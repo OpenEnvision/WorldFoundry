@@ -2,11 +2,23 @@
 
 from pydantic import BaseModel
 
+from worldfoundry.base_models.llm_mllm_core.action.gr00t.preprocessing.base import (
+    InvertibleModalityTransform as InvertibleModalityTransform,
+)
+from worldfoundry.base_models.llm_mllm_core.action.gr00t.preprocessing.base import (
+    ModalityTransform as ModalityTransform,
+)
+from worldfoundry.base_models.llm_mllm_core.action.gr00t.preprocessing.state_action import StateActionToTensor
+from worldfoundry.synthesis.action_generation.dreamzero.preprocessing.transform_state_action import (
+    PerHorizonActionTransform,
+    StateActionTransform,
+)
+
+from .dream_transform import DreamTransform
 from .embodiment import EmbodimentTag
 from .schema import DatasetMetadata
-from .transform_base import ComposedModalityTransform, InvertibleModalityTransform, ModalityTransform
+from .transform_base import ComposedModalityTransform
 from .transform_concat import ConcatTransform
-from .transform_state_action import PerHorizonActionTransform, StateActionToTensor, StateActionTransform
 from .transform_video import (
     VideoColorJitter,
     VideoCrop,
@@ -22,7 +34,6 @@ from .transform_video import (
     VideoToNumpy,
     VideoToTensor,
 )
-from .dream_transform import DreamTransform
 
 
 class ModalityConfig(BaseModel):

@@ -8,7 +8,7 @@ groups:
 - action_chunk
 source_repos:
 - url: https://github.com/moojink/openvla-oft
-  revision: e4287e94541f
+  revision: e4287e94541f459edc4feabc4e181f537cd569a8
 checkpoints:
 - repo_id: moojink/openvla-7b-oft-finetuned-libero-spatial
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/moojink--openvla-7b-oft-finetuned-libero-spatial

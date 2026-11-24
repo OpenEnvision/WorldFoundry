@@ -6,30 +6,31 @@ SpatialTransformer rearranges ``B C T H W`` → ``(B·T) (H·W) C`` for
 """
 
 import importlib.util
+from functools import partial
 
 import torch
-from torch import nn, einsum
 import torch.nn.functional as F
 from einops import rearrange, repeat
-from functools import partial
+from torch import einsum, nn
 
 xformers = None
 if importlib.util.find_spec("xformers") is not None:
     import xformers
     import xformers.ops
+
     XFORMERS_IS_AVAILBLE = True
 else:
     XFORMERS_IS_AVAILBLE = False
-from worldfoundry.core.nn.diffusion.utils import (
+from worldfoundry.core.nn.diffusion.convolution import zero_module  # noqa: E402 - Follows the conditional setup block.
+from worldfoundry.core.nn.diffusion.utils import (  # noqa: E402 - Follows the conditional setup block.
     checkpoint,
-    exists,
     default,
+    exists,
 )
-from worldfoundry.core.nn.diffusion.convolution import zero_module
 
 
 class RelativePosition(nn.Module):
-    """ https://github.com/evelinehong/Transformer_Relative_Position_PyTorch/blob/master/relative_position.py """
+    """https://github.com/evelinehong/Transformer_Relative_Position_PyTorch/blob/master/relative_position.py"""
 
     def __init__(self, num_units, max_relative_position):
         """Allocate the ``[-max, +max]`` relative-position table."""
@@ -55,8 +56,21 @@ class RelativePosition(nn.Module):
 class CrossAttention(nn.Module):
     """Multi-head attention on flattened UNet tokens (spatial ``H·W`` or temporal ``T``)."""
 
-    def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0., 
-                 relative_position=False, temporal_length=None, video_length=None, image_cross_attention=False, image_cross_attention_scale=1.0, image_cross_attention_scale_learnable=False, text_context_len=77):
+    def __init__(
+        self,
+        query_dim,
+        context_dim=None,
+        heads=8,
+        dim_head=64,
+        dropout=0.0,
+        relative_position=False,
+        temporal_length=None,
+        video_length=None,
+        image_cross_attention=False,
+        image_cross_attention_scale=1.0,
+        image_cross_attention_scale_learnable=False,
+        text_context_len=77,
+    ):
         """Build QKV projections; optional relative bias and image-context branch."""
         super().__init__()
         inner_dim = dim_head * heads
@@ -70,10 +84,10 @@ class CrossAttention(nn.Module):
         self.to_v = nn.Linear(context_dim, inner_dim, bias=False)
 
         self.to_out = nn.Sequential(nn.Linear(inner_dim, query_dim), nn.Dropout(dropout))
-        
+
         self.relative_position = relative_position
         if self.relative_position:
-            assert(temporal_length is not None)
+            assert temporal_length is not None
             self.relative_position_k = RelativePosition(num_units=dim_head, max_relative_position=temporal_length)
             self.relative_position_v = RelativePosition(num_units=dim_head, max_relative_position=temporal_length)
         else:
@@ -90,12 +104,11 @@ class CrossAttention(nn.Module):
             self.to_k_ip = nn.Linear(context_dim, inner_dim, bias=False)
             self.to_v_ip = nn.Linear(context_dim, inner_dim, bias=False)
             if image_cross_attention_scale_learnable:
-                self.register_parameter('alpha', nn.Parameter(torch.tensor(0.)) )
-
+                self.register_parameter("alpha", nn.Parameter(torch.tensor(0.0)))
 
     def forward(self, x, context=None, mask=None):
         """Attend queries ``B S C`` to text/image context; return the same layout."""
-        spatial_self_attn = (context is None)
+        spatial_self_attn = context is None
         k_ip, v_ip, out_ip = None, None, None
 
         h = self.heads
@@ -103,103 +116,101 @@ class CrossAttention(nn.Module):
         context = default(context, x)
 
         if self.image_cross_attention and not spatial_self_attn:
-            context, context_image = context[:,:self.text_context_len,:], context[:,self.text_context_len:,:]
+            context, context_image = context[:, : self.text_context_len, :], context[:, self.text_context_len :, :]
             k = self.to_k(context)
             v = self.to_v(context)
             k_ip = self.to_k_ip(context_image)
             v_ip = self.to_v_ip(context_image)
         else:
             if not spatial_self_attn:
-                context = context[:,:self.text_context_len,:]
+                context = context[:, : self.text_context_len, :]
             k = self.to_k(context)
             v = self.to_v(context)
 
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
+        q, k, v = (rearrange(t, "b n (h d) -> (b h) n d", h=h) for t in (q, k, v))
 
-        sim = torch.einsum('b i d, b j d -> b i j', q, k) * self.scale
+        sim = torch.einsum("b i d, b j d -> b i j", q, k) * self.scale
         if self.relative_position:
             len_q, len_k, len_v = q.shape[1], k.shape[1], v.shape[1]
             k2 = self.relative_position_k(len_q, len_k)
-            sim2 = einsum('b t d, t s d -> b t s', q, k2) * self.scale # TODO check 
+            sim2 = einsum("b t d, t s d -> b t s", q, k2) * self.scale  # TODO check
             sim += sim2
         del k
 
         if exists(mask):
             ## feasible for causal attention mask only
             max_neg_value = -torch.finfo(sim.dtype).max
-            mask = repeat(mask, 'b i j -> (b h) i j', h=h)
-            sim.masked_fill_(~(mask>0.5), max_neg_value)
+            mask = repeat(mask, "b i j -> (b h) i j", h=h)
+            sim.masked_fill_(~(mask > 0.5), max_neg_value)
 
         # attention, what we cannot get enough of
         sim = sim.softmax(dim=-1)
 
-        out = torch.einsum('b i j, b j d -> b i d', sim, v)
+        out = torch.einsum("b i j, b j d -> b i d", sim, v)
         if self.relative_position:
             v2 = self.relative_position_v(len_q, len_v)
-            out2 = einsum('b t s, t s d -> b t d', sim, v2) # TODO check
+            out2 = einsum("b t s, t s d -> b t d", sim, v2)  # TODO check
             out += out2
-        out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
-
+        out = rearrange(out, "(b h) n d -> b n (h d)", h=h)
 
         ## for image cross-attention
         if k_ip is not None:
-            k_ip, v_ip = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (k_ip, v_ip))
-            sim_ip =  torch.einsum('b i d, b j d -> b i j', q, k_ip) * self.scale
+            k_ip, v_ip = (rearrange(t, "b n (h d) -> (b h) n d", h=h) for t in (k_ip, v_ip))
+            sim_ip = torch.einsum("b i d, b j d -> b i j", q, k_ip) * self.scale
             del k_ip
             sim_ip = sim_ip.softmax(dim=-1)
-            out_ip = torch.einsum('b i j, b j d -> b i d', sim_ip, v_ip)
-            out_ip = rearrange(out_ip, '(b h) n d -> b n (h d)', h=h)
-
+            out_ip = torch.einsum("b i j, b j d -> b i d", sim_ip, v_ip)
+            out_ip = rearrange(out_ip, "(b h) n d -> b n (h d)", h=h)
 
         if out_ip is not None:
             if self.image_cross_attention_scale_learnable:
-                out = out + self.image_cross_attention_scale * out_ip * (torch.tanh(self.alpha)+1)
+                out = out + self.image_cross_attention_scale * out_ip * (torch.tanh(self.alpha) + 1)
             else:
                 out = out + self.image_cross_attention_scale * out_ip
-        
+
         return self.to_out(out)
-    
+
     def efficient_forward(self, x, context=None, mask=None):
         """xFormers path for the same ``B S C`` attention as ``forward``."""
-        spatial_self_attn = (context is None)
+        spatial_self_attn = context is None
         k_ip, v_ip, out_ip = None, None, None
 
         q = self.to_q(x)
         context = default(context, x)
 
         if self.image_cross_attention and not spatial_self_attn:
-            context, context_image = context[:,:self.text_context_len,:], context[:,self.text_context_len:,:]
+            context, context_image = context[:, : self.text_context_len, :], context[:, self.text_context_len :, :]
             k = self.to_k(context)
             v = self.to_v(context)
             k_ip = self.to_k_ip(context_image)
             v_ip = self.to_v_ip(context_image)
         else:
             if not spatial_self_attn:
-                context = context[:,:self.text_context_len,:]
+                context = context[:, : self.text_context_len, :]
             k = self.to_k(context)
             v = self.to_v(context)
 
         b, _, _ = q.shape
-        q, k, v = map(
-            lambda t: t.unsqueeze(3)
+        q, k, v = (
+            t.unsqueeze(3)
             .reshape(b, t.shape[1], self.heads, self.dim_head)
             .permute(0, 2, 1, 3)
             .reshape(b * self.heads, t.shape[1], self.dim_head)
-            .contiguous(),
-            (q, k, v),
+            .contiguous()
+            for t in (q, k, v)
         )
         # actually compute the attention, what we cannot get enough of
         out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=None)
-        
+
         ## for image cross-attention
         if k_ip is not None:
-            k_ip, v_ip = map(
-                lambda t: t.unsqueeze(3)
+            k_ip, v_ip = (
+                t.unsqueeze(3)
                 .reshape(b, t.shape[1], self.heads, self.dim_head)
                 .permute(0, 2, 1, 3)
                 .reshape(b * self.heads, t.shape[1], self.dim_head)
-                .contiguous(),
-                (k_ip, v_ip),
+                .contiguous()
+                for t in (k_ip, v_ip)
             )
             out_ip = xformers.ops.memory_efficient_attention(q, k_ip, v_ip, attn_bias=None, op=None)
             out_ip = (
@@ -219,26 +230,57 @@ class CrossAttention(nn.Module):
         )
         if out_ip is not None:
             if self.image_cross_attention_scale_learnable:
-                out = out + self.image_cross_attention_scale * out_ip * (torch.tanh(self.alpha)+1)
+                out = out + self.image_cross_attention_scale * out_ip * (torch.tanh(self.alpha) + 1)
             else:
                 out = out + self.image_cross_attention_scale * out_ip
-           
+
         return self.to_out(out)
 
 
 class BasicTransformerBlock(nn.Module):
     """LN + self-attn + optional text/image cross-attn + FFN on ``B S C`` tokens."""
 
-    def __init__(self, dim, n_heads, d_head, dropout=0., context_dim=None, gated_ff=True, checkpoint=True,
-                disable_self_attn=False, attention_cls=None, video_length=None, image_cross_attention=False, image_cross_attention_scale=1.0, image_cross_attention_scale_learnable=False, text_context_len=77):
+    def __init__(
+        self,
+        dim,
+        n_heads,
+        d_head,
+        dropout=0.0,
+        context_dim=None,
+        gated_ff=True,
+        checkpoint=True,
+        disable_self_attn=False,
+        attention_cls=None,
+        video_length=None,
+        image_cross_attention=False,
+        image_cross_attention_scale=1.0,
+        image_cross_attention_scale_learnable=False,
+        text_context_len=77,
+    ):
         """Wire self-attn, cross-attn, and the gated FFN."""
         super().__init__()
         attn_cls = CrossAttention if attention_cls is None else attention_cls
         self.disable_self_attn = disable_self_attn
-        self.attn1 = attn_cls(query_dim=dim, heads=n_heads, dim_head=d_head, dropout=dropout,
-            context_dim=context_dim if self.disable_self_attn else None)
+        self.attn1 = attn_cls(
+            query_dim=dim,
+            heads=n_heads,
+            dim_head=d_head,
+            dropout=dropout,
+            context_dim=context_dim if self.disable_self_attn else None,
+        )
         self.ff = FeedForward(dim, dropout=dropout, glu=gated_ff)
-        self.attn2 = attn_cls(query_dim=dim, context_dim=context_dim, heads=n_heads, dim_head=d_head, dropout=dropout, video_length=video_length, image_cross_attention=image_cross_attention, image_cross_attention_scale=image_cross_attention_scale, image_cross_attention_scale_learnable=image_cross_attention_scale_learnable,text_context_len=text_context_len)
+        self.attn2 = attn_cls(
+            query_dim=dim,
+            context_dim=context_dim,
+            heads=n_heads,
+            dim_head=d_head,
+            dropout=dropout,
+            video_length=video_length,
+            image_cross_attention=image_cross_attention,
+            image_cross_attention_scale=image_cross_attention_scale,
+            image_cross_attention_scale_learnable=image_cross_attention_scale_learnable,
+            text_context_len=text_context_len,
+        )
         self.image_cross_attention = image_cross_attention
 
         self.norm1 = nn.LayerNorm(dim)
@@ -246,18 +288,16 @@ class BasicTransformerBlock(nn.Module):
         self.norm3 = nn.LayerNorm(dim)
         self.checkpoint = checkpoint
 
-
     def forward(self, x, context=None, mask=None, **kwargs):
         """Checkpointed residual block on ``B S C`` (spatial ``H·W`` or temporal ``T``)."""
         ## implementation tricks: because checkpointing doesn't support non-tensor (e.g. None or scalar) arguments
-        input_tuple = (x,)      ## should not be (x), otherwise *input_tuple will decouple x into multiple arguments
+        input_tuple = (x,)  ## should not be (x), otherwise *input_tuple will decouple x into multiple arguments
         if context is not None:
             input_tuple = (x, context)
         if mask is not None:
             forward_mask = partial(self._forward, mask=mask)
             return checkpoint(forward_mask, (x,), self.parameters(), self.checkpoint)
         return checkpoint(self._forward, input_tuple, self.parameters(), self.checkpoint)
-
 
     def _forward(self, x, context=None, mask=None):
         """Inner self-attn / cross-attn / FFN path used by gradient checkpointing."""
@@ -277,9 +317,21 @@ class SpatialTransformer(nn.Module):
     NEW: use_linear for more efficiency instead of the 1x1 convs
     """
 
-    def __init__(self, in_channels, n_heads, d_head, depth=1, dropout=0., context_dim=None,
-                 use_checkpoint=True, disable_self_attn=False, use_linear=False, video_length=None,
-                 image_cross_attention=False, image_cross_attention_scale_learnable=False):
+    def __init__(
+        self,
+        in_channels,
+        n_heads,
+        d_head,
+        depth=1,
+        dropout=0.0,
+        context_dim=None,
+        use_checkpoint=True,
+        disable_self_attn=False,
+        use_linear=False,
+        video_length=None,
+        image_cross_attention=False,
+        image_cross_attention_scale_learnable=False,
+    ):
         """Build the spatial stack that flattens ``H·W`` into the token axis."""
         super().__init__()
         self.in_channels = in_channels
@@ -291,27 +343,29 @@ class SpatialTransformer(nn.Module):
             self.proj_in = nn.Linear(in_channels, inner_dim)
 
         attention_cls = None
-        self.transformer_blocks = nn.ModuleList([
-            BasicTransformerBlock(
-                inner_dim,
-                n_heads,
-                d_head,
-                dropout=dropout,
-                context_dim=context_dim,
-                disable_self_attn=disable_self_attn,
-                checkpoint=use_checkpoint,
-                attention_cls=attention_cls,
-                video_length=video_length,
-                image_cross_attention=image_cross_attention,
-                image_cross_attention_scale_learnable=image_cross_attention_scale_learnable,
-                ) for d in range(depth)
-        ])
+        self.transformer_blocks = nn.ModuleList(
+            [
+                BasicTransformerBlock(
+                    inner_dim,
+                    n_heads,
+                    d_head,
+                    dropout=dropout,
+                    context_dim=context_dim,
+                    disable_self_attn=disable_self_attn,
+                    checkpoint=use_checkpoint,
+                    attention_cls=attention_cls,
+                    video_length=video_length,
+                    image_cross_attention=image_cross_attention,
+                    image_cross_attention_scale_learnable=image_cross_attention_scale_learnable,
+                )
+                for d in range(depth)
+            ]
+        )
         if not use_linear:
             self.proj_out = zero_module(nn.Conv2d(inner_dim, in_channels, kernel_size=1, stride=1, padding=0))
         else:
             self.proj_out = zero_module(nn.Linear(inner_dim, in_channels))
         self.use_linear = use_linear
-
 
     def forward(self, x, context=None, **kwargs):
         """Rearrange ``B C T H W`` → ``(B·T) (H·W) C``, attend, then restore."""
@@ -320,19 +374,19 @@ class SpatialTransformer(nn.Module):
         x = self.norm(x)
         if not self.use_linear:
             x = self.proj_in(x)
-        x = rearrange(x, 'b c h w -> b (h w) c').contiguous()
+        x = rearrange(x, "b c h w -> b (h w) c").contiguous()
         if self.use_linear:
             x = self.proj_in(x)
-        for i, block in enumerate(self.transformer_blocks):
+        for _i, block in enumerate(self.transformer_blocks):
             x = block(x, context=context, **kwargs)
         if self.use_linear:
             x = self.proj_out(x)
-        x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w).contiguous()
+        x = rearrange(x, "b (h w) c -> b c h w", h=h, w=w).contiguous()
         if not self.use_linear:
             x = self.proj_out(x)
         return x + x_in
-    
-    
+
+
 class TemporalTransformer(nn.Module):
     """
     Transformer block for image-like data in temporal axis.
@@ -340,9 +394,24 @@ class TemporalTransformer(nn.Module):
     Then apply standard transformer action.
     Finally, reshape to image
     """
-    def __init__(self, in_channels, n_heads, d_head, depth=1, dropout=0., context_dim=None,
-                 use_checkpoint=True, use_linear=False, only_self_att=True, causal_attention=False, causal_block_size=1,
-                 relative_position=False, temporal_length=None, use_image_dataset=False):
+
+    def __init__(
+        self,
+        in_channels,
+        n_heads,
+        d_head,
+        depth=1,
+        dropout=0.0,
+        context_dim=None,
+        use_checkpoint=True,
+        use_linear=False,
+        only_self_att=True,
+        causal_attention=False,
+        causal_block_size=1,
+        relative_position=False,
+        temporal_length=None,
+        use_image_dataset=False,
+    ):
         """Build the temporal stack that attends along ``T`` after flattening space."""
         super().__init__()
         self.only_self_att = only_self_att
@@ -361,26 +430,30 @@ class TemporalTransformer(nn.Module):
             self.proj_in = nn.Linear(in_channels, inner_dim)
 
         if relative_position:
-            assert(temporal_length is not None)
+            assert temporal_length is not None
             attention_cls = partial(CrossAttention, relative_position=True, temporal_length=temporal_length)
         else:
             attention_cls = partial(CrossAttention, temporal_length=temporal_length)
         if self.causal_attention:
-            assert(temporal_length is not None)
+            assert temporal_length is not None
             self.mask = torch.tril(torch.ones([1, temporal_length, temporal_length]))
 
         if self.only_self_att:
             context_dim = None
-        self.transformer_blocks = nn.ModuleList([
-            BasicTransformerBlock(
-                inner_dim,
-                n_heads,
-                d_head,
-                dropout=dropout,
-                context_dim=context_dim,
-                attention_cls=attention_cls,
-                checkpoint=use_checkpoint) for d in range(depth)
-        ])
+        self.transformer_blocks = nn.ModuleList(
+            [
+                BasicTransformerBlock(
+                    inner_dim,
+                    n_heads,
+                    d_head,
+                    dropout=dropout,
+                    context_dim=context_dim,
+                    attention_cls=attention_cls,
+                    checkpoint=use_checkpoint,
+                )
+                for d in range(depth)
+            ]
+        )
         if not use_linear:
             self.proj_out = zero_module(nn.Conv1d(inner_dim, in_channels, kernel_size=1, stride=1, padding=0))
         else:
@@ -392,54 +465,53 @@ class TemporalTransformer(nn.Module):
         b, c, t, h, w = x.shape
         x_in = x
         x = self.norm(x)
-        x = rearrange(x, 'b c t h w -> (b h w) c t').contiguous()
+        x = rearrange(x, "b c t h w -> (b h w) c t").contiguous()
         if not self.use_linear:
             x = self.proj_in(x)
-        x = rearrange(x, 'bhw c t -> bhw t c').contiguous()
+        x = rearrange(x, "bhw c t -> bhw t c").contiguous()
         if self.use_linear:
             x = self.proj_in(x)
 
         temp_mask = None
         if self.causal_attention:
             # slice the from mask map
-            temp_mask = self.mask[:,:t,:t].to(x.device)
+            temp_mask = self.mask[:, :t, :t].to(x.device)
 
         if temp_mask is not None:
             mask = temp_mask.to(x.device)
-            mask = repeat(mask, 'l i j -> (l bhw) i j', bhw=b*h*w)
+            mask = repeat(mask, "l i j -> (l bhw) i j", bhw=b * h * w)
         else:
             mask = None
 
         if self.only_self_att:
             ## note: if no context is given, cross-attention defaults to self-attention
-            for i, block in enumerate(self.transformer_blocks):
+            for _i, block in enumerate(self.transformer_blocks):
                 x = block(x, mask=mask)
-            x = rearrange(x, '(b hw) t c -> b hw t c', b=b).contiguous()
+            x = rearrange(x, "(b hw) t c -> b hw t c", b=b).contiguous()
         else:
-            x = rearrange(x, '(b hw) t c -> b hw t c', b=b).contiguous()
-            context = rearrange(context, '(b t) l con -> b t l con', t=t).contiguous()
-            for i, block in enumerate(self.transformer_blocks):
+            x = rearrange(x, "(b hw) t c -> b hw t c", b=b).contiguous()
+            context = rearrange(context, "(b t) l con -> b t l con", t=t).contiguous()
+            for _i, block in enumerate(self.transformer_blocks):
                 # calculate each batch one by one (since number in shape could not greater then 65,535 for some package)
                 for j in range(b):
-                    context_j = repeat(
-                        context[j],
-                        't l con -> (t r) l con', r=(h * w) // t, t=t).contiguous()
+                    context_j = repeat(context[j], "t l con -> (t r) l con", r=(h * w) // t, t=t).contiguous()
                     ## note: causal mask will not applied in cross-attention case
                     x[j] = block(x[j], context=context_j)
-        
+
         if self.use_linear:
             x = self.proj_out(x)
-            x = rearrange(x, 'b (h w) t c -> b c t h w', h=h, w=w).contiguous()
+            x = rearrange(x, "b (h w) t c -> b c t h w", h=h, w=w).contiguous()
         if not self.use_linear:
-            x = rearrange(x, 'b hw t c -> (b hw) c t').contiguous()
+            x = rearrange(x, "b hw t c -> (b hw) c t").contiguous()
             x = self.proj_out(x)
-            x = rearrange(x, '(b h w) c t -> b c t h w', b=b, h=h, w=w).contiguous()
+            x = rearrange(x, "(b h w) c t -> b c t h w", b=b, h=h, w=w).contiguous()
 
         return x + x_in
-    
+
 
 class GEGLU(nn.Module):
     """Gated-GELU FFN: linear to 2x width, then value * GELU(gate) on the last dim."""
+
     def __init__(self, dim_in, dim_out):
         """Linear map ``dim_in → 2 * dim_out`` for the value/gate split."""
         super().__init__()
@@ -453,21 +525,15 @@ class GEGLU(nn.Module):
 
 class FeedForward(nn.Module):
     """Position-wise MLP used inside LVDM transformer blocks (``B S C``)."""
-    def __init__(self, dim, dim_out=None, mult=4, glu=False, dropout=0.):
+
+    def __init__(self, dim, dim_out=None, mult=4, glu=False, dropout=0.0):
         """Build the expand / GELU-or-GEGLU / contract MLP."""
         super().__init__()
         inner_dim = int(dim * mult)
         dim_out = default(dim_out, dim)
-        project_in = nn.Sequential(
-            nn.Linear(dim, inner_dim),
-            nn.GELU()
-        ) if not glu else GEGLU(dim, inner_dim)
+        project_in = nn.Sequential(nn.Linear(dim, inner_dim), nn.GELU()) if not glu else GEGLU(dim, inner_dim)
 
-        self.net = nn.Sequential(
-            project_in,
-            nn.Dropout(dropout),
-            nn.Linear(inner_dim, dim_out)
-        )
+        self.net = nn.Sequential(project_in, nn.Dropout(dropout), nn.Linear(inner_dim, dim_out))
 
     def forward(self, x):
         """Apply the position-wise MLP to ``[..., C]`` tokens."""
@@ -476,54 +542,40 @@ class FeedForward(nn.Module):
 
 class LinearAttention(nn.Module):
     """Linear attention on a spatial feature map ``B C H W``."""
+
     def __init__(self, dim, heads=4, dim_head=32):
         """1x1 conv QKV used by the linear-attention fallback."""
         super().__init__()
         self.heads = heads
         hidden_dim = dim_head * heads
-        self.to_qkv = nn.Conv2d(dim, hidden_dim * 3, 1, bias = False)
+        self.to_qkv = nn.Conv2d(dim, hidden_dim * 3, 1, bias=False)
         self.to_out = nn.Conv2d(hidden_dim, dim, 1)
 
     def forward(self, x):
         """Linear attention on a spatial feature map ``B C H W``."""
         b, c, h, w = x.shape
         qkv = self.to_qkv(x)
-        q, k, v = rearrange(qkv, 'b (qkv heads c) h w -> qkv b heads c (h w)', heads = self.heads, qkv=3)
-        k = k.softmax(dim=-1)  
-        context = torch.einsum('bhdn,bhen->bhde', k, v)
-        out = torch.einsum('bhde,bhdn->bhen', context, q)
-        out = rearrange(out, 'b heads c (h w) -> b (heads c) h w', heads=self.heads, h=h, w=w)
+        q, k, v = rearrange(qkv, "b (qkv heads c) h w -> qkv b heads c (h w)", heads=self.heads, qkv=3)
+        k = k.softmax(dim=-1)
+        context = torch.einsum("bhdn,bhen->bhde", k, v)
+        out = torch.einsum("bhde,bhdn->bhen", context, q)
+        out = rearrange(out, "b heads c (h w) -> b (heads c) h w", heads=self.heads, h=h, w=w)
         return self.to_out(out)
 
 
 class SpatialSelfAttention(nn.Module):
     """Conv QKV self-attention on a ``B C H W`` UNet feature map."""
+
     def __init__(self, in_channels):
         """Conv QKV for pixel-wise spatial self-attention."""
         super().__init__()
         self.in_channels = in_channels
 
         self.norm = torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
-        self.q = torch.nn.Conv2d(in_channels,
-                                 in_channels,
-                                 kernel_size=1,
-                                 stride=1,
-                                 padding=0)
-        self.k = torch.nn.Conv2d(in_channels,
-                                 in_channels,
-                                 kernel_size=1,
-                                 stride=1,
-                                 padding=0)
-        self.v = torch.nn.Conv2d(in_channels,
-                                 in_channels,
-                                 kernel_size=1,
-                                 stride=1,
-                                 padding=0)
-        self.proj_out = torch.nn.Conv2d(in_channels,
-                                        in_channels,
-                                        kernel_size=1,
-                                        stride=1,
-                                        padding=0)
+        self.q = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.k = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.v = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.proj_out = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
 
     def forward(self, x):
         """Self-attend a ``B C H W`` map and add the residual."""
@@ -534,19 +586,19 @@ class SpatialSelfAttention(nn.Module):
         v = self.v(h_)
 
         # compute attention
-        b,c,h,w = q.shape
-        q = rearrange(q, 'b c h w -> b (h w) c')
-        k = rearrange(k, 'b c h w -> b c (h w)')
-        w_ = torch.einsum('bij,bjk->bik', q, k)
+        b, c, h, w = q.shape
+        q = rearrange(q, "b c h w -> b (h w) c")
+        k = rearrange(k, "b c h w -> b c (h w)")
+        w_ = torch.einsum("bij,bjk->bik", q, k)
 
-        w_ = w_ * (int(c)**(-0.5))
+        w_ = w_ * (int(c) ** (-0.5))
         w_ = torch.nn.functional.softmax(w_, dim=2)
 
         # attend to values
-        v = rearrange(v, 'b c h w -> b c (h w)')
-        w_ = rearrange(w_, 'b i j -> b j i')
-        h_ = torch.einsum('bij,bjk->bik', v, w_)
-        h_ = rearrange(h_, 'b c (h w) -> b c h w', h=h)
+        v = rearrange(v, "b c h w -> b c (h w)")
+        w_ = rearrange(w_, "b i j -> b j i")
+        h_ = torch.einsum("bij,bjk->bik", v, w_)
+        h_ = rearrange(h_, "b c (h w) -> b c h w", h=h)
         h_ = self.proj_out(h_)
 
-        return x+h_
+        return x + h_

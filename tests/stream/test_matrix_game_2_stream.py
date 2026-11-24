@@ -1,18 +1,13 @@
 from diffusers.utils import export_to_video
 from PIL import Image
-from worldfoundry.pipelines.matrix_game.pipeline_matrix_game_2 import MatrixGame2Pipeline
-import torch
 
+from worldfoundry.pipelines.matrix_game.pipeline_matrix_game_2 import MatrixGame2Pipeline
 
 image_path = "./data/test_cases/test_image_case1/ref_image.png"
-input_image = Image.open(image_path).convert('RGB')
+input_image = Image.open(image_path).convert("RGB")
 
 pretrained_model_path = "Skywork/Matrix-Game-2.0"
-pipeline = MatrixGame2Pipeline.from_pretrained(
-    model_path=pretrained_model_path,
-    mode="universal",
-    device="cuda"
-)
+pipeline = MatrixGame2Pipeline.from_pretrained(model_path=pretrained_model_path, mode="universal", device="cuda")
 
 AVAILABLE_INTERACTIONS = ["forward", "left", "right", "forward_left", "forward_right", "camera_l", "camera_r"]
 
@@ -29,11 +24,11 @@ turn_idx = 0
 while True:
     interaction_input = input(f"\n[Turn {turn_idx}] Enter interaction(s) (or 'n'/'q' to stop): ").strip().lower()
 
-    if interaction_input in ['n', 'q']:
+    if interaction_input in ["n", "q"]:
         print("Stopping interaction loop...")
         break
 
-    current_signal = [s.strip() for s in interaction_input.split(',') if s.strip()]
+    current_signal = [s.strip() for s in interaction_input.split(",") if s.strip()]
 
     invalid_signals = [s for s in current_signal if s not in AVAILABLE_INTERACTIONS]
     if invalid_signals:
@@ -64,8 +59,8 @@ while True:
         images=start_img,  # only the first turn uses the input image, subsequent turns use the last generated frame
         interactions=current_signal,
         num_frames=num_frames,
-        size = (352, 640),
-        visualize_ops=False
+        size=(352, 640),
+        visualize_ops=False,
     )
 
     turn_idx += 1

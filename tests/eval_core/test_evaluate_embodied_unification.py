@@ -5,16 +5,15 @@ from pathlib import Path
 
 import pytest
 
+from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_RUNNER_TARGET
 from worldfoundry.cli import main
-from worldfoundry.evaluation.runner import EvaluateRunRequest, execute_evaluate_run
-from worldfoundry.evaluation.tasks.embodied import (
+from worldfoundry.evals.tasks.embodied import (
     VlaVaWamRunRequest,
     materialize_vla_va_wam_requests,
     metric_suite,
     run_vla_va_wam,
 )
-from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_RUNNER_TARGET
-
+from worldfoundry.evals.tasks.execution.orchestration.evaluate import EvaluateRunRequest, execute_evaluate_run
 
 EMBODIED_SPEC = {
     "track": "vla",

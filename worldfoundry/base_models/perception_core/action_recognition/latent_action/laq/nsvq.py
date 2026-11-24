@@ -24,9 +24,7 @@ class NSVQ(nn.Module):
         self.patch_size = patch_size
         self.eps = 1e-12
 
-        self.codebooks = nn.Parameter(
-            torch.randn(num_embeddings, embedding_dim, device=device)
-        )
+        self.codebooks = nn.Parameter(torch.randn(num_embeddings, embedding_dim, device=device))
         self.project_in = nn.Linear(dim, embedding_dim)
         self.project_out = nn.Linear(embedding_dim, dim)
 
@@ -55,38 +53,24 @@ class NSVQ(nn.Module):
                 nn.Conv2d(embedding_dim, embedding_dim, 3, stride=2, padding=1),
             ]
         elif code_seq_len == 49:
-            layers = [
-                nn.Conv2d(embedding_dim, embedding_dim, 3, stride=2, padding=1)
-            ]
+            layers = [nn.Conv2d(embedding_dim, embedding_dim, 3, stride=2, padding=1)]
         elif code_seq_len == 64:
-            layers = [
-                nn.Conv2d(embedding_dim, embedding_dim, 2, stride=2, padding=1)
-            ]
+            layers = [nn.Conv2d(embedding_dim, embedding_dim, 2, stride=2, padding=1)]
         elif code_seq_len == 256:
-            layers = [
-                nn.Conv2d(embedding_dim, embedding_dim, 3, stride=2, padding=1)
-            ]
+            layers = [nn.Conv2d(embedding_dim, embedding_dim, 3, stride=2, padding=1)]
         else:
-            raise ValueError(
-                "code_seq_len must be one of 1, 2, 4, 16, 49, 64, or 256"
-            )
+            raise ValueError("code_seq_len must be one of 1, 2, 4, 16, 49, 64, or 256")
         self.cnn_encoder = nn.Sequential(*layers)
 
     def _encode(self, input_data: Tensor) -> Tensor:
         batch_size = input_data.shape[0]
         spatial_size = self.image_size // self.patch_size
         input_data = self.project_in(input_data)
-        input_data = rearrange_to_image(
-            input_data, batch_size, self.embedding_dim, spatial_size
-        )
+        input_data = rearrange_to_image(input_data, batch_size, self.embedding_dim, spatial_size)
         input_data = self.cnn_encoder(input_data)
-        return input_data.flatten(2).transpose(1, 2).reshape(
-            -1, self.embedding_dim
-        )
+        return input_data.flatten(2).transpose(1, 2).reshape(-1, self.embedding_dim)
 
-    def forward(
-        self, input_data_first: Tensor, input_data_last: Tensor
-    ) -> tuple[Tensor, Tensor]:
+    def forward(self, input_data_first: Tensor, input_data_last: Tensor) -> tuple[Tensor, Tensor]:
         batch_size = input_data_first.shape[0]
         input_data = self._encode(input_data_last) - self._encode(input_data_first)
 
@@ -101,13 +85,9 @@ class NSVQ(nn.Module):
         random_vector = torch.randn_like(input_data)
         residual_norm = (input_data - hard_quantized).norm(dim=1, keepdim=True)
         random_norm = random_vector.norm(dim=1, keepdim=True)
-        quantized = input_data + (
-            residual_norm / random_norm + self.eps
-        ) * random_vector
+        quantized = input_data + (residual_norm / random_norm + self.eps) * random_vector
 
-        quantized = quantized.reshape(
-            batch_size, self.embedding_dim, -1
-        ).transpose(1, 2).contiguous()
+        quantized = quantized.reshape(batch_size, self.embedding_dim, -1).transpose(1, 2).contiguous()
         quantized = self.project_out(quantized)
         return quantized, indices.reshape(batch_size, -1)
 
@@ -118,6 +98,4 @@ def rearrange_to_image(
     embedding_dim: int,
     spatial_size: int,
 ) -> Tensor:
-    return input_data.transpose(1, 2).reshape(
-        batch_size, embedding_dim, spatial_size, spatial_size
-    )
+    return input_data.transpose(1, 2).reshape(batch_size, embedding_dim, spatial_size, spatial_size)

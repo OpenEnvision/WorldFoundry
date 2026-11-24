@@ -18,7 +18,7 @@ SRC_ROOT = REPO_ROOT
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from worldfoundry.evaluation.utils import load_manifest  # noqa: E402
+from worldfoundry.evals.utils import load_manifest  # noqa: E402
 
 DEFAULT_MANIFEST_DIR = REPO_ROOT / "worldfoundry" / "data" / "models" / "catalog"
 DEFAULT_CACHE_DIR = REPO_ROOT / "cache" / "hfd"
@@ -385,10 +385,7 @@ def check_local_checkpoint(
 
     revision_matches = True
     if expected_revision and _is_commit_like_revision(expected_revision):
-        if referenced_snapshot:
-            revision_matches = referenced_snapshot == expected_revision
-        else:
-            revision_matches = (snapshots_dir / expected_revision).is_dir()
+        revision_matches = (snapshots_dir / expected_revision).is_dir()
     elif expected_revision and ref_path.is_file():
         revision_matches = bool(referenced_snapshot) and (snapshots_dir / referenced_snapshot).is_dir()
     elif expected_revision:

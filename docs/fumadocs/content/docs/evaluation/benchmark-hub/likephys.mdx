@@ -18,7 +18,7 @@ WorldFoundry **recomputes the official mis-rank formulas** in tree (`compute_mis
 Import `results_<model>.json` files (or a directory of `<scenario>/results_<probe_model>.json`) and recompute mis-rank:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id likephys \
   --mode official-validation \
   --official-results-path <likephys_results_root> \
@@ -35,7 +35,7 @@ hf download JianhaoDYDY/LikePhys-Benchmark --repo-type dataset --local-dir "${WO
 
 WORLDFOUNDRY_LIKEPHYS_EVALUATOR_ROOT=/path/to/LikePhys \
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/likephys/run_likephys_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/likephys/run_likephys_official_runner.py \
   --run-official \
   --probe-model wan2.1-T2V-1.3b \
   --scenario ball_drop \

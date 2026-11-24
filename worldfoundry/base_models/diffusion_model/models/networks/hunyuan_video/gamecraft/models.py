@@ -1,6 +1,5 @@
 # Adapted from Tencent Hunyuan-GameCraft-1.0, under the Tencent Hunyuan Community License.
 import os
-from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -13,11 +12,12 @@ try:
 except ImportError:
     flash_attn_varlen_func = None
 
+from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import camera_features
 from worldfoundry.core.attention import apply_nd_rotary_embedding as apply_rotary_emb
-from worldfoundry.core.attention.sequence.sequence_metadata import get_cu_seqlens
 from worldfoundry.core.attention.parallel.sequence_parallel_attention import (
     parallel_attention,
 )
+from worldfoundry.core.attention.sequence.sequence_metadata import get_cu_seqlens
 from worldfoundry.core.distributed.sequence_parallel.runtime import (
     all_gather,
     get_sequence_parallel_state,
@@ -52,8 +52,6 @@ from worldfoundry.core.nn import (
     normalization_layer as get_norm_layer,
 )
 
-from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import camera_features
-
 from ..layers.token_refiner import SingleTokenRefiner
 from .cameranet import CameraNet
 from .patch import PatchEmbed
@@ -73,8 +71,8 @@ class DoubleStreamBlock(nn.Module):
         qk_norm: bool = True,
         qk_norm_type: str = "rms",
         qkv_bias: bool = False,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
@@ -131,13 +129,13 @@ class DoubleStreamBlock(nn.Module):
         img: torch.Tensor,
         txt: torch.Tensor,
         vec: torch.Tensor,
-        cu_seqlens_q: Optional[torch.Tensor] = None,
-        cu_seqlens_kv: Optional[torch.Tensor] = None,
-        max_seqlen_q: Optional[int] = None,
-        max_seqlen_kv: Optional[int] = None,
-        freqs_cis: tuple = None,
+        cu_seqlens_q: torch.Tensor | None = None,
+        cu_seqlens_kv: torch.Tensor | None = None,
+        max_seqlen_q: int | None = None,
+        max_seqlen_kv: int | None = None,
+        freqs_cis: tuple | None = None,
         use_sage: bool = True,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         img_mod1_shift, img_mod1_scale, img_mod1_gate, img_mod2_shift, img_mod2_scale, img_mod2_gate = self.img_mod(
             vec
         ).chunk(6, dim=-1)
@@ -252,9 +250,9 @@ class SingleStreamBlock(nn.Module):
         mlp_act_type: str = "gelu_tanh",
         qk_norm: bool = True,
         qk_norm_type: str = "rms",
-        qk_scale: float = None,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        qk_scale: float | None = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
@@ -296,11 +294,11 @@ class SingleStreamBlock(nn.Module):
         x: torch.Tensor,
         vec: torch.Tensor,
         txt_len: int,
-        cu_seqlens_q: Optional[torch.Tensor] = None,
-        cu_seqlens_kv: Optional[torch.Tensor] = None,
-        max_seqlen_q: Optional[int] = None,
-        max_seqlen_kv: Optional[int] = None,
-        freqs_cis: Tuple[torch.Tensor, torch.Tensor] = None,
+        cu_seqlens_q: torch.Tensor | None = None,
+        cu_seqlens_kv: torch.Tensor | None = None,
+        max_seqlen_q: int | None = None,
+        max_seqlen_kv: int | None = None,
+        freqs_cis: tuple[torch.Tensor, torch.Tensor] | None = None,
         use_sage: bool = True,
     ) -> torch.Tensor:
         mod_shift, mod_scale, mod_gate = self.modulation(vec).chunk(3, dim=-1)
@@ -395,23 +393,23 @@ class HYVideoDiffusionTransformer(ModelMixin, ConfigMixin):
     def __init__(
         self,
         args,
-        patch_size: list = [1, 2, 2],
+        patch_size: list = [1, 2, 2],  # noqa: B006 - Keeps the upstream default object and signature.
         in_channels: int = 4,  # Should be VAE.config.latent_channels.
-        out_channels: int = None,
+        out_channels: int | None = None,
         hidden_size: int = 3072,
         mlp_width_ratio: float = 4.0,
         mlp_act_type: str = "gelu_tanh",
         num_heads: int = 24,
         depth_double_blocks: int = 19,
         depth_single_blocks: int = 38,
-        rope_dim_list: List[int] = [16, 56, 56],
+        rope_dim_list: list[int] = [16, 56, 56],  # noqa: B006 - Keeps the upstream default object and signature.
         qkv_bias: bool = True,
         qk_norm: bool = True,
         qk_norm_type: str = "rms",
         guidance_embed: bool = False,  # For modulation.
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
-        multitask_mask_training_type: Optional[str] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
+        multitask_mask_training_type: str | None = None,
         camera_in_channels: int = 6,
         camera_down_coef: int = 8,
     ):
@@ -517,15 +515,11 @@ class HYVideoDiffusionTransformer(ModelMixin, ConfigMixin):
 
     def _encode_camera_condition(self, condition, latent_frames):
         if latent_frames == 18:
-            return torch.cat(
-                [self.camera_net(torch.zeros_like(condition)), self.camera_net(condition)], dim=1
-            )
+            return torch.cat([self.camera_net(torch.zeros_like(condition)), self.camera_net(condition)], dim=1)
         if latent_frames == 9:
             return self.camera_net(condition)
         if latent_frames == 10:
-            return torch.cat(
-                [self.camera_net(torch.zeros_like(condition)[:, :4]), self.camera_net(condition)], dim=1
-            )
+            return torch.cat([self.camera_net(torch.zeros_like(condition)[:, :4]), self.camera_net(condition)], dim=1)
         raise ValueError("GameCraft camera conditioning requires 9, 10 or 18 latent frames")
 
     def enable_deterministic(self):
@@ -546,15 +540,15 @@ class HYVideoDiffusionTransformer(ModelMixin, ConfigMixin):
         t: torch.Tensor,  # Should be in range(0, 1000).
         text_states: torch.Tensor = None,
         text_mask: torch.Tensor = None,  # Now we don't use it.
-        text_states_2: Optional[torch.Tensor] = None,  # Text embedding for modulation.
-        freqs_cos: Optional[torch.Tensor] = None,
-        freqs_sin: Optional[torch.Tensor] = None,
+        text_states_2: torch.Tensor | None = None,  # Text embedding for modulation.
+        freqs_cos: torch.Tensor | None = None,
+        freqs_sin: torch.Tensor | None = None,
         guidance: torch.Tensor = None,  # Guidance for modulation, should be cfg_scale x 1000.
         return_dict: bool = True,
         is_cache: bool = False,
         cam_latents=None,
         use_sage: bool = False,
-    ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+    ) -> torch.Tensor | dict[str, torch.Tensor]:
         out = {}
         img = x
         txt = text_states
@@ -579,7 +573,7 @@ class HYVideoDiffusionTransformer(ModelMixin, ConfigMixin):
             torch.cuda.empty_cache()
 
         camera_condition = cam_latents
-        assert camera_condition is not None, print("plucker_embedding is not provided")
+        assert camera_condition is not None, print("plucker_embedding is not provided")  # noqa: RUF030 - Upstream assertion prints its context before failing.
         latent_len = img.shape[2]
 
         # Embed image and text.
@@ -593,7 +587,8 @@ class HYVideoDiffusionTransformer(ModelMixin, ConfigMixin):
             raise NotImplementedError(f"Unsupported text_projection: {self.text_projection}")
 
         camera_latents = camera_features(
-            self.camera_net, camera_condition,
+            self.camera_net,
+            camera_condition,
             encode=lambda condition: self._encode_camera_condition(condition, latent_len),
         )
         img = img + camera_latents
@@ -624,7 +619,7 @@ class HYVideoDiffusionTransformer(ModelMixin, ConfigMixin):
         freqs_cis = (freqs_cos, freqs_sin) if freqs_cos is not None else None
         # --------------------- Pass through DiT blocks ------------------------
         if not is_cache:
-            for layer_num, block in enumerate(self.double_blocks):
+            for layer_num, block in enumerate(self.double_blocks):  # noqa: B007 - The loop variable is read outside the loop.
                 double_block_args = [
                     img,
                     txt,

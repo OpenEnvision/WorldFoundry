@@ -23,9 +23,8 @@ pip_packages:
 - termcolor
 source_requirement_files:
 - worldfoundry/synthesis/visual_generation/mira_wm/requirements-torchcodec.txt
-pythonpath_dirs:
-- worldfoundry/synthesis/visual_generation/mira_wm/src
 validation_imports:
+- worldfoundry.synthesis.visual_generation.mira_wm.src.mira.inference.loading
 - torch>=2.8,<2.9
 - torchcodec==0.7.0
 - numpy

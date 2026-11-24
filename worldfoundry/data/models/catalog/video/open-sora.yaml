@@ -1,6 +1,6 @@
 id: open-sora
 name: Open-Sora
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 runtime_profile: runtime-profile:open-sora
 tasks:
 - text-to-video
@@ -73,18 +73,16 @@ docs:
   publisher: HPC-AI Tech
   publisher_kind: company
   publisher_zh: 潞晨科技（HPC-AI Tech）
-  overview: 'Open-Sora is HPC-AI Tech''s fully open text-to-video project — model, training code, and data pipeline are all published, which made it a popular reproducible baseline. The WorldFoundry route is complete and reports missing checkpoints at runtime. Note the recorded packaging detail: Open-Sora often requires separate model and VAE repositories, and both confirmed public HF repos are listed in the manifest.'
-  overview_zh: Open-Sora 是潞晨科技（HPC-AI Tech）的全开源文生视频项目——模型、训练代码与数据管线全部公开，因此成为流行的可复现基线。WorldFoundry 路径已完备，checkpoint 缺失会在运行时报告。注意记录在案的打包细节： Open-Sora 通常需要模型与 VAE 两个独立仓库，manifest 中列出了两个已确认的公开 HF 仓库。
-  architecture: Open-Sora uses a spatial-temporal diffusion transformer (its STDiT design) over a video VAE latent space, per the upstream project. This repository records the prompt-only input contract and the two-repo (model + VAE) checkpoint layout; version-specific internals are not recorded here.
-  architecture_zh: Open-Sora 采用视频 VAE 潜空间上的时空扩散 Transformer（其 STDiT 设计），见上游项目。本仓库记录仅 prompt 的输入契约与「模型 + VAE」双仓库 checkpoint 布局；具体版本的内部细节仓库未记录。
-  usage_notes: No runner-parity record exists yet. Stage both the model and VAE repositories before running — forgetting the VAE is the most common failure. Best used as a reproducible research baseline rather than a production generator.
-  usage_notes_zh: 尚无 runner parity 记录。运行前请同时就位模型与 VAE 两个仓库——漏掉 VAE 是最常见的失败原因。它更适合作为可复现研究基线，而非生产级生成器。
+  overview: Open-Sora is HPC-AI Tech's fully open text-to-video project — model, training code, and data pipeline are all published, which made it a popular reproducible baseline. WorldFoundry runs the v1.2 STDiT-v3 inference route, which needs separate model and VAE repositories.
+  overview_zh: Open-Sora 是潞晨科技（HPC-AI Tech）的全开源文生视频项目，模型、训练代码与数据管线全部公开，因此成为流行的可复现基线。WorldFoundry 运行 v1.2 STDiT-v3 推理路径，需要模型与 VAE 两个独立仓库。
+  architecture: 'Open-Sora uses a spatial-temporal diffusion transformer (its STDiT design) over a video VAE latent space, per the upstream project. It takes a text prompt only, and its checkpoint comes as two repositories: model and VAE.'
+  architecture_zh: Open-Sora 采用视频 VAE 潜空间上的时空扩散 Transformer（其 STDiT 设计），见上游项目。输入仅为文本提示词，checkpoint 分为模型与 VAE 两个仓库。
+  usage_notes: Stage both the model and VAE repositories before running — forgetting the VAE is the most common failure. Best used as a reproducible research baseline rather than a production generator.
+  usage_notes_zh: 运行前请同时就位模型与 VAE 两个仓库，漏掉 VAE 是最常见的失败原因。它更适合作为可复现研究基线，而非生产级生成器。
   limitations:
-  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
-  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - Text-to-video only; image-to-video and video-to-video from later upstream releases are not available.
   limitations_zh:
-  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
-  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - 仅支持文生视频；上游后续版本的图生视频与视频到视频不可用。
   recommended_benchmarks:
   - id: vbench
     reason: The suite Open-Sora releases habitually report on.

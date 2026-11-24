@@ -26,12 +26,17 @@ would silently rotate the wrong tokens.
 """
 
 import math
-from typing import Callable, List, Tuple, Union
+from collections.abc import Callable, Sequence
+from typing import cast
 
 import torch
 import torch.distributed
 
-from worldfoundry.core.attention.sequence.packed_sequence import ModelMetaArgs, PackedCoreAttnParams, PackedCrossAttnParams
+from worldfoundry.core.attention.sequence.packed_sequence import (
+    ModelMetaArgs,
+    PackedCoreAttnParams,
+    PackedCrossAttnParams,
+)
 from worldfoundry.core.distributed.model_parallel import groups as mpu
 from worldfoundry.core.utils.python.misc_utils import divide
 
@@ -113,11 +118,9 @@ class FakeHandle:
 
     def __init__(self):
         """Construct a no-op handle that is already complete."""
-        pass
 
     def wait(self):
         """No-op; there is no outstanding collective to join."""
-        pass
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -143,18 +146,19 @@ def update_packed_seq_params_for_cuda_graph(cross_attn_params: PackedCrossAttnPa
     cu_seqlens_k = cu_seqlens_k.cumsum(-1).to(torch.int32)
     static_cu_seqlens_k = torch.arange(0, (batch_size + 1) * static_caption_length, static_caption_length)
     assert cu_seqlens_k.shape[0] == batch_size + 1 == static_cu_seqlens_k.shape[0]
-    start_index_map = dict(zip(cu_seqlens_k.flatten().tolist(), static_cu_seqlens_k.flatten().tolist()))
+    start_index_map = dict(zip(cu_seqlens_k.flatten().tolist(), static_cu_seqlens_k.flatten().tolist(), strict=False))
 
     # Move kv_range to the right position
-    kv_range_start_list = cross_attn_params.kv_ranges[:, 0].flatten().tolist()
+    kv_ranges = cast(torch.Tensor, cross_attn_params.kv_ranges)
+    kv_range_start_list = kv_ranges[:, 0].flatten().tolist()
     static_kv_range_start = [start_index_map[kv_range_start_list[i]] for i in range(len(kv_range_start_list))]
     static_kv_range_start = torch.tensor(static_kv_range_start, dtype=torch.int32, device=xattn_mask.device)
-    assert static_kv_range_start.shape[0] == cross_attn_params.kv_ranges.shape[0]
-    static_kv_range_diff = cross_attn_params.kv_ranges[:, 1] - cross_attn_params.kv_ranges[:, 0]
+    assert static_kv_range_start.shape[0] == kv_ranges.shape[0]
+    static_kv_range_diff = kv_ranges[:, 1] - kv_ranges[:, 0]
     static_kv_range_end = static_kv_range_start + static_kv_range_diff
     static_kv_range = torch.stack((static_kv_range_start, static_kv_range_end), dim=1)
 
-    assert static_kv_range.shape == cross_attn_params.kv_ranges.shape
+    assert static_kv_range.shape == kv_ranges.shape
     return PackedCrossAttnParams(
         q_ranges=cross_attn_params.q_ranges,
         kv_ranges=static_kv_range,
@@ -168,7 +172,7 @@ def update_packed_seq_params_for_cuda_graph(cross_attn_params: PackedCrossAttnPa
 def cp_update_cross_attn_qkv_range(
     cross_attn_params: PackedCrossAttnParams,
     batch_size: int,
-    cp_split_sizes: List[int],
+    cp_split_sizes: list[int],
     device: torch.device,
     cp_shuffle_num: int = 1,
     cp_pad_size: int = 0,
@@ -188,13 +192,14 @@ def cp_update_cross_attn_qkv_range(
     # Update cu_seqlens_q and max_seqlen_q because split x maybe unbalanced
     cp_rank = mpu.get_cp_rank()
     seq_len_cur_rank = cp_split_sizes[cp_rank]
-    cp_split_sizes = [divide(x, cp_shuffle_num) for x in cp_split_sizes]
-    cp_split_sizes = torch.tensor(cp_split_sizes, dtype=torch.int32, device=device)
-    base_cp_boundaries = torch.cat((torch.zeros(1, dtype=torch.int32, device=device), cp_split_sizes.cumsum(0)))
+    shuffled_split_sizes = torch.tensor(
+        [divide(x, cp_shuffle_num) for x in cp_split_sizes], dtype=torch.int32, device=device
+    )
+    base_cp_boundaries = torch.cat((torch.zeros(1, dtype=torch.int32, device=device), shuffled_split_sizes.cumsum(0)))
     total_seq_len = base_cp_boundaries[-1]
 
-    cu_seqlens_q = cross_attn_params.cu_seqlens_q
-    cu_seqlens_k = cross_attn_params.cu_seqlens_kv
+    cu_seqlens_q = cast(torch.Tensor, cross_attn_params.cu_seqlens_q)
+    cu_seqlens_k = cast(torch.Tensor, cross_attn_params.cu_seqlens_kv)
     cu_seqlens_pad = torch.arange(cu_seqlens_q.shape[0], dtype=torch.int32, device=device) * divide(
         cp_pad_size, cp_shuffle_num
     )
@@ -233,14 +238,16 @@ def cp_update_cross_attn_qkv_range(
         inner_offsets = torch.cat(
             (torch.zeros(1, dtype=inner_end_values.dtype), torch.cumsum(inner_end_values[:-1], dim=0))
         )
-        inner_xattn_q_ranges = [tensor + int(offset) for tensor, offset in zip(inner_xattn_q_ranges, inner_offsets)]
+        inner_xattn_q_ranges = [
+            tensor + int(offset) for tensor, offset in zip(inner_xattn_q_ranges, inner_offsets, strict=False)
+        ]
         xattn_q_ranges.append(torch.cat(inner_xattn_q_ranges, dim=0))
         xattn_k_ranges.append(torch.cat(inner_xattn_k_ranges, dim=0))
 
     end_values = torch.tensor([ranges[-1, -1].item() for ranges in xattn_q_ranges], dtype=torch.int32)
     offsets = torch.cat((torch.zeros(1, dtype=end_values.dtype), torch.cumsum(end_values[:-1], dim=0)))
 
-    shifted_tensors = [tensor + int(offset) for tensor, offset in zip(xattn_q_ranges, offsets)]
+    shifted_tensors = [tensor + int(offset) for tensor, offset in zip(xattn_q_ranges, offsets, strict=False)]
     xattn_q_ranges_ts = torch.cat(shifted_tensors, dim=0)
     xattn_k_ranges_ts = torch.cat(xattn_k_ranges, dim=0)
 
@@ -265,7 +272,7 @@ def cp_ulysses_process(
     x: torch.Tensor,
     condition_map: torch.Tensor,
     rope: torch.Tensor,
-    xattn_mask_for_cuda_graph: Union[torch.Tensor, None],
+    xattn_mask_for_cuda_graph: torch.Tensor | None,
     cross_attn_params: PackedCrossAttnParams,
 ):
     """Scatter tokens/RoPE/condition map and rewrite cross-attn ranges for Ulysses.
@@ -300,7 +307,7 @@ def cp_shuffle_overlap_process(
     x: torch.Tensor,
     condition_map: torch.Tensor,
     rope: torch.Tensor,
-    xattn_mask_for_cuda_graph: Union[torch.Tensor, None],
+    xattn_mask_for_cuda_graph: torch.Tensor | None,
     ardf_meta: dict,
     core_attn_params: PackedCoreAttnParams,
     cross_attn_params: PackedCrossAttnParams,
@@ -358,7 +365,7 @@ def cp_pre_process(
     x: torch.Tensor,
     condition_map: torch.Tensor,
     rope: torch.Tensor,
-    xattn_mask_for_cuda_graph: Union[torch.Tensor, None],
+    xattn_mask_for_cuda_graph: torch.Tensor | None,
     ardf_meta: dict,
     core_attn_params: PackedCoreAttnParams,
     cross_attn_params: PackedCrossAttnParams,
@@ -442,8 +449,8 @@ def cp_post_process(cp_size: int, cp_strategy: str, x: torch.Tensor, meta_args: 
 
 
 def all_to_all_input_split(
-    tensor: torch.Tensor, cp_split_sizes: List[int]
-) -> Tuple[torch.Tensor, torch.distributed.Work]:
+    tensor: torch.Tensor, cp_split_sizes: list[int] | None
+) -> tuple[torch.Tensor, torch.distributed.Work | FakeHandle]:
     """
     Scatter head_number and gather seq_len, for example:
     input: (seq_len, cp * hn, hd)
@@ -467,8 +474,8 @@ def all_to_all_input_split(
 
 
 def all_to_all_output_split(
-    tensor: torch.Tensor, cp_split_sizes: List[int]
-) -> Tuple[torch.Tensor, torch.distributed.Work]:
+    tensor: torch.Tensor, cp_split_sizes: list[int] | None
+) -> tuple[torch.Tensor, torch.distributed.Work | FakeHandle]:
     """
     Scatter seq_len and gather head_number, for example:
     input: (seq_len * cp, hn, hd)
@@ -491,8 +498,8 @@ def all_to_all_output_split(
 
 
 def fused_qkv_communication(
-    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, cp_split_sizes: List[int]
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, cp_split_sizes: list[int] | None
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """All-to-all Q, K, and V in one collective by concatenating heads.
 
     Repeats K/V heads when CP size is a multiple of KV heads (MQA/GQA)
@@ -532,7 +539,6 @@ class UlyssesScheduler:
 
     def __init__(self):
         """No instance state; methods are static schedules."""
-        pass
 
     @staticmethod
     def get_attn_and_xattn_with_comm_overlap(
@@ -545,7 +551,7 @@ class UlyssesScheduler:
         overlap_degree: int,
         batch_size: int,
         cp_size: int,
-        cp_split_sizes: List[int] = None,
+        cp_split_sizes: list[int] | None = None,
     ):
         """
         Get Q, K, V with communication overlap.
@@ -590,7 +596,7 @@ class UlyssesScheduler:
         overlap_degree: int,
         batch_size: int,
         cp_size: int,
-        cp_split_sizes: List[int] = None,
+        cp_split_sizes: list[int] | None = None,
     ):
         """
         When seq_len is very small, CPU-bound issues are severe. By fusing kv communication,
@@ -615,7 +621,7 @@ class UlyssesScheduler:
         overlap_degree: int,
         batch_size: int,
         cp_size: int,
-        cp_split_sizes: List[int] = None,
+        cp_split_sizes: list[int] | None = None,
     ):
         """
         By fusing the communication of q, k, and v together, further optimize CPU-bound issues.
@@ -637,7 +643,7 @@ class UlyssesScheduler:
         overlap_degree: int,
         batch_size: int,
         cp_size: int,
-        cp_split_sizes: List[int] = None,
+        cp_split_sizes: list[int] | None = None,
     ):
         """Run core attention in ``overlap_degree`` head chunks, then cross-attn.
 
@@ -655,30 +661,30 @@ class UlyssesScheduler:
         else:
             assert overlap_degree <= q_head
 
+        query_chunks: Sequence[torch.Tensor]
         if overlap_degree == 1:
-            query = [query]
+            query_chunks = [query]
         elif kv_head == 1:  # MQA
-            query = query.chunk(overlap_degree, dim=1)
+            query_chunks = query.chunk(overlap_degree, dim=1)
         else:  # GQA
             assert q_head % (overlap_degree * kv_head) == 0
-            query = query.reshape(q_seq, kv_head, -1, q_hidden)
-            query = query.chunk(overlap_degree, dim=2)
-            query = [q.reshape(q_seq, -1, q_hidden) for q in query]
+            grouped_query = query.reshape(q_seq, kv_head, -1, q_hidden)
+            query_chunks = [q.reshape(q_seq, -1, q_hidden) for q in grouped_query.chunk(overlap_degree, dim=2)]
 
-        # Compute Core Attention
-        handle_attn = None
-        core_attn_out = None
-        core_attn_outs = []
+        # Compute Core Attention; each chunk's output exchange overlaps the next chunk's compute.
+        pending: tuple[torch.Tensor, torch.distributed.Work | FakeHandle] | None = None
+        core_attn_outs: list[torch.Tensor] = []
         for i in range(overlap_degree):
-            core_attn_out_new = core_attn_func(query[i], key, value)
-            if handle_attn is not None:
-                handle_attn.wait()
-                core_attn_outs.append(core_attn_out)
-            core_attn_out, handle_attn = all_to_all_output_split(core_attn_out_new, cp_split_sizes)
+            core_attn_out_new = core_attn_func(query_chunks[i], key, value)
+            if pending is not None:
+                pending[1].wait()
+                core_attn_outs.append(pending[0])
+            pending = all_to_all_output_split(core_attn_out_new, cp_split_sizes)
 
         xattn_out = cross_attn_func()
-        handle_attn.wait()
-        core_attn_outs.append(core_attn_out)
+        final_output, final_handle = cast(tuple[torch.Tensor, torch.distributed.Work | FakeHandle], pending)
+        final_handle.wait()
+        core_attn_outs.append(final_output)
         core_attn_out = torch.cat(core_attn_outs, dim=1)
 
         core_attn_out = _rearrange(core_attn_out, "(cp sq b) hn hd -> (sq) b (cp hn hd)", cp=cp_size, b=batch_size)
@@ -691,8 +697,8 @@ class UlyssesScheduler:
 
 
 def cso_communication(
-    input: torch.Tensor, cp_world_size: int, cp_split_sizes: List[int], comm_type: str = None
-) -> Tuple[torch.Tensor, torch.distributed.Work]:
+    input: torch.Tensor, cp_world_size: int, cp_split_sizes: list[int] | None, comm_type: str | None = None
+) -> tuple[torch.Tensor, torch.distributed.Work | FakeHandle]:
     """Launch one context-shuffle-overlap all-to-all operation.
 
     Args:

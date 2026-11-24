@@ -45,7 +45,6 @@ class BasePolicy(ABC):
         Raises:
             AssertionError: If the observation is invalid.
         """
-        pass
 
     @abstractmethod
     def check_action(self, action: dict[str, Any]) -> None:
@@ -57,7 +56,6 @@ class BasePolicy(ABC):
         Raises:
             AssertionError: If the action is invalid.
         """
-        pass
 
     @abstractmethod
     def _get_action(
@@ -77,7 +75,6 @@ class BasePolicy(ABC):
                 - action: Dictionary containing the action to be executed
                 - info: Dictionary containing additional metadata (e.g., confidence scores)
         """
-        pass
 
     def get_action(
         self, observation: dict[str, Any], options: dict[str, Any] | None = None
@@ -116,7 +113,6 @@ class BasePolicy(ABC):
         Returns:
             Dictionary containing the info after resetting the policy
         """
-        pass
 
 
 class PolicyWrapper(BasePolicy):

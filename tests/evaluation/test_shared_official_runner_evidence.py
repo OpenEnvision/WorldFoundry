@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.execution.framework.official_runner import (
+from worldfoundry.evals.tasks.execution.framework.official_runner import (
     BenchRunnerConfig,
     build_scorecard,
 )

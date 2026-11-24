@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -12,7 +12,7 @@ DEFAULT_VGGT_OMEGA_CHECKPOINT_NAME = "vggt_omega_1b_512.pt"
 class VGGTOmegaRepresentation:
     """VGGT-Omega representation model for camera, depth, and point maps."""
 
-    def __init__(self, model: Optional[Any] = None, device: Optional[str] = None) -> None:
+    def __init__(self, model: Any | None = None, device: str | None = None) -> None:
         """
         Create a VGGT-Omega runtime wrapper.
 
@@ -29,11 +29,11 @@ class VGGTOmegaRepresentation:
     def from_pretrained(
         cls,
         pretrained_model_path: str,
-        device: Optional[str] = None,
+        device: str | None = None,
         enable_alignment: bool = False,
-        repo_root: Optional[str] = None,
+        repo_root: str | None = None,
         **kwargs: Any,
-    ) -> "VGGTOmegaRepresentation":
+    ) -> VGGTOmegaRepresentation:
         """
         Load the official VGGT-Omega checkpoint.
 
@@ -65,7 +65,7 @@ class VGGTOmegaRepresentation:
         instance.patch_size = kwargs.get("patch_size", 16)
         return instance
 
-    def get_representation(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def get_representation(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Run VGGT-Omega inference and return WorldFoundry-compatible arrays.
 
@@ -107,7 +107,7 @@ class VGGTOmegaRepresentation:
         intrinsic_np = intrinsic.squeeze(0).detach().cpu().numpy()
         point_map = _unproject_depth_map_to_point_map(depth_map, extrinsic_np, intrinsic_np)
 
-        results: Dict[str, Any] = {
+        results: dict[str, Any] = {
             "extrinsic": extrinsic_np,
             "intrinsic": intrinsic_np,
             "depth_map": depth_map,
@@ -118,14 +118,11 @@ class VGGTOmegaRepresentation:
         }
 
         if "camera_and_register_tokens" in predictions:
-            results["camera_and_register_tokens"] = (
-                predictions["camera_and_register_tokens"].detach().cpu().numpy()
-            )
+            results["camera_and_register_tokens"] = predictions["camera_and_register_tokens"].detach().cpu().numpy()
         if "text_alignment_embedding" in predictions:
-            results["text_alignment_embedding"] = (
-                predictions["text_alignment_embedding"].detach().cpu().numpy()
-            )
+            results["text_alignment_embedding"] = predictions["text_alignment_embedding"].detach().cpu().numpy()
         return results
+
 
 def _resolve_checkpoint_file(pretrained_model_path: str, *, enable_alignment: bool = False) -> Path:
     """
@@ -139,9 +136,7 @@ def _resolve_checkpoint_file(pretrained_model_path: str, *, enable_alignment: bo
     if path.is_file():
         return path
     if path.is_dir():
-        checkpoint_name = (
-            "vggt_omega_1b_256_text.pt" if enable_alignment else DEFAULT_VGGT_OMEGA_CHECKPOINT_NAME
-        )
+        checkpoint_name = "vggt_omega_1b_256_text.pt" if enable_alignment else DEFAULT_VGGT_OMEGA_CHECKPOINT_NAME
         checkpoint = path / checkpoint_name
         if checkpoint.is_file():
             return checkpoint

@@ -1,11 +1,15 @@
+from typing import ClassVar
+
+
 class ModelRegistry:
-    _models = {}
+    _models: ClassVar[dict] = {}
 
     @classmethod
     def register(cls, model_name):
         def decorator(model_class):
             cls._models[model_name] = model_class
             return model_class
+
         return decorator
 
     @classmethod

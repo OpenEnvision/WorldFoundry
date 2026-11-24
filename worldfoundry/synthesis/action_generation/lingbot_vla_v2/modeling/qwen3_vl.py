@@ -1,40 +1,51 @@
 """Checkpoint-compatible Qwen3-VL inference layers."""
 
-import torch
-from torch import nn
-import torch.nn.functional as F
-from typing import Callable, Optional, Tuple
+from collections.abc import Callable
+from typing import ClassVar
 
-from transformers.generation import GenerationMixin
-from transformers.modeling_layers import GradientCheckpointingLayer
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from transformers.processing_utils import Unpack
-from transformers.utils import logging
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
-from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLTextConfig, Qwen3VLVisionConfig
+import torch
+import torch.nn.functional as F
 import transformers.models.qwen3_vl.modeling_qwen3_vl as hf_qwen3vl
+from torch import nn
+from transformers.generation import GenerationMixin
+from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
+from transformers.modeling_layers import GradientCheckpointingLayer
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLTextConfig, Qwen3VLVisionConfig
 from transformers.models.qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLForConditionalGeneration as _Qwen3VLForConditionalGeneration,
+)
+from transformers.models.qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLModel as _Qwen3VLModel,
-    Qwen3VLTextModel as _Qwen3VLTextModel,
+)
+from transformers.models.qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLPreTrainedModel as _Qwen3VLPreTrainedModel,
+)
+from transformers.models.qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLTextAttention,
     Qwen3VLTextMLP,
     Qwen3VLTextRMSNorm,
     Qwen3VLTextRotaryEmbedding,
-    Qwen3VLVisionModel,
     Qwen3VLVisionMLP,
-    apply_rotary_pos_emb,
+    Qwen3VLVisionModel,
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
-
+from transformers.models.qwen3_vl.modeling_qwen3_vl import (
+    Qwen3VLTextModel as _Qwen3VLTextModel,
+)
+from transformers.models.qwen3_vl.modeling_qwen3_vl import (
+    apply_rotary_pos_emb as apply_rotary_pos_emb,
+)
+from transformers.processing_utils import Unpack
+from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
 
 def _qwen3vl_no_init_weights(self, module):
     return
+
 
 _Qwen3VLPreTrainedModel._init_weights = _qwen3vl_no_init_weights
 Qwen3VLPreTrainedModel = _Qwen3VLPreTrainedModel
@@ -58,9 +69,9 @@ class Qwen3VLVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        max_seqlen: Optional[int] = None,
+        rotary_pos_emb: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -121,7 +132,7 @@ class Qwen3VLVisionAttention(nn.Module):
                     is_causal=False,
                     **kwargs,
                 )[0]
-                for q, k, v in zip(*splits)
+                for q, k, v in zip(*splits, strict=False)
             ]
             attn_output = torch.cat(attn_outputs, dim=1)
 
@@ -142,8 +153,8 @@ class Qwen3VLVisionBlock(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        rotary_pos_emb: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
         hidden_states = hidden_states + self.attn(
@@ -169,13 +180,13 @@ class Qwen3VLTextDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        att_output: Optional[torch.Tensor] = None,
-        start: Optional[int] = 0,
-        end: Optional[int] = 0,
+        att_output: torch.Tensor | None = None,
+        start: int | None = 0,
+        end: int | None = 0,
         compute_kqv: bool = False,
         output_atten: bool = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         param_dtype = self.self_attn.q_proj.weight.dtype
         hidden_states = hidden_states.to(param_dtype)
         if att_output is not None:
@@ -248,9 +259,9 @@ class Qwen3VLModel(_Qwen3VLModel):
 
 
 class Qwen3VLForConditionalGeneration(_Qwen3VLForConditionalGeneration, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys: ClassVar[list] = ["lm_head.weight"]
     config_class = Qwen3VLConfig
-    _no_split_modules = ["Qwen3VLTextDecoderLayer", "Qwen3VLVisionBlock"]
+    _no_split_modules: ClassVar[list] = ["Qwen3VLTextDecoderLayer", "Qwen3VLVisionBlock"]
 
     def __init__(self, config):
         Qwen3VLPreTrainedModel.__init__(self, config)
@@ -282,10 +293,10 @@ def forward_without_grid_thw(
     self,
     hidden_states: torch.Tensor,
     grid_thw: torch.Tensor = None,
-    pos_embeds: Optional[torch.Tensor] = None,
-    position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-    cu_seqlens: Optional[torch.Tensor] = None,
-    max_seqlen: Optional[int] = None,
+    pos_embeds: torch.Tensor | None = None,
+    position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+    cu_seqlens: torch.Tensor | None = None,
+    max_seqlen: int | None = None,
     **kwargs,
 ) -> torch.Tensor:
     hidden_states = self.patch_embed(hidden_states)

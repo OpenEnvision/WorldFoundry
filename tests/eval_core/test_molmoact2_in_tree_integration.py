@@ -6,11 +6,10 @@ from pathlib import Path
 
 import yaml
 
-from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
 from worldfoundry.operators import MolmoAct2Operator
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
-
+from worldfoundry.zoo.catalog import load_model_zoo_registry
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -20,7 +19,7 @@ def test_molmoact2_model_zoo_and_runtime_profile_are_registered() -> None:
     entry = registry.get("molmoact2")
     profile = load_runtime_profile("molmoact2")
 
-    assert entry.runner_target == "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner"
+    assert entry.runner_target == "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner"
     assert entry.pipeline_target == "worldfoundry.pipelines.component_pipelines:MolmoAct2Pipeline"
     assert entry.runtime_profile == "runtime-profile:molmoact2"
     # The catalog records in_tree_checkpoint_runtime_static_verified, which is
@@ -157,7 +156,9 @@ def test_molmoact2_runtime_config_yaml_can_select_default_variant(tmp_path: Path
 
 
 def test_molmoact2_operator_maps_yam_camera_aliases() -> None:
-    operator = MolmoAct2Operator(input_schema={"camera_keys": ["top_cam", "left_cam", "right_cam"], "norm_tag": "yam_dual_molmoact2"})
+    operator = MolmoAct2Operator(
+        input_schema={"camera_keys": ["top_cam", "left_cam", "right_cam"], "norm_tag": "yam_dual_molmoact2"}
+    )
     perception = operator.process_perception(
         images=None,
         front_camera_rgb="front",

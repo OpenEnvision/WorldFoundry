@@ -10,7 +10,8 @@ and other spatial memories implement their own rankers.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from .store import MemoryQuery, MemoryRecord
 
@@ -47,7 +48,7 @@ def score_record(
     return score
 
 
-def select_records(records: list[Mapping[str, Any]], query: MemoryQuery) -> list[MemoryRecord]:
+def select_records(records: Sequence[Mapping[str, Any]], query: MemoryQuery) -> list[MemoryRecord]:
     """Return the top-*query.top_k* records ranked by :func:`score_record`."""
     if not records or query.top_k <= 0:
         return []
@@ -63,7 +64,7 @@ def select_records(records: list[Mapping[str, Any]], query: MemoryQuery) -> list
     return [record for _, _, record in ranked[: query.top_k]]
 
 
-def _newest_timestamp(records: list[Mapping[str, Any]]) -> int | float | None:
+def _newest_timestamp(records: Sequence[Mapping[str, Any]]) -> int | float | None:
     """Newest numeric ``timestamp``, or ``None`` when every record lacks one.
 
     Non-numeric timestamps are ignored so a single bad row cannot disable

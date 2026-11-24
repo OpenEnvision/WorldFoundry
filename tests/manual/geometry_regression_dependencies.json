@@ -1,22 +1,67 @@
 {
   "schema_version": 1,
   "shared_paths": [
-    "worldfoundry/core/**",
+    "worldfoundry/core/__init__.py",
+    "worldfoundry/core/README.md",
+    "worldfoundry/core/action_normalization.py",
+    "worldfoundry/core/contracts.py",
+    "worldfoundry/core/env_registry.py",
+    "worldfoundry/core/prompting.py",
+    "worldfoundry/core/registry.py",
+    "worldfoundry/core/acceleration/**",
+    "worldfoundry/core/attention/**",
+    "worldfoundry/core/configuration/**",
+    "worldfoundry/core/distributed/**",
+    "worldfoundry/core/execution/__init__.py",
+    "worldfoundry/core/execution/compile_numerics.py",
+    "worldfoundry/core/execution/inference.py",
+    "worldfoundry/core/execution/inference_runtime.py",
+    "worldfoundry/core/execution/parallel_execution.py",
+    "worldfoundry/core/execution/process.py",
+    "worldfoundry/core/execution/queued_batch.py",
+    "worldfoundry/core/execution/runtime_cache.py",
+    "worldfoundry/core/execution/graphs/**",
+    "worldfoundry/core/geometry/**",
+    "worldfoundry/core/io/**",
+    "worldfoundry/core/kernels/**",
+    "worldfoundry/core/media/__init__.py",
+    "worldfoundry/core/media/artifacts.py",
+    "worldfoundry/core/media/resolutions.py",
+    "worldfoundry/core/media/types.py",
+    "worldfoundry/core/media/codecs/**",
+    "worldfoundry/core/memory/**",
+    "worldfoundry/core/model_loading/**",
+    "worldfoundry/core/nn/**",
+    "worldfoundry/core/observability/**",
+    "worldfoundry/core/platform/**",
+    "worldfoundry/core/safety/**",
+    "worldfoundry/core/utils/**",
+    "worldfoundry/core/vram/**",
     "worldfoundry/runtime/**",
     "worldfoundry/pipelines/pipeline_utils.py",
     "worldfoundry/operators/base_operator.py",
     "worldfoundry/studio/inference/**",
-    "worldfoundry/studio/serving/**",
+    "worldfoundry/studio/serving/__init__.py",
+    "worldfoundry/studio/serving/auth.py",
+    "worldfoundry/studio/serving/http.py",
+    "worldfoundry/studio/serving/network.py",
+    "worldfoundry/studio/serving/telemetry.py",
+    "worldfoundry/studio/workspace/**",
     "worldfoundry/studio/cli.py",
-    "worldfoundry/studio/ui/launch_config.py",
-    "worldfoundry/studio/ui/launcher.py",
+    "worldfoundry/studio/visualization/launch_config.py",
+    "worldfoundry/studio/visualization/launcher.py",
+    "worldfoundry/data/base_models/capabilities/geometry.yaml",
+    "worldfoundry/data/base_models/stacks.yaml",
     "worldfoundry/data/models/**",
     "pyproject.toml",
     "MANIFEST.in",
     ".gitattributes",
     "constraints/**",
     "requirements*.txt",
+    "scripts/inference/prepare_model_infer.sh",
+    "scripts/model_zoo/download_checkpoints.py",
     "scripts/setup/**",
+    "scripts/workspace/run_workspace.sh",
     "tests/manual/geometry_regression_dependencies.json",
     "tests/manual/geometry_regression.py",
     "tests/manual/geometry_regression_impact.py",
@@ -24,8 +69,66 @@
     "tests/manual/geometry_regression_schedule.py",
     "worldfoundry/synthesis/base_synthesis.py"
   ],
+  "evaluation_only_paths": [
+    "worldfoundry/base_models/perception_core/video_text/README.md",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/README.md",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/get_facesim.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/get_gmescore.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/get_naturalscore.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/get_nexusscore.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/curricularface/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/curricularface/common.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/curricularface/model_irse.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/curricularface/model_resnet.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/gme/gme_model.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/configs/yolo_world_v2_l_vlpan_bn_2e-4_80e_8gpus_image_prompt_demo.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/datasets/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/datasets/mm_dataset.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/datasets/transformers/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/datasets/transformers/mm_mix_img_transforms.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/datasets/transformers/mm_transforms.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/datasets/utils.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/datasets/yolov5_cc3m_grounding.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/datasets/yolov5_lvis.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/datasets/yolov5_mixed_grounding.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/datasets/yolov5_obj365v1.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/datasets/yolov5_obj365v2.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/datasets/yolov5_v3det.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/engine/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/engine/optimizers/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/engine/optimizers/yolow_v5_optim_constructor.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/assigner/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/assigner/task_aligned_assigner.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/backbones/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/backbones/mm_backbone.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/data_preprocessors/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/data_preprocessors/data_preprocessor.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/dense_heads/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/dense_heads/yolo_world_head.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/dense_heads/yolo_world_seg_head.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/detectors/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/detectors/yolo_world.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/detectors/yolo_world_image.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/layers/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/layers/yolo_bricks.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/losses/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/losses/dynamic_loss.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/necks/__init__.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/models/necks/yolo_world_pafpn.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/eval/utils/yoloworld/yolo_world/version.py",
+    "worldfoundry/base_models/perception_core/video_text/opens2v_nexus/paths.py",
+    "worldfoundry/data/base_models/capabilities/benchmark_data.yaml",
+    "worldfoundry/data/base_models/capabilities/video_metrics.yaml"
+  ],
   "ignored_paths": [
     "docs/**",
+    "skills/index.md",
+    "skills/worldfoundry-studio-serving/SKILL.md",
+    "skills/worldfoundry-studio-serving/references/realtime-contract.md",
+    "worldfoundry/base_models/README.md",
+    "worldfoundry/base_models/three_dimensions/README.md",
     "README*",
     "LICENSE*",
     "THIRD-PARTY-NOTICES",
@@ -35,14 +138,22 @@
     "tests/**",
     "worldfoundry/cli/**",
     "worldfoundry/mcp/**",
-    "worldfoundry/evaluation/**",
+    "worldfoundry/evals/**",
     "worldfoundry/data/benchmarks/**",
     "worldfoundry/studio/visualization/**",
     "worldfoundry/studio/frontend/**",
-    "worldfoundry/studio/ui/**",
+    "worldfoundry/studio/assets/web/**",
     "scripts/docs/**"
   ],
   "components": {
+    "fastframes": [
+      "worldfoundry/pipelines/fastframes/**",
+      "worldfoundry/operators/fastframes_operator.py",
+      "worldfoundry/runtime/inference_specs/fastframes.py",
+      "worldfoundry/base_models/diffusion_model/models/denoisers/fastframes.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/wan/variants/fastframes/**",
+      "worldfoundry/base_models/diffusion_model/schedulers/fastframes.py"
+    ],
     "depth-anything-v1": [
       "worldfoundry/base_models/three_dimensions/depth/depth_anything/runtime_v1.py",
       "worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v1/**",
@@ -56,6 +167,8 @@
     "depth-anything-v3": [
       "worldfoundry/base_models/three_dimensions/depth/depth_anything/runtime_v3.py",
       "worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v3/**",
+      "worldfoundry/base_models/perception_core/general_perception/dinov2/variants/depth_anything_v3/vision_transformer.py",
+      "worldfoundry/base_models/perception_core/general_perception/dinov2/variants/depth_anything_v3/layers/attention.py",
       "worldfoundry/pipelines/depth_anything/pipeline_depth_anything_v3.py"
     ],
     "cut3r": [
@@ -109,8 +222,7 @@
     ],
     "hyworldmirror-2": [
       "worldfoundry/base_models/three_dimensions/point_clouds/hyworldmirror_2p0/**",
-      "worldfoundry/pipelines/hunyuan_world/pipeline_hy_world_2p0.py",
-      "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_worldgen_runtime.py"
+      "worldfoundry/pipelines/hunyuan_world/pipeline_hy_world_2p0.py"
     ],
     "lyra-2": [
       "worldfoundry/base_models/three_dimensions/point_clouds/lyra/**",
@@ -157,6 +269,62 @@
     "cosmos-transfer25": [
       "worldfoundry/pipelines/cosmos/pipeline_cosmos_transfer2p5.py",
       "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "hy-nomas": [
+      "worldfoundry/pipelines/hy_nomas/**",
+      "worldfoundry/operators/hy_nomas_operator.py",
+      "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "pika-h3-flex": [
+      "worldfoundry/pipelines/pika_h3_flex/**",
+      "worldfoundry/pipelines/minimax/**",
+      "worldfoundry/base_models/diffusion_model/models/networks/minimax_h3/**",
+      "worldfoundry/base_models/diffusion_model/models/autoencoders/minimax_h3_*",
+      "worldfoundry/base_models/diffusion_model/models/encoders/minimax_h3_qwen3vl.py",
+      "worldfoundry/base_models/diffusion_model/schedulers/minimax_h3.py"
+    ],
+    "pi4": [
+      "worldfoundry/pipelines/pi4/**",
+      "worldfoundry/operators/pi4_operator.py",
+      "worldfoundry/runtime/inference_specs/pi4.py",
+      "worldfoundry/base_models/three_dimensions/point_clouds/pi4_inference/**"
+    ],
+    "h3-world": [
+      "worldfoundry/pipelines/h3_world/**",
+      "worldfoundry/runtime/inference_specs/h3_world.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/minimax_h3/variants/h3_world.py"
+    ],
+    "h3-tiny": [
+      "worldfoundry/pipelines/h3_tiny/**",
+      "worldfoundry/operators/h3_tiny_operator.py",
+      "worldfoundry/runtime/inference_specs/h3_tiny.py",
+      "worldfoundry/base_models/diffusion_model/models/denoisers/h3_tiny.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/minimax_h3/variants/h3_tiny/**",
+      "worldfoundry/base_models/diffusion_model/schedulers/h3_tiny.py"
+    ],
+    "pi-h3": [
+      "worldfoundry/pipelines/pi_h3/**",
+      "worldfoundry/operators/pi_h3_operator.py",
+      "worldfoundry/runtime/inference_specs/pi_h3.py",
+      "worldfoundry/base_models/diffusion_model/models/denoisers/pi_h3.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/minimax_h3/variants/pi_h3/**",
+      "worldfoundry/base_models/diffusion_model/schedulers/pi_h3.py"
+    ],
+    "self-forcing": [
+      "worldfoundry/pipelines/forcing/__init__.py",
+      "worldfoundry/pipelines/forcing/pipeline_native_forcing.py",
+      "worldfoundry/pipelines/native_diffusion*.py",
+      "worldfoundry/base_models/diffusion_model/**",
+      "worldfoundry/synthesis/visual_generation/forcing/self_forcing_runtime/**"
+    ],
+    "causal-forcing": [
+      "worldfoundry/pipelines/forcing/__init__.py",
+      "worldfoundry/pipelines/forcing/pipeline_native_forcing.py",
+      "worldfoundry/pipelines/native_diffusion*.py",
+      "worldfoundry/base_models/diffusion_model/**",
+      "worldfoundry/synthesis/visual_generation/forcing/causal_forcing_runtime/eval_inputs.py",
+      "worldfoundry/synthesis/visual_generation/forcing/causal_forcing_runtime/inference.py",
+      "worldfoundry/synthesis/visual_generation/forcing/causal_forcing_runtime/pipeline/**"
     ],
     "gamma-world": [
       "worldfoundry/pipelines/gamma_world/**",
@@ -251,6 +419,7 @@
       "worldfoundry/synthesis/visual_generation/wonderworld/**",
       "worldfoundry/operators/wonderworld_operator.py",
       "worldfoundry/base_models/perception_core/segment/scene_segmentation.py",
+      "worldfoundry/base_models/perception_core/segment/sam_v1/modeling/transformer.py",
       "worldfoundry/base_models/diffusion_model/**"
     ],
     "helixworld": [
@@ -302,9 +471,510 @@
       "worldfoundry/base_models/diffusion_model/runners/compressed_memory.py",
       "worldfoundry/base_models/diffusion_model/runners/strategies.py",
       "worldfoundry/base_models/diffusion_model/schedulers/**"
+    ],
+    "ltx-2.5": [
+      "worldfoundry/pipelines/ltx25/**",
+      "worldfoundry/synthesis/visual_generation/ltx25/**",
+      "worldfoundry/base_models/diffusion_model/recipes/ltx25.py"
+    ],
+    "hyperflow": [
+      "worldfoundry/pipelines/hyperflow/**",
+      "worldfoundry/synthesis/visual_generation/hyperflow/**"
+    ],
+    "ltx-2-v2v": [
+      "worldfoundry/pipelines/ltx2/pipeline_ltx2_v2v.py",
+      "worldfoundry/base_models/diffusion_model/recipes/ltx.py"
+    ],
+    "ltx-2.3-v2v": [
+      "worldfoundry/pipelines/ltx2/pipeline_ltx2_v2v.py",
+      "worldfoundry/base_models/diffusion_model/recipes/ltx.py"
+    ],
+    "omnivinci": [
+      "worldfoundry/synthesis/visual_generation/omnivinci/**",
+      "worldfoundry/base_models/llm_mllm_core/mllm/omnivinci/**"
+    ],
+    "action-go1": [
+      "worldfoundry/synthesis/action_generation/go1/**",
+      "worldfoundry/base_models/llm_mllm_core/action/rdt.py"
+    ],
+    "action-ahawam": [
+      "worldfoundry/synthesis/action_generation/ahawam/**"
+    ],
+    "action-fastwam": [
+      "worldfoundry/synthesis/action_generation/fastwam/**"
+    ],
+    "action-x-wam": [
+      "worldfoundry/synthesis/action_generation/x_wam/**",
+      "worldfoundry/pipelines/x_wam/pipeline_x_wam.py"
+    ],
+    "action-being-h05": [
+      "worldfoundry/synthesis/action_generation/being_h05/**"
+    ],
+    "action-gr00t": [
+      "worldfoundry/synthesis/action_generation/gr00t/**"
+    ],
+    "action-galaxea-vla": [
+      "worldfoundry/synthesis/action_generation/galaxea_vla/**"
+    ],
+    "action-hy-embodied-vla": [
+      "worldfoundry/synthesis/action_generation/hy_embodied_vla/**",
+      "worldfoundry/pipelines/hy_embodied_vla/pipeline_hy_embodied_vla.py"
+    ],
+    "action-internvla-a1": [
+      "worldfoundry/synthesis/action_generation/internvla_a1/**"
+    ],
+    "action-lingbot-vla": [
+      "worldfoundry/synthesis/action_generation/lingbot_vla/**",
+      "worldfoundry/base_models/llm_mllm_core/action/lingbot/__init__.py",
+      "worldfoundry/base_models/llm_mllm_core/action/lingbot/modeling.py",
+      "worldfoundry/base_models/llm_mllm_core/action/lingbot/preprocessing.py"
+    ],
+    "action-lingbot-vla-v2": [
+      "worldfoundry/synthesis/action_generation/lingbot_vla_v2/**",
+      "worldfoundry/base_models/llm_mllm_core/action/lingbot/__init__.py",
+      "worldfoundry/base_models/llm_mllm_core/action/lingbot/modeling.py",
+      "worldfoundry/base_models/llm_mllm_core/action/lingbot/preprocessing.py"
+    ],
+    "action-cogact": [
+      "worldfoundry/synthesis/action_generation/cogact/**",
+      "worldfoundry/base_models/llm_mllm_core/action/cogact.py",
+      "worldfoundry/base_models/llm_mllm_core/action/cogact_diffusion.py"
+    ],
+    "action-db-cogact": [
+      "worldfoundry/synthesis/action_generation/db_cogact/**",
+      "worldfoundry/base_models/llm_mllm_core/action/cogact.py",
+      "worldfoundry/base_models/llm_mllm_core/action/cogact_diffusion.py"
+    ],
+    "action-diffusion-policy": [
+      "worldfoundry/synthesis/action_generation/diffusion_policy/**"
+    ],
+    "action-roboflamingo": [
+      "worldfoundry/base_models/_vendor_imports.py",
+      "worldfoundry/synthesis/action_generation/roboflamingo/**"
+    ],
+    "action-tinyvla": [
+      "worldfoundry/synthesis/action_generation/tinyvla/**",
+      "worldfoundry/base_models/llm_mllm_core/action/transformer.py"
+    ],
+    "action-molmoact2": [
+      "worldfoundry/synthesis/action_generation/molmoact2/**"
+    ],
+    "action-molmobot": [
+      "worldfoundry/synthesis/action_generation/molmobot/**"
+    ],
+    "action-openpi": [
+      "worldfoundry/synthesis/action_generation/openpi/**"
+    ],
+    "action-lda-1b": [
+      "worldfoundry/synthesis/action_generation/lda_1b/**"
+    ],
+    "action-xiaomi-robotics-0": [
+      "worldfoundry/synthesis/action_generation/xiaomi_robotics_0/**",
+      "worldfoundry/pipelines/xiaomi_robotics_0/pipeline_xiaomi_robotics_0.py"
+    ],
+    "action-giga-world-policy-0.5": [
+      "worldfoundry/synthesis/action_generation/giga_world_policy/**"
+    ],
+    "action-openvla": [
+      "worldfoundry/synthesis/action_generation/openvla/**"
+    ],
+    "action-openvla-oft": [
+      "worldfoundry/synthesis/action_generation/openvla_oft/**"
+    ],
+    "action-spirit-v1.5": [
+      "worldfoundry/synthesis/action_generation/spirit_v15/**"
+    ],
+    "action-abot-m0": [
+      "worldfoundry/synthesis/action_generation/abot_m0/**"
+    ],
+    "action-mem-0": [
+      "worldfoundry/synthesis/action_generation/mem0/**"
+    ],
+    "action-dreamzero": [
+      "worldfoundry/synthesis/action_generation/dreamzero/**"
+    ],
+    "visual-joyai_echo": [
+      "worldfoundry/synthesis/visual_generation/joyai_echo/**",
+      "worldfoundry/pipelines/joyai_echo/pipeline_joyai_echo.py"
+    ],
+    "visual-solarwm": [
+      "worldfoundry/synthesis/visual_generation/solarwm/**",
+      "worldfoundry/pipelines/solarwm/pipeline_solarwm.py"
+    ],
+    "visual-alayaworld_v11": [
+      "worldfoundry/synthesis/visual_generation/alayaworld_v11/**",
+      "worldfoundry/pipelines/alayaworld_v11/pipeline_alayaworld_v11.py"
+    ],
+    "visual-astronex_world": [
+      "worldfoundry/synthesis/visual_generation/astronex_world/**",
+      "worldfoundry/pipelines/astronex_world/pipeline_astronex_world.py"
+    ],
+    "visual-emu35": [
+      "worldfoundry/synthesis/visual_generation/emu35/**",
+      "worldfoundry/pipelines/emu35/pipeline_emu35.py"
+    ],
+    "visual-open_magvit2": [
+      "worldfoundry/synthesis/visual_generation/open_magvit2/**"
+    ],
+    "visual-show_o": [
+      "worldfoundry/synthesis/visual_generation/show_o/**"
+    ],
+    "visual-infinite_world": [
+      "worldfoundry/synthesis/visual_generation/infinite_world/**",
+      "worldfoundry/pipelines/infinite_world/pipeline_infinite_world.py"
+    ],
+    "visual-krea_realtime_video": [
+      "worldfoundry/synthesis/visual_generation/krea_realtime/worldfoundry_runner.py",
+      "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/sample.py",
+      "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/release_server.py",
+      "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/pipeline/causal_inference.py",
+      "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/runtime_utils/memory.py",
+      "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/runtime_utils/vae_block3.py",
+      "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/utils/wan_wrapper.py"
+    ],
+    "visual-lyra_1": [
+      "worldfoundry/synthesis/visual_generation/lyra_1/**",
+      "worldfoundry/pipelines/lyra/pipeline_lyra1.py",
+      "worldfoundry/base_models/three_dimensions/point_clouds/lyra/**"
+    ],
+    "visual-longcat_video": [
+      "worldfoundry/synthesis/visual_generation/longcat_video/**",
+      "worldfoundry/pipelines/longcat_video/pipeline_longcat_video.py"
+    ],
+    "visual-liveworld": [
+      "worldfoundry/synthesis/visual_generation/liveworld/**",
+      "worldfoundry/pipelines/liveworld/pipeline_liveworld.py"
+    ],
+    "visual-uni3c": [
+      "worldfoundry/synthesis/visual_generation/uni3c/**",
+      "worldfoundry/pipelines/uni3c/pipeline_uni3c.py"
+    ],
+    "visual-adaworld": [
+      "worldfoundry/synthesis/visual_generation/adaworld/**"
+    ],
+    "visual-easyanimate": [
+      "worldfoundry/synthesis/visual_generation/easyanimate/**",
+      "worldfoundry/pipelines/easyanimate/pipeline_easyanimate_i2v.py"
+    ],
+    "visual-animatediff": [
+      "worldfoundry/synthesis/visual_generation/animatediff/**"
+    ],
+    "visual-cameractrl": [
+      "worldfoundry/synthesis/visual_generation/cameractrl/**"
+    ],
+    "visual-worldcam": [
+      "worldfoundry/synthesis/visual_generation/worldcam/**",
+      "worldfoundry/pipelines/worldcam/pipeline_worldcam.py"
+    ],
+    "visual-rcm": [
+      "worldfoundry/synthesis/visual_generation/rcm/**"
+    ],
+    "visual-kairos": [
+      "worldfoundry/synthesis/visual_generation/kairos/**",
+      "worldfoundry/pipelines/kairos/pipeline_kairos.py"
+    ],
+    "visual-neoverse": [
+      "worldfoundry/synthesis/visual_generation/neoverse/**",
+      "worldfoundry/pipelines/neoverse/pipeline_neoverse.py"
+    ],
+    "visual-vmem": [
+      "worldfoundry/synthesis/visual_generation/vmem/**",
+      "worldfoundry/pipelines/vmem/pipeline_vmem.py"
+    ],
+    "visual-mmaudio": [
+      "worldfoundry/synthesis/visual_generation/mmaudio/**"
+    ],
+    "visual-nwm": [
+      "worldfoundry/synthesis/visual_generation/nwm/**"
+    ],
+    "visual-mineworld": [
+      "worldfoundry/synthesis/visual_generation/mineworld/**"
+    ],
+    "visual-genie_envisioner": [
+      "worldfoundry/synthesis/visual_generation/genie_envisioner/**"
+    ],
+    "native-hma": [
+      "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py",
+      "worldfoundry/synthesis/visual_generation/hma/**"
+    ],
+    "native-uniworld-view": [
+      "worldfoundry/pipelines/uniworld_view/pipeline_uniworld_view.py",
+      "worldfoundry/pipelines/uniworld_view/upstream_entry.py",
+      "worldfoundry/synthesis/visual_generation/uniworld_view/**"
+    ],
+    "action-last-r1": [
+      "worldfoundry/pipelines/component_pipelines.py",
+      "worldfoundry/synthesis/action_generation/last_r1/**"
+    ],
+    "native-sana": [
+      "worldfoundry/base_models/diffusion_model/models/networks/sana/**",
+      "worldfoundry/pipelines/sana/pipeline_sana.py"
+    ],
+    "native-ltx-2.x": [
+      "worldfoundry/base_models/diffusion_model/models/networks/ltx/**",
+      "worldfoundry/pipelines/ltx2/pipeline_ltx2_3_i2v.py",
+      "worldfoundry/pipelines/ltx2/pipeline_ltx2_3_t2v.py",
+      "worldfoundry/pipelines/ltx2/pipeline_ltx2_i2v.py",
+      "worldfoundry/pipelines/ltx2/pipeline_ltx2_t2v.py",
+      "worldfoundry/synthesis/visual_generation/ltx2/**"
+    ],
+    "native-hunyuanvideo": [
+      "worldfoundry/base_models/diffusion_model/models/autoencoders/hunyuan_video/**",
+      "worldfoundry/pipelines/hunyuan_video/pipeline_hunyuan_video.py"
+    ],
+    "native-hunyuanvideo-1.5": [
+      "worldfoundry/base_models/diffusion_model/models/autoencoders/hunyuan_video/**",
+      "worldfoundry/pipelines/hunyuan_video/pipeline_hunyuan_video.py"
+    ],
+    "native-allegro": [
+      "worldfoundry/pipelines/allegro/pipeline_allegro_ti2v.py",
+      "worldfoundry/synthesis/visual_generation/allegro/**"
+    ],
+    "native-bernini": [
+      "worldfoundry/pipelines/bernini/pipeline_bernini.py",
+      "worldfoundry/synthesis/visual_generation/bernini/**"
+    ],
+    "native-bernini-r-1.3b": [
+      "worldfoundry/pipelines/bernini/pipeline_bernini.py",
+      "worldfoundry/synthesis/visual_generation/bernini/**"
+    ],
+    "native-bernini-r-14b": [
+      "worldfoundry/pipelines/bernini/pipeline_bernini.py",
+      "worldfoundry/synthesis/visual_generation/bernini/**"
+    ],
+    "native-framepack": [
+      "worldfoundry/pipelines/video_official/pipeline_official_video.py",
+      "worldfoundry/synthesis/visual_generation/framepack/**"
+    ],
+    "native-helios": [
+      "worldfoundry/base_models/diffusion_model/models/networks/helios/**",
+      "worldfoundry/pipelines/helios/pipeline_helios.py",
+      "worldfoundry/synthesis/visual_generation/helios/**"
+    ],
+    "native-lingbot-video": [
+      "worldfoundry/pipelines/lingbot_video/pipeline_lingbot_video.py",
+      "worldfoundry/synthesis/visual_generation/lingbot_video/**"
+    ],
+    "native-longvie-2": [
+      "worldfoundry/pipelines/longvie/pipeline_longvie.py",
+      "worldfoundry/synthesis/visual_generation/longvie/**"
+    ],
+    "native-magi-1": [
+      "worldfoundry/pipelines/video_official/pipeline_official_video.py",
+      "worldfoundry/synthesis/visual_generation/magi/**"
+    ],
+    "native-magi2-preview": [
+      "worldfoundry/base_models/diffusion_model/models/autoencoders/magi2/**",
+      "worldfoundry/pipelines/magi2/**",
+      "worldfoundry/pipelines/magi2/pipeline_magi2.py"
+    ],
+    "native-minimax-h3": [
+      "worldfoundry/base_models/diffusion_model/models/networks/minimax_h3/dit.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/minimax_h3/ops.py",
+      "worldfoundry/pipelines/minimax/pipeline_minimax_h3.py"
+    ],
+    "native-open-sora": [
+      "worldfoundry/pipelines/video_official/pipeline_official_video.py",
+      "worldfoundry/synthesis/visual_generation/open_sora/**"
+    ],
+    "native-open-sora-plan": [
+      "worldfoundry/pipelines/video_official/pipeline_official_video.py",
+      "worldfoundry/synthesis/visual_generation/open_sora_plan/**"
+    ],
+    "native-pusa-vidgen": [
+      "worldfoundry/pipelines/pusa_vidgen/pipeline_pusa_vidgen.py",
+      "worldfoundry/synthesis/visual_generation/pusa_vidgen/**"
+    ],
+    "native-step-video-t2v": [
+      "worldfoundry/base_models/diffusion_model/models/networks/step_video/normalization.py",
+      "worldfoundry/pipelines/step_video/pipeline_step_video_t2v.py"
+    ],
+    "native-unianimate-dit": [
+      "worldfoundry/pipelines/video_official/pipeline_official_video.py",
+      "worldfoundry/synthesis/visual_generation/unianimate_dit/**"
+    ],
+    "native-ac3d": [
+      "worldfoundry/pipelines/ac3d/pipeline_ac3d.py",
+      "worldfoundry/synthesis/visual_generation/ac3d/**"
+    ],
+    "native-echo-infinity": [
+      "worldfoundry/pipelines/echo_infinity/pipeline_echo_infinity.py",
+      "worldfoundry/synthesis/visual_generation/echo_infinity/**"
+    ],
+    "native-hy-worldplay": [
+      "worldfoundry/pipelines/hunyuan_world/pipeline_hunyuan_worldplay.py",
+      "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/**"
+    ],
+    "native-sana-wm": [
+      "worldfoundry/base_models/diffusion_model/models/networks/sana/**",
+      "worldfoundry/pipelines/sana_wm/pipeline_sana_wm.py"
+    ],
+    "native-scope": [
+      "worldfoundry/pipelines/scope/pipeline_scope.py",
+      "worldfoundry/synthesis/visual_generation/scope/**"
+    ],
+    "native-evoke": [
+      "worldfoundry/pipelines/evoke/pipeline_evoke.py",
+      "worldfoundry/synthesis/visual_generation/evoke/**",
+      "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/mlp.py",
+      "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/patch_embed.py",
+      "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/rope.py",
+      "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/swiglu_ffn.py"
+    ],
+    "native-hydra": [
+      "worldfoundry/pipelines/hydra/pipeline_hydra.py",
+      "worldfoundry/synthesis/visual_generation/hydra/**"
+    ],
+    "native-magicworld": [
+      "worldfoundry/pipelines/magic_world/pipeline_magic_world.py",
+      "worldfoundry/synthesis/visual_generation/magic_world/**"
+    ],
+    "native-minwm-hy-action2v": [
+      "worldfoundry/pipelines/minwm/pipeline_minwm.py",
+      "worldfoundry/synthesis/visual_generation/minwm/**"
+    ],
+    "native-minwm-wan-action2v": [
+      "worldfoundry/pipelines/minwm/pipeline_minwm.py",
+      "worldfoundry/synthesis/visual_generation/minwm/**"
+    ],
+    "native-moverse": [
+      "worldfoundry/pipelines/moverse/pipeline_moverse.py",
+      "worldfoundry/synthesis/visual_generation/moverse/**"
+    ],
+    "native-spatia": [
+      "worldfoundry/pipelines/spatia/pipeline_spatia.py",
+      "worldfoundry/synthesis/visual_generation/spatia/**",
+      "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/models/mapanything/model.py",
+      "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/geometry.py",
+      "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/inference.py",
+      "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/image.py",
+      "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/multiview_confidence.py",
+      "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/misc.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/encoders/dense_rep_encoder.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/encoders/dinov2.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/encoders/global_rep_encoder.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/info_sharing/alternating_attention_transformer.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/info_sharing/cross_attention_transformer.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/info_sharing/global_attention_transformer.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/__init__.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/adaptors.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/dpt.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/linear.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/mlp_head.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/pose_head.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/utils/transformer_blocks.py"
+    ],
+    "native-versecrafter": [
+      "worldfoundry/pipelines/versecrafter/pipeline_versecrafter.py",
+      "worldfoundry/synthesis/visual_generation/versecrafter/**"
+    ],
+    "native-wan21-fun-14b-cam": [
+      "worldfoundry/pipelines/video_x_fun/pipeline_video_x_fun.py",
+      "worldfoundry/synthesis/visual_generation/video_x_fun/**"
+    ],
+    "native-wan21-fun-1p3b-cam": [
+      "worldfoundry/pipelines/video_x_fun/pipeline_video_x_fun.py",
+      "worldfoundry/synthesis/visual_generation/video_x_fun/**"
+    ],
+    "native-wan22-fun-5b-cam": [
+      "worldfoundry/pipelines/video_x_fun/pipeline_video_x_fun.py",
+      "worldfoundry/synthesis/visual_generation/video_x_fun/**"
+    ],
+    "native-wan22-fun-a14b-cam": [
+      "worldfoundry/pipelines/video_x_fun/pipeline_video_x_fun.py",
+      "worldfoundry/synthesis/visual_generation/video_x_fun/**"
+    ],
+    "native-warp-as-history": [
+      "worldfoundry/pipelines/warp_as_history/pipeline_warp_as_history.py",
+      "worldfoundry/synthesis/visual_generation/warp_as_history/**"
+    ],
+    "native-worldcrafter": [
+      "worldfoundry/base_models/diffusion_model/models/networks/worldcrafter/**",
+      "worldfoundry/pipelines/worldcrafter/pipeline_worldcrafter.py",
+      "worldfoundry/synthesis/visual_generation/worldcrafter/**"
+    ],
+    "native-worldcrafter-base": [
+      "worldfoundry/base_models/diffusion_model/models/networks/worldcrafter/**",
+      "worldfoundry/pipelines/worldcrafter/pipeline_worldcrafter.py",
+      "worldfoundry/synthesis/visual_generation/worldcrafter/**"
+    ],
+    "native-worldcrafter-fast": [
+      "worldfoundry/base_models/diffusion_model/models/networks/worldcrafter/**",
+      "worldfoundry/pipelines/worldcrafter/pipeline_worldcrafter.py",
+      "worldfoundry/synthesis/visual_generation/worldcrafter/**"
+    ],
+    "native-ctrl-world": [
+      "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py",
+      "worldfoundry/synthesis/visual_generation/ctrl_world/**"
+    ],
+    "native-dino-wm": [
+      "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py",
+      "worldfoundry/synthesis/visual_generation/dino_wm/**"
+    ],
+    "native-giga-world-0": [
+      "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py",
+      "worldfoundry/synthesis/visual_generation/giga_world_0/**"
+    ],
+    "native-leworldmodel": [
+      "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py",
+      "worldfoundry/synthesis/visual_generation/le_wm/**"
+    ],
+    "native-matrix-game-1": [
+      "worldfoundry/pipelines/matrix_game/pipeline_matrix_game_1.py",
+      "worldfoundry/synthesis/visual_generation/matrix_game/matrix_game_1_runtime/**"
+    ],
+    "native-matrix-game-3": [
+      "worldfoundry/pipelines/matrix_game/pipeline_matrix_game_3.py",
+      "worldfoundry/synthesis/visual_generation/matrix_game/matrix_game_3_runtime/**"
+    ],
+    "native-matrix-game-3.5-first-person": [
+      "worldfoundry/pipelines/matrix_game/pipeline_matrix_game_3p5.py",
+      "worldfoundry/synthesis/visual_generation/matrix_game/matrix_game_3p5_runtime/**"
+    ],
+    "native-matrix-game-3.5-third-person": [
+      "worldfoundry/pipelines/matrix_game/pipeline_matrix_game_3p5.py",
+      "worldfoundry/synthesis/visual_generation/matrix_game/matrix_game_3p5_runtime/**"
+    ],
+    "native-mira": [
+      "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py",
+      "worldfoundry/synthesis/visual_generation/mira_wm/**"
+    ],
+    "native-multiworld": [
+      "worldfoundry/pipelines/multiworld/pipeline_multiworld_ittakestwo.py",
+      "worldfoundry/synthesis/visual_generation/multiworld/**"
+    ],
+    "native-rolling-forcing": [
+      "worldfoundry/pipelines/forcing/pipeline_forcing.py",
+      "worldfoundry/synthesis/visual_generation/forcing/**",
+      "worldfoundry/synthesis/visual_generation/rolling_forcing/**"
+    ],
+    "native-solaris": [
+      "worldfoundry/pipelines/solaris/pipeline_solaris.py",
+      "worldfoundry/synthesis/visual_generation/solaris/**"
+    ],
+    "native-starwm": [
+      "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py",
+      "worldfoundry/synthesis/visual_generation/starwm/**"
+    ],
+    "native-tesseract": [
+      "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py",
+      "worldfoundry/synthesis/action_generation/tesseract/**"
     ]
   },
   "cases": {
+    "fastframes-l-t2v-checkpoint-replay": [
+      "fastframes"
+    ],
+    "fastframes-s-t2v-checkpoint-replay": [
+      "fastframes"
+    ],
+    "hy-nomas-segments-short": ["hy-nomas"],
+    "hy-nomas-low-memory-short": ["hy-nomas"],
+    "pika-h3-flex-t2va-short": ["pika-h3-flex"],
+    "pi4-kart-tracking-short": ["pi4"],
+    "h3-world-forward-checkpoint-replay": ["h3-world"],
+    "h3-tiny-pruned-fl2va-t2va-short": ["h3-tiny", "native-minimax-h3"],
+    "pi-h3-4step-dwd-t2va-short": ["pi-h3", "native-minimax-h3"],
     "inspatio-world-1p5-image-short": [
       "inspatio-world-1p5"
     ],
@@ -497,10 +1167,577 @@
     ],
     "wonderworld-scene-short": [
       "wonderworld"
+    ],
+    "self-forcing-t2v-short": [
+      "self-forcing"
+    ],
+    "causal-forcing-chunkwise-t2v-short": [
+      "causal-forcing"
+    ],
+    "causal-forcing-framewise-short": [
+      "causal-forcing"
+    ],
+    "ltx25-distilled-video-short": [
+      "ltx-2.5"
+    ],
+    "hyperflow-t2va-short": [
+      "hyperflow"
+    ],
+    "ltx-2-v2v-control-short": [
+      "ltx-2-v2v"
+    ],
+    "ltx-2.3-v2v-control-short": [
+      "ltx-2.3-v2v"
+    ],
+    "omnivinci-audiovisual-text-short": [
+      "omnivinci"
+    ],
+    "go1-action-short": [
+      "action-go1"
+    ],
+    "ahawam-action-short": [
+      "action-ahawam"
+    ],
+    "fastwam-action-short": [
+      "action-fastwam"
+    ],
+    "x-wam-action-short": [
+      "action-x-wam"
+    ],
+    "being-h05-action-short": [
+      "action-being-h05"
+    ],
+    "gr00t-action-short": [
+      "action-gr00t"
+    ],
+    "galaxea-vla-action-short": [
+      "action-galaxea-vla"
+    ],
+    "hy-embodied-vla-action-short": [
+      "action-hy-embodied-vla"
+    ],
+    "internvla-a1-action-short": [
+      "action-internvla-a1"
+    ],
+    "lingbot-vla-action-short": [
+      "action-lingbot-vla"
+    ],
+    "lingbot-vla-v2-action-short": [
+      "action-lingbot-vla-v2"
+    ],
+    "cogact-action-short": [
+      "action-cogact"
+    ],
+    "db-cogact-action-short": [
+      "action-db-cogact"
+    ],
+    "diffusion-policy-action-short": [
+      "action-diffusion-policy"
+    ],
+    "roboflamingo-action-short": [
+      "action-roboflamingo"
+    ],
+    "tinyvla-action-short": [
+      "action-tinyvla"
+    ],
+    "molmoact2-action-short": [
+      "action-molmoact2"
+    ],
+    "molmobot-action-short": [
+      "action-molmobot"
+    ],
+    "openpi-action-short": [
+      "action-openpi"
+    ],
+    "lda-1b-action-short": [
+      "action-lda-1b"
+    ],
+    "xiaomi-robotics-0-action-short": [
+      "action-xiaomi-robotics-0"
+    ],
+    "giga-world-policy-0.5-action-short": [
+      "action-giga-world-policy-0.5"
+    ],
+    "openvla-action-short": [
+      "action-openvla"
+    ],
+    "openvla-oft-action-short": [
+      "action-openvla-oft"
+    ],
+    "spirit-v1.5-action-short": [
+      "action-spirit-v1.5"
+    ],
+    "abot-m0-action-short": [
+      "action-abot-m0"
+    ],
+    "mem-0-action-short": [
+      "action-mem-0"
+    ],
+    "gr00t-n1-action-short": [
+      "action-gr00t"
+    ],
+    "dreamzero-droid-actions-short": [
+      "action-dreamzero"
+    ],
+    "joyai-echo-wm-base-controls-short": [
+      "visual-joyai_echo"
+    ],
+    "joyai-echo-wm-flash-controls-short": [
+      "visual-joyai_echo"
+    ],
+    "joyai-echo-longvideo-r2v-short": [
+      "visual-joyai_echo"
+    ],
+    "solarwm-wan5b-dmd-indexed-short": [
+      "visual-solarwm"
+    ],
+    "solarwm-ltx-indexed-short": [
+      "visual-solarwm"
+    ],
+    "alayaworld-v11-dmd-camera-short": [
+      "visual-alayaworld_v11"
+    ],
+    "astronex-causal-i2v-camera-short": [
+      "visual-astronex_world"
+    ],
+    "emu35-story-text-image-short": [
+      "visual-emu35"
+    ],
+    "open-magvit2-l-class-image-short": [
+      "visual-open_magvit2"
+    ],
+    "show-o-t2i-short": [
+      "visual-show_o"
+    ],
+    "infinite-world-camera-short": [
+      "visual-infinite_world"
+    ],
+    "krea-realtime-two-blocks-short": [
+      "visual-krea_realtime_video"
+    ],
+    "lyra1-static-reconstruction": [
+      "visual-lyra_1"
+    ],
+    "longcat-t2v-native-short": [
+      "visual-longcat_video"
+    ],
+    "liveworld-geometry-short": [
+      "visual-liveworld"
+    ],
+    "uni3c-camera-render-short": [
+      "visual-uni3c"
+    ],
+    "adaworld-context-short": [
+      "visual-adaworld"
+    ],
+    "easyanimate-i2v-short": [
+      "visual-easyanimate"
+    ],
+    "animatediff-v3-t2v-short": [
+      "visual-animatediff"
+    ],
+    "cameractrl-realestate-short": [
+      "visual-cameractrl"
+    ],
+    "worldcam-video-camera-short": [
+      "visual-worldcam"
+    ],
+    "causal-rcm-c1-1-short": [
+      "visual-rcm"
+    ],
+    "kairos-480p-distilled-short": [
+      "visual-kairos"
+    ],
+    "neoverse-navigation-short": [
+      "visual-neoverse"
+    ],
+    "vmem-forward-navigation-short": [
+      "visual-vmem"
+    ],
+    "mmaudio-small-16k-video-audio-short": [
+      "visual-mmaudio"
+    ],
+    "mmaudio-small-44k-video-audio-short": [
+      "visual-mmaudio"
+    ],
+    "nwm-recon-one-second": [
+      "visual-nwm"
+    ],
+    "mineworld-1200m-actions-short": [
+      "visual-mineworld"
+    ],
+    "genie-envisioner-three-view-history-short": [
+      "visual-genie_envisioner"
+    ],
+    "hma-paired-trajectory-short": [
+      "native-hma"
+    ],
+    "uniworld-view-single-view-short": [
+      "native-uniworld-view"
+    ],
+    "last-r1-libero10-actions-short": [
+      "action-last-r1"
+    ],
+    "easyanimate-i2v-checkpoint-replay": [
+      "visual-easyanimate"
+    ],
+    "solarwm-wan2.2-5b-checkpoint-replay": [
+      "visual-solarwm"
+    ],
+    "solarwm-ltx-22b-checkpoint-replay": [
+      "visual-solarwm"
+    ],
+    "hunyuanworld-mirror-checkpoint-replay": [
+      "hunyuan-mirror"
+    ],
+    "hy-world-2.0-checkpoint-replay": [
+      "hyworldmirror-2"
+    ],
+    "matrix-game-2-universal-ref-image-seed42-15f-checkpoint-replay": [
+      "matrix-game2"
+    ],
+    "sana-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-600m-512px-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-600m-1024px-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-1600m-512px-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-1600m-512px-multiling-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-1600m-1024px-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-1600m-1024px-multiling-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-1600m-1024px-bf16-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-1600m-2k-bf16-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-1600m-4k-bf16-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana1p5-1600m-1024px-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana1p5-4800m-1024px-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-sprint-600m-1024px-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-sprint-1600m-1024px-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-controlnet-600m-1024px-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-controlnet-1600m-1024px-bf16-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-video-2b-480p-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-video-2b-720p-checkpoint-replay": [
+      "native-sana"
+    ],
+    "longsana-video-2b-480p-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-streaming-2b-720p-checkpoint-replay": [
+      "native-sana"
+    ],
+    "sana-streaming-bidirectional-2b-720p-checkpoint-replay": [
+      "native-sana"
+    ],
+    "wan2.1-checkpoint-replay": [
+      "wan-video"
+    ],
+    "wan2.1-t2v-1.3b-832x480-81f-checkpoint-replay": [
+      "wan-video"
+    ],
+    "wan2.1-t2v-14b-checkpoint-replay": [
+      "wan-video"
+    ],
+    "wan2.1-i2v-14b-480p-checkpoint-replay": [
+      "wan-video"
+    ],
+    "wan2.1-i2v-14b-720p-checkpoint-replay": [
+      "wan-video"
+    ],
+    "wan2.1-vace-checkpoint-replay": [
+      "wan-video"
+    ],
+    "wan2.2-checkpoint-replay": [
+      "wan-video"
+    ],
+    "wan2.2-ti2v-5b-1280x704-121f-checkpoint-replay": [
+      "wan-video"
+    ],
+    "wan2.2-t2v-a14b-checkpoint-replay": [
+      "wan-video"
+    ],
+    "wan2.2-i2v-a14b-checkpoint-replay": [
+      "wan-video"
+    ],
+    "ltx-2-t2v-checkpoint-replay": [
+      "native-ltx-2.x"
+    ],
+    "ltx-2-i2v-checkpoint-replay": [
+      "native-ltx-2.x"
+    ],
+    "ltx-2.3-t2v-checkpoint-replay": [
+      "native-ltx-2.x"
+    ],
+    "ltx-2.3-i2v-checkpoint-replay": [
+      "native-ltx-2.x"
+    ],
+    "ltx-2.x-checkpoint-replay": [
+      "native-ltx-2.x"
+    ],
+    "hunyuanvideo-checkpoint-replay": [
+      "native-hunyuanvideo"
+    ],
+    "hunyuanvideo-t2v-checkpoint-replay": [
+      "native-hunyuanvideo"
+    ],
+    "hunyuanvideo-i2v-checkpoint-replay": [
+      "native-hunyuanvideo"
+    ],
+    "hunyuanvideo-1.5-checkpoint-replay": [
+      "native-hunyuanvideo-1.5"
+    ],
+    "hunyuanvideo-1.5-t2v-checkpoint-replay": [
+      "native-hunyuanvideo-1.5"
+    ],
+    "hunyuanvideo-1.5-i2v-checkpoint-replay": [
+      "native-hunyuanvideo-1.5"
+    ],
+    "allegro-checkpoint-replay": [
+      "native-allegro"
+    ],
+    "allegro-ti2v-checkpoint-replay": [
+      "native-allegro"
+    ],
+    "bernini-checkpoint-replay": [
+      "native-bernini"
+    ],
+    "bernini-r-1.3b-checkpoint-replay": [
+      "native-bernini-r-1.3b"
+    ],
+    "bernini-r-14b-checkpoint-replay": [
+      "native-bernini-r-14b"
+    ],
+    "framepack-original-checkpoint-replay": [
+      "native-framepack"
+    ],
+    "framepack-f1-checkpoint-replay": [
+      "native-framepack"
+    ],
+    "helios-checkpoint-replay": [
+      "native-helios"
+    ],
+    "helios-base-checkpoint-replay": [
+      "native-helios"
+    ],
+    "helios-mid-checkpoint-replay": [
+      "native-helios"
+    ],
+    "helios-distilled-checkpoint-replay": [
+      "native-helios"
+    ],
+    "lingbot-video-dense-checkpoint-replay": [
+      "native-lingbot-video"
+    ],
+    "lingbot-video-moe-checkpoint-replay": [
+      "native-lingbot-video"
+    ],
+    "longvie-2-checkpoint-replay": [
+      "native-longvie-2"
+    ],
+    "magi-1-checkpoint-replay": [
+      "native-magi-1"
+    ],
+    "magi2-preview-checkpoint-replay": [
+      "native-magi2-preview"
+    ],
+    "minimax-h3-checkpoint-replay": [
+      "native-minimax-h3"
+    ],
+    "open-sora-checkpoint-replay": [
+      "native-open-sora"
+    ],
+    "open-sora-plan-checkpoint-replay": [
+      "native-open-sora-plan"
+    ],
+    "pusa-vidgen-checkpoint-replay": [
+      "native-pusa-vidgen"
+    ],
+    "step-video-t2v-checkpoint-replay": [
+      "native-step-video-t2v"
+    ],
+    "unianimate-dit-checkpoint-replay": [
+      "native-unianimate-dit"
+    ],
+    "ac3d-2b-checkpoint-replay": [
+      "native-ac3d"
+    ],
+    "ac3d-5b-checkpoint-replay": [
+      "native-ac3d"
+    ],
+    "echo-infinity-checkpoint-replay": [
+      "native-echo-infinity"
+    ],
+    "hy-worldplay-checkpoint-replay": [
+      "native-hy-worldplay"
+    ],
+    "sana-wm-checkpoint-replay": [
+      "native-sana-wm"
+    ],
+    "sana-wm-streaming-checkpoint-replay": [
+      "native-sana-wm"
+    ],
+    "scope-checkpoint-replay": [
+      "native-scope"
+    ],
+    "evoke-checkpoint-replay": [
+      "native-evoke"
+    ],
+    "hydra-checkpoint-replay": [
+      "native-hydra"
+    ],
+    "magicworld-checkpoint-replay": [
+      "native-magicworld"
+    ],
+    "minwm-hy-action2v-checkpoint-replay": [
+      "native-minwm-hy-action2v"
+    ],
+    "minwm-wan-action2v-checkpoint-replay": [
+      "native-minwm-wan-action2v"
+    ],
+    "moverse-checkpoint-replay": [
+      "native-moverse"
+    ],
+    "spatia-checkpoint-replay": [
+      "native-spatia"
+    ],
+    "versecrafter-checkpoint-replay": [
+      "native-versecrafter"
+    ],
+    "wan21-fun-14b-cam-checkpoint-replay": [
+      "native-wan21-fun-14b-cam"
+    ],
+    "wan21-fun-1p3b-cam-checkpoint-replay": [
+      "native-wan21-fun-1p3b-cam"
+    ],
+    "wan22-fun-5b-cam-checkpoint-replay": [
+      "native-wan22-fun-5b-cam"
+    ],
+    "wan22-fun-a14b-cam-checkpoint-replay": [
+      "native-wan22-fun-a14b-cam"
+    ],
+    "warp-as-history-checkpoint-replay": [
+      "native-warp-as-history"
+    ],
+    "worldcrafter-checkpoint-replay": [
+      "native-worldcrafter"
+    ],
+    "worldcrafter-base-checkpoint-replay": [
+      "native-worldcrafter-base"
+    ],
+    "worldcrafter-fast-checkpoint-replay": [
+      "native-worldcrafter-fast"
+    ],
+    "ctrl-world-checkpoint-replay": [
+      "native-ctrl-world"
+    ],
+    "diamond-checkpoint-replay": [
+      "diamond"
+    ],
+    "diamond-atari-checkpoint-replay": [
+      "diamond"
+    ],
+    "dino-wm-wall-planned-actions": [
+      "native-dino-wm"
+    ],
+    "giga-world-0-checkpoint-replay": [
+      "native-giga-world-0"
+    ],
+    "leworldmodel-pusht-learned-policy": [
+      "native-leworldmodel"
+    ],
+    "matrix-game-1-checkpoint-replay": [
+      "native-matrix-game-1"
+    ],
+    "matrix-game-3-checkpoint-replay": [
+      "native-matrix-game-3"
+    ],
+    "matrix-game-3.5-first-person-checkpoint-replay": [
+      "native-matrix-game-3.5-first-person"
+    ],
+    "matrix-game-3.5-third-person-checkpoint-replay": [
+      "native-matrix-game-3.5-third-person"
+    ],
+    "mira-checkpoint-replay": [
+      "native-mira"
+    ],
+    "multiworld-checkpoint-replay": [
+      "native-multiworld"
+    ],
+    "rolling-forcing-checkpoint-replay": [
+      "native-rolling-forcing"
+    ],
+    "solaris-translation-two-player": [
+      "native-solaris"
+    ],
+    "solarwm-wan2.2-14b-checkpoint-replay": [
+      "visual-solarwm"
+    ],
+    "solarwm-h3-33b-checkpoint-replay": [
+      "visual-solarwm"
+    ],
+    "starwm-generated-state-text": [
+      "native-starwm"
+    ],
+    "tesseract-checkpoint-replay": [
+      "native-tesseract"
     ]
   },
   "coverage_scope": "Declared short 3D, video generation and world-model cases; variants and unlisted integrations are not implied covered.",
   "cpu_only_components": [
+    {
+      "paths": [
+        "worldfoundry/base_models/perception_core/tracking/cotracker/models/core/cotracker/blocks.py",
+        "worldfoundry/base_models/perception_core/tracking/dot/models/shelf/cotracker2_utils/models/core/cotracker/blocks.py",
+        "worldfoundry/base_models/perception_core/tracking/dot/models/shelf/cotracker3_utils/models/core/cotracker/blocks.py"
+      ],
+      "reason": "CoTracker and DOT feature blocks used by benchmark scoring. CPU contracts exercise scalar and paired option bindings, checkpoint key layout and MLP outputs.",
+      "required_cpu_contracts": [
+        "tests/evaluation/execution/test_vbench_sampling.py"
+      ]
+    },
+    {
+      "paths": [
+        "worldfoundry/base_models/perception_core/frame_interpolation/amt/motion_smoothness.py",
+        "worldfoundry/base_models/perception_core/frame_interpolation/amt/networks/AMT-S.py",
+        "worldfoundry/base_models/perception_core/frame_interpolation/amt/networks/blocks/feat_enc.py",
+        "worldfoundry/base_models/perception_core/optical_flow/flowformerplusplus/core/FlowFormer/PerCostFormer3/cnn.py"
+      ],
+      "reason": "Benchmark motion-smoothness and optical-flow scoring. CPU contracts exercise numbered RGB frame selection and the AMT and FlowFormer feature encoders.",
+      "required_cpu_contracts": [
+        "tests/base_models/perception_core/optical_flow/test_raft_features.py",
+        "tests/evaluation/execution/test_vbench_sampling.py"
+      ]
+    },
     {
       "paths": [
         "benchmarks/__init__.py",
@@ -514,6 +1751,101 @@
       "required_cpu_contracts": [
         "tests/runtime/test_inference_benchmark_correctness.py"
       ]
+    },
+    {
+      "paths": [
+        "worldfoundry/base_models/perception_core/general_perception/openai_clip_runtime/clip/clip.py",
+        "worldfoundry/base_models/perception_core/general_perception/openai_clip_runtime/clip/model.py",
+        "worldfoundry/base_models/perception_core/general_perception/openai_clip_runtime/clip/simple_tokenizer.py"
+      ],
+      "reason": "OpenAI CLIP benchmark image scoring and the shared ViCLIP scoring vocabulary. CPU contracts exercise visual feature arithmetic, lazy scoring import and offline tokenization.",
+      "required_cpu_contracts": [
+        "tests/evaluation/execution/test_openai_clip_scoring.py"
+      ]
+    },
+    {
+      "paths": [
+        "worldfoundry/studio/serving/realtime/__init__.py"
+      ],
+      "reason": "Studio realtime serving layer that no replay case imports; its transport, input and delivery behavior is covered by the Studio realtime CPU contracts.",
+      "required_cpu_contracts": [
+        "tests/studio_visualization/test_realtime_nvenc.py",
+        "tests/studio_visualization/test_world_realtime.py"
+      ]
+    },
+    {
+      "paths": [
+        "worldfoundry/studio/serving/realtime/input.py"
+      ],
+      "reason": "Studio realtime serving layer that no replay case imports; its transport, input and delivery behavior is covered by the Studio realtime CPU contracts.",
+      "required_cpu_contracts": [
+        "tests/studio_visualization/test_realtime_input.py",
+        "tests/studio_visualization/test_realtime_input_consumers.py",
+        "tests/studio_visualization/test_realtime_input_golden.py",
+        "tests/studio_visualization/test_world_realtime.py"
+      ]
+    },
+    {
+      "paths": [
+        "worldfoundry/studio/serving/realtime/media.py"
+      ],
+      "reason": "Studio realtime serving layer that no replay case imports; its transport, input and delivery behavior is covered by the Studio realtime CPU contracts.",
+      "required_cpu_contracts": [
+        "tests/studio_visualization/test_realtime_delivery.py",
+        "tests/studio_visualization/test_realtime_presentation.py",
+        "tests/studio_visualization/test_world_realtime.py"
+      ]
+    },
+    {
+      "paths": [
+        "worldfoundry/studio/serving/realtime/nvenc.py"
+      ],
+      "reason": "Studio realtime serving layer that no replay case imports; its transport, input and delivery behavior is covered by the Studio realtime CPU contracts.",
+      "required_cpu_contracts": [
+        "tests/studio_visualization/test_realtime_delivery.py",
+        "tests/studio_visualization/test_realtime_nvenc.py"
+      ]
+    },
+    {
+      "paths": [
+        "worldfoundry/studio/serving/realtime/sensors.py"
+      ],
+      "reason": "Studio realtime serving layer that no replay case imports; its transport, input and delivery behavior is covered by the Studio realtime CPU contracts.",
+      "required_cpu_contracts": [
+        "tests/studio_visualization/test_realtime_sensors.py",
+        "tests/studio_visualization/test_world_realtime.py"
+      ]
+    },
+    {
+      "paths": [
+        "worldfoundry/studio/serving/realtime/telemetry.py"
+      ],
+      "reason": "Studio realtime serving layer that no replay case imports; its transport, input and delivery behavior is covered by the Studio realtime CPU contracts.",
+      "required_cpu_contracts": [
+        "tests/studio_visualization/test_realtime_delivery.py",
+        "tests/studio_visualization/test_realtime_nvenc.py",
+        "tests/studio_visualization/test_world_realtime.py"
+      ]
+    },
+    {
+      "paths": [
+        "worldfoundry/studio/serving/realtime/webrtc.py"
+      ],
+      "reason": "Studio realtime serving layer that no replay case imports; its transport, input and delivery behavior is covered by the Studio realtime CPU contracts.",
+      "required_cpu_contracts": [
+        "tests/studio_visualization/test_realtime_delivery.py",
+        "tests/studio_visualization/test_realtime_presentation.py"
+      ]
+    },
+    {
+      "paths": [
+        "worldfoundry/synthesis/visual_generation/forcing/torchvision_video_compat/sitecustomize.py"
+      ],
+      "reason": "Torchvision video shim that the shared forcing bridge prepends to Rolling-Forcing subprocesses; no replay case launches that subprocess. The CPU contracts execute the shim and check its placement on the subprocess path.",
+      "required_cpu_contracts": [
+        "tests/pipelines/test_forcing_integration.py",
+        "tests/pipelines/test_forcing_runtime.py"
+      ]
     }
   ],
   "relocation_contracts": [
@@ -524,19 +1856,15 @@
         "adaworld",
         "diamond",
         "dino_wm",
-        "egowm",
         "hma",
         "le_wm",
         "mineworld",
         "mira_wm",
         "nwm",
-        "open_dreamer",
         "open_oasis",
-        "shotstream",
         "solarwm",
         "starwm",
-        "vid2world",
-        "wilddet3d"
+        "vid2world"
       ],
       "files": [
         "runtime_manifest.py"
@@ -578,6 +1906,122 @@
         "tests/synthesis/test_base_synthesis_lazy_import.py"
       ],
       "reason": "Direct-package relocation is accepted only after commit-blob comparison proves identical bytes or the declared import-namespace rewrite; CPU contracts verify runtime discovery, configuration targets and bundled resources. This does not certify these models numerically."
+    },
+    {
+      "from_root": "worldfoundry/core/memory",
+      "to_root": "worldfoundry/synthesis/visual_generation/memory",
+      "files": ["mosaic.py"],
+      "required_cpu_contracts": [
+        "tests/eval_core/test_mosaicmem_integration.py",
+        "tests/runtime/test_geometry_regression_relocations.py"
+      ],
+      "reason": "The standalone MosaicMem memory implementation moved unchanged. The CPU contract exercises keyframe insertion, mosaic retrieval and latent-canvas composition from its new location."
     }
-  ]
+  ],
+  "environment_variants": {
+    "worldfoundry/data/models/runtime/environments/world/h3-world.yaml": ["h3-world@h3-world"],
+    "worldfoundry/data/models/runtime/environments/three_d/pi4.yaml": ["pi4@pi4"],
+    "worldfoundry/data/models/runtime/environments/video/fastframes.yaml": [
+      "fastframes@fastframes"
+    ],
+    "worldfoundry/data/models/runtime/environments/three_d/geometry-priors.yaml": [
+      "dap@dap",
+      "depth-anything-v2-prior@depth-anything-v2-prior",
+      "depth-anything-v3-prior@depth-anything-v3-prior",
+      "geocalib-prior@geocalib-prior",
+      "metric3d-prior@metric3d-prior",
+      "prior-depth-anything@prior-depth-anything",
+      "track-anything-prior@track-anything-prior",
+      "unidepth-v2-prior@unidepth-v2-prior",
+      "video-depth-anything-prior@video-depth-anything-prior"
+    ],
+    "worldfoundry/data/models/runtime/environments/video/hyperflow.yaml": [
+      "hyperflow@hyperflow"
+    ],
+    "worldfoundry/data/models/runtime/environments/video/joyai-echo-longvideo.yaml": [
+      "joyai-echo-longvideo@joyai-echo-longvideo"
+    ],
+    "worldfoundry/data/models/runtime/environments/video/kairos-sensenova.yaml": [
+      "kairos-sensenova@kairos-sensenova"
+    ],
+    "worldfoundry/data/models/runtime/environments/video/ltx-2-v2v.yaml": [
+      "ltx-2-v2v@ltx-2-v2v"
+    ],
+    "worldfoundry/data/models/runtime/environments/video/ltx-2.3-v2v.yaml": [
+      "ltx-2.3-v2v@ltx-2.3-v2v"
+    ],
+    "worldfoundry/data/models/runtime/environments/video/ltx-2.5.yaml": [
+      "ltx-2-v2v@ltx-2-v2v",
+      "ltx-2.3-v2v@ltx-2.3-v2v",
+      "ltx-2.5@ltx-2.5"
+    ],
+    "worldfoundry/data/models/runtime/environments/video/magi2-preview.yaml": [
+      "magi2-preview@magi2-preview"
+    ],
+    "worldfoundry/data/models/runtime/environments/video/moverse.yaml": [
+      "moverse@moverse"
+    ],
+    "worldfoundry/data/models/runtime/environments/video/omnivinci.yaml": [
+      "omnivinci@omnivinci"
+    ],
+    "worldfoundry/data/models/runtime/environments/video/studio_verified_unified.yaml": [
+      "allegro-ti2v@allegro-ti2v",
+      "allegro@allegro",
+      "cogvideox-2b-t2v@cogvideox-2b-t2v",
+      "cogvideox-5b-i2v@cogvideox-5b-i2v",
+      "cogvideox-5b-t2v@cogvideox-5b-t2v",
+      "cogvideox@cogvideox",
+      "dynamicrafter-1024-i2v@dynamicrafter-1024-i2v",
+      "dynamicrafter-512-i2v@dynamicrafter-512-i2v",
+      "dynamicrafter@dynamicrafter",
+      "easyanimate-i2v@easyanimate-i2v",
+      "easyanimate@easyanimate",
+      "hy-worldplay@hy-worldplay",
+      "i2vgen-xl@i2vgen-xl",
+      "krea-realtime-video@krea-realtime-video",
+      "longcat-video@longcat-video",
+      "mochi-1-preview-t2v@mochi-1-preview-t2v",
+      "mochi-1@mochi-1",
+      "modelscope-t2v@modelscope-t2v",
+      "neoverse@neoverse",
+      "sana@sana",
+      "skyreels-v2@skyreels-v2",
+      "unianimate-dit@unianimate-dit",
+      "vchitect-2-t2v@vchitect-2-t2v",
+      "videocrafter1-i2v@videocrafter1-i2v",
+      "videocrafter1-t2v@videocrafter1-t2v",
+      "videocrafter2-t2v@videocrafter2-t2v",
+      "videocrafter@videocrafter",
+      "wan2.1-vace@wan2.1-vace",
+      "wan2.1@wan2.1",
+      "wan2.2@wan2.2",
+      "worldgen@worldgen",
+      "yume-1p5@yume-1p5",
+      "yume@yume"
+    ],
+    "worldfoundry/data/models/runtime/environments/video/uni3c.yaml": [
+      "uni3c@uni3c"
+    ],
+    "worldfoundry/data/models/runtime/environments/video/warp-as-history.yaml": [
+      "warp-as-history@warp-as-history"
+    ],
+    "worldfoundry/data/models/runtime/environments/world/astronex-world.yaml": [
+      "astronex-world@astronex-world"
+    ],
+    "worldfoundry/data/models/runtime/environments/world/mira.yaml": [
+      "mira@mira"
+    ],
+    "worldfoundry/data/models/runtime/environments/world/scope.yaml": [
+      "scope@scope"
+    ],
+    "worldfoundry/data/models/runtime/environments/world/solarwm-wan22.yaml": [
+      "solarwm@solarwm"
+    ],
+    "worldfoundry/data/models/runtime/environments/world/solarwm.yaml": [
+      "solarwm@solarwm"
+    ],
+    "worldfoundry/data/models/runtime/environments/world/uniworld-view.yaml": [
+      "uniworld-view@uniworld-view"
+    ]
+  }
 }

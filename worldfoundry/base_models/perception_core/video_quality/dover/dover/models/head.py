@@ -1,10 +1,4 @@
-import math
-
-import numpy as np
-import torch
 import torch.nn as nn
-from torch.nn import functional as F
-from torchvision.ops import roi_align, roi_pool
 
 
 class VQAHead(nn.Module):
@@ -16,9 +10,7 @@ class VQAHead(nn.Module):
         pre_pool: whether pre-pool the features or not (True for Aesthetic Attributes, False for Technical Attributes)
     """
 
-    def __init__(
-        self, in_channels=768, hidden_channels=64, dropout_ratio=0.5, pre_pool=False, **kwargs
-    ):
+    def __init__(self, in_channels=768, hidden_channels=64, dropout_ratio=0.5, pre_pool=False, **kwargs):
         super().__init__()
         self.dropout_ratio = dropout_ratio
         self.in_channels = in_channels
@@ -40,9 +32,6 @@ class VQAHead(nn.Module):
         x = self.dropout(x)
         qlt_score = self.fc_last(self.dropout(self.gelu(self.fc_hid(x))))
         return qlt_score
-    
-    
-
 
 
 class VARHead(nn.Module):
@@ -80,9 +69,7 @@ class IQAHead(nn.Module):
         dropout_ratio: the dropout ratio for features before the MLP (default 0.5)
     """
 
-    def __init__(
-        self, in_channels=768, hidden_channels=64, dropout_ratio=0.5, **kwargs
-    ):
+    def __init__(self, in_channels=768, hidden_channels=64, dropout_ratio=0.5, **kwargs):
         super().__init__()
         self.dropout_ratio = dropout_ratio
         self.in_channels = in_channels

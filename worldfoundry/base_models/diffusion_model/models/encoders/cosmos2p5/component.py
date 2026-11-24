@@ -150,20 +150,33 @@ class Cosmos25PromptConditioner:
         compute_type = "cpu" if self.run_on_cpu else device.type
         model_config = getattr(getattr(self.model, "model", self.model), "config", None)
         return (
-            weights, id(self.model), id(self.tokenizer),
+            weights,
+            id(self.model),
+            id(self.tokenizer),
             repr(getattr(self.tokenizer, "chat_template", None)),
             repr(getattr(self.tokenizer, "special_tokens_map", None)),
             getattr(self.tokenizer, "vocab_size", None),
-            len(self.tokenizer), self.sequence_length, self.embedding_concat_strategy,
-            self.n_layers_per_group, self.run_on_cpu, _SYSTEM_PROMPT, device, dtype,
-            torch.is_autocast_enabled(compute_type), torch.get_autocast_dtype(compute_type),
-            self.embedding_cache_size, self.embedding_cache_max_bytes,
+            len(self.tokenizer),
+            self.sequence_length,
+            self.embedding_concat_strategy,
+            self.n_layers_per_group,
+            self.run_on_cpu,
+            _SYSTEM_PROMPT,
+            device,
+            dtype,
+            torch.is_autocast_enabled(compute_type),
+            torch.get_autocast_dtype(compute_type),
+            self.embedding_cache_size,
+            self.embedding_cache_max_bytes,
             getattr(model_config, "_attn_implementation", None),
-            torch.get_float32_matmul_precision(), torch.are_deterministic_algorithms_enabled(),
-            torch.backends.cuda.matmul.allow_tf32, torch.backends.cudnn.allow_tf32,
+            torch.get_float32_matmul_precision(),
+            torch.are_deterministic_algorithms_enabled(),
+            torch.backends.cuda.matmul.allow_tf32,
+            torch.backends.cudnn.allow_tf32,
             torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction,
             torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction,
-            torch.backends.cuda.flash_sdp_enabled(), torch.backends.cuda.mem_efficient_sdp_enabled(),
+            torch.backends.cuda.flash_sdp_enabled(),
+            torch.backends.cuda.mem_efficient_sdp_enabled(),
             torch.backends.cuda.math_sdp_enabled(),
             getattr(torch.backends.cuda, "cudnn_sdp_enabled", lambda: None)(),
         )
@@ -332,9 +345,7 @@ def build_cosmos25_prompt_conditioner(context: ComponentBuildContext) -> Cosmos2
         model,
         tokenizer,
         sequence_length=int(context.component_options.get("sequence_length", 512)),
-        embedding_concat_strategy=str(
-            context.component_options.get("embedding_concat_strategy", "full_concat")
-        ),
+        embedding_concat_strategy=str(context.component_options.get("embedding_concat_strategy", "full_concat")),
         n_layers_per_group=int(context.component_options.get("n_layers_per_group", 5)),
         **encoder_options,
         output_device=context.policy.device if run_on_cpu else None,
@@ -420,9 +431,7 @@ class CosmosReason1TextEncoder:
             sequence_length=int(getattr(config, "sequence_length", 512)),
             run_on_cpu=getattr(config, "run_on_cpu", False),
             embedding_cache_size=getattr(config, "embedding_cache_size", 0),
-            embedding_cache_max_bytes=getattr(
-                config, "embedding_cache_max_bytes", _DEFAULT_EMBEDDING_CACHE_MAX_BYTES
-            ),
+            embedding_cache_max_bytes=getattr(config, "embedding_cache_max_bytes", _DEFAULT_EMBEDDING_CACHE_MAX_BYTES),
         )
         self.model = self.encoder.model
 
@@ -435,10 +444,10 @@ class CosmosReason1TextEncoder:
 
 
 __all__ = [
-    "CosmosReason1TextEncoder",
-    "CosmosReason1TextEncoderConfig",
     "Cosmos25PromptConditioner",
     "Cosmos25TextBackbone",
+    "CosmosReason1TextEncoder",
+    "CosmosReason1TextEncoderConfig",
     "build_cosmos25_prompt_conditioner",
     "convert_reason1_text_state_dict",
     "load_cosmos_reason1_prompt_encoder",

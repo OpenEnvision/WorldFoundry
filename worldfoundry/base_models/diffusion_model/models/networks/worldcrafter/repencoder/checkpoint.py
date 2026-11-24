@@ -4,15 +4,15 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import torch
 import torch.nn as nn
 from safetensors.torch import load_file
 
 from .config import RepEncoderConfig
-
 
 CHECKPOINT_FILENAME = "model.safetensors"
 CONFIG_FILENAME = "config.json"
@@ -62,10 +62,7 @@ def load_checkpoint_state(
         if value.dtype != expected[name].dtype
     }
     if dtype_mismatch:
-        raise TypeError(
-            "RepEncoder checkpoint violates mixed dtype ownership: "
-            f"{list(dtype_mismatch.items())[:8]}"
-        )
+        raise TypeError(f"RepEncoder checkpoint violates mixed dtype ownership: {list(dtype_mismatch.items())[:8]}")
     nonfinite = [name for name, value in state.items() if not torch.isfinite(value).all()]
     if nonfinite:
         raise FloatingPointError(f"RepEncoder checkpoint contains non-finite tensors: {nonfinite[:8]}")

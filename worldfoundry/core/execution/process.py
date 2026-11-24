@@ -17,10 +17,14 @@ Public surface:
   without reading the whole file.
 - :func:`torchrun_module_command` / :func:`run_torchrun_module` —
   build or run ``python -m torch.distributed.run --standalone``.
+- :func:`package_module_command` — build ``python -m worldfoundry...``,
+  optionally under single-node ``torch.distributed.run``; model runtimes use
+  it to start in-tree workers without adding ``PYTHONPATH`` entries.
 """
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import subprocess
@@ -28,7 +32,7 @@ import sys
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 # ──────────────────────────────────────────────────────────────────────────
 # Teardown — process-group first, then psutil tree fallback
@@ -119,19 +123,15 @@ def terminate_process_group(process: subprocess.Popen[Any], *, grace_seconds: fl
         return
     if process.poll() is not None:
         return
-    try:
+    with contextlib.suppress(OSError, ProcessLookupError):
         process.terminate()
-    except (OSError, ProcessLookupError):
-        pass
     try:
         process.wait(timeout=max(float(grace_seconds), 0.0))
         return
     except subprocess.TimeoutExpired:
         pass
-    try:
+    with contextlib.suppress(OSError, ProcessLookupError):
         process.kill()
-    except (OSError, ProcessLookupError):
-        pass
     process.wait()
 
 
@@ -148,7 +148,7 @@ def terminate_process_tree(process: subprocess.Popen[Any], *, grace_seconds: flo
         return
     descendants: list[Any] = []
     try:
-        import psutil
+        psutil = __import__("psutil")
     except ImportError:
         descendants = []
     else:
@@ -156,33 +156,25 @@ def terminate_process_tree(process: subprocess.Popen[Any], *, grace_seconds: flo
             parent = psutil.Process(process.pid)
             descendants = parent.children(recursive=True)
             for child in reversed(descendants):
-                try:
+                with contextlib.suppress(psutil.NoSuchProcess):
                     child.terminate()
-                except psutil.NoSuchProcess:
-                    pass
         except (OSError, psutil.AccessDenied, psutil.NoSuchProcess):
             descendants = []
-    try:
+    with contextlib.suppress(OSError, ProcessLookupError):
         process.terminate()
-    except (OSError, ProcessLookupError):
-        pass
     try:
         process.wait(timeout=max(float(grace_seconds), 0.0))
     except subprocess.TimeoutExpired:
-        try:
+        with contextlib.suppress(OSError, ProcessLookupError):
             process.kill()
-        except (OSError, ProcessLookupError):
-            pass
         process.wait()
     if descendants:
-        import psutil
+        psutil = __import__("psutil")
 
         _, alive = psutil.wait_procs(descendants, timeout=max(float(grace_seconds), 0.0))
         for child in alive:
-            try:
+            with contextlib.suppress(psutil.NoSuchProcess):
                 child.kill()
-            except psutil.NoSuchProcess:
-                pass
         if alive:
             psutil.wait_procs(alive, timeout=max(float(grace_seconds), 0.0))
 
@@ -280,7 +272,8 @@ def run_logged_subprocess(
                 duration_seconds=round(time.monotonic() - start, 6),
                 timeout_seconds=timeout,
             )
-            raise subprocess.TimeoutExpired(command, timeout) from None
+            # wait() only times out when a timeout was supplied.
+            raise subprocess.TimeoutExpired(command, cast(float, timeout)) from None
         finally:
             # The leader exiting does not imply its descendants have stopped.
             if owns_process_group:
@@ -394,13 +387,50 @@ def run_torchrun_module(
     )
 
 
+def package_module_command(
+    module: str,
+    args: Sequence[str | os.PathLike[str] | int | float] = (),
+    *,
+    python_executable: str | os.PathLike[str] | None = None,
+    nproc_per_node: int | None = None,
+    launcher_options: Sequence[str] = ("--standalone",),
+    launcher: Sequence[str] | None = None,
+) -> list[str]:
+    """Build the command that runs an in-tree WorldFoundry module in a child interpreter.
+
+    Without ``nproc_per_node`` the command is ``python -m MODULE ARGS``. With it,
+    the module runs under single-node torchrun: ``python -m torch.distributed.run
+    LAUNCHER_OPTIONS --nproc_per_node N -m MODULE ARGS``; ``launcher`` replaces
+    the ``python -m torch.distributed.run`` prefix with an explicit ``torchrun``
+    executable. The child inherits the caller's environment and import path; the
+    command never adds ``PYTHONPATH`` entries.
+
+    Raises:
+        ValueError: If ``module`` is not a dotted ``worldfoundry`` module path or
+            ``nproc_per_node`` is not positive.
+    """
+
+    parts = module.split(".")
+    if parts[0] != "worldfoundry" or not all(part.isidentifier() for part in parts):
+        raise ValueError(f"only in-tree worldfoundry modules can be launched, got {module!r}")
+    python = os.fspath(python_executable) if python_executable is not None else sys.executable
+    module_args = ["-m", module, *map(str, args)]
+    if nproc_per_node is None:
+        return [python, *module_args]
+    if nproc_per_node < 1:
+        raise ValueError("nproc_per_node must be positive")
+    prefix = list(launcher) if launcher else [python, "-m", "torch.distributed.run"]
+    return [*prefix, *launcher_options, "--nproc_per_node", str(nproc_per_node), *module_args]
+
+
 __all__ = [
-    "process_identity",
+    "package_module_command",
     "process_group_alive",
-    "terminate_owned_process_group",
+    "process_identity",
     "read_text_tail",
     "run_logged_subprocess",
     "run_torchrun_module",
+    "terminate_owned_process_group",
     "terminate_process_group",
     "terminate_process_tree",
     "torchrun_module_command",

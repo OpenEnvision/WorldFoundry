@@ -82,16 +82,12 @@ def normalize_camera_path(
     if not isinstance(raw_keyframes, Sequence) or isinstance(raw_keyframes, (str, bytes)):
         raise CameraPathError("camera_path.keyframes must be an array.")
     if not min_keyframes <= len(raw_keyframes) <= max_keyframes:
-        raise CameraPathError(
-            f"camera_path requires between {min_keyframes} and {max_keyframes} keyframes."
-        )
+        raise CameraPathError(f"camera_path requires between {min_keyframes} and {max_keyframes} keyframes.")
 
     interpolation = str(payload.get("interpolation") or "smooth").strip().lower()
     if interpolation not in CAMERA_PATH_INTERPOLATIONS:
         raise CameraPathError(
-            "camera_path.interpolation must be one of "
-            + ", ".join(sorted(CAMERA_PATH_INTERPOLATIONS))
-            + "."
+            "camera_path.interpolation must be one of " + ", ".join(sorted(CAMERA_PATH_INTERPOLATIONS)) + "."
         )
     coordinate_space = str(payload.get("coordinate_space") or "world").strip().lower()
     if coordinate_space not in {"local", "world"}:
@@ -132,11 +128,7 @@ def normalize_camera_path(
                     label=f"keyframes[{index}].rotation",
                 ),
                 "fov": fov,
-                "prompt": str(
-                    raw_keyframe.get("prompt")
-                    or raw_keyframe.get("region_hint")
-                    or ""
-                ).strip(),
+                "prompt": str(raw_keyframe.get("prompt") or raw_keyframe.get("region_hint") or "").strip(),
             }
         )
 
@@ -199,7 +191,7 @@ def sample_camera_path(
     elif "frame_count" in path:
         sampled_frame_count = int(path["frame_count"])
     else:
-        sampled_frame_count = max(int(round(path["duration_sec"] * path["fps"])) + 1, 2)
+        sampled_frame_count = max(round(path["duration_sec"] * path["fps"]) + 1, 2)
     if sampled_frame_count < 2:
         raise CameraPathError("sampled camera paths require at least two frames.")
 
@@ -222,21 +214,16 @@ def sample_camera_path(
     alpha_column = alpha[:, None]
 
     sampled_positions = (
-        positions[segment_indices] * (1.0 - alpha_column)
-        + positions[segment_indices + 1] * alpha_column
+        positions[segment_indices] * (1.0 - alpha_column) + positions[segment_indices + 1] * alpha_column
     )
     sampled_rotations = (
-        rotations_rad[segment_indices] * (1.0 - alpha_column)
-        + rotations_rad[segment_indices + 1] * alpha_column
+        rotations_rad[segment_indices] * (1.0 - alpha_column) + rotations_rad[segment_indices + 1] * alpha_column
     )
-    sampled_fovs = (
-        fovs[segment_indices] * (1.0 - alpha)
-        + fovs[segment_indices + 1] * alpha
-    )
+    sampled_fovs = fovs[segment_indices] * (1.0 - alpha) + fovs[segment_indices + 1] * alpha
 
     camera_w2c = np.repeat(np.eye(4, dtype=np.float32)[None], sampled_frame_count, axis=0)
     world_up = np.asarray([0.0, 1.0, 0.0], dtype=np.float64)
-    for index, (position, rotation) in enumerate(zip(sampled_positions, sampled_rotations)):
+    for index, (position, rotation) in enumerate(zip(sampled_positions, sampled_rotations, strict=False)):
         pitch, yaw, roll = rotation
         forward = np.asarray(
             [
@@ -262,13 +249,11 @@ def sample_camera_path(
         camera_w2c[index, :3, 3] = (-rotation_w2c @ position).astype(np.float32)
 
     base_fov = float(sampled_fovs[0])
-    zoom_factors = np.tan(np.deg2rad(base_fov) / 2.0) / np.tan(
-        np.deg2rad(sampled_fovs) / 2.0
-    )
+    zoom_factors = np.tan(np.deg2rad(base_fov) / 2.0) / np.tan(np.deg2rad(sampled_fovs) / 2.0)
     keyframe_indices = np.rint(key_times * (sampled_frame_count - 1)).astype(np.int64)
     captions = {
         str(int(sample_index)): str(keyframe["prompt"])
-        for sample_index, keyframe in zip(keyframe_indices, keyframes)
+        for sample_index, keyframe in zip(keyframe_indices, keyframes, strict=False)
         if keyframe["prompt"]
     }
     return {
@@ -282,9 +267,9 @@ def sample_camera_path(
 
 
 __all__ = [
-    "CameraPathError",
     "CAMERA_PATH_INTERPOLATIONS",
     "CAMERA_PATH_SCHEMA_VERSION",
+    "CameraPathError",
     "default_camera_path",
     "normalize_camera_path",
     "sample_camera_path",

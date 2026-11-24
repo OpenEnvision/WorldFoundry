@@ -43,32 +43,57 @@ def _recipe(mode: str) -> NativeDiffusionRecipe:
     checkpoint_metadata = {"license": "CC-BY-NC-4.0", "upstream_source_revision": WORLDPLAY2_SOURCE_REVISION}
     base = {"repo_id": WAN22_I2V_A14B_REPO_ID, "revision": WAN22_I2V_A14B_REVISION}
     return NativeDiffusionRecipe(
-        model_id=model_id, aliases=(("worldplay2-fast", repo_id) if mode == "few_step" else (repo_id,)),
+        model_id=model_id,
+        aliases=(("worldplay2-fast", repo_id) if mode == "few_step" else (repo_id,)),
         components=(
             ComponentSpec(denoiser, build_worldplay2_denoiser, {"high": "high", "low": "low"}),
             ComponentSpec(conditioner, build_worldplay2_conditioner, {"weights": "t5", "tokenizer": "tokenizer"}),
             ComponentSpec(initializer, build_worldplay2_latent_initializer),
-            ComponentSpec(scheduler, build_worldplay2_pdd_scheduler if mode == "few_step" else build_wan_flow_unipc_scheduler,
-                          options={} if mode == "few_step" else {"shift": 5.0}),
+            ComponentSpec(
+                scheduler,
+                build_worldplay2_pdd_scheduler if mode == "few_step" else build_wan_flow_unipc_scheduler,
+                options={} if mode == "few_step" else {"shift": 5.0},
+            ),
             ComponentSpec(codec, build_wan_video_decoder, {"weights": "vae"}),
         ),
-        execution=ExecutionSpec(strategy="compressed-memory", bindings={
-            "denoiser": denoiser, "conditioner": conditioner, "latent_initializer": initializer,
-            "scheduler": scheduler, "decoder": codec, "latent_encoder": codec,
-        }),
+        execution=ExecutionSpec(
+            strategy="compressed-memory",
+            bindings={
+                "denoiser": denoiser,
+                "conditioner": conditioner,
+                "latent_initializer": initializer,
+                "scheduler": scheduler,
+                "decoder": codec,
+                "latent_encoder": codec,
+            },
+        ),
         checkpoints={
-            "high": CheckpointSpec(repo_id=repo_id, revision=revision,
-                                   files=("high_noise_model/diffusion_pytorch_model.safetensors",), metadata=checkpoint_metadata),
-            "low": CheckpointSpec(repo_id=repo_id, revision=revision,
-                                  files=("low_noise_model/diffusion_pytorch_model.safetensors",), metadata=checkpoint_metadata),
+            "high": CheckpointSpec(
+                repo_id=repo_id,
+                revision=revision,
+                files=("high_noise_model/diffusion_pytorch_model.safetensors",),
+                metadata=checkpoint_metadata,
+            ),
+            "low": CheckpointSpec(
+                repo_id=repo_id,
+                revision=revision,
+                files=("low_noise_model/diffusion_pytorch_model.safetensors",),
+                metadata=checkpoint_metadata,
+            ),
             "t5": CheckpointSpec(**base, files=("models_t5_umt5-xxl-enc-bf16.pth",)),
             "tokenizer": CheckpointSpec(**base, files=WAN_TOKENIZER_FILES, allow_patterns=("google/umt5-xxl/*",)),
             "vae": CheckpointSpec(**base, files=("Wan2.1_VAE.pth",)),
         },
         options={"mode": mode, "latent_channels": 16, "spatial_compression": 8, "temporal_compression": 4},
-        capabilities=frozenset({"image-to-video", "action-control", "prompt-scheduling", "compressed-memory", "chunked-video"}),
-        metadata={"architecture": "wan2.2-i2v-a14b", "native_inference": True, "output_layout": "FHWC",
-                  "upstream_source_revision": WORLDPLAY2_SOURCE_REVISION},
+        capabilities=frozenset(
+            {"image-to-video", "action-control", "prompt-scheduling", "compressed-memory", "chunked-video"}
+        ),
+        metadata={
+            "architecture": "wan2.2-i2v-a14b",
+            "native_inference": True,
+            "output_layout": "FHWC",
+            "upstream_source_revision": WORLDPLAY2_SOURCE_REVISION,
+        },
     )
 
 

@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Mapping, Sequence
 
 from worldfoundry.core.io.paths import project_root
 from worldfoundry.runtime.env import (
     first_env_path,
     resolve_cache_dir,
     resolve_ckpt_dir,
-    resolve_data_dir,
     resolve_hf_cache_dir,
     resolve_hfd_root,
     resolve_model_dir,
@@ -43,7 +42,10 @@ def _dedupe_paths(paths: Sequence[Path | str | None]) -> tuple[Path, ...]:
         if raw_path is None:
             continue
         path = Path(raw_path).expanduser()
-        key = path.resolve().as_posix() if path.exists() else path.as_posix()
+        try:
+            key = path.resolve().as_posix() if path.exists() else path.as_posix()
+        except OSError:
+            key = path.as_posix()
         if key in seen:
             continue
         deduped.append(path)
@@ -80,9 +82,7 @@ def studio_workspace_root(env: EnvMapping | None = None) -> Path:
 
     environ = os.environ if env is None else env
     explicit = first_env_path(
-        (
-            "WORLDFOUNDRY_STUDIO_WORKSPACE_DIR",
-        ),
+        ("WORLDFOUNDRY_STUDIO_WORKSPACE_DIR",),
         environ,
     )
     if explicit is not None:
@@ -106,9 +106,7 @@ def studio_model_roots(env: EnvMapping | None = None, *, repo_root: Path | None 
 
     environ = os.environ if env is None else env
     explicit_root = first_env_path(
-        (
-            "WORLDFOUNDRY_STUDIO_MODEL_ROOT",
-        ),
+        ("WORLDFOUNDRY_STUDIO_MODEL_ROOT",),
         environ,
     )
     model_dir = resolve_model_dir(environ)
@@ -155,9 +153,7 @@ def studio_hfd_cache_roots(
     hf_cache_dir = resolve_hf_cache_dir(environ)
     project_cache_roots = [root / "cache" / "hfd" for root in _mirror_project_roots(project_roots)]
     project_ckpt_roots = [
-        root.parent / directory
-        for root in _mirror_project_roots(project_roots)
-        for directory in ("ckpt", "ckpts")
+        root.parent / directory for root in _mirror_project_roots(project_roots) for directory in ("ckpt", "ckpts")
     ]
     return _dedupe_paths(
         (
@@ -176,21 +172,3 @@ def studio_hfd_cache_roots(
             cache_dir / "hfd",
         )
     )
-
-
-def studio_path_summary(env: EnvMapping | None = None) -> dict[str, str | list[str]]:
-    """Build a startup-safe summary of Studio filesystem roots.
-
-    Args:
-        env: Optional environment mapping; defaults to the process environment.
-    """
-
-    environ = os.environ if env is None else env
-    return {
-        "workspace_root": str(studio_workspace_root(environ)),
-        "data_dir": str(resolve_data_dir(environ)),
-        "model_dir": str(resolve_model_dir(environ)),
-        "cache_dir": str(resolve_cache_dir(environ)),
-        "model_roots": [str(path) for path in studio_model_roots(environ)],
-        "hfd_cache_roots": [str(path) for path in studio_hfd_cache_roots(environ)],
-    }

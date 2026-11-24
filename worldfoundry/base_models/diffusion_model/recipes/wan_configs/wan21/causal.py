@@ -27,15 +27,11 @@ def is_causal_block(n: str, m) -> bool:
 
 @dataclass
 class CausalWanArchConfig(DiTArchConfig):
-    """Causal wan arch config implementation."""
-    _fsdp_shard_conditions: list = field(
-        default_factory=lambda: [is_causal_block]
-    )
+    _fsdp_shard_conditions: list = field(default_factory=lambda: [is_causal_block])
 
 
 @dataclass
 class CausalWanConfig(DiTConfig):
-    """Causal wan config implementation."""
     arch_config: DiTArchConfig = field(default_factory=CausalWanArchConfig)
 
     prefix: str = "CausalWan"

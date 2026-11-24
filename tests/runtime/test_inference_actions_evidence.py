@@ -18,22 +18,32 @@ import yaml
 
 PATH = Path(__file__).resolve().parents[1] / "manual/inference_actions_evidence.py"
 SPEC = importlib.util.spec_from_file_location("test_actions_evidence", PATH)
+assert SPEC is not None and SPEC.loader is not None
 evidence = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(evidence)
 
-PRIMARY_CHECK_CONTEXTS = (
-    "geometry-impact", "inference-replay", "cpu-tests", "inference-tensors",
-    "public-surface", "packaging-license-gate",
+PUBLIC_CI_CHECK_CONTEXTS = (
+    "geometry-impact",
+    "cpu-tests",
+    "inference-tensors",
+    "public-surface",
+    "packaging-license-gate",
 )
+EVIDENCE_CHECK_CONTEXTS = ("inference-replay",)
 
 
-def actions_job_expression(value, *, event_name, evidence_json):
+def actions_job_expression(value, *, event_name, evidence_json, control_ref="", reference_index=""):
     """Evaluate the workflow's string, comparison and short-circuit expressions."""
     if isinstance(value, bool) or not value.startswith("${{"):
         return value
     assert value.endswith("}}"), value
     expression = ast.parse(value[3:-2].strip().replace("&&", " and ").replace("||", " or "), mode="eval")
-    contexts = {"github.event_name": event_name, "inputs.evidence_json": evidence_json}
+    contexts = {
+        "github.event_name": event_name,
+        "inputs.evidence_json": evidence_json,
+        "vars.INFERENCE_EVIDENCE_CONTROL_REF": control_ref,
+        "vars.INFERENCE_REFERENCE_INDEX_SHA256": reference_index,
+    }
 
     def evaluate(node):
         if isinstance(node, ast.Constant) and isinstance(node.value, (str, bool)):
@@ -61,59 +71,130 @@ def actions_job_expression(value, *, event_name, evidence_json):
     return evaluate(expression.body)
 
 
+def test_public_ci_exposes_bounded_open_source_checks():
+    workflow = yaml.safe_load(
+        (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    )
+    assert workflow.get("permissions") == {"contents": "read"}
+    assert "concurrency" in workflow
+    jobs = workflow["jobs"]
+    assert set(PUBLIC_CI_CHECK_CONTEXTS) <= jobs.keys()
+    assert "inference-replay" not in jobs
+    assert "attest-inference-evidence" not in jobs
+    for job_id, job in jobs.items():
+        assert isinstance(job.get("timeout-minutes"), int) and job["timeout-minutes"] > 0, job_id
+        assert job.get("name", job_id) == job_id
+
+
 @pytest.mark.parametrize("event_name", ["push", "pull_request", "workflow_dispatch"])
 @pytest.mark.parametrize("report_input", ["", "{}", "invalid-json", " ", "0", "false"])
 def test_evidence_dispatch_skips_cannot_replace_required_check_contexts(event_name, report_input):
-    workflow = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    workflow = Path(__file__).resolve().parents[2] / ".github/workflows/inference-evidence.yml"
     jobs = yaml.safe_load(workflow.read_text(encoding="utf-8"))["jobs"]
-    assert set(PRIMARY_CHECK_CONTEXTS) <= jobs.keys()
+    assert set(EVIDENCE_CHECK_CONTEXTS) <= jobs.keys()
     attesting = event_name == "workflow_dispatch" and report_input != ""
-    emitted_names, skipped_names = {}, []
-    for job_id, job in jobs.items():
-        context = {"event_name": event_name, "evidence_json": report_input}
-        name = actions_job_expression(job.get("name", job_id), **context)
-        runs = actions_job_expression(job.get("if", True), **context)
-        assert isinstance(name, str) and name, (job_id, name)
-        emitted_names[job_id] = name
-        if not runs:
-            skipped_names.append(name)
-        if job_id in PRIMARY_CHECK_CONTEXTS:
-            assert runs == (not attesting), (job_id, event_name, report_input)
-            if attesting:
-                assert name not in PRIMARY_CHECK_CONTEXTS, (job_id, name)
-            else:
-                assert name == job_id, (job_id, name)
-    assert len(set(emitted_names.values())) == len(emitted_names)
-    assert set(skipped_names).isdisjoint(PRIMARY_CHECK_CONTEXTS)
-    attestation = jobs["attest-inference-evidence"]
-    assert actions_job_expression(attestation["if"], event_name=event_name, evidence_json=report_input) == attesting
-    if attesting:
-        assert len(skipped_names) == len(PRIMARY_CHECK_CONTEXTS)
-        assert set(emitted_names.values()).isdisjoint(PRIMARY_CHECK_CONTEXTS)
+    for configured in (True, False):
+        control_ref = "main" if configured else ""
+        reference_index = "5" * 64 if configured else ""
+        emitted_names, skipped_names = {}, []
+        for job_id, job in jobs.items():
+            context = {
+                "event_name": event_name,
+                "evidence_json": report_input,
+                "control_ref": control_ref,
+                "reference_index": reference_index,
+            }
+            name = actions_job_expression(job.get("name", job_id), **context)
+            runs = actions_job_expression(job.get("if", True), **context)
+            assert isinstance(name, str) and name, (job_id, name)
+            emitted_names[job_id] = name
+            if not runs:
+                skipped_names.append(name)
+            if job_id in EVIDENCE_CHECK_CONTEXTS:
+                assert runs == (configured and not attesting), (job_id, event_name, report_input, configured)
+                if attesting:
+                    assert name not in EVIDENCE_CHECK_CONTEXTS, (job_id, name)
+                else:
+                    assert name == job_id, (job_id, name)
+        assert len(set(emitted_names.values())) == len(emitted_names)
+        if configured:
+            assert set(skipped_names).isdisjoint(EVIDENCE_CHECK_CONTEXTS)
+        attestation = jobs["attest-inference-evidence"]
+        assert (
+            actions_job_expression(
+                attestation["if"],
+                event_name=event_name,
+                evidence_json=report_input,
+                control_ref=control_ref,
+                reference_index=reference_index,
+            )
+            == attesting
+        )
+        if attesting:
+            assert set(emitted_names.values()).isdisjoint(EVIDENCE_CHECK_CONTEXTS)
 
 
 def documents():
-    identities = {"source_revision": "1" * 40, "source_tree": "2" * 40,
-                  "matrix_sha256": "3" * 64, "dependencies_sha256": "4" * 64}
-    plan = {**identities, "base_revision": "6" * 40, "head_revision": "1" * 40,
-            "status": "planned", "selected_cases": ["video-a"]}
-    report = {**identities, "schema_version": 1, "mode": "replay", "status": "passed",
-              "reference_index_sha256": "5" * 64, "selected_cases": ["video-a"],
-              "cases": {"video-a": {"status": "passed", "atol": 0, "rtol": 0, "outputs": {
-                  "frames": {"shape": [9, 16, 32, 3], "passed": True, "exact": True, "max_abs_error": 0},
-              }}}}
-    receipt = evidence.attest_report(plan, report, reference="5" * 64, repository="owner/repo", run_id=73,
-                                     control_revision="7" * 40, control_ref="main", expected_control_ref="main")
-    run = {"id": 73, "event": "workflow_dispatch", "status": "completed", "conclusion": "success",
-           "path": evidence.WORKFLOW, "head_branch": "main", "head_sha": "7" * 40,
-           "repository": {"full_name": "owner/repo"}, "head_repository": {"full_name": "owner/repo"}}
+    identities = {
+        "source_revision": "1" * 40,
+        "source_tree": "2" * 40,
+        "matrix_sha256": "3" * 64,
+        "dependencies_sha256": "4" * 64,
+    }
+    plan = {
+        **identities,
+        "base_revision": "6" * 40,
+        "head_revision": "1" * 40,
+        "status": "planned",
+        "selected_cases": ["video-a"],
+    }
+    report = {
+        **identities,
+        "schema_version": 1,
+        "mode": "replay",
+        "status": "passed",
+        "reference_index_sha256": "5" * 64,
+        "selected_cases": ["video-a"],
+        "cases": {
+            "video-a": {
+                "status": "passed",
+                "atol": 0,
+                "rtol": 0,
+                "outputs": {
+                    "frames": {"shape": [9, 16, 32, 3], "passed": True, "exact": True, "max_abs_error": 0},
+                },
+            }
+        },
+    }
+    receipt = evidence.attest_report(
+        plan,
+        report,
+        reference="5" * 64,
+        repository="owner/repo",
+        run_id=73,
+        control_revision="7" * 40,
+        control_ref="main",
+        expected_control_ref="main",
+    )
+    run = {
+        "id": 73,
+        "event": "workflow_dispatch",
+        "status": "completed",
+        "conclusion": "success",
+        "path": evidence.WORKFLOW,
+        "head_branch": "main",
+        "head_sha": "7" * 40,
+        "repository": {"full_name": "owner/repo"},
+        "head_repository": {"full_name": "owner/repo"},
+    }
     artifact = {"id": 87, "name": evidence.ARTIFACT, "expired": False, "workflow_run": {"id": 73}}
     return plan, run, artifact, receipt
 
 
 def verify(plan, run, artifact, receipt):
-    return evidence.verify_origin(run, artifact, receipt, repository="owner/repo", control_ref="main",
-                                  plan=plan, reference="5" * 64)
+    return evidence.verify_origin(
+        run, artifact, receipt, repository="owner/repo", control_ref="main", plan=plan, reference="5" * 64
+    )
 
 
 def test_official_successful_current_dispatch_retains_exact_replay_requirements():
@@ -126,11 +207,19 @@ def test_official_successful_current_dispatch_retains_exact_replay_requirements(
     assert result["required_checks"] == ["public-cpu", "inference-tensors"]
 
 
-@pytest.mark.parametrize("field,value", [
-    ("event", "pull_request"), ("event", "push"), ("status", "in_progress"), ("conclusion", "failure"),
-    ("path", ".github/workflows/other.yml"), ("head_branch", "candidate"),
-    ("repository", {"full_name": "fork/repo"}), ("head_repository", {"full_name": "fork/repo"}),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("event", "pull_request"),
+        ("event", "push"),
+        ("status", "in_progress"),
+        ("conclusion", "failure"),
+        ("path", ".github/workflows/other.yml"),
+        ("head_branch", "candidate"),
+        ("repository", {"full_name": "fork/repo"}),
+        ("head_repository", {"full_name": "fork/repo"}),
+    ],
+)
 def test_failed_untrusted_fork_or_different_workflow_run_is_rejected(field, value):
     plan, run, artifact, receipt = documents()
     run[field] = value
@@ -138,8 +227,9 @@ def test_failed_untrusted_fork_or_different_workflow_run_is_rejected(field, valu
         verify(plan, run, artifact, receipt)
 
 
-@pytest.mark.parametrize("field,value", [("expired", True), ("expired", None), ("name", "user-report"),
-                                         ("workflow_run", {"id": 99})])
+@pytest.mark.parametrize(
+    "field,value", [("expired", True), ("expired", None), ("name", "user-report"), ("workflow_run", {"id": 99})]
+)
 def test_expired_unassociated_or_unofficial_artifact_is_rejected(field, value):
     plan, run, artifact, receipt = documents()
     artifact[field] = value
@@ -147,11 +237,19 @@ def test_expired_unassociated_or_unofficial_artifact_is_rejected(field, value):
         verify(plan, run, artifact, receipt)
 
 
-@pytest.mark.parametrize("field,value", [
-    ("source_revision", "9" * 40), ("source_tree", "9" * 40), ("base_revision", "9" * 40),
-    ("control_revision", "9" * 40), ("run_id", 74), ("repository", "fork/repo"),
-    ("workflow_path", ".github/workflows/other.yml"), ("schema_version", 2),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("source_revision", "9" * 40),
+        ("source_tree", "9" * 40),
+        ("base_revision", "9" * 40),
+        ("control_revision", "9" * 40),
+        ("run_id", 74),
+        ("repository", "fork/repo"),
+        ("workflow_path", ".github/workflows/other.yml"),
+        ("schema_version", 2),
+    ],
+)
 def test_reused_receipt_or_changed_identity_is_rejected(field, value):
     plan, run, artifact, receipt = documents()
     receipt[field] = value
@@ -183,8 +281,16 @@ def test_official_provenance_does_not_replace_exact_numeric_validation(change):
 def test_maintainer_dispatch_requires_configured_control_branch(ref):
     plan, _, _, receipt = documents()
     with pytest.raises(ValueError, match="control branch"):
-        evidence.attest_report(plan, receipt["report"], reference="5" * 64, repository="owner/repo", run_id=73,
-                               control_revision="7" * 40, control_ref=ref, expected_control_ref="main")
+        evidence.attest_report(
+            plan,
+            receipt["report"],
+            reference="5" * 64,
+            repository="owner/repo",
+            run_id=73,
+            control_revision="7" * 40,
+            control_ref=ref,
+            expected_control_ref="main",
+        )
 
 
 def archive(value, *, members=None):
@@ -203,8 +309,10 @@ def test_official_artifact_bytes_are_bound_to_actions_digest():
         evidence.decode_artifact(body, "sha256:" + "0" * 64)
 
 
-@pytest.mark.parametrize("members", [["../receipt.json"], ["receipt.json", "other.json"],
-                                      ["receipt.json", "receipt.json"], ["nested/receipt.json"]])
+@pytest.mark.parametrize(
+    "members",
+    [["../receipt.json"], ["receipt.json", "other.json"], ["receipt.json", "receipt.json"], ["nested/receipt.json"]],
+)
 def test_archive_cannot_select_arbitrary_or_duplicate_receipts(members):
     *_, receipt = documents()
     if len(members) != len(set(members)):
@@ -245,7 +353,7 @@ def test_ci_downloads_official_artifact_and_does_not_read_repository_report():
     plan, run, artifact, receipt = documents()
     api = FakeAPI([run], [artifact], {artifact["id"]: receipt})
     assert evidence.find_evidence(api, plan, control_ref="main", reference="5" * 64)["status"] == "gpu_replay_verified"
-    assert "/actions/workflows/ci.yml/runs?" in api.calls[0][0]
+    assert "/actions/workflows/inference-evidence.yml/runs?" in api.calls[0][0]
     assert "event=workflow_dispatch" in api.calls[0][0]
     assert all("/contents/" not in path for path, _ in api.calls)
 
@@ -286,12 +394,16 @@ def test_rerun_only_failed_gate_for_exact_commit():
 
         def request(self, path, **kwargs):
             self.calls.append((path, kwargs))
-            if "/workflows/ci.yml/runs?" in path:
+            if "/workflows/inference-evidence.yml/runs?" in path:
                 return {"workflow_runs": [{"id": 1, "head_sha": "1" * 40}, {"id": 2, "head_sha": "2" * 40}]}
             if "/jobs?" in path:
-                return {"jobs": [{"id": 10, "name": "inference-replay", "conclusion": "failure"},
-                                 {"id": 11, "name": "inference-replay", "conclusion": "success"},
-                                 {"id": 12, "name": "cpu-tests", "conclusion": "failure"}]}
+                return {
+                    "jobs": [
+                        {"id": 10, "name": "inference-replay", "conclusion": "failure"},
+                        {"id": 11, "name": "inference-replay", "conclusion": "success"},
+                        {"id": 12, "name": "cpu-tests", "conclusion": "failure"},
+                    ]
+                }
             return None
 
     api = API()
@@ -310,29 +422,55 @@ def historical_contract(tmp_path):
         target.parent.mkdir(parents=True, exist_ok=True)
         # Candidate files are inspected as Git blobs and are never executed.
         target.write_text("# Independent committed source fixture: " + relative + "\n")
-    for args in [("init", "-q"), ("config", "user.name", "Regression test"),
-                 ("config", "user.email", "test@example.invalid"), ("add", "."), ("commit", "-qm", "sources")]:
+    for args in [
+        ("init", "-q"),
+        ("config", "user.name", "Regression test"),
+        ("config", "user.email", "test@example.invalid"),
+        ("add", "."),
+        ("commit", "-qm", "sources"),
+    ]:
         subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True)
     plan, _, _, receipt = documents()
-    plan.update(source_revision=evidence.gate.impact.revision(tmp_path),
-                source_tree=evidence.gate.impact.revision(tmp_path, "HEAD^{tree}"))
+    plan.update(
+        source_revision=evidence.gate.impact.revision(tmp_path),
+        source_tree=evidence.gate.impact.revision(tmp_path, "HEAD^{tree}"),
+    )
     generic = receipt["report"]
     generic.update(source_revision=plan["source_revision"], source_tree=plan["source_tree"])
-    contract = {"schema_version": 1, "contract_id": evidence.MG2_CONTRACT, "status": "passed",
-                "source_revision": plan["source_revision"], "source_tree": plan["source_tree"],
-                "historical_reference_sha256": tool.REFERENCE_SHA256,
-                "historical_reference_revision": tool.REFERENCE_REVISION,
-                "numeric_signatures": accepted.expected_signatures,
-                "source_sha256": {path: evidence.checkout_digest(tmp_path, path)
-                                  for path in set(accepted.required_source_paths) | {evidence.MG2_HELPER}},
-                "test_source_sha256": evidence.checkout_digest(tmp_path, evidence.MG2_TEST),
-                "frozen_helper_sha256": evidence.checkout_digest(tmp_path, evidence.MG2_FROZEN_HELPER),
-                "junit": {"status": "passed", "executed_tests": 6, "skipped": 0,
-                          "complete_selection_verified": True, "source_files_verified": 1, "sha256": "8" * 64},
-                "raw_report_sha256": "9" * 64}
-    bundle = {"schema_version": 2, "mode": "trusted_contract_bundle", "status": "passed",
-              "source_revision": plan["source_revision"], "source_tree": plan["source_tree"],
-              "generic_replay": generic, "contracts": {evidence.MG2_CONTRACT: contract}}
+    contract = {
+        "schema_version": 1,
+        "contract_id": evidence.MG2_CONTRACT,
+        "status": "passed",
+        "source_revision": plan["source_revision"],
+        "source_tree": plan["source_tree"],
+        "historical_reference_sha256": tool.REFERENCE_SHA256,
+        "historical_reference_revision": tool.REFERENCE_REVISION,
+        "numeric_signatures": accepted.expected_signatures,
+        "source_sha256": {
+            path: evidence.checkout_digest(tmp_path, path)
+            for path in set(accepted.required_source_paths) | {evidence.MG2_HELPER}
+        },
+        "test_source_sha256": evidence.checkout_digest(tmp_path, evidence.MG2_TEST),
+        "frozen_helper_sha256": evidence.checkout_digest(tmp_path, evidence.MG2_FROZEN_HELPER),
+        "junit": {
+            "status": "passed",
+            "executed_tests": 6,
+            "skipped": 0,
+            "complete_selection_verified": True,
+            "source_files_verified": 1,
+            "sha256": "8" * 64,
+        },
+        "raw_report_sha256": "9" * 64,
+    }
+    bundle = {
+        "schema_version": 2,
+        "mode": "trusted_contract_bundle",
+        "status": "passed",
+        "source_revision": plan["source_revision"],
+        "source_tree": plan["source_tree"],
+        "generic_replay": generic,
+        "contracts": {evidence.MG2_CONTRACT: contract},
+    }
     return tmp_path, plan, bundle
 
 
@@ -344,10 +482,26 @@ def test_independent_historical_contract_retains_separate_identity(historical_co
     assert evidence.MG2_CONTRACT not in result["executed_cases"]
 
 
-@pytest.mark.parametrize("change", ["historical_reference", "historical_signature", "missing_historical_case",
-                                    "source_commit", "source_tree", "missing_source", "source_blob", "test_blob",
-                                    "junit_skip", "junit_missing", "junit_selection", "missing_raw_hash"])
-def test_historical_contract_cannot_pass_with_changed_output_source_or_incomplete_execution(historical_contract, change):
+@pytest.mark.parametrize(
+    "change",
+    [
+        "historical_reference",
+        "historical_signature",
+        "missing_historical_case",
+        "source_commit",
+        "source_tree",
+        "missing_source",
+        "source_blob",
+        "test_blob",
+        "junit_skip",
+        "junit_missing",
+        "junit_selection",
+        "missing_raw_hash",
+    ],
+)
+def test_historical_contract_cannot_pass_with_changed_output_source_or_incomplete_execution(
+    historical_contract, change
+):
     root, plan, bundle = historical_contract
     contract = bundle["contracts"][evidence.MG2_CONTRACT]
     if change == "historical_reference":
@@ -426,18 +580,28 @@ def test_optional_diagnostic_gpu_evidence_does_not_mislabel_no_inference_change(
 def raw_documents(root, plan, contract):
     accepted = evidence.historical_tool().MG2HistoricalReference()
     raw = copy.deepcopy(accepted._reference)
-    raw.update(source_revision=plan["source_revision"], source_tree=plan["source_tree"],
-               source_sha256={str(root / key): value for key, value in contract["source_sha256"].items()},
-               test_source_sha256=contract["test_source_sha256"],
-               frozen_helper_sha256=contract["frozen_helper_sha256"],
-               historical_reference={**accepted.receipt, "conditioning_passed": True,
-                                     "contracts_passed": list(accepted.expected_signatures["contracts"])})
+    raw.update(
+        source_revision=plan["source_revision"],
+        source_tree=plan["source_tree"],
+        source_sha256={str(root / key): value for key, value in contract["source_sha256"].items()},
+        test_source_sha256=contract["test_source_sha256"],
+        frozen_helper_sha256=contract["frozen_helper_sha256"],
+        historical_reference={
+            **accepted.receipt,
+            "conditioning_passed": True,
+            "contracts_passed": list(accepted.expected_signatures["contracts"]),
+        },
+    )
     document = ET.Element("testsuite", tests="6", failures="0", errors="0", skipped="0")
     for key, record in raw["contracts"].items():
         record["historical_reference_passed"] = True
         strategy, seed = key.split("_seed")
-        ET.SubElement(document, "testcase", classname=evidence.MG2_TEST[:-3].replace("/", "."),
-                      name="test_real_conditioned_public_rollout_preserves_12_blocks_exactly[" + strategy + "-" + seed + "]")
+        ET.SubElement(
+            document,
+            "testcase",
+            classname=evidence.MG2_TEST[:-3].replace("/", "."),
+            name="test_real_conditioned_public_rollout_preserves_12_blocks_exactly[" + strategy + "-" + seed + "]",
+        )
     junit = root / "results.xml"
     ET.ElementTree(document).write(junit, encoding="utf-8")
     return raw, junit
@@ -453,7 +617,9 @@ def test_full_raw_report_is_compacted_only_after_complete_junit_and_committed_so
     assert evidence.verify_conditioned_contract(contract, root=root, plan=plan)["status"] == "passed"
 
 
-@pytest.mark.parametrize("change", ["old_commit", "missing_historical_case", "partial_junit", "different_test_selection"])
+@pytest.mark.parametrize(
+    "change", ["old_commit", "missing_historical_case", "partial_junit", "different_test_selection"]
+)
 def test_compact_command_cannot_promote_incomplete_or_stale_raw_evidence(historical_contract, change):
     root, plan, bundle = historical_contract
     raw, junit = raw_documents(root, plan, bundle["contracts"][evidence.MG2_CONTRACT])
@@ -463,11 +629,13 @@ def test_compact_command_cannot_promote_incomplete_or_stale_raw_evidence(histori
         raw["historical_reference"]["contracts_passed"].pop()
     else:
         document = ET.parse(junit)
+        testcase = document.getroot().find("testcase")
+        assert testcase is not None
         if change == "partial_junit":
-            document.getroot().remove(document.getroot().find("testcase"))
+            document.getroot().remove(testcase)
             document.getroot().set("tests", "5")
         else:
-            document.getroot().find("testcase").set("name", "unrelated_test_passes")
+            testcase.set("name", "unrelated_test_passes")
         document.write(junit, encoding="utf-8")
     with pytest.raises(ValueError):
         evidence.compact_conditioned_report(raw, root=root, junit=junit)

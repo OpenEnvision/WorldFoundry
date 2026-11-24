@@ -82,7 +82,7 @@ def generate_traj_txt(x_up_angles, y_left_angles, r, r_zoom, frame: int, is_tran
     is_zoom = all(x == 0 for x in x_up_angles) and all(y == 0 for y in y_left_angles)
     is_not_y = all(y == 0 for y in y_left_angles)
 
-    for x_up_angle, y_left_angle, r_val, r_zoom_val in zip(x_up_angles, y_left_angles, rs, r_zooms):
+    for x_up_angle, y_left_angle, r_val, r_zoom_val in zip(x_up_angles, y_left_angles, rs, r_zooms, strict=False):
         radius = r_zoom_val if is_not_y else r_val
         c2ws_list.append(
             sphere2pose(

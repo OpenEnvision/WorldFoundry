@@ -20,8 +20,8 @@ Studio exposes multiple frontends:
 Before opening the Spark viewer, install its version-pinned browser modules:
 
 ```bash
-python -m worldfoundry.studio.ui.vendor_assets
-python -m worldfoundry.studio.ui.vendor_assets --check
+python -m worldfoundry.studio.visualization.vendor_assets
+python -m worldfoundry.studio.visualization.vendor_assets --check
 ```
 
 The installer downloads missing, empty, or unreadable files and reuses readable
@@ -36,7 +36,7 @@ nonempty local modules. Install modules separately from starting Studio;
 
 ## Workspace mode
 
-For multi-model validation and release QA, run the workspace app instead of a single-model Studio process:
+For multi-model work, run the workspace app instead of a single-model Studio process:
 
 ```bash
 source tmp/worldfoundry_unified_env.sh
@@ -59,8 +59,7 @@ bash scripts/workspace/run_workspace.sh \
   --data-dir /path/to/benchmark-data
 ```
 
-The launcher is open-source friendly and does not depend on machine-specific
-paths. It resolves assets in this order: command-line option, already exported
+The launcher resolves assets in this order: command-line option, already exported
 environment variable, repo-sibling `ckpt/` or `data/` directory when present,
 env-file value from `tmp/worldfoundry_unified_env.sh`, then
 `~/.cache/worldfoundry/...`.
@@ -89,10 +88,9 @@ Open:
 http://127.0.0.1:7870/
 ```
 
-The workspace is the preferred UI for release validation.
-Use it to submit inference jobs, inspect model-specific forms, review artifacts,
+Use the workspace to submit inference jobs, inspect model-specific forms, review artifacts,
 and compare runs without switching between multiple one-off scripts.
-Those Workspace jobs are visual smoke (`python -m worldfoundry.studio.workspace_job infer`). Everyday reproducible / model-page commands use `worldfoundry-eval run <id> --pipeline.task-profile …`. See [CLI entrypoints](/docs/reference/cli#entrypoints).
+Those Workspace jobs are visual smoke (`python -m worldfoundry.studio.workspace_job infer`). Everyday reproducible / model-page commands use `wf run <id> --pipeline.task-profile …`. See [CLI entrypoints](/docs/reference/cli#entrypoints).
 
 Workspace also supports evaluation jobs. For VBench, select **Evaluation**,
 choose benchmark `vbench`, put generated videos in **Dataset Root** (or an
@@ -113,6 +111,11 @@ in the **Create Job** dialog before submission.
 - **Frames, FPS, height, width, steps, guidance, seed** — Generation parameters sent in the job payload.
 - **Runtime checks** — Optional memory/compile toggles such as Torch Compile, CPU Offload, VAE Offload, and Text Encoder Offload. These appear only when the selected model advertises support.
 - **Call JSON / Load JSON** — Advanced overrides merged into `call_kwargs` and `load_kwargs`.
+
+The attention selection follows the model's declared loading and inference
+boundaries. A load-only option is not copied into inference kwargs. Explicit
+Load JSON and Call JSON values take precedence at their respective supported
+boundary; unsupported explicit kwargs remain validation errors.
 
 When you open **Create Job** or switch task profiles, the form is prefilled from
 Workspace defaults loaded at startup. Model-specific official demo values from
@@ -268,7 +271,7 @@ Workspace inference defaults to a fast job path. It assumes the selected conda
 environment, checkpoint roots, and viewer dependencies were prepared before the
 server was launched. Keep this default for normal repeated inference.
 
-Turn checks on only for setup debugging or release preflight:
+Turn checks on for setup debugging or preflight:
 
 <div className="pi-kv-catalog is-vars not-prose">
   <section className="pi-kv-group">
@@ -400,8 +403,8 @@ Turn checks on only for setup debugging or release preflight:
 
 For the fastest finish path, model runtimes should return explicit
 `preview_image`, `preview_video`, `artifact_paths`, `rrd_path`, and `output_dir`
-values in their run record. Use `always` scanning only as a compatibility mode
-for older runtimes that write files without reporting them.
+values in their run record. Use `always` scanning only for runtimes that write
+files without reporting them.
 
 Resident workers keep the conda child process alive across jobs so the child
 `StudioManager` can reuse its pipeline cache. Set
@@ -487,15 +490,25 @@ control, start at 1.5x `HIGH`; reserve `ULTRA` and 2–4x output for GPUs with
 measured headroom. `rtx-deblur-ultra` is same-resolution and therefore avoids
 the bandwidth increase.
 
+`WORLDFOUNDRY_REALTIME_POSTPROCESS_PRESET` names an entry in the post-processing
+preset registry (`worldfoundry.core.media.processing.presets`); one preset runs
+per Studio process. Studio builds the selected processor and runs its probe
+before serving, and `WORLDFOUNDRY_REALTIME_RTX_*` overrides are rejected unless
+an RTX preset is selected.
+
 ### Browser presentation timing and encoder feedback
 
 The WebRTC status strip shows **E2E**, the median time from submitting a control
 in the browser to presenting a frame from the chunk that consumed it. Hover over
 the strip for p90, server control-to-queue time, RTT, jitter-buffer delay, and
 decode time. The distribution contains the latest 256 measured controls and
-excludes configured warmup chunks. Keyboard/joystick edges, STEP, and live text
-updates carry control IDs. Coalesced inputs and controls whose frames never
-present do not create synthetic latency samples.
+excludes configured warmup chunks. Keyboard/joystick edges, mouse deltas,
+physical and virtual stick levels, STEP, and live text updates carry control IDs.
+Axis IDs follow the resampler: delta messages contribute to their sampled chunk;
+level messages overwritten within one input frame are excluded. Held nonzero
+levels retain their IDs across chunks, but neutral samples are not attributed to
+later idle frames. STEP does not consume queued axis IDs. Controls without a
+matching presented frame do not create latency samples.
 
 Frame receipts carry the actual RTP timestamp, chunk index, and frame index over
 the existing DataChannel. The browser matches them to
@@ -528,6 +541,47 @@ or sessions without matching receipts show E2E as unavailable rather than
 substituting server time. NVENC feedback requires PyNvVideoCodec and a GPU with an NVENC engine;
 CUDA availability alone is insufficient. Encoder bitrate adaptation changes
 transport compression quality, not generated model pixels.
+
+### Weight-free browser UI checks
+
+`tests/manual/realtime_browser_ui.mjs` opens an isolated Chromium window with a
+temporary profile and serves the production HTML, CSS and JavaScript on loopback.
+It checks model-declared keys, virtual stick axes and key fallback, Pointer Lock
+and mouse movement, stick rest and focus-loss handling, continuous progress,
+pause/resume, STEP rejection, prompt restart and reset. HTTP/WebSocket model
+responses and gamepad readings are fixtures.
+
+Use a desktop session, the Studio Python environment, Node.js, and Playwright 1.65:
+
+```bash
+npm install --prefix /private/replay-browser playwright@1.65.0
+/private/replay-browser/node_modules/.bin/playwright install chromium
+NODE_PATH=/private/replay-browser/node_modules PYTHON=python \
+  node tests/manual/realtime_browser_ui.mjs outputs/realtime-browser-ui
+```
+
+The output directory must be new. `CHROMIUM_EXECUTABLE` can select an existing
+Chromium binary. Keep the test window in the foreground while the runner exercises
+its tabs. `browser.json`, `chromium.log` and screenshots retain the results; the
+temporary browser profile is removed when the runner exits.
+
+For an operator-assisted physical Escape check, run a separate session:
+
+```bash
+NODE_PATH=/private/replay-browser/node_modules PYTHON=python \
+  node tests/manual/realtime_browser_ui.mjs outputs/realtime-physical-escape --physical-escape
+```
+
+Click the video in the test window, press the keyboard's **Esc** key, and keep the
+window focused until the check finishes. The runner waits up to ten minutes. It
+records native pointer release while focused and verifies that subsequent mouse
+movement sends no axes; switching away from the window does not pass the check.
+
+**Evidence scope:** real DOM, keyboard, mouse, tab focus and browser Pointer Lock
+APIs with substituted model responses. The automatic suite releases the pointer
+through `exitPointerLock()`; the separate `--physical-escape` mode requires an
+operator. Gamepad readings remain simulated. Neither mode is checkpoint,
+WebRTC transport or inference-performance evidence.
 
 ### Checkpoint-backed network replay
 
@@ -656,9 +710,9 @@ WorldFoundry keeps one visualization capability registry for in-tree 3D and
 perception models. Query it before writing model-specific viewer code:
 
 ```bash
-worldfoundry-eval models visualizations
-worldfoundry-eval models visualizations --family perception_core
-worldfoundry-eval models visualizations --model raft --json
+wf models visualizations
+wf models visualizations --family perception_core
+wf models visualizations --model raft --json
 ```
 
 Structured 2D results share one conversion command. Supported kinds are
@@ -666,12 +720,12 @@ Structured 2D results share one conversion command. Supported kinds are
 `keypoints`, and `text`:
 
 ```bash
-worldfoundry-eval models visualize \
+wf models visualize \
   --kind flow \
   --artifact outputs/flow.npz \
   --output outputs/flow.png
 
-worldfoundry-eval models visualize \
+wf models visualize \
   --kind detection \
   --artifact outputs/detections.json \
   --media inputs/frame.png \
@@ -716,23 +770,23 @@ frame:
   VGGT-Omega official GLBs use `+Y` up and `alignment=none`.
 - A raw VGGT/VGGT-Omega prediction NPZ remains in the model's OpenCV frame, so
   Viser applies `coordinate_preset=opencv-to-opengl` once and uses `+Y` up.
-- Raw UniDepth V2 and UniK3D model-point NPZ files also use the OpenCV camera
-  frame. Their Workspace PLY exporter instead persists `x-right/y-up/z-forward`,
-  so those PLY files use `asset-native`, `+Y` up, and `alignment=none` without a
+- Raw UniDepth V2 model-point NPZ files also use the OpenCV camera frame. Its
+  Workspace PLY exporter instead persists `x-right/y-up/z-forward`, so those PLY
+  files use `asset-native`, `+Y` up, and `alignment=none` without a
   second flip.
-- DUSt3R, LoGeR, and Pi3 PLY point clouds keep their predicted camera-to-world
+- LoGeR and Pi3 PLY point clouds keep their predicted camera-to-world
   sidecars. Viser applies `first-camera-opengl` to points and cameras together,
   uses `+Y` up, and frames the central 5-95% geometry range so sparse outliers do
   not shrink the useful scene.
 - Rerun recordings must log the world `ViewCoordinates` and use the same camera
-  convention in every `Pinhole`. Cut3R and MonST3R use RDF for both world and
-  camera entities.
+  convention in every `Pinhole`. Cut3R uses RDF for both world and camera
+  entities.
 - Never fix an orientation mismatch by flipping only the point cloud. Apply the
   same rigid transform to geometry and camera-to-world poses, then verify reset,
   orbit, and timeline interaction in a browser.
 
-Workspace resolves the proven VGGT, DUSt3R, LoGeR, and Pi3 defaults automatically.
-The Visualizer defaults also cover UniDepth V2 and UniK3D raw/Workspace assets.
+Workspace resolves the proven VGGT, LoGeR, and Pi3 defaults automatically.
+The Visualizer defaults also cover UniDepth V2 raw/Workspace assets.
 The Visualizer Params JSON remains an explicit override for other exporters. Viser reports the
 actual bound port when its requested port is occupied. Rerun uses WebGPU
 by default; set `WORLDFOUNDRY_STUDIO_RERUN_RENDERER=webgl` only when the target
@@ -748,7 +802,7 @@ viewer code:
 - **Gaussian splats** — Default Spark. Use the official viewer when the upstream renderer requires a nonstandard shader or splat format.
 
 An inference run is not visually verified merely because a viewer process
-starts. Release evidence for a 3D/4D method should confirm finite geometry,
+starts. To verify a 3D/4D method, confirm finite geometry,
 camera data, and the declared coordinate frame, then open the actual artifact in a browser, check a nonblank and
 readably framed canvas, exercise reset/orbit or timeline controls, and review
 console errors. Preserve an official viewer as a small visualization plugin;
@@ -757,8 +811,7 @@ Viser/Rerun scene layers are sufficient.
 
 ## Studio screenshots
 
-These screenshots are from the `7870` workspace used for model release
-validation.
+These screenshots are from the `7870` workspace.
 
 - **Inference jobs** — Completed runs, inline preview media, status, and logs.
 - **Create Job** — Model-specific inputs and official demo defaults.
@@ -775,9 +828,7 @@ when the run record exposes them.
 ### Create Job
 
 The form should expose the model's actual input contract.
-The screenshot below is only a UI-shape example; release demo claims should be
-checked against the [release gates](/docs/reference/validation) and the matching
-run manifest.
+The screenshot below shows the UI layout only.
 
 ![Studio Create Job dialog](/images/studio/screens/studio-create-job-ltx2-3.png)
 
@@ -799,7 +850,7 @@ artifacts.
 - **LingBot camera** — `python -m worldfoundry.studio.cli lingbot-world --variant base-camera --device cuda:1`. Slower, camera-centric profile.
 - **MatrixGame** — `python -m worldfoundry.studio.cli matrix-game-2 --device cuda:1`. Interactive world navigation.
 - **WorldCam** — `python -m worldfoundry.studio.cli worldcam --device cuda:1`. Camera-path generation and view control.
-- **Hosted APIs** — Configure provider credentials and endpoint settings in Workspace inference jobs or `worldfoundry run <model>`, then preview exported artifacts with the `media` frontend.
+- **Hosted APIs** — Configure provider credentials and endpoint settings in Workspace inference jobs or `wf run <model>`, then preview exported artifacts with the `media` frontend.
 - **Viser point cloud** — `python -m worldfoundry.studio.cli pi3 --frontend points --asset /path/to/scene.ply --port 18590`. Native Viser UI.
 - **Spark 3DGS** — `python -m worldfoundry.studio.cli vggt --frontend spark --asset /path/to/scene.splat --port 8765`. Standalone Spark canvas.
 - **Embodied simulator** — `python -m worldfoundry.studio.cli openvla --frontend embodied --simulator-url http://127.0.0.1:9000`. **Planned.** Registers an external simulator URL only; does not launch an in-tree viewer.
@@ -862,9 +913,59 @@ Arrow keys / IJKL = look
 ```
 
 Keyboard and stick edges are sent immediately over the current realtime channel.
-The resident runtime samples the latest effective control state at model chunk
-boundaries, so input does not create a second inference request or reload the
-pipeline.
+The resident runtime resamples queued transitions into each model chunk without
+creating another inference request or reloading the pipeline. A short tap remains
+pending until its active state spans at least one input-frame sampling interval,
+even if it was released during generation. Sampling may extend a sub-frame tap;
+observing current held keys does not consume queued transitions. The worker stays
+awake until pending input is drained, then resumes its normal idle behavior.
+
+Models can declare their own key bindings in `RealtimeSpec.keys`. The page then
+accepts exactly those keys and lists them in the control legend. A virtual stick
+is hidden only when the model declares neither its keys nor its axes. Omitting
+`keys` keeps W/A/S/D and I/J/K/L; `keys: []` disables key input. Prompt-scheduled
+and queued-segment pages take no keyboard actions.
+
+#### Mouse, gamepad, and virtual sticks
+
+Models that declare `RealtimeSpec.axes` also accept mouse or stick input. The
+control legend names the inputs the model accepts:
+
+- **Mouse** (`mouse_x`/`mouse_y` axes): once the session is live, a hint asks
+  you to click the video. The click captures the pointer, and mouse motion is
+  summed and sent at most once per animation frame. `Esc` releases the pointer
+  and stops sending.
+- **Gamepad** (`gamepad_*` axes): Studio reads the first connected gamepad every
+  animation frame and sends the four stick levels when a component changes by
+  more than 0.02 or returns to zero. Browsers expose gamepads only on a secure
+  origin (HTTPS or `localhost`) and after a button press, so the legend lists
+  **GAMEPAD** once a gamepad is reported.
+- **Virtual sticks:** the existing movement and camera sticks map to
+  `gamepad_lx`/`gamepad_ly` and `gamepad_rx`/`gamepad_ry`. Each declared direction
+  sends a continuous value in `[-1, 1]`; directions without an axis retain their
+  declared-key mapping. The model's deadzone, scale and limit still apply on the
+  server. A captured drag takes priority over the physical stick for its declared
+  directions. Releasing it restores the physical stick's current values, or zero
+  when no gamepad is connected. Virtual axes also work without the Gamepad API.
+
+Window blur or a hidden tab clears virtual drags and sends neutral levels. An old
+pointer cannot reactivate the drag when focus returns. Physical stick input
+resumes on focus return; disconnecting a gamepad resamples the remaining inputs
+without clearing an active virtual drag.
+
+Over WebRTC, mouse deltas use the unordered `axes` DataChannel. Physical and
+virtual stick levels use the reliable `controls` channel, because the server holds each level until
+the next sample and a lost return-to-rest sample would keep the stick held.
+While a channel is congested, samples wait for a later frame and mouse motion
+keeps accumulating. The WebSocket transport sends the same messages on its
+socket.
+
+#### Input sampling limits
+
+Input retention guarantees a control sample, not immediate visible motion in the
+same generated chunk. MatrixGame2's stride-4 action encoder may consume the final
+input row in a later chunk. A final-row-only action still needs that subsequent
+chunk; input retention alone does not drain the model's action history.
 
 ### Live text events, idle steps, and output resolution
 
@@ -877,9 +978,10 @@ joysticks:
   condition at the next model chunk boundary; **CLEAR EVENT** restores the base
   prompt. Models without a state-preserving text-update path disable this
   surface instead of acknowledging an update they cannot apply.
-- **STEP:** queues exactly one generated chunk with no keyboard direction. It is
-  useful for an idle camera or for checking a text event. It does not enable an
-  autonomous generation loop. Queued-segment models keep **STEP** disabled
+- **STEP:** queues exactly one generated chunk without keyboard or axis input;
+  it does not reuse the previous chunk's controls. It is useful for an idle camera
+  or for checking a text event. It does not enable an autonomous generation loop.
+  Queued-segment models keep **STEP** disabled
   because their next segment requires new control videos.
 - **OUTPUT:** selects the transmitted frame size. **NATIVE** preserves the model
   output size. Smaller choices resize and letterbox only the WebRTC/WebSocket
@@ -917,6 +1019,23 @@ from the model catalog; if the native size is unknown, it does not guess a
 fixed preset. Switching back to `{"mode":"native"}` removes the transport
 scaler. WebRTC resize work runs before frames enter the media track, so held
 frames do not repeatedly pay the resize cost or block the control event loop.
+
+### Continuous sessions
+
+Models whose `RealtimeSpec.advance` is `continuous`, such as native
+Self-Forcing, generate chunk after chunk on their own once the session starts.
+For these sessions the page shows:
+
+- rollout progress in the status strip, as `CHUNK 3/7`, or as a running count
+  when the model sets no `max_chunks` limit;
+- **PAUSE**/**RESUME** beside **STEP**, which stops and restarts auto-advance.
+  **STEP** is enabled while the rollout is paused and generates one chunk;
+- `ROLLOUT COMPLETE` once the rollout reaches `max_chunks`. **STEP** on a
+  finished rollout shows the server's reason next to the controls.
+
+A new prompt, submitted with `Enter` at any time, starts a new rollout and
+restarts the chunk count. Sessions that generate only on input keep the
+controls described above.
 
 ### Draggable and collapsible panels
 
@@ -1261,13 +1380,6 @@ fullscreen permission.
 
 Only `WORLDFOUNDRY_*` Studio environment variables are supported.
 
-## Release evidence
-
-Only add public demo media after the matching official configuration has run
-through the in-tree Studio or Studio-compatible API path. Keep the run manifest,
-decoded media metadata, and visual QA record with the validation artifacts so
-the embedded video can be traced back to an actual release candidate run.
-
 ## Code layout
 
 Each implementation has one canonical import path. There are no forwarding
@@ -1275,55 +1387,51 @@ modules at the Studio root.
 
 | Location | Responsibility |
 | --- | --- |
-| `inference/catalog.py` | Discover pipelines and resolve model defaults and checkpoints. |
+| `inference/catalog/` | Model catalog: `discovery.py` (AST pipeline scan, entry building, `find_entry`), `models/<family>.py` (curated overrides and per-model defaults), `resolve.py` (checkpoint and path resolution), `params.py` (shared parameter templates). |
 | `inference/config.py` | Runtime environment and distributed process topology. |
 | `inference/execution.py` | Prepare inputs, load pipelines, execute, and persist raw run artifacts. |
 | `inference/dispatch.py` | GPU admission, managed subprocesses, resident workers, cancellation, and deadlines. |
 | `inference/paths.py`, `inference/variants.py` | Runtime paths and model variant selection. |
-| `serving/workspace.py`, `serving/jobs.py` | Workspace API and in-process UI job scheduling. |
+| `inference/listing.py` | Studio-visible catalog listing shared by the Workspace, launcher, and TUI. |
 | `serving/` | Authentication, file serving, telemetry, and realtime transport. |
-| `ui/launcher.py`, `ui/launch_config.py` | Standalone frontend routing and browser launch options. |
-| `ui/workspace.html`, `ui/workspace.py` | Packaged Workspace page and its asset loader. |
-| `ui/` | Browser launch options, model interfaces, shared browser assets, and the Workspace page. |
-| `visualization/` | Artifact discovery, viewer routing, geometry presentation, and browser backends. |
-| `cli.py` | Installed `worldfoundry-studio` command. |
+| `visualization/` | Artifact routing (`registry.py`, `artifacts.py`, `run_record.py`), preview conversion (`presentation.py`), and browser backends. |
+| `visualization/launcher.py`, `visualization/launch_config.py` | Standalone frontend routing and browser launch options. |
+| `visualization/interfaces.py`, `visualization/vendor_assets.py` | Model interface specs and pinned browser modules. |
+| `workspace/app.py`, `workspace/jobs.py` | Workspace API and in-process UI job scheduling. |
+| `assets/web/` | Packaged Workspace page and the world frontend CSS/JS. |
+| `cli.py` | Installed `wf-studio` command. |
 | `runtime_job.py` | Subprocess and resident inference worker entrypoint. |
 | `workspace_job.py` | CLI adapter for Workspace inference requests. |
 
 The inference modules do not import the frontend, serving, or visualization
 packages. `StudioManager` saves raw artifacts by default. Frontends explicitly
-install `visualization.studio.prepare_run_record` as the `record_processor`
-when they need viewer manifests or preview conversion.
+install `visualization.presentation.prepare_run_record` as the `record_processor`
+when they need preview conversion.
 
-`studio/native` and its CUDA/C++/ImGui frontend have been removed. The standalone
-browser backends remain available through `worldfoundry-studio`.
+The standalone browser backends run through `wf-studio`.
 
-### Retained rendering helpers
+### Rendering helpers outside Studio
 
-`visualization/plugins` contains only implementations with current callers:
+Model-side rendering lives with the model code, so `base_models` never imports Studio:
 
 | Implementation | Caller |
 | --- | --- |
-| `perception/render.py` | `models visualize` CLI and Grounding DINO annotation. |
-| `scene3d/projection.py` | VIPE projection videos, SLAM overlays, and video writing. |
-| `scene3d/depth_anything_v3/export_vis.py` | Depth Anything 3 depth, feature, and Gaussian exports. |
-| `styles/colormaps.py` | Depth and normal rendering in `perception/render.py`. |
+| `base_models/perception_core/visualization/render.py` | `models visualize` CLI and Grounding DINO annotation. |
+| `base_models/perception_core/visualization/colormaps.py` | Depth and normal rendering in `render.py`. |
+| `base_models/three_dimensions/general_3d/vipe/utils/visualization.py` | VIPE projection videos, SLAM overlays, and video writing. |
+| `base_models/three_dimensions/depth/depth_anything/depth_anything_v3/utils/visualize.py` | Depth Anything 3 depth, feature, and Gaussian exports. |
 
 Wan Animate conditioning images are model inputs, owned by
 `base_models/diffusion_model/models/encoders/wan/variants/animate/render.py`
 and called by `AAPoseMeta.draw_aapose` without a Studio dependency.
 
-The unused media and robotics helpers, pixelSplat training visualization,
-duplicate DVLT visualization, HED annotator, sky-segmentation/GLB export chain,
-and compatibility wrappers have been deleted. Geometry providers discover
-actual artifacts; a directory of Python source is not a renderable scene.
+Geometry providers discover actual artifacts; a directory of Python source is not a renderable scene.
 
-`worldfoundry/representations` has been removed. Depth Anything, VGGT, Pi3,
-WorldFM, Lyra and the other geometry pipelines now import their runtime from
-the corresponding family in `worldfoundry/base_models/three_dimensions`.
-Checkpoint loading, preprocessing and geometry postprocessing live beside
-the model code. The empty base class, marker classes and old-path forwarding
-modules are gone. Studio visualization still owns artifact display.
+Depth Anything, VGGT, Pi3, WorldFM, Lyra and the other geometry pipelines
+import their runtime from the corresponding family in
+`worldfoundry/base_models/three_dimensions`. Checkpoint loading, preprocessing
+and geometry postprocessing live beside the model code. Studio visualization
+owns artifact display.
 
 ### Inference lifecycle
 

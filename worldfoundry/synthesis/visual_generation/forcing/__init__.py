@@ -1,21 +1,5 @@
-"""
-Package for implementing forcing mechanisms, including causal and self-forcing synthesis
-and their corresponding runtime components.
+"""Shared in-tree bridge and facade for the official forcing-family runners (RollingForcing)."""
 
-This `__init__.py` file exposes the primary classes from the submodules
-`forcing_synthesis` and `runtime` to allow for direct imports from the
-`forcing` package.
-"""
+from .runtime import RollingForcingRuntime
 
-from .forcing_synthesis import CausalForcingSynthesis, SelfForcingSynthesis
-from .runtime import CausalForcingRuntime, RollingForcingRuntime, SelfForcingRuntime
-
-# Define the public API of the 'forcing' package.
-# These names will be imported when a user does 'from forcing import *'.
-__all__ = [
-    "CausalForcingRuntime",
-    "CausalForcingSynthesis",
-    "RollingForcingRuntime",
-    "SelfForcingRuntime",
-    "SelfForcingSynthesis",
-]
+__all__ = ["RollingForcingRuntime"]

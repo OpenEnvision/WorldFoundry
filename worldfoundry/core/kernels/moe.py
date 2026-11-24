@@ -19,14 +19,13 @@ Public surface:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
 
 from worldfoundry.core.kernels.capabilities import triton_tensor_eligible
 from worldfoundry.core.kernels.registry import KERNEL_REGISTRY
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Portable reference — evaluate only routed tokens so unused experts stay cold
@@ -169,7 +168,7 @@ def _routed_swiglu_moe_triton_candidate(
     del allow_triton
     from worldfoundry.core.kernels.triton_moe import routed_swiglu_moe_triton
 
-    resolved_workspace = workspace() if callable(workspace) else workspace
+    resolved_workspace = cast("dict[str, torch.Tensor] | None", workspace() if callable(workspace) else workspace)
     return routed_swiglu_moe_triton(
         hidden_states,
         routing_weights,

@@ -93,8 +93,6 @@ _EXPORT_MODULES = {
     "rotary_frequencies": "worldfoundry.core.attention.rotary.rope",
     "rotate_half": "worldfoundry.core.attention.rotary.rope",
     "sequence_parallel_attention_forward": "worldfoundry.core.attention.parallel.sequence_parallel_rope",
-    "QKVSelfAttention": "worldfoundry.core.nn.transformer.vit_qkv",
-    "QKNormRopeSelfAttention": "worldfoundry.core.nn.transformer.vit_qkv",
     "CSOHelper": "worldfoundry.core.attention.parallel.context_parallel_runtime",
     "UlyssesScheduler": "worldfoundry.core.attention.parallel.context_parallel_runtime",
     "cp_post_process": "worldfoundry.core.attention.parallel.context_parallel_runtime",

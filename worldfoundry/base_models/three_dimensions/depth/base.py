@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> base.py functionality."""
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -97,9 +95,6 @@ class DepthEstimationModel(ABC):
 
     @property
     def supported_camera_types(self) -> list[CameraType]:
-        """
-        Supported camera types.
-        """
         return [CameraType.PINHOLE]
 
     @abstractmethod
@@ -115,12 +110,4 @@ class PassiveDepthModel(DepthEstimationModel):
     """
 
     def estimate(self, src: DepthEstimationInput) -> DepthEstimationResult:
-        """Estimate.
-
-        Args:
-            src: The src.
-
-        Returns:
-            The return value.
-        """
         return DepthEstimationResult()

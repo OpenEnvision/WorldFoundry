@@ -5,8 +5,6 @@
 # Licensed under the Apache License, Version 2.0 [see LICENSE for details]
 # ------------------------------------------------------------------------
 
-"""Module for base_models -> perception_core -> detection -> grounding_dino -> models -> GroundingDINO -> utils.py functionality."""
-
 import copy
 import math
 
@@ -16,13 +14,6 @@ from torch import Tensor, nn
 
 
 def _get_clones(module, N, layer_share=False):
-    """Helper function to get clones.
-
-    Args:
-        module: The module.
-        N: The n.
-        layer_share: The layer share.
-    """
     # import ipdb; ipdb.set_trace()
     if layer_share:
         return nn.ModuleList([module for i in range(N)])
@@ -51,11 +42,6 @@ def get_sine_pos_embed(
     dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
 
     def sine_func(x: torch.Tensor):
-        """Sine func.
-
-        Args:
-            x: The x.
-        """
         sin_x = x * scale / dim_t
         sin_x = torch.stack((sin_x[..., 0::2].sin(), sin_x[..., 1::2].cos()), dim=3).flatten(2)
         return sin_x
@@ -67,9 +53,7 @@ def get_sine_pos_embed(
     return pos_res
 
 
-def gen_encoder_output_proposals(
-    memory: Tensor, memory_padding_mask: Tensor, spatial_shapes: Tensor, learnedwh=None
-):
+def gen_encoder_output_proposals(memory: Tensor, memory_padding_mask: Tensor, spatial_shapes: Tensor, learnedwh=None):
     """
     Input:
         - memory: bs, \sum{hw}, d_model
@@ -114,9 +98,7 @@ def gen_encoder_output_proposals(
         _cur += H_ * W_
     # import ipdb; ipdb.set_trace()
     output_proposals = torch.cat(proposals, 1)
-    output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(
-        -1, keepdim=True
-    )
+    output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
     output_proposals = torch.log(output_proposals / (1 - output_proposals))  # unsigmoid
     output_proposals = output_proposals.masked_fill(memory_padding_mask.unsqueeze(-1), float("inf"))
     output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
@@ -132,34 +114,10 @@ def gen_encoder_output_proposals(
 
 
 class RandomBoxPerturber:
-    """Random box perturber implementation."""
-    def __init__(
-        self, x_noise_scale=0.2, y_noise_scale=0.2, w_noise_scale=0.2, h_noise_scale=0.2
-    ) -> None:
-        """Init.
-
-        Args:
-            x_noise_scale: The x noise scale.
-            y_noise_scale: The y noise scale.
-            w_noise_scale: The w noise scale.
-            h_noise_scale: The h noise scale.
-
-        Returns:
-            The return value.
-        """
-        self.noise_scale = torch.Tensor(
-            [x_noise_scale, y_noise_scale, w_noise_scale, h_noise_scale]
-        )
+    def __init__(self, x_noise_scale=0.2, y_noise_scale=0.2, w_noise_scale=0.2, h_noise_scale=0.2) -> None:
+        self.noise_scale = torch.Tensor([x_noise_scale, y_noise_scale, w_noise_scale, h_noise_scale])
 
     def __call__(self, refanchors: Tensor) -> Tensor:
-        """Call.
-
-        Args:
-            refanchors: The refanchors.
-
-        Returns:
-            The return value.
-        """
         nq, bs, query_dim = refanchors.shape
         device = refanchors.device
 
@@ -170,9 +128,7 @@ class RandomBoxPerturber:
         return new_refanchors.clamp_(0, 1)
 
 
-def sigmoid_focal_loss(
-    inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2, no_reduction=False
-):
+def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2, no_reduction=False):
     """
     Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
     Args:
@@ -207,27 +163,12 @@ class MLP(nn.Module):
     """Very simple multi-layer perceptron (also called FFN)"""
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
-        """Init.
-
-        Args:
-            input_dim: The input dim.
-            hidden_dim: The hidden dim.
-            output_dim: The output dim.
-            num_layers: The num layers.
-        """
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(
-            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
-        )
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim], strict=False))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         for i, layer in enumerate(self.layers):
             x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
@@ -250,16 +191,11 @@ def _get_activation_fn(activation, d_model=256, batch_dim=0):
 
 
 def gen_sineembed_for_position(pos_tensor):
-    """Gen sineembed for position.
-
-    Args:
-        pos_tensor: The pos tensor.
-    """
     # n_query, bs, _ = pos_tensor.size()
     # sineembed_tensor = torch.zeros(n_query, bs, 256)
     scale = 2 * math.pi
     dim_t = torch.arange(128, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = 10000 ** (2 * (torch.div(dim_t, 2, rounding_mode='floor')) / 128)
+    dim_t = 10000 ** (2 * (torch.div(dim_t, 2, rounding_mode="floor")) / 128)
     x_embed = pos_tensor[:, :, 0] * scale
     y_embed = pos_tensor[:, :, 1] * scale
     pos_x = x_embed[:, :, None] / dim_t
@@ -279,12 +215,11 @@ def gen_sineembed_for_position(pos_tensor):
 
         pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
     else:
-        raise ValueError("Unknown pos_tensor shape(-1):{}".format(pos_tensor.size(-1)))
+        raise ValueError(f"Unknown pos_tensor shape(-1):{pos_tensor.size(-1)}")
     return pos
 
 
 class ContrastiveEmbed(nn.Module):
-    """Contrastive embed implementation."""
     def __init__(self, max_text_len=256):
         """
         Args:
@@ -294,18 +229,18 @@ class ContrastiveEmbed(nn.Module):
         self.max_text_len = max_text_len
 
     def forward(self, x, text_dict):
-        """_summary_
+        """Score queries against text tokens, padding the token axis to max_text_len with -inf.
 
         Args:
-            x (_type_): _description_
-            text_dict (_type_): _description_
+            x: Query features, (bs, n_query, d_model).
+            text_dict:
             {
                 'encoded_text': encoded_text, # bs, 195, d_model
                 'text_token_mask': text_token_mask, # bs, 195
                         # True for used tokens. False for padding tokens
             }
         Returns:
-            _type_: _description_
+            Logits of shape (bs, n_query, max_text_len); padding tokens are -inf.
         """
         assert isinstance(text_dict, dict)
 

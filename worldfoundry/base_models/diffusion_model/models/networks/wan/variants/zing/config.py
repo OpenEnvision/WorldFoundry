@@ -1,6 +1,7 @@
 # Adapted from seedleap/zing-world-model (Apache-2.0).
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -176,7 +177,7 @@ def load_config(path: str | Path) -> ZingConfig:
         denoising_steps=denoising_steps,
         **{key: inference[key] for key in inference_keys - {"denoising_steps"}},
     )
-    if len(denoising_steps) != 4 or any(a <= b for a, b in zip(denoising_steps, denoising_steps[1:])):
+    if len(denoising_steps) != 4 or any(a <= b for a, b in itertools.pairwise(denoising_steps)):
         raise ValueError("inference.denoising_steps must be strictly descending")
     if denoising_steps[0] > inference_config.num_timesteps or denoising_steps[-1] < 0:
         raise ValueError("inference.denoising_steps are outside the diffusion range")

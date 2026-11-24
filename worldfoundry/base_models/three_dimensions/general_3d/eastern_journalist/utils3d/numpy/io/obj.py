@@ -1,23 +1,22 @@
-"""Module for base_models -> three_dimensions -> general_3d -> eastern_journalist -> utils3d -> numpy -> io -> obj.py functionality."""
-
+# ruff: noqa: F405 - Names come from the upstream star import.
+import os
 from io import TextIOWrapper
-from typing import *
 from itertools import chain, repeat
 from pathlib import Path
-import os
+from typing import *  # noqa: F403 - Upstream star import kept as written.
 
 import numpy as np
 from numpy import ndarray
 
-
 __all__ = [
-    'read_obj', 
-    'write_obj', 
+    "read_obj",
+    "write_obj",
 ]
 
 
 class WavefrontOBJDict(TypedDict):
     "Typing for wavefront .obj file content"
+
     mtllib: List[str]
     "Material library filenames"
     v: ndarray
@@ -32,7 +31,7 @@ class WavefrontOBJDict(TypedDict):
     "Vertex texture coordinate indices of faces. NOTE: 0-based indexing"
     fn: Union[ndarray, Tuple[ndarray, ndarray]]
     "Vertex normal indices of faces. NOTE: 0-based indexing"
-    l: Union[ndarray, Tuple[ndarray, ndarray]]
+    l: Union[ndarray, Tuple[ndarray, ndarray]]  # noqa: E741 - Ambiguous upstream name kept as written.
     "Vertex indices of lines. NOTE: 0-based indexing"
     lt: Union[ndarray, Tuple[ndarray, ndarray]]
     "Vertex texture coordinate indices of lines. NOTE: 0-based indexing"
@@ -40,18 +39,16 @@ class WavefrontOBJDict(TypedDict):
     "Vertex indices of points. NOTE: 0-based indexing"
     pt: ndarray
     "Vertex texture coordinate indices of points. NOTE: 0-based indexing"
-    o: Dict[str, Dict[Literal['f', 'l', 'p'], slice]]
+    o: Dict[str, Dict[Literal["f", "l", "p"], slice]]
     "Object names and corresponding slices of faces/lines/points"
-    g: Dict[str, Dict[Literal['f', 'l', 'p'], slice]]
+    g: Dict[str, Dict[Literal["f", "l", "p"], slice]]
     "Group names and corresponding slices of faces/lines/points"
-    usemtl: Dict[str, Dict[Literal['f', 'l', 'p'], slice]]
+    usemtl: Dict[str, Dict[Literal["f", "l", "p"], slice]]
     "Material names and corresponding slices of faces/lines/points"
 
 
 def read_obj(
-    file : Union[str, Path, TextIOWrapper],
-    encoding: Union[str, None] = None,
-    ignore_unknown: bool = False
+    file: Union[str, Path, TextIOWrapper], encoding: Union[str, None] = None, ignore_unknown: bool = False
 ) -> WavefrontOBJDict:
     """
     Read wavefront .obj file.
@@ -99,16 +96,16 @@ def read_obj(
     Material library:
     - `mtllib` (List[str]): list of material library filenames - `mtllib` lines in .obj file.
     """
-    if hasattr(file,'read'):
+    if hasattr(file, "read"):
         lines = file.read().splitlines()
     else:
-        with open(file, 'r', encoding=encoding) as fp:
+        with open(file, encoding=encoding) as fp:
             lines = fp.read().splitlines()
     mtllib = []
-    v, vt, vn = [], [], []          # Vertex coordinates, Vertex texture coordinate, Vertex normal
-    f, ft, fn = [], [], []          # Face indices, Face texture indices, Face normal indices
-    l, lt = [], []                  # Line indices, Line texture indices
-    p, pt = [], []                  # Point indices, Point texture indices
+    v, vt, vn = [], [], []  # Vertex coordinates, Vertex texture coordinate, Vertex normal
+    f, ft, fn = [], [], []  # Face indices, Face texture indices, Face normal indices
+    l, lt = [], []  # noqa: E741 - Ambiguous upstream name kept as written.  # Line indices, Line texture indices
+    p, pt = [], []  # Point indices, Point texture indices
     o = {}
     o_names, o_offsets = [], []
     g = {}
@@ -116,55 +113,58 @@ def read_obj(
     usemtl = {}
     usemtl_names, usemtl_offsets = [], []
 
-    int_ = lambda x: int(x) if x != '' else 0
-    pad = lambda l, n, x = 0: l + [x] * (n - len(l))
-    
+    def int_(x):
+        return int(x) if x != "" else 0
+
+    def pad(l, n, x=0):  # noqa: E741 - Ambiguous upstream name kept as written.
+        return l + [x] * (n - len(l))
+
     # Read the lines
     for i, line in enumerate(lines):
         keyword, *seq = line.strip().split()
-        if len(seq) == 0: 
+        if len(seq) == 0:
             continue
-        if keyword == 'v':
-            assert 3 <= len(seq) <= 4, f'Invalid format of line {i}: {line}'
+        if keyword == "v":
+            assert 3 <= len(seq) <= 4, f"Invalid format of line {i}: {line}"
             v.append([float(e) for e in seq])
-        elif keyword == 'vt':
-            assert 3 <= len(seq) <= 4, f'Invalid format of line {i}: {line}'
+        elif keyword == "vt":
+            assert 3 <= len(seq) <= 4, f"Invalid format of line {i}: {line}"
             vt.append([float(e) for e in seq])
-        elif keyword == 'vn':
-            assert len(seq) == 3, f'Invalid format of line {i}: {line}'
+        elif keyword == "vn":
+            assert len(seq) == 3, f"Invalid format of line {i}: {line}"
             vn.append([float(e) for e in seq])
-        elif keyword == 'f':
-            elems = [pad(list(map(int_, item.split('/'))), 3) for item in seq]
+        elif keyword == "f":
+            elems = [pad(list(map(int_, item.split("/"))), 3) for item in seq]
             f.append([e[0] for e in elems])
             ft.append([e[1] for e in elems])
             fn.append([e[2] for e in elems])
-        elif keyword == 'l':
-            elems = [pad(list(map(int_, item.split('/'))), 2) for item in seq]
+        elif keyword == "l":
+            elems = [pad(list(map(int_, item.split("/"))), 2) for item in seq]
             l.append([e[0] for e in elems])
             lt.append([e[1] for e in elems])
-        elif keyword == 'p':
-            elems = [pad(list(map(int_, item.split('/'))), 2) for item in seq]
+        elif keyword == "p":
+            elems = [pad(list(map(int_, item.split("/"))), 2) for item in seq]
             p.extend([e[0] for e in elems])
             pt.extend([e[1] for e in elems])
-        elif keyword == 'o':
-            assert len(seq) == 1, f'Invalid format of line {i}: {line}'
+        elif keyword == "o":
+            assert len(seq) == 1, f"Invalid format of line {i}: {line}"
             o_names.append(seq[0])
             o_offsets.append((len(f), len(l), len(p)))
-        elif keyword == 'g':
-            assert len(seq) == 1, f'Invalid format of line {i}: {line}'
+        elif keyword == "g":
+            assert len(seq) == 1, f"Invalid format of line {i}: {line}"
             g_names.append(seq[0])
             g_offsets.append((len(f), len(l), len(p)))
-        elif keyword == 'usemtl':
-            assert len(seq) == 1, f'Invalid format of line {i}: {line}'
+        elif keyword == "usemtl":
+            assert len(seq) == 1, f"Invalid format of line {i}: {line}"
             usemtl_names.append(seq[0])
             usemtl_offsets.append((len(f), len(l), len(p)))
-        elif keyword == 'mtllib':
+        elif keyword == "mtllib":
             mtllib.extend(seq)
-        elif keyword[0] == '#':
+        elif keyword[0] == "#":
             continue
         else:
             if not ignore_unknown:
-                raise Exception(f'Unknown keyword {keyword} in line {i}: {line}')
+                raise Exception(f"Unknown keyword {keyword} in line {i}: {line}")
 
     # Process vertex data
     if len(v) > 0:
@@ -172,21 +172,18 @@ def read_obj(
         v = np.array([v_ + [1.0] * (max_v_dim - len(v_)) for v_ in v], dtype=np.float32)
     else:
         v = None
-    
+
     if len(vt) > 0:
         max_vt_dim = max(map(len, vt)) if len(vt) > 0 else 0
         vt = np.array([vt_ + [0.0] * (max_vt_dim - len(vt_)) for vt_ in vt], dtype=np.float32)
     else:
         vt = None
-    
-    if len(vn) > 0:
-        vn = np.array(vn, dtype=np.float32)
-    else:
-        vn = None
+
+    vn = np.array(vn, dtype=np.float32) if len(vn) > 0 else None
 
     # Process face data
-    if len(f) > 0:          
-        f_lengths = np.array(list(map(len, f)))  
+    if len(f) > 0:
+        f_lengths = np.array(list(map(len, f)))
         f = np.array(list(chain.from_iterable(f)), dtype=np.int32) - 1
         ft = np.array(list(chain.from_iterable(ft)), dtype=np.int32) - 1
         fn = np.array(list(chain.from_iterable(fn)), dtype=np.int32) - 1
@@ -218,29 +215,29 @@ def read_obj(
     # Process line data
     if len(l) > 0:
         l_lengths = np.array(list(map(len, l)))
-        l = np.array(list(chain.from_iterable(l)), dtype=np.int32) - 1
+        l = np.array(list(chain.from_iterable(l)), dtype=np.int32) - 1  # noqa: E741 - Ambiguous upstream name kept as written.
         lt = np.array(list(chain.from_iterable(lt)), dtype=np.int32) - 1
-        
+
         if (l == -1).all():
-            l = None
+            l = None  # noqa: E741 - Ambiguous upstream name kept as written.
         if (lt == -1).all():
             lt = None
 
         if (l_lengths == l_lengths[0]).all():
             l_len = l_lengths[0]
-            l = l.reshape(-1, l_len) if l is not None else None
+            l = l.reshape(-1, l_len) if l is not None else None  # noqa: E741 - Ambiguous upstream name kept as written.
             lt = lt.reshape(-1, l_len) if lt is not None else None
         else:
             l_offsets = np.concatenate([[0], np.cumsum(l_lengths)])
-            l = (l, l_offsets) if l is not None else None
+            l = (l, l_offsets) if l is not None else None  # noqa: E741 - Ambiguous upstream name kept as written.
             lt = (lt, l_offsets) if lt is not None else None
     else:
-        l = None
+        l = None  # noqa: E741 - Ambiguous upstream name kept as written.
         lt = None
 
     # Process point data
     if len(p) > 0:
-        p =  np.array(p, dtype=np.int32) - 1
+        p = np.array(p, dtype=np.int32) - 1
         pt = np.array(pt, dtype=np.int32) - 1
         if (p == -1).all():
             p = None
@@ -258,15 +255,15 @@ def read_obj(
             end_f, end_l, end_p = o_offsets[i + 1]
             o_i = {}
             if f is not None and end_f > start_f:
-                o_i['f'] = slice(start_f, end_f)
+                o_i["f"] = slice(start_f, end_f)
             if l is not None and end_l > start_l:
-                o_i['l'] = slice(start_l, end_l)
+                o_i["l"] = slice(start_l, end_l)
             if p is not None and end_p > start_p:
-                o_i['p'] = slice(start_p, end_p)
+                o_i["p"] = slice(start_p, end_p)
             o[o_names[i]] = o_i
     else:
         o = None
-    
+
     if len(g_names) > 0:
         g_offsets.append(len(f))
         for i in range(len(g_names)):
@@ -274,13 +271,13 @@ def read_obj(
             end_f, end_l, end_p = g_offsets[i + 1]
             g_i = {}
             if f is not None and end_f > start_f:
-                g_i['f'] = slice(start_f, end_f)
+                g_i["f"] = slice(start_f, end_f)
             if l is not None and end_l > start_l:
-                g_i['l'] = slice(start_l, end_l)
+                g_i["l"] = slice(start_l, end_l)
             if p is not None and end_p > start_p:
-                g_i['p'] = slice(start_p, end_p)
+                g_i["p"] = slice(start_p, end_p)
             g[g_names[i]] = g_i
-    else:  
+    else:
         g = None
 
     if len(usemtl_names) > 0:
@@ -290,93 +287,126 @@ def read_obj(
             end_f, end_l, end_p = usemtl_offsets[i + 1]
             usemtl_i = {}
             if f is not None and end_f > start_f:
-                usemtl_i['f'] = slice(start_f, end_f)
+                usemtl_i["f"] = slice(start_f, end_f)
             if l is not None and end_l > start_l:
-                usemtl_i['l'] = slice(start_l, end_l)
+                usemtl_i["l"] = slice(start_l, end_l)
             if p is not None and end_p > start_p:
-                usemtl_i['p'] = slice(start_p, end_p)
+                usemtl_i["p"] = slice(start_p, end_p)
             usemtl[usemtl_names[i]] = usemtl_i
     else:
         usemtl = None
 
-    output = {'mtllib': mtllib, 'v': v, 'vt': vt, 'vn': vn, 'f': f, 'ft': ft, 'fn': fn, 'l': l, 'lt': lt, 'p': p, 'pt': pt, 'o': o, 'g': g, 'usemtl': usemtl}
+    output = {
+        "mtllib": mtllib,
+        "v": v,
+        "vt": vt,
+        "vn": vn,
+        "f": f,
+        "ft": ft,
+        "fn": fn,
+        "l": l,
+        "lt": lt,
+        "p": p,
+        "pt": pt,
+        "o": o,
+        "g": g,
+        "usemtl": usemtl,
+    }
     output = {k: v for k, v in output.items() if v is not None}
 
     return output
 
 
-def write_obj(
-    file: Union[str, Path, os.PathLike],
-    obj: WavefrontOBJDict,
-    encoding: Union[str, None] = None
-):
-    """Write obj.
+def write_obj(file: Union[str, Path, os.PathLike], obj: WavefrontOBJDict, encoding: Union[str, None] = None):
+    fp = Path(file).open("w", encoding=encoding) if isinstance(file, (str, Path, os.PathLike)) else file  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
 
-    Args:
-        file: The file.
-        obj: The obj.
-        encoding: The encoding.
-    """
-    if isinstance(file, (str, Path, os.PathLike)):
-        fp = Path(file).open('w', encoding=encoding)
-    else:
-        fp = file
-    
     with fp:
         # Write mtllib
-        if 'mtllib' in obj:
-            for mtllib in obj.get('mtllib', []):
-                print('mtllib', mtllib, file=fp)
-        
+        if "mtllib" in obj:
+            for mtllib in obj.get("mtllib", []):
+                print("mtllib", mtllib, file=fp)
+
         # Write vertices and attributes
-        for k in ['v', 'vt', 'vn', 'vp']:
+        for k in ["v", "vt", "vn", "vp"]:
             if k not in obj:
                 continue
             for v in obj[k]:
                 print(k, *map(float, v), file=fp)
-        
+
         # Write faces
-        if 'f' in obj or 'ft' in obj or 'fn' in obj:
-            f = obj.get('f', None)
+        if "f" in obj or "ft" in obj or "fn" in obj:
+            f = obj.get("f", None)
             if isinstance(f, tuple):
                 f_data, f_offsets = f
                 f = np.split(f_data, f_offsets[1:-1])
-            ft = obj.get('ft', None)
+            ft = obj.get("ft", None)
             if isinstance(ft, tuple):
                 ft_data, f_offsets = ft
                 ft = np.split(ft_data, f_offsets[1:-1])
-            fn = obj.get('fn', None)
+            fn = obj.get("fn", None)
             if isinstance(fn, tuple):
                 fn_data, f_offsets = fn
                 fn = np.split(fn_data, f_offsets[1:-1])
-            for i, (f_i, ft_i, fn_i) in enumerate(zip(f if f is not None else repeat(None), ft if ft is not None else repeat(None), fn if fn is not None else repeat(None))):
+            for _i, (f_i, ft_i, fn_i) in enumerate(
+                zip(
+                    f if f is not None else repeat(None),
+                    ft if ft is not None else repeat(None),
+                    fn if fn is not None else repeat(None),
+                    strict=False,
+                )
+            ):
                 if f_i is not None and ft_i is None and fn_i is None:
-                    print('f', ' '.join(f'{f_ij + 1}' for f_ij in f_i), file=fp)
+                    print("f", " ".join(f"{f_ij + 1}" for f_ij in f_i), file=fp)
                 else:
-                    print('f', ' '.join(f'{f_ij}/{ft_ij}/{fn_ij}' for f_ij, ft_ij, fn_ij in zip(f_i if f_i is not None else repeat(''), ft_i if ft_i is not None else repeat(''), fn_i if fn_i is not None else repeat(''))))
+                    print(
+                        "f",
+                        " ".join(
+                            f"{f_ij}/{ft_ij}/{fn_ij}"
+                            for f_ij, ft_ij, fn_ij in zip(
+                                f_i if f_i is not None else repeat(""),
+                                ft_i if ft_i is not None else repeat(""),
+                                fn_i if fn_i is not None else repeat(""),
+                                strict=False,
+                            )
+                        ),
+                    )
 
         # Write lines
-        if 'l' in obj or 'lt' in obj:
-            l = obj.get('l', None)
+        if "l" in obj or "lt" in obj:
+            l = obj.get("l", None)  # noqa: E741 - Ambiguous upstream name kept as written.
             if isinstance(l, tuple):
                 l_data, l_offsets = l
-                l = np.split(l_data, l_offsets[1:-1])
-            lt = obj.get('lt', None)
+                l = np.split(l_data, l_offsets[1:-1])  # noqa: E741 - Ambiguous upstream name kept as written.
+            lt = obj.get("lt", None)
             if isinstance(lt, tuple):
                 lt_data, l_offsets = lt
                 lt = np.split(lt_data, l_offsets[1:-1])
-            for i, (l_i, lt_i) in enumerate(zip(l if l is not None else repeat(None), lt if lt is not None else repeat(None))):
+            for _i, (l_i, lt_i) in enumerate(
+                zip(l if l is not None else repeat(None), lt if lt is not None else repeat(None), strict=False)
+            ):
                 if l_i is not None and lt_i is None:
-                    print('l', ' '.join(f'{l_ij + 1}' for l_ij in l_i), file=fp)
+                    print("l", " ".join(f"{l_ij + 1}" for l_ij in l_i), file=fp)
                 else:
-                    print('l', ' '.join(f'{l_ij + 1}/{lt_ij + 1}' for l_ij, lt_ij in zip(l_i if l_i is not None else repeat(''), lt_i if lt_i is not None else repeat(''))))
+                    print(
+                        "l",
+                        " ".join(
+                            f"{l_ij + 1}/{lt_ij + 1}"
+                            for l_ij, lt_ij in zip(
+                                l_i if l_i is not None else repeat(""),
+                                lt_i if lt_i is not None else repeat(""),
+                                strict=False,
+                            )
+                        ),
+                    )
 
         # Write points
-        if 'p' in obj or 'pt' in obj:
-            p = obj.get('p', None)
-            pt = obj.get('pt', None)
-            for i, (p_i, pt_i) in enumerate(zip(p if p is not None else repeat(None), pt if pt is not None else repeat(None))):
+        if "p" in obj or "pt" in obj:
+            p = obj.get("p", None)
+            pt = obj.get("pt", None)
+            for _i, (p_i, pt_i) in enumerate(
+                zip(p if p is not None else repeat(None), pt if pt is not None else repeat(None), strict=False)
+            ):
                 if p_i is not None and pt_i is None:
-                    print('p', f'{p_i + 1}', file=fp)
+                    print("p", f"{p_i + 1}", file=fp)
                 else:
-                    print('p', f'{p_i + 1}/{pt_i + 1}', file=fp)
+                    print("p", f"{p_i + 1}/{pt_i + 1}", file=fp)

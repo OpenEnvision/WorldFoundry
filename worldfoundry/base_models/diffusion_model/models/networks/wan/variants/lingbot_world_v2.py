@@ -3,18 +3,13 @@
 V2-specific causal backbone; common Wan layers come from WorldFoundry.
 Adds causal / fast-attention hooks.  Licensed CC BY-NC-SA 4.0 upstream.
 """
+
 import math
+from typing import ClassVar
 
 import torch
 import torch.nn as nn
-from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 
-from worldfoundry.base_models.diffusion_model.optimizations.static_cross_kv import StaticConditionCache
-from worldfoundry.core.attention.rotary.complex_rope import assemble_complex_rotary_frequencies_3d
-from worldfoundry.core.attention.sequence.varlen import (
-    attention,
-    flash_attention,
-)
 from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_22 import (
     WanLayerNorm,
     WanRMSNorm,
@@ -22,13 +17,19 @@ from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_22 i
     rope_params,
     sinusoidal_embedding_1d,
 )
-
 from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import (
     apply_camera_modulation,
     camera_condition_for_block,
     embed_wan_camera_condition,
     prepare_wan_camera_condition,
 )
+from worldfoundry.base_models.diffusion_model.optimizations.static_cross_kv import StaticConditionCache
+from worldfoundry.core.attention.rotary.complex_rope import assemble_complex_rotary_frequencies_3d
+from worldfoundry.core.attention.sequence.varlen import (
+    attention,
+    flash_attention,
+)
+from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 
 __all__ = ["LingBotWorldV2Model", "WanModelFast"]
 
@@ -178,13 +179,29 @@ class CausalWanSelfAttention(nn.Module):
         if backend == "scaled_int8_fp8":
             from worldfoundry.core.attention.sequence.key_centering import streaming_scaled_attention
 
-            x = streaming_scaled_attention(roped_query, k_cache, v_cache, kv_cache, current_start=current_start,
-                                           local_start=local_start_index, local_end=local_end_index, maximum=max_attention_size)
+            x = streaming_scaled_attention(
+                roped_query,
+                k_cache,
+                v_cache,
+                kv_cache,
+                current_start=current_start,
+                local_start=local_start_index,
+                local_end=local_end_index,
+                maximum=max_attention_size,
+            )
         elif backend == "torch":
             from worldfoundry.core.attention.backends.dispatch import attention_forward
 
-            x = attention_forward(roped_query, k_cache, v_cache, q_pattern="b s n d", k_pattern="b s n d",
-                                  v_pattern="b s n d", out_pattern="b s n d", backend="torch")
+            x = attention_forward(
+                roped_query,
+                k_cache,
+                v_cache,
+                q_pattern="b s n d",
+                k_pattern="b s n d",
+                v_pattern="b s n d",
+                out_pattern="b s n d",
+                backend="torch",
+            )
         else:
             x = attention(roped_query, k_cache, v_cache)
 
@@ -368,8 +385,8 @@ class CausalHead(nn.Module):
 class WanModelFast(nn.Module, NativeConfigMixin):
     r"""LingBot-World-V2 causal-fast DiT."""
 
-    ignore_for_config = ["patch_size", "cross_attn_norm", "qk_norm", "text_dim"]
-    _no_split_modules = ["WanAttentionBlock"]
+    ignore_for_config: ClassVar[list] = ["patch_size", "cross_attn_norm", "qk_norm", "text_dim"]
+    _no_split_modules: ClassVar[list] = ["WanAttentionBlock"]
     prepare_camera_condition = prepare_wan_camera_condition
 
     @register_to_config
@@ -599,7 +616,7 @@ class WanModelFast(nn.Module, NativeConfigMixin):
             self.freqs = self.freqs.to(device)
 
         if y is not None:
-            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y)]
+            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y, strict=False)]
 
         # embeddings
         x = [self.patch_embedding(u.unsqueeze(0)) for u in x]
@@ -628,23 +645,27 @@ class WanModelFast(nn.Module, NativeConfigMixin):
         )
 
         # Prepared camera tensors belong to this chunk, not to the model.
-        if dit_cond_dict is not None and "c2ws_plucker_emb" in dit_cond_dict and "_camera_modulations" not in dit_cond_dict:
+        if (
+            dit_cond_dict is not None
+            and "c2ws_plucker_emb" in dit_cond_dict
+            and "_camera_modulations" not in dit_cond_dict
+        ):
             dit_cond_dict = dict(dit_cond_dict)
             dit_cond_dict["c2ws_plucker_emb"] = embed_wan_camera_condition(self, dit_cond_dict["c2ws_plucker_emb"])
 
         # arguments
-        kwargs = dict(
-            e=e0,
-            seq_lens=seq_lens,
-            grid_sizes=grid_sizes,
-            freqs=self.freqs if rotary_frequencies is None else rotary_frequencies,
-            context=context,
-            context_lens=context_lens,
-            dit_cond_dict=dit_cond_dict,
-            max_attention_size=max_attention_size,
-            frame_seqlen=frame_seqlen,
-            cross_attn_first_call=cross_attn_first_call,
-        )
+        kwargs = {
+            "e": e0,
+            "seq_lens": seq_lens,
+            "grid_sizes": grid_sizes,
+            "freqs": self.freqs if rotary_frequencies is None else rotary_frequencies,
+            "context": context,
+            "context_lens": context_lens,
+            "dit_cond_dict": dit_cond_dict,
+            "max_attention_size": max_attention_size,
+            "frame_seqlen": frame_seqlen,
+            "cross_attn_first_call": cross_attn_first_call,
+        }
 
         for block_index, block in enumerate(self.blocks):
             kwargs["dit_cond_dict"] = camera_condition_for_block(dit_cond_dict, block_index)
@@ -683,10 +704,10 @@ class WanModelFast(nn.Module, NativeConfigMixin):
 
         c = self.out_dim
         out = []
-        for u, v in zip(x, grid_sizes.tolist()):
+        for u, v in zip(x, grid_sizes.tolist(), strict=False):
             u = u[: math.prod(v)].view(*v, *self.patch_size, c)
             u = torch.einsum("fhwpqrc->cfphqwr", u)
-            u = u.reshape(c, *[i * j for i, j in zip(v, self.patch_size)])
+            u = u.reshape(c, *[i * j for i, j in zip(v, self.patch_size, strict=False)])
             out.append(u)
         return out
 

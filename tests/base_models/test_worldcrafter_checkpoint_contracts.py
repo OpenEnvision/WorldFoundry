@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any, cast
 
 import pytest
 
@@ -106,10 +107,14 @@ def test_repencoder_metadata_load_does_not_scan_model_bytes(tmp_path, monkeypatc
     (tmp_path / "config.json").write_text(json.dumps(RepEncoderConfig().to_dict()))
     manifest = {"format": "worldcrafter_repencoder_v1", "model_sha256": "stale"}
     (tmp_path / "manifest.json").write_text(json.dumps(manifest))
+
+    def _reject_read_bytes(_path: object) -> bytes:
+        raise AssertionError("metadata loading scanned model bytes")
+
     monkeypatch.setattr(
         type(model_path),
         "read_bytes",
-        lambda _path: pytest.fail("metadata loading scanned model bytes"),
+        _reject_read_bytes,
     )
 
     path, config, metadata = read_checkpoint_metadata(tmp_path)
@@ -117,3 +122,50 @@ def test_repencoder_metadata_load_does_not_scan_model_bytes(tmp_path, monkeypatc
     assert path == model_path
     assert config == RepEncoderConfig()
     assert metadata == manifest
+
+
+def test_worldcrafter_loaders_normalize_unindexed_cuda_device(tmp_path, monkeypatch) -> None:
+    import torch
+
+    from worldfoundry.synthesis.visual_generation.worldcrafter import model_loading, runtime
+
+    recorded: list[torch.device] = []
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "current_device", lambda: 0)
+    monkeypatch.setattr(torch.cuda, "set_device", lambda dev: recorded.append(torch.device(dev)))
+    monkeypatch.setattr(runtime, "validate_weights", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
+
+    with pytest.raises(RuntimeError, match="stop"):
+        runtime.WorldCrafter.from_pretrained(tmp_path, model_type="base", device="cuda")
+
+    with pytest.raises(FileNotFoundError):
+        model_loading.load_fast(
+            runtime.WorldCrafter,
+            tmp_path / "missing",
+            device="cuda",
+            height=384,
+            width=640,
+            seed=42,
+            memory_fov_h_deg=100.0,
+            memory_fov_v_deg=71.0,
+            memory_fov_samples_per_axis=10,
+            attention_backend="sdpa",
+            enable_compile=False,
+        )
+
+    assert recorded == [torch.device("cuda", 0), torch.device("cuda", 0)]
+
+
+def test_configure_attention_maps_sdpa_to_native() -> None:
+    from worldfoundry.synthesis.visual_generation.worldcrafter.runtime import configure_attention
+
+    seen: list[str] = []
+
+    class FakeTransformer:
+        def set_attention_backend(self, backend: str) -> None:
+            seen.append(backend)
+
+    resolved = configure_attention(cast(Any, FakeTransformer()), "sdpa")
+
+    assert resolved == "native"
+    assert seen == ["native"]

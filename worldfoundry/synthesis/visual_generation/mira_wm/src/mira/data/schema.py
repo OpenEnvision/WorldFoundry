@@ -59,7 +59,7 @@ class MatchEntry(BaseModel):
     perspectives: list[Perspective]
 
     @model_validator(mode="after")
-    def _check_chunk_indices(self) -> "MatchEntry":
+    def _check_chunk_indices(self) -> MatchEntry:
         """`chunk_indices` must be a per-present-chunk map: one entry per `chunk_frames`, all
         distinct. A length mismatch or a duplicate would make `chunk_id` map a chunk to the wrong
         original index -- i.e. to the wrong `.mp4`/`.jsonl` member -- producing silently corrupt
@@ -85,6 +85,6 @@ class Index(BaseModel):
     entries: list[MatchEntry]
 
     @classmethod
-    def load(cls, index_path: str | Path) -> "Index":
+    def load(cls, index_path: str | Path) -> Index:
         with open(index_path, encoding="utf-8") as f:
             return cls.model_validate(json.load(f))

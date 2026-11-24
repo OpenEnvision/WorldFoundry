@@ -45,7 +45,7 @@ metadata:
     validation.
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.embodied.rollout_runner:build_ai2thor_closed_loop_runner
+    runner_target: worldfoundry.evals.tasks.embodied.rollout_runner:build_ai2thor_closed_loop_runner
     runner_script_available: false
     task_yaml_available: true
     runtime_verified: false
@@ -56,7 +56,7 @@ metadata:
     root_env: WORLDFOUNDRY_AI2THOR_ROOT
     results_path_env: WORLDFOUNDRY_AI2THOR_RESULTS_PATH
     eval_config: worldfoundry/data/benchmarks/eval_configs/embodied/ai2thor/floorplan1.yaml
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ai2thor --mode contract --output-dir
+  contract_validation_command: wf zoo benchmark-run --benchmark-id ai2thor --mode contract --output-dir
     tmp/benchmark_zoo/benchmark_contract/ai2thor --json
   artifact_layout:
     generated_artifact_dir_env: WORLDFOUNDRY_AI2THOR_RESULTS_PATH
@@ -68,12 +68,12 @@ metadata:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/ai2thor.yaml
   checkpoint_refs: []
   validation_command:
-  - worldfoundry-eval
+  - wf
   - embodied
   - run
   - --config
   - worldfoundry/data/benchmarks/eval_configs/embodied/ai2thor/floorplan1.yaml
-  official_runner_target: worldfoundry.evaluation.tasks.embodied.rollout_runner:build_ai2thor_closed_loop_runner
+  official_runner_target: worldfoundry.evals.tasks.embodied.rollout_runner:build_ai2thor_closed_loop_runner
 tasks:
   ai2thor_scene_rollouts:
     benchmark_name: ai2thor
@@ -139,4 +139,4 @@ tasks:
       - task_success
       - episode_success
       - reward
-      runner_target: worldfoundry.evaluation.tasks.embodied.rollout_runner:build_ai2thor_closed_loop_runner
+      runner_target: worldfoundry.evals.tasks.embodied.rollout_runner:build_ai2thor_closed_loop_runner

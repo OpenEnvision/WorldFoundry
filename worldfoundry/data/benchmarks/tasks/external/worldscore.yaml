@@ -19,7 +19,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: worldscore
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldscore --mode contract 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id worldscore --mode contract 
     --output-dir tmp/benchmark_zoo/benchmark_contract/worldscore --json
   open_source_status: experimental
   official_benchmark_verified: false
@@ -60,7 +60,7 @@ metadata:
       WORLDFOUNDRY_SEA_RAFT_CKPT: 
         cache/worldfoundry/assets/worldscore_official/metrics/checkpoints/Tartan-C-T-TSKH-spring540x960-M.pth
     runtime_env:
-      WORLDFOUNDRY_WORLDSCORE_ROOT: worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore
+      WORLDFOUNDRY_WORLDSCORE_ROOT: worldfoundry/evals/tasks/execution/runners/worldscore/runtime/worldscore
       WORLDFOUNDRY_WORLDSCORE_CONFIG_ROOT: worldfoundry/data/benchmarks/assets/worldscore/config
       WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR: cache/worldfoundry/assets/worldscore_official/metrics/checkpoints
     missing: []
@@ -76,8 +76,8 @@ metadata:
     metrics_available: 4
     scope: bounded_official_gpu_validation
     scorecard: tmp/local_open_eval/worldscore_bounded_gpu_validation_after_readiness_layers_20260525/scorecard.json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldScoreContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/worldscore/run_worldscore_official_runner.py
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:worldscore
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/worldscore/run_worldscore_official_runner.py
   offline_normalization:
     description: Import a WorldScore result artifact with run_worldscore_official_runner.py --official-results-path.
   prompt_suite:
@@ -88,7 +88,7 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_official_runtime
-    root: worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore
+    root: worldfoundry/evals/tasks/execution/runners/worldscore/runtime/worldscore
     root_env: WORLDFOUNDRY_WORLDSCORE_ROOT
     official_results_path_env: WORLDFOUNDRY_WORLDSCORE_RESULTS_PATH
     evaluation_output_dir_env: WORLDFOUNDRY_WORLDSCORE_OUTPUT_DIR
@@ -103,11 +103,11 @@ metadata:
     local_dataset_paths:
     - cache/worldfoundry/data/hfd_datasets/Howieeeee/WorldScore
     - cache/worldfoundry/data/hfd_datasets/Howieeeee__WorldScore
-    in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore
+    in_tree_runtime: worldfoundry/evals/tasks/execution/runners/worldscore/runtime/worldscore
     task_yaml: worldfoundry/data/benchmarks/tasks/external/worldscore.yaml
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldScoreContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:worldscore
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
@@ -116,7 +116,7 @@ metadata:
     normalizer_verified: false
     surface: bounded_official_gpu_validation
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -180,8 +180,8 @@ tasks:
           kind: video
     evaluation_protocol:
     - name: external_official_runner
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldScoreContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/worldscore/run_worldscore_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:worldscore
+      runner_script: worldfoundry/evals/tasks/execution/runners/worldscore/run_worldscore_official_runner.py
       metric_ids:
       - controllability
       - quality

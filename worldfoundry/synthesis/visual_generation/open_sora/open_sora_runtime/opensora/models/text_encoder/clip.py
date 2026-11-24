@@ -28,20 +28,12 @@ import torch.nn as nn
 import transformers
 from transformers import CLIPTextModel, CLIPTokenizer
 
-from opensora.registry import MODELS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import MODELS
 
 transformers.logging.set_verbosity_error()
 
 
-class AbstractEncoder(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def encode(self, *args, **kwargs):
-        raise NotImplementedError
-
-
-class FrozenCLIPEmbedder(AbstractEncoder):
+class FrozenCLIPEmbedder(nn.Module):
     """Uses the CLIP transformer encoder for text (from Hugging Face)"""
 
     def __init__(self, path="openai/clip-vit-huge-patch14", device="cuda", max_length=77):
@@ -103,7 +95,7 @@ class ClipEncoder:
     def encode(self, text):
         _, pooled_embeddings = self.text_encoder.encode(text)
         y = pooled_embeddings.unsqueeze(1).unsqueeze(1)
-        return dict(y=y)
+        return {"y": y}
 
     def null(self, n):
         null_y = self.y_embedder.y_embedding[None].repeat(n, 1, 1)[:, None]

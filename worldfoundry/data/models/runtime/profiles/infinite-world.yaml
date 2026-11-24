@@ -6,9 +6,10 @@ groups:
 - world
 - video
 source_repos:
-- url: https://github.com/thuml/InfiniteWorld
+- url: https://github.com/MeiGen-AI/Infinite-World
+  revision: 1e8fc49ba7dc0f928c966c49c31fda9394c045d3
 checkpoints:
-- repo_id: thuml/InfiniteWorld
+- repo_id: MeiGen-AI/Infinite-World
   role: infinite_world_checkpoint
 input_schema:
   prompt: true

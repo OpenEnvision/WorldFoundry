@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from copy import deepcopy
 import heapq
 import math
+from collections.abc import Callable, Sequence
+from copy import deepcopy
 
 import einops
 import jax
@@ -116,9 +116,7 @@ class MemoryBuffer:
         images, states = self._validate_inputs(images, states, step_idx_list)
         output = self._encode_images(images)
         image_by_size = {
-            size: np.asarray(
-                jax.device_get(pool_tokens_to_size(output, size * size, self.pool_type))
-            )
+            size: np.asarray(jax.device_get(pool_tokens_to_size(output, size * size, self.pool_type)))
             for size in (8, 4, 2)
         }
         positions = {size: self._positions(step_idx_list, size) for size in (8, 4, 2)}
@@ -280,10 +278,7 @@ class MemoryBufferRecurrent(MemoryBuffer):
             raise ValueError("Invalid recurrent history indices")
         horizon = self.input_obs_horizon
         if exec_start_idx == 0:
-            if step_idx < horizon:
-                indices = [step_idx]
-            else:
-                indices = list(range(step_idx % horizon, step_idx + 1, horizon))
+            indices = [step_idx] if step_idx < horizon else list(range(step_idx % horizon, step_idx + 1, horizon))
         else:
             if exec_start_idx <= horizon * 2:
                 video_indices = list(range(0, exec_start_idx, max(1, horizon // 2)))

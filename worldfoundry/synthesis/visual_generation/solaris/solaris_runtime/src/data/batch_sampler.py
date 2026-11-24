@@ -1,7 +1,6 @@
 import json
 import logging
 import math
-import os
 
 import numpy as np
 import torch
@@ -20,7 +19,6 @@ def _init_torch_sampler_with_optional_dataset(sampler, dataset):
 
 
 class EvalBatchSampler(torch.utils.data.Sampler):
-
     def __init__(
         self,
         dataset,
@@ -29,7 +27,7 @@ class EvalBatchSampler(torch.utils.data.Sampler):
         num_replicas,
         num_frames,
         num_global_samples=None,  # global number of samples
-        seed=[0],
+        seed=[0],  # noqa: B006 - Keeps the upstream default object and signature.
     ):
         _init_torch_sampler_with_optional_dataset(self, dataset)
         self.dataset = dataset
@@ -60,15 +58,11 @@ class EvalBatchSampler(torch.utils.data.Sampler):
                 "eval_ids",
                 f"eval_ids_{dataset.dataset_name}.json",
             )
-            with open(eval_ids_path, "r") as f:
+            with open(eval_ids_path) as f:
                 self.ids = json.load(f)
 
         assert num_frames <= 1024, "num_frames must be at most 1024"
-        num_global_samples = (
-            min(num_global_samples, len(self.ids))
-            if num_global_samples is not None
-            else len(self.ids)
-        )
+        num_global_samples = min(num_global_samples, len(self.ids)) if num_global_samples is not None else len(self.ids)
         if isinstance(dataset, DatasetMultiplayer):
             self.examples = [
                 SegmentIdMultiplayer(
@@ -84,8 +78,7 @@ class EvalBatchSampler(torch.utils.data.Sampler):
             # For other datasets, replace the endpoint with start + self.num_frames
             # Note this could potentially lead to an error later on when calling Dataset.__getitem__(...) if out of bounds
             self.examples = [
-                SegmentId(episode_id, start, start + self.num_frames)
-                for (episode_id, start, _) in self.ids
+                SegmentId(episode_id, start, start + self.num_frames) for (episode_id, start, _) in self.ids
             ]
         self.examples = self.examples[:num_global_samples]
         self.examples = self.examples[self.rank :: self.world_size]

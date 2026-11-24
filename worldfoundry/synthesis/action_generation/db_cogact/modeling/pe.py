@@ -1,6 +1,5 @@
 # Inference-only DB-CogACT source retained in-tree.
 import torch.nn as nn
-
 from transformers import SiglipImageProcessor
 
 from .pe_configuration import get_config
@@ -19,7 +18,7 @@ def get_image_processor(image_res: int = 336):
         size={
             "height": image_res,
             "width": image_res,
-        }
+        },
     )
 
     return image_processor
@@ -50,9 +49,7 @@ class PEVisionTower(nn.Module):
                 ).to(image.dtype)
                 image_features.append(image_feature)
         else:
-            image_features = self.vision_tower.forward(
-                images.to(device=self.device, dtype=self.dtype)
-            ).to(images.dtype)
+            image_features = self.vision_tower.forward(images.to(device=self.device, dtype=self.dtype)).to(images.dtype)
 
         return image_features
 
@@ -67,6 +64,7 @@ class PEVisionTower(nn.Module):
     @property
     def hidden_size(self):
         return self.config.width
+
     @property
     def num_patches(self):
         return (self.config.image_size // self.config.patch_size // 4) ** 2

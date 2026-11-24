@@ -5,15 +5,14 @@ within the WorldFoundry framework. It handles model loading, configuration resol
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from worldfoundry.core.io.paths import hfd_root_path
-from worldfoundry.core.io.paths import package_module_root as package_root
-from worldfoundry.evaluation.utils import worldfoundry_data_path
+from worldfoundry.core.io.paths import hfd_root_path, package_data_path
 
 # Root directory for default Open-MAGVIT2 runtime configurations within worldfoundry data.
-DEFAULT_OPEN_MAGVIT2_CONFIG_ROOT = worldfoundry_data_path("models", "runtime", "configs", "open_magvit2")
+DEFAULT_OPEN_MAGVIT2_CONFIG_ROOT = package_data_path("models", "runtime", "configs", "open_magvit2")
 # Default configuration file for Open-MAGVIT2 model.
 DEFAULT_OPEN_MAGVIT2_CONFIG = DEFAULT_OPEN_MAGVIT2_CONFIG_ROOT / "imagenet_conditional_llama_L.yaml"
 
@@ -88,7 +87,7 @@ class OpenMAGVIT2Runtime:
         device: str | None = None,
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "OpenMAGVIT2Runtime":
+    ) -> OpenMAGVIT2Runtime:
         """
         Initializes OpenMAGVIT2Runtime from a pretrained model path or configuration.
 
@@ -111,10 +110,10 @@ class OpenMAGVIT2Runtime:
         options = dict(pretrained_model_path) if isinstance(pretrained_model_path, Mapping) else {}
         if pretrained_model_path is not None and not isinstance(pretrained_model_path, Mapping):
             options["checkpoint_path"] = str(pretrained_model_path)
-        
+
         # Update options with any additional keyword arguments provided.
         options.update(kwargs)
-        
+
         # Initialize the runtime instance, resolving parameters from multiple potential sources.
         return cls(
             model_id=str(options.get("model_id") or options.get("profile_id") or model_id or cls.MODEL_ID),
@@ -124,19 +123,6 @@ class OpenMAGVIT2Runtime:
             class_id=int(options.get("class_id", 207)),
             batch_size=int(options.get("batch_size", 1)),
         )
-
-    @staticmethod
-    def _runtime_root() -> Path:
-        """
-        Returns the root path of the in-tree Open-MAGVIT2 runtime package.
-
-        This path is used to dynamically add the package to `sys.path` to enable
-        local imports of the model's inference logic.
-
-        Returns:
-            Path: The `Path` object pointing to the runtime package directory.
-        """
-        return package_root("worldfoundry.synthesis.visual_generation.open_magvit2.open_magvit2_runtime")
 
     def _resolve_config(self) -> Path:
         """
@@ -174,7 +160,7 @@ class OpenMAGVIT2Runtime:
         """
         if self.checkpoint_path:
             return Path(self.checkpoint_path).expanduser().resolve()
-        
+
         # Define a list of preferred checkpoint filenames.
         preferred_names = (
             "AR_256_L.ckpt",
@@ -187,18 +173,18 @@ class OpenMAGVIT2Runtime:
         )
         # Create a list of potential paths from preferred names in the default root.
         candidates = tuple(DEFAULT_OPEN_MAGVIT2_CHECKPOINT_ROOT / name for name in preferred_names)
-        
+
         # Filter existing paths from preferred names, then add any other .ckpt and .pth files.
         candidates = (
             tuple(path for path in candidates if path.exists())
             + tuple(sorted(DEFAULT_OPEN_MAGVIT2_CHECKPOINT_ROOT.glob("*.ckpt")))
             + tuple(sorted(DEFAULT_OPEN_MAGVIT2_CHECKPOINT_ROOT.glob("*.pth")))
         )
-        
+
         # If any candidate checkpoint is found, return the first one.
         if candidates:
             return candidates[0].resolve()
-        
+
         # Raise an error if no checkpoint could be found.
         raise FileNotFoundError(
             "Open-MAGVIT2 checkpoint not found. Pass checkpoint_path/ckpt_path pointing to the transformer checkpoint."
@@ -208,28 +194,14 @@ class OpenMAGVIT2Runtime:
         """
         Ensures the Open-MAGVIT2 model and configuration are loaded.
 
-        If the model and config are not already loaded, this method dynamically adds the
-        runtime's path to `sys.path` and imports the `load_model` function to load
-        the model and its configuration based on the resolved paths.
+        Import the installed inference loader and resolve the config and checkpoint assets.
 
         Returns:
             tuple: A tuple containing the loaded model instance and its configuration.
         """
         if self._model is not None:
             return self._model, self._config
-        
-        import sys
 
-        runtime_root = self._runtime_root()
-        runtime_path = str(runtime_root)
-        
-        # Add the runtime package path to sys.path if not already present,
-        # ensuring dynamic imports from the in-tree package work.
-        if runtime_path not in sys.path:
-            sys.path.insert(0, runtime_path)
-            
-        # These imports are dynamic and depend on `runtime_path` being in `sys.path`.
-        from worldfoundry.synthesis.visual_generation.open_magvit2 import open_magvit2_runtime  # noqa: F401
         from worldfoundry.synthesis.visual_generation.open_magvit2.open_magvit2_runtime.inference import load_model
 
         # Load the model and configuration using the resolved paths and specified device.
@@ -267,11 +239,11 @@ class OpenMAGVIT2Runtime:
         else:
             # If it's a single value, duplicate it to form a pair.
             parts = [value, value]
-        
+
         # Ensure that exactly two parts were obtained.
         if len(parts) != 2:
             raise ValueError(f"Open-MAGVIT2 {name} expects two comma-separated values.")
-        
+
         # Cast each part to the target type.
         return cast(parts[0]), cast(parts[1])
 
@@ -317,10 +289,10 @@ class OpenMAGVIT2Runtime:
         # Validate that no unsupported image or video inputs are provided.
         if images is not None or video is not None:
             raise ValueError("Open-MAGVIT2 wrapper is class-conditional and does not accept image or video inputs.")
-        
+
         # Ensure the model and configuration are loaded before prediction.
         model, config = self._ensure_model()
-        
+
         # Dynamically import the image saving function from the runtime.
         from worldfoundry.synthesis.visual_generation.open_magvit2.open_magvit2_runtime.inference import (
             save_class_image,
@@ -328,7 +300,7 @@ class OpenMAGVIT2Runtime:
 
         # Determine the output path for the generated image.
         target = Path(output_path) if output_path is not None else Path.cwd() / "open_magvit2.png"
-        
+
         # Call the actual image generation function with resolved parameters.
         target = save_class_image(
             model,
@@ -342,7 +314,7 @@ class OpenMAGVIT2Runtime:
             top_p=self._pair(kwargs.get("top_p", (0.96, 0.96)), float, "top_p"),
             cfg_scale=self._pair(kwargs.get("cfg_scale", (4.0, 4.0)), float, "cfg_scale"),
         )
-        
+
         # Return generation metadata and the artifact path.
         return {
             "status": "success",

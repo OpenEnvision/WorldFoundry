@@ -1,0 +1,52 @@
+id: hailuo-2p3
+name: Hailuo 2.3
+aliases:
+- minimax-i2v
+- minimax_i2v
+tasks:
+- audio-video
+- image-to-video
+- hosted-api
+provider: api
+source:
+  status: api
+  official_repo_url: https://www.minimax.io/
+official_sources:
+  project_page: https://www.minimax.io/
+integration:
+  status: integrated
+  notes:
+  - Hosted API Studio pipeline is available; users must provide their own provider
+    API key.
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: hailuo-2p3
+runner_parity:
+  status: not_applicable
+  notes:
+  - API output parity depends on provider-side model versioning and account access.
+demo_parity:
+  status: not_applicable
+docs:
+  publisher: MiniMax
+  publisher_kind: company
+  publisher_zh: MiniMax（稀宇科技）
+  overview: Hailuo 2.3 is MiniMax's hosted video generation service for image-to-video and joint audio-video generation. You provide a start image (plus an optional prompt) and MiniMax renders the clip on its infrastructure; WorldFoundry submits the request and collects the returned video. The aliases minimax-i2v and minimax_i2v also resolve to this model. Use it to generate with MiniMax inside the Studio workflow without managing GPUs.
+  overview_zh: Hailuo 2.3（海螺 2.3）是 MiniMax 的托管视频生成服务，支持图生视频与音视频联合生成。你提供一张起始图（可附文本提示词），MiniMax 在其基础设施上渲染成片；WorldFoundry 负责提交请求并回收返回的视频。别名 minimax-i2v、minimax_i2v 同样指向该模型。适合在不管理 GPU 的前提下，在 WorldFoundry 的 Studio 工作流中使用 MiniMax 生成。
+  architecture: 'A hosted, provider-operated model: MiniMax has not published its architecture, parameter count, or training recipe. WorldFoundry provides a Studio pipeline that submits requests to the provider endpoint and collects the returned video artifacts.'
+  architecture_zh: 由服务方托管运行的模型：MiniMax 未公开其架构、参数规模或训练细节。WorldFoundry 提供一条向服务方端点提交请求并回收生成视频产物的 Studio pipeline。
+  usage_notes: Configure your own MiniMax platform API key and paid account before launching jobs. No weights are downloaded and no local GPU environment is needed; generation happens on the provider side, so cost, quota, and content policy follow your provider account.
+  usage_notes_zh: 启动任务前，请先配置你自己的 MiniMax 开放平台 API key 与付费账号。本地不下载权重，也不需要 GPU 环境；生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。
+  limitations:
+  - MiniMax controls model versioning, so outputs can change over time.
+  - No local weights and no offline mode; reproducibility is limited to the request parameters WorldFoundry stores.
+  limitations_zh:
+  - 模型版本由服务方控制，输出可能随时间变化。
+  - 没有本地权重、不支持离线运行；可复现性仅限于 WorldFoundry 保存的请求参数。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video
+      outputs.
+    reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+  - id: physics-iq
+    reason: Probes whether provider-side video models respect basic physical plausibility.
+    reason_zh: 检验服务方视频模型是否遵循基本物理合理性。

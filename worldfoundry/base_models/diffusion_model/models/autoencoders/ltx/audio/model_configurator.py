@@ -10,6 +10,8 @@ They do not run encode/decode; they only wire modules that
 Used by :mod:`~..component` when loading LTX-2 media weights.
 """
 
+from typing import Any
+
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.attention import AttentionType
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.audio_vae import AudioDecoder, AudioEncoder
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.causality_axis import CausalityAxis
@@ -58,6 +60,11 @@ class VocoderConfigurator:
     """
 
     @classmethod
+    def from_metadata(cls, metadata: dict[str, Any]) -> Vocoder | VocoderWithBWE:
+        """Build from split-checkpoint safetensors metadata."""
+        return cls.from_config(metadata.get("config", {}))
+
+    @classmethod
     def from_config(cls: type[Vocoder], config: dict) -> Vocoder | VocoderWithBWE:
         cfg = config.get("vocoder", {})
 
@@ -103,6 +110,11 @@ class VocoderConfigurator:
 
 class AudioDecoderConfigurator:
     """Instantiate the LTX audio decoder CNN from checkpoint JSON."""
+
+    @classmethod
+    def from_metadata(cls, metadata: dict[str, Any]) -> AudioDecoder:
+        """Build from split-checkpoint safetensors metadata."""
+        return cls.from_config(metadata.get("config", {}))
 
     @classmethod
     def from_config(cls: type[AudioDecoder], config: dict) -> AudioDecoder:

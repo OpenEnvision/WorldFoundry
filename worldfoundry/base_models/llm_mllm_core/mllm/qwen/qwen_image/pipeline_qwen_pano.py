@@ -12,30 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> llm_mllm_core -> mllm -> qwen -> qwen_image -> pipeline_qwen_pano.py functionality."""
-
-from typing import Any, Callable, Dict, List, Optional, Union
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import torch
-
 from diffusers.pipelines.qwenimage.pipeline_qwenimage_edit_plus import (
-    QwenImageEditPlusPipeline,
     PipelineImageInput,
+    QwenImageEditPlusPipeline,
     QwenImagePipelineOutput,
+    calculate_dimensions,
     calculate_shift,
     retrieve_timesteps,
-    calculate_dimensions,
 )
 from diffusers.utils import is_torch_xla_available, logging
 
 try:
     from diffusers.models.autoencoders.vae import DecoderOutput
 except ImportError:
-    from diffusers.models.vae import DecoderOutput
+    from diffusers.models.vae import (  # noqa: F401 - Version fallback of the import above, kept as upstream.
+        DecoderOutput,
+    )
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
+
     XLA_AVAILABLE = True
 else:
     XLA_AVAILABLE = False
@@ -59,62 +60,34 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
     @torch.no_grad()
     def __call__(
         self,
-        image: Optional[PipelineImageInput] = None,
-        prompt: Union[str, List[str]] = None,
-        negative_prompt: Union[str, List[str]] = None,
+        image: PipelineImageInput | None = None,
+        prompt: str | list[str] | None = None,
+        negative_prompt: str | list[str] | None = None,
         true_cfg_scale: float = 4.0,
-        height: Optional[int] = None,
-        width: Optional[int] = None,
+        height: int | None = None,
+        width: int | None = None,
         num_inference_steps: int = 50,
-        sigmas: Optional[List[float]] = None,
-        guidance_scale: Optional[float] = None,
+        sigmas: list[float] | None = None,
+        guidance_scale: float | None = None,
         num_images_per_prompt: int = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.Tensor] = None,
-        prompt_embeds: Optional[torch.Tensor] = None,
-        prompt_embeds_mask: Optional[torch.Tensor] = None,
-        negative_prompt_embeds: Optional[torch.Tensor] = None,
-        negative_prompt_embeds_mask: Optional[torch.Tensor] = None,
-        output_type: Optional[str] = "pil",
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.Tensor | None = None,
+        prompt_embeds: torch.Tensor | None = None,
+        prompt_embeds_mask: torch.Tensor | None = None,
+        negative_prompt_embeds: torch.Tensor | None = None,
+        negative_prompt_embeds_mask: torch.Tensor | None = None,
+        output_type: str | None = "pil",
         return_dict: bool = True,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
-        callback_on_step_end: Optional[Callable[[int, int, Dict], None]] = None,
-        callback_on_step_end_tensor_inputs: List[str] = ["latents"],
+        attention_kwargs: dict[str, Any] | None = None,
+        callback_on_step_end: Callable[[int, int, dict], None] | None = None,
+        callback_on_step_end_tensor_inputs: list[str] = ["latents"],  # noqa: B006 - Keeps the upstream default object and signature.
         max_sequence_length: int = 512,
     ):
-        """Call.
-
-        Args:
-            image: The image.
-            prompt: The prompt.
-            negative_prompt: The negative prompt.
-            true_cfg_scale: The true cfg scale.
-            height: The height.
-            width: The width.
-            num_inference_steps: The num inference steps.
-            sigmas: The sigmas.
-            guidance_scale: The guidance scale.
-            num_images_per_prompt: The num images per prompt.
-            generator: The generator.
-            latents: The latents.
-            prompt_embeds: The prompt embeds.
-            prompt_embeds_mask: The prompt embeds mask.
-            negative_prompt_embeds: The negative prompt embeds.
-            negative_prompt_embeds_mask: The negative prompt embeds mask.
-            output_type: The output type.
-            return_dict: The return dict.
-            attention_kwargs: The attention kwargs.
-            callback_on_step_end: The callback on step end.
-            callback_on_step_end_tensor_inputs: The callback on step end tensor inputs.
-            max_sequence_length: The max sequence length.
-        """
         # ── Output size ────────────────────────────────────────────────
         # Derive height/width from the input image's aspect ratio if not
         # specified, targeting a fixed pixel budget (1024²).
         image_size = image.size
-        calculated_width, calculated_height = calculate_dimensions(
-            1024 * 1024, image_size[0] / image_size[1]
-        )
+        calculated_width, calculated_height = calculate_dimensions(1024 * 1024, image_size[0] / image_size[1])
         height = height or calculated_height
         width = width or calculated_width
 
@@ -127,7 +100,9 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
 
         # 1. Check inputs
         self.check_inputs(
-            prompt, height, width,
+            prompt,
+            height,
+            width,
             negative_prompt=negative_prompt,
             prompt_embeds=prompt_embeds,
             negative_prompt_embeds=negative_prompt_embeds,
@@ -158,13 +133,9 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
         #     multimodal text encoder (cross-attention keys/values).
         #   • vae_image        (~1024²) — high-res crop encoded by the VAE
         #     into the latent space and concatenated with the noisy latent.
-        if image is not None and not (
-            isinstance(image, torch.Tensor) and image.size(1) == self.latent_channels
-        ):
+        if image is not None and not (isinstance(image, torch.Tensor) and image.size(1) == self.latent_channels):
             image_width, image_height = image.size
-            condition_width, condition_height = calculate_dimensions(
-                CONDITION_IMAGE_SIZE, image_width / image_height
-            )
+            condition_width, condition_height = calculate_dimensions(CONDITION_IMAGE_SIZE, image_width / image_height)
             vae_width, vae_height = calculate_dimensions(VAE_IMAGE_SIZE, image_width / image_height)
             condition_image = self.image_processor.resize(image, condition_height, condition_width)
             # unsqueeze(2) adds a temporal dimension expected by the 3-D VAE.
@@ -182,8 +153,7 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
             )
         elif true_cfg_scale <= 1 and has_neg_prompt:
             logger.warning(
-                "negative_prompt is passed but classifier-free guidance is not enabled since "
-                "true_cfg_scale <= 1"
+                "negative_prompt is passed but classifier-free guidance is not enabled since true_cfg_scale <= 1"
             )
 
         # True CFG is active only when a negative prompt is given AND the scale
@@ -192,18 +162,23 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
 
         # Encode the conditional prompt (text + condition thumbnail).
         prompt_embeds, prompt_embeds_mask = self.encode_prompt(
-            image=[condition_image], prompt=prompt,
-            prompt_embeds=prompt_embeds, prompt_embeds_mask=prompt_embeds_mask,
-            device=device, num_images_per_prompt=num_images_per_prompt,
+            image=[condition_image],
+            prompt=prompt,
+            prompt_embeds=prompt_embeds,
+            prompt_embeds_mask=prompt_embeds_mask,
+            device=device,
+            num_images_per_prompt=num_images_per_prompt,
             max_sequence_length=max_sequence_length,
         )
         if do_true_cfg:
             # Encode the unconditional (negative) prompt separately.
             negative_prompt_embeds, negative_prompt_embeds_mask = self.encode_prompt(
-                image=[condition_image], prompt=negative_prompt,
+                image=[condition_image],
+                prompt=negative_prompt,
                 prompt_embeds=negative_prompt_embeds,
                 prompt_embeds_mask=negative_prompt_embeds_mask,
-                device=device, num_images_per_prompt=num_images_per_prompt,
+                device=device,
+                num_images_per_prompt=num_images_per_prompt,
                 max_sequence_length=max_sequence_length,
             )
 
@@ -213,9 +188,12 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
             [vae_image],
             batch_size * num_images_per_prompt,
             num_channels_latents,
-            height, width,
+            height,
+            width,
             prompt_embeds.dtype,
-            device, generator, latents,
+            device,
+            generator,
+            latents,
         )
 
         # img_shapes tells the transformer the spatial extent of each sequence
@@ -232,10 +210,7 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
         ] * batch_size
 
         # 5. Prepare timesteps
-        sigmas = (
-            np.linspace(1.0, 1 / num_inference_steps, num_inference_steps)
-            if sigmas is None else sigmas
-        )
+        sigmas = np.linspace(1.0, 1 / num_inference_steps, num_inference_steps) if sigmas is None else sigmas
         image_seq_len = latents.shape[1]
         # calculate_shift adapts the flow-matching time shift μ based on the
         # sequence length so that longer sequences denoise more slowly.
@@ -247,7 +222,11 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
             self.scheduler.config.get("max_shift", 1.15),
         )
         timesteps, num_inference_steps = retrieve_timesteps(
-            self.scheduler, num_inference_steps, device, sigmas=sigmas, mu=mu,
+            self.scheduler,
+            num_inference_steps,
+            device,
+            sigmas=sigmas,
+            mu=mu,
         )
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
         self._num_timesteps = len(timesteps)
@@ -260,8 +239,7 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
             guidance = guidance.expand(latents.shape[0])
         elif not self.transformer.config.guidance_embeds and guidance_scale is not None:
             logger.warning(
-                f"guidance_scale is passed as {guidance_scale}, but ignored since the model "
-                f"is not guidance-distilled."
+                f"guidance_scale is passed as {guidance_scale}, but ignored since the model is not guidance-distilled."
             )
             guidance = None
         else:
@@ -272,12 +250,9 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
 
         # Pre-compute per-sample text sequence lengths to avoid recomputing
         # them inside the loop; used by the transformer's attention mask logic.
-        txt_seq_lens = (
-            prompt_embeds_mask.sum(dim=1).tolist() if prompt_embeds_mask is not None else None
-        )
+        txt_seq_lens = prompt_embeds_mask.sum(dim=1).tolist() if prompt_embeds_mask is not None else None
         negative_txt_seq_lens = (
-            negative_prompt_embeds_mask.sum(dim=1).tolist()
-            if negative_prompt_embeds_mask is not None else None
+            negative_prompt_embeds_mask.sum(dim=1).tolist() if negative_prompt_embeds_mask is not None else None
         )
 
         # 6. Denoising loop
@@ -346,9 +321,8 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
                 latents_dtype = latents.dtype
                 latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
 
-                if latents.dtype != latents_dtype:
-                    if torch.backends.mps.is_available():
-                        latents = latents.to(latents_dtype)
+                if latents.dtype != latents_dtype and torch.backends.mps.is_available():
+                    latents = latents.to(latents_dtype)
 
                 if callback_on_step_end is not None:
                     callback_kwargs = {}
@@ -358,9 +332,7 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
                     latents = callback_outputs.pop("latents", latents)
                     prompt_embeds = callback_outputs.pop("prompt_embeds", prompt_embeds)
 
-                if i == len(timesteps) - 1 or (
-                    (i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0
-                ):
+                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
                     progress_bar.update()
 
                 if XLA_AVAILABLE:
@@ -383,9 +355,9 @@ class PanoDiffusionPipeline(QwenImageEditPlusPipeline):
                 .view(1, self.vae.config.z_dim, 1, 1, 1)
                 .to(latents.device, latents.dtype)
             )
-            latents_std = 1.0 / torch.tensor(self.vae.config.latents_std).view(
-                1, self.vae.config.z_dim, 1, 1, 1
-            ).to(latents.device, latents.dtype)
+            latents_std = 1.0 / torch.tensor(self.vae.config.latents_std).view(1, self.vae.config.z_dim, 1, 1, 1).to(
+                latents.device, latents.dtype
+            )
             latents = latents.to(self.vae.dtype)
             latents = latents / latents_std + latents_mean
             # Decode; [:, :, 0] selects the single temporal frame.

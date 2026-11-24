@@ -1,8 +1,6 @@
-"""Module for base_models -> perception_core -> general_perception -> open_clip -> audio -> transform.py functionality."""
-
 import random
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -12,75 +10,33 @@ from .config import CLIPAudioCfg
 
 @dataclass
 class AudioAugmentationCfg:
-    """Audio augmentation cfg implementation."""
     data_trunc: str = "rand_trunc"
     data_fill: str = "repeatpad"
     enable_fusion: bool = False
     int16_normalize: bool = False
 
 
-def _as_audio_cfg_dict(audio_cfg: Union[CLIPAudioCfg, Dict[str, Any]]) -> Dict[str, Any]:
-    """Helper function to as audio cfg dict.
-
-    Args:
-        audio_cfg: The audio cfg.
-
-    Returns:
-        The return value.
-    """
+def _as_audio_cfg_dict(audio_cfg: CLIPAudioCfg | dict[str, Any]) -> dict[str, Any]:
     if isinstance(audio_cfg, CLIPAudioCfg):
         return asdict(audio_cfg)
     return dict(audio_cfg)
 
 
-def get_audio_frame_count(audio_cfg: Union[CLIPAudioCfg, Dict[str, Any]]) -> int:
-    """Get audio frame count.
-
-    Args:
-        audio_cfg: The audio cfg.
-
-    Returns:
-        The return value.
-    """
+def get_audio_frame_count(audio_cfg: CLIPAudioCfg | dict[str, Any]) -> int:
     cfg = _as_audio_cfg_dict(audio_cfg)
     return cfg.get("clip_samples", 480000) // cfg.get("hop_size", 480) + 1
 
 
 def int16_to_float32_torch(x: torch.Tensor) -> torch.Tensor:
-    """Int16 to float32 torch.
-
-    Args:
-        x: The x.
-
-    Returns:
-        The return value.
-    """
     return (x / 32767.0).type(torch.float32)
 
 
 def float32_to_int16_torch(x: torch.Tensor) -> torch.Tensor:
-    """Float32 to int16 torch.
-
-    Args:
-        x: The x.
-
-    Returns:
-        The return value.
-    """
     x = torch.clamp(x, min=-1.0, max=1.0)
     return (x * 32767.0).type(torch.int16)
 
 
-def _get_mel(audio_data: torch.Tensor, audio_cfg: Dict[str, Any]) -> torch.Tensor:
-    """Helper function to get mel.
-
-    Args:
-        audio_data: The audio data.
-        audio_cfg: The audio cfg.
-
-    Returns:
-        The return value.
-    """
+def _get_mel(audio_data: torch.Tensor, audio_cfg: dict[str, Any]) -> torch.Tensor:
     import torchaudio
 
     mel_tf = torchaudio.transforms.MelSpectrogram(
@@ -105,20 +61,12 @@ class AudioPreprocess:
     """Picklable audio preprocessing callable for DataLoader spawn/forkserver workers."""
 
     def __init__(
-            self,
-            audio_cfg: Union[CLIPAudioCfg, Dict[str, Any]],
-            data_fill: str = "repeatpad",
-            data_trunc: str = "rand_trunc",
-            int16_normalize: bool = False,
+        self,
+        audio_cfg: CLIPAudioCfg | dict[str, Any],
+        data_fill: str = "repeatpad",
+        data_trunc: str = "rand_trunc",
+        int16_normalize: bool = False,
     ):
-        """Init.
-
-        Args:
-            audio_cfg: The audio cfg.
-            data_fill: The data fill.
-            data_trunc: The data trunc.
-            int16_normalize: The int16 normalize.
-        """
         self.cfg = _as_audio_cfg_dict(audio_cfg)
         self.data_fill = data_fill
         self.data_trunc = data_trunc
@@ -128,16 +76,11 @@ class AudioPreprocess:
         self.hop_size = self.cfg.get("hop_size", 480)
 
     def _fill_waveform(self, waveform):
-        """Helper function to fill waveform.
-
-        Args:
-            waveform: The waveform.
-        """
         if len(waveform) >= self.clip_samples:
-            return waveform[:self.clip_samples]
+            return waveform[: self.clip_samples]
         if self.data_fill == "repeat":
             repeats = int(np.ceil(self.clip_samples / len(waveform)))
-            waveform = waveform.repeat(repeats)[:self.clip_samples]
+            waveform = waveform.repeat(repeats)[: self.clip_samples]
         elif self.data_fill == "repeatpad":
             repeats = self.clip_samples // len(waveform)
             waveform = waveform.repeat(repeats)
@@ -149,11 +92,6 @@ class AudioPreprocess:
         return waveform
 
     def __call__(self, audio_data):
-        """Call.
-
-        Args:
-            audio_data: The audio data.
-        """
         import torchaudio
 
         waveform, sr = audio_data
@@ -191,18 +129,18 @@ class AudioPreprocess:
                     elif global_mel.shape[0] > chunk_frames:
                         overflow = global_mel.shape[0] - chunk_frames
                         idx = random.randint(0, overflow)
-                        global_mel = global_mel[idx:idx + chunk_frames]
-                    mel_fusion = torch.stack([global_mel] + local_mels, dim=0)
+                        global_mel = global_mel[idx : idx + chunk_frames]
+                    mel_fusion = torch.stack([global_mel] + local_mels, dim=0)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                     longer = True
                 result["mel_fusion"] = mel_fusion
-                waveform = waveform[:self.clip_samples]
+                waveform = waveform[: self.clip_samples]
             elif self.data_trunc == "rand_trunc":
                 overflow = len(waveform) - self.clip_samples
                 idx = random.randint(0, overflow)
-                waveform = waveform[idx:idx + self.clip_samples]
+                waveform = waveform[idx : idx + self.clip_samples]
                 longer = True
             elif self.data_trunc == "trunc":
-                waveform = waveform[:self.clip_samples]
+                waveform = waveform[: self.clip_samples]
                 longer = True
             else:
                 raise ValueError(f"Unsupported audio truncation mode: {self.data_trunc}")
@@ -219,19 +157,11 @@ class AudioPreprocess:
 
 
 def make_audio_preprocess(
-        audio_cfg: Union[CLIPAudioCfg, Dict[str, Any]],
-        data_fill: str = "repeatpad",
-        data_trunc: str = "rand_trunc",
-        int16_normalize: bool = False,
+    audio_cfg: CLIPAudioCfg | dict[str, Any],
+    data_fill: str = "repeatpad",
+    data_trunc: str = "rand_trunc",
+    int16_normalize: bool = False,
 ):
-    """Make audio preprocess.
-
-    Args:
-        audio_cfg: The audio cfg.
-        data_fill: The data fill.
-        data_trunc: The data trunc.
-        int16_normalize: The int16 normalize.
-    """
     return AudioPreprocess(
         audio_cfg,
         data_fill=data_fill,
@@ -241,17 +171,10 @@ def make_audio_preprocess(
 
 
 def audio_transform_v2(
-        audio_cfg: Union[CLIPAudioCfg, Dict[str, Any]],
-        is_train: bool = False,
-        audio_aug_cfg: Union[AudioAugmentationCfg, Dict[str, Any], None] = None,
+    audio_cfg: CLIPAudioCfg | dict[str, Any],
+    is_train: bool = False,
+    audio_aug_cfg: AudioAugmentationCfg | dict[str, Any] | None = None,
 ):
-    """Audio transform v2.
-
-    Args:
-        audio_cfg: The audio cfg.
-        is_train: The is train.
-        audio_aug_cfg: The audio aug cfg.
-    """
     cfg = _as_audio_cfg_dict(audio_cfg)
     if isinstance(audio_aug_cfg, dict):
         audio_aug_cfg = AudioAugmentationCfg(**audio_aug_cfg)

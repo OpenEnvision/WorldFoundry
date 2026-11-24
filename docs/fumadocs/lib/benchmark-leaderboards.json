@@ -309,7 +309,8 @@
       "kind": "live",
       "liveUrl": "https://molmospaces.allen.ai/leaderboard",
       "liveLabel": "molmospaces.allen.ai",
-      "liveLabelZh": "molmospaces.allen.ai"
+      "liveLabelZh": "molmospaces.allen.ai",
+      "liveEmbedUrl": "https://molmospaces.allen.ai/leaderboard"
     },
     "rlbench": {
       "kind": "empty",
@@ -431,7 +432,8 @@
       "kind": "live",
       "liveUrl": "https://robotwin-platform.github.io/leaderboard",
       "liveLabel": "robotwin-platform.github.io",
-      "liveLabelZh": "robotwin-platform.github.io"
+      "liveLabelZh": "robotwin-platform.github.io",
+      "liveEmbedUrl": "https://robotwin-platform.github.io/leaderboard"
     },
     "simpler-env": {
       "kind": "paper",
@@ -607,7 +609,8 @@
       "kind": "live",
       "liveUrl": "https://sy77777en.github.io/CameraBench/leaderboard/table.html",
       "liveLabel": "sy77777en.github.io/CameraBench",
-      "liveLabelZh": "sy77777en.github.io/CameraBench"
+      "liveLabelZh": "sy77777en.github.io/CameraBench",
+      "liveEmbedUrl": "https://sy77777en.github.io/CameraBench/leaderboard/table.html"
     },
     "chronomagic-bench": {
       "kind": "live",

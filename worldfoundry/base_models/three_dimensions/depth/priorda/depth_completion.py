@@ -2,13 +2,10 @@
 # https://github.com/SpatialVision/Prior-Depth-Anything
 # Licensed under the Apache-2.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> three_dimensions -> depth -> priorda -> depth_completion.py functionality."""
-
+import os
 import re
 import time
 import warnings
-import os
-from typing import Dict, Tuple
 
 import torch
 
@@ -17,20 +14,11 @@ from .utils import depth2disparity
 
 
 class DepthCompletion(torch.nn.Module):
-    """Depth completion implementation."""
     @staticmethod
     def build(**kwargs):
-        """Build."""
         return DepthCompletion(**kwargs)
 
     def __init__(self, args, fmde_path, device=None):
-        """Init.
-
-        Args:
-            args: The args.
-            fmde_path: The fmde path.
-            device: The device.
-        """
         super().__init__()
 
         self.args = args
@@ -40,11 +28,6 @@ class DepthCompletion(torch.nn.Module):
         self.depth_model = self.init_depth_model(fmde_path)
 
     def set_device(self, device=None):
-        """Set device.
-
-        Args:
-            device: The device.
-        """
         if device is not None:
             self.device = device
             return
@@ -63,16 +46,6 @@ class DepthCompletion(torch.nn.Module):
         prior_depths,
         geometric_depths,
     ):
-        """Unify format.
-
-        Args:
-            images: The images.
-            sparse_depths: The sparse depths.
-            sparse_masks: The sparse masks.
-            cover_masks: The cover masks.
-            prior_depths: The prior depths.
-            geometric_depths: The geometric depths.
-        """
         # Tune the shape of the tensors.
         if images.max() <= 1:
             images = images * 255
@@ -136,7 +109,7 @@ class DepthCompletion(torch.nn.Module):
 
         # Preprocess pred_disparities.
         if geometric_depths is not None:
-            warnings.warn("The geometric depth is provided by the user. ")
+            warnings.warn("The geometric depth is provided by the user. ", stacklevel=1)
             pred_disparities = depth2disparity(geometric_depths)
         else:
             # heit = sparse_depths.shape[-2] // 14 * 14
@@ -174,7 +147,7 @@ class DepthCompletion(torch.nn.Module):
         prior_depths=None,
         geometric_depths=None,
         pattern=None,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """
         Processe input images and sparse depth information to produce completed depth maps.
         We use global alignment and KNN alignment to refine the depth predictions.
@@ -270,14 +243,6 @@ class DepthCompletion(torch.nn.Module):
         return depth_model
 
     def calc_scale_shift(self, k_sparse_targets, k_pred_targets, currk_dists=None, knn=False):
-        """Calc scale shift.
-
-        Args:
-            k_sparse_targets: The k sparse targets.
-            k_pred_targets: The k pred targets.
-            currk_dists: The currk dists.
-            knn: The knn.
-        """
         k_pred_targets += torch.rand(*k_pred_targets.shape, device=self.device) * 1e-5
         X = torch.stack([k_pred_targets, torch.ones_like(k_pred_targets, device=self.device)], dim=2)
 
@@ -294,7 +259,7 @@ class DepthCompletion(torch.nn.Module):
 
     def perform_weighted(
         self, sparse_ori: torch.Tensor, pred_ori: torch.Tensor, dists: torch.Tensor
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         """
         Perform weighted operations on input tensors using distance-based weights. A diagonal
         matrix is created from the normalized weights and used to weight the inputs.
@@ -325,7 +290,7 @@ class DepthCompletion(torch.nn.Module):
 
     def knn_aligns(
         self, sparse_disparities, pred_disparities, sparse_masks, complete_masks, K
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         """
         Perform K-Nearest Neighbors (KNN) alignment on sparse and predicted disparities.
 
@@ -397,11 +362,6 @@ class DepthCompletion(torch.nn.Module):
         K: int,
         chunk_size: int = 65536,
     ) -> torch.Tensor:
-        """Helper function to torch knn indices.
-
-        Returns:
-            The return value.
-        """
         indices: list[torch.Tensor] = []
         for batch_id in batch_y.unique(sorted=True):
             x_mask = batch_x == batch_id
@@ -464,7 +424,7 @@ class DepthCompletion(torch.nn.Module):
         scaled_preds[sparse_masks] = sparse_disparities[sparse_masks]
         return scaled_preds
 
-    def global_aligns(self, sparse_disparities, pred_disparities, sparse_masks) -> Tuple[torch.Tensor, ...]:
+    def global_aligns(self, sparse_disparities, pred_disparities, sparse_masks) -> tuple[torch.Tensor, ...]:
         """
         Perform global alignment on sparse and predicted disparities. Extract the valid disparities from
         both sparse and predicted map based on the sparse masks.

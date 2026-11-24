@@ -18,11 +18,11 @@ import torch
 from torch import nn
 from torch.utils.data import Dataset, TensorDataset
 
+from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
 from worldfoundry.core.utils.tensors import torch as torch_utils
 from worldfoundry.core.utils.tensors.torch import (
     DDPMethodWrapper,
     get_seed,
-    load_torch,
     sequential_split_dataset,
     set_seed_everywhere,
     torch_flatten_indices,
@@ -61,7 +61,7 @@ def _checkpoint_roundtrip(tmp_path: Path, device: str) -> None:
     parent = nn.ModuleDict({"model": net, "method": DDPMethodWrapper(net, "forward")})
     path = tmp_path / "weights.pt"
     torch.save(parent.state_dict(), path)
-    state = load_torch(str(tmp_path), path.name, map_location=device)
+    state = load_torch_checkpoint(str(path), map_location=device)
     assert set(state) == {"model.weight", "model.bias"}
     restored = nn.Linear(2, 2, device=device)
     restored.load_state_dict({key.removeprefix("model."): value for key, value in state.items()})
@@ -78,18 +78,6 @@ def test_cuda_checkpoint_roundtrip_restores_the_weight_owner(tmp_path: Path) -> 
     if not torch.cuda.is_available():
         pytest.skip("CUDA device unavailable")
     _checkpoint_roundtrip(tmp_path, "cuda")
-
-
-def test_load_torch_reports_the_joined_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    import worldfoundry.core.model_loading as model_loading
-
-    def fail(*args: object, **kwargs: object) -> None:
-        raise RuntimeError("checkpoint unreadable")
-
-    monkeypatch.setattr(model_loading, "load_torch_checkpoint", fail)
-    with pytest.raises(RuntimeError, match="checkpoint unreadable") as error:
-        load_torch(str(tmp_path), "weights.pt")
-    assert f"Error loading {tmp_path / 'weights.pt'}" in str(error.value)
 
 
 @pytest.mark.parametrize("seed", [0, 7, None, -1, "system"])

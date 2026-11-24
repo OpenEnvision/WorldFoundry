@@ -8,7 +8,7 @@ groups:
 source_repos:
 - url: https://github.com/AlayaLab/AlayaWorld
   revision: ea03cfbb2e4c4e9102ed8ea8562e0b5370ca9b79
-  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/AlayaLab--AlayaWorld
+  in_tree_path: worldfoundry/synthesis/visual_generation/alayaworld_v11/alayaworld_v11_runtime
 checkpoints:
 - repo_id: AlayaLab/AlayaWorld-v1.1-stage2b
   revision: 17f2f8a4939d85920b8a6c5191ce88dec7f862d1
@@ -42,7 +42,7 @@ artifact_kind: generated_world
 artifact_filename: alayaworld-v1.1.mp4
 execution:
   environment: alayaworld-v1.1
-  backend_stage: official_external_runtime
+  backend_stage: official_in_tree_runtime
   runtime_status: cpu_contract_validated_checkpoint_gpu_pending
   integration_status: integrated
   pipeline_binding: alayaworld-v1.1
@@ -51,7 +51,7 @@ integration:
   status: integrated
 license: ltx-2-community-license
 notes:
-- Uses extracted inference-only rollout methods and inference configuration sections; no trainer or optimizer is instantiated.
+- Uses the vendored inference-only rollout, configuration schema and LTX-2.3 transformer; no trainer or optimizer is instantiated.
 - CPU configuration and adapter contracts checked; checkpoint loading, VRAM usage and GPU artifact parity remain pending.
 - Single-GPU inference bridge; full-window native VAE encoding may use more peak memory than the upstream streaming encoder.
 usage_restrictions:

@@ -34,7 +34,7 @@ if not report.ok:
 
 ## `LocalAsset`
 
-Local asset 把稳定 manifest identity、解析后路径与当前 `ready` 状态放在一起。Readiness 只表示路径存在，不证明 checkpoint 完整、dataset license 已接受或 runtime 能成功加载内容。
+Local asset 同时记录稳定 manifest identity、解析后路径与当前 `ready` 状态。Readiness 只表示路径存在，不证明 checkpoint 完整、dataset license 已接受或 runtime 能成功加载内容。
 
 <PythonApiReference symbol="worldfoundry.runtime.assets.LocalAsset" locale="zh" />
 

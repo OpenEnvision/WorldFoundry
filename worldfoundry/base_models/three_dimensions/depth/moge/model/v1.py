@@ -1,12 +1,9 @@
-"""Module for base_models -> three_dimensions -> depth -> moge -> model -> v1.py functionality."""
-
-from typing import *
-from numbers import Number
-from functools import partial
-from pathlib import Path
+# ruff: noqa: F405 - Names come from the upstream star import.
 import importlib
 import warnings
-import json
+from numbers import Number
+from pathlib import Path
+from typing import *  # noqa: F403 - Upstream star import kept as written.
 
 import torch
 import torch.nn as nn
@@ -14,180 +11,211 @@ import torch.nn.functional as F
 import torch.utils
 import torch.utils.checkpoint
 import torch.version
+
+# isort: split
 from ....general_3d.eastern_journalist.utils3d.torch import depth_map_to_point_map, intrinsics_from_focal_center
+
+# isort: split
 from huggingface_hub import hf_hub_download
 
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.utils import (
+    create_uv_grid as normalized_view_plane_uv,
+)
 
-from ..utils.geometry_torch import normalized_view_plane_uv, recover_focal_shift, gaussian_blur_2d, dilate_with_mask
-from .utils import wrap_dinov2_attention_with_sdpa, wrap_module_with_gradient_checkpointing, unwrap_module_with_gradient_checkpointing
-from ..utils.tools import timeit
+from ..utils.geometry_torch import recover_focal_shift
+from .utils import (
+    wrap_module_with_gradient_checkpointing,
+)
 
 
-class ResidualConvBlock(nn.Module):  
-    """Residual conv block implementation."""
-    def __init__(self, in_channels: int, out_channels: int = None, hidden_channels: int = None, padding_mode: str = 'replicate', activation: Literal['relu', 'leaky_relu', 'silu', 'elu'] = 'relu', norm: Literal['group_norm', 'layer_norm'] = 'group_norm'):  
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            hidden_channels: The hidden channels.
-            padding_mode: The padding mode.
-            activation: The activation.
-            norm: The norm.
-        """
-        super(ResidualConvBlock, self).__init__()  
-        if out_channels is None:  
+class ResidualConvBlock(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int | None = None,
+        hidden_channels: int | None = None,
+        padding_mode: str = "replicate",
+        activation: Literal["relu", "leaky_relu", "silu", "elu"] = "relu",
+        norm: Literal["group_norm", "layer_norm"] = "group_norm",
+    ):
+        super().__init__()
+        if out_channels is None:
             out_channels = in_channels
         if hidden_channels is None:
             hidden_channels = in_channels
 
-        if activation =='relu':
-            activation_cls = lambda: nn.ReLU(inplace=True)
-        elif activation == 'leaky_relu':
-            activation_cls = lambda: nn.LeakyReLU(negative_slope=0.2, inplace=True)
-        elif activation =='silu':
-            activation_cls = lambda: nn.SiLU(inplace=True)
-        elif activation == 'elu':
-            activation_cls = lambda: nn.ELU(inplace=True)
+        if activation == "relu":
+
+            def activation_cls():
+                return nn.ReLU(inplace=True)
+        elif activation == "leaky_relu":
+
+            def activation_cls():
+                return nn.LeakyReLU(negative_slope=0.2, inplace=True)
+        elif activation == "silu":
+
+            def activation_cls():
+                return nn.SiLU(inplace=True)
+        elif activation == "elu":
+
+            def activation_cls():
+                return nn.ELU(inplace=True)
         else:
-            raise ValueError(f'Unsupported activation function: {activation}')
+            raise ValueError(f"Unsupported activation function: {activation}")
 
         self.layers = nn.Sequential(
             nn.GroupNorm(1, in_channels),
             activation_cls(),
             nn.Conv2d(in_channels, hidden_channels, kernel_size=3, padding=1, padding_mode=padding_mode),
-            nn.GroupNorm(hidden_channels // 32 if norm == 'group_norm' else 1, hidden_channels),
+            nn.GroupNorm(hidden_channels // 32 if norm == "group_norm" else 1, hidden_channels),
             activation_cls(),
-            nn.Conv2d(hidden_channels, out_channels, kernel_size=3, padding=1, padding_mode=padding_mode)
+            nn.Conv2d(hidden_channels, out_channels, kernel_size=3, padding=1, padding_mode=padding_mode),
         )
-        
-        self.skip_connection = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0) if in_channels != out_channels else nn.Identity()  
-  
-    def forward(self, x):  
-        """Forward.
 
-        Args:
-            x: The x.
-        """
-        skip = self.skip_connection(x)  
+        self.skip_connection = (
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
+            if in_channels != out_channels
+            else nn.Identity()
+        )
+
+    def forward(self, x):
+        skip = self.skip_connection(x)
         x = self.layers(x)
         x = x + skip
-        return x  
+        return x
 
 
 class Head(nn.Module):
-    """Head implementation."""
     def __init__(
-        self, 
+        self,
         num_features: int,
-        dim_in: int, 
-        dim_out: List[int], 
+        dim_in: int,
+        dim_out: List[int],
         dim_proj: int = 512,
-        dim_upsample: List[int] = [256, 128, 128],
+        dim_upsample: List[int] = [256, 128, 128],  # noqa: B006 - Keeps the upstream default object and signature.
         dim_times_res_block_hidden: int = 1,
         num_res_blocks: int = 1,
-        res_block_norm: Literal['group_norm', 'layer_norm'] = 'group_norm',
+        res_block_norm: Literal["group_norm", "layer_norm"] = "group_norm",
         last_res_blocks: int = 0,
         last_conv_channels: int = 32,
-        last_conv_size: int = 1
+        last_conv_size: int = 1,
     ):
-        """Init.
-
-        Args:
-            num_features: The num features.
-            dim_in: The dim in.
-            dim_out: The dim out.
-            dim_proj: The dim proj.
-            dim_upsample: The dim upsample.
-            dim_times_res_block_hidden: The dim times res block hidden.
-            num_res_blocks: The num res blocks.
-            res_block_norm: The res block norm.
-            last_res_blocks: The last res blocks.
-            last_conv_channels: The last conv channels.
-            last_conv_size: The last conv size.
-        """
         super().__init__()
-        
-        self.projects = nn.ModuleList([
-            nn.Conv2d(in_channels=dim_in, out_channels=dim_proj, kernel_size=1, stride=1, padding=0,) for _ in range(num_features)
-        ])
 
-        self.upsample_blocks = nn.ModuleList([
-            nn.Sequential(
-                self._make_upsampler(in_ch + 2, out_ch),
-                *(ResidualConvBlock(out_ch, out_ch, dim_times_res_block_hidden * out_ch, activation="relu", norm=res_block_norm) for _ in range(num_res_blocks))
-            ) for in_ch, out_ch in zip([dim_proj] + dim_upsample[:-1], dim_upsample)
-        ])
+        self.projects = nn.ModuleList(
+            [
+                nn.Conv2d(
+                    in_channels=dim_in,
+                    out_channels=dim_proj,
+                    kernel_size=1,
+                    stride=1,
+                    padding=0,
+                )
+                for _ in range(num_features)
+            ]
+        )
 
-        self.output_block = nn.ModuleList([
-            self._make_output_block(
-                dim_upsample[-1] + 2, dim_out_, dim_times_res_block_hidden, last_res_blocks, last_conv_channels, last_conv_size, res_block_norm,
-            ) for dim_out_ in dim_out
-        ])
-    
+        self.upsample_blocks = nn.ModuleList(
+            [
+                nn.Sequential(
+                    self._make_upsampler(in_ch + 2, out_ch),
+                    *(
+                        ResidualConvBlock(
+                            out_ch, out_ch, dim_times_res_block_hidden * out_ch, activation="relu", norm=res_block_norm
+                        )
+                        for _ in range(num_res_blocks)
+                    ),
+                )
+                for in_ch, out_ch in zip([dim_proj] + dim_upsample[:-1], dim_upsample, strict=False)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+            ]
+        )
+
+        self.output_block = nn.ModuleList(
+            [
+                self._make_output_block(
+                    dim_upsample[-1] + 2,
+                    dim_out_,
+                    dim_times_res_block_hidden,
+                    last_res_blocks,
+                    last_conv_channels,
+                    last_conv_size,
+                    res_block_norm,
+                )
+                for dim_out_ in dim_out
+            ]
+        )
+
     def _make_upsampler(self, in_channels: int, out_channels: int):
-        """Helper function to make upsampler.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-        """
         upsampler = nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, padding_mode='replicate')
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, padding_mode="replicate"),
         )
         upsampler[0].weight.data[:] = upsampler[0].weight.data[:, :, :1, :1]
         return upsampler
 
-    def _make_output_block(self, dim_in: int, dim_out: int, dim_times_res_block_hidden: int, last_res_blocks: int, last_conv_channels: int, last_conv_size: int, res_block_norm: Literal['group_norm', 'layer_norm']):
-        """Helper function to make output block.
-
-        Args:
-            dim_in: The dim in.
-            dim_out: The dim out.
-            dim_times_res_block_hidden: The dim times res block hidden.
-            last_res_blocks: The last res blocks.
-            last_conv_channels: The last conv channels.
-            last_conv_size: The last conv size.
-            res_block_norm: The res block norm.
-        """
+    def _make_output_block(
+        self,
+        dim_in: int,
+        dim_out: int,
+        dim_times_res_block_hidden: int,
+        last_res_blocks: int,
+        last_conv_channels: int,
+        last_conv_size: int,
+        res_block_norm: Literal["group_norm", "layer_norm"],
+    ):
         return nn.Sequential(
-            nn.Conv2d(dim_in, last_conv_channels, kernel_size=3, stride=1, padding=1, padding_mode='replicate'),
-            *(ResidualConvBlock(last_conv_channels, last_conv_channels, dim_times_res_block_hidden * last_conv_channels, activation='relu', norm=res_block_norm) for _ in range(last_res_blocks)),
+            nn.Conv2d(dim_in, last_conv_channels, kernel_size=3, stride=1, padding=1, padding_mode="replicate"),
+            *(
+                ResidualConvBlock(
+                    last_conv_channels,
+                    last_conv_channels,
+                    dim_times_res_block_hidden * last_conv_channels,
+                    activation="relu",
+                    norm=res_block_norm,
+                )
+                for _ in range(last_res_blocks)
+            ),
             nn.ReLU(inplace=True),
-            nn.Conv2d(last_conv_channels, dim_out, kernel_size=last_conv_size, stride=1, padding=last_conv_size // 2, padding_mode='replicate'),
+            nn.Conv2d(
+                last_conv_channels,
+                dim_out,
+                kernel_size=last_conv_size,
+                stride=1,
+                padding=last_conv_size // 2,
+                padding_mode="replicate",
+            ),
         )
-            
-    def forward(self, hidden_states: torch.Tensor, image: torch.Tensor):
-        """Forward.
 
-        Args:
-            hidden_states: The hidden states.
-            image: The image.
-        """
+    def forward(self, hidden_states: torch.Tensor, image: torch.Tensor):
         img_h, img_w = image.shape[-2:]
         patch_h, patch_w = img_h // 14, img_w // 14
 
         # Process the hidden states
-        x = torch.stack([
-            proj(feat.permute(0, 2, 1).unflatten(2, (patch_h, patch_w)).contiguous())
-                for proj, (feat, clstoken) in zip(self.projects, hidden_states)
-        ], dim=1).sum(dim=1)
-        
+        x = torch.stack(
+            [
+                proj(feat.permute(0, 2, 1).unflatten(2, (patch_h, patch_w)).contiguous())
+                for proj, (feat, clstoken) in zip(self.projects, hidden_states, strict=False)
+            ],
+            dim=1,
+        ).sum(dim=1)
+
         # Upsample stage
         # (patch_h, patch_w) -> (patch_h * 2, patch_w * 2) -> (patch_h * 4, patch_w * 4) -> (patch_h * 8, patch_w * 8)
-        for i, block in enumerate(self.upsample_blocks):
+        for _i, block in enumerate(self.upsample_blocks):
             # UV coordinates is for awareness of image aspect ratio
-            uv = normalized_view_plane_uv(width=x.shape[-1], height=x.shape[-2], aspect_ratio=img_w / img_h, dtype=x.dtype, device=x.device)
+            uv = normalized_view_plane_uv(
+                width=x.shape[-1], height=x.shape[-2], aspect_ratio=img_w / img_h, dtype=x.dtype, device=x.device
+            )
             uv = uv.permute(2, 0, 1).unsqueeze(0).expand(x.shape[0], -1, -1, -1)
             x = torch.cat([x, uv], dim=1)
             for layer in block:
                 x = torch.utils.checkpoint.checkpoint(layer, x, use_reentrant=False)
-        
+
         # (patch_h * 8, patch_w * 8) -> (img_h, img_w)
         x = F.interpolate(x, (img_h, img_w), mode="bilinear", align_corners=False)
-        uv = normalized_view_plane_uv(width=x.shape[-1], height=x.shape[-2], aspect_ratio=img_w / img_h, dtype=x.dtype, device=x.device)
+        uv = normalized_view_plane_uv(
+            width=x.shape[-1], height=x.shape[-2], aspect_ratio=img_w / img_h, dtype=x.dtype, device=x.device
+        )
         uv = uv.permute(2, 0, 1).unsqueeze(0).expand(x.shape[0], -1, -1, -1)
         x = torch.cat([x, uv], dim=1)
 
@@ -195,71 +223,60 @@ class Head(nn.Module):
             output = [torch.utils.checkpoint.checkpoint(block, x, use_reentrant=False) for block in self.output_block]
         else:
             output = torch.utils.checkpoint.checkpoint(self.output_block, x, use_reentrant=False)
-        
+
         return output
 
 
 class MoGeModel(nn.Module):
-    """Mo ge model implementation."""
     image_mean: torch.Tensor
     image_std: torch.Tensor
 
-    def __init__(self, 
-        encoder: str = 'dinov2_vitb14', 
+    def __init__(
+        self,
+        encoder: str = "dinov2_vitb14",
         intermediate_layers: Union[int, List[int]] = 4,
         dim_proj: int = 512,
-        dim_upsample: List[int] = [256, 128, 128],
+        dim_upsample: List[int] = [256, 128, 128],  # noqa: B006 - Keeps the upstream default object and signature.
         dim_times_res_block_hidden: int = 1,
         num_res_blocks: int = 1,
-        remap_output: Literal[False, True, 'linear', 'sinh', 'exp', 'sinh_exp'] = 'linear',
-        res_block_norm: Literal['group_norm', 'layer_norm'] = 'group_norm',
-        num_tokens_range: Tuple[Number, Number] = [1200, 2500],
+        remap_output: Literal[False, True, "linear", "sinh", "exp", "sinh_exp"] = "linear",
+        res_block_norm: Literal["group_norm", "layer_norm"] = "group_norm",
+        num_tokens_range: Tuple[Number, Number] = [1200, 2500],  # noqa: B006 - Keeps the upstream default object and signature.
         last_res_blocks: int = 0,
         last_conv_channels: int = 32,
         last_conv_size: int = 1,
         mask_threshold: float = 0.5,
-        **deprecated_kwargs
+        **deprecated_kwargs,
     ):
-        """Init.
-
-        Args:
-            encoder: The encoder.
-            intermediate_layers: The intermediate layers.
-            dim_proj: The dim proj.
-            dim_upsample: The dim upsample.
-            dim_times_res_block_hidden: The dim times res block hidden.
-            num_res_blocks: The num res blocks.
-            remap_output: The remap output.
-            res_block_norm: The res block norm.
-            num_tokens_range: The num tokens range.
-            last_res_blocks: The last res blocks.
-            last_conv_channels: The last conv channels.
-            last_conv_size: The last conv size.
-            mask_threshold: The mask threshold.
-        """
-        super(MoGeModel, self).__init__()
+        super().__init__()
 
         if deprecated_kwargs:
             # Process legacy arguments
-            if 'trained_area_range' in deprecated_kwargs:
-                num_tokens_range = [deprecated_kwargs['trained_area_range'][0] // 14 ** 2, deprecated_kwargs['trained_area_range'][1] // 14 ** 2]
-                del deprecated_kwargs['trained_area_range']
-            warnings.warn(f"The following deprecated/invalid arguments are ignored: {deprecated_kwargs}")
+            if "trained_area_range" in deprecated_kwargs:
+                num_tokens_range = [
+                    deprecated_kwargs["trained_area_range"][0] // 14**2,
+                    deprecated_kwargs["trained_area_range"][1] // 14**2,
+                ]
+                del deprecated_kwargs["trained_area_range"]
+            warnings.warn(f"The following deprecated/invalid arguments are ignored: {deprecated_kwargs}", stacklevel=1)
 
         self.encoder = encoder
         self.remap_output = remap_output
         self.intermediate_layers = intermediate_layers
         self.num_tokens_range = num_tokens_range
         self.mask_threshold = mask_threshold
-        
-        hub_loader = getattr(importlib.import_module(".....perception_core.general_perception.dinov2.hub.backbones", __package__), encoder)
+
+        hub_loader = getattr(
+            importlib.import_module(".....perception_core.general_perception.dinov2.hub.backbones", __package__),
+            encoder,
+        )
         self.backbone = hub_loader(pretrained=False)
         dim_feature = self.backbone.blocks[0].attn.qkv.in_features
-        
+
         self.head = Head(
-            num_features=intermediate_layers if isinstance(intermediate_layers, int) else len(intermediate_layers), 
-            dim_in=dim_feature, 
-            dim_out=[3, 1], 
+            num_features=intermediate_layers if isinstance(intermediate_layers, int) else len(intermediate_layers),
+            dim_in=dim_feature,
+            dim_out=[3, 1],
             dim_proj=dim_proj,
             dim_upsample=dim_upsample,
             dim_times_res_block_hidden=dim_times_res_block_hidden,
@@ -267,7 +284,7 @@ class MoGeModel(nn.Module):
             res_block_norm=res_block_norm,
             last_res_blocks=last_res_blocks,
             last_conv_channels=last_conv_channels,
-            last_conv_size=last_conv_size 
+            last_conv_size=last_conv_size,
         )
 
         image_mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
@@ -278,24 +295,19 @@ class MoGeModel(nn.Module):
 
     @property
     def device(self) -> torch.device:
-        """Device.
-
-        Returns:
-            The return value.
-        """
         return next(self.parameters()).device
 
     @property
     def dtype(self) -> torch.dtype:
-        """Dtype.
-
-        Returns:
-            The return value.
-        """
         return next(self.parameters()).dtype
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, Path, IO[bytes]], model_kwargs: Optional[Dict[str, Any]] = None, **hf_kwargs) -> 'MoGeModel':
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Union[str, Path, IO[bytes]],
+        model_kwargs: Optional[Dict[str, Any]] = None,
+        **hf_kwargs,
+    ) -> "MoGeModel":
         """
         Load a model from a checkpoint file.
 
@@ -312,52 +324,39 @@ class MoGeModel(nn.Module):
             checkpoint_path = local_path / "model.pt" if local_path.is_dir() else local_path
             if not checkpoint_path.is_file():
                 raise FileNotFoundError(f"Expected a MoGe checkpoint file at {checkpoint_path}")
-            checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
+            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
         else:
             cached_checkpoint_path = hf_hub_download(
-                repo_id=pretrained_model_name_or_path,
-                repo_type="model",
-                filename="model.pt",
-                **hf_kwargs
+                repo_id=pretrained_model_name_or_path, repo_type="model", filename="model.pt", **hf_kwargs
             )
-            checkpoint = torch.load(cached_checkpoint_path, map_location='cpu', weights_only=True)
-        model_config = checkpoint['model_config']
+            checkpoint = torch.load(cached_checkpoint_path, map_location="cpu", weights_only=True)
+        model_config = checkpoint["model_config"]
         if model_kwargs is not None:
             model_config.update(model_kwargs)
         model = cls(**model_config)
-        model.load_state_dict(checkpoint['model'])
+        model.load_state_dict(checkpoint["model"])
         return model
 
     def init_weights(self):
-        """Init weights."""
         raise RuntimeError(
             "MoGe v1 init_weights() would require external DINOv2 weights. "
             "Use from_pretrained() with a local MoGe checkpoint instead."
         )
-    
+
     def enable_gradient_checkpointing(self):
-        """Enable gradient checkpointing."""
         for i in range(len(self.backbone.blocks)):
             self.backbone.blocks[i] = wrap_module_with_gradient_checkpointing(self.backbone.blocks[i])
-    
+
     def _remap_points(self, points: torch.Tensor) -> torch.Tensor:
-        """Helper function to remap points.
-
-        Args:
-            points: The points.
-
-        Returns:
-            The return value.
-        """
-        if self.remap_output == 'linear':
+        if self.remap_output == "linear":
             pass
-        elif self.remap_output =='sinh':
+        elif self.remap_output == "sinh":
             points = torch.sinh(points)
-        elif self.remap_output == 'exp':
+        elif self.remap_output == "exp":
             xy, z = points.split([2, 1], dim=-1)
             z = torch.exp(z)
             points = torch.cat([xy * z, z], dim=-1)
-        elif self.remap_output =='sinh_exp':
+        elif self.remap_output == "sinh_exp":
             xy, z = points.split([2, 1], dim=-1)
             points = torch.cat([torch.sinh(xy), torch.exp(z)], dim=-1)
         else:
@@ -365,25 +364,24 @@ class MoGeModel(nn.Module):
         return points
 
     def forward(self, image: torch.Tensor, num_tokens: int) -> Dict[str, torch.Tensor]:
-        """Forward.
-
-        Args:
-            image: The image.
-            num_tokens: The num tokens.
-
-        Returns:
-            The return value.
-        """
         original_height, original_width = image.shape[-2:]
-        
+
         # Resize to expected resolution defined by num_tokens
-        resize_factor = ((num_tokens * 14 ** 2) / (original_height * original_width)) ** 0.5
+        resize_factor = ((num_tokens * 14**2) / (original_height * original_width)) ** 0.5
         resized_width, resized_height = int(original_width * resize_factor), int(original_height * resize_factor)
-        image = F.interpolate(image, (resized_height, resized_width), mode="bicubic", align_corners=False, antialias=True)
-    
+        image = F.interpolate(
+            image, (resized_height, resized_width), mode="bicubic", align_corners=False, antialias=True
+        )
+
         # Apply image transformation for DINOv2
         image = (image - self.image_mean) / self.image_std
-        image_14 = F.interpolate(image, (resized_height // 14 * 14, resized_width // 14 * 14), mode="bilinear", align_corners=False, antialias=True)
+        image_14 = F.interpolate(
+            image,
+            (resized_height // 14 * 14, resized_width // 14 * 14),
+            mode="bilinear",
+            align_corners=False,
+            antialias=True,
+        )
 
         # Get intermediate layers from the backbone
         features = self.backbone.get_intermediate_layers(image_14, self.intermediate_layers, return_class_token=True)
@@ -391,27 +389,31 @@ class MoGeModel(nn.Module):
         # Predict points (and mask)
         output = self.head(features, image)
         points, mask = output
-        
+
         # Make sure fp32 precision for output
         with torch.autocast(device_type=image.device.type, dtype=torch.float32):
             # Resize to original resolution
-            points = F.interpolate(points, (original_height, original_width), mode='bilinear', align_corners=False, antialias=False)
-            mask = F.interpolate(mask, (original_height, original_width), mode='bilinear', align_corners=False, antialias=False)
-            
+            points = F.interpolate(
+                points, (original_height, original_width), mode="bilinear", align_corners=False, antialias=False
+            )
+            mask = F.interpolate(
+                mask, (original_height, original_width), mode="bilinear", align_corners=False, antialias=False
+            )
+
             # Post-process points and mask
             points, mask = points.permute(0, 2, 3, 1), mask.squeeze(1)
-            points = self._remap_points(points)     # slightly improves the performance in case of very large output values
+            points = self._remap_points(points)  # slightly improves the performance in case of very large output values
 
-        return_dict = {'points': points, 'mask': mask}
+        return_dict = {"points": points, "mask": mask}
         return return_dict
 
     @torch.inference_mode()
     def infer(
-        self, 
-        image: torch.Tensor, 
+        self,
+        image: torch.Tensor,
         fov_x: Union[Number, torch.Tensor] = None,
         resolution_level: int = 9,
-        num_tokens: int = None,
+        num_tokens: int | None = None,
         apply_mask: bool = True,
         force_projection: bool = True,
         use_fp16: bool = True,
@@ -451,14 +453,16 @@ class MoGeModel(nn.Module):
         if num_tokens is None:
             min_tokens, max_tokens = self.num_tokens_range
             num_tokens = int(min_tokens + (resolution_level / 9) * (max_tokens - min_tokens))
-        
-        with torch.autocast(device_type=self.device.type, dtype=torch.float16, enabled=use_fp16 and self.dtype != torch.float16):
+
+        with torch.autocast(
+            device_type=self.device.type, dtype=torch.float16, enabled=use_fp16 and self.dtype != torch.float16
+        ):
             output = self.forward(image, num_tokens)
-        points, mask = output['points'], output['mask']
+        points, mask = output["points"], output["mask"]
 
         # Always process the output in fp32 precision
         with torch.autocast(device_type=self.device.type, dtype=torch.float32):
-            points, mask, fov_x = map(lambda x: x.float() if isinstance(x, torch.Tensor) else x, [points, mask, fov_x])
+            points, mask, fov_x = (x.float() if isinstance(x, torch.Tensor) else x for x in [points, mask, fov_x])
 
             mask_binary = mask > self.mask_threshold
 
@@ -466,20 +470,32 @@ class MoGeModel(nn.Module):
             if fov_x is None:
                 focal, shift = recover_focal_shift(points, mask_binary)
             else:
-                focal = aspect_ratio / (1 + aspect_ratio ** 2) ** 0.5 / torch.tan(torch.deg2rad(torch.as_tensor(fov_x, device=points.device, dtype=points.dtype) / 2))
+                focal = (
+                    aspect_ratio
+                    / (1 + aspect_ratio**2) ** 0.5
+                    / torch.tan(torch.deg2rad(torch.as_tensor(fov_x, device=points.device, dtype=points.dtype) / 2))
+                )
                 if focal.ndim == 0:
                     focal = focal[None].expand(points.shape[0])
                 _, shift = recover_focal_shift(points, mask_binary, focal=focal)
-            fx = focal / 2 * (1 + aspect_ratio ** 2) ** 0.5 / aspect_ratio
-            fy = focal / 2 * (1 + aspect_ratio ** 2) ** 0.5 
-            intrinsics = intrinsics_from_focal_center(fx, fy, torch.tensor(0.5, device=points.device, dtype=points.dtype), torch.tensor(0.5, device=points.device, dtype=points.dtype))
+            fx = focal / 2 * (1 + aspect_ratio**2) ** 0.5 / aspect_ratio
+            fy = focal / 2 * (1 + aspect_ratio**2) ** 0.5
+            intrinsics = intrinsics_from_focal_center(
+                fx,
+                fy,
+                torch.tensor(0.5, device=points.device, dtype=points.dtype),
+                torch.tensor(0.5, device=points.device, dtype=points.dtype),
+            )
             depth = points[..., 2] + shift[..., None, None]
-            
+
             # If projection constraint is forced, recompute the point map using the actual depth map
             if force_projection:
                 points = depth_map_to_point_map(depth, intrinsics=intrinsics)
             else:
-                points = points + torch.stack([torch.zeros_like(shift), torch.zeros_like(shift), shift], dim=-1)[..., None, None, :]
+                points = (
+                    points
+                    + torch.stack([torch.zeros_like(shift), torch.zeros_like(shift), shift], dim=-1)[..., None, None, :]
+                )
 
             # Apply mask if needed
             if apply_mask:
@@ -487,10 +503,10 @@ class MoGeModel(nn.Module):
                 depth = torch.where(mask_binary, depth, torch.inf)
 
         return_dict = {
-            'points': points,
-            'intrinsics': intrinsics,
-            'depth': depth,
-            'mask': mask_binary,
+            "points": points,
+            "intrinsics": intrinsics,
+            "depth": depth,
+            "mask": mask_binary,
         }
 
         if omit_batch_dim:

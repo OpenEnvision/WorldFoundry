@@ -1,6 +1,6 @@
 ---
 title: VBench-2.0
-description: "NTU / Shanghai AI Lab faithfulness suite: 18 abilities in five pillars. WorldFoundry vendors the runtime; it does not invent a board. Not interchangeable with VBench."
+description: "NTU / Shanghai AI Lab faithfulness suite: 18 abilities in five pillars. WorldFoundry vendors the official runtime. Not interchangeable with VBench."
 ---
 
 VBench-2.0 (S-Lab, NTU and Shanghai AI Laboratory) is the **intrinsic-faithfulness** successor to [VBench](/docs/evaluation/benchmark-hub/vbench). It is **not interchangeable** with the 16-dimension quality suite. **18 fine-grained abilities** group into five pillars that average into `vbench2_total`:
@@ -13,7 +13,7 @@ VBench-2.0 (S-Lab, NTU and Shanghai AI Laboratory) is the **intrinsic-faithfulne
 
 Paper: [VBench-2.0](https://arxiv.org/abs/2503.21755). Project: [vchitect.github.io/VBench-2.0-project](https://vchitect.github.io/VBench-2.0-project/). Code: [Vchitect/VBench](https://github.com/Vchitect/VBench). Snapshots: `Vchitect/VBench-2.0_sampled_videos`, `_human_annotation`, `_human_anomaly`.
 
-WorldFoundry **vendors the VBench-2.0 runtime**. The runner checks prompt-suite coverage (`vbench2_dataset_manifest.json`, `vbench2_video_coverage.json`) before dispatching evaluators. A bounded **diversity** component is verified; the full suite is not. Some dims need RetinaFace or other heavyweight judges.
+WorldFoundry **vendors the VBench-2.0 runtime**. The runner checks prompt-suite coverage (`vbench2_dataset_manifest.json`, `vbench2_video_coverage.json`) before dispatching evaluators. The **diversity** dimension is validated. Some dimensions need RetinaFace or other heavyweight judges.
 
 <BenchmarkPageSections id="vbench-2.0" locale="en" />
 
@@ -21,7 +21,7 @@ WorldFoundry **vendors the VBench-2.0 runtime**. The runner checks prompt-suite 
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py \
   --benchmark-id vbench-2.0 \
   --variant vbench2 \
   --dimension Motion_Order_Understanding \
@@ -33,7 +33,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 Env: `WORLDFOUNDRY_VBENCH2_DATASET_ROOT`, `WORLDFOUNDRY_VBENCH2_RESULTS_PATH`, `WORLDFOUNDRY_VBENCH2_ROOT`, `WORLDFOUNDRY_HF_CACHE_DIR`. Shared stack: `vbench_perception_metric_stack`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/vbench-2.0.yaml`, `worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime`.
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/vbench-2.0.yaml`, `worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime`.
 
 Outputs include `scorecard.json` (primary `vbench2_total`), `dimension_scores.json`, and coverage manifests.
 

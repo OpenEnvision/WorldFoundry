@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-import sys
-
 
 ALLEGRO_RUNTIME_UNAVAILABLE = (
     "Allegro source code is not available from the in-tree runtime package. "
@@ -22,31 +19,21 @@ class AllegroComponents:
 
 
 def load_allegro_components() -> AllegroComponents:
-    """
-    Load the in-tree Allegro TI2V implementation components.
-
-    Args:
-        None: This loader has no parameters because checkpoints stay external assets.
-    """
-    runtime_root = Path(__file__).resolve().parent
-    package_root = runtime_root / "allegro"
-    if not package_root.exists():
-        raise RuntimeError(ALLEGRO_RUNTIME_UNAVAILABLE)
-
-    runtime_root_str = str(runtime_root)
-    if runtime_root_str not in sys.path:
-        sys.path.insert(0, runtime_root_str)
-
+    """Load the installed TI2V components; checkpoints remain external assets."""
     try:
-        from allegro.models.transformers.transformer_3d_allegro_ti2v import (
+        from worldfoundry.synthesis.visual_generation.allegro.allegro_runtime.allegro.models.transformers.transformer_3d_allegro_ti2v import (
             AllegroTransformerTI2V3DModel,
         )
-        from allegro.models.vae.vae_allegro import AllegroAutoencoderKL3D
-        from allegro.pipelines.data_process import (
+        from worldfoundry.synthesis.visual_generation.allegro.allegro_runtime.allegro.models.vae.vae_allegro import (
+            AllegroAutoencoderKL3D,
+        )
+        from worldfoundry.synthesis.visual_generation.allegro.allegro_runtime.allegro.pipelines.data_process import (
             CenterCropResizeVideo,
             ToTensorVideo,
         )
-        from allegro.pipelines.pipeline_allegro_ti2v import AllegroTI2VPipeline
+        from worldfoundry.synthesis.visual_generation.allegro.allegro_runtime.allegro.pipelines.pipeline_allegro_ti2v import (
+            AllegroTI2VPipeline,
+        )
     except ImportError as exc:
         raise RuntimeError(ALLEGRO_RUNTIME_UNAVAILABLE) from exc
 

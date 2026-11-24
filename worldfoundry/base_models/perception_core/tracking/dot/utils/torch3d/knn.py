@@ -5,13 +5,11 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import namedtuple
-from typing import Union
 
 import torch
 from _torch3d import _C
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
-
 
 _KNN = namedtuple("KNN", "dists idx knn")
 
@@ -94,23 +92,21 @@ class _knn_points(Function):
         p1, p2, lengths1, lengths2, idx = ctx.saved_tensors
         norm = ctx.norm
         # TODO(gkioxari) Change cast to floats once we add support for doubles.
-        if not (grad_dists.dtype == torch.float32):
+        if not (grad_dists.dtype == torch.float32):  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             grad_dists = grad_dists.float()
-        if not (p1.dtype == torch.float32):
+        if not (p1.dtype == torch.float32):  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             p1 = p1.float()
-        if not (p2.dtype == torch.float32):
+        if not (p2.dtype == torch.float32):  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             p2 = p2.float()
-        grad_p1, grad_p2 = _C.knn_points_backward(
-            p1, p2, lengths1, lengths2, idx, norm, grad_dists
-        )
+        grad_p1, grad_p2 = _C.knn_points_backward(p1, p2, lengths1, lengths2, idx, norm, grad_dists)
         return grad_p1, grad_p2, None, None, None, None, None, None
 
 
 def knn_points(
     p1: torch.Tensor,
     p2: torch.Tensor,
-    lengths1: Union[torch.Tensor, None] = None,
-    lengths2: Union[torch.Tensor, None] = None,
+    lengths1: torch.Tensor | None = None,
+    lengths2: torch.Tensor | None = None,
     norm: int = 2,
     K: int = 1,
     version: int = -1,
@@ -174,9 +170,7 @@ def knn_points(
         lengths2 = torch.full((p1.shape[0],), P2, dtype=torch.int64, device=p1.device)
 
     # pyre-fixme[16]: `_knn_points` has no attribute `apply`.
-    p1_dists, p1_idx = _knn_points.apply(
-        p1, p2, lengths1, lengths2, K, version, norm, return_sorted
-    )
+    p1_dists, p1_idx = _knn_points.apply(p1, p2, lengths1, lengths2, K, version, norm, return_sorted)
 
     p2_nn = None
     if return_nn:
@@ -185,9 +179,7 @@ def knn_points(
     return _KNN(dists=p1_dists, idx=p1_idx, knn=p2_nn if return_nn else None)
 
 
-def knn_gather(
-    x: torch.Tensor, idx: torch.Tensor, lengths: Union[torch.Tensor, None] = None
-):
+def knn_gather(x: torch.Tensor, idx: torch.Tensor, lengths: torch.Tensor | None = None):
     """
     A helper function for knn that allows indexing a tensor x with the indices `idx`
     returned by `knn_points`.

@@ -13,12 +13,7 @@ from rich.text import Text
 pytest.importorskip("PIL")
 from PIL import Image, ImageOps
 
-from worldfoundry.cli.tui_brand import (
-    brand_logo_image,
-    logo_asset_path,
-    render_brand_logo,
-    render_logo_halfblocks,
-)
+from worldfoundry.cli.tui.brand import brand_logo_image, logo_asset_path, render_brand_logo, render_logo_halfblocks
 
 
 def test_brand_retains_official_swan_and_wordmark_pixels() -> None:
@@ -54,7 +49,7 @@ def test_native_output_preserves_original_bitmap_when_resized(monkeypatch, backe
     from textual_image.widget import SixelImage, TGPImage
     from textual_image.widget.sixel import _ImageSixelImpl
 
-    from worldfoundry.cli import tui_logo
+    from worldfoundry.cli.tui import logo as tui_logo
 
     packets: list[dict] = []
     encoded: list[Image.Image] = []
@@ -117,7 +112,9 @@ def test_native_output_preserves_original_bitmap_when_resized(monkeypatch, backe
                 continue
             chunks.setdefault(packet["i"], []).append(packet["payload"])
             if packet["m"] == 0:
-                encoded.append(Image.open(io.BytesIO(base64.b64decode("".join(chunks.pop(packet["i"]))))).convert("RGB"))
+                encoded.append(
+                    Image.open(io.BytesIO(base64.b64decode("".join(chunks.pop(packet["i"]))))).convert("RGB")
+                )
         assert any(packet.get("a") == "d" for packet in packets)
     assert {image.width for image in encoded} == {240, 360, 400, 560}
     with Image.open(logo_asset_path()) as source:
@@ -131,7 +128,7 @@ def test_native_output_preserves_original_bitmap_when_resized(monkeypatch, backe
 def test_text_logo_preview_opens_by_keyboard_and_refits_after_resize(monkeypatch) -> None:
     from textual.app import App, ComposeResult
 
-    from worldfoundry.cli import tui_logo
+    from worldfoundry.cli.tui import logo as tui_logo
 
     monkeypatch.setattr(tui_logo, "TerminalImage", None)
 
@@ -168,8 +165,8 @@ def test_text_logo_preview_opens_by_keyboard_and_refits_after_resize(monkeypatch
 
 
 def test_workspace_layout_recovers_after_resizing_logo_preview(tmp_path) -> None:
-    from worldfoundry.cli.tui_app import WorldFoundryTui
-    from worldfoundry.cli.tui_logo import LogoPreview
+    from worldfoundry.cli.tui.app import WorldFoundryTui
+    from worldfoundry.cli.tui.logo import LogoPreview
 
     async def exercise() -> None:
         app = WorldFoundryTui(output_dir=tmp_path)

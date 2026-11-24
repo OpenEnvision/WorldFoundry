@@ -11,7 +11,8 @@ from worldfoundry.base_models.diffusion_model.schedulers.sana import SanaFlowDPM
 def _schedule(scheduler, *, steps, shift, dtype):
     return scheduler.schedule(
         SamplingConfig(num_inference_steps=steps, scheduler_options={"shift": shift}),
-        device=torch.device("cpu"), dtype=dtype,
+        device=torch.device("cpu"),
+        dtype=dtype,
     )
 
 
@@ -32,9 +33,7 @@ def test_interleaved_dpm_requests_keep_their_own_history(dtype, other_steps, oth
     expected_a = _schedule(isolated_a, steps=4, shift=7.0, dtype=dtype)
     noise = torch.linspace(-1, 1, 24).reshape(1, 2, 3, 2, 2).to(dtype)
     a, reference_a = noise.clone(), noise.clone()
-    rng_a, rng_reference_a, rng_b, rng_reference_b = (
-        torch.Generator().manual_seed(43) for _ in range(4)
-    )
+    rng_a, rng_reference_a, rng_b, rng_reference_b = (torch.Generator().manual_seed(43) for _ in range(4))
     for index in range(interrupt_after):
         a = _advance(shared, a, steps_a[index], rng_a)
         reference_a = _advance(isolated_a, reference_a, expected_a[index], rng_reference_a)
@@ -69,8 +68,7 @@ def test_serial_dpm_matches_native_solver_at_every_step(dtype, count):
     for step, timestep in zip(steps, native.timesteps):
         assert torch.equal(step.timestep, timestep)
         actual = _advance(scheduler, actual, step, actual_rng)
-        expected = native.step(_flow(expected, step), timestep, expected,
-                               generator=expected_rng, return_dict=False)[0]
+        expected = native.step(_flow(expected, step), timestep, expected, generator=expected_rng, return_dict=False)[0]
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
         assert torch.isfinite(actual).all()
     assert torch.equal(torch.get_rng_state(), global_rng)

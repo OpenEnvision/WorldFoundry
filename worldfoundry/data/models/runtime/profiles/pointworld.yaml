@@ -1,8 +1,7 @@
-artifact_filename: pointworld_runtime_plan.json
-artifact_kind: generated_3d_asset
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: pointworld
 display_name: PointWorld
-id: pointworld
+task_family: three_dimension
 input_schema:
   actions:
   - robot_action
@@ -11,7 +10,15 @@ input_schema:
   point_cloud: true
   prompt: true
   video: true
-integration_status: runtime_ported
+artifact_kind: generated_3d_asset
+artifact_filename: pointworld_runtime_plan.json
+execution:
+  pipeline_binding: pointworld
+  backend_stage: worldfoundry_runtime_plan
+  runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - PointWorld official source route is registered; checkpoint/point-cloud assets are
   runtime-gated.
@@ -22,9 +29,3 @@ notes:
 - Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/PointWorld at 05484826dfef74cbe278a3974179a5a16705d35d.
 - Real point-cloud world prediction remains blocked until nvidia/PointWorld_models
   and official runtime parity are staged.
-runtime_status: route_ready_assets_pending
-task_family: three_dimension
-execution:
-  pipeline_binding: pointworld
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending

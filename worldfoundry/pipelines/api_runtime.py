@@ -6,7 +6,6 @@ import os
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-
 _PLACEHOLDER_API_KEYS = {"", "your_api_key", "your api key"}
 _PIPELINE_LOADER_METADATA_KEYS = {
     "model_id",
@@ -39,7 +38,7 @@ def resolve_api_key(api_key: str | None, env_names: Sequence[str], service_name:
 
 
 def load_api_pipeline_from_pretrained(
-    pipeline_cls: type,
+    pipeline_cls: Any,
     *,
     model_path: Any = None,
     required_components: Mapping[str, Any] | None = None,

@@ -1,4 +1,3 @@
-
 import pytest
 
 # This test module imports worldfoundry code that requires the optional
@@ -7,12 +6,12 @@ pytest.importorskip("ftfy")
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
 import torch
+from PIL import Image
 
-from worldfoundry.synthesis.visual_generation.dualcamctrl.runtime import DualCamCtrlRuntime
 from worldfoundry.base_models.diffusion_model.runners.staged import StagedDiffusionPipeline
 from worldfoundry.core.media.codecs.video import coerce_video_frames
+from worldfoundry.synthesis.visual_generation.dualcamctrl.runtime import DualCamCtrlRuntime
 
 
 def test_dualcamctrl_resolves_shared_wan_files_from_checkpoint_root(tmp_path, monkeypatch):

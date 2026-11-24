@@ -23,7 +23,6 @@ from collections.abc import Sequence
 import torch
 from torch import nn
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Constructor helpers — triple-broadcast options and a small act vocabulary
 # ──────────────────────────────────────────────────────────────────────────

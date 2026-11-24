@@ -3,13 +3,11 @@
 import math
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.nn.attention.flex_attention import (BlockMask, _mask_mod_signature,
-                                               flex_attention)
+from torch.nn.attention.flex_attention import BlockMask, _mask_mod_signature, flex_attention
 from xformers.ops import AttentionBias, fmha
 
 from worldfoundry.base_models.llm_mllm_core.mllm.perceptionlm.core import probe
@@ -26,11 +24,11 @@ class InitStdFactor(Enum):
 class BaseTransformerArgs:
     dim: int = 512
     n_layers: int = 8
-    head_dim: Optional[int] = None
-    n_heads: Optional[int] = None
-    n_kv_heads: Optional[int] = None
+    head_dim: int | None = None
+    n_heads: int | None = None
+    n_kv_heads: int | None = None
 
-    ffn_dim_multiplier: Optional[float] = None
+    ffn_dim_multiplier: float | None = None
 
     multiple_of: int = 256
 
@@ -43,7 +41,7 @@ class BaseTransformerArgs:
     low_freq_factor: int = 1
     high_freq_factor: int = 32
 
-    init_base_std: Optional[float] = None
+    init_base_std: float | None = None
     init_std_factor: str = "disabled"
 
     max_seqlen: int = 1024
@@ -93,9 +91,7 @@ def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor, seq_dim: int
         2,
         2,
     ), f"freqs_cis vs x: {(freqs_cis.shape, x.shape)}"
-    shape = [
-        d if i == seq_dim or i == ndim - 3 else 1 for i, d in enumerate(x.shape[:-2])
-    ] + [2, 2]
+    shape = [d if i == seq_dim or i == ndim - 3 else 1 for i, d in enumerate(x.shape[:-2])] + [2, 2]
     return freqs_cis.view(*shape)
 
 
@@ -104,12 +100,10 @@ def apply_rotary_emb(
     xk: torch.Tensor,
     seq_dim: int,
     freqs_cis: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     xq_ = xq.reshape(*xq.shape[:-1], -1, 1, 2)  # B S H D -> B S H D/2 1 2
     xk_ = xk.reshape(*xk.shape[:-1], -1, 1, 2)  # B S H D -> B S H D/2 1 2
-    freqs_cis = reshape_for_broadcast(
-        freqs_cis, xq_, seq_dim
-    ).float()  # S D/2 2 2 -> 1 S 1 D/2 2 2
+    freqs_cis = reshape_for_broadcast(freqs_cis, xq_, seq_dim).float()  # S D/2 2 2 -> 1 S 1 D/2 2 2
     xq_out = (xq_ * freqs_cis).sum(5).flatten(3)
     xk_out = (xk_ * freqs_cis).sum(5).flatten(3)
     return xq_out.type_as(xq), xk_out.type_as(xk)
@@ -128,7 +122,7 @@ def lengths_to_start_ids(lengths):
 
 def lengths_to_local_ids(lengths):
     assert lengths.ndim == 1
-    nb_seqs = lengths.size(0)
+    _nb_seqs = lengths.size(0)
     total_seqlen = lengths.sum()
     # This gives the document id of each token
     doc_id = torch.repeat_interleave(lengths)
@@ -145,7 +139,7 @@ def lengths_to_local_ids(lengths):
 def generate_doc_mask_mod(
     mask_mod: _mask_mod_signature,
     lengths: torch.Tensor,
-    kv_lengths: Optional[torch.Tensor] = None,
+    kv_lengths: torch.Tensor | None = None,
 ) -> _mask_mod_signature:
     """Generates mask mods that apply to inputs to flex attention in the sequence stacked
     format.
@@ -226,9 +220,7 @@ class RotaryEmbedding(torch.nn.Module):
     def reset_parameters(self):
         self.register_buffer(
             "freqs_cis",
-            self.precompute_freqs_cis(
-                dim=self.head_dim, end=self.max_seqlen, theta=self.theta
-            ),
+            self.precompute_freqs_cis(dim=self.head_dim, end=self.max_seqlen, theta=self.theta),
             persistent=False,
         )
 
@@ -247,9 +239,7 @@ class RotaryEmbedding(torch.nn.Module):
                 smooth = (self.old_context_len / wavelen - self.low_freq_factor) / (
                     self.high_freq_factor - self.low_freq_factor
                 )
-                new_freqs.append(
-                    (1 - smooth) * freq / self.scale_factor + smooth * freq
-                )
+                new_freqs.append((1 - smooth) * freq / self.scale_factor + smooth * freq)
         return torch.tensor(new_freqs, dtype=freqs.dtype, device=freqs.device)
 
     def precompute_freqs_cis(
@@ -283,9 +273,7 @@ class RotaryEmbedding(torch.nn.Module):
 
         return torch.stack((cos, -sin, sin, cos), dim=-1).view(*freqs.size(), 2, 2)
 
-    def forward(
-        self, seqlen: Optional[int] = None, tok_idx: Optional[torch.Tensor] = None
-    ):
+    def forward(self, seqlen: int | None = None, tok_idx: torch.Tensor | None = None):
         """
         Return freqs_cis corresponding to consecutive seqlen positions or the corresponding tok_idx positions
         Args:
@@ -339,9 +327,7 @@ class TiedLinear(nn.Module):
         super().__init__()
         self.tied_module = tied_module
         if not hasattr(tied_module, "weight"):
-            raise AttributeError(
-                "Provided module does not have attribute 'weight'. Please check your tied_module."
-            )
+            raise AttributeError("Provided module does not have attribute 'weight'. Please check your tied_module.")
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         return F.linear(x, self.tied_module.weight)
@@ -392,8 +378,8 @@ class Attention(nn.Module):
         self,
         x: torch.Tensor,
         freq_cis: torch.Tensor,
-        tok_idx: Optional[torch.Tensor] = None,
-        mask: Optional[Union[BlockMask, AttentionBias, str]] = None,
+        tok_idx: torch.Tensor | None = None,
+        mask: BlockMask | AttentionBias | str | None = None,
         attn_impl: str = "sdpa",
     ) -> torch.Tensor:
         # B S D
@@ -420,7 +406,7 @@ class Attention(nn.Module):
 
         if attn_impl == "flex_attention":
             assert mask is None or isinstance(mask, BlockMask)
-            xq, xk, xv = map(lambda e: e.transpose(1, 2), (xq, xk, xv))
+            xq, xk, xv = (e.transpose(1, 2) for e in (xq, xk, xv))
             output = flex_attention(xq, xk, xv, block_mask=mask)
             output = output.transpose(1, 2).contiguous()  # B H S D -> B S H D
 
@@ -430,7 +416,7 @@ class Attention(nn.Module):
             # This uses B S H D instead of B H S D of pytorch
 
         elif attn_impl == "sdpa":
-            xq, xk, xv = map(lambda e: e.transpose(1, 2), (xq, xk, xv))
+            xq, xk, xv = (e.transpose(1, 2) for e in (xq, xk, xv))
             assert mask is None or isinstance(mask, (str, torch.Tensor))
             is_causal = (mask == "causal") if isinstance(mask, str) else False
             mask = mask if isinstance(mask, torch.Tensor) else None
@@ -443,9 +429,7 @@ class Attention(nn.Module):
             )
             output = output.transpose(1, 2).contiguous()  # B H S D -> B S H D
         else:
-            raise NotImplementedError(
-                f"Attention implementation {attn_impl} not supported"
-            )
+            raise NotImplementedError(f"Attention implementation {attn_impl} not supported")
 
         output = self.wo(output.reshape(output_shape))
 
@@ -478,7 +462,7 @@ class FeedForward(nn.Module):
         dim: int,
         hidden_dim: int,
         multiple_of: int,
-        ffn_dim_multiplier: Optional[float],
+        ffn_dim_multiplier: float | None,
         mp_size: int = 1,
     ):
         super().__init__()
@@ -541,9 +525,7 @@ class TransformerBlock(nn.Module):
     def __init__(self, args: BaseTransformerArgs):
         super().__init__()
 
-        assert (args.head_dim is not None) or (
-            args.n_heads is not None
-        ), "Should specify at least head_dim or n_heads"
+        assert (args.head_dim is not None) or (args.n_heads is not None), "Should specify at least head_dim or n_heads"
         self.head_dim = args.head_dim or args.dim // args.n_heads
         self.n_heads = args.n_heads or args.dim // args.head_dim
         self.n_kv_heads = args.n_kv_heads or self.n_heads
@@ -571,11 +553,10 @@ class TransformerBlock(nn.Module):
         self,
         x: torch.Tensor,
         freq_cis: torch.Tensor,
-        tok_idx: Optional[torch.Tensor] = None,
-        mask: Optional[Union[BlockMask, AttentionBias, str]] = None,
+        tok_idx: torch.Tensor | None = None,
+        mask: BlockMask | AttentionBias | str | None = None,
         attn_impl: str = "sdpa",
     ) -> torch.Tensor:
-
         h = x + self.attention(
             self.attention_norm(x),
             freq_cis,
@@ -618,14 +599,13 @@ class BaseTransformer(nn.Module):
     def forward(
         self,
         h,
-        tok_idx: Optional[torch.Tensor] = None,
-        mask: Optional[Union[BlockMask, AttentionBias, str]] = None,
+        tok_idx: torch.Tensor | None = None,
+        mask: BlockMask | AttentionBias | str | None = None,
         attn_impl: str = "sdpa",
     ):
-
         freq_cis = self.rope_embeddings(seqlen=self.max_seqlen, tok_idx=tok_idx)
 
-        for i, layer in enumerate(self.layers):
+        for _i, layer in enumerate(self.layers):
             h = layer(h, freq_cis, tok_idx=tok_idx, mask=mask, attn_impl=attn_impl)
         return h
 

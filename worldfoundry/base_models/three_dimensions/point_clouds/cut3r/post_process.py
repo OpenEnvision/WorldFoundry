@@ -4,12 +4,10 @@
 # --------------------------------------------------------
 # modified from DUSt3R
 
-"""Module for base_models -> three_dimensions -> point_clouds -> cut3r -> post_process.py functionality."""
-
 import numpy as np
 import torch
 
-from .utils.geometry import xy_grid
+from worldfoundry.core.geometry.projection import pixel_coordinate_grid as xy_grid
 
 
 def estimate_focal_knowing_depth(pts3d, pp, focal_mode="median", min_focal=0.0, max_focal=np.inf):
@@ -41,7 +39,7 @@ def estimate_focal_knowing_depth(pts3d, pp, focal_mode="median", min_focal=0.0, 
 
         focal = dot_xy_px.mean(dim=1) / dot_xy_xy.mean(dim=1)
 
-        for iter in range(10):
+        for _iter in range(10):
             dis = (pixels - focal.view(-1, 1, 1) * xy_over_z).norm(dim=-1)
 
             w = dis.clip(min=1e-8).reciprocal()

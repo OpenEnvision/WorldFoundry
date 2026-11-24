@@ -24,10 +24,11 @@ from pathlib import Path
 SPEC = importlib.util.spec_from_file_location(
     "actions_inference_gate", Path(__file__).with_name("inference_regression_gate.py")
 )
+assert SPEC is not None and SPEC.loader is not None
 gate = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(gate)
 
-WORKFLOW = ".github/workflows/ci.yml"
+WORKFLOW = ".github/workflows/inference-evidence.yml"
 ALLOWED_WORKFLOWS = {WORKFLOW}
 ARTIFACT = "trusted-inference-evidence"
 RECEIPT = "receipt.json"
@@ -40,6 +41,7 @@ MG2_FROZEN_HELPER = "tests/synthesis/test_matrix_game_2_checkpoint_trajectory.py
 
 def load_tool(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -93,10 +95,13 @@ def compact_conditioned_report(report: dict, *, root: Path, junit: Path) -> dict
         raise ValueError("GPU report does not identify this exact source commit and tree")
     historical = report.get("historical_reference", {})
     expected_cases = set(accepted.expected_signatures["contracts"])
-    if (historical.get("sha256") != tool.REFERENCE_SHA256 or historical.get("conditioning_passed") is not True
-            or set(historical.get("contracts_passed", [])) != expected_cases
-            or len(historical.get("contracts_passed", [])) != len(expected_cases)
-            or any(report["contracts"][key].get("historical_reference_passed") is not True for key in expected_cases)):
+    if (
+        historical.get("sha256") != tool.REFERENCE_SHA256
+        or historical.get("conditioning_passed") is not True
+        or set(historical.get("contracts_passed", [])) != expected_cases
+        or len(historical.get("contracts_passed", [])) != len(expected_cases)
+        or any(report["contracts"][key].get("historical_reference_passed") is not True for key in expected_cases)
+    ):
         raise ValueError("GPU run did not complete every historical reference comparison")
     sources = normalized_sources(report, root)
     if set(sources) != set(accepted.required_source_paths) | {MG2_HELPER}:
@@ -105,39 +110,69 @@ def compact_conditioned_report(report: dict, *, root: Path, junit: Path) -> dict
         raise ValueError("GPU report test differs from the committed test")
     if report.get("frozen_helper_sha256") != checkout_digest(root, MG2_FROZEN_HELPER):
         raise ValueError("GPU report changed its frozen test helper")
-    validator = load_tool(Path(__file__).resolve().parents[2] / "tests/manual/validate_junit_contract.py",
-                          "actions_junit_gate")
-    nodes = [MG2_TEST + "::test_real_conditioned_public_rollout_preserves_12_blocks_exactly["
-             + strategy + "-" + str(seed) + "]" for strategy in ("split", "packed") for seed in (7, 42, 1730)]
+    validator = load_tool(
+        Path(__file__).resolve().parents[2] / "tests/manual/validate_junit_contract.py", "actions_junit_gate"
+    )
+    nodes = [
+        MG2_TEST
+        + "::test_real_conditioned_public_rollout_preserves_12_blocks_exactly["
+        + strategy
+        + "-"
+        + str(seed)
+        + "]"
+        for strategy in ("split", "packed")
+        for seed in (7, 42, 1730)
+    ]
     manifest = validator.build_manifest(nodes, root, [MG2_TEST])
     junit_result = validator.validate_junit(manifest, junit, root)
-    return {"schema_version": 1, "contract_id": MG2_CONTRACT, "status": "passed",
-            "source_revision": head, "source_tree": tree,
-            "historical_reference_sha256": tool.REFERENCE_SHA256,
-            "historical_reference_revision": tool.REFERENCE_REVISION,
-            "numeric_signatures": accepted.numeric_signatures(report), "source_sha256": sources,
-            "test_source_sha256": report["test_source_sha256"],
-            "frozen_helper_sha256": report["frozen_helper_sha256"],
-            "junit": {**junit_result, "sha256": hashlib.sha256(junit.read_bytes()).hexdigest()},
-            "raw_report_sha256": hashlib.sha256(json.dumps(report, sort_keys=True, separators=(",", ":")).encode()).hexdigest()}
+    return {
+        "schema_version": 1,
+        "contract_id": MG2_CONTRACT,
+        "status": "passed",
+        "source_revision": head,
+        "source_tree": tree,
+        "historical_reference_sha256": tool.REFERENCE_SHA256,
+        "historical_reference_revision": tool.REFERENCE_REVISION,
+        "numeric_signatures": accepted.numeric_signatures(report),
+        "source_sha256": sources,
+        "test_source_sha256": report["test_source_sha256"],
+        "frozen_helper_sha256": report["frozen_helper_sha256"],
+        "junit": {**junit_result, "sha256": hashlib.sha256(junit.read_bytes()).hexdigest()},
+        "raw_report_sha256": hashlib.sha256(
+            json.dumps(report, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
 
 
 def compact_generic_replay(report: dict) -> dict:
     """Preserve numerical evidence while omitting private model-host paths."""
-    fields = ("schema_version", "mode", "status", "source_revision", "source_tree", "matrix_sha256",
-              "dependencies_sha256", "reference_index_sha256", "selected_cases", "cases")
+    fields = (
+        "schema_version",
+        "mode",
+        "status",
+        "source_revision",
+        "source_tree",
+        "matrix_sha256",
+        "dependencies_sha256",
+        "reference_index_sha256",
+        "selected_cases",
+        "cases",
+    )
     return {key: report[key] for key in fields if key in report}
 
 
 def verify_conditioned_contract(contract: dict, *, root: Path, plan: dict) -> dict:
     tool = historical_tool()
     accepted = tool.MG2HistoricalReference()
-    if (contract.get("schema_version") != 1 or contract.get("contract_id") != MG2_CONTRACT
-            or contract.get("status") != "passed"
-            or contract.get("source_revision") != plan["source_revision"]
-            or contract.get("source_tree") != plan["source_tree"]
-            or contract.get("historical_reference_sha256") != tool.REFERENCE_SHA256
-            or contract.get("historical_reference_revision") != tool.REFERENCE_REVISION):
+    if (
+        contract.get("schema_version") != 1
+        or contract.get("contract_id") != MG2_CONTRACT
+        or contract.get("status") != "passed"
+        or contract.get("source_revision") != plan["source_revision"]
+        or contract.get("source_tree") != plan["source_tree"]
+        or contract.get("historical_reference_sha256") != tool.REFERENCE_SHA256
+        or contract.get("historical_reference_revision") != tool.REFERENCE_REVISION
+    ):
         raise ValueError("Historical MG2 contract is incomplete, stale or uses a changed reference")
     if contract.get("numeric_signatures") != accepted.expected_signatures:
         raise ValueError("Historical MG2 numerical signatures changed")
@@ -151,20 +186,33 @@ def verify_conditioned_contract(contract: dict, *, root: Path, plan: dict) -> di
         if contract.get(key) != checkout_digest(root, relative):
             raise ValueError("Historical MG2 evidence used a different committed test: " + relative)
     junit = contract.get("junit", {})
-    if (junit.get("status") != "passed" or junit.get("executed_tests") != 6 or junit.get("skipped") != 0
-            or junit.get("complete_selection_verified") is not True or junit.get("source_files_verified") != 1):
+    if (
+        junit.get("status") != "passed"
+        or junit.get("executed_tests") != 6
+        or junit.get("skipped") != 0
+        or junit.get("complete_selection_verified") is not True
+        or junit.get("source_files_verified") != 1
+    ):
         raise ValueError("Historical MG2 contract did not execute all six tests without skips")
     valid_sha(junit.get("sha256"), 64, "complete GPU JUnit hash")
     valid_sha(contract.get("raw_report_sha256"), 64, "full GPU report hash")
-    return {"status": "passed", "contract_id": MG2_CONTRACT, "historical_reference_sha256": tool.REFERENCE_SHA256,
-            "executed_tests": 6, "exact_historical_signatures": 7}
+    return {
+        "status": "passed",
+        "contract_id": MG2_CONTRACT,
+        "historical_reference_sha256": tool.REFERENCE_SHA256,
+        "executed_tests": 6,
+        "exact_historical_signatures": 7,
+    }
 
 
 def verify_bundle(plan: dict, report: dict, reference: str, root: Path | None) -> dict:
     required = "matrix-game2-controls-short" in plan.get("selected_cases", [])
     if report.get("schema_version") == 2 and report.get("mode") == "trusted_contract_bundle":
-        if (report.get("status") != "passed" or report.get("source_revision") != plan["source_revision"]
-                or report.get("source_tree") != plan["source_tree"]):
+        if (
+            report.get("status") != "passed"
+            or report.get("source_revision") != plan["source_revision"]
+            or report.get("source_tree") != plan["source_tree"]
+        ):
             raise ValueError("GPU contract bundle does not match this exact source commit and tree")
         replay = report["generic_replay"]
         if not plan.get("selected_cases") and replay.get("selected_cases"):
@@ -177,7 +225,9 @@ def verify_bundle(plan: dict, report: dict, reference: str, root: Path | None) -
         if not isinstance(contracts, dict) or any(key != MG2_CONTRACT for key in contracts):
             raise ValueError("GPU contract bundle contains an unrecognized independent contract")
         if required and MG2_CONTRACT not in contracts:
-            raise ValueError("Affected MG2 changes require the independent historical contract as well as the generic replay")
+            raise ValueError(
+                "Affected MG2 changes require the independent historical contract as well as the generic replay"
+            )
         verified = {}
         for key, contract in contracts.items():
             if root is None:
@@ -189,14 +239,17 @@ def verify_bundle(plan: dict, report: dict, reference: str, root: Path | None) -
     return gate.verify_replay(plan, report, reference)
 
 
-def valid_sha(value: str, length: int, label: str) -> str:
+def valid_sha(value: object, length: int, label: str) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{" + str(length) + "}", value):
         raise ValueError(f"A pinned {label} is required")
     return value
 
 
 def definitions(root: Path) -> tuple[Path, Path]:
-    return root / "tests/manual/geometry_regression_cases.json", root / "tests/manual/geometry_regression_dependencies.json"
+    return (
+        root / "tests/manual/geometry_regression_cases.json",
+        root / "tests/manual/geometry_regression_dependencies.json",
+    )
 
 
 def plan_for_checkout(root: Path, base: str, head: str) -> dict:
@@ -213,9 +266,19 @@ def plan_for_checkout(root: Path, base: str, head: str) -> dict:
     return plan
 
 
-def attest_report(plan: dict, report: dict, *, reference: str, repository: str, run_id: int,
-                  control_revision: str, control_ref: str, expected_control_ref: str,
-                  workflow_path: str = WORKFLOW, root: Path | None = None) -> dict:
+def attest_report(
+    plan: dict,
+    report: dict,
+    *,
+    reference: str,
+    repository: str,
+    run_id: int,
+    control_revision: str,
+    control_ref: str,
+    expected_control_ref: str,
+    workflow_path: str = WORKFLOW,
+    root: Path | None = None,
+) -> dict:
     if not expected_control_ref or control_ref != expected_control_ref:
         raise ValueError("Dispatch must use the configured trusted control branch")
     valid_sha(control_revision, 40, "control workflow commit")
@@ -229,23 +292,37 @@ def attest_report(plan: dict, report: dict, *, reference: str, repository: str, 
     if not plan.get("selected_cases") and not report.get("contracts"):
         raise ValueError("Only completed affected inference replays need attestation")
     result = verify_bundle(plan, report, reference, root)
-    return {"schema_version": 1, "repository": repository, "workflow_path": workflow_path,
-            "run_id": run_id, "control_revision": control_revision, "control_ref": control_ref,
-            "base_revision": plan["base_revision"], "source_revision": plan["source_revision"],
-            "source_tree": plan["source_tree"], "report": report, "verification": result}
+    return {
+        "schema_version": 1,
+        "repository": repository,
+        "workflow_path": workflow_path,
+        "run_id": run_id,
+        "control_revision": control_revision,
+        "control_ref": control_ref,
+        "base_revision": plan["base_revision"],
+        "source_revision": plan["source_revision"],
+        "source_tree": plan["source_tree"],
+        "report": report,
+        "verification": result,
+    }
 
 
-def verify_provenance(run: dict, artifact: dict, receipt: dict, *, repository: str, control_ref: str,
-                      workflow_path: str = WORKFLOW) -> dict:
+def verify_provenance(
+    run: dict, artifact: dict, receipt: dict, *, repository: str, control_ref: str, workflow_path: str = WORKFLOW
+) -> dict:
     if not control_ref:
         raise ValueError("Trusted evidence control branch is not configured")
     if workflow_path not in ALLOWED_WORKFLOWS:
         raise ValueError("An official evidence workflow path is required")
-    if (run.get("event") != "workflow_dispatch" or run.get("status") != "completed"
-            or run.get("conclusion") != "success" or run.get("path") != workflow_path
-            or run.get("head_branch") != control_ref
-            or run.get("repository", {}).get("full_name") != repository
-            or run.get("head_repository", {}).get("full_name") != repository):
+    if (
+        run.get("event") != "workflow_dispatch"
+        or run.get("status") != "completed"
+        or run.get("conclusion") != "success"
+        or run.get("path") != workflow_path
+        or run.get("head_branch") != control_ref
+        or run.get("repository", {}).get("full_name") != repository
+        or run.get("head_repository", {}).get("full_name") != repository
+    ):
         raise ValueError("GPU evidence did not originate from the trusted successful dispatch")
     if artifact.get("name") != ARTIFACT or artifact.get("expired") is not False:
         raise ValueError("Trusted GPU evidence artifact is absent or expired")
@@ -253,24 +330,46 @@ def verify_provenance(run: dict, artifact: dict, receipt: dict, *, repository: s
     if artifact_run.get("id") != run.get("id"):
         raise ValueError("Artifact belongs to a different workflow run")
     valid_sha(run.get("head_sha"), 40, "control workflow commit")
-    expected = {"schema_version": 1, "repository": repository, "workflow_path": workflow_path,
-                "run_id": run["id"], "control_revision": run["head_sha"], "control_ref": control_ref}
+    expected = {
+        "schema_version": 1,
+        "repository": repository,
+        "workflow_path": workflow_path,
+        "run_id": run["id"],
+        "control_revision": run["head_sha"],
+        "control_ref": control_ref,
+    }
     if any(receipt.get(key) != value for key, value in expected.items()):
         raise ValueError("Official GPU artifact is stale or its commit identities do not match")
-    metadata = {key: valid_sha(receipt.get(key), 40, key)
-                for key in ("base_revision", "source_revision", "source_tree")}
+    metadata = {
+        key: valid_sha(receipt.get(key), 40, key) for key in ("base_revision", "source_revision", "source_tree")
+    }
     return metadata
 
 
-def verify_origin(run: dict, artifact: dict, receipt: dict, *, repository: str, control_ref: str,
-                  plan: dict, reference: str, workflow_path: str = WORKFLOW, root: Path | None = None) -> dict:
-    metadata = verify_provenance(run, artifact, receipt, repository=repository, control_ref=control_ref,
-                                 workflow_path=workflow_path)
+def verify_origin(
+    run: dict,
+    artifact: dict,
+    receipt: dict,
+    *,
+    repository: str,
+    control_ref: str,
+    plan: dict,
+    reference: str,
+    workflow_path: str = WORKFLOW,
+    root: Path | None = None,
+) -> dict:
+    metadata = verify_provenance(
+        run, artifact, receipt, repository=repository, control_ref=control_ref, workflow_path=workflow_path
+    )
     if any(value != plan[key] for key, value in metadata.items()):
         raise ValueError("Official GPU artifact is stale or its commit identities do not match")
     result = verify_bundle(plan, receipt["report"], reference, root)
-    return {**result, "evidence_run_id": run["id"], "evidence_artifact_id": artifact["id"],
-            "evidence_control_revision": run["head_sha"]}
+    return {
+        **result,
+        "evidence_run_id": run["id"],
+        "evidence_artifact_id": artifact["id"],
+        "evidence_control_revision": run["head_sha"],
+    }
 
 
 def inspect_receipt(api, *, run_id: int, control_ref: str, workflow_path: str) -> dict:
@@ -282,8 +381,9 @@ def inspect_receipt(api, *, run_id: int, control_ref: str, workflow_path: str) -
         raise ValueError("Official dispatch has no unique trusted GPU evidence artifact")
     artifact = matched[0]
     receipt = api.artifact(artifact)
-    metadata = verify_provenance(run, artifact, receipt, repository=api.repository, control_ref=control_ref,
-                                 workflow_path=workflow_path)
+    metadata = verify_provenance(
+        run, artifact, receipt, repository=api.repository, control_ref=control_ref, workflow_path=workflow_path
+    )
     return {"status": "identities_verified", **metadata}
 
 
@@ -300,12 +400,20 @@ class GitHub:
             raise ValueError("An Actions API token is required to verify official evidence")
         self.repository = repository
         self.base = "https://api.github.com/repos/" + repository
-        self.headers = {"Accept": "application/vnd.github+json", "Authorization": "Bearer " + token,
-                        "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "WorldFoundry-inference-gate"}
+        self.headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": "Bearer " + token,
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "WorldFoundry-inference-gate",
+        }
 
     def request(self, path: str, *, data: dict | None = None, method: str = "GET"):
-        request = urllib.request.Request(self.base + path, headers=self.headers, method=method,
-                                         data=None if data is None else json.dumps(data).encode())
+        request = urllib.request.Request(
+            self.base + path,
+            headers=self.headers,
+            method=method,
+            data=None if data is None else json.dumps(data).encode(),
+        )
         if data is not None:
             request.add_header("Content-Type", "application/json")
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -349,8 +457,16 @@ def decode_artifact(body: bytes, digest: str | None) -> dict:
     return value
 
 
-def find_evidence(api: GitHub, plan: dict, *, control_ref: str, reference: str, run_id: int | None = None,
-                  workflow_path: str = WORKFLOW, root: Path | None = None) -> dict:
+def find_evidence(
+    api: GitHub,
+    plan: dict,
+    *,
+    control_ref: str,
+    reference: str,
+    run_id: int | None = None,
+    workflow_path: str = WORKFLOW,
+    root: Path | None = None,
+) -> dict:
     valid_sha(reference, 64, "accepted reference index")
     if not control_ref:
         raise ValueError("Trusted evidence control branch is not configured")
@@ -360,8 +476,9 @@ def find_evidence(api: GitHub, plan: dict, *, control_ref: str, reference: str, 
     if run_id is not None:
         runs = [api.request("/actions/runs/" + str(run_id))]
     else:
-        query = urllib.parse.urlencode({"event": "workflow_dispatch", "status": "success",
-                                        "branch": control_ref, "per_page": 100})
+        query = urllib.parse.urlencode(
+            {"event": "workflow_dispatch", "status": "success", "branch": control_ref, "per_page": 100}
+        )
         runs = api.request("/actions/workflows/" + workflow + "/runs?" + query)["workflow_runs"]
     errors = []
     for run in runs:
@@ -376,9 +493,25 @@ def find_evidence(api: GitHub, plan: dict, *, control_ref: str, reference: str, 
             receipt = api.artifact(artifact)
             if receipt.get("source_revision") != plan["source_revision"]:
                 continue
-            return verify_origin(run, artifact, receipt, repository=api.repository, control_ref=control_ref,
-                                 plan=plan, reference=reference, workflow_path=workflow_path, root=root)
-        except (ValueError, KeyError, TypeError, AssertionError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
+            return verify_origin(
+                run,
+                artifact,
+                receipt,
+                repository=api.repository,
+                control_ref=control_ref,
+                plan=plan,
+                reference=reference,
+                workflow_path=workflow_path,
+                root=root,
+            )
+        except (
+            ValueError,
+            KeyError,
+            TypeError,
+            AssertionError,
+            subprocess.CalledProcessError,
+            zipfile.BadZipFile,
+        ) as error:
             errors.append(str(error))
     raise ValueError("No official complete GPU replay matches this source commit: " + "; ".join(errors[:3]))
 
@@ -386,7 +519,8 @@ def find_evidence(api: GitHub, plan: dict, *, control_ref: str, reference: str, 
 def rerun_gate_jobs(api: GitHub, source_revision: str) -> list[int]:
     """Retry only the receipt-consuming CPU gate for this exact candidate commit."""
     query = urllib.parse.urlencode({"head_sha": source_revision, "per_page": 100})
-    runs = api.request("/actions/workflows/ci.yml/runs?" + query)["workflow_runs"]
+    workflow = urllib.parse.quote(WORKFLOW.rsplit("/", 1)[1], safe="")
+    runs = api.request("/actions/workflows/" + workflow + "/runs?" + query)["workflow_runs"]
     restarted = []
     for run in runs:
         if run.get("head_sha") != source_revision:
@@ -400,12 +534,20 @@ def rerun_gate_jobs(api: GitHub, source_revision: str) -> list[int]:
 
 
 def write_check(api: GitHub, source_revision: str, result: dict, *, success: bool) -> None:
-    api.request("/check-runs", method="POST", data={
-        "name": "trusted-inference-evidence", "head_sha": source_revision, "status": "completed",
-        "conclusion": "success" if success else "failure",
-        "output": {"title": "Exact trusted GPU replay" if success else "Trusted GPU replay rejected",
-                   "summary": json.dumps(result, indent=2)},
-    })
+    api.request(
+        "/check-runs",
+        method="POST",
+        data={
+            "name": "trusted-inference-evidence",
+            "head_sha": source_revision,
+            "status": "completed",
+            "conclusion": "success" if success else "failure",
+            "output": {
+                "title": "Exact trusted GPU replay" if success else "Trusted GPU replay rejected",
+                "summary": json.dumps(result, indent=2),
+            },
+        },
+    )
 
 
 def main() -> int:
@@ -444,8 +586,9 @@ def main() -> int:
         root = args.source_root.resolve()
         if args.command == "inspect-actions":
             api = GitHub(args.repository, os.environ.get("GITHUB_TOKEN", ""))
-            result = inspect_receipt(api, run_id=args.run_id, control_ref=args.control_ref,
-                                     workflow_path=args.workflow_path)
+            result = inspect_receipt(
+                api, run_id=args.run_id, control_ref=args.control_ref, workflow_path=args.workflow_path
+            )
             if args.github_output:
                 with args.github_output.open("a") as output:
                     for key in ("source_revision", "source_tree", "base_revision"):
@@ -454,20 +597,33 @@ def main() -> int:
             plan = plan_for_checkout(root, args.base, args.head)
             raw = json.loads(args.conditioned_report.read_text())
             contract = compact_conditioned_report(raw, root=root, junit=args.junit)
-            result = {"schema_version": 2, "mode": "trusted_contract_bundle", "status": "passed",
-                      "source_revision": plan["source_revision"], "source_tree": plan["source_tree"],
-                      "generic_replay": compact_generic_replay(json.loads(args.generic_replay.read_text())),
-                      "contracts": {MG2_CONTRACT: contract}}
+            result = {
+                "schema_version": 2,
+                "mode": "trusted_contract_bundle",
+                "status": "passed",
+                "source_revision": plan["source_revision"],
+                "source_tree": plan["source_tree"],
+                "generic_replay": compact_generic_replay(json.loads(args.generic_replay.read_text())),
+                "contracts": {MG2_CONTRACT: contract},
+            }
             verify_bundle(plan, result, args.reference_index, root)
             if len(json.dumps(result, separators=(",", ":")).encode()) > 60000:
                 raise ValueError("Compact report exceeds the workflow dispatch input limit")
         elif args.command == "attest":
             plan = plan_for_checkout(root, args.base, args.head)
             report = json.loads(os.environ["INFERENCE_REPORT_JSON"])
-            result = attest_report(plan, report, reference=args.reference_index, repository=args.repository,
-                                   run_id=args.run_id, control_revision=args.control_revision,
-                                   control_ref=args.actual_control_ref, expected_control_ref=args.control_ref,
-                                   workflow_path=args.workflow_path, root=root)
+            result = attest_report(
+                plan,
+                report,
+                reference=args.reference_index,
+                repository=args.repository,
+                run_id=args.run_id,
+                control_revision=args.control_revision,
+                control_ref=args.actual_control_ref,
+                expected_control_ref=args.control_ref,
+                workflow_path=args.workflow_path,
+                root=root,
+            )
         else:
             plan = json.loads(args.plan.read_text())
             gate.verify_checkout_plan(plan, root, *definitions(root))
@@ -475,22 +631,45 @@ def main() -> int:
                 result = gate.verify_replay(plan, {}, args.reference_index)
             else:
                 api = GitHub(args.repository, os.environ.get("GITHUB_TOKEN", ""))
-                result = find_evidence(api, plan, control_ref=args.control_ref, reference=args.reference_index,
-                                       run_id=args.run_id, workflow_path=args.workflow_path, root=root)
+                result = find_evidence(
+                    api,
+                    plan,
+                    control_ref=args.control_ref,
+                    reference=args.reference_index,
+                    run_id=args.run_id,
+                    workflow_path=args.workflow_path,
+                    root=root,
+                )
             if args.publish_check:
                 api = api or GitHub(args.repository, os.environ.get("GITHUB_TOKEN", ""))
                 write_check(api, plan["source_revision"], result, success=True)
                 result["rerun_gate_jobs"] = rerun_gate_jobs(api, plan["source_revision"])
         code = 0
-    except (ValueError, OSError, KeyError, TypeError, AssertionError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
+    except (
+        ValueError,
+        OSError,
+        KeyError,
+        TypeError,
+        AssertionError,
+        subprocess.CalledProcessError,
+        zipfile.BadZipFile,
+    ) as error:
         result, code = {"status": "failed", "error": str(error)}, 1
         if args.command == "verify-actions" and args.publish_check and api is not None and plan is not None:
             write_check(api, plan["source_revision"], result, success=False)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    rendered = json.dumps(result, sort_keys=True, separators=(",", ":")) if args.command == "compact" else json.dumps(result, indent=2, sort_keys=True)
+    rendered = (
+        json.dumps(result, sort_keys=True, separators=(",", ":"))
+        if args.command == "compact"
+        else json.dumps(result, indent=2, sort_keys=True)
+    )
     args.output.write_text(rendered + "\n")
     # Receipts may contain private model-host paths; log only their verification.
-    logged = {"status": "passed", "mode": result["mode"], "source_revision": result["source_revision"]} if args.command == "compact" and code == 0 else result.get("verification", result)
+    logged = (
+        {"status": "passed", "mode": result["mode"], "source_revision": result["source_revision"]}
+        if args.command == "compact" and code == 0
+        else result.get("verification", result)
+    )
     print(json.dumps(logged, indent=2))
     return code
 

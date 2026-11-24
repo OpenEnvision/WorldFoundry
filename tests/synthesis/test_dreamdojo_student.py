@@ -412,8 +412,8 @@ def test_student_requires_explicit_weights_and_never_uses_teacher_default(tmp_pa
 
 def test_student_native_recipe_and_studio_contract_resolve() -> None:
     from worldfoundry.base_models.diffusion_model.recipes.registry import default_native_diffusion_registry
-    from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
     from worldfoundry.studio.inference.catalog import find_entry
+    from worldfoundry.zoo.catalog import load_model_zoo_registry
 
     recipe = default_native_diffusion_registry().resolve("dreamdojo-student")
     assert recipe.execution.strategy == "causal-trigflow"

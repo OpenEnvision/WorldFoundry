@@ -12,6 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .pipeline import MagiPipeline
+from typing import Any
+
+
+def __getattr__(name: str) -> Any:
+    if name == "MagiPipeline":
+        from .pipeline import MagiPipeline
+
+        return MagiPipeline
+    raise AttributeError(name)
+
 
 __all__ = ["MagiPipeline"]

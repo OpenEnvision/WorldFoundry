@@ -9,7 +9,7 @@ groups:
 source_repos:
 - url: https://github.com/Lightricks/LTX-2
   revision: a95ab856bf29407b6b066ede0abe1846050db56c
-  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/Lightricks--LTX-2
+  in_tree_path: worldfoundry/base_models/diffusion_model
 checkpoints:
 - repo_id: Lightricks/LTX-2.5
   revision: bf86adedf518142442575d1ce2e767b7d01c8c76
@@ -33,12 +33,17 @@ input_schema:
   - fps
   - offload_mode
   - quantization
+  - diffvae_optimization
+  - auto_duration
+  - num_generated_keyframes
+  - enhance_prompt
+  - timeout_seconds
 artifact_kind: generated_video
 artifact_filename: ltx-2.5.mp4
 execution:
   environment: ltx-2.5
-  backend_stage: official_external_runtime
-  runtime_status: command_contract_validated_checkpoint_gpu_pending
+  backend_stage: native
+  runtime_status: native_checkpoint_demo_pending
   integration_status: integrated
   pipeline_binding: ltx-2.5
   defaults:
@@ -48,9 +53,13 @@ execution:
     fps: 24
     seed: 42
     offload_mode: cpu
+    timeout_seconds: 7200
 integration:
   status: integrated
 notes:
-- Prediction never clones source or downloads checkpoints; all source and component paths are preflighted.
-- Uses the official split-checkpoint DistilledPipeline and preserves its joint audio-video output.
-- DFR, dev checkpoint pipelines, LoRAs, editing, training, UI, server, and upstream evaluation are intentionally excluded.
+- Prediction uses local split checkpoints and runs in-process in the ltx-2.5 environment.
+- NativeDiffusionPipeline runs the ltx-2.5 joint-multistage recipe with canonical LTX components.
+- timeout_seconds defaults to 7200. The cooperative deadline is checked between stages/steps
+  and before artifact writes; it cannot preempt a running CUDA kernel.
+- Reduced random split-checkpoint CPU replays match the pinned upstream stage and decoded tensors exactly.
+  Released-checkpoint GPU, quantization, offload and complete encoded-artifact parity remain pending.

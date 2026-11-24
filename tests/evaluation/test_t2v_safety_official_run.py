@@ -9,17 +9,17 @@ from types import SimpleNamespace
 import pytest
 
 from worldfoundry.core.io.formats.serialization import write_jsonl
-from worldfoundry.evaluation.api import ArtifactRef, GenerationResult
-from worldfoundry.evaluation.tasks.catalog.workspace_registry import (
+from worldfoundry.evals.api import ArtifactRef, GenerationResult
+from worldfoundry.evals.tasks.catalog.workspace_registry import (
     build_workspace_benchmark_command,
 )
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_generation import (
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_generation import (
     get_benchmark_generation_adapter,
 )
-from worldfoundry.evaluation.tasks.execution.orchestration.model_benchmark import (
+from worldfoundry.evals.tasks.execution.orchestration.model_benchmark import (
     _materialize_generated_artifacts,
 )
-from worldfoundry.evaluation.tasks.execution.runners.t2v_safety_bench import (
+from worldfoundry.evals.tasks.execution.runners.t2v_safety_bench import (
     run_t2v_safety_bench_official_runner as runner,
 )
 

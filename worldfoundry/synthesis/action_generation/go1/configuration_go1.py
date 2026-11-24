@@ -3,10 +3,9 @@ import copy
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
 
-from .configuration_internlm2 import InternLM2Config
-from .configuration_intern_vit import InternVisionConfig
-
 from .configuration_action_expert import ActionExpertConfig, LatentPlannerConfig
+from .configuration_intern_vit import InternVisionConfig
+from .configuration_internlm2 import InternLM2Config
 
 logger = logging.get_logger(__name__)
 
@@ -68,17 +67,17 @@ class GO1ModelConfig(PretrainedConfig):
         try:
             if "InternLM2ForCausalLM" in llm_config["architectures"][0]:
                 self.llm_config = InternLM2Config(**llm_config)
-        except:
+        except BaseException:
             self.llm_config = InternLM2Config()
         try:
             if action_config["architectures"][0] == "ActionExpertModel":
                 self.action_config = ActionExpertConfig(**action_config)
-        except:
+        except BaseException:
             self.action_config = ActionExpertConfig()
         try:
             if latent_planner_config["architectures"][0] == "ActionExpertModel":
                 self.latent_planner_config = LatentPlannerConfig(**latent_planner_config)
-        except:
+        except BaseException:
             self.latent_planner_config = LatentPlannerConfig()
 
         self.noise_scheduler_config = noise_scheduler_config

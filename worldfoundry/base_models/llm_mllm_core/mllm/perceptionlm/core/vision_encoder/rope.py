@@ -1,11 +1,11 @@
-from math import log, pi
-from typing import Literal, Optional, Union
+from math import pi
+from typing import Literal
 
 import torch
 from einops import rearrange, repeat
 from torch import Tensor, broadcast_tensors, einsum, nn
 from torch.amp import autocast
-from torch.nn import Module, ModuleList
+from torch.nn import Module
 
 # helper functions
 
@@ -47,9 +47,9 @@ def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
     rot_dim = freqs.shape[-1]
     end_index = start_index + rot_dim
 
-    assert (
-        rot_dim <= t.shape[-1]
-    ), f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
+    assert rot_dim <= t.shape[-1], (
+        f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
+    )
 
     t_left, t, t_right = (
         t[..., :start_index],
@@ -81,10 +81,8 @@ class RotaryEmbedding(Module):
     def __init__(
         self,
         dim,
-        custom_freqs: Optional[Tensor] = None,
-        freqs_for: Union[
-            Literal["lang"], Literal["pixel"], Literal["constant"]
-        ] = "lang",
+        custom_freqs: Tensor | None = None,
+        freqs_for: Literal["lang"] | Literal["pixel"] | Literal["constant"] = "lang",
         theta=10000,
         max_freq=10,
         num_freqs=1,
@@ -108,9 +106,7 @@ class RotaryEmbedding(Module):
         if exists(custom_freqs):
             freqs = custom_freqs
         elif freqs_for == "lang":
-            freqs = 1.0 / (
-                theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim)
-            )
+            freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
         elif freqs_for == "pixel":
             freqs = torch.linspace(1.0, max_freq / 2, dim // 2) * pi
         elif freqs_for == "constant":
@@ -163,16 +159,14 @@ class RotaryEmbedding(Module):
         self.register_buffer(key, value, persistent=False)
 
     def get_seq_pos(self, seq_len, device, dtype, offset=0):
-        return (
-            torch.arange(seq_len, device=device, dtype=dtype) + offset
-        ) / self.interpolate_factor
+        return (torch.arange(seq_len, device=device, dtype=dtype) + offset) / self.interpolate_factor
 
     def rotate_queries_or_keys(self, t, seq_dim=None, offset=0):
         seq_dim = default(seq_dim, self.default_seq_dim)
 
-        assert (
-            not self.use_xpos
-        ), "you must use `.rotate_queries_and_keys` method instead and pass in both queries and keys, for length extrapolatable rotary embeddings"
+        assert not self.use_xpos, (
+            "you must use `.rotate_queries_and_keys` method instead and pass in both queries and keys, for length extrapolatable rotary embeddings"
+        )
 
         device, dtype, seq_len = t.device, t.dtype, t.shape[seq_dim]
 
@@ -193,9 +187,7 @@ class RotaryEmbedding(Module):
         q_len, k_len = q.shape[seq_dim], k.shape[seq_dim]
         assert q_len <= k_len
 
-        rotated_q = self.rotate_queries_or_keys(
-            q, seq_dim=seq_dim, offset=k_len - q_len + offset
-        )
+        rotated_q = self.rotate_queries_or_keys(q, seq_dim=seq_dim, offset=k_len - q_len + offset)
         rotated_k = self.rotate_queries_or_keys(k, seq_dim=seq_dim, offset=offset)
 
         rotated_q = rotated_q.type(q.dtype)
@@ -226,16 +218,12 @@ class RotaryEmbedding(Module):
 
         return rotated_q, rotated_k
 
-    def get_scale(self, t: Tensor, seq_len: Optional[int] = None, offset=0):
+    def get_scale(self, t: Tensor, seq_len: int | None = None, offset=0):
         assert self.use_xpos
 
         should_cache = self.cache_if_possible and exists(seq_len)
 
-        if (
-            should_cache
-            and exists(self.cached_scales)
-            and (seq_len + offset) <= self.cached_scales.shape[0]
-        ):
+        if should_cache and exists(self.cached_scales) and (seq_len + offset) <= self.cached_scales.shape[0]:
             return self.cached_scales[offset : (offset + seq_len)]
 
         scale = 1.0
@@ -273,17 +261,10 @@ class RotaryEmbedding(Module):
     @autocast("cuda", enabled=False)
     def forward(self, t: Tensor, seq_len=None, offset=0):
         should_cache = (
-            self.cache_if_possible
-            and not self.learned_freq
-            and exists(seq_len)
-            and self.freqs_for != "pixel"
+            self.cache_if_possible and not self.learned_freq and exists(seq_len) and self.freqs_for != "pixel"
         )
 
-        if (
-            should_cache
-            and exists(self.cached_freqs)
-            and (offset + seq_len) <= self.cached_freqs.shape[0]
-        ):
+        if should_cache and exists(self.cached_freqs) and (offset + seq_len) <= self.cached_freqs.shape[0]:
             return self.cached_freqs[offset : (offset + seq_len)].detach()
 
         freqs = self.freqs
@@ -297,11 +278,8 @@ class RotaryEmbedding(Module):
         return freqs
 
 
-
-
-
 class Rope2D:
-    """ Helper class to apply RoPE2D as well as interpolate on the fly. """
+    """Helper class to apply RoPE2D as well as interpolate on the fly."""
 
     def __init__(self, dim, use_cls_token=False):
         self.dim = dim
@@ -331,9 +309,7 @@ class Rope2D:
             freq = torch.cat([freqs_x, freqs_y], dim=-1).reshape(grid_h * grid_w, -1)
 
             if self.use_cls_token:
-                freq = torch.cat(
-                    [torch.zeros(1, freq.shape[-1], device=device), freq], dim=0
-                )
+                freq = torch.cat([torch.zeros(1, freq.shape[-1], device=device), freq], dim=0)
 
             self.freq = freq[None, ...]
 

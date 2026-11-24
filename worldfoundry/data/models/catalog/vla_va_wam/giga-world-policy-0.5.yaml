@@ -12,6 +12,7 @@ official_sources:
   project_page: https://open-gigaai.github.io/giga-world-policy/
   github:
     url: https://github.com/open-gigaai/giga-world-policy
+    revision: 5d55073a6508de7354c83679d9028f4010ff6cb2
     head_sha: 3c36880111d3dd422c9d4ac1a26c3154f8922538
   huggingface:
   - repo_id: open-gigaai/Giga-World-Policy-0.5
@@ -39,7 +40,6 @@ output_artifacts:
 pipeline_binding: giga-world-policy-0.5
 runtime_profile: runtime-profile:giga-world-policy-0.5
 catalog_category: vla_va_wam
-schema_version: 2
 docs:
   publisher: GigaAI
   publisher_kind: company
@@ -52,7 +52,5 @@ docs:
   usage_notes_zh: 发布的 transformer 是预训练初始化：任务部署还需本地后训练统计（任务专用 norm_stats_delta.json），以及适用时的任务微调 transformer 目录。所有 Hub 资产需本地就位；运行时禁用网络访问。
   limitations:
   - Pretrained initialization only — task use requires your own post-training statistics/fine-tune.
-  - No GPU rollout validation is recorded in this repository.
   limitations_zh:
   - 仅为预训练初始化——任务使用需自备后训练统计/微调。
-  - 仓库未记录 GPU rollout 验证。

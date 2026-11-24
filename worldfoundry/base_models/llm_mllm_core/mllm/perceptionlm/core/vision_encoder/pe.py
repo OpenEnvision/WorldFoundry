@@ -1,30 +1,30 @@
-import copy
-import math
-import random
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import asdict
 from functools import partial
 from logging import getLogger
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, Literal
+from typing import Literal
 
 import numpy as np
 import torch
 import torch.nn as nn
 from einops import rearrange
 from timm.layers import DropPath
-from torch import nn
 from torch.nn import functional as F
-from torch.nn.init import constant_, xavier_normal_, xavier_uniform_
+from torch.nn.init import constant_, xavier_uniform_
 from torch.nn.parameter import Parameter
 from torch.utils.checkpoint import checkpoint
 
+from worldfoundry.base_models.llm_mllm_core.mllm.perceptionlm.core.vision_encoder.config import (
+    PE_TEXT_CONFIG,
+    PE_VISION_CONFIG,
+    PEConfig,
+    PETextConfig,
+    fetch_pe_checkpoint,
+)
 from worldfoundry.base_models.llm_mllm_core.mllm.perceptionlm.core.vision_encoder.rope import Rope2D
-from worldfoundry.base_models.llm_mllm_core.mllm.perceptionlm.core.vision_encoder.config import PEConfig, PETextConfig, PE_VISION_CONFIG, PE_TEXT_CONFIG, fetch_pe_checkpoint
-
-
 
 logger = getLogger()
-
 
 
 class LayerScale(nn.Module):
@@ -56,14 +56,10 @@ class AttentionPooling(nn.Module):
         self.embed_dim = embed_dim
         self.num_heads = num_heads
 
-        assert (
-            self.embed_dim % num_heads == 0
-        ), "embed_dim must be divisible by num_heads"
+        assert self.embed_dim % num_heads == 0, "embed_dim must be divisible by num_heads"
 
         self.probe = nn.Parameter(torch.randn(1, num_probe, self.embed_dim))
-        self.attn = nn.MultiheadAttention(
-            self.embed_dim, self.num_heads, batch_first=True
-        )
+        self.attn = nn.MultiheadAttention(self.embed_dim, self.num_heads, batch_first=True)
 
         self.layernorm = norm_layer(embed_dim)
         self.mlp_width = int(embed_dim * mlp_ratio)
@@ -96,16 +92,14 @@ class SelfAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
-        rope: Optional[nn.Module] = None,
+        rope: nn.Module | None = None,
     ):
-        super(SelfAttention, self).__init__()
+        super().__init__()
         self.embed_dim = embed_dim
 
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), "embed_dim must be divisible by num_heads"
+        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
 
         # To make this compatibile with nn.MultiHeadAttention
         self.in_proj_weight = Parameter(torch.empty(3 * embed_dim, embed_dim))
@@ -125,13 +119,7 @@ class SelfAttention(nn.Module):
         proj = F.linear(x, self.in_proj_weight, self.in_proj_bias)
 
         # reshape to 3, E and not E, 3 is deliberate for better memory coalescing and keeping same order as chunk()
-        proj = (
-            proj.unflatten(-1, (3, embed_dim))
-            .unsqueeze(0)
-            .transpose(0, -2)
-            .squeeze(-2)
-            .contiguous()
-        )
+        proj = proj.unflatten(-1, (3, embed_dim)).unsqueeze(0).transpose(0, -2).squeeze(-2).contiguous()
         q, k, v = proj[0], proj[1], proj[2]
 
         # Use "q_" so that we don't accidentally quit in pdb :)
@@ -142,9 +130,7 @@ class SelfAttention(nn.Module):
         if self.rope:
             q, k = self.rope(q, k)
 
-        attn = F.scaled_dot_product_attention(
-            q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False, scale=self.scale
-        )
+        attn = F.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False, scale=self.scale)
         attn = rearrange(attn, "b h s d -> b s (h d)")
 
         return F.linear(attn, self.out_proj.weight, self.out_proj.bias)
@@ -156,11 +142,11 @@ class ResidualAttentionBlock(nn.Module):
         d_model: int,
         n_head: int,
         mlp_ratio: float = 4.0,
-        ls_init_value: float = None,
+        ls_init_value: float | None = None,
         act_layer: Callable = nn.GELU,
         norm_layer: Callable = nn.LayerNorm,
         drop_path: float = 0.0,
-        rope: Optional[nn.Module] = None,
+        rope: nn.Module | None = None,
     ):
         super().__init__()
 
@@ -169,16 +155,8 @@ class ResidualAttentionBlock(nn.Module):
         else:
             self.attn = nn.MultiheadAttention(d_model, n_head, batch_first=True)
 
-        self.ls_1 = (
-            LayerScale(d_model, ls_init_value)
-            if ls_init_value is not None
-            else nn.Identity()
-        )
-        self.ls_2 = (
-            LayerScale(d_model, ls_init_value)
-            if ls_init_value is not None
-            else nn.Identity()
-        )
+        self.ls_1 = LayerScale(d_model, ls_init_value) if ls_init_value is not None else nn.Identity()
+        self.ls_2 = LayerScale(d_model, ls_init_value) if ls_init_value is not None else nn.Identity()
 
         self.ln_1 = norm_layer(d_model)
         self.ln_2 = norm_layer(d_model)
@@ -200,12 +178,11 @@ class ResidualAttentionBlock(nn.Module):
     def _call_attn(
         self,
         q_x: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
     ):
-
-        if attn_mask is not None:
+        if attn_mask is not None:  # noqa: SIM102 - Branches carry per-case comments.
             # Leave boolean masks as is
-            if not attn_mask.dtype == torch.bool:
+            if not attn_mask.dtype == torch.bool:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 attn_mask = attn_mask.to(q_x.dtype)
 
         if isinstance(self.attn, SelfAttention):
@@ -216,11 +193,9 @@ class ResidualAttentionBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
     ):
-        x = x + self.drop_path1(
-            self.ls_1(self._call_attn(self.ln_1(x), attn_mask=attn_mask))
-        )
+        x = x + self.drop_path1(self.ls_1(self._call_attn(self.ln_1(x), attn_mask=attn_mask)))
         x = x + self.drop_path2(self.ls_2(self.mlp(self.ln_2(x))))
         return x
 
@@ -232,11 +207,11 @@ class Transformer(nn.Module):
         layers: int,
         heads: int,
         mlp_ratio: float = 4.0,
-        ls_init_value: float = None,
+        ls_init_value: float | None = None,
         act_layer: Callable = nn.GELU,
         norm_layer: Callable = nn.LayerNorm,
         drop_path: float = 0.0,
-        rope: Optional[nn.Module] = None,
+        rope: nn.Module | None = None,
     ):
         super().__init__()
         self.width = width
@@ -265,14 +240,14 @@ class Transformer(nn.Module):
 
     @torch.jit.ignore
     def truncate(self, layer_idx: int):
-        """ Delete layers so the last layer is the given layer index. """
+        """Delete layers so the last layer is the given layer index."""
         self.layers = ((self.layers + layer_idx) % self.layers) + 1
-        self.resblocks = nn.ModuleList(self.resblocks[:self.layers])
+        self.resblocks = nn.ModuleList(self.resblocks[: self.layers])
 
     def forward(
         self,
         x: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
         layer_idx: int = -1,
     ):
         stop_idx = (self.layers + layer_idx) % self.layers
@@ -283,7 +258,7 @@ class Transformer(nn.Module):
                 x = checkpoint(r, x, None, None, attn_mask)
             else:
                 x = r(x, attn_mask=attn_mask)
-            
+
             if i == stop_idx:
                 break
 
@@ -299,16 +274,16 @@ class VisionTransformer(nn.Module):
         heads: int,
         mlp_ratio: float,
         act_layer: Callable = nn.GELU,
-        norm_layer: Callable = partial(nn.LayerNorm, eps=1e-5),
+        norm_layer: Callable = partial(nn.LayerNorm, eps=1e-5),  # noqa: B008 - Default evaluated once at definition, as upstream.
         use_ln_pre: bool = True,
         use_ln_post: bool = True,
-        ls_init_value: float = None,
+        ls_init_value: float | None = None,
         drop_path: float = 0.0,
         image_size: int = 448,  # Pretrain image size only; you can pass in any image size
         use_abs_posemb: bool = True,
         use_rope2d: bool = True,
         use_cls_token: bool = False,
-        output_dim: Optional[int] = 1280,
+        output_dim: int | None = 1280,
         attn_pooler_heads: int = 8,
         pool_type: Literal["attn", "tok", "avg", "none"] = "attn",
     ):
@@ -371,7 +346,6 @@ class VisionTransformer(nn.Module):
 
         self.init_tensors()
 
-
     def init_tensors(self):
         def init_submodule_tensors(module):
             for name, child in module.named_children():
@@ -392,17 +366,11 @@ class VisionTransformer(nn.Module):
         if self.use_abs_posemb:
             self.posemb_grid_size = self.image_size // self.patch_size
             self.positional_embedding = nn.Parameter(
-                init_scale
-                * torch.randn(
-                    int(self.use_cls_token) + self.posemb_grid_size**2, self.width
-                )
+                init_scale * torch.randn(int(self.use_cls_token) + self.posemb_grid_size**2, self.width)
             )
 
         if self.proj_dim is not None:
-            self.proj = nn.Parameter(
-                init_scale * torch.randn(self.width, self.proj_dim)
-            )
-
+            self.proj = nn.Parameter(init_scale * torch.randn(self.width, self.proj_dim))
 
     def load_ckpt(self, ckpt_path: str, verbose: bool = True):
         _sd = torch.load(ckpt_path, weights_only=True)
@@ -424,37 +392,28 @@ class VisionTransformer(nn.Module):
             print(f"Missing keys for loading vision encoder: {m}")
             print(f"Unexpected keys for loading vision encoder: {u}")
 
-
     def truncate(self, layer_idx: int):
-        """ Delete layers so the last layer is the given layer index. """
+        """Delete layers so the last layer is the given layer index."""
         self.transformer.truncate(layer_idx)
         self.layers = self.transformer.layers
 
-
     @classmethod
-    def from_config(
-        cls,
-        name: str,
-        pretrained: bool = False,
-        checkpoint_path: Optional[str] = None,
-        **kwdargs
-    ):
+    def from_config(cls, name: str, pretrained: bool = False, checkpoint_path: str | None = None, **kwdargs):
         if name not in PE_VISION_CONFIG:
             raise RuntimeError(f"{name} not found in configs.")
-    
+
         args = asdict(PE_VISION_CONFIG[name])
         args.update(kwdargs)
-        
+
         model = cls(**args)
         if pretrained:
             model.load_ckpt(fetch_pe_checkpoint(name, checkpoint_path))
-        
+
         return model
-    
+
     @classmethod
     def available_configs(cls):
         return list(PE_VISION_CONFIG.keys())
-
 
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):
@@ -470,13 +429,9 @@ class VisionTransformer(nn.Module):
             cls_token_embed, pos_embed = pos_embed[:1], pos_embed[1:]
 
         pos_embed = (
-            pos_embed.reshape(1, self.posemb_grid_size, self.posemb_grid_size, -1)
-            .permute(0, 3, 1, 2)
-            .contiguous()
+            pos_embed.reshape(1, self.posemb_grid_size, self.posemb_grid_size, -1).permute(0, 3, 1, 2).contiguous()
         )
-        pos_embed = F.interpolate(
-            pos_embed, size=(grid_h, grid_w), mode="bilinear", align_corners=False
-        )
+        pos_embed = F.interpolate(pos_embed, size=(grid_h, grid_w), mode="bilinear", align_corners=False)
         pos_embed = pos_embed.permute(0, 2, 3, 1).reshape(-1, self.width).contiguous()
 
         if self.use_cls_token:
@@ -496,13 +451,7 @@ class VisionTransformer(nn.Module):
         else:
             raise NotImplementedError
 
-    def forward_features(
-        self,
-        x: torch.Tensor,
-        norm: bool = False,
-        layer_idx: int = -1,
-        strip_cls_token: bool = False
-    ):
+    def forward_features(self, x: torch.Tensor, norm: bool = False, layer_idx: int = -1, strip_cls_token: bool = False):
         batch, _, h, w = x.shape
         grid_h, grid_w = h // self.patch_size, w // self.patch_size
 
@@ -542,13 +491,6 @@ class VisionTransformer(nn.Module):
         return x
 
 
-
-
-
-
-
-
-
 class TextTransformer(nn.Module):
     def __init__(
         self,
@@ -558,14 +500,14 @@ class TextTransformer(nn.Module):
         heads: int = 8,
         layers: int = 12,
         mlp_ratio: float = 4.0,
-        ls_init_value: float = None,
+        ls_init_value: float | None = None,
         output_dim: int = 1280,
         no_causal_mask: bool = False,
         pad_id: int = 0,
         pool_type: str = "argmax",
         proj_bias: bool = False,
         act_layer: Callable = nn.GELU,
-        norm_layer: Callable = partial(nn.LayerNorm, eps=1e-5),
+        norm_layer: Callable = partial(nn.LayerNorm, eps=1e-5),  # noqa: B008 - Default evaluated once at definition, as upstream.
         output_tokens: bool = False,
         use_ln_post: bool = True,
     ):
@@ -599,9 +541,7 @@ class TextTransformer(nn.Module):
         if no_causal_mask:
             self.attn_mask = None
         else:
-            self.register_buffer(
-                "attn_mask", self.build_causal_mask(), persistent=False
-            )
+            self.register_buffer("attn_mask", self.build_causal_mask(), persistent=False)
 
         if pool_type == "attn" or pool_type == "attn_eos":
             self.attn_pool = AttentionPooling(
@@ -636,7 +576,7 @@ class TextTransformer(nn.Module):
         _sd = {k.replace("module.", ""): v for k, v in _sd.items()}
 
         m, u = self.load_state_dict(_sd, strict=False)
-        
+
         if verbose or (m or u):
             logger.info(f"Missing keys for loading model: {m}")
             logger.info(f"Unexpected keys for loading model: {u}")
@@ -652,9 +592,7 @@ class TextTransformer(nn.Module):
         additive_mask = torch.repeat_interleave(additive_mask, self.heads, 0)
         return additive_mask
 
-    def text_global_pool(
-        self, x, text: Optional[torch.Tensor] = None, pool_type: str = "argmax"
-    ):
+    def text_global_pool(self, x, text: torch.Tensor | None = None, pool_type: str = "argmax"):
         if pool_type == "first":
             pooled, tokens = x[:, 0], x[:, 1:]
         elif pool_type == "last":
@@ -670,9 +608,7 @@ class TextTransformer(nn.Module):
 
     def forward(self, text):
         seq_len = text.shape[1]
-        x = self.token_embedding(
-            text
-        ) 
+        x = self.token_embedding(text)
         attn_mask = self.attn_mask
         if attn_mask is not None:
             attn_mask = attn_mask[:seq_len, :seq_len]
@@ -695,26 +631,18 @@ class TextTransformer(nn.Module):
         return pooled
 
 
-
-
 class CLIP(TextTransformer):
-    def __init__(
-        self,
-        vision_cfg: PEConfig,
-        text_cfg: PETextConfig,
-        init_logit_scale: float = np.log(1 / 0.07)
-    ):
-        super(CLIP, self).__init__(**asdict(text_cfg))
+    def __init__(self, vision_cfg: PEConfig, text_cfg: PETextConfig, init_logit_scale: float = np.log(1 / 0.07)):
+        super().__init__(**asdict(text_cfg))
         self.visual = VisionTransformer(**asdict(vision_cfg))
         self.image_size = self.visual.image_size  # For ease of use
         self.logit_scale = nn.Parameter(torch.ones([]) * init_logit_scale)
-
 
     def encode_image(self, image, normalize: bool = False):
         x = self.visual(image)
         return F.normalize(x, dim=-1) if normalize else x
 
-    def encode_video(self, video, normalize: bool = False): # b n c h w
+    def encode_video(self, video, normalize: bool = False):  # b n c h w
         b, n, c, h, w = video.shape
         frms = video.reshape(b * n, c, h, w)
         frm_feats = self.encode_image(frms, normalize=normalize)
@@ -728,32 +656,27 @@ class CLIP(TextTransformer):
 
     def forward(
         self,
-        image: Optional[torch.Tensor] = None,
-        text: Optional[torch.Tensor] = None,
+        image: torch.Tensor | None = None,
+        text: torch.Tensor | None = None,
     ):
-        image_features = (
-            self.encode_image(image, normalize=True) if image is not None else None
-        )
-        text_features = (
-            self.encode_text(text, normalize=True) if text is not None else None
-        )
+        image_features = self.encode_image(image, normalize=True) if image is not None else None
+        text_features = self.encode_text(text, normalize=True) if text is not None else None
         return image_features, text_features, self.logit_scale.exp()
-    
 
     @classmethod
     def from_config(
         cls,
         name: str,
         pretrained: bool = False,
-        checkpoint_path: Optional[str] = None  # To load your own
+        checkpoint_path: str | None = None,  # To load your own
     ):
         if name not in PE_VISION_CONFIG or name not in PE_TEXT_CONFIG:
             raise RuntimeError(f"{name} not found in configs.")
-    
+
         model = cls(PE_VISION_CONFIG[name], PE_TEXT_CONFIG[name])
         if pretrained:
             model.load_ckpt(fetch_pe_checkpoint(name, checkpoint_path))
-        
+
         return model
 
     @classmethod

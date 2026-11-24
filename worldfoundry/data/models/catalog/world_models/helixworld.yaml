@@ -12,6 +12,7 @@ official_sources:
   project_page: https://helixworld.org/
   github:
     url: https://github.com/NoizAI/HelixWorld
+    revision: 3fa5f166834b08ea20ddc925c01f85d936ac03b5
     head_sha: 3fa5f166834b08ea20ddc925c01f85d936ac03b5
   huggingface:
   - repo_id: NoizAI/HelixWorld-preview
@@ -24,7 +25,7 @@ checkpoints:
 - repo_id: google/gemma-3-12b-it-qat-q4_0-unquantized
   revision: 68f7ee4fbd59087436ada77ed2d62f373fdd4482
 runtime_profile: runtime-profile:helixworld
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: helixworld
 catalog_category: world_models
 integration:
@@ -47,8 +48,6 @@ docs:
   architecture: LTX-2.3 joint audio/video transformer with action timestep embeddings, camera PRoPE, four-step stochastic sampling and bounded clean-context replay.
   architecture_zh: 基于 LTX-2.3 联合音视频 transformer，加入动作时间步嵌入、相机 PRoPE、四步随机采样与有界历史上下文重放。
   limitations:
-  - Full-checkpoint CUDA output parity has not been validated.
   - Preview inference is released; full-model training code and the technical report are forthcoming.
   limitations_zh:
-  - 尚未验证完整 checkpoint 的 CUDA 输出一致性。
   - 当前公开 Preview 推理版本，完整模型训练代码及技术报告尚待发布。

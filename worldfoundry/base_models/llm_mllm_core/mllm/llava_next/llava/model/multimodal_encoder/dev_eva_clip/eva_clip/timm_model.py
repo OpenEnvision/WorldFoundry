@@ -1,4 +1,4 @@
-""" timm model adapter
+"""timm model adapter
 
 Wraps timm (https://github.com/rwightman/pytorch-image-models) models for use as a vision tower in CLIP model.
 """
@@ -15,12 +15,12 @@ try:
 
     try:
         # old timm imports < 0.8.1
-        from timm.models.layers.attention_pool2d import RotAttentionPool2d
         from timm.models.layers.attention_pool2d import AttentionPool2d as AbsAttentionPool2d
+        from timm.models.layers.attention_pool2d import RotAttentionPool2d
     except ImportError:
         # new timm imports >= 0.8.1
-        from timm.layers import RotAttentionPool2d
         from timm.layers import AttentionPool2d as AbsAttentionPool2d
+        from timm.layers import RotAttentionPool2d
 except ImportError:
     timm = None
 
@@ -32,7 +32,17 @@ class TimmModel(nn.Module):
     # FIXME this adapter is a work in progress, may change in ways that break weight compat
     """
 
-    def __init__(self, model_name, embed_dim, image_size=224, pool="avg", proj="linear", proj_bias=False, drop=0.0, pretrained=False):
+    def __init__(
+        self,
+        model_name,
+        embed_dim,
+        image_size=224,
+        pool="avg",
+        proj="linear",
+        proj_bias=False,
+        drop=0.0,
+        pretrained=False,
+    ):
         super().__init__()
         if timm is None:
             raise RuntimeError("Please `pip install timm` to use timm models.")
@@ -47,7 +57,7 @@ class TimmModel(nn.Module):
             self.trunk.reset_classifier(0, global_pool="")
         else:
             # reset global pool if pool config set, otherwise leave as network default
-            reset_kwargs = dict(global_pool=pool) if pool else {}
+            reset_kwargs = {"global_pool": pool} if pool else {}
             self.trunk.reset_classifier(0, **reset_kwargs)
         prev_chs = self.trunk.num_features
 
@@ -85,9 +95,9 @@ class TimmModel(nn.Module):
             # NOTE: partial freeze requires latest timm (master) branch and is subject to change
             try:
                 # FIXME import here until API stable and in an official release
-                from timm.models.helpers import group_parameters, group_modules
+                from timm.models.helpers import group_modules, group_parameters
             except ImportError:
-                raise RuntimeError("Please install a recent `timm` release from the configured package index.")
+                raise RuntimeError("Please install a recent `timm` release from the configured package index.")  # noqa: B904 - Keeps the implicit exception context.
             matcher = self.trunk.group_matcher()
             gparams = group_parameters(self.trunk, matcher)
             max_layer_id = max(gparams.keys())
@@ -105,7 +115,7 @@ class TimmModel(nn.Module):
     def set_grad_checkpointing(self, enable=True):
         try:
             self.trunk.set_grad_checkpointing(enable)
-        except Exception as e:
+        except Exception:
             logging.warning("grad checkpointing not supported for this timm image tower, continuing without...")
 
     def forward(self, x):

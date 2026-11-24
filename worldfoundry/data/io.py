@@ -13,19 +13,14 @@ from types import SimpleNamespace
 from typing import IO, Any
 from urllib.parse import urlparse
 
-from worldfoundry.core.io import (
-    copy_uri,
-    dump_serialized,
-    exists_uri,
-    load_serialized,
-    save_image_or_video_tensor,
-)
+from worldfoundry.core.io import copy_uri, dump_serialized, exists_uri, load_serialized
 from worldfoundry.core.io.assets.cache import (
     download_from_cache_or_uri as _download_from_cache_or_uri,
 )
 from worldfoundry.core.io.assets.cache import (
     load_from_cache_or_uri as _load_from_cache_or_uri,
 )
+from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
 
 
 def _strip_storage_compat_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:

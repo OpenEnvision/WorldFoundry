@@ -1,2 +1,2 @@
-_target_: models.identity.IdentityFeatureModel
+_target_: worldfoundry.synthesis.visual_generation.dino_wm.models.identity.IdentityFeatureModel
 emb_dim: 7

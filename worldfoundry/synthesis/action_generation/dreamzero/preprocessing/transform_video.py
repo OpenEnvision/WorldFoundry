@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, ClassVar
+from collections.abc import Callable
+from typing import Any, ClassVar
 
-from einops import rearrange
 import numpy as np
-from pydantic import Field, PrivateAttr, field_validator
 import torch
 import torchvision.transforms.v2 as T
+from einops import rearrange
+from pydantic import Field, PrivateAttr, field_validator
+
+from worldfoundry.base_models.llm_mllm_core.action.gr00t.preprocessing.base import ModalityTransform
 
 from .schema import DatasetMetadata
-from .transform_base import ModalityTransform
 
 
 class VideoTransform(ModalityTransform):
@@ -67,7 +69,7 @@ class VideoTransform(ModalityTransform):
             split = rearrange(joined, "(v b t) ... -> v b t ...", v=num_views, b=batch_size)
         else:
             split = rearrange(joined, "(v t) ... -> v t ...", v=num_views)
-        for key, view in zip(self.apply_to, split):
+        for key, view in zip(self.apply_to, split, strict=False):
             data[key] = view
         return data
 
@@ -182,14 +184,7 @@ class VideoToNumpy(VideoTransform):
 
     @staticmethod
     def to_numpy(frames: torch.Tensor) -> np.ndarray:
-        return (
-            frames.movedim(-3, -1)
-            .mul(255)
-            .clamp_(0, 255)
-            .to(torch.uint8)
-            .cpu()
-            .numpy()
-        )
+        return frames.movedim(-3, -1).mul(255).clamp_(0, 255).to(torch.uint8).cpu().numpy()
 
 
 class VideoNormalize(VideoTransform):

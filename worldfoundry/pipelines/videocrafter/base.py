@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Mapping
-from typing import Any, Dict, Optional
+from typing import Any
 
-from ...synthesis.visual_generation.memory.video import VideoArtifactMemory
 from ...operators.runtime_video_operator import RuntimeVideoOperator
+from ...synthesis.visual_generation.memory.video import VideoArtifactMemory
 from ..pipeline_utils import PipelineABC
-
 
 _CHECKPOINT_KEYS = ("ckpt_path", "checkpoint_path", "pretrained_model_path", "model_path")
 _RUNTIME_KWARGS = {
@@ -43,11 +43,10 @@ _CALL_RUNTIME_ALIASES = {
 
 def _videocrafter_runtime_inputs(
     model_path: Any,
-    required_components: Optional[Mapping[str, Any]],
+    required_components: Mapping[str, Any] | None,
     device: str,
     overrides: Mapping[str, Any],
 ) -> tuple[Any, dict[str, Any]]:
-    """Videocrafter runtime inputs helper function."""
     runtime_overrides = {
         key: value
         for source in (required_components or {}, overrides)
@@ -59,7 +58,7 @@ def _videocrafter_runtime_inputs(
     checkpoint = model_path
     if isinstance(model_path, Mapping):
         values = dict(model_path)
-        checkpoint = next((values[key] for key in _CHECKPOINT_KEYS if key in values and values[key]), None)
+        checkpoint = next((values[key] for key in _CHECKPOINT_KEYS if values.get(key)), None)
         runtime_overrides.update({key: value for key, value in values.items() if key in _RUNTIME_KWARGS})
 
     return checkpoint, runtime_overrides
@@ -73,9 +72,9 @@ class VideoCrafterPipelineBase(PipelineABC):
 
     def __init__(
         self,
-        operator: Optional[RuntimeVideoOperator] = None,
+        operator: RuntimeVideoOperator | None = None,
         synthesis_model=None,
-        memory_module: Optional[VideoArtifactMemory] = None,
+        memory_module: VideoArtifactMemory | None = None,
         device: str = "cuda",
     ) -> None:
         """Initialize the pipeline and configure runtime components."""
@@ -93,10 +92,10 @@ class VideoCrafterPipelineBase(PipelineABC):
         self.device = device
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: Any = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
         lazy: bool = True,
         **kwargs: Any,
@@ -108,7 +107,7 @@ class VideoCrafterPipelineBase(PipelineABC):
             device,
             kwargs,
         )
-        synthesis_model = cls.SYNTHESIS_CLS.from_pretrained(
+        synthesis_model = cls._component("SYNTHESIS_CLS").from_pretrained(
             pretrained_model_path=checkpoint,
             device=device,
             lazy=lazy,
@@ -121,7 +120,7 @@ class VideoCrafterPipelineBase(PipelineABC):
             device=device,
         )
 
-    def process(self, prompt: str = "", images=None, **kwargs) -> Dict[str, Any]:
+    def process(self, prompt: str = "", images=None, **kwargs) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
         del kwargs
         self.operator.get_interaction(prompt)
@@ -139,8 +138,8 @@ class VideoCrafterPipelineBase(PipelineABC):
         self,
         prompt: str = "",
         images=None,
-        output_path: Optional[str] = None,
-        fps: Optional[int] = None,
+        output_path: str | None = None,
+        fps: int | None = None,
         return_dict: bool = False,
         **kwargs,
     ):
@@ -186,10 +185,8 @@ class VideoCrafterPipelineBase(PipelineABC):
             if saved_generator_attrs and getattr(self.synthesis_model, "generator", None) is generator:
                 for key, value in saved_generator_attrs.items():
                     if value is _missing:
-                        try:
+                        with contextlib.suppress(AttributeError):
                             delattr(generator, key)
-                        except AttributeError:
-                            pass
                     else:
                         setattr(generator, key, value)
             if saved_runtime_kwargs is not None:
@@ -209,8 +206,8 @@ class VideoCrafterPipelineBase(PipelineABC):
         self,
         prompt: str = "",
         images=None,
-        output_path: Optional[str] = None,
-        fps: Optional[int] = None,
+        output_path: str | None = None,
+        fps: int | None = None,
         return_dict: bool = False,
         **kwargs,
     ):

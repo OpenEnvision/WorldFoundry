@@ -163,7 +163,12 @@ class GaussianSurfels:
         exclude_layer: int | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor] | None]:
         """Share gsplat projections and native RGB/median compositing."""
-        from gsplat.cuda._wrapper import fully_fused_projection, isect_offset_encode, isect_tiles
+        gsplat_wrapper = __import__(
+            "gsplat.cuda._wrapper", fromlist=["fully_fused_projection", "isect_offset_encode", "isect_tiles"]
+        )
+        fully_fused_projection = gsplat_wrapper.fully_fused_projection
+        isect_offset_encode = gsplat_wrapper.isect_offset_encode
+        isect_tiles = gsplat_wrapper.isect_tiles
 
         from worldfoundry.core.kernels.triton_gaussian_raster import gaussian_raster_rgb
 

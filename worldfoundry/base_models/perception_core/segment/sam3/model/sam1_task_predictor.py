@@ -6,15 +6,13 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> perception_core -> segment -> sam3 -> model -> sam1_task_predictor.py functionality."""
-
 import logging
-from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 from PIL.Image import Image
+
 from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_tracker_base import Sam3TrackerBase
 from worldfoundry.base_models.perception_core.segment.sam3.model.utils.sam1_utils import SAM2Transforms
 
@@ -22,6 +20,7 @@ from worldfoundry.base_models.perception_core.segment.sam3.model.utils.sam1_util
 # Adapted from https://github.com/facebookresearch/sam2/blob/main/sam2/sam2_image_predictor.py
 class SAM3InteractiveImagePredictor(nn.Module):
     """Interactive image predictor implementation."""
+
     def __init__(
         self,
         sam_model: Sam3TrackerBase,
@@ -72,7 +71,7 @@ class SAM3InteractiveImagePredictor(nn.Module):
     @torch.no_grad()
     def set_image(
         self,
-        image: Union[np.ndarray, Image],
+        image: np.ndarray | Image,
     ) -> None:
         """
         Calculates the image embeddings for the provided image, allowing
@@ -113,7 +112,7 @@ class SAM3InteractiveImagePredictor(nn.Module):
 
         feats = [
             feat.permute(1, 2, 0).view(1, -1, *feat_size)
-            for feat, feat_size in zip(vision_feats[::-1], self._bb_feat_sizes[::-1])
+            for feat, feat_size in zip(vision_feats[::-1], self._bb_feat_sizes[::-1], strict=False)
         ][::-1]
         self._features = {"image_embed": feats[-1], "high_res_feats": feats[:-1]}
         self._is_image_set = True
@@ -122,7 +121,7 @@ class SAM3InteractiveImagePredictor(nn.Module):
     @torch.no_grad()
     def set_image_batch(
         self,
-        image_list: List[Union[np.ndarray]],
+        image_list: list[np.ndarray],
     ) -> None:
         """
         Calculates the image embeddings for the provided image batch, allowing
@@ -160,7 +159,7 @@ class SAM3InteractiveImagePredictor(nn.Module):
 
         feats = [
             feat.permute(1, 2, 0).view(batch_size, -1, *feat_size)
-            for feat, feat_size in zip(vision_feats[::-1], self._bb_feat_sizes[::-1])
+            for feat, feat_size in zip(vision_feats[::-1], self._bb_feat_sizes[::-1], strict=False)
         ][::-1]
         self._features = {"image_embed": feats[-1], "high_res_feats": feats[:-1]}
         self._is_image_set = True
@@ -169,38 +168,30 @@ class SAM3InteractiveImagePredictor(nn.Module):
 
     def predict_batch(
         self,
-        point_coords_batch: List[np.ndarray] = None,
-        point_labels_batch: List[np.ndarray] = None,
-        box_batch: List[np.ndarray] = None,
-        mask_input_batch: List[np.ndarray] = None,
+        point_coords_batch: list[np.ndarray] | None = None,
+        point_labels_batch: list[np.ndarray] | None = None,
+        box_batch: list[np.ndarray] | None = None,
+        mask_input_batch: list[np.ndarray] | None = None,
         multimask_output: bool = True,
         return_logits: bool = False,
         normalize_coords=True,
-    ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+    ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
         """This function is very similar to predict(...), however it is used for batched mode, when the model is expected to generate predictions on multiple images.
         It returns a tuple of lists of masks, ious, and low_res_masks_logits.
         """
         assert self._is_batch, "This function should only be used when in batched mode"
         if not self._is_image_set:
-            raise RuntimeError(
-                "An image must be set with .set_image_batch(...) before mask prediction."
-            )
+            raise RuntimeError("An image must be set with .set_image_batch(...) before mask prediction.")
         num_images = len(self._features["image_embed"])
         all_masks = []
         all_ious = []
         all_low_res_masks = []
         for img_idx in range(num_images):
             # Transform input prompts
-            point_coords = (
-                point_coords_batch[img_idx] if point_coords_batch is not None else None
-            )
-            point_labels = (
-                point_labels_batch[img_idx] if point_labels_batch is not None else None
-            )
+            point_coords = point_coords_batch[img_idx] if point_coords_batch is not None else None
+            point_labels = point_labels_batch[img_idx] if point_labels_batch is not None else None
             box = box_batch[img_idx] if box_batch is not None else None
-            mask_input = (
-                mask_input_batch[img_idx] if mask_input_batch is not None else None
-            )
+            mask_input = mask_input_batch[img_idx] if mask_input_batch is not None else None
             mask_input, unnorm_coords, labels, unnorm_box = self._prep_prompts(
                 point_coords,
                 point_labels,
@@ -219,9 +210,7 @@ class SAM3InteractiveImagePredictor(nn.Module):
                 img_idx=img_idx,
             )
             masks_np = masks.squeeze(0).float().detach().cpu().numpy()
-            iou_predictions_np = (
-                iou_predictions.squeeze(0).float().detach().cpu().numpy()
-            )
+            iou_predictions_np = iou_predictions.squeeze(0).float().detach().cpu().numpy()
             low_res_masks_np = low_res_masks.squeeze(0).float().detach().cpu().numpy()
             all_masks.append(masks_np)
             all_ious.append(iou_predictions_np)
@@ -231,14 +220,14 @@ class SAM3InteractiveImagePredictor(nn.Module):
 
     def predict(
         self,
-        point_coords: Optional[np.ndarray] = None,
-        point_labels: Optional[np.ndarray] = None,
-        box: Optional[np.ndarray] = None,
-        mask_input: Optional[np.ndarray] = None,
+        point_coords: np.ndarray | None = None,
+        point_labels: np.ndarray | None = None,
+        box: np.ndarray | None = None,
+        mask_input: np.ndarray | None = None,
         multimask_output: bool = True,
         return_logits: bool = False,
         normalize_coords=True,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Predict masks for the given input prompts, using the currently set image.
 
@@ -273,9 +262,7 @@ class SAM3InteractiveImagePredictor(nn.Module):
             a subsequent iteration as mask input.
         """
         if not self._is_image_set:
-            raise RuntimeError(
-                "An image must be set with .set_image(...) before mask prediction."
-            )
+            raise RuntimeError("An image must be set with .set_image(...) before mask prediction.")
 
         # Transform input prompts
 
@@ -297,27 +284,11 @@ class SAM3InteractiveImagePredictor(nn.Module):
         low_res_masks_np = low_res_masks.squeeze(0).float().detach().cpu().numpy()
         return masks_np, iou_predictions_np, low_res_masks_np
 
-    def _prep_prompts(
-        self, point_coords, point_labels, box, mask_logits, normalize_coords, img_idx=-1
-    ):
-        """Helper function to prep prompts.
-
-        Args:
-            point_coords: The point coords.
-            point_labels: The point labels.
-            box: The box.
-            mask_logits: The mask logits.
-            normalize_coords: The normalize coords.
-            img_idx: The img idx.
-        """
+    def _prep_prompts(self, point_coords, point_labels, box, mask_logits, normalize_coords, img_idx=-1):
         unnorm_coords, labels, unnorm_box, mask_input = None, None, None, None
         if point_coords is not None:
-            assert point_labels is not None, (
-                "point_labels must be supplied if point_coords is supplied."
-            )
-            point_coords = torch.as_tensor(
-                point_coords, dtype=torch.float, device=self.device
-            )
+            assert point_labels is not None, "point_labels must be supplied if point_coords is supplied."
+            point_coords = torch.as_tensor(point_coords, dtype=torch.float, device=self.device)
             unnorm_coords = self._transforms.transform_coords(
                 point_coords, normalize=normalize_coords, orig_hw=self._orig_hw[img_idx]
             )
@@ -330,9 +301,7 @@ class SAM3InteractiveImagePredictor(nn.Module):
                 box, normalize=normalize_coords, orig_hw=self._orig_hw[img_idx]
             )  # Bx2x2
         if mask_logits is not None:
-            mask_input = torch.as_tensor(
-                mask_logits, dtype=torch.float, device=self.device
-            )
+            mask_input = torch.as_tensor(mask_logits, dtype=torch.float, device=self.device)
             if len(mask_input.shape) == 3:
                 mask_input = mask_input[None, :, :, :]
         return mask_input, unnorm_coords, labels, unnorm_box
@@ -340,14 +309,14 @@ class SAM3InteractiveImagePredictor(nn.Module):
     @torch.no_grad()
     def _predict(
         self,
-        point_coords: Optional[torch.Tensor],
-        point_labels: Optional[torch.Tensor],
-        boxes: Optional[torch.Tensor] = None,
-        mask_input: Optional[torch.Tensor] = None,
+        point_coords: torch.Tensor | None,
+        point_labels: torch.Tensor | None,
+        boxes: torch.Tensor | None = None,
+        mask_input: torch.Tensor | None = None,
         multimask_output: bool = True,
         return_logits: bool = False,
         img_idx: int = -1,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Predict masks for the given input prompts, using the currently set image.
         Input prompts are batched torch tensors and are expected to already be
@@ -384,14 +353,9 @@ class SAM3InteractiveImagePredictor(nn.Module):
             a subsequent iteration as mask input.
         """
         if not self._is_image_set:
-            raise RuntimeError(
-                "An image must be set with .set_image(...) before mask prediction."
-            )
+            raise RuntimeError("An image must be set with .set_image(...) before mask prediction.")
 
-        if point_coords is not None:
-            concat_points = (point_coords, point_labels)
-        else:
-            concat_points = None
+        concat_points = (point_coords, point_labels) if point_coords is not None else None
 
         # Embed prompts
         if boxes is not None:
@@ -414,13 +378,8 @@ class SAM3InteractiveImagePredictor(nn.Module):
         )
 
         # Predict masks
-        batched_mode = (
-            concat_points is not None and concat_points[0].shape[0] > 1
-        )  # multi object prediction
-        high_res_features = [
-            feat_level[img_idx].unsqueeze(0)
-            for feat_level in self._features["high_res_feats"]
-        ]
+        batched_mode = concat_points is not None and concat_points[0].shape[0] > 1  # multi object prediction
+        high_res_features = [feat_level[img_idx].unsqueeze(0) for feat_level in self._features["high_res_feats"]]
         low_res_masks, iou_predictions, _, _ = self.model.sam_mask_decoder(
             image_embeddings=self._features["image_embed"][img_idx].unsqueeze(0),
             image_pe=self.model.sam_prompt_encoder.get_dense_pe(),
@@ -432,9 +391,7 @@ class SAM3InteractiveImagePredictor(nn.Module):
         )
 
         # Upscale the masks to the original image resolution
-        masks = self._transforms.postprocess_masks(
-            low_res_masks, self._orig_hw[img_idx]
-        )
+        masks = self._transforms.postprocess_masks(low_res_masks, self._orig_hw[img_idx])
         low_res_masks = torch.clamp(low_res_masks, -32.0, 32.0)
         if not return_logits:
             masks = masks > self.mask_threshold
@@ -448,21 +405,12 @@ class SAM3InteractiveImagePredictor(nn.Module):
         the embedding spatial dimension of SAM (typically C=256, H=W=64).
         """
         if not self._is_image_set:
-            raise RuntimeError(
-                "An image must be set with .set_image(...) to generate an embedding."
-            )
-        assert self._features is not None, (
-            "Features must exist if an image has been set."
-        )
+            raise RuntimeError("An image must be set with .set_image(...) to generate an embedding.")
+        assert self._features is not None, "Features must exist if an image has been set."
         return self._features["image_embed"]
 
     @property
     def device(self) -> torch.device:
-        """Device.
-
-        Returns:
-            The return value.
-        """
         return self.model.device
 
     def reset_predictor(self) -> None:

@@ -1,34 +1,24 @@
 import os
-import torch
 import subprocess
+
+import torch
+
 
 def detectplat_device_gpu_vendor():
     try:
-        result = subprocess.run(
-            ["mx-smi"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=3
-        )
+        result = subprocess.run(["mx-smi"], capture_output=True, text=True, timeout=3)
         output = result.stdout + result.stderr
 
         if "MetaX" in output:
             return "MetaX"
-    except:
+    except BaseException:
         pass
 
     try:
-        result = subprocess.run(
-            ["nvidia-smi"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=3
-        )
+        result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, timeout=3)
         if "NVIDIA" in result.stdout:
             return "NVIDIA"
-    except:
+    except BaseException:
         pass
 
     return "Unknown"
@@ -39,22 +29,20 @@ def get_cuda_sm():
     if not IS_CUDA:
         return None
     major, minor = torch.cuda.get_device_capability()
-    return major * 10 + minor 
+    return major * 10 + minor
 
 
 FLAGS_KAIROS_PLAT_DEVICE = detectplat_device_gpu_vendor()
 FLAGS_KAIROS_IS_METAX = False
 FLAGS_KAIROS_CUDA_SM = None
-print(f'current device: {FLAGS_KAIROS_PLAT_DEVICE}')
+print(f"current device: {FLAGS_KAIROS_PLAT_DEVICE}")
 
-if FLAGS_KAIROS_PLAT_DEVICE == "NVIDIA" or (
-    FLAGS_KAIROS_PLAT_DEVICE == "Unknown" and torch.cuda.is_available()
-):
+if FLAGS_KAIROS_PLAT_DEVICE == "NVIDIA" or (FLAGS_KAIROS_PLAT_DEVICE == "Unknown" and torch.cuda.is_available()):
     FLAGS_KAIROS_PLAT_DEVICE = "NVIDIA"
     FLAGS_KAIROS_CUDA_SM = get_cuda_sm()
 
 if FLAGS_KAIROS_PLAT_DEVICE == "MetaX":
-    os.environ["IS_METAX"] = "1" # for docker 
+    os.environ["IS_METAX"] = "1"  # for docker
     os.environ["FLAGS_KAIROS_IS_METAX"] = "1"
     FLAGS_KAIROS_IS_METAX = True
     if not hasattr(torch, "maca"):

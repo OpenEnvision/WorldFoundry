@@ -19,18 +19,14 @@ def approx_gelu():
     return nn.GELU(approximate="tanh")
 
 
-def get_layernorm(
-    hidden_size: torch.Tensor, eps: float, affine: bool, use_kernel: bool
-):
+def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kernel: bool):
     if use_kernel:
         try:
             from apex.normalization import FusedLayerNorm
 
             return FusedLayerNorm(hidden_size, elementwise_affine=affine, eps=eps)
         except ImportError:
-            raise RuntimeError(
-                "FusedLayerNorm not available. Please install apex."
-            ) from None
+            raise RuntimeError("FusedLayerNorm not available. Please install apex.") from None
     else:
         return nn.LayerNorm(hidden_size, eps, elementwise_affine=affine)
 
@@ -69,23 +65,17 @@ class AttentionWithMask(nn.Module):
 
         self.qk_norm = qk_norm
 
-    def forward(
-        self, x: torch.Tensor | list[torch.Tensor], causal: bool
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor | list[torch.Tensor], causal: bool) -> torch.Tensor:
         if causal:
             if self._use_xformers:
                 attn_bias, x = _xformers_ops.fmha.BlockDiagonalMask.from_tensor_list(x)
                 attn_bias = attn_bias.make_causal()
-                qkv = einops.rearrange(
-                    self.qkv(x), "1 bnt (m h d) -> m 1 bnt h d", m=3, h=self.num_heads
-                )
+                qkv = einops.rearrange(self.qkv(x), "1 bnt (m h d) -> m 1 bnt h d", m=3, h=self.num_heads)
                 q, k, v = qkv.unbind(0)
                 q, k = self.q_norm(q), self.k_norm(k)
                 q = q.to(v.dtype)
                 k = k.to(v.dtype)
-                out = _xformers_ops.fmha.memory_efficient_attention(
-                    q, k, v, attn_bias=attn_bias
-                )
+                out = _xformers_ops.fmha.memory_efficient_attention(q, k, v, attn_bias=attn_bias)
                 x = einops.rearrange(out, "1 bnt h d -> 1 bnt (h d)")
                 x = self.proj(x)
                 x = self.proj_drop(x)
@@ -93,14 +83,10 @@ class AttentionWithMask(nn.Module):
             else:
                 ret = []
                 for xi in x:
-                    qkv = einops.rearrange(
-                        self.qkv(xi), "n t (m h d) -> m n h t d", h=self.num_heads, m=3
-                    )
+                    qkv = einops.rearrange(self.qkv(xi), "n t (m h d) -> m n h t d", h=self.num_heads, m=3)
                     q, k, v = qkv.unbind(0)
                     q, k = self.q_norm(q), self.k_norm(k)
-                    xa = F.scaled_dot_product_attention(
-                        q, k, v, is_causal=True, dropout_p=self.attn_drop.p
-                    )
+                    xa = F.scaled_dot_product_attention(q, k, v, is_causal=True, dropout_p=self.attn_drop.p)
                     xa = einops.rearrange(xa, "n h t d -> n t (h d)")
                     xa = self.proj(xa)
                     xa = self.proj_drop(xa)
@@ -108,25 +94,17 @@ class AttentionWithMask(nn.Module):
                 return ret
         else:
             if self._use_xformers:
-                qkv = einops.rearrange(
-                    self.qkv(x), "b n (m h d) -> m b n h d", h=self.num_heads, m=3
-                )
+                qkv = einops.rearrange(self.qkv(x), "b n (m h d) -> m b n h d", h=self.num_heads, m=3)
                 q, k, v = qkv.unbind(0)
                 q, k = self.q_norm(q), self.k_norm(k)
                 q = q.to(v.dtype)
                 k = k.to(v.dtype)
-                x = _xformers_ops.memory_efficient_attention(
-                    query=q, key=k, value=v, p=self.attn_drop.p
-                )
+                x = _xformers_ops.memory_efficient_attention(query=q, key=k, value=v, p=self.attn_drop.p)
             else:
-                qkv = einops.rearrange(
-                    self.qkv(x), "b n (m h d) -> m b h n d", h=self.num_heads, m=3
-                )
+                qkv = einops.rearrange(self.qkv(x), "b n (m h d) -> m b h n d", h=self.num_heads, m=3)
                 q, k, v = qkv.unbind(0)
                 q, k = self.q_norm(q), self.k_norm(k)
-                x = F.scaled_dot_product_attention(
-                    q, k, v, is_causal=False, dropout_p=self.attn_drop.p
-                )
+                x = F.scaled_dot_product_attention(q, k, v, is_causal=False, dropout_p=self.attn_drop.p)
                 x = einops.rearrange(x, "b h n d -> b n h d")
 
             x = einops.rearrange(x, "b n h d -> b n (h d)")
@@ -154,9 +132,7 @@ class STBlock(nn.Module):
         super().__init__()
         self.hidden_size = hidden_size
 
-        self.norm1 = get_layernorm(
-            hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel
-        )
+        self.norm1 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
         self.attn = AttentionWithMask(
             hidden_size,
             num_heads=num_heads,
@@ -164,9 +140,7 @@ class STBlock(nn.Module):
             use_xformers=use_xformers,
             qk_norm=st_use_qk_norm,
         )
-        self.norm2 = get_layernorm(
-            hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel
-        )
+        self.norm2 = get_layernorm(hidden_size, eps=1e-6, affine=False, use_kernel=enable_layernorm_kernel)
         self.mlp = Mlp(
             in_features=hidden_size,
             hidden_features=int(hidden_size * mlp_ratio),
@@ -174,9 +148,7 @@ class STBlock(nn.Module):
             drop=0,
         )
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.scale_shift_table = nn.Parameter(
-            torch.randn(6, hidden_size) / hidden_size**0.5
-        )
+        self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
 
         self.d_s = d_s
         self.d_t = d_t
@@ -190,9 +162,7 @@ class STBlock(nn.Module):
         )
 
     def forward(self, concat_x, pad_len, tpe=None):
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-            self.scale_shift_table[None]
-        ).chunk(6, dim=1)
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (self.scale_shift_table[None]).chunk(6, dim=1)
         x_m = t2i_modulate(self.norm1(concat_x), shift_msa, scale_msa)
 
         x_s = self.attn(x_m, causal=False)
@@ -212,8 +182,6 @@ class STBlock(nn.Module):
 
         x = concat_x + self.drop_path(gate_msa * x_t)
 
-        x = x + self.drop_path(
-            gate_mlp * self.mlp(t2i_modulate(self.norm2(x), shift_mlp, scale_mlp))
-        )
+        x = x + self.drop_path(gate_mlp * self.mlp(t2i_modulate(self.norm2(x), shift_mlp, scale_mlp)))
 
         return x

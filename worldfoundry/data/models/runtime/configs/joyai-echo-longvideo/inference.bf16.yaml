@@ -1,0 +1,64 @@
+# Echo 1.5 full DMD BF16 single-GPU inference configuration.
+# Relative paths are resolved from the vendored echo_longvideo_runtime package.
+
+paths:
+  checkpoint: checkpoints/echo15_full_dmd
+  gemma_path: checkpoints/gemma-3-12b
+  requests_dir: examples/the_last_visa/requests
+  requests_glob: "*.json"
+  output_root: inference_result
+  # Set this to use complete precomputed text/image/audio conditioning.
+  conditioning_cache_dir:
+
+video:
+  num_frames: 241
+  height: 736
+  width: 1280
+  fps: 25
+  seed: 42
+
+# Tiled decode is the safe public default across supported devices. Use
+# `untiled` explicitly only after measuring sufficient device-memory headroom.
+video_vae:
+  decode_mode: tiled
+  tile_size_frames: 64
+  tile_overlap_frames: 24
+  tile_size_pixels: 512
+  tile_overlap_pixels: 64
+
+# The production BF16 DMD schedule. Each step predicts x0 and then re-noises
+# with fresh Gaussian noise at the next sigma.
+denoising:
+  steps: [1000, 994, 988, 981, 975, 909, 725, 422, 0]
+  sigmas: [1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0]
+
+memory:
+  max_size: 7
+  downscale_factor: 1
+  enable_audio: true
+  position_mode: slot_center
+  position_offset: 500.0
+  position_slot_stride: 50.0
+
+  # Production memory keeps the MSST speech stem of memory audio. The MSST-WebUI
+  # separator is not part of this runtime; disable the filter to use memory audio.
+  voice_filter:
+    enabled: true
+    backend: msst_speech
+
+inference:
+  device: cuda
+  dtype: bfloat16
+  # Match the production encoder guard and avoid oversized text conditioning.
+  prompt_max_chars: 1500
+  # Increase for throughput when memory allows; use 1 for the lowest text-stage peak.
+  text_batch_size: 1
+  image_batch_size: 1
+  audio_batch_size: 1
+  # Experimental H3-style DiT weight streaming. Disabled keeps the release
+  # pipeline unchanged. Immutable block weights remain on CPU when enabled.
+  dit_layerwise_offload:
+    enabled: false
+    resident_blocks: 0
+    prefetch_blocks: 1
+    pin_memory: true

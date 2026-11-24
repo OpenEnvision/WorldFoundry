@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import resolve_data_path
-
 
 RUNTIME_DIR = Path(__file__).resolve().parent
 OFFICIAL_ENTRYPOINT = RUNTIME_DIR / "offline_infer" / "run_inference_client.py"
@@ -31,11 +31,21 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile):
     input_file = Path(str(options.get("input_file") or options.get("dataset_path") or DEFAULT_INPUT_FILE)).expanduser()
     mode = str(options.get("mode") or "nothink")
     if entrypoint is None or not Path(entrypoint).is_file():
-        missing.append({"kind": "entrypoint", "path": str(entrypoint or ""), "reason": "StarWM inference client is missing"})
+        missing.append(
+            {"kind": "entrypoint", "path": str(entrypoint or ""), "reason": "StarWM inference client is missing"}
+        )
     if not input_file.is_file():
-        missing.append({"kind": "asset", "path": str(input_file), "reason": "StarWM input prompt fixture does not exist"})
+        missing.append(
+            {"kind": "asset", "path": str(input_file), "reason": "StarWM input prompt fixture does not exist"}
+        )
     if not _api_model_id(options):
-        missing.append({"kind": "option", "path": "served_model_id", "reason": "StarWM requires served_model_id/api_model_id for the OpenAI-compatible endpoint"})
+        missing.append(
+            {
+                "kind": "option",
+                "path": "served_model_id",
+                "reason": "StarWM requires served_model_id/api_model_id for the OpenAI-compatible endpoint",
+            }
+        )
     if mode not in {"think", "nothink"}:
         missing.append({"kind": "option", "path": "mode", "reason": "StarWM mode must be 'think' or 'nothink'"})
     return missing
@@ -45,8 +55,6 @@ def build_command(context):
     options = dict(context.get("options") or {})
     output_file = options.get("output_file") or context["output_path"]
     command = [
-        context["python"],
-        context["entrypoint"],
         "--input_file",
         str(options.get("input_file") or options.get("dataset_path") or DEFAULT_INPUT_FILE),
         "--output_file",
@@ -62,7 +70,13 @@ def build_command(context):
         "--max_workers",
         str(options.get("max_workers", 8)),
     ]
-    return command
+    if options.get("seed") is not None:
+        command.extend(["--seed", str(int(options["seed"]))])
+    return package_module_command(
+        "worldfoundry.synthesis.visual_generation.starwm.offline_infer.run_inference_client",
+        command,
+        python_executable=context["python"],
+    )
 
 
 __all__ = [

@@ -24,7 +24,7 @@ python -m pip install -e ".[tui]"
 Once your environment is active, launch the TUI:
 
 ```bash
-worldfoundry-eval tui
+wf tui
 ```
 
 The TUI reads the same model-zoo and benchmark-zoo manifests as the CLI discovery commands. It does not bypass manifest readiness, runtime profiles, or runner validation.
@@ -74,7 +74,7 @@ The TUI reads the same model-zoo and benchmark-zoo manifests as the CLI discover
 Example — generate a command for a specific model × benchmark pair and exit:
 
 ```bash
-worldfoundry-eval tui --model-id openvla --benchmark-id libero --print-command
+wf tui --model-id openvla --benchmark-id libero --print-command
 ```
 
 This is useful in scripts or CI pipelines where you need the canonical command without manual interaction.
@@ -87,7 +87,7 @@ Switch **Mode** in the top-left panel to move between Inference, Studio, and Eva
 
 ### Inference
 
-Use Inference to pick a model, fill model-specific inputs, and generate a runnable `worldfoundry-eval run` command. The toolbar provides **Run**, **Stop**, **Copy**, **Cmd**, **Check**, **Files**, **GPU**, and **Sync**. Everyday reproducible / model-page commands stay on `worldfoundry-eval run`; Workspace visual smoke uses `python -m worldfoundry.studio.workspace_job infer`. See [CLI entrypoints](/docs/reference/cli#entrypoints).
+Use Inference to pick a model, fill model-specific inputs, and generate a runnable `wf run` command. The toolbar provides **Run**, **Stop**, **Copy**, **Cmd**, **Check**, **Files**, **GPU**, and **Sync**. Everyday reproducible / model-page commands stay on `wf run`; Workspace visual smoke uses `python -m worldfoundry.studio.workspace_job infer`. See [CLI entrypoints](/docs/reference/cli#entrypoints).
 
 ![TUI Inference mode](/images/tui/tui-inference.png)
 
@@ -101,7 +101,7 @@ Use Studio to launch the local Studio web UI from the terminal. Press **Run** to
 
 ### Evaluation
 
-Use Evaluation to configure benchmark runs. Choose an evaluation intent, select metrics, and set the output directory. The TUI builds the corresponding `worldfoundry-eval` command for the selected model × benchmark pair.
+Use Evaluation to configure benchmark runs. Choose an evaluation intent, select metrics, and set the output directory. The TUI builds the corresponding `wf` command for the selected model × benchmark pair.
 
 ![TUI Evaluation mode](/images/tui/tui-evaluation.png)
 
@@ -191,7 +191,7 @@ The main navigation shortcuts also work while a text field has focus:
 
 Outside text fields, `r` refreshes the catalog, `c` copies the command, `p` checks paths and the environment, `g` shows GPU status, and `a` lists output files. Toolbar tooltips also describe these actions. Catalog refresh and GPU status queries run in the background so navigation remains available. GPU queries time out after 10 seconds and report failures in the execution log.
 
-The official OpenEnvision logo keeps its original renderer and proportions. Small terminals hide the logo and stack the workspace vertically; use `F2`, `F3`, and `F4` to move between sections. Search and table headers stay visible while browsing rows. Resizing, switching themes, and refreshing catalogs preserve the row you are browsing; press `Enter` to use it. Filtering preserves the configured model, and the overview identifies a selection outside the current filter. Switching modes preserves each mode's model selection and any edited output directory.
+Small terminals hide the logo and stack the workspace vertically; use `F2`, `F3`, and `F4` to move between sections. Search and table headers stay visible while browsing rows. Resizing, switching themes, and refreshing catalogs preserve the row you are browsing; press `Enter` to use it. Filtering preserves the configured model, and the overview identifies a selection outside the current filter. Switching modes preserves each mode's model selection and any edited output directory.
 
 Unicode icons are the default. If your terminal uses a Nerd Font, opt in with `WORLDFOUNDRY_TUI_ICONS=nerd`; use `WORLDFOUNDRY_TUI_ICONS=ascii` for plain button and navigation labels.
 
@@ -219,8 +219,6 @@ The TUI surfaces readiness warnings alongside catalog entries:
 - **Missing dataset** — The benchmark requires a dataset that is not staged locally.
 - **Missing environment** — The runtime profile declares conda packages or CUDA versions that are not satisfied.
 - **License gate** — The model or dataset has a gated or non-commercial license that requires manual review.
-
-When a readiness blocker is present, the generated command includes `--mode official-validation` by default. This ensures you can validate the wiring without committing GPU resources to a blocked run.
 
 ## Fallback mode
 

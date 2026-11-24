@@ -37,11 +37,7 @@ def _supported_config_options(config_module: Any, options: dict[str, Any]) -> di
     known = getattr(config_module, "_config", None)
     if isinstance(known, dict):
         return {key: value for key, value in options.items() if key in known}
-    return {
-        key: value
-        for key, value in options.items()
-        if hasattr(config_module, key)
-    }
+    return {key: value for key, value in options.items() if hasattr(config_module, key)}
 
 
 @dataclass(frozen=True)
@@ -145,12 +141,8 @@ def compile_transformer(model: LTXModel, config: CompilationConfig) -> LTXModel:
 
     def patched_dynamo_forward(*args, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
         torch.compiler.cudagraph_mark_step_begin()
-        inductor_options = _supported_config_options(
-            torch._inductor.config, config.inductor_config
-        )
-        dynamo_options = _supported_config_options(
-            torch._dynamo.config, config.dynamo_config
-        )
+        inductor_options = _supported_config_options(torch._inductor.config, config.inductor_config)
+        dynamo_options = _supported_config_options(torch._dynamo.config, config.dynamo_config)
         with (
             torch._inductor.config.patch(**inductor_options),
             torch._dynamo.config.patch(**dynamo_options),  # type: ignore[attr-defined]

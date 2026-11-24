@@ -1,7 +1,3 @@
-export type SidebarBadge = {
-  kind: 'integrated' | 'normalizer' | 'planned' | 'blocked';
-};
-
 export type SidebarPageLink = {
   url: string;
   label: string;
@@ -11,7 +7,6 @@ export type SidebarNavPage = {
   type: 'page';
   link: SidebarPageLink;
   depth: 0 | 1 | 2;
-  badges: SidebarBadge[];
 };
 
 export type SidebarNavDivider = {

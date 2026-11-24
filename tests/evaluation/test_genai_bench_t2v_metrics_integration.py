@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNNERS = REPO_ROOT / "worldfoundry" / "evaluation" / "tasks" / "execution" / "runners"
+RUNNERS = REPO_ROOT / "worldfoundry" / "evals" / "tasks" / "execution" / "runners"
 
 
 class GenAIBenchT2VMetricsSmokeTests(unittest.TestCase):
@@ -68,7 +68,7 @@ class GenAIBenchT2VMetricsSmokeTests(unittest.TestCase):
             self.assertEqual(scorecard["run"]["scorer_summary"]["backend"], "mock")
 
     def test_bundled_genai_assets_resolve_without_env(self) -> None:
-        from worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_prompts import (
+        from worldfoundry.evals.tasks.execution.runners.genai_bench.genai_bench_prompts import (
             load_metadata,
             resolve_preference_pairs_path,
         )
@@ -80,7 +80,7 @@ class GenAIBenchT2VMetricsSmokeTests(unittest.TestCase):
         self.assertIn("genai-bench", str(pairs_path))
 
     def test_official_genai_output_fields_are_normalized(self) -> None:
-        from worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_metrics import (
+        from worldfoundry.evals.tasks.execution.runners.genai_bench.genai_bench_metrics import (
             evaluate_genai_preference_rows,
         )
 
@@ -99,7 +99,7 @@ class GenAIBenchT2VMetricsSmokeTests(unittest.TestCase):
         self.assertEqual(result["per_task"]["video_generation"]["num_total"], 3)
 
     def test_vqa_score_import_without_ffmpeg(self) -> None:
-        from worldfoundry.evaluation.tasks.execution.runners._scorers.vqa_score import (
+        from worldfoundry.evals.tasks.execution.runners._scorers.vqa_score import (
             list_all_vqascore_models,
             package_root,
         )

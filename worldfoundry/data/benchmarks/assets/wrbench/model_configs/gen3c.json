@@ -21,10 +21,6 @@
   "default_width": 832,
   "execution_contract": {
     "backend_status": "planned",
-    "entry_script": {
-      "launcher": "scripts/inference/run_local_benchmark.sh",
-      "worker": "scripts/inference/workers/run_gen3c_worker.py"
-    },
     "note": "GEN3C requires ViPE cache + in-process Gen3cPipeline; local backend is planned.",
     "upstream_command": "Gen3cPipeline.generate via official gen3c_dynamic Cache4D path"
   },

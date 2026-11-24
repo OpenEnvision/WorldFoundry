@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from worldfoundry.runtime.inference_catalog import (
+from worldfoundry.runtime.inference_specs.lingbot_world import (
     LINGBOT_VARIANT_BASE_ACT_PREVIEW,
     LINGBOT_VARIANT_BASE_CAM,
     LINGBOT_VARIANT_FAST,

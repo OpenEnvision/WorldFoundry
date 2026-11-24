@@ -4,10 +4,9 @@
 
 from __future__ import annotations
 
-import logging
 import types
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Optional
+from typing import Literal
 
 import timm
 import torch
@@ -23,9 +22,7 @@ from .vit import (
 # LOGGER = logging.getLogger(__name__)
 
 
-ViTPreset = Literal[
-    "dinov2l16_384",
-]
+ViTPreset = Literal["dinov2l16_384",]
 
 
 @dataclass
@@ -39,18 +36,18 @@ class ViTConfig:
     patch_size: int = 16
 
     # In case we need to rescale the backbone when loading from timm.
-    timm_preset: Optional[str] = None
+    timm_preset: str | None = None
     timm_img_size: int = 384
     timm_patch_size: int = 16
 
     # The following 2 parameters are only used by DPT.  See dpt_factory.py.
-    encoder_feature_layer_ids: List[int] = None
+    encoder_feature_layer_ids: list[int] = None
     """The layers in the Beit/ViT used to constructs encoder features for DPT."""
-    encoder_feature_dims: List[int] = None
+    encoder_feature_dims: list[int] = None
     """The dimension of features of encoder layers from Beit/ViT features for DPT."""
 
 
-VIT_CONFIG_DICT: Dict[ViTPreset, ViTConfig] = {
+VIT_CONFIG_DICT: dict[ViTPreset, ViTConfig] = {
     "dinov2l16_384": ViTConfig(
         in_chans=3,
         embed_dim=1024,
@@ -94,9 +91,7 @@ def create_vit(
         model = timm.create_model(config.timm_preset, pretrained=use_pretrained)
         model.forward_features = types.MethodType(forward_features_eva_fixed, model)
     else:
-        model = timm.create_model(
-            config.timm_preset, pretrained=use_pretrained, dynamic_img_size=True
-        )
+        model = timm.create_model(config.timm_preset, pretrained=use_pretrained, dynamic_img_size=True)
     model = make_vit_b16_backbone(
         model,
         encoder_feature_dims=config.encoder_feature_dims,
@@ -111,9 +106,7 @@ def create_vit(
 
     if checkpoint_uri is not None:
         state_dict = torch.load(checkpoint_uri, map_location="cpu")
-        missing_keys, unexpected_keys = model.load_state_dict(
-            state_dict=state_dict, strict=False
-        )
+        missing_keys, unexpected_keys = model.load_state_dict(state_dict=state_dict, strict=False)
 
         if len(unexpected_keys) != 0:
             raise KeyError(f"Found unexpected keys when loading vit: {unexpected_keys}")

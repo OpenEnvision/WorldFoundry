@@ -36,9 +36,12 @@ def _project_root() -> Path:
 
 
 def _is_vae_dir(path: Path) -> bool:
-    return path.is_dir() and (path / "config.json").is_file() and (
-        (path / "diffusion_pytorch_model.safetensors").is_file()
-        or (path / "diffusion_pytorch_model.bin").is_file()
+    return (
+        path.is_dir()
+        and (path / "config.json").is_file()
+        and (
+            (path / "diffusion_pytorch_model.safetensors").is_file() or (path / "diffusion_pytorch_model.bin").is_file()
+        )
     )
 
 
@@ -91,8 +94,7 @@ def missing_worldfm_asset_message(
         "WorldFM synthesis is configured for strict in-tree execution and cannot download "
         f"`{DEFAULT_WORLDFM_REPO}` at runtime. Provide a local directory containing "
         f"`{expected_checkpoint}` plus `vae/config.json` and a VAE weight file, or pass "
-        "`checkpoint_filename`/`vae_path` explicitly. Searched: "
-        + ", ".join(searched_roots)
+        "`checkpoint_filename`/`vae_path` explicitly. Searched: " + ", ".join(searched_roots)
     )
 
 
@@ -154,4 +156,3 @@ def load_worldfm_checkpoint(model_path: str | Path) -> Any:
     if not path.is_file():
         raise FileNotFoundError(f"WorldFM checkpoint file does not exist: {path}")
     return torch.load(path, map_location=lambda storage, loc: storage)
-

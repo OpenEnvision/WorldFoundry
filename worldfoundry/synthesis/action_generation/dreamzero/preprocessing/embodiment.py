@@ -228,9 +228,7 @@ class EmbodimentTag(Enum):
     The Unitree G1 dataset with full body and height command and navigate command.
     """
 
-    UNITREE_G1_FULL_BODY_WITH_WAIST_HEIGHT_NAV_CMD = (
-        "unitree_g1_full_body_with_waist_height_nav_cmd"
-    )
+    UNITREE_G1_FULL_BODY_WITH_WAIST_HEIGHT_NAV_CMD = "unitree_g1_full_body_with_waist_height_nav_cmd"
     """
     The Unitree G1 dataset with full body and waist and height command and navigate command.
     """
@@ -242,9 +240,7 @@ class EmbodimentTag(Enum):
     The Unitree G1 dataset with full body and waist and height command and navigate command and task progress.
     """
 
-    UNITREE_G1_FULL_BODY_WITH_HEIGHT_NAV_CMD_IN_SIM = (
-        "unitree_g1_full_body_with_height_nav_cmd_in_sim"
-    )
+    UNITREE_G1_FULL_BODY_WITH_HEIGHT_NAV_CMD_IN_SIM = "unitree_g1_full_body_with_height_nav_cmd_in_sim"
     """
     The Unitree G1 dataset with full body and height command and navigate command in sim, data is collected with 50Hz.
     """
@@ -259,9 +255,7 @@ class EmbodimentTag(Enum):
     The GR1 robot with reward information for oflfine RL.
     """
 
-    UNITREE_G1_FULL_BODY_WITH_HEIGHT_NAV_CMD_OAK_STEREO = (
-        "unitree_g1_full_body_with_height_nav_cmd_oak_stereo"
-    )
+    UNITREE_G1_FULL_BODY_WITH_HEIGHT_NAV_CMD_OAK_STEREO = "unitree_g1_full_body_with_height_nav_cmd_oak_stereo"
     """
     The Unitree G1 dataset with full body and height command and navigate command and oak stereo.
     """
@@ -307,23 +301,17 @@ class EmbodimentTag(Enum):
     The Unitree G1 dataset with full body and height command.
     """
 
-    DEPRECATED_UNITREE_G1_FULL_BODY_WITH_HEIGHT_AND_EEF = (
-        "deprecated_unitree_g1_full_body_with_height_and_eef"
-    )
+    DEPRECATED_UNITREE_G1_FULL_BODY_WITH_HEIGHT_AND_EEF = "deprecated_unitree_g1_full_body_with_height_and_eef"
     """
     The Unitree G1 dataset with full body and height command and eef command.
     """
 
-    DEPRECATED_UNITREE_G1_FULL_BODY_WITH_HEIGHT_EEF_NAV_CMD = (
-        "deprecated_unitree_g1_full_body_with_height_eef_nav_cmd"
-    )
+    DEPRECATED_UNITREE_G1_FULL_BODY_WITH_HEIGHT_EEF_NAV_CMD = "deprecated_unitree_g1_full_body_with_height_eef_nav_cmd"
     """
     The Unitree G1 dataset with full body and height command and eef command and navigate command.
     """
 
-    DEPRECATED_UNITREE_G1_FULL_BODY_WITH_HEIGHT_NAV_CMD = (
-        "deprecated_unitree_g1_full_body_with_height_nav_cmd"
-    )
+    DEPRECATED_UNITREE_G1_FULL_BODY_WITH_HEIGHT_NAV_CMD = "deprecated_unitree_g1_full_body_with_height_nav_cmd"
     """
     The Unitree G1 dataset with full body and height command and navigate command.
     """

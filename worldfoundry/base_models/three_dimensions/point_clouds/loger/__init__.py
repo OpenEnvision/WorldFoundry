@@ -6,11 +6,6 @@ __all__ = ["Pi3", "layers", "utils"]
 
 
 def __getattr__(name: str):
-    """Getattr.
-
-    Args:
-        name: The name.
-    """
     if name == "Pi3":
         from .pi3 import Pi3
 

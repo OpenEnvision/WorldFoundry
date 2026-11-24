@@ -4,27 +4,15 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> general_3d -> lagernvs -> lagernvs_runtime -> models -> encoder_decoder.py functionality."""
 
 import einops
-from pathlib import Path
-import sys
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.renderer import Renderer
 
-_THIS_FILE = Path(__file__).resolve()
-for _path in (
-    _THIS_FILE.parents[7],
-    _THIS_FILE.parents[4] / "point_clouds" / "vggt",
-):
-    _path_str = str(_path)
-    if _path_str not in sys.path:
-        sys.path.insert(0, _path_str)
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.models.vggt import VGGT
 
-from vggt.models.vggt import VGGT
-
+from .renderer import Renderer
 
 # Main model file
 # Consists of
@@ -35,7 +23,6 @@ from vggt.models.vggt import VGGT
 
 
 class EncoderDecoder(nn.Module):
-    """Encoder decoder implementation."""
     def __init__(
         self,
         depth,
@@ -47,18 +34,6 @@ class EncoderDecoder(nn.Module):
         attention_to_features_type="bidirectional_cross_attention",
         pretrained_patch_embed=False,
     ):
-        """Init.
-
-        Args:
-            depth: The depth.
-            hidden_size: The hidden size.
-            patch_size: The patch size.
-            num_heads: The num heads.
-            freeze_vggt: The freeze vggt.
-            pretrained_vggt: The pretrained vggt.
-            attention_to_features_type: The attention to features type.
-            pretrained_patch_embed: The pretrained patch embed.
-        """
         super().__init__()
         self.reconstructor = Reconstructor(
             hidden_size,
@@ -83,15 +58,6 @@ class EncoderDecoder(nn.Module):
         num_cond_views,
         timeit=False,
     ):
-        """Forward.
-
-        Args:
-            images: The images.
-            rays: The rays.
-            cam_token: The cam token.
-            num_cond_views: The num cond views.
-            timeit: The timeit.
-        """
         input_images = images[:, :num_cond_views, ...]
         cam_token = cam_token[:, :num_cond_views]
         target_rays = rays[:, num_cond_views:]
@@ -108,9 +74,7 @@ class EncoderDecoder(nn.Module):
         )
 
         if timeit:
-            rendered_images, time_t = self.renderer(
-                rec_tokens, target_rays, timeit=timeit
-            )
+            rendered_images, time_t = self.renderer(rec_tokens, target_rays, timeit=timeit)
         else:
             rendered_images = self.renderer(rec_tokens, target_rays, timeit=timeit)
 
@@ -133,15 +97,6 @@ class Reconstructor(nn.Module):
         freeze_vggt=False,
         pretrained_patch_embed=False,
     ):
-        """Init.
-
-        Args:
-            renderer_hidden_size: The renderer hidden size.
-            target_patch_size: The target patch size.
-            pretrained_vggt: The pretrained vggt.
-            freeze_vggt: The freeze vggt.
-            pretrained_patch_embed: The pretrained patch embed.
-        """
         super().__init__()
         self.vggt = VGGT(
             enable_camera=False,
@@ -197,26 +152,16 @@ class Reconstructor(nn.Module):
         else:
             tgt_w = vggt_imsize
             tgt_h = (int(tgt_w * h / w) // self.vggt_patch_size) * self.vggt_patch_size
-        input_images = F.interpolate(
-            input_images, size=(tgt_h, tgt_w), mode="bilinear", antialias=True
-        )
-        input_images = einops.rearrange(
-            input_images, "(b v) c h w -> b v c h w", b=b, v=v_input
-        )
+        input_images = F.interpolate(input_images, size=(tgt_h, tgt_w), mode="bilinear", antialias=True)
+        input_images = einops.rearrange(input_images, "(b v) c h w -> b v c h w", b=b, v=v_input)
         # extract features for the conditioning images
         if self.freeze_vggt:
             with torch.no_grad():
-                tokens_vggt_cond = self.vggt(
-                    input_images, cameras_possibly_zero=input_camera_cond
-                ).detach()
+                tokens_vggt_cond = self.vggt(input_images, cameras_possibly_zero=input_camera_cond).detach()
         else:
-            tokens_vggt_cond = self.vggt(
-                input_images, cameras_possibly_zero=input_camera_cond
-            )
+            tokens_vggt_cond = self.vggt(input_images, cameras_possibly_zero=input_camera_cond)
 
-        tokens_vggt_image_cond = tokens_vggt_cond[
-            :, :, self.vggt.aggregator.patch_start_idx :, :
-        ]
+        tokens_vggt_image_cond = tokens_vggt_cond[:, :, self.vggt.aggregator.patch_start_idx :, :]
 
         tokens_vggt_image_cond = self.geo_feature_connector(tokens_vggt_image_cond)
         tokens_vggt_image_cond = self.geo_feature_norm(tokens_vggt_image_cond)
@@ -225,7 +170,4 @@ class Reconstructor(nn.Module):
 
 
 def EncDec_VitB8(**kwargs):
-    """Encdec vitb8."""
-    return EncoderDecoder(
-        depth=12, hidden_size=768, patch_size=8, num_heads=12, **kwargs
-    )
+    return EncoderDecoder(depth=12, hidden_size=768, patch_size=8, num_heads=12, **kwargs)

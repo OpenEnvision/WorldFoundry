@@ -1,30 +1,15 @@
-"""Module for base_models -> three_dimensions -> depth -> midas -> dpt_depth.py functionality."""
-
 import torch
 import torch.nn as nn
-
-from .base_model import BaseModel
-from .blocks import (
-    FeatureFusionBlock_custom,
-    Interpolate,
-    _make_encoder,
-    forward_beit,
-    forward_swin,
-    forward_levit,
-    forward_vit,
-)
-from .backbones.levit import stem_b4_transpose
 from timm.models.layers import get_act_layer
 
+from worldfoundry.base_models.three_dimensions.depth.midas.fusion import Interpolate
 
-def _make_fusion_block(features, use_bn, size = None):
-    """Helper function to make fusion block.
+from .backbones.levit import stem_b4_transpose
+from .base_model import BaseModel
+from .blocks import FeatureFusionBlock_custom, _make_encoder, forward_beit, forward_levit, forward_swin, forward_vit
 
-    Args:
-        features: The features.
-        use_bn: The use bn.
-        size: The size.
-    """
+
+def _make_fusion_block(features, use_bn, size=None):
     return FeatureFusionBlock_custom(
         features,
         nn.ReLU(False),
@@ -38,6 +23,7 @@ def _make_fusion_block(features, use_bn, size = None):
 
 class DPT(BaseModel):
     """Dpt implementation."""
+
     def __init__(
         self,
         head,
@@ -46,7 +32,7 @@ class DPT(BaseModel):
         readout="project",
         channels_last=False,
         use_bn=False,
-        **kwargs
+        **kwargs,
     ):
         """Init.
 
@@ -59,39 +45,34 @@ class DPT(BaseModel):
             use_bn: The use bn.
         """
 
-        super(DPT, self).__init__()
+        super().__init__()
 
         self.channels_last = channels_last
 
-        # For the Swin, Swin 2, LeViT and Next-ViT Transformers, the hierarchical architectures prevent setting the 
+        # For the Swin, Swin 2, LeViT and Next-ViT Transformers, the hierarchical architectures prevent setting the
         # hooks freely. Instead, the hooks have to be chosen according to the ranges specified in the comments.
         hooks = {
             "beitl16_512": [5, 11, 17, 23],
             "beitl16_384": [5, 11, 17, 23],
             "beitb16_384": [2, 5, 8, 11],
             "swin2l24_384": [1, 1, 17, 1],  # Allowed ranges: [0, 1], [0,  1], [ 0, 17], [ 0,  1]
-            "swin2b24_384": [1, 1, 17, 1],                  # [0, 1], [0,  1], [ 0, 17], [ 0,  1]
-            "swin2t16_256": [1, 1, 5, 1],                   # [0, 1], [0,  1], [ 0,  5], [ 0,  1]
-            "swinl12_384": [1, 1, 17, 1],                   # [0, 1], [0,  1], [ 0, 17], [ 0,  1]
-            "next_vit_large_6m": [2, 6, 36, 39],            # [0, 2], [3,  6], [ 7, 36], [37, 39]
-            "levit_384": [3, 11, 21],                       # [0, 3], [6, 11], [14, 21]
+            "swin2b24_384": [1, 1, 17, 1],  # [0, 1], [0,  1], [ 0, 17], [ 0,  1]
+            "swin2t16_256": [1, 1, 5, 1],  # [0, 1], [0,  1], [ 0,  5], [ 0,  1]
+            "swinl12_384": [1, 1, 17, 1],  # [0, 1], [0,  1], [ 0, 17], [ 0,  1]
+            "next_vit_large_6m": [2, 6, 36, 39],  # [0, 2], [3,  6], [ 7, 36], [37, 39]
+            "levit_384": [3, 11, 21],  # [0, 3], [6, 11], [14, 21]
             "vitb_rn50_384": [0, 1, 8, 11],
             "vitb16_384": [2, 5, 8, 11],
             "vitl16_384": [5, 11, 17, 23],
         }[backbone]
 
-        if "next_vit" in backbone:
-            in_features = {
-                "next_vit_large_6m": [96, 256, 512, 1024],
-            }[backbone]
-        else:
-            in_features = None
+        in_features = {"next_vit_large_6m": [96, 256, 512, 1024]}[backbone] if "next_vit" in backbone else None
 
         # Instantiate backbone and reassemble blocks
         self.pretrained, self.scratch = _make_encoder(
             backbone,
             features,
-            False, # Set to true of you want to train from scratch, uses ImageNet weights
+            False,  # Set to true of you want to train from scratch, uses ImageNet weights
             groups=1,
             expand=False,
             exportable=False,
@@ -110,6 +91,7 @@ class DPT(BaseModel):
             self.forward_transformer = forward_swin
         elif "next_vit" in backbone:
             from .backbones.next_vit import forward_next_vit
+
             self.forward_transformer = forward_next_vit
         elif "levit" in backbone:
             self.forward_transformer = forward_levit
@@ -126,14 +108,13 @@ class DPT(BaseModel):
 
         self.scratch.output_conv = head
 
-
     def forward(self, x):
         """Forward.
 
         Args:
             x: The x.
         """
-        if self.channels_last == True:
+        if self.channels_last == True:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             x.contiguous(memory_format=torch.channels_last)
 
         layers = self.forward_transformer(self.pretrained, x)
@@ -165,17 +146,10 @@ class DPT(BaseModel):
 
 
 class DPTDepthModel(DPT):
-    """Dpt depth model implementation."""
     def __init__(self, path=None, non_negative=True, **kwargs):
-        """Init.
-
-        Args:
-            path: The path.
-            non_negative: The non negative.
-        """
-        features = kwargs["features"] if "features" in kwargs else 256
-        head_features_1 = kwargs["head_features_1"] if "head_features_1" in kwargs else features
-        head_features_2 = kwargs["head_features_2"] if "head_features_2" in kwargs else 32
+        features = kwargs["features"] if "features" in kwargs else 256  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
+        head_features_1 = kwargs["head_features_1"] if "head_features_1" in kwargs else features  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
+        head_features_2 = kwargs["head_features_2"] if "head_features_2" in kwargs else 32  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
         kwargs.pop("head_features_1", None)
         kwargs.pop("head_features_2", None)
 
@@ -192,12 +166,7 @@ class DPTDepthModel(DPT):
         super().__init__(head, **kwargs)
 
         if path is not None:
-           self.load(path)
+            self.load(path)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         return super().forward(x).squeeze(dim=1)

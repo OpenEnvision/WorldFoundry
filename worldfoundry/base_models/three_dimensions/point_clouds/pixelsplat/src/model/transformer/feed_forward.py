@@ -22,21 +22,11 @@
 
 # This file comes from https://github.com/stelzner/srt
 
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> transformer -> feed_forward.py functionality."""
-
 from torch import nn
 
 
 class FeedForward(nn.Module):
-    """Feed forward implementation."""
     def __init__(self, dim, hidden_dim, dropout=0.0):
-        """Init.
-
-        Args:
-            dim: The dim.
-            hidden_dim: The hidden dim.
-            dropout: The dropout.
-        """
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(dim, hidden_dim),
@@ -47,9 +37,4 @@ class FeedForward(nn.Module):
         )
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         return self.net(x)

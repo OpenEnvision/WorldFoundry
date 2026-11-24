@@ -1,6 +1,5 @@
 # Inference-only DB-CogACT source retained in-tree.
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .pe_model import PerceptionEncoderWithDownsample
 
@@ -12,7 +11,7 @@ class PerceptionEncoderConfig:
     layers: int
     heads: int
     mlp_ratio: float
-    output_dim: Optional[int]
+    output_dim: int | None
 
     ls_init_value: float = None
     drop_path: float = 0.0
@@ -64,7 +63,7 @@ class PE_LANG_L14_728(PerceptionEncoderConfig):
     heads: int = 16
     mlp_ratio: float = 4.0
     pool_type: str = "none"
-    output_dim: Optional[int] = None
+    output_dim: int | None = None
     use_cls_token: bool = True
     use_ln_post: bool = False
     ls_init_value: float = 0.1

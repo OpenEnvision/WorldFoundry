@@ -1,11 +1,11 @@
-from .models.wan_model import WanModel
-from .models.wan_video_image_encoder import WanImageEncoder
-from .models.wan_video_text_encoder import WanTextEncoder
+from worldfoundry.core.model_loading import load_model_loader_registry
 from worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_2_runtime.extension_modules.wanx_vae.wanx_vae import (
     WanVAE as WanVideoVAE,
 )
-from worldfoundry.core.model_loading import load_model_loader_registry
 
+from .models.wan_model import WanModel
+from .models.wan_video_image_encoder import WanImageEncoder
+from .models.wan_video_text_encoder import WanTextEncoder
 
 _MODEL_CLASSES = {
     "WanModel": WanModel,

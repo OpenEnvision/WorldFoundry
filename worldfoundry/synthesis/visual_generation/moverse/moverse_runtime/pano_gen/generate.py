@@ -24,12 +24,13 @@ import torch
 import torchvision.transforms as T
 from PIL import Image
 
-from .camera_utils import Perspective
-from .fluxfill_pipeline import FluxFillPipeline
 from worldfoundry.base_models.three_dimensions.general_3d.geocalib.autolevel import (
     FlowEstimator,
     preprocess_image,
 )
+
+from .camera_utils import Perspective
+from .fluxfill_pipeline import FluxFillPipeline
 from .prompt_builder import build_pano_prompt
 
 
@@ -128,9 +129,7 @@ def _get_pipeline(basemodel_name_or_path: str, lora_path: str, dtype: torch.dtyp
     key = (basemodel_name_or_path, lora_path, dtype)
     if key not in _pipeline_cache:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        pipeline = FluxFillPipeline.from_pretrained(
-            basemodel_name_or_path, torch_dtype=dtype
-        ).to(device)
+        pipeline = FluxFillPipeline.from_pretrained(basemodel_name_or_path, torch_dtype=dtype).to(device)
         # In offline mode (HF_HUB_OFFLINE=1), diffusers requires explicit weight_name.
         # lora_path is a full file path, so split into directory + filename.
         if os.path.isfile(lora_path):
@@ -155,7 +154,7 @@ def generate(
     num_inference_steps: int = 30,
     seed: int = 42,
     mixed_precision: str = "bf16",
-    save_intermediate_dir: str = None,
+    save_intermediate_dir: str | None = None,
 ) -> Image.Image:
     """Generate a 360° panorama from a perspective image.
 

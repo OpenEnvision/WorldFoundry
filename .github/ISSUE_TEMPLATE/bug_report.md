@@ -77,7 +77,7 @@ assignees: ""
 
 <!-- Required when the failure involves evaluation, model integration, or benchmark readiness. -->
 
-- `worldfoundry-eval prepare` or preflight report:
+- `wf prepare` or preflight report:
 - Scorecard path:
 - Run manifest path:
 - Validation matrix or zoo report output:

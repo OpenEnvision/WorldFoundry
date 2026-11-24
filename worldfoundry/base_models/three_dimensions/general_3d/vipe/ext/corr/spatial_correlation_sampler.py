@@ -2,8 +2,6 @@
 # https://github.com/ClementPinard/Pytorch-Correlation-extension
 # Licensed under the MIT License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> ext -> corr -> spatial_correlation_sampler.py functionality."""
-
 from torch import nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
@@ -44,22 +42,8 @@ def spatial_correlation_sample(
 
 
 class SpatialCorrelationSamplerFunction(Function):
-    """Spatial correlation sampler function implementation."""
     @staticmethod
     def forward(ctx, input1, input2, kernel_size=1, patch_size=1, stride=1, padding=0, dilation=1, dilation_patch=1):
-        """Forward.
-
-        Args:
-            ctx: The ctx.
-            input1: The input1.
-            input2: The input2.
-            kernel_size: The kernel size.
-            patch_size: The patch size.
-            stride: The stride.
-            padding: The padding.
-            dilation: The dilation.
-            dilation_patch: The dilation patch.
-        """
         ctx.save_for_backward(input1, input2)
         kH, kW = ctx.kernel_size = _pair(kernel_size)
         patchH, patchW = ctx.patch_size = _pair(patch_size)
@@ -90,12 +74,6 @@ class SpatialCorrelationSamplerFunction(Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_output):
-        """Backward.
-
-        Args:
-            ctx: The ctx.
-            grad_output: The grad output.
-        """
         input1, input2 = ctx.saved_tensors
 
         kH, kW = ctx.kernel_size
@@ -126,19 +104,8 @@ class SpatialCorrelationSamplerFunction(Function):
 
 
 class SpatialCorrelationSampler(nn.Module):
-    """Spatial correlation sampler implementation."""
     def __init__(self, kernel_size=1, patch_size=1, stride=1, padding=0, dilation=1, dilation_patch=1):
-        """Init.
-
-        Args:
-            kernel_size: The kernel size.
-            patch_size: The patch size.
-            stride: The stride.
-            padding: The padding.
-            dilation: The dilation.
-            dilation_patch: The dilation patch.
-        """
-        super(SpatialCorrelationSampler, self).__init__()
+        super().__init__()
         self.kernel_size = kernel_size
         self.patch_size = patch_size
         self.stride = stride
@@ -147,12 +114,6 @@ class SpatialCorrelationSampler(nn.Module):
         self.dilation_patch = dilation_patch
 
     def forward(self, input1, input2):
-        """Forward.
-
-        Args:
-            input1: The input1.
-            input2: The input2.
-        """
         return SpatialCorrelationSamplerFunction.apply(
             input1,
             input2,

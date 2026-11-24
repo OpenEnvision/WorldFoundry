@@ -11,6 +11,7 @@ math is plain PyTorch.
 
 This is H3 video encoder graph math, not LTX PixelNorm.
 """
+
 import math
 import os
 
@@ -24,9 +25,7 @@ from .conv import BaseConv3d
 def _validate_activation(activation):
     valid_activations = {"identity", "silu", "relu"}
     if activation not in valid_activations:
-        raise ValueError(
-            f"Unsupported activation: {activation}. Supported: {valid_activations}"
-        )
+        raise ValueError(f"Unsupported activation: {activation}. Supported: {valid_activations}")
 
 
 def _apply_activation(x, activation):
@@ -40,21 +39,13 @@ def _apply_activation(x, activation):
 
 def _merge_time_to_batch(x):
     batch, channels, depth, height, width = x.shape
-    return (
-        x.permute(0, 2, 1, 3, 4)
-        .contiguous()
-        .view(batch * depth, channels, 1, height, width)
-    )
+    return x.permute(0, 2, 1, 3, 4).contiguous().view(batch * depth, channels, 1, height, width)
 
 
 def _split_time_from_batch(x, batch):
     batch_depth, channels, _, height, width = x.shape
     depth = batch_depth // batch
-    return (
-        x.view(batch, depth, channels, height, width)
-        .permute(0, 2, 1, 3, 4)
-        .contiguous()
-    )
+    return x.view(batch, depth, channels, height, width).permute(0, 2, 1, 3, 4).contiguous()
 
 
 def fused_group_norm(x, num_groups, weight, bias, eps=1e-5, activation="silu"):
@@ -87,6 +78,7 @@ def fused_spatial_norm(
 
 class DummyAffine(torch.nn.Module):
     """Identity affine placeholder when a norm has no learned scale/bias."""
+
     def __init__(self, num_channels, affine=True):
         super().__init__()
         if affine:
@@ -187,9 +179,7 @@ class FusedGroupNorm3D(torch.nn.Module):
                 raise NotImplementedError("Dynamic affine is not defined")
             weight = self.weight if self.affine else None
             bias = self.bias if self.affine else None
-            out = fused_group_norm(
-                f, self.num_groups, weight, bias, self.eps, self.activation
-            )
+            out = fused_group_norm(f, self.num_groups, weight, bias, self.eps, self.activation)
 
         if need_reshape:
             out = _split_time_from_batch(out, batch)
@@ -198,6 +188,7 @@ class FusedGroupNorm3D(torch.nn.Module):
 
 class TemporalIsolatedGroupNorm(nn.GroupNorm):
     """GroupNorm that does not mix statistics across time."""
+
     def forward(self, input):
         if input.dim() == 5:
             batch = input.shape[0]
@@ -209,6 +200,7 @@ class TemporalIsolatedGroupNorm(nn.GroupNorm):
 
 class SpatialNorm3D(nn.Module):
     """Spatially conditioned 3-D normalization for the H3 encoder."""
+
     def __init__(
         self,
         f_channels,
@@ -220,9 +212,7 @@ class SpatialNorm3D(nn.Module):
     ):
         super().__init__()
         norm_cls = TemporalIsolatedGroupNorm if use_t_isolated_gn else nn.GroupNorm
-        self.norm_layer = norm_cls(
-            num_groups=32, num_channels=f_channels, eps=1e-6, affine=True
-        )
+        self.norm_layer = norm_cls(num_groups=32, num_channels=f_channels, eps=1e-6, affine=True)
 
         self.conv_y = BaseConv3d(
             zq_channels,

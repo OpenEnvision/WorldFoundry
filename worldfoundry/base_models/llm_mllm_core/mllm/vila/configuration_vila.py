@@ -1,11 +1,11 @@
-from typing import Optional
+from typing import ClassVar
 
 from transformers import PretrainedConfig
 
 
 class VILAConfig(PretrainedConfig):
     model_type = "vila"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference: ClassVar[list] = ["past_key_values"]
 
     def __init__(
         self,
@@ -32,8 +32,8 @@ class VILAConfig(PretrainedConfig):
         s2_scales=None,
         s2_max_split_size=None,
         s2_resize_output_to_scale_idx=0,
-        min_tiles: Optional[int] = 1,
-        max_tiles: Optional[int] = 12,
+        min_tiles: int | None = 1,
+        max_tiles: int | None = 12,
         num_time_tokens=None,
         time_token_format=None,
         image_encoder: str = (

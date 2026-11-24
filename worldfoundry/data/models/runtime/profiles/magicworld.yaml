@@ -11,6 +11,7 @@ source_repos:
   revision: 75ed6e2180316b7f07398e4e88ea8bdba3e6970c
   in_tree_path: worldfoundry/base_models/three_dimensions/general_3d/uni3c
 - url: https://github.com/apple/ml-depth-pro
+  revision: 9efe5c1def37a26c5367a71df664b18e1306c708
   in_tree_path: worldfoundry/base_models/three_dimensions/depth/depth_pro
 checkpoints:
 - repo_id: LuckyLiGY/MagicWorld

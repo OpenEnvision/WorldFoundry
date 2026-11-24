@@ -28,11 +28,10 @@ Public surface:
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import math
+from abc import ABC, abstractmethod
 
 import torch
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # DDPM-style contract — convert x0 / noise / velocity in float64
@@ -62,10 +61,7 @@ class SchedulerInterface(ABC):
         """Convert a clean-data prediction to a noise prediction."""
 
         original_dtype = x0.dtype
-        x0, xt, alphas_cumprod = map(
-            lambda x: x.double().to(x0.device),
-            [x0, xt, self.alphas_cumprod],
-        )
+        x0, xt, alphas_cumprod = (x.double().to(x0.device) for x in [x0, xt, self.alphas_cumprod])
 
         alpha_prod_t = alphas_cumprod[timestep].reshape(-1, 1, 1, 1)
         beta_prod_t = 1 - alpha_prod_t
@@ -82,10 +78,7 @@ class SchedulerInterface(ABC):
         """Convert a noise prediction to a clean-data prediction."""
 
         original_dtype = noise.dtype
-        noise, xt, alphas_cumprod = map(
-            lambda x: x.double().to(noise.device),
-            [noise, xt, self.alphas_cumprod],
-        )
+        noise, xt, alphas_cumprod = (x.double().to(noise.device) for x in [noise, xt, self.alphas_cumprod])
         alpha_prod_t = alphas_cumprod[timestep].reshape(-1, 1, 1, 1)
         beta_prod_t = 1 - alpha_prod_t
 
@@ -101,10 +94,7 @@ class SchedulerInterface(ABC):
         """Convert a velocity prediction to a clean-data prediction."""
 
         original_dtype = velocity.dtype
-        velocity, xt, alphas_cumprod = map(
-            lambda x: x.double().to(velocity.device),
-            [velocity, xt, self.alphas_cumprod],
-        )
+        velocity, xt, alphas_cumprod = (x.double().to(velocity.device) for x in [velocity, xt, self.alphas_cumprod])
         alpha_prod_t = alphas_cumprod[timestep].reshape(-1, 1, 1, 1)
         beta_prod_t = 1 - alpha_prod_t
 

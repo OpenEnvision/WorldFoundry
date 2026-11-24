@@ -15,9 +15,8 @@
 """LingBot-VLA v1 inference attention implementations."""
 
 import torch
-import torch.nn.functional as F  # noqa: N812
+import torch.nn.functional as F
 from packaging.version import Version
-import einops
 
 if Version(torch.__version__) > Version("2.5.0"):
     # Ffex attention is only available from torch 2.5 onwards
@@ -30,9 +29,8 @@ if Version(torch.__version__) > Version("2.5.0"):
     )
 
 # more aggressive compile setting
-_flex_attention = torch.compile(
-    flex_attention,
-    mode="max-autotune-no-cudagraphs")
+_flex_attention = torch.compile(flex_attention, mode="max-autotune-no-cudagraphs")
+
 
 def flex_attention_forward(
     query_states: torch.Tensor,
@@ -73,7 +71,7 @@ def flex_attention_forward(
 
     b_mask, h_mask, q_len, kv_len = causal_mask.shape  # The shape of your mask
 
-    block_size = 128 # some gpus do not support 64
+    block_size = 128  # some gpus do not support 64
     q_len_rounded = _round_up_to_multiple(q_len, block_size)
     kv_len_rounded = _round_up_to_multiple(kv_len, block_size)
 
@@ -117,14 +115,18 @@ def flex_attention_forward(
         key_states,
         value_states,
         block_mask=block_mask,
-        kernel_options = {
-            "BLOCK_M": 32, "BLOCK_N": 32,
-            "BLOCK_M1": 32, "BLOCK_N1": 32,
-            "BLOCK_M2": 32, "BLOCK_N2": 32,
-            "num_stages": 2, "num_warps": 4,
+        kernel_options={
+            "BLOCK_M": 32,
+            "BLOCK_N": 32,
+            "BLOCK_M1": 32,
+            "BLOCK_N1": 32,
+            "BLOCK_M2": 32,
+            "BLOCK_N2": 32,
+            "num_stages": 2,
+            "num_warps": 4,
         },
         enable_gqa=True,  # because we shaped query/key states for GQA
-        scale=head_dim**-0.5 if scaling is None else scaling, # on certain device, the head_dim ** 0.5 break compile !
+        scale=head_dim**-0.5 if scaling is None else scaling,  # on certain device, the head_dim ** 0.5 break compile !
     )
     attn_output = attn_output[:, :, :seq_len, :].to(dtype=original_dtype)
     attn_output = attn_output.transpose(1, 2).contiguous()  # [B, Q_LEN, H, head_dim]

@@ -1,6 +1,7 @@
-artifact_filename: dreamx-world-5b-cam.mp4
-artifact_kind: generated_world
-backend_stage: in_tree_resident_runtime
+schema_version: 2
+model_id: dreamx-world-5b-cam
+display_name: DreamX-World 5B Cam
+task_family: world_model
 checkpoints:
 - repo_id: GD-ML/DreamX-World-5B-Cam
   revision: a4379c7723f6ebd02139e2e8fd62d6ef523e86e3
@@ -21,26 +22,28 @@ checkpoints:
   - models_t5_umt5-xxl-enc-bf16.pth
   - google/umt5-xxl/tokenizer_config.json
   - google/umt5-xxl/spiece.model
-display_name: DreamX-World 5B Cam
-id: dreamx-world-5b-cam
 input_schema:
   actions:
   - camera_navigation
   image: true
   prompt: true
   video: false
-integration_status: in_tree_runtime_workspace_validated
+artifact_kind: generated_world
+artifact_filename: dreamx-world-5b-cam.mp4
+execution:
+  pipeline_binding: dreamx-world-5b-cam
+  backend_stage: in_tree_resident_runtime
+  runtime_status: native_checkpoint_runtime_a100_workspace_validated
+  integration_status: in_tree_runtime_workspace_validated
+integration:
+  status: in_tree_runtime_workspace_validated
 notes:
 - The camera-conditioned 5B runtime, diffusion pipeline, pose controls, VAE and text
   encoder adapters are integrated in-tree under synthesis/visual_generation/dreamx_world.
 - The resident session caches weights and prompt embeddings, uses native 1+4k windows,
   and continues from the previous final frame without subprocess or MP4 round trips.
 - Multi-GPU inference uses configurable 1/2/3/4/6/8-rank Ulysses sequence parallelism.
-- A real single-A100 Workspace run loaded both pinned checkpoints and generated four finite, decodable 1280x704 output frames from the official DreamX example image using an 8-step 5-frame window. This is an integration smoke and not the default 30-step quality recipe.
-runtime_status: native_checkpoint_runtime_a100_workspace_validated
-task_family: world_model
-execution:
-  pipeline_binding: dreamx-world-5b-cam
-  backend_stage: in_tree_resident_runtime
-  runtime_status: native_checkpoint_runtime_a100_workspace_validated
-  integration_status: in_tree_runtime_workspace_validated
+- A real single-A100 Workspace run loaded both pinned checkpoints and generated four
+  finite, decodable 1280x704 output frames from the official DreamX example image
+  using an 8-step 5-frame window. This is an integration smoke and not the default
+  30-step quality recipe.

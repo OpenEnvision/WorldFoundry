@@ -3,20 +3,20 @@ title: ManiSkill2
 description: "ICLR 2023 的 SAPIEN 套件：20 个任务族、2,000+ 物体、400 万+ 演示帧。WorldFoundry 导入官方 rollout——不跑 SAPIEN。"
 ---
 
-ManiSkill2（ICLR 2023，加州大学圣迭戈分校 Hao Su 实验室，联合清华）是 ManiSkill 系列的 **统一 Gym** 世代：在 **SAPIEN** 上有 **20** 个任务族、**2,000+** 物体模型、**400 万+** 演示帧。任务族覆盖固定与移动底座、单臂与双臂、刚体与软体。同一接口提供点云、RGB-D 与特权状态观测，以及多种控制器。官方评测报告见过 vs 未见的资产与构型。2022 挑战赛用过云端计分；本页未收录该榜。
+ManiSkill2（ICLR 2023，加州大学圣迭戈分校 Hao Su 实验室，联合清华）是 ManiSkill 系列的**统一 Gym** 世代：在 **SAPIEN** 上有 **20** 个任务族、**2,000+** 物体模型、**400 万+** 演示帧。任务族覆盖固定与移动底座、单臂与双臂、刚体与软体。同一接口提供点云、RGB-D 与特权状态观测，以及多种控制器。官方评测报告已见 vs 未见的资产与构型。
 
-本卡片**不是** [ManiSkill](/zh/docs/evaluation/benchmark-hub/maniskill) 的改名。那一页跟踪后来的 GPU 并行 `maniskill.ai` 导入器。导出是 ICLR 2023 / ManiSkill2 协议时用本页。
+后续的 GPU 并行 `maniskill.ai` 版本另见：[ManiSkill](/zh/docs/evaluation/benchmark-hub/maniskill)。导出遵循 ICLR 2023 / ManiSkill2 协议时使用 ManiSkill2。
 
-论文：[ManiSkill2: A Unified Benchmark for Generalizable Manipulation Skills](https://arxiv.org/abs/2302.04659)。项目：[maniskill2.github.io](https://maniskill2.github.io/)。代码：[haosulab/ManiSkill2](https://github.com/haosulab/ManiSkill2)（Apache-2.0）。后续树在 [haosulab/ManiSkill](https://github.com/haosulab/ManiSkill)。
+论文：[ManiSkill2: A Unified Benchmark for Generalizable Manipulation Skills](https://arxiv.org/abs/2302.04659)。项目：[maniskill2.github.io](https://maniskill2.github.io/)。代码：[haosulab/ManiSkill2](https://github.com/haosulab/ManiSkill2)（Apache-2.0）。后续代码树位于 [haosulab/ManiSkill](https://github.com/haosulab/ManiSkill)。
 
-WorldFoundry **只导入官方结果**。你在上游跑 SAPIEN / ManiSkill2，再经 `official-validation` 归一化 JSON/CSV rollout 摘要。仓内无模拟器，也无官方策略。
+WorldFoundry **只导入官方结果**。先在上游运行 SAPIEN / ManiSkill2，再经 `official-validation` 归一化 JSON/CSV rollout 摘要。仓内无模拟器，也无官方策略。
 
 <BenchmarkPageSections id="maniskill2" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id maniskill2 \
   --mode official-validation \
   --official-results-path <official_results.json> \

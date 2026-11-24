@@ -15,7 +15,7 @@ Public surface
     Type predicates, ``any_*`` tree ops, :func:`chunk_seq`, :func:`get_batch_size`.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, TypeGuard
 
 import numpy as np
 import torch
@@ -28,23 +28,22 @@ from worldfoundry.core.utils.python.tree_utils import (
     tree_value_at_path,
 )
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Type predicates — cheap leaf tests used by every any_* helper
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def is_array_tensor(obj):
+def is_array_tensor(obj: object) -> TypeGuard[np.ndarray | torch.Tensor]:
     """Return whether ``obj`` is an ``ndarray`` or a torch tensor (not a pytree)."""
     return isinstance(obj, (np.ndarray, torch.Tensor))
 
 
-def is_numpy(obj):
+def is_numpy(obj: object) -> TypeGuard[np.ndarray]:
     """Return whether ``obj`` is a numpy ndarray (scalars and tensors are False)."""
     return isinstance(obj, np.ndarray)
 
 
-def is_tensor(obj):
+def is_tensor(obj: object) -> TypeGuard[torch.Tensor]:
     """Return whether ``obj`` is a torch tensor, including subclasses."""
     return torch.is_tensor(obj)
 
@@ -54,7 +53,7 @@ def is_tensor(obj):
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def any_stack(xs: List, *, dim: int = 0):
+def any_stack(xs: list, *, dim: int = 0):
     """
     Works for both torch Tensor and numpy array
     """
@@ -76,7 +75,7 @@ def any_stack(xs: List, *, dim: int = 0):
     return tree.map_structure(_any_stack_helper, *xs)
 
 
-def any_concat(xs: List, *, dim: int = 0):
+def any_concat(xs: list, *, dim: int = 0):
     """
     Works for both torch Tensor and numpy array
     """
@@ -98,7 +97,7 @@ def any_concat(xs: List, *, dim: int = 0):
     return tree.map_structure(_any_concat_helper, *xs)
 
 
-def any_chunk(x, chunks: int, *, dim: int = 0, strict: bool = True) -> List[Any]:
+def any_chunk(x, chunks: int, *, dim: int = 0, strict: bool = True) -> list[Any]:
     """
     Works for both torch Tensor and numpy array
 
@@ -123,7 +122,7 @@ def any_chunk(x, chunks: int, *, dim: int = 0, strict: bool = True) -> List[Any]
                 chunked_values = torch.chunk(x, chunks, dim=dim)
 
             if path:
-                for xc, chunked in zip(x_copies, chunked_values):
+                for xc, chunked in zip(x_copies, chunked_values, strict=False):
                     tree_assign_at_path(xc, path, chunked)
             else:  # top-level, no nested path
                 for i, chunked in enumerate(chunked_values):
@@ -156,7 +155,7 @@ def chunk_seq(arr, chunks: int, check_divide=True):
 
 
 @make_recursive_func
-def any_zeros_like(x: Union[Dict, np.ndarray, torch.Tensor, int, float, np.number]):
+def any_zeros_like(x: dict | np.ndarray | torch.Tensor | int | float | np.number):
     """Returns a zero-filled object of the same (d)type and shape as the input.
 
     The difference between this and `np.zeros_like()` is that this works well
@@ -180,7 +179,7 @@ def any_zeros_like(x: Union[Dict, np.ndarray, torch.Tensor, int, float, np.numbe
 
 
 @make_recursive_func
-def any_ones_like(x: Union[Dict, np.ndarray, torch.Tensor, int, float, np.number]):
+def any_ones_like(x: dict | np.ndarray | torch.Tensor | int | float | np.number):
     """Returns a one-filled object of the same (d)type and shape as the input.
     The difference between this and `np.ones_like()` is that this works well
     with `np.number`, `int`, `float`, and `jax.numpy.DeviceArray` objects without
@@ -201,7 +200,7 @@ def any_ones_like(x: Union[Dict, np.ndarray, torch.Tensor, int, float, np.number
 
 
 @make_recursive_func
-def any_zero_(x: Union[Dict, np.ndarray, torch.Tensor]):
+def any_zero_(x: dict | np.ndarray | torch.Tensor):
     """
     Apply in-place zero-out to a tensor, i.e. x.zero_()
     """
@@ -214,7 +213,7 @@ def any_zero_(x: Union[Dict, np.ndarray, torch.Tensor]):
 
 
 @make_recursive_func
-def any_fill_(x: Union[Dict, np.ndarray, torch.Tensor], value):
+def any_fill_(x: dict | np.ndarray | torch.Tensor, value):
     """
     Apply in-place zero-out to a tensor, i.e. x.zero_()
     """
@@ -316,7 +315,7 @@ def any_get_shape(x):
 
 
 @make_recursive_func
-def any_mean(x, dim: Optional[int] = None, keepdim: bool = False):
+def any_mean(x, dim: int | None = None, keepdim: bool = False):
     """Mean over ``dim`` (or all axes). Numpy ``axis`` and torch ``dim`` stay aligned."""
     if is_numpy(x):
         return np.mean(x, axis=dim, keepdims=keepdim)
@@ -327,7 +326,7 @@ def any_mean(x, dim: Optional[int] = None, keepdim: bool = False):
 
 
 @make_recursive_func
-def any_variance(x, dim: Optional[int] = None, keepdim: bool = False, unbiased: bool = False):
+def any_variance(x, dim: int | None = None, keepdim: bool = False, unbiased: bool = False):
     """Variance with a shared ``unbiased`` flag (numpy ``ddof=1`` vs torch ``unbiased``)."""
     if is_numpy(x):
         return np.var(x, axis=dim, keepdims=keepdim, ddof=1 if unbiased else 0)

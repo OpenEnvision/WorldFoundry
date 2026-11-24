@@ -31,17 +31,19 @@ import threading
 import uuid
 from dataclasses import fields as dataclass_fields
 from dataclasses import is_dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 import attr
 import attrs
-from hydra import compose, initialize
-from hydra.core.config_store import ConfigStore
-from hydra.core.global_hydra import GlobalHydra
 from omegaconf import DictConfig, OmegaConf
 
 from worldfoundry.core.configuration.cosmos_config import Config
-from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.observability.rank_logging import log
+
+_hydra_api = __import__("hydra", fromlist=["compose", "initialize"])
+compose, initialize = _hydra_api.compose, _hydra_api.initialize
+ConfigStore = __import__("hydra.core.config_store", fromlist=["ConfigStore"]).ConfigStore
+GlobalHydra = __import__("hydra.core.global_hydra", fromlist=["GlobalHydra"]).GlobalHydra
 
 # ──────────────────────────────────────────────────────────────────────────
 # Process-wide Hydra lock — ConfigStore / GlobalHydra must not leak across jobs
@@ -89,7 +91,7 @@ def get_fields(obj):
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def override(config: Config, overrides: Optional[list[str]] = None, remove_defaults: bool = False) -> Config:
+def override(config: Config, overrides: list[str] | None = None, remove_defaults: bool = False) -> Config:
     """
     :param config: the instance of class `Config` (usually from `make_config`)
     :param overrides: list of overrides for config
@@ -167,7 +169,7 @@ def override(config: Config, overrides: Optional[list[str]] = None, remove_defau
                     f"Fields mismatch: {ref_fields} != {keys}. Extra keys found: {extra_keys} \n \t when constructing {type(ref_instance)} with {keys}"
                 )
 
-            resolved_kwargs: Dict[str, Any] = {}
+            resolved_kwargs: dict[str, Any] = {}
             for f in keys:
                 resolved_kwargs[f] = config_from_dict(getattr(ref_instance, f), kwargs[f])
             try:

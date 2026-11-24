@@ -15,7 +15,8 @@ def test_joyai_echo_workspace_declares_every_external_runtime_component(model_id
     options = entry.default_load_kwargs
 
     assert Path(entry.default_model_ref).is_dir()
-    assert Path(options["source_root"]).is_dir()
+    assert "source_root" not in options
+    assert "source_root" not in entry.load_params
     assert Path(entry.default_input_path).is_file()
     assert "gemma-3-12b-it" in Path(options["gemma_path"]).name
     assert options["python_executable"].endswith(f"/{model_id}/bin/python")

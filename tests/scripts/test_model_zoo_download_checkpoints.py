@@ -29,9 +29,7 @@ def test_manifest_and_command_preserve_recipe_specific_filename(tmp_path: Path) 
         },
     )
 
-    assert manifest.hf_repo_files == {
-        "Example/Memory": ["context_k1/epoch-0.safetensors"]
-    }
+    assert manifest.hf_repo_files == {"Example/Memory": ["context_k1/epoch-0.safetensors"]}
     command = download_checkpoints.build_download_command(
         "Example/Memory",
         tmp_path,
@@ -67,10 +65,33 @@ def test_local_check_requires_the_model_specific_file(tmp_path: Path) -> None:
         required_files=["context_k20/epoch-0.safetensors"],
     )
     assert missing["ready"] is False
-    assert missing["direct_hfd_missing_required_files"] == [
-        "context_k20/epoch-0.safetensors"
-    ]
+    assert missing["direct_hfd_missing_required_files"] == ["context_k20/epoch-0.safetensors"]
 
 
 def test_hf_filename_rejects_path_traversal() -> None:
     assert download_checkpoints._normalize_hf_filename("../secret.safetensors") is None
+
+
+def test_pinned_snapshot_is_checked_independently_of_main(tmp_path: Path) -> None:
+    repo = "Example/Memory"
+    pinned_revision = "a" * 40
+    main_revision = "b" * 40
+    required_file = "libero_10/model.safetensors"
+    cache = tmp_path / "models--Example--Memory"
+    ref = cache / "refs" / "main"
+    ref.parent.mkdir(parents=True)
+    ref.write_text(main_revision + "\n")
+    for revision in (pinned_revision, main_revision):
+        checkpoint = cache / "snapshots" / revision / required_file
+        checkpoint.parent.mkdir(parents=True)
+        checkpoint.touch()
+
+    ready = download_checkpoints.check_local_checkpoint(repo, tmp_path, pinned_revision, [required_file])
+    assert ready["ready"] is True
+    assert ready["local_layout"] == "hf_cache"
+    assert ready["referenced_snapshot"] == main_revision
+
+    (cache / "snapshots" / pinned_revision / required_file).unlink()
+    missing = download_checkpoints.check_local_checkpoint(repo, tmp_path, pinned_revision, [required_file])
+    assert missing["ready"] is False
+    assert missing["hf_missing_required_files"] == [required_file]

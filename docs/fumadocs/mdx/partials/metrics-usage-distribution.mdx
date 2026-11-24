@@ -17,7 +17,7 @@ Lower values indicate closer generated and reference feature distributions. FID 
 **Assets:** Torch-fidelity InceptionV3 / CLIP / SwAV weights via `torch.hub` and `torchvision` caches. Offline: `feature_extractor_weights_path` or staged Torch cache.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_fid
+from worldfoundry.evals.tasks.metrics import compute_fid
 
 ref_dir = "/data/coco_val"
 gen_dir = "/data/my_model_samples"
@@ -44,7 +44,7 @@ Lower values indicate closer generated and reference feature distributions. FID 
 **When**: SceneFID with object crops from bbox annotations.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_scene_fid
+from worldfoundry.evals.tasks.metrics import compute_scene_fid
 
 score = compute_scene_fid(
     "/data/ref",
@@ -73,7 +73,7 @@ A high score means individual images produce confident predictions while the who
 **Assets:** Torch-fidelity InceptionV3 via `torch.hub` / `torchvision` cache.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_inception_score
+from worldfoundry.evals.tasks.metrics import compute_inception_score
 
 result = compute_inception_score("/data/generated_only")
 print(result)  # dict with mean/std IS
@@ -98,7 +98,7 @@ Unlike FID, KID does not fit Gaussian distributions and its estimator can be unb
 **Assets:** Torch-fidelity Inception features via `torch.hub` / `torchvision` cache.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_kid
+from worldfoundry.evals.tasks.metrics import compute_kid
 
 kid = compute_kid("/data/ref", "/data/gen")
 print(kid["kernel_inception_distance_mean"])
@@ -117,7 +117,7 @@ print(kid["kernel_inception_distance_mean"])
 **Assets:** Torch-fidelity Inception features via `torch.hub` / `torchvision` cache.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_precision_recall
+from worldfoundry.evals.tasks.metrics import compute_precision_recall
 
 pr = compute_precision_recall("/data/ref", "/data/gen")
 print(pr)
@@ -131,12 +131,12 @@ print(pr)
 
 **When**: α-precision, β-recall, realism score (k-NN radii).
 
-**Reference:** α-precision, β-recall, and realism score via k-NN radii in feature space. Paper: [Kynkä et al.](https://arxiv.org/abs/1905.05473) Repo: [kynkaat/improved-precision-and-recall-metric](https://github.com/kynkaat/improved-precision-and-recall-metric)
+**Reference:** α-precision, β-recall, and realism score via k-NN radii in feature space. Paper: [Kynkäänniemi et al.](https://arxiv.org/abs/1904.06991) Repo: [kynkaat/improved-precision-and-recall-metric](https://github.com/kynkaat/improved-precision-and-recall-metric)
 
 **Assets:** Torchvision VGG16 feature extractor (`TORCH_HOME` / torch cache).
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_improved_precision_recall,
     compute_realism_score,
 )
@@ -179,33 +179,33 @@ Lower values indicate that generated and reference image distributions are close
 
 #### `trend`
 
-**Principle:** `trend` / `trend_jsd` compares reference and generated trend distributions, usually through a divergence such as Jensen-Shannon divergence. Given two categorical or binned distributions `P` and `Q`, the common computation is:
+**Principle:** `trend` / `trend_jsd` compares reference and generated feature distributions by fitting Truncated Generalized Normal Distributions (TGND) per dimension and computing Jensen-Shannon divergence:
 
 $$
 \mathrm{JSD}(P, Q) = \tfrac{1}{2}\,\mathrm{KL}(P \parallel M) + \tfrac{1}{2}\,\mathrm{KL}(Q \parallel M), \quad M = \tfrac{1}{2}(P + Q)
 $$
 
-Lower values indicate that generated outputs preserve the reference trend distribution more closely. In WorldFoundry, this is best used when the benchmark defines explicit attributes, categories, temporal bins, or other trend statistics to compare.
+Lower values indicate that generated outputs preserve the reference feature distribution more closely.
 
 
 **When**: Distribution distance on image folders (different feature backends).
 
 **Reference:**
-- **`fwd`:** Fréchet Wavelet Distance between image distributions. Paper: [Karras et al.](https://arxiv.org/abs/1812.04948) Repo: WorldFoundry (vendored `pytorchfwd`)
+- **`fwd`:** Fréchet Wavelet Distance between image distributions. Repo: WorldFoundry (vendored `pytorchfwd`)
 - **`cmmd`:** CLIP Maximum Mean Discrepancy between image sets. Paper: [Jayasumana et al.](https://arxiv.org/abs/2402.05236) Repo: WorldFoundry (adapted from CMMD repo)
-- **`clean_fid`:** Clean-FID with improved Inception preprocessing. Paper: [Parmar et al.](https://arxiv.org/abs/2204.06191) Repo: [GaParmar/clean-fid](https://github.com/GaParmar/clean-fid)
+- **`clean_fid`:** Clean-FID with improved Inception preprocessing. Paper: [Parmar et al.](https://arxiv.org/abs/2104.11222) Repo: [GaParmar/clean-fid](https://github.com/GaParmar/clean-fid)
 - **`mind`:** Monge Inception Distance between image sets. Paper: [John et al.](https://arxiv.org/abs/2306.04594) Repo: WorldFoundry (torch-fidelity integration)
-- **`trend`:** Truncated entropy / trend divergence on feature histograms. Paper: [Han et al.](https://arxiv.org/abs/2206.08599) Repo: WorldFoundry (paper reimplementation)
+- **`trend`:** TREND metric via TGND parameter JSD on Inception embeddings. Repo: WorldFoundry (in-tree `distribution/trend/`)
 
 **Assets:**
-- **`fwd`:** Torch-fidelity / wavelet backend weights via vendored distribution helpers and torch cache.
+- **`fwd`:** Wavelet packet transform via vendored `pytorchfwd`.
 - **`cmmd`:** CLIP vision encoder `openai/clip-vit-large-patch14-336` in Hugging Face `transformers` cache (`WORLDFOUNDRY_HFD_ROOT`).
 - **`clean_fid`:** Clean-FID Inception network and optional reference statistics in the `cleanfid` runtime cache.
 - **`mind`:** Torch-fidelity feature extractors via `torch.hub` / `torchvision` cache.
-- **`trend`:** No model checkpoint when caller supplies the required statistics/features.
+- **`trend`:** InceptionV3 embeddings (via `pytorch_fid`) or precomputed parameter arrays.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_fwd,
     compute_cmmd,
     compute_clean_fid,
@@ -240,7 +240,7 @@ Lower values indicate smoother perceptual changes under latent interpolation. PP
 **Assets:** Torch-fidelity latent / perceptual path weights via `torch.hub` / `torchvision` cache.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_ppl
+from worldfoundry.evals.tasks.metrics import compute_ppl
 
 ppl = compute_ppl("/path/to/generated_or_latent_inputs")
 print(ppl)
@@ -271,9 +271,9 @@ The score can be interpreted as an effective number of distinct samples under th
 **When**: Diversity from feature matrices or image folders.
 
 **Reference:**
-- **`vendi_score`:** Vendi score (diversity) from feature matrix or image embeddings. Paper: [Friedman & Dieng](https://arxiv.org/abs/2202.03269) Repo: WorldFoundry (adapted)
+- **`vendi_score`:** Vendi score (diversity) from feature matrix or image embeddings. Paper: [Friedman & Dieng](https://arxiv.org/abs/2210.02410) Repo: WorldFoundry (adapted)
 - **`rke`:** Rényi kernel entropy mode count on feature embeddings (diversity). Paper: [Jalali et al. (NeurIPS 2023)](https://openreview.net/forum?id=PdZhf6PiAb) Repo: [mjalali/renyi-kernel-entropy](https://github.com/mjalali/renyi-kernel-entropy)
-- **`rnd`:** Random Network Distillation novelty score on feature vectors. Paper: [Burda et al.](https://arxiv.org/abs/1810.12894) Repo: WorldFoundry (paper reimplementation)
+- **`rnd`:** Random Network Distillation diversity score on feature vectors. Paper: [Fowl et al.](https://arxiv.org/abs/2010.06715) Repo: WorldFoundry (paper reimplementation)
 
 **Assets:**
 - **`vendi_score`:** Image helper: torchvision InceptionV3. Text helper: `roberta-base` and `princeton-nlp/unsup-simcse-roberta-base` under `WORLDFOUNDRY_HFD_ROOT`. Feature-array mode needs no extractor.
@@ -282,7 +282,7 @@ The score can be interpreted as an effective number of distinct samples under th
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_vendi_score,
     compute_rke,
     compute_rrke,
@@ -312,7 +312,7 @@ print("rnd_images", compute_rnd_from_images("/data/generated"))
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import compute_mean_rarity_score
+from worldfoundry.evals.tasks.metrics import compute_mean_rarity_score
 
 real_feats = np.load("real.npy")
 gen_feats = np.load("gen.npy")
@@ -327,13 +327,13 @@ print(compute_mean_rarity_score(real_feats, gen_feats, k=5))
 
 **When**: Feature Likelihood Divergence on precomputed feature arrays.
 
-**Reference:** Feature Likelihood Divergence between real and generated feature distributions. Paper: [Richter & Rhodes (ICML 2022)](https://arxiv.org/abs/2204.06496) Repo: WorldFoundry (paper reimplementation)
+**Reference:** Feature Likelihood Divergence between real and generated feature distributions. Paper: [Jiralerspong et al. (NeurIPS 2023)](https://arxiv.org/abs/2302.04440) Repo: WorldFoundry (in-tree `distribution/fld/`)
 
 **Assets:** No model checkpoint when caller supplies train/test/generated feature arrays.
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import compute_fld
+from worldfoundry.evals.tasks.metrics import compute_fld
 
 train = np.load("train_feats.npy")
 test = np.load("test_feats.npy")
@@ -344,17 +344,17 @@ print(compute_fld(train, test, gen))
 **Returns**: Float FLD; lower is better.
 
 ### `multimodal_mid` (↑)
-**Principle:** Mutual Information Divergence is a multimodal generation metric based on CLIP-style image-text features. It estimates cross-modal mutual information behavior between paired modalities and uses a negative Gaussian cross-mutual-information formulation to score alignment. Higher WorldFoundry scores should indicate stronger multimodal consistency when the implementation exposes MID as a positive alignment score. Use it for paired multimodal generation such as text-to-image or image captioning, and document the exact feature model.
+**Principle:** Mutual Information Divergence is a multimodal generation metric based on CLIP-style image-text features. It estimates cross-modal mutual information behavior between paired modalities and uses a negative Gaussian cross-mutual-information formulation to score alignment. Higher WorldFoundry scores indicate stronger multimodal consistency. Use it for paired multimodal generation such as text-to-image or image captioning, and document the exact feature model.
 
 
 **When**: Mutual Information Divergence on paired image-text embeddings.
 
-**Reference:** Mutual Information Divergence comparing joint image-text embedding distributions. Paper: [Dhaka et al. (NeurIPS 2021)](https://arxiv.org/abs/2106.04566) Repo: WorldFoundry (paper reimplementation)
+**Reference:** Mutual Information Divergence comparing joint image-text embedding distributions (Naver `mid.metric`; not MIND). Repo: WorldFoundry (in-tree `distribution/mid_metric/`)
 
 **Assets:** No model checkpoint when caller supplies paired feature arrays.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_multimodal_mid
+from worldfoundry.evals.tasks.metrics import compute_multimodal_mid
 
 print(compute_multimodal_mid(image_feats, text_feats))
 ```
@@ -367,12 +367,12 @@ print(compute_multimodal_mid(image_feats, text_feats))
 
 **When**: Fréchet Joint Distance on paired image-text joint embeddings.
 
-**Reference:** Fréchet Joint Distance over paired image-text embeddings. Paper: [Lee et al. (ICCV 2023)](https://arxiv.org/abs/2303.08118) Repo: WorldFoundry (paper reimplementation)
+**Reference:** Fréchet Joint Distance over paired conditional/image joint embeddings. Paper: [DeVries et al.](https://arxiv.org/abs/1907.07175) Repo: WorldFoundry (in-tree `distribution/fjd/`)
 
 **Assets:** No model checkpoint when caller supplies joint embeddings.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_fjd_from_joint_embeddings
+from worldfoundry.evals.tasks.metrics import compute_fjd_from_joint_embeddings
 
 print(compute_fjd_from_joint_embeddings(real_joint, gen_joint))
 ```
@@ -390,12 +390,12 @@ print(compute_fjd_from_joint_embeddings(real_joint, gen_joint))
 **Assets:** No model checkpoint when caller supplies feature arrays.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_crosslid
+from worldfoundry.evals.tasks.metrics import compute_crosslid
 
 print(compute_crosslid(features, k=5))
 ```
 
-**Returns**: Float CrossLID; lower indicates less diversity.
+**Returns**: Float CrossLID; lower is better.
 
 ### `cfid` (↓)
 **Principle:** Conditional FID generalizes FID to conditional distributions. Instead of comparing only unconditional generated and real image distributions, CFID measures discrepancies between conditional distributions, making it more sensitive to cases where outputs are realistic but unrelated to inputs. The closed-form version follows a conditional Gaussian/Wasserstein setup. Lower values indicate better conditional fidelity.
@@ -403,12 +403,12 @@ print(compute_crosslid(features, k=5))
 
 **When**: Conditional FID from paired conditional/unconditional embeddings.
 
-**Reference:** Conditional FID from paired conditional/unconditional embeddings. Paper: [Benny & Wolf (NeurIPS 2020)](https://arxiv.org/abs/2008.06993) Repo: WorldFoundry (paper reimplementation)
+**Reference:** Conditional FID (Soloveitchik paired CFID). Paper: [Soloveitchik et al.](https://arxiv.org/abs/2103.11521) Repo: WorldFoundry (in-tree `distribution/cfid/`)
 
 **Assets:** No model checkpoint when caller supplies conditional feature arrays.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_cfid
+from worldfoundry.evals.tasks.metrics import compute_cfid
 
 print(compute_cfid(ref_pairs, gen_pairs))
 ```
@@ -421,43 +421,37 @@ print(compute_cfid(ref_pairs, gen_pairs))
 
 **When**: Semantic Similarity Distance between text and image embeddings.
 
-**Reference:** Semantic Similarity Distance between text and image embeddings. Paper: [Tschannen et al. (ICLR 2018)](https://arxiv.org/abs/1710.05135) Repo: WorldFoundry (paper reimplementation)
+**Reference:** Semantic Similarity Distance for text-to-image evaluation. Repo: WorldFoundry (in-tree `distribution/ssd/`)
 
 **Assets:** No model checkpoint when caller supplies text/image embeddings.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_ssd
+from worldfoundry.evals.tasks.metrics import compute_ssd
 
 print(compute_ssd(text_embeds, image_embeds))
 ```
 
 **Returns**: Float SSD; lower is better.
 
-### `linear_separability` (↑)
-**Principle:** Linear separability measures disentanglement in a latent or attribute space. The StyleGAN formulation asks whether latent-space samples corresponding to a binary attribute can be separated by a linear hyperplane. In WorldFoundry, the public helper computes a score from a confusion matrix, so the effective computation depends on classifier outcomes:
-
-$$
-\text{linear\_separability} = \mathrm{score}(\mathbf{C})
-$$
-
-Higher values indicate that the attribute or factor is more linearly separable. This metric is meaningful only when the upstream classifier, labels, and attribute definitions are stable.
+### `linear_separability` (↓)
+**Principle:** StyleGAN linear separability measures disentanglement in a latent space by fitting linear SVMs to predict binary attributes from latent codes and computing `2**H(Y|X)` from the classifier confusion matrix. Lower values indicate less conditional entropy and therefore more linearly disentangled latents. This metric is meaningful only when the upstream classifier, labels, and attribute definitions are stable.
 
 
 **When**: StyleGAN latent linear separability from an SVM confusion matrix.
 
-**Reference:** SVM linear separability score from StyleGAN latent confusion matrix. Paper: [Karras et al.](https://arxiv.org/abs/1812.04948) Repo: [NVlabs/stylegan](https://github.com/NVlabs/stylegan)
+**Reference:** StyleGAN linear separability (`2**H(Y|X)`; lower is more disentangled). Paper: [Karras et al.](https://arxiv.org/abs/1812.04948) Repo: [NVlabs/stylegan](https://github.com/NVlabs/stylegan)
 
 **Assets:** No model checkpoint — pass the confusion matrix / separability inputs required by the API.
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import compute_linear_separability
+from worldfoundry.evals.tasks.metrics import compute_linear_separability
 
 confusion = np.load("svm_confusion.npy")
 print(compute_linear_separability(confusion))
 ```
 
-**Returns**: Separability score; higher = more disentangled latents.
+**Returns**: Separability score `2**H(Y|X)`; lower = more disentangled latents.
 
 ### `fdd` (↓)
 **Principle:** Fréchet Denoised Distance replaces the Inception feature extractor in FID with a denoising-autoencoder representation. The metric encodes real and generated images with a DAE, fits Gaussian statistics in the denoised latent space, and computes a Fréchet distance. Lower values indicate that generated images are closer to reference images in a structure-biased denoised feature space. FDD is especially relevant when structural plausibility matters more than low-level visual artifacts.
@@ -470,7 +464,7 @@ print(compute_linear_separability(confusion))
 **Assets:** `WORLDFOUNDRY_FDD_DAE_CKPT` or auto-download via `gdown` (Google Drive id `1j7MVFWYfRNZLQ3uChe7TGQG8L1Oaf9Gt`).
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_fdd
+from worldfoundry.evals.tasks.metrics import compute_fdd
 
 # export WORLDFOUNDRY_FDD_DAE_CKPT=/path/to/dae.pt
 score = compute_fdd("/data/ref", "/data/gen")
@@ -480,7 +474,7 @@ print(score)
 **Returns**: Float FDD; lower = more structurally plausible.
 
 ### `cis` (↑)
-**Principle:** Conditional Inception Score generalizes Inception Score to class-conditional generation. It decomposes quality and diversity by conditioning class, using within-class and between-class components derived from classifier predictions. Higher values indicate better class-conditional quality and diversity. Use CIS only when generated samples have known class conditions and classifier predictions are meaningful for those classes.
+**Principle:** Conditional Inception Score generalizes Inception Score to class-conditional generation. It decomposes quality and diversity by conditioning class, using within-class and between-class components derived from classifier predictions (`BCIS × WCIS`). Higher values indicate better class-conditional quality and diversity. Use CIS only when generated samples have known class conditions and classifier predictions are meaningful for those classes.
 
 
 **When**: Conditional Inception Score from class-probability batches.
@@ -491,7 +485,7 @@ print(score)
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import compute_cis, compute_cis_from_predictions
+from worldfoundry.evals.tasks.metrics import compute_cis, compute_cis_from_predictions
 
 # probs: list of (N, num_classes) arrays, one bucket per condition
 print(compute_cis(class_probs))
@@ -499,6 +493,39 @@ print(compute_cis_from_predictions(predictions, num_classes=1000))
 ```
 
 **Returns**: Dict with BCIS, WCIS, and combined CIS.
+
+### `cas` (↑)
+**Principle:** Classification Accuracy Score evaluates conditional generative models by training a classifier strictly on synthetic samples and measuring its Top-k accuracy on real test images. Higher CAS indicates that the synthetic distribution captures the class-discriminative structure of the real distribution.
+
+
+**When**: Train classifier on synthetic images; evaluate Top-k accuracy on real labels.
+
+**Reference:** Classification Accuracy Score: train on synthetic, Top-k accuracy on real labels. Paper: [Ravuri & Vinyals](https://arxiv.org/abs/1905.10887) Repo: WorldFoundry (paper reimplementation)
+
+**Assets:** No fixed checkpoint — trains a lightweight classifier on synthetic features supplied by the API.
+
+```python
+import numpy as np
+from worldfoundry.evals.tasks.metrics import (
+    train_classifier_and_compute_cas,
+    compute_cas_from_predictions,
+)
+
+out = train_classifier_and_compute_cas(
+    synthetic_images=syn_x,
+    synthetic_labels=syn_y,
+    real_images=real_x,
+    real_labels=real_y,
+    num_classes=10,
+    device="cuda",
+)
+print(out["cas_top1"], out.get("cas_top5"))
+
+# or with existing predictions
+print(compute_cas_from_predictions(real_y, pred_topk, topk=(1, 5)))
+```
+
+**Returns**: Dict with `cas`, `cas_top1`, optional `cas_top5`.
 
 ### `attribute_sad / attribute_pad` (↓)
 #### `attribute_sad`
@@ -510,18 +537,18 @@ print(compute_cis_from_predictions(predictions, num_classes=1000))
 **Principle:** Attribute PaD is the paired or relationship-sensitive counterpart to SaD. It evaluates whether generated samples preserve attribute relationships or paired attribute behavior relative to the reference set. Lower values indicate better attribute-pair consistency. Use it when attribute co-occurrence or implausible attribute relationships are important evaluation targets.
 
 
-**When**: SadPaD attribute divergence from precomputed HCS histograms.
+**When**: SadPaD attribute divergence from precomputed HCS tensors.
 
 **Reference:**
-- **`attribute_sad`:** KL / JS / W1 divergence between attribute histograms (attribute SAD). Paper: [Ramesh et al.](https://arxiv.org/abs/2105.05233) Repo: WorldFoundry (SadPaD reimplementation)
-- **`attribute_pad`:** Attribute-aware Padé approximant divergence for text attributes. Paper: [Ramesh et al.](https://arxiv.org/abs/2105.05233) Repo: WorldFoundry (SadPaD reimplementation)
+- **`attribute_sad`:** Semantic Attribute Distance (SaD) from HCS features. Repo: WorldFoundry (in-tree `distribution/sadpad/`)
+- **`attribute_pad`:** Pairwise Attribute Distance (PaD) from HCS features. Repo: WorldFoundry (in-tree `distribution/sadpad/`)
 
 **Assets:**
-- **`attribute_sad`:** No model checkpoint — pass precomputed HCS histograms (`hcs_real`, `hcs_gen`, `text_list`).
-- **`attribute_pad`:** No model checkpoint — pass precomputed HCS histograms (`hcs_real`, `hcs_gen`, `text_list`).
+- **`attribute_sad`:** No model checkpoint — pass precomputed HCS tensors (`hcs_real`, `hcs_gen`, `text_list`).
+- **`attribute_pad`:** No model checkpoint — pass precomputed HCS tensors (`hcs_real`, `hcs_gen`, `text_list`).
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_attribute_sad, compute_attribute_pad
+from worldfoundry.evals.tasks.metrics import compute_attribute_sad, compute_attribute_pad
 
 text_list = ["smiling", "young", "eyeglasses"]
 sad = compute_attribute_sad(hcs_real, hcs_gen, text_list)
@@ -545,7 +572,7 @@ print(sad, pad)
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_fvd_from_numpy,
     compute_fvd_from_frame_dirs,
 )
@@ -577,7 +604,7 @@ print(
 **Assets:** PIPs2 tracker `pips2_weights.pth` from FVMD release via torch hub cache.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_fvmd
+from worldfoundry.evals.tasks.metrics import compute_fvmd
 
 score = compute_fvmd("/data/ref_videos", "/data/gen_videos")
 print(score)
@@ -603,7 +630,7 @@ Lower values indicate closer video distributions. JEDi was proposed to address l
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_jedi_from_features,
     compute_mock_jedi,
 )
@@ -621,11 +648,10 @@ print(compute_mock_jedi())
 ### Run multiple torch-fidelity metrics at once
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_distribution_metrics
+from worldfoundry.evals.tasks.metrics import compute_distribution_metrics
 
 scores = compute_distribution_metrics(
     "/data/ref", "/data/gen", metrics=("fid", "kid", "prc")
 )
 print(scores)
 ```
-

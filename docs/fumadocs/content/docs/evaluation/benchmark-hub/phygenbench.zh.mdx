@@ -1,6 +1,6 @@
 ---
 title: PhyGenBench
-description: "T2V 物理常识生成：160 条 prompt 覆盖 27 条定律，由 PhyGenEval 打分。WorldFoundry 导入结果或跑 overall.py，不跑各阶段 judge。"
+description: "T2V 物理常识生成：160 条 prompt 覆盖 27 条定律，由 PhyGenEval 打分。WorldFoundry 导入结果，或对已准备好的 stage 输出跑 overall.py。"
 ---
 
 PhyGenBench（上海人工智能实验室 / OpenGVLab）问的是**文生视频生成器**是否遵守物理常识。它提供 **160 条 prompt**，声称覆盖力学、光学、热学、材料四大领域的 **27 条定律**。上游打分是 **PhyGenEval**：VQAScore、GPT-4o/LLaVA 风格顺序校验、InternVideo2 自然度，再交给 `overall.py`。
@@ -9,7 +9,7 @@ PhyGenBench（上海人工智能实验室 / OpenGVLab）问的是**文生视频�
 
 论文：[PhyGenBench](https://arxiv.org/abs/2410.05363)。项目：[phygenbench123.github.io](https://phygenbench123.github.io/)。代码：[OpenGVLab/PhyGenBench](https://github.com/OpenGVLab/PhyGenBench)。
 
-WorldFoundry 捆绑 `prompts.json` 与 PhyGenEval `overall.py`。它**导入**官方结果文件，或对已准备好的 stage 输出跑**有界** `overall.py`。它**不**运行 VQAScore、GPT-4o/LLaVA 或 InternVideo2。
+WorldFoundry 捆绑 `prompts.json` 与 PhyGenEval `overall.py`。它**导入**官方结果文件，或对已准备好的 stage 输出跑 `overall.py`。它**不**运行 VQAScore、GPT-4o/LLaVA 或 InternVideo2。
 
 <BenchmarkPageSections id="phygenbench" locale="zh" />
 
@@ -18,7 +18,7 @@ WorldFoundry 捆绑 `prompts.json` 与 PhyGenEval `overall.py`。它**导入**�
 导入官方结果导出：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id phygenbench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -27,11 +27,11 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-用仓内 `overall.py` 聚合已备 stage 输出（不能替代完整 judge 栈）：
+用仓内 `overall.py` 聚合已准备好的 stage 输出（不能替代完整 judge 栈）：
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --output-dir tmp/phygenbench/official \

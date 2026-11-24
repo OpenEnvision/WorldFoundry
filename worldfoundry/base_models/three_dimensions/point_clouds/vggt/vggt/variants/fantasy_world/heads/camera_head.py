@@ -4,22 +4,16 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> variants -> fantasy_world -> heads -> camera_head.py functionality."""
-
-import math
-import numpy as np
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.layers import Mlp
-from ..layers.block import Block
-from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.head_act import activate_pose
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.geometry_bridge import (
     ChannelExpandAndReshape,
-    WanVAE_,
 )
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.head_act import activate_pose
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.layers import Mlp
+
+from ..layers.block import Block
 
 
 class CameraHead(nn.Module):
@@ -41,19 +35,6 @@ class CameraHead(nn.Module):
         quat_act: str = "linear",
         fl_act: str = "relu",  # Field of view activations: ensures FOV values are positive.
     ):
-        """Init.
-
-        Args:
-            dim_in: The dim in.
-            trunk_depth: The trunk depth.
-            pose_encoding_type: The pose encoding type.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            init_values: The init values.
-            trans_act: The trans act.
-            quat_act: The quat act.
-            fl_act: The fl act.
-        """
         super().__init__()
 
         if pose_encoding_type == "absT_quaR_FoV":
@@ -65,7 +46,6 @@ class CameraHead(nn.Module):
         self.quat_act = quat_act
         self.fl_act = fl_act
         self.trunk_depth = trunk_depth
-
 
         # Build the trunk using a sequence of transformer blocks.
         self.trunk = nn.Sequential(
@@ -86,7 +66,7 @@ class CameraHead(nn.Module):
         # Module for producing modulation parameters: shift, scale, and a gate.
         self.poseLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(dim_in, 3 * dim_in, bias=True))
 
-        self.camera_time_upsample = ChannelExpandAndReshape(input_channels= dim_in)
+        self.camera_time_upsample = ChannelExpandAndReshape(input_channels=dim_in)
         # Adaptive layer normalization without affine parameters.
         self.adaln_norm = nn.LayerNorm(dim_in, elementwise_affine=False, eps=1e-6)
         self.pose_branch = Mlp(in_features=dim_in, hidden_features=dim_in // 2, out_features=self.target_dim, drop=0)
@@ -108,9 +88,11 @@ class CameraHead(nn.Module):
 
         # Extract the camera tokens
         pose_tokens = tokens[:, :, 0]
-        upsample_pose = self.camera_time_upsample(pose_tokens[:,1:,:]) 
+        upsample_pose = self.camera_time_upsample(pose_tokens[:, 1:, :])
         pose_tokens = self.token_norm(pose_tokens)
-        pose_tokens = torch.cat([pose_tokens[:,0:1,:], upsample_pose], dim=1) # The unsampled pose tokens were not normalized by token_norm. This will be improved in the future. 
+        pose_tokens = torch.cat(
+            [pose_tokens[:, 0:1, :], upsample_pose], dim=1
+        )  # The unsampled pose tokens were not normalized by token_norm. This will be improved in the future.
         pred_pose_enc_list = self.trunk_fn(pose_tokens, num_iterations)
         return pred_pose_enc_list
 
@@ -149,10 +131,7 @@ class CameraHead(nn.Module):
             # Compute the delta update for the pose encoding.
             pred_pose_enc_delta = self.pose_branch(self.trunk_norm(pose_tokens_modulated))
 
-            if pred_pose_enc is None:
-                pred_pose_enc = pred_pose_enc_delta
-            else:
-                pred_pose_enc = pred_pose_enc + pred_pose_enc_delta
+            pred_pose_enc = pred_pose_enc_delta if pred_pose_enc is None else pred_pose_enc + pred_pose_enc_delta
 
             # Apply final activation functions for translation, quaternion, and field-of-view.
             activated_pose = activate_pose(

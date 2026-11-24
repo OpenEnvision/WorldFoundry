@@ -1,10 +1,9 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> misc -> collation.py functionality."""
-
-from typing import Callable, Dict, Union
+from collections.abc import Callable
+from typing import Union
 
 from torch import Tensor
 
-Tree = Union[Dict[str, "Tree"], Tensor]
+Tree = Union[dict[str, "Tree"], Tensor]  # noqa: UP007 - Runtime type alias kept as typing.Union.
 
 
 def collate(trees: list[Tree], merge_fn: Callable[[list[Tensor]], Tensor]) -> Tree:
@@ -12,6 +11,4 @@ def collate(trees: list[Tree], merge_fn: Callable[[list[Tensor]], Tensor]) -> Tr
     if isinstance(trees[0], Tensor):
         return merge_fn(trees)
     else:
-        return {
-            key: collate([tree[key] for tree in trees], merge_fn) for key in trees[0]
-        }
+        return {key: collate([tree[key] for tree in trees], merge_fn) for key in trees[0]}

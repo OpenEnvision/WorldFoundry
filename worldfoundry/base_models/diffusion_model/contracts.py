@@ -25,9 +25,10 @@ Data flow for one ``runner.run``::
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import Mapping, Protocol, Sequence, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import torch
 from torch import Tensor
@@ -230,7 +231,7 @@ class DenoiserInput:
     # Components use these boundaries for batch-shape-sensitive arithmetic.
     request_batch_sizes: tuple[int, ...] = ()
 
-    def with_updates(self, **changes: object) -> "DenoiserInput":
+    def with_updates(self, **changes: object) -> DenoiserInput:
         """Return a new instance with selected fields replaced (frozen dataclass)."""
         return replace(self, **changes)
 
@@ -249,7 +250,7 @@ class DenoiserOutput:
     def __post_init__(self) -> None:
         object.__setattr__(self, "extras", _frozen_mapping(self.extras))
 
-    def with_updates(self, **changes: object) -> "DenoiserOutput":
+    def with_updates(self, **changes: object) -> DenoiserOutput:
         """Immutable update used by ``after_denoiser`` extensions."""
         return replace(self, **changes)
 
@@ -273,7 +274,7 @@ class DiffusionOutput:
         object.__setattr__(self, "artifacts", _frozen_mapping(self.artifacts))
         object.__setattr__(self, "metadata", _frozen_mapping(self.metadata))
 
-    def with_metadata(self, **values: object) -> "DiffusionOutput":
+    def with_metadata(self, **values: object) -> DiffusionOutput:
         """Merge extra metadata and return a new instance."""
         metadata = dict(self.metadata)
         metadata.update(values)
@@ -340,7 +341,7 @@ class EncodedLatentInitializer(Protocol):
         self,
         request: DiffusionRequest,
         *,
-        latent_encoder: "LatentEncoder",
+        latent_encoder: LatentEncoder,
         generator: torch.Generator,
         device: torch.device,
         dtype: torch.dtype,
@@ -416,7 +417,9 @@ class ModalityState:
 
     ``denoise_mask`` marks the region updated on this step.  ``clean_latent``
     is the frozen / conditioned reference; a masked-latent strategy projects
-    frozen regions back after every step.
+    frozen regions back after every step.  ``keyframes_mask`` optionally marks
+    tokens that encode a single standalone pixel frame (LTX-2.5 keyframe
+    position embedding); it shares ``denoise_mask``'s layout.
     """
 
     latent: Tensor
@@ -424,12 +427,13 @@ class ModalityState:
     positions: Tensor
     clean_latent: Tensor
     attention_mask: Tensor | None = None
+    keyframes_mask: Tensor | None = None
 
-    def with_updates(self, **changes: object) -> "ModalityState":
+    def with_updates(self, **changes: object) -> ModalityState:
         """Immutable field replacement."""
         return replace(self, **changes)
 
-    def clone(self) -> "ModalityState":
+    def clone(self) -> ModalityState:
         """Deep-copy every tensor so stages do not share storage."""
         return ModalityState(
             latent=self.latent.clone(),
@@ -437,6 +441,7 @@ class ModalityState:
             positions=self.positions.clone(),
             clean_latent=self.clean_latent.clone(),
             attention_mask=self.attention_mask.clone() if self.attention_mask is not None else None,
+            keyframes_mask=self.keyframes_mask.clone() if self.keyframes_mask is not None else None,
         )
 
 

@@ -51,10 +51,7 @@ def test_fused_rope_state_requires_real_provider_execution() -> None:
     model = _TinyModel()
     state = install_fused_rope_runtime(model)
     assert state.installed_blocks == 2
-    assert all(
-        block._worldfoundry_fused_rope_runtime is state
-        for block in model.blocks
-    )
+    assert all(block._worldfoundry_fused_rope_runtime is state for block in model.blocks)
 
     state.record_eager_dispatch(
         _dispatch(

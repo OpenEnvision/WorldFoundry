@@ -1,20 +1,22 @@
-"""Shared execution contract for explicitly selected official inference entrypoints.
+"""Shared execution contract for vendored official inference entrypoints.
 
-Only argument vectors are executed. Each call owns a fresh artifact directory;
-failed launches and stale videos cannot be reported as successful generation.
+Only argument vectors are executed, and the entrypoints are WorldFoundry package
+modules. Each call owns a fresh artifact directory; failed launches and stale
+videos cannot be reported as successful generation.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
 import signal
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Mapping
 
 from worldfoundry.runtime.assets import expand_worldfoundry_path
 
@@ -47,10 +49,8 @@ class InferencePlan:
 class OfficialInferenceRuntime:
     MODEL_ID = ""
     REVISION = ""
-    REQUIRED_SOURCE_FILES = ()
 
-    def __init__(self, *, source_root, python_executable=None, device="cuda"):
-        self.source_root = local_path(source_root)
+    def __init__(self, *, python_executable=None, device="cuda"):
         # Preserve virtualenv symlinks: resolving bin/python can select the wrong environment.
         executable = os.path.expandvars(str(python_executable or sys.executable))
         self.python_executable = str(Path(shutil.which(executable) or executable).expanduser().absolute())
@@ -64,44 +64,20 @@ class OfficialInferenceRuntime:
         return ()
 
     def preflight(self):
-        missing = [
-            str(p)
-            for p in (
-                *[self.source_root / name for name in self.REQUIRED_SOURCE_FILES],
-                Path(self.python_executable),
-                *self.required_assets(),
-            )
-            if not p.exists()
-        ]
-        actual_revision = None
-        if (self.source_root / ".git").exists():
-            try:
-                probe = subprocess.run(
-                    ["git", "-C", str(self.source_root), "rev-parse", "HEAD"],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                    check=True,
-                )
-                actual_revision = probe.stdout.strip()
-            except (OSError, subprocess.SubprocessError):
-                pass
+        missing = [str(p) for p in (Path(self.python_executable), *self.required_assets()) if not p.exists()]
         return {
             "status": "ready" if not missing else "blocked",
             "model_id": self.MODEL_ID,
-            "source_revision": actual_revision,
-            "source_matches_pin": actual_revision == self.REVISION if actual_revision else None,
             "missing_paths": missing,
             "upstream_revision": self.REVISION,
-            "backend": "official_external_runtime",
+            "backend": "official_in_tree_runtime",
             "gpu_validation": "pending",
         }
 
-    def environment(self, *python_paths):
+    def environment(self):
         env = {
             "PYTHONUNBUFFERED": "1",
             "TOKENIZERS_PARALLELISM": "false",
-            "PYTHONPATH": os.pathsep.join([*(str(p) for p in python_paths), os.environ.get("PYTHONPATH", "")]),
         }
         if self.device.startswith("cuda:"):
             env["CUDA_VISIBLE_DEVICES"] = self.device[5:]
@@ -133,10 +109,8 @@ class OfficialInferenceRuntime:
                 try:
                     code = process.wait(timeout=timeout_seconds)
                 except subprocess.TimeoutExpired:
-                    try:
+                    with contextlib.suppress(ProcessLookupError):
                         os.killpg(process.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
                     code = process.wait()
                     error = f"Inference exceeded {timeout_seconds} seconds"
             except OSError as exc:
@@ -167,10 +141,8 @@ class OfficialInferenceRuntime:
             "artifact_files": artifacts,
             "artifact_path": artifacts[0] if success else None,
             "returncode": code,
-            "runtime": "official_external_runtime",
+            "runtime": "official_in_tree_runtime",
             "upstream_revision": plan.upstream_revision,
-            "source_revision": preflight["source_revision"],
-            "source_matches_pin": preflight["source_matches_pin"],
             "stdout_path": str(stdout_path),
             "stderr_path": str(stderr_path),
         }

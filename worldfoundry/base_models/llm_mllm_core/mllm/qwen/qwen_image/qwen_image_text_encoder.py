@@ -1,50 +1,34 @@
-"""Module for base_models -> llm_mllm_core -> mllm -> qwen -> qwen_image -> qwen_image_text_encoder.py functionality."""
-
-from transformers import Qwen2_5_VLModel
 import torch
-from typing import Optional, Union
+from transformers import Qwen2_5_VLModel
 
 
 class QwenImageTextEncoder(torch.nn.Module):
-    """Qwen image text encoder implementation."""
     def __init__(self):
-        """Init."""
         super().__init__()
         from transformers import Qwen2_5_VLConfig
-        config = Qwen2_5_VLConfig(**{
-            "architectures": [
-                "Qwen2_5_VLForConditionalGeneration"
-            ],
-            "attention_dropout": 0.0,
-            "bos_token_id": 151643,
-            "eos_token_id": 151645,
-            "hidden_act": "silu",
-            "hidden_size": 3584,
-            "image_token_id": 151655,
-            "initializer_range": 0.02,
-            "intermediate_size": 18944,
-            "max_position_embeddings": 128000,
-            "max_window_layers": 28,
-            "model_type": "qwen2_5_vl",
-            "num_attention_heads": 28,
-            "num_hidden_layers": 28,
-            "num_key_value_heads": 4,
-            "rms_norm_eps": 1e-06,
-            "rope_scaling": {
-                "mrope_section": [
-                    16,
-                    24,
-                    24
-                ],
-                "rope_type": "default",
-                "type": "default"
-            },
-            "rope_theta": 1000000.0,
-            "sliding_window": 32768,
-            "text_config": {
-                "architectures": [
-                "Qwen2_5_VLForConditionalGeneration"
-                ],
+
+        config = Qwen2_5_VLConfig(
+            architectures=["Qwen2_5_VLForConditionalGeneration"],
+            attention_dropout=0.0,
+            bos_token_id=151643,
+            eos_token_id=151645,
+            hidden_act="silu",
+            hidden_size=3584,
+            image_token_id=151655,
+            initializer_range=0.02,
+            intermediate_size=18944,
+            max_position_embeddings=128000,
+            max_window_layers=28,
+            model_type="qwen2_5_vl",
+            num_attention_heads=28,
+            num_hidden_layers=28,
+            num_key_value_heads=4,
+            rms_norm_eps=1e-06,
+            rope_scaling={"mrope_section": [16, 24, 24], "rope_type": "default", "type": "default"},
+            rope_theta=1000000.0,
+            sliding_window=32768,
+            text_config={
+                "architectures": ["Qwen2_5_VLForConditionalGeneration"],
                 "attention_dropout": 0.0,
                 "bos_token_id": 151643,
                 "eos_token_id": 151645,
@@ -54,34 +38,34 @@ class QwenImageTextEncoder(torch.nn.Module):
                 "initializer_range": 0.02,
                 "intermediate_size": 18944,
                 "layer_types": [
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention",
-                "full_attention"
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
+                    "full_attention",
                 ],
                 "max_position_embeddings": 128000,
                 "max_window_layers": 28,
@@ -90,15 +74,7 @@ class QwenImageTextEncoder(torch.nn.Module):
                 "num_hidden_layers": 28,
                 "num_key_value_heads": 4,
                 "rms_norm_eps": 1e-06,
-                "rope_scaling": {
-                "mrope_section": [
-                    16,
-                    24,
-                    24
-                ],
-                "rope_type": "default",
-                "type": "default"
-                },
+                "rope_scaling": {"mrope_section": [16, 24, 24], "rope_type": "default", "type": "default"},
                 "rope_theta": 1000000.0,
                 "sliding_window": None,
                 "torch_dtype": "float32",
@@ -108,22 +84,17 @@ class QwenImageTextEncoder(torch.nn.Module):
                 "vision_end_token_id": 151653,
                 "vision_start_token_id": 151652,
                 "vision_token_id": 151654,
-                "vocab_size": 152064
+                "vocab_size": 152064,
             },
-            "tie_word_embeddings": False,
-            "torch_dtype": "float32",
-            "transformers_version": "4.54.0",
-            "use_cache": True,
-            "use_sliding_window": False,
-            "video_token_id": 151656,
-            "vision_config": {
+            tie_word_embeddings=False,
+            torch_dtype="float32",
+            transformers_version="4.54.0",
+            use_cache=True,
+            use_sliding_window=False,
+            video_token_id=151656,
+            vision_config={
                 "depth": 32,
-                "fullatt_block_indexes": [
-                    7,
-                    15,
-                    23,
-                    31
-                ],
+                "fullatt_block_indexes": [7, 15, 23, 31],
                 "hidden_act": "silu",
                 "hidden_size": 1280,
                 "in_channels": 3,
@@ -139,35 +110,35 @@ class QwenImageTextEncoder(torch.nn.Module):
                 "temporal_patch_size": 2,
                 "tokens_per_second": 2,
                 "torch_dtype": "float32",
-                "window_size": 112
+                "window_size": 112,
             },
-            "vision_end_token_id": 151653,
-            "vision_start_token_id": 151652,
-            "vision_token_id": 151654,
-            "vocab_size": 152064
-        })
+            vision_end_token_id=151653,
+            vision_start_token_id=151652,
+            vision_token_id=151654,
+            vocab_size=152064,
+        )
         self.model = Qwen2_5_VLModel(config)
         self.lm_head = torch.nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
-        rope_deltas: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        second_per_grid_ts: Optional[torch.Tensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values=None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        rope_deltas: torch.LongTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        second_per_grid_ts: torch.Tensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ):
         r"""
@@ -237,26 +208,17 @@ class QwenImageTextEncoder(torch.nn.Module):
             **kwargs,
         )
         return outputs.hidden_states
-    
+
     @staticmethod
     def state_dict_converter():
-        """State dict converter."""
         return QwenImageTextEncoderStateDictConverter()
 
 
-
-class QwenImageTextEncoderStateDictConverter():
-    """Qwen image text encoder state dict converter implementation."""
+class QwenImageTextEncoderStateDictConverter:
     def __init__(self):
-        """Init."""
         pass
 
     def from_diffusers(self, state_dict):
-        """From diffusers.
-
-        Args:
-            state_dict: The state dict.
-        """
         state_dict_ = {}
         for k, v in state_dict.items():
             if k.startswith("visual."):

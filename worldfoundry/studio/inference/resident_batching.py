@@ -174,7 +174,7 @@ def _execute_resident_batch(worker: _ResidentWorker, requests: Sequence[Resident
             if not isinstance(raw_records, list) or len(raw_records) != len(requests):
                 raise RuntimeError("resident batch must return one record per request")
             records = tuple(dispatch.run_record_from_manifest(record) for record in raw_records)
-        for request, record, wait_ms in zip(requests, records, queue_ms):
+        for request, record, wait_ms in zip(requests, records, queue_ms, strict=False):
             if request.interrupted():
                 record.status = "cancelled"
                 record.metadata["resident_result_discarded"] = True

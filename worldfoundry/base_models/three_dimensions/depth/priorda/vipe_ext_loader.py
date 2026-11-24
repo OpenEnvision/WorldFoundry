@@ -1,5 +1,3 @@
-"""Module for base_models -> three_dimensions -> depth -> priorda -> vipe_ext_loader.py functionality."""
-
 from __future__ import annotations
 
 import os
@@ -12,11 +10,6 @@ import torch.utils.cpp_extension as cpp_extension
 
 
 def _additional_include_flags() -> list[str]:
-    """Helper function to additional include flags.
-
-    Returns:
-        The return value.
-    """
     conda_prefix = os.environ.get("CONDA_PREFIX")
     if conda_prefix:
         conda_include_path = Path(conda_prefix) / "include"
@@ -26,11 +19,6 @@ def _additional_include_flags() -> list[str]:
 
 
 def _configure_cuda_home() -> None:
-    """Helper function to configure cuda home.
-
-    Returns:
-        The return value.
-    """
     if os.environ.get("CUDA_HOME"):
         cpp_extension.CUDA_HOME = os.environ["CUDA_HOME"]
         return
@@ -49,11 +37,6 @@ def _configure_cuda_home() -> None:
 
 
 def load_vipe_ext() -> ModuleType:
-    """Load vipe ext.
-
-    Returns:
-        The return value.
-    """
     try:
         import vipe_ext as compiled_ext
 

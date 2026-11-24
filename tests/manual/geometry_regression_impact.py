@@ -13,6 +13,60 @@ import re
 import stat
 import subprocess
 from pathlib import Path, PurePosixPath
+from typing import cast
+
+# Runtime sources removed by the approved native model retirements.
+_APPROVED_RUNTIME_RETIREMENTS = {
+    "egowm": (
+        "40ad11315bdedb4f1f48492626fe5343e5770ee3",
+        (
+            "worldfoundry/synthesis/visual_generation/egowm/__init__.py",
+            "worldfoundry/synthesis/visual_generation/egowm/infer.py",
+            "worldfoundry/synthesis/visual_generation/egowm/nav_25dof_stats.json",
+            "worldfoundry/synthesis/visual_generation/egowm/worldfoundry_runtime.py",
+        ),
+    ),
+    "hunyuanworld-voyager": (
+        "356f0f354a8758046e465373403295bfa5393a80",
+        (
+            "worldfoundry/operators/hunyuan_world_voyager_operator.py",
+            "worldfoundry/pipelines/hunyuan_world/pipeline_hunyuan_world_voyager_official.py",
+            "worldfoundry/synthesis/visual_generation/hunyuan_world/voyager_official.py",
+        ),
+    ),
+    "hyworld-worldgen": (
+        "6dc017a663cf05359c318f702bc5e40c4af7b8e5",
+        (
+            "worldfoundry/pipelines/hunyuan_world/pipeline_hy_world_2p0_worldgen.py",
+            "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_worldgen_runtime.py",
+            "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_worldgen_synthesis.py",
+        ),
+    ),
+    "open-dreamer": (
+        "ad47c6b6bc68d18c49603286343efa2a057aa1b9",
+        (
+            "worldfoundry/synthesis/visual_generation/open_dreamer/__init__.py",
+            "worldfoundry/synthesis/visual_generation/open_dreamer/vpt_actions.py",
+            "worldfoundry/synthesis/visual_generation/open_dreamer/worldfoundry_runtime.py",
+        ),
+    ),
+    "shotstream": (
+        "da8fce9ffaf2d06f23286d135837efba1046e8e6",
+        (
+            "worldfoundry/synthesis/visual_generation/shotstream/__init__.py",
+            "worldfoundry/synthesis/visual_generation/shotstream/infer.py",
+            "worldfoundry/synthesis/visual_generation/shotstream/worldfoundry_runtime.py",
+        ),
+    ),
+    "wilddet3d": (
+        "270f31164058b2156f12b5d2808d93756a81953e",
+        (
+            "worldfoundry/synthesis/visual_generation/wilddet3d/infer.py",
+            "worldfoundry/synthesis/visual_generation/wilddet3d/worldfoundry_runtime.py",
+        ),
+    ),
+}
+_RETIREMENT_CONTRACT = "tests/eval_core/test_catalog_integration_status.py"
 
 
 def digest(path: Path) -> str:
@@ -26,6 +80,45 @@ def relative_path(value: str) -> str:
     if path.is_absolute() or ".." in path.parts or path.as_posix() != value or path == PurePosixPath("."):
         raise ValueError(f"Invalid repository path: {value!r}")
     return path.as_posix()
+
+
+def environment_variants(policy: dict) -> dict[str, list[str]]:
+    """Read exact environment ownership without extending unknown-path coverage."""
+    mappings = policy.get("environment_variants", {})
+    if not isinstance(mappings, dict):
+        raise ValueError("Environment ownership must map exact paths to native variants")
+    for path, variants in mappings.items():
+        relative_path(path)
+        if (
+            not path.startswith("worldfoundry/data/models/runtime/environments/")
+            or not path.endswith((".yaml", ".yml"))
+            or any(char in path for char in "*?[")
+        ):
+            raise ValueError(f"Environment ownership needs an exact manifest path: {path}")
+        if (
+            not isinstance(variants, list)
+            or not variants
+            or len(set(variants)) != len(variants)
+            or any(
+                not isinstance(variant, str)
+                or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*@[a-zA-Z0-9][a-zA-Z0-9_.-]*", variant)
+                for variant in variants
+            )
+        ):
+            raise ValueError(f"Environment ownership needs distinct model_id@binding_id variants: {path}")
+    return mappings
+
+
+def evaluation_only_paths(policy: dict) -> set[str]:
+    """Read exact evaluation dependencies without overriding inference ownership."""
+    paths = policy.get("evaluation_only_paths", [])
+    if not isinstance(paths, list):
+        raise ValueError("Evaluation-only dependencies must be a list of exact paths")
+    for path in paths:
+        relative_path(path)
+        if any(char in path for char in "*?["):
+            raise ValueError(f"Evaluation-only dependencies need exact paths: {path}")
+    return set(paths)
 
 
 def load_definitions(matrix: Path, dependencies: Path) -> tuple[dict, dict]:
@@ -86,24 +179,33 @@ def load_definitions(matrix: Path, dependencies: Path) -> tuple[dict, dict]:
             if any(character in path for character in "*?["):
                 raise ValueError("Relocation file declarations cannot use wildcards")
         for rewrite in rule.get("relative_import_rewrites", []):
-            if (not isinstance(rewrite, list) or len(rewrite) != 2
-                    or not all(isinstance(value, str) and value.startswith("from .") for value in rewrite)):
+            if (
+                not isinstance(rewrite, list)
+                or len(rewrite) != 2
+                or not all(isinstance(value, str) and value.startswith("from .") for value in rewrite)
+            ):
                 raise ValueError("Extra relocation rewrites must name exact relative imports")
         for removed in rule.get("deleted_metadata", []):
             relative_path(removed["path"])
-            if (not re.fullmatch(r"[0-9a-f]{64}", removed.get("sha256", ""))
-                    or not isinstance(removed.get("reason"), str) or not removed["reason"].strip()):
+            if (
+                not re.fullmatch(r"[0-9a-f]{64}", removed.get("sha256", ""))
+                or not isinstance(removed.get("reason"), str)
+                or not removed["reason"].strip()
+            ):
                 raise ValueError("Removed metadata needs its exact content digest and reason")
+    environment_variants(policy)
     return cases, policy
 
 
 def changed_paths(root: Path, base: str, head: str) -> list[str]:
     """Include both sides of renames and deleted paths; filenames remain unquoted."""
-    refs = [revision(root, ref + "^{commit}") for ref in (base, head)]
-    if not all(refs):
+    base_commit, head_commit = (revision(root, ref + "^{commit}") for ref in (base, head))
+    if not base_commit or not head_commit:
         raise ValueError("Diff base and head must resolve to commits")
     raw = (
-        subprocess.check_output(["git", "-C", str(root), "diff", "--name-status", "-z", "--find-renames", *refs, "--"])
+        subprocess.check_output(
+            ["git", "-C", str(root), "diff", "--name-status", "-z", "--find-renames", base_commit, head_commit, "--"]
+        )
         .decode()
         .split("\0")
     )
@@ -155,8 +257,10 @@ class ImportGraph:
             if not path.resolve().is_relative_to(self.root):
                 raise ValueError(f"Import escapes source tree: {name}")
             self.trees[name] = ast.parse(path.read_text(), filename=str(path))
-            if any(getattr(node, "name", None) in {"_component_pipeline_class", "WorldModelRuntimeSpec"}
-                   for node in self.trees[name].body):
+            if any(
+                getattr(node, "name", None) in {"_component_pipeline_class", "WorldModelRuntimeSpec"}
+                for node in self.trees[name].body
+            ):
                 self.lazy_modules.add(name)
         return self.trees[name]
 
@@ -165,8 +269,13 @@ class ImportGraph:
         for node in self.tree(name).body:
             if isinstance(node, ast.ClassDef) and node.name == symbol:
                 for member in node.body:
-                    targets = (member.targets if isinstance(member, ast.Assign) else
-                               [member.target] if isinstance(member, ast.AnnAssign) else [])
+                    targets = (
+                        member.targets
+                        if isinstance(member, ast.Assign)
+                        else [member.target]
+                        if isinstance(member, ast.AnnAssign)
+                        else []
+                    )
                     if any(isinstance(target, ast.Name) and target.id == "MODEL_ID" for target in targets):
                         if isinstance(member.value, ast.Constant) and isinstance(member.value.value, str):
                             return member.value.value
@@ -180,42 +289,76 @@ class ImportGraph:
         """
         tree = self.tree(name)
         excluded, selected = set(), []
-        factory = next((node for node in tree.body if isinstance(node, ast.FunctionDef)
-                        and node.name == "_component_pipeline_class"), None)
-        declarative_factory = (factory is not None and all(
+        factory = next(
+            (
+                node
+                for node in tree.body
+                if isinstance(node, ast.FunctionDef) and node.name == "_component_pipeline_class"
+            ),
+            None,
+        )
+        declarative_factory = factory is not None and all(
             isinstance(node.func, ast.Name) and node.func.id == "type"
-            for node in ast.walk(factory) if isinstance(node, ast.Call)
-        ))
-        record = next((node for node in tree.body if isinstance(node, ast.ClassDef)
-                       and node.name == "WorldModelRuntimeSpec"), None)
+            for node in ast.walk(factory)
+            if isinstance(node, ast.Call)
+        )
+        record = next(
+            (node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WorldModelRuntimeSpec"),
+            None,
+        )
         data_record = record is not None and not any(
             isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) for node in record.body
         )
         for statement in tree.body:
-            targets = (statement.targets if isinstance(statement, ast.Assign) else
-                       [statement.target] if isinstance(statement, ast.AnnAssign) else [])
+            targets = (
+                statement.targets
+                if isinstance(statement, ast.Assign)
+                else [statement.target]
+                if isinstance(statement, ast.AnnAssign)
+                else []
+            )
             value = getattr(statement, "value", None)
-            if (declarative_factory and isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
-                    and value.func.id == "_component_pipeline_class"):
-                literals = [node for node in ast.walk(value) if isinstance(node, ast.Constant)
-                            and isinstance(node.value, str) and node.value.startswith("worldfoundry.")]
+            if (
+                declarative_factory
+                and isinstance(value, ast.Call)
+                and isinstance(value.func, ast.Name)
+                and value.func.id == "_component_pipeline_class"
+            ):
+                literals = [
+                    node
+                    for node in ast.walk(value)
+                    if isinstance(node, ast.Constant)
+                    and isinstance(node.value, str)
+                    and node.value.startswith("worldfoundry.")
+                ]
                 excluded.update(id(node) for node in literals)
                 if symbol is None or any(isinstance(target, ast.Name) and target.id == symbol for target in targets):
                     selected.extend(node.value for node in literals)
-            if (data_record and isinstance(value, ast.Dict)
-                    and any(isinstance(target, ast.Name) and target.id == "WORLD_MODEL_RUNTIME_SPECS"
-                            for target in targets)
-                    and all(isinstance(key, ast.Constant) and isinstance(key.value, str)
-                            and isinstance(entry, ast.Call) and isinstance(entry.func, ast.Name)
-                            and entry.func.id == "WorldModelRuntimeSpec"
-                            for key, entry in zip(value.keys, value.values))):
+            if (
+                data_record
+                and isinstance(value, ast.Dict)
+                and any(isinstance(target, ast.Name) and target.id == "WORLD_MODEL_RUNTIME_SPECS" for target in targets)
+                and all(
+                    isinstance(key, ast.Constant)
+                    and isinstance(key.value, str)
+                    and isinstance(entry, ast.Call)
+                    and isinstance(entry.func, ast.Name)
+                    and entry.func.id == "WorldModelRuntimeSpec"
+                    for key, entry in zip(value.keys, value.values)
+                )
+            ):
                 metadata_only = symbol in {"WORLD_MODEL_RUNTIME_SPECS", "WorldModelRuntimeSpec", "runtime_spec"}
                 keys = {key.value for key in value.keys}
                 for key, entry in zip(value.keys, value.values):
-                    literals = [node for node in ast.walk(entry) if isinstance(node, ast.Constant)
-                                and isinstance(node.value, str) and node.value.startswith("worldfoundry.")]
+                    literals = [
+                        node
+                        for node in ast.walk(entry)
+                        if isinstance(node, ast.Constant)
+                        and isinstance(node.value, str)
+                        and node.value.startswith("worldfoundry.")
+                    ]
                     excluded.update(id(node) for node in literals)
-                    if not metadata_only and (model_id not in keys or key.value == model_id):
+                    if not metadata_only and (model_id not in keys or cast(ast.Constant, key).value == model_id):
                         selected.extend(node.value for node in literals)
         return excluded, selected
 
@@ -229,9 +372,14 @@ class ImportGraph:
             return self.cache[key]
         path = self.root / self.modules[name]
         excluded, selected = self.lazy_literals(name, symbol, model_id) if name in self.lazy_modules else (set(), [])
-        dynamic_loader = any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                             and node.func.attr == "import_module" and node.args
-                             and not isinstance(node.args[0], ast.Constant) for node in ast.walk(tree))
+        dynamic_loader = any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "import_module"
+            and node.args
+            and not isinstance(node.args[0], ast.Constant)
+            for node in ast.walk(tree)
+        )
         package = name if path.name == "__init__.py" else name.rpartition(".")[0]
         imports = set()
         # Importing a module also executes any non-namespace parent __init__.
@@ -288,16 +436,22 @@ _VERIFICATION_TOOLS = {
 
 
 def committed_json_definition(
-    source_root: Path, path: Path, changes: list[str], *, base: str | None, head: str,
+    source_root: Path,
+    path: Path,
+    changes: list[str],
+    *,
+    base: str | None,
+    head: str,
     history_root: Path | None = None,
 ) -> tuple[dict, dict] | None:
     """Read unique, finite JSON from the exact before/after committed blobs."""
     if base is None or path.is_symlink() or not path.resolve().is_relative_to(source_root.resolve()):
         return None
     history = history_root or source_root
-    commits = [revision(history, ref + "^{commit}") for ref in (base, head)]
-    if not all(commits):
+    base_commit, head_commit = (revision(history, ref + "^{commit}") for ref in (base, head))
+    if not base_commit or not head_commit:
         return None
+    commits = (base_commit, head_commit)
     relative = path.relative_to(source_root).as_posix()
 
     def unique_object(pairs):
@@ -314,21 +468,32 @@ def committed_json_definition(
     try:
         if changed_paths(history, *commits) != sorted(set(changes)):
             return None
-        blobs = [subprocess.check_output(
-            ["git", "-C", str(history), "show", commit + ":" + relative], stderr=subprocess.PIPE,
-        ) for commit in commits]
+        blobs = [
+            subprocess.check_output(
+                ["git", "-C", str(history), "show", commit + ":" + relative],
+                stderr=subprocess.PIPE,
+            )
+            for commit in commits
+        ]
         if path.read_bytes() != blobs[1]:
             return None
-        before, after = [json.loads(blob, object_pairs_hook=unique_object, parse_constant=invalid_constant)
-                         for blob in blobs]
+        before, after = [
+            json.loads(blob, object_pairs_hook=unique_object, parse_constant=invalid_constant) for blob in blobs
+        ]
         return (before, after) if isinstance(before, dict) and isinstance(after, dict) else None
     except (OSError, ValueError, TypeError, subprocess.CalledProcessError):
         return None
 
 
 def committed_additional_cases(
-    source_root: Path, matrix: Path, dependencies: Path, changes: list[str], *,
-    base: str | None, head: str, history_root: Path | None = None,
+    source_root: Path,
+    matrix: Path,
+    dependencies: Path,
+    changes: list[str],
+    *,
+    base: str | None,
+    head: str,
+    history_root: Path | None = None,
 ) -> set[str] | None:
     """Prove append-only recipes and ownership without altering old coverage.
 
@@ -336,18 +501,21 @@ def committed_additional_cases(
     identical. Added components may only be used by added cases. Any removal,
     reclassification, dirty file or incomplete history keeps full selection.
     """
-    options = dict(base=base, head=head, history_root=history_root)
-    recipes = committed_json_definition(source_root, matrix, changes, **options)
-    rules = committed_json_definition(source_root, dependencies, changes, **options)
+    recipes = committed_json_definition(source_root, matrix, changes, base=base, head=head, history_root=history_root)
+    rules = committed_json_definition(
+        source_root, dependencies, changes, base=base, head=head, history_root=history_root
+    )
     if recipes is None or rules is None:
         return None
     before_cases, after_cases = recipes
     before, after = rules
+
     def canonical(value):
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
-    if (not before_cases.keys() <= after_cases.keys()
-            or any(canonical(before_cases[name]) != canonical(after_cases[name]) for name in before_cases)):
+    if not before_cases.keys() <= after_cases.keys() or any(
+        canonical(before_cases[name]) != canonical(after_cases[name]) for name in before_cases
+    ):
         return None
     global_before = {key: value for key, value in before.items() if key not in {"components", "cases"}}
     global_after = {key: value for key, value in after.items() if key not in {"components", "cases"}}
@@ -355,8 +523,12 @@ def committed_additional_cases(
         return None
     for key in ("components", "cases"):
         old, new = before.get(key), after.get(key)
-        if (not isinstance(old, dict) or not isinstance(new, dict) or not old.keys() <= new.keys()
-                or any(canonical(old[name]) != canonical(new[name]) for name in old)):
+        if (
+            not isinstance(old, dict)
+            or not isinstance(new, dict)
+            or not old.keys() <= new.keys()
+            or any(canonical(old[name]) != canonical(new[name]) for name in old)
+        ):
             return None
     added = after_cases.keys() - before_cases.keys()
     if after["cases"].keys() - before["cases"].keys() != added:
@@ -368,8 +540,14 @@ def committed_additional_cases(
 
 
 def verification_tooling_proofs(
-    source_root: Path, matrix: Path, dependencies: Path, changes: list[str], *,
-    base: str | None, head: str, history_root: Path | None = None,
+    source_root: Path,
+    matrix: Path,
+    dependencies: Path,
+    changes: list[str],
+    *,
+    base: str | None,
+    head: str,
+    history_root: Path | None = None,
 ) -> list[dict]:
     """Distinguish verified test orchestration from changes to inference itself.
 
@@ -382,8 +560,11 @@ def verification_tooling_proofs(
     if base is None or not changed_tools:
         return []
     history = history_root or source_root
-    commits = [revision(history, ref + "^{commit}") for ref in (base, head)]
-    if not all(commits) or changed_paths(history, *commits) != sorted(set(changes)):
+    base_commit, head_commit = (revision(history, ref + "^{commit}") for ref in (base, head))
+    if not base_commit or not head_commit:
+        return []
+    commits = (base_commit, head_commit)
+    if changed_paths(history, *commits) != sorted(set(changes)):
         return []
 
     def entries(commit):
@@ -399,8 +580,11 @@ def verification_tooling_proofs(
     before, after = [entries(commit) for commit in commits]
 
     def runtime_entries(tree):
-        return {path: value for path, value in tree.items()
-                if not path.startswith(("tests/", "docs/", ".github/")) and path != "Makefile"}
+        return {
+            path: value
+            for path, value in tree.items()
+            if not path.startswith(("tests/", "docs/", ".github/")) and path != "Makefile"
+        }
 
     runtime = runtime_entries(after)
     if not runtime or runtime_entries(before) != runtime:
@@ -426,8 +610,7 @@ def verification_tooling_proofs(
                     return []
                 data = os.fsencode(link_text)
             else:
-                if (not stat.S_ISREG(actual_mode)
-                        or bool(actual_mode & stat.S_IXUSR) != (mode == "100755")):
+                if not stat.S_ISREG(actual_mode) or bool(actual_mode & stat.S_IXUSR) != (mode == "100755"):
                     return []
                 data = target.read_bytes()
         except (OSError, ValueError, RuntimeError):
@@ -447,9 +630,21 @@ def verification_tooling_proofs(
         parent = Path(directory)
         relative_parent = parent.relative_to(source_root)
         if relative_parent == Path("."):
-            folders[:] = [name for name in folders if name not in {
-                ".git", "tests", "docs", ".github", "tmp", ".pytest_cache", ".ruff_cache", ".mypy_cache",
-            }]
+            folders[:] = [
+                name
+                for name in folders
+                if name
+                not in {
+                    ".git",
+                    "tests",
+                    "docs",
+                    ".github",
+                    "tmp",
+                    ".pytest_cache",
+                    ".ruff_cache",
+                    ".mypy_cache",
+                }
+            ]
         for name in folders:
             target = parent / name
             if target.is_symlink() and target.relative_to(source_root).as_posix() not in runtime:
@@ -462,8 +657,9 @@ def verification_tooling_proofs(
     definitions = [path.relative_to(source_root).as_posix() for path in (matrix, dependencies)]
     additional_cases = set()
     if any(before.get(path) != after.get(path) for path in definitions):
-        additional_cases = committed_additional_cases(source_root, matrix, dependencies, changes,
-                                                     base=base, head=head, history_root=history_root)
+        additional_cases = committed_additional_cases(
+            source_root, matrix, dependencies, changes, base=base, head=head, history_root=history_root
+        )
         if additional_cases is None:
             return []
     inspected = [*definitions, *changed_tools]
@@ -475,30 +671,51 @@ def verification_tooling_proofs(
             return []
         target = source_root / path
         blob = subprocess.check_output(["git", "-C", str(history), "cat-file", "blob", entry[2]])
-        if (target.is_symlink() or not target.is_file()
-                or not target.resolve().is_relative_to(source_root.resolve()) or target.read_bytes() != blob):
+        if (
+            target.is_symlink()
+            or not target.is_file()
+            or not target.resolve().is_relative_to(source_root.resolve())
+            or target.read_bytes() != blob
+        ):
             return []
     contracts = sorted({_VERIFICATION_TOOLS[path] for path in changed_tools})
     for path in contracts:
         target = source_root / path
         entry = after.get(path)
-        if (entry is None or entry[0] not in {"100644", "100755"} or target.is_symlink()
-                or not target.is_file() or not target.resolve().is_relative_to(source_root.resolve())):
+        if (
+            entry is None
+            or entry[0] not in {"100644", "100755"}
+            or target.is_symlink()
+            or not target.is_file()
+            or not target.resolve().is_relative_to(source_root.resolve())
+        ):
             return []
         blob = subprocess.check_output(["git", "-C", str(history), "cat-file", "blob", entry[2]])
         if target.read_bytes() != blob:
             return []
     runtime_digest = hashlib.sha256(json.dumps(runtime, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    return [{"path": path, "reason": "Verification tooling changed; immutable runtime and existing case definitions are identical. Additional cases require replay.",
-             "base_revision": commits[0], "head_revision": commits[1],
-             "additional_case_ids": sorted(additional_cases),
-             "immutable_runtime_tree_sha256": runtime_digest,
-             "source_sha256": digest(source_root / path), "required_cpu_contracts": contracts}
-            for path in changed_tools]
+    return [
+        {
+            "path": path,
+            "reason": "Verification tooling changed; immutable runtime and existing case definitions are identical. Additional cases require replay.",
+            "base_revision": commits[0],
+            "head_revision": commits[1],
+            "additional_case_ids": sorted(additional_cases),
+            "immutable_runtime_tree_sha256": runtime_digest,
+            "source_sha256": digest(source_root / path),
+            "required_cpu_contracts": contracts,
+        }
+        for path in changed_tools
+    ]
 
 
 def relocation_proofs(
-    source_root: Path, policy: dict, changes: list[str], *, base: str | None, head: str,
+    source_root: Path,
+    policy: dict,
+    changes: list[str],
+    *,
+    base: str | None,
+    head: str,
     history_root: Path | None = None,
 ) -> list[dict]:
     """Prove declared moves from immutable blobs, never from rename similarity.
@@ -535,8 +752,12 @@ def relocation_proofs(
 
     def inspect(path, data):
         target = source_root / path
-        return (target.is_file() and not target.is_symlink()
-                and target.resolve().is_relative_to(source_root.resolve()) and target.read_bytes() == data)
+        return (
+            target.is_file()
+            and not target.is_symlink()
+            and target.resolve().is_relative_to(source_root.resolve())
+            and target.read_bytes() == data
+        )
 
     proofs, changed = [], set(changes)
     for rule in policy["relocation_contracts"]:
@@ -556,27 +777,37 @@ def relocation_proofs(
             return "declared_namespace_rewrite" if rewritten.encode() == after else None
 
         def record(old, new, before, after, kind, reason=None):
-            proofs.append({
-                "old_path": old, "new_path": new, "kind": kind,
-                "old_sha256": hashlib.sha256(before).hexdigest(),
-                "new_sha256": hashlib.sha256(after).hexdigest() if after is not None else None,
-                "base_revision": commits[0], "head_revision": commits[1],
-                "reason": reason or rule["reason"],
-                "required_cpu_contracts": rule["required_cpu_contracts"],
-            })
+            proofs.append(
+                {
+                    "old_path": old,
+                    "new_path": new,
+                    "kind": kind,
+                    "old_sha256": hashlib.sha256(before).hexdigest(),
+                    "new_sha256": hashlib.sha256(after).hexdigest() if after is not None else None,
+                    "base_revision": commits[0],
+                    "head_revision": commits[1],
+                    "reason": reason or rule["reason"],
+                    "required_cpu_contracts": rule["required_cpu_contracts"],
+                }
+            )
 
         for old in sorted(changed):
             if not old.startswith(old_root):
                 continue
             relative = old.removeprefix(old_root)
-            if (relative.split("/", 1)[0] not in rule.get("packages", [])
-                    and relative not in rule.get("files", [])):
+            if relative.split("/", 1)[0] not in rule.get("packages", []) and relative not in rule.get("files", []):
                 continue
             new = new_root + relative
-            if (new not in changed or old not in before_tree or old in after_tree
-                    or new in before_tree or new not in after_tree or (source_root / old).exists()
-                    or before_tree[old][0] != after_tree[new][0]
-                    or before_tree[old][0] not in {"100644", "100755"}):
+            if (
+                new not in changed
+                or old not in before_tree
+                or old in after_tree
+                or new in before_tree
+                or new not in after_tree
+                or (source_root / old).exists()
+                or before_tree[old][0] != after_tree[new][0]
+                or before_tree[old][0] not in {"100644", "100755"}
+            ):
                 continue
             before, after = content(before_tree[old]), content(after_tree[new])
             kind = comparison(before, after)
@@ -586,22 +817,113 @@ def relocation_proofs(
             if path not in changed or path not in before_tree or path not in after_tree:
                 continue
             before, after = content(before_tree[path]), content(after_tree[path])
-            if (before_tree[path][0] == after_tree[path][0]
-                    and before_tree[path][0] in {"100644", "100755"}
-                    and comparison(before, after) == "declared_namespace_rewrite" and inspect(path, after)):
+            if (
+                before_tree[path][0] == after_tree[path][0]
+                and before_tree[path][0] in {"100644", "100755"}
+                and comparison(before, after) == "declared_namespace_rewrite"
+                and inspect(path, after)
+            ):
                 record(path, path, before, after, "declared_namespace_rewrite")
         for removed in rule.get("deleted_metadata", []):
             path = removed["path"]
-            if (path in changed and path in before_tree and path not in after_tree
-                    and not (source_root / path).exists() and before_tree[path][0] == "100644"):
+            if (
+                path in changed
+                and path in before_tree
+                and path not in after_tree
+                and not (source_root / path).exists()
+                and before_tree[path][0] == "100644"
+            ):
                 before = content(before_tree[path])
                 if hashlib.sha256(before).hexdigest() == removed["sha256"]:
                     record(path, None, before, None, "removed_metadata", removed["reason"])
     return proofs
 
 
+def retirement_proofs(
+    source_root: Path,
+    changes: list[str],
+    *,
+    base: str | None,
+    head: str,
+    history_root: Path | None = None,
+) -> list[dict]:
+    """Bind retired runtime paths to approved deletions and the inspected Git diff."""
+    changed = set(changes)
+    if base is None or not any(changed.intersection(paths) for _, paths in _APPROVED_RUNTIME_RETIREMENTS.values()):
+        return []
+    history = history_root or source_root
+    base_commit = revision(history, base + "^{commit}")
+    head_commit = revision(history, head + "^{commit}")
+    if base_commit is None or head_commit is None:
+        raise ValueError("Retirement proof requires pinned Git base and head commits")
+
+    def entries(commit: str, paths: list[str]) -> dict[str, bytes]:
+        output = subprocess.check_output(["git", "-C", str(history), "ls-tree", "-r", "-z", commit, "--", *paths])
+        result = {}
+        for row in output.split(b"\0"):
+            if row:
+                metadata, path = row.split(b"\t", 1)
+                result[path.decode()] = metadata
+        return result
+
+    def ancestor(earlier: str, later: str) -> bool:
+        return (
+            subprocess.run(
+                ["git", "-C", str(history), "merge-base", "--is-ancestor", earlier, later],
+                capture_output=True,
+                check=False,
+            ).returncode
+            == 0
+        )
+
+    proofs = []
+    for model_id, (removal, sources) in _APPROVED_RUNTIME_RETIREMENTS.items():
+        selected = sorted(changed.intersection(sources))
+        if not selected or not ancestor(removal, head_commit) or not ancestor(base_commit, removal + "^"):
+            continue
+        binding = f"worldfoundry/data/models/bindings/pipelines/{model_id}.yaml"
+        before_removal = entries(removal + "^", [binding, *selected])
+        if binding not in before_removal or entries(removal, [binding, *selected]):
+            continue
+        retained = entries(head_commit, [binding, *selected])
+        if binding in retained or os.path.lexists(source_root / binding):
+            continue
+        original = entries(base_commit, selected)
+        for path in selected:
+            blob = original.get(path)
+            if (
+                blob is None
+                or blob != before_removal.get(path)
+                or path in retained
+                or os.path.lexists(source_root / path)
+            ):
+                continue
+            mode, kind, object_id = blob.decode().split()
+            if kind != "blob" or mode not in {"100644", "100755"}:
+                continue
+            proofs.append(
+                {
+                    "kind": "approved_model_retirement",
+                    "model_id": model_id,
+                    "path": path,
+                    "reason": f"Approved native retirement of {model_id}",
+                    "base_blob": object_id,
+                    "removal_revision": removal,
+                    "base_revision": base_commit,
+                    "head_revision": head_commit,
+                    "required_cpu_contracts": [_RETIREMENT_CONTRACT],
+                }
+            )
+    return proofs
+
+
 def committed_case_changes(
-    source_root: Path, matrix: Path, changes: list[str], *, base: str | None, head: str,
+    source_root: Path,
+    matrix: Path,
+    changes: list[str],
+    *,
+    base: str | None,
+    head: str,
     history_root: Path | None = None,
 ) -> set[str] | None:
     """Narrow recipe edits only after inspecting both immutable Git blobs.
@@ -609,13 +931,15 @@ def committed_case_changes(
     Missing history, dirty definitions, ambiguous JSON or changed case IDs keep
     the full replay selection. Runtime dependencies are still selected separately.
     """
-    definitions = committed_json_definition(source_root, matrix, changes,
-                                            base=base, head=head, history_root=history_root)
+    definitions = committed_json_definition(
+        source_root, matrix, changes, base=base, head=head, history_root=history_root
+    )
     if definitions is None:
         return None
     before, after = definitions
     if not before.keys() <= after.keys():
         return None
+
     def canonical(value):
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
@@ -623,32 +947,67 @@ def committed_case_changes(
 
 
 def select_cases(
-    matrix: Path, dependencies: Path, source_root: Path, changes: list[str], *, evidence: Path | None = None,
-    base: str | None = None, head: str = "HEAD", history_root: Path | None = None,
+    matrix: Path,
+    dependencies: Path,
+    source_root: Path,
+    changes: list[str],
+    *,
+    evidence: Path | None = None,
+    base: str | None = None,
+    head: str = "HEAD",
+    history_root: Path | None = None,
 ) -> dict:
     cases, policy = load_definitions(matrix, dependencies)
     changes = sorted({relative_path(path) for path in changes})
-    for rule in [*policy.get("cpu_only_components", []), *policy.get("relocation_contracts", [])]:
+    environments = environment_variants(policy)
+    evaluation_paths = evaluation_only_paths(policy)
+    retirements = retirement_proofs(source_root, changes, base=base, head=head, history_root=history_root)
+    for rule in [*policy.get("cpu_only_components", []), *policy.get("relocation_contracts", []), *retirements]:
         for contract in rule["required_cpu_contracts"]:
             test = source_root / contract
-            if (not test.is_file() or test.is_symlink()
-                    or not test.resolve().is_relative_to(source_root.resolve())):
+            if not test.is_file() or test.is_symlink() or not test.resolve().is_relative_to(source_root.resolve()):
                 raise ValueError(f"Declared CPU contract has no inspected implementation: {contract}")
     graph = ImportGraph(source_root)
     proofs = relocation_proofs(source_root, policy, changes, base=base, head=head, history_root=history_root)
     verification = verification_tooling_proofs(
-        source_root, matrix, dependencies, changes, base=base, head=head, history_root=history_root,
+        source_root,
+        matrix,
+        dependencies,
+        changes,
+        base=base,
+        head=head,
+        history_root=history_root,
     )
     verified_tools = {proof["path"] for proof in verification}
     matrix_path = matrix.relative_to(source_root).as_posix()
-    edited_cases = committed_case_changes(
-        source_root, matrix, changes, base=base, head=head, history_root=history_root,
-    ) if matrix_path in changes else None
+    edited_cases = (
+        committed_case_changes(
+            source_root,
+            matrix,
+            changes,
+            base=base,
+            head=head,
+            history_root=history_root,
+        )
+        if matrix_path in changes
+        else None
+    )
     dependencies_path = dependencies.relative_to(source_root).as_posix()
-    additional_cases = committed_additional_cases(
-        source_root, matrix, dependencies, changes, base=base, head=head, history_root=history_root,
-    ) if dependencies_path in changes else None
+    additional_cases = (
+        committed_additional_cases(
+            source_root,
+            matrix,
+            dependencies,
+            changes,
+            base=base,
+            head=head,
+            history_root=history_root,
+        )
+        if dependencies_path in changes
+        else None
+    )
     proven_paths = {path for proof in proofs for path in (proof["old_path"], proof["new_path"]) if path}
+    approved_retirements = {proof["path"]: proof for proof in retirements}
     reasons = {name: [] for name in cases}
     graph_errors = {}
     closures, traces = {}, {}
@@ -676,6 +1035,17 @@ def select_cases(
             for name in additional_cases:
                 reasons[name].append({"path": path, "kind": "committed_additional_case_dependency"})
             matched = True
+        elif path in environments:
+            covered = set()
+            for name, case in cases.items():
+                model_id = case.get("model_id", name)
+                identity = model_id + "@" + case.get("binding_id", model_id)
+                if identity in environments[path]:
+                    reasons[name].append({"path": path, "kind": "declared_environment", "variant": identity})
+                    covered.add(identity)
+            if covered != set(environments[path]):
+                uncovered.append(path)
+            matched = True
         elif matches(path, policy["shared_paths"]) or path == matrix_path:
             for name in cases:
                 reasons[name].append({"path": path, "kind": "shared_component_or_case_matrix"})
@@ -697,10 +1067,14 @@ def select_cases(
             declared_cpu = [rule for rule in policy.get("cpu_only_components", []) if path in rule["paths"]]
             if path in proven_paths:
                 continue
-            if declared_cpu:
-                cpu_only.extend({"path": path, "reason": rule["reason"],
-                                 "required_cpu_contracts": rule["required_cpu_contracts"]} for rule in declared_cpu)
-            elif matches(path, policy["ignored_paths"]):
+            if path in approved_retirements:
+                cpu_only.append(approved_retirements[path])
+            elif declared_cpu:
+                cpu_only.extend(
+                    {"path": path, "reason": rule["reason"], "required_cpu_contracts": rule["required_cpu_contracts"]}
+                    for rule in declared_cpu
+                )
+            elif path in evaluation_paths or matches(path, policy["ignored_paths"]):
                 ignored.append(path)
             else:
                 uncovered.append(path)
@@ -712,9 +1086,12 @@ def select_cases(
                 {"kind": "conservative_fallback", "paths": uncovered, "graph_errors": sorted(graph_errors)}
             )
     if verification and "matrix-game2-controls-short" in cases:
-        reasons["matrix-game2-controls-short"].append({
-            "kind": "verified_tooling_pipeline_replay", "paths": sorted(verified_tools),
-        })
+        reasons["matrix-game2-controls-short"].append(
+            {
+                "kind": "verified_tooling_pipeline_replay",
+                "paths": sorted(verified_tools),
+            }
+        )
     selected = [name for name in cases if reasons[name]]
     return {
         "schema_version": 1,
@@ -729,9 +1106,9 @@ def select_cases(
         "ignored_paths": ignored,
         "proven_relocations": proofs,
         "cpu_only_changes": cpu_only,
-        "required_cpu_contracts": sorted({
-            contract for item in [*proofs, *cpu_only] for contract in item["required_cpu_contracts"]
-        }),
+        "required_cpu_contracts": sorted(
+            {contract for item in [*proofs, *cpu_only] for contract in item["required_cpu_contracts"]}
+        ),
         "uncovered_paths": uncovered,
         "graph_errors": graph_errors,
         "required_checks": ["public-cpu", "inference-tensors", *(["real-weight-replays"] if selected else [])],

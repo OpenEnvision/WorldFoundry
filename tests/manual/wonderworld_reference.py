@@ -54,7 +54,7 @@ def main() -> None:
     from worldfoundry.base_models.diffusion_model import NativeDiffusionPipeline, RuntimePolicy
     from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest, SamplingConfig
     from worldfoundry.base_models.diffusion_model.extensions.depth_guidance import DecodedDepthGuidance
-    from worldfoundry.runtime.wonderworld_inference_spec import WONDERWORLD_NEGATIVE_PROMPT
+    from worldfoundry.runtime.inference_specs.wonderworld import WONDERWORLD_NEGATIVE_PROMPT
     from worldfoundry.synthesis.visual_generation.wonderworld.runtime import image_tensor
 
     if (arguments.guided or arguments.farther) and arguments.mode != "depth":

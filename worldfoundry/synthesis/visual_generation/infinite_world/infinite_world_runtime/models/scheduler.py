@@ -1,35 +1,16 @@
-import math
 import time
-import numpy as np
-
-from tqdm import tqdm
-from typing import Callable
-from einops import rearrange
 from functools import partial
 
+import numpy as np
 import torch
 from torch.distributions import LogisticNormal
+from tqdm import tqdm
 
 from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
 
 # some code are inspired by https://github.com/magic-research/piecewise-rectified-flow/blob/main/scripts/train_perflow.py
 # and https://github.com/magic-research/piecewise-rectified-flow/blob/main/src/scheduler_perflow.py
 # and https://github.com/black-forest-labs/flux/blob/main/src/flux/sampling.py
-
-
-def _extract_into_tensor(arr, timesteps, broadcast_shape):
-    """
-    Extract values from a 1-D numpy array for a batch of indices.
-    :param arr: the 1-D numpy array.
-    :param timesteps: a tensor of indices into the array to extract.
-    :param broadcast_shape: a larger shape of K dimensions with the batch
-                            dimension equal to the length of timesteps.
-    :return: a tensor of shape [batch_size, 1, ...] where the shape has K dims.
-    """
-    res = torch.from_numpy(arr).to(device=timesteps.device)[timesteps].float()
-    while len(res.shape) < len(broadcast_shape):
-        res = res[..., None]
-    return res + torch.zeros(broadcast_shape, device=timesteps.device)
 
 
 def mean_flat(tensor: torch.Tensor, stoploss_mask=None):
@@ -41,8 +22,10 @@ def mean_flat(tensor: torch.Tensor, stoploss_mask=None):
     if stoploss_mask is None:
         return tensor.mean(dim=list(range(1, len(tensor.shape))))
     else:
-        stoploss_mask = stoploss_mask.unsqueeze(1).expand_as(tensor) # [B, T, H, W] --> [B, C, T, H, W]
-        assert tensor.shape == stoploss_mask.shape, f"shape of tensor {tensor.shape} and stoploss_mask {stoploss_mask.shape} should be the same"
+        stoploss_mask = stoploss_mask.unsqueeze(1).expand_as(tensor)  # [B, T, H, W] --> [B, C, T, H, W]
+        assert tensor.shape == stoploss_mask.shape, (
+            f"shape of tensor {tensor.shape} and stoploss_mask {stoploss_mask.shape} should be the same"
+        )
         loss_mask = ~stoploss_mask
         masked_loss = tensor * loss_mask
         sum_loss = masked_loss.sum(dim=list(range(1, len(tensor.shape))))
@@ -54,7 +37,6 @@ def mean_flat(tensor: torch.Tensor, stoploss_mask=None):
 
 def clamp(value, min_value, max_value):
     return max(min_value, min(value, max_value))
-
 
 
 def timestep_transform(
@@ -93,9 +75,9 @@ class RFlowScheduler:
 
         # sample method
         assert sample_method in ["uniform", "logit-normal"]
-        assert (
-            sample_method == "uniform" or not use_discrete_timesteps
-        ), "Only uniform sampling is supported for discrete timesteps"
+        assert sample_method == "uniform" or not use_discrete_timesteps, (
+            "Only uniform sampling is supported for discrete timesteps"
+        )
         self.sample_method = sample_method
         if sample_method == "logit-normal":
             self.distribution = LogisticNormal(torch.tensor([loc]), torch.tensor([scale]))
@@ -110,7 +92,7 @@ class RFlowScheduler:
         sigmas = shift * sigmas / (1 + (shift - 1) * sigmas)
         self.timesteps = sigmas * num_timesteps
 
-        y = torch.exp(-2 * ((self.timesteps - num_timesteps/2) / num_timesteps)**2)
+        y = torch.exp(-2 * ((self.timesteps - num_timesteps / 2) / num_timesteps) ** 2)
         y_shifted = y - y.min()
         self.bsmntw_weighing = y_shifted * (num_timesteps / y_shifted.sum())
 
@@ -120,7 +102,7 @@ class RFlowScheduler:
         Arguments format copied from opensora/schedulers/iddpm/gaussian_diffusion.py/training_losses
         Note: t is int tensor and should be rescaled from [0, num_timesteps-1] to [1,0]
         """
-        
+
         if t is None:
             if self.use_discrete_timesteps:
                 t = torch.randint(0, self.num_timesteps, (x_start.shape[0],), device=x_start.device)
@@ -130,7 +112,7 @@ class RFlowScheduler:
                 t = self.sample_t(x_start) * self.num_timesteps
 
             if self.use_timestep_transform:
-                latent_size = x_start.shape[-3:]
+                _latent_size = x_start.shape[-3:]
                 t = timestep_transform(t, shift=self.shift, num_timesteps=self.num_timesteps)
 
         if model_kwargs is None:
@@ -139,13 +121,11 @@ class RFlowScheduler:
             noise = torch.randn_like(x_start)
         assert noise.shape == x_start.shape
 
-
         if context_parallel_util.get_cp_size() > 1:
             context_parallel_util.cp_broadcast(noise)
             context_parallel_util.cp_broadcast(t)
 
         x_t = self.add_noise(x_start, noise, t)
-
 
         target = x_start - noise
         if self.use_reversed_velocity:
@@ -177,7 +157,7 @@ class RFlowScheduler:
         compatible with diffusers add_noise()
         """
         timesteps = timesteps.float() / self.num_timesteps
-        timesteps = timesteps.view(timesteps.shape + (1,) * (len(noise.shape)-1))
+        timesteps = timesteps.view(timesteps.shape + (1,) * (len(noise.shape) - 1))
 
         return (1 - timesteps) * original_samples + timesteps * noise
 
@@ -204,33 +184,35 @@ class RFlowScheduler:
 
         if context_parallel_util.get_cp_size() > 1:
             context_parallel_util.cp_broadcast(z)
-        
+
         # For performance alignment
         # from source.opensora.utils.inference_utils import apply_mask_strategy
         # mask = apply_mask_strategy(z, [[]], [""], 0, align=5)
-        
-        assert negative_prompts is None or len(negative_prompts) in [n, 1], \
-            "Invalid negative prompts."
+
+        assert negative_prompts is None or len(negative_prompts) in [n, 1], "Invalid negative prompts."
 
         if negative_prompts:
-            if len(negative_prompts) == 1: negative_prompts *= n
+            if len(negative_prompts) == 1:
+                negative_prompts *= n
             prompts = prompts + negative_prompts
 
         batch_size = len(prompts)
         if context_parallel_util.get_cp_rank() == 0:
             model_args = text_encoder.encode(prompts)
             if context_parallel_util.get_cp_size() > 1:
-                context_parallel_util.cp_broadcast(model_args['y'])
-                context_parallel_util.cp_broadcast(model_args['y_mask'])
+                context_parallel_util.cp_broadcast(model_args["y"])
+                context_parallel_util.cp_broadcast(model_args["y_mask"])
         elif context_parallel_util.get_cp_size() > 1:
             caption_channels = text_encoder.output_dim
             model_max_length = text_encoder.model_max_length
-            y_tensor = torch.zeros([batch_size, 1, model_max_length, caption_channels], dtype=torch.float32, device=device)
+            y_tensor = torch.zeros(
+                [batch_size, 1, model_max_length, caption_channels], dtype=torch.float32, device=device
+            )
             y_mask_tensor = torch.zeros([batch_size, model_max_length], dtype=torch.int64, device=device)
             context_parallel_util.cp_broadcast(y_tensor)
             context_parallel_util.cp_broadcast(y_mask_tensor)
             model_args = {
-                "y" : y_tensor,
+                "y": y_tensor,
                 "y_mask": y_mask_tensor,
             }
 
@@ -245,10 +227,10 @@ class RFlowScheduler:
         # prepare timesteps
         timesteps = list(np.linspace(self.num_timesteps, 1, self.num_sampling_steps, dtype=np.float32))
         if self.use_discrete_timesteps:
-            timesteps = [int(round(t)) for t in timesteps]
+            timesteps = [int(round(t)) for t in timesteps]  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         timesteps = [torch.tensor([t] * z.shape[0], device=device) for t in timesteps]
         if self.use_timestep_transform:
-            latent_size = z_size[-3:]
+            _latent_size = z_size[-3:]
             timesteps = [timestep_transform(t, shift=self.shift, num_timesteps=self.num_timesteps) for t in timesteps]
 
         if mask is not None:
@@ -285,7 +267,7 @@ class RFlowScheduler:
             t = torch.cat([t, t], 0)
             start = time.time()
             pred = model(z_in, t, **model_args)
-            pred = pred[:, :, -z_in.shape[2]:]
+            pred = pred[:, :, -z_in.shape[2] :]
             end = time.time()
 
             print(f"Step {i} Forward time: {end - start:.4f} seconds")

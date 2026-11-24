@@ -1,10 +1,8 @@
-from typing import Optional
-
 import torch
 import torch.nn.functional as F
 from diffusers.models.attention import Attention
 from diffusers.models.embeddings import apply_rotary_emb
-from einops import rearrange, repeat
+from einops import rearrange
 
 
 class HunyuanAttnProcessor2_0:
@@ -21,10 +19,10 @@ class HunyuanAttnProcessor2_0:
         self,
         attn: Attention,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        temb: Optional[torch.Tensor] = None,
-        image_rotary_emb: Optional[torch.Tensor] = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        temb: torch.Tensor | None = None,
+        image_rotary_emb: torch.Tensor | None = None,
     ) -> torch.Tensor:
         residual = hidden_states
         if attn.spatial_norm is not None:
@@ -102,6 +100,7 @@ class HunyuanAttnProcessor2_0:
 
         return hidden_states
 
+
 class LazyKVCompressionProcessor2_0:
     r"""
     Processor for implementing scaled dot-product attention (enabled by default if you're using PyTorch 2.0). This is
@@ -116,16 +115,16 @@ class LazyKVCompressionProcessor2_0:
         self,
         attn: Attention,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        temb: Optional[torch.Tensor] = None,
-        image_rotary_emb: Optional[torch.Tensor] = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        temb: torch.Tensor | None = None,
+        image_rotary_emb: torch.Tensor | None = None,
     ) -> torch.Tensor:
         residual = hidden_states
         if attn.spatial_norm is not None:
             hidden_states = attn.spatial_norm(hidden_states, temb)
 
-        input_ndim = hidden_states.ndim
+        _input_ndim = hidden_states.ndim
 
         batch_size, channel, num_frames, height, width = hidden_states.shape
         hidden_states = rearrange(hidden_states, "b c f h w -> b (f h w) c", f=num_frames, h=height, w=width)
@@ -182,8 +181,8 @@ class LazyKVCompressionProcessor2_0:
                 rearrange(image_rotary_emb[1], "(f h w) c -> f c h w", f=num_frames, h=height, w=width),
             )
             compression_image_rotary_emb = (
-                F.interpolate(compression_image_rotary_emb[0], size=key_shape[-2:], mode='bilinear'),
-                F.interpolate(compression_image_rotary_emb[1], size=key_shape[-2:], mode='bilinear')
+                F.interpolate(compression_image_rotary_emb[0], size=key_shape[-2:], mode="bilinear"),
+                F.interpolate(compression_image_rotary_emb[1], size=key_shape[-2:], mode="bilinear"),
             )
             compression_image_rotary_emb = (
                 rearrange(compression_image_rotary_emb[0], "f c h w -> (f h w) c"),
@@ -215,6 +214,7 @@ class LazyKVCompressionProcessor2_0:
 
         return hidden_states
 
+
 class EasyAnimateAttnProcessor2_0:
     def __init__(self):
         pass
@@ -224,8 +224,8 @@ class EasyAnimateAttnProcessor2_0:
         attn: Attention,
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        image_rotary_emb: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        image_rotary_emb: torch.Tensor | None = None,
         attn2: Attention = None,
     ) -> torch.Tensor:
         text_seq_length = encoder_hidden_states.size(1)
@@ -256,12 +256,12 @@ class EasyAnimateAttnProcessor2_0:
             query = attn.norm_q(query)
         if attn.norm_k is not None:
             key = attn.norm_k(key)
-        
+
         if attn2 is not None:
             query_txt = attn2.to_q(encoder_hidden_states)
             key_txt = attn2.to_k(encoder_hidden_states)
             value_txt = attn2.to_v(encoder_hidden_states)
-            
+
             inner_dim = key_txt.shape[-1]
             head_dim = inner_dim // attn.heads
 
@@ -311,11 +311,19 @@ class EasyAnimateAttnProcessor2_0:
             encoder_hidden_states = attn2.to_out[1](encoder_hidden_states)
         return hidden_states, encoder_hidden_states
 
+
 try:
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import pad_input, unpad_input
-except:
+    from flash_attn import (  # noqa: F401 - Import checks optional dependency availability.
+        flash_attn_func,
+        flash_attn_varlen_func,
+    )
+    from flash_attn.bert_padding import (  # noqa: F401 - Import checks optional dependency availability.
+        pad_input,
+        unpad_input,
+    )
+except BaseException:
     print("Flash Attention is not installed. Please install with `pip install flash-attn`, if you want to use SWA.")
+
 
 class EasyAnimateSWAttnProcessor2_0:
     def __init__(self, cross_attention_size=1024):
@@ -326,11 +334,11 @@ class EasyAnimateSWAttnProcessor2_0:
         attn: Attention,
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        image_rotary_emb: Optional[torch.Tensor] = None,
-        num_frames: int = None, 
-        height: int = None, 
-        width: int = None,
+        attention_mask: torch.Tensor | None = None,
+        image_rotary_emb: torch.Tensor | None = None,
+        num_frames: int | None = None,
+        height: int | None = None,
+        width: int | None = None,
         attn2: Attention = None,
     ) -> torch.Tensor:
         text_seq_length = encoder_hidden_states.size(1)
@@ -370,12 +378,12 @@ class EasyAnimateSWAttnProcessor2_0:
             query_txt = query_txt.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
             key_txt = key_txt.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
             value_txt = value_txt.view(batch_size, -1, attn.heads, head_dim)
-            
+
             if attn2.norm_q is not None:
                 query_txt = attn2.norm_q(query_txt)
             if attn2.norm_k is not None:
                 key_txt = attn2.norm_k(key_txt)
-            
+
             query = torch.cat([query_txt, query], dim=2)
             key = torch.cat([key_txt, key], dim=2)
             value = torch.cat([value_txt, value], dim=1)
@@ -385,7 +393,7 @@ class EasyAnimateSWAttnProcessor2_0:
             query[:, :, text_seq_length:] = apply_rotary_emb(query[:, :, text_seq_length:], image_rotary_emb)
             if not attn.is_cross_attention:
                 key[:, :, text_seq_length:] = apply_rotary_emb(key[:, :, text_seq_length:], image_rotary_emb)
-            
+
         query = query.transpose(1, 2).to(value)
         key = key.transpose(1, 2).to(value)
         interval = max((query.size(1) - text_seq_length) // (self.cross_attention_size - text_seq_length), 1)
@@ -393,22 +401,22 @@ class EasyAnimateSWAttnProcessor2_0:
         cross_key = torch.cat([key[:, :text_seq_length], key[:, text_seq_length::interval]], dim=1)
         cross_val = torch.cat([value[:, :text_seq_length], value[:, text_seq_length::interval]], dim=1)
         cross_hidden_states = flash_attn_func(query, cross_key, cross_val, dropout_p=0.0, causal=False)
-        
+
         # Split and rearrange to six directions
         querys = torch.tensor_split(query[:, text_seq_length:], 6, 2)
         keys = torch.tensor_split(key[:, text_seq_length:], 6, 2)
         values = torch.tensor_split(value[:, text_seq_length:], 6, 2)
-        
+
         new_querys = [querys[0]]
         new_keys = [keys[0]]
         new_values = [values[0]]
         for index, mode in enumerate(
             [
-                "bs (f h w) hn hd -> bs (f w h) hn hd", 
-                "bs (f h w) hn hd -> bs (h f w) hn hd", 
-                "bs (f h w) hn hd -> bs (h w f) hn hd", 
-                "bs (f h w) hn hd -> bs (w f h) hn hd", 
-                "bs (f h w) hn hd -> bs (w h f) hn hd"
+                "bs (f h w) hn hd -> bs (f w h) hn hd",
+                "bs (f h w) hn hd -> bs (h f w) hn hd",
+                "bs (f h w) hn hd -> bs (h w f) hn hd",
+                "bs (f h w) hn hd -> bs (w f h) hn hd",
+                "bs (f h w) hn hd -> bs (w h f) hn hd",
             ]
         ):
             new_querys.append(rearrange(querys[index + 1], mode, f=num_frames, h=height, w=width))
@@ -417,23 +425,28 @@ class EasyAnimateSWAttnProcessor2_0:
         query = torch.cat(new_querys, dim=2)
         key = torch.cat(new_keys, dim=2)
         value = torch.cat(new_values, dim=2)
-        
+
         # apply attention
-        hidden_states = flash_attn_func(query, key, value, dropout_p=0.0, causal=False, window_size=(windows_size, windows_size))
+        hidden_states = flash_attn_func(
+            query, key, value, dropout_p=0.0, causal=False, window_size=(windows_size, windows_size)
+        )
 
         hidden_states = torch.tensor_split(hidden_states, 6, 2)
         new_hidden_states = [hidden_states[0]]
         for index, mode in enumerate(
             [
-                "bs (f w h) hn hd -> bs (f h w) hn hd", 
-                "bs (h f w) hn hd -> bs (f h w) hn hd", 
-                "bs (h w f) hn hd -> bs (f h w) hn hd", 
-                "bs (w f h) hn hd -> bs (f h w) hn hd", 
-                "bs (w h f) hn hd -> bs (f h w) hn hd"
+                "bs (f w h) hn hd -> bs (f h w) hn hd",
+                "bs (h f w) hn hd -> bs (f h w) hn hd",
+                "bs (h w f) hn hd -> bs (f h w) hn hd",
+                "bs (w f h) hn hd -> bs (f h w) hn hd",
+                "bs (w h f) hn hd -> bs (f h w) hn hd",
             ]
         ):
             new_hidden_states.append(rearrange(hidden_states[index + 1], mode, f=num_frames, h=height, w=width))
-        hidden_states = torch.cat([cross_hidden_states[:, :text_seq_length], torch.cat(new_hidden_states, dim=2)], dim=1) + cross_hidden_states 
+        hidden_states = (
+            torch.cat([cross_hidden_states[:, :text_seq_length], torch.cat(new_hidden_states, dim=2)], dim=1)
+            + cross_hidden_states
+        )
 
         hidden_states = hidden_states.reshape(batch_size, -1, attn.heads * head_dim)
 

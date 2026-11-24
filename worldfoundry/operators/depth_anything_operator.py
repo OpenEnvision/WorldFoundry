@@ -1,12 +1,13 @@
 """Module for the DepthAnything operator implementation."""
 
 import os
+from pathlib import Path
+from typing import Any
+
 import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
-from typing import List, Optional, Union, Dict, Any
-from pathlib import Path
 
 from .base_operator import BaseOperator
 
@@ -34,11 +35,11 @@ class DepthAnythingOperator(BaseOperator):
             operation_types = ["visual_instruction"]
         if interaction_template is None:
             interaction_template = ["image_depth", "video_depth", "grayscale_depth", "color_depth"]
-        super(DepthAnythingOperator, self).__init__(operation_types=operation_types)
+        super().__init__(operation_types=operation_types)
         self.interaction_template = interaction_template
         self.interaction_template_init()
 
-    def collect_paths(self, path: Union[str, Path]) -> List[str]:
+    def collect_paths(self, path: str | Path) -> list[str]:
         """
         Collect file paths from a file, directory, or txt list.
 
@@ -51,16 +52,12 @@ class DepthAnythingOperator(BaseOperator):
         path = str(path)
         if os.path.isfile(path):
             if path.lower().endswith(".txt"):
-                with open(path, "r", encoding="utf-8") as handle:
+                with open(path, encoding="utf-8") as handle:
                     files = [line.strip() for line in handle.readlines() if line.strip()]
             else:
                 files = [path]
         else:
-            files = [
-                os.path.join(path, name)
-                for name in os.listdir(path)
-                if not name.startswith(".")
-            ]
+            files = [os.path.join(path, name) for name in os.listdir(path) if not name.startswith(".")]
             files.sort()
         return files
 
@@ -74,16 +71,10 @@ class DepthAnythingOperator(BaseOperator):
         Returns:
             Normalized depth array as uint8
         """
-        prediction = (prediction - prediction.min()) / (
-            prediction.max() - prediction.min() + 1e-8
-        )
+        prediction = (prediction - prediction.min()) / (prediction.max() - prediction.min() + 1e-8)
         return (prediction * 255.0).cpu().numpy().astype(np.uint8)
 
-    def prepare_depth_visualization(
-        self,
-        depth: np.ndarray,
-        grayscale: bool = False
-    ) -> np.ndarray:
+    def prepare_depth_visualization(self, depth: np.ndarray, grayscale: bool = False) -> np.ndarray:
         """
         Prepare depth map for visualization.
 
@@ -98,11 +89,7 @@ class DepthAnythingOperator(BaseOperator):
 
         return prepare_depth_visualization(depth, grayscale=grayscale)
 
-    def interpolate_depth(
-        self,
-        depth: torch.Tensor,
-        target_size: tuple
-    ) -> torch.Tensor:
+    def interpolate_depth(self, depth: torch.Tensor, target_size: tuple) -> torch.Tensor:
         """
         Interpolate depth map to target size.
 
@@ -113,14 +100,9 @@ class DepthAnythingOperator(BaseOperator):
         Returns:
             Interpolated depth tensor
         """
-        return F.interpolate(
-            depth[None], target_size, mode="bilinear", align_corners=False
-        )[0, 0]
+        return F.interpolate(depth[None], target_size, mode="bilinear", align_corners=False)[0, 0]
 
-    def process_perception(
-        self,
-        input_signal: Union[str, np.ndarray, torch.Tensor]
-    ) -> np.ndarray:
+    def process_perception(self, input_signal: str | np.ndarray | torch.Tensor) -> np.ndarray:
         """
         Process visual signal (image) for real-time interactive updates.
         This function handles loading and preprocessing of images from various input types.
@@ -176,8 +158,10 @@ class DepthAnythingOperator(BaseOperator):
             ValueError: If interaction is not in template
         """
         if interaction not in self.interaction_template:
-            raise ValueError(f"Interaction '{interaction}' not in interaction_template. "
-                           f"Available interactions: {self.interaction_template}")
+            raise ValueError(
+                f"Interaction '{interaction}' not in interaction_template. "
+                f"Available interactions: {self.interaction_template}"
+            )
         return True
 
     def get_interaction(self, interaction):
@@ -190,7 +174,7 @@ class DepthAnythingOperator(BaseOperator):
         if self.check_interaction(interaction):
             self.current_interaction.append(interaction)
 
-    def process_interaction(self, num_frames: Optional[int] = None) -> Dict[str, Any]:
+    def process_interaction(self, num_frames: int | None = None) -> dict[str, Any]:
         """
         Process current interactions and convert to features for representation/synthesis.
 
@@ -211,11 +195,7 @@ class DepthAnythingOperator(BaseOperator):
         self.interaction_history.append(latest_interaction)
 
         # Process interaction based on type
-        result = {
-            "data_type": "image",
-            "grayscale": False,
-            "output_format": "color_map"
-        }
+        result = {"data_type": "image", "grayscale": False, "output_format": "color_map"}
 
         if latest_interaction == "image_depth":
             result["data_type"] = "image"

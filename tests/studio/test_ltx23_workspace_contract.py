@@ -29,9 +29,7 @@ def test_ltx23_exact_i2v_id_keeps_the_full_workspace_contract() -> None:
         "seed",
     } <= set(entry.call_params)
     required = entry.default_load_kwargs["required_components"]
-    assert Path(required["spatial_upsampler_path"]).name == (
-        "ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
-    )
+    assert Path(required["spatial_upsampler_path"]).name == ("ltx-2.3-spatial-upscaler-x2-1.1.safetensors")
     assert Path(required["gemma_root"]).name in {
         "gemma-3-12b-it-qat-q4_0-unquantized",
         "google--gemma-3-12b-it-qat-q4_0-unquantized",

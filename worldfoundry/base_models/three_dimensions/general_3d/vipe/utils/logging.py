@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> utils -> logging.py functionality."""
-
 import logging
 
 import tqdm
@@ -31,13 +29,7 @@ def configure_logging() -> logging.Logger:
 
     # Define a custom logging handler to use tqdm.write
     class TqdmLoggingHandler(logging.Handler):
-        """Tqdm logging handler implementation."""
         def emit(self, record):
-            """Emit.
-
-            Args:
-                record: The record.
-            """
             msg = self.format(record)
             tqdm.tqdm.write(msg)
 

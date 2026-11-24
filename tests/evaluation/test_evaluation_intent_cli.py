@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from worldfoundry.cli.main import main
-from worldfoundry.evaluation.tasks.datasets import build_dataset_manifest, write_dataset_manifest
+from worldfoundry.evals.tasks.datasets import build_dataset_manifest, write_dataset_manifest
 
 
 def test_generate_score_cli_plans_custom_dataset_without_loading_model(tmp_path: Path, capsys) -> None:

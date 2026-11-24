@@ -1,6 +1,6 @@
 ---
 title: WorldScore
-description: "Stanford unified world-generation bench: controllability, quality, dynamics on camera-specified rollouts. WorldFoundry vendors the runtime; a bounded dynamic component is verified."
+description: "Stanford's unified world-generation benchmark: controllability, quality, and dynamics on camera-specified rollouts."
 ---
 
 WorldScore (Stanford) unifies evaluation of **3D/4D scene generation and video world models**. A model receives a starting scene plus a sequence of **camera-specified layout instructions**. Three families normalize into `worldscore_average`:
@@ -11,7 +11,7 @@ WorldScore (Stanford) unifies evaluation of **3D/4D scene generation and video w
 
 Paper: [WorldScore](https://arxiv.org/abs/2504.00983). Project: [haoyi-duan.github.io/WorldScore](https://haoyi-duan.github.io/WorldScore/). Code: [haoyi-duan/WorldScore](https://github.com/haoyi-duan/WorldScore) (MIT). Data: [`Howieeeee/WorldScore`](https://huggingface.co/datasets/Howieeeee/WorldScore) (revision `42c4e267e1cc0529af1b0284ce018e04d43906e3`).
 
-WorldFoundry **vendors the core runtime** and converts `evaluation.json` trees into scorecards. A **bounded dynamic component is verified**; **full metric-tree execution is not**. Full metrics need DROID / `lietorch`, GroundingDINO, SAM, optical-flow / interpolation, Mamba, and matching checkpoints.
+WorldFoundry runs the core WorldScore runtime and converts `evaluation.json` trees into scorecards. The dynamics component has been validated on a bounded sample; running the full metric tree needs DROID / `lietorch`, GroundingDINO, SAM, optical-flow / interpolation, Mamba, and matching checkpoints.
 
 <BenchmarkPageSections id="worldscore" locale="en" />
 
@@ -22,7 +22,7 @@ hf download Howieeeee/WorldScore --repo-type dataset \
   --revision 42c4e267e1cc0529af1b0284ce018e04d43906e3 \
   --local-dir cache/worldfoundry/data/hfd_datasets/Howieeeee/WorldScore
 
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id worldscore \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -33,7 +33,7 @@ worldfoundry-eval zoo benchmark-run \
 
 GPU path: `--generated-root`, `--data-path`, `--num-jobs`. Staging helpers: `--stage-dynamic-source`, `--stage-sample-index`, `--stage-target-frames`. Env: `WORLDFOUNDRY_WORLDSCORE_RESULTS_PATH`, `WORLDFOUNDRY_WORLDSCORE_OUTPUT_DIR`, `WORLDFOUNDRY_WORLDSCORE_CONFIG_ROOT`. Shared stack: `worldscore_spatial_metric_stack`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/worldscore.yaml`, `worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore`.
+Source files: `worldfoundry/data/benchmarks/tasks/external/worldscore.yaml`, `worldfoundry/evals/tasks/execution/runners/worldscore/runtime/worldscore`.
 
 Outputs include `scorecard.json` (primary `worldscore_average`) and `per_sample_metrics.jsonl`.
 

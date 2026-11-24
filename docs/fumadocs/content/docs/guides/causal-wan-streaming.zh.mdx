@@ -77,13 +77,34 @@ LingBot-V2 1.3B 路径的稳态模型延迟降低约 **2.7%**，常驻 chunk 延
 
 `wan/streaming.py` 共享 native/reference Wan2.1 decoder。逐 latent 解码保留因果卷积 history，避免反复解码增长中的整段视频。
 
-`feature_cache.py` 将 history 保存为紧凑 storage，在当前 step 完成后提交更新；shape、dtype、device 相同时复用原有地址，减少缓存分配和大 tensor 切片持有。
+`feature_cache.py` 将 history 保存为紧凑 storage，在当前 step 完成后提交更新；shape、dtype、device 相同时复用原有地址，减少缓存分配，并避免持有大 tensor 切片。
 
 LingBot-V2 1.3B 长视频路径的独立 decoder 编译提供约 **1.75×** 的 warm 解码速度，稳态实时 chunk 延迟降低约 **10.6%**。去噪 latents 完全一致；解码 RGB 的最大像素误差为 **1/255**，PSNR 为 **71.77 dB**，不是逐像素一致。请求重置与 A/B/A 复用保持各自路径的输出一致性。
 
 canonical checkpoint modules 保持不变，decoder CUDA Graph capture 关闭。默认保留 eager 解码，编译适合常驻会话预热。
 
 通过 1.3B pipeline 的加载选项 `vae_streaming_compile=True`，或 runner 的 `--vae-streaming-compile` 选择独立 decoder compile。
+
+## 实时帧延迟物化
+
+LingBot-V2 的 `stream_realtime()` 将解码后的 uint8 RGB 保留在 CUDA 上，通过 `video` 和 `video_chunk` 返回有序的 `LazyCudaFrame` 列表（`layout="frame-list"`）。每个 chunk 独立持有像素和 producer event，不受后续解码或会话 reset 影响。像素转换和首块 13 帧、后续 16 帧的节奏不变；普通批量推理和直接调用
+`session.generate()` 仍返回 CPU 结果。
+
+Studio 的 CPU transport 先在侧流发起 pinned-memory 拷贝，再物化帧。支持 CUDA 输入的 transport 配合 identity 后处理时，为选定的编码器保留 GPU 像素；自定义后处理仍接收 CPU 输入。生成计时只等待本次 decode event，而不是同步整张设备，也不包含延后的 host 物化。丢帧策略和队列策略不变。
+
+在仓库根目录用本地权重对照：
+
+```bash
+python tests/manual/lingbot_v2_transport_replay.py \
+  --checkpoint ../ckpts/lingbot-world-v2-1.3b-causal-fast \
+  --shared-assets ../ckpts/Wan-AI--Wan2.1-T2V-1.3B \
+  --image testcase/012_abandoned-room.png \
+  --output tmp/lingbot-frame-transport --chunks 21 --rounds 3
+```
+
+该 probe 检查 CPU 交付路径的 RGB 是否完全一致，并覆盖 A/B/A seed 和 reset，分别记录生成与物化耗时。它不覆盖浏览器显示、网络和编码，也不能证明 NVENC 硬件支持或编码加速。在单张 H100 上（1.3B、464×832、Torch attention、eager DiT/VAE；预热后 333 帧），延迟物化在 A/B/A reset 后保持 RGB 完全一致，CPU 交付耗时与原路径相同：
+1557.84 ms/chunk 对 1555.80 ms/chunk（+0.13%，排除前五个 chunk）。收益在于
+CUDA 消费者可以跳过 host 物化；拷回 host 时以 pinned D2H 在独立侧流执行。排队的 device frames 在消费或丢弃前仍占用显存。
 
 ## 独立 LingBot-V2 1.3B
 

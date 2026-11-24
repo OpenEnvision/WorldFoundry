@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 x-plug The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,45 +11,42 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MplugOwl model. """
+"""PyTorch MplugOwl model."""
 
 import logging
 import math
-from typing import Any, Optional, Tuple, Union
+from typing import Any, ClassVar
 
 try:
     from flash_attn.flash_attn_interface import flash_attn_unpadded_func
 
     flash_attn_func = flash_attn_unpadded_func
-except:
+except BaseException:
     flash_attn_func = None
     print("install flash-attn first.")
-import math
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
 
+import einops
 import torch
 import torch.utils.checkpoint
 from torch import nn
-import einops
-
 from transformers.modeling_outputs import (
     BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithPastAndCrossAttentions
 )
 from transformers.modeling_utils import PreTrainedModel
+from transformers.models.auto import AutoModelForCausalLM
 from transformers.pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from transformers.utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    logging,
+    logging,  # noqa: F811 - Later import provides the binding, as upstream.
     replace_return_docstrings,
 )
-from transformers.models.auto import AutoModelForCausalLM
-from .configuration_mplug_owl import MplugOwlConfig, MplugOwlVisionConfig, MplugOwlVisualAbstractorConfig
 
+from .configuration_mplug_owl import MplugOwlConfig, MplugOwlVisionConfig, MplugOwlVisualAbstractorConfig
 
 logger = logging.get_logger(__name__)
 
@@ -81,12 +77,12 @@ class MplugOwlForConditionalGenerationModelOutput(ModelOutput):
             Outputs of the language model.
     """
 
-    loss: Optional[Tuple[torch.FloatTensor]] = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
-    vision_outputs: Optional[torch.FloatTensor] = None
-    language_model_outputs: Optional[Tuple[torch.FloatTensor]] = None
+    loss: tuple[torch.FloatTensor] | None = None
+    logits: tuple[torch.FloatTensor] | None = None
+    vision_outputs: torch.FloatTensor | None = None
+    language_model_outputs: tuple[torch.FloatTensor] | None = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["vision_outputs", "language_model_outputs"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -147,7 +143,7 @@ class MplugOwlVisionEmbeddings(nn.Module):
         batch_size = pixel_values.size(0)
         T = pixel_values.size(2) if pixel_values.dim() > 4 else 1
         if T > 1:
-            pixel_values = einops.rearrange(pixel_values, 'b c t h w -> (b t) c h w')
+            pixel_values = einops.rearrange(pixel_values, "b c t h w -> (b t) c h w")
         image_embeds = self.patch_embed(pixel_values)
         image_embeds = image_embeds.flatten(2).transpose(1, 2)
 
@@ -155,7 +151,7 @@ class MplugOwlVisionEmbeddings(nn.Module):
         embeddings = torch.cat([class_embeds, image_embeds], dim=1)
         embeddings = embeddings + self.position_embedding[:, : embeddings.size(1)].to(image_embeds.dtype)
         embeddings = self.pre_layernorm(embeddings)
-        embeddings = einops.rearrange(embeddings, '(b t) n d -> b t n d', b=batch_size)
+        embeddings = einops.rearrange(embeddings, "(b t) n d -> b t n d", b=batch_size)
         return embeddings
 
 
@@ -183,17 +179,19 @@ class QuickGELU(nn.Module):
 
 class MplugOwlVisionLocalTemporal(nn.Module):
     def __init__(self, config):
-        super(MplugOwlVisionLocalTemporal, self).__init__()
+        super().__init__()
 
         self.image_size = config.image_size
         self.patch_size = config.patch_size
         self.num_patches = 1 + (self.image_size // self.patch_size) ** 2
         self.hidden_size = config.hidden_size
         d_bottleneck = self.hidden_size // 2
-        
+
         self.ln = LayerNormFp32(self.hidden_size)
         self.down_proj = nn.Conv3d(self.hidden_size, d_bottleneck, kernel_size=1, stride=1, padding=0)
-        self.conv = nn.Conv3d(d_bottleneck, d_bottleneck, kernel_size=(3, 1, 1), stride=1, padding=(1, 0, 0), groups=d_bottleneck)
+        self.conv = nn.Conv3d(
+            d_bottleneck, d_bottleneck, kernel_size=(3, 1, 1), stride=1, padding=(1, 0, 0), groups=d_bottleneck
+        )
         self.up_proj = nn.Conv3d(d_bottleneck, self.hidden_size, kernel_size=1, stride=1, padding=0)
 
         nn.init.constant_(self.up_proj.weight, 0)
@@ -203,22 +201,22 @@ class MplugOwlVisionLocalTemporal(nn.Module):
 
     def forward(self, x):
         # [b, t, s, c]
-        T = x.size(1)
-        H = int((self.num_patches - 1)**0.5) 
+        _T = x.size(1)
+        H = int((self.num_patches - 1) ** 0.5)
         cls_token, x = x[:, :, 0:1], x[:, :, 1:]
         x = self.ln(x)
-        x = einops.rearrange(x, 'b t (h w) c -> b c t h w', h=H)
+        x = einops.rearrange(x, "b t (h w) c -> b c t h w", h=H)
         x = self.down_proj(x)
         _device = x.device
-        self = self.to('cpu') # hack: cpu offloading since bfloat16 on gpu gives error with conv_depthwise3d 
-        x = x.to('cpu')
+        self = self.to("cpu")  # hack: cpu offloading since bfloat16 on gpu gives error with conv_depthwise3d
+        x = x.to("cpu")
         x = self.conv(x)
         self = self.to(_device)
         x = x.to(_device)
         x = self.activation_func(x)
         x = self.up_proj(x)
-        x = einops.rearrange(x, 'b c t h w -> b t (h w) c')
-        x = torch.cat([cls_token, x], dim = 2)
+        x = einops.rearrange(x, "b c t h w -> b t (h w) c")
+        x = torch.cat([cls_token, x], dim=2)
         return x
 
 
@@ -248,9 +246,9 @@ class MplugOwlVisionAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        head_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, seq_len, embed_dim = hidden_states.size()
@@ -315,7 +313,7 @@ class MplugOwlVisionAttention(nn.Module):
 
             context_layer = torch.matmul(attention_probs, value_states).permute(0, 2, 1, 3)
 
-        new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size,)
+        new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         context_layer = context_layer.reshape(new_context_layer_shape)
 
         output = self.dense(context_layer)
@@ -354,8 +352,8 @@ class MplugOwlVisionEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, time, seq_len, embed_dim)`
@@ -369,8 +367,8 @@ class MplugOwlVisionEncoderLayer(nn.Module):
         B, T = hidden_states.size(0), hidden_states.size(1)
         if T > 1:
             hidden_states = hidden_states + self.temporal(hidden_states)
-        hidden_states = einops.rearrange(hidden_states, 'b t n d -> (b t) n d')
-        
+        hidden_states = einops.rearrange(hidden_states, "b t n d -> (b t) n d")
+
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -385,7 +383,7 @@ class MplugOwlVisionEncoderLayer(nn.Module):
         hidden_states = self.mlp(hidden_states)
 
         hidden_states = hidden_states + residual
-        hidden_states = einops.rearrange(hidden_states, '(b t) n d -> b t n d', b=B)
+        hidden_states = einops.rearrange(hidden_states, "(b t) n d -> b t n d", b=B)
 
         outputs = (hidden_states,)
 
@@ -404,25 +402,25 @@ class MplugOwlPreTrainedModel(PreTrainedModel):
     config_class = MplugOwlConfig
     base_model_prefix = "mplug_owl"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [
+    _keys_to_ignore_on_load_missing: ClassVar[list] = [
         r"position_ids",
         r"language_model.encoder.embed_tokens.weight",
         r"language_model.decoder.embed_tokens.weight",
         r"language_model.lm_head.weight",
     ]
-    _no_split_modules = [
+    _no_split_modules: ClassVar[list] = [
         "MplugOwlVisionEncoderLayer",
         "LlamaDecoderLayer",
         "MplugOwlVisualAbstractorLayer",
         "LlamaForCausalLM",
         "Parameter",
     ]
-    _keep_in_fp32_modules = ["wo"]
+    _keep_in_fp32_modules: ClassVar[list] = ["wo"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_range
-        if isinstance(module, nn.Conv2d) or isinstance(module, nn.Embedding) or isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Conv2d, nn.Embedding, nn.Linear)):
             module.weight.data.normal_(mean=0.0, std=factor)
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
@@ -578,11 +576,11 @@ class MplugOwlVisionEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -613,9 +611,9 @@ class MplugOwlVisionEncoder(nn.Module):
         all_attentions = () if output_attentions else None
 
         hidden_states = inputs_embeds
-        for idx, encoder_layer in enumerate(self.layers):
+        for _idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
+                encoder_states = encoder_states + (hidden_states,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
@@ -639,16 +637,14 @@ class MplugOwlVisionEncoder(nn.Module):
             hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                all_attentions = all_attentions + (layer_outputs[1],)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
+            encoder_states = encoder_states + (hidden_states,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions)
 
 
 class MplugOwlVisionModel(MplugOwlPreTrainedModel):
@@ -670,11 +666,11 @@ class MplugOwlVisionModel(MplugOwlPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MplugOwlVisionConfig)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        pixel_values: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Returns:
 
@@ -688,7 +684,7 @@ class MplugOwlVisionModel(MplugOwlPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values) # [B, T, N, D]
+        hidden_states = self.embeddings(pixel_values)  # [B, T, N, D]
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -704,7 +700,7 @@ class MplugOwlVisionModel(MplugOwlPreTrainedModel):
         pooled_output = self.post_layernorm(pooled_output)
 
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -747,7 +743,7 @@ class MplugOwlVisualAbstractorMultiHeadAttention(nn.Module):
         self.config = config
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention heads (%d)"
+                "The hidden size (%d) is not a multiple of the number of attention heads (%d)"  # noqa: UP031 - Keeps printf conversions that depend on argument types.
                 % (config.hidden_size, config.num_attention_heads)
             )
 
@@ -775,7 +771,7 @@ class MplugOwlVisualAbstractorMultiHeadAttention(nn.Module):
         return self.attention_map
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -829,12 +825,12 @@ class MplugOwlVisualAbstractorMultiHeadAttention(nn.Module):
         context_layer = torch.matmul(attention_probs_dropped, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         context_layer = context_layer.view(*new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
-        outputs = outputs + (past_key_value,)
+        outputs = outputs + (past_key_value,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         return outputs
 
 
@@ -882,13 +878,13 @@ class MplugOwlVisualAbstractorAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+        attention_mask: torch.FloatTensor | None = None,
+        head_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        past_key_value: tuple[tuple[torch.FloatTensor]] | None = None,
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.Tensor]:
         # HACK we apply norm on q and k
         hidden_states = self.norm1(hidden_states)
         encoder_hidden_states = self.normk(encoder_hidden_states)
@@ -905,7 +901,7 @@ class MplugOwlVisualAbstractorAttention(nn.Module):
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         # add attentions if we output them
-        outputs = (attention_output,) + self_outputs[1:]
+        outputs = (attention_output,) + self_outputs[1:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         return outputs
 
 
@@ -971,7 +967,7 @@ class MplugOwlVisualAbstractorEncoder(nn.Module):
         for i in range(self.config.num_hidden_layers):
             layer_module = self.layers[i]
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                all_hidden_states = all_hidden_states + (hidden_states,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
@@ -980,7 +976,7 @@ class MplugOwlVisualAbstractorEncoder(nn.Module):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
+                        return module(*inputs, past_key_value, output_attentions)  # noqa: B023 - Keeps the upstream late binding of the loop variable.
 
                     return custom_forward
 
@@ -1032,7 +1028,7 @@ class MplugOwlVisualAbstractorModel(MplugOwlPreTrainedModel):
     def get_extended_attention_mask(
         self,
         attention_mask: torch.Tensor,
-        input_shape: Tuple[int],
+        input_shape: tuple[int],
         device: torch.device,
     ) -> torch.Tensor:
         """
@@ -1059,9 +1055,7 @@ class MplugOwlVisualAbstractorModel(MplugOwlPreTrainedModel):
             extended_attention_mask = attention_mask[:, None, None, :]
         else:
             raise ValueError(
-                "Wrong shape for input_ids (shape {}) or attention_mask (shape {})".format(
-                    input_shape, attention_mask.shape
-                )
+                f"Wrong shape for input_ids (shape {input_shape}) or attention_mask (shape {attention_mask.shape})"
             )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
@@ -1107,7 +1101,7 @@ class MplugOwlVisualAbstractorModel(MplugOwlPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         T = encoder_hidden_states.size(1)
         if T == 1 or temporal_query_embeds is None:
             embedding_output = query_embeds
@@ -1117,9 +1111,7 @@ class MplugOwlVisualAbstractorModel(MplugOwlPreTrainedModel):
         batch_size, seq_length = input_shape
         device = embedding_output.device
 
-        encoder_hidden_states = einops.rearrange(
-            encoder_hidden_states, 'b t n d -> b (t n) d'
-        )
+        encoder_hidden_states = einops.rearrange(encoder_hidden_states, "b t n d -> b (t n) d")
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -1132,7 +1124,7 @@ class MplugOwlVisualAbstractorModel(MplugOwlPreTrainedModel):
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if encoder_hidden_states is not None:
-            if type(encoder_hidden_states) == list:
+            if type(encoder_hidden_states) is list:
                 encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states[0].size()
             else:
                 (
@@ -1142,7 +1134,7 @@ class MplugOwlVisualAbstractorModel(MplugOwlPreTrainedModel):
                 ) = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
 
-            if type(encoder_attention_mask) == list:
+            if type(encoder_attention_mask) is list:
                 encoder_extended_attention_mask = [self.invert_attention_mask(mask) for mask in encoder_attention_mask]
             elif encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
@@ -1176,8 +1168,8 @@ class MplugOwlVisualAbstractorModel(MplugOwlPreTrainedModel):
         if T == 1 or temporal_query_embeds is None:
             temporal_sequence_output = None
         else:
-            temporal_sequence_output = sequence_output[:, query_embeds.size(1):]
-            sequence_output = sequence_output[:, :query_embeds.size(1)]
+            temporal_sequence_output = sequence_output[:, query_embeds.size(1) :]
+            sequence_output = sequence_output[:, : query_embeds.size(1)]
 
         sequence_output = self.visual_fc(sequence_output)
         if temporal_sequence_output is not None:
@@ -1213,9 +1205,7 @@ class MplugOwlModel(MplugOwlPreTrainedModel):
         self.temporal_query_tokens = nn.Parameter(
             torch.zeros(1, config.num_query_tokens, config.visual_abstractor_config.hidden_size)
         )
-        self.abstractor = MplugOwlVisualAbstractorModel(
-            config.visual_abstractor_config, config.text_config.hidden_size
-        )
+        self.abstractor = MplugOwlVisualAbstractorModel(config.visual_abstractor_config, config.text_config.hidden_size)
 
         # if config.use_decoder_only_language_model:
         # from llama.modeling_llama import LlamaForCausalLM
@@ -1252,14 +1242,14 @@ class MplugOwlModel(MplugOwlPreTrainedModel):
 
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.Tensor] = None,
-        decoder_attention_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.Tensor | None = None,
+        decoder_attention_mask: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1293,10 +1283,10 @@ class MplugOwlModel(MplugOwlPreTrainedModel):
 
     def get_image_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1319,11 +1309,10 @@ def get_media_indices(my_list):
         my_list = my_list.cpu().tolist()
     result = []
     for i in range(len(my_list)):
-        if i == 0 and my_list[i] < 0:
-            result.append(i)
-        elif my_list[i] != my_list[i - 1] and my_list[i] < 0:
+        if (i == 0 and my_list[i] < 0) or (my_list[i] != my_list[i - 1] and my_list[i] < 0):
             result.append(i)
     return result
+
 
 def get_media_types(tensors, positions):
     if isinstance(tensors, torch.Tensor):
@@ -1355,9 +1344,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         self.temporal_query_tokens = nn.Parameter(
             torch.zeros(1, config.num_query_tokens, config.visual_abstractor_config.hidden_size)
         )
-        self.abstractor = MplugOwlVisualAbstractorModel(
-            config.visual_abstractor_config, config.text_config.hidden_size
-        )
+        self.abstractor = MplugOwlVisualAbstractorModel(config.visual_abstractor_config, config.text_config.hidden_size)
 
         # if config.use_decoder_only_language_model:
         # from llama.modeling_llama import LlamaForCausalLM
@@ -1376,9 +1363,11 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         )
 
         # Hack Bloom
-        if config.text_config.model_type == 'bloom':
-            bound_method = bloom_forward.__get__(self.language_model.transformer, self.language_model.transformer.__class__)
-            setattr(self.language_model.transformer, 'forward', bound_method)
+        if config.text_config.model_type == "bloom":
+            bound_method = bloom_forward.__get__(
+                self.language_model.transformer, self.language_model.transformer.__class__
+            )
+            self.language_model.transformer.forward = bound_method
 
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
@@ -1434,18 +1423,18 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         input_ids: torch.FloatTensor,
         num_images,
         num_videos,
-        non_padding_mask: Optional[torch.LongTensor] = None,
-        non_media_mask: Optional[torch.LongTensor] = None,
-        prompt_mask: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
-        return_dict: Optional[bool] = None,
+        non_padding_mask: torch.LongTensor | None = None,
+        non_media_mask: torch.LongTensor | None = None,
+        prompt_mask: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        labels: torch.LongTensor | None = None,
+        return_dict: bool | None = None,
         **forward_kwargs,
-    ) -> Union[Tuple, MplugOwlForConditionalGenerationModelOutput]:
+    ) -> tuple | MplugOwlForConditionalGenerationModelOutput:
         r"""
         Returns:
 
@@ -1520,15 +1509,14 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
             for i in range(batch_size)
         ]
 
-        media_token_types = [
-            get_media_types(text_tokens_[i][:-1], media_token_indices[i])
-            for i in range(batch_size)
-        ]
+        media_token_types = [get_media_types(text_tokens_[i][:-1], media_token_indices[i]) for i in range(batch_size)]
 
         text_tokens_[text_tokens_ < 0] = 1  # Not used
         inputs_embeds = self.get_input_embeddings()(text_tokens_)  # Temporally Embedding
 
-        if hasattr(self.language_model, 'transformer') and hasattr(self.language_model.transformer, 'word_embeddings_layernorm'):
+        if hasattr(self.language_model, "transformer") and hasattr(
+            self.language_model.transformer, "word_embeddings_layernorm"
+        ):
             inputs_embeds = self.language_model.transformer.word_embeddings_layernorm(inputs_embeds)
 
         if pixel_values is not None:
@@ -1549,9 +1537,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
             video_embeds = self.vision_model(video_pixel_values, return_dict=True).last_hidden_state
 
             video_attention_mask = torch.ones(video_embeds.size()[:-1], dtype=torch.long, device=video_embeds.device)
-            video_attention_mask = einops.rearrange(
-                video_attention_mask, 'b t n -> b (t n)'
-            )
+            video_attention_mask = einops.rearrange(video_attention_mask, "b t n -> b (t n)")
             query_tokens = self.query_tokens.expand(video_embeds.shape[0], -1, -1)
             temporal_query_tokens = self.temporal_query_tokens.expand(video_embeds.shape[0], -1, -1)
 
@@ -1561,7 +1547,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
                 encoder_hidden_states=video_embeds,
                 encoder_attention_mask=video_attention_mask,
             )["last_hidden_state"]
-            video_embeds   = video_query_features
+            video_embeds = video_query_features
             vid_seq_length = video_query_features.shape[1]
 
         num_images_per_sample = num_images.long().cpu().tolist()
@@ -1582,12 +1568,16 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
                     result_attn.append(attention_mask[b, start:pos])
                 if media_token_types[b][i] == -1:
                     result.append(image_embeds[img_idx + curr_image_idx])
-                    result_attn.append(torch.ones(image_embeds[img_idx + curr_image_idx].shape[0], device=inputs_embeds.device))
+                    result_attn.append(
+                        torch.ones(image_embeds[img_idx + curr_image_idx].shape[0], device=inputs_embeds.device)
+                    )
                     start = pos + img_seq_length
                     curr_image_idx += 1
                 else:
                     result.append(video_embeds[vid_idx + curr_video_idx])
-                    result_attn.append(torch.ones(video_embeds[vid_idx + curr_video_idx].shape[0], device=inputs_embeds.device))
+                    result_attn.append(
+                        torch.ones(video_embeds[vid_idx + curr_video_idx].shape[0], device=inputs_embeds.device)
+                    )
                     start = pos + vid_seq_length
                     curr_video_idx += 1
             if start < inputs_embeds.shape[1]:
@@ -1599,9 +1589,9 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
             text_chunk_embeds.append(torch.cat(result, dim=0))
             text_chunk_attns.append(torch.cat(result_attn, dim=0))
 
-        inputs_embeds  = torch.stack(text_chunk_embeds, dim=0)
+        inputs_embeds = torch.stack(text_chunk_embeds, dim=0)
         attention_mask = torch.stack(text_chunk_attns, dim=0)
-        
+
         if labels is not None:
             # Create causal mask and position ids
             _, loss_mask, position_ids = get_ltor_masks_and_position_ids_from_embeddings(inputs_embeds)
@@ -1614,7 +1604,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
 
             loss_mask = loss_mask * non_padding_mask * non_media_mask * prompt_mask
             labels[:, 1:][loss_mask != 1] = -100
-                
+
         # Forward into GPT
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -1631,8 +1621,8 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor = None,
         video_pixel_values: torch.FloatTensor = None,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
         isdecoder=True,
         get_logits_only=False,
         **generate_kwargs,
@@ -1659,12 +1649,9 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
 
         batch_size = input_ids.size(0)
         media_token_indices = [get_media_indices(input_ids[i]) for i in range(batch_size)]
-        media_token_types = [
-            get_media_types(input_ids[i], media_token_indices[i])
-            for i in range(batch_size)
-        ]
-        num_images_per_sample = [len([y for y in x if y==-1]) for x in media_token_types]
-        num_videos_per_sample = [len([y for y in x if y<-1]) for x in media_token_types]
+        media_token_types = [get_media_types(input_ids[i], media_token_indices[i]) for i in range(batch_size)]
+        num_images_per_sample = [len([y for y in x if y == -1]) for x in media_token_types]
+        num_videos_per_sample = [len([y for y in x if y < -1]) for x in media_token_types]
         input_ids = input_ids.clone()  # prevent inplace modify
         input_ids[input_ids < 0] = 0  # Not used
 
@@ -1675,7 +1662,9 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
         batch_size = input_ids.shape[0]
         # get text embedding
         inputs_embeds = self.get_input_embeddings()(input_ids)
-        if hasattr(self.language_model, 'transformer') and hasattr(self.language_model.transformer, 'word_embeddings_layernorm'):
+        if hasattr(self.language_model, "transformer") and hasattr(
+            self.language_model.transformer, "word_embeddings_layernorm"
+        ):
             inputs_embeds = self.language_model.transformer.word_embeddings_layernorm(inputs_embeds)
         # get visual embedding
         if pixel_values is not None:
@@ -1703,9 +1692,7 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
                 video_attention_mask = torch.ones(
                     video_embeds.size()[:-1], dtype=torch.long, device=video_embeds.device
                 )
-                video_attention_mask = einops.rearrange(
-                    video_attention_mask, 'b t n -> b (t n)'
-                )
+                video_attention_mask = einops.rearrange(video_attention_mask, "b t n -> b (t n)")
                 query_tokens = self.query_tokens.expand(video_embeds.shape[0], -1, -1)
                 temporal_query_tokens = self.temporal_query_tokens.expand(video_embeds.shape[0], -1, -1)
                 query_outputs = self.abstractor(
@@ -1738,12 +1725,16 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
                     result_attn.append(attention_mask[b, start:pos])
                 if media_token_types[b][i] == -1:
                     result.append(image_embeds[img_idx + curr_image_idx])
-                    result_attn.append(torch.ones(image_embeds[img_idx + curr_image_idx].shape[0], device=inputs_embeds.device))
+                    result_attn.append(
+                        torch.ones(image_embeds[img_idx + curr_image_idx].shape[0], device=inputs_embeds.device)
+                    )
                     start = pos + img_seq_length
                     curr_image_idx += 1
                 else:
                     result.append(video_embeds[vid_idx + curr_video_idx])
-                    result_attn.append(torch.ones(video_embeds[vid_idx + curr_video_idx].shape[0], device=inputs_embeds.device))
+                    result_attn.append(
+                        torch.ones(video_embeds[vid_idx + curr_video_idx].shape[0], device=inputs_embeds.device)
+                    )
                     start = pos + vid_seq_length
                     curr_video_idx += 1
             if start < inputs_embeds.shape[1]:
@@ -1759,23 +1750,28 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
 
         if get_logits_only:
             outputs = self.language_model(
-                        inputs_embeds=inputs_embeds,
-                        attention_mask=attention_mask,
-                        return_dict=True,
-                        output_attentions=self.config.output_attentions,
-                    )
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                return_dict=True,
+                output_attentions=self.config.output_attentions,
+            )
         else:
             outputs = self.language_model.generate(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 **generate_kwargs,
             )
-            
+
         return outputs
 
     def prepare_inputs_for_generation(
-        self, input_ids, pixel_values=None, video_pixel_values=None,
-        past_key_values=None, attention_mask=None, **model_kwargs
+        self,
+        input_ids,
+        pixel_values=None,
+        video_pixel_values=None,
+        past_key_values=None,
+        attention_mask=None,
+        **model_kwargs,
     ):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -1800,20 +1796,20 @@ class MplugOwlForConditionalGeneration(MplugOwlPreTrainedModel):
 
 def bloom_forward(
     self,
-    input_ids: Optional[torch.LongTensor] = None,
-    past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
-    attention_mask: Optional[torch.Tensor] = None,
-    head_mask: Optional[torch.LongTensor] = None,
-    inputs_embeds: Optional[torch.LongTensor] = None,
-    use_cache: Optional[bool] = None,
-    output_attentions: Optional[bool] = None,
-    output_hidden_states: Optional[bool] = None,
-    return_dict: Optional[bool] = None,
+    input_ids: torch.LongTensor | None = None,
+    past_key_values: tuple[tuple[torch.Tensor, torch.Tensor], ...] | None = None,
+    attention_mask: torch.Tensor | None = None,
+    head_mask: torch.LongTensor | None = None,
+    inputs_embeds: torch.LongTensor | None = None,
+    use_cache: bool | None = None,
+    output_attentions: bool | None = None,
+    output_hidden_states: bool | None = None,
+    return_dict: bool | None = None,
     **deprecated_arguments,
-) -> Union[Tuple[torch.Tensor, ...], BaseModelOutputWithPastAndCrossAttentions]:
+) -> tuple[torch.Tensor, ...] | BaseModelOutputWithPastAndCrossAttentions:
     if deprecated_arguments.pop("position_ids", False) is not False:
         # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
-        warnings.warn(
+        warnings.warn(  # noqa: F821 - Name is undefined in the upstream source.
             "`position_ids` have no functionality in BLOOM and will be removed in v5.0.0. You can safely ignore"
             " passing `position_ids`.",
             FutureWarning,
@@ -1849,19 +1845,18 @@ def bloom_forward(
     if inputs_embeds is None:
         inputs_embeds = self.word_embeddings(input_ids)
         inputs_embeds = self.word_embeddings_layernorm(inputs_embeds)
-    
+
     hidden_states = inputs_embeds
 
     presents = () if use_cache else None
     all_self_attentions = () if output_attentions else None
     all_hidden_states = () if output_hidden_states else None
 
-    if self.gradient_checkpointing and self.training:
-        if use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-            )
-            use_cache = False
+    if self.gradient_checkpointing and self.training and use_cache:
+        logger.warning_once(
+            "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+        )
+        use_cache = False
 
     # Compute alibi tensor: check build_alibi_tensor documentation
     seq_length_with_past = seq_length
@@ -1882,9 +1877,9 @@ def bloom_forward(
         past_key_values_length=past_key_values_length,
     )
 
-    for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+    for i, (block, layer_past) in enumerate(zip(self.h, past_key_values, strict=False)):
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states = all_hidden_states + (hidden_states,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         if self.gradient_checkpointing and self.training:
 
@@ -1916,16 +1911,16 @@ def bloom_forward(
 
         hidden_states = outputs[0]
         if use_cache is True:
-            presents = presents + (outputs[1],)
+            presents = presents + (outputs[1],)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         if output_attentions:
-            all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+            all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     # Add last hidden state
     hidden_states = self.ln_f(hidden_states)
 
     if output_hidden_states:
-        all_hidden_states = all_hidden_states + (hidden_states,)
+        all_hidden_states = all_hidden_states + (hidden_states,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     if not return_dict:
         return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)

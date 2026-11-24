@@ -27,6 +27,7 @@ Safe unwrapping lives in :mod:`worldfoundry.core.model_loading.checkpoints.safe_
 DCP planners live in :mod:`worldfoundry.core.model_loading.checkpoints.dcp`.
 """
 
+import contextlib
 import io
 import json
 import os
@@ -113,7 +114,7 @@ def _is_hf_file_cached(
     still falls through to a fresh download instead of aborting the load.
     """
 
-    from huggingface_hub import try_to_load_from_cache
+    try_to_load_from_cache = __import__("huggingface_hub", fromlist=["try_to_load_from_cache"]).try_to_load_from_cache
 
     try:
         cached = try_to_load_from_cache(
@@ -290,7 +291,7 @@ def _hf_hub_download_shard_task(
     args: tuple[str, str, str | None, str],
 ) -> tuple[str, str]:
     """Download one shard; used by ThreadPoolExecutor."""
-    from huggingface_hub import hf_hub_download
+    hf_hub_download = __import__("huggingface_hub", fromlist=["hf_hub_download"]).hf_hub_download
 
     repo_id, shard_file, subfolder, revision = args
     settings: dict[str, object] = {
@@ -440,7 +441,7 @@ def _load_sharded_safetensors_index_checkpoint(
             _discard_corrupt_cache(cache_path)
 
     if is_hf_url:
-        from huggingface_hub import hf_hub_download
+        hf_hub_download = __import__("huggingface_hub", fromlist=["hf_hub_download"]).hf_hub_download
 
         repo_id, index_filename, subfolder, revision = _parse_huggingface_checkpoint_url(checkpoint_path)
         logger.info(f"Merging sharded safetensors from Hugging Face: {checkpoint_path}")
@@ -567,7 +568,7 @@ def _download_checkpoint_from_huggingface_url(
     checkpoint_min_free_gb: float | None = None,
 ) -> str:
     """Download a checkpoint from Hugging Face and return local cached path."""
-    from huggingface_hub import hf_hub_download
+    hf_hub_download = __import__("huggingface_hub", fromlist=["hf_hub_download"]).hf_hub_download
 
     repo_id, filename, subfolder, revision = _parse_huggingface_checkpoint_url(url)
     logger.info(f"Downloading checkpoint from Hugging Face: {url}")
@@ -870,7 +871,6 @@ def _load_checkpoint_from_s3(
     credential_path: str,
     map_location: str | torch.device = "cpu",
 ) -> dict[str, torch.Tensor]:
-    """Load checkpoint from S3."""
     from worldfoundry.core.io.filesystem.s3_filesystem import S3FileSystem
 
     logger.info(f"Downloading checkpoint from S3: {s3_path}")
@@ -948,10 +948,8 @@ def _save_to_local_cache(
         os.replace(tmp_path, path)
         sync_directory(directory)
     except Exception as exc:
-        try:
+        with contextlib.suppress(OSError):
             os.remove(tmp_path)
-        except OSError:
-            pass
         _raise_local_cache_disk_error(
             exc,
             path=path,
@@ -1044,10 +1042,7 @@ def load_checkpoint(
             checkpoint_type = "single"
         else:
             ext = _get_checkpoint_extension(checkpoint_path)
-            if ext in (".pt", ".pth", ".ckpt", ".safetensors"):
-                checkpoint_type = "single"
-            else:
-                checkpoint_type = "distributed"
+            checkpoint_type = "single" if ext in (".pt", ".pth", ".ckpt", ".safetensors") else "distributed"
 
     if checkpoint_type == "single":
         state_dict = load_single_checkpoint(

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -46,9 +47,7 @@ def _frames_for_segments(
     fps: int,
 ) -> list[frozenset[str]]:
     fallback = frozenset(
-        _TOKEN_TO_KEY[token]
-        for item in interactions
-        if (token := str(item).strip().lower()) in _TOKEN_TO_KEY
+        _TOKEN_TO_KEY[token] for item in interactions if (token := str(item).strip().lower()) in _TOKEN_TO_KEY
     )
     if not segments:
         return [fallback] * frame_count
@@ -149,6 +148,8 @@ class SanaWMRealtimeSession:
             fps=self.fps,
             first_chunk_frames=self.output_frames,
             steady_chunk_frames=self.output_frames,
+            first_input_frames=self.output_frames - 1,
+            steady_input_frames=self.output_frames - 1,
         )
 
     def runtime_info(self) -> dict[str, Any]:
@@ -163,14 +164,15 @@ class SanaWMRealtimeSession:
 
     def configure(self, *, image: Any, prompt: str, **kwargs: Any) -> dict[str, Any]:
         with self._state_lock:
-            self._prompt = str(prompt).strip()
+            normalized = str(prompt).strip()
             result = self.pipeline.configure_realtime(
                 images=image,
-                prompt=self._prompt,
+                prompt=normalized,
                 fps=self.fps,
                 window_frames=self.num_frames,
                 **kwargs,
             )
+            self._prompt = normalized
             self._configured = True
             return result
 
@@ -194,8 +196,7 @@ class SanaWMRealtimeSession:
         with self._state_lock:
             if not self._configured:
                 raise RuntimeError("SANA-WM realtime session is not configured")
-            if prompt is not None:
-                self.update_prompt(prompt)
+            next_prompt = str(prompt or "").strip() or self._prompt
             frames = _frames_for_segments(
                 control_segments,
                 list(interactions or ()),
@@ -205,8 +206,9 @@ class SanaWMRealtimeSession:
             result = self.pipeline.stream_realtime(
                 interactions=["".join(sorted(keys)) or "none" for keys in frames],
                 seed=seed,
-                prompt=self._prompt,
+                prompt=next_prompt,
             )
+            self._prompt = next_prompt
             result["frames"] = result.get("video", result.get("sample"))
             result["realtime_spec"] = self.realtime_spec().to_payload()
             result["realtime_metrics"] = dict(self.last_metrics)

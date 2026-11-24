@@ -12,7 +12,7 @@ notes:
 - Workspace and TUI generate videos through WorldFoundry model integrations; this runner imports the metric result file.
 - Full validation requires reference assets, generated videos, ViT-L-14.pt, DOVER, and optical-flow metric outputs.
 preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile aigcbench --manifest 
+  worldfoundry.evals.tasks.execution.orchestration.runtime_preflight --profile aigcbench --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/aigcbench.yaml --output-dir 
   tmp/worldfoundry_preflight/aigcbench --json
 python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
@@ -35,7 +35,7 @@ required_packages:
 - numpy
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/aigcbench.yaml
 - id: bundled_prompt_manifest
@@ -53,7 +53,7 @@ optional_imports:
 - cv2
 - pandas
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id

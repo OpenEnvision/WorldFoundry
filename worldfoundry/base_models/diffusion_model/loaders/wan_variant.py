@@ -9,8 +9,8 @@ filename raises :exc:`FileNotFoundError` / :exc:`ValueError`.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
 import torch
 
@@ -42,15 +42,13 @@ def _compatible_state_dict(model, state_dict: dict) -> dict:
             adjusted = source.new_zeros(target.shape)
             common = tuple(
                 slice(0, min(source_size, target_size))
-                for source_size, target_size in zip(source.shape, target.shape)
+                for source_size, target_size in zip(source.shape, target.shape, strict=False)
             )
             adjusted[common] = source[common]
             state_dict = dict(state_dict)
             state_dict[patch_key] = adjusted
     return {
-        key: value
-        for key, value in state_dict.items()
-        if key in model_state and model_state[key].shape == value.shape
+        key: value for key, value in state_dict.items() if key in model_state and model_state[key].shape == value.shape
     }
 
 
@@ -108,6 +106,7 @@ def load_wan_config(
 
 class WanVariantLoadingMixin:
     """Attach a native ``from_pretrained`` constructor to a Wan variant class."""
+
     @classmethod
     def from_pretrained(
         cls,

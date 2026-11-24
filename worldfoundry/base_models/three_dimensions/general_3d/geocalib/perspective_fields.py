@@ -7,16 +7,12 @@
 Adapted from https://github.com/jinlinyi/PerspectiveFields/blob/main/perspective2d/utils/panocam.py
 """
 
-from typing import Tuple
-
 import torch
 from torch.nn import functional as F
 
 from .camera import BaseCamera
 from .gravity import Gravity
 from .misc import J_up_projection, J_vecnorm, SphericalManifold
-
-# flake8: noqa: E266
 
 
 def get_horizon_line(camera: BaseCamera, gravity: Gravity, relative: bool = True) -> torch.Tensor:
@@ -72,7 +68,7 @@ def get_up_field(camera: BaseCamera, gravity: Gravity, normalize: bool = True) -
 
     if hasattr(camera, "dist"):
         d_uv = camera.distort(uv, return_scale=True)[0]  # (..., N, 1)
-        d_uv = torch.diag_embed(d_uv.expand(d_uv.shape[:-1] + (2,)))  # (..., N, 2, 2)
+        d_uv = torch.diag_embed(d_uv.expand(d_uv.shape[:-1] + (2,)))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.  # (..., N, 2, 2)
         offset = camera.up_projection_offset(uv)  # (..., N, 2)
         offset = torch.einsum("...i,...j->...ij", offset, uv)  # (..., N, 2, 2)
 
@@ -123,7 +119,7 @@ def J_up_field(
     # distortion values
     if hasattr(camera, "dist"):
         d_uv = camera.distort(uv, return_scale=True)[0]  # (..., N, 1)
-        d_uv = torch.diag_embed(d_uv.expand(d_uv.shape[:-1] + (2,)))  # (..., N, 2, 2)
+        d_uv = torch.diag_embed(d_uv.expand(d_uv.shape[:-1] + (2,)))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.  # (..., N, 2, 2)
         offset = camera.up_projection_offset(uv)  # (..., N, 2)
         offset_uv = torch.einsum("...i,...j->...ij", offset, uv)  # (..., N, 2, 2)
 
@@ -174,7 +170,7 @@ def J_up_field(
 
     if hasattr(camera, "dist"):
         J_duv = camera.J_distort(uv, wrt="scale2dist")
-        J_duv = torch.diag_embed(J_duv.expand(J_duv.shape[:-1] + (2,)))  # (..., N, 2, 2)
+        J_duv = torch.diag_embed(J_duv.expand(J_duv.shape[:-1] + (2,)))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.  # (..., N, 2, 2)
         J_offset = torch.einsum("...i,...j->...ij", camera.J_up_projection_offset(uv, wrt="dist"), uv)
         J_proj2k1 = torch.einsum("...Nij,...Nj->...Ni", J_duv + J_offset, projected_up2d)
         J_k1 = torch.einsum("...Nij,...Nj->...Ni", J_norm2proj, J_proj2k1)[..., None]
@@ -287,7 +283,7 @@ def get_perspective_field(
     gravity: Gravity,
     use_up: bool = True,
     use_latitude: bool = True,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Get the perspective field from the camera parameters.
 
     Args:
@@ -334,7 +330,7 @@ def J_perspective_field(
     use_latitude: bool = True,
     spherical: bool = False,
     log_focal: bool = False,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Get the jacobian of the perspective field.
 
     Args:

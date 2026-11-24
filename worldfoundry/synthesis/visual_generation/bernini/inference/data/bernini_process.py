@@ -15,7 +15,8 @@ import copy
 import io
 import json
 import random
-from typing import TYPE_CHECKING, Any, Callable, Dict, List
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 import torch
 from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
@@ -45,7 +46,7 @@ def filt_out_source_vae(
 ):
     vae_latents_filted, vae_latents_filted_shape, vae_mask = [], [], []
     if drop_vision:
-        for (vae_emb, shape, is_target) in zip(vae_latents, vae_latent_shape, target_mask):
+        for vae_emb, shape, is_target in zip(vae_latents, vae_latent_shape, target_mask, strict=False):
             if is_target:
                 vae_mask.extend([is_target])
                 vae_latents_filted.append(vae_emb)
@@ -78,31 +79,29 @@ def get_drop_condition(
 
 def rearrange_vae_feature(vae_emb):
     pt, ph, pw = 1, 2, 2
-    patched_vae_emb = rearrange(
-        vae_emb, 'c (t pt) (h ph) (w pw) -> (t h w) c pt ph pw', pt=pt, ph=ph, pw=pw
-    )
+    patched_vae_emb = rearrange(vae_emb, "c (t pt) (h ph) (w pw) -> (t h w) c pt ph pw", pt=pt, ph=ph, pw=pw)
     return patched_vae_emb
 
 
 def packing_vae(
     vae_rope_func: "Callable",
-    vae_type_list: "List[int]",
-    image_inputs: "Dict[str, Any]",
-    video_inputs: "Dict[str, Any]",
+    vae_type_list: "list[int]",
+    image_inputs: "dict[str, Any]",
+    video_inputs: "dict[str, Any]",
     noise_sigma: float,
-    max_vae_frames: int = None,
+    max_vae_frames: int | None = None,
     interpolate_src_id: bool = True,
     max_trained_src_id: int = 5,
 ):
-    image_vae_masks = list(image_inputs.pop('image_vae_mask', []))
-    video_vae_masks = list(video_inputs.pop('video_vae_mask', []))
+    image_vae_masks = list(image_inputs.pop("image_vae_mask", []))
+    video_vae_masks = list(video_inputs.pop("video_vae_mask", []))
 
-    image_vae_list = iter(image_inputs.pop('image_vae_latents', []))
-    image_vae_shape_list = iter(image_inputs.pop('image_vae_shape', []))
+    image_vae_list = iter(image_inputs.pop("image_vae_latents", []))
+    image_vae_shape_list = iter(image_inputs.pop("image_vae_shape", []))
     image_vae_mask_list = iter(image_vae_masks)
 
-    video_vae_list = iter(video_inputs.pop('video_vae_latents', []))
-    video_vae_shape_list = iter(video_inputs.pop('video_vae_shape', []))
+    video_vae_list = iter(video_inputs.pop("video_vae_latents", []))
+    video_vae_shape_list = iter(video_inputs.pop("video_vae_shape", []))
     video_vae_mask_list = iter(video_vae_masks)
 
     # Source ids for the conditioning segments (the target keeps source_id 0).
@@ -171,29 +170,29 @@ def packing_vae(
     if vae_rope_func is not None and len(input_vae_rope) > 0:
         input_vae_rope = torch.cat(input_vae_rope, dim=1)
         input_vae_rope = input_vae_rope.permute(1, 0, 2)
-        packed_vae_latents['input_vae_rope'] = input_vae_rope
+        packed_vae_latents["input_vae_rope"] = input_vae_rope
 
     if len(input_vae_latents) > 0:
         input_vae_latents = torch.cat(input_vae_latents, dim=0)
         vae_seqlen = input_vae_latents.shape[0]
         target_lens = torch.tensor(target_lens)
-        packed_vae_latents['input_vae_latents'] = input_vae_latents
+        packed_vae_latents["input_vae_latents"] = input_vae_latents
     else:
         vae_seqlen = 0
         target_lens = torch.tensor([])
 
-    packed_vae_latents['vae_seqlen'] = torch.tensor([vae_seqlen])
-    packed_vae_latents['target_lens'] = target_lens
+    packed_vae_latents["vae_seqlen"] = torch.tensor([vae_seqlen])
+    packed_vae_latents["target_lens"] = target_lens
 
     if len(target_velocity) > 0:
         target_velocity = torch.cat(target_velocity, dim=0)
-        packed_vae_latents['target_velocity'] = target_velocity
+        packed_vae_latents["target_velocity"] = target_velocity
 
     return packed_vae_latents
 
 
 def bernini_process_sample(
-    sample: Dict[str, Any],
+    sample: dict[str, Any],
     processor: "ProcessorMixin",
     chat_template: "ChatTemplate",
     position_id_func: "Callable",
@@ -203,12 +202,12 @@ def bernini_process_sample(
     text_dropout_rate: float,
     img_dropout_rate: float,
     video_dropout_rate: float,
-    max_vae_frames: int = None,
-    noise_sigma=torch.tensor(0),
-    noise_timestep=torch.tensor(0),
+    max_vae_frames: int | None = None,
+    noise_sigma=torch.tensor(0),  # noqa: B008 - Default evaluated once at definition, as upstream.
+    noise_timestep=torch.tensor(0),  # noqa: B008 - Default evaluated once at definition, as upstream.
     noise_sigma_low=None,
     noise_timestep_low=None,
-    vit_mask_ratio: float = 1.0, # mask all tokens when inference
+    vit_mask_ratio: float = 1.0,  # mask all tokens when inference
     interpolate_src_id: bool = True,
     max_trained_src_id: int = 5,
     **kwargs,
@@ -218,40 +217,32 @@ def bernini_process_sample(
     """
 
     task_name = kwargs.get("source_name", "").split("$")[0].lower()
-    drop_text, drop_video, drop_img = get_drop_condition(
-        text_dropout_rate,
-        img_dropout_rate,
-        video_dropout_rate
-    )
+    drop_text, drop_video, drop_img = get_drop_condition(text_dropout_rate, img_dropout_rate, video_dropout_rate)
 
     conversations = json.loads(sample["inputs"])
 
     token_num_inputs = {}
-    if "image_embeds" in sample and sample['image_embeds'] is not None and len(sample['image_embeds']) > 0:
+    if "image_embeds" in sample and sample["image_embeds"] is not None and len(sample["image_embeds"]) > 0:
         raw_image_embeds = []
         raw_image_grid_thw = []
-        for vit_emb, thw in zip(sample['image_embeds'], sample['image_grid_thw']):
+        for vit_emb, thw in zip(sample["image_embeds"], sample["image_grid_thw"], strict=False):
             vit_emb = _load_tensor_blob(vit_emb, source="Bernini image embedding")
             raw_image_embeds.append(vit_emb)
             raw_image_grid_thw.append(thw)
 
         merge_length = processor.image_processor.merge_size**2
-        token_num_inputs["image"] = (
-            torch.tensor(raw_image_grid_thw).prod(dim=-1) // merge_length
-        )
+        token_num_inputs["image"] = torch.tensor(raw_image_grid_thw).prod(dim=-1) // merge_length
 
-    if "video_embeds" in sample and sample['video_embeds'] is not None and len(sample['video_embeds']) > 0:
+    if "video_embeds" in sample and sample["video_embeds"] is not None and len(sample["video_embeds"]) > 0:
         raw_video_embeds = []
         raw_video_grid_thw = []
-        for vit_emb, thw in zip(sample['video_embeds'], sample['video_grid_thw']):
+        for vit_emb, thw in zip(sample["video_embeds"], sample["video_grid_thw"], strict=False):
             vit_emb = _load_tensor_blob(vit_emb, source="Bernini video embedding")
             raw_video_embeds.append(vit_emb)
             raw_video_grid_thw.append(thw)
 
         merge_length = processor.image_processor.merge_size**2
-        token_num_inputs["video"] = (
-            torch.tensor(raw_video_grid_thw).prod(dim=-1) // merge_length
-        )
+        token_num_inputs["video"] = torch.tensor(raw_video_grid_thw).prod(dim=-1) // merge_length
 
     tokenized_example = chat_template.encode_messages(
         conversations,
@@ -273,15 +264,17 @@ def bernini_process_sample(
             tokenized_example[k] = torch.as_tensor(v)
 
     # Packing vit embeds
-    vit_type_list, vit_img_and_vid_id_list = tokenized_example.pop(
-        'vit_type_list'), tokenized_example.pop('vit_img_and_vid_id_list')
+    vit_type_list, vit_img_and_vid_id_list = (
+        tokenized_example.pop("vit_type_list"),
+        tokenized_example.pop("vit_img_and_vid_id_list"),
+    )
     visual_embeds = []
     image_grid_thw, video_grid_thw = [], []
-    for vit_type, vit_id in zip(vit_type_list, vit_img_and_vid_id_list):
-        if vit_type == 0: # image
+    for vit_type, vit_id in zip(vit_type_list, vit_img_and_vid_id_list, strict=False):
+        if vit_type == 0:  # image
             image_grid_thw.append(raw_image_grid_thw[vit_id])
             visual_embeds.append(raw_image_embeds[vit_id])
-        elif vit_type == 1: # video
+        elif vit_type == 1:  # video
             video_grid_thw.append(raw_video_grid_thw[vit_id])
             visual_embeds.append(raw_video_embeds[vit_id])
 
@@ -291,29 +284,34 @@ def bernini_process_sample(
         video_grid_thw = torch.tensor(video_grid_thw)
     if len(visual_embeds) > 0:
         visual_embeds = torch.cat(visual_embeds, dim=0)
-        tokenized_example['visual_embeds'] = visual_embeds
+        tokenized_example["visual_embeds"] = visual_embeds
     else:
         visual_embeds = torch.randn(0, 3584)
 
-
     input_ids = tokenized_example["input_ids"]
-    tokenized_example["position_ids"] = position_id_func(
-        input_ids=input_ids.unsqueeze(0),
-        image_grid_thw=image_grid_thw if len(image_grid_thw) > 0 else None,
-        video_grid_thw=video_grid_thw if len(video_grid_thw) > 0 else None,
-        attention_mask=tokenized_example["attention_mask"].unsqueeze(0),
-    )[0].squeeze(1).clone()  # (dim, l)
+    tokenized_example["position_ids"] = (
+        position_id_func(
+            input_ids=input_ids.unsqueeze(0),
+            image_grid_thw=image_grid_thw if len(image_grid_thw) > 0 else None,
+            video_grid_thw=video_grid_thw if len(video_grid_thw) > 0 else None,
+            attention_mask=tokenized_example["attention_mask"].unsqueeze(0),
+        )[0]
+        .squeeze(1)
+        .clone()
+    )  # (dim, l)
     tokenized_example["mllm_seqlen"] = tokenized_example["attention_mask"].sum().reshape(1)
 
     image_inputs, video_inputs = {}, {}
     # Packing vae latents
-    image_target_mask, video_target_mask = tokenized_example.pop(
-        'image_target_mask'), tokenized_example.pop('video_target_mask')
+    image_target_mask, video_target_mask = (
+        tokenized_example.pop("image_target_mask"),
+        tokenized_example.pop("video_target_mask"),
+    )
 
-    if sample.get('image_vae_latents', None) is not None and len(sample['image_vae_latents']) > 0:
+    if sample.get("image_vae_latents") is not None and len(sample["image_vae_latents"]) > 0:
         image_vae_latents = []
         image_vae_shape = []
-        for vae_emb, _ in zip(sample['image_vae_latents'], image_target_mask):
+        for vae_emb, _ in zip(sample["image_vae_latents"], image_target_mask, strict=False):
             vae_emb = _load_tensor_blob(vae_emb, source="Bernini image VAE latent")
             _, _, t, h, w = vae_emb.shape
             image_vae_shape.append([t, h, w])
@@ -327,15 +325,15 @@ def bernini_process_sample(
             image_vae_shape,
             image_target_mask,
             drop_img,
-            'image_vae_latents',
-            'image_vae_shape',
-            'image_vae_mask'
+            "image_vae_latents",
+            "image_vae_shape",
+            "image_vae_mask",
         )
 
-    if "video_vae_latents" in sample and len(sample['video_vae_latents']) > 0:
+    if "video_vae_latents" in sample and len(sample["video_vae_latents"]) > 0:
         video_vae_latents = []
         video_vae_shape = []
-        for vae_emb, _ in zip(sample['video_vae_latents'], video_target_mask):
+        for vae_emb, _ in zip(sample["video_vae_latents"], video_target_mask, strict=False):
             vae_emb = _load_tensor_blob(vae_emb, source="Bernini video VAE latent")
             _, _, t, h, w = vae_emb.shape
             video_vae_shape.append([t, h, w])
@@ -349,12 +347,12 @@ def bernini_process_sample(
             video_vae_shape,
             video_target_mask,
             drop_video,
-            'video_vae_latents',
-            'video_vae_shape',
-            'video_vae_mask'
+            "video_vae_latents",
+            "video_vae_shape",
+            "video_vae_mask",
         )
 
-    vae_type_list = tokenized_example.pop('vae_type_list')
+    vae_type_list = tokenized_example.pop("vae_type_list")
 
     if noise_sigma_low is not None:
         image_inputs_copy = copy.deepcopy(image_inputs)
@@ -370,7 +368,7 @@ def bernini_process_sample(
             max_trained_src_id=max_trained_src_id,
         )
         for k, v in packed_vae_latents_low.items():
-            tokenized_example[k + '_low'] = v
+            tokenized_example[k + "_low"] = v
 
     packed_vae_latents = packing_vae(
         vae_rope_func,
@@ -383,13 +381,13 @@ def bernini_process_sample(
         max_trained_src_id=max_trained_src_id,
     )
     tokenized_example.update(packed_vae_latents)
-    tokenized_example['timesteps'] = torch.tensor([noise_timestep])
+    tokenized_example["timesteps"] = torch.tensor([noise_timestep])
     if noise_timestep_low is not None:
-        tokenized_example['timesteps_low'] = torch.tensor([noise_timestep_low])
+        tokenized_example["timesteps_low"] = torch.tensor([noise_timestep_low])
 
     tokenized_example["num_tokens"] = torch.tensor(
         [tokenized_example["vae_seqlen"][0] + tokenized_example["mllm_seqlen"][0]]
     )
 
-    tokenized_example['task_name'] = task_name
+    tokenized_example["task_name"] = task_name
     return [tokenized_example]

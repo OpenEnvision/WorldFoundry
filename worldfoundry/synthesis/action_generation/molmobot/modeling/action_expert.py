@@ -1,17 +1,14 @@
 import math
-from dataclasses import dataclass, field
-from typing import Optional, Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
+from worldfoundry.core.nn.transformer.dit import modulate_sequence as _modulate
+
 from ..config import BaseConfig, D
-
-
-def _modulate(x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
-    """Apply AdaLN-style shift/scale modulation."""
-    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
 class ActionExpertAttention(nn.Module):
@@ -29,7 +26,7 @@ class ActionExpertAttention(nn.Module):
         self.hidden_size = hidden_size
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
 
         self.q_proj = nn.Linear(hidden_size, hidden_size, bias=True)
         self.kv_proj = nn.Linear(hidden_size, hidden_size * 2, bias=True)
@@ -41,8 +38,8 @@ class ActionExpertAttention(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        kv: Optional[torch.Tensor] = None,
-        attn_mask: Optional[torch.Tensor] = None,
+        kv: torch.Tensor | None = None,
+        attn_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -128,7 +125,7 @@ class ActionExpertBlock(nn.Module):
         x: torch.Tensor,
         timestep_embed: torch.Tensor,
         cross_context: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         (
             shift_msa,
@@ -184,8 +181,7 @@ class SinusoidalTimeEmbedding(nn.Module):
         device = timesteps.device
         half_dim = self.dim // 2
         freq = torch.exp(
-            torch.arange(half_dim, device=device, dtype=timesteps.dtype)
-            * (-math.log(10000.0) / max(half_dim - 1, 1))
+            torch.arange(half_dim, device=device, dtype=timesteps.dtype) * (-math.log(10000.0) / max(half_dim - 1, 1))
         )
         args = timesteps[:, None] * freq[None, :]
         emb = torch.cat([torch.sin(args), torch.cos(args)], dim=-1)
@@ -244,9 +240,7 @@ class ActionExpert(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.action_embed = nn.Linear(config.action_dim, config.hidden_size, device=device)
-        self.action_pos_embed = nn.Parameter(
-            torch.zeros(1, config.max_horizon, config.hidden_size, device=device)
-        )
+        self.action_pos_embed = nn.Parameter(torch.zeros(1, config.max_horizon, config.hidden_size, device=device))
         nn.init.trunc_normal_(self.action_pos_embed, std=0.02)
 
         self.time_embed = nn.Sequential(
@@ -256,7 +250,9 @@ class ActionExpert(nn.Module):
             nn.Linear(config.hidden_size, config.hidden_size, device=device),
         )
         self.context_proj = nn.Linear(llm_dim, config.hidden_size, bias=False, device=device)
-        self.context_norm = nn.LayerNorm(config.hidden_size, elementwise_affine=False) if config.context_layer_norm else nn.Identity()
+        self.context_norm = (
+            nn.LayerNorm(config.hidden_size, elementwise_affine=False) if config.context_layer_norm else nn.Identity()
+        )
         self.state_encoder = nn.Linear(config.hidden_size, config.hidden_size, device=device)
         self.state_norm = nn.LayerNorm(config.hidden_size, elementwise_affine=False, eps=1e-6)
 
@@ -274,7 +270,7 @@ class ActionExpert(nn.Module):
         )
         self.final_layer = ActionExpertFinalLayer(config.hidden_size, config.action_dim)
 
-    def _encode_states(self, states: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+    def _encode_states(self, states: torch.Tensor | None) -> torch.Tensor | None:
         if states is None:
             return None
         if states.dim() == 2:
@@ -292,7 +288,7 @@ class ActionExpert(nn.Module):
     def _prepare_context(
         self,
         encoder_hidden_states: Sequence[torch.Tensor],
-        encoded_states: Optional[torch.Tensor],
+        encoded_states: torch.Tensor | None,
     ) -> Sequence[torch.Tensor]:
         contexts = []
         for hidden in encoder_hidden_states:
@@ -305,11 +301,11 @@ class ActionExpert(nn.Module):
 
     def _build_cross_attention_mask(
         self,
-        encoder_attention_mask: Optional[torch.Tensor],
-        encoded_states: Optional[torch.Tensor],
+        encoder_attention_mask: torch.Tensor | None,
+        encoded_states: torch.Tensor | None,
         batch_size: int,
         dtype: torch.dtype,
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         """Build a mask for cross-attention operations.
 
         This function creates an attention mask that determines which tokens in the context
@@ -366,8 +362,8 @@ class ActionExpert(nn.Module):
         actions: torch.Tensor,
         timesteps: torch.Tensor,
         encoder_hidden_states: Sequence[torch.Tensor],
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        state_embeddings: Optional[torch.Tensor] = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        state_embeddings: torch.Tensor | None = None,
         states_mode: str = "cross_attn",
     ) -> torch.Tensor:
         """Forward pass of the ActionExpert model.
@@ -396,9 +392,7 @@ class ActionExpert(nn.Module):
 
         # Ensure the number of encoder hidden states matches the number of transformer blocks
         if len(encoder_hidden_states) != len(self.blocks):
-            raise ValueError(
-                f"Expected {len(self.blocks)} encoder hidden states, got {len(encoder_hidden_states)}"
-            )
+            raise ValueError(f"Expected {len(self.blocks)} encoder hidden states, got {len(encoder_hidden_states)}")
 
         # Embed diffusion timesteps to condition the model
         timestep_embed = self.time_embed(timesteps)
@@ -456,7 +450,7 @@ class ActionExpert(nn.Module):
 
         # Process the embedded actions through each transformer block
         # Each block uses the corresponding context tensor for cross-attention
-        for block, context in zip(self.blocks, contexts):
+        for block, context in zip(self.blocks, contexts, strict=False):
             x = block(x, timestep_embed, context, attn_mask=cross_mask)
 
         # Apply final projection to get the denoised action prediction

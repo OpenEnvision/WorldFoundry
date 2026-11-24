@@ -8,19 +8,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import pytest
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
 
 # ── CM-08: CliUsageError routes to exit 2 ────────────────────────
 
 
 def test_evaluate_usage_raises_cli_usage_error() -> None:
-    from worldfoundry.cli.main import _validate_evaluate_usage
+    from worldfoundry.cli.evaluate import _validate_evaluate_usage
     from worldfoundry.cli.utils import CliUsageError
 
     with pytest.raises(CliUsageError, match="--samples-path requires --embodied-spec"):
@@ -37,7 +33,7 @@ def test_evaluate_usage_raises_cli_usage_error() -> None:
 
 
 def test_evaluate_mutex_flags_raise_cli_usage_error() -> None:
-    from worldfoundry.cli.main import _validate_evaluate_usage
+    from worldfoundry.cli.evaluate import _validate_evaluate_usage
     from worldfoundry.cli.utils import CliUsageError
 
     with pytest.raises(CliUsageError, match="cannot be combined"):
@@ -53,9 +49,13 @@ def test_evaluate_mutex_flags_raise_cli_usage_error() -> None:
         )
 
 
-def test_score_usage_error_exits_two_with_json(capsys: pytest.CaptureFixture[str]) -> None:
+def test_score_usage_error_exits_two_with_json(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     from worldfoundry.cli.main import main
 
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("TERM", "dumb")
     returncode = main(["score", "--benchmark", "does-not-exist-xyz", "--plan-only", "--json"])
     assert returncode == 2
     captured = capsys.readouterr()
@@ -114,44 +114,6 @@ def test_create_mcp_server_uses_absolute_default_root() -> None:
     assert "resolve_mcp_output_root" in source
     assert 'Path(os.environ.get("WORLDFOUNDRY_MCP_RUN_ROOT", "runs/mcp"))' not in source
     assert resolve_mcp_output_root().is_absolute()
-
-
-# ── CM-33: branding follows the invoked entry ────────────────────
-
-
-def test_cli_prog_name_follows_argv(monkeypatch: pytest.MonkeyPatch) -> None:
-    from worldfoundry.cli.utils import cli_prog_name
-
-    monkeypatch.setattr(sys, "argv", ["/usr/bin/worldfoundry", "--help"])
-    assert cli_prog_name() == "worldfoundry"
-    monkeypatch.setattr(sys, "argv", ["/usr/bin/worldfoundry-eval", "--help"])
-    assert cli_prog_name() == "worldfoundry-eval"
-    monkeypatch.setattr(sys, "argv", [str(REPO_ROOT / "worldfoundry" / "cli" / "__main__.py")])
-    assert cli_prog_name() == "worldfoundry-eval"
-
-
-def test_banner_uses_worldfoundry_when_invoked_as_worldfoundry(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    from worldfoundry.cli.main import main
-
-    monkeypatch.setattr(sys, "argv", ["/usr/bin/worldfoundry"])
-    assert main([]) == 0
-    output = capsys.readouterr().out
-    assert "worldfoundry zoo benchmarks" in output
-    assert "worldfoundry-eval zoo benchmarks" not in output
-
-
-def test_help_prog_follows_worldfoundry_entry(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    from worldfoundry.cli.main import main
-
-    monkeypatch.setattr(sys, "argv", ["/usr/bin/worldfoundry"])
-    with pytest.raises(SystemExit) as exc:
-        main(["--help"])
-    assert exc.value.code in {0, None}
-    assert "usage: worldfoundry" in capsys.readouterr().out
 
 
 # ── CM-24 remainder: unused helper gone; query matcher shared ────

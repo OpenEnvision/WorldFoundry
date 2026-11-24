@@ -1,6 +1,6 @@
 ---
 title: Visual Chronometer
-description: "TACO PhyFPS predictor over arbitrary videos. All consistency metrics are lower-is-better. WorldFoundry shares the runtime with PhyFPS-Bench-Gen; it does not invent a board."
+description: "TACO PhyFPS predictor over arbitrary videos. All consistency metrics are lower-is-better. WorldFoundry shares the runtime with PhyFPS-Bench-Gen."
 ---
 
 Visual Chronometer (TACO Group, Texas A&M) predicts **Physical Frames Per Second (PhyFPS)** — the temporal scale implied by visual motion — ignoring container metadata. It is trained with controlled temporal resampling and physics-grounded augmentations (motion blur, rolling shutter). As a WorldFoundry benchmark it scores a **directory of arbitrary videos** (not a fixed prompt suite) with mean PhyFPS plus intra- / inter-video coefficients of variation. **Lower values mean steadier temporal behavior.**
@@ -9,14 +9,14 @@ Sibling generation audit: [PhyFPS-Bench-Gen](/docs/evaluation/benchmark-hub/phyf
 
 Code: [taco-group/Visual_Chronometer](https://github.com/taco-group/Visual_Chronometer). Checkpoint: [`xiangbog/Visual_Chronometer`](https://huggingface.co/xiangbog/Visual_Chronometer) (`vc_common_10_60fps.ckpt`, 10–60 FPS).
 
-WorldFoundry runs `predict.py` in-process through the shared PhyFPS-Bench-Gen wrapper, or imports `results.csv`. Runtime / normalizer surfaces exist; **no release-verified full official run is claimed**.
+WorldFoundry runs `predict.py` in-process through the shared PhyFPS-Bench-Gen wrapper, or imports `results.csv`.
 
 <BenchmarkPageSections id="visual-chronometer" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id visual-chronometer \
   --mode official-validation \
   --official-results-path <results.csv> \
@@ -27,7 +27,7 @@ worldfoundry-eval zoo benchmark-run \
 
 `--generated-artifact-dir` plus `WORLDFOUNDRY_VISUAL_CHRONOMETER_PREDICT_BACKEND` selects local prediction. Env: `WORLDFOUNDRY_VISUAL_CHRONOMETER_RESULTS_PATH`, `WORLDFOUNDRY_VISUAL_CHRONOMETER_ROOT`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/visual-chronometer.yaml`, `worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer`.
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/visual-chronometer.yaml`, `worldfoundry/evals/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer`.
 
 Outputs include `scorecard.json` (primary `visual_chronometer_average`) and `results.csv`.
 

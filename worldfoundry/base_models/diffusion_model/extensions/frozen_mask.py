@@ -42,9 +42,7 @@ class FrozenLatentMaskExtension(DiffusionExtension):
             False,
         )
         if not isinstance(all_ones_semantics, bool):
-            raise TypeError(
-                f"{_WAN_DENOISE_MASK_IS_ALL_ONES} must be a bool when provided"
-            )
+            raise TypeError(f"{_WAN_DENOISE_MASK_IS_ALL_ONES} must be a bool when provided")
         if all_ones_semantics:
             # Pure TI2V text-to-video has no frozen latent region.  The
             # initializer supplies this CPU-known proof so every scheduler
@@ -54,17 +52,13 @@ class FrozenLatentMaskExtension(DiffusionExtension):
         clean = context.conditioning.shared.get("clean_latents")
         mask = context.conditioning.shared.get("denoise_mask")
         if not isinstance(clean, torch.Tensor) or not isinstance(mask, torch.Tensor):
-            raise TypeError(
-                "masked-latent execution requires tensor clean_latents and denoise_mask conditions"
-            )
+            raise TypeError("masked-latent execution requires tensor clean_latents and denoise_mask conditions")
         clean = clean.to(device=latents.device, dtype=latents.dtype)
         mask = mask.to(device=latents.device, dtype=latents.dtype)
         try:
             return latents * mask + clean * (1.0 - mask)
         except RuntimeError as error:
-            raise ValueError(
-                "clean_latents and denoise_mask must broadcast to the generated latent shape"
-            ) from error
+            raise ValueError("clean_latents and denoise_mask must broadcast to the generated latent shape") from error
 
 
 __all__ = ["FrozenLatentMaskExtension"]

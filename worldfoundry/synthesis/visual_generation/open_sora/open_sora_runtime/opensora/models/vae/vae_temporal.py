@@ -1,11 +1,11 @@
-from typing import Tuple, Union
-
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
-from opensora.registry import MODELS
-from opensora.utils.ckpt_utils import load_checkpoint
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import MODELS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.utils.ckpt_utils import (
+    load_checkpoint,
+)
 
 from .utils import DiagonalGaussianDistribution
 
@@ -37,7 +37,7 @@ class CausalConv3d(nn.Module):
         self,
         chan_in,
         chan_out,
-        kernel_size: Union[int, Tuple[int, int, int]],
+        kernel_size: int | tuple[int, int, int],
         pad_mode="constant",
         strides=None,  # allow custom stride
         **kwargs,
@@ -146,12 +146,12 @@ class Encoder(nn.Module):
         self.activation_fn = get_activation_fn(activation_fn)
         self.activate = self.activation_fn()
         self.conv_fn = CausalConv3d
-        self.block_args = dict(
-            conv_fn=self.conv_fn,
-            activation_fn=self.activation_fn,
-            use_conv_shortcut=False,
-            num_groups=self.num_groups,
-        )
+        self.block_args = {
+            "conv_fn": self.conv_fn,
+            "activation_fn": self.activation_fn,
+            "use_conv_shortcut": False,
+            "num_groups": self.num_groups,
+        }
 
         # first layer conv
         self.conv_in = self.conv_fn(
@@ -245,12 +245,12 @@ class Decoder(nn.Module):
         self.activation_fn = get_activation_fn(activation_fn)
         self.activate = self.activation_fn()
         self.conv_fn = CausalConv3d
-        self.block_args = dict(
-            conv_fn=self.conv_fn,
-            activation_fn=self.activation_fn,
-            use_conv_shortcut=False,
-            num_groups=self.num_groups,
-        )
+        self.block_args = {
+            "conv_fn": self.conv_fn,
+            "activation_fn": self.activation_fn,
+            "use_conv_shortcut": False,
+            "num_groups": self.num_groups,
+        }
 
         filters = self.filters * self.channel_multipliers[-1]
         prev_filters = filters
@@ -410,10 +410,7 @@ class VAE_Temporal(nn.Module):
 
     def forward(self, x, sample_posterior=True):
         posterior = self.encode(x)
-        if sample_posterior:
-            z = posterior.sample()
-        else:
-            z = posterior.mode()
+        z = posterior.sample() if sample_posterior else posterior.mode()
         recon_video = self.decode(z, num_frames=x.shape[2])
         return recon_video, posterior, z
 

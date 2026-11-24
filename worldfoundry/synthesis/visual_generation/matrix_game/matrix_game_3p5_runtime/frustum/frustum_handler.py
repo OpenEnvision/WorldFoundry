@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import contextlib
 import warnings
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -197,11 +197,53 @@ def fix_extrinsic_translation_axis_and_scale(T, trans_axis_order="xyz", flip_up_
     return Tout
 
 
-# 权重
+def _w2c_camera_center(w2c: np.ndarray) -> np.ndarray:
+    """Camera center ``-R^T @ t`` in world coordinates of a (4, 4) w2c matrix."""
+    R = w2c[:3, :3]
+    t = w2c[:3, 3]
+    return -R.T @ t
+
+
+def _select_by_optical_axis_angle(
+    w2c_candidates: np.ndarray, w2c_query: np.ndarray, angle_topk: int, angle_threshold: float | None
+) -> tuple[np.ndarray, np.ndarray]:
+    """Select candidates whose optical axes are closest in angle to the query's.
+
+    Without ``angle_threshold`` this keeps the ``angle_topk`` smallest angles; with it, all candidates
+    within the threshold, or the ``angle_topk`` smallest when fewer qualify.
+
+    Args:
+        w2c_candidates: Non-empty candidate w2c extrinsics (N, 4, 4).
+        w2c_query: Query w2c extrinsic (4, 4).
+        angle_topk: Number of smallest-angle candidates to keep.
+        angle_threshold: Optional angle threshold in degrees.
+
+    Returns:
+        ``(selected_indices, angles_deg)``: the selected candidate indices and the angles of all N candidates.
+    """
+    N = w2c_candidates.shape[0]
+    # Optical axis (camera z axis in world coordinates): with R = w2c[:3, :3], c2w[:3, :3] = R^T, so the
+    # axis is c2w[:3, 2] = R^T[:, 2] = R[2, :3], the third row of the w2c rotation.
+    dirs_cand = w2c_candidates[:, 2, :3]  # (N, 3)
+    dir_query = w2c_query[2, :3]  # (3,)
+    dirs_cand = dirs_cand / (np.linalg.norm(dirs_cand, axis=1, keepdims=True) + 1e-12)
+    dir_query = dir_query / (np.linalg.norm(dir_query) + 1e-12)
+
+    cos_angles = np.clip(dirs_cand @ dir_query, -1.0, 1.0)  # (N,)
+    angles_deg = np.degrees(np.arccos(cos_angles))  # (N,)
+
+    if angle_threshold is not None:
+        mask = angles_deg <= float(angle_threshold)
+        if mask.sum() >= min(angle_topk, N):
+            return np.where(mask)[0], angles_deg
+    return np.argsort(angles_deg)[: min(angle_topk, N)], angles_deg
+
+
+# Candidate scoring weights
 DIVERSITY_WEIGHT = 0
 STABILITY__WEIGHT = 0
 FIRST_FRAME_PENALTY = 0
-VOTE_WEIGHT = 0  # 组内投票一致性权重
+VOTE_WEIGHT = 0  # Weight of vote agreement within a query group
 
 try:
     from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.api import (
@@ -273,7 +315,7 @@ DepthEstimator = Callable[[Sequence[np.ndarray]], np.ndarray]
 def make_hw_grid(H, W):
     h = np.arange(H)
     w = np.arange(W)
-    hh, ww = np.meshgrid(h, w, indexing="ij")  # 保证第一维是H
+    hh, ww = np.meshgrid(h, w, indexing="ij")  # First dimension is H
     grid = np.stack([hh, ww], axis=-1)  # (H, W, 2)
     return grid
 
@@ -351,16 +393,16 @@ def reproject_pixels_nd_to_nd(
     # invert the unique 3x3 once and broadcast the result -- bit-identical
     # (same LAPACK inv on the same matrix) but ~N_pixels cheaper.
     _K_old_single = K_old.shape == (3, 3)
-    if not K_old.shape == lead + (
+    if not K_old.shape == lead + (  # noqa: SIM201, RUF005 - Keeps `not ==` for operands that may compare elementwise.; Keeps `+` semantics for the operand's runtime type.
         3,
         3,
     ):
-        K_old = np.broadcast_to(K_old, lead + (3, 3))
-    if not T_old_w2c.shape == lead + (
+        K_old = np.broadcast_to(K_old, lead + (3, 3))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+    if not T_old_w2c.shape == lead + (  # noqa: SIM201, RUF005 - Keeps `not ==` for operands that may compare elementwise.; Keeps `+` semantics for the operand's runtime type.
         4,
         4,
     ):
-        T_old_w2c = np.broadcast_to(T_old_w2c, lead + (4, 4))
+        T_old_w2c = np.broadcast_to(T_old_w2c, lead + (4, 4))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     # Normalize new cam shapes:
     # - if (3,3)/(4,4), broadcast to lead
@@ -371,18 +413,18 @@ def reproject_pixels_nd_to_nd(
         T_new_w2c = T_new_w2c[0]
 
     if K_new.shape == (3, 3):
-        K_new = np.broadcast_to(K_new, lead + (3, 3))
+        K_new = np.broadcast_to(K_new, lead + (3, 3))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     if T_new_w2c.shape == (4, 4):
-        T_new_w2c = np.broadcast_to(T_new_w2c, lead + (4, 4))
+        T_new_w2c = np.broadcast_to(T_new_w2c, lead + (4, 4))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
-    assert K_new.shape == lead + (
+    assert K_new.shape == lead + (  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         3,
         3,
-    ), f"K_new must be {lead + (3, 3)} or (3,3), got {K_new.shape}"
-    assert T_new_w2c.shape == lead + (
+    ), f"K_new must be {lead + (3, 3)} or (3,3), got {K_new.shape}"  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+    assert T_new_w2c.shape == lead + (  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         4,
         4,
-    ), f"T_new_w2c must be {lead + (4, 4)} or (4,4), got {T_new_w2c.shape}"
+    ), f"T_new_w2c must be {lead + (4, 4)} or (4,4), got {T_new_w2c.shape}"  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     # (h,w)->(v,u)
     v = pix_hw[..., 0]
@@ -395,7 +437,7 @@ def reproject_pixels_nd_to_nd(
     if _K_old_single:
         # Invert the unique 3x3 once, then broadcast: identical values to
         # ``inv(broadcast(K))`` but avoids the per-pixel re-inversion.
-        invK_old = np.broadcast_to(np.linalg.inv(K_old[(0,) * len(lead)]), lead + (3, 3))
+        invK_old = np.broadcast_to(np.linalg.inv(K_old[(0,) * len(lead)]), lead + (3, 3))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     else:
         invK_old = np.linalg.inv(K_old)  # (...,3,3)
     rays = np.einsum("...ij,...j->...i", invK_old, pix_homo)  # (...,3)
@@ -414,7 +456,7 @@ def reproject_pixels_nd_to_nd(
 
     zc_new = Xc_new[..., 2]  # (...)
 
-    # 在 pinhole 相机模型中，通常 z>0 才表示点位于相机前方，才可视为有效投影
+    # A pinhole projection is valid only for points in front of the camera (z > 0).
     valid_mask = np.isfinite(zc_new) & (zc_new > 1e-2)
 
     # normalize + project with per-point K_new
@@ -422,7 +464,7 @@ def reproject_pixels_nd_to_nd(
         denom = np.where(valid_mask, zc_new, 1.0)
     else:
         denom = zc_new + np.where(zc_new >= 0, eps, -eps)
-        # 避免无效点参与除法，后续会统一写成 NaN
+        # Invalid points are not divided; their coordinates stay NaN.
         denom = np.where(valid_mask, denom, 1.0)
 
     x = np.full_like(zc_new, np.nan, dtype=np.result_type(Xc_new.dtype, np.float32))
@@ -437,7 +479,7 @@ def reproject_pixels_nd_to_nd(
     v_new = uv1[..., 1]
 
     pix_new_hw = np.stack([v_new, u_new], axis=-1)  # (...,2) float
-    # 将无效点显式标记为 -1，便于下游直接按 mask 或 NaN 过滤
+    # Mark invalid points with -10000 so downstream code can filter them.
     pix_new_hw = np.where(valid_mask[..., None], pix_new_hw, -10000)
 
     return pix_new_hw, zc_new, Xw, Xc_new
@@ -455,8 +497,8 @@ class SourceCache:
     w2c: np.ndarray  # (T, 4, 4)
     camera_centers: np.ndarray  # (T, 3)
     depths: np.ndarray  # (T, H, W)
-    is_keyframe: np.ndarray  # (T,) bool，硬性关键帧标记
-    soft_key_score: np.ndarray  # (T,) float32，软性关键分数，范围 [0,1]
+    is_keyframe: np.ndarray  # (T,) bool, hard keyframe flags
+    soft_key_score: np.ndarray  # (T,) float32, soft keyframe scores in [0, 1]
 
     # ---- helpers ----
     @property
@@ -466,11 +508,11 @@ class SourceCache:
     def local_to_global(self, local_idx: int) -> int:
         return int(self.first_index + local_idx)
 
-    def global_to_local(self, global_idx: int) -> Optional[int]:
+    def global_to_local(self, global_idx: int) -> int | None:
         li = int(global_idx - self.first_index)
         return li if 0 <= li < self.num_frames else None
 
-    def all_global_indices(self) -> List[int]:
+    def all_global_indices(self) -> list[int]:
         start = int(self.first_index)
         end = int(self.first_index + self.num_frames)
         return list(range(start, end))
@@ -496,19 +538,19 @@ class FrustumHandler:
         self,
         intrinsic: np.ndarray,
         *,
-        image_size: Optional[Tuple[int, int]] = None,
-        grid_size: Tuple[int, int] = (64, 64),
-        point_stride: Optional[int] = None,
-        depth_inf_thresh: Optional[float] = None,
+        image_size: tuple[int, int] | None = None,
+        grid_size: tuple[int, int] = (64, 64),
+        point_stride: int | None = None,
+        depth_inf_thresh: float | None = None,
         is_c2w: bool = True,
         trans_axis_order: str = "xyz",
         flip_up_sign: bool = False,
         use_gpu: bool = True,  # kept for compatibility (not toggling logic here)
-        depth_estimator: Optional[DepthEstimator] = None,
-        depth_model_ckpt: Optional[str] = None,
-        depth_model_config: Optional[Dict] = None,
+        depth_estimator: DepthEstimator | None = None,
+        depth_model_ckpt: str | None = None,
+        depth_model_config: dict | None = None,
         depth_infer_fps: int = 30,
-        depth_input_size: Optional[int] = None,
+        depth_input_size: int | None = None,
         depth_fp32: bool = False,
         keyframe_rot_thresh_deg: float = 45,
         keyframe_trans_thresh: float = 1,
@@ -545,31 +587,31 @@ class FrustumHandler:
         self._depth_input_size = depth_input_size
         self._depth_fp32 = bool(depth_fp32)
 
-        # 关键帧参数：硬阈值 + 时间强制阈值
+        # Keyframe thresholds: rotation, translation and maximum interval
         self._keyframe_rot_thresh_deg = float(keyframe_rot_thresh_deg)
         self._keyframe_trans_thresh = float(keyframe_trans_thresh)
         self._keyframe_max_interval = max(1, int(keyframe_max_interval))
 
-        # VAE 空间下采样比 (latent ↔ pixel). WAN VAE 默认 16, 不同 VAE 需调
-        # 此参数影响 reproject 时 pix_hw 的尺度换算与回换算 (proj/stride).
+        # Spatial downsampling factor of the VAE (latent <-> pixel), 16 for the WAN VAE; it scales pix_hw
+        # in reprojection (proj/stride).
         if int(latent_stride) <= 0:
             raise ValueError(f"latent_stride must be positive, got {latent_stride}")
         self._latent_stride = int(latent_stride)
 
         # Cache & matrices
-        self._cache: Optional[SourceCache] = None
+        self._cache: SourceCache | None = None
         self.depths = []
-        self._Kpix: Optional[np.ndarray] = None
+        self._Kpix: np.ndarray | None = None
         self._Kpixs = []
-        self._Kpix_inv: Optional[np.ndarray] = None
+        self._Kpix_inv: np.ndarray | None = None
         self._fixed_intrinsics = bool(fixed_intrinsics)
-        self._stride: Optional[int] = None
+        self._stride: int | None = None
         self.extrinsics = []
         self.frames = []
         if init_extrinsic is not None:
             self.last_extrinsic = init_extrinsic
         else:
-            self.last_extrinsic = np.eye(4)[None, ...]  # 用于对齐新加入的相机位姿
+            self.last_extrinsic = np.eye(4)[None, ...]  # Aligns newly registered camera poses
 
     @staticmethod
     def _compute_view_change_for_points(points_world, source_w2c, query_w2c):
@@ -595,14 +637,14 @@ class FrustumHandler:
         return np.stack([ratio, phi, theta], axis=-1).astype(np.float32)
 
     @contextlib.contextmanager
-    def _timing_scope(self, name: str, metadata: Optional[Dict] = None):
+    def _timing_scope(self, name: str, metadata: dict | None = None):
         del name, metadata
         yield self
 
     # --------------------------------------------------------------------- #
     # Public API
     # --------------------------------------------------------------------- #
-    def get_state(self) -> Dict:
+    def get_state(self) -> dict:
         """Get a serializable snapshot of the handler's state (for checkpointing, etc.)."""
         state = {
             "_Kpix": self._Kpix,
@@ -615,13 +657,13 @@ class FrustumHandler:
         }
         return state
 
-    def load_state(self, state: Dict, clip_num) -> None:
+    def load_state(self, state: dict, clip_num) -> None:
         """Load a state snapshot previously obtained from get_state()."""
         self._Kpix = state.get("_Kpix")
         self._image_size = state.get("image_size")
         self._grid_size = state.get("grid_size")
-        self.depths = state.get("depths", [])[clip_num:]  # 只保留最近的 depth_infer_fps 帧
-        self.extrinsics = state.get("extrinsics", [])[clip_num:]  # 只保留最近的 depth_infer_fps 帧
+        self.depths = state.get("depths", [])[clip_num:]  # Keep the most recent depth_infer_fps frames
+        self.extrinsics = state.get("extrinsics", [])[clip_num:]  # Keep the most recent depth_infer_fps frames
         self.frames = state.get("frames", [])[clip_num:]
         self._is_c2w = state.get("is_c2w", True)
         self.last_extrinsic = self.extrinsics[-1] if self.extrinsics else np.eye(4)
@@ -697,9 +739,9 @@ class FrustumHandler:
         *,
         extrinsics=None,
         intrinsics=None,
-        depths: Optional[np.ndarray] = None,
-        start_index: Optional[int] = None,
-        overwrite_stride: Optional[int] = None,
+        depths: np.ndarray | None = None,
+        start_index: int | None = None,
+        overwrite_stride: int | None = None,
         force_using_input_extrinics: bool = False,
         cat_to_start=False,
         cache_frames: bool = False,
@@ -789,8 +831,7 @@ class FrustumHandler:
 
         # ---- Prepare depths (for NEW frames only) ----
         if depths is None:
-            # 检测模型类型: DepthAnything3 或 VideoDepthAnything
-
+            # The depth estimator is DepthAnything3 (or compatible) or VideoDepthAnything.
             self._depth_estimator = self._depth_estimator.to(device)
 
             # Route through this branch for DA3 itself OR any DA3-compatible
@@ -800,24 +841,21 @@ class FrustumHandler:
             if (HAS_DA3 and isinstance(self._depth_estimator, DepthAnything3)) or getattr(
                 self._depth_estimator, "da3_compatible", False
             ):
-                # 使用 Depth Anything V3 / DA3 兼容估计器推理
                 model_name = getattr(self._depth_estimator, "model_name", "unknown")
-                print(f"注册帧深度/位姿推理(estimator={model_name})")
+                print(f"Estimating depth and pose of registered frames (estimator={model_name})")
 
-                # 将 numpy 数组 frames 转换为 PIL Images (DA3 需要)
+                # DA3 takes PIL images.
                 from PIL import Image
 
                 pil_frames = []
                 for frame in frames:
                     if isinstance(frame, np.ndarray):
-                        # 确保是 uint8 格式
                         if frame.dtype != np.uint8:
                             frame = (frame * 255).astype(np.uint8) if frame.max() <= 1.0 else frame.astype(np.uint8)
                         pil_frames.append(Image.fromarray(frame))
                     else:
                         pil_frames.append(frame)
 
-                # DA3 推理
                 with torch.no_grad():
                     prediction = self._depth_estimator.inference(
                         pil_frames,
@@ -900,8 +938,7 @@ class FrustumHandler:
                             self._Kpixs.append(normalized_intr)
                             self._Kpix = normalized_intr.copy()
             else:
-                # 使用原有的 VideoDepthAnything 推理
-                print("使用 VideoDepthAnything 推理深度图")
+                print("Estimating depth maps with VideoDepthAnything")
                 depths, _ = self._depth_estimator.infer_video_depth(
                     frames,
                     target_fps=self._depth_infer_fps,
@@ -967,7 +1004,7 @@ class FrustumHandler:
         latent_frame_idx: int,
         total_frames: int,
         frames_per_latent: int = 4,
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         """Map a latent-frame index to the covered raw-frame half-open interval [start, end)."""
         latent_frame_idx = int(latent_frame_idx)
         total_frames = int(total_frames)
@@ -995,7 +1032,7 @@ class FrustumHandler:
         *,
         frames_per_latent: int = 1,
     ) -> int:
-        """将原始 frame 索引映射为 latent 索引，支持 1:1 与 4:1 压缩模式。"""
+        """Map a frame index to a latent index for 1:1 or N:1 temporal compression."""
         frame_id = int(frame_id)
         total_latents = int(total_latents)
         if total_latents <= 0:
@@ -1005,19 +1042,19 @@ class FrustumHandler:
         if frames_per_latent == 1:
             latent_id = frame_id
         else:
-            # 与 _latent_frame_to_frame_span 的分组规则保持一致：
-            # latent0 覆盖 frame0，随后每个 latent 覆盖 frames_per_latent 帧。
+            # Same grouping as _latent_frame_to_frame_span: latent 0 covers frame 0 and each later
+            # latent covers frames_per_latent frames.
             latent_id = 0 if frame_id <= 0 else (1 + (frame_id - 1) // frames_per_latent)
         return int(np.clip(latent_id, 0, total_latents - 1))
 
     @staticmethod
     def _coerce_source_valid_masks(
-        source_valid_masks: Optional[torch.Tensor | np.ndarray],
+        source_valid_masks: torch.Tensor | np.ndarray | None,
         *,
         total_latents: int,
         H_lat: int,
         W_lat: int,
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         """Validate optional source-latent validity masks.
 
         ``True`` means the source latent pixel may participate in frustum
@@ -1038,10 +1075,10 @@ class FrustumHandler:
     @staticmethod
     def _coerce_memory_K(
         *,
-        K: Optional[np.ndarray],
-        memory_K: Optional[np.ndarray],
+        K: np.ndarray | None,
+        memory_K: np.ndarray | None,
         M: int,
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """Resolve the public ``select_candidates`` / ``fuse_candidates``
         ``K`` + ``memory_K`` kwargs into the single internal ``K_override``
         array.
@@ -1075,7 +1112,7 @@ class FrustumHandler:
         self,
         frame_id: int,
         Ks=None,
-        K_override: Optional[np.ndarray] = None,
+        K_override: np.ndarray | None = None,
     ) -> np.ndarray:
         # Resolve the per-frame intrinsic. Two K_override shapes supported:
         #   * (3, 3)   -- legacy: every frame shares one K.
@@ -1118,7 +1155,7 @@ class FrustumHandler:
         w2c: np.ndarray,
         geometry_rep_mode: str = "single_frame",
         frames_per_latent: int = 4,
-    ) -> Dict[str, np.ndarray]:
+    ) -> dict[str, np.ndarray]:
         """Resolve a latent frame into representative geometry.
 
         Returns a dict with:
@@ -1247,7 +1284,7 @@ class FrustumHandler:
         H_lat: int,
         W_lat: int,
         depth_reduce_mode: str,
-    ) -> Tuple:
+    ) -> tuple:
         """Key scoped to a specific depth array and representative geometry."""
         return (
             id(depths),
@@ -1262,10 +1299,10 @@ class FrustumHandler:
     @staticmethod
     def _clipped_proj_bbox(
         projected_hw: np.ndarray,
-        canvas_hw: Tuple[int, int],
+        canvas_hw: tuple[int, int],
         *,
         outlier_clip_factor: float = 1.0,
-    ) -> Optional[Tuple[float, float, float, float]]:
+    ) -> tuple[float, float, float, float] | None:
         """Compute the canvas-clipped (h0, h1, w0, w1) bounding box of a
         projected point cloud, using exactly the same sentinel filter and
         outlier-clip semantics as ``_compute_canvas_iou_score``'s bbox
@@ -1304,8 +1341,8 @@ class FrustumHandler:
 
     @staticmethod
     def _bbox_iou_on_canvas(
-        a: Optional[Tuple[float, float, float, float]],
-        b: Optional[Tuple[float, float, float, float]],
+        a: tuple[float, float, float, float] | None,
+        b: tuple[float, float, float, float] | None,
     ) -> float:
         """Axis-aligned bbox IoU between two candidate projection bboxes.
 
@@ -1330,11 +1367,11 @@ class FrustumHandler:
 
     @staticmethod
     def _pick_candidates_with_nms(
-        scored: List[Dict],
+        scored: list[dict],
         k: int,
-        mode: Optional[str],
-        thresholds: Dict[str, float],
-    ) -> List[Dict]:
+        mode: str | None,
+        thresholds: dict[str, float],
+    ) -> list[dict]:
         """Greedy NMS-style candidate picker.
 
         Inputs:
@@ -1375,7 +1412,7 @@ class FrustumHandler:
         temp_gap = int(thresholds.get("min_temporal_gap", 0))
         pose_thr = float(thresholds.get("pose_distance_threshold", 0.0))
 
-        def is_proximate(cand: Dict, picked_one: Dict) -> bool:
+        def is_proximate(cand: dict, picked_one: dict) -> bool:
             if mode == "projection_iou":
                 iou = FrustumHandler._bbox_iou_on_canvas(cand.get("proj_bbox"), picked_one.get("proj_bbox"))
                 return iou >= proj_thr
@@ -1395,7 +1432,7 @@ class FrustumHandler:
                 f"Unsupported candidate_nms_mode={mode!r}. Use 'projection_iou', 'temporal', 'pose' or None."
             )
 
-        picked: List[Dict] = []
+        picked: list[dict] = []
         used = [False] * len(scored)
         picked.append(scored[0])
         used[0] = True
@@ -1441,8 +1478,8 @@ class FrustumHandler:
         query_reference_frame: int = 2,
         coverage_grid_downsample: int = 4,
         coverage_pool_stride: int = 2,
-        depth_downsample_pool: Optional[Dict] = None,
-    ) -> List[List[int]]:
+        depth_downsample_pool: dict | None = None,
+    ) -> list[list[int]]:
         """Fast UNION-coverage candidate selection (the ``coverage`` picker).
 
         A fully VECTORISED, FULL-POOL greedy-coverage selector that avoids both
@@ -1557,14 +1594,14 @@ class FrustumHandler:
         masks[gg, mm, ci[gg, mm, pp], cj[gg, mm, pp]] = True
 
         # ---- per-group greedy union-coverage pick over the full pool ----
-        out: List[List[int]] = []
+        out: list[list[int]] = []
         flat = masks.reshape(n_groups, M, Hd * Wd)
         area = flat.sum(axis=2)  # (Qg, M)
         for g in range(n_groups):
             mg = flat[g]
             union = np.zeros(Hd * Wd, dtype=bool)
             avail = np.ones(M, dtype=bool)
-            picked: List[int] = []
+            picked: list[int] = []
             for _ in range(cpqg):
                 gain = (mg & ~union).sum(axis=1)
                 gain[~avail] = -1
@@ -1594,9 +1631,9 @@ class FrustumHandler:
 
     @staticmethod
     def _pick_candidates_by_coverage_greedy(
-        scored: List[Dict],
+        scored: list[dict],
         k: int,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Greedy UNION-coverage candidate picker.
 
         Unlike ``_pick_candidates_with_nms`` (which seeds with the single
@@ -1637,7 +1674,7 @@ class FrustumHandler:
         if union is None:
             return list(scored[:k])
 
-        picked: List[Dict] = []
+        picked: list[dict] = []
         used = [False] * len(scored)
         while len(picked) < k:
             best_i, best_gain = None, 0
@@ -1669,7 +1706,7 @@ class FrustumHandler:
     def _compute_canvas_iou_score(
         self,
         projected_hw: np.ndarray,
-        canvas_hw: Tuple[int, int],
+        canvas_hw: tuple[int, int],
         *,
         iou_mode: str = "bbox",
         iou_mix_weight: float = 0.5,
@@ -1773,10 +1810,10 @@ class FrustumHandler:
         H_lat: int,
         W_lat: int,
         depth_reduce_mode: str = "nearest",
-        depth_downsample_pool: Optional[Dict] = None,
-        depth_downsample_key: Optional[Tuple] = None,
+        depth_downsample_pool: dict | None = None,
+        depth_downsample_key: tuple | None = None,
         grid_downsample: int = 1,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Forward warp the (downsampled) memory latent grid into the query camera.
 
         old=memory and new=query: depth, K, pose are all consistent on the
@@ -1846,8 +1883,8 @@ class FrustumHandler:
     @staticmethod
     def _resolve_query_K_for_group(
         *,
-        query_K_one: Optional[np.ndarray],
-        K_override: Optional[np.ndarray],
+        query_K_one: np.ndarray | None,
+        K_override: np.ndarray | None,
         fallback_K: np.ndarray,
     ) -> np.ndarray:
         """Resolve the (3,3) query-side intrinsic for a single query group.
@@ -1888,16 +1925,16 @@ class FrustumHandler:
         depths: np.ndarray,
         w2c: np.ndarray,
         Ks=None,
-        K_override: Optional[np.ndarray] = None,
-        query_K_one: Optional[np.ndarray] = None,
+        K_override: np.ndarray | None = None,
+        query_K_one: np.ndarray | None = None,
         geometry_rep_mode: str = "second_frame",
         iou_mode: str = "bbox",
         frames_per_latent: int = 4,
-        depth_downsample_pool: Optional[Dict] = None,
+        depth_downsample_pool: dict | None = None,
         return_coverage_mask: bool = False,
         depth_reduce_mode: str = "block_median",
         coverage_grid_downsample: int = 1,
-    ) -> Tuple[float, Dict[str, np.ndarray]]:
+    ) -> tuple[float, dict[str, np.ndarray]]:
         rep = self._build_group_representative_geometry(
             candidate_latent_frame_idx,
             depths=depths,
@@ -1998,28 +2035,28 @@ class FrustumHandler:
         depths: np.ndarray,
         w2c: np.ndarray,
         Ks=None,
-        K_override: Optional[np.ndarray] = None,
-        query_K: Optional[np.ndarray] = None,
+        K_override: np.ndarray | None = None,
+        query_K: np.ndarray | None = None,
         candidates_per_query_group: int = 1,
-        coarse_candidate_groups: Optional[int] = None,
-        angle_threshold: Optional[float] = None,
-        distance_threshold: Optional[float] = None,
-        temporal_threshold: Optional[int] = None,
+        coarse_candidate_groups: int | None = None,
+        angle_threshold: float | None = None,
+        distance_threshold: float | None = None,
+        temporal_threshold: int | None = None,
         iou_mode: str = "bbox",
         geometry_rep_mode: str = "second_frame",
         frames_per_latent: int = 4,
-        candidate_nms_mode: Optional[str] = None,
+        candidate_nms_mode: str | None = None,
         candidate_nms_projection_iou_threshold: float = 0.7,
         candidate_nms_min_temporal_gap: int = 0,
         candidate_nms_pose_distance_threshold: float = 0.0,
         candidate_nms_pool_multiplier: float = 2.0,
         query_reference_frame: int = 2,
-        depth_downsample_pool: Optional[Dict] = None,
+        depth_downsample_pool: dict | None = None,
         coverage_grid_downsample: int = 1,
-    ) -> Tuple[List[List[int]], List[List[int]], List[List[int]], List[List[int]]]:
+    ) -> tuple[list[list[int]], list[list[int]], list[list[int]], list[list[int]]]:
         Q = int(query_extrinsics.shape[0])
         if Q % 4 != 0:
-            raise ValueError(f"query_extrinsics 数量必须是4的倍数, 当前 Q={Q}")
+            raise ValueError(f"The number of query_extrinsics must be a multiple of 4, got Q={Q}")
         query_reference_offset = self._query_reference_offset(query_reference_frame)
 
         if candidate_nms_mode is not None and candidate_nms_mode not in {
@@ -2064,14 +2101,14 @@ class FrustumHandler:
         # enough non-proximate options to honour the request. Clamp to the
         # total number of candidate groups available.
         if candidate_nms_mode is not None:
-            coarse_k = int(round(coarse_k * float(candidate_nms_pool_multiplier)))
+            coarse_k = int(round(coarse_k * float(candidate_nms_pool_multiplier)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
             coarse_k = max(coarse_k, candidates_per_query_group)
             coarse_k = min(coarse_k, len(candidate_gids))
 
-        selected_group_ids: List[List[int]] = []
-        selected_frame_ids: List[List[int]] = []
-        keyframe_group_ids: List[List[int]] = []
-        keyframe_frame_ids: List[List[int]] = []
+        selected_group_ids: list[list[int]] = []
+        selected_frame_ids: list[list[int]] = []
+        keyframe_group_ids: list[list[int]] = []
+        keyframe_frame_ids: list[list[int]] = []
 
         num_query_groups = Q // 4
         # Per-query-frame K: when ``query_K`` is supplied, derive a single
@@ -2209,26 +2246,26 @@ class FrustumHandler:
         depths=None,
         K=None,
         candidates_per_query_group: int = 1,
-        keyframe_candidate_min_count: Optional[int] = 0,
-        keyframe_candidate_max_count: Optional[int] = 0,
+        keyframe_candidate_min_count: int | None = 0,
+        keyframe_candidate_max_count: int | None = 0,
         keyframe_candidate_ratio: float = 0,
-        distance_threshold: Optional[float] = None,
-        temporal_threshold: Optional[int] = None,
-        angle_threshold: Optional[float] = None,
+        distance_threshold: float | None = None,
+        temporal_threshold: int | None = None,
+        angle_threshold: float | None = None,
         diversity_weight: float = DIVERSITY_WEIGHT,
         vote_weight: float = VOTE_WEIGHT,
         stability_weight: float = STABILITY__WEIGHT,
         first_frame_penalty: float = FIRST_FRAME_PENALTY,
         fuse_mode: str = "masked_mean",
         fill_ratio_threshold: float = 0.95,
-        fill_candidate_limit: Optional[int] = None,
+        fill_candidate_limit: int | None = None,
         return_candidate_frame_ids: bool = False,
         return_revgrid: bool = False,
         zbuffer_depth_preference: str = "near",
         interpolation_mode: str = "bilinear",
         geometry_rep_mode: str = "second_frame",
-    ) -> Tuple[
-        Dict[int, Dict[str, np.ndarray]],
+    ) -> tuple[
+        dict[int, dict[str, np.ndarray]],
         np.ndarray,
         np.ndarray,
         np.ndarray,
@@ -2244,7 +2281,7 @@ class FrustumHandler:
         keyframe_mask = None
         if w2c is None and depths is None:
             cache = self._require_cache()
-            w2c = cache.w2c.copy()  # (T, 4, 4) 已缓存的所有源帧 w2c
+            w2c = cache.w2c.copy()  # (T, 4, 4) w2c of all cached source frames
             depths = cache.depths.copy()
             keyframe_mask = cache.is_keyframe.copy()
             # w2c_backup = w2c.copy()
@@ -2256,7 +2293,6 @@ class FrustumHandler:
         if query_extrinsics.ndim != 3 or query_extrinsics.shape[1:] != (4, 4):
             raise ValueError("query_extrinsics must have shape (Q,4,4).")
 
-        # 将候选分组投票逻辑抽成类方法，避免 query_hits_mode_old 过长
         (
             _selected_group_ids,
             candidate_frame_ids,
@@ -2280,8 +2316,10 @@ class FrustumHandler:
         )
         iqx = 1
         queried_latents = []
-        queried_revgrids: List[np.ndarray] = []
-        for frame_candidates, keyframe_frame_candidates in zip(candidate_frame_ids, keyframe_candidate_frame_ids):
+        queried_revgrids: list[np.ndarray] = []
+        for frame_candidates, keyframe_frame_candidates in zip(
+            candidate_frame_ids, keyframe_candidate_frame_ids, strict=False
+        ):
             keyframe_frame_candidates = []
             fused_out = self._fuse_group_latent_with_keyframes(
                 frame_candidates=frame_candidates,
@@ -2308,7 +2346,7 @@ class FrustumHandler:
             iqx += 4
         output = torch.cat(queried_latents, dim=1)
         revgrid_output = np.stack(queried_revgrids, axis=0) if return_revgrid else None
-        # 按需返回每个 query-group 的候选帧 id 列表（长度为 candidates_per_query_group）
+        # Optionally return the candidate frame ids of each query group (candidates_per_query_group each).
         if return_candidate_frame_ids and return_revgrid:
             return (
                 output,
@@ -2332,32 +2370,32 @@ class FrustumHandler:
         query_extrinsics: np.ndarray,
         depths: np.ndarray,
         w2c: np.ndarray,
-        K: Optional[np.ndarray] = None,
-        memory_K: Optional[np.ndarray] = None,
-        query_K: Optional[np.ndarray] = None,
+        K: np.ndarray | None = None,
+        memory_K: np.ndarray | None = None,
+        query_K: np.ndarray | None = None,
         H_lat: int,
         W_lat: int,
-        total_latents: Optional[int] = None,
+        total_latents: int | None = None,
         candidates_per_query_group: int = 1,
-        distance_threshold: Optional[float] = None,
-        temporal_threshold: Optional[int] = None,
-        angle_threshold: Optional[float] = None,
-        coarse_candidate_groups: Optional[int] = None,
+        distance_threshold: float | None = None,
+        temporal_threshold: int | None = None,
+        angle_threshold: float | None = None,
+        coarse_candidate_groups: int | None = None,
         iou_mode: str = "bbox",
         geometry_rep_mode: str = "second_frame",
         latent_merge_4frames: bool = False,
         selection_mode: str = "projection_iou",
-        query_frame_indices: Optional[Sequence[int]] = None,
+        query_frame_indices: Sequence[int] | None = None,
         query_reference_frame: int = 2,
-        candidate_nms_mode: Optional[str] = None,
+        candidate_nms_mode: str | None = None,
         candidate_nms_projection_iou_threshold: float = 0.7,
         candidate_nms_min_temporal_gap: int = 0,
         candidate_nms_pose_distance_threshold: float = 0.0,
         candidate_nms_pool_multiplier: float = 2.0,
-        depth_downsample_pool: Optional[Dict] = None,
+        depth_downsample_pool: dict | None = None,
         coverage_grid_downsample: int = 4,
         coverage_pool_stride: int = 2,
-    ) -> List[List[int]]:
+    ) -> list[list[int]]:
         """Phase 1 of the split mosaic-query pipeline: pick candidate frame ids
         per query group **without** touching any latent buffer.
 
@@ -2450,7 +2488,7 @@ class FrustumHandler:
                 if candidate_nms_mode is None:
                     pool_topk = max(max_candidates, min(10, int(w2c.shape[0])))
                 else:
-                    pool_topk = int(
+                    pool_topk = int(  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
                         round(max(max_candidates, min(10, int(w2c.shape[0]))) * float(candidate_nms_pool_multiplier))
                     )
                     pool_topk = min(max(pool_topk, max_candidates), int(w2c.shape[0]))
@@ -2464,7 +2502,7 @@ class FrustumHandler:
                     temporal_threshold=temporal_threshold,
                 )
                 if selection_mode == "pose_pool_temporal_earliest":
-                    temporal_pool_k = int(round(max_candidates * float(candidate_nms_pool_multiplier)))
+                    temporal_pool_k = int(round(max_candidates * float(candidate_nms_pool_multiplier)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
                     temporal_pool_k = min(max(temporal_pool_k, max_candidates), len(ranked))
                     ranked_for_pick = sorted(ranked[:temporal_pool_k], key=lambda item: int(item[0]))
                 else:
@@ -2485,7 +2523,7 @@ class FrustumHandler:
                                 "iou_score": 0.0,
                                 "angle_deg": 0.0,
                                 "dist": 0.0,
-                                "coarse_rank": int(len(scored_pose)),
+                                "coarse_rank": len(scored_pose),
                                 "proj_bbox": None,
                                 "rep_translation": np.asarray(cam_center, dtype=np.float32),
                             }
@@ -2650,12 +2688,12 @@ class FrustumHandler:
         latents: torch.Tensor,
         w2c: np.ndarray,
         depths: np.ndarray,
-        K: Optional[np.ndarray] = None,
-        memory_K: Optional[np.ndarray] = None,
-        query_K: Optional[np.ndarray] = None,
+        K: np.ndarray | None = None,
+        memory_K: np.ndarray | None = None,
+        query_K: np.ndarray | None = None,
         fuse_mode: str = "masked_mean",
         fill_ratio_threshold: float = 0.95,
-        fill_candidate_limit: Optional[int] = None,
+        fill_candidate_limit: int | None = None,
         return_revgrid: bool = False,
         zbuffer_depth_preference: str = "near",
         interpolation_mode: str = "bilinear",
@@ -2665,14 +2703,14 @@ class FrustumHandler:
         special_query_frame=None,
         # Accept and ignore so the dataset can pass H_lat/W_lat alongside
         # the rest of ``fused_query_inputs`` without a separate split.
-        H_lat: Optional[int] = None,
-        W_lat: Optional[int] = None,
-        memory_total_frames: Optional[int] = None,
+        H_lat: int | None = None,
+        W_lat: int | None = None,
+        memory_total_frames: int | None = None,
         return_view_change: bool = False,
         fuse_block_size: int = 1,
         return_source_frame_ids: bool = False,
-        source_valid_masks: Optional[torch.Tensor | np.ndarray] = None,
-    ) -> Tuple:
+        source_valid_masks: torch.Tensor | np.ndarray | None = None,
+    ) -> tuple:
         """Phase 2 of the split pipeline: given ``candidate_frame_ids`` from
         ``select_candidates`` and a populated memory ``latents`` buffer, run
         per-query-group reproject+fuse and stitch the result.
@@ -2735,10 +2773,10 @@ class FrustumHandler:
         else:
             iqx = 0
             query_step = 1
-        queried_latents: List[torch.Tensor] = []
-        queried_revgrids: List[np.ndarray] = []
-        queried_view_changes: List[np.ndarray] = []
-        queried_source_fids: List[np.ndarray] = []
+        queried_latents: list[torch.Tensor] = []
+        queried_revgrids: list[np.ndarray] = []
+        queried_view_changes: list[np.ndarray] = []
+        queried_source_fids: list[np.ndarray] = []
         for group_idx, frame_candidates in enumerate(candidate_frame_ids):
             if special_query_frame is not None:
                 frame_candidates = list(special_query_frame) + list(frame_candidates)
@@ -2813,7 +2851,7 @@ class FrustumHandler:
             revgrid_output = np.stack(queried_revgrids, axis=0) if return_revgrid else None
             view_change_output = np.stack(queried_view_changes, axis=0) if return_view_change else None
             source_fid_output = np.stack(queried_source_fids, axis=0) if return_source_frame_ids else None
-        extras: List = []
+        extras: list = []
         if return_revgrid:
             extras.append(revgrid_output)
         if return_view_change:
@@ -2832,27 +2870,27 @@ class FrustumHandler:
         w2c=None,
         depths=None,
         K=None,
-        memory_K: Optional[np.ndarray] = None,
-        query_K: Optional[np.ndarray] = None,
+        memory_K: np.ndarray | None = None,
+        query_K: np.ndarray | None = None,
         candidates_per_query_group: int = 1,
-        distance_threshold: Optional[float] = None,
-        temporal_threshold: Optional[int] = None,
-        angle_threshold: Optional[float] = None,
+        distance_threshold: float | None = None,
+        temporal_threshold: int | None = None,
+        angle_threshold: float | None = None,
         fuse_mode: str = "masked_mean",
         fill_ratio_threshold: float = 0.95,
-        fill_candidate_limit: Optional[int] = None,
+        fill_candidate_limit: int | None = None,
         return_candidate_frame_ids: bool = False,
         return_revgrid: bool = False,
         zbuffer_depth_preference: str = "near",
         interpolation_mode: str = "bilinear",
         geometry_rep_mode: str = "second_frame",
-        coarse_candidate_groups: Optional[int] = None,
+        coarse_candidate_groups: int | None = None,
         iou_mode: str = "bbox",
         selection_mode: str = "projection_iou",
         special_query_frame=None,
         latent_merge_4frames: bool = False,
         query_reference_frame: int = 2,
-        candidate_nms_mode: Optional[str] = None,
+        candidate_nms_mode: str | None = None,
         candidate_nms_projection_iou_threshold: float = 0.7,
         candidate_nms_min_temporal_gap: int = 0,
         candidate_nms_pose_distance_threshold: float = 0.0,
@@ -2860,9 +2898,9 @@ class FrustumHandler:
         coverage_grid_downsample: int = 4,
         coverage_pool_stride: int = 2,
         return_view_change: bool = False,
-        source_valid_masks: Optional[torch.Tensor | np.ndarray] = None,
-    ) -> Tuple[
-        Dict[int, Dict[str, np.ndarray]],
+        source_valid_masks: torch.Tensor | np.ndarray | None = None,
+    ) -> tuple[
+        dict[int, dict[str, np.ndarray]],
         np.ndarray,
         np.ndarray,
         np.ndarray,
@@ -2875,7 +2913,7 @@ class FrustumHandler:
         point with the legacy signature).
 
         Args:
-            latent_merge_4frames: True 时按 4 帧压缩 latent 处理；False 时按 1 帧 1 latent 处理。
+            latent_merge_4frames: True when each latent covers 4 frames; False for one latent per frame.
             candidate_nms_mode: opt-in inter-candidate NMS. See
                 ``select_candidates`` for full semantics. Default ``None``
                 preserves the legacy "top-N by IoU score" behaviour.
@@ -2901,7 +2939,7 @@ class FrustumHandler:
         # pair. The pool is owned here and discarded before ``fuse_candidates``
         # runs so memory stays bounded (one (H_lat, W_lat) float32 per
         # candidate group at peak).
-        depth_downsample_pool: Dict = {}
+        depth_downsample_pool: dict = {}
         try:
             candidate_frame_ids = self.select_candidates(
                 query_extrinsics=query_extrinsics,
@@ -3018,9 +3056,9 @@ class FrustumHandler:
         fuse_mode: str,
         interpolation_mode: str,
         fill_ratio_threshold: float,
-        fill_candidate_limit: Optional[int],
-        K_override: Optional[np.ndarray] = None,
-        query_K_one: Optional[np.ndarray] = None,
+        fill_candidate_limit: int | None,
+        K_override: np.ndarray | None = None,
+        query_K_one: np.ndarray | None = None,
         return_revgrid: bool = False,
         zbuffer_depth_preference: str = "near",
         geometry_rep_mode: str = "second_frame",
@@ -3028,7 +3066,7 @@ class FrustumHandler:
         return_view_change: bool = False,
         fuse_block_size: int = 1,
         return_source_frame_ids: bool = False,
-        source_valid_masks: Optional[torch.Tensor] = None,
+        source_valid_masks: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Forward-warp + z-buffer scatter fusion of memory latents into the query view.
 
@@ -3075,9 +3113,8 @@ class FrustumHandler:
 
         if int(fuse_block_size) not in (1, 2):
             raise ValueError(f"fuse_block_size must be 1 or 2, got {fuse_block_size}.")
-        if int(fuse_block_size) == 2:
-            if H_lat % 2 != 0 or W_lat % 2 != 0:
-                raise ValueError(f"fuse_block_size=2 requires even (H_lat, W_lat); got ({H_lat}, {W_lat}).")
+        if int(fuse_block_size) == 2 and (H_lat % 2 != 0 or W_lat % 2 != 0):
+            raise ValueError(f"fuse_block_size=2 requires even (H_lat, W_lat); got ({H_lat}, {W_lat}).")
 
         z_pref = str(zbuffer_depth_preference).lower().strip()
         if z_pref not in {"near", "far"}:
@@ -3086,7 +3123,7 @@ class FrustumHandler:
         neutral_view_change = np.array([1.0, 0.0, 0.0], dtype=np.float32)
 
         def _pack_fuse_result(fused_latent, revgrid=None, view_change=None, source_fid=None):
-            extras: List = []
+            extras: list = []
             if return_revgrid:
                 extras.append(revgrid)
             if return_view_change:
@@ -3125,8 +3162,8 @@ class FrustumHandler:
 
         def _resolve_candidate_records(
             frame_ids: Sequence[int],
-        ) -> List[Dict[str, np.ndarray]]:
-            records: List[Dict[str, np.ndarray]] = []
+        ) -> list[dict[str, np.ndarray]]:
+            records: list[dict[str, np.ndarray]] = []
             seen_local = set()
             total_frames = int(w2c.shape[0])
             for frame_id in frame_ids:
@@ -3153,7 +3190,7 @@ class FrustumHandler:
             },
         ):
             keyframe_records = _resolve_candidate_records(keyframe_frame_candidates)
-            normal_records: List[Dict[str, np.ndarray]] = []
+            normal_records: list[dict[str, np.ndarray]] = []
             seen_frame_ids = {int(r["frame_id"]) for r in keyframe_records}
             for rep in _resolve_candidate_records(frame_candidates):
                 fid_int = int(rep["frame_id"])
@@ -3173,8 +3210,8 @@ class FrustumHandler:
                 ]
 
         def _splat_one(
-            rec: Dict[str, np.ndarray],
-        ) -> Tuple[
+            rec: dict[str, np.ndarray],
+        ) -> tuple[
             torch.Tensor,
             torch.Tensor,
             torch.Tensor,
@@ -3331,8 +3368,8 @@ class FrustumHandler:
             )
 
         def _splat_one_block(
-            rec: Dict[str, np.ndarray],
-        ) -> Tuple[
+            rec: dict[str, np.ndarray],
+        ) -> tuple[
             torch.Tensor,
             torch.Tensor,
             torch.Tensor,
@@ -3519,12 +3556,12 @@ class FrustumHandler:
             )
 
         all_records = list(keyframe_records) + list(normal_records)
-        splat_list: List[torch.Tensor] = []
-        valid_list: List[torch.Tensor] = []
-        zmap_list: List[torch.Tensor] = []
-        revgrid_list: List[np.ndarray] = []
-        view_change_list: List[np.ndarray] = []
-        source_fid_list: List[np.ndarray] = []
+        splat_list: list[torch.Tensor] = []
+        valid_list: list[torch.Tensor] = []
+        zmap_list: list[torch.Tensor] = []
+        revgrid_list: list[np.ndarray] = []
+        view_change_list: list[np.ndarray] = []
+        source_fid_list: list[np.ndarray] = []
         if int(fuse_block_size) == 2:
             splat_fn = _splat_one_block
             splat_scope = "materialize.fuse_candidates.group.splat_block_candidate"
@@ -3573,7 +3610,7 @@ class FrustumHandler:
                     "materialize.fuse_candidates.group.revgrid.masked_mean",
                     metadata={"candidate_count": len(revgrid_list)},
                 ):
-                    for rg, vc, sf in zip(revgrid_list, view_change_list, source_fid_list):
+                    for rg, vc, sf in zip(revgrid_list, view_change_list, source_fid_list, strict=False):
                         empty = revgrid_out[..., 0] < 0
                         cand_valid = rg[..., 0] >= 0
                         write = empty & cand_valid
@@ -3605,6 +3642,7 @@ class FrustumHandler:
                     revgrid_list,
                     view_change_list,
                     source_fid_list,
+                    strict=False,
                 ):
                     write = valid_mask & ~filled
                     if write.any():
@@ -3618,7 +3656,7 @@ class FrustumHandler:
                                 revgrid_out[rev_write] = rg[rev_write]
                                 view_change_out[rev_write] = vc[rev_write]
                                 source_fid_out[rev_write] = sf[rev_write]
-                    used += 1
+                    used += 1  # noqa: SIM113 - Keeps the explicit loop counter.
                     filled_ratio = float(filled.float().mean().item())
                     if used >= max_candidates or filled_ratio >= ratio_threshold:
                         break
@@ -3653,6 +3691,7 @@ class FrustumHandler:
                     revgrid_list,
                     view_change_list,
                     source_fid_list,
+                    strict=False,
                 ):
                     if z_pref == "near":
                         z_for_cmp = torch.where(valid_mask, z_map, torch.full_like(z_map, float("inf")))
@@ -3680,7 +3719,7 @@ class FrustumHandler:
 
         raise ValueError(f"Unsupported fuse_mode={fuse_mode}. Use 'masked_mean', 'fill_stop', or 'fill_stop_zbuffer'.")
 
-    def masked_pixelwise_mean(self, xs, invalid_masks: Optional[Sequence[torch.Tensor]] = None) -> torch.Tensor:
+    def masked_pixelwise_mean(self, xs, invalid_masks: Sequence[torch.Tensor] | None = None) -> torch.Tensor:
         """
         Pixel-wise mean over multiple images with per-input invalid masks (True=invalid).
 
@@ -3765,20 +3804,20 @@ class FrustumHandler:
         return self._cache
 
     def _rotation_geodesic_deg(self, R_prev: np.ndarray, R_curr: np.ndarray) -> float:
-        """计算相邻两帧旋转的测地角（单位：度）。"""
+        """Return the geodesic angle between two rotations in degrees."""
         R_rel = R_prev.T @ R_curr
         cos_a = np.clip((np.trace(R_rel) - 1.0) / 2.0, -1.0, 1.0)
         return float(np.degrees(np.arccos(cos_a)))
 
-    def _compute_keyframe_labels_for_new_batch(self, c2w_new: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """为新注册批次计算硬关键帧标记与软关键分数。
+    def _compute_keyframe_labels_for_new_batch(self, c2w_new: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Compute hard keyframe flags and soft keyframe scores for a newly registered batch.
 
-        硬关键帧触发条件：
-            1) 旋转变化超过阈值；或
-            2) 平移变化超过阈值；或
-            3) 距上次关键帧间隔达到上限（时间强制关键帧）。
+        A frame is a hard keyframe when, relative to the previous frame:
+            1) the rotation change reaches the threshold, or
+            2) the translation change reaches the threshold, or
+            3) the interval since the last keyframe reaches the maximum.
 
-        软关键分数范围 [0,1]，并在关键帧处设为 1.0。
+        Soft scores lie in [0, 1] and are 1.0 at keyframes.
         """
         c2w_new = np.asarray(c2w_new, dtype=np.float64)
         if c2w_new.ndim != 3 or c2w_new.shape[1:] != (4, 4):
@@ -3792,24 +3831,21 @@ class FrustumHandler:
         hard_flags = np.zeros((Tn,), dtype=bool)
         soft_scores = np.zeros((Tn,), dtype=np.float32)
 
-        # 从历史缓存衔接：保证跨批次关键帧逻辑连续
+        # Continue from the cached frames so keyframe selection is consistent across batches.
         if self._cache is None or self._cache.num_frames == 0:
             prev_pose = None
             frames_since_last_kf = max_interval
         else:
             prev_pose = self._cache.c2w[-1]
             key_indices = np.flatnonzero(self._cache.is_keyframe)
-            if key_indices.size > 0:
-                last_kf = int(key_indices[-1])
-            else:
-                last_kf = int(self._cache.num_frames - 1)
+            last_kf = int(key_indices[-1]) if key_indices.size > 0 else int(self._cache.num_frames - 1)
             frames_since_last_kf = int(self._cache.num_frames - 1 - last_kf)
 
         for idx in range(Tn):
             cur_pose = c2w_new[idx]
 
             if prev_pose is None:
-                # 第一帧强制关键帧，作为后续分段锚点
+                # The first frame is always a keyframe and anchors later segments.
                 is_kf = True
                 soft = 1.0
             else:
@@ -3825,7 +3861,7 @@ class FrustumHandler:
                 trans_ratio = trans_dist / trans_thresh
                 time_ratio = float(frames_since_last_kf + 1) / float(max_interval)
 
-                # 软分数：运动与时间进度联合增长，关键帧处会被抬到 1.0
+                # The soft score grows with motion and elapsed time and is 1.0 at keyframes.
                 soft = float(np.clip(max(rot_ratio, trans_ratio, time_ratio), 0.0, 1.0))
 
                 is_kf = (
@@ -3848,65 +3884,56 @@ class FrustumHandler:
         return hard_flags, soft_scores
 
     def _compute_group_motion_scores(self, w2c: np.ndarray) -> np.ndarray:
-        """计算每帧所属4帧组的运动量分数.
+        """Score the motion of the 4-frame group each frame belongs to.
 
-        T = 1 + 4t 结构:
-          - 帧 0: 单独帧（不属于任何组，赋中位数运动量）
-          - 帧 1~4: 第0组
-          - 帧 5~8: 第1组
+        Frames follow the T = 1 + 4t layout:
+          - frame 0: standalone, scored with the median group motion
+          - frames 1-4: group 0
+          - frames 5-8: group 1
           - ...
 
-        运动量 = 组内首尾帧的旋转测地距离(度) + 平移距离
+        Group motion = rotation geodesic distance (degrees) + translation distance between the
+        first and last frames of the group.
 
         Args:
-            w2c: (T, 4, 4) 所有帧的 w2c 外参
+            w2c: (T, 4, 4) w2c extrinsics of all frames.
 
         Returns:
-            scores: (T,) 每帧的运动量分数，值越大表示所属组运动越剧烈
+            scores: (T,) motion score per frame; larger means the group moves more.
         """
         T = w2c.shape[0]
         scores = np.zeros(T, dtype=np.float64)
 
-        def _cam_center(m: np.ndarray) -> np.ndarray:
-            """从 w2c 矩阵提取世界坐标系下的相机中心"""
-            R = m[:3, :3]
-            t = m[:3, 3]
-            return -R.T @ t
-
         def _rotation_angle_deg(R1: np.ndarray, R2: np.ndarray) -> float:
-            """两个旋转矩阵之间的测地距离（度）"""
+            """Geodesic distance between two rotation matrices in degrees."""
             R_rel = R1 @ R2.T
             cos_a = np.clip((np.trace(R_rel) - 1.0) / 2.0, -1.0, 1.0)
             return float(np.degrees(np.arccos(cos_a)))
 
-        # 计算每个4帧组的运动量
         num_groups = (T - 1) // 4 if T > 1 else 0
-        group_motions: List[float] = []
+        group_motions: list[float] = []
 
         for g in range(num_groups):
-            start_idx = 1 + g * 4  # 组内第一帧
-            end_idx = start_idx + 3  # 组内最后一帧
+            start_idx = 1 + g * 4
+            end_idx = start_idx + 3
             if end_idx >= T:
                 end_idx = T - 1
 
-            # 旋转变化量
             R_start = w2c[start_idx, :3, :3]
             R_end = w2c[end_idx, :3, :3]
             rot_change = _rotation_angle_deg(R_start, R_end)
 
-            # 平移变化量
-            c_start = _cam_center(w2c[start_idx])
-            c_end = _cam_center(w2c[end_idx])
+            c_start = _w2c_camera_center(w2c[start_idx])
+            c_end = _w2c_camera_center(w2c[end_idx])
             trans_change = float(np.linalg.norm(c_end - c_start))
 
             motion = rot_change + trans_change
             group_motions.append(motion)
 
-            # 将运动量赋给组内所有帧
             for fi in range(start_idx, min(start_idx + 4, T)):
                 scores[fi] = motion
 
-        # 帧0特殊处理：赋中位数运动量（中性，既不特别偏好也不特别惩罚）
+        # Frame 0 gets the median group motion so it is neither favored nor penalized.
         if group_motions:
             scores[0] = float(np.median(group_motions))
         else:
@@ -3916,11 +3943,11 @@ class FrustumHandler:
 
     def _select_candidates(
         self,
-        base_local_indices: List[int],
+        base_local_indices: list[int],
         query_center: np.ndarray,
-        max_candidates: Optional[int],
-        distance_threshold: Optional[float],
-    ) -> List[int]:
+        max_candidates: int | None,
+        distance_threshold: float | None,
+    ) -> list[int]:
         """Select LOCAL candidate indices by distance to query center."""
         if not base_local_indices:
             return []
@@ -3948,25 +3975,25 @@ class FrustumHandler:
         w2c: np.ndarray,
         query_extrinsics: np.ndarray,
         candidates_per_query_group: int = 1,
-        keyframe_mask: Optional[np.ndarray] = None,
-        keyframe_candidate_min_count: Optional[int] = 0,
-        keyframe_candidate_max_count: Optional[int] = 0,
+        keyframe_mask: np.ndarray | None = None,
+        keyframe_candidate_min_count: int | None = 0,
+        keyframe_candidate_max_count: int | None = 0,
         keyframe_candidate_ratio: float = 0,
         angle_threshold: float = 30.0,
-        distance_threshold: Optional[float] = None,
-        temporal_threshold: Optional[int] = None,
+        distance_threshold: float | None = None,
+        temporal_threshold: int | None = None,
         diversity_weight: float = DIVERSITY_WEIGHT,
         vote_weight: float = VOTE_WEIGHT,
         stability_weight: float = STABILITY__WEIGHT,
         first_frame_penalty: float = FIRST_FRAME_PENALTY,
-    ) -> Tuple[List[List[int]], List[List[int]], List[List[int]], List[List[int]]]:
-        """按每 4 个 query 为一组做候选分组投票。
+    ) -> tuple[list[list[int]], list[list[int]], list[list[int]], list[list[int]]]:
+        """Select candidate frame groups by voting within each group of 4 queries.
 
         Returns:
-            selected_group_ids_per_group: 每个 query-group 的候选组 id 列表
-            selected_frame_ids_per_group: 每个 query-group 的候选帧 id 列表
-            keyframe_group_ids_per_group: 每个 query-group 中来自关键帧的候选组 id 列表
-            keyframe_frame_ids_per_group: 每个 query-group 中来自关键帧的候选帧 id 列表
+            selected_group_ids_per_group: candidate group ids of each query group
+            selected_frame_ids_per_group: candidate frame ids of each query group
+            keyframe_group_ids_per_group: candidate group ids of each query group that come from keyframes
+            keyframe_frame_ids_per_group: candidate frame ids of each query group that come from keyframes
         """
         Q = query_extrinsics.shape[0]
         N = w2c.shape[0]
@@ -3974,7 +4001,7 @@ class FrustumHandler:
         keyframe_candidate_ratio = float(np.clip(keyframe_candidate_ratio, 0.0, 1.0))
 
         if keyframe_mask is None:
-            # 未提供关键帧信息时，不强制关键帧比例
+            # Without keyframe information, no keyframe quota applies.
             keyframe_mask = np.zeros((N,), dtype=bool)
             keyframe_candidate_ratio = 0.0
         else:
@@ -3982,21 +4009,21 @@ class FrustumHandler:
             if keyframe_mask.shape[0] != N:
                 raise ValueError(f"keyframe_mask length must match frame count {N}, got {keyframe_mask.shape[0]}.")
 
-        # 帧索引映射到候选组：帧0→组0，帧1~4→组1，帧5~8→组2...
+        # Frame index to candidate group: frame 0 -> group 0, frames 1-4 -> group 1, frames 5-8 -> group 2, ...
         def _frame_to_group(idx: int) -> int:
             if idx == 0:
                 return 0
             return (idx - 1) // 4 + 1
 
-        # 预计算稳定性分（按组运动量归一化）
+        # Stability scores from the normalized group motion
         group_motions = self._compute_group_motion_scores(w2c.copy())
         gm_min, gm_max = group_motions.min(), group_motions.max()
         gm_range = gm_max - gm_min + 1e-9
         group_motions_norm = (group_motions - gm_min) / gm_range
 
-        # 先为每个 query 预计算候选排序（角度筛选 + 位移排序）
+        # Rank the candidates of each query (angle filter, then translation distance).
         angle_topk_for_ranking = max(10, N // 4)
-        all_candidates: List[List[Tuple[int, float, float]]] = []
+        all_candidates: list[list[tuple[int, float, float]]] = []
         for qi in range(Q):
             ranked = self._rank_candidates_by_angle_then_translation(
                 w2c,
@@ -4009,26 +4036,26 @@ class FrustumHandler:
             )
             all_candidates.append(ranked)
 
-        # 每 4 个 query 组成一个 query-group
-        assert Q % 4 == 0, f"query_extrinsics 数量必须是4的倍数, 当前 Q={Q}"
+        # Every 4 queries form one query group.
+        assert Q % 4 == 0, f"The number of query_extrinsics must be a multiple of 4, got Q={Q}"
         num_query_groups = Q // 4
 
-        selected_group_ids: List[List[int]] = []
-        selected_frame_ids: List[List[int]] = []
-        keyframe_group_ids: List[List[int]] = []
-        keyframe_frame_ids: List[List[int]] = []
+        selected_group_ids: list[list[int]] = []
+        selected_frame_ids: list[list[int]] = []
+        keyframe_group_ids: list[list[int]] = []
+        keyframe_frame_ids: list[list[int]] = []
         for qg in range(num_query_groups):
             q_start = qg * 4
             q_end = q_start + 4
 
             from collections import defaultdict
 
-            group_votes: Dict[int, float] = defaultdict(float)
-            group_hit_count: Dict[int, int] = defaultdict(int)
+            group_votes: dict[int, float] = defaultdict(float)
+            group_hit_count: dict[int, int] = defaultdict(int)
             # gid -> (frame_idx, angle, dist, best_sub_score)
-            group_best_frame: Dict[int, Tuple[int, float, float, float]] = {}
+            group_best_frame: dict[int, tuple[int, float, float, float]] = {}
 
-            # 2a) 子查询投票
+            # 2a) Votes of the individual queries
             for qi in range(q_start, q_end):
                 candidates = all_candidates[qi]
                 if not candidates:
@@ -4058,24 +4085,21 @@ class FrustumHandler:
                 keyframe_frame_ids.append([-1] * candidates_per_query_group)
                 continue
 
-            # 2b) 组级综合打分并贪心选组（支持每组输出多个候选）
+            # 2b) Score the groups and pick them greedily (several candidates per query group).
             all_gids = list(group_votes.keys())
 
             vote_scores = np.array([group_votes[g] for g in all_gids])
             vote_min, vote_max = vote_scores.min(), vote_scores.max()
             vote_range = vote_max - vote_min + 1e-9
 
-            # 新规则：
-            # 1) 4个query先各自贡献候选，组内允许重复命中同一个gid；
-            # 2) 最终按票数(众数)从高到低排序；
-            # 3) 同票时按综合分(final_score)打破平局。
-            gid_metrics: List[Tuple[int, int, float]] = []
+            # Each of the 4 queries contributes candidates and may hit the same gid repeatedly; groups are
+            # ranked by hit count, with final_score breaking ties.
+            gid_metrics: list[tuple[int, int, float]] = []
             for gid in all_gids:
                 vote_score_norm = (group_votes[gid] - vote_min) / vote_range
                 hit_ratio = group_hit_count[gid] / 4.0
 
-                # 组间完全独立：不再使用跨组历史选择约束。
-                # diversity_weight 保留参数兼容，这里给常数1.0，不引入跨组抑制。
+                # Query groups are selected independently; the diversity term is a constant 1.0.
                 diversity_score = 1.0
 
                 repr_idx = group_best_frame[gid][0]
@@ -4091,11 +4115,11 @@ class FrustumHandler:
                 )
                 gid_metrics.append((gid, int(group_hit_count[gid]), float(final_score)))
 
-            # 先按票数降序，再按综合分降序
+            # Sort by hit count, then by final score, both descending.
             gid_metrics.sort(key=lambda x: (-x[1], -x[2]))
 
-            # 关键帧数量双阈值：最少数量 + 最大数量
-            # - 若未显式设置 min_count，则退回 ratio 行为，保证兼容旧调用
+            # Keyframe count bounds: a minimum and a maximum.
+            # Without keyframe_candidate_min_count the minimum comes from keyframe_candidate_ratio.
             required_keyframes = (
                 int(np.ceil(candidates_per_query_group * keyframe_candidate_ratio))
                 if keyframe_candidate_min_count is None
@@ -4109,23 +4133,23 @@ class FrustumHandler:
 
             required_keyframes = max(0, min(required_keyframes, candidates_per_query_group))
             max_keyframes = max(0, min(max_keyframes, candidates_per_query_group))
-            # 若配置冲突（max < min），以满足最少数量为优先
+            # When max < min, the minimum wins.
             if max_keyframes < required_keyframes:
                 max_keyframes = required_keyframes
 
             keyframe_metrics = [m for m in gid_metrics if keyframe_mask[int(group_best_frame[m[0]][0])]]
 
-            chosen_gids: List[int] = []
+            chosen_gids: list[int] = []
             chosen_kf_count = 0
 
-            # 1) 先满足关键帧硬配额
+            # 1) Fill the required keyframe quota first.
             for m in keyframe_metrics:
                 if len(chosen_gids) >= required_keyframes:
                     break
                 chosen_gids.append(int(m[0]))
                 chosen_kf_count += 1
 
-            # 2) 再按总排序补齐到 candidates_per_query_group，同时不超过关键帧上限
+            # 2) Fill up to candidates_per_query_group in ranked order without exceeding the keyframe maximum.
             for m in gid_metrics:
                 gid = int(m[0])
                 if gid in chosen_gids:
@@ -4142,24 +4166,23 @@ class FrustumHandler:
                 if is_kf_frame:
                     chosen_kf_count += 1
 
-            picked_group_ids: List[int] = chosen_gids
-            picked_frame_ids: List[int] = [int(group_best_frame[gid][0]) for gid in picked_group_ids]
+            picked_group_ids: list[int] = chosen_gids
+            picked_frame_ids: list[int] = [int(group_best_frame[gid][0]) for gid in picked_group_ids]
 
-            # 记录“来自关键帧”的子集（用于下游单独分析/可视化）
-            picked_kf_group_ids: List[int] = []
-            picked_kf_frame_ids: List[int] = []
+            # Subset that comes from keyframes, for downstream analysis and visualization
+            picked_kf_group_ids: list[int] = []
+            picked_kf_frame_ids: list[int] = []
             for gid in picked_group_ids:
                 frame_id = int(group_best_frame[gid][0])
                 if keyframe_mask[frame_id]:
                     picked_kf_group_ids.append(gid)
                     picked_kf_frame_ids.append(frame_id)
 
-            # 不足 candidates_per_query_group 时用 -1 补齐，保持输出形状稳定
+            # Pad with -1 to candidates_per_query_group so the output shape is fixed.
             while len(picked_group_ids) < candidates_per_query_group:
                 picked_group_ids.append(-1)
                 picked_frame_ids.append(-1)
 
-            # 关键帧列表也补齐为固定长度，便于下游统一处理
             while len(picked_kf_group_ids) < candidates_per_query_group:
                 picked_kf_group_ids.append(-1)
                 picked_kf_frame_ids.append(-1)
@@ -4182,26 +4205,28 @@ class FrustumHandler:
         w2c_query: np.ndarray,
         *,
         angle_topk: int = 5,
-        angle_threshold: Optional[float] = None,
-    ) -> Tuple[int, float, float]:
-        """根据朝向角度和位移距离，从候选外参中选出最佳匹配.
+        angle_threshold: float | None = None,
+    ) -> tuple[int, float, float]:
+        """Pick the candidate camera that best matches the query by viewing direction, then position.
 
-        策略:
-            1. 计算每个候选相机与查询相机的光轴夹角，取夹角最小的一批候选；
-            2. 在这批候选中，选取平移距离最近的那一个作为最终结果。
+        1. Keep the candidates whose optical axes are closest in angle to the query's.
+        2. Among them, return the one with the nearest camera center.
 
         Args:
-            w2c_candidates: 候选 w2c 外参 (N, 4, 4).
-            w2c_query: 查询 w2c 外参 (1, 4, 4) 或 (4, 4).
-            angle_topk: 按夹角取前 k 个候选（默认 5）.
-            angle_threshold: 若指定，则改用角度阈值筛选（单位：度），
-                               此时 angle_topk 仅作为最少保留数量的下限。
+            w2c_candidates: Candidate w2c extrinsics (N, 4, 4).
+            w2c_query: Query w2c extrinsic (1, 4, 4) or (4, 4).
+            angle_topk: Number of candidates with the smallest angles to keep.
+            angle_threshold: When set, keep all candidates within this angle in degrees, falling back to
+                the angle_topk closest when fewer remain.
 
         Returns:
             (best_idx, best_angle_deg, best_dist):
-                best_idx      – 在 w2c_candidates 中的索引
-                best_angle_deg – 该候选与查询的光轴夹角（度）
-                best_dist      – 该候选与查询的平移距离
+                best_idx       - index in w2c_candidates
+                best_angle_deg - optical-axis angle to the query in degrees
+                best_dist      - camera-center distance to the query
+
+        Raises:
+            ValueError: w2c_candidates is empty.
         """
         w2c_candidates = np.asarray(w2c_candidates, dtype=np.float64)
         w2c_query = np.asarray(w2c_query, dtype=np.float64)
@@ -4212,49 +4237,12 @@ class FrustumHandler:
 
         N = w2c_candidates.shape[0]
         if N == 0:
-            raise ValueError("候选外参数量不能为 0")
+            raise ValueError("w2c_candidates must not be empty")
 
-        # ---- 提取光轴方向（相机坐标系 z 轴在世界坐标系中的方向）----
-        # w2c 的旋转部分 R = w2c[:3,:3]，其转置即 c2w 旋转
-        # 相机 z 轴在世界系中 = R^T @ [0,0,1] = R 的第三列（转置后第三行）
-        # 即 c2w[:3, 2] = w2c[:3, 2]（因为 R^T 的第三列 = R 的第三行）
-        # 更准确：c2w = inv(w2c)，对于刚体变换 c2w[:3,:3] = R^T
-        # 光轴 = c2w[:3, 2] = R^T[:, 2] = R[2, :3]（w2c 旋转矩阵的第三行）
-        dirs_cand = w2c_candidates[:, 2, :3]  # (N, 3) — 每个候选相机的光轴方向
-        dir_query = w2c_query[2, :3]  # (3,)   — 查询相机的光轴方向
+        topk_indices, angles_deg = _select_by_optical_axis_angle(w2c_candidates, w2c_query, angle_topk, angle_threshold)
 
-        # 归一化
-        dirs_cand = dirs_cand / (np.linalg.norm(dirs_cand, axis=1, keepdims=True) + 1e-12)
-        dir_query = dir_query / (np.linalg.norm(dir_query) + 1e-12)
-
-        # 计算夹角（弧度 → 度）
-        cos_angles = np.clip(dirs_cand @ dir_query, -1.0, 1.0)  # (N,)
-        angles_rad = np.arccos(cos_angles)
-        angles_deg = np.degrees(angles_rad)  # (N,)
-
-        # ---- 第一步：按夹角筛选候选 ----
-        if angle_threshold is not None:
-            # 角度阈值模式：选所有角度 <= 阈值的，至少保留 angle_topk 个
-            mask = angles_deg <= float(angle_threshold)
-            if mask.sum() < min(angle_topk, N):
-                # 不够时退化为 topk
-                topk_indices = np.argsort(angles_deg)[: min(angle_topk, N)]
-            else:
-                topk_indices = np.where(mask)[0]
-        else:
-            # 纯 topk 模式
-            k = min(angle_topk, N)
-            topk_indices = np.argsort(angles_deg)[:k]
-
-        # ---- 第二步：在候选中按平移距离选最近 ----
-        # w2c 的平移部分 t = w2c[:3, 3]；相机中心 = -R^T @ t
-        def _cam_center(w2c_mat: np.ndarray) -> np.ndarray:
-            R = w2c_mat[:3, :3]
-            t = w2c_mat[:3, 3]
-            return -R.T @ t
-
-        center_query = _cam_center(w2c_query)  # (3,)
-        centers_cand = np.stack([_cam_center(w2c_candidates[i]) for i in topk_indices], axis=0)  # (K, 3)
+        center_query = _w2c_camera_center(w2c_query)  # (3,)
+        centers_cand = np.stack([_w2c_camera_center(w2c_candidates[i]) for i in topk_indices], axis=0)  # (K, 3)
 
         dists = np.linalg.norm(centers_cand - center_query[None, :], axis=1)  # (K,)
         best_local = int(np.argmin(dists))
@@ -4268,18 +4256,18 @@ class FrustumHandler:
         w2c_query: np.ndarray,
         *,
         angle_topk: int = 10,
-        angle_threshold: Optional[float] = None,
-        query_frame_idx: Optional[int] = None,
-        distance_threshold: Optional[float] = None,
-        temporal_threshold: Optional[int] = None,
-    ) -> List[Tuple[int, float, float]]:
-        """返回按角度筛选后、按平移距离升序排列的候选列表.
+        angle_threshold: float | None = None,
+        query_frame_idx: int | None = None,
+        distance_threshold: float | None = None,
+        temporal_threshold: int | None = None,
+    ) -> list[tuple[int, float, float]]:
+        """Return the angle-filtered candidates sorted by camera-center distance.
 
-        与 find_best_match_by_angle_then_translation 逻辑一致，
-        但返回全部候选而非仅最优，供外部多样性选择使用。
+        Applies the filter of find_best_match_by_angle_then_translation but returns all remaining
+        candidates, optionally restricted by distance_threshold and temporal_threshold.
 
         Returns:
-            按距离升序排列的 [(idx, angle_deg, dist), ...]
+            [(idx, angle_deg, dist), ...] in ascending distance.
         """
         w2c_candidates = np.asarray(w2c_candidates, dtype=np.float64)
         w2c_query = np.asarray(w2c_query, dtype=np.float64)
@@ -4292,49 +4280,19 @@ class FrustumHandler:
         if N == 0:
             return []
 
-        # 提取光轴方向
-        dirs_cand = w2c_candidates[:, 2, :3]  # (N, 3)
-        dir_query = w2c_query[2, :3]  # (3,)
-        dirs_cand = dirs_cand / (np.linalg.norm(dirs_cand, axis=1, keepdims=True) + 1e-12)
-        dir_query = dir_query / (np.linalg.norm(dir_query) + 1e-12)
+        topk_indices, angles_deg = _select_by_optical_axis_angle(w2c_candidates, w2c_query, angle_topk, angle_threshold)
 
-        # 夹角
-        cos_angles = np.clip(dirs_cand @ dir_query, -1.0, 1.0)
-        angles_deg = np.degrees(np.arccos(cos_angles))
-
-        # 角度筛选
-        if angle_threshold is not None:
-            mask = angles_deg <= float(angle_threshold)
-            if mask.sum() < min(angle_topk, N):
-                topk_indices = np.argsort(angles_deg)[: min(angle_topk, N)]
-            else:
-                topk_indices = np.where(mask)[0]
-        else:
-            k = min(angle_topk, N)
-            topk_indices = np.argsort(angles_deg)[:k]
-
-        # 计算相机中心距离
-        def _cam_center(w2c_mat: np.ndarray) -> np.ndarray:
-            R = w2c_mat[:3, :3]
-            t = w2c_mat[:3, 3]
-            return -R.T @ t
-
-        center_query = _cam_center(w2c_query)
-        centers_cand = np.stack([_cam_center(w2c_candidates[i]) for i in topk_indices], axis=0)
-        # Distances are in the same units as the extrinsics' translation vectors
-        # (typically meters). The legacy `* 0.01` factor was an unexplained
-        # scale that made `distance_threshold` operate in centimeters-ish units
-        # without saying so; callers passing `distance_threshold=30` expected
-        # 30 meters but were actually filtering at ~0.3 meters. Removed.
+        center_query = _w2c_camera_center(w2c_query)
+        centers_cand = np.stack([_w2c_camera_center(w2c_candidates[i]) for i in topk_indices], axis=0)
+        # Distances are in the units of the extrinsics' translation vectors (typically meters).
         dists = np.linalg.norm(centers_cand - center_query[None, :], axis=1)
 
-        # 过滤1：空间距离阈值（超过阈值的候选直接丢弃）
+        # Drop candidates farther than distance_threshold.
         valid_mask = np.ones_like(dists, dtype=bool)
         if distance_threshold is not None:
             valid_mask &= dists <= float(distance_threshold)
 
-        # 过滤2：时间阈值（离当前 query 太老的候选丢弃）
-        # 仅过滤“更老”的候选：query_frame_idx - candidate_idx > temporal_threshold
+        # Drop candidates older than the query by more than temporal_threshold frames.
         if query_frame_idx is not None and temporal_threshold is not None:
             valid_mask &= (int(query_frame_idx) - topk_indices) <= int(temporal_threshold)
 
@@ -4344,9 +4302,8 @@ class FrustumHandler:
         topk_indices = topk_indices[valid_mask]
         dists = dists[valid_mask]
 
-        # 按距离升序排列
         order = np.argsort(dists)
-        ranked: List[Tuple[int, float, float]] = []
+        ranked: list[tuple[int, float, float]] = []
         for o in order:
             gi = int(topk_indices[o])
             ranked.append((gi, float(angles_deg[gi]), float(dists[o])))

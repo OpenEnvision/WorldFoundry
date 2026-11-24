@@ -12,21 +12,22 @@ from transformers import (
     Qwen2_5_VLForConditionalGeneration,
 )
 
+from worldfoundry.base_models.diffusion_model.kandinsky6_types import TextEmbeds
 from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.quantize.nf4 import qwen_load_kwargs
 
-from worldfoundry.base_models.diffusion_model.kandinsky6_types import TextEmbeds
-
-_PROMPT_TEMPLATE = "\n".join([
-    "<|im_start|>system\nYou are a promt engineer. Describe the video in detail.",
-    "Describe how the camera moves or shakes, describe the zoom and view angle, whether it follows the objects.",
-    "Describe the location of the video, main characters or objects and their action.",
-    "Describe the dynamism of the video and presented actions.",
-    "Name the visual style of the video: whether it is a professional footage, user generated content, "
-    "some kind of animation, video game or scren content.",
-    "Describe the visual effects, postprocessing and transitions if they are presented in the video.",
-    "Pay attention to the order of key actions shown in the scene.<|im_end|>",
-    "<|im_start|>user\n{}<|im_end|>",
-])
+_PROMPT_TEMPLATE = "\n".join(
+    [
+        "<|im_start|>system\nYou are a promt engineer. Describe the video in detail.",
+        "Describe how the camera moves or shakes, describe the zoom and view angle, whether it follows the objects.",
+        "Describe the location of the video, main characters or objects and their action.",
+        "Describe the dynamism of the video and presented actions.",
+        "Name the visual style of the video: whether it is a professional footage, user generated content, "
+        "some kind of animation, video game or scren content.",
+        "Describe the visual effects, postprocessing and transitions if they are presented in the video.",
+        "Pay attention to the order of key actions shown in the scene.<|im_end|>",
+        "<|im_start|>user\n{}<|im_end|>",
+    ]
+)
 # Number of tokens to crop from the front (system prompt + user header)
 _CROP_START = 129
 
@@ -122,9 +123,7 @@ class Kandinsky6TextEmbedder:
         self.text_token_padding = text_token_padding
 
         qwen_kwargs = qwen_load_kwargs(self.device, quantized=quantized_qwen)
-        self.qwen = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            qwen_path, **qwen_kwargs
-        ).eval()
+        self.qwen = Qwen2_5_VLForConditionalGeneration.from_pretrained(qwen_path, **qwen_kwargs).eval()
         self.processor = AutoProcessor.from_pretrained(qwen_processor_dir(qwen_path))
 
         self.clip = _load_clip_text_model(clip_path).to(self.device).eval()
@@ -181,9 +180,7 @@ class Kandinsky6TextEmbedder:
             else:
                 text_embeds_out = embeds
                 attention_mask = attn.to(dtype=torch.bool)
-            cu_seqlens = torch.arange(
-                len(texts) + 1, dtype=torch.int32, device=embeds.device
-            ) * embeds.shape[1]
+            cu_seqlens = torch.arange(len(texts) + 1, dtype=torch.int32, device=embeds.device) * embeds.shape[1]
         else:
             token_counts = attn.sum(dim=1).to(torch.int32)
             if len(texts) == 1:
@@ -197,9 +194,7 @@ class Kandinsky6TextEmbedder:
                 max_tokens = int(token_counts.max().item())
                 text_embeds_out = embeds[:, :max_tokens]
                 attention_mask = attn[:, :max_tokens].to(dtype=torch.bool)
-                cu_seqlens = torch.arange(
-                    len(texts) + 1, dtype=torch.int32, device=embeds.device
-                ) * max_tokens
+                cu_seqlens = torch.arange(len(texts) + 1, dtype=torch.int32, device=embeds.device) * max_tokens
 
         # CLIP pooled
         clip_inputs = self.tokenizer(

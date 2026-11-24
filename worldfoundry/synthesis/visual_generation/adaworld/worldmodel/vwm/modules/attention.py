@@ -1,12 +1,18 @@
 import math
 from inspect import isfunction
-from typing import Any, List, Optional
+from typing import Any, ClassVar
+from typing import List as List  # noqa: UP035 - Re-exported to modules that star-import this namespace.
+from typing import Optional as Optional
 
 import torch
 import torch.nn.functional as F
 from einops import rearrange
 from torch import nn
+
+from worldfoundry.base_models.diffusion_model.models.autoencoders.lvdm.blocks import Normalize
+from worldfoundry.base_models.diffusion_model.models.networks.lvdm.attention import GEGLU
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+from worldfoundry.core.nn.blocks.layers import zero_module as zero_module
 
 SDP_IS_AVAILABLE = callable(getattr(F, "scaled_dot_product_attention", None))
 if not SDP_IS_AVAILABLE:
@@ -20,7 +26,7 @@ try:
     import xformers.ops
 
     XFORMERS_IS_AVAILABLE = True
-except:
+except BaseException:
     XFORMERS_IS_AVAILABLE = False
     print("No module 'xformers', processing without it")
 
@@ -36,42 +42,14 @@ def default(val, d):
         return d() if isfunction(d) else d
 
 
-class GEGLU(nn.Module):
-    def __init__(self, dim_in, dim_out):
-        super(GEGLU, self).__init__()
-        self.proj = nn.Linear(dim_in, dim_out * 2)
-
-    def forward(self, x):
-        x, gate = self.proj(x).chunk(2, dim=-1)
-        return x * F.gelu(gate)
-
-
 class FeedForward(nn.Module):
-    def __init__(
-            self,
-            dim,
-            dim_out=None,
-            mult=4,
-            glu=False,
-            dropout=0.0,
-            zero_init=False
-    ):
-        super(FeedForward, self).__init__()
+    def __init__(self, dim, dim_out=None, mult=4, glu=False, dropout=0.0, zero_init=False):
+        super().__init__()
         inner_dim = int(dim * mult)
         dim_out = default(dim_out, dim)
-        project_in = (
-            nn.Sequential(
-                nn.Linear(dim, inner_dim),
-                nn.GELU()
-            )
-            if not glu else GEGLU(dim, inner_dim)
-        )
+        project_in = nn.Sequential(nn.Linear(dim, inner_dim), nn.GELU()) if not glu else GEGLU(dim, inner_dim)
 
-        self.net = nn.Sequential(
-            project_in,
-            nn.Dropout(dropout),
-            nn.Linear(inner_dim, dim_out)
-        )
+        self.net = nn.Sequential(project_in, nn.Dropout(dropout), nn.Linear(inner_dim, dim_out))
 
         if zero_init:
             nn.init.zeros_(self.net[-1].weight)
@@ -81,60 +59,29 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 
-def zero_module(module):
-    """
-    Zero out the parameters of a module and return it.
-    """
-
-    for p in module.parameters():
-        p.detach().zero_()
-    return module
-
-
-def Normalize(in_channels):
-    return nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
-
-
 class CrossAttention(nn.Module):  # Not used, never mind
     def __init__(
-            self,
-            query_dim,
-            context_dim=None,
-            heads=8,
-            dim_head=64,
-            dropout=0.0,
-            backend=None,
-            zero_init=False,
-            **kwargs
+        self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0.0, backend=None, zero_init=False, **kwargs
     ):
-        super(CrossAttention, self).__init__()
+        super().__init__()
         inner_dim = dim_head * heads
         context_dim = default(context_dim, query_dim)
 
-        self.scale = dim_head ** -0.5
+        self.scale = dim_head**-0.5
         self.heads = heads
 
         self.to_q = nn.Linear(query_dim, inner_dim, bias=False)
         self.to_k = nn.Linear(context_dim, inner_dim, bias=False)
         self.to_v = nn.Linear(context_dim, inner_dim, bias=False)
 
-        self.to_out = nn.Sequential(
-            nn.Linear(inner_dim, query_dim),
-            nn.Dropout(dropout)
-        )
+        self.to_out = nn.Sequential(nn.Linear(inner_dim, query_dim), nn.Dropout(dropout))
         self.backend = backend
 
         if zero_init:
             nn.init.zeros_(self.to_out[0].weight)
             nn.init.zeros_(self.to_out[0].bias)
 
-    def forward(
-            self,
-            x,
-            context=None,
-            mask=None,
-            additional_tokens=None
-    ):
+    def forward(self, x, context=None, mask=None, additional_tokens=None):
         num_heads = self.heads
 
         if additional_tokens is not None:
@@ -148,7 +95,7 @@ class CrossAttention(nn.Module):  # Not used, never mind
         k = self.to_k(context)
         v = self.to_v(context)
 
-        q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=num_heads), (q, k, v))
+        q, k, v = (rearrange(t, "b n (h d) -> b h n d", h=num_heads) for t in (q, k, v))
 
         out = _worldfoundry_scaled_dot_product_attention(q, k, v, attn_mask=mask, backend=self.backend)
 
@@ -162,17 +109,8 @@ class CrossAttention(nn.Module):  # Not used, never mind
 
 
 class MemoryEfficientCrossAttention(nn.Module):  # We are using this implementation
-    def __init__(
-            self,
-            query_dim,
-            context_dim=None,
-            heads=8,
-            dim_head=64,
-            dropout=0.0,
-            zero_init=False,
-            **kwargs
-    ):
-        super(MemoryEfficientCrossAttention, self).__init__()
+    def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0.0, zero_init=False, **kwargs):
+        super().__init__()
         print(
             f"Setting up {self.__class__.__name__}. "
             f"Query dim is {query_dim}, "
@@ -188,24 +126,14 @@ class MemoryEfficientCrossAttention(nn.Module):  # We are using this implementat
         self.to_k = nn.Linear(context_dim, inner_dim, bias=False)
         self.to_v = nn.Linear(context_dim, inner_dim, bias=False)
 
-        self.to_out = nn.Sequential(
-            nn.Linear(inner_dim, query_dim),
-            nn.Dropout(dropout)
-        )
-        self.attention_op: Optional[Any] = None
+        self.to_out = nn.Sequential(nn.Linear(inner_dim, query_dim), nn.Dropout(dropout))
+        self.attention_op: Any | None = None
 
         if zero_init:
             nn.init.zeros_(self.to_out[0].weight)
             nn.init.zeros_(self.to_out[0].bias)
 
-    def forward(
-            self,
-            x,
-            context=None,
-            mask=None,
-            additional_tokens=None,
-            batchify_xformers=False
-    ):
+    def forward(self, x, context=None, mask=None, additional_tokens=None, batchify_xformers=False):
         if additional_tokens is not None:
             # Get the number of masked tokens at the beginning of the output sequence
             n_tokens_to_mask = additional_tokens.shape[1]
@@ -218,13 +146,13 @@ class MemoryEfficientCrossAttention(nn.Module):  # We are using this implementat
         v = self.to_v(context)
 
         b, _, _ = q.shape
-        q, k, v = map(
-            lambda t: t.unsqueeze(3)
+        q, k, v = (
+            t.unsqueeze(3)
             .reshape(b, t.shape[1], self.heads, self.dim_head)
             .permute(0, 2, 1, 3)
             .reshape(b * self.heads, t.shape[1], self.dim_head)
-            .contiguous(),
-            (q, k, v)
+            .contiguous()
+            for t in (q, k, v)
         )
 
         if exists(mask):
@@ -257,25 +185,25 @@ class MemoryEfficientCrossAttention(nn.Module):  # We are using this implementat
 
 
 class BasicTransformerBlock(nn.Module):
-    ATTENTION_MODES = {
+    ATTENTION_MODES: ClassVar[dict] = {
         "softmax": CrossAttention,  # Vanilla attention
-        "softmax-xformers": MemoryEfficientCrossAttention  # Ampere
+        "softmax-xformers": MemoryEfficientCrossAttention,  # Ampere
     }
 
     def __init__(
-            self,
-            dim,
-            n_heads,
-            d_head,
-            dropout=0.0,
-            context_dim=None,
-            gated_ff=True,
-            use_checkpoint=False,
-            disable_self_attn=False,
-            attn_mode="softmax",
-            sdp_backend=None
+        self,
+        dim,
+        n_heads,
+        d_head,
+        dropout=0.0,
+        context_dim=None,
+        gated_ff=True,
+        use_checkpoint=False,
+        disable_self_attn=False,
+        attn_mode="softmax",
+        sdp_backend=None,
     ):
-        super(BasicTransformerBlock, self).__init__()
+        super().__init__()
         assert attn_mode in self.ATTENTION_MODES
         if attn_mode != "softmax" and not XFORMERS_IS_AVAILABLE:
             print(
@@ -299,16 +227,11 @@ class BasicTransformerBlock(nn.Module):
             heads=n_heads,
             dim_head=d_head,
             dropout=dropout,
-            backend=sdp_backend
+            backend=sdp_backend,
         )  # Is a self-attn if not self.disable_self_attn
         self.ff = FeedForward(dim, dropout=dropout, glu=gated_ff)
         self.attn2 = attn_cls(
-            query_dim=dim,
-            context_dim=context_dim,
-            heads=n_heads,
-            dim_head=d_head,
-            dropout=dropout,
-            backend=sdp_backend
+            query_dim=dim, context_dim=context_dim, heads=n_heads, dim_head=d_head, dropout=dropout, backend=sdp_backend
         )  # Is self-attn if context is None
         self.norm1 = nn.LayerNorm(dim)
         self.norm2 = nn.LayerNorm(dim)
@@ -326,8 +249,12 @@ class BasicTransformerBlock(nn.Module):
 
     def _forward(self, x, context=None, additional_tokens=None):
         # Spatial self-attn
-        x = self.attn1(self.norm1(x), context=context if self.disable_self_attn else None,
-                       additional_tokens=additional_tokens) + x
+        x = (
+            self.attn1(
+                self.norm1(x), context=context if self.disable_self_attn else None, additional_tokens=additional_tokens
+            )
+            + x
+        )
         # Spatial cross-attn
         x = self.attn2(self.norm2(x), context=context, additional_tokens=additional_tokens) + x
         # Feedforward
@@ -346,27 +273,27 @@ class SpatialTransformer(nn.Module):
     """
 
     def __init__(
-            self,
-            in_channels,
-            n_heads,
-            d_head,
-            depth=1,
-            dropout=0.0,
-            context_dim=None,
-            disable_self_attn=False,
-            use_linear=False,
-            attn_type="softmax",
-            use_checkpoint=False,
-            sdp_backend=None
+        self,
+        in_channels,
+        n_heads,
+        d_head,
+        depth=1,
+        dropout=0.0,
+        context_dim=None,
+        disable_self_attn=False,
+        use_linear=False,
+        attn_type="softmax",
+        use_checkpoint=False,
+        sdp_backend=None,
     ):
-        super(SpatialTransformer, self).__init__()
+        super().__init__()
         print(f"Constructing {self.__class__.__name__} of depth {depth} w/ {in_channels} channels and {n_heads} heads")
 
         from omegaconf import ListConfig
 
-        if exists(context_dim) and not isinstance(context_dim, (List, ListConfig)):
+        if exists(context_dim) and not isinstance(context_dim, (list, ListConfig)):
             context_dim = [context_dim]
-        if exists(context_dim) and isinstance(context_dim, List):
+        if exists(context_dim) and isinstance(context_dim, list):
             if depth != len(context_dim):
                 print(
                     f"WARNING: {self.__class__.__name__}: "
@@ -375,9 +302,9 @@ class SpatialTransformer(nn.Module):
                     f"Setting context_dim to {depth * [context_dim[0]]} now"
                 )
                 # Depth does not match context dims
-                assert all(
-                    map(lambda x: x == context_dim[0], context_dim)
-                ), "Need homogenous context_dim to match depth automatically"
+                assert all(x == context_dim[0] for x in context_dim), (
+                    "Need homogenous context_dim to match depth automatically"
+                )
                 context_dim = depth * [context_dim[0]]
         elif context_dim is None:
             context_dim = [None] * depth
@@ -400,24 +327,20 @@ class SpatialTransformer(nn.Module):
                     disable_self_attn=disable_self_attn,
                     attn_mode=attn_type,
                     use_checkpoint=use_checkpoint,
-                    sdp_backend=sdp_backend
+                    sdp_backend=sdp_backend,
                 )
                 for d in range(depth)
             ]
         )
         if use_linear:
-            self.proj_out = zero_module(
-                nn.Linear(inner_dim, in_channels)
-            )
+            self.proj_out = zero_module(nn.Linear(inner_dim, in_channels))
         else:
-            self.proj_out = zero_module(
-                nn.Conv2d(inner_dim, in_channels, kernel_size=1, stride=1, padding=0)
-            )
+            self.proj_out = zero_module(nn.Conv2d(inner_dim, in_channels, kernel_size=1, stride=1, padding=0))
         self.use_linear = use_linear
 
     def forward(self, x, context=None):
         # NOTE: If no context is given, cross-attn defaults to self-attn
-        if not isinstance(context, List):
+        if not isinstance(context, list):
             context = [context]
         b, c, h, w = x.shape
         x_in = x

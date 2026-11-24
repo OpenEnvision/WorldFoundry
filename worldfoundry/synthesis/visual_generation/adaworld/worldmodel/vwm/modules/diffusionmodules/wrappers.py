@@ -1,15 +1,15 @@
-from typing import Dict
-
 import torch
 import torch.nn as nn
 from packaging import version
 
-OPENAIUNETWRAPPER = "vwm.modules.diffusionmodules.wrappers.OpenAIWrapper"
+OPENAIUNETWRAPPER = (
+    "worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.diffusionmodules.wrappers.OpenAIWrapper"
+)
 
 
 class IdentityWrapper(nn.Module):
     def __init__(self, diffusion_model, compile_model: bool = False):
-        super(IdentityWrapper, self).__init__()
+        super().__init__()
         compile = (
             torch.compile
             if version.parse(torch.__version__) >= version.parse("2.0.0") and compile_model
@@ -22,18 +22,6 @@ class IdentityWrapper(nn.Module):
 
 
 class OpenAIWrapper(IdentityWrapper):
-    def forward(
-            self,
-            x: torch.Tensor,
-            t: torch.Tensor,
-            c: Dict,
-            **kwargs
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, t: torch.Tensor, c: dict, **kwargs) -> torch.Tensor:
         x = torch.cat([x, c.get("concat", torch.Tensor([]).type_as(x))], dim=1)
-        return self.diffusion_model(
-            x,
-            timesteps=t,
-            context=c.get("crossattn", None),
-            y=c.get("vector", None),
-            **kwargs
-        )
+        return self.diffusion_model(x, timesteps=t, context=c.get("crossattn"), y=c.get("vector"), **kwargs)

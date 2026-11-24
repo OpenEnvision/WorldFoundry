@@ -17,7 +17,6 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-
 _EXPORTS = {
     "Cosmos3LatentInitializer": ".cosmos3",
     "ProvidedLatentInitializer": ".provided",

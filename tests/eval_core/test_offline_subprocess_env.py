@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from worldfoundry.runtime.conda import RuntimeCondaEnvSpec
-from worldfoundry.studio.inference.dispatch import _runtime_env
 from worldfoundry.base_models.three_dimensions.three_d_four_d.runtime import (
     ThreeDFourDRuntimeSynthesis,
     three_d_four_d_runtime_spec,
 )
-
+from worldfoundry.runtime.conda import RuntimeCondaEnvSpec
+from worldfoundry.studio.inference.dispatch import _runtime_env
 
 OFFLINE_ENV = {
     "HF_HUB_OFFLINE": "1",
@@ -32,7 +31,6 @@ def test_three_d_four_d_child_preserves_explicit_offline_mode(tmp_path, monkeypa
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path / "ckpts"))
     runtime = ThreeDFourDRuntimeSynthesis(
         spec=three_d_four_d_runtime_spec("mvdiffusion"),
-        source_root=tmp_path,
         device="cpu",
     )
 

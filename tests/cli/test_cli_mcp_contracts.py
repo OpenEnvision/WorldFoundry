@@ -19,11 +19,20 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from types import FunctionType
+from typing import Any
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(autouse=True)
+def plain_presentation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("TERM", "dumb")
 
 
 def _run_cli(args: list[str], *, timeout: float = 120.0) -> subprocess.CompletedProcess[str]:
@@ -43,10 +52,10 @@ class FakeMCP:
     """Minimal stand-in for FastMCP that records registered tool functions."""
 
     def __init__(self) -> None:
-        self.tools: dict[str, object] = {}
+        self.tools: dict[str, Callable[..., Any]] = {}
 
-    def tool(self):
-        def decorator(fn):
+    def tool(self, **_kwargs: Any) -> Callable[[FunctionType], FunctionType]:
+        def decorator(fn: FunctionType) -> FunctionType:
             self.tools[fn.__name__] = fn
             return fn
 
@@ -54,7 +63,7 @@ class FakeMCP:
 
 
 @pytest.fixture(scope="module")
-def registered_tools() -> dict[str, object]:
+def registered_tools() -> dict[str, Callable[..., Any]]:
     from worldfoundry.mcp.tools.registration import register_tools
 
     fake = FakeMCP()
@@ -73,7 +82,7 @@ def test_parser_build_stays_off_heavy_import_paths() -> None:
         "from worldfoundry.cli.main import _build_parser\n"
         "_build_parser()\n"
         "assert 'torch' not in sys.modules, 'torch imported during parser build'\n"
-        "heavy = 'worldfoundry.evaluation.tasks.execution.orchestration.service'\n"
+        "heavy = 'worldfoundry.evals.tasks.execution.orchestration.service'\n"
         "assert heavy not in sys.modules, 'orchestration.service imported during parser build'\n"
     )
     env = dict(os.environ)
@@ -145,7 +154,7 @@ def test_score_usage_error_fails_fast_before_heavy_import(tmp_path: Path) -> Non
         "from worldfoundry.cli.main import main\n"
         "rc = main(['score', '--benchmark', 'x', '--output-dir', sys.argv[1]])\n"
         "assert rc == 2, rc\n"
-        "heavy = 'worldfoundry.evaluation.tasks.execution.orchestration.service'\n"
+        "heavy = 'worldfoundry.evals.tasks.execution.orchestration.service'\n"
         "assert heavy not in sys.modules, 'orchestration.service imported for a usage error'\n"
         "print('USAGE_CONTRACT_OK')\n"
     )
@@ -205,29 +214,76 @@ def test_run_print_config_without_model_is_usage_error(tmp_path: Path) -> None:
     assert "Traceback" not in result.stderr
 
 
+@pytest.mark.parametrize(
+    "args,exit_code,message,hint,json_output",
+    [
+        (
+            ["score", "--benchmark", "x", "--plan-only", "--json"],
+            2,
+            "score --benchmark requires --artifacts",
+            "Run wf score --help for usage.",
+            True,
+        ),
+        (
+            ["zoo", "benchmark-show", "--benchmark-id", "does-not-exist-xyz", "--json"],
+            1,
+            "does-not-exist-xyz",
+            None,
+            True,
+        ),
+        (["definitely-not-a-command"], 2, "invalid choice", "Run wf --help to see commands and options.", False),
+    ],
+)
+def test_forced_color_errors_preserve_machine_output_and_exit_codes(
+    monkeypatch: pytest.MonkeyPatch, args: list[str], exit_code: int, message: str, hint: str | None, json_output: bool
+) -> None:
+    monkeypatch.delenv("NO_COLOR")
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    monkeypatch.setenv("TERM", "xterm")
+    monkeypatch.setenv("COLUMNS", "160")
+    result = _run_cli(args)
+    assert result.returncode == exit_code
+    assert "\x1b[1m\x1b[31mError\x1b[0m" in result.stderr
+    assert message in result.stderr
+    assert "Traceback" not in result.stderr
+    if hint is not None:
+        assert hint in result.stderr
+    if json_output:
+        assert "\x1b[" not in result.stdout
+        payload = json.loads(result.stdout)
+        assert payload["status"] == "error"
+        assert payload["exit_code"] == exit_code
+        assert payload["error"]["type"]
+        assert message in payload["error"]["message"]
+        if exit_code == 2:
+            assert payload["error"]["type"] == "usage"
+    else:
+        assert result.stdout == ""
+
+
 # ── CM-25: registered tools return the structured error envelope ────────
 
 
-def test_tool_errors_return_envelope_instead_of_raising(registered_tools: dict[str, object]) -> None:
+def test_tool_errors_return_envelope_instead_of_raising(registered_tools: dict[str, Callable[..., Any]]) -> None:
     list_runs = registered_tools["list_runs"]
-    payload = list_runs(limit=0)
+    payload = asyncio.run(list_runs(limit=0))
     assert payload["ok"] is False
-    assert payload["error_type"] == "error"
+    assert payload["error_type"] == "invalid_argument"
     assert "limit" in payload["error"]
 
 
-def test_async_tool_errors_return_envelope(registered_tools: dict[str, object]) -> None:
+def test_async_tool_errors_return_envelope(registered_tools: dict[str, Callable[..., Any]]) -> None:
     evaluate = registered_tools["evaluate"]
-    payload = asyncio.run(evaluate(model="m", benchmark="b", wait="bogus-strategy"))
+    payload = asyncio.run(evaluate(model="m", benchmarks=["b"], wait="bogus-strategy"))
     assert payload["ok"] is False
-    assert payload["error_type"] == "error"
+    assert payload["error_type"] == "invalid_argument"
     assert "wait" in payload["error"]
 
 
 # ── CM-26: studio waits are async with finite default timeouts ──────────
 
 
-def test_studio_wait_tools_are_async(registered_tools: dict[str, object]) -> None:
+def test_studio_wait_tools_are_async(registered_tools: dict[str, Callable[..., Any]]) -> None:
     assert inspect.iscoroutinefunction(registered_tools["wait_for_studio_job"])
     assert inspect.iscoroutinefunction(registered_tools["submit_studio_inference"])
 
@@ -238,9 +294,7 @@ def test_studio_wait_default_timeout_is_finite() -> None:
     assert studio.DEFAULT_STUDIO_WAIT_TIMEOUT_S == 600.0
     for fn, param in (
         (studio.wait_for_studio_job_payload, "timeout_s"),
-        (studio.wait_for_studio_job_payload_async, "timeout_s"),
         (studio.submit_studio_inference_payload, "wait_timeout_s"),
-        (studio.submit_studio_inference_payload_async, "wait_timeout_s"),
     ):
         default = inspect.signature(fn).parameters[param].default
         assert default == studio.DEFAULT_STUDIO_WAIT_TIMEOUT_S
@@ -264,13 +318,13 @@ def test_readiness_default_dataset_root_is_absolute() -> None:
 # ── CM-31: advertised tool face matches the registrations ────────────────
 
 
-def test_mcp_tool_names_match_registration(registered_tools: dict[str, object]) -> None:
+def test_mcp_tool_names_match_registration(registered_tools: dict[str, Callable[..., Any]]) -> None:
     from worldfoundry.mcp.tools.server_info import MCP_TOOL_NAMES
 
     assert sorted(MCP_TOOL_NAMES) == sorted(registered_tools)
 
 
-def test_preview_run_covers_evaluate_selection_surface(registered_tools: dict[str, object]) -> None:
+def test_preview_run_covers_evaluate_selection_surface(registered_tools: dict[str, Callable[..., Any]]) -> None:
     preview_params = set(inspect.signature(registered_tools["preview_run"]).parameters)
     evaluate_params = set(inspect.signature(registered_tools["evaluate"]).parameters)
     # Wait-strategy knobs only make sense for submission, not preview.
@@ -282,8 +336,6 @@ def test_preview_run_covers_evaluate_selection_surface(registered_tools: dict[st
 
 def test_mcp_client_persistent_session(monkeypatch: pytest.MonkeyPatch) -> None:
     from worldfoundry.mcp.client import MCPClient
-
-    created: list[object] = []
 
     class FakeSession:
         async def list_tools(self):
@@ -306,6 +358,8 @@ def test_mcp_client_persistent_session(monkeypatch: pytest.MonkeyPatch) -> None:
         async def __aexit__(self, *exc):
             self.closed = True
             return False
+
+    created: list[FakeContext] = []
 
     async def fake_client(self):
         return FakeContext()
@@ -368,7 +422,7 @@ def test_mcp_context_restores_persisted_runs_for_payloads(tmp_path: Path) -> Non
                         "completed_at": "2026-08-25T00:00:09+00:00",
                         "returncode": 0,
                         "output_dir": str(tmp_path / "persisted-run"),
-                        "command": ["worldfoundry-eval", "run", "--json"],
+                        "command": ["wf", "run", "--json"],
                         "metadata": {"surface": "mcp"},
                     }
                 ],
@@ -379,7 +433,7 @@ def test_mcp_context_restores_persisted_runs_for_payloads(tmp_path: Path) -> Non
     ctx = MCPToolContext(output_root=tmp_path)
     listed = list_runs_payload(context=ctx)
     assert listed["total"] == 1
-    assert listed["runs"][0]["job_id"] == "persisted-run"
+    assert listed["runs"][0]["run_id"] == "persisted-run"
     assert listed["runs"][0]["restored"] is True
     status = get_run_status_payload("persisted-run", context=ctx)
     assert status["status"] == "completed"
@@ -421,13 +475,13 @@ def test_create_mcp_server_writes_context_back_to_default(
     from worldfoundry.mcp.tools.context import get_default_context
 
     class FakeFastMCP:
-        def __init__(self, name, *, instructions=None, json_response=False) -> None:
+        def __init__(self, name, *, instructions=None, json_response=False, host=None, port=None) -> None:
             self.name = name
             self.tools: dict[str, object] = {}
 
-        def tool(self):
+        def tool(self, **kwargs):
             def decorator(fn):
-                self.tools[fn.__name__] = fn
+                self.tools[kwargs["name"]] = fn
                 return fn
 
             return decorator
@@ -447,8 +501,9 @@ def test_create_mcp_server_writes_context_back_to_default(
             [sys.executable, "-c", "print('shared-store')"],
             metadata={"run_id": "shared-store-run"},
         )
+        assert job._task is not None
         await job._task
-        return server.tools["list_runs"]()
+        return await server.tools["list_runs"]()
 
     envelope = asyncio.run(scenario())
     assert envelope["ok"] is True

@@ -55,7 +55,7 @@ class HunyuanVideo15Resources:
             required_glyph_files = [
                 os.path.join(glyph_root, "assets/color_idx.json"),
                 os.path.join(glyph_root, "assets/multilingual_10-lang_idx.json"),
-                os.path.join(glyph_root, "checkpoints/byt5_model.pt"),
+                os.path.join(glyph_root, "checkpoints/model.safetensors"),
             ]
             missing_glyph_files = [path for path in required_glyph_files if not os.path.exists(path)]
             if missing_glyph_files:
@@ -75,13 +75,13 @@ class HunyuanVideo15Resources:
                 byT5_google_path = "google/byt5-small"
             multilingual_prompt_format_color_path = os.path.join(glyph_root, "assets/color_idx.json")
             multilingual_prompt_format_font_path = os.path.join(glyph_root, "assets/multilingual_10-lang_idx.json")
-            byt5_args = dict(
-                byT5_google_path=byT5_google_path,
-                byT5_ckpt_path=os.path.join(glyph_root, "checkpoints/byt5_model.pt"),
-                multilingual_prompt_format_color_path=multilingual_prompt_format_color_path,
-                multilingual_prompt_format_font_path=multilingual_prompt_format_font_path,
-                byt5_max_length=byt5_max_length,
-            )
+            byt5_args = {
+                "byT5_google_path": byT5_google_path,
+                "byT5_ckpt_path": os.path.join(glyph_root, "checkpoints/model.safetensors"),
+                "multilingual_prompt_format_color_path": multilingual_prompt_format_color_path,
+                "multilingual_prompt_format_font_path": multilingual_prompt_format_font_path,
+                "byt5_max_length": byt5_max_length,
+            }
             byt5_kwargs = load_glyph_byT5_v2(byt5_args, device=device)
             prompt_format = MultilingualPromptFormat(
                 font_path=multilingual_prompt_format_font_path, color_path=multilingual_prompt_format_color_path
@@ -113,7 +113,7 @@ class HunyuanVideo15Resources:
             if not os.path.exists(config_path):
                 continue
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
+                with open(config_path, encoding="utf-8") as f:
                     config = json.load(f)
             except Exception as exc:
                 loguru.logger.warning("Skipping unreadable HY-WorldPlay text encoder config {}: {}", config_path, exc)
@@ -176,7 +176,7 @@ class HunyuanVideo15Resources:
             if not os.path.exists(config_path):
                 continue
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
+                with open(config_path, encoding="utf-8") as f:
                     config = json.load(f)
             except Exception as exc:
                 loguru.logger.warning("Skipping unreadable HY-WorldPlay vision encoder config {}: {}", config_path, exc)

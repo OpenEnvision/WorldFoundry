@@ -32,12 +32,14 @@ import os
 import threading
 import warnings
 from collections import deque
-from collections.abc import Iterator, MutableMapping
+from collections.abc import Generator, MutableMapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
+from typing import Literal, TypeAlias
 
 import torch
+import torch.version
 from einops import rearrange
 
 from worldfoundry.core.attention.backends.native import (
@@ -184,7 +186,7 @@ def flash_attention_3(
     scale=None,
 ):
     """FlashAttention 3 entry (Hopper ``flash_attn_interface``); layout ``b s n d``."""
-    import flash_attn_interface
+    flash_attn_interface = __import__("flash_attn_interface")
 
     required_in_pattern, required_out_pattern = "b s n d", "b s n d"
     q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, required_in_pattern, dims)
@@ -321,7 +323,7 @@ def sage_attention(
     scale=None,
 ):
     """SageAttention entry (approximate; explicit opt-in); layout ``b n s d``."""
-    from sageattention import sageattn
+    sageattn = __import__("sageattention", fromlist=["sageattn"]).sageattn
 
     required_in_pattern, required_out_pattern = "b n s d", "b n s d"
     q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, required_in_pattern, dims)
@@ -343,7 +345,7 @@ def sage_attention_3(
 ):
     """SageAttention 3 (Blackwell FP4). Does not support GQA/MQA or a custom softmax scale."""
 
-    from sageattn3 import sageattn3_blackwell
+    sageattn3_blackwell = __import__("sageattn3", fromlist=["sageattn3_blackwell"]).sageattn3_blackwell
 
     required_in_pattern, required_out_pattern = "b n s d", "b n s d"
     q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, required_in_pattern, dims)
@@ -368,7 +370,7 @@ def xformers_attention(
     scale=None,
 ):
     """xFormers memory-efficient attention. GQA is rejected until a 5D layout exists."""
-    import xformers.ops as xops
+    xops = __import__("xformers.ops", fromlist=["memory_efficient_attention"])
 
     required_in_pattern, required_out_pattern = "b s n d", "b s n d"
     q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, required_in_pattern, dims)
@@ -399,7 +401,7 @@ _PROVIDER_COMPILE_RECEIPT_SINK: ContextVar[MutableMapping[str, int] | None] = Co
 @contextmanager
 def attention_compile_receipt_scope(
     sink: MutableMapping[str, int],
-) -> Iterator[None]:
+) -> Generator[None, None, None]:
     """Bind compiled-provider receipts to the wrapper currently executing.
 
     The process-global report is useful for eager runs, but a compiled graph
@@ -433,7 +435,7 @@ def _record_provider_runtime(selected: str, **increments: int) -> None:
     with _PROVIDER_RUNTIME_LOCK:
         counters = _PROVIDER_RUNTIME.setdefault(
             selected,
-            {name: 0 for name in _PROVIDER_RUNTIME_EVENT_NAMES},
+            dict.fromkeys(_PROVIDER_RUNTIME_EVENT_NAMES, 0),
         )
         for event, increment in increments.items():
             counters[event] += int(increment)
@@ -455,7 +457,7 @@ def _record_compiled_provider_graph_trace(selected: str) -> int:
     with _PROVIDER_RUNTIME_LOCK:
         counters = _PROVIDER_RUNTIME.setdefault(
             selected,
-            {name: 0 for name in _PROVIDER_RUNTIME_EVENT_NAMES},
+            dict.fromkeys(_PROVIDER_RUNTIME_EVENT_NAMES, 0),
         )
         counters["compiled_graph_traces"] += 1
         count = counters["compiled_graph_traces"]
@@ -824,6 +826,12 @@ def _auto_attention_backends(device: torch.device | str | None) -> tuple[str, ..
     return ()
 
 
+_AttentionSignature: TypeAlias = (
+    tuple[Literal["known"], int, int, int, int, int, int, int, int, int, str, str, str, str]
+    | tuple[Literal["unknown"], int, int, int, int, int, int]
+)
+
+
 def _tensor_layout_shape(tensor: torch.Tensor, pattern: str, dims: dict | None) -> tuple[int, int, int] | None:
     """Return ``(sequence, heads, head_dim)`` for common dispatcher layouts."""
 
@@ -848,7 +856,7 @@ def _attention_signature(
     k_pattern: str,
     v_pattern: str,
     dims: dict | None,
-) -> tuple[object, ...]:
+) -> _AttentionSignature:
     """Hash QKV layout into a quarantine key, or ``unknown`` when unpackable.
 
     Unknown layouts still dispatch; they just cannot be shape-gated or
@@ -885,7 +893,7 @@ def _select_attention_backends_cached(
     preferred: str,
     device: str,
     dtype: str,
-    signature: tuple[object, ...],
+    signature: _AttentionSignature,
     short_threshold: int,
     unavailable: tuple[str, ...],
 ) -> tuple[str, ...]:
@@ -925,7 +933,7 @@ def _attention_backend_shape_eligible(
     selected: str,
     device: str,
     dtype: str,
-    signature: tuple[object, ...],
+    signature: _AttentionSignature,
 ) -> bool:
     """Return whether ``selected`` can serve this signature without a kernel error.
 
@@ -960,9 +968,10 @@ def _attention_backend_shape_eligible(
         return False
     if k_heads <= 0 or q_heads % k_heads:
         return False
-    if selected in {"flash_attention_2", "flash_attention_3", "flash_attention_4"}:
-        if int(head_dim) <= 0 or int(head_dim) > 256 or int(head_dim) % 8:
-            return False
+    if selected in {"flash_attention_2", "flash_attention_3", "flash_attention_4"} and (
+        int(head_dim) <= 0 or int(head_dim) > 256 or int(head_dim) % 8
+    ):
+        return False
     if selected == "sage_attention" and int(head_dim) not in {64, 128}:
         return False
     if selected == "sage_attention_3":
@@ -972,11 +981,9 @@ def _attention_backend_shape_eligible(
             return False
         if max(int(_q_seq), int(k_seq)) < 512:
             return False
-    if selected == "xformers" and (q_heads != k_heads or k_heads != v_heads):
-        # Common xFormers releases require explicit 5D grouped layout for
-        # GQA/MQA. Until that layout is built here, keep the safe MHA path.
-        return False
-    return True
+    # Common xFormers releases require explicit 5D grouped layout for
+    # GQA/MQA. Until that layout is built here, keep the safe MHA path.
+    return not (selected == "xformers" and (q_heads != k_heads or k_heads != v_heads))
 
 
 def _remember_failed_attention_signature(key: tuple[object, ...]) -> None:
@@ -1073,11 +1080,9 @@ def _is_backend_load_error(selected: str, exc: ImportError | OSError) -> bool:
         # transitive Python/CUDA module is a provider availability failure too.
         return bool(roots)
     message = str(exc).lower()
-    if not any(marker in message for marker in _DYNAMIC_LIBRARY_ERROR_MARKERS):
-        return False
     # Loader errors commonly mention only a transitive dependency such as
     # libcudart/libtorch rather than the importing backend module.
-    return True
+    return any(marker in message for marker in _DYNAMIC_LIBRARY_ERROR_MARKERS)
 
 
 def _is_unsupported_kernel_error(exc: RuntimeError) -> bool:

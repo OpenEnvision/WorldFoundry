@@ -1,13 +1,14 @@
-import torch
-from typing import Optional, Tuple, List
 from dataclasses import dataclass
-from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.blockmask import BlockPattern, AttnMaskSpec
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
+import torch
 from matplotlib.patches import Rectangle
 
+from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.blockmask import AttnMaskSpec, BlockPattern
 
-def make_magi_ranges_full(spec: AttnMaskSpec, Q_real: int, KV_real: int, device) -> Tuple[torch.Tensor, torch.Tensor]:
+
+def make_magi_ranges_full(spec: AttnMaskSpec, Q_real: int, KV_real: int, device) -> tuple[torch.Tensor, torch.Tensor]:
     """
     MagiAttention-style format:
       q_ranges: [R,2] int32
@@ -21,8 +22,8 @@ def make_magi_ranges_full(spec: AttnMaskSpec, Q_real: int, KV_real: int, device)
     local_k = spec.local_attn_blocks - 1
     sink_k = spec.sink_blocks
 
-    q_list: List[List[int]] = []
-    k_list: List[List[int]] = []
+    q_list: list[list[int]] = []
+    k_list: list[list[int]] = []
 
     def _append(q0: int, q1: int, k0: int, k1: int):
         q_list.append([q0, q1])
@@ -70,7 +71,8 @@ def make_magi_ranges_full(spec: AttnMaskSpec, Q_real: int, KV_real: int, device)
         total_len = 2 * clean_len
 
         assert Q_real == total_len and KV_real == total_len, (
-            f"teacher_forcing expects Q_real==KV_real==2*clean_len ({total_len}), " f"got Q_real={Q_real}, KV_real={KV_real}"
+            f"teacher_forcing expects Q_real==KV_real==2*clean_len ({total_len}), "
+            f"got Q_real={Q_real}, KV_real={KV_real}"
         )
 
         local_k_tf = spec.local_attn_blocks - 1
@@ -123,7 +125,7 @@ def make_magi_ranges_full(spec: AttnMaskSpec, Q_real: int, KV_real: int, device)
     raise ValueError(f"Unsupported mode: {mode}")
 
 
-def merge_k_ranges(q_ranges: torch.Tensor, k_ranges: torch.Tensor, KV_real: int) -> Tuple[torch.Tensor, torch.Tensor]:
+def merge_k_ranges(q_ranges: torch.Tensor, k_ranges: torch.Tensor, KV_real: int) -> tuple[torch.Tensor, torch.Tensor]:
     """
     For each consecutive block of identical q_range:
       - clip k to [0, KV_real]
@@ -142,8 +144,8 @@ def merge_k_ranges(q_ranges: torch.Tensor, k_ranges: torch.Tensor, KV_real: int)
     q_cpu = q_cpu[order]
     k_cpu = k_cpu[order]
 
-    out_q: List[Tuple[int, int]] = []
-    out_k: List[Tuple[int, int]] = []
+    out_q: list[tuple[int, int]] = []
+    out_k: list[tuple[int, int]] = []
 
     R = q_cpu.shape[0]
     i = 0
@@ -151,7 +153,7 @@ def merge_k_ranges(q_ranges: torch.Tensor, k_ranges: torch.Tensor, KV_real: int)
         q0, q1 = q_cpu[i]
         assert q0 < q1, f"Invalid q range [{q0}, {q1})"
         j = i
-        segs: List[Tuple[int, int]] = []
+        segs: list[tuple[int, int]] = []
         while j < R and q_cpu[j, 0] == q0 and q_cpu[j, 1] == q1:
             k0, k1 = k_cpu[j]
             k0 = max(0, min(KV_real, int(k0)))
@@ -163,7 +165,7 @@ def merge_k_ranges(q_ranges: torch.Tensor, k_ranges: torch.Tensor, KV_real: int)
         assert segs, f"Empty-k group for q=[{q0},{q1})."
 
         segs.sort(key=lambda x: x[0])
-        merged: List[Tuple[int, int]] = []
+        merged: list[tuple[int, int]] = []
         cur_s, cur_e = segs[0]
         for s, e in segs[1:]:
             if s <= cur_e:  # overlap or touch
@@ -184,7 +186,9 @@ def merge_k_ranges(q_ranges: torch.Tensor, k_ranges: torch.Tensor, KV_real: int)
     return q2, k2
 
 
-def group_q_ranges_csr(q_ranges: torch.Tensor, k_ranges: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def group_q_ranges_csr(
+    q_ranges: torch.Tensor, k_ranges: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Groups consecutive identical q_ranges into CSR:
       q_unique: [G,2] int32
@@ -214,7 +218,7 @@ def group_q_ranges_csr(q_ranges: torch.Tensor, k_ranges: torch.Tensor) -> Tuple[
     return q_unique, k, qk_map
 
 
-def build_qtile_tasks(q_unique: torch.Tensor, Q_real: int, BLOCK_M: int) -> Tuple[torch.Tensor, torch.Tensor]:
+def build_qtile_tasks(q_unique: torch.Tensor, Q_real: int, BLOCK_M: int) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Build task list: each task is (group_id, qtile_id) where qtile intersects q_range.
     Returns:
@@ -262,14 +266,16 @@ class MagiMask:
     BLOCK_M: int
 
 
-def prepare_magi_csr_and_tasks(q_ranges: torch.Tensor, k_ranges: torch.Tensor, Q_real: int, KV_real: int, BLOCK_M: int) -> MagiMask:
+def prepare_magi_csr_and_tasks(
+    q_ranges: torch.Tensor, k_ranges: torch.Tensor, Q_real: int, KV_real: int, BLOCK_M: int
+) -> MagiMask:
     q_ranges, k_ranges = merge_k_ranges(q_ranges, k_ranges, KV_real=KV_real)
     q_unique, k_flat, qk_map = group_q_ranges_csr(q_ranges, k_ranges)
     # sanity: q coverage (partition, no gaps/overlaps)
     qu = q_unique.detach().to("cpu").to(torch.int64).numpy()
-    assert qu.shape[0] > 0 and qu[0, 0] == 0 and qu[-1, 1] == Q_real, f"q_unique does not cover [0,Q_real)."
+    assert qu.shape[0] > 0 and qu[0, 0] == 0 and qu[-1, 1] == Q_real, "q_unique does not cover [0,Q_real)."
     for i in range(qu.shape[0] - 1):
-        assert qu[i, 1] == qu[i + 1, 0], f"q_unique has gap/overlap at i={i}: {qu[i]} vs {qu[i+1]}"
+        assert qu[i, 1] == qu[i + 1, 0], f"q_unique has gap/overlap at i={i}: {qu[i]} vs {qu[i + 1]}"
     task_group, task_qtile = build_qtile_tasks(q_unique, Q_real=Q_real, BLOCK_M=BLOCK_M)
     return MagiMask(
         q_unique=q_unique.contiguous(),
@@ -286,11 +292,11 @@ def prepare_magi_csr_and_tasks(q_ranges: torch.Tensor, k_ranges: torch.Tensor, Q
 def visualize_magi_ranges(
     q_ranges: torch.Tensor,
     k_ranges: torch.Tensor,
-    Q: Optional[int] = None,
-    K: Optional[int] = None,
-    figsize: Tuple[int, int] = (7, 7),
-    ax: Optional[plt.Axes] = None,
-    title: Optional[str] = None,
+    Q: int | None = None,
+    K: int | None = None,
+    figsize: tuple[int, int] = (7, 7),
+    ax: plt.Axes | None = None,
+    title: str | None = None,
     show_ranges_grid: bool = True,
 ):
     """
@@ -313,7 +319,7 @@ def visualize_magi_ranges(
     # draw rectangles in token coords (exact)
     ax.set_xlim(0, K)
     ax.set_ylim(Q, 0)
-    for (q0, q1), (k0, k1) in zip(qr, kr):
+    for (q0, q1), (k0, k1) in zip(qr, kr, strict=False):
         if q1 <= q0 or k1 <= k0:
             continue
         qq0 = max(0, min(Q, int(q0)))
@@ -352,9 +358,9 @@ def visualize_magi_csr_full(
     qk_map: torch.Tensor,
     Q: int,
     K: int,
-    figsize: Tuple[int, int] = (7, 7),
-    ax: Optional[plt.Axes] = None,
-    title: Optional[str] = None,
+    figsize: tuple[int, int] = (7, 7),
+    ax: plt.Axes | None = None,
+    title: str | None = None,
 ):
     qu = q_unique.detach().to("cpu").to(torch.int64).numpy()
     kf = k_flat.detach().to("cpu").to(torch.int64).numpy()

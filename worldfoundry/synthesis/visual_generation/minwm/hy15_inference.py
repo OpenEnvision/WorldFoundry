@@ -9,7 +9,6 @@ import json
 import os
 import re
 import time
-from types import SimpleNamespace
 
 import imageio
 import numpy as np
@@ -20,18 +19,18 @@ from PIL import Image
 from safetensors.torch import load_file
 from torchvision import transforms
 
+from worldfoundry.base_models.diffusion_model.schedulers.hunyuan_compat import (
+    HunyuanVideoFlowMatchDiscreteScheduler as FlowMatchDiscreteScheduler,
+)
 from worldfoundry.core.geometry.trajectory import (
     camera_trajectory_action_labels,
     camera_trajectory_tensors,
 )
-from worldfoundry.base_models.diffusion_model.schedulers.hunyuan_compat import (
-    HunyuanVideoFlowMatchDiscreteScheduler as FlowMatchDiscreteScheduler,
-)
-
 
 # ---------------------------------------------------------------------------
 # Camera trajectory (ProPE) utilities
 # ---------------------------------------------------------------------------
+
 
 def make_camera_tensors(traj_str, fx=0.5050505, fy=0.89786756, cx=0.5, cy=0.5):
     return camera_trajectory_tensors(
@@ -48,54 +47,82 @@ def make_camera_tensors(traj_str, fx=0.5050505, fy=0.89786756, cx=0.5, cy=0.5):
 # Argument parsing
 # ---------------------------------------------------------------------------
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", required=True, choices=["bidirectional", "ar_rollout"])
 
     # Model paths
-    parser.add_argument("--transformer_dir", required=True,
-                        help="Transformer checkpoint dir (contains config.json + diffusion_pytorch_model.safetensors)")
-    parser.add_argument("--model_path", type=str, default=None,
-                        help="HunyuanVideo-1.5 base model dir (contains vae/, text_encoder/, vision_encoder/). "
-                             "Auto-detected from HF cache if not specified.")
-    parser.add_argument("--action_ckpt", type=str, default=None,
-                        help="Path to action model safetensors (overrides transformer_dir weights)")
+    parser.add_argument(
+        "--transformer_dir",
+        required=True,
+        help="Transformer checkpoint dir (contains config.json + diffusion_pytorch_model.safetensors)",
+    )
+    parser.add_argument(
+        "--model_path",
+        type=str,
+        default=None,
+        help="HunyuanVideo-1.5 base model dir (contains vae/, text_encoder/, vision_encoder/). "
+        "Auto-detected from HF cache if not specified.",
+    )
+    parser.add_argument(
+        "--action_ckpt",
+        type=str,
+        default=None,
+        help="Path to action model safetensors (overrides transformer_dir weights)",
+    )
 
     # Data
-    parser.add_argument("--example_json", required=True,
-                        help="JSON file with list of {image, caption} entries (relative paths resolved from JSON dir)")
+    parser.add_argument(
+        "--example_json",
+        required=True,
+        help="JSON file with list of {image, caption} entries (relative paths resolved from JSON dir)",
+    )
     parser.add_argument("--output_dir", required=True)
 
     # Camera trajectory (ProPE) - optional
-    parser.add_argument("--trajectory", type=str, default=None,
-                        help="Camera trajectory string, e.g. 'w*19', 'd*10,w*9'. "
-                             "Overrides per-sample trajectory from JSON.")
-    parser.add_argument("--use_camera", action="store_true",
-                        help="Enable camera mode: read trajectory from JSON per sample. "
-                             "Samples without trajectory field are skipped.")
+    parser.add_argument(
+        "--trajectory",
+        type=str,
+        default=None,
+        help="Camera trajectory string, e.g. 'w*19', 'd*10,w*9'. Overrides per-sample trajectory from JSON.",
+    )
+    parser.add_argument(
+        "--use_camera",
+        action="store_true",
+        help="Enable camera mode: read trajectory from JSON per sample. Samples without trajectory field are skipped.",
+    )
 
     # Inference hyperparameters
     parser.add_argument("--num_inference_steps", type=int, default=50)
     parser.add_argument("--shift", type=float, default=5.0)
     parser.add_argument("--fps", type=int, default=8)
-    parser.add_argument("--guidance_scale", type=float, default=6.0,
-                        help="CFG guidance scale. 1.0 disables CFG.")
+    parser.add_argument("--guidance_scale", type=float, default=6.0, help="CFG guidance scale. 1.0 disables CFG.")
     parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--width", type=int, default=832)
-    parser.add_argument("--video_length", type=int, default=77,
-                        help="Number of output video frames (must satisfy (n-1)//4+1 divisible by 4)")
-    parser.add_argument("--seed", type=int, default=0,
-                        help="Random seed used by NumPy and PyTorch")
+    parser.add_argument(
+        "--video_length",
+        type=int,
+        default=77,
+        help="Number of output video frames (must satisfy (n-1)//4+1 divisible by 4)",
+    )
+    parser.add_argument("--seed", type=int, default=0, help="Random seed used by NumPy and PyTorch")
 
     # Discrete action conditioning
-    parser.add_argument("--use_discrete_action", action="store_true",
-                        help="Pass discrete action labels to model (requires action_in module in ckpt)")
+    parser.add_argument(
+        "--use_discrete_action",
+        action="store_true",
+        help="Pass discrete action labels to model (requires action_in module in ckpt)",
+    )
 
     # AR-specific
-    parser.add_argument("--stabilization_level", type=int, default=1,
-                        help="Timestep for clean context frame modulation (ar_rollout only)")
-    parser.add_argument("--chunk_latent_frames", type=int, default=4,
-                        help="Frames per chunk for ar_rollout")
+    parser.add_argument(
+        "--stabilization_level",
+        type=int,
+        default=1,
+        help="Timestep for clean context frame modulation (ar_rollout only)",
+    )
+    parser.add_argument("--chunk_latent_frames", type=int, default=4, help="Frames per chunk for ar_rollout")
 
     return parser.parse_args()
 
@@ -104,6 +131,7 @@ def parse_args():
 # Distributed setup
 # ---------------------------------------------------------------------------
 
+
 def setup_dist(mode):
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
     world_size = int(os.environ.get("WORLD_SIZE", 1))
@@ -111,13 +139,13 @@ def setup_dist(mode):
     torch.cuda.set_device(local_rank)
 
     if not dist.is_initialized():
-        dist.init_process_group(backend="gloo", init_method="env://",
-                                world_size=world_size, rank=rank)
+        dist.init_process_group(backend="gloo", init_method="env://", world_size=world_size, rank=rank)
 
     if mode == "bidirectional":
         from worldfoundry.core.distributed.sequence_parallel import parallel_state as ps
 
         _orig_init_mp = ps.init_model_parallel_group
+
         def _patched_init_mp(group_ranks, local_rank, backend, **kwargs):
             return ps.GroupCoordinator(
                 group_ranks=group_ranks,
@@ -126,6 +154,7 @@ def setup_dist(mode):
                 use_device_communicator=False,
                 group_name=kwargs.get("group_name"),
             )
+
         ps.init_model_parallel_group = _patched_init_mp
 
         if ps._WORLD is None:
@@ -136,8 +165,7 @@ def setup_dist(mode):
                 use_device_communicator=False,
                 group_name="world",
             )
-        ps.initialize_model_parallel(tensor_model_parallel_size=1,
-                                     sequence_model_parallel_size=1)
+        ps.initialize_model_parallel(tensor_model_parallel_size=1, sequence_model_parallel_size=1)
         ps.init_model_parallel_group = _orig_init_mp
 
     return rank, world_size, local_rank
@@ -146,6 +174,7 @@ def setup_dist(mode):
 # ---------------------------------------------------------------------------
 # Shared utilities: on-the-fly encoding
 # ---------------------------------------------------------------------------
+
 
 def load_examples(example_json):
     """Load example list from JSON file. Returns list of {image, caption} dicts with absolute paths."""
@@ -170,21 +199,20 @@ def find_hunyuanvideo_model_path():
 def encode_image_to_cond_latent(vae, image_path, height, width, device):
     """Load image, resize, encode through VAE to get conditional latent."""
     image = Image.open(image_path).convert("RGB")
-    transform = transforms.Compose([
-        transforms.Resize((height, width)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-    ])
+    transform = transforms.Compose(
+        [
+            transforms.Resize((height, width)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+        ]
+    )
     img_tensor = transform(image).unsqueeze(0).unsqueeze(2)  # [1, 3, 1, H, W]
     img_tensor = img_tensor.to(device, dtype=torch.float16)
     with torch.no_grad():
         latent = vae.encode(img_tensor).latent_dist.sample()
     scaling_factor = vae.config.scaling_factor
     shift_factor = getattr(vae.config, "shift_factor", None)
-    if shift_factor:
-        latent = (latent - shift_factor) * scaling_factor
-    else:
-        latent = latent * scaling_factor
+    latent = (latent - shift_factor) * scaling_factor if shift_factor else latent * scaling_factor
     return latent.to(dtype=torch.bfloat16)
 
 
@@ -216,13 +244,17 @@ def encode_byt5(byt5_model, byt5_tokenizer, caption, byt5_max_length, device):
     if byt5_model is None:
         if re.search(r'"[^"\n]+"', caption):
             raise ValueError("Quoted glyph text requires local Glyph-SDXL-v2 / ByT5 checkpoints.")
-        return torch.zeros((1, byt5_max_length, 1472), device=device), \
-               torch.zeros((1, byt5_max_length), device=device, dtype=torch.int64)
+        return torch.zeros((1, byt5_max_length, 1472), device=device), torch.zeros(
+            (1, byt5_max_length), device=device, dtype=torch.int64
+        )
 
     with torch.no_grad():
         byt5_text_inputs = byt5_tokenizer(
-            caption, return_tensors="pt", padding="max_length",
-            max_length=byt5_max_length, truncation=True,
+            caption,
+            return_tensors="pt",
+            padding="max_length",
+            max_length=byt5_max_length,
+            truncation=True,
         )
         text_ids = byt5_text_inputs.input_ids.to(device)
         text_mask = byt5_text_inputs.attention_mask.to(device)
@@ -247,8 +279,9 @@ def encode_negative_prompt(text_encoder, byt5_model, byt5_tokenizer, byt5_max_le
     }
 
 
-def prepare_sample_data(vae, text_encoder, vision_encoder, byt5_model, byt5_tokenizer,
-                        example, height, width, video_length, device):
+def prepare_sample_data(
+    vae, text_encoder, vision_encoder, byt5_model, byt5_tokenizer, example, height, width, video_length, device
+):
     """
     Encode a single example (image + caption) into the data dict expected by inference functions.
     Returns dict with keys: image_cond, prompt_embeds, prompt_mask, vision_states,
@@ -311,6 +344,7 @@ def decode_and_save(x, vae, device, output_path, fps):
 # Model loading
 # ---------------------------------------------------------------------------
 
+
 def load_model_bidirectional(transformer_dir):
     raise ValueError("The public minWM HY runtime requires camera conditioning (--use_camera).")
 
@@ -324,6 +358,7 @@ def load_model_prope(transformer_dir, use_discrete_action=False):
     from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.h15.action_camera import (
         ARHunyuanVideo_1_5_DiffusionTransformer,
     )
+
     config = ARHunyuanVideo_1_5_DiffusionTransformer.load_config(transformer_dir)
     model = ARHunyuanVideo_1_5_DiffusionTransformer.from_config(config)
     model.add_prope_parameters()
@@ -341,8 +376,10 @@ def load_model_prope(transformer_dir, use_discrete_action=False):
 # Bidirectional inference
 # ---------------------------------------------------------------------------
 
-def run_inference_bidirectional(model, data, neg_prompts, device, num_steps, shift,
-                                guidance_scale, viewmats=None, Ks=None, action=None):
+
+def run_inference_bidirectional(
+    model, data, neg_prompts, device, num_steps, shift, guidance_scale, viewmats=None, Ks=None, action=None
+):
     """
     Bidirectional full-sequence denoising.
     When viewmats/Ks are provided, passes them to model (ProPE mode).
@@ -367,8 +404,10 @@ def run_inference_bidirectional(model, data, neg_prompts, device, num_steps, shi
     # ProPE camera kwargs (empty dict if no trajectory)
     prope_kwargs = {}
     if viewmats is not None:
-        prope_kwargs = {"viewmats": viewmats.to(device, dtype=torch.bfloat16),
-                        "Ks": Ks.to(device, dtype=torch.bfloat16)}
+        prope_kwargs = {
+            "viewmats": viewmats.to(device, dtype=torch.bfloat16),
+            "Ks": Ks.to(device, dtype=torch.bfloat16),
+        }
     if action is not None:
         prope_kwargs["action"] = action.to(device, dtype=torch.int64)
 
@@ -388,7 +427,7 @@ def run_inference_bidirectional(model, data, neg_prompts, device, num_steps, shi
     total_steps = len(scheduler.timesteps)
     for i, t in enumerate(scheduler.timesteps):
         if dist.get_rank() == 0:
-            print(f"  denoising {i+1}/{total_steps}, t={t.item():.1f}", flush=True)
+            print(f"  denoising {i + 1}/{total_steps}, t={t.item():.1f}", flush=True)
         timesteps_in = t.unsqueeze(0).expand(B * T).to(device, dtype=torch.bfloat16)
 
         with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
@@ -437,14 +476,25 @@ def run_inference_bidirectional(model, data, neg_prompts, device, num_steps, shi
 # AR rollout inference (chunk-by-chunk with KV cache)
 # ---------------------------------------------------------------------------
 
+
 def _init_kv_cache(num_layers):
-    return [{"k_vision": None, "v_vision": None, "k_txt": None, "v_txt": None}
-            for _ in range(num_layers)]
+    return [{"k_vision": None, "v_vision": None, "k_txt": None, "v_txt": None} for _ in range(num_layers)]
 
 
-def run_inference_rollout(model, data, neg_prompts, device, num_steps, shift,
-                          guidance_scale, stabilization_level, chunk_latent_frames=4,
-                          viewmats=None, Ks=None, action=None):
+def run_inference_rollout(
+    model,
+    data,
+    neg_prompts,
+    device,
+    num_steps,
+    shift,
+    guidance_scale,
+    stabilization_level,
+    chunk_latent_frames=4,
+    viewmats=None,
+    Ks=None,
+    action=None,
+):
     """
     AR rollout chunk-by-chunk denoising with KV cache.
     When viewmats/Ks are provided, passes per-chunk camera tensors to model (ProPE mode).
@@ -483,11 +533,17 @@ def run_inference_rollout(model, data, neg_prompts, device, num_steps, shift,
     # Phase 1: cache text KV
     with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
         kv_cache = model(
-            bi_inference=False, ar_txt_inference=True, ar_vision_inference=False,
-            timestep_txt=t_txt, text_states=prompt_embed,
-            encoder_attention_mask=prompt_mask, vision_states=vision_states,
-            mask_type="i2v", extra_kwargs=extra_kwargs,
-            kv_cache=kv_cache, cache_txt=True,
+            bi_inference=False,
+            ar_txt_inference=True,
+            ar_vision_inference=False,
+            timestep_txt=t_txt,
+            text_states=prompt_embed,
+            encoder_attention_mask=prompt_mask,
+            vision_states=vision_states,
+            mask_type="i2v",
+            extra_kwargs=extra_kwargs,
+            kv_cache=kv_cache,
+            cache_txt=True,
         )
         if use_cfg:
             neg_embed = neg_prompts["prompt_embeds"].to(device, dtype=torch.bfloat16)
@@ -496,11 +552,17 @@ def run_inference_rollout(model, data, neg_prompts, device, num_steps, shift,
             neg_byt5_mask = neg_prompts["byt5_text_mask"].to(device, dtype=torch.bfloat16)
             neg_extra = {"byt5_text_states": neg_byt5, "byt5_text_mask": neg_byt5_mask}
             kv_cache_neg = model(
-                bi_inference=False, ar_txt_inference=True, ar_vision_inference=False,
-                timestep_txt=t_txt, text_states=neg_embed,
-                encoder_attention_mask=neg_mask, vision_states=vision_states,
-                mask_type="i2v", extra_kwargs=neg_extra,
-                kv_cache=kv_cache_neg, cache_txt=True,
+                bi_inference=False,
+                ar_txt_inference=True,
+                ar_vision_inference=False,
+                timestep_txt=t_txt,
+                text_states=neg_embed,
+                encoder_attention_mask=neg_mask,
+                vision_states=vision_states,
+                mask_type="i2v",
+                extra_kwargs=neg_extra,
+                kv_cache=kv_cache_neg,
+                cache_txt=True,
             )
 
     # Phase 2: chunk-by-chunk denoising
@@ -515,7 +577,7 @@ def run_inference_rollout(model, data, neg_prompts, device, num_steps, shift,
         timesteps = scheduler.timesteps
 
         if dist.get_rank() == 0:
-            print(f"  Chunk {chunk_i+1}/{chunk_num} frames[{start_idx}:{end_idx})", flush=True)
+            print(f"  Chunk {chunk_i + 1}/{chunk_num} frames[{start_idx}:{end_idx})", flush=True)
 
         # ProPE: per-chunk camera tensors
         prope_kwargs = {}
@@ -526,7 +588,7 @@ def run_inference_rollout(model, data, neg_prompts, device, num_steps, shift,
         if action is not None:
             prope_kwargs["action"] = action[start_idx:end_idx].to(device, dtype=torch.int64)
 
-        for i, t in enumerate(timesteps):
+        for _i, t in enumerate(timesteps):
             if dist.get_rank() == 0:
                 print("timesteps", t.item(), flush=True)
             ts_in = torch.full((chunk_latent_frames,), t, device=device, dtype=timesteps.dtype)
@@ -536,27 +598,38 @@ def run_inference_rollout(model, data, neg_prompts, device, num_steps, shift,
 
             with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 cond_pred = model(
-                    bi_inference=False, ar_txt_inference=False, ar_vision_inference=True,
-                    hidden_states=hidden, timestep=ts_in, timestep_r=None,
-                    mask_type="i2v", return_dict=False,
-                    kv_cache=kv_cache, cache_vision=False,
-                    rope_temporal_size=rope_total, start_rope_start_idx=start_idx,
+                    bi_inference=False,
+                    ar_txt_inference=False,
+                    ar_vision_inference=True,
+                    hidden_states=hidden,
+                    timestep=ts_in,
+                    timestep_r=None,
+                    mask_type="i2v",
+                    return_dict=False,
+                    kv_cache=kv_cache,
+                    cache_vision=False,
+                    rope_temporal_size=rope_total,
+                    start_rope_start_idx=start_idx,
                     **prope_kwargs,
                 )[0]
                 if use_cfg:
                     uncond_pred = model(
-                        bi_inference=False, ar_txt_inference=False, ar_vision_inference=True,
-                        hidden_states=hidden, timestep=ts_in, timestep_r=None,
-                        mask_type="i2v", return_dict=False,
-                        kv_cache=kv_cache_neg, cache_vision=False,
-                        rope_temporal_size=rope_total, start_rope_start_idx=start_idx,
+                        bi_inference=False,
+                        ar_txt_inference=False,
+                        ar_vision_inference=True,
+                        hidden_states=hidden,
+                        timestep=ts_in,
+                        timestep_r=None,
+                        mask_type="i2v",
+                        return_dict=False,
+                        kv_cache=kv_cache_neg,
+                        cache_vision=False,
+                        rope_temporal_size=rope_total,
+                        start_rope_start_idx=start_idx,
                         **prope_kwargs,
                     )[0]
 
-            if use_cfg:
-                pred = uncond_pred + guidance_scale * (cond_pred - uncond_pred)
-            else:
-                pred = cond_pred
+            pred = uncond_pred + guidance_scale * (cond_pred - uncond_pred) if use_cfg else cond_pred
 
             latent_chunk = scheduler.step(pred, t, latent_chunk, return_dict=False)[0]
             latents[:, :, start_idx:end_idx] = latent_chunk
@@ -569,16 +642,22 @@ def run_inference_rollout(model, data, neg_prompts, device, num_steps, shift,
         denoised_chunk = latents[:, :, start_idx:end_idx]
         denoised_cond = cond_input[:, :, start_idx:end_idx]
         denoised_input = torch.cat([denoised_chunk, denoised_cond], dim=1)
-        ctx_ts = torch.full((chunk_latent_frames,), stabilization_level - 1,
-                            device=device, dtype=torch.bfloat16)
+        ctx_ts = torch.full((chunk_latent_frames,), stabilization_level - 1, device=device, dtype=torch.bfloat16)
 
         with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
             new_kv = model(
-                bi_inference=False, ar_txt_inference=False, ar_vision_inference=True,
-                hidden_states=denoised_input, timestep=ctx_ts, timestep_r=None,
-                mask_type="i2v", return_dict=False,
-                kv_cache=kv_cache, cache_vision=True,
-                rope_temporal_size=rope_total, start_rope_start_idx=start_idx,
+                bi_inference=False,
+                ar_txt_inference=False,
+                ar_vision_inference=True,
+                hidden_states=denoised_input,
+                timestep=ctx_ts,
+                timestep_r=None,
+                mask_type="i2v",
+                return_dict=False,
+                kv_cache=kv_cache,
+                cache_vision=True,
+                rope_temporal_size=rope_total,
+                start_rope_start_idx=start_idx,
                 **prope_kwargs,
             )
             for j in range(num_layers):
@@ -586,18 +665,23 @@ def run_inference_rollout(model, data, neg_prompts, device, num_steps, shift,
                     kv_cache[j]["k_vision"] = new_kv[j]["k_vision"]
                     kv_cache[j]["v_vision"] = new_kv[j]["v_vision"]
                 else:
-                    kv_cache[j]["k_vision"] = torch.cat(
-                        [kv_cache[j]["k_vision"], new_kv[j]["k_vision"]], dim=2)
-                    kv_cache[j]["v_vision"] = torch.cat(
-                        [kv_cache[j]["v_vision"], new_kv[j]["v_vision"]], dim=2)
+                    kv_cache[j]["k_vision"] = torch.cat([kv_cache[j]["k_vision"], new_kv[j]["k_vision"]], dim=2)
+                    kv_cache[j]["v_vision"] = torch.cat([kv_cache[j]["v_vision"], new_kv[j]["v_vision"]], dim=2)
 
             if use_cfg:
                 new_kv_neg = model(
-                    bi_inference=False, ar_txt_inference=False, ar_vision_inference=True,
-                    hidden_states=denoised_input, timestep=ctx_ts, timestep_r=None,
-                    mask_type="i2v", return_dict=False,
-                    kv_cache=kv_cache_neg, cache_vision=True,
-                    rope_temporal_size=rope_total, start_rope_start_idx=start_idx,
+                    bi_inference=False,
+                    ar_txt_inference=False,
+                    ar_vision_inference=True,
+                    hidden_states=denoised_input,
+                    timestep=ctx_ts,
+                    timestep_r=None,
+                    mask_type="i2v",
+                    return_dict=False,
+                    kv_cache=kv_cache_neg,
+                    cache_vision=True,
+                    rope_temporal_size=rope_total,
+                    start_rope_start_idx=start_idx,
                     **prope_kwargs,
                 )
                 for j in range(num_layers):
@@ -606,9 +690,11 @@ def run_inference_rollout(model, data, neg_prompts, device, num_steps, shift,
                         kv_cache_neg[j]["v_vision"] = new_kv_neg[j]["v_vision"]
                     else:
                         kv_cache_neg[j]["k_vision"] = torch.cat(
-                            [kv_cache_neg[j]["k_vision"], new_kv_neg[j]["k_vision"]], dim=2)
+                            [kv_cache_neg[j]["k_vision"], new_kv_neg[j]["k_vision"]], dim=2
+                        )
                         kv_cache_neg[j]["v_vision"] = torch.cat(
-                            [kv_cache_neg[j]["v_vision"], new_kv_neg[j]["v_vision"]], dim=2)
+                            [kv_cache_neg[j]["v_vision"], new_kv_neg[j]["v_vision"]], dim=2
+                        )
 
     return latents, chunk0_latency
 
@@ -616,6 +702,7 @@ def run_inference_rollout(model, data, neg_prompts, device, num_steps, shift,
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main():
     args = parse_args()
@@ -638,8 +725,8 @@ def main():
         model_path = find_hunyuanvideo_model_path()
         if model_path is None:
             raise RuntimeError(
-                "Cannot auto-detect HunyuanVideo-1.5 model path. "
-                "Please specify --model_path explicitly.")
+                "Cannot auto-detect HunyuanVideo-1.5 model path. Please specify --model_path explicitly."
+            )
     if rank == 0:
         print(f"Model path: {model_path}")
 
@@ -651,12 +738,10 @@ def main():
 
     if camera_mode and args.trajectory is None:
         # Camera mode reading per-sample trajectory: skip samples without trajectory
-        target_examples = [(i, ex) for i, ex in enumerate(all_examples)
-                           if ex.get("trajectory")]
+        target_examples = [(i, ex) for i, ex in enumerate(all_examples) if ex.get("trajectory")]
     elif not camera_mode:
         # Ti2v mode: skip samples that have trajectory (they're camera-only)
-        target_examples = [(i, ex) for i, ex in enumerate(all_examples)
-                           if not ex.get("trajectory")]
+        target_examples = [(i, ex) for i, ex in enumerate(all_examples) if not ex.get("trajectory")]
         if not target_examples:
             # All samples have trajectory but we're in ti2v mode — use all, ignore trajectory
             target_examples = list(enumerate(all_examples))
@@ -665,8 +750,7 @@ def main():
         target_examples = list(enumerate(all_examples))
 
     # Round-robin assignment across ranks
-    my_examples = [(idx, ex) for j, (idx, ex) in enumerate(target_examples)
-                   if j % world_size == rank]
+    my_examples = [(idx, ex) for j, (idx, ex) in enumerate(target_examples) if j % world_size == rank]
 
     if rank == 0:
         print(f"Total examples: {len(all_examples)}, assigned to rank {rank}: {len(my_examples)}")
@@ -680,12 +764,14 @@ def main():
     from worldfoundry.base_models.diffusion_model.models.autoencoders.hunyuan_video.h15 import (
         AutoencoderKLConv3D,
     )
+
     vae_path = os.path.join(model_path, "vae")
     vae = AutoencoderKLConv3D.from_pretrained(vae_path, torch_dtype=torch.float16).cpu()
 
     from worldfoundry.base_models.diffusion_model.models.encoders.hunyuan_video.h15_resources import (
         HunyuanVideo15Resources as HunyuanVideo_1_5_Pipeline,
     )
+
     text_encoder, _ = HunyuanVideo_1_5_Pipeline._load_text_encoders(model_path, device="cpu")
     vision_encoder = HunyuanVideo_1_5_Pipeline._load_vision_encoder(model_path, device="cpu")
     byt5_kwargs, _ = HunyuanVideo_1_5_Pipeline._load_byt5(model_path, True, 256, device="cpu")
@@ -736,8 +822,7 @@ def main():
             print(f"[rank {rank}] Already exists, skipping: {output_path}")
             continue
 
-        print(f"[rank {rank}] ({task_idx+1}/{len(my_examples)}) "
-              f"sample {sample_idx}: {example['caption'][:60]}...")
+        print(f"[rank {rank}] ({task_idx + 1}/{len(my_examples)}) sample {sample_idx}: {example['caption'][:60]}...")
 
         # Encode inputs
         text_encoder.to(device)
@@ -746,8 +831,16 @@ def main():
             byt5_model.to(device)
 
         data = prepare_sample_data(
-            vae, text_encoder, vision_encoder, byt5_model, byt5_tokenizer,
-            example, args.height, args.width, args.video_length, device,
+            vae,
+            text_encoder,
+            vision_encoder,
+            byt5_model,
+            byt5_tokenizer,
+            example,
+            args.height,
+            args.width,
+            args.video_length,
+            device,
         )
 
         neg_prompts = None
@@ -786,9 +879,16 @@ def main():
             torch.cuda.synchronize()
             _t0 = time.perf_counter()
             x = run_inference_bidirectional(
-                model, data, neg_prompts, device,
-                args.num_inference_steps, args.shift, args.guidance_scale,
-                viewmats, Ks, action,
+                model,
+                data,
+                neg_prompts,
+                device,
+                args.num_inference_steps,
+                args.shift,
+                args.guidance_scale,
+                viewmats,
+                Ks,
+                action,
             )
             torch.cuda.synchronize()
             infer_lat = time.perf_counter() - _t0
@@ -799,10 +899,18 @@ def main():
                     chunk0_latencies.append(None)
         else:
             x, chunk0_lat = run_inference_rollout(
-                model, data, neg_prompts, device,
-                args.num_inference_steps, args.shift, args.guidance_scale,
-                args.stabilization_level, args.chunk_latent_frames,
-                viewmats, Ks, action,
+                model,
+                data,
+                neg_prompts,
+                device,
+                args.num_inference_steps,
+                args.shift,
+                args.guidance_scale,
+                args.stabilization_level,
+                args.chunk_latent_frames,
+                viewmats,
+                Ks,
+                action,
             )
             if rank == 0:
                 if len(chunk0_latencies) >= 1:
@@ -826,7 +934,9 @@ def main():
         valid = [v for v in chunk0_latencies[1:] if v is not None]
         if valid:
             label = "full inference" if args.mode == "bidirectional" else "chunk0"
-            print(f"[timing] rank0 {label} latency (from 2nd prompt): avg={sum(valid)/len(valid):.3f}s over {len(valid)} samples")
+            print(
+                f"[timing] rank0 {label} latency (from 2nd prompt): avg={sum(valid) / len(valid):.3f}s over {len(valid)} samples"
+            )
 
     dist.destroy_process_group()
     if rank == 0:

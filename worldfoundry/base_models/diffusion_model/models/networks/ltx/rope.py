@@ -8,12 +8,11 @@ midpoint (``use_middle_indices_grid``) then packed as SPLIT
 
 import functools
 import math
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable, Tuple
 
 import numpy as np
 import torch
-from einops import rearrange
 
 
 class LTXRopeType(Enum):
@@ -25,7 +24,7 @@ class LTXRopeType(Enum):
 
 def apply_rotary_emb(
     input_tensor: torch.Tensor,
-    freqs_cis: Tuple[torch.Tensor, torch.Tensor],
+    freqs_cis: tuple[torch.Tensor, torch.Tensor],
     rope_type: LTXRopeType = LTXRopeType.SPLIT,
 ) -> torch.Tensor:
     """Rotate ``input_tensor`` by precomputed ``(cos, sin)`` in the requested layout."""
@@ -42,10 +41,9 @@ def apply_interleaved_rotary_emb(
     input_tensor: torch.Tensor, cos_freqs: torch.Tensor, sin_freqs: torch.Tensor
 ) -> torch.Tensor:
     """Legacy pair-wise rotate: even/odd channels treated as complex pairs."""
-    t_dup = rearrange(input_tensor, "... (d r) -> ... d r", r=2)
+    t_dup = input_tensor.unflatten(-1, (-1, 2))
     t1, t2 = t_dup.unbind(dim=-1)
-    t_dup = torch.stack((-t2, t1), dim=-1)
-    input_tensor_rot = rearrange(t_dup, "... d r -> ... (d r)")
+    input_tensor_rot = torch.stack((-t2, t1), dim=-1).flatten(-2)
 
     out = input_tensor * cos_freqs + input_tensor_rot * sin_freqs
 
@@ -77,7 +75,7 @@ def apply_split_rotary_emb(
         # cannot prove `b_in == cos_freqs.shape[0]` and `seq == t` across tensors.
         input_tensor = input_tensor.unflatten(-1, (h, -1)).transpose(1, 2)
 
-    split_input = rearrange(input_tensor, "... (d r) -> ... d r", d=2)
+    split_input = input_tensor.unflatten(-1, (2, -1))
     first_half_input = split_input[..., :1, :]
     second_half_input = split_input[..., 1:, :]
 
@@ -88,7 +86,7 @@ def apply_split_rotary_emb(
     first_half_output.addcmul_(-sin_freqs.unsqueeze(-2), second_half_input)
     second_half_output.addcmul_(sin_freqs.unsqueeze(-2), first_half_input)
 
-    output = rearrange(output, "... d r -> ... (d r)")
+    output = output.flatten(-2)
     if needs_reshape:
         # `transpose(1, 2).flatten(-2)` keeps the batch and seq dims symbolic; using
         # `reshape(b_in, t, -1)` would force Dynamo to specialise both axes.
@@ -157,6 +155,20 @@ def get_fractional_positions(indices_grid: torch.Tensor, max_pos: list[int]) -> 
     return fractional_positions
 
 
+@functools.lru_cache(maxsize=32)
+def _cached_device_freq_grid(
+    freq_grid_generator: Callable[[float, int, int], torch.Tensor],
+    theta: float,
+    n_pos_dims: int,
+    dim: int,
+    device_str: str,
+) -> torch.Tensor:
+    """Cache the frequency grid on the target device so CUDA Graph capture avoids H2D copies."""
+    grid = freq_grid_generator(theta, n_pos_dims, dim)
+    target = torch.device(device_str)
+    return grid if grid.device == target else grid.to(device=target)
+
+
 def generate_freqs(
     indices: torch.Tensor, indices_grid: torch.Tensor, max_pos: list[int], use_middle_indices_grid: bool
 ) -> torch.Tensor:
@@ -170,7 +182,8 @@ def generate_freqs(
         indices_grid = indices_grid[..., 0]
 
     fractional_positions = get_fractional_positions(indices_grid, max_pos)
-    indices = indices.to(device=fractional_positions.device)
+    if indices.device != fractional_positions.device:
+        indices = indices.to(device=fractional_positions.device)
 
     freqs = (indices * (fractional_positions.unsqueeze(-1) * 2 - 1)).transpose(-1, -2).flatten(2)
     return freqs
@@ -227,7 +240,17 @@ def precompute_freqs_cis(
     if max_pos is None:
         max_pos = [20, 2048, 2048]
 
-    indices = freq_grid_generator(theta, indices_grid.shape[1], dim)
+    if indices_grid.device.type in {"cpu", "cuda"} and not torch.compiler.is_compiling():
+        indices = _cached_device_freq_grid(
+            freq_grid_generator,
+            float(theta),
+            int(indices_grid.shape[1]),
+            int(dim),
+            str(indices_grid.device),
+        )
+    else:
+        raw_generator = getattr(freq_grid_generator, "__wrapped__", freq_grid_generator)
+        indices = raw_generator(theta, indices_grid.shape[1], dim)
     freqs = generate_freqs(indices, indices_grid, max_pos, use_middle_indices_grid)
 
     if rope_type == LTXRopeType.SPLIT:

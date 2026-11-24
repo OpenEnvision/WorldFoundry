@@ -1,0 +1,3 @@
+# GigaWorld-0 uses the stride-aware 3D attention API and builds against the
+# installed Torch/CUDA stack for the active GPU architecture.
+natten==0.20.1

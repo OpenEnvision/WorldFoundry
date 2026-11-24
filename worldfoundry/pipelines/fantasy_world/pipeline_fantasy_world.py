@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any, Optional
+from typing import Any
 
 import torch
 
-from ...synthesis.visual_generation.memory.stream import SceneStateMemory
 from ...operators.fantasy_world_operator import FantasyWorldOperator
+from ...synthesis.visual_generation.memory.stream import SceneStateMemory
 from ..pipeline_utils import PipelineABC
 
 
 class FantasyWorldPipelineBase(PipelineABC):
     """FantasyWorldPipelineBase implementation for WorldFoundry pipelines."""
+
     SYNTHESIS_CLS = None
     SYNTHESIS_TARGET = None
     DEFAULT_SCENE_NAME = "fantasyworld_scene"
@@ -21,9 +22,9 @@ class FantasyWorldPipelineBase(PipelineABC):
     def __init__(
         self,
         *,
-        operator: Optional[FantasyWorldOperator] = None,
+        operator: FantasyWorldOperator | None = None,
         synthesis_model=None,
-        memory_module: Optional[Any] = None,
+        memory_module: Any | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype: torch.dtype = torch.bfloat16,
@@ -50,10 +51,10 @@ class FantasyWorldPipelineBase(PipelineABC):
         return cls.SYNTHESIS_CLS
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[Any] = None,
-        required_components: Optional[dict] = None,
+        model_path: Any | None = None,
+        required_components: dict | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype: torch.dtype = torch.bfloat16,
@@ -240,9 +241,7 @@ class FantasyWorldPipelineBase(PipelineABC):
             or scene_name is not None
         ):
             if state is None and images is None:
-                raise ValueError(
-                    "FantasyWorld stream initialization requires `images` on the first turn."
-                )
+                raise ValueError("FantasyWorld stream initialization requires `images` on the first turn.")
 
             current_camera_source = self.operator.resolve_interaction_source(
                 interactions=interactions,
@@ -293,6 +292,7 @@ class FantasyWorldPipelineBase(PipelineABC):
 
 class FantasyWorldWan21Pipeline(FantasyWorldPipelineBase):
     """Pipeline implementation for FantasyWorldWan21 visual generation."""
+
     MODEL_ID = "fantasyworld-wan21"
     SYNTHESIS_TARGET = (
         "worldfoundry.synthesis.visual_generation.fantasy_world.fantasy_world_wan21_synthesis:"
@@ -303,6 +303,7 @@ class FantasyWorldWan21Pipeline(FantasyWorldPipelineBase):
 
 class FantasyWorldWan22Pipeline(FantasyWorldPipelineBase):
     """Pipeline implementation for FantasyWorldWan22 visual generation."""
+
     MODEL_ID = "fantasyworld-wan22"
     SYNTHESIS_TARGET = (
         "worldfoundry.synthesis.visual_generation.fantasy_world.fantasy_world_wan22_synthesis:"
@@ -313,12 +314,13 @@ class FantasyWorldWan22Pipeline(FantasyWorldPipelineBase):
 
 class FantasyWorldPipeline(FantasyWorldWan21Pipeline):
     """Pipeline implementation for FantasyWorld visual generation."""
+
     MODEL_ID = "fantasyworld"
 
 
 __all__ = [
-    "FantasyWorldPipelineBase",
     "FantasyWorldPipeline",
+    "FantasyWorldPipelineBase",
     "FantasyWorldWan21Pipeline",
     "FantasyWorldWan22Pipeline",
 ]

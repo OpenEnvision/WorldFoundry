@@ -5,11 +5,12 @@ download code.  All model implementations retain their eager attention path.
 """
 
 import logging
-from functools import lru_cache
+from functools import cache
 
 logger = logging.getLogger(__name__)
 
-@lru_cache(maxsize=None)
+
+@cache
 def load_flash_attn():
     """Return local Flash Attention symbols, or an empty dict."""
     symbols = _load_from_source()

@@ -1,13 +1,11 @@
 import functools
 import math
-from typing import Callable, List, Optional
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
-
 from diffusers.models.activations import GEGLU, GELU, ApproximateGELU, LinearActivation, SwiGLU
 from diffusers.utils import deprecate
-
 
 # Monkey-patch helpers to replace standard linear/feedforward with tiled variants.
 
@@ -93,7 +91,7 @@ class TiledLinear(torch.autograd.Function):
         mlp_module: torch.nn.Module,
         x: torch.Tensor,
         shards: int,
-        compute_params: Optional[List[torch.nn.Parameter]] = None,
+        compute_params: list[torch.nn.Parameter] | None = None,
     ) -> torch.Tensor:
         ctx.fn = fn
         ctx.mlp_module = mlp_module
@@ -147,7 +145,7 @@ class TiledLinear(torch.autograd.Function):
 
             grads_tuple = torch.autograd.grad(
                 outputs=output,
-                inputs=[x_shard] + trainable_params,
+                inputs=[x_shard] + trainable_params,  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                 grad_outputs=incoming_grad_shard,
                 allow_unused=True,
                 retain_graph=False,
@@ -155,7 +153,7 @@ class TiledLinear(torch.autograd.Function):
 
             x_grad.narrow(0, shard_offset, shard_step).copy_(grads_tuple[0])
 
-            for param, grad in zip(trainable_params, grads_tuple[1:]):
+            for param, grad in zip(trainable_params, grads_tuple[1:], strict=False):
                 if grad is not None:
                     if param.grad is None:
                         param.grad = grad
@@ -172,8 +170,8 @@ def apply_tiled_linear(
     fn: Callable,
     mlp_module: torch.nn.Module,
     x: torch.Tensor,
-    num_shards: Optional[int] = None,
-    compute_params: Optional[List[torch.nn.Parameter]] = None,
+    num_shards: int | None = None,
+    compute_params: list[torch.nn.Parameter] | None = None,
 ) -> torch.Tensor:
     """
     Apply tiled MLP computation for memory efficiency.
@@ -224,7 +222,7 @@ class FeedForward(nn.Module):
     def __init__(
         self,
         dim: int,
-        dim_out: Optional[int] = None,
+        dim_out: int | None = None,
         mult: int = 4,
         dropout: float = 0.0,
         activation_fn: str = "geglu",
@@ -258,7 +256,7 @@ class FeedForward(nn.Module):
             self.net.append(nn.Dropout(dropout))
 
     def forward(self, hidden_states: torch.Tensor, *args, **kwargs) -> torch.Tensor:
-        if len(args) > 0 or kwargs.get("scale", None) is not None:
+        if len(args) > 0 or kwargs.get("scale") is not None:
             deprecation_message = "The `scale` argument is deprecated and will be ignored. Please remove it, as passing it will raise an error in the future. `scale` should directly be passed while calling the underlying pipeline component i.e., via `cross_attention_kwargs`."
             deprecate("scale", "1.0.0", deprecation_message)
         for module in self.net:
@@ -284,14 +282,14 @@ class TiledFeedForward(nn.Module):
     def __init__(
         self,
         dim: int,
-        dim_out: Optional[int] = None,
+        dim_out: int | None = None,
         mult: int = 4,
         dropout: float = 0.0,
         activation_fn: str = "geglu",
         final_dropout: bool = False,
-        inner_dim: Optional[int] = None,
+        inner_dim: int | None = None,
         bias: bool = True,
-        num_shards: Optional[int] = None,
+        num_shards: int | None = None,
     ):
         super().__init__()
 

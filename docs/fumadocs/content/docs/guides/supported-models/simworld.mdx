@@ -1,15 +1,15 @@
 ---
 title: "SimWorld"
-description: "SimWorld: simulator-control and multi-agent-simulation; Runner parity pending."
+description: "SimWorld: simulator control, multi agent simulation, and 1 more task; Runner parity pending."
 modelId: "simworld"
 pageSource: generated
 ---
 
-SimWorld is a simulator-control entry rather than a video generator: it drives multi-agent embodied simulation (policy rollouts, world state) through a simulator server. In this catalog the route is registered; the simulator server and assets stay runtime-gated, and the recorded artifact type is world_state.
+SimWorld is a simulator-control model rather than a video generator: it drives multi-agent embodied simulation (policy rollouts, world state) through a simulator server and produces world_state artifacts.
 
 <ModelPaperFigures modelId="simworld" locale="en" />
 
-The recorded paper is [arXiv 2512.01078](https://arxiv.org/abs/2512.01078).
+Paper: [arXiv 2512.01078](https://arxiv.org/abs/2512.01078).
 
 Code: [SimWorld-AI/SimWorld](https://github.com/SimWorld-AI/SimWorld).
 
@@ -17,11 +17,11 @@ Code: [SimWorld-AI/SimWorld](https://github.com/SimWorld-AI/SimWorld).
 
 ## What it is for
 
-Use `simworld` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.
+`simworld` is a world generation model.
 
-Architecture internals are not recorded in this repository — this entry catalogs a simulation platform surface, not a neural network.
+A simulation platform interface, not a neural network.
 
-Catalog tasks include simulator-control, multi-agent-simulation, and embodied policy rollout. Catalog aliases include `simworld-ai` and `SimWorld-AI/SimWorld`.
+Tasks: simulator control, multi agent simulation, and embodied policy rollout. Aliases: `simworld-ai` and `SimWorld-AI/SimWorld`.
 
 ## Runtime contract
 
@@ -31,18 +31,16 @@ CLI task profiles: `default`. WorldFoundry binds `SimWorldPipeline`.
 
 Family status: **Runner parity pending**.
 
-Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. A running simulator server is the key prerequisite.
+A running simulator server is the key prerequisite. Until the required assets are staged, a run returns a runtime plan that lists what is missing.
 
-SimWorld route is registered; simulator server/assets are runtime-gated.
+Needs an external simulator server; no standalone generation.
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run simworld --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Run `wf run simworld --pipeline.task-profile default` to generate the world.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh simworld`. Add `--download` to fetch missing public checkpoints.
-
-Status: **Runner parity pending**.
+No public checkpoint is listed for this model; stage the weights as described in the usage notes. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh simworld`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="simworld" locale="en" />

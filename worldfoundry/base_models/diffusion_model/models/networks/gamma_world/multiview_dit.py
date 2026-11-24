@@ -21,7 +21,6 @@ so several camera streams share one token lattice.  Latents remain
 """
 
 import math
-from typing import List, Optional, Tuple
 
 import torch
 import torch.amp as amp
@@ -29,15 +28,23 @@ from einops import rearrange
 from torch import nn
 from torch.distributed._composable.fsdp import fully_shard
 
-from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.observability.rank_logging import log
+
+# isort: split
 from worldfoundry.core.kernels import layer_norm_scale_shift, residual_gate_add
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.encoders.structured_conditioning import DataType
 from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.action_encoder import (
     MultiAgentActionControlModule,
     RMS_norm,
     build_multi_agent_action_control,
 )
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.dit import Block, MinimalDiT, VideoSize
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.multiagent_rope import (
     build_multi_agent_freqs,
     precompute_freqs_cis_4d,
@@ -67,11 +74,11 @@ class ActionBlock(Block):
         x_B_T_H_W_D: torch.Tensor,
         emb_B_T_D: torch.Tensor,
         crossattn_emb: torch.Tensor,
-        rope_emb_L_1_1_D: Optional[torch.Tensor] = None,
-        adaln_lora_B_T_3D: Optional[torch.Tensor] = None,
-        extra_per_block_pos_emb: Optional[torch.Tensor] = None,
+        rope_emb_L_1_1_D: torch.Tensor | None = None,
+        adaln_lora_B_T_3D: torch.Tensor | None = None,
+        extra_per_block_pos_emb: torch.Tensor | None = None,
         kv_cache_cfg=None,
-        action_bias_B_T_H_W_D: Optional[torch.Tensor] = None,
+        action_bias_B_T_H_W_D: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if extra_per_block_pos_emb is not None:
             x_B_T_H_W_D = x_B_T_H_W_D + extra_per_block_pos_emb
@@ -211,8 +218,7 @@ class MinimalV1LVGDiT(MinimalDiT):
         kwargs["in_channels"] += 1
         self.timestep_scale = timestep_scale
 
-        if "num_layers" in kwargs:
-            del kwargs["num_layers"]
+        kwargs.pop("num_layers", None)
 
         if enable_action_control:
             self._crossattn_emb_channels = kwargs.get("crossattn_emb_channels", 1024)
@@ -310,13 +316,8 @@ class MinimalV1LVGDiT(MinimalDiT):
             )
 
     def init_weights(self) -> None:
-
         for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-            elif isinstance(m, nn.Conv1d):
+            if isinstance(m, (nn.Linear, nn.Conv1d)):
                 nn.init.xavier_uniform_(m.weight)
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
@@ -349,7 +350,6 @@ class MinimalV1LVGDiT(MinimalDiT):
                         nn.init.zeros_(m.bias)
 
     def _resolve_agent_pool_indices(self, n_views: int) -> list[int]:
-
         if self._override_agent_pool_indices is not None:
             indices = list(self._override_agent_pool_indices)
             assert len(indices) == n_views, (
@@ -372,9 +372,8 @@ class MinimalV1LVGDiT(MinimalDiT):
         B_T_H_W_D: tuple[int, int, int, int, int],
         n_views: int,
         device: torch.device,
-        fps: Optional[torch.Tensor] = None,
+        fps: torch.Tensor | None = None,
     ) -> torch.Tensor:
-
         B, T, H, W, D = B_T_H_W_D
         t_per_view = T // n_views
 
@@ -405,9 +404,8 @@ class MinimalV1LVGDiT(MinimalDiT):
         self,
         B_T_H_W_D: tuple[int, int, int, int, int],
         view_indices_B_T: torch.Tensor,
-        fps: Optional[torch.Tensor] = None,
+        fps: torch.Tensor | None = None,
     ) -> torch.Tensor:
-
         B, T, H, W, D = B_T_H_W_D
         n_views = view_indices_B_T.max().item() + 1
 
@@ -431,16 +429,16 @@ class MinimalV1LVGDiT(MinimalDiT):
         x_B_C_T_H_W: torch.Tensor,
         timesteps_B_T: torch.Tensor,
         crossattn_emb: torch.Tensor,
-        condition_video_input_mask_B_C_T_H_W: Optional[torch.Tensor] = None,
-        fps: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
-        data_type: Optional[DataType] = DataType.VIDEO,
-        intermediate_feature_ids: Optional[List[int]] = None,
-        img_context_emb: Optional[torch.Tensor] = None,
-        view_indices_B_T: Optional[torch.Tensor] = None,
-        action_inputs: Optional[dict] = None,
+        condition_video_input_mask_B_C_T_H_W: torch.Tensor | None = None,
+        fps: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
+        data_type: DataType | None = DataType.VIDEO,
+        intermediate_feature_ids: list[int] | None = None,
+        img_context_emb: torch.Tensor | None = None,
+        view_indices_B_T: torch.Tensor | None = None,
+        action_inputs: dict | None = None,
         **kwargs,
-    ) -> torch.Tensor | List[torch.Tensor] | Tuple[torch.Tensor, List[torch.Tensor]]:
+    ) -> torch.Tensor | list[torch.Tensor] | tuple[torch.Tensor, list[torch.Tensor]]:
         del kwargs
         assert isinstance(data_type, DataType)
 
@@ -471,7 +469,7 @@ class MinimalV1LVGDiT(MinimalDiT):
             max_idx = view_indices_B_T.max().item()
             min_idx = view_indices_B_T.min().item()
             num_views = self.view_embedding.num_embeddings
-            assert 0 <= min_idx and max_idx < num_views, (
+            assert min_idx >= 0 and max_idx < num_views, (
                 f"view_indices out of range: min={min_idx}, max={max_idx}, num_views={num_views}, "
                 f"shape={view_indices_B_T.shape}, dtype={view_indices_B_T.dtype}"
             )

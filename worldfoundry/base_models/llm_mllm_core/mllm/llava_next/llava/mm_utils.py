@@ -1,11 +1,13 @@
-from PIL import Image
-from io import BytesIO
+import ast
 import base64
 import math
-import ast
 import re
+from io import BytesIO
+
 import torch
+from PIL import Image
 from transformers import StoppingCriteria
+
 from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.constants import IMAGE_TOKEN_INDEX
 
 
@@ -91,7 +93,9 @@ def process_highres_image_crop_split(image, data_args, processor=None):
         processor = data_args.image_processor
     image_crop = resize_and_center_crop(image, crop_resolution)
     image_patches = extract_patches(image_crop, patch_size=split_resolution, overlap_ratio=0)
-    image_patches = [processor.preprocess(image_patch, return_tensors="pt")["pixel_values"][0] for image_patch in image_patches]
+    image_patches = [
+        processor.preprocess(image_patch, return_tensors="pt")["pixel_values"][0] for image_patch in image_patches
+    ]
     return torch.stack(image_patches, dim=0)
 
 
@@ -99,10 +103,7 @@ def process_highres_image(image, processor, grid_pinpoints):
     grid_params = [int(x) for x in grid_pinpoints.split(",")]
     width_height = max(image.size)
     fit_grid_params = [x for x in grid_params if x >= width_height]
-    if len(fit_grid_params) == 0:
-        select_size = max(grid_params)
-    else:
-        select_size = min(fit_grid_params)
+    select_size = max(grid_params) if len(fit_grid_params) == 0 else min(fit_grid_params)
     # FIXME: always select the 448
     select_size = max(grid_params)
     image_padded = expand2square(image, tuple(int(x * 255) for x in processor.image_mean))
@@ -111,8 +112,10 @@ def process_highres_image(image, processor, grid_pinpoints):
     image_original_resize = image.resize((processor.size["shortest_edge"], processor.size["shortest_edge"]))
     image_padded = image_padded.resize((select_size, select_size))
     image_patches = extract_patches(image_padded, patch_size=processor.size["shortest_edge"], overlap_ratio=0)
-    image_patches = [image_original_resize] + image_patches
-    image_patches = [processor.preprocess(image_patch, return_tensors="pt")["pixel_values"][0] for image_patch in image_patches]
+    image_patches = [image_original_resize] + image_patches  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+    image_patches = [
+        processor.preprocess(image_patch, return_tensors="pt")["pixel_values"][0] for image_patch in image_patches
+    ]
     return torch.stack(image_patches, dim=0)
 
 
@@ -141,7 +144,9 @@ def select_best_resolution(original_size, possible_resolutions):
         effective_resolution = min(downscaled_width * downscaled_height, original_width * original_height)
         wasted_resolution = (width * height) - effective_resolution
 
-        if effective_resolution > max_effective_resolution or (effective_resolution == max_effective_resolution and wasted_resolution < min_wasted_resolution):
+        if effective_resolution > max_effective_resolution or (
+            effective_resolution == max_effective_resolution and wasted_resolution < min_wasted_resolution
+        ):
             max_effective_resolution = effective_resolution
             min_wasted_resolution = wasted_resolution
             best_fit = (width, height)
@@ -229,13 +234,12 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
         range_start = tuple(map(int, matches[0]))
         range_end = tuple(map(int, matches[-1]))
         # Generate a matrix of tuples from (range_start[0], range_start[1]) to (range_end[0], range_end[1])
-        grid_pinpoints = [(i, j) for i in range(range_start[0], range_end[0] + 1) for j in range(range_start[1], range_end[1] + 1)]
+        grid_pinpoints = [
+            (i, j) for i in range(range_start[0], range_end[0] + 1) for j in range(range_start[1], range_end[1] + 1)
+        ]
         # Multiply all elements by patch_size
         grid_pinpoints = [[dim * patch_size for dim in pair] for pair in grid_pinpoints]
-    if type(grid_pinpoints) is list:
-        possible_resolutions = grid_pinpoints
-    else:
-        possible_resolutions = ast.literal_eval(grid_pinpoints)
+    possible_resolutions = grid_pinpoints if type(grid_pinpoints) is list else ast.literal_eval(grid_pinpoints)
     width, height = select_best_resolution(image_size, possible_resolutions)
     return width // patch_size, height // patch_size
 
@@ -256,7 +260,7 @@ def process_anyres_image(image, processor, grid_pinpoints):
     if isinstance(grid_pinpoints, str) and "x" in grid_pinpoints:
         try:
             patch_size = processor.size[0]
-        except Exception as e:
+        except Exception:
             patch_size = processor.size["shortest_edge"]
         assert patch_size in [224, 336, 384, 448, 512], "patch_size should be in [224, 336, 384, 448, 512]"
         # Use regex to extract the range from the input string
@@ -264,14 +268,13 @@ def process_anyres_image(image, processor, grid_pinpoints):
         range_start = tuple(map(int, matches[0]))
         range_end = tuple(map(int, matches[-1]))
         # Generate a matrix of tuples from (range_start[0], range_start[1]) to (range_end[0], range_end[1])
-        grid_pinpoints = [(i, j) for i in range(range_start[0], range_end[0] + 1) for j in range(range_start[1], range_end[1] + 1)]
+        grid_pinpoints = [
+            (i, j) for i in range(range_start[0], range_end[0] + 1) for j in range(range_start[1], range_end[1] + 1)
+        ]
         # Multiply all elements by patch_size
         grid_pinpoints = [[dim * patch_size for dim in pair] for pair in grid_pinpoints]
 
-    if type(grid_pinpoints) is list:
-        possible_resolutions = grid_pinpoints
-    else:
-        possible_resolutions = ast.literal_eval(grid_pinpoints)
+    possible_resolutions = grid_pinpoints if type(grid_pinpoints) is list else ast.literal_eval(grid_pinpoints)
     best_resolution = select_best_resolution(image.size, possible_resolutions)
     image_padded = resize_and_pad_image(image, best_resolution)
 
@@ -280,16 +283,15 @@ def process_anyres_image(image, processor, grid_pinpoints):
     # FIXME: this seems to be a bug that it resizes instead of pad.
     # but to keep it consistent with previous, i will keep it as it is
     # TODO: uncomment below to ablate with the padding
-    if isinstance(processor.size, dict):
-        shortest_edge = processor.size["shortest_edge"]
-    else:
-        shortest_edge = min(processor.size)
+    shortest_edge = processor.size["shortest_edge"] if isinstance(processor.size, dict) else min(processor.size)
     image_original_resize = image.resize((shortest_edge, shortest_edge))
     # image_padded_square = expand2square(image, tuple(int(x*255) for x in processor.image_mean))
     # image_original_resize = image_padded_square.resize((processor.size['shortest_edge'], processor.size['shortest_edge']))
 
-    image_patches = [image_original_resize] + patches
-    image_patches = [processor.preprocess(image_patch, return_tensors="pt")["pixel_values"][0] for image_patch in image_patches]
+    image_patches = [image_original_resize] + patches  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+    image_patches = [
+        processor.preprocess(image_patch, return_tensors="pt")["pixel_values"][0] for image_patch in image_patches
+    ]
     return torch.stack(image_patches, dim=0)
 
 
@@ -342,7 +344,7 @@ def tokenizer_image_token(prompt, tokenizer, image_token_index=IMAGE_TOKEN_INDEX
     prompt_chunks = [tokenizer(chunk).input_ids for chunk in prompt.split("<image>")]
 
     def insert_separator(X, sep):
-        return [ele for sublist in zip(X, [sep] * len(X)) for ele in sublist][:-1]
+        return [ele for sublist in zip(X, [sep] * len(X), strict=False) for ele in sublist][:-1]
 
     input_ids = []
     offset = 0
@@ -389,7 +391,4 @@ class KeywordsStoppingCriteria(StoppingCriteria):
             if output_ids[0, -keyword_id.shape[0] :] == keyword_id:
                 return True
         outputs = self.tokenizer.batch_decode(output_ids[:, -offset:], skip_special_tokens=True)[0]
-        for keyword in self.keywords:
-            if keyword in outputs:
-                return True
-        return False
+        return any(keyword in outputs for keyword in self.keywords)

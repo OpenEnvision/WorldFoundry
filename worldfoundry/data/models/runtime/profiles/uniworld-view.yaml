@@ -6,8 +6,10 @@ groups: [world, camera_control, image_to_video, video_to_video]
 source_repos:
 - url: https://github.com/PKU-YuanGroup/UniWorld-View
   revision: 660212c48bff7c91a2ea5c7d5f3785af581100e2
+  in_tree_path: worldfoundry/synthesis/visual_generation/uniworld_view/uniworld_view_runtime
 - url: https://github.com/NIRVANALAN/STream3R
   revision: 7bdca8cf7ec206ff8b08c0941ad8286d72087d4f
+  in_tree_path: worldfoundry/base_models/three_dimensions/point_clouds/stream3r
 checkpoints:
 - repo_id: Drexubery/UniView
   role: uniview_transformer
@@ -38,18 +40,16 @@ artifact_kind: generated_video
 artifact_filename: uniworld-view.mp4
 execution:
   environment: _unified
-  backend_stage: official_external_runtime
-  runtime_status: source_and_checkpoints_required
+  backend_stage: official_in_tree_runtime
+  runtime_status: integrated_checkpoint_required
   integration_status: integrated
   pipeline_binding: uniworld-view
 integration: {status: integrated}
 notes:
-- The adapter invokes the official inference.py from a separate pinned checkout and Python environment.
+- The adapter runs the vendored official inference entry point as a package module in a separate Python environment.
 - WorldFoundry dispatch stays in the unified environment; UNIWORLD_VIEW_PYTHON selects the separate upstream process.
 - Official inference uses BLIP2 captioning; its --prompt flag is ignored by the current upstream inference path.
 - The upstream default hybrid renderer requires PyTorch3D and at least 60 GB GPU memory is recommended.
-- Dynamic view also requires STream3R source and weights; MoSca is an optional precomputed geometry alternative.
+- Dynamic view also requires STream3R weights; MoSca is an optional precomputed geometry alternative.
 - The official default keeps the source aspect ratio at an approximate height/width token budget; set keep_aspect_ratio=false to request exact output dimensions.
-- The pinned upstream setup_stream3r method is empty; the WorldFoundry entry restores its intended load call for dynamic_view.
-- The pinned upstream single_view final-video save omits fps; the WorldFoundry entry applies the requested rate to that artifact.
-- The pinned upstream diffusion call hard-codes seed 42; the WorldFoundry entry applies the requested seed at the pipeline call.
+- The vendored runtime loads STream3R for dynamic_view, saves the final single_view video at the requested fps and seeds the diffusion call with the requested seed; the pinned upstream revision leaves setup_stream3r empty, omits that fps and hard-codes seed 42.

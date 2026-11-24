@@ -12,25 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 class Color:
-
     @staticmethod
     def red(x):
-        return '\33[31m' +x + '\033[0m'
-    
+        return "\33[31m" + x + "\033[0m"
+
     @staticmethod
     def green(x):
-        return '\33[32m' +x + '\033[0m'
+        return "\33[32m" + x + "\033[0m"
 
     @staticmethod
     def yellow(x):
-        return '\33[33m' +x + '\033[0m'
+        return "\33[33m" + x + "\033[0m"
 
     @staticmethod
     def blue(x):
-        return '\33[34m' +x + '\033[0m'
+        return "\33[34m" + x + "\033[0m"
 
     @staticmethod
     def violet(x):
-        return '\33[35m' +x + '\033[0m'
-
-    
+        return "\33[35m" + x + "\033[0m"

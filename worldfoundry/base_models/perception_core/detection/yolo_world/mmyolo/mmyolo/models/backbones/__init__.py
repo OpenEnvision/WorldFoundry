@@ -7,7 +7,13 @@ from .efficient_rep import YOLOv6CSPBep, YOLOv6EfficientRep
 from .yolov7_backbone import YOLOv7Backbone
 
 __all__ = [
-    'YOLOv5CSPDarknet', 'BaseBackbone', 'YOLOv6EfficientRep', 'YOLOv6CSPBep',
-    'YOLOXCSPDarknet', 'CSPNeXt', 'YOLOv7Backbone', 'PPYOLOECSPResNet',
-    'YOLOv8CSPDarknet'
+    "BaseBackbone",
+    "CSPNeXt",
+    "PPYOLOECSPResNet",
+    "YOLOXCSPDarknet",
+    "YOLOv5CSPDarknet",
+    "YOLOv6CSPBep",
+    "YOLOv6EfficientRep",
+    "YOLOv7Backbone",
+    "YOLOv8CSPDarknet",
 ]

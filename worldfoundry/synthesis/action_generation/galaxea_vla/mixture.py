@@ -22,14 +22,20 @@ Individual mixture in PaliGemma format
 
 """
 
-from typing import Optional, Tuple
 
-import torch
-import torch.nn as nn
+import torch  # noqa: E402 - Follows a module-level setup call, as upstream.
+import torch.nn as nn  # noqa: E402 - Follows a module-level setup call, as upstream.
 
-from .model_utils import apply_rotary_pos_emb, repeat_kv
-from .paligemma_modules import GemmaMLP, GemmaRMSNorm, GemmaRotaryEmbedding
+from worldfoundry.base_models.llm_mllm_core.mllm.qwen.layers import (  # noqa: E402 - Preserve upstream import order.
+    repeat_kv,
+)
 
+from .model_utils import apply_rotary_pos_emb  # noqa: E402 - Follows a module-level setup call, as upstream.
+from .paligemma_modules import (  # noqa: E402 - Follows a module-level setup call, as upstream.
+    GemmaMLP,
+    GemmaRMSNorm,
+    GemmaRotaryEmbedding,
+)
 
 
 class Mixture(nn.Module):
@@ -70,7 +76,7 @@ class Mixture(nn.Module):
     def forward_norm(
         self,
         x: torch.FloatTensor,
-        cond: Optional[torch.FloatTensor] = None,
+        cond: torch.FloatTensor | None = None,
     ) -> torch.FloatTensor | None:
         if hasattr(self, "norm"):
             args = [x] if self.adaptive_mode is None else [x, cond]
@@ -187,7 +193,7 @@ class MixtureAttention(nn.Module):
         states = apply_rotary_pos_emb(states, cos, sin)
         return states.to(orig_dtype)
 
-    def repeat_kv(self, key_states: torch.FloatTensor, value_states: torch.FloatTensor) -> Tuple[torch.FloatTensor]:
+    def repeat_kv(self, key_states: torch.FloatTensor, value_states: torch.FloatTensor) -> tuple[torch.FloatTensor]:
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
         return key_states, value_states

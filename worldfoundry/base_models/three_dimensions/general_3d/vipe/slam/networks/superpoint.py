@@ -20,6 +20,7 @@ Authors: Rémi Pautrat, Paul-Edouard Sarlin
 
 from collections import OrderedDict
 from types import SimpleNamespace
+from typing import ClassVar
 
 import torch
 import torch.nn as nn
@@ -38,20 +39,9 @@ def sample_descriptors(keypoints, descriptors, s: int = 8):
 
 
 def batched_nms(scores, nms_radius: int):
-    """Batched nms.
-
-    Args:
-        scores: The scores.
-        nms_radius: The nms radius.
-    """
     assert nms_radius >= 0
 
     def max_pool(x):
-        """Max pool.
-
-        Args:
-            x: The x.
-        """
         return torch.nn.functional.max_pool2d(x, kernel_size=nms_radius * 2 + 1, stride=1, padding=nms_radius)
 
     zeros = torch.zeros_like(scores)
@@ -65,13 +55,6 @@ def batched_nms(scores, nms_radius: int):
 
 
 def select_top_k_keypoints(keypoints, scores, k):
-    """Select top k keypoints.
-
-    Args:
-        keypoints: The keypoints.
-        scores: The scores.
-        k: The k.
-    """
     if k >= len(keypoints):
         return keypoints, scores
     scores, indices = torch.topk(scores, k, dim=0, sorted=True)
@@ -79,16 +62,7 @@ def select_top_k_keypoints(keypoints, scores, k):
 
 
 class VGGBlock(nn.Sequential):
-    """Vgg block implementation."""
     def __init__(self, c_in, c_out, kernel_size, relu=True):
-        """Init.
-
-        Args:
-            c_in: The c in.
-            c_out: The c out.
-            kernel_size: The kernel size.
-            relu: The relu.
-        """
         padding = (kernel_size - 1) // 2
         conv = nn.Conv2d(c_in, c_out, kernel_size=kernel_size, stride=1, padding=padding)
         activation = nn.ReLU(inplace=True) if relu else nn.Identity()
@@ -105,8 +79,7 @@ class VGGBlock(nn.Sequential):
 
 
 class SuperPoint(nn.Module):
-    """Super point implementation."""
-    default_conf = {
+    default_conf: ClassVar[dict] = {
         "nms_radius": 4,
         "max_num_keypoints": None,
         "detection_threshold": 0.005,
@@ -116,7 +89,6 @@ class SuperPoint(nn.Module):
     }
 
     def __init__(self, **conf):
-        """Init."""
         super().__init__()
         conf = {**self.default_conf, **conf}
         self.conf = SimpleNamespace(**conf)
@@ -143,7 +115,6 @@ class SuperPoint(nn.Module):
         self.load_pretrained()
 
     def load_pretrained(self):
-        """Load pretrained."""
         state_dict = torch.hub.load_state_dict_from_url(
             "https://github.com/rpautrat/SuperPoint/raw/refs/heads/master/weights/superpoint_v6_from_tf.pth"
         )
@@ -151,11 +122,6 @@ class SuperPoint(nn.Module):
         self.eval()
 
     def forward(self, data):
-        """Forward.
-
-        Args:
-            data: The data.
-        """
         image = data["image"]
         if image.shape[1] == 3:  # RGB to gray
             scale = image.new_tensor([0.299, 0.587, 0.114]).view(1, 3, 1, 1)

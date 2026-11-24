@@ -7,10 +7,16 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracker3_utils.models.core.model_utils import sample_features5d, bilinear_sampler
-from worldfoundry.base_models.perception_core.tracking.cotracker.models.core.embeddings import get_1d_sincos_pos_embed_from_grid
 
-from .blocks import Mlp, BasicEncoder
+from worldfoundry.base_models.perception_core.tracking.cotracker.models.core.embeddings import (
+    get_1d_sincos_pos_embed_from_grid,
+)
+from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracker3_utils.models.core.model_utils import (
+    bilinear_sampler,
+    sample_features5d,
+)
+
+from .blocks import BasicEncoder, Mlp
 from .cotracker import EfficientUpdateFormer
 
 torch.manual_seed(0)
@@ -30,13 +36,11 @@ def posenc(x, min_deg, max_deg):
     """
     if min_deg == max_deg:
         return x
-    scales = torch.tensor(
-        [2**i for i in range(min_deg, max_deg)], dtype=x.dtype, device=x.device
-    )
+    scales = torch.tensor([2**i for i in range(min_deg, max_deg)], dtype=x.dtype, device=x.device)
 
-    xb = (x[..., None, :] * scales[:, None]).reshape(list(x.shape[:-1]) + [-1])
+    xb = (x[..., None, :] * scales[:, None]).reshape(list(x.shape[:-1]) + [-1])  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     four_feat = torch.sin(torch.cat([xb, xb + 0.5 * torch.pi], dim=-1))
-    return torch.cat([x] + [four_feat], dim=-1)
+    return torch.cat([x] + [four_feat], dim=-1)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
 
 class CoTrackerThreeBase(nn.Module):
@@ -51,7 +55,7 @@ class CoTrackerThreeBase(nn.Module):
         add_space_attn=True,
         linear_layer_for_vis_conf=True,
     ):
-        super(CoTrackerThreeBase, self).__init__()
+        super().__init__()
         self.window_len = window_len
         self.stride = stride
         self.corr_radius = corr_radius
@@ -61,9 +65,6 @@ class CoTrackerThreeBase(nn.Module):
 
         self.linear_layer_for_vis_conf = linear_layer_for_vis_conf
         self.fnet = BasicEncoder(input_dim=3, output_dim=self.latent_dim, stride=stride)
-
-        highres_dim = 128
-        lowres_dim = 256
 
         self.num_virtual_tracks = num_virtual_tracks
         self.model_resolution = model_resolution
@@ -83,13 +84,9 @@ class CoTrackerThreeBase(nn.Module):
         )
         self.corr_mlp = Mlp(in_features=49 * 49, hidden_features=384, out_features=256)
 
-        time_grid = torch.linspace(0, window_len - 1, window_len).reshape(
-            1, window_len, 1
-        )
+        time_grid = torch.linspace(0, window_len - 1, window_len).reshape(1, window_len, 1)
 
-        self.register_buffer(
-            "time_emb", get_1d_sincos_pos_embed_from_grid(self.input_dim, time_grid[0])
-        )
+        self.register_buffer("time_emb", get_1d_sincos_pos_embed_from_grid(self.input_dim, time_grid[0]))
 
     def get_support_points(self, coords, r, reshape_back=True):
         B, _, N, _ = coords.shape
@@ -111,7 +108,6 @@ class CoTrackerThreeBase(nn.Module):
             return coords_lvl
 
     def get_track_feat(self, fmaps, queried_frames, queried_coords, support_radius=0):
-
         sample_frames = queried_frames[:, None, :, None]
         sample_coords = torch.cat(
             [
@@ -131,16 +127,10 @@ class CoTrackerThreeBase(nn.Module):
         B, T, D, H_, W_ = fmaps.shape
         N = queried_coords.shape[1]
         r = self.corr_radius
-        sample_coords = torch.cat(
-            [torch.zeros_like(queried_coords[..., :1]), queried_coords], dim=-1
-        )[:, None]
+        sample_coords = torch.cat([torch.zeros_like(queried_coords[..., :1]), queried_coords], dim=-1)[:, None]
         support_points = self.get_support_points(sample_coords, r, reshape_back=False)
-        correlation_feat = bilinear_sampler(
-            fmaps.reshape(B * T, D, 1, H_, W_), support_points
-        )
-        return correlation_feat.view(B, T, D, N, (2 * r + 1), (2 * r + 1)).permute(
-            0, 1, 3, 4, 5, 2
-        )
+        correlation_feat = bilinear_sampler(fmaps.reshape(B * T, D, 1, H_, W_), support_points)
+        return correlation_feat.view(B, T, D, N, (2 * r + 1), (2 * r + 1)).permute(0, 1, 3, 4, 5, 2)
 
     def interpolate_time_embed(self, x, t):
         previous_dtype = x.dtype
@@ -150,15 +140,13 @@ class CoTrackerThreeBase(nn.Module):
             return self.time_emb
 
         time_emb = self.time_emb.float()
-        time_emb = F.interpolate(
-            time_emb.permute(0, 2, 1), size=t, mode="linear"
-        ).permute(0, 2, 1)
+        time_emb = F.interpolate(time_emb.permute(0, 2, 1), size=t, mode="linear").permute(0, 2, 1)
         return time_emb.to(previous_dtype)
 
 
 class CoTrackerThreeOnline(CoTrackerThreeBase):
     def __init__(self, **args):
-        super(CoTrackerThreeOnline, self).__init__(**args)
+        super().__init__(**args)
 
     def init_video_online_processing(self):
         self.online_ind = 0
@@ -184,24 +172,16 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
         r = 2 * self.corr_radius + 1
 
         coord_preds, vis_preds, conf_preds = [], [], []
-        for it in range(iters):
+        for _it in range(iters):
             coords = coords.detach()  # B T N 2
             coords_init = coords.view(B * S, N, 2)
             corr_embs = []
-            corr_feats = []
             for i in range(self.corr_levels):
-                corr_feat = self.get_correlation_feat(
-                    fmaps_pyramid[i], coords_init / 2**i
-                )
+                corr_feat = self.get_correlation_feat(fmaps_pyramid[i], coords_init / 2**i)
                 track_feat_support = (
-                    track_feat_support_pyramid[i]
-                    .view(B, 1, r, r, N, self.latent_dim)
-                    .squeeze(1)
-                    .permute(0, 3, 1, 2, 4)
+                    track_feat_support_pyramid[i].view(B, 1, r, r, N, self.latent_dim).squeeze(1).permute(0, 3, 1, 2, 4)
                 )
-                corr_volume = torch.einsum(
-                    "btnhwc,bnijc->btnhwij", corr_feat, track_feat_support
-                )
+                corr_volume = torch.einsum("btnhwc,bnijc->btnhwij", corr_feat, track_feat_support)
                 corr_emb = self.corr_mlp(corr_volume.reshape(B * S * N, r * r * r * r))
 
                 corr_embs.append(corr_emb)
@@ -214,12 +194,8 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
             rel_coords_forward = coords[:, :-1] - coords[:, 1:]
             rel_coords_backward = coords[:, 1:] - coords[:, :-1]
 
-            rel_coords_forward = torch.nn.functional.pad(
-                rel_coords_forward, (0, 0, 0, 0, 0, 1)
-            )
-            rel_coords_backward = torch.nn.functional.pad(
-                rel_coords_backward, (0, 0, 0, 0, 1, 0)
-            )
+            rel_coords_forward = torch.nn.functional.pad(rel_coords_forward, (0, 0, 0, 0, 0, 1))
+            rel_coords_backward = torch.nn.functional.pad(rel_coords_backward, (0, 0, 0, 0, 1, 0))
 
             scale = (
                 torch.tensor(
@@ -238,11 +214,7 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
             )  # batch, num_points, num_frames, 84
             transformer_input.append(rel_pos_emb_input)
 
-            x = (
-                torch.cat(transformer_input, dim=-1)
-                .permute(0, 2, 1, 3)
-                .reshape(B * N, S, -1)
-            )
+            x = torch.cat(transformer_input, dim=-1).permute(0, 2, 1, 3).reshape(B * N, S, -1)
 
             x = x + self.interpolate_time_embed(x, S)
             x = x.view(B, N, S, -1)  # (B N) T D -> B N T D
@@ -310,17 +282,13 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
         assert S >= 2  # A tracker needs at least two frames to track something
         if is_online:
             assert T <= S, "Online mode: video chunk must be <= window size."
-            assert (
-                self.online_ind is not None
-            ), "Call model.init_video_online_processing() first."
+            assert self.online_ind is not None, "Call model.init_video_online_processing() first."
             assert not is_train, "Training not supported in online mode."
 
         step = S // 2  # How much the sliding window moves at every step
 
         video = 2 * (video / 255.0) - 1.0
-        pad = (
-            S - T if is_online else (S - T % S) % S
-        )  # We don't want to pad if T % S == 0
+        pad = S - T if is_online else (S - T % S) % S  # We don't want to pad if T % S == 0
         video = video.reshape(B, 1, T, C * H * W)
         if pad > 0:
             padding_tensor = video[:, :, -1:, :].expand(B, 1, pad, C * H * W)
@@ -349,15 +317,9 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
             else:
                 # Pad online predictions with zeros for the current window
                 pad = min(step, T - step)
-                coords_predicted = F.pad(
-                    self.online_coords_predicted, (0, 0, 0, 0, 0, pad), "constant"
-                )
-                vis_predicted = F.pad(
-                    self.online_vis_predicted, (0, 0, 0, pad), "constant"
-                )
-                conf_predicted = F.pad(
-                    self.online_conf_predicted, (0, 0, 0, pad), "constant"
-                )
+                coords_predicted = F.pad(self.online_coords_predicted, (0, 0, 0, 0, 0, pad), "constant")
+                vis_predicted = F.pad(self.online_vis_predicted, (0, 0, 0, pad), "constant")
+                conf_predicted = F.pad(self.online_conf_predicted, (0, 0, 0, pad), "constant")
 
         # We store our predictions here
         all_coords_predictions, all_vis_predictions, all_confidence_predictions = (
@@ -367,10 +329,10 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
         )
 
         C_ = C
-        H4, W4 = H // self.stride, W // self.stride
+        H4, W4 = H // self.stride, W // self.stride  # noqa: F841 - Upstream assignment kept.
 
         # Compute convolutional features for the video or for the current chunk in case of online mode
-        if (not is_train) and (T > fmaps_chunk_size):
+        if (not is_train) and (fmaps_chunk_size < T):
             fmaps = []
             for t in range(0, T, fmaps_chunk_size):
                 video_chunk = video[:, t : t + fmaps_chunk_size]
@@ -388,9 +350,7 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
                 torch.tensor(1e-12, device=fmaps.device),
             )
         )
-        fmaps = fmaps.permute(0, 3, 1, 2).reshape(
-            B, -1, self.latent_dim, H // self.stride, W // self.stride
-        )
+        fmaps = fmaps.permute(0, 3, 1, 2).reshape(B, -1, self.latent_dim, H // self.stride, W // self.stride)
         fmaps = fmaps.to(dtype)
 
         # We compute track features
@@ -398,14 +358,10 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
         track_feat_pyramid = []
         track_feat_support_pyramid = []
         fmaps_pyramid.append(fmaps)
-        for i in range(self.corr_levels - 1):
-            fmaps_ = fmaps.reshape(
-                B * T_pad, self.latent_dim, fmaps.shape[-2], fmaps.shape[-1]
-            )
+        for i in range(self.corr_levels - 1):  # noqa: B007 - The loop variable is read outside the loop.
+            fmaps_ = fmaps.reshape(B * T_pad, self.latent_dim, fmaps.shape[-2], fmaps.shape[-1])
             fmaps_ = F.avg_pool2d(fmaps_, 2, stride=2)
-            fmaps = fmaps_.reshape(
-                B, T_pad, self.latent_dim, fmaps_.shape[-2], fmaps_.shape[-1]
-            )
+            fmaps = fmaps_.reshape(B, T_pad, self.latent_dim, fmaps_.shape[-2], fmaps_.shape[-1])
             fmaps_pyramid.append(fmaps)
         if is_online:
             sample_frames = queried_frames[:, None, :, None]  # B 1 N 1
@@ -423,27 +379,18 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
 
             if is_online:
                 if self.online_track_feat[i] is None:
-                    self.online_track_feat[i] = torch.zeros_like(
-                        track_feat, device=device
-                    )
-                    self.online_track_support[i] = torch.zeros_like(
-                        track_feat_support, device=device
-                    )
+                    self.online_track_feat[i] = torch.zeros_like(track_feat, device=device)
+                    self.online_track_support[i] = torch.zeros_like(track_feat_support, device=device)
 
                 self.online_track_feat[i] += track_feat * sample_mask
                 self.online_track_support[i] += track_feat_support * sample_mask
-                track_feat_pyramid.append(
-                    self.online_track_feat[i].repeat(1, T_pad, 1, 1)
-                )
-                track_feat_support_pyramid.append(
-                    self.online_track_support[i].unsqueeze(1)
-                )
+                track_feat_pyramid.append(self.online_track_feat[i].repeat(1, T_pad, 1, 1))
+                track_feat_support_pyramid.append(self.online_track_support[i].unsqueeze(1))
             else:
                 track_feat_pyramid.append(track_feat.repeat(1, T_pad, 1, 1))
                 track_feat_support_pyramid.append(track_feat_support.unsqueeze(1))
 
-        D_coords = 2
-        coord_preds, vis_preds, confidence_preds = [], [], []
+        coord_preds, vis_preds, confidence_preds = [], [], []  # noqa: F841 - Upstream assignment kept.
 
         vis_init = torch.zeros((B, S, N, 1), device=device).float()
         conf_init = torch.zeros((B, S, N, 1), device=device).float()
@@ -456,9 +403,7 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
         for ind in indices:
             if ind > 0:
                 overlap = S - step
-                copy_over = (queried_frames < ind + overlap)[
-                    :, None, :, None
-                ]  # B 1 N 1
+                copy_over = (queried_frames < ind + overlap)[:, None, :, None]  # B 1 N 1
                 coords_prev = coords_predicted[:, ind : ind + overlap] / self.stride
                 padding_tensor = coords_prev[:, -1:, :, :].expand(-1, step, -1, -1)
                 coords_prev = torch.cat([coords_prev, padding_tensor], dim=1)
@@ -471,28 +416,17 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
                 padding_tensor = conf_prev[:, -1:, :, :].expand(-1, step, -1, -1)
                 conf_prev = torch.cat([conf_prev, padding_tensor], dim=1)
 
-                coords_init = torch.where(
-                    copy_over.expand_as(coords_init), coords_prev, coords_init
-                )
-                vis_init = torch.where(
-                    copy_over.expand_as(vis_init), vis_prev, vis_init
-                )
-                conf_init = torch.where(
-                    copy_over.expand_as(conf_init), conf_prev, conf_init
-                )
+                coords_init = torch.where(copy_over.expand_as(coords_init), coords_prev, coords_init)
+                vis_init = torch.where(copy_over.expand_as(vis_init), vis_prev, vis_init)
+                conf_init = torch.where(copy_over.expand_as(conf_init), conf_prev, conf_init)
 
             attention_mask = (queried_frames < ind + S).reshape(B, 1, N)  # B S N
             # import ipdb; ipdb.set_trace()
             coords, viss, confs = self.forward_window(
-                fmaps_pyramid=(
-                    fmaps_pyramid
-                    if is_online
-                    else [fmap[:, ind : ind + S] for fmap in fmaps_pyramid]
-                ),
+                fmaps_pyramid=(fmaps_pyramid if is_online else [fmap[:, ind : ind + S] for fmap in fmaps_pyramid]),
                 coords=coords_init,
                 track_feat_support_pyramid=[
-                    attention_mask[:, None, :, :, None] * tfeat
-                    for tfeat in track_feat_support_pyramid
+                    attention_mask[:, None, :, :, None] * tfeat for tfeat in track_feat_support_pyramid
                 ],
                 vis=vis_init,
                 conf=conf_init,
@@ -500,22 +434,14 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
                 iters=iters,
                 add_space_attn=add_space_attn,
             )
-            S_trimmed = (
-                T if is_online else min(T - ind, S)
-            )  # accounts for last window duration
+            S_trimmed = T if is_online else min(T - ind, S)  # accounts for last window duration
             coords_predicted[:, ind : ind + S] = coords[-1][:, :S_trimmed]
             vis_predicted[:, ind : ind + S] = viss[-1][:, :S_trimmed]
             conf_predicted[:, ind : ind + S] = confs[-1][:, :S_trimmed]
             if is_train:
-                all_coords_predictions.append(
-                    [coord[:, :S_trimmed] for coord in coords]
-                )
-                all_vis_predictions.append(
-                    [torch.sigmoid(vis[:, :S_trimmed]) for vis in viss]
-                )
-                all_confidence_predictions.append(
-                    [torch.sigmoid(conf[:, :S_trimmed]) for conf in confs]
-                )
+                all_coords_predictions.append([coord[:, :S_trimmed] for coord in coords])
+                all_vis_predictions.append([torch.sigmoid(vis[:, :S_trimmed]) for vis in viss])
+                all_confidence_predictions.append([torch.sigmoid(conf[:, :S_trimmed]) for conf in confs])
         if is_online:
             self.online_ind += step
             self.online_coords_predicted = coords_predicted
@@ -525,10 +451,7 @@ class CoTrackerThreeOnline(CoTrackerThreeBase):
         conf_predicted = torch.sigmoid(conf_predicted)
 
         if is_train:
-            valid_mask = (
-                queried_frames[:, None]
-                <= torch.arange(0, T, device=device)[None, :, None]
-            )
+            valid_mask = queried_frames[:, None] <= torch.arange(0, T, device=device)[None, :, None]
             train_data = (
                 all_coords_predictions,
                 all_vis_predictions,

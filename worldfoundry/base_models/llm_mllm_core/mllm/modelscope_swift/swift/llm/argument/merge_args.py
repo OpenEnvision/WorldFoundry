@@ -16,6 +16,7 @@ class MergeArguments:
         safe_serialization(bool): Use safetensors or not, default `True`.
         max_shard_size(str): The max size of single shard file.
     """
+
     merge_lora: bool = False
     safe_serialization: bool = True
-    max_shard_size: str = '5GB'
+    max_shard_size: str = "5GB"

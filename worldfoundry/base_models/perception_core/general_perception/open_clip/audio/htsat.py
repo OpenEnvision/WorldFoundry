@@ -5,25 +5,25 @@
 # below codes are based and referred from https://github.com/microsoft/Swin-Transformer
 # Swin Transformer for Computer Vision: https://arxiv.org/pdf/2103.14030.pdf
 
-"""Module for base_models -> perception_core -> general_perception -> open_clip -> audio -> htsat.py functionality."""
+import collections.abc
+import math
+import random
+import warnings
+from itertools import repeat
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from itertools import repeat
-import collections.abc
-import math
-import warnings
-
-from torch.nn.init import _calculate_fan_in_and_fan_out
 import torch.utils.checkpoint as checkpoint
-
-import random
-
-from torchlibrosa.stft import Spectrogram, LogmelFilterBank
+from torch.nn.init import _calculate_fan_in_and_fan_out
 from torchlibrosa.augmentation import SpecAugmentation
+from torchlibrosa.stft import LogmelFilterBank, Spectrogram
 
-from .fusion import iAFF, AFF, DAF
+from worldfoundry.core.attention.window import window_partition as window_partition
+from worldfoundry.core.attention.window import window_reverse as window_reverse
+from worldfoundry.core.nn.blocks.layers import Mlp as Mlp
+from worldfoundry.core.nn.blocks.stochastic_depth import UniformDropPath as DropPath
+
+from .fusion import AFF, DAF, iAFF
 
 
 def do_mixup(x, mixup_lambda):
@@ -56,17 +56,7 @@ def interpolate(x, ratio):
 
 # from PyTorch internals
 def _ntuple(n):
-    """Helper function to ntuple.
-
-    Args:
-        n: The n.
-    """
     def parse(x):
-        """Parse.
-
-        Args:
-            x: The x.
-        """
         if isinstance(x, collections.abc.Iterable):
             return x
         return tuple(repeat(x, n))
@@ -81,73 +71,21 @@ to_4tuple = _ntuple(4)
 to_ntuple = _ntuple
 
 
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
-    """
-    if drop_prob == 0.0 or not training:
-        return x
-    keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
-    random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
-    return output
-
-
-class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob=None):
-        """Init.
-
-        Args:
-            drop_prob: The drop prob.
-        """
-        super(DropPath, self).__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        return drop_path(x, self.drop_prob, self.training)
-
-
 class PatchEmbed(nn.Module):
     """2D Image to Patch Embedding"""
 
     def __init__(
-            self,
-            img_size=224,
-            patch_size=16,
-            in_chans=3,
-            embed_dim=768,
-            norm_layer=None,
-            flatten=True,
-            patch_stride=16,
-            enable_fusion=False,
-            fusion_type="None",
+        self,
+        img_size=224,
+        patch_size=16,
+        in_chans=3,
+        embed_dim=768,
+        norm_layer=None,
+        flatten=True,
+        patch_stride=16,
+        enable_fusion=False,
+        fusion_type="None",
     ):
-        """Init.
-
-        Args:
-            img_size: The img size.
-            patch_size: The patch size.
-            in_chans: The in chans.
-            embed_dim: The embed dim.
-            norm_layer: The norm layer.
-            flatten: The flatten.
-            patch_stride: The patch stride.
-            enable_fusion: The enable fusion.
-            fusion_type: The fusion type.
-        """
         super().__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
@@ -188,18 +126,12 @@ class PatchEmbed(nn.Module):
                 self.fusion_model = iAFF(channels=embed_dim, type="2D")
 
     def forward(self, x, longer_idx=None):
-        """Forward.
-
-        Args:
-            x: The x.
-            longer_idx: The longer idx.
-        """
         if (self.enable_fusion) and (self.fusion_type in ["daf_2d", "aff_2d", "iaff_2d"]):
             global_x = x[:, 0:1, :, :]
 
             # global processing
             B, C, H, W = global_x.shape
-            assert H == self.img_size[0] and W == self.img_size[1], (
+            assert self.img_size[0] == H and self.img_size[1] == W, (
                 f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
             )
             global_x = self.proj(global_x)
@@ -232,7 +164,7 @@ class PatchEmbed(nn.Module):
             x = global_x
         else:
             B, C, H, W = x.shape
-            assert H == self.img_size[0] and W == self.img_size[1], (
+            assert self.img_size[0] == H and self.img_size[1] == W, (
                 f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
             )
             x = self.proj(x)
@@ -243,59 +175,10 @@ class PatchEmbed(nn.Module):
         return x
 
 
-class Mlp(nn.Module):
-    """MLP as used in Vision Transformer, MLP-Mixer and related networks"""
-
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
-        """Init.
-
-        Args:
-            in_features: The in features.
-            hidden_features: The hidden features.
-            out_features: The out features.
-            act_layer: The act layer.
-            drop: The drop.
-        """
-        super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = act_layer()
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
-
-    def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
-        return x
-
-
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
-    """Helper function to no grad trunc normal.
-
-    Args:
-        tensor: The tensor.
-        mean: The mean.
-        std: The std.
-        a: The a.
-        b: The b.
-    """
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
     def norm_cdf(x):
-        """Norm cdf.
-
-        Args:
-            x: The x.
-        """
         # Computes standard normal cumulative distribution function
         return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
@@ -310,7 +193,7 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         # Values are generated by using a truncated uniform distribution and
         # then using the inverse CDF for the normal distribution.
         # Get upper and lower cdf values
-        l = norm_cdf((a - mean) / std)
+        l = norm_cdf((a - mean) / std)  # noqa: E741 - Ambiguous upstream name kept as written.
         u = norm_cdf((b - mean) / std)
 
         # Uniformly fill tensor with values from [l, u], then translate to
@@ -352,14 +235,6 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
 
 
 def variance_scaling_(tensor, scale=1.0, mode="fan_in", distribution="normal"):
-    """Variance scaling.
-
-    Args:
-        tensor: The tensor.
-        scale: The scale.
-        mode: The mode.
-        distribution: The distribution.
-    """
     fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
     if mode == "fan_in":
         denom = fan_in
@@ -383,42 +258,7 @@ def variance_scaling_(tensor, scale=1.0, mode="fan_in", distribution="normal"):
 
 
 def lecun_normal_(tensor):
-    """Lecun normal.
-
-    Args:
-        tensor: The tensor.
-    """
     variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
-
-
-def window_partition(x, window_size):
-    """
-    Args:
-        x: (B, H, W, C)
-        window_size (int): window size
-    Returns:
-        windows: (num_windows*B, window_size, window_size, C)
-    """
-    B, H, W, C = x.shape
-    x = x.view(B, H // window_size, window_size, W // window_size, window_size, C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
-    return windows
-
-
-def window_reverse(windows, window_size, H, W):
-    """
-    Args:
-        windows: (num_windows*B, window_size, window_size, C)
-        window_size (int): Window size
-        H (int): Height of image
-        W (int): Width of image
-    Returns:
-        x: (B, H, W, C)
-    """
-    B = int(windows.shape[0] / (H * W / window_size / window_size))
-    x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
-    return x
 
 
 class WindowAttention(nn.Module):
@@ -435,18 +275,6 @@ class WindowAttention(nn.Module):
     """
 
     def __init__(self, dim, window_size, num_heads, qkv_bias=True, qk_scale=None, attn_drop=0.0, proj_drop=0.0):
-        """Init.
-
-        Args:
-            dim: The dim.
-            window_size: The window size.
-            num_heads: The num heads.
-            qkv_bias: The qkv bias.
-            qk_scale: The qk scale.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-        """
-
         super().__init__()
         self.dim = dim
         self.window_size = window_size  # Wh, Ww
@@ -517,18 +345,16 @@ class WindowAttention(nn.Module):
         return x, attn
 
     def extra_repr(self):
-        """Extra repr."""
         return f"dim={self.dim}, window_size={self.window_size}, num_heads={self.num_heads}"
 
 
 # We use the model based on Swintransformer Block, therefore we can use the swin-transformer pretrained model
 class SwinTransformerBlock(nn.Module):
-    r"""Swin Transformer Block.
+    r"""
     Args:
         dim (int): Number of input channels.
         input_resolution (tuple[int]): Input resulotion.
         num_heads (int): Number of attention heads.
-        window_size (int): Window size.
         shift_size (int): Shift size for SW-MSA.
         mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
         qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Default: True
@@ -541,40 +367,22 @@ class SwinTransformerBlock(nn.Module):
     """
 
     def __init__(
-            self,
-            dim,
-            input_resolution,
-            num_heads,
-            window_size=7,
-            shift_size=0,
-            mlp_ratio=4.0,
-            qkv_bias=True,
-            qk_scale=None,
-            drop=0.0,
-            attn_drop=0.0,
-            drop_path=0.0,
-            act_layer=nn.GELU,
-            norm_layer=nn.LayerNorm,
-            norm_before_mlp="ln",
+        self,
+        dim,
+        input_resolution,
+        num_heads,
+        window_size=7,
+        shift_size=0,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        qk_scale=None,
+        drop=0.0,
+        attn_drop=0.0,
+        drop_path=0.0,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        norm_before_mlp="ln",
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            input_resolution: The input resolution.
-            num_heads: The num heads.
-            window_size: The window size.
-            shift_size: The shift size.
-            mlp_ratio: The mlp ratio.
-            qkv_bias: The qkv bias.
-            qk_scale: The qk scale.
-            drop: The drop.
-            attn_drop: The attn drop.
-            drop_path: The drop path.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            norm_before_mlp: The norm before mlp.
-        """
         super().__init__()
         self.dim = dim
         self.input_resolution = input_resolution
@@ -633,18 +441,13 @@ class SwinTransformerBlock(nn.Module):
             mask_windows = window_partition(img_mask, self.window_size)  # nW, window_size, window_size, 1
             mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
             attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
+            attn_mask = attn_mask.masked_fill(attn_mask != 0, (-100.0)).masked_fill(attn_mask == 0, 0.0)
         else:
             attn_mask = None
 
         self.register_buffer("attn_mask", attn_mask)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         # pdb.set_trace()
         H, W = self.input_resolution
         # print("H: ", H)
@@ -688,7 +491,6 @@ class SwinTransformerBlock(nn.Module):
         return x, attn
 
     def extra_repr(self):
-        """Extra repr."""
         return (
             f"dim={self.dim}, input_resolution={self.input_resolution}, num_heads={self.num_heads}, "
             f"window_size={self.window_size}, shift_size={self.shift_size}, mlp_ratio={self.mlp_ratio}"
@@ -704,13 +506,6 @@ class PatchMerging(nn.Module):
     """
 
     def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
-        """Init.
-
-        Args:
-            input_resolution: The input resolution.
-            dim: The dim.
-            norm_layer: The norm layer.
-        """
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
@@ -741,7 +536,6 @@ class PatchMerging(nn.Module):
         return x
 
     def extra_repr(self):
-        """Extra repr."""
         return f"input_resolution={self.input_resolution}, dim={self.dim}"
 
 
@@ -749,7 +543,6 @@ class BasicLayer(nn.Module):
     """A basic Swin Transformer layer for one stage.
     Args:
         dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resolution.
         depth (int): Number of blocks.
         num_heads (int): Number of attention heads.
         window_size (int): Local window size.
@@ -765,43 +558,23 @@ class BasicLayer(nn.Module):
     """
 
     def __init__(
-            self,
-            dim,
-            input_resolution,
-            depth,
-            num_heads,
-            window_size,
-            mlp_ratio=4.0,
-            qkv_bias=True,
-            qk_scale=None,
-            drop=0.0,
-            attn_drop=0.0,
-            drop_path=0.0,
-            norm_layer=nn.LayerNorm,
-            downsample=None,
-            use_checkpoint=False,
-            norm_before_mlp="ln",
+        self,
+        dim,
+        input_resolution,
+        depth,
+        num_heads,
+        window_size,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        qk_scale=None,
+        drop=0.0,
+        attn_drop=0.0,
+        drop_path=0.0,
+        norm_layer=nn.LayerNorm,
+        downsample=None,
+        use_checkpoint=False,
+        norm_before_mlp="ln",
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            input_resolution: The input resolution.
-            depth: The depth.
-            num_heads: The num heads.
-            window_size: The window size.
-            mlp_ratio: The mlp ratio.
-            qkv_bias: The qkv bias.
-            qk_scale: The qk scale.
-            drop: The drop.
-            attn_drop: The attn drop.
-            drop_path: The drop path.
-            norm_layer: The norm layer.
-            downsample: The downsample.
-            use_checkpoint: The use checkpoint.
-            norm_before_mlp: The norm before mlp.
-        """
-
         super().__init__()
         self.dim = dim
         self.input_resolution = input_resolution
@@ -837,11 +610,6 @@ class BasicLayer(nn.Module):
             self.downsample = None
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         attns = []
         attn = None
         for blk in self.blocks:
@@ -859,7 +627,6 @@ class BasicLayer(nn.Module):
         return x, attn
 
     def extra_repr(self):
-        """Extra repr."""
         return f"dim={self.dim}, input_resolution={self.input_resolution}, depth={self.depth}"
 
 
@@ -890,59 +657,32 @@ class HTSATEncoder(nn.Module):
     """
 
     def __init__(
-            self,
-            spec_size=256,
-            patch_size=4,
-            patch_stride=(4, 4),
-            in_chans=1,
-            num_classes=527,
-            embed_dim=96,
-            depths=[2, 2, 6, 2],
-            num_heads=[4, 8, 16, 32],
-            window_size=8,
-            mlp_ratio=4.0,
-            qkv_bias=True,
-            qk_scale=None,
-            drop_rate=0.0,
-            attn_drop_rate=0.0,
-            drop_path_rate=0.1,
-            norm_layer=nn.LayerNorm,
-            ape=False,
-            patch_norm=True,
-            use_checkpoint=False,
-            norm_before_mlp="ln",
-            config=None,
-            enable_fusion=False,
-            fusion_type="None",
-            **kwargs,
+        self,
+        spec_size=256,
+        patch_size=4,
+        patch_stride=(4, 4),
+        in_chans=1,
+        num_classes=527,
+        embed_dim=96,
+        depths=[2, 2, 6, 2],  # noqa: B006 - Keeps the upstream default object and signature.
+        num_heads=[4, 8, 16, 32],  # noqa: B006 - Keeps the upstream default object and signature.
+        window_size=8,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        qk_scale=None,
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
+        drop_path_rate=0.1,
+        norm_layer=nn.LayerNorm,
+        ape=False,
+        patch_norm=True,
+        use_checkpoint=False,
+        norm_before_mlp="ln",
+        config=None,
+        enable_fusion=False,
+        fusion_type="None",
+        **kwargs,
     ):
-        """Init.
-
-        Args:
-            spec_size: The spec size.
-            patch_size: The patch size.
-            patch_stride: The patch stride.
-            in_chans: The in chans.
-            num_classes: The num classes.
-            embed_dim: The embed dim.
-            depths: The depths.
-            num_heads: The num heads.
-            window_size: The window size.
-            mlp_ratio: The mlp ratio.
-            qkv_bias: The qkv bias.
-            qk_scale: The qk scale.
-            drop_rate: The drop rate.
-            attn_drop_rate: The attn drop rate.
-            drop_path_rate: The drop path rate.
-            norm_layer: The norm layer.
-            ape: The ape.
-            patch_norm: The patch norm.
-            use_checkpoint: The use checkpoint.
-            norm_before_mlp: The norm before mlp.
-            config: The config.
-            enable_fusion: The enable fusion.
-            fusion_type: The fusion type.
-        """
         super().__init__()
 
         self.config = config
@@ -1060,7 +800,7 @@ class HTSATEncoder(nn.Module):
                 qk_scale=self.qk_scale,
                 drop=self.drop_rate,
                 attn_drop=self.attn_drop_rate,
-                drop_path=dpr[sum(self.depths[:i_layer]) : sum(self.depths[:i_layer + 1])],
+                drop_path=dpr[sum(self.depths[:i_layer]) : sum(self.depths[: i_layer + 1])],
                 norm_layer=self.norm_layer,
                 downsample=PatchMerging if (i_layer < self.num_layers - 1) else None,
                 use_checkpoint=use_checkpoint,
@@ -1096,11 +836,6 @@ class HTSATEncoder(nn.Module):
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
-        """Helper function to init weights.
-
-        Args:
-            m: The m.
-        """
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
@@ -1111,21 +846,13 @@ class HTSATEncoder(nn.Module):
 
     @torch.jit.ignore
     def no_weight_decay(self):
-        """No weight decay."""
         return {"absolute_pos_embed"}
 
     @torch.jit.ignore
     def no_weight_decay_keywords(self):
-        """No weight decay keywords."""
         return {"relative_position_bias_table"}
 
     def forward_features(self, x, longer_idx=None):
-        """Forward features.
-
-        Args:
-            x: The x.
-            longer_idx: The longer idx.
-        """
         # A deprecated optimization for using a hierarchical output from different blocks
 
         frames_num = x.shape[2]
@@ -1133,7 +860,7 @@ class HTSATEncoder(nn.Module):
         if self.ape:
             x = x + self.absolute_pos_embed
         x = self.pos_drop(x)
-        for i, layer in enumerate(self.layers):
+        for _i, layer in enumerate(self.layers):
             x, attn = layer(x)
         # for x
         x = self.norm(x)
@@ -1176,38 +903,23 @@ class HTSATEncoder(nn.Module):
         return output_dict
 
     def crop_wav(self, x, crop_size, spe_pos=None):
-        """Crop wav.
-
-        Args:
-            x: The x.
-            crop_size: The crop size.
-            spe_pos: The spe pos.
-        """
         time_steps = x.shape[2]
         tx = torch.zeros(x.shape[0], x.shape[1], crop_size, x.shape[3], device=x.device, dtype=x.dtype)
         for i in range(len(x)):
-            if spe_pos is None:
-                crop_pos = random.randint(0, time_steps - crop_size - 1)
-            else:
-                crop_pos = spe_pos
-            tx[i][0] = x[i, 0, crop_pos:crop_pos + crop_size, :]
+            crop_pos = random.randint(0, time_steps - crop_size - 1) if spe_pos is None else spe_pos
+            tx[i][0] = x[i, 0, crop_pos : crop_pos + crop_size, :]
         return tx
 
     # Reshape the wavform to a img size, if you want to use the pretrained swin transformer model
     def reshape_wav2img(self, x):
-        """Reshape wav2img.
-
-        Args:
-            x: The x.
-        """
         B, C, T, F = x.shape
         target_T = int(self.spec_size * self.freq_ratio)
         target_F = self.spec_size // self.freq_ratio
-        assert T <= target_T and F <= target_F, "the wav size should less than or equal to the swin input size"
+        assert target_T >= T and target_F >= F, "the wav size should less than or equal to the swin input size"
         # to avoid bicubic zero error
-        if T < target_T:
+        if target_T > T:
             x = nn.functional.interpolate(x, (target_T, x.shape[3]), mode="bicubic", align_corners=True)
-        if F < target_F:
+        if target_F > F:
             x = nn.functional.interpolate(x, (x.shape[2], target_F), mode="bicubic", align_corners=True)
         x = x.permute(0, 1, 3, 2).contiguous()
         x = x.reshape(x.shape[0], x.shape[1], x.shape[2], self.freq_ratio, x.shape[3] // self.freq_ratio)
@@ -1218,36 +930,21 @@ class HTSATEncoder(nn.Module):
 
     # Repeat the wavform to a img size, if you want to use the pretrained swin transformer model
     def repeat_wat2img(self, x, cur_pos):
-        """Repeat wat2img.
-
-        Args:
-            x: The x.
-            cur_pos: The cur pos.
-        """
         B, C, T, F = x.shape
         target_T = int(self.spec_size * self.freq_ratio)
         target_F = self.spec_size // self.freq_ratio
-        assert T <= target_T and F <= target_F, "the wav size should less than or equal to the swin input size"
+        assert target_T >= T and target_F >= F, "the wav size should less than or equal to the swin input size"
         # to avoid bicubic zero error
-        if T < target_T:
+        if target_T > T:
             x = nn.functional.interpolate(x, (target_T, x.shape[3]), mode="bicubic", align_corners=True)
-        if F < target_F:
+        if target_F > F:
             x = nn.functional.interpolate(x, (x.shape[2], target_F), mode="bicubic", align_corners=True)
         x = x.permute(0, 1, 3, 2).contiguous()  # B C F T
-        x = x[:, :, :, cur_pos:cur_pos + self.spec_size]
+        x = x[:, :, :, cur_pos : cur_pos + self.spec_size]
         x = x.repeat(repeats=(1, 1, 4, 1))
         return x
 
     def forward(self, x: torch.Tensor, mixup_lambda=None, infer_mode=False, device=None):
-        """Forward.
-
-        Args:
-            x: The x.
-            mixup_lambda: The mixup lambda.
-            infer_mode: The infer mode.
-            device: The device.
-        """
-
         if self.enable_fusion and x["longer"].sum() == 0:
             # if no audio is longer than 10s, then randomly select one audio to be longer
             if self.training:
@@ -1373,13 +1070,6 @@ class HTSATEncoder(nn.Module):
 
 
 def create_htsat_model(audio_cfg, enable_fusion=False, fusion_type="None"):
-    """Create htsat model.
-
-    Args:
-        audio_cfg: The audio cfg.
-        enable_fusion: The enable fusion.
-        fusion_type: The fusion type.
-    """
     try:
         assert audio_cfg.model_name in ["tiny", "base", "large"], "model name for HTS-AT is wrong!"
         if audio_cfg.model_name == "tiny":

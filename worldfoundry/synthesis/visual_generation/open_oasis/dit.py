@@ -5,15 +5,17 @@ References:
     - Latte: https://github.com/Vchitect/Latte/blob/main/models/latte.py
 """
 
-from typing import Optional, Literal
 import torch
-from torch import nn
-from rotary_embedding_torch import RotaryEmbedding
 from einops import rearrange
-from attention import SpatialAxialAttention, TemporalAxialAttention
-from timm.models.vision_transformer import Mlp
 from timm.layers.helpers import to_2tuple
-import math
+from timm.models.vision_transformer import Mlp
+from torch import nn
+
+from worldfoundry.base_models.diffusion_model.models.networks.sana.variants.cpu_frequency import (
+    CpuFrequencyTimestepEmbedder as TimestepEmbedder,
+)
+from worldfoundry.synthesis.visual_generation.open_oasis.attention import SpatialAxialAttention, TemporalAxialAttention
+from worldfoundry.synthesis.visual_generation.open_oasis.rotary_embedding_torch import RotaryEmbedding
 
 
 def modulate(x, shift, scale):
@@ -61,53 +63,13 @@ class PatchEmbed(nn.Module):
 
     def forward(self, x, random_sample=False):
         B, C, H, W = x.shape
-        assert random_sample or (H == self.img_size[0] and W == self.img_size[1]), f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+        assert random_sample or (self.img_size[0] == H and self.img_size[1] == W), (
+            f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+        )
         x = self.proj(x)
-        if self.flatten:
-            x = rearrange(x, "B C H W -> B (H W) C")
-        else:
-            x = rearrange(x, "B C H W -> B H W C")
+        x = rearrange(x, "B C H W -> B (H W) C") if self.flatten else rearrange(x, "B C H W -> B H W C")
         x = self.norm(x)
         return x
-
-
-class TimestepEmbedder(nn.Module):
-    """
-    Embeds scalar timesteps into vector representations.
-    """
-
-    def __init__(self, hidden_size, frequency_embedding_size=256):
-        super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(frequency_embedding_size, hidden_size, bias=True),  # hidden_size is diffusion model hidden size
-            nn.SiLU(),
-            nn.Linear(hidden_size, hidden_size, bias=True),
-        )
-        self.frequency_embedding_size = frequency_embedding_size
-
-    @staticmethod
-    def timestep_embedding(t, dim, max_period=10000):
-        """
-        Create sinusoidal timestep embeddings.
-        :param t: a 1-D Tensor of N indices, one per batch element.
-                          These may be fractional.
-        :param dim: the dimension of the output.
-        :param max_period: controls the minimum frequency of the embeddings.
-        :return: an (N, D) Tensor of positional embeddings.
-        """
-        # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
-        half = dim // 2
-        freqs = torch.exp(-math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half).to(device=t.device)
-        args = t[:, None].float() * freqs[None]
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
-        return embedding
-
-    def forward(self, t):
-        t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
-        t_emb = self.mlp(t_freq)
-        return t_emb
 
 
 class FinalLayer(nn.Module):
@@ -135,13 +97,15 @@ class SpatioTemporalDiTBlock(nn.Module):
         num_heads,
         mlp_ratio=4.0,
         is_causal=True,
-        spatial_rotary_emb: Optional[RotaryEmbedding] = None,
-        temporal_rotary_emb: Optional[RotaryEmbedding] = None,
+        spatial_rotary_emb: RotaryEmbedding | None = None,
+        temporal_rotary_emb: RotaryEmbedding | None = None,
     ):
         super().__init__()
         self.is_causal = is_causal
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
 
         self.s_norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.s_attn = SpatialAxialAttention(
@@ -180,12 +144,16 @@ class SpatioTemporalDiTBlock(nn.Module):
         B, T, H, W, D = x.shape
 
         # spatial block
-        s_shift_msa, s_scale_msa, s_gate_msa, s_shift_mlp, s_scale_mlp, s_gate_mlp = self.s_adaLN_modulation(c).chunk(6, dim=-1)
+        s_shift_msa, s_scale_msa, s_gate_msa, s_shift_mlp, s_scale_mlp, s_gate_mlp = self.s_adaLN_modulation(c).chunk(
+            6, dim=-1
+        )
         x = x + gate(self.s_attn(modulate(self.s_norm1(x), s_shift_msa, s_scale_msa)), s_gate_msa)
         x = x + gate(self.s_mlp(modulate(self.s_norm2(x), s_shift_mlp, s_scale_mlp)), s_gate_mlp)
 
         # temporal block
-        t_shift_msa, t_scale_msa, t_gate_msa, t_shift_mlp, t_scale_mlp, t_gate_mlp = self.t_adaLN_modulation(c).chunk(6, dim=-1)
+        t_shift_msa, t_scale_msa, t_gate_msa, t_shift_mlp, t_scale_mlp, t_gate_mlp = self.t_adaLN_modulation(c).chunk(
+            6, dim=-1
+        )
         x = x + gate(self.t_attn(modulate(self.t_norm1(x), t_shift_msa, t_scale_msa)), t_gate_msa)
         x = x + gate(self.t_mlp(modulate(self.t_norm2(x), t_shift_mlp, t_scale_mlp)), t_gate_mlp)
 

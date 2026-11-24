@@ -26,8 +26,7 @@ from worldfoundry.studio.inference.execution import (
     PipelineContext,
     StudioManager,
 )
-from worldfoundry.studio.ui.launch_config import StudioLaunchConfig, launch_uses_lingbot_torchrun_rollout
-from worldfoundry.studio.visualization.backends.world import world_frontend_html
+from worldfoundry.studio.visualization.backends.world import world_frontend_html, world_frontend_js
 from worldfoundry.studio.visualization.backends.world_realtime import (
     LatestFrameBuffer,
     RealtimeControlResampler,
@@ -36,9 +35,7 @@ from worldfoundry.studio.visualization.backends.world_realtime import (
     _ActiveSocket,
     _prefer_websocket_transport,
 )
-from worldfoundry.studio.visualization.backends.world_realtime_client import (
-    WORLD_REALTIME_CLIENT_JS,
-)
+from worldfoundry.studio.visualization.launch_config import StudioLaunchConfig, launch_uses_lingbot_torchrun_rollout
 from worldfoundry.synthesis.visual_generation.helios import realtime
 from worldfoundry.synthesis.visual_generation.helios import transformer_helios_diffusers as helios_transformer
 
@@ -352,11 +349,11 @@ def test_prompt_scheduled_ui_does_not_claim_keyboard_controls() -> None:
     assert 'id="frameCanvas"' in html
     assert "stick-well is-hidden" in html
     assert "HOLD WASD / DRAG STICKS" not in html
-    assert 'type: "prompt_update", prompt' in WORLD_REALTIME_CLIENT_JS
-    assert "allowedKeys.clear()" in WORLD_REALTIME_CLIENT_JS
-    assert "createImageBitmap" in WORLD_REALTIME_CLIENT_JS
-    assert "__worldfoundryPresentedFrames" in WORLD_REALTIME_CLIENT_JS
-    assert 'el.viewport.scrollIntoView({ block: "center"' in WORLD_REALTIME_CLIENT_JS
+    assert 'type: "prompt_update", prompt' in world_frontend_js()
+    assert "allowedKeys.clear()" in world_frontend_js()
+    assert "createImageBitmap" in world_frontend_js()
+    assert "__worldfoundryPresentedFrames" in world_frontend_js()
+    assert 'el.viewport.scrollIntoView({ block: "center"' in world_frontend_js()
 
 
 def test_prompt_scheduled_ui_bypasses_ice_even_for_remote_clients() -> None:

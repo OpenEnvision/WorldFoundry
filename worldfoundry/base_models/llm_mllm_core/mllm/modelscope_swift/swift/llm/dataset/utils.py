@@ -6,9 +6,10 @@ import os
 import pickle
 import threading
 import time
+from collections.abc import Callable
 from copy import copy
 from queue import Queue
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 from datasets import Dataset as HfDataset
@@ -16,7 +17,11 @@ from modelscope.hub.utils.utils import get_cache_dir
 from torch.utils.data import Dataset, IterableDataset
 from tqdm import tqdm
 
-from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.utils import get_logger, is_master, safe_ddp_context
+from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.utils import (
+    get_logger,
+    safe_ddp_context,
+)
+
 from ..template import MaxLengthError
 from .preprocessor import RowPreprocessor
 
@@ -25,16 +30,15 @@ logger = get_logger()
 
 def sample_dataset(
     dataset: HfDataset,
-    dataset_sample: Optional[int],
+    dataset_sample: int | None,
     shuffle: bool = True,
-    random_state: Optional[np.random.RandomState] = None,
+    random_state: np.random.RandomState | None = None,
 ) -> HfDataset:
     """Sample dataset by a dataset_sample number
     Args:
         dataset: The dataset instance, iterable dataset is not supported
         dataset_sample: The sample number
         shuffle: Whether to perform random sampling on non-streaming datasets
-        random_state: The random state
     Returns:
         The sampled dataset
     """
@@ -44,8 +48,10 @@ def sample_dataset(
     n_repeat_sample = dataset_sample // len(dataset)
     n_remain_sample = dataset_sample % len(dataset)
     if n_repeat_sample >= 1 and n_remain_sample >= 1:
-        logger.warning(f'dataset_sample:{dataset_sample} is greater than len(dataset):{len(dataset)}, '
-                       'repeated sampling will be performed.')
+        logger.warning(
+            f"dataset_sample:{dataset_sample} is greater than len(dataset):{len(dataset)}, "
+            "repeated sampling will be performed."
+        )
     idx = np.tile(range(len(dataset)), n_repeat_sample)
     if n_remain_sample >= 1:
         if shuffle:
@@ -62,14 +68,16 @@ def sample_dataset(
 class LazyLLMDataset(Dataset):
     """This class if used to lazy tokenize the dataset, and skips bad ones when training"""
 
-    def __init__(self,
-                 dataset: HfDataset,
-                 encode_func: Callable[[Dict[str, Any]], Dict[str, Any]],
-                 *,
-                 n_try_fetch: int = 10,
-                 strict: bool = False,
-                 random_state: Union[np.random.RandomState, int, None] = None,
-                 traceback_limit: int = 10) -> None:
+    def __init__(
+        self,
+        dataset: HfDataset,
+        encode_func: Callable[[dict[str, Any]], dict[str, Any]],
+        *,
+        n_try_fetch: int = 10,
+        strict: bool = False,
+        random_state: np.random.RandomState | int | None = None,
+        traceback_limit: int = 10,
+    ) -> None:
         self.dataset = dataset
         self.encode_func = encode_func
 
@@ -87,7 +95,7 @@ class LazyLLMDataset(Dataset):
         self._idx = 0
         self._idx_list = self.random_state.permutation(len(self.dataset)).tolist()
 
-    def __getitem__(self, idx: int) -> Dict[str, Any]:
+    def __getitem__(self, idx: int) -> dict[str, Any]:
         for i in range(self.n_try_fetch):
             n_try = i
             if i == 0:
@@ -101,24 +109,28 @@ class LazyLLMDataset(Dataset):
             except Exception:
                 if n_try == self.n_try_fetch - 1 or self.strict:
                     if self.strict:
-                        logger.warning('To avoid errors, you can pass `strict=False`.')
+                        logger.warning("To avoid errors, you can pass `strict=False`.")
                     raise
                 if self.traceback_limit is not None and self._traceback_counter < self.traceback_limit:
                     import traceback
+
                     logger.info(traceback.format_exc())
-                    logger.warning('👆👆👆There are errors in the template.encode, '
-                                   'and another piece of data will be randomly selected.')
+                    logger.warning(
+                        "👆👆👆There are errors in the template.encode, "
+                        "and another piece of data will be randomly selected."
+                    )
                     self._traceback_counter += 1
 
-        raise ValueError('Failed to retrieve the dataset. You can avoid this issue by increasing `max_length` or '
-                         'modifying the `truncation_strategy`.')
+        raise ValueError(
+            "Failed to retrieve the dataset. You can avoid this issue by increasing `max_length` or "
+            "modifying the `truncation_strategy`."
+        )
 
     def __len__(self) -> int:
         return len(self.dataset)
 
 
 class BasePackingDataset:
-
     def __init__(self, template, dataset, num_proc: int = 1, *, packing_interval: int = 128, strict: bool = False):
         template._packing = True
         self.template = template
@@ -126,7 +138,7 @@ class BasePackingDataset:
         self.num_proc = num_proc
         self.packing_interval = packing_interval
         self.strict = strict
-        assert num_proc >= 1, f'num_proc: {num_proc}'
+        assert num_proc >= 1, f"num_proc: {num_proc}"
         self.workers = []
 
     @staticmethod
@@ -135,6 +147,7 @@ class BasePackingDataset:
             return [], []
         # https://arxiv.org/pdf/2404.10830
         import binpacking
+
         sequences = binpacking.to_constant_volume(sequences, template.max_length, weight_pos=1)
         res = []
         if sequences and not is_finished:
@@ -146,7 +159,7 @@ class BasePackingDataset:
             res.append(packed)
         return res, ret_sequences
 
-    def _encode_data(self, data) -> Dict[str, Any]:
+    def _encode_data(self, data) -> dict[str, Any]:
         res = None
         try:
             res = self.template.encode(data)
@@ -166,7 +179,7 @@ class IndexedDatasetBuilder:
         self.idx_path = os.path.join(self.cache_dir, IndexedDataset.IDX_FNAME)
         if os.path.exists(self.bin_path):
             os.remove(self.bin_path)
-        self.bin_file = open(self.bin_path, 'ab')
+        self.bin_file = open(self.bin_path, "ab")  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
         self.length_list = []
         self.idx_list = [0]
         self.shard_offset = [0]
@@ -183,9 +196,8 @@ class IndexedDatasetBuilder:
                 item_buffer = pickle.dumps(item)
                 bin_buffer.append(item_buffer)
                 self.idx_list.append(self.idx_list[-1] + len(item_buffer))
-                self.length_list.append(
-                    max([len(item[k]) for k in item.keys() if k.endswith('input_ids') or k.endswith('labels')]))
-            self.bin_file.write(b''.join(bin_buffer))
+                self.length_list.append(max([len(item[k]) for k in item.keys() if k.endswith(("input_ids", "labels"))]))  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+            self.bin_file.write(b"".join(bin_buffer))
             offset = self.idx_list[-1] - self.shard_offset[-1]
             if offset >= self.CHUNK_SIZE:
                 self.bin_file.close()
@@ -194,9 +206,9 @@ class IndexedDatasetBuilder:
                 self.n_shard += 1
                 if os.path.exists(self.bin_path):
                     os.remove(self.bin_path)
-                self.bin_file = open(self.bin_path, 'ab')
+                self.bin_file = open(self.bin_path, "ab")  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
 
-    def add_items(self, items: List[Any]) -> None:
+    def add_items(self, items: list[Any]) -> None:
         if self._thread is None:
             self._thread = threading.Thread(target=self._write_worker, daemon=True)
             self._thread.start()
@@ -208,26 +220,25 @@ class IndexedDatasetBuilder:
             self._thread.join()
         self.bin_file.close()
         idx_obj = {
-            'idx': self.idx_list,
-            'length': self.length_list,
-            'n_shard': self.n_shard,
-            'shard_offset': self.shard_offset,
+            "idx": self.idx_list,
+            "length": self.length_list,
+            "n_shard": self.n_shard,
+            "shard_offset": self.shard_offset,
         }
-        with open(self.idx_path, 'wb') as f:
+        with open(self.idx_path, "wb") as f:
             pickle.dump(idx_obj, f)
 
 
 class BinReader:
-
     def __init__(self, bin_path: str):
         self.bin_path = bin_path
-        self.file = open(bin_path, 'rb')
+        self.file = open(bin_path, "rb")  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
         self.mm = mmap.mmap(self.file.fileno(), 0, access=mmap.ACCESS_READ)
 
     def read_buffer(self, offset: int, size: int) -> bytes:
         if offset < 0 or size < 0 or offset + size > len(self.mm):
-            raise ValueError('Invalid offset or size')
-        return self.mm[offset:offset + size]
+            raise ValueError("Invalid offset or size")
+        return self.mm[offset : offset + size]
 
     def __del__(self):
         self.mm.close()
@@ -235,27 +246,27 @@ class BinReader:
 
 
 class IndexedDataset(Dataset):
-    BIN_FNAME = 'data-{:05d}.bin'
-    IDX_FNAME = 'data.idx'
+    BIN_FNAME = "data-{:05d}.bin"
+    IDX_FNAME = "data.idx"
 
     @staticmethod
     def get_cache_dir(dataset_name: str):
-        cache_dir = os.getenv('PACKING_CACHE') or os.path.join(get_cache_dir(), 'tmp')
+        cache_dir = os.getenv("PACKING_CACHE") or os.path.join(get_cache_dir(), "tmp")
         cache_dir = os.path.join(cache_dir, dataset_name)
         os.makedirs(cache_dir, exist_ok=True)
-        assert dataset_name is not None, f'dataset_name: {dataset_name}'
+        assert dataset_name is not None, f"dataset_name: {dataset_name}"
         return cache_dir
 
     def __init__(self, dataset_name: str):
         self.dataset_name = dataset_name
         cache_dir = self.get_cache_dir(dataset_name)
         self.idx_path = os.path.join(cache_dir, self.IDX_FNAME)
-        with open(self.idx_path, 'rb') as f:
+        with open(self.idx_path, "rb") as f:
             idx_obj = pickle.load(f)
-        self.idx_list = idx_obj['idx']
-        self.length_list = idx_obj['length']
-        self.n_shard = idx_obj['n_shard']
-        self.shard_offset = idx_obj['shard_offset']
+        self.idx_list = idx_obj["idx"]
+        self.length_list = idx_obj["length"]
+        self.n_shard = idx_obj["n_shard"]
+        self.shard_offset = idx_obj["shard_offset"]
         self.bin_readers = []
         for i in range(self.n_shard):
             bin_path = os.path.join(cache_dir, self.BIN_FNAME.format(i))
@@ -275,34 +286,39 @@ class IndexedDataset(Dataset):
 
 
 class PackingDataset(BasePackingDataset, Dataset):
-
     def __init__(self, template, dataset, num_proc: int = 1, *, packing_interval: int = 128, strict: bool = False):
         from datasets.fingerprint import update_fingerprint
+
         num_proc = min(len(dataset), num_proc)
         super().__init__(template, dataset, num_proc, packing_interval=packing_interval, strict=strict)
         template = copy(template)
         template.model = None  # Avoid hashing the model.
-        fingerprint = update_fingerprint(dataset._fingerprint, 'PackingDataset', {
-            'template': template,
-            'packing_interval': packing_interval,
-            'strict': strict,
-            'version': 'v1',
-        })
-        self.dataset_name = f'packing-cache-{fingerprint}'
+        fingerprint = update_fingerprint(
+            dataset._fingerprint,
+            "PackingDataset",
+            {
+                "template": template,
+                "packing_interval": packing_interval,
+                "strict": strict,
+                "version": "v1",
+            },
+        )
+        self.dataset_name = f"packing-cache-{fingerprint}"
         with safe_ddp_context(None, True):
             self.create_packed_dataset()
 
     def create_packed_dataset(self):
         cache_dir = IndexedDataset.get_cache_dir(self.dataset_name)
-        logger.info(f'packing cache_dir: {cache_dir}')
+        logger.info(f"packing cache_dir: {cache_dir}")
         if not os.path.exists(os.path.join(cache_dir, IndexedDataset.IDX_FNAME)):
             self._queue = mp.Queue(maxsize=1000)
             self._terminated_workers = 0
             self.prog_bar = tqdm(
-                total=len(self.dataset), dynamic_ncols=True, desc=f'Packing (num_proc={self.num_proc})')
+                total=len(self.dataset), dynamic_ncols=True, desc=f"Packing (num_proc={self.num_proc})"
+            )
             for i in range(self.num_proc):
                 shard_dataset = self.dataset.shard(self.num_proc, i)
-                worker = mp.Process(target=self._producer, args=(shard_dataset, ), daemon=True)
+                worker = mp.Process(target=self._producer, args=(shard_dataset,), daemon=True)
                 worker.start()
                 self.workers.append(worker)
 
@@ -312,7 +328,7 @@ class PackingDataset(BasePackingDataset, Dataset):
                 worker.terminate()
         self.packed_dataset = IndexedDataset(self.dataset_name)
 
-    def fetch_packing_data(self, res: Optional[list] = None):
+    def fetch_packing_data(self, res: list | None = None):
         res = res or []
         for _ in range(self.packing_interval):
             data = self._queue.get()
@@ -323,7 +339,7 @@ class PackingDataset(BasePackingDataset, Dataset):
                 continue
             self.prog_bar.update(1)
             if data:
-                res.append((data, len(data['input_ids'])))
+                res.append((data, len(data["input_ids"])))
         return res
 
     def packing_dataset(self):
@@ -355,15 +371,16 @@ class PackingDataset(BasePackingDataset, Dataset):
 
 
 class IterablePackingDataset(BasePackingDataset, IterableDataset):
-
-    def __init__(self,
-                 template,
-                 dataset,
-                 num_proc: int = 1,
-                 *,
-                 packing_interval: int = 128,
-                 strict: bool = False,
-                 cyclic: bool = False):
+    def __init__(
+        self,
+        template,
+        dataset,
+        num_proc: int = 1,
+        *,
+        packing_interval: int = 128,
+        strict: bool = False,
+        cyclic: bool = False,
+    ):
         super().__init__(template, dataset, num_proc, packing_interval=packing_interval, strict=strict)
         self._in_queue = mp.Queue()
         self._out_queue = mp.Queue()
@@ -377,10 +394,7 @@ class IterablePackingDataset(BasePackingDataset, IterableDataset):
     def _processor(self):
         while True:
             i, data = self._in_queue.get()
-            if data is None:
-                encoded_data = None
-            else:
-                encoded_data = self._encode_data(data)
+            encoded_data = None if data is None else self._encode_data(data)
             self._out_queue.put((i, encoded_data))
 
     def _put_data_in_queue(self, iterator):
@@ -401,7 +415,7 @@ class IterablePackingDataset(BasePackingDataset, IterableDataset):
                 break
             elif not data:
                 continue
-            res[i] = (data, len(data['input_ids']))
+            res[i] = (data, len(data["input_ids"]))
         res = [data for data in res if data]
         last_res += res
         return last_res
@@ -409,7 +423,7 @@ class IterablePackingDataset(BasePackingDataset, IterableDataset):
     @staticmethod
     def cyclic_iter(iterable):
         while True:
-            for x in iterable:
+            for x in iterable:  # noqa: UP028 - Keeps the loop; `yield from` would forward send() and throw().
                 yield x
 
     def __iter__(self):
@@ -418,10 +432,7 @@ class IterablePackingDataset(BasePackingDataset, IterableDataset):
         except StopIteration:
             return
 
-        if self.cyclic:
-            iterator = self.cyclic_iter(self.dataset)
-        else:
-            iterator = iter(self.dataset)
+        iterator = self.cyclic_iter(self.dataset) if self.cyclic else iter(self.dataset)
         data = []
         while True:
             finished = self._put_data_in_queue(iterator)
@@ -433,17 +444,15 @@ class IterablePackingDataset(BasePackingDataset, IterableDataset):
 
 
 class EncodePreprocessor(RowPreprocessor):
-
-    def __init__(self, template: 'Template'):
+    def __init__(self, template: "Template"):  # noqa: F821 - Quoted annotation avoids a runtime Template import.
         super().__init__()
         self.template = template
 
-    def preprocess(self, row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def preprocess(self, row: dict[str, Any]) -> dict[str, Any] | None:
         return self.template.encode(row)
 
 
 class GetLengthPreprocessor(RowPreprocessor):
-
     def preprocess(self, row):
-        length = max([len(row[k]) for k in row.keys() if k.endswith('input_ids')])
-        return {'length': length}
+        length = max([len(row[k]) for k in row.keys() if k.endswith("input_ids")])  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+        return {"length": length}

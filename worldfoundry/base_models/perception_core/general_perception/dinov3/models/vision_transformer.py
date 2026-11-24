@@ -3,18 +3,18 @@
 # This software may be used and distributed in accordance with
 # the terms of the DINOv3 License Agreement.
 
-"""Module for base_models -> perception_core -> general_perception -> dinov3 -> models -> vision_transformer.py functionality."""
-
 import logging
+from collections.abc import Sequence
 from functools import partial
-from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
+from typing import Any, Literal
 
 import torch
 import torch.nn.init
 from torch import Tensor, nn
 
-from ..layers import RMSNorm, RopePositionEmbedding, SelfAttentionBlock, SwiGLUFFN
 from worldfoundry.core.nn.blocks.layers import LayerScale, Mlp, PatchEmbed
+
+from ..layers import RMSNorm, RopePositionEmbedding, SelfAttentionBlock, SwiGLUFFN
 from ..utils import named_apply
 
 logger = logging.getLogger("dinov3")
@@ -41,12 +41,6 @@ dtype_dict = {
 
 
 def init_weights_vit(module: nn.Module, name: str = ""):
-    """Init weights vit.
-
-    Args:
-        module: The module.
-        name: The name.
-    """
     if isinstance(module, nn.Linear):
         torch.nn.init.trunc_normal_(module.weight, std=0.02)
         if module.bias is not None:
@@ -66,7 +60,6 @@ def init_weights_vit(module: nn.Module, name: str = ""):
 
 
 class DinoVisionTransformer(nn.Module):
-    """Dino vision transformer implementation."""
     def __init__(
         self,
         *,
@@ -99,7 +92,6 @@ class DinoVisionTransformer(nn.Module):
         device: Any | None = None,
         **ignored_kwargs,
     ):
-        """Init."""
         super().__init__()
         if len(ignored_kwargs) > 0:
             logger.warning(f"Ignored kwargs: {ignored_kwargs}")
@@ -187,7 +179,6 @@ class DinoVisionTransformer(nn.Module):
         self.mask_token = nn.Parameter(torch.empty(1, embed_dim, device=device))
 
     def init_weights(self):
-        """Init weights."""
         self.rope_embed._init_weights()
         nn.init.normal_(self.cls_token, std=0.02)
         if self.n_storage_tokens > 0:
@@ -195,16 +186,7 @@ class DinoVisionTransformer(nn.Module):
         nn.init.zeros_(self.mask_token)
         named_apply(init_weights_vit, self)
 
-    def prepare_tokens_with_masks(self, x: Tensor, masks=None) -> Tuple[Tensor, Tuple[int]]:
-        """Prepare tokens with masks.
-
-        Args:
-            x: The x.
-            masks: The masks.
-
-        Returns:
-            The return value.
-        """
+    def prepare_tokens_with_masks(self, x: Tensor, masks=None) -> tuple[Tensor, tuple[int]]:
         x = self.patch_embed(x)
         B, H, W, _ = x.shape
         x = x.flatten(1, 2)
@@ -236,19 +218,10 @@ class DinoVisionTransformer(nn.Module):
 
         return x, (H, W)
 
-    def forward_features_list(self, x_list: List[Tensor], masks_list: List[Tensor]) -> List[Dict[str, Tensor]]:
-        """Forward features list.
-
-        Args:
-            x_list: The x list.
-            masks_list: The masks list.
-
-        Returns:
-            The return value.
-        """
+    def forward_features_list(self, x_list: list[Tensor], masks_list: list[Tensor]) -> list[dict[str, Tensor]]:
         x = []
         rope = []
-        for t_x, t_masks in zip(x_list, masks_list):
+        for t_x, t_masks in zip(x_list, masks_list, strict=False):
             t2_x, hw_tuple = self.prepare_tokens_with_masks(t_x, t_masks)
             x.append(t2_x)
             rope.append(hw_tuple)
@@ -260,7 +233,7 @@ class DinoVisionTransformer(nn.Module):
             x = blk(x, rope_sincos)
         all_x = x
         output = []
-        for idx, (x, masks) in enumerate(zip(all_x, masks_list)):
+        for idx, (x, masks) in enumerate(zip(all_x, masks_list, strict=False)):
             if self.untie_cls_and_patch_norms or self.untie_global_and_local_cls_norm:
                 if self.untie_global_and_local_cls_norm and self.training and idx == 1:
                     x_norm_cls_reg = self.local_cls_norm(x[:, : self.n_storage_tokens + 1])
@@ -284,39 +257,18 @@ class DinoVisionTransformer(nn.Module):
             )
         return output
 
-    def forward_features(self, x: Tensor | List[Tensor], masks: Optional[Tensor] = None) -> List[Dict[str, Tensor]]:
-        """Forward features.
-
-        Args:
-            x: The x.
-            masks: The masks.
-
-        Returns:
-            The return value.
-        """
+    def forward_features(self, x: Tensor | list[Tensor], masks: Tensor | None = None) -> list[dict[str, Tensor]]:
         if isinstance(x, torch.Tensor):
             return self.forward_features_list([x], [masks])[0]
         else:
             return self.forward_features_list(x, masks)
 
-    def _get_intermediate_layers_not_chunked(self, x: Tensor, n: int = 1) -> List[Tensor]:
-        """Helper function to get intermediate layers not chunked.
-
-        Args:
-            x: The x.
-            n: The n.
-
-        Returns:
-            The return value.
-        """
+    def _get_intermediate_layers_not_chunked(self, x: Tensor, n: int = 1) -> list[Tensor]:
         x, (H, W) = self.prepare_tokens_with_masks(x)
         output, total_block_len = [], len(self.blocks)
         blocks_to_take = range(total_block_len - n, total_block_len) if isinstance(n, int) else n
         for i, blk in enumerate(self.blocks):
-            if self.rope_embed is not None:
-                rope_sincos = self.rope_embed(H=H, W=W)
-            else:
-                rope_sincos = None
+            rope_sincos = self.rope_embed(H=H, W=W) if self.rope_embed is not None else None
             x = blk(x, rope_sincos)
             if i in blocks_to_take:
                 output.append(x)
@@ -327,20 +279,12 @@ class DinoVisionTransformer(nn.Module):
         self,
         x: torch.Tensor,
         *,
-        n: Union[int, Sequence] = 1,
+        n: int | Sequence = 1,
         reshape: bool = False,
         return_class_token: bool = False,
         return_extra_tokens: bool = False,
         norm: bool = True,
-    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor, ...]]]:
-        """Get intermediate layers.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
+    ) -> tuple[torch.Tensor | tuple[torch.Tensor, ...]]:
         outputs = self._get_intermediate_layers_not_chunked(x, n)
         if norm:
             outputs_normed = []
@@ -364,18 +308,13 @@ class DinoVisionTransformer(nn.Module):
         if not return_class_token and not return_extra_tokens:
             return tuple(outputs)
         elif return_class_token and not return_extra_tokens:
-            return tuple(zip(outputs, class_tokens))
+            return tuple(zip(outputs, class_tokens, strict=False))
         elif not return_class_token and return_extra_tokens:
-            return tuple(zip(outputs, extra_tokens))
+            return tuple(zip(outputs, extra_tokens, strict=False))
         elif return_class_token and return_extra_tokens:
-            return tuple(zip(outputs, class_tokens, extra_tokens))
+            return tuple(zip(outputs, class_tokens, extra_tokens, strict=False))
 
-    def forward(self, *args, is_training: bool = False, **kwargs) -> List[Dict[str, Tensor]] | Tensor:
-        """Forward.
-
-        Returns:
-            The return value.
-        """
+    def forward(self, *args, is_training: bool = False, **kwargs) -> list[dict[str, Tensor]] | Tensor:
         ret = self.forward_features(*args, **kwargs)
         if is_training:
             return ret
@@ -384,11 +323,6 @@ class DinoVisionTransformer(nn.Module):
 
 
 def vit_small(patch_size=16, **kwargs):
-    """Vit small.
-
-    Args:
-        patch_size: The patch size.
-    """
     model = DinoVisionTransformer(
         patch_size=patch_size,
         embed_dim=384,
@@ -401,11 +335,6 @@ def vit_small(patch_size=16, **kwargs):
 
 
 def vit_base(patch_size=16, **kwargs):
-    """Vit base.
-
-    Args:
-        patch_size: The patch size.
-    """
     model = DinoVisionTransformer(
         patch_size=patch_size,
         embed_dim=768,
@@ -418,11 +347,6 @@ def vit_base(patch_size=16, **kwargs):
 
 
 def vit_large(patch_size=16, **kwargs):
-    """Vit large.
-
-    Args:
-        patch_size: The patch size.
-    """
     model = DinoVisionTransformer(
         patch_size=patch_size,
         embed_dim=1024,
@@ -435,11 +359,6 @@ def vit_large(patch_size=16, **kwargs):
 
 
 def vit_so400m(patch_size=16, **kwargs):
-    """Vit so400m.
-
-    Args:
-        patch_size: The patch size.
-    """
     model = DinoVisionTransformer(
         patch_size=patch_size,
         embed_dim=1152,
@@ -452,11 +371,6 @@ def vit_so400m(patch_size=16, **kwargs):
 
 
 def vit_huge2(patch_size=16, **kwargs):
-    """Vit huge2.
-
-    Args:
-        patch_size: The patch size.
-    """
     model = DinoVisionTransformer(
         patch_size=patch_size,
         embed_dim=1280,
@@ -482,11 +396,6 @@ def vit_giant2(patch_size=16, **kwargs):
 
 
 def vit_7b(patch_size=16, **kwargs):
-    """Vit 7b.
-
-    Args:
-        patch_size: The patch size.
-    """
     model = DinoVisionTransformer(
         patch_size=patch_size,
         embed_dim=4096,

@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from worldfoundry.evaluation.tasks.catalog.runner_kinds import (
+from worldfoundry.evals.tasks.catalog.runner_kinds import (
     CANONICAL_RUNNER_KINDS,
     IN_TREE_RUNTIME_KINDS,
     RUNNER_KIND_ALIASES,
     RUNNER_KINDS,
     normalize_runner_kind,
 )
-from worldfoundry.evaluation.tasks.catalog.schema import BenchmarkRunnerSpec
-from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import ManifestBenchmarkRunner
+from worldfoundry.evals.tasks.catalog.schema import BenchmarkRunnerSpec
+from worldfoundry.evals.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_runner import ManifestBenchmarkRunner
 
 
 def test_runner_kind_groups_are_derived_from_the_closed_vocabulary() -> None:

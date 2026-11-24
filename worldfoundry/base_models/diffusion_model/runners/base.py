@@ -17,8 +17,9 @@ to change the CFG formula while keeping the same extension lifecycle.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, cast
+from typing import Any, cast
 
 import torch
 from torch import Tensor

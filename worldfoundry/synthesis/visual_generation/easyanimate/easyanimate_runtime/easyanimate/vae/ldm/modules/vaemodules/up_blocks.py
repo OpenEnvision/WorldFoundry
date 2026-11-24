@@ -4,8 +4,7 @@ import torch.nn as nn
 from .attention import SpatialAttention, TemporalAttention
 from .common import ResidualBlock3D
 from .gc_block import GlobalContextBlock
-from .upsamplers import (SpatialTemporalUpsampler3D, SpatialUpsampler3D,
-                         TemporalUpsampler3D)
+from .upsamplers import SpatialTemporalUpsampler3D, SpatialUpsampler3D, TemporalUpsampler3D
 
 
 def get_up_block(
@@ -204,7 +203,7 @@ class SpatialAttnUpBlock3D(nn.Module):
             self.upsampler = None
 
     def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
-        for conv, attn in zip(self.convs, self.attentions):
+        for conv, attn in zip(self.convs, self.attentions, strict=False):
             x = conv(x)
             x = attn(x)
 
@@ -328,7 +327,7 @@ class TemporalAttnUpBlock3D(nn.Module):
             self.upsampler = None
 
     def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
-        for conv, attn in zip(self.convs, self.attentions):
+        for conv, attn in zip(self.convs, self.attentions, strict=False):
             x = conv(x)
             x = attn(x)
 

@@ -5,8 +5,9 @@ import importlib.util
 import os
 import sys
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 import cv2
 import numpy as np
@@ -58,7 +59,7 @@ def _local_moge_model_path_candidates(source_value: str) -> list[Path]:
 
 
 def _resolve_moge_pretrained(
-    pretrained_model_name_or_path: Optional[str | os.PathLike],
+    pretrained_model_name_or_path: str | os.PathLike | None,
 ) -> str:
     if pretrained_model_name_or_path is None:
         for candidate in _local_moge_model_path_candidates(DEFAULT_WORLDFM_MOGE2_REPO):
@@ -105,10 +106,7 @@ def _to_rgb_pil_image(data: Any) -> Image.Image:
     if isinstance(data, (str, os.PathLike)):
         return Image.open(data).convert("RGB")
 
-    if isinstance(data, torch.Tensor):
-        array = data.detach().cpu().numpy()
-    else:
-        array = np.asarray(data)
+    array = data.detach().cpu().numpy() if isinstance(data, torch.Tensor) else np.asarray(data)
 
     if array.ndim == 4:
         array = array[0]
@@ -117,12 +115,8 @@ def _to_rgb_pil_image(data: Any) -> Image.Image:
     if array.shape[0] in (1, 3):
         array = np.transpose(array, (1, 2, 0))
     if array.dtype != np.uint8:
-        if np.issubdtype(array.dtype, np.floating):
-            if array.min() >= -1.0 and array.max() <= 1.0:
-                if array.min() < 0.0:
-                    array = (array + 1.0) * 127.5
-                else:
-                    array = array * 255.0
+        if np.issubdtype(array.dtype, np.floating) and array.min() >= -1.0 and array.max() <= 1.0:
+            array = (array + 1.0) * 127.5 if array.min() < 0.0 else array * 255.0
         array = np.clip(array, 0.0, 255.0).astype(np.uint8)
     if array.shape[-1] == 1:
         array = np.repeat(array, 3, axis=-1)
@@ -139,11 +133,11 @@ class WorldFMRepresentation:
 
     def __init__(
         self,
-        hw_path: Optional[str] = None,
-        moge_path: Optional[str] = None,
-        realesrgan_path: Optional[str] = None,
-        zim_path: Optional[str] = None,
-        moge_pretrained: Optional[str | os.PathLike] = DEFAULT_WORLDFM_MOGE2_REPO,
+        hw_path: str | None = None,
+        moge_path: str | None = None,
+        realesrgan_path: str | None = None,
+        zim_path: str | None = None,
+        moge_pretrained: str | os.PathLike | None = DEFAULT_WORLDFM_MOGE2_REPO,
         render_size: int = 512,
         resolution_level: int = 30,
         fov_deg: float = 45.0,
@@ -167,7 +161,7 @@ class WorldFMRepresentation:
         dist_max_m: float = 20.0,
         weight_near: float = 1.0,
         weight_far: float = 0.0,
-        device: Optional[str] = None,
+        device: str | None = None,
     ) -> None:
         for name, value in {
             "hw_path": hw_path,
@@ -233,9 +227,9 @@ class WorldFMRepresentation:
 
     def _resolve_scene_dir(
         self,
-        output_dir: Optional[str | os.PathLike],
+        output_dir: str | os.PathLike | None,
         scene_name: str,
-    ) -> Optional[Path]:
+    ) -> Path | None:
         if output_dir is None:
             return None
         base_dir = Path(output_dir).expanduser().resolve()
@@ -246,9 +240,9 @@ class WorldFMRepresentation:
     def _materialize_input_image(
         self,
         images,
-        image_path: Optional[str],
-        scene_dir: Optional[Path],
-    ) -> tuple[str, Optional[Path]]:
+        image_path: str | None,
+        scene_dir: Path | None,
+    ) -> tuple[str, Path | None]:
         if image_path:
             resolved = Path(image_path).expanduser().resolve()
             if not resolved.exists():
@@ -272,7 +266,7 @@ class WorldFMRepresentation:
         image.save(materialized)
         return str(materialized), materialized
 
-    def _load_panorama(self, panorama_image=None, panorama_path: Optional[str] = None) -> Image.Image:
+    def _load_panorama(self, panorama_image=None, panorama_path: str | None = None) -> Image.Image:
         if panorama_path is not None:
             path = Path(panorama_path).expanduser().resolve()
             if not path.exists():
@@ -282,7 +276,7 @@ class WorldFMRepresentation:
             raise ValueError("Expected `panorama_image` or `panorama_path`.")
         return _to_rgb_pil_image(panorama_image)
 
-    def _run_panorama_generation(self, image_path: str, scene_dir: Optional[Path]) -> Image.Image:
+    def _run_panorama_generation(self, image_path: str, scene_dir: Path | None) -> Image.Image:
         if scene_dir is not None:
             cached_panorama = scene_dir / "panorama.png"
             if cached_panorama.exists():
@@ -326,9 +320,11 @@ class WorldFMRepresentation:
         splitted_dist = []
         splitted_masks = []
         for index in trange(0, len(splitted_images), self.batch_size, desc="MoGe Infer", leave=False):
-            batch = np.stack(splitted_images[index:index + self.batch_size])
+            batch = np.stack(splitted_images[index : index + self.batch_size])
             tensor = torch.tensor(batch / 255.0, dtype=torch.float32, device=device).permute(0, 3, 1, 2)
-            fov_x, _ = np.rad2deg(utils3d.numpy.intrinsics_to_fov(np.array(intrinsics[index:index + self.batch_size])))
+            fov_x, _ = np.rad2deg(
+                utils3d.numpy.intrinsics_to_fov(np.array(intrinsics[index : index + self.batch_size]))
+            )
             fov_x_tensor = torch.tensor(fov_x, dtype=torch.float32, device=device)
             outputs = model.infer(
                 tensor,
@@ -351,11 +347,14 @@ class WorldFMRepresentation:
         )
         panorama_depth = panorama_depth.astype(np.float32)
         panorama_depth = cv2.resize(panorama_depth, (image_rgb.shape[1], image_rgb.shape[0]), cv2.INTER_LINEAR)
-        panorama_mask = cv2.resize(
-            panorama_mask.astype(np.uint8),
-            (image_rgb.shape[1], image_rgb.shape[0]),
-            cv2.INTER_NEAREST,
-        ) > 0
+        panorama_mask = (
+            cv2.resize(
+                panorama_mask.astype(np.uint8),
+                (image_rgb.shape[1], image_rgb.shape[0]),
+                cv2.INTER_NEAREST,
+            )
+            > 0
+        )
 
         depth_raw = panorama_depth.copy()
         if panorama_mask.any():
@@ -373,13 +372,13 @@ class WorldFMRepresentation:
         self,
         *,
         images=None,
-        image_path: Optional[str] = None,
+        image_path: str | None = None,
         panorama_image=None,
-        panorama_path: Optional[str] = None,
+        panorama_path: str | None = None,
         K,
         scene_name: str,
-        output_dir: Optional[str | os.PathLike] = None,
-    ) -> Dict[str, Any]:
+        output_dir: str | os.PathLike | None = None,
+    ) -> dict[str, Any]:
         scene_dir = self._resolve_scene_dir(output_dir, scene_name)
         use_panorama_input = panorama_image is not None or panorama_path is not None
         self._setup_external_repos(require_panorama_generator=not use_panorama_input)
@@ -422,9 +421,9 @@ class WorldFMRepresentation:
 
     def render_views(
         self,
-        scene_context: Dict[str, Any],
+        scene_context: dict[str, Any],
         c2w_list: Sequence[np.ndarray],
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         K = np.asarray(scene_context["K"], dtype=np.float64)
         renderer = scene_context["renderer"]
         cond_db = scene_context["cond_db"]

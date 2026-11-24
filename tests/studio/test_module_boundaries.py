@@ -19,7 +19,7 @@ def test_inference_materialization_and_unload_do_not_import_viewers(tmp_path):
         from pathlib import Path
 
         forbidden = (
-            "worldfoundry.studio.ui", "worldfoundry.studio.serving",
+            "worldfoundry.studio.workspace", "worldfoundry.studio.serving",
             "worldfoundry.studio.visualization", "gradio", "fastapi",
             "uvicorn", "viser", "rerun", "trimesh",
         )
@@ -69,9 +69,10 @@ def test_inference_materialization_and_unload_do_not_import_viewers(tmp_path):
 
 
 def test_workspace_page_is_a_packaged_asset():
-    from worldfoundry.studio.ui.workspace import WORKSPACE_HTML
+    pytest.importorskip("fastapi")
+    from worldfoundry.studio.workspace.app import WORKSPACE_HTML
 
-    packaged = files("worldfoundry.studio").joinpath("ui", "workspace.html").read_text(encoding="utf-8")
+    packaged = files("worldfoundry.studio").joinpath("assets", "web", "workspace.html").read_text(encoding="utf-8")
     assert packaged == WORKSPACE_HTML
     assert "<html" in packaged.lower()
 

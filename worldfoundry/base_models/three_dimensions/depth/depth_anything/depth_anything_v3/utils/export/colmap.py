@@ -12,19 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> export -> colmap.py functionality."""
-
 import os
-import pycolmap
-import cv2 as cv
-import numpy as np
 
+import numpy as np
+import pycolmap
 from PIL import Image
 
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.specs import Prediction
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.export_glb import (
+    _depths_to_world_points_with_colors,
+)
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.logger import logger
-
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.export_glb import _depths_to_world_points_with_colors
 
 
 def export_to_colmap(
@@ -34,18 +32,6 @@ def export_to_colmap(
     conf_thresh_percentile: float = 40.0,
     process_res_method: str = "upper_bound_resize",
 ) -> None:
-    """Export to colmap.
-
-    Args:
-        prediction: The prediction.
-        export_dir: The export dir.
-        image_paths: The image paths.
-        conf_thresh_percentile: The conf thresh percentile.
-        process_res_method: The process res method.
-
-    Returns:
-        The return value.
-    """
     # 1. Data preparation
     conf_thresh = np.percentile(prediction.conf, conf_thresh_percentile)
     points, colors = _depths_to_world_points_with_colors(
@@ -83,9 +69,7 @@ def export_to_colmap(
         else:
             raise ValueError(f"Unknown process_res_method: {process_res_method}")
 
-        pycolmap_intri = np.array(
-            [intrinsic[0, 0], intrinsic[1, 1], intrinsic[0, 2], intrinsic[1, 2]]
-        )
+        pycolmap_intri = np.array([intrinsic[0, 0], intrinsic[1, 1], intrinsic[0, 2], intrinsic[1, 2]])
 
         extrinsic = prediction.extrinsics[fidx]
         cam_from_world = pycolmap.Rigid3d(pycolmap.Rotation3d(extrinsic[:3, :3]), extrinsic[:3, 3])
@@ -127,9 +111,7 @@ def export_to_colmap(
             point2d[1] *= orig_h / h
             point3d_id = point3d_ids[vidx]
             point2d_list.append(pycolmap.Point2D(point2d, point3d_id))
-            reconstruction.point3D(point3d_id).track.add_element(
-                image.image_id, len(point2d_list) - 1
-            )
+            reconstruction.point3D(point3d_id).track.add_element(image.image_id, len(point2d_list) - 1)
 
         # set and add image
         image.frame_id = image.image_id

@@ -2,13 +2,13 @@
 import torch
 
 __all__ = [
-    "PROMPT_TEMPLATE",
-    "PRECISION_TO_TYPE",
     "PRECISIONS",
-    "VAE_PATH",
+    "PRECISION_TO_TYPE",
+    "PROMPT_TEMPLATE",
     "TEXT_ENCODER_PATH",
-    "TOKENIZER_PATH",
     "TEXT_PROJECTION",
+    "TOKENIZER_PATH",
+    "VAE_PATH",
 ]
 
 # =================== Constant Values =====================

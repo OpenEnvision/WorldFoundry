@@ -1,15 +1,15 @@
 ---
 title: GenAI-Bench
-description: "TIGER-Lab 裁判对齐评测：在图像生成、编辑与视频上对比人工偏好的成对准确率。WorldFoundry 导入标签，不编造榜单。"
+description: "TIGER-Lab 裁判对齐评测：在图像生成、编辑与视频上对比人工偏好的成对准确率。WorldFoundry 导入官方结果行。"
 ---
 
-GenAI-Bench（滑铁卢大学 TIGER-Lab，随 GenAI-Arena 发布）测的是**自动裁判是否对齐人工偏好**，不是生成器好不好看。每条记录是同一 prompt 的一对输出加人工标签。WorldFoundry 打整体 **成对准确率**，并按三个任务拆开：
+GenAI-Bench（滑铁卢大学 TIGER-Lab，随 GenAI-Arena 发布）测的是**自动裁判是否对齐人工偏好**，而不是生成器的画面好坏。每条记录是同一 prompt 的一对输出加人工标签。WorldFoundry 计算整体**成对准确率**，并按三个任务分别统计：
 
 - **图像生成**
 - **图像编辑**
 - **视频生成**
 
-任务级成对齐备时，`genai_bench_average` 是各任务准确率的均值。
+任务级结果齐备时，`genai_bench_average` 是各任务准确率的均值。
 
 论文：[GenAI-Bench](https://arxiv.org/abs/2406.04485)。代码：[TIGER-AI-Lab/GenAI-Bench](https://github.com/TIGER-AI-Lab/GenAI-Bench)。数据集：[`TIGER-Lab/GenAI-Bench`](https://huggingface.co/datasets/TIGER-Lab/GenAI-Bench)（CC-BY-4.0）。
 
@@ -20,7 +20,7 @@ WorldFoundry **归一化官方结果行**。一行必须有 `task`（`image_gene
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id genai-bench \
   --mode official-validation \
   --official-results-path <official_results.jsonl> \
@@ -31,7 +31,7 @@ worldfoundry-eval zoo benchmark-run \
 
 `--preference-pairs-path` 提供成对清单。默认导入路径：`WORLDFOUNDRY_GENAI_BENCH_RESULTS_PATH`。共享资源：`genai_bench_dataset_assets`、`t2v_metrics_source_assets`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/genai-bench.yaml`。
+清单：`worldfoundry/data/benchmarks/tasks/external/genai-bench.yaml`。
 
 产物包括 `scorecard.json`（主键 `genai_bench_average`）、`benchmark_contract.json`、`raw_metric_table.jsonl`。
 

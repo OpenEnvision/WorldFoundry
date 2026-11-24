@@ -1,4 +1,5 @@
 """Inference-only Being-H0.5 integration."""
+
 from __future__ import annotations
 
 __all__ = ["BeingH05Synthesis"]

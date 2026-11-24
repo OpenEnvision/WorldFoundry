@@ -1,32 +1,24 @@
 import dataclasses
-from typing import List, Union, Tuple, Dict, Optional
 
+import numpy as np
 import PIL
 from PIL import ImageFile
-from einops import einops
-from ..config import BaseConfig
-
-from .image_preprocessor import ImagePreprocessor
-from .preprocessor_utils import TokenizedVisionData, batch_pixels_to_patches, \
-    TensorSpec
-from ..tokenizer import HfTokenizerWrapper
-import numpy as np
-
 from transformers.image_utils import ImageInput
+
+from worldfoundry.base_models.llm_mllm_core.mllm.molmo.preprocessing import (
+    arange_for_pooling,
+    batch_pixels_to_patches,
+)
+
+from ..config import BaseConfig
+from ..tokenizer import HfTokenizerWrapper
+from .image_preprocessor import ImagePreprocessor
+from .preprocessor_utils import TensorSpec, TokenizedVisionData
 
 
 def setup_pil():
     PIL.Image.MAX_IMAGE_PIXELS = None
     ImageFile.LOAD_TRUNCATED_IMAGES = True
-
-
-def arange_for_pooling(idx_arr, pool_h, pool_w):
-    h_pad = pool_h * ((idx_arr.shape[0] + pool_h - 1) // pool_h) - idx_arr.shape[0]
-    w_pad = pool_w * ((idx_arr.shape[1] + pool_w - 1) // pool_w) - idx_arr.shape[1]
-    idx_arr = np.pad(idx_arr, [[h_pad//2, (h_pad+1)//2], [w_pad//2, (w_pad+1)//2]],
-                     mode='constant',constant_values=-1)
-    return einops.rearrange(
-        idx_arr, "(h dh) (w dw) -> h w (dh dw)", dh=pool_h, dw=pool_w)
 
 
 @dataclasses.dataclass
@@ -38,12 +30,12 @@ class MultiCropConfig(BaseConfig):
     p_high_res: float = 0
     pooling_w: int = 2
     pooling_h: int = 2
-    overlap_margins: Tuple[int, int] = (4, 4)
-    max_images: Optional[int] = None
+    overlap_margins: tuple[int, int] = (4, 4)
+    max_images: int | None = None
     max_multi_image_crops: int = 4
     multi_image_pooling_w: int = 2
     multi_image_pooling_h: int = 2
-    use_single_crop_col_tokens: Optional[bool] = None
+    use_single_crop_col_tokens: bool | None = None
     use_single_crop_start_token: bool = False
     single_frame: bool = True
 
@@ -74,7 +66,7 @@ class MultiCropConfig(BaseConfig):
                     image_pooling_h=self.multi_image_pooling_h,
                     p_high_res=0,
                 ),
-                self.max_images
+                self.max_images,
             )
         else:
             multi_image = None
@@ -87,6 +79,7 @@ class MultiCropImagePreprocessor:
     Converts text/images inputs into tensors that can be used in the forward method
     for the a model
     """
+
     tokenizer: HfTokenizerWrapper
     image_preprocessor: ImagePreprocessor
     legacy_image_mask: bool = False
@@ -98,22 +91,19 @@ class MultiCropImagePreprocessor:
     p_high_res: float = 0.0
     image_pooling_w: int = 2
     image_pooling_h: int = 2
-    image_padding_mask: Union[bool, int] = False
-    overlap_margins: Tuple[int, int] = (4, 4)
+    image_padding_mask: bool | int = False
+    overlap_margins: tuple[int, int] = (4, 4)
 
-    use_single_crop_col_tokens: Optional[bool] = None
+    use_single_crop_col_tokens: bool | None = None
     use_single_crop_start_token: bool = False
 
     single_frame: bool = True
 
-
-    def get_output_shapes(self) -> Dict[str, TensorSpec]:
+    def get_output_shapes(self) -> dict[str, TensorSpec]:
         """Return the maximumly sized output shapes this preprocessor could produce"""
         if self.crop_mode == "resize":
             height, width = self.image_preprocessor.base_image_input_size
-            return TensorSpec.get_spec(
-                self(np.zeros((height, width, 3), dtype=np.uint8), is_training=False)
-            )
+            return TensorSpec.get_spec(self(np.zeros((height, width, 3), dtype=np.uint8), is_training=False))
         specs = []
         # Computing the output shapes of this preprocessor statically is possible but
         # annoying to keep updated and can be error-prone
@@ -123,11 +113,7 @@ class MultiCropImagePreprocessor:
         # HACK: `token_pooling` might have the larger first dimension for sqaure images,
         # so we need to add a square image to the specs
         for [h, w] in [[10000, 100], [100, 10000], [10000, 10000]]:
-            specs.append(
-                TensorSpec.get_spec(
-                    self(np.zeros([h, w, 3], dtype=np.uint8), is_training=False)
-                )
-            )
+            specs.append(TensorSpec.get_spec(self(np.zeros([h, w, 3], dtype=np.uint8), is_training=False)))
         return TensorSpec.max_dictionaries(*specs)
 
     def __call__(
@@ -156,19 +142,17 @@ class MultiCropImagePreprocessor:
         crop_patch_h = base_image_input_size[0] // base_image_input_d
 
         original_image_h, original_image_w = image.shape[:2]
-        crop_size = base_image_input_size[0]
+        _crop_size = base_image_input_size[0]
 
         if self.crop_mode == "resize":
-            resized, resized_mask, resize_idx = self.image_preprocessor.build_single_crop(image, is_training=is_training, rng=rng)
-            resize_idx = np.arange(crop_patch_w*crop_patch_h).reshape([crop_patch_h, crop_patch_w])
+            resized, resized_mask, resize_idx = self.image_preprocessor.build_single_crop(
+                image, is_training=is_training, rng=rng
+            )
+            resize_idx = np.arange(crop_patch_w * crop_patch_h).reshape([crop_patch_h, crop_patch_w])
             pooling_idx = arange_for_pooling(resize_idx, pooling_h, pooling_w)
             h, w = pooling_idx.shape[:2]
-            pooling_idx = pooling_idx.reshape([-1, pooling_h*pooling_w])
-            per_row = np.full(
-                (w,),
-                patch_id,
-                dtype=np.int32
-            )
+            pooling_idx = pooling_idx.reshape([-1, pooling_h * pooling_w])
+            per_row = np.full((w,), patch_id, dtype=np.int32)
             if use_single_crop_col_tokens:
                 per_row = np.concatenate([per_row, [self.tokenizer.image_col_token_id]], 0)
             extra_tokens = np.tile(per_row, [h])
@@ -180,29 +164,27 @@ class MultiCropImagePreprocessor:
             return TokenizedVisionData(
                 tokens=np.concatenate(joint, 0),
                 images=batch_pixels_to_patches(resized, image_patch_size),
-                image_masks=None if resized_mask is None else batch_pixels_to_patches(resized_mask, image_patch_size).mean(-1),
-                token_pooling=pooling_idx
+                image_masks=None
+                if resized_mask is None
+                else batch_pixels_to_patches(resized_mask, image_patch_size).mean(-1),
+                token_pooling=pooling_idx,
             )
 
         if self.crop_mode in ["overlap-and-resize-c2", "overlap-and-resize"]:
             max_crops = self.max_crops
             crop_arr, mask_arr, patch_idx_arr = self.image_preprocessor.build_overlapping_crops(
-                image, is_training=is_training, rng=rng,
-                max_crops=max_crops, overlap_margins=self.overlap_margins)
+                image, is_training=is_training, rng=rng, max_crops=max_crops, overlap_margins=self.overlap_margins
+            )
             pooling_idx = arange_for_pooling(patch_idx_arr, pooling_h, pooling_w)
             h, w = pooling_idx.shape[:2]
-            pooling_idx = pooling_idx.reshape([-1, pooling_h*pooling_w])
+            pooling_idx = pooling_idx.reshape([-1, pooling_h * pooling_w])
 
             # Now build the output tokens
             per_row = np.full(w, self.tokenizer.image_patch_token_id, dtype=np.int32)
             if self.use_col_tokens:
                 per_row = np.concatenate([per_row, [self.tokenizer.image_col_token_id]], 0)
             joint = np.tile(per_row, [h])
-            joint = [
-                [self.tokenizer.image_start_token_id],
-                joint,
-                [self.tokenizer.image_end_token_id]
-            ]
+            joint = [[self.tokenizer.image_start_token_id], joint, [self.tokenizer.image_end_token_id]]
 
             if self.crop_mode == "overlap-and-resize":
                 crop_arr = batch_pixels_to_patches(crop_arr, image_patch_size)
@@ -216,7 +198,9 @@ class MultiCropImagePreprocessor:
                 )
 
             # Finally do the same for the global image
-            resized, resized_mask, resize_idx = self.image_preprocessor.build_single_crop(image, is_training=is_training, rng=rng)
+            resized, resized_mask, resize_idx = self.image_preprocessor.build_single_crop(
+                image, is_training=is_training, rng=rng
+            )
             crop_arr = np.concatenate([resized, crop_arr], 0)
 
             if mask_arr is not None:
@@ -227,21 +211,13 @@ class MultiCropImagePreprocessor:
 
             resize_idx = arange_for_pooling(resize_idx, pooling_h, pooling_w)
             h, w = resize_idx.shape[:2]
-            resize_idx = resize_idx.reshape([-1, pooling_h*pooling_w])
+            resize_idx = resize_idx.reshape([-1, pooling_h * pooling_w])
 
             # Global image goes first, so the order of patches in previous crops gets increased
-            pooling_idx = np.where(
-                pooling_idx >= 0,
-                pooling_idx + crop_patch_h*crop_patch_w,
-                -1
-            )
+            pooling_idx = np.where(pooling_idx >= 0, pooling_idx + crop_patch_h * crop_patch_w, -1)
             pooling_idx = np.concatenate([resize_idx, pooling_idx])
 
-            per_row = np.full(
-                (w,),
-                patch_id,
-                dtype=np.int32
-            )
+            per_row = np.full((w,), patch_id, dtype=np.int32)
             if use_single_crop_col_tokens:
                 per_row = np.concatenate([per_row, [self.tokenizer.image_col_token_id]], 0)
             extra_tokens = np.tile(per_row, [h])
@@ -249,18 +225,18 @@ class MultiCropImagePreprocessor:
                 start_token = self.tokenizer.low_res_image_start_token_id
             else:
                 start_token = self.tokenizer.image_start_token_id
-            joint = [
-                        [start_token],
-                        extra_tokens,
-                        [self.tokenizer.image_end_token_id],
-                    ] + joint
+            joint = [  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+                [start_token],
+                extra_tokens,
+                [self.tokenizer.image_end_token_id],
+            ] + joint
             if mask_arr is not None:
                 mask_arr = batch_pixels_to_patches(mask_arr, image_patch_size).astype(np.float32).mean(axis=-1)
             return TokenizedVisionData(
                 tokens=np.concatenate(joint, 0),
                 images=batch_pixels_to_patches(crop_arr, image_patch_size),
                 image_masks=mask_arr,
-                token_pooling=pooling_idx
+                token_pooling=pooling_idx,
             )
         else:
             raise NotImplementedError(self.crop_mode)
@@ -271,11 +247,11 @@ class MultiImagePreprocessor:
     image_preprocessor: MultiCropImagePreprocessor
     max_images: int
 
-    def get_output_shapes(self) -> Dict[str, TensorSpec]:
+    def get_output_shapes(self) -> dict[str, TensorSpec]:
         image_shapes = self.image_preprocessor.get_output_shapes()
         tokens_shape = image_shapes.pop("tokens") * self.max_images
         tokens_shape = tokens_shape.extend(
-            sum(len(self.image_preprocessor.tokenizer.encode(f"Image {i+1}")) for i in range(self.max_images))
+            sum(len(self.image_preprocessor.tokenizer.encode(f"Image {i + 1}")) for i in range(self.max_images))
         )
         for k, v in image_shapes.items():
             assert k in ["images", "image_masks", "token_pooling"]
@@ -290,7 +266,7 @@ class MultiImagePreprocessor:
         images,
         is_training=False,
         rng=None,
-    ) -> List[TokenizedVisionData]:
+    ) -> list[TokenizedVisionData]:
         if is_training:
             raise ValueError("MolmoBot's multi-image preprocessor supports inference only.")
         tokenized_images = []
@@ -301,7 +277,9 @@ class MultiImagePreprocessor:
             for idx, image in enumerate(images):
                 image_data = self.image_preprocessor(image, is_training, rng)
                 prefix = f"Image {idx + 1}"
-                image_data.tokens = np.concatenate([self.image_preprocessor.tokenizer.encode(prefix), image_data.tokens], 0)
+                image_data.tokens = np.concatenate(
+                    [self.image_preprocessor.tokenizer.encode(prefix), image_data.tokens], 0
+                )
                 assert image_data.position_ids is None
                 tokenized_images.append(image_data)
                 if self.max_images is not None and idx == self.max_images - 1:
@@ -320,7 +298,9 @@ class MultiImagePreprocessor:
                     image_data = self.image_preprocessor(view, is_training, rng)
 
                     prefix = f"Image {min_prefix + image_pair_idx} View {view_idx + 1}"
-                    image_data.tokens = np.concatenate([self.image_preprocessor.tokenizer.encode(prefix), image_data.tokens], 0)
+                    image_data.tokens = np.concatenate(
+                        [self.image_preprocessor.tokenizer.encode(prefix), image_data.tokens], 0
+                    )
                     assert image_data.position_ids is None
                     tokenized_images.append(image_data)
 

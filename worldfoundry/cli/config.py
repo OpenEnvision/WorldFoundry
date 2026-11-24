@@ -7,22 +7,23 @@ import os
 import re
 import shlex
 import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import yaml
 
-from worldfoundry.evaluation.utils import REPO_ROOT
+from worldfoundry.evals.utils import REPO_ROOT
 
 from .presentation import print_table, terminal_enabled
-from .utils import json_dump, parse_key_value_mapping
+from .utils import json_dump, parse_key_value_strings
 
 # ── Config constants ────────────────────────────────────────────
 
 CONFIG_SCHEMA_VERSION = "worldfoundry-example-config"
 DEFAULT_CONFIG_DIR = REPO_ROOT / "configs"
 _ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*?))?\}|\$([A-Za-z_][A-Za-z0-9_]*)")
-_SUPPORTED_ENTRYPOINTS = {"worldfoundry", "worldfoundry-eval"}
+_SUPPORTED_ENTRYPOINTS = {"wf"}
 
 
 # ── Config loading and expansion ────────────────────────────────
@@ -47,8 +48,7 @@ def _load_config(path: Path) -> dict[str, Any]:
         raise ValueError("config command must be a non-empty list of strings")
     if command[0] not in _SUPPORTED_ENTRYPOINTS:
         raise ValueError(
-            "config command must start with one of "
-            f"{', '.join(sorted(_SUPPORTED_ENTRYPOINTS))}; got {command[0]!r}"
+            f"config command must start with one of {', '.join(sorted(_SUPPORTED_ENTRYPOINTS))}; got {command[0]!r}"
         )
     return payload
 
@@ -60,6 +60,7 @@ def _expand_env_token(token: str, env: Mapping[str, str]) -> str:
         token: Raw token potentially containing environment variable references.
         env: Environment mapping used for substitution.
     """
+
     def replace(match: re.Match[str]) -> str:
         braced_name = match.group(1)
         default_value = match.group(2)
@@ -136,7 +137,7 @@ def _config_list_items(config_dir: Path) -> list[dict[str, Any]]:
                 "requirements": dict(payload.get("requirements", {})),
                 "command": command,
                 "shell": shlex.join(command),
-                "run_command": f"worldfoundry-eval config run {shlex.quote(_display_path(path))}",
+                "run_command": f"wf config run {shlex.quote(_display_path(path))}",
             }
         )
     return items
@@ -188,7 +189,7 @@ def _handle_config_list(args: argparse.Namespace) -> int:
 def _handle_config_run(args: argparse.Namespace) -> int:
     """Expand and execute a WorldFoundry YAML workflow template through the CLI."""
     payload = _load_config(args.config)
-    env = {**os.environ, **parse_key_value_mapping(args.env)}
+    env = {**os.environ, **parse_key_value_strings(args.env)}
     command = _with_output_dir(_expanded_command(payload, env), args.output_dir)
     command_payload = _command_payload(args.config, payload, command)
 
@@ -229,7 +230,9 @@ def register_config_subparser(subparsers: argparse._SubParsersAction) -> None:
     run_parser.add_argument("--env", action="append", default=None, metavar="KEY=VALUE")
     run_parser.add_argument("--output-dir", type=Path, help="Override or append the config command's --output-dir.")
     run_parser.add_argument("--plan-only", action="store_true", help="Print the expanded command without executing it.")
-    run_parser.add_argument("--print-command", action="store_true", help="Print the expanded command to stderr before execution.")
+    run_parser.add_argument(
+        "--print-command", action="store_true", help="Print the expanded command to stderr before execution."
+    )
     run_parser.add_argument("--json", action="store_true", help="With --plan-only, print the expanded command as JSON.")
     run_parser.set_defaults(func=_handle_config_run)
 

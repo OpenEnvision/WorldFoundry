@@ -19,9 +19,7 @@ from .utils import hwc2chw, normalize_images, resize
 from .vq import VectorQuantizer
 
 
-def _select_last_frames(
-    values: torch.Tensor, lengths: list[int]
-) -> list[torch.Tensor]:
+def _select_last_frames(values: torch.Tensor, lengths: list[int]) -> list[torch.Tensor]:
     if len(values) != len(lengths):
         raise ValueError("Batch size and length count must match")
     return [values[index, -length:] for index, length in enumerate(lengths)]
@@ -85,23 +83,13 @@ class IgorEncoder(IgorPretrainedModel):
             in_channels=config.in_channels,
         )
         self.pe_spatial = nn.Parameter(
-            torch.from_numpy(
-                get_2D_position_embeddings(
-                    config.encoder_embed_dim, config.grid_size
-                )
-            )
+            torch.from_numpy(get_2D_position_embeddings(config.encoder_embed_dim, config.grid_size))
             .float()
             .unsqueeze(0),
             requires_grad=False,
         )
         self.pe_temporal = nn.Parameter(
-            torch.from_numpy(
-                get_1D_position_embeddings(
-                    config.encoder_embed_dim, config.d_t
-                )
-            )
-            .float()
-            .unsqueeze(0),
+            torch.from_numpy(get_1D_position_embeddings(config.encoder_embed_dim, config.d_t)).float().unsqueeze(0),
             requires_grad=False,
         )
         self.layers = nn.ModuleList(
@@ -135,14 +123,10 @@ class IgorEncoder(IgorPretrainedModel):
 
     def _init_weights(self, module: nn.Module) -> None:
         if module is self.embed.proj:
-            nn.init.xavier_uniform_(
-                module.weight.data.view(module.weight.shape[0], -1)
-            )
+            nn.init.xavier_uniform_(module.weight.data.view(module.weight.shape[0], -1))
         super()._init_weights(module)
 
-    def forward(
-        self, clips: torch.Tensor, clip_lengths: list[int]
-    ) -> torch.Tensor:
+    def forward(self, clips: torch.Tensor, clip_lengths: list[int]) -> torch.Tensor:
         embedding = self.embed(clips) + self.pe_spatial
         embeddings = _select_last_frames(embedding, clip_lengths)
         values = torch.cat(embeddings, dim=0)
@@ -172,15 +156,11 @@ class IgorEncoder(IgorPretrainedModel):
 
         clips = self.preprocess(clips)
         batch_size, frame_count = clips.shape[:2]
-        valid_lengths = torch.full(
-            (batch_size,), frame_count, device=clips.device, dtype=torch.long
-        )
+        valid_lengths = torch.full((batch_size,), frame_count, device=clips.device, dtype=torch.long)
 
         if frame_count < self.config.d_t:
             pad_count = self.config.d_t - frame_count
-            padding = clips.new_zeros(
-                batch_size, pad_count, *clips.shape[2:]
-            )
+            padding = clips.new_zeros(batch_size, pad_count, *clips.shape[2:])
             clips = torch.cat((padding, clips), dim=1)
             frame_count = self.config.d_t
 
@@ -195,8 +175,7 @@ class IgorEncoder(IgorPretrainedModel):
                 actions = new_actions
             else:
                 actions = [
-                    torch.cat((current, new[-1:]), dim=0)
-                    for current, new in zip(actions, new_actions)
+                    torch.cat((current, new[-1:]), dim=0) for current, new in zip(actions, new_actions, strict=False)
                 ]
 
         if actions is None:
@@ -219,9 +198,7 @@ class IgorModel(IgorPretrainedModel):
 
     def _init_weights(self, module: nn.Module) -> None:
         if module is self.vq.embedding:
-            nn.init.uniform_(
-                module.weight, -1.0 / self.vq.n_e, 1.0 / self.vq.n_e
-            )
+            nn.init.uniform_(module.weight, -1.0 / self.vq.n_e, 1.0 / self.vq.n_e)
         super()._init_weights(module)
 
     @torch.inference_mode()

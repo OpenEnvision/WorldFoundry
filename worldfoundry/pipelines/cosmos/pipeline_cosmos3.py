@@ -48,7 +48,7 @@ class Cosmos3Pipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "Cosmos3Pipeline":
+    ) -> Cosmos3Pipeline:
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
         options.update(required_components or {})
         options.update(kwargs)
@@ -57,7 +57,7 @@ class Cosmos3Pipeline(PipelineABC):
         checkpoint_overrides = None
         if isinstance(source, (str, Path)) and Path(source).expanduser().is_dir():
             root = str(Path(source).expanduser().resolve())
-            checkpoint_overrides = {name: root for name in ("transformer", "vae", "sound", "tokenizer", "scheduler")}
+            checkpoint_overrides = dict.fromkeys(("transformer", "vae", "sound", "tokenizer", "scheduler"), root)
         visible_gpus = int(torch.cuda.device_count()) if torch.cuda.is_available() else 0
         offload_mode, device_map = resolve_cosmos3_runtime_options(
             options,

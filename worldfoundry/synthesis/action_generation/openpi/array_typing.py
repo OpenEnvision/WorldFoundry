@@ -9,26 +9,28 @@ import beartype
 import jax
 import jax._src.tree_util as private_tree_util
 import jax.core
-from jaxtyping import ArrayLike
-from jaxtyping import Bool  # noqa: F401
-from jaxtyping import DTypeLike  # noqa: F401
-from jaxtyping import Float
-from jaxtyping import Int  # noqa: F401
-from jaxtyping import Key  # noqa: F401
-from jaxtyping import Num  # noqa: F401
-from jaxtyping import PyTree
-from jaxtyping import Real  # noqa: F401
-from jaxtyping import UInt8  # noqa: F401
-from jaxtyping import config
-from jaxtyping import jaxtyped
 import jaxtyping
 import torch
+from jaxtyping import (
+    ArrayLike,
+    Bool,  # noqa: F401 - Re-exported for at.<type> annotations.
+    DTypeLike,  # noqa: F401 - Re-exported for at.<type> annotations.
+    Float,
+    Int,  # noqa: F401 - Re-exported for at.<type> annotations.
+    Key,  # noqa: F401 - Re-exported for at.<type> annotations.
+    Num,  # noqa: F401 - Re-exported for at.<type> annotations.
+    PyTree,
+    Real,  # noqa: F401 - Re-exported for at.<type> annotations.
+    UInt8,  # noqa: F401 - Re-exported for at.<type> annotations.
+    config,
+    jaxtyped,
+)
 
 # patch jaxtyping to handle https://github.com/patrick-kidger/jaxtyping/issues/277.
 # the problem is that custom PyTree nodes are sometimes initialized with arbitrary types (e.g., `jax.ShapeDtypeStruct`,
 # `jax.Sharding`, or even <object>) due to JAX tracing operations. this patch skips typechecking when the stack trace
 # contains `jax._src.tree_util`, which should only be the case during tree unflattening.
-_decorator = getattr(jaxtyping, "_decorator", None)  # noqa: SLF001
+_decorator = getattr(jaxtyping, "_decorator", None)
 _original_check_dataclass_annotations = getattr(_decorator, "_check_dataclass_annotations", None)
 # Redefine Array to include both JAX arrays and PyTorch tensors
 Array = jax.Array | torch.Tensor
@@ -44,7 +46,7 @@ def _check_dataclass_annotations(self, typechecker):
 
 
 if _original_check_dataclass_annotations is not None:
-    _decorator._check_dataclass_annotations = _check_dataclass_annotations  # noqa: SLF001
+    _decorator._check_dataclass_annotations = _check_dataclass_annotations
 
 KeyArrayLike: TypeAlias = jax.typing.ArrayLike
 Params: TypeAlias = PyTree[Float[ArrayLike, "..."]]
@@ -60,7 +62,7 @@ def typecheck(t: T) -> T:
 @contextlib.contextmanager
 def disable_typechecking():
     initial = config.jaxtyping_disable
-    config.update("jaxtyping_disable", True)  # noqa: FBT003
+    config.update("jaxtyping_disable", True)
     yield
     config.update("jaxtyping_disable", initial)
 

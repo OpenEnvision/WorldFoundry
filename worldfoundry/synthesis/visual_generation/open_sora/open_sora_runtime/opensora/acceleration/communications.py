@@ -69,7 +69,7 @@ def _gather(
     group: dist.ProcessGroup,
     gather_dim: int,
 ):
-    if gather_list is None:
+    if gather_list is None:  # noqa: F821 - Name is undefined in the upstream source.
         gather_list = [torch.empty_like(input_) for _ in range(world_size)]
     dist.gather(input_, gather_list, group=group, gather_dim=gather_dim)
     return gather_list

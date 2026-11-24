@@ -1,16 +1,15 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """CLI entry point for Depth-Anything-3 depth estimation.
 
 Usage:
     # Single video
-    python code/depth/depth_predict_da3_cli.py --input video.mp4 --output ./output
+    python -m worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.depth.depth_predict_da3_cli --input video.mp4 --output ./output
 
     # Video directory
-    python code/depth/depth_predict_da3_cli.py --input ./videos/ --output ./output
+    python -m worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.depth.depth_predict_da3_cli --input ./videos/ --output ./output
 
     # With explicit config
-    python depth/depth_predict_da3_cli.py --input video.mp4 --output ./output \
+    python -m worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.depth.depth_predict_da3_cli --input video.mp4 --output ./output \
         --config-json '{"model_path": "./checkpoints/DA3"}'
 """
 
@@ -20,17 +19,12 @@ import logging
 import os
 import sys
 import traceback
-from typing import List
 
-# Add code/ to path so sibling packages are importable
-_code_dir = os.path.join(os.path.dirname(__file__), "..")
-if _code_dir not in sys.path:
-    sys.path.insert(0, _code_dir)
-
-from depth.depth_predict_da3 import DepthPredictDA3
 from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.reproducibility import (
     initialize_reproducibility,
 )
+
+from .depth_predict_da3 import DepthPredictDA3
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,7 +34,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_video_files(input_path: str, video_extensions: List[str]) -> List[str]:
+def get_video_files(input_path: str, video_extensions: list[str]) -> list[str]:
     """Find video files from a path (file or directory)."""
     video_files = []
     if os.path.isfile(input_path):
@@ -86,18 +80,14 @@ def process_video(model, video_path, output_dir, video_idx, total_videos, flat_o
 
 def main():
     parser = argparse.ArgumentParser(description="Depth Predict DA3 CLI")
-    parser.add_argument("--input", "-i", type=str, required=True,
-                        help="Input video file or directory")
-    parser.add_argument("--output", "-o", type=str, required=True,
-                        help="Output directory")
-    parser.add_argument("--video_ext", type=str, default=".mp4,.avi,.mov,.mkv",
-                        help="Supported video extensions, comma-separated")
-    parser.add_argument("--filter", "-f", type=str, default=None,
-                        help="Filter videos by filename keyword")
-    parser.add_argument("--skip_existing", action="store_true",
-                        help="Skip videos with existing output")
-    parser.add_argument("--config-json", type=str, default=None,
-                        help="JSON string with depth model config overrides")
+    parser.add_argument("--input", "-i", type=str, required=True, help="Input video file or directory")
+    parser.add_argument("--output", "-o", type=str, required=True, help="Output directory")
+    parser.add_argument(
+        "--video_ext", type=str, default=".mp4,.avi,.mov,.mkv", help="Supported video extensions, comma-separated"
+    )
+    parser.add_argument("--filter", "-f", type=str, default=None, help="Filter videos by filename keyword")
+    parser.add_argument("--skip_existing", action="store_true", help="Skip videos with existing output")
+    parser.add_argument("--config-json", type=str, default=None, help="JSON string with depth model config overrides")
     args = parser.parse_args()
     initialize_reproducibility()
 
@@ -124,7 +114,9 @@ def main():
         is_single = os.path.isfile(args.input)
         filtered = []
         for vp in video_files:
-            check_dir = args.output if is_single else os.path.join(args.output, os.path.splitext(os.path.basename(vp))[0])
+            check_dir = (
+                args.output if is_single else os.path.join(args.output, os.path.splitext(os.path.basename(vp))[0])
+            )
             if os.path.exists(os.path.join(check_dir, "intrinsic.txt")):
                 print(f"Skipping (already processed): {os.path.basename(vp)}")
             else:
@@ -147,8 +139,7 @@ def main():
     fail_count = 0
 
     for idx, video_path in enumerate(video_files, 1):
-        success = process_video(model, video_path, args.output, idx, len(video_files),
-                                flat_output=is_single_file)
+        success = process_video(model, video_path, args.output, idx, len(video_files), flat_output=is_single_file)
         if success:
             success_count += 1
         else:

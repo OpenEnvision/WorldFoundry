@@ -1,36 +1,34 @@
-"""Bind WorldFoundry to official SolarWM Wan2.2-5B Stage2 inference."""
+"""Bind WorldFoundry to SolarWM Wan2.2-5B Stage2 inference through the vendored solarwm package."""
 
 from __future__ import annotations
 
 import importlib.util
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
-from worldfoundry.core.io.paths import checkpoint_root_path, local_data_root_path, official_runtime_repo_path
+from worldfoundry.core.execution.process import package_module_command
+from worldfoundry.core.io import resolve_data_path
+from worldfoundry.core.io.paths import checkpoint_root_path, local_data_root_path
 from worldfoundry.runtime.assets import expand_worldfoundry_path
 from worldfoundry.synthesis.visual_generation.runtime_manifest import command_settings
 
 RUNTIME_DIR = Path(__file__).resolve().parent
 OFFICIAL_ENTRYPOINT = RUNTIME_DIR / "infer.py"
+ENTRYPOINT_MODULE = "worldfoundry.synthesis.visual_generation.solarwm.infer"
 OFFICIAL_REPO_URL = "https://github.com/Junchao-cs/SolarWM"
-SOURCE_ENV_VAR = "WORLDFOUNDRY_SOLARWM_SOURCE"
-SOURCE_DIR_NAME = "SolarWM"
+CONFIG_ROOT = Path(resolve_data_path("models/runtime/configs/solarwm"))
 
 DEFAULT_RELEASE_ROOT = checkpoint_root_path("junchaoh-cs--SolarWM-Wan2.2-5B")
 DEFAULT_BASE_MODEL_DIR = DEFAULT_RELEASE_ROOT / "SolarWM-5B-base"
 DEFAULT_CHECKPOINT_DIR = DEFAULT_RELEASE_ROOT / "SolarWM-5B-sgf-stage2-81f"
 DEFAULT_DATA_ROOT = local_data_root_path() / "SolarWM-Data" / "releases-v1"
-DEFAULT_CONFIG_RELATIVE = Path("configs/examples/wan22_ti2v_5b/infer_stage2_sgf_camera_length.yaml")
+DEFAULT_CONFIG_RELATIVE = Path("examples/wan22_ti2v_5b/infer_stage2_sgf_camera_length.yaml")
 DEFAULT_TEST_INDEX = Path("recipes/clean-81f/raw-wds/test-index.jsonl.gz")
 
 # Requirement diagnostics, rather than a static block, decide whether a staged
-# source/checkpoint/data installation can execute.
+# checkpoint/data installation can execute.
 BLOCKED_REASON = ""
-
-
-def runtime_root() -> Path:
-    """Resolve the user-staged official SolarWM checkout."""
-    return official_runtime_repo_path(SOURCE_DIR_NAME, specific_env=SOURCE_ENV_VAR)
 
 
 def _option(options: Mapping[str, Any], *names: str, default: Any = None) -> Any:
@@ -76,12 +74,13 @@ def _data_root(options: Mapping[str, Any]) -> Path:
     )
 
 
-def _config_path(options: Mapping[str, Any], source_root: Path) -> Path:
+def _config_path(options: Mapping[str, Any]) -> Path:
+    """Resolve the inference config; relative paths name configs bundled under ``CONFIG_ROOT``."""
     raw = _option(options, "config_path", "solarwm_config", "config")
     if raw in (None, ""):
-        return source_root / DEFAULT_CONFIG_RELATIVE
+        return CONFIG_ROOT / DEFAULT_CONFIG_RELATIVE
     path = expand_worldfoundry_path(str(raw))
-    return path if path.is_absolute() else source_root / path
+    return path if path.is_absolute() else CONFIG_ROOT / path
 
 
 def _test_index(options: Mapping[str, Any]) -> Path:
@@ -106,45 +105,12 @@ def _missing_file(path: Path, *, kind: str, reason: str) -> dict[str, str] | Non
 
 
 def missing_requirements(*, options, runtime_root, entrypoint, profile) -> list[dict[str, str]]:
-    """Report every source, checkpoint, dataset, and dependency gap."""
-    del profile
+    """Report every checkpoint, dataset, configuration, and dependency gap."""
+    del runtime_root, entrypoint, profile
     options = dict(options or {})
-    source = Path(str(runtime_root)).expanduser()
     missing: list[dict[str, str]] = []
 
-    required_source_files = (
-        Path("src/solarwm/__init__.py"),
-        Path("src/solarwm/__main__.py"),
-        DEFAULT_CONFIG_RELATIVE,
-    )
-    if not source.is_dir():
-        missing.append(
-            {
-                "kind": "source_repo",
-                "path": str(source),
-                "reason": (
-                    f"SolarWM checkout is not staged; clone {OFFICIAL_REPO_URL} here or set "
-                    f"{SOURCE_ENV_VAR}"
-                ),
-            }
-        )
-    else:
-        for relative in required_source_files:
-            path = source / relative
-            item = _missing_file(path, kind="source_repo", reason="official SolarWM source asset is missing or empty")
-            if item is not None:
-                missing.append(item)
-
-    if entrypoint is None or not Path(str(entrypoint)).is_file():
-        missing.append(
-            {
-                "kind": "entrypoint",
-                "path": str(entrypoint or ""),
-                "reason": "WorldFoundry SolarWM compatibility launcher is missing",
-            }
-        )
-
-    config_path = _config_path(options, source)
+    config_path = _config_path(options)
     item = _missing_file(config_path, kind="config", reason="SolarWM inference config is missing or empty")
     if item is not None:
         missing.append(item)
@@ -204,16 +170,11 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile) -> list[
 
 
 def build_command(context: Mapping[str, Any]) -> list[str]:
-    """Build the compatibility-launcher command for the official SolarWM CLI."""
+    """Build the launcher command for the vendored SolarWM CLI."""
     settings = command_settings(context)
-    source = Path(str(context["runtime_root"]))
-    command = [
-        str(context["python"]),
-        str(context["entrypoint"]),
-        "--source-dir",
-        str(source),
+    args = [
         "--config",
-        str(_config_path(settings, source)),
+        str(_config_path(settings)),
         "--base-model-dir",
         str(_base_model_dir(settings)),
         "--checkpoint-dir",
@@ -229,20 +190,20 @@ def build_command(context: Mapping[str, Any]) -> list[str]:
     ]
     test_index = _option(settings, "test_index", "dataset_index")
     if test_index not in (None, ""):
-        command.extend(["--test-index", str(test_index)])
-    return command
+        args.extend(["--test-index", str(test_index)])
+    return package_module_command(ENTRYPOINT_MODULE, args, python_executable=str(context["python"]))
 
 
 __all__ = [
     "BLOCKED_REASON",
+    "CONFIG_ROOT",
     "DEFAULT_BASE_MODEL_DIR",
     "DEFAULT_CHECKPOINT_DIR",
     "DEFAULT_CONFIG_RELATIVE",
     "DEFAULT_DATA_ROOT",
+    "ENTRYPOINT_MODULE",
     "OFFICIAL_ENTRYPOINT",
     "OFFICIAL_REPO_URL",
-    "SOURCE_ENV_VAR",
     "build_command",
     "missing_requirements",
-    "runtime_root",
 ]

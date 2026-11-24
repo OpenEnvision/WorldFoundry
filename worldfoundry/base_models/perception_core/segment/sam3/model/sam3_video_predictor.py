@@ -2,22 +2,18 @@
 
 # pyre-unsafe
 
-"""Module for base_models -> perception_core -> segment -> sam3 -> model -> sam3_video_predictor.py functionality."""
-
 import datetime
-import gc
 import multiprocessing as mp
 import os
 import queue
 import socket
 import sys
-import time
 import uuid
 from contextlib import closing
-from typing import List, Optional
 
 import psutil
 import torch
+
 from worldfoundry.base_models.perception_core.segment.sam3.logger import get_logger
 from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_base_predictor import Sam3BasePredictor
 
@@ -26,6 +22,7 @@ logger = get_logger(__name__)
 
 class Sam3VideoPredictor(Sam3BasePredictor):
     """Sam video predictor implementation."""
+
     def __init__(
         self,
         checkpoint_path=None,
@@ -38,19 +35,6 @@ class Sam3VideoPredictor(Sam3BasePredictor):
         apply_temporal_disambiguation: bool = True,
         compile: bool = False,
     ):
-        """Init.
-
-        Args:
-            checkpoint_path: The checkpoint path.
-            bpe_path: The bpe path.
-            has_presence_token: The has presence token.
-            geo_encoder_use_img_cross_attn: The geo encoder use img cross attn.
-            strict_state_dict_loading: The strict state dict loading.
-            async_loading_frames: The async loading frames.
-            video_loader_type: The video loader type.
-            apply_temporal_disambiguation: The apply temporal disambiguation.
-            compile: The compile.
-        """
         super().__init__()
         self.async_loading_frames = async_loading_frames
         self.video_loader_type = video_loader_type
@@ -115,8 +99,8 @@ class Sam3VideoPredictor(Sam3BasePredictor):
 
 class Sam3VideoPredictorMultiGPU(Sam3VideoPredictor):
     """Sam video predictor multi gpu implementation."""
+
     def __init__(self, *model_args, gpus_to_use=None, **model_kwargs):
-        """Init."""
         if gpus_to_use is None:
             # if not specified, use only the current GPU by default
             gpus_to_use = [torch.cuda.current_device()]
@@ -161,9 +145,7 @@ class Sam3VideoPredictorMultiGPU(Sam3VideoPredictor):
     def handle_request(self, request):
         """Dispatch a request based on its type."""
         if self.has_shutdown:
-            raise RuntimeError(
-                "cannot handle request after the predictor has shutdown; please create a new predictor"
-            )
+            raise RuntimeError("cannot handle request after the predictor has shutdown; please create a new predictor")
 
         # when starting a session, we need to create a session id before dispatching
         # the request to the workers
@@ -184,9 +166,7 @@ class Sam3VideoPredictorMultiGPU(Sam3VideoPredictor):
     def handle_stream_request(self, request):
         """Dispatch a stream request based on its type."""
         if self.has_shutdown:
-            raise RuntimeError(
-                "cannot handle request after the predictor has shutdown; please create a new predictor"
-            )
+            raise RuntimeError("cannot handle request after the predictor has shutdown; please create a new predictor")
 
         # dispatch the request to all worker processes
         if self.world_size > 1 and self.rank == 0:
@@ -238,7 +218,6 @@ class Sam3VideoPredictorMultiGPU(Sam3VideoPredictor):
         logger.info(f"spawned {world_size - 1} worker processes")
 
     def _start_nccl_process_group(self):
-        """Helper function to start nccl process group."""
         rank = int(os.environ["RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
         if world_size == 1:
@@ -292,9 +271,7 @@ class Sam3VideoPredictorMultiGPU(Sam3VideoPredictor):
         assert int(os.environ["RANK"]) == rank
         assert int(os.environ["WORLD_SIZE"]) == world_size
         # load the model in this worker process
-        predictor = Sam3VideoPredictorMultiGPU(
-            *model_args, gpus_to_use=gpus_to_use, **model_kwargs
-        )
+        predictor = Sam3VideoPredictorMultiGPU(*model_args, gpus_to_use=gpus_to_use, **model_kwargs)
         logger.info(f"started worker {rank=} with {world_size=}")
         # return the worker process id to the main process for bookkeeping
         worker_pid = os.getpid()
@@ -328,9 +305,7 @@ class Sam3VideoPredictorMultiGPU(Sam3VideoPredictor):
                 # to clean up its daemon child processes. So here we manually check whether the
                 # parent process still exists (every 5 sec as in `command_queue.get` timeout).
                 if not psutil.pid_exists(parent_pid):
-                    logger.info(
-                        f"stopping worker {rank=} as its parent process has exited"
-                    )
+                    logger.info(f"stopping worker {rank=} as its parent process has exited")
                     sys.exit(1)
             except Exception as e:
                 logger.error(f"worker {rank=} exception: {e}", exc_info=True)

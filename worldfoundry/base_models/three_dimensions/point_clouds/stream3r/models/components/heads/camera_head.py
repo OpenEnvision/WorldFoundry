@@ -4,14 +4,16 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Tuple
 
 import torch
 import torch.nn as nn
 
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.head_act import (
+    activate_pose as activate_pose,
+)
+
 from ..layers import Mlp
 from ..layers.block import Block
-from .head_act import activate_pose
 
 
 class CameraHead(nn.Module):
@@ -85,16 +87,16 @@ class CameraHead(nn.Module):
         if mode == "causal":
             for i in range(S):
                 curr_view_start = i
-                curr_view_end = (i + 1)
-                mask[curr_view_start:curr_view_end, curr_view_end:] = float('-inf')
+                curr_view_end = i + 1
+                mask[curr_view_start:curr_view_end, curr_view_end:] = float("-inf")
         elif mode == "window":
             window_size = 5
             for i in range(S):
                 curr_view_start = i
-                curr_view_end = (i + 1)
-                mask[curr_view_start:curr_view_end, 1:] = float('-inf')
+                curr_view_end = i + 1
+                mask[curr_view_start:curr_view_end, 1:] = float("-inf")
                 start_view = max(1, i - window_size + 1)
-                mask[curr_view_start:curr_view_end, start_view:(i+1)] = 0
+                mask[curr_view_start:curr_view_end, start_view : (i + 1)] = 0
         elif mode == "full":
             mask = None
         else:
@@ -107,7 +109,7 @@ class CameraHead(nn.Module):
         aggregated_tokens_list: list,
         num_iterations: int = 4,
         mode: str = "causal",
-        kv_cache_list: List[List[List[torch.Tensor]]] = None
+        kv_cache_list: list[list[list[torch.Tensor]]] | None = None,
     ) -> list:
         """
         Forward pass to predict camera parameters.
@@ -138,7 +140,13 @@ class CameraHead(nn.Module):
         pred_pose_enc_list = self.trunk_fn(pose_tokens, num_iterations, attn_mask, kv_cache_list)
         return pred_pose_enc_list
 
-    def trunk_fn(self, pose_tokens: torch.Tensor, num_iterations: int, attn_mask: torch.Tensor, kv_cache_list: List[Tuple[torch.Tensor, torch.Tensor]] = None) -> list:
+    def trunk_fn(
+        self,
+        pose_tokens: torch.Tensor,
+        num_iterations: int,
+        attn_mask: torch.Tensor,
+        kv_cache_list: list[tuple[torch.Tensor, torch.Tensor]] | None = None,
+    ) -> list:
         """
         Iteratively refine camera pose predictions.
 
@@ -171,17 +179,16 @@ class CameraHead(nn.Module):
 
             for i in range(self.trunk_depth):
                 if kv_cache_list is not None:
-                    pose_tokens_modulated, kv_cache_list[iter][i] = self.trunk[i](pose_tokens_modulated, attn_mask=attn_mask, kv_cache=kv_cache_list[iter][i])
+                    pose_tokens_modulated, kv_cache_list[iter][i] = self.trunk[i](
+                        pose_tokens_modulated, attn_mask=attn_mask, kv_cache=kv_cache_list[iter][i]
+                    )
                 else:
                     pose_tokens_modulated = self.trunk[i](pose_tokens_modulated, attn_mask=attn_mask)
 
             # Compute the delta update for the pose encoding.
             pred_pose_enc_delta = self.pose_branch(self.trunk_norm(pose_tokens_modulated))
 
-            if pred_pose_enc is None:
-                pred_pose_enc = pred_pose_enc_delta
-            else:
-                pred_pose_enc = pred_pose_enc + pred_pose_enc_delta
+            pred_pose_enc = pred_pose_enc_delta if pred_pose_enc is None else pred_pose_enc + pred_pose_enc_delta
 
             # Apply final activation functions for translation, quaternion, and field-of-view.
             activated_pose = activate_pose(

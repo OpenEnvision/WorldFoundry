@@ -15,7 +15,7 @@ from worldfoundry.studio.inference.execution import (
     _prepared_inputs_from_payload,
     _prepared_inputs_payload,
 )
-from worldfoundry.studio.ui.launch_config import StudioLaunchConfig, launch_uses_lingbot_torchrun_rollout
+from worldfoundry.studio.visualization.launch_config import StudioLaunchConfig, launch_uses_lingbot_torchrun_rollout
 
 
 def _entry(model_id: str = "matrix-game-3") -> CatalogEntry:
@@ -441,16 +441,6 @@ def test_longvie2_rank_keeps_one_pipeline_across_run_stream_and_reset(monkeypatc
     assert second["video"][0].getpixel((0, 0)) == (0, 0, 255)
     assert context.pipeline.segments == 0
     assert context.state == {}
-
-
-def test_longvie2_public_reset_is_broadcast_to_every_resident_rank(monkeypatch, tmp_path):
-    _enable_torchrun(monkeypatch, world_size=4)
-    manager = StudioManager(workspace_root=str(tmp_path / "studio"))
-    commands = []
-    monkeypatch.setattr(manager, "_run_torchrun_command", lambda command: commands.append(command) or "reset")
-
-    assert manager.reset_cached_model("longvie-2") == "reset"
-    assert commands == [{"kind": "reset_model", "model_id": "longvie-2"}]
 
 
 def test_matrix_game3_distributed_dispatch_requires_non_api_multi_rank(monkeypatch, tmp_path):

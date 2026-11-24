@@ -2,6 +2,7 @@
 
 import torch
 
+
 def resolve_intrinsic_source_resolution(K_3x3, h_org, w_org, tag=""):
     """Pick the resolution K_3x3 was calibrated at, for feeding transform_intrinsic_for_crop_resize.
 
@@ -12,8 +13,8 @@ def resolve_intrinsic_source_resolution(K_3x3, h_org, w_org, tag=""):
     always keep the declared value. Must stay shared between the training and val/infer pose loaders.
     """
     try:
-        h_inferred = int(round(float(K_3x3[1, 2]) * 2)) if float(K_3x3[1, 2]) > 1 else None
-        w_inferred = int(round(float(K_3x3[0, 2]) * 2)) if float(K_3x3[0, 2]) > 1 else None
+        h_inferred = int(round(float(K_3x3[1, 2]) * 2)) if float(K_3x3[1, 2]) > 1 else None  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        w_inferred = int(round(float(K_3x3[0, 2]) * 2)) if float(K_3x3[0, 2]) > 1 else None  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     except Exception:
         h_inferred, w_inferred = None, None
 
@@ -27,7 +28,8 @@ def resolve_intrinsic_source_resolution(K_3x3, h_org, w_org, tag=""):
         if (w_inferred > h_inferred) != (w_org > h_org) and abs(a_inferred - a_declared) <= 0.05 * a_declared:
             raise ValueError(
                 f"[CamCtrl] {tag}: intrinsic calibrated at {h_inferred}x{w_inferred}, opposite orientation "
-                f"to the declared {h_org}x{w_org} -- pose solved on a rotated frame, sample unusable")
+                f"to the declared {h_org}x{w_org} -- pose solved on a rotated frame, sample unusable"
+            )
 
     h_final = h_org if h_org is not None else (h_inferred if h_inferred is not None else 720)
     w_final = w_org if w_org is not None else (w_inferred if w_inferred is not None else 1280)
@@ -37,8 +39,10 @@ def resolve_intrinsic_source_resolution(K_3x3, h_org, w_org, tag=""):
     if off_h and off_w:
         s_h, s_w = h_inferred / h_org, w_inferred / w_org
         if abs(s_h - s_w) <= 0.05 * max(s_h, s_w):
-            print(f"[CamCtrl] {tag}: declared {h_org}x{w_org} overridden by intrinsic-derived "
-                  f"{h_inferred}x{w_inferred} (both axes off > 10% at scale {s_h:.3f}/{s_w:.3f})")
+            print(
+                f"[CamCtrl] {tag}: declared {h_org}x{w_org} overridden by intrinsic-derived "
+                f"{h_inferred}x{w_inferred} (both axes off > 10% at scale {s_h:.3f}/{s_w:.3f})"
+            )
             return h_inferred, w_inferred
     if off_h:
         print(f"[CamCtrl] WARN {tag}: declared source_h={h_org} differs from intrinsic-derived {h_inferred} by > 10%")

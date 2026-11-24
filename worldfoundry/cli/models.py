@@ -5,20 +5,20 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
-import sys
 from pathlib import Path
+from typing import Any
 
-from worldfoundry.evaluation.utils import write_json
+from worldfoundry.evals.utils import write_json
 
-from .presentation import print_details, print_notice, print_table, terminal_enabled
-from .utils import json_dump
+from .presentation import print_details, print_table, terminal_enabled
+from .utils import CliUsageError, json_dump
 
 # ── Models list and runtime runners ─────────────────────────────
 
 
 def _handle_models_list(args: argparse.Namespace) -> int:
     """List available model types from the model registry."""
-    from worldfoundry.evaluation.models.catalog.registry import discover_model_registry
+    from worldfoundry.zoo.catalog.registry import discover_model_registry
 
     registry = discover_model_registry()
     items = [item.to_dict() for item in registry.list(args.family)]
@@ -40,15 +40,14 @@ def _handle_models_list(args: argparse.Namespace) -> int:
 
 
 def _handle_models_runtime_runners(args: argparse.Namespace) -> int:
-    """Emit registered ``module:Class`` runner targets usable with ``worldfoundry-eval evaluate --mode model``.
+    """Emit registered ``module:Class`` runner targets usable with ``wf evaluate --mode model``.
 
     Parameters:
         args: CLI namespace; ``json`` selects JSON lines instead of plain text rows.
     """
-    from worldfoundry.evaluation.models.runners.registry import model_runner_registry_report
+    from worldfoundry.evals.models.runners.registry import model_runner_registry_snapshot
 
-    report = model_runner_registry_report()
-    payload = [entry.to_dict() for entry in report.entries]
+    payload = [entry.to_dict() for entry in model_runner_registry_snapshot().list()]
     if args.json:
         json_dump(payload)
         return 0
@@ -58,15 +57,11 @@ def _handle_models_runtime_runners(args: argparse.Namespace) -> int:
             ("Runner", "Target", "Source", "Aliases"),
             [(item["name"], item["runner_target"], item["source"], item["aliases"]) for item in payload],
         )
-        for issue in report.issues:
-            print_notice(f"{issue.code}: {issue.name or '-'}: {issue.message}", level="warning", stream=sys.stderr)
         return 0
 
     for entry in payload:
         aliases = ", ".join(entry["aliases"]) if entry["aliases"] else "-"
         print(f"{entry['name']}: {entry['runner_target']} source={entry['source']} aliases={aliases}")
-    for issue in report.issues:
-        print(f"warning:{issue.code} {issue.name or '-'}: {issue.message}", file=sys.stderr)
     return 0
 
 
@@ -99,12 +94,12 @@ def _handle_models_visualizations(args: argparse.Namespace) -> int:
 # ── Base-model asset management ──────────────────────────────────
 
 
-def _execute_download_commands(commands: list[list[str]]) -> list[dict[str, object]]:
+def _execute_download_commands(commands: list[list[str]]) -> list[dict[str, Any]]:
     """Run a sequence of download commands and capture truncated stdout/stderr."""
     env = os.environ.copy()
     env.setdefault("HF_HUB_DISABLE_XET", "1")
     env.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
-    executed = []
+    executed: list[dict[str, Any]] = []
     for command in commands:
         completed = subprocess.run(
             [str(item) for item in command],
@@ -159,8 +154,11 @@ def _handle_models_assets(args: argparse.Namespace) -> int:
                     print("report:", args.report_path)
         return 0
 
-    plan = base_model_materialization_plan(args.capability)
-    executed = []
+    try:
+        plan = base_model_materialization_plan(args.capability)
+    except KeyError as exc:
+        raise CliUsageError(str(exc.args[0])) from exc
+    executed: list[dict[str, Any]] = []
     if args.execute_downloads:
         executed = _execute_download_commands(plan.get("download_command_argvs", []))
         plan = base_model_materialization_plan(args.capability)
@@ -230,7 +228,7 @@ def _media_frames(path: Path) -> list:
 
     if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
         return [iio.imread(path)]
-    return [frame for frame in iio.imiter(path)]
+    return list(iio.imiter(path))
 
 
 def _write_visualization(output: Path, frames: list, *, fps: float) -> None:
@@ -241,7 +239,8 @@ def _write_visualization(output: Path, frames: list, *, fps: float) -> None:
         return
     import imageio.v2 as iio
 
-    with iio.get_writer(output, fps=fps, codec="libx264") as writer:
+    writer = iio.get_writer(output, fps=fps, codec="libx264")
+    with writer:
         for frame in frames:
             writer.append_data(frame)
 
@@ -266,7 +265,7 @@ def _handle_models_visualize(args: argparse.Namespace) -> int:
     import numpy as np
     from PIL import Image
 
-    from worldfoundry.studio.visualization.plugins.perception.render import (
+    from worldfoundry.base_models.perception_core.visualization.render import (
         load_json_detections,
         render_depth,
         render_detections,
@@ -335,7 +334,7 @@ def _handle_models_visualize(args: argparse.Namespace) -> int:
             raise ValueError("Keypoint and media frame counts must match.")
         rendered_frames = [
             render_keypoints(frame, points, edges=edges, normalized=args.normalized)
-            for frame, points in zip(frames, keypoint_frames)
+            for frame, points in zip(frames, keypoint_frames, strict=False)
         ]
         _write_visualization(output, rendered_frames, fps=args.fps)
         frame_count = len(rendered_frames)
@@ -354,7 +353,8 @@ def _handle_models_visualize(args: argparse.Namespace) -> int:
         rendered = render_tracks(_media_frames(source), tracks, visibility=visibility, trace_length=args.trace_length)
         import imageio.v2 as iio
 
-        with iio.get_writer(output, fps=args.fps, codec="libx264") as writer:
+        writer = iio.get_writer(output, fps=args.fps, codec="libx264")
+        with writer:
             for frame in rendered:
                 writer.append_data(frame)
         frame_count = len(rendered)
@@ -373,8 +373,8 @@ def _handle_models_visualize(args: argparse.Namespace) -> int:
     return 0
 
 
-def register_model_subparsers(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    from worldfoundry.base_models.capabilities import BASE_MODEL_CAPABILITIES, BASE_MODEL_STACKS
+def register_model_subparsers(subparsers: argparse._SubParsersAction) -> None:
+    from worldfoundry.base_models.capabilities import base_model_stack_ids
 
     models_parser = subparsers.add_parser("models", help="Inspect model runners, environments, and assets")
     models_subparsers = models_parser.add_subparsers(dest="models_command", required=True)
@@ -406,8 +406,10 @@ def register_model_subparsers(subparsers: argparse._SubParsersAction[argparse.Ar
     models_assets_parser.add_argument(
         "--capability",
         action="append",
-        choices=sorted([*BASE_MODEL_CAPABILITIES, *BASE_MODEL_STACKS]),
-        help="Capability or stack id to materialize. May repeat. Defaults to all registered capabilities.",
+        help=(
+            "Capability or stack id to materialize (see --list). May repeat. "
+            f"Defaults to all registered capabilities. Stacks: {', '.join(base_model_stack_ids())}."
+        ),
     )
     models_assets_parser.add_argument(
         "--list", action="store_true", help="List registered base-model capabilities and stacks."

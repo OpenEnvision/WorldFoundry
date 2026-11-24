@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 from .configuration import A1Config
-
 
 IMAGE_PATCH_TOKEN = "<im_patch>"
 IMAGE_START_TOKEN = "<im_start>"
@@ -87,18 +87,14 @@ def load_local_tokenizer(location: str | Path, config: A1Config):
     if not all(token in added for token in EXTRA_TOKENS):
         padding = max(config.embedding_size - len(tokenizer), 0)
         fillers = [f"|<A1_EXTRA_{index}>|" for index in range(padding)]
-        tokenizer.add_special_tokens(
-            {"additional_special_tokens": [*fillers, *EXTRA_TOKENS]}
-        )
+        tokenizer.add_special_tokens({"additional_special_tokens": [*fillers, *EXTRA_TOKENS]})
     special_ids = {token: int(tokenizer.convert_tokens_to_ids(token)) for token in EXTRA_TOKENS}
     if len(set(special_ids.values())) != len(EXTRA_TOKENS):
         raise ValueError("A1 tokenizer did not assign distinct IDs to all multimodal tokens")
     maximum = config.embedding_size + config.additional_vocab_size
     invalid = {token: index for token, index in special_ids.items() if index < 0 or index >= maximum}
     if invalid:
-        raise ValueError(
-            f"A1 tokenizer special-token IDs exceed checkpoint embeddings: {invalid}"
-        )
+        raise ValueError(f"A1 tokenizer special-token IDs exceed checkpoint embeddings: {invalid}")
     return tokenizer, special_ids
 
 
@@ -121,9 +117,9 @@ def _as_rgb_array(value: Any) -> np.ndarray:
         raise ValueError("A1 images must contain only finite values")
     if array.dtype != np.uint8:
         low, high = float(array.min()), float(array.max())
-        if 0.0 <= low and high <= 1.0:
+        if low >= 0.0 and high <= 1.0:
             array = array * 255.0
-        elif -1.0 <= low and high <= 1.0:
+        elif low >= -1.0 and high <= 1.0:
             array = (array + 1.0) * 127.5
         array = np.clip(np.rint(array), 0, 255).astype(np.uint8)
     return np.ascontiguousarray(array)
@@ -135,13 +131,17 @@ def _resize_and_pad(image: np.ndarray, size: int, pad_value: float) -> tuple[np.
     scaled_height = max(int(np.float32(height) * scale), 1)
     scaled_width = max(int(np.float32(width) * scale), 1)
     tensor = torch.from_numpy(image).permute(2, 0, 1).float().div_(255.0).unsqueeze(0)
-    tensor = F.interpolate(
-        tensor,
-        size=(scaled_height, scaled_width),
-        mode="bilinear",
-        align_corners=False,
-        antialias=True,
-    ).clamp_(0.0, 1.0)[0].permute(1, 2, 0)
+    tensor = (
+        F.interpolate(
+            tensor,
+            size=(scaled_height, scaled_width),
+            mode="bilinear",
+            align_corners=False,
+            antialias=True,
+        )
+        .clamp_(0.0, 1.0)[0]
+        .permute(1, 2, 0)
+    )
     top = (size - scaled_height) // 2
     left = (size - scaled_width) // 2
     output = torch.full((size, size, 3), float(pad_value), dtype=torch.float32)
@@ -161,10 +161,7 @@ def _pixels_to_patches(array: np.ndarray, patch_size: int) -> np.ndarray:
         patch_size,
         *(() if array.ndim == 2 else (channels,)),
     )
-    if array.ndim == 2:
-        shaped = shaped.transpose(0, 2, 1, 3)
-    else:
-        shaped = shaped.transpose(0, 2, 1, 3, 4)
+    shaped = shaped.transpose(0, 2, 1, 3) if array.ndim == 2 else shaped.transpose(0, 2, 1, 3, 4)
     return shaped.reshape(-1, patch_size * patch_size * channels)
 
 
@@ -199,16 +196,12 @@ class A1Processor:
         ids = self.special_ids
         right_tokens = [ids[token] for token in RIGHT_AXIS_TOKENS]
         if self.config.right_end_effector_dim > len(right_tokens):
-            right_tokens.extend(
-                [ids[RIGHT_EEF_TOKEN]] * (self.config.right_end_effector_dim - len(right_tokens))
-            )
+            right_tokens.extend([ids[RIGHT_EEF_TOKEN]] * (self.config.right_end_effector_dim - len(right_tokens)))
         slots = right_tokens[: self.config.right_end_effector_dim]
         if self.config.action_use_left_eef:
             left_tokens = [ids[token] for token in LEFT_AXIS_TOKENS]
             if self.config.left_end_effector_dim > len(left_tokens):
-                left_tokens.extend(
-                    [ids[LEFT_EEF_TOKEN]] * (self.config.left_end_effector_dim - len(left_tokens))
-                )
+                left_tokens.extend([ids[LEFT_EEF_TOKEN]] * (self.config.left_end_effector_dim - len(left_tokens)))
             slots.extend(left_tokens[: self.config.left_end_effector_dim])
         if self.config.action_use_mobile_base:
             slots.extend([ids[MOBILE_BASE_TOKEN]] * self.config.mobile_base_dim)
@@ -233,9 +226,7 @@ class A1Processor:
 
         for value in values:
             image = _as_rgb_array(value)
-            resized, pixel_mask = _resize_and_pad(
-                image, self.config.image_size, self.config.pad_value
-            )
+            resized, pixel_mask = _resize_and_pad(image, self.config.image_size, self.config.pad_value)
             normalized = (resized - OPENAI_CLIP_MEAN) / OPENAI_CLIP_STD
             patches = _pixels_to_patches(normalized, self.config.image_patch_size).astype(np.float32)
             mask_patches = _pixels_to_patches(pixel_mask, self.config.image_patch_size).mean(-1).astype(np.float32)
@@ -282,9 +273,7 @@ class A1Processor:
             raise ValueError("A1 requires a finite, non-empty state vector")
         original_state_dim = int(raw_state.size)
         if raw_state.size > self.config.proprio_dim:
-            raise ValueError(
-                f"A1 state has {raw_state.size} values, checkpoint accepts {self.config.proprio_dim}"
-            )
+            raise ValueError(f"A1 state has {raw_state.size} values, checkpoint accepts {self.config.proprio_dim}")
         padded_state = np.pad(raw_state, (0, self.config.proprio_dim - raw_state.size))
 
         image_tokens, crops, image_masks, feature_positions, pooling = self._process_images(images)
@@ -331,10 +320,10 @@ class A1Processor:
 
 
 __all__ = [
-    "A1PreparedBatch",
-    "A1Processor",
     "ACTION_END_TOKEN",
     "ACTION_START_TOKEN",
     "EXTRA_TOKENS",
+    "A1PreparedBatch",
+    "A1Processor",
     "load_local_tokenizer",
 ]

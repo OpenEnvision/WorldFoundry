@@ -20,6 +20,7 @@ official_sources:
   paper: https://arxiv.org/abs/2410.10629
   github:
     url: https://github.com/NVlabs/Sana
+    revision: 00cb59836c297bd5fad401000ee65f9042f29d02
   huggingface:
   - repo_id: Efficient-Large-Model/Sana_1600M_1024px
     status: confirmed
@@ -46,7 +47,7 @@ integration:
   - SANA-Streaming sources are synchronized from NVlabs/Sana commit
     78be97aec4efabd73ddb97d47e9f7c13a60ef90a; the paper's MPQ deployment path
     is not part of the public BF16 inference recipe.
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: sana
 runtime_profile: runtime-profile:sana
 runner_parity:
@@ -60,7 +61,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_600M_512px
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-600m-512px
   runtime_profile: runtime-profile:sana
 - id: sana-600m-1024px
@@ -68,7 +69,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_600M_1024px
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-600m-1024px
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-512px
@@ -76,7 +77,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_512px
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-1600m-512px
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-512px-multiling
@@ -84,7 +85,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_512px_MultiLing
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-1600m-512px-multiling
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-1024px
@@ -92,7 +93,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_1024px
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-1600m-1024px
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-1024px-multiling
@@ -100,7 +101,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_1024px_MultiLing
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-1600m-1024px-multiling
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-1024px-bf16
@@ -108,7 +109,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_1024px_BF16
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-1600m-1024px-bf16
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-2k-bf16
@@ -116,7 +117,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_2Kpx_BF16
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-1600m-2k-bf16
   runtime_profile: runtime-profile:sana
 - id: sana-1600m-4k-bf16
@@ -124,7 +125,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_4Kpx_BF16
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-1600m-4k-bf16
   runtime_profile: runtime-profile:sana
 - id: sana1p5-1600m-1024px
@@ -132,7 +133,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/SANA1.5_1.6B_1024px
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana1p5-1600m-1024px
   runtime_profile: runtime-profile:sana
 - id: sana1p5-4800m-1024px
@@ -140,7 +141,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/SANA1.5_4.8B_1024px
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana1p5-4800m-1024px
   runtime_profile: runtime-profile:sana
 - id: sana-sprint-600m-1024px
@@ -148,7 +149,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_Sprint_0.6B_1024px
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-sprint-600m-1024px
   runtime_profile: runtime-profile:sana
 - id: sana-sprint-1600m-1024px
@@ -156,7 +157,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_Sprint_1.6B_1024px
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-sprint-1600m-1024px
   runtime_profile: runtime-profile:sana
 - id: sana-controlnet-600m-1024px
@@ -164,7 +165,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_600M_1024px_ControlNet_HED
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-controlnet-600m-1024px
   runtime_profile: runtime-profile:sana
 - id: sana-controlnet-1600m-1024px-bf16
@@ -172,7 +173,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/Sana_1600M_1024px_BF16_ControlNet_HED
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-controlnet-1600m-1024px-bf16
   runtime_profile: runtime-profile:sana
 - id: sana-video-2b-480p
@@ -180,7 +181,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/SANA-Video_2B_480p
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-video-2b-480p
   runtime_profile: runtime-profile:sana-video-2b-480p
 - id: sana-video-2b-720p
@@ -188,7 +189,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/SANA-Video_2B_720p
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-video-2b-720p
   runtime_profile: runtime-profile:sana-video-2b-720p
 - id: longsana-video-2b-480p
@@ -196,7 +197,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/SANA-Video_2B_480p_LongLive
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: longsana-video-2b-480p
   runtime_profile: runtime-profile:longsana-video-2b-480p
 - id: sana-streaming-2b-720p
@@ -204,7 +205,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/SANA-Streaming
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-streaming-2b-720p
   runtime_profile: runtime-profile:sana-streaming-2b-720p
   notes:
@@ -215,7 +216,7 @@ variants:
   integration_status: integrated
   checkpoint_refs:
   - repo_id: Efficient-Large-Model/SANA-Streaming_bidirectional
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: sana-streaming-bidirectional-2b-720p
   runtime_profile: runtime-profile:sana-streaming-bidirectional-2b-720p
   notes:
@@ -229,24 +230,24 @@ docs:
   publisher: NVIDIA
   publisher_kind: company
   publisher_zh: 英伟达（NVIDIA）
-  overview: 'Sana is NVIDIA''s efficient generation family, and the largest variant surface in the video category: twenty recorded variants spanning text-to-image (600M–4.8B, up to 4K), ControlNet-conditioned image generation, Sana-Video 2B text-to-video at 480p/720p, LongSANA long video, and SANA-Streaming video-to-video (long and bidirectional). Checkpoint math is split across canonical role-based diffusion components in-tree.'
-  overview_zh: Sana 是英伟达的高效生成系列，也是 video 类别中 variant 最多的条目：二十个已记录 variant，覆盖文生图（600M–4.8B，最高 4K）、ControlNet 条件图像生成、Sana-Video 2B 的 480p/720p 文生视频、LongSANA 长视频，以及 SANA-Streaming 的视频到视频（长时与双向）。checkpoint 数学分布在树内按角色划分的规范化扩散组件中。
-  architecture: Sana's efficiency comes from a deep-compression autoencoder (32x) plus linear-attention DiT blocks and a small LLM text encoder, per the publication (arXiv 2410.10629). The recorded streaming routes use the vendored official BF16 CLI, hybrid DiT blocks, fused GDN kernels, and a causal LTX-2 VAE wrapper, synchronized from the pinned NVlabs/Sana commit; the paper's MPQ deployment path is not part of the public BF16 recipe.
-  architecture_zh: Sana 的高效来自深压缩自编码器（32x）、线性注意力 DiT 块与小型 LLM 文本编码器，见论文（arXiv 2410.10629）。记录的流式路径使用内置官方 BF16 CLI、混合 DiT 块、融合 GDN 核与因果 LTX-2 VAE 封装，源码同步自固定的 NVlabs/Sana commit；论文中的 MPQ 部署路径不在公开 BF16 配方内。
-  usage_notes: 'Integration status is runtime_ported with runner parity pending, but note the recorded evidence: the long-streaming checkpoint completed a real A100 run with 81 decoded 1280x704 frames at 16 FPS (artifact SHA256 recorded in the profile). SANA-Streaming accepts a source video path or hf:// URI. Full 50-step / longer-frame official quality parity remains pending.'
-  usage_notes_zh: 集成状态为 runtime_ported、runner parity 为 pending，但注意已记录证据：long-streaming checkpoint 在真实 A100 上完成一次运行，81 帧 1280x704、16 FPS 全部解码（产物 SHA256 记录在 profile 中）。 SANA-Streaming 接受源视频路径或 hf:// URI。完整 50 步/更长帧数的官方质量一致性仍在等待。
+  overview: Sana is NVIDIA's efficient generation family with twenty variants spanning text-to-image (600M–4.8B, up to 4K), ControlNet-conditioned image generation, Sana-Video 2B text-to-video at 480p/720p, LongSANA long video, and SANA-Streaming video-to-video (long and bidirectional).
+  overview_zh: Sana 是英伟达的高效生成系列，共二十个 variant，覆盖文生图（600M–4.8B，最高 4K）、ControlNet 条件图像生成、Sana-Video 2B 的 480p/720p 文生视频、LongSANA 长视频，以及 SANA-Streaming 的视频到视频（长时与双向）。
+  architecture: Sana's efficiency comes from a deep-compression autoencoder (32x) plus linear-attention DiT blocks and a small LLM text encoder, per the publication (arXiv 2410.10629). The SANA-Streaming routes use the official BF16 CLI with hybrid DiT blocks, fused GDN kernels, and a causal LTX-2 VAE.
+  architecture_zh: Sana 的高效来自深压缩自编码器（32x）、线性注意力 DiT 块与小型 LLM 文本编码器，见论文（arXiv 2410.10629）。SANA-Streaming 路径使用官方 BF16 CLI，包含混合 DiT 块、融合 GDN 核与因果 LTX-2 VAE。
+  usage_notes: 'Validated with the long-streaming checkpoint: an A100 run decodes 81 frames at 1280x704, 16 FPS. SANA-Streaming accepts a source video path or hf:// URI.'
+  usage_notes_zh: 已用 long-streaming checkpoint 验证：在 A100 上的运行解码出 81 帧 1280x704、16 FPS 视频。SANA-Streaming 接受源视频路径或 hf:// URI。
   limitations:
-  - Official long-configuration quality parity is pending — the recorded A100 run verifies the wiring, not full parity.
-  - 'Twenty variants share one entry: check each variant''s task before assuming video capability (most are text-to-image).'
+  - Quality parity with the official full 50-step, longer-frame configuration is not verified.
+  - "Twenty variants share one page: check each variant's task before assuming video capability (most are text-to-image)."
   - The MPQ deployment path from the paper is not available in the public BF16 recipe.
   limitations_zh:
-  - 官方长配置的质量一致性仍在等待——已记录的 A100 运行验证的是链路而非完整一致性。
-  - 二十个 variant 共用一个条目：使用前先确认各 variant 的任务（多数是文生图）。
+  - 与官方完整 50 步、更长帧数配置的质量一致性尚未验证。
+  - 二十个 variant 共用一个页面：使用前先确认各 variant 的任务（多数是文生图）。
   - 论文中的 MPQ 部署路径在公开 BF16 配方中不可用。
   recommended_benchmarks:
   - id: vbench
     reason: Quality suite for the Sana-Video T2V routes.
     reason_zh: Sana-Video 文生视频路径的质量评测。
   - id: sana-wm-bench
-    reason: This repository's Sana-specific world-model benchmark.
-    reason_zh: 本仓库中针对 Sana 的世界模型评测。
+    reason: Sana-specific world-model benchmark.
+    reason_zh: 针对 Sana 的世界模型评测。

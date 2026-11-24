@@ -16,8 +16,11 @@ def test_longlive_schedule_keeps_request_shift_when_another_request_is_scheduled
     sampling = SamplingConfig(num_inference_steps=4, guidance_scale=1.0, scheduler_options={"shift": 7.0})
     steps = shared.schedule(sampling, device=torch.device("cpu"), dtype=dtype)
     expected_steps = isolated.schedule(sampling, device=torch.device("cpu"), dtype=dtype)
-    shared.schedule(SamplingConfig(num_inference_steps=4, guidance_scale=1.0,
-                                   scheduler_options={"shift": 2.0}), device=torch.device("cpu"), dtype=dtype)
+    shared.schedule(
+        SamplingConfig(num_inference_steps=4, guidance_scale=1.0, scheduler_options={"shift": 2.0}),
+        device=torch.device("cpu"),
+        dtype=dtype,
+    )
     noise = torch.linspace(-1, 1, 24).reshape(1, 2, 3, 2, 2).to(dtype)
     flow = torch.full_like(noise, 0.125)
     actual, expected = noise.clone(), noise.clone()
@@ -31,8 +34,11 @@ def test_longlive_schedule_keeps_request_shift_when_another_request_is_scheduled
 
 @pytest.mark.parametrize("kind", ["euler", "longlive", "self_forcing"])
 def test_sampling_uses_request_rng_and_preserves_global_rng(kind):
-    scheduler = {"euler": FlowMatchEulerScheduler, "longlive": SanaLongLiveScheduler,
-                 "self_forcing": FastVideoCausalWanSelfForcingScheduler}[kind]()
+    scheduler = {
+        "euler": FlowMatchEulerScheduler,
+        "longlive": SanaLongLiveScheduler,
+        "self_forcing": FastVideoCausalWanSelfForcingScheduler,
+    }[kind]()
     config = SamplingConfig(num_inference_steps=8 if kind == "self_forcing" else 4, guidance_scale=1.0)
     initial = torch.zeros((1, 2, 3, 2, 2))
     global_state = torch.get_rng_state().clone()

@@ -35,7 +35,7 @@ def to_pil_preserve(images: Any, scale_float: bool = True) -> Any:
         finite_max = float(array.max()) if array.size else 0.0
         if -1.0 <= finite_min < 0.0 and finite_max <= 1.0:
             array = (array + 1.0) * 127.5
-        elif 0.0 <= finite_min and finite_max <= 1.0:
+        elif finite_min >= 0.0 and finite_max <= 1.0:
             array = array * 255.0
         array = np.clip(array, 0.0, 255.0).round().astype(np.uint8)
     elif array.dtype != np.uint8:

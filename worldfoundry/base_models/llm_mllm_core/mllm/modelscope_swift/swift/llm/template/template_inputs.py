@@ -1,18 +1,17 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
-
 import json
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
-Tool = Dict[str, Union[str, Dict]]
-History = List[Union[Tuple[str, str], List[str]]]
-Message = Dict[str, Union[str, List[Dict[str, Any]]]]
-Messages = List[Message]
+Tool = dict[str, str | dict]
+History = list[tuple[str, str] | list[str]]
+Message = dict[str, str | list[dict[str, Any]]]
+Messages = list[Message]
 
 
-def messages_to_history(messages: Messages) -> Dict[str, Any]:
+def messages_to_history(messages: Messages) -> dict[str, Any]:
     system = None
     messages = messages.copy()
     if messages[0]["role"] == "system":
@@ -22,7 +21,7 @@ def messages_to_history(messages: Messages) -> Dict[str, Any]:
         messages.append({"role": "assistant", "content": None})
     history = []
     history_roles = []
-    for user_message, assistant_message in zip(messages[::2], messages[1::2]):
+    for user_message, assistant_message in zip(messages[::2], messages[1::2], strict=False):
         assert user_message["role"] in {"tool", "user"}, f"user_message {user_message}"
         assert assistant_message["role"] == "assistant", f"assistant_message: {assistant_message}"
         history.append([user_message["content"], assistant_message["content"]])
@@ -58,32 +57,33 @@ class InferRequest:
         and additionally passing in images: ["<url/path/base64/PIL.Image>"].
     tools: Organize tools into the format of agent_template for system. for example, 'react_en'.
     """
+
     messages: Messages
 
-    images: List[Union[str, Image.Image]] = field(default_factory=list)
-    audios: List[str] = field(default_factory=list)
-    videos: List[str] = field(default_factory=list)
+    images: list[str | Image.Image] = field(default_factory=list)  # noqa: F821 - Postponed PIL annotation retained from the template schema.
+    audios: list[str] = field(default_factory=list)
+    videos: list[str] = field(default_factory=list)
 
-    tools: Optional[List[Tool]] = None
-    objects: Dict[str, List[Any]] = field(default_factory=dict)
+    tools: list[Tool] | None = None
+    objects: dict[str, list[Any]] = field(default_factory=dict)
 
     def __post_init__(self):
-        for key in ['images', 'audios', 'videos']:
+        for key in ["images", "audios", "videos"]:
             val = getattr(self, key)
             if isinstance(val, str):
                 setattr(self, key, [val])
-        assert isinstance(self.messages, list), f'messages: {self.messages}'
+        assert isinstance(self.messages, list), f"messages: {self.messages}"
 
     @staticmethod
-    def remove_response(messages) -> Optional[str]:
-        last_role = messages[-1]['role'] if messages else None
-        if last_role == 'assistant':
-            return messages.pop()['content']
+    def remove_response(messages) -> str | None:
+        last_role = messages[-1]["role"] if messages else None
+        if last_role == "assistant":
+            return messages.pop()["content"]
 
     @staticmethod
-    def _to_printable(obj, key: Optional[str] = None):
-        if isinstance(obj, str) and key not in {'content', 'text'} and len(obj) >= 1000:
-            return f'<<<base64:{obj[:50]}..>>>'
+    def _to_printable(obj, key: str | None = None):
+        if isinstance(obj, str) and key not in {"content", "text"} and len(obj) >= 1000:
+            return f"<<<base64:{obj[:50]}..>>>"
         elif isinstance(obj, list):
             res = []
             for item in obj:
@@ -107,7 +107,8 @@ class RolloutInferRequest(InferRequest):
     to be a list of strings for compatibility with POST requests.
     The strings can represent image URLs or Base64 encoded images.
     """
-    images: List[str] = field(default_factory=list)
+
+    images: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -116,25 +117,26 @@ class TemplateInputs(InferRequest):
 
     objects: Used for grounding tasks in a general format.
     """
-    rejected_response: Optional[str] = None
-    label: Optional[bool] = None
+
+    rejected_response: str | None = None
+    label: bool | None = None
 
 
 @dataclass
 class StdTemplateInputs:
     # only user/tool/assistant
-    messages: List[Dict[str, str]]
+    messages: list[dict[str, str]]
     # None: use default system; '': not use system
-    system: Optional[str] = None
-    tools: Optional[List[Tool]] = None
+    system: str | None = None
+    tools: list[Tool] | None = None
 
-    rejected_response: Optional[str] = None
-    label: Optional[int] = None
+    rejected_response: str | None = None
+    label: int | None = None
 
-    images: List[Union[str, Image.Image]] = field(default_factory=list)
-    audios: List[str] = field(default_factory=list)
-    videos: List[str] = field(default_factory=list)
-    objects: Dict[str, List[Any]] = field(default_factory=dict)
+    images: list[str | Image.Image] = field(default_factory=list)  # noqa: F821 - Postponed PIL annotation retained from the template schema.
+    audios: list[str] = field(default_factory=list)
+    videos: list[str] = field(default_factory=list)
+    objects: dict[str, list[Any]] = field(default_factory=dict)
 
     def __post_init__(self):
         self.image_idx = 0
@@ -159,26 +161,26 @@ class StdTemplateInputs:
         return bool(self.images or self.audios or self.videos or self.objects)
 
     @classmethod
-    def from_dict(cls, inputs: Dict[str, Any]) -> 'StdTemplateInputs':
+    def from_dict(cls, inputs: dict[str, Any]) -> StdTemplateInputs:
         kwargs = {}
-        for key in ['rejected_response', 'label']:
+        for key in ["rejected_response", "label"]:
             if key in inputs:
                 kwargs[key] = inputs[key]
-        messages = inputs['messages']
-        tools = inputs.get('tools')
-        objects = inputs.get('objects') or {}
+        messages = inputs["messages"]
+        tools = inputs.get("tools")
+        objects = inputs.get("objects") or {}
 
-        if messages and messages[0]['role'] == 'system':
+        if messages and messages[0]["role"] == "system":
             message = messages.pop(0)
-            system = message['content']
+            system = message["content"]
         else:
             system = None
 
         for message in messages:
-            if message['role'] == 'tool_response':
-                message['role'] = 'tool'
-            if message['role'] in {'tool_call', 'tool'} and not isinstance(message['content'], str):
-                message['content'] = json.dumps(message['content'], ensure_ascii=False)
+            if message["role"] == "tool_response":
+                message["role"] = "tool"
+            if message["role"] in {"tool_call", "tool"} and not isinstance(message["content"], str):
+                message["content"] = json.dumps(message["content"], ensure_ascii=False)
 
         media_kwargs = StdTemplateInputs.remove_messages_media(messages)
         for k in list(media_kwargs.keys()):
@@ -189,35 +191,35 @@ class StdTemplateInputs:
                 inputs_mm_data = [inputs_mm_data]
             inputs_mm_data = (inputs_mm_data or []).copy()
             if mm_data:
-                assert not inputs_mm_data, f'self.{k}: {inputs_mm_data}'
+                assert not inputs_mm_data, f"self.{k}: {inputs_mm_data}"
             else:
                 media_kwargs[k] = inputs_mm_data
 
         return cls(messages=messages, system=system, tools=tools, objects=objects, **kwargs, **media_kwargs)
 
     @staticmethod
-    def remove_messages_media(messages: Messages) -> Dict[str, Any]:
-        res = {'images': [], 'audios': [], 'videos': []}
+    def remove_messages_media(messages: Messages) -> dict[str, Any]:
+        res = {"images": [], "audios": [], "videos": []}
         for message in messages:
-            content = message['content']
+            content = message["content"]
             if isinstance(content, str):
                 continue
             # List[Dict[str, Any]]
-            new_content = ''
+            new_content = ""
             for item in content:
-                key: str = item['type']
+                key: str = item["type"]
                 value = item.get(key)
-                if key == 'text':
+                if key == "text":
                     new_content += value
                     continue
                 # image/audio/video
                 # image_url/audio_url/video_url
-                if key.endswith('_url'):
-                    key = key[:-len('_url')]
-                new_content += f'<{key}>'
+                if key.endswith("_url"):
+                    key = key[: -len("_url")]
+                new_content += f"<{key}>"
                 if isinstance(value, dict):
-                    value = value['url']
+                    value = value["url"]
                 if value:
-                    res[f'{key}s'].append(value)
-            message['content'] = new_content
+                    res[f"{key}s"].append(value)
+            message["content"] = new_content
         return res

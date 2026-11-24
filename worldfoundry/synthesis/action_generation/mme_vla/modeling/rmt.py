@@ -1,18 +1,19 @@
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
+from functools import partial
+
+import einops
 import flax.nnx as nnx
 import jax
 import jax.numpy as jnp
-import einops
+from jax import vmap
+
 from ...openpi import array_typing as at
 from ...openpi import sharding
-from functools import partial
-from jax import vmap
 from .memory_utils import (
+    apply_rotary_emb,
     kernel_init,
-    kernel_init_out_proj,
     kernel_init_out_proj_rmt,
     precompute_freqs_cis,
-    apply_rotary_emb,
-    rms_normalize
 )
 
 
@@ -29,7 +30,7 @@ class RMTLayer(nnx.Module):
         self.num_kv_heads = config.recurrent_memory.rmt_config.num_kv_heads
         self.mini_batch_size = self.config.recurrent_memory.mini_batch_size
         self.head_dim = self.hidden_dim // self.num_heads
-        
+
         self.dtype = dtype = jnp.float32
 
         self.output_stats = config.recurrent_memory.output_stats
@@ -71,15 +72,12 @@ class RMTLayer(nnx.Module):
         )
 
         self.memory_state = nnx.Param(
-            jax.random.normal(rngs.params(), (self.mem_slots, self.hidden_dim))
-            * jnp.sqrt(1 / (self.hidden_dim)),
+            jax.random.normal(rngs.params(), (self.mem_slots, self.hidden_dim)) * jnp.sqrt(1 / (self.hidden_dim)),
         )
 
         self.post_norm = nnx.LayerNorm(self.hidden_dim, rngs=rngs, dtype=dtype)
         self.freqs_cis = nnx.Variable(
-            precompute_freqs_cis(
-                self.head_dim, (self.mini_batch_size + self.mem_slots) * 2
-            ),
+            precompute_freqs_cis(self.head_dim, (self.mini_batch_size + self.mem_slots) * 2),
         )
 
     def __call__(
@@ -91,7 +89,6 @@ class RMTLayer(nnx.Module):
         # do cross attention recurrently for each mini-batch
         @partial(vmap, axis_name="batch")
         def update_batch(x, mask):
-
             def compute_mini_batch(carry, inputs):
                 x_mb = inputs["X"]  # (mb, d)
                 mask_mb = inputs["mask"]  # (1,)
@@ -110,25 +107,21 @@ class RMTLayer(nnx.Module):
                 "mask": mask,  # (nm, )
             }
 
-            mem_tokens, stats_dict = jax.lax.scan(
-                f=compute_mini_batch, init=mem_state, xs=inputs
-            )
+            mem_tokens, stats_dict = jax.lax.scan(f=compute_mini_batch, init=mem_state, xs=inputs)
 
             return mem_tokens, stats_dict
 
         mem_state_new, stats_dict = update_batch(hidden_states, mask)
-        return mem_state_new, mem_state_new, stats_dict # for interface consistency
+        return mem_state_new, mem_state_new, stats_dict  # for interface consistency
 
     def reset(self):
-        return jax.tree.map(
-            lambda x: x.value if isinstance(x, nnx.Param) else x, self.memory_state
-        )
+        return jax.tree.map(lambda x: x.value if isinstance(x, nnx.Param) else x, self.memory_state)
 
     def process_mini_batch(
-        self, 
-        x_mb,       # (mb, d) 
-        mask_mb,    # (1,) 
-        mem_state   # (mem_slots, d)
+        self,
+        x_mb,  # (mb, d)
+        mask_mb,  # (1,)
+        mem_state,  # (mem_slots, d)
     ):
         def cross_attention():
             mem_dtype = mem_state.dtype
@@ -145,10 +138,7 @@ class RMTLayer(nnx.Module):
             k_vec = einops.rearrange(k_vec, "s (nh d) -> s nh d", nh=self.num_kv_heads)
             v_vec = einops.rearrange(v_vec, "s (nh d) -> s nh d", nh=self.num_kv_heads)
 
-
-            freqs_cis = jnp.take(
-                self.freqs_cis.value, jnp.arange(q_vec.shape[0]), axis=0
-            )  # (ws, d/2)
+            freqs_cis = jnp.take(self.freqs_cis.value, jnp.arange(q_vec.shape[0]), axis=0)  # (ws, d/2)
             q_vec, k_vec = apply_rotary_emb(q_vec[None, :], k_vec[None, :], freqs_cis)
 
             encoded = jax.nn.dot_product_attention(
@@ -190,8 +180,6 @@ class RMTLayer(nnx.Module):
                 stats_dict = None
             return mem_state, stats_dict
 
-        mem_state_new, stats_dict = jax.lax.cond(
-            mask_mb, cross_attention, keep_original
-        )
+        mem_state_new, stats_dict = jax.lax.cond(mask_mb, cross_attention, keep_original)
 
         return mem_state_new, stats_dict

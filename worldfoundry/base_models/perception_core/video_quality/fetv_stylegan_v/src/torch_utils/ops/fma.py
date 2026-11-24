@@ -10,23 +10,26 @@
 
 import torch
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
-def fma(a, b, c): # => a * b + c
+
+def fma(a, b, c):  # => a * b + c
     return _FusedMultiplyAdd.apply(a, b, c)
 
-#----------------------------------------------------------------------------
 
-class _FusedMultiplyAdd(torch.autograd.Function): # a * b + c
+# ----------------------------------------------------------------------------
+
+
+class _FusedMultiplyAdd(torch.autograd.Function):  # a * b + c
     @staticmethod
-    def forward(ctx, a, b, c): # pylint: disable=arguments-differ
+    def forward(ctx, a, b, c):  # pylint: disable=arguments-differ
         out = torch.addcmul(c, a, b)
         ctx.save_for_backward(a, b)
         ctx.c_shape = c.shape
         return out
 
     @staticmethod
-    def backward(ctx, dout): # pylint: disable=arguments-differ
+    def backward(ctx, dout):  # pylint: disable=arguments-differ
         a, b = ctx.saved_tensors
         c_shape = ctx.c_shape
         da = None
@@ -44,7 +47,9 @@ class _FusedMultiplyAdd(torch.autograd.Function): # a * b + c
 
         return da, db, dc
 
-#----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+
 
 def _unbroadcast(x, shape):
     extra_dims = x.ndim - len(shape)
@@ -53,8 +58,9 @@ def _unbroadcast(x, shape):
     if len(dim):
         x = x.sum(dim=dim, keepdim=True)
     if extra_dims:
-        x = x.reshape(-1, *x.shape[extra_dims+1:])
+        x = x.reshape(-1, *x.shape[extra_dims + 1 :])
     assert x.shape == shape
     return x
 
-#----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------

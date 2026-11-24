@@ -16,41 +16,40 @@ from io import StringIO
 
 import yaml
 
-from worldfoundry.core.utils.tensors.arrays import any_to_primitive
 from worldfoundry.core.io.filesystem.file_utils import f_join
+from worldfoundry.core.utils.tensors.arrays import any_to_primitive
 
 __all__ = [
-    "json_load",
-    "json_loads",
-    "jsonl_load",
-    "yaml_load",
-    "yaml_loads",
-    "json_dump",
-    "json_dumps",
-    "jsonl_dump",
-    "yaml_dump",
-    "yaml_dumps",
-    "json_or_yaml_load",
-    "json_or_yaml_dump",
     "Jsonl",
-    # ---------------- Aliases -----------------
-    "load_json",
-    "loads_json",
-    "load_jsonl",
-    "load_yaml",
-    "loads_yaml",
     "dump_json",
-    "dumps_json",
+    "dump_json_or_yaml",
     "dump_jsonl",
     "dump_yaml",
+    "dumps_json",
     "dumps_yaml",
+    "json_dump",
+    "json_dumps",
+    "json_load",
+    "json_loads",
+    "json_or_yaml_dump",
+    "json_or_yaml_load",
+    "jsonl_dump",
+    "jsonl_load",
+    # ---------------- Aliases -----------------
+    "load_json",
     "load_json_or_yaml",
-    "dump_json_or_yaml",
+    "load_jsonl",
+    "load_yaml",
+    "loads_json",
+    "loads_yaml",
+    "yaml_dump",
+    "yaml_dumps",
+    "yaml_load",
+    "yaml_loads",
 ]
 
-from typing import Dict, List
 
-from typing_extensions import Literal
+from typing import Literal
 
 # ──────────────────────────────────────────────────────────────────────────
 # JSON / JSONL / YAML — local files only; no URI routing, no NaN ban by default
@@ -61,7 +60,7 @@ def json_load(*file_path, **kwargs):
     """Load JSON from a joined local path; ``**kwargs`` go to :func:`json.load`."""
 
     file_path = f_join(file_path)
-    with open(file_path, "r") as fp:
+    with open(file_path) as fp:
         return json.load(fp, **kwargs)
 
 
@@ -75,10 +74,8 @@ def jsonl_load(*file_path, **kwargs):
     """Load every line as JSON; blank lines become parse errors, not skips."""
 
     file_path = f_join(file_path)
-    data = []
-    for line in open(file_path):
-        data.append(json.loads(line, **kwargs))
-    return data
+    with open(file_path) as handle:
+        return [json.loads(line, **kwargs) for line in handle]
 
 
 def json_dump(data, *file_path, convert_to_primitive=False, **kwargs):
@@ -117,7 +114,7 @@ def yaml_load(*file_path, loader=yaml.safe_load, **kwargs):
     """Load YAML with ``safe_load`` by default so tags cannot construct objects."""
 
     file_path = f_join(file_path)
-    with open(file_path, "r") as fp:
+    with open(file_path) as fp:
         return loader(fp, **kwargs)
 
 
@@ -182,10 +179,10 @@ def json_or_yaml_load(*file_path, **loader_kwargs):
     file_path = str(f_join(file_path))
     if file_path.endswith(".json"):
         return json_load(file_path, **loader_kwargs)
-    elif file_path.endswith(".yml") or file_path.endswith(".yaml"):
+    elif file_path.endswith((".yml", ".yaml")):
         return yaml_load(file_path, **loader_kwargs)
     else:
-        raise IOError(f'unknown file extension: "{file_path}", loader supports only ".json", ".yml", ".yaml"')
+        raise OSError(f'unknown file extension: "{file_path}", loader supports only ".json", ".yml", ".yaml"')
 
 
 def json_or_yaml_dump(data, *file_path, **dumper_kwargs):
@@ -199,10 +196,10 @@ def json_or_yaml_dump(data, *file_path, **dumper_kwargs):
     file_path = str(f_join(file_path))
     if file_path.endswith(".json"):
         return json_dump(data, file_path, **dumper_kwargs)
-    elif file_path.endswith(".yml") or file_path.endswith(".yaml"):
+    elif file_path.endswith((".yml", ".yaml")):
         return yaml_dump(data, file_path, **dumper_kwargs)
     else:
-        raise IOError(f'unknown file extension: "{file_path}", dumper supports only ".json", ".yml", ".yaml"')
+        raise OSError(f'unknown file extension: "{file_path}", dumper supports only ".json", ".yml", ".yaml"')
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -247,13 +244,13 @@ class Jsonl:
             assert path.exists(self._file_path)
             self._fp = None
         else:
-            self._fp = open(self._file_path, mode)
+            self._fp = open(self._file_path, mode)  # noqa: SIM115  # closed by close()
         if path.exists(self._file_path) and mode != "w":
             self.data = jsonl_load(self._file_path)
         else:
             self.data = []
 
-    def append(self, data: Dict):
+    def append(self, data: dict):
         """Append one mapping to memory and disk; raises in read mode."""
 
         if self._mode == "r":
@@ -261,7 +258,7 @@ class Jsonl:
         self.data.append(data)
         print(json_dumps(data), file=self._fp, flush=True)
 
-    def extend(self, data_list: List[Dict]):
+    def extend(self, data_list: list[dict]):
         """Append each mapping through :meth:`append` so flush stays per-row."""
 
         for data in data_list:

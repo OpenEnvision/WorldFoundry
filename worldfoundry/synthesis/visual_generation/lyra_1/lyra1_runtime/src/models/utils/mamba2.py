@@ -20,13 +20,11 @@ import math
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
-from einops import rearrange, repeat
-
-from mamba_ssm.ops.triton.layernorm_gated import RMSNorm as RMSNormGated, LayerNorm
+from einops import rearrange
 from mamba_ssm.ops.triton.layer_norm import RMSNorm
+from mamba_ssm.ops.triton.layernorm_gated import RMSNorm as RMSNormGated
 from mamba_ssm.ops.triton.ssd_combined import mamba_split_conv1d_scan_combined
+
 
 class Mamba2SingleScan(nn.Module):
     def __init__(
@@ -91,8 +89,7 @@ class Mamba2SingleScan(nn.Module):
 
         # Initialize log dt bias
         dt = torch.exp(
-            torch.rand(self.nheads, **factory_kwargs) * (math.log(dt_max) - math.log(dt_min))
-            + math.log(dt_min)
+            torch.rand(self.nheads, **factory_kwargs) * (math.log(dt_max) - math.log(dt_min)) + math.log(dt_min)
         )
         dt = torch.clamp(dt, min=dt_init_floor)
         # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
@@ -121,11 +118,11 @@ class Mamba2SingleScan(nn.Module):
     def forward(self, zxbcdt):
         """
         zxbcdt: (B, L, D)
-        Returns: same shape as input 
+        Returns: same shape as input
         """
         A = -torch.exp(self.A_log)  # (nheads) or (d_inner, d_state)
         initial_states = None
-        dt_limit_kwargs = {} if self.dt_limit == (0.0, float("inf")) else dict(dt_limit=self.dt_limit)
+        dt_limit_kwargs = {} if self.dt_limit == (0.0, float("inf")) else {"dt_limit": self.dt_limit}
 
         # Fully fused path
         out = mamba_split_conv1d_scan_combined(
@@ -146,6 +143,7 @@ class Mamba2SingleScan(nn.Module):
             **dt_limit_kwargs,
         )
         return out
+
 
 class Mamba2MultiScan(nn.Module):
     def __init__(
@@ -168,7 +166,7 @@ class Mamba2MultiScan(nn.Module):
         conv_bias,
         # Fused kernel and sharding options
         chunk_size,
-        scan_type, # single, bi
+        scan_type,  # single, bi
         device,
         dtype,
         if_divide_out,
@@ -251,6 +249,7 @@ class Mamba2MultiScan(nn.Module):
 
         return out
 
+
 class Mamba2Block(nn.Module):
     def __init__(
         self,
@@ -272,7 +271,7 @@ class Mamba2Block(nn.Module):
         conv_bias=True,
         # Fused kernel and sharding options
         chunk_size=256,
-        scan_type="bi", # single, bi
+        scan_type="bi",  # single, bi
         device=None,
         dtype=None,
         if_divide_out=False,
@@ -280,14 +279,34 @@ class Mamba2Block(nn.Module):
     ):
         super().__init__()
         assert norm_cls in ["rms_norm", "layer_norm"]
-        if norm_cls=="rms_norm":
+        if norm_cls == "rms_norm":
             self.norm = RMSNorm(d_model)
-        elif norm_cls=="layer_norm":
+        elif norm_cls == "layer_norm":
             self.norm = nn.LayerNorm(d_model)
-        self.mamba = Mamba2MultiScan(d_model, d_state, d_conv, conv_init, expand, headdim, ngroups, A_init_range, dt_min, 
-                            dt_max, dt_init_floor, dt_limit, learnable_init_states, activation, bias, conv_bias, 
-                            chunk_size, scan_type, device, dtype, if_divide_out)
-        
+        self.mamba = Mamba2MultiScan(
+            d_model,
+            d_state,
+            d_conv,
+            conv_init,
+            expand,
+            headdim,
+            ngroups,
+            A_init_range,
+            dt_min,
+            dt_max,
+            dt_init_floor,
+            dt_limit,
+            learnable_init_states,
+            activation,
+            bias,
+            conv_bias,
+            chunk_size,
+            scan_type,
+            device,
+            dtype,
+            if_divide_out,
+        )
+
     def forward(self, x):
         """
         x: (B, L, D)
@@ -302,7 +321,7 @@ if __name__ == "__main__":
     batch_size = 4
     seq_len = 128
     input_dim = 256
-    
+
     model = Mamba2Block(d_model=input_dim, device="cuda").to("cuda")
     input = torch.randn(batch_size, seq_len, input_dim).to("cuda")
     output = model(input)

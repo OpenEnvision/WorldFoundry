@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import inspect
 import tempfile
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -143,7 +144,7 @@ def _expand_worldfoundry_tokens(value: Any) -> Any:
     return value
 
 
-def _runtime_defaults_from_data(config_path: str, config_key: str | None = None) -> Dict[str, Any]:
+def _runtime_defaults_from_data(config_path: str, config_key: str | None = None) -> dict[str, Any]:
     """Load runtime kwargs from a package data config.
 
     This function reads a serialized configuration file from the package data,
@@ -222,7 +223,7 @@ def default_hfd_path(repo_dir: str) -> str:
     return str(expand_worldfoundry_path(str(Path("$WORLDFOUNDRY_HFD_ROOT") / repo_dir)))
 
 
-def _filter_supported_constructor_kwargs(runtime_cls, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+def _filter_supported_constructor_kwargs(runtime_cls, kwargs: dict[str, Any]) -> dict[str, Any]:
     """Filter keyword arguments to only include those supported by a class constructor.
 
     This utility inspects the `__init__` signature of `runtime_cls` and returns
@@ -244,11 +245,7 @@ def _filter_supported_constructor_kwargs(runtime_cls, kwargs: Dict[str, Any]) ->
     if any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()):
         return kwargs
     # Otherwise, filter kwargs to only include those explicitly defined in the signature.
-    return {
-        key: value
-        for key, value in kwargs.items()
-        if key in parameters
-    }
+    return {key: value for key, value in kwargs.items() if key in parameters}
 
 
 class RuntimeVideoSynthesis(BaseSynthesis):
@@ -267,7 +264,7 @@ class RuntimeVideoSynthesis(BaseSynthesis):
         model_name: str,
         generation_type: str,
         runtime_cls,
-        runtime_kwargs: Dict[str, Any],
+        runtime_kwargs: dict[str, Any],
         lazy: bool = True,
     ) -> None:
         """Initializes the RuntimeVideoSynthesis instance.
@@ -292,7 +289,7 @@ class RuntimeVideoSynthesis(BaseSynthesis):
             self._ensure_generator()
 
     @classmethod
-    def default_runtime_kwargs(cls) -> Dict[str, Any]:
+    def default_runtime_kwargs(cls) -> dict[str, Any]:
         """Return runtime kwargs from data-backed defaults.
 
         This class method retrieves the default runtime configuration for the
@@ -317,9 +314,9 @@ class RuntimeVideoSynthesis(BaseSynthesis):
     def build_runtime_kwargs(
         cls,
         pretrained_model_path=None,
-        generator_overrides: Optional[Dict[str, Any]] = None,
+        generator_overrides: dict[str, Any] | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build runtime kwargs from class defaults and caller overrides.
 
         This method consolidates runtime configuration. It starts with the
@@ -353,10 +350,7 @@ class RuntimeVideoSynthesis(BaseSynthesis):
             overrides[primary_path_key] = pretrained_model_path
         runtime_kwargs.update(overrides)
         # Expand any WorldFoundry environment tokens in the final runtime kwargs.
-        runtime_kwargs = {
-            key: _expand_worldfoundry_tokens(value)
-            for key, value in runtime_kwargs.items()
-        }
+        runtime_kwargs = {key: _expand_worldfoundry_tokens(value) for key, value in runtime_kwargs.items()}
         return runtime_kwargs
 
     @classmethod
@@ -366,7 +360,7 @@ class RuntimeVideoSynthesis(BaseSynthesis):
         args=None,
         device=None,
         lazy: bool = True,
-        generator_overrides: Optional[Dict[str, Any]] = None,
+        generator_overrides: dict[str, Any] | None = None,
         **kwargs,
     ):
         """Create this model's synthesis wrapper from local defaults.
@@ -417,10 +411,12 @@ class RuntimeVideoSynthesis(BaseSynthesis):
         """
         if self.generator is None:
             # Filter kwargs to only pass arguments supported by the runtime_cls constructor.
-            self.generator = self.runtime_cls(**_filter_supported_constructor_kwargs(self.runtime_cls, self.runtime_kwargs))
+            self.generator = self.runtime_cls(
+                **_filter_supported_constructor_kwargs(self.runtime_cls, self.runtime_kwargs)
+            )
         return self.generator
 
-    def _prediction_runtime_overrides(self, kwargs: Mapping[str, Any], *, fps: Optional[int]) -> Dict[str, Any]:
+    def _prediction_runtime_overrides(self, kwargs: Mapping[str, Any], *, fps: int | None) -> dict[str, Any]:
         """Map Studio call kwargs onto runtime constructor kwargs.
 
         This method translates a generic set of prediction-time keyword arguments
@@ -499,11 +495,8 @@ class RuntimeVideoSynthesis(BaseSynthesis):
         signature = inspect.signature(self.runtime_cls)
         parameters = signature.parameters
         # Check if the runtime constructor accepts arbitrary keyword arguments (**kwargs).
-        supports_var_kwargs = any(
-            parameter.kind == inspect.Parameter.VAR_KEYWORD
-            for parameter in parameters.values()
-        )
-        overrides: Dict[str, Any] = {}
+        supports_var_kwargs = any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values())
+        overrides: dict[str, Any] = {}
 
         def add_supported(candidates: tuple[str, ...], value: Any) -> None:
             """Helper to add a value to overrides if any candidate key is supported."""
@@ -557,8 +550,8 @@ class RuntimeVideoSynthesis(BaseSynthesis):
         self,
         prompt: str,
         images=None,
-        output_path: Optional[str] = None,
-        fps: Optional[int] = None,
+        output_path: str | None = None,
+        fps: int | None = None,
         return_dict: bool = False,
         **kwargs,
     ):
@@ -610,6 +603,7 @@ class RuntimeVideoSynthesis(BaseSynthesis):
             save_path = Path(target_path).expanduser().resolve()
             save_path.parent.mkdir(parents=True, exist_ok=True)
             import imageio
+
             # Save the video using imageio, prioritizing explicit fps, then kwargs fps, then generator's fps, then a default.
             imageio.mimsave(str(save_path), video, fps=fps or kwargs.get("fps") or getattr(generator, "fps", 16) or 16)
 

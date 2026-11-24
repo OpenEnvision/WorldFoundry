@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from ...synthesis.visual_generation.memory.video import VideoArtifactMemory
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
-from ..pipeline_utils import PipelineABC
+from ...operators.runtime_video_operator import RuntimeVideoOperator
+from ...synthesis.visual_generation.memory.video import VideoArtifactMemory
 from ...synthesis.visual_generation.warp_as_history.variants import (
     get_warp_as_history_variant,
 )
-from ...operators.runtime_video_operator import RuntimeVideoOperator
 from ...synthesis.visual_generation.warp_as_history.warp_as_history_synthesis import (
     WarpAsHistorySynthesis,
 )
+from ..pipeline_utils import PipelineABC
 
 
 class WarpAsHistoryPipeline(PipelineABC):
@@ -26,9 +26,9 @@ class WarpAsHistoryPipeline(PipelineABC):
         self,
         *,
         model_id: str | None = None,
-        operator: Optional[RuntimeVideoOperator] = None,
-        synthesis_model: Optional[WarpAsHistorySynthesis] = None,
-        memory_module: Optional[VideoArtifactMemory] = None,
+        operator: RuntimeVideoOperator | None = None,
+        synthesis_model: WarpAsHistorySynthesis | None = None,
+        memory_module: VideoArtifactMemory | None = None,
         device: str = "cuda",
     ) -> None:
         """Initialize the pipeline and configure runtime components."""
@@ -40,22 +40,22 @@ class WarpAsHistoryPipeline(PipelineABC):
         self.model_name = self.variant.display_name
         self.operator = operator or RuntimeVideoOperator(generation_type="i2v")
         self.operators = self.operator
-        self.memory_module = memory_module or VideoArtifactMemory(model_id='warp-as-history')
+        self.memory_module = memory_module or VideoArtifactMemory(model_id="warp-as-history")
         self.device = device
 
     @classmethod
     def from_pretrained(
         cls,
         model_path: Any = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
         model_id: str | None = None,
         lazy: bool = True,
         **kwargs: Any,
-    ) -> "WarpAsHistoryPipeline":
+    ) -> WarpAsHistoryPipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         del lazy
-        options: Dict[str, Any] = {}
+        options: dict[str, Any] = {}
         if isinstance(model_path, dict):
             options.update(model_path)
         elif model_path is not None:
@@ -63,13 +63,9 @@ class WarpAsHistoryPipeline(PipelineABC):
         options.update(required_components or {})
         options.update(kwargs)
         resolved_model_id = str(
-            options.get("model_id")
-            or options.get("variant")
-            or options.get("profile_id")
-            or model_id
-            or cls.MODEL_ID
+            options.get("model_id") or options.get("variant") or options.get("profile_id") or model_id or cls.MODEL_ID
         )
-        synthesis_model = cls.SYNTHESIS_CLS.from_pretrained(
+        synthesis_model = cls._component("SYNTHESIS_CLS").from_pretrained(
             {**options, "model_id": resolved_model_id},
             device=device,
         )
@@ -77,11 +73,11 @@ class WarpAsHistoryPipeline(PipelineABC):
             model_id=resolved_model_id,
             operator=RuntimeVideoOperator(generation_type="i2v"),
             synthesis_model=synthesis_model,
-            memory_module=VideoArtifactMemory(model_id='warp-as-history'),
+            memory_module=VideoArtifactMemory(model_id="warp-as-history"),
             device=device,
         )
 
-    def process(self, prompt: str | None = None, images: Any = None, **kwargs: Any) -> Dict[str, Any]:
+    def process(self, prompt: str | None = None, images: Any = None, **kwargs: Any) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
         if prompt is None:
             prompt = ""

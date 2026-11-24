@@ -1,8 +1,8 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import os
+from collections.abc import Callable
 from logging import getLogger
-from typing import Callable, List, Tuple
 
 import torch
 from PIL import Image
@@ -17,8 +17,7 @@ logger = getLogger()
 def get_video_transform(
     image_res: int = 224,
     normalize_img: bool = True,
-) -> Tuple[Callable, int]:
-
+) -> tuple[Callable, int]:
     transforms = VideoTransform(
         size=image_res,
         normalize_img=normalize_img,
@@ -59,7 +58,7 @@ class VideoTransform(ImageTransform):
 
         return super()._transform_torch_tensor(frames)
 
-    def _process_multiple_images(self, image_paths: List[str]):
+    def _process_multiple_images(self, image_paths: list[str]):
         images = [Image.open(path).convert("RGB") for path in image_paths]
         processed_images = []
         for image in images:
@@ -68,7 +67,7 @@ class VideoTransform(ImageTransform):
         processed_images = torch.cat(processed_images, dim=0)
         return processed_images, (w, h)
 
-    def _process_multiple_images_pil(self, images: List[Image.Image]):
+    def _process_multiple_images_pil(self, images: list[Image.Image]):
         processed_images = []
         for image in images:
             image, (w, h) = super().__call__(image)
@@ -109,7 +108,7 @@ class VideoTransform(ImageTransform):
             end_frame = start_frame + 1
 
         sample_fps = int(sampling_fps)
-        t_stride = int(round(float(fps) / sample_fps))
+        t_stride = int(round(float(fps) / sample_fps))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
         all_pos = list(range(start_frame, end_frame + 1, t_stride))
         if len(all_pos) > max_frames:
@@ -132,14 +131,12 @@ class VideoTransform(ImageTransform):
     def uniform_sample(self, m, n):
         assert n <= m
         stride = (m - 1) / (n - 1) if n > 1 else 0  # Calculate the stride
-        return [int(round(i * stride)) for i in range(n)]
+        return [int(round(i * stride)) for i in range(n)]  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
     def draw_bounding_boxes(self, frames, all_bboxes):
         # Assuming frames is a torch.Tensor with shape (N, C, H, W)
         N, _, _, _ = frames.shape
-        frames_with_bbox = (
-            frames.clone()
-        )  # Clone the tensor to avoid modifying the original
+        frames_with_bbox = frames.clone()  # Clone the tensor to avoid modifying the original
         for i in range(N):
             if i in all_bboxes:
                 bbox = all_bboxes[i]

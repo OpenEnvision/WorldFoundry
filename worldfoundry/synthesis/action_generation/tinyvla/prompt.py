@@ -5,12 +5,11 @@ from __future__ import annotations
 import torch
 
 from .constants import (
-    DEFAULT_IMAGE_TOKEN,
     DEFAULT_IM_END_TOKEN,
     DEFAULT_IM_START_TOKEN,
+    DEFAULT_IMAGE_TOKEN,
     IMAGE_TOKEN_INDEX,
 )
-
 
 _SYSTEM = (
     "A chat between a curious user and an artificial intelligence assistant. "

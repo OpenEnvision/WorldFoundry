@@ -90,7 +90,7 @@ def get_grid(height, width, shape=None, dtype="torch", device="cpu", align_corne
         if not normalize:
             x = x * W
             y = y * H
-    x_view, y_view, exp = [1 for _ in S] + [1, -1], [1 for _ in S] + [-1, 1], S + [H, W]
+    x_view, y_view, exp = [1 for _ in S] + [1, -1], [1 for _ in S] + [-1, 1], S + [H, W]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     x = x.view(*x_view).expand(*exp)
     y = y.view(*y_view).expand(*exp)
     grid = torch.stack([x, y], dim=-1)
@@ -103,7 +103,7 @@ def get_sobel_kernel(kernel_size):
     K = kernel_size
     sobel = torch.tensor(list(range(K))) - K // 2
     sobel_x, sobel_y = sobel.view(-1, 1), sobel.view(1, -1)
-    sum_xy = sobel_x ** 2 + sobel_y ** 2
+    sum_xy = sobel_x**2 + sobel_y**2
     sum_xy[sum_xy == 0] = 1
     sobel_x, sobel_y = sobel_x / sum_xy, sobel_y / sum_xy
     sobel_kernel = torch.stack([sobel_x.unsqueeze(0), sobel_y.unsqueeze(0)], dim=0)
@@ -116,7 +116,9 @@ def to_device(data, device):
 
 
 def get_alpha_consistency(bflow, fflow, thresh_1=0.01, thresh_2=0.5, thresh_mul=1):
-    norm = lambda x: x.pow(2).sum(dim=-1).sqrt()
+    def norm(x):
+        return x.pow(2).sum(dim=-1).sqrt()
+
     B, H, W, C = bflow.shape
 
     mag = norm(fflow) + norm(bflow)

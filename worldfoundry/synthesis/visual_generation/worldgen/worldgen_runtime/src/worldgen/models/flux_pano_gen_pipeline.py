@@ -1,6 +1,5 @@
 # Adpted from LayerPano3D
 # https://huggingface.co/ysmikey/Layerpano3D-FLUX-Panorama-LoRA/blob/main/pipeline_flux.py
-
 # Copyright 2024 Black Forest Labs and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,33 +13,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import inspect
-from typing import Any, Callable, Dict, List, Optional, Union
+from collections.abc import Callable
+from typing import Any, ClassVar
 
 import numpy as np
 import torch
-from transformers import (
-    CLIPImageProcessor,
-    CLIPTextModel,
-    CLIPTokenizer,
-    CLIPVisionModelWithProjection,
-    T5EncoderModel,
-    T5TokenizerFast,
-)
-
+from diffusers import DiffusionPipeline
 from diffusers.image_processor import PipelineImageInput, VaeImageProcessor
 from diffusers.loaders import FluxIPAdapterMixin, FluxLoraLoaderMixin, FromSingleFileMixin, TextualInversionLoaderMixin
 from diffusers.models.autoencoders import AutoencoderKL
 
 # from autoencoder_kl import AutoencoderKL
-
-
 from diffusers.models.transformers import FluxTransformer2DModel
+from diffusers.pipelines.flux import FluxPipelineOutput
 from diffusers.schedulers import FlowMatchEulerDiscreteScheduler
 
 # from scheduling_flow_match_euler_discrete import FlowMatchEulerDiscreteScheduler
-
 from diffusers.utils import (
     USE_PEFT_BACKEND,
     is_torch_xla_available,
@@ -50,15 +39,18 @@ from diffusers.utils import (
     unscale_lora_layers,
 )
 from diffusers.utils.torch_utils import randn_tensor
-from diffusers import DiffusionPipeline
-from diffusers.pipelines.flux import FluxPipelineOutput
-import torch.nn.functional as F
-from einops import rearrange
-from worldgen.utils.lora_utils import load_and_fix_lora
+from transformers import (
+    CLIPImageProcessor,
+    CLIPTextModel,
+    CLIPTokenizer,
+    CLIPVisionModelWithProjection,
+    T5EncoderModel,
+    T5TokenizerFast,
+)
 
 try:
     from diffusers.models.autoencoders.vae import DecoderOutput
-except:
+except BaseException:
     from diffusers.models.vae import DecoderOutput
 
 if is_torch_xla_available():
@@ -104,10 +96,10 @@ def calculate_shift(
 # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
 def retrieve_timesteps(
     scheduler,
-    num_inference_steps: Optional[int] = None,
-    device: Optional[Union[str, torch.device]] = None,
-    timesteps: Optional[List[int]] = None,
-    sigmas: Optional[List[float]] = None,
+    num_inference_steps: int | None = None,
+    device: str | torch.device | None = None,
+    timesteps: list[int] | None = None,
+    sigmas: list[float] | None = None,
     **kwargs,
 ):
     r"""
@@ -195,8 +187,8 @@ class FluxPipeline(
     """
 
     model_cpu_offload_seq = "text_encoder->text_encoder_2->image_encoder->transformer->vae"
-    _optional_components = ["image_encoder", "feature_extractor"]
-    _callback_tensor_inputs = ["latents", "prompt_embeds"]
+    _optional_components: ClassVar[list] = ["image_encoder", "feature_extractor"]
+    _callback_tensor_inputs: ClassVar[list] = ["latents", "prompt_embeds"]
 
     def __init__(
         self,
@@ -236,11 +228,11 @@ class FluxPipeline(
 
     def _get_t5_prompt_embeds(
         self,
-        prompt: Union[str, List[str]] = None,
+        prompt: str | list[str] | None = None,
         num_images_per_prompt: int = 1,
         max_sequence_length: int = 512,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         device = device or self._execution_device
         dtype = dtype or self.text_encoder.dtype
@@ -285,9 +277,9 @@ class FluxPipeline(
 
     def _get_clip_prompt_embeds(
         self,
-        prompt: Union[str, List[str]],
+        prompt: str | list[str],
         num_images_per_prompt: int = 1,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ):
         device = device or self._execution_device
 
@@ -329,14 +321,14 @@ class FluxPipeline(
 
     def encode_prompt(
         self,
-        prompt: Union[str, List[str]],
-        prompt_2: Union[str, List[str]],
-        device: Optional[torch.device] = None,
+        prompt: str | list[str],
+        prompt_2: str | list[str],
+        device: torch.device | None = None,
         num_images_per_prompt: int = 1,
-        prompt_embeds: Optional[torch.FloatTensor] = None,
-        pooled_prompt_embeds: Optional[torch.FloatTensor] = None,
+        prompt_embeds: torch.FloatTensor | None = None,
+        pooled_prompt_embeds: torch.FloatTensor | None = None,
         max_sequence_length: int = 512,
-        lora_scale: Optional[float] = None,
+        lora_scale: float | None = None,
     ):
         r"""
 
@@ -391,15 +383,13 @@ class FluxPipeline(
                 device=device,
             )
 
-        if self.text_encoder is not None:
-            if isinstance(self, FluxLoraLoaderMixin) and USE_PEFT_BACKEND:
-                # Retrieve the original scale by scaling back the LoRA layers
-                unscale_lora_layers(self.text_encoder, lora_scale)
+        if self.text_encoder is not None and isinstance(self, FluxLoraLoaderMixin) and USE_PEFT_BACKEND:
+            # Retrieve the original scale by scaling back the LoRA layers
+            unscale_lora_layers(self.text_encoder, lora_scale)
 
-        if self.text_encoder_2 is not None:
-            if isinstance(self, FluxLoraLoaderMixin) and USE_PEFT_BACKEND:
-                # Retrieve the original scale by scaling back the LoRA layers
-                unscale_lora_layers(self.text_encoder_2, lora_scale)
+        if self.text_encoder_2 is not None and isinstance(self, FluxLoraLoaderMixin) and USE_PEFT_BACKEND:
+            # Retrieve the original scale by scaling back the LoRA layers
+            unscale_lora_layers(self.text_encoder_2, lora_scale)
 
         dtype = self.text_encoder.dtype if self.text_encoder is not None else self.transformer.dtype
         text_ids = torch.zeros(prompt_embeds.shape[1], 3).to(device=device, dtype=dtype)
@@ -417,9 +407,7 @@ class FluxPipeline(
         image_embeds = image_embeds.repeat_interleave(num_images_per_prompt, dim=0)
         return image_embeds
 
-    def prepare_ip_adapter_image_embeds(
-        self, ip_adapter_image, ip_adapter_image_embeds, device, num_images_per_prompt
-    ):
+    def prepare_ip_adapter_image_embeds(self, ip_adapter_image, ip_adapter_image_embeds, device, num_images_per_prompt):
         image_embeds = []
         if ip_adapter_image_embeds is None:
             if not isinstance(ip_adapter_image, list):
@@ -430,8 +418,8 @@ class FluxPipeline(
                     f"`ip_adapter_image` must have same length as the number of IP Adapters. Got {len(ip_adapter_image)} images and {len(self.transformer.encoder_hid_proj.image_projection_layers)} IP Adapters."
                 )
 
-            for single_ip_adapter_image, image_proj_layer in zip(
-                ip_adapter_image, self.transformer.encoder_hid_proj.image_projection_layers
+            for single_ip_adapter_image, _image_proj_layer in zip(
+                ip_adapter_image, self.transformer.encoder_hid_proj.image_projection_layers, strict=False
             ):
                 single_image_embeds = self.encode_image(single_ip_adapter_image, device, 1)
 
@@ -441,7 +429,7 @@ class FluxPipeline(
                 image_embeds.append(single_image_embeds)
 
         ip_adapter_image_embeds = []
-        for i, single_image_embeds in enumerate(image_embeds):
+        for _i, single_image_embeds in enumerate(image_embeds):
             single_image_embeds = torch.cat([single_image_embeds] * num_images_per_prompt, dim=0)
             single_image_embeds = single_image_embeds.to(device=device)
             ip_adapter_image_embeds.append(single_image_embeds)
@@ -505,7 +493,7 @@ class FluxPipeline(
                 f" {negative_prompt_embeds}. Please make sure to only forward one of the two."
             )
 
-        if prompt_embeds is not None and negative_prompt_embeds is not None:
+        if prompt_embeds is not None and negative_prompt_embeds is not None:  # noqa: SIM102 - Statement form kept for readability.
             if prompt_embeds.shape != negative_prompt_embeds.shape:
                 raise ValueError(
                     "`prompt_embeds` and `negative_prompt_embeds` must have the same shape when passed directly, but"
@@ -563,25 +551,17 @@ class FluxPipeline(
 
         return latents
 
-
     def blend_v(self, a, b, blend_extent):
         blend_extent = min(a.shape[2], b.shape[2], blend_extent)
         for y in range(blend_extent):
-            b[:, :,
-              y, :] = a[:, :, -blend_extent
-                        + y, :] * (1 - y / blend_extent) + b[:, :, y, :] * (
-                            y / blend_extent)
+            b[:, :, y, :] = a[:, :, -blend_extent + y, :] * (1 - y / blend_extent) + b[:, :, y, :] * (y / blend_extent)
         return b
 
     def blend_h(self, a, b, blend_extent):
         blend_extent = min(a.shape[3], b.shape[3], blend_extent)
         for x in range(blend_extent):
-            b[:, :, :, x] = a[:, :, :, -blend_extent
-                              + x] * (1 - x / blend_extent) + b[:, :, :, x] * (
-                                  x / blend_extent)
+            b[:, :, :, x] = a[:, :, :, -blend_extent + x] * (1 - x / blend_extent) + b[:, :, :, x] * (x / blend_extent)
         return b
-
-
 
     def enable_vae_slicing(self):
         r"""
@@ -641,11 +621,13 @@ class FluxPipeline(
             )
 
         latents = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
-        latents = torch.cat([latents, latents[:, :, :, :self.blend_extend]], dim=-1)
+        latents = torch.cat([latents, latents[:, :, :, : self.blend_extend]], dim=-1)
         width_new_blended = latents.shape[-1]
 
         latents = self._pack_latents(latents, batch_size, num_channels_latents, height, width_new_blended)
-        latent_image_ids = self._prepare_latent_image_ids(batch_size, height // 2, width_new_blended // 2, device, dtype)
+        latent_image_ids = self._prepare_latent_image_ids(
+            batch_size, height // 2, width_new_blended // 2, device, dtype
+        )
 
         return latents, latent_image_ids, width_new_blended
 
@@ -669,34 +651,34 @@ class FluxPipeline(
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
         self,
-        prompt: Union[str, List[str]] = None,
-        prompt_2: Optional[Union[str, List[str]]] = None,
-        negative_prompt: Union[str, List[str]] = None,
-        negative_prompt_2: Optional[Union[str, List[str]]] = None,
+        prompt: str | list[str] | None = None,
+        prompt_2: str | list[str] | None = None,
+        negative_prompt: str | list[str] | None = None,
+        negative_prompt_2: str | list[str] | None = None,
         true_cfg_scale: float = 1.0,
-        height: Optional[int] = None,
-        width: Optional[int] = None,
+        height: int | None = None,
+        width: int | None = None,
         num_inference_steps: int = 28,
-        sigmas: Optional[List[float]] = None,
+        sigmas: list[float] | None = None,
         guidance_scale: float = 3.5,
-        num_images_per_prompt: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.FloatTensor] = None,
-        prompt_embeds: Optional[torch.FloatTensor] = None,
-        pooled_prompt_embeds: Optional[torch.FloatTensor] = None,
-        ip_adapter_image: Optional[PipelineImageInput] = None,
-        ip_adapter_image_embeds: Optional[List[torch.Tensor]] = None,
-        negative_ip_adapter_image: Optional[PipelineImageInput] = None,
-        negative_ip_adapter_image_embeds: Optional[List[torch.Tensor]] = None,
-        negative_prompt_embeds: Optional[torch.FloatTensor] = None,
-        negative_pooled_prompt_embeds: Optional[torch.FloatTensor] = None,
-        output_type: Optional[str] = "pil",
+        num_images_per_prompt: int | None = 1,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.FloatTensor | None = None,
+        prompt_embeds: torch.FloatTensor | None = None,
+        pooled_prompt_embeds: torch.FloatTensor | None = None,
+        ip_adapter_image: PipelineImageInput | None = None,
+        ip_adapter_image_embeds: list[torch.Tensor] | None = None,
+        negative_ip_adapter_image: PipelineImageInput | None = None,
+        negative_ip_adapter_image_embeds: list[torch.Tensor] | None = None,
+        negative_prompt_embeds: torch.FloatTensor | None = None,
+        negative_pooled_prompt_embeds: torch.FloatTensor | None = None,
+        output_type: str | None = "pil",
         return_dict: bool = True,
-        joint_attention_kwargs: Optional[Dict[str, Any]] = None,
-        callback_on_step_end: Optional[Callable[[int, int, Dict], None]] = None,
-        callback_on_step_end_tensor_inputs: List[str] = ["latents"],
+        joint_attention_kwargs: dict[str, Any] | None = None,
+        callback_on_step_end: Callable[[int, int, dict], None] | None = None,
+        callback_on_step_end_tensor_inputs: list[str] = ["latents"],  # noqa: B006 - Keeps the upstream default object and signature.
         max_sequence_length: int = 512,
-        blend_extend: int = 6 
+        blend_extend: int = 6,
     ):
         r"""
         Function invoked when calling the pipeline for generation.
@@ -782,8 +764,7 @@ class FluxPipeline(
         self.vae.enable_tiling()
 
         ###########################################
-        def _decode(self, z: torch.Tensor, return_dict: bool = True) -> Union[DecoderOutput, torch.Tensor]:
-            
+        def _decode(self, z: torch.Tensor, return_dict: bool = True) -> DecoderOutput | torch.Tensor:
             # if self.use_tiling and (z.shape[-1] > self.tile_latent_min_size or z.shape[-2] > self.tile_latent_min_size):
             #     return self.tiled_decode(z, return_dict=return_dict)
 
@@ -800,17 +781,8 @@ class FluxPipeline(
 
             return DecoderOutput(sample=dec)
 
-
-
-
         ###########################################
-        def tiled_decode(
-            self,
-            z: torch.FloatTensor,
-            return_dict: bool = True
-        ) -> Union[DecoderOutput, torch.FloatTensor]:
-            
-            
+        def tiled_decode(self, z: torch.FloatTensor, return_dict: bool = True) -> DecoderOutput | torch.FloatTensor:
             r"""Decode a batch of images using a tiled decoder.
 
             Args:
@@ -826,10 +798,10 @@ class FluxPipeline(
             overlap_size = int(self.tile_latent_min_size * (1 - self.tile_overlap_factor))
             blend_extent = int(self.tile_sample_min_size * self.tile_overlap_factor)
             row_limit = self.tile_sample_min_size - blend_extent
-            
+
             w = z.shape[3]
 
-            z = torch.cat([z, z[:, :, :, :2]], dim=-1)  #[1, 16, 64, 160]
+            z = torch.cat([z, z[:, :, :, :2]], dim=-1)  # [1, 16, 64, 160]
 
             # z = torch.cat([z, z[:, :, :, :w // 32]], dim=-1)  #[1, 16, 64, 160]
             # Split z into overlapping 64x64 tiles and decode them separately.
@@ -838,7 +810,7 @@ class FluxPipeline(
             rows = []
             for i in range(0, z.shape[2], overlap_size):
                 row = []
-                tile = z[:, :, i:i + self.tile_latent_min_size, :]
+                tile = z[:, :, i : i + self.tile_latent_min_size, :]
                 if self.config.use_post_quant_conv:
                     tile = self.post_quant_conv(tile)
 
@@ -858,25 +830,25 @@ class FluxPipeline(
                         tile = self.blend_h(row[j - 1], tile, blend_extent)
                     result_row.append(
                         self.blend_h(
-                            tile[:, :, :row_limit, w * vae_scale_factor:],
-                            tile[:, :, :row_limit, :w * vae_scale_factor],
-                            tile.shape[-1] - w * vae_scale_factor))
+                            tile[:, :, :row_limit, w * vae_scale_factor :],
+                            tile[:, :, :row_limit, : w * vae_scale_factor],
+                            tile.shape[-1] - w * vae_scale_factor,
+                        )
+                    )
                 result_rows.append(torch.cat(result_row, dim=3))
 
             dec = torch.cat(result_rows, dim=2)
             if not return_dict:
-                return (dec, )
+                return (dec,)
             return DecoderOutput(sample=dec)
-        
+
         self.vae.tiled_decode = tiled_decode.__get__(self.vae, AutoencoderKL)
         self.vae._decode = _decode.__get__(self.vae, AutoencoderKL)
 
         self.blend_extend = blend_extend
-        
+
         # self.blend_extend = width // self.vae_scale_factor // 32
         ###########################################
-
-
 
         height = height or self.default_sample_size * self.vae_scale_factor
         width = width or self.default_sample_size * self.vae_scale_factor
@@ -911,9 +883,7 @@ class FluxPipeline(
 
         device = self._execution_device
 
-        lora_scale = (
-            self.joint_attention_kwargs.get("scale", None) if self.joint_attention_kwargs is not None else None
-        )
+        lora_scale = self.joint_attention_kwargs.get("scale", None) if self.joint_attention_kwargs is not None else None
         do_true_cfg = true_cfg_scale > 1 and negative_prompt is not None
         (
             prompt_embeds,
@@ -958,7 +928,6 @@ class FluxPipeline(
             latents,
         )
         width_new_blended = width_new_blended * self.vae_scale_factor
-
 
         # 5. Prepare timesteps
         sigmas = np.linspace(1.0, 1 / num_inference_steps, num_inference_steps) if sigmas is None else sigmas
@@ -1059,14 +1028,19 @@ class FluxPipeline(
                 latents_dtype = latents.dtype
                 latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
 
-                
-                ### ================================== ###                
-                latents_unpack = self._unpack_latents(latents, height, width_new_blended, self.vae_scale_factor)                
-                latents_unpack = self.blend_h(latents_unpack, latents_unpack, self.blend_extend)                
-                latents = self._pack_latents(latents_unpack, batch_size, num_channels_latents, height // self.vae_scale_factor, width_new_blended // self.vae_scale_factor)
+                ### ================================== ###
+                latents_unpack = self._unpack_latents(latents, height, width_new_blended, self.vae_scale_factor)
+                latents_unpack = self.blend_h(latents_unpack, latents_unpack, self.blend_extend)
+                latents = self._pack_latents(
+                    latents_unpack,
+                    batch_size,
+                    num_channels_latents,
+                    height // self.vae_scale_factor,
+                    width_new_blended // self.vae_scale_factor,
+                )
                 ##########################################
-                
-                if latents.dtype != latents_dtype:
+
+                if latents.dtype != latents_dtype:  # noqa: SIM102 - Branches carry per-case comments.
                     if torch.backends.mps.is_available():
                         # some platforms (eg. apple mps) misbehave due to a pytorch bug: https://github.com/pytorch/pytorch/pull/99272
                         latents = latents.to(latents_dtype)
@@ -1086,17 +1060,22 @@ class FluxPipeline(
 
                 if XLA_AVAILABLE:
                     xm.mark_step()
-            
+
             latents_unpack = self._unpack_latents(latents, height, width_new_blended, self.vae_scale_factor)
             latents_unpack = self.blend_h(latents_unpack, latents_unpack, self.blend_extend)
-            latents_unpack = latents_unpack[:, :, :, :width // self.vae_scale_factor]
-            latents = self._pack_latents(latents_unpack, batch_size, num_channels_latents, height // self.vae_scale_factor, width // self.vae_scale_factor)
+            latents_unpack = latents_unpack[:, :, :, : width // self.vae_scale_factor]
+            latents = self._pack_latents(
+                latents_unpack,
+                batch_size,
+                num_channels_latents,
+                height // self.vae_scale_factor,
+                width // self.vae_scale_factor,
+            )
 
         if output_type == "latent":
             image = latents
 
         else:
-
             latents = self._unpack_latents(latents, height, width, self.vae_scale_factor)
             latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
             image = self.vae.decode(latents, return_dict=False)[0]

@@ -1,15 +1,15 @@
 ---
 title: "RT-1"
-description: "RT-1 from Google Research: vla and vla policy rollout; Runner parity pending."
+description: "RT-1 from Google Research: VLA, VLA policy rollout, and 2 more tasks; Runner parity pending."
 modelId: "rt-1"
 pageSource: generated
 ---
 
-RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. WorldFoundry's in-tree SavedModel adapter has comp…
+RT-1 (Robotics Transformer 1) is Google Research's pioneering large-scale robot transformer, trained on 130k real-robot episodes to output discretized actions from images and instructions. Validated offline on GPU with the official checkpo…
 
 <ModelPaperFigures modelId="rt-1" locale="en" />
 
-The recorded paper is [arXiv 2212.06817](https://arxiv.org/abs/2212.06817).
+Paper: [arXiv 2212.06817](https://arxiv.org/abs/2212.06817).
 
 Project page: [robotics-transformer.github.io](https://robotics-transformer.github.io/). Code: [google-research/robotics_transformer](https://github.com/google-research/robotics_transformer).
 
@@ -17,15 +17,15 @@ Project page: [robotics-transformer.github.io](https://robotics-transformer.gith
 
 ## What it is for
 
-Pick `rt-1` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.
+`rt-1` is a vision-language-action policy: an instruction and observations in, actions out.
 
 An EfficientNet-B3 image tokenizer with FiLM language conditioning, TokenLearner compression, and a decoder-only transformer emitting discretized action tokens — served as a TensorFlow SavedModel. It is published by Google Research.
 
-Catalog tasks include vla, vla policy rollout, robot policy, and robotics transformer. Catalog aliases include `rt1` and `robotics-transformer`.
+Tasks: VLA, VLA policy rollout, robot policy, and robotics transformer. Aliases: `rt1` and `robotics-transformer`.
 
 ## Runtime contract
 
-Required `input_path` and `language_embedding`; optional `prompt` and `plan_only`; artifacts `rt1_action_trace.json`.
+Required `input-path` and `language-embedding`; inputs `prompt` (bundled samples are used when omitted); options `plan-only`; artifacts `rt1_action_trace.json`.
 
 CLI task profiles: `vla`. WorldFoundry binds `RT1Pipeline`.
 
@@ -33,16 +33,14 @@ Family status: **Runner parity pending**.
 
 Supply a 512-D language_embedding from an encoder compatible with the checkpoint along with the image and prompt. The released SavedModel does not turn prompt text into that embedding; WorldFoundry rejects text-only inference instead of silently using zeros. GPU inference needs a TensorFlow/CuDNN-compatible environment.
 
-The released SavedModel consumes a precomputed 512-D language embedding; passing only a prompt string is rejected because the SavedModel does not encode text.
+Text-only inference requires a separately staged, checkpoint-compatible language encoder; offline action structure validation does not prove task success.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run rt-1 --pipeline.task-profile vla` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Run the policy with `wf run rt-1 --pipeline.task-profile vla --pipeline.input-path VALUE --pipeline.language-embedding VALUE`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CPU).
 
-No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh rt-1`. Add `--download` to fetch missing public checkpoints.
-
-Status: **Runner parity pending**.
+No public checkpoint is listed for this model; stage the weights as described in the usage notes. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh rt-1`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="rt-1" locale="en" />

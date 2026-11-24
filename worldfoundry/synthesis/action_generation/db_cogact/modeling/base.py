@@ -1,14 +1,14 @@
 # Inference-only DB-CogACT source retained in-tree.
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Mapping, Optional, Tuple
+from typing import ClassVar
 
 import numpy as np
 import torch
 import torch.nn as nn
-from transformers import (AutoConfig, AutoModel, PretrainedConfig,
-                          PreTrainedModel, GenerationMixin)
+from transformers import AutoConfig, AutoModel, GenerationMixin, PretrainedConfig, PreTrainedModel
 from transformers.modeling_outputs import ModelOutput
 
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
@@ -21,18 +21,18 @@ from .vision import build_vision_tower
 class DexboticConfig(PretrainedConfig):
     model_type = "dexbotic"
     llm_config: str | PretrainedConfig
-    mm_projector_type: Optional[str] = 'mlp2x_gelu'
-    mm_vision_tower: Optional[str] = None
-    chat_template: Optional[str] = 'dexbotic'
-    init_llm_weights: Optional[bool] = False
+    mm_projector_type: str | None = "mlp2x_gelu"
+    mm_vision_tower: str | None = None
+    chat_template: str | None = "dexbotic"
+    init_llm_weights: bool | None = False
 
 
 @dataclass
 class CausalLMOutputDexbotic(ModelOutput):
     logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    past_key_values: tuple[tuple[torch.FloatTensor]] | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class DexboticPretrainedModel(PreTrainedModel):
@@ -54,9 +54,7 @@ class DexboticVLMModel(DexboticPretrainedModel):
         super().__init__(config)
         if config.init_llm_weights:
             if not isinstance(config.llm_config, (str, Path)):
-                raise ValueError(
-                    "init_llm_weights requires a local language-model checkpoint path"
-                )
+                raise ValueError("init_llm_weights requires a local language-model checkpoint path")
             local_llm = resolve_local_hf_model_path(
                 config.llm_config,
                 required_files=("config.json",),
@@ -95,7 +93,7 @@ class DexboticVLMModel(DexboticPretrainedModel):
                 llm_config = config.llm_config
             self.llm = AutoModel.from_config(llm_config)
         self._merge_llm()
-        if getattr(config, 'mm_vision_tower', None) is not None:
+        if getattr(config, "mm_vision_tower", None) is not None:
             self.mm_vision_tower = self._build_mm_vision_module(config.mm_vision_tower)
         else:
             self.mm_vision_tower = self._build_mm_vision_module(config)
@@ -106,7 +104,7 @@ class DexboticVLMModel(DexboticPretrainedModel):
     def initialize_model(self, extra_config: dict):
         for key, value in extra_config.items():
             setattr(self.config, key, value)
-        if getattr(self.config, 'mm_vision_tower', None) is not None:
+        if getattr(self.config, "mm_vision_tower", None) is not None:
             self.mm_vision_tower = self._build_mm_vision_module(self.config.mm_vision_tower)
         else:
             self.mm_vision_tower = self._build_mm_vision_module(self.config)
@@ -114,25 +112,28 @@ class DexboticVLMModel(DexboticPretrainedModel):
 
     def _merge_llm(self):
         # merge llm config with self.config, only add missing keys
-        llm_config_dict = {k: v for k, v in self.llm.config.__dict__.items()
-                           if not k.startswith('_') and not hasattr(self.config, k)}
+        llm_config_dict = {
+            k: v for k, v in self.llm.config.__dict__.items() if not k.startswith("_") and not hasattr(self.config, k)
+        }
         for key, value in llm_config_dict.items():
             setattr(self.config, key, value)
         self.llm.resize_token_embeddings(self.config.vocab_size)
 
     def _build_mm_projector_module(self, config) -> nn.Module:
-        if getattr(self, 'mm_projector', None) is not None:
+        if getattr(self, "mm_projector", None) is not None:
             return self.mm_projector
         self.mm_projector = build_vision_projector(config)
 
         return self.mm_projector
 
     def _build_mm_vision_module(self, config) -> nn.Module:
-        if getattr(self, 'mm_vision_tower', None) is not None:
+        if getattr(self, "mm_vision_tower", None) is not None:
             return self.mm_vision_tower
-        if getattr(config, 'vision_config', None) is not None and getattr(config, 'processor_config', None) is not None:
+        if getattr(config, "vision_config", None) is not None and getattr(config, "processor_config", None) is not None:
             # FIXME: processor should be moved to top level config
-            self.mm_vision_tower = build_vision_tower(config.vision_config, processor_config=config.processor_config, select_layer=None)
+            self.mm_vision_tower = build_vision_tower(
+                config.vision_config, processor_config=config.processor_config, select_layer=None
+            )
         else:
             self.mm_vision_tower = build_vision_tower(config)
         self.config.mm_hidden_size = self.mm_vision_tower.hidden_size
@@ -141,30 +142,21 @@ class DexboticVLMModel(DexboticPretrainedModel):
 
     def _load_pretrain_projector(self, pretrain_mm_mlp_adapter) -> None:
         if pretrain_mm_mlp_adapter is not None:
-            print(
-                f"=> loading pretrain_mm_mlp_adapter from {pretrain_mm_mlp_adapter} ...")
+            print(f"=> loading pretrain_mm_mlp_adapter from {pretrain_mm_mlp_adapter} ...")
             mm_projector_weights = torch.load(
                 pretrain_mm_mlp_adapter,
                 map_location="cpu",
                 weights_only=True,
             )
             if not isinstance(mm_projector_weights, Mapping) or not all(
-                isinstance(key, str) and isinstance(value, torch.Tensor)
-                for key, value in mm_projector_weights.items()
+                isinstance(key, str) and isinstance(value, torch.Tensor) for key, value in mm_projector_weights.items()
             ):
-                raise TypeError(
-                    "pretrained DB-CogACT projector must be a string-to-tensor state dictionary"
-                )
+                raise TypeError("pretrained DB-CogACT projector must be a string-to-tensor state dictionary")
 
             def get_w(weights, keyword):
-                return {k.split(keyword + '.')[1]: v for k,
-                        v in weights.items() if keyword in k}
+                return {k.split(keyword + ".")[1]: v for k, v in weights.items() if keyword in k}
 
-            self.mm_projector.load_state_dict(
-                get_w(
-                    mm_projector_weights,
-                    'mm_projector'),
-                strict=True)
+            self.mm_projector.load_state_dict(get_w(mm_projector_weights, "mm_projector"), strict=True)
 
     @property
     def mm_projector_module(self) -> nn.Module:
@@ -206,17 +198,13 @@ class DexboticVLMModel(DexboticPretrainedModel):
 
         if images.ndim == 5:
             # [B n_image, C, H, W] -> [B*n_image, C, H, W]
-            concat_images = torch.cat([image for image in images], dim=0)
+            concat_images = torch.cat(list(images), dim=0)
             concat_image_features = encode_image(concat_images)
             split_sizes = [image.shape[0] for image in images]
-            image_features = torch.split(
-                concat_image_features,
-                split_sizes,
-                dim=0)  # {[n_image n_token C] * B}
+            image_features = torch.split(concat_image_features, split_sizes, dim=0)  # {[n_image n_token C] * B}
             # {[n_image*n_token C] * B}
             image_features = [x.flatten(0, 1) for x in image_features]
-            image_features = torch.stack(
-                image_features, dim=0)  # [B, n_image*n_token, C]
+            image_features = torch.stack(image_features, dim=0)  # [B, n_image*n_token, C]
         else:
             image_features = encode_image(images)
 
@@ -224,19 +212,14 @@ class DexboticVLMModel(DexboticPretrainedModel):
         image_features = image_features.to(execution_device)
         return image_features
 
-
-
-
-
-
     def _prepare_inputs_for_multimodal(
         self,
-        input_ids: Optional[torch.Tensor],
-        position_ids: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[torch.Tensor],
-        cache_position: Optional[torch.Tensor],
-        images: Optional[torch.Tensor],
+        input_ids: torch.Tensor | None,
+        position_ids: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: torch.Tensor | None,
+        cache_position: torch.Tensor | None,
+        images: torch.Tensor | None,
     ) -> tuple:
         """Insert vision embeddings into an inference prompt."""
         vision = self.mm_vision_module
@@ -255,13 +238,11 @@ class DexboticVLMModel(DexboticPretrainedModel):
         if position_ids is None:
             position_ids = torch.arange(input_ids.shape[1], dtype=torch.long, device=input_ids.device)
 
-        unpadded_ids = [ids[mask] for ids, mask in zip(input_ids, attention_mask)]
+        unpadded_ids = [ids[mask] for ids, mask in zip(input_ids, attention_mask, strict=False)]
         new_input_embeds = []
         cur_image_idx = 0
         for ids in unpadded_ids:
-            embeds, cur_image_idx = self._insert_multimodal_embeds(
-                image_features, ids, cur_image_idx
-            )
+            embeds, cur_image_idx = self._insert_multimodal_embeds(image_features, ids, cur_image_idx)
             new_input_embeds.append(embeds)
 
         max_length = getattr(self.config, "tokenizer_model_max_length", None)
@@ -272,9 +253,7 @@ class DexboticVLMModel(DexboticPretrainedModel):
         )
         inputs_embeds = torch.stack(padded, dim=0)
         attention_mask = (
-            None
-            if original_attention_mask is None
-            else attention_mask.to(dtype=original_attention_mask.dtype)
+            None if original_attention_mask is None else attention_mask.to(dtype=original_attention_mask.dtype)
         )
         position_ids = None if original_position_ids is None else position_ids
         if original_attention_mask is None or cache_position is None:
@@ -290,10 +269,7 @@ class DexboticVLMModel(DexboticPretrainedModel):
             return embeds, image_index + 1
 
         boundaries = [-1, *image_positions, input_ids.shape[0]]
-        token_segments = [
-            input_ids[boundaries[i] + 1 : boundaries[i + 1]]
-            for i in range(len(boundaries) - 1)
-        ]
+        token_segments = [input_ids[boundaries[i] + 1 : boundaries[i + 1]] for i in range(len(boundaries) - 1)]
         lengths = [segment.shape[0] for segment in token_segments]
         flat_tokens = torch.cat(token_segments)
         embedded_segments = torch.split(self.backbone.embed_tokens(flat_tokens), lengths, dim=0)
@@ -312,15 +288,11 @@ class DexboticVLMModel(DexboticPretrainedModel):
         padded_attention = torch.zeros(
             (batch_size, max_length), dtype=attention_mask.dtype, device=attention_mask.device
         )
-        padded_positions = torch.zeros(
-            (batch_size, max_length), dtype=position_ids.dtype, device=position_ids.device
-        )
+        padded_positions = torch.zeros((batch_size, max_length), dtype=position_ids.dtype, device=position_ids.device)
         left_padding = getattr(self.config, "tokenizer_padding_side", "right") == "left"
         for batch_index, embeds in enumerate(input_embeds):
             length = embeds.shape[0]
-            padding = torch.zeros(
-                (max_length - length, embeds.shape[1]), dtype=embeds.dtype, device=embeds.device
-            )
+            padding = torch.zeros((max_length - length, embeds.shape[1]), dtype=embeds.dtype, device=embeds.device)
             if left_padding:
                 padded.append(torch.cat((padding, embeds), dim=0))
                 padded_attention[batch_index, -length:] = True
@@ -338,7 +310,7 @@ class DexboticVLMModel(DexboticPretrainedModel):
 
 class DexboticForCausalLM(DexboticPretrainedModel, GenerationMixin):
     config_class = DexboticConfig
-    _tied_weights_keys = {}
+    _tied_weights_keys: ClassVar[dict] = {}
 
     def __init__(self, config: DexboticConfig):
         super().__init__(config)
@@ -358,21 +330,18 @@ class DexboticForCausalLM(DexboticPretrainedModel, GenerationMixin):
         if hasattr(self, "lm_head"):
             self.lm_head = new_embeddings
 
-
     def process_images(self, images):
         vision_tower = self.model.mm_vision_module
         image_processor = vision_tower.image_processor
-        image_aspect_ratio = getattr(self.config, "image_aspect_ratio", 'pad')
+        image_aspect_ratio = getattr(self.config, "image_aspect_ratio", "pad")
         new_images = []
-        if image_aspect_ratio == 'pad':
+        if image_aspect_ratio == "pad":
             for image in images:
-                image = self.expand2square(image, tuple(int(x * 255)
-                                           for x in image_processor.image_mean))
-                image = image_processor.preprocess(
-                    image, return_tensors='pt')['pixel_values'][0]
+                image = self.expand2square(image, tuple(int(x * 255) for x in image_processor.image_mean))
+                image = image_processor.preprocess(image, return_tensors="pt")["pixel_values"][0]
                 new_images.append(image)
         else:
-            return image_processor(images, return_tensors='pt')['pixel_values']
+            return image_processor(images, return_tensors="pt")["pixel_values"]
         if all(x.shape == new_images[0].shape for x in new_images):
             new_images = torch.stack(new_images, dim=0)
         return new_images
@@ -380,6 +349,7 @@ class DexboticForCausalLM(DexboticPretrainedModel, GenerationMixin):
     @staticmethod
     def expand2square(pil_img, background_color):
         from PIL import Image
+
         width, height = pil_img.size
         if width == height:
             return pil_img
@@ -392,26 +362,27 @@ class DexboticForCausalLM(DexboticPretrainedModel, GenerationMixin):
             result.paste(pil_img, ((height - width) // 2, 0))
             return result
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None,
-                                      **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+    ):
         images = kwargs.pop("images", None)
 
         _inputs = super().prepare_inputs_for_generation(
-            input_ids, past_key_values=past_key_values, attention_mask=attention_mask, inputs_embeds=inputs_embeds,
-            **kwargs
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            **kwargs,
         )
 
         if images is not None:
-            _inputs['images'] = images
+            _inputs["images"] = images
         return _inputs
 
 
-
 class ActionOutputForCausalLM(ABC):
-
     @abstractmethod
-    def inference_action(self, input_ids, image_tensor, inference_args={}, **kwargs):
-        ...
+    def inference_action(self, input_ids, image_tensor, inference_args={}, **kwargs): ...  # noqa: B006 - Keeps the upstream default object and signature.
 
     def _denorm(self, actions, action_norms) -> np.ndarray:
         """Denormalize the actions
@@ -420,7 +391,7 @@ class ActionOutputForCausalLM(ABC):
             action_norms (dict): Dictionary of normalization parameters
         """
         actions = np.clip(actions, -1, 1)
-        min, max = np.array(action_norms['min']), np.array(action_norms['max'])
+        min, max = np.array(action_norms["min"]), np.array(action_norms["max"])
         min = min.reshape(1, -1)
         max = max.reshape(1, -1)
         actions = min + (actions + 1) * 0.5 * (max - min)

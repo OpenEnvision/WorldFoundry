@@ -4,9 +4,9 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+
 import torch
 import torch.nn.functional as F
-from typing import Optional, Tuple
 
 EPS = 1e-6
 
@@ -19,9 +19,9 @@ def smart_cat(tensor1, tensor2, dim):
 
 def get_points_on_a_grid(
     size: int,
-    extent: Tuple[float, ...],
-    center: Optional[Tuple[float, ...]] = None,
-    device: Optional[torch.device] = torch.device("cpu"),
+    extent: tuple[float, ...],
+    center: tuple[float, ...] | None = None,
+    device: torch.device | None = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
 ):
     r"""Get a grid of points covering a rectangular region
 
@@ -102,7 +102,6 @@ def reduce_masked_mean(input, mask, dim=None, keepdim=False):
 
     Args:
         inout (Tensor): input tensor.
-        mask (Tensor): mask.
         dim (int, optional): Dimension to sum over. Defaults to None.
         keepdim (bool, optional): Keep the summed dimension. Defaults to False.
 
@@ -177,9 +176,7 @@ def bilinear_sampler(input, coords, align_corners=True, padding_mode="border"):
         coords = coords[..., [1, 2, 0]]
 
     if align_corners:
-        coords = coords * torch.tensor(
-            [2 / max(size - 1, 1) for size in reversed(sizes)], device=coords.device
-        )
+        coords = coords * torch.tensor([2 / max(size - 1, 1) for size in reversed(sizes)], device=coords.device)
     else:
         coords = coords * torch.tensor([2 / size for size in reversed(sizes)], device=coords.device)
 
@@ -218,9 +215,7 @@ def sample_features4d(input, coords):
     # B C R 1
     feats = bilinear_sampler(input, coords)
 
-    return feats.permute(0, 2, 1, 3).view(
-        B, -1, feats.shape[1] * feats.shape[3]
-    )  # B C R 1 -> B R C
+    return feats.permute(0, 2, 1, 3).view(B, -1, feats.shape[1] * feats.shape[3])  # B C R 1 -> B R C
 
 
 def sample_features5d(input, coords):

@@ -1,4 +1,3 @@
-# ruff: noqa
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 
@@ -15,19 +14,16 @@ from collections import OrderedDict
 import torch
 import torch.nn as nn
 
-from .blocks import (
-    FinalLayer,
-    RDTBlock,
-    TimestepEmbedder,
-    get_1d_sincos_pos_embed_from_grid,
-    get_multimodal_cond_pos_embed,
-)
+from worldfoundry.base_models.llm_mllm_core.action.rdt import TimestepEmbedder
+
+from .blocks import FinalLayer, RDTBlock, get_1d_sincos_pos_embed_from_grid, get_multimodal_cond_pos_embed
 
 
 class RDT(nn.Module):
     """
     Class for Robotics Diffusion Transformers.
     """
+
     def __init__(
         self,
         output_dim=128,
@@ -39,7 +35,7 @@ class RDT(nn.Module):
         img_cond_len=4096,
         lang_pos_embed_config=None,
         img_pos_embed_config=None,
-        dtype=torch.bfloat16
+        dtype=torch.bfloat16,
     ):
         super().__init__()
         self.horizon = horizon
@@ -55,18 +51,13 @@ class RDT(nn.Module):
 
         # We will use trainable sin-cos embeddings
         # [timestep; state; action]
-        self.x_pos_embed = nn.Parameter(
-            torch.zeros(1, horizon+3, hidden_size))
+        self.x_pos_embed = nn.Parameter(torch.zeros(1, horizon + 3, hidden_size))
         # Language conditions
-        self.lang_cond_pos_embed = nn.Parameter(
-            torch.zeros(1, max_lang_cond_len, hidden_size))
+        self.lang_cond_pos_embed = nn.Parameter(torch.zeros(1, max_lang_cond_len, hidden_size))
         # Image conditions
-        self.img_cond_pos_embed = nn.Parameter(
-            torch.zeros(1, img_cond_len, hidden_size))
+        self.img_cond_pos_embed = nn.Parameter(torch.zeros(1, img_cond_len, hidden_size))
 
-        self.blocks = nn.ModuleList([
-            RDTBlock(hidden_size, num_heads) for _ in range(depth)
-        ])
+        self.blocks = nn.ModuleList([RDTBlock(hidden_size, num_heads) for _ in range(depth)])
         self.final_layer = FinalLayer(hidden_size, output_dim)
         self.initialize_weights()
 
@@ -77,43 +68,40 @@ class RDT(nn.Module):
                 torch.nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
+
         self.apply(_basic_init)
 
         # Initialize pos_embed by sin-cos embedding
         x_pos_embed = get_multimodal_cond_pos_embed(
             embed_dim=self.hidden_size,
-            mm_cond_lens=OrderedDict([
-                ('timestep', 1),
-                ('ctrl_freq', 1),
-                ('state', 1),
-                ('action', self.horizon),
-            ])
+            mm_cond_lens=OrderedDict(
+                [
+                    ("timestep", 1),
+                    ("ctrl_freq", 1),
+                    ("state", 1),
+                    ("action", self.horizon),
+                ]
+            ),
         )
         self.x_pos_embed.data.copy_(torch.from_numpy(x_pos_embed).float().unsqueeze(0))
 
         if self.lang_pos_embed_config is None:
             lang_cond_pos_embed = get_1d_sincos_pos_embed_from_grid(
-                self.hidden_size, torch.arange(self.max_lang_cond_len))
+                self.hidden_size, torch.arange(self.max_lang_cond_len)
+            )
         else:
             lang_cond_pos_embed = get_multimodal_cond_pos_embed(
-                embed_dim=self.hidden_size,
-                mm_cond_lens=OrderedDict(self.lang_pos_embed_config),
-                embed_modality=False
+                embed_dim=self.hidden_size, mm_cond_lens=OrderedDict(self.lang_pos_embed_config), embed_modality=False
             )
-        self.lang_cond_pos_embed.data.copy_(
-            torch.from_numpy(lang_cond_pos_embed).float().unsqueeze(0))
+        self.lang_cond_pos_embed.data.copy_(torch.from_numpy(lang_cond_pos_embed).float().unsqueeze(0))
 
         if self.img_pos_embed_config is None:
-            img_cond_pos_embed = get_1d_sincos_pos_embed_from_grid(
-                self.hidden_size, torch.arange(self.img_cond_len))
+            img_cond_pos_embed = get_1d_sincos_pos_embed_from_grid(self.hidden_size, torch.arange(self.img_cond_len))
         else:
             img_cond_pos_embed = get_multimodal_cond_pos_embed(
-                embed_dim=self.hidden_size,
-                mm_cond_lens=OrderedDict(self.img_pos_embed_config),
-                embed_modality=False
+                embed_dim=self.hidden_size, mm_cond_lens=OrderedDict(self.img_pos_embed_config), embed_modality=False
             )
-        self.img_cond_pos_embed.data.copy_(
-            torch.from_numpy(img_cond_pos_embed).float().unsqueeze(0))
+        self.img_cond_pos_embed.data.copy_(torch.from_numpy(img_cond_pos_embed).float().unsqueeze(0))
 
         # Initialize timestep and control freq embedding MLP
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
@@ -143,28 +131,28 @@ class RDT(nn.Module):
         lang_mask: (B, L_lang) or None, language condition mask (True for valid).
         img_mask: (B, L_img) or None, image condition mask (True for valid).
         """
-        t = self.t_embedder(t).unsqueeze(1)             # (B, 1, D) or (1, 1, D)
-        freq = self.freq_embedder(freq).unsqueeze(1)    # (B, 1, D)
+        t = self.t_embedder(t).unsqueeze(1)  # (B, 1, D) or (1, 1, D)
+        freq = self.freq_embedder(freq).unsqueeze(1)  # (B, 1, D)
         # Append timestep to the input tokens
         if t.shape[0] == 1:
             t = t.expand(x.shape[0], -1, -1)
-        x = torch.cat([t, freq, x], dim=1)               # (B, T+1, D)
+        x = torch.cat([t, freq, x], dim=1)  # (B, T+1, D)
 
         # Add multimodal position embeddings
         x = x + self.x_pos_embed
         # Note the lang is of variable length
-        lang_c = lang_c + self.lang_cond_pos_embed[:, :lang_c.shape[1]]
+        lang_c = lang_c + self.lang_cond_pos_embed[:, : lang_c.shape[1]]
         img_c = img_c + self.img_cond_pos_embed
 
         # Forward pass
         conds = [lang_c, img_c]
         masks = [lang_mask, img_mask]
         for i, block in enumerate(self.blocks):
-            c, mask = conds[i%2], masks[i%2]
-            x = block(x, c, mask)                       # (B, T+1, D)
+            c, mask = conds[i % 2], masks[i % 2]
+            x = block(x, c, mask)  # (B, T+1, D)
         # Inject the language condition at the final layer
-        x = self.final_layer(x)                         # (B, T+1, out_channels)
+        x = self.final_layer(x)  # (B, T+1, out_channels)
 
         # Only preserve the action tokens
-        x = x[:, -self.horizon:]
+        x = x[:, -self.horizon :]
         return x

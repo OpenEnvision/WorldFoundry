@@ -1,27 +1,37 @@
 """ViGeo construction and lifecycle helpers for Evoke inference."""
+
 from __future__ import annotations
 
-from typing import Optional
+_VIGEO_KEYS = (
+    "num_tokens",
+    "mode",
+    "chunk_size",
+    "intr_source",
+    "conf_transform",
+    "scale_mode",
+    "anchor_windows",
+    "total_budget",
+    "cache_keep_frames",
+    # only read by the baseline-free scale modes: scale_value for scale_mode=fixed,
+    # depth_median_target for scale_mode=depth_median (see vigeo_cloud._resolve_scale_baseline_free)
+    "scale_value",
+    "depth_median_target",
+)
 
-_VIGEO_KEYS = ("num_tokens", "mode", "chunk_size", "intr_source", "conf_transform",
-               "scale_mode", "anchor_windows", "total_budget", "cache_keep_frames",
-               # only read by the baseline-free scale modes: scale_value for scale_mode=fixed,
-               # depth_median_target for scale_mode=depth_median (see vigeo_cloud._resolve_scale_baseline_free)
-               "scale_value", "depth_median_target")
 
-
-def build_estimator(backend: str, device, process_res: int,
-                    weights: Optional[str] = None, src: Optional[str] = None,
-                    vigeo_opts: Optional[dict] = None):
+def build_estimator(
+    backend: str,
+    device,
+    process_res: int,
+    weights: str | None = None,
+    vigeo_opts: dict | None = None,
+):
     """Construct the sole supported inference depth backend."""
     if (backend or "vigeo").lower() != "vigeo":
         raise ValueError(f"this inference-only Evoke port supports depth_backend='vigeo', got {backend!r}")
-    from .vigeo_cloud import ViGeoDepthEstimator, _VIGEO_WEIGHTS
+    from .vigeo_cloud import _VIGEO_WEIGHTS, ViGeoDepthEstimator
 
-    kwargs = dict(device=device, process_res=int(process_res),
-                  weights=(weights or str(_VIGEO_WEIGHTS)))
-    if src:
-        kwargs["src"] = src
+    kwargs = {"device": device, "process_res": int(process_res), "weights": (weights or str(_VIGEO_WEIGHTS))}
     unknown = sorted(set(vigeo_opts or {}) - set(_VIGEO_KEYS))
     if unknown:
         raise ValueError(f"unknown ViGeo option(s) {unknown}; expected any of {sorted(_VIGEO_KEYS)}")
@@ -45,9 +55,10 @@ def reset_stream(estimator) -> None:
         fn()
 
 
-def check_assets(backend: str, weights: Optional[str] = None, src: Optional[str] = None) -> None:
-    """Fail before model loading when ViGeo source or weights are missing."""
+def check_assets(backend: str, weights: str | None = None) -> None:
+    """Fail before model loading when ViGeo weights are missing."""
     if (backend or "vigeo").lower() != "vigeo":
         raise ValueError(f"this inference-only Evoke port supports depth_backend='vigeo', got {backend!r}")
     from .vigeo_cloud import check_assets as _check
-    _check(src, weights)
+
+    _check(weights)

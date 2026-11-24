@@ -17,9 +17,9 @@ SOURCE_PACKAGE_ROOT = Path(__file__).resolve().parent / "lyra_2"
 __all__ = [
     "DEFAULT_DA3_MODEL_NAME",
     "DEFAULT_WEIGHT_DTYPE",
+    "SOURCE_PACKAGE_ROOT",
     "Lyra2Runtime",
     "Lyra2Synthesis",
-    "SOURCE_PACKAGE_ROOT",
     "load_runtime",
 ]
 

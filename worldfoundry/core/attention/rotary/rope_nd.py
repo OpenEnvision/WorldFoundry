@@ -24,10 +24,12 @@ Public surface:
 
 from __future__ import annotations
 
+from typing import cast
+
+import numpy as np
 import torch
 
 from worldfoundry.core.attention.rotary.rope import apply_rotary_embedding
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Axis helpers — accept a scalar broadcast or an explicit per-axis tuple
@@ -171,7 +173,9 @@ def apply_nd_rotary_embedding(
         return query_out, key_out
 
     query_complex = torch.view_as_complex(query.float().reshape(*query.shape[:-1], -1, 2))
-    freqs = reshape_rotary_for_broadcast(freqs_cis, query_complex, head_first=head_first).to(query.device)
+    freqs = cast(torch.Tensor, reshape_rotary_for_broadcast(freqs_cis, query_complex, head_first=head_first)).to(
+        query.device
+    )
     query_freqs = _slice_freqs_for_value(freqs, query_complex, head_first=head_first, start_offset=start_offset)
     query_out = torch.view_as_real(query_complex * query_freqs).flatten(3).type_as(query)
 
@@ -237,7 +241,7 @@ def get_nd_rotary_pos_embed(
             torch.cat([embedding[0] for embedding in embeddings], dim=1),
             torch.cat([embedding[1] for embedding in embeddings], dim=1),
         )
-    return torch.cat(embeddings, dim=1)
+    return torch.cat(cast(list[torch.Tensor], embeddings), dim=1)
 
 
 def get_1d_rotary_pos_embed(
@@ -266,6 +270,51 @@ def get_1d_rotary_pos_embed(
     return torch.polar(torch.ones_like(freqs), freqs)
 
 
+def get_1d_rotary_pos_embed_linear(
+    dim: int,
+    pos: torch.Tensor | np.ndarray | int,
+    theta: float = 10000.0,
+    use_real: bool = False,
+    linear_factor: float = 1.0,
+    ntk_factor: float = 1.0,
+    repeat_interleave_real: bool = True,
+    freqs_dtype: torch.dtype = torch.float32,
+) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+    """Build rotary factors with direct NTK multiplication and a separate linear divisor.
+
+    Real factors return FP32 in interleaved or concatenated order. Complex factors
+    retain the requested frequency precision and the position tensor's device.
+    """
+    assert dim % 2 == 0
+
+    if isinstance(pos, int):
+        pos = torch.arange(pos)
+    if isinstance(pos, np.ndarray):
+        pos = torch.from_numpy(pos)  # [S]
+
+    theta = theta * ntk_factor
+    freqs = (
+        1.0
+        / (theta ** (torch.arange(0, dim, 2, dtype=freqs_dtype, device=pos.device)[: (dim // 2)] / dim))
+        / linear_factor
+    )  # [D/2]
+    freqs = torch.outer(pos, freqs)  # [S, D/2]
+    if use_real and repeat_interleave_real:
+        # flux, hunyuan-dit, cogvideox
+        freqs_cos = freqs.cos().repeat_interleave(2, dim=1, output_size=freqs.shape[1] * 2).float()  # [S, D]
+        freqs_sin = freqs.sin().repeat_interleave(2, dim=1, output_size=freqs.shape[1] * 2).float()  # [S, D]
+        return freqs_cos, freqs_sin
+    elif use_real:
+        # stable audio, allegro
+        freqs_cos = torch.cat([freqs.cos(), freqs.cos()], dim=-1).float()  # [S, D]
+        freqs_sin = torch.cat([freqs.sin(), freqs.sin()], dim=-1).float()  # [S, D]
+        return freqs_cos, freqs_sin
+    else:
+        # lumina
+        freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64     # [S, D/2]
+        return freqs_cis
+
+
 def _expand_factor(
     factor: float | list[float],
     length: int,
@@ -285,6 +334,7 @@ def _expand_factor(
 __all__ = [
     "apply_nd_rotary_embedding",
     "get_1d_rotary_pos_embed",
+    "get_1d_rotary_pos_embed_linear",
     "get_meshgrid_nd",
     "get_nd_rotary_pos_embed",
     "reshape_rotary_for_broadcast",

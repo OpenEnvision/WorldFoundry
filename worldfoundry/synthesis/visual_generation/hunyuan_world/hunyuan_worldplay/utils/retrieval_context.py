@@ -1,5 +1,4 @@
 import math
-from typing import List, Tuple
 
 import numpy as np
 import torch
@@ -32,7 +31,7 @@ def generate_points_in_sphere(
     return points
 
 
-def rotation_matrix_to_angles(R: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+def rotation_matrix_to_angles(R: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Estimate the Pitch and Yaw angles from a 3x3 rotation matrix R in the camera coordinate system.
 
@@ -200,7 +199,7 @@ def calculate_fov_overlap_similarity(
 
 
 def select_aligned_memory_frames(
-    w2c_list: List[np.ndarray],
+    w2c_list: list[np.ndarray],
     current_frame_idx: int,
     memory_frames: int,
     temporal_context_size: int,
@@ -209,7 +208,7 @@ def select_aligned_memory_frames(
     ang_weight: float = 1.0,
     device=None,
     points_local=None,
-) -> List[int]:
+) -> list[int]:
     """
     Selects memory and context frames for a given frame based on a four-frame segment distance calculation.
 
@@ -223,7 +222,7 @@ def select_aligned_memory_frames(
     :return: List[int]: A list containing the indices of the selected memory frames and context frames.
     """
     if current_frame_idx <= memory_frames:
-        return list(range(0, current_frame_idx))
+        return list(range(current_frame_idx))
 
     num_total_frames = len(w2c_list)
     if current_frame_idx >= num_total_frames or current_frame_idx < 3:
@@ -293,6 +292,6 @@ def select_aligned_memory_frames(
     selected_frames_set = set(context_frames_indices)
     selected_frames_set.update(memory_frames_indices)
 
-    final_selected_frames = sorted(list(selected_frames_set))
+    final_selected_frames = sorted(selected_frames_set)
 
     return final_selected_frames

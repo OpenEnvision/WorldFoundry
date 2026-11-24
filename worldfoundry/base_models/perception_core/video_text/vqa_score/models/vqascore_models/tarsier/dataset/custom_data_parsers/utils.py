@@ -1,21 +1,21 @@
-from typing import List, Dict, Union
-import os
-import random
-import tempfile
-from PIL import Image, ImageSequence
 import base64
 import io
-import re
-import uuid
 import json
-import numpy as np
-import pyarrow.fs as pf
-import func_timeout
-from func_timeout import func_set_timeout
 import math
+import os
+import random
+import re
+import tempfile
+import uuid
 
 # fmt: on
 import decord
+import func_timeout
+import numpy as np
+import pyarrow.fs as pf
+from func_timeout import func_set_timeout
+from PIL import Image, ImageSequence
+
 # fmt: off
 
 
@@ -25,14 +25,14 @@ def denorm_box(points, height, width):
         new_points.append((round(p[0] * width), round(p[1] * height)))
     return new_points
 
-def process_image_for_tiktok(frames: List[Image.Image], mask_boxes):
+def process_image_for_tiktok(frames: list[Image.Image], mask_boxes):
     mask_boxes = mask_boxes[:len(frames)]
     frames = [np.array(f) for f in frames]
     # assert len(mask_boxes) == len(frames)
     height, width = frames[0].shape[:2]
 
     new_frames = []
-    for boxes, frame in zip(mask_boxes, frames):
+    for boxes, frame in zip(mask_boxes, frames, strict=False):
         left, top, right, bottom = 0, 0, width, height
         for box in boxes:
             pts = np.array(denorm_box(box, height, width), np.int32)
@@ -44,12 +44,12 @@ def process_image_for_tiktok(frames: List[Image.Image], mask_boxes):
         new_frames.append(Image.fromarray(frame[top: bottom, left: right]))
     return new_frames
 
-# 先将视频分成 n_frames 份。训练时，每份随机抽一帧；测试时，每份抽中间的那一帧。
+# Split into n_frames segments; sample randomly in training and use each midpoint in evaluation.
 def _sample_frame_indices_v2(
         total_frames: int, 
         n_frames: int, 
         is_training=False, 
-        video_sampling_strategy = {},
+        video_sampling_strategy = {},  # noqa: B006 - Keeps the upstream default object and signature.
     ):
     total_frames_idxs = list(range(total_frames))
     if total_frames <= n_frames: 
@@ -62,8 +62,8 @@ def _sample_frame_indices_v2(
         sample_ids = [i[(len(i)+1)//2-1] for i in frame_splits]
     return sample_ids
 
-# 均匀抽帧，必采样首尾帧。
-def _sample_frame_indices_v1(total_frames: int, n_frames: int, is_training=False, video_sampling_strategy = {}):
+# Sample uniformly, including both endpoints when requesting more than one frame.
+def _sample_frame_indices_v1(total_frames: int, n_frames: int, is_training=False, video_sampling_strategy = {}):  # noqa: B006 - Keeps the upstream default object and signature.
     if n_frames == 1:
         return [0]  # sample first frame in default
     if total_frames <= n_frames:
@@ -76,27 +76,27 @@ def conduct_disturb_frame(frame_indices):
     n_frames = len(frame_indices)
     frame_indices_new = []
     if disturb_type == 'exchange':
-        # 均等分成4个segments, 随机交换两个segment
+        # Split into four segments and randomly swap two segments.
         seg_len = math.ceil(n_frames / 4)
         seg_idxs = list(range(0, n_frames, seg_len))
-        target_idxs = random.sample(range(0, 4), 2)
+        target_idxs = random.sample(range(4), 2)
         seg_idxs[target_idxs[0]], seg_idxs[target_idxs[1]] = seg_idxs[target_idxs[1]], seg_idxs[target_idxs[0]]
         for idx in seg_idxs:
             frame_indices_new += frame_indices[idx: idx+seg_len]
     elif disturb_type == 'crop':
-        # 随机截取出3/4时长，再采均匀n_frames帧
+        # Randomly crop to about three quarters of the duration, then sample n_frames uniformly.
         crop_len = math.ceil(n_frames / 4)
-        idx_s = random.choice(range(0, crop_len+1))
+        idx_s = random.choice(range(crop_len+1))
         idx_e = n_frames - 1 - (crop_len - idx_s)
         frame_indices_new = np.linspace(frame_indices[idx_s], frame_indices[idx_e], n_frames, dtype=int).tolist()
     elif disturb_type == 'reverse':
-        # 随机选择长度为[1/2, 1]时长的片段进行顺序颠倒
+        # Reverse a random segment covering half to all of the frames.
         reverse_len = math.ceil(random.uniform(0.5,1) * n_frames)
-        idx_s = random.choice(range(0, n_frames-reverse_len+1))
+        idx_s = random.choice(range(n_frames-reverse_len+1))
         idx_e = idx_s + reverse_len - 1
         frame_indices_new = frame_indices[:idx_s] + list(reversed(frame_indices[idx_s: idx_e+1])) + frame_indices[idx_e+1:]
     elif disturb_type == 'discard':
-        # 随机丢弃一半帧
+        # Randomly discard half of the frames.
         frame_indices_new = random.sample(frame_indices, n_frames//2)
         frame_indices_new.sort()
     return disturb_type, frame_indices_new
@@ -134,7 +134,7 @@ def download_file(path):
         # with timer(f'Download {path}'):
         return _download_file(path)
     except func_timeout.exceptions.FunctionTimedOut as e:
-        raise ValueError(e)
+        raise ValueError(e)  # noqa: B904 - Keeps the implicit exception context.
     
 def load_video_from_url(video_url):
     """
@@ -143,7 +143,7 @@ def load_video_from_url(video_url):
     """
     import imageio
     # Create a temporary file to store the video
-    temp_video_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+    temp_video_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
     temp_video_path = temp_video_file.name
     # Read the video and write it to the temporary file
     reader = imageio.get_reader(video_url, "ffmpeg")
@@ -175,7 +175,7 @@ class VideoReader:
     def fps(self):
         return self._fps
 
-    def sample(self, frame_indices) -> List[Image.Image]:
+    def sample(self, frame_indices) -> list[Image.Image]:
         frames = self.vr.get_batch(frame_indices)
         # Ensure compatibility: Convert to NumPy array if necessary
         if hasattr(frames, "asnumpy"):  # It's a Tensor
@@ -194,7 +194,7 @@ class VideoReader:
             os.remove(self.local_path)
 
 class ImageSeqReader:
-    def __init__(self, path: List[str]) -> None:
+    def __init__(self, path: list[str]) -> None:
         self.path = path
         self.local_path = self.preprocess()
         self._length = len(self.local_path)
@@ -226,7 +226,7 @@ class GIFReader:
         self.local_path = self.preprocess()
         self.gif = Image.open(self.local_path)
         self._length = self.gif.n_frames
-        duration = self.gif.info.get('duration', 0) / 1000  # 转换为秒
+        duration = self.gif.info.get('duration', 0) / 1000  # Convert to seconds.
         if duration > 0:
             self._fps = 1 / duration
         else:
@@ -246,7 +246,7 @@ class GIFReader:
         for frame in ImageSequence.Iterator(self.gif):
             if i in frame_indices:
                 frames.append(frame.convert('RGB'))
-            i += 1
+            i += 1  # noqa: SIM113 - Keeps the explicit loop counter.
         return frames
 
     def preprocess(self):
@@ -269,28 +269,25 @@ def check_frame_indices(frame_indices, total_frames, video_path):
 
 
 def sample_video(
-    video_path: Union[str, List[str]], 
-    frame_indices: List[int] = None, 
-    start_frame:int=None, 
-    end_frame:int=None, 
-    n_frames:int = None,
-    time_indices: List[float] = None,
-    start_time:int=None,
-    end_time:int=None,
-    sampling_fps:float=None,
+    video_path: str | list[str], 
+    frame_indices: list[int] | None = None, 
+    start_frame:int | None=None, 
+    end_frame:int | None=None, 
+    n_frames:int | None = None,
+    time_indices: list[float] | None = None,
+    start_time:int | None=None,
+    end_time:int | None=None,
+    sampling_fps:float | None=None,
     mask_boxes=None,
     is_training:bool=False,
-    video_sampling_strategy={'video_sampler_version': 'v1'},
+    video_sampling_strategy={'video_sampler_version': 'v1'},  # noqa: B006 - Keeps the upstream default object and signature.
     return_frame_ids: bool=False,
-    ) -> List[Image.Image]:
+    ) -> list[Image.Image]:
 
     do_frame_disturb = video_sampling_strategy.get('do_frame_disturb', False)
 
     if isinstance(video_path, str):
-        if video_path.endswith('.gif'):
-            reader = GIFReader(video_path)
-        else:
-            reader = VideoReader(video_path)
+        reader = GIFReader(video_path) if video_path.endswith('.gif') else VideoReader(video_path)
     else:
         reader = ImageSeqReader(video_path)
     
@@ -317,7 +314,7 @@ def sample_video(
             end_frame -= 1
 
         if video_sampling_strategy['video_sampler_version'] == 'v1':
-            # 均匀抽帧，必采样首尾帧。
+            # Sample uniformly, including both endpoints when requesting more than one frame.
             frame_indices = _sample_frame_indices_v1(end_frame - start_frame + 1, n_frames, is_training, video_sampling_strategy)
         elif video_sampling_strategy['video_sampler_version'] == 'v2':
             frame_indices = _sample_frame_indices_v2(end_frame - start_frame + 1, n_frames, is_training, video_sampling_strategy)
@@ -352,7 +349,7 @@ def sample_video(
 
 
 def load_image_from_base64String(img_path):
-    img = base64.b64decode(open(img_path, "rb").read())
+    img = base64.b64decode(open(img_path, "rb").read())  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
     buf = io.BytesIO(img)
     img = Image.open(buf)
     return img
@@ -408,15 +405,15 @@ def adjust_bbox(text, frame):
 
 def bbox_area(vertices, convert_format = True):
     if convert_format:
-        vertices = list(zip(vertices[::2], vertices[1::2]))
+        vertices = list(zip(vertices[::2], vertices[1::2], strict=False))
     x0, y0 = vertices[0]
     x1, y1 = vertices[1]
     return abs((x1 - x0) * (y1 - y0))
 
 def polygon_area(vertices, convert_format = True):
     if convert_format:
-        vertices = list(zip(vertices[::2], vertices[1::2]))
-    n = len(vertices)  # 多边形顶点的数量
+        vertices = list(zip(vertices[::2], vertices[1::2], strict=False))
+    n = len(vertices)  # Number of polygon vertices.
     if n == 2:
         return bbox_area(vertices, convert_format=False)
     area = 0
@@ -427,18 +424,18 @@ def polygon_area(vertices, convert_format = True):
     return abs(area) / 2
 
 def get_text_len(text_line):
-    l = 0
+    l = 0  # noqa: E741 - Ambiguous upstream name kept as written.
     for c in text_line:
         if '\u4e00' <= c <= '\u9fff':
-            l += 1
+            l += 1  # noqa: E741 - Ambiguous upstream name kept as written.
         else:
-            l += 0.5
+            l += 0.5  # noqa: E741 - Ambiguous upstream name kept as written.
     return l
 
 def filter_ocr_polygon(response, area_threshold=0.0005):
     try:
         resp = json.loads(response)
-    except:
+    except BaseException:
         return response
     new_resp = []
     for coords, text_line in resp:

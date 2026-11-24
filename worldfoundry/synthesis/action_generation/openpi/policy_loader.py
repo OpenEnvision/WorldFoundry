@@ -6,11 +6,11 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
-from .modeling import model as _model
-from . import policy as _policy
 from . import checkpoints as _checkpoints
 from . import config as _config
+from . import policy as _policy
 from . import transforms
+from .modeling import model as _model
 
 
 def create_trained_policy(
@@ -69,9 +69,7 @@ def create_trained_policy(
             "float16": jnp.float16,
             "float32": jnp.float32,
         }[inference_dtype]
-        model = runtime_config.model.load(
-            _model.restore_params(checkpoint_dir / "params", dtype=jax_dtype)
-        )
+        model = runtime_config.model.load(_model.restore_params(checkpoint_dir / "params", dtype=jax_dtype))
     data_config = runtime_config.data.create(runtime_config.assets_dirs, runtime_config.model)
     if norm_stats is None:
         # We are loading the norm stats from the checkpoint instead of the config assets dir to make sure

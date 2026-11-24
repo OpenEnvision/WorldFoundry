@@ -12,13 +12,12 @@ Not a process-group factory — callers pass already-created ``cpu_group``
 Public surface: :class:`DistributedAutograd`, :class:`DeviceCommunicatorBase`.
 """
 
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.distributed as dist
 from torch import Tensor
 from torch.distributed import ProcessGroup, ReduceOp
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Autograd Functions — pair each collective with its algebraic inverse
@@ -41,7 +40,7 @@ class DistributedAutograd:
         """
 
         @staticmethod
-        def forward(ctx: Any, group: ProcessGroup, input_: Tensor, op: dist.ReduceOp | None = None) -> Tensor:
+        def forward(ctx: Any, group: ProcessGroup, input_: Tensor, op: ReduceOp.RedOpType | None = None) -> Tensor:
             """Clone then all-reduce so the autograd graph stays out-of-place."""
             ctx.group = group
             ctx.op = op
@@ -49,8 +48,9 @@ class DistributedAutograd:
             dist.all_reduce(output, group=group, op=op)
             return output
 
+        # Autograd supplies one gradient for this forward's single tensor output.
         @staticmethod
-        def backward(ctx: Any, grad_output: Tensor) -> tuple[None, Tensor, None]:
+        def backward(ctx: Any, grad_output: Tensor) -> tuple[None, Tensor, None]:  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
             """All-reduce the incoming grad; ``group`` / ``op`` have no gradient."""
             grad_output = grad_output.clone()
             dist.all_reduce(grad_output, group=ctx.group, op=ctx.op)
@@ -72,25 +72,26 @@ class DistributedAutograd:
             ctx.input_shape = input_.shape
 
             input_size = input_.size()
-            output_size = (input_size[0] * world_size,) + input_size[1:]
+            output_size = (input_size[0] * world_size, *input_size[1:])
             output_tensor = torch.empty(output_size, dtype=input_.dtype, device=input_.device)
 
             dist.all_gather_into_tensor(output_tensor, input_, group=group)
 
-            output_tensor = output_tensor.reshape((world_size,) + input_size)
+            output_tensor = output_tensor.reshape((world_size, *input_size))
             output_tensor = output_tensor.movedim(0, dim)
             output_tensor = output_tensor.reshape(
-                input_size[:dim] + (world_size * input_size[dim],) + input_size[dim + 1 :]
+                (*input_size[:dim], world_size * input_size[dim], *input_size[dim + 1 :])
             )
             return output_tensor
 
+        # Autograd supplies one gradient for this forward's single tensor output.
         @staticmethod
-        def backward(ctx: Any, grad_output: Tensor) -> tuple[None, Tensor, None, None]:
+        def backward(ctx: Any, grad_output: Tensor) -> tuple[None, Tensor, None, None]:  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
             """Reduce-scatter the gathered-dim gradient back to each source rank."""
             # Split the gradient tensor along the gathered dimension
             dim_size = grad_output.size(ctx.dim) // ctx.world_size
             grad_chunks = grad_output.reshape(
-                grad_output.shape[: ctx.dim] + (ctx.world_size, dim_size) + grad_output.shape[ctx.dim + 1 :]
+                (*grad_output.shape[: ctx.dim], ctx.world_size, dim_size, *grad_output.shape[ctx.dim + 1 :])
             )
             grad_chunks = grad_chunks.movedim(ctx.dim, 0)
 
@@ -168,8 +169,9 @@ class DistributedAutograd:
                     f"Only (scatter_dim=2, gather_dim=1) and (scatter_dim=1, gather_dim=2) are supported."
                 )
 
+        # Autograd supplies one gradient for this forward's single tensor output.
         @staticmethod
-        def backward(ctx: Any, grad_output: Tensor) -> tuple[None, Tensor, None, None, None]:
+        def backward(ctx: Any, grad_output: Tensor) -> tuple[None, Tensor, None, None, None]:  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
             """Invert the Ulysses swap by exchanging ``scatter_dim`` and ``gather_dim``."""
             if ctx.world_size == 1:
                 return None, grad_output, None, None, None
@@ -213,7 +215,7 @@ class DeviceCommunicatorBase:
         self.global_world_size = dist.get_world_size()
         self.rank_in_group = dist.get_group_rank(self.cpu_group, self.global_rank)
 
-    def all_reduce(self, input_: torch.Tensor, op: dist.ReduceOp | None = ReduceOp.SUM) -> torch.Tensor:
+    def all_reduce(self, input_: torch.Tensor, op: ReduceOp.RedOpType | None = ReduceOp.SUM) -> torch.Tensor:
         """Performs an all_reduce operation with gradient support."""
         return DistributedAutograd.AllReduce.apply(self.device_group, input_, op)
 
@@ -240,16 +242,10 @@ class DeviceCommunicatorBase:
             dim += input_.dim()
 
         # Allocate output tensor.
-        if self.rank_in_group == dst:
-            gather_list = [torch.empty_like(input_) for _ in range(world_size)]
-        else:
-            gather_list = None
+        gather_list = [torch.empty_like(input_) for _ in range(world_size)] if self.rank_in_group == dst else None
         # Gather.
         torch.distributed.gather(input_, gather_list, dst=self.ranks[dst], group=self.device_group)
-        if self.rank_in_group == dst:
-            output_tensor = torch.cat(gather_list, dim=dim)
-        else:
-            output_tensor = None
+        output_tensor = torch.cat(cast(list[Tensor], gather_list), dim=dim) if self.rank_in_group == dst else None
         return output_tensor
 
     def send(self, tensor: torch.Tensor, dst: int | None = None) -> None:
@@ -271,4 +267,3 @@ class DeviceCommunicatorBase:
 
     def destroy(self) -> None:
         """Release backend resources; the base class holds none."""
-        pass

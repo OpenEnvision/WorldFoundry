@@ -5,33 +5,47 @@
 # Modified from PixArt-Sigma's repos:
 #   https://github.com/PixArt-alpha/PixArt-sigma/blob/master/diffusion/model/nets/PixArtMS.py
 # --------------------------------------------------------
-import torch
-import torch.nn as nn
 import os
 import traceback
+
+import torch
+import torch.nn as nn
 from timm.models.layers import DropPath
 from timm.models.vision_transformer import Mlp
 
+from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_blocks import SizeEmbedder
+
+from ...utils.logger import get_root_logger
 from ..builder import MODELS
 from ..utils import auto_grad_checkpoint, to_2tuple
-from .PixArtWorldFM_blocks import t2i_modulate, CaptionEmbedder, AttentionKVCompress, MultiHeadCrossAttention, T2IFinalLayer, TimestepEmbedder, SizeEmbedder
 from .PixArtWorldFM import PixArtWorldFM, get_2d_sincos_pos_embed
+from .PixArtWorldFM_blocks import (
+    AttentionKVCompress,
+    CaptionEmbedder,
+    MultiHeadCrossAttention,
+    T2IFinalLayer,
+    t2i_modulate,
+)
 from .plucker import compute_plucker_rays
-from .prope import get_rope_coeffs_2d, prepare_prope_apply_fns, reorder_tokens_to_camera_major, reorder_tokens_from_camera_major
-from ...utils.logger import get_root_logger
+from .prope import (
+    get_rope_coeffs_2d,
+    prepare_prope_apply_fns,
+    reorder_tokens_from_camera_major,
+    reorder_tokens_to_camera_major,
+)
 
 
 class PatchEmbed(nn.Module):
-    """ 2D Image to Patch Embedding
-    """
+    """2D Image to Patch Embedding"""
+
     def __init__(
-            self,
-            patch_size=16,
-            in_chans=3,
-            embed_dim=768,
-            norm_layer=None,
-            flatten=True,
-            bias=True,
+        self,
+        patch_size=16,
+        in_chans=3,
+        embed_dim=768,
+        norm_layer=None,
+        flatten=True,
+        bias=True,
     ):
         super().__init__()
         patch_size = to_2tuple(patch_size)
@@ -53,28 +67,51 @@ class PixArtWorldFMMSBlock(nn.Module):
     A PixArtWorldFMMS block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
 
-    def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, drop_path=0., input_size=None,
-                 sampling=None, sr_ratio=1, qk_norm=False, disable_cross_attn=False, **block_kwargs):
+    def __init__(
+        self,
+        hidden_size,
+        num_heads,
+        mlp_ratio=4.0,
+        drop_path=0.0,
+        input_size=None,
+        sampling=None,
+        sr_ratio=1,
+        qk_norm=False,
+        disable_cross_attn=False,
+        **block_kwargs,
+    ):
         super().__init__()
         self.hidden_size = hidden_size
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.attn = AttentionKVCompress(
-            hidden_size, num_heads=num_heads, qkv_bias=True, sampling=sampling, sr_ratio=sr_ratio,
-            qk_norm=qk_norm, **block_kwargs
+            hidden_size,
+            num_heads=num_heads,
+            qkv_bias=True,
+            sampling=sampling,
+            sr_ratio=sr_ratio,
+            qk_norm=qk_norm,
+            **block_kwargs,
         )
         self.cross_attn = MultiHeadCrossAttention(hidden_size, num_heads, **block_kwargs)
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+
         # to be compatible with lower version pytorch
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
-        self.mlp = Mlp(in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0)
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size ** 0.5)
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
+        self.mlp = Mlp(
+            in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0
+        )
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
         self.disable_cross_attn = disable_cross_attn
 
     def forward(self, x, y, t, mask=None, HW=None, block_id=None, **kwargs):
         B, N, C = x.shape
 
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (self.scale_shift_table[None] + t.reshape(B, 6, -1)).chunk(6, dim=1)
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
+            self.scale_shift_table[None] + t.reshape(B, 6, -1)
+        ).chunk(6, dim=1)
         x_in = t2i_modulate(self.norm1(x), shift_msa, scale_msa)
         x = x + self.drop_path(
             gate_msa
@@ -83,14 +120,14 @@ class PixArtWorldFMMSBlock(nn.Module):
                 HW=HW,
                 block_id=block_id,
                 use_prope=bool(kwargs.get("use_prope", False)),
-                prope_viewmats=kwargs.get("prope_viewmats", None),
-                prope_Ks=kwargs.get("prope_Ks", None),
-                prope_image_hw=kwargs.get("prope_image_hw", None),
-                prope_cache=kwargs.get("prope_cache", None),
+                prope_viewmats=kwargs.get("prope_viewmats"),
+                prope_Ks=kwargs.get("prope_Ks"),
+                prope_image_hw=kwargs.get("prope_image_hw"),
+                prope_cache=kwargs.get("prope_cache"),
             )
         )
         if not self.disable_cross_attn:
-            cond2_tokens = kwargs.get("cond2_tokens", None)
+            cond2_tokens = kwargs.get("cond2_tokens")
             if cond2_tokens is not None:
                 # In cond2-cross-attn mode, attend to cond2 tokens (reference image).
                 # IMPORTANT: MultiHeadCrossAttention flattens batch into a single sequence internally;
@@ -110,11 +147,12 @@ class PixArtWorldFMMSBlock(nn.Module):
                         _rank0 = True
                         try:
                             import torch.distributed as dist
+
                             if dist.is_available() and dist.is_initialized():
-                                _rank0 = (dist.get_rank() == 0)
+                                _rank0 = dist.get_rank() == 0
                         except Exception:
                             _rank0 = True
-                        debug_step = kwargs.get("debug_step", None)
+                        debug_step = kwargs.get("debug_step")
                         debug_steps = int(kwargs.get("debug_steps", 1) or 1)
                         if (not _rank0) or (debug_step is not None and int(debug_step) >= debug_steps):
                             raise RuntimeError("skip")
@@ -161,27 +199,27 @@ class PixArtWorldFMMS(PixArtWorldFM):
     """
 
     def __init__(
-            self,
-            input_size=32,
-            patch_size=2,
-            in_channels=4,
-            hidden_size=1152,
-            depth=28,
-            num_heads=16,
-            mlp_ratio=4.0,
-            class_dropout_prob=0.1,
-            learn_sigma=True,
-            pred_sigma=True,
-            drop_path: float = 0.,
-            caption_channels=4096,
-            pe_interpolation=1.,
-            config=None,
-            model_max_length=120,
-            micro_condition=False,
-            qk_norm=False,
-            kv_compress_config=None,
-            disable_cross_attn=False,
-            **kwargs,
+        self,
+        input_size=32,
+        patch_size=2,
+        in_channels=4,
+        hidden_size=1152,
+        depth=28,
+        num_heads=16,
+        mlp_ratio=4.0,
+        class_dropout_prob=0.1,
+        learn_sigma=True,
+        pred_sigma=True,
+        drop_path: float = 0.0,
+        caption_channels=4096,
+        pe_interpolation=1.0,
+        config=None,
+        model_max_length=120,
+        micro_condition=False,
+        qk_norm=False,
+        kv_compress_config=None,
+        disable_cross_attn=False,
+        **kwargs,
     ):
         super().__init__(
             input_size=input_size,
@@ -203,17 +241,23 @@ class PixArtWorldFMMS(PixArtWorldFM):
             **kwargs,
         )
         self.h = self.w = 0
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
-        self.t_block = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(hidden_size, 6 * hidden_size, bias=True)
-        )
+
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
+        self.t_block = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 6 * hidden_size, bias=True))
         # Check if mask channel injection is enabled via kwargs
-        self.use_mask_channel = kwargs.get('use_mask_channel', False)
+        self.use_mask_channel = kwargs.get("use_mask_channel", False)
         if self.use_mask_channel:
             in_channels = in_channels + 1
         self.x_embedder = PatchEmbed(patch_size, in_channels, hidden_size, bias=True)
-        self.y_embedder = CaptionEmbedder(in_channels=caption_channels, hidden_size=hidden_size, uncond_prob=class_dropout_prob, act_layer=approx_gelu, token_num=model_max_length)
+        self.y_embedder = CaptionEmbedder(
+            in_channels=caption_channels,
+            hidden_size=hidden_size,
+            uncond_prob=class_dropout_prob,
+            act_layer=approx_gelu,
+            token_num=model_max_length,
+        )
         # Normalize cond2 tokens before cross-attn to reduce distribution shift / scale issues.
         # elementwise_affine=False -> no extra parameters, safe for checkpoint compatibility.
         self.cond2_token_norm = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
@@ -221,26 +265,33 @@ class PixArtWorldFMMS(PixArtWorldFM):
         # In tri-condition mode we can optionally inject cond2 through cross-attention (enabled by `use_cond2_cross_attn`).
         self.micro_conditioning = micro_condition
         if self.micro_conditioning:
-            self.csize_embedder = SizeEmbedder(hidden_size//3)  # c_size embed
-            self.ar_embedder = SizeEmbedder(hidden_size//3)     # aspect ratio embed
+            self.csize_embedder = SizeEmbedder(hidden_size // 3)  # c_size embed
+            self.ar_embedder = SizeEmbedder(hidden_size // 3)  # aspect ratio embed
         drop_path = [x.item() for x in torch.linspace(0, drop_path, depth)]  # stochastic depth decay rule
         if kv_compress_config is None:
             kv_compress_config = {
-                'sampling': None,
-                'scale_factor': 1,
-                'kv_compress_layer': [],
+                "sampling": None,
+                "scale_factor": 1,
+                "kv_compress_layer": [],
             }
-        self.blocks = nn.ModuleList([
-            PixArtWorldFMMSBlock(
-                hidden_size, num_heads, mlp_ratio=mlp_ratio, drop_path=drop_path[i],
-                input_size=(input_size // patch_size, input_size // patch_size),
-                sampling=kv_compress_config['sampling'],
-                sr_ratio=int(kv_compress_config['scale_factor']) if i in kv_compress_config['kv_compress_layer'] else 1,
-                qk_norm=qk_norm,
-                disable_cross_attn=disable_cross_attn,
-            )
-            for i in range(depth)
-        ])
+        self.blocks = nn.ModuleList(
+            [
+                PixArtWorldFMMSBlock(
+                    hidden_size,
+                    num_heads,
+                    mlp_ratio=mlp_ratio,
+                    drop_path=drop_path[i],
+                    input_size=(input_size // patch_size, input_size // patch_size),
+                    sampling=kv_compress_config["sampling"],
+                    sr_ratio=int(kv_compress_config["scale_factor"])
+                    if i in kv_compress_config["kv_compress_layer"]
+                    else 1,
+                    qk_norm=qk_norm,
+                    disable_cross_attn=disable_cross_attn,
+                )
+                for i in range(depth)
+            ]
+        )
         self.final_layer = T2IFinalLayer(hidden_size, patch_size, self.out_channels)
         # Optional pose injection (Plücker) projector: 6-dim -> hidden_size
         self.plucker_proj = nn.Sequential(
@@ -273,15 +324,16 @@ class PixArtWorldFMMS(PixArtWorldFM):
         # This allows diffusion/model/gaussian_diffusion.py to remain generic
         use_cond2_cross_attn = bool(kwargs.get("use_cond2_cross_attn", False))
         debug_cond2_stats = bool(kwargs.get("debug_cond2_stats", False))
-        debug_step = kwargs.get("debug_step", None)
+        debug_step = kwargs.get("debug_step")
         debug_steps = int(kwargs.get("debug_steps", 1) or 1)
         # rank0-only debug to avoid 4x log spam in DDP
         _rank0 = True
         if debug_cond2_stats:
             try:
                 import torch.distributed as dist
+
                 if dist.is_available() and dist.is_initialized():
-                    _rank0 = (dist.get_rank() == 0)
+                    _rank0 = dist.get_rank() == 0
             except Exception:
                 _rank0 = True
 
@@ -329,13 +381,16 @@ class PixArtWorldFMMS(PixArtWorldFM):
                 mx = samp.max().item()
                 nan = bool(torch.isnan(samp).any().item())
                 inf = bool(torch.isinf(samp).any().item())
-                logger.info(f"[DebugCond2] {name}: shape={tuple(t.shape)} sample_n={k} mean={mean:.6f} std={std:.6f} min={mn:.6f} max={mx:.6f} nan={nan} inf={inf}")
+                logger.info(
+                    f"[DebugCond2] {name}: shape={tuple(t.shape)} sample_n={k} mean={mean:.6f} std={std:.6f} min={mn:.6f} max={mx:.6f} nan={nan} inf={inf}"
+                )
+
         cond2_tokens = None
-        if kwargs.get('tri_condition', False):
-            cond1 = kwargs['cond1']
-            cond2 = kwargs['cond2']
-            cond1_mask_latent = kwargs.get('cond1_mask_latent', None)
-            cond1_mask_inject_mode = kwargs.get('cond1_mask_inject_mode', 'add')
+        if kwargs.get("tri_condition", False):
+            cond1 = kwargs["cond1"]
+            cond2 = kwargs["cond2"]
+            cond1_mask_latent = kwargs.get("cond1_mask_latent")
+            cond1_mask_inject_mode = kwargs.get("cond1_mask_inject_mode", "add")
             # Only concat if not already concatenated (check width or explicit flag if needed)
             # Here we assume if x matches cond width, it's likely just the target
             if x.shape[-1] == cond1.shape[-1]:
@@ -343,22 +398,22 @@ class PixArtWorldFMMS(PixArtWorldFM):
                     # Cond2 cross attention mode: cond2 is NOT concatenated into the self-attn stream.
                     # Only concat x and cond1 (and mask stripe if applicable).
                     cond2_to_embed = None
-                    if cond1_mask_latent is not None and cond1_mask_inject_mode == 'channel':
+                    if cond1_mask_latent is not None and cond1_mask_inject_mode == "channel":
                         # Channel injection: concat mask as an extra channel to cond1
                         cond1_with_mask = torch.cat([cond1, cond1_mask_latent], dim=1)  # [B, 5, H, W]
                         x_padded = torch.cat([x, torch.zeros_like(x[:, :1])], dim=1)  # [B, 5, H, W]
                         x = torch.cat([x_padded, cond1_with_mask], dim=3)
-                        kwargs['split_num'] = 2
+                        kwargs["split_num"] = 2
                         # Process cond2 separately for cross-attn (also need to pad to 5 channels)
                         cond2_to_embed = torch.cat([cond2, torch.zeros_like(cond2[:, :1])], dim=1)  # [B, 5, H, W]
                     elif cond1_mask_latent is not None:
                         # Width concat mode with mask
                         x = torch.cat([x, cond1, cond1_mask_latent], dim=3)
-                        kwargs['split_num'] = 3
+                        kwargs["split_num"] = 3
                         cond2_to_embed = cond2  # [B, 4, H, W]
                     else:
                         x = torch.cat([x, cond1], dim=3)
-                        kwargs['split_num'] = 2
+                        kwargs["split_num"] = 2
                         cond2_to_embed = cond2  # [B, 4, H, W]
                     split_output = True
                     # Embed cond2 for cross-attn tokens
@@ -372,21 +427,36 @@ class PixArtWorldFMMS(PixArtWorldFM):
                         cond2_embed = self.x_embedder(cond2_to_embed)  # (B, N_cond2, D) where D=hidden_size
                         # Add positional embedding for cond2 (cached)
                         embed_dim = cond2_embed.shape[-1]
-                        cache_key = (int(cond2_h_tokens), int(cond2_w_tokens), int(embed_dim), str(cond2_embed.device), str(cond2_embed.dtype), float(self.pe_interpolation), int(self.base_size))
+                        cache_key = (
+                            int(cond2_h_tokens),
+                            int(cond2_w_tokens),
+                            int(embed_dim),
+                            str(cond2_embed.device),
+                            str(cond2_embed.dtype),
+                            float(self.pe_interpolation),
+                            int(self.base_size),
+                        )
                         cond2_pos_embed = self._cond2_pos_embed_cache.get(cache_key, None)
                         if cond2_pos_embed is None:
-                            cond2_pos_embed = torch.from_numpy(
-                                get_2d_sincos_pos_embed(
-                                    embed_dim, (cond2_h_tokens, cond2_w_tokens),
-                                    pe_interpolation=self.pe_interpolation, base_size=self.base_size
+                            cond2_pos_embed = (
+                                torch.from_numpy(
+                                    get_2d_sincos_pos_embed(
+                                        embed_dim,
+                                        (cond2_h_tokens, cond2_w_tokens),
+                                        pe_interpolation=self.pe_interpolation,
+                                        base_size=self.base_size,
+                                    )
                                 )
-                            ).unsqueeze(0).to(cond2_embed.device).to(self.dtype)
+                                .unsqueeze(0)
+                                .to(cond2_embed.device)
+                                .to(self.dtype)
+                            )
                             self._cond2_pos_embed_cache[cache_key] = cond2_pos_embed
                         cond2_tokens = cond2_embed + cond2_pos_embed  # (B, N_cond2, D)
                         cond2_tokens = self.cond2_token_norm(cond2_tokens)
                         cond2_tokens = cond2_tokens.contiguous()
                         _sample_stats("cond2_tokens(after_norm)", cond2_tokens)
-                elif cond1_mask_latent is not None and cond1_mask_inject_mode == 'channel':
+                elif cond1_mask_latent is not None and cond1_mask_inject_mode == "channel":
                     # Channel injection: concat mask as an extra channel to cond1
                     # cond1_mask_latent should be [B, 1, H, W] (single channel mask)
                     # cond1 is [B, 4, H, W], after concat becomes [B, 5, H, W]
@@ -396,37 +466,43 @@ class PixArtWorldFMMS(PixArtWorldFM):
                     x_padded = torch.cat([x, torch.zeros_like(x[:, :1])], dim=1)  # [B, 5, H, W]
                     cond2_padded = torch.cat([cond2, torch.zeros_like(cond2[:, :1])], dim=1)  # [B, 5, H, W]
                     x = torch.cat([x_padded, cond1_with_mask, cond2_padded], dim=3)
-                    kwargs['split_num'] = 3
+                    kwargs["split_num"] = 3
                     split_output = True
                 elif cond1_mask_latent is not None:
                     # Width concat mode (original concat behavior)
                     # Mask is provided as an extra "stripe" (same shape as cond1 latent: [B,4,H,W]).
                     # We concatenate in width to keep in_channels=4 and remain pretrained-compatible.
                     x = torch.cat([x, cond1, cond1_mask_latent, cond2], dim=3)
-                    kwargs['split_num'] = 4
+                    kwargs["split_num"] = 4
                     split_output = True
                 else:
                     x = torch.cat([x, cond1, cond2], dim=3)
-                    kwargs['split_num'] = 3
+                    kwargs["split_num"] = 3
                     split_output = True
-        elif kwargs.get('two_condition', False):
-            cond2 = kwargs['cond2']
+        elif kwargs.get("two_condition", False):
+            cond2 = kwargs["cond2"]
             if x.shape[-1] == cond2.shape[-1]:
                 x = torch.cat([x, cond2], dim=3)
-                kwargs['split_num'] = 2
+                kwargs["split_num"] = 2
                 split_output = True
 
         # Check if split_num is in kwargs and extract it, removing it from kwargs to avoid passing to blocks
-        split_num = kwargs.pop('split_num', 2)
+        split_num = kwargs.pop("split_num", 2)
 
         # Clean up kwargs for checkpointing to prevent "Unexpected keyword arguments" error
         # These arguments might be passed via model_kwargs but are not accepted by block/checkpoint
         keys_to_pop = [
-            'split_output', 'split_num',
-            'tri_condition', 'cond1', 'cond2', 'cond1_mask_latent',
-            'two_condition',
-            'condition_latent', 'cond1_latent', 'cond2_latent',
-            'use_cond2_cross_attn',
+            "split_output",
+            "split_num",
+            "tri_condition",
+            "cond1",
+            "cond2",
+            "cond1_mask_latent",
+            "two_condition",
+            "condition_latent",
+            "cond1_latent",
+            "cond2_latent",
+            "use_cond2_cross_attn",
         ]
         for k in keys_to_pop:
             if k in kwargs:
@@ -457,17 +533,32 @@ class PixArtWorldFMMS(PixArtWorldFM):
         x = x.to(self.dtype)
         timestep = timestep.to(self.dtype)
         y = y.to(self.dtype)
-        self.h, self.w = x.shape[-2]//self.patch_size, x.shape[-1]//self.patch_size
+        self.h, self.w = x.shape[-2] // self.patch_size, x.shape[-1] // self.patch_size
         # pos embed (cached; varies with concat width so cache key includes h/w)
-        pos_cache_key = (int(self.h), int(self.w), int(self.pos_embed.shape[-1]), str(x.device), str(x.dtype), float(self.pe_interpolation), int(self.base_size))
+        pos_cache_key = (
+            int(self.h),
+            int(self.w),
+            int(self.pos_embed.shape[-1]),
+            str(x.device),
+            str(x.dtype),
+            float(self.pe_interpolation),
+            int(self.base_size),
+        )
         pos_embed = self._pos_embed_cache.get(pos_cache_key, None)
         if pos_embed is None:
-            pos_embed = torch.from_numpy(
-                get_2d_sincos_pos_embed(
-                    self.pos_embed.shape[-1], (self.h, self.w), pe_interpolation=self.pe_interpolation,
-                    base_size=self.base_size
+            pos_embed = (
+                torch.from_numpy(
+                    get_2d_sincos_pos_embed(
+                        self.pos_embed.shape[-1],
+                        (self.h, self.w),
+                        pe_interpolation=self.pe_interpolation,
+                        base_size=self.base_size,
+                    )
                 )
-            ).unsqueeze(0).to(x.device).to(self.dtype)
+                .unsqueeze(0)
+                .to(x.device)
+                .to(self.dtype)
+            )
             self._pos_embed_cache[pos_cache_key] = pos_embed
 
         x = self.x_embedder(x) + pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
@@ -481,13 +572,13 @@ class PixArtWorldFMMS(PixArtWorldFM):
         if (
             kwargs.get("use_prope", False)
             and ("prope_viewmats" in kwargs)
-            and (kwargs.get("prope_viewmats", None) is not None)
+            and (kwargs.get("prope_viewmats") is not None)
             and bool(kwargs.get("use_prope_cache", True))
         ):
             try:
-                vm_in = kwargs.get("prope_viewmats", None)
-                Ks_in = kwargs.get("prope_Ks", None)
-                ihw_in = kwargs.get("prope_image_hw", None)
+                vm_in = kwargs.get("prope_viewmats")
+                Ks_in = kwargs.get("prope_Ks")
+                ihw_in = kwargs.get("prope_image_hw")
                 if ihw_in is None and data_info is not None and ("img_hw" in data_info):
                     ihw_in = data_info["img_hw"]
                 cameras = int(vm_in.shape[1])
@@ -537,7 +628,9 @@ class PixArtWorldFMMS(PixArtWorldFM):
                             )
                         coeffs_x, coeffs_y = self._prope_coeff_cache[coeff_key]
                         if ihw_in is None:
-                            ihw_in = torch.tensor([[patches_y, patches_x]], device=x.device, dtype=torch.float32).repeat(x.shape[0], 1)
+                            ihw_in = torch.tensor(
+                                [[patches_y, patches_x]], device=x.device, dtype=torch.float32
+                            ).repeat(x.shape[0], 1)
                         apply_fn_q, apply_fn_kv, apply_fn_o = prepare_prope_apply_fns(
                             head_dim=head_dim,
                             viewmats=vm_in.to(device=x.device, dtype=attn_dtype),
@@ -548,6 +641,7 @@ class PixArtWorldFMMS(PixArtWorldFM):
                             coeffs_x=coeffs_x,
                             coeffs_y=coeffs_y,
                         )
+
                         # reorder fns for merged-width <-> camera-major
                         def _reorder_to(t: torch.Tensor) -> torch.Tensor:
                             return reorder_tokens_to_camera_major(
@@ -583,12 +677,16 @@ class PixArtWorldFMMS(PixArtWorldFM):
                 if os.environ.get("PROPE_CACHE_DEBUG", "0") == "1":
                     try:
                         import torch.distributed as dist
+
                         rank0 = (not dist.is_available()) or (not dist.is_initialized()) or (dist.get_rank() == 0)
                     except Exception:
                         rank0 = True
                     if rank0:
                         logger = get_root_logger()
-                        logger.info("[PRoPE][cache][error] PixArtWorldFMMS.forward failed to prepare shared prope_cache; will fall back to per-layer compute.\n" + traceback.format_exc())
+                        logger.info(
+                            "[PRoPE][cache][error] PixArtWorldFMMS.forward failed to prepare shared prope_cache; will fall back to per-layer compute.\n"
+                            + traceback.format_exc()
+                        )
         else:
             # Explicitly disable shared cache (for A/B testing) or missing camera params.
             kwargs["prope_cache"] = None
@@ -602,7 +700,9 @@ class PixArtWorldFMMS(PixArtWorldFM):
             if plucker_image_hw is None:
                 # default from data_info if available
                 if data_info is None or ("img_hw" not in data_info):
-                    raise ValueError("use_plucker=True but plucker_image_hw not provided and data_info['img_hw'] missing.")
+                    raise ValueError(
+                        "use_plucker=True but plucker_image_hw not provided and data_info['img_hw'] missing."
+                    )
                 plucker_image_hw = data_info["img_hw"]
             # Shapes: viewmats (B,V,4,4), Ks (B,V,3,3), image_hw (B,2)
             B = x.shape[0]
@@ -610,7 +710,9 @@ class PixArtWorldFMMS(PixArtWorldFM):
             h_tokens = int(self.h)
             w_tokens_total = int(self.w)
             if w_tokens_total % V != 0:
-                raise ValueError(f"Plücker expects merged-width tokens divisible by views. w_tokens_total={w_tokens_total}, V={V}")
+                raise ValueError(
+                    f"Plücker expects merged-width tokens divisible by views. w_tokens_total={w_tokens_total}, V={V}"
+                )
             w_tokens_per_view = w_tokens_total // V
             plucker = compute_plucker_rays(
                 w2c=plucker_viewmats,
@@ -627,7 +729,7 @@ class PixArtWorldFMMS(PixArtWorldFM):
         t = self.t_embedder(timestep)  # (N, D)
 
         if self.micro_conditioning:
-            c_size, ar = data_info['img_hw'].to(self.dtype), data_info['aspect_ratio'].to(self.dtype)
+            c_size, ar = data_info["img_hw"].to(self.dtype), data_info["aspect_ratio"].to(self.dtype)
             csize = self.csize_embedder(c_size, bs)  # (N, D)
             ar = self.ar_embedder(ar, bs)  # (N, D)
             t = t + torch.cat([csize, ar], dim=1)
@@ -641,13 +743,15 @@ class PixArtWorldFMMS(PixArtWorldFM):
             # Debug logs are OFF by default. Enable by passing `debug_mask_log=True` into model kwargs.
             if debug_mask_log:
                 logger = get_root_logger()
-                logger.info(f"[MaskDebug] Original mask shape: {mask.shape}, y shape: {y.shape}, mask dtype: {mask.dtype}")
+                logger.info(
+                    f"[MaskDebug] Original mask shape: {mask.shape}, y shape: {y.shape}, mask dtype: {mask.dtype}"
+                )
             if mask.shape[0] != y.shape[0]:
                 mask = mask.repeat(y.shape[0] // mask.shape[0], 1)
             mask = mask.squeeze(1).squeeze(1)
             y = y.squeeze(1).masked_select(mask.unsqueeze(-1) != 0).view(1, -1, x.shape[-1])
             y_lens = mask.sum(dim=1).tolist()
-            if debug_mask_log and (not hasattr(self, '_y_lens_debug_logged')):
+            if debug_mask_log and (not hasattr(self, "_y_lens_debug_logged")):
                 self._y_lens_debug_logged = True
                 logger = get_root_logger()
                 logger.info(f"[YLenDebug] y_lens: {y_lens[:5]}... (total {len(y_lens)} samples)")
@@ -690,7 +794,7 @@ class PixArtWorldFMMS(PixArtWorldFM):
         half = x[: len(x) // 2]
         combined = torch.cat([half, half], dim=0)
         model_out = self.forward(combined, timestep, y, mask, data_info=data_info, **kwargs)
-        model_out = model_out['x'] if isinstance(model_out, dict) else model_out
+        model_out = model_out["x"] if isinstance(model_out, dict) else model_out
         eps, rest = model_out[:, :3], model_out[:, 3:]
         cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
@@ -707,7 +811,7 @@ class PixArtWorldFMMS(PixArtWorldFM):
         assert self.h * self.w == x.shape[1]
 
         x = x.reshape(shape=(x.shape[0], self.h, self.w, p, p, c))
-        x = torch.einsum('nhwpqc->nchpwq', x)
+        x = torch.einsum("nhwpqc->nchpwq", x)
         imgs = x.reshape(shape=(x.shape[0], c, self.h * p, self.w * p))
         return imgs
 

@@ -4,9 +4,10 @@ import json
 import math
 import os
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -18,8 +19,7 @@ os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
 from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
 
-from .constants import ACTION_DIM, ACTION_PROPRIO_NORMALIZATION_TYPE, NormalizationType, PROPRIO_DIM
-
+from .constants import ACTION_DIM, ACTION_PROPRIO_NORMALIZATION_TYPE, PROPRIO_DIM, NormalizationType
 
 _DATA_CONFIG = load_vla_va_wam_runtime_config("openvla-oft")
 OPENVLA_IMAGE_SIZE = int(_DATA_CONFIG["image_size"])
@@ -27,10 +27,7 @@ _VARIANT_CONFIGS = _DATA_CONFIG.get("variants")
 if not isinstance(_VARIANT_CONFIGS, Mapping):
     raise TypeError("openvla-oft data config requires a variants mapping")
 OFFICIAL_COMPONENT_FILES = {
-    str(payload["repo_id"]): {
-        str(kind): str(filename)
-        for kind, filename in payload.get("component_files", {}).items()
-    }
+    str(payload["repo_id"]): {str(kind): str(filename) for kind, filename in payload.get("component_files", {}).items()}
     for payload in _VARIANT_CONFIGS.values()
     if isinstance(payload, Mapping)
 }
@@ -72,14 +69,14 @@ def _as_bool(value: Any, default: bool = False) -> bool:
 
 def _resolve_device(torch: Any, requested: str) -> str:
     del torch
-    from worldfoundry.core.execution.device import resolve_inference_device
+    from worldfoundry.core.platform.device import resolve_inference_device
 
     return resolve_inference_device(requested or "cuda", allow_cpu_fallback=True)
 
 
 def _resolve_dtype(torch: Any, requested: str | None, device: str) -> tuple[Any, str]:
     del torch
-    from worldfoundry.core.execution.device import resolve_inference_dtype
+    from worldfoundry.core.platform.device import resolve_inference_dtype
 
     dtype = resolve_inference_dtype(device, requested or "auto")
     return dtype, str(dtype).removeprefix("torch.")
@@ -92,19 +89,12 @@ def _is_hf_repo_id(value: str) -> bool:
 def _load_component_state_dict(torch: Any, checkpoint_path: Path) -> dict[str, Any]:
     state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     if not isinstance(state_dict, Mapping):
-        raise ValueError(
-            f"OpenVLA-OFT component checkpoint must contain a state dict: {checkpoint_path}"
-        )
+        raise ValueError(f"OpenVLA-OFT component checkpoint must contain a state dict: {checkpoint_path}")
     if isinstance(state_dict.get("state_dict"), Mapping):
         state_dict = state_dict["state_dict"]
     if not all(isinstance(key, str) and torch.is_tensor(value) for key, value in state_dict.items()):
-        raise ValueError(
-            f"OpenVLA-OFT component checkpoint contains non-tensor entries: {checkpoint_path}"
-        )
-    return {
-        key[7:] if key.startswith("module.") else key: value
-        for key, value in state_dict.items()
-    }
+        raise ValueError(f"OpenVLA-OFT component checkpoint contains non-tensor entries: {checkpoint_path}")
+    return {key[7:] if key.startswith("module.") else key: value for key, value in state_dict.items()}
 
 
 def _find_component_file(checkpoint_dir: Path, repo_id: str | None, kind: str) -> Path:
@@ -129,9 +119,7 @@ def _snapshot_or_local_dir(
 ) -> tuple[Path, str | None]:
     del cache_dir
     if not local_files_only:
-        raise ValueError(
-            "OpenVLA-OFT inference is local-only; stage checkpoints with the hfd workflow"
-        )
+        raise ValueError("OpenVLA-OFT inference is local-only; stage checkpoints with the hfd workflow")
     local_dir = resolve_local_hf_model_path(
         checkpoint_location,
         required_files=("config.json",),
@@ -189,7 +177,7 @@ def _prepare_image(image: Any, *, center_crop: bool) -> Any:
     if pil.size != (OPENVLA_IMAGE_SIZE, OPENVLA_IMAGE_SIZE):
         pil = pil.resize((OPENVLA_IMAGE_SIZE, OPENVLA_IMAGE_SIZE), Image.Resampling.LANCZOS)
     if center_crop:
-        crop_side = int(round(OPENVLA_IMAGE_SIZE * math.sqrt(0.9)))
+        crop_side = int(round(OPENVLA_IMAGE_SIZE * math.sqrt(0.9)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         left = (OPENVLA_IMAGE_SIZE - crop_side) // 2
         top = (OPENVLA_IMAGE_SIZE - crop_side) // 2
         pil = pil.crop((left, top, left + crop_side, top + crop_side))
@@ -200,9 +188,7 @@ def _prepare_image(image: Any, *, center_crop: bool) -> Any:
 def _present_image(value: Any) -> bool:
     if value is None:
         return False
-    if isinstance(value, str) and not value:
-        return False
-    return True
+    return not (isinstance(value, str) and not value)
 
 
 def _first_present_image(*values: Any) -> Any:
@@ -239,9 +225,7 @@ def _select_images(image: Any, observation: Mapping[str, Any], *, num_images: in
         if len(images) >= num_images:
             break
     if len(images) < num_images:
-        raise ValueError(
-            f"OpenVLA-OFT checkpoint expects {num_images} images, but only {len(images)} were provided."
-        )
+        raise ValueError(f"OpenVLA-OFT checkpoint expects {num_images} images, but only {len(images)} were provided.")
     return images[:num_images]
 
 
@@ -401,7 +385,9 @@ class OpenVLAOFTRuntime:
 
         action_head = None
         if self.config.use_l1_regression:
-            action_head = L1RegressionActionHead(input_dim=model.llm_dim, hidden_dim=model.llm_dim, action_dim=ACTION_DIM)
+            action_head = L1RegressionActionHead(
+                input_dim=model.llm_dim, hidden_dim=model.llm_dim, action_dim=ACTION_DIM
+            )
         elif self.config.use_diffusion:
             action_head = DiffusionActionHead(
                 input_dim=model.llm_dim,

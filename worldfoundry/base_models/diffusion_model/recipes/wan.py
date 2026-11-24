@@ -11,6 +11,10 @@ Family split
 - Wan 2.2 TI2V-5B: text+image initializer, still ``standard``.
 - Wan 2.2 A14B T2V / I2V: dual low/high-noise experts and
   ``wan22-dual-expert-guidance`` (timestep-routed CFG scales).
+- Self-Forcing and Causal-Forcing (Wan 2.1 T2V 1.3B DMD): causal
+  single-expert generators on ``autoregressive-window`` with distilled x0
+  prediction; Causal-Forcing adds frame-wise blocks, an image-seeded first
+  frame and the Causal Forcing++ first-block step list.
 
 Official model sources are pinned to immutable Hub revisions.
 """
@@ -28,6 +32,7 @@ from ..models.autoencoders.wan import (
 )
 from ..models.denoisers.wan import (
     build_fastvideo_causal_wan22_denoiser,
+    build_self_forcing_wan21_denoiser,
     build_wan21_i2v_14b_denoiser,
     build_wan21_t2v_1p3b_denoiser,
     build_wan21_t2v_14b_denoiser,
@@ -42,6 +47,7 @@ from ..models.encoders.wan import (
     build_wan_text_conditioner,
 )
 from ..models.initializers.wan import (
+    build_wan_causal_forcing_latent_initializer,
     build_wan_causal_i2v_latent_initializer,
     build_wan_i2v_latent_initializer,
     build_wan_t2v_latent_initializer,
@@ -50,6 +56,7 @@ from ..models.initializers.wan import (
 )
 from ..schedulers import (
     build_fastvideo_causal_wan_self_forcing_scheduler,
+    build_wan_flow_match_euler_scheduler,
     build_wan_flow_unipc_scheduler,
 )
 from .spec import NativeDiffusionRecipe
@@ -63,6 +70,11 @@ WAN22_T2V_A14B_MODEL_ID = "wan2.2-t2v-a14b"
 WAN22_I2V_A14B_MODEL_ID = "wan2.2-i2v-a14b"
 WAN21_VACE_14B_MODEL_ID = "wan2.1-vace"
 FASTVIDEO_CAUSAL_WAN22_MODEL_ID = "fastvideo-causal-wan2.2-i2v-14b"
+SELF_FORCING_MODEL_ID = "self-forcing"
+CAUSAL_FORCING_CHUNKWISE_MODEL_ID = "causal-forcing-chunkwise"
+CAUSAL_FORCING_FRAMEWISE_MODEL_ID = "causal-forcing-framewise"
+CAUSAL_FORCING_FRAMEWISE_1STEP_MODEL_ID = "causal-forcing-framewise-1step"
+CAUSAL_FORCING_FRAMEWISE_2STEP_MODEL_ID = "causal-forcing-framewise-2step"
 
 WAN21_T2V_1P3B_REPO_ID = "Wan-AI/Wan2.1-T2V-1.3B"
 WAN21_T2V_14B_REPO_ID = "Wan-AI/Wan2.1-T2V-14B"
@@ -73,6 +85,8 @@ WAN22_T2V_A14B_REPO_ID = "Wan-AI/Wan2.2-T2V-A14B"
 WAN22_I2V_A14B_REPO_ID = "Wan-AI/Wan2.2-I2V-A14B"
 WAN21_VACE_14B_REPO_ID = "Wan-AI/Wan2.1-VACE-14B"
 FASTVIDEO_CAUSAL_WAN22_REPO_ID = "FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers"
+SELF_FORCING_REPO_ID = "gdhe17/Self-Forcing"
+CAUSAL_FORCING_REPO_ID = "zhuhz22/Causal-Forcing"
 
 WAN21_T2V_1P3B_REVISION = "37ec512624d61f7aa208f7ea8140a131f93afc9a"
 WAN21_T2V_14B_REVISION = "a064a6c71f5be440641209c07bf2a5ce7a2ff5e4"
@@ -83,6 +97,10 @@ WAN22_T2V_A14B_REVISION = "c8c270b13ee05bfa474194ac9fb07a5868a97cea"
 WAN22_I2V_A14B_REVISION = "206a9ee1b7bfaaf8f7e4d81335650533490646a3"
 WAN21_VACE_14B_REVISION = "539c162b1387eac9dc4c20bd3f74671309e76a4c"
 FASTVIDEO_CAUSAL_WAN22_REVISION = "0977572ccf137da5e577d62e3231ca840151af38"
+SELF_FORCING_REVISION = "2f8b779212da279d212c22a509b66ad6552f350e"
+CAUSAL_FORCING_REVISION = "2f8eb8bb6eeb1238da9d13e5420d342a74d634a6"
+# thu-ml/Causal-Forcing source revision these recipes follow.
+CAUSAL_FORCING_UPSTREAM_SOURCE_REVISION = "da3ddf1a590f30c9edc568e11c2f77170995c31c"
 
 # Architecture/training semantics were audited against the official Wan
 # source.  Model assets are independently pinned to the immutable Hub commit
@@ -135,9 +153,7 @@ def _checkpoints(
         "upstream_source_revision": WAN21_UPSTREAM_SOURCE_REVISION,
     }
     dit_file = (
-        "diffusion_pytorch_model.safetensors.index.json"
-        if sharded_dit
-        else "diffusion_pytorch_model.safetensors"
+        "diffusion_pytorch_model.safetensors.index.json" if sharded_dit else "diffusion_pytorch_model.safetensors"
     )
     checkpoints = {
         "dit": CheckpointSpec(
@@ -213,9 +229,7 @@ def _wan21_recipe(
             ),
             ComponentSpec(
                 initializer,
-                build_wan_i2v_latent_initializer
-                if image_to_video
-                else build_wan_t2v_latent_initializer,
+                build_wan_i2v_latent_initializer if image_to_video else build_wan_t2v_latent_initializer,
             ),
             ComponentSpec(
                 scheduler,
@@ -434,11 +448,7 @@ def _wan22_a14b_recipe(*, image_to_video: bool) -> NativeDiffusionRecipe:
         components=(
             ComponentSpec(
                 denoiser,
-                (
-                    build_wan22_i2v_a14b_dual_denoiser
-                    if image_to_video
-                    else build_wan22_t2v_a14b_dual_denoiser
-                ),
+                (build_wan22_i2v_a14b_dual_denoiser if image_to_video else build_wan22_t2v_a14b_dual_denoiser),
                 {"high_weights": "high-dit", "low_weights": "low-dit"},
                 {"boundary_ratio": boundary_ratio},
             ),
@@ -449,9 +459,7 @@ def _wan22_a14b_recipe(*, image_to_video: bool) -> NativeDiffusionRecipe:
             ),
             ComponentSpec(
                 initializer,
-                build_wan_i2v_latent_initializer
-                if image_to_video
-                else build_wan_t2v_latent_initializer,
+                build_wan_i2v_latent_initializer if image_to_video else build_wan_t2v_latent_initializer,
             ),
             ComponentSpec(
                 scheduler,
@@ -591,9 +599,7 @@ def fastvideo_causal_wan22_i2v_14b_recipe() -> NativeDiffusionRecipe:
             options={"prediction_mode": "flow", "guidance_mode": "standard"},
         ),
         checkpoints=checkpoints,
-        capabilities=frozenset(
-            {"image-to-video", "causal-generation", "dual-expert", "self-forcing"}
-        ),
+        capabilities=frozenset({"image-to-video", "causal-generation", "dual-expert", "self-forcing"}),
         options={
             "latent_channels": 16,
             "spatial_compression": 8,
@@ -616,6 +622,239 @@ def fastvideo_causal_wan22_i2v_14b_recipe() -> NativeDiffusionRecipe:
             "repository_revision": revision,
             "upstream_flashdreams_revision": "289da6f1d232de5abaa30d686c977b9c0040fe76",
         },
+    )
+
+
+def _forcing_wan21_t2v_1p3b_recipe(
+    *,
+    model_id: str,
+    aliases: tuple[str, ...],
+    dit: CheckpointSpec,
+    block_size: int,
+    fixed_timesteps: tuple[int, ...],
+    first_block_timesteps: tuple[int, ...] = (),
+    renoise_dtype: str | None = None,
+    image_to_video: bool = False,
+    capability: str,
+    metadata: dict[str, object],
+) -> NativeDiffusionRecipe:
+    """Assemble a DMD-distilled causal Wan2.1 T2V 1.3B rollout on ``autoregressive-window``.
+
+    Self-Forcing and the Causal-Forcing releases share the causal Wan graph, the
+    shift-5 distilled-x0 sampler, the 21-latent-frame global KV cache, the Wan2.1
+    text encoder and the bf16 codec. They differ in the generator checkpoint, the
+    latent block size, the released step lists, and whether an image may seed
+    the first latent frame.
+    """
+
+    import torch
+
+    denoiser, conditioner, initializer, scheduler, codec = _keys()
+    wan = _checkpoints(
+        WAN21_T2V_1P3B_REPO_ID,
+        WAN21_T2V_1P3B_REVISION,
+        sharded_dit=False,
+        image_to_video=False,
+    )
+    execution_options: dict[str, object] = {
+        "prediction_mode": "distilled-x0",
+        "fixed_timesteps": fixed_timesteps,
+    }
+    if first_block_timesteps:
+        execution_options["first_block_timesteps"] = first_block_timesteps
+    execution_options["context_timestep"] = 0
+    if renoise_dtype is not None:
+        execution_options["renoise_dtype"] = renoise_dtype
+    capabilities = {"text-to-video", "causal-generation", capability}
+    if image_to_video:
+        capabilities.add("image-to-video")
+    return NativeDiffusionRecipe(
+        model_id=model_id,
+        aliases=aliases,
+        components=(
+            ComponentSpec(
+                denoiser,
+                build_self_forcing_wan21_denoiser,
+                {"weights": "dit"},
+                {"block_size": block_size, "cache_frames": 21, "timestep_shift": 5.0},
+            ),
+            ComponentSpec(
+                conditioner,
+                build_wan_text_conditioner,
+                {"weights": "text-encoder", "tokenizer": "tokenizer"},
+            ),
+            ComponentSpec(
+                initializer,
+                build_wan_causal_forcing_latent_initializer if image_to_video else build_wan_t2v_latent_initializer,
+            ),
+            ComponentSpec(
+                scheduler,
+                build_wan_flow_match_euler_scheduler,
+                options={"shift": 5.0},
+            ),
+            ComponentSpec(
+                codec,
+                build_wan_video_decoder,
+                {"weights": "vae"},
+                {"dtype": torch.bfloat16, "std_reciprocal_in_codec_dtype": True},
+            ),
+        ),
+        execution=ExecutionSpec(
+            strategy="autoregressive-window",
+            bindings=dict(_execution(image_to_video=image_to_video).bindings),
+            options=execution_options,
+        ),
+        checkpoints={
+            "dit": dit,
+            "text-encoder": wan["text-encoder"],
+            "tokenizer": wan["tokenizer"],
+            "vae": wan["vae"],
+        },
+        capabilities=frozenset(capabilities),
+        options={
+            "latent_channels": 16,
+            "spatial_compression": 8,
+            "temporal_compression": 4,
+            "default_height": 480,
+            "default_width": 832,
+            "default_num_frames": 81,
+            "default_num_inference_steps": len(fixed_timesteps),
+            "default_guidance_scale": 1.0,
+            "default_fps": 16,
+        },
+        metadata={
+            "parameter_scale": "1.3B",
+            "native_inference": True,
+            "output_layout": "BCTHW",
+            "latent_block_size": block_size,
+            "cache_window": 21,
+            **metadata,
+        },
+    )
+
+
+def self_forcing_wan21_t2v_1p3b_recipe() -> NativeDiffusionRecipe:
+    """Return Self-Forcing's four-step causal Wan2.1 T2V 1.3B rollout (DMD checkpoint).
+
+    The released sampler denoises three-latent-frame blocks at the unwarped
+    indices (1000, 750, 500, 250), which the runner warps onto the shift-5
+    flow calendar, and commits each clean block to the KV cache at timestep 0.
+    The codec runs in bf16 with the official wrapper's bf16 latent scale.
+    """
+
+    return _forcing_wan21_t2v_1p3b_recipe(
+        model_id=SELF_FORCING_MODEL_ID,
+        aliases=(SELF_FORCING_REPO_ID, "self-forcing-dmd"),
+        dit=CheckpointSpec(
+            repo_id=SELF_FORCING_REPO_ID,
+            revision=SELF_FORCING_REVISION,
+            files=("checkpoints/self_forcing_dmd.pt",),
+            metadata={"license": "Apache-2.0", "repository_revision": SELF_FORCING_REVISION},
+        ),
+        block_size=3,
+        fixed_timesteps=(1000, 750, 500, 250),
+        capability="self-forcing",
+        metadata={
+            "architecture": "self-forcing-causal-wan2.1",
+            "repository_revision": SELF_FORCING_REVISION,
+            "upstream_source_revision": "33593df3e81fa3ec10239271dd2c100facac6de1",
+        },
+    )
+
+
+def _causal_forcing_recipe(
+    *,
+    model_id: str,
+    aliases: tuple[str, ...] = (),
+    checkpoint_file: str,
+    block_size: int,
+    fixed_timesteps: tuple[int, ...],
+    first_block_timesteps: tuple[int, ...] = (),
+    image_to_video: bool = False,
+) -> NativeDiffusionRecipe:
+    """Return one released Causal-Forcing generator on the shared forcing rollout.
+
+    The official scheduler re-noises a one-frame block of one sample in bf16 (see
+    ``AutoregressiveWindowRunner._renoise_in_dtype``), so frame-wise students
+    re-noise in bf16; three-frame blocks keep the float32 re-noise.
+    """
+
+    return _forcing_wan21_t2v_1p3b_recipe(
+        model_id=model_id,
+        aliases=aliases,
+        dit=CheckpointSpec(
+            repo_id=CAUSAL_FORCING_REPO_ID,
+            revision=CAUSAL_FORCING_REVISION,
+            files=(checkpoint_file,),
+            metadata={"license": "Apache-2.0", "repository_revision": CAUSAL_FORCING_REVISION},
+        ),
+        block_size=block_size,
+        fixed_timesteps=fixed_timesteps,
+        first_block_timesteps=first_block_timesteps,
+        renoise_dtype="bfloat16" if block_size == 1 else None,
+        image_to_video=image_to_video,
+        capability="causal-forcing",
+        metadata={
+            "architecture": "causal-forcing-causal-wan2.1",
+            "repository_revision": CAUSAL_FORCING_REVISION,
+            "upstream_source_revision": CAUSAL_FORCING_UPSTREAM_SOURCE_REVISION,
+        },
+    )
+
+
+def causal_forcing_chunkwise_recipe() -> NativeDiffusionRecipe:
+    """Return Causal-Forcing's chunk-wise four-step student: three-latent-frame blocks, T2V.
+
+    It is the default variant, so the public ``causal-forcing`` model ID resolves to it.
+    """
+
+    return _causal_forcing_recipe(
+        model_id=CAUSAL_FORCING_CHUNKWISE_MODEL_ID,
+        aliases=("causal-forcing",),
+        checkpoint_file="chunkwise/causal_forcing.pt",
+        block_size=3,
+        fixed_timesteps=(1000, 750, 500, 250),
+    )
+
+
+def causal_forcing_framewise_recipe() -> NativeDiffusionRecipe:
+    """Return Causal-Forcing's frame-wise four-step student: one-latent-frame blocks.
+
+    An input image makes it the official I2V route: the encoded image is the
+    clean first latent frame, committed to the KV cache before the remaining
+    frames are rolled out.
+    """
+
+    return _causal_forcing_recipe(
+        model_id=CAUSAL_FORCING_FRAMEWISE_MODEL_ID,
+        checkpoint_file="framewise/causal_forcing.pt",
+        block_size=1,
+        fixed_timesteps=(1000, 750, 500, 250),
+        image_to_video=True,
+    )
+
+
+def causal_forcing_framewise_1step_recipe() -> NativeDiffusionRecipe:
+    """Return Causal Forcing++ frame-wise one-step: four steps on the first frame, then one per frame."""
+
+    return _causal_forcing_recipe(
+        model_id=CAUSAL_FORCING_FRAMEWISE_1STEP_MODEL_ID,
+        checkpoint_file="causal-forcing++/framewise-1step.pt",
+        block_size=1,
+        fixed_timesteps=(1000,),
+        first_block_timesteps=(1000, 750, 500, 250),
+    )
+
+
+def causal_forcing_framewise_2step_recipe() -> NativeDiffusionRecipe:
+    """Return Causal Forcing++ frame-wise two-step: four steps on the first frame, then two per frame."""
+
+    return _causal_forcing_recipe(
+        model_id=CAUSAL_FORCING_FRAMEWISE_2STEP_MODEL_ID,
+        checkpoint_file="causal-forcing++/framewise-2step.pt",
+        block_size=1,
+        fixed_timesteps=(1000, 500),
+        first_block_timesteps=(1000, 750, 500, 250),
     )
 
 
@@ -674,9 +913,7 @@ def wan22_ti2v_5b_recipe() -> NativeDiffusionRecipe:
         ),
         execution=ExecutionSpec(strategy="masked-latent", bindings=bindings),
         checkpoints=checkpoints,
-        capabilities=frozenset(
-            {"text-to-video", "image-to-video", "classifier-free-guidance", "per-token-timestep"}
-        ),
+        capabilities=frozenset({"text-to-video", "image-to-video", "classifier-free-guidance", "per-token-timestep"}),
         options={
             "latent_channels": 48,
             "spatial_compression": 16,
@@ -692,9 +929,19 @@ def wan22_ti2v_5b_recipe() -> NativeDiffusionRecipe:
 
 
 __all__ = [
+    "CAUSAL_FORCING_CHUNKWISE_MODEL_ID",
+    "CAUSAL_FORCING_FRAMEWISE_1STEP_MODEL_ID",
+    "CAUSAL_FORCING_FRAMEWISE_2STEP_MODEL_ID",
+    "CAUSAL_FORCING_FRAMEWISE_MODEL_ID",
+    "CAUSAL_FORCING_REPO_ID",
+    "CAUSAL_FORCING_REVISION",
+    "CAUSAL_FORCING_UPSTREAM_SOURCE_REVISION",
     "FASTVIDEO_CAUSAL_WAN22_MODEL_ID",
     "FASTVIDEO_CAUSAL_WAN22_REPO_ID",
     "FASTVIDEO_CAUSAL_WAN22_REVISION",
+    "SELF_FORCING_MODEL_ID",
+    "SELF_FORCING_REPO_ID",
+    "SELF_FORCING_REVISION",
     "WAN21_I2V_14B_480P_MODEL_ID",
     "WAN21_I2V_14B_480P_REPO_ID",
     "WAN21_I2V_14B_480P_REVISION",
@@ -707,27 +954,32 @@ __all__ = [
     "WAN21_T2V_14B_MODEL_ID",
     "WAN21_T2V_14B_REPO_ID",
     "WAN21_T2V_14B_REVISION",
-    "WAN22_TI2V_5B_MODEL_ID",
-    "WAN22_TI2V_5B_REPO_ID",
-    "WAN22_TI2V_5B_REVISION",
-    "WAN22_T2V_A14B_MODEL_ID",
-    "WAN22_T2V_A14B_REPO_ID",
-    "WAN22_T2V_A14B_REVISION",
-    "WAN22_I2V_A14B_MODEL_ID",
-    "WAN22_I2V_A14B_REPO_ID",
-    "WAN22_I2V_A14B_REVISION",
+    "WAN21_UPSTREAM_SOURCE_REVISION",
     "WAN21_VACE_14B_MODEL_ID",
     "WAN21_VACE_14B_REPO_ID",
     "WAN21_VACE_14B_REVISION",
+    "WAN22_I2V_A14B_MODEL_ID",
+    "WAN22_I2V_A14B_REPO_ID",
+    "WAN22_I2V_A14B_REVISION",
+    "WAN22_T2V_A14B_MODEL_ID",
+    "WAN22_T2V_A14B_REPO_ID",
+    "WAN22_T2V_A14B_REVISION",
+    "WAN22_TI2V_5B_MODEL_ID",
+    "WAN22_TI2V_5B_REPO_ID",
+    "WAN22_TI2V_5B_REVISION",
     "WAN_TOKENIZER_FILES",
-    "WAN21_UPSTREAM_SOURCE_REVISION",
+    "causal_forcing_chunkwise_recipe",
+    "causal_forcing_framewise_1step_recipe",
+    "causal_forcing_framewise_2step_recipe",
+    "causal_forcing_framewise_recipe",
     "fastvideo_causal_wan22_i2v_14b_recipe",
+    "self_forcing_wan21_t2v_1p3b_recipe",
     "wan21_i2v_14b_480p_recipe",
     "wan21_i2v_14b_720p_recipe",
     "wan21_t2v_1p3b_recipe",
     "wan21_t2v_14b_recipe",
-    "wan22_ti2v_5b_recipe",
-    "wan22_t2v_a14b_recipe",
-    "wan22_i2v_a14b_recipe",
     "wan21_vace_14b_recipe",
+    "wan22_i2v_a14b_recipe",
+    "wan22_t2v_a14b_recipe",
+    "wan22_ti2v_5b_recipe",
 ]

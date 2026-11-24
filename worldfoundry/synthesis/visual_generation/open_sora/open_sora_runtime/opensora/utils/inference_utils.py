@@ -4,17 +4,17 @@ import re
 
 import torch
 
-from opensora.datasets import IMG_FPS
-from opensora.datasets.utils import read_from_path
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.datasets import IMG_FPS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.datasets.utils import read_from_path
 
 
 def prepare_multi_resolution_info(info_type, batch_size, image_size, num_frames, fps, device, dtype):
     if info_type is None:
-        return dict()
+        return {}
     elif info_type == "PixArtMS":
         hw = torch.tensor([image_size], device=device, dtype=dtype).repeat(batch_size, 1)
         ar = torch.tensor([[image_size[0] / image_size[1]]], device=device, dtype=dtype).repeat(batch_size, 1)
-        return dict(ar=ar, hw=hw)
+        return {"ar": ar, "hw": hw}
     elif info_type in ["STDiT2", "OpenSora"]:
         fps = fps if num_frames > 1 else IMG_FPS
         fps = torch.tensor([fps], device=device, dtype=dtype).repeat(batch_size)
@@ -22,13 +22,13 @@ def prepare_multi_resolution_info(info_type, batch_size, image_size, num_frames,
         width = torch.tensor([image_size[1]], device=device, dtype=dtype).repeat(batch_size)
         num_frames = torch.tensor([num_frames], device=device, dtype=dtype).repeat(batch_size)
         ar = torch.tensor([image_size[0] / image_size[1]], device=device, dtype=dtype).repeat(batch_size)
-        return dict(height=height, width=width, num_frames=num_frames, ar=ar, fps=fps)
+        return {"height": height, "width": width, "num_frames": num_frames, "ar": ar, "fps": fps}
     else:
         raise NotImplementedError
 
 
 def load_prompts(prompt_path, start_idx=None, end_idx=None):
-    with open(prompt_path, "r") as f:
+    with open(prompt_path) as f:
         prompts = [line.strip() for line in f.readlines()]
     prompts = prompts[start_idx:end_idx]
     return prompts
@@ -215,9 +215,9 @@ def append_generated(vae, generated_video, refs_x, mask_strategy, loop_i, condit
             mask_strategy[j] = ""
         else:
             mask_strategy[j] += ";"
-        mask_strategy[
-            j
-        ] += f"{loop_i},{len(refs)-1},-{condition_frame_length},0,{condition_frame_length},{condition_frame_edit}"
+        mask_strategy[j] += (
+            f"{loop_i},{len(refs) - 1},-{condition_frame_length},0,{condition_frame_length},{condition_frame_edit}"
+        )
     return refs_x, mask_strategy
 
 

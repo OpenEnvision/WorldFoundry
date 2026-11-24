@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .paths import checkpoint_path
 
-__all__ = ["InputPadder", "MODEL_CONFIG", "Model", "checkpoint_path", "init_model_config"]
+__all__ = ["MODEL_CONFIG", "InputPadder", "Model", "checkpoint_path", "init_model_config"]
 
 
 def __getattr__(name: str):

@@ -60,7 +60,7 @@ def __getattr__(name: str):
 # Defines the public API of this module when `*` is used in an import statement.
 __all__ = [
     "RUNTIME_ROOT",
-    "Yume1p5Runtime",
-    "YumeRuntime",
+    "Yume1p5Runtime",  # noqa: F822 - Provided by the module-level __getattr__.
+    "YumeRuntime",  # noqa: F822 - Provided by the module-level __getattr__.
     "runtime_root",
 ]

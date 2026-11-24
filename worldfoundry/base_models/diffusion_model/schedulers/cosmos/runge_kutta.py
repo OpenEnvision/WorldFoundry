@@ -25,7 +25,7 @@ Times are EDM sigmas (log-space inside the residual RK2 step).
 AB2 lives in :mod:`.multi_step`.
 """
 
-from typing import Callable, Tuple
+from collections.abc import Callable
 
 import torch
 
@@ -110,7 +110,7 @@ def reg_x0_euler_step(
     s: torch.Tensor,
     t: torch.Tensor,
     x0_s: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Perform a regularized Euler step based on x0 prediction.
 
@@ -130,7 +130,7 @@ def reg_x0_euler_step(
 
 def reg_eps_euler_step(
     x_s: torch.Tensor, s: torch.Tensor, t: torch.Tensor, eps_s: torch.Tensor
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Perform a regularized Euler step based on epsilon prediction.
 
@@ -148,7 +148,7 @@ def reg_eps_euler_step(
 
 def rk1_euler(
     x_s: torch.Tensor, s: torch.Tensor, t: torch.Tensor, x0_fn: Callable
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Perform a first-order Runge-Kutta (Euler) step.
 
@@ -170,7 +170,7 @@ def rk1_euler(
 
 def rk2_mid_stable(
     x_s: torch.Tensor, s: torch.Tensor, t: torch.Tensor, x0_fn: Callable
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Perform a stable second-order Runge-Kutta (midpoint) step.
 
@@ -190,7 +190,7 @@ def rk2_mid_stable(
     return reg_x0_euler_step(x_s, s, t, x0_s1)
 
 
-def rk2_mid(x_s: torch.Tensor, s: torch.Tensor, t: torch.Tensor, x0_fn: Callable) -> Tuple[torch.Tensor, torch.Tensor]:
+def rk2_mid(x_s: torch.Tensor, s: torch.Tensor, t: torch.Tensor, x0_fn: Callable) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Perform a second-order Runge-Kutta (midpoint) step.
 
@@ -213,7 +213,7 @@ def rk2_mid(x_s: torch.Tensor, s: torch.Tensor, t: torch.Tensor, x0_fn: Callable
 
 def rk_2heun_naive(
     x_s: torch.Tensor, s: torch.Tensor, t: torch.Tensor, x0_fn: Callable
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Perform a naive second-order Runge-Kutta (Heun's method) step.
     Impl based on rho-rk-deis solvers, https://github.com/qsh-zh/deis
@@ -240,7 +240,7 @@ def rk_2heun_naive(
 
 def rk_2heun_edm(
     x_s: torch.Tensor, s: torch.Tensor, t: torch.Tensor, x0_fn: Callable
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Perform a naive second-order Runge-Kutta (Heun's method) step.
     Impl based no EDM second order Heun method
@@ -264,7 +264,7 @@ def rk_2heun_edm(
 
 def rk_3kutta_naive(
     x_s: torch.Tensor, s: torch.Tensor, t: torch.Tensor, x0_fn: Callable
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Perform a naive third-order Runge-Kutta step.
     Impl based on rho-rk-deis solvers, https://github.com/qsh-zh/deis

@@ -2,15 +2,16 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from .models.models_r3m import R3M
-
+import copy
 import os
 from os.path import expanduser
-import omegaconf
-import hydra
+
 import gdown
+import hydra
+import omegaconf
 import torch
-import copy
+
+from .models.models_r3m import R3M as R3M
 
 VALID_ARGS = [
     "_target_",
@@ -25,10 +26,7 @@ VALID_ARGS = [
     "l2dist",
     "bs",
 ]
-if torch.cuda.is_available():
-    device = "cuda"
-else:
-    device = "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def cleanup_config(cfg):
@@ -37,7 +35,7 @@ def cleanup_config(cfg):
     for key in list(keys):
         if key not in VALID_ARGS:
             del config.agent[key]
-    config.agent["_target_"] = "models.encoder.r3m.R3M"
+    config.agent["_target_"] = "worldfoundry.synthesis.visual_generation.dino_wm.models.encoder.r3m.R3M"
     config["device"] = device
 
     ## Hardcodes to remove the language head
@@ -85,12 +83,11 @@ def load_r3m(modelid):
     cleancfg = cleanup_config(modelcfg)
     rep = hydra.utils.instantiate(cleancfg)
     rep = torch.nn.DataParallel(rep)
-    r3m_state_dict = remove_language_head(
-        torch.load(modelpath, map_location=torch.device(device))["r3m"]
-    )
+    r3m_state_dict = remove_language_head(torch.load(modelpath, map_location=torch.device(device))["r3m"])
     rep.load_state_dict(r3m_state_dict)
     rep = rep.module
     return rep
+
 
 def load_r3m_reproduce(modelid):
     home = os.path.join(expanduser("~"), ".r3m")
@@ -125,9 +122,7 @@ def load_r3m_reproduce(modelid):
     cleancfg = cleanup_config(modelcfg)
     rep = hydra.utils.instantiate(cleancfg)
     rep = torch.nn.DataParallel(rep)
-    r3m_state_dict = remove_language_head(
-        torch.load(modelpath, map_location=torch.device(device))["r3m"]
-    )
+    r3m_state_dict = remove_language_head(torch.load(modelpath, map_location=torch.device(device))["r3m"])
 
     rep.load_state_dict(r3m_state_dict)
     rep = rep.module

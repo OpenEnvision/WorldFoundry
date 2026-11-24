@@ -11,29 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import inspect
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Union
+from typing import ClassVar
 
 import numpy as np
 import PIL.Image
 import torch
-from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
-
 from diffusers.image_processor import PipelineImageInput
 
 # import from our own models instead  of diffusers
 # from diffusers.models import AutoencoderKLTemporalDecoder, UNetSpatioTemporalConditionModel
 from diffusers.models import AutoencoderKLTemporalDecoder
-from models.unet_spatio_temporal_condition import UNetSpatioTemporalConditionModel
-
+from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 from diffusers.schedulers import EulerDiscreteScheduler
 from diffusers.utils import BaseOutput, is_torch_xla_available, logging, replace_example_docstring
 from diffusers.utils.torch_utils import is_compiled_module, randn_tensor
 from diffusers.video_processor import VideoProcessor
-from diffusers.pipelines.pipeline_utils import DiffusionPipeline
+from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 
+from .unet_spatio_temporal_condition import UNetSpatioTemporalConditionModel
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -78,10 +76,10 @@ def _append_dims(x, target_dims):
 # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
 def retrieve_timesteps(
     scheduler,
-    num_inference_steps: Optional[int] = None,
-    device: Optional[Union[str, torch.device]] = None,
-    timesteps: Optional[List[int]] = None,
-    sigmas: Optional[List[float]] = None,
+    num_inference_steps: int | None = None,
+    device: str | torch.device | None = None,
+    timesteps: list[int] | None = None,
+    sigmas: list[float] | None = None,
     **kwargs,
 ):
     r"""
@@ -146,7 +144,7 @@ class StableVideoDiffusionPipelineOutput(BaseOutput):
             num_frames, height, width, num_channels)`.
     """
 
-    frames: Union[List[List[PIL.Image.Image]], np.ndarray, torch.Tensor]
+    frames: list[list[PIL.Image.Image]] | np.ndarray | torch.Tensor
 
 
 class StableVideoDiffusionPipeline(DiffusionPipeline):
@@ -171,7 +169,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
     """
 
     model_cpu_offload_seq = "image_encoder->unet->vae"
-    _callback_tensor_inputs = ["latents"]
+    _callback_tensor_inputs: ClassVar[list] = ["latents"]
 
     def __init__(
         self,
@@ -196,7 +194,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
     def _encode_image(
         self,
         image: PipelineImageInput,
-        device: Union[str, torch.device],
+        device: str | torch.device,
         num_videos_per_prompt: int,
         do_classifier_free_guidance: bool,
     ) -> torch.Tensor:
@@ -244,7 +242,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
     def _encode_vae_image(
         self,
         image: torch.Tensor,
-        device: Union[str, torch.device],
+        device: str | torch.device,
         num_videos_per_prompt: int,
         do_classifier_free_guidance: bool,
     ):
@@ -343,9 +341,9 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
         height: int,
         width: int,
         dtype: torch.dtype,
-        device: Union[str, torch.device],
+        device: str | torch.device,
         generator: torch.Generator,
-        latents: Optional[torch.Tensor] = None,
+        latents: torch.Tensor | None = None,
     ):
         shape = (
             batch_size,
@@ -390,24 +388,24 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
         self,
-        image: Union[PIL.Image.Image, List[PIL.Image.Image], torch.Tensor],
+        image: PIL.Image.Image | list[PIL.Image.Image] | torch.Tensor,
         height: int = 576,
         width: int = 1024,
-        num_frames: Optional[int] = None,
+        num_frames: int | None = None,
         num_inference_steps: int = 25,
-        sigmas: Optional[List[float]] = None,
+        sigmas: list[float] | None = None,
         min_guidance_scale: float = 1.0,
         max_guidance_scale: float = 3.0,
         fps: int = 7,
         motion_bucket_id: int = 127,
         noise_aug_strength: float = 0.02,
-        decode_chunk_size: Optional[int] = None,
-        num_videos_per_prompt: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.Tensor] = None,
-        output_type: Optional[str] = "pil",
-        callback_on_step_end: Optional[Callable[[int, int, Dict], None]] = None,
-        callback_on_step_end_tensor_inputs: List[str] = ["latents"],
+        decode_chunk_size: int | None = None,
+        num_videos_per_prompt: int | None = 1,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.Tensor | None = None,
+        output_type: str | None = "pil",
+        callback_on_step_end: Callable[[int, int, dict], None] | None = None,
+        callback_on_step_end_tensor_inputs: list[str] = ["latents"],  # noqa: B006 - Keeps the upstream default object and signature.
         return_dict: bool = True,
     ):
         r"""
@@ -616,7 +614,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
                 if XLA_AVAILABLE:
                     xm.mark_step()
 
-        if not output_type == "latent":
+        if not output_type == "latent":  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             # cast back to fp16 if needed
             if needs_upcasting:
                 self.vae.to(dtype=torch.float16)
@@ -696,7 +694,7 @@ def _filter2d(input, kernel):
 
     height, width = tmp_kernel.shape[-2:]
 
-    padding_shape: List[int] = _compute_padding([height, width])
+    padding_shape: list[int] = _compute_padding([height, width])
     input = torch.nn.functional.pad(input, padding_shape, mode="reflect")
 
     # kernel and input tensor reshape to align element-wise or batch-wise params
@@ -727,10 +725,7 @@ def _gaussian(window_size: int, sigma):
 
 
 def _gaussian_blur2d(input, kernel_size, sigma):
-    if isinstance(sigma, tuple):
-        sigma = torch.tensor([sigma], dtype=input.dtype)
-    else:
-        sigma = sigma.to(dtype=input.dtype)
+    sigma = torch.tensor([sigma], dtype=input.dtype) if isinstance(sigma, tuple) else sigma.to(dtype=input.dtype)
 
     ky, kx = int(kernel_size[0]), int(kernel_size[1])
     bs = sigma.shape[0]

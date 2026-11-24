@@ -26,12 +26,16 @@ from einops import rearrange
 from torch import Tensor
 from tqdm import tqdm
 
-from mira.data.batch import VideoActionBatch
-from mira.world_model.config import WorldModelInferenceConfig
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.data.batch import VideoActionBatch
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.config import WorldModelInferenceConfig
 
 if TYPE_CHECKING:
-    from mira.world_model.latent_world_model import LatentWorldModel
-    from mira.world_model.multi_wrapper_world_model import MultiWrapperWorldModel
+    from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.latent_world_model import (
+        LatentWorldModel,
+    )
+    from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.multi_wrapper_world_model import (
+        MultiWrapperWorldModel,
+    )
 
     # Both variants present the surface ``rollout`` reads (config, codec, encode_video,
     # denoise_streaming, action_encoder, device, ...); the wrapper adds tiling + action combination.

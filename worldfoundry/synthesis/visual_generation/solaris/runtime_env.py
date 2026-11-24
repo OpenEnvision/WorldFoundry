@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Optional
 
 from worldfoundry.core import cuda_visible_devices_from_device
 
@@ -74,47 +74,7 @@ def project_root() -> Path:
     return current.parents[5]
 
 
-def _candidate_runtime(path_value: Path) -> Optional[Path]:
-    """Checks if a given path is a valid Solaris runtime root.
-
-    A path is considered a valid runtime root if it contains specific sentinel
-    files, either directly or within a nested 'solaris' subdirectory.
-
-    Args:
-        path_value (Path): The path to check.
-
-    Returns:
-        Optional[Path]: The validated runtime root path if found, otherwise None.
-    """
-    # Sentinel files expected in a valid Solaris runtime directory.
-    sentinels = [
-        ("src", "inference.py"),
-    ]
-    # Check if the sentinels exist directly under path_value.
-    if all(path_value.joinpath(*parts).is_file() for parts in sentinels):
-        return path_value
-    # If not found directly, check if they exist under a 'solaris' subdirectory.
-    nested = path_value / "solaris"
-    if all(nested.joinpath(*parts).is_file() for parts in sentinels):
-        return nested
-    return None
-
-
-def local_runtime_candidates() -> list[Path]:
-    """Generates a list of candidate paths for the Solaris runtime on the local system.
-
-    WorldFoundry ships the inference-only Solaris runtime in-tree.
-
-    Returns:
-        list[Path]: A list of potential Solaris runtime root paths.
-    """
-    in_tree_runtime = Path(__file__).resolve().parent / "solaris_runtime"
-    return [
-        in_tree_runtime,
-    ]
-
-
-def _resolve_env_path(env_keys: Iterable[str]) -> Optional[Path]:
+def _resolve_env_path(env_keys: Iterable[str]) -> Path | None:
     """Resolves a file system path from a list of environment variable keys.
 
     It iterates through the provided environment keys in order, returning the
@@ -134,62 +94,23 @@ def _resolve_env_path(env_keys: Iterable[str]) -> Optional[Path]:
     return None
 
 
-def resolve_runtime_root(runtime_root: Optional[str] = None) -> str:
-    """Resolves the root directory of the Solaris inference runtime.
-
-    It checks for a provided `runtime_root` argument, then environment variables,
-    and finally common local candidate paths. The first valid path found is returned.
-
-    Args:
-        runtime_root (Optional[str], optional): An explicitly provided path to the
-                                                runtime root. Defaults to None.
-
-    Returns:
-        str: The absolute path to the resolved Solaris runtime root directory.
-
-    Raises:
-        FileNotFoundError: If no valid Solaris runtime root can be found.
-    """
-    candidates: list[Path] = []
-    # Add an explicitly provided runtime_root to the candidates if available.
-    if runtime_root:
-        candidates.append(Path(runtime_root).expanduser())
-    # Add candidate paths from environment variables.
-    env_candidate = _resolve_env_path(
-        [
-            "WORLDFOUNDRY_SOLARIS_RUNTIME_ROOT",
-            "SOLARIS_RUNTIME_ROOT",
-        ]
+def resolve_runtime_root(runtime_root: str | None = None) -> str:
+    """Resolve the data/work base independently of the installed inference code."""
+    candidate = (
+        Path(runtime_root).expanduser()
+        if runtime_root
+        else _resolve_env_path(["WORLDFOUNDRY_SOLARIS_RUNTIME_ROOT", "SOLARIS_RUNTIME_ROOT"])
     )
-    if env_candidate is not None:
-        candidates.append(env_candidate)
-    # Add common local runtime candidates.
-    candidates.extend(local_runtime_candidates())
-
-    for candidate in candidates:
-        # Check if the candidate path (or its 'solaris' subdirectory) is a valid runtime.
-        resolved = _candidate_runtime(candidate)
-        if resolved is not None and resolved.is_dir():
-            return str(resolved.resolve())
-
-    # If no runtime root was found after checking all candidates, raise an error.
-    if runtime_root:
-        raise FileNotFoundError(
-            f"Solaris runtime not found at '{runtime_root}'. "
-            "Expected a directory containing 'src/inference.py'; bundled configs are under worldfoundry/data/models/runtime/configs/solaris."
-        )
-    raise FileNotFoundError(
-        "Unable to locate the Solaris inference runtime. Expected the in-tree "
-        "worldfoundry/synthesis/visual_generation/solaris/solaris_runtime directory "
-        "or an explicit required_components['runtime_root'] override."
-    )
+    if candidate is None:
+        candidate = Path(__file__).resolve().parent / "solaris_runtime"
+    return str(candidate.resolve())
 
 
 def _resolve_path_under_runtime(
-    raw_value: Optional[str],
+    raw_value: str | None,
     runtime_root: str,
     *,
-    default_relative: Optional[str],
+    default_relative: str | None,
     env_keys: Iterable[str],
     label: str,
     must_exist: bool,
@@ -231,10 +152,7 @@ def _resolve_path_under_runtime(
         raise ValueError(f"Unable to resolve Solaris {label}.")
 
     # Resolve absolute path: if relative, combine with runtime_root.
-    if not candidate.is_absolute():
-        candidate = (Path(runtime_root) / candidate).resolve()
-    else:
-        candidate = candidate.resolve()
+    candidate = (Path(runtime_root) / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
 
     # Check existence if required.
     if must_exist and not candidate.exists():
@@ -246,7 +164,7 @@ def _resolve_path_under_runtime(
 
 
 def resolve_pretrained_model_dir(
-    pretrained_model_dir: Optional[str],
+    pretrained_model_dir: str | None,
     runtime_root: str,
 ) -> str:
     """Resolves the directory containing pretrained models.
@@ -276,7 +194,7 @@ def resolve_pretrained_model_dir(
 
 
 def resolve_eval_data_dir(
-    eval_data_dir: Optional[str],
+    eval_data_dir: str | None,
     runtime_root: str,
 ) -> str:
     """Resolves the directory containing evaluation datasets.
@@ -308,7 +226,7 @@ def resolve_eval_data_dir(
 
 
 def resolve_output_dir(
-    output_dir: Optional[str],
+    output_dir: str | None,
     runtime_root: str,
 ) -> str:
     """Resolves the directory for storing output files.
@@ -337,7 +255,7 @@ def resolve_output_dir(
 
 
 def resolve_checkpoint_dir(
-    checkpoint_dir: Optional[str],
+    checkpoint_dir: str | None,
     runtime_root: str,
 ) -> str:
     """Resolves the directory for storing model checkpoints.
@@ -366,7 +284,7 @@ def resolve_checkpoint_dir(
 
 
 def resolve_jax_cache_dir(
-    jax_cache_dir: Optional[str],
+    jax_cache_dir: str | None,
     runtime_root: str,
 ) -> str:
     """Resolves the directory for JAX cache files.
@@ -395,7 +313,7 @@ def resolve_jax_cache_dir(
 
 
 def resolve_model_weights_path(
-    model_weights_path: Optional[str],
+    model_weights_path: str | None,
     runtime_root: str,
     pretrained_model_dir: str,
 ) -> str:
@@ -460,7 +378,7 @@ def _normalize_token(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
 
 
-def normalize_eval_types(eval_types: Optional[object]) -> list[str]:
+def normalize_eval_types(eval_types: object | None) -> list[str]:
     """Normalizes and validates a specification of evaluation types.
 
     It accepts `None`, a single string, or an iterable of strings. It splits
@@ -575,7 +493,7 @@ def hydra_key_for_eval_type(eval_type: str) -> str:
     return str(EVAL_TYPE_SPECS[eval_type]["hydra_key"])
 
 
-def _cuda_library_dirs_from_python(python_executable: Optional[str]) -> list[str]:
+def _cuda_library_dirs_from_python(python_executable: str | None) -> list[str]:
     """Attempts to find CUDA library directories within a Python virtual environment.
 
     It inspects the `site-packages` directories under a virtual environment
@@ -628,8 +546,8 @@ def _cuda_library_dirs_from_python(python_executable: Optional[str]) -> list[str
 
 
 def build_inference_env(
-    device: Optional[str],
-    python_executable: Optional[str] = None,
+    device: str | None,
+    python_executable: str | None = None,
 ) -> dict[str, str]:
     """Builds a modified environment dictionary suitable for Solaris inference.
 

@@ -23,7 +23,8 @@ layout, runs local attention, then reverses.  Tensors are ``B S H D``.
 """
 
 import os
-from typing import Any, Callable, List, Union
+from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.distributed as dist
@@ -33,7 +34,9 @@ from torch.distributed import ProcessGroup
 from torch.nn import Module
 
 from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.attention import attention
-from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.neighborhood_attention import NeighborhoodAttention
+from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.neighborhood_attention import (
+    NeighborhoodAttention,
+)
 
 
 def post_all2all(local_seq_2_local_head, seq_world_size):
@@ -79,12 +82,12 @@ def single_all_to_all(input, local_seq_2_local_head, group, async_op=False):
 
 
 def async_a2a_communicate(
-    a2a_inputs: Union[torch.Tensor, List[torch.Tensor]],
+    a2a_inputs: torch.Tensor | list[torch.Tensor],
     cp_size: int,
     cp_group: ProcessGroup,
     cp_stream: torch.cuda.Stream,
     local_seq_2_local_head: bool,
-) -> Union[torch.Tensor, List[torch.Tensor]]:
+) -> torch.Tensor | list[torch.Tensor]:
     """
     A2A communication for context parallelism. best used in communicate qkv
     Modified from Nvidia Transformer Engine.
@@ -93,9 +96,7 @@ def async_a2a_communicate(
     if len(a2a_inputs) > 1:
         first = a2a_inputs[0]
         compatible = all(
-            value.shape == first.shape
-            and value.dtype == first.dtype
-            and value.device == first.device
+            value.shape == first.shape and value.dtype == first.dtype and value.device == first.device
             for value in a2a_inputs[1:]
         )
         try:
@@ -158,16 +159,15 @@ class DistributedAttention(torch.nn.Module):
 
     def __init__(
         self,
-        local_attention: Union[Module, Callable],
+        local_attention: Module | Callable,
     ) -> None:
-        super(DistributedAttention, self).__init__()
+        super().__init__()
         self.local_attn = local_attention
         self.pg = None
         self.stream = None
 
     def forward(self, query: Tensor, key: Tensor, value: Tensor, *args: Any, **kwargs) -> Tensor:
-        """forward
-
+        """
         Arguments:
             query (Tensor): query input to the layer
             key (Tensor): key input to the layer
@@ -199,7 +199,7 @@ class DistributedAttention(torch.nn.Module):
 class MinimalA2AAttnOp(DistributedAttention):
     def __init__(self, *args, **kwargs):
         del args, kwargs
-        super(MinimalA2AAttnOp, self).__init__(attention)
+        super().__init__(attention)
 
     def set_context_parallel_group(self, process_group, ranks, stream, cp_comm_type: str = "p2p"):
         del ranks
@@ -212,6 +212,6 @@ class MinimalA2AAttnOp(DistributedAttention):
 
 class NattenA2AAttnOp(MinimalA2AAttnOp):
     def __init__(self, *args, **kwargs):
-        super(NattenA2AAttnOp, self).__init__(None)
+        super().__init__(None)
         self.natten_op = NeighborhoodAttention(*args, **kwargs, base_attn_op=attention)
         self.local_attn = self.natten_op

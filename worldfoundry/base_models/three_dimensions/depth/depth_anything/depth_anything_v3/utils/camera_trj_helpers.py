@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> camera_trj_helpers.py functionality."""
-
 import cv2
 import numpy as np
 import torch
@@ -27,7 +25,9 @@ except ImportError:
 
     logger.warn("Dependency 'scipy' not found. Required for interpolating camera trajectory.")
 
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import as_homogeneous
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import (
+    as_homogeneous,
+)
 
 
 @torch.no_grad()
@@ -61,9 +61,7 @@ def render_stabilization_path(poses, k_size=45):
 
     input_poses = []
     for i in range(num_frames):
-        input_poses.append(
-            torch.cat([poses[i, :3, 0:1], poses[i, :3, 1:2], poses[i, :3, 3:4]], dim=-1)
-        )
+        input_poses.append(torch.cat([poses[i, :3, 0:1], poses[i, :3, 1:2], poses[i, :3, 3:4]], dim=-1))
     input_poses = torch.stack(input_poses)  # (num_frames, 3, 3)
 
     # Prepare Gaussian kernel
@@ -73,9 +71,7 @@ def render_stabilization_path(poses, k_size=45):
 
     output_vectors = []
     for idx in range(3):  # For r1, r2, t
-        vec = (
-            input_poses[:, :, idx].T.unsqueeze(0).unsqueeze(0)
-        )  # (1, 1, 3, num_frames) -> (1, 1, 3, num_frames)
+        vec = input_poses[:, :, idx].T.unsqueeze(0).unsqueeze(0)  # (1, 1, 3, num_frames) -> (1, 1, 3, num_frames)
         # But actually, we want (batch=3, channel=1, width=num_frames)
         # So:
         vec = input_poses[:, :, idx].T.unsqueeze(1)  # (3, 1, num_frames)
@@ -116,16 +112,6 @@ def render_wander_path(
     num_frames: int = 120,
     max_disp: float = 48.0,
 ):
-    """Render wander path.
-
-    Args:
-        cam2world: The cam2world.
-        intrinsic: The intrinsic.
-        h: The h.
-        w: The w.
-        num_frames: The num frames.
-        max_disp: The max disp.
-    """
     device, dtype = cam2world.device, cam2world.dtype
     fx = intrinsic[0, 0] * w
     r = max_disp / fx
@@ -151,17 +137,6 @@ def render_dolly_zoom_path(
     max_disp: float = 0.1,
     D_focus: float = 10.0,
 ):
-    """Render dolly zoom path.
-
-    Args:
-        cam2world: The cam2world.
-        intrinsic: The intrinsic.
-        h: The h.
-        w: The w.
-        num_frames: The num frames.
-        max_disp: The max disp.
-        D_focus: The d focus.
-    """
     device, dtype = cam2world.device, cam2world.dtype
     fx0, fy0 = intrinsic[0, 0] * w, intrinsic[1, 1] * h
     t = torch.linspace(0.0, 2.0, steps=num_frames, device=device, dtype=dtype)
@@ -183,16 +158,6 @@ def interpolate_intrinsics(
     final: torch.Tensor,  # "*#batch 3 3"
     t: torch.Tensor,  # " time_step"
 ) -> torch.Tensor:  # "*batch time_step 3 3"
-    """Interpolate intrinsics.
-
-    Args:
-        initial: The initial.
-        final: The final.
-        t: The t.
-
-    Returns:
-        The return value.
-    """
     initial = rearrange(initial, "... i j -> ... () i j")
     final = rearrange(final, "... i j -> ... () i j")
     t = rearrange(t, "t -> t () ()")
@@ -232,14 +197,6 @@ def intersect_rays(
 
 
 def normalize(a: torch.Tensor) -> torch.Tensor:  # "*#batch dim" -> "*#batch dim"
-    """Normalize.
-
-    Args:
-        a: The a.
-
-    Returns:
-        The return value.
-    """
     return a / a.norm(dim=-1, keepdim=True)
 
 
@@ -277,15 +234,6 @@ def matrix_to_euler(
     rotations: torch.Tensor,  # "*batch 3 3"
     pattern: str,
 ) -> torch.Tensor:  # "*batch 3"
-    """Matrix to euler.
-
-    Args:
-        rotations: The rotations.
-        pattern: The pattern.
-
-    Returns:
-        The return value.
-    """
     *batch, _, _ = rotations.shape
     rotations = rotations.reshape(-1, 3, 3)
     angles_np = R.from_matrix(rotations.detach().cpu().numpy()).as_euler(pattern)
@@ -297,15 +245,6 @@ def euler_to_matrix(
     rotations: torch.Tensor,  # "*batch 3"
     pattern: str,
 ) -> torch.Tensor:  # "*batch 3 3"
-    """Euler to matrix.
-
-    Args:
-        rotations: The rotations.
-        pattern: The pattern.
-
-    Returns:
-        The return value.
-    """
     *batch, _ = rotations.shape
     rotations = rotations.reshape(-1, 3)
     matrix_np = R.from_euler(pattern, rotations.detach().cpu().numpy()).as_matrix()
@@ -347,16 +286,6 @@ def pivot_parameters_to_extrinsics(
     pivot_coordinate_frame: torch.Tensor,  # "*#batch 3 3"
     pivot_point: torch.Tensor,  # "*#batch 3"
 ) -> torch.Tensor:  # "*batch 4 4"
-    """Pivot parameters to extrinsics.
-
-    Args:
-        parameters: The parameters.
-        pivot_coordinate_frame: The pivot coordinate frame.
-        pivot_point: The pivot point.
-
-    Returns:
-        The return value.
-    """
     translation, y, z = parameters.split((3, 1, 1), dim=-1)
 
     euler = torch.cat((y, torch.zeros_like(y), z), dim=-1)
@@ -383,16 +312,6 @@ def interpolate_circular(
     b: torch.Tensor,  # "*#batch"
     t: torch.Tensor,  # "*#batch"
 ) -> torch.Tensor:  # " *batch"
-    """Interpolate circular.
-
-    Args:
-        a: The a.
-        b: The b.
-        t: The t.
-
-    Returns:
-        The return value.
-    """
     a, b, t = torch.broadcast_tensors(a, b, t)
 
     tau = 2 * torch.pi
@@ -421,16 +340,6 @@ def interpolate_pivot_parameters(
     final: torch.Tensor,  # "*#batch 5"
     t: torch.Tensor,  # " time_step"
 ) -> torch.Tensor:  # "*batch time_step 5"
-    """Interpolate pivot parameters.
-
-    Args:
-        initial: The initial.
-        final: The final.
-        t: The t.
-
-    Returns:
-        The return value.
-    """
     initial = rearrange(initial, "... d -> ... () d")
     final = rearrange(final, "... d -> ... () d")
     t = rearrange(t, "t -> t ()")
@@ -501,17 +410,6 @@ def generate_wobble_transformation(
     num_rotations: int = 1,
     scale_radius_with_t: bool = True,
 ) -> torch.Tensor:  # "*batch time_step 4 4"]:
-    """Generate wobble transformation.
-
-    Args:
-        radius: The radius.
-        t: The t.
-        num_rotations: The num rotations.
-        scale_radius_with_t: The scale radius with t.
-
-    Returns:
-        The return value.
-    """
     # Generate a translation in the image plane.
     tf = torch.eye(4, dtype=torch.float32, device=t.device)
     tf = tf.broadcast_to((*radius.shape, t.shape[0], 4, 4)).clone()
@@ -524,9 +422,7 @@ def generate_wobble_transformation(
 
 
 @torch.no_grad()
-def render_wobble_inter_path(
-    cam2world: torch.Tensor, intr_normed: torch.Tensor, inter_len: int, n_skip: int = 3
-):
+def render_wobble_inter_path(cam2world: torch.Tensor, intr_normed: torch.Tensor, inter_len: int, n_skip: int = 3):
     """
     cam2world: [batch, 4, 4],
     intr_normed: [batch, 3, 3]

@@ -15,4 +15,4 @@ def checkpoint_path() -> Path:
     return Path(status["matched_path"] or status["local_path"])
 
 
-__all__ = ["InputPadder", "RAFT", "checkpoint_path"]
+__all__ = ["RAFT", "InputPadder", "checkpoint_path"]

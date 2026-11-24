@@ -24,6 +24,4 @@ def resolve_mvdiffusion_checkpoint(*parts: str) -> Path:
             return candidate.resolve()
 
     rendered = "\n  - ".join(str(path) for path in checked)
-    raise FileNotFoundError(
-        f"MVDiffusion checkpoint is missing; checked:\n  - {rendered}"
-    )
+    raise FileNotFoundError(f"MVDiffusion checkpoint is missing; checked:\n  - {rendered}")

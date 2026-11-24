@@ -7,9 +7,9 @@ generation.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import torch
 from transformers import GenerationConfig
@@ -99,7 +99,7 @@ class VILAGenerator:
     model: VILAForCausalLM
 
     @classmethod
-    def from_pretrained(cls, model_path: str | Path, **kwargs) -> "VILAGenerator":
+    def from_pretrained(cls, model_path: str | Path, **kwargs) -> VILAGenerator:
         return cls(model=load_vila_model(model_path, **kwargs))
 
     def generate(

@@ -18,8 +18,10 @@ class WanCausalWorldDenoiser(torch.nn.Module):
         super().__init__()
         self.model = model
         self.scheduler = FlowMatchScheduler(
-            num_inference_steps=1000, shift=timestep_shift,
-            sigma_min=0.0, extra_one_step=True,
+            num_inference_steps=1000,
+            shift=timestep_shift,
+            sigma_min=0.0,
+            extra_one_step=True,
         )
 
     @classmethod
@@ -30,7 +32,9 @@ class WanCausalWorldDenoiser(torch.nn.Module):
         state = load_state_dict(str(checkpoint), device="cpu")
         if not state or not all(key.startswith("model.") for key in state):
             raise ValueError("Expected an InSpatio causal Wan checkpoint with model.* keys")
-        model.load_state_dict({key.removeprefix("model."): value for key, value in state.items()}, strict=True, assign=True)
+        model.load_state_dict(
+            {key.removeprefix("model."): value for key, value in state.items()}, strict=True, assign=True
+        )
         return cls(model).to(device=device, dtype=dtype).eval().requires_grad_(False)
 
     def get_scheduler(self):
@@ -43,19 +47,25 @@ class WanCausalWorldDenoiser(torch.nn.Module):
         sigma = sigmas[index].reshape(-1, 1, 1, 1)
         return (xt.double() - sigma * flow_pred.double()).to(flow_pred.dtype)
 
-    def forward(self, noisy_image_or_video, conditional_dict, timestep, kv_cache,
-                kv_size, render_latent_input, freqs_offset=0):
+    def forward(
+        self, noisy_image_or_video, conditional_dict, timestep, kv_cache, kv_size, render_latent_input, freqs_offset=0
+    ):
         spatial_tokens = noisy_image_or_video.shape[-2] * noisy_image_or_video.shape[-1] // 4
         flow = self.model(
             noisy_image_or_video.permute(0, 2, 1, 3, 4).contiguous(),
-            t=timestep, context=conditional_dict["prompt_embeds"],
-            seq_len=spatial_tokens * 24, kv_cache=kv_cache, kv_size=kv_size,
+            t=timestep,
+            context=conditional_dict["prompt_embeds"],
+            seq_len=spatial_tokens * 24,
+            kv_cache=kv_cache,
+            kv_size=kv_size,
             render_latent_input=render_latent_input.permute(0, 2, 1, 3, 4).contiguous(),
             freqs_offset=freqs_offset,
         ).permute(0, 2, 1, 3, 4)
         if kv_size[1] < 0:
             return flow
         clean = self._convert_flow_pred_to_x0(
-            flow.flatten(0, 1), noisy_image_or_video.flatten(0, 1), timestep.flatten(),
+            flow.flatten(0, 1),
+            noisy_image_or_video.flatten(0, 1),
+            timestep.flatten(),
         ).unflatten(0, flow.shape[:2])
         return flow, clean

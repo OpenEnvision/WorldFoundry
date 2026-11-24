@@ -101,9 +101,9 @@ metrics:
   output_unit: accuracy
 
 runner:
-  official_script: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.worldbench.run_worldbench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.worldbench.run_worldbench_official_runner
     dataset_root_arg: --dataset-root
     dataset_manifest_arg: --video-manifest
     answer_manifest_arg: --answer-manifest
@@ -111,9 +111,9 @@ runner:
     supports_official_runtime: true
     accepts_generated_artifacts: true
     default_metrics: [foreground_miou, background_rmse]
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:worldbench
   run_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -130,7 +130,7 @@ runner:
   validation_command:
   - python
   - -m
-  - worldfoundry.evaluation.tasks.execution.runners.worldbench.run_worldbench_official_runner
+  - worldfoundry.evals.tasks.execution.runners.worldbench.run_worldbench_official_runner
   - --run-official
   - --dataset-root
   - <worldbench_dataset>
@@ -147,8 +147,8 @@ runner:
   verification_status: bounded_fixture_verified
   runtime:
     kind: in_tree_model_backed_evaluator
-    root: worldfoundry/evaluation/tasks/execution/runners/worldbench
-    implementation: worldfoundry/evaluation/tasks/execution/runners/worldbench/runtime/worldbench
+    root: worldfoundry/evals/tasks/execution/runners/worldbench
+    implementation: worldfoundry/evals/tasks/execution/runners/worldbench/runtime/worldbench
     config: worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml
     dataset_root_env: WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -195,7 +195,7 @@ data_refs:
 
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:worldbench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
@@ -223,7 +223,7 @@ artifact_layout:
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 - -m
-- worldfoundry.evaluation.tasks.execution.runners.worldbench.run_worldbench_official_runner
+- worldfoundry.evals.tasks.execution.runners.worldbench.run_worldbench_official_runner
 - --run-official
 - --dataset-root
 - ${WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT}
@@ -232,3 +232,20 @@ validation_command:
 - --output-dir
 - <out>
 - --json
+contract:
+  input_keys:
+  - official_results_path
+  - worldbench_dataset_root
+  - generated_video_dir
+  - answer_manifest
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_scores
+  - worldbench_evaluation
+  requires_upstream_runtime: false
+  notes:
+  - In-tree runtime evaluates raw generated continuations with the shared WorldFoundry SAM2 base model.
+  - Existing WorldBench result files remain supported through the compatibility normalizer.
+  - The public release computes Dice while naming it mIoU, so the contract reports conventional IoU and
+    release-compatible Dice separately.

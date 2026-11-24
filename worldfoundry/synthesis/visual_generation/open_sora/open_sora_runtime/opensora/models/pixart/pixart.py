@@ -28,16 +28,21 @@ from einops import rearrange
 from timm.models.layers import DropPath
 from timm.models.vision_transformer import Mlp
 
+from worldfoundry.base_models.diffusion_model.models.networks.sana.variants.cpu_frequency import (
+    CpuFrequencySizeEmbedder as SizeEmbedder,
+)
+
 # from .builder import MODELS
-from opensora.acceleration.checkpoint import auto_grad_checkpoint
-from opensora.models.layers.blocks import (
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.acceleration.checkpoint import (
+    auto_grad_checkpoint,
+)
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.models.layers.blocks import (
     Attention,
     CaptionEmbedder,
     MultiHeadCrossAttention,
     PatchEmbed3D,
     SeqParallelAttention,
     SeqParallelMultiHeadCrossAttention,
-    SizeEmbedder,
     T2IFinalLayer,
     TimestepEmbedder,
     approx_gelu,
@@ -46,8 +51,10 @@ from opensora.models.layers.blocks import (
     get_layernorm,
     t2i_modulate,
 )
-from opensora.registry import MODELS
-from opensora.utils.ckpt_utils import load_checkpoint
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import MODELS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.utils.ckpt_utils import (
+    load_checkpoint,
+)
 
 
 class PixArtBlock(nn.Module):

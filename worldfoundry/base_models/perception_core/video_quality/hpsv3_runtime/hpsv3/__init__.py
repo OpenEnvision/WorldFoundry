@@ -1,1 +1,1 @@
-from .inference import HPSv3RewardInferencer
+from .inference import HPSv3RewardInferencer as HPSv3RewardInferencer

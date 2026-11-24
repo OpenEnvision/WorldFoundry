@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 
@@ -15,8 +16,8 @@ class Batch:
     end: torch.LongTensor
     trunc: torch.LongTensor
     mask_padding: torch.BoolTensor
-    info: List[Dict[str, Any]]
-    segment_ids: List[SegmentId]
+    info: list[dict[str, Any]]
+    segment_ids: list[SegmentId]
 
     def pin_memory(self) -> Batch:
         return Batch(**{k: v if k in ("segment_ids", "info") else v.pin_memory() for k, v in self.__dict__.items()})

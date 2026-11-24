@@ -6,7 +6,6 @@ from PIL import Image
 
 from worldfoundry.pipelines.lyra.pipeline_lyra1 import Lyra1Pipeline
 
-
 REPO_ROOT = os.getenv(
     "LYRA1_REPO_ROOT",
     str(Path(__file__).resolve().parents[2] / "thirdparty" / "Lyra-1"),

@@ -11,7 +11,7 @@
 # --------------------------------------------------------
 
 import enum
-from typing import Callable, List
+from collections.abc import Callable
 
 import numpy as np
 import torch
@@ -148,7 +148,7 @@ def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
     elif schedule_name == "squaredcos_cap_v2":
         return betas_for_alpha_bar(
             num_diffusion_timesteps,
-            lambda t: matorch.cos((t + 0.008) / 1.008 * matorch.pi / 2) ** 2,
+            lambda t: matorch.cos((t + 0.008) / 1.008 * matorch.pi / 2) ** 2,  # noqa: F821 - Name is undefined in the upstream source.
         )
     else:
         raise NotImplementedError(f"unknown beta schedule: {schedule_name}")
@@ -523,10 +523,7 @@ class GaussianDiffusion:
         if device is None:
             device = next(model.parameters()).device
         assert isinstance(shape, (tuple, list))
-        if noise is not None:
-            img = noise
-        else:
-            img = torch.randn(*shape, device=device)
+        img = noise if noise is not None else torch.randn(*shape, device=device)
         indices = list(range(self.num_timesteps))[::-1]
 
         if progress:
@@ -682,10 +679,7 @@ class GaussianDiffusion:
         if device is None:
             device = next(model.parameters()).device
         assert isinstance(shape, (tuple, list))
-        if noise is not None:
-            img = noise
-        else:
-            img = torch.randn(*shape, device=device)
+        img = noise if noise is not None else torch.randn(*shape, device=device)
         indices = list(range(self.num_timesteps))[::-1]
 
         if progress:
@@ -889,7 +883,7 @@ class GaussianDiffusion:
         }
 
 
-def _extract_into_tensor(arr: torch.Tensor, timesteps: torch.Tensor, broadcast_shape: List[int]):
+def _extract_into_tensor(arr: torch.Tensor, timesteps: torch.Tensor, broadcast_shape: list[int]):
     """
     Extract values from a 1-D numpy array for a batch of indices.
     :param arr: the 1-D numpy array.

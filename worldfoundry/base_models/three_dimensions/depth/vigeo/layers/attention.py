@@ -8,9 +8,10 @@
 #   https://github.com/rwightman/pytorch-image-models/tree/master/timm/models/vision_transformer.py
 
 import os
+
 import torch
-from torch import nn, Tensor
 import torch.nn.functional as F
+from torch import Tensor, nn
 
 XFORMERS_ENABLED = os.environ.get("XFORMERS_DISABLED") is None
 try:
@@ -57,7 +58,7 @@ class Attention(nn.Module):
 
     def eviction(self, k: Tensor, v: Tensor, cache_budget: int, num_anchor_tokens: int):
         B, H, N, D = k.shape
-        if N <= cache_budget:
+        if cache_budget >= N:
             return k, v, 0.0
 
         anchor_k, candidate_k = k.split([num_anchor_tokens, N - num_anchor_tokens], dim=2)
@@ -85,9 +86,17 @@ class Attention(nn.Module):
 
         return final_k, final_v, avg_scores
 
-    def forward(self, x: Tensor, pos: Tensor = None, segment_lengths: list[int] = None,
-            attn_mask=None, past_key_value=None, use_cache=False,
-            cache_budget: int = None, tokens_per_frame: int = None):
+    def forward(
+        self,
+        x: Tensor,
+        pos: Tensor = None,
+        segment_lengths: list[int] | None = None,
+        attn_mask=None,
+        past_key_value=None,
+        use_cache=False,
+        cache_budget: int | None = None,
+        tokens_per_frame: int | None = None,
+    ):
         B, SN, C = x.shape
         qkv = self.qkv(x).reshape(B, SN, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
         q, k, v = qkv.unbind(0)
@@ -122,9 +131,11 @@ class Attention(nn.Module):
 
         if segment_lengths is None or len(segment_lengths) <= 1:
             x_out = F.scaled_dot_product_attention(
-                q, k, v,
+                q,
+                k,
+                v,
                 dropout_p=self.attn_drop.p if self.training else 0.0,
-                attn_mask=(attn_mask)[:, None].repeat(1, self.num_heads, 1, 1) if attn_mask is not None else None
+                attn_mask=(attn_mask)[:, None].repeat(1, self.num_heads, 1, 1) if attn_mask is not None else None,
             )
         else:
             outputs = []
@@ -135,13 +146,16 @@ class Attention(nn.Module):
                 segment_tokens = length * tokens_per_frame
                 next_idx = curr_idx + segment_tokens
                 q_chunk = q[:, :, curr_idx:next_idx]
-                k_past  = k[:, :, :next_idx]
-                v_past  = v[:, :, :next_idx]
+                k_past = k[:, :, :next_idx]
+                v_past = v[:, :, :next_idx]
                 outputs.append(
                     F.scaled_dot_product_attention(
-                        q_chunk, k_past, v_past,
+                        q_chunk,
+                        k_past,
+                        v_past,
                         dropout_p=self.attn_drop.p if self.training else 0.0,
-                    ))
+                    )
+                )
                 curr_idx = next_idx
             x_out = torch.cat(outputs, dim=2)
 
@@ -149,6 +163,7 @@ class Attention(nn.Module):
         x_out = self.proj(x_out)
         x_out = self.proj_drop(x_out)
         return x_out
+
 
 class MemEffAttention(Attention):
     def forward(self, x: Tensor, pos=None, attn_mask=None, attn_bias=None) -> Tensor:

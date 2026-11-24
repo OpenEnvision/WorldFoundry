@@ -13,9 +13,9 @@ from .strategies import HighSigmaStrategy
 from .types import DenoisePrediction, LabelImageCondition
 
 __all__ = [
+    "EDMSDE",
     "DenoisePrediction",
     "EDMScaling",
-    "EDMSDE",
     "HighSigmaStrategy",
     "LabelImageCondition",
     "RectifiedFlowScaling",

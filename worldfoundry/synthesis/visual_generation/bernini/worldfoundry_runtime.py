@@ -6,12 +6,14 @@ import importlib.util
 import json
 import os
 import struct
+import subprocess
 import sys
 import tempfile
 from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.core.io.paths import (
     checkpoint_root_path,
@@ -164,12 +166,12 @@ FULL_TASK_DEFAULTS: dict[str, dict[str, Any]] = {
 }
 
 RENDERER_TASK_DEFAULTS: dict[str, dict[str, Any]] = {
-    "t2i": dict(num_frames=1, guidance_mode="t2v_apg"),
-    "i2i": dict(num_frames=1, guidance_mode="v2v"),
-    "t2v": dict(num_frames=81, guidance_mode="t2v_apg"),
-    "v2v": dict(num_frames=81, guidance_mode="v2v_apg"),
-    "r2v": dict(num_frames=81, guidance_mode="r2v_apg"),
-    "rv2v": dict(num_frames=81, guidance_mode="rv2v"),
+    "t2i": {"num_frames": 1, "guidance_mode": "t2v_apg"},
+    "i2i": {"num_frames": 1, "guidance_mode": "v2v"},
+    "t2v": {"num_frames": 81, "guidance_mode": "t2v_apg"},
+    "v2v": {"num_frames": 81, "guidance_mode": "v2v_apg"},
+    "r2v": {"num_frames": 81, "guidance_mode": "r2v_apg"},
+    "rv2v": {"num_frames": 81, "guidance_mode": "rv2v"},
 }
 
 COMMON_DEFAULTS = {
@@ -201,7 +203,7 @@ MODEL_CONFIG_DEFAULTS = {
     "interpolate_src_id": True,
     "max_trained_src_id": 5,
 }
-MODEL_CONFIG_KEYS = frozenset(MODEL_CONFIG_DEFAULTS)
+MODEL_CONFIG_KEYS = frozenset(MODEL_CONFIG_DEFAULTS) | {"shift"}
 
 # Moving the largest model stage still needs working space for activations and
 # CUDA kernels.  This is deliberately a reserve, not a claimed exact peak.
@@ -224,9 +226,7 @@ def checkpoint_integrity_errors(checkpoint_path: Path) -> list[str]:
     partials = [path for path in checkpoint_path.rglob("*.aria2") if ".cache" not in path.parts]
     if partials:
         examples = ", ".join(str(path.relative_to(checkpoint_path)) for path in partials[:3])
-        errors.append(
-            f"checkpoint download is incomplete ({len(partials)} aria2 partial file(s), e.g. {examples})"
-        )
+        errors.append(f"checkpoint download is incomplete ({len(partials)} aria2 partial file(s), e.g. {examples})")
 
     # hfd records the repository manifest before starting aria2.  When it is
     # present, use it to catch missing shards even if the index/config files
@@ -248,9 +248,7 @@ def checkpoint_integrity_errors(checkpoint_path: Path) -> list[str]:
         missing = [relative for relative in expected if not (checkpoint_path / relative).is_file()]
         if missing:
             examples = ", ".join(missing[:4])
-            errors.append(
-                f"checkpoint is missing {len(missing)} repository file(s), e.g. {examples}"
-            )
+            errors.append(f"checkpoint is missing {len(missing)} repository file(s), e.g. {examples}")
 
     # The current hfd helper records exact byte sizes in a tab-separated
     # manifest. Presence checks alone are insufficient: a truncated shard can
@@ -290,13 +288,8 @@ def checkpoint_integrity_errors(checkpoint_path: Path) -> list[str]:
         examples = ", ".join(malformed_manifest[:3])
         errors.append(f"invalid hfd byte-size manifest ({examples})")
     if wrong_sizes:
-        examples = ", ".join(
-            f"{relative}={actual}/{expected} bytes"
-            for relative, actual, expected in wrong_sizes[:3]
-        )
-        errors.append(
-            f"checkpoint has {len(wrong_sizes)} wrong-sized repository file(s), e.g. {examples}"
-        )
+        examples = ", ".join(f"{relative}={actual}/{expected} bytes" for relative, actual, expected in wrong_sizes[:3])
+        errors.append(f"checkpoint has {len(wrong_sizes)} wrong-sized repository file(s), e.g. {examples}")
 
     for index_path in checkpoint_path.rglob("*.safetensors.index.json"):
         if ".cache" in index_path.parts:
@@ -308,9 +301,7 @@ def checkpoint_integrity_errors(checkpoint_path: Path) -> list[str]:
             continue
         weight_map = index.get("weight_map")
         if not isinstance(weight_map, Mapping):
-            errors.append(
-                f"invalid checkpoint index {index_path.relative_to(checkpoint_path)}: weight_map is missing"
-            )
+            errors.append(f"invalid checkpoint index {index_path.relative_to(checkpoint_path)}: weight_map is missing")
             continue
         shard_names = {name for name in weight_map.values() if isinstance(name, str)}
         missing_shards = [name for name in sorted(shard_names) if not (index_path.parent / name).is_file()]
@@ -363,11 +354,7 @@ def _safetensors_group_sizes(index_path: Path) -> dict[str, int]:
 def checkpoint_resource_estimate(checkpoint_path: Path) -> dict[str, int | None]:
     """Estimate per-rank host weights and the largest CUDA-resident stage."""
 
-    shards = [
-        path
-        for path in checkpoint_path.rglob("*.safetensors")
-        if ".cache" not in path.parts
-    ]
+    shards = [path for path in checkpoint_path.rglob("*.safetensors") if ".cache" not in path.parts]
     host_weight_bytes = sum(path.stat().st_size for path in shards)
     stage_sizes: Counter[str] = Counter()
     largest_shard_bytes = 0
@@ -400,11 +387,7 @@ def checkpoint_resource_estimate(checkpoint_path: Path) -> dict[str, int | None]
     # index's aggregate total as one resident stage incorrectly reports 168 GiB
     # for a checkpoint whose largest stage is about 53 GiB.  Fall back to the
     # aggregate only when tensor group information could not be read.
-    peak_cuda_weight_bytes = (
-        max(group_sizes.values())
-        if group_sizes
-        else max(indexed_totals, default=0)
-    )
+    peak_cuda_weight_bytes = max(group_sizes.values()) if group_sizes else max(indexed_totals, default=0)
     return {
         "host_weight_bytes_per_rank": host_weight_bytes or None,
         "streaming_host_weight_bytes_per_rank": streaming_host_weight_bytes or None,
@@ -454,7 +437,7 @@ def _cgroup_memory_available_bytes() -> int | None:
             stat_values = {
                 key: int(value)
                 for line in stat_path.read_text(encoding="utf-8").splitlines()
-                if len((parts := line.split())) == 2
+                if len(parts := line.split()) == 2
                 for key, value in (parts,)
             }
             inactive_file = next(
@@ -514,10 +497,15 @@ class BerniniRuntime:
         self.variant = VARIANTS[model_id]
         self.device = device
         self.model_config = dict(MODEL_CONFIG_DEFAULTS)
-        unknown_config = set(model_config or ()) - MODEL_CONFIG_KEYS
+        raw_config = dict(model_config or {})
+        if "shift" not in raw_config and raw_config.get("flow_shift") is not None:
+            raw_config["shift"] = float(raw_config.pop("flow_shift"))
+        else:
+            raw_config.pop("flow_shift", None)
+        unknown_config = set(raw_config) - MODEL_CONFIG_KEYS
         if unknown_config:
             raise ValueError(f"Unsupported Bernini model config keys: {sorted(unknown_config)}")
-        self.model_config.update(dict(model_config or {}))
+        self.model_config.update(raw_config)
         self.checkpoint_path = self._resolve_checkpoint(checkpoint_path)
         self._pipeline: Any = None
 
@@ -596,9 +584,7 @@ class BerniniRuntime:
         blockers: list[str] = []
         streaming_experts = self.variant.model_id == "bernini-r-14b"
         host_per_rank = estimate[
-            "streaming_host_weight_bytes_per_rank"
-            if streaming_experts
-            else "host_weight_bytes_per_rank"
+            "streaming_host_weight_bytes_per_rank" if streaming_experts else "host_weight_bytes_per_rank"
         ]
         host_available = _cgroup_memory_available_bytes()
         if host_per_rank and host_available is not None:
@@ -631,14 +617,11 @@ class BerniniRuntime:
                     if peak_cuda_weight:
                         required = int(peak_cuda_weight) + CUDA_WORKSPACE_RESERVE_BYTES
                         insufficient = [
-                            (index, free)
-                            for index, free in zip(indices, gpu_free)
-                            if free < required
+                            (index, free) for index, free in zip(indices, gpu_free, strict=False) if free < required
                         ]
                         if insufficient:
                             rendered = ", ".join(
-                                f"cuda:{index}={free / 1024**3:.1f} GiB free"
-                                for index, free in insufficient
+                                f"cuda:{index}={free / 1024**3:.1f} GiB free" for index, free in insufficient
                             )
                             blockers.append(
                                 "largest Bernini stage needs at least "
@@ -696,8 +679,10 @@ class BerniniRuntime:
         pipeline_cls = BerniniPipeline if self.variant.family == "planner_renderer" else BerniniRendererPipeline
         load_options = dict(self.model_config)
         if self.variant.family == "renderer":
-            # Public Bernini-R repos already contain transformer/transformer_2.
+            # Public Bernini-R repos already contain transformer/transformer_2,
+            # and upstream CLI passes flow_shift (default 5.0) as shift.
             load_options["load_ckpt_weights"] = False
+            load_options.setdefault("shift", COMMON_DEFAULTS["flow_shift"])
         if self.variant.model_id == "bernini-r-14b":
             # The two 14B experts cannot coexist in this cgroup. Load the
             # active expert directly onto CUDA and replace it at the scheduler
@@ -773,14 +758,19 @@ class BerniniRuntime:
             env.setdefault("NCCL_NET_PLUGIN", "none")
             env.setdefault("NCCL_DEBUG", "WARN")
             env.setdefault("TOKENIZERS_PARALLELISM", "false")
-            from worldfoundry.core.execution.process import run_torchrun_module
+            from worldfoundry.core.execution.process import package_module_command
 
-            completed = run_torchrun_module(
-                "worldfoundry.synthesis.visual_generation.bernini.distributed_infer",
-                nproc_per_node=nproc_per_node,
-                args=("--payload", str(payload_path)),
+            completed = subprocess.run(
+                package_module_command(
+                    "worldfoundry.synthesis.visual_generation.bernini.distributed_infer",
+                    ("--payload", str(payload_path)),
+                    nproc_per_node=nproc_per_node,
+                    python_executable=sys.executable,
+                ),
                 env=env,
-                python_executable=sys.executable,
+                text=True,
+                capture_output=True,
+                check=False,
             )
             if completed.returncode:
                 detail = (completed.stderr or completed.stdout).strip()
@@ -802,7 +792,11 @@ class BerniniRuntime:
         nproc_per_node = int(overrides.pop("nproc_per_node", 1))
         ulysses_size = int(overrides.pop("ulysses_size", nproc_per_node if nproc_per_node > 1 else 1))
         requested_output = Path(output_path).expanduser().resolve()
-        output = requested_output.with_suffix(".png") if task_type in {"t2i", "i2i"} else requested_output.with_suffix(".mp4")
+        output = (
+            requested_output.with_suffix(".png")
+            if task_type in {"t2i", "i2i"}
+            else requested_output.with_suffix(".mp4")
+        )
         report = self.requirement_report()
         if plan_only or not report["ready"]:
             plan_path = self._plan_path(output)
@@ -831,7 +825,9 @@ class BerniniRuntime:
             }
 
         defaults = dict(COMMON_DEFAULTS)
-        defaults.update((FULL_TASK_DEFAULTS if self.variant.family == "planner_renderer" else RENDERER_TASK_DEFAULTS)[task_type])
+        defaults.update(
+            (FULL_TASK_DEFAULTS if self.variant.family == "planner_renderer" else RENDERER_TASK_DEFAULTS)[task_type]
+        )
         defaults.update({key: value for key, value in overrides.items() if value is not None})
         output.parent.mkdir(parents=True, exist_ok=True)
         distributed = int(os.environ.get("WORLD_SIZE", "1")) > 1
@@ -910,13 +906,13 @@ class BerniniRuntime:
 
 
 __all__ = [
-    "BerniniRuntime",
-    "BerniniVariant",
     "FULL_TASK_DEFAULTS",
     "MODEL_CONFIG_KEYS",
     "RENDERER_TASK_DEFAULTS",
     "UPSTREAM_REVISION",
     "VARIANTS",
+    "BerniniRuntime",
+    "BerniniVariant",
     "checkpoint_integrity_errors",
     "infer_task_type",
     "normalize_task_type",

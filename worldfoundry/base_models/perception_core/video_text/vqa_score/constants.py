@@ -1,9 +1,7 @@
 import os
 
 HF_CACHE_DIR = (
-    os.environ.get("WORLDFOUNDRY_T2V_METRICS_CACHE_DIR")
-    or os.environ.get("WORLDFOUNDRY_HFD_ROOT")
-    or "./hf_cache/"
+    os.environ.get("WORLDFOUNDRY_T2V_METRICS_CACHE_DIR") or os.environ.get("WORLDFOUNDRY_HFD_ROOT") or "./hf_cache/"
 )
 
 # For CLIP-FlanT5 and LLaVA-1.5 (copied from llava)

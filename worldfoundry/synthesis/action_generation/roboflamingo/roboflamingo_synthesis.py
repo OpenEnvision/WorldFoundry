@@ -10,16 +10,18 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
-from ..base_action_synthesis import ActionModelSynthesis
 from worldfoundry.synthesis.action_generation.roboflamingo.runtime import (
     RoboFlamingoRuntime,
     RoboFlamingoRuntimeConfig,
     select_roboflamingo_runtime_config,
 )
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
+
+from ..base_action_synthesis import ActionModelSynthesis
 
 
 def _first_observation_value(*values: Any) -> Any:
@@ -88,7 +90,7 @@ class RoboFlamingoSynthesis(ActionModelSynthesis):
         hf_models_root: str | Path | None = None,
         command_template: Sequence[str] | None = None,
         **kwargs: Any,
-    ) -> "RoboFlamingoSynthesis":
+    ) -> RoboFlamingoSynthesis:
         """Create RoboFlamingo from profile metadata without loading torch.
 
         This factory method simplifies instantiation by resolving model paths
@@ -201,8 +203,12 @@ class RoboFlamingoSynthesis(ActionModelSynthesis):
         # to RoboFlamingo's expected observation keys, with fallback logic.
         return {
             "visual_history": _first_observation_value(video, kwargs.get("visual_history"), images),
-            "current_image": _first_observation_value(images, kwargs.get("image"), kwargs.get("image_path"), kwargs.get("ref_image_path")),
-            "gripper_image": _first_observation_value(kwargs.get("gripper_image"), kwargs.get("wrist_image"), kwargs.get("gripper")),
+            "current_image": _first_observation_value(
+                images, kwargs.get("image"), kwargs.get("image_path"), kwargs.get("ref_image_path")
+            ),
+            "gripper_image": _first_observation_value(
+                kwargs.get("gripper_image"), kwargs.get("wrist_image"), kwargs.get("gripper")
+            ),
             "proprio": _first_observation_value(kwargs.get("proprio"), kwargs.get("robot_state")),
             "gripper_state": kwargs.get("gripper_state"),
         }
@@ -275,7 +281,9 @@ class RoboFlamingoSynthesis(ActionModelSynthesis):
             },
         }
         # Write the plan payload to a JSON file.
-        plan_path.write_text(json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        plan_path.write_text(
+            json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
         # If only a plan is requested, return the planning artifacts and status.
         if plan_only:

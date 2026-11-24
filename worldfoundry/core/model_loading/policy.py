@@ -6,10 +6,10 @@ model families can use the same loading and execution vocabulary.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Mapping
 
 import torch
 
@@ -36,6 +36,10 @@ class QuantizationMode(str, Enum):
     INT4 = "int4"
     NVFP4 = "nvfp4"
     GGUF = "gguf"
+    FP8_CAST = "fp8-cast"
+    FP8_SCALED_MM = "fp8-scaled-mm"
+    NVFP4_CAST = "nvfp4-cast"
+    NVFP4_PREQUANT = "nvfp4-prequant"
 
 
 class AttentionBackend(str, Enum):
@@ -59,7 +63,7 @@ class AttentionBackend(str, Enum):
     SCALED_INT8_FP8 = "scaled_int8_fp8"
 
     @classmethod
-    def _missing_(cls, value: object) -> "AttentionBackend | None":
+    def _missing_(cls, value: object) -> AttentionBackend | None:
         """Accept the public aliases understood by the attention dispatcher."""
 
         normalized = str(value).strip().lower().replace("-", "_")

@@ -1,17 +1,21 @@
-artifact_filename: longcat_video.mp4
-artifact_kind: generated_video
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: longcat-video
 display_name: LongCat-Video
-id: longcat-video
+task_family: video_generation
 input_schema:
   image: true
   prompt: true
   video: true
-integration_status: integrated
+artifact_kind: generated_video
+artifact_filename: longcat_video.mp4
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: official_demo_parity_pending
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - WorldFoundry provides a vendored LongCat-Video runtime wrapper and fails fast when
   execution is not explicitly requested.
 - The pipeline uses the vendored demo scripts when execute=True and local checkpoints
   are staged.
-runtime_status: official_demo_parity_pending
-task_family: video_generation

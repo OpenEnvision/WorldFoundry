@@ -13,7 +13,7 @@ Paper: [arXiv 2602.06949](https://arxiv.org/abs/2602.06949). Project: [DreamDojo
 
 ## Runtime contract
 
-Integration status: **Integrated**. The model is a robot world model, not an action-generating VLA policy.
+The model is a robot world model, not an action-generating VLA policy.
 
 Supply one initial image and already-normalized actions shaped `[N,384]` or `[1,N,384]`, where `N` is a positive multiple of 12. Each chunk generates 13 frames at 480×640 and 5 fps. Continuation uses the final generated frame as the next observation and removes duplicate boundary frames. Action files may be `.npy`, `.json`, or PyTorch tensors.
 
@@ -22,6 +22,8 @@ The unified action layout includes GR-1 `[0,58)`, G1 `[58,101)`, YAM `[101,147)`
 ## Running in WorldFoundry
 
 Prepare the GR-1 EMA checkpoint, Cosmos-Predict2.5 video tokenizer, and Cosmos-Reason1-7B text encoder. The public loader automatically converts distributed checkpoint shards to `model_ema_bf16.pt` when needed.
+
+It runs in the dedicated environment `dreamdojo` (Python 3.10, CUDA 12.8, torch==2.7.0).
 
 ```python
 from worldfoundry.pipelines.component_pipelines import DreamDojoPipeline
@@ -46,11 +48,11 @@ pipeline(
 
 For precomputed official Reason1 features, replace `text_encoder_path` with `text_embeddings_path`. Features must have shape `[1,S,100352]`; this uses actual supplied text embeddings rather than loading the text encoder.
 
-The reproducible public-loader command is `python tests/manual/dreamdojo_inference.py --help`. Checkpoints, inputs, and generated videos remain external assets.
+For a command-line run, see `python tests/manual/dreamdojo_inference.py --help`. Checkpoints, inputs, and generated videos live outside the repository.
 
-## Executed evidence
+## Validation
 
-A checkpoint-backed public-loader smoke on H100 generated and exported 13 frames at 480×640 and 5 fps, with neutral normalized actions, 35 sampling steps, and seed 42. A two-chunk A/B/A replay generated 25 frames per request from 24 actions: repeated A pixels matched exactly, and changed actions changed the generated pixels.
+Validated with the released GR-1 checkpoint: the pipeline generates 13 frames per chunk at 480×640 and 5 fps (35 steps, seed 42), repeated actions reproduce identical frames, and changed actions change the generated video.
 
 ## Limitations
 

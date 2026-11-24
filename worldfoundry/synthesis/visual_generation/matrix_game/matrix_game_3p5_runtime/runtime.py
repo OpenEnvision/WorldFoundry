@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import (
     resolve_local_checkpoint_file,
     resolve_local_hf_model_path,
@@ -30,9 +31,7 @@ DA3_REPO = "depth-anything/DA3NESTED-GIANT-LARGE-1.1"
 
 RUNTIME_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = RUNTIME_ROOT.parents[4]
-INFERENCE_ENTRYPOINT = RUNTIME_ROOT / "entrypoint.py"
-NATIVE_DIFFUSION_ROOT = PROJECT_ROOT / "worldfoundry/base_models/diffusion_model"
-SHARED_DA3_ROOT = PROJECT_ROOT / "worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v3"
+ENTRYPOINT_MODULE = "worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_3p5_runtime.entrypoint"
 
 WAN_REQUIRED_FILES = (
     "models_t5_umt5-xxl-enc-bf16.pth",
@@ -50,16 +49,6 @@ REQUIRED_RUNTIME_FILES = (
 )
 REQUIRED_DATA_FILES = tuple(
     matrix_game_35_infer_config_path(profile) for profile in ("common", "first_person", "third_person")
-)
-REQUIRED_SHARED_FILES = (
-    NATIVE_DIFFUSION_ROOT / "pipeline.py",
-    NATIVE_DIFFUSION_ROOT / "recipes/matrix_game.py",
-    NATIVE_DIFFUSION_ROOT / "models/autoencoders/wan/model.py",
-    NATIVE_DIFFUSION_ROOT / "models/encoders/wan/model.py",
-    NATIVE_DIFFUSION_ROOT / "models/networks/matrix_game_3p5/model.py",
-    NATIVE_DIFFUSION_ROOT / "models/denoisers/matrix_game_3p5.py",
-    NATIVE_DIFFUSION_ROOT / "models/networks/wan/model.py",
-    SHARED_DA3_ROOT / "api.py",
 )
 
 _RESERVED_PIPELINE_ARGS = frozenset(
@@ -85,7 +74,6 @@ _SAFE_ENV_KEYS = (
     "CUDA_VISIBLE_DEVICES",
     "DA3_MODEL_PATH",
     "HF_HUB_OFFLINE",
-    "PYTHONPATH",
     "TRANSFORMERS_OFFLINE",
     "WORLDFOUNDRY_MATRIX_GAME_3P5_CACHE_DIR",
     "WORLDFOUNDRY_MATRIX_GAME_3P5_PYTHON",
@@ -293,7 +281,7 @@ class MatrixGame35Runtime:
         )
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> "MatrixGame35Runtime":
+    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> MatrixGame35Runtime:
         options = dict(pretrained_model_path) if isinstance(pretrained_model_path, Mapping) else {}
         if pretrained_model_path is not None and not isinstance(pretrained_model_path, Mapping):
             options["checkpoint_path"] = pretrained_model_path
@@ -367,9 +355,7 @@ class MatrixGame35Runtime:
             for relative in REQUIRED_RUNTIME_FILES
             if not (RUNTIME_ROOT / relative).is_file()
         ]
-        missing_runtime.extend(
-            str(path) for path in (*REQUIRED_DATA_FILES, *REQUIRED_SHARED_FILES) if not path.is_file()
-        )
+        missing_runtime.extend(str(path) for path in REQUIRED_DATA_FILES if not path.is_file())
         assets: dict[str, str] = {}
         asset_errors: dict[str, str] = {}
 
@@ -402,8 +388,6 @@ class MatrixGame35Runtime:
             "runtime_root": str(RUNTIME_ROOT),
             "config_root": str(MATRIX_GAME_35_CONFIG_ROOT),
             "project_root": str(PROJECT_ROOT),
-            "native_diffusion_root": str(NATIVE_DIFFUSION_ROOT),
-            "shared_da3_root": str(SHARED_DA3_ROOT),
             "code_ready": code_ready,
             "assets_ready": assets_ready,
             "device_ready": device_ready,
@@ -512,9 +496,7 @@ class MatrixGame35Runtime:
         inference_output_dir = output_root_path / self.spec.output_namespace / run_name
         workspace_path = cache_root_path / "infer_runs" / f"{self.spec.output_namespace}_{run_name}"
 
-        command = [
-            str(assets.python_executable),
-            str(INFERENCE_ENTRYPOINT),
+        arguments = [
             "--person",
             self.spec.person,
             "--image",
@@ -547,15 +529,15 @@ class MatrixGame35Runtime:
             str(assets.da3_dir),
         ]
         if caption_path is not None:
-            command.extend(["--caption", str(Path(caption_path).expanduser().resolve())])
+            arguments.extend(["--caption", str(Path(caption_path).expanduser().resolve())])
         if refs_dir is not None:
-            command.extend(["--refs", str(Path(refs_dir).expanduser().resolve())])
+            arguments.extend(["--refs", str(Path(refs_dir).expanduser().resolve())])
         if keep_workspace:
-            command.append("--keep-workspace")
-        command.extend(_validate_extra_args(extra_args))
+            arguments.append("--keep-workspace")
+        arguments.extend(_validate_extra_args(extra_args))
+        command = package_module_command(ENTRYPOINT_MODULE, arguments, python_executable=assets.python_executable)
 
         env = os.environ.copy()
-        env["PYTHONPATH"] = os.pathsep.join(entry for entry in (str(PROJECT_ROOT), env.get("PYTHONPATH", "")) if entry)
         env["DA3_MODEL_PATH"] = str(assets.da3_dir)
         env["WORLDFOUNDRY_SKIP_MODEL_DOWNLOAD"] = "true"
         env["HF_HUB_OFFLINE"] = "1"
@@ -744,11 +726,9 @@ class MatrixGame35Runtime:
 
 __all__ = [
     "DA3_REPO",
+    "ENTRYPOINT_MODULE",
     "MATRIX_GAME_35_CHECKPOINT_REPO",
-    "INFERENCE_ENTRYPOINT",
     "PROJECT_ROOT",
-    "SHARED_DA3_ROOT",
-    "NATIVE_DIFFUSION_ROOT",
     "RUNTIME_ROOT",
     "SOURCE_REPOSITORY",
     "SOURCE_REVISION",

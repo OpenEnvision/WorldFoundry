@@ -11,20 +11,16 @@ pytest.importorskip("textual")
 
 from textual.widgets import Collapsible, Input, Select
 
-from worldfoundry.cli.tui_app import (
+from worldfoundry.cli.catalog import is_infer_model_row, load_catalog
+from worldfoundry.cli.command_builders import build_model_benchmark_command, build_model_infer_command
+from worldfoundry.cli.inference_variants import infer_variant_options
+from worldfoundry.cli.tui.app import (
     WorldFoundryTui,
     _format_file_artifact,
     _human_bytes,
     _looks_like_media_file,
     _looks_like_remote_id,
     _looks_like_video_file,
-)
-from worldfoundry.cli.tui_discovery import (
-    build_model_benchmark_command,
-    build_model_infer_command,
-    infer_variant_options,
-    is_infer_model_row,
-    load_tui_catalog,
 )
 
 
@@ -86,7 +82,7 @@ def test_tui_mounts_and_switches_modes(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_every_tui_catalog_entry_builds_a_command(tmp_path: Path) -> None:
-    catalog = load_tui_catalog()
+    catalog = load_catalog()
 
     for row in catalog.models:
         if is_infer_model_row(row):
@@ -113,7 +109,7 @@ def test_every_tui_catalog_entry_builds_a_command(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_tui_groups_legacy_and_studio_model_aliases() -> None:
-    catalog = load_tui_catalog()
+    catalog = load_catalog()
     infer_rows = {row.model_id: row for row in catalog.models if is_infer_model_row(row)}
 
     assert "flashworld" in infer_rows

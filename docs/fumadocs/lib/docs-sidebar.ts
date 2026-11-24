@@ -15,7 +15,6 @@ import {
 import { source } from '@/lib/source';
 
 export type {
-  SidebarBadge,
   SidebarNavDivider,
   SidebarNavItem,
   SidebarNavPage,
@@ -98,7 +97,6 @@ function getArchitectureSidebarItems(locale: Locale): SidebarNavItem[] {
       type: 'page',
       link: toSidebarPageLink(page, locale),
       depth: 2,
-      badges: [],
     });
   }
 
@@ -126,7 +124,6 @@ function getMetricsSidebarItems(locale: Locale): SidebarNavItem[] {
       type: 'page',
       link: toSidebarPageLink(page, locale),
       depth: 2,
-      badges: [],
     });
   }
 
@@ -150,7 +147,6 @@ function getApiReferenceSidebarItems(locale: Locale): SidebarNavItem[] {
       type: 'page',
       link: toSidebarPageLink(page, locale),
       depth: 2,
-      badges: [],
     });
   }
 
@@ -177,7 +173,6 @@ export function getDocsSidebarGroups(locale: Locale): SidebarNavGroup[] {
               type: 'page',
               link: toSidebarPageLink(page, locale),
               depth: 0,
-              badges: [],
             },
             items: apiChildren,
           });
@@ -196,7 +191,6 @@ export function getDocsSidebarGroups(locale: Locale): SidebarNavGroup[] {
               type: 'page',
               link: toSidebarPageLink(page, locale),
               depth: 0,
-              badges: [],
             },
             items: metricsChildren,
           });
@@ -210,7 +204,6 @@ export function getDocsSidebarGroups(locale: Locale): SidebarNavGroup[] {
               type: 'page',
               link: toSidebarPageLink(page, locale),
               depth: 0,
-              badges: [],
             },
             items: architectureChildren,
           });
@@ -222,7 +215,6 @@ export function getDocsSidebarGroups(locale: Locale): SidebarNavGroup[] {
           type: 'page',
           link: toSidebarPageLink(page, locale),
           depth: nested ? 1 : 0,
-          badges: [],
         });
       }
 

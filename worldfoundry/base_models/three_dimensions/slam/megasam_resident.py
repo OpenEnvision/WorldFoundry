@@ -9,8 +9,9 @@ import sys
 import tempfile
 import time
 from collections import OrderedDict
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import cv2
 import numpy as np
@@ -75,7 +76,7 @@ def valid_pose_cache(path: Path) -> bool:
         with np.load(path) as data:
             poses = data["cam_c2w"]
             return poses.ndim == 3 and poses.shape[1:] == (4, 4) and poses.shape[0] >= 2
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
 
 
@@ -138,9 +139,9 @@ def load_unidepth_model(weights_root: Path, device: Any) -> Any:
 def resize_unidepth_rgb(rgb: np.ndarray) -> np.ndarray:
     if rgb.shape[1] > rgb.shape[0]:
         final_w = LONG_DIM
-        final_h = int(round(LONG_DIM * rgb.shape[0] / rgb.shape[1]))
+        final_h = int(round(LONG_DIM * rgb.shape[0] / rgb.shape[1]))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     else:
-        final_w = int(round(LONG_DIM * rgb.shape[1] / rgb.shape[0]))
+        final_w = int(round(LONG_DIM * rgb.shape[1] / rgb.shape[0]))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         final_h = LONG_DIM
     return cv2.resize(rgb, (final_w, final_h), cv2.INTER_AREA)
 
@@ -252,7 +253,8 @@ class ResidentMegaSamPipeline:
         checkpoint = self.droid_checkpoint
         net = DroidNet()
         state_dict = OrderedDict(
-            (key.replace("module.", ""), value) for key, value in self.torch.load(checkpoint, map_location="cpu", weights_only=True).items()
+            (key.replace("module.", ""), value)
+            for key, value in self.torch.load(checkpoint, map_location="cpu", weights_only=True).items()
         )
         for key in (
             "update.weight.2.weight",
@@ -352,8 +354,13 @@ class ResidentMegaSamPipeline:
 
         try:
             run_tracking(
-                frames_dir, mono_root, metric_root, scene_name, output,
-                buffer_size=buffer_size, droid_factory=resident_droid,
+                frames_dir,
+                mono_root,
+                metric_root,
+                scene_name,
+                output,
+                buffer_size=buffer_size,
+                droid_factory=resident_droid,
             )
         finally:
             gc.collect()

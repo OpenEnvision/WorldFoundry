@@ -13,7 +13,6 @@ This is LTX video graph math, not spatial tiling
 """
 
 import math
-from typing import Tuple, Union
 
 import torch
 from einops import rearrange
@@ -25,12 +24,13 @@ from .enums import PaddingModeType
 
 class SpaceToDepthDownsample(nn.Module):
     """Pack spatial (and optional temporal) pixels into channels."""
+
     def __init__(
         self,
-        dims: Union[int, Tuple[int, int]],
+        dims: int | tuple[int, int],
         in_channels: int,
         out_channels: int,
-        stride: Tuple[int, int, int],
+        stride: tuple[int, int, int],
         spatial_padding_mode: PaddingModeType = PaddingModeType.ZEROS,
     ):
         super().__init__()
@@ -82,11 +82,12 @@ class SpaceToDepthDownsample(nn.Module):
 
 class DepthToSpaceUpsample(nn.Module):
     """Unpack channels back to spatial/temporal resolution."""
+
     def __init__(
         self,
-        dims: int | Tuple[int, int],
+        dims: int | tuple[int, int],
         in_channels: int,
-        stride: Tuple[int, int, int],
+        stride: tuple[int, int, int],
         residual: bool = False,
         out_channels_reduction_factor: int = 1,
         spatial_padding_mode: PaddingModeType = PaddingModeType.ZEROS,

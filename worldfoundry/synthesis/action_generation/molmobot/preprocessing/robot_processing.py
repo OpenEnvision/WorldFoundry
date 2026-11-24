@@ -1,5 +1,6 @@
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Optional, Sequence, List
+from typing import Any, Optional
 
 import numpy as np
 import torch
@@ -20,12 +21,12 @@ def _to_array(x):
 def _normalize_array(
     x: np.ndarray,
     *,
-    mean: Optional[np.ndarray] = None,
-    std: Optional[np.ndarray] = None,
-    min_val: Optional[np.ndarray] = None,
-    max_val: Optional[np.ndarray] = None,
-    q_low: Optional[np.ndarray] = None,
-    q_high: Optional[np.ndarray] = None,
+    mean: np.ndarray | None = None,
+    std: np.ndarray | None = None,
+    min_val: np.ndarray | None = None,
+    max_val: np.ndarray | None = None,
+    q_low: np.ndarray | None = None,
+    q_high: np.ndarray | None = None,
     mode: str = "mean_std",
 ) -> np.ndarray:
     eps = 1e-6
@@ -50,12 +51,12 @@ def _normalize_array(
 def _unnormalize_array(
     x: np.ndarray,
     *,
-    mean: Optional[np.ndarray] = None,
-    std: Optional[np.ndarray] = None,
-    min_val: Optional[np.ndarray] = None,
-    max_val: Optional[np.ndarray] = None,
-    q_low: Optional[np.ndarray] = None,
-    q_high: Optional[np.ndarray] = None,
+    mean: np.ndarray | None = None,
+    std: np.ndarray | None = None,
+    min_val: np.ndarray | None = None,
+    max_val: np.ndarray | None = None,
+    q_low: np.ndarray | None = None,
+    q_high: np.ndarray | None = None,
     mode: str = "mean_std",
 ) -> np.ndarray:
     if mode == "mean_std":
@@ -72,12 +73,12 @@ def _unnormalize_array(
 
 @dataclass
 class _FeatureNormalizer:
-    mean: Optional[np.ndarray] = None
-    std: Optional[np.ndarray] = None
-    min_val: Optional[np.ndarray] = None
-    max_val: Optional[np.ndarray] = None
-    q_low: Optional[np.ndarray] = None
-    q_high: Optional[np.ndarray] = None
+    mean: np.ndarray | None = None
+    std: np.ndarray | None = None
+    min_val: np.ndarray | None = None
+    max_val: np.ndarray | None = None
+    q_low: np.ndarray | None = None
+    q_high: np.ndarray | None = None
     mode: str = "min_max"
 
     @classmethod
@@ -155,18 +156,18 @@ class _FeatureNormalizer:
 class RobotPreprocessor:
     """Normalizes robot state for policy inference."""
 
-    state_normalizers: Dict[str, _FeatureNormalizer] = field(default_factory=dict)
+    state_normalizers: dict[str, _FeatureNormalizer] = field(default_factory=dict)
     default_repo_id: str = "default"
 
-    def normalize_state(self, state, repo_id: Optional[str]) -> Optional[object]:
+    def normalize_state(self, state, repo_id: str | None) -> object | None:
         normalizer = self._get_normalizer(self.state_normalizers, repo_id)
         if normalizer is None:
             return state
         return normalizer.normalize(state)
 
     def _get_normalizer(
-        self, mapping: Mapping[str, _FeatureNormalizer], repo_id: Optional[str]
-    ) -> Optional[_FeatureNormalizer]:
+        self, mapping: Mapping[str, _FeatureNormalizer], repo_id: str | None
+    ) -> _FeatureNormalizer | None:
         if repo_id and repo_id in mapping:
             return mapping[repo_id]
         return mapping.get(self.default_repo_id)
@@ -176,18 +177,18 @@ class RobotPreprocessor:
 class RobotPostprocessor:
     """Unnormalizes model actions back to the robot's raw scale."""
 
-    action_normalizers: Dict[str, _FeatureNormalizer] = field(default_factory=dict)
+    action_normalizers: dict[str, _FeatureNormalizer] = field(default_factory=dict)
     default_repo_id: str = "default"
 
-    def unnormalize_action(self, action, repo_id: Optional[str]) -> Optional[object]:
+    def unnormalize_action(self, action, repo_id: str | None) -> object | None:
         normalizer = self._get_normalizer(self.action_normalizers, repo_id)
         if normalizer is None:
             return action
         return normalizer.unnormalize(action)
 
     def _get_normalizer(
-        self, mapping: Mapping[str, _FeatureNormalizer], repo_id: Optional[str]
-    ) -> Optional[_FeatureNormalizer]:
+        self, mapping: Mapping[str, _FeatureNormalizer], repo_id: str | None
+    ) -> _FeatureNormalizer | None:
         if repo_id and repo_id in mapping:
             return mapping[repo_id]
         return mapping.get(self.default_repo_id)
@@ -197,10 +198,10 @@ class RobotPostprocessor:
 class RobotProcessorConfig(BaseConfig):
     """Configuration container for robot pre/post processing."""
 
-    stats_by_repo: Dict[str, Dict[str, Any]] = field(default_factory=dict, metadata={"allow_objects": True})
+    stats_by_repo: dict[str, dict[str, Any]] = field(default_factory=dict, metadata={"allow_objects": True})
     default_repo_id: str = "default"
     action_key: str = "action"
-    state_keys: List[str] = field(default_factory=lambda: ["observation.state"])
+    state_keys: list[str] = field(default_factory=lambda: ["observation.state"])
     action_norm_mode: str = "min_max"
     state_norm_mode: str = "min_max"
 
@@ -219,8 +220,8 @@ class RobotProcessorConfig(BaseConfig):
         )
 
     def _build_normalizers(self):
-        action_norms: Dict[str, _FeatureNormalizer] = {}
-        state_norms: Dict[str, _FeatureNormalizer] = {}
+        action_norms: dict[str, _FeatureNormalizer] = {}
+        state_norms: dict[str, _FeatureNormalizer] = {}
         for repo_id, stats in self.stats_by_repo.items():
             if self.action_key in stats:
                 norm = _FeatureNormalizer.from_stats(stats[self.action_key], mode=self.action_norm_mode)

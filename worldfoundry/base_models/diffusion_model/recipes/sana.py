@@ -200,13 +200,19 @@ def _image_recipe(variant: SanaVariant) -> NativeDiffusionRecipe:
     )
     initializer_factory = build_sana_controlnet_initializer if controlnet else build_sana_image_initializer
     scheduler_factory = build_sana_scm_scheduler if sprint else build_sana_flow_match_scheduler
-    scheduler_options = {"sigma_data": 0.5} if sprint else {
-        "shift": (
-            6.0 if variant.model_id == "sana-1600m-4k-bf16"
-            else 4.0 if _parameter_scale(variant.model_id) == "600M"
-            else 3.0
-        )
-    }
+    scheduler_options = (
+        {"sigma_data": 0.5}
+        if sprint
+        else {
+            "shift": (
+                6.0
+                if variant.model_id == "sana-1600m-4k-bf16"
+                else 4.0
+                if _parameter_scale(variant.model_id) == "600M"
+                else 3.0
+            )
+        }
+    )
     codec_options = {"decoder_input_scale": 0.5} if sprint else {}
     return NativeDiffusionRecipe(
         model_id=variant.model_id,
@@ -348,10 +354,7 @@ def _video_recipe(variant: SanaVariant) -> NativeDiffusionRecipe:
         ),
         execution=_execution(
             encoded_initialization=streaming,
-            strategy=(
-                "chunked-additive-cache" if longlive
-                else "chunked-kv-cache" if long_streaming else "standard"
-            ),
+            strategy=("chunked-additive-cache" if longlive else "chunked-kv-cache" if long_streaming else "standard"),
             options={
                 "base_chunk_frames": 3,
                 "num_cached_chunks": 2,

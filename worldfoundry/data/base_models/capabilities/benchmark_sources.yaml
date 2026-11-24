@@ -1,0 +1,266 @@
+# Upstream benchmark repositories vendored into this repository (template: in_tree_source).
+# Schema and templates: see the module docstring of worldfoundry/base_models/capabilities.py.
+
+bridgedata_v2_source_assets:
+  template: in_tree_source
+  path: worldfoundry/data/benchmarks/tasks/external/bridgedata-v2.yaml
+  kind: file
+  upstream: https://github.com/rail-berkeley/bridge_data_v2.git
+  note: BridgeData V2 source checkout used to stage real-robot offline evaluation assets.
+
+calvin_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/embodied/simulators/calvin
+  upstream: https://github.com/mees/calvin.git
+  note: CALVIN source checkout for long-horizon sequence evaluation.
+
+libero_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/embodied/simulators/libero
+  upstream: https://github.com/Lifelong-Robot-Learning/LIBERO.git
+  upstream_revision: 8f1084e3132a39270c3a13ebe37270a43ece2a01
+  note: Official LIBERO source checkout for simulator-backed language-conditioned manipulation rollouts.
+
+maniskill_source_assets:
+  template: in_tree_source
+  path: worldfoundry/data/benchmarks/tasks/external/maniskill.yaml
+  kind: file
+  upstream: https://github.com/haosulab/ManiSkill.git
+  role: simulator_in_tree_source
+  note: ManiSkill simulator source checkout; SAPIEN/runtime packages remain environment-specific.
+
+metaworld_source_assets:
+  template: in_tree_source
+  path: worldfoundry/data/benchmarks/tasks/external/metaworld.yaml
+  kind: file
+  upstream: https://github.com/Farama-Foundation/Metaworld.git
+  role: simulator_in_tree_source
+  note: Meta-World source checkout for simulator task-suite mapping and rollout result normalization.
+
+rlbench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/embodied/simulators/rlbench
+  upstream: https://github.com/stepjam/RLBench.git
+  role: simulator_in_tree_source
+  note: RLBench source checkout; full evaluation still requires CoppeliaSim/PyRep and task assets.
+
+robocasa_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/embodied/simulators/robocasa
+  upstream: https://github.com/robocasa/robocasa.git
+  role: simulator_in_tree_source
+  note: RoboCasa source checkout; scene assets and policy rollouts remain explicit runtime assets.
+
+simpler_env_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/embodied/simulators/simpler
+  upstream: https://github.com/simpler-env/SimplerEnv.git
+  role: simulator_in_tree_source
+  note: SimplerEnv source checkout for simulator-backed VLA policy rollouts.
+
+iworld_bench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/iworldbench
+  upstream: https://github.com/EmbodiedCity/iWorld-Bench.git
+  upstream_revision: 666cdea0e98ec77c2666074abdc3c01ce4f1eb44
+  note: Released iWorld-Bench official evaluator and camera trajectory resources.
+
+t2vworldbench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/t2vworldbench
+  upstream: https://github.com/magiclinux/world_knowledge.git
+  note: T2VWorldBench prompt-suite repository.
+
+vmbench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/vmbench
+  upstream: https://github.com/AMAP-ML/VMBench.git
+  note: VMBench source checkout and prompt metadata.
+
+mirabench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/mirabench
+  upstream: https://github.com/mira-space/MiraData.git
+  upstream_revision: 7ad05795dd74acdc6b364222a9fa885a94b0c1a2
+  note: MiraBench/MiraData source checkout for preference and video-quality evaluation surfaces.
+
+devil_dynamics_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/devil_dynamics
+  upstream: https://github.com/MingXiangL/DEVIL.git
+  upstream_revision: 48556c329e6a6f92a587021bc97022494faec69c
+  note: DEVIL Dynamics source checkout for video dynamics evaluation prompts and metric code.
+
+phygenbench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/phygenbench
+  upstream: https://github.com/OpenGVLab/PhyGenBench.git
+  upstream_revision: f8642cb796f3bcb01f0b7c1b2ec53b75d357c739
+  note: PhyGenBench source checkout for physical consistency evaluation assets.
+
+physvidbench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/physvidbench
+  upstream: https://github.com/ensanli/PhysVidBenchCode.git
+  upstream_revision: b1d20f121ed3ebe5d18337d884fdecfad065096b
+  note: PhysVidBench official code checkout with prompts_questions.csv and AuroraCap caption tracks.
+
+visual_chronometer_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer
+  upstream: https://github.com/taco-group/Visual_Chronometer.git
+  upstream_revision: 0dc1fd68641f476f18e76c9d1d0931278c02a386
+  note: Visual Chronometer source assets are vendored in-tree for PhyFPS inference runtime.
+
+videophy_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/videophy
+  upstream: https://github.com/Hritikbansal/videophy.git
+  upstream_revision: 01d366c979e4a82875852adbf427ccc036e7373a
+  note: VideoPhy source checkout for physical commonsense and result normalization assets.
+
+physics_iq_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/physics_iq
+  upstream: https://github.com/google-deepmind/physics-IQ-benchmark.git
+  upstream_revision: 52e52a14d3a7284ae24d8aff98fe982ac7a60971
+  note: Physics-IQ source checkout for official task definitions and normalization surfaces.
+
+t2v_safety_bench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/t2v_safety_bench
+  upstream: https://github.com/yibo-miao/T2VSafetyBench.git
+  upstream_revision: 97a841699fc25bc61662e6453bd6a2d9d187a9db
+  note: T2VSafetyBench source checkout for prompt and safety-rule assets.
+
+ipv_bench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/ipv_bench
+  upstream: https://github.com/showlab/Impossible-Videos.git
+  upstream_revision: b959c423093d6e46a7e7008e205b9a16104e3f70
+  note: Impossible-Videos/IPV-Bench source checkout for counterfactual video prompts and assets.
+
+videoscience_bench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/videoscience_bench
+  upstream: https://github.com/hao-ai-lab/VideoScience.git
+  upstream_revision: 0b3bb2da74388991bf842bca1096a6a25d3c9311
+  note: VideoScience-Bench source checkout for scientific reasoning prompts and rubrics.
+
+phyeduvideo_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/phyeduvideo
+  upstream: https://github.com/meghamariamkm/PhyEduVideo.git
+  upstream_revision: 5a36a13818552095c9ed12c6562f236d5b5011bd
+  note: PhyEduVideo source checkout for physics-education prompts and rubrics.
+
+worldarena_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/worldarena
+  upstream: https://github.com/tsinghua-fib-lab/WorldArena.git
+  upstream_revision: 329f6c7ce6c8019715aa8a2fff7b71112e4001d4
+  note: WorldArena source checkout for embodied world-model task and data-engine assets.
+
+four_d_worldbench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/four_d_worldbench/runtime/four_d_worldbench
+  env: WORLDFOUNDRY_4DWORLDBENCH_ROOT
+  upstream: https://github.com/yeppp27/4dworldbench_code.git
+  upstream_revision: 9dc305cb15418055813be8b26c716a230289d6b5
+  note: 4DWorldBench evaluator; the official dataset is not published, so callers supply dataset_json.
+
+apple_pi_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/apple_pi
+  upstream: https://github.com/21yrm/Apple-PI
+  note: Apple-PI evaluator.
+
+harnesseval_w_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/harnesseval_w/runtime
+  upstream: https://github.com/MirroS-Lab/HarnessEval-W
+  upstream_revision: ed4ccc6486b8271723ee8baea60d89b32d0a7518
+  note: HarnessEval-W evaluator.
+
+larybench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/larybench
+  upstream: https://github.com/meituan-longcat/LARYBench
+  upstream_revision: e7feaf1b72921ee2c34e489adb0f45faf356ecee
+  note: LARYBench classification/regression evaluator.
+
+memobench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/memobench/runtime/memobench
+  env: WORLDFOUNDRY_MEMOBENCH_ROOT
+  upstream: https://github.com/MemoBench-Team/MemoBench
+  upstream_revision: 8822e2713b01db90820a2c75115a37814ff992a0
+  note: MemoBench evaluator.
+
+mind_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/mind/runtime/mind
+  env: WORLDFOUNDRY_MIND_ROOT
+  upstream: https://github.com/CSU-JPG/MIND
+  upstream_revision: 219f458bbfbc3204e848bb6dd1f45363d4e34730
+  note: MIND evaluator.
+
+pawbench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/pawbench/runtime/pawbench
+  env: WORLDFOUNDRY_PAWBENCH_ROOT
+  upstream: https://github.com/Andrew0613/PAWBench
+  upstream_revision: f9ae040227a5b76ee50e37871fbbefc89fcc7fea
+  note: PAWBench evaluator.
+
+physical_ai_bench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/physical_ai_bench/runtime/physical_ai_bench
+  upstream: https://github.com/SHI-Labs/physical-ai-bench
+  upstream_revision: 2f3b687410029b98397fbc51fa4de36bfd45627d
+  note: PAI-Bench generation and conditional-generation evaluator.
+
+sana_wm_bench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/sana_wm_bench
+  upstream: https://github.com/NVlabs/Sana
+  upstream_revision: 6298508fcb511762a11c42cff45b2fc9fd930325
+  note: SANA-WM-Bench evaluator (upstream tools/metrics/sana_wm).
+
+stevo_bench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/stevo_bench/runtime/stevo_bench
+  env: WORLDFOUNDRY_STEVO_BENCH_ROOT
+  upstream: https://github.com/jhanliufu-personal/STEVO-Bench
+  upstream_revision: 680fb6ee2733894ebc8e5584c08146f4bf7e6415
+  note: StEvo-Bench evaluator.
+
+worldmembench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/worldmembench/runtime
+  upstream: https://github.com/ZJU-REAL/WorldMemBench
+  upstream_revision: 1b79840143a98e017891e893b5d3ef75b93078a3
+  note: WorldMemBench evaluator.
+
+worldolympiad_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+  env: WORLDFOUNDRY_WORLDOLYMPIAD_ROOT
+  upstream: https://github.com/alibaba-damo-academy/WorldOlympiad
+  upstream_revision: bb2e240918d15d822250a33b3504672be545d10d
+  note: WorldOlympiad evaluator, vendored unmodified.
+
+worldreasonbench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/worldreasonbench
+  upstream: https://github.com/UniX-AI-Lab/WorldReasonBench
+  upstream_revision: 4dbc6ab91f8eac7db597a3db2824469f96c9a033
+  note: WorldReasonBench evaluator.
+
+wrbench_source_assets:
+  template: in_tree_source
+  path: worldfoundry/evals/tasks/execution/runners/wrbench/runtime
+  env: WORLDFOUNDRY_WRBENCH_ROOT
+  upstream: https://github.com/JinPLu/WRBench
+  upstream_revision: 629595dc60ec08a29711af0377280c4ac9dd40bc
+  note: WRBench toolkit; the Natural-25 prompts and first frames are bundled in tree.

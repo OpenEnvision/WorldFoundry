@@ -13,8 +13,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-import worldfoundry.evaluation.models.pipelines as model_pipelines
-from worldfoundry.evaluation.models.catalog.registry import discover_model_registry
+import worldfoundry.evals.models.pipelines as model_pipelines
 from worldfoundry.pipelines.multiworld.pipeline_multiworld_ittakestwo import (
     MultiWorldItTakesTwoPipeline,
 )
@@ -24,6 +23,7 @@ from worldfoundry.synthesis.visual_generation.multiworld import (
 from worldfoundry.synthesis.visual_generation.multiworld import (
     multiworld_ittakestwo_synthesis as synthesis_module,
 )
+from worldfoundry.zoo.catalog.registry import discover_model_registry
 
 
 def _example_action() -> dict[str, np.ndarray]:
@@ -33,7 +33,7 @@ def _example_action() -> dict[str, np.ndarray]:
     }
 
 
-class _DummySynthesis:
+class _DummySynthesis(synthesis_module.MultiWorldItTakesTwoSynthesis):
     def __init__(self) -> None:
         self.calls = []
 
@@ -136,6 +136,8 @@ def test_multiworld_default_runtime_uses_in_tree_runtime(monkeypatch, tmp_path: 
     monkeypatch.setenv("WORLDFOUNDRY_GITHUB_REPOS_ROOT", str(tmp_path / "github_repos"))
 
     source = Path(runtime_env.__file__).read_text(encoding="utf-8")
+    assert "PYTHONPATH" not in source
+    assert "build_subprocess_env" not in runtime_env.__all__
     assert "official_runtime_repo_path" not in source
     assert "github_repos" not in source
     assert "WORLDFOUNDRY_MODEL_SOURCE_DIR" not in source
@@ -158,7 +160,7 @@ def test_multiworld_catalog_defaults_map_all_native_checkpoint_roles(monkeypatch
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(checkpoint_root))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "ckpt"))
 
-    components = catalog._multiworld_ittakestwo_default_load_kwargs()["required_components"]
+    components = catalog.models.world_models._multiworld_ittakestwo_default_load_kwargs()["required_components"]
 
     assert Path(components["runtime_root"]) == Path(runtime_env.__file__).resolve().parent
     assert Path(components["config_path"]).is_file()
@@ -173,7 +175,8 @@ def test_model_registry_contains_multiworld_ittakestwo() -> None:
 
     assert model.family == "video_generation"
     assert model.has_loader is True
-    assert model.has_infer is False
+    assert model.has_infer is True
+    assert model.runner_target == "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner"
 
 
 def test_multiworld_synthesis_uses_native_runtime(monkeypatch, tmp_path: Path) -> None:
@@ -233,3 +236,26 @@ def test_multiworld_synthesis_uses_native_runtime(monkeypatch, tmp_path: Path) -
     assert captured["predict"]["action"] is action
     assert captured["predict"]["show_progress"] is False
     assert result["video"].shape == (3, 8, 8, 3)
+
+
+def test_load_and_preprocess_stereo_views_preserve_square_aspect_without_padding(tmp_path: Path) -> None:
+    from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.utils.environment_observation import (
+        load_and_preprocess_images,
+    )
+
+    stereo_path = tmp_path / "stereo.png"
+    stereo = Image.new("RGB", (960, 480))
+    stereo.paste((200, 40, 20), (0, 0, 480, 480))
+    stereo.paste((20, 40, 200), (480, 0, 960, 480))
+    stereo.save(stereo_path)
+
+    left = load_and_preprocess_images([stereo_path], mode="pad", return_view="left", target_size=224)
+    right = load_and_preprocess_images([stereo_path], mode="pad", return_view="right", target_size=224)
+
+    assert left.shape == (1, 3, 224, 224)
+    assert right.shape == (1, 3, 224, 224)
+    # Row 0 and row 223 must contain image pixels (no 56px white letterbox bars).
+    assert left[0, 2, 0, 0] < 0.2
+    assert left[0, 2, 223, 223] < 0.2
+    assert right[0, 0, 0, 0] < 0.2
+    assert right[0, 0, 223, 223] < 0.2

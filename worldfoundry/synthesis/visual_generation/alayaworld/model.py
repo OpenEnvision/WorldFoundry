@@ -140,7 +140,7 @@ class AlayaWorldModel(LTXModel):
         )
         self._context_parallel_group = None
 
-    def enable_context_parallel(self, group=None) -> "AlayaWorldModel":
+    def enable_context_parallel(self, group=None) -> AlayaWorldModel:
         """Enable Ulysses self attention using an initialized process group.
 
         The existing per-device attention implementation remains the inner
@@ -319,7 +319,7 @@ class AlayaWorldModel(LTXModel):
         )
         x = torch.cat((*prefix_tokens, args.x), dim=1)
         positions = torch.cat(
-            tuple(
+            tuple(  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                 prefix.positions.to(device=video.positions.device, dtype=video.positions.dtype) for prefix in prefixes
             )
             + (video.positions,),

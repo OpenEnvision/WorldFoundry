@@ -12,7 +12,7 @@ from worldfoundry.base_models.diffusion_model.recipes import (
     wan22_i2v_a14b_recipe,
     wan22_t2v_a14b_recipe,
 )
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
 
 
 class _FakeDenoiser:

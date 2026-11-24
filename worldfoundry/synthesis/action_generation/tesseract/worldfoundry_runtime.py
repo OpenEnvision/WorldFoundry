@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import checkpoint_root_path, project_root
 from worldfoundry.runtime.assets import expand_worldfoundry_path
 from worldfoundry.synthesis.visual_generation.runtime_manifest import command_settings
-
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 RUNTIME_DIR = PACKAGE_DIR / "tesseract_runtime"
@@ -203,12 +204,10 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile) -> list[
 
 
 def build_command(context: Mapping[str, Any]) -> list[str]:
-    """Build the TesserAct RGBDN compatibility launcher command."""
+    """Build the installed TesserAct RGBDN inference module command."""
     settings = command_settings(context)
     image_path = _path_option(settings, "image_path", "input_image", default=DEFAULT_INPUT_IMAGE)
     command = [
-        str(context["python"]),
-        str(context["entrypoint"]),
         "--checkpoint-dir",
         str(_checkpoint_dir(settings)),
         "--base-model-dir",
@@ -252,7 +251,9 @@ def build_command(context: Mapping[str, Any]) -> list[str]:
         command.append("--use-dynamic-cfg")
     if bool(settings.get("memory_efficient", True)):
         command.append("--memory-efficient")
-    return command
+    return package_module_command(
+        "worldfoundry.synthesis.action_generation.tesseract.infer", command, python_executable=str(context["python"])
+    )
 
 
 __all__ = [

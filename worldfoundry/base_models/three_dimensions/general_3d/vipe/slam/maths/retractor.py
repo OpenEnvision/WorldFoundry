@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> maths -> retractor.py functionality."""
-
 from typing import Any
 
 import torch
@@ -24,110 +22,39 @@ from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.cameras imp
 
 
 class BaseRetractor:
-    """Base retractor implementation."""
     def oplus(self, x: Any, inds: torch.Tensor, dx: torch.Tensor) -> None:
-        """Oplus.
-
-        Args:
-            x: The x.
-            inds: The inds.
-            dx: The dx.
-
-        Returns:
-            The return value.
-        """
         x[inds] += dx
 
 
 class PoseRetractor(BaseRetractor):
-    """Pose retractor implementation."""
     def oplus(self, x: SE3, inds: torch.Tensor, dx: torch.Tensor) -> None:
-        """Oplus.
-
-        Args:
-            x: The x.
-            inds: The inds.
-            dx: The dx.
-
-        Returns:
-            The return value.
-        """
         x.data[inds] = SE3(x.data[inds]).retr(dx).data
 
 
 class RigRotationOnlyRetractor(BaseRetractor):
-    """Rig rotation only retractor implementation."""
     def oplus(self, x: SE3, inds: torch.Tensor, dx: torch.Tensor) -> None:
-        """Oplus.
-
-        Args:
-            x: The x.
-            inds: The inds.
-            dx: The dx.
-
-        Returns:
-            The return value.
-        """
         dx = dx.clone()
         dx[:, :3] = 0  # zero out translation part
         x.data[inds] = SE3(x.data[inds]).retr(dx).data
 
 
 class DenseDispRetractor(BaseRetractor):
-    """Dense disp retractor implementation."""
     def oplus(self, x: torch.Tensor, inds: torch.Tensor, dx: torch.Tensor) -> None:
-        """Oplus.
-
-        Args:
-            x: The x.
-            inds: The inds.
-            dx: The dx.
-
-        Returns:
-            The return value.
-        """
         dx = torch.where(dx > 10, torch.zeros_like(dx), dx)
         super().oplus(x, inds, dx)
 
 
 class TracksDispRetractor(BaseRetractor):
-    """Tracks disp retractor implementation."""
     def oplus(self, x: torch.Tensor, inds: torch.Tensor, dx: torch.Tensor) -> None:
-        """Oplus.
-
-        Args:
-            x: The x.
-            inds: The inds.
-            dx: The dx.
-
-        Returns:
-            The return value.
-        """
         super().oplus(x, inds, dx)
         x.clamp_(min=1e-3, max=10)
 
 
 class IntrinsicsRetractor(BaseRetractor):
-    """Intrinsics retractor implementation."""
     def __init__(self, camera_type: CameraType):
-        """Init.
-
-        Args:
-            camera_type: The camera type.
-        """
         self.camera_type = camera_type
 
     def oplus(self, x: torch.Tensor, inds: torch.Tensor, dx: torch.Tensor) -> None:
-        """Oplus.
-
-        Args:
-            x: The x.
-            inds: The inds.
-            dx: The dx.
-
-        Returns:
-            The return value.
-        """
         if len(dx) == 1:
             # Broadcast dx to all intrinsics
             inds = torch.where(x[:, 0] > 0)[0]

@@ -18,13 +18,12 @@
 
 """Small logging helpers used by inference preprocessing."""
 
-import logging
-import os
-import sys
-import threading
-from functools import lru_cache
-from typing import Optional
-
+import logging  # noqa: E402 - Follows a module-level setup call, as upstream.
+import os  # noqa: E402 - Follows a module-level setup call, as upstream.
+import sys  # noqa: E402 - Follows a module-level setup call, as upstream.
+import threading  # noqa: E402 - Follows a module-level setup call, as upstream.
+from functools import lru_cache  # noqa: E402 - Follows a module-level setup call, as upstream.
+from typing import Optional  # noqa: E402 - Follows a module-level setup call, as upstream.
 
 _thread_lock = threading.RLock()
 _default_handler: Optional["logging.Handler"] = None
@@ -63,7 +62,8 @@ def _get_default_logging_level() -> "logging._Level":
 
 
 def _get_library_name() -> str:
-    return __name__.split(".")[0]
+    """Cover this family's modeling and preprocessing logger namespaces."""
+    return __name__.rsplit(".", 2)[0]
 
 
 def _get_library_root_logger() -> "logging.Logger":
@@ -92,7 +92,7 @@ def _configure_library_root_logger() -> None:
         library_root_logger.propagate = False
 
 
-def get_logger(name: Optional[str] = None) -> "_Logger":
+def get_logger(name: str | None = None) -> "_Logger":
     """
     Returns a logger with the specified name. It is not supposed to be accessed by external scripts.
     """

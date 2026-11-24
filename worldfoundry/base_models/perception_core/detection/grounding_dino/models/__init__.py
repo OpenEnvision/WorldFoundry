@@ -5,17 +5,10 @@
 # Licensed under the Apache License, Version 2.0 [see LICENSE for details]
 # ------------------------------------------------------------------------
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-"""Module for base_models -> perception_core -> detection -> grounding_dino -> models -> __init__.py functionality."""
-
-from .GroundingDINO import build_groundingdino
+from .GroundingDINO import build_groundingdino as build_groundingdino
 
 
 def build_model(args):
-    """Build model.
-
-    Args:
-        args: The args.
-    """
     # we use register to maintain models from catdet6 on.
     from .registry import MODULE_BUILD_FUNCS
 

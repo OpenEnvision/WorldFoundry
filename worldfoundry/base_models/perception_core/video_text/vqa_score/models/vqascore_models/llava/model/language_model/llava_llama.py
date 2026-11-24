@@ -13,28 +13,25 @@
 #    limitations under the License.
 
 
-from typing import List, Optional, Tuple, Union
 from dataclasses import dataclass, field
 
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
-
-from transformers import AutoConfig, AutoModelForCausalLM, \
-                         LlamaConfig, LlamaModel, LlamaForCausalLM
-
+from transformers import AutoConfig, AutoModelForCausalLM, LlamaConfig, LlamaForCausalLM, LlamaModel
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-from ..llava_arch import LlavaMetaModel, LlavaMetaForCausalLM
+from ..llava_arch import LlavaMetaForCausalLM, LlavaMetaModel
+
 
 @dataclass
 class ModelArguments:
     tune_mm_mlp_adapter: bool = field(default=False)
-    vision_tower: Optional[str] = field(default='openai/clip-vit-large-patch14-336')
-    mm_vision_select_layer: Optional[int] = field(default=-2)   # default to the second last layer in llava1.5
-    pretrain_mm_mlp_adapter: Optional[str] = field(default=None)
-    mm_projector_type: Optional[str] = field(default='mlp2x_gelu')
-    mm_vision_select_feature: Optional[str] = field(default="patch")
+    vision_tower: str | None = field(default="openai/clip-vit-large-patch14-336")
+    mm_vision_select_layer: int | None = field(default=-2)  # default to the second last layer in llava1.5
+    pretrain_mm_mlp_adapter: str | None = field(default=None)
+    mm_projector_type: str | None = field(default="mlp2x_gelu")
+    mm_vision_select_feature: str | None = field(default="patch")
 
 
 class LlavaConfig(LlamaConfig):
@@ -45,7 +42,7 @@ class LlavaLlamaModel(LlavaMetaModel, LlamaModel):
     config_class = LlavaConfig
 
     def __init__(self, config: LlamaConfig):
-        super(LlavaLlamaModel, self).__init__(config)
+        super().__init__(config)
 
 
 class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
@@ -66,23 +63,25 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        images: Optional[torch.FloatTensor] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        images: torch.FloatTensor | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | CausalLMOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(input_ids, attention_mask, past_key_values, labels, images)
+        input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(
+            input_ids, attention_mask, past_key_values, labels, images
+        )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -93,7 +92,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict
+            return_dict=return_dict,
         )
 
         hidden_states = outputs[0]
@@ -113,8 +112,8 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             loss = loss_fct(shift_logits, shift_labels)
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            output = (logits,) + outputs[1:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+            return (loss,) + output if loss is not None else output  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -142,10 +141,11 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "decoder_attention_mask": kwargs.get("decoder_attention_mask"),
-                "images": kwargs.get("images", None),
+                "images": kwargs.get("images"),
             }
         )
         return model_inputs
+
 
 AutoConfig.register("llava-v1.5", LlavaConfig)
 AutoModelForCausalLM.register(LlavaConfig, LlavaLlamaForCausalLM)

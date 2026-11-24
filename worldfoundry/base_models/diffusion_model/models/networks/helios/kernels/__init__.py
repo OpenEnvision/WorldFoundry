@@ -1,4 +1,5 @@
-from .fp32_rmsnorm import replace_rmsnorm_with_fp32
+from worldfoundry.base_models.diffusion_model.models.networks.helios.normalization import replace_rmsnorm_with_fp32
+
 from .triton_norm import replace_all_norms_with_flash_norms
 from .triton_rope import replace_rope_with_flash_rope
 

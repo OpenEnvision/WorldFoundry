@@ -1,23 +1,22 @@
 """Module for the Yume operator implementation."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional, List
+from typing import Any
 
-from PIL import Image
+import numpy as np
 import torch
 import torch.nn.functional as F
+from PIL import Image
 from torchvision import transforms
-import numpy as np
 
-from .base_operator import BaseOperator
 from worldfoundry.synthesis.visual_generation.yume.yume_runtime.yume import YUME_SIZE_CONFIGS
 
+from .base_operator import BaseOperator
 
 YUME_SUPPORTED_SIZES = tuple(YUME_SIZE_CONFIGS.keys())
 
 
 def _to_rgb_array(image: Any) -> np.ndarray:
-    """To rgb array implementation."""
     if isinstance(image, (list, tuple)):
         if len(image) != 1:
             raise ValueError(
@@ -65,7 +64,7 @@ class YumeOperator(BaseOperator):
         """Initialize the operator with specific configurations."""
         if operation_types is None:
             operation_types = []
-        super(YumeOperator, self).__init__(operation_types=operation_types)
+        super().__init__(operation_types=operation_types)
         self.interaction_template = [
             "forward",
             "left",
@@ -92,7 +91,7 @@ class YumeOperator(BaseOperator):
             self.check_interaction(interaction)
         self.current_interaction.append(interactions)
 
-    def process_interaction(self, **kwargs) -> Dict[str, Any]:
+    def process_interaction(self, **kwargs) -> list[str]:
         """Process the recorded interactions and return the generated actions."""
         INTERACTION_2_CAPTION_DICT = {
             "forward": "The camera pushes forward (W).",
@@ -113,15 +112,13 @@ class YumeOperator(BaseOperator):
 
     def process_perception(
         self,
-        size: Optional[str] = None,
-        images: Optional[Image.Image] = None,
-        videos: Optional[List[Image.Image]] = None,
-    ) -> Dict[str, Any]:
-
+        size: str | None = None,
+        images: Image.Image | None = None,
+        videos: list[Image.Image] | None = None,
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         assert size in YUME_SUPPORTED_SIZES, (
-            f"Unsupported size: {size}. "
-            f"Supported sizes for yume are: {YUME_SUPPORTED_SIZES}"
+            f"Unsupported size: {size}. Supported sizes for yume are: {YUME_SUPPORTED_SIZES}"
         )
         target_size = YUME_SIZE_CONFIGS[size]
 
@@ -129,9 +126,9 @@ class YumeOperator(BaseOperator):
         video_pixel_values = None
 
         if images is not None:
-            images = _to_rgb_array(images)
+            image_array = _to_rgb_array(images)
 
-            images_tensor = torch.from_numpy(images).permute(2, 0, 1).float() / 255.0
+            images_tensor = torch.from_numpy(image_array).permute(2, 0, 1).float() / 255.0
             resized_images = F.interpolate(
                 images_tensor.unsqueeze(0),
                 size=target_size,

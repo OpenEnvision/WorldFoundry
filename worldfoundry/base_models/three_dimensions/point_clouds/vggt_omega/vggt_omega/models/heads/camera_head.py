@@ -4,8 +4,6 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt_omega -> vggt_omega -> models -> heads -> camera_head.py functionality."""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,14 +15,6 @@ class CameraHead(nn.Module):
     """Camera head used by the released VGGT-Omega checkpoints."""
 
     def __init__(self, dim_in: int = 2048) -> None:
-        """Init.
-
-        Args:
-            dim_in: The dim in.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         self.token_norm = nn.LayerNorm(dim_in, eps=1e-5)
@@ -57,15 +47,6 @@ class CameraHead(nn.Module):
         aggregated_tokens_list: list[torch.Tensor | None],
         patch_token_start: int,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            aggregated_tokens_list: The aggregated tokens list.
-            patch_token_start: The patch token start.
-
-        Returns:
-            The return value.
-        """
         tokens = aggregated_tokens_list[-1]
         if tokens is None:
             raise ValueError("Aggregator did not cache the final layer, which CameraHead needs.")
@@ -93,14 +74,6 @@ class CameraHead(nn.Module):
 
 
 def _apply_camera_activation(raw_camera: torch.Tensor) -> torch.Tensor:
-    """Helper function to apply camera activation.
-
-    Args:
-        raw_camera: The raw camera.
-
-    Returns:
-        The return value.
-    """
     translation = raw_camera[..., :3]
     quaternion = raw_camera[..., 3:7]
     fov = F.relu(raw_camera[..., 7:]) + 0.01

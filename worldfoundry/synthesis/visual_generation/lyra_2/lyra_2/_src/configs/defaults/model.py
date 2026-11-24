@@ -1,24 +1,24 @@
 from hydra.core.config_store import ConfigStore
-from lyra_2._src.models.lyra2_model import (
+
+from worldfoundry.core.configuration.lazy_config import LazyCall as L
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.models.lyra2_model import (
     Lyra2Model,
     Lyra2T2VConfig,
 )
 
-from worldfoundry.core.configuration.lazy_config import LazyCall as L
-
-fsdp_wan2pt1_lyra2_spatial_config = dict(
-    model=L(Lyra2Model)(
+fsdp_wan2pt1_lyra2_spatial_config = {
+    "model": L(Lyra2Model)(
         config=Lyra2T2VConfig(fsdp_shard_size=8, state_t=20),
         _recursive_=False,
     ),
-)
+}
 
-ddp_wan2pt1_lyra2_spatial_config = dict(
-    model=L(Lyra2Model)(
+ddp_wan2pt1_lyra2_spatial_config = {
+    "model": L(Lyra2Model)(
         config=Lyra2T2VConfig(state_t=20),
         _recursive_=False,
     ),
-)
+}
 
 
 def lyra_register_model():

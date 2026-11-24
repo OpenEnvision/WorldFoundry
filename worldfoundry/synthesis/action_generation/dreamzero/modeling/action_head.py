@@ -18,18 +18,18 @@ from torchvision.transforms import v2
 from transformers import PretrainedConfig
 from transformers.feature_extraction_utils import BatchFeature
 
-from worldfoundry.core.nn.diffusion.schedulers import (
-    FlowMatchScheduler,
-)
-from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import (
-    FlowUniPCMultistepScheduler,
-)
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import (
     T5LayerNorm,
     T5RelativeEmbedding,
 )
+from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import (
+    FlowUniPCMultistepScheduler,
+)
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
 from worldfoundry.core.model_loading.checkpoints.file import load_state_dict
+from worldfoundry.core.nn.diffusion.schedulers import (
+    FlowMatchScheduler,
+)
 from worldfoundry.core.vram import (
     AutoWrappedLinear,
     AutoWrappedModule,
@@ -336,7 +336,7 @@ class WANPolicyHead(ActionHead):
                     # Handle sharded safetensors
                     print(f"Loading sharded safetensors using index: {safetensors_index_path}")
 
-                    with open(safetensors_index_path, "r") as f:
+                    with open(safetensors_index_path) as f:
                         index = json.load(f)
 
                     # Load each shard
@@ -394,23 +394,23 @@ class WANPolicyHead(ActionHead):
                 T5RelativeEmbedding: AutoWrappedModule,
                 T5LayerNorm: AutoWrappedModule,
             },
-            vram_config=dict(
-                offload_dtype=dtype,
-                offload_device="cpu",
-                onload_dtype=dtype,
-                onload_device="cpu",
-                computation_dtype=self.dtype,
-                computation_device=(
+            vram_config={
+                "offload_dtype": dtype,
+                "offload_device": "cpu",
+                "onload_dtype": dtype,
+                "onload_device": "cpu",
+                "computation_dtype": self.dtype,
+                "computation_device": (
                     torch.device("cuda", torch.cuda.current_device())
                     if torch.cuda.is_available()
                     else torch.device("cpu")
                 ),
-            ),
+            },
         )
 
         self.cpu_offload = True
 
-    def load_models_to_device(self, loadmodel_names=[]):
+    def load_models_to_device(self, loadmodel_names=[]):  # noqa: B006 - Keeps the upstream default object and signature.
         # only load models to device if cpu_offload is enabled
         if not self.cpu_offload:
             return
@@ -505,7 +505,7 @@ class WANPolicyHead(ActionHead):
         seq_lens = attention_mask.gt(0).sum(dim=1).long()
         prompt_emb = self.text_encoder(input_ids, attention_mask)
         prompt_emb = prompt_emb.clone().to(dtype=torch.bfloat16)
-        for i, v in enumerate(seq_lens):
+        for _i, v in enumerate(seq_lens):
             prompt_emb[:, v:] = 0
         return prompt_emb
 
@@ -587,10 +587,7 @@ class WANPolicyHead(ActionHead):
         if self.ip_size > 1:
             assert self.cfg_scale != 1.0, "cfg_scale must be != 1.0 when ip_size > 1"
             assert len(kv_caches_input) == 2
-            if self.ip_rank == 0:
-                kv_caches = [kv_caches_input[0]]
-            else:
-                kv_caches = [kv_caches_input[1]]
+            kv_caches = [kv_caches_input[0]] if self.ip_rank == 0 else [kv_caches_input[1]]
         else:
             assert len(kv_caches_input) <= 2
             kv_caches = [kv_caches_input[0]]
@@ -599,7 +596,6 @@ class WANPolicyHead(ActionHead):
         return kv_caches
 
     def _prepare_text_inputs(self, data: BatchFeature) -> list[tuple[torch.Tensor, torch.Tensor]]:
-
         if self.ip_size > 1:
             assert self.cfg_scale != 1.0, "cfg_scale must be != 1.0 when ip_size > 1"
             if self.ip_rank == 0:
@@ -706,7 +702,6 @@ class WANPolicyHead(ActionHead):
         return cast(list[tuple[torch.Tensor, torch.Tensor]], output_predictions)
 
     def should_run_model(self, index, current_timestep, prev_predictions):
-
         if not self.dynamic_cache_schedule:
             return self.dit_step_mask[index]
 
@@ -728,7 +723,7 @@ class WANPolicyHead(ActionHead):
         thresholds = [0.95, 0.93]
         countdowns = [4, 2]
 
-        for threshold, countdown in zip(thresholds, countdowns):
+        for threshold, countdown in zip(thresholds, countdowns, strict=False):
             if sim > threshold:
                 self.skip_countdown = countdown
                 return False
@@ -933,10 +928,10 @@ class WANPolicyHead(ActionHead):
                 clip_feature=self.clip_feas,
                 kv_caches=kv_caches,
                 crossattn_caches=crossattn_caches,
-                kv_cache_metadata=dict(
-                    start_frame=0,
-                    update_kv_cache=True,
-                ),
+                kv_cache_metadata={
+                    "start_frame": 0,
+                    "update_kv_cache": True,
+                },
             )
             self.current_start_frame += 1
 
@@ -961,10 +956,10 @@ class WANPolicyHead(ActionHead):
                 clip_feature=self.clip_feas,
                 kv_caches=kv_caches,
                 crossattn_caches=crossattn_caches,
-                kv_cache_metadata=dict(
-                    start_frame=self.current_start_frame - self.num_frame_per_block,
-                    update_kv_cache=True,
-                ),
+                kv_cache_metadata={
+                    "start_frame": self.current_start_frame - self.num_frame_per_block,
+                    "update_kv_cache": True,
+                },
             )
 
         end_kv_event.record()
@@ -1048,10 +1043,10 @@ class WANPolicyHead(ActionHead):
                     clip_feature=self.clip_feas,
                     kv_caches=kv_caches,
                     crossattn_caches=crossattn_caches,
-                    kv_cache_metadata=dict(
-                        start_frame=self.current_start_frame,
-                        update_kv_cache=False,
-                    ),
+                    kv_cache_metadata={
+                        "start_frame": self.current_start_frame,
+                        "update_kv_cache": False,
+                    },
                 )
                 flow_pred_cond, flow_pred_cond_action = predictions[0]
                 flow_pred_uncond, flow_pred_uncond_action = predictions[1]
@@ -1101,7 +1096,9 @@ class WANPolicyHead(ActionHead):
         image_encoder_time = start_image_encoder_event.elapsed_time(end_image_encoder_event) / 1000
         vae_time = start_vae_event.elapsed_time(end_vae_event) / 1000
         kv_creation_time = start_kv_event.elapsed_time(end_kv_event) / 1000
-        diffusion_times = [s.elapsed_time(e) for s, e in zip(start_diffusion_events, end_diffusion_events)]
+        diffusion_times = [
+            s.elapsed_time(e) for s, e in zip(start_diffusion_events, end_diffusion_events, strict=False)
+        ]
         diffusion_time = sum(diffusion_times) / 1000
         scheduler_time = (
             total_time - kv_creation_time - diffusion_time - text_encoder_time - image_encoder_time - vae_time
@@ -1147,7 +1144,9 @@ class WANPolicyHead(ActionHead):
         # Torch compile the modules. Skip _forward_blocks: Dynamo with fullgraph can fail on
         # shape variation (e.g. x [1,50,C] vs e [1,200,C]); the block aligns e to x at runtime.
         if not ENABLE_TENSORRT:
-            print("Torch compiling the TextEncoder and VAE modules (CLIP attention and Wan _forward_blocks remain eager).")
+            print(
+                "Torch compiling the TextEncoder and VAE modules (CLIP attention and Wan _forward_blocks remain eager)."
+            )
 
             self.text_encoder.forward = torch.compile(
                 mode="reduce-overhead",

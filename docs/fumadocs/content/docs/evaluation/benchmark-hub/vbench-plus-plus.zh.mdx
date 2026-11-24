@@ -1,19 +1,19 @@
 ---
 title: VBench++
-description: "VBench 扩展：I2V、长视频、可信度。WorldFoundry 内置 runtime，不编造榜单。与 VBench、VBench-2.0 不同。"
+description: "VBench 扩展：I2V、长视频、可信度。WorldFoundry 内置 runtime。与 VBench、VBench-2.0 不同。"
 ---
 
-VBench++（S-Lab、南洋理工与上海人工智能实验室）为 [VBench](/zh/docs/evaluation/benchmark-hub/vbench) 增加三条赛道。它 **不是** [VBench-2.0](/zh/docs/evaluation/benchmark-hub/vbench-2.0)。同一上游仓库：[Vchitect/VBench](https://github.com/Vchitect/VBench)（Apache-2.0）。
+VBench++（S-Lab、南洋理工与上海人工智能实验室）为 [VBench](/zh/docs/evaluation/benchmark-hub/vbench) 增加三条赛道。它**不是** [VBench-2.0](/zh/docs/evaluation/benchmark-hub/vbench-2.0)。同一上游仓库：[Vchitect/VBench](https://github.com/Vchitect/VBench)（Apache-2.0）。
 
-- **图像生成视频** — 官方可裁剪图像套件上的 I2V 主体 / 背景一致性与相机运动。
-- **长视频** — 时间窗口打分；目录记录的有界命令用 `temporal_flickering` / `long_custom_input`。
-- **可信度** — 公平、偏见、安全探针（部分需要额外人脸 / 属性模型）。
+- **图像生成视频**：官方可裁剪图像套件上的 I2V 主体 / 背景一致性与相机运动。
+- **长视频**：时间窗口打分；下面的命令以 `long_custom_input` 模式运行 `temporal_flickering`。
+- **可信度**：公平、偏见、安全探针（部分需要额外人脸 / 属性模型）。
 
-`--variant` 选择 `i2v`、`long` 或 `trustworthiness`。各变体平均分再加 `vbench_plus_plus_average`（WorldFoundry 对已有维度的均值）。
+`--variant` 选择 `i2v`、`long` 或 `trustworthiness`。除各变体平均分外，还会写入 `vbench_plus_plus_average`（WorldFoundry 对已有维度计算的均值）。
 
 论文：[VBench++](https://arxiv.org/abs/2411.13503)。项目：[vchitect.github.io/VBench-project](https://vchitect.github.io/VBench-project/)。
 
-WorldFoundry **仓内内置 VBench++ runtime**。有界长视频组件已验证；全套未验证。
+WorldFoundry **内置 VBench++ runtime**。长视频 `temporal_flickering` 维度（`long_custom_input` 模式）已验证；完整套件尚未验证。
 
 <BenchmarkPageSections id="vbench-plus-plus" locale="zh" />
 
@@ -21,7 +21,7 @@ WorldFoundry **仓内内置 VBench++ runtime**。有界长视频组件已验证�
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py \
   --benchmark-id vbench-plus-plus \
   --variant long \
   --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
@@ -34,7 +34,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 I2V 使用官方图像套件命名。可选 checkout 覆盖：`WORLDFOUNDRY_VBENCH_PLUS_PLUS_ROOT`。共享栈：`vbench_perception_metric_stack`。Prompt / 图像套件在公开 VBench 仓库中。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/vbench-plus-plus.yaml`，`worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime`。
+清单：`worldfoundry/data/benchmarks/tasks/external/vbench-plus-plus.yaml`。
 
 产物包括 `scorecard.json`（主键 `vbench_plus_plus_average`）与 `dimension_scores.json`。
 

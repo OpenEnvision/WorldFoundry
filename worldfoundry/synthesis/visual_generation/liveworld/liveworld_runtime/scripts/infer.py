@@ -7,23 +7,23 @@ Supports two modes:
 In batch mode all heavyweight models are loaded once externally, then each
 config gets a fresh pipeline instance that reuses those shared models.
 """
+
 from __future__ import annotations
 
+import argparse
 import os
-import sys
 from pathlib import Path
 
-# Ensure project root is on sys.path so that `scripts.*`, `scripts.dataset_preparation.*`,
-# etc. are importable when running `python scripts/infer.py` directly.
-_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
-
-import argparse
-
-from liveworld.pipelines.monitor_centric import MonitorCentricEvolutionPipeline, load_monitor_centric_config
-from liveworld.pipelines.monitor_centric.shared_models import create_shared_models
-from liveworld.utils import set_seed
+from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.pipelines.monitor_centric import (
+    MonitorCentricEvolutionPipeline,
+    load_monitor_centric_config,
+)
+from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.pipelines.monitor_centric.shared_models import (
+    create_shared_models,
+)
+from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.utils import (
+    set_seed,
+)
 
 
 def _prepare_config(config_path: str, output_root: str, device: str | None, system_config: str | None = None) -> dict:
@@ -66,7 +66,13 @@ def _run_single(config: dict) -> None:
     pipeline.run(iter_inputs)
 
 
-def _run_batch(config_paths: list[str], output_root: str, device: str | None, entity_names_str: str | None = None, system_config: str | None = None) -> None:
+def _run_batch(
+    config_paths: list[str],
+    output_root: str,
+    device: str | None,
+    entity_names_str: str | None = None,
+    system_config: str | None = None,
+) -> None:
     """Load all models once, then run each config with a fresh pipeline."""
     if not config_paths:
         print("[batch] No configs to run")
@@ -115,16 +121,20 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--config", help="Path to a single event-centric YAML config")
     group.add_argument("--configs-list", help="Path to file listing config paths (one per line)")
-    parser.add_argument("--system-config", required=True, help="Path to system config YAML (model weights, runtime settings)")
+    parser.add_argument(
+        "--system-config", required=True, help="Path to system config YAML (model weights, runtime settings)"
+    )
     parser.add_argument("--output-root", required=True, help="Output directory for inference results")
     parser.add_argument("--device", default=None, help="Override device, e.g. cuda:0")
-    parser.add_argument("--entity-names", default=None, help="Comma-separated entity names to always detect, e.g. 'person,dog'")
+    parser.add_argument(
+        "--entity-names", default=None, help="Comma-separated entity names to always detect, e.g. 'person,dog'"
+    )
     args = parser.parse_args()
 
     if args.configs_list:
         # Batch mode: read config paths from file, then remove the temp file.
         configs_list_path = Path(args.configs_list)
-        with open(configs_list_path, "r") as f:
+        with open(configs_list_path) as f:
             config_paths = [line.strip() for line in f if line.strip()]
         configs_list_path.unlink(missing_ok=True)
         _run_batch(config_paths, args.output_root, args.device, args.entity_names, args.system_config)

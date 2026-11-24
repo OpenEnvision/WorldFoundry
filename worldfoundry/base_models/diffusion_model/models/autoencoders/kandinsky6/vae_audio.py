@@ -1,10 +1,13 @@
 """Audio VAE and BigVGAN vocoder as separate modules."""
+
 from __future__ import annotations
 
 import torch
 from torch import nn
 
-from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.autoencoder.autoencoder import load_bigvgan_v2
+from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.autoencoder.autoencoder import (
+    load_bigvgan_v2,
+)
 from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.features_utils import FeaturesUtils
 
 

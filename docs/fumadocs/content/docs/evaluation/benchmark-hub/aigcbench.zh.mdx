@@ -1,6 +1,6 @@
 ---
 title: AIGCBench
-description: "BenchCouncil 图生视频质量评测：首帧保真、对齐、运动、时序、DOVER。WorldFoundry 导入官方指标，不编造榜单。"
+description: "BenchCouncil 图生视频质量评测：首帧保真、对齐、运动、时序、DOVER。WorldFoundry 导入官方指标导出。"
 ---
 
 AIGCBench（BenchCouncil，中科院计算所）评的是**图生视频**：给定条件图像和 prompt，片段是否保真、是否有运动、时序是否连贯？指标族：
@@ -14,14 +14,14 @@ AIGCBench（BenchCouncil，中科院计算所）评的是**图生视频**：给�
 
 论文：[AIGCBench](https://arxiv.org/abs/2401.01651)。项目：[benchcouncil.org/AIGCBench](https://www.benchcouncil.org/AIGCBench)。代码：[BenchCouncil/AIGCBench](https://github.com/BenchCouncil/AIGCBench)（Apache-2.0）。数据集：[`stevenfan/AIGCBench_v1.0`](https://huggingface.co/datasets/stevenfan/AIGCBench_v1.0)。
 
-WorldFoundry **导入官方指标 CSV / TSV**（或流水线分数转储）。`worldfoundry/data/benchmarks/assets/aigcbench` 里的 `prompt_suite.json` 可在不下载完整 Hugging Face 数据的情况下物化请求。CLIP、DOVER 与光流打分器仍由调用方提供。官方导出提供时，主键为 `aigcbench_average`。
+WorldFoundry **导入官方指标 CSV / TSV**（或流水线分数转储）。`worldfoundry/data/benchmarks/assets/aigcbench` 里的 `prompt_suite.json` 可在不下载完整 Hugging Face 数据的情况下生成请求。CLIP、DOVER 与光流打分器仍由调用方提供。提供官方导出时，主键为 `aigcbench_average`。
 
 <BenchmarkPageSections id="aigcbench" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id aigcbench \
   --mode official-validation \
   --official-results-path <official_results.csv> \
@@ -30,7 +30,7 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-`--strict` 会在覆盖缺口处失败；`--prompt-manifest` 可限制 prompt 子集。首帧 / 参考视频指标族需要官方资源就位。默认导入路径：`WORLDFOUNDRY_AIGCBENCH_RESULTS_PATH`。共享栈：`video_quality_motion_stack`。
+覆盖不完整时，`--strict` 会使运行失败；`--prompt-manifest` 可限制 prompt 子集。参考图像 / 参考视频指标族需要先准备好对应的官方资源。默认导入路径：`WORLDFOUNDRY_AIGCBENCH_RESULTS_PATH`。共享栈：`video_quality_motion_stack`。
 
 仓内指针：
 

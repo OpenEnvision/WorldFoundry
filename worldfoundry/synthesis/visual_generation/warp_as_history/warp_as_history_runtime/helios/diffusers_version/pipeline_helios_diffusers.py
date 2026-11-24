@@ -13,31 +13,38 @@ from __future__ import annotations
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import html
 import math
+from collections.abc import Callable
 from itertools import accumulate
-from typing import Any, Callable
+from typing import Any, ClassVar
 
 import numpy as np
 import regex as re
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, UMT5EncoderModel
-
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.image_processor import PipelineImageInput
+from transformers import AutoTokenizer, UMT5EncoderModel
+
+from worldfoundry.core.nn.diffusion.utils import optimized_scale as optimized_scale
+
 try:
     from diffusers.loaders import HeliosLoraLoaderMixin
 except ImportError:
     try:
         from diffusers.loaders import WanLoraLoaderMixin as HeliosLoraLoaderMixin
     except ImportError:
+
         class HeliosLoraLoaderMixin:
             pass
+
+
 from diffusers.models import AutoencoderKLWan
-from .transformer_helios_diffusers import HeliosTransformer3DModel
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
+
+from .transformer_helios_diffusers import HeliosTransformer3DModel
+
 try:
     from diffusers.schedulers import HeliosScheduler
 except ImportError:
@@ -51,13 +58,19 @@ if not hasattr(_diffusers, "HeliosScheduler"):
     _diffusers.HeliosScheduler = HeliosScheduler
 if not hasattr(_diffusers, "HeliosDMDScheduler"):
     _diffusers.HeliosDMDScheduler = HeliosScheduler
-from diffusers.utils import is_ftfy_available, is_torch_xla_available, logging, replace_example_docstring
-from diffusers.utils.torch_utils import randn_tensor
-from diffusers.video_processor import VideoProcessor
+from dataclasses import dataclass  # noqa: E402 - Follows the conditional setup block.
+
+from diffusers.utils import (  # noqa: E402 - Follows the conditional setup block.
+    BaseOutput,
+    is_ftfy_available,
+    is_torch_xla_available,
+    logging,
+    replace_example_docstring,
+)
+from diffusers.utils.torch_utils import randn_tensor  # noqa: E402 - Follows the conditional setup block.
+from diffusers.video_processor import VideoProcessor  # noqa: E402 - Follows the conditional setup block.
 
 
-from dataclasses import dataclass
-from diffusers.utils import BaseOutput
 @dataclass
 class HeliosPipelineOutput(BaseOutput):
     r"""
@@ -115,18 +128,6 @@ EXAMPLE_DOC_STRING = """
 """
 
 
-def optimized_scale(positive_flat, negative_flat):
-    positive_flat = positive_flat.float()
-    negative_flat = negative_flat.float()
-    # Calculate dot production
-    dot_product = torch.sum(positive_flat * negative_flat, dim=1, keepdim=True)
-    # Squared norm of uncondition
-    squared_norm = torch.sum(negative_flat**2, dim=1, keepdim=True) + 1e-8
-    # st_star = v_cond^T * v_uncond / ||v_uncond||^2
-    st_star = dot_product / squared_norm
-    return st_star
-
-
 def basic_clean(text):
     text = ftfy.fix_text(text)
     text = html.unescape(html.unescape(text))
@@ -181,8 +182,8 @@ class HeliosPipeline(DiffusionPipeline, HeliosLoraLoaderMixin):
     """
 
     model_cpu_offload_seq = "text_encoder->transformer->vae"
-    _callback_tensor_inputs = ["latents", "prompt_embeds", "negative_prompt_embeds"]
-    _optional_components = ["transformer"]
+    _callback_tensor_inputs: ClassVar[list] = ["latents", "prompt_embeds", "negative_prompt_embeds"]
+    _optional_components: ClassVar[list] = ["transformer"]
 
     @classmethod
     def _get_signature_types(cls):
@@ -224,7 +225,7 @@ class HeliosPipeline(DiffusionPipeline, HeliosLoraLoaderMixin):
 
     def _get_t5_prompt_embeds(
         self,
-        prompt: str | list[str] = None,
+        prompt: str | list[str] | None = None,
         num_videos_per_prompt: int = 1,
         max_sequence_length: int = 226,
         device: torch.device | None = None,
@@ -251,7 +252,7 @@ class HeliosPipeline(DiffusionPipeline, HeliosLoraLoaderMixin):
 
         prompt_embeds = self.text_encoder(text_input_ids.to(device), mask.to(device)).last_hidden_state
         prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
-        prompt_embeds = [u[:v] for u, v in zip(prompt_embeds, seq_lens)]
+        prompt_embeds = [u[:v] for u, v in zip(prompt_embeds, seq_lens, strict=False)]
         prompt_embeds = torch.stack(
             [torch.cat([u, u.new_zeros(max_sequence_length - u.size(0), u.size(1))]) for u in prompt_embeds], dim=0
         )
@@ -304,10 +305,7 @@ class HeliosPipeline(DiffusionPipeline, HeliosLoraLoaderMixin):
         device = device or self._execution_device
 
         prompt = [prompt] if isinstance(prompt, str) else prompt
-        if prompt is not None:
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
+        batch_size = len(prompt) if prompt is not None else prompt_embeds.shape[0]
 
         if prompt_embeds is None:
             prompt_embeds, _ = self._get_t5_prompt_embeds(
@@ -584,7 +582,7 @@ class HeliosPipeline(DiffusionPipeline, HeliosLoraLoaderMixin):
         zero_steps: int | None = 1,
         # ------------ Callback ------------
         callback_on_step_end: Callable[[int, int], None] | PipelineCallback | MultiPipelineCallbacks | None = None,
-        callback_on_step_end_tensor_inputs: list[str] = ["latents"],
+        callback_on_step_end_tensor_inputs: list[str] = ["latents"],  # noqa: B006 - Keeps the upstream default object and signature.
         progress_bar=None,
     ):
         batch_size = latents.shape[0]
@@ -674,8 +672,8 @@ class HeliosPipeline(DiffusionPipeline, HeliosLoraLoaderMixin):
     def stage2_sample(
         self,
         latents: torch.Tensor = None,
-        pyramid_num_stages: int = None,
-        pyramid_num_inference_steps_list: list[int] = None,
+        pyramid_num_stages: int | None = None,
+        pyramid_num_inference_steps_list: list[int] | None = None,
         prompt_embeds: torch.Tensor = None,
         negative_prompt_embeds: torch.Tensor = None,
         guidance_scale: float | None = 5.0,
@@ -697,7 +695,7 @@ class HeliosPipeline(DiffusionPipeline, HeliosLoraLoaderMixin):
         is_amplify_first_chunk: bool = False,
         # ------------ Callback ------------
         callback_on_step_end: Callable[[int, int], None] | PipelineCallback | MultiPipelineCallbacks | None = None,
-        callback_on_step_end_tensor_inputs: list[str] = ["latents"],
+        callback_on_step_end_tensor_inputs: list[str] = ["latents"],  # noqa: B006 - Keeps the upstream default object and signature.
         progress_bar=None,
     ):
         batch_size, num_channel, num_frames, height, width = latents.shape
@@ -881,13 +879,13 @@ class HeliosPipeline(DiffusionPipeline, HeliosLoraLoaderMixin):
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
         self,
-        prompt: str | list[str] = None,
-        negative_prompt: str | list[str] = None,
+        prompt: str | list[str] | None = None,
+        negative_prompt: str | list[str] | None = None,
         height: int = 384,
         width: int = 640,
         num_frames: int = 132,
         num_inference_steps: int = 50,
-        sigmas: list[float] = None,
+        sigmas: list[float] | None = None,
         guidance_scale: float = 5.0,
         num_videos_per_prompt: int | None = 1,
         generator: torch.Generator | list[torch.Generator] | None = None,
@@ -898,7 +896,7 @@ class HeliosPipeline(DiffusionPipeline, HeliosLoraLoaderMixin):
         return_dict: bool = True,
         attention_kwargs: dict[str, Any] | None = None,
         callback_on_step_end: Callable[[int, int], None] | PipelineCallback | MultiPipelineCallbacks | None = None,
-        callback_on_step_end_tensor_inputs: list[str] = ["latents"],
+        callback_on_step_end_tensor_inputs: list[str] = ["latents"],  # noqa: B006 - Keeps the upstream default object and signature.
         max_sequence_length: int = 512,
         # ------------ I2V ------------
         image: PipelineImageInput | None = None,
@@ -915,17 +913,17 @@ class HeliosPipeline(DiffusionPipeline, HeliosLoraLoaderMixin):
         video_noise_sigma_max: float = 0.135,
         # ------------ Interactive ------------
         use_interpolate_prompt: bool = False,
-        interpolate_time_list: list = [7, 7, 7],
+        interpolate_time_list: list = [7, 7, 7],  # noqa: B006 - Keeps the upstream default object and signature.
         interpolation_steps: int = 3,
         # ------------ Stage 1 ------------
-        history_sizes: list = [16, 2, 1],
+        history_sizes: list = [16, 2, 1],  # noqa: B006 - Keeps the upstream default object and signature.
         num_latent_frames_per_chunk: int = 9,
         keep_first_frame: bool = True,
         is_skip_first_chunk: bool = False,
         # ------------ Stage 2 ------------
         is_enable_stage2: bool = False,
         pyramid_num_stages: int = 3,
-        pyramid_num_inference_steps_list: list = [10, 10, 10],
+        pyramid_num_inference_steps_list: list = [10, 10, 10],  # noqa: B006 - Keeps the upstream default object and signature.
         # ------------ CFG Zero ------------
         use_zero_init: bool | None = True,
         zero_steps: int | None = 1,
@@ -1216,10 +1214,9 @@ class HeliosPipeline(DiffusionPipeline, HeliosLoraLoaderMixin):
         indices_latents_history_long = indices_latents_history_long.unsqueeze(0)
 
         # 6. Denoising loop
-        if use_interpolate_prompt:
-            if num_latent_chunk < max(interpolate_cumulative_list):
-                num_latent_chunk = sum(interpolate_cumulative_list)
-                print(f"Update num_latent_chunk to: {num_latent_chunk}")
+        if use_interpolate_prompt and num_latent_chunk < max(interpolate_cumulative_list):
+            num_latent_chunk = sum(interpolate_cumulative_list)
+            print(f"Update num_latent_chunk to: {num_latent_chunk}")
 
         if not is_enable_stage2:
             patch_size = self.transformer.config.patch_size
@@ -1392,8 +1389,7 @@ class HeliosPipeline(DiffusionPipeline, HeliosLoraLoaderMixin):
                 history_latents = torch.cat([history_latents, latents], dim=2)
                 real_history_latents = history_latents[:, :, -total_generated_latent_frames:]
                 current_latents = (
-                    real_history_latents[:, :, -num_latent_frames_per_chunk:].to(vae_dtype) / latents_std
-                    + latents_mean
+                    real_history_latents[:, :, -num_latent_frames_per_chunk:].to(vae_dtype) / latents_std + latents_mean
                 )
                 current_video = self.vae.decode(current_latents, return_dict=False)[0]
 

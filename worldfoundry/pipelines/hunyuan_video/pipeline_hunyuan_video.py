@@ -113,7 +113,7 @@ class NativeHunyuanVideoPipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "NativeHunyuanVideoPipeline":
+    ) -> NativeHunyuanVideoPipeline:
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
         options.update(required_components or {})
         options.update(kwargs)
@@ -125,7 +125,7 @@ class NativeHunyuanVideoPipeline(PipelineABC):
         if isinstance(source, (str, Path)) and Path(source).expanduser().is_dir():
             source_root = Path(source).expanduser().resolve()
             root = str(source_root)
-            overrides.update({name: root for name in ("transformer", "vae")})
+            overrides.update(dict.fromkeys(("transformer", "vae"), root))
             if resolved_model_id.startswith("hunyuanvideo-1.5"):
                 overrides["resources"] = root
                 local_vision = source_root / "vision_encoder" / "siglip"

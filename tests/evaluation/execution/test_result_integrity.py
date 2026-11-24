@@ -12,13 +12,13 @@ from typing import Any
 
 import pytest
 
-from worldfoundry.evaluation.api import AggregateResult, ArtifactRef, GenerationRequest, GenerationResult, MetricResult
-from worldfoundry.evaluation.api.metrics import aggregate_mean
-from worldfoundry.evaluation.tasks.execution.orchestration.contract import run_contract
-from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import run_evaluate
-from worldfoundry.evaluation.tasks.execution.orchestration.existing_results import run_existing_results
-from worldfoundry.evaluation.tasks.execution.orchestration.model_benchmark_suite import _SuiteGenerationMemoRunner
-from worldfoundry.evaluation.tasks.execution.orchestration.run_session import coerce_generation_result
+from worldfoundry.evals.api import AggregateResult, ArtifactRef, GenerationRequest, GenerationResult, MetricResult
+from worldfoundry.evals.api.metrics import aggregate_mean
+from worldfoundry.evals.tasks.execution.orchestration.contract import run_contract
+from worldfoundry.evals.tasks.execution.orchestration.evaluate import run_evaluate
+from worldfoundry.evals.tasks.execution.orchestration.existing_results import run_existing_results
+from worldfoundry.evals.tasks.execution.orchestration.run_session import coerce_generation_result
+from worldfoundry.evals.tasks.execution.orchestration.suite_cells import _SuiteGenerationMemoRunner
 
 pytestmark = pytest.mark.unit
 
@@ -26,8 +26,8 @@ pytestmark = pytest.mark.unit
 @pytest.fixture(autouse=True)
 def fixed_versions(monkeypatch: pytest.MonkeyPatch) -> None:
     version = {"available": False, "commit": None, "dirty": None, "dirty_diff_sha256": None}
-    monkeypatch.setattr("worldfoundry.evaluation.utils.git_metadata", lambda *args: version)
-    monkeypatch.setattr("worldfoundry.evaluation.reporting.run_manifest.git_metadata", lambda *args: version)
+    monkeypatch.setattr("worldfoundry.evals.utils.git_metadata", lambda *args: version)
+    monkeypatch.setattr("worldfoundry.evals.reporting.run_manifest.git_metadata", lambda *args: version)
 
 
 def requests() -> list[GenerationRequest]:
@@ -313,7 +313,7 @@ def test_suite_memo_forwards_progress_without_caching_partial_batch(tmp_path: Pa
 def test_pipeline_runner_checkpoints_one_complete_unit_per_yield(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from worldfoundry.evaluation.models.runners.pipeline import WorldFoundryPipelineRunner
+    from worldfoundry.evals.models.runners.pipeline import WorldFoundryPipelineRunner
 
     root = tmp_path / "run"
     runner = WorldFoundryPipelineRunner("integrity", object(), pipeline_target="tests:Pipeline")

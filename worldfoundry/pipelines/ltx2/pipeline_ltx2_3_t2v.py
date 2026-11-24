@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from .pipeline_ltx2_3_i2v import LTX23I2VPipeline
 from ...synthesis.visual_generation.ltx2.ltx2_3_t2v_synthesis import LTX23T2VSynthesis
+from .pipeline_ltx2_3_i2v import LTX23I2VPipeline
 
 
 class LTX23T2VPipeline(LTX23I2VPipeline):

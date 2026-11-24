@@ -1,7 +1,7 @@
 """CLI sub-commands for creating, inspecting, and validating run plans and metric IDs.
 
 This module wires up the ``plan`` and ``metric`` sub-commands under the
-``worldfoundry-eval`` CLI.  The ``plan`` sub-command supports ``create``,
+``wf`` CLI.  The ``plan`` sub-command supports ``create``,
 ``show``, and ``validate`` operations on stable executable run plans.  The
 ``metric`` sub-command supports ``list``, ``show``, and ``validate``
 operations on the metric registry.
@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Any
 
-from worldfoundry.evaluation.utils import BENCHMARK_TASK_ROOT, TMP_ROOT
+from worldfoundry.evals.utils import BENCHMARK_TASK_ROOT, TMP_ROOT
 
 from .presentation import print_details, print_notice, print_table, terminal_enabled
 from .utils import (
@@ -44,9 +45,9 @@ def _build_run_plan_from_cli_args(args: argparse.Namespace):
     Returns:
         A fully constructed :class:`RunPlan` instance.
     """
-    from worldfoundry.evaluation.runner import build_run_plan, build_run_plan_from_task_registry
+    from worldfoundry.evals.tasks.execution.orchestration.plan import build_run_plan, build_run_plan_from_task_registry
 
-    plan_kwargs = {
+    plan_kwargs: dict[str, Any] = {
         "mode": args.mode,
         "dataset_root": args.data_path,
         "dataset_manifest": args.dataset_manifest,
@@ -81,6 +82,7 @@ def _build_run_plan_from_cli_args(args: argparse.Namespace):
         )
     return build_run_plan(output_dir=args.output_dir, **plan_kwargs)
 
+
 def _plan_result_payload(plan) -> dict:
     """Extract a human-readable summary payload from a :class:`RunPlan`.
 
@@ -95,7 +97,7 @@ def _plan_result_payload(plan) -> dict:
     """
     validation = None
     try:
-        from worldfoundry.evaluation.runner import validate_run_plan
+        from worldfoundry.evals.tasks.execution.orchestration.plan import validate_run_plan
 
         validation = validate_run_plan(plan)
     except Exception:  # pragma: no cover - validation is best-effort for summaries.
@@ -112,6 +114,7 @@ def _plan_result_payload(plan) -> dict:
         "validation": validation,
     }
 
+
 def _handle_plan_create(args: argparse.Namespace) -> int:
     """Create a run plan and print or write it to disk.
 
@@ -121,7 +124,7 @@ def _handle_plan_create(args: argparse.Namespace) -> int:
     Returns:
         ``0`` on success.
     """
-    from worldfoundry.evaluation.runner import write_run_plan
+    from worldfoundry.evals.tasks.execution.orchestration.plan import write_run_plan
 
     plan = _build_run_plan_from_cli_args(args)
     if args.output_json:
@@ -142,6 +145,7 @@ def _handle_plan_create(args: argparse.Namespace) -> int:
                 print(f"wrote: {args.output_json}")
     return 0
 
+
 def _handle_plan_show(args: argparse.Namespace) -> int:
     """Load and display an existing run plan.
 
@@ -151,7 +155,7 @@ def _handle_plan_show(args: argparse.Namespace) -> int:
     Returns:
         ``0`` on success.
     """
-    from worldfoundry.evaluation.runner import load_run_plan
+    from worldfoundry.evals.tasks.execution.orchestration.plan import load_run_plan
 
     plan = load_run_plan(args.plan_path)
     if args.json:
@@ -173,6 +177,7 @@ def _handle_plan_show(args: argparse.Namespace) -> int:
     )
     return 0
 
+
 def _handle_plan_validate(args: argparse.Namespace) -> int:
     """Validate a run plan without executing it.
 
@@ -182,7 +187,7 @@ def _handle_plan_validate(args: argparse.Namespace) -> int:
     Returns:
         ``0`` if the plan is valid, ``1`` if issues were found.
     """
-    from worldfoundry.evaluation.runner import load_run_plan, validate_run_plan
+    from worldfoundry.evals.tasks.execution.orchestration.plan import load_run_plan, validate_run_plan
 
     plan = load_run_plan(args.plan_path)
     payload = validate_run_plan(plan)
@@ -200,6 +205,7 @@ def _handle_plan_validate(args: argparse.Namespace) -> int:
                 print(f"issue: {issue}")
     return 0 if payload["ok"] else 1
 
+
 # ── Metric sub-command handlers ─────────────────────────────
 
 
@@ -212,7 +218,7 @@ def _handle_metric_list(args: argparse.Namespace) -> int:
     Returns:
         ``0`` on success.
     """
-    from worldfoundry.evaluation.tasks.metrics.registry import list_metric_registry_entries
+    from worldfoundry.evals.tasks.metrics.registry import list_metric_registry_entries
 
     entries = list_metric_registry_entries()
     payload = [entry.to_dict() for entry in entries]
@@ -243,6 +249,7 @@ def _handle_metric_list(args: argparse.Namespace) -> int:
         print(f"{entry.id}: family={entry.family} aliases={aliases}{parameterized} {entry.description}")
     return 0
 
+
 def _handle_metric_show(args: argparse.Namespace) -> int:
     """Display details for a single metric registry entry.
 
@@ -252,7 +259,7 @@ def _handle_metric_show(args: argparse.Namespace) -> int:
     Returns:
         ``0`` on success.
     """
-    from worldfoundry.evaluation.tasks.metrics.registry import default_metric_registry
+    from worldfoundry.evals.tasks.metrics.registry import default_metric_registry
 
     entry = default_metric_registry().get(args.metric_id)
     payload = entry.to_dict()
@@ -274,6 +281,7 @@ def _handle_metric_show(args: argparse.Namespace) -> int:
     )
     return 0
 
+
 def _handle_metric_validate(args: argparse.Namespace) -> int:
     """Validate one or more metric IDs against the registry.
 
@@ -283,7 +291,7 @@ def _handle_metric_validate(args: argparse.Namespace) -> int:
     Returns:
         ``0`` if all IDs resolve, ``1`` if any are unknown.
     """
-    from worldfoundry.evaluation.tasks.metrics.registry import validate_metric_ids
+    from worldfoundry.evals.tasks.metrics.registry import validate_metric_ids
 
     payload = validate_metric_ids(args.metric_id)
     if args.json:
@@ -313,12 +321,12 @@ def _handle_metric_validate(args: argparse.Namespace) -> int:
 # ── Sub-parser registration ─────────────────────────────────
 
 
-def register_plan_metric_subparsers(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def register_plan_metric_subparsers(subparsers: argparse._SubParsersAction) -> None:
     """Register ``plan`` and ``metric`` sub-commands on the root CLI parser.
 
     Args:
         subparsers: The subparser collection from the root
-            ``worldfoundry-eval`` command.
+            ``wf`` command.
     """
     plan_parser = subparsers.add_parser(
         "plan",
@@ -332,11 +340,15 @@ def register_plan_metric_subparsers(subparsers: argparse._SubParsersAction[argpa
     )
     plan_create_parser.add_argument("--task-name")
     plan_create_parser.add_argument("--task-root", action="append", type=Path)
-    plan_create_parser.add_argument("--include-path", "--benchmark-include-path", action="append", type=Path, dest="include_path")
+    plan_create_parser.add_argument(
+        "--include-path", "--benchmark-include-path", action="append", type=Path, dest="include_path"
+    )
     plan_create_parser.add_argument("--root-dir", type=Path)
     plan_create_parser.add_argument("--recursive", action="store_true")
     plan_create_parser.add_argument("--benchmark")
-    plan_create_parser.add_argument("--mode", choices=["existing-results", "existing", "results", "model", "generate"], default="model")
+    plan_create_parser.add_argument(
+        "--mode", choices=["existing-results", "existing", "results", "model", "generate"], default="model"
+    )
     plan_create_parser.add_argument("--data-path", type=Path)
     plan_create_parser.add_argument("--dataset-manifest", type=Path)
     plan_create_parser.add_argument("--requests-path", type=Path)

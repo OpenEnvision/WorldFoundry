@@ -24,8 +24,12 @@ def resolve_device_paths(cfg):
     """Resolve relative device paths to absolute using Hydra's original cwd."""
     orig_cwd = get_original_cwd()
     path_keys = [
-        "data_dir", "eval_data_dir", "pretrained_model_dir",
-        "output_dir", "checkpoint_dir", "jax_cache_dir",
+        "data_dir",
+        "eval_data_dir",
+        "pretrained_model_dir",
+        "output_dir",
+        "checkpoint_dir",
+        "jax_cache_dir",
     ]
     with open_dict(cfg):
         for key in path_keys:

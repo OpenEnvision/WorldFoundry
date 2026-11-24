@@ -40,7 +40,9 @@ type SearchIndex = {
   >;
 };
 
-let staticSearchIndex: Promise<SearchIndex> | undefined;
+let staticSearchIndex: Promise<SearchIndex> | null = null;
+
+const CJK_PATTERN = /[\u3400-\u9fff]/;
 
 function initOrama() {
   return create({
@@ -54,34 +56,82 @@ function normalizeForLooseSearch(value: string) {
   return value.toLocaleLowerCase().replace(/\s+/g, '');
 }
 
+function extractSearchTokens(query: string): string[] {
+  const trimmed = query.trim().toLocaleLowerCase();
+  if (!trimmed) return [];
+
+  const tokens: string[] = [];
+  for (const part of trimmed.split(/\s+/)) {
+    const segments = part.match(/[\u3400-\u9fff]+|[^\u3400-\u9fff]+/g);
+    if (segments) {
+      tokens.push(...segments);
+    }
+  }
+  return tokens;
+}
+
 async function loadSearchIndex() {
-  staticSearchIndex ??= fetch(withBasePath('/api/search') ?? '/api/search').then((res) => {
-    if (!res.ok) throw new Error('Failed to fetch search index.');
-    return res.json() as Promise<SearchIndex>;
-  });
+  staticSearchIndex ??= fetch(withBasePath('/api/search') ?? '/api/search')
+    .then((res) => {
+      if (!res.ok) throw new Error('Failed to fetch search index.');
+      return res.json() as Promise<SearchIndex>;
+    })
+    .catch((error) => {
+      staticSearchIndex = null;
+      throw error;
+    });
 
   return staticSearchIndex;
 }
 
 async function searchChineseFallback(query: string): Promise<SortedResult[]> {
   const normalizedQuery = normalizeForLooseSearch(query);
+  const tokens = extractSearchTokens(query);
 
-  if (!normalizedQuery) return [];
+  if (!normalizedQuery || tokens.length === 0) return [];
 
   const index = await loadSearchIndex();
   const documents = Object.values(index.data.zh?.docs.docs ?? {});
   const pageDocuments = new Map(
     documents.filter((doc) => doc.type === 'page').map((doc) => [doc.page_id, doc]),
   );
-  const highlighter = createContentHighlighter(query);
-  const results: SortedResult[] = [];
-  const emitted = new Set<string>();
+  const pageTitles = new Map(
+    Array.from(pageDocuments.entries(), ([pageId, page]) => [
+      pageId,
+      normalizeForLooseSearch(`${page.content} ${page.breadcrumbs?.join(' ') ?? ''}`),
+    ]),
+  );
+
+  const exactMatches: SearchDocument[] = [];
+  const docTokenMatches: SearchDocument[] = [];
+  const pageScopedTokenMatches: SearchDocument[] = [];
 
   for (const doc of documents) {
     const searchable = normalizeForLooseSearch(`${doc.content} ${doc.breadcrumbs?.join(' ') ?? ''}`);
 
-    if (!searchable.includes(normalizedQuery)) continue;
+    if (searchable.includes(normalizedQuery)) {
+      exactMatches.push(doc);
+      continue;
+    }
 
+    if (tokens.every((token) => searchable.includes(token))) {
+      docTokenMatches.push(doc);
+      continue;
+    }
+
+    if (tokens.length > 1 && tokens.some((token) => searchable.includes(token))) {
+      const combined = `${searchable}${pageTitles.get(doc.page_id) ?? ''}`;
+      if (tokens.every((token) => combined.includes(token))) {
+        pageScopedTokenMatches.push(doc);
+      }
+    }
+  }
+
+  const highlighter = createContentHighlighter(query);
+  const results: SortedResult[] = [];
+  const emitted = new Set<string>();
+
+  for (const doc of [...exactMatches, ...docTokenMatches, ...pageScopedTokenMatches]) {
     const page = pageDocuments.get(doc.page_id) ?? doc;
 
     if (!emitted.has(page.page_id)) {
@@ -121,6 +171,10 @@ function createSearchClient(locale: Locale) {
 
   return {
     async search(query: string) {
+      if (locale === 'zh' && CJK_PATTERN.test(query)) {
+        return searchChineseFallback(query);
+      }
+
       const results = await client.search(query);
 
       if (locale !== 'zh' || results.length > 0) return results;

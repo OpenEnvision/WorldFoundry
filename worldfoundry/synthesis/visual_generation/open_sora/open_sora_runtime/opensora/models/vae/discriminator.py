@@ -6,8 +6,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from opensora.registry import MODELS
-from opensora.utils.ckpt_utils import find_model, load_checkpoint
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import MODELS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.utils.ckpt_utils import (
+    find_model,
+    load_checkpoint,
+)
 
 
 def cast_tuple(t, length=1):
@@ -15,7 +18,7 @@ def cast_tuple(t, length=1):
 
 
 def xavier_uniform_weight_init(m):
-    if isinstance(m, nn.Conv3d) or isinstance(m, nn.Linear):
+    if isinstance(m, (nn.Conv3d, nn.Linear)):
         nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain("relu"))
         if m.bias is not None:
             nn.init.zeros_(m.bias)
@@ -44,7 +47,7 @@ class BlurPool3D(nn.Module):
         device="cpu",
         dtype=torch.bfloat16,
     ):
-        super(BlurPool3D, self).__init__()
+        super().__init__()
         self.filt_size = filt_size
         self.pad_off = pad_off
         self.pad_sizes = [
@@ -85,7 +88,7 @@ class BlurPool3D(nn.Module):
         filt = filt_3d / torch.sum(filt_3d)  # SCH: modified to it 3D
         self.register_buffer("filt", filt[None, None, :, :, :].repeat((self.channels, 1, 1, 1, 1)))
 
-        self.pad = get_pad_layer(pad_type)(self.pad_sizes)
+        self.pad = get_pad_layer(pad_type)(self.pad_sizes)  # noqa: F821 - Name is undefined in the upstream source.
 
     def forward(self, inp):
         if self.filt_size == 1:
@@ -163,11 +166,11 @@ class NLayerDiscriminator(nn.Module):
             n_layers (int)  -- the number of conv layers in the discriminator
             norm_layer      -- normalization layer
         """
-        super(NLayerDiscriminator, self).__init__()
+        super().__init__()
 
         norm_layer = nn.BatchNorm2d
 
-        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
+        if type(norm_layer) is functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
             use_bias = norm_layer.func != nn.BatchNorm2d
         else:
             use_bias = norm_layer != nn.BatchNorm2d
@@ -220,12 +223,12 @@ class NLayerDiscriminator3D(nn.Module):
             n_layers (int)  -- the number of conv layers in the discriminator
             use_actnorm (bool) -- flag to use actnorm instead of batchnorm
         """
-        super(NLayerDiscriminator3D, self).__init__()
+        super().__init__()
         if not use_actnorm:
             norm_layer = nn.BatchNorm3d
         else:
             raise NotImplementedError("Not implemented.")
-        if type(norm_layer) == functools.partial:
+        if type(norm_layer) is functools.partial:
             use_bias = norm_layer.func != nn.BatchNorm3d
         else:
             use_bias = norm_layer != nn.BatchNorm3d
@@ -322,17 +325,17 @@ class StyleGANDiscriminatorBlur(nn.Module):
         self.norm1 = nn.GroupNorm(num_groups, prev_filters, dtype=dtype, device=device)
 
         scale_factor = 2**self.num_blocks
-        if num_frames % scale_factor != 0:  # SCH: NOTE: has first frame which would be padded before usage
+        if num_frames % scale_factor != 0:  # noqa: SIM108 - Branches carry per-case comments.  # SCH: NOTE: has first frame which would be padded before usage
             time_scaled = num_frames // scale_factor + 1
         else:
             time_scaled = num_frames / scale_factor
 
-        assert (
-            self.input_size[0] % scale_factor == 0
-        ), f"image width {self.input_size[0]} is not divisible by scale factor {scale_factor}"
-        assert (
-            self.input_size[1] % scale_factor == 0
-        ), f"image height {self.input_size[1]} is not divisible by scale factor {scale_factor}"
+        assert self.input_size[0] % scale_factor == 0, (
+            f"image width {self.input_size[0]} is not divisible by scale factor {scale_factor}"
+        )
+        assert self.input_size[1] % scale_factor == 0, (
+            f"image height {self.input_size[1]} is not divisible by scale factor {scale_factor}"
+        )
         w_scaled, h_scaled = self.input_size[0] / scale_factor, self.input_size[1] / scale_factor
         in_features = int(prev_filters * time_scaled * w_scaled * h_scaled)  # (C*T*W*H)
         self.linear1 = nn.Linear(in_features, prev_filters, device=device, dtype=dtype)  # NOTE: init to xavier_uniform
@@ -369,11 +372,11 @@ def load_checkpoint_with_inflation(model, ckpt_path):
     """
     pre-train using image, then inflate to 3D videos
     """
-    if ckpt_path.endswith(".pt") or ckpt_path.endswith(".pth"):
+    if ckpt_path.endswith((".pt", ".pth")):
         state_dict = find_model(ckpt_path)
         with torch.no_grad():
             for key in state_dict:
-                if key in model:
+                if key in model:  # noqa: SIM102 - Branches carry per-case comments.
                     # central inflation
                     if state_dict[key].size() == model[key][:, :, 0, :, :].size():
                         # temporal dimension

@@ -2,9 +2,9 @@
 
 from ..components import ComponentKey, ComponentKind, ComponentSpec, ExecutionSpec
 from ..loaders import CheckpointSpec
+from ..models.autoencoders.kandinsky6.component import build_kandinsky6_decoder
 from ..models.denoisers.kandinsky6 import build_kandinsky6_denoiser
 from ..models.encoders.kandinsky6.component import build_kandinsky6_conditioner
-from ..models.autoencoders.kandinsky6.component import build_kandinsky6_decoder
 from .spec import NativeDiffusionRecipe
 
 CHECKPOINT_NAMES = ("pro-distill", "pro", "pro-pretrain", "lite", "lite-distill", "lite-pretrain")

@@ -4,10 +4,10 @@ import ast
 import sys
 from pathlib import Path
 
-import worldfoundry.evaluation.tasks.catalog as catalog_module
-from worldfoundry.evaluation.api import EvaluationProtocolSpec as ApiEvaluationProtocolSpec
-from worldfoundry.evaluation.api.json_contract import JsonContract, tuple_of_str
-from worldfoundry.evaluation.tasks.catalog import (
+import worldfoundry.evals.tasks.catalog as catalog_module
+from worldfoundry.core.json_contract import JsonContract, tuple_of_str
+from worldfoundry.evals.api import EvaluationProtocolSpec as ApiEvaluationProtocolSpec
+from worldfoundry.evals.tasks.catalog import (
     BenchmarkSpec,
     CatalogRegistry,
     EvaluationProtocolSpec,
@@ -152,7 +152,7 @@ def test_task_config_coercion_preserves_task_config_shape_without_data_import() 
 
 def test_catalog_imports_are_stdlib_or_local_and_do_not_import_data_benchmarks() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    catalog_root = repo_root / "src" / "worldfoundry" / "evaluation" / "catalog"
+    catalog_root = repo_root / "src" / "worldfoundry" / "evals" / "catalog"
     allowed_modules = set(sys.stdlib_module_names) | {"__future__"}
 
     for path in catalog_root.glob("*.py"):

@@ -9,9 +9,8 @@ from typing import Any
 import torch
 import yaml
 
-from worldfoundry.core.io.paths import resolve_data_path
 from worldfoundry.core.configuration.python import EasyDict
-
+from worldfoundry.core.io.paths import resolve_data_path
 
 _CONFIG_ROOT = resolve_data_path("models", "runtime", "configs", "wan_va")
 

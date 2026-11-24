@@ -119,20 +119,159 @@ def prepare_sana_block_input(blocks: nn.ModuleList, value: torch.Tensor) -> torc
     return value
 
 
+def _contains_tensor(obj: object) -> bool:
+    if isinstance(obj, torch.Tensor):
+        return True
+    if isinstance(obj, dict):
+        return any(_contains_tensor(k) or _contains_tensor(v) for k, v in obj.items())
+    if isinstance(obj, (list, tuple, set)):
+        return any(_contains_tensor(item) for item in obj)
+    return False
+
+
 def run_sana_blocks(blocks: nn.ModuleList, value: torch.Tensor, *args, **kwargs) -> torch.Tensor:
-    """One block-stack seam for stateless image/video graphs and request caches."""
+    """One block-stack seam for stateless image/video graphs, request caches, and piecewise CUDA Graphs."""
     cache = kwargs.pop("feature_cache", None)
     step = kwargs.pop("feature_cache_step", 0)
     total_steps = kwargs.pop("feature_cache_total_steps", None)
+    piecewise_graph = kwargs.pop("piecewise_graph", None)
+    on_stack_execute = kwargs.pop("on_stack_execute", None)
+    if piecewise_graph is None:
+        piecewise_graph = getattr(blocks, "_worldfoundry_piecewise_graph", None)
     value = prepare_sana_block_input(blocks, value)
-    if cache is None:
+
+    use_piecewise = piecewise_graph is not None and not torch.is_grad_enabled() and value.is_cuda and len(blocks) > 0
+    seg_name: str | None = None
+    flat_tensors: list[torch.Tensor] = []
+    arg_specs: list[tuple[str, object]] = []
+    kw_specs: list[tuple[str, str, object]] = []
+    if use_piecewise:
+        # Piecewise CUDA Graph captures tensor and tuple-of-tensor inputs while
+        # keeping non-tensor metadata (such as THW tuple) in the segment key.
+        # Fall back to eager if any constant container embeds an untracked tensor
+        # (prevents GPU-CPU repr() syncs and stale captured tensor pointers).
+        for item in args:
+            if isinstance(item, torch.Tensor):
+                arg_specs.append(("tensor", len(flat_tensors)))
+                flat_tensors.append(item)
+            elif isinstance(item, tuple) and item and all(isinstance(elem, torch.Tensor) for elem in item):
+                start = len(flat_tensors)
+                flat_tensors.extend(item)
+                arg_specs.append(("tensor_tuple", (start, len(flat_tensors))))
+            elif _contains_tensor(item):
+                use_piecewise = False
+                break
+            else:
+                arg_specs.append(("const", item))
+
+        if use_piecewise:
+            for k in sorted(kwargs):
+                v = kwargs[k]
+                if isinstance(v, torch.Tensor):
+                    kw_specs.append((k, "tensor", len(flat_tensors)))
+                    flat_tensors.append(v)
+                elif isinstance(v, tuple) and v and all(isinstance(elem, torch.Tensor) for elem in v):
+                    start = len(flat_tensors)
+                    flat_tensors.extend(v)
+                    kw_specs.append((k, "tensor_tuple", (start, len(flat_tensors))))
+                elif _contains_tensor(v):
+                    use_piecewise = False
+                    break
+                else:
+                    kw_specs.append((k, "const", v))
+
+        if use_piecewise:
+            seg_name = f"sana_blocks:{tuple(arg_specs)}:{tuple(kw_specs)}"
+
+    def _run_stack_eager(hidden: torch.Tensor, *stack_args) -> torch.Tensor:
         for block in blocks:
-            value = block(value, *args, **kwargs)
-        return value
+            hidden = block(hidden, *stack_args, **kwargs)
+        return hidden
+
+    def _run_stack(hidden: torch.Tensor) -> torch.Tensor:
+        if callable(on_stack_execute):
+            on_stack_execute()
+        if not use_piecewise or piecewise_graph is None or seg_name is None:
+            return _run_stack_eager(hidden, *args)
+
+        def _segment_fn(seg_hidden: torch.Tensor, *seg_tensors: torch.Tensor) -> torch.Tensor:
+            rebuilt_args: list[object] = []
+            for kind, payload in arg_specs:
+                if kind == "tensor":
+                    rebuilt_args.append(seg_tensors[int(payload)])  # type: ignore[arg-type]
+                elif kind == "tensor_tuple":
+                    start_i, end_i = payload  # type: ignore[misc]
+                    rebuilt_args.append(tuple(seg_tensors[start_i:end_i]))
+                else:
+                    rebuilt_args.append(payload)
+            rebuilt_kwargs: dict[str, object] = {}
+            for k, kind, payload in kw_specs:
+                if kind == "tensor":
+                    rebuilt_kwargs[k] = seg_tensors[int(payload)]  # type: ignore[arg-type]
+                elif kind == "tensor_tuple":
+                    start_i, end_i = payload  # type: ignore[misc]
+                    rebuilt_kwargs[k] = tuple(seg_tensors[start_i:end_i])
+                else:
+                    rebuilt_kwargs[k] = payload
+            cur = seg_hidden
+            for block in blocks:
+                cur = block(cur, *rebuilt_args, **rebuilt_kwargs)
+            return cur
+
+        piecewise_graph.get_or_register_segment(seg_name, _segment_fn)
+        return piecewise_graph.run_segment(seg_name, hidden, *flat_tensors)
+
+    if cache is None:
+        return _run_stack(value)
+
+    # Support both fast whole-stack cache controllers (run_stack) and standard
+    # EasyCache (run_blocks), recording piecewise skips cleanly on cache hits.
+    run_stack_hook = getattr(cache, "run_stack", None)
+    if callable(run_stack_hook):
+        output, hit = run_stack_hook(
+            step,
+            value,
+            _run_stack,
+            block_count=len(blocks),
+            total_steps=total_steps,
+        )
+        if hit and use_piecewise and piecewise_graph is not None and seg_name is not None:
+            piecewise_graph.record_skip(seg_name)
+        return output
+
+    if use_piecewise and piecewise_graph is not None and seg_name is not None:
+        # Wrap EasyCache so a dense miss still replays the captured piecewise graph.
+        # EasyCache calls run_block(0..N-1) sequentially on a miss; intercept index 0
+        # to execute the captured whole stack and short-circuit indices 1..N-1.
+        stack_ran = False
+
+        def _run_block_piecewise(index: int, hidden: torch.Tensor) -> torch.Tensor:
+            nonlocal stack_ran
+            if index == 0:
+                stack_ran = True
+                return _run_stack(hidden)
+            return hidden
+
+        output = cache.run_blocks(
+            step,
+            value,
+            _run_block_piecewise,
+            block_count=len(blocks),
+            total_steps=total_steps,
+        )
+        if not stack_ran:
+            piecewise_graph.record_skip(seg_name)
+        return output
+
+    def _run_block_direct(index: int, hidden: torch.Tensor) -> torch.Tensor:
+        if index == 0 and callable(on_stack_execute):
+            on_stack_execute()
+        return blocks[index](hidden, *args, **kwargs)
+
     return cache.run_blocks(
         step,
         value,
-        lambda index, hidden: blocks[index](hidden, *args, **kwargs),
+        _run_block_direct,
         block_count=len(blocks),
         total_steps=total_steps,
     )

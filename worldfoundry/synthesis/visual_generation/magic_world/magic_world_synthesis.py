@@ -13,7 +13,7 @@ class MagicWorldSynthesis(BaseSynthesis):
         self.runtime = runtime
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> "MagicWorldSynthesis":
+    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> MagicWorldSynthesis:
         return cls(MagicWorldRuntime.from_pretrained(pretrained_model_path, **kwargs))
 
     def predict(self, **kwargs: Any) -> Any:

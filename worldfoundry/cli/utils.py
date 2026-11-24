@@ -6,7 +6,7 @@ import argparse
 import json
 import os
 import re
-import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -24,18 +24,11 @@ class CliUsageError(ValueError):
     distinguishable from usage mistakes (CM-08).
     """
 
+
 def cli_prog_name() -> str:
-    """Match usage/help branding to the console script that was invoked.
+    """Return the program name used in usage, help, and hint text."""
 
-    ``worldfoundry`` and ``worldfoundry-eval`` share this parser; anything
-    else (``python -m worldfoundry.cli``, tests, ...) keeps the historical
-    ``worldfoundry-eval`` branding so existing help-contract tests stay stable.
-    """
-
-    name = Path(sys.argv[0]).name
-    if name in {"worldfoundry", "worldfoundry-eval"}:
-        return name
-    return "worldfoundry-eval"
+    return "wf"
 
 
 def json_dump(payload: object) -> None:
@@ -75,9 +68,9 @@ def task_roots_from_args(args: argparse.Namespace) -> tuple[Path, ...]:
         Deduplicated tuple of :class:`Path` directories to search for
         task definitions.
     """
-    from worldfoundry.evaluation.utils import BENCHMARK_TASK_ROOT
+    from worldfoundry.evals.utils import BENCHMARK_TASK_ROOT
 
-    roots = list(args.task_root or ())
+    roots: list[Path] = list(args.task_root or ())
     if not roots:
         roots = [BENCHMARK_TASK_ROOT] if BENCHMARK_TASK_ROOT.exists() else []
     for env_name in ("WORLDFOUNDRY_TASK_ROOTS", "WORLDFOUNDRY_BENCHMARK_INCLUDE_PATH"):
@@ -100,19 +93,31 @@ def parse_json_value(value: str) -> object:
     return value
 
 
+def _key_value_pairs(values: list[str] | None) -> Iterator[tuple[str, str]]:
+    """Split repeated `KEY=VALUE` flags in order, rejecting items without a key."""
+    for item in values or ():
+        key, separator, value = item.partition("=")
+        if not separator or not key.strip():
+            raise ValueError(f"expected KEY=VALUE, got {item!r}")
+        yield key.strip(), value
+
+
+def parse_key_value_strings(values: list[str] | None) -> dict[str, str]:
+    """Parse repeated `KEY=VALUE` flags, keeping every value as literal text.
+
+    Args:
+        values: Repeated key-value CLI flag values.
+    """
+    return dict(_key_value_pairs(values))
+
+
 def parse_key_value_mapping(values: list[str] | None) -> dict[str, object]:
     """Parse repeated `KEY=VALUE` flags.
 
     Args:
         values: Repeated key-value CLI flag values.
     """
-    payload: dict[str, object] = {}
-    for item in values or ():
-        key, separator, value = item.partition("=")
-        if not separator or not key.strip():
-            raise ValueError(f"expected KEY=VALUE, got {item!r}")
-        payload[key.strip()] = parse_json_value(value)
-    return payload
+    return {key: parse_json_value(value) for key, value in _key_value_pairs(values)}
 
 
 def load_json_mapping(path: Path | None) -> dict[str, Any] | None:
@@ -140,24 +145,22 @@ def canonical_model_zoo_id(value: str | None, manifest_dir: Path | None) -> str 
         return None
     if manifest_dir is None or not manifest_dir.exists():
         return value
-    from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
+    from worldfoundry.zoo.catalog import load_model_zoo_registry
 
     return load_model_zoo_registry(manifest_dir).get(value).model_id
 
 
-def canonical_benchmark_zoo_id(value: str | None, manifest_dir: Path | None) -> str | None:
+def canonical_benchmark_zoo_id(value: str, manifest_dir: Path | None) -> str:
     """Resolve a benchmark-zoo id or alias.
 
     Args:
         value: Benchmark id or alias.
         manifest_dir: Optional benchmark-zoo manifest directory or file.
     """
-    if value is None:
-        return None
     if manifest_dir is None or not manifest_dir.exists():
         return value
-    from worldfoundry.evaluation.tasks.catalog.schema import load_entries
-    from worldfoundry.evaluation.tasks.catalog.zoo_registry import BenchmarkZooRegistry, load_benchmark_zoo_registry
+    from worldfoundry.evals.tasks.catalog.schema import load_entries
+    from worldfoundry.evals.tasks.catalog.zoo_registry import BenchmarkZooRegistry, load_benchmark_zoo_registry
 
     if manifest_dir.is_file():
         return BenchmarkZooRegistry(load_entries(manifest_dir)).get(value).benchmark_id
@@ -171,4 +174,24 @@ def resolve_cli_benchmark_for_materialize(task_type: str, benchmark_name: str) -
         "Task-type/benchmark-name materialization is retired for benchmark-zoo entries. "
         f"Use `{prog} run --benchmark <id> --model <id>` or "
         f"`{prog} task materialize` with a filesystem task YAML."
+    )
+
+
+def add_generation_cache_args(parser: argparse.ArgumentParser, *, namespace: str) -> None:
+    """Add generation-cache ``--generation-cache-*`` arguments to a parser."""
+    parser.add_argument(
+        "--generation-cache-dir",
+        type=Path,
+        help="Optional SQLite generation-result cache directory for deterministic model outputs.",
+    )
+    parser.add_argument(
+        "--generation-cache-mode",
+        choices=["off", "read", "write", "read-write", "refresh"],
+        default="off",
+        help="Generation cache mode. read-write reuses hits and stores new successful outputs.",
+    )
+    parser.add_argument(
+        "--generation-cache-namespace",
+        default=namespace,
+        help="Namespace inside the generation-result cache database.",
     )

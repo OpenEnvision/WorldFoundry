@@ -4,11 +4,14 @@
 """Multiscale UCPE geometry; local control poses and global memory poses stay separate."""
 
 from __future__ import annotations
+
 from typing import Any
+
 import torch
 from einops import rearrange, repeat
-from . import geometry as ucpe_cc
+
 from ..ucpe import prope as prope_torch
+from . import geometry as ucpe_cc
 
 
 def rope_axis_positions(
@@ -48,12 +51,8 @@ def _build_stage_rope_coeffs(
     scale_invariant_positions: bool = True,
 ):
     """PRoPE cos/sin coefficients for one token grid."""
-    base_x = rope_axis_positions(
-        patches_x, reference_patches_x, scale_invariant_positions, device
-    )
-    base_y = rope_axis_positions(
-        patches_y, reference_patches_y, scale_invariant_positions, device
-    )
+    base_x = rope_axis_positions(patches_x, reference_patches_x, scale_invariant_positions, device)
+    base_y = rope_axis_positions(patches_y, reference_patches_y, scale_invariant_positions, device)
 
     x_positions = torch.tile(base_x, (patches_y * cameras,))
     y_positions = torch.tile(torch.repeat_interleave(base_y, patches_x), (cameras,))
@@ -121,12 +120,8 @@ def resolve_pose_chunk(
             return None
         pose_chunk = pose[:, :num_latent_frames_per_chunk]
     else:
-        window_num_frames = (
-            num_latent_frames_per_chunk - 1
-        ) * vae_scale_factor_temporal + 1
-        pose_chunk = _slice_pose_chunk(
-            pose, chunk_index, window_num_frames, restart_each_chunk=restart_each_chunk
-        )
+        window_num_frames = (num_latent_frames_per_chunk - 1) * vae_scale_factor_temporal + 1
+        pose_chunk = _slice_pose_chunk(pose, chunk_index, window_num_frames, restart_each_chunk=restart_each_chunk)
         if pose_chunk is None:
             return None
         pose_chunk = pose_chunk[:, ::vae_scale_factor_temporal]
@@ -161,9 +156,7 @@ def build_ucpe_camera_input(
     """Build one ``control_camera_dit_input`` dict for a single token grid."""
     method = transformer.camera_condition
     if "gta" in method or "prope" in method:
-        raise NotImplementedError(
-            "The UCPE bridge implements relray_absmap only."
-        )
+        raise NotImplementedError("The UCPE bridge implements relray_absmap only.")
     if "relray" not in method:
         raise ValueError(f"Unsupported camera condition: {method}")
 
@@ -179,9 +172,7 @@ def build_ucpe_camera_input(
         )
 
     c2w = torch.eye(4, device=pose_chunk.device, dtype=pose_chunk.dtype)
-    c2w = repeat(
-        c2w, "... -> B T ...", B=pose_chunk.shape[0], T=pose_chunk.shape[1]
-    ).clone()
+    c2w = repeat(c2w, "... -> B T ...", B=pose_chunk.shape[0], T=pose_chunk.shape[1]).clone()
     c2w[..., :3, :4] = pose_chunk
 
     d_cam = ucpe_cc.ucm_unproject_grid_fov(
@@ -202,9 +193,7 @@ def build_ucpe_camera_input(
         "patches_x": grid_w,
     }
 
-    needs_coeffs = (
-        force_explicit_coeffs or grid_h != attn.patches_y or grid_w != attn.patches_x
-    )
+    needs_coeffs = force_explicit_coeffs or grid_h != attn.patches_y or grid_w != attn.patches_x
     if needs_coeffs:
         coeffs_x, coeffs_y = _build_stage_rope_coeffs(
             cameras=pose_chunk.shape[1],
@@ -241,10 +230,7 @@ def build_ucpe_camera_input(
             f"camera viewmats token count mismatch: expected {expected_token_count}, "
             f"got {camera_input['viewmats'].shape[1]}"
         )
-    if (
-        "cam_emb" in camera_input
-        and camera_input["cam_emb"].shape[1] != expected_token_count
-    ):
+    if "cam_emb" in camera_input and camera_input["cam_emb"].shape[1] != expected_token_count:
         raise ValueError(
             f"camera cam_emb token count mismatch: expected {expected_token_count}, "
             f"got {camera_input['cam_emb'].shape[1]}"
@@ -299,10 +285,7 @@ def build_ucpe_attention_kwargs_pyramid(
     as its common geometric reference. Sampling at pixel centers keeps the
     frustum symmetric, including at the coarsest resolution.
     """
-    if (
-        camera_trajectory is None
-        or getattr(transformer, "camera_condition", "none") == "none"
-    ):
+    if camera_trajectory is None or getattr(transformer, "camera_condition", "none") == "none":
         return None
 
     resolved = resolve_pose_chunk(
@@ -318,9 +301,7 @@ def build_ucpe_attention_kwargs_pyramid(
         return None
     pose_chunk, x_fov, xi = resolved
 
-    reference_grid_h, reference_grid_w = max(
-        token_grids, key=lambda grid: grid[0] * grid[1]
-    )
+    reference_grid_h, reference_grid_w = max(token_grids, key=lambda grid: grid[0] * grid[1])
     camera_inputs = [
         build_ucpe_camera_input(
             transformer,
@@ -366,6 +347,5 @@ def build_ucpe_attention_kwargs_sequential_pyramid(
     if pyramid_kwargs is None:
         return None
     return [
-        {"camera_control_ucpe_input": camera_input}
-        for camera_input in pyramid_kwargs["camera_control_ucpe_input_list"]
+        {"camera_control_ucpe_input": camera_input} for camera_input in pyramid_kwargs["camera_control_ucpe_input_list"]
     ]

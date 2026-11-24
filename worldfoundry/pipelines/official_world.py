@@ -7,6 +7,7 @@ import shutil
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
+from typing import ClassVar
 
 from worldfoundry.operators.interactive_world_operator import InteractiveWorldOperator
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
@@ -14,16 +15,22 @@ from worldfoundry.pipelines.pipeline_utils import PipelineABC
 
 class OfficialWorldPipeline(PipelineABC):
     RUNTIME_CLS = None
-    MODEL_ID = ""
+    MODEL_ID: ClassVar[str] = ""  # ty: ignore[invalid-mutable-override]  # each pipeline binds one model id
     OPERATOR_CLS = InteractiveWorldOperator
 
     def __init__(self, runtime):
         self.runtime = runtime
         self.history = []
-        self.operator = self.OPERATOR_CLS()
+        self.operator = self._component("OPERATOR_CLS")()
 
     @classmethod
-    def from_pretrained(cls, model_path=None, required_components=None, device="cuda", **kwargs):
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
+        cls,
+        model_path=None,
+        required_components=None,
+        device="cuda",
+        **kwargs,
+    ):
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
         if model_path is not None and not isinstance(model_path, Mapping):
             options["checkpoint_dir"] = model_path
@@ -48,7 +55,7 @@ class OfficialWorldPipeline(PipelineABC):
         env_dir = options.pop("python_env_dir", None)
         if env_dir is not None:
             options.setdefault("python_executable", str(Path(env_dir) / "bin/python"))
-        return cls(cls.RUNTIME_CLS(device=device, **options))
+        return cls(cls._component("RUNTIME_CLS")(device=device, **options))
 
     def preflight(self):
         return self.runtime.preflight()

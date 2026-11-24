@@ -68,8 +68,8 @@ class ResidualFusion3D_Gating(nn.Module):
         """
         x, r: [B, F*H*W, C]
         """
-        B = x.shape[0]
-        C = x.shape[-1]
+        _B = x.shape[0]
+        _C = x.shape[-1]
 
         # Fold packed tokens back to a 3D volume for the conv mixer.
         x = rearrange(x, "b (f h w) c -> b c f h w", f=f, h=h, w=w)

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import CtrlWorldPipeline
+from worldfoundry.synthesis.visual_generation import runtime_manifest
 from worldfoundry.synthesis.visual_generation.ctrl_world import infer
 from worldfoundry.synthesis.visual_generation.ctrl_world import worldfoundry_runtime as runtime
-from worldfoundry.synthesis.visual_generation import runtime_manifest
 
 
 def _write_fixture(path: Path) -> None:
@@ -102,7 +105,15 @@ def test_build_command_expands_paths_and_plan_options(tmp_path, monkeypatch) -> 
                     "input_views": [str(view) for view in views],
                     "num_inference_steps": 2,
                     "action_direction": "left",
-                    "initial_pose": [0.4632655382, 0.0169253815, 0.4484287798, 3.1247090285, 0.0323393448, 0.0202563482, 0.0],
+                    "initial_pose": [
+                        0.4632655382,
+                        0.0169253815,
+                        0.4484287798,
+                        3.1247090285,
+                        0.0323393448,
+                        0.0202563482,
+                        0.0,
+                    ],
                     "action_distance": 0.08,
                     "seed": 7,
                 }
@@ -128,6 +139,9 @@ def test_build_command_expands_paths_and_plan_options(tmp_path, monkeypatch) -> 
         }
     )
 
+    assert command[:3] == ["python", "-m", "worldfoundry.synthesis.visual_generation.ctrl_world.infer"]
+    parsed = infer._parser().parse_args(command[3:])
+    assert parsed.checkpoint_path == checkpoint
     assert command[command.index("--checkpoint-path") + 1] == str(checkpoint)
     assert command[command.index("--base-model-dir") + 1] == str(base)
     assert command[command.index("--clip-model-dir") + 1] == str(clip)
@@ -146,12 +160,28 @@ def test_build_command_expands_paths_and_plan_options(tmp_path, monkeypatch) -> 
 
 def test_build_command_keeps_legacy_actions_explicit_smoke_only(tmp_path) -> None:
     plan_path = tmp_path / "plan.json"
-    plan_path.write_text(json.dumps({"extra": {"action_mode": "synthetic-zero-smoke", "action_scale": 0.0, "input_mode": "synthetic-three-view"}}))
-    command = runtime.build_command({
-        "python": "python", "entrypoint": str(runtime.OFFICIAL_ENTRYPOINT),
-        "output_path": str(tmp_path / "out.mp4"), "plan_path": str(plan_path),
-        "prompt": "smoke", "device": "cuda", "options": {},
-    })
+    plan_path.write_text(
+        json.dumps(
+            {
+                "extra": {
+                    "action_mode": "synthetic-zero-smoke",
+                    "action_scale": 0.0,
+                    "input_mode": "synthetic-three-view",
+                }
+            }
+        )
+    )
+    command = runtime.build_command(
+        {
+            "python": "python",
+            "entrypoint": str(runtime.OFFICIAL_ENTRYPOINT),
+            "output_path": str(tmp_path / "out.mp4"),
+            "plan_path": str(plan_path),
+            "prompt": "smoke",
+            "device": "cuda",
+            "options": {},
+        }
+    )
     assert command[command.index("--action-mode") + 1] == "synthetic-zero-smoke"
     assert command[command.index("--action-scale") + 1] == "0.0"
     assert "--initial-pose" not in command
@@ -207,8 +237,9 @@ def test_absolute_pose_actions_match_official_cold_start_keyboard_contract() -> 
 def test_absolute_pose_uses_official_special_keyboard_trajectory() -> None:
     import importlib
 
-    infer._ensure_vendored_runtime_importable()
-    key_board_control = importlib.import_module("models.utils").key_board_control
+    key_board_control = importlib.import_module(
+        "worldfoundry.synthesis.visual_generation.ctrl_world.ctrl_world_runtime.models.utils"
+    ).key_board_control
     pose = np.array([0.6571552157, -0.2333021909, 0.1489311606, 3.0244400501, -0.1095049530, -0.5373510122, 0.0])
     official_future = key_board_control(pose[None, :], "d", distance=0.08)
     stats = json.loads(infer.OFFICIAL_ACTION_STATS.read_text())
@@ -225,17 +256,23 @@ def test_absolute_pose_requires_measured_start_state(tmp_path, monkeypatch) -> N
     _write_fixture(launcher)
     monkeypatch.setattr(runtime.importlib.util, "find_spec", lambda _name: object())
     options = {
-        "checkpoint_path": str(checkpoint), "base_model_dir": str(base), "clip_model_dir": str(clip),
-        "input_mode": "explicit-three-view", "input_views": [str(view) for view in views],
+        "checkpoint_path": str(checkpoint),
+        "base_model_dir": str(base),
+        "clip_model_dir": str(clip),
+        "input_mode": "explicit-three-view",
+        "input_views": [str(view) for view in views],
     }
     missing = runtime.missing_requirements(options=options, runtime_root=source, entrypoint=launcher, profile=None)
     assert any(item["path"] == "initial_pose" for item in missing)
     options["action_mode"] = "synthetic-zero-smoke"
     assert runtime.missing_requirements(options=options, runtime_root=source, entrypoint=launcher, profile=None) == []
     options["initial_pose"] = [0.4, 0.0, 0.4, 3.1, 0.0, 0.0, 0.0]
-    assert any(item["path"] == "initial_pose" for item in runtime.missing_requirements(
-        options=options, runtime_root=source, entrypoint=launcher, profile=None
-    ))
+    assert any(
+        item["path"] == "initial_pose"
+        for item in runtime.missing_requirements(
+            options=options, runtime_root=source, entrypoint=launcher, profile=None
+        )
+    )
 
 
 def test_explicit_views_preserve_three_distinct_camera_inputs(tmp_path) -> None:
@@ -254,9 +291,12 @@ def test_explicit_views_preserve_three_distinct_camera_inputs(tmp_path) -> None:
 def test_launcher_imports_current_diffusers_runtime() -> None:
     import importlib
 
-    infer._ensure_vendored_runtime_importable()
-    pipeline_module = importlib.import_module("models.pipeline_ctrl_world")
-    model_module = importlib.import_module("models.ctrl_world")
+    pipeline_module = importlib.import_module(
+        "worldfoundry.synthesis.visual_generation.ctrl_world.ctrl_world_runtime.models.pipeline_ctrl_world"
+    )
+    model_module = importlib.import_module(
+        "worldfoundry.synthesis.visual_generation.ctrl_world.ctrl_world_runtime.models.ctrl_world"
+    )
 
     assert pipeline_module.CtrlWorldDiffusionPipeline.__name__ == "CtrlWorldDiffusionPipeline"
     assert model_module.CrtlWorld.__name__ == "CrtlWorld"
@@ -288,3 +328,16 @@ def test_launcher_rejects_cpu_execution(tmp_path) -> None:
         assert "CUDA" in str(exc)
     else:
         raise AssertionError("CPU execution was accepted")
+
+
+@pytest.mark.unit
+def test_ctrl_world_actions_preserve_the_callers_import_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
+    unrelated_models = ModuleType("models")
+    monkeypatch.setitem(sys.modules, "models", unrelated_models)
+    original_path = list(sys.path)
+
+    actions = infer._absolute_pose_action_rollout([0.4, 0.0, 0.4, 3.1, 0.0, 0.0, 0.0], "right", 0.08)
+
+    assert tuple(actions.shape) == (1, 11, 7)
+    assert sys.modules["models"] is unrelated_models
+    assert sys.path == original_path

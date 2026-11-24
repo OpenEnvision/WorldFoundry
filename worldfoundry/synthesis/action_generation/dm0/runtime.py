@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.core.io.paths import resolve_data_path, resolve_local_hf_model_path
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
@@ -78,7 +79,7 @@ class DM0Runtime:
         import torch
         from transformers import AutoTokenizer
 
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .modeling import DM0Config, DM0ForCausalLM
 

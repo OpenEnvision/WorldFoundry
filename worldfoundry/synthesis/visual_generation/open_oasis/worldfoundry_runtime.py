@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import project_root
 from worldfoundry.synthesis.visual_generation.runtime_manifest import (
     command_settings,
     plan_payload,
 )
-
 
 RUNTIME_DIR = Path(__file__).resolve().parent
 OFFICIAL_ENTRYPOINT = RUNTIME_DIR / "generate.py"
@@ -46,7 +46,9 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile):
         elif not Path(value).expanduser().exists():
             missing.append({"kind": "asset", "path": value, "reason": f"Open-Oasis `{key}` path does not exist"})
     if entrypoint is None or not Path(entrypoint).is_file():
-        missing.append({"kind": "entrypoint", "path": str(entrypoint or ""), "reason": "Open-Oasis generate.py is missing"})
+        missing.append(
+            {"kind": "entrypoint", "path": str(entrypoint or ""), "reason": "Open-Oasis generate.py is missing"}
+        )
     return missing
 
 
@@ -55,9 +57,7 @@ def build_command(context):
     plan = plan_payload(context)
     if plan.get("fps") is not None:
         options["fps"] = plan["fps"]
-    return [
-        context["python"],
-        context["entrypoint"],
+    args = [
         "--oasis-ckpt",
         _runtime_path(_option(options, "oasis_ckpt", "checkpoint_path", "model_path", default="") or ""),
         "--vae-ckpt",
@@ -75,6 +75,9 @@ def build_command(context):
         "--ddim-steps",
         str(options.get("ddim_steps", 10)),
     ]
+    return package_module_command(
+        "worldfoundry.synthesis.visual_generation.open_oasis.generate", args, python_executable=context["python"]
+    )
 
 
 __all__ = ["BLOCKED_REASON", "OFFICIAL_ENTRYPOINT", "RUNTIME_DIR", "build_command", "missing_requirements"]

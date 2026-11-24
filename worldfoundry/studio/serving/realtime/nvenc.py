@@ -21,11 +21,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from fractions import Fraction
 from importlib import import_module
 from importlib.util import find_spec
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -34,8 +35,6 @@ from worldfoundry.studio.serving.realtime.telemetry import FrameContext, frame_c
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from av.packet import Packet
 
-# H.264 Annex-B NAL type identifier for an IDR (keyframe) slice.
-_H264_NAL_TYPE_IDR = 5
 
 # RTP video clock, per RFC 6184. aiortc's H264Encoder.pack() rescales from the
 # packet's declared time_base into this base, so stamping packets on 1/90000 is
@@ -80,21 +79,6 @@ def _encoder_supported(nvc: Any, gpu_id: int, *, width: int = 0, height: int = 0
         if value and ((minimum and value < minimum) or (maximum and value > maximum)):
             return False, f"NVENC {dimension} {value} is outside GPU {gpu_id} limits {minimum}..{maximum}"
     return True, ""
-
-
-def _payload_contains_nal_type(payload: bytes, nal_type: int) -> bool:
-    """Scan an Annex-B H.264 payload for the presence of a specific NAL type."""
-    i = 0
-    while True:
-        idx = payload.find(b"\x00\x00\x01", i)
-        if idx < 0:
-            return False
-        nal_start = idx + 3
-        if nal_start >= len(payload):
-            return False
-        if (payload[nal_start] & 0x1F) == nal_type:
-            return True
-        i = nal_start + 1
 
 
 def _rgb_frame_to_abgr_cuda(frame_rgb_uint8: Any, torch_module: Any, *, gpu_id: int = 0) -> Any:
@@ -392,11 +376,15 @@ def build_nvenc_track(
             first_real_frame_at: float | None = None
             try:
                 while not self._closed:
+                    context: FrameContext | None = None
                     if self._last_frame is None or self._real_frames:
                         try:
-                            self._last_frame = await frames.get()
+                            queued = await frames.get()
                         except EOFError:
                             break
+                        context = frame_context(queued)
+                        self._last_frame = frame_pixels(queued)
+                        del queued
                     else:
                         next_pull += self._interval
                         now = loop.time()
@@ -405,13 +393,17 @@ def build_nvenc_track(
                         elif now - next_pull > self._interval:
                             next_pull = now
                         try:
-                            self._last_frame = frames.get_nowait()
+                            queued = frames.get_nowait()
                         except asyncio.QueueEmpty:
-                            # Repeat the held frame to keep a steady RTP clock
-                            # and flush the encoder's final source frame.
+                            # Repeat the held frame without delivery context so
+                            # steady RTP pacing does not emit duplicate receipts.
                             pass
                         except EOFError:
                             break
+                        else:
+                            context = frame_context(queued)
+                            self._last_frame = frame_pixels(queued)
+                            del queued
                     if self._real_frames:
                         now = loop.time()
                         if first_real_frame_at is None:
@@ -421,11 +413,10 @@ def build_nvenc_track(
                         pts = self._pts_counter
                     self._pts_counter = pts + max(_RTP_VIDEO_CLOCK // fps, 1)
                     started_at = loop.time()
-                    context = frame_context(self._last_frame)
                     self._encode_future = loop.run_in_executor(
                         self._worker,
                         self._encode,
-                        frame_pixels(self._last_frame),
+                        self._last_frame,
                         pts,
                     )
                     packets = await asyncio.shield(self._encode_future)

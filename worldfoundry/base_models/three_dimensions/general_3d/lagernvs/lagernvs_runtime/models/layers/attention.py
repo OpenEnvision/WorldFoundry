@@ -4,8 +4,6 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> general_3d -> lagernvs -> lagernvs_runtime -> models -> layers -> attention.py functionality."""
-
 import einops
 import torch
 import torch.nn as nn
@@ -47,39 +45,21 @@ def _get_flash_attention_ops():
 
 # src: https://github.com/pytorch/benchmark/blob/main/torchbenchmark/models/llama/model.py#L28
 class RMSNorm(nn.Module):
-    """Rms norm implementation."""
     def __init__(self, dim: int, eps: float = 1e-5):
-        """Init.
-
-        Args:
-            dim: The dim.
-            eps: The eps.
-        """
         super().__init__()
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(dim))
 
     def _norm(self, x):
-        """Helper function to norm.
-
-        Args:
-            x: The x.
-        """
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         output = self._norm(x.float()).type_as(x)
 
         return output * self.weight.type_as(x)
 
 
 class Attention(nn.Module):
-    """Attention implementation."""
     def __init__(
         self,
         dim: int,
@@ -90,20 +70,6 @@ class Attention(nn.Module):
         fc_dropout=0.0,
         use_qk_norm=True,
     ) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            qkv_bias: The qkv bias.
-            fc_bias: The fc bias.
-            attn_dropout: The attn dropout.
-            fc_dropout: The fc dropout.
-            use_qk_norm: The use qk norm.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
         self.num_heads = num_heads
@@ -125,15 +91,6 @@ class Attention(nn.Module):
         self.flash_attn_ops = _get_flash_attention_ops()
 
     def forward(self, q: torch.Tensor, kv=None) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            q: The q.
-            kv: The kv.
-
-        Returns:
-            The return value.
-        """
         # attention block that supports non-query keys and values
         if kv is None:
             kv = q
@@ -141,10 +98,7 @@ class Attention(nn.Module):
         k = self.k_proj(kv)
         v = self.v_proj(kv)
 
-        q, k, v = (
-            einops.rearrange(t, "b l (nh dh) -> b l nh dh", dh=self.head_dim)
-            for t in (q, k, v)
-        )
+        q, k, v = (einops.rearrange(t, "b l (nh dh) -> b l nh dh", dh=self.head_dim) for t in (q, k, v))
         if self.use_qk_norm:
             q, k = self.q_norm(q), self.k_norm(k)
 

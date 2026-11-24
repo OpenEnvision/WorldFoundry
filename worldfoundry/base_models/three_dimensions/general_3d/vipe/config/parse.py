@@ -1,13 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> config -> parse.py functionality."""
-
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from threading import RLock
-from typing import Sequence
 
 import hydra
 from hydra.core.global_hydra import GlobalHydra
@@ -20,20 +18,10 @@ _HYDRA_COMPOSE_LOCK = RLock()
 
 
 def _default_config_dir() -> Path:
-    """Helper function to default config dir.
-
-    Returns:
-        The return value.
-    """
     return get_config_path()
 
 
 def register_config_resolvers() -> None:
-    """Register config resolvers.
-
-    Returns:
-        The return value.
-    """
     if not OmegaConf.has_resolver("eq"):
         OmegaConf.register_new_resolver("eq", lambda a, b: a == b)
     if not OmegaConf.has_resolver("neq"):
@@ -45,16 +33,6 @@ def parse_untyped_config(
     hydra_args: Sequence[str] = (),
     config_dir: str | Path | None = None,
 ) -> DictConfig:
-    """Parse untyped config.
-
-    Args:
-        config_name: The config name.
-        hydra_args: The hydra args.
-        config_dir: The config dir.
-
-    Returns:
-        The return value.
-    """
     register_config_resolvers()
 
     config_dir_path = Path(config_dir) if config_dir is not None else Path("configs")
@@ -95,15 +73,6 @@ def parse_untyped_config(
 
 
 def validate_typed_config(config: DictConfig, config_name: str = "default") -> ViPEConfig:
-    """Validate typed config.
-
-    Args:
-        config: The config.
-        config_name: The config name.
-
-    Returns:
-        The return value.
-    """
     register_config_resolvers()
     OmegaConf.resolve(config)
     return ViPEConfig.model_validate(config, context={"config_name": config_name})
@@ -114,15 +83,5 @@ def parse_typed_config(
     hydra_args: Sequence[str] = (),
     config_dir: str | Path | None = None,
 ) -> ViPEConfig:
-    """Parse typed config.
-
-    Args:
-        config_name: The config name.
-        hydra_args: The hydra args.
-        config_dir: The config dir.
-
-    Returns:
-        The return value.
-    """
     untyped_config = parse_untyped_config(config_name=config_name, hydra_args=hydra_args, config_dir=config_dir)
     return ViPEConfig.model_validate(untyped_config, context={"config_name": config_name})

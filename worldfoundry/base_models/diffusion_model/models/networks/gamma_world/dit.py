@@ -31,9 +31,12 @@ distributed attention interchangeable without changing residual math.
 import math
 from collections import namedtuple
 from collections.abc import Sequence
-from typing import List, Optional, Tuple, Union
+from typing import Optional
 
-from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.kv_cache import AttentionOpWithKVCache, KVCacheConfig
+from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.kv_cache import (
+    AttentionOpWithKVCache,
+    KVCacheConfig,
+)
 
 try:
     from worldfoundry.core.distributed.model_parallel.megatron_compat import parallel_state
@@ -48,23 +51,34 @@ import torch.amp as amp
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 from torch import nn
-from torch.nn import functional as F
 from torch.distributed import ProcessGroup, get_process_group_ranks
 from torch.distributed._composable.fsdp import fully_shard
+from torch.nn import functional as F
 from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
 
 from worldfoundry.core.attention import attention
 from worldfoundry.core.attention.backends.native import NativeAttention
 from worldfoundry.core.distributed.model_parallel.context import split_inputs_cp
-from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.observability.rank_logging import log
+
+# isort: split
 from worldfoundry.core.kernels import layer_norm_scale_shift, qk_rmsnorm_rope, residual_gate_add
-from worldfoundry.runtime.compile_cache import CompilePolicy, compile_callable_cached
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.encoders.structured_conditioning import DataType
+from worldfoundry.runtime.compile_cache import CompilePolicy, compile_callable_cached
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.context_parallel import (
     MinimalA2AAttnOp,
     NattenA2AAttnOp,
 )
-from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.neighborhood_attention import NeighborhoodAttention
+
+# isort: split
+# isort: split
+from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.neighborhood_attention import (
+    NeighborhoodAttention,
+)
 
 VideoSize = namedtuple("VideoSize", ["T", "H", "W"])
 _COMPILED_FLEX_ATTENTION = compile_callable_cached(
@@ -130,7 +144,7 @@ def torch_attention_op(
     q_B_S_H_D: torch.Tensor,
     k_B_S_H_D: torch.Tensor,
     v_B_S_H_D: torch.Tensor,
-    attn_mask: Optional[torch.Tensor] = None,
+    attn_mask: torch.Tensor | None = None,
     flatten_heads: bool = True,
 ) -> torch.Tensor:
     """Scaled dot-product attention with optional mask.
@@ -154,7 +168,7 @@ def flex_attention_op(
     q_B_S_H_D: torch.Tensor,
     k_B_S_H_D: torch.Tensor,
     v_B_S_H_D: torch.Tensor,
-    attn_mask: Optional[BlockMask] = None,
+    attn_mask: BlockMask | None = None,
     flatten_heads: bool = True,
 ) -> torch.Tensor:
     # Rearrange to [B, H, S, D]
@@ -370,10 +384,7 @@ class Attention(nn.Module):
         context = x if context is None else context
         k = self.k_proj(context)
         v = self.v_proj(context)
-        q, k, v = map(
-            lambda t: rearrange(t, "b ... (h d) -> b ... h d", h=self.n_heads, d=self.head_dim),
-            (q, k, v),
-        )
+        q, k, v = (rearrange(t, "b ... (h d) -> b ... h d", h=self.n_heads, d=self.head_dim) for t in (q, k, v))
 
         def apply_norm_and_rotary_pos_emb(q, k, v, rope_emb):
             v = self.v_norm(v)
@@ -401,8 +412,8 @@ class Attention(nn.Module):
         q,
         k,
         v,
-        video_size: Optional[VideoSize] = None,
-        kv_cache_cfg: Optional[KVCacheConfig] = None,
+        video_size: VideoSize | None = None,
+        kv_cache_cfg: KVCacheConfig | None = None,
     ):
         additional_args = {}
         if isinstance(self.attn_op, (NattenA2AAttnOp, NeighborhoodAttention)) or self.backend == "i4":
@@ -423,10 +434,10 @@ class Attention(nn.Module):
     def forward(
         self,
         x,
-        context: Optional[torch.Tensor] = None,
-        rope_emb: Optional[torch.Tensor] = None,
-        video_size: Optional[VideoSize] = None,
-        kv_cache_cfg: Optional[KVCacheConfig] = None,
+        context: torch.Tensor | None = None,
+        rope_emb: torch.Tensor | None = None,
+        video_size: VideoSize | None = None,
+        kv_cache_cfg: KVCacheConfig | None = None,
     ):
         """
         Args:
@@ -472,9 +483,8 @@ class I2VCrossAttention(Attention):
         k_img = self.k_img(img_context)
         v_img = self.v_img(img_context)
         # Rearrange k_img, v_img
-        k_img, v_img = map(
-            lambda t: rearrange(t, "b ... (h d) -> b ... h d", h=self.n_heads, d=self.head_dim),
-            (k_img, v_img),
+        k_img, v_img = (
+            rearrange(t, "b ... (h d) -> b ... h d", h=self.n_heads, d=self.head_dim) for t in (k_img, v_img)
         )
 
         return q, k, v, self.k_img_norm(k_img), v_img
@@ -509,7 +519,7 @@ class VideoPositionEmb(nn.Module):
     def seq_dim(self):
         return 1
 
-    def forward(self, x_B_T_H_W_C: torch.Tensor, fps=Optional[torch.Tensor]) -> torch.Tensor:
+    def forward(self, x_B_T_H_W_C: torch.Tensor, fps=Optional[torch.Tensor]) -> torch.Tensor:  # noqa: UP045 - Upstream default object; callers always pass fps.
         """
         With CP, the function assume that the input tensor is already split.
         It delegates the embedding generation to generate_embeddings function.
@@ -530,7 +540,7 @@ class VideoPositionEmb(nn.Module):
 
         return self._split_for_context_parallel(embeddings)
 
-    def generate_embeddings(self, B_T_H_W_C: torch.Size, fps=Optional[torch.Tensor]):
+    def generate_embeddings(self, B_T_H_W_C: torch.Size, fps=Optional[torch.Tensor]):  # noqa: UP045 - Upstream default object; callers always pass fps.
         raise NotImplementedError
 
     def _split_for_context_parallel(self, embeddings):
@@ -601,10 +611,10 @@ class VideoRopePosition3DEmb(VideoPositionEmb):
     def generate_embeddings(
         self,
         B_T_H_W_C: torch.Size,
-        fps: Optional[torch.Tensor] = None,
-        h_ntk_factor: Optional[float] = None,
-        w_ntk_factor: Optional[float] = None,
-        t_ntk_factor: Optional[float] = None,
+        fps: torch.Tensor | None = None,
+        h_ntk_factor: float | None = None,
+        w_ntk_factor: float | None = None,
+        t_ntk_factor: float | None = None,
     ):
         """
         Generate embeddings for the given input size.
@@ -632,7 +642,7 @@ class VideoRopePosition3DEmb(VideoPositionEmb):
         temporal_freqs = 1.0 / (t_theta ** self.dim_temporal_range.float())
 
         B, T, H, W, _ = B_T_H_W_C
-        assert H <= self.max_h and W <= self.max_w, (
+        assert self.max_h >= H and self.max_w >= W, (
             f"Input dimensions (H={H}, W={W}) exceed the maximum dimensions (max_h={self.max_h}, max_w={self.max_w})"
         )
         half_emb_h = torch.outer(self.seq[:H], h_spatial_freqs)
@@ -703,7 +713,7 @@ class LearnablePosEmbAxis(VideoPositionEmb):
         torch.nn.init.trunc_normal_(self.pos_emb_w, std=std, a=-3 * std, b=3 * std)
         torch.nn.init.trunc_normal_(self.pos_emb_t, std=std, a=-3 * std, b=3 * std)
 
-    def generate_embeddings(self, B_T_H_W_C: torch.Size, fps=Optional[torch.Tensor]) -> torch.Tensor:
+    def generate_embeddings(self, B_T_H_W_C: torch.Size, fps=Optional[torch.Tensor]) -> torch.Tensor:  # noqa: UP045 - Upstream default object; callers always pass fps.
         B, T, H, W, _ = B_T_H_W_C
         if self.interpolation == "crop":
             emb_h_H = self.pos_emb_h[:H]
@@ -970,7 +980,7 @@ class FinalLayer(nn.Module):
         # x_BT_HW_D,
         x_B_T_H_W_D,
         emb_B_T_D,
-        adaln_lora_B_T_3D: Optional[torch.Tensor] = None,
+        adaln_lora_B_T_3D: torch.Tensor | None = None,
     ):
         # Released Gamma checkpoints store this modulation path in bfloat16.
         # Current PyTorch disables float32 autocast on CUDA, so requiring a
@@ -1032,7 +1042,7 @@ class Block(nn.Module):
         use_adaln_lora: bool = False,
         adaln_lora_dim: int = 256,
         backend: str = "flash",
-        image_context_dim: Optional[int] = None,
+        image_context_dim: int | None = None,
         use_wan_fp32_strategy: bool = False,
     ):
         super().__init__()
@@ -1131,10 +1141,10 @@ class Block(nn.Module):
         x_B_T_H_W_D: torch.Tensor,
         emb_B_T_D: torch.Tensor,
         crossattn_emb: torch.Tensor,
-        rope_emb_L_1_1_D: Optional[torch.Tensor] = None,
-        adaln_lora_B_T_3D: Optional[torch.Tensor] = None,
-        extra_per_block_pos_emb: Optional[torch.Tensor] = None,
-        kv_cache_cfg: Optional[KVCacheConfig] = None,
+        rope_emb_L_1_1_D: torch.Tensor | None = None,
+        adaln_lora_B_T_3D: torch.Tensor | None = None,
+        extra_per_block_pos_emb: torch.Tensor | None = None,
+        kv_cache_cfg: KVCacheConfig | None = None,
     ) -> torch.Tensor:
         if extra_per_block_pos_emb is not None:
             x_B_T_H_W_D = x_B_T_H_W_D + extra_per_block_pos_emb
@@ -1340,7 +1350,7 @@ class MinimalDiT(nn.Module):
         crossattn_emb_channels: int = 1024,
         use_crossattn_projection: bool = False,
         crossattn_proj_in_channels: int = 1024,
-        extra_image_context_dim: Optional[int] = None,
+        extra_image_context_dim: int | None = None,
         # positional embedding settings
         pos_emb_cls: str = "sincos",
         pos_emb_learnable: bool = False,
@@ -1358,7 +1368,7 @@ class MinimalDiT(nn.Module):
         extra_t_extrapolation_ratio: float = 1.0,
         rope_enable_fps_modulation: bool = True,
         n_dense_blocks: int = -1,
-        natten_parameters: Union[dict, list] = None,
+        natten_parameters: dict | list | None = None,
         # if True, will closely match wan's strategy to use fp32 in certain layers/operations
         use_wan_fp32_strategy: bool = False,
     ) -> None:
@@ -1496,21 +1506,21 @@ class MinimalDiT(nn.Module):
             raise ValueError(f"Unknown pos_emb_cls {self.pos_emb_cls}")
 
         log.debug(f"Building positional embedding with {self.pos_emb_cls} class, impl {cls_type}")
-        kwargs = dict(
-            model_channels=self.model_channels,
-            len_h=self.max_img_h // self.patch_spatial,
-            len_w=self.max_img_w // self.patch_spatial,
-            len_t=self.max_frames // self.patch_temporal,
-            max_fps=self.max_fps,
-            min_fps=self.min_fps,
-            is_learnable=self.pos_emb_learnable,
-            interpolation=self.pos_emb_interpolation,
-            head_dim=self.model_channels // self.num_heads,
-            h_extrapolation_ratio=self.rope_h_extrapolation_ratio,
-            w_extrapolation_ratio=self.rope_w_extrapolation_ratio,
-            t_extrapolation_ratio=self.rope_t_extrapolation_ratio,
-            enable_fps_modulation=self.rope_enable_fps_modulation,
-        )
+        kwargs = {
+            "model_channels": self.model_channels,
+            "len_h": self.max_img_h // self.patch_spatial,
+            "len_w": self.max_img_w // self.patch_spatial,
+            "len_t": self.max_frames // self.patch_temporal,
+            "max_fps": self.max_fps,
+            "min_fps": self.min_fps,
+            "is_learnable": self.pos_emb_learnable,
+            "interpolation": self.pos_emb_interpolation,
+            "head_dim": self.model_channels // self.num_heads,
+            "h_extrapolation_ratio": self.rope_h_extrapolation_ratio,
+            "w_extrapolation_ratio": self.rope_w_extrapolation_ratio,
+            "t_extrapolation_ratio": self.rope_t_extrapolation_ratio,
+            "enable_fps_modulation": self.rope_enable_fps_modulation,
+        }
         self.pos_embedder = cls_type(
             **kwargs,
         )
@@ -1526,9 +1536,9 @@ class MinimalDiT(nn.Module):
     def prepare_embedded_sequence(
         self,
         x_B_C_T_H_W: torch.Tensor,
-        fps: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+        fps: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         """
         Prepares an embedded sequence tensor by applying positional embeddings and handling padding masks.
 
@@ -1564,10 +1574,7 @@ class MinimalDiT(nn.Module):
             )
         x_B_T_H_W_D = self.x_embedder(x_B_C_T_H_W)
 
-        if self.extra_per_block_abs_pos_emb:
-            extra_pos_emb = self.extra_pos_embedder(x_B_T_H_W_D, fps=fps)
-        else:
-            extra_pos_emb = None
+        extra_pos_emb = self.extra_pos_embedder(x_B_T_H_W_D, fps=fps) if self.extra_per_block_abs_pos_emb else None
 
         if "rope" in self.pos_emb_cls.lower():
             return x_B_T_H_W_D, self.pos_embedder(x_B_T_H_W_D, fps=fps), extra_pos_emb
@@ -1591,12 +1598,12 @@ class MinimalDiT(nn.Module):
         x_B_C_T_H_W: torch.Tensor,
         timesteps_B_T: torch.Tensor,
         crossattn_emb: torch.Tensor,
-        fps: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
-        data_type: Optional[DataType] = DataType.VIDEO,
-        intermediate_feature_ids: Optional[List[int]] = None,
-        img_context_emb: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor | List[torch.Tensor] | Tuple[torch.Tensor, List[torch.Tensor]]:
+        fps: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
+        data_type: DataType | None = DataType.VIDEO,
+        intermediate_feature_ids: list[int] | None = None,
+        img_context_emb: torch.Tensor | None = None,
+    ) -> torch.Tensor | list[torch.Tensor] | tuple[torch.Tensor, list[torch.Tensor]]:
         """Denoise video latents through AdaLN DiT blocks.
 
         ``x_B_C_T_H_W`` is channel-first video.  Inside the trunk tokens live as
@@ -1702,7 +1709,7 @@ class MinimalDiT(nn.Module):
 
         self._is_context_parallel_enabled = False
 
-    def enable_context_parallel(self, process_group: Optional[ProcessGroup] = None):
+    def enable_context_parallel(self, process_group: ProcessGroup | None = None):
         # pos_embedder
         self.pos_embedder.enable_context_parallel(process_group=process_group)
         if self.extra_per_block_abs_pos_emb:
@@ -1725,7 +1732,7 @@ class MinimalDiT(nn.Module):
 
 
 def replace_selfattn_op_with_sparse_attn_op(
-    model: MinimalDiT, n_dense_blocks: int = 0, natten_parameters: Union[dict, list] = None
+    model: MinimalDiT, n_dense_blocks: int = 0, natten_parameters: dict | list | None = None
 ) -> MinimalDiT:
     """
     Replace the self-attention operator with a sparse self-attention operator.
@@ -1783,7 +1790,7 @@ def replace_selfattn_op_with_sparse_attn_op(
     for i, block in enumerate(model.blocks):
         natten_params = natten_parameters_list[i]
         if natten_params is not None:
-            natten_parameters_layer = {k: v for k, v in natten_params.items()}
+            natten_parameters_layer = dict(natten_params.items())
             natten_parameters_layer["layer_id"] = i
             if block.self_attn.backend == "minimal_a2a":
                 sparse_attn_op = NattenA2AAttnOp(natten_parameters=natten_parameters_layer)

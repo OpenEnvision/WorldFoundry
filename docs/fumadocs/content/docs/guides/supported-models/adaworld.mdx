@@ -1,6 +1,6 @@
 ---
 title: "AdaWorld"
-description: "AdaWorld runs its released latent-action world-model checkpoint on a source video; short-form inference verified."
+description: "AdaWorld extracts latent actions from a source video to drive an adaptable world model, using the released checkpoint."
 modelId: "adaworld"
 pageSource: authored
 ---
@@ -15,7 +15,7 @@ The project is described in [arXiv 2503.18938](https://arxiv.org/abs/2503.18938)
 
 ## What it does
 
-AdaWorld's latent-action autoencoder extracts motion representations from video, which condition the world model's generated frames. The in-tree runtime follows the official FDM inference path. The recorded catalog tasks are `latent-action-world-model`, `action-conditioned-video`, and `multi-domain-world-model`; the completed GPU check covers a short source-video rollout, not separate task benchmarks.
+AdaWorld's latent-action autoencoder extracts motion representations from video, which condition the world model's generated frames. The in-tree runtime follows the official FDM inference path through the installed `worldfoundry.synthesis.visual_generation.adaworld.worldmodel.sample` module. Its tasks are `latent-action-world-model`, `action-conditioned-video`, and `multi-domain-world-model`; the completed GPU check covers a short source-video rollout, not separate task benchmarks.
 
 ## Inputs and checkpoint
 
@@ -32,10 +32,10 @@ pipeline = AdaWorldPipeline.from_pretrained(
 result = pipeline(video="/path/to/source.mp4", output_path="adaworld.mp4", start_index=0)
 ```
 
-The catalog profile names `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8); the GPU probe used the local CUDA 12.1 environment. For short source clips, set `start_index` to an existing frame; the underlying runner defaults to frame 50.
+It runs in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). For short source clips, set `start_index` to an existing frame; the underlying runner defaults to frame 50.
 
-## Verification scope
+## Validation
 
-The public pipeline generated and decoded a four-frame, 256 × 256 MP4 from synthetic video with two sampling steps. Its MP4 matched the direct in-tree official runner byte for byte. This verifies checkpoint loading and the short inference path. Task success, long-horizon consistency, and output quality have not been measured.
+Validated with the released checkpoint: the public pipeline generates a four-frame 256 × 256 MP4 from a synthetic source video with two sampling steps, identical to the official runner output. Task success, long-horizon consistency, and output quality are not measured.
 
 <ModelRelatedRecipes modelId="adaworld" locale="en" />

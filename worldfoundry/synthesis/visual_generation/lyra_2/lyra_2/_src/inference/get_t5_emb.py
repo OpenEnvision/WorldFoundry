@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import os
-from typing import List, Optional, Union
 
 import torch
 
 from worldfoundry.base_models.diffusion_model.models.encoders.wan import WanUMT5PromptEncoder
 
-_t5_encoder: Optional[WanUMT5PromptEncoder] = None
-_t5_offloaded: Optional[WanUMT5PromptEncoder] = None
+_t5_encoder: WanUMT5PromptEncoder | None = None
+_t5_offloaded: WanUMT5PromptEncoder | None = None
 
 
 def _build_encoder(*, device: str, text_len: int) -> WanUMT5PromptEncoder:
@@ -24,7 +23,7 @@ def _build_encoder(*, device: str, text_len: int) -> WanUMT5PromptEncoder:
 
 
 def get_umt5_embedding(
-    prompts: Union[str, List[str]],
+    prompts: str | list[str],
     device: str = "cuda",
     max_length: int = 512,
 ) -> torch.Tensor:
@@ -36,7 +35,7 @@ def get_umt5_embedding(
 
 @torch.no_grad()
 def get_umt5_embedding_offloaded(
-    prompts: Union[str, List[str]],
+    prompts: str | list[str],
     device: str = "cuda",
     max_length: int = 512,
 ) -> torch.Tensor:

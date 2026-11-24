@@ -21,12 +21,10 @@ Public surface:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
-import math
-
 import torch
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Abstract + Dirac — deterministic tokenize / eval without a posterior
@@ -151,7 +149,7 @@ class DiagonalGaussianDistribution:
 
         return self.mean
 
-    def kl(self, other: "DiagonalGaussianDistribution | None" = None) -> torch.Tensor:
+    def kl(self, other: DiagonalGaussianDistribution | None = None) -> torch.Tensor:
         """Batch KL; ``other is None`` is KL to standard normal.
 
         Reduction sums every non-batch axis. Deterministic posteriors return 0.
@@ -164,11 +162,7 @@ class DiagonalGaussianDistribution:
             value = 0.5 * (self.mean.square() + self.var - 1.0 - self.logvar)
         else:
             value = 0.5 * (
-                (self.mean - other.mean).square() / other.var
-                + self.var / other.var
-                - 1.0
-                - self.logvar
-                + other.logvar
+                (self.mean - other.mean).square() / other.var + self.var / other.var - 1.0 - self.logvar + other.logvar
             )
         return value.sum(dim=dimensions)
 

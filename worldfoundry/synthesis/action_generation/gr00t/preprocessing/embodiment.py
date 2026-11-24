@@ -17,7 +17,6 @@
 
 from enum import Enum
 
-
 """
 Embodiment tags are used to identify the robot embodiment in the data.
 

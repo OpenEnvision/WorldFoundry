@@ -9,21 +9,21 @@ WorldFoundry 是面向世界智能的开源基础设施。世界智能不能被�
 
 ## 第一次运行
 
-[快速开始](/zh/docs/quickstart) 的环境已经 source 之后，为 `matrix-game-2` 生成一份可检查的 artifact：
+在 source [快速开始](/zh/docs/quickstart)中的环境文件后，为 `matrix-game-2` 生成一份可检查的 artifact：
 
 ```bash
 bash scripts/inference/prepare_model_infer.sh matrix-game-2 --download
-worldfoundry-eval run matrix-game-2-universal-action-validation \
+wf run matrix-game-2-universal-action-validation \
   --pipeline.task-profile official-universal-image
 ```
 
-这次运行只支撑一个结论：这套配置产出了可检查的 artifact，并不等于某个 benchmark 已经跑完。日常命令用 `worldfoundry-eval run`。各层与清单见[设计](/zh/docs/overview/design)。
+这次运行只支撑一个结论：这套配置产出了可检查的 artifact，并不等于某个 benchmark 已经跑完。日常命令用 `wf run`。各层与清单见[设计](/zh/docs/overview/design)。
 
 <h2 id="operational-definition">操作定义</h2>
 
 视觉逼真度衡量的是观察质量，并不足以证明世界建模。一段照片级视频仍可能丢掉物体身份、违反动力学，或对干预没有因果响应。
 
-因此，我们把**生成式世界模型**定义为一个学习得到的、由历史与控制条件化的潜在动力学系统。它推断并维护持久的环境状态，在内生动力学与外部干预下演化该状态，并吸收新的观察，使后续预测对刚刚发生的事情负责。
+因此，我们把**生成式世界模型**定义为一个学习得到的、由历史与控制条件化的潜在动力学系统。它推断并维护持久的环境状态，在内生动力学与外部干预下演化该状态，并吸收新的观察，使后续预测与刚刚发生的事情保持一致。
 
 <DocsImage
   src="/paper/operational-definition.webp"
@@ -85,7 +85,7 @@ WorldFoundry 的价值出现在**跨模型、跨 benchmark、跨界面**的工�
 - **记录比命令更完整。** checkpoint、依赖、dataset 或 evaluator 一变，同一条命令就可能不可比。ledger、身份、blocker 与 scorecard 同时说明实际跑了什么，以及该结果被允许主张什么。
 - **多入口，同一后端。** TUI、CLI、Studio、Python 与 MCP 共用 catalog 与契约。界面可以换，run 身份与持久输出保持一致。
 
-这适合需要长期维护或比较多个世界模型家族、将生成与评测解耦、复用昂贵 artifact，或为人与 agent 提供稳定机器可读发现的团队。模型、benchmark、机器与 reviewer 越多，这些契约越划算。
+这适合需要长期维护或比较多个世界模型家族、将生成与评测解耦、复用昂贵 artifact，或为人与 agent 提供稳定机器可读发现的团队。模型、benchmark、机器与 reviewer 越多，这些契约的价值越高。
 
 <TeaserImage alt="WorldFoundry 统一世界模型发现、推理、检查与评测" />
 

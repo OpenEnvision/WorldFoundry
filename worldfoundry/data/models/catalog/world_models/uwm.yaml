@@ -16,6 +16,7 @@ official_sources:
   project_page: https://weirdlabuw.github.io/uwm/
   github:
     url: https://github.com/WEIRDLabUW/unified-world-model
+    revision: b7d4067c8859775e5b08f681e76d538015cdd445
     head_sha: b7d4067c8859775e5b08f681e76d538015cdd445
 integration:
   status: runtime_ported
@@ -32,22 +33,22 @@ output_artifacts:
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry
   runtimes; blocked entries retain upstream provenance without runnable backends.
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: uwm
 docs:
   publisher: University of Washington (WEIRD Lab)
   publisher_kind: university
   publisher_zh: 华盛顿大学（WEIRD 实验室）
-  overview: Unified World Models (UWM) from the University of Washington's WEIRD Lab couples video prediction and action diffusion in one robot world model, with recorded variants for LIBERO-90 (uwm-libero90) and DROID (uwm-droid). WorldFoundry registers the official evaluation route in-tree; checkpoints and datasets are runtime-gated.
-  overview_zh: 华盛顿大学 WEIRD 实验室的 Unified World Models（UWM）将视频预测与动作扩散耦合进同一个机器人世界模型，仓库记录了 LIBERO-90（uwm-libero90）与 DROID（uwm-droid）两个变体。WorldFoundry 树内注册了官方评测路由；checkpoint 与数据集为运行时门控。
-  architecture: 'UWM is a video-action diffusion design: one diffusion process jointly models future observations and robot actions, so the same network serves prediction and policy roles. Details beyond the official repository pointer are not recorded in this repository.'
-  architecture_zh: UWM 是视频-动作扩散设计：单个扩散过程联合建模未来观测与机器人动作，同一网络兼任预测与策略角色。官方仓库指针之外的细节仓库未记录。
-  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. Pick the LIBERO-90 or DROID variant to match your evaluation suite.
-  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。请按评测套件选择 LIBERO-90 或 DROID 变体。
+  overview: Unified World Models (UWM) from the University of Washington's WEIRD Lab couples video prediction and action diffusion in one robot world model, with variants for LIBERO-90 (uwm-libero90) and DROID (uwm-droid). WorldFoundry runs the official evaluation route; checkpoints and datasets must be staged before generation.
+  overview_zh: 华盛顿大学 WEIRD 实验室的 Unified World Models（UWM）将视频预测与动作扩散耦合进同一个机器人世界模型，提供 LIBERO-90（uwm-libero90）与 DROID（uwm-droid）两个变体。WorldFoundry 运行官方评测路由；生成前需就位 checkpoint 与数据集。
+  architecture: 'UWM is a video-action diffusion design: one diffusion process jointly models future observations and robot actions, so the same network serves prediction and policy roles.'
+  architecture_zh: UWM 是视频-动作扩散设计：单个扩散过程联合建模未来观测与机器人动作，同一网络兼任预测与策略角色。
+  usage_notes: Pick the LIBERO-90 or DROID variant to match your evaluation suite. Until the required checkpoints and assets are staged, a run outputs a runtime plan that lists the missing assets instead of generating.
+  usage_notes_zh: 请按评测套件选择 LIBERO-90 或 DROID 变体。所需 checkpoint 与资产就位前，运行只会输出列出缺失资产的运行时计划，而不会生成结果。
   limitations:
-  - Checkpoints/datasets are runtime-gated; no GPU validation is recorded in this repository.
+  - Checkpoints and datasets are not bundled and must be staged before running.
   limitations_zh:
-  - checkpoint/数据集为运行时门控；仓库未记录 GPU 验证。
+  - checkpoint 与数据集不随附，运行前需自行就位。
   recommended_benchmarks:
   - id: libero
     reason: The uwm-libero90 variant targets LIBERO tasks.

@@ -18,7 +18,7 @@ import re
 
 import torch
 import torch.nn as nn
-from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedModel
+from transformers import PretrainedConfig, PreTrainedModel
 
 
 class IdentityMap(nn.Module):
@@ -125,7 +125,7 @@ def flat_square_3x3(x):
 class MultimodalProjectorConfig(PretrainedConfig):
     model_type = "v2l_projector"
 
-    def __init__(self, mm_projector_type: str = None, **kwargs):
+    def __init__(self, mm_projector_type: str | None = None, **kwargs):
         super().__init__()
         self.mm_projector_type = mm_projector_type
 

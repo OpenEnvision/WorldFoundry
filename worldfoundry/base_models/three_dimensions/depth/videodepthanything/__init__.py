@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> videodepthanything -> __init__.py functionality."""
-
 import numpy as np
 import torch
 
@@ -31,16 +29,6 @@ class VideoDepthAnythingDepthModel(DepthEstimationModel):
     """
 
     def __init__(self, model: str = "vitl", input_size: int = 518, weights_path: str | None = None) -> None:
-        """Init.
-
-        Args:
-            model: The model.
-            input_size: The input size.
-            weights_path: The weights path.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         self.model_config = {
@@ -83,22 +71,9 @@ class VideoDepthAnythingDepthModel(DepthEstimationModel):
 
     @property
     def depth_type(self) -> DepthType:
-        """Depth type.
-
-        Returns:
-            The return value.
-        """
         return DepthType.AFFINE_DISP
 
     def estimate(self, src: DepthEstimationInput) -> DepthEstimationResult:
-        """Estimate.
-
-        Args:
-            src: The src.
-
-        Returns:
-            The return value.
-        """
         frame_list: list[np.ndarray] = unpack_optional(src.video_frame_list)
         depths = self.model.infer_video_depth(frame_list, input_size=self.input_size, fp32=self.use_fp32)  # [T, H, W]
         depths = torch.from_numpy(depths).float().cuda()

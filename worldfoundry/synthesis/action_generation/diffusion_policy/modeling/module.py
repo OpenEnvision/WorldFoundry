@@ -1,6 +1,7 @@
 # Inference-only Diffusion Policy source retained in-tree.
 import torch.nn as nn
 
+
 class ModuleAttrMixin(nn.Module):
     def __init__(self):
         super().__init__()

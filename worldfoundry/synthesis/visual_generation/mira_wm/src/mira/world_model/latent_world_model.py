@@ -18,15 +18,23 @@ from pydantic import BaseModel, ConfigDict
 from torch import Tensor
 from tqdm import tqdm
 
-from mira.codec.codec_model import VideoCodec
-from mira.data.batch import VideoActionBatch
-from mira.ml.config_loading import drop_removed_fields, strip_hydra_targets
-from mira.inference_support.checkpoints import resolve_checkpoint
-from mira.world_model.actions_config import ActionTensors
-from mira.world_model.config import LatentWorldModelConfig, WorldModelInferenceConfig
-from mira.world_model.diffusion_transformer import DiffusionTransformer
-from mira.world_model.layers.action_encoder import ActionEncoder
-from mira.world_model.schedule import build_inference_schedule
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.codec.codec_model import VideoCodec
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.data.batch import VideoActionBatch
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.inference_support.checkpoints import resolve_checkpoint
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.ml.config_loading import (
+    drop_removed_fields,
+    strip_hydra_targets,
+)
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.actions_config import ActionTensors
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.config import (
+    LatentWorldModelConfig,
+    WorldModelInferenceConfig,
+)
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.diffusion_transformer import (
+    DiffusionTransformer,
+)
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.layers.action_encoder import ActionEncoder
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.schedule import build_inference_schedule
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +51,7 @@ REMOVED_CONFIG_FIELDS: dict[str, object] = {
 
 def _config_dict_from_yaml(config_node: object) -> dict:
     """Resolve a saved architecture config to a plain dict, stripping hydra/removed-field cruft."""
-    from omegaconf import OmegaConf  # noqa: PLC0415 -- optional dep, used only here
+    from omegaconf import OmegaConf  # optional dep, used only here
 
     raw = OmegaConf.to_container(config_node, resolve=True)  # type: ignore[arg-type]
     assert isinstance(raw, dict), "expected a mapping at model.architecture.config"
@@ -125,8 +133,7 @@ class LatentWorldModel(nn.Module):
         self.bos = None
         if config.use_clean_past:
             self.bos = nn.Parameter(
-                0.02
-                * torch.randn(self.world_model.latent_height, self.world_model.latent_width, self.latent_dim)
+                0.02 * torch.randn(self.world_model.latent_height, self.world_model.latent_width, self.latent_dim)
             )
 
     def forward(self, batch: VideoActionBatch, *args, **kwargs) -> dict[str, Tensor]:
@@ -308,7 +315,7 @@ class LatentWorldModel(nn.Module):
         clean_past = z_t[:, -2:-1] if self.config.use_clean_past else None
 
         last_kv_cache = None
-        for step_idx, (timestep, delta_t) in enumerate(zip(timesteps[:-1], delta_ts)):
+        for step_idx, (timestep, delta_t) in enumerate(zip(timesteps[:-1], delta_ts, strict=False)):
             tau = timestep * torch.ones((batch_size, 1, 1, 1, 1), device=device, dtype=z_t.dtype)
             # PSD-trained models take the integration-step size as input; None means no delta.
             tau_delta = delta_t * torch.ones_like(tau) if self.config.psd_enabled else None
@@ -333,9 +340,7 @@ class LatentWorldModel(nn.Module):
         if noise_level is not None:
             # update streaming kv cache
             # add noise on last frame
-            current_tau = (1 - noise_level) * torch.ones(
-                (batch_size, 1, 1, 1, 1), device=device, dtype=z_t.dtype
-            )
+            current_tau = (1 - noise_level) * torch.ones((batch_size, 1, 1, 1, 1), device=device, dtype=z_t.dtype)
             current_z_t = current_tau * z_t[:, -1:] + (1 - current_tau) * torch.randn_like(z_t[:, -1:])
             current_z_t = current_z_t.to(dtype=z_t.dtype)
             _, last_kv_cache = self.world_model(
@@ -383,8 +388,7 @@ class LatentWorldModel(nn.Module):
             )
         if n_context_frames < 1 or n_context_frames >= self.config.video.timesteps:
             raise ValueError(
-                f"n_context_frames ({n_context_frames}) must be in [1, video.timesteps="
-                f"{self.config.video.timesteps})."
+                f"n_context_frames ({n_context_frames}) must be in [1, video.timesteps={self.config.video.timesteps})."
             )
         self.config.n_context_frames = n_context_frames
         self.n_context_frames = n_context_frames
@@ -413,7 +417,7 @@ class LatentWorldModel(nn.Module):
 
         # denoise autoregressively one frame at a time
         for start in tqdm(
-            range(0, z.shape[1] - window_size + 1),
+            range(z.shape[1] - window_size + 1),
             desc="Diffusion inference",
             disable=not progress_bar,
         ):
@@ -506,7 +510,7 @@ class LatentWorldModel(nn.Module):
             where ``viz_video`` stacks the HUD-annotated prediction over the ground truth vertically.
         """
         # Imported here (not at module load) to keep the model independent of the training package.
-        from mira.inference_support.visualization import (  # noqa: PLC0415
+        from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.inference_support.visualization import (
             add_prediction_border,
             video_to_uint8,
             visualize_batch,
@@ -568,7 +572,7 @@ class LatentWorldModel(nn.Module):
         checkpoint = {"state_dict": self.state_dict()}
 
         if extra_data is not None:
-            for key in extra_data.keys():
+            for key in extra_data.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 if key in checkpoint:
                     raise ValueError(f"Key {key} already exists in checkpoint, cannot overwrite")
 
@@ -580,7 +584,7 @@ class LatentWorldModel(nn.Module):
     def load_from_checkpoint(
         cls, checkpoint_path: str | Path, device: str | torch.device | None = None, **kwargs
     ) -> LatentWorldModel:
-        from omegaconf import OmegaConf  # noqa: PLC0415 -- optional dep, used only here
+        from omegaconf import OmegaConf  # optional dep, used only here
 
         config_path = LatentWorldModel._find_config(checkpoint_path)
 
@@ -592,9 +596,7 @@ class LatentWorldModel(nn.Module):
 
         # Load via OmegaConf (already a dependency) so the config's ${..} interpolations resolve.
         config_raw = OmegaConf.load(config_path)
-        config = LatentWorldModelConfig.model_validate(
-            _config_dict_from_yaml(config_raw.model.architecture.config)
-        )
+        config = LatentWorldModelConfig.model_validate(_config_dict_from_yaml(config_raw.model.architecture.config))
         model = cls(config)
         model.to(device)
 

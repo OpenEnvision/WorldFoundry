@@ -5,8 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 # from .attention import MemEffAttention
-"""Module for base_models -> perception_core -> general_perception -> dinov2 -> variants -> depth_anything_v3 -> layers -> __init__.py functionality."""
-
 from .block import Block
 from .rope import PositionGetter, RotaryPositionEmbedding2D
 

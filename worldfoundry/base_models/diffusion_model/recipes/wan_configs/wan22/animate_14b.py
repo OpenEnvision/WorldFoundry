@@ -13,18 +13,18 @@ from easydict import EasyDict
 
 from .shared import wan_shared_cfg
 
-#------------------------ Wan animate 14B ------------------------#
-animate_14B = EasyDict(__name__='Config: Wan animate 14B')
+# ------------------------ Wan animate 14B ------------------------#
+animate_14B = EasyDict(__name__="Config: Wan animate 14B")
 animate_14B.update(wan_shared_cfg)
 
-animate_14B.t5_checkpoint = 'models_t5_umt5-xxl-enc-bf16.pth'
-animate_14B.t5_tokenizer = 'google/umt5-xxl'
+animate_14B.t5_checkpoint = "models_t5_umt5-xxl-enc-bf16.pth"
+animate_14B.t5_tokenizer = "google/umt5-xxl"
 
-animate_14B.clip_checkpoint = 'models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth'
-animate_14B.clip_tokenizer = 'xlm-roberta-large'
-animate_14B.lora_checkpoint = 'relighting_lora.ckpt'
+animate_14B.clip_checkpoint = "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"
+animate_14B.clip_tokenizer = "xlm-roberta-large"
+animate_14B.lora_checkpoint = "relighting_lora.ckpt"
 # vae
-animate_14B.vae_checkpoint = 'Wan2.1_VAE.pth'
+animate_14B.vae_checkpoint = "Wan2.1_VAE.pth"
 animate_14B.vae_stride = (4, 8, 8)
 
 # transformer
@@ -47,4 +47,4 @@ animate_14B.sample_steps = 20
 animate_14B.sample_guide_scale = 1.0
 animate_14B.frame_num = 77
 animate_14B.sample_fps = 30
-animate_14B.prompt = '视频中的人在做动作'
+animate_14B.prompt = "视频中的人在做动作"

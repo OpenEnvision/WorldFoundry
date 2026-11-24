@@ -4,10 +4,9 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> dependency -> np_to_pycolmap.py functionality."""
-
 import numpy as np
 import pycolmap
+
 from .projection import project_3D_points_np
 
 
@@ -71,7 +70,7 @@ def batch_np_matrix_to_pycolmap(
     assert masks is not None
 
     if masks.sum(1).min() < min_inlier_per_frame:
-        print(f"Not enough inliers per frame, skip BA.")
+        print("Not enough inliers per frame, skip BA.")
         return None, None
 
     # Reconstruction object, following the format of PyCOLMAP/COLMAP
@@ -119,7 +118,7 @@ def batch_np_matrix_to_pycolmap(
         for point3D_id in range(1, num_points3D + 1):
             original_track_idx = valid_idx[point3D_id - 1]
 
-            if (reconstruction.points3D[point3D_id].xyz < max_points3D_val).all():
+            if (reconstruction.points3D[point3D_id].xyz < max_points3D_val).all():  # noqa: SIM102 - Branches carry per-case comments.
                 if masks[fidx][original_track_idx]:
                     # It seems we don't need +0.5 for BA
                     point2D_xy = tracks[fidx][original_track_idx]
@@ -137,7 +136,7 @@ def batch_np_matrix_to_pycolmap(
         try:
             image.points2D = pycolmap.ListPoint2D(points2D_list)
             image.registered = True
-        except:
+        except BaseException:
             print(f"frame {fidx + 1} is out of BA")
             image.registered = False
 
@@ -282,7 +281,7 @@ def batch_np_matrix_to_pycolmap_wo_track(
         try:
             image.points2D = pycolmap.ListPoint2D(points2D_list)
             image.registered = True
-        except:
+        except BaseException:
             print(f"frame {fidx + 1} does not have any points")
             image.registered = False
 

@@ -4,7 +4,7 @@
 try:
     from timm.layers import resample_abs_pos_embed
 except ImportError as err:
-    print("ImportError: {0}".format(err))
+    print(f"ImportError: {err}")
 import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
@@ -40,10 +40,7 @@ def forward_features_eva_fixed(self, x):
     x = self.patch_embed(x)
     x, rot_pos_embed = self._pos_embed(x)
     for blk in self.blocks:
-        if self.grad_checkpointing:
-            x = checkpoint(blk, x, rot_pos_embed)
-        else:
-            x = blk(x, rot_pos_embed)
+        x = checkpoint(blk, x, rot_pos_embed) if self.grad_checkpointing else blk(x, rot_pos_embed)
     x = self.norm(x)
     return x
 
@@ -52,15 +49,13 @@ def resize_vit(model: nn.Module, img_size) -> nn.Module:
     """Resample the ViT module to the given size."""
     patch_size = model.patch_embed.patch_size
     model.patch_embed.img_size = img_size
-    grid_size = tuple([s // p for s, p in zip(img_size, patch_size)])
+    grid_size = tuple([s // p for s, p in zip(img_size, patch_size, strict=False)])
     model.patch_embed.grid_size = grid_size
 
     pos_embed = resample_abs_pos_embed(
         model.pos_embed,
         grid_size,  # img_size
-        num_prefix_tokens=(
-            0 if getattr(model, "no_embed_class", False) else model.num_prefix_tokens
-        ),
+        num_prefix_tokens=(0 if getattr(model, "no_embed_class", False) else model.num_prefix_tokens),
     )
     model.pos_embed = torch.nn.Parameter(pos_embed)
 
@@ -73,13 +68,10 @@ def resize_patch_embed(model: nn.Module, new_patch_size=(16, 16)) -> nn.Module:
     if hasattr(model, "patch_embed"):
         old_patch_size = model.patch_embed.patch_size
 
-        if (
-            new_patch_size[0] != old_patch_size[0]
-            or new_patch_size[1] != old_patch_size[1]
-        ):
+        if new_patch_size[0] != old_patch_size[0] or new_patch_size[1] != old_patch_size[1]:
             patch_embed_proj = model.patch_embed.proj.weight
             patch_embed_proj_bias = model.patch_embed.proj.bias
-            use_bias = True if patch_embed_proj_bias is not None else False
+            use_bias = patch_embed_proj_bias is not None
             _, _, h, w = patch_embed_proj.shape
 
             new_patch_embed_proj = torch.nn.functional.interpolate(
@@ -88,9 +80,7 @@ def resize_patch_embed(model: nn.Module, new_patch_size=(16, 16)) -> nn.Module:
                 mode="bicubic",
                 align_corners=False,
             )
-            new_patch_embed_proj = (
-                new_patch_embed_proj * (h / new_patch_size[0]) * (w / new_patch_size[1])
-            )
+            new_patch_embed_proj = new_patch_embed_proj * (h / new_patch_size[0]) * (w / new_patch_size[1])
 
             model.patch_embed.proj = nn.Conv2d(
                 in_channels=model.patch_embed.proj.in_channels,
@@ -108,16 +98,8 @@ def resize_patch_embed(model: nn.Module, new_patch_size=(16, 16)) -> nn.Module:
             model.patch_size = new_patch_size
             model.patch_embed.patch_size = new_patch_size
             model.patch_embed.img_size = (
-                int(
-                    model.patch_embed.img_size[0]
-                    * new_patch_size[0]
-                    / old_patch_size[0]
-                ),
-                int(
-                    model.patch_embed.img_size[1]
-                    * new_patch_size[1]
-                    / old_patch_size[1]
-                ),
+                int(model.patch_embed.img_size[0] * new_patch_size[0] / old_patch_size[0]),
+                int(model.patch_embed.img_size[1] * new_patch_size[1] / old_patch_size[1]),
             )
 
     return model

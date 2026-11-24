@@ -4,13 +4,11 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Tuple, Union
+
 import torch
 
 
-def get_2d_sincos_pos_embed(
-    embed_dim: int, grid_size: Union[int, Tuple[int, int]]
-) -> torch.Tensor:
+def get_2d_sincos_pos_embed(embed_dim: int, grid_size: int | tuple[int, int]) -> torch.Tensor:
     """
     This function initializes a grid and generates a 2D positional embedding using sine and cosine functions.
     It is a wrapper of get_2d_sincos_pos_embed_from_grid.
@@ -33,9 +31,7 @@ def get_2d_sincos_pos_embed(
     return pos_embed.reshape(1, grid_size_h, grid_size_w, -1).permute(0, 3, 1, 2)
 
 
-def get_2d_sincos_pos_embed_from_grid(
-    embed_dim: int, grid: torch.Tensor
-) -> torch.Tensor:
+def get_2d_sincos_pos_embed_from_grid(embed_dim: int, grid: torch.Tensor) -> torch.Tensor:
     """
     This function generates a 2D positional embedding from a given grid using sine and cosine functions.
 
@@ -56,9 +52,7 @@ def get_2d_sincos_pos_embed_from_grid(
     return emb
 
 
-def get_1d_sincos_pos_embed_from_grid(
-    embed_dim: int, pos: torch.Tensor
-) -> torch.Tensor:
+def get_1d_sincos_pos_embed_from_grid(embed_dim: int, pos: torch.Tensor) -> torch.Tensor:
     """
     This function generates a 1D positional embedding from a given grid using sine and cosine functions.
 
@@ -101,9 +95,7 @@ def get_2d_embedding(xy: torch.Tensor, C: int, cat_coords: bool = True) -> torch
 
     x = xy[:, :, 0:1]
     y = xy[:, :, 1:2]
-    div_term = (
-        torch.arange(0, C, 2, device=xy.device, dtype=torch.float32) * (1000.0 / C)
-    ).reshape(1, 1, int(C / 2))
+    div_term = (torch.arange(0, C, 2, device=xy.device, dtype=torch.float32) * (1000.0 / C)).reshape(1, 1, int(C / 2))
 
     pe_x = torch.zeros(B, N, C, device=xy.device, dtype=torch.float32)
     pe_y = torch.zeros(B, N, C, device=xy.device, dtype=torch.float32)

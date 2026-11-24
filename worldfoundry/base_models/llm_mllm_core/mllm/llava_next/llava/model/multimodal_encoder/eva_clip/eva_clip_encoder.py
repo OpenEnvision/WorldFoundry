@@ -1,11 +1,10 @@
-import torch
 import torch.nn as nn
+
+from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.utils import rank0_print
 
 from .eva_clip_processors import EvaClipImageTrainProcessor
 from .eva_vit import EVAEncoderWrapper
-from .factory import list_models, add_model_config, get_model_config
-
-from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.utils import rank0_print
+from .factory import get_model_config
 
 
 class EvaClipVisionTower(nn.Module):
@@ -22,10 +21,12 @@ class EvaClipVisionTower(nn.Module):
             self.load_model()
         elif getattr(args, "unfreeze_mm_vision_tower", False):
             # TODO: better detector is needed.
-            rank0_print(f"The checkpoint seems to contain `vision_tower` weights: `unfreeze_mm_vision_tower`: True.")
+            rank0_print("The checkpoint seems to contain `vision_tower` weights: `unfreeze_mm_vision_tower`: True.")
             self.load_model()
         elif hasattr(args, "mm_tunable_parts") and "mm_vision_tower" in args.mm_tunable_parts:
-            rank0_print(f"The checkpoint seems to contain `vision_tower` weights: `mm_tunable_parts` contains `mm_vision_tower`.")
+            rank0_print(
+                "The checkpoint seems to contain `vision_tower` weights: `mm_tunable_parts` contains `mm_vision_tower`."
+            )
             self.load_model()
         else:
             self.cfg_only = self.config
@@ -42,7 +43,9 @@ class EvaClipVisionTower(nn.Module):
         if type(images) is list:
             image_features = []
             for image in images:
-                image_feature = self.vision_tower(image.to(device=self.device, dtype=self.dtype).unsqueeze(0)).to(image.dtype)
+                image_feature = self.vision_tower(image.to(device=self.device, dtype=self.dtype).unsqueeze(0)).to(
+                    image.dtype
+                )
                 image_features.append(image_feature)
         else:
             image_features = self.vision_tower(images.to(device=self.device, dtype=self.dtype)).to(images.dtype)

@@ -39,11 +39,11 @@ def test_videocrafter_workspace_defaults_use_complete_hfd_exports(monkeypatch, t
     expected_paths = _stage_videocrafter_checkpoints(checkpoint_root)
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(checkpoint_root))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(checkpoint_root))
-    monkeypatch.setattr(studio_catalog, "_discover_ast_pipelines", lambda: ())
+    monkeypatch.setattr(studio_catalog.discovery, "_discover_ast_pipelines", lambda: ())
 
     entries = {
         entry.model_id: entry
-        for entry in studio_catalog._canonical_runtime_entries()
+        for entry in studio_catalog.discovery._canonical_runtime_entries()
         if entry.model_id in expected_paths
     }
 
@@ -55,10 +55,10 @@ def test_videocrafter_exact_workspace_ids_do_not_bypass_curated_defaults(monkeyp
     expected_paths = _stage_videocrafter_checkpoints(checkpoint_root)
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(checkpoint_root))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(checkpoint_root))
-    studio_catalog._discover_ast_pipelines.cache_clear()
-    studio_catalog._discover_catalog_infos.cache_clear()
+    studio_catalog.discovery._discover_ast_pipelines.cache_clear()
+    studio_catalog.discovery._discover_catalog_infos.cache_clear()
     monkeypatch.setattr(
-        studio_catalog,
+        studio_catalog.discovery,
         "discover_catalog",
         lambda: (_ for _ in ()).throw(AssertionError("exact Workspace ids must not scan the full catalog")),
     )

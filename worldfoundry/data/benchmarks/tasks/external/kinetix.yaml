@@ -21,20 +21,22 @@ metrics:
   reward:
     aggregation: mean
 metadata:
+  base_model_dependencies:
+  - kinetix_official_runtime_assets
   source_kind: benchmark_zoo
   benchmark_id: kinetix
   status: integrated
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:KinetixContract
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:kinetix
   runtime:
     kind: external_official_results_runner
     root_env: WORLDFOUNDRY_KINETIX_ROOT
     results_path_env: WORLDFOUNDRY_KINETIX_RESULTS_PATH
     preflight_profile: kinetix
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.embodied.normalizer:normalize_results
+    target: worldfoundry.evals.tasks.embodied.normalizer:normalize_results
     status: implemented
     protocol: official_embodied_result_normalizer
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id kinetix --mode contract --output-dir 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id kinetix --mode contract --output-dir 
     tmp/benchmark_zoo/benchmark_contract/kinetix --json
   release_status: normalizer_only
   maturity: contract_ready
@@ -51,7 +53,7 @@ metadata:
   - Full leaderboard parity is not claimed until official rollouts are executed and imported.
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:KinetixContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:kinetix
     task_yaml_available: true
     runtime_verified: false
     normalizer_verified: true
@@ -65,7 +67,7 @@ metadata:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/kinetix.yaml
   checkpoint_refs: []
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -121,4 +123,4 @@ tasks:
       - task_success
       - episode_success
       - reward
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:KinetixContract
+      runner_target: worldfoundry.evals.tasks.contracts.external:kinetix

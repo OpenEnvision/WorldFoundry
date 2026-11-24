@@ -6,9 +6,15 @@ from typing import Literal
 import torch
 import torch.nn as nn
 
-from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.autoencoder import AutoEncoderModule
-from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.autoencoder.distributions import DiagonalGaussianDistribution
-from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.mel_converter import get_mel_converter
+from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.autoencoder import (
+    AutoEncoderModule,
+)
+from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.autoencoder.distributions import (
+    DiagonalGaussianDistribution,
+)
+from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.mel_converter import (
+    get_mel_converter,
+)
 
 
 class FeaturesUtils(nn.Module):

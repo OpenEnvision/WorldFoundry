@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -13,17 +14,13 @@ from .base_operator import BaseOperator
 
 
 def _to_rgb_pil_image(data: Any) -> Image.Image:
-    """To rgb pil image implementation."""
     if isinstance(data, Image.Image):
         return data.convert("RGB")
 
     if isinstance(data, (str, Path)):
         return Image.open(data).convert("RGB")
 
-    if isinstance(data, torch.Tensor):
-        array = data.detach().cpu().numpy()
-    else:
-        array = np.asarray(data)
+    array = data.detach().cpu().numpy() if isinstance(data, torch.Tensor) else np.asarray(data)
 
     if array.ndim == 4:
         array = array[0]
@@ -32,9 +29,8 @@ def _to_rgb_pil_image(data: Any) -> Image.Image:
     if array.shape[0] in (1, 3):
         array = np.transpose(array, (1, 2, 0))
     if array.dtype != np.uint8:
-        if np.issubdtype(array.dtype, np.floating):
-            if array.min() >= -1.0 and array.max() <= 1.0:
-                array = (array + 1.0) * 127.5 if array.min() < 0.0 else array * 255.0
+        if np.issubdtype(array.dtype, np.floating) and array.min() >= -1.0 and array.max() <= 1.0:
+            array = (array + 1.0) * 127.5 if array.min() < 0.0 else array * 255.0
         array = np.clip(array, 0.0, 255.0).astype(np.uint8)
     if array.shape[-1] == 1:
         array = np.repeat(array, 3, axis=-1)
@@ -42,7 +38,6 @@ def _to_rgb_pil_image(data: Any) -> Image.Image:
 
 
 def _is_pose_sequence(value: Any) -> bool:
-    """Is pose sequence implementation."""
     try:
         array = np.asarray(value, dtype=np.float64)
     except Exception:
@@ -55,9 +50,7 @@ class FantasyWorldOperator(BaseOperator):
 
     def __init__(self, operation_types=None, interaction_template=None):
         """Initialize the operator with specific configurations."""
-        super().__init__(
-            operation_types=operation_types or ["visual_instruction", "action_instruction"]
-        )
+        super().__init__(operation_types=operation_types or ["visual_instruction", "action_instruction"])
         self.interaction_template = interaction_template or ["camera_trajectory"]
         self.interaction_template_init()
 
@@ -65,9 +58,9 @@ class FantasyWorldOperator(BaseOperator):
         self,
         *,
         interactions=None,
-        camera_json_path: Optional[str | Path] = None,
-        camera_data: Optional[Dict[str, Any]] = None,
-        camera_poses: Optional[Sequence] = None,
+        camera_json_path: str | Path | None = None,
+        camera_data: dict[str, Any] | None = None,
+        camera_poses: Sequence | None = None,
     ):
         """Resolve the source or sequence of interaction inputs."""
         explicit = [value for value in (camera_json_path, camera_data, camera_poses) if value is not None]
@@ -115,7 +108,7 @@ class FantasyWorldOperator(BaseOperator):
         self,
         images=None,
         end_image=None,
-        scene_name: Optional[str] = None,
+        scene_name: str | None = None,
     ):
         """Process perception inputs like images, videos, and reference frames."""
         if images is None:

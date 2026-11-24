@@ -3,15 +3,14 @@ from __future__ import annotations
 import json
 
 from worldfoundry.core.io.formats.serialization import read_jsonl_objects, write_jsonl
-from worldfoundry.evaluation.api import ArtifactRef, GenerationRequest, GenerationResult
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_generation import (
+from worldfoundry.evals.api import ArtifactRef, GenerationRequest, GenerationResult
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_generation import (
     get_benchmark_generation_adapter,
 )
-
-from worldfoundry.evaluation.tasks.execution.runners.wrbench.wrbench_prompts import (
+from worldfoundry.evals.tasks.execution.runners.wrbench.wrbench_prompts import (
     copy_wrbench_generated_videos,
 )
-from worldfoundry.evaluation.tasks.execution.runners.wrbench.wrbench_runtime import (
+from worldfoundry.evals.tasks.execution.runners.wrbench.wrbench_runtime import (
     discover_video_manifest,
 )
 

@@ -8,9 +8,9 @@ pageSource: authored
 
 模型 ID 为 `inspatio-world-1p5`。原有 `inspatio-world` 继续使用旧版权重和视频推理入口。
 
-新入口复用 WorldFoundry 的因果 Wan2.1 骨干、UMT5、Wan VAE、分块采样器和 DA3 base model，无需另行安装 InSpatio 仓库。已发布模型的推理规格为 **832×480、BF16、每块三个潜帧、四次去噪**。当前入口生成完整视频文件，尚未开放交互式流式会话。
+模型基于因果 Wan2.1 骨干，配合 UMT5 编码器、Wan VAE、分块采样器和 DA3 深度模型运行，无需另行安装 InSpatio 仓库。已发布模型的推理规格为 **832×480、BF16、每块三个潜帧、四次去噪**。输出为完整视频文件，不提供交互式流式会话。
 
-先准备本地 `inspatio/world-1.5` 和 `Wan-AI/Wan2.1-T2V-1.3B` 权重。直接输入图像或视频还需要 `depth-anything/DA3NESTED-GIANT-LARGE-1.1`；已准备深度和相机的场景不加载 DA3。推理只读取本地权重，不修改权重目录。
+先准备本地 `inspatio/world-1.5` 和 `Wan-AI/Wan2.1-T2V-1.3B` 权重。直接输入图像或视频还需要 `depth-anything/DA3NESTED-GIANT-LARGE-1.1`；已准备深度和相机的场景不加载 DA3。
 
 ```python
 from worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15 import InspatioWorldV15Pipeline
@@ -35,11 +35,9 @@ print(result["artifact_path"])
 
 默认返回视频路径；`return_frames=True` 会额外把帧载入主机内存。加载时可选 `compile_dit=True`，普通推理不要求编译。
 
-快速测试位于 `tests/synthesis/test_inspatio_v15_catalog.py` 和 `tests/synthesis/test_inspatio_v15_tensors.py`。`tests/manual/inspatio_v15_regression.py` 使用同一套本地权重，分别运行本入口和固定版本的官方实现，比较潜变量以及 source、render、mask、pred 的解码帧。
+已使用发布权重验证：六组短 GPU 用例（单图、四图和视频三类准备好的场景，以及三类直接 RGB 输入；每组两个因果块）在 BF16 下与固定版本的官方实现完全一致。直接输入用例两侧使用同一份 DA3 估计几何，因此不单独评估 DA3 的重建质量。
 
-六组短 GPU 测试已通过 BF16/SDPA 完全一致对照：三类准备好的场景，以及三类原始 RGB 输入。直接输入的对照使用同一份 DA3 估计几何验证生成结果，不单独评估 DA3 的重建质量。每组覆盖两个因果块，包含前一块的上下文。
-
-复现时，先将官方仓库切到 catalog 记录的固定版本，并就位本地组件权重。请使用新的输出目录；官方视频样例没有附带深度，`prepare-depth` 会调用共享 DA3 补齐。
+复现时，先将官方仓库切到 revision `dd3561f544053fe22d739b6b2f8461c9c97bf8cb`，并在本地准备组件权重。`tests/manual/inspatio_v15_regression.py` 使用同一套本地权重，分别运行 WorldFoundry 与官方实现，比较潜变量以及 source、render、mask、pred 的解码帧。请使用新的输出目录；官方视频样例没有附带深度，`prepare-depth` 会调用共享 DA3 补齐。
 
 ```bash
 # 先根据 nvidia-smi 将 INSPATIO_GPU_ID 设为可用 GPU 的编号或 UUID。
@@ -53,6 +51,6 @@ for mode in prepare prepare-depth native upstream compare; do
 done
 ```
 
-再给 `native`、`upstream`、`compare` 加上 `--direct`，即可检查原始 RGB 输入和 DA3 路径。`--cases` 可选择单例并在不同 GPU 上并行运行。标准回归矩阵包含 `inspatio-world-1p5-{image,multiview,video}-short`；将 `WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` 设为验证目录下的 `fixtures`。对照结果记录权重和数值输出哈希，并拒绝使用不同版本的发布权重。
+再给 `native`、`upstream`、`compare` 加上 `--direct`，即可检查原始 RGB 输入和 DA3 路径。`--cases` 可选择单个用例并在不同 GPU 上并行运行。标准回归矩阵包含 `inspatio-world-1p5-{image,multiview,video}-short`；将 `WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` 设为验证目录下的 `fixtures`。对照会拒绝不同版本的发布权重。
 
 代码归属和 Apache-2.0 正文统一保留在根目录 `THIRD-PARTY-NOTICES`，各组件权重继续遵循上游条款。

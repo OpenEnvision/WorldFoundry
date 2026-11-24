@@ -2,87 +2,16 @@
 Conv head is from MoGe (https://github.com/microsoft/moge)
 """
 
-from typing import List, Literal
+from typing import Literal
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-def normalized_view_plane_uv(
-    width: int, height: int, aspect_ratio: float = None, dtype: torch.dtype = None, device: torch.device = None
-) -> torch.Tensor:
-    "UV with left-top corner as (-width / diagonal, -height / diagonal) and right-bottom corner as (width / diagonal, height / diagonal)"
-    if aspect_ratio is None:
-        aspect_ratio = width / height
-
-    span_x = aspect_ratio / (1 + aspect_ratio**2) ** 0.5
-    span_y = 1 / (1 + aspect_ratio**2) ** 0.5
-
-    u = torch.linspace(-span_x * (width - 1) / width, span_x * (width - 1) / width, width, dtype=dtype, device=device)
-    v = torch.linspace(
-        -span_y * (height - 1) / height, span_y * (height - 1) / height, height, dtype=dtype, device=device
-    )
-    u, v = torch.meshgrid(u, v, indexing="xy")
-    uv = torch.stack([u, v], dim=-1)
-    return uv
-
-
-class ResidualConvBlock(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int = None,
-        hidden_channels: int = None,
-        padding_mode: str = "replicate",
-        activation: Literal["relu", "leaky_relu", "silu", "elu"] = "relu",
-        norm: Literal["group_norm", "layer_norm"] = "group_norm",
-    ):
-        super(ResidualConvBlock, self).__init__()
-        if out_channels is None:
-            out_channels = in_channels
-        if hidden_channels is None:
-            hidden_channels = in_channels
-
-        if activation == "relu":
-
-            def activation_cls():
-                return nn.ReLU(inplace=True)
-        elif activation == "leaky_relu":
-
-            def activation_cls():
-                return nn.LeakyReLU(negative_slope=0.2, inplace=True)
-        elif activation == "silu":
-
-            def activation_cls():
-                return nn.SiLU(inplace=True)
-        elif activation == "elu":
-
-            def activation_cls():
-                return nn.ELU(inplace=True)
-        else:
-            raise ValueError(f"Unsupported activation function: {activation}")
-
-        self.layers = nn.Sequential(
-            nn.GroupNorm(1, in_channels),
-            activation_cls(),
-            nn.Conv2d(in_channels, hidden_channels, kernel_size=3, padding=1, padding_mode=padding_mode),
-            nn.GroupNorm(hidden_channels // 32 if norm == "group_norm" else 1, hidden_channels),
-            activation_cls(),
-            nn.Conv2d(hidden_channels, out_channels, kernel_size=3, padding=1, padding_mode=padding_mode),
-        )
-
-        self.skip_connection = (
-            nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
-            if in_channels != out_channels
-            else nn.Identity()
-        )
-
-    def forward(self, x):
-        skip = self.skip_connection(x)
-        x = self.layers(x)
-        x = x + skip
-        return x
+from worldfoundry.base_models.three_dimensions.depth.moge.model.v1 import ResidualConvBlock
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.utils import (
+    create_uv_grid as normalized_view_plane_uv,
+)
 
 
 class ConvHead(nn.Module):
@@ -90,9 +19,9 @@ class ConvHead(nn.Module):
         self,
         num_features: int,
         dim_in: int,
-        dim_out: List[int],
+        dim_out: list[int],
         dim_proj: int = 512,
-        dim_upsample: List[int] = [256, 128, 128],
+        dim_upsample: list[int] = [256, 128, 128],  # noqa: B006 - Keeps the upstream default object and signature.
         dim_times_res_block_hidden: int = 1,
         num_res_blocks: int = 1,
         res_block_norm: Literal["group_norm", "layer_norm"] = "group_norm",
@@ -119,7 +48,7 @@ class ConvHead(nn.Module):
                         for _ in range(num_res_blocks)
                     ),
                 )
-                for in_ch, out_ch in zip([dim_proj] + dim_upsample[:-1], dim_upsample)
+                for in_ch, out_ch in zip([dim_proj] + dim_upsample[:-1], dim_upsample, strict=False)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             ]
         )
 
@@ -180,7 +109,11 @@ class ConvHead(nn.Module):
         )
 
     def forward(
-        self, hidden_states: torch.Tensor, image: torch.Tensor = None, patch_h: int = None, patch_w: int = None
+        self,
+        hidden_states: torch.Tensor,
+        image: torch.Tensor = None,
+        patch_h: int | None = None,
+        patch_w: int | None = None,
     ):
         if image is not None:
             img_h, img_w = image.shape[-2:]
@@ -198,7 +131,7 @@ class ConvHead(nn.Module):
 
         # Upsample stage
         # (patch_h, patch_w) -> (patch_h * 2, patch_w * 2) -> (patch_h * 4, patch_w * 4) -> (patch_h * 8, patch_w * 8)
-        for i, block in enumerate(self.upsample_blocks):
+        for _i, block in enumerate(self.upsample_blocks):
             # UV coordinates is for awareness of image aspect ratio
             if self.using_uv:
                 uv = normalized_view_plane_uv(

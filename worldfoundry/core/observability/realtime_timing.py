@@ -45,7 +45,7 @@ class TimingDistribution:
     p90_ms: float
 
     @classmethod
-    def from_values(cls, values: list[float]) -> "TimingDistribution":
+    def from_values(cls, values: list[float]) -> TimingDistribution:
         """Summarize finite samples only; an all-NaN list is treated as empty and rejected."""
         ordered = sorted(float(value) for value in values if math.isfinite(float(value)))
         if not ordered:

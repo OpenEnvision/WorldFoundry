@@ -5,7 +5,7 @@ description: 如何选择和组合 WorldFoundry 的注意力、配置、I/O、�
 
 `worldfoundry.core` 是模型接入层下面的公共复用层。这里存放很多世界模型都会需要、但又不应该属于某个具体模型身份的能力，例如注意力分发、checkpoint 加载、逻辑路径、媒体 I/O、分布式通信、Transformer 形状计算、显存策略和推理进程初始化。
 
-这一部分现在记录 236 个 Core 函数或类。顶层公开接口直接从 `worldfoundry/core/__init__.py` 发现，同时补充 Lazy Config、上下文并行切分等在仓库中被高频使用的子包接口。签名、方法、参数默认值、返回标注和源码行号都会在文档构建时从 Python 源码重新生成。
+这一部分收录 Core 的函数和类。顶层公开接口直接从 `worldfoundry/core/__init__.py` 发现，同时补充 Lazy Config、上下文并行切分等常用的子包接口。签名、方法、参数默认值、返回标注和源码行号都会在文档构建时从 Python 源码重新生成。
 
 文档生成器不 import runtime，但真正调用 Core API 仍然需要对应子系统的依赖。最小 package 安装有意不会拉取 Torch、OmegaConf、Loguru、视频 codec 和所有模型栈。应使用所选模型文档声明的环境；下面各分类也会指出关键依赖边界。
 
@@ -13,7 +13,7 @@ description: 如何选择和组合 WorldFoundry 的注意力、配置、I/O、�
 
 它首先帮助你选择入口。如果 Q、K、V 已经拆成多头布局，应使用 `scaled_dot_product_attention`；如果模型有自己的 QKV 排布，还希望在可选融合实现之间分发，应使用 `attention_forward`。需要 checkpoint 权重时，可以根据 Core 应当负责多少工作，在 `load_torch_checkpoint`、`load_state_dict`、`DiskMap` 和 `load_model` 之间选择。Manifest 中出现路径时，应解析 WorldFoundry 逻辑 token，而不是写死当前机器的绝对路径。
 
-它也会说明调用的状态和顺序。`BlockKVCache` 有准备、写入、完成记账的顺序；上下文并行有切分、计算、聚合的对称流程；显存 wrapper 会经过 offload、onload、preparing 和 computation 四种放置阶段。这些约束往往比函数名更重要，所以每个分类页会先解释使用模型，再列完整接口。
+它也会说明调用的状态和顺序。`BlockKVCache` 有准备、写入、完成记录的顺序；上下文并行有切分、计算、聚合的对称流程；显存 wrapper 会经过 offload、onload、preparing 和 computation 四种放置阶段。这些约束往往比函数名更重要，所以每个分类页会先解释使用方式，再列完整接口。
 
 ## Import 边界
 

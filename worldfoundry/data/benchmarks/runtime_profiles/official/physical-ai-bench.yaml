@@ -15,8 +15,8 @@ python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots: [.]
 required_assets:
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py
-  - worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/runtime/physical_ai_bench
+  - worldfoundry/evals/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/physical_ai_bench/runtime/physical_ai_bench
   evaluator_config: worldfoundry/data/benchmarks/assets/physical-ai-bench/evaluator.yaml
   task_yaml: worldfoundry/data/benchmarks/tasks/external/physical-ai-bench.yaml
 
@@ -26,20 +26,20 @@ optional_env:
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 - WORLDFOUNDRY_DOVER_CKPT
 - WORLDFOUNDRY_GROUNDING_DINO_CKPT
-- WORLDFOUNDRY_SAM2_CKPT
+- WORLDFOUNDRY_PHYSICAL_AI_BENCH_SAM2_CKPT
 - OPENAI_API_KEY
 
 required_imports: [numpy, cv2, skimage, scipy, yaml, torch, decord, lpips, pycocotools, supervision, transformers, requests]
 required_packages: [numpy, opencv-python, scikit-image, scipy, PyYAML, torch, decord, lpips, pycocotools, supervision, transformers, requests]
 required_paths:
-- {id: official_runner_script, path: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py}
-- {id: in_tree_runtime, path: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/runtime/physical_ai_bench}
+- {id: official_runner_script, path: worldfoundry/evals/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py}
+- {id: in_tree_runtime, path: worldfoundry/evals/tasks/execution/runners/physical_ai_bench/runtime/physical_ai_bench}
 - {id: evaluator_config, path: worldfoundry/data/benchmarks/assets/physical-ai-bench/evaluator.yaml}
 - {id: task_yaml, path: worldfoundry/data/benchmarks/tasks/external/physical-ai-bench.yaml}
 
 requires_cuda_visibility: false
 status: in_tree_runtime_ready
-base_model_dependencies: [vbench, vbench-plus-plus, qwen-vl, dover, lpips, video-depth-anything, grounding-dino, sam2]
+base_model_dependencies: [vbench_source_assets, vbench_plus_plus_source_assets, vbench_metric_checkpoint_assets, qwen2_5_vl_72b_instruct, dover, lpips_vgg, video_depth_anything_vits, grounding_dino, sam2_hiera_large]
 bounded_fixture_validation:
   status: verified
   components: [canny, blur, depth, segmentation, generation_vqa_parser, result_normalizer]
@@ -51,7 +51,7 @@ bounded_fixture_validation:
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 - -m
-- worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner
+- worldfoundry.evals.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner
 - --track
 - conditional-generation
 - --run-official

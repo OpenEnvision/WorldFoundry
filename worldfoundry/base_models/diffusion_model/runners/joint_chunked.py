@@ -26,8 +26,15 @@ class JointChunkedDiffusionRunner(JointMultiStageDiffusionRunner):
     """
 
     def __init__(
-        self, *, frames_per_chunk=4, temporal_compression=8, history_chunks=3,
-        prefix_chunks=1, sampling_seed_offset=0, token_conditions=None, **kwargs,
+        self,
+        *,
+        frames_per_chunk=4,
+        temporal_compression=8,
+        history_chunks=3,
+        prefix_chunks=1,
+        sampling_seed_offset=0,
+        token_conditions=None,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         if len(self.stage_steps) != 1:
@@ -49,10 +56,11 @@ class JointChunkedDiffusionRunner(JointMultiStageDiffusionRunner):
             raise ValueError("video tokens must form complete latent-frame chunks")
         temporal = video.positions[0, 0]
         stride = self.frames_per_chunk * tokens_per_frame
-        ends = temporal[stride - 1::stride, 1]
+        ends = temporal[stride - 1 :: stride, 1]
         assignments = {
             name: torch.bucketize(state.positions[0, 0].mean(-1).contiguous(), ends.contiguous(), right=False)
-            for name, state in states.items() if name != "video"
+            for name, state in states.items()
+            if name != "video"
         }
         chunks = []
         for index in range(latent_frames // self.frames_per_chunk):
@@ -82,8 +90,10 @@ class JointChunkedDiffusionRunner(JointMultiStageDiffusionRunner):
             if mask is not None:
                 mask = mask[..., start:end, start:end]
             result[name] = ModalityState(
-                latent=state.latent[:, start:end], denoise_mask=state.denoise_mask[:, start:end],
-                positions=state.positions[:, :, start:end], clean_latent=state.clean_latent[:, start:end],
+                latent=state.latent[:, start:end],
+                denoise_mask=state.denoise_mask[:, start:end],
+                positions=state.positions[:, :, start:end],
+                clean_latent=state.clean_latent[:, start:end],
                 attention_mask=mask,
             )
         return result
@@ -110,9 +120,14 @@ class JointChunkedDiffusionRunner(JointMultiStageDiffusionRunner):
             raise ValueError("joint clean-context chunking requires unguided predictions")
         schedule = tuple(self.components.schedulers[0].schedule(request.sampling, device=self.device, dtype=self.dtype))
         conditioning = self.components.conditioner.encode(request, device=self.device, dtype=self.dtype)
-        states = self._validate_states(self.components.latent_initializer.initialize(
-            request, generator=self._generator(request.sampling.seed), device=self.device, dtype=self.dtype,
-        ))
+        states = self._validate_states(
+            self.components.latent_initializer.initialize(
+                request,
+                generator=self._generator(request.sampling.seed),
+                device=self.device,
+                dtype=self.dtype,
+            )
+        )
         generator = self._generator((request.sampling.seed + self.sampling_seed_offset) % (2**63 - 1))
         chunks = self._chunks(states, request)
         history = []
@@ -124,15 +139,21 @@ class JointChunkedDiffusionRunner(JointMultiStageDiffusionRunner):
                 self._predict(
                     states=previous,
                     conditioning=self._chunk_conditioning(conditioning, chunks[index], cache.writing()),
-                    timestep=torch.zeros((), device=self.device), step_index=0,
-                    total_steps=len(schedule), guidance_scale=1,
+                    timestep=torch.zeros((), device=self.device),
+                    step_index=0,
+                    total_steps=len(schedule),
+                    guidance_scale=1,
                 )
             current, _ = self._reframe(self._slice(states, chunk), cursor)
             chunk_conditioning = self._chunk_conditioning(conditioning, chunk, cache)
             for step in schedule:
                 prediction = self._predict(
-                    states=current, conditioning=chunk_conditioning, timestep=step.timestep,
-                    step_index=step.index, total_steps=len(schedule), guidance_scale=1,
+                    states=current,
+                    conditioning=chunk_conditioning,
+                    timestep=step.timestep,
+                    step_index=step.index,
+                    total_steps=len(schedule),
+                    guidance_scale=1,
                 )
                 if set(prediction.samples) != set(current):
                     raise ValueError("joint denoiser must return every initialized modality")
@@ -140,9 +161,15 @@ class JointChunkedDiffusionRunner(JointMultiStageDiffusionRunner):
                     clean = prediction.samples[name]
                     if clean.shape != state.latent.shape:
                         raise ValueError(f"{name} prediction does not match its latent shape")
-                    clean = (state.clean_latent.float() + state.denoise_mask.float() * (clean.float() - state.clean_latent.float())).to(state.latent.dtype)
+                    clean = (
+                        state.clean_latent.float()
+                        + state.denoise_mask.float() * (clean.float() - state.clean_latent.float())
+                    ).to(state.latent.dtype)
                     latent = self.components.schedulers[0].step(clean, step, state.latent, generator=generator)
-                    latent = (state.clean_latent.float() + state.denoise_mask.float() * (latent.float() - state.clean_latent.float())).to(state.latent.dtype)
+                    latent = (
+                        state.clean_latent.float()
+                        + state.denoise_mask.float() * (latent.float() - state.clean_latent.float())
+                    ).to(state.latent.dtype)
                     current[name] = state.with_updates(latent=latent)
             del chunk_conditioning
             source = self._slice(states, chunk)
@@ -153,7 +180,14 @@ class JointChunkedDiffusionRunner(JointMultiStageDiffusionRunner):
         }
         artifacts = dict(self.components.decoder.decode_modalities(final, request))
         return DiffusionOutput(
-            sample=artifacts["video"], latents=final["video"].latent, artifacts=artifacts,
-            metadata={"model_id": self.model_id, "seed": request.sampling.seed,
-                      "execution_strategy": "joint-chunked", "chunks": len(chunks), "output_layout": "FHWC"},
+            sample=artifacts["video"],
+            latents=final["video"].latent,
+            artifacts=artifacts,
+            metadata={
+                "model_id": self.model_id,
+                "seed": request.sampling.seed,
+                "execution_strategy": "joint-chunked",
+                "chunks": len(chunks),
+                "output_layout": "FHWC",
+            },
         )

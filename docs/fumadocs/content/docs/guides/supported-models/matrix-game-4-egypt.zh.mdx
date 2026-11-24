@@ -31,7 +31,7 @@ print(result["artifact_path"], result["metadata"])
 ```
 
 ```bash
-worldfoundry-eval run matrix-game-4-egypt \
+wf run matrix-game-4-egypt \
   --pipeline.task-profile low-poly-rendering \
   --pipeline.input-path lowpoly.mp4 --json
 ```
@@ -66,11 +66,11 @@ MATRIX_GAME_DATA_DIR="$MATRIX_GAME4_RESOURCES/game" \
   bash scripts/play.sh --scene ancient-egypt
 ```
 
-按固定版本的[安装指南](https://github.com/SkyworkAI/Matrix-Game/blob/5446525c80da2a4a2f87801addbbc7faa8d2486e/Matrix-Game-4/docs/installation.md) 安装 CMake、SDL2、OpenGL/EGL 和 FFmpeg，按[离线录制指南](https://github.com/SkyworkAI/Matrix-Game/blob/5446525c80da2a4a2f87801addbbc7faa8d2486e/Matrix-Game-4/docs/offline.md) 采集干净 RGB。HUD 和音频不进入模型输入。游戏源码和发布模型资产采用 Apache-2.0，游戏内嵌依赖保留各自许可。归属记录见 `THIRD-PARTY-NOTICES` 和 `thirdparty/UPSTREAM_PROVENANCE.md`。
+按固定版本的[安装指南](https://github.com/SkyworkAI/Matrix-Game/blob/5446525c80da2a4a2f87801addbbc7faa8d2486e/Matrix-Game-4/docs/installation.md)安装 CMake、SDL2、OpenGL/EGL 和 FFmpeg，按[离线录制指南](https://github.com/SkyworkAI/Matrix-Game/blob/5446525c80da2a4a2f87801addbbc7faa8d2486e/Matrix-Game-4/docs/offline.md)采集干净 RGB。HUD 和音频不进入模型输入。游戏源码和发布模型资产采用 Apache-2.0，游戏内嵌依赖保留各自许可。归属记录见 `THIRD-PARTY-NOTICES` 和 `thirdparty/UPSTREAM_PROVENANCE.md`。
 
 ## 验证
 
-通过公共加载入口运行发布权重，在 H100、BF16、SDPA、无 offload 条件下，**5 帧与 100 帧** 864×480 输入的 latent 和解码 RGB 数值均与固定版本上游完全一致。输入分别为重复的 sink 图像和合成的图像平移。100 帧用例跨越 21-latent KV 窗口，裁掉 1 个补帧，导出 100 帧、20 FPS 的 MP4；同一权重实例的 A/B/A 请求复用、中断去噪后的恢复及全局 RNG 不变检查也均通过。
+已在 H100 上用发布权重验证（BF16、SDPA、无 offload）：对 **5 帧与 100 帧** 864×480 输入，公共 pipeline 的 latent 和解码 RGB 与固定版本上游实现完全一致，100 帧用例导出 100 帧、20 FPS 的 MP4。
 
 使用显式本地输入和 checkpoint 目录复现：
 
@@ -83,10 +83,10 @@ python tests/manual/matrix_game4_checkpoint_parity.py \
   --output-dir tmp/matrix-game4-checkpoint-parity
 ```
 
-对照使用与公共入口相同的已解码 RGB 输入，独立执行上游 quality preset。报告、数值 tensor 和原生 MP4 写入输出目录。`tests/manual/matrix_game4_component_parity.py` 仍提供组件对照：小图 81 次前向及 KV tensor 逐位一致，真实 Wan2.2 VAE 的五帧编码和解码也逐位一致。
+脚本对同一份已解码 RGB 输入分别运行公共入口和上游 quality preset，并把报告、数值 tensor 和原生 MP4 写入输出目录。
 
 ## 限制
 
-accepted-reference 发布回放、游戏画面质量及实测吞吐量仍待验证。Castle、Racing、TAEHV 一步渲染、实时游戏交互及吞吐优化属于后续集成范围。
+游戏画面质量与渲染吞吐量尚未测量。目前只提供古埃及场景；Castle、Racing、TAEHV 一步渲染及实时游戏交互尚未集成。
 
 <ModelRelatedRecipes modelId="matrix-game-4-egypt" locale="zh" />

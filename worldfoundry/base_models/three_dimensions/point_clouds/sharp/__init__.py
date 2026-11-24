@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 __all__ = [
-    "Gaussians3D",
     "GaussianDecoderParams",
+    "Gaussians3D",
     "InitializerParams",
     "PanoGaussianPredictor",
     "PredictorParams",

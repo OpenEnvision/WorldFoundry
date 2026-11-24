@@ -8,7 +8,7 @@ groups:
 source_repos:
 - url: https://github.com/Astronex-Robotics/Astronex-World
   revision: 27584bf1a89da01ef35a03b48d83bc818d2adf2b
-  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/Astronex-Robotics--Astronex-World
+  in_tree_path: worldfoundry/synthesis/visual_generation/astronex_world/astronex_world_runtime
 checkpoints:
 - repo_id: Astronex-Lab/Astronex-World
   revision: f06ea330f2ce5cabef5fbf175287fe323ec1218c
@@ -26,7 +26,7 @@ artifact_kind: generated_world
 artifact_filename: astronex-world.mp4
 execution:
   environment: astronex-world
-  backend_stage: official_external_runtime
+  backend_stage: official_in_tree_runtime
   runtime_status: cpu_contract_validated_checkpoint_gpu_pending
   integration_status: integrated
   pipeline_binding: astronex-world

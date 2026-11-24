@@ -27,7 +27,7 @@ import imageio
 import torch
 import torchvision
 
-__all__ = ['save_video', 'save_image']
+__all__ = ["save_image", "save_video"]
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +36,12 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def rand_name(length=8, suffix=''):
+def rand_name(length=8, suffix=""):
     """Return a hex filename stem of *length* random bytes, plus *suffix*."""
-    name = binascii.b2a_hex(os.urandom(length)).decode('utf-8')
+    name = binascii.b2a_hex(os.urandom(length)).decode("utf-8")
     if suffix:
-        if not suffix.startswith('.'):
-            suffix = '.' + suffix
+        if not suffix.startswith("."):
+            suffix = "." + suffix
         name += suffix
     return name
 
@@ -67,30 +67,29 @@ def merge_video_audio(video_path: str, audio_path: str):
     try:
         # create ffmpeg command
         command = [
-            'ffmpeg',
-            '-y',  # overwrite
-            '-i',
+            "ffmpeg",
+            "-y",  # overwrite
+            "-i",
             video_path,
-            '-i',
+            "-i",
             audio_path,
-            '-c:v',
-            'copy',  # copy video stream
-            '-c:a',
-            'aac',  # use AAC audio encoder
-            '-b:a',
-            '192k',  # set audio bitrate (optional)
-            '-map',
-            '0:v:0',  # select the first video stream
-            '-map',
-            '1:a:0',  # select the first audio stream
-            '-shortest',  # choose the shortest duration
-            temp_output
+            "-c:v",
+            "copy",  # copy video stream
+            "-c:a",
+            "aac",  # use AAC audio encoder
+            "-b:a",
+            "192k",  # set audio bitrate (optional)
+            "-map",
+            "0:v:0",  # select the first video stream
+            "-map",
+            "1:a:0",  # select the first audio stream
+            "-shortest",  # choose the shortest duration
+            temp_output,
         ]
 
         # execute the command
         logger.info("Start merging video and audio...")
-        result = subprocess.run(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        result = subprocess.run(command, capture_output=True, text=True)
 
         # check result
         if result.returncode != 0:
@@ -108,13 +107,7 @@ def merge_video_audio(video_path: str, audio_path: str):
             os.remove(temp_output)
 
 
-def save_video(tensor,
-               save_file=None,
-               fps=30,
-               suffix='.mp4',
-               nrow=8,
-               normalize=True,
-               value_range=(-1, 1)):
+def save_video(tensor, save_file=None, fps=30, suffix=".mp4", nrow=8, normalize=True, value_range=(-1, 1)):
     """Write a ``[C, T, H, W]`` (or batched grid) tensor as an H.264 mp4.
 
     Each time slice is passed through ``make_grid`` so a batch becomes
@@ -122,31 +115,30 @@ def save_video(tensor,
     When *save_file* is omitted the file lands in ``/tmp/<rand>.mp4``.
     """
     # cache file
-    cache_file = osp.join('/tmp', rand_name(
-        suffix=suffix)) if save_file is None else save_file
+    cache_file = osp.join("/tmp", rand_name(suffix=suffix)) if save_file is None else save_file
 
     # save to cache
     try:
         # preprocess
         tensor = tensor.clamp(min(value_range), max(value_range))
-        tensor = torch.stack([
-            torchvision.utils.make_grid(
-                u, nrow=nrow, normalize=normalize, value_range=value_range)
-            for u in tensor.unbind(2)
-        ],
-                             dim=1).permute(1, 2, 3, 0)
+        tensor = torch.stack(
+            [
+                torchvision.utils.make_grid(u, nrow=nrow, normalize=normalize, value_range=value_range)
+                for u in tensor.unbind(2)
+            ],
+            dim=1,
+        ).permute(1, 2, 3, 0)
         tensor = (tensor * 255).type(torch.uint8).cpu()
 
         # write video
-        writer = imageio.get_writer(
-            cache_file, fps=fps, codec='libx264', quality=8)
+        writer = imageio.get_writer(cache_file, fps=fps, codec="libx264", quality=8)
         for frame in tensor.numpy():
             writer.append_data(frame)
         writer.close()
     except Exception as e:
         # Vendored contract swallows the error; log at ERROR so a missing
         # output file is at least visible in logs.
-        logger.error(f'save_video failed, error: {e}')
+        logger.error(f"save_video failed, error: {e}")
 
 
 def save_image(tensor, save_file, nrow=8, normalize=True, value_range=(-1, 1)):
@@ -157,24 +149,17 @@ def save_image(tensor, save_file, nrow=8, normalize=True, value_range=(-1, 1)):
     """
     # cache file
     suffix = osp.splitext(save_file)[1]
-    if suffix.lower() not in [
-            '.jpg', '.jpeg', '.png', '.tiff', '.gif', '.webp'
-    ]:
-        suffix = '.png'
+    if suffix.lower() not in [".jpg", ".jpeg", ".png", ".tiff", ".gif", ".webp"]:
+        suffix = ".png"
 
     # save to cache
     try:
         tensor = tensor.clamp(min(value_range), max(value_range))
-        torchvision.utils.save_image(
-            tensor,
-            save_file,
-            nrow=nrow,
-            normalize=normalize,
-            value_range=value_range)
+        torchvision.utils.save_image(tensor, save_file, nrow=nrow, normalize=normalize, value_range=value_range)
         return save_file
     except Exception as e:
         # Vendored contract swallows the error (returns None); log at ERROR.
-        logger.error(f'save_image failed, error: {e}')
+        logger.error(f"save_image failed, error: {e}")
 
 
 def masks_like(tensor, zero=False, generator=None, p=0.2, current_latent_num=None):
@@ -194,21 +179,19 @@ def masks_like(tensor, zero=False, generator=None, p=0.2, current_latent_num=Non
 
     if zero:
         if generator is not None:
-            for u, v in zip(out1, out2):
-                random_num = torch.rand(
-                    1, generator=generator, device=generator.device).item()
+            for u, v in zip(out1, out2, strict=False):
+                random_num = torch.rand(1, generator=generator, device=generator.device).item()
                 if random_num < p:
                     u_target = u[:, :-current_latent_num] if current_latent_num else u[:, 0]
                     v_target = v[:, :-current_latent_num] if current_latent_num else v[:, 0]
-                    u_target[:] = torch.normal(
-                        mean=-3.5,
-                        std=0.5,
-                        size=(1,),
-                        device=u.device,
-                        generator=generator).expand_as(u_target).exp()
+                    u_target[:] = (
+                        torch.normal(mean=-3.5, std=0.5, size=(1,), device=u.device, generator=generator)
+                        .expand_as(u_target)
+                        .exp()
+                    )
                     v_target[:] = torch.zeros_like(v_target)
         else:
-            for u, v in zip(out1, out2):
+            for u, v in zip(out1, out2, strict=False):
                 if current_latent_num:
                     u[:, :-current_latent_num] = torch.zeros_like(u[:, :-current_latent_num])
                     v[:, :-current_latent_num] = torch.zeros_like(v[:, :-current_latent_num])
@@ -228,7 +211,7 @@ def best_output_size(w, h, dw, dh, expected_area):
     """
     # float output size
     ratio = w / h
-    ow = (expected_area * ratio)**0.5
+    ow = (expected_area * ratio) ** 0.5
     oh = expected_area / ow
 
     # process width first
@@ -244,8 +227,7 @@ def best_output_size(w, h, dw, dh, expected_area):
     ratio2 = ow2 / oh2
 
     # compare ratios
-    if max(ratio / ratio1, ratio1 / ratio) < max(ratio / ratio2,
-                                                 ratio2 / ratio):
+    if max(ratio / ratio1, ratio1 / ratio) < max(ratio / ratio2, ratio2 / ratio):
         return ow1, oh1
     else:
         return ow2, oh2

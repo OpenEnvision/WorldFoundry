@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 WAH_PROMPT_TRIGGER = "wah."
 
 WAH_NEGATIVE_PROMPT = (

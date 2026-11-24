@@ -19,8 +19,8 @@ a ``model_forward`` with the contract documented on :class:`Magi2PreviewSampler`
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -28,28 +28,28 @@ import torch.nn.functional as F
 # The model callable receives the batched (cond, uncond) inputs and the current
 # (already /1000-normalized) timestep, and returns a (video, audio) velocity
 # tuple, each a batch-of-2 tensor ordered [cond, uncond].
-ModelForward = Callable[..., Tuple[torch.Tensor, torch.Tensor]]
+ModelForward = Callable[..., tuple[torch.Tensor, torch.Tensor]]
 
 
 DEFAULT_NEGATIVE_PROMPT = (
-    'Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, '
-    'static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra '
-    'fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused '
-    'fingers, still picture, messy background, three legs, many people in the background, walking '
-    'backwards, low quality, worst quality, poor quality, noise, background noise, hiss, hum, buzz, '
-    'crackle, static, compression artifacts, MP3 artifacts, digital clipping, distortion, muffled, muddy,'
-    ' unclear, echo, reverb, room echo, over-reverberated, hollow sound, distant, washed out, harsh, '
-    'shrill, piercing, grating, tinny, thin sound, boomy, bass-heavy, flat EQ, over-compressed, abrupt '
-    'cut, jarring transition, sudden silence, looping artifact, music, instrumental, sirens, alarms, '
-    'crowd noise, unrelated sound effects, chaotic, disorganized, messy, cheap sound, emotionless, flat '
-    'delivery, deadpan, lifeless, apathetic, robotic, mechanical, monotone, flat intonation, undynamic, '
-    'boring, reading from a script, AI voice, synthetic, text-to-speech, TTS, insincere, fake emotion, '
-    'exaggerated, overly dramatic, melodramatic, cheesy, cringey, hesitant, unconfident, tired, weak '
-    'voice, stuttering, stammering, mumbling, slurred speech, mispronounced, bad articulation, lisp, '
-    'vocal fry, creaky voice, mouth clicks, lip smacks, wet mouth sounds, heavy breathing, audible '
-    'inhales, plosives, p-pops, coughing, clearing throat, sneezing, speaking too fast, rushed, speaking '
-    'too slow, dragged out, unnatural pauses, awkward silence, choppy, disconnected, multiple speakers, '
-    'two voices, background talking, out of tune, off-key, autotune artifacts'
+    "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, "
+    "static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra "
+    "fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused "
+    "fingers, still picture, messy background, three legs, many people in the background, walking "
+    "backwards, low quality, worst quality, poor quality, noise, background noise, hiss, hum, buzz, "
+    "crackle, static, compression artifacts, MP3 artifacts, digital clipping, distortion, muffled, muddy,"
+    " unclear, echo, reverb, room echo, over-reverberated, hollow sound, distant, washed out, harsh, "
+    "shrill, piercing, grating, tinny, thin sound, boomy, bass-heavy, flat EQ, over-compressed, abrupt "
+    "cut, jarring transition, sudden silence, looping artifact, music, instrumental, sirens, alarms, "
+    "crowd noise, unrelated sound effects, chaotic, disorganized, messy, cheap sound, emotionless, flat "
+    "delivery, deadpan, lifeless, apathetic, robotic, mechanical, monotone, flat intonation, undynamic, "
+    "boring, reading from a script, AI voice, synthetic, text-to-speech, TTS, insincere, fake emotion, "
+    "exaggerated, overly dramatic, melodramatic, cheesy, cringey, hesitant, unconfident, tired, weak "
+    "voice, stuttering, stammering, mumbling, slurred speech, mispronounced, bad articulation, lisp, "
+    "vocal fry, creaky voice, mouth clicks, lip smacks, wet mouth sounds, heavy breathing, audible "
+    "inhales, plosives, p-pops, coughing, clearing throat, sneezing, speaking too fast, rushed, speaking "
+    "too slow, dragged out, unnatural pauses, awkward silence, choppy, disconnected, multiple speakers, "
+    "two voices, background talking, out of tune, off-key, autotune artifacts"
 )
 
 
@@ -82,7 +82,7 @@ class Magi2SamplingConfig:
     num_inference_steps: int = 100
     shift: float = 7.0
     z_dim: int = 48
-    vae_stride: Tuple[int, int, int] = (8, 16, 16)
+    vae_stride: tuple[int, int, int] = (8, 16, 16)
     video_txt_guidance_scale: float = 5.0
     audio_txt_guidance_scale: float = 7.0
     use_cfg_trick: bool = False
@@ -97,7 +97,7 @@ class Magi2SamplingConfig:
     cfg_rescale: float = 0.0
     # Refiner stage.
     magi2_refiner_num_inference_steps: int = 5
-    magi2_refiner_vae_stride: Tuple[int, int, int] = (4, 16, 16)
+    magi2_refiner_vae_stride: tuple[int, int, int] = (4, 16, 16)
     magi2_refiner_noise_value: int = 220
     magi2_refiner_video_txt_guidance_scale: float = 2.0
 
@@ -127,7 +127,7 @@ def _pad_or_trim(tensor, target_size: int, dim: int, pad_value: float = 0.0):
         padding_tuple = [0] * (2 * tensor.dim())
         padding_dim_index = tensor.dim() - 1 - dim
         padding_tuple[2 * padding_dim_index + 1] = padding_amount
-        return F.pad(tensor, tuple(padding_tuple), 'constant', pad_value), current_size
+        return F.pad(tensor, tuple(padding_tuple), "constant", pad_value), current_size
     slicing = [slice(None)] * tensor.dim()
     slicing[dim] = slice(0, target_size)
     return tensor[tuple(slicing)], current_size
@@ -165,7 +165,7 @@ class Magi2PreviewSampler:
         self.device = device
         self.dtype = dtype
 
-    def forward(self, model_input: dict) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, model_input: dict) -> tuple[torch.Tensor, torch.Tensor]:
         """One injected-model call; returns batched ``(video, audio)`` velocities."""
 
         return self.model_forward(**model_input)
@@ -174,20 +174,20 @@ class Magi2PreviewSampler:
         self,
         *,
         video_t_list: list[torch.Tensor],
-        latent: torch.Tensor,          # B, C, T, H, W
-        audio_latent: torch.Tensor,    # B, L, C
-        txt_feat: torch.Tensor,        # B, L, D
-        null_txt_feat: torch.Tensor,   # B, L, D
+        latent: torch.Tensor,  # B, C, T, H, W
+        audio_latent: torch.Tensor,  # B, L, C
+        txt_feat: torch.Tensor,  # B, L, D
+        null_txt_feat: torch.Tensor,  # B, L, D
         video_scheduler,
         audio_scheduler,
         cfg_config: CFGConfig,
-        ref_audio_feat: Optional[torch.Tensor] = None,
-        ref_video_feat: Optional[torch.Tensor] = None,
-        ref_image_feat: Optional[torch.Tensor] = None,
-        ref_image_feat_len: Optional[torch.Tensor] = None,
-        ref_image_special_token_embedding: Optional[torch.Tensor] = None,
+        ref_audio_feat: torch.Tensor | None = None,
+        ref_video_feat: torch.Tensor | None = None,
+        ref_image_feat: torch.Tensor | None = None,
+        ref_image_feat_len: torch.Tensor | None = None,
+        ref_image_special_token_embedding: torch.Tensor | None = None,
         progress: bool = True,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Run the preview flow-matching loop with per-step CFG.
 
         ``video_t_list`` is the scheduler's discrete timesteps.  Each step
@@ -196,14 +196,12 @@ class Magi2PreviewSampler:
         UniPC schedulers independently.
         """
 
-        video_cfgs, audio_cfgs = self.precalculate_cfg(
-            video_t_list, latent.shape[2], cfg_config
-        )
+        video_cfgs, audio_cfgs = self.precalculate_cfg(video_t_list, latent.shape[2], cfg_config)
 
         latent = latent.clone()
         audio_latent = audio_latent.clone()
 
-        iterator = zip(video_t_list, video_cfgs, audio_cfgs)
+        iterator = zip(video_t_list, video_cfgs, audio_cfgs, strict=False)
         if progress:
             try:
                 from tqdm import tqdm
@@ -248,13 +246,13 @@ class Magi2PreviewSampler:
         audio_latent: torch.Tensor,
         txt_feat: torch.Tensor,
         null_txt_feat: torch.Tensor,
-        ref_audio_feat: Optional[torch.Tensor] = None,
-        ref_video_feat: Optional[torch.Tensor] = None,
-        ref_image_feat: Optional[torch.Tensor] = None,
-        ref_image_feat_len: Optional[torch.Tensor] = None,
-        ref_image_special_token_embedding: Optional[torch.Tensor] = None,
+        ref_audio_feat: torch.Tensor | None = None,
+        ref_video_feat: torch.Tensor | None = None,
+        ref_image_feat: torch.Tensor | None = None,
+        ref_image_feat_len: torch.Tensor | None = None,
+        ref_image_special_token_embedding: torch.Tensor | None = None,
         t: torch.Tensor | None = None,
-        cfg_config: Optional[CFGConfig] = None,
+        cfg_config: CFGConfig | None = None,
     ) -> dict:
         """Build the batch-of-2 (cond, uncond) kwargs for ``model_forward``.
 
@@ -274,8 +272,11 @@ class Magi2PreviewSampler:
 
         if ref_audio_feat is None:
             ref_audio_feat = torch.zeros(
-                latent.shape[0], 0, audio_latent.shape[2],
-                device=latent.device, dtype=audio_latent.dtype,
+                latent.shape[0],
+                0,
+                audio_latent.shape[2],
+                device=latent.device,
+                dtype=audio_latent.dtype,
             )
         ref_audio_feat_len = ref_audio_feat.shape[1]
 
@@ -283,15 +284,9 @@ class Magi2PreviewSampler:
             ref_video_feat = torch.empty_like(latent)
             ref_video_feat_len = 0
         else:
-            ref_video_feat_len = (
-                ref_video_feat.shape[3] * ref_video_feat.shape[4]
-            ) // 4
-        ref_video_feat = torch.cat(
-            [ref_video_feat, torch.zeros_like(ref_video_feat)], dim=0
-        )
-        ref_video_feat_len = torch.tensor(
-            [ref_video_feat_len, ref_video_feat_len], device=latent.device
-        )
+            ref_video_feat_len = (ref_video_feat.shape[3] * ref_video_feat.shape[4]) // 4
+        ref_video_feat = torch.cat([ref_video_feat, torch.zeros_like(ref_video_feat)], dim=0)
+        ref_video_feat_len = torch.tensor([ref_video_feat_len, ref_video_feat_len], device=latent.device)
 
         (
             ref_image_feat_cfg,
@@ -316,29 +311,15 @@ class Magi2PreviewSampler:
         batch_cfg = 2
         _, _, video_t, video_h, video_w = latent.shape
         audio_t = audio_latent.shape[1]
-        per_token_video_t = (
-            t_normalized.view(-1, 1, 1, 1, 1)
-            .expand(batch_cfg, 1, video_t, video_h, video_w)
-            .clone()
-        )
-        per_token_audio_t = (
-            t_normalized.view(-1, 1, 1).expand(batch_cfg, audio_t, 1).clone()
-        )
+        per_token_video_t = t_normalized.view(-1, 1, 1, 1, 1).expand(batch_cfg, 1, video_t, video_h, video_w).clone()
+        per_token_audio_t = t_normalized.view(-1, 1, 1).expand(batch_cfg, audio_t, 1).clone()
 
         context = {
-            "audio_feat_len": torch.tensor(
-                [audio_latent_len, audio_latent_len], device=latent.device
-            ),
+            "audio_feat_len": torch.tensor([audio_latent_len, audio_latent_len], device=latent.device),
             "txt_feat": torch.cat([txt_feat, null_txt_feat], dim=0),
-            "txt_feat_len": torch.tensor(
-                [txt_feat_len, null_txt_feat_len], device=latent.device
-            ),
-            "ref_audio_feat": torch.cat(
-                [ref_audio_feat, torch.zeros_like(ref_audio_feat)], dim=0
-            ),
-            "ref_audio_feat_len": torch.tensor(
-                [ref_audio_feat_len, ref_audio_feat_len], device=latent.device
-            ),
+            "txt_feat_len": torch.tensor([txt_feat_len, null_txt_feat_len], device=latent.device),
+            "ref_audio_feat": torch.cat([ref_audio_feat, torch.zeros_like(ref_audio_feat)], dim=0),
+            "ref_audio_feat_len": torch.tensor([ref_audio_feat_len, ref_audio_feat_len], device=latent.device),
             "ref_video_feat": ref_video_feat,
             "ref_video_feat_len": ref_video_feat_len,
             "ref_image_feat": ref_image_feat_cfg,
@@ -357,13 +338,11 @@ class Magi2PreviewSampler:
 
     @staticmethod
     def _prepare_ref_image_cfg(
-        ref_image_feat: Optional[torch.Tensor],
-        ref_image_feat_len: Optional[torch.Tensor],
-        ref_image_special_token_embedding: Optional[torch.Tensor],
-        cfg_config: Optional[CFGConfig],
-    ) -> tuple[
-        Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]
-    ]:
+        ref_image_feat: torch.Tensor | None,
+        ref_image_feat_len: torch.Tensor | None,
+        ref_image_special_token_embedding: torch.Tensor | None,
+        cfg_config: CFGConfig | None,
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
         """Duplicate the image conditioning along the cond/uncond batch axis.
 
         By default the unconditional half sees a zeroed image so CFG steers both
@@ -377,9 +356,7 @@ class Magi2PreviewSampler:
         uncond_feat = ref_image_feat if keep_ref else torch.zeros_like(ref_image_feat)
         ref_image_feat_cfg = torch.cat([ref_image_feat, uncond_feat], dim=0)
         ref_image_feat_len_cfg = (
-            torch.cat([ref_image_feat_len, ref_image_feat_len], dim=0)
-            if ref_image_feat_len is not None
-            else None
+            torch.cat([ref_image_feat_len, ref_image_feat_len], dim=0) if ref_image_feat_len is not None else None
         )
         ref_image_special_tokens_cfg = (
             torch.cat(
@@ -414,25 +391,19 @@ class Magi2PreviewSampler:
                 cfg_config.cfg_trick_value, cfg_config.video_txt_guidance_scale
             )
         else:
-            video_cfg_base = torch.tensor(
-                [cfg_config.video_txt_guidance_scale], device=self.device
-            )
+            video_cfg_base = torch.tensor([cfg_config.video_txt_guidance_scale], device=self.device)
 
         for t in t_list:
             video_cfg = video_cfg_base.clone()
             if cfg_config.use_dynamic_cfg and t < cfg_config.dynamic_cfg_start_t:
-                video_cfg[video_cfg > cfg_config.dynamic_cfg_cutoff_value] = (
-                    cfg_config.dynamic_cfg_cutoff_value
-                )
+                video_cfg[video_cfg > cfg_config.dynamic_cfg_cutoff_value] = cfg_config.dynamic_cfg_cutoff_value
             all_video_cfgs.append(video_cfg)
             all_audio_cfgs.append(cfg_config.audio_txt_guidance_scale)
 
         return all_video_cfgs, all_audio_cfgs
 
     @staticmethod
-    def _cfg_scale_tensor(
-        guidance_scale: torch.Tensor | float, like: torch.Tensor
-    ) -> torch.Tensor:
+    def _cfg_scale_tensor(guidance_scale: torch.Tensor | float, like: torch.Tensor) -> torch.Tensor:
         if isinstance(guidance_scale, torch.Tensor):
             return guidance_scale.to(device=like.device, dtype=like.dtype)
         return torch.tensor(float(guidance_scale), device=like.device, dtype=like.dtype)
@@ -447,25 +418,20 @@ class Magi2PreviewSampler:
     ) -> torch.Tensor:
         guidance_scale = cls._cfg_scale_tensor(guidance_scale, cond)
         x_orig = x_orig.to(device=cond.device, dtype=cond.dtype)
-        denoised = x_orig - (
-            (x_orig - uncond) + guidance_scale * ((x_orig - cond) - (x_orig - uncond))
-        )
+        denoised = x_orig - ((x_orig - uncond) + guidance_scale * ((x_orig - cond) - (x_orig - uncond)))
         matching_pred_signs = (cond - uncond).sign() == cond.sign()
-        matching_diff_after = (
-            cond.sign()
-            == (cond * guidance_scale - uncond * (guidance_scale - 1)).sign()
-        )
+        matching_diff_after = cond.sign() == (cond * guidance_scale - uncond * (guidance_scale - 1)).sign()
         deviation_influence = denoised.sign() == (denoised - x_orig).sign()
         return matching_pred_signs & matching_diff_after & deviation_influence
 
     @classmethod
     def _apply_skimmed_cfg_linear(
         cls,
-        x_orig: Optional[torch.Tensor],
+        x_orig: torch.Tensor | None,
         cond: torch.Tensor,
         uncond: torch.Tensor,
         guidance_scale: torch.Tensor | float,
-        cfg_config: Optional[CFGConfig],
+        cfg_config: CFGConfig | None,
     ) -> torch.Tensor:
         if (
             cfg_config is None
@@ -480,9 +446,7 @@ class Magi2PreviewSampler:
         if not torch.any(valid_scale).item():
             return uncond
 
-        scale_delta = torch.where(
-            valid_scale, guidance_scale - 1, torch.ones_like(guidance_scale)
-        )
+        scale_delta = torch.where(valid_scale, guidance_scale - 1, torch.ones_like(guidance_scale))
         fallback_weight = (cfg_config.skimmed_cfg_scale - 1) / scale_delta
 
         target_uncond = cond * (1 - fallback_weight) + uncond * fallback_weight
@@ -504,9 +468,7 @@ class Magi2PreviewSampler:
         return tuple(range(2, tensor.ndim))
 
     @classmethod
-    def _apply_cfg_rescale(
-        cls, pos: torch.Tensor, cfg: torch.Tensor, cfg_config: Optional[CFGConfig]
-    ) -> torch.Tensor:
+    def _apply_cfg_rescale(cls, pos: torch.Tensor, cfg: torch.Tensor, cfg_config: CFGConfig | None) -> torch.Tensor:
         if cfg_config is None or cfg_config.cfg_rescale <= 0 or cfg.numel() == 0:
             return cfg
 
@@ -515,14 +477,8 @@ class Magi2PreviewSampler:
             return cfg
 
         pos_std = pos.float().std(dim=spatial_dims, keepdim=True, unbiased=False)
-        cfg_std = (
-            cfg.float()
-            .std(dim=spatial_dims, keepdim=True, unbiased=False)
-            .clamp_min(1e-6)
-        )
-        factor = cfg_config.cfg_rescale * (pos_std / cfg_std) + (
-            1 - cfg_config.cfg_rescale
-        )
+        cfg_std = cfg.float().std(dim=spatial_dims, keepdim=True, unbiased=False).clamp_min(1e-6)
+        factor = cfg_config.cfg_rescale * (pos_std / cfg_std) + (1 - cfg_config.cfg_rescale)
         return cfg * factor.to(device=cfg.device, dtype=cfg.dtype)
 
     def cfg_velocity(
@@ -530,9 +486,9 @@ class Magi2PreviewSampler:
         model_output: tuple[torch.Tensor, torch.Tensor],
         video_txt_guidance_scale: torch.Tensor,
         audio_txt_guidance_scale: torch.Tensor,
-        cfg_config: Optional[CFGConfig] = None,
-        latent: Optional[torch.Tensor] = None,
-        audio_latent: Optional[torch.Tensor] = None,
+        cfg_config: CFGConfig | None = None,
+        latent: torch.Tensor | None = None,
+        audio_latent: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         """Combine cond/uncond velocities with optional skim + CFG-rescale."""
 
@@ -544,9 +500,7 @@ class Magi2PreviewSampler:
             uncond_video = self._apply_skimmed_cfg_linear(
                 latent, cond_video, uncond_video, video_txt_guidance_scale, cfg_config
             )
-            cfg_video = uncond_video + video_txt_guidance_scale * (
-                cond_video - uncond_video
-            )
+            cfg_video = uncond_video + video_txt_guidance_scale * (cond_video - uncond_video)
             cfg_video = self._apply_cfg_rescale(cond_video, cfg_video, cfg_config)
         else:
             cfg_video = None
@@ -560,9 +514,7 @@ class Magi2PreviewSampler:
                 audio_txt_guidance_scale,
                 cfg_config,
             )
-            cfg_audio = uncond_audio + audio_txt_guidance_scale * (
-                cond_audio - uncond_audio
-            )
+            cfg_audio = uncond_audio + audio_txt_guidance_scale * (cond_audio - uncond_audio)
             cfg_audio = self._apply_cfg_rescale(cond_audio, cfg_audio, cfg_config)
         else:
             cfg_audio = None
@@ -579,7 +531,7 @@ class Magi2PreviewSampler:
         video_scheduler,
         audio_scheduler,
         t: torch.Tensor,
-        cfg_config: Optional[CFGConfig] = None,
+        cfg_config: CFGConfig | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         """Apply CFG and take one UniPC step on video and audio latents."""
 
@@ -594,9 +546,7 @@ class Magi2PreviewSampler:
         if cfg_video is not None:
             latent = video_scheduler.step(cfg_video, t, latent, return_dict=False)[0]
         if cfg_audio is not None:
-            audio_latent = audio_scheduler.step(
-                cfg_audio, t, audio_latent, return_dict=False
-            )[0]
+            audio_latent = audio_scheduler.step(cfg_audio, t, audio_latent, return_dict=False)[0]
         return latent, audio_latent, cfg_video, cfg_audio
 
 

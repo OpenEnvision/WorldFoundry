@@ -6,8 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.runners.phyeduvideo.phyeduvideo_metrics import compute_phyeduvideo_metrics
-from worldfoundry.evaluation.tasks.execution.runners.phyeduvideo.phyeduvideo_prompts import (
+from worldfoundry.evals.tasks.execution.runners.phyeduvideo.phyeduvideo_metrics import compute_phyeduvideo_metrics
+from worldfoundry.evals.tasks.execution.runners.phyeduvideo.phyeduvideo_prompts import (
     CANONICAL_PROMPT_COUNT,
     load_prompt_records,
     materialize_phyeduvideo_generation_requests,
@@ -73,7 +73,7 @@ def test_phyeduvideo_metrics_from_summary_csv() -> None:
 
 
 def test_phyeduvideo_official_runner_normalizes_sample_results(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.utils import benchmark_task_sample_path
+    from worldfoundry.evals.utils import benchmark_task_sample_path
 
     sample_path = benchmark_task_sample_path("phyeduvideo")
     assert sample_path is not None
@@ -86,7 +86,7 @@ def test_phyeduvideo_official_runner_normalizes_sample_results(tmp_path: Path) -
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/phyeduvideo/run_phyeduvideo_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/phyeduvideo/run_phyeduvideo_official_runner.py",
             "--official-results-path",
             str(sample_path),
             "--output-dir",
@@ -105,7 +105,7 @@ def test_phyeduvideo_official_runner_normalizes_sample_results(tmp_path: Path) -
 
 
 def test_phyeduvideo_official_run_with_artifact_results_writes_scorecard(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.utils import benchmark_task_sample_path
+    from worldfoundry.evals.utils import benchmark_task_sample_path
 
     sample_path = benchmark_task_sample_path("phyeduvideo")
     assert sample_path is not None
@@ -120,7 +120,7 @@ def test_phyeduvideo_official_run_with_artifact_results_writes_scorecard(tmp_pat
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/phyeduvideo/run_phyeduvideo_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/phyeduvideo/run_phyeduvideo_official_runner.py",
             "--run-official",
             "--generated-artifact-dir",
             str(generated_dir),

@@ -33,8 +33,7 @@ def validate_minimax_h3_vae_latent_stats(
     if arch_config.latent_channels != expected_channels:
         raise MiniMaxH3VAEContractError(
             component_name,
-            "latent_channels must be "
-            f"{expected_channels}, got {arch_config.latent_channels!r}",
+            f"latent_channels must be {expected_channels}, got {arch_config.latent_channels!r}",
         )
 
     for field_name, values in (
@@ -47,8 +46,7 @@ def validate_minimax_h3_vae_latent_stats(
                 f"config.json missing {field_name}",
             )
         if not isinstance(values, list) or not all(
-            isinstance(value, (int, float)) and not isinstance(value, bool)
-            for value in values
+            isinstance(value, (int, float)) and not isinstance(value, bool) for value in values
         ):
             raise MiniMaxH3VAEContractError(
                 component_name,
@@ -57,19 +55,14 @@ def validate_minimax_h3_vae_latent_stats(
         if len(values) != expected_channels:
             raise MiniMaxH3VAEContractError(
                 component_name,
-                f"config.json {field_name} must contain exactly "
-                f"{expected_channels} values, got {len(values)}",
+                f"config.json {field_name} must contain exactly {expected_channels} values, got {len(values)}",
             )
-        if field_name == "latents_mean" and not all(
-            math.isfinite(value) for value in values
-        ):
+        if field_name == "latents_mean" and not all(math.isfinite(value) for value in values):
             raise MiniMaxH3VAEContractError(
                 component_name,
                 "config.json latents_mean values must be finite",
             )
-        if field_name == "latents_std" and not all(
-            math.isfinite(value) and value > 0 for value in values
-        ):
+        if field_name == "latents_std" and not all(math.isfinite(value) and value > 0 for value in values):
             raise MiniMaxH3VAEContractError(
                 component_name,
                 "config.json latents_std values must be finite and greater than zero",

@@ -74,8 +74,12 @@ def video_metadata(path):
 def validate_scene(record):
     scene = Path(record["path"])
     frames, views, valid = (int(record[key]) for key in ("frames", "views", "valid_frames"))
-    if (not 0 < valid <= frames or tuple(record["resolution"]) != RESOLUTION
-            or not math.isfinite(float(record["fps"])) or float(record["fps"]) <= 0):
+    if (
+        not 0 < valid <= frames
+        or tuple(record["resolution"]) != RESOLUTION
+        or not math.isfinite(float(record["fps"]))
+        or float(record["fps"]) <= 0
+    ):
         raise ValueError("InSpatio 1.5 requires positive frame counts/fps and resolution 480x832")
     source_type = source_type_for(record)
     if source_type == "video" and views != frames:
@@ -84,13 +88,17 @@ def validate_scene(record):
         raise ValueError("Four-image scenes must cover complete three-latent chunks")
     if record.get("depth_encoding") != DEPTH_ENCODING:
         raise ValueError(f"Expected depth_encoding={DEPTH_ENCODING}")
-    expected_intrinsics = ("estimated_source_frame_000000_fixed" if source_type == "video"
-                           else "estimated_source_view_00_fixed")
+    expected_intrinsics = (
+        "estimated_source_frame_000000_fixed" if source_type == "video" else "estimated_source_view_00_fixed"
+    )
     if record.get("target_intrinsics") != expected_intrinsics:
         raise ValueError(f"Expected target_intrinsics={expected_intrinsics}")
     target = Path(record.get("target_traj_path", scene / "input/target_tcw.txt"))
-    lengths = (len(matrices(scene / "depth/source_intrinsics.txt", 3)),
-               len(matrices(scene / "depth/source_tcw.txt", 4)), len(matrices(target, 4)))
+    lengths = (
+        len(matrices(scene / "depth/source_intrinsics.txt", 3)),
+        len(matrices(scene / "depth/source_tcw.txt", 4)),
+        len(matrices(target, 4)),
+    )
     if lengths != (views, views, frames):
         raise ValueError("RGB/depth/source camera/target trajectory count mismatch")
     read_range(scene / "depth/metadata.txt")
@@ -158,16 +166,40 @@ def stage_direct_input(directory, *, images=None, videos=None, prompt="", traj_t
         if size == RESOLUTION:
             (inputs / "video.mp4").symlink_to(source)
         else:
-            subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-i", str(source),
-                            "-vf", "scale=832:480:force_original_aspect_ratio=increase,crop=832:480",
-                            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(inputs / "video.mp4")], check=True)
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-nostdin",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-i",
+                    str(source),
+                    "-vf",
+                    "scale=832:480:force_original_aspect_ratio=increase,crop=832:480",
+                    "-an",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    str(inputs / "video.mp4"),
+                ],
+                check=True,
+            )
         kind, views = "video", frames
     (inputs / "target_tcw.txt").symlink_to(trajectory)
     (inputs / "prompt.txt").write_text(prompt.strip() + "\n")
-    metadata = {"kind": kind, "views": views, "frames": frames, "valid_frames": frames,
-                "fps": fps, "resolution": list(RESOLUTION),
-                "target_intrinsics": ("estimated_source_frame_000000_fixed" if kind == "video"
-                                      else "estimated_source_view_00_fixed"),
-                "depth_encoding": DEPTH_ENCODING}
+    metadata = {
+        "kind": kind,
+        "views": views,
+        "frames": frames,
+        "valid_frames": frames,
+        "fps": fps,
+        "resolution": list(RESOLUTION),
+        "target_intrinsics": (
+            "estimated_source_frame_000000_fixed" if kind == "video" else "estimated_source_view_00_fixed"
+        ),
+        "depth_encoding": DEPTH_ENCODING,
+    }
     (directory / "scene.json").write_text(json.dumps(metadata, indent=2) + "\n")
     return {**metadata, "id": "scene", "path": str(directory), "text": prompt.strip()}

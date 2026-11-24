@@ -26,7 +26,7 @@ def patch_auto_config(config: PretrainedConfig):
 
     @wraps(_old_from_pretrained)
     def _from_pretrained(*args, **kwargs):
-        return (config, {}) if 'return_unused_kwargs' in kwargs else config
+        return (config, {}) if "return_unused_kwargs" in kwargs else config
 
     AutoConfig.from_pretrained = _from_pretrained
     try:

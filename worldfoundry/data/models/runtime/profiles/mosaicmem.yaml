@@ -1,8 +1,7 @@
-artifact_filename: mosaicmem_runtime_plan.json
-artifact_kind: memory_index
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: mosaicmem
 display_name: MosaicMem
-id: mosaicmem
+task_family: world_model
 input_schema:
   actions:
   - memory_update
@@ -10,18 +9,20 @@ input_schema:
   image: true
   prompt: true
   video: true
-integration_status: runtime_ported
+artifact_kind: memory_index
+artifact_filename: mosaicmem_runtime_plan.json
+execution:
+  pipeline_binding: mosaicmem
+  backend_stage: worldfoundry_runtime_plan
+  runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - MosaicMem source route is registered for memory-plan artifacts; generator assets
   remain runtime-gated.
 - Missing checkpoints/assets are reported by the runtime plan and are not catalog
   blockers.
-- WorldFoundry exposes MosaicMem through worldfoundry.core.memory for keyframe patch ingestion,
-  target-view retrieval, coverage summaries, and latent-canvas composition.
+- WorldFoundry exposes MosaicMem through worldfoundry.synthesis.visual_generation.memory.mosaic for keyframe patch
+  ingestion, target-view retrieval, coverage summaries, and latent-canvas composition.
 - Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/mosaicmem at 3178e01e3639d7e2e7a487d5d589fd5f53719904.
-runtime_status: route_ready_assets_pending
-task_family: world_model
-execution:
-  pipeline_binding: mosaicmem
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending

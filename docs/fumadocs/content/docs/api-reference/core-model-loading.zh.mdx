@@ -3,7 +3,7 @@ title: Core 模型加载
 description: 安全 checkpoint 读取、state dict 发现、结构身份、惰性 DiskMap 与模型构造。
 ---
 
-模型加载被分成多层，让调用方决定 Core 应当负责多少策略。`load_torch_checkpoint` 默认以 weights-only 安全模式读取一个 PyTorch 对象；`load_state_dict` 理解文件、目录、多路径、safetensors 和分片 index；`DiskMap` 按参数名惰性暴露 checkpoint tensor；`load_model` 还会构造 module、转换 key、分配权重、安装可选显存管理、移动 placement 并切换 eval 模式。
+模型加载分为多层，由调用方决定 Core 应当负责多少策略。`load_torch_checkpoint` 默认以 weights-only 安全模式读取一个 PyTorch 对象；`load_state_dict` 理解文件、目录、多路径、safetensors 和分片 index；`DiskMap` 按参数名惰性暴露 checkpoint tensor；`load_model` 还会构造 module、转换 key、分配权重、安装可选显存管理、移动 placement 并切换 eval 模式。
 
 ## 一个安全的本地 state dict 示例
 

@@ -1,8 +1,7 @@
-artifact_filename: vggt_world_runtime_plan.json
-artifact_kind: generated_world
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: vggt-world
 display_name: VGGT-World
-id: vggt-world
+task_family: world_model
 input_schema:
   actions:
   - camera_navigation
@@ -10,7 +9,15 @@ input_schema:
   image: true
   prompt: true
   video: true
-integration_status: runtime_ported
+artifact_kind: generated_world
+artifact_filename: vggt_world_runtime_plan.json
+execution:
+  pipeline_binding: vggt-world
+  backend_stage: worldfoundry_runtime_plan
+  runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - VGGT-World official source route is registered; checkpoints/assets are runtime-gated.
 - Missing checkpoints/assets are reported by the runtime plan and are not catalog
@@ -18,9 +25,3 @@ notes:
 - WorldFoundry tracks upstream source and checkpoint metadata only; no runnable pipeline
   is registered.
 - Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/VGGT-World at c90f5ee289036277fe75a69aa96418c04ccd5cc7.
-runtime_status: route_ready_assets_pending
-task_family: world_model
-execution:
-  pipeline_binding: vggt-world
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Iterable
 from dataclasses import asdict
 from enum import Enum
-from typing import List, Type, cast, Optional, Iterable, Dict, Any, TypeVar
+from typing import Any, TypeVar, cast
 
-from omegaconf import OmegaConf as om, DictConfig, ListConfig
-from omegaconf.errors import OmegaConfBaseException
 import torch
+from omegaconf import DictConfig, ListConfig
+from omegaconf import OmegaConf as om
+from omegaconf.errors import OmegaConfBaseException
 
 from .exceptions import OLMoConfigurationError
 from .io import PathOrStr, read_file
@@ -18,7 +20,6 @@ D = TypeVar("D", bound="DictConfig|ListConfig")
 
 @dataclasses.dataclass
 class BaseConfig:
-
     @classmethod
     def update_legacy_settings(cls, config: D) -> D:
         """
@@ -27,7 +28,7 @@ class BaseConfig:
         return config
 
     @classmethod
-    def new(cls: Type[C], **kwargs) -> C:
+    def new(cls: type[C], **kwargs) -> C:
         cls._register_resolvers()
         conf = om.structured(cls)
         try:
@@ -35,14 +36,14 @@ class BaseConfig:
                 conf = om.merge(conf, kwargs)
             return cast(C, om.to_object(conf))
         except OmegaConfBaseException as e:
-            raise OLMoConfigurationError(e)
+            raise OLMoConfigurationError(e)  # noqa: B904 - Keeps the implicit exception context.
 
     @classmethod
     def load(
-        cls: Type[C],
+        cls: type[C],
         path: PathOrStr,
-        overrides: Optional[List[str]] = None,
-        key: Optional[str] = None,
+        overrides: list[str] | None = None,
+        key: str | None = None,
         validate_paths: bool = True,
     ) -> C:
         """Load from a YAML file."""
@@ -58,13 +59,13 @@ class BaseConfig:
                 conf = om.merge(conf, om.from_dotlist(overrides))
             return cast(C, om.to_object(conf))
         except OmegaConfBaseException as e:
-            raise OLMoConfigurationError(e)
+            raise OLMoConfigurationError(e)  # noqa: B904 - Keeps the implicit exception context.
 
     def save(self, path: PathOrStr) -> None:
         """Save to a YAML file."""
         om.save(config=self, f=str(path))
 
-    def asdict(self, exclude: Optional[Iterable[str]] = None) -> Dict[str, Any]:
+    def asdict(self, exclude: Iterable[str] | None = None) -> dict[str, Any]:
         out = asdict(self)  # type: ignore
         if exclude is not None:
             for name in exclude:
@@ -90,7 +91,7 @@ class StrEnum(str, Enum):
         return self.value
 
     def __repr__(self) -> str:
-        return f"'{str(self)}'"
+        return f"'{self!s}'"
 
 
 class DType(StrEnum):
@@ -103,7 +104,7 @@ class DType(StrEnum):
     float16 = "float16"
 
     @classmethod
-    def from_pt(cls, dtype: torch.dtype) -> "DType":
+    def from_pt(cls, dtype: torch.dtype) -> DType:
         if dtype == torch.float32:
             return DType.float32
         elif dtype == torch.bfloat16:

@@ -12,14 +12,14 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.catalog.dispatch import (
+from worldfoundry.evals.tasks.catalog.dispatch import (
     VIDEO_RUNNER_REGISTRY,
     VideoRunnerSpec,
 )
-from worldfoundry.evaluation.tasks.execution.framework.official_runner import (
+from worldfoundry.evals.tasks.execution.framework.official_runner import (
     default_benchmark_timeout,
 )
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import _timeout_seconds
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_commands import _timeout_seconds
 
 
 def test_default_benchmark_timeout_env_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -50,7 +50,7 @@ def test_orchestration_timeout_uses_shared_environment_default(monkeypatch: pyte
 
 def test_phygenbench_upstream_overall_times_out_on_hung_child(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """ET-06: a hung upstream process must raise TimeoutExpired, not block forever."""
-    from worldfoundry.evaluation.tasks.execution.runners.phygenbench import phygenbench_runtime
+    from worldfoundry.evals.tasks.execution.runners.phygenbench import phygenbench_runtime
 
     repo_root = tmp_path / "phygenbench_repo"
     overall = repo_root / "PhyGenEval" / "overall.py"
@@ -72,7 +72,7 @@ def test_phygenbench_upstream_overall_times_out_on_hung_child(tmp_path: Path, mo
 
 def test_phygenbench_upstream_overall_unbounded_when_env_unset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Without the env var the historical behavior (no timeout) is preserved."""
-    from worldfoundry.evaluation.tasks.execution.runners.phygenbench import phygenbench_runtime
+    from worldfoundry.evals.tasks.execution.runners.phygenbench import phygenbench_runtime
 
     repo_root = tmp_path / "phygenbench_repo"
     overall = repo_root / "PhyGenEval" / "overall.py"

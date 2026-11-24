@@ -8,17 +8,11 @@
 # and https://github.com/facebookresearch/co-tracker/tree/main
 
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> dependency -> track_modules -> utils.py functionality."""
-
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
-from typing import Optional, Tuple, Union
-from einops import rearrange, repeat
 
-
-def get_2d_sincos_pos_embed(embed_dim: int, grid_size: Union[int, Tuple[int, int]], return_grid=False) -> torch.Tensor:
+def get_2d_sincos_pos_embed(embed_dim: int, grid_size: int | tuple[int, int], return_grid=False) -> torch.Tensor:
     """
     This function initializes a grid and generates a 2D positional embedding using sine and cosine functions.
     It is a wrapper of get_2d_sincos_pos_embed_from_grid.

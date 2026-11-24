@@ -3,49 +3,20 @@
 """This is basically a copy from perception_models/core/vision_encoder/pe.py"""
 
 from collections import OrderedDict
+from collections.abc import Callable
 from functools import partial
 
 # SPDX-License-Identifier: Apache-2.0
 from math import pi
-from typing import Callable, Literal, Optional, Union
+from typing import Literal
 
 import torch
 from einops import rearrange, repeat
 from torch import nn
 from torch.nn import functional as F
 
-
-def rotate_half(x):
-    x = rearrange(x, "... (d r) -> ... d r", r=2)
-    x1, x2 = x.unbind(dim=-1)
-    x = torch.stack((-x2, x1), dim=-1)
-    return rearrange(x, "... d r -> ... (d r)")
-
-
-def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
-    dtype = t.dtype
-
-    if t.ndim == 3:
-        seq_len = t.shape[seq_dim]
-        freqs = freqs[-seq_len:]
-
-    rot_dim = freqs.shape[-1]
-    end_index = start_index + rot_dim
-
-    assert rot_dim <= t.shape[-1], (
-        "feature dimension {} is not of sufficient size to rotate in all the "
-        "positions {}".format(t.shape[-1], rot_dim)
-    )
-
-    t_left, t, t_right = (
-        t[..., :start_index],
-        t[..., start_index:end_index],
-        t[..., end_index:],
-    )
-    t = (t * freqs.cos() * scale) + (rotate_half(t) * freqs.sin() * scale)
-    out = torch.cat((t_left, t, t_right), dim=-1)
-
-    return out.type(dtype)
+from worldfoundry.core.attention.rotary.rope import apply_rotary_embedding
+from worldfoundry.core.nn.blocks.layers import LayerScale
 
 
 class Rope2D(nn.Module):
@@ -73,11 +44,9 @@ class Rope2D(nn.Module):
         self._freqs_runtime_cache = OrderedDict()
         self._max_runtime_cache_entries = 4
 
-    def _compute_inv_freq(self, base: Union[int, float], dim: int) -> torch.Tensor:
+    def _compute_inv_freq(self, base: int | float, dim: int) -> torch.Tensor:
         if self.freqs_for == "lang":
-            freqs = 1.0 / (
-                base ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim)
-            )
+            freqs = 1.0 / (base ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
         elif self.freqs_for == "pixel":
             freqs = torch.linspace(1.0, self.max_freq / 2, dim // 2) * pi
         elif self.freqs_for == "constant":
@@ -95,7 +64,7 @@ class Rope2D(nn.Module):
         self,
         grid_height: int,
         grid_width: int,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ) -> torch.Tensor:
         grid_h_range = torch.arange(grid_height, dtype=torch.float, device=device)
         grid_w_range = torch.arange(grid_width, dtype=torch.float, device=device)
@@ -105,12 +74,8 @@ class Rope2D(nn.Module):
         inv_freq = self._compute_inv_freq(self.theta, self.dim // 2)
         if device is not None:
             inv_freq = inv_freq.to(device=device)
-        freqs_h = self._compute_freqs(grid_h_range, inv_freq)[:, None].expand(
-            grid_height, grid_width, -1
-        )
-        freqs_w = self._compute_freqs(grid_w_range, inv_freq)[None, :].expand(
-            grid_height, grid_width, -1
-        )
+        freqs_h = self._compute_freqs(grid_h_range, inv_freq)[:, None].expand(grid_height, grid_width, -1)
+        freqs_w = self._compute_freqs(grid_w_range, inv_freq)[None, :].expand(grid_height, grid_width, -1)
         freqs = torch.cat([freqs_w, freqs_h], dim=-1).reshape(grid_height * grid_width, -1)
         if self.use_cls_token:
             freqs = torch.cat([torch.zeros(1, freqs.shape[-1], device=device), freqs], dim=0)
@@ -135,20 +100,10 @@ class Rope2D(nn.Module):
         # Cache frequencies outside module state so FSDP2 wrap/prepare does not touch them,
         # while still avoiding per-forward recomputation on the common same-device/same-grid path.
         freqs = self._get_runtime_freqs(grid_hw[0], grid_hw[1], q.device)
-        q = apply_rotary_emb(freqs, q)
-        k = apply_rotary_emb(freqs, k)
+        cos, sin = freqs.cos(), freqs.sin()
+        q = apply_rotary_embedding(q, cos, sin, interleaved=True)
+        k = apply_rotary_embedding(k, cos, sin, interleaved=True)
         return q, k
-
-
-class LayerScale(nn.Module):
-    def __init__(self, dim, init_values=1e-5, inplace=False):
-        super().__init__()
-        self.inplace = inplace
-        self.dim = dim
-        self.gamma = nn.Parameter(init_values * torch.ones(dim))
-
-    def forward(self, x):
-        return x.mul_(self.gamma) if self.inplace else x * self.gamma
 
 
 class AttentionPooling(nn.Module):
@@ -166,14 +121,10 @@ class AttentionPooling(nn.Module):
         self.embed_dim = embed_dim
         self.num_heads = num_heads
 
-        assert (
-            self.embed_dim % num_heads == 0
-        ), "embed_dim must be divisible by num_heads"
+        assert self.embed_dim % num_heads == 0, "embed_dim must be divisible by num_heads"
 
         self.probe = nn.Parameter(torch.randn(1, num_probe, self.embed_dim))
-        self.attn = nn.MultiheadAttention(
-            self.embed_dim, self.num_heads, batch_first=True
-        )
+        self.attn = nn.MultiheadAttention(self.embed_dim, self.num_heads, batch_first=True)
 
         self.layernorm = norm_layer(embed_dim)
         self.mlp_width = int(embed_dim * mlp_ratio)
@@ -215,9 +166,7 @@ class SelfAttention(nn.Module):
 
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), "embed_dim must be divisible by num_heads"
+        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
 
         # To make this compatible with nn.MultiHeadAttention
         self.in_proj_weight = nn.Parameter(torch.empty(3 * embed_dim, embed_dim))
@@ -241,13 +190,7 @@ class SelfAttention(nn.Module):
         proj = F.linear(x, self.in_proj_weight, self.in_proj_bias)
 
         # reshape to 3, E and not E, 3 is deliberate for better memory coalescing and keeping same order as chunk()
-        proj = (
-            proj.unflatten(-1, (3, embed_dim))
-            .unsqueeze(0)
-            .transpose(0, -2)
-            .squeeze(-2)
-            .contiguous()
-        )
+        proj = proj.unflatten(-1, (3, embed_dim)).unsqueeze(0).transpose(0, -2).squeeze(-2).contiguous()
         q, k, v = proj[0], proj[1], proj[2]
 
         # Use "q_" so that we don't accidentally quit in pdb :)
@@ -279,7 +222,7 @@ class ResidualAttentionBlock(nn.Module):
         max_grid_height: int,
         max_grid_width: int,
         mlp_ratio: float = 4.0,
-        ls_init_value: float = None,
+        ls_init_value: float | None = None,
         act_layer: Callable = nn.GELU,
         norm_layer: Callable = nn.LayerNorm,
         use_cls_token: bool = False,
@@ -294,16 +237,8 @@ class ResidualAttentionBlock(nn.Module):
             use_cls_token=use_cls_token,
         )
 
-        self.ls_1 = (
-            LayerScale(d_model, ls_init_value)
-            if ls_init_value is not None
-            else nn.Identity()
-        )
-        self.ls_2 = (
-            LayerScale(d_model, ls_init_value)
-            if ls_init_value is not None
-            else nn.Identity()
-        )
+        self.ls_1 = LayerScale(d_model, ls_init_value) if ls_init_value is not None else nn.Identity()
+        self.ls_2 = LayerScale(d_model, ls_init_value) if ls_init_value is not None else nn.Identity()
 
         self.ln_1 = norm_layer(d_model)
         self.ln_2 = norm_layer(d_model)
@@ -338,7 +273,7 @@ class Transformer(nn.Module):
         max_grid_height: int,
         max_grid_width: int,
         mlp_ratio: float = 4.0,
-        ls_init_value: float = None,
+        ls_init_value: float | None = None,
         act_layer: Callable = nn.GELU,
         norm_layer: Callable = nn.LayerNorm,
         use_cls_token: bool = False,
@@ -389,19 +324,19 @@ class PerceptionEncoderWithDownsample(nn.Module):
         heads: int,
         mlp_ratio: float,
         act_layer: Callable = nn.GELU,
-        norm_layer: Callable = partial(nn.LayerNorm, eps=1e-5),
+        norm_layer: Callable = partial(nn.LayerNorm, eps=1e-5),  # noqa: B008 - Default evaluated once at definition, as upstream.
         use_ln_pre: bool = True,
         use_ln_post: bool = True,
-        ls_init_value: float = None,
+        ls_init_value: float | None = None,
         drop_path: float = 0.0,
         image_size: int = 448,  # Pretrain image size only; you can pass in any image size
         use_abs_posemb: bool = True,
         use_rope2d: bool = True,
         use_cls_token: bool = False,
-        output_dim: Optional[int] = 1280,
+        output_dim: int | None = 1280,
         attn_pooler_heads: int = 8,
         pool_type: Literal["attn", "tok", "avg", "none"] = "attn",
-        layer_types: list[str] = [],
+        layer_types: list[str] = [],  # noqa: B006 - Keeps the upstream default object and signature.
         sliding_window_size: int = -1,
         # config,
         # act_layer: Callable = nn.GELU,
@@ -474,9 +409,7 @@ class PerceptionEncoderWithDownsample(nn.Module):
         )
 
         if self.use_cls_token:
-            self.class_embedding = nn.Parameter(
-                (self.width**-0.5) * torch.randn(self.width)
-            )
+            self.class_embedding = nn.Parameter((self.width**-0.5) * torch.randn(self.width))
 
         if self.use_abs_posemb:
             self.posemb_grid_size = self.image_size // self.patch_size
@@ -498,9 +431,7 @@ class PerceptionEncoderWithDownsample(nn.Module):
             cls_token_embed, pos_embed = pos_embed[:1], pos_embed[1:]
 
         pos_embed = (
-            pos_embed.reshape(1, self.posemb_grid_size, self.posemb_grid_size, -1)
-            .permute(0, 3, 1, 2)
-            .contiguous()
+            pos_embed.reshape(1, self.posemb_grid_size, self.posemb_grid_size, -1).permute(0, 3, 1, 2).contiguous()
         )
         pos_embed = F.interpolate(
             pos_embed,

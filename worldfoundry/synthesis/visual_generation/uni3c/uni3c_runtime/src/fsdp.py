@@ -5,20 +5,21 @@ import torch
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import MixedPrecision, ShardingStrategy
 from torch.distributed.fsdp.wrap import lambda_auto_wrap_policy
-from src.utils import get_local_rank, get_world_size
+
+from .utils import get_local_rank, get_world_size
 
 
 def shard_model(
-        model,
-        device_id,
-        param_dtype=torch.bfloat16,
-        reduce_dtype=torch.float32,
-        buffer_dtype=torch.bfloat16,
-        process_group=None,
-        sharding_strategy=ShardingStrategy.FULL_SHARD,
-        sync_module_states=True,
-        use_orig_params=False,  # this should only be "True" for inference
-        model_type="wan"
+    model,
+    device_id,
+    param_dtype=torch.bfloat16,
+    reduce_dtype=torch.float32,
+    buffer_dtype=torch.bfloat16,
+    process_group=None,
+    sharding_strategy=ShardingStrategy.FULL_SHARD,
+    sync_module_states=True,
+    use_orig_params=False,  # this should only be "True" for inference
+    model_type="wan",
 ):
     model = model.to(torch.float32)
     if model_type == "wan":
@@ -35,15 +36,12 @@ def shard_model(
         module=model,
         process_group=process_group,
         sharding_strategy=sharding_strategy,
-        auto_wrap_policy=partial(
-            lambda_auto_wrap_policy, lambda_fn=lambda m: m in block_list),
-        mixed_precision=MixedPrecision(
-            param_dtype=param_dtype,
-            reduce_dtype=reduce_dtype,
-            buffer_dtype=buffer_dtype),
+        auto_wrap_policy=partial(lambda_auto_wrap_policy, lambda_fn=lambda m: m in block_list),
+        mixed_precision=MixedPrecision(param_dtype=param_dtype, reduce_dtype=reduce_dtype, buffer_dtype=buffer_dtype),
         device_id=device_id,
         sync_module_states=sync_module_states,
-        use_orig_params=use_orig_params)
+        use_orig_params=use_orig_params,
+    )
     return model
 
 

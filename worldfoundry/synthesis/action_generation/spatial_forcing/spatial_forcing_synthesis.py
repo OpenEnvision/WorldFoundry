@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any, ClassVar
 
 from worldfoundry.core.model_loading.checkpoints import select_profile_checkpoint, selected_checkpoint_options
 from worldfoundry.synthesis.action_generation.base_action_synthesis import ActionModelSynthesis
@@ -30,7 +31,7 @@ class SpatialForcingSynthesis(OfficialPolicySynthesis, ActionModelSynthesis):
         "proprio",
         "robot_state",
     )
-    DEFAULT_RUNTIME_OPTIONS = {
+    DEFAULT_RUNTIME_OPTIONS: ClassVar[dict] = {
         "backend": "callable_entrypoint",
         "policy_target": "worldfoundry.synthesis.action_generation.spatial_forcing.runtime:predict_action",
         "predict_method": "predict_action",
@@ -42,7 +43,7 @@ class SpatialForcingSynthesis(OfficialPolicySynthesis, ActionModelSynthesis):
         "center_crop": True,
         "local_files_only": True,
     }
-    CHECKPOINT_ALIASES = {
+    CHECKPOINT_ALIASES: ClassVar[dict] = {
         "spatial": "libero_spatial_checkpoint",
         "libero-spatial": "libero_spatial_checkpoint",
         "object": "libero_object_checkpoint",
@@ -73,8 +74,7 @@ class SpatialForcingSynthesis(OfficialPolicySynthesis, ActionModelSynthesis):
         }
         selector = requested.get("checkpoint_variant") or requested.get("variant_id") or requested.get("variant")
         has_explicit_path = any(
-            requested.get(key) not in (None, "")
-            for key in ("checkpoint_path", "checkpoint_dir", "ckpt_path")
+            requested.get(key) not in (None, "") for key in ("checkpoint_path", "checkpoint_dir", "ckpt_path")
         )
         has_explicit_ref = any(
             requested.get(key) not in (None, "")

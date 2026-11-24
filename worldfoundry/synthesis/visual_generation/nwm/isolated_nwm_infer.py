@@ -8,129 +8,207 @@ import torch
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
-import argparse
-import os
+import argparse  # noqa: E402 - Follows module-level setup, as upstream.
+import os  # noqa: E402 - Follows module-level setup, as upstream.
+from pathlib import Path  # noqa: E402 - Follows module-level setup, as upstream.
 
-import numpy as np
-from diffusers.models import AutoencoderKL
-from PIL import Image
+import numpy as np  # noqa: E402 - Follows module-level setup, as upstream.
+from diffusers.models import AutoencoderKL  # noqa: E402 - Follows module-level setup, as upstream.
+from PIL import Image  # noqa: E402 - Follows module-level setup, as upstream.
 
-from worldfoundry.core.distributed.collectives import metric_sync as dist
-from worldfoundry.synthesis.visual_generation.nwm import misc
-from worldfoundry.synthesis.visual_generation.nwm.config_paths import (
+from worldfoundry.core.distributed.collectives import (  # noqa: E402 - Follows module-level setup, as upstream.
+    metric_sync as dist,
+)
+from worldfoundry.core.io.paths import (  # noqa: E402 - Follows module-level setup, as upstream.
+    resolve_local_hf_model_path,
+    resolve_worldfoundry_path,
+)
+from worldfoundry.synthesis.visual_generation.nwm import misc  # noqa: E402 - Follows module-level setup, as upstream.
+from worldfoundry.synthesis.visual_generation.nwm.config_paths import (  # noqa: E402 - Follows module-level setup, as upstream.
     load_runtime_yaml,
 )
-from worldfoundry.synthesis.visual_generation.nwm.diffusion import (
+from worldfoundry.synthesis.visual_generation.nwm.diffusion import (  # noqa: E402 - Follows module-level setup, as upstream.
     create_diffusion,
 )
-from worldfoundry.synthesis.visual_generation.nwm.eval_inputs import (
+from worldfoundry.synthesis.visual_generation.nwm.eval_inputs import (  # noqa: E402 - Follows module-level setup, as upstream.
     EvalDataset,
 )
-from worldfoundry.synthesis.visual_generation.nwm.models import CDiT_models
+from worldfoundry.synthesis.visual_generation.nwm.models import (  # noqa: E402 - Follows module-level setup, as upstream.
+    CDiT_models,
+)
 
 
 def save_image(output_file, img, unnormalize_img):
     img = img.detach().cpu()
     if unnormalize_img:
         img = misc.unnormalize(img)
-        
+
     img = img * 255
     img = img.byte()
-    image = Image.fromarray(img.permute(1, 2, 0).numpy(), mode='RGB')
+    image = Image.fromarray(img.permute(1, 2, 0).numpy(), mode="RGB")
 
     image.save(output_file)
-    
-    
-def build_eval_input_dataset(config, dataset_name, eval_type, predefined_index=True):
-    data_config = config["eval_datasets"][dataset_name]    
-    if predefined_index:
-        predefined_index = f"data_splits/{dataset_name}/test/{eval_type}.pkl"
-    else:
-        predefined_index=None
 
-    
+
+def build_eval_input_dataset(config, dataset_name, eval_type, predefined_index=True):
+    data_config = config["eval_datasets"][dataset_name]
+    predefined_index = f"data_splits/{dataset_name}/test/{eval_type}.pkl" if predefined_index else None
+
     dataset = EvalDataset(
-                data_folder=data_config["data_folder"],
-                data_split_folder=data_config["test"],
-                dataset_name=dataset_name,
-                image_size=config["image_size"],
-                min_dist_cat=config["eval_distance"]["eval_min_dist_cat"],
-                max_dist_cat=config["eval_distance"]["eval_max_dist_cat"],
-                len_traj_pred=config["eval_len_traj_pred"],
-                traj_stride=config["traj_stride"], 
-                context_size=config["eval_context_size"],
-                normalize=config["normalize"],
-                transform=misc.transform,
-                predefined_index=predefined_index,
-                traj_names='traj_names.txt'
-            )
-    
+        data_folder=data_config["data_folder"],
+        data_split_folder=data_config["test"],
+        dataset_name=dataset_name,
+        image_size=config["image_size"],
+        min_dist_cat=config["eval_distance"]["eval_min_dist_cat"],
+        max_dist_cat=config["eval_distance"]["eval_max_dist_cat"],
+        len_traj_pred=config["eval_len_traj_pred"],
+        traj_stride=config["traj_stride"],
+        context_size=config["eval_context_size"],
+        normalize=config["normalize"],
+        transform=misc.transform,
+        predefined_index=predefined_index,
+        traj_names="traj_names.txt",
+    )
+
     return dataset
 
+
+def _resolve_vae_source(vae_path: str | None = None) -> str:
+    """Resolve the SD-VAE directory locally when available, keeping the Hub id fallback."""
+    if vae_path:
+        return str(resolve_worldfoundry_path(vae_path))
+    try:
+        return str(resolve_local_hf_model_path("stabilityai/sd-vae-ft-ema"))
+    except FileNotFoundError:
+        regression_root = os.environ.get("WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT")
+        if regression_root:
+            candidate = Path(regression_root).expanduser() / "stabilityai--sd-vae-ft-ema"
+            if candidate.is_dir():
+                return str(candidate.resolve())
+        return "stabilityai/sd-vae-ft-ema"
+
+
 @torch.no_grad()
-def model_forward_wrapper(all_models, curr_obs, curr_delta, num_timesteps, latent_size, device, num_cond, num_goals=1, rel_t=None, progress=False):
+def model_forward_wrapper(
+    all_models,
+    curr_obs,
+    curr_delta,
+    num_timesteps,
+    latent_size,
+    device,
+    num_cond,
+    num_goals=1,
+    rel_t=None,
+    progress=False,
+):
     model, diffusion, vae = all_models
     x = curr_obs.to(device)
     y = curr_delta.to(device)
 
-    with torch.amp.autocast('cuda', enabled=True, dtype=torch.bfloat16):
+    with torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
         B, T = x.shape[:2]
 
         if rel_t is None:
-            rel_t = (torch.ones(B)* (1. / 128.)).to(device)
+            rel_t = (torch.ones(B) * (1.0 / 128.0)).to(device)
             rel_t *= num_timesteps
 
-        x = x.flatten(0,1)
+        x = x.flatten(0, 1)
         x = vae.encode(x).latent_dist.sample().mul_(0.18215).unflatten(0, (B, T))
-        x_cond = x[:, :num_cond].unsqueeze(1).expand(B, num_goals, num_cond, x.shape[2], x.shape[3], x.shape[4]).flatten(0, 1)
-        z = torch.randn(B*num_goals, 4, latent_size, latent_size, device=device)
+        x_cond = (
+            x[:, :num_cond]
+            .unsqueeze(1)
+            .expand(B, num_goals, num_cond, x.shape[2], x.shape[3], x.shape[4])
+            .flatten(0, 1)
+        )
+        z = torch.randn(B * num_goals, 4, latent_size, latent_size, device=device)
         y = y.flatten(0, 1)
-        model_kwargs = dict(y=y, x_cond=x_cond, rel_t=rel_t)      
+        model_kwargs = {"y": y, "x_cond": x_cond, "rel_t": rel_t}
         samples = diffusion.p_sample_loop(
-                model.forward, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=progress, device=device
+            model.forward, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=progress, device=device
         )
         samples = vae.decode(samples / 0.18215).sample
 
-        return torch.clip(samples, -1., 1.)
+        return torch.clip(samples, -1.0, 1.0)
+
 
 def generate_rollout(args, output_dir, rollout_fps, idxs, all_models, obs_image, gt_image, delta, num_cond, device):
     rollout_stride = args.input_fps // rollout_fps
-    gt_image = gt_image[:, rollout_stride-1::rollout_stride]
+    gt_image = gt_image[:, rollout_stride - 1 :: rollout_stride]
     delta = delta.unflatten(1, (-1, rollout_stride)).sum(2)
     curr_obs = obs_image.clone().to(device)
-    
+
     for i in range(gt_image.shape[1]):
-        curr_delta = delta[:, i:i+1].to(device)
+        curr_delta = delta[:, i : i + 1].to(device)
         if args.gt:
             x_pred_pixels = gt_image[:, i].clone().to(device)
         else:
-            x_pred_pixels = model_forward_wrapper(all_models, curr_obs, curr_delta, rollout_stride, args.latent_size, num_cond=num_cond, num_goals=1, device=device)
+            x_pred_pixels = model_forward_wrapper(
+                all_models,
+                curr_obs,
+                curr_delta,
+                rollout_stride,
+                args.latent_size,
+                num_cond=num_cond,
+                num_goals=1,
+                device=device,
+            )
 
-        curr_obs = torch.cat((curr_obs, x_pred_pixels.unsqueeze(1)), dim=1) # append current prediction
-        curr_obs = curr_obs[:, 1:] # remove first observation
+        curr_obs = torch.cat((curr_obs, x_pred_pixels.unsqueeze(1)), dim=1)  # append current prediction
+        curr_obs = curr_obs[:, 1:]  # remove first observation
         write_prediction_frames(output_dir, idxs, i, x_pred_pixels)
 
+
 def generate_time(args, output_dir, idxs, all_models, obs_image, gt_output, delta, secs, num_cond, device):
-    eval_timesteps = [sec*args.input_fps for sec in secs]
-    for sec, timestep in zip(secs, eval_timesteps):
+    eval_timesteps = [sec * args.input_fps for sec in secs]
+    for sec, timestep in zip(secs, eval_timesteps, strict=False):
         curr_delta = delta[:, :timestep].sum(dim=1, keepdim=True)
         if args.gt:
-            x_pred_pixels = gt_output[:, timestep-1].clone().to(device)
+            x_pred_pixels = gt_output[:, timestep - 1].clone().to(device)
         else:
-            x_pred_pixels = model_forward_wrapper(all_models, obs_image, curr_delta, timestep, args.latent_size, num_cond=num_cond, num_goals=1, device=device)
+            x_pred_pixels = model_forward_wrapper(
+                all_models,
+                obs_image,
+                curr_delta,
+                timestep,
+                args.latent_size,
+                num_cond=num_cond,
+                num_goals=1,
+                device=device,
+            )
         write_prediction_frames(output_dir, idxs, sec, x_pred_pixels)
+
 
 def write_prediction_frames(output_dir, idxs, sec, x_pred_pixels):
     for batch_idx, sample_idx in enumerate(idxs.flatten()):
         sample_idx = int(sample_idx.item())
-        sample_folder = os.path.join(output_dir, f'id_{sample_idx}')
+        sample_folder = os.path.join(output_dir, f"id_{sample_idx}")
         os.makedirs(sample_folder, exist_ok=True)
-        image_file = os.path.join(sample_folder, f'{sec}.png')
+        image_file = os.path.join(sample_folder, f"{sec}.png")
         save_image(image_file, x_pred_pixels[batch_idx], True)
+
+
+def _resolve_vae_source(vae_path: str | None = None) -> str:
+    """Resolve the SD-VAE directory locally when available, keeping the Hub id fallback."""
+    if vae_path:
+        return str(resolve_worldfoundry_path(vae_path))
+    try:
+        return str(resolve_local_hf_model_path("stabilityai/sd-vae-ft-ema"))
+    except FileNotFoundError:
+        regression_root = os.environ.get("WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT")
+        if regression_root:
+            candidate = Path(regression_root).expanduser() / "stabilityai--sd-vae-ft-ema"
+            if candidate.is_dir():
+                return str(candidate.resolve())
+        return "stabilityai/sd-vae-ft-ema"
+
 
 @torch.no_grad()
 def main(args):
     _, _, device, _ = dist.init_distributed()
+    if args.seed is not None:
+        from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
+
+        set_seed_everywhere(args.seed)
     print(args)
     device = torch.device(device)
     num_tasks = dist.get_world_size()
@@ -139,13 +217,13 @@ def main(args):
 
     # model & config setup
     if args.gt:
-        args.save_output_dir = os.path.join(args.output_dir, 'gt')
+        args.save_output_dir = os.path.join(args.output_dir, "gt")
     else:
-        exp_name = os.path.basename(exp_eval).split('.')[0]
+        exp_name = os.path.basename(exp_eval).split(".")[0]
         args.save_output_dir = os.path.join(args.output_dir, exp_name)
-    
-    if  args.ckp != '0100000':
-        args.save_output_dir = args.save_output_dir + "_%s"%(args.ckp)
+
+    if args.ckp != "0100000":
+        args.save_output_dir = args.save_output_dir + "_%s" % (args.ckp)  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
     os.makedirs(args.save_output_dir, exist_ok=True)
 
@@ -153,90 +231,117 @@ def main(args):
     user_config = load_runtime_yaml(exp_eval)
     config.update(user_config)
 
-    latent_size = config['image_size'] // 8
-    args.latent_size = config['image_size'] // 8
+    latent_size = config["image_size"] // 8
+    args.latent_size = config["image_size"] // 8
 
-    num_cond = config['context_size']
+    num_cond = config["context_size"]
     print("loading")
     model_lst = (None, None, None)
     if not args.gt:
-        model = CDiT_models[config['model']](context_size=num_cond, input_size=latent_size, in_channels=4)
-        ckp = torch.load(f'{config["results_dir"]}/{config["run_name"]}/checkpoints/{args.ckp}.pth.tar', map_location='cpu', weights_only=False)
+        model = CDiT_models[config["model"]](context_size=num_cond, input_size=latent_size, in_channels=4)
+        ckp = torch.load(
+            f"{config['results_dir']}/{config['run_name']}/checkpoints/{args.ckp}.pth.tar",
+            map_location="cpu",
+            weights_only=False,
+        )
         print(model.load_state_dict(ckp["ema"], strict=True))
         model.eval()
         model.to(device)
         model = torch.compile(model)
         diffusion = create_diffusion(str(250))
-        vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
+        vae = AutoencoderKL.from_pretrained(_resolve_vae_source(getattr(args, "vae_path", None))).to(device)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[device], find_unused_parameters=False)
         model_lst = (model, diffusion, vae)
 
     # Build evaluation input loaders.
-    dataset_names = args.datasets.split(',')
+    dataset_names = args.datasets.split(",")
     datasets = {}
 
     for dataset_name in dataset_names:
         dataset_val = build_eval_input_dataset(config, dataset_name, args.eval_type, predefined_index=True)
 
         if len(dataset_val) % num_tasks != 0:
-            print('Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. '
-                    'This will slightly alter validation results as extra duplicate entries are added to achieve '
-                    'equal num of samples per-process.')
+            print(
+                "Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. "
+                "This will slightly alter validation results as extra duplicate entries are added to achieve "
+                "equal num of samples per-process."
+            )
         sampler_val = torch.utils.data.DistributedSampler(
-            dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=False)
+            dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=False
+        )
 
         curr_data_loader = torch.utils.data.DataLoader(
-                            dataset_val, sampler=sampler_val,
-                            batch_size=args.batch_size,
-                            num_workers=args.num_workers,
-                            pin_memory=True,
-                            drop_last=False
-                        )
+            dataset_val,
+            sampler=sampler_val,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=True,
+            drop_last=False,
+        )
         datasets[dataset_name] = curr_data_loader
 
     print_freq = 1
-    header = 'Evaluation: '
+    header = "Evaluation: "
     metric_logger = dist.MetricLogger(delimiter="  ")
 
     for dataset_name in dataset_names:
         dataset_save_output_dir = os.path.join(args.save_output_dir, dataset_name)
         os.makedirs(dataset_save_output_dir, exist_ok=True)
         curr_data_loader = datasets[dataset_name]
-        
-        for data_iter_step, (idxs, obs_image, gt_image, delta) in enumerate(metric_logger.log_every(curr_data_loader, print_freq, header)):
-            with torch.amp.autocast('cuda', enabled=True, dtype=torch.bfloat16):
+
+        for _data_iter_step, (idxs, obs_image, gt_image, delta) in enumerate(
+            metric_logger.log_every(curr_data_loader, print_freq, header)
+        ):
+            with torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
                 obs_image = obs_image[:, -num_cond:].to(device)
                 gt_image = gt_image.to(device)
                 num_cond = config["context_size"]
-                if args.eval_type == 'rollout':
+                if args.eval_type == "rollout":
                     for rollout_fps in args.rollout_fps_values:
-                        curr_rollout_output_dir = os.path.join(dataset_save_output_dir, f'rollout_{rollout_fps}fps')
+                        curr_rollout_output_dir = os.path.join(dataset_save_output_dir, f"rollout_{rollout_fps}fps")
                         os.makedirs(curr_rollout_output_dir, exist_ok=True)
-                        generate_rollout(args, curr_rollout_output_dir, rollout_fps, idxs, model_lst, obs_image, gt_image, delta, num_cond, device)
-                elif args.eval_type == 'time':
-                    secs = np.array([2**i for i in range(0, args.num_sec_eval)])
-                    curr_time_output_dir = os.path.join(dataset_save_output_dir, 'time')
+                        generate_rollout(
+                            args,
+                            curr_rollout_output_dir,
+                            rollout_fps,
+                            idxs,
+                            model_lst,
+                            obs_image,
+                            gt_image,
+                            delta,
+                            num_cond,
+                            device,
+                        )
+                elif args.eval_type == "time":
+                    secs = np.array([2**i for i in range(args.num_sec_eval)])
+                    curr_time_output_dir = os.path.join(dataset_save_output_dir, "time")
                     os.makedirs(curr_time_output_dir, exist_ok=True)
-                    generate_time(args, curr_time_output_dir, idxs, model_lst, obs_image, gt_image, delta, secs, num_cond, device)
-    
+                    generate_time(
+                        args, curr_time_output_dir, idxs, model_lst, obs_image, gt_image, delta, secs, num_cond, device
+                    )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    
+
     parser.add_argument("--output_dir", type=str, default=None, help="output directory")
+    parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--exp", type=str, default=None, help="experiment name")
-    parser.add_argument("--ckp", type=str, default='0100000')
+    parser.add_argument("--ckp", type=str, default="0100000")
     parser.add_argument("--num_sec_eval", type=int, default=5)
     parser.add_argument("--input_fps", type=int, default=4)
     parser.add_argument("--datasets", type=str, default=None, help="dataset name")
     parser.add_argument("--num_workers", type=int, default=8, help="num workers")
     parser.add_argument("--batch_size", type=int, default=16, help="batch size")
-    parser.add_argument("--eval_type", type=str, default=None, help="type of evaluation has to be either 'time' or 'rollout'")
+    parser.add_argument(
+        "--eval_type", type=str, default=None, help="type of evaluation has to be either 'time' or 'rollout'"
+    )
     # Rollout Evaluation Args
-    parser.add_argument("--rollout_fps_values", type=str, default='1,4', help="")
+    parser.add_argument("--rollout_fps_values", type=str, default="1,4", help="")
     parser.add_argument("--gt", type=int, default=0, help="set to 1 to produce ground truth evaluation set")
+    parser.add_argument("--vae_path", type=str, default=None, help="optional local sd-vae-ft-ema directory")
     args = parser.parse_args()
-    
-    args.rollout_fps_values = [int(fps) for fps in args.rollout_fps_values.split(',')]
-    
+
+    args.rollout_fps_values = [int(fps) for fps in args.rollout_fps_values.split(",")]
+
     main(args)

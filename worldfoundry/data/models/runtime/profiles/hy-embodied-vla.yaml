@@ -1,6 +1,6 @@
-artifact_filename: hy_embodied_vla_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: hy-embodied-vla
+task_family: vla_policy
 checkpoints:
 - id: robotwin
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/tencent--Hy-Embodied-0.5-VLA-RoboTwin
@@ -14,7 +14,6 @@ checkpoints:
   revision: 3f53d1f8d2bc587c523cfdc9f1041ceee42c2524
   role: umi_pretrained_policy
   status: checkpoint_gpu_validated
-id: hy-embodied-vla
 input_schema:
   action_representation: normalized_or_checkpoint_decoded_action_chunk
   actions:
@@ -41,14 +40,26 @@ input_schema:
   - posrot20
   - robotwin_wxyz
   video: false
-integration_status: integrated
+artifact_kind: action_trace
+artifact_filename: hy_embodied_vla_action_trace.json
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: all_released_checkpoints_gpu_validated
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
-- The runtime is hermetic to the reference GitHub checkout and defaults to strictly local checkpoints.
-- UMI uses 50 relative 20-D action steps. RoboTwin returns 20 relative plus 20 absolute 20-D steps and defaults to 1:1 pose blending when a raw RoboTwin start pose is supplied.
-- A single image may be replicated across views for smoke tests; benchmark parity requires the official three-camera observations.
-- RoboTwin benchmark parity requires six history frames with the current frame last; missing initial history slots are zero padded.
-- The RoboTwin checkpoint passed strict restoration and real six-frame, three-camera A100 inference.
-- The UMI checkpoint passed a real Workspace rollout on an A100 in BF16: one RGB image replicated across the three views, normalized 20-D state, and a finite 50-by-20 decoded relative-action chunk.
-runtime_status: all_released_checkpoints_gpu_validated
-task_family: vla_policy
+- The runtime is hermetic to the reference GitHub checkout and defaults to strictly
+  local checkpoints.
+- UMI uses 50 relative 20-D action steps. RoboTwin returns 20 relative plus 20 absolute
+  20-D steps and defaults to 1:1 pose blending when a raw RoboTwin start pose is supplied.
+- A single image may be replicated across views for smoke tests; benchmark parity
+  requires the official three-camera observations.
+- RoboTwin benchmark parity requires six history frames with the current frame last;
+  missing initial history slots are zero padded.
+- The RoboTwin checkpoint passed strict restoration and real six-frame, three-camera
+  A100 inference.
+- The UMI checkpoint passed a real Workspace rollout on an A100 in BF16: one RGB image
+    replicated across the three views, normalized 20-D state, and a finite 50-by-20
+    decoded relative-action chunk.
 verification_status: robotwin_and_umi_checkpoints_gpu_validated

@@ -7,6 +7,7 @@ groups:
 - image_to_video
 source_repos:
 - url: https://github.com/lllyasviel/FramePack
+  revision: 97fe5dbe06ac1f337ece08935b1076a35eefeeb9
 checkpoints:
 - repo_id: lllyasviel/FramePackI2V_HY
   role: i2v_checkpoint

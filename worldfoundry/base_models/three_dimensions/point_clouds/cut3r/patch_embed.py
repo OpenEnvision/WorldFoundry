@@ -4,23 +4,12 @@
 # --------------------------------------------------------
 # modified from DUSt3R
 
-"""Module for base_models -> three_dimensions -> point_clouds -> cut3r -> patch_embed.py functionality."""
-
 import torch
 
-from .blocks import PatchEmbed  # noqa
+from .blocks import PatchEmbed
 
 
 def get_patch_embed(patch_embed_cls, img_size, patch_size, enc_embed_dim, in_chans=3):
-    """Get patch embed.
-
-    Args:
-        patch_embed_cls: The patch embed cls.
-        img_size: The img size.
-        patch_size: The patch size.
-        enc_embed_dim: The enc embed dim.
-        in_chans: The in chans.
-    """
     implementations = {"PatchEmbedDust3R": PatchEmbedDust3R, "ManyAR_PatchEmbed": ManyAR_PatchEmbed}
     if patch_embed_cls not in implementations:
         raise ValueError(f"Unsupported CUT3R patch embedding: {patch_embed_cls!r}")
@@ -31,11 +20,6 @@ class PatchEmbedDust3R(PatchEmbed):
     """Patch embed dust r implementation."""
 
     def forward(self, x, **kw):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         B, C, H, W = x.shape
         assert H % self.patch_size[0] == 0, (
             f"Input image height ({H}) is not a multiple of patch size ({self.patch_size[0]})."
@@ -66,26 +50,10 @@ class ManyAR_PatchEmbed(PatchEmbed):
         norm_layer=None,
         flatten=True,
     ):
-        """Init.
-
-        Args:
-            img_size: The img size.
-            patch_size: The patch size.
-            in_chans: The in chans.
-            embed_dim: The embed dim.
-            norm_layer: The norm layer.
-            flatten: The flatten.
-        """
         self.embed_dim = embed_dim
         super().__init__(img_size, patch_size, in_chans, embed_dim, norm_layer, flatten)
 
     def forward(self, img, true_shape):
-        """Forward.
-
-        Args:
-            img: The img.
-            true_shape: The true shape.
-        """
         B, C, H, W = img.shape
 
         assert H % self.patch_size[0] == 0, (

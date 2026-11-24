@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 id: spirit-v1.5
 name: Spirit-VLA v1.5
 aliases:
@@ -38,15 +38,13 @@ docs:
   publisher: Spirit AI
   publisher_kind: company
   publisher_zh: Spirit AI（千寻智能）
-  overview: Spirit-VLA v1.5 is Spirit AI's vision-language-action policy on a Qwen3-VL backbone, released as the confirmed Spirit-AI-robotics/Spirit-v1.5 base checkpoint. WorldFoundry includes the native inference architecture and preprocessing in-tree; the runtime loads the official checkpoint and Qwen3-VL backbone with remote Python disabled.
-  overview_zh: Spirit-VLA v1.5 是 Spirit AI（千寻智能）基于 Qwen3-VL 骨干的视觉-语言-动作策略，发布已确认的 Spirit-AI-robotics/Spirit-v1.5 base checkpoint。WorldFoundry 将原生推理架构与预处理内置树内；运行时加载官方 checkpoint 与 Qwen3-VL 骨干，禁用远程 Python。
-  architecture: A Qwen3-VL vision-language backbone with Spirit's action prediction head. Architecture internals beyond the official repository pointer are not recorded in this repository.
-  architecture_zh: Qwen3-VL 视觉-语言骨干配 Spirit 的动作预测头。官方仓库指针之外的架构内部细节仓库未记录。
-  usage_notes: Import and checkpoint gating are validated; numerical parity requires staging the 21.6 GB checkpoint locally.
-  usage_notes_zh: 导入与 checkpoint 门控已验证；数值 parity 需本地就位 21.6 GB checkpoint。
+  overview: Spirit-VLA v1.5 is Spirit AI's vision-language-action policy on a Qwen3-VL backbone, released as the Spirit-AI-robotics/Spirit-v1.5 base checkpoint. WorldFoundry runs the native inference architecture and preprocessing in-tree and loads the official checkpoint and Qwen3-VL backbone with remote code disabled.
+  overview_zh: Spirit-VLA v1.5 是 Spirit AI（千寻智能）基于 Qwen3-VL 骨干的视觉-语言-动作策略，发布为 Spirit-AI-robotics/Spirit-v1.5 base checkpoint。WorldFoundry 在树内运行原生推理架构与预处理，加载官方 checkpoint 与 Qwen3-VL 骨干，并禁用远程代码。
+  architecture: A Qwen3-VL vision-language backbone with Spirit's action prediction head.
+  architecture_zh: Qwen3-VL 视觉-语言骨干配 Spirit 的动作预测头。
+  usage_notes: Stage the 21.6 GB Spirit-v1.5 checkpoint and the Qwen/Qwen3-VL-4B-Instruct backbone locally before running.
+  usage_notes_zh: 运行前需在本地就位 21.6 GB 的 Spirit-v1.5 checkpoint 与 Qwen/Qwen3-VL-4B-Instruct 骨干。
   limitations:
-  - The 21.6 GB checkpoint is not staged; numerical parity is pending.
-  - No license is recorded in this repository.
+  - License terms are not documented; check the upstream release before use.
   limitations_zh:
-  - 21.6 GB checkpoint 未就位；数值 parity 待定。
-  - 仓库未记录许可证。
+  - 许可证条款未注明，使用前请查看上游发布。

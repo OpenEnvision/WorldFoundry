@@ -31,6 +31,7 @@ class AttentionType(Enum):
 
 class AttnBlock(torch.nn.Module):
     """Residual self-attention block over LTX audio feature maps."""
+
     def __init__(
         self,
         in_channels: int,

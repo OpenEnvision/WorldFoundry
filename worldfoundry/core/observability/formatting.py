@@ -6,7 +6,7 @@ stdout/stderr redirection context managers, a ``watch``-style decorator,
 and logging filters that drop or rewrite noisy third-party messages.
 
 This is not the distributed rank logger
-(:mod:`worldfoundry.core.distributed.runtime.logging`).
+(:mod:`worldfoundry.core.observability.rank_logging`).
 """
 
 import ast
@@ -20,11 +20,11 @@ import sys
 import textwrap
 import time
 import traceback
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable, Union
+from typing import Any, Literal, cast
 
 import numpy as np
-from typing_extensions import Literal
 
 from worldfoundry.core.utils.python.functional_utils import meta_decorator
 from worldfoundry.core.utils.python.misc_utils import match_patterns
@@ -72,7 +72,7 @@ def print_str(*args, **kwargs):
     return sstream.getvalue()
 
 
-def _eval_simple_format_node(node: ast.AST, env: dict) -> object:
+def _eval_simple_format_node(node: ast.AST, env: dict[str, Any]) -> Any:
     """Evaluate a name or integer arithmetic AST node against *env* only."""
     if isinstance(node, ast.Name):
         if node.id not in env:
@@ -114,7 +114,7 @@ def fstring(fmt_str, **kwargs):
 def get_format_keys(fmt_str):
     """Return field names referenced by a :class:`string.Formatter` template."""
     keys = []
-    for literal, field_name, fmt_spec, conversion in string.Formatter().parse(fmt_str):
+    for _literal, field_name, _fmt_spec, _conversion in string.Formatter().parse(fmt_str):
         if field_name:
             keys.append(field_name)
     return keys
@@ -135,10 +135,7 @@ def pretty_repr_str(obj, **kwargs):
     """
     Useful to produce __repr__()
     """
-    if isinstance(obj, str):
-        cls_name = obj
-    else:
-        cls_name = obj.__class__.__name__
+    cls_name = obj if isinstance(obj, str) else obj.__class__.__name__
     kw_strs = [k + "=" + pprint.pformat(v, indent=2, compact=True) for k, v in kwargs.items()]
     new_line = len(cls_name) + sum(len(kw) for kw in kw_strs) > 84
     if new_line:
@@ -166,7 +163,7 @@ def get_exception_info(to_str: bool = False):
     """
     typ_, value, trace = sys.exc_info()
     return {
-        "type": typ_.__name__ if to_str else typ_,
+        "type": cast(type[BaseException], typ_).__name__ if to_str else typ_,
         "value": str(value) if to_str else value,
         "trace": "".join(traceback.format_exception(typ_, value, trace)),
     }
@@ -229,7 +226,7 @@ def watch(func, seconds: int = 5, max_times: int = 0, keep_returns: bool = False
         keep_returns: if True, will keep the return value from the function
             and return as a list at the end
     """
-    from blessings import Terminal
+    Terminal = __import__("blessings", fromlist=["Terminal"]).Terminal
 
     def _wrapped(*args, **kwargs):
         """Fullscreen refresh loop; ``KeyboardInterrupt`` exits without re-raising."""
@@ -246,7 +243,7 @@ def watch(func, seconds: int = 5, max_times: int = 0, keep_returns: bool = False
                         if keep_returns:
                             returns.append(ret)
                     N += 1
-                    if max_times > 0 and N >= max_times:
+                    if max_times > 0 and max_times <= N:
                         break
                     time.sleep(seconds)
                 except KeyboardInterrupt:
@@ -261,7 +258,7 @@ def watch(func, seconds: int = 5, max_times: int = 0, keep_returns: bool = False
 # ──────────────────────────────────────────────────────────────────────────
 
 
-class PrintRedirection(object):
+class PrintRedirection:
     """
     Context manager: temporarily redirects stdout and stderr
     """
@@ -317,16 +314,17 @@ class PrintToFile(PrintRedirection):
         out_path = None
         if out_file:
             out_path = os.path.expanduser(out_file)
-            self.out_file = open(out_path, "w")
+            self.out_file = open(out_path, "w")  # noqa: SIM115  # closed by close()
         if err_file:
             err_path = os.path.expanduser(err_file)
             if out_path is not None and err_path == out_path:  # redirect both stdout/err to one file
                 self.err_file = self.out_file
             else:
-                self.err_file = open(err_path, "w")
+                self.err_file = open(err_path, "w")  # noqa: SIM115  # closed by close()
         super().__init__(stdout=self.out_file, stderr=self.err_file)
 
-    def __exit__(self, *args):
+    # The context-manager protocol supplies positional args; retain this public variadic signature.
+    def __exit__(self, *args: Any) -> None:  # ty: ignore[invalid-method-override]
         """Restore streams, then close file handles (shared out/err is closed once)."""
 
         super().__exit__(*args)
@@ -396,10 +394,7 @@ class ExcludeLoggingFilter(logging.Filter):
 
     def filter(self, record):
         """Return False when ``record.msg`` matches an exclude pattern."""
-        if match_patterns(record.msg, include=self._patterns):
-            return False
-        else:
-            return True
+        return not match_patterns(record.msg, include=self._patterns)
 
 
 class ReplaceStringLoggingFilter(logging.Filter):
@@ -421,7 +416,7 @@ class ReplaceStringLoggingFilter(logging.Filter):
 
 def logging_exclude_pattern(
     logger_name,
-    patterns: Union[str, list[str], Callable, list[Callable], None],
+    patterns: str | list[str] | Callable | list[Callable] | None,
 ):
     """
     Args:
@@ -432,7 +427,7 @@ def logging_exclude_pattern(
 
 def logging_replace_string(
     logger_name,
-    patterns: Union[str, list[str], Callable, list[Callable], None],
+    patterns: str | list[str] | Callable | list[Callable] | None,
     replacer: Callable,
 ):
     """

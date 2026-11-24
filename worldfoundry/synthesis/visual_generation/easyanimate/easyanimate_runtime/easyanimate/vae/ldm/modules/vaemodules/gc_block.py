@@ -10,7 +10,7 @@ class GlobalContextBlock(nn.Module):
         in_channels: int,
         out_channels: int,
         min_channels: int = 16,
-        init_bias: float = -10.,
+        init_bias: float = -10.0,
         fusion_type: str = "mul",
     ):
         super().__init__()
@@ -25,7 +25,7 @@ class GlobalContextBlock(nn.Module):
         if fusion_type == "mul":
             self.conv_mul = nn.Sequential(
                 nn.Conv2d(in_channels, num_channels, kernel_size=1),
-                nn.LayerNorm([num_channels, 1, 1]), # TODO: LayerNorm or GroupNorm?
+                nn.LayerNorm([num_channels, 1, 1]),  # TODO: LayerNorm or GroupNorm?
                 nn.LeakyReLU(0.1),
                 nn.Conv2d(num_channels, out_channels, kernel_size=1),
                 nn.Sigmoid(),
@@ -36,7 +36,7 @@ class GlobalContextBlock(nn.Module):
         else:
             self.conv_add = nn.Sequential(
                 nn.Conv2d(in_channels, num_channels, kernel_size=1),
-                nn.LayerNorm([num_channels, 1, 1]), # TODO: LayerNorm or GroupNorm?
+                nn.LayerNorm([num_channels, 1, 1]),  # TODO: LayerNorm or GroupNorm?
                 nn.LeakyReLU(0.1),
                 nn.Conv2d(num_channels, out_channels, kernel_size=1),
             )

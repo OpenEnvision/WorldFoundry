@@ -21,7 +21,7 @@ def replay_context_indices(frame_count: int, context_frames: int) -> list[int]:
     historical = selected - 1
     if historical == 1:
         return [frame_count - 1, 0]
-    indices = [int(round(index * (frame_count - 2) / (historical - 1))) for index in range(historical)]
+    indices = [int(round(index * (frame_count - 2) / (historical - 1))) for index in range(historical)]  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     return [frame_count - 1, *indices]
 
 

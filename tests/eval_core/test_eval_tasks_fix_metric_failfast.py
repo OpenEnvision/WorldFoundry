@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from worldfoundry.evaluation.tasks.metrics.registry import (
+from worldfoundry.evals.tasks.metrics.registry import (
     BuiltinExistingResultsMetric,
     MetricRegistryError,
     UnknownMetricRegistryKeyError,
@@ -20,7 +20,7 @@ from worldfoundry.evaluation.tasks.metrics.registry import (
 
 
 def test_registered_but_uncomputable_metric_ids_fail_fast() -> None:
-    for metric_id in ("fid", "cmmd", "vqa_score", "clip_score"):
+    for metric_id in ("fid", "kid", "vqa_score", "clip_score"):
         # These ids resolve in the registry (they are real metric packages) ...
         assert default_metric_registry().get(metric_id) is not None
         # ... but the offline evaluator cannot compute them, so it must refuse.
@@ -56,7 +56,7 @@ def test_unknown_ids_keep_raising_unknown_key_error() -> None:
 
 def test_spec_implementation_field_is_honest() -> None:
     registry = default_metric_registry()
-    offline_impl = "worldfoundry.evaluation.tasks.metrics.registry:BuiltinExistingResultsMetric"
+    offline_impl = "worldfoundry.evals.tasks.metrics.registry:BuiltinExistingResultsMetric"
     assert registry.get("artifact_count").spec.implementation == offline_impl
     assert registry.get("fid").spec.implementation is None
     assert registry.get("vqa_score").spec.implementation is None
@@ -67,12 +67,12 @@ def test_is_offline_computable_metric_id_matrix() -> None:
     assert is_offline_computable_metric_id("has_artifact:video")
     assert is_offline_computable_metric_id("numeric:quality")
     assert not is_offline_computable_metric_id("fid")
-    assert not is_offline_computable_metric_id("cmmd")
+    assert not is_offline_computable_metric_id("kid")
 
 
 def test_metric_resolution_reports_benchmark_supported_metrics() -> None:
-    from worldfoundry.evaluation.tasks.execution.framework.scoring_registry import target_benchmark_metrics
-    from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import _resolve_metrics
+    from worldfoundry.evals.tasks.execution.framework.scoring_registry import target_benchmark_metrics
+    from worldfoundry.evals.tasks.execution.orchestration.evaluate import _resolve_metrics
 
     benchmarks = target_benchmark_metrics()
     assert benchmarks, "at least one in-tree benchmark is expected"

@@ -39,13 +39,13 @@ class MCPClient:
         timeout: Maximum wait time for server responses.
     """
 
-    command: str = "worldfoundry-mcp"
-    args: tuple[str, ...] = ()
+    command: str = "wf"
+    args: tuple[str, ...] = ("mcp",)
     env: Mapping[str, str] | None = None
     cwd: str | None = None
     timeout: timedelta = timedelta(seconds=600)
 
-    async def __aenter__(self) -> "MCPClient":
+    async def __aenter__(self) -> MCPClient:
         """Open a persistent server session reused by subsequent helper calls."""
 
         self._persistent_context = await self._client()
@@ -124,7 +124,7 @@ class MCPClient:
                 {
                     "type": "function",
                     "function": {
-                        "name": str(getattr(tool, "name")),
+                        "name": str(tool.name),
                         "description": str(getattr(tool, "description", "") or ""),
                         "parameters": schema,
                     },
@@ -191,7 +191,7 @@ def convert_result_to_openai_format(result: Any) -> list[dict[str, Any]]:
     if result is None:
         return []
     if hasattr(result, "content"):
-        return convert_result_to_openai_format(getattr(result, "content"))
+        return convert_result_to_openai_format(result.content)
     if isinstance(result, list | tuple):
         blocks: list[dict[str, Any]] = []
         for item in result:
@@ -216,13 +216,13 @@ def convert_result_to_openai_format(result: Any) -> list[dict[str, Any]]:
     # heuristic substring match ("image"/"audio" in the type string).
     content_type = str(getattr(result, "type", result.__class__.__name__)).lower()
     if hasattr(result, "text"):
-        return [{"type": "text", "text": str(getattr(result, "text"))}]
+        return [{"type": "text", "text": str(result.text)}]
     if "image" in content_type and hasattr(result, "data"):
         mime_type = str(getattr(result, "mimeType", None) or getattr(result, "mime_type", None) or "image/png")
-        return [{"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{getattr(result, 'data')}"}}]
+        return [{"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{result.data}"}}]
     if "audio" in content_type and hasattr(result, "data"):
         mime_type = str(getattr(result, "mimeType", None) or getattr(result, "mime_type", None) or "audio/wav")
-        return [_openai_audio_block(str(getattr(result, "data")), mime_type)]
+        return [_openai_audio_block(str(result.data), mime_type)]
     # NOTE: Fallback — serialise the entire object as a text string.
     return [{"type": "text", "text": str(result)}]
 

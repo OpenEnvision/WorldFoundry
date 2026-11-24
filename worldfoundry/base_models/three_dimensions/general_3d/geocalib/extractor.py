@@ -5,7 +5,6 @@
 """Simple interface for GeoCalib model."""
 
 from pathlib import Path
-from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -80,9 +79,9 @@ class GeoCalib(nn.Module):
         self,
         img: torch.Tensor,
         camera_model: str = "pinhole",
-        priors: Optional[Dict[str, torch.Tensor]] = None,
+        priors: dict[str, torch.Tensor] | None = None,
         shared_intrinsics: bool = False,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """Perform calibration with online resizing.
 
         Assumes input image is in range [0, 1] and in RGB format.
@@ -128,7 +127,7 @@ class GeoCalib(nn.Module):
             "camera": camera,
             "gravity": gravity,
             "covariance": out["covariance"],
-            **{k: out[k] for k in out.keys() if "field" in k},
-            **{k: out[k] for k in out.keys() if "confidence" in k},
-            **{k: out[k] for k in out.keys() if "uncertainty" in k},
+            **{k: out[k] for k in out.keys() if "field" in k},  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+            **{k: out[k] for k in out.keys() if "confidence" in k},  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+            **{k: out[k] for k in out.keys() if "uncertainty" in k},  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
         }

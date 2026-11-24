@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Sequence
+from typing import Any, ClassVar
 
 from .base_operator import BaseOperator
 
@@ -15,7 +16,7 @@ class DreamDojoOperator(BaseOperator):
     WORLD_MODEL_FAMILY = "action_conditioned_robot_world_model"
     ACTION_REPRESENTATION = "384d_unified_robot_action_or_latent_action_chunk"
     OBSERVATION_LAYOUT = "egocentric_robot_video_or_initial_frame_with_actions"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "instruction": True,
         "image": True,
@@ -29,7 +30,7 @@ class DreamDojoOperator(BaseOperator):
         ],
     }
     ACTION_SPACE_DIM = 384
-    ACTION_SLICES = {
+    ACTION_SLICES: ClassVar[dict[str, list[int]]] = {
         "fourier_gr1": [0, 29],
         "manus_retargeted_gr1": [29, 58],
         "unitree_g1": [58, 101],
@@ -40,7 +41,7 @@ class DreamDojoOperator(BaseOperator):
         "latent": [352, 384],
     }
 
-    def __init__(self, input_schema: Dict[str, Any] | None = None):
+    def __init__(self, input_schema: dict[str, Any] | None = None):
         """Initialize the operator with specific configurations."""
         super().__init__(operation_types=["textual_instruction", "visual_instruction", "action_instruction"])
         self.input_schema = {**self.DEFAULT_INPUT_SCHEMA, **dict(input_schema or {})}
@@ -49,12 +50,10 @@ class DreamDojoOperator(BaseOperator):
 
     @staticmethod
     def _is_number(value: Any) -> bool:
-        """Is number implementation."""
         return isinstance(value, (int, float)) and not isinstance(value, bool)
 
     @classmethod
     def _is_numeric_vector(cls, value: Any) -> bool:
-        """Is numeric vector implementation."""
         return (
             isinstance(value, Sequence)
             and not isinstance(value, (str, bytes, bytearray))
@@ -63,7 +62,6 @@ class DreamDojoOperator(BaseOperator):
 
     @classmethod
     def _normalise_action_item(cls, item: Any) -> Any:
-        """Normalise action item implementation."""
         if isinstance(item, Path):
             return str(item)
         tolist = getattr(item, "tolist", None)
@@ -82,7 +80,6 @@ class DreamDojoOperator(BaseOperator):
 
     @classmethod
     def _extract_actions(cls, interaction: Any) -> list[Any]:
-        """Extract actions implementation."""
         if interaction is None:
             return []
         if isinstance(interaction, Path):
@@ -123,7 +120,6 @@ class DreamDojoOperator(BaseOperator):
 
     @staticmethod
     def _controls(interaction: Any) -> dict[str, Any]:
-        """Controls implementation."""
         return {str(key): value for key, value in interaction.items()} if isinstance(interaction, Mapping) else {}
 
     def check_interaction(self, interaction):
@@ -136,7 +132,7 @@ class DreamDojoOperator(BaseOperator):
         self.check_interaction(interaction)
         self.current_interaction.append(interaction)
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = self._extract_actions(raw)
@@ -160,7 +156,7 @@ class DreamDojoOperator(BaseOperator):
             },
         }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
         text = prompt if prompt is not None else kwargs.get("instruction", kwargs.get("task", kwargs.get("caption")))
         prompt_text = "" if text is None else str(text)
@@ -179,7 +175,7 @@ class DreamDojoOperator(BaseOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         observation = {
             "initial_image": images,

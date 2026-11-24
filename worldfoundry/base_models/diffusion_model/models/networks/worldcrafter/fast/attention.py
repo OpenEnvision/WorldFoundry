@@ -9,8 +9,9 @@ must not downcast camera embeddings or Q/K/V to its BF16 storage dtype.
 
 import torch
 from einops import rearrange, repeat
-from ..ucpe.camera import UcpeSelfAttention
+
 from ..ucpe.bridge import _flash_attention_sdpa as flash_attention
+from ..ucpe.camera import UcpeSelfAttention
 
 
 class FastUcpeSelfAttention(UcpeSelfAttention):
@@ -21,7 +22,7 @@ class FastUcpeSelfAttention(UcpeSelfAttention):
         grid_h = control_camera_dit_input.get("patches_y", self.patches_y)
         grid_w = control_camera_dit_input.get("patches_x", self.patches_x)
         expected = num_cameras * grid_h * grid_w
-        assert T == expected or T == num_cameras, (
+        assert expected == T or num_cameras == T, (
             f"Expected token count {expected} ({num_cameras}x{grid_h}x{grid_w}) or {num_cameras}, got {T}"
         )
 
@@ -39,9 +40,9 @@ class FastUcpeSelfAttention(UcpeSelfAttention):
 
         self.prope_attn._precompute_and_cache_apply_fns(
             viewmats=control_camera_dit_input["viewmats"],
-            Ks=control_camera_dit_input.get("K", None),
-            coeffs_x=control_camera_dit_input.get("coeffs_x", None),
-            coeffs_y=control_camera_dit_input.get("coeffs_y", None),
+            Ks=control_camera_dit_input.get("K"),
+            coeffs_x=control_camera_dit_input.get("coeffs_x"),
+            coeffs_y=control_camera_dit_input.get("coeffs_y"),
         )
 
         q = self.prope_attn._apply_to_q(q)

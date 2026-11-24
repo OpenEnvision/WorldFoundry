@@ -299,11 +299,9 @@ def build_hunyuan_video15_prompt_conditioner(
     byt5 = load_glyph_byT5_v2(
         {
             "byT5_google_path": str(root / "text_encoder" / "byt5-small"),
-            "byT5_ckpt_path": str(glyph_root / "checkpoints" / "byt5_model.pt"),
+            "byT5_ckpt_path": str(glyph_root / "checkpoints" / "model.safetensors"),
             "multilingual_prompt_format_color_path": str(glyph_root / "assets" / "color_idx.json"),
-            "multilingual_prompt_format_font_path": str(
-                glyph_root / "assets" / "multilingual_10-lang_idx.json"
-            ),
+            "multilingual_prompt_format_font_path": str(glyph_root / "assets" / "multilingual_10-lang_idx.json"),
             "byt5_max_length": int(context.component_options.get("byt5_max_length", 256)),
         },
         device=context.policy.device,
@@ -314,9 +312,7 @@ def build_hunyuan_video15_prompt_conditioner(
     )
     vision = None
     if bool(context.component_options.get("image_to_video", False)):
-        vision_root = NativeCheckpointResolver().materialize(
-            context.require_checkpoint("vision")
-        ).root
+        vision_root = NativeCheckpointResolver().materialize(context.require_checkpoint("vision")).root
         vision = VisionEncoder(
             vision_encoder_type="siglip",
             vision_encoder_precision=precision,

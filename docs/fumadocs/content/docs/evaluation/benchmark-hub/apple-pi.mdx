@@ -17,7 +17,7 @@ Score the deduction subtrack against staged GT (Gemini key for real judging; SAM
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py \
   --run-official \
   --gt-dir "${WORLDFOUNDRY_APPLE_PI_GT_DIR}" \
   --pred-dir "${WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR}" \
@@ -29,7 +29,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 Import an existing result file:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id apple-pi \
   --mode official-validation \
   --official-results-path <apple_pi_results.json> \
@@ -37,6 +37,6 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-`--no-foundation-models` and `--judge-backend mock` are wiring only. Env: `WORLDFOUNDRY_APPLE_PI_GT_DIR`, `WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR`, `WORLDFOUNDRY_APPLE_PI_RESULTS_PATH`, `WORLDFOUNDRY_APPLE_PI_JUDGE_BACKEND`, `WORLDFOUNDRY_APPLE_PI_SAM3_CHECKPOINT`, `WORLDFOUNDRY_APPLE_PI_MOGE_CHECKPOINT`. Manifest: `worldfoundry/data/benchmarks/tasks/external/apple-pi.yaml`. Outputs: `scorecard.json` (primary `deduction`), `raw_metric_table.jsonl`, `per_sample_scores.jsonl`, `benchmark_contract.json`.
+`--no-foundation-models` and `--judge-backend mock` only exercise the pipeline; they do not produce real scores. Env: `WORLDFOUNDRY_APPLE_PI_GT_DIR`, `WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR`, `WORLDFOUNDRY_APPLE_PI_RESULTS_PATH`, `WORLDFOUNDRY_APPLE_PI_JUDGE_BACKEND`, `WORLDFOUNDRY_APPLE_PI_SAM3_CHECKPOINT`, `WORLDFOUNDRY_APPLE_PI_MOGE_CHECKPOINT`. Manifest: `worldfoundry/data/benchmarks/tasks/external/apple-pi.yaml`. Outputs: `scorecard.json` (primary `deduction`), `raw_metric_table.jsonl`, `per_sample_scores.jsonl`, `benchmark_contract.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

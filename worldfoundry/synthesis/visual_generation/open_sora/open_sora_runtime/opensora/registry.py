@@ -32,15 +32,15 @@ def build_module(module, builder, **kwargs):
 
 MODELS = Registry(
     "model",
-    locations=["opensora.models"],
+    locations=["worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.models"],
 )
 
 SCHEDULERS = Registry(
     "scheduler",
-    locations=["opensora.schedulers"],
+    locations=["worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.schedulers"],
 )
 
 DATASETS = Registry(
     "dataset",
-    locations=["opensora.datasets"],
+    locations=["worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.datasets"],
 )

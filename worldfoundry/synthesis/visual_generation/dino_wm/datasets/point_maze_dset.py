@@ -1,20 +1,22 @@
-import torch
+from collections.abc import Callable
+from pathlib import Path
+
 import decord
 import numpy as np
-from pathlib import Path
+import torch
 from einops import rearrange
-from decord import VideoReader
-from typing import Callable, Optional
+
 from .traj_dset import TrajDataset, get_train_val_sliced
-from typing import Optional, Callable, Any
+
 decord.bridge.set_bridge("torch")
+
 
 class PointMazeDataset(TrajDataset):
     def __init__(
         self,
         data_path: str = "data/point_maze",
-        n_rollout: Optional[int] = None,
-        transform: Optional[Callable] = None,
+        n_rollout: int | None = None,
+        transform: Callable | None = None,
         normalize_action: bool = False,
         action_scale=1.0,
     ):
@@ -25,13 +27,10 @@ class PointMazeDataset(TrajDataset):
         self.states = states
         self.actions = torch.load(self.data_path / "actions.pth").float()
         self.actions = self.actions / action_scale  # scaled back up in env
-        self.seq_lengths = torch.load(self.data_path /'seq_lengths.pth')
+        self.seq_lengths = torch.load(self.data_path / "seq_lengths.pth")
 
         self.n_rollout = n_rollout
-        if self.n_rollout:
-            n = self.n_rollout
-        else:
-            n = len(self.states)
+        n = self.n_rollout or len(self.states)
 
         self.states = self.states[:n]
         self.actions = self.actions[:n]
@@ -91,11 +90,8 @@ class PointMazeDataset(TrajDataset):
         image = rearrange(image, "T H W C -> T C H W")
         if self.transform:
             image = self.transform(image)
-        obs = {
-            "visual": image,
-            "proprio": proprio
-        }
-        return obs, act, state, {} # env_info
+        obs = {"visual": image, "proprio": proprio}
+        return obs, act, state, {}  # env_info
 
     def __getitem__(self, idx):
         return self.get_frames(idx, range(self.get_seq_length(idx)))
@@ -109,10 +105,11 @@ class PointMazeDataset(TrajDataset):
         elif isinstance(imgs, torch.Tensor):
             return rearrange(imgs, "b h w c -> b c h w") / 255.0
 
+
 def load_point_maze_slice_train_val(
     transform,
     n_rollout=50,
-    data_path='data/pusht_dataset',
+    data_path="data/pusht_dataset",
     normalize_action=False,
     split_ratio=0.8,
     num_hist=0,
@@ -126,16 +123,13 @@ def load_point_maze_slice_train_val(
         normalize_action=normalize_action,
     )
     dset_train, dset_val, train_slices, val_slices = get_train_val_sliced(
-        traj_dataset=dset,
-        train_fraction=split_ratio,
-        num_frames=num_hist + num_pred,
-        frameskip=frameskip
+        traj_dataset=dset, train_fraction=split_ratio, num_frames=num_hist + num_pred, frameskip=frameskip
     )
 
     datasets = {}
-    datasets['train'] = train_slices
-    datasets['valid'] = val_slices
+    datasets["train"] = train_slices
+    datasets["valid"] = val_slices
     traj_dset = {}
-    traj_dset['train'] = dset_train
-    traj_dset['valid'] = dset_val
+    traj_dset["train"] = dset_train
+    traj_dset["valid"] = dset_val
     return datasets, traj_dset

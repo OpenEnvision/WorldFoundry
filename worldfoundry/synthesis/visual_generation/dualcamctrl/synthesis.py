@@ -10,8 +10,8 @@ from .runtime import (
     DEFAULT_DUALCAMCTRL_REPO,
     DEFAULT_NEGATIVE_PROMPT,
     DEFAULT_TEST_CASE_DIR,
-    DualCamCtrlRuntime,
     OFFICIAL_SOURCE_REPO,
+    DualCamCtrlRuntime,
 )
 
 
@@ -30,6 +30,6 @@ __all__ = [
     "DEFAULT_DUALCAMCTRL_REPO",
     "DEFAULT_NEGATIVE_PROMPT",
     "DEFAULT_TEST_CASE_DIR",
-    "DualCamCtrlSynthesis",
     "OFFICIAL_SOURCE_REPO",
+    "DualCamCtrlSynthesis",
 ]

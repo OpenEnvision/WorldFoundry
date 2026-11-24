@@ -16,7 +16,6 @@ from ....contracts import DiffusionRequest
 from ....loaders import ModuleLoadSpec, NativeModuleLoader
 from .model import AutoencoderKL
 
-
 LVDM_AUTOENCODER_CONFIG = {
     "embed_dim": 4,
     "monitor": "val/rec_loss",
@@ -38,11 +37,7 @@ LVDM_AUTOENCODER_CONFIG = {
 
 def _autoencoder_state_dict(state_dict: Mapping[str, object]) -> Mapping[str, object]:
     prefix = "first_stage_model."
-    converted = {
-        key[len(prefix) :]: value
-        for key, value in state_dict.items()
-        if key.startswith(prefix)
-    }
+    converted = {key[len(prefix) :]: value for key, value in state_dict.items() if key.startswith(prefix)}
     if not converted:
         raise KeyError("VideoCrafter checkpoint contains no first_stage_model parameters")
     return converted

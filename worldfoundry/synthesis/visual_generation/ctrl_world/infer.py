@@ -6,10 +6,8 @@ import argparse
 import gc
 import json
 import math
-import sys
 from pathlib import Path
 from types import SimpleNamespace
-
 
 NUM_HISTORY = 6
 NUM_FRAMES = 5
@@ -38,29 +36,6 @@ OFFICIAL_KEYBOARD_ACTIONS = {
 OFFICIAL_ACTION_STATS = Path(__file__).resolve().parent / "action_stats.json"
 
 
-def _clear_conflicting_models_namespace(runtime_root: Path) -> None:
-    package = sys.modules.get("models")
-    package_file = getattr(package, "__file__", None) if package is not None else None
-    if package_file is not None:
-        try:
-            belongs_to_runtime = Path(package_file).resolve().is_relative_to(runtime_root)
-        except OSError:
-            belongs_to_runtime = False
-        if belongs_to_runtime:
-            return
-    for module_name in tuple(sys.modules):
-        if module_name == "models" or module_name.startswith("models."):
-            sys.modules.pop(module_name, None)
-
-
-def _ensure_vendored_runtime_importable() -> None:
-    runtime_root = (Path(__file__).resolve().parent / "ctrl_world_runtime").resolve()
-    _clear_conflicting_models_namespace(runtime_root)
-    runtime_entry = str(runtime_root)
-    sys.path[:] = [entry for entry in sys.path if entry != runtime_entry]
-    sys.path.insert(0, runtime_entry)
-
-
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint-path", type=Path, required=True)
@@ -83,9 +58,18 @@ def _parser() -> argparse.ArgumentParser:
         default="absolute-pose",
         help="Use an official physical Cartesian pose, or explicitly opt into the old zero-pose smoke input.",
     )
-    parser.add_argument("--initial-pose", type=float, nargs=ACTION_DIM, metavar=("X", "Y", "Z", "RX", "RY", "RZ", "GRIPPER"))
-    parser.add_argument("--action-distance", type=float, default=0.08, help="Physical XYZ displacement in metres, as in official key_board_control.")
-    parser.add_argument("--action-scale", type=float, help="Normalized delta for synthetic-zero-smoke only (default 0.2).")
+    parser.add_argument(
+        "--initial-pose", type=float, nargs=ACTION_DIM, metavar=("X", "Y", "Z", "RX", "RY", "RZ", "GRIPPER")
+    )
+    parser.add_argument(
+        "--action-distance",
+        type=float,
+        default=0.08,
+        help="Physical XYZ displacement in metres, as in official key_board_control.",
+    )
+    parser.add_argument(
+        "--action-scale", type=float, help="Normalized delta for synthetic-zero-smoke only (default 0.2)."
+    )
     parser.add_argument("--height", type=int, default=192)
     parser.add_argument("--width", type=int, default=320)
     parser.add_argument("--num-frames", type=int, default=NUM_FRAMES)
@@ -199,8 +183,7 @@ def _absolute_pose_action_rollout(initial_pose: list[float] | tuple[float, ...],
     import numpy as np
     import torch
 
-    _ensure_vendored_runtime_importable()
-    from models.utils import key_board_control
+    from .ctrl_world_runtime.models.utils import key_board_control
 
     pose = np.asarray(initial_pose, dtype=np.float64)
     if pose.shape != (ACTION_DIM,) or not np.isfinite(pose).all():
@@ -212,9 +195,7 @@ def _absolute_pose_action_rollout(initial_pose: list[float] | tuple[float, ...],
 
     # The official helper also clips XYZ and contains task 1799's special up/down paths.
     keyboard_action = OFFICIAL_KEYBOARD_ACTIONS.get(direction, "r")
-    future = key_board_control(
-        pose[None, :], keyboard_action, distance=0.0 if direction == "stationary" else distance
-    )
+    future = key_board_control(pose[None, :], keyboard_action, distance=0.0 if direction == "stationary" else distance)
     physical = np.concatenate((np.repeat(pose[None, :], NUM_HISTORY, axis=0), future), axis=0)
 
     stats = json.loads(OFFICIAL_ACTION_STATS.read_text(encoding="utf-8"))
@@ -247,16 +228,16 @@ def _model_args(args: argparse.Namespace, dtype) -> SimpleNamespace:
 def run(args: argparse.Namespace) -> Path:
     """Generate a three-camera Ctrl-World rollout with the released checkpoint."""
     _validate_args(args)
-    _ensure_vendored_runtime_importable()
 
     import numpy as np
     import torch
 
-    from models.ctrl_world import CrtlWorld
-    from models.pipeline_ctrl_world import CtrlWorldDiffusionPipeline
-    from models.utils import split_ctrl_world_latents
     from worldfoundry.core.media.codecs.video import save_video_h264
     from worldfoundry.core.model_loading import load_torch_checkpoint
+
+    from .ctrl_world_runtime.models.ctrl_world import CrtlWorld
+    from .ctrl_world_runtime.models.pipeline_ctrl_world import CtrlWorldDiffusionPipeline
+    from .ctrl_world_runtime.models.utils import split_ctrl_world_latents
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is unavailable; Ctrl-World inference cannot run")
@@ -293,13 +274,19 @@ def run(args: argparse.Namespace) -> Path:
         current_latent = torch.cat([view_latents[index] for index in range(3)], dim=1).unsqueeze(0)
         expected_shape = (1, 4, 72, 40)
         if tuple(current_latent.shape) != expected_shape:
-            raise RuntimeError(f"Ctrl-World three-view latent shape must be {expected_shape}, got {tuple(current_latent.shape)}")
+            raise RuntimeError(
+                f"Ctrl-World three-view latent shape must be {expected_shape}, got {tuple(current_latent.shape)}"
+            )
         history = current_latent.unsqueeze(1).repeat(1, NUM_HISTORY, 1, 1, 1)
         if args.action_mode == "absolute-pose":
             actions = _absolute_pose_action_rollout(args.initial_pose, args.action_direction, args.action_distance)
         else:
-            print("Using synthetic zero-pose actions for smoke testing only; motion direction is not physically validated.")
-            actions = _normalized_action_rollout(args.action_direction, args.action_scale if args.action_scale is not None else 0.2)
+            print(
+                "Using synthetic zero-pose actions for smoke testing only; motion direction is not physically validated."
+            )
+            actions = _normalized_action_rollout(
+                args.action_direction, args.action_scale if args.action_scale is not None else 0.2
+            )
         actions = actions.to(device=device, dtype=dtype)
         text_token = model.action_encoder(
             actions,

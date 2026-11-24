@@ -8,63 +8,63 @@ from types import SimpleNamespace
 
 import pytest
 
-from worldfoundry.evaluation.reporting.validation import validate_contract_file
-from worldfoundry.evaluation.tasks.execution.runners.four_d_worldbench.runtime.four_d_worldbench.runner import (
+from worldfoundry.evals.reporting.validation import validate_contract_file
+from worldfoundry.evals.tasks.execution.runners.four_d_worldbench.runtime.four_d_worldbench.runner import (
     validate_video_inputs,
 )
-from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_metrics import (
+from worldfoundry.evals.tasks.execution.runners.iworldbench.iworldbench_metrics import (
     COMPONENT_METRIC_ORDER,
     compute_iworldbench_metrics,
 )
-from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_prompts import (
+from worldfoundry.evals.tasks.execution.runners.iworldbench.iworldbench_prompts import (
     CANONICAL_PROMPT_COUNT,
 )
-from worldfoundry.evaluation.tasks.execution.runners.iworldbench.run_iworldbench_official_runner import (
+from worldfoundry.evals.tasks.execution.runners.iworldbench.run_iworldbench_official_runner import (
     _metric_rows as iworldbench_metric_rows,
 )
-from worldfoundry.evaluation.tasks.execution.runners.iworldbench.run_iworldbench_official_runner import (
+from worldfoundry.evals.tasks.execution.runners.iworldbench.run_iworldbench_official_runner import (
     _scorecard as iworldbench_scorecard,
 )
-from worldfoundry.evaluation.tasks.execution.runners.iworldbench.run_iworldbench_official_runner import (
+from worldfoundry.evals.tasks.execution.runners.iworldbench.run_iworldbench_official_runner import (
     main as iworldbench_main,
 )
-from worldfoundry.evaluation.tasks.execution.runners.likephys.likephys_metrics import (
+from worldfoundry.evals.tasks.execution.runners.likephys.likephys_metrics import (
     compute_likephys_metrics,
     misrank_by_variation,
 )
-from worldfoundry.evaluation.tasks.execution.runners.likephys.likephys_scenarios import (
+from worldfoundry.evals.tasks.execution.runners.likephys.likephys_scenarios import (
     REPORTED_VARIATION_FILTERS,
     scenario_id_for_variations,
 )
-from worldfoundry.evaluation.tasks.execution.runners.rbench.rbench_metrics import (
+from worldfoundry.evals.tasks.execution.runners.memobench.run_memobench_official_runner import (
+    _scorecard as memobench_scorecard,
+)
+from worldfoundry.evals.tasks.execution.runners.rbench.rbench_metrics import (
     aggregate_task_track,
     compute_rbench_metrics,
     normalize_embodiment_row,
     normalize_task_score,
 )
-from worldfoundry.evaluation.tasks.execution.runners.memobench.run_memobench_official_runner import (
-    _scorecard as memobench_scorecard,
-)
-from worldfoundry.evaluation.tasks.execution.runners.vbench_2_0.vbench_shared_official_impl import (
+from worldfoundry.evals.tasks.execution.runners.vbench_2_0.vbench_shared_official_impl import (
     PLUS_VARIANT_AVERAGE,
     aggregate_rows,
     canonical_declared_dimensions,
     raw_dimension_rows,
 )
-from worldfoundry.evaluation.tasks.execution.runners.videophy2.videophy2_metrics import (
+from worldfoundry.evals.tasks.execution.runners.videophy2.videophy2_metrics import (
     compute_videophy2_metrics,
 )
-from worldfoundry.evaluation.tasks.execution.runners.videoscience_bench.runtime.videoscience_bench.judge.vlm_as_a_judge import (
+from worldfoundry.evals.tasks.execution.runners.videoscience_bench.runtime.videoscience_bench.judge.vlm_as_a_judge import (
     WEIGHTS,
     _compute_overall_1to4,
 )
-from worldfoundry.evaluation.tasks.execution.runners.videoscience_bench.runtime.videoscience_bench.videoscience_batch import (
+from worldfoundry.evals.tasks.execution.runners.videoscience_bench.runtime.videoscience_bench.videoscience_batch import (
     _metrics_from_rubric,
 )
-from worldfoundry.evaluation.tasks.execution.runners.videoverse.run_videoverse_official_runner import (
+from worldfoundry.evals.tasks.execution.runners.videoverse.run_videoverse_official_runner import (
     normalize_videoverse_results,
 )
-from worldfoundry.evaluation.tasks.execution.runners.vmbench.vmbench_prompts import (
+from worldfoundry.evals.tasks.execution.runners.vmbench.vmbench_prompts import (
     materialize_vmbench_meta_info,
 )
 
@@ -110,23 +110,18 @@ def test_iworldbench_partial_component_does_not_emit_full_suite_average() -> Non
 
 def test_iworldbench_average_requires_complete_metric_suite() -> None:
     rows = [
-        {"metric_id": metric_id, "score": index / 10}
-        for index, metric_id in enumerate(COMPONENT_METRIC_ORDER, start=1)
+        {"metric_id": metric_id, "score": index / 10} for index, metric_id in enumerate(COMPONENT_METRIC_ORDER, start=1)
     ]
 
     computed = compute_iworldbench_metrics(rows=rows)
 
     assert computed["metrics"]["iworldbench_average"] == pytest.approx(0.5)
-    assert computed["components"]["sample_counts"]["iworldbench_average"] == len(
-        COMPONENT_METRIC_ORDER
-    )
+    assert computed["components"]["sample_counts"]["iworldbench_average"] == len(COMPONENT_METRIC_ORDER)
 
 
 def test_iworldbench_partial_official_run_is_not_full_benchmark(tmp_path: Path) -> None:
     source_path = tmp_path / "reports"
-    computed = compute_iworldbench_metrics(
-        rows=[{"metric_id": "memory_symmetry", "score": 1.0}]
-    )
+    computed = compute_iworldbench_metrics(rows=[{"metric_id": "memory_symmetry", "score": 1.0}])
     metric_rows = iworldbench_metric_rows(
         computed=computed,
         source_path=source_path,
@@ -285,9 +280,7 @@ def test_videoverse_bounded_run_scores_only_the_selected_subset(tmp_path: Path) 
                     "verification_checks": [],
                 },
                 "2": {
-                    "t2v_eval_event_info": {
-                        "verification_plan": [{"event": "a"}, {"event": "b"}, {"event": "c"}]
-                    },
+                    "t2v_eval_event_info": {"verification_plan": [{"event": "a"}, {"event": "b"}, {"event": "c"}]},
                     "verification_checks": [],
                 },
             }
@@ -387,9 +380,7 @@ def test_videophy2_deprecated_aggregates_do_not_enter_metrics() -> None:
     )
     assert official_rows["metrics"]["rule_followed_rate"] == pytest.approx(2 / 3)
     assert "videophy2_average" not in official_rows["metrics"]
-    assert official_rows["components"]["deprecated_metrics"] == {
-        "rule_classification_accuracy": 0.9
-    }
+    assert official_rows["components"]["deprecated_metrics"] == {"rule_classification_accuracy": 0.9}
 
 
 def test_videoscience_average_uses_official_weights() -> None:
@@ -474,10 +465,22 @@ def test_likephys_partial_scenarios_do_not_claim_full_suite_coverage() -> None:
 
 
 def test_likephys_scenario_inference_requires_an_exact_variation_signature() -> None:
-    assert scenario_id_for_variations({"valid", "color_change", "fracturing_fluid", "invisible_wall",
-                                       "negative_viscosity", "non_conservation_fluid",
-                                       "phase_shifting_fluid", "teleporting_fluid",
-                                       "temporal_disorder"}) == "river"
+    assert (
+        scenario_id_for_variations(
+            {
+                "valid",
+                "color_change",
+                "fracturing_fluid",
+                "invisible_wall",
+                "negative_viscosity",
+                "non_conservation_fluid",
+                "phase_shifting_fluid",
+                "teleporting_fluid",
+                "temporal_disorder",
+            }
+        )
+        == "river"
+    )
     # A partial signature must not be attributed to a scenario, which would silently apply
     # that scenario's reported variation filter to unrelated results.
     assert scenario_id_for_variations({"valid", "temporal_disorder"}) is None
@@ -486,12 +489,18 @@ def test_likephys_scenario_inference_requires_an_exact_variation_signature() -> 
 def test_rbench_missing_amplitude_drops_the_video_from_the_penalized_aggregate(tmp_path: Path) -> None:
     split = tmp_path / "4_embodiments" / "model" / "dual_arm"
     vqa = split / "VQA" / "gpt"
-    for name, score in (("1_robot_subject_stability", 15), ("2_physical_plausibility", 5), ("3_task_adherence_consistency", 5)):
+    for name, score in (
+        ("1_robot_subject_stability", 15),
+        ("2_physical_plausibility", 5),
+        ("3_task_adherence_consistency", 5),
+    ):
         target = vqa / name
         target.mkdir(parents=True)
         header = "name,option,score\n" if name.startswith("1_") else "name,score\n"
         body = "".join(
-            f"0001.mp4,A1,{score}\n0002.mp4,A1,{score}\n" if name.startswith("1_") else f"0001.mp4,{score}\n0002.mp4,{score}\n"
+            f"0001.mp4,A1,{score}\n0002.mp4,A1,{score}\n"
+            if name.startswith("1_")
+            else f"0001.mp4,{score}\n0002.mp4,{score}\n"
         )
         (target / "results.csv").write_text(header + body, encoding="utf-8")
     (split / "motion").mkdir(parents=True)
@@ -506,9 +515,7 @@ def test_rbench_missing_amplitude_drops_the_video_from_the_penalized_aggregate(t
         encoding="utf-8",
     )
 
-    computed = compute_rbench_metrics(
-        embodiment_track_dir=split.parent, task_track_dir=None, vlm_backend="gpt"
-    )
+    computed = compute_rbench_metrics(embodiment_track_dir=split.parent, task_track_dir=None, vlm_backend="gpt")
     summary = computed["embodiment_track"]["per_split"]["dual_arm"]
 
     assert summary["video_count"] == 2
@@ -535,9 +542,7 @@ def test_rbench_overall_requires_both_official_tracks(tmp_path: Path) -> None:
         target.mkdir(parents=True)
         (target / "results.csv").write_text("name,score\n0001,5\n", encoding="utf-8")
 
-    computed = compute_rbench_metrics(
-        embodiment_track_dir=None, task_track_dir=task_dir, vlm_backend="gpt"
-    )
+    computed = compute_rbench_metrics(embodiment_track_dir=None, task_track_dir=task_dir, vlm_backend="gpt")
 
     assert computed["metrics"]["task_track_overall"] == pytest.approx(1.0)
     # Two of five task splits and no embodiment track: the composite must stay unset.

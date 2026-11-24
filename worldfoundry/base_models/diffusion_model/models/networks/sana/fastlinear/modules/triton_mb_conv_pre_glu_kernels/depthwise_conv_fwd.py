@@ -28,7 +28,6 @@ import triton.language as tl
 
 
 def get_cuda_autotune_config():
-    """Get cuda autotune config."""
     return [
         triton.Config({"BLOCK_SIZE_H": 128, "BLOCK_SIZE_W": 256}, num_stages=3, num_warps=8),
         triton.Config({"BLOCK_SIZE_H": 64, "BLOCK_SIZE_W": 256}, num_stages=4, num_warps=4),
@@ -51,7 +50,6 @@ def get_cuda_autotune_config():
 
 
 def get_autotune_config():
-    """Get autotune config."""
     return get_cuda_autotune_config()
 
 
@@ -149,8 +147,11 @@ def depthwise_conv_fwd(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor
 
     # Allocates output.
     y = torch.empty_like(x)
+
     # 1D launch kernel where each block gets its own program.
-    grid = lambda META: (B * C * triton.cdiv(H, META["BLOCK_SIZE_H"]) * triton.cdiv(W, META["BLOCK_SIZE_W"]),)
+    def grid(META):
+        return (B * C * triton.cdiv(H, META["BLOCK_SIZE_H"]) * triton.cdiv(W, META["BLOCK_SIZE_W"]),)
+
     if x.dtype == weight.dtype == bias.dtype:
         depthwise_conv_fwd_kernel[grid](
             x,
@@ -177,7 +178,6 @@ def depthwise_conv_fwd(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor
 
 
 def debug():
-    """Debug."""
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
     torch.cuda.manual_seed(0)
@@ -191,7 +191,7 @@ def debug():
     )
     x = torch.randn(16, 512, 32, 32, device=device, dtype=dtype).to(memory_format=torch.channels_last)
     # ref_y = conv(x)
-    tri_y = depthwise_conv_fwd(x.permute(0, 2, 3, 1), conv.weight[:, 0], conv.bias).permute(0, 3, 1, 2)
+    _tri_y = depthwise_conv_fwd(x.permute(0, 2, 3, 1), conv.weight[:, 0], conv.bias).permute(0, 3, 1, 2)
 
 
 if __name__ == "__main__":

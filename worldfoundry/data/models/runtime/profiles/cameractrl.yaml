@@ -8,6 +8,7 @@ groups:
 - camera_control
 source_repos:
 - url: https://github.com/hehao13/CameraCtrl
+  revision: af45a7a0dbeedb7f6ed66aac4a9e5411a279f0d2
 checkpoints:
 - repo_id: hehao13/CameraCtrl
   role: cameractrl_checkpoint

@@ -4,13 +4,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from einops import rearrange, repeat
-
 
 from . import camera as ucpe_cc
 from . import prope as prope_torch
@@ -56,9 +55,7 @@ def load_ucpe_checkpoint_state_dict(checkpoint_path: str | Path):
     resolved_path = _resolve_checkpoint_payload_path(checkpoint_path)
     state_obj = torch.load(resolved_path, map_location="cpu", weights_only=True)
     if not isinstance(state_obj, dict):
-        raise RuntimeError(
-            f"Checkpoint payload at {resolved_path} is expected to be a dict, got {type(state_obj)}"
-        )
+        raise RuntimeError(f"Checkpoint payload at {resolved_path} is expected to be a dict, got {type(state_obj)}")
 
     for key in ("state_dict", "module"):
         payload = state_obj.get(key)
@@ -73,9 +70,7 @@ def extract_ucpe_camera_adapter_state_dict(checkpoint_path: str | Path):
 
     mapped_state = {}
     for key, value in state_dict.items():
-        if ".cam_self_attn." in key and (
-            key.startswith("pipe.dit.blocks.") or key.startswith("blocks.")
-        ):
+        if ".cam_self_attn." in key and (key.startswith(("pipe.dit.blocks.", "blocks."))):
             mapped_state[key] = value
 
     if not mapped_state:
@@ -168,15 +163,14 @@ def load_ucpe_camera_adapter_weights(transformer: WorldCrafterTransformer3DModel
         elif key.startswith("blocks.") and ".cam_self_attn." in key:
             mapped_state[key] = value
 
-    expected_cam_keys = {key for key in transformer.state_dict().keys() if ".cam_self_attn." in key}
+    expected_cam_keys = {key for key in transformer.state_dict().keys() if ".cam_self_attn." in key}  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
     mapped_cam_keys = set(mapped_state.keys())
     missing_cam_keys = sorted(expected_cam_keys - mapped_cam_keys)
     unexpected_cam_keys = sorted(mapped_cam_keys - expected_cam_keys)
 
     if not mapped_state:
         raise RuntimeError(
-            f"No UCPE camera adapter tensors found in checkpoint: {checkpoint_path} "
-            f"(resolved_payload={resolved_path})"
+            f"No UCPE camera adapter tensors found in checkpoint: {checkpoint_path} (resolved_payload={resolved_path})"
         )
     if missing_cam_keys or unexpected_cam_keys:
         raise RuntimeError(
@@ -204,17 +198,11 @@ def _relative_pose_chunk(
     window_num_frames: int,
     device: torch.device,
 ) -> torch.Tensor | None:
-    if isinstance(global_c2w, torch.Tensor):
-        pose = global_c2w.detach().cpu().numpy()
-    else:
-        pose = np.asarray(global_c2w)
+    pose = global_c2w.detach().cpu().numpy() if isinstance(global_c2w, torch.Tensor) else np.asarray(global_c2w)
     if pose.ndim == 3:
         pose = pose[None]
     if pose.ndim != 4 or pose.shape[0] != 1 or pose.shape[-2:] not in ((3, 4), (4, 4)):
-        raise ValueError(
-            "camera_trajectory['c2w'] must be [1,T,3,4] or [1,T,4,4], "
-            f"got {pose.shape}"
-        )
+        raise ValueError(f"camera_trajectory['c2w'] must be [1,T,3,4] or [1,T,4,4], got {pose.shape}")
     start = int(chunk_index) * int(window_num_frames)
     end = start + int(window_num_frames)
     if pose.shape[1] < end:
@@ -263,8 +251,7 @@ def build_ucpe_attention_kwargs_for_chunk(
         pose_chunk = pose_chunk[..., :3, :4]
     elif pose_chunk.shape[-2:] != (3, 4):
         raise ValueError(
-            "pose_chunk is expected to be [B, T, 3, 4] or [B, T, 4, 4], "
-            f"got shape={tuple(pose_chunk.shape)}"
+            f"pose_chunk is expected to be [B, T, 3, 4] or [B, T, 4, 4], got shape={tuple(pose_chunk.shape)}"
         )
     pose_chunk = pose_chunk[:, ::vae_scale_factor_temporal].to(dtype=torch.float32)
     c2w = torch.eye(4, device=pose_chunk.device, dtype=pose_chunk.dtype)

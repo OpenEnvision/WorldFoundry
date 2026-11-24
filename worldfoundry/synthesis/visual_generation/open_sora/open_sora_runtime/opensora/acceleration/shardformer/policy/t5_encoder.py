@@ -18,7 +18,9 @@ class T5EncoderPolicy(Policy):
 
         # check whether apex is installed
         try:
-            from opensora.acceleration.shardformer.modeling.t5 import T5LayerNorm
+            from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.acceleration.shardformer.modeling.t5 import (
+                T5LayerNorm,
+            )
 
             # recover hf from fused rms norm to T5 norm which is faster
             self.append_or_create_submodule_replacement(

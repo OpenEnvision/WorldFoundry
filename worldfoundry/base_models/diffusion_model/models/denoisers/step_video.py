@@ -14,7 +14,6 @@ from ...contracts import DenoiserInput, DenoiserOutput
 from ...loaders import ModuleLoadSpec, NativeModuleLoader
 from ..networks.step_video import StepVideoModel
 
-
 STEP_VIDEO_CONFIG = {
     "num_attention_heads": 48,
     "attention_head_dim": 128,
@@ -34,6 +33,7 @@ STEP_VIDEO_CONFIG = {
 
 class StepVideoDenoiser:
     """StepVideo DiT adapter that forwards dual text/CLIP embeddings."""
+
     def __init__(self, model: StepVideoModel) -> None:
         self.model = model
 

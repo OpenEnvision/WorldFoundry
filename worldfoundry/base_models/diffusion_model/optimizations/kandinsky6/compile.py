@@ -1,8 +1,13 @@
 """Kandinsky-6 compile configuration values."""
+
 from typing import Any, Literal
+
 from pydantic import Field
+
 from .base import ConfigModel
+
 CompileStrategyName = Literal["none", "torch"]
+
 
 class AotiCompileConfig(ConfigModel):
     """Regional AOTInductor knobs for ``kandy export`` / ``compile_aoti``.
@@ -35,6 +40,7 @@ class AotiCompileConfig(ConfigModel):
         if self.cudagraphs:
             cfg["triton.cudagraphs"] = True
         return cfg
+
 
 class CompileConfig(ConfigModel):
     """DiT compile: runtime ``torch.compile`` + optional AOTI export settings.

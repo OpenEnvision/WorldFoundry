@@ -1,9 +1,9 @@
 ---
 title: 运行推理
-description: 运行模型 demo、检查生成产物并做发布验证；评分请见评测章节。
+description: 运行模型 demo、检查生成产物；评分请见评测章节。
 ---
 
-WorldFoundry 推理覆盖环境安装、checkpoint 准备、模型启动和产物检查。Benchmark 评分与 scorecard 见[评测](/zh/docs/evaluation)。要挑 model ID、看 readiness 标签，先看[模型](/zh/docs/guides/supported-models)。
+WorldFoundry 推理覆盖环境安装、checkpoint 准备、模型启动和产物检查。Benchmark 评分与 scorecard 见[评测](/zh/docs/evaluation)。如需选择 model ID 或查看 readiness 标签，请先参阅[模型](/zh/docs/guides/supported-models)。
 
 ## 快速路径
 
@@ -12,7 +12,7 @@ bash scripts/setup/bootstrap_worldfoundry.sh
 source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 
-worldfoundry-eval run <model-id> \
+wf run <model-id> \
   --pipeline.task-profile <task-profile> \
   --output-dir tmp/worldfoundry_infer/<model-id>
 ```
@@ -41,8 +41,7 @@ Hugging Face checkpoints 默认应通过原生 `from_pretrained` 或
 
 `WORLDFOUNDRY_CKPT_DIR` 用于非 HF 权重，以及上游式 runtime 需要的兼容 alias。
 
-如果机器上已经有共享 checkpoint 目录，优先用软链接接入支持的 cache layout，
-不要复制权重：
+如果机器上已经有共享 checkpoint 目录，优先用软链接接入支持的 cache layout，不要复制权重：
 
 ```bash
 bash scripts/setup/link_hf_checkpoints.sh \
@@ -58,10 +57,9 @@ Hugging Face cache alias，例如
 `refs/main` 指向该 local revision。新用户不需要执行这一步，可以直接让
 Hugging Face 按默认策略下载到 `HF_HOME`。
 
-对外公开的默认写法仍然是 Hugging Face repo ID。本地软链接只是为已经下载过
-权重的机器模拟出同一套 cache layout。
+默认的 checkpoint 来源是 Hugging Face repo ID。本地软链接只是为已经下载过权重的机器模拟出同一套 cache layout。
 
-单模型首次推理可以用面向发布的 helper 串起这些步骤：
+单模型首次推理可以用一个 helper 串起这些步骤：
 
 ```bash
 bash scripts/inference/prepare_model_infer.sh <model-id> --verify-env-only
@@ -69,12 +67,11 @@ bash scripts/inference/prepare_model_infer.sh <model-id> --download
 ```
 
 它会解析 conda profile，通过原生 HF cache 或文档声明的 HFD alias
-检查/下载 Hugging Face checkpoint，运行 `zoo model-download --check-local`，
-并打印下一步推理命令。
+检查/下载 Hugging Face checkpoint，运行 `zoo model-download --check-local`，并打印下一步推理命令。
 
 ## 可复现的单模型准备流程
 
-本地发布验证和开源用户复现都使用同一组顺序：
+任何模型都按以下顺序准备：
 
 ```bash
 bash scripts/setup/bootstrap_worldfoundry.sh
@@ -92,20 +89,20 @@ bash scripts/inference/prepare_model_infer.sh <model-id> --download
 记录了真实兼容性原因时，才应该使用专用环境，例如固定的 torch/CUDA ABI、
 JAX/TensorFlow 隔离，或 simulator 依赖。
 
-不要把私有 cache 路径写进公开文档。公开 checkpoint 路径应该是 Hugging Face
-repo ID、原生 HF cache 位置，或文档明确声明的 `WORLDFOUNDRY_CKPT_DIR` alias。
+Checkpoint 路径使用 Hugging Face repo ID、原生 HF cache 位置，或文档明确声明的
+`WORLDFOUNDRY_CKPT_DIR` alias。
 
 ## CLI 推理
 
-日常可复现、写进文档的标准命令是 `worldfoundry-eval run`，与模型页上的命令同一形状：
+日常可复现、写进文档的标准命令是 `wf run`，格式与模型页上的命令一致：
 
 ```bash
-worldfoundry-eval run <model-id> \
+wf run <model-id> \
   --pipeline.task-profile <task-profile> \
   --output-dir tmp/worldfoundry_infer/<model-id>
 ```
 
-**选哪条命令。** 日常可复现 / 模型页命令用 `worldfoundry-eval run`。只有 Workspace 视觉冒烟才用 `python -m worldfoundry.studio.workspace_job infer`。入口对照见 [CLI 命令入口](/zh/docs/reference/cli#命令入口)。
+**选哪条命令。** 日常可复现 / 模型页命令用 `wf run`。只有 Workspace 视觉冒烟才用 `python -m worldfoundry.studio.workspace_job infer`。入口对照见 [CLI 命令入口](/zh/docs/reference/cli#命令入口)。
 
 Workspace 视觉冒烟（与 Studio UI 提交的是同一条 job 路径）：
 
@@ -142,13 +139,10 @@ python -m worldfoundry.studio.workspace_job infer \
 
 ### Echo-Memory Context-K1
 
-WorldFoundry 集成 `echo-memory-context-k1`，固定模型 recipe、checkpoint 文件和
-采样布局。结构化加载覆盖已发布的 1,185 张量 DiT；原生 pipeline 切换后的
-全新双 chunk CUDA 验证、官方样例对齐和 benchmark 评分仍待完成。未发布或已撤回权重的 Echo-Memory 变体不纳入接入范围。
+WorldFoundry 集成 `echo-memory-context-k1`，固定模型 recipe、checkpoint 文件和采样布局。已发布的 DiT 可按完整 key 与 shape 加载；CUDA 生成、官方样例对齐和
+benchmark 评分尚未验证。未发布或已撤回权重的 Echo-Memory 变体不受支持。
 
-Runtime 直接扩展 WorldFoundry 的 canonical Wan 2.1，不调用 DiffSynth。
-架构从不会由 checkpoint header 隐式决定：先按固定 model recipe 构造模型，
-再要求完整的 key 与 shape coverage。当前公开的 K=1 模型使用正常 pipeline 接口：
+Runtime 直接扩展 WorldFoundry 的 canonical Wan 2.1，不调用 DiffSynth。架构不会由 checkpoint header 隐式决定：先按固定 model recipe 构造模型，再要求完整的 key 与 shape coverage。当前公开的 K=1 模型使用正常 pipeline 接口：
 
 ```python
 from worldfoundry.pipelines.echo_memory.pipeline_echo_memory import (
@@ -174,8 +168,7 @@ print(result["generated_video_path"])
 4. 通过 `BaseMemory` 实现历史保留/检索（发布路线使用 `EchoRolloutMemory`），不修改 canonical Wan 路径。
 
 新 recipe 还必须增加严格 checkpoint-structure invariant、固定公开 model ID、
-catalog/binding/profile，并在 promotion 前完成真实 CUDA validation。
-公开用法和 checkpoint 身份见
+catalog/binding/profile，并在 promotion 前完成真实 CUDA validation。公开用法和 checkpoint 身份见
 [Echo-Memory 模型卡](/zh/docs/guides/supported-models/echo-memory-context-k1)。
 Training 与尚未验证的 FSDP/USP 不属于当前 infer-only surface。
 
@@ -186,12 +179,10 @@ Matrix-Game 3.5 以两个不可变的模型 recipe 注册：
 - `matrix-game-3.5-first-person` 始终加载 `first-person.safetensors`。
 - `matrix-game-3.5-third-person` 始终加载 `third-person.safetensors`。该 checkpoint 架构含四个 subject-reference embedding slot；发布的 inference profile 有意把每次请求限制为最多两个 reference。
 
-两个 recipe 共用原生 `DiffusionRequest` → `NativeDiffusionPipeline` 路径，
-并复用 canonical Wan components 与 Depth Anything 3。输入必须包含 anchor image，以及相机 NPZ：
+两个 recipe 共用原生 `DiffusionRequest` → `NativeDiffusionPipeline` 路径，并复用 canonical Wan components 与 Depth Anything 3。输入必须包含 anchor image，以及相机 NPZ：
 `extrinsics_c2w`（或 `extrinsics`）形状为 `(N,4,4)`，像素 intrinsics
 形状为 `(4,)`、`(N,4)`、`(3,3)` 或 `(N,3,3)`。单 block 至少需要
-86 个 pose，输出 anchor 加 84 个新生成帧，分辨率 704×1280、16 FPS。
-已发布 base checkpoint 默认使用 25 个去噪 step。
+86 个 pose，输出 anchor 加 84 个新生成帧，分辨率 704×1280、16 FPS。已发布 base checkpoint 默认使用 25 个去噪 step。
 
 声明式 inference profile 统一位于
 `worldfoundry/data/models/runtime/configs/matrix_game_3p5`；runtime package
@@ -222,8 +213,7 @@ print(result["artifact_path"])
 [本地资产](/zh/docs/guides/local-assets)。Memory retrieval
 与 fusion 研究应扩展
 `build_mosaic_inference_dataset(..., dataset_cls=...)` 与
-`build_mosaic_pipeline_module(..., module_cls=...)` 等 factory，
-而不是复制 runtime 或 native diffusion infrastructure。
+`build_mosaic_pipeline_module(..., module_cls=...)` 等 factory，而不是复制 runtime 或 native diffusion infrastructure。
 
 ### Cosmos 1 与 Cosmos 2 原生模型
 
@@ -252,7 +242,7 @@ gen3c(
 ```
 
 两个 wrapper 都直接调用 `NativeDiffusionPipeline`。Predict2 checkpoint 受 gated
-access 限制；registry 与结构验证通过并不代表已完成全分辨率 GPU artifact parity。
+access 限制。全分辨率 GPU artifact parity 尚未验证。
 
 ### Cosmos 2.5 原生模型
 
@@ -278,15 +268,11 @@ result = pipe(
 print(result["artifact_path"])
 ```
 
-原生路径不会 import Diffusers，也不依赖已删除的
-`base_models/diffusion_model/video/cosmos2p5`。Transfer 当前固定官方
-`general/edge` checkpoint；其他 control variant 需要在验证后作为独立的
-checkpoint-specific recipe 接入。
+原生路径不会 import Diffusers。Transfer 固定使用官方 `general/edge` checkpoint；其他 control variant 需要独立的 checkpoint-specific recipe。
 
 ### HunyuanVideo 原生模型
 
-原版与 1.5 的 T2V/I2V 是同一套 native pipeline 上四个独立 recipe。
-选择 model 只会切换 checkpoint-compatible component，不会切换 runner
+原版与 1.5 的 T2V/I2V 是同一套 native pipeline 中的四个独立 recipe。选择 model 只会切换 checkpoint-compatible component，不会切换 runner
 architecture：
 
 ```python
@@ -306,21 +292,19 @@ print(result["artifact_path"])
 
 `hunyuanvideo-t2v`、`hunyuanvideo-i2v`、`hunyuanvideo-1.5-t2v` 与
 `hunyuanvideo-1.5-i2v` 复用框架 loader、scheduler、offload policy、standard
-denoising runner 与 media writer；旧上游 CLI runtime 不再是 backend。生成后可
-通过公开 CLI、catalog model ID 和 benchmark ID 运行生成的视频：
+denoising runner 与 media writer。生成后可通过公开 CLI、catalog model ID 和 benchmark ID 运行生成的视频：
 
 ```bash
-worldfoundry run --benchmark vbench \
+wf run --benchmark vbench \
   --model hunyuanvideo-1.5-t2v \
   --generated-artifact-dir /path/to/generated-videos \
   --mode official-run \
   --output-dir tmp/bench/hunyuanvideo-1.5-t2v
 ```
 
-Registry 与 checkpoint 结构验证已经通过；切换后的 native CUDA artifact parity
-仍需重跑，不能由历史 CLI artifact 替代。
+Registry 与 checkpoint 结构检查已通过；native CUDA artifact parity 尚未验证。
 
-兼容桥接脚本也存在：
+也可以使用 shell wrapper：
 
 ```bash
 bash scripts/inference/run_infer.sh \
@@ -343,9 +327,8 @@ bash scripts/workspace/run_workspace.sh
 http://127.0.0.1:7870/
 ```
 
-Workspace 是检查 release readiness 的首选界面。它适合检查模型专用输入表单、
-官方 demo 默认参数、生成文件、gallery preview 和视觉回归；确认之后再记录
-模型 readiness。
+用 Workspace 检查模型专用输入表单、官方 demo 默认参数、生成文件、gallery preview
+和视觉回归。
 
 逐模型 viewer 路由和 Visualizers 页面说明见
 [Studio 指南](/zh/docs/guides/studio#workspace-可视化入口)。
@@ -360,10 +343,9 @@ Create Job 字段、runtime checks、默认值，以及可选的持久化默认�
 - **生成的视频/图像/3D/action artifact** — 需要人工视觉或结构检查的主要 demo 输出。
 - **Job manifest 或 run record** — 记录 model ID、variant、backend、参数、路径、耗时、状态和错误。
 - **Logs** — Runtime import、checkpoint、CUDA 和模型调用细节。
-- **Studio 的 Gallery/Files 条目** — 发布验证时的人类 review surface。
+- **Studio 的 Gallery/Files 条目** — 人工 review 界面。
 
-“生成了视频文件”本身不算成功。还要检查输入契约、prompt/camera/action 控制、
-帧数、分辨率与 artifact 内容，是否匹配目标官方 demo 或模型 profile。
+“生成了视频文件”本身不算成功。还要检查输入契约、prompt/camera/action 控制、帧数、分辨率与 artifact 内容，是否匹配目标官方 demo 或模型 profile。
 
 ## 下一步
 

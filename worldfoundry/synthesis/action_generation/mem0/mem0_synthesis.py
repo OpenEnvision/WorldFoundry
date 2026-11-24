@@ -1,6 +1,6 @@
 """WorldFoundry synthesis facade for Mem-0."""
 
-from typing import Mapping
+from collections.abc import Mapping
 
 from worldfoundry.synthesis.action_generation.base_action_synthesis import ActionModelSynthesis
 from worldfoundry.synthesis.action_generation.official_policy import OfficialPolicySynthesis

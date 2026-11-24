@@ -30,7 +30,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Timing records — wall clocks only; no CUDA-event attribution
 # ──────────────────────────────────────────────────────────────────────────
@@ -109,7 +108,7 @@ class PrewarmDeadline:
         label: str = "prewarm",
         timeout_s: float | None = None,
         time_fn: Callable[[], float] = time.perf_counter,
-    ) -> "PrewarmDeadline":
+    ) -> PrewarmDeadline:
         """Stamp ``start_time`` now; ``timeout_s=None`` means no expiry."""
         _validate_timeout(timeout_s)
         return cls(label=label, start_time=time_fn(), timeout_s=timeout_s)

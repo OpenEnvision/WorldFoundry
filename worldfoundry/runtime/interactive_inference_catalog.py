@@ -17,7 +17,7 @@ from worldfoundry.core.execution.inference import (
     InferenceVariantSpec,
     ModelInferenceSpec,
 )
-from worldfoundry.core.io.paths import hfd_root_path, official_runtime_repo_path, package_data_path
+from worldfoundry.core.io.paths import hfd_root_path, package_data_path
 
 
 def _field(name, kind="string", default=None, *, target="call_kwargs", required=False, description=""):
@@ -51,7 +51,7 @@ def _variant(name, repo, *, aliases=(), **load):
 _PROMPT = _field("prompt", target="prompt", required=True)
 _IMAGE = _field("input_path", "path", target="input_path", description="Reference image path.")
 _REQUIRED_IMAGE = _field("input_path", "path", target="input_path", required=True, description="Reference image path.")
-_EXTERNAL = (_asset("source_root"), _asset("python_executable"))
+_EXTERNAL = (_asset("python_executable"),)
 _OUTPUTS = (InferenceArtifactSpec("video", "video", required=True, preview=True),)
 
 
@@ -111,7 +111,6 @@ ASTRONEX = _spec(
             mode,
             "Astronex-Lab/Astronex-World",
             mode=mode,
-            source_root=str(official_runtime_repo_path("Astronex-Robotics--Astronex-World")),
         )
         for mode in ("causal", "bidirectional")
     ],
@@ -153,7 +152,6 @@ SOLAR = _spec(
             route["repo_id"],
             variant=name,
             checkpoint_dir=str(hfd_root_path(route["repo_id"].replace("/", "--"), route["checkpoint_subdir"])),
-            source_root=str(official_runtime_repo_path("Junchao-cs--SolarWM")),
         )
         for name, route in _SOLAR_ROUTES.items()
     ],
@@ -183,7 +181,6 @@ ALAYA_V11 = _spec(
             name,
             "AlayaLab/AlayaWorld-v1.1-stage2b",
             variant=name,
-            source_root=str(official_runtime_repo_path("AlayaLab--AlayaWorld")),
             student_dir=str(hfd_root_path("AlayaLab--AlayaWorld-v1.1-stage3")),
         )
         for name in ("dmd", "ar")
@@ -195,7 +192,6 @@ ALAYA_V11 = _spec(
         _asset("base_checkpoint", required=True),
         _asset("gemma_path", required=True),
         _asset("vigeo_checkpoint", required=True),
-        _asset("vigeo_source_root"),
         _asset("student_dir", description="Stage 3 LoRA required for DMD; AR uses stage 2b."),
         _field("rounds", "integer", 5),
         _field("seed", "integer", 42),
@@ -215,7 +211,6 @@ ECHO = _spec(
             name,
             "Echo-Team/Echo-WM",
             variant=name,
-            source_root=str(official_runtime_repo_path("jd-opensource--JoyAI-Echo")),
             gemma_path=str(hfd_root_path("google--gemma-3-12b-it-qat-q4_0-unquantized")),
         )
         for name in ("base", "flash")
@@ -226,16 +221,13 @@ ECHO = _spec(
         _asset("checkpoint_dir", required=True),
         _asset("gemma_path", required=True),
         _field("action_str", default="w-60,a-60", required=True, description="Camera actions, e.g. w-60,a-60."),
-        _field("num_frames", "integer", 241, description="Base: 1+8*N; Flash: 1+8*video_chunk_size*N."),
-        _field("width", "integer", 1280),
-        _field("height", "integer", 704),
-        _field("fps", "integer", 24),
+        _field("num_frames", "integer", description="Base: 1+8*N; Flash: 1+8*video_chunk_size*N."),
+        _field("width", "integer"),
+        _field("height", "integer"),
+        _field("fps", "integer"),
         _field("seed", "integer", 4),
         *(_field(key, "number") for key in ("fov_deg", "translation_speed", "rotation_speed_deg", "pitch_limit_deg")),
-        *(
-            _field(key, "boolean", True if key == "action_overlay" else False)
-            for key in ("auto_fov", "no_audio", "action_overlay")
-        ),
+        *(_field(key, "boolean", key == "action_overlay") for key in ("auto_fov", "no_audio", "action_overlay")),
         *(
             _field(key, kind, description="Base variant only; leave unset for Flash.")
             for key, kind in (

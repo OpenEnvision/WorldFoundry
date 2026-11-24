@@ -7,12 +7,6 @@ import torch
 from torch.nn.utils import weight_norm
 
 
-def init_weights(m, mean=0.0, std=0.01):
-    classname = m.__class__.__name__
-    if classname.find("Conv") != -1:
-        m.weight.data.normal_(mean, std)
-
-
 def apply_weight_norm(m):
     classname = m.__class__.__name__
     if classname.find("Conv") != -1:

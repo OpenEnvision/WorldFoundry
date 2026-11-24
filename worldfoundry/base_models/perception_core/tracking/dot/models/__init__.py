@@ -2,6 +2,7 @@ from .dense_optical_tracking import DenseOpticalTracker
 from .optical_flow import OpticalFlow
 from .point_tracking import PointTracker
 
+
 def create_model(args):
     if args.model == "dot":
         model = DenseOpticalTracker(

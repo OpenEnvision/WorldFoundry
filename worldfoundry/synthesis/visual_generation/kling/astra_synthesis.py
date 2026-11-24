@@ -5,6 +5,7 @@ AstraSynthesis integrates with the BaseSynthesis abstract class and leverages th
 for video generation, including functionalities like model loading, patching, frame encoding,
 diffusion prediction, and video decoding.
 """
+
 import os
 from copy import copy
 from pathlib import Path
@@ -37,6 +38,7 @@ class AstraSynthesis(BaseSynthesis):
     WanVideoAstraPipeline, including model loading, component patching,
     video encoding/decoding, and the diffusion denoising process.
     """
+
     def __init__(self, pipe):
         """
         Initializes the AstraSynthesis instance with a pre-configured pipeline.
@@ -87,12 +89,11 @@ class AstraSynthesis(BaseSynthesis):
             maybe_download_hf_repo_on_rank0(str(path_or_id))
             return snapshot_download(str(path_or_id), local_files_only=True)
         raise FileNotFoundError(
-            "Astra requires an existing local model path or a Hugging Face repo id. "
-            f"Could not resolve: {path_or_id}"
+            f"Astra requires an existing local model path or a Hugging Face repo id. Could not resolve: {path_or_id}"
         )
 
     @classmethod
-    def from_pretrained(cls, config, device="cuda"): # the config is the AstraConfig from the pipeline
+    def from_pretrained(cls, config, device="cuda"):  # the config is the AstraConfig from the pipeline
         """
         Loads and configures the Astra video synthesis pipeline from pretrained models.
 
@@ -125,15 +126,17 @@ class AstraSynthesis(BaseSynthesis):
         # Replace the default DiT model implementation in the manager with a patched version
         # to support Astra's custom components.
         replace_dit_model_in_manager()
-        
+
         # Initialize the ModelManager to load shared models with bfloat16 precision on CPU initially.
         model_manager = ModelManager(torch_dtype=torch.bfloat16, device="cpu")
         # Load the core WAN models: the diffusion model, text encoder (T5), and VAE.
-        model_manager.load_models([
-            os.path.join(resolved_wan_path, "diffusion_pytorch_model.safetensors"),
-            os.path.join(resolved_wan_path, "models_t5_umt5-xxl-enc-bf16.pth"),
-            os.path.join(resolved_wan_path, "Wan2.1_VAE.pth"),
-        ])
+        model_manager.load_models(
+            [
+                os.path.join(resolved_wan_path, "diffusion_pytorch_model.safetensors"),
+                os.path.join(resolved_wan_path, "models_t5_umt5-xxl-enc-bf16.pth"),
+                os.path.join(resolved_wan_path, "Wan2.1_VAE.pth"),
+            ]
+        )
         # Create the pipeline from the loaded models and move it to the target device.
         pipe = WanVideoAstraPipeline.from_model_manager(model_manager, device=device)
 
@@ -149,10 +152,10 @@ class AstraSynthesis(BaseSynthesis):
             # Initialize projector as an identity mapping.
             block.projector.weight = nn.Parameter(torch.eye(dim))
             block.projector.bias = nn.Parameter(torch.zeros(dim))
-        
+
         # Add framepack components to the DiT model for efficient handling of contextual frames.
         add_framepack_components(pipe.dit)
-        
+
         # Configure and add Mixture-of-Experts (MoE) components to the DiT model
         # to handle different input modalities (Sekai, Nuscenes, OpenX).
         moe_config = {
@@ -161,10 +164,10 @@ class AstraSynthesis(BaseSynthesis):
             "hidden_dim": config.moe_hidden_dim or dim * 2,
             "sekai_input_dim": 13,
             "nuscenes_input_dim": 8,
-            "openx_input_dim": 13
+            "openx_input_dim": 13,
         }
         add_moe_components(pipe.dit, moe_config)
-        
+
         # 3. Load weights
         print(f"Loading DiT weights from: {resolved_astra_path} ...")
         # Construct the full path to the Astra-specific DiT checkpoint.
@@ -183,17 +186,17 @@ class AstraSynthesis(BaseSynthesis):
         pipe.dit.load_state_dict(dit_state_dict, strict=True)
         # Move the entire pipeline to the specified device.
         pipe = pipe.to(device)
-        
+
         # Ensure the clean_x_embedder (if present) is cast to the model's dtype.
         model_dtype = next(pipe.dit.parameters()).dtype
-        if hasattr(pipe.dit, 'clean_x_embedder'):
+        if hasattr(pipe.dit, "clean_x_embedder"):
             pipe.dit.clean_x_embedder = pipe.dit.clean_x_embedder.to(dtype=model_dtype)
-        
+
         # Set the number of inference steps for the scheduler based on the config.
         pipe.scheduler.set_timesteps(max(1, int(getattr(config, "num_inference_steps", 50))))
-        
+
         return cls(pipe)
-    
+
     def encode_frames(self, frames):
         """
         Encodes raw video frames into latent representations.
@@ -240,16 +243,27 @@ class AstraSynthesis(BaseSynthesis):
         print(f"Loading encoded video from {pth_path}")
         # Load the encoded data from the .pth file, ensuring it's on CPU.
         encoded_data = torch.load(pth_path, weights_only=True, map_location="cpu")
-        full_latents = encoded_data['latents']
+        full_latents = encoded_data["latents"]
         # Validate that the requested frame range is within the bounds of available latents.
         if start_frame + num_frames > full_latents.shape[1]:
-            raise ValueError(f"Not enough frames: requested {start_frame + num_frames}, available {full_latents.shape[1]}")
+            raise ValueError(
+                f"Not enough frames: requested {start_frame + num_frames}, available {full_latents.shape[1]}"
+            )
         # Select the specific slice of latents for conditioning.
-        condition_latents = full_latents[:, start_frame:start_frame + num_frames, :, :]
+        condition_latents = full_latents[:, start_frame : start_frame + num_frames, :, :]
         return condition_latents, encoded_data
 
     @torch.no_grad()
-    def predict(self, framepack_data, current_generation, prompt_emb_pos, prompt_emb_neg, args, camera_embedding_uncond=None, generator=None):
+    def predict(
+        self,
+        framepack_data,
+        current_generation,
+        prompt_emb_pos,
+        prompt_emb_neg,
+        args,
+        camera_embedding_uncond=None,
+        generator=None,
+    ):
         """
         Runs the diffusion denoising loop to generate new video latents.
 
@@ -279,76 +293,162 @@ class AstraSynthesis(BaseSynthesis):
         num_inference_steps = max(1, int(getattr(args, "num_inference_steps", 50)))
         scheduler = copy(self.pipe.scheduler)
         scheduler.set_timesteps(num_inference_steps)
-        
+
         # Prepare input tensors by extracting them from framepack_data and adding batch dimensions.
-        clean_latents = framepack_data['clean_latents'].unsqueeze(0)
-        clean_latents_2x = framepack_data['clean_latents_2x'].unsqueeze(0)
-        clean_latents_4x = framepack_data['clean_latents_4x'].unsqueeze(0)
-        camera_embedding = framepack_data['camera_embedding'].unsqueeze(0)
-        modality_type = framepack_data['modality_type']
-        
+        clean_latents = framepack_data["clean_latents"].unsqueeze(0)
+        clean_latents_2x = framepack_data["clean_latents_2x"].unsqueeze(0)
+        clean_latents_4x = framepack_data["clean_latents_4x"].unsqueeze(0)
+        camera_embedding = framepack_data["camera_embedding"].unsqueeze(0)
+        modality_type = framepack_data["modality_type"]
+
         modality_inputs = {modality_type: camera_embedding}
-        
+
         modality_inputs_uncond = None
         camera_embedding_uncond_batch = None
         # Prepare unconditional camera embeddings if camera CFG is enabled.
         if args.use_camera_cfg and camera_embedding_uncond is not None:
-            camera_embedding_uncond_batch = camera_embedding_uncond[:camera_embedding.shape[1], :].unsqueeze(0)
+            camera_embedding_uncond_batch = camera_embedding_uncond[: camera_embedding.shape[1], :].unsqueeze(0)
             modality_inputs_uncond = {modality_type: camera_embedding_uncond_batch}
-            
-        latent_indices = framepack_data['latent_indices'].unsqueeze(0).cpu()
-        clean_latent_indices = framepack_data['clean_latent_indices'].unsqueeze(0).cpu()
-        clean_latent_2x_indices = framepack_data['clean_latent_2x_indices'].unsqueeze(0).cpu()
-        clean_latent_4x_indices = framepack_data['clean_latent_4x_indices'].unsqueeze(0).cpu()
+
+        latent_indices = framepack_data["latent_indices"].unsqueeze(0).cpu()
+        clean_latent_indices = framepack_data["clean_latent_indices"].unsqueeze(0).cpu()
+        clean_latent_2x_indices = framepack_data["clean_latent_2x_indices"].unsqueeze(0).cpu()
+        clean_latent_4x_indices = framepack_data["clean_latent_4x_indices"].unsqueeze(0).cpu()
 
         # Determine dimensions of the latents.
-        C = clean_latents.shape[1] 
+        C = clean_latents.shape[1]
         H = clean_latents.shape[3]
         W = clean_latents.shape[4]
-        
+
         # Initialize new latents with random noise, which will be denoised iteratively.
         new_latents = torch.randn(1, C, current_generation, H, W, device=device, dtype=model_dtype, generator=generator)
         # Prepare any additional input required by the pipeline.
         extra_input = self.pipe.prepare_extra_input(new_latents)
         timesteps = scheduler.timesteps
-        
+
         # Main diffusion denoising loop.
         for i, timestep in enumerate(timesteps):
             if i % 10 == 0:
-                print(f"  Denoising step {i+1}/{len(timesteps)}")
+                print(f"  Denoising step {i + 1}/{len(timesteps)}")
             timestep_tensor = timestep.unsqueeze(0).to(device, dtype=model_dtype)
-            
+
             # --- CFG LOGIC ---
             # Apply classifier-free guidance for camera conditioning.
             if args.use_camera_cfg and args.camera_guidance_scale > 1.0:
-                 # Predict noise for the conditional (with camera embedding) input.
-                 noise_pred_cond, _ = self.pipe.dit(new_latents, timestep=timestep_tensor, cam_emb=camera_embedding, modality_inputs=modality_inputs, latent_indices=latent_indices, clean_latents=clean_latents, clean_latent_indices=clean_latent_indices, clean_latents_2x=clean_latents_2x, clean_latent_2x_indices=clean_latent_2x_indices, clean_latents_4x=clean_latents_4x, clean_latent_4x_indices=clean_latent_4x_indices, **prompt_emb_pos, **extra_input)
-                 # Predict noise for the unconditional (without camera embedding) input.
-                 noise_pred_uncond, _ = self.pipe.dit(new_latents, timestep=timestep_tensor, cam_emb=camera_embedding_uncond_batch, modality_inputs=modality_inputs_uncond, latent_indices=latent_indices, clean_latents=clean_latents, clean_latent_indices=clean_latent_indices, clean_latents_2x=clean_latents_2x, clean_latent_2x_indices=clean_latent_2x_indices, clean_latents_4x=clean_latents_4x, clean_latent_4x_indices=clean_latent_4x_indices, **(prompt_emb_neg if prompt_emb_neg else prompt_emb_pos), **extra_input)
-                 # Combine conditional and unconditional predictions using the camera guidance scale.
-                 noise_pred = noise_pred_uncond + args.camera_guidance_scale * (noise_pred_cond - noise_pred_uncond)
-                 
-                 # Further apply text-based classifier-free guidance if both camera and text CFG are active.
-                 if args.text_guidance_scale > 1.0 and prompt_emb_neg:
-                     # Predict noise using the negative text prompt but with conditional camera.
-                     noise_pred_text_uncond, _ = self.pipe.dit(new_latents, timestep=timestep_tensor, cam_emb=camera_embedding, modality_inputs=modality_inputs, latent_indices=latent_indices, clean_latents=clean_latents, clean_latent_indices=clean_latent_indices, clean_latents_2x=clean_latents_2x, clean_latent_2x_indices=clean_latent_2x_indices, clean_latents_4x=clean_latents_4x, clean_latent_4x_indices=clean_latent_4x_indices, **prompt_emb_neg, **extra_input)
-                     # Apply text guidance on top of the camera-guided noise prediction.
-                     noise_pred = noise_pred_text_uncond + args.text_guidance_scale * (noise_pred - noise_pred_text_uncond)
+                # Predict noise for the conditional (with camera embedding) input.
+                noise_pred_cond, _ = self.pipe.dit(
+                    new_latents,
+                    timestep=timestep_tensor,
+                    cam_emb=camera_embedding,
+                    modality_inputs=modality_inputs,
+                    latent_indices=latent_indices,
+                    clean_latents=clean_latents,
+                    clean_latent_indices=clean_latent_indices,
+                    clean_latents_2x=clean_latents_2x,
+                    clean_latent_2x_indices=clean_latent_2x_indices,
+                    clean_latents_4x=clean_latents_4x,
+                    clean_latent_4x_indices=clean_latent_4x_indices,
+                    **prompt_emb_pos,
+                    **extra_input,
+                )
+                # Predict noise for the unconditional (without camera embedding) input.
+                noise_pred_uncond, _ = self.pipe.dit(
+                    new_latents,
+                    timestep=timestep_tensor,
+                    cam_emb=camera_embedding_uncond_batch,
+                    modality_inputs=modality_inputs_uncond,
+                    latent_indices=latent_indices,
+                    clean_latents=clean_latents,
+                    clean_latent_indices=clean_latent_indices,
+                    clean_latents_2x=clean_latents_2x,
+                    clean_latent_2x_indices=clean_latent_2x_indices,
+                    clean_latents_4x=clean_latents_4x,
+                    clean_latent_4x_indices=clean_latent_4x_indices,
+                    **(prompt_emb_neg if prompt_emb_neg else prompt_emb_pos),
+                    **extra_input,
+                )
+                # Combine conditional and unconditional predictions using the camera guidance scale.
+                noise_pred = noise_pred_uncond + args.camera_guidance_scale * (noise_pred_cond - noise_pred_uncond)
+
+                # Further apply text-based classifier-free guidance if both camera and text CFG are active.
+                if args.text_guidance_scale > 1.0 and prompt_emb_neg:
+                    # Predict noise using the negative text prompt but with conditional camera.
+                    noise_pred_text_uncond, _ = self.pipe.dit(
+                        new_latents,
+                        timestep=timestep_tensor,
+                        cam_emb=camera_embedding,
+                        modality_inputs=modality_inputs,
+                        latent_indices=latent_indices,
+                        clean_latents=clean_latents,
+                        clean_latent_indices=clean_latent_indices,
+                        clean_latents_2x=clean_latents_2x,
+                        clean_latent_2x_indices=clean_latent_2x_indices,
+                        clean_latents_4x=clean_latents_4x,
+                        clean_latent_4x_indices=clean_latent_4x_indices,
+                        **prompt_emb_neg,
+                        **extra_input,
+                    )
+                    # Apply text guidance on top of the camera-guided noise prediction.
+                    noise_pred = noise_pred_text_uncond + args.text_guidance_scale * (
+                        noise_pred - noise_pred_text_uncond
+                    )
             # Apply only text-based classifier-free guidance if enabled and a negative prompt is provided.
             elif args.text_guidance_scale > 1.0 and prompt_emb_neg:
-                 # Predict noise for the conditional (positive text) input.
-                 noise_pred_cond, _ = self.pipe.dit(new_latents, timestep=timestep_tensor, cam_emb=camera_embedding, modality_inputs=modality_inputs, latent_indices=latent_indices, clean_latents=clean_latents, clean_latent_indices=clean_latent_indices, clean_latents_2x=clean_latents_2x, clean_latent_2x_indices=clean_latent_2x_indices, clean_latents_4x=clean_latents_4x, clean_latent_4x_indices=clean_latent_4x_indices, **prompt_emb_pos, **extra_input)
-                 # Predict noise for the unconditional (negative text) input.
-                 noise_pred_uncond, _ = self.pipe.dit(new_latents, timestep=timestep_tensor, cam_emb=camera_embedding, modality_inputs=modality_inputs, latent_indices=latent_indices, clean_latents=clean_latents, clean_latent_indices=clean_latent_indices, clean_latents_2x=clean_latents_2x, clean_latent_2x_indices=clean_latent_2x_indices, clean_latents_4x=clean_latents_4x, clean_latent_4x_indices=clean_latent_4x_indices, **prompt_emb_neg, **extra_input)
-                 # Combine conditional and unconditional predictions using the text guidance scale.
-                 noise_pred = noise_pred_uncond + args.text_guidance_scale * (noise_pred_cond - noise_pred_uncond)
+                # Predict noise for the conditional (positive text) input.
+                noise_pred_cond, _ = self.pipe.dit(
+                    new_latents,
+                    timestep=timestep_tensor,
+                    cam_emb=camera_embedding,
+                    modality_inputs=modality_inputs,
+                    latent_indices=latent_indices,
+                    clean_latents=clean_latents,
+                    clean_latent_indices=clean_latent_indices,
+                    clean_latents_2x=clean_latents_2x,
+                    clean_latent_2x_indices=clean_latent_2x_indices,
+                    clean_latents_4x=clean_latents_4x,
+                    clean_latent_4x_indices=clean_latent_4x_indices,
+                    **prompt_emb_pos,
+                    **extra_input,
+                )
+                # Predict noise for the unconditional (negative text) input.
+                noise_pred_uncond, _ = self.pipe.dit(
+                    new_latents,
+                    timestep=timestep_tensor,
+                    cam_emb=camera_embedding,
+                    modality_inputs=modality_inputs,
+                    latent_indices=latent_indices,
+                    clean_latents=clean_latents,
+                    clean_latent_indices=clean_latent_indices,
+                    clean_latents_2x=clean_latents_2x,
+                    clean_latent_2x_indices=clean_latent_2x_indices,
+                    clean_latents_4x=clean_latents_4x,
+                    clean_latent_4x_indices=clean_latent_4x_indices,
+                    **prompt_emb_neg,
+                    **extra_input,
+                )
+                # Combine conditional and unconditional predictions using the text guidance scale.
+                noise_pred = noise_pred_uncond + args.text_guidance_scale * (noise_pred_cond - noise_pred_uncond)
             # If no CFG is used, perform a single noise prediction with the positive prompt.
             else:
-                 noise_pred, _ = self.pipe.dit(new_latents, timestep=timestep_tensor, cam_emb=camera_embedding, modality_inputs=modality_inputs, latent_indices=latent_indices, clean_latents=clean_latents, clean_latent_indices=clean_latent_indices, clean_latents_2x=clean_latents_2x, clean_latent_2x_indices=clean_latent_2x_indices, clean_latents_4x=clean_latents_4x, clean_latent_4x_indices=clean_latent_4x_indices, **prompt_emb_pos, **extra_input)
-            
+                noise_pred, _ = self.pipe.dit(
+                    new_latents,
+                    timestep=timestep_tensor,
+                    cam_emb=camera_embedding,
+                    modality_inputs=modality_inputs,
+                    latent_indices=latent_indices,
+                    clean_latents=clean_latents,
+                    clean_latent_indices=clean_latent_indices,
+                    clean_latents_2x=clean_latents_2x,
+                    clean_latent_2x_indices=clean_latent_2x_indices,
+                    clean_latents_4x=clean_latents_4x,
+                    clean_latent_4x_indices=clean_latent_4x_indices,
+                    **prompt_emb_pos,
+                    **extra_input,
+                )
+
             # Take a single denoising step using the scheduler.
             new_latents = scheduler.step(noise_pred, timestep, new_latents)
-        
+
         return new_latents
 
     def decode_video(self, latents, tiled=True, tile_size=(34, 34), tile_stride=(18, 16)):
@@ -368,7 +468,9 @@ class AstraSynthesis(BaseSynthesis):
         # Decode the latents into video frames using the pipeline's VAE decoder.
         with self._vae_lock, torch.no_grad():
             try:
-                decoded_video = self.pipe.decode_video(latents, tiled=tiled, tile_size=tile_size, tile_stride=tile_stride)
+                decoded_video = self.pipe.decode_video(
+                    latents, tiled=tiled, tile_size=tile_size, tile_stride=tile_stride
+                )
             finally:
                 self.pipe.vae.model.clear_cache()
         # Convert the decoded video tensor to a NumPy array, permuting dimensions

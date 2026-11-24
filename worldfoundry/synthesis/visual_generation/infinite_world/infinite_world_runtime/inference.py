@@ -3,12 +3,12 @@ from __future__ import annotations
 import os
 import random
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 import torch
 
-from worldfoundry.evaluation.utils import worldfoundry_data_path
+from worldfoundry.core.io.paths import package_data_path
 from worldfoundry.core.model_loading import load_torch_state_dict
 
 from .bucket_registry import get_bucket_config
@@ -20,7 +20,6 @@ from .plan import (
     resolve_in_tree_model_root,
 )
 from .utils.import_utils import get_obj_from_str
-
 
 DEFAULT_NEGATIVE_PROMPT = (
     "many cars, crowds, Vivid hues, overexposed, static, blurry details, subtitles, style, work, artwork, "
@@ -37,7 +36,7 @@ def default_config_path() -> str:
     Args:
         None.
     """
-    return str(worldfoundry_data_path("models", "runtime", "configs", "infinite_world.yaml"))
+    return str(package_data_path("models", "runtime", "configs", "infinite_world", "inference.yaml"))
 
 
 def build_runtime_plan(
@@ -84,7 +83,7 @@ def _plan_model_root(pretrained_model_path: Any = None) -> Path | None:
     return candidate.resolve() if candidate.is_dir() else None
 
 
-def _resolve_model_root(pretrained_model_path: Optional[str]) -> str:
+def _resolve_model_root(pretrained_model_path: str | None) -> str:
     return str(resolve_in_tree_model_root(pretrained_model_path))
 
 
@@ -96,7 +95,7 @@ def _device_index(device: str) -> int:
     return torch.cuda.current_device() if torch.cuda.is_available() else 0
 
 
-def _resolve_path(path_value: Optional[str], model_root: str) -> Optional[str]:
+def _resolve_path(path_value: str | None, model_root: str) -> str | None:
     if path_value is None:
         return None
     path_value = str(path_value).strip()
@@ -105,7 +104,7 @@ def _resolve_path(path_value: Optional[str], model_root: str) -> Optional[str]:
     return os.path.join(model_root, path_value)
 
 
-def _resolve_config_path(config_path: Optional[str]) -> str:
+def _resolve_config_path(config_path: str | None) -> str:
     if config_path is None:
         return default_config_path()
 
@@ -165,7 +164,7 @@ def _video_tensor_to_uint8(video_tensor: torch.Tensor) -> np.ndarray:
     return video.astype(np.uint8)
 
 
-def _capture_rng_state(device: torch.device) -> Dict[str, Optional[torch.Tensor]]:
+def _capture_rng_state(device: torch.device) -> dict[str, torch.Tensor | None]:
     state = {
         "cpu": torch.get_rng_state().clone(),
         "cuda": None,
@@ -175,7 +174,7 @@ def _capture_rng_state(device: torch.device) -> Dict[str, Optional[torch.Tensor]
     return state
 
 
-def _restore_rng_state(device: torch.device, state: Dict[str, Optional[torch.Tensor]]):
+def _restore_rng_state(device: torch.device, state: dict[str, torch.Tensor | None]):
     cpu_state = state.get("cpu")
     if cpu_state is not None:
         torch.set_rng_state(cpu_state)
@@ -209,8 +208,8 @@ class InfiniteWorldRuntime:
         weight_dtype=torch.bfloat16,
         guidance_scale: float = 5.0,
         negative_prompt: str = DEFAULT_NEGATIVE_PROMPT,
-        load_seed: Optional[int] = None,
-        post_load_rng_state: Optional[Dict[str, Optional[torch.Tensor]]] = None,
+        load_seed: int | None = None,
+        post_load_rng_state: dict[str, torch.Tensor | None] | None = None,
     ):
         self.model_root = model_root
         self.config_path = config_path
@@ -235,14 +234,14 @@ class InfiniteWorldRuntime:
         args=None,
         device=None,
         weight_dtype=torch.bfloat16,
-        config_path: Optional[str] = None,
-        checkpoint_path: Optional[str] = None,
+        config_path: str | None = None,
+        checkpoint_path: str | None = None,
         bucket_config_name: str = "ASPECT_RATIO_627_F64",
-        num_sampling_steps: Optional[int] = None,
-        shift: Optional[float] = None,
-        guidance_scale: Optional[float] = None,
+        num_sampling_steps: int | None = None,
+        shift: float | None = None,
+        guidance_scale: float | None = None,
         negative_prompt: str = DEFAULT_NEGATIVE_PROMPT,
-        seed: Optional[int] = 42,
+        seed: int | None = 42,
         **kwargs,
     ):
         device = device or "cuda"
@@ -332,10 +331,10 @@ class InfiniteWorldRuntime:
     def plan(
         cls,
         pretrained_model_path=None,
-        device: Optional[str] = None,
-        config_path: Optional[str] = None,
+        device: str | None = None,
+        config_path: str | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Build a local-runtime readiness plan without loading model weights.
 
@@ -360,10 +359,10 @@ class InfiniteWorldRuntime:
         move_ids: torch.Tensor,
         view_ids: torch.Tensor,
         num_chunks: int = 1,
-        negative_prompt: Optional[str] = None,
-        seed: Optional[int] = None,
+        negative_prompt: str | None = None,
+        seed: int | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if seed is not None:
             if self.load_seed is not None and int(seed) == int(self.load_seed) and self.post_load_rng_state is not None:
                 _restore_rng_state(self.device_torch, self.post_load_rng_state)

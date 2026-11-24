@@ -20,6 +20,7 @@ from ..minimax_h3_common import validate_minimax_h3_vae_latent_stats
 @dataclass
 class MiniMaxH3VideoVAEArchConfig:
     """Architectural widths and downsample schedule for the H3 video VAE."""
+
     latent_channels: int = 24
     latents_mean: list[float] | None = None
     latents_std: list[float] | None = None
@@ -40,9 +41,8 @@ class MiniMaxH3VideoVAEArchConfig:
 @dataclass
 class MiniMaxH3VideoVAEConfig:
     """Runtime config (tiling, parallel decode) plus architecture."""
-    arch_config: MiniMaxH3VideoVAEArchConfig = field(
-        default_factory=MiniMaxH3VideoVAEArchConfig
-    )
+
+    arch_config: MiniMaxH3VideoVAEArchConfig = field(default_factory=MiniMaxH3VideoVAEArchConfig)
     load_encoder: bool = True
     load_decoder: bool = True
     use_tiling: bool = True
@@ -62,17 +62,13 @@ class MiniMaxH3VideoVAEConfig:
             return "tiled"
         if self.parallel_decode_mode in ("spatial", "spatial_shard"):
             raise ValueError(
-                "MiniMax H3 rejects spatial-shard VAE decode because it failed "
-                "the released quality contract; use tiled"
+                "MiniMax H3 rejects spatial-shard VAE decode because it failed the released quality contract; use tiled"
             )
         if self.parallel_decode_mode == "tiled":
             return "tiled"
         if self.parallel_decode_mode == "patch":
             raise ValueError("MiniMax H3 does not support patch VAE decode; use tiled")
-        raise ValueError(
-            f"unsupported MiniMax H3 VAE parallel decode mode "
-            f"{self.parallel_decode_mode!r}"
-        )
+        raise ValueError(f"unsupported MiniMax H3 VAE parallel decode mode {self.parallel_decode_mode!r}")
 
     def post_init(self) -> None:
         self.resolved_parallel_decode_mode()

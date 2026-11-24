@@ -66,9 +66,9 @@ def temporal_random_crop(vframes, num_frames, frame_interval):
     temporal_sample = video_transforms.TemporalRandomCrop(num_frames * frame_interval)
     total_frames = len(vframes)
     start_frame_ind, end_frame_ind = temporal_sample(total_frames)
-    assert (
-        end_frame_ind - start_frame_ind >= num_frames
-    ), f"Not enough frames to sample, {end_frame_ind} - {start_frame_ind} < {num_frames}"
+    assert end_frame_ind - start_frame_ind >= num_frames, (
+        f"Not enough frames to sample, {end_frame_ind} - {start_frame_ind} < {num_frames}"
+    )
     frame_indice = np.linspace(start_frame_ind, end_frame_ind - 1, num_frames, dtype=int)
     video = vframes[frame_indice]
     return video
@@ -218,11 +218,11 @@ def resize_crop_to_fill(pil_image, image_size):
         sh, sw = th, round(w * rh)
         image = pil_image.resize((sw, sh), Image.BICUBIC)
         i = 0
-        j = int(round((sw - tw) / 2.0))
+        j = int(round((sw - tw) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     else:
         sh, sw = round(h * rw), tw
         image = pil_image.resize((sw, sh), Image.BICUBIC)
-        i = int(round((sh - th) / 2.0))
+        i = int(round((sh - th) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         j = 0
     arr = np.array(image)
     assert i + th <= arr.shape[0] and j + tw <= arr.shape[1]

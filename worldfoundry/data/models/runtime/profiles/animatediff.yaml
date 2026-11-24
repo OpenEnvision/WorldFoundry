@@ -1,13 +1,17 @@
-artifact_filename: animatediff.gif
-artifact_kind: generated_video
-backend_stage: in_tree_runtime
-id: animatediff
+schema_version: 2
+model_id: animatediff
 input_schema:
   image: false
   prompt: true
-integration_status: integrated
+artifact_kind: generated_video
+artifact_filename: animatediff.gif
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: official_repo_animation_pipeline_ready
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - WorldFoundry owns AnimateDiff runtime execution in worldfoundry/synthesis/visual_generation/animatediff/worldfoundry_runtime.py
   and keeps worldfoundry/synthesis/visual_generation/animatediff/animatediff_synthesis.py
   as the thin synthesis adapter.
-runtime_status: official_repo_animation_pipeline_ready

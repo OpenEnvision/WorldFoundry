@@ -5,6 +5,7 @@ task_family: world_model
 groups: [video, image_to_video, camera_control]
 source_repos:
 - url: https://github.com/EternalEvan/Astra
+  revision: 3fb82e1939bfcf87d6e27a7da57d8b55ff9cb393
 checkpoints:
 - repo_id: EvanEternal/Astra
   revision: aef5d6d75a994fa67f3f05cf17f5824a53b1c52f

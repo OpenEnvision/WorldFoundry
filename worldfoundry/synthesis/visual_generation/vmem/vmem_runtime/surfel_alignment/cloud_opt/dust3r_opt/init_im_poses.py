@@ -6,24 +6,22 @@
 # --------------------------------------------------------
 from functools import cache
 
+import cv2
 import numpy as np
+import roma
 import scipy.sparse as sp
 import torch
-import cv2
-import roma
 from tqdm import tqdm
 
-from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.utils.geometry import (
-    geotrf,
-    get_med_dist_between_poses,
-    inv,
-)
 from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.post_process import estimate_focal_knowing_depth
+from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.utils.geometry import get_med_dist_between_poses
+from worldfoundry.core.geometry.projection import invert_matrix as inv
+from worldfoundry.core.geometry.projection import transform_points as geotrf
 from worldfoundry.synthesis.visual_generation.vmem.vmem_runtime.surfel_alignment.viz import (
     to_numpy,
 )
 
-from ..commons import edge_str, i_j_ij, compute_edge_scores
+from ..commons import compute_edge_scores, edge_str, i_j_ij
 
 
 @torch.no_grad()
@@ -103,14 +101,10 @@ def init_from_pts3d(self, pts3d, im_focals, im_poses):
     # init poses
     nkp, known_poses_msk, known_poses = get_known_poses(self)
     if nkp == 1:
-        raise NotImplementedError(
-            "Would be simpler to just align everything afterwards on the single known pose"
-        )
+        raise NotImplementedError("Would be simpler to just align everything afterwards on the single known pose")
     elif nkp > 1:
         # global rigid SE3 alignment
-        s, R, T = align_multiple_poses(
-            im_poses[known_poses_msk], known_poses[known_poses_msk]
-        )
+        s, R, T = align_multiple_poses(im_poses[known_poses_msk], known_poses[known_poses_msk])
         trf = sRT_to_4x4(s, R, T, device=known_poses.device)
 
         # rotate everything
@@ -123,9 +117,7 @@ def init_from_pts3d(self, pts3d, im_focals, im_poses):
     for e, (i, j) in enumerate(self.edges):
         i_j = edge_str(i, j)
         # compute transform that goes from cam to world
-        s, R, T = rigid_points_registration(
-            self.pred_i[i_j], pts3d[i], conf=self.conf_i[i_j]
-        )
+        s, R, T = rigid_points_registration(self.pred_i[i_j], pts3d[i], conf=self.conf_i[i_j])
         self._set_pose(self.pw_poses, e, R, T, scale=s)
 
     # take into account the scale normalization
@@ -164,16 +156,14 @@ def minimum_spanning_tree(
     verbose=True,
 ):
     n_imgs = len(imshapes)
-    sparse_graph = -dict_to_sparse_graph(
-        compute_edge_scores(map(i_j_ij, edges), conf_i, conf_j)
-    )
+    sparse_graph = -dict_to_sparse_graph(compute_edge_scores(map(i_j_ij, edges), conf_i, conf_j))
     print(sparse_graph)
     msp = sp.csgraph.minimum_spanning_tree(sparse_graph).tocoo()
 
     # temp variable to store 3d points
     pts3d = [None] * len(imshapes)
 
-    todo = sorted(zip(-msp.data, msp.row, msp.col))  # sorted edges
+    todo = sorted(zip(-msp.data, msp.row, msp.col, strict=False))  # sorted edges
     im_poses = [None] * n_imgs
     im_focals = [None] * n_imgs
 
@@ -232,12 +222,8 @@ def minimum_spanning_tree(
 
     if has_im_poses:
         # complete all missing informations
-        pair_scores = list(
-            sparse_graph.values()
-        )  # already negative scores: less is best
-        edges_from_best_to_worse = np.array(list(sparse_graph.keys()))[
-            np.argsort(pair_scores)
-        ]
+        pair_scores = list(sparse_graph.values())  # already negative scores: less is best
+        edges_from_best_to_worse = np.array(list(sparse_graph.keys()))[np.argsort(pair_scores)]
         for i, j in edges_from_best_to_worse.tolist():
             if im_focals[i] is None:
                 im_focals[i] = estimate_focal(pred_i[edge_str(i, j)])
@@ -245,9 +231,7 @@ def minimum_spanning_tree(
         for i in range(n_imgs):
             if im_poses[i] is None:
                 msk = im_conf[i] > min_conf_thr
-                res = fast_pnp(
-                    pts3d[i], im_focals[i], msk=msk, device=device, niter_PnP=niter_PnP
-                )
+                res = fast_pnp(pts3d[i], im_focals[i], msk=msk, device=device, niter_PnP=niter_PnP)
                 if res:
                     im_focals[i], im_poses[i] = res
             if im_poses[i] is None:
@@ -289,9 +273,7 @@ def estimate_focal(pts3d_i, pp=None):
         H, W, THREE = pts3d_i.shape
         assert THREE == 3
         pp = torch.tensor((W / 2, H / 2), device=pts3d_i.device)
-    focal = estimate_focal_knowing_depth(
-        pts3d_i.unsqueeze(0), pp.unsqueeze(0), focal_mode="weiszfeld"
-    ).ravel()
+    focal = estimate_focal_knowing_depth(pts3d_i.unsqueeze(0), pp.unsqueeze(0), focal_mode="weiszfeld").ravel()
     return float(focal)
 
 
@@ -316,10 +298,7 @@ def fast_pnp(pts3d, focal, msk, device, pp=None, niter_PnP=10):
     else:
         tentative_focals = [focal]
 
-    if pp is None:
-        pp = (W / 2, H / 2)
-    else:
-        pp = to_numpy(pp)
+    pp = (W / 2, H / 2) if pp is None else to_numpy(pp)
 
     best = (0,)
     for focal in tentative_focals:
@@ -336,7 +315,7 @@ def fast_pnp(pts3d, focal, msk, device, pp=None, niter_PnP=10):
             )
             if not success:
                 continue
-        except:
+        except BaseException:
             continue
 
         score = len(inliers)
@@ -379,9 +358,7 @@ def align_multiple_poses(src_poses, target_poses):
         eps = max(get_med_dist_between_poses(poses) / 100, 1e-6)
         return torch.cat((poses[:, :3, 3], poses[:, :3, 3] + eps * poses[:, :3, 2]))
 
-    R, T, s = roma.rigid_points_registration(
-        center_and_z(src_poses), center_and_z(target_poses), compute_scaling=True
-    )
+    R, T, s = roma.rigid_points_registration(center_and_z(src_poses), center_and_z(target_poses), compute_scaling=True)
     # If scale is too small (near zero), set it to 1 to prevent numerical issues
     if abs(s) < 1e-6:
         s = 1.0

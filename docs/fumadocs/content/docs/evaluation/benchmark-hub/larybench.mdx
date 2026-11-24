@@ -1,9 +1,9 @@
 ---
 title: LARYBench
-description: "Meituan LongCat latent-action probe: extract, classify, and regress robot actions. WorldFoundry ships the three-stage runtime; it does not invent a board."
+description: "Meituan LongCat latent-action probe: extract, classify, and regress robot actions. WorldFoundry ships the three-stage runtime."
 ---
 
-LARYBench (Meituan LongCat) asks whether a video / world model's **latent actions** still contain real robot-action information. It is not a text-to-video beauty contest. The official pipeline has three stages over **CALVIN**, **VLABench**, **AgiBot-Beta**, and **RoboCOIN**:
+LARYBench (Meituan LongCat) asks whether a video / world model's **latent actions** still contain real robot-action information. The official pipeline has three stages over **CALVIN**, **VLABench**, **AgiBot-Beta**, and **RoboCOIN**:
 
 - **Extract** — run a representation model over one metadata table, write latent-action CSVs, score `extraction_coverage`.
 - **Classify** — probe discrete action classes (`top1_accuracy`, `macro_f1`, `weighted_f1`).
@@ -20,7 +20,7 @@ WorldFoundry **ships the stage drivers** in tree (`cli.py`, `extract.py`, `class
 Import an official classify or regress export:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id larybench \
   --mode official-validation \
   --official-results-path /path/to/classification_summary.json \
@@ -41,7 +41,7 @@ export MODEL_DIR=/path/to/representation_checkpoints
 hf download meituan-longcat/LARYBench --repo-type dataset --local-dir "${DATA_DIR}"
 
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/larybench/run_larybench_official_runner.py \
   --run-official \
   --stage extract \
   --dataset calvin \
@@ -56,11 +56,11 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 Classify needs `--dim` and `--classes`. Regress accepts `--action-mode absolute|relative` and optional `--global-stats-json` / `--val-unseen-csv`. Layout env vars: `DATA_DIR`, `LARY_METADATA_DIR`, `LARY_LA_DIR`, `MODEL_DIR`, optional `WORLDFOUNDRY_LARYBENCH_ROOT`.
 
-In-tree pointers:
+Manifest and runner directory:
 
 ```text
 worldfoundry/data/benchmarks/tasks/external/larybench.yaml
-worldfoundry/evaluation/tasks/execution/runners/larybench/
+worldfoundry/evals/tasks/execution/runners/larybench/
 ```
 
 Outputs under `--output-dir` include `scorecard.json` (primary `extraction_coverage`), `benchmark_contract.json`, and `raw_metric_table.jsonl`.

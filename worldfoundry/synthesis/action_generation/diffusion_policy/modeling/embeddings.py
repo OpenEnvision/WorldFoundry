@@ -1,7 +1,9 @@
 # Inference-only Diffusion Policy source retained in-tree.
 import math
+
 import torch
 import torch.nn as nn
+
 
 class SinusoidalPosEmb(nn.Module):
     def __init__(self, dim):

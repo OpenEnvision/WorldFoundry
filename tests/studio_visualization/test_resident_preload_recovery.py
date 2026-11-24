@@ -10,8 +10,8 @@ from PIL import Image
 
 from worldfoundry.studio.inference.catalog import find_entry
 from worldfoundry.studio.inference.execution import PreparedInputs
-from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
 from worldfoundry.studio.visualization.backends.world_realtime import ResidentWorldRuntime
+from worldfoundry.studio.visualization.launch_config import StudioLaunchConfig
 
 
 class Manager:

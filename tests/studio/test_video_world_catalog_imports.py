@@ -5,26 +5,26 @@ import importlib
 import pytest
 
 import worldfoundry.synthesis.visual_generation.magic_world.worldfoundry_runtime as magicworld_runtime
-from worldfoundry.studio.inference.catalog import (
+from worldfoundry.studio.inference.catalog import find_entry, find_runtime_entry
+from worldfoundry.studio.inference.catalog.discovery import _discover_ast_pipelines
+from worldfoundry.studio.inference.catalog.models.scene_3d import _depth_anything_v2_default_ref, _pi3_default_ref
+from worldfoundry.studio.inference.catalog.models.video_generation import (
     _animatediff_default_load_kwargs,
-    _depth_anything_v2_default_ref,
-    _discover_ast_pipelines,
-    _hf_checkpoint_model_ref,
     _hydra_default_load_kwargs,
     _hydra_default_ref,
     _longsana_video_480p_default_ref,
+    _sana_video_480p_default_ref,
+    _sana_video_720p_default_ref,
+)
+from worldfoundry.studio.inference.catalog.models.world_models import (
     _magicworld_default_load_kwargs,
     _magicworld_default_ref,
     _minwm_default_ref,
     _minwm_hy_default_load_kwargs,
     _minwm_wan_default_load_kwargs,
-    _pi3_default_ref,
-    _sana_video_480p_default_ref,
-    _sana_video_720p_default_ref,
     _wow_default_ref,
-    find_entry,
-    find_runtime_entry,
 )
+from worldfoundry.studio.inference.catalog.resolve import _hf_checkpoint_model_ref
 from worldfoundry.synthesis.visual_generation.magic_world.worldfoundry_runtime import (
     _magicworld_latent_frames,
 )

@@ -8,9 +8,6 @@ import time
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from omegaconf import OmegaConf
 from torch import distributions as pyd
 from torch.distributions.utils import _standard_normal
 
@@ -26,7 +23,7 @@ class eval_mode:
             model.train(False)
 
     def __exit__(self, *args):
-        for model, state in zip(self.models, self.prev_states):
+        for model, state in zip(self.models, self.prev_states, strict=False):
             model.train(state)
         return False
 
@@ -40,24 +37,12 @@ def set_seed_everywhere(seed):
 
 
 def soft_update_params(net, target_net, tau):
-    for param, target_param in zip(net.parameters(), target_net.parameters()):
+    for param, target_param in zip(net.parameters(), target_net.parameters(), strict=False):
         target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
 
 def to_torch(xs, device):
     return tuple(torch.as_tensor(x, device=device) for x in xs)
-
-
-def weight_init(m):
-    if isinstance(m, nn.Linear):
-        nn.init.orthogonal_(m.weight.data)
-        if hasattr(m.bias, "data"):
-            m.bias.data.fill_(0.0)
-    elif isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
-        gain = nn.init.calculate_gain("relu")
-        nn.init.orthogonal_(m.weight.data, gain)
-        if hasattr(m.bias, "data"):
-            m.bias.data.fill_(0.0)
 
 
 def accuracy(output, target, topk=(1,)):
@@ -97,9 +82,7 @@ class Every:
         if self._every is None:
             return False
         every = self._every // self._action_repeat
-        if step % every == 0:
-            return True
-        return False
+        return bool(step % every == 0)
 
 
 class Timer:
@@ -129,7 +112,7 @@ class TruncatedNormal(pyd.Normal):
         x = x - x.detach() + clamped_x.detach()
         return x
 
-    def sample(self, clip=None, sample_shape=torch.Size()):
+    def sample(self, clip=None, sample_shape=torch.Size()):  # noqa: B008 - Default evaluated once at definition, as upstream.
         shape = self._extended_shape(sample_shape)
         eps = _standard_normal(shape, dtype=self.loc.dtype, device=self.loc.device)
         eps *= self.scale
@@ -150,9 +133,7 @@ def schedule(schdl, step):
             return (1.0 - mix) * init + mix * final
         match = re.match(r"step_linear\((.+),(.+),(.+),(.+),(.+)\)", schdl)
         if match:
-            init, final1, duration1, final2, duration2 = [
-                float(g) for g in match.groups()
-            ]
+            init, final1, duration1, final2, duration2 = [float(g) for g in match.groups()]
             if step <= duration1:
                 mix = np.clip(step / duration1, 0.0, 1.0)
                 return (1.0 - mix) * init + mix * final1

@@ -7,7 +7,7 @@ Implements a variant of Vision Transformers for Dense Prediction, https://arxiv.
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 import torch
 from torch import nn
@@ -77,9 +77,7 @@ class MultiresConvDecoder(nn.Module):
         num_encoders = len(self.dims_encoder)
 
         if num_levels != num_encoders:
-            raise ValueError(
-                f"Got encoder output levels={num_levels}, expected levels={num_encoders+1}."
-            )
+            raise ValueError(f"Got encoder output levels={num_levels}, expected levels={num_encoders + 1}.")
 
         # Project features of different encoder dims to the same decoder dim.
         # Fuse features from the lowest resolution (num_levels-1)

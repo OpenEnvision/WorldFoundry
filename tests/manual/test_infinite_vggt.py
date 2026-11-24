@@ -1,12 +1,12 @@
 import sys
-from pathlib import Path
+
 sys.path.append("..")
 
 from worldfoundry.pipelines.infinite_vggt.pipeline_infinite_vggt import InfiniteVGGTPipeline
 
 # Configure before running: HuggingFace repo or local dir with .pth
 MODEL_PATH = "lch01/StreamVGGT"
-DATA_PATH = "./worldfoundry/data/test_cases/test_image_seq_case1" #"/YOUR/IMAGE/DIR/OR/VIDEO/PATH"
+DATA_PATH = "./worldfoundry/data/test_cases/test_image_seq_case1"  # "/YOUR/IMAGE/DIR/OR/VIDEO/PATH"
 OUTPUT_DIR = "./output/infinite_vggt"
 
 # Optional: set interaction (export_ply / export_glb / export_depth)

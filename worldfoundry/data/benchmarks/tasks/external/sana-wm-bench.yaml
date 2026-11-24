@@ -16,8 +16,8 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: sana-wm-bench
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:SanaWMBenchContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:sana-wm-bench
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py
   integration_status: integrated
   status: in_tree_runtime_ready
   input_contract: [prompt, first_frame, camera_npz, generated_video]

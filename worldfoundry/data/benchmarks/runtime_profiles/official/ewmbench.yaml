@@ -13,7 +13,7 @@ notes:
 - Full leaderboard parity still requires generated artifacts for the complete official prompt/task suite plus upstream
   scorer or judge assets.
 preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile ewmbench --manifest
+  worldfoundry.evals.tasks.execution.orchestration.runtime_preflight --profile ewmbench --manifest
   worldfoundry/data/benchmarks/runtime_profiles/official/ewmbench.yaml --output-dir tmp/worldfoundry_preflight/ewmbench
   --json
 python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
@@ -21,7 +21,7 @@ pythonpath_roots:
 - .
 required_assets:
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench
+  - worldfoundry/evals/tasks/execution/runners/ewmbench/runtime/ewmbench
   task_yaml: worldfoundry/data/benchmarks/tasks/external/ewmbench.yaml
 required_env: []
 optional_env:
@@ -33,12 +33,12 @@ required_imports:
 required_packages:
 - numpy
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
 required_paths:
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/ewmbench.yaml
 - id: in_tree_runtime_root
-  path: worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench
+  path: worldfoundry/evals/tasks/execution/runners/ewmbench/runtime/ewmbench
 requires_cuda_visibility: false
 status: in_tree_result_normalizer_ready_upstream_runtime_pending
 optional_imports:
@@ -48,7 +48,7 @@ base_model_dependencies:
 optional_base_model_dependencies:
 - spatial_perception_core_stack
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id

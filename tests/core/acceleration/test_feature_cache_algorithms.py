@@ -46,8 +46,7 @@ def test_teacache_uses_polynomial_threshold_and_dense_boundaries() -> None:
     )
     with torch.no_grad():
         outputs = [
-            cache.run(step, signal, lambda: _computed(counter), total_steps=4)
-            for step, signal in enumerate(signals)
+            cache.run(step, signal, lambda: _computed(counter), total_steps=4) for step, signal in enumerate(signals)
         ]
     assert counter[0] == 2
     assert [event.hit for event in cache.events] == [False, True, True, False]
@@ -91,10 +90,7 @@ def test_taylorseer_extrapolates_between_dense_steps() -> None:
     counter = [0]
     cache = TaylorSeerResidualCache(interval=2, dense_last=0, total_steps=5)
     with torch.no_grad():
-        outputs = [
-            cache.run(step, torch.zeros(1), lambda: _computed(counter), total_steps=5)
-            for step in range(5)
-        ]
+        outputs = [cache.run(step, torch.zeros(1), lambda: _computed(counter), total_steps=5) for step in range(5)]
     assert [event.hit for event in cache.events] == [False, True, False, True, False]
     assert counter[0] == 3
     # The first hit has no derivative yet and therefore reuses the seed.
@@ -432,9 +428,7 @@ def test_block_feature_caches_force_dense_without_mutating_state_under_autograd(
     grad_input = torch.full((1, 3, 4), 100.0, requires_grad=True)
     output = cache.run_blocks(1, grad_input, run_block, block_count=block_count)
     output.sum().backward()
-    assert [after - before for after, before in zip(calls, before_grad, strict=True)] == [
-        1
-    ] * block_count
+    assert [after - before for after, before in zip(calls, before_grad, strict=True)] == [1] * block_count
     assert grad_input.grad is not None
     assert cache.events[-1].reason == "autograd"
     assert cache.events[-1].skipped_blocks == ()

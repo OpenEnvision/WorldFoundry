@@ -1,13 +1,13 @@
 ---
 title: MIND
-description: "Closed-loop revisit bench for interactive world models: 250 clips at 1080p / 24 FPS. WorldFoundry scores videos; it does not generate them, and mind_average is not official."
+description: "Closed-loop revisit bench for interactive world models: 250 clips at 1080p / 24 FPS. WorldFoundry scores generated videos; mind_average is a WorldFoundry aggregate."
 ---
 
 MIND (CSU-JPG) is an open-domain **closed-loop revisit** bench: the model rolls out under camera / action commands, leaves a region, and returns. Official **MIND-Data** is **250** Unreal Engine 5 clips at **1080p / 24 FPS** across eight scene categories (40+ environments). **200** clips share one action space (100 first-person + 100 third-person); **50** use varied speeds and rotation angles (25 + 25). Scoring: long-context memory (PSNR / SSIM / LPIPS / MSE + DINOv3 patch MSE), visual quality (MUSIQ-SPAQ, LAION aesthetic), action control (ViPE relative pose error), and a **mirror test** for general scene consistency. Layout: `<model>/{1st,3rd}_data/<test_type>/<name>/video.mp4`. The project marks a public leaderboard as **coming soon**.
 
 Paper: [MIND](https://arxiv.org/abs/2602.08025). Project: [csu-jpg.github.io/MIND.github.io](https://csu-jpg.github.io/MIND.github.io/). Code: [CSU-JPG/MIND](https://github.com/CSU-JPG/MIND) (MIT). Dataset: [CSU-JPG/MIND](https://huggingface.co/datasets/CSU-JPG/MIND).
 
-WorldFoundry **vendors the metric runtime** (`run_mind_official_runner.py`). `--run-official` scores staged GT + generated videos; `--official-results-path` **imports** a finished MIND JSON; `--run-fixture` is a GPU-free normalizer check. This page does **not** run world-model inference. `mind_average` (and the four ability-group scores) are **WorldFoundry-derived** — MIND publishes no official composite.
+WorldFoundry **vendors the metric runtime** (`run_mind_official_runner.py`). `--run-official` scores staged GT + generated videos; `--official-results-path` **imports** a finished MIND JSON; `--run-fixture` is a GPU-free normalizer check. Generate the videos first; the runner does not run world-model inference. `mind_average` (and the four ability-group scores) are **WorldFoundry-derived** — MIND publishes no official composite.
 
 <BenchmarkPageSections id="mind" locale="en" />
 
@@ -16,7 +16,7 @@ WorldFoundry **vendors the metric runtime** (`run_mind_official_runner.py`). `--
 GPU-free fixture:
 
 ```bash
-python worldfoundry/evaluation/tasks/execution/runners/mind/run_mind_official_runner.py \
+python worldfoundry/evals/tasks/execution/runners/mind/run_mind_official_runner.py \
   --run-fixture \
   --output-dir tmp/mind/fixture \
   --json
@@ -26,7 +26,7 @@ Score staged GT and model outputs (DINOv3 via `--dino-path`; ViPE via `--vipe-re
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/mind/run_mind_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/mind/run_mind_official_runner.py \
   --run-official \
   --gt-root /path/to/MIND-Data \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
@@ -38,7 +38,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 Import a finished MIND result JSON:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id mind \
   --mode official-validation \
   --official-results-path <mind_result.json> \
@@ -98,6 +98,6 @@ MIND-Data/
 - `action` — ViPE RPE after outlier filtering: `__overall__`, `translation`, `rotation`, `other`, and `act:<name>` (`rpe_trans_mean` / `median`, `rpe_rot_mean_deg` / `median_deg`, `count`).
 - `video_results[*].gsc` — mirror-test general scene consistency (same four pixel metrics; `sample_frames` should be `2 × mark_time`).
 
-The bundled fixture at `worldfoundry/data/benchmarks/assets/mind/fixtures/mind_result_fixture.json` follows this schema with invented numbers. It contains **no upstream MIND records** — every sample id, frame count, and score was written so normalization, aggregation, and scorecard invariants can run without GPUs, ViPE, or the official dataset. Do not publish it as a MIND score.
+The bundled fixture at `worldfoundry/data/benchmarks/assets/mind/fixtures/mind_result_fixture.json` follows this schema with synthetic numbers, so normalization, aggregation, and scorecard checks run without GPUs, ViPE, or the official dataset. It is not a MIND result.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

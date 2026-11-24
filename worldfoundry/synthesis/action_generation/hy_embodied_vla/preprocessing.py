@@ -6,15 +6,13 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
+
 from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
 
 _DATA_CONFIG = load_vla_va_wam_runtime_config("hy-embodied-vla")
 _CAMERA_CONFIG = _DATA_CONFIG["camera_keys"]
 CAMERA_KEYS = tuple(str(key) for key in _CAMERA_CONFIG)
-_CAMERA_ALIASES = {
-    str(key): tuple(str(alias) for alias in aliases)
-    for key, aliases in _CAMERA_CONFIG.items()
-}
+_CAMERA_ALIASES = {str(key): tuple(str(alias) for alias in aliases) for key, aliases in _CAMERA_CONFIG.items()}
 
 
 def _frame_tensor(frame: Any):
@@ -58,10 +56,7 @@ def _camera_tensor(value: Any, *, use_video_encoder: bool, history_size: int):
         elif tensor.ndim == 4:
             if tensor.shape[1] not in {1, 3, 4} and tensor.shape[-1] in {1, 3, 4}:
                 tensor = tensor.permute(0, 3, 1, 2)
-            if use_video_encoder and tensor.shape[1] in {1, 3, 4}:
-                result = tensor.unsqueeze(0)
-            else:
-                result = tensor
+            result = tensor.unsqueeze(0) if use_video_encoder and tensor.shape[1] in {1, 3, 4} else tensor
         elif tensor.ndim == 3:
             result = _frame_tensor(tensor).unsqueeze(0)
         else:
@@ -145,7 +140,7 @@ def _camera_mapping(images: Any, *, replicate_single_image: bool) -> dict[str, A
     if images is None:
         return {}
     keys = CAMERA_KEYS if replicate_single_image else CAMERA_KEYS[:1]
-    return {key: images for key in keys}
+    return dict.fromkeys(keys, images)
 
 
 def build_model_batch(

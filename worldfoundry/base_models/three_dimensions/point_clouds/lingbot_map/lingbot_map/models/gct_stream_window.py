@@ -9,18 +9,20 @@ Provides streaming inference functionality:
 """
 
 import logging
+from typing import Any
+
 import torch
 import torch.nn as nn
-from typing import Optional, Dict, Any, List
 from tqdm.auto import tqdm
 
-from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.utils.rotation import quat_to_mat, mat_to_quat
+from worldfoundry.core.geometry.transforms import closed_form_inverse_se3
+from worldfoundry.core.geometry.transforms import quaternion_xyzw_to_rotation_matrix as quat_to_mat
+from worldfoundry.core.geometry.transforms import rotation_matrix_to_quaternion_xyzw as mat_to_quat
 
-from ..heads.camera_head import CameraCausalHead
-from .gct_base import GCTBase
 from ..aggregator.stream import AggregatorStream
+from ..heads.camera_head import CameraCausalHead
 from ..utils.pose_enc import pose_encoding_to_extri_intri
-from ..utils.geometry import closed_form_inverse_se3
+from .gct_base import GCTBase
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +55,8 @@ def _compute_flow_magnitude(
     device = cur_pose_enc.device
     dtype = cur_depth.dtype
 
-    cur_ext, cur_intr = pose_encoding_to_extri_intri(
-        cur_pose_enc, image_size_hw=image_size_hw
-    )
-    kf_ext, kf_intr = pose_encoding_to_extri_intri(
-        kf_pose_enc, image_size_hw=image_size_hw
-    )
+    cur_ext, cur_intr = pose_encoding_to_extri_intri(cur_pose_enc, image_size_hw=image_size_hw)
+    kf_ext, kf_intr = pose_encoding_to_extri_intri(kf_pose_enc, image_size_hw=image_size_hw)
     B = cur_ext.shape[0]
 
     cur_ext = cur_ext[:, 0]
@@ -71,12 +69,12 @@ def _compute_flow_magnitude(
 
     v_coords = torch.arange(0, H, stride, device=device, dtype=dtype)
     u_coords = torch.arange(0, W, stride, device=device, dtype=dtype)
-    v_grid, u_grid = torch.meshgrid(v_coords, u_coords, indexing='ij')
+    v_grid, u_grid = torch.meshgrid(v_coords, u_coords, indexing="ij")
     ones = torch.ones_like(u_grid)
     pixel_coords = torch.stack([u_grid, v_grid, ones], dim=-1)
 
     intr_inv = torch.inverse(cur_intr)
-    cam_coords = torch.einsum('bij,hwj->bhwi', intr_inv, pixel_coords)
+    cam_coords = torch.einsum("bij,hwj->bhwi", intr_inv, pixel_coords)
     cam_pts = cam_coords * depth.unsqueeze(-1)
 
     c2w = torch.zeros(B, 4, 4, device=device, dtype=dtype)
@@ -85,18 +83,18 @@ def _compute_flow_magnitude(
 
     ones_hw = torch.ones(B, Hs, Ws, 1, device=device, dtype=dtype)
     cam_pts_h = torch.cat([cam_pts, ones_hw], dim=-1)
-    world_pts = torch.einsum('bij,bhwj->bhwi', c2w, cam_pts_h)[..., :3]
+    world_pts = torch.einsum("bij,bhwj->bhwi", c2w, cam_pts_h)[..., :3]
 
     kf_c2w = torch.zeros(B, 4, 4, device=device, dtype=dtype)
     kf_c2w[:, :3, :] = kf_ext
     kf_c2w[:, 3, 3] = 1.0
     kf_w2c = closed_form_inverse_se3(kf_c2w)
     world_pts_h = torch.cat([world_pts, ones_hw], dim=-1)
-    kf_cam_pts = torch.einsum('bij,bhwj->bhwi', kf_w2c, world_pts_h)[..., :3]
+    kf_cam_pts = torch.einsum("bij,bhwj->bhwi", kf_w2c, world_pts_h)[..., :3]
 
     z = kf_cam_pts[..., 2:3].clamp(min=1e-6)
     kf_cam_norm = kf_cam_pts / z
-    kf_pixels = torch.einsum('bij,bhwj->bhwi', kf_intr, kf_cam_norm)[..., :2]
+    kf_pixels = torch.einsum("bij,bhwj->bhwi", kf_intr, kf_cam_norm)[..., :2]
 
     orig_pixels = torch.stack([u_grid, v_grid], dim=-1).unsqueeze(0).expand(B, -1, -1, -1)
 
@@ -129,8 +127,8 @@ class GCTStream(GCTBase):
         img_size: int = 518,
         patch_size: int = 14,
         embed_dim: int = 1024,
-        patch_embed: str = 'dinov2_vitl14_reg',
-        pretrained_path: str = '',
+        patch_embed: str = "dinov2_vitl14_reg",
+        pretrained_path: str = "",
         disable_global_rope: bool = False,
         # Head configuration
         enable_camera: bool = True,
@@ -296,8 +294,8 @@ class GCTStream(GCTBase):
     def _aggregate_features(
         self,
         images: torch.Tensor,
-        num_frame_for_scale: Optional[int] = None,
-        sliding_window_size: Optional[int] = None,
+        num_frame_for_scale: int | None = None,
+        sliding_window_size: int | None = None,
         num_frame_per_block: int = 1,
         **kwargs,
     ) -> tuple:
@@ -329,11 +327,11 @@ class GCTStream(GCTBase):
         Call this method when starting a new video sequence to clear
         cached key-value pairs from previous sequences.
         """
-        if hasattr(self.aggregator, 'clean_kv_cache'):
+        if hasattr(self.aggregator, "clean_kv_cache"):
             self.aggregator.clean_kv_cache()
         else:
             logger.warning("Aggregator does not support KV cache cleaning")
-        if hasattr(self.camera_head, 'kv_cache'):
+        if hasattr(self.camera_head, "kv_cache"):
             self.camera_head.clean_kv_cache()
         else:
             logger.warning("Camera head does not support KV cache cleaning")
@@ -348,12 +346,16 @@ class GCTStream(GCTBase):
         Args:
             skip: If True, subsequent forward passes will not append KV to cache.
         """
-        if hasattr(self.aggregator, 'kv_cache') and self.aggregator.kv_cache is not None:
+        if hasattr(self.aggregator, "kv_cache") and self.aggregator.kv_cache is not None:
             self.aggregator.kv_cache["_skip_append"] = skip
         # FlashInfer manager
-        if hasattr(self.aggregator, 'kv_cache_manager') and self.aggregator.kv_cache_manager is not None:
+        if hasattr(self.aggregator, "kv_cache_manager") and self.aggregator.kv_cache_manager is not None:
             self.aggregator.kv_cache_manager._skip_append = skip
-        if self.camera_head is not None and hasattr(self.camera_head, 'kv_cache') and self.camera_head.kv_cache is not None:
+        if (
+            self.camera_head is not None
+            and hasattr(self.camera_head, "kv_cache")
+            and self.camera_head.kv_cache is not None
+        ):
             for cache_dict in self.camera_head.kv_cache:
                 cache_dict["_skip_append"] = skip
 
@@ -366,13 +368,17 @@ class GCTStream(GCTBase):
         the most recent append without having to restore evicted frames.
         """
         # FlashInfer manager
-        if hasattr(self.aggregator, 'kv_cache_manager') and self.aggregator.kv_cache_manager is not None:
+        if hasattr(self.aggregator, "kv_cache_manager") and self.aggregator.kv_cache_manager is not None:
             self.aggregator.kv_cache_manager._defer_eviction = defer
         # SDPA aggregator cache (dict)
-        if hasattr(self.aggregator, 'kv_cache') and isinstance(self.aggregator.kv_cache, dict):
+        if hasattr(self.aggregator, "kv_cache") and isinstance(self.aggregator.kv_cache, dict):
             self.aggregator.kv_cache["_defer_eviction"] = defer
         # Camera head SDPA caches
-        if self.camera_head is not None and hasattr(self.camera_head, 'kv_cache') and self.camera_head.kv_cache is not None:
+        if (
+            self.camera_head is not None
+            and hasattr(self.camera_head, "kv_cache")
+            and self.camera_head.kv_cache is not None
+        ):
             for cache_dict in self.camera_head.kv_cache:
                 cache_dict["_defer_eviction"] = defer
 
@@ -384,13 +390,13 @@ class GCTStream(GCTBase):
         Must be called while eviction is still deferred.
         """
         # FlashInfer manager — rollback each transformer block
-        if hasattr(self.aggregator, 'kv_cache_manager') and self.aggregator.kv_cache_manager is not None:
+        if hasattr(self.aggregator, "kv_cache_manager") and self.aggregator.kv_cache_manager is not None:
             mgr = self.aggregator.kv_cache_manager
             for block_idx in range(mgr.num_blocks):
                 mgr.rollback_last_frame(block_idx)
 
         # SDPA aggregator cache — trim last frame along dim=2
-        if hasattr(self.aggregator, 'kv_cache') and isinstance(self.aggregator.kv_cache, dict):
+        if hasattr(self.aggregator, "kv_cache") and isinstance(self.aggregator.kv_cache, dict):
             kv = self.aggregator.kv_cache
             for key in list(kv.keys()):
                 if key.startswith(("k_", "v_")) and kv[key] is not None and torch.is_tensor(kv[key]):
@@ -400,7 +406,7 @@ class GCTStream(GCTBase):
                         kv[key] = None
 
         # Camera head
-        if self.camera_head is not None and hasattr(self.camera_head, 'rollback_last_frame'):
+        if self.camera_head is not None and hasattr(self.camera_head, "rollback_last_frame"):
             self.camera_head.rollback_last_frame()
 
         # Aggregator frame counter (used for 3D RoPE temporal positions)
@@ -409,7 +415,7 @@ class GCTStream(GCTBase):
     def _execute_deferred_eviction(self):
         """Execute the eviction that was deferred during the last forward pass."""
         # FlashInfer manager
-        if hasattr(self.aggregator, 'kv_cache_manager') and self.aggregator.kv_cache_manager is not None:
+        if hasattr(self.aggregator, "kv_cache_manager") and self.aggregator.kv_cache_manager is not None:
             mgr = self.aggregator.kv_cache_manager
             for block_idx in range(mgr.num_blocks):
                 mgr.execute_deferred_eviction(
@@ -418,7 +424,7 @@ class GCTStream(GCTBase):
                     sliding_window=self.kv_cache_sliding_window,
                 )
 
-    def get_kv_cache_info(self) -> Dict[str, Any]:
+    def get_kv_cache_info(self) -> dict[str, Any]:
         """
         Get information about current KV cache state.
 
@@ -427,11 +433,11 @@ class GCTStream(GCTBase):
                 - num_cached_blocks: Number of blocks with cached KV
                 - cache_memory_mb: Approximate memory usage in MB
         """
-        if not hasattr(self.aggregator, 'kv_cache') or self.aggregator.kv_cache is None:
+        if not hasattr(self.aggregator, "kv_cache") or self.aggregator.kv_cache is None:
             return {"num_cached_blocks": 0, "cache_memory_mb": 0.0}
 
         kv_cache = self.aggregator.kv_cache
-        num_cached = sum(1 for k in kv_cache.keys() if k.startswith('k_') and not k.endswith('_special'))
+        num_cached = sum(1 for k in kv_cache.keys() if k.startswith("k_") and not k.endswith("_special"))  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
 
         # Estimate memory usage
         total_elements = 0
@@ -442,21 +448,18 @@ class GCTStream(GCTBase):
         # Assume bfloat16 (2 bytes per element)
         cache_memory_mb = (total_elements * 2) / (1024 * 1024)
 
-        return {
-            "num_cached_blocks": num_cached,
-            "cache_memory_mb": round(cache_memory_mb, 2)
-        }
+        return {"num_cached_blocks": num_cached, "cache_memory_mb": round(cache_memory_mb, 2)}
 
     @torch.no_grad()
     def inference_streaming(
         self,
         images: torch.Tensor,
-        num_scale_frames: Optional[int] = None,
+        num_scale_frames: int | None = None,
         keyframe_interval: int = 1,
-        output_device: Optional[torch.device] = None,
+        output_device: torch.device | None = None,
         flow_threshold: float = 0.0,
         max_non_keyframe_gap: int = 30,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """
         Streaming inference: process scale frames first, then frame-by-frame.
 
@@ -517,14 +520,6 @@ class GCTStream(GCTBase):
 
         # Helper to move tensor to output device
         def _to_out(t: torch.Tensor) -> torch.Tensor:
-            """Helper function to to out.
-
-            Args:
-                t: The t.
-
-            Returns:
-                The return value.
-            """
             if output_device is not None:
                 return t.to(output_device)
             return t
@@ -534,7 +529,7 @@ class GCTStream(GCTBase):
 
         # Phase 1: Process scale frames together
         # These frames get bidirectional attention among themselves via scale token
-        logger.info(f'Processing {scale_frames} scale frames...')
+        logger.info(f"Processing {scale_frames} scale frames...")
         scale_images = images[:, :scale_frames].to(_model_device, non_blocking=True)
         scale_output = self.forward(
             scale_images,
@@ -548,7 +543,9 @@ class GCTStream(GCTBase):
         all_depth = [_to_out(scale_output["depth"])] if "depth" in scale_output else []
         all_depth_conf = [_to_out(scale_output["depth_conf"])] if "depth_conf" in scale_output else []
         all_world_points = [_to_out(scale_output["world_points"])] if "world_points" in scale_output else []
-        all_world_points_conf = [_to_out(scale_output["world_points_conf"])] if "world_points_conf" in scale_output else []
+        all_world_points_conf = (
+            [_to_out(scale_output["world_points_conf"])] if "world_points_conf" in scale_output else []
+        )
         del scale_output
 
         # Phase 2: Process remaining frames one-by-one
@@ -561,12 +558,12 @@ class GCTStream(GCTBase):
 
         pbar = tqdm(
             range(scale_frames, S),
-            desc='Streaming inference',
+            desc="Streaming inference",
             initial=scale_frames,
             total=S,
         )
         for i in pbar:
-            frame_image = images[:, i:i+1].to(_model_device, non_blocking=True)
+            frame_image = images[:, i : i + 1].to(_model_device, non_blocking=True)
 
             if use_flow_keyframe:
                 # Flow-based: defer eviction, forward, then decide
@@ -586,8 +583,10 @@ class GCTStream(GCTBase):
                 if cur_depth is not None:
                     H_pred, W_pred = cur_depth.shape[2], cur_depth.shape[3]
                     flow_mag = _compute_flow_magnitude(
-                        frame_output["pose_enc"], last_kf_pose_enc,
-                        cur_depth, (H_pred, W_pred),
+                        frame_output["pose_enc"],
+                        last_kf_pose_enc,
+                        cur_depth,
+                        (H_pred, W_pred),
                     )
                 else:
                     flow_mag = flow_threshold + 1.0
@@ -676,18 +675,24 @@ class GCTStream(GCTBase):
     # Window stitching & cross-window alignment
     # ══════════════════════════════════════════════════════════════════════
 
-    _FRAME_AXIS_KEYS = frozenset({
-        "pose_enc", "depth", "depth_conf",
-        "world_points", "world_points_conf",
-        "frame_type", "is_keyframe",
-    })
+    _FRAME_AXIS_KEYS = frozenset(
+        {
+            "pose_enc",
+            "depth",
+            "depth_conf",
+            "world_points",
+            "world_points_conf",
+            "frame_type",
+            "is_keyframe",
+        }
+    )
 
     def _stitch_windows(
         self,
-        windows: List[Dict],
+        windows: list[dict],
         window_size: int,
         overlap: int,
-    ) -> Dict:
+    ) -> dict:
         """Concatenate per-window predictions while de-duplicating overlaps.
 
         For each temporal key the method builds a slice table first — every
@@ -702,7 +707,7 @@ class GCTStream(GCTBase):
 
         n_win = len(windows)
         all_keys = list(windows[0].keys())
-        stitched: Dict = {}
+        stitched: dict = {}
 
         for key in all_keys:
             values = [w.get(key) for w in windows]
@@ -721,16 +726,11 @@ class GCTStream(GCTBase):
                     slices.append(None)
                     continue
                 total = tensor.shape[1]
-                is_last = (wi == n_win - 1)
+                is_last = wi == n_win - 1
                 end = total if is_last else max(total - overlap, 0)
                 slices.append((0, end) if end > 0 else None)
 
-            parts = [
-                values[i][:, s:e]
-                for i, s_e in enumerate(slices)
-                if s_e is not None
-                for s, e in [s_e]
-            ]
+            parts = [values[i][:, s:e] for i, s_e in enumerate(slices) if s_e is not None for s, e in [s_e]]
             if parts:
                 stitched[key] = torch.cat(parts, dim=1)
             else:
@@ -763,8 +763,8 @@ class GCTStream(GCTBase):
 
     @staticmethod
     def _pairwise_alignment(
-        prev_pred: Dict,
-        curr_pred: Dict,
+        prev_pred: dict,
+        curr_pred: dict,
         overlap: int,
         batch_size: int,
         device: torch.device,
@@ -799,7 +799,7 @@ class GCTStream(GCTBase):
         is_kf_curr = curr_pred.get("is_keyframe")
         paired_offsets = None
         if is_kf_prev is not None and is_kf_curr is not None and eff_overlap > 0:
-            kf_prev_tail = is_kf_prev[0, start:start + eff_overlap].to(torch.bool)
+            kf_prev_tail = is_kf_prev[0, start : start + eff_overlap].to(torch.bool)
             kf_curr_head = is_kf_curr[0, :eff_overlap].to(torch.bool)
             paired_mask = kf_prev_tail & kf_curr_head
             if paired_mask.any():
@@ -818,24 +818,28 @@ class GCTStream(GCTBase):
             curr_depth_idx = torch.tensor([0], device=device, dtype=torch.long)
 
         # Decompose C2W: center ([:3]) + quaternion ([3:7])
-        Ra = quat_to_mat(pe_prev[:, idx_a, 3:7])   # (B, 3, 3)
-        ca = pe_prev[:, idx_a, :3]                  # (B, 3)
+        Ra = quat_to_mat(pe_prev[:, idx_a, 3:7])  # (B, 3, 3)
+        ca = pe_prev[:, idx_a, :3]  # (B, 3)
         Rb = quat_to_mat(pe_curr[:, idx_b, 3:7])
         cb = pe_curr[:, idx_b, :3]
 
-        R_ab = torch.bmm(Ra, Rb.transpose(1, 2))    # Ra = R_ab @ Rb
+        R_ab = torch.bmm(Ra, Rb.transpose(1, 2))  # Ra = R_ab @ Rb
 
         # Scale from depth — aggregate across all paired keyframes in overlap.
         s_ab = unit_s.clone()
         da = prev_pred.get("depth")
         db = curr_pred.get("depth")
-        if (da is not None and db is not None
-                and int(prev_depth_idx.max().item()) < da.shape[1]
-                and int(curr_depth_idx.max().item()) < db.shape[1]):
+        if (
+            da is not None
+            and db is not None
+            and int(prev_depth_idx.max().item()) < da.shape[1]
+            and int(curr_depth_idx.max().item()) < db.shape[1]
+        ):
             s_ab = GCTStream._depth_ratio_scale(
                 da[:, prev_depth_idx, ..., 0],
                 db[:, curr_depth_idx, ..., 0],
-                batch_size, device,
+                batch_size,
+                device,
             ).to(dtype)
 
         # ca = s_ab * R_ab @ cb + t_ab  =>  t_ab = ca - s_ab * R_ab @ cb
@@ -845,14 +849,14 @@ class GCTStream(GCTBase):
 
     @staticmethod
     def _warp_predictions(
-        pred: Dict,
+        pred: dict,
         R: torch.Tensor,
         t: torch.Tensor,
         s: torch.Tensor,
         batch_size: int,
-    ) -> Dict:
+    ) -> dict:
         """Apply a similarity transform (s, R, t) to one window's predictions."""
-        warped: Dict = {}
+        warped: dict = {}
 
         # Pose encoding: center + quaternion + intrinsics
         pe = pred.get("pose_enc")
@@ -863,9 +867,8 @@ class GCTStream(GCTBase):
 
             R_exp = R[:, None].expand(-1, nf, -1, -1)
             new_rot = torch.matmul(R_exp, local_rot)
-            new_ctr = (
-                s.view(batch_size, 1, 1) * torch.matmul(R_exp, local_ctr.unsqueeze(-1)).squeeze(-1)
-                + t.view(batch_size, 1, 3)
+            new_ctr = s.view(batch_size, 1, 1) * torch.matmul(R_exp, local_ctr.unsqueeze(-1)).squeeze(-1) + t.view(
+                batch_size, 1, 3
             )
             out_pe = pe.clone()
             out_pe[:, :, :3] = new_ctr
@@ -901,9 +904,9 @@ class GCTStream(GCTBase):
 
     def _align_and_stitch_windows(
         self,
-        windows: List[Dict],
-        scale_mode: str = 'median',
-    ) -> Dict:
+        windows: list[dict],
+        scale_mode: str = "median",
+    ) -> dict:
         """Bring all windows into the first window's coordinate frame, then stitch.
 
         Iterates over consecutive window pairs, estimates the pairwise
@@ -918,20 +921,15 @@ class GCTStream(GCTBase):
             return out
 
         # Discover batch / device / dtype from any available tensor
-        ref = next(
-            v
-            for w in windows
-            for k in ("pose_enc", "world_points", "depth")
-            if (v := w.get(k)) is not None
-        )
+        ref = next(v for w in windows for k in ("pose_enc", "world_points", "depth") if (v := w.get(k)) is not None)
         dev, dt, nb = ref.device, ref.dtype, ref.shape[0]
 
         overlap = getattr(self, "_last_overlap_size", 0)
         win_sz = getattr(self, "_last_window_size", -1)
 
-        warped_windows: List[Dict] = []
-        per_window_scales: List[torch.Tensor] = []
-        per_window_transforms: List[torch.Tensor] = []
+        warped_windows: list[dict] = []
+        per_window_scales: list[torch.Tensor] = []
+        per_window_transforms: list[torch.Tensor] = []
 
         for idx, raw in enumerate(windows):
             if idx == 0:
@@ -940,7 +938,12 @@ class GCTStream(GCTBase):
                 t_rel = torch.zeros(nb, 3, device=dev, dtype=dt)
             else:
                 s_rel, R_rel, t_rel = self._pairwise_alignment(
-                    warped_windows[-1], raw, overlap, nb, dev, dt,
+                    warped_windows[-1],
+                    raw,
+                    overlap,
+                    nb,
+                    dev,
+                    dt,
                 )
 
             per_window_scales.append(s_rel.clone())
@@ -949,9 +952,7 @@ class GCTStream(GCTBase):
             T[:, :3, 3] = t_rel
             per_window_transforms.append(T)
 
-            warped_windows.append(
-                self._warp_predictions(raw, R_rel, t_rel, s_rel, nb)
-            )
+            warped_windows.append(self._warp_predictions(raw, R_rel, t_rel, s_rel, nb))
 
         merged = self._stitch_windows(warped_windows, win_sz, overlap)
 
@@ -968,15 +969,15 @@ class GCTStream(GCTBase):
         self,
         images: torch.Tensor,
         window_size: int = 16,
-        overlap_size: Optional[int] = None,
-        overlap_keyframes: Optional[int] = None,
-        num_scale_frames: Optional[int] = None,
-        scale_mode: str = 'median',
-        output_device: Optional[torch.device] = None,
+        overlap_size: int | None = None,
+        overlap_keyframes: int | None = None,
+        num_scale_frames: int | None = None,
+        scale_mode: str = "median",
+        output_device: torch.device | None = None,
         keyframe_interval: int = 1,
         flow_threshold: float = 0.0,
         max_non_keyframe_gap: int = 30,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """
         Windowed inference with keyframe detection and cross-window alignment.
 
@@ -1032,8 +1033,7 @@ class GCTStream(GCTBase):
         # keep peak GPU memory at one window (not the full sequence).
         _model_device = next(self.parameters()).device
 
-        ws = (num_scale_frames if num_scale_frames is not None
-              else self.num_frame_for_scale)
+        ws = num_scale_frames if num_scale_frames is not None else self.num_frame_for_scale
         ws = min(ws, S)
 
         # Resolve overlap in *actual frames*.  Priority:
@@ -1052,70 +1052,53 @@ class GCTStream(GCTBase):
         eff_overlap = min(eff_overlap, S - 1) if S > 1 else 0
 
         def _to_out(t: torch.Tensor) -> torch.Tensor:
-            """Helper function to to out.
-
-            Args:
-                t: The t.
-
-            Returns:
-                The return value.
-            """
             return t.to(output_device) if output_device is not None else t
 
         def _collect_frame(out, w_lists):
-            """Helper function to collect frame.
-
-            Args:
-                out: The out.
-                w_lists: The w lists.
-            """
-            w_lists['pose_enc'].append(_to_out(out["pose_enc"]))
+            w_lists["pose_enc"].append(_to_out(out["pose_enc"]))
             if "depth" in out:
-                w_lists['depth'].append(_to_out(out["depth"]))
+                w_lists["depth"].append(_to_out(out["depth"]))
             if "depth_conf" in out:
-                w_lists['depth_conf'].append(_to_out(out["depth_conf"]))
+                w_lists["depth_conf"].append(_to_out(out["depth_conf"]))
             if "world_points" in out:
-                w_lists['world_points'].append(_to_out(out["world_points"]))
+                w_lists["world_points"].append(_to_out(out["world_points"]))
             if "world_points_conf" in out:
-                w_lists['world_pts_conf'].append(_to_out(out["world_points_conf"]))
+                w_lists["world_pts_conf"].append(_to_out(out["world_points_conf"]))
 
         def _make_window_pred(w_lists):
-            """Helper function to make window pred.
-
-            Args:
-                w_lists: The w lists.
-            """
-            pred: Dict = {"pose_enc": torch.cat(w_lists['pose_enc'], dim=1)}
-            if w_lists['depth']:
-                pred["depth"] = torch.cat(w_lists['depth'], dim=1)
-            if w_lists['depth_conf']:
-                pred["depth_conf"] = torch.cat(w_lists['depth_conf'], dim=1)
-            if w_lists['world_points']:
-                pred["world_points"] = torch.cat(w_lists['world_points'], dim=1)
-            if w_lists['world_pts_conf']:
-                pred["world_points_conf"] = torch.cat(w_lists['world_pts_conf'], dim=1)
+            pred: dict = {"pose_enc": torch.cat(w_lists["pose_enc"], dim=1)}
+            if w_lists["depth"]:
+                pred["depth"] = torch.cat(w_lists["depth"], dim=1)
+            if w_lists["depth_conf"]:
+                pred["depth_conf"] = torch.cat(w_lists["depth_conf"], dim=1)
+            if w_lists["world_points"]:
+                pred["world_points"] = torch.cat(w_lists["world_points"], dim=1)
+            if w_lists["world_pts_conf"]:
+                pred["world_points_conf"] = torch.cat(w_lists["world_pts_conf"], dim=1)
             # Frame type: 0=scale, 1=keyframe, 2=non-keyframe
-            ft = torch.tensor(w_lists['frame_type'], dtype=torch.uint8).unsqueeze(0)  # [1, T]
+            ft = torch.tensor(w_lists["frame_type"], dtype=torch.uint8).unsqueeze(0)  # [1, T]
             pred["frame_type"] = ft
-            pred["is_keyframe"] = (ft != 2)  # scale + keyframe = True
+            pred["is_keyframe"] = ft != 2  # scale + keyframe = True
             return pred
 
         def _new_lists():
-            """Helper function to new lists."""
             return {
-                'pose_enc': [], 'depth': [], 'depth_conf': [],
-                'world_points': [], 'world_pts_conf': [],
-                'frame_type': [],  # list of ints: 0=scale, 1=keyframe, 2=non-keyframe
+                "pose_enc": [],
+                "depth": [],
+                "depth_conf": [],
+                "world_points": [],
+                "world_pts_conf": [],
+                "frame_type": [],  # list of ints: 0=scale, 1=keyframe, 2=non-keyframe
             }
 
         # ================================================================
         # Flow-based mode: dynamic windows (can't precompute window list)
         # ================================================================
         if use_flow_keyframe:
-            all_window_predictions: List[Dict] = []
+            all_window_predictions: list[dict] = []
             cursor = 0
             window_idx = 0
-            pbar = tqdm(total=S, desc='Windowed inference (flow)', initial=0)
+            pbar = tqdm(total=S, desc="Windowed inference (flow)", initial=0)
 
             while cursor < S:
                 window_start = cursor
@@ -1125,9 +1108,7 @@ class GCTStream(GCTBase):
                 self.clean_kv_cache()
 
                 # ---------- Phase 1: scale frames ----------
-                scale_images = images[:, cursor:cursor + window_scale].to(
-                    _model_device, non_blocking=True
-                )
+                scale_images = images[:, cursor : cursor + window_scale].to(_model_device, non_blocking=True)
                 scale_out = self.forward(
                     scale_images,
                     num_frame_for_scale=window_scale,
@@ -1136,7 +1117,7 @@ class GCTStream(GCTBase):
                 )
                 w_lists = _new_lists()
                 _collect_frame(scale_out, w_lists)
-                w_lists['frame_type'].extend([0] * window_scale)  # scale frames
+                w_lists["frame_type"].extend([0] * window_scale)  # scale frames
 
                 # Flow state: last keyframe = last scale frame
                 last_kf_pose_enc = scale_out["pose_enc"][:, -1:]
@@ -1151,9 +1132,7 @@ class GCTStream(GCTBase):
                 kf_count = 0
 
                 while cursor < S and kf_count < target_kf:
-                    frame_image = images[:, cursor:cursor + 1].to(
-                        _model_device, non_blocking=True
-                    )
+                    frame_image = images[:, cursor : cursor + 1].to(_model_device, non_blocking=True)
 
                     self._set_defer_eviction(True)
                     frame_out = self.forward(
@@ -1169,8 +1148,10 @@ class GCTStream(GCTBase):
                     if cur_depth is not None:
                         H_pred, W_pred = cur_depth.shape[2], cur_depth.shape[3]
                         flow_mag = _compute_flow_magnitude(
-                            frame_out["pose_enc"], last_kf_pose_enc,
-                            cur_depth, (H_pred, W_pred),
+                            frame_out["pose_enc"],
+                            last_kf_pose_enc,
+                            cur_depth,
+                            (H_pred, W_pred),
                         )
                     else:
                         flow_mag = flow_threshold + 1.0
@@ -1188,10 +1169,10 @@ class GCTStream(GCTBase):
                         last_kf_pose_enc = frame_out["pose_enc"]
                         last_kf_local_idx = local_idx
                         kf_count += 1
-                        w_lists['frame_type'].append(1)  # keyframe
+                        w_lists["frame_type"].append(1)  # keyframe
                     else:
                         self._rollback_last_frame()
-                        w_lists['frame_type'].append(2)  # non-keyframe
+                        w_lists["frame_type"].append(2)  # non-keyframe
 
                     _collect_frame(frame_out, w_lists)
                     del frame_out
@@ -1232,14 +1213,12 @@ class GCTStream(GCTBase):
                     if end_idx == S:
                         break
 
-            all_window_predictions: List[Dict] = []
-            for start, end in tqdm(windows, desc='Windowed inference'):
+            all_window_predictions: list[dict] = []
+            for start, end in tqdm(windows, desc="Windowed inference"):
                 # Slice on whichever device `images` lives on, then move just
                 # this window to the model device.  Keeps peak memory at one
                 # window instead of the full sequence.
-                window_images = images[:, start:end].to(
-                    _model_device, non_blocking=True
-                )
+                window_images = images[:, start:end].to(_model_device, non_blocking=True)
                 window_len = end - start
 
                 # Fresh KV cache
@@ -1256,21 +1235,18 @@ class GCTStream(GCTBase):
                 )
                 w_lists = _new_lists()
                 _collect_frame(scale_out, w_lists)
-                w_lists['frame_type'].extend([0] * window_scale)  # scale frames
+                w_lists["frame_type"].extend([0] * window_scale)  # scale frames
                 del scale_out
 
                 # ---------- Phase 2: stream remaining frames ----------
                 for i in range(window_scale, window_len):
-                    is_keyframe = (
-                        kf_int <= 1
-                        or ((i - window_scale) % kf_int == 0)
-                    )
+                    is_keyframe = kf_int <= 1 or ((i - window_scale) % kf_int == 0)
 
                     if not is_keyframe:
                         self._set_skip_append(True)
 
                     frame_out = self.forward(
-                        window_images[:, i:i + 1],
+                        window_images[:, i : i + 1],
                         num_frame_for_scale=window_scale,
                         num_frame_per_block=1,
                         causal_inference=True,
@@ -1280,7 +1256,7 @@ class GCTStream(GCTBase):
                         self._set_skip_append(False)
 
                     _collect_frame(frame_out, w_lists)
-                    w_lists['frame_type'].append(1 if is_keyframe else 2)
+                    w_lists["frame_type"].append(1 if is_keyframe else 2)
                     del frame_out
 
                 all_window_predictions.append(_make_window_pred(w_lists))
@@ -1290,9 +1266,7 @@ class GCTStream(GCTBase):
         self._last_overlap_size = eff_overlap
 
         # Align and stitch windows
-        predictions = self._align_and_stitch_windows(
-            all_window_predictions, scale_mode=scale_mode
-        )
+        predictions = self._align_and_stitch_windows(all_window_predictions, scale_mode=scale_mode)
 
         predictions["images"] = _to_out(images)
 

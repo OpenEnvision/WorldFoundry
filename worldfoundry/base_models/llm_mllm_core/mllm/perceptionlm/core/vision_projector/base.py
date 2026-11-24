@@ -15,7 +15,6 @@ class BaseProjector(nn.Module, ABC):
         """
         Setup the vision_projector attribute in subclasses.
         """
-        pass
 
     def forward(self, x):
         x = x.permute(1, 0, 2)  # NLD -> LND

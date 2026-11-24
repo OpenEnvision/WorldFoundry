@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Sequence, Union
+from collections.abc import Sequence
+from typing import Any, ClassVar
 
 import torch
 from PIL import Image
@@ -12,7 +13,11 @@ from .base_operator import BaseOperator
 
 
 def load_pil_image(image_input) -> Image.Image:
-    """Load pil image implementation."""
+    """Return a PIL image or an image file path as an RGB PIL image.
+
+    Raises:
+        TypeError: The input is neither a PIL image nor a string path.
+    """
     if isinstance(image_input, Image.Image):
         return image_input.convert("RGB")
     if isinstance(image_input, str):
@@ -26,7 +31,7 @@ class MatrixGame3Operator(BaseOperator):
     KEYBOARD_DIM = 6
     MOUSE_STEP = 0.1
 
-    KEYBOARD_IDX = {
+    KEYBOARD_IDX: ClassVar[dict[str, int]] = {
         "forward": 0,
         "back": 1,
         "left": 2,
@@ -35,7 +40,7 @@ class MatrixGame3Operator(BaseOperator):
         "attack": 5,
     }
 
-    CAMERA_VALUE_MAP = {
+    CAMERA_VALUE_MAP: ClassVar[dict[str, list[Any]]] = {
         "camera_up": [MOUSE_STEP, 0.0],
         "camera_down": [-MOUSE_STEP, 0.0],
         "camera_l": [0.0, -MOUSE_STEP],
@@ -46,7 +51,7 @@ class MatrixGame3Operator(BaseOperator):
         "camera_dr": [-MOUSE_STEP, MOUSE_STEP],
     }
 
-    COMBINATION_MAP = {
+    COMBINATION_MAP: ClassVar[dict[str, Any]] = {
         "forward_left": ["forward", "left"],
         "forward_right": ["forward", "right"],
         "back_left": ["back", "left"],
@@ -70,8 +75,8 @@ class MatrixGame3Operator(BaseOperator):
         self.clip_frame = 56
         self.clip_overlap_frames = int(clip_overlap_frames)
         self.followup_frames = self.clip_frame - self.clip_overlap_frames
-        default_template = list(self.KEYBOARD_IDX.keys()) + list(self.CAMERA_VALUE_MAP.keys()) + list(
-            self.COMBINATION_MAP.keys()
+        default_template = (
+            list(self.KEYBOARD_IDX.keys()) + list(self.CAMERA_VALUE_MAP.keys()) + list(self.COMBINATION_MAP.keys())
         )
         self.interaction_template = interaction_template or sorted(set(default_template))
         self.interaction_template_init()
@@ -99,7 +104,7 @@ class MatrixGame3Operator(BaseOperator):
         num_frames: int | None = None,
         num_iterations: int | None = None,
         frames_per_action: int | None = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         if len(self.current_interaction) == 0:
             raise RuntimeError("No interaction registered")
@@ -112,16 +117,18 @@ class MatrixGame3Operator(BaseOperator):
 
         frames_per_action = int(frames_per_action or self.frames_per_action)
         if num_iterations is None:
-            target_frames = num_frames if num_frames is not None else max(
-                self.first_clip_frames,
-                len(actions) * frames_per_action,
+            target_frames = (
+                num_frames
+                if num_frames is not None
+                else max(
+                    self.first_clip_frames,
+                    len(actions) * frames_per_action,
+                )
             )
             if target_frames <= self.first_clip_frames:
                 num_iterations = 1
             else:
-                num_iterations = 1 + math.ceil(
-                    (int(target_frames) - self.first_clip_frames) / self.followup_frames
-                )
+                num_iterations = 1 + math.ceil((int(target_frames) - self.first_clip_frames) / self.followup_frames)
         num_iterations = max(int(num_iterations), 1)
         total_frames = self.first_clip_frames + (num_iterations - 1) * self.followup_frames
 
@@ -143,23 +150,17 @@ class MatrixGame3Operator(BaseOperator):
         """Process perception inputs like images, videos, and reference frames."""
         return load_pil_image(input_image)
 
-    def _normalize_interaction(self, interaction: Union[str, Dict[str, Any]]) -> Dict[str, str]:
-        """Normalize interaction implementation."""
+    def _normalize_interaction(self, interaction: str | dict[str, Any]) -> dict[str, str]:
         if isinstance(interaction, str):
             return {"action": interaction}
         if isinstance(interaction, dict):
-            action = (
-                interaction.get("action")
-                or interaction.get("signal")
-                or interaction.get("interaction")
-            )
+            action = interaction.get("action") or interaction.get("signal") or interaction.get("interaction")
             if action is None:
                 raise ValueError("MatrixGame3 interaction dict requires 'action', 'signal', or 'interaction'.")
             return {"action": action}
         raise TypeError(f"Unsupported interaction type: {type(interaction)}")
 
     def _encode_action(self, action: str):
-        """Encode action implementation."""
         action_list = self.COMBINATION_MAP.get(action, [action])
         keyboard = torch.zeros(self.KEYBOARD_DIM, dtype=torch.float32)
         mouse = torch.zeros(2, dtype=torch.float32)
@@ -182,9 +183,8 @@ class MatrixGame3Operator(BaseOperator):
         total_frames: int,
         frames_per_action: int,
     ):
-        """Build sequence implementation."""
-        keyboard_rows: List[torch.Tensor] = []
-        mouse_rows: List[torch.Tensor] = []
+        keyboard_rows: list[torch.Tensor] = []
+        mouse_rows: list[torch.Tensor] = []
 
         for action in actions:
             keyboard, mouse = self._encode_action(action)

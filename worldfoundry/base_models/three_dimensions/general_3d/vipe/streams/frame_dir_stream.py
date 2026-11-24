@@ -13,14 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> streams -> frame_dir_stream.py functionality."""
-
 from pathlib import Path
 
 import cv2
 import torch
 
-from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base import ProcessedVideoStream, StreamList, VideoFrame, VideoStream
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base import (
+    ProcessedVideoStream,
+    StreamList,
+    VideoFrame,
+    VideoStream,
+)
 
 
 class FrameDirStream(VideoStream):
@@ -30,16 +33,6 @@ class FrameDirStream(VideoStream):
     """
 
     def __init__(self, path: Path, seek_range: range | None = None, name: str | None = None) -> None:
-        """Init.
-
-        Args:
-            path: The path.
-            seek_range: The seek range.
-            name: The name.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         if seek_range is None:
             seek_range = range(-1)
@@ -54,7 +47,7 @@ class FrameDirStream(VideoStream):
             self.frame_files.extend(sorted(path.glob(f"*{ext}")))
             self.frame_files.extend(sorted(path.glob(f"*{ext.upper()}")))
 
-        self.frame_files = sorted(list(set(self.frame_files)))
+        self.frame_files = sorted(set(self.frame_files))
 
         if not self.frame_files:
             raise ValueError(f"No image files found in directory: {path}")
@@ -77,48 +70,22 @@ class FrameDirStream(VideoStream):
         self._fps = self._fps / self.step
 
     def frame_size(self) -> tuple[int, int]:
-        """Frame size.
-
-        Returns:
-            The return value.
-        """
         return (self._height, self._width)
 
     def fps(self) -> float:
-        """Fps.
-
-        Returns:
-            The return value.
-        """
         return self._fps
 
     def name(self) -> str:
-        """Name.
-
-        Returns:
-            The return value.
-        """
         return self._name
 
     def __len__(self) -> int:
-        """Len.
-
-        Returns:
-            The return value.
-        """
         return len(range(self.start, self.end, self.step))
 
     def __iter__(self):
-        """Iter."""
         self.current_frame_idx = -1
         return self
 
     def __next__(self) -> VideoFrame:
-        """Next.
-
-        Returns:
-            The return value.
-        """
         self.current_frame_idx += 1
 
         if self.current_frame_idx >= self.end:
@@ -145,20 +112,7 @@ class FrameDirStream(VideoStream):
 
 
 class FrameDirStreamList(StreamList):
-    """Frame dir stream list implementation."""
     def __init__(self, base_path: str, frame_start: int, frame_end: int, frame_skip: int, cached: bool = False) -> None:
-        """Init.
-
-        Args:
-            base_path: The base path.
-            frame_start: The frame start.
-            frame_end: The frame end.
-            frame_skip: The frame skip.
-            cached: The cached.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         base_path_obj = Path(base_path)
 
@@ -181,34 +135,13 @@ class FrameDirStreamList(StreamList):
         self.cached = cached
 
     def __len__(self) -> int:
-        """Len.
-
-        Returns:
-            The return value.
-        """
         return len(self.frame_directories)
 
     def __getitem__(self, index: int) -> VideoStream:
-        """Getitem.
-
-        Args:
-            index: The index.
-
-        Returns:
-            The return value.
-        """
         stream: VideoStream = FrameDirStream(self.frame_directories[index], seek_range=self.frame_range)
         if self.cached:
             stream = ProcessedVideoStream(stream, []).cache(desc="Loading frames", online=False)
         return stream
 
     def stream_name(self, index: int) -> str:
-        """Stream name.
-
-        Args:
-            index: The index.
-
-        Returns:
-            The return value.
-        """
         return self.frame_directories[index].name

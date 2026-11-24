@@ -1,0 +1,74 @@
+id: h3-world
+name: H3-World
+aliases:
+- h3_world
+- minimax-h3-world
+tasks:
+- image-to-world-video
+- action-conditioned-video
+- interactive-world-model
+- audio-video-generation
+output_artifacts:
+- generated_video
+provider: Tencent / NUS / PolyU
+source:
+  status: open_source
+  official_repo_url: https://github.com/Danzer1xxxxChan/H3-World
+  revision: f0c7be2acbbde8256b2473f6e7b088f58272acae
+  license: apache-2.0
+  requires_auth: false
+official_sources:
+  paper: https://arxiv.org/abs/2609.01560
+  project_page: https://danzer1xxxxchan.github.io/H3-World
+  github:
+    url: https://github.com/Danzer1xxxxChan/H3-World
+    revision: f0c7be2acbbde8256b2473f6e7b088f58272acae
+  huggingface:
+  - repo_id: DANNY621/H3-World
+    revision: cb1a1fe209415bd3c744a74b1058bb8bfd507268
+    type: model
+  - repo_id: MiniMaxAI/MiniMax-H3
+    revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+    type: model
+checkpoints:
+- repo_id: DANNY621/H3-World
+  revision: cb1a1fe209415bd3c744a74b1058bb8bfd507268
+  role: h3_world_lora_adapter
+  license: minimax-h3-community
+  files:
+  - step-10000.safetensors
+- repo_id: MiniMaxAI/MiniMax-H3
+  revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+  subfolder: FL2VA
+  role: shared_h3_base
+  license: minimax-h3-community
+integration:
+  status: integrated
+  backend_stage: shared_base_model_runtime
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+runtime_profile: runtime-profile:h3-world
+pipeline_binding: h3-world
+min_vram_gb: 80
+runner_parity:
+  status: verified
+  expected_artifacts:
+  - h3-world.mp4
+  notes:
+  - Reuses the canonical MiniMax-H3 DiT, Qwen3-VL encoder, video/audio VAEs, packed sequence builder, denoise loop, and MP4 writer.
+  - Adapts the rank-32 LoRA onto WorldFoundry's fused QKV layout with per-latent mirrored RoPE offsets, segmented token refiner, and directed attention routing.
+  - Verified on H200 with real MiniMax-H3 FL2VA and H3-World step-10000.safetensors weights (832x480, 124 frames at 24 fps, 50 steps, 32 kHz stereo AAC) for forward and pan-right-fast presets.
+catalog_category: world_models
+docs:
+  publisher: Tencent / NUS / PolyU
+  overview: Interactive action-conditioned world model built on MiniMax-H3. Translates keyboard states into per-latent English instructions bound to each video latent via directed attention routing and a rank-32 LoRA adapter.
+  overview_zh: 基于 MiniMax-H3 的交互式动作条件世界模型，将键盘状态转换为逐 latent 英文指令，并通过定向注意力路由与 rank-32 LoRA 适配器绑定到对应视频 latent。
+  architecture: Reuses WorldFoundry's canonical MiniMax-H3 33B DiT, Qwen3-VL multimodal encoder, video/audio VAEs, and rectified-flow loop. Adds rank-32 attention LoRA loading with grouped-to-split QKV reordering, mirrored per-latent RoPE offsets, segmented token refinement, and directed FlexAttention/SDPA masking.
+  architecture_zh: 复用 WorldFoundry 规范化的 MiniMax-H3 33B DiT、Qwen3-VL 多模态编码器、音视频 VAE 与 rectified-flow 采样循环，并扩展 rank-32 注意力 LoRA（含分组到拆分 QKV 重排）、镜像逐 latent RoPE 偏移、分段 token refiner 与定向 FlexAttention/SDPA 掩码。
+  usage_notes: Stage the MiniMax-H3 FL2VA base weights alongside DANNY621/H3-World (step-10000.safetensors). Supply a starting frame, a scene description, and either action_preset (e.g. forward, pan-right-fast), interactions, or explicit per-latent action_script clauses.
+  usage_notes_zh: 运行前准备 MiniMax-H3 的 FL2VA 基础权重以及 DANNY621/H3-World（step-10000.safetensors）。提供起始帧图像、场景描述以及 action_preset（如 forward、pan-right-fast）、interactions 或显式逐 latent 的 action_script。
+  limitations:
+  - Native resolution is 832x480 at 24 fps with 17k+5 frame counts (124, 243, 481) and 32 kHz stereo audio.
+  - Checkpoints are subject to the MiniMax H3 Community License Agreement.
+  limitations_zh:
+  - 原生分辨率为 832x480、24 fps，帧数需满足 17k+5（124、243、481），并附带 32 kHz 立体声音频。
+  - 模型权重受 MiniMax H3 Community License Agreement 约束。

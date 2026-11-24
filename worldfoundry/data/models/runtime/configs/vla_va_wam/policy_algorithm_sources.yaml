@@ -68,6 +68,7 @@ algorithms:
   source_basis: lerobot_reference_implementation
   official_repo:
     url: https://github.com/huggingface/lerobot
+    revision: 8fff0fde7c79f23a93d845d1a50e985de01f8b8a
     local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/lerobot
   model_refs:
   - repo_id: lerobot/smolvla_base

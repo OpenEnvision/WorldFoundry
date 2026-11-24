@@ -4,7 +4,7 @@ import torch
 """Stripped version of https://github.com/richzhang/PerceptualSimilarity/tree/master/models"""
 
 
-class DiagonalGaussianDistribution(object):
+class DiagonalGaussianDistribution:
     def __init__(
         self,
         parameters,
@@ -40,7 +40,7 @@ class DiagonalGaussianDistribution(object):
                     dim=[1, 2, 3, 4],
                 )
 
-    def nll(self, sample, dims=[1, 2, 3, 4]):
+    def nll(self, sample, dims=[1, 2, 3, 4]):  # noqa: B006 - Keeps the upstream default object and signature.
         if self.deterministic:
             return torch.Tensor([0.0])
         logtwopi = np.log(2.0 * np.pi)

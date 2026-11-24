@@ -1,26 +1,26 @@
 ---
 title: VideoScience-Bench
-description: "UCSD Hao AI Lab 的科学理解 T2V 评测：五维 1-4 量表。WorldFoundry 接好 VLM 裁判，不编造榜单。"
+description: "UCSD Hao AI Lab 的科学理解 T2V 评测：五维 1-4 量表。WorldFoundry 归一化官方结果，或调用 VLM 裁判。"
 ---
 
-VideoScience-Bench（加州大学圣地亚哥分校 Hao AI Lab）问的是视频生成器是否 **理解科学**。Prompt 描述真实实验与现象。VLM 裁判按 **1–4 量表** 打五个维度；官方加权总分归一化到单位区间，即 `videoscience_average`：
+VideoScience-Bench（加州大学圣地亚哥分校 Hao AI Lab）问的是视频生成器是否**理解科学**。Prompt 描述真实实验与现象。VLM 裁判按 **1–4 量表**为五个维度打分；官方加权总分归一化到单位区间，即 `videoscience_average`：
 
 - **Prompt 一致性**
-- **现象一致性** — 描绘的结果是否符合真实科学？
+- **现象一致性**：描绘的结果是否符合真实科学？
 - **正确动态**
-- **不变性** — 不变量是否保持不变？
+- **不变性**：各不变量是否保持不变？
 - **时空连贯**
 
-论文：[VideoScience-Bench](https://arxiv.org/abs/2512.02942)。空间：[lmgame/videoscience-bench](https://huggingface.co/spaces/lmgame/videoscience-bench/blob/main/README.md)。代码：[hao-ai-lab/VideoScience](https://github.com/hao-ai-lab/VideoScience)。目录发布状态：experimental。合同条目不要求 Hugging Face 数据集。
+论文：[VideoScience-Bench](https://arxiv.org/abs/2512.02942)。空间：[lmgame/videoscience-bench](https://huggingface.co/spaces/lmgame/videoscience-bench/blob/main/README.md)。代码：[hao-ai-lab/VideoScience](https://github.com/hao-ai-lab/VideoScience)。不需要 Hugging Face 数据集。
 
-WorldFoundry **归一化官方结果文件**，并在配置好提供方 / 模型 / 凭证时可对 experiments CSV 跑裁判。不声称已完成带凭证的完整上游运行。
+WorldFoundry **归一化官方结果文件**，并在配置好提供方 / 模型 / 凭证后，可使用裁判评估 experiments CSV。
 
 <BenchmarkPageSections id="videoscience-bench" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id videoscience-bench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -31,7 +31,7 @@ worldfoundry-eval zoo benchmark-run \
 
 运行时 CLI 接受 `--experiments-csv`、`--evaluation-results-dir`、可选 `--reference-videos-dir`，以及裁判标志（`--judge-provider`、`--judge-model`、`--judge-max-runs`、`--max-frames`、`--judge-fps`）。`--ready-only` 只评产物齐全的实验。默认导入：`WORLDFOUNDRY_VIDEOSCIENCE_BENCH_RESULTS_PATH`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/videoscience-bench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/runtime/videoscience_bench`。
+清单：`worldfoundry/data/benchmarks/tasks/external/videoscience-bench.yaml`。
 
 产物包括 `scorecard.json`（主键 `videoscience_average`）。
 

@@ -6,16 +6,13 @@ import ast
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TASKS_ROOT = REPO_ROOT / "worldfoundry" / "evaluation" / "tasks"
+TASKS_ROOT = REPO_ROOT / "worldfoundry" / "evals" / "tasks"
 METRICS_ROOT = TASKS_ROOT / "metrics"
 
 MIND_PROCESS = TASKS_ROOT / "execution/runners/mind/runtime/mind/src/process.py"
 
 LITERAL_EVAL_FILES = (
     TASKS_ROOT / "execution/runners/worldscore/runtime/worldscore/worldscore/benchmark/helpers/prompt_generator.py",
-    TASKS_ROOT / "execution/runners/videoscore/runtime/videoscore/benchmark/get_spearman_corr.py",
-    TASKS_ROOT / "execution/runners/videoscore/runtime/videoscore/benchmark/get_vbench_pairwise_acc.py",
-    TASKS_ROOT / "execution/runners/videoscore/runtime/videoscore/benchmark/get_genaibench_pairwise_acc.py",
 )
 
 

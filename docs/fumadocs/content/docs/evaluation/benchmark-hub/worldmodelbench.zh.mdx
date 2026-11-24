@@ -1,19 +1,19 @@
 ---
 title: WorldModelBench
-description: "NeurIPS 2025 世界模型裁判套件：350 条实例，VILA 裁判。WorldFoundry 检入 evaluation.py；完整裁判执行未验证。"
+description: "NeurIPS 2025 世界模型裁判套件：350 条实例，VILA 裁判。WorldFoundry 内置官方 evaluation.py 并导入结果。"
 ---
 
-WorldModelBench（NVIDIA、UC Berkeley、UC San Diego、MIT；NeurIPS 2025）把视频生成器当世界模型来评，覆盖 **7 个应用域 / 56 个子域**。官方规模：**350 条实例**，对照 **6.7 万条众包人类标注** 校准。三个分面：
+WorldModelBench（NVIDIA、UC Berkeley、UC San Diego、MIT；NeurIPS 2025）将视频生成器作为世界模型进行评估，覆盖 **7 个应用域 / 56 个子域**。官方规模：**350 条实例**，对照 **6.7 万条众包人类标注** 校准。三个分面：
 
 - 指令跟随
 - 常识推理
 - 物理遵守（例如不规则尺寸变化这类质量守恒违规）
 
-官方裁判是微调的 **2B VILA 系** 多模态模型，论文报告在检测世界建模违规上优于 GPT-4o。`world_model_average` 汇总公开分面。
+官方裁判是微调的 **2B VILA 系**多模态模型，论文报告在检测世界建模违规上优于 GPT-4o。`world_model_average` 汇总公开分面。
 
 论文：[WorldModelBench](https://arxiv.org/abs/2502.20694)。项目：[worldmodelbench-team.github.io](https://worldmodelbench-team.github.io/)。代码：[WorldModelBench-Team/WorldModelBench](https://github.com/WorldModelBench-Team/WorldModelBench)。数据：[`Efficient-Large-Model/worldmodelbench`](https://huggingface.co/datasets/Efficient-Large-Model/worldmodelbench)。
 
-WorldFoundry **检入上游 `evaluation.py` 与 350 条实例清单**。结果导入与清单覆盖检查已验证；**完整裁判权重执行未验证**。榜单答案在上游扣留。
+WorldFoundry **内置上游 `evaluation.py` 与 350 条实例清单**。结果导入与清单覆盖检查已验证。上游未公开榜单答案。
 
 <BenchmarkPageSections id="worldmodelbench" locale="zh" />
 
@@ -23,7 +23,7 @@ WorldFoundry **检入上游 `evaluation.py` 与 350 条实例清单**。结果�
 hf download Efficient-Large-Model/worldmodelbench --repo-type dataset \
   --local-dir cache/worldfoundry/data/hfd_datasets/Efficient-Large-Model/worldmodelbench
 
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id worldmodelbench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -35,7 +35,7 @@ worldfoundry-eval zoo benchmark-run \
 
 official-run 用 `WORLDFOUNDRY_WORLDMODELBENCH_JUDGE`（VILA 权重或 HF 模型 id）驱动 `evaluation.py`。封装会按 N、2N、5N 类别长度校验 accs/preds 形状，并记录 350 条视频覆盖。环境变量：`WORLDFOUNDRY_WORLDMODELBENCH_RESULTS_PATH`、`WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT`。共享资源：`worldmodelbench_dataset_assets`。清单：`worldfoundry/data/benchmarks/assets/worldmodelbench/worldmodelbench.json`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/worldmodelbench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/runtime/evaluation.py`。
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/worldmodelbench.yaml`、`worldfoundry/evals/tasks/execution/runners/worldmodelbench/runtime/evaluation.py`。
 
 产物包括 `scorecard.json`（主键 `world_model_average`）与 `judge_responses.jsonl`。
 

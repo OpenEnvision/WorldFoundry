@@ -7,15 +7,12 @@
 # Open-Sora-Plan: https://github.com/PKU-YuanGroup/Open-Sora-Plan
 # --------------------------------------------------------
 
-import torch
-import collections
-from diffusers.models.embeddings import TimestepEmbedding, Timesteps
 
+import torch
+from diffusers.models.embeddings import TimestepEmbedding, Timesteps
+from diffusers.utils import logging
 from einops import rearrange
 from torch import nn
-
-
-from diffusers.utils import logging
 
 logger = logging.get_logger(__name__)
 
@@ -74,12 +71,13 @@ class CombinedTimestepSizeEmbeddings(nn.Module):
 
         return conditioning
 
+
 class PatchEmbed2D(nn.Module):
     """2D Image to Patch Embedding"""
 
     def __init__(
         self,
-        num_frames=1, 
+        num_frames=1,
         height=224,
         width=224,
         patch_size_t=1,
@@ -91,7 +89,7 @@ class PatchEmbed2D(nn.Module):
         bias=True,
         interpolation_scale=(1, 1),
         interpolation_scale_t=1,
-        use_abs_pos=False, 
+        use_abs_pos=False,
     ):
         super().__init__()
         self.use_abs_pos = use_abs_pos
@@ -113,7 +111,7 @@ class PatchEmbed2D(nn.Module):
         b, _, _, _, _ = latent.shape
         video_latent = None
 
-        latent = rearrange(latent, 'b c t h w -> (b t) c h w')
+        latent = rearrange(latent, "b c t h w -> (b t) c h w")
 
         latent = self.proj(latent)
         if self.flatten:
@@ -121,17 +119,18 @@ class PatchEmbed2D(nn.Module):
         if self.layer_norm:
             latent = self.norm(latent)
 
-        latent = rearrange(latent, '(b t) n c -> b (t n) c', b=b)
+        latent = rearrange(latent, "(b t) n c -> b (t n) c", b=b)
         video_latent = latent
 
         return video_latent
-    
+
+
 class PatchEmbed2DTI2V(nn.Module):
     """2D Image to Patch Embedding but with 3D position embedding"""
 
     def __init__(
         self,
-        num_frames=1, 
+        num_frames=1,
         height=224,
         width=224,
         patch_size_t=1,
@@ -143,7 +142,7 @@ class PatchEmbed2DTI2V(nn.Module):
         bias=True,
         interpolation_scale=(1, 1),
         interpolation_scale_t=1,
-        use_abs_pos=True, 
+        use_abs_pos=True,
     ):
         super().__init__()
         self.use_abs_pos = use_abs_pos
@@ -166,17 +165,16 @@ class PatchEmbed2DTI2V(nn.Module):
         self.height, self.width = height // patch_size, width // patch_size
         self.base_size = (height // patch_size, width // patch_size)
         self.interpolation_scale = (interpolation_scale[0], interpolation_scale[1])
-       
+
         self.num_frames = num_frames // patch_size_t
         self.base_size_t = num_frames // patch_size_t
         self.interpolation_scale_t = interpolation_scale_t
 
-
     def forward(self, latent, num_frames):
         b, _, _, _, _ = latent.shape
         video_latent, image_latent = None, None
-        height, width = latent.shape[-2] // self.patch_size, latent.shape[-1] // self.patch_size
-        latent = rearrange(latent, 'b c t h w -> (b t) c h w')
+        height, width = latent.shape[-2] // self.patch_size, latent.shape[-1] // self.patch_size  # noqa: F841 - Upstream assignment kept.
+        latent = rearrange(latent, "b c t h w -> (b t) c h w")
         latent = self.proj(latent)
 
         if self.flatten:
@@ -184,15 +182,22 @@ class PatchEmbed2DTI2V(nn.Module):
         if self.layer_norm:
             latent = self.norm(latent)
 
-        latent = rearrange(latent, '(b t) n c -> b t n c', b=b)
+        latent = rearrange(latent, "(b t) n c -> b t n c", b=b)
         video_latent, image_latent = latent[:, :num_frames], latent[:, num_frames:]
 
-        video_latent = rearrange(video_latent, 'b t n c -> b (t n) c') if video_latent is not None and video_latent.numel() > 0 else None
-        image_latent = rearrange(image_latent, 'b t n c -> (b t) n c') if image_latent is not None and image_latent.numel() > 0 else None
+        video_latent = (
+            rearrange(video_latent, "b t n c -> b (t n) c")
+            if video_latent is not None and video_latent.numel() > 0
+            else None
+        )
+        image_latent = (
+            rearrange(image_latent, "b t n c -> (b t) n c")
+            if image_latent is not None and image_latent.numel() > 0
+            else None
+        )
 
         if num_frames == 1 and image_latent is None:
             image_latent = video_latent
             video_latent = None
 
         return video_latent, image_latent
-

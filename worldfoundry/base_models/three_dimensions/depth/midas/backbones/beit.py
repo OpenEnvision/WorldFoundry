@@ -1,25 +1,16 @@
-"""Module for base_models -> three_dimensions -> depth -> midas -> backbones -> beit.py functionality."""
-
-import timm
-import torch
 import types
 
 import numpy as np
+import timm
+import torch
 import torch.nn.functional as F
-
-from .utils import forward_adapted_unflatten, make_backbone_default
 from timm.models.beit import gen_relative_position_index
 from torch.utils.checkpoint import checkpoint
-from typing import Optional
+
+from .utils import forward_adapted_unflatten, make_backbone_default
 
 
 def forward_beit(pretrained, x):
-    """Forward beit.
-
-    Args:
-        pretrained: The pretrained.
-        x: The x.
-    """
     return forward_adapted_unflatten(pretrained, x, "forward_features")
 
 
@@ -49,28 +40,28 @@ def _get_rel_pos_bias(self, window_size):
     old_num_relative_distance = self.num_relative_distance
     new_num_relative_distance = new_height * new_width + 3
 
-    old_sub_table = old_relative_position_bias_table[:old_num_relative_distance - 3]
+    old_sub_table = old_relative_position_bias_table[: old_num_relative_distance - 3]
 
     old_sub_table = old_sub_table.reshape(1, old_width, old_height, -1).permute(0, 3, 1, 2)
     new_sub_table = F.interpolate(old_sub_table, size=(new_height, new_width), mode="bilinear")
     new_sub_table = new_sub_table.permute(0, 2, 3, 1).reshape(new_num_relative_distance - 3, -1)
 
     new_relative_position_bias_table = torch.cat(
-        [new_sub_table, old_relative_position_bias_table[old_num_relative_distance - 3:]])
+        [new_sub_table, old_relative_position_bias_table[old_num_relative_distance - 3 :]]
+    )
 
     key = str(window_size[1]) + "," + str(window_size[0])
-    if key not in self.relative_position_indices.keys():
+    if key not in self.relative_position_indices.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
         self.relative_position_indices[key] = gen_relative_position_index(window_size)
 
-    relative_position_bias = new_relative_position_bias_table[
-        self.relative_position_indices[key].view(-1)].view(
-        window_size[0] * window_size[1] + 1,
-        window_size[0] * window_size[1] + 1, -1)  # Wh*Ww,Wh*Ww,nH
+    relative_position_bias = new_relative_position_bias_table[self.relative_position_indices[key].view(-1)].view(
+        window_size[0] * window_size[1] + 1, window_size[0] * window_size[1] + 1, -1
+    )  # Wh*Ww,Wh*Ww,nH
     relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
     return relative_position_bias.unsqueeze(0)
 
 
-def attention_forward(self, x, resolution, shared_rel_pos_bias: Optional[torch.Tensor] = None):
+def attention_forward(self, x, resolution, shared_rel_pos_bias: torch.Tensor | None = None):
     """
     Modification of timm.models.beit.py: Attention.forward to support arbitrary window sizes.
     """
@@ -82,7 +73,7 @@ def attention_forward(self, x, resolution, shared_rel_pos_bias: Optional[torch.T
     q, k, v = qkv.unbind(0)  # make torchscript happy (cannot use tensor as tuple)
 
     q = q * self.scale
-    attn = (q @ k.transpose(-2, -1))
+    attn = q @ k.transpose(-2, -1)
 
     if self.relative_position_bias_table is not None:
         window_size = tuple(np.array(resolution) // 16)
@@ -99,7 +90,7 @@ def attention_forward(self, x, resolution, shared_rel_pos_bias: Optional[torch.T
     return x
 
 
-def block_forward(self, x, resolution, shared_rel_pos_bias: Optional[torch.Tensor] = None):
+def block_forward(self, x, resolution, shared_rel_pos_bias: torch.Tensor | None = None):
     """
     Modification of timm.models.beit.py: Block.forward to support arbitrary window sizes.
     """
@@ -114,8 +105,7 @@ def block_forward(self, x, resolution, shared_rel_pos_bias: Optional[torch.Tenso
         x = x + drop_path1(self.attn(self.norm1(x), resolution, shared_rel_pos_bias=shared_rel_pos_bias))
         x = x + drop_path2(self.mlp(self.norm2(x)))
     else:
-        x = x + drop_path1(self.gamma_1 * self.attn(self.norm1(x), resolution,
-                                                    shared_rel_pos_bias=shared_rel_pos_bias))
+        x = x + drop_path1(self.gamma_1 * self.attn(self.norm1(x), resolution, shared_rel_pos_bias=shared_rel_pos_bias))
         x = x + drop_path2(self.gamma_2 * self.mlp(self.norm2(x)))
     return x
 
@@ -143,29 +133,18 @@ def beit_forward_features(self, x):
 
 
 def _make_beit_backbone(
-        model,
-        features=[96, 192, 384, 768],
-        size=[384, 384],
-        hooks=[0, 4, 8, 11],
-        vit_features=768,
-        use_readout="ignore",
-        start_index=1,
-        start_index_readout=1,
+    model,
+    features=[96, 192, 384, 768],  # noqa: B006 - Keeps the upstream default object and signature.
+    size=[384, 384],  # noqa: B006 - Keeps the upstream default object and signature.
+    hooks=[0, 4, 8, 11],  # noqa: B006 - Keeps the upstream default object and signature.
+    vit_features=768,
+    use_readout="ignore",
+    start_index=1,
+    start_index_readout=1,
 ):
-    """Helper function to make beit backbone.
-
-    Args:
-        model: The model.
-        features: The features.
-        size: The size.
-        hooks: The hooks.
-        vit_features: The vit features.
-        use_readout: The use readout.
-        start_index: The start index.
-        start_index_readout: The start index readout.
-    """
-    backbone = make_backbone_default(model, features, size, hooks, vit_features, use_readout, start_index,
-                                     start_index_readout)
+    backbone = make_backbone_default(
+        model, features, size, hooks, vit_features, use_readout, start_index, start_index_readout
+    )
 
     backbone.model.patch_embed.forward = types.MethodType(patch_embed_forward, backbone.model.patch_embed)
     backbone.model.forward_features = types.MethodType(beit_forward_features, backbone.model)
@@ -182,13 +161,6 @@ def _make_beit_backbone(
 
 
 def _make_pretrained_beitl16_512(pretrained, use_readout="ignore", hooks=None):
-    """Helper function to make pretrained beitl16 512.
-
-    Args:
-        pretrained: The pretrained.
-        use_readout: The use readout.
-        hooks: The hooks.
-    """
     model = timm.create_model("beit_large_patch16_512", pretrained=pretrained)
 
     hooks = [5, 11, 17, 23] if hooks is None else hooks
@@ -206,13 +178,6 @@ def _make_pretrained_beitl16_512(pretrained, use_readout="ignore", hooks=None):
 
 
 def _make_pretrained_beitl16_384(pretrained, use_readout="ignore", hooks=None):
-    """Helper function to make pretrained beitl16 384.
-
-    Args:
-        pretrained: The pretrained.
-        use_readout: The use readout.
-        hooks: The hooks.
-    """
     model = timm.create_model("beit_large_patch16_384", pretrained=pretrained)
 
     hooks = [5, 11, 17, 23] if hooks is None else hooks
@@ -226,13 +191,6 @@ def _make_pretrained_beitl16_384(pretrained, use_readout="ignore", hooks=None):
 
 
 def _make_pretrained_beitb16_384(pretrained, use_readout="ignore", hooks=None):
-    """Helper function to make pretrained beitb16 384.
-
-    Args:
-        pretrained: The pretrained.
-        use_readout: The use readout.
-        hooks: The hooks.
-    """
     model = timm.create_model("beit_base_patch16_384", pretrained=pretrained)
 
     hooks = [2, 5, 8, 11] if hooks is None else hooks

@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 id: smolvla
 name: SmolVLA
 aliases:
@@ -58,18 +58,16 @@ docs:
   publisher: Hugging Face (LeRobot)
   publisher_kind: company
   publisher_zh: Hugging Face（LeRobot）
-  overview: 'SmolVLA is Hugging Face''s compact community VLA: a SmolVLM2-500M vision-language backbone with a flow-matching action expert, small enough for consumer hardware. The catalog records the HuggingFaceVLA/smolvla_libero task checkpoint (manifest and normalization schema validated) as the rollout default, with lerobot/smolvla_base as a fine-tuning asset.'
-  overview_zh: SmolVLA 是 Hugging Face 的紧凑社区 VLA：SmolVLM2-500M 视觉-语言骨干配 flow-matching 动作专家，小到可在消费级硬件运行。catalog 记录 HuggingFaceVLA/smolvla_libero 任务 checkpoint （manifest 与归一化 schema 已验证）为 rollout 默认，lerobot/smolvla_base 为微调资产。
-  architecture: 'The official flow-matching architecture is preserved in-tree with strict checkpoint structure: SmolVLM2-500M-Video-Instruct as the pinned vision-language backbone plus the flow action expert. Runtime loading is local-only with no external source checkout.'
-  architecture_zh: 官方 flow-matching 架构以严格 checkpoint 结构保留在树内：锁定的 SmolVLM2-500M-Video-Instruct 视觉-语言骨干加 flow 动作专家。运行时仅本地加载，无外部源码 checkout。
+  overview: "SmolVLA is Hugging Face's compact community VLA: a SmolVLM2-500M vision-language backbone with a flow-matching action expert, small enough for consumer hardware. The HuggingFaceVLA/smolvla_libero task checkpoint is the rollout default, and lerobot/smolvla_base is a fine-tuning asset. Validated on GPU with the LIBERO checkpoint: the policy returns a finite 1×50×7 action chunk."
+  overview_zh: SmolVLA 是 Hugging Face 的紧凑社区 VLA：SmolVLM2-500M 视觉-语言骨干配 flow-matching 动作专家，小到可在消费级硬件运行。HuggingFaceVLA/smolvla_libero 任务 checkpoint 是 rollout 默认，lerobot/smolvla_base 为微调资产。已在 GPU 上用 LIBERO checkpoint 验证：策略返回有限的 1×50×7 动作块。
+  architecture: 'The official flow-matching architecture: SmolVLM2-500M-Video-Instruct as the vision-language backbone plus the flow action expert. Checkpoints load locally with strict structure checks; no external source checkout is needed.'
+  architecture_zh: 官方 flow-matching 架构：SmolVLM2-500M-Video-Instruct 视觉-语言骨干加 flow 动作专家。checkpoint 仅本地加载并严格校验结构；无需外部源码检出。
   usage_notes: Use smolvla_libero for rollouts; the multi-robot base checkpoint lacks canonical state statistics and remains a non-default fine-tuning asset.
   usage_notes_zh: rollout 用 smolvla_libero；多机器人 base checkpoint 缺少规范状态统计，仅作为非默认微调资产。
   limitations:
   - The base checkpoint is not rollout-ready (missing canonical state statistics).
-  - No license is recorded in this repository.
   limitations_zh:
   - base checkpoint 不可直接 rollout（缺少规范状态统计）。
-  - 仓库未记录许可证。
   recommended_benchmarks:
   - id: libero
     reason: The validated rollout default is the LIBERO task checkpoint.

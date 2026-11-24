@@ -6,17 +6,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.runners.physics_iq.physics_iq_metrics import (
+from worldfoundry.evals.tasks.execution.runners.physics_iq.physics_iq_metrics import (
     metric_values_from_scores,
 )
-from worldfoundry.evaluation.tasks.execution.runners.physics_iq.physics_iq_prompts import (
+from worldfoundry.evals.tasks.execution.runners.physics_iq.physics_iq_prompts import (
+    load_description_rows,
     materialize_physics_iq_generation_requests,
     unique_generation_records,
-    load_description_rows,
 )
-from worldfoundry.evaluation.utils import benchmark_task_sample_path
-from worldfoundry.evaluation.tasks.execution.runners.physics_iq.protocols import ORIGINAL
-
+from worldfoundry.evals.tasks.execution.runners.physics_iq.protocols import ORIGINAL
+from worldfoundry.evals.utils import benchmark_task_sample_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -62,7 +61,7 @@ def test_physics_iq_official_runner_normalizes_sample_results(tmp_path: Path) ->
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py",
             "--official-results-path",
             str(sample_path),
             "--output-dir",
@@ -94,7 +93,7 @@ def test_physics_iq_official_run_requires_reference_dataset(tmp_path: Path) -> N
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py",
             "--run-official",
             "--generated-artifact-dir",
             str(generated_dir),

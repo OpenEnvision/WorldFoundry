@@ -12,6 +12,8 @@ output is video/audio context.
 Used after :mod:`.feature_extractor` / :mod:`.embeddings_processor`.
 """
 
+from typing import Any
+
 import torch
 
 from worldfoundry.base_models.diffusion_model.models.networks.ltx.attention import Attention
@@ -22,7 +24,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.ltx.rope import (
     generate_freq_grid_pytorch,
     precompute_freqs_cis,
 )
-from worldfoundry.core.nn import rms_norm
+from worldfoundry.core.nn import TransformerAttentionOps, rms_norm
 
 
 class _BasicTransformerBlock1D(torch.nn.Module):
@@ -33,7 +35,9 @@ class _BasicTransformerBlock1D(torch.nn.Module):
         dim_head: int,
         rope_type: LTXRopeType = LTXRopeType.SPLIT,
         apply_gated_attention: bool = False,
-    ):
+        ff_bias: bool = True,
+        attention_ops: TransformerAttentionOps | None = None,
+    ) -> None:
         super().__init__()
 
         self.attn1 = Attention(
@@ -42,12 +46,10 @@ class _BasicTransformerBlock1D(torch.nn.Module):
             dim_head=dim_head,
             rope_type=rope_type,
             apply_gated_attention=apply_gated_attention,
+            ops=attention_ops,
         )
 
-        self.ff = FeedForward(
-            dim,
-            dim_out=dim,
-        )
+        self.ff = FeedForward(dim, dim_out=dim, bias=ff_bias)
 
     def forward(
         self,
@@ -101,8 +103,6 @@ class Embeddings1DConnector(torch.nn.Module):
         double_precision_rope (bool): Use double precision rope calculation (default=False).
     """
 
-    _supports_gradient_checkpointing = True
-
     def __init__(
         self,
         attention_head_dim: int = 128,
@@ -115,7 +115,9 @@ class Embeddings1DConnector(torch.nn.Module):
         rope_type: LTXRopeType = LTXRopeType.SPLIT,
         double_precision_rope: bool = False,
         apply_gated_attention: bool = False,
-    ):
+        ff_bias: bool = True,
+        attention_ops: TransformerAttentionOps | None = None,
+    ) -> None:
         super().__init__()
         self.num_attention_heads = num_attention_heads
         self.inner_dim = num_attention_heads * attention_head_dim
@@ -134,6 +136,8 @@ class Embeddings1DConnector(torch.nn.Module):
                     dim_head=attention_head_dim,
                     rope_type=rope_type,
                     apply_gated_attention=apply_gated_attention,
+                    ff_bias=ff_bias,
+                    attention_ops=attention_ops,
                 )
                 for _ in range(num_layers)
             ]
@@ -201,63 +205,41 @@ class Embeddings1DConnector(torch.nn.Module):
 
 
 class Embeddings1DConnectorConfigurator:
-    """Configurator for video embeddings connector."""
+    """Construct the video connector from transformer checkpoint configuration."""
+
+    _DIMENSION_PREFIX = "connector_"
 
     @classmethod
-    def from_config(cls: type[Embeddings1DConnector], config: dict) -> Embeddings1DConnector:
-        transformer_config = config.get("transformer", {})
-        rope_type = LTXRopeType(transformer_config.get("rope_type", "split"))
-        double_precision_rope = transformer_config.get("frequencies_precision", False) == "float64"
-        pe_max_pos = transformer_config.get("connector_positional_embedding_max_pos", [1])
+    def from_metadata(cls, metadata: dict[str, Any]) -> Embeddings1DConnector:
+        """Resolve the split-checkpoint configuration and attention execution policy."""
+        from worldfoundry.base_models.diffusion_model.optimizations.ltx.attention import split_checkpoint_attention_ops
 
-        # Video connector dimensions
-        num_attention_heads = transformer_config.get("connector_num_attention_heads", 30)
-        attention_head_dim = transformer_config.get("connector_attention_head_dim", 128)
-        num_layers = transformer_config.get("connector_num_layers", 2)
-
-        connector = Embeddings1DConnector(
-            num_attention_heads=num_attention_heads,
-            attention_head_dim=attention_head_dim,
-            num_layers=num_layers,
-            positional_embedding_max_pos=pe_max_pos,
-            rope_type=rope_type,
-            double_precision_rope=double_precision_rope,
-            apply_gated_attention=transformer_config.get("connector_apply_gated_attention", False),
-        )
-        return connector
-
-
-class AudioEmbeddings1DConnectorConfigurator:
-    """Configurator for audio embeddings connector with separate dimension settings."""
+        return cls.from_config(metadata.get("config", {}), attention_ops=split_checkpoint_attention_ops())
 
     @classmethod
-    def from_config(cls: type[Embeddings1DConnector], config: dict) -> Embeddings1DConnector:
+    def from_config(
+        cls, config: dict[str, Any], *, attention_ops: TransformerAttentionOps | None = None
+    ) -> Embeddings1DConnector:
+        """Keep audio dimension overrides independent of the shared connector options."""
         transformer_config = config.get("transformer", {})
-        rope_type = LTXRopeType(transformer_config.get("rope_type", "split"))
-        double_precision_rope = transformer_config.get("frequencies_precision", False) == "float64"
-        pe_max_pos = transformer_config.get("connector_positional_embedding_max_pos", [1])
-
-        # Audio connector dimensions - fall back to video connector config for backwards compatibility
-        num_attention_heads = transformer_config.get(
-            "audio_connector_num_attention_heads",
-            transformer_config.get("connector_num_attention_heads", 30),
-        )
-        attention_head_dim = transformer_config.get(
-            "audio_connector_attention_head_dim",
-            transformer_config.get("connector_attention_head_dim", 128),
-        )
-        num_layers = transformer_config.get(
-            "audio_connector_num_layers",
-            transformer_config.get("connector_num_layers", 2),
-        )
-
-        connector = Embeddings1DConnector(
-            num_attention_heads=num_attention_heads,
-            attention_head_dim=attention_head_dim,
-            num_layers=num_layers,
-            positional_embedding_max_pos=pe_max_pos,
-            rope_type=rope_type,
-            double_precision_rope=double_precision_rope,
+        dimensions = {
+            key: transformer_config.get(
+                cls._DIMENSION_PREFIX + key, transformer_config.get("connector_" + key, default)
+            )
+            for key, default in (("num_attention_heads", 30), ("attention_head_dim", 128), ("num_layers", 2))
+        }
+        return Embeddings1DConnector(
+            **dimensions,
+            positional_embedding_max_pos=transformer_config.get("connector_positional_embedding_max_pos", [1]),
+            rope_type=LTXRopeType(transformer_config.get("rope_type", "split")),
+            double_precision_rope=transformer_config.get("frequencies_precision", False) == "float64",
             apply_gated_attention=transformer_config.get("connector_apply_gated_attention", False),
+            ff_bias=transformer_config.get("connector_ff_bias", True),
+            attention_ops=attention_ops,
         )
-        return connector
+
+
+class AudioEmbeddings1DConnectorConfigurator(Embeddings1DConnectorConfigurator):
+    """Use audio dimensions where specified, otherwise retain video connector widths."""
+
+    _DIMENSION_PREFIX = "audio_connector_"

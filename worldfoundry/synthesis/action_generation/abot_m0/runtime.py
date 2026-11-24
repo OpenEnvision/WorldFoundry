@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.core.io.paths import resolve_data_path, resolve_local_hf_model_path, resolve_worldfoundry_path
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
@@ -55,9 +56,10 @@ def _checkpoint_root(location: str) -> tuple[Path, Path]:
     candidates: list[Path] = []
     for pattern in patterns:
         candidates.extend(root.glob(pattern))
-    candidates = sorted(set(path.resolve() for path in candidates if path.is_file()))
+    candidates = sorted({path.resolve() for path in candidates if path.is_file()})
     if not candidates:
         raise FileNotFoundError(f"ABot-M0 policy weights are missing under {root}")
+
     # Released step checkpoints sort lexicographically; compare the numeric step.
     def rank(path: Path) -> tuple[int, str]:
         import re
@@ -239,8 +241,8 @@ class ABotM0Runtime:
             return self._model
         import torch
 
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
         from worldfoundry.core.execution.inference import compile_module_if_enabled
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .action_head import ActionHeadConfig
         from .modeling import ABotM0Model
@@ -366,11 +368,9 @@ class ABotM0Runtime:
             # right gripper] order and its official adapter restores the
             # interleaved per-arm environment layout after unnormalization.
             action_layout = (
-                "dual_arm_14"
-                if statistics_width == 14 and mask.shape == (14,) and not mask[-2:].any()
-                else "identity"
+                "dual_arm_14" if statistics_width == 14 and mask.shape == (14,) and not mask[-2:].any() else "identity"
             )
-        if action_layout == "dual_arm_14" and low.shape[-1] == 14:
+        if action_layout == "dual_arm_14" and low.shape[-1] == 14:  # noqa: SIM102 - Branches carry per-case comments.
             # Some deployment statistics are stored in interleaved modality order.
             if abs(float(low[6])) < 1e-6 and abs(float(low[12])) > 0.05:
                 low, high, mask = _dual_arm_to_training(low), _dual_arm_to_training(high), _dual_arm_to_training(mask)
@@ -409,15 +409,20 @@ class ABotM0Runtime:
         state = self._prepare_state(observation, model.action_config.state_dim)
         state_tensor = torch.from_numpy(state) if state is not None else None
         with worldfoundry_inference_context():
-            normalized = model.predict_action(
-                images=[views],
-                instructions=[instruction],
-                state=state_tensor,
-                image_size=self.config.image_size,
-                seed=self.config.seed,
-                num_inference_steps=self.config.num_inference_steps,
-                tokenizer_max_length=self.config.tokenizer_max_length,
-            )[0].float().cpu().numpy()
+            normalized = (
+                model.predict_action(
+                    images=[views],
+                    instructions=[instruction],
+                    state=state_tensor,
+                    image_size=self.config.image_size,
+                    seed=self.config.seed,
+                    num_inference_steps=self.config.num_inference_steps,
+                    tokenizer_max_length=self.config.tokenizer_max_length,
+                )[0]
+                .float()
+                .cpu()
+                .numpy()
+            )
         actions = self._unnormalize(normalized)
         if not np.isfinite(actions).all():
             raise FloatingPointError("ABot-M0 produced non-finite actions")
@@ -479,8 +484,16 @@ def predict_action(
         device=str(options.get("device") or device),
         torch_dtype=str(options.get("torch_dtype") or "auto"),
         attention_backend=str(options.get("attention_backend") or "auto"),
-        num_inference_steps=(option_int(options.get("num_inference_steps"), 4) if options.get("num_inference_steps") is not None else None),
-        tokenizer_max_length=(option_int(options.get("tokenizer_max_length"), 256) if options.get("tokenizer_max_length") is not None else None),
+        num_inference_steps=(
+            option_int(options.get("num_inference_steps"), 4)
+            if options.get("num_inference_steps") is not None
+            else None
+        ),
+        tokenizer_max_length=(
+            option_int(options.get("tokenizer_max_length"), 256)
+            if options.get("tokenizer_max_length") is not None
+            else None
+        ),
         seed=option_int(options.get("seed"), 0),
         device_map=options.get("device_map"),
         device_ids=tuple(int(item) for item in raw_devices),
@@ -499,4 +512,4 @@ def predict_action(
     return runtime.predict_action(instruction=instruction, image=image, observation=observation)
 
 
-__all__ = ["ABotM0Runtime", "ABotM0RuntimeConfig", "MODEL_ID", "predict_action"]
+__all__ = ["MODEL_ID", "ABotM0Runtime", "ABotM0RuntimeConfig", "predict_action"]

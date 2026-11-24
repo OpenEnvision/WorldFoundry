@@ -1,16 +1,15 @@
-import collections
 import importlib
 import logging
 import os
 import time
 from collections import OrderedDict
 from collections.abc import Sequence
-from itertools import repeat
-from typing import Tuple
 
 import numpy as np
 import torch
 import torch.distributed as dist
+
+from worldfoundry.core.nn.blocks.tuples import ntuple as _ntuple
 
 # ======================================================
 # Logging
@@ -37,7 +36,7 @@ def create_logger(logging_dir=None):
     Create a logger that writes to a log file and stdout.
     """
     if is_main_process():  # real logger
-        additional_args = dict()
+        additional_args = {}
         if logging_dir is not None:
             additional_args["handlers"] = [
                 logging.StreamHandler(),
@@ -167,7 +166,7 @@ def all_reduce_mean(tensor: torch.Tensor) -> torch.Tensor:
     return tensor
 
 
-def get_model_numel(model: torch.nn.Module) -> Tuple[int, int]:
+def get_model_numel(model: torch.nn.Module) -> tuple[int, int]:
     num_params = 0
     num_params_trainable = 0
     for p in model.parameters():
@@ -242,15 +241,6 @@ def to_torch_dtype(dtype):
         raise ValueError
 
 
-def _ntuple(n):
-    def parse(x):
-        if isinstance(x, collections.abc.Iterable) and not isinstance(x, str):
-            return x
-        return tuple(repeat(x, n))
-
-    return parse
-
-
 to_1tuple = _ntuple(1)
 to_2tuple = _ntuple(2)
 to_3tuple = _ntuple(3)
@@ -283,25 +273,6 @@ def inverse_param_sigmoid(x, alpha, eps=1e-5):
     x1 = x.clamp(min=eps)
     x2 = (1 - x).clamp(min=eps)
     return torch.log(x1 / x2) / alpha
-
-
-def inverse_sigmoid(x, eps=1e-5):
-    """Inverse function of sigmoid.
-
-    Args:
-        x (Tensor): The tensor to do the
-            inverse.
-        eps (float): EPS avoid numerical
-            overflow. Defaults 1e-5.
-    Returns:
-        Tensor: The x has passed the inverse
-            function of sigmoid, has same
-            shape with input.
-    """
-    x = x.clamp(min=0, max=1)
-    x1 = x.clamp(min=eps)
-    x2 = (1 - x).clamp(min=eps)
-    return torch.log(x1 / x2)
 
 
 # ======================================================
@@ -344,7 +315,7 @@ def transpose(x):
     Args:
         x (list[list]):
     """
-    ret = list(map(list, zip(*x)))
+    ret = list(map(list, zip(*x, strict=False)))
     return ret
 
 

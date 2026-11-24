@@ -4,8 +4,8 @@
 Extracted from the existing InSpatio 1.0 runtime. Version 1.5 uses the same
 reference/previous-block context and four-step causal sampling equations.
 """
+
 from contextlib import nullcontext
-from typing import List, Optional
 
 import torch
 
@@ -58,7 +58,7 @@ def denoise_block(
             )
 
     for index, current_timestep in enumerate(denoising_steps):
-        is_last_step = (index == len(denoising_steps) - 1)
+        is_last_step = index == len(denoising_steps) - 1
         timestep = torch.ones([B, F], device=device, dtype=torch.int64) * current_timestep
 
         ctx = torch.no_grad() if not is_last_step else nullcontext()
@@ -80,7 +80,7 @@ def denoise_block(
             noisy_input = scheduler.add_noise(
                 denoised_pred.flatten(0, 1),
                 sample_noise_like(denoised_pred.flatten(0, 1), noise_generator),
-                next_t * torch.ones([B * F], device=device, dtype=torch.long)
+                next_t * torch.ones([B * F], device=device, dtype=torch.long),
             ).unflatten(0, denoised_pred.shape[:2])
 
     return denoised_pred, noise_before_last_step
@@ -95,8 +95,7 @@ class InspatioCausalRollout(torch.nn.Module):
 
         # Step 2: Initialize all causal hyperparmeters
         self.scheduler = self.generator.get_scheduler()
-        self.denoising_step_list = torch.tensor(
-            args.denoising_step_list, dtype=torch.long)
+        self.denoising_step_list = torch.tensor(args.denoising_step_list, dtype=torch.long)
         if args.warp_denoising_step:
             print("warping denoising step list")
             timesteps = torch.cat((self.scheduler.timesteps.cpu(), torch.tensor([0], dtype=torch.float32)))
@@ -119,10 +118,10 @@ class InspatioCausalRollout(torch.nn.Module):
     def inference(
         self,
         noise: torch.Tensor,
-        text_prompts: List[str],
-        ref_latent: Optional[torch.Tensor] = None,
-        render_latent: Optional[torch.Tensor] = None,
-        mask_latent: Optional[torch.Tensor] = None,
+        text_prompts: list[str],
+        ref_latent: torch.Tensor | None = None,
+        render_latent: torch.Tensor | None = None,
+        mask_latent: torch.Tensor | None = None,
         decode: bool = True,
         noise_generator=None,
     ) -> torch.Tensor:
@@ -141,25 +140,27 @@ class InspatioCausalRollout(torch.nn.Module):
         """
         if noise.ndim != 5 or noise.shape[1] < 1:
             raise ValueError("Noise must be non-empty [B,F,C,H,W]")
-        if (ref_latent is None or render_latent is None or mask_latent is None
-                or ref_latent.shape != noise.shape or render_latent.shape != noise.shape
-                or mask_latent.shape != (*noise.shape[:2], 4, *noise.shape[-2:])):
+        if (
+            ref_latent is None
+            or render_latent is None
+            or mask_latent is None
+            or ref_latent.shape != noise.shape
+            or render_latent.shape != noise.shape
+            or mask_latent.shape != (*noise.shape[:2], 4, *noise.shape[-2:])
+        ):
             raise ValueError("Source, render, and four-channel mask latent shapes must match noise")
         batch_size, num_frames, num_channels, height, width = noise.shape
-        assert num_frames % self.num_frame_per_block == 0, f"num_frames {num_frames} is not a multiple of num_frame_per_block {self.num_frame_per_block}"
+        assert num_frames % self.num_frame_per_block == 0, (
+            f"num_frames {num_frames} is not a multiple of num_frame_per_block {self.num_frame_per_block}"
+        )
         num_blocks = num_frames // self.num_frame_per_block
 
-        num_output_frames = num_frames   # add the initial latent frames
-        conditional_dict = self.text_encoder(
-            text_prompts=text_prompts
-        )
+        num_output_frames = num_frames  # add the initial latent frames
+        conditional_dict = self.text_encoder(text_prompts=text_prompts)
 
         output = torch.zeros(
-            [batch_size, num_output_frames, num_channels, height, width],
-            device=noise.device,
-            dtype=noise.dtype
+            [batch_size, num_output_frames, num_channels, height, width], device=noise.device, dtype=noise.dtype
         )
-
 
         self._initialize_kv_cache(batch_size, noise.dtype, noise.device)
 
@@ -170,10 +171,18 @@ class InspatioCausalRollout(torch.nn.Module):
         start_index = 0
         last_pred = None
         for num_block_frame in all_num_frames:
-            noisy_input = noise[:, start_index :start_index + num_block_frame ].to(device=noise.device, dtype=noise.dtype)
-            ref_block = ref_latent[:, start_index :start_index + num_block_frame ].to(device=noise.device, dtype=noise.dtype)
-            render_block = render_latent[:, start_index :start_index + num_block_frame ].to(device=noise.device, dtype=noise.dtype)
-            mask_block = mask_latent[:, start_index :start_index + num_block_frame ].to(device=noise.device, dtype=noise.dtype)
+            noisy_input = noise[:, start_index : start_index + num_block_frame].to(
+                device=noise.device, dtype=noise.dtype
+            )
+            ref_block = ref_latent[:, start_index : start_index + num_block_frame].to(
+                device=noise.device, dtype=noise.dtype
+            )
+            render_block = render_latent[:, start_index : start_index + num_block_frame].to(
+                device=noise.device, dtype=noise.dtype
+            )
+            mask_block = mask_latent[:, start_index : start_index + num_block_frame].to(
+                device=noise.device, dtype=noise.dtype
+            )
             render_block = torch.cat([mask_block, render_block], dim=2)
 
             kv_size = self.frame_seq_length * self.num_frame_per_block
@@ -192,7 +201,10 @@ class InspatioCausalRollout(torch.nn.Module):
                 kv_size = kv_size + self.frame_seq_length * self.num_frame_per_block
 
             denoised_pred, _ = denoise_block(
-                self.generator, self.scheduler, noisy_input, conditional_dict,
+                self.generator,
+                self.scheduler,
+                noisy_input,
+                conditional_dict,
                 self.kv_cache1,
                 context_frames=context_frames,
                 context_no_grad=True,
@@ -203,14 +215,12 @@ class InspatioCausalRollout(torch.nn.Module):
                 noise_generator=noise_generator,
             )
 
-
             # Step 3.2: record the model's output
-            output[:, start_index:start_index + num_block_frame] = denoised_pred
+            output[:, start_index : start_index + num_block_frame] = denoised_pred
             last_pred = denoised_pred.clone().detach()
 
             # Step 3.4: update the start and end frame indices
             start_index += num_block_frame
-
 
         # Step 4: Decode the output
         if not decode:
@@ -227,10 +237,13 @@ class InspatioCausalRollout(torch.nn.Module):
         Uses detach() + zero_() to safely reuse cache without gradient issues.
         Cache is allocated only once; subsequent calls only zero the existing tensors.
         """
-        if self.kv_cache1 is not None and len(self.kv_cache1) == self.num_transformer_blocks \
-                and self.kv_cache1[0]["k"].shape[0] == batch_size \
-                and self.kv_cache1[0]["k"].dtype == dtype \
-                and self.kv_cache1[0]["k"].device == device:
+        if (
+            self.kv_cache1 is not None
+            and len(self.kv_cache1) == self.num_transformer_blocks
+            and self.kv_cache1[0]["k"].shape[0] == batch_size
+            and self.kv_cache1[0]["k"].dtype == dtype
+            and self.kv_cache1[0]["k"].device == device
+        ):
             for block_cache in self.kv_cache1:
                 block_cache["k"].detach_().zero_()
                 block_cache["v"].detach_().zero_()
@@ -243,7 +256,13 @@ class InspatioCausalRollout(torch.nn.Module):
         print(f"Initializing kv cache with size: {kv_cache_size}")
         self.kv_cache1 = []
         for _ in range(self.num_transformer_blocks):
-            self.kv_cache1.append({
-                "k": torch.zeros([batch_size, kv_cache_size, num_heads, dim // num_heads], dtype=dtype, device=device),
-                "v": torch.zeros([batch_size, kv_cache_size, num_heads, dim // num_heads], dtype=dtype, device=device),
-            })
+            self.kv_cache1.append(
+                {
+                    "k": torch.zeros(
+                        [batch_size, kv_cache_size, num_heads, dim // num_heads], dtype=dtype, device=device
+                    ),
+                    "v": torch.zeros(
+                        [batch_size, kv_cache_size, num_heads, dim // num_heads], dtype=dtype, device=device
+                    ),
+                }
+            )

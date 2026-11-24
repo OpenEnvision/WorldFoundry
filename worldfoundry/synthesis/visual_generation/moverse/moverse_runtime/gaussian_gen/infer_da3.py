@@ -106,10 +106,7 @@ def infer_panorama_depth(
         view_resolution,
         process_res,
     )
-    distance_maps = [
-        zdepth_to_distance(depth, intrinsics[index])
-        for index, depth in enumerate(depth_maps)
-    ]
+    distance_maps = [zdepth_to_distance(depth, intrinsics[index]) for index, depth in enumerate(depth_maps)]
     pred_masks = [depth > 0 for depth in depth_maps]
 
     merge_height = min(1024, pano_height)

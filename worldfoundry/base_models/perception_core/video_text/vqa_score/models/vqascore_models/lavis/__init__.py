@@ -1,8 +1,8 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import os
@@ -11,10 +11,8 @@ import sys
 from omegaconf import OmegaConf
 
 from .common.registry import registry
-
-from .models import *
-from .processors import *
-
+from .models import *  # noqa: F403 - Upstream star import kept as written.
+from .processors import *  # noqa: F403 - Upstream star import kept as written.
 
 root_dir = os.path.dirname(os.path.abspath(__file__))
 default_cfg = OmegaConf.load(os.path.join(root_dir, "configs/default.yaml"))

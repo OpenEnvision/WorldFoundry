@@ -55,7 +55,8 @@ notes:
 - Camera paths use row-major OpenCV world-to-camera matrices; named upstream viewer matrices use column-major 16-vectors.
 - Exported scene depth equals Marigold scene depth times 1000; camera translations use these exported units.
 - Guided depth uses the final eight Euler steps and known scene/ground anchors; latent noise and U-Net input remain unscaled as in the pinned source.
-- gsplat RGB rendering, opacity-crossing median depth, and 0.8 L1 plus 0.2 DSSIM fitting are native implementations; full official rasterizer and quality parity remain pending.
+- gsplat supplies differentiable projections and sorted tile lists; native Triton RGB/alpha and median depth share alpha cap 0.99 and retain the surface crossing the termination threshold.
+- Fitting uses 0.8 L1 plus 0.2 DSSIM. Integration contracts and numerical comparison are separate from scene-quality observations; full official pipeline parity remains pending.
 - New Gaussians precede the frozen scene at equal depth; only their bounded particle range is fitted and pruned.
 - Upstream reports 48 GB VRAM. Local component weights and a CUDA-compatible gsplat installation are required.
 - No separate WonderWorld generator checkpoint is needed. SD2 uses CreativeML Open RAIL++-M; retain all component licensing terms.

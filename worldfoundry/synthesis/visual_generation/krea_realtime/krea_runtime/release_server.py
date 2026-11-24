@@ -3,58 +3,81 @@ import torch
 from worldfoundry.core.io.paths import package_data_path
 
 torch.set_grad_enabled(False)
-import asyncio
-import base64
-import gc
-import logging
-import os
-import queue
-import random
-import shutil
-import socket
-import subprocess
-import tempfile
-import threading
-import traceback
-import uuid
-from collections import deque
-from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
-from io import BytesIO
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional
+import asyncio  # noqa: E402 - Follows a module-level setup call, as upstream.
+import base64  # noqa: E402 - Follows a module-level setup call, as upstream.
+import gc  # noqa: E402 - Follows a module-level setup call, as upstream.
+import logging  # noqa: E402 - Follows a module-level setup call, as upstream.
+import os  # noqa: E402 - Follows a module-level setup call, as upstream.
+import queue  # noqa: E402 - Follows a module-level setup call, as upstream.
+import random  # noqa: E402 - Follows a module-level setup call, as upstream.
+import shutil  # noqa: E402 - Follows a module-level setup call, as upstream.
+import socket  # noqa: E402 - Follows a module-level setup call, as upstream.
+import subprocess  # noqa: E402 - Follows a module-level setup call, as upstream.
+import tempfile  # noqa: E402 - Follows a module-level setup call, as upstream.
+import threading  # noqa: E402 - Follows a module-level setup call, as upstream.
+import traceback  # noqa: E402 - Follows a module-level setup call, as upstream.
+import uuid  # noqa: E402 - Follows a module-level setup call, as upstream.
+from collections import deque  # noqa: E402 - Follows a module-level setup call, as upstream.
+from collections.abc import Callable  # noqa: E402 - Follows a module-level setup call, as upstream.
+from concurrent.futures import ThreadPoolExecutor  # noqa: E402 - Follows a module-level setup call, as upstream.
+from functools import lru_cache  # noqa: E402 - Follows a module-level setup call, as upstream.
+from io import BytesIO  # noqa: E402 - Follows a module-level setup call, as upstream.
+from typing import TYPE_CHECKING  # noqa: E402 - Follows a module-level setup call, as upstream.
 
-import numpy as np
-import safetensors
-from safetensors.torch import load_file, save_file
+import numpy as np  # noqa: E402 - Follows a module-level setup call, as upstream.
+from safetensors.torch import load_file  # noqa: E402 - Follows a module-level setup call, as upstream.
 
-from worldfoundry.core.nn import FlowMatchScheduler, SchedulerInterface
+from worldfoundry.core.nn import FlowMatchScheduler  # noqa: E402 - Follows a module-level setup call, as upstream.
 
 if TYPE_CHECKING:
-    from pipeline import CausalInferencePipeline
-    from runtime_utils.vae_block3 import VAEDecoderWrapper, VAEEncoderWrapper
-    from utils.wan_wrapper import WanDiffusionWrapper, WanTextEncoder
+    from worldfoundry.synthesis.visual_generation.krea_realtime.krea_runtime.pipeline import CausalInferencePipeline
+    from worldfoundry.synthesis.visual_generation.krea_realtime.krea_runtime.runtime_utils.vae_block3 import (
+        VAEDecoderWrapper,
+        VAEEncoderWrapper,
+    )
+    from worldfoundry.synthesis.visual_generation.krea_realtime.krea_runtime.utils.wan_wrapper import (
+        WanDiffusionWrapper,
+        WanTextEncoder,
+    )
 
 # Internal / self-forcing imports
-import time
-from pathlib import Path
+import contextlib  # noqa: E402 - Follows the conditional setup block.
+import time  # noqa: E402 - Follows the conditional setup block.
+from pathlib import Path  # noqa: E402 - Follows the conditional setup block.
 
-import torch._dynamo as dynamo
-import torchvision.transforms.functional as TF
-from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
-from msgpack import packb, unpackb
+import torch._dynamo as dynamo  # noqa: E402 - Follows the conditional setup block.
+import torchvision.transforms.functional as TF  # noqa: E402 - Follows the conditional setup block.
+from fastapi import (  # noqa: E402 - Follows the conditional setup block.
+    FastAPI,
+    File,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402 - Follows the conditional setup block.
+from fastapi.responses import HTMLResponse, JSONResponse  # noqa: E402 - Follows the conditional setup block.
+from msgpack import packb, unpackb  # noqa: E402 - Follows the conditional setup block.
 
 # External imports
-from omegaconf import OmegaConf
-from PIL import Image
-from pydantic import BaseModel, ValidationError
-from settings import compiler_stance, resolve_model_asset
-from tqdm import tqdm
-from utils.misc import AtomicCounter
-from v2v import encode_video_latent, get_denoising_schedule
+from omegaconf import OmegaConf  # noqa: E402 - Follows the conditional setup block.
+from PIL import Image  # noqa: E402 - Follows the conditional setup block.
+from pydantic import BaseModel, ValidationError  # noqa: E402 - Follows the conditional setup block.
+from tqdm import tqdm  # noqa: E402 - Follows the conditional setup block.
 
-from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import WanVAE
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import (  # noqa: E402 - Follows the conditional setup block.
+    WanVAE,
+)
+from worldfoundry.synthesis.visual_generation.krea_realtime.krea_runtime.settings import (  # noqa: E402 - Follows the conditional setup block.
+    compiler_stance,
+    resolve_model_asset,
+)
+from worldfoundry.synthesis.visual_generation.krea_realtime.krea_runtime.utils.misc import (  # noqa: E402 - Follows the conditional setup block.
+    AtomicCounter,
+)
+from worldfoundry.synthesis.visual_generation.krea_realtime.krea_runtime.v2v import (  # noqa: E402 - Follows the conditional setup block.
+    encode_video_latent,
+    get_denoising_schedule,
+)
 
 # PyTorch renamed this setting in older releases and removed the compatibility
 # alias in newer ones.  Keep the upstream intent without making module import
@@ -64,6 +87,7 @@ if hasattr(dynamo.config, "recompile_limit"):
 elif hasattr(dynamo.config, "accumulated_recompile_limit"):
     dynamo.config.accumulated_recompile_limit = 32
 
+
 # Helper function for resampling frames
 def resample_array(array, target_length):
     """Resample a list to the target length using linear interpolation of indices"""
@@ -72,21 +96,20 @@ def resample_array(array, target_length):
     indices = np.round(np.linspace(0, len(array) - 1, target_length)).astype(int)
     return [array[i] for i in indices]
 
+
 # SECTION: CONFIGURATION AND CONSTANTS
 
 # Basic configuration - logs to console by default
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    level=logging.DEBUG, format="%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
 
 # Get a logger
 log = logging.getLogger(__name__)
 
 # Global storage for session frames
-session_frames_storage: Dict[str, List[torch.Tensor]] = {}
-session_frame_locks: Dict[str, threading.Lock] = {}
+session_frames_storage: dict[str, list[torch.Tensor]] = {}
+session_frame_locks: dict[str, threading.Lock] = {}
 
 UUID_NIL = str(uuid.UUID(int=0))
 USE_STATIC_ENCODER_COND_DICT = os.getenv("USE_STATIC_ENCODER_COND_DICT", "false").lower() in ("true", "1", "yes")
@@ -98,18 +121,21 @@ gpu = torch.cuda.current_device()
 upload_stream = torch.cuda.Stream(device=gpu)
 download_stream = torch.cuda.Stream(device=gpu)
 
+
 def load_merge_config(config_path: str | Path) -> OmegaConf:
     config = OmegaConf.load(config_path)
-    default_config = OmegaConf.load(str(package_data_path('models', 'runtime', 'configs', 'krea_realtime', 'default_config.yaml')))
-    merged_config = OmegaConf.merge(
-        default_config, config
+    default_config = OmegaConf.load(
+        str(package_data_path("models", "runtime", "configs", "krea_realtime", "default_config.yaml"))
     )
+    merged_config = OmegaConf.merge(default_config, config)
     return merged_config
+
 
 class Models:
     """
     Wrapper class that holds all loaded models
     """
+
     def __init__(self, text_encoder, transformer, pipeline, vae_encoder, vae_decoder):
         self.text_encoder: WanTextEncoder = text_encoder
         self.transformer: WanDiffusionWrapper = transformer
@@ -117,8 +143,10 @@ class Models:
         self.vae_encoder: VAEEncoderWrapper = vae_encoder
         self.vae_decoder: VAEDecoderWrapper = vae_decoder
 
+
 def copy_models(models: Models, config, gpu):
     from copy import deepcopy
+
     with torch.cuda.device(gpu):
         text_encoder = deepcopy(models.text_encoder).to(gpu)
         transformer = deepcopy(models.transformer).to(gpu)
@@ -126,6 +154,7 @@ def copy_models(models: Models, config, gpu):
         vae_decoder = deepcopy(models.vae_decoder).to(gpu)
         pipeline = load_pipeline(config, gpu, transformer, text_encoder, vae_decoder)
         return Models(text_encoder, transformer, pipeline, vae_encoder, vae_decoder)
+
 
 def load_text_encoder():
     """Load and configure the text encoder model"""
@@ -136,23 +165,26 @@ def load_text_encoder():
         # TODO: remove
         print("USING STATIC COND DICT. PLSPLSPLS REMOVE BEFORE MERGING")
         static_cond_dict = torch.load("static_cond_dict_cat_skateboard.pth", weights_only=True)
+
         class StaticTextEncoder(torch.nn.Module):
             def forward(self, text_prompts):
                 return static_cond_dict
+
         return StaticTextEncoder()
-    
-    from utils.wan_wrapper import WanTextEncoder
+
+    from worldfoundry.synthesis.visual_generation.krea_realtime.krea_runtime.utils.wan_wrapper import WanTextEncoder
+
     t_import = time.time()
     log.debug(f"Text encoder import took: {t_import - t_start:.2f}s")
-    
+
     text_encoder = WanTextEncoder()
     text_encoder.eval()
     text_encoder.to(dtype=torch.bfloat16)
     text_encoder.requires_grad_(False)
-    
+
     t_finish = time.time()
     log.debug(f"Text encoder load completed in: {t_finish - t_import:.2f}s, total: {t_finish - t_start:.2f}s")
-    
+
     return text_encoder
 
 
@@ -161,11 +193,14 @@ def load_transformer(config, meta_transformer=False):
     t_start = time.time()
 
     checkpoint_path = config.checkpoint_path
-    
-    from utils.wan_wrapper import WanDiffusionWrapper
+
+    from worldfoundry.synthesis.visual_generation.krea_realtime.krea_runtime.utils.wan_wrapper import (
+        WanDiffusionWrapper,
+    )
+
     t_import = time.time()
     log.debug(f"Transformer import took: {t_import - t_start:.2f}s")
-    
+
     state_dict = load_file(checkpoint_path, device="cuda")
     log.debug(f"Loading transformer state dict from {checkpoint_path}")
     if state_dict["model.blocks.0.self_attn.k.weight"].shape[0] == 1536:
@@ -176,7 +211,7 @@ def load_transformer(config, meta_transformer=False):
     timestep_shift = getattr(config, "timestep_shift", 5.0)
     transformer = WanDiffusionWrapper(model_name=model_name, timestep_shift=timestep_shift, is_causal=True)
     transformer.load_state_dict(state_dict)
-    
+
     transformer = transformer.to(dtype=torch.bfloat16)
     transformer.eval()
     transformer.requires_grad_(False)
@@ -188,13 +223,14 @@ def load_transformer(config, meta_transformer=False):
     if config.enable_fp8:
         log.debug("Quantizing transfofmer to fp8")
         from torchao.quantization.quant_api import Float8DynamicActivationFloat8WeightConfig, PerTensor, quantize_
+
         quantize_(transformer, Float8DynamicActivationFloat8WeightConfig(granularity=PerTensor()))
 
     t_finish = time.time()
     log.debug(f"Transformer load completed in: {t_finish - t_import:.2f}s, total: {t_finish - t_start:.2f}s")
 
-    
     return transformer
+
 
 def load_vae():
     """Load and configure the VAE decoder"""
@@ -202,7 +238,11 @@ def load_vae():
 
     log.debug("Using runtime_utils.vae_block3.VAEEncoderWrapper")
     log.debug("Using runtime_utils.vae_block3.VAEDecoderWrapper")
-    from runtime_utils.vae_block3 import VAEDecoderWrapper, VAEEncoderWrapper
+    from worldfoundry.synthesis.visual_generation.krea_realtime.krea_runtime.runtime_utils.vae_block3 import (
+        VAEDecoderWrapper,
+        VAEEncoderWrapper,
+    )
+
     vae_dtype = torch.float16
     vae_path = str(resolve_model_asset("Wan2.1-T2V-1.3B", "Wan2.1_VAE.pth"))
     vae = WanVAE(vae_pth=vae_path, dtype=vae_dtype)
@@ -212,7 +252,7 @@ def load_vae():
     vae_state_dict = torch.load(vae_path, map_location="cpu", weights_only=True)
     decoder_state_dict = {}
     for key, value in vae_state_dict.items():
-        if 'decoder.' in key or 'conv2' in key:
+        if "decoder." in key or "conv2" in key:
             decoder_state_dict[key] = value
 
     vae_encoder.eval()
@@ -229,50 +269,46 @@ def load_vae():
 
     t_finish = time.time()
     log.debug(f"VAE load completed in: {t_finish - t_start:.2f}s")
-    
+
     return vae_encoder, vae_decoder
 
 
 def load_pipeline(config, device, transformer, text_encoder, vae_decoder):
     """Initialize the causal inference pipeline"""
     t_start = time.time()
-    
-    from pipeline import CausalInferencePipeline
+
+    from worldfoundry.synthesis.visual_generation.krea_realtime.krea_runtime.pipeline import CausalInferencePipeline
+
     t_import = time.time()
     log.debug(f"Pipeline import took: {t_import - t_start:.2f}s")
-    
+
     pipeline = CausalInferencePipeline(
-        config,
-        device=device,
-        generator=transformer,
-        text_encoder=text_encoder,
-        vae=vae_decoder
+        config, device=device, generator=transformer, text_encoder=text_encoder, vae=vae_decoder
     )
 
-    
     t_finish = time.time()
     log.debug(f"Pipeline initialization completed in: {t_finish - t_start:.2f}s")
-    
+
     return pipeline
+
 
 def load_all(config: OmegaConf, meta_transformer=False):
     """
     Load all models with progress tracking
-    
+
     Args:
         config: OmegaConf configuration object containing checkpoint_path and use_trt settings
-    
+
     Returns:
         Models instance containing all loaded models
     """
     log.info("Starting model loading...")
     t_total_start = time.time()
-    
+
     # Extract settings from config
-    checkpoint_path = config.get('checkpoint_path', './checkpoints/self_forcing_dmd.pt')
+    checkpoint_path = config.get("checkpoint_path", "./checkpoints/self_forcing_dmd.pt")
     log.debug(f"Using checkpoint: {checkpoint_path}")
-    
-    
+
     # Create progress bar with 4 stages
     with tqdm(total=4, desc="Loading models") as pbar:
         # Load transformer
@@ -290,7 +326,7 @@ def load_all(config: OmegaConf, meta_transformer=False):
         pbar.update(1)
         gc.collect()
         torch.cuda.empty_cache()
-        
+
         # Load VAE decoder
         pbar.set_description("Loading VAE")
         t_stage_start = time.time()
@@ -304,10 +340,10 @@ def load_all(config: OmegaConf, meta_transformer=False):
         pipeline = load_pipeline(config, torch.cuda.current_device(), transformer, text_encoder, vae_decoder)
         log.debug(f"Initializing pipeline took: {time.time() - t_stage_start:.2f}s")
         pbar.update(1)
-    
+
     t_total_end = time.time()
     log.info(f"All models loaded successfully in {t_total_end - t_total_start:.2f}s")
-    
+
     models = Models(text_encoder, transformer, pipeline, vae_encoder, vae_decoder)
 
     gc.collect()
@@ -320,11 +356,12 @@ def load_all(config: OmegaConf, meta_transformer=False):
 
     return models
 
+
 class GenerateParams(BaseModel):
     prompt: str
     width: int = 832
     height: int = 480
-    
+
     seed: int | None = None
     resume_latents: bytes | None = None
     strength: float = 1.0
@@ -335,7 +372,7 @@ class GenerateParams(BaseModel):
     keep_first_frame: bool = False
     kv_cache_num_frames: int = 3
     num_blocks: int = 9
-    num_denoising_steps: int | None = 5 # use 4 for performance
+    num_denoising_steps: int | None = 5  # use 4 for performance
 
     block_on_frame: bool = False
 
@@ -345,16 +382,23 @@ class GenerateParams(BaseModel):
 
     webcam_mode: bool = False
     webcam_fps: int = 10
+
     class Config:
         arbitrary_types_allowed = True
-    
+
 
 class GenerationSession:
     SESSION_COUNTER = AtomicCounter()
 
     @torch.inference_mode()
-    def __init__(self, params: GenerateParams,
-                 config: OmegaConf, debug=False, frame_callback: Optional[Callable] = None, models: Models | None = None):
+    def __init__(
+        self,
+        params: GenerateParams,
+        config: OmegaConf,
+        debug=False,
+        frame_callback: Callable | None = None,
+        models: Models | None = None,
+    ):
         self.current_use_taehv = config.use_taehv
         self.frame_callback = frame_callback or (lambda *args, **kwargs: logging.warning("No frame callback set!"))
         self.session_id = self.SESSION_COUNTER.increment()
@@ -363,20 +407,19 @@ class GenerationSession:
         self.block_idx = 0
         self.params = params
 
-
         self.input_video = params.input_video
         if self.input_video is None and not params.webcam_mode:
             self.params.strength = 1.0
-            
+
         self.start_frame = params.start_frame
 
         self.width = params.width // 8 * 8
-        self.height = params.height // 8 * 8 
+        self.height = params.height // 8 * 8
         self.latent_width = self.width // 8
         self.latent_height = self.height // 8
-        self.resume_latents: Optional[torch.Tensor] = None
+        self.resume_latents: torch.Tensor | None = None
         self.last_frame_latent = None
-        
+
         self.config = config
         self.debug = debug
         self.gpu = torch.cuda.current_device()
@@ -393,16 +436,15 @@ class GenerationSession:
         self.kv_cache_num_frames = params.kv_cache_num_frames
         self.g_num_blocks = self.num_blocks = params.num_blocks
 
-        frame_cache_len = 1 + (params.kv_cache_num_frames - 1) * 4 
+        frame_cache_len = 1 + (params.kv_cache_num_frames - 1) * 4
         self.frame_context_cache = deque(maxlen=frame_cache_len)
 
-        
         self.gpu_initialized = False
 
-        self.encode_vae_cache: list[Optional[torch.Tensor]] = [None] * 55
-        self.decode_vae_cache: list[Optional[torch.Tensor]] = [None] * 55
+        self.encode_vae_cache: list[torch.Tensor | None] = [None] * 55
+        self.decode_vae_cache: list[torch.Tensor | None] = [None] * 55
         self.num_frame_per_block = 3
-       
+
         self.rnd = torch.Generator(self.gpu).manual_seed(self.params.seed)
 
         num_latent_frames = self.num_blocks * self.num_frame_per_block
@@ -431,7 +473,11 @@ class GenerationSession:
             latents, _ = self.encode_v2v(self.input_video, max_frames=None, resample_to=None)
             latents = latents[None].to(self.gpu, dtype=self.noise.dtype).movedim(1, 2)
 
-            self.noise = latents * (1.0 - init_denoising_strength_scaled) + torch.randn(latents.shape, device=self.noise.device, dtype=self.noise.dtype, generator=self.rnd) * init_denoising_strength_scaled
+            self.noise = (
+                latents * (1.0 - init_denoising_strength_scaled)
+                + torch.randn(latents.shape, device=self.noise.device, dtype=self.noise.dtype, generator=self.rnd)
+                * init_denoising_strength_scaled
+            )
             self.noise = self.noise.contiguous()
             print("latents shape: ", latents.shape)
             actual_num_blocks = latents.shape[1] // self.num_frame_per_block - 1
@@ -441,37 +487,47 @@ class GenerationSession:
             print("Setting up start frame")
             self.setup_start_frame(self.params.start_frame, models)
 
-        self.last_pred: Optional[torch.Tensor] = None
-    
+        self.last_pred: torch.Tensor | None = None
+
     def to(self, gpu):
-        if self.gpu == gpu: return
+        if self.gpu == gpu:
+            return
         self.all_latents = self.all_latents.to(gpu, non_blocking=True)
         self.noise = self.noise.to(gpu, non_blocking=True)
 
         if isinstance(self.encode_vae_cache, list):
-            self.encode_vae_cache = [cache.to(gpu, non_blocking=True) if cache is not None else None for cache in self.encode_vae_cache]
+            self.encode_vae_cache = [
+                cache.to(gpu, non_blocking=True) if cache is not None else None for cache in self.encode_vae_cache
+            ]
         if isinstance(self.decode_vae_cache, list):
-            self.decode_vae_cache = [cache.to(gpu, non_blocking=True) if cache is not None else None for cache in self.decode_vae_cache]
-        
+            self.decode_vae_cache = [
+                cache.to(gpu, non_blocking=True) if cache is not None else None for cache in self.decode_vae_cache
+            ]
+
         # move prompt embed stuff
-        self.current_prompt_embeds = self.current_prompt_embeds.to(gpu, non_blocking=True) if self.current_prompt_embeds is not None else None
-        if hasattr(self, 'conditional_dict'):
+        self.current_prompt_embeds = (
+            self.current_prompt_embeds.to(gpu, non_blocking=True) if self.current_prompt_embeds is not None else None
+        )
+        if hasattr(self, "conditional_dict"):
             for key, value in self.conditional_dict.items():
                 self.conditional_dict[key] = value.to(gpu, non_blocking=True)
-        self.interpolated_prompt_embeds = [embed.to(gpu, non_blocking=True) for embed in self.interpolated_prompt_embeds]
+        self.interpolated_prompt_embeds = [
+            embed.to(gpu, non_blocking=True) for embed in self.interpolated_prompt_embeds
+        ]
         self.gpu = gpu
-    
+
     def dispose(self):
         self.disposed.set()
 
     def interpolate_prompt_embeds(self, models: Models, new_prompt, interpolation_steps):
-        if self.current_prompt_embeds is None: return
+        if self.current_prompt_embeds is None:
+            return
         prompt_embeds_1 = self.current_prompt_embeds
         prompt_embeds_2 = models.text_encoder(text_prompts=[new_prompt])["prompt_embeds"].to(dtype=torch.bfloat16)
         x = torch.lerp(
-            prompt_embeds_1, 
-            prompt_embeds_2, 
-            torch.linspace(0, 1, steps=interpolation_steps).unsqueeze(1).unsqueeze(2).to(prompt_embeds_1)
+            prompt_embeds_1,
+            prompt_embeds_2,
+            torch.linspace(0, 1, steps=interpolation_steps).unsqueeze(1).unsqueeze(2).to(prompt_embeds_1),
         )
         self.interpolated_prompt_embeds = list(x.chunk(interpolation_steps, dim=0))
 
@@ -481,7 +537,7 @@ class GenerationSession:
                 self.params.strength = denoising_strength
             if isinstance(frame, str):
                 if frame.startswith("data:"):
-                    frame = frame[frame.index(",") + 1:]
+                    frame = frame[frame.index(",") + 1 :]
                 frame = base64.b64decode(frame)
             image = Image.open(BytesIO(frame)).convert("RGB")
             tensor = TF.to_tensor(image).to(dtype=torch.float16).pin_memory()
@@ -493,14 +549,11 @@ class GenerationSession:
             traceback.print_exc()
             print(f"Killing from push_frame: {e}")
             self.dispose()
-    
+
     def process_webcam_frames(self, models: Models, idx: int):
         """Process webcam frames for streaming v2v with proper frame encoding"""
         # Determine number of frames to encode based on block index
-        if idx == 0:
-            num_frames_to_encode = 9
-        else:
-            num_frames_to_encode = 12
+        num_frames_to_encode = 9 if idx == 0 else 12
 
         # Wait until we have at least enough frames
         while self.frame_queue.qsize() < num_frames_to_encode:
@@ -534,19 +587,20 @@ class GenerationSession:
 
         return latents
 
-    @lru_cache(maxsize=32)
+    @lru_cache(maxsize=32)  # noqa: B019 - Keeps the upstream per-instance method cache.
     def encode_v2v(self, video_path_or_url: str, max_frames=None, resample_to=None):
-        latents = encode_video_latent(self.models.vae_encoder,
-                                    encode_vae_cache=[None] * 55,
-                                    video_path_or_url=video_path_or_url,
-                                    height=self.params.height,
-                                    width=self.params.width,
-                                    stream=False,
-                                    max_frames=max_frames,
-                                    resample_to=resample_to,
-                                    )
+        latents = encode_video_latent(
+            self.models.vae_encoder,
+            encode_vae_cache=[None] * 55,
+            video_path_or_url=video_path_or_url,
+            height=self.params.height,
+            width=self.params.width,
+            stream=False,
+            max_frames=max_frames,
+            resample_to=resample_to,
+        )
         return latents
-        
+
     def init_models(self, models: Models, params: GenerateParams):
         attn_size = self.params.kv_cache_num_frames + models.pipeline.num_frame_per_block
         for block in models.pipeline.generator.model.blocks:
@@ -556,41 +610,68 @@ class GenerationSession:
             block.self_attn.local_attn_size = -1
         models.pipeline._initialize_kv_cache(batch_size=1, dtype=torch.bfloat16, device=gpu)
         models.pipeline._initialize_crossattn_cache(batch_size=1, dtype=torch.bfloat16, device=gpu)
-        models.pipeline.generator.model.block_mask = None 
-
-
+        models.pipeline.generator.model.block_mask = None
 
         # this prevents a cuda sync
         models.pipeline.scheduler = FlowMatchScheduler(shift=params.timestep_shift, sigma_min=0.0, extra_one_step=True)
         models.pipeline.scheduler.set_timesteps(1000, training=True)
-        
-        st = models.pipeline.scheduler.timesteps
-        self.zero_padded_timesteps = torch.cat((st.cpu(), torch.tensor([0], dtype=torch.float32))).to(torch.cuda.current_device())
 
+        st = models.pipeline.scheduler.timesteps
+        self.zero_padded_timesteps = torch.cat((st.cpu(), torch.tensor([0], dtype=torch.float32))).to(
+            torch.cuda.current_device()
+        )
 
     def get_clean_context_frames(self, models: Models):
-        current_kv_cache_num_frames = self.kv_cache_num_frames if self.kv_cache_num_frames is not None else self.params.kv_cache_num_frames
-        clean_context_frames = self.all_latents[:, :self.current_start_frame]
-        if self.params.keep_first_frame or (self.block_idx - 1) * models.pipeline.num_frame_per_block < current_kv_cache_num_frames:
+        current_kv_cache_num_frames = (
+            self.kv_cache_num_frames if self.kv_cache_num_frames is not None else self.params.kv_cache_num_frames
+        )
+        clean_context_frames = self.all_latents[:, : self.current_start_frame]
+        if (
+            self.params.keep_first_frame
+            or (self.block_idx - 1) * models.pipeline.num_frame_per_block < current_kv_cache_num_frames
+        ):
             if current_kv_cache_num_frames == 1:
                 clean_context_frames = clean_context_frames[:, :1]
             else:
-                clean_context_frames = torch.cat((clean_context_frames[:, :1], clean_context_frames[:,1:][:, -current_kv_cache_num_frames + 1:]), dim=1)
+                clean_context_frames = torch.cat(
+                    (clean_context_frames[:, :1], clean_context_frames[:, 1:][:, -current_kv_cache_num_frames + 1 :]),
+                    dim=1,
+                )
         else:
             # print("reencoding first latent frame, block idx:")
-            clean_context_frames = clean_context_frames[:,1:][:, -current_kv_cache_num_frames + 1:]
-            first_frame_latent = encode_video_latent(models.vae_encoder, [None]*55, resample_to=16, max_frames=81, video_path_or_url=None, frames=self.frame_context_cache[0][0].half(), height=480, width=832, stream=False,)[0].transpose(0, 1)[None]
+            clean_context_frames = clean_context_frames[:, 1:][:, -current_kv_cache_num_frames + 1 :]
+            first_frame_latent = encode_video_latent(
+                models.vae_encoder,
+                [None] * 55,
+                resample_to=16,
+                max_frames=81,
+                video_path_or_url=None,
+                frames=self.frame_context_cache[0][0].half(),
+                height=480,
+                width=832,
+                stream=False,
+            )[0].transpose(0, 1)[None]
             clean_context_frames = torch.cat((first_frame_latent, clean_context_frames), dim=1).to(self.all_latents)
         return clean_context_frames
-    
+
     def setup_start_frame(self, image: Image.Image, models: Models):
         num_context_frames = self.params.kv_cache_num_frames
-        frame_cache_len = 1 + (num_context_frames - 1) * 4 
+        frame_cache_len = 1 + (num_context_frames - 1) * 4
 
         tensor = TF.to_tensor(image).to(dtype=torch.float16)
         tensor = tensor.to("cuda").sub_(0.5).mul_(2.0)
         tensors = torch.stack([tensor] * frame_cache_len)
-        latents = encode_video_latent(models.vae_encoder, [None]*55, resample_to=16, max_frames=81, video_path_or_url=None, frames=tensors, height=480, width=832, stream=False)[0].transpose(0, 1)[None]
+        latents = encode_video_latent(
+            models.vae_encoder,
+            [None] * 55,
+            resample_to=16,
+            max_frames=81,
+            video_path_or_url=None,
+            frames=tensors,
+            height=480,
+            width=832,
+            stream=False,
+        )[0].transpose(0, 1)[None]
         self.resume_latents = latents
 
     def recompute_kv_cache(self, models: Models):
@@ -599,7 +680,7 @@ class GenerationSession:
             if self.resume_latents is not None:
                 print("Resuming generation from latents, shape", self.resume_latents.shape)
                 self.current_start_frame = self.resume_latents.shape[1]
-                self.all_latents[:, :self.current_start_frame] = self.resume_latents
+                self.all_latents[:, : self.current_start_frame] = self.resume_latents
             else:
                 return self.current_start_frame
 
@@ -607,13 +688,15 @@ class GenerationSession:
             block.self_attn.num_frame_per_block = models.pipeline.num_frame_per_block
 
         current_kv_cache_num_frames = self.params.kv_cache_num_frames
-        
+
         model_input_start_frame = min(self.current_start_frame, current_kv_cache_num_frames)
-                
+
         clean_context_frames = self.get_clean_context_frames(models)
-        
+
         models.pipeline._initialize_kv_cache(
-            batch_size=clean_context_frames.shape[0], dtype=clean_context_frames.dtype, device=clean_context_frames.device
+            batch_size=clean_context_frames.shape[0],
+            dtype=clean_context_frames.dtype,
+            device=clean_context_frames.device,
         )
 
         block_mask = models.pipeline.generator.model._prepare_blockwise_causal_attn_mask(
@@ -624,10 +707,14 @@ class GenerationSession:
             local_attn_size=-1,
         )
 
-        context_timestep = torch.ones(
-            [clean_context_frames.shape[0], clean_context_frames.shape[1]],
-            device=clean_context_frames.device,
-            dtype=torch.int64) * 0
+        context_timestep = (
+            torch.ones(
+                [clean_context_frames.shape[0], clean_context_frames.shape[1]],
+                device=clean_context_frames.device,
+                dtype=torch.int64,
+            )
+            * 0
+        )
         models.pipeline.generator.model.block_mask = block_mask
         models.transformer(
             noisy_image_or_video=clean_context_frames,
@@ -650,7 +737,7 @@ class GenerationSession:
             self.conditional_dict = models.text_encoder(text_prompts=[self.params.prompt])
             for key, value in self.conditional_dict.items():
                 self.conditional_dict[key] = value.to(dtype=torch.bfloat16).contiguous()
-            self.current_prompt_embeds = self.conditional_dict['prompt_embeds']
+            self.current_prompt_embeds = self.conditional_dict["prompt_embeds"]
 
         model_input_start_frame = self.recompute_kv_cache(models)
         assert model_input_start_frame is not None
@@ -663,26 +750,34 @@ class GenerationSession:
 
             denoising_strength_scaled = self.denoising_step_list[0] / 1000.0
             latents = latents[None].to("cuda", dtype=self.noise.dtype).movedim(1, 2)
-            noisy_input = latents * (1.0 - denoising_strength_scaled) + torch.randn_like(latents) * denoising_strength_scaled
+            noisy_input = (
+                latents * (1.0 - denoising_strength_scaled) + torch.randn_like(latents) * denoising_strength_scaled
+            )
         else:
-            noisy_input = self.noise[:, self.current_start_frame:self.current_start_frame + models.pipeline.num_frame_per_block]
+            noisy_input = self.noise[
+                :, self.current_start_frame : self.current_start_frame + models.pipeline.num_frame_per_block
+            ]
 
         if self.interpolated_prompt_embeds:
             models.pipeline._initialize_crossattn_cache(batch_size=1, dtype=torch.bfloat16, device=self.gpu)
             next_interpolated_text_emb = self.interpolated_prompt_embeds.pop(0)
             self.current_prompt_embeds = next_interpolated_text_emb.to(
-                dtype=self.current_prompt_embeds.dtype, device=self.current_prompt_embeds.device)
+                dtype=self.current_prompt_embeds.dtype, device=self.current_prompt_embeds.device
+            )
 
         # This is set from config
         for index, current_timestep in enumerate(self.denoising_step_list):
-            if self.disposed.is_set(): return
-            t_step_start = time.time()
+            if self.disposed.is_set():
+                return
+            _t_step_start = time.time()
             # Normal initialize timestamp stuff
-            timestep = torch.ones([1, models.pipeline.num_frame_per_block], device=self.noise.device,
-                                dtype=torch.int64) * current_timestep
+            timestep = (
+                torch.ones([1, models.pipeline.num_frame_per_block], device=self.noise.device, dtype=torch.int64)
+                * current_timestep
+            )
 
-            self.conditional_dict['prompt_embeds'] = self.current_prompt_embeds
-            
+            self.conditional_dict["prompt_embeds"] = self.current_prompt_embeds
+
             if index < len(self.denoising_step_list) - 1:
                 start_time = time.time()
                 _, denoised_pred = models.transformer(
@@ -691,18 +786,28 @@ class GenerationSession:
                     timestep=timestep,
                     kv_cache=models.pipeline.kv_cache1,
                     crossattn_cache=models.pipeline.crossattn_cache,
-                    current_start=model_input_start_frame * models.pipeline.frame_seq_length
+                    current_start=model_input_start_frame * models.pipeline.frame_seq_length,
                 )
-                start_time = time.time()
+                start_time = time.time()  # noqa: F841 - Kept as upstream; an underscore name already exists.
                 next_timestep = self.denoising_step_list[index + 1]
                 noisy_input = models.pipeline.scheduler.add_noise(
                     denoised_pred.flatten(0, 1),
-                    torch.randn(*denoised_pred.flatten(0, 1).shape, generator=self.rnd, device=denoised_pred.device, dtype=torch.bfloat16),
-                    next_timestep * torch.ones([1 * models.pipeline.num_frame_per_block], device=self.noise.device, dtype=torch.long, )
+                    torch.randn(
+                        *denoised_pred.flatten(0, 1).shape,
+                        generator=self.rnd,
+                        device=denoised_pred.device,
+                        dtype=torch.bfloat16,
+                    ),
+                    next_timestep
+                    * torch.ones(
+                        [1 * models.pipeline.num_frame_per_block],
+                        device=self.noise.device,
+                        dtype=torch.long,
+                    ),
                 ).unflatten(0, denoised_pred.shape[:2])
                 # logging.debug("(renoise) time %f", time.time() - start_time)
             else:
-                start_time = time.time()
+                _start_time = time.time()
                 # otherwise just denoise
                 _, denoised_pred = models.transformer(
                     noisy_image_or_video=noisy_input,
@@ -710,22 +815,24 @@ class GenerationSession:
                     timestep=timestep,
                     kv_cache=models.pipeline.kv_cache1,
                     crossattn_cache=models.pipeline.crossattn_cache,
-                    current_start=model_input_start_frame * models.pipeline.frame_seq_length
+                    current_start=model_input_start_frame * models.pipeline.frame_seq_length,
                 )
 
-        self.all_latents[:, self.current_start_frame:self.current_start_frame + models.pipeline.num_frame_per_block] = denoised_pred
+        self.all_latents[
+            :, self.current_start_frame : self.current_start_frame + models.pipeline.num_frame_per_block
+        ] = denoised_pred
         self.last_pred = denoised_pred
-        decode_start = time.time()
-        
+        _decode_start = time.time()
+
         if (self.params.width, self.params.height) != (832, 480):
             print("Falling back to eager for VAE decode")
             ctx = compiler_stance(torch, "force_eager")
         else:
             ctx = compiler_stance(torch, "default")
-        
+
         with ctx:
             pixels, self.decode_vae_cache = models.vae_decoder(denoised_pred.half(), *self.decode_vae_cache)
-        
+
         self.frame_context_cache.extend(pixels.split(1, dim=1))
         if idx == 0:
             pixels = pixels[:, 3:, :, :, :]  # Skip first 3 frames of first block
@@ -740,9 +847,9 @@ class GenerationSession:
         self.total_frames_sent += pixels.shape[1]
         self.block_idx += 1
         self.resume_latents = None
-        
+
         return pixels
-    
+
     @torch.inference_mode()
     def generate_block(self, models: Models):
         with torch.cuda.device(self.gpu):
@@ -750,23 +857,34 @@ class GenerationSession:
             if out is None:
                 raise asyncio.CancelledError()
             return out
-    
+
     def generate_blocks(self, num_blocks: int, models: Models):
         for _ in range(num_blocks):
             self.generate_block(models)
-    
+
     def __hash__(self):
         return id(self)
 
+
 def compile_models(models: Models):
-    models.vae_decoder = torch.compile(models.vae_decoder, fullgraph=True,) 
+    models.vae_decoder = torch.compile(
+        models.vae_decoder,
+        fullgraph=True,
+    )
     models.transformer = torch.compile(models.transformer)
+
 
 # SECTION - SERVER & HANDLING
 async def lifespan(app: FastAPI):
-    app.state.config = load_merge_config(os.getenv("CONFIG", str(package_data_path('models', 'runtime', 'configs', 'krea_realtime', 'self_forcing_server_14b.yaml'))))
+    app.state.config = load_merge_config(
+        os.getenv(
+            "CONFIG",
+            str(package_data_path("models", "runtime", "configs", "krea_realtime", "self_forcing_server_14b.yaml")),
+        )
+    )
     app.state.models = load_all(app.state.config)
     yield
+
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
@@ -777,9 +895,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/health")
 async def health():
     return "OK"
+
 
 @app.get("/")
 async def root():
@@ -789,18 +909,19 @@ async def root():
         return HTMLResponse("<h1>Self-Forcing</h1><p>Demo UI not found.</p>", status_code=404)
     return HTMLResponse(demo_path.read_text(encoding="utf-8"))
 
+
 @app.post("/upload_video")
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video(file: UploadFile = File(...)):  # noqa: B008 - Default evaluated once at definition, as upstream.
     """Upload a video file and return its temporary path for use in generation"""
     try:
         # Create a temporary file with the original extension
         suffix = Path(file.filename).suffix if file.filename else ".mp4"
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-        
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
+
         # Copy uploaded file to temp file
         with temp_file:
             shutil.copyfileobj(file.file, temp_file)
-        
+
         log.info(f"Video uploaded to temporary file: {temp_file.name}")
         return JSONResponse({"path": temp_file.name, "filename": file.filename})
     except Exception as e:
@@ -809,18 +930,19 @@ async def upload_video(file: UploadFile = File(...)):
     finally:
         file.file.close()
 
+
 @app.post("/upload_start_frame")
-async def upload_start_frame(file: UploadFile = File(...)):
+async def upload_start_frame(file: UploadFile = File(...)):  # noqa: B008 - Default evaluated once at definition, as upstream.
     """Upload a start frame image and return its temporary path for use in generation"""
     try:
         # Create a temporary file with the original extension
         suffix = Path(file.filename).suffix if file.filename else ".jpg"
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-        
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
+
         # Copy uploaded file to temp file
         with temp_file:
             shutil.copyfileobj(file.file, temp_file)
-        
+
         log.info(f"Start frame uploaded to temporary file: {temp_file.name}")
         return JSONResponse({"path": temp_file.name, "filename": file.filename})
     except Exception as e:
@@ -829,102 +951,114 @@ async def upload_start_frame(file: UploadFile = File(...)):
     finally:
         file.file.close()
 
+
 @app.get("/download_video/{session_id}")
 async def download_video(session_id: str):
     """Download the generated video as MP4 for a given session"""
     from fastapi.responses import Response
-    
+
     # Check if we have frames for this session
     if session_id not in session_frames_storage:
         return JSONResponse({"error": "No video data found for this session"}, status_code=404)
-    
+
     # Get the frames for this session
     frames = session_frames_storage[session_id]
     if not frames:
         return JSONResponse({"error": "No frames available"}, status_code=404)
-    
+
     try:
         # Combine all frame tensors
         # frames is a list of tensors, each with shape [1, num_frames, 3, H, W]
         all_frames = torch.cat(frames, dim=1)  # Shape: [1, total_frames, 3, H, W]
-        
+
         # Save to MP4 using ffmpeg
         mp4_data = save_video_to_bytes(all_frames, fps=16)
-        
+
         if mp4_data is None:
             return JSONResponse({"error": "Failed to generate MP4"}, status_code=500)
-        
+
         # Clean up the stored frames
         del session_frames_storage[session_id]
-        if session_id in session_frame_locks:
-            del session_frame_locks[session_id]
-        
+        session_frame_locks.pop(session_id, None)
+
         # Return the MP4 file
         return Response(
             content=mp4_data,
             media_type="video/mp4",
-            headers={
-                "Content-Disposition": f"attachment; filename=video_{session_id}.mp4"
-            }
+            headers={"Content-Disposition": f"attachment; filename=video_{session_id}.mp4"},
         )
-        
+
     except Exception as e:
         log.error(f"Error generating video: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-def save_video_to_bytes(pixels: torch.Tensor, fps: int = 24) -> Optional[bytes]:
+
+def save_video_to_bytes(pixels: torch.Tensor, fps: int = 24) -> bytes | None:
     """Save video frames to MP4 and return as bytes"""
     try:
         # pixels shape: [1, num_frames, 3, H, W]
         video_tensor = pixels[0].cpu().clamp(0, 1)
         num_frames, _, height, width = video_tensor.shape
-        
+
         # Convert to uint8 RGB frames
         video_np = (video_tensor.permute(0, 2, 3, 1).numpy() * 255).astype(np.uint8)
-        
+
         # Create a temporary file for output
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
             tmp_path = tmp_file.name
-        
+
         cmd = [
-            "ffmpeg", "-y",
-            "-f", "rawvideo",
-            "-vcodec", "rawvideo",
-            "-s", f"{width}x{height}",
-            "-pix_fmt", "rgb24",
-            "-r", str(fps),
-            "-i", "-",  # Read from stdin
-            "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",
-            "-crf", "18",  # High quality
-            "-preset", "fast",
-            tmp_path
+            "ffmpeg",
+            "-y",
+            "-f",
+            "rawvideo",
+            "-vcodec",
+            "rawvideo",
+            "-s",
+            f"{width}x{height}",
+            "-pix_fmt",
+            "rgb24",
+            "-r",
+            str(fps),
+            "-i",
+            "-",  # Read from stdin
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-crf",
+            "18",  # High quality
+            "-preset",
+            "fast",
+            tmp_path,
         ]
-        
+
         process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
         process.stdin.write(video_np.tobytes())
         process.stdin.close()
         process.wait()
-        
+
         if process.returncode != 0:
             log.error(f"FFmpeg error: {process.stderr.read().decode()}")
             return None
-        
+
         # Read the MP4 file
-        with open(tmp_path, 'rb') as f:
+        with open(tmp_path, "rb") as f:
             mp4_data = f.read()
-        
+
         # Clean up
         os.unlink(tmp_path)
-        
+
         return mp4_data
-        
+
     except Exception as e:
         log.error(f"Error creating video: {e}")
         return None
 
+
 generate_pool = ThreadPoolExecutor(max_workers=1)
 encode_pool = ThreadPoolExecutor(max_workers=24)
+
 
 async def ws_session(websocket: WebSocket, id: str, config: OmegaConf, models: Models):
     loop = asyncio.get_event_loop()
@@ -961,8 +1095,9 @@ async def ws_session(websocket: WebSocket, id: str, config: OmegaConf, models: M
         if id not in session_frames_storage:
             session_frames_storage[id] = []
             session_frame_locks[id] = threading.Lock()
-        
+
         frame_queue = asyncio.Queue[asyncio.Future[bytes]]()
+
         async def frame_sender():
             while True:
                 try:
@@ -973,14 +1108,17 @@ async def ws_session(websocket: WebSocket, id: str, config: OmegaConf, models: M
                 except Exception as e:
                     logging.error(f"Error sending frame: {e}")
                 frame_queue.task_done()
+
         frame_sender_task = asyncio.create_task(frame_sender())
 
         async def extract_frame(frames_future: asyncio.Future[torch.Tensor], idx: int, frame_id: str) -> bytes:
             io = BytesIO()
             frames = await frames_future
-            await loop.run_in_executor(encode_pool, lambda: TF.to_pil_image(frames[0, idx], "RGB").save(io, format='JPEG', quality=90))
+            await loop.run_in_executor(
+                encode_pool, lambda: TF.to_pil_image(frames[0, idx], "RGB").save(io, format="JPEG", quality=90)
+            )
             if websocket.query_params.get("fmt", "jpeg") == "msgpack":
-                return packb({ "image": io.getvalue(), "request_id": frame_id })
+                return packb({"image": io.getvalue(), "request_id": frame_id})
             return io.getvalue()
 
         def frame_callback(tensor: torch.Tensor, frame_ids: list[str], event: torch.cuda.Event):
@@ -990,7 +1128,7 @@ async def ws_session(websocket: WebSocket, id: str, config: OmegaConf, models: M
                 with torch.cuda.stream(download_stream):
                     cpu_tensor.copy_(tensor)
                 return cpu_tensor.add_(1.0).mul_(0.5).clamp_(0.0, 1.0)
-            
+
             def store_frames():
                 cpu_tensor = torch.zeros_like(tensor, device="cpu", pin_memory=True)
                 download_stream.wait_event(event)
@@ -1011,20 +1149,20 @@ async def ws_session(websocket: WebSocket, id: str, config: OmegaConf, models: M
             except Exception as e:
                 logging.error(f"Error in frame_callback: {e}")
                 traceback.print_exc()
+
         def actual_frame_callback(*args):
             loop.call_soon_threadsafe(frame_callback, *args)
 
         gc.collect()
         torch.cuda.empty_cache()
-        new_session = lambda: GenerationSession(
-            params,
-            config,
-            frame_callback=actual_frame_callback,
-            models=models
-        )
+
+        def new_session():
+            return GenerationSession(params, config, frame_callback=actual_frame_callback, models=models)
+
         session = new_session()
 
         new_data_event = asyncio.Event()
+
         async def generate_loop():
             try:
                 while True:
@@ -1044,6 +1182,7 @@ async def ws_session(websocket: WebSocket, id: str, config: OmegaConf, models: M
                         traceback.print_exc()
             except Exception as e:
                 logging.error(f"Error in generate_loop: {e}")
+
         generate_task = loop.create_task(generate_loop())
 
         async for data in websocket.iter_bytes():
@@ -1064,17 +1203,21 @@ async def ws_session(websocket: WebSocket, id: str, config: OmegaConf, models: M
                 session.interpolate_prompt_embeds(models, session.params.prompt, interp_steps)
             if (new_seed := frame.get("seed", None)) is not None:
                 session.params.seed = int(new_seed)
-            if (image := frame.get("image")):
-                await loop.run_in_executor(encode_pool, session.push_frame, image, frame.get("strength", None), frame.get("request_id", None))
+            if image := frame.get("image"):
+                await loop.run_in_executor(
+                    encode_pool, session.push_frame, image, frame.get("strength", None), frame.get("request_id", None)
+                )
                 if (timestamp := frame.get("timestamp")) and isinstance(timestamp, (int, float)):
                     timestamp /= 1000.0
                     if time.time() - timestamp > 1.0:
                         logging.warning(f"High latency detected: {time.time() - timestamp:.2f}s")
             new_data_event.set()
     except WebSocketDisconnect:
-        logging.info(f"Client disconnected from api session {id}, generation session {session.session_id if session else None}")
+        logging.info(
+            f"Client disconnected from api session {id}, generation session {session.session_id if session else None}"
+        )
     finally:
-        logging.info(f"Terminating session")
+        logging.info("Terminating session")
         if session:
             session.dispose()
         if frame_sender_task:
@@ -1082,10 +1225,9 @@ async def ws_session(websocket: WebSocket, id: str, config: OmegaConf, models: M
         if generate_task:
             generate_task.cancel()
         # Send session ID for video download
-        try:
+        with contextlib.suppress(BaseException):
             await websocket.send_json({"session_id": id, "status": "completed"})
-        except:
-            pass
+
 
 @app.websocket("/session/{id}")
 async def app_session(websocket: WebSocket, id: str):

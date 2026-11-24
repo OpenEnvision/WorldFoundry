@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import collections
 import os
+from collections.abc import Callable, Mapping
 from functools import partial
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+from typing import Any
 
 import attrs
 import torch
@@ -56,13 +57,6 @@ except ImportError:
     _find_minimal_target_modules = None
     BaseTunerLayer = None
 
-from lyra_2._src.models.utils import (
-    _convert_musubi_wan_lora_to_non_diffusers_wan,
-    _convert_non_diffusers_wan_lora_to_diffusers,
-)
-from lyra_2._src.modules.conditioner import DataType, T2VCondition
-from lyra_2._src.utils.resolution import VIDEO_RES_SIZE_INFO
-
 from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import FlowUniPCMultistepScheduler
 from worldfoundry.core.configuration.lazy_config import LazyDict
 from worldfoundry.core.configuration.lazy_config import instantiate as lazy_instantiate
@@ -73,11 +67,17 @@ from worldfoundry.core.distributed.model_parallel.context import (
     cat_outputs_cp,
 )
 from worldfoundry.core.distributed.sharding.fsdp_runtime import hsdp_device_mesh
-from worldfoundry.core.distributed.runtime.logging import log
-from worldfoundry.core.model_loading import InferenceModel, load_state_dict, non_strict_load_model
-from worldfoundry.core.observability.time import CudaSyncTimer as sync_timer
-from worldfoundry.core.utils import count_parameters as count_params
 from worldfoundry.core.execution import inference_runtime as misc
+from worldfoundry.core.model_loading import InferenceModel, load_state_dict, non_strict_load_model
+from worldfoundry.core.observability.rank_logging import log
+from worldfoundry.core.observability.time import CudaSyncTimer as sync_timer
+from worldfoundry.core.utils import count_params
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.models.utils import (
+    _convert_musubi_wan_lora_to_non_diffusers_wan,
+    _convert_non_diffusers_wan_lora_to_diffusers,
+)
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.modules.conditioner import DataType, T2VCondition
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.utils.resolution import VIDEO_RES_SIZE_INFO
 
 IS_PREPROCESSED_KEY = "is_preprocessed"
 NUM_EMBEDDING_PADDING_TOKENS = 512
@@ -89,7 +89,7 @@ class I4LoraConfig:
     pretrained_lora_path: str = ""
     lora_rank: int = -1
     adapter_name: str = "default"
-    lora_target_modules: list[str] = []
+    lora_target_modules: list[str] = []  # noqa: RUF008 - Upstream mutable default kept as written.
     init_lora_weights: str = "kaiming"
 
 
@@ -105,7 +105,7 @@ class T2VModelConfig:
     input_image_key: str = "image"  # key to fetch input image from data_batch
     input_caption_key: str = "ai_caption"  # Key used to fetch input captions
     use_torch_compile: bool = False
-    lora_config: I4LoraConfig = I4LoraConfig()
+    lora_config: I4LoraConfig = I4LoraConfig()  # noqa: RUF009 - Default evaluated once at definition, as upstream.
     use_mp_policy_fsdp: bool = False
     keep_original_net_dtype: bool = False
 
@@ -163,9 +163,8 @@ class WANDiffusionModel(InferenceModel):
             self.fsdp_device_mesh = None
 
         # 6. diffusion neural networks part
-        if "lora_config" in config:
-            if config.lora_config.enabled:
-                self.config.net.postpone_checkpoint = True
+        if "lora_config" in config and config.lora_config.enabled:
+            self.config.net.postpone_checkpoint = True
         self.set_up_model()
 
         self.net.requires_grad_(False)
@@ -203,9 +202,8 @@ class WANDiffusionModel(InferenceModel):
         # NOTE: (ruiyuang) always use meta device, no need to use cpu
         init_device = "meta"
         with misc.timer("Creating PyTorch model"):
-            with sync_timer("net instantiate"):
-                with torch.device(init_device):
-                    net = lazy_instantiate(config.net)
+            with sync_timer("net instantiate"), torch.device(init_device):
+                net = lazy_instantiate(config.net)
 
             if "lora_config" in config:
                 self.maybe_inject_lora_to_net(net, skip_load=True)
@@ -265,7 +263,7 @@ class WANDiffusionModel(InferenceModel):
             self.net = torch.compile(self.net, dynamic=False, disable=not self.config.use_torch_compile)
 
     def is_lora_model(self, model):
-        for _, module in model.named_modules():
+        for _, module in model.named_modules():  # noqa: SIM110 - Keeps the explicit loop.
             if isinstance(module, BaseTunerLayer):
                 return True
         return False
@@ -305,7 +303,7 @@ class WANDiffusionModel(InferenceModel):
         state_dict = {k[len("net.") :] if k.startswith("net.") else k: v for k, v in state_dict.items()}
 
         if not skip_inject:
-            target_modules = list({name.split(".lora")[0] for name in state_dict.keys()})
+            target_modules = list({name.split(".lora")[0] for name in state_dict.keys()})  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             for key, val in state_dict.items():
                 if ("lora_down" in key or "lora_A" in key) and val.ndim > 1:
                     rank = val.shape[0]
@@ -424,7 +422,7 @@ class WANDiffusionModel(InferenceModel):
                 _state_dict = get_model_state_dict(model)
                 missing_keys = []
                 unexpected_keys = []
-                for k in _state_dict.keys():
+                for k in _state_dict.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                     if "_extra_state" in k:
                         pass
                     if k in pretrained_lora_state_dict:
@@ -486,7 +484,7 @@ class WANDiffusionModel(InferenceModel):
                     module.active_adapter = adapter_names
 
                 # Set the scaling weight for each adapter for this module
-                for adapter_name, weight in zip(adapter_names, weights):
+                for adapter_name, weight in zip(adapter_names, weights, strict=False):
                     module.set_scale(adapter_name, get_module_weight(weight, module_name))
         log.info(f"Set weights: {weights}, and activate adapters: {adapter_names}")
 
@@ -525,7 +523,7 @@ class WANDiffusionModel(InferenceModel):
 
     def get_x0_fn_from_batch(
         self,
-        data_batch: Dict,
+        data_batch: dict,
         guidance: float = 1.5,
         is_negative_prompt: bool = False,
     ) -> Callable:
@@ -584,10 +582,10 @@ class WANDiffusionModel(InferenceModel):
     @torch.no_grad()
     def generate_samples_from_batch(
         self,
-        data_batch: Dict,
+        data_batch: dict,
         guidance: float = 1.5,
         seed: int = 1,
-        state_shape: Tuple | None = None,
+        state_shape: tuple | None = None,
         n_sample: int | None = None,
         is_negative_prompt: bool = False,
         num_steps: int = 35,
@@ -624,7 +622,7 @@ class WANDiffusionModel(InferenceModel):
             ]
 
         noise = misc.arch_invariant_rand(
-            (n_sample,) + tuple(state_shape),
+            (n_sample,) + tuple(state_shape),  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             torch.float32,
             self.tensor_kwargs["device"],
             seed,
@@ -667,24 +665,21 @@ class WANDiffusionModel(InferenceModel):
 
     def get_data_and_condition(
         self, data_batch: dict[str, torch.Tensor], return_latent_state: bool = True
-    ) -> Tuple[Tensor, Tensor, T2VCondition]:
+    ) -> tuple[Tensor, Tensor, T2VCondition]:
         self._normalize_video_databatch_inplace(data_batch)
         self._augment_image_dim_inplace(data_batch)
         is_image_batch = self.is_image_batch(data_batch)
 
         # Latent state
         raw_state = data_batch[self.input_image_key if is_image_batch else self.input_data_key]
-        if return_latent_state:
-            latent_state = self.encode(raw_state).contiguous().float()
-        else:
-            latent_state = None
+        latent_state = self.encode(raw_state).contiguous().float() if return_latent_state else None
 
         # Condition
         condition = self.conditioner(data_batch)
         condition = condition.edit_data_type(DataType.IMAGE if is_image_batch else DataType.VIDEO)
         return raw_state, latent_state, condition
 
-    def _normalize_video_databatch_inplace(self, data_batch: dict[str, Tensor], input_key: str = None) -> None:
+    def _normalize_video_databatch_inplace(self, data_batch: dict[str, Tensor], input_key: str | None = None) -> None:
         """
         Normalizes video data in-place on a CUDA device to reduce data loading overhead.
 
@@ -729,7 +724,7 @@ class WANDiffusionModel(InferenceModel):
                 data_batch[input_key] = data_batch[input_key].to(**self.tensor_kwargs) / 127.5 - 1.0
                 data_batch[IS_PREPROCESSED_KEY] = True
 
-    def _augment_image_dim_inplace(self, data_batch: dict[str, Tensor], input_key: str = None) -> None:
+    def _augment_image_dim_inplace(self, data_batch: dict[str, Tensor], input_key: str | None = None) -> None:
         input_key = self.input_image_key if input_key is None else input_key
         if input_key in data_batch:
             # Check if the data has already been augmented and avoid re-augmenting
@@ -753,7 +748,7 @@ class WANDiffusionModel(InferenceModel):
 
     # ------------------ Checkpointing ------------------
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return self.net.state_dict(prefix="net.")
 
     def load_state_dict(
@@ -814,7 +809,7 @@ class WANDiffusionModel(InferenceModel):
         return self.tokenizer.encode(state)
 
     @torch.no_grad()
-    def decode(self, latent: torch.Tensor, T_latent_seq_lens: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def decode(self, latent: torch.Tensor, T_latent_seq_lens: torch.Tensor | None = None) -> torch.Tensor:
         if T_latent_seq_lens is not None:
             latent_list = torch.split(latent, T_latent_seq_lens.tolist(), dim=2)
             decoded_list = [self.tokenizer.decode(latent) for latent in latent_list]
@@ -822,10 +817,10 @@ class WANDiffusionModel(InferenceModel):
         else:
             return self.tokenizer.decode(latent)
 
-    def get_video_height_width(self) -> Tuple[int, int]:
+    def get_video_height_width(self) -> tuple[int, int]:
         return VIDEO_RES_SIZE_INFO[self.config.resolution]["9,16"]
 
-    def get_video_latent_height_width(self) -> Tuple[int, int]:
+    def get_video_latent_height_width(self) -> tuple[int, int]:
         height, width = VIDEO_RES_SIZE_INFO[self.config.resolution]["9,16"]
         return height // self.tokenizer.spatial_compression_factor, width // self.tokenizer.spatial_compression_factor
 

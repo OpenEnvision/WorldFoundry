@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.synthesis.action_generation._native_policy_runtime import first_present, to_numpy_image
 
@@ -51,10 +52,7 @@ def integration_asset(root: Path, relative: str) -> Path:
 
 def resolve_robot_config(root: Path, robot_name: str, options: Mapping[str, Any]) -> Path:
     explicit = options.get("robot_config_path")
-    if explicit:
-        path = Path(str(explicit)).expanduser().resolve()
-    else:
-        path = integration_asset(root, f"{robot_name}.yaml")
+    path = Path(str(explicit)).expanduser().resolve() if explicit else integration_asset(root, f"{robot_name}.yaml")
     if not path.is_file():
         raise FileNotFoundError(f"LingBot-VLA robot config not found: {path}")
     return path
@@ -119,14 +117,14 @@ def populate_images(
     if missing:
         values = _image_candidates(image, raw, required_keys)
         if len(values) == len(required_keys):
-            for key, value in zip(required_keys, values):
+            for key, value in zip(required_keys, values, strict=False):
                 if key in missing:
                     raw[key] = value
         elif len(values) == 1 and len(missing) > 1 and replicate_single:
             for key in missing:
                 raw[key] = values[0]
         elif len(values) == len(missing):
-            for key, value in zip(missing, values):
+            for key, value in zip(missing, values, strict=False):
                 raw[key] = value
     remaining = [key for key in required_keys if raw.get(key) is None]
     if remaining:

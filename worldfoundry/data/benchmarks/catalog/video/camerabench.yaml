@@ -43,8 +43,8 @@ official_sources:
   evaluation_code:
     url: https://github.com/linzhiqiu/t2v_metrics/tree/main/camerabench
     notes: Referenced by the CameraBench materials as evaluation code; WorldFoundry ports the metric aggregation in-tree
-      under worldfoundry/evaluation/tasks/execution/runners/camerabench and exposes it through 
-      worldfoundry/evaluation/tasks/execution/runners/camerabench/run_camerabench_official_runner.py.
+      under worldfoundry/evals/tasks/execution/runners/camerabench and exposes it through 
+      worldfoundry/evals/tasks/execution/runners/camerabench/run_camerabench_official_runner.py.
   project_page: https://linzhiqiu.github.io/papers/camerabench/
   paper_url: https://arxiv.org/abs/2504.15376
   huggingface_datasets:
@@ -103,16 +103,16 @@ metrics:
   output_unit: score
   primary: true
 runner:
-  official_script: worldfoundry/evaluation/tasks/execution/runners/camerabench/run_camerabench_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/camerabench/run_camerabench_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.camerabench.run_camerabench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.camerabench.run_camerabench_official_runner
     generated_arg: null
     dataset_root_arg: --benchmark-data-root
-    supports_run_official: false
+    supports_official_runtime: true
     input_kind: score_dir_or_official_results
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:CameraBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:camerabench
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -133,7 +133,6 @@ runner:
   - OPENAI_API_KEY only when explicitly enabling caption GPT judging
   runtime:
     kind: in_tree_official_source
-    root: worldfoundry/evaluation/tasks/execution/runners/camerabench/runtime/camerabench
     repo_url: https://github.com/linzhiqiu/t2v_metrics.git
     repo_revision: 0bd9bfc68032ce4f9d5da80d646fa5ceb3b9bb1b
     repo_subdir: camerabench
@@ -168,18 +167,19 @@ runner:
   - Contract runner exposes generated videos and camera prompts for camera-motion scoring.
   - In-tree metric aggregation validates CameraBench score-dir binary, VQA/retrieval, caption, and aggregate score 
     families from a prepared CameraBench score_dir.
-  - --run-official executes the vendored official t2v_metrics/camerabench evaluation scripts 
-    (runtime/camerabench, pinned to the upstream revision above) on a prepared score_dir; per-sample VLM score 
-    generation remains an explicit external stage.
+  - --run-official executes the official t2v_metrics/camerabench evaluation scripts at repo_revision on a prepared
+    score_dir. The pinned sources are fetched into ${WORLDFOUNDRY_CACHE_DIR}/sources on first use;
+    WORLDFOUNDRY_CAMERABENCH_RUNTIME_ROOT can point at the camerabench/ directory of an existing checkout instead.
+    Per-sample VLM score generation remains an explicit external stage.
 integration:
   status: integrated
   tier: model_backed
   hf_dataset_id: linzhiqiu/camerabench
   evidence:
-    strict_official_runtime: worldfoundry-eval zoo benchmark-run --benchmark-id camerabench --mode 
+    strict_official_runtime: wf zoo benchmark-run --benchmark-id camerabench --mode 
       official-validation --official-results-path <official_results.json> --benchmark-data-root <camerabench_data_root> 
       --output-dir <out> --json
-    in_tree_score_dir_metric_aggregator: worldfoundry-eval zoo benchmark-run --benchmark-id camerabench --mode 
+    in_tree_score_dir_metric_aggregator: wf zoo benchmark-run --benchmark-id camerabench --mode 
       official-validation --score-dir <score_dir> --benchmark-data-root <camerabench_data_root> --output-dir <out> 
       --json
     official_benchmark_verified: false
@@ -228,11 +228,9 @@ data_refs:
   - cache/worldfoundry/data/hfd_datasets/syCen/CameraBench
   task_yaml: worldfoundry/data/benchmarks/tasks/external/camerabench.yaml
   bundled_assets: worldfoundry/data/benchmarks/assets/camerabench
-  in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/camerabench/runtime/camerabench
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:CameraBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:camerabench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
@@ -241,7 +239,7 @@ runner_availability:
   surface: camerabench_official_in_tree
   normalizer_verified: true
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -260,3 +258,15 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - generated_video_dir
+  - camera_prompt_manifest
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - camera_predictions
+  notes:
+  - Contract exposes CameraBench as a camera-motion evaluation surface for generated videos.
+  - The core upstream task is camera-motion understanding, so task-mismatch handling must be explicit.

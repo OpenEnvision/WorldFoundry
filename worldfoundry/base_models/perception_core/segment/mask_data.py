@@ -15,8 +15,9 @@ Public surface
 
 from __future__ import annotations
 
+from collections.abc import ItemsView
 from copy import deepcopy
-from typing import Any, ItemsView
+from typing import Any
 
 import numpy as np
 import torch
@@ -81,7 +82,7 @@ class MaskData:
             else:
                 raise TypeError(f"MaskData key {k} has an unsupported type {type(v)}.")
 
-    def cat(self, new_stats: "MaskData") -> None:
+    def cat(self, new_stats: MaskData) -> None:
         """Append ``new_stats`` along the batch axis, deep-copying missing keys.
 
         Tensor / ndarray concat uses dim 0. Lists are concatenated with a

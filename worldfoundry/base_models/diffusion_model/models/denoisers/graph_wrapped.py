@@ -73,20 +73,53 @@ _CUDA_GRAPH_STATEFUL_CONFLICTS = (
     "teacache_thresh",
 )
 
+# Whole-stack residual/step caches run their gating logic in Python around the
+# transformer block stack, so piecewise block-stack CUDA Graphs compose cleanly
+# with them. Block-selective caches and dynamic sparse processors still require
+# explicit piecewise segment validation and remain fail-closed.
+_PIECEWISE_GRAPH_CONFLICTS = (
+    "approximate_attention",
+    "blocktaylorseer",
+    "dualblock",
+    "dynamicblock",
+    "firstblock",
+)
+
+
+def resolve_cuda_graph_mode(context: Any) -> str:
+    """Resolve the CUDA Graph capture mode: ``'off'``, ``'whole'``, or ``'piecewise'``."""
+
+    raw = context.component_options.get("cuda_graph", context.policy.options.get("cuda_graph", False))
+    if raw is None or raw is False:
+        return "off"
+    if raw is True:
+        return "whole"
+    normalized = str(raw).strip().casefold()
+    if normalized in {"off", "none", "false", "disabled"}:
+        return "off"
+    if normalized in {"whole", "full", "true"}:
+        return "whole"
+    if normalized == "piecewise":
+        return "piecewise"
+    raise ValueError(f"unsupported cuda_graph mode {raw!r}; expected bool, 'off', 'whole', or 'piecewise'")
+
 
 def validate_cuda_graph_options(context: Any) -> None:
     """Reject stateful options whose Python control flow cannot be captured.
 
-    CUDA Graph replay does not rerun Python cache invalidation, feature-cache
-    decisions, or sparse routing. Wan static cross-KV is resolved outside the
-    captured network and supplied as explicit tensor inputs; the remaining
-    stateful policies must stay outside this whole-network capture path.
+    Whole-network CUDA Graph replay (``cuda_graph=True`` / ``'whole'``) does not
+    rerun Python cache invalidation, feature-cache decisions, or sparse routing.
+    Piecewise block-stack capture (``cuda_graph='piecewise'``) keeps Python step
+    gating outside the captured transformer stack, allowing composition with
+    whole-stack feature caches (TeaCache, MagCache, AdaCache, TaylorSeer, Custom).
     """
 
-    if not resolve_cuda_graph_option(context):
+    mode = resolve_cuda_graph_mode(context)
+    if mode == "off":
         return
+    blocked = _PIECEWISE_GRAPH_CONFLICTS if mode == "piecewise" else _CUDA_GRAPH_STATEFUL_CONFLICTS
     conflicts: list[str] = []
-    for name in _CUDA_GRAPH_STATEFUL_CONFLICTS:
+    for name in blocked:
         value = context.component_options.get(
             name,
             context.policy.options.get(name),
@@ -102,14 +135,9 @@ def validate_cuda_graph_options(context: Any) -> None:
 
 
 def resolve_cuda_graph_option(context: Any) -> bool:
-    """Resolve the ``cuda_graph`` flag from a component build context.
+    """Resolve whether any CUDA Graph mode (``'whole'`` or ``'piecewise'``) is enabled."""
 
-    A component-level ``component_options["cuda_graph"]`` takes precedence over
-    the run-wide ``policy.options["cuda_graph"]`` so a recipe can enable graphs
-    for one component without turning them on globally.
-    """
-
-    return bool(context.component_options.get("cuda_graph", context.policy.options.get("cuda_graph", False)))
+    return resolve_cuda_graph_mode(context) != "off"
 
 
 def resolve_teacache_threshold(context: Any) -> float | None:
@@ -122,14 +150,10 @@ def resolve_teacache_threshold(context: Any) -> float | None:
     builds never cache (``validate_runtime_policy_for_purpose`` forbids the key).
     """
 
-    raw = context.component_options.get(
-        "teacache", context.policy.options.get("teacache", None)
-    )
+    raw = context.component_options.get("teacache", context.policy.options.get("teacache", None))
     if raw is None or raw is False:
         return None
-    thresh = context.component_options.get(
-        "teacache_thresh", context.policy.options.get("teacache_thresh", None)
-    )
+    thresh = context.component_options.get("teacache_thresh", context.policy.options.get("teacache_thresh", None))
     if thresh is not None:
         return float(thresh)
     if raw is True:
@@ -244,8 +268,7 @@ class FeatureCacheDenoiserMixin:
                         (
                             candidate
                             for candidate in requests.values()
-                            if bool(candidate.get("complete"))
-                            and candidate.get("request_id") != request_id
+                            if bool(candidate.get("complete")) and candidate.get("request_id") != request_id
                         ),
                         key=lambda candidate: int(candidate["request_epoch"]),
                     )
@@ -284,9 +307,7 @@ class FeatureCacheDenoiserMixin:
             cache = caches.get(branch)
             if cache is None:
                 if step != 0:
-                    raise ValueError(
-                        "a request-local feature-cache branch must begin at step 0"
-                    )
+                    raise ValueError("a request-local feature-cache branch must begin at step 0")
                 if config is None:
                     # Backwards-compatible direct-constructor path used by
                     # older callers. Public builds use calibrated config.
@@ -321,14 +342,10 @@ class FeatureCacheDenoiserMixin:
                         raise ValueError("EasyCache branch steps must be unique and contiguous")
                     reset = getattr(cache, "reset", None)
                     if not callable(reset):
-                        raise TypeError(
-                            "request-local feature cache must implement reset()"
-                        )
+                        raise TypeError("request-local feature cache must implement reset()")
                     reset()
                 elif previous_step is None or step != int(previous_step) + 1:
-                    raise ValueError(
-                        "feature-cache branch steps must be unique and contiguous"
-                    )
+                    raise ValueError("feature-cache branch steps must be unique and contiguous")
             if getattr(cache, "algorithm", None) == "easycache":
                 cache.observe_conditioning(model_input.conditioning)
             state["branch_steps"][branch] = step
@@ -346,11 +363,7 @@ class FeatureCacheDenoiserMixin:
         config = getattr(self, "_feature_cache_config", None)
         threshold = getattr(self, "_teacache_threshold", None)
         enabled = config is not None or threshold is not None
-        algorithm = (
-            str(config.algorithm)
-            if config is not None
-            else ("adaptive-residual-legacy" if enabled else "none")
-        )
+        algorithm = str(config.algorithm) if config is not None else ("adaptive-residual-legacy" if enabled else "none")
         branches: dict[str, dict[str, Any]] = {}
         total_hits = 0
         total_events = 0
@@ -358,15 +371,9 @@ class FeatureCacheDenoiserMixin:
         total_skipped_block_calls = 0
         if request_id is None:
             request_id = self._feature_cache_context_var().get()
-        state = (
-            self._feature_request_state(request_id, create=False)
-            if isinstance(request_id, str)
-            else None
-        )
+        state = self._feature_request_state(request_id, create=False) if isinstance(request_id, str) else None
         if state is None and isinstance(request_id, str):
-            encoded = self.__dict__.get("_feature_cache_receipt_snapshots", {}).get(
-                request_id
-            )
+            encoded = self.__dict__.get("_feature_cache_receipt_snapshots", {}).get(request_id)
             if isinstance(encoded, str):
                 decoded = json.loads(encoded)
                 if not isinstance(decoded, dict):
@@ -389,11 +396,7 @@ class FeatureCacheDenoiserMixin:
                 receipt = None
             dense_block_calls = getattr(cache, "dense_block_calls", 0)
             skipped_block_calls = getattr(cache, "skipped_block_calls", 0)
-            if (
-                isinstance(dense_block_calls, bool)
-                or not isinstance(dense_block_calls, int)
-                or dense_block_calls < 0
-            ):
+            if isinstance(dense_block_calls, bool) or not isinstance(dense_block_calls, int) or dense_block_calls < 0:
                 dense_block_calls = 0
             if (
                 isinstance(skipped_block_calls, bool)
@@ -447,10 +450,7 @@ class FeatureCacheDenoiserMixin:
             "request_epoch": request_epoch,
             "request_local": state is not None
             and bool(branches)
-            and all(
-                    bool(branch_report.get("request_local"))
-                    for branch_report in branches.values()
-                ),
+            and all(bool(branch_report.get("request_local")) for branch_report in branches.values()),
             "effective": effective,
             "events": total_events,
             "hits": total_hits,
@@ -508,44 +508,58 @@ class FeatureCacheDenoiserMixin:
 
         with self._feature_cache_lock():
             return {
-                "live_requests": len(
-                    self.__dict__.get("_feature_cache_requests", {})
-                ),
-                "receipt_snapshots": len(
-                    self.__dict__.get("_feature_cache_receipt_snapshots", {})
-                ),
+                "live_requests": len(self.__dict__.get("_feature_cache_requests", {})),
+                "receipt_snapshots": len(self.__dict__.get("_feature_cache_receipt_snapshots", {})),
                 "max_receipt_snapshots": 32,
             }
 
 
 class GraphWrappedDenoiserMixin:
-    """Give a denoiser an opt-in CUDA Graph runner around its inner DiT call.
+    """Give a denoiser an opt-in CUDA Graph runner (whole-network or piecewise).
 
     ``enabled=False`` (the default from :func:`resolve_cuda_graph_option`)
-    leaves ``_graph_runner`` unset.  :meth:`_run_network` then calls
-    ``self.model`` with no extra frames.  ``graph_report`` returns ``None``
-    when graphs are disabled so audit snapshots can distinguish "never
+    leaves ``_graph_runner`` and ``_piecewise_graph`` unset. :meth:`_run_network`
+    then calls ``self.model`` with no extra frames. ``graph_report`` returns
+    ``None`` when graphs are disabled so audit snapshots can distinguish "never
     opted in" from "opted in but still warming up".
     """
 
     _graph_runner: InferenceCUDAGraphRunner | None = None
+    _piecewise_graph: Any = None
 
-    def _init_graph_runner(self, model: Any, *, enabled: bool, extra_key: str) -> None:
-        self._graph_runner = (
-            InferenceCUDAGraphRunner(model, extra_key=extra_key) if enabled else None
-        )
+    def _init_graph_runner(
+        self,
+        model: Any,
+        *,
+        enabled: bool | str,
+        extra_key: str,
+    ) -> None:
+        if isinstance(enabled, str) and enabled.strip().casefold() == "piecewise":
+            from worldfoundry.core.execution.graphs.piecewise_graph import PiecewiseBlockGraphRunner
+
+            self._graph_runner = None
+            self._piecewise_graph = PiecewiseBlockGraphRunner(warmup=1, max_graphs_per_segment=8, clone_outputs=True)
+            self._piecewise_graph_extra_key = extra_key
+        else:
+            self._piecewise_graph = None
+            self._graph_runner = InferenceCUDAGraphRunner(model, extra_key=extra_key) if bool(enabled) else None
         register_acceleration_runtime(model, self)
 
     @contextmanager
     def execution_warmup(self) -> Generator[None, None, None]:
         """Capture real request signatures, then prohibit request-time capture."""
         graph = self._graph_runner
-        if graph is None:
-            yield
-        else:
+        piecewise = getattr(self, "_piecewise_graph", None)
+        if graph is not None:
             with graph.capture_scope():
                 yield
             graph.freeze()
+        elif piecewise is not None:
+            with piecewise.capture_scope():
+                yield
+            piecewise.freeze()
+        else:
+            yield
 
     def _run_network(self, *args: Any, **kwargs: Any) -> Any:
         if self._graph_runner is not None:
@@ -557,17 +571,31 @@ class GraphWrappedDenoiserMixin:
 
         if self._graph_runner is not None:
             self._graph_runner.begin_request_window()
+        piecewise = getattr(self, "_piecewise_graph", None)
+        if piecewise is not None:
+            piecewise.begin_request_window()
 
     def graph_report(self) -> Mapping[str, Any] | None:
         """Return the runner's capture/replay stats, or ``None`` when disabled."""
 
-        return self._graph_runner.report() if self._graph_runner is not None else None
+        if self._graph_runner is not None:
+            return self._graph_runner.report()
+        piecewise = getattr(self, "_piecewise_graph", None)
+        if piecewise is not None:
+            raw = piecewise.report()
+            segments = raw.get("segments", {})
+            return {
+                **raw,
+                "capture_failed": sum(int(seg.get("capture_failed", 0)) for seg in segments.values()),
+            }
+        return None
 
 
 __all__ = [
-    "acceleration_runtime_call",
     "FeatureCacheDenoiserMixin",
     "GraphWrappedDenoiserMixin",
+    "acceleration_runtime_call",
+    "resolve_cuda_graph_mode",
     "resolve_cuda_graph_option",
     "resolve_teacache_threshold",
     "validate_cuda_graph_options",

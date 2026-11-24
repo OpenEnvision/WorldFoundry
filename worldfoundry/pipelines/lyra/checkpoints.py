@@ -2,7 +2,6 @@
 
 import shutil
 from pathlib import Path
-from typing import Optional
 
 from worldfoundry.base_models.three_dimensions.point_clouds.lyra.utils import (
     _candidate_lyra1_weights_subdir,
@@ -12,7 +11,6 @@ from worldfoundry.core.io.paths import scratch_directory
 
 
 def _lyra1_checkpoint_layout_complete(root: Path) -> bool:
-    """Lyra1 checkpoint layout complete helper function."""
     required_files = [
         root / "Gen3C-Cosmos-7B" / "model.pt",
         root / "Cosmos-Tokenize1-CV8x8x8-720p" / "mean_std.pt",
@@ -24,7 +22,6 @@ def _lyra1_checkpoint_layout_complete(root: Path) -> bool:
 
 
 def _reset_dir(path: Path):
-    """Reset dir helper function."""
     if path.is_symlink() or path.is_file():
         path.unlink()
     elif path.is_dir():
@@ -33,7 +30,6 @@ def _reset_dir(path: Path):
 
 
 def _link_or_copy(src: Path, dst: Path):
-    """Link or copy helper function."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists() or dst.is_symlink():
         _reset_dir(dst)
@@ -48,10 +44,19 @@ def _link_or_copy(src: Path, dst: Path):
 
 
 def prepare_lyra1_checkpoint_root(
-    checkpoint_dir: Optional[str],
-    repo_root: Optional[str] = None,
+    checkpoint_dir: str | None,
+    repo_root: str | None = None,
 ) -> str:
-    """Prepare lyra1 checkpoint root helper function."""
+    """Return a checkpoint root that holds the GEN3C checkpoints and the Lyra-1 weights.
+
+    A candidate (``checkpoint_dir``, then ``<repo_root>/checkpoints``) that already has the full layout
+    is returned as is. Otherwise the GEN3C checkpoint root is returned when it has the layout, or it
+    is combined with the located ``lyra_static.pt`` and ``lyra_dynamic.pt`` weights in a scratch
+    directory of symlinks, or copies where symlinks fail.
+
+    Raises:
+        FileNotFoundError: The Lyra-1 weights cannot be found.
+    """
     from worldfoundry.synthesis.visual_generation.gen3c.runtime_env import (
         prepare_gen3c_checkpoint_root,
     )

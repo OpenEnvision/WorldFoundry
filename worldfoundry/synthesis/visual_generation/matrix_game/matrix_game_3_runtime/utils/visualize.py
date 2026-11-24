@@ -53,7 +53,9 @@ def _condition_label(keyboard: np.ndarray, mouse: np.ndarray) -> str:
     return " + ".join(labels[:4])
 
 
-def _load_mouse_icon(mouse_icon_path: str | os.PathLike[str] | None, frame_height: int, mouse_scale: float) -> Image.Image | None:
+def _load_mouse_icon(
+    mouse_icon_path: str | os.PathLike[str] | None, frame_height: int, mouse_scale: float
+) -> Image.Image | None:
     if not mouse_icon_path:
         return None
     path = Path(mouse_icon_path)

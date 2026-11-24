@@ -1,4 +1,3 @@
-# flake8: noqa: F722
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,19 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> geometry.py functionality."""
-
+from collections.abc import Callable
 from types import SimpleNamespace
-from typing import Optional
+
 import numpy as np
 import torch
 from einops import einsum
-
-from worldfoundry.core.geometry.transforms import (
-    quaternion_xyzw_to_rotation_matrix as quat_to_mat,
-    rotation_matrix_to_quaternion_xyzw as mat_to_quat,
-    standardize_quaternion_xyzw as standardize_quaternion,
-)
 
 
 def as_homogeneous(ext):
@@ -60,11 +52,6 @@ def as_homogeneous(ext):
 
 @torch.jit.script
 def affine_inverse(A: torch.Tensor):
-    """Affine inverse.
-
-    Args:
-        A: The a.
-    """
     R = A[..., :3, :3]  # ..., 3, 3
     T = A[..., :3, 3:]  # ..., 3, 1
     P = A[..., 3:, :]  # ..., 1, 4
@@ -84,11 +71,6 @@ def transpose_last_two_axes(arr):
 
 
 def affine_inverse_np(A: np.ndarray):
-    """Affine inverse np.
-
-    Args:
-        A: The a.
-    """
     R = A[..., :3, :3]
     T = A[..., :3, 3:]
     P = A[..., 3:, :]
@@ -103,7 +85,7 @@ def affine_inverse_np(A: np.ndarray):
 
 def sample_image_grid(
     shape: tuple[int, ...],
-    device: torch.device = torch.device("cpu"),
+    device: torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
 ) -> tuple[
     torch.Tensor,  # float coordinates (xy indexing), "*shape dim"
     torch.Tensor,  # integer indices (ij indexing), "*shape dim"
@@ -117,7 +99,7 @@ def sample_image_grid(
 
     # Each entry is a floating-point coordinate in the range (0, 1). In the 2D case,
     # each entry is an (x, y) coordinate.
-    coordinates = [(idx + 0.5) / length for idx, length in zip(indices, shape)]
+    coordinates = [(idx + 0.5) / length for idx, length in zip(indices, shape, strict=False)]
     coordinates = reversed(coordinates)
     coordinates = torch.stack(torch.meshgrid(*coordinates, indexing="xy"), dim=-1)
 
@@ -177,22 +159,16 @@ def get_world_rays(
     coordinates: torch.Tensor,  # "*#batch dim"
     extrinsics: torch.Tensor,  # "*#batch dim+2 dim+2"
     intrinsics: torch.Tensor,  # "*#batch dim+1 dim+1"
+    *,
+    unproject_fn: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor] = unproject,
+    transform_cam2world_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = transform_cam2world,
 ) -> tuple[
     torch.Tensor,  # origins, "*batch dim+1"
     torch.Tensor,  # directions, "*batch dim+1"
 ]:
-    """Get world rays.
-
-    Args:
-        coordinates: The coordinates.
-        extrinsics: The extrinsics.
-        intrinsics: The intrinsics.
-
-    Returns:
-        The return value.
-    """
+    """Build world rays with explicitly bound inverse and coordinate-dtype policies."""
     # Get camera-space ray directions.
-    directions = unproject(
+    directions = unproject_fn(
         coordinates,
         torch.ones_like(coordinates[..., 0]),
         intrinsics,
@@ -201,7 +177,7 @@ def get_world_rays(
 
     # Transform ray directions to world coordinates.
     directions = homogenize_vectors(directions)
-    directions = transform_cam2world(directions, extrinsics)[..., :-1]
+    directions = transform_cam2world_fn(directions, extrinsics)[..., :-1]
 
     # Tile the ray origins to have the same shape as the ray directions.
     origins = extrinsics[..., :-1, -1].broadcast_to(directions.shape)
@@ -210,22 +186,9 @@ def get_world_rays(
 
 
 def get_fov(intrinsics: torch.Tensor) -> torch.Tensor:  # "batch 3 3" -> "batch 2"
-    """Get fov.
-
-    Args:
-        intrinsics: The intrinsics.
-
-    Returns:
-        The return value.
-    """
     intrinsics_inv = intrinsics.float().inverse().to(intrinsics)
 
     def process_vector(vector):
-        """Process vector.
-
-        Args:
-            vector: The vector.
-        """
         vector = torch.tensor(vector, dtype=intrinsics.dtype, device=intrinsics.device)
         vector = einsum(intrinsics_inv, vector, "b i j, j -> b i")
         return vector / vector.norm(dim=-1, keepdim=True)
@@ -242,18 +205,8 @@ def get_fov(intrinsics: torch.Tensor) -> torch.Tensor:  # "batch 3 3" -> "batch 
 def map_pdf_to_opacity(
     pdf: torch.Tensor,  # " *batch"
     global_step: int = 0,
-    opacity_mapping: Optional[dict] = None,
+    opacity_mapping: dict | None = None,
 ) -> torch.Tensor:  # " *batch"
-    """Map pdf to opacity.
-
-    Args:
-        pdf: The pdf.
-        global_step: The global step.
-        opacity_mapping: The opacity mapping.
-
-    Returns:
-        The return value.
-    """
     # https://www.desmos.com/calculator/opvwti3ba9
 
     # Figure out the exponent.
@@ -267,13 +220,11 @@ def map_pdf_to_opacity(
     # Map the probability density to an opacity.
     return 0.5 * (1 - (1 - pdf) ** exponent + pdf ** (1 / exponent))
 
-def normalize_homogenous_points(points):
-    """Normalize the point vectors"""
-    return points / points[..., -1:]
 
 def inverse_intrinsic_matrix(ixts):
     """ """
     return torch.inverse(ixts)
+
 
 def pixel_space_to_camera_space(pixel_space_points, depth, intrinsics):
     """
@@ -314,45 +265,7 @@ def camera_space_to_world_space(camera_space_points, c2w):
     return world_space_points[..., :3]
 
 
-def camera_space_to_pixel_space(camera_space_points, intrinsics):
-    """
-    Convert camera space points to pixel space points.
-
-    Args:
-        camera_space_points (torch.Tensor): Camera space points with shape (b, v1, v2, h, w, 3)
-        c2w (torch.Tensor): Camera to world extrinsics matrix with shape (b, v2, 3, 3)
-
-    Returns:
-        torch.Tensor: World space points with shape (b, v1, v2, h, w, 2).
-    """
-    camera_space_points = normalize_homogenous_points(camera_space_points)
-    pixel_space_points = torch.einsum(
-        "b u i j , b v u h w j -> b v u h w i", intrinsics, camera_space_points
-    )
-    return pixel_space_points[..., :2]
-
-
-def world_space_to_camera_space(world_space_points, c2w):
-    """
-    Convert world space points to pixel space points.
-
-    Args:
-        world_space_points (torch.Tensor): World space points with shape (b, v1, h, w, 3)
-        c2w (torch.Tensor): Camera to world extrinsics matrix with shape (b, v2, 4, 4)
-
-    Returns:
-        torch.Tensor: Camera space points with shape (b, v1, v2, h, w, 3).
-    """
-    world_space_points = homogenize_points(world_space_points)
-    camera_space_points = torch.einsum(
-        "b u i j , b v h w j -> b v u h w i", c2w.inverse(), world_space_points
-    )
-    return camera_space_points[..., :3]
-
-
-def unproject_depth(
-    depth, intrinsics, c2w=None, ixt_normalized=False, num_patches_x=None, num_patches_y=None
-):
+def unproject_depth(depth, intrinsics, c2w=None, ixt_normalized=False, num_patches_x=None, num_patches_y=None):
     """
     Turn the depth map into a 3D point cloud in world space
 
@@ -407,9 +320,7 @@ def unproject_depth(
 
     # Compute coordinates of pixels in camera space
     pixel_space_points = torch.stack((x_grid, y_grid), dim=-1)  # (..., h, w, 2)
-    camera_points = pixel_space_to_camera_space(
-        pixel_space_points, depth, intrinsics
-    )  # (..., h, w, 3)
+    camera_points = pixel_space_to_camera_space(pixel_space_points, depth, intrinsics)  # (..., h, w, 3)
 
     # Convert points to world space
     world_points = camera_space_to_world_space(camera_points, c2w)  # (..., h, w, 3)

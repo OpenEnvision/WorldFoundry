@@ -1,15 +1,16 @@
 """I/O helpers for event-centric outputs."""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import torch
 from PIL import Image
 
-from liveworld.utils import save_video_h264
+from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.utils import save_video_h264
 
 
 def ensure_dir(path: str | Path) -> Path:
@@ -19,7 +20,7 @@ def ensure_dir(path: str | Path) -> Path:
     return out
 
 
-def save_json(path: str | Path, payload: Dict[str, Any]) -> None:
+def save_json(path: str | Path, payload: dict[str, Any]) -> None:
     """Save a JSON file with deterministic formatting."""
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -29,7 +30,7 @@ def save_json(path: str | Path, payload: Dict[str, Any]) -> None:
 
 def save_video(
     path: str | Path,
-    frames: Union[List[np.ndarray], np.ndarray],
+    frames: list[np.ndarray] | np.ndarray,
     fps: float = 16.0,
 ) -> None:
     """Save frames as an MP4 video.
@@ -60,7 +61,7 @@ def save_image(path: str | Path, image: np.ndarray) -> None:
 def save_pointcloud_ply(
     path: str | Path,
     points: np.ndarray,
-    colors: Optional[np.ndarray] = None,
+    colors: np.ndarray | None = None,
 ) -> None:
     """Save point cloud as PLY file.
 
@@ -127,7 +128,7 @@ def decode_latent_to_rgb(
 
         # WanVAEWrapper uses decode_to_pixel, expects [B, T, C, H, W]
         # Our latent is [1, C, T, H, W], need to permute to [1, T, C, H, W]
-        if latent.dim() == 5 and latent.shape[1] == 16:  # [1, C, T, H, W]
+        if latent.dim() == 5 and latent.shape[1] == 16:  # noqa: SIM108 - Branches carry per-case comments.  # [1, C, T, H, W]
             latent_for_vae = latent.permute(0, 2, 1, 3, 4)  # [1, T, C, H, W]
         else:
             latent_for_vae = latent
@@ -170,7 +171,7 @@ def visualize_projection_latent(
     if C == 32:
         # Split scene and fg.
         scene_latent = latent[:16]  # [16, T, h, w]
-        fg_latent = latent[16:]     # [16, T, h, w]
+        fg_latent = latent[16:]  # [16, T, h, w]
 
         scene_frames = decode_latent_to_rgb(scene_latent, vae, device, dtype)
         fg_frames = decode_latent_to_rgb(fg_latent, vae, device, dtype)

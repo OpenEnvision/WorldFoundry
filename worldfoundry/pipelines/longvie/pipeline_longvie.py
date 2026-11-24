@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from ...operators.longvie_operator import LongVieOperator
 from ...synthesis.visual_generation.longvie.longvie_synthesis import LongVieSynthesis
@@ -36,7 +37,7 @@ class LongViePipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "LongViePipeline":
+    ) -> LongViePipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         options: dict[str, Any] = {}
         if isinstance(model_path, Mapping):

@@ -1,26 +1,24 @@
 # Modified by Jialian Wu from https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/vit.py
 import logging
 import math
+import os
+import sys
+from functools import partial
+
 import fvcore.nn.weight_init as weight_init
 import torch
 import torch.nn as nn
-from functools import partial
-
-from detectron2.layers import CNNBlockBase, Conv2d, get_norm
+from detectron2.layers import CNNBlockBase, Conv2d, ShapeSpec, get_norm
 from detectron2.modeling.backbone.build import BACKBONE_REGISTRY
-from detectron2.layers import ShapeSpec
 
-import os
-import sys
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(CUR_DIR, '../../../centernet2'))
-from centernet.modeling.backbone.fpn_p5 import LastLevelP6P7_P5
+sys.path.append(os.path.join(CUR_DIR, "../../../centernet2"))
+import torch.utils.checkpoint as checkpoint  # noqa: E402 - Follows the sys.path setup.
+from centernet.modeling.backbone.fpn_p5 import LastLevelP6P7_P5  # noqa: E402 - Follows the sys.path setup.
+from detectron2.modeling.backbone.backbone import Backbone  # noqa: E402 - Follows the sys.path setup.
+from timm.models.layers import DropPath, Mlp, trunc_normal_  # noqa: E402 - Follows the sys.path setup.
 
-import torch.utils.checkpoint as checkpoint
-from timm.models.layers import DropPath, Mlp, trunc_normal_
-
-from detectron2.modeling.backbone.backbone import Backbone
-from .utils import (
+from .utils import (  # noqa: E402 - Follows the sys.path setup.
     PatchEmbed,
     add_decomposed_rel_pos,
     get_abs_pos,
@@ -273,7 +271,6 @@ class ViT(Backbone):
         """
         Args:
             img_size (int): Input image size.
-            patch_size (int): Patch size.
             in_chans (int): Number of input image channels.
             embed_dim (int): Patch embedding dimension.
             depth (int): Depth of ViT.
@@ -355,85 +352,97 @@ class ViT(Backbone):
     def forward(self, x):
         x = self.patch_embed(x)
         if self.pos_embed is not None:
-            x = x + get_abs_pos(
-                self.pos_embed, self.pretrain_use_cls_token, (x.shape[1], x.shape[2])
-            )
+            x = x + get_abs_pos(self.pos_embed, self.pretrain_use_cls_token, (x.shape[1], x.shape[2]))
 
         for blk in self.blocks:
-            if self.use_act_checkpoint:
-                x = checkpoint.checkpoint(blk, x)
-            else:
-                x = blk(x)
+            x = checkpoint.checkpoint(blk, x) if self.use_act_checkpoint else blk(x)
 
         return x.permute(0, 3, 1, 2)
 
 
 class ViT_FPN(Backbone):
     def __init__(self, bottom_up=None, top_block=None, out_channels=None, strides=None, vit_out_dim=None):
-        super(ViT_FPN, self).__init__()
+        super().__init__()
         assert isinstance(bottom_up, Backbone)
         self.bottom_up = bottom_up
         self.top_block = top_block
 
-        self._out_feature_strides = {"p{}".format(int(math.log2(s))): s for s in strides}
+        self._out_feature_strides = {f"p{int(math.log2(s))}": s for s in strides}
         self._out_features = list(self._out_feature_strides.keys())
-        self._out_feature_channels = {k: out_channels for k in self._out_features}
+        self._out_feature_channels = dict.fromkeys(self._out_features, out_channels)
         self._size_divisibility = strides[2]
 
         self.maxpool = nn.MaxPool2d(2, stride=2)
         self.fpn_stride_16_8 = nn.ConvTranspose2d(vit_out_dim, vit_out_dim, 2, stride=2, bias=False)
-        self.fpn_stride8_conv1 = nn.Conv2d(in_channels=vit_out_dim, out_channels=out_channels, kernel_size=1, bias=False)
+        self.fpn_stride8_conv1 = nn.Conv2d(
+            in_channels=vit_out_dim, out_channels=out_channels, kernel_size=1, bias=False
+        )
         self.fpn_stride8_norm1 = nn.LayerNorm(out_channels)
-        self.fpn_stride8_conv2 = nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=1, bias=False)
+        self.fpn_stride8_conv2 = nn.Conv2d(
+            in_channels=out_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=1, bias=False
+        )
         self.fpn_stride8_norm2 = nn.LayerNorm(out_channels)
 
-        self.fpn_stride16_conv1 = nn.Conv2d(in_channels=vit_out_dim, out_channels=out_channels, kernel_size=1, bias=False)
+        self.fpn_stride16_conv1 = nn.Conv2d(
+            in_channels=vit_out_dim, out_channels=out_channels, kernel_size=1, bias=False
+        )
         self.fpn_stride16_norm1 = nn.LayerNorm(out_channels)
-        self.fpn_stride16_conv2 = nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=1, bias=False)
+        self.fpn_stride16_conv2 = nn.Conv2d(
+            in_channels=out_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=1, bias=False
+        )
         self.fpn_stride16_norm2 = nn.LayerNorm(out_channels)
 
-        self.fpn_stride32_conv1 = nn.Conv2d(in_channels=vit_out_dim, out_channels=out_channels, kernel_size=1, bias=False)
+        self.fpn_stride32_conv1 = nn.Conv2d(
+            in_channels=vit_out_dim, out_channels=out_channels, kernel_size=1, bias=False
+        )
         self.fpn_stride32_norm1 = nn.LayerNorm(out_channels)
-        self.fpn_stride32_conv2 = nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=1, bias=False)
+        self.fpn_stride32_conv2 = nn.Conv2d(
+            in_channels=out_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=1, bias=False
+        )
         self.fpn_stride32_norm2 = nn.LayerNorm(out_channels)
 
     def forward(self, x):
         vit_output_featuremap = self.bottom_up(x)
 
         stride8_feature = self.fpn_stride_16_8(vit_output_featuremap)
-        stride8_feature = self.fpn_stride8_norm1(self.fpn_stride8_conv1(stride8_feature)
-                                                 .permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        stride8_feature = self.fpn_stride8_norm2(self.fpn_stride8_conv2(stride8_feature)
-                                                 .permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        stride8_feature = self.fpn_stride8_norm1(self.fpn_stride8_conv1(stride8_feature).permute(0, 2, 3, 1)).permute(
+            0, 3, 1, 2
+        )
+        stride8_feature = self.fpn_stride8_norm2(self.fpn_stride8_conv2(stride8_feature).permute(0, 2, 3, 1)).permute(
+            0, 3, 1, 2
+        )
 
         stride32_feature = self.maxpool(vit_output_featuremap)
-        stride32_feature = self.fpn_stride32_norm1(self.fpn_stride32_conv1(stride32_feature)
-                                                   .permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        stride32_feature = self.fpn_stride32_norm2(self.fpn_stride32_conv2(stride32_feature)
-                                                   .permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        stride32_feature = self.fpn_stride32_norm1(
+            self.fpn_stride32_conv1(stride32_feature).permute(0, 2, 3, 1)
+        ).permute(0, 3, 1, 2)
+        stride32_feature = self.fpn_stride32_norm2(
+            self.fpn_stride32_conv2(stride32_feature).permute(0, 2, 3, 1)
+        ).permute(0, 3, 1, 2)
 
-        stride16_feature = self.fpn_stride16_norm1(self.fpn_stride16_conv1(vit_output_featuremap).
-                                                   permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        stride16_feature = self.fpn_stride16_norm2(self.fpn_stride16_conv2(stride16_feature)
-                                                   .permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        stride16_feature = self.fpn_stride16_norm1(
+            self.fpn_stride16_conv1(vit_output_featuremap).permute(0, 2, 3, 1)
+        ).permute(0, 3, 1, 2)
+        stride16_feature = self.fpn_stride16_norm2(
+            self.fpn_stride16_conv2(stride16_feature).permute(0, 2, 3, 1)
+        ).permute(0, 3, 1, 2)
 
         results = [stride8_feature, stride16_feature, stride32_feature]
 
         results.extend(self.top_block(stride32_feature))
 
         assert len(self._out_features) == len(results)
-        fpn_out = {f: res for f, res in zip(self._out_features, results)}
+        fpn_out = dict(zip(self._out_features, results, strict=False))
 
         return fpn_out
+
     @property
     def size_divisibility(self):
         return self._size_divisibility
 
     def output_shape(self):
         return {
-            name: ShapeSpec(
-                channels=self._out_feature_channels[name], stride=self._out_feature_strides[name]
-            )
+            name: ShapeSpec(channels=self._out_feature_channels[name], stride=self._out_feature_strides[name])
             for name in self._out_features
         }
 
@@ -467,21 +476,24 @@ def build_vit_fpn_backbone(cfg, input_shape: ShapeSpec):
         residual_block_indexes=[],
         use_act_checkpoint=cfg.USE_ACT_CHECKPOINT,
         use_rel_pos=True,
-        out_feature="last_feat",)
+        out_feature="last_feat",
+    )
 
     out_channels = cfg.MODEL.FPN.OUT_CHANNELS
     assert out_channels == 256 or out_channels == 768 or out_channels == 1024
-    backbone = ViT_FPN(bottom_up=bottom_up,
-                       top_block=LastLevelP6P7_P5(out_channels, out_channels),
-                       out_channels=out_channels,
-                       strides=[8, 16, 32, 64, 128],
-                       vit_out_dim=vit_out_dim)
+    backbone = ViT_FPN(
+        bottom_up=bottom_up,
+        top_block=LastLevelP6P7_P5(out_channels, out_channels),
+        out_channels=out_channels,
+        strides=[8, 16, 32, 64, 128],
+        vit_out_dim=vit_out_dim,
+    )
     return backbone
 
 
 @BACKBONE_REGISTRY.register()
 def build_vit_fpn_backbone_large(cfg, input_shape: ShapeSpec):
-    window_block_indexes = (list(range(0, 5)) + list(range(6, 11)) + list(range(12, 17)) + list(range(18, 23)))
+    window_block_indexes = list(range(5)) + list(range(6, 11)) + list(range(12, 17)) + list(range(18, 23))
     embed_dim = 1024
     vit_out_dim = embed_dim
     bottom_up = ViT(  # Single-scale ViT backbone
@@ -499,21 +511,24 @@ def build_vit_fpn_backbone_large(cfg, input_shape: ShapeSpec):
         residual_block_indexes=[],
         use_act_checkpoint=cfg.USE_ACT_CHECKPOINT,
         use_rel_pos=True,
-        out_feature="last_feat",)
+        out_feature="last_feat",
+    )
 
     out_channels = cfg.MODEL.FPN.OUT_CHANNELS
     assert out_channels == 256 or out_channels == 768 or out_channels == 1024
-    backbone = ViT_FPN(bottom_up=bottom_up,
-                          top_block=LastLevelP6P7_P5(out_channels, out_channels),
-                          out_channels=out_channels,
-                          strides=[8, 16, 32, 64, 128],
-                          vit_out_dim=vit_out_dim)
+    backbone = ViT_FPN(
+        bottom_up=bottom_up,
+        top_block=LastLevelP6P7_P5(out_channels, out_channels),
+        out_channels=out_channels,
+        strides=[8, 16, 32, 64, 128],
+        vit_out_dim=vit_out_dim,
+    )
     return backbone
 
 
 @BACKBONE_REGISTRY.register()
 def build_vit_fpn_backbone_huge(cfg, input_shape: ShapeSpec):
-    window_block_indexes = (list(range(0, 7)) + list(range(8, 15)) + list(range(16, 23)) + list(range(24, 31)))
+    window_block_indexes = list(range(7)) + list(range(8, 15)) + list(range(16, 23)) + list(range(24, 31))
     embed_dim = 1280
     vit_out_dim = embed_dim
     bottom_up = ViT(  # Single-scale ViT backbone
@@ -531,13 +546,16 @@ def build_vit_fpn_backbone_huge(cfg, input_shape: ShapeSpec):
         residual_block_indexes=[],
         use_act_checkpoint=cfg.USE_ACT_CHECKPOINT,
         use_rel_pos=True,
-        out_feature="last_feat",)
+        out_feature="last_feat",
+    )
 
     out_channels = cfg.MODEL.FPN.OUT_CHANNELS
     assert out_channels == 256 or out_channels == 768 or out_channels == 1024
-    backbone = ViT_FPN(bottom_up=bottom_up,
-                          top_block=LastLevelP6P7_P5(out_channels, out_channels),
-                          out_channels=out_channels,
-                          strides=[8, 16, 32, 64, 128],
-                          vit_out_dim=vit_out_dim)
+    backbone = ViT_FPN(
+        bottom_up=bottom_up,
+        top_block=LastLevelP6P7_P5(out_channels, out_channels),
+        out_channels=out_channels,
+        strides=[8, 16, 32, 64, 128],
+        vit_out_dim=vit_out_dim,
+    )
     return backbone

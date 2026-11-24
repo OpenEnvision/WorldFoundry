@@ -28,7 +28,6 @@ from worldfoundry.core.kernels.triton_autotune import custom_autotune
 
 
 def get_cuda_autotune_config():
-    """Get cuda autotune config."""
     return [
         triton.Config(
             {"BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 64, "GROUP_SIZE_M": 8}, num_stages=3, num_warps=8
@@ -89,7 +88,6 @@ def get_cuda_autotune_config():
 
 
 def get_autotune_config():
-    """Get autotune config."""
     return get_cuda_autotune_config()
 
 
@@ -176,7 +174,7 @@ def linear_glu_fwd_kernel(
     # `accumulator` will be converted back to fp16 after the loop.
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
     accumulator_1 = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
+    for k in range(tl.cdiv(K, BLOCK_SIZE_K)):
         # Load the next block of A and B, generate a mask by checking the K dimension.
         # If it is out of bounds, set it to 0.
         x = tl.load(x_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
@@ -217,9 +215,12 @@ def linear_glu_fwd(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor) ->
     M, K, N = torch.prod(torch.tensor(x.shape[:-1])).item(), x.shape[-1], weight.shape[0] // 2
 
     # Allocates output.
-    y = torch.empty(x.shape[:-1] + (N,), device=x.device, dtype=x.dtype)
+    y = torch.empty(x.shape[:-1] + (N,), device=x.device, dtype=x.dtype)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+
     # 1D launch kernel where each block gets its own program.
-    grid = lambda META: (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
+    def grid(META):
+        return (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
+
     if x.dtype == weight.dtype == bias.dtype:
         linear_glu_fwd_kernel[grid](
             x,

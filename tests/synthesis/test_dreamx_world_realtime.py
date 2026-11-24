@@ -10,21 +10,25 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-from PIL import Image
 import pytest
 import torch
+from PIL import Image
 
+from worldfoundry.core.nn import AutoencoderKLOutput, DiagonalGaussianDistribution
 from worldfoundry.pipelines.dreamx_world import DreamXWorld5BCamPipeline
 from worldfoundry.studio.inference.catalog import find_entry
-from worldfoundry.studio.inference.dispatch import _requested_torchrun_nproc
-from worldfoundry.studio.inference.execution import TORCHRUN_LINGBOT_FAST_ENV, StudioManager
-from worldfoundry.studio.ui.launch_config import StudioLaunchConfig, launch_uses_lingbot_torchrun_rollout
+from worldfoundry.studio.inference.dispatch import _default_torchrun_nproc, _requested_torchrun_nproc
+from worldfoundry.studio.inference.execution import (
+    TORCHRUN_LINGBOT_FAST_ENV,
+    StudioManager,
+    _prepared_inputs_from_payload,
+)
+from worldfoundry.studio.visualization.launch_config import StudioLaunchConfig, launch_uses_lingbot_torchrun_rollout
 from worldfoundry.synthesis.visual_generation.dreamx_world import realtime
 from worldfoundry.synthesis.visual_generation.dreamx_world.runtime.utils.prompt_embeddings import (
     validate_prompt_embedding_pair,
 )
 from worldfoundry.synthesis.visual_generation.shared.wan_diffusers import WanDiffusersInferenceMixin
-from worldfoundry.core.nn import AutoencoderKLOutput, DiagonalGaussianDistribution
 
 
 def _checkpoint(root: Path, required: tuple[str, ...]) -> Path:
@@ -37,12 +41,15 @@ def _checkpoint(root: Path, required: tuple[str, ...]) -> Path:
 
 def test_checkpoint_resolver_requires_every_released_component(tmp_path: Path) -> None:
     checkpoint = _checkpoint(tmp_path / "DreamX", realtime._DREAMX_REQUIRED)
-    assert realtime._resolve_checkpoint(
-        checkpoint,
-        default_name="unused",
-        required=realtime._DREAMX_REQUIRED,
-        label="DreamX",
-    ) == checkpoint.resolve()
+    assert (
+        realtime._resolve_checkpoint(
+            checkpoint,
+            default_name="unused",
+            required=realtime._DREAMX_REQUIRED,
+            label="DreamX",
+        )
+        == checkpoint.resolve()
+    )
 
     (checkpoint / realtime._DREAMX_REQUIRED[-1]).unlink()
     with pytest.raises(FileNotFoundError, match=realtime._DREAMX_REQUIRED[-1]):
@@ -92,14 +99,15 @@ def test_decoded_video_is_contiguous_rgb_uint8() -> None:
 
 def test_shared_wan_vae_encoder_accepts_native_output_object() -> None:
     class _VAE:
-        def encode(self, value):
+        def encode(self, value: torch.Tensor) -> AutoencoderKLOutput:
             moments = torch.cat((value, torch.zeros_like(value)), dim=1)
-            return AutoencoderKLOutput(
-                latent_dist=DiagonalGaussianDistribution(moments, deterministic=True)
-            )
+            return AutoencoderKLOutput(latent_dist=DiagonalGaussianDistribution(moments, deterministic=True))
 
-    pipeline = object.__new__(WanDiffusersInferenceMixin)
-    pipeline.vae = _VAE()
+    class _Pipeline(WanDiffusersInferenceMixin):
+        def __init__(self) -> None:
+            self.vae = _VAE()
+
+    pipeline = _Pipeline()
     value = torch.ones((2, 1, 1, 2, 2))
 
     result = pipeline._encode_vae_mode(value, device="cpu", dtype=torch.float32)
@@ -164,18 +172,24 @@ def test_pipeline_keeps_one_session_and_forwards_user_controls(monkeypatch: pyte
     assert result["frames"].shape == (4, 8, 8, 3)
     assert [name for name, _ in calls].count("init") == 1
     assert [name for name, _ in calls].count("prepare") == 1
-    assert calls[-1][1]["interactions"] == ["forward", "camera_r"]
+    call_kwargs = calls[-1][1]
+    assert isinstance(call_kwargs, dict)
+    assert call_kwargs["interactions"] == ["forward", "camera_r"]
 
 
-def test_catalog_is_user_input_only_and_uses_local_assets() -> None:
+def test_catalog_keeps_local_examples_and_the_world_upload_requirement(monkeypatch: pytest.MonkeyPatch) -> None:
     entry = find_entry("dreamx-world-5b-cam")
 
-    assert entry.default_prompt == ""
-    assert entry.default_input_path == ""
+    assert "blocky coastal cliff" in entry.default_prompt
+    assert Path(entry.default_input_path).parts[-3:] == ("test_cases", "dreamx_world", "007.jpg")
     assert entry.default_interactions == ()
-    assert entry.default_load_kwargs["nproc_per_node"] == 8
+    assert "nproc_per_node" not in entry.default_load_kwargs
     assert "user-input-only" in entry.tags
     assert "in-tree-runtime" in entry.tags
+    monkeypatch.delenv("WORLDFOUNDRY_REALTIME_NPROC_PER_NODE", raising=False)
+    monkeypatch.delenv("WORLDFOUNDRY_REALTIME_NPROC", raising=False)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,2,3,4,5,6,7")
+    assert _default_torchrun_nproc(entry.model_id, {}) == 8
 
 
 def test_user_can_select_dreamx_sequence_parallel_gpu_count(
@@ -186,12 +200,10 @@ def test_user_can_select_dreamx_sequence_parallel_gpu_count(
     assert _requested_torchrun_nproc("dreamx-world-5b-cam", {}) == 6
 
     monkeypatch.setenv("WORLD_SIZE", "6")
-    assert launch_uses_lingbot_torchrun_rollout(
-        StudioLaunchConfig(model_id="dreamx-world-5b-cam", frontend="world")
-    )
+    assert launch_uses_lingbot_torchrun_rollout(StudioLaunchConfig(model_id="dreamx-world-5b-cam", frontend="world"))
     monkeypatch.setenv(TORCHRUN_LINGBOT_FAST_ENV, "1")
     manager = StudioManager(workspace_root=str(tmp_path / "studio"))
     assert manager._should_use_torchrun_lingbot_fast(
-        SimpleNamespace(model_id="dreamx-world-5b-cam"),
-        SimpleNamespace(backend="from_pretrained"),
+        find_entry("dreamx-world-5b-cam"),
+        _prepared_inputs_from_payload({"backend": "from_pretrained"}),
     )

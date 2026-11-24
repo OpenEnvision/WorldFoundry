@@ -21,7 +21,9 @@ Contract, kept identical to the reference:
 
 from __future__ import annotations
 
+import itertools
 import math
+from collections.abc import Sequence
 from typing import Any
 
 import torch
@@ -174,7 +176,7 @@ def minimax_h3_frame_count_from_video_latent_t(out_t: int) -> int:
 def minimax_h3_audio_latent_t(duration_seconds: float) -> int:
     """Audio latent temporal length at the 40 Hz latent boundary."""
 
-    return int(round(float(duration_seconds) * 40.0))
+    return int(round(float(duration_seconds) * 40.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
 
 # --------------------------------------------------------------------------- #
@@ -193,6 +195,28 @@ def minimax_h3_time_shift_sigmas(*, num_steps: int = 50, shift_scale: float = 6.
     shifted, _ = torch.unique_consecutive(shifted, return_counts=True)
     if num_steps > 1 and shifted[-1].item() > 0.0:
         shifted = torch.cat([shifted, torch.tensor([0.0], dtype=shifted.dtype)])
+    return [float(value) for value in shifted.tolist()]
+
+
+def minimax_h3_sigma_schedule(knots: Sequence[float], *, shift_scale: float) -> list[float]:
+    """Shift an explicit descending H3 knot list and retain its terminal zero.
+
+    Adapters with a distilled student often publish a non-uniform evaluation
+    ladder.  Keeping the knot list explicit avoids silently replacing that
+    contract with the generic uniform-step schedule.
+    """
+
+    values = [float(value) for value in knots]
+    if len(values) < 2 or values[0] != 1.0 or values[-1] != 0.0:
+        raise ValueError("MiniMax H3 knots must start at 1.0 and end at 0.0")
+    if any(not math.isfinite(value) or value < 0.0 or value > 1.0 for value in values):
+        raise ValueError("MiniMax H3 knots must be finite values in [0, 1]")
+    if any(left <= right for left, right in itertools.pairwise(values)):
+        raise ValueError("MiniMax H3 knots must be strictly decreasing")
+    if not math.isfinite(float(shift_scale)) or shift_scale <= 0.0:
+        raise ValueError("MiniMax H3 shift_scale must be finite and positive")
+    base = torch.tensor(values, dtype=torch.float32)
+    shifted = float(shift_scale) * base / (1 + (float(shift_scale) - 1) * base)
     return [float(value) for value in shifted.tolist()]
 
 
@@ -267,6 +291,7 @@ __all__ = [
     "minimax_h3_euler_eta0_step",
     "minimax_h3_frame_count_from_video_latent_t",
     "minimax_h3_rf_v_to_x0",
+    "minimax_h3_sigma_schedule",
     "minimax_h3_time_shift_sigmas",
     "minimax_h3_video_latent_t",
 ]

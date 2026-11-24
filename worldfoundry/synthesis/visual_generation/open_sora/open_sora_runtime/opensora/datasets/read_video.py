@@ -2,7 +2,7 @@ import gc
 import math
 import os
 from fractions import Fraction
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
 import av
 import cv2
@@ -19,11 +19,11 @@ from torchvision.io.video import (
 
 def read_video_av(
     filename: str,
-    start_pts: Union[float, Fraction] = 0,
-    end_pts: Optional[Union[float, Fraction]] = None,
+    start_pts: float | Fraction = 0,
+    end_pts: float | Fraction | None = None,
     pts_unit: str = "pts",
     output_format: str = "THWC",
-) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, Any]]:
+) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
     """
     Reads a video from a file, returning both the video frames and the audio frames
 
@@ -121,9 +121,9 @@ def read_video_av(
             aframes = np.concatenate(aframes_list, 1)
             aframes = torch.as_tensor(aframes)
             if pts_unit == "sec":
-                start_pts = int(math.floor(start_pts * (1 / audio_timebase)))
+                start_pts = int(math.floor(start_pts * (1 / audio_timebase)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
                 if end_pts != float("inf"):
-                    end_pts = int(math.ceil(end_pts * (1 / audio_timebase)))
+                    end_pts = int(math.ceil(end_pts * (1 / audio_timebase)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
             aframes = _align_audio_frames(aframes, audio_frames, start_pts, end_pts)
         else:
             aframes = torch.empty((1, 0), dtype=torch.float32)

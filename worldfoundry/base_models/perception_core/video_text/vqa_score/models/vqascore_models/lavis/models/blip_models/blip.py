@@ -1,18 +1,26 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import logging
 import os
 
 import torch
+
 from ...common.dist_utils import download_cached_file
 from ...common.utils import is_url
+
+# isort: split
 from ...models.base_model import BaseModel
+
+# isort: split
+# isort: split
 from ...models.vit import interpolate_pos_embed
+
+# isort: split
 from transformers import BertTokenizer
 
 
@@ -27,9 +35,7 @@ class BlipBase(BaseModel):
 
     def load_from_pretrained(self, url_or_filename):
         if is_url(url_or_filename):
-            cached_file = download_cached_file(
-                url_or_filename, check_hash=False, progress=True
-            )
+            cached_file = download_cached_file(url_or_filename, check_hash=False, progress=True)
             checkpoint = torch.load(cached_file, map_location="cpu")
         elif os.path.isfile(url_or_filename):
             checkpoint = torch.load(url_or_filename, map_location="cpu")
@@ -41,19 +47,18 @@ class BlipBase(BaseModel):
         state_dict["visual_encoder.pos_embed"] = interpolate_pos_embed(
             state_dict["visual_encoder.pos_embed"], self.visual_encoder
         )
-        if "visual_encoder_m.pos_embed" in self.state_dict().keys():
+        if "visual_encoder_m.pos_embed" in self.state_dict().keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             state_dict["visual_encoder_m.pos_embed"] = interpolate_pos_embed(
                 state_dict["visual_encoder_m.pos_embed"], self.visual_encoder_m
             )
 
-        for key in self.state_dict().keys():
-            if key in state_dict.keys():
-                if state_dict[key].shape != self.state_dict()[key].shape:
-                    del state_dict[key]
+        for key in self.state_dict().keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+            if key in state_dict.keys() and state_dict[key].shape != self.state_dict()[key].shape:  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+                del state_dict[key]
 
         msg = self.load_state_dict(state_dict, strict=False)
 
-        logging.info("Missing keys {}".format(msg.missing_keys))
-        logging.info("load checkpoint from %s" % url_or_filename)
+        logging.info(f"Missing keys {msg.missing_keys}")
+        logging.info("load checkpoint from %s" % url_or_filename)  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
         return msg

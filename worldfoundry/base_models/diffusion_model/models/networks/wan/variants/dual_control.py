@@ -11,7 +11,6 @@ TeaCache hooks live here.
 
 from __future__ import annotations
 
-import torch
 from torch import nn
 
 from ..model import DiTBlock
@@ -44,20 +43,14 @@ class WanDualControlModel(nn.Module):
 
         self.control_layers = int(control_layers)
         block_args = (has_image_input, dim // 2, num_heads // 2, ffn_dim // 2, eps)
-        self.control_blocks_dense = nn.ModuleList(
-            [DiTBlock(*block_args) for _ in range(self.control_layers)]
-        )
-        self.control_blocks_sparse = nn.ModuleList(
-            [DiTBlock(*block_args) for _ in range(self.control_layers)]
-        )
+        self.control_blocks_dense = nn.ModuleList([DiTBlock(*block_args) for _ in range(self.control_layers)])
+        self.control_blocks_sparse = nn.ModuleList([DiTBlock(*block_args) for _ in range(self.control_layers)])
 
         self.control_initial_combine_linear_dense = nn.Linear(dim, dim // 2)
         self.control_initial_combine_linear_sparse = nn.Linear(dim, dim // 2)
         self.control_text_linear = nn.Linear(dim, dim // 2)
         self.control_t_mod = nn.Linear(dim, dim // 2)
-        self.control_combine_linears = nn.ModuleList(
-            [nn.Linear(dim // 2, dim) for _ in range(self.control_layers)]
-        )
+        self.control_combine_linears = nn.ModuleList([nn.Linear(dim // 2, dim) for _ in range(self.control_layers)])
 
         nn.init.zeros_(self.control_initial_combine_linear_dense.weight)
         nn.init.zeros_(self.control_initial_combine_linear_dense.bias)

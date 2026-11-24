@@ -7,6 +7,7 @@ groups:
 - audio
 source_repos:
 - url: https://github.com/sgl-project/sglang
+  revision: 95140a7b0c9fc2f87a2a6cf6f6f0df8640a73174
 checkpoints:
 - repo_id: MiniMaxAI/MiniMax-H3
   revision: main

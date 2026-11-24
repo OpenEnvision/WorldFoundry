@@ -19,8 +19,9 @@ Public surface:
 from __future__ import annotations
 
 import importlib
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 
 class NativeProviderUnavailable(RuntimeError):
@@ -110,9 +111,7 @@ def _status_from_manifest(
 
     capabilities = manifest.get("capabilities")
     normalized_capabilities = (
-        tuple(str(value) for value in capabilities)
-        if isinstance(capabilities, (tuple, list))
-        else ()
+        tuple(str(value) for value in capabilities) if isinstance(capabilities, (tuple, list)) else ()
     )
     operator_abi = manifest.get("operator_abi_version")
     return NativeProviderStatus(
@@ -125,7 +124,7 @@ def _status_from_manifest(
         operator_abi_version=int(operator_abi) if operator_abi is not None else None,
         capabilities=normalized_capabilities,
         manifest=dict(manifest),
-        )
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -148,9 +147,7 @@ def native_provider_status(*, load: bool = False, strict: bool = False) -> Nativ
         raise
     except Exception as exc:
         if strict:
-            raise NativeProviderUnavailable(
-                f"native provider import failed: {type(exc).__name__}: {exc}"
-            ) from exc
+            raise NativeProviderUnavailable(f"native provider import failed: {type(exc).__name__}: {exc}") from exc
         return NativeProviderStatus(
             state="import_failed",
             installed=False,
@@ -205,9 +202,7 @@ def native_provider_status(*, load: bool = False, strict: bool = False) -> Nativ
         raise
     except Exception as exc:
         if strict:
-            raise NativeProviderUnavailable(
-                f"native provider load failed: {type(exc).__name__}: {exc}"
-            ) from exc
+            raise NativeProviderUnavailable(f"native provider load failed: {type(exc).__name__}: {exc}") from exc
         compatibility_error = getattr(package, "NativeKernelCompatibilityError", ())
         incompatible = isinstance(compatibility_error, type) and isinstance(exc, compatibility_error)
         return NativeProviderStatus(
@@ -219,9 +214,7 @@ def native_provider_status(*, load: bool = False, strict: bool = False) -> Nativ
             reason=f"{type(exc).__name__}: {exc}",
             build_id=str(manifest.get("build_id")) if manifest.get("build_id") is not None else None,
             operator_abi_version=(
-                int(manifest["operator_abi_version"])
-                if manifest.get("operator_abi_version") is not None
-                else None
+                int(manifest["operator_abi_version"]) if manifest.get("operator_abi_version") is not None else None
             ),
             capabilities=tuple(str(value) for value in manifest.get("capabilities", ())),
             manifest=dict(manifest),

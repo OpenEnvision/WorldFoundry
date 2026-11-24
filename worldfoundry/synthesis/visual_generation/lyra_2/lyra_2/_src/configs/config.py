@@ -1,21 +1,27 @@
-from typing import Any, List
+from typing import Any
 
 import attrs
-from lyra_2._src.configs.defaults.common.checkpoint import register_checkpoint
-from lyra_2._src.configs.defaults.common.tokenizer import register_tokenizer
-from lyra_2._src.configs.defaults.conditioner import lyra_register_conditioner
-from lyra_2._src.configs.defaults.model import lyra_register_model
-from lyra_2._src.configs.defaults.net import lyra_register_net
 
 from worldfoundry.core.configuration import Config as InferenceConfig
 from worldfoundry.core.configuration.hydra import (
     import_all_modules_from_package,
 )
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.configs.defaults.common.checkpoint import (
+    register_checkpoint,
+)
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.configs.defaults.common.tokenizer import (
+    register_tokenizer,
+)
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.configs.defaults.conditioner import (
+    lyra_register_conditioner,
+)
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.configs.defaults.model import lyra_register_model
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.configs.defaults.net import lyra_register_net
 
 
 @attrs.define(slots=False)
 class Config(InferenceConfig):
-    defaults: List[Any] = attrs.field(
+    defaults: list[Any] = attrs.field(
         factory=lambda: [
             "_self_",
             {"model": "fsdp_wan2pt1_lyra2_spatial"},
@@ -45,6 +51,6 @@ def make_config() -> Config:
     lyra_register_conditioner()
 
     # Register experiment configs
-    import_all_modules_from_package("lyra_2._src.configs", reload=True)
+    import_all_modules_from_package("worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.configs", reload=True)
 
     return c

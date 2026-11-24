@@ -7,14 +7,15 @@ raw waveforms and outputs projected sequence embeddings.
 
 import logging
 import os
-from functools import lru_cache
-from typing import Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from functools import cache
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 from torch import Tensor, nn
+
 from worldfoundry.core.attention import scaled_dot_product_attention
 
 SDPA_AVAILABLE = True
@@ -31,12 +32,6 @@ N_FRAMES = N_SAMPLES // HOP_LENGTH  # 3000 frames in a mel spectrogram input
 
 
 def _exact_div(x, y):
-    """Helper function to exact div.
-
-    Args:
-        x: The x.
-        y: The y.
-    """
     assert x % y == 0
     return x // y
 
@@ -55,7 +50,7 @@ def get_T_after_cnn(L_in, dilation=1):
 # ---------------------------------------------------------------------------
 
 
-@lru_cache(maxsize=None)
+@cache
 def mel_filters(device, n_mels: int = N_MELS) -> torch.Tensor:
     """Load the mel filterbank matrix for projecting STFT into a Mel spectrogram.
 
@@ -68,10 +63,10 @@ def mel_filters(device, n_mels: int = N_MELS) -> torch.Tensor:
 
 
 def log_mel_spectrogram(
-        audio: Union[np.ndarray, torch.Tensor],
-        n_mels: int = N_MELS,
-        padding: int = 0,
-        device: Optional[Union[str, torch.device]] = None,
+    audio: np.ndarray | torch.Tensor,
+    n_mels: int = N_MELS,
+    padding: int = 0,
+    device: str | torch.device | None = None,
 ) -> torch.Tensor:
     """Compute the log-Mel spectrogram of a waveform.
 
@@ -115,30 +110,12 @@ def log_mel_spectrogram(
 
 
 class LayerNorm(nn.LayerNorm):
-    """Layer norm implementation."""
     def forward(self, x: Tensor) -> Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         return super().forward(x).type(x.dtype)
 
 
 class Linear(nn.Linear):
-    """Linear implementation."""
     def forward(self, x: Tensor) -> Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         return F.linear(
             x,
             self.weight.to(x.dtype),
@@ -148,17 +125,8 @@ class Linear(nn.Linear):
 
 class Conv1d(nn.Conv1d):
     """Conv d implementation."""
-    def _conv_forward(self, x: Tensor, weight: Tensor, bias: Optional[Tensor]) -> Tensor:
-        """Helper function to conv forward.
 
-        Args:
-            x: The x.
-            weight: The weight.
-            bias: The bias.
-
-        Returns:
-            The return value.
-        """
+    def _conv_forward(self, x: Tensor, weight: Tensor, bias: Tensor | None) -> Tensor:
         return super()._conv_forward(
             x,
             weight.to(x.dtype),
@@ -181,16 +149,9 @@ def sinusoids(length, channels, max_timescale=10000):
 
 
 class MultiHeadAttention(nn.Module):
-    """Multi head attention implementation."""
     use_sdpa = True
 
     def __init__(self, n_state: int, n_head: int):
-        """Init.
-
-        Args:
-            n_state: The n state.
-            n_head: The n head.
-        """
         super().__init__()
         self.n_head = n_head
         self.query = Linear(n_state, n_state)
@@ -199,20 +160,12 @@ class MultiHeadAttention(nn.Module):
         self.out = Linear(n_state, n_state)
 
     def forward(
-            self,
-            x: Tensor,
-            xa: Optional[Tensor] = None,
-            mask: Optional[Tensor] = None,
-            kv_cache: Optional[dict] = None,
+        self,
+        x: Tensor,
+        xa: Tensor | None = None,
+        mask: Tensor | None = None,
+        kv_cache: dict | None = None,
     ):
-        """Forward.
-
-        Args:
-            x: The x.
-            xa: The xa.
-            mask: The mask.
-            kv_cache: The kv cache.
-        """
         q = self.query(x)
         if kv_cache is None or xa is None or self.key not in kv_cache:
             k = self.key(x if xa is None else xa)
@@ -224,23 +177,12 @@ class MultiHeadAttention(nn.Module):
         return self.out(wv), qk
 
     def qkv_attention(
-            self,
-            q: Tensor,
-            k: Tensor,
-            v: Tensor,
-            mask: Optional[Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Qkv attention.
-
-        Args:
-            q: The q.
-            k: The k.
-            v: The v.
-            mask: The mask.
-
-        Returns:
-            The return value.
-        """
+        self,
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        mask: Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         n_batch, n_ctx, n_state = q.shape
         scale = (n_state // self.n_head) ** -0.25
         q = q.view(*q.shape[:2], self.n_head, -1).permute(0, 2, 1, 3)
@@ -269,15 +211,7 @@ class MultiHeadAttention(nn.Module):
 
 
 class ResidualAttentionBlock(nn.Module):
-    """Residual attention block implementation."""
     def __init__(self, n_state: int, n_head: int, cross_attention: bool = False):
-        """Init.
-
-        Args:
-            n_state: The n state.
-            n_head: The n head.
-            cross_attention: The cross attention.
-        """
         super().__init__()
         self.attn = MultiHeadAttention(n_state, n_head)
         self.attn_ln = LayerNorm(n_state)
@@ -290,20 +224,12 @@ class ResidualAttentionBlock(nn.Module):
         self.mlp_ln = LayerNorm(n_state)
 
     def forward(
-            self,
-            x: Tensor,
-            xa: Optional[Tensor] = None,
-            mask: Optional[Tensor] = None,
-            kv_cache: Optional[dict] = None,
+        self,
+        x: Tensor,
+        xa: Tensor | None = None,
+        mask: Tensor | None = None,
+        kv_cache: dict | None = None,
     ):
-        """Forward.
-
-        Args:
-            x: The x.
-            xa: The xa.
-            mask: The mask.
-            kv_cache: The kv cache.
-        """
         x = x + self.attn(self.attn_ln(x), mask=mask, kv_cache=kv_cache)[0]
         if self.cross_attn:
             x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)[0]
@@ -324,29 +250,17 @@ class WhisperEncoder(nn.Module):
     """
 
     def __init__(
-            self,
-            n_mels: int,
-            n_ctx: int,
-            n_state: int,
-            n_head: int,
-            n_layer: int,
-            output_dim: int = 512,
-            avg_pool: bool = True,
-            add_audio_bos_eos_token: bool = True,
-            **kwargs,
+        self,
+        n_mels: int,
+        n_ctx: int,
+        n_state: int,
+        n_head: int,
+        n_layer: int,
+        output_dim: int = 512,
+        avg_pool: bool = True,
+        add_audio_bos_eos_token: bool = True,
+        **kwargs,
     ):
-        """Init.
-
-        Args:
-            n_mels: The n mels.
-            n_ctx: The n ctx.
-            n_state: The n state.
-            n_head: The n head.
-            n_layer: The n layer.
-            output_dim: The output dim.
-            avg_pool: The avg pool.
-            add_audio_bos_eos_token: The add audio bos eos token.
-        """
         super().__init__()
         self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, padding=1)
         self.conv2 = Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)
@@ -371,17 +285,10 @@ class WhisperEncoder(nn.Module):
         self.grad_checkpointing = False
 
     def set_grad_checkpointing(self, enable: bool = True, impl: str = "inline"):
-        """Set grad checkpointing.
-
-        Args:
-            enable: The enable.
-            impl: The impl.
-        """
         self.grad_checkpointing = enable
 
     def forward(self, x, padding_mask=None, audio_lengths=None):
-        """Forward pass.
-
+        """
         Parameters
         ----------
         x : dict
@@ -473,11 +380,11 @@ def create_whisper_model(audio_cfg, output_dim, **kwargs) -> WhisperEncoder:
     If audio_cfg.pretrained is True, loads OpenAI Whisper weights.
     """
     _WHISPER_CONFIGS = {
-        "tiny": dict(n_layer=4, width=384, heads=6),
-        "base": dict(n_layer=6, width=512, heads=8),
-        "small": dict(n_layer=12, width=768, heads=12),
-        "medium": dict(n_layer=24, width=1024, heads=16),
-        "large": dict(n_layer=32, width=1280, heads=20),
+        "tiny": {"n_layer": 4, "width": 384, "heads": 6},
+        "base": {"n_layer": 6, "width": 512, "heads": 8},
+        "small": {"n_layer": 12, "width": 768, "heads": 12},
+        "medium": {"n_layer": 24, "width": 1024, "heads": 16},
+        "large": {"n_layer": 32, "width": 1280, "heads": 20},
     }
 
     name = audio_cfg.model_name
@@ -506,7 +413,7 @@ def create_whisper_model(audio_cfg, output_dim, **kwargs) -> WhisperEncoder:
             model_state_dict = model.state_dict()
             whisper_state_dict = whisper_model.encoder.state_dict()
             loaded = 0
-            for k in model_state_dict.keys():
+            for k in model_state_dict.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 if k in whisper_state_dict and model_state_dict[k].shape == whisper_state_dict[k].shape:
                     model_state_dict[k] = whisper_state_dict[k]
                     loaded += 1

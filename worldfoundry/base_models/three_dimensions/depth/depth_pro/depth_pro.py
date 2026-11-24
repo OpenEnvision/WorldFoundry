@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
-from typing import Mapping, Optional, Tuple, Union
+from collections.abc import Mapping
+from dataclasses import dataclass
 
 import torch
+from huggingface_hub import hf_hub_download
 from torch import nn
 from torchvision.transforms import (
     Compose,
@@ -22,7 +23,6 @@ from .network.decoder import MultiresConvDecoder
 from .network.encoder import DepthProEncoder
 from .network.fov import FOVNetwork
 from .network.vit_factory import VIT_CONFIG_DICT, ViTPreset, create_vit
-from huggingface_hub import hf_hub_download
 
 
 @dataclass
@@ -33,8 +33,8 @@ class DepthProConfig:
     image_encoder_preset: ViTPreset
     decoder_features: int
 
-    checkpoint_uri: Optional[str] = None
-    fov_encoder_preset: Optional[ViTPreset] = None
+    checkpoint_uri: str | None = None
+    fov_encoder_preset: ViTPreset | None = None
     use_fov_head: bool = True
 
 
@@ -56,9 +56,7 @@ DEFAULT_MONODEPTH_CONFIG_DICT = DepthProConfig(
 )
 
 
-def create_backbone_model(
-    preset: ViTPreset
-) -> Tuple[nn.Module, ViTPreset]:
+def create_backbone_model(preset: ViTPreset) -> tuple[nn.Module, ViTPreset]:
     """Create and load a backbone model given a config.
 
     Args:
@@ -81,9 +79,9 @@ def create_backbone_model(
 
 def create_model_and_transforms(
     config: DepthProConfig = DEFAULT_MONODEPTH_CONFIG_DICT,
-    device: torch.device = torch.device("cpu"),
+    device: torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
     precision: torch.dtype = torch.float32,
-) -> Tuple[DepthPro, Compose]:
+) -> tuple[DepthPro, Compose]:
     """Create a DepthPro model and load weights from `config.checkpoint_uri`.
 
     Args:
@@ -97,12 +95,8 @@ def create_model_and_transforms(
         The Torch DepthPro model and associated Transform.
 
     """
-    patch_encoder, patch_encoder_config = create_backbone_model(
-        preset=config.patch_encoder_preset
-    )
-    image_encoder, _ = create_backbone_model(
-        preset=config.image_encoder_preset
-    )
+    patch_encoder, patch_encoder_config = create_backbone_model(preset=config.patch_encoder_preset)
+    image_encoder, _ = create_backbone_model(preset=config.image_encoder_preset)
 
     fov_encoder = None
     if config.use_fov_head and config.fov_encoder_preset is not None:
@@ -118,7 +112,7 @@ def create_model_and_transforms(
         decoder_features=config.decoder_features,
     )
     decoder = MultiresConvDecoder(
-        dims_encoder=[config.decoder_features] + list(encoder.dims_encoder),
+        dims_encoder=[config.decoder_features] + list(encoder.dims_encoder),  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         dim_decoder=config.decoder_features,
     )
     model = DepthPro(
@@ -150,14 +144,10 @@ def create_model_and_transforms(
         )
     if checkpoint_uri is not None:
         state_dict = torch.load(checkpoint_uri, map_location="cpu")
-        missing_keys, unexpected_keys = model.load_state_dict(
-            state_dict=state_dict, strict=True
-        )
+        missing_keys, unexpected_keys = model.load_state_dict(state_dict=state_dict, strict=True)
 
         if len(unexpected_keys) != 0:
-            raise KeyError(
-                f"Found unexpected keys when loading monodepth: {unexpected_keys}"
-            )
+            raise KeyError(f"Found unexpected keys when loading monodepth: {unexpected_keys}")
 
         # fc_norm is only for the classification head,
         # which we would not use. We only use the encoding.
@@ -177,7 +167,7 @@ class DepthPro(nn.Module):
         decoder: MultiresConvDecoder,
         last_dims: tuple[int, int],
         use_fov_head: bool = True,
-        fov_encoder: Optional[nn.Module] = None,
+        fov_encoder: nn.Module | None = None,
     ):
         """Initialize DepthPro.
 
@@ -197,9 +187,7 @@ class DepthPro(nn.Module):
 
         dim_decoder = decoder.dim_decoder
         self.head = nn.Sequential(
-            nn.Conv2d(
-                dim_decoder, dim_decoder // 2, kernel_size=3, stride=1, padding=1
-            ),
+            nn.Conv2d(dim_decoder, dim_decoder // 2, kernel_size=3, stride=1, padding=1),
             nn.ConvTranspose2d(
                 in_channels=dim_decoder // 2,
                 out_channels=dim_decoder // 2,
@@ -232,7 +220,7 @@ class DepthPro(nn.Module):
         """Return the internal image size of the network."""
         return self.encoder.img_size
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Decode by projection and fusion of multi-resolution encodings.
 
         Args:
@@ -245,7 +233,7 @@ class DepthPro(nn.Module):
 
         """
         _, _, H, W = x.shape
-        assert H == self.img_size and W == self.img_size
+        assert self.img_size == H and self.img_size == W
 
         encodings = self.encoder(x)
         features, features_0 = self.decoder(encodings)
@@ -261,7 +249,7 @@ class DepthPro(nn.Module):
     def infer(
         self,
         x: torch.Tensor,
-        f_px: Optional[Union[float, torch.Tensor]] = None,
+        f_px: float | torch.Tensor | None = None,
         interpolation_mode="bilinear",
     ) -> Mapping[str, torch.Tensor]:
         """Infer depth and fov for a given image.
@@ -285,7 +273,7 @@ class DepthPro(nn.Module):
         if len(x.shape) == 3:
             x = x.unsqueeze(0)
         _, _, H, W = x.shape
-        resize = H != self.img_size or W != self.img_size
+        resize = self.img_size != H or self.img_size != W
 
         if resize:
             x = nn.functional.interpolate(

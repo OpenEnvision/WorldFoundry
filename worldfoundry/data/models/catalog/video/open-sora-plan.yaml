@@ -1,6 +1,6 @@
 id: open-sora-plan
 name: Open-Sora-Plan
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 runtime_profile: runtime-profile:open-sora-plan
 tasks:
 - text-to-video
@@ -61,18 +61,16 @@ docs:
   publisher: Peking University (Yuan Group)
   publisher_kind: university
   publisher_zh: 北京大学（袁粒课题组）
-  overview: Open-Sora-Plan is Peking University Yuan Group's open text-to-video effort (HF releases under the LanguageBind org), developed independently from HPC-AI Tech's Open-Sora despite the similar name. The WorldFoundry route is complete and reports missing checkpoints at runtime.
-  overview_zh: Open-Sora-Plan 是北京大学袁粒课题组的开源文生视频项目（HF 发布在 LanguageBind 组织下），虽与潞晨的 Open-Sora 同名相近，但相互独立。WorldFoundry 路径已完备，checkpoint 缺失会在运行时报告。
-  architecture: The project pairs a video VAE (WF-VAE in later versions) with a diffusion transformer denoiser, per upstream releases. This repository records the prompt-only contract and generated_video artifact; the specific version internals are not recorded here.
-  architecture_zh: 该项目将视频 VAE（后期版本为 WF-VAE）与扩散 Transformer 去噪器配对，见上游发布。本仓库记录仅 prompt 的契约与 generated_video 产物；具体版本内部细节仓库未记录。
-  usage_notes: No runner-parity record exists yet. Official GitHub is PKU-YuanGroup; checkpoints live under LanguageBind on Hugging Face — use those exact orgs when staging weights.
-  usage_notes_zh: 尚无 runner parity 记录。官方 GitHub 为 PKU-YuanGroup；checkpoint 在 Hugging Face 的 LanguageBind 组织下——就位权重时请使用这两个准确的组织名。
+  overview: Open-Sora-Plan is Peking University Yuan Group's open text-to-video effort (HF releases under the LanguageBind org), developed independently from HPC-AI Tech's Open-Sora despite the similar name. WorldFoundry runs the v1.3.0 GPU release.
+  overview_zh: Open-Sora-Plan 是北京大学袁粒课题组的开源文生视频项目（HF 发布在 LanguageBind 组织下），虽与潞晨的 Open-Sora 同名相近，但相互独立。WorldFoundry 运行 v1.3.0 GPU 版本。
+  architecture: The project pairs a video VAE (WF-VAE in later versions) with a diffusion transformer denoiser, per upstream releases. The WorldFoundry route takes a prompt only and writes a generated video.
+  architecture_zh: 该项目将视频 VAE（后期版本为 WF-VAE）与扩散 Transformer 去噪器配对，见上游发布。WorldFoundry 路径只接受 prompt，输出生成视频。
+  usage_notes: 'Stage LanguageBind/Open-Sora-Plan-v1.3.0 and google/mt5-xxl. Official GitHub is PKU-YuanGroup; checkpoints live under LanguageBind on Hugging Face — use those exact orgs when staging weights. Validated with the official v1.3 demo: the pipeline generates 93 frames at 640x352 and 18 fps with 100 Euler-ancestral steps.'
+  usage_notes_zh: 请就位 LanguageBind/Open-Sora-Plan-v1.3.0 与 google/mt5-xxl。官方 GitHub 为 PKU-YuanGroup；checkpoint 在 Hugging Face 的 LanguageBind 组织下——就位权重时请使用这两个准确的组织名。已按官方 v1.3 demo 验证：pipeline 以 100 步 Euler-ancestral 采样生成 93 帧、640x352、18 fps 的视频。
   limitations:
-  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
-  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - The GPU route uses v1.3.0; the v1.5.0 release targets Ascend NPU / MindSpeed.
   limitations_zh:
-  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
-  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - GPU 路径使用 v1.3.0；v1.5.0 版本面向昇腾 NPU / MindSpeed。
   recommended_benchmarks:
   - id: vbench
     reason: Standard open T2V quality suite.

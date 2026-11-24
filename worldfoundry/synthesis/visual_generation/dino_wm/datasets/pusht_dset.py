@@ -1,33 +1,36 @@
-import torch
-import decord
 import pickle
-import numpy as np
+from collections.abc import Callable
 from pathlib import Path
-from einops import rearrange
+
+import decord
+import numpy as np
+import torch
 from decord import VideoReader
-from typing import Callable, Optional
+from einops import rearrange
+
 from .traj_dset import TrajDataset, TrajSlicerDataset
-from typing import Optional, Callable, Any
+
 decord.bridge.set_bridge("torch")
 
 # precomputed dataset stats
 ACTION_MEAN = torch.tensor([-0.0087, 0.0068])
 ACTION_STD = torch.tensor([0.2019, 0.2002])
-STATE_MEAN = torch.tensor([236.6155, 264.5674, 255.1307, 266.3721, 1.9584, -2.93032027,  2.54307914])
+STATE_MEAN = torch.tensor([236.6155, 264.5674, 255.1307, 266.3721, 1.9584, -2.93032027, 2.54307914])
 STATE_STD = torch.tensor([101.1202, 87.0112, 52.7054, 57.4971, 1.7556, 74.84556075, 74.14009094])
-PROPRIO_MEAN = torch.tensor([236.6155, 264.5674, -2.93032027,  2.54307914])
+PROPRIO_MEAN = torch.tensor([236.6155, 264.5674, -2.93032027, 2.54307914])
 PROPRIO_STD = torch.tensor([101.1202, 87.0112, 74.84556075, 74.14009094])
+
 
 class PushTDataset(TrajDataset):
     def __init__(
         self,
-        n_rollout: Optional[int] = None,
-        transform: Optional[Callable] = None,
+        n_rollout: int | None = None,
+        transform: Callable | None = None,
         data_path: str = "data/pusht_dataset",
         normalize_action: bool = True,
         relative=True,
         action_scale=100.0,
-        with_velocity: bool = True, # agent's velocity
+        with_velocity: bool = True,  # agent's velocity
     ):
         self.data_path = Path(data_path)
         self.transform = transform
@@ -48,17 +51,14 @@ class PushTDataset(TrajDataset):
         # load shapes, assume all shapes are 'T' if file not found
         shapes_file = self.data_path / "shapes.pkl"
         if shapes_file.exists():
-            with open(shapes_file, 'rb') as f:
+            with open(shapes_file, "rb") as f:
                 shapes = pickle.load(f)
                 self.shapes = shapes
         else:
-            self.shapes = ['T'] * len(self.states)
+            self.shapes = ["T"] * len(self.states)
 
         self.n_rollout = n_rollout
-        if self.n_rollout:
-            n = self.n_rollout
-        else:
-            n = len(self.states)
+        n = self.n_rollout or len(self.states)
 
         self.states = self.states[:n]
         self.actions = self.actions[:n]
@@ -80,10 +80,10 @@ class PushTDataset(TrajDataset):
         if normalize_action:
             self.action_mean = ACTION_MEAN
             self.action_std = ACTION_STD
-            self.state_mean = STATE_MEAN[:self.state_dim]
-            self.state_std = STATE_STD[:self.state_dim]
-            self.proprio_mean = PROPRIO_MEAN[:self.proprio_dim]
-            self.proprio_std = PROPRIO_STD[:self.proprio_dim]
+            self.state_mean = STATE_MEAN[: self.state_dim]
+            self.state_std = STATE_STD[: self.state_dim]
+            self.proprio_mean = PROPRIO_MEAN[: self.proprio_dim]
+            self.proprio_std = PROPRIO_STD[: self.proprio_dim]
         else:
             self.action_mean = torch.zeros(self.action_dim)
             self.action_std = torch.ones(self.action_dim)
@@ -119,7 +119,7 @@ class PushTDataset(TrajDataset):
         if self.transform:
             image = self.transform(image)
         obs = {"visual": image, "proprio": proprio}
-        return obs, act, state, {'shape': shape}
+        return obs, act, state, {"shape": shape}
 
     def __getitem__(self, idx):
         return self.get_frames(idx, range(self.get_seq_length(idx)))

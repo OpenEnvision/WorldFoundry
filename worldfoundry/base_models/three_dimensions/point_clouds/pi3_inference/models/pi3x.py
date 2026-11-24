@@ -9,14 +9,18 @@ from huggingface_hub import PyTorchModelHubMixin
 from worldfoundry.base_models.perception_core.general_perception.dinov2.hub.backbones import (
     dinov2_vitl14_reg,
 )
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import (
+    homogenize_points,
+)
+from worldfoundry.core.attention.rotary.rope_2d import CrocoRotaryPositionEmbedding2D as RoPE2D
 from worldfoundry.core.nn.blocks.layers import Mlp, PatchEmbed
 
-from ..utils.geometry import get_pixel, homogenize_points, se3_inverse
+from ..utils.geometry import get_pixel, se3_inverse
 from .layers.attention import FlashAttentionRope
 from .layers.block import BlockRope, PoseInjectBlock
 from .layers.camera_head import CameraHead
 from .layers.conv_head import ConvHead
-from .layers.pos_embed import PositionGetter, RoPE2D
+from .layers.pos_embed import PositionGetter
 from .layers.transformer_head import ContextOnlyTransformerDecoder, TransformerDecoder
 
 
@@ -394,7 +398,7 @@ class Pi3X(nn.Module, PyTorchModelHubMixin):
 
     def _chunked_conv_head(self, head, feat, patch_h, patch_w, chunk_size=64):
         BN = feat.shape[0]
-        if BN <= chunk_size:
+        if chunk_size >= BN:
             return head(feat, patch_h=patch_h, patch_w=patch_w)
         outputs = [[] for _ in range(len(head.output_block))] if isinstance(head.output_block, nn.ModuleList) else []
         for i in range(0, BN, chunk_size):
@@ -460,14 +464,14 @@ class Pi3X(nn.Module, PyTorchModelHubMixin):
             # convert local_points to metric
             local_points = local_points * metric.view(B, 1, 1, 1, 1)
 
-        return dict(
-            points=points,
-            local_points=local_points,
-            rays=rays,
-            conf=conf,
-            camera_poses=camera_poses,
-            metric=metric,
-        )
+        return {
+            "points": points,
+            "local_points": local_points,
+            "rays": rays,
+            "conf": conf,
+            "camera_poses": camera_poses,
+            "metric": metric,
+        }
 
     def decode(self, hidden, N, H, W, poses, use_pose_mask):
         if len(hidden.shape) == 4:
@@ -512,22 +516,21 @@ class Pi3X(nn.Module, PyTorchModelHubMixin):
 
             hidden = blk(hidden, xpos=pos)
 
-            if self.use_multimodal:
-                if i in [1, 9, 17, 25, 33] and use_pose_mask.sum() > 0:
-                    hidden = hidden.reshape(B, N, -1, 1024)
-                    poses_feat = self.pose_inject_blk[pose_inject_blk_idx](
-                        hidden[..., self.patch_start_idx :, :].reshape(B, N * (hw - self.patch_start_idx), -1),
-                        poses,
-                        H,
-                        W,
-                        H // 14,
-                        W // 14,
-                        attn_mask=pose_inject_mask,
-                    ).reshape(B, N, -1, 1024)
-                    hidden[..., self.patch_start_idx :, :] += poses_feat * use_pose_mask.view(B, N, 1, 1)
+            if self.use_multimodal and i in [1, 9, 17, 25, 33] and use_pose_mask.sum() > 0:
+                hidden = hidden.reshape(B, N, -1, 1024)
+                poses_feat = self.pose_inject_blk[pose_inject_blk_idx](
+                    hidden[..., self.patch_start_idx :, :].reshape(B, N * (hw - self.patch_start_idx), -1),
+                    poses,
+                    H,
+                    W,
+                    H // 14,
+                    W // 14,
+                    attn_mask=pose_inject_mask,
+                ).reshape(B, N, -1, 1024)
+                hidden[..., self.patch_start_idx :, :] += poses_feat * use_pose_mask.view(B, N, 1, 1)
 
-                    hidden = hidden.reshape(B, N * hw, -1)
-                    pose_inject_blk_idx += 1
+                hidden = hidden.reshape(B, N * hw, -1)
+                pose_inject_blk_idx += 1
 
             if i == len(self.decoder) - 2:
                 temp_features = hidden.clone().reshape(B * N, hw, -1)

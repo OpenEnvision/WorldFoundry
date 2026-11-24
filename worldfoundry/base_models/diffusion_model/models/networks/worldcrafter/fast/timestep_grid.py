@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import torch
 
@@ -45,16 +46,12 @@ def resolve_dmd_contract_path(checkpoint_path: str | Path) -> Path:
     return path / DMD_TIMESTEP_CONTRACT_FILENAME
 
 
-def _require_exact_keys(
-    payload: Mapping[str, Any], expected: set[str], name: str
-) -> None:
+def _require_exact_keys(payload: Mapping[str, Any], expected: set[str], name: str) -> None:
     actual = set(payload)
     if actual != expected:
         missing = sorted(expected - actual)
         unexpected = sorted(actual - expected)
-        raise ValueError(
-            f"Invalid {name} keys: missing={missing}, unexpected={unexpected}"
-        )
+        raise ValueError(f"Invalid {name} keys: missing={missing}, unexpected={unexpected}")
 
 
 @dataclass(frozen=True)
@@ -73,10 +70,8 @@ class DmdTimestepStep:
         }
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "DmdTimestepStep":
-        _require_exact_keys(
-            payload, {"model_timestep", "current_sigma", "next_sigma"}, "DMD step"
-        )
+    def from_dict(cls, payload: Mapping[str, Any]) -> DmdTimestepStep:
+        _require_exact_keys(payload, {"model_timestep", "current_sigma", "next_sigma"}, "DMD step")
         return cls(
             model_timestep=float(payload["model_timestep"]),
             current_sigma=float(payload["current_sigma"]),
@@ -103,17 +98,13 @@ class DmdSchedulerConfig:
 
     def validate(self) -> None:
         if self.num_train_timesteps != 1000:
-            raise ValueError(
-                f"DMD requires 1000 scheduler timesteps, got {self.num_train_timesteps}"
-            )
+            raise ValueError(f"DMD requires 1000 scheduler timesteps, got {self.num_train_timesteps}")
         if self.stages != 3:
-            raise ValueError(
-                f"Direct DMD requires three pyramid stages, got {self.stages}"
-            )
+            raise ValueError(f"Direct DMD requires three pyramid stages, got {self.stages}")
         expected_range = (0.0, 1.0 / 3.0, 2.0 / 3.0, 1.0)
         if len(self.stage_range) != len(expected_range) or any(
             not math.isclose(actual, expected, rel_tol=0.0, abs_tol=1e-12)
-            for actual, expected in zip(self.stage_range, expected_range)
+            for actual, expected in zip(self.stage_range, expected_range, strict=False)
         ):
             raise ValueError(f"Unsupported DMD stage range: {self.stage_range}")
         if not math.isclose(self.gamma, 1.0 / 3.0, rel_tol=0.0, abs_tol=1e-12):
@@ -123,14 +114,10 @@ class DmdSchedulerConfig:
         if self.version != "v1":
             raise ValueError(f"Unsupported DMD stage scheduler version: {self.version}")
         if not self.use_dynamic_shifting or self.time_shift_type != "linear":
-            raise ValueError(
-                "Direct DMD student schedules require linear resolution-dependent shifting"
-            )
+            raise ValueError("Direct DMD student schedules require linear resolution-dependent shifting")
         if (self.base_seq_len, self.max_seq_len) != (256, 4096):
             raise ValueError("Direct DMD student shift sequence-length anchors changed")
-        if not math.isclose(self.base_shift, 0.5) or not math.isclose(
-            self.max_shift, 1.15
-        ):
+        if not math.isclose(self.base_shift, 0.5) or not math.isclose(self.max_shift, 1.15):
             raise ValueError("Direct DMD student shift endpoints changed")
 
     def to_dict(self) -> dict[str, Any]:
@@ -150,7 +137,7 @@ class DmdSchedulerConfig:
         }
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "DmdSchedulerConfig":
+    def from_dict(cls, payload: Mapping[str, Any]) -> DmdSchedulerConfig:
         expected = {
             "num_train_timesteps",
             "stages",
@@ -203,24 +190,17 @@ class DmdTimestepContract:
                 f"Unsupported DMD timestep contract schema {self.schema_version}; "
                 f"expected 2 or {DMD_TIMESTEP_CONTRACT_SCHEMA_VERSION}"
             )
-        if len(self.latent_shape) != 4 or any(
-            value <= 0 for value in self.latent_shape
-        ):
+        if len(self.latent_shape) != 4 or any(value <= 0 for value in self.latent_shape):
             raise ValueError(f"Invalid DMD latent shape: {self.latent_shape}")
         if self.rollout_steps_per_stage != _LOCKED_ROLLOUT_STEPS:
             raise ValueError(
-                f"Unsupported DMD rollout step counts {self.rollout_steps_per_stage}; "
-                f"expected {_LOCKED_ROLLOUT_STEPS}"
+                f"Unsupported DMD rollout step counts {self.rollout_steps_per_stage}; expected {_LOCKED_ROLLOUT_STEPS}"
             )
         self.student_scheduler.validate()
         if len(self.normal_stages) != 3 or len(self.empty_history_stages) != 3:
-            raise ValueError(
-                "DMD student schedule must contain exactly three pyramid stages"
-            )
+            raise ValueError("DMD student schedule must contain exactly three pyramid stages")
         expected_empty_multiplier = 2 if self.amplify_empty_history else 1
-        for stage_index, (normal, empty) in enumerate(
-            zip(self.normal_stages, self.empty_history_stages)
-        ):
+        for stage_index, (normal, empty) in enumerate(zip(self.normal_stages, self.empty_history_stages, strict=False)):
             expected_normal = self.rollout_steps_per_stage[stage_index]
             if len(normal) != expected_normal:
                 raise ValueError(
@@ -233,17 +213,10 @@ class DmdTimestepContract:
                 )
             self._validate_stage(stage_index, normal, "normal")
             self._validate_stage(stage_index, empty, "empty_history")
-        if (
-            not self.amplify_empty_history
-            and self.empty_history_stages != self.normal_stages
-        ):
-            raise ValueError(
-                "Unamplified DMD contracts must use the normal table for empty history"
-            )
+        if not self.amplify_empty_history and self.empty_history_stages != self.normal_stages:
+            raise ValueError("Unamplified DMD contracts must use the normal table for empty history")
         if self.latent_shape == _LOCKED_LATENT_SHAPE:
-            self._validate_locked_timesteps(
-                self.normal_stages, _LOCKED_NORMAL_TIMESTEPS, "normal"
-            )
+            self._validate_locked_timesteps(self.normal_stages, _LOCKED_NORMAL_TIMESTEPS, "normal")
             if self.amplify_empty_history:
                 self._validate_locked_timesteps(
                     self.empty_history_stages,
@@ -252,24 +225,16 @@ class DmdTimestepContract:
                 )
 
     @staticmethod
-    def _validate_stage(
-        stage_index: int, steps: Sequence[DmdTimestepStep], name: str
-    ) -> None:
+    def _validate_stage(stage_index: int, steps: Sequence[DmdTimestepStep], name: str) -> None:
         previous_timestep = float("inf")
         for index, step in enumerate(steps):
             values = (step.model_timestep, step.current_sigma, step.next_sigma)
             if not all(math.isfinite(value) for value in values):
-                raise ValueError(
-                    f"Non-finite value in {name} stage {stage_index}, step {index}: {values}"
-                )
+                raise ValueError(f"Non-finite value in {name} stage {stage_index}, step {index}: {values}")
             if not 0.0 <= step.next_sigma < step.current_sigma <= 1.0:
-                raise ValueError(
-                    f"Invalid sigma transition in {name} stage {stage_index}, step {index}: {values}"
-                )
+                raise ValueError(f"Invalid sigma transition in {name} stage {stage_index}, step {index}: {values}")
             if step.model_timestep >= previous_timestep:
-                raise ValueError(
-                    f"Timesteps are not strictly descending in {name} stage {stage_index}"
-                )
+                raise ValueError(f"Timesteps are not strictly descending in {name} stage {stage_index}")
             previous_timestep = step.model_timestep
             if index + 1 < len(steps) and not math.isclose(
                 step.next_sigma,
@@ -277,13 +242,9 @@ class DmdTimestepContract:
                 rel_tol=0.0,
                 abs_tol=1e-7,
             ):
-                raise ValueError(
-                    f"Broken x0 re-noise transition in {name} stage {stage_index}, step {index}"
-                )
+                raise ValueError(f"Broken x0 re-noise transition in {name} stage {stage_index}, step {index}")
         if steps[-1].next_sigma != 0.0:
-            raise ValueError(
-                f"The final {name} transition in stage {stage_index} must end at clean x0"
-            )
+            raise ValueError(f"The final {name} transition in stage {stage_index} must end at clean x0")
 
     @staticmethod
     def _validate_locked_timesteps(
@@ -291,27 +252,21 @@ class DmdTimestepContract:
         expected: Sequence[Sequence[float]],
         name: str,
     ) -> None:
-        for stage_index, (actual_stage, expected_stage) in enumerate(
-            zip(stages, expected)
-        ):
+        for stage_index, (actual_stage, expected_stage) in enumerate(zip(stages, expected, strict=False)):
             actual = [step.model_timestep for step in actual_stage]
             if len(actual) != len(expected_stage) or any(
                 not math.isclose(value, target, rel_tol=0.0, abs_tol=1e-3)
-                for value, target in zip(actual, expected_stage)
+                for value, target in zip(actual, expected_stage, strict=False)
             ):
                 raise ValueError(
                     f"Locked 384x640x9 DMD {name} schedule changed at stage {stage_index}: "
                     f"expected {list(expected_stage)}, got {actual}"
                 )
 
-    def stage(
-        self, stage_index: int, *, empty_history: bool = False
-    ) -> tuple[DmdTimestepStep, ...]:
+    def stage(self, stage_index: int, *, empty_history: bool = False) -> tuple[DmdTimestepStep, ...]:
         if stage_index not in range(3):
             raise IndexError(f"DMD pyramid stage must be 0, 1 or 2, got {stage_index}")
-        return (self.empty_history_stages if empty_history else self.normal_stages)[
-            stage_index
-        ]
+        return (self.empty_history_stages if empty_history else self.normal_stages)[stage_index]
 
     def stage_tensors(
         self,
@@ -332,9 +287,7 @@ class DmdTimestepContract:
                 device=device,
                 dtype=torch.float32,
             ),
-            "next_sigma": torch.tensor(
-                [step.next_sigma for step in steps], device=device, dtype=torch.float32
-            ),
+            "next_sigma": torch.tensor([step.next_sigma for step in steps], device=device, dtype=torch.float32),
         }
 
     @staticmethod
@@ -363,9 +316,7 @@ class DmdTimestepContract:
         """Apply the shared flow transition ``(1-sigma)*x0 + sigma*noise``."""
 
         if x0.shape != noise.shape:
-            raise ValueError(
-                f"x0/noise shapes differ: {tuple(x0.shape)} vs {tuple(noise.shape)}"
-            )
+            raise ValueError(f"x0/noise shapes differ: {tuple(x0.shape)} vs {tuple(noise.shape)}")
         if isinstance(next_sigma, DmdTimestepStep):
             next_sigma = next_sigma.next_sigma
         sigma = torch.as_tensor(next_sigma, device=x0.device, dtype=torch.float32)
@@ -374,9 +325,7 @@ class DmdTimestepContract:
         elif sigma.ndim == 1 and sigma.shape[0] in (1, x0.shape[0]):
             sigma = sigma.reshape(sigma.shape[0], *([1] * (x0.ndim - 1)))
         else:
-            raise ValueError(
-                f"next_sigma must be scalar or one value per batch item; got shape {tuple(sigma.shape)}"
-            )
+            raise ValueError(f"next_sigma must be scalar or one value per batch item; got shape {tuple(sigma.shape)}")
         # The contract owns the numerical transition as well as its coefficients:
         # every caller keeps the rollout state in FP32 between model queries and
         # casts only the transformer's input. Returning ``x0.dtype`` here would
@@ -389,11 +338,9 @@ class DmdTimestepContract:
         path: str | Path,
         *,
         expected_latent_shape=None,
-    ) -> "DmdTimestepContract":
+    ) -> DmdTimestepContract:
         path = Path(path)
-        source = (
-            path if path.suffix.lower() == ".json" else resolve_dmd_contract_path(path)
-        )
+        source = path if path.suffix.lower() == ".json" else resolve_dmd_contract_path(path)
         document = json.loads(source.read_text(encoding="utf-8"))
         if not isinstance(document, dict):
             raise ValueError(f"DMD contract must be a JSON object: {source}")
@@ -403,24 +350,16 @@ class DmdTimestepContract:
         contract = cls(
             schema_version=int(document["schema_version"]),
             latent_shape=tuple(int(x) for x in document["latent_shape"]),
-            rollout_steps_per_stage=tuple(
-                int(x) for x in student["rollout_steps_per_stage"]
-            ),
+            rollout_steps_per_stage=tuple(int(x) for x in student["rollout_steps_per_stage"]),
             amplify_empty_history=bool(student["amplify_empty_history"]),
             normal_stages=tuple(
-                tuple(DmdTimestepStep.from_dict(x) for x in stage)
-                for stage in student["normal_stages"]
+                tuple(DmdTimestepStep.from_dict(x) for x in stage) for stage in student["normal_stages"]
             ),
             empty_history_stages=tuple(
-                tuple(DmdTimestepStep.from_dict(x) for x in stage)
-                for stage in student["empty_history_stages"]
+                tuple(DmdTimestepStep.from_dict(x) for x in stage) for stage in student["empty_history_stages"]
             ),
-            student_scheduler=DmdSchedulerConfig.from_dict(
-                student["scheduler_provenance"]
-            ),
+            student_scheduler=DmdSchedulerConfig.from_dict(student["scheduler_provenance"]),
         )
-        if expected_latent_shape is not None and contract.latent_shape != tuple(
-            expected_latent_shape
-        ):
+        if expected_latent_shape is not None and contract.latent_shape != tuple(expected_latent_shape):
             raise ValueError(f"DMD latent shape mismatch: {contract.latent_shape}")
         return contract

@@ -1,25 +1,35 @@
 from __future__ import annotations
 
-import os
-import gym
 import json
-import hydra
-import random
-import torch
-import pickle
 import logging
+import os
+import pickle
+import random
 import warnings
-import numpy as np
 from itertools import product
 from pathlib import Path
+
+import gym
+import hydra
+import numpy as np
+import torch
 from einops import rearrange
 from omegaconf import OmegaConf, open_dict
 
-from env.venv import SubprocVectorEnv
-from custom_resolvers import replace_slash
-from preprocessor import Preprocessor
-from inference_planning.evaluator import PlanEvaluator
-from utils import cfg_to_dict, seed
+# isort: split
+from worldfoundry.synthesis.visual_generation.dino_wm.env.venv import SubprocVectorEnv
+
+# isort: split
+# isort: split
+from worldfoundry.synthesis.visual_generation.dino_wm.custom_resolvers import (
+    replace_slash,  # noqa: F401 - Keeps the module's import-time setup.
+)
+
+# isort: split
+from worldfoundry.synthesis.visual_generation.dino_wm.checkpoint import load_checkpoint, model_config
+from worldfoundry.synthesis.visual_generation.dino_wm.inference_planning.evaluator import PlanEvaluator
+from worldfoundry.synthesis.visual_generation.dino_wm.preprocessor import Preprocessor
+from worldfoundry.synthesis.visual_generation.dino_wm.utils import cfg_to_dict, seed
 
 warnings.filterwarnings("ignore")
 log = logging.getLogger(__name__)
@@ -42,9 +52,7 @@ ALL_MODEL_KEYS = [
     "action_encoder",
 ]
 
-DATASET_MODULE_PREFIX = (
-    "worldfoundry.synthesis.visual_generation.dino_wm.datasets."
-)
+DATASET_MODULE_PREFIX = "worldfoundry.synthesis.visual_generation.dino_wm.datasets."
 
 
 def _use_vendored_dataset_modules(model_cfg):
@@ -62,9 +70,11 @@ def _use_vendored_dataset_modules(model_cfg):
                 DATASET_MODULE_PREFIX + target.removeprefix("datasets."),
             )
 
+
 def planning_main_in_dir(working_dir, cfg_dict):
     os.chdir(working_dir)
     return planning_main(cfg_dict=cfg_dict)
+
 
 def launch_plan_jobs(
     epoch,
@@ -78,23 +88,15 @@ def launch_plan_jobs(
         for cfg_dict in cfg_dicts:
             subdir_name = f"{cfg_dict['planner']['name']}_goal_source={cfg_dict['goal_source']}_goal_H={cfg_dict['goal_H']}_alpha={cfg_dict['objective']['alpha']}"
             subdir_path = os.path.join(plan_output_dir, subdir_name)
-            executor = submitit.AutoExecutor(
-                folder=subdir_path, slurm_max_num_timeout=20
-            )
+            executor = submitit.AutoExecutor(folder=subdir_path, slurm_max_num_timeout=20)
             executor.update_parameters(
-                **{
-                    k: v
-                    for k, v in cfg_dict["hydra"]["launcher"].items()
-                    if k != "submitit_folder"
-                }
+                **{k: v for k, v in cfg_dict["hydra"]["launcher"].items() if k != "submitit_folder"}
             )
             cfg_dict["saved_folder"] = subdir_path
             cfg_dict["wandb_logging"] = False  # don't init wandb
             job = executor.submit(planning_main_in_dir, subdir_path, cfg_dict)
             jobs.append((epoch, subdir_name, job))
-            print(
-                f"Submitted evaluation job for checkpoint: {subdir_path}, job id: {job.job_id}"
-            )
+            print(f"Submitted evaluation job for checkpoint: {subdir_path}, job id: {job.job_id}")
         return jobs
 
 
@@ -103,10 +105,10 @@ def build_plan_cfg_dicts(
     ckpt_base_path="",
     model_name="",
     model_epoch="final",
-    planner=["gd", "cem"],
-    goal_source=["dset"],
-    goal_H=[1, 5, 10],
-    alpha=[0, 0.1, 1],
+    planner=["gd", "cem"],  # noqa: B006 - Keeps the upstream default object and signature.
+    goal_source=["dset"],  # noqa: B006 - Keeps the upstream default object and signature.
+    goal_H=[1, 5, 10],  # noqa: B006 - Keeps the upstream default object and signature.
+    alpha=[0, 0.1, 1],  # noqa: B006 - Keeps the upstream default object and signature.
 ):
     """
     Return a list of plan overrides, for model_path, add a key in the dict {"model_path": model_path}.
@@ -128,9 +130,7 @@ def build_plan_cfg_dicts(
     cfg_dicts = []
     for override_args in overrides:
         planner = override_args["planner"]
-        planner_cfg = OmegaConf.load(
-            os.path.join(config_path, f"planner/{planner}.yaml")
-        )
+        planner_cfg = OmegaConf.load(os.path.join(config_path, f"planner/{planner}.yaml"))
         cfg["planner"] = OmegaConf.merge(cfg.get("planner", {}), planner_cfg)
         override_args.pop("planner")
         cfg = OmegaConf.merge(cfg, OmegaConf.create(override_args))
@@ -220,7 +220,8 @@ class PlanWorkspace:
         )
 
         # optional: assume planning horizon equals to goal horizon
-        from inference_planning.mpc import MPCPlanner
+        from worldfoundry.synthesis.visual_generation.dino_wm.inference_planning.mpc import MPCPlanner
+
         if isinstance(self.planner, MPCPlanner):
             self.planner.sub_planner.horizon = cfg_dict["goal_H"]
             self.planner.n_taken_actions = cfg_dict["goal_H"]
@@ -233,26 +234,20 @@ class PlanWorkspace:
         states = []
         actions = []
         observations = []
-        
+
         if self.goal_source == "random_state":
             # update env config from val trajs
-            observations, states, actions, env_info = (
-                self.sample_traj_segment_from_dset(traj_len=2)
-            )
+            observations, states, actions, env_info = self.sample_traj_segment_from_dset(traj_len=2)
             self.env.update_env(env_info)
 
             # sample random states
-            rand_init_state, rand_goal_state = self.env.sample_random_init_goal_states(
-                self.eval_seed
-            )
-            if self.env_name == "deformable_env": # take rand init state from dset for deformable envs
-                rand_init_state = np.array([x[0] for x in states])
+            rand_init_state, rand_goal_state = self.env.sample_random_init_goal_states(self.eval_seed)
 
             obs_0, state_0 = self.env.prepare(self.eval_seed, rand_init_state)
             obs_g, state_g = self.env.prepare(self.eval_seed, rand_goal_state)
 
             # add dim for t
-            for k in obs_0.keys():
+            for k in obs_0.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 obs_0[k] = np.expand_dims(obs_0[k], axis=1)
                 obs_g[k] = np.expand_dims(obs_g[k], axis=1)
 
@@ -263,8 +258,8 @@ class PlanWorkspace:
             self.gt_actions = None
         else:
             # update env config from val trajs
-            observations, states, actions, env_info = (
-                self.sample_traj_segment_from_dset(traj_len=self.frameskip * self.goal_H + 1)
+            observations, states, actions, env_info = self.sample_traj_segment_from_dset(
+                traj_len=self.frameskip * self.goal_H + 1
             )
             self.env.update_env(env_info)
 
@@ -277,17 +272,9 @@ class PlanWorkspace:
             wm_actions = rearrange(actions, "b (t f) d -> b t (f d)", f=self.frameskip)
             exec_actions = self.data_preprocessor.denormalize_actions(actions)
             # replay actions in env to get gt obses
-            rollout_obses, rollout_states = self.env.rollout(
-                self.eval_seed, init_state, exec_actions.numpy()
-            )
-            self.obs_0 = {
-                key: np.expand_dims(arr[:, 0], axis=1)
-                for key, arr in rollout_obses.items()
-            }
-            self.obs_g = {
-                key: np.expand_dims(arr[:, -1], axis=1)
-                for key, arr in rollout_obses.items()
-            }
+            rollout_obses, rollout_states = self.env.rollout(self.eval_seed, init_state, exec_actions.numpy())
+            self.obs_0 = {key: np.expand_dims(arr[:, 0], axis=1) for key, arr in rollout_obses.items()}
+            self.obs_g = {key: np.expand_dims(arr[:, -1], axis=1) for key, arr in rollout_obses.items()}
             self.state_0 = init_state  # (b, d)
             self.state_g = rollout_states[:, -1]  # (b, d)
             self.gt_actions = wm_actions
@@ -308,7 +295,7 @@ class PlanWorkspace:
             raise ValueError("No trajectory in the dataset is long enough.")
 
         # sample init_states from dset
-        for i in range(self.n_evals):
+        for i in range(self.n_evals):  # noqa: B007 - The loop variable is read outside the loop.
             max_offset = -1
             while max_offset < 0:  # filter out traj that are not long enough
                 traj_id = random.randint(0, len(self.dset) - 1)
@@ -316,10 +303,7 @@ class PlanWorkspace:
                 max_offset = obs["visual"].shape[0] - traj_len
             state = state.numpy()
             offset = random.randint(0, max_offset)
-            obs = {
-                key: arr[offset : offset + traj_len]
-                for key, arr in obs.items()
-            }
+            obs = {key: arr[offset : offset + traj_len] for key, arr in obs.items()}
             state = state[offset : offset + traj_len]
             act = act[offset : offset + self.frameskip * self.goal_H]
             actions.append(act)
@@ -355,10 +339,7 @@ class PlanWorkspace:
         print(f"Dumped plan targets to {file_path}")
 
     def perform_planning(self):
-        if self.debug_dset_init:
-            actions_init = self.gt_actions
-        else:
-            actions_init = None
+        actions_init = self.gt_actions if self.debug_dset_init else None
         actions, action_len = self.planner.plan(
             obs_0=self.obs_0,
             obs_g=self.obs_g,
@@ -370,21 +351,17 @@ class PlanWorkspace:
         logs = {f"final_eval/{k}": v for k, v in logs.items()}
         self.wandb_run.log(logs)
         logs_entry = {
-            key: (
-                value.item()
-                if isinstance(value, (np.float32, np.int32, np.int64))
-                else value
-            )
+            key: (value.item() if isinstance(value, (np.float32, np.int32, np.int64)) else value)
             for key, value in logs.items()
         }
         with open(self.log_filename, "a") as file:
             file.write(json.dumps(logs_entry) + "\n")
+        np.save("planned_actions.npy", actions.detach().cpu().numpy(), allow_pickle=False)
         return logs
 
 
 def load_ckpt(snapshot_path, device):
-    with snapshot_path.open("rb") as f:
-        payload = torch.load(f, map_location=device)
+    payload = load_checkpoint(snapshot_path, map_location=device)
     loaded_keys = []
     result = {}
     for k, v in payload.items():
@@ -396,6 +373,7 @@ def load_ckpt(snapshot_path, device):
 
 
 def load_model(model_ckpt, train_cfg, num_action_repeat, device):
+    train_cfg = model_config(train_cfg)
     result = {}
     if model_ckpt.exists():
         result = load_ckpt(model_ckpt, device)
@@ -412,11 +390,11 @@ def load_model(model_ckpt, train_cfg, num_action_repeat, device):
         base_path = os.path.dirname(os.path.abspath(__file__))
         if train_cfg.env.decoder_path is not None:
             decoder_path = os.path.join(base_path, train_cfg.env.decoder_path)
-            ckpt = torch.load(decoder_path)
+            ckpt = load_checkpoint(decoder_path)
             if isinstance(ckpt, dict):
                 result["decoder"] = ckpt["decoder"]
             else:
-                result["decoder"] = torch.load(decoder_path)
+                result["decoder"] = ckpt
         else:
             raise ValueError(
                 "Decoder path not found in model checkpoint \
@@ -465,16 +443,14 @@ def planning_main(cfg_dict):
     if cfg_dict["wandb_logging"]:
         if wandb is None:
             raise RuntimeError("DINO-WM wandb_logging=True requires wandb, but wandb is not installed.")
-        wandb_run = wandb.init(
-            project=f"plan_{cfg_dict['planner']['name']}", config=cfg_dict
-        )
+        wandb_run = wandb.init(project=f"plan_{cfg_dict['planner']['name']}", config=cfg_dict)
         wandb.run.name = "{}".format(output_dir.split("plan_outputs/")[-1])
     else:
         wandb_run = None
 
     ckpt_base_path = cfg_dict["ckpt_base_path"]
     model_path = f"{ckpt_base_path}/outputs/{cfg_dict['model_name']}/"
-    with open(os.path.join(model_path, "hydra.yaml"), "r") as f:
+    with open(os.path.join(model_path, "hydra.yaml")) as f:
         model_cfg = OmegaConf.load(f)
 
     _use_vendored_dataset_modules(model_cfg)
@@ -489,33 +465,28 @@ def planning_main(cfg_dict):
     dset = dset["valid"]
 
     num_action_repeat = model_cfg.num_action_repeat
-    model_ckpt = (
-        Path(model_path) / "checkpoints" / f"model_{cfg_dict['model_epoch']}.pth"
-    )
+    model_ckpt = Path(model_path) / "checkpoints" / f"model_{cfg_dict['model_epoch']}.pth"
     model = load_model(model_ckpt, model_cfg, num_action_repeat, device=device)
 
     if model_cfg.env.name == "point_maze":
-        from env import register_point_maze
+        from worldfoundry.synthesis.visual_generation.dino_wm.env import register_point_maze
 
         register_point_maze()
 
-    # use dummy vector env for wall and deformable envs
-    if model_cfg.env.name == "wall" or model_cfg.env.name == "deformable_env":
-        from env.serial_vector_env import SerialVectorEnv
+    # use dummy vector env for wall
+    if model_cfg.env.name == "wall":
+        from worldfoundry.synthesis.visual_generation.dino_wm.env.serial_vector_env import SerialVectorEnv
+
         env = SerialVectorEnv(
             [
-                gym.make(
-                    model_cfg.env.name, *model_cfg.env.args, **model_cfg.env.kwargs
-                )
+                gym.make(model_cfg.env.name, *model_cfg.env.args, **model_cfg.env.kwargs)
                 for _ in range(cfg_dict["n_evals"])
             ]
         )
     else:
         env = SubprocVectorEnv(
             [
-                lambda: gym.make(
-                    model_cfg.env.name, *model_cfg.env.args, **model_cfg.env.kwargs
-                )
+                lambda: gym.make(model_cfg.env.name, *model_cfg.env.args, **model_cfg.env.kwargs)
                 for _ in range(cfg_dict["n_evals"])
             ]
         )

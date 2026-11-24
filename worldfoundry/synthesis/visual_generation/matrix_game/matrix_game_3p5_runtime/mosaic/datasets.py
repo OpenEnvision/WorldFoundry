@@ -92,7 +92,7 @@ def _resolve_dataset_cache_dir(args):
 
 
 def _load_manifest_keys(path):
-    with open(path, "r", encoding="utf-8") as handle:
+    with open(path, encoding="utf-8") as handle:
         payload = json.load(handle)
     if not isinstance(payload, dict):
         raise ValueError(f"Inference manifest must be an object: {path}")

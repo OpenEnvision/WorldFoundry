@@ -1,31 +1,33 @@
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, ClassVar
 
-import numpy as np
 import torch
-import torchvision.transforms.functional as TF
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.image_processor import VaeImageProcessor
-from diffusers.models.embeddings import get_1d_rotary_pos_embed
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 from diffusers.schedulers import FlowMatchEulerDiscreteScheduler
 from diffusers.utils import BaseOutput, replace_example_docstring
 from diffusers.video_processor import VideoProcessor
 from einops import rearrange
-from PIL import Image
 from transformers import AutoTokenizer
 
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.dreamx_world.vae import (
+    AutoencoderKLWan3_8,
+)
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.dreamx_world.text_encoder import (
+    WanT5EncoderModel,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.dreamx_world.transformer import (
+    Wan2_2Transformer3DModel,
+)
 from worldfoundry.synthesis.visual_generation.shared.wan_diffusers import (
     WanDiffusersInferenceMixin,
-    resize_mask,
     retrieve_timesteps,
 )
-from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.dreamx_world.vae import AutoencoderKLWan3_8
-from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.dreamx_world.text_encoder import WanT5EncoderModel
-from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.dreamx_world.transformer import Wan2_2Transformer3DModel
-from ..utils.prompt_embeddings import validate_prompt_embedding_pair
 
+from ..utils.prompt_embeddings import validate_prompt_embedding_pair
 
 EXAMPLE_DOC_STRING = """
     Examples:
@@ -33,6 +35,8 @@ EXAMPLE_DOC_STRING = """
         pass
         ```
 """
+
+
 @dataclass
 class WanPipelineOutput(BaseOutput):
     r"""
@@ -56,10 +60,10 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
     library implements for all the pipelines (such as downloading or saving, running on a particular device, etc.)
     """
 
-    _optional_components = ["transformer_2"]
+    _optional_components: ClassVar[list] = ["transformer_2"]
     model_cpu_offload_seq = "text_encoder->transformer_2->transformer->vae"
 
-    _callback_tensor_inputs = [
+    _callback_tensor_inputs: ClassVar[list] = [
         "latents",
         "prompt_embeds",
         "negative_prompt_embeds",
@@ -77,25 +81,33 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
         super().__init__()
 
         self.register_modules(
-            tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer,
-            transformer_2=transformer_2, scheduler=scheduler
+            tokenizer=tokenizer,
+            text_encoder=text_encoder,
+            vae=vae,
+            transformer=transformer,
+            transformer_2=transformer_2,
+            scheduler=scheduler,
         )
         self.video_processor = VideoProcessor(vae_scale_factor=self.vae.spatial_compression_ratio)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae.spatial_compression_ratio)
         self.mask_processor = VaeImageProcessor(
-            vae_scale_factor=self.vae.spatial_compression_ratio, do_normalize=False, do_binarize=True, do_convert_grayscale=True
+            vae_scale_factor=self.vae.spatial_compression_ratio,
+            do_normalize=False,
+            do_binarize=True,
+            do_convert_grayscale=True,
         )
+
     def encode_prompt(
         self,
-        prompt: Union[str, List[str]],
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        prompt: str | list[str],
+        negative_prompt: str | list[str] | None = None,
         do_classifier_free_guidance: bool = True,
         num_videos_per_prompt: int = 1,
-        prompt_embeds: Optional[torch.Tensor] = None,
-        negative_prompt_embeds: Optional[torch.Tensor] = None,
+        prompt_embeds: torch.Tensor | None = None,
+        negative_prompt_embeds: torch.Tensor | None = None,
         max_sequence_length: int = 512,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         r"""
         Encodes the prompt into text encoder hidden states.
@@ -165,12 +177,14 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
             )
 
         return prompt_embeds, negative_prompt_embeds
+
     def decode_latents(self, latents: torch.Tensor) -> torch.Tensor:
         frames = self.vae.decode(latents.to(self.vae.dtype)).sample
         frames = (frames / 2 + 0.5).clamp(0, 1)
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloa16
         frames = frames.cpu().float().numpy()
         return frames
+
     def check_inputs(
         self,
         prompt,
@@ -237,34 +251,35 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
         self,
-        prompt: Optional[Union[str, List[str]]] = None,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        prompt: str | list[str] | None = None,
+        negative_prompt: str | list[str] | None = None,
         height: int = 480,
         width: int = 720,
-        video: Union[torch.FloatTensor] = None,
-        control_camera_video: Union[torch.FloatTensor] = None,
-        start_image: Union[torch.FloatTensor] = None,
+        video: torch.FloatTensor = None,
+        control_camera_video: torch.FloatTensor = None,
+        start_image: torch.FloatTensor = None,
         num_frames: int = 49,
         num_inference_steps: int = 50,
-        timesteps: Optional[List[int]] = None,
+        timesteps: list[int] | None = None,
         guidance_scale: float = 6,
         num_videos_per_prompt: int = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.FloatTensor] = None,
-        prompt_embeds: Optional[torch.FloatTensor] = None,
-        negative_prompt_embeds: Optional[torch.FloatTensor] = None,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.FloatTensor | None = None,
+        prompt_embeds: torch.FloatTensor | None = None,
+        negative_prompt_embeds: torch.FloatTensor | None = None,
         output_type: str = "numpy",
         return_dict: bool = False,
-        callback_on_step_end: Optional[
-            Union[Callable[[int, int, Dict], None], PipelineCallback, MultiPipelineCallbacks]
-        ] = None,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
-        callback_on_step_end_tensor_inputs: List[str] = ["latents"],
+        callback_on_step_end: Callable[[int, int, dict], None]
+        | PipelineCallback
+        | MultiPipelineCallbacks
+        | None = None,
+        attention_kwargs: dict[str, Any] | None = None,
+        callback_on_step_end_tensor_inputs: list[str] = ["latents"],  # noqa: B006 - Keeps the upstream default object and signature.
         max_sequence_length: int = 512,
         boundary: float = 0.875,
         comfyui_progressbar: bool = False,
-    ) -> Union[WanPipelineOutput, Tuple]:
+    ) -> WanPipelineOutput | tuple:
         """
         Function invoked when calling the pipeline for generation.
         Args:
@@ -320,10 +335,7 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
             max_sequence_length=max_sequence_length,
             device=device,
         )
-        if do_classifier_free_guidance:
-            in_prompt_embeds = negative_prompt_embeds + prompt_embeds
-        else:
-            in_prompt_embeds = prompt_embeds
+        in_prompt_embeds = negative_prompt_embeds + prompt_embeds if do_classifier_free_guidance else prompt_embeds
 
         # 4. Prepare timesteps
         timesteps, num_inference_steps = retrieve_timesteps(
@@ -337,12 +349,15 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
 
         if comfyui_progressbar:
             from comfy.utils import ProgressBar
+
             pbar = ProgressBar(num_inference_steps + 2)
 
         # 5. Prepare latents.
         if video is not None:
             video_length = video.shape[2]
-            init_video = self.image_processor.preprocess(rearrange(video, "b c f h w -> (b f) c h w"), height=height, width=width)
+            init_video = self.image_processor.preprocess(
+                rearrange(video, "b c f h w -> (b f) c h w"), height=height, width=width
+            )
             init_video = init_video.to(dtype=torch.float32)
             init_video = rearrange(init_video, "(b f) c h w -> b c f h w", f=video_length)
         else:
@@ -363,7 +378,6 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
         if comfyui_progressbar:
             pbar.update(1)
 
-
         # Prepare camera control latent variables
         if control_camera_video is not None and isinstance(control_camera_video, torch.Tensor):
             # Rearrange dimensions
@@ -371,8 +385,9 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
             control_camera_latents = torch.concat(
                 [
                     torch.repeat_interleave(control_camera_video[:, :, 0:1], repeats=4, dim=2),
-                    control_camera_video[:, :, 1:]
-                ], dim=2
+                    control_camera_video[:, :, 1:],
+                ],
+                dim=2,
             ).transpose(1, 2)
 
             # Reshape, transpose, and view into desired shape
@@ -382,16 +397,17 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
 
         elif control_camera_video is not None and isinstance(control_camera_video, dict):
             control_camera_latents = {}
-            for key, value in control_camera_video.items():
+            for key, value in control_camera_video.items():  # noqa: B007 - The loop variable is read outside the loop.
                 control_camera_latents[key] = control_camera_video[key].unsqueeze(0)
-
 
         mask = torch.zeros(1, 1, latents.size()[2], latents.size()[3], latents.size()[4]).to(device, weight_dtype)
 
         if start_image is not None:
             # I2V
             video_length = start_image.shape[2]
-            start_image = self.image_processor.preprocess(rearrange(start_image, "b c f h w -> (b f) c h w"), height=height, width=width)
+            start_image = self.image_processor.preprocess(
+                rearrange(start_image, "b c f h w -> (b f) c h w"), height=height, width=width
+            )
             start_image = start_image.to(dtype=torch.float32)
             start_image = rearrange(start_image, "(b f) c h w -> b c f h w", f=video_length)
 
@@ -404,7 +420,7 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
                 weight_dtype,
                 device,
                 generator,
-                do_classifier_free_guidance
+                do_classifier_free_guidance,
             )[1]
 
             if self.vae.spatial_compression_ratio >= 16:
@@ -412,21 +428,31 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
                 latents = (1 - mask) * start_image_latentes + mask * latents
 
             elif self.vae.spatial_compression_ratio < 16:
-                bsz, _, num_latent_frames, latent_height, latent_width = latents.shape # [b, c, f, h, w]
+                bsz, _, num_latent_frames, latent_height, latent_width = latents.shape  # [b, c, f, h, w]
 
                 mask_latents = torch.ones((bsz, 1, num_frames, latent_height, latent_width)).to(device, weight_dtype)
                 mask_latents[:, :, 1:] = 0
                 mask_latents = torch.concat(
+                    [torch.repeat_interleave(mask_latents[:, :, 0:1], repeats=4, dim=2), mask_latents[:, :, 1:]], dim=2
+                )  # torch.Size([1, 1, 84, h, w])
+                mask_latents = mask_latents.view(
+                    mask_latents.shape[0], mask_latents.shape[2] // 4, 4, mask_latents.shape[3], mask_latents.shape[4]
+                )  # 1, 21, 4, h, w
+                mask_latents = mask_latents.transpose(1, 2)  # 1, 4, 21, h, w
+
+                masked_video = torch.cat(
                     [
-                        torch.repeat_interleave(mask_latents[:, :, 0:1], repeats=4, dim=2),
-                        mask_latents[:, :, 1:]
-                    ], dim=2
-                ) # torch.Size([1, 1, 84, h, w])
-                mask_latents = mask_latents.view(mask_latents.shape[0], mask_latents.shape[2] // 4, 4, mask_latents.shape[3], mask_latents.shape[4]) # 1, 21, 4, h, w
-                mask_latents = mask_latents.transpose(1, 2) # 1, 4, 21, h, w
-
-
-                masked_video = torch.cat([start_image[:, :, 0:1], start_image.new_zeros(start_image.shape[0], start_image.shape[1], num_frames-1, start_image.shape[3], start_image.shape[4])], dim=2)
+                        start_image[:, :, 0:1],
+                        start_image.new_zeros(
+                            start_image.shape[0],
+                            start_image.shape[1],
+                            num_frames - 1,
+                            start_image.shape[3],
+                            start_image.shape[4],
+                        ),
+                    ],
+                    dim=2,
+                )
                 _, masked_video_latents = self.prepare_mask_latents(
                     None,
                     masked_video,
@@ -440,16 +466,23 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
                     noise_aug_strength=None,
                 )
 
-
-
         if comfyui_progressbar:
             pbar.update(1)
 
         # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
-        target_shape = (self.vae.latent_channels, (num_frames - 1) // self.vae.temporal_compression_ratio + 1, height // self.vae.spatial_compression_ratio, width // self.vae.spatial_compression_ratio)
-        seq_len = math.ceil((target_shape[2] * target_shape[3]) / (self.transformer.config.patch_size[1] * self.transformer.config.patch_size[2]) * target_shape[1])
+        target_shape = (
+            self.vae.latent_channels,
+            (num_frames - 1) // self.vae.temporal_compression_ratio + 1,
+            height // self.vae.spatial_compression_ratio,
+            width // self.vae.spatial_compression_ratio,
+        )
+        seq_len = math.ceil(
+            (target_shape[2] * target_shape[3])
+            / (self.transformer.config.patch_size[1] * self.transformer.config.patch_size[2])
+            * target_shape[1]
+        )
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
         self.transformer.num_inference_steps = num_inference_steps
@@ -467,7 +500,9 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
                 # Prepare control latent variables
                 if control_camera_video is not None and isinstance(control_camera_video, torch.Tensor):
                     control_camera_latents_input = (
-                        torch.cat([control_camera_latents] * 2) if do_classifier_free_guidance else control_camera_latents
+                        torch.cat([control_camera_latents] * 2)
+                        if do_classifier_free_guidance
+                        else control_camera_latents
                     ).to(device, weight_dtype)
                 elif control_camera_video is not None and isinstance(control_camera_video, dict):
                     control_camera_latents_input = {}
@@ -485,14 +520,10 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
                     )
                     y = torch.cat([mask_input, masked_video_latents_input], dim=1).to(device, weight_dtype)
 
-
                 # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
                 if self.vae.spatial_compression_ratio >= 16:
                     temp_ts = ((mask[0][0][:, ::2, ::2]) * t).flatten()
-                    temp_ts = torch.cat([
-                        temp_ts,
-                        temp_ts.new_ones(seq_len - temp_ts.size(0)) * t
-                    ])
+                    temp_ts = torch.cat([temp_ts, temp_ts.new_ones(seq_len - temp_ts.size(0)) * t])
                     temp_ts = temp_ts.unsqueeze(0)
                     timestep = temp_ts.expand(latent_model_input.shape[0], temp_ts.size(1))
                 else:
@@ -527,7 +558,6 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
                 # compute the previous noisy sample x_t -> x_t-1
                 latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
 
-
                 if self.vae.spatial_compression_ratio >= 16 and mask[:, :, 1, :, :].any():
                     latents = (1 - mask) * start_image_latentes + mask * latents
 
@@ -548,7 +578,7 @@ class Wan2_2_CameraPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
 
         if output_type == "numpy":
             video = self.decode_latents(latents)
-        elif not output_type == "latent":
+        elif not output_type == "latent":  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             video = self.decode_latents(latents)
             video = self.video_processor.postprocess_video(video=video, output_type=output_type)
         else:

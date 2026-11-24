@@ -1,15 +1,16 @@
-id: simworld
+schema_version: 2
+model_id: simworld
 display_name: SimWorld
 task_family: world_model
 artifact_kind: world_state
 artifact_filename: simworld_runtime_plan.json
-backend_stage: worldfoundry_runtime_plan
-integration_status: runtime_ported
-runtime_status: route_ready_assets_pending
 execution:
   pipeline_binding: simworld
   backend_stage: worldfoundry_runtime_plan
   runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - SimWorld route is registered; simulator server/assets are runtime-gated.
 - Missing checkpoints/assets are reported by the runtime plan and are not catalog

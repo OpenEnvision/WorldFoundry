@@ -6,10 +6,9 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from torch import nn
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Named tree walk — stable qualified names for init and VRAM / compile wrap

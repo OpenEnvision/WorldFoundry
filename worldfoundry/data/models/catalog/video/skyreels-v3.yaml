@@ -1,6 +1,6 @@
 id: skyreels-v3
 name: SkyReels V3
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: skyreels-v3
 tasks:
 - reference-to-video
@@ -16,6 +16,7 @@ official_sources:
   paper: https://arxiv.org/abs/2601.17323
   github:
     url: https://github.com/SkyworkAI/SkyReels-V3
+    revision: 28c771e8456341be6a213e3d1133ed1fd19bf75d
   huggingface:
   - repo_id: Skywork/SkyReels-V3-R2V-14B
     status: confirmed
@@ -40,18 +41,16 @@ docs:
   publisher: Skywork AI (Kunlun)
   publisher_kind: company
   publisher_zh: 昆仑万维（Skywork AI）
-  overview: SkyReels V3 is Skywork's newer generation, recorded for reference-to-video, audio-guided video, and video-to-video. The catalog route loads the SkyReels-V3-R2V-14B checkpoint into the shared native Wan graph with reference-image latent concatenation and dual text/image guidance — implemented as reusable initializer and execution-strategy capabilities rather than a bespoke runtime.
-  overview_zh: SkyReels V3 是 Skywork 的更新一代，记录任务为参考图生视频、音频引导视频与视频到视频。 catalog 路径把 SkyReels-V3-R2V-14B checkpoint 加载进共享原生 Wan 图，参考图潜变量拼接与文本/图像双引导被实现为可复用的初始化器与执行策略能力，而非专属运行时。
-  architecture: Transformer, UMT5 text encoder, and VAE checkpoint schemas map exactly onto the native Wan graphs (recorded as verified). Reference conditioning concatenates reference-image latents; guidance runs dual text/image channels through the UniPC scheduler and dual-condition runner.
-  architecture_zh: Transformer、UMT5 文本编码器与 VAE 的 checkpoint schema 与原生 Wan 图精确对应（已记录验证）。参考条件通过拼接参考图潜变量实现；引导以文本/图像双通道经 UniPC 调度器与双条件 runner 执行。
-  usage_notes: 'Runner status is partial: checkpoint schema mapping is exact, and a prior official-runtime visual artifact is documented, but native visual parity still needs a GPU inference run. No Diffusers or model-owned subprocess runtime is involved.'
-  usage_notes_zh: runner 状态为 partial：checkpoint schema 映射精确、此前官方运行时的视觉产物有存档，但原生视觉一致性仍需一次 GPU 推理运行。不涉及 Diffusers 或模型自有的子进程运行时。
+  overview: SkyReels V3 is Skywork's newer generation, covering reference-to-video, audio-guided video, and video-to-video. WorldFoundry runs the SkyReels-V3-R2V-14B checkpoint on the shared native Wan graph with reference-image latent concatenation and dual text/image guidance.
+  overview_zh: SkyReels V3 是 Skywork 的更新一代，覆盖参考图生视频、音频引导视频与视频到视频。WorldFoundry 在共享原生 Wan 图上运行 SkyReels-V3-R2V-14B checkpoint，采用参考图潜变量拼接与文本/图像双引导。
+  architecture: The transformer, UMT5 text encoder, and VAE checkpoints map exactly onto the native Wan graphs. Reference conditioning concatenates reference-image latents; guidance runs dual text/image channels through the UniPC scheduler and dual-condition runner.
+  architecture_zh: Transformer、UMT5 文本编码器与 VAE 的 checkpoint 与原生 Wan 图精确对应。参考条件通过拼接参考图潜变量实现；引导以文本/图像双通道经 UniPC 调度器与双条件 runner 执行。
+  usage_notes: At 14B scale, plan for datacenter-class GPU memory.
+  usage_notes_zh: 14B 规模，需按数据中心级显存规划。
   limitations:
-  - Native visual parity is pending a GPU run; only schema-level verification is complete.
-  - '14B scale: plan for datacenter-class VRAM.'
+  - Native generation output has not been validated on GPU; only the checkpoint mapping is verified.
   limitations_zh:
-  - 原生视觉一致性尚待 GPU 运行；目前只完成 schema 层验证。
-  - 14B 规模：需按数据中心级显存规划。
+  - 原生生成结果尚未在 GPU 上验证，目前只验证了 checkpoint 映射。
   recommended_benchmarks:
   - id: vbench
     reason: Baseline quality suite.

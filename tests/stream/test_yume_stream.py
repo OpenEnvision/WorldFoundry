@@ -1,8 +1,8 @@
+import torch
 from diffusers.utils import export_to_video
 from PIL import Image
-from worldfoundry.pipelines.yume.pipeline_yume import YumePipeline
-import torch
 
+from worldfoundry.pipelines.yume.pipeline_yume import YumePipeline
 
 prompt = "A fire-breathing dragon appeared."
 image_path = "./data/test_cases/test_image_case1/ref_image.png"
@@ -10,16 +10,10 @@ input_image = Image.open(image_path).convert("RGB")
 
 pretrained_model_path = "stdstu123/Yume-I2V-540P"
 pipeline = YumePipeline.from_pretrained(
-    model_path=pretrained_model_path,
-    device="cuda",
-    weight_dtype=torch.bfloat16,
-    fsdp=True
+    model_path=pretrained_model_path, device="cuda", weight_dtype=torch.bfloat16, fsdp=True
 )
 
-AVAILABLE_INTERACTIONS = [
-    "forward", "left", "right", "backward",
-    "camera_l", "camera_r", "camera_up", "camera_down"
-]
+AVAILABLE_INTERACTIONS = ["forward", "left", "right", "backward", "camera_l", "camera_r", "camera_up", "camera_down"]
 
 print("Available interactions:")
 for i, interaction in enumerate(AVAILABLE_INTERACTIONS):
@@ -75,7 +69,7 @@ while True:
         images=start_img,
         size="544*960",
         seed=43,
-        task_type="i2v"
+        task_type="i2v",
     )
 
     turn_idx += 1
@@ -83,6 +77,10 @@ while True:
 
 print(f"Total frames generated: {len(pipeline.memory_module.all_frames)}")
 
-if (not torch.distributed.is_available()) or (not torch.distributed.is_initialized()) or torch.distributed.get_rank() == 0:
+if (
+    (not torch.distributed.is_available())
+    or (not torch.distributed.is_initialized())
+    or torch.distributed.get_rank() == 0
+):
     export_to_video(pipeline.memory_module.all_frames, "yume_stream_demo.mp4", fps=16)
     print("Video saved successfully.")

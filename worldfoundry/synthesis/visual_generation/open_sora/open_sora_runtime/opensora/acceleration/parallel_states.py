@@ -1,6 +1,6 @@
 import torch.distributed as dist
 
-_GLOBAL_PARALLEL_GROUPS = dict()
+_GLOBAL_PARALLEL_GROUPS = {}
 
 
 def set_data_parallel_group(group: dist.ProcessGroup):
@@ -16,4 +16,4 @@ def set_sequence_parallel_group(group: dist.ProcessGroup):
 
 
 def get_sequence_parallel_group():
-    return _GLOBAL_PARALLEL_GROUPS.get("sequence", None)
+    return _GLOBAL_PARALLEL_GROUPS.get("sequence")

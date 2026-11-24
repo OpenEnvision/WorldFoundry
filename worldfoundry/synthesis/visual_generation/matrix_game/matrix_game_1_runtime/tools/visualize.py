@@ -76,12 +76,30 @@ def draw_keys_on_frame(
     vertical_shift = -20
     all_shift = 50
     positions = {
-        "W": (width // 2 - key_size[0] // 2 - horizontal_shift - all_shift + spacing * 2, height - bottom_margin - key_size[1] * 2 + vertical_shift - 20),
-        "A": (width // 2 - key_size[0] * 2 + 5 - horizontal_shift - all_shift + spacing * 2, height - bottom_margin - key_size[1] + vertical_shift),
-        "S": (width // 2 - key_size[0] // 2 - horizontal_shift - all_shift + spacing * 2, height - bottom_margin - key_size[1] + vertical_shift),
-        "D": (width // 2 + key_size[0] - 5 - horizontal_shift - all_shift + spacing * 2, height - bottom_margin - key_size[1] + vertical_shift),
-        "Space": (width // 2 + key_size[0] * 2 + spacing * 4 - horizontal_shift - all_shift, height - bottom_margin - key_size[1] + vertical_shift),
-        "Attack": (width // 2 + key_size[0] * 3 + spacing * 9 - horizontal_shift - all_shift, height - bottom_margin - key_size[1] + vertical_shift),
+        "W": (
+            width // 2 - key_size[0] // 2 - horizontal_shift - all_shift + spacing * 2,
+            height - bottom_margin - key_size[1] * 2 + vertical_shift - 20,
+        ),
+        "A": (
+            width // 2 - key_size[0] * 2 + 5 - horizontal_shift - all_shift + spacing * 2,
+            height - bottom_margin - key_size[1] + vertical_shift,
+        ),
+        "S": (
+            width // 2 - key_size[0] // 2 - horizontal_shift - all_shift + spacing * 2,
+            height - bottom_margin - key_size[1] + vertical_shift,
+        ),
+        "D": (
+            width // 2 + key_size[0] - 5 - horizontal_shift - all_shift + spacing * 2,
+            height - bottom_margin - key_size[1] + vertical_shift,
+        ),
+        "Space": (
+            width // 2 + key_size[0] * 2 + spacing * 4 - horizontal_shift - all_shift,
+            height - bottom_margin - key_size[1] + vertical_shift,
+        ),
+        "Attack": (
+            width // 2 + key_size[0] * 3 + spacing * 9 - horizontal_shift - all_shift,
+            height - bottom_margin - key_size[1] + vertical_shift,
+        ),
     }
     for key_name, (x, y) in positions.items():
         wide = key_name in {"Space", "Attack"}
@@ -112,7 +130,7 @@ def overlay_icon(
     if icon is None:
         return
     if icon.ndim == 3 and icon.shape[2] == 3:
-        alpha_channel = np.full(icon.shape[:2] + (1,), 255, dtype=icon.dtype)
+        alpha_channel = np.full(icon.shape[:2] + (1,), 255, dtype=icon.dtype)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         icon = np.concatenate([icon, alpha_channel], axis=2)
 
     x, y = position
@@ -179,7 +197,9 @@ def process_video(
     out_video: list[np.ndarray] = []
     for frame_idx, raw_frame in enumerate(input_video):
         frame = np.array(raw_frame, copy=True)
-        keys = key_data.get(frame_idx, {"W": False, "A": False, "S": False, "D": False, "Space": False, "Attack": False})
+        keys = key_data.get(
+            frame_idx, {"W": False, "A": False, "S": False, "D": False, "Space": False, "Attack": False}
+        )
         raw_mouse_pos = mouse_data.get(frame_idx, (frame_width // 4, frame_height // 4))
         mouse_position = (int(raw_mouse_pos[0] * 2), int(raw_mouse_pos[1] * 2))
         draw_keys_on_frame(frame, keys, key_size=(75, 75), spacing=10, bottom_margin=20)

@@ -1,6 +1,6 @@
 ---
 title: "Octo"
-description: "Berkeley RAIL JAX generalist policy; octo-small-1.5 restored on A100 and emitted a finite (1, 4, 7) action chunk."
+description: "Berkeley RAIL generalist robot policy in JAX/Flax; octo-small-1.5 is validated on GPU and samples (1, 4, 7) action chunks."
 modelId: "octo"
 pageSource: authored
 ---
@@ -9,19 +9,19 @@ Octo is Berkeley RAIL’s transformer generalist robot policy with a diffusion a
 
 <ModelPaperFigures modelId="octo" locale="en" />
 
-WorldFoundry keeps a flat in-tree inference package under `worldfoundry/synthesis/action_generation/octo` — no upstream checkout, package alias, or `sys.path` injection. Two catalog variants share that package: `octo-base-1.5` and `octo-small-1.5`. The recorded GPU path is **octo-small-1.5**: the official Orbax tree restored on an A100 (**136,670,604** parameters) and `sample_actions` produced a finite **(1, 4, 7)** action chunk. Base checkpoint sampling is still pending a separate checkpoint-backed run.
+WorldFoundry runs Octo with its own inference code; no upstream checkout is needed. Two variants share that code: `octo-base-1.5` and `octo-small-1.5`. Validated on an A100 with the official **octo-small-1.5** checkpoint: the Orbax tree restores (**136,670,604** parameters) and `sample_actions` returns a finite **(1, 4, 7)** action chunk. `octo-base-1.5` sampling is not validated.
 
 <ModelCommandBuilder modelId="octo" locale="en" />
 
 ## What it is for
 
-Start on `octo-small-1.5` when you want the path this repository actually sampled on GPU. Required inputs are `image`, `instruction`, `prompt`, and `video`. `OctoPipeline` writes `octo_action_trace.json`. Default runtime config pins `variant=small`, `dataset_key=bridge_dataset`, `image_key=image_primary`.
+Start on `octo-small-1.5` for the GPU-validated path. Required inputs are `image`, `instruction`, `prompt`, and `video`. `OctoPipeline` writes `octo_action_trace.json`. Default runtime config pins `variant=small`, `dataset_key=bridge_dataset`, `image_key=image_primary`.
 
-`octo-base-1.5` uses the same modeling package and a staged Hugging Face tree; do not treat it as the A100 `sample_actions` evidence. A common evaluation venue for Open-X generalist policies is [SimplerEnv](/docs/evaluation/benchmark-hub/simpler-env). Real rollout still needs a benchmark-specific action-space binding.
+`octo-base-1.5` uses the same modeling code with its own Hugging Face checkpoint. A common evaluation venue for Open-X generalist policies is [SimplerEnv](/docs/evaluation/benchmark-hub/simpler-env). Real rollout still needs a benchmark-specific action-space binding.
 
 ## Runtime contract
 
-Images are resized to **256×256**. The verified small-policy chunk is **batch 1 × action horizon 4 × action dim 7**. Text assets declared next to the policy: CLIP processor at `${WORLDFOUNDRY_HFD_ROOT}/openai--clip-vit-base-patch32` and a local multilingual sentence encoder under `${WORLDFOUNDRY_CKPT_DIR}/octo/universal-sentence-encoder-multilingual-3`. Legacy class names inside checkpoints are rewritten by an internal ModuleSpec resolver for inference components only.
+Images are resized to **256×256**. The verified small-policy chunk is **batch 1 × action horizon 4 × action dim 7**. Text assets declared next to the policy: CLIP processor at `${WORLDFOUNDRY_HFD_ROOT}/openai--clip-vit-base-patch32` and a local multilingual sentence encoder under `${WORLDFOUNDRY_CKPT_DIR}/octo/universal-sentence-encoder-multilingual-3`.
 
 Pinned revisions:
 
@@ -33,9 +33,9 @@ Pinned revisions:
 Dedicated environment `worldfoundry-octo-jax` (Python 3.10, CUDA 11.8, JAX 0.4.20, cuDNN 8.9). This is not the PyTorch unified stack. Launch the GPU-validated variant with:
 
 ```
-worldfoundry-eval run octo-small-1.5
+wf run octo-small-1.5
 ```
 
-The catalog default launch still prints `octo-base-1.5`. Swap the variant for the recorded A100 sample. No license is recorded in this repository — confirm upstream terms before production use.
+The command builder's default launch uses `octo-base-1.5`; switch to `octo-small-1.5` for the validated path. The license is not stated — confirm upstream terms before production use.
 
 <ModelRelatedRecipes modelId="octo" locale="en" />

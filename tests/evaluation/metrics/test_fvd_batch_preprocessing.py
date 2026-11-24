@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import torch
 
-from worldfoundry.evaluation.tasks.metrics.fvd import fvd_core
+from worldfoundry.evals.tasks.metrics.distribution.fvd import fvd_core
 
 pytestmark = pytest.mark.unit
 

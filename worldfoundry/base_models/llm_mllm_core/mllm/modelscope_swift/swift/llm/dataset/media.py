@@ -1,7 +1,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import os
 import shutil
-from typing import List, Literal, Optional, Union
+from typing import ClassVar, Literal
 
 import aiohttp
 from modelscope.hub.utils.utils import get_cache_dir
@@ -14,26 +14,38 @@ logger = get_logger()
 class MediaResource:
     """A class to manage the resource downloading."""
 
-    cache_dir = os.path.join(get_cache_dir(), 'media_resources')
-    lock_dir = os.path.join(get_cache_dir(), 'lockers')
+    cache_dir = os.path.join(get_cache_dir(), "media_resources")
+    lock_dir = os.path.join(get_cache_dir(), "lockers")
 
-    media_type_urls = {
-        'llava', 'coco', 'sam', 'gqa', 'ocr_vqa', 'textvqa', 'VG_100K', 'VG_100K_2', 'share_textvqa', 'web-celebrity',
-        'web-landmark', 'wikiart'
+    media_type_urls: ClassVar[set] = {
+        "llava",
+        "coco",
+        "sam",
+        "gqa",
+        "ocr_vqa",
+        "textvqa",
+        "VG_100K",
+        "VG_100K_2",
+        "share_textvqa",
+        "web-celebrity",
+        "web-landmark",
+        "wikiart",
     }
 
-    URL_PREFIX = 'https://www.modelscope.cn/api/v1/datasets/hjh0119/sharegpt4v-images/repo?Revision=master&FilePath='
+    URL_PREFIX = "https://www.modelscope.cn/api/v1/datasets/hjh0119/sharegpt4v-images/repo?Revision=master&FilePath="
 
     @staticmethod
     def get_url(media_type):
-        is_ocr_vqa = (media_type == 'ocr_vqa')
-        extension = 'tar' if is_ocr_vqa else 'zip'
-        return f'{MediaResource.URL_PREFIX}{media_type}.{extension}'
+        is_ocr_vqa = media_type == "ocr_vqa"
+        extension = "tar" if is_ocr_vqa else "zip"
+        return f"{MediaResource.URL_PREFIX}{media_type}.{extension}"
 
     @staticmethod
-    def download(media_type_or_url: Union[str, List[str]],
-                 local_alias: Optional[str] = None,
-                 file_type: Literal['compressed', 'file', 'sharded'] = 'compressed'):
+    def download(
+        media_type_or_url: str | list[str],
+        local_alias: str | None = None,
+        file_type: Literal["compressed", "file", "sharded"] = "compressed",
+    ):
         """Download and extract a resource from a http link.
 
         Args:
@@ -52,14 +64,15 @@ class MediaResource:
         media_file = media_type_or_url if isinstance(media_type_or_url, str) else media_type_or_url[0]
         with safe_ddp_context(hash_id=media_file):
             return MediaResource._safe_download(
-                media_type=media_type_or_url, media_name=local_alias, file_type=file_type)
+                media_type=media_type_or_url, media_name=local_alias, file_type=file_type
+            )
 
     @staticmethod
     def move_directory_contents(src_dir, dst_dir):
         if not os.path.exists(dst_dir):
             os.makedirs(dst_dir)
 
-        for dirpath, dirnames, filenames in os.walk(src_dir):
+        for dirpath, _dirnames, filenames in os.walk(src_dir):
             relative_path = os.path.relpath(dirpath, src_dir)
             target_dir = os.path.join(dst_dir, relative_path)
 
@@ -72,19 +85,22 @@ class MediaResource:
                 shutil.move(src_file, dst_file)
 
     @staticmethod
-    def _safe_download(media_type: Union[str, List[str]],
-                       media_name: Optional[str] = None,
-                       file_type: Literal['compressed', 'file', 'sharded'] = 'compressed'):
+    def _safe_download(
+        media_type: str | list[str],
+        media_name: str | None = None,
+        file_type: Literal["compressed", "file", "sharded"] = "compressed",
+    ):
         media_name = media_name or media_type
-        assert isinstance(media_name, str), f'{media_name} is not a str'
+        assert isinstance(media_name, str), f"{media_name} is not a str"
         if isinstance(media_type, str) and media_type in MediaResource.media_type_urls:
             media_type = MediaResource.get_url(media_type)
 
-        from datasets.download.download_manager import DownloadManager, DownloadConfig
+        from datasets.download.download_manager import DownloadConfig, DownloadManager
+
         final_folder = os.path.join(MediaResource.cache_dir, media_name)
 
-        if file_type == 'file':
-            filename = media_type.split('/')[-1]
+        if file_type == "file":
+            filename = media_type.split("/")[-1]
             final_path = os.path.join(final_folder, filename)
             if os.path.exists(final_path):  # if the download thing is a file but not folder,
                 return final_folder  # check whether the file exists
@@ -94,32 +110,34 @@ class MediaResource:
             if os.path.exists(final_folder):
                 return final_folder
 
-        logger.info('# #################Resource downloading#################')
-        logger.info('Downloading necessary resources...')
-        logger.info(f'Resource package: {media_type}')
-        logger.info(f'Extracting to local dir: {final_folder}')
-        logger.info('If the downloading fails or lasts a long time, '
-                    'you can manually download the resources and extracting to the local dir.')
-        logger.info('Now begin.')
+        logger.info("# #################Resource downloading#################")
+        logger.info("Downloading necessary resources...")
+        logger.info(f"Resource package: {media_type}")
+        logger.info(f"Extracting to local dir: {final_folder}")
+        logger.info(
+            "If the downloading fails or lasts a long time, "
+            "you can manually download the resources and extracting to the local dir."
+        )
+        logger.info("Now begin.")
         download_config = DownloadConfig(cache_dir=MediaResource.cache_dir)
-        download_config.storage_options = {'client_kwargs': {'timeout': aiohttp.ClientTimeout(total=3600)}}
-        if file_type == 'file':
-            filename = media_type.split('/')[-1]
+        download_config.storage_options = {"client_kwargs": {"timeout": aiohttp.ClientTimeout(total=3600)}}
+        if file_type == "file":
+            filename = media_type.split("/")[-1]
             final_path = os.path.join(final_folder, filename)
             local_dirs = DownloadManager(download_config=download_config).download(media_type)
             shutil.move(str(local_dirs), final_path)
-        elif file_type == 'compressed':
+        elif file_type == "compressed":
             local_dirs = DownloadManager(download_config=download_config).download_and_extract(media_type)
             shutil.move(str(local_dirs), final_folder)
         else:
             for media_url in media_type:
                 local_dirs = DownloadManager(download_config=download_config).download_and_extract(media_url)
                 MediaResource.move_directory_contents(str(local_dirs), final_folder)
-        logger.info('# #################Resource downloading finished#################')
+        logger.info("# #################Resource downloading finished#################")
         return final_folder
 
     @staticmethod
-    def safe_save(image, file_name, folder, format='JPEG'):
+    def safe_save(image, file_name, folder, format="JPEG"):
         folder = os.path.join(MediaResource.cache_dir, folder)
         os.makedirs(folder, exist_ok=True)
         file = os.path.join(folder, file_name)

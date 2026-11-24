@@ -1,14 +1,17 @@
 """Module for the Base operator implementation."""
 
+from typing import Any
 
-class BaseOperator(object):
+
+class BaseOperator:
     """Operator class for the Base model integration."""
+
     def __init__(self, operation_types=None):
         """
         operation includes:
             - textual_instruction
             - visual_instruction
-            - action_instruction (including mouse and keyboard to 
+            - action_instruction (including mouse and keyboard to
               control the trajectory and viewpoint.)
         """
         if operation_types is None:
@@ -19,43 +22,43 @@ class BaseOperator(object):
         self.interaction_history = []
 
     def interaction_template_init(self):
-        """Interaction template init implementation."""
+        """Check that ``interaction_template`` is a list.
+
+        Raises:
+            ValueError: ``interaction_template`` is not a list.
+        """
         if type(self.interaction_template) is not list:
             raise ValueError("interaction_template should be a list")
 
-    def get_interaction(self, interaction):
+    def get_interaction(self, *args: Any, **kwargs: Any) -> Any:
         """
         utilize this function to update the interaction list
         """
-        pass
 
-    def check_interaction(self, interaction):
+    def check_interaction(self, *args: Any, **kwargs: Any) -> Any:
         """
         utilize this function to check the interaction validity
         """
-        pass
 
-    def process_interaction(self):
+    def process_interaction(self, *args: Any, **kwargs: Any) -> Any:
         """
         utilize this function to process the interaction
         """
-        pass
 
-    def process_perception(self):
+    def process_perception(self, *args: Any, **kwargs: Any) -> Any:
         """
         utilize this function to process the visual, audio singal
         This function is different from process_interaction for real-time interactive updates
         """
-        pass
 
     def get_interaction_template(self):
-        """Get interaction template implementation."""
+        """Return the interactions this operator accepts."""
         return self.interaction_template
-    
+
     def get_interaction_history(self):
-        """Get interaction history implementation."""
+        """Return the interactions processed so far."""
         return self.interaction_history
-    
+
     def delete_last_interaction(self):
         """Remove the last recorded interaction from the current list.
 

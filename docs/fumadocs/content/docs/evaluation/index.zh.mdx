@@ -5,26 +5,26 @@ description: 用 benchmark、metric 与可复现 scorecard 对生成产物打分
 
 评测把模型输出变成可审查证据：准备输入、生成或导入结果、打分、写出 scorecard。模型启动细节留在 runner；benchmark 消费归一化的 `GenerationResult`。打分与 leaderboard 声明是分开的——framework 导入成功不等于官方榜单跑通。
 
-首次端到端路径见[使用指南](/zh/docs/quickstart)。Flag 与 discovery 命令见 [CLI](/zh/docs/reference/cli)。各 benchmark 布局见 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)。Metric 配方见[指标](/zh/docs/evaluation/metrics)。
+首次端到端流程见[快速开始](/zh/docs/quickstart)。Flag 与 discovery 命令见 [CLI](/zh/docs/reference/cli)。各 benchmark 布局见 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)。Metric 配方见[指标](/zh/docs/evaluation/metrics)。15 款视频生成与世界模型在 H200 上的完整加速基准与质量验证见[视频生成与世界模型加速基准](/zh/docs/guides/videogen-acceleration-benchmarks)。
 
 ## 该跑什么
 
-- **用完整 benchmark protocol 给一个目录打分** — `worldfoundry-eval score --benchmark <id> --artifacts <dir> ...`
-- **从 dataset manifest 生成，再按 metric ID 打分** — `worldfoundry-eval generate-score --model <id> --dataset-manifest <file> ...`
-- **复现已知的 model × benchmark 配置** — `worldfoundry-eval reproduce --recipe <recipe.yaml> ...`
-- **用新模型或自定义模型跑已有 benchmark** — `worldfoundry-eval run --model <id> --model-manifest-dir <dir> --benchmark <id> ...`
-- **对已有 JSON/JSONL 结果打分** — `worldfoundry-eval evaluate --mode existing-results ...`
-- **从 task 物化 request ledger** — `worldfoundry-eval task materialize ...`
-- **跑单个 benchmark × model** — `worldfoundry-eval run --benchmark <id> --model <id> ...`
-- **导入官方形态结果** — `worldfoundry-eval zoo benchmark-run --mode official-validation ...`
-- **尝试新的 benchmark manifest** — `worldfoundry-eval run --benchmark-manifest-dir <dir> --benchmark <id> ...`
-- **列出 metric ID** — `worldfoundry-eval metric list`
+- **用完整 benchmark protocol 给一个目录打分** — `wf score --benchmark <id> --artifacts <dir> ...`
+- **从 dataset manifest 生成，再按 metric ID 打分** — `wf generate-score --model <id> --dataset-manifest <file> ...`
+- **复现已知的 model × benchmark 配置** — `wf reproduce --recipe <recipe.yaml> ...`
+- **用新模型或自定义模型跑已有 benchmark** — `wf run --model <id> --model-manifest-dir <dir> --benchmark <id> ...`
+- **对已有 JSON/JSONL 结果打分** — `wf evaluate --mode existing-results ...`
+- **从 task 物化 request ledger** — `wf task materialize ...`
+- **跑单个 benchmark × model** — `wf run --benchmark <id> --model <id> ...`
+- **导入官方格式结果** — `wf zoo benchmark-run --mode official-validation ...`
+- **尝试新的 benchmark manifest** — `wf run --benchmark-manifest-dir <dir> --benchmark <id> ...`
+- **列出 metric ID** — `wf metric list`
 
-默认用户入口是 `worldfoundry-eval run`。已有物化 request 或 result 时用 `evaluate`。已集成的外部 benchmark（自备 data root、生成产物或官方结果文件）用 `zoo benchmark-run`。
+默认用户入口是 `wf run`。已有物化 request 或 result 时用 `evaluate`。已集成的外部 benchmark（自备 data root、生成产物或官方结果文件）用 `zoo benchmark-run`。
 
 ## 按意图选择
 
-CLI、TUI 与 Workspace 把下面这些用户意图编译到同样的两种执行 request 上；它们不各自维护一套推理或 metric 实现。
+CLI、TUI 与 Workspace 都会将以下用户意图编译为同样的两种执行 request，并共用同一套推理与 metric 实现。
 
 - **官方复现** — 固定 recipe、官方 sample 覆盖、模型生成设置与 benchmark runtime 设置。分类：`reproduction`。
 - **Model benchmark** — 仓内模型加上 benchmark 的官方 prompt/data protocol。分类：`protocol_compliant`。
@@ -48,7 +48,7 @@ CLI、TUI 与 Workspace 把下面这些用户意图编译到同样的两种执�
 
 ```bash
 # 物化小型 request ledger
-worldfoundry-eval task materialize <task-name> \
+wf task materialize <task-name> \
   --benchmark <benchmark-id> \
   --dataset-manifest /path/to/dataset_manifest.json \
   --num-samples 8 \
@@ -56,7 +56,7 @@ worldfoundry-eval task materialize <task-name> \
   --json
 
 # 对已有结果打分
-worldfoundry-eval evaluate \
+wf evaluate \
   --mode existing-results \
   --results-path tmp/results.jsonl \
   --output-dir tmp/evaluate_existing \
@@ -66,7 +66,7 @@ worldfoundry-eval evaluate \
   --json
 
 # 用 VBench 的完整 protocol 给别处生成的视频打分
-worldfoundry-eval score \
+wf score \
   --benchmark vbench \
   --artifacts /path/to/videos \
   --output-dir tmp/vbench_custom \
@@ -74,7 +74,7 @@ worldfoundry-eval score \
   --json
 
 # 让仓内模型跑一份带校验和的 dataset manifest
-worldfoundry-eval generate-score \
+wf generate-score \
   --model <model-id> \
   --dataset-manifest /path/to/dataset_manifest.json \
   --metric artifact_count \
@@ -83,7 +83,7 @@ worldfoundry-eval generate-score \
   --json
 
 # 跑单个 benchmark cell
-worldfoundry-eval run \
+wf run \
   --benchmark <benchmark-id> \
   --model <model-id> \
   --output-dir tmp/benchmark_run \
@@ -91,7 +91,7 @@ worldfoundry-eval run \
   --json
 
 # 导入官方形态结果（framework 证据，不是 leaderboard 声明）
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -131,13 +131,13 @@ reference:
   reported_score: <value>
 ```
 
-先跑 `worldfoundry-eval reproduce --recipe recipe.yaml --output-dir tmp/reproduce --plan-only --json`。prepared 记录包含 recipe 与 requests 的 SHA-256、来源字段、模型/benchmark revision、范围与 leaderboard 候选状态；实际执行时仍会校验 benchmark runner 与本地资产。
+先跑 `wf reproduce --recipe recipe.yaml --output-dir tmp/reproduce --plan-only --json`。prepared 记录包含 recipe 与 requests 的 SHA-256、来源字段、模型/benchmark revision、范围与 leaderboard 候选状态；实际执行时仍会校验 benchmark runner 与本地资产。
 
 各 benchmark 专用的布局与 flag 见对应的 Benchmark Hub 页。
 
 ## 输出
 
-- **`report.md`** — 人工先看
+- **`report.md`** — 供人工优先查看
 - **`scorecard.json`** — 归一化分数与 leaderboard 资格
 - **`metrics/summary.json`** — 自动化用的聚合指标
 - **`results.jsonl`** — 逐样本状态、产物、错误
@@ -145,17 +145,17 @@ reference:
 
 ## 恢复与结果完整性
 
-`run`、`evaluate`、`generate-score`、`reproduce` 和 `score --results` 支持 `--resume` 与 `--metric-batch-size`（默认 32）。使用同一输出目录恢复身份匹配的已完成生成结果与逐样本 metric checkpoint。Workspace 提供相同控件。Pipeline runner 每完成一个样本或 rollout 就刷新到 `results.jsonl`；自定义 runner 可实现 `generate_iter(requests)`，在不拆分 batch 的情况下逐项持久化。
+`run`、`evaluate`、`generate-score`、`reproduce` 和 `score --results` 支持 `--resume` 与 `--metric-batch-size`（默认 32）。使用同一输出目录可恢复身份匹配的已完成生成结果与逐样本 metric checkpoint。Workspace 提供相同控件。Pipeline runner 每完成一个样本或 rollout 就刷新到 `results.jsonl`；自定义 runner 可实现 `generate_iter(requests)`，在不拆分 batch 的情况下逐项持久化。
 
 Request 与带 ID 的 result 必须具有唯一的 `sample_id`。多 seed 输出使用不同样本 ID，在 metadata 中保留共同的 prompt 标识。导入结果需要显式的成功 `status`；缺失状态记为 `unknown`。非有限 metric 输出记为无效，diagnostics 保留原因，其他有限分数仍会写出。
 
-共用的视频产物物化逻辑从 `generation/results.jsonl` 读取成功样本的产物，保留各 benchmark 的官方文件命名。相对 artifact URI 以生成目录为基准解析；失败或状态未知的结果不会被物化为质量打分输入。每次执行重建 run 自有的 staging；用户提供的已有输入目录保持不变。
+共用的视频产物物化逻辑从 `generation/results.jsonl` 读取成功样本的产物，保留各 benchmark 的官方文件命名。相对 artifact URI 以生成目录为基准解析；失败或状态未知的结果不会被物化为质量打分输入。每次执行都会重建该 run 专属的 staging；用户提供的已有输入目录保持不变。
 
 Suite 恢复会核对实际物化的请求、解析后的模型配置、benchmark 配置以及必要报告和媒体产物。同一路径下的请求内容变化、scorecard 缺失均会触发执行；生成 checkpoint 可独立于打分继续复用。失败执行会记录 failed/interrupted manifest，并移除根目录成功报告；官方子进程必须生成本轮 scorecard。
 
 根摘要和 suite comparison 保留 benchmark 的真实指标值、方向及定义，生成计数仅作为诊断信息。执行成功、导入分数有效、有界集成证据和完整官方验证是不同概念：外层摘要只能收紧子 scorecard 的榜单资格。Workspace 显式选择 `existing-results` 时，即使带 benchmark ID，也仍走进程内结果打分。
 
-VBench 标准集合为每条提示生成五个独立 seed 的视频：944 条唯一提示，共 4,720 个请求。样本限制按视频而非提示计数，属于有界执行。生成 adapter 会使用其支持的数据根目录和 split；不支持的显式覆盖参数会报错。
+VBench 标准集合针对每条提示，使用五个独立 seed 分别生成视频：944 条唯一提示，共 4,720 个请求。样本限制按视频而非提示计数，属于有界执行。生成 adapter 会使用其支持的数据根目录和 split；不支持的显式覆盖参数会报错。
 
 FVD 按 feature batch 分别预处理，最终距离仍使用整个数据集的特征。WorldScore 先按 metric 对实例的归一化值求均值，再按 aspect 对 metric 求均值，并输出百分制 aspect 分数；同一 metric 的模型在 batch 内复用，切换 metric 前释放。具身评测取消时，会等待当前 rollout worker 返回，再清理模拟器与模型资源。
 
@@ -167,10 +167,10 @@ FVD 按 feature batch 分别预处理，最终距离仍使用整个数据集的�
 
 - **`existing-results`** — 对已物化结果打分，不跑推理
 - **`model` / `generate`** — 跑模型 runner，再打分
-- **`official-validation`** — 通过 benchmark runner 导入官方形态结果
+- **`official-validation`** — 通过 benchmark runner 导入官方格式结果
 - **`official-run`** — 跑 manifest 声明的 benchmark runtime
 
-Framework 导入证据用 `official-validation`；数据集、checkpoint、环境与官方 evaluator 都就绪之后再用 `official-run`。
+Framework 的导入证据使用 `official-validation`；数据集、checkpoint、环境与官方 evaluator 都就绪之后再用 `official-run`。
 
 ## 契约（简）
 
@@ -186,5 +186,6 @@ Framework 导入证据用 `official-validation`；数据集、checkpoint、环�
 
 - [Benchmark Hub](/zh/docs/evaluation/benchmark-hub) — 各 benchmark 准备与运行说明
 - [指标](/zh/docs/evaluation/metrics) — 仓内 scorer 与 compute API
+- [视频生成与世界模型加速基准](/zh/docs/guides/videogen-acceleration-benchmarks) — 15 款模型在 H200 上的加速与质量实测报告
 - [支持的模型](/zh/docs/guides/supported-models) — catalog 状态
 - [Embodied official runtime](/zh/docs/evaluation/embodied-official-runtime) — Docker / 仿真器路径

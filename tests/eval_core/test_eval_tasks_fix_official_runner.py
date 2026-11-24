@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.execution.framework import official_runner as ors
+from worldfoundry.evals.tasks.execution.framework import official_runner as ors
 
 
 def _config(tmp_path: Path, **overrides) -> ors.BenchRunnerConfig:
@@ -181,7 +181,7 @@ def test_fresh_successful_run_is_still_scored(tmp_path: Path) -> None:
 
 def test_worldscore_failure_writes_failed_scorecard(tmp_path: Path) -> None:
     """ET-14: the standalone worldscore runner keeps the failure contract."""
-    from worldfoundry.evaluation.tasks.execution.runners.worldscore import (
+    from worldfoundry.evals.tasks.execution.runners.worldscore import (
         run_worldscore_official_runner as worldscore,
     )
 

@@ -5,7 +5,6 @@
 """GeoCalib model definition."""
 
 import logging
-from typing import Dict
 
 import torch
 from torch import nn
@@ -31,8 +30,7 @@ class LowLevelEncoder(nn.Module):
         self.conv1 = ConvModule(self.in_channel, self.feat_dim, kernel_size=3, padding=1)
         self.conv2 = ConvModule(self.feat_dim, self.feat_dim, kernel_size=3, padding=1)
 
-    def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        """Forward pass."""
+    def forward(self, data: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         x = data["image"]
 
         assert x.shape[-1] % 32 == 0 and x.shape[-2] % 32 == 0, (
@@ -54,8 +52,7 @@ class UpDecoder(nn.Module):
         self.decoder = LightHamHead()
         self.linear_pred_up = nn.Conv2d(self.decoder.out_channels, 2, kernel_size=1)
 
-    def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        """Forward pass."""
+    def forward(self, data: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         x, log_confidence = self.decoder(data["features"])
         up = self.linear_pred_up(x)
         return {
@@ -73,8 +70,7 @@ class LatitudeDecoder(nn.Module):
         self.decoder = LightHamHead()
         self.linear_pred_latitude = nn.Conv2d(self.decoder.out_channels, 1, kernel_size=1)
 
-    def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        """Forward pass."""
+    def forward(self, data: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         x, log_confidence = self.decoder(data["features"])
         eps = 1e-5  # avoid nan in backward of asin
         lat = torch.tanh(self.linear_pred_latitude(x))
@@ -94,8 +90,7 @@ class PerspectiveDecoder(nn.Module):
         self.up_head = UpDecoder()
         self.latitude_head = LatitudeDecoder()
 
-    def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        """Forward pass."""
+    def forward(self, data: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         return self.up_head(data) | self.latitude_head(data)
 
 
@@ -115,8 +110,7 @@ class GeoCalib(nn.Module):
 
         self.optimizer = LMOptimizer({**optimizer_options})
 
-    def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        """Forward pass."""
+    def forward(self, data: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         features = {
             "hl": self.backbone(data)["features"],
             "ll": self.ll_enc(data)["features"],
@@ -129,10 +123,10 @@ class GeoCalib(nn.Module):
 
         return out
 
-    def flexible_load(self, state_dict: Dict[str, torch.Tensor]) -> None:
+    def flexible_load(self, state_dict: dict[str, torch.Tensor]) -> None:
         """Load a checkpoint with flexible key names."""
         dict_params = set(state_dict.keys())
-        model_params = set(map(lambda n: n[0], self.named_parameters()))
+        model_params = {n[0] for n in self.named_parameters()}
 
         if dict_params == model_params:  # perfect fit
             logger.info("Loading all parameters of the checkpoint.")
@@ -141,11 +135,6 @@ class GeoCalib(nn.Module):
         elif len(dict_params & model_params) == 0:  # perfect mismatch
 
             def strip_prefix(x):
-                """Strip prefix.
-
-                Args:
-                    x: The x.
-                """
                 return ".".join(x.split(".")[:1] + x.split(".")[2:])
 
             state_dict = {strip_prefix(n): p for n, p in state_dict.items()}

@@ -3,27 +3,27 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import tempfile
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Optional, Sequence
 
 import numpy as np
 import torch
 
 from worldfoundry.core import cuda_visible_devices_from_device, load_pil_image, load_video_frames
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import (
     checkpoint_root_path,
     hfd_root_path,
+    package_data_path,
     project_root,
 )
 from worldfoundry.core.io.paths import (
     package_module_root as package_root,
 )
 from worldfoundry.core.media.processing.postprocess import VideoChunk
-from worldfoundry.evaluation.utils import worldfoundry_data_path
 from worldfoundry.runtime.env import resolve_hfd_root
 
 DEFAULT_MATRIX_GAME3_ALIASES = {
@@ -36,10 +36,12 @@ DEFAULT_MATRIX_GAME3_ALIASES = {
 }
 
 
+RUNNER_MODULE = "worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_3_runtime.worldfoundry_runner"
 DEFAULT_MATRIX_GAME3_CHECKPOINT_DIR = resolve_hfd_root() / "Skywork--Matrix-Game-3.0"
-DEFAULT_MATRIX_GAME3_ASSET_ROOT = worldfoundry_data_path(
+DEFAULT_MATRIX_GAME3_ASSET_ROOT = package_data_path(
     "models",
-    "runtime", "configs",
+    "runtime",
+    "configs",
     "matrix_game_3",
     "assets",
 )
@@ -107,7 +109,7 @@ def _validate_runtime_root(path_value: Path) -> Path:
     return path_value.resolve()
 
 
-def resolve_checkpoint_dir(path_value: Optional[str]) -> str:
+def resolve_checkpoint_dir(path_value: str | None) -> str:
     requested = "" if path_value is None else str(path_value).strip()
     primary: str | Path | None
     if requested in DEFAULT_MATRIX_GAME3_ALIASES:
@@ -159,13 +161,8 @@ def _wait_for_video_readable(video_path: Path, timeout: float = 180.0, interval:
     raise FileNotFoundError(f"Matrix-Game-3 output video not found: {video_path}")
 
 
-def build_subprocess_env(runtime_path: str, device: str | None = None) -> dict:
+def build_subprocess_env(device: str | None = None) -> dict:
     env = os.environ.copy()
-    pythonpath_entries = [str(project_root() / "src"), runtime_path]
-    existing = env.get("PYTHONPATH")
-    if existing:
-        pythonpath_entries.append(existing)
-    env["PYTHONPATH"] = os.pathsep.join(pythonpath_entries)
     visible_device = cuda_visible_devices_from_device(device)
     if visible_device is not None:
         env["CUDA_VISIBLE_DEVICES"] = visible_device
@@ -178,12 +175,11 @@ class MatrixGame3Runtime:
 
     def __init__(
         self,
-        runtime_path: str,
         checkpoint_dir: str,
         device: str = "cuda",
-        defaults: Optional[dict] = None,
+        defaults: dict | None = None,
     ):
-        self.runtime_root = runtime_path
+        self.runtime_root = str(_validate_runtime_root(runtime_root()))
         self.checkpoint_dir = checkpoint_dir
         self.device = device
         self.defaults = defaults or {}
@@ -195,11 +191,10 @@ class MatrixGame3Runtime:
         pretrained_model_path,
         args=None,
         device=None,
-        checkpoint_dir: Optional[str] = None,
+        checkpoint_dir: str | None = None,
         **kwargs,
-    ) -> "MatrixGame3Runtime":
+    ) -> MatrixGame3Runtime:
         del args
-        runtime_path = str(_validate_runtime_root(runtime_root()))
         checkpoint_source = checkpoint_dir
         if checkpoint_source is None and pretrained_model_path is not None:
             model_ref = str(pretrained_model_path).strip()
@@ -207,7 +202,6 @@ class MatrixGame3Runtime:
                 checkpoint_source = model_ref
         resolved_checkpoint_dir = resolve_checkpoint_dir(checkpoint_source)
         return cls(
-            runtime_path=runtime_path,
             checkpoint_dir=resolved_checkpoint_dir,
             device=device or "cuda",
             defaults=kwargs,
@@ -220,34 +214,36 @@ class MatrixGame3Runtime:
         keyboard_condition,
         mouse_condition,
         num_iterations: int,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         save_name: str = "matrix_game_3",
         size: str | Sequence[int] = "704*1280",
         fps: int = 17,
         seed: int = 42,
-        num_inference_steps: Optional[int] = None,
-        sample_shift: Optional[float] = None,
-        sample_guide_scale: Optional[float] = None,
-        checkpoint_dir: Optional[str] = None,
-        vae_type: Optional[str] = None,
-        lightvae_pruning_rate: Optional[float] = None,
-        fa_version: Optional[str] = None,
+        num_inference_steps: int | None = None,
+        sample_shift: float | None = None,
+        sample_guide_scale: float | None = None,
+        checkpoint_dir: str | None = None,
+        vae_type: str | None = None,
+        lightvae_pruning_rate: float | None = None,
+        fa_version: str | None = None,
         visualize_ops: bool = True,
-        use_base_model: Optional[bool] = None,
-        use_int8: Optional[bool] = None,
-        verify_quant: Optional[bool] = None,
-        use_async_vae: Optional[bool] = None,
-        async_vae_warmup_iters: Optional[int] = None,
-        compile_vae: Optional[bool] = None,
-        ulysses_size: Optional[int] = None,
-        t5_fsdp: Optional[bool] = None,
-        t5_cpu: Optional[bool] = None,
-        dit_fsdp: Optional[bool] = None,
-        convert_model_dtype: Optional[bool] = None,
+        use_base_model: bool | None = None,
+        use_int8: bool | None = None,
+        verify_quant: bool | None = None,
+        use_async_vae: bool | None = None,
+        async_vae_warmup_iters: int | None = None,
+        compile_vae: bool | None = None,
+        ulysses_size: int | None = None,
+        t5_fsdp: bool | None = None,
+        t5_cpu: bool | None = None,
+        dit_fsdp: bool | None = None,
+        convert_model_dtype: bool | None = None,
         show_progress: bool = True,
         **kwargs,
     ):
-        resolved_checkpoint_dir = resolve_checkpoint_dir(checkpoint_dir) if checkpoint_dir is not None else self.checkpoint_dir
+        resolved_checkpoint_dir = (
+            resolve_checkpoint_dir(checkpoint_dir) if checkpoint_dir is not None else self.checkpoint_dir
+        )
         self._ensure_checkpoint_layout(resolved_checkpoint_dir)
 
         output_dir_path = Path(output_dir or tempfile.mkdtemp(prefix="matrix_game3_")).expanduser().resolve()
@@ -265,12 +261,7 @@ class MatrixGame3Runtime:
             )
 
         size_value = self._normalize_size(size)
-        command = [
-            sys.executable,
-            "-m",
-            "worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_3_runtime.worldfoundry_runner",
-            "--runtime_root",
-            self.runtime_root,
+        arguments = [
             "--ckpt_dir",
             resolved_checkpoint_dir,
             "--actions_json",
@@ -292,9 +283,21 @@ class MatrixGame3Runtime:
             "--num_iterations",
             str(int(num_iterations)),
             "--num_inference_steps",
-            str(int(num_inference_steps if num_inference_steps is not None else self.defaults.get("num_inference_steps", 3))),
+            str(
+                int(
+                    num_inference_steps
+                    if num_inference_steps is not None
+                    else self.defaults.get("num_inference_steps", 3)
+                )
+            ),
             "--sample_guide_scale",
-            str(float(sample_guide_scale if sample_guide_scale is not None else self.defaults.get("sample_guide_scale", 5.0))),
+            str(
+                float(
+                    sample_guide_scale
+                    if sample_guide_scale is not None
+                    else self.defaults.get("sample_guide_scale", 5.0)
+                )
+            ),
             "--ulysses_size",
             str(int(ulysses_size if ulysses_size is not None else self.defaults.get("ulysses_size", 1))),
             "--vae_type",
@@ -302,17 +305,25 @@ class MatrixGame3Runtime:
         ]
         resolved_fa_version = fa_version if fa_version is not None else self.defaults.get("fa_version")
         if resolved_fa_version is not None:
-            command.extend(["--fa_version", str(resolved_fa_version)])
+            arguments.extend(["--fa_version", str(resolved_fa_version)])
         if sample_shift is not None or self.defaults.get("sample_shift") is not None:
-            command.extend(["--sample_shift", str(float(sample_shift if sample_shift is not None else self.defaults["sample_shift"]))])
+            arguments.extend(
+                [
+                    "--sample_shift",
+                    str(float(sample_shift if sample_shift is not None else self.defaults["sample_shift"])),
+                ]
+            )
         if lightvae_pruning_rate is not None:
-            command.extend(["--lightvae_pruning_rate", str(float(lightvae_pruning_rate))])
+            arguments.extend(["--lightvae_pruning_rate", str(float(lightvae_pruning_rate))])
         elif self.defaults.get("lightvae_pruning_rate") is not None:
-            command.extend(["--lightvae_pruning_rate", str(float(self.defaults["lightvae_pruning_rate"]))])
+            arguments.extend(["--lightvae_pruning_rate", str(float(self.defaults["lightvae_pruning_rate"]))])
 
         for flag_name, flag_value in [
             ("--visualize_ops", visualize_ops),
-            ("--use_base_model", self.defaults.get("use_base_model", False) if use_base_model is None else use_base_model),
+            (
+                "--use_base_model",
+                self.defaults.get("use_base_model", False) if use_base_model is None else use_base_model,
+            ),
             ("--use_int8", self.defaults.get("use_int8", False) if use_int8 is None else use_int8),
             ("--verify_quant", self.defaults.get("verify_quant", False) if verify_quant is None else verify_quant),
             ("--use_async_vae", self.defaults.get("use_async_vae", False) if use_async_vae is None else use_async_vae),
@@ -320,22 +331,24 @@ class MatrixGame3Runtime:
             ("--t5_fsdp", self.defaults.get("t5_fsdp", False) if t5_fsdp is None else t5_fsdp),
             ("--t5_cpu", self.defaults.get("t5_cpu", False) if t5_cpu is None else t5_cpu),
             ("--dit_fsdp", self.defaults.get("dit_fsdp", False) if dit_fsdp is None else dit_fsdp),
-            ("--convert_model_dtype", self.defaults.get("convert_model_dtype", False) if convert_model_dtype is None else convert_model_dtype),
+            (
+                "--convert_model_dtype",
+                self.defaults.get("convert_model_dtype", False) if convert_model_dtype is None else convert_model_dtype,
+            ),
         ]:
             if flag_value:
-                command.append(flag_name)
+                arguments.append(flag_name)
 
         async_vae_warmup_iters = (
-            self.defaults.get("async_vae_warmup_iters", 0)
-            if async_vae_warmup_iters is None
-            else async_vae_warmup_iters
+            self.defaults.get("async_vae_warmup_iters", 0) if async_vae_warmup_iters is None else async_vae_warmup_iters
         )
         if int(async_vae_warmup_iters) > 0:
-            command.extend(["--async_vae_warmup_iters", str(int(async_vae_warmup_iters))])
+            arguments.extend(["--async_vae_warmup_iters", str(int(async_vae_warmup_iters))])
 
+        command = package_module_command(RUNNER_MODULE, arguments)
         stdout = None if show_progress else subprocess.DEVNULL
         stderr = None if show_progress else subprocess.STDOUT
-        env = build_subprocess_env(self.runtime_root, self.device)
+        env = build_subprocess_env(self.device)
         subprocess.run(
             command,
             check=True,
@@ -376,10 +389,7 @@ class MatrixGame3Runtime:
             return self._resident_pipeline
         self._ensure_checkpoint_layout(self.checkpoint_dir)
         world_size = int(os.environ.get("WORLD_SIZE", "1") or "1")
-        distributed = (
-            torch.distributed.is_available()
-            and torch.distributed.is_initialized()
-        )
+        distributed = torch.distributed.is_available() and torch.distributed.is_initialized()
         if world_size > 1 and not distributed:
             raise RuntimeError(
                 "Matrix-Game 3 multi-GPU realtime requires an initialized torch.distributed "
@@ -397,18 +407,14 @@ class MatrixGame3Runtime:
                 f"processes; got world_size={world_size}."
             )
 
-        runtime_path = str(Path(self.runtime_root).expanduser().resolve())
-        if runtime_path in sys.path:
-            sys.path.remove(runtime_path)
-        sys.path.insert(0, runtime_path)
         from .worldfoundry_runner import patch_torch_dynamo_config_aliases
 
         patch_torch_dynamo_config_aliases()
-        import pipeline.inference_interactive_pipeline as native_runtime
-
         from worldfoundry.base_models.diffusion_model.recipes.wan_configs.action_22 import (
             WAN_CONFIGS,
         )
+
+        from .pipeline import inference_interactive_pipeline as native_runtime
 
         device = torch.device(self.device)
         device_id = (

@@ -1,8 +1,9 @@
 # Inference-only DB-CogACT source retained in-tree.
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Literal, Optional, Sequence
+from typing import Literal
 
 import numpy as np
 
@@ -14,9 +15,9 @@ class ActionOutput:
 
 @dataclass
 class SamplingConfig:
-    num_steps: int = 10       # flow matching / DDIM steps
+    num_steps: int = 10  # flow matching / DDIM steps
     cfg_scale: float = 1.5
-    seed: Optional[int] = None
+    seed: int | None = None
 
 
 @dataclass
@@ -33,6 +34,6 @@ class GenSamplingConfig:
 class GenerationOutput:
     text: str
     tokens: list
-    logprobs: Optional[list] = None
+    logprobs: list | None = None
     finish_reason: Literal["stop", "length", "eos"] = "stop"
     metadata: dict = field(default_factory=dict)

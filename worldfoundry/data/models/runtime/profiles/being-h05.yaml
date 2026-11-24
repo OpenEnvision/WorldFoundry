@@ -1,6 +1,6 @@
-artifact_filename: being_h05_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: being-h05
+task_family: vla_policy
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/BeingBeyond--Being-H05-2B
   repo_id: BeingBeyond/Being-H05-2B
@@ -18,16 +18,6 @@ checkpoints:
   repo_id: BeingBeyond/Being-H05-2B_libero_robocasa
   role: cross_embodiment_demo_checkpoint
   status: local_checkpoint_staged_tensor_gpu_probe_ready
-gpu_readiness:
-  artifact_kind: action_trace
-  attention_mask_kind: dense
-  gpu: 80GB CUDA GPU
-  gpu_peak_memory_allocated_bytes: 5640473600
-  sdpa_backend: efficient_attention
-  status: success
-  torch: 2.5.1+cu118
-  torch_cuda: '11.8'
-id: being-h05
 input_schema:
   actions:
   - robot_action
@@ -42,19 +32,35 @@ input_schema:
   prompt: true
   state: true
   video: false
-integration_status: integrated
+artifact_kind: action_trace
+artifact_filename: being_h05_action_trace.json
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_being_h05_libero_get_action_gpu_ready_efficient_sdpa
+  integration_status: integrated
+integration:
+  status: integrated
+gpu_readiness:
+  artifact_kind: action_trace
+  attention_mask_kind: dense
+  gpu: 80GB CUDA GPU
+  gpu_peak_memory_allocated_bytes: 5640473600
+  sdpa_backend: efficient_attention
+  status: success
+  torch: 2.5.1+cu118
+  torch_cuda: '11.8'
 notes:
 - Being-H0.5 is a cross-embodiment VLA policy. It is intentionally routed through
   embodied action profiles, not video generation.
 - Official BeingHPolicy consumes multi-view RGB, robot state, language instruction,
   data_config_name, dataset_name, and embodiment_tag; output is robot-specific actions
   plus action_unified when RTC is enabled.
-- WorldFoundry keeps the flattened Being-H0.5 architecture and checkpoint runtime directly under worldfoundry/synthesis/action_generation/being_h05.
-- Safetensors are preferred; legacy .bin/.pt files use weights-only deserialization, require a pure named-tensor mapping, and load with strict key matching.
+- WorldFoundry keeps the flattened Being-H0.5 architecture and checkpoint runtime
+  directly under worldfoundry/synthesis/action_generation/being_h05.
+- Safetensors are preferred; legacy .bin/.pt files use weights-only deserialization,
+  require a pure named-tensor mapping, and load with strict key matching.
 - The default runnable profile uses data_config_name=libero_nonorm, dataset_name=libero_posttrain,
   embodiment_tag=libero, and checkpoint ${WORLDFOUNDRY_HFD_ROOT}/BeingBeyond--Being-H05-2B_libero.
 - The prior single-GPU OOM came from forcing Qwen3 dense attention through SDPBackend.MATH;
   Qwen3 dense inference now uses SDPBackend.EFFICIENT_ATTENTION for this profile.
-runtime_status: in_tree_being_h05_libero_get_action_gpu_ready_efficient_sdpa
-task_family: vla_policy
 verification_status: checkpoint_backed_action_trace_gpu_ready_efficient_sdpa

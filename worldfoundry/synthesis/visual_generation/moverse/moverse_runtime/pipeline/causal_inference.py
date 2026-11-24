@@ -1,16 +1,16 @@
-from typing import List, Optional
 import time
+
 import torch
 
-from utils.misc import randn_like_fp32_cast
-from utils.wan_wrapper import WanDiffusionWrapper, WanTextEncoder, WanVAEWrapper
 from worldfoundry.core.vram import (
-    DynamicSwapInstaller,
     get_cuda_free_memory_gb,
     gpu,
     move_model_to_device_with_memory_preservation,
 )
-from pipeline.causal_base import CausalPipelineBase
+
+from ..utils.misc import randn_like_fp32_cast
+from ..utils.wan_wrapper import WanDiffusionWrapper, WanTextEncoder, WanVAEWrapper
+from .causal_base import CausalPipelineBase
 
 
 def _cuda_ms(ev_start: torch.cuda.Event, ev_end: torch.cuda.Event) -> float:
@@ -26,25 +26,18 @@ def _make_event() -> torch.cuda.Event:
 
 
 class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
-    def __init__(
-            self,
-            args,
-            device,
-            generator=None,
-            text_encoder=None,
-            vae=None
-    ):
+    def __init__(self, args, device, generator=None, text_encoder=None, vae=None):
         torch.nn.Module.__init__(self)
         # Step 1: Initialize all models
-        self.generator = WanDiffusionWrapper(
-            **getattr(args, "model_kwargs", {}), is_causal=True) if generator is None else generator
+        self.generator = (
+            WanDiffusionWrapper(**getattr(args, "model_kwargs", {}), is_causal=True) if generator is None else generator
+        )
         self.text_encoder = WanTextEncoder() if text_encoder is None else text_encoder
         self.vae = WanVAEWrapper() if vae is None else vae
 
         # Step 2: Initialize all causal hyperparmeters
         self.scheduler = self.generator.get_scheduler()
-        self.denoising_step_list = torch.tensor(
-            args.denoising_step_list, dtype=torch.long)
+        self.denoising_step_list = torch.tensor(args.denoising_step_list, dtype=torch.long)
         print(f"before warp_denoising_step, denoising_step_list: {self.denoising_step_list}")
         if args.warp_denoising_step:
             # add 0 to the end of timesteps and use scheduler's timesteps with denoising_step_list as indices
@@ -57,36 +50,41 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
         self.num_frame_per_block = getattr(args, "num_frame_per_block", 1)
         self.independent_first_frame = args.independent_first_frame
         self.local_attn_size = self.generator.model.local_attn_size
-        self.skip_clean_rerun = getattr(args, 'skip_clean_rerun', False)
-        self.skip_clean_rerun_copy_x_last_c_full = getattr(args, 'skip_clean_rerun_copy_x_last_c_full', False)
-        self.skip_clean_rerun_copy_x_last_c_last = getattr(args, 'skip_clean_rerun_copy_x_last_c_last', False)
-        self.use_flow_matching_denoising = getattr(args, 'use_flow_matching_denoising', False)
+        self.skip_clean_rerun = getattr(args, "skip_clean_rerun", False)
+        self.skip_clean_rerun_copy_x_last_c_full = getattr(args, "skip_clean_rerun_copy_x_last_c_full", False)
+        self.skip_clean_rerun_copy_x_last_c_last = getattr(args, "skip_clean_rerun_copy_x_last_c_last", False)
+        self.use_flow_matching_denoising = getattr(args, "use_flow_matching_denoising", False)
 
         # With height-concat conditioning (use_cond_latent=True) height is doubled, so each
         # frame produces 2× tokens (3120 instead of 1560 for the default 60×52 patch grid).
         # MMDiT mode keeps separate streams → frame_seq_length stays at 1560.
-        self.use_cond_latent = getattr(args, 'use_cond_latent', False)
-        self.is_mmdit = getattr(args, 'model_kwargs', {}).get('is_mmdit', False)
+        self.use_cond_latent = getattr(args, "use_cond_latent", False)
+        self.is_mmdit = getattr(args, "model_kwargs", {}).get("is_mmdit", False)
         # MemRoPE Phase 2 — read the parsed config that WanDiffusionWrapper stored on the
         # model (set_memrope). When present, the split gen/cond three-tier KV cache is used
         # instead of the single sliding-window cache. Requires height-concat conditioning.
-        self.memrope_cfg = getattr(getattr(self.generator, 'model', None), 'memrope_cfg', None)
+        self.memrope_cfg = getattr(getattr(self.generator, "model", None), "memrope_cfg", None)
         if self.memrope_cfg is not None:
-            assert self.use_cond_latent and not self.is_mmdit, \
+            assert self.use_cond_latent and not self.is_mmdit, (
                 "MemRoPE requires use_cond_latent=True (height-concat) and non-MMDiT model."
-            print(f"[CausalInferencePipeline] MemRoPE enabled: gen={self.memrope_cfg['gen']} "
-                  f"cond={self.memrope_cfg['cond']}")
+            )
+            print(
+                f"[CausalInferencePipeline] MemRoPE enabled: gen={self.memrope_cfg['gen']} "
+                f"cond={self.memrope_cfg['cond']}"
+            )
         # TODO: make the frame_seq_length adaptive to the number of frames in the input video
         if self.is_mmdit:
             self.frame_seq_length = 1560
         else:
             self.frame_seq_length = 3120 if self.use_cond_latent else 1560
 
-        print(f"KV inference with {self.num_frame_per_block} frames per block"
-              f" and frame_seq_length={self.frame_seq_length} tokens/frame "
-              f"(use_cond_latent={self.use_cond_latent}, is_mmdit={self.is_mmdit} "
-              f"skip_clean_rerun_copy_x_last_c_full={self.skip_clean_rerun_copy_x_last_c_full}, "
-              f"skip_clean_rerun_copy_x_last_c_last={self.skip_clean_rerun_copy_x_last_c_last})")
+        print(
+            f"KV inference with {self.num_frame_per_block} frames per block"
+            f" and frame_seq_length={self.frame_seq_length} tokens/frame "
+            f"(use_cond_latent={self.use_cond_latent}, is_mmdit={self.is_mmdit} "
+            f"skip_clean_rerun_copy_x_last_c_full={self.skip_clean_rerun_copy_x_last_c_full}, "
+            f"skip_clean_rerun_copy_x_last_c_last={self.skip_clean_rerun_copy_x_last_c_last})"
+        )
         # max_attention_size is patched at inference() time (not here) so it can
         # use the actual num_output_frames from the noise tensor. This makes the
         # global-attention case (local_attn_size=-1) correct for arbitrary video
@@ -100,13 +98,13 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
     def inference(
         self,
         noise: torch.Tensor,
-        text_prompts: List[str],
-        initial_latent: Optional[torch.Tensor] = None,
+        text_prompts: list[str],
+        initial_latent: torch.Tensor | None = None,
         return_latents: bool = False,
         profile: bool = False,
         low_memory: bool = False,
-        cond_latent: Optional[torch.Tensor] = None,
-        conditional_dict: Optional[dict] = None,
+        cond_latent: torch.Tensor | None = None,
+        conditional_dict: dict | None = None,
     ) -> torch.Tensor:
         """
         Perform inference on the given noise and text prompts.
@@ -135,10 +133,11 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
                 (batch_size, num_output_frames, num_channels, height, width).
                 It is normalized to be in the range [0, 1].
         """
-        batch_size, num_frames, num_channels, height, width = noise.shape # (1,21,16,60,104)
-        num_blocks, num_input_frames, num_output_frames = self._compute_num_blocks(
-            num_frames, initial_latent)
-        print(f"inference: noise shape={noise.shape}, initial_latent shape={initial_latent.shape if initial_latent is not None else None}, num_blocks={num_blocks}, num_input_frames={num_input_frames}, num_output_frames={num_output_frames}")
+        batch_size, num_frames, num_channels, height, width = noise.shape  # (1,21,16,60,104)
+        num_blocks, num_input_frames, num_output_frames = self._compute_num_blocks(num_frames, initial_latent)
+        print(
+            f"inference: noise shape={noise.shape}, initial_latent shape={initial_latent.shape if initial_latent is not None else None}, num_blocks={num_blocks}, num_input_frames={num_input_frames}, num_output_frames={num_output_frames}"
+        )
 
         # Patch self-attention max_attention_size with the actual num_output_frames.
         # For local attention (local_attn_size != -1) the patch returns
@@ -146,22 +145,19 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
         # is a no-op there. For global attention (-1) it correctly sizes the
         # window to the full output length.
         if not self.is_mmdit:
-            self._patch_attn_max_size(self.generator, self.frame_seq_length,
-                                      num_max_frames=num_output_frames)
+            self._patch_attn_max_size(self.generator, self.frame_seq_length, num_max_frames=num_output_frames)
         if conditional_dict is None:
-            conditional_dict = self.text_encoder(
-                text_prompts=text_prompts
-            )
+            conditional_dict = self.text_encoder(text_prompts=text_prompts)
 
         if low_memory:
             gpu_memory_preservation = get_cuda_free_memory_gb(gpu) + 5
-            move_model_to_device_with_memory_preservation(self.text_encoder, target_device=gpu, preserved_memory_gb=gpu_memory_preservation)
+            move_model_to_device_with_memory_preservation(
+                self.text_encoder, target_device=gpu, preserved_memory_gb=gpu_memory_preservation
+            )
 
         output = torch.zeros(
-            [batch_size, num_output_frames, num_channels, height, width],
-            device=noise.device,
-            dtype=noise.dtype
-        ) # TODO: maybe empty is more effcient
+            [batch_size, num_output_frames, num_channels, height, width], device=noise.device, dtype=noise.dtype
+        )  # TODO: maybe empty is more effcient
 
         # Always-on timing
         timing_t0 = _make_event()
@@ -174,11 +170,7 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
                 device=noise.device,
                 num_output_frames=num_output_frames,
             )
-            self._initialize_crossattn_cache(
-                batch_size=batch_size,
-                dtype=noise.dtype,
-                device=noise.device
-            )
+            self._initialize_crossattn_cache(batch_size=batch_size, dtype=noise.dtype, device=noise.device)
         else:
             self._reset_crossattn_cache(self.crossattn_cache)
             if self.memrope_cfg is not None:
@@ -214,11 +206,11 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
                 num_input_blocks = num_input_frames // self.num_frame_per_block
 
             for _ in range(num_input_blocks):
-                current_ref_latents = \
-                    initial_latent[:, current_start_frame:current_start_frame + self.num_frame_per_block]
-                output[:, current_start_frame:current_start_frame + self.num_frame_per_block] = current_ref_latents
-                _cond_block = self._slice_cond(
-                    cond_latent, current_start_frame, self.num_frame_per_block)
+                current_ref_latents = initial_latent[
+                    :, current_start_frame : current_start_frame + self.num_frame_per_block
+                ]
+                output[:, current_start_frame : current_start_frame + self.num_frame_per_block] = current_ref_latents
+                _cond_block = self._slice_cond(cond_latent, current_start_frame, self.num_frame_per_block)
                 self.generator(
                     noisy_image_or_video=current_ref_latents,
                     conditional_dict=conditional_dict,
@@ -239,22 +231,27 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
             block_start_ev = _make_event()
 
             noisy_input = noise[
-                :, current_start_frame - num_input_frames:current_start_frame + current_num_frames - num_input_frames]
+                :, current_start_frame - num_input_frames : current_start_frame + current_num_frames - num_input_frames
+            ]
 
-            print(f"Processing block {block_idx+1}/{len(all_num_frames)} with num_input_frames={num_input_frames}, current_num_frames={current_num_frames}, noisy_input shape={noisy_input.shape}")
+            print(
+                f"Processing block {block_idx + 1}/{len(all_num_frames)} with num_input_frames={num_input_frames}, current_num_frames={current_num_frames}, noisy_input shape={noisy_input.shape}"
+            )
 
             # Step 3.1: Spatial denoising loop
             step_times_ms = []
             for index, current_timestep in enumerate(self.denoising_step_list):
                 step_start_ev = _make_event()
                 # set current timestep
-                timestep = torch.ones(
-                    [batch_size, current_num_frames],
-                    device=noise.device,
-                    dtype=torch.int64) * current_timestep
+                timestep = (
+                    torch.ones([batch_size, current_num_frames], device=noise.device, dtype=torch.int64)
+                    * current_timestep
+                )
 
                 _cond_block = self._slice_cond(cond_latent, current_start_frame, current_num_frames)
-                print(f"  Step {index+1}/{len(self.denoising_step_list)}: timestep={current_timestep}, input shape={noisy_input.shape}, cond_latent block shape={_cond_block.shape if _cond_block is not None else None}")
+                print(
+                    f"  Step {index + 1}/{len(self.denoising_step_list)}: timestep={current_timestep}, input shape={noisy_input.shape}, cond_latent block shape={_cond_block.shape if _cond_block is not None else None}"
+                )
                 if index < len(self.denoising_step_list) - 1:
                     flow_pred, denoised_pred = self.generator(
                         noisy_image_or_video=noisy_input,
@@ -272,16 +269,16 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
                             flow_pred.flatten(0, 1),
                             noisy_input.flatten(0, 1),
                             timestep.flatten(0, 1),
-                            next_timestep * torch.ones(
-                                [batch_size * current_num_frames], device=noise.device, dtype=torch.long),
+                            next_timestep
+                            * torch.ones([batch_size * current_num_frames], device=noise.device, dtype=torch.long),
                         ).unflatten(0, denoised_pred.shape[:2])
                     else:
                         # Stochastic consistency step: re-add fresh noise to pred_x0
                         noisy_input = self.scheduler.add_noise(
                             denoised_pred.flatten(0, 1),
                             randn_like_fp32_cast(denoised_pred.flatten(0, 1)),
-                            next_timestep * torch.ones(
-                                [batch_size * current_num_frames], device=noise.device, dtype=torch.long)
+                            next_timestep
+                            * torch.ones([batch_size * current_num_frames], device=noise.device, dtype=torch.long),
                         ).unflatten(0, denoised_pred.shape[:2])
                 else:
                     # for getting real output
@@ -299,7 +296,7 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
                 step_times_ms.append(_cuda_ms(step_start_ev, step_end_ev))
 
             # Step 3.2: record the model's output
-            output[:, current_start_frame:current_start_frame + current_num_frames] = denoised_pred
+            output[:, current_start_frame : current_start_frame + current_num_frames] = denoised_pred
 
             # Step 3.3: update KV cache for use as context by the next block.
             # Two modes:
@@ -325,7 +322,7 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
             elif self.skip_clean_rerun:
                 pass
             else:
-                context_timestep = torch.ones_like(timestep) * self.args.context_noise # 0
+                context_timestep = torch.ones_like(timestep) * self.args.context_noise  # 0
                 self.generator(
                     noisy_image_or_video=denoised_pred,
                     conditional_dict=conditional_dict,
@@ -340,14 +337,15 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
             block_end_ev = _make_event()
             block_ms = _cuda_ms(block_start_ev, block_end_ev)
             ctx_ms = _cuda_ms(ctx_start_ev, ctx_end_ev)
-            block_timing_stats.append({
-                "step_times_ms": step_times_ms,
-                "ctx_ms": ctx_ms,
-                "total_ms": block_ms,
-            })
+            block_timing_stats.append(
+                {
+                    "step_times_ms": step_times_ms,
+                    "ctx_ms": ctx_ms,
+                    "total_ms": block_ms,
+                }
+            )
             step_summary = "  ".join(
-                f"step{i}(t={int(self.denoising_step_list[i])})={t:.0f}ms"
-                for i, t in enumerate(step_times_ms)
+                f"step{i}(t={int(self.denoising_step_list[i])})={t:.0f}ms" for i, t in enumerate(step_times_ms)
             )
             print(f"[Block {block_idx:2d}] total={block_ms:.0f}ms | {step_summary} | ctx_update={ctx_ms:.0f}ms")
 
@@ -363,14 +361,14 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
         vae_end_ev = _make_event()
 
         # ── Timing summary ────────────────────────────────────────────────────
-        init_ms  = _cuda_ms(timing_t0, init_end_ev)
-        diff_ms  = sum(b["total_ms"] for b in block_timing_stats)
-        vae_ms   = _cuda_ms(vae_start_ev, vae_end_ev)
+        init_ms = _cuda_ms(timing_t0, init_end_ev)
+        diff_ms = sum(b["total_ms"] for b in block_timing_stats)
+        vae_ms = _cuda_ms(vae_start_ev, vae_end_ev)
         total_ms = init_ms + diff_ms + vae_ms
         num_steps = len(self.denoising_step_list)
         print("\n=== Inference Timing Summary ===")
-        print(f"  Init/cache : {init_ms:7.0f} ms  ({100*init_ms/total_ms:.1f}%)")
-        print(f"  Diffusion  : {diff_ms:7.0f} ms  ({100*diff_ms/total_ms:.1f}%)")
+        print(f"  Init/cache : {init_ms:7.0f} ms  ({100 * init_ms / total_ms:.1f}%)")
+        print(f"  Diffusion  : {diff_ms:7.0f} ms  ({100 * diff_ms / total_ms:.1f}%)")
         for b_idx, b in enumerate(block_timing_stats):
             pct = 100 * b["total_ms"] / diff_ms if diff_ms > 0 else 0.0
             print(f"    Block {b_idx:2d} : {b['total_ms']:6.0f} ms  ({pct:.1f}% of diffusion)")
@@ -381,8 +379,8 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
                 print(f"    step{i} (t={int(self.denoising_step_list[i])}): avg={avg:.0f}ms")
             avg_ctx = sum(b["ctx_ms"] for b in block_timing_stats) / len(block_timing_stats)
             print(f"    ctx_update            : avg={avg_ctx:.0f}ms")
-        print(f"  VAE decode : {vae_ms:7.0f} ms  ({100*vae_ms/total_ms:.1f}%)")
-        print(f"  TOTAL      : {total_ms:7.0f} ms  ({total_ms/1000:.2f}s)")
+        print(f"  VAE decode : {vae_ms:7.0f} ms  ({100 * vae_ms / total_ms:.1f}%)")
+        print(f"  TOTAL      : {total_ms:7.0f} ms  ({total_ms / 1000:.2f}s)")
         print("=" * 35)
 
         if return_latents:
@@ -400,13 +398,15 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
                 gives the correct doubled capacity automatically.
         """
         if self.memrope_cfg is not None:
-            self.kv_cache1 = self._make_memrope_kv_cache(
-                batch_size, dtype, device, self.memrope_cfg)
+            self.kv_cache1 = self._make_memrope_kv_cache(batch_size, dtype, device, self.memrope_cfg)
             return
         kv_cache_size = self._compute_kv_cache_size(self.local_attn_size, num_output_frames)
         if self.is_mmdit:
             self.kv_cache1 = self._make_dual_kv_cache(
-                batch_size, kv_cache_size, dtype, device,
+                batch_size,
+                kv_cache_size,
+                dtype,
+                device,
                 self.generator.model.double_stream_layers,
             )
         else:
@@ -448,7 +448,7 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
         batch_size: int = 1,
         device=None,
         dtype: torch.dtype = torch.bfloat16,
-        conditional_dict: Optional[dict] = None,
+        conditional_dict: dict | None = None,
         num_frames_for_cache: int = 21,
     ) -> None:
         """Initialize (or reset) a streaming generation session.
@@ -489,20 +489,19 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
 
         self._stream_current_frame: int = 0
         self._stream_max_frames: int = num_frames_for_cache
-        self._stream_conditional_dict: Optional[dict] = conditional_dict
+        self._stream_conditional_dict: dict | None = conditional_dict
 
         # Clear VAE temporal decode cache to ensure each streaming session
         # starts from frame 0 (avoid stale feat_cache from previous sessions).
-        if hasattr(self, 'vae') and hasattr(self.vae, 'model') and \
-                hasattr(self.vae.model, 'clear_cache'):
+        if hasattr(self, "vae") and hasattr(self.vae, "model") and hasattr(self.vae.model, "clear_cache"):
             self.vae.model.clear_cache()
 
     def streaming_step(
         self,
-        noise: torch.Tensor,               # [B, N, C, H, W]
-        cond_latent: torch.Tensor,         # [B, N, C, H, W]
-        conditional_dict: Optional[dict] = None,
-        _timing: Optional[dict] = None,
+        noise: torch.Tensor,  # [B, N, C, H, W]
+        cond_latent: torch.Tensor,  # [B, N, C, H, W]
+        conditional_dict: dict | None = None,
+        _timing: dict | None = None,
     ) -> torch.Tensor:
         """Single streaming inference step: generate N frames without resetting KV cache.
 
@@ -524,9 +523,8 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
         Raises:
             RuntimeError: If initialize_streaming() has not been called.
         """
-        if not hasattr(self, '_stream_current_frame'):
-            raise RuntimeError(
-                "Call initialize_streaming() before streaming_step().")
+        if not hasattr(self, "_stream_current_frame"):
+            raise RuntimeError("Call initialize_streaming() before streaming_step().")
 
         if conditional_dict is not None:
             self._stream_conditional_dict = conditional_dict
@@ -535,10 +533,8 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
         current_start = self._stream_current_frame
 
         # ── KV cache overflow detection (global attention mode) ──────────
-        if (self.local_attn_size == -1
-                and current_start + num_frames > self._stream_max_frames):
-            print(f"[streaming_step] KV cache full "
-                  f"({current_start}/{self._stream_max_frames} frames), auto-reset.")
+        if self.local_attn_size == -1 and current_start + num_frames > self._stream_max_frames:
+            print(f"[streaming_step] KV cache full ({current_start}/{self._stream_max_frames} frames), auto-reset.")
             self._reset_all_kv_caches(noise.device)
             self._stream_current_frame = 0
             current_start = 0
@@ -552,20 +548,26 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
 
         # ── Multi-step denoising loop ────────────────────────────────────
         _num_steps = len(self.denoising_step_list)
-        print(f"[streaming_step] frame={current_start}, {_num_steps} denoising steps, "
-              f"skip_clean_rerun={self.skip_clean_rerun}")
+        print(
+            f"[streaming_step] frame={current_start}, {_num_steps} denoising steps, "
+            f"skip_clean_rerun={self.skip_clean_rerun}"
+        )
         for index, current_timestep in enumerate(self.denoising_step_list):
-            timestep = torch.ones(
-                [batch_size, num_frames],
-                device=noise.device,
-                dtype=torch.int64,
-            ) * current_timestep
+            timestep = (
+                torch.ones(
+                    [batch_size, num_frames],
+                    device=noise.device,
+                    dtype=torch.int64,
+                )
+                * current_timestep
+            )
 
-            is_last = (index == len(self.denoising_step_list) - 1)
+            is_last = index == len(self.denoising_step_list) - 1
 
             _cond = self._slice_cond(
                 cond_latent if not is_last else cond_latent.clone(),
-                0, num_frames,
+                0,
+                num_frames,
             )
 
             _t0 = time.perf_counter()
@@ -579,15 +581,18 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
                 cond_latent=_cond,
             )
             torch.cuda.synchronize()
-            print(f"[streaming_step]   denoise {index+1}/{_num_steps} done "
-                  f"({(time.perf_counter()-_t0)*1000:.0f} ms)")
+            print(
+                f"[streaming_step]   denoise {index + 1}/{_num_steps} done "
+                f"({(time.perf_counter() - _t0) * 1000:.0f} ms)"
+            )
 
             if not is_last:
                 next_timestep = self.denoising_step_list[index + 1]
                 noisy_input = self.scheduler.add_noise(
                     denoised_pred.flatten(0, 1),
                     torch.randn_like(denoised_pred.flatten(0, 1)),
-                    next_timestep * torch.ones(
+                    next_timestep
+                    * torch.ones(
                         [batch_size * num_frames],
                         device=noise.device,
                         dtype=torch.long,
@@ -608,8 +613,7 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
                 cond_latent=self._slice_cond(cond_latent, 0, num_frames),
             )
             torch.cuda.synchronize()
-            print(f"[streaming_step]   clean rerun done "
-                  f"({(time.perf_counter()-_t0)*1000:.0f} ms)")
+            print(f"[streaming_step]   clean rerun done ({(time.perf_counter() - _t0) * 1000:.0f} ms)")
 
         # ── Update frame counter ─────────────────────────────────────────
         self._stream_current_frame += num_frames
@@ -632,7 +636,7 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
     @property
     def streaming_frame_count(self) -> int:
         """Number of frames generated in the current streaming session."""
-        return getattr(self, '_stream_current_frame', 0)
+        return getattr(self, "_stream_current_frame", 0)
 
     def reset_streaming(self) -> None:
         """Manually reset streaming session (clear KV caches, zero frame counter)."""
@@ -641,7 +645,6 @@ class CausalInferencePipeline(CausalPipelineBase, torch.nn.Module):
             self._reset_all_kv_caches(device)
         self._stream_current_frame = 0
         # Clear VAE temporal decode cache as well
-        if hasattr(self, 'vae') and hasattr(self.vae, 'model') and \
-                hasattr(self.vae.model, 'clear_cache'):
+        if hasattr(self, "vae") and hasattr(self.vae, "model") and hasattr(self.vae.model, "clear_cache"):
             self.vae.model.clear_cache()
         print("[reset_streaming] KV caches reset, restarting from frame 0.")

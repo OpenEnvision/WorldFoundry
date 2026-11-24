@@ -12,6 +12,7 @@ Variants (camera, action, linear, TAE, geometry) live under
 """
 
 from .component import (
+    Wan21TAEPreviewDecoder,
     WanTAEPreviewDecoder,
     WanVideoDecoder,
     build_diffusers_wan_video_codec,
@@ -29,11 +30,12 @@ from .model import (
 )
 
 __all__ = [
+    "Wan21TAEPreviewDecoder",
+    "WanTAEPreviewDecoder",
+    "WanVideoDecoder",
     "WanVideoVAE",
     "WanVideoVAE38",
     "WanVideoVAEStateDictConverter",
-    "WanTAEPreviewDecoder",
-    "WanVideoDecoder",
     "build_diffusers_wan_video_codec",
     "build_wan_video_decoder",
     "build_wan_video_vae38_decoder",

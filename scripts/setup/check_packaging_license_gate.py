@@ -2,8 +2,10 @@
 """Audit public distributions for license boundaries and core source completeness.
 
 ``MANIFEST.in`` controls sdists, while setuptools package discovery and
-``include-package-data`` control wheels.  This checker keeps all three paths
-aligned and checks that built distributions contain every core source module.
+``include-package-data`` control wheels.  ``LICENSE_GATED_PATHS`` below is the
+single list of license-gated trees; this checker requires ``MANIFEST.in``,
+``.gitignore`` and ``pyproject.toml`` to agree with it and checks that built
+distributions contain every core source module.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ else:  # pragma: no cover - Python 3.10 only
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT_PATH = REPO_ROOT / "pyproject.toml"
 MANIFEST_PATH = REPO_ROOT / "MANIFEST.in"
+GITIGNORE_PATH = REPO_ROOT / ".gitignore"
 LICENSE_GATE_MARKER = "License-gated upstream runtimes"
 NOTICE_NAME = "THIRD-PARTY-NOTICES"
 LICENSE_NAME = "LICENSE"
@@ -35,11 +38,43 @@ NATIVE_LICENSE_LINK = "thirdparty/fastvideo-kernel/LICENSE"
 RETAINED_UPSTREAM_LICENSES = (
     "worldfoundry/base_models/diffusion_model/models/autoencoders/kandinsky6/mmaudio/ext/bigvgan_v2/LICENSE",
     "worldfoundry/base_models/diffusion_model/models/autoencoders/kandinsky6/mmaudio/ext/bigvgan_v2/incl_licenses/LICENSE_*",
+    "worldfoundry/evals/tasks/execution/runners/worldmembench/runtime/LICENSE",
 )
 REQUIRED_RUNTIME_RESOURCES = (
     "worldfoundry/synthesis/visual_generation/dino_wm/datasets/UPSTREAM.md",
-    "worldfoundry/synthesis/visual_generation/egowm/nav_25dof_stats.json",
     "worldfoundry/synthesis/visual_generation/vid2world/csgo_utils/test_split.txt",
+)
+# License-gated upstream trees never ship in a distribution. Most are ignored
+# local checkouts; the tracked ones stay in Git but are pruned from artifacts.
+LICENSE_GATED_PATHS = (
+    "worldfoundry/base_models/three_dimensions/depth/dvlt/dvlt_runtime",
+    "worldfoundry/base_models/three_dimensions/depth/unik3d",
+    "worldfoundry/base_models/three_dimensions/general_3d/dust3r",
+    "worldfoundry/base_models/three_dimensions/general_3d/four_d_gaussians",
+    "worldfoundry/base_models/three_dimensions/general_3d/mast3r",
+    "worldfoundry/base_models/three_dimensions/general_3d/monst3r",
+    "worldfoundry/base_models/three_dimensions/general_3d/stable_virtual_camera",
+    "worldfoundry/base_models/three_dimensions/point_clouds/gaussian_splatting",
+    "worldfoundry/base_models/three_dimensions/point_clouds/pi3",
+    "worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/UniDepth",
+    "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft",
+    "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager",
+    "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_panogen_runtime",
+    "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_worldgen_runtime",
+    "worldfoundry/synthesis/visual_generation/krea_realtime/realtime_video_runtime",
+    "worldfoundry/synthesis/visual_generation/open_sora/open_sora_runtime",
+    "worldfoundry/synthesis/visual_generation/vmem/vmem_runtime/extern/CUT3R",
+    "worldfoundry/synthesis/visual_generation/wonderworld/wonderworld_runtime",
+    "thirdparty/diff-gaussian-rasterization",
+    "thirdparty/SageAttention",
+    "thirdparty/simple-knn",
+    "thirdparty/matrix-game",
+)
+TRACKED_LICENSE_GATED_PATHS = frozenset(
+    {
+        "worldfoundry/synthesis/visual_generation/open_sora/open_sora_runtime",
+        "thirdparty/matrix-game",
+    }
 )
 LICENSE_TEXT_BEGIN = b"----- BEGIN RETAINED LICENSE TEXT -----\n"
 LICENSE_TEXT_END = b"\n----- END RETAINED LICENSE TEXT -----\n"
@@ -266,26 +301,40 @@ def _matches_any_package(packages: Sequence[str], pattern: str) -> bool:
     return any(fnmatch.fnmatchcase(name, pattern) for name in packages)
 
 
-def license_gated_paths(manifest_path: Path = MANIFEST_PATH) -> list[str]:
-    """Read worldfoundry prune paths from the manifest's license-gate block."""
-    paths: list[str] = []
+def license_gated_paths() -> list[str]:
+    """Return the gated paths inside the ``worldfoundry`` package tree."""
+    return [path for path in LICENSE_GATED_PATHS if path.startswith("worldfoundry/")]
+
+
+def license_gated_prefixes() -> list[str]:
+    return [path.replace("/", ".") for path in license_gated_paths()]
+
+
+def manifest_gate_errors(manifest_text: str) -> list[str]:
+    """Compare the manifest's license-gate prune block with ``LICENSE_GATED_PATHS``."""
+    pruned: list[str] = []
     in_block = False
-    for line in manifest_path.read_text(encoding="utf-8").splitlines():
+    for line in manifest_text.splitlines():
         stripped = line.strip()
         if LICENSE_GATE_MARKER in stripped:
             in_block = True
-            continue
-        if in_block and not stripped:
+        elif in_block and not stripped:
             break
-        if in_block and stripped.startswith("prune worldfoundry/"):
-            paths.append(stripped.removeprefix("prune ").rstrip("/"))
-    if not paths:
-        raise RuntimeError(f"no gated paths found below the '{LICENSE_GATE_MARKER}' marker in {manifest_path}")
-    return paths
+        elif in_block and stripped.startswith("prune "):
+            pruned.append(stripped.removeprefix("prune ").rstrip("/"))
+    return [f"MANIFEST.in lacks 'prune {path}'" for path in LICENSE_GATED_PATHS if path not in pruned] + [
+        f"MANIFEST.in prunes ungated path {path}" for path in pruned if path not in LICENSE_GATED_PATHS
+    ]
 
 
-def license_gated_prefixes(manifest_path: Path = MANIFEST_PATH) -> list[str]:
-    return [path.replace("/", ".") for path in license_gated_paths(manifest_path)]
+def gitignore_gate_errors(gitignore_text: str) -> list[str]:
+    """Require an anchored ignore rule for every untracked gated checkout."""
+    rules = set(gitignore_text.splitlines())
+    return [
+        f".gitignore lacks '/{path}/'"
+        for path in LICENSE_GATED_PATHS
+        if path not in TRACKED_LICENSE_GATED_PATHS and f"/{path}/" not in rules
+    ]
 
 
 def leaked_packages(kept_packages: Sequence[str], prefixes: Sequence[str]) -> list[str]:
@@ -420,10 +469,17 @@ def main(argv: list[str] | None = None) -> int:
     all_packages = discover_packages(find_config)
     kept_packages = selected_packages(all_packages, exclude)
     gated_paths = license_gated_paths()
-    gated_prefixes = [path.replace("/", ".") for path in gated_paths]
+    gated_prefixes = license_gated_prefixes()
     exclude_package_data = pyproject["tool"]["setuptools"].get("exclude-package-data", {})
 
     failures = 0
+    gate_errors = [
+        *manifest_gate_errors(MANIFEST_PATH.read_text(encoding="utf-8")),
+        *gitignore_gate_errors(GITIGNORE_PATH.read_text(encoding="utf-8")),
+    ]
+    if gate_errors:
+        failures += 1
+        _print_items("FAIL: packaging rules disagree with LICENSE_GATED_PATHS:", gate_errors)
     notice_path = REPO_ROOT / NOTICE_NAME
     notice = notice_path.read_bytes() if notice_path.is_file() else b""
     notice_errors = license_bundle_errors(notice)
@@ -497,7 +553,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.wheel is not None:
         if not args.wheel.is_file() or args.wheel.suffix != ".whl":
             parser.error(f"--wheel must name an existing .whl file: {args.wheel}")
-        wheel_leaks = audit_wheel(args.wheel, [*gated_paths, *PRIVATE_SOURCE_PATHS, "test", "tests", "test_stream"])
+        wheel_leaks = audit_wheel(
+            args.wheel, [*LICENSE_GATED_PATHS, *PRIVATE_SOURCE_PATHS, "test", "tests", "test_stream"]
+        )
         if wheel_leaks:
             failures += 1
             _print_items(
@@ -511,7 +569,7 @@ def main(argv: list[str] | None = None) -> int:
             _print_items("FAIL: first-party wrapper package(s) absent from wheel:", missing_from_wheel)
 
     if args.sdist is not None:
-        source_leaks = audit_sdist(args.sdist, gated_paths)
+        source_leaks = audit_sdist(args.sdist, list(LICENSE_GATED_PATHS))
         if source_leaks:
             failures += 1
             _print_items("FAIL: private or gated files found in source artifact:", source_leaks, limit=50)
@@ -543,7 +601,7 @@ def main(argv: list[str] | None = None) -> int:
         "packaging license gate OK: "
         f"{len(all_packages)} namespace packages discovered, "
         f"{len(kept_packages)} retained, {len(exclude)} configured excludes, "
-        f"{len(gated_paths)} gated paths protected{artifact}"
+        f"{len(LICENSE_GATED_PATHS)} gated paths protected{artifact}"
     )
     return 0
 

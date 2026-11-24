@@ -77,7 +77,7 @@ def test_small_studio_discovery_and_topology_remain_independent(monkeypatch):
 
     from worldfoundry.studio.inference.catalog import find_entry
     from worldfoundry.studio.inference.dispatch import _validate_model_torchrun_nproc, _with_lingbot_world_parallelism
-    from worldfoundry.studio.ui.launch_config import StudioLaunchConfig, launch_uses_lingbot_torchrun_rollout
+    from worldfoundry.studio.visualization.launch_config import StudioLaunchConfig, launch_uses_lingbot_torchrun_rollout
 
     entry = find_entry(SMALL_MODEL_ID)
     assert entry.model_id == SMALL_MODEL_ID

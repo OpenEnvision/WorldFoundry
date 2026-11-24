@@ -1,7 +1,7 @@
 """Worker for NVIDIA's pinned original GR00T-N1 release.
 
-Invoked by legacy_n1.py in a separate environment with Transformers 4.45.2.
-The official source checkout is supplied through PYTHONPATH by the parent.
+Started by legacy_n1.py as a package module in a separate environment with
+Transformers 4.45.2. The n1-release code is vendored under ``legacy_n1_runtime``.
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ def _write(path: Path, payload: object) -> None:
 
 
 def _install_eager_attention() -> None:
-    """Use standard PyTorch attention without editing NVIDIA's release files."""
-    from gr00t.model.backbone import eagle_backbone
+    """Load the Eagle2 vision and language models with standard PyTorch attention."""
+    from .legacy_n1_runtime.gr00t.model.backbone import eagle_backbone
 
-    official_auto_config = eagle_backbone.AutoConfig
+    official_auto_config = eagle_backbone.Eagle2ChatConfig
 
     class EagerEagleConfig:
         @staticmethod
@@ -33,7 +33,7 @@ def _install_eager_attention() -> None:
             config.llm_config._attn_implementation = "eager"
             return config
 
-    eagle_backbone.AutoConfig = EagerEagleConfig
+    eagle_backbone.Eagle2ChatConfig = EagerEagleConfig
 
 
 def _check_model_weights(model: object, checkpoint_dir: Path) -> dict[str, object]:
@@ -41,15 +41,11 @@ def _check_model_weights(model: object, checkpoint_dir: Path) -> dict[str, objec
 
     model_shapes = {key: tuple(value.shape) for key, value in model.state_dict().items()}
     with safe_open(checkpoint_dir / "model.safetensors", framework="pt", device="cpu") as reader:
-        checkpoint_shapes = {
-            key: tuple(reader.get_slice(key).get_shape()) for key in reader.keys()
-        }
+        checkpoint_shapes = {key: tuple(reader.get_slice(key).get_shape()) for key in reader.keys()}  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
     missing = sorted(model_shapes.keys() - checkpoint_shapes.keys())
     unexpected = sorted(checkpoint_shapes.keys() - model_shapes.keys())
     mismatched = sorted(
-        key
-        for key in model_shapes.keys() & checkpoint_shapes.keys()
-        if model_shapes[key] != checkpoint_shapes[key]
+        key for key in model_shapes.keys() & checkpoint_shapes.keys() if model_shapes[key] != checkpoint_shapes[key]
     )
     record = {
         "checkpoint_tensors": len(checkpoint_shapes),
@@ -91,15 +87,14 @@ def run(request_path: Path) -> None:
     import transformers
 
     if transformers.__version__ != "4.45.2":
-        raise RuntimeError(
-            f"Original GR00T-N1 requires transformers==4.45.2; found {transformers.__version__}"
-        )
+        raise RuntimeError(f"Original GR00T-N1 requires transformers==4.45.2; found {transformers.__version__}")
     torch.set_num_threads(8)
     _install_eager_attention()
 
-    from gr00t.data.embodiment_tags import EmbodimentTag
-    from gr00t.experiment.data_config import DATA_CONFIG_MAP
-    from gr00t.model.policy import Gr00tPolicy
+    from worldfoundry.base_models.llm_mllm_core.action.gr00t.preprocessing.embodiment_tags import EmbodimentTag
+
+    from .legacy_n1_runtime.gr00t.experiment.data_config import DATA_CONFIG_MAP
+    from .legacy_n1_runtime.gr00t.model.policy import Gr00tPolicy
 
     request = json.loads(request_path.read_text())
     checkpoint = Path(request["checkpoint_dir"]).resolve()
@@ -174,9 +169,7 @@ def run(request_path: Path) -> None:
             "data_config_name": data_config_name,
             "load_record": load_record,
             "action_checks": checks,
-            "peak_cuda_memory_allocated": torch.cuda.max_memory_allocated()
-            if torch.cuda.is_available()
-            else 0,
+            "peak_cuda_memory_allocated": torch.cuda.max_memory_allocated() if torch.cuda.is_available() else 0,
         },
         "duration_seconds": round(time.monotonic() - started, 3),
         "metadata": request.get("extra_metadata", {}),

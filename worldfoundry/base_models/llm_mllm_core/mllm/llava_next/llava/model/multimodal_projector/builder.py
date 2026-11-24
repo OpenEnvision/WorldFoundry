@@ -1,6 +1,6 @@
-import torch
-import torch.nn as nn
 import re
+
+import torch.nn as nn
 
 from .pooler_projector import PoolerProjector
 

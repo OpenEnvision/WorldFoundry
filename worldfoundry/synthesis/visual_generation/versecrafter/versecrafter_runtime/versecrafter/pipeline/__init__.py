@@ -1,6 +1,6 @@
-from .pipeline_wan_versecrafter import WanVerseCrafterPipeline
-
 import importlib.util
+
+from .pipeline_wan_versecrafter import WanVerseCrafterPipeline
 
 if importlib.util.find_spec("paifuser") is not None:
     # --------------------------------------------------------------- #

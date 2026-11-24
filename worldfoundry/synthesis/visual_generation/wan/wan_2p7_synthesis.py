@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ._dashscope import RUNTIME_STATUS, DashScopeVideoSynthesis
 
@@ -14,7 +14,7 @@ class Wan2p7Synthesis(DashScopeVideoSynthesis):
 
     def generate_i2av(
         self,
-        media: List[Dict[str, str]],
+        media: list[dict[str, str]],
         input_prompt: str,
         model: str = "wan2.7-i2v",
         resolution: str = "720P",
@@ -22,9 +22,9 @@ class Wan2p7Synthesis(DashScopeVideoSynthesis):
         negative_prompt: str = "",
         prompt_extend: bool = True,
         watermark: bool = False,
-        seed: Optional[int] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        seed: int | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Submit an image-to-video task.
 
         Args:
@@ -34,7 +34,7 @@ class Wan2p7Synthesis(DashScopeVideoSynthesis):
             seed: Random seed for reproducibility.
             kwargs: Extra knobs forwarded into the request's ``parameters``.
         """
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": model,
             "input": {"prompt": input_prompt, "media": media},
             "parameters": {
@@ -53,17 +53,17 @@ class Wan2p7Synthesis(DashScopeVideoSynthesis):
 
     def predict(
         self,
-        processed_data: Dict[str, Any],
+        processed_data: dict[str, Any],
         task_type: str = "i2av",
-        model: Optional[str] = None,
+        model: str | None = None,
         resolution: str = "720P",
         duration: int = 5,
         negative_prompt: str = "",
         prompt_extend: bool = True,
         watermark: bool = False,
-        seed: Optional[int] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        seed: int | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Submit a generation task.
 
         Args:
@@ -77,7 +77,7 @@ class Wan2p7Synthesis(DashScopeVideoSynthesis):
             raise ValueError("Wan2.7 currently only supports i2av task_type.")
 
         prompt = processed_data.get("prompt", "")
-        media = processed_data.get("media", None)
+        media = processed_data.get("media")
         if not media:
             raise ValueError("Wan2.7 requires media input.")
 

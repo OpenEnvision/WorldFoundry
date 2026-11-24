@@ -7,7 +7,6 @@ If you have changes in mind, please contribute back so the community can benefit
 
 import dataclasses
 from enum import IntEnum, auto
-from typing import Any, Dict, List, Tuple, Union
 
 
 class SeparatorStyle(IntEnum):
@@ -44,9 +43,9 @@ class Conversation:
     # The system message
     system_message: str = ""
     # The names of two roles
-    roles: Tuple[str] = ("USER", "ASSISTANT")
+    roles: tuple[str] = ("USER", "ASSISTANT")
     # All messages. Each item is (role, message).
-    messages: List[List[str]] = ()
+    messages: list[list[str]] = ()
     # The number of few shot examples
     offset: int = 0
     # The separator style and configurations
@@ -54,9 +53,9 @@ class Conversation:
     sep: str = "\n"
     sep2: str = None
     # Stop criteria (the default one is EOS token)
-    stop_str: Union[str, List[str]] = None
+    stop_str: str | list[str] = None
     # Stops generation if meeting any token in this list
-    stop_token_ids: List[int] = None
+    stop_token_ids: list[int] = None
 
     def get_prompt(self) -> str:
         """Get the prompt for generation."""
@@ -113,7 +112,7 @@ class Conversation:
             return ret
         elif self.sep_style == SeparatorStyle.RWKV:
             ret = system_prompt
-            for i, (role, message) in enumerate(self.messages):
+            for i, (role, message) in enumerate(self.messages):  # noqa: B007 - The loop variable is read outside the loop.
                 if message:
                     ret += role + ": " + message.replace("\r\n", "\n").replace("\n\n", "\n")
                     ret += "\n\n"
@@ -122,11 +121,8 @@ class Conversation:
             return ret
         elif self.sep_style == SeparatorStyle.LLAMA2:
             seps = [self.sep, self.sep2]
-            if self.system_message:
-                ret = system_prompt
-            else:
-                ret = "[INST] "
-            for i, (role, message) in enumerate(self.messages):
+            ret = system_prompt if self.system_message else "[INST] "
+            for i, (role, message) in enumerate(self.messages):  # noqa: B007 - The loop variable is read outside the loop.
                 tag = self.roles[i % 2]
                 if message:
                     if i == 0:
@@ -140,14 +136,11 @@ class Conversation:
             # source: https://huggingface.co/THUDM/chatglm-6b/blob/1d240ba371910e9282298d4592532d7f0f3e9f3e/modeling_chatglm.py#L1302-L1308
             # source2: https://huggingface.co/THUDM/chatglm2-6b/blob/e186c891cf64310ac66ef10a87e6635fa6c2a579/modeling_chatglm.py#L926
             round_add_n = 1 if self.name == "chatglm2" else 0
-            if system_prompt:
-                ret = system_prompt + self.sep
-            else:
-                ret = ""
+            ret = system_prompt + self.sep if system_prompt else ""
 
             for i, (role, message) in enumerate(self.messages):
                 if i % 2 == 0:
-                    ret += f"[Round {i//2 + round_add_n}]{self.sep}"
+                    ret += f"[Round {i // 2 + round_add_n}]{self.sep}"
 
                 if message:
                     ret += f"{role}：{message}{self.sep}"
@@ -263,7 +256,7 @@ class Conversation:
     def to_gradio_chatbot(self):
         """Convert the conversation to gradio chatbot format."""
         ret = []
-        for i, (role, msg) in enumerate(self.messages[self.offset :]):
+        for i, (_role, msg) in enumerate(self.messages[self.offset :]):
             if i % 2 == 0:
                 ret.append([msg, None])
             else:
@@ -308,7 +301,7 @@ class Conversation:
 
 
 # A global registry for all conversation templates
-conv_templates: Dict[str, Conversation] = {}
+conv_templates: dict[str, Conversation] = {}
 
 
 def register_conv_template(template: Conversation, override: bool = False):

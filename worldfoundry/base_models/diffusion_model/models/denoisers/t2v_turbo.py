@@ -57,11 +57,7 @@ def t2v_turbo_guidance_projection(reference: torch.Tensor) -> torch.Tensor:
 
 def _unet_state_dict(state_dict: Mapping[str, object]) -> Mapping[str, object]:
     prefix = "model.diffusion_model."
-    converted = {
-        key[len(prefix) :]: value
-        for key, value in state_dict.items()
-        if key.startswith(prefix)
-    }
+    converted = {key[len(prefix) :]: value for key, value in state_dict.items() if key.startswith(prefix)}
     if not converted:
         raise KeyError("VideoCrafter checkpoint contains no model.diffusion_model parameters")
     if "time_cond_proj.weight" not in converted:
@@ -72,6 +68,7 @@ def _unet_state_dict(state_dict: Mapping[str, object]) -> Mapping[str, object]:
 
 class T2VTurboDenoiser:
     """LVDM UNet adapter that consumes ``context`` and LCM ``timestep_cond``."""
+
     def __init__(self, model: UNetModel) -> None:
         self.model = model
 
@@ -124,8 +121,8 @@ def build_t2v_turbo_denoiser(context: ComponentBuildContext) -> T2VTurboDenoiser
 
 
 __all__ = [
-    "T2VTurboDenoiser",
     "T2V_TURBO_UNET_CONFIG",
+    "T2VTurboDenoiser",
     "build_t2v_turbo_denoiser",
     "t2v_turbo_guidance_projection",
 ]

@@ -1,3 +1,4 @@
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 import dataclasses
 from typing import Any
 
@@ -51,9 +52,7 @@ def make_attn_mask(input_mask, mask_ar, mask_na=None):
         mask_na = jnp.broadcast_to(mask_na, input_mask.shape)
         mask_not_attend = jnp.logical_and(
             jnp.logical_or(mask_na[:, None, :], mask_na[:, :, None]),
-            einops.repeat(
-                jnp.cumsum(mask_na, axis=1) <= 0, "b k -> b s k", s=mask_na.shape[1]
-            ),
+            einops.repeat(jnp.cumsum(mask_na, axis=1) <= 0, "b k -> b s k", s=mask_na.shape[1]),
         )
         # print(mask_not_attend)
         return jnp.where(mask_not_attend, False, jnp.logical_and(attn_mask, valid_mask))
@@ -85,7 +84,9 @@ class HistoryPi0Config(Pi0Config):
                     max_token_len *= 2
                 else:
                     raise ValueError(f"Not supported symbolic memory type: {loaded_config.symbolic_memory.type}")
-                config_with_loaded_history = dataclasses.replace(config_with_loaded_history, max_token_len=max_token_len)
+                config_with_loaded_history = dataclasses.replace(
+                    config_with_loaded_history, max_token_len=max_token_len
+                )
                 print("symbolic_memory_type: ", loaded_config.symbolic_memory.type)
 
             print("max_token_len: ", config_with_loaded_history.max_token_len)
@@ -103,12 +104,8 @@ class HistoryPi0Config(Pi0Config):
                 if self.history_config.representation_type == "symbolic":
                     observation_spec = HistAugObservation.from_base_obs(
                         base_obs_spec,
-                        symbolic_tokenized_prompt=jax.ShapeDtypeStruct(
-                            [batch_size, self.max_token_len], jnp.int32
-                        ),
-                        symbolic_tokenized_prompt_mask=jax.ShapeDtypeStruct(
-                            [batch_size, self.max_token_len], bool
-                        ),
+                        symbolic_tokenized_prompt=jax.ShapeDtypeStruct([batch_size, self.max_token_len], jnp.int32),
+                        symbolic_tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, self.max_token_len], bool),
                     )
                 elif self.history_config.representation_type == "perceptual":
                     observation_spec = HistAugObservation.from_base_obs(
@@ -183,11 +180,10 @@ class HistoryPi0Config(Pi0Config):
                     )
 
                 else:
-                    raise ValueError(
-                        f"Not supported representation type: {self.history_config.representation_type}"
-                    )
+                    raise ValueError(f"Not supported representation type: {self.history_config.representation_type}")
 
         return observation_spec, action_spec
+
 
 class HistoryPi0(BaseModel):
     def __init__(self, config: HistoryPi0Config, rngs: nnx.Rngs):
@@ -195,7 +191,6 @@ class HistoryPi0(BaseModel):
         self.pi05 = config.pi05
         paligemma_config = _gemma.get_config(config.paligemma_variant)
         action_expert_config = _gemma.get_config(config.action_expert_variant)
-
 
         self.config = config
         self.use_history = config.use_history
@@ -224,13 +219,9 @@ class HistoryPi0(BaseModel):
                     dtype=config.dtype,
                 )
             elif self.representation_type == "symbolic":
-                self.integration_type = (
-                    None  # if symbolic, we only use it as languge input
-                )
+                self.integration_type = None  # if symbolic, we only use it as languge input
             else:
-                raise ValueError(
-                    f"Not supported representation type: {self.representation_type}"
-                )
+                raise ValueError(f"Not supported representation type: {self.representation_type}")
 
             print(
                 f"====== Using History, Representation Type: {self.representation_type} , Integration Type: {self.integration_type} ======"
@@ -259,10 +250,8 @@ class HistoryPi0(BaseModel):
                 llm.lazy_init(
                     rngs=rngs,
                     method="init",
-                    use_adarms=(
-                        [False, False, True] if config.pi05 else [False, False, False]
-                    ),
-                    mem_mods=[False, False, False]
+                    use_adarms=([False, False, True] if config.pi05 else [False, False, False]),
+                    mem_mods=[False, False, False],
                 )
             else:
                 llm = nnx_bridge.ToNNX(
@@ -282,9 +271,7 @@ class HistoryPi0(BaseModel):
 
         else:
             # safe setting
-            self.history_config = self.integration_type = self.representation_type = (
-                None
-            )
+            self.history_config = self.integration_type = self.representation_type = None
 
             llm = nnx_bridge.ToNNX(
                 _gemma.Module(
@@ -298,7 +285,7 @@ class HistoryPi0(BaseModel):
                 rngs=rngs,
                 method="init",
                 use_adarms=[False, True] if config.pi05 else [False, False],
-                mem_mods=[False, False]
+                mem_mods=[False, False],
             )
 
         img = nnx_bridge.ToNNX(
@@ -313,37 +300,21 @@ class HistoryPi0(BaseModel):
         img.lazy_init(next(iter(config.fake_obs().images.values())), rngs=rngs)
 
         self.PaliGemma = nnx.Dict(llm=llm, img=img)
-        self.action_in_proj = nnx.Linear(
-            config.action_dim, action_expert_config.width, rngs=rngs
-        )
+        self.action_in_proj = nnx.Linear(config.action_dim, action_expert_config.width, rngs=rngs)
 
         if config.pi05:
-            self.time_mlp_in = nnx.Linear(
-                action_expert_config.width, action_expert_config.width, rngs=rngs
-            )
-            self.time_mlp_out = nnx.Linear(
-                action_expert_config.width, action_expert_config.width, rngs=rngs
-            )
+            self.time_mlp_in = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
+            self.time_mlp_out = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
         else:
-            self.state_proj = nnx.Linear(
-                config.action_dim, action_expert_config.width, rngs=rngs
-            )
-            self.action_time_mlp_in = nnx.Linear(
-                2 * action_expert_config.width, action_expert_config.width, rngs=rngs
-            )
-            self.action_time_mlp_out = nnx.Linear(
-                action_expert_config.width, action_expert_config.width, rngs=rngs
-            )
-        self.action_out_proj = nnx.Linear(
-            action_expert_config.width, config.action_dim, rngs=rngs
-        )
+            self.state_proj = nnx.Linear(config.action_dim, action_expert_config.width, rngs=rngs)
+            self.action_time_mlp_in = nnx.Linear(2 * action_expert_config.width, action_expert_config.width, rngs=rngs)
+            self.action_time_mlp_out = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
+        self.action_out_proj = nnx.Linear(action_expert_config.width, config.action_dim, rngs=rngs)
 
     @at.typecheck
     def embed_memory(self, obs: HistAugObservation):
         if self.representation_type == "perceptual":
-            tokens, _, stats = self.mem_encoder(
-                obs.static_image_emb, obs.static_pos_emb, obs.static_state_emb
-            )
+            tokens, _, stats = self.mem_encoder(obs.static_image_emb, obs.static_pos_emb, obs.static_state_emb)
             input_mask = obs.static_mask
             ar_mask = [False] * tokens.shape[1]
             na_mask = [False] * tokens.shape[1]
@@ -413,9 +384,7 @@ class HistoryPi0(BaseModel):
 
         # add language (aka tokenized inputs)
         if self.use_history and self.representation_type == "symbolic":
-            tokenized_inputs = self.PaliGemma.llm(
-                obs.symbolic_tokenized_prompt, method="embed"
-            )
+            tokenized_inputs = self.PaliGemma.llm(obs.symbolic_tokenized_prompt, method="embed")
             tokens.append(tokenized_inputs)
             input_mask.append(obs.symbolic_tokenized_prompt_mask)
             # full attention between image and language inputs
@@ -466,9 +435,7 @@ class HistoryPi0(BaseModel):
 
         action_tokens = self.action_in_proj(noisy_actions)
         # embed timestep using sine-cosine positional encoding with sensitivity in the range [0, 1]
-        time_emb = posemb_sincos(
-            timestep, self.action_in_proj.out_features, min_period=4e-3, max_period=4.0
-        )
+        time_emb = posemb_sincos(timestep, self.action_in_proj.out_features, min_period=4e-3, max_period=4.0)
         if self.pi05:
             # time MLP (for adaRMS)
             time_emb = self.time_mlp_in(time_emb)
@@ -479,9 +446,7 @@ class HistoryPi0(BaseModel):
             adarms_cond = time_emb
         else:
             # mix timestep + action information using an MLP (no adaRMS)
-            time_tokens = einops.repeat(
-                time_emb, "b emb -> b s emb", s=self.action_horizon
-            )
+            time_tokens = einops.repeat(time_emb, "b emb -> b s emb", s=self.action_horizon)
             action_time_tokens = jnp.concatenate([action_tokens, time_tokens], axis=-1)
             action_time_tokens = self.action_time_mlp_in(action_time_tokens)
             action_time_tokens = nnx.swish(action_time_tokens)
@@ -509,16 +474,13 @@ class HistoryPi0(BaseModel):
         num_steps: int | at.Int[at.Array, ""] = 10,
         noise: at.Float[at.Array, "b ah ad"] | None = None,
     ) -> Actions:
-
         observation = preprocess_observation(observation)
         # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
         # distribution. yes, this is the opposite of the pi0 paper, and I'm sorry.
         dt = -1.0 / num_steps
         batch_size = observation.state.shape[0]
         if noise is None:
-            noise = jax.random.normal(
-                rng, (batch_size, self.action_horizon, self.action_dim)
-            )
+            noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
 
         if self.integration_type == "expert":
             mem_tokens, mem_input_mask, mem_ar_mask, mem_na_mask, _ = self.embed_memory(observation)
@@ -528,9 +490,7 @@ class HistoryPi0(BaseModel):
             prefix_mask = jnp.concatenate([mem_input_mask, vlm_mask], axis=1)
             prefix_ar_mask = jnp.concatenate([mem_ar_mask, vlm_ar_mask], axis=0)
             prefix_na_mask = jnp.concatenate([mem_na_mask, vlm_na_mask], axis=0)
-            prefix_attn_mask = make_attn_mask(
-                prefix_mask, prefix_ar_mask, prefix_na_mask
-            )
+            prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask, prefix_na_mask)
             positions = jnp.cumsum(prefix_mask, axis=1) - 1
             _, kv_cache = self.PaliGemma.llm(
                 [mem_tokens, vlm_tokens, None],
@@ -542,9 +502,7 @@ class HistoryPi0(BaseModel):
             prefix_tokens, prefix_mask, prefix_ar_mask, _, _ = self.embed_prefix(observation)
             prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
             positions = jnp.cumsum(prefix_mask, axis=1) - 1
-            _, kv_cache = self.PaliGemma.llm(
-                [prefix_tokens, None], mask=prefix_attn_mask, positions=positions
-            )
+            _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
             mem_seq, mem_mask, _, _, _ = self.embed_memory(observation)
 
         else:
@@ -554,40 +512,29 @@ class HistoryPi0(BaseModel):
             else:
                 prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
             positions = jnp.cumsum(prefix_mask, axis=1) - 1
-            _, kv_cache = self.PaliGemma.llm(
-                [prefix_tokens, None], mask=prefix_attn_mask, positions=positions
-            )
-
+            _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
 
         def step(carry):
             x_t, time = carry
-            suffix_tokens, suffix_mask, suffix_ar_mask, _, adarms_cond = (
-                self.embed_suffix(observation, x_t, jnp.broadcast_to(time, batch_size))
+            suffix_tokens, suffix_mask, suffix_ar_mask, _, adarms_cond = self.embed_suffix(
+                observation, x_t, jnp.broadcast_to(time, batch_size)
             )
             # `suffix_attn_mask` is shape (b, suffix_len, suffix_len) indicating how the suffix tokens can attend to each
             # other
             suffix_attn_mask = make_attn_mask(suffix_mask, suffix_ar_mask)
             # `prefix_attn_mask` is shape (b, suffix_len, prefix_len) indicating how the suffix tokens can attend to the
             # prefix tokens
-            prefix_attn_mask = einops.repeat(
-                prefix_mask, "b p -> b s p", s=suffix_tokens.shape[1]
-            )
+            prefix_attn_mask = einops.repeat(prefix_mask, "b p -> b s p", s=suffix_tokens.shape[1])
             # `combined_mask` is shape (b, suffix_len, prefix_len + suffix_len) indicating how the suffix tokens (which
             # generate the queries) can attend to the full prefix + suffix sequence (which generates the keys and values)
-            full_attn_mask = jnp.concatenate(
-                [prefix_attn_mask, suffix_attn_mask], axis=-1
-            )
+            full_attn_mask = jnp.concatenate([prefix_attn_mask, suffix_attn_mask], axis=-1)
             assert full_attn_mask.shape == (
                 batch_size,
                 suffix_tokens.shape[1],
                 prefix_mask.shape[1] + suffix_tokens.shape[1],
             )
             # `positions` is shape (b, suffix_len) indicating the positions of the suffix tokens
-            positions = (
-                jnp.sum(prefix_mask, axis=-1)[:, None]
-                + jnp.cumsum(suffix_mask, axis=-1)
-                - 1
-            )
+            positions = jnp.sum(prefix_mask, axis=-1)[:, None] + jnp.cumsum(suffix_mask, axis=-1) - 1
 
             if self.integration_type == "expert":
                 (mem_out, prefix_out, suffix_out), _ = self.PaliGemma.llm(
@@ -629,7 +576,6 @@ class HistoryPi0(BaseModel):
 
         x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
         return x_0
-
 
     def vision_encode(self, images: at.Float[at.Array, "k v 224 224 3"]):
         shape = images.shape

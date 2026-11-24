@@ -29,4 +29,4 @@ camera_keys:
 - head
 - left_wrist
 - right_wrist
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner

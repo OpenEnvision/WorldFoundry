@@ -1,7 +1,7 @@
 """Central logging configuration for WorldFoundry.
 
 This module is the single opt-in entry point for wiring the framework's
-loguru-backed ``log`` facade (:mod:`worldfoundry.core.distributed.runtime.logging`)
+loguru-backed ``log`` facade (:mod:`worldfoundry.core.observability.rank_logging`)
 together with the stdlib :mod:`logging` hierarchy — vendored model runtimes,
 the sequence-parallel infrastructure (``init_logger``), and the rank-aware
 ``distributed_logger``. Calling :func:`configure_logging` once at process
@@ -39,13 +39,14 @@ import re
 import sys
 import threading
 import traceback
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import Any, cast
 
 __all__ = [
     "bind_log_context",
@@ -54,8 +55,8 @@ __all__ = [
     "get_log_context",
     "get_logger",
     "is_configured",
-    "log_context_environment",
     "log_context",
+    "log_context_environment",
     "write_jsonl_event",
 ]
 
@@ -86,7 +87,7 @@ _CONFIGURE_LOCK = threading.Lock()
 # without leaking into concurrent runs in the same process.  The fields are
 # attached by the formatter, which means stdlib and facade call sites receive
 # the same context without every caller having to pass it explicitly.
-_LOG_CONTEXT: ContextVar[dict[str, Any]] = ContextVar("worldfoundry_log_context", default={})
+_LOG_CONTEXT: ContextVar[Mapping[str, Any]] = ContextVar("worldfoundry_log_context", default=MappingProxyType({}))
 _SCHEMA_VERSION = "worldfoundry.log.v1"
 _CONTEXT_FIELDS = (
     "run_id",
@@ -119,7 +120,7 @@ _KNOWN_TOKEN = re.compile(
 )
 
 
-def bind_log_context(**fields: Any) -> Token[dict[str, Any]]:
+def bind_log_context(**fields: Any) -> Token[Mapping[str, Any]]:
     """Bind correlation fields for the current execution context.
 
     The returned token can be passed to :meth:`contextvars.ContextVar.reset`,
@@ -170,7 +171,7 @@ def _bind_log_context_from_environment() -> None:
 
 
 @contextmanager
-def log_context(**fields: Any) -> Iterator[None]:
+def log_context(**fields: Any) -> Generator[None, None, None]:
     """Temporarily bind correlation fields for a block of work."""
 
     token = bind_log_context(**fields)
@@ -181,7 +182,8 @@ def log_context(**fields: Any) -> Iterator[None]:
 
 
 try:  # loguru is an optional dependency; the stdlib path is fully supported.
-    from loguru import logger as _loguru_logger
+    # Optional backend; its record dictionaries include formatter-owned fields.
+    _loguru_logger = __import__("loguru", fromlist=["logger"]).logger
 
     _LOGURU_AVAILABLE = True
 except ImportError:  # pragma: no cover - exercised in minimal environments.
@@ -354,21 +356,22 @@ class WorldFoundryLoggerAdapter(logging.LoggerAdapter):
     and fields stay separate from human-readable messages.
     """
 
-    def process(self, message: object, kwargs: dict[str, Any]) -> tuple[object, dict[str, Any]]:
+    # logging invokes process positionally; keep the public message parameter name.
+    def process(self, message: object, kwargs: dict[str, Any]) -> tuple[object, dict[str, Any]]:  # ty: ignore[invalid-method-override]
         """Merge adapter-bound fields with per-call extras without dropping caller ``extra``."""
         extra = dict(kwargs.get("extra") or {})
         supplied = extra.pop("_worldfoundry_fields", {})
-        fields = dict(self.extra.get("_worldfoundry_fields", {}))
+        fields = dict(cast(Mapping[str, Any], self.extra).get("_worldfoundry_fields", {}))
         if isinstance(supplied, Mapping):
             fields.update(supplied)
         extra["_worldfoundry_fields"] = fields
         kwargs["extra"] = extra
         return message, kwargs
 
-    def bind(self, **fields: Any) -> "WorldFoundryLoggerAdapter":
+    def bind(self, **fields: Any) -> WorldFoundryLoggerAdapter:
         """Return a sibling logger with fields attached to every record."""
 
-        current = dict(self.extra.get("_worldfoundry_fields", {}))
+        current = dict(cast(Mapping[str, Any], self.extra).get("_worldfoundry_fields", {}))
         current.update(fields)
         return type(self)(self.logger, {"_worldfoundry_fields": current})
 
@@ -478,7 +481,8 @@ def _resolve_level(level: str | int | None, default: int = logging.INFO) -> int:
     upper = level.strip().upper()
     if upper in _LEVEL_ALIASES:
         return _LEVEL_ALIASES[upper]
-    resolved = logging.getLevelName(upper)
+    # logging.getLevelNamesMapping() needs Python 3.11; the name -> level lookup also honours addLevelName levels.
+    resolved = logging.getLevelName(upper)  # ty: ignore[deprecated]
     if isinstance(resolved, int) and 0 <= resolved <= logging.CRITICAL:
         return resolved
     raise ValueError(f"Unknown log level {level!r}. Expected one of DEBUG/INFO/WARNING/ERROR/CRITICAL.")
@@ -499,15 +503,16 @@ class _StdlibToLoguruHandler(logging.Handler):
         """Forward one stdlib record into loguru; never raise — failures go to ``handleError``."""
         try:
             _sanitize_record(record)
+            logger = cast(Any, _loguru_logger)
             try:
-                level = _loguru_logger.level(record.levelname).name  # type: ignore[union-attr]
+                level = logger.level(record.levelname).name
             except (ValueError, TypeError):
                 level = record.levelno
             frame, depth = logging.currentframe(), 0
             while frame is not None and (depth == 0 or frame.f_code.co_filename == logging.__file__):
                 frame = frame.f_back
                 depth += 1
-            _loguru_logger.bind(  # type: ignore[union-attr]
+            logger.bind(
                 _worldfoundry_fields=_record_fields(record),
                 _worldfoundry_logger_name=record.name,
             ).opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
@@ -563,10 +568,7 @@ def _loguru_json_format(record: Mapping[str, Any]) -> str:
             if key != "_worldfoundry_fields":
                 fields.setdefault(str(key), value)
     record_time = record.get("time")
-    if isinstance(record_time, datetime):
-        timestamp = record_time
-    else:
-        timestamp = datetime.now(timezone.utc)
+    timestamp = record_time if isinstance(record_time, datetime) else datetime.now(timezone.utc)
     level = record.get("level")
     level_name = getattr(level, "name", str(level))
     process = record.get("process")
@@ -637,7 +639,7 @@ def _apply_distributed_logger(level: int) -> None:
     distributed stack; if it is unavailable we simply skip reparenting.
     """
     try:
-        from worldfoundry.core.distributed.runtime.logging import distributed_logger
+        from worldfoundry.core.observability.rank_logging import distributed_logger
     except Exception:
         return
     distributed_logger.handlers.clear()
@@ -707,7 +709,9 @@ def _configure_loguru(
     colorize: bool | None,
 ) -> None:
     """Reset loguru sinks and intercept stdlib so vendored loggers share one pipeline."""
-    _loguru_logger.remove()  # type: ignore[union-attr]
+    # Loguru's Record stub omits formatter-owned keys added by the callbacks below.
+    logger = cast(Any, _loguru_logger)
+    logger.remove()
     # Bridge stdlib logging into loguru so vendored / sequence-parallel loggers
     # share the same sinks as the facade.
     root = logging.getLogger()
@@ -717,7 +721,7 @@ def _configure_loguru(
     root.addHandler(handler)
 
     console_color = True if colorize is None else colorize
-    _loguru_logger.add(  # type: ignore[union-attr]
+    logger.add(
         _write_console,
         level=level_name,
         format=_loguru_text_format,
@@ -730,7 +734,7 @@ def _configure_loguru(
         if suffix and suffix not in path.name:
             path = path.with_name(f"{path.stem}{suffix}{path.suffix}")
         path.parent.mkdir(parents=True, exist_ok=True)
-        _loguru_logger.add(  # type: ignore[union-attr]
+        logger.add(
             str(path),
             level=level_name,
             format=_loguru_json_format if json_file else _loguru_text_format,

@@ -13,7 +13,7 @@ Validation evidence should be proportional to the changed surface: small enough 
 - **CLI or runner** — Public CLI discovery plus a representative evaluate command. Extra when promoted: Existing-results and model-mode runs if output contracts changed.
 - **Model manifest** — `zoo model-show`, `zoo model-download --check-local`. Extra when promoted: Clone, checkpoint, demo parity, runner parity, benchmark run.
 - **Model runtime integration** — In-tree runtime import, no machine-local source checkout dependency, runtime profile with `backend_stage`, and focused regression. Extra when promoted: Checkpoint-backed run and one normalized benchmark scorecard.
-- **Benchmark manifest** — `zoo benchmark-show`, `preflight runtime --profile <benchmark-id>`. Extra when promoted: Clone, dataset, official runtime, normalized scorecard.
+- **Benchmark manifest** — `zoo benchmark-show`, `preflight runtime --profile <benchmark-id> --output-dir <dir>`. Extra when promoted: Clone, dataset, official runtime, normalized scorecard.
 - **Benchmark runner** — `zoo benchmark-run --mode official-validation` or `--mode official-run`. Extra when promoted: Official result import, official runtime, and full-suite fairness gate.
 - **Suite or matrix** — `run --all-benchmarks --plan-only --json`. Extra when promoted: Plan selected cells, then validate artifacts with runnable benchmark paths.
 
@@ -36,13 +36,20 @@ make test
 python -m pytest -q tests/runtime/test_geometry_regression_impact.py
 ```
 
+The generated environment adds the Conda CUDA toolkit's target-specific headers
+to the host compiler search path when present. PyTorch extensions such as
+gsplat use them to compile C++ sources.
+
 The default selection in `pyproject.toml` covers process logging, GPU lease
 bookkeeping with simulated devices, checkpoint staging, job persistence,
 Conda dispatch, pipeline cleanup, job shutdown, and packaging boundaries.
 It runs without CUDA, checkpoint downloads, or provider API credentials. CI
 uses the complete selection plus the coverage, evidence, historical-reference
 and JUnit-validator contracts. `make test-infer` is an alias; use `PYTHON=python3` on
-systems whose `python` command still points to Python 2.
+systems whose `python` command still points to Python 2. The public gate uses the
+`test` extra without Torch; PyAV, Protobuf and SoundFile support its artifact
+readers. Contracts that import model runtimes or tensor-based metrics belong to
+`test-infer-tensors`.
 
 The Make targets collect an independent complete node manifest before running
 tests. They reject skips, collection errors, missing or additional nodes,
@@ -98,7 +105,11 @@ parity, and backend fallbacks. These CPU tests require Torch/torchvision, PyAV,
 ImageIO/FFmpeg and OpenCV; hosted tensor CI installs them separately from the
 Torch-free public gate. The extended component selection also installs Diffusers
 0.39, EasyDict, Loguru, Matplotlib, dm-tree, timm and aiortc for scheduler,
-logging, pose-rendering, tensor-tree, perception and WebRTC contracts. RTX adapter tests use a fake effect and do not establish
+logging, pose-rendering, tensor-tree, perception and WebRTC contracts. Hydra,
+Trimesh, Kornia, Lightning utilities, Lightning/PyTorch Lightning, msgspec,
+OpenCLIP, einops-exts, Beautiful Soup, gdown and Decord provide the selected
+configuration, geometry, encoder and video-reader dependencies.
+RTX adapter tests use a fake effect and do not establish
 proprietary-runtime execution. Bridge and realtime integration tests remain
 selected alongside these shared contracts.
 `tests/core/execution/test_cuda_nvenc_transport.py` belongs to the CUDA gate;
@@ -300,10 +311,10 @@ accepting a seeded reference requires separately recording this behavior fix
 and proving latent and controlled-decoder parity, rather than silently
 replacing a failed reference.
 
-The existing `tests/manual/geometry_regression_cases.json` now includes geometry,
-video and world-model cases. Legacy script names and `GEOMETRY_*` commands remain
+`tests/manual/geometry_regression_cases.json` covers geometry, video and
+world-model cases. The geometry script names and `GEOMETRY_*` commands remain
 available; `plan-inference`, `replay-inference` and `verify-inference` expose the
-broader scope. New short cases declare Wan 2.1 1.3B, Wan 2.2 TI2V 5B, LTX 0.9.8
+broader scope. Short cases declare Wan 2.1 1.3B, Wan 2.2 TI2V 5B, LTX 0.9.8
 I2V, CogVideoX 2B, Cosmos Predict 2.5 2B, Matrix Game 2 and DreamX World 5B AR.
 LTX retains its native two-pass ten-step recipe. These cases compare available
 latents, raw frames, decoded RGB exports and fps; they check changed conditions,
@@ -347,6 +358,124 @@ pixels and frame rate against the reference. Oasis uses this route because
 its subprocess returns an MP4 without in-memory tensors; its generator fixes
 the random seed to 0.
 
+Pi4 declares `projected_tracks` from each captured or exported XYZ array to
+its dense XY track array. The runner derives in-frame validity from pixel
+coordinates and raster size. It requires finite XYZ inside the image and
+NaN markers outside. Replay compares the validity mask exactly and checks
+all in-frame coordinates.
+
+GPU-required cases set `requires_gpu: true`; the runner fails before loading
+weights when CUDA is unavailable. This declaration does not certify a GPU run.
+The native LTX-2.5, LTX-2/2.3 IC-LoRA V2V and HyperFlow cases compare decoded
+video and FPS using their declared checkpoint and control assets.
+
+For generated-text models, `text_outputs` maps relative JSON artifact names to
+explicit output field paths, for example `{"prediction.json": ["text"]}`.
+The runner stores the selected string as UTF-8 `uint8` bytes under
+`text.prediction.json.text` and requires that key in `required_outputs`.
+Auditing re-reads the selected fields and requires exact byte equality even
+when a floating-point tolerance is supplied. Input paths and other JSON strings
+are not captured. OmniVinci's audiovisual case compares its generated description
+through this contract; legacy numerical cases are unchanged.
+
+Emu3.5 exports its in-tree Story protobuf as `.pb`. The replay exporter uses
+that schema to read generated clip text and PNG images into
+`export.<file>.text.*` and `export.<file>.images.*` arrays. Both generated
+modalities are required; a question-only response cannot pass. Text bytes and
+image pixels compare exactly, including when numerical tolerances are supplied.
+Questions and reference images are not generated outputs.
+
+MMAudio FLAC artifacts are decoded lazily with SoundFile to lossless `int32`
+PCM arrays, sample rate and channel count under `export.<file>.samples`,
+`.sample_rate` and `.channels`. Samples and metadata compare exactly even
+with floating-point tolerances; container tags do not affect the comparison.
+Empty audio fails validation. The 16k and 44k routes have separate GPU cases.
+Both cases pin the consumed checkpoint files, including the local OpenCLIP
+export. Prepare OpenCLIP and the 44 kHz BigVGAN export under
+`WORLDFOUNDRY_CKPT_DIR` so the replay checks the files the runtime loads.
+
+The short Show-o replay pins the Show-o and MAGVIT configurations and weights
+plus the Phi-1.5 configuration and tokenizer files used to load the released
+model. Stage these files in their three local checkpoint directories.
+
+AnimateDiff V3 pins the SD1.5 files, motion module, RealisticVision checkpoint,
+and OpenAI CLIP ViT-L/14 configuration and weights used during replay. Stage
+the CLIP pair under `WORLDFOUNDRY_CKPT_DIR/openai--clip-vit-large-patch14`.
+
+Echo-Infinity pins the Wan2.1-T2V-1.3B denoiser configuration and weights,
+VAE, T5 encoder and tokenizer files loaded from `wan_models/Wan2.1-T2V-1.3B`.
+The replay profile supplies the generator checkpoint SHA256. The explicit file
+inventory requires an accepted reference recorded with this recipe.
+
+For generated video soundtracks, declare `audio_outputs: ["video.mp4"]`.
+PyAV decodes the selected stream to float32 PCM under `audio.<file>.samples`,
+with exact sample-rate, channel-count and channel-layout metadata. PCM compares
+exactly even with floating-point tolerances; missing or empty audio fails.
+HyperFlow requires both decoded video and its generated soundtrack. Cases
+without `audio_outputs` retain their existing captures.
+
+NWM and MineWorld forward the loader's optional seed to their in-tree subprocesses,
+seeding Python, NumPy and Torch through the canonical runtime helper. An unset
+seed leaves their RNG behavior unchanged. NWM records generated PNG frames,
+not the request plan; replay compares the decoded prediction pixels exactly.
+
+Action cases can materialize their released camera/state observations from
+UTF-8 JSON input data. `input_json` maps a concrete call argument to an explicitly
+listed `assets` file and a required SHA256 pin:
+
+```json
+{
+  "input_json": {
+    "official_policy_observation": {
+      "path": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/go1/observation.json",
+      "sha256": "${WORLDFOUNDRY_REGRESSION_GO1_OBSERVATION_SHA256}"
+    }
+  }
+}
+```
+
+The private accepted-reference profile supplies the 64-character lowercase
+hexadecimal pin. Unset, malformed or mismatched pins, undeclared input files,
+and collisions with explicit `call` arguments fail before model loading.
+Environment tokens inside the decoded observation use the existing case
+expansion. The checkpoint, seed, inference call and required action outputs
+remain in the case; only observation data is external. Include the observation
+bundle in `assets` to pin its referenced camera media as well. JSON inputs apply
+to single-call recipes; legacy cases need no changes. Observation materialization
+and accepted-reference receipts remain GPU-host prerequisites.
+
+For an uploaded observation bundle with absolute paths from another host, set
+`WORLDFOUNDRY_REGRESSION_ORIGINAL_INPUT_ROOT` to its former input root and
+`WORLDFOUNDRY_REGRESSION_INPUT_ROOT` to the copied root in the case environment.
+The runner resolves matching paths to declared local files after checking the
+JSON pin. The observation JSON and the accompanying asset hashes are retained.
+
+File-backed native inputs use `asset_sha256`, a mapping from declared `assets`
+names to required lowercase SHA256 pins or operator-supplied pin variables.
+The runner checks these pins before hashing checkpoints or loading the model;
+it does not rewrite the input payload. Single-call cases may select generated
+fields with `result_outputs`, for example `["actions"]`, excluding timing and
+memory metadata. Selected media paths use the existing numerical decoders.
+`result_outputs: []` compares only explicitly exported outputs; required-output
+checks still reject a plan or an empty result. Omitting either option preserves
+the existing case behavior.
+
+Family recipes preserve their native checkpoint and input contracts. DIAMOND's
+public `model_path` selects `pretrained_dir`; its Atari replay uses
+`pretrained=True`, a selected game and a pinned, precollected nonempty initialization
+dataset rather than collecting new simulator observations. LeWorldModel's
+`model_path` selects its learned `policy` checkpoint; DINO-WM compares the computed
+`planned_actions.npy`, and LaST-R1 selects generated action fields rather than value
+or runtime metadata. The model-specific seed and command tests are weight-free
+contracts, not checkpoint-generation evidence.
+
+StarWM's public `model_path` selects `served_model_id`, not a local checkpoint.
+Its pending endpoint declaration requires a matching seeded vLLM server, pinned
+server provenance and genuine generated state text. It remains a local-checkpoint
+coverage-policy blocker, and the public runtime's endpoint readiness gate remains
+blocked. Endpoint repeatability and accepted-reference execution are separate
+requirements.
+
 Kandinsky6 Lite/Pro, including each distilled and pretraining variant, has its
 own `kandinsky6-<variant>-video-short` case. Stage the matching Diffusers release
 under `WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT` at the case's `assets.checkpoint`
@@ -375,16 +504,33 @@ inference. A frozen baseline preserves existing gaps while CI rejects new
 uncovered identities, loss of an existing recipe and affected native variants
 without a runnable numerical replay. Releases requiring complete coverage
 can invoke the coverage script with `--require-complete`; gaps return exit 2.
+For commit-diff coverage, `--head` must resolve to the inspected checkout's
+commit. The report records the comparison base, candidate commit and tree.
+Commit-diff coverage reads the committed matrix, model YAML, dependency
+declarations and Python sources. Inventory mode can inspect work in progress.
 
-The planned retirement policy dated 2026-10-16 removes BiWM Wan2.1
+Under the model retirement policy of 2026-10-16, BiWM Wan2.1
 (`biwm-wan21@biwm-wan21`), BiWM Wan2.2 (`biwm-wan22@biwm-wan22`),
-IRASim (`irasim@irasim`) and Pandora (`pandora@pandora`) from active support.
-Their frozen baseline records remain unchanged. The exact identity set in
-`tests/manual/native_coverage_policy.py` permits these planned removals and
+IRASim (`irasim@irasim`) and Pandora (`pandora@pandora`) are out of active support.
+Their frozen baseline records are kept. The exact identity set in
+`tests/manual/native_coverage_policy.py` permits these removals and
 reports them as `retired_native_variants`, not replay coverage or GPU success.
+EgoWM (`egowm@egowm`), HunyuanWorld-Voyager
+(`hunyuanworld-voyager@hunyuanworld-voyager`), HY-World 2.0 world generation
+(`hyworld-worldgen@hyworld-worldgen`), Open Dreamer (`open-dreamer@open-dreamer`),
+ShotStream (`shotstream@shotstream`) and WildDet3D (`wilddet3d@wilddet3d`) are
+retired the same way: their runtimes depended on license-gated local checkouts,
+external source checkouts whose code cannot be vendored, or external build-only
+dependencies, and every model runtime must run from the repository.
 Other frozen variant removals still fail. Reintroducing a retired identity
 requires its own checkpoint replay recipe, like a new variant; its historical
 uncovered-gap exception no longer applies.
+
+The planner records exact runtime deletions for these six integrations as
+`cpu_only_changes` when the approved removal is in the candidate history,
+the comparison base has the removed blobs, and both the source paths and
+binding are absent. The registry CPU tests verify the retired public routes.
+Other runtime paths still follow ordinary affected-case selection.
 
 The short matrix also declares separate recipes for all six Kandinsky 6
 checkpoints, both DreamDojo student identities, LingBot-World-V2 1.3B,
@@ -420,6 +566,10 @@ These declarations supplement static imports. Unknown paths still expand
 selection conservatively and fail when an affected native variant lacks a
 real checkpoint replay.
 
+The `evaluation_only_paths` list records exact files used by evaluation. A
+matching inference import or declared runtime dependency still selects the
+affected case or variant.
+
 Appending recipes and their component declarations selects the added cases
 only when the exact committed before/after definitions prove that every
 existing recipe, ownership and global rule is unchanged. Changed test
@@ -428,7 +578,7 @@ and asset files, matching checkout contents, its CPU contracts and a real MG2
 smoke replay. Changed production code remains independently selected; dirty
 definitions, deletions or reclassifications keep the full replay selection.
 
-The legacy InSpatio, LingBot Cam/Act/V2 and ATI cases each use their own released
+The InSpatio, LingBot Cam/Act/V2 and ATI cases each use their own released
 checkpoint. Set `WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` to the accepted
 scene containing `video_example_00/input/{video.mp4,target_tcw.txt}`.
 `WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS` contains 21-frame `poses.npy` and
@@ -442,20 +592,26 @@ source tree, matrix, dependency declarations and pinned reference index, that
 all affected cases executed, and that every numerical field is exact.
 It requires a `--base` commit-diff plan and recomputes the changed paths;
 manually listed or omitted paths cannot bypass the affected-case gate.
+The matrix and dependency definitions must match the committed files. The
+tracked Python sources used by the import graph must also match that commit.
 Preflight, stale commits, omitted cases, relaxed tolerances and failed runs
 cannot pass. Public CPU and tensor gates must pass separately.
 
-The hosted `inference-replay` job consumes a successful official Actions
-artifact from a maintainer-dispatched control workflow. A missing, expired,
-foreign or stale receipt fails. The dispatch verifies the candidate's exact
+The opt-in `Inference Evidence` workflow (`.github/workflows/inference-evidence.yml`)
+consumes a successful official Actions artifact from a maintainer-dispatched
+control workflow via its `inference-replay` job. A missing, expired, foreign or
+stale receipt fails when enabled. The dispatch verifies the candidate's exact
 commit, tree, comparison base and pinned reference index before publishing
-`trusted-inference-evidence`. Evidence-only dispatches run the attestation job;
-ordinary CI runs verify the receipt. This workflow uses a prepared trusted GPU
-host without requiring a hosted GPU runner. Configure the repository variables
-`INFERENCE_EVIDENCE_CONTROL_REF`, `INFERENCE_EVIDENCE_WORKFLOW_PATH` and
-`INFERENCE_REFERENCE_INDEX_SHA256`; protect the merge branch with the
-`inference-replay` and CPU checks. A workflow declaration alone does not enable
-branch protection. Uncovered and unexecuted variants remain gaps.
+`trusted-inference-evidence`. Evidence-only dispatches run `attest-inference-evidence`;
+ordinary PRs verify the receipt whenever the repository configures
+`INFERENCE_EVIDENCE_CONTROL_REF` and `INFERENCE_REFERENCE_INDEX_SHA256` (and
+optionally `INFERENCE_EVIDENCE_WORKFLOW_PATH`). Repositories without those
+variables run public weight-free checks in `CI` without failing `inference-replay`.
+You can also enable manual `workflow_dispatch` CUDA contract execution on a
+`[self-hosted, linux, gpu]` runner via `.github/workflows/gpu-contracts.yml`.
+Protect the merge branch with the public CPU checks and, once configured,
+`inference-replay`. A workflow declaration alone does not enable branch
+protection. Uncovered and unexecuted variants remain gaps.
 
 MG2 changes, including changes to its numerical contract, additionally require
 all six real-image, 12-block trajectories against a frozen accepted revision.
@@ -476,11 +632,12 @@ INFERENCE_REFERENCE_INDEX_SHA256=<pinned-index> python3 tests/manual/inference_a
   --generic-replay /private/path/replay/report.json --output /private/path/evidence.json
 ```
 
-Dispatch `CI` on the configured control branch with those two commit IDs and
-the compact JSON as `source_revision`, `base_revision` and `evidence_json`.
-After that dispatch succeeds, retry the candidate's `inference-replay` job.
-The companion `inference-evidence-verified.yml` performs this retry once it is
-installed on the repository's default branch; until then retry it explicitly.
+Dispatch `Inference Evidence` on the configured control branch with those two
+commit IDs and the compact JSON as `source_revision`, `base_revision` and
+`evidence_json`. After that dispatch succeeds, retry the candidate's
+`inference-replay` job. The companion `inference-evidence-verified.yml` performs
+this retry once it is installed on the repository's default branch; until then
+retry it explicitly.
 
 ### Component parity and first divergence
 
@@ -569,7 +726,15 @@ The planner combines the explicit component declarations in
 Python imports, literal lazy imports, package initializers, and optional recorded
 imports. Git rename and deletion handling includes the old paths. Shared
 inference infrastructure or matrix changes select all cases; new cases require dependency
-declarations. Unknown paths or an unresolved import graph select the full matrix
+declarations. The realtime layers `worldfoundry/core/execution/realtime/`,
+`worldfoundry/studio/serving/realtime/` and `worldfoundry/core/media/processing/`
+are not shared paths: a change there selects the cases whose import closure,
+declared components or recorded imports include the file. `core/media/processing`
+still reaches every case through the lazy facade table in `worldfoundry.core`.
+The `studio/serving/realtime/` files are also declared CPU-only components:
+a serving file that no case's import closure includes requires the Studio
+realtime CPU contracts named in the dependency file instead of a replay.
+Unknown paths or an unresolved import graph select the full matrix
 and exit with `uncovered`, requiring the coverage gap to be resolved. A docs-only
 change can report `no_inference_changes`; it still requires the CPU gates.
 
@@ -585,6 +750,15 @@ CI uploads `geometry-impact` even when planning fails. This artifact lists
 required replays; it is not a successful GPU result. The runner rejects stale
 tree/policy hashes, contradictory empty plans, or plans omitting cases required
 by the current declarations and import graph.
+
+Environment ownership is declared in `environment_variants` in
+`geometry_regression_dependencies.json`: exact environment YAML paths map to
+explicit `model_id@binding_id` lists. The native coverage policy and replay
+planner use these owners before broad metadata rules. A profile's declared
+`execution.environment` also identifies consumers, including both LTX V2V
+profiles using LTX-2.5. No wildcard environment mappings are accepted. Missing
+case definitions remain uncovered; unknown manifests and shared-core changes
+retain conservative selection. Frozen native-coverage records are unchanged.
 
 ### Scheduled GPU regression on a prepared host
 
@@ -626,6 +800,11 @@ private host profile such as `~/.config/worldfoundry/geometry-regression.json`:
 }
 ```
 
+A transferred accepted reference can use its original index SHA-256 when the
+archive preserves the indexed files byte for byte. Scheduled replay verifies
+the complete inventory and resolves recorded absolute export paths only when
+every export maps to an indexed file under a single original output root.
+
 The optional `gpu_holder` object configures an existing `gg` script using an
 absolute `script`, string-list `start_args`, its `env` (including `GG_PYTHON`),
 and optional log `ready_patterns`. The runner stops that script for replays and
@@ -664,17 +843,24 @@ python3 tests/manual/geometry_regression_schedule.py remove \
 Installation preserves other cron entries and uses `Asia/Shanghai`. It copies
 controllers from the committed source revision; reinstall after changing those
 controllers. Each run snapshots the configured local committed ref, without
-pulling, resetting, or executing dirty source files. Separate model processes
+pulling, resetting, or executing dirty source files. CUDA preflight and replay
+workers use the replay script from that snapshot. Separate model processes
 share the host's physical-GPU lease locks, have per-case and suite time budgets,
 and undergo exact numerical and imported-source audits. The complete short
 matrix runs daily; an on-demand `--plan` can select affected cases instead.
+The saved plan must identify the exact commit resolved by the configured ref.
 `latest.json` records `running` before work starts and the final outcome; run
 logs, source revision and comparisons live under `runs/`. Retention keeps seven
 run directories by default and archives older compact reports under `history/`.
 Accepted references are outside disposable runs and are never regenerated by
 the runner. Profiles, local assets, weights and evidence stay outside Git.
-`--preflight-only` checks all selected assets and environments without loading
-model weights; its `preflight_passed` status is not numerical inference evidence.
+`--preflight-only` compares the selected asset file inventories and environments
+with their accepted references. A failed resource check lists each affected
+case under `asset_preflight_failures` before acquiring a GPU lease. The full
+replay also compares asset SHA-256 digests before loading model weights.
+For older snapshots without the worker's accepted-manifest option, the
+controller compares those digests before starting the committed worker.
+Numerical inference evidence comes from the completed replay.
 
 Pin numerical environment settings in the host profile too, including
 `OMP_NUM_THREADS` and `MKL_NUM_THREADS`; CPU depth reconstruction can change with
@@ -791,8 +977,8 @@ make lint
 make compile-eval
 make cli-entrypoint-check
 make cli-check
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval evaluate --results-path tmp/results.jsonl --output-dir tmp/worldfoundry_evaluate --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmarks --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf evaluate --results-path tmp/results.jsonl --output-dir tmp/worldfoundry_evaluate --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo benchmarks --json
 ```
 
   </Tab>
@@ -803,26 +989,27 @@ cd docs/fumadocs
 npm run models:check
 npm run types:check
 npm run build
-curl -I http://localhost:8013/docs
-curl -I http://localhost:8013/zh/docs
+npm start &
+curl -I http://localhost:3000/docs
+curl -I http://localhost:3000/zh/docs
 ```
 
   </Tab>
   <Tab>
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-show --model-id <model-id> --include-manifest --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-download --model-id <model-id> --check-local --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo model-show --model-id <model-id> --include-manifest --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo model-download --model-id <model-id> --check-local --json
 ```
 
   </Tab>
   <Tab>
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmark-show --benchmark-id <benchmark-id> --include-spec --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmarks --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval preflight runtime --profile <benchmark-id> --manifest worldfoundry/data/benchmarks/runtime_profiles/official/<benchmark-id>.yaml --output-dir tmp/preflight/runtime/<benchmark-id> --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmark-run --benchmark-id <benchmark-id> --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_artifacts> --output-dir tmp/benchmark_zoo/official_validation/<benchmark-id> --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo benchmark-show --benchmark-id <benchmark-id> --include-spec --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo benchmarks --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf preflight runtime --profile <benchmark-id> --manifest worldfoundry/data/benchmarks/runtime_profiles/official/<benchmark-id>.yaml --output-dir tmp/preflight/runtime/<benchmark-id> --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo benchmark-run --benchmark-id <benchmark-id> --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_artifacts> --output-dir tmp/benchmark_zoo/official_validation/<benchmark-id> --json
 ```
 
   </Tab>
@@ -870,36 +1057,35 @@ Do not use `integrated` as a leaderboard synonym. Normalizer-only benchmark inte
 - **Pass** — Required stages ran and produced expected artifacts. Release treatment: Can support the matching claim.
 - **Partial** — Some stages were skipped because they require network, credentials, data, GPU, or license review. Release treatment: Usable for development, not for stronger public claims.
 - **Blocked** — A required source, dataset, license, dependency, checkpoint, or API condition is unavailable. Release treatment: Keep the manifest blocked or planned.
-- **Stale** — Report hash, manifest hash, git commit, validator script, or timestamp no longer matches. Release treatment: Rerun validation before counting it.
+- **Stale** — The evidence was produced from a different commit, manifest, or validation script than the change under review. Release treatment: Rerun validation before counting it.
 - **Runner-only** — Schema and runner path pass, but official runtime did not run. Release treatment: Not leaderboard evidence.
 
 ## Validation matrix
 
-The matrix is the release gate for model-zoo and benchmark-zoo readiness. It merges manifest entries with staged validation reports and recomputes integration status.
+The plan matrix checks the release inventory without loading models. It resolves every model × benchmark cell of the formal docs inventory into `suite_manifest.json`, and `validate-artifact` checks that manifest against its schema.
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval run \
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf run \
   --all-benchmarks \
-    --plan-only \
+  --plan-only \
   --output-dir tmp/worldfoundry_plan_matrix \
   --json
 
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-artifact \
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf validate-artifact \
   tmp/worldfoundry_plan_matrix/suite_manifest.json \
   --kind suite-manifest \
   --strict \
   --json
 ```
 
-- **`accepted_integrated`** — Fresh report passes every required stage and manifest says integrated. Maintainer action: Keep evidence current.
-- **`accepted_variant_integrated`** — One or more scoped variants pass while the parent family remains planned. Maintainer action: Continue validating remaining variants.
-- **`validated_but_manifest_not_promoted`** — Report passes, manifest still says planned or blocked. Maintainer action: Promote only after artifact review.
-- **`manifest_integrated_without_report`** — Manifest says integrated, but no fresh validation report exists. Maintainer action: Run staged validation or downgrade.
-- **`manifest_overclaims_integration`** — Manifest says integrated but computed stages do not pass. Maintainer action: Downgrade or rerun full validation.
-- **`report_overclaims_integration`** — Report claims integrated but staged evidence is incomplete. Maintainer action: Discard or rerun report.
-- **`stale_report`** — Report hash, script, git commit, schema, or manifest entry changed. Maintainer action: Rerun validation.
-- **`partial_or_blocked`** — Report exists but stages failed or were skipped. Maintainer action: Follow `next_action`.
-- **`not_validated`** — Manifest entry has no report. Maintainer action: Run the matching runtime preflight and official validation run.
+Each cell records a `status`, `exit_code`, and `reason`:
+
+- **`planned`** — The model's outputs satisfy the benchmark's inputs; the cell can execute once its assets are staged.
+- **`skipped`** — The pairing is incompatible or the benchmark is unavailable; the reason says why. `--fail-on-skipped` turns skips into a failing exit code.
+- **`blocked`** — In a plan run with `--no-skip-incompatible`, an incompatible pairing stays in the matrix as a blocked cell with exit code 1.
+- **`failed`** and **`succeeded`** — Outcomes of executed cells when the matrix runs without `--plan-only`.
+
+Readiness labels come from the catalogs, not from the matrix. `wf zoo models` reports `runnable_runner` only for entries with a `runner_target` and `integration.status: integrated`, and `wf zoo benchmarks` derives `--ready-now` and `--official-ready` from benchmark evidence fields. Promote a catalog status only together with the executed evidence it references, and rerun that evidence when a manifest change alters what runs.
 
 ## Checklist
 

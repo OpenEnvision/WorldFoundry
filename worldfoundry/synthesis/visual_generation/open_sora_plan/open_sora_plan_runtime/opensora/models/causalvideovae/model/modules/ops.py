@@ -1,5 +1,5 @@
-import torch
 from einops import rearrange
+
 
 def video_to_image(func):
     def wrapper(self, x, *args, **kwargs):
@@ -9,13 +9,13 @@ def video_to_image(func):
             x = func(self, x, *args, **kwargs)
             x = rearrange(x, "(b t) c h w -> b c t h w", t=t)
         return x
+
     return wrapper
 
-def nonlinearity(x):
-    return x * torch.sigmoid(x)
 
 def cast_tuple(t, length=1):
-    return t if isinstance(t, tuple) or isinstance(t, list) else ((t,) * length)
+    return t if isinstance(t, (tuple, list)) else ((t,) * length)
+
 
 def shift_dim(x, src_dim=-1, dest_dim=-1, make_contiguous=True):
     n_dims = len(x.shape)

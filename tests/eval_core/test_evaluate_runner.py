@@ -6,12 +6,12 @@ from pathlib import Path
 import pytest
 
 from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_MODEL_ID, CONTRACT_FIXTURE_RUNNER_TARGET
-from worldfoundry.evaluation.runner import (
+from worldfoundry.evals.tasks.execution.orchestration.evaluate import (
     EVALUATE_RUN_RESULT_SCHEMA_VERSION,
     EvaluateRunRequest,
     execute_evaluate_run,
-    materialize_generation_requests,
 )
+from worldfoundry.evals.tasks.execution.orchestration.materialize import materialize_generation_requests
 
 
 def _read_jsonl(path: Path) -> list[dict]:

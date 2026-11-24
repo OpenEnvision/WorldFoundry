@@ -4,8 +4,8 @@ import pytest
 
 pytest.importorskip("yaml")
 
-from worldfoundry.evaluation.tasks.execution.framework.artifact_score_runtime import main
-from worldfoundry.evaluation.tasks.execution.runners.devil_dynamics.run_devil_dynamics_official_runner import (
+from worldfoundry.evals.tasks.execution.framework.artifact_score_runtime import main
+from worldfoundry.evals.tasks.execution.runners.devil_dynamics.run_devil_dynamics_official_runner import (
     main as devil_dynamics_main,
 )
 

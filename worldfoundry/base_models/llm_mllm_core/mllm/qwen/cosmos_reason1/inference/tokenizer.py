@@ -13,10 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 try:
-    from qwen_vl_utils import extract_vision_info, process_vision_info
+    from worldfoundry.base_models.llm_mllm_core.mllm.qwen.qwen_vl_utils import extract_vision_info, process_vision_info
 except ImportError as exc:
     _QWEN_VL_UTILS_IMPORT_ERROR = exc
 
@@ -34,7 +33,7 @@ from transformers.models.auto.processing_auto import AutoProcessor
 
 def build_tokenizer(
     tokenizer_type: str,
-    cache_dir: Optional[str] = None,
+    cache_dir: str | None = None,
 ):
     return Processor(tokenizer_type, cache_dir)
 
@@ -114,13 +113,13 @@ class Processor:
 
             # process inputs
             if self.is_vision_tokenizer:
-                processor_kwargs = dict(
-                    text=[text],
-                    images=image_inputs,
-                    videos=video_inputs,
-                    padding=False,
-                    return_tensors=return_tensors,
-                )
+                processor_kwargs = {
+                    "text": [text],
+                    "images": image_inputs,
+                    "videos": video_inputs,
+                    "padding": False,
+                    "return_tensors": return_tensors,
+                }
                 # Recent Transformers releases reject an empty fps list for
                 # text-only prompts. Preserve the upstream list behavior when
                 # videos are present and omit the optional argument otherwise.

@@ -18,7 +18,6 @@ PIPELINE_DEFAULTS = {
     "worldfoundry/pipelines/vggt_omega/pipeline_vggt_omega.py": "vggt_omega_output",
     "worldfoundry/pipelines/depth_anything/pipeline_depth_anything_v1.py": "vis_depth",
     "worldfoundry/pipelines/worldlabs/pipeline_worldlabs.py": "worldlabs_assets",
-    "worldfoundry/pipelines/hunyuan_world/pipeline_hunyuan_world_voyager.py": "hunyuan_world_voyager",
 }
 
 FORBIDDEN_CWD_DEFAULTS = (
@@ -31,24 +30,12 @@ FORBIDDEN_CWD_DEFAULTS = (
     "./vis_depth",
     "./vis_video_depth",
     "./output/worldlabs_assets",
-    "./output/hunyuan_world_voyager/represent_render",
-    "./output/hunyuan_world_voyager/final_render",
 )
 
 LAZY_SIGNATURES = (
     ("worldfoundry/pipelines/cut3r/pipeline_cut3r.py", "run_two_stage_3dgs_video", "output_dir"),
     ("worldfoundry/pipelines/cut3r/pipeline_cut3r.py", "run_official_export", "output_dir"),
     ("worldfoundry/pipelines/vggt_omega/pipeline_vggt_omega.py", "run_official_scene_export", "output_dir"),
-    (
-        "worldfoundry/pipelines/hunyuan_world/pipeline_hunyuan_world_voyager.py",
-        "from_pretrained",
-        "represent_render_dir",
-    ),
-    (
-        "worldfoundry/pipelines/hunyuan_world/pipeline_hunyuan_world_voyager.py",
-        "__call__",
-        "output_save_path",
-    ),
 )
 
 
@@ -103,12 +90,7 @@ def test_default_output_dir_helpers_resolve_under_artifact_root(monkeypatch, tmp
 def test_named_defaults_stay_under_artifact_root(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("WORLDFOUNDRY_ARTIFACT_DIR", str(tmp_path))
     depth = _load_default_output_dir("worldfoundry/pipelines/depth_anything/pipeline_depth_anything_v1.py")
-    voyager = _load_default_output_dir("worldfoundry/pipelines/hunyuan_world/pipeline_hunyuan_world_voyager.py")
     assert Path(depth("vis_video_depth")) == tmp_path / "vis_video_depth"
-    assert Path(voyager("hunyuan_world_voyager/represent_render")) == (
-        tmp_path / "hunyuan_world_voyager" / "represent_render"
-    )
-    assert Path(voyager("hunyuan_world_voyager/final_render")) == (tmp_path / "hunyuan_world_voyager" / "final_render")
 
 
 def test_default_helpers_call_artifact_root_lazily() -> None:

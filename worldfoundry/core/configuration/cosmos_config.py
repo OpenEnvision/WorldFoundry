@@ -14,7 +14,7 @@ only ``context_parallel_size``.
 
 from __future__ import annotations
 
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import attrs
 
@@ -44,7 +44,7 @@ def _default_model_parallel() -> Any:
     """
 
     try:
-        from megatron.core import ModelParallelConfig
+        ModelParallelConfig = __import__("megatron.core", fromlist=["ModelParallelConfig"]).ModelParallelConfig
     except ImportError:
         return _FallbackModelParallelConfig()
     return ModelParallelConfig()
@@ -64,7 +64,7 @@ def _is_attrs_instance(value: object) -> bool:
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def make_freezable(cls: T) -> T:
+def make_freezable(cls: type[T]) -> type[T]:
     """Add a recursive runtime ``freeze`` operation to an attrs class.
 
     Freezing is *shallow* with respect to containers: it blocks attribute
@@ -77,16 +77,18 @@ def make_freezable(cls: T) -> T:
         raise TypeError("make_freezable requires attrs classes declared with slots=False")
     if cls.__dict__.get("_worldfoundry_freezable", False):
         return cls
-    original_setattr = cls.__setattr__
+    # The decorator adds methods and a marker that are not part of the input class's static type.
+    decorated_cls = cast(Any, cls)
+    original_setattr = decorated_cls.__setattr__
 
-    def setattr_override(self, key, value) -> None:  # noqa: ANN001
+    def setattr_override(self: Any, key: str, value: Any) -> None:
         """Block assignment after ``freeze`` except the freeze flag itself."""
 
         if getattr(self, "_is_frozen", False) and key != "_is_frozen":
             raise AttributeError("Cannot modify frozen instance")
         original_setattr(self, key, value)
 
-    def freeze(self) -> None:  # noqa: ANN001
+    def freeze(self: Any) -> None:
         """Walk nested attrs children first so a parent cannot thaw a child."""
 
         for value in attrs.asdict(self, recurse=False).values():
@@ -94,9 +96,9 @@ def make_freezable(cls: T) -> T:
                 value.freeze()
         self._is_frozen = True
 
-    cls.__setattr__ = setattr_override
-    cls.freeze = freeze
-    cls._worldfoundry_freezable = True
+    decorated_cls.__setattr__ = setattr_override
+    decorated_cls.freeze = freeze
+    decorated_cls._worldfoundry_freezable = True
     return cls
 
 

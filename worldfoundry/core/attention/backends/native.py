@@ -51,6 +51,7 @@ from typing import Any, Literal
 import torch
 import torch.nn.functional as F
 from torch import Tensor
+from torch import version as torch_version
 from torch.distributed import ProcessGroup
 
 try:
@@ -58,8 +59,13 @@ try:
 except ImportError:  # torch 2.4 exposes DeviceMesh from this module.
     from torch.distributed.device_mesh import DeviceMesh
 
+_context_parallel: Any
 try:
-    from torch.distributed.tensor.experimental import context_parallel as _context_parallel
+    _context_parallel = getattr(
+        importlib.import_module("torch.distributed.tensor.experimental"),
+        "context_parallel",
+        None,
+    )
 except ImportError:
     _context_parallel = None
 
@@ -192,7 +198,7 @@ def native_sdpa_priority(
     )
     if parsed.type != "cuda":
         return ("math",)
-    if getattr(torch.version, "hip", None) is not None:
+    if getattr(torch_version, "hip", None) is not None:
         # Let PyTorch/AOTriton choose on ROCm until CDNA/RDNA-specific orders
         # are physically qualified by the project.
         return ()
@@ -340,7 +346,7 @@ def normalize_fully_masked_rows(
     query: Any,
     key: Any,
 ) -> Any:
-    """Make all-false boolean rows backend-independent.
+    """Make fully masked boolean and symbolic causal rows backend-independent.
 
     CUDA SDPA backends do not all agree on the result of a query row whose
     boolean keep-mask contains no keys. In particular, cuDNN attention can
@@ -349,6 +355,15 @@ def normalize_fully_masked_rows(
     query is longer than the key, so normalize them at the shared boundary.
     """
 
+    from torch.nn.attention.bias import CausalBias, CausalVariant
+
+    # CausalBias supports SDPA dispatch, but not Tensor properties such as dtype.
+    if isinstance(attn_mask, CausalBias):
+        empty_rows = attn_mask.seq_len_q - attn_mask.seq_len_kv
+        if attn_mask.variant == CausalVariant.LOWER_RIGHT and empty_rows > 0:
+            valid_rows = torch.arange(attn_mask.seq_len_q, device=output.device) >= empty_rows
+            return torch.where(valid_rows.unsqueeze(-1), output, torch.zeros_like(output))
+        return output
     if not isinstance(attn_mask, torch.Tensor) or attn_mask.dtype is not torch.bool:
         return output
     score_shape = (*query.shape[:-1], key.shape[-2])
@@ -377,6 +392,8 @@ def flattened_multihead_attention(
     merge here.
     """
 
+    from torch.nn.attention.bias import CausalBias
+
     if query.ndim != 3 or key.ndim != 3 or value.ndim != 3:
         raise ValueError("flattened attention expects [B, S, hidden] Q/K/V tensors")
     if query.shape[0] != key.shape[0] or key.shape[:2] != value.shape[:2]:
@@ -396,7 +413,7 @@ def flattened_multihead_attention(
     query_heads = query.view(batch, -1, heads, query_head_dim).transpose(1, 2)
     key_heads = key.view(batch, -1, heads, key_head_dim).transpose(1, 2)
     value_heads = value.view(batch, -1, heads, value_head_dim).transpose(1, 2)
-    if attn_mask is not None:
+    if attn_mask is not None and not isinstance(attn_mask, CausalBias):
         if attn_mask.ndim == 2:
             attn_mask = attn_mask.unsqueeze(0).unsqueeze(0)
         elif attn_mask.ndim == 3:
@@ -434,12 +451,14 @@ def _compatible_gqa(sdpa, query: Tensor, key: Tensor, value: Tensor, kwargs: dic
     No RuntimeError (including OOM) is caught or retried here.
     """
 
+    from torch.nn.attention.bias import CausalBias
+
     mask = kwargs.get("attn_mask")
     if (
         query.ndim == key.ndim == value.ndim == 4
         and query.shape[0] == key.shape[0] == value.shape[0]
         and key.shape[1] == value.shape[1]
-        and (mask is None or mask.ndim <= 2)
+        and (mask is None or isinstance(mask, CausalBias) or mask.ndim <= 2)
     ):
         batch, heads, length, width = query.shape
         kv_heads = key.shape[1]
@@ -563,7 +582,9 @@ class NativeAttention(torch.nn.Module):
         """
         super().__init__()
         assert qkv_format in ["bhsd", "bshd"], f"Invalid qkv format: {qkv_format}"
-        assert backend in ["math", "efficient", "cudnn", "flash", "cudnn_fp8", "triton_tma"], f"Invalid backend: {backend}"
+        assert backend in ["math", "efficient", "cudnn", "flash", "cudnn_fp8", "triton_tma"], (
+            f"Invalid backend: {backend}"
+        )
         self.qkv_format = qkv_format
         self.backend = backend
         self.device_mesh: DeviceMesh | None = None
@@ -661,6 +682,10 @@ class NativeAttention(torch.nn.Module):
 
         with torch.nn.attention.sdpa_kernel(sdpa_backend):
             if self.device_mesh is not None:
+                if _context_parallel is None:
+                    raise RuntimeError(
+                        "NativeAttention context parallel requires torch.distributed.tensor.experimental.context_parallel."
+                    )
                 # Pass a dummy buffer to satisfy context_parallel's buffers[0].device
                 # check (required in PyTorch 2.9+ where buffers cannot be empty).
                 _dummy = torch.empty(self.device_mesh.size(), device=query.device)

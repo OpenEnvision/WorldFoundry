@@ -3,8 +3,6 @@ model_id: unianimate-dit
 runtime:
   kind: official_cli
   backend_quality: in_tree_official_runtime
-  repo_root_candidates:
-  - ${WORLDFOUNDRY_PACKAGE_ROOT}/synthesis/visual_generation/unianimate_dit/unianimate_dit_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_CKPT_DIR/UniAnimate-DiT
   - $WORLDFOUNDRY_HFD_ROOT/ZheWang123--UniAnimate-DiT
@@ -17,12 +15,8 @@ runtime:
     seed: 0
     use_usp: false
     nproc_per_node: 4
-  command:
-  - "{python}"
-  - "-m"
-  - "worldfoundry.synthesis.visual_generation.unianimate_dit.worldfoundry_runner"
-  - "--repo-root"
-  - "{repo_root}"
+  module: worldfoundry.synthesis.visual_generation.unianimate_dit.worldfoundry_runner
+  args:
   - "--checkpoint-dir"
   - "{checkpoint_path}"
   - "--wan-root"

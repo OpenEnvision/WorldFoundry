@@ -12,4 +12,5 @@ def __getattr__(name: str) -> Any:
         return DBCogACTSynthesis
     raise AttributeError(name)
 
+
 __all__ = ["DBCogACTSynthesis"]

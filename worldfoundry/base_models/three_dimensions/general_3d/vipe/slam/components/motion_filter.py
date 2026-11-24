@@ -18,8 +18,6 @@
 # Licensed under the MIT License.
 # -------------------------------------------------------------------------------------------------
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> components -> motion_filter.py functionality."""
-
 import torch
 
 from ..networks.droid_net import CorrBlock, DroidNet
@@ -38,16 +36,8 @@ class MotionFilter:
         droid_net: DroidNet,
         sparse_tracks: SparseTracks,
         thresh: float,
-        device: torch.device = torch.device("cuda"),
+        device: torch.device = torch.device("cuda"),  # noqa: B008 - Default evaluated once at definition, as upstream.
     ):
-        """Init.
-
-        Args:
-            droid_net: The droid net.
-            sparse_tracks: The sparse tracks.
-            thresh: The thresh.
-            device: The device.
-        """
         self.net = droid_net
         self.thresh = thresh
         self.device = device
@@ -56,12 +46,6 @@ class MotionFilter:
 
     @staticmethod
     def coords_grid(ht, wd, **kwargs):
-        """Coords grid.
-
-        Args:
-            ht: The ht.
-            wd: The wd.
-        """
         y, x = torch.meshgrid(
             torch.arange(ht).to(**kwargs).float(),
             torch.arange(wd).to(**kwargs).float(),

@@ -5,6 +5,7 @@ task_family: video_generation
 groups: [video, video_editing, controlled_video_generation]
 source_repos:
 - url: https://github.com/Wan-Video/Wan2.1
+  revision: 9737cba9c1c3c4d04b33fcad41c111989865d315
 checkpoints:
 - repo_id: Wan-AI/Wan2.1-VACE-14B
   role: vace_checkpoint

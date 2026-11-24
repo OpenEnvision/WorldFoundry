@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> interface.py functionality."""
-
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,7 +26,6 @@ from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.cameras imp
 
 @dataclass(kw_only=True)
 class SLAMMap:
-    """Slam map implementation."""
     # (M, 3) tensor of XYZ coordinates
     dense_disp_xyz: torch.Tensor
     # (M, 3) tensor of RGB colors (0-1)
@@ -41,11 +38,6 @@ class SLAMMap:
     backend_graph: torch.Tensor | None = None
 
     def scale(self, factor: float):
-        """Scale.
-
-        Args:
-            factor: The factor.
-        """
         self.dense_disp_xyz *= factor
 
     def save(self, path: Path):
@@ -110,15 +102,6 @@ class SLAMMap:
         )
 
     def get_dense_disp_pcd(self, keyframe_idx: int, view_idx: int = -1) -> tuple[torch.Tensor, torch.Tensor]:
-        """Get dense disp pcd.
-
-        Args:
-            keyframe_idx: The keyframe idx.
-            view_idx: The view idx.
-
-        Returns:
-            The return value.
-        """
         if view_idx == -1:
             xyz, color = [], []
             for v in range(self.dense_disp_packinfo.shape[1]):
@@ -155,21 +138,6 @@ class SLAMMap:
         infill: bool = False,
         tstamp_nn: int = 3,
     ) -> torch.Tensor:
-        """Project map.
-
-        Args:
-            frame_tstamp: The frame tstamp.
-            view_idx: The view idx.
-            target_size: The target size.
-            target_intrinsics: The target intrinsics.
-            target_pose: The target pose.
-            target_camera_type: The target camera type.
-            infill: The infill.
-            tstamp_nn: The tstamp nn.
-
-        Returns:
-            The return value.
-        """
         right_keyframe_idx = np.searchsorted(self.dense_disp_frame_inds, frame_tstamp).item()
         right_keyframe_idx = min(right_keyframe_idx + tstamp_nn, len(self.dense_disp_frame_inds) - 1)
         left_keyframe_idx = max(right_keyframe_idx - 2 * tstamp_nn, 0)
@@ -217,7 +185,6 @@ class SLAMMap:
 
 @dataclass(kw_only=True)
 class SLAMOutput:
-    """Slam output implementation."""
     trajectory: SE3  # (N,)
     intrinsics: torch.Tensor  # (V, 4)
 
@@ -230,22 +197,9 @@ class SLAMOutput:
 
     @property
     def keyframe_ids(self) -> np.ndarray:
-        """Keyframe ids.
-
-        Returns:
-            The return value.
-        """
         assert self.slam_map is not None, "SLAM map not available."
         return np.array(self.slam_map.dense_disp_frame_inds)
 
     def get_view_trajectory(self, view_idx: int) -> SE3:
-        """Get view trajectory.
-
-        Args:
-            view_idx: The view idx.
-
-        Returns:
-            The return value.
-        """
         assert self.rig is not None, "Rig not available."
         return self.trajectory * self.rig[view_idx][None]  # type: ignore

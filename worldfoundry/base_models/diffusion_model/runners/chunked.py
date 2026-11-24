@@ -346,11 +346,7 @@ class ChunkedKVCacheRunner(NativeDiffusionRunner):
             spatial_tokens = int(latents.shape[-2] * latents.shape[-1])
             shared = dict(context.conditioning.shared)
             positive_base = {**shared, **context.conditioning.positive}
-            negative_base = (
-                {**shared, **context.conditioning.negative}
-                if negative_cache is not None
-                else None
-            )
+            negative_base = {**shared, **context.conditioning.negative} if negative_cache is not None else None
 
             for chunk_index in range(num_chunks):
                 start, end = chunk_indices[chunk_index : chunk_index + 2]
@@ -381,9 +377,7 @@ class ChunkedKVCacheRunner(NativeDiffusionRunner):
                     sink_index = torch.arange(sink_frames, device=latents.device)
                     non_sink_count = num_cached_frames - sink_frames + (end - start)
                     window_start = end - non_sink_count
-                    frame_index = torch.cat(
-                        (sink_index, torch.arange(window_start, end, device=latents.device))
-                    )
+                    frame_index = torch.cat((sink_index, torch.arange(window_start, end, device=latents.device)))
                     rope_start, rope_end = 0, end
                 else:
                     rope_start, rope_end = chunk_indices[cache_start], end
@@ -538,8 +532,14 @@ class ChunkedAdditiveCacheRunner(ChunkedKVCacheRunner):
 
     @staticmethod
     def _accumulate_cache(
-        cache, chunk_index, *, state_blocks, num_cached_chunks, sink_token,
-        chunk_indices, spatial_tokens,
+        cache,
+        chunk_index,
+        *,
+        state_blocks,
+        num_cached_chunks,
+        sink_token,
+        chunk_indices,
+        spatial_tokens,
     ):
         del state_blocks, chunk_indices, spatial_tokens
         if sink_token:

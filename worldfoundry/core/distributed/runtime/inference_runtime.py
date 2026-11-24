@@ -29,10 +29,9 @@ from datetime import timedelta
 import torch
 
 import worldfoundry.core.distributed.model_parallel.groups as mpu
-from worldfoundry.core.distributed.runtime.logging import print_rank_0
-from worldfoundry.core.distributed.model_parallel.pipeline import init_pp_scheduler
-
 from worldfoundry.core.distributed.collectives.generic import get_world_size  # noqa: F401 - public compatibility export
+from worldfoundry.core.distributed.model_parallel.pipeline import init_pp_scheduler
+from worldfoundry.core.observability.rank_logging import print_rank_0
 
 # ──────────────────────────────────────────────────────────────────────────
 # Inference process-group + CP/PP mesh — not a wrapper of init_torch_distributed
@@ -120,10 +119,7 @@ def get_device(local_rank=None):
 
     backend = torch.distributed.get_backend()
     if backend == "nccl":
-        if local_rank is None:
-            device = torch.device("cuda")
-        else:
-            device = torch.device(f"cuda:{local_rank}")
+        device = torch.device("cuda") if local_rank is None else torch.device(f"cuda:{local_rank}")
     elif backend == "gloo":
         device = torch.device("cpu")
     else:

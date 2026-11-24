@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import math
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 import torch
 import torch.nn as nn
@@ -12,10 +12,7 @@ import torch.nn.functional as F
 
 
 class DepthProEncoder(nn.Module):
-    """DepthPro Encoder.
-
-    An encoder aimed at creating multi-resolution encodings from Vision Transformers.
-    """
+    """An encoder aimed at creating multi-resolution encodings from Vision Transformers."""
 
     def __init__(
         self,
@@ -53,15 +50,13 @@ class DepthProEncoder(nn.Module):
         patch_encoder_embed_dim = patch_encoder.embed_dim
         image_encoder_embed_dim = image_encoder.embed_dim
 
-        self.out_size = int(
-            patch_encoder.patch_embed.img_size[0] // patch_encoder.patch_embed.patch_size[0]
-        )
+        self.out_size = int(patch_encoder.patch_embed.img_size[0] // patch_encoder.patch_embed.patch_size[0])
 
         def _create_project_upsample_block(
             dim_in: int,
             dim_out: int,
             upsample_layers: int,
-            dim_int: Optional[int] = None,
+            dim_int: int | None = None,
         ) -> nn.Module:
             if dim_int is None:
                 dim_int = dim_out
@@ -130,12 +125,8 @@ class DepthProEncoder(nn.Module):
         )
 
         # Obtain intermediate outputs of the blocks.
-        self.patch_encoder.blocks[self.hook_block_ids[0]].register_forward_hook(
-            self._hook0
-        )
-        self.patch_encoder.blocks[self.hook_block_ids[1]].register_forward_hook(
-            self._hook1
-        )
+        self.patch_encoder.blocks[self.hook_block_ids[0]].register_forward_hook(self._hook0)
+        self.patch_encoder.blocks[self.hook_block_ids[1]].register_forward_hook(self._hook1)
 
     def _hook0(self, model, input, output):
         self.backbone_highres_hook0 = output
@@ -148,22 +139,16 @@ class DepthProEncoder(nn.Module):
         """Return the full image size of the SPN network."""
         return self.patch_encoder.patch_embed.img_size[0] * 4
 
-    def _create_pyramid(
-        self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _create_pyramid(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Create a 3-level image pyramid."""
         # Original resolution: 1536 by default.
         x0 = x
 
         # Middle resolution: 768 by default.
-        x1 = F.interpolate(
-            x, size=None, scale_factor=0.5, mode="bilinear", align_corners=False
-        )
+        x1 = F.interpolate(x, size=None, scale_factor=0.5, mode="bilinear", align_corners=False)
 
         # Low resolution: 384 by default, corresponding to the backbone resolution.
-        x2 = F.interpolate(
-            x, size=None, scale_factor=0.25, mode="bilinear", align_corners=False
-        )
+        x2 = F.interpolate(x, size=None, scale_factor=0.25, mode="bilinear", align_corners=False)
 
         return x0, x1, x2
 
@@ -173,7 +158,7 @@ class DepthProEncoder(nn.Module):
         patch_stride = int(patch_size * (1 - overlap_ratio))
 
         image_size = x.shape[-1]
-        steps = int(math.ceil((image_size - patch_size) / patch_stride)) + 1
+        steps = int(math.ceil((image_size - patch_size) / patch_stride)) + 1  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
         x_patch_list = []
         for j in range(steps):
@@ -216,9 +201,7 @@ class DepthProEncoder(nn.Module):
         output = torch.cat(output_list, dim=-2)
         return output
 
-    def reshape_feature(
-        self, embeddings: torch.Tensor, width, height, cls_token_offset=1
-    ):
+    def reshape_feature(self, embeddings: torch.Tensor, width, height, cls_token_offset=1):
         """Discard class token and reshape 1D feature map to a 2D grid."""
         b, hw, c = embeddings.shape
 
@@ -264,9 +247,7 @@ class DepthProEncoder(nn.Module):
 
         # Step 2: Run the backbone (BeiT) model and get the result of large batch size.
         x_pyramid_encodings = self.patch_encoder(x_pyramid_patches)
-        x_pyramid_encodings = self.reshape_feature(
-            x_pyramid_encodings, self.out_size, self.out_size
-        )
+        x_pyramid_encodings = self.reshape_feature(x_pyramid_encodings, self.out_size, self.out_size)
 
         # Step 3: merging.
         # Merge highres latent encoding.
@@ -275,18 +256,14 @@ class DepthProEncoder(nn.Module):
             self.out_size,
             self.out_size,
         )
-        x_latent0_features = self.merge(
-            x_latent0_encodings[: batch_size * 5 * 5], batch_size=batch_size, padding=3
-        )
+        x_latent0_features = self.merge(x_latent0_encodings[: batch_size * 5 * 5], batch_size=batch_size, padding=3)
 
         x_latent1_encodings = self.reshape_feature(
             self.backbone_highres_hook1,
             self.out_size,
             self.out_size,
         )
-        x_latent1_features = self.merge(
-            x_latent1_encodings[: batch_size * 5 * 5], batch_size=batch_size, padding=3
-        )
+        x_latent1_features = self.merge(x_latent1_encodings[: batch_size * 5 * 5], batch_size=batch_size, padding=3)
 
         # Split the 35 batch size from pyramid encoding back into 5x5+3x3+1x1.
         x0_encodings, x1_encodings, x2_encodings = torch.split(
@@ -306,9 +283,7 @@ class DepthProEncoder(nn.Module):
 
         # Apply the image encoder model.
         x_global_features = self.image_encoder(x2_patches)
-        x_global_features = self.reshape_feature(
-            x_global_features, self.out_size, self.out_size
-        )
+        x_global_features = self.reshape_feature(x_global_features, self.out_size, self.out_size)
 
         # Upsample feature maps.
         x_latent0_features = self.upsample_latent0(x_latent0_features)
@@ -319,9 +294,7 @@ class DepthProEncoder(nn.Module):
         x2_features = self.upsample2(x2_features)
 
         x_global_features = self.upsample_lowres(x_global_features)
-        x_global_features = self.fuse_lowres(
-            torch.cat((x2_features, x_global_features), dim=1)
-        )
+        x_global_features = self.fuse_lowres(torch.cat((x2_features, x_global_features), dim=1))
 
         return [
             x_latent0_features,

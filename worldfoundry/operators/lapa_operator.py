@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,16 +16,18 @@ class LAPAOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "visual_action_model"
     ACTION_REPRESENTATION = "latent_action_tokens"
     OBSERVATION_LAYOUT = "video_or_frame_sequence"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": False,
         "image": True,
         "video": True,
         "actions": ["latent_action_tokens", "token_ids"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
-        conditioning_text = prompt if prompt not in (None, "") else _first_present(kwargs, "caption", "instruction", "task_instruction")
+        conditioning_text = (
+            prompt if prompt not in (None, "") else _first_present(kwargs, "caption", "instruction", "task_instruction")
+        )
         conditioning_text = "" if conditioning_text is None else str(conditioning_text)
         return {
             "prompt": conditioning_text,
@@ -41,7 +44,7 @@ class LAPAOperator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         video_context = video or _first_present(kwargs, "video_context", "frame_sequence", "frames")
         observation = _compact_dict(
@@ -68,7 +71,7 @@ class LAPAOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         tokens = _extract_action_signal(raw, "latent_action_tokens", "token_ids", "action_tokens")

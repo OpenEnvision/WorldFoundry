@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ._model_scoped import ModelScopedMemory
 
@@ -10,7 +10,7 @@ from ._model_scoped import ModelScopedMemory
 class RuntimeMemory(ModelScopedMemory):
     """Small state store for model-specific runtime artifacts."""
 
-    def record(self, data: Any, metadata: Optional[Dict[str, Any]] = None, **kwargs: Any):
+    def record(self, data: Any, metadata: dict[str, Any] | None = None, **kwargs: Any):
         """Store ``data``, tagged with this memory's model.
 
         Args:

@@ -69,7 +69,7 @@ export function Tabs({
         className,
       )}
     >
-      {items.map((item, index) => (
+      {items.map((_item, index) => (
         <input
           key={`input-${index}`}
           type="radio"

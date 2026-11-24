@@ -1,14 +1,18 @@
-artifact_filename: show_o.png
-artifact_kind: generated_image
-backend_stage: in_tree_runtime
-id: show-o
+schema_version: 2
+model_id: show-o
 input_schema:
   image: false
   mode: t2i
   prompt: true
-integration_status: runtime_ported
+artifact_kind: generated_image
+artifact_filename: show_o.png
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_show_o_runtime_ported_t2i_ready
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - WorldFoundry vendors the Show-O text-to-image runtime under worldfoundry/synthesis/visual_generation/show_o/show_o_runtime.
 - The current wrapper supports t2i image generation; MMU, inpainting, and extrapolation
   modes are not wired yet.
-runtime_status: in_tree_show_o_runtime_ported_t2i_ready

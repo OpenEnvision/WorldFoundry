@@ -188,8 +188,8 @@ def test_failed_init_releases_lease_and_keeps_previous_scene(dispatch: Any, rout
 
 
 @pytest.mark.parametrize("route", ["realtime", "realtime-rank"])
-def test_native_realtime_prepare_configure_stream_and_public_reset(dispatch: Any, route: str) -> None:
-    manager, ctx, request, call = dispatch
+def test_native_realtime_prepare_configure_and_stream(dispatch: Any, route: str) -> None:
+    _manager, ctx, request, call = dispatch
     pipeline = ctx.pipeline = _NativeRealtimePipeline()
     call(route, "configure", replace(request, image=None))
     assert not ctx.state
@@ -197,11 +197,7 @@ def test_native_realtime_prepare_configure_stream_and_public_reset(dispatch: Any
         call(route, "stream")
     call(route, "configure")
     call(route, "stream")
-    manager.pipeline_cache[ctx.cache_key] = ctx
-    manager._reset_cached_model_local(ctx.entry.model_id)
-    assert pipeline.calls == ["prepare", "configure", "stream", "reset"]
-    assert not ctx.state
-    assert ctx.active_leases == 0
+    assert pipeline.calls == ["prepare", "configure", "stream"]
 
 
 @pytest.mark.parametrize("terminal", ["exhausted", "stream-error", "closed"])

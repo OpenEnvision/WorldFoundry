@@ -7,13 +7,14 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from worldfoundry.core import cuda_visible_devices_from_device
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.runtime.assets import expand_worldfoundry_path
-
 
 SOURCE_ROOT = Path(__file__).resolve().parents[4]
 INFERENCE_ROOT = Path(__file__).resolve().parent
@@ -32,7 +33,6 @@ REQUIRED_RUNTIME_FILES = (
     "pipeline_lingbot_video.py",
     "pipeline_lingbot_video_i2v.py",
     "transformer_lingbot_video.py",
-    "scheduling_flow_unipc.py",
     "utils.py",
 )
 
@@ -59,9 +59,7 @@ def _append_value(command: list[str], flag: str, value: Any) -> None:
         command.extend((flag, str(value)))
 
 
-def _validate_frame_count_request(
-    request: Mapping[str, Any], prompt_json: Path | None, mode: str
-) -> None:
+def _validate_frame_count_request(request: Mapping[str, Any], prompt_json: Path | None, mode: str) -> None:
     """Catch frame requests that the official CLI would silently override."""
     if mode == "t2i" or request.get("num_frames") is None:
         return
@@ -121,14 +119,11 @@ class LingBotVideoRuntime:
         *,
         device: str = "cuda",
         python_executable: str | Path | None = None,
-        inference_root: str | Path | None = None,
     ) -> None:
         self.checkpoint_dir = _expand_path(checkpoint_dir)
         self.device = str(device)
-        self.python_executable = (
-            Path(python_executable or sys.executable).expanduser().resolve()
-        )
-        self.inference_root = _expand_path(inference_root) or INFERENCE_ROOT
+        self.python_executable = Path(python_executable or sys.executable).expanduser().resolve()
+        self.inference_root = INFERENCE_ROOT
 
     @classmethod
     def from_pretrained(
@@ -137,7 +132,7 @@ class LingBotVideoRuntime:
         *,
         device: str = "cuda",
         **kwargs: Any,
-    ) -> "LingBotVideoRuntime":
+    ) -> LingBotVideoRuntime:
         return cls(checkpoint_dir, device=device, **kwargs)
 
     def missing_checkpoint_files(
@@ -148,10 +143,7 @@ class LingBotVideoRuntime:
     ) -> tuple[str, ...]:
         if self.checkpoint_dir is None:
             return REQUIRED_CHECKPOINT_COMPONENTS
-        required = [
-            self.checkpoint_dir / component
-            for component in REQUIRED_CHECKPOINT_COMPONENTS
-        ]
+        required = [self.checkpoint_dir / component for component in REQUIRED_CHECKPOINT_COMPONENTS]
         if run_refiner:
             refiner_root = _expand_path(refiner_model_dir) or self.checkpoint_dir
             required.append(refiner_root / "refiner")
@@ -175,11 +167,7 @@ class LingBotVideoRuntime:
             refiner_model_dir=refiner_model_dir,
         )
         missing_runtime = self.missing_runtime_files()
-        checkpoint_ready = (
-            self.checkpoint_dir is not None
-            and self.checkpoint_dir.is_dir()
-            and not missing_checkpoint
-        )
+        checkpoint_ready = self.checkpoint_dir is not None and self.checkpoint_dir.is_dir() and not missing_checkpoint
         runtime_ready = self.inference_root.is_dir() and not missing_runtime
         return {
             "status": "ready" if checkpoint_ready and runtime_ready else "blocked",
@@ -205,33 +193,23 @@ class LingBotVideoRuntime:
         output_path: str | Path,
     ) -> LingBotVideoRuntimePlan:
         if self.checkpoint_dir is None:
-            raise ValueError(
-                "LingBot-Video inference requires a local checkpoint directory."
-            )
+            raise ValueError("LingBot-Video inference requires a local checkpoint directory.")
 
         mode = str(request.get("mode") or "t2v").strip().lower()
         if mode not in SUPPORTED_MODES:
-            raise ValueError(
-                f"Unsupported LingBot-Video mode {mode!r}; expected one of {sorted(SUPPORTED_MODES)}."
-            )
+            raise ValueError(f"Unsupported LingBot-Video mode {mode!r}; expected one of {sorted(SUPPORTED_MODES)}.")
 
         output = Path(output_path).expanduser().resolve()
         output.parent.mkdir(parents=True, exist_ok=True)
         prompt_json = _expand_path(request.get("prompt_json"))
         prompt = request.get("prompt")
         if prompt_json is None and (prompt is None or not str(prompt).strip()):
-            raise ValueError(
-                "LingBot-Video requires prompt_json or a structured prompt string."
-            )
+            raise ValueError("LingBot-Video requires prompt_json or a structured prompt string.")
         _validate_frame_count_request(request, prompt_json, mode)
-        if mode == "ti2v" and not _first_path(
-            request.get("image") or request.get("images")
-        ):
+        if mode == "ti2v" and not _first_path(request.get("image") or request.get("images")):
             raise ValueError("LingBot-Video ti2v inference requires an image.")
 
         base_args = [
-            "-m",
-            RUNNER_MODULE,
             "--backend",
             str(request.get("backend") or "diffusers"),
             "--model_dir",
@@ -249,9 +227,7 @@ class LingBotVideoRuntime:
         image = _first_path(request.get("image") or request.get("images"))
         _append_value(base_args, "--image", image)
         _append_value(base_args, "--negative_prompt", request.get("negative_prompt"))
-        _append_value(
-            base_args, "--negative_prompt_json", request.get("negative_prompt_json")
-        )
+        _append_value(base_args, "--negative_prompt_json", request.get("negative_prompt_json"))
 
         value_flags = {
             "resolution": "--resolution",
@@ -285,6 +261,8 @@ class LingBotVideoRuntime:
             "refiner_sample_fps": "--refiner_sample_fps",
             "refiner_max_video_frames": "--refiner_max_video_frames",
             "refiner_vae_dtype": "--refiner_vae_dtype",
+            "sol_profile": "--sol_profile",
+            "refiner_sol_profile": "--refiner_sol_profile",
         }
         normalized_request = dict(request)
         if normalized_request.get("steps") is None:
@@ -319,41 +297,27 @@ class LingBotVideoRuntime:
         if bool(request.get("run_refiner") or request.get("refiner_model_dir")):
             refiner_output = _expand_path(request.get("refiner_output"))
             if refiner_output is None:
-                refiner_output = output.with_name(
-                    f"{output.stem}_refined{output.suffix}"
-                )
+                refiner_output = output.with_name(f"{output.stem}_refined{output.suffix}")
             _append_value(base_args, "--refiner_output", refiner_output)
 
         cfg_degree = int(request.get("cfg_parallel_degree") or 1)
         context_degree = int(request.get("context_parallel_degree") or 1)
         topology_size = cfg_degree * context_degree
         requested_nproc = int(request.get("nproc_per_node") or 1)
-        nproc = (
-            topology_size
-            if topology_size > 1 and requested_nproc == 1
-            else requested_nproc
-        )
+        nproc = topology_size if topology_size > 1 and requested_nproc == 1 else requested_nproc
         if topology_size > 1 and nproc != topology_size:
             raise ValueError(
                 "LingBot-Video nproc_per_node must equal cfg_parallel_degree * context_parallel_degree "
                 f"({topology_size}), got {nproc}."
             )
-        command = [str(self.python_executable)]
-        if nproc > 1:
-            command.extend(
-                (
-                    "-m",
-                    "torch.distributed.run",
-                    "--standalone",
-                    "--nproc_per_node",
-                    str(nproc),
-                )
-            )
-        command.extend(base_args)
+        command = package_module_command(
+            RUNNER_MODULE,
+            base_args,
+            python_executable=self.python_executable,
+            nproc_per_node=nproc if nproc > 1 else None,
+        )
 
-        env = {
-            "PYTHONPATH": f"{SOURCE_ROOT}{os.pathsep + os.environ['PYTHONPATH'] if os.environ.get('PYTHONPATH') else ''}",
-        }
+        env: dict[str, str] = {}
         visible_devices = cuda_visible_devices_from_device(self.device)
         if visible_devices:
             env["CUDA_VISIBLE_DEVICES"] = visible_devices
@@ -364,9 +328,7 @@ class LingBotVideoRuntime:
             workdir=str(SOURCE_ROOT),
             checkpoint_dir=str(self.checkpoint_dir),
             output_path=str(output),
-            refiner_output_path=(
-                str(refiner_output) if refiner_output is not None else None
-            ),
+            refiner_output_path=(str(refiner_output) if refiner_output is not None else None),
             mode=mode,
         )
 
@@ -377,9 +339,7 @@ class LingBotVideoRuntime:
         timeout_seconds: int = 7200,
         log_dir: str | Path | None = None,
     ) -> dict[str, Any]:
-        target_log_dir = (
-            Path(log_dir or Path(plan.output_path).parent).expanduser().resolve()
-        )
+        target_log_dir = Path(log_dir or Path(plan.output_path).parent).expanduser().resolve()
         target_log_dir.mkdir(parents=True, exist_ok=True)
         stdout_path = target_log_dir / "lingbot_video_stdout.log"
         stderr_path = target_log_dir / "lingbot_video_stderr.log"
@@ -410,11 +370,7 @@ class LingBotVideoRuntime:
         candidates = [Path(plan.output_path)]
         if plan.refiner_output_path:
             candidates.append(Path(plan.refiner_output_path))
-        generated_files = [
-            str(path)
-            for path in candidates
-            if path.is_file() and path.stat().st_size > 0
-        ]
+        generated_files = [str(path) for path in candidates if path.is_file() and path.stat().st_size > 0]
         ok = returncode == 0 and bool(generated_files)
         if returncode != 0 and error is None:
             error = f"LingBot-Video runner exited with code {returncode}."

@@ -15,6 +15,7 @@ official_sources:
   paper: https://arxiv.org/abs/2504.12369
   github:
     url: https://github.com/xizaoqu/WorldMem
+    revision: c1cc91bdfb2dda52fe309280e5ed046b1faba448
 integration:
   status: runtime_ported
   notes:
@@ -28,22 +29,18 @@ runtime_profile: runtime-profile:worldmem
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry
   runtimes; blocked entries retain upstream provenance without runnable backends.
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: worldmem
 docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: 'WorldMem targets the core weakness of interactive world models — forgetting: it equips a Minecraft-style interactive world model with an explicit memory so revisited places stay consistent over long horizons (paper: arXiv 2504.12369). WorldFoundry registers the route in-tree; upstream inference model and data assets are runtime-gated.'
-  overview_zh: WorldMem 针对交互式世界模型的核心弱点——遗忘：为 Minecraft 式交互世界模型加装显式记忆，使重访地点在长时程下保持一致（论文：arXiv 2504.12369）。WorldFoundry 树内注册了路由；上游推理模型与数据资产为运行时门控。
-  architecture: 'The recorded design theme is long-term consistency via memory: past observations are stored and retrieved to condition future rollouts. Architecture internals beyond the official repository and paper pointers are not recorded in this repository.'
-  architecture_zh: 仓库记录的设计主题是基于记忆的长期一致性：存储并检索历史观测以条件化后续滚动生成。官方仓库与论文指针之外的架构内部细节仓库未记录。
-  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
-  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。
-  limitations:
-  - Upstream inference model/data assets are runtime-gated; no GPU validation is recorded in this repository.
-  limitations_zh:
-  - 上游推理模型/数据资产为运行时门控；仓库未记录 GPU 验证。
+  overview: 'WorldMem targets the core weakness of interactive world models — forgetting: it equips a Minecraft-style interactive world model with an explicit memory so revisited places stay consistent over long horizons (paper: arXiv 2504.12369). WorldFoundry runs the route in-tree; the upstream inference model and data assets must be staged before generation.'
+  overview_zh: WorldMem 针对交互式世界模型的核心弱点——遗忘：为 Minecraft 式交互世界模型加装显式记忆，使重访地点在长时程下保持一致（论文：arXiv 2504.12369）。WorldFoundry 在树内运行该路径；生成前需就位上游推理模型与数据资产。
+  architecture: 'The design theme is long-term consistency via memory: past observations are stored and retrieved to condition future rollouts.'
+  architecture_zh: 设计主题是基于记忆的长期一致性：存储并检索历史观测以条件化后续滚动生成。
+  usage_notes: Until the upstream inference model and data assets are staged, a run returns a runtime plan that lists the missing assets instead of generating.
+  usage_notes_zh: 上游推理模型与数据资产就位前，运行只输出列出缺失资产的运行时计划，不会生成内容。
   recommended_benchmarks:
   - id: memobench
     reason: Long-term memory consistency of world rollouts.

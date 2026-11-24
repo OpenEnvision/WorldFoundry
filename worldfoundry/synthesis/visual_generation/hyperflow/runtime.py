@@ -1,19 +1,16 @@
-"""Local-only HyperFlow inference using the pinned upstream H3 implementation.
-
-The upstream package owns the two-time embedder, LoRA and fixed sigma grid;
-WorldFoundry shares its existing H3 geometry and process/artifact machinery.
-No H3 transformer, text encoder or VAE is copied into this adapter.
-"""
+"""Local HyperFlow inference through canonical in-tree MiniMax-H3 components."""
 
 from __future__ import annotations
 
 import json
+import socket
 import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import hfd_root_path
 from worldfoundry.runtime.assets import local_file_is_ready
 from worldfoundry.runtime.in_tree_cli import execute_in_tree, require_path
@@ -46,7 +43,7 @@ def _reference(value: Any) -> tuple[str, Path]:
 
 
 class HyperFlowRuntime:
-    """Build and execute the official T2VA/FL2VA/Ref2VA inference commands."""
+    """Build and execute the in-tree T2VA/FL2VA/Ref2VA inference commands."""
 
     def __init__(self, *, model_path=None, weights_path=None, python_executable=None, device="cuda", gpus=1):
         self.model_path = Path(model_path or hfd_root_path("MiniMaxAI--MiniMax-H3")).expanduser().resolve()
@@ -96,25 +93,43 @@ class HyperFlowRuntime:
         missing = [str(path) for path in required if not local_file_is_ready(path)]
         environment = python_module_probe(
             Path(self.python_executable),
-            ("hyperflow_h3", "diffusers", "transformers", "peft", "av", "torch"),
+            (
+                "worldfoundry.synthesis.visual_generation.hyperflow.generate",
+                "diffusers",
+                "transformers",
+                "av",
+                "torch",
+                "torchvision",
+                "torchaudio",
+                "numpy",
+                "scipy",
+                "einops",
+                "msgspec",
+            ),
             pythonpath=[],
             timeout=30,
         )
         if environment["ok"]:
-            # The upstream lower bound accepts Transformers 4.57, whose
-            # Qwen3VLProcessor lacks create_mm_token_type_ids used by 0.40.
-            code = (
-                "import json; from importlib.metadata import version; "
-                "from packaging.specifiers import SpecifierSet; "
-                "required={'diffusers':'==0.40.0','transformers':'==5.12.1',"
-                "'peft':'==0.18.0','safetensors':'>=0.8'}; "
-                "versions={name:version(name) for name in required}; "
-                "print(json.dumps({'versions':versions,'compatible':all("
-                "versions[name] in SpecifierSet(spec) for name,spec in required.items())}))"
-            )
+            # The released multimodal presentation uses the Transformers 5.x
+            # processor's explicit per-modality token-type interface.
             try:
                 checked = subprocess.run(
-                    [self.python_executable, "-s", "-c", code], capture_output=True, text=True, timeout=30, check=True
+                    [
+                        self.python_executable,
+                        "-s",
+                        "-c",
+                        "import json; from importlib.metadata import version; "
+                        "from packaging.specifiers import SpecifierSet; "
+                        "required={'diffusers':'==0.40.0','transformers':'==5.12.1',"
+                        "'safetensors':'>=0.8'}; "
+                        "versions={name:version(name) for name in required}; "
+                        "print(json.dumps({'versions':versions,'compatible':all("
+                        "versions[name] in SpecifierSet(spec) for name,spec in required.items())}))",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=True,
                 )
                 environment.update(json.loads(checked.stdout))
                 environment["ok"] = environment["compatible"]
@@ -128,7 +143,7 @@ class HyperFlowRuntime:
             "source_revision": UPSTREAM_REVISION,
             "python_executable": self.python_executable,
             "environment": environment,
-            "runtime_requirement": "hyperflow-h3 at the recorded revision, diffusers==0.40.0, transformers==5.12.1, peft==0.18.0, safetensors>=0.8, av",
+            "runtime_requirement": "in-tree MiniMax-H3/HyperFlow, diffusers==0.40.0 utilities, transformers==5.12.1, safetensors>=0.8, av",
         }
 
     def build_plan(
@@ -186,11 +201,9 @@ class HyperFlowRuntime:
         output = Path(output_path).expanduser().resolve()
         if output.suffix.lower() != ".mp4":
             raise ValueError("HyperFlow output_path must end in .mp4.")
-        module = "generate_ref2va" if refs else "generate_fl2va"
-        command = [
-            self.python_executable,
-            "-m",
-            f"hyperflow_h3.examples.{module}",
+        if (height is None) != (width is None):
+            raise ValueError("HyperFlow height and width must be passed together.")
+        arguments = [
             "--model",
             str(self.model_path),
             "--weights",
@@ -216,23 +229,38 @@ class HyperFlowRuntime:
             if value is not None:
                 if isinstance(value, bool) or int(value) != value or value <= 0 or value % 32:
                     raise ValueError(f"{key} must be a positive multiple of 32.")
-                command.extend((f"--{key}", str(value)))
+                arguments.extend((f"--{key}", str(value)))
         for flag, value in (("--image", image), ("--last-image", last_image)):
             if value is not None:
-                command.extend((flag, str(require_path(value, "HyperFlow keyframe", kind="file"))))
+                arguments.extend((flag, str(require_path(value, "HyperFlow keyframe", kind="file"))))
         counts = dict.fromkeys(_REFERENCE_EXTENSIONS, 0)
         for value in refs:
             kind, path = _reference(value)
             counts[kind] += 1
-            command.extend(("--ref", f"{kind}:{path}"))
+            arguments.extend(("--ref", f"{kind}:{path}"))
         if len(refs) > 12 or counts["image"] > 9 or counts["video"] > 3 or counts["audio"] > 3:
             raise ValueError("Ref2VA supports at most 9 images, 3 videos, 3 audio clips and 12 references total.")
         if counts["audio"] and not (counts["image"] or counts["video"]):
             raise ValueError("Audio references require an image or video reference.")
         if not offload:
-            command.append("--no-offload")
+            arguments.append("--no-offload")
         if sol_attn:
-            command.append("--sol-attn")
+            arguments.append("--sol-attn")
+        launcher_options = ()
+        if self.gpus > 1:
+            # The release uses loopback rendezvous for hosts whose container
+            # hostname is not resolvable from a worker.
+            with socket.socket() as probe:
+                probe.bind(("127.0.0.1", 0))
+                port = probe.getsockname()[1]
+            launcher_options = ("--nnodes=1", "--master_addr=127.0.0.1", f"--master_port={port}")
+        command = package_module_command(
+            "worldfoundry.synthesis.visual_generation.hyperflow.generate",
+            arguments,
+            python_executable=self.python_executable,
+            nproc_per_node=self.gpus if self.gpus > 1 else None,
+            launcher_options=launcher_options,
+        )
         return {
             "command": command,
             "workflow": selected,

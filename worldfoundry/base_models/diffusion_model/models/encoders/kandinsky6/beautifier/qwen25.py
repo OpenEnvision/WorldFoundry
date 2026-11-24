@@ -1,4 +1,3 @@
-# ruff: noqa: E501, W291
 """Qwen 2.5 beautifier. Reuses the text encoder's Qwen, no extra weights.
 
 The instruction strings keep the original wording, including lines longer than
@@ -80,7 +79,7 @@ def build_expand_messages(
     ]
 
 
-def expand_prompt(  # noqa: PLR0913
+def expand_prompt(
     prompt: str,
     qwen_processor,
     qwen_model,

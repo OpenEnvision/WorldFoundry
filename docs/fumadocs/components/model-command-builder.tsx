@@ -21,18 +21,20 @@ const labels = {
     environment: 'Environment',
     device: 'Device',
     taskContract: 'Task contract',
-    taskProfile: 'Profile',
     inputs: 'Inputs',
     artifacts: 'Artifacts',
     required: 'Required',
-    optional: 'Optional',
+    choices: 'Choices',
     defaultValue: 'Default',
     more: 'Show more',
     less: 'Show less',
-    inputSingular: 'input',
-    inputPlural: 'inputs',
+    inputSingular: 'key input',
+    inputPlural: 'key inputs',
     artifactSingular: 'artifact',
     artifactPlural: 'artifacts',
+    moreOptionSingular: 'more option',
+    moreOptionPlural: 'more options',
+    moreOptionsNote: 'Also accepted by wf run for this task; no default is recorded for them.',
     noPipeline: 'No runnable inference pipeline is recorded for this model.',
     noContract: 'No contract is recorded for this variant.',
     noArtifacts: 'No artifact contract is recorded for this task.',
@@ -57,18 +59,20 @@ const labels = {
     environment: '环境',
     device: '设备',
     taskContract: '任务契约',
-    taskProfile: '配置',
     inputs: '输入',
     artifacts: '输出',
     required: '必填',
-    optional: '可选',
+    choices: '可选值',
     defaultValue: '默认值',
     more: '展开',
     less: '收起',
-    inputSingular: '项输入',
-    inputPlural: '项输入',
+    inputSingular: '个关键参数',
+    inputPlural: '个关键参数',
     artifactSingular: '项输出',
     artifactPlural: '项输出',
+    moreOptionSingular: '个其他参数',
+    moreOptionPlural: '个其他参数',
+    moreOptionsNote: 'wf run 在该任务下也接受这些参数，但没有记录默认值。',
     noPipeline: '该模型没有记录可运行的推理 Pipeline。',
     noContract: '该 variant 没有记录契约。',
     noArtifacts: '该 task 没有记录 Artifact 契约。',
@@ -137,7 +141,7 @@ function shellWord(value: string) {
 
 function runCommand(modelId: string, task: ModelRecipeTask) {
   const lines = [
-    'worldfoundry-eval run \\',
+    'wf run \\',
     `  ${shellWord(modelId)} \\`,
     `  --pipeline.task-profile ${shellWord(task.id)} \\`,
   ];
@@ -282,6 +286,14 @@ function parseDetail(detail?: string) {
   return { required, defaultText, choices };
 }
 
+function formatJson(value: object): FormattedDefault {
+  const compact = JSON.stringify(value);
+  if (compact.length <= 42) {
+    return { display: 'scalar', text: compact };
+  }
+  return { display: 'json', text: JSON.stringify(value, null, 2) };
+}
+
 function formatDefault(value: unknown): FormattedDefault {
   if (value === undefined || value === null || value === '') {
     return { display: 'empty', text: '' };
@@ -290,14 +302,14 @@ function formatDefault(value: unknown): FormattedDefault {
     return { display: 'scalar', text: value ? 'true' : 'false' };
   }
   if (typeof value === 'object') {
-    return { display: 'json', text: JSON.stringify(value, null, 2) };
+    return formatJson(value);
   }
   const text = String(value);
   if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
     try {
       const parsed = JSON.parse(text) as unknown;
       if (parsed && typeof parsed === 'object') {
-        return { display: 'json', text: JSON.stringify(parsed, null, 2) };
+        return formatJson(parsed);
       }
     } catch {
       // Keep the original string when it only looks like JSON.
@@ -340,6 +352,23 @@ function fieldDescription(value?: string) {
   if (/ passed to the pipeline for every generated sample\.?$/.test(text)) return '';
   if (/ used as the input for direct .+ inference\.?$/.test(text)) return '';
   return text;
+}
+
+function taskLead(value?: string) {
+  const text = visibleCopy(value);
+  return / through the public CLI contract\.?$/.test(text) ? '' : text;
+}
+
+type ContractField = ReturnType<typeof normalizeInput>;
+
+/**
+ * CLI task schemas list every option a pipeline accepts, including options shared
+ * across a pipeline family. Required inputs, primary inputs, curated contract
+ * fields (no target), and options with a default recorded for this model are the
+ * contract; the remaining options stay behind a secondary disclosure.
+ */
+function isKeyField(field: ContractField) {
+  return field.required || !field.target || field.target === 'input' || field.formatted.display !== 'empty';
 }
 
 function countPhrase(count: number, singular: string, plural: string) {
@@ -406,7 +435,7 @@ function ContractFieldRow({
   field,
 }: {
   t: Copy;
-  field: ReturnType<typeof normalizeInput>;
+  field: ContractField;
 }) {
   const inlineDefault = field.formatted.display === 'scalar';
   return (
@@ -414,9 +443,7 @@ function ContractFieldRow({
       <div className="wf-command-builder-contract-row-top">
         <code className="wf-command-builder-contract-row-name">{field.field}</code>
         <div className="wf-command-builder-contract-row-badges">
-          <span className={`wf-command-builder-pill${field.required ? ' is-required' : ''}`}>
-            {field.required ? t.required : t.optional}
-          </span>
+          {field.required ? <span className="wf-command-builder-pill is-required">{t.required}</span> : null}
           {field.kind ? <span className="wf-command-builder-pill">{field.kind}</span> : null}
         </div>
         {inlineDefault ? (
@@ -427,8 +454,8 @@ function ContractFieldRow({
       </div>
       {field.description ? <p className="wf-command-builder-field-note">{field.description}</p> : null}
       {inlineDefault ? null : <FieldDefault t={t} formatted={field.formatted} />}
-      {field.choices.length > 0 ? (
-        <div className="wf-command-builder-choices" aria-label={t.optional}>
+      {field.choices.length > 1 ? (
+        <div className="wf-command-builder-choices" aria-label={t.choices}>
           {field.choices.map((choice) => (
             <span key={choice}>{choice}</span>
           ))}
@@ -440,26 +467,26 @@ function ContractFieldRow({
 
 function ContractPanel({
   t,
-  taskId,
-  taskLabel,
   description,
   inputs,
   artifacts,
 }: {
   t: Copy;
-  taskId: string;
-  taskLabel: string;
   description: string;
   inputs: ContractInput[];
   artifacts: Array<{ kind?: string; filename?: string; description?: string }>;
 }) {
   const fields = inputs.map(normalizeInput).filter((field) => field.field);
+  const keyFields = fields.filter(isKeyField);
+  const primaryFields = keyFields.length ? keyFields : fields;
+  const extraFields = keyFields.length ? fields.filter((field) => !isKeyField(field)) : [];
   const outputItems = artifacts.filter((item) => item.kind || item.filename);
-  const lead = visibleCopy(description);
+  const lead = taskLead(description);
   const [open, setOpen] = useState(false);
+  const [extraOpen, setExtraOpen] = useState(false);
 
   return (
-    <div className={`wf-command-builder-contracts${open ? ' is-open' : ''}`}>
+    <div className="wf-command-builder-contracts">
       <button
         type="button"
         className="wf-command-builder-disclosure"
@@ -467,21 +494,10 @@ function ContractPanel({
         onClick={() => setOpen((value) => !value)}
       >
         <span className="wf-command-builder-contracts-title">{t.taskContract}</span>
-        <span className="wf-command-builder-contracts-meta">
-          <span className="wf-command-builder-profile-chip">
-            <span className="wf-command-builder-field-label">{t.taskProfile}</span>
-            <span className="wf-command-builder-profile-text">
-              {taskLabel && taskLabel !== taskId ? (
-                <span className="wf-command-builder-profile-name">{taskLabel}</span>
-              ) : null}
-              <code>{taskId}</code>
-            </span>
-          </span>
-          <span className="wf-command-builder-contracts-counts">
-            {countPhrase(fields.length, t.inputSingular, t.inputPlural)}
-            {' · '}
-            {countPhrase(outputItems.length, t.artifactSingular, t.artifactPlural)}
-          </span>
+        <span className="wf-command-builder-contracts-counts">
+          {countPhrase(primaryFields.length, t.inputSingular, t.inputPlural)}
+          {' · '}
+          {countPhrase(outputItems.length, t.artifactSingular, t.artifactPlural)}
         </span>
       </button>
       {open ? (
@@ -491,11 +507,11 @@ function ContractPanel({
           <section className="wf-command-builder-contract">
             <header>
               <h3>{t.inputs}</h3>
-              <b>{fields.length}</b>
+              <b>{primaryFields.length}</b>
             </header>
-            {fields.length ? (
+            {primaryFields.length ? (
               <ul className="wf-command-builder-contract-rows">
-                {fields.map((field) => (
+                {primaryFields.map((field) => (
                   <ContractFieldRow key={field.field} t={t} field={field} />
                 ))}
               </ul>
@@ -531,6 +547,28 @@ function ContractPanel({
               ) : (
                 <p>{t.noArtifacts}</p>
               )}
+            </section>
+          ) : null}
+          {extraFields.length ? (
+            <section className="wf-command-builder-contract">
+              <button
+                type="button"
+                className="wf-command-builder-more-toggle"
+                aria-expanded={extraOpen}
+                onClick={() => setExtraOpen((value) => !value)}
+              >
+                {countPhrase(extraFields.length, t.moreOptionSingular, t.moreOptionPlural)}
+              </button>
+              {extraOpen ? (
+                <div className="wf-command-builder-more-body">
+                  <p className="wf-command-builder-field-note">{t.moreOptionsNote}</p>
+                  <ul className="wf-command-builder-contract-rows">
+                    {extraFields.map((field) => (
+                      <ContractFieldRow key={field.field} t={t} field={field} />
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </section>
           ) : null}
         </div>
@@ -749,8 +787,6 @@ export function ModelCommandBuilder({ recipe, locale = 'en' }: { recipe: ModelRe
       {taskChoices.length > 0 ? (
         <ContractPanel
           t={t}
-          taskId={selectedTask.id}
-          taskLabel={selectedTask.label}
           description={selectedTask.description}
           inputs={selectedInputContract}
           artifacts={selectedArtifacts}

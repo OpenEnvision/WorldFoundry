@@ -20,17 +20,17 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: stevo-bench
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:StevoBenchContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id stevo-bench --mode contract
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:stevo-bench
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py
+  contract_validation_command: wf zoo benchmark-run --benchmark-id stevo-bench --mode contract
     --output-dir tmp/benchmark_zoo/benchmark_contract/stevo-bench --json
-  validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id stevo-bench --mode official-validation
+  validation_command: wf zoo benchmark-run --benchmark-id stevo-bench --mode official-validation
     --official-results-path <stevo_bench_run_dir_or_summary_json> --output-dir <out> --json
   checkpoint_refs: []
   runtime:
     kind: in_tree_official_runtime_hosted_judges
-    root: worldfoundry/evaluation/tasks/execution/runners/stevo_bench
-    runtime_root: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench
+    root: worldfoundry/evals/tasks/execution/runners/stevo_bench
+    runtime_root: worldfoundry/evals/tasks/execution/runners/stevo_bench/runtime/stevo_bench
     root_env: WORLDFOUNDRY_STEVO_BENCH_ROOT
     results_path_env: WORLDFOUNDRY_STEVO_BENCH_RESULTS_PATH
     task_root_env: WORLDFOUNDRY_STEVO_BENCH_TASK_ROOT
@@ -56,7 +56,7 @@ metadata:
     filename_template: scorecard.json
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:StevoBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:stevo-bench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
@@ -117,5 +117,5 @@ tasks:
       - occlusion_done
       - trigger_applied
       - control_success
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:StevoBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:stevo-bench
+      runner_script: worldfoundry/evals/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py

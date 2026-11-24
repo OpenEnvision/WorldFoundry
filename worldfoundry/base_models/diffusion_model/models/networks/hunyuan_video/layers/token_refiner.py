@@ -5,8 +5,6 @@ blocks on ``B L C`` text tokens.  The pooled context+timestep vector
 gates each residual.  Video tokens are not refined here.
 """
 
-from typing import Optional
-
 import torch
 import torch.nn as nn
 from einops import rearrange
@@ -39,8 +37,8 @@ class IndividualTokenRefinerBlock(nn.Module):
         qk_norm: bool = False,
         qk_norm_type: str = "layer",
         qkv_bias: bool = True,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
@@ -48,30 +46,18 @@ class IndividualTokenRefinerBlock(nn.Module):
         head_dim = hidden_size // heads_num
         mlp_hidden_dim = int(hidden_size * mlp_width_ratio)
 
-        self.norm1 = nn.LayerNorm(
-            hidden_size, elementwise_affine=True, eps=1e-6, **factory_kwargs
-        )
-        self.self_attn_qkv = nn.Linear(
-            hidden_size, hidden_size * 3, bias=qkv_bias, **factory_kwargs
-        )
+        self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=True, eps=1e-6, **factory_kwargs)
+        self.self_attn_qkv = nn.Linear(hidden_size, hidden_size * 3, bias=qkv_bias, **factory_kwargs)
         qk_norm_layer = get_norm_layer(qk_norm_type)
         self.self_attn_q_norm = (
-            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs)
-            if qk_norm
-            else nn.Identity()
+            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs) if qk_norm else nn.Identity()
         )
         self.self_attn_k_norm = (
-            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs)
-            if qk_norm
-            else nn.Identity()
+            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs) if qk_norm else nn.Identity()
         )
-        self.self_attn_proj = nn.Linear(
-            hidden_size, hidden_size, bias=qkv_bias, **factory_kwargs
-        )
+        self.self_attn_proj = nn.Linear(hidden_size, hidden_size, bias=qkv_bias, **factory_kwargs)
 
-        self.norm2 = nn.LayerNorm(
-            hidden_size, elementwise_affine=True, eps=1e-6, **factory_kwargs
-        )
+        self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=True, eps=1e-6, **factory_kwargs)
         act_layer = get_activation_layer(act_type)
         self.mlp = MLP(
             in_channels=hidden_size,
@@ -130,8 +116,8 @@ class IndividualTokenRefiner(nn.Module):
         qk_norm: bool = False,
         qk_norm_type: str = "layer",
         qkv_bias: bool = True,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
@@ -156,7 +142,7 @@ class IndividualTokenRefiner(nn.Module):
         self,
         x: torch.Tensor,
         c: torch.LongTensor,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
     ):
         """Apply the stack; ``mask`` is ``B L`` (1=keep) expanded to pairwise attn."""
         self_attn_mask = None
@@ -165,9 +151,7 @@ class IndividualTokenRefiner(nn.Module):
             seq_len = mask.shape[1]
             mask = mask.to(x.device)
             # batch_size x 1 x seq_len x seq_len
-            self_attn_mask_1 = mask.view(batch_size, 1, 1, seq_len).repeat(
-                1, 1, seq_len, 1
-            )
+            self_attn_mask_1 = mask.view(batch_size, 1, 1, seq_len).repeat(1, 1, seq_len, 1)
             # batch_size x 1 x seq_len x seq_len
             self_attn_mask_2 = self_attn_mask_1.transpose(2, 3)
             # batch_size x 1 x seq_len x seq_len, 1 for broadcasting of heads_num
@@ -184,6 +168,7 @@ class SingleTokenRefiner(nn.Module):
     """
     A single token refiner block for llm text embedding refine.
     """
+
     def __init__(
         self,
         in_channels,
@@ -197,25 +182,21 @@ class SingleTokenRefiner(nn.Module):
         qk_norm_type: str = "layer",
         qkv_bias: bool = True,
         attn_mode: str = "torch",
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
         self.attn_mode = attn_mode
         assert self.attn_mode == "torch", "Only support 'torch' mode for token refiner."
 
-        self.input_embedder = nn.Linear(
-            in_channels, hidden_size, bias=True, **factory_kwargs
-        )
+        self.input_embedder = nn.Linear(in_channels, hidden_size, bias=True, **factory_kwargs)
 
         act_layer = get_activation_layer(act_type)
         # Build timestep embedding layer
         self.t_embedder = TimestepEmbedder(hidden_size, act_layer, **factory_kwargs)
         # Build context embedding layer
-        self.c_embedder = TextProjection(
-            in_channels, hidden_size, act_layer, **factory_kwargs
-        )
+        self.c_embedder = TextProjection(in_channels, hidden_size, act_layer, **factory_kwargs)
 
         self.individual_token_refiner = IndividualTokenRefiner(
             hidden_size=hidden_size,
@@ -234,7 +215,7 @@ class SingleTokenRefiner(nn.Module):
         self,
         x: torch.Tensor,
         t: torch.LongTensor,
-        mask: Optional[torch.LongTensor] = None,
+        mask: torch.LongTensor | None = None,
     ):
         """Project ``B L C_text`` and refine; ``t`` is the diffusion timestep."""
         timestep_aware_representations = self.t_embedder(t)
@@ -243,9 +224,7 @@ class SingleTokenRefiner(nn.Module):
             context_aware_representations = x.mean(dim=1)
         else:
             mask_float = mask.float().unsqueeze(-1)  # [b, s1, 1]
-            context_aware_representations = (x * mask_float).sum(
-                dim=1
-            ) / mask_float.sum(dim=1)
+            context_aware_representations = (x * mask_float).sum(dim=1) / mask_float.sum(dim=1)
         context_aware_representations = self.c_embedder(context_aware_representations)
         c = timestep_aware_representations + context_aware_representations
 

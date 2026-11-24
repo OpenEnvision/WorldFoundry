@@ -8,7 +8,7 @@ source:
   license: research-only-non-commercial-not-eu
 checkpoint: TencentARC/VerseCrafter
 runtime_profile: runtime-profile:versecrafter
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: versecrafter
 official_sources:
   project_page: https://sixiaozheng.github.io/VerseCrafter_page/
@@ -31,12 +31,12 @@ docs:
   publisher: Tencent ARC Lab
   publisher_kind: company
   publisher_zh: 腾讯 ARC 实验室
-  overview: 'VerseCrafter from Tencent ARC is a camera-controlled image-to-video world model built on 4D control: a geometry-aware rendering stage produces 4D control signals that guide the diffusion stage along the requested camera path. WorldFoundry vendors the official source (revision 008693b5) plus the exact VideoX-Fun submodule (revision 246a0e3a) in-tree, with the TencentARC/VerseCrafter checkpoint reference.'
-  overview_zh: 腾讯 ARC 的 VerseCrafter 是基于 4D 控制的相机可控图生视频世界模型：几何感知渲染阶段产出 4D 控制信号，引导扩散阶段沿指定相机路径生成。WorldFoundry 将官方源码（revision 008693b5）与精确的 VideoX-Fun 子模块（revision 246a0e3a）内置树内，checkpoint 引用为 TencentARC/VerseCrafter。
-  architecture: 'Two stages are wired in-tree: camera-only 4D-control rendering followed by the diffusion stage. The diffusion backbone comes from the pinned VideoX-Fun submodule. Further architecture internals are not recorded in this repository.'
-  architecture_zh: 树内接通两个阶段：仅相机的 4D 控制渲染，随后是扩散阶段。扩散骨干来自锁定版本的 VideoX-Fun 子模块。更多架构内部细节仓库未记录。
-  usage_notes: 'Note the license before any deployment: upstream is research-only, non-commercial, and excludes intended EU use. A local checkpoint-backed short video has been verified, with visible late-frame artifacts; official output parity remains unmeasured.'
-  usage_notes_zh: 部署前务必注意许可：上游为仅研究、非商用，且排除面向欧盟的使用。本地真实权重短视频已验证，但后段有可见伪影；尚未测量与官方输出的一致性。
+  overview: 'VerseCrafter from Tencent ARC is a camera-controlled image-to-video world model built on 4D control: a geometry-aware rendering stage produces 4D control signals that guide the diffusion stage along the requested camera path. It runs with the TencentARC/VerseCrafter checkpoint plus Wan-AI/Wan2.1-T2V-14B and Ruicheng/moge-2-vitl-normal.'
+  overview_zh: 腾讯 ARC 的 VerseCrafter 是基于 4D 控制的相机可控图生视频世界模型：几何感知渲染阶段产出 4D 控制信号，引导扩散阶段沿指定相机路径生成。运行需要 TencentARC/VerseCrafter checkpoint，以及 Wan-AI/Wan2.1-T2V-14B 与 Ruicheng/moge-2-vitl-normal。
+  architecture: 'Two stages: camera-only 4D-control rendering, followed by a diffusion stage whose backbone comes from VideoX-Fun.'
+  architecture_zh: 两个阶段：仅相机的 4D 控制渲染，随后是扩散阶段，其扩散骨干来自 VideoX-Fun。
+  usage_notes: 'Validated with the released checkpoint: a short camera-controlled video generates end to end, with visible artifacts in late frames.'
+  usage_notes_zh: 已用发布权重验证：可端到端生成相机可控短视频，后段帧有可见伪影。
   limitations:
   - Research-only, non-commercial license that excludes intended EU use.
   - The short GPU run has late-frame disocclusion artifacts; camera-path accuracy and official output parity remain unmeasured.

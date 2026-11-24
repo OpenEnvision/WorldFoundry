@@ -48,7 +48,7 @@ def shard_model(
         forward_prefetch=True,
         limit_all_gathers=True,
         sync_module_states=sync_module_states,
-        use_orig_params=True if use_lora else False,
+        use_orig_params=bool(use_lora),
     )
     return model
 

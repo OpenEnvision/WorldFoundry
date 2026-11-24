@@ -34,7 +34,6 @@ class VideoReadError(Exception):
 
 
 class Dataset(TorchDataset):
-
     def __init__(
         self,
         data_dir,
@@ -47,12 +46,10 @@ class Dataset(TorchDataset):
         self.dataset_name = dataset_name
         self.directory = Path(data_dir).expanduser()
 
-        with open(self.directory / "episodes_info.json", "r") as json_file:
+        with open(self.directory / "episodes_info.json") as json_file:
             self.episodes_info = json.load(json_file)
         self._num_episodes = self.episodes_info["num_episodes"]
-        self._lengths = np.array(
-            [ep["length"] for ep in self.episodes_info["episodes"]]
-        )
+        self._lengths = np.array([ep["length"] for ep in self.episodes_info["episodes"]])
         self._obs_resize = obs_resize
         self._converters = [input_converters[c] for c in converters]
 
@@ -79,9 +76,7 @@ class Dataset(TorchDataset):
         try:
             act = self.read_act_slice(actions_path, segment_id.start, segment_id.stop)
         except Exception as e:
-            raise ValueError(
-                f"Error reading episode actions {segment_id.episode_id}: {e}"
-            ) from e
+            raise ValueError(f"Error reading episode actions {segment_id.episode_id}: {e}") from e
 
         try:
             obs_decord = minecraft.read_obs_slice_decord(
@@ -141,7 +136,7 @@ class DatasetMultiplayer(TorchDataset):
         self._episodes = {}
 
         mp4_files = sorted(
-            [p for p in self.directory.glob(f"*_{self.bot1_name}_*.mp4")],
+            self.directory.glob(f"*_{self.bot1_name}_*.mp4"),
             key=lambda p: p.name,
         )
         episode_id = 0
@@ -150,9 +145,7 @@ class DatasetMultiplayer(TorchDataset):
             name = video_path_bot1.name
 
             # Form the expected counterpart filename for bot2 by swapping bot name
-            counterpart_name = name.replace(
-                f"_{self.bot1_name}_", f"_{self.bot2_name}_", 1
-            )
+            counterpart_name = name.replace(f"_{self.bot1_name}_", f"_{self.bot2_name}_", 1)
             video_path_bot2 = self.directory / counterpart_name
 
             # Corresponding action files must exist and share the same stem
@@ -160,20 +153,12 @@ class DatasetMultiplayer(TorchDataset):
             actions_path_bot2 = video_path_bot2.with_suffix(".json")
             # If the action file ends with '_camera.json', replace it with '.json'
             if actions_path_bot1.name.endswith("_camera.json"):
-                actions_path_bot1 = actions_path_bot1.with_name(
-                    actions_path_bot1.name.replace("_camera.json", ".json")
-                )
+                actions_path_bot1 = actions_path_bot1.with_name(actions_path_bot1.name.replace("_camera.json", ".json"))
             if actions_path_bot2.name.endswith("_camera.json"):
-                actions_path_bot2 = actions_path_bot2.with_name(
-                    actions_path_bot2.name.replace("_camera.json", ".json")
-                )
+                actions_path_bot2 = actions_path_bot2.with_name(actions_path_bot2.name.replace("_camera.json", ".json"))
 
             # Validate existence of all four files
-            if (
-                video_path_bot2.exists()
-                and actions_path_bot1.exists()
-                and actions_path_bot2.exists()
-            ):
+            if video_path_bot2.exists() and actions_path_bot1.exists() and actions_path_bot2.exists():
                 self._episodes[episode_id] = {
                     "bot1_video_path": video_path_bot1.name,
                     "bot1_actions_path": actions_path_bot1.name,
@@ -213,16 +198,14 @@ class DatasetMultiplayer(TorchDataset):
             raise ValueError(f"Error reading video {video_path_bot2}: {e}") from e
 
         try:
-            with open(actions_path_bot1, "r") as f:
+            with open(actions_path_bot1) as f:
                 bot1_actions = json.load(f)
-            with open(actions_path_bot2, "r") as f:
+            with open(actions_path_bot2) as f:
                 bot2_actions = json.load(f)
             bot1_actions = bot1_actions[segment_id.bot1_start : segment_id.bot1_stop]
             bot2_actions = bot2_actions[segment_id.bot2_start : segment_id.bot2_stop]
         except Exception as e:
-            raise ValueError(
-                f"Error reading episode actions {segment_id.episode_id}: {e}"
-            ) from e
+            raise ValueError(f"Error reading episode actions {segment_id.episode_id}: {e}") from e
         bot1_actions = [{**a, "bot": self.bot1_name} for a in bot1_actions]
         bot2_actions = [{**a, "bot": self.bot2_name} for a in bot2_actions]
 
@@ -320,8 +303,6 @@ def collate_segments_to_batch(sequence_length, pad_batch_to, segments):
             [(0, pad_batch_to - len(valid_segments))] + [(0, 0)] * (act_batch.ndim - 1),
             mode="constant",
         )
-        real_lengths = np.pad(
-            real_lengths, (0, pad_batch_to - len(valid_segments)), mode="constant"
-        )
+        real_lengths = np.pad(real_lengths, (0, pad_batch_to - len(valid_segments)), mode="constant")
 
     return Batch(obs_batch, act_batch, real_lengths)

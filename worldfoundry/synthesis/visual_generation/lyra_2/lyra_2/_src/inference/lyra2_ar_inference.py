@@ -15,21 +15,20 @@
 
 import gc
 import os
-from typing import List, Optional
 
 import numpy as np
 import torch
 import tqdm
 from einops import rearrange
-from lyra_2._src.models.lyra2_model import Sparse3DCache
-from lyra_2._src.utils.forward_warp_utils_pytorch import (
-    reliable_depth_mask_range_batch,
-)
 
-from worldfoundry.core.distributed.runtime.logging import log
 from worldfoundry.core.distributed.model_parallel.megatron_compat import parallel_state
 from worldfoundry.core.execution import inference_runtime as misc
+from worldfoundry.core.observability.rank_logging import log
 from worldfoundry.data.io import save_img_or_video
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.models.lyra2_model import Sparse3DCache
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.utils.forward_warp_utils_pytorch import (
+    reliable_depth_mask_range_batch,
+)
 
 torch.enable_grad(False)
 
@@ -198,7 +197,7 @@ def _predict_da3_depth_window(
         return {"frame_indices": [], "prediction": None}
 
     # Build absolute frame indices along the global video timeline
-    selected_frames: List[int] = []
+    selected_frames: list[int] = []
     step = max(int(frame_interval), 1)
     for k in range(int(max_history_frames)):
         f = abs_last_idx - k * step
@@ -212,13 +211,13 @@ def _predict_da3_depth_window(
 
         selected_frames.extend(list(range(0, int(abs_last_idx) + 1, chunk)))
 
-    selected_frames = sorted(set(int(x) for x in selected_frames))
+    selected_frames = sorted({int(x) for x in selected_frames})
     if not selected_frames:
         return {"frame_indices": [], "prediction": None}
 
-    images: List[np.ndarray] = []
-    exts: List[np.ndarray] = []
-    ixts: List[np.ndarray] = []
+    images: list[np.ndarray] = []
+    exts: list[np.ndarray] = []
+    ixts: list[np.ndarray] = []
 
     hist_cpu = history_frames[0].detach().cpu()  # [C,T,H,W]
     cam_cpu = cam_w2c.detach().cpu()
@@ -386,9 +385,9 @@ class Lyra2InferencePipeline:
         base_neg_t5_text_embeddings=None,
         padding_mask=None,
         fps=None,
-        vipe_input_dump_dir: Optional[str] = None,
-        vipe_input_dump_prefix: Optional[str] = None,
-        multiview_data: Optional[dict] = None,
+        vipe_input_dump_dir: str | None = None,
+        vipe_input_dump_prefix: str | None = None,
+        multiview_data: dict | None = None,
     ):
         self.model = model
         self.args = args
@@ -434,7 +433,7 @@ class Lyra2InferencePipeline:
         self.use_image_spatial = bool(getattr(cfg, "spatial_memory_use_image", False))
         self.merge_history_buffers = False
         self.num_retrieval_views: int = int(getattr(args, "num_retrieval_views", 1))
-        self.warp_video_collect: List[torch.Tensor] = []
+        self.warp_video_collect: list[torch.Tensor] = []
         self.vipe_input_dump_dir = vipe_input_dump_dir
         self.vipe_input_dump_prefix = vipe_input_dump_prefix
 
@@ -451,13 +450,13 @@ class Lyra2InferencePipeline:
         # - We keep a single Sparse3DCache (downsample=4, store_values=True) used for:
         #   1) spatial overlap retrieval
         #   2) depth lookup by frame_id for accumulated-PD warping
-        self.retrieval_cache: Optional[Sparse3DCache] = None
+        self.retrieval_cache: Sparse3DCache | None = None
         # Most recent "buffer" depth for warping (B,1,H,W). We store it explicitly to avoid requiring
         # the latest history frame to be present in the cache.
-        self.buffer_depth_latest: Optional[torch.Tensor] = None
+        self.buffer_depth_latest: torch.Tensor | None = None
         # Optional per-pixel validity mask (B,1,H,W) for UI/visualization (e.g. non-sky).
-        self.buffer_mask_latest: Optional[torch.Tensor] = None
-        self.buffer_depth_latest_frame_idx: Optional[int] = None
+        self.buffer_mask_latest: torch.Tensor | None = None
+        self.buffer_depth_latest_frame_idx: int | None = None
 
         self.depth_backend = getattr(args, "depth_backend", "da3")
         self.local_da3_model = da3_model if self.depth_backend == "da3" else None
@@ -476,7 +475,9 @@ class Lyra2InferencePipeline:
             first_K = self.intrinsics[:, 0]
             if self.depth_backend == "da3":
                 if self.local_da3_model is None:
-                    from lyra_2._src.inference.depth_utils import load_da3_model
+                    from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.inference.depth_utils import (
+                        load_da3_model,
+                    )
 
                     da3_device = model.tensor_kwargs.get("device", "cuda" if torch.cuda.is_available() else "cpu")
                     self.local_da3_model = load_da3_model(
@@ -544,9 +545,9 @@ class Lyra2InferencePipeline:
         self.ar_idx = 0
 
         # Predicted-pose update state (populated by _update_depth_cache when da3_use_predicted_pose=True).
-        self._predicted_pose_last_w2c: Optional[torch.Tensor] = None
-        self._predicted_pose_updated_seed_depth: Optional[torch.Tensor] = None
-        self._predicted_pose_updated_seed_mask: Optional[torch.Tensor] = None
+        self._predicted_pose_last_w2c: torch.Tensor | None = None
+        self._predicted_pose_updated_seed_depth: torch.Tensor | None = None
+        self._predicted_pose_updated_seed_mask: torch.Tensor | None = None
         self._predicted_pose_is_first_segment: bool = False
 
         self.base_t5_text_embeddings = base_t5_text_embeddings
@@ -759,7 +760,7 @@ class Lyra2InferencePipeline:
         torch.cuda.empty_cache()
         warp_pixels = getattr(self.model, "_latest_condition_state_pixels", None)
         if self.use_pose and warp_pixels is not None:
-            if isinstance(warp_pixels, torch.Tensor) and warp_pixels.dim() == 5:
+            if isinstance(warp_pixels, torch.Tensor) and warp_pixels.dim() == 5:  # noqa: SIM102 - Statement form kept for readability.
                 if int(warp_pixels.shape[1]) > 3:
                     warp_pixels = warp_pixels[:, :3]
             self.warp_video_collect.append(warp_pixels.detach().float().cpu())
@@ -892,7 +893,7 @@ class Lyra2InferencePipeline:
             finally:
                 if offload_da3:
                     _restore_diffusion_to_gpu(self.model, True)
-            da3_frames: List[int] = da3_out["frame_indices"]
+            da3_frames: list[int] = da3_out["frame_indices"]
             da3_pred = da3_out["prediction"]
             assert da3_pred is not None and len(da3_frames) > 0, "DA3 depth window prediction required for cache update"
 
@@ -903,7 +904,7 @@ class Lyra2InferencePipeline:
 
             # --- Predicted-pose alignment (if enabled) ---
             use_predicted_pose = bool(getattr(self.args, "da3_use_predicted_pose", False))
-            aligned_w2c_per_local: Optional[List[torch.Tensor]] = None
+            aligned_w2c_per_local: list[torch.Tensor] | None = None
             depth_scale_factor: float = 1.0
             is_first_segment = False
 

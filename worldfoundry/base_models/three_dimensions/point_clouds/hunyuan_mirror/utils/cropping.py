@@ -30,11 +30,6 @@ class ImageList:
     """
 
     def __init__(self, images):
-        """Init.
-
-        Args:
-            images: The images.
-        """
         if not isinstance(images, (tuple, list, set)):
             images = [images]
         self.images = []
@@ -165,9 +160,7 @@ def rescale_image_and_other_optional_info(
     output_resolution = np.floor(input_resolution * scale_final).astype(int)
 
     # First rescale the image so that it contains the crop
-    image = image.resize(
-        tuple(output_resolution), resample=lanczos if scale_final < 1 else bicubic
-    )
+    image = image.resize(tuple(output_resolution), resample=lanczos if scale_final < 1 else bicubic)
     if depthmap is not None:
         depthmap = cv2.resize(
             depthmap,
@@ -273,9 +266,7 @@ def crop_image_and_other_optional_info(
     if depthmap is not None:
         depthmap = depthmap[top:bottom, left:right]
     if additional_quantities is not None:
-        additional_quantities = [
-            quantity[top:bottom, left:right] for quantity in additional_quantities
-        ]
+        additional_quantities = [quantity[top:bottom, left:right] for quantity in additional_quantities]
 
     if camera_intrinsics is not None:
         camera_intrinsics = camera_intrinsics.copy()
@@ -290,7 +281,7 @@ def crop_image_depthmap(image, depthmap, camera_intrinsics, crop_bbox):
     Return a crop of the input view.
     """
     image = ImageList(image)
-    l, t, r, b = crop_bbox
+    l, t, r, b = crop_bbox  # noqa: E741 - Ambiguous upstream name kept as written.
 
     image = image.crop((l, t, r, b))
     if depthmap is not None:
@@ -308,7 +299,7 @@ def crop_image_normalmap(image, normalmap, camera_intrinsics, valid_mask, crop_b
     Return a crop of the input view.
     """
     image = ImageList(image)
-    l, t, r, b = crop_bbox
+    l, t, r, b = crop_bbox  # noqa: E741 - Ambiguous upstream name kept as written.
 
     image = image.crop((l, t, r, b))
     normalmap = normalmap[t:b, l:r]
@@ -321,9 +312,7 @@ def crop_image_normalmap(image, normalmap, camera_intrinsics, valid_mask, crop_b
     return image.to_pil(), normalmap, camera_intrinsics, valid_mask
 
 
-def rescale_image_depthmap(
-    image, depthmap, camera_intrinsics, output_resolution, force=True
-):
+def rescale_image_depthmap(image, depthmap, camera_intrinsics, output_resolution, force=True):
     """Jointly rescale a (image, depthmap)
     so that (out_width, out_height) >= output_res
     """
@@ -342,9 +331,7 @@ def rescale_image_depthmap(
     output_resolution = np.floor(input_resolution * scale_final).astype(int)
 
     # first rescale the image so that it contains the crop
-    image = image.resize(
-        output_resolution, resample=lanczos if scale_final < 1 else bicubic
-    )
+    image = image.resize(output_resolution, resample=lanczos if scale_final < 1 else bicubic)
     if depthmap is not None:
         depthmap = cv2.resize(
             depthmap,
@@ -382,9 +369,7 @@ def rescale_image_normalmap(image, normalmap, camera_intrinsics, normal_mask, ou
     output_resolution = np.floor(input_resolution * scale_final).astype(int)
 
     # first rescale the image so that it contains the crop
-    image = image.resize(
-        output_resolution, resample=lanczos if scale_final < 1 else bicubic
-    )
+    image = image.resize(output_resolution, resample=lanczos if scale_final < 1 else bicubic)
     if normalmap is not None:
         normalmap = cv2.resize(
             normalmap,
@@ -413,9 +398,7 @@ def rescale_image_normalmap(image, normalmap, camera_intrinsics, normal_mask, ou
     return image.to_pil(), normalmap, camera_intrinsics, normal_mask
 
 
-def bbox_from_intrinsics_in_out(
-    input_camera_matrix, output_camera_matrix, output_resolution
-):
+def bbox_from_intrinsics_in_out(input_camera_matrix, output_camera_matrix, output_resolution):
     """
     Calculate the bounding box for cropping based on input and output camera intrinsics.
 
@@ -428,9 +411,7 @@ def bbox_from_intrinsics_in_out(
         tuple: Crop bounding box as (left, top, right, bottom)
     """
     out_width, out_height = output_resolution
-    left, top = np.int32(
-        np.round(input_camera_matrix[:2, 2] - output_camera_matrix[:2, 2])
-    )
+    left, top = np.int32(np.round(input_camera_matrix[:2, 2] - output_camera_matrix[:2, 2]))
     crop_bbox = (left, top, left + out_width, top + out_height)
     return crop_bbox
 
@@ -468,14 +449,12 @@ def crop_resize_if_necessary(
 
     # High-quality Lanczos down-scaling
     target_rescale_resolution = np.array(resolution)
-    image, depthmap, intrinsics, additional_quantities = (
-        rescale_image_and_other_optional_info(
-            image=image,
-            output_resolution=target_rescale_resolution,
-            depthmap=depthmap,
-            camera_intrinsics=intrinsics,
-            additional_quantities_to_be_resized_with_nearest=additional_quantities,
-        )
+    image, depthmap, intrinsics, additional_quantities = rescale_image_and_other_optional_info(
+        image=image,
+        output_resolution=target_rescale_resolution,
+        depthmap=depthmap,
+        camera_intrinsics=intrinsics,
+        additional_quantities_to_be_resized_with_nearest=additional_quantities,
     )
 
     # Actual cropping (if necessary)
@@ -499,14 +478,12 @@ def crop_resize_if_necessary(
         top = (h - target_h) // 2
         crop_bbox = (left, top, left + target_w, top + target_h)
 
-    image, depthmap, new_intrinsics, additional_quantities = (
-        crop_image_and_other_optional_info(
-            image=image,
-            crop_bbox=crop_bbox,
-            depthmap=depthmap,
-            camera_intrinsics=intrinsics,
-            additional_quantities=additional_quantities,
-        )
+    image, depthmap, new_intrinsics, additional_quantities = crop_image_and_other_optional_info(
+        image=image,
+        crop_bbox=crop_bbox,
+        depthmap=depthmap,
+        camera_intrinsics=intrinsics,
+        additional_quantities=additional_quantities,
     )
 
     # Return the output

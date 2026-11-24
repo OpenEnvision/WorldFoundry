@@ -11,7 +11,8 @@ pageSource: authored
 - 源码：[Robbyant/lingbot-world-v2](https://github.com/Robbyant/lingbot-world-v2)，revision `94f43115de8d4a4f9f282126528c300a0b232c5f`。
 - root-level indexed DiT shards 单独加载；`shared_assets_path` 指向 Wan2.1 的 UMT5、tokenizer 和 VAE 资产。
 - 默认单 GPU、317 帧、chunk_size=4、shift=5、16 FPS，T5/DiT FSDP 均关闭；首 chunk 13 帧，之后每 chunk 16 帧。
-- 相机条件在同一 chunk 内复用，减少重复投影并保持输出像素一致；流式 VAE 保留独立的因果 history。
-- 许可：**CC-BY-NC-SA-4.0，非商用、相同方式共享**。
+- 运行环境：独立环境 `lingbot-world-v2`（Python 3.10，CUDA 12.1，torch==2.5.1）。
+- 相机条件在同一 chunk 内复用，减少重复投影并保持输出像素一致。
+- 许可：**CC-BY-NC-SA-4.0，署名、非商用、相同方式共享**。
 
-加载示例、共享加速效果和 Studio 多传感器契约见 [Causal Wan 流式推理](/docs/guides/causal-wan-streaming)。
+加载示例、共享加速效果和 Studio 多传感器契约见 [Causal Wan 流式推理](/zh/docs/guides/causal-wan-streaming)。

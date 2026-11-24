@@ -42,15 +42,11 @@ def save_chunk_state(
     }
     metadata_path = state_output_dir / f"chunk_{chunk_index:03d}_complete.json"
     temporary_metadata_path = metadata_path.with_suffix(".json.tmp")
-    temporary_metadata_path.write_text(
-        json.dumps(metadata, indent=2, sort_keys=True) + "\n"
-    )
+    temporary_metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
     os.replace(temporary_metadata_path, metadata_path)
     latest_path = state_output_dir / "latest.json"
     temporary_latest_path = latest_path.with_suffix(".json.tmp")
-    temporary_latest_path.write_text(
-        json.dumps(metadata, indent=2, sort_keys=True) + "\n"
-    )
+    temporary_latest_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
     os.replace(temporary_latest_path, latest_path)
     print(f"[worldcrafter] saved resumable state {checkpoint_path}", flush=True)
 
@@ -62,16 +58,10 @@ def assemble_resumed_video(
     fps: int,
     overlap_frames: int = 1,
 ) -> None:
-    chunk_paths = [
-        chunk_output_dir / f"chunk_{index:03d}_33f.mp4"
-        for index in range(final_chunk_index + 1)
-    ]
+    chunk_paths = [chunk_output_dir / f"chunk_{index:03d}_33f.mp4" for index in range(final_chunk_index + 1)]
     missing_chunks = [str(path) for path in chunk_paths if not path.is_file()]
     if missing_chunks:
-        raise FileNotFoundError(
-            "cannot assemble resumed output; missing chunks: "
-            + ", ".join(missing_chunks)
-        )
+        raise FileNotFoundError("cannot assemble resumed output; missing chunks: " + ", ".join(missing_chunks))
     ffmpeg = _resolve_ffmpeg_executable()
     if ffmpeg is None:
         raise RuntimeError("FFmpeg is required to assemble resumed WorldCrafter video")
@@ -83,16 +73,12 @@ def assemble_resumed_video(
     if overlap_frames == 0:
         concat_path = output_path.with_suffix(".concat.txt")
         concat_path.write_text(
-            "".join(
-                "file '" + str(path.resolve()).replace("'", "'\\''") + "'\n"
-                for path in chunk_paths
-            ),
+            "".join("file '" + str(path.resolve()).replace("'", "'\\''") + "'\n" for path in chunk_paths),
             encoding="utf-8",
         )
         try:
             subprocess.run(
-                [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat_path),
-                 "-c", "copy", str(output_path)],
+                [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat_path), "-c", "copy", str(output_path)],
                 check=True,
             )
         finally:
@@ -107,9 +93,7 @@ def assemble_resumed_video(
         trim = "trim=start_frame=1," if index else ""
         filters.append(f"[{index}:v]{trim}setpts=PTS-STARTPTS[v{index}]")
     inputs = "".join(f"[v{index}]" for index in range(len(chunk_paths)))
-    filters.append(
-        f"{inputs}concat=n={len(chunk_paths)}:v=1:a=0,format=yuv420p[v]"
-    )
+    filters.append(f"{inputs}concat=n={len(chunk_paths)}:v=1:a=0,format=yuv420p[v]")
     subprocess.run(
         [
             ffmpeg,

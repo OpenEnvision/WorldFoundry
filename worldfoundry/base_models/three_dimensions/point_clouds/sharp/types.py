@@ -30,7 +30,7 @@ class Gaussians3D(NamedTuple):
     colors: torch.Tensor
     opacities: torch.Tensor
 
-    def to(self, device: torch.device | str) -> "Gaussians3D":
+    def to(self, device: torch.device | str) -> Gaussians3D:
         return Gaussians3D(*(value.to(device) for value in self))
 
 
@@ -70,9 +70,7 @@ class GaussianDecoderParams:
 @dataclasses.dataclass
 class PredictorParams:
     initializer: InitializerParams = dataclasses.field(default_factory=InitializerParams)
-    gaussian_decoder: GaussianDecoderParams = dataclasses.field(
-        default_factory=GaussianDecoderParams
-    )
+    gaussian_decoder: GaussianDecoderParams = dataclasses.field(default_factory=GaussianDecoderParams)
     delta_factor: DeltaFactor = dataclasses.field(default_factory=DeltaFactor)
     max_scale: float = 10.0
     min_scale: float = 0.0

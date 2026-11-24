@@ -21,22 +21,22 @@ import hashlib
 import json
 import math
 import os
-import re
 import select
 import subprocess
 import sys
 import tempfile
 import threading
 import time
-from contextlib import contextmanager
+from collections.abc import Callable, Mapping
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Mapping
+from typing import TYPE_CHECKING, Any
 
 from worldfoundry.core.execution.process import terminate_process_group
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path, worldfoundry_path_tokens
-from worldfoundry.evaluation.reporting import is_sensitive_key, redact_secret_text
+from worldfoundry.evals.reporting import is_sensitive_key, redact_secret_text
 from worldfoundry.runtime.conda import (
     RuntimeCondaEnvSpec,
     apply_unified_env_override,
@@ -89,7 +89,6 @@ DEFAULT_FORCE_SUBPROCESS_MODELS = frozenset(
         "cameractrl",
         "hunyuan-game-craft",
         "hunyuan-gamecraft",
-        "hunyuan-world-voyager",
         "lingbot-world",
         "lingbot-world-v2",
         "lingbot-world-v2-1.3b",
@@ -122,12 +121,6 @@ TORCHRUN_MODEL_NPROC_KEYS: Mapping[str, tuple[str, ...]] = {
     ),
     "hunyuan-game-craft": ("torchrun_nproc_per_node", "torchrun_nproc", "nproc_per_node"),
     "hunyuan-gamecraft": ("torchrun_nproc_per_node", "torchrun_nproc", "nproc_per_node"),
-    "hunyuan-world-voyager": (
-        "torchrun_nproc_per_node",
-        "torchrun_nproc",
-        "nproc_per_node",
-        "ulysses_degree",
-    ),
     "hunyuan-worldplay": ("torchrun_nproc_per_node", "torchrun_nproc", "nproc_per_node"),
     "wan2.1-vace": (
         "torchrun_nproc_per_node",
@@ -244,7 +237,7 @@ def _automatic_gpu_pool() -> CudaDeviceLeasePool:
     if not devices:
         raise RuntimeError("device=cuda was requested, but no visible CUDA devices were discovered")
     with _AUTO_GPU_POOL_LOCK:
-        if _AUTO_GPU_POOL is None or _AUTO_GPU_POOL_DEVICES != devices:
+        if _AUTO_GPU_POOL is None or devices != _AUTO_GPU_POOL_DEVICES:
             lock_keys: dict[str, str] = {}
             try:
                 result = subprocess.run(
@@ -432,7 +425,7 @@ def _discover_existing_env_spec(spec: RuntimeCondaEnvSpec) -> RuntimeCondaEnvSpe
                     spec,
                     env_name=name,
                     env_root=root,
-                    notes=spec.notes + (f"studio_env_discovery:{candidate}",),
+                    notes=(*spec.notes, f"studio_env_discovery:{candidate}"),
                 )
     return None
 
@@ -463,11 +456,11 @@ def _current_explicit_unified_env_spec(
         spec,
         env_name=env_prefix.name,
         env_root=env_prefix.parent,
-        notes=spec.notes + (f"studio_explicit_active_unified_env:{env_prefix}",),
+        notes=(*spec.notes, f"studio_explicit_active_unified_env:{env_prefix}"),
     )
 
 
-@lru_cache(maxsize=None)
+@cache
 def workspace_runtime_spec(model_id: str) -> RuntimeCondaEnvSpec | None:
     """Resolve the Conda runtime spec for a model, with discovery and unified-env fallback."""
     spec = load_runtime_conda_env_spec(model_id)
@@ -821,15 +814,18 @@ def _official_video_internal_torchrun_nproc(
     call_kwargs: Mapping[str, Any],
     load_kwargs: Mapping[str, Any],
 ) -> int:
-    """Return nproc for official video configs whose command launches torchrun."""
+    """Return the process count declared by an in-tree official CLI module."""
+    import yaml
+
     config_path = _package_root() / "data" / "models" / "runtime" / "configs" / "video_official" / f"{model_id}.yaml"
     if not config_path.is_file():
         return 0
     try:
-        text = config_path.read_text(encoding="utf-8")
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     except OSError:
         return 0
-    if "{torchrun}" not in text:
+    runtime = config.get("runtime") or {}
+    if runtime.get("kind") != "official_cli" or "nproc_per_node" not in runtime:
         return 0
     requested = (
         call_kwargs.get("nproc_per_node")
@@ -840,8 +836,7 @@ def _official_video_internal_torchrun_nproc(
         or load_kwargs.get("torchrun_nproc")
     )
     if requested in {None, ""}:
-        match = re.search(r"(?m)^\s+nproc_per_node:\s*([0-9]+)\s*$", text)
-        requested = match.group(1) if match else 0
+        requested = str(runtime["nproc_per_node"]).format(**(runtime.get("defaults") or {}))
     try:
         return int(requested or 0)
     except Exception:
@@ -1359,23 +1354,18 @@ def _shutdown_resident_worker(worker: _ResidentWorker, *, force: bool = False) -
             return
         process = worker.process
         if process.poll() is None and not force:
-            try:
-                process.stdin.write(b'{"command":"shutdown"}\n')
-                process.stdin.flush()
-            except (AttributeError, BrokenPipeError, OSError, ValueError):
-                pass
-            try:
+            if process.stdin is not None:
+                with suppress(OSError, ValueError):
+                    process.stdin.write(b'{"command":"shutdown"}\n')
+                    process.stdin.flush()
+            with suppress(subprocess.TimeoutExpired, ChildProcessError, OSError):
                 process.wait(timeout=2)
-            except (subprocess.TimeoutExpired, ChildProcessError, OSError):
-                pass
         # Parent exit alone does not release CUDA: descendants may still hold it.
         terminate_process_group(process, grace_seconds=0 if force else 2)
         for pipe in (process.stdin, process.stdout):
             if pipe is not None:
-                try:
+                with suppress(OSError, ValueError):
                     pipe.close()
-                except (OSError, ValueError):
-                    pass
         if worker.device_lease is not None:
             worker.device_lease.release()
             worker.device_lease = None
@@ -1736,10 +1726,8 @@ def _runtime_cache_dir(spec: RuntimeCondaEnvSpec, name: str) -> str:
         )
     )
     path = root / spec.model_id / name
-    try:
+    with suppress(OSError):
         path.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        pass
     return str(path)
 
 
@@ -1903,7 +1891,7 @@ def _start_resident_worker(
             stderr=subprocess.STDOUT,
             bufsize=0,
             start_new_session=sys.platform != "win32",
-            **({"pass_fds": device_lease.file_descriptors} if os.name == "posix" and device_lease else {}),
+            pass_fds=device_lease.file_descriptors if os.name == "posix" and device_lease else (),
         )
     except OSError as exc:
         raise _ResidentWorkerUnavailable(f"could not start resident worker for {model_id}: {exc}") from exc
@@ -1945,16 +1933,20 @@ def _resident_worker_for(
     cancel_requested: CancelCallback | None = None,
     deadline: float | None = None,
 ) -> _ResidentWorker:
-    options = dict(
-        model_id=model_id,
-        spec=spec,
-        workspace_root=workspace_root,
-        context=context,
-        log_callback=log_callback,
-        cancel_requested=cancel_requested,
-        deadline=deadline,
-    )
-    worker = _resident_worker_for_locked(**options, allow_start=False)
+    def locked_worker(*, allow_start: bool, device_lease: CudaDeviceLease | None = None) -> _ResidentWorker | None:
+        return _resident_worker_for_locked(
+            model_id=model_id,
+            spec=spec,
+            workspace_root=workspace_root,
+            context=context,
+            log_callback=log_callback,
+            device_lease=device_lease,
+            allow_start=allow_start,
+            cancel_requested=cancel_requested,
+            deadline=deadline,
+        )
+
+    worker = locked_worker(allow_start=False)
     if worker is not None:
         return worker
     count = context.automatic_cuda_device_count or len(context.requested_cuda_tokens or ())
@@ -1997,10 +1989,10 @@ def _resident_worker_for(
                     )
                     break
                 except _ResidentWorkerReady:
-                    worker = _resident_worker_for_locked(**options, allow_start=False)
+                    worker = locked_worker(allow_start=False)
                     if worker is not None:
                         return worker
-        worker = _resident_worker_for_locked(**options, device_lease=lease)
+        worker = locked_worker(allow_start=True, device_lease=lease)
         assert worker is not None
         return worker
     finally:
@@ -2181,40 +2173,25 @@ def _retire_idle_resident_workers_for_cuda_request(
         with _RESIDENT_WORKERS_LOCK:
             candidates = sorted(
                 (
-                    worker
+                    (worker, worker.device_lease)
                     for worker in _RESIDENT_WORKERS.values()
                     if worker.in_use == 0
                     and worker.device_lease is not None
                     and (tokens is None or set(tokens).intersection(worker.device_lease.tokens))
                 ),
-                key=lambda worker: worker.last_used_at,
+                key=lambda candidate: candidate[0].last_used_at,
             )
-            for worker in candidates:
+            for worker, lease in candidates:
                 if _RESIDENT_WORKERS.get(worker.key) is not worker:
                     continue
                 _RESIDENT_WORKERS.pop(worker.key, None)
                 retired_workers.append(worker)
-                released_capacity += len(worker.device_lease.tokens)
+                released_capacity += len(lease.tokens)
                 if tokens is None and released_capacity >= missing:
                     break
         for worker in retired_workers:
             _shutdown_resident_worker(worker, force=False)
     return len(retired_workers)
-
-
-def _retire_idle_resident_workers_for_new_resident_key(
-    base_key: tuple[str, ...],
-    requested_count: int,
-) -> int:
-    """Make CUDA capacity for a new resident key without retiring a reusable worker."""
-
-    with _RESIDENT_WORKERS_LOCK:
-        has_reusable_worker = any(
-            worker.base_key == base_key and worker.process.poll() is None for worker in _RESIDENT_WORKERS.values()
-        )
-    if has_reusable_worker:
-        return 0
-    return _retire_idle_resident_workers_for_cuda_request(requested_count)
 
 
 def _drop_resident_worker(worker: _ResidentWorker, *, force: bool = False, only_if_idle: bool = False) -> None:
@@ -2410,10 +2387,8 @@ def _run_manager_payload_in_resident_conda(
     result_path = dispatch_dir / "result.json"
     error_path = dispatch_dir / "error.json"
     for stale_path in (result_path, error_path):
-        try:
+        with suppress(FileNotFoundError):
             stale_path.unlink()
-        except FileNotFoundError:
-            pass
     payload_path.write_text(
         json.dumps(
             {
@@ -2674,7 +2649,7 @@ def _run_manager_payload_one_shot(
         stderr=subprocess.STDOUT,
         bufsize=0,
         start_new_session=sys.platform != "win32",
-        **({"pass_fds": device_lease.file_descriptors} if os.name == "posix" and device_lease else {}),
+        pass_fds=device_lease.file_descriptors if os.name == "posix" and device_lease else (),
     )
     try:
         if device_lease is not None:

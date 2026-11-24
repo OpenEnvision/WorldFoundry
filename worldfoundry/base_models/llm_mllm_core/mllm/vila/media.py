@@ -1,7 +1,7 @@
 import glob
 import os
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import cv2
 import numpy as np
@@ -33,11 +33,11 @@ class Video(File):
     pass
 
 
-def make_list(obj: Any) -> List:
+def make_list(obj: Any) -> list:
     return obj if isinstance(obj, list) else [obj]
 
 
-def _extract_image(image: Union[Image, PIL.Image.Image]) -> PIL.Image.Image:
+def _extract_image(image: Image | PIL.Image.Image) -> PIL.Image.Image:
     if isinstance(image, Image):
         if image.path.startswith("http://") or image.path.startswith("https://"):
             image = PIL.Image.open(requests.get(image.path, stream=True).raw)
@@ -46,7 +46,7 @@ def _extract_image(image: Union[Image, PIL.Image.Image]) -> PIL.Image.Image:
     return image
 
 
-def _load_video(video_path: str, *, num_frames: int) -> List[PIL.Image.Image]:
+def _load_video(video_path: str, *, num_frames: int) -> list[PIL.Image.Image]:
     # Load video frames from a directory
     if os.path.isdir(video_path):
         frame_paths = sorted(glob.glob(os.path.join(video_path, "*")))
@@ -82,9 +82,9 @@ def _load_video(video_path: str, *, num_frames: int) -> List[PIL.Image.Image]:
     return [frames[index] for index in indices if index in frames]
 
 
-def _extract_video(video: Video, config: PretrainedConfig) -> List[PIL.Image.Image]:
+def _extract_video(video: Video, config: PretrainedConfig) -> list[PIL.Image.Image]:
     num_frames = config.num_video_frames
-    if getattr(config, "fps") != 0:
+    if config.fps != 0:
         print("Extracting frames from video with specified FPS is not supported yet. Ignored.")
 
     frames = _load_video(video.path, num_frames=num_frames)
@@ -92,10 +92,10 @@ def _extract_video(video: Video, config: PretrainedConfig) -> List[PIL.Image.Ima
 
 
 def extract_media(
-    messages: List[Dict[str, Any]],
-    config: Optional[PretrainedConfig] = None,
+    messages: list[dict[str, Any]],
+    config: PretrainedConfig | None = None,
     draft: bool = False,
-) -> Dict[str, List[Any]]:
+) -> dict[str, list[Any]]:
     media = defaultdict(list)
     for message in messages:
         text = ""

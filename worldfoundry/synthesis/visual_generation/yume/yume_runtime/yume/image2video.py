@@ -3,8 +3,6 @@ import json
 import math
 import os
 from copy import deepcopy
-from pathlib import Path
-from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -13,13 +11,14 @@ import torchvision.transforms.functional as TF
 from safetensors import safe_open
 from safetensors.torch import load_file
 
-from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
-from worldfoundry.base_models.diffusion_model.models.encoders.wan.clip import CLIPModel
-from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import WanModel
-from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import T5EncoderModel
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import WanVAE
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.clip import CLIPModel
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import T5EncoderModel
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import WanModel
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
 
-def upsample_conv3d_weights(conv_small: nn.Conv3d, size: Tuple[int, int, int]):
+
+def upsample_conv3d_weights(conv_small: nn.Conv3d, size: tuple[int, int, int]):
     old_weight = conv_small.weight.data
     new_weight = F.interpolate(
         old_weight,
@@ -45,7 +44,7 @@ def load_yume_checkpoint(model: nn.Module, checkpoint_dir: str) -> nn.Module:
     index_path = os.path.join(checkpoint_dir, "diffusion_pytorch_model.safetensors.index.json")
 
     if os.path.exists(index_path):
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index_data = json.load(f)
 
         unique_shards = set(index_data["weight_map"].values())
@@ -56,7 +55,7 @@ def load_yume_checkpoint(model: nn.Module, checkpoint_dir: str) -> nn.Module:
             if not os.path.exists(shard_path):
                 raise FileNotFoundError(f"Missing shard file: {shard_path}")
             with safe_open(shard_path, framework="pt") as f:
-                for key in f.keys():
+                for key in f.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                     model_weights[key] = f.get_tensor(key).to(device)
     else:
         full_model_path = os.path.join(checkpoint_dir, "diffusion_pytorch_model.safetensors")
@@ -72,7 +71,6 @@ def load_yume_checkpoint(model: nn.Module, checkpoint_dir: str) -> nn.Module:
 
 
 class YumeI2V:
-
     def __init__(
         self,
         config,
@@ -104,21 +102,11 @@ class YumeI2V:
         }
 
         self.model = WanModel.from_config(config_wan)
-        self.model.patch_embedding_2x = upsample_conv3d_weights(
-            deepcopy(self.model.patch_embedding), (1, 4, 4)
-        )
-        self.model.patch_embedding_2x_f = torch.nn.Conv3d(
-            36, 36, kernel_size=(1, 4, 4), stride=(1, 4, 4)
-        )
-        self.model.patch_embedding_4x = upsample_conv3d_weights(
-            deepcopy(self.model.patch_embedding), (1, 8, 8)
-        )
-        self.model.patch_embedding_8x = upsample_conv3d_weights(
-            deepcopy(self.model.patch_embedding), (1, 16, 16)
-        )
-        self.model.patch_embedding_16x = upsample_conv3d_weights(
-            deepcopy(self.model.patch_embedding), (1, 32, 32)
-        )
+        self.model.patch_embedding_2x = upsample_conv3d_weights(deepcopy(self.model.patch_embedding), (1, 4, 4))
+        self.model.patch_embedding_2x_f = torch.nn.Conv3d(36, 36, kernel_size=(1, 4, 4), stride=(1, 4, 4))
+        self.model.patch_embedding_4x = upsample_conv3d_weights(deepcopy(self.model.patch_embedding), (1, 8, 8))
+        self.model.patch_embedding_8x = upsample_conv3d_weights(deepcopy(self.model.patch_embedding), (1, 16, 16))
+        self.model.patch_embedding_16x = upsample_conv3d_weights(deepcopy(self.model.patch_embedding), (1, 32, 32))
 
         self.model = load_yume_checkpoint(self.model, os.path.join(checkpoint_dir, "Yume-Dit"))
         self.model.eval().requires_grad_(False)
@@ -132,9 +120,9 @@ class YumeI2V:
         else:
             self.model.to(self.device)
 
-        self.text_encoder: Optional[T5EncoderModel] = None
-        self.vae: Optional[WanVAE] = None
-        self.clip: Optional[CLIPModel] = None
+        self.text_encoder: T5EncoderModel | None = None
+        self.vae: WanVAE | None = None
+        self.clip: CLIPModel | None = None
 
     def init_model(
         self,
@@ -210,10 +198,7 @@ class YumeI2V:
         lat_h = h // self.vae_stride[1]
         lat_w = w // self.vae_stride[2]
 
-        if rand_num_img < 0.4:
-            img = model_input[:, 0, :, :]
-        else:
-            img = model_input[:, 0:-frame_zero, :, :]
+        img = model_input[:, 0, :, :] if rand_num_img < 0.4 else model_input[:, 0:-frame_zero, :, :]
 
         if rand_num_img >= 0.4:
             model_input = torch.cat(
@@ -226,10 +211,10 @@ class YumeI2V:
         else:
             model_input = self.vae.encode([model_input])[0]
 
-        max_seq_len = ((frame_num - 1) // self.vae_stride[0] + 1) * lat_h * lat_w // (
-            self.patch_size[1] * self.patch_size[2]
+        max_seq_len = (
+            ((frame_num - 1) // self.vae_stride[0] + 1) * lat_h * lat_w // (self.patch_size[1] * self.patch_size[2])
         )
-        max_seq_len = int(math.ceil(max_seq_len / self.sp_size)) * self.sp_size
+        max_seq_len = int(math.ceil(max_seq_len / self.sp_size)) * self.sp_size  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
         noise = torch.randn_like(model_input)
 
@@ -366,10 +351,10 @@ class YumeI2V:
         img = model_input
         model_input = model_input_1
 
-        max_seq_len = ((frame_num - 1) // self.vae_stride[0] + 1) * lat_h * lat_w // (
-            self.patch_size[1] * self.patch_size[2]
+        max_seq_len = (
+            ((frame_num - 1) // self.vae_stride[0] + 1) * lat_h * lat_w // (self.patch_size[1] * self.patch_size[2])
         )
-        max_seq_len = int(math.ceil(max_seq_len / self.sp_size)) * self.sp_size
+        max_seq_len = int(math.ceil(max_seq_len / self.sp_size)) * self.sp_size  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
         noise = torch.randn(
             16,

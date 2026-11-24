@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEXT_SUFFIXES = {
     ".css",
@@ -31,18 +30,27 @@ FORBIDDEN_MACHINE_PATHS = (
 PRUNED_DIRS = {
     ".git",
     ".next",
+    ".pi",
+    ".pi-traces",
     ".pytest_cache",
+    ".source",
+    ".venv",
     "__pycache__",
+    "benchmark_results",
+    "build",
     "cache",
+    "dist",
     "logs",
     "node_modules",
     "out",
     "outputs",
+    "runs",
     "tmp",
+    "venv",
+    "wf-goal",
+    "worldfoundry.egg-info",
 }
-PRUNED_DIR_PREFIXES = (
-    "out.nfs-busy-",
-)
+PRUNED_DIR_PREFIXES = ("out.nfs-busy-",)
 
 
 def _iter_open_source_text_files() -> list[Path]:

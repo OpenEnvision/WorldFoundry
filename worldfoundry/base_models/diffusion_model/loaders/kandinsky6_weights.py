@@ -1,9 +1,13 @@
 """Local Kandinsky-6 checkpoint assignment and meta-buffer materialization."""
+
 import logging
+
 import torch
-from torch import nn
 from safetensors.torch import load_file
+from torch import nn
+
 logger = logging.getLogger(__name__)
+
 
 def materialize_meta_buffers(module: nn.Module, device: torch.device) -> None:
     """Allocate non-persistent buffers left on ``meta`` after ``load_state_dict(assign=True)``.

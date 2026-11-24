@@ -15,19 +15,19 @@ import torch
 import torch.nn as nn
 from timm.models.vision_transformer import Attention, Mlp, PatchEmbed
 
-
-def modulate(x, shift, scale):
-    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
-
+from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_blocks import FinalLayer
+from worldfoundry.core.nn.transformer.dit import modulate_sequence as modulate
 
 #################################################################################
 #               Embedding Layers for Timesteps and Class Labels                 #
 #################################################################################
 
+
 class TimestepEmbedder(nn.Module):
     """
     Embeds scalar timesteps into vector representations.
     """
+
     def __init__(self, hidden_size, frequency_embedding_size=256):
         super().__init__()
         self.mlp = nn.Sequential(
@@ -49,9 +49,9 @@ class TimestepEmbedder(nn.Module):
         """
         # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
         half = dim // 2
-        freqs = torch.exp(
-            -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
-        ).to(device=t.device)
+        freqs = torch.exp(-math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half).to(
+            device=t.device
+        )
         args = t.float() * freqs[None]
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
         if dim % 2:
@@ -63,70 +63,79 @@ class TimestepEmbedder(nn.Module):
         t_emb = self.mlp(t_freq)
         return t_emb
 
+
 class ActionEmbedder(nn.Module):
     """
     Embeds action xy into vector representations.
     """
+
     def __init__(self, hidden_size, frequency_embedding_size=256):
         super().__init__()
-        hsize = hidden_size//3
+        hsize = hidden_size // 3
         self.x_emb = TimestepEmbedder(hsize, frequency_embedding_size)
         self.y_emb = TimestepEmbedder(hsize, frequency_embedding_size)
-        self.angle_emb = TimestepEmbedder(hidden_size -2*hsize, frequency_embedding_size)
+        self.angle_emb = TimestepEmbedder(hidden_size - 2 * hsize, frequency_embedding_size)
 
     def forward(self, xya):
-        return torch.cat([self.x_emb(xya[...,0:1]), self.y_emb(xya[...,1:2]), self.angle_emb(xya[...,2:3])], dim=-1)
+        return torch.cat([self.x_emb(xya[..., 0:1]), self.y_emb(xya[..., 1:2]), self.angle_emb(xya[..., 2:3])], dim=-1)
+
 
 #################################################################################
 #                                 Core CDiT Model                                #
 #################################################################################
 
+
 class CDiTBlock(nn.Module):
     """
     A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
+
     def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, **block_kwargs):
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.norm_cond = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.cttn = nn.MultiheadAttention(hidden_size, num_heads=num_heads, add_bias_kv=True, bias=True, batch_first=True, **block_kwargs)
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(hidden_size, 11 * hidden_size, bias=True)
+        self.cttn = nn.MultiheadAttention(
+            hidden_size, num_heads=num_heads, add_bias_kv=True, bias=True, batch_first=True, **block_kwargs
         )
+        self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 11 * hidden_size, bias=True))
 
         self.norm3 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
         self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=approx_gelu, drop=0)
 
     def forward(self, x, c, x_cond):
-        shift_msa, scale_msa, gate_msa, shift_ca_xcond, scale_ca_xcond, shift_ca_x, scale_ca_x, gate_ca_x, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(11, dim=1)
+        (
+            shift_msa,
+            scale_msa,
+            gate_msa,
+            shift_ca_xcond,
+            scale_ca_xcond,
+            shift_ca_x,
+            scale_ca_x,
+            gate_ca_x,
+            shift_mlp,
+            scale_mlp,
+            gate_mlp,
+        ) = self.adaLN_modulation(c).chunk(11, dim=1)
         x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
         x_cond_norm = modulate(self.norm_cond(x_cond), shift_ca_xcond, scale_ca_xcond)
-        x = x + gate_ca_x.unsqueeze(1) * self.cttn(query=modulate(self.norm2(x), shift_ca_x, scale_ca_x), key=x_cond_norm, value=x_cond_norm, need_weights=False)[0]
-        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm3(x), shift_mlp, scale_mlp))
-        return x
-
-class FinalLayer(nn.Module):
-    """
-    The final layer of DiT.
-    """
-    def __init__(self, hidden_size, patch_size, out_channels):
-        super().__init__()
-        self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels, bias=True)
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(hidden_size, 2 * hidden_size, bias=True)
+        x = (
+            x
+            + gate_ca_x.unsqueeze(1)
+            * self.cttn(
+                query=modulate(self.norm2(x), shift_ca_x, scale_ca_x),
+                key=x_cond_norm,
+                value=x_cond_norm,
+                need_weights=False,
+            )[0]
         )
-
-    def forward(self, x, c):
-        shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
-        x = modulate(self.norm_final(x), shift, scale)
-        x = self.linear(x)
+        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm3(x), shift_mlp, scale_mlp))
         return x
 
 
@@ -134,6 +143,7 @@ class CDiT(nn.Module):
     """
     Diffusion model with a Transformer backbone.
     """
+
     def __init__(
         self,
         input_size=32,
@@ -157,7 +167,9 @@ class CDiT(nn.Module):
         self.t_embedder = TimestepEmbedder(hidden_size)
         self.y_embedder = ActionEmbedder(hidden_size)
         num_patches = self.x_embedder.num_patches
-        self.pos_embed = nn.Parameter(torch.zeros(self.context_size + 1, num_patches, hidden_size), requires_grad=True) # for context and for predicted frame
+        self.pos_embed = nn.Parameter(
+            torch.zeros(self.context_size + 1, num_patches, hidden_size), requires_grad=True
+        )  # for context and for predicted frame
         self.blocks = nn.ModuleList([CDiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(depth)])
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
         self.time_embedder = TimestepEmbedder(hidden_size)
@@ -170,6 +182,7 @@ class CDiT(nn.Module):
                 torch.nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
+
         self.apply(_basic_init)
 
         # Initialize (and freeze) pos_embed by sin-cos embedding:
@@ -179,7 +192,6 @@ class CDiT(nn.Module):
         w = self.x_embedder.proj.weight.data
         nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
         nn.init.constant_(self.x_embedder.proj.bias, 0)
-
 
         # Initialize action embedding:
         nn.init.normal_(self.y_embedder.x_emb.mlp[0].weight, std=0.02)
@@ -194,10 +206,10 @@ class CDiT(nn.Module):
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
-        
+
         nn.init.normal_(self.time_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.time_embedder.mlp[2].weight, std=0.02)
-            
+
         # Zero-out adaLN modulation layers in DiT blocks:
         for block in self.blocks:
             nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
@@ -220,7 +232,7 @@ class CDiT(nn.Module):
         assert h * w == x.shape[1]
 
         x = x.reshape(shape=(x.shape[0], h, w, p, p, c))
-        x = torch.einsum('nhwpqc->nchpwq', x)
+        x = torch.einsum("nhwpqc->nchpwq", x)
         imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
         return imgs
 
@@ -231,13 +243,16 @@ class CDiT(nn.Module):
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
         """
-        x = self.x_embedder(x) + self.pos_embed[self.context_size:]
-        x_cond = self.x_embedder(x_cond.flatten(0, 1)).unflatten(0, (x_cond.shape[0], x_cond.shape[1])) + self.pos_embed[:self.context_size]  # (N, T, D), where T = H * W / patch_size ** 2.flatten(1, 2)
+        x = self.x_embedder(x) + self.pos_embed[self.context_size :]
+        x_cond = (
+            self.x_embedder(x_cond.flatten(0, 1)).unflatten(0, (x_cond.shape[0], x_cond.shape[1]))
+            + self.pos_embed[: self.context_size]
+        )  # (N, T, D), where T = H * W / patch_size ** 2.flatten(1, 2)
         x_cond = x_cond.flatten(1, 2)
         t = self.t_embedder(t[..., None])
-        y = self.y_embedder(y) 
+        y = self.y_embedder(y)
         time_emb = self.time_embedder(rel_t[..., None])
-        c = t + time_emb + y # if training on unlabeled data, dont add y.
+        c = t + time_emb + y  # if training on unlabeled data, dont add y.
 
         for block in self.blocks:
             x = block(x, c, x_cond)
@@ -245,10 +260,12 @@ class CDiT(nn.Module):
         x = self.unpatchify(x)
         return x
 
+
 #################################################################################
 #                   Sine/Cosine Positional Embedding Functions                  #
 #################################################################################
 # https://github.com/facebookresearch/mae/blob/main/util/pos_embed.py
+
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False, extra_tokens=0):
     """
@@ -275,7 +292,7 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
     emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0])  # (H*W, D/2)
     emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[1])  # (H*W, D/2)
 
-    emb = np.concatenate([emb_h, emb_w], axis=1) # (H*W, D)
+    emb = np.concatenate([emb_h, emb_w], axis=1)  # (H*W, D)
     return emb
 
 
@@ -287,14 +304,14 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     """
     assert embed_dim % 2 == 0
     omega = np.arange(embed_dim // 2, dtype=np.float64)
-    omega /= embed_dim / 2.
-    omega = 1. / 10000**omega  # (D/2,)
+    omega /= embed_dim / 2.0
+    omega = 1.0 / 10000**omega  # (D/2,)
 
     pos = pos.reshape(-1)  # (M,)
-    out = np.einsum('m,d->md', pos, omega)  # (M, D/2), outer product
+    out = np.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
 
-    emb_sin = np.sin(out) # (M, D/2)
-    emb_cos = np.cos(out) # (M, D/2)
+    emb_sin = np.sin(out)  # (M, D/2)
+    emb_cos = np.cos(out)  # (M, D/2)
 
     emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
     return emb
@@ -304,22 +321,21 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
 #                                   CDiT Configs                                  #
 #################################################################################
 
+
 def CDiT_XL_2(**kwargs):
     return CDiT(depth=28, hidden_size=1152, patch_size=2, num_heads=16, **kwargs)
+
 
 def CDiT_L_2(**kwargs):
     return CDiT(depth=24, hidden_size=1024, patch_size=2, num_heads=16, **kwargs)
 
+
 def CDiT_B_2(**kwargs):
     return CDiT(depth=12, hidden_size=768, patch_size=2, num_heads=12, **kwargs)
+
 
 def CDiT_S_2(**kwargs):
     return CDiT(depth=12, hidden_size=384, patch_size=2, num_heads=6, **kwargs)
 
 
-CDiT_models = {
-    'CDiT-XL/2': CDiT_XL_2, 
-    'CDiT-L/2':  CDiT_L_2, 
-    'CDiT-B/2':  CDiT_B_2, 
-    'CDiT-S/2':  CDiT_S_2
-}
+CDiT_models = {"CDiT-XL/2": CDiT_XL_2, "CDiT-L/2": CDiT_L_2, "CDiT-B/2": CDiT_B_2, "CDiT-S/2": CDiT_S_2}

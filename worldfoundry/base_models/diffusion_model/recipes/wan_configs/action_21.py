@@ -16,11 +16,11 @@ import copy
 from worldfoundry.base_models.diffusion_model.recipes.wan_configs.wan21.i2v_14b_upstream import (
     i2v_14B,
 )
-from worldfoundry.base_models.diffusion_model.recipes.wan_configs.wan21.t2v_14b import (
-    t2v_14B,
-)
 from worldfoundry.base_models.diffusion_model.recipes.wan_configs.wan21.t2v_1p3b import (
     t2v_1_3B,
+)
+from worldfoundry.base_models.diffusion_model.recipes.wan_configs.wan21.t2v_14b import (
+    t2v_14B,
 )
 
 t2i_14B = copy.deepcopy(t2v_14B)
@@ -62,6 +62,6 @@ __all__ = [
     "WAN_CONFIGS",
     "i2v_14B",
     "t2i_14B",
-    "t2v_14B",
     "t2v_1_3B",
+    "t2v_14B",
 ]

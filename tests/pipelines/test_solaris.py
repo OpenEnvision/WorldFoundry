@@ -3,8 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import worldfoundry.evaluation.models.pipelines as model_pipelines
-from worldfoundry.evaluation.models import discover_model_registry
+import worldfoundry.evals.models.pipelines as model_pipelines
 from worldfoundry.pipelines.solaris.pipeline_solaris import SolarisPipeline
 from worldfoundry.synthesis.visual_generation.solaris import runtime_env as runtime_env_module
 from worldfoundry.synthesis.visual_generation.solaris import (
@@ -13,9 +12,10 @@ from worldfoundry.synthesis.visual_generation.solaris import (
 from worldfoundry.synthesis.visual_generation.solaris import (
     worldfoundry_runtime as solaris_runtime_module,
 )
+from worldfoundry.zoo.catalog.registry import discover_model_registry
 
 
-class _DummySynthesis:
+class _DummySynthesis(synthesis_module.SolarisSynthesis):
     def __init__(self) -> None:
         self.calls = []
 
@@ -217,7 +217,7 @@ def test_solaris_synthesis_builds_inference_command(monkeypatch, tmp_path: Path)
                 "stderr": stderr,
             }
         )
-        if command[1] == "src/inference.py":
+        if command[1:3] == ["-m", "worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.inference"]:
             experiment_name = next(arg.split("=", 1)[1] for arg in command if arg.startswith("experiment_name="))
             model_output_dir = (
                 Path(next(arg.split("=", 1)[1] for arg in command if arg.startswith("device.output_dir=")))
@@ -230,6 +230,7 @@ def test_solaris_synthesis_builds_inference_command(monkeypatch, tmp_path: Path)
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(solaris_runtime_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(solaris_runtime_module, "_visible_cuda_device_count", lambda: 1)
     monkeypatch.setenv("WORLDFOUNDRY_SOLARIS_MANAGE_LD_LIBRARY_PATH", "1")
 
     synthesis = synthesis_module.SolarisSynthesis(
@@ -261,7 +262,11 @@ def test_solaris_synthesis_builds_inference_command(monkeypatch, tmp_path: Path)
 
     inference_call = calls[0]
     inference_command = inference_call["command"]
-    assert inference_command[:2] == [str(python_executable), "src/inference.py"]
+    assert inference_command[:3] == [
+        str(python_executable),
+        "-m",
+        "worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.inference",
+    ]
     assert "experiment_name=demo" in inference_command
     assert "device.eval_num_samples=1" in inference_command
     assert "device.num_workers=4" in inference_command

@@ -12,14 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 from diffusers.models.autoencoders.autoencoder_kl_cogvideox import (
-    CogVideoXCausalConv3d, CogVideoXDownBlock3D, CogVideoXMidBlock3D,
-    CogVideoXSafeConv3d, CogVideoXSpatialNorm3D, CogVideoXUpBlock3D)
+    CogVideoXCausalConv3d,
+    CogVideoXDownBlock3D,
+    CogVideoXMidBlock3D,
+    CogVideoXSpatialNorm3D,
+    CogVideoXUpBlock3D,
+)
+from diffusers.models.autoencoders.autoencoder_kl_cogvideox import (
+    CogVideoXSafeConv3d as CogVideoXSafeConv3d,
+)
 from diffusers.utils import logging
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -53,13 +59,13 @@ class CogVideoXEncoder3D(nn.Module):
         self,
         in_channels: int = 3,
         out_channels: int = 16,
-        down_block_types: Tuple[str, ...] = (
+        down_block_types: tuple[str, ...] = (
             "CogVideoXDownBlock3D",
             "CogVideoXDownBlock3D",
             "CogVideoXDownBlock3D",
             "CogVideoXDownBlock3D",
         ),
-        block_out_channels: Tuple[int, ...] = (128, 256, 256, 512),
+        block_out_channels: tuple[int, ...] = (128, 256, 256, 512),
         layers_per_block: int = 3,
         act_fn: str = "silu",
         norm_eps: float = 1e-6,
@@ -121,14 +127,14 @@ class CogVideoXEncoder3D(nn.Module):
         )
 
         self.gradient_checkpointing = False
-        
+
     def _clear_fake_context_parallel_cache(self):
         for name, module in self.named_modules():
             if isinstance(module, CogVideoXCausalConv3d):
                 logger.debug(f"Clearing fake Context Parallel cache for layer: {name}")
                 module._clear_fake_context_parallel_cache()
 
-    def forward(self, sample: torch.Tensor, temb: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, sample: torch.Tensor, temb: torch.Tensor | None = None) -> torch.Tensor:
         r"""The forward method of the `CogVideoXEncoder3D` class."""
         hidden_states = self.conv_in(sample)
 
@@ -193,13 +199,13 @@ class CogVideoXDecoder3D(nn.Module):
         self,
         in_channels: int = 16,
         out_channels: int = 3,
-        up_block_types: Tuple[str, ...] = (
+        up_block_types: tuple[str, ...] = (
             "CogVideoXUpBlock3D",
             "CogVideoXUpBlock3D",
             "CogVideoXUpBlock3D",
             "CogVideoXUpBlock3D",
         ),
-        block_out_channels: Tuple[int, ...] = (128, 256, 256, 512),
+        block_out_channels: tuple[int, ...] = (128, 256, 256, 512),
         layers_per_block: int = 3,
         act_fn: str = "silu",
         norm_eps: float = 1e-6,
@@ -275,7 +281,7 @@ class CogVideoXDecoder3D(nn.Module):
                 logger.debug(f"Clearing fake Context Parallel cache for layer: {name}")
                 module._clear_fake_context_parallel_cache()
 
-    def forward(self, sample: torch.Tensor, temb: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, sample: torch.Tensor, temb: torch.Tensor | None = None) -> torch.Tensor:
         r"""The forward method of the `CogVideoXDecoder3D` class."""
         hidden_states = self.conv_in(sample)
 

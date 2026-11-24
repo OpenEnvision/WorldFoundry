@@ -6,14 +6,6 @@ __all__ = ["DepthAnything3", "DepthAnything3Model"]
 
 
 def __getattr__(name: str) -> Any:
-    """Getattr.
-
-    Args:
-        name: The name.
-
-    Returns:
-        The return value.
-    """
     if name == "DepthAnything3":
         from .api import DepthAnything3
 

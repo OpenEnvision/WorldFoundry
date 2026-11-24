@@ -15,20 +15,18 @@ import io
 import os
 import string
 from functools import lru_cache
-from typing import List, Optional, Union
 
 import ftfy
 import regex as re
 import torch
 from iopath.common.file_io import g_pathmgr
 
-
 # https://stackoverflow.com/q/62691279
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 DEFAULT_CONTEXT_LENGTH = 77
 
 
-@lru_cache()
+@lru_cache
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a corresponding list of unicode strings.
@@ -39,11 +37,7 @@ def bytes_to_unicode():
     To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
     And avoids mapping to whitespace/control characters the bpe code barfs on.
     """
-    bs = (
-        list(range(ord("!"), ord("~") + 1))
-        + list(range(ord("¡"), ord("¬") + 1))
-        + list(range(ord("®"), ord("ÿ") + 1))
-    )
+    bs = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
     cs = bs[:]
     n = 0
     for b in range(2**8):
@@ -52,7 +46,7 @@ def bytes_to_unicode():
             cs.append(2**8 + n)
             n += 1
     cs = [chr(n) for n in cs]
-    return dict(zip(bs, cs))
+    return dict(zip(bs, cs, strict=False))
 
 
 def get_pairs(word):
@@ -68,63 +62,33 @@ def get_pairs(word):
 
 
 def basic_clean(text):
-    """Basic clean.
-
-    Args:
-        text: The text.
-    """
     text = ftfy.fix_text(text)
     text = html.unescape(html.unescape(text))
     return text.strip()
 
 
 def whitespace_clean(text):
-    """Whitespace clean.
-
-    Args:
-        text: The text.
-    """
     text = re.sub(r"\s+", " ", text)
     text = text.strip()
     return text
 
 
 def _clean_canonicalize(x):
-    """Helper function to clean canonicalize.
-
-    Args:
-        x: The x.
-    """
     # basic, remove whitespace, remove punctuation, lower case
     return canonicalize_text(basic_clean(x))
 
 
 def _clean_lower(x):
-    """Helper function to clean lower.
-
-    Args:
-        x: The x.
-    """
     # basic, remove whitespace, lower case
     return whitespace_clean(basic_clean(x)).lower()
 
 
 def _clean_whitespace(x):
-    """Helper function to clean whitespace.
-
-    Args:
-        x: The x.
-    """
     # basic, remove whitespace
     return whitespace_clean(basic_clean(x))
 
 
 def get_clean_fn(type: str):
-    """Get clean fn.
-
-    Args:
-        type: The type.
-    """
     if type == "canonicalize":
         return _clean_canonicalize
     elif type == "lower":
@@ -132,7 +96,7 @@ def get_clean_fn(type: str):
     elif type == "whitespace":
         return _clean_whitespace
     else:
-        assert False, f"Invalid clean function ({type})."
+        assert False, f"Invalid clean function ({type})."  # noqa: B011 - Keeps the assertion semantics under -O.
 
 
 def canonicalize_text(text, *, keep_punctuation_exact_string=None):
@@ -157,28 +121,19 @@ def canonicalize_text(text, *, keep_punctuation_exact_string=None):
     return text.strip()
 
 
-class SimpleTokenizer(object):
-    """Simple tokenizer implementation."""
+class SimpleTokenizer:
     def __init__(
         self,
-        bpe_path: Union[str, os.PathLike],
-        additional_special_tokens: Optional[List[str]] = None,
-        context_length: Optional[int] = DEFAULT_CONTEXT_LENGTH,
+        bpe_path: str | os.PathLike,
+        additional_special_tokens: list[str] | None = None,
+        context_length: int | None = DEFAULT_CONTEXT_LENGTH,
         clean: str = "lower",
     ):
-        """Init.
-
-        Args:
-            bpe_path: The bpe path.
-            additional_special_tokens: The additional special tokens.
-            context_length: The context length.
-            clean: The clean.
-        """
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
         with g_pathmgr.open(bpe_path, "rb") as fh:
             bpe_bytes = io.BytesIO(fh.read())
-            merges = gzip.open(bpe_bytes).read().decode("utf-8").split("\n")
+            merges = gzip.open(bpe_bytes).read().decode("utf-8").split("\n")  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
         # merges = gzip.open(bpe_path).read().decode("utf-8").split("\n")
         merges = merges[1 : 49152 - 256 - 2 + 1]
         merges = [tuple(merge.split()) for merge in merges]
@@ -190,9 +145,9 @@ class SimpleTokenizer(object):
         if additional_special_tokens:
             special_tokens += additional_special_tokens
         vocab.extend(special_tokens)
-        self.encoder = dict(zip(vocab, range(len(vocab))))
+        self.encoder = dict(zip(vocab, range(len(vocab)), strict=False))
         self.decoder = {v: k for k, v in self.encoder.items()}
-        self.bpe_ranks = dict(zip(merges, range(len(merges))))
+        self.bpe_ranks = dict(zip(merges, range(len(merges)), strict=False))
         self.cache = {t: t for t in special_tokens}
         special = "|".join(special_tokens)
         self.pat = re.compile(
@@ -207,14 +162,9 @@ class SimpleTokenizer(object):
         self.clean_fn = get_clean_fn(clean)
 
     def bpe(self, token):
-        """Bpe.
-
-        Args:
-            token: The token.
-        """
         if token in self.cache:
             return self.cache[token]
-        word = tuple(token[:-1]) + (token[-1] + "</w>",)
+        word = tuple(token[:-1]) + (token[-1] + "</w>",)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         pairs = get_pairs(word)
         if not pairs:
             return token + "</w>"
@@ -230,7 +180,7 @@ class SimpleTokenizer(object):
                     j = word.index(first, i)
                     new_word.extend(word[i:j])
                     i = j
-                except:
+                except BaseException:
                     new_word.extend(word[i:])
                     break
                 if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
@@ -250,37 +200,19 @@ class SimpleTokenizer(object):
         return word
 
     def encode(self, text):
-        """Encode.
-
-        Args:
-            text: The text.
-        """
         bpe_tokens = []
         text = self.clean_fn(text)
         for token in re.findall(self.pat, text):
             token = "".join(self.byte_encoder[b] for b in token.encode("utf-8"))
-            bpe_tokens.extend(
-                self.encoder[bpe_token] for bpe_token in self.bpe(token).split(" ")
-            )
+            bpe_tokens.extend(self.encoder[bpe_token] for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
     def decode(self, tokens):
-        """Decode.
-
-        Args:
-            tokens: The tokens.
-        """
         text = "".join([self.decoder[token] for token in tokens])
-        text = (
-            bytearray([self.byte_decoder[c] for c in text])
-            .decode("utf-8", errors="replace")
-            .replace("</w>", " ")
-        )
+        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors="replace").replace("</w>", " ")
         return text
 
-    def __call__(
-        self, texts: Union[str, List[str]], context_length: Optional[int] = None
-    ) -> torch.LongTensor:
+    def __call__(self, texts: str | list[str], context_length: int | None = None) -> torch.LongTensor:
         """Returns the tokenized representation of given input string(s)
         Parameters
         ----------
@@ -296,10 +228,7 @@ class SimpleTokenizer(object):
             texts = [texts]
         context_length = context_length or self.context_length
         assert context_length, "Please set a valid context length"
-        all_tokens = [
-            [self.sot_token_id] + self.encode(text) + [self.eot_token_id]
-            for text in texts
-        ]
+        all_tokens = [[self.sot_token_id] + self.encode(text) + [self.eot_token_id] for text in texts]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         result = torch.zeros(len(all_tokens), context_length, dtype=torch.long)
         for i, tokens in enumerate(all_tokens):
             if len(tokens) > context_length:

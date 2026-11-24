@@ -7,12 +7,10 @@ import pytest
 
 from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_MODEL_ID
 from worldfoundry.cli import main
-from worldfoundry.evaluation.runner import (
-    ModelBenchmarkSuiteRequest,
-    list_model_benchmark_suite_presets,
-    run_model_benchmark_suite,
-)
-from worldfoundry.evaluation.tasks.execution.orchestration.model_benchmark import CONTRACT_VALIDATION_ID
+from worldfoundry.evals.tasks.execution.orchestration.model_benchmark import CONTRACT_VALIDATION_ID
+from worldfoundry.evals.tasks.execution.orchestration.model_benchmark_suite import run_model_benchmark_suite
+from worldfoundry.evals.tasks.execution.orchestration.suite_presets import list_model_benchmark_suite_presets
+from worldfoundry.evals.tasks.execution.orchestration.suite_requests import ModelBenchmarkSuiteRequest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_MANIFEST_DIR = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "catalog"
@@ -63,7 +61,7 @@ def test_model_benchmark_suite_skips_incompatible_cells(tmp_path: Path) -> None:
             output_dir=tmp_path / "suite",
             benchmark_manifest_dir=BENCHMARK_MANIFEST_DIR,
             model_manifest_dir=MODEL_MANIFEST_DIR,
-            model_ids=("splatt3r",),
+            model_ids=("lingbot-map",),
             benchmark_ids=("vbench",),
             mode="contract",
         )
@@ -271,7 +269,7 @@ def test_model_benchmark_suite_preset_expands_named_suite(tmp_path: Path) -> Non
 
 
 def test_formal_benchmark_inventory_comes_from_catalog() -> None:
-    from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import formal_benchmark_ids
+    from worldfoundry.evals.tasks.catalog.benchmark_catalog import formal_benchmark_ids
 
     benchmark_ids = set(formal_benchmark_ids(BENCHMARK_MANIFEST_DIR))
     assert {"vbench", "libero", "robotwin"} <= benchmark_ids

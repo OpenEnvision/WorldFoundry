@@ -14,12 +14,11 @@
 # limitations under the License.
 
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> pipeline -> __init__.py functionality."""
-
 import copy
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Sequence, cast
+from typing import Any, cast
 
 from omegaconf import DictConfig
 
@@ -30,42 +29,22 @@ from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base impo
 
 @dataclass(kw_only=True, slots=True)
 class AnnotationPipelineOutput:
-    """Annotation pipeline output implementation."""
     # Eager return of the payload values that comes from early stages of the pipeline.
     payload: Any | None = None
     output_streams: Sequence[VideoStream] | None = None
 
 
 class Pipeline(ABC):
-    """Pipeline implementation."""
     def __init__(self) -> None:
-        """Init.
-
-        Returns:
-            The return value.
-        """
         self._return_payload = False
         self._return_output_streams = False
 
     @property
     def return_payload(self) -> bool:
-        """Return payload.
-
-        Returns:
-            The return value.
-        """
         return self._return_payload
 
     @return_payload.setter
     def return_payload(self, value: bool) -> None:
-        """Return payload.
-
-        Args:
-            value: The value.
-
-        Returns:
-            The return value.
-        """
         assert isinstance(value, bool), "return_payload must be a boolean"
         self._return_payload = value
         if value:
@@ -73,37 +52,16 @@ class Pipeline(ABC):
 
     @property
     def return_output_streams(self) -> bool:
-        """Return output streams.
-
-        Returns:
-            The return value.
-        """
         return self._return_output_streams
 
     @return_output_streams.setter
     def return_output_streams(self, value: bool) -> None:
-        """Return output streams.
-
-        Args:
-            value: The value.
-
-        Returns:
-            The return value.
-        """
         assert isinstance(value, bool), "return_output_streams must be a boolean"
         self._return_output_streams = value
         if value:
             self._return_payload = False
 
     def should_filter(self, stream_name: str) -> bool:
-        """Should filter.
-
-        Args:
-            stream_name: The stream name.
-
-        Returns:
-            The return value.
-        """
         return False
 
     @abstractmethod
@@ -111,28 +69,12 @@ class Pipeline(ABC):
 
 
 def _as_dictconfig(config: DictConfig | BaseConfigSchema) -> DictConfig:
-    """Helper function to as dictconfig.
-
-    Args:
-        config: The config.
-
-    Returns:
-        The return value.
-    """
     if isinstance(config, BaseConfigSchema):
         return config.to_dictconfig()
     return config
 
 
 def make_pipeline_cls(config: DictConfig | BaseConfigSchema) -> type[Pipeline]:
-    """Make pipeline cls.
-
-    Args:
-        config: The config.
-
-    Returns:
-        The return value.
-    """
     config = _as_dictconfig(config)
     module_path, class_name = config.instance.rsplit(".", 1)
     module = import_config_module(module_path)
@@ -140,14 +82,6 @@ def make_pipeline_cls(config: DictConfig | BaseConfigSchema) -> type[Pipeline]:
 
 
 def make_pipeline(config: DictConfig | BaseConfigSchema) -> Pipeline:
-    """Make pipeline.
-
-    Args:
-        config: The config.
-
-    Returns:
-        The return value.
-    """
     config = copy.deepcopy(_as_dictconfig(config))
     pipeline_cls = make_pipeline_cls(config)
     del config.instance

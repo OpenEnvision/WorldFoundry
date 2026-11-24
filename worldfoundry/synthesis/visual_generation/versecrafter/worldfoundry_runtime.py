@@ -6,11 +6,13 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path, resolve_data_path
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
 
@@ -41,9 +43,7 @@ class VerseCrafterRuntime:
         self.repo_root = ensure_in_tree_runtime(self.bundled_repo_root(), package_file=__file__)
         hfd = hfd_root_path()
         checkpoints = checkpoint_root_path()
-        self.checkpoint_path = Path(
-            checkpoint_path or hfd / "TencentARC--VerseCrafter"
-        ).expanduser()
+        self.checkpoint_path = Path(checkpoint_path or hfd / "TencentARC--VerseCrafter").expanduser()
         self.base_model_path = Path(base_model_path or checkpoints / "Wan2.1-T2V-14B").expanduser()
         self.moge_model_path = Path(moge_model_path or hfd / "Ruicheng--moge-2-vitl-normal").expanduser()
         self.python_executable = str(python_executable or sys.executable)
@@ -62,20 +62,8 @@ class VerseCrafterRuntime:
         return Path(__file__).resolve().parent / "versecrafter_runtime"
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> "VerseCrafterRuntime":
+    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> VerseCrafterRuntime:
         return cls(checkpoint_path=pretrained_model_path, **kwargs)
-
-    @staticmethod
-    def _torchrun_prefix(python_executable: str) -> list[str]:
-        """Return a collision-free one-rank launcher for concurrent Studio jobs."""
-
-        return [
-            python_executable,
-            "-m",
-            "torch.distributed.run",
-            "--standalone",
-            "--nproc_per_node=1",
-        ]
 
     def plan(self, **kwargs: Any) -> dict[str, Any]:
         return {
@@ -89,23 +77,12 @@ class VerseCrafterRuntime:
             "inputs": {key: str(value) for key, value in kwargs.items()},
         }
 
-    def _python_paths(self) -> tuple[Path, ...]:
-        worldfoundry_root = Path(__file__).resolve().parents[3]
-        return (
-            worldfoundry_root.parent,
-            self.repo_root,
-            worldfoundry_root / "synthesis" / "visual_generation" / "video_x_fun" / "video_x_fun_runtime",
-        )
-
     def _process_env(self) -> tuple[dict[str, str], str]:
         env = {str(key): str(value) for key, value in self.env.items()}
         effective_device = self.device
         if self.device.startswith("cuda:") and "CUDA_VISIBLE_DEVICES" not in env:
             env["CUDA_VISIBLE_DEVICES"] = self.device.split(":", 1)[1]
             effective_device = "cuda"
-        python_path = os.pathsep.join(str(path.resolve()) for path in self._python_paths())
-        inherited = os.environ.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = os.pathsep.join(part for part in (python_path, inherited) if part)
         return env, effective_device
 
     def _run_stage(
@@ -123,8 +100,7 @@ class VerseCrafterRuntime:
             cwd=self.repo_root,
             env=process_env,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             check=False,
         )
         log_path = log_dir / f"{name}.log"
@@ -190,10 +166,7 @@ class VerseCrafterRuntime:
             json.dumps(
                 {
                     "metadata": {"num_frames": int(num_frames), "num_objects": 0, "obj_id_to_color_idx": {}},
-                    "frames": [
-                        {"frame_index": index, "objects": []}
-                        for index in range(int(num_frames))
-                    ],
+                    "frames": [{"frame_index": index, "objects": []} for index in range(int(num_frames))],
                 },
                 indent=2,
             ),
@@ -202,48 +175,52 @@ class VerseCrafterRuntime:
         env, effective_device = self._process_env()
         self._run_stage(
             "depth",
-            [
-                self.python_executable,
-                "inference/moge-v2_infer.py",
-                "--input",
-                image,
-                "--output",
-                depth_dir,
-                "--pretrained",
-                moge,
-                "--device",
-                effective_device,
-                "--maps",
-            ],
+            package_module_command(
+                "worldfoundry.synthesis.visual_generation.versecrafter.versecrafter_runtime.inference.moge_v2_infer",
+                [
+                    "--input",
+                    image,
+                    "--output",
+                    depth_dir,
+                    "--pretrained",
+                    moge,
+                    "--device",
+                    effective_device,
+                    "--maps",
+                ],
+                python_executable=self.python_executable,
+            ),
             log_dir=input_dir,
             env=env,
         )
         depth_npz = require_path(depth_dir / "depth_intrinsics.npz", "VerseCrafter estimated depth", kind="file")
-        render_command: list[Any] = [
-            self.python_executable,
-            "inference/rendering_4D_control_maps.py",
-            "--png_path",
-            image,
-            "--npz_path",
-            depth_npz,
-            "--mask_dir",
-            mask_dir,
-            "--trajectory_npz",
-            trajectory,
-            "--ellipsoid_json",
-            ellipsoid,
-            "--output_dir",
-            render_dir,
-            "--device",
-            effective_device,
-            "--fps",
-            str(fps),
-            "--target_height",
-            str(height),
-            "--target_width",
-            str(width),
-            "--use_fp16",
-        ]
+        render_command = package_module_command(
+            "worldfoundry.synthesis.visual_generation.versecrafter.versecrafter_runtime.inference.rendering_4D_control_maps",
+            [
+                "--png_path",
+                image,
+                "--npz_path",
+                depth_npz,
+                "--mask_dir",
+                mask_dir,
+                "--trajectory_npz",
+                trajectory,
+                "--ellipsoid_json",
+                ellipsoid,
+                "--output_dir",
+                render_dir,
+                "--device",
+                effective_device,
+                "--fps",
+                str(fps),
+                "--target_height",
+                str(height),
+                "--target_width",
+                str(width),
+                "--use_fp16",
+            ],
+            python_executable=self.python_executable,
+        )
         self._run_stage("render_4d", render_command, log_dir=input_dir, env=env)
         for filename in (
             "background_RGB.mp4",
@@ -256,51 +233,51 @@ class VerseCrafterRuntime:
         if default_trajectory:
             self._validate_default_control_maps(render_dir)
 
-        command = [
-            *self._torchrun_prefix(self.python_executable),
-            "inference/versecrafter_inference.py",
-            "--transformer_path",
-            checkpoint,
-            "--base_model_path",
-            base,
-            "--config_path",
-            resolve_data_path(
-                "models", "runtime", "configs", "versecrafter", "wan2.1", "wan_civitai.yaml"
-            ),
-            "--rendering_maps_path",
-            render_dir,
-            "--input_image_path",
-            image,
-            "--save_path",
-            native_output,
-            "--sample_size",
-            f"{int(height)},{int(width)}",
-            "--video_length",
-            str(num_frames),
-            "--fps",
-            str(fps),
-            "--num_inference_steps",
-            str(num_inference_steps),
-            "--guidance_scale",
-            str(guidance_scale),
-            "--seed",
-            str(seed),
-            "--ulysses_degree",
-            "1",
-            "--ring_degree",
-            "1",
-            "--gpu_memory_mode",
-            self.gpu_memory_mode,
-            "--prompt",
-            prompt,
-        ]
+        command = package_module_command(
+            "worldfoundry.synthesis.visual_generation.versecrafter.versecrafter_runtime.inference.versecrafter_inference",
+            [
+                "--transformer_path",
+                checkpoint,
+                "--base_model_path",
+                base,
+                "--config_path",
+                resolve_data_path("models", "runtime", "configs", "versecrafter", "wan2.1", "wan_civitai.yaml"),
+                "--rendering_maps_path",
+                render_dir,
+                "--input_image_path",
+                image,
+                "--save_path",
+                native_output,
+                "--sample_size",
+                f"{int(height)},{int(width)}",
+                "--video_length",
+                str(num_frames),
+                "--fps",
+                str(fps),
+                "--num_inference_steps",
+                str(num_inference_steps),
+                "--guidance_scale",
+                str(guidance_scale),
+                "--seed",
+                str(seed),
+                "--ulysses_degree",
+                "1",
+                "--ring_degree",
+                "1",
+                "--gpu_memory_mode",
+                self.gpu_memory_mode,
+                "--prompt",
+                prompt,
+            ],
+            python_executable=self.python_executable,
+            nproc_per_node=1,
+        )
         result = execute_in_tree(
             command,
             cwd=self.repo_root,
             output_path=output,
             search_roots=(native_output,),
             env=env,
-            python_paths=self._python_paths(),
             preferred_names=("generated_video_0.mp4",),
         )
         return result if return_dict else result.get("video")
@@ -327,9 +304,7 @@ class VerseCrafterRuntime:
         valid_background = np.mean(frames[0][..., 0] < 128)
         has_depth = np.any(frames[1][..., 0] > 2)
         if valid_background < 0.01 or not has_depth:
-            raise RuntimeError(
-                "VerseCrafter default trajectory rendered an empty background control map"
-            )
+            raise RuntimeError("VerseCrafter default trajectory rendered an empty background control map")
 
     @staticmethod
     def _write_default_trajectory(path: Path, num_frames: int) -> Path:

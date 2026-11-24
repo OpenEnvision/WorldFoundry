@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from typing import MutableMapping, TypeVar
+from collections.abc import MutableMapping
+from typing import TypeVar
 
 import torch
 import torch.distributed as dist
@@ -32,9 +33,7 @@ def move_to_device(value: T, device: torch.device) -> T:
     if isinstance(value, torch.Tensor):
         return value.to(device, non_blocking=True)  # type: ignore[return-value]
     if isinstance(value, dict):
-        return {
-            key: move_to_device(item, device) for key, item in value.items()
-        }  # type: ignore[return-value]
+        return {key: move_to_device(item, device) for key, item in value.items()}  # type: ignore[return-value]
     if isinstance(value, list):
         return [move_to_device(item, device) for item in value]  # type: ignore[return-value]
     if isinstance(value, tuple):

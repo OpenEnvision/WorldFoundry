@@ -155,7 +155,7 @@ class DreamDojoRuntime:
 
         from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest, SamplingConfig
         from worldfoundry.base_models.diffusion_model.models.encoders.dreamdojo import robot_actions
-        from worldfoundry.core.utils import load_pil_image
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
 
         if video is not None:
             raise ValueError("DreamDojo 2B GR-1 accepts one initial image and normalized robot actions")
@@ -272,7 +272,7 @@ class DreamDojoRuntime:
 
     def configure_realtime(self, images: Any, prompt: str = "", **kwargs: Any) -> dict[str, Any]:
         """Configure one image/text/seed context before consuming normalized actions."""
-        from worldfoundry.core.utils import load_pil_image
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
 
         from .realtime import student_sampling_options
 
@@ -344,7 +344,7 @@ class DreamDojoRuntime:
         if self.variant != "student":
             raise ValueError("DreamDojo chunk streaming requires the distilled student")
         from worldfoundry.base_models.diffusion_model.models.encoders.dreamdojo import robot_actions
-        from worldfoundry.core.utils import load_pil_image
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
 
         from .realtime import DreamDojoStudentSession, student_sampling_options
 

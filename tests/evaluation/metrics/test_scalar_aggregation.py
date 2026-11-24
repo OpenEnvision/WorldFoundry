@@ -9,9 +9,9 @@ from pathlib import Path
 
 import numpy as np
 
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, MetricResult
-from worldfoundry.evaluation.api.metrics import aggregate_mean
-from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import run_evaluate
+from worldfoundry.evals.api import GenerationRequest, GenerationResult, MetricResult
+from worldfoundry.evals.api.metrics import aggregate_mean
+from worldfoundry.evals.tasks.execution.orchestration.evaluate import run_evaluate
 
 
 class NumpyMetric:

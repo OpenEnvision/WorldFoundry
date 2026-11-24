@@ -8,6 +8,7 @@ source_repos:
   revision: 1a002caf7bb55cfb016dcc670c357bd803af3a0d
   in_tree_path: worldfoundry/synthesis/visual_generation/ati/ati_runtime
 - url: https://github.com/Wan-Video/Wan2.1
+  revision: 9737cba9c1c3c4d04b33fcad41c111989865d315
   in_tree_path: worldfoundry/base_models/diffusion_model/models
 checkpoints:
 - repo_id: bytedance-research/ATI

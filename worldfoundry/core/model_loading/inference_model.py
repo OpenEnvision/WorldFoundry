@@ -54,14 +54,15 @@ def instantiate_inference_network(
     from worldfoundry.core.configuration.lazy_config import instantiate
 
     with torch.device("meta"):
-        network = instantiate(config)
+        # Instantiated networks provide their own init_weights and fully_shard hooks.
+        network: Any = instantiate(config)
 
     internal_kwargs = (
         {"mp_policy": internal_mixed_precision_policy} if internal_mixed_precision_policy is not None else {}
     )
     root_kwargs = {"mp_policy": root_mixed_precision_policy} if root_mixed_precision_policy is not None else {}
 
-    def shard(module: torch.nn.Module) -> torch.nn.Module:
+    def shard(module: Any) -> Any:
         """FSDP-wrap *module* on ``device_mesh``; reshard after each forward.
 
         Internal children get ``internal_kwargs``; the root gets

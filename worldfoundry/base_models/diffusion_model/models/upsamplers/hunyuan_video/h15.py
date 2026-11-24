@@ -35,17 +35,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor
-from worldfoundry.core.model_loading.model_configuration import (
-    NativeConfigMixin,
-    register_to_config,
-)
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.hunyuan_video.h15 import (
     CausalConv3d,
     ResnetBlock,
-    RMS_norm,
     forward_with_checkpointing,
     swish,
+)
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import RMS_norm
+from worldfoundry.core.model_loading.model_configuration import (
+    NativeConfigMixin,
+    register_to_config,
 )
 
 
@@ -61,6 +61,7 @@ class UpsamplerType(Enum):
 @dataclass
 class UpsamplerConfig:
     """Serializable HunyuanVideo 1.5 upsampler hyperparameters."""
+
     load_from: str
     enable: bool = False
     hidden_channels: int = 128
@@ -71,12 +72,8 @@ class UpsamplerConfig:
 
 class SRResidualCausalBlock3D(nn.Module):
     """Sr residual causal block d implementation."""
-    def __init__(self, channels: int):
-        """Init.
 
-        Args:
-            channels: The channels.
-        """
+    def __init__(self, channels: int):
         super().__init__()
         self.block = nn.Sequential(
             CausalConv3d(channels, channels, kernel_size=3),
@@ -87,14 +84,6 @@ class SRResidualCausalBlock3D(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         return x + self.block(x)
 
 
@@ -110,15 +99,6 @@ class SRTo720pUpsampler(nn.Module, NativeConfigMixin):
         num_blocks: int = 6,
         global_residual: bool = False,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            hidden_channels: The hidden channels.
-            num_blocks: The num blocks.
-            global_residual: The global residual.
-        """
         super().__init__()
         if hidden_channels is None:
             hidden_channels = 64
@@ -128,14 +108,6 @@ class SRTo720pUpsampler(nn.Module, NativeConfigMixin):
         self.global_residual = bool(global_residual)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         residual = x
         y = self.in_conv(x)
         for blk in self.blocks:
@@ -158,15 +130,6 @@ class SRTo1080pUpsampler(nn.Module, NativeConfigMixin):
         num_res_blocks: int = 2,
         is_residual: bool = False,
     ):
-        """Init.
-
-        Args:
-            z_channels: The z channels.
-            out_channels: The out channels.
-            block_out_channels: The block out channels.
-            num_res_blocks: The num res blocks.
-            is_residual: The is residual.
-        """
         super().__init__()
         self.num_res_blocks = num_res_blocks
         self.block_out_channels = block_out_channels
@@ -176,7 +139,7 @@ class SRTo1080pUpsampler(nn.Module, NativeConfigMixin):
         self.conv_in = CausalConv3d(z_channels, block_in, kernel_size=3)
 
         self.up = nn.ModuleList()
-        for i_level, ch in enumerate(block_out_channels):
+        for _i_level, ch in enumerate(block_out_channels):
             block = nn.ModuleList()
             block_out = ch
             for _ in range(self.num_res_blocks + 1):
@@ -193,7 +156,7 @@ class SRTo1080pUpsampler(nn.Module, NativeConfigMixin):
         self.gradient_checkpointing = False
         self.is_residual = is_residual
 
-    def forward(self, z: Tensor, target_shape: Sequence[int] = None) -> Tensor:
+    def forward(self, z: Tensor, target_shape: Sequence[int] | None = None) -> Tensor:
         """
         Args:
             z: (B, C, T, H, W)

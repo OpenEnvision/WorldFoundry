@@ -8,11 +8,11 @@ and world model are video-only here.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 import torch
 
-from mira.world_model.actions_config import ActionTensors
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.actions_config import ActionTensors
 
 
 # A dataclass (not Pydantic) because Pydantic + torch.compile() has issues: Pydantic's validation
@@ -27,16 +27,14 @@ class VideoActionBatch:
     # Plain ``torch.Tensor`` fields whose torch methods propagate generically. ``actions`` is an
     # ``ActionTensors`` container handled explicitly in ``to``/``pin_memory``/``clone`` below (it
     # implements the same methods), so device moves and copies still reach it.
-    _TENSOR_ATTRIBUTES = ["video"]
+    _TENSOR_ATTRIBUTES: ClassVar[list] = ["video"]
 
     video: torch.Tensor  # (B, T, C, H, W) uint8
     actions: ActionTensors
 
     def to(self, *args: Any, **kwargs: Any) -> VideoActionBatch:
         """Propagate ``torch.Tensor.to`` to the video and the actions."""
-        return VideoActionBatch(
-            video=self.video.to(*args, **kwargs), actions=self.actions.to(*args, **kwargs)
-        )
+        return VideoActionBatch(video=self.video.to(*args, **kwargs), actions=self.actions.to(*args, **kwargs))
 
     def pin_memory(self) -> VideoActionBatch:
         """Propagate ``torch.Tensor.pin_memory`` to the video and the actions (called by the loader)."""

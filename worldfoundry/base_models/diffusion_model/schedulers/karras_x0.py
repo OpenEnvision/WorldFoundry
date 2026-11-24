@@ -91,9 +91,7 @@ class KarrasX0AB2Scheduler:
         sigma = step.timestep.to(device=latents.device, dtype=work).reshape(1)
         next_sigma = step.next_timestep.to(device=latents.device, dtype=work).reshape(1)
         if self._previous_x0 is None or self._previous_sigma is None:
-            result = _batch_mul((sigma - next_sigma) / sigma, x0) + _batch_mul(
-                next_sigma / sigma, current
-            )
+            result = _batch_mul((sigma - next_sigma) / sigma, x0) + _batch_mul(next_sigma / sigma, current)
         else:
             previous_x0 = self._previous_x0.to(device=latents.device, dtype=work)
             previous_sigma = self._previous_sigma.to(device=latents.device, dtype=work).reshape(1)
@@ -157,10 +155,7 @@ class KarrasX0EulerScheduler:
         if sigma_min <= 0 or sigma_max <= sigma_min or rho <= 0:
             raise ValueError("Karras x0 Euler requires 0 < sigma_min < sigma_max and rho > 0")
         ramp = torch.linspace(0, 1, sampling.num_inference_steps, device=device, dtype=torch.float64)
-        nonzero = (
-            sigma_max ** (1 / rho)
-            + ramp * (sigma_min ** (1 / rho) - sigma_max ** (1 / rho))
-        ) ** rho
+        nonzero = (sigma_max ** (1 / rho) + ramp * (sigma_min ** (1 / rho) - sigma_max ** (1 / rho))) ** rho
         sigmas = torch.cat((nonzero, nonzero.new_zeros(1)))
         return tuple(
             SchedulerStep(

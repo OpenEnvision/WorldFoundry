@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 
 import torch
+import torch.version
 import triton
 import triton.language as tl
 

@@ -5,8 +5,8 @@ Composes :mod:`.original_encoder` and :mod:`.original_decoder`. Public ``encode`
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
 import torch
 from torch import nn
@@ -106,7 +106,7 @@ class HunyuanVideoCausal3DAutoencoder(nn.Module):
             return json.load(handle)
 
     @classmethod
-    def from_config(cls, config: Mapping[str, object], **overrides: object) -> "HunyuanVideoCausal3DAutoencoder":
+    def from_config(cls, config: Mapping[str, object], **overrides: object) -> HunyuanVideoCausal3DAutoencoder:
         values = {key: value for key, value in dict(config).items() if not key.startswith("_")}
         values.update(overrides)
         return cls(**values)
@@ -172,7 +172,9 @@ class HunyuanVideoCausal3DAutoencoder(nn.Module):
         for height in range(0, value.shape[-2], overlap):
             row = []
             for width in range(0, value.shape[-1], overlap):
-                tile = value[..., height : height + self.tile_sample_min_size, width : width + self.tile_sample_min_size]
+                tile = value[
+                    ..., height : height + self.tile_sample_min_size, width : width + self.tile_sample_min_size
+                ]
                 row.append(self._encode_moments(tile))
             rows.append(row)
         merged_rows = []
@@ -198,7 +200,9 @@ class HunyuanVideoCausal3DAutoencoder(nn.Module):
         for height in range(0, value.shape[-2], overlap):
             row = []
             for width in range(0, value.shape[-1], overlap):
-                tile = value[..., height : height + self.tile_latent_min_size, width : width + self.tile_latent_min_size]
+                tile = value[
+                    ..., height : height + self.tile_latent_min_size, width : width + self.tile_latent_min_size
+                ]
                 row.append(self._decode_sample(tile))
             rows.append(row)
         merged_rows = []
@@ -329,11 +333,7 @@ def load_hunyuan_video_causal3d(
     if "state_dict" in state_dict and isinstance(state_dict["state_dict"], Mapping):
         state_dict = state_dict["state_dict"]
     if any(name.startswith("vae.") for name in state_dict):
-        state_dict = {
-            name.removeprefix("vae."): value
-            for name, value in state_dict.items()
-            if name.startswith("vae.")
-        }
+        state_dict = {name.removeprefix("vae."): value for name, value in state_dict.items() if name.startswith("vae.")}
     vae.load_state_dict(state_dict)
     if dtype is not None:
         vae.to(dtype=dtype)

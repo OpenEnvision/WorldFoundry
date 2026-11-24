@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.core.io.paths import (
     resolve_data_path,
@@ -68,7 +69,7 @@ class XiaomiRobotics1RuntimeConfig:
         *,
         checkpoint_path: str,
         device: str,
-    ) -> "XiaomiRobotics1RuntimeConfig":
+    ) -> XiaomiRobotics1RuntimeConfig:
         action_type = str(options.get("action_type") or "joint").lower()
         if action_type not in {"joint", "ee"}:
             raise ValueError("action_type must be 'joint' or 'ee'")
@@ -130,12 +131,9 @@ class XiaomiRobotics1Runtime:
                 values = nested
                 break
         if not values or not all(
-            isinstance(key, str) and isinstance(value, torch.Tensor)
-            for key, value in values.items()
+            isinstance(key, str) and isinstance(value, torch.Tensor) for key, value in values.items()
         ):
-            raise TypeError(
-                "XR1 model_states.pt must contain a non-empty string-to-tensor state dict"
-            )
+            raise TypeError("XR1 model_states.pt must contain a non-empty string-to-tensor state dict")
         prefixes = ("module.model.", "model.")
         for prefix in prefixes:
             selected = {key[len(prefix) :]: value for key, value in values.items() if key.startswith(prefix)}
@@ -162,8 +160,7 @@ class XiaomiRobotics1Runtime:
         tasks = payload.get("tasks", payload)
         if not isinstance(tasks, Mapping) or not tasks:
             raise ValueError(
-                f"normalization file {path} has no task statistics; "
-                "export checkpoint statistics into worldfoundry/data"
+                f"normalization file {path} has no task statistics; export checkpoint statistics into worldfoundry/data"
             )
         selected = tasks.get(task_id)
         if selected is None and len(tasks) == 1:
@@ -200,7 +197,7 @@ class XiaomiRobotics1Runtime:
         from transformers import AutoProcessor
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
         from worldfoundry.synthesis.action_generation.xiaomi_robotics_0.configuration_mibot import (
             Qwen3VLConfig,
         )
@@ -414,7 +411,7 @@ class XiaomiRobotics1Runtime:
         tokens = architecture["special_tokens"]
         state_tokens = str(tokens["state"]) * int(architecture["state_shape"][0])
         action_tokens = "".join(f"<a_{index}>" for index in range(int(architecture["action_shape"][0])))
-        messages = base_messages + [
+        messages = base_messages + [  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             {
                 "role": "user",
                 "content": [{"type": "text", "text": f"Robot state: {state_tokens}"}],

@@ -1,4 +1,5 @@
 import os.path as osp
+
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,7 +15,7 @@ def to_rgb(tensor, mode, tracks=None, is_video=False, to_torch=True, reshape_as_
     if is_video:
         batch_size, time_steps = tensor.shape[:2]
     if mode == "flow":
-        height, width = tensor.shape[-3: -1]
+        height, width = tensor.shape[-3:-1]
         tensor = np.reshape(tensor, (-1, height, width, 2))
         tensor = flow_to_rgb(tensor)
     elif mode == "mask":
@@ -37,7 +38,7 @@ def to_rgb(tensor, mode, tracks=None, is_video=False, to_torch=True, reshape_as_
                 for t in range(time_steps):
                     pos_t = traj[:, t]
                     occ_t = occ[:, t]
-                    new_tensor.append(plot_tracks(tensor[:, t], pos_t, occ_t, tracks=traj[:, :t + 1]))
+                    new_tensor.append(plot_tracks(tensor[:, t], pos_t, occ_t, tracks=traj[:, : t + 1]))
                 tensor = np.stack(new_tensor, axis=1)
             else:
                 tensor = plot_tracks(tensor, traj, occ)
@@ -52,12 +53,12 @@ def to_rgb(tensor, mode, tracks=None, is_video=False, to_torch=True, reshape_as_
 
 def flow_to_rgb(flow, transparent=False):
     flow = np.copy(flow)
-    H, W = flow.shape[-3: -1]
-    mul = 20.
-    scaling = mul / (H ** 2 + W ** 2) ** 0.5
+    H, W = flow.shape[-3:-1]
+    mul = 20.0
+    scaling = mul / (H**2 + W**2) ** 0.5
     direction = (np.arctan2(flow[..., 0], flow[..., 1]) + np.pi) / (2 * np.pi)
     norm = np.linalg.norm(flow, axis=-1)
-    magnitude = np.clip(norm * scaling, 0., 1.)
+    magnitude = np.clip(norm * scaling, 0.0, 1.0)
     saturation = np.ones_like(direction)
     if transparent:
         hsv = np.stack([direction, saturation, np.ones_like(magnitude)], axis=-1)
@@ -96,12 +97,10 @@ def plot_tracks(rgb, points, occluded, tracks=None, trackgroup=None):
 
     for i in range(rgb.shape[0]):
         fig = plt.figure(
-            figsize=(width / figure_dpi, height / figure_dpi),
-            dpi=figure_dpi,
-            frameon=False,
-            facecolor='w')
+            figsize=(width / figure_dpi, height / figure_dpi), dpi=figure_dpi, frameon=False, facecolor="w"
+        )
         ax = fig.add_subplot()
-        ax.axis('off')
+        ax.axis("off")
         ax.imshow(rgb[i])
 
         valid = points[:, i, 0] > 0
@@ -110,7 +109,7 @@ def plot_tracks(rgb, points, occluded, tracks=None, trackgroup=None):
         valid = np.logical_and(valid, points[:, i, 1] < rgb.shape[1] - 1)
 
         if occluded is not None:
-            colalpha = np.concatenate([colors[:, :-1], 1 - occluded[:, i:i + 1]], axis=1)
+            colalpha = np.concatenate([colors[:, :-1], 1 - occluded[:, i : i + 1]], axis=1)
         else:
             colalpha = colors[:, :-1]
         # Note: matplotlib uses pixel coordinates, not raster.
@@ -133,7 +132,7 @@ def plot_tracks(rgb, points, occluded, tracks=None, trackgroup=None):
                 ax.plot(x[valid_track] - 0.5, y[valid_track] - 0.5, color=track_color, marker=None)
 
         if occluded is not None:
-            occ2 = occluded[:, i:i + 1]
+            occ2 = occluded[:, i : i + 1]
 
             colalpha = np.concatenate([colors[:, :-1], occ2], axis=1)
 
@@ -141,7 +140,7 @@ def plot_tracks(rgb, points, occluded, tracks=None, trackgroup=None):
                 points[valid, i, 0],
                 points[valid, i, 1],
                 s=20,
-                facecolors='none',
+                facecolors="none",
                 edgecolors=colalpha[valid],
             )
 
@@ -149,13 +148,11 @@ def plot_tracks(rgb, points, occluded, tracks=None, trackgroup=None):
         plt.margins(0, 0)
         fig.canvas.draw()
         width, height = fig.get_size_inches() * fig.get_dpi()
-        img = np.frombuffer(
-            fig.canvas.tostring_rgb(),
-            dtype='uint8').reshape(int(height), int(width), 3)
+        img = np.frombuffer(fig.canvas.tostring_rgb(), dtype="uint8").reshape(int(height), int(width), 3)
         disp.append(np.copy(img))
         plt.close("all")
 
-    return np.stack(disp, axis=0).astype(float).transpose(0, 3, 1, 2) / 255 # TODO : inconsistent
+    return np.stack(disp, axis=0).astype(float).transpose(0, 3, 1, 2) / 255  # TODO : inconsistent
 
 
 def plot_points(src_frame, tgt_frame, src_points, tgt_points, save_path, max_points=256):
@@ -176,22 +173,22 @@ def plot_points(src_frame, tgt_frame, src_points, tgt_points, save_path, max_poi
     indices = np.random.choice(len(src_pos), size=min(max_points, len(src_pos)), replace=False)
     for i in indices:
         if src_alpha[i] == 1:
-            ax.scatter(src_pos[i, 0], src_pos[i, 1], s=5, c="black", marker='x')
+            ax.scatter(src_pos[i, 0], src_pos[i, 1], s=5, c="black", marker="x")
         else:
-            ax.scatter(src_pos[i, 0], src_pos[i, 1], s=5, linewidths=1.5, c="black", marker='o')
-            ax.scatter(src_pos[i, 0], src_pos[i, 1], s=2.5, c="white", marker='o')
+            ax.scatter(src_pos[i, 0], src_pos[i, 1], s=5, linewidths=1.5, c="black", marker="o")
+            ax.scatter(src_pos[i, 0], src_pos[i, 1], s=2.5, c="white", marker="o")
         if tgt_alpha[i] == 1:
-            ax.scatter(W + P + tgt_pos[i, 0], tgt_pos[i, 1], s=5, c="black", marker='x')
+            ax.scatter(W + P + tgt_pos[i, 0], tgt_pos[i, 1], s=5, c="black", marker="x")
         else:
-            ax.scatter(W + P + tgt_pos[i, 0], tgt_pos[i, 1], s=5, linewidths=1.5, c="black", marker='o')
-            ax.scatter(W + P + tgt_pos[i, 0], tgt_pos[i, 1], s=2.5, c="white", marker='o')
+            ax.scatter(W + P + tgt_pos[i, 0], tgt_pos[i, 1], s=5, linewidths=1.5, c="black", marker="o")
+            ax.scatter(W + P + tgt_pos[i, 0], tgt_pos[i, 1], s=2.5, c="white", marker="o")
 
         plt.plot([src_pos[i, 0], W + P + tgt_pos[i, 0]], [src_pos[i, 1], tgt_pos[i, 1]], linewidth=0.5, c="black")
 
     # Save
-    ax.axis('off')
+    ax.axis("off")
     plt.tight_layout()
     plt.subplots_adjust(wspace=0)
     create_folder(osp.dirname(save_path))
-    plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+    plt.savefig(save_path, bbox_inches="tight", pad_inches=0)
     plt.close()

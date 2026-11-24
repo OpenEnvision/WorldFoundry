@@ -35,12 +35,8 @@ def _pack_text_embeds(
     masked = hidden_states.masked_fill(~expanded, 0.0)
     denominator = (sequence_lengths * hidden).view(batch, 1, 1, 1)
     mean = masked.sum(dim=(1, 2), keepdim=True) / (denominator + eps)
-    minimum = hidden_states.masked_fill(~expanded, float("inf")).amin(
-        dim=(1, 2), keepdim=True
-    )
-    maximum = hidden_states.masked_fill(~expanded, float("-inf")).amax(
-        dim=(1, 2), keepdim=True
-    )
+    minimum = hidden_states.masked_fill(~expanded, float("inf")).amin(dim=(1, 2), keepdim=True)
+    maximum = hidden_states.masked_fill(~expanded, float("-inf")).amax(dim=(1, 2), keepdim=True)
     normalized = (hidden_states - mean) / (maximum - minimum + eps)
     normalized = (normalized * scale_factor).flatten(2)
     flattened_mask = mask[:, :, None].expand(-1, -1, normalized.shape[-1])
@@ -141,9 +137,7 @@ def build_sana_wm_refiner_conditioner(
     from transformers import AutoTokenizer, Gemma3ForConditionalGeneration
 
     gemma = NativeCheckpointResolver().materialize(context.require_checkpoint("weights"))
-    connectors_checkpoint = NativeCheckpointResolver().materialize(
-        context.require_checkpoint("connectors")
-    )
+    connectors_checkpoint = NativeCheckpointResolver().materialize(context.require_checkpoint("connectors"))
     gemma_root = gemma.directory("gemma3_12b")
     connectors_root = connectors_checkpoint.directory("refiner_diffusers/connectors")
     tokenizer = AutoTokenizer.from_pretrained(str(gemma_root), local_files_only=True)

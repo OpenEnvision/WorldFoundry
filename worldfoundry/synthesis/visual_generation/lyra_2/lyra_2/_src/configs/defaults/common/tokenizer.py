@@ -15,7 +15,8 @@
 
 
 from hydra.core.config_store import ConfigStore
-from lyra_2._src.tokenizers.wan2pt1 import (
+
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.tokenizers.wan2pt1 import (
     Wan2pt1VAEConfig,
 )
 

@@ -3,17 +3,14 @@
 # Mixture-of-Transformers (MoT) for world-action policy.
 # Action stream (state + action) and visual stream (ref + future) use separate
 # transformer parameters with global self-attention across both streams.
-
 import math
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, ClassVar
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.loaders import FromOriginalModelMixin, PeftAdapterMixin
-from diffusers.models.attention import AttentionMixin, AttentionModuleMixin
+from diffusers.models.attention import AttentionMixin
 from diffusers.models.attention_dispatch import dispatch_attention_fn
 from diffusers.models.cache_utils import CacheMixin
 from diffusers.models.modeling_outputs import Transformer2DModelOutput
@@ -21,31 +18,35 @@ from diffusers.models.modeling_utils import ModelMixin
 from diffusers.models.normalization import FP32LayerNorm
 from diffusers.utils import USE_PEFT_BACKEND, logging, scale_lora_layers, unscale_lora_layers
 
+from .action_projectors import EmbodimentSpecificActionDecoder, EmbodimentSpecificActionEncoder
 from .transformer import (
+    FeedForward,
+    WanAttention,
+    WanAttnProcessor,
     WanRotaryPosEmbed,
     WanRotaryPosEmbed1D,
     WanTimeTextImageEmbedding,
     WanTransformerBlock,
     _get_qkv_projections,
-    WanAttnProcessor,
-    WanAttention,
-    FeedForward,
 )
-from .action_projectors import EmbodimentSpecificActionDecoder, EmbodimentSpecificActionEncoder
 
 logger = logging.get_logger(__name__)
+
 
 def _copy_param_sliced(dst: torch.Tensor, src: torch.Tensor) -> None:
     """Copy ``src`` into ``dst``, taking leading slices when ``src`` is larger."""
     if dst.shape == src.shape:
         dst.copy_(src)
         return
-    if any(s < d for s, d in zip(src.shape, dst.shape)):
+    if any(s < d for s, d in zip(src.shape, dst.shape, strict=False)):
         raise ValueError(f"Cannot slice-load: src shape {tuple(src.shape)} -> dst shape {tuple(dst.shape)}")
     slc = tuple(slice(0, d) for d in dst.shape)
     dst.copy_(src[slc])
 
-def _load_module_state_dict_sliced(module: nn.Module, state_dict: Dict[str, torch.Tensor], prefix: str = "", skip=False) -> Tuple[list, list]:
+
+def _load_module_state_dict_sliced(
+    module: nn.Module, state_dict: dict[str, torch.Tensor], prefix: str = "", skip=False
+) -> tuple[list, list]:
     """Load *state_dict* into *module*, slicing tensors when shapes differ."""
     loaded, skipped = [], []
     module_state = module.state_dict()
@@ -63,6 +64,7 @@ def _load_module_state_dict_sliced(module: nn.Module, state_dict: Dict[str, torc
             skipped.append(full_key)
     return loaded, skipped
 
+
 def _apply_rotary_emb(
     hidden_states: torch.Tensor,
     freqs_cos: torch.Tensor,
@@ -76,9 +78,8 @@ def _apply_rotary_emb(
     out[..., 1::2] = x1 * sin + x2 * cos
     return out.type_as(hidden_states)
 
-def _chunk_temb(
-    temb: torch.Tensor, scale_shift_table: torch.Tensor
-) -> Tuple[torch.Tensor, ...]:
+
+def _chunk_temb(temb: torch.Tensor, scale_shift_table: torch.Tensor) -> tuple[torch.Tensor, ...]:
     if temb.ndim == 4:
         shift_msa, scale_msa, gate_msa, c_shift_msa, c_scale_msa, c_gate_msa = (
             scale_shift_table.unsqueeze(0) + temb.float()
@@ -95,6 +96,7 @@ def _chunk_temb(
         6, dim=1
     )
     return shift_msa, scale_msa, gate_msa, c_shift_msa, c_scale_msa, c_gate_msa
+
 
 def build_mot_attention_mask(
     num_state_tokens: int,
@@ -139,6 +141,7 @@ def build_mot_attention_mask(
 
     return mask.unsqueeze(0).unsqueeze(0).expand(batch_size, num_heads, l_total, l_total).to(dtype=dtype)
 
+
 class ActionExpertBlock(nn.Module):
     def __init__(self, action_expert_dim: int, wan_dim: int, action_ffn_dim: int, num_heads: int, eps: float = 1e-6):
         super().__init__()
@@ -169,8 +172,9 @@ class ActionExpertBlock(nn.Module):
     #     """Load Wan2.2 block weights; slice feature dims where action expert is narrower."""
     #     return _load_module_state_dict_sliced(self, dense_sd)
 
-    def load_from_dense_block(self, dense_block: "WanTransformerBlock") -> Tuple[list, list]:
+    def load_from_dense_block(self, dense_block: "WanTransformerBlock") -> tuple[list, list]:
         return self.load_from_dense_state_dict(dense_block.state_dict())
+
 
 class WanMoTTransformerBlock(nn.Module):
     """MoT block with separate action/visual experts and global self-attention."""
@@ -185,12 +189,10 @@ class WanMoTTransformerBlock(nn.Module):
         qk_norm: str = "rms_norm_across_heads",
         cross_attn_norm: bool = False,
         eps: float = 1e-6,
-        added_kv_proj_dim: Optional[int] = None,
+        added_kv_proj_dim: int | None = None,
     ):
         super().__init__()
-        self.action_expert = ActionExpertBlock(
-            action_expert_dim, wan_dim, action_ffn_dim, num_heads, eps
-        )
+        self.action_expert = ActionExpertBlock(action_expert_dim, wan_dim, action_ffn_dim, num_heads, eps)
         self.visual_expert = WanTransformerBlock(
             wan_dim, ffn_dim, num_heads, qk_norm, cross_attn_norm, eps, added_kv_proj_dim
         )
@@ -201,8 +203,8 @@ class WanMoTTransformerBlock(nn.Module):
         expert: WanTransformerBlock,
         shift_msa: torch.Tensor,
         scale_msa: torch.Tensor,
-        rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]],
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        rotary_emb: tuple[torch.Tensor, torch.Tensor] | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         norm_x = (expert.norm1(hidden_states.float()) * (1 + scale_msa) + shift_msa).type_as(hidden_states)
         query, key, value = _get_qkv_projections(expert.attn1, norm_x, None)
         query = expert.attn1.norm_q(query)
@@ -232,8 +234,8 @@ class WanMoTTransformerBlock(nn.Module):
     def _build_cross_attn_kv_cache(
         self,
         expert: WanTransformerBlock,
-        encoder_hidden_states: Optional[torch.Tensor],
-    ) -> Optional[Dict[str, torch.Tensor]]:
+        encoder_hidden_states: torch.Tensor | None,
+    ) -> dict[str, torch.Tensor] | None:
         if encoder_hidden_states is None:
             return None
 
@@ -253,8 +255,8 @@ class WanMoTTransformerBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
         expert: WanTransformerBlock,
-        encoder_hidden_states: Optional[torch.Tensor],
-        encoder_kv_cache: Optional[Dict[str, torch.Tensor]] = None,
+        encoder_hidden_states: torch.Tensor | None,
+        encoder_kv_cache: dict[str, torch.Tensor] | None = None,
     ) -> torch.Tensor:
         attn = expert.attn2
         query = attn.to_q(hidden_states)
@@ -286,11 +288,11 @@ class WanMoTTransformerBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
         expert: WanTransformerBlock,
-        encoder_hidden_states: Optional[torch.Tensor],
+        encoder_hidden_states: torch.Tensor | None,
         c_shift_msa: torch.Tensor,
         c_scale_msa: torch.Tensor,
         c_gate_msa: torch.Tensor,
-        encoder_kv_cache: Optional[Dict[str, torch.Tensor]] = None,
+        encoder_kv_cache: dict[str, torch.Tensor] | None = None,
     ) -> torch.Tensor:
         if encoder_hidden_states is not None or encoder_kv_cache is not None:
             norm_hidden_states = expert.norm2(hidden_states.float()).type_as(hidden_states)
@@ -314,10 +316,10 @@ class WanMoTTransformerBlock(nn.Module):
         encoder_action_hidden_states: torch.Tensor,
         action_temb: torch.Tensor,
         visual_temb: torch.Tensor,
-        action_rotary_emb: Tuple[torch.Tensor, torch.Tensor],
-        visual_rotary_emb: Tuple[torch.Tensor, torch.Tensor],
-        self_attention_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        action_rotary_emb: tuple[torch.Tensor, torch.Tensor],
+        visual_rotary_emb: tuple[torch.Tensor, torch.Tensor],
+        self_attention_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         a_shift, a_scale, a_gate, a_c_shift, a_c_scale, a_c_gate = _chunk_temb(
             action_temb, self.action_expert.scale_shift_table
         )
@@ -352,12 +354,12 @@ class WanMoTTransformerBlock(nn.Module):
         out_action = self._expert_out_proj(attn_action, self.action_expert)
         out_visual = self._expert_out_proj(attn_visual, self.visual_expert)
 
-        action_hidden_states = (
-            action_hidden_states.float() + out_action.float() * a_gate
-        ).type_as(action_hidden_states)
-        visual_hidden_states = (
-            visual_hidden_states.float() + out_visual.float() * v_gate
-        ).type_as(visual_hidden_states)
+        action_hidden_states = (action_hidden_states.float() + out_action.float() * a_gate).type_as(
+            action_hidden_states
+        )
+        visual_hidden_states = (visual_hidden_states.float() + out_visual.float() * v_gate).type_as(
+            visual_hidden_states
+        )
 
         action_hidden_states = self._expert_cross_attn_ffn(
             action_hidden_states,
@@ -386,9 +388,9 @@ class WanMoTTransformerBlock(nn.Module):
         encoder_action_hidden_states: torch.Tensor,
         action_prefix_temb: torch.Tensor,
         visual_temb: torch.Tensor,
-        action_prefix_rotary_emb: Tuple[torch.Tensor, torch.Tensor],
-        visual_rotary_emb: Tuple[torch.Tensor, torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
+        action_prefix_rotary_emb: tuple[torch.Tensor, torch.Tensor],
+        visual_rotary_emb: tuple[torch.Tensor, torch.Tensor],
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
         a_shift, a_scale, a_gate, a_c_shift, a_c_scale, a_c_gate = _chunk_temb(
             action_prefix_temb, self.action_expert.scale_shift_table
         )
@@ -423,16 +425,14 @@ class WanMoTTransformerBlock(nn.Module):
         out_action = self._expert_out_proj(attn_action, self.action_expert)
         out_visual = self._expert_out_proj(attn_visual, self.visual_expert)
 
-        action_prefix_hidden_states = (
-            action_prefix_hidden_states.float() + out_action.float() * a_gate
-        ).type_as(action_prefix_hidden_states)
-        visual_hidden_states = (
-            visual_hidden_states.float() + out_visual.float() * v_gate
-        ).type_as(visual_hidden_states)
-
-        action_encoder_kv_cache = self._build_cross_attn_kv_cache(
-            self.action_expert, encoder_action_hidden_states
+        action_prefix_hidden_states = (action_prefix_hidden_states.float() + out_action.float() * a_gate).type_as(
+            action_prefix_hidden_states
         )
+        visual_hidden_states = (visual_hidden_states.float() + out_visual.float() * v_gate).type_as(
+            visual_hidden_states
+        )
+
+        action_encoder_kv_cache = self._build_cross_attn_kv_cache(self.action_expert, encoder_action_hidden_states)
         action_prefix_hidden_states = self._expert_cross_attn_ffn(
             action_prefix_hidden_states,
             self.action_expert,
@@ -462,8 +462,8 @@ class WanMoTTransformerBlock(nn.Module):
         action_hidden_states: torch.Tensor,
         encoder_action_hidden_states: torch.Tensor,
         action_temb: torch.Tensor,
-        action_rotary_emb: Tuple[torch.Tensor, torch.Tensor],
-        prefix_cache: Dict[str, torch.Tensor],
+        action_rotary_emb: tuple[torch.Tensor, torch.Tensor],
+        prefix_cache: dict[str, torch.Tensor],
     ) -> torch.Tensor:
         a_shift, a_scale, a_gate, a_c_shift, a_c_scale, a_c_gate = _chunk_temb(
             action_temb, self.action_expert.scale_shift_table
@@ -485,9 +485,9 @@ class WanMoTTransformerBlock(nn.Module):
         )
 
         out_action = self._expert_out_proj(attn_output, self.action_expert)
-        action_hidden_states = (
-            action_hidden_states.float() + out_action.float() * a_gate
-        ).type_as(action_hidden_states)
+        action_hidden_states = (action_hidden_states.float() + out_action.float() * a_gate).type_as(
+            action_hidden_states
+        )
 
         action_encoder_kv_cache = None
         if "action_encoder_key" in prefix_cache and "action_encoder_value" in prefix_cache:
@@ -506,21 +506,26 @@ class WanMoTTransformerBlock(nn.Module):
         )
         return action_hidden_states
 
-    def load_from_dense_state_dict(self, dense_sd: Dict[str, torch.Tensor], skip_action_expert: bool = False) -> Tuple[list, list]:
+    def load_from_dense_state_dict(
+        self, dense_sd: dict[str, torch.Tensor], skip_action_expert: bool = False
+    ) -> tuple[list, list]:
         visual_loaded, visual_skipped = _load_module_state_dict_sliced(self.visual_expert, dense_sd)
         if skip_action_expert:
             print("--------------------------------")
-            print('WARNING: Action expert weights are skipped')
+            print("WARNING: Action expert weights are skipped")
             print("--------------------------------")
-        action_loaded, action_skipped = _load_module_state_dict_sliced(self.action_expert, dense_sd, skip=skip_action_expert)
+        action_loaded, action_skipped = _load_module_state_dict_sliced(
+            self.action_expert, dense_sd, skip=skip_action_expert
+        )
         action_loaded = [f"action_expert.{k}" for k in action_loaded]
         action_skipped = [f"action_expert.{k}" for k in action_skipped]
         visual_loaded = [f"visual_expert.{k}" for k in visual_loaded]
         visual_skipped = [f"visual_expert.{k}" for k in visual_skipped]
         return visual_loaded + action_loaded, visual_skipped + action_skipped
 
-    def load_from_dense_block(self, dense_block: WanTransformerBlock) -> Tuple[list, list]:
+    def load_from_dense_block(self, dense_block: WanTransformerBlock) -> tuple[list, list]:
         return self.load_from_dense_state_dict(dense_block.state_dict())
+
 
 class CasualWorldActionTransformer_MoT(
     ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalModelMixin, CacheMixin, AttentionMixin
@@ -535,15 +540,27 @@ class CasualWorldActionTransformer_MoT(
     """
 
     _supports_gradient_checkpointing = True
-    _skip_layerwise_casting_patterns = ["patch_embedding", "condition_embedder", "action_condition_embedder", "norm"]
-    _no_split_modules = ["WanMoTTransformerBlock"]
-    _keep_in_fp32_modules = ["time_embedder", "scale_shift_table", "action_scale_shift_table", "norm1", "norm2", "norm3"]
-    _repeated_blocks = ["WanMoTTransformerBlock"]
+    _skip_layerwise_casting_patterns: ClassVar[list] = [
+        "patch_embedding",
+        "condition_embedder",
+        "action_condition_embedder",
+        "norm",
+    ]
+    _no_split_modules: ClassVar[list] = ["WanMoTTransformerBlock"]
+    _keep_in_fp32_modules: ClassVar[list] = [
+        "time_embedder",
+        "scale_shift_table",
+        "action_scale_shift_table",
+        "norm1",
+        "norm2",
+        "norm3",
+    ]
+    _repeated_blocks: ClassVar[list] = ["WanMoTTransformerBlock"]
 
     @register_to_config
     def __init__(
         self,
-        patch_size: Tuple[int, ...] = (1, 2, 2),
+        patch_size: tuple[int, ...] = (1, 2, 2),
         num_attention_heads: int = 40,
         attention_head_dim: int = 128,
         in_channels: int = 16,
@@ -553,12 +570,12 @@ class CasualWorldActionTransformer_MoT(
         ffn_dim: int = 13824,
         num_layers: int = 40,
         cross_attn_norm: bool = True,
-        qk_norm: Optional[str] = "rms_norm_across_heads",
+        qk_norm: str | None = "rms_norm_across_heads",
         eps: float = 1e-6,
-        image_dim: Optional[int] = None,
-        added_kv_proj_dim: Optional[int] = None,
+        image_dim: int | None = None,
+        added_kv_proj_dim: int | None = None,
         rope_max_seq_len: int = 1024,
-        pos_embed_seq_len: Optional[int] = None,
+        pos_embed_seq_len: int | None = None,
         action_expert_dim: int = 1024,
         action_ffn_dim: int = 4096,
         in_action_channels: int = 32,
@@ -632,28 +649,32 @@ class CasualWorldActionTransformer_MoT(
             num_embodiments=num_embodiments,
         )
 
-    def _encode_state_tokens(self, state: torch.Tensor, embodiment_id: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def _encode_state_tokens(self, state: torch.Tensor, embodiment_id: torch.Tensor | None = None) -> torch.Tensor:
         if getattr(self.state_encoder, "uses_embodiment_id", False):
             return self.state_encoder(state, embodiment_id=embodiment_id)
         return self.state_encoder(state)
 
-    def _encode_action_tokens_only(self, action: torch.Tensor, embodiment_id: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def _encode_action_tokens_only(
+        self, action: torch.Tensor, embodiment_id: torch.Tensor | None = None
+    ) -> torch.Tensor:
         if getattr(self.action_encoder, "uses_embodiment_id", False):
             return self.action_encoder(action, embodiment_id=embodiment_id)
         return self.action_encoder(action)
 
-    def _decode_action_tokens(self, action_states: torch.Tensor, embodiment_id: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def _decode_action_tokens(
+        self, action_states: torch.Tensor, embodiment_id: torch.Tensor | None = None
+    ) -> torch.Tensor:
         if getattr(self.action_decoder, "uses_embodiment_id", False):
             return self.action_decoder(action_states, embodiment_id=embodiment_id)
         return self.action_decoder(action_states)
 
     def load_from_wan_pretrained_state_dict(
         self,
-        state_dict: Dict[str, torch.Tensor],
+        state_dict: dict[str, torch.Tensor],
         *,
         verbose: bool = True,
         skip_action_expert: bool = False,
-    ) -> Tuple[list, list, list, list]:
+    ) -> tuple[list, list, list, list]:
         """
         Load weights from :class:`CasualWorldActionTransformer` (Wan2.2).
 
@@ -687,7 +708,7 @@ class CasualWorldActionTransformer_MoT(
         for key, tensor in state_dict.items():
             if key.startswith("blocks."):
                 continue
-            if key.startswith("state_encoder.") or key.startswith("action_encoder.") or key.startswith("action_decoder."):
+            if key.startswith(("state_encoder.", "action_encoder.", "action_decoder.")):
                 if skip_action_expert:
                     skipped_keys.append(key)
                 continue
@@ -713,12 +734,14 @@ class CasualWorldActionTransformer_MoT(
                 if verbose:
                     logger.warning("No Wan weights found for %s", prefix)
                 continue
-            block_loaded, block_skipped = block.load_from_dense_state_dict(block_sd, skip_action_expert=skip_action_expert)
+            block_loaded, block_skipped = block.load_from_dense_state_dict(
+                block_sd, skip_action_expert=skip_action_expert
+            )
             loaded_keys.extend(f"{prefix}{k}" for k in block_loaded)
             skipped_keys.extend(f"{prefix}{k}" for k in block_skipped)
         if skip_action_expert:
             print("--------------------------------")
-            print('WARNING: Action I/O weights are skipped')
+            print("WARNING: Action I/O weights are skipped")
             print("--------------------------------")
         else:
             # Action/state I/O (optional in WAM policy checkpoints).  Older
@@ -736,7 +759,7 @@ class CasualWorldActionTransformer_MoT(
                 module_sd = {}
                 for source_prefix in source_prefixes:
                     source_sd = {
-                        f"{module_name}.{k[len(source_prefix) + 1:]}": v
+                        f"{module_name}.{k[len(source_prefix) + 1 :]}": v
                         for k, v in state_dict.items()
                         if k.startswith(f"{source_prefix}.")
                     }
@@ -745,9 +768,7 @@ class CasualWorldActionTransformer_MoT(
                         break
                 if not module_sd:
                     continue
-                mod_loaded, mod_skipped = _load_module_state_dict_sliced(
-                    module, module_sd, prefix=module_name
-                )
+                mod_loaded, mod_skipped = _load_module_state_dict_sliced(module, module_sd, prefix=module_name)
                 loaded_keys.extend(mod_loaded)
                 skipped_keys.extend(mod_skipped)
 
@@ -761,14 +782,12 @@ class CasualWorldActionTransformer_MoT(
                         logger.warning("Skip action_scale_shift_table from scale_shift_table: %s", exc)
                     skipped_keys.append("action_scale_shift_table")
 
-            cond_sd = {k[len("condition_embedder.") :]: v for k, v in state_dict.items() if k.startswith("condition_embedder.")}
+            cond_sd = {
+                k[len("condition_embedder.") :]: v for k, v in state_dict.items() if k.startswith("condition_embedder.")
+            }
             if cond_sd:
-                cond_loaded, cond_skipped = _load_module_state_dict_sliced(
-                    self.action_condition_embedder, cond_sd
-                )
-                loaded_keys.extend(
-                    f"action_condition_embedder.{k}" for k in cond_loaded
-                )
+                cond_loaded, cond_skipped = _load_module_state_dict_sliced(self.action_condition_embedder, cond_sd)
+                loaded_keys.extend(f"action_condition_embedder.{k}" for k in cond_loaded)
                 skipped_keys.extend(f"action_condition_embedder.{k}" for k in cond_skipped)
 
         # Commit in-place updates back to parameters.
@@ -783,16 +802,19 @@ class CasualWorldActionTransformer_MoT(
                 wan_dim,
                 self.config.action_expert_dim,
             )
-        return loaded_keys, skipped_keys, unexpected_keys, [
-            k for k in own_state if k not in loaded_keys and not k.startswith("blocks.")
-        ]
+        return (
+            loaded_keys,
+            skipped_keys,
+            unexpected_keys,
+            [k for k in own_state if k not in loaded_keys and not k.startswith("blocks.")],
+        )
 
     def encode_action_tokens(
         self,
         state: torch.Tensor,
         action: torch.Tensor,
-        embodiment_id: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor], int, int]:
+        embodiment_id: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor], int, int]:
         """Encode state+action into action stream tokens and RoPE."""
         state_states = self._encode_state_tokens(state, embodiment_id=embodiment_id)
         action_states = self._encode_action_tokens_only(action, embodiment_id=embodiment_id)
@@ -803,13 +825,10 @@ class CasualWorldActionTransformer_MoT(
     def encode_visual_tokens(
         self,
         ref_latents: torch.Tensor,
-        future_latents: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor], int, int, Optional[Dict[str, int]]]:
+        future_latents: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor], int, int, dict[str, int] | None]:
         """Encode ref (+ optional future) latents into visual stream tokens and RoPE."""
-        if future_latents is not None:
-            visual_input = torch.cat([ref_latents, future_latents], dim=2)
-        else:
-            visual_input = ref_latents
+        visual_input = torch.cat([ref_latents, future_latents], dim=2) if future_latents is not None else ref_latents
 
         visual_rotary_emb = self.rope(visual_input)
         visual_hidden_states = self.patch_embedding(visual_input)
@@ -841,7 +860,7 @@ class CasualWorldActionTransformer_MoT(
         num_action_only_tokens: int,
         num_ref_tokens: int,
         num_future_tokens: int,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Split per-token timestep from interleaved [state, ref, action, future] order."""
         # if timestep.ndim != 4:
         #     return timestep, timestep
@@ -870,10 +889,10 @@ class CasualWorldActionTransformer_MoT(
         encoder_action_hidden_states: torch.Tensor,
         action_temb: torch.Tensor,
         visual_temb: torch.Tensor,
-        action_rotary_emb: Tuple[torch.Tensor, torch.Tensor],
-        visual_rotary_emb: Tuple[torch.Tensor, torch.Tensor],
+        action_rotary_emb: tuple[torch.Tensor, torch.Tensor],
+        visual_rotary_emb: tuple[torch.Tensor, torch.Tensor],
         self_attention_mask: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         for block in self.blocks:
             if torch.is_grad_enabled() and self.gradient_checkpointing:
                 action_hidden_states, visual_hidden_states = self._gradient_checkpointing_func(
@@ -908,7 +927,7 @@ class CasualWorldActionTransformer_MoT(
         dim: int,
         device: torch.device,
         dtype: torch.dtype,
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         head_dim = self.config.attention_head_dim
         visual_hidden_states = torch.zeros(batch_size, 0, dim, device=device, dtype=dtype)
         visual_rotary_emb = (
@@ -933,21 +952,21 @@ class CasualWorldActionTransformer_MoT(
     def _forward_tokens(
         self,
         action_hidden_states: torch.Tensor,
-        visual_hidden_states: Optional[torch.Tensor],
-        action_rotary_emb: Tuple[torch.Tensor, torch.Tensor],
-        visual_rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        visual_hidden_states: torch.Tensor | None,
+        action_rotary_emb: tuple[torch.Tensor, torch.Tensor],
+        visual_rotary_emb: tuple[torch.Tensor, torch.Tensor] | None,
         timestep: torch.LongTensor,
         encoder_hidden_states: torch.Tensor,
         num_state_tokens: int,
         num_ref_tokens: int,
-        encoder_hidden_states_image: Optional[torch.Tensor] = None,
+        encoder_hidden_states_image: torch.Tensor | None = None,
         return_dict: bool = True,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
+        attention_kwargs: dict[str, Any] | None = None,
         output_action: bool = True,
         output_visual: bool = True,
-        visual_grid_info: Optional[Dict[str, int]] = None,
-        embodiment_id: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor, ...], Dict[str, torch.Tensor], Transformer2DModelOutput]:
+        visual_grid_info: dict[str, int] | None = None,
+        embodiment_id: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, ...] | dict[str, torch.Tensor] | Transformer2DModelOutput:
         if attention_kwargs is not None:
             attention_kwargs = attention_kwargs.copy()
             lora_scale = attention_kwargs.pop("scale", 1.0)
@@ -958,9 +977,7 @@ class CasualWorldActionTransformer_MoT(
             scale_lora_layers(self, lora_scale)
         else:
             if attention_kwargs is not None and attention_kwargs.get("scale", None) is not None:
-                logger.warning(
-                    "Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective."
-                )
+                logger.warning("Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective.")
 
         batch_size = action_hidden_states.shape[0]
         la = action_hidden_states.shape[1]
@@ -1051,7 +1068,9 @@ class CasualWorldActionTransformer_MoT(
             action_shift = action_shift.to(action_hidden_states.device)
             action_scale = action_scale.to(action_hidden_states.device)
             # action_hidden_states = (action_hidden_states.float() + action_scale * action_shift).type_as(action_hidden_states)
-            action_hidden_states = (self.action_norm_out(action_hidden_states.float()) * (1 + action_scale) + action_shift).type_as(action_hidden_states)
+            action_hidden_states = (
+                self.action_norm_out(action_hidden_states.float()) * (1 + action_scale) + action_shift
+            ).type_as(action_hidden_states)
             action_slice = action_hidden_states[:, num_state_tokens:]
             action_pred = self._decode_action_tokens(action_slice, embodiment_id=embodiment_id)
 
@@ -1059,11 +1078,15 @@ class CasualWorldActionTransformer_MoT(
             if visual_grid_info is None:
                 raise ValueError("visual_grid_info is required when output_visual=True")
             if visual_temb.ndim == 3:
-                shift, scale = (self.scale_shift_table.unsqueeze(0).to(visual_temb.device) + visual_temb.unsqueeze(2)).chunk(2, dim=2)
+                shift, scale = (
+                    self.scale_shift_table.unsqueeze(0).to(visual_temb.device) + visual_temb.unsqueeze(2)
+                ).chunk(2, dim=2)
                 shift = shift.squeeze(2)
                 scale = scale.squeeze(2)
             else:
-                shift, scale = (self.scale_shift_table.to(visual_temb.device) + visual_temb.unsqueeze(1)).chunk(2, dim=1)
+                shift, scale = (self.scale_shift_table.to(visual_temb.device) + visual_temb.unsqueeze(1)).chunk(
+                    2, dim=1
+                )
             shift = shift.to(visual_hidden_states.device)
             scale = scale.to(visual_hidden_states.device)
             visual_for_out = (self.norm_out(visual_hidden_states.float()) * (1 + scale) + shift).type_as(
@@ -1103,14 +1126,16 @@ class CasualWorldActionTransformer_MoT(
         ref_latents: torch.Tensor = None,
         timestep: torch.LongTensor = None,
         encoder_hidden_states: torch.Tensor = None,
-        encoder_hidden_states_image: Optional[torch.Tensor] = None,
+        encoder_hidden_states_image: torch.Tensor | None = None,
         return_dict: bool = True,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
-        state: Optional[torch.Tensor] = None,
-        action: Optional[torch.Tensor] = None,
-        embodiment_id: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor, ...], Dict[str, torch.Tensor], Transformer2DModelOutput]:
-        action_hidden_states, action_rotary_emb, num_state_tokens, _ = self.encode_action_tokens(state, action, embodiment_id=embodiment_id)
+        attention_kwargs: dict[str, Any] | None = None,
+        state: torch.Tensor | None = None,
+        action: torch.Tensor | None = None,
+        embodiment_id: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, ...] | dict[str, torch.Tensor] | Transformer2DModelOutput:
+        action_hidden_states, action_rotary_emb, num_state_tokens, _ = self.encode_action_tokens(
+            state, action, embodiment_id=embodiment_id
+        )
         visual_hidden_states, visual_rotary_emb, num_ref_tokens, _, grid_info = self.encode_visual_tokens(
             ref_latents, noisy_latents
         )
@@ -1138,14 +1163,16 @@ class CasualWorldActionTransformer_MoT(
         ref_latents: torch.Tensor = None,
         timestep: torch.LongTensor = None,
         encoder_hidden_states: torch.Tensor = None,
-        encoder_hidden_states_image: Optional[torch.Tensor] = None,
+        encoder_hidden_states_image: torch.Tensor | None = None,
         return_dict: bool = True,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
-        state: Optional[torch.Tensor] = None,
-        action: Optional[torch.Tensor] = None,
-        embodiment_id: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor, ...], Dict[str, torch.Tensor], Transformer2DModelOutput]:
-        action_hidden_states, action_rotary_emb, num_state_tokens, _ = self.encode_action_tokens(state, action, embodiment_id=embodiment_id)
+        attention_kwargs: dict[str, Any] | None = None,
+        state: torch.Tensor | None = None,
+        action: torch.Tensor | None = None,
+        embodiment_id: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, ...] | dict[str, torch.Tensor] | Transformer2DModelOutput:
+        action_hidden_states, action_rotary_emb, num_state_tokens, _ = self.encode_action_tokens(
+            state, action, embodiment_id=embodiment_id
+        )
         visual_hidden_states, visual_rotary_emb, num_ref_tokens, _, _ = self.encode_visual_tokens(
             ref_latents, noisy_latents
         )
@@ -1172,14 +1199,16 @@ class CasualWorldActionTransformer_MoT(
         noisy_latents: torch.Tensor = None,
         timestep: torch.LongTensor = None,
         encoder_hidden_states: torch.Tensor = None,
-        encoder_hidden_states_image: Optional[torch.Tensor] = None,
+        encoder_hidden_states_image: torch.Tensor | None = None,
         return_dict: bool = True,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
-        state: Optional[torch.Tensor] = None,
-        action: Optional[torch.Tensor] = None,
-        embodiment_id: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor, ...], Dict[str, torch.Tensor], Transformer2DModelOutput]:
-        action_hidden_states, action_rotary_emb, num_state_tokens, _ = self.encode_action_tokens(state, action, embodiment_id=embodiment_id)
+        attention_kwargs: dict[str, Any] | None = None,
+        state: torch.Tensor | None = None,
+        action: torch.Tensor | None = None,
+        embodiment_id: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, ...] | dict[str, torch.Tensor] | Transformer2DModelOutput:
+        action_hidden_states, action_rotary_emb, num_state_tokens, _ = self.encode_action_tokens(
+            state, action, embodiment_id=embodiment_id
+        )
         if ref_latents is not None:
             visual_hidden_states, visual_rotary_emb, num_ref_tokens, _, _ = self.encode_visual_tokens(ref_latents)
         else:
@@ -1213,14 +1242,16 @@ class CasualWorldActionTransformer_MoT(
         ref_latents: torch.Tensor = None,
         timestep: torch.LongTensor = None,
         encoder_hidden_states: torch.Tensor = None,
-        encoder_hidden_states_image: Optional[torch.Tensor] = None,
+        encoder_hidden_states_image: torch.Tensor | None = None,
         return_dict: bool = True,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
-        state: Optional[torch.Tensor] = None,
-        action: Optional[torch.Tensor] = None,
-        embodiment_id: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor, ...], Dict[str, torch.Tensor], Transformer2DModelOutput]:
-        action_hidden_states, action_rotary_emb, num_state_tokens, _ = self.encode_action_tokens(state, action, embodiment_id=embodiment_id)
+        attention_kwargs: dict[str, Any] | None = None,
+        state: torch.Tensor | None = None,
+        action: torch.Tensor | None = None,
+        embodiment_id: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, ...] | dict[str, torch.Tensor] | Transformer2DModelOutput:
+        action_hidden_states, action_rotary_emb, num_state_tokens, _ = self.encode_action_tokens(
+            state, action, embodiment_id=embodiment_id
+        )
         visual_hidden_states, visual_rotary_emb, num_ref_tokens, _, grid_info = self.encode_visual_tokens(
             ref_latents, noisy_latents
         )
@@ -1250,8 +1281,8 @@ class CasualWorldActionTransformer_MoT(
         embedder: WanTimeTextImageEmbedding,
         timestep: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
-        timestep_seq_len: Optional[int],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        timestep_seq_len: int | None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         timestep = embedder.timesteps_proj(timestep)
         if timestep_seq_len is not None:
             timestep = timestep.unflatten(0, (-1, timestep_seq_len))
@@ -1271,13 +1302,13 @@ class CasualWorldActionTransformer_MoT(
         self,
         action_prefix_hidden_states: torch.Tensor,
         visual_hidden_states: torch.Tensor,
-        action_prefix_rotary_emb: Tuple[torch.Tensor, torch.Tensor],
-        visual_rotary_emb: Tuple[torch.Tensor, torch.Tensor],
+        action_prefix_rotary_emb: tuple[torch.Tensor, torch.Tensor],
+        visual_rotary_emb: tuple[torch.Tensor, torch.Tensor],
         action_prefix_timestep: torch.Tensor,
         visual_timestep: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
-        encoder_hidden_states_image: Optional[torch.Tensor],
-    ) -> Dict[str, Any]:
+        encoder_hidden_states_image: torch.Tensor | None,
+    ) -> dict[str, Any]:
         cache = getattr(self, "_action_only_prefix_cache", None)
         if cache is not None:
             return cache
@@ -1347,10 +1378,10 @@ class CasualWorldActionTransformer_MoT(
         action_hidden_states: torch.Tensor,
         encoder_action_hidden_states: torch.Tensor,
         action_timestep_proj: torch.Tensor,
-        action_rotary_emb: Tuple[torch.Tensor, torch.Tensor],
-        prefix_cache_blocks: List[Dict[str, torch.Tensor]],
+        action_rotary_emb: tuple[torch.Tensor, torch.Tensor],
+        prefix_cache_blocks: list[dict[str, torch.Tensor]],
     ) -> torch.Tensor:
-        for block, block_cache in zip(self.blocks, prefix_cache_blocks):
+        for block, block_cache in zip(self.blocks, prefix_cache_blocks, strict=False):
             action_hidden_states = block.forward_action_with_prefix_cache(
                 action_hidden_states,
                 encoder_action_hidden_states,
@@ -1366,12 +1397,12 @@ class CasualWorldActionTransformer_MoT(
         ref_latents: torch.Tensor = None,
         timestep: torch.LongTensor = None,
         encoder_hidden_states: torch.Tensor = None,
-        encoder_hidden_states_image: Optional[torch.Tensor] = None,
+        encoder_hidden_states_image: torch.Tensor | None = None,
         return_dict: bool = True,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
-        state: Optional[torch.Tensor] = None,
-        action: Optional[torch.Tensor] = None,
-        embodiment_id: Optional[torch.Tensor] = None,
+        attention_kwargs: dict[str, Any] | None = None,
+        state: torch.Tensor | None = None,
+        action: torch.Tensor | None = None,
+        embodiment_id: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if attention_kwargs is not None:
             attention_kwargs = attention_kwargs.copy()
@@ -1383,9 +1414,7 @@ class CasualWorldActionTransformer_MoT(
             scale_lora_layers(self, lora_scale)
         else:
             if attention_kwargs is not None and attention_kwargs.get("scale", None) is not None:
-                logger.warning(
-                    "Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective."
-                )
+                logger.warning("Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective.")
 
         try:
             action_hidden_states, action_rotary_emb, num_state_tokens, num_action_tokens = self.encode_action_tokens(
@@ -1491,13 +1520,13 @@ class CasualWorldActionTransformer_MoT(
         ref_latents: torch.Tensor = None,
         timestep: torch.LongTensor = None,
         encoder_hidden_states: torch.Tensor = None,
-        encoder_hidden_states_image: Optional[torch.Tensor] = None,
+        encoder_hidden_states_image: torch.Tensor | None = None,
         return_dict: bool = True,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
-        state: Optional[torch.Tensor] = None,
-        action: Optional[torch.Tensor] = None,
-        embodiment_id: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor, ...], Dict[str, torch.Tensor], Transformer2DModelOutput]:
+        attention_kwargs: dict[str, Any] | None = None,
+        state: torch.Tensor | None = None,
+        action: torch.Tensor | None = None,
+        embodiment_id: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, ...] | dict[str, torch.Tensor] | Transformer2DModelOutput:
         if torch.is_grad_enabled():
             raise RuntimeError(
                 "GWP0.5 action-only inference requires torch.no_grad()/inference_mode() "

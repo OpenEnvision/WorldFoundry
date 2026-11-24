@@ -19,7 +19,7 @@ Kandinsky 6.0 从文本生成同步的视频与 44.1 kHz 音频，也可使用�
 
 ## 运行
 
-准备 `worldfoundry/data/models/runtime/environments/video/kandinsky6.yaml` 中描述的专用 Python 3.10 / CUDA 12.6 环境。该环境的依赖版本与使用真实 checkpoint 的 GPU 验证一致。在其中安装 WorldFoundry，并下载完整的官方 Diffusers 快照，包括两个文本编码器、tokenizer、两个 VAE 和 vocoder。
+准备 `worldfoundry/data/models/runtime/environments/video/kandinsky6.yaml` 中描述的专用 Python 3.10 / CUDA 12.6 环境。在其中安装 WorldFoundry，并下载完整的官方 Diffusers 快照，包括两个文本编码器、tokenizer、两个 VAE 和 vocoder。
 
 ```python
 from worldfoundry.pipelines.kandinsky6 import Kandinsky6Pipeline
@@ -46,18 +46,18 @@ Pipeline 写出 MP4、JSON 运行报告以及保存编码后 prompt 的文本文
 
 ## 架构
 
-Transformer 与 PiFlow head 的实现位于 `base_models/diffusion_model/models/networks/kandinsky6`。Prompt 编码器和视频、音频 codec 分别由独立的组件模块负责。框架负责 checkpoint 准备、flow schedule、联合采样和 MP4 封装。推理无需外部源码 checkout 或上游 CLI。
+Transformer 与 PiFlow head、prompt 编码器以及视频、音频 codec 均在 WorldFoundry 中原生运行，框架同时负责 checkpoint 加载、flow schedule、音视频联合采样和 MP4 封装。推理无需上游源码 checkout 或 CLI。
 
 官方源码：[kandinskylab/kandinsky-6](https://github.com/kandinskylab/kandinsky-6)，revision 为 `b224b77cb458c2f9241a5a245bedc4fd43817b11`。源码采用 MIT 许可证，随附音频组件保留各自的许可证声明。
 
-## CUDA 验证
+## 验证
 
-固定版本的 `kandinsky6-pro-distill` 快照在一张 NVIDIA H100 80GB 上通过了文本生成视频验证，使用 SDPA、component offload、10 步和 seed 42。输出包含 121 帧、864×480、24 fps 视频及 44.1 kHz 音频。权重加载耗时 85.2 秒，生成耗时 140.4 秒。PyAV 检查确认了两个流、视频尺寸、帧数、采样率以及音频数值有限；首帧、中间帧和末帧展示了 prompt 描述的橘猫在花园中行走。
+已在一张 NVIDIA H100 80GB 上验证：`kandinsky6-pro-distill` 快照可生成符合 prompt 的文生视频片段，含 121 帧、864×480、24 fps 视频及 44.1 kHz 音频（10 步、SDPA、component offload，生成约 140 秒）。
 
-验证环境使用 Python 3.10.16、PyTorch 2.9.0+cu126、Diffusers 0.40.0、Transformers 5.14.1、Safetensors 0.8.0 和 PyAV 16.0.1。视频 VAE 选择空间 tile 时计入卷积 workspace，并保留边缘不足一个完整 tile 的区域。
+验证环境使用 Python 3.10.16、PyTorch 2.9.0+cu126、Diffusers 0.40.0、Transformers 5.14.1、Safetensors 0.8.0 和 PyAV 16.0.1。
 
 ```bash
-python scripts/inference/check_kandinsky6.py \
+python tests/manual/kandinsky6_inference.py \
   --checkpoint-dir ../ckpt/kandinskylab--Kandinsky-6.0-Pro-distill-5s-Diffusers \
   --output-dir outputs/kandinsky6-pro-distill-validation \
   --offload-mode component --attention-backend sdpa
@@ -67,4 +67,4 @@ python scripts/inference/check_kandinsky6.py \
 
 ## 限制
 
-GPU 证据覆盖 Pro-distill 文本生成视频。图像生成视频、另外五个快照以及与官方 demo 的 parity 尚未验证；这五个 catalog 条目保留 `planned` 状态。CPU 测试覆盖普通与 PiFlow 原生 runner、请求规范化、本地 checkpoint 错误、空间 tile 边缘及 MP4 音视频流。独立的 Kandinsky 超分模型不属于该集成。
+GPU 上仅验证了 Pro-distill 文生视频。图生视频、另外五个快照以及与官方 demo 的一致性尚未验证；这五个快照的状态为 Planned。独立的 Kandinsky 超分模型不受支持。

@@ -15,7 +15,7 @@ class ATISynthesis(BaseSynthesis):
         self.runtime = runtime
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> "ATISynthesis":
+    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> ATISynthesis:
         return cls(ATIRuntime.from_pretrained(pretrained_model_path, **kwargs))
 
     def predict(self, **kwargs: Any) -> Any:

@@ -4,8 +4,6 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> layers -> __init__.py functionality."""
-
 from worldfoundry.core.nn.blocks.layers import (
     DropPath,
     LayerScale,
@@ -14,8 +12,9 @@ from worldfoundry.core.nn.blocks.layers import (
     SwiGLUFFN,
     SwiGLUFFNFused,
 )
-from .block import NestedTensorBlock
+
 from .attention import MemEffAttention
+from .block import NestedTensorBlock
 
 __all__ = [
     "DropPath",

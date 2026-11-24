@@ -1,18 +1,11 @@
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> api_helpers.py functionality."""
-
 import argparse
 
 
 def parse_scalar(s):
-    """Parse scalar.
-
-    Args:
-        s: The s.
-    """
     if not isinstance(s, str):
         return s
     t = s.strip()
-    l = t.lower()
+    l = t.lower()  # noqa: E741 - Ambiguous upstream name kept as written.
     if l == "true":
         return True
     if l == "false":

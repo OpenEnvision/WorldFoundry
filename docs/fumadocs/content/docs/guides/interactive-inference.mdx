@@ -3,18 +3,18 @@ title: Interactive world model inference
 description: Run Zing, Astronex-World, SolarWM, AlayaWorld v1.1 and Echo-WM with explicit inference-only routes.
 ---
 
-These routes generate video using local weights. Catalog browsing and configuration checks work on CPU; generation requires CUDA. No weights are downloaded during inference. New integrations have CPU contract checks; GPU output quality and checkpoint-backed parity are still pending.
+These routes generate video using local weights. Catalog browsing and configuration checks work on CPU; generation requires CUDA. No weights are downloaded during inference. These routes pass CPU contract checks; GPU output quality and checkpoint-backed parity are not yet validated.
 
 | Model ID | Inference route | Required source |
 | --- | --- | --- |
 | `zing` (alias `zing-0.5`) | Native Wan2.2 layers, UMT5, VAE38; Zing keyboard and causal cache extensions | None |
-| `astronex-world` | Official causal or bidirectional sampler | Astronex-World checkout |
-| `solarwm` | Official `solarwm infer`, indexed image/caption/camera cases | SolarWM checkout and matching backend environment |
-| `alayaworld` | Existing native LTX-2.3 + DA3 merged checkpoint route | None |
-| `alayaworld-v1.1` | Extracted inference-only ViGeo rollout, shared loaders/VAE/history/text and external Alaya transformer extension | AlayaWorld and ViGeo1.1 source |
-| `joyai-echo-wm` | Official Base or Flash audio/video inference | JoyAI-Echo checkout |
+| `astronex-world` | Official causal or bidirectional sampler, vendored in WorldFoundry | None |
+| `solarwm` | Official `solarwm infer`, vendored in WorldFoundry; indexed image/caption/camera cases | Matching backend environment |
+| `alayaworld` | Native LTX-2.3 + DA3 merged checkpoint route | None |
+| `alayaworld-v1.1` | In-tree ViGeo rollout and Alaya LTX-2.3 variant, with shared LTX/loaders/VAE/history/text/ViGeo | None |
+| `joyai-echo-wm` | Official Base or Flash audio/video inference, vendored in WorldFoundry | None |
 
-Runtime settings live under `worldfoundry/data/models/runtime/configs/`. Training loops, optimizers, losses and data preparation pipelines are not part of these integrations. External checkouts stay outside the WorldFoundry source tree. SolarWM refers to upstream inference recipes without copying their mixed training/inference configuration trees.
+Runtime settings live under `worldfoundry/data/models/runtime/configs/`. Training loops, optimizers, losses and data preparation pipelines are not part of these integrations. SolarWM's released inference configurations are bundled under `configs/solarwm/examples/`.
 
 ## Workspace, TUI and CLI
 
@@ -23,15 +23,15 @@ All routes in the table are discoverable in Workspace and the TUI. The shared in
 Inspect a model without loading checkpoints:
 
 ```bash
-worldfoundry run zing --help
-worldfoundry run solarwm --model-variant h3-ar --model-status
-worldfoundry run joyai-echo-wm --model-variant flash --help
+wf run zing --help
+wf run solarwm --model-variant h3-ar --model-status
+wf run joyai-echo-wm --model-variant flash --help
 ```
 
 For direct inference, loading options use `--pipeline.load.*`; generation options use `--pipeline.*`:
 
 ```bash
-worldfoundry run zing \
+wf run zing \
   --pipeline.load.checkpoint-dir /path/to/zing-0.5 \
   --pipeline.prompt "A walk through a quiet garden." \
   --pipeline.num-frames 81 \
@@ -68,14 +68,13 @@ pipe.close()
 
 ## Astronex-World
 
-Use source revision `27584bf1a89da01ef35a03b48d83bc818d2adf2b` and the `Astronex-Lab/Astronex-World` checkpoint layout.
+The causal and bidirectional samplers are adapted from source revision `27584bf1a89da01ef35a03b48d83bc818d2adf2b`; the network is a WorldFoundry Wan variant that loads the released denoiser, UMT5 text encoder and Wan2.2 VAE onto the shared modules. Use the `Astronex-Lab/Astronex-World` checkpoint layout.
 
 ```python
 from worldfoundry.pipelines.astronex_world import AstronexWorldPipeline
 
 pipe = AstronexWorldPipeline.from_pretrained(
     checkpoint_dir="/path/to/Astronex-World-weights",
-    source_root="/path/to/Astronex-World-source",
     python_executable="/path/to/astronex-env/bin/python",
     mode="causal",  # or "bidirectional"
     device="cuda:0",
@@ -95,13 +94,12 @@ result = pipe(
 
 ## SolarWM
 
-Use source revision `2fe1ea9aca072f787bbba07ee9380b0e1ea7563b`. The public inference interface reads image, caption and camera trajectories from indexed samples; it is not a free-form prompt/image endpoint.
+The `solarwm` package is vendored from source revision `2fe1ea9aca072f787bbba07ee9380b0e1ea7563b`, together with the LTX-2 v1.2.0 packages its LTX route uses. The public inference interface reads image, caption and camera trajectories from indexed samples; it is not a free-form prompt/image endpoint.
 
 ```python
 from worldfoundry.pipelines.solarwm import SolarWMPipeline
 
 pipe = SolarWMPipeline.from_pretrained(
-    source_root="/path/to/SolarWM",
     python_executable="/path/to/solar-wan-env/bin/python",
     variant="wan-5b-dmd",
     base_path="/path/to/SolarWM-models/SolarWM-5B-base",
@@ -116,7 +114,7 @@ Other variants are `wan-5b-dmd-237f`, `wan-5b-ar`, `wan-5b-bidirectional`, `wan-
 
 The `wan-5b-dmd-237f` route follows the indexed source length. Supply at least 237 video frames and matching camera poses to exercise its 237-frame rollout; selecting this variant with an 81-frame source still produces an 81-frame clip.
 
-Wan, LTX and H3 require **separate environments**. The packaged `solarwm` environment describes the default Wan route only. Follow the pinned upstream environment guide for LTX/H3, and pass its Python interpreter explicitly. LTX needs `assets` entries `model.codec.video_vae_path` and `inference.negative_caption_cache`. H3 needs `data.silence_latents_path` and `data.encoder_contract_path`; `h3-dmd-long` additionally needs `inference.plan` and `inference.dataset_root`. These are existing inference assets; this integration does not preencode data.
+Wan, LTX and H3 require **separate environments**. The packaged `solarwm` environment describes the default Wan route only. LTX needs Python 3.12, PyTorch 2.9.1 with CUDA 12.8 and Transformers 5.14.1; H3 needs PyTorch 2.6.0, Diffusers 0.40.0, Transformers 5.12.1, PEFT 0.20.0 and FlashAttention 2.8.3. Pass the interpreter explicitly. LTX needs `assets` entries `model.codec.video_vae_path` and `inference.negative_caption_cache`. H3 needs `data.silence_latents_path` and `data.encoder_contract_path`; `h3-dmd-long` additionally needs `inference.plan` and `inference.dataset_root`. These are existing inference assets; this integration does not preencode data.
 
 Use `overrides={"data.test_index": "...", "validation.sample_count": 1}` for Wan indexed selection. LTX uses `data.index` and `inference.sample_count`. Unknown overrides and training commands are rejected. Each call gets a fresh output directory. Completed videos and completion markers are required before a run is reported successful.
 
@@ -124,20 +122,18 @@ SolarWM code is Apache-2.0. LTX and H3 checkpoints retain their respective commu
 
 ## AlayaWorld v1.1
 
-Keep the original `alayaworld` merged checkpoint separate. Version 1.1 requires the stage2b transformer/history, LTX-2.3 base checkpoint, unquantized Gemma and ViGeo1.1. DMD additionally loads the stage3 LoRA. Use AlayaWorld source revision `ea03cfbb2e4c4e9102ed8ea8562e0b5370ca9b79` and the matching ViGeo release.
+Keep the original `alayaworld` merged checkpoint separate. Version 1.1 requires the stage2b transformer/history, LTX-2.3 base checkpoint, unquantized Gemma and ViGeo1.1. DMD additionally loads the stage3 LoRA. The rollout, configuration schema and LTX-2.3 transformer are vendored from AlayaWorld revision `ea03cfbb2e4c4e9102ed8ea8562e0b5370ca9b79`; ViGeo uses the shared WorldFoundry implementation.
 
 ```python
 from worldfoundry.pipelines.alayaworld_v11 import AlayaWorldV11Pipeline
 
 pipe = AlayaWorldV11Pipeline.from_pretrained(
-    source_root="/path/to/AlayaWorld",
     python_executable="/path/to/alaya-env/bin/python",
     checkpoint_dir="/path/to/AlayaWorld-v1.1-stage2b",
     student_dir="/path/to/AlayaWorld-v1.1-stage3",
     base_checkpoint="/path/to/ltx-2.3-22b-dev.safetensors",
     gemma_path="/path/to/gemma-3-12b-it-qat-q4_0-unquantized",
     vigeo_checkpoint="/path/to/ViGeo1.1",
-    vigeo_source_root="/path/to/ViGeo",
     variant="dmd",  # "ar" uses 30 steps and no student adapter
 )
 result = pipe(
@@ -151,17 +147,16 @@ result = pipe(
 )
 ```
 
-Omit `camera_path` to synthesize the released forward trajectory; optional `forward`, `yaw`, `pitch` and normalized `intrinsic=[fx, fy, cx, cy]` control it. A supplied camera path must be long enough for the requested rollout. The inference session includes no trainer class or setup/optimization lifecycle. It reuses the shared LTX VAE, text encoding, history encoder and checkpoint/LoRA loaders. The Alaya transformer extension and ViGeo geometry remain external dependencies. GPU memory and artifact parity are unvalidated; full-window VAE encoding may have higher peak memory than the upstream streaming encoder.
+Omit `camera_path` to synthesize the released forward trajectory; optional `forward`, `yaw`, `pitch` and normalized `intrinsic=[fx, fy, cx, cy]` control it. A supplied camera path must be long enough for the requested rollout. The inference session includes no trainer class or setup/optimization lifecycle. It reuses the shared LTX VAE, text encoding, history encoder and checkpoint/LoRA loaders. GPU memory and artifact parity are unvalidated; full-window VAE encoding may have higher peak memory than the upstream streaming encoder.
 
 ## Echo-WM
 
-The existing `JoyAIEchoWMPipeline` supports `variant="base"` and `variant="flash"`. Use JoyAI-Echo revision `a08f1274573d7cd6ec66719f204951f4227a5173` and `Echo-Team/Echo-WM` weights.
+`JoyAIEchoWMPipeline` supports `variant="base"` and `variant="flash"`. Both entrypoints are vendored from JoyAI-Echo revision `a08f1274573d7cd6ec66719f204951f4227a5173`; use `Echo-Team/Echo-WM` weights.
 
 ```python
 from worldfoundry.pipelines.joyai_echo.pipeline_joyai_echo import JoyAIEchoWMPipeline
 
 pipe = JoyAIEchoWMPipeline.from_pretrained(
-    source_root="/path/to/JoyAI-Echo",
     checkpoint_dir="/path/to/Echo-WM",
     gemma_path="/path/to/gemma-3-12b-it-qat-q4_0-unquantized",
     python_executable="/path/to/echo-wm-env/bin/python",
@@ -178,4 +173,4 @@ result = pipe(
 )
 ```
 
-Base prompts use the six upstream fields: Environment, Character, Style, Perspective, Sounds and Speech. Base lengths are `1 + 8*N`; Flash lengths are `1 + 8*video_chunk_size*N` (default chunk size 3). Audio is on by default; set `no_audio=True` for video only. Width/height must be multiples of 32. No long-horizon checkpoint availability or GPU parity is implied by catalog registration.
+Base prompts use the six upstream fields: Environment, Character, Style, Perspective, Sounds and Speech. Base lengths are `1 + 8*N`; Flash lengths are `1 + 8*video_chunk_size*N` (default chunk size 3). Audio is on by default; set `no_audio=True` for video only. Width/height must be multiples of 32. Long-horizon checkpoint availability and GPU parity are not established.

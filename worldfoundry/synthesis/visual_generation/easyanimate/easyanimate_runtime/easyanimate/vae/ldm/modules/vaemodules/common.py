@@ -3,40 +3,40 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange, repeat
+from einops import rearrange
 
 from .activations import get_activation
 
-
 try:
     current_version = torch.__version__
-    version_numbers = [int(x) for x in current_version.split('.')[:2]]
-    if version_numbers[0] < 2 or (version_numbers[0] == 2 and version_numbers[1] < 2):
-        need_to_float = True
-    else:
-        need_to_float = False
-except Exception as e:
+    version_numbers = [int(x) for x in current_version.split(".")[:2]]
+    need_to_float = bool(version_numbers[0] < 2 or (version_numbers[0] == 2 and version_numbers[1] < 2))
+except Exception:
     print("Encountered an error with Torch version. Set the data type to float in the VAE. ")
     need_to_float = False
 
-def cast_tuple(t, length = 1):
+
+def cast_tuple(t, length=1):
     return t if isinstance(t, tuple) else ((t,) * length)
+
 
 def divisible_by(num, den):
     return (num % den) == 0
 
+
 def is_odd(n):
     return not divisible_by(n, 2)
+
 
 class CausalConv3d(nn.Conv3d):
     def __init__(
         self,
         in_channels: int,
         out_channels: int,
-        kernel_size=3, # : int | tuple[int, int, int], 
-        stride=1, # : int | tuple[int, int, int] = 1,
-        padding=1, # : int | tuple[int, int, int],  # TODO: change it to 0.
-        dilation=1, # :  int | tuple[int, int, int] = 1,
+        kernel_size=3,  # : int | tuple[int, int, int],
+        stride=1,  # : int | tuple[int, int, int] = 1,
+        padding=1,  # : int | tuple[int, int, int],  # TODO: change it to 0.
+        dilation=1,  # :  int | tuple[int, int, int] = 1,
         **kwargs,
     ):
         kernel_size = kernel_size if isinstance(kernel_size, tuple) else (kernel_size,) * 3
@@ -90,7 +90,7 @@ class CausalConv3d(nn.Conv3d):
             x = F.pad(
                 x,
                 pad=(0, 0, 0, 0, self.temporal_padding, 0),
-                mode="replicate",     # TODO: check if this is necessary
+                mode="replicate",  # TODO: check if this is necessary
             )
             x = x.to(dtype=dtype)
             return super().forward(x)
@@ -98,44 +98,40 @@ class CausalConv3d(nn.Conv3d):
             x = F.pad(
                 x,
                 pad=(0, 0, 0, 0, self.temporal_padding, 0),
-                mode="replicate",     # TODO: check if this is necessary
+                mode="replicate",  # TODO: check if this is necessary
             )
             x = x.to(dtype=dtype)
 
             # Clear cache before
             self._clear_conv_cache()
             # We could move these to the cpu for a lower VRAM
-            self.prev_features = x[:, :, -self.temporal_padding:].clone()
+            self.prev_features = x[:, :, -self.temporal_padding :].clone()
 
             b, c, f, h, w = x.size()
             outputs = []
             i = 0
             while i + self.temporal_padding + 1 <= f:
-                out = super().forward(x[:, :, i:i + self.temporal_padding + 1])
+                out = super().forward(x[:, :, i : i + self.temporal_padding + 1])
                 i += self.t_stride
                 outputs.append(out)
             return torch.concat(outputs, 2)
         elif self.padding_flag == 4:
             if self.t_stride == 2:
-                x = torch.concat(
-                    [self.prev_features[:, :, -(self.temporal_padding - 1):], x], dim = 2
-                )
+                x = torch.concat([self.prev_features[:, :, -(self.temporal_padding - 1) :], x], dim=2)
             else:
-                x = torch.concat(
-                    [self.prev_features, x], dim = 2
-                )
+                x = torch.concat([self.prev_features, x], dim=2)
             x = x.to(dtype=dtype)
 
             # Clear cache before
             self._clear_conv_cache()
             # We could move these to the cpu for a lower VRAM
-            self.prev_features = x[:, :, -self.temporal_padding:].clone()
+            self.prev_features = x[:, :, -self.temporal_padding :].clone()
 
             b, c, f, h, w = x.size()
             outputs = []
             i = 0
             while i + self.temporal_padding + 1 <= f:
-                out = super().forward(x[:, :, i:i + self.temporal_padding + 1])
+                out = super().forward(x[:, :, i : i + self.temporal_padding + 1])
                 i += self.t_stride
                 outputs.append(out)
             return torch.concat(outputs, 2)
@@ -143,31 +139,27 @@ class CausalConv3d(nn.Conv3d):
             x = F.pad(
                 x,
                 pad=(0, 0, 0, 0, self.temporal_padding, 0),
-                mode="replicate",     # TODO: check if this is necessary
+                mode="replicate",  # TODO: check if this is necessary
             )
             x = x.to(dtype=dtype)
 
             # Clear cache before
             self._clear_conv_cache()
             # We could move these to the cpu for a lower VRAM
-            self.prev_features = x[:, :, -self.temporal_padding:].clone()
-            
+            self.prev_features = x[:, :, -self.temporal_padding :].clone()
+
             return super().forward(x)
         elif self.padding_flag == 6:
             if self.t_stride == 2:
-                x = torch.concat(
-                    [self.prev_features[:, :, -(self.temporal_padding - 1):], x], dim = 2
-                )
+                x = torch.concat([self.prev_features[:, :, -(self.temporal_padding - 1) :], x], dim=2)
             else:
-                x = torch.concat(
-                    [self.prev_features, x], dim = 2
-                )
+                x = torch.concat([self.prev_features, x], dim=2)
 
             # Clear cache before
             self._clear_conv_cache()
             # We could move these to the cpu for a lower VRAM
-            self.prev_features = x[:, :, -self.temporal_padding:].clone()
-            
+            self.prev_features = x[:, :, -self.temporal_padding :].clone()
+
             x = x.to(dtype=dtype)
             return super().forward(x)
         else:
@@ -177,6 +169,7 @@ class CausalConv3d(nn.Conv3d):
             )
             x = x.to(dtype=dtype)
             return super().forward(x)
+
 
 class ResidualBlock2D(nn.Module):
     def __init__(

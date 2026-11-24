@@ -15,7 +15,7 @@ pythonpath_roots:
 - .
 required_assets:
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/worldreasonbench
+  - worldfoundry/evals/tasks/execution/runners/worldreasonbench
   task_yaml: worldfoundry/data/benchmarks/tasks/external/worldreasonbench.yaml
 optional_env:
 - WORLDFOUNDRY_WORLDREASONBENCH_ROOT
@@ -30,9 +30,9 @@ optional_env:
 - HF_ENDPOINT
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/worldreasonbench/run_worldreasonbench_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/worldreasonbench/run_worldreasonbench_official_runner.py
 - id: metrics_runtime
-  path: worldfoundry/evaluation/tasks/execution/runners/worldreasonbench/worldreasonbench_metrics.py
+  path: worldfoundry/evals/tasks/execution/runners/worldreasonbench/worldreasonbench_metrics.py
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/worldreasonbench.yaml
 requires_cuda_visibility: false
@@ -43,7 +43,7 @@ optional_imports:
 - PIL
 - tqdm
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id

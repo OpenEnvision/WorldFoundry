@@ -212,7 +212,7 @@ class _MosaicDatasetBase(torch.utils.data.Dataset):
         )
         self.metadata_path = None
         self.repeat = 1
-        self.data_file_keys = tuple()
+        self.data_file_keys = ()
         self.main_data_operator = lambda x: x
         self.special_operator_map = {}
         self.max_data_items = max_data_items
@@ -314,7 +314,7 @@ class _MosaicDatasetBase(torch.utils.data.Dataset):
             return []
         import yaml
 
-        with open(yaml_path, "r") as f:
+        with open(yaml_path) as f:
             payload = yaml.safe_load(f) or []
         if isinstance(payload, dict):
             for key in ("include", "include_hashes", "hashes", "items"):
@@ -348,7 +348,7 @@ class _MosaicDatasetBase(torch.utils.data.Dataset):
         if inference_assign_yaml is not None:
             import yaml
 
-            with open(inference_assign_yaml, "r") as f:
+            with open(inference_assign_yaml) as f:
                 inference_assigns = yaml.safe_load(f) or []
             matched = []
             for path in rawpath:
@@ -479,7 +479,7 @@ class _MosaicDatasetBase(torch.utils.data.Dataset):
             "class": type(self).__name__,
             "rawpath_sha": _sha1_text("\n".join(sorted(rawpath))),
             "rawpath_count": len(rawpath),
-            "inference_assigns": sorted(list(inference_assigns or [])),
+            "inference_assigns": sorted(inference_assigns or []),
             "inputs": self._dataset_cache_inputs_dict(),
         }
         return hashlib.sha1(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:24]
@@ -575,7 +575,7 @@ class _MosaicDatasetBase(torch.utils.data.Dataset):
                 "split_source_count": getattr(self, "_split_source_count", None),
             },
             "inputs": self._dataset_cache_inputs_dict(),
-            "inference_assigns": sorted(list(inference_assigns or [])),
+            "inference_assigns": sorted(inference_assigns or []),
             "rawpath_count": len(rawpath),
             "kept_count": len(dataset_info),
             "dataset_info": dataset_info,
@@ -587,7 +587,7 @@ class _MosaicDatasetBase(torch.utils.data.Dataset):
 
     def _dataset_cache_try_load(self, cache_path, expected_fingerprint):
         try:
-            with open(cache_path, "r", encoding="utf-8") as f:
+            with open(cache_path, encoding="utf-8") as f:
                 payload = json.load(f)
         except (OSError, ValueError):
             return None
@@ -1045,7 +1045,7 @@ class _MosaicVideoSharedDataset(_MosaicDatasetBase):
         if cached is not None:
             return cached
         try:
-            with open(json_path, "r", encoding="utf-8") as f:
+            with open(json_path, encoding="utf-8") as f:
                 payload = json.load(f)
         except (OSError, ValueError):
             result = {"format": "segments", "segments": []}
@@ -1483,7 +1483,7 @@ def _resolve_depth_metadata_for_npz(depth_path, depth_format=None, depth_metadat
     if not os.path.isfile(metadata_path):
         return depth_format, depth_metadata
     try:
-        with open(metadata_path, "r", encoding="utf-8") as f:
+        with open(metadata_path, encoding="utf-8") as f:
             payload = json.load(f) or {}
     except (OSError, ValueError):
         return depth_format, depth_metadata
@@ -2034,7 +2034,7 @@ class _MosaicVideoDatasetBase(_MosaicVideoSharedDataset):
         G = g_orig + drift_frames
 
         is_starting = bool(data.get("is_starting", True))
-        if is_starting:
+        if is_starting:  # noqa: SIM108 - Branches carry per-case comments.
             # Section-0 bootstrap anchor is a genuine single-frame
             # (image-mode) latent, so replicate its one pose.
             clean_frame_indices = [G - 1] * self.VAE_T_SCALING
@@ -2203,7 +2203,7 @@ class DA3MosaicVideoDataset(_MosaicVideoDatasetBase):
 
         import yaml
 
-        with open(filter_yaml, "r") as f:
+        with open(filter_yaml) as f:
             filter_criteria = yaml.safe_load(f) or []
         filtered = [path for path in rawpath if not any(filter_token in path for filter_token in filter_criteria)]
         self._da3_index_debug(f"filter_yaml applied: before={before_filter} after={len(filtered)} path={filter_yaml}")

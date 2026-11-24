@@ -4,11 +4,10 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt_omega -> vggt_omega -> utils -> pose_enc.py functionality."""
-
 import torch
 
-from .rotation import mat_to_quat, quat_to_mat
+from worldfoundry.core.geometry.transforms import quaternion_xyzw_to_rotation_matrix as quat_to_mat
+from worldfoundry.core.geometry.transforms import rotation_matrix_to_quaternion_xyzw as mat_to_quat
 
 
 def extri_intri_to_pose_encoding(extrinsics, intrinsics, image_size_hw):
@@ -44,7 +43,7 @@ def encoding_to_camera(pose_encoding, image_size_hw, build_intrinsics=True):
         fy = (H / 2.0) / torch.tan(fov_h / 2.0)
         fx = (W / 2.0) / torch.tan(fov_w / 2.0)
 
-        intrinsics = torch.zeros(pose_encoding.shape[:2] + (3, 3), device=pose_encoding.device)
+        intrinsics = torch.zeros(pose_encoding.shape[:2] + (3, 3), device=pose_encoding.device)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         intrinsics[..., 0, 0] = fx
         intrinsics[..., 1, 1] = fy
         intrinsics[..., 0, 2] = W / 2

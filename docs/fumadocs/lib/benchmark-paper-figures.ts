@@ -39,12 +39,6 @@ type BenchmarkPaperFigureData = {
 
 const data = readSiteJson<BenchmarkPaperFigureData>('lib/benchmark-paper-figures.json');
 
-export function getBenchmarkPaperFigureEntry(
-  benchmarkId: string,
-): BenchmarkPaperFigureEntry | undefined {
-  return data.figures[benchmarkId];
-}
-
 function localizedField(
   entry: BenchmarkPaperFigureEntry,
   locale: Locale,
@@ -133,8 +127,4 @@ export function getBenchmarkHeroFigures(
   const teasers = getBenchmarkPaperFigures(benchmarkId, locale, ['teaser']);
   const boardSrc = new Set(board.map((figure) => figure.src));
   return teasers.filter((figure) => !boardSrc.has(figure.src));
-}
-
-export function hasBenchmarkPaperFigures(benchmarkId: string): boolean {
-  return getBenchmarkPaperFigures(benchmarkId).length > 0;
 }

@@ -3,7 +3,8 @@
 This module requires ``transformers`` and is imported lazily by model
 ``generate()`` methods — ``import open_clip`` does not require transformers.
 """
-from typing import Callable, Optional
+
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -16,21 +17,11 @@ class _SimpleConfig:
     """Minimal config stub satisfying GenerationMixin's attribute access."""
 
     def __init__(self, vocab_size: int = 49408):
-        """Init.
-
-        Args:
-            vocab_size: The vocab size.
-        """
         self.is_encoder_decoder = False
         self.vocab_size = vocab_size
         self._attn_implementation = "eager"
 
     def get_text_config(self, decoder=False):
-        """Get text config.
-
-        Args:
-            decoder: The decoder.
-        """
         return self
 
 
@@ -46,34 +37,23 @@ class MultimodalGenerationWrapper(nn.Module, GenerationMixin):
         text_decoder_fn: Callable (image_embs, token_embs) -> logits ``(B, S, V)``.
         image_embs: Pre-computed image context for cross-attention ``(B, N, D)``.
         vocab_size: Vocabulary size for config.
-        pad_token_id: Pad token id.
         eos_token_id: End-of-sequence token id.
         bos_token_id: Start-of-sequence token id.
     """
+
     main_input_name = "input_ids"
     _is_stateful = False
 
     def __init__(
-            self,
-            text_encoder_fn: Callable,
-            text_decoder_fn: Callable,
-            image_embs: torch.Tensor,
-            vocab_size: int = 49408,
-            pad_token_id: int = 0,
-            eos_token_id: int = 49407,
-            bos_token_id: int = 49406,
+        self,
+        text_encoder_fn: Callable,
+        text_decoder_fn: Callable,
+        image_embs: torch.Tensor,
+        vocab_size: int = 49408,
+        pad_token_id: int = 0,
+        eos_token_id: int = 49407,
+        bos_token_id: int = 49406,
     ):
-        """Init.
-
-        Args:
-            text_encoder_fn: The text encoder fn.
-            text_decoder_fn: The text decoder fn.
-            image_embs: The image embs.
-            vocab_size: The vocab size.
-            pad_token_id: The pad token id.
-            eos_token_id: The eos token id.
-            bos_token_id: The bos token id.
-        """
         super().__init__()
         self._text_encoder_fn = text_encoder_fn
         self._text_decoder_fn = text_decoder_fn
@@ -88,25 +68,14 @@ class MultimodalGenerationWrapper(nn.Module, GenerationMixin):
 
     @property
     def device(self) -> torch.device:
-        """Device.
-
-        Returns:
-            The return value.
-        """
         return self._image_embs.device
 
     def prepare_inputs_for_generation(
-            self,
-            input_ids,
-            image_embs=None,
-            **kwargs,
+        self,
+        input_ids,
+        image_embs=None,
+        **kwargs,
     ):
-        """Prepare inputs for generation.
-
-        Args:
-            input_ids: The input ids.
-            image_embs: The image embs.
-        """
         # TODO(kv-cache): When past_key_values is not None, slice input_ids
         # to only the last token and forward past_key_values + cache_position.
         return {
@@ -115,20 +84,11 @@ class MultimodalGenerationWrapper(nn.Module, GenerationMixin):
         }
 
     def forward(
-            self,
-            input_ids: torch.Tensor,
-            image_embs: Optional[torch.Tensor] = None,
-            **kwargs,  # absorb cache_position, attention_mask, etc.
+        self,
+        input_ids: torch.Tensor,
+        image_embs: torch.Tensor | None = None,
+        **kwargs,  # absorb cache_position, attention_mask, etc.
     ) -> CausalLMOutputWithPast:
-        """Forward.
-
-        Args:
-            input_ids: The input ids.
-            image_embs: The image embs.
-
-        Returns:
-            The return value.
-        """
         if image_embs is None:
             image_embs = self._image_embs
         # TODO(kv-cache): Accept past_key_values, pass to decoder, return
@@ -141,11 +101,5 @@ class MultimodalGenerationWrapper(nn.Module, GenerationMixin):
         return CausalLMOutputWithPast(logits=logits, past_key_values=None)
 
     def _reorder_cache(self, past_key_values, beam_idx):
-        """Helper function to reorder cache.
-
-        Args:
-            past_key_values: The past key values.
-            beam_idx: The beam idx.
-        """
         # TODO(kv-cache): Reorder cached K/V for beam search beam reordering.
         return past_key_values

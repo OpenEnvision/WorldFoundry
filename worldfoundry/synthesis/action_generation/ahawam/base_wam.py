@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Sequence, Union
+from collections.abc import Sequence
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -23,8 +24,8 @@ class BaseWAM(torch.nn.Module):
         vae,
         text_encoder=None,
         tokenizer=None,
-        text_dim: Optional[int] = None,
-        proprio_dim: Optional[int] = None,
+        text_dim: int | None = None,
+        proprio_dim: int | None = None,
         device: str = "cpu",
         torch_dtype: torch.dtype = torch.float32,
         video_infer_shift: float = 5.0,
@@ -76,7 +77,7 @@ class BaseWAM(torch.nn.Module):
         return self
 
     @torch.no_grad()
-    def encode_prompt(self, prompt: Union[str, Sequence[str]]):
+    def encode_prompt(self, prompt: str | Sequence[str]):
         if self.text_encoder is None or self.tokenizer is None:
             raise ValueError(
                 "Prompt encoding requires loaded text encoder/tokenizer. "
@@ -101,7 +102,7 @@ class BaseWAM(torch.nn.Module):
         self,
         context: torch.Tensor,
         context_mask: torch.Tensor,
-        proprio: Optional[torch.Tensor],
+        proprio: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if self.proprio_encoder is None or proprio is None:
             return context, context_mask
@@ -153,8 +154,8 @@ class BaseWAM(torch.nn.Module):
         *,
         input_image: torch.Tensor,
         action_horizon: int,
-        start_latents: Optional[torch.Tensor],
-        seed: Optional[int],
+        start_latents: torch.Tensor | None,
+        seed: int | None,
         rand_device: str,
     ) -> tuple[torch.Tensor, int]:
         if input_image.ndim == 3:
@@ -201,11 +202,11 @@ class BaseWAM(torch.nn.Module):
     def _prepare_action_context(
         self,
         *,
-        prompt: Optional[str],
+        prompt: str | None,
         batch_size: int,
-        proprio: Optional[torch.Tensor],
-        context: Optional[torch.Tensor],
-        context_mask: Optional[torch.Tensor],
+        proprio: torch.Tensor | None,
+        context: torch.Tensor | None,
+        context_mask: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if proprio is not None:
             if self.proprio_dim is None:

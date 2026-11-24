@@ -7,13 +7,38 @@ import torch.distributed as dist
 from mmengine.runner import set_random_seed
 from tqdm import tqdm
 
-from opensora.acceleration.parallel_states import set_sequence_parallel_group
-from opensora.datasets import save_sample
-from opensora.datasets.aspect import get_image_size, get_num_frames
-from opensora.models.text_encoder.t5 import text_preprocessing
-from opensora.registry import MODELS, SCHEDULERS, build_module
-from opensora.utils.config_utils import parse_configs
-from opensora.utils.inference_utils import (
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.acceleration.parallel_states import (
+    set_sequence_parallel_group,
+)
+
+# isort: split
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.datasets import save_sample
+
+# isort: split
+# isort: split
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.datasets.aspect import (
+    get_image_size,
+    get_num_frames,
+)
+
+# isort: split
+# isort: split
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.models.text_encoder.t5 import (
+    text_preprocessing,
+)
+
+# isort: split
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import (
+    MODELS,
+    SCHEDULERS,
+    build_module,
+)
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.utils.config_utils import (
+    parse_configs,
+)
+
+# isort: split
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.utils.inference_utils import (
     add_watermark,
     append_generated,
     append_score_to_prompts,
@@ -29,7 +54,15 @@ from opensora.utils.inference_utils import (
     refine_prompts_by_openai,
     split_prompt,
 )
-from opensora.utils.misc import all_exists, create_logger, is_distributed, is_main_process, to_torch_dtype
+
+# isort: split
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.utils.misc import (
+    all_exists,
+    create_logger,
+    is_distributed,
+    is_main_process,
+    to_torch_dtype,
+)
 
 
 def main():
@@ -52,6 +85,7 @@ def main():
     if is_distributed():
         import colossalai
         from colossalai.cluster import DistCoordinator
+
         colossalai.launch_from_torch({})
         coordinator = DistCoordinator()
         enable_sequence_parallelism = coordinator.world_size > 1
@@ -81,9 +115,9 @@ def main():
     if image_size is None:
         resolution = cfg.get("resolution", None)
         aspect_ratio = cfg.get("aspect_ratio", None)
-        assert (
-            resolution is not None and aspect_ratio is not None
-        ), "resolution and aspect_ratio must be provided if image_size is not provided"
+        assert resolution is not None and aspect_ratio is not None, (
+            "resolution and aspect_ratio must be provided if image_size is not provided"
+        )
         image_size = get_image_size(resolution, aspect_ratio)
     num_frames = get_num_frames(cfg.num_frames)
 
@@ -244,7 +278,9 @@ def main():
 
             # 4. merge to obtain the final prompt
             batch_prompts = []
-            for prompt_segment_list, loop_idx_list in zip(batched_prompt_segment_list, batched_loop_idx_list):
+            for prompt_segment_list, loop_idx_list in zip(
+                batched_prompt_segment_list, batched_loop_idx_list, strict=False
+            ):
                 batch_prompts.append(merge_prompt(prompt_segment_list, loop_idx_list))
 
             # == Iter over loop generation ==

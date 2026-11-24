@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 
@@ -81,8 +82,7 @@ class _MaterializeMixin:
             ref_count = int(ref_images.shape[0])
             codec_dtype = getattr(self, "vae_dtype", dtype)
             ref_videos = [
-                ref_images[index].to(device=device, dtype=codec_dtype).unsqueeze(1)
-                for index in range(ref_count)
+                ref_images[index].to(device=device, dtype=codec_dtype).unsqueeze(1) for index in range(ref_count)
             ]
             ref_latents = self.vae.encode(
                 ref_videos,
@@ -247,10 +247,8 @@ class _MaterializeMixin:
                 memory_latents[:, frame_id] = latent[:, 0]
                 target = target_paths.get(frame_id)
                 if target:
-                    try:
+                    with contextlib.suppress(OSError):
                         self._atomic_dump_latent(target, latent)
-                    except OSError:
-                        pass
         if memory_total_frames == 0:
             return self._zero_mosaic_payload(
                 data,

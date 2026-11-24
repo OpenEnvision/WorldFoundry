@@ -1,25 +1,17 @@
 # LaCT
 
-"""Module for base_models -> three_dimensions -> point_clouds -> loger -> ttt.py functionality."""
-
+import collections
 import math
-from einops import rearrange
+
 import torch
 import torch.nn as nn
+from einops import rearrange
 from torch.nn import functional as F
-
-import collections
-
 
 TTTOperator = collections.namedtuple("TTTOperator", ["start", "end", "update", "apply"])
 
 
 def inv_softplus(x):
-    """Inv softplus.
-
-    Args:
-        x: The x.
-    """
     y = x + math.log(-math.expm1(-x))
     return y
 
@@ -67,15 +59,12 @@ def zeropower_via_newtonschulz5(G, steps):
     # Perform the NS iterations
     for _ in range(steps):
         A = X @ X.transpose(1, 2)
-        B = (
-            b * A + c * A @ A
-        )  # adapted from suggestion by @jxbz, @leloykun, and @YouJiacheng
+        B = b * A + c * A @ A  # adapted from suggestion by @jxbz, @leloykun, and @YouJiacheng
         X = a * X + B @ X
 
     if G.size(1) > G.size(2):
         X = X.transpose(1, 2)
     return X
-
 
 
 @torch.compile
@@ -106,7 +95,7 @@ def fast_weight_swish_glu_weight_norm_mini_batch_apply(
     k: [b, l, d]
     v: [b, l, d]
     lr0, lr1, lr2: [b, l, 1]
-    
+
     """
     w0_norm = w0.detach().norm(dim=1, keepdim=True)
     w1_norm = w1.detach().norm(dim=1, keepdim=True)
@@ -118,19 +107,19 @@ def fast_weight_swish_glu_weight_norm_mini_batch_apply(
         dw2_momentum = torch.zeros_like(w2)
 
     output = []
-    
+
     for start, end, update, apply in ttt_ua_order:
         w0_now, w1_now, w2_now = w0, w1, w2
 
         if update:
             ki, vi = k[:, start:end, :], v[:, start:end, :]  # bf16 [b, l, d]
-            
+
             lr0i = lr0[:, start:end, :]  # [b, l, d/1] fp32
             lr1i = lr1[:, start:end, :]  # [b, l, d/1] fp32
             lr2i = lr2[:, start:end, :]  # [b, l, d/1] fp32
 
-            gate_before_act = ki @ w0_now       # b[b, l, dh] = [b, l, d] @ [b, d, dh]
-            hidden_before_mul = ki @ w2_now     # b[b, l, dh] = [b, l, d] @ [b, d, dh]
+            gate_before_act = ki @ w0_now  # b[b, l, dh] = [b, l, d] @ [b, d, dh]
+            hidden_before_mul = ki @ w2_now  # b[b, l, dh] = [b, l, d] @ [b, d, dh]
             hidden = F.silu(gate_before_act, inplace=False) * hidden_before_mul
 
             for _ in range(ttt_update_steps):
@@ -140,9 +129,7 @@ def fast_weight_swish_glu_weight_norm_mini_batch_apply(
                 dgate = dhidden * hidden_before_mul
                 dgate_before_act = silu_backprop(dgate, gate_before_act)
 
-                w1_grad = zeropower_via_newtonschulz5(
-                    (hidden * lr1i).transpose(-1, -2) @ vi, muon_update_steps
-                )
+                w1_grad = zeropower_via_newtonschulz5((hidden * lr1i).transpose(-1, -2) @ vi, muon_update_steps)
                 w0_grad = zeropower_via_newtonschulz5(
                     (ki * lr0i).transpose(-1, -2) @ dgate_before_act, muon_update_steps
                 )
@@ -158,7 +145,7 @@ def fast_weight_swish_glu_weight_norm_mini_batch_apply(
                     dw0_momentum = w0_grad
                     dw1_momentum = w1_grad
                     dw2_momentum = w2_grad
-                
+
                 # Gradient ascent: add gradients
                 w1_now = w1_now + w1_grad
                 w0_now = w0_now + w0_grad
@@ -210,19 +197,6 @@ class FastWeightGluMLPMultihead(nn.Module):
         ttt_update_steps: int = 1,
         ttt_pre_norm: bool = False,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            head_dim: The head dim.
-            inter_multi: The inter multi.
-            bias: The bias.
-            base_lr: The base lr.
-            muon_update_steps: The muon update steps.
-            use_momentum: The use momentum.
-            ttt_update_steps: The ttt update steps.
-            ttt_pre_norm: The ttt pre norm.
-        """
         super().__init__()
         self.dim = dim
         assert dim % head_dim == 0
@@ -261,7 +235,7 @@ class FastWeightGluMLPMultihead(nn.Module):
 
         if self.ttt_pre_norm:
             self.pre_norm = torch.nn.RMSNorm(dim, eps=1e-5, elementwise_affine=True)
-        
+
         self.o_norm = torch.nn.RMSNorm(head_dim, eps=1e-5, elementwise_affine=True)
 
     def forward(self, x: torch.Tensor, info: dict | None = None, *args):
@@ -271,8 +245,8 @@ class FastWeightGluMLPMultihead(nn.Module):
         num_dims = len(x.shape)
         if num_dims == 3:
             x = x.unsqueeze(1)
-            
-        b, t, l, d = x.shape
+
+        b, t, l, d = x.shape  # noqa: E741 - Ambiguous upstream name kept as written.
 
         if self.ttt_pre_norm:
             x = self.pre_norm(x)
@@ -280,10 +254,7 @@ class FastWeightGluMLPMultihead(nn.Module):
         x = rearrange(x, "b t l d -> b (t l) d")
         qkv = F.silu(self.to_qkv(x), inplace=True)
 
-        q, k, v = rearrange(
-            qkv, "b l (qkv h d) -> qkv (b h) l d",
-            qkv=3, h=self.num_heads
-        )
+        q, k, v = rearrange(qkv, "b l (qkv h d) -> qkv (b h) l d", qkv=3, h=self.num_heads)
         q = q / (q.norm(dim=2, keepdim=True) + 1e-5)
         k = k / (k.norm(dim=2, keepdim=True) + 1e-5)
 
@@ -298,10 +269,7 @@ class FastWeightGluMLPMultihead(nn.Module):
 
         lr = torch.nn.functional.softplus(lr.float() + self.base_lr_inv)
 
-        lr0, lr1, lr2 = rearrange(
-            lr, "b l (lrs h d) -> lrs (b h) l d",
-            lrs=3, h=self.num_heads
-        )
+        lr0, lr1, lr2 = rearrange(lr, "b l (lrs h d) -> lrs (b h) l d", lrs=3, h=self.num_heads)
 
         if info and "w0" in info and info.get("w0") is not None:
             assert "w1" in info and "w2" in info
@@ -314,7 +282,15 @@ class FastWeightGluMLPMultihead(nn.Module):
             w2 = self.w2.repeat(x.shape[0], 1, 1)
 
         output, w0, w1, w2 = fast_weight_swish_glu_weight_norm_mini_batch_apply(
-            w0, w1, w2, q, k, v, lr0, lr1, lr2,
+            w0,
+            w1,
+            w2,
+            q,
+            k,
+            v,
+            lr0,
+            lr1,
+            lr2,
             info["ttt_op_order"] if info else [],
             muon_update_steps=self.muon_update_steps,
             momentum=momentum,
@@ -322,27 +298,24 @@ class FastWeightGluMLPMultihead(nn.Module):
         )
 
         output = self.o_norm(output)
-        
-        output = rearrange(
-            output, "(b h) l d -> b l (h d)", h=self.num_heads, b=x.shape[0]
-        )
+
+        output = rearrange(output, "(b h) l d -> b l (h d)", h=self.num_heads, b=x.shape[0])
 
         output = self.c_proj(output)
         output = rearrange(output, "b (t l) d -> b t l d", t=t).to(x.dtype)
 
         if num_dims == 3:
             output = rearrange(output, "b t l d -> b (t l) d", t=t)
-        
+
         return output, {
-            "w0": w0, "w1": w1, "w2": w2,
+            "w0": w0,
+            "w1": w1,
+            "w2": w2,
         }
 
     def extra_repr(self) -> str:
-        """Extra repr.
-
-        Returns:
-            The return value.
-        """
-        return (f"w0 shape: {self.w0.shape}, w1 shape: {self.w1.shape}, w2 shape: {self.w2.shape}, "
-                f"Muon update steps: {self.muon_update_steps}, "
-                f"Base lr: {math.log(1 + math.exp(self.base_lr_inv))}, ")
+        return (
+            f"w0 shape: {self.w0.shape}, w1 shape: {self.w1.shape}, w2 shape: {self.w2.shape}, "
+            f"Muon update steps: {self.muon_update_steps}, "
+            f"Base lr: {math.log(1 + math.exp(self.base_lr_inv))}, "
+        )

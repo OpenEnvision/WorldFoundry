@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 
 import torch
@@ -32,7 +33,7 @@ def attention_range_plan(q_ranges: torch.Tensor, k_ranges: torch.Tensor) -> Atte
     bounds = sorted(events)
     active: set[int] = set()
     groups = []
-    for start, stop in zip(bounds[:-1], bounds[1:]):
+    for start, stop in itertools.pairwise(bounds):
         for index, added in events[start]:
             if added:
                 active.add(index)

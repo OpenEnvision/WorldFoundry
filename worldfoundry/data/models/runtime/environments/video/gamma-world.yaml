@@ -1,7 +1,7 @@
 model_id: gamma-world
 env_name: worldfoundry-gamma-world-cu128
 env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
-python: 3.10
+python: '3.10'
 cuda_profile: cu128
 driver_status: requires_driver_570_124_06_or_newer
 pip_extra_index_url: https://download.pytorch.org/whl/cu128

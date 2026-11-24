@@ -1,20 +1,20 @@
 ---
 title: RoboTwin 2.0
-description: "50 dual-arm tasks, 731 objects, five embodiments, strong domain randomization. WorldFoundry imports official eval_result files — it does not claim the public board."
+description: "50 dual-arm tasks, 731 objects, five embodiments, strong domain randomization. WorldFoundry imports official eval_result files."
 ---
 
 RoboTwin 2.0 (The University of Hong Kong and Shanghai AI Laboratory, with AgileX) is a **bimanual** SAPIEN benchmark, not a video-generation suite. The paper instantiates **50** dual-arm tasks on **RoboTwin-OD** (**731** objects, **147** categories) across **five** embodiments: Aloha-AgileX, ARX-X5, Piper, Franka Panda, and UR5-WSG. Domain randomization is five axes — clutter, lighting, background, tabletop height, language — and **clean** vs **randomized** success are reported separately. The companion dump is **100k+** expert trajectories (`TianxingChen/RoboTwin2.0`).
 
-Paper: [RoboTwin 2.0](https://arxiv.org/abs/2506.18088). Project: [robotwin-platform.github.io](https://robotwin-platform.github.io/). Docs: [usage / configurations](https://robotwin-platform.github.io/doc/). Code: [RoboTwin-Platform/RoboTwin](https://github.com/RoboTwin-Platform/RoboTwin). Official board: [leaderboard](https://robotwin-platform.github.io/leaderboard) — **not ingested** here.
+Paper: [RoboTwin 2.0](https://arxiv.org/abs/2506.18088). Project: [robotwin-platform.github.io](https://robotwin-platform.github.io/). Docs: [usage / configurations](https://robotwin-platform.github.io/doc/). Code: [RoboTwin-Platform/RoboTwin](https://github.com/RoboTwin-Platform/RoboTwin). Official board: [leaderboard](https://robotwin-platform.github.io/leaderboard).
 
-WorldFoundry **imports** official `eval_result/_result.txt` (layout `eval_result/{task}/{policy}/{config}/{ckpt}/{timestamp}/_result.txt`) or structured JSON/CSV. Offline normalization needs no simulator. Real parity still needs the upstream **SAPIEN / Curobo** stack and the official `policy/*/eval.sh` scripts. A 2026-05-25 bounded local check reached CUDA allocation; `script/test_render.py` hit the timeout, so rendering is **not** claimed green. Shared stack: `robotwin_dataset_assets`.
+WorldFoundry **imports** official `eval_result/_result.txt` (layout `eval_result/{task}/{policy}/{config}/{ckpt}/{timestamp}/_result.txt`) or structured JSON/CSV. Offline normalization needs no simulator. Producing new results needs the upstream **SAPIEN / Curobo** stack and the official `policy/*/eval.sh` scripts. Rendering through `script/test_render.py` has not been validated in WorldFoundry. Shared stack: `robotwin_dataset_assets`.
 
 <BenchmarkPageSections id="robotwin" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id robotwin \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -24,7 +24,7 @@ worldfoundry-eval zoo benchmark-run \
 
 `--official-results-path` may point at a `_result.txt` tree or a JSON/CSV export. Optional `WORLDFOUNDRY_ROBOTWIN_ROOT` overrides the runtime/repo root. Default import path: `WORLDFOUNDRY_ROBOTWIN_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/robotwin.yaml`.
 
-In-tree pointers:
+Default local paths for the dataset dumps and upstream checkout:
 
 ```text
 cache/worldfoundry/data/hfd_datasets/TianxingChen__RoboTwin2.0

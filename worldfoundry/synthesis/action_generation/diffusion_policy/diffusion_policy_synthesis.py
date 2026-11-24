@@ -9,16 +9,18 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
-from ..base_action_synthesis import ActionModelSynthesis
 from worldfoundry.synthesis.action_generation.diffusion_policy.runtime import (
     DiffusionPolicyRuntime,
     DiffusionPolicyRuntimeConfig,
     select_diffusion_policy_checkpoint,
 )
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
+
+from ..base_action_synthesis import ActionModelSynthesis
 
 
 class DiffusionPolicySynthesis(ActionModelSynthesis):
@@ -74,7 +76,7 @@ class DiffusionPolicySynthesis(ActionModelSynthesis):
         hf_models_root: str | Path | None = None,
         command_template: Sequence[str] | None = None,
         **kwargs: Any,
-    ) -> "DiffusionPolicySynthesis":
+    ) -> DiffusionPolicySynthesis:
         """Creates a DiffusionPolicySynthesis instance from a pretrained model.
 
         This class method streamlines the process of loading a model by resolving
@@ -267,7 +269,9 @@ class DiffusionPolicySynthesis(ActionModelSynthesis):
                 "device": runtime_config.device,
             },
         }
-        plan_path.write_text(json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        plan_path.write_text(
+            json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
         # If only planning is requested, return the plan details without executing the model.
         if plan_only:

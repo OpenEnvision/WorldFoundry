@@ -61,8 +61,7 @@ class Cosmos2Video2WorldInitializer:
             raise ValueError("Cosmos Predict2 height and width must be divisible by 16")
         if (request.num_frames - 1) % self.temporal_compression:
             raise ValueError(
-                "Cosmos Predict2 num_frames must satisfy "
-                f"(num_frames - 1) % {self.temporal_compression} == 0"
+                f"Cosmos Predict2 num_frames must satisfy (num_frames - 1) % {self.temporal_compression} == 0"
             )
         # Released Video2World weights use a 93-frame sampling window. Shorter
         # latent sequences produce late-frame breakup. The shared decoder trims

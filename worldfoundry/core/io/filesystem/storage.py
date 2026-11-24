@@ -11,9 +11,10 @@ import io
 import os
 import shutil
 import tempfile
-from contextlib import contextmanager
+from collections.abc import Generator, Iterable
+from contextlib import _GeneratorContextManager, contextmanager
 from pathlib import Path
-from typing import BinaryIO, Generator, Iterable, TextIO
+from typing import IO, Any, BinaryIO, Literal, TextIO, overload
 from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
 
@@ -35,6 +36,23 @@ def is_remote_uri(uri: str | os.PathLike[str]) -> bool:
     return parse_uri_scheme(uri) not in {"", "file"}
 
 
+def suffix_for_uri(value: str | os.PathLike[str]) -> str:
+    """Return the lower-case file suffix for local paths and URL-like strings."""
+
+    text = str(value).strip()
+    if not text:
+        return ""
+    parsed = urlparse(text)
+    path_text = unquote(parsed.path) if parsed.scheme else text
+    name = Path(path_text).name
+    suffixes = Path(name).suffixes
+    if not suffixes:
+        return ""
+    if len(suffixes) >= 2 and suffixes[-2].casefold() == ".tar":
+        return ".tar" + suffixes[-1].casefold()
+    return suffixes[-1].casefold()
+
+
 def uri_to_local_path(uri: str | os.PathLike[str]) -> Path:
     """Convert a local path or ``file://`` URI into a ``Path``."""
 
@@ -47,6 +65,36 @@ def uri_to_local_path(uri: str | os.PathLike[str]) -> Path:
     return Path(text).expanduser()
 
 
+@overload
+def open_uri(
+    uri: str | os.PathLike[str],
+    mode: Literal["rb", "wb", "ab", "xb", "rb+", "wb+", "ab+", "xb+"] = "rb",
+    *,
+    encoding: str = "utf-8",
+    **storage_options: Any,
+) -> _GeneratorContextManager[BinaryIO, None, None]: ...
+
+
+@overload
+def open_uri(
+    uri: str | os.PathLike[str],
+    mode: Literal["r", "w", "a", "x", "r+", "w+", "a+", "x+"],
+    *,
+    encoding: str = "utf-8",
+    **storage_options: Any,
+) -> _GeneratorContextManager[TextIO, None, None]: ...
+
+
+@overload
+def open_uri(
+    uri: str | os.PathLike[str],
+    mode: str = "rb",
+    *,
+    encoding: str = "utf-8",
+    **storage_options: Any,
+) -> _GeneratorContextManager[IO[Any], None, None]: ...
+
+
 @contextmanager
 def open_uri(
     uri: str | os.PathLike[str],
@@ -54,7 +102,7 @@ def open_uri(
     *,
     encoding: str = "utf-8",
     **storage_options,
-) -> Generator[BinaryIO | TextIO, None, None]:
+) -> Generator[IO[Any], None, None]:
     """Open a local or remote URI.
 
     ``fsspec`` is used when available. Without it, local files are supported for
@@ -255,9 +303,11 @@ def copy_uri(src: str | os.PathLike[str], dst: str | os.PathLike[str], **storage
         target = uri_to_local_path(dst)
         target.parent.mkdir(parents=True, exist_ok=True)
         return str(shutil.copy(source, target))
-    with open_uri(src, "rb", **storage_options) as source_handle:
-        with open_uri(dst, "wb", **storage_options) as target_handle:
-            shutil.copyfileobj(source_handle, target_handle, length=_COPY_CHUNK_BYTES)
+    with (
+        open_uri(src, "rb", **storage_options) as source_handle,
+        open_uri(dst, "wb", **storage_options) as target_handle,
+    ):
+        shutil.copyfileobj(source_handle, target_handle, length=_COPY_CHUNK_BYTES)
     return str(dst)
 
 
@@ -290,7 +340,7 @@ def _optional_fsspec():
     """Return the fsspec module or ``None`` so local-only jobs skip the S3 extra."""
 
     try:
-        import fsspec  # type: ignore
+        import fsspec
     except ImportError:
         return None
     return fsspec
@@ -310,6 +360,7 @@ __all__ = [
     "read_binary_uri",
     "read_text_uri",
     "remove_uri",
+    "suffix_for_uri",
     "uri_to_local_path",
     "write_binary_uri",
     "write_text_uri",

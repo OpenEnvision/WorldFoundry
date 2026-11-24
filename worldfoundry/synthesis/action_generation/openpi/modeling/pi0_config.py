@@ -6,9 +6,9 @@ import jax
 import jax.numpy as jnp
 from typing_extensions import override
 
-from . import model as _model
-from . import gemma as _gemma
 from .. import array_typing as at
+from . import gemma as _gemma
+from . import model as _model
 
 if TYPE_CHECKING:
     from .pi0 import Pi0

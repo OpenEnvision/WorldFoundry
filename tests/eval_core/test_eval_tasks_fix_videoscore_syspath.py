@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.execution.runners.videoscore.run_videoscore_official_runner import (
+from worldfoundry.evals.tasks.execution.runners.videoscore.run_videoscore_official_runner import (
     load_official_videoscore_module,
     patch_transformers_dynamic_cache_api,
 )

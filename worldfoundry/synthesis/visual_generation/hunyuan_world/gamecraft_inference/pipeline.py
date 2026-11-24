@@ -1,7 +1,8 @@
 # Adapted from Tencent Hunyuan-GameCraft-1.0, under the Tencent Hunyuan Community License.
 import inspect
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, ClassVar
 
 import numpy as np
 import torch
@@ -39,7 +40,7 @@ from .text_encoder import TextEncoder
 
 @dataclass
 class HunyuanVideoPipelineOutput(BaseOutput):
-    videos: Union[torch.Tensor, np.ndarray]
+    videos: torch.Tensor | np.ndarray
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -55,9 +56,9 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
     """
 
     model_cpu_offload_seq = "text_encoder->text_encoder_2->transformer->vae"
-    _optional_components = ["text_encoder_2"]
-    _exclude_from_cpu_offload = ["transformer"]
-    _callback_tensor_inputs = ["latents", "prompt_embeds", "negative_prompt_embeds"]
+    _optional_components: ClassVar[list] = ["text_encoder_2"]
+    _exclude_from_cpu_offload: ClassVar[list] = ["transformer"]
+    _callback_tensor_inputs: ClassVar[list] = ["latents", "prompt_embeds", "negative_prompt_embeds"]
 
     def __init__(
         self,
@@ -65,8 +66,8 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
         text_encoder: TextEncoder,
         transformer: HYVideoDiffusionTransformer,
         scheduler: KarrasDiffusionSchedulers,
-        text_encoder_2: Optional[TextEncoder] = None,
-        progress_bar_config: Dict[str, Any] = None,
+        text_encoder_2: TextEncoder | None = None,
+        progress_bar_config: dict[str, Any] | None = None,
         args=None,
     ):
         super().__init__()
@@ -137,7 +138,7 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
                 f" {negative_prompt_embeds}. Please make sure to only forward one of the two."
             )
 
-        if prompt_embeds is not None and negative_prompt_embeds is not None:
+        if prompt_embeds is not None and negative_prompt_embeds is not None:  # noqa: SIM102 - Statement form kept for readability.
             if prompt_embeds.shape != negative_prompt_embeds.shape:
                 raise ValueError(
                     "`prompt_embeds` and `negative_prompt_embeds` must have the same shape when passed directly, but"
@@ -202,10 +203,7 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
         # print("!!!randn_like", latents.shape)
         latents = latents.to(dtype=dtype)
 
-        if latents is None:
-            latents = noise
-        else:
-            latents = latents.to(device)
+        latents = noise if latents is None else latents.to(device)
 
         if hasattr(self.scheduler, "init_noise_sigma"):
             latents = latents * self.scheduler.init_noise_sigma
@@ -219,14 +217,14 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
         num_videos_per_prompt,
         do_classifier_free_guidance,
         negative_prompt=None,
-        prompt_embeds: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        negative_prompt_embeds: Optional[torch.Tensor] = None,
-        negative_attention_mask: Optional[torch.Tensor] = None,
-        lora_scale: Optional[float] = None,
-        clip_skip: Optional[int] = None,
-        text_encoder: Optional[TextEncoder] = None,
-        data_type: Optional[str] = "image",
+        prompt_embeds: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        negative_prompt_embeds: torch.Tensor | None = None,
+        negative_attention_mask: torch.Tensor | None = None,
+        lora_scale: float | None = None,
+        clip_skip: int | None = None,
+        text_encoder: TextEncoder | None = None,
+        data_type: str | None = "image",
     ):
         r"""
         Encodes the prompt into text encoder hidden states.
@@ -336,7 +334,7 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
 
         # get unconditional embeddings for classifier free guidance
         if do_classifier_free_guidance and negative_prompt_embeds is None:
-            uncond_tokens: List[str]
+            uncond_tokens: list[str]
             if negative_prompt is None:
                 uncond_tokens = [""] * batch_size
             elif prompt is not None and type(prompt) is not type(negative_prompt):
@@ -383,10 +381,9 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
                 negative_prompt_embeds = negative_prompt_embeds.repeat(1, num_videos_per_prompt, 1)
                 negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_videos_per_prompt, seq_len, -1)
 
-        if text_encoder is not None:
-            if isinstance(self, LoraLoaderMixin) and USE_PEFT_BACKEND:
-                # Retrieve the original scale by scaling back the LoRA layers
-                unscale_lora_layers(text_encoder.model, lora_scale)
+        if text_encoder is not None and isinstance(self, LoraLoaderMixin) and USE_PEFT_BACKEND:
+            # Retrieve the original scale by scaling back the LoRA layers
+            unscale_lora_layers(text_encoder.model, lora_scale)
 
         return prompt_embeds, negative_prompt_embeds, attention_mask, negative_attention_mask
 
@@ -394,45 +391,46 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
         self,
-        prompt: Union[str, List[str]],
-        cam_latents: Union[torch.Tensor],  # cam_latents
-        last_latents: Union[torch.Tensor],
-        uncond_cam_latents: Union[torch.Tensor],
-        gt_latents: Union[torch.Tensor],
+        prompt: str | list[str],
+        cam_latents: torch.Tensor,  # cam_latents
+        last_latents: torch.Tensor,
+        uncond_cam_latents: torch.Tensor,
+        gt_latents: torch.Tensor,
         height: int,
         width: int,
         video_length: int,  # frame is called video_len in hunyuan_multimodal/dev_video
         data_type: str = "video",
         num_inference_steps: int = 50,
-        timesteps: List[int] = None,
-        sigmas: List[float] = None,
+        timesteps: list[int] | None = None,
+        sigmas: list[float] | None = None,
         guidance_scale: float = 7.5,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
-        ref_latents: Optional[torch.Tensor] = None,
-        uncond_ref_latents: Optional[torch.Tensor] = None,
+        negative_prompt: str | list[str] | None = None,
+        ref_latents: torch.Tensor | None = None,
+        uncond_ref_latents: torch.Tensor | None = None,
         ip_cfg_scale: float = 0.0,
         use_deepcache: int = 1,
-        num_videos_per_prompt: Optional[int] = 1,
+        num_videos_per_prompt: int | None = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.Tensor] = None,
-        prompt_embeds: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        negative_prompt_embeds: Optional[torch.Tensor] = None,
-        negative_attention_mask: Optional[torch.Tensor] = None,
-        output_type: Optional[str] = "pil",
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.Tensor | None = None,
+        prompt_embeds: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        negative_prompt_embeds: torch.Tensor | None = None,
+        negative_attention_mask: torch.Tensor | None = None,
+        output_type: str | None = "pil",
         return_dict: bool = True,
-        cross_attention_kwargs: Optional[Dict[str, Any]] = None,
+        cross_attention_kwargs: dict[str, Any] | None = None,
         guidance_rescale: float = 0.0,
-        clip_skip: Optional[int] = None,
-        callback_on_step_end: Optional[
-            Union[Callable[[int, int, Dict], None], PipelineCallback, MultiPipelineCallbacks]
-        ] = None,
-        callback_on_step_end_tensor_inputs: List[str] = ["latents"],
-        freqs_cis: Tuple[torch.Tensor, torch.Tensor] = None,
+        clip_skip: int | None = None,
+        callback_on_step_end: Callable[[int, int, dict], None]
+        | PipelineCallback
+        | MultiPipelineCallbacks
+        | None = None,
+        callback_on_step_end_tensor_inputs: list[str] = ["latents"],  # noqa: B006 - Keeps the upstream default object and signature.
+        freqs_cis: tuple[torch.Tensor, torch.Tensor] | None = None,
         vae_ver: str = "88-4c-sd",
         enable_tiling: bool = False,
-        n_tokens: Optional[int] = None,
+        n_tokens: int | None = None,
         video_val_flag: bool = False,
         denoise_strength: float = 1.0,
         mask=None,
@@ -603,17 +601,16 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
             if prompt_mask_2 is not None:
                 prompt_mask_2 = torch.cat([negative_prompt_mask_2, prompt_mask_2])
 
-        if self.do_classifier_free_guidance:
-            if ref_latents is not None:
-                ref_latents = torch.cat([ref_latents, ref_latents], dim=0)
-                if prompt_mask[0].sum() > 575:
-                    prompt_mask[0] = torch.cat(
-                        [
-                            torch.ones((1, prompt_mask[0].sum() - 575)).to(prompt_mask),
-                            torch.zeros((1, prompt_mask.shape[1] - prompt_mask[0].sum() + 575)).to(prompt_mask),
-                        ],
-                        dim=1,
-                    )
+        if self.do_classifier_free_guidance and ref_latents is not None:
+            ref_latents = torch.cat([ref_latents, ref_latents], dim=0)
+            if prompt_mask[0].sum() > 575:
+                prompt_mask[0] = torch.cat(
+                    [
+                        torch.ones((1, prompt_mask[0].sum() - 575)).to(prompt_mask),
+                        torch.zeros((1, prompt_mask.shape[1] - prompt_mask[0].sum() + 575)).to(prompt_mask),
+                    ],
+                    dim=1,
+                )
 
         if ip_cfg_scale > 0:
             prompt_embeds = torch.cat([prompt_embeds, prompt_embeds[1:]])
@@ -693,8 +690,7 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
         vae_autocast_enabled = (vae_dtype != torch.float32) and not self.args.val_disable_autocast
 
         camera_input = (
-            torch.cat([uncond_cam_latents, cam_latents], dim=0)
-            if self.do_classifier_free_guidance else cam_latents
+            torch.cat([uncond_cam_latents, cam_latents], dim=0) if self.do_classifier_free_guidance else cam_latents
         )
         split_camera_cfg = latents.shape[-1] * latents.shape[-2] > 64 * 112 and cpu_offload
         camera_condition = CameraConditionCache(camera_input)
@@ -738,11 +734,8 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
                 with torch.autocast(device_type="cuda", dtype=target_dtype, enabled=autocast_enabled):
                     is_cache = False
                     if use_deepcache and num_inference_steps == 50:
-                        no_cache_steps = list(range(0, 10)) + list(range(10, 40, 2)) + list(range(40, 50))
-                        if i in no_cache_steps:
-                            is_cache = False
-                        else:
-                            is_cache = True
+                        no_cache_steps = list(range(10)) + list(range(10, 40, 2)) + list(range(40, 50))
+                        is_cache = i not in no_cache_steps
                     if split_camera_cfg:
                         if i == 0:
                             print(
@@ -855,7 +848,7 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
         if last_latents.shape[2] == 1:
             latents = latents[:, :, 1:, :, :]
 
-        if not output_type == "latent":
+        if not output_type == "latent":  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             expand_temporal_dim = False
             if len(latents.shape) == 4:
                 if isinstance(self.vae, AutoencoderKLCausal3D):
@@ -868,10 +861,7 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
                     f"Only support latents with shape (b, c, h, w) or (b, c, f, h, w), but got {latents.shape}."
                 )
 
-            if not last_latents.shape[2] == 1:
-                last_latents = latents[:, :, latents.shape[2] // 2 :, :, :]
-            else:
-                last_latents = latents
+            last_latents = latents[:, :, latents.shape[2] // 2 :, :, :] if not last_latents.shape[2] == 1 else latents  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             latent_decode = last_latents.clone()
             latent_decode = latent_decode / self.vae.config.scaling_factor
 
@@ -925,12 +915,6 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
         return HunyuanVideoPipelineOutput(videos=image)
 
     def prepare_extra_func_kwargs(self, func, kwargs):
-        """Prepare extra func kwargs.
-
-        Args:
-            func: The func.
-            kwargs: The kwargs.
-        """
         extra_step_kwargs = {}
         for k, v in kwargs.items():
             accepts = k in set(inspect.signature(func).parameters.keys())
@@ -940,35 +924,28 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
 
     @property
     def guidance_scale(self):
-        """Guidance scale."""
         return self._guidance_scale
 
     @property
     def guidance_rescale(self):
-        """Guidance rescale."""
         return self._guidance_rescale
 
     @property
     def clip_skip(self):
-        """Clip skip."""
         return self._clip_skip
 
     @property
     def do_classifier_free_guidance(self):
-        """Do classifier free guidance."""
         return self._guidance_scale > 1
 
     @property
     def cross_attention_kwargs(self):
-        """Cross attention kwargs."""
         return self._cross_attention_kwargs
 
     @property
     def num_timesteps(self):
-        """Num timesteps."""
         return self._num_timesteps
 
     @property
     def interrupt(self):
-        """Interrupt."""
         return self._interrupt

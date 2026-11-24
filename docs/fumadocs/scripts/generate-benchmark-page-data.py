@@ -95,15 +95,6 @@ LABEL_ZH = {
     "generated-video": "生成视频",
 }
 
-KIND_ZH = {
-    "axis": "轴",
-    "split": "划分",
-    "track": "赛道",
-    "category": "类别",
-    "task": "任务",
-    "suite": "套件",
-}
-
 
 def load_yaml(path: Path) -> Any:
     return yaml.safe_load(path.read_text()) or {}
@@ -115,6 +106,10 @@ def as_list(value: Any) -> list[Any]:
     if isinstance(value, list):
         return value
     return [value]
+
+
+def as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def humanize(value: str) -> str:
@@ -395,7 +390,7 @@ def collect_data(
     for url in github_urls(official.get("github")):
         sources.append({"kind": "github", "id": url, "license": license_label(official.get("license"))})
 
-    dataset = catalog.get("dataset") if isinstance(catalog.get("dataset"), dict) else {}
+    dataset = as_dict(catalog.get("dataset"))
     notes = [str(item) for item in as_list(overlay.get("notes")) if item]
     notes_zh = [str(item) for item in as_list(overlay.get("notesZh")) if item]
     if dataset.get("not_applicable") and dataset.get("reason"):
@@ -557,7 +552,14 @@ DIMENSION_OVERLAYS: dict[str, list[dict[str, Any]]] = {
         },
     ],
     "vbench-2.0": [
-        {"id": "creativity", "name": "Creativity", "nameZh": "创造性", "kind": "category", "description": "Composition and diversity.", "descriptionZh": "构图与多样性。"},
+        {
+            "id": "creativity",
+            "name": "Creativity",
+            "nameZh": "创造性",
+            "kind": "category",
+            "description": "Composition and diversity.",
+            "descriptionZh": "构图与多样性。",
+        },
         {"id": "commonsense", "name": "Commonsense", "nameZh": "常识", "kind": "category"},
         {"id": "controllability", "name": "Controllability", "nameZh": "可控性", "kind": "category"},
         {"id": "human_fidelity", "name": "Human fidelity", "nameZh": "人体保真", "kind": "category"},
@@ -643,7 +645,9 @@ DATA_OVERLAYS: dict[str, dict[str, Any]] = {
         "unitZh": "条 prompt",
         "summary": "1,649 closed-set prompts; ChronoMagic-Bench dataset discovery records 1,799 rows",
         "summaryZh": "1,649 条闭集 prompt；ChronoMagic-Bench 数据集发现记录 1,799 行",
-        "notes": ["Companion ChronoMagic / ChronoMagic-Pro / ChronoMagic-ProH training sets are listed in official sources."],
+        "notes": [
+            "Companion ChronoMagic / ChronoMagic-Pro / ChronoMagic-ProH training sets are listed in official sources."
+        ],
         "notesZh": ["官方来源同时列出 ChronoMagic / ChronoMagic-Pro / ChronoMagic-ProH 训练数据。"],
     },
     "evalcrafter": {"count": 700, "unit": "prompts", "unitZh": "条 prompt"},

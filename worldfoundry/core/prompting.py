@@ -9,6 +9,14 @@ extenders through ``from_model_manager``.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any, Protocol
+
+
+class _PromptHookFactory(Protocol):
+    """Construct a prompt hook from the caller's model source."""
+
+    @classmethod
+    def from_model_manager(cls, model_source: Any) -> Any: ...
 
 
 class PromptProcessor:
@@ -24,12 +32,14 @@ class PromptProcessor:
         self.refiners = []
         self.extenders = []
 
-    def load_prompt_refiners(self, model_source, refiner_classes: Sequence[type] = ()) -> None:
+    def load_prompt_refiners(self, model_source: Any, refiner_classes: Sequence[type[_PromptHookFactory]] = ()) -> None:
         """Instantiate each refiner with ``from_model_manager(model_source)`` and append it."""
         for refiner_class in refiner_classes:
             self.refiners.append(refiner_class.from_model_manager(model_source))
 
-    def load_prompt_extenders(self, model_source, extender_classes: Sequence[type] = ()) -> None:
+    def load_prompt_extenders(
+        self, model_source: Any, extender_classes: Sequence[type[_PromptHookFactory]] = ()
+    ) -> None:
         """Instantiate each extender with ``from_model_manager(model_source)`` and append it."""
         for extender_class in extender_classes:
             self.extenders.append(extender_class.from_model_manager(model_source))

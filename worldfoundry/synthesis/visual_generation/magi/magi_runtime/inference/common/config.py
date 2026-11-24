@@ -140,22 +140,28 @@ class MagiConfig:
     @classmethod
     def from_json(cls, json_path: str):
         def simple_json_decoder(dct):
-            dtype_map = {"torch.bfloat16": torch.bfloat16, "torch.float16": torch.float16, "torch.float32": torch.float32}
-            if 'params_dtype' in dct:
-                dct['params_dtype'] = dtype_map[dct['params_dtype']]
+            dtype_map = {
+                "torch.bfloat16": torch.bfloat16,
+                "torch.float16": torch.float16,
+                "torch.float32": torch.float32,
+            }
+            if "params_dtype" in dct:
+                dct["params_dtype"] = dtype_map[dct["params_dtype"]]
             return dct
 
-        with open(json_path, "r") as f:
+        with open(json_path) as f:
             config_dict = json.load(f, object_hook=simple_json_decoder)
         magi_config = cls._create_config_from_dict(config_dict)
 
         def post_validation(magi_config):
             if magi_config.engine_config.fp8_quant or magi_config.engine_config.distill:
-                assert (
-                    magi_config.runtime_config.cfg_number == 1
-                ), "Please set `cfg_number: 1` in config.json for distill or quant model"
+                assert magi_config.runtime_config.cfg_number == 1, (
+                    "Please set `cfg_number: 1` in config.json for distill or quant model"
+                )
             else:
-                assert magi_config.runtime_config.cfg_number == 3, "Please set `cfg_number: 3` in config.json for base model"
+                assert magi_config.runtime_config.cfg_number == 3, (
+                    "Please set `cfg_number: 3` in config.json for base model"
+                )
 
         post_validation(magi_config)
 

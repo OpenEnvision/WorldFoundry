@@ -58,14 +58,12 @@ class WanImageEncoder(torch.nn.Module):
 
 class WanImageEncoderStateDictConverter:
     """Remap official CLIP vision keys onto :class:`WanImageEncoder`."""
+
     def from_diffusers(self, state_dict):
         return state_dict
 
     def from_civitai(self, state_dict):
-        return {
-            f"model.{name}": parameter
-            for name, parameter in state_dict.items()
-        }
+        return {f"model.{name}": parameter for name, parameter in state_dict.items()}
 
 
 __all__ = ["WanImageEncoder", "WanImageEncoderStateDictConverter"]

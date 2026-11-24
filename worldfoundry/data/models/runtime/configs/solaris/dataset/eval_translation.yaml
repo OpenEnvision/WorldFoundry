@@ -1,6 +1,6 @@
 train_dataset_name: ""
 test_dataset_name: "eval/translationEval/test"
-class: src.data.dataset.DatasetMultiplayer
+class: worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.data.dataset.DatasetMultiplayer
 name: eval_translation
 multiplayer: true
 additional_params:

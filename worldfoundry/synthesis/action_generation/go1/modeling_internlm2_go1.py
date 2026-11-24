@@ -2,7 +2,7 @@
 
 import math
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import ClassVar
 
 import torch
 from einops import rearrange
@@ -11,6 +11,7 @@ from torch.nn import CrossEntropyLoss
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.utils import logging
 
+from worldfoundry.base_models.llm_mllm_core.mllm.qwen.layers import QwenMLP
 from worldfoundry.core.attention import scaled_dot_product_attention
 
 from .configuration_internlm2 import InternLM2Config
@@ -19,7 +20,6 @@ from .modeling_internlm2 import (
     InternLM2DecoderLayer,
     InternLM2FlashAttention2,
     InternLM2ForCausalLM,
-    InternLM2MLP,
     InternLM2Model,
     InternLM2RMSNorm,
     _import_flash_attn,
@@ -29,7 +29,7 @@ from .modeling_internlm2 import (
 
 logger = logging.get_logger(__name__)
 
-from .flash_attn_utils import load_flash_attn
+from .flash_attn_utils import load_flash_attn  # noqa: E402 - Follows the logging setup.
 
 flash_attn_func, flash_attn_varlen_func = None, None
 pad_input, index_first_axis, unpad_input = None, None, None
@@ -49,17 +49,18 @@ class InternLM2AttentionGO1(InternLM2Attention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_value: tuple[torch.Tensor] | None = None,
         output_attentions: bool = False,
         use_cache: bool = True,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         if "padding_mask" in kwargs:
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. "
-                "Please make sure use `attention_mask` instead.`"
+                "Please make sure use `attention_mask` instead.`",
+                stacklevel=1,
             )
 
         bsz, q_len, _ = hidden_states.size()
@@ -86,7 +87,7 @@ class InternLM2AttentionGO1(InternLM2Attention):
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos[position_ids], sin[position_ids])
 
         if past_key_value is not None:
             # reuse k, v, self_attention
@@ -98,11 +99,10 @@ class InternLM2AttentionGO1(InternLM2Attention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
+        if attention_mask is not None and attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+            raise ValueError(
+                f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+            )
         if output_attentions:
             attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
             if attention_mask is not None:
@@ -144,18 +144,19 @@ class InternLM2FlashAttention2GO1(InternLM2FlashAttention2):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_value: tuple[torch.Tensor] | None = None,
         output_attentions: bool = False,
         use_cache: bool = True,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         # InternLM2FlashAttention2 attention does not support output_attentions
         if "padding_mask" in kwargs:
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. "
-                "Please make sure use `attention_mask` instead.`"
+                "Please make sure use `attention_mask` instead.`",
+                stacklevel=1,
             )
 
             # overwrite attention_mask with padding_mask
@@ -189,7 +190,7 @@ class InternLM2FlashAttention2GO1(InternLM2FlashAttention2):
 
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos[position_ids], sin[position_ids])
 
         if past_key_value is not None:
             # reuse k, v, self_attention
@@ -227,20 +228,20 @@ class InternLM2DecoderLayerGO1(InternLM2DecoderLayer):
 
         self.attention = INTERNLM2GO1_ATTENTION_CLASSES[config.attn_implementation](config=config)
 
-        self.feed_forward = InternLM2MLP(config)
+        self.feed_forward = QwenMLP(config)
         self.attention_norm = InternLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.ffn_norm = InternLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_value: tuple[torch.Tensor] | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = True,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -258,7 +259,8 @@ class InternLM2DecoderLayerGO1(InternLM2DecoderLayer):
         if "padding_mask" in kwargs:
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. "
-                "Please make sure use `attention_mask` instead.`"
+                "Please make sure use `attention_mask` instead.`",
+                stacklevel=1,
             )
 
         residual = hidden_states
@@ -315,7 +317,7 @@ class InternLM2ModelGO1(InternLM2Model):
 
         self.tok_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
-        self.layers: List[InternLM2DecoderLayerGO1] = nn.ModuleList(
+        self.layers: list[InternLM2DecoderLayerGO1] = nn.ModuleList(
             [InternLM2DecoderLayerGO1(config) for _ in range(config.num_hidden_layers)]
         )
         self.norm = InternLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -327,15 +329,15 @@ class InternLM2ModelGO1(InternLM2Model):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -462,7 +464,7 @@ class InternLM2ModelGO1(InternLM2Model):
 class InternLM2ForCausalLMGO1(InternLM2ForCausalLM):
     _auto_class = "AutoModelForCausalLM"
 
-    _tied_weights_keys = ["output.weight"]
+    _tied_weights_keys: ClassVar[list] = ["output.weight"]
 
     def __init__(self, config, output_logits: bool = True):
         super().__init__(config)
@@ -471,7 +473,7 @@ class InternLM2ForCausalLMGO1(InternLM2ForCausalLM):
         self.output = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.output_logits = output_logits
         if not self.output_logits:
-            logger.warning(f"InternLM2ForCausalLMGO1 disable logits projection output!!")
+            logger.warning("InternLM2ForCausalLMGO1 disable logits projection output!!")
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -483,16 +485,16 @@ class InternLM2ForCausalLMGO1(InternLM2ForCausalLM):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = True,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = True,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | CausalLMOutputWithPast:
         """Modified from InternLM2ModelGO1."""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -535,8 +537,8 @@ class InternLM2ForCausalLMGO1(InternLM2ForCausalLM):
             loss = loss_fct(shift_logits, shift_labels)
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            output = (logits,) + outputs[1:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+            return (loss,) + output if loss is not None else output  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
         output = CausalLMOutputWithPast(

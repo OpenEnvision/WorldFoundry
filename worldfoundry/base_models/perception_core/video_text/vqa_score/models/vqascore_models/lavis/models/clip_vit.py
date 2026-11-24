@@ -1,16 +1,19 @@
-from collections import OrderedDict
-from itertools import repeat
 import collections.abc
 import math
+from collections import OrderedDict
+from itertools import repeat
 
 import torch
 import torch.nn.functional as F
+from fairscale.nn.checkpoint.checkpoint_activations import checkpoint_wrapper
 from torch import nn
 
-from fairscale.nn.checkpoint.checkpoint_activations import checkpoint_wrapper
-
+# isort: split
 from ..models.eva_vit import convert_weights_to_fp16
+
+# isort: split
 from ..common.dist_utils import download_cached_file
+
 
 class Bottleneck(nn.Module):
     expansion = 4
@@ -38,11 +41,15 @@ class Bottleneck(nn.Module):
 
         if stride > 1 or inplanes != planes * Bottleneck.expansion:
             # downsampling layer is prepended with an avgpool, and the subsequent convolution has stride 1
-            self.downsample = nn.Sequential(OrderedDict([
-                ("-1", nn.AvgPool2d(stride)),
-                ("0", nn.Conv2d(inplanes, planes * self.expansion, 1, stride=1, bias=False)),
-                ("1", nn.BatchNorm2d(planes * self.expansion))
-            ]))
+            self.downsample = nn.Sequential(
+                OrderedDict(
+                    [
+                        ("-1", nn.AvgPool2d(stride)),
+                        ("0", nn.Conv2d(inplanes, planes * self.expansion, 1, stride=1, bias=False)),
+                        ("1", nn.BatchNorm2d(planes * self.expansion)),
+                    ]
+                )
+            )
 
     def forward(self, x: torch.Tensor):
         identity = x
@@ -61,9 +68,9 @@ class Bottleneck(nn.Module):
 
 
 class AttentionPool2d(nn.Module):
-    def __init__(self, spacial_dim: int, embed_dim: int, num_heads: int, output_dim: int = None):
+    def __init__(self, spacial_dim: int, embed_dim: int, num_heads: int, output_dim: int | None = None):
         super().__init__()
-        self.positional_embedding = nn.Parameter(torch.randn(spacial_dim ** 2 + 1, embed_dim) / embed_dim ** 0.5)
+        self.positional_embedding = nn.Parameter(torch.randn(spacial_dim**2 + 1, embed_dim) / embed_dim**0.5)
         self.k_proj = nn.Linear(embed_dim, embed_dim)
         self.q_proj = nn.Linear(embed_dim, embed_dim)
         self.v_proj = nn.Linear(embed_dim, embed_dim)
@@ -75,7 +82,9 @@ class AttentionPool2d(nn.Module):
         x = torch.cat([x.mean(dim=0, keepdim=True), x], dim=0)  # (HW+1)NC
         x = x + self.positional_embedding[:, None, :].to(x.dtype)  # (HW+1)NC
         x, _ = F.multi_head_attention_forward(
-            query=x, key=x, value=x,
+            query=x,
+            key=x,
+            value=x,
             embed_dim_to_check=x.shape[-1],
             num_heads=self.num_heads,
             q_proj_weight=self.q_proj.weight,
@@ -91,11 +100,11 @@ class AttentionPool2d(nn.Module):
             out_proj_bias=self.c_proj.bias,
             use_separate_proj_weight=True,
             training=self.training,
-            need_weights=False
+            need_weights=False,
         )
 
         return x[0]
-    
+
 
 class LayerNorm(nn.LayerNorm):
     """Subclass torch's LayerNorm to handle fp16."""
@@ -117,18 +126,22 @@ class ResidualAttentionBlock(nn.Module):
 
         self.attn = nn.MultiheadAttention(d_model, n_head)
         self.ln_1 = LayerNorm(d_model)
-        self.mlp = nn.Sequential(OrderedDict([
-            ("c_fc", nn.Linear(d_model, d_model * 4)),
-            ("gelu", QuickGELU()),
-            ("c_proj", nn.Linear(d_model * 4, d_model))
-        ]))
+        self.mlp = nn.Sequential(
+            OrderedDict(
+                [
+                    ("c_fc", nn.Linear(d_model, d_model * 4)),
+                    ("gelu", QuickGELU()),
+                    ("c_proj", nn.Linear(d_model * 4, d_model)),
+                ]
+            )
+        )
         self.ln_2 = LayerNorm(d_model)
         self.attn_mask = attn_mask
 
         if use_grad_checkpointing:
             self.attn = checkpoint_wrapper(self.attn)
             self.mlp = checkpoint_wrapper(self.mlp)
-            
+
     def attention(self, x: torch.Tensor):
         self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
         return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
@@ -140,18 +153,24 @@ class ResidualAttentionBlock(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, use_grad_checkpointing=False):
+    def __init__(
+        self, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, use_grad_checkpointing=False
+    ):
         super().__init__()
         self.width = width
         self.layers = layers
-        self.resblocks = nn.Sequential(*[ResidualAttentionBlock(width, heads, attn_mask, use_grad_checkpointing and i>12) for i in range(layers)])
+        self.resblocks = nn.Sequential(
+            *[ResidualAttentionBlock(width, heads, attn_mask, use_grad_checkpointing and i > 12) for i in range(layers)]
+        )
 
     def forward(self, x: torch.Tensor):
         return self.resblocks(x)
 
 
 class VisionTransformer(nn.Module):
-    def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, use_grad_checkpointing: bool):
+    def __init__(
+        self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, use_grad_checkpointing: bool
+    ):
         super().__init__()
         self.input_resolution = input_resolution
         self.num_features = width
@@ -159,45 +178,55 @@ class VisionTransformer(nn.Module):
         self.num_patches = (input_resolution // patch_size) ** 2
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_size, bias=False)
 
-        scale = width ** -0.5
+        scale = width**-0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
         self.positional_embedding = nn.Parameter(scale * torch.randn(self.num_patches + 1, width))
         self.ln_pre = LayerNorm(width)
-        
-        self.transformer = Transformer(width, layers-1, heads, use_grad_checkpointing=use_grad_checkpointing)
-           
-#         self.ln_final = LayerNorm(width)
+
+        self.transformer = Transformer(width, layers - 1, heads, use_grad_checkpointing=use_grad_checkpointing)
+
+    #         self.ln_final = LayerNorm(width)
 
     def forward(self, x: torch.Tensor):
-
         x = self.conv1(x)  # shape = [*, width, grid, grid]
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
-        x = torch.cat([self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device), x], dim=1)  # shape = [*, grid ** 2 + 1, width]
+        x = torch.cat(
+            [
+                self.class_embedding.to(x.dtype)
+                + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device),
+                x,
+            ],
+            dim=1,
+        )  # shape = [*, grid ** 2 + 1, width]
         x = x + self.positional_embedding.to(x.dtype)
         x = self.ln_pre(x)
 
         x = x.permute(1, 0, 2)  # NLD -> LND
         x = self.transformer(x)
         x = x.permute(1, 0, 2)  # LND -> NLD
-        
-#         x = self.ln_final(x)
+
+        #         x = self.ln_final(x)
         return x
-    
-    
-            
+
+
 # From PyTorch internals
 def _ntuple(n):
     def parse(x):
         if isinstance(x, collections.abc.Iterable):
             return x
         return tuple(repeat(x, n))
+
     return parse
-to_2tuple = _ntuple(2)        
-def interpolate_pos_embed(model, state_dict, interpolation: str = 'bicubic', seq_dim=1):
+
+
+to_2tuple = _ntuple(2)
+
+
+def interpolate_pos_embed(model, state_dict, interpolation: str = "bicubic", seq_dim=1):
     # Rescale the grid of position embeddings when loading from state_dict
-    old_pos_embed = state_dict.get('positional_embedding', None)
-    
+    old_pos_embed = state_dict.get("positional_embedding", None)
+
     grid_size = round((model.positional_embedding.shape[0] - 1) ** 0.5)
     if old_pos_embed is None:
         return
@@ -211,10 +240,10 @@ def interpolate_pos_embed(model, state_dict, interpolation: str = 'bicubic', seq
         pos_emb_tok, pos_emb_img = old_pos_embed[:extra_tokens], old_pos_embed[extra_tokens:]
     else:
         pos_emb_tok, pos_emb_img = None, old_pos_embed
-        
+
     old_grid_size = to_2tuple(int(math.sqrt(len(pos_emb_img))))
 
-    print('Resizing position embedding grid-size from %s to %s', old_grid_size, grid_size)
+    print("Resizing position embedding grid-size from %s to %s", old_grid_size, grid_size)
     pos_emb_img = pos_emb_img.reshape(1, old_grid_size[0], old_grid_size[1], -1).permute(0, 3, 1, 2)
     pos_emb_img = F.interpolate(
         pos_emb_img,
@@ -223,32 +252,27 @@ def interpolate_pos_embed(model, state_dict, interpolation: str = 'bicubic', seq
         align_corners=True,
     )
     pos_emb_img = pos_emb_img.permute(0, 2, 3, 1).reshape(1, grid_size[0] * grid_size[1], -1)[0]
-    if pos_emb_tok is not None:
-        new_pos_embed = torch.cat([pos_emb_tok, pos_emb_img], dim=0)
-    else:
-        new_pos_embed = pos_emb_img
-    state_dict['positional_embedding'] = new_pos_embed
-    
-    
-def create_clip_vit_L(img_size=224,use_checkpoint=False,precision="fp16"):
+    new_pos_embed = torch.cat([pos_emb_tok, pos_emb_img], dim=0) if pos_emb_tok is not None else pos_emb_img
+    state_dict["positional_embedding"] = new_pos_embed
+
+
+def create_clip_vit_L(img_size=224, use_checkpoint=False, precision="fp16"):
     model = VisionTransformer(
-            input_resolution=img_size,
-            patch_size=14,
-            width=1024,
-            layers=22,
-            heads=16,
-            use_grad_checkpointing=use_checkpoint,
-        )         
-    url = "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/clip_vit_L.pth"
-    cached_file = download_cached_file(
-        url, check_hash=False, progress=True
+        input_resolution=img_size,
+        patch_size=14,
+        width=1024,
+        layers=22,
+        heads=16,
+        use_grad_checkpointing=use_checkpoint,
     )
-    state_dict = torch.load(cached_file, map_location="cpu")    
-    interpolate_pos_embed(model,state_dict)
-    
-    incompatible_keys = model.load_state_dict(state_dict, strict=False)
+    url = "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/clip_vit_L.pth"
+    cached_file = download_cached_file(url, check_hash=False, progress=True)
+    state_dict = torch.load(cached_file, map_location="cpu")
+    interpolate_pos_embed(model, state_dict)
+
+    _incompatible_keys = model.load_state_dict(state_dict, strict=False)
     # print(incompatible_keys)
-    
+
     if precision == "fp16":
         convert_weights_to_fp16(model)
     return model

@@ -60,10 +60,7 @@ class _LatentActionQuantizationBase(nn.Module):
         patch_height, patch_width = self.patch_size
         image_height, image_width = self.image_size
         if image_height % patch_height or image_width % patch_width:
-            raise ValueError(
-                f"Image size {self.image_size} must be divisible by "
-                f"patch size {self.patch_size}"
-            )
+            raise ValueError(f"Image size {self.image_size} must be divisible by patch size {self.patch_size}")
 
         transformer_kwargs = {
             "dim": dim,
@@ -75,12 +72,8 @@ class _LatentActionQuantizationBase(nn.Module):
             "peg_causal": True,
         }
         self.spatial_rel_pos_bias = ContinuousPositionBias(dim=dim, heads=heads)
-        self.enc_spatial_transformer = Transformer(
-            depth=spatial_depth, **transformer_kwargs
-        )
-        self.enc_temporal_transformer = Transformer(
-            depth=temporal_depth, **transformer_kwargs
-        )
+        self.enc_spatial_transformer = Transformer(depth=spatial_depth, **transformer_kwargs)
+        self.enc_temporal_transformer = Transformer(depth=temporal_depth, **transformer_kwargs)
         self.vq = NSVQ(
             dim=dim,
             num_embeddings=codebook_size,
@@ -98,9 +91,7 @@ class _LatentActionQuantizationBase(nn.Module):
             self.image_size[1] // self.patch_size[1],
         )
 
-    def load_state_dict(
-        self, state_dict: dict[str, Tensor], strict: bool = False, assign: bool = False
-    ):
+    def load_state_dict(self, state_dict: dict[str, Tensor], strict: bool = False, assign: bool = False):
         del strict
         try:
             return super().load_state_dict(state_dict, strict=False, assign=assign)
@@ -109,9 +100,7 @@ class _LatentActionQuantizationBase(nn.Module):
 
     def load(self, path: str | Path) -> None:
         checkpoint = torch.load(Path(path))
-        state_dict = {
-            key.removeprefix("module."): value for key, value in checkpoint.items()
-        }
+        state_dict = {key.removeprefix("module."): value for key, value in checkpoint.items()}
         self.load_state_dict(state_dict)
 
     def _tokenize_video(self, first_frame: Tensor, last_frame: Tensor) -> Tensor:
@@ -123,12 +112,8 @@ class _LatentActionQuantizationBase(nn.Module):
         video_shape = tuple(tokens.shape[:-1])
 
         tokens = rearrange(tokens, "b t h w d -> (b t) (h w) d")
-        attention_bias = self.spatial_rel_pos_bias(
-            height, width, device=tokens.device
-        )
-        tokens = self.enc_spatial_transformer(
-            tokens, attn_bias=attention_bias, video_shape=video_shape
-        )
+        attention_bias = self.spatial_rel_pos_bias(height, width, device=tokens.device)
+        tokens = self.enc_spatial_transformer(tokens, attn_bias=attention_bias, video_shape=video_shape)
         tokens = rearrange(
             tokens,
             "(b t) (h w) d -> b t h w d",
@@ -137,9 +122,7 @@ class _LatentActionQuantizationBase(nn.Module):
             w=width,
         )
         tokens = rearrange(tokens, "b t h w d -> (b h w) t d")
-        tokens = self.enc_temporal_transformer(
-            tokens, video_shape=video_shape
-        )
+        tokens = self.enc_temporal_transformer(tokens, video_shape=video_shape)
         tokens = rearrange(
             tokens,
             "(b h w) t d -> b t h w d",
@@ -158,9 +141,7 @@ class _LatentActionQuantizationBase(nn.Module):
         **_: Any,
     ) -> tuple[Tensor, Tensor]:
         if not return_only_codebook_ids:
-            raise ValueError(
-                "The in-tree LAQ integration only supports latent-action extraction"
-            )
+            raise ValueError("The in-tree LAQ integration only supports latent-action extraction")
         if mask is not None:
             raise ValueError("Masked training is not part of latent-action extraction")
         if video.ndim == 4:
@@ -168,18 +149,12 @@ class _LatentActionQuantizationBase(nn.Module):
         if video.ndim != 5:
             raise ValueError(f"Expected BCHW or BCTHW input, got {video.shape}")
         if tuple(video.shape[-2:]) != self.image_size:
-            raise ValueError(
-                f"Expected image size {self.image_size}, got {tuple(video.shape[-2:])}"
-            )
+            raise ValueError(f"Expected image size {self.image_size}, got {tuple(video.shape[-2:])}")
         if video.shape[2] != 2:
-            raise ValueError(
-                f"LAQ extraction expects frame pairs, got {video.shape[2]} frames"
-            )
+            raise ValueError(f"LAQ extraction expects frame pairs, got {video.shape[2]} frames")
 
         first_frame, last_frame = video[:, :, :1], video[:, :, 1:]
-        first_tokens, last_tokens = self._encode(
-            self._tokenize_video(first_frame, last_frame)
-        )
+        first_tokens, last_tokens = self._encode(self._tokenize_video(first_frame, last_frame))
         batch_size = video.shape[0]
         first_tokens = first_tokens.reshape(batch_size, -1, first_tokens.shape[-1])
         last_tokens = last_tokens.reshape(batch_size, -1, last_tokens.shape[-1])
@@ -249,9 +224,7 @@ class LatentActionQuantizationDinov3Feature(_LatentActionQuantizationBase):
 class LatentActionQuantizationMagvit2(_LatentActionQuantizationBase):
     def __init__(self, *, model_type: str = "en18", **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.magvit2_tokenizer = get_magvit2_tokenizer(
-            model_type=model_type, device="cpu"
-        )
+        self.magvit2_tokenizer = get_magvit2_tokenizer(model_type=model_type, device="cpu")
 
     def _tokenize_video(self, first_frame: Tensor, last_frame: Tensor) -> Tensor:
         first_tokens = get_reps_magvit2(first_frame, self.magvit2_tokenizer)

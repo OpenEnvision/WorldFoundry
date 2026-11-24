@@ -1,9 +1,9 @@
 ---
 title: WorldScore
-description: "斯坦福统一世界生成评测：相机指定 rollout 上的可控、质量、动态。WorldFoundry 内置 runtime；有界动态组件已验证。"
+description: "斯坦福的统一世界生成评测：在相机指定的 rollout 上评测可控性、质量与动态。"
 ---
 
-WorldScore（斯坦福）把 **3D/4D 场景生成与视频世界模型** 放进同一协议。模型收到起始场景加一串 **相机指定的布局指令**。三个分面归一化为 `worldscore_average`：
+WorldScore（斯坦福）将 **3D/4D 场景生成与视频世界模型** 纳入同一协议。模型收到起始场景加一串 **相机指定的布局指令**。三个分面归一化为 `worldscore_average`：
 
 - **可控性** — 相机与物体 / 条件控制
 - **质量** — 视觉与重建保真
@@ -11,7 +11,7 @@ WorldScore（斯坦福）把 **3D/4D 场景生成与视频世界模型** 放进�
 
 论文：[WorldScore](https://arxiv.org/abs/2504.00983)。项目：[haoyi-duan.github.io/WorldScore](https://haoyi-duan.github.io/WorldScore/)。代码：[haoyi-duan/WorldScore](https://github.com/haoyi-duan/WorldScore)（MIT）。数据：[`Howieeeee/WorldScore`](https://huggingface.co/datasets/Howieeeee/WorldScore)（修订 `42c4e267e1cc0529af1b0284ce018e04d43906e3`）。
 
-WorldFoundry **仓内内置核心 runtime**，并把 `evaluation.json` 树转成 scorecard。**有界动态组件已验证**；**完整指标树执行未验证**。完整指标需要 DROID / `lietorch`、GroundingDINO、SAM、光流 / 插帧、Mamba 及对应权重。
+WorldFoundry 内置 WorldScore 核心 runtime，并把 `evaluation.json` 树转成 scorecard。动态组件已在有限样本上验证；运行完整指标树需要 DROID / `lietorch`、GroundingDINO、SAM、光流 / 插帧、Mamba 及对应权重。
 
 <BenchmarkPageSections id="worldscore" locale="zh" />
 
@@ -22,7 +22,7 @@ hf download Howieeeee/WorldScore --repo-type dataset \
   --revision 42c4e267e1cc0529af1b0284ce018e04d43906e3 \
   --local-dir cache/worldfoundry/data/hfd_datasets/Howieeeee/WorldScore
 
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id worldscore \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -33,7 +33,7 @@ worldfoundry-eval zoo benchmark-run \
 
 GPU 路径：`--generated-root`、`--data-path`、`--num-jobs`。暂存助手：`--stage-dynamic-source`、`--stage-sample-index`、`--stage-target-frames`。环境变量：`WORLDFOUNDRY_WORLDSCORE_RESULTS_PATH`、`WORLDFOUNDRY_WORLDSCORE_OUTPUT_DIR`、`WORLDFOUNDRY_WORLDSCORE_CONFIG_ROOT`。共享栈：`worldscore_spatial_metric_stack`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/worldscore.yaml`，`worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore`。
+相关文件：`worldfoundry/data/benchmarks/tasks/external/worldscore.yaml`，`worldfoundry/evals/tasks/execution/runners/worldscore/runtime/worldscore`。
 
 产物包括 `scorecard.json`（主键 `worldscore_average`）与 `per_sample_metrics.jsonl`。
 

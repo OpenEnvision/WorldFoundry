@@ -64,13 +64,13 @@ class T2VTurboT2VPipeline(PipelineABC):
         return overrides or None
 
     @classmethod
-    def from_pretrained(  # ty: ignore[invalid-method-override]
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: str | Mapping[str, Any] | None = None,
         required_components: Mapping[str, Any] | None = None,
         device: str = "cuda",
         **kwargs: Any,
-    ) -> "T2VTurboT2VPipeline":
+    ) -> T2VTurboT2VPipeline:
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
         options.update(required_components or {})
         options.update(kwargs)

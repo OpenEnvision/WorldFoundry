@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 id: pi0
 name: pi0
 aliases:
@@ -11,6 +11,7 @@ official_sources:
   github:
     head_sha: c23745b5ad24e98f66967ea795a07b2588ed6c79
     url: https://github.com/Physical-Intelligence/openpi
+    revision: c23745b5ad24e98f66967ea795a07b2588ed6c79
 integration:
   status: runtime_ported
   notes:
@@ -32,19 +33,19 @@ docs:
   publisher: Physical Intelligence
   publisher_kind: company
   publisher_zh: Physical Intelligence（PI）
-  overview: 'pi0 is Physical Intelligence''s flagship flow-matching VLA: a PaliGemma-based backbone with an action expert that decodes continuous action chunks via flow matching. This catalog entry is the concrete pi0 algorithm route, reusing the flattened in-tree OpenPI runtime with pi0-specific configuration.'
-  overview_zh: pi0 是 Physical Intelligence 的旗舰 flow-matching VLA：基于 PaliGemma 的骨干加动作专家，经 flow matching 解码连续动作块。本 catalog 条目是具体的 pi0 算法路由，复用扁平化树内 OpenPI 运行时与 pi0 专用配置。
-  architecture: A PaliGemma VLM backbone plus a flow-matching action expert producing action chunks; the model graph, transforms, local checkpoint loader, and action sampler are in-tree. Checkpoints are GCS-hosted (gs://openpi-assets).
-  architecture_zh: PaliGemma VLM 骨干加 flow-matching 动作专家，输出动作块；模型图、变换、本地 checkpoint 加载器与动作采样器内置树内。checkpoint 托管于 GCS（gs://openpi-assets）。
-  usage_notes: Stage GCS checkpoints with gsutil/gcloud (not Hugging Face). Numerical parity remains gated only by staged checkpoint assets; the shared runtime infrastructure is validated under the openpi entry.
-  usage_notes_zh: 用 gsutil/gcloud 就位 GCS checkpoint（非 Hugging Face）。数值 parity 仅受 checkpoint 资产就位限制；共享运行时基础设施已在 openpi 条目下验证。
+  overview: "pi0 is Physical Intelligence's flagship flow-matching VLA: a PaliGemma-based backbone with an action expert that decodes continuous action chunks via flow matching. WorldFoundry runs the concrete pi0 algorithm on the OpenPI runtime with pi0-specific configuration."
+  overview_zh: pi0 是 Physical Intelligence 的旗舰 flow-matching VLA：基于 PaliGemma 的骨干加动作专家，经 flow matching 解码连续动作块。WorldFoundry 在 OpenPI 运行时上以 pi0 专用配置运行具体的 pi0 算法。
+  architecture: A PaliGemma VLM backbone plus a flow-matching action expert producing action chunks. Checkpoints are GCS-hosted (gs://openpi-assets).
+  architecture_zh: PaliGemma VLM 骨干加 flow-matching 动作专家，输出动作块。checkpoint 托管于 GCS（gs://openpi-assets）。
+  usage_notes: Stage the GCS checkpoints with gsutil/gcloud (not Hugging Face). The default config is pi0_droid; its Orbax checkpoint must already be local.
+  usage_notes_zh: 用 gsutil/gcloud 准备 GCS checkpoint（非 Hugging Face）。默认配置为 pi0_droid，对应的 Orbax checkpoint 必须已在本地。
   limitations:
   - GCS-hosted checkpoints require gsutil/gcloud tooling.
-  - No license is recorded on this entry (see the openpi entry, Apache-2.0).
+  - No pi0-specific license is listed; OpenPI is released under Apache-2.0.
   limitations_zh:
   - GCS 托管 checkpoint 需要 gsutil/gcloud 工具。
-  - 本条目未记录许可证（参见 openpi 条目，Apache-2.0）。
+  - 未标明 pi0 专属许可证；OpenPI 以 Apache-2.0 发布。
   recommended_benchmarks:
   - id: libero
-    reason: The openpi family validates pi05_libero in-tree.
-    reason_zh: openpi 家族在树内验证了 pi05_libero。
+    reason: LIBERO is the OpenPI family's validated benchmark, through the pi05_libero config.
+    reason_zh: LIBERO 是 OpenPI 家族已验证的评测（通过 pi05_libero 配置）。

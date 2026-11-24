@@ -1,15 +1,15 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
-import logging
 import json
-from typing import Dict
+import logging
 
 from omegaconf import OmegaConf
+
 from ..common.registry import registry
 
 
@@ -36,9 +36,7 @@ class Config:
         # self._validate_runner_config(runner_config)
 
         # Override the default configuration with user options.
-        self.config = OmegaConf.merge(
-            runner_config, model_config, dataset_config, user_config
-        )
+        self.config = OmegaConf.merge(runner_config, model_config, dataset_config, user_config)
 
     def _validate_runner_config(self, runner_config):
         """
@@ -61,7 +59,7 @@ class Config:
         model_cls = registry.get_model_class(model.arch)
         assert model_cls is not None, f"Model '{model.arch}' has not been registered."
 
-        model_type = kwargs.get("model.model_type", None)
+        model_type = kwargs.get("model.model_type")
         if not model_type:
             model_type = model.get("model_type", None)
         # else use the model type selected by user.
@@ -88,9 +86,7 @@ class Config:
     def build_dataset_config(config):
         datasets = config.get("datasets", None)
         if datasets is None:
-            raise KeyError(
-                "Expecting 'datasets' as the root key for dataset configuration."
-            )
+            raise KeyError("Expecting 'datasets' as the root key for dataset configuration.")
 
         dataset_config = OmegaConf.create()
 
@@ -98,9 +94,7 @@ class Config:
             builder_cls = registry.get_builder_class(dataset_name)
 
             dataset_config_type = datasets[dataset_name].get("type", "default")
-            dataset_config_path = builder_cls.default_config_path(
-                type=dataset_config_type
-            )
+            dataset_config_path = builder_cls.default_config_path(type=dataset_config_type)
 
             # hiararchy override, customized config > default config
             dataset_config = OmegaConf.merge(
@@ -123,7 +117,7 @@ class Config:
         if has_equal:
             return opts
 
-        return [(opt + "=" + value) for opt, value in zip(opts[0::2], opts[1::2])]
+        return [(opt + "=" + value) for opt, value in zip(opts[0::2], opts[1::2], strict=False)]
 
     def get_config(self):
         return self.config
@@ -155,7 +149,7 @@ class Config:
             else:
                 logging.warning(f"No dataset named '{dataset}' in config. Skipping")
 
-        logging.info(f"\n======  Model Attributes  ======")
+        logging.info("\n======  Model Attributes  ======")
         logging.info(self._convert_node_to_json(self.config.model))
 
     def _convert_node_to_json(self, node):
@@ -205,7 +199,7 @@ class ConfigValidator:
     def __init__(self, description):
         self.description = description
 
-        self.arguments = dict()
+        self.arguments = {}
 
         self.parsed_args = None
 
@@ -228,20 +222,18 @@ class ConfigValidator:
         Convert yaml config (dict-like) to list, required by argparse.
         """
         for k, v in config.items():
-            assert (
-                k in self.arguments
-            ), f"""{k} is not a valid argument. Support arguments are {self.format_arguments()}."""
+            assert k in self.arguments, (
+                f"""{k} is not a valid argument. Support arguments are {self.format_arguments()}."""
+            )
 
             if self.arguments[k].type is not None:
                 try:
                     self.arguments[k].val = self.arguments[k].type(v)
                 except ValueError:
-                    raise ValueError(f"{k} is not a valid {self.arguments[k].type}.")
+                    raise ValueError(f"{k} is not a valid {self.arguments[k].type}.")  # noqa: B904 - Keeps the implicit exception context.
 
             if self.arguments[k].choices is not None:
-                assert (
-                    v in self.arguments[k].choices
-                ), f"""{k} must be one of {self.arguments[k].choices}."""
+                assert v in self.arguments[k].choices, f"""{k} must be one of {self.arguments[k].choices}."""
 
         return config
 
@@ -271,7 +263,7 @@ def create_runner_config_validator():
     # add argumetns for training dataset ratios
     validator.add_argument(
         "train_dataset_ratios",
-        type=Dict[str, float],
+        type=dict[str, float],
         help="""Ratios of training dataset. This is used in iteration-based runner.
         Do not support for epoch-based runner because how to define an epoch becomes tricky.
         Default: None""",
@@ -297,14 +289,14 @@ def create_runner_config_validator():
         "lr_sched",
         type=str,
         choices=lr_scheds_choices,
-        help="Learning rate scheduler to use, from {}".format(lr_scheds_choices),
+        help=f"Learning rate scheduler to use, from {lr_scheds_choices}",
     )
     task_choices = registry.list_tasks()
     validator.add_argument(
         "task",
         type=str,
         choices=task_choices,
-        help="Task to use, from {}".format(task_choices),
+        help=f"Task to use, from {task_choices}",
     )
     # add arguments for init_lr
     validator.add_argument(

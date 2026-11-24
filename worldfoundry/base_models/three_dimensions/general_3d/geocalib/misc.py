@@ -7,7 +7,7 @@
 import functools
 import inspect
 import logging
-from typing import Callable, List
+from collections.abc import Callable
 
 import numpy as np
 import torch
@@ -31,7 +31,6 @@ def autocast(func: Callable) -> Callable:
 
     @functools.wraps(func)
     def wrap(self, *args):
-        """Wrap."""
         device = torch.device("cpu")
         dtype = None
         if isinstance(self, TensorWrapper):
@@ -146,7 +145,7 @@ class TensorWrapper:
         return self.__class__(self._data.squeeze(*args, **kwargs))
 
     @classmethod
-    def stack(cls, objects: List, dim=0, *, out=None):
+    def stack(cls, objects: list, dim=0, *, out=None):
         """Stack a list of objects with the same type and shape."""
         data = torch.stack([obj._data for obj in objects], dim=dim, out=out)
         return cls(data)
@@ -309,10 +308,10 @@ def J_up_projection(uv: torch.Tensor, abc: torch.Tensor, wrt: str = "uv") -> tor
     """
     if wrt == "uv":
         c = abc[..., 2][..., None, None, None]
-        return -c * torch.eye(2, device=uv.device, dtype=uv.dtype).expand(uv.shape[:-1] + (2, 2))
+        return -c * torch.eye(2, device=uv.device, dtype=uv.dtype).expand(uv.shape[:-1] + (2, 2))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     elif wrt == "abc":
-        J = uv.new_zeros(uv.shape[:-1] + (2, 3))
+        J = uv.new_zeros(uv.shape[:-1] + (2, 3))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         J[..., 0, 0] = 1
         J[..., 1, 1] = 1
         J[..., 0, 2] = -uv[..., 0]

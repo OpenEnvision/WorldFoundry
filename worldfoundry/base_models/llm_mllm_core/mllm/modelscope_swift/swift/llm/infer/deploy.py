@@ -1,15 +1,14 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import asyncio
 import inspect
+import json
 import multiprocessing
 import time
 from contextlib import contextmanager
 from dataclasses import asdict
 from http import HTTPStatus
 from threading import Thread
-from typing import List, Optional, Union
 
-import json
 import uvicorn
 from aiohttp import ClientConnectorError
 from fastapi import FastAPI, Request
@@ -19,6 +18,7 @@ from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm impo
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm.infer.protocol import MultiModalRequestMixin
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.plugin import InferStats
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.utils import JsonlWriter, get_logger
+
 from .infer import SwiftInfer
 from .infer_engine import InferClient
 from .protocol import ChatCompletionRequest, CompletionRequest, Model, ModelList
@@ -31,11 +31,11 @@ class SwiftDeploy(SwiftInfer):
     args: args_class
 
     def _register_app(self):
-        self.app.get('/v1/models')(self.get_available_models)
-        self.app.post('/v1/chat/completions')(self.create_chat_completion)
-        self.app.post('/v1/completions')(self.create_completion)
+        self.app.get("/v1/models")(self.get_available_models)
+        self.app.post("/v1/chat/completions")(self.create_chat_completion)
+        self.app.post("/v1/completions")(self.create_completion)
 
-    def __init__(self, args: Union[List[str], DeployArguments, None] = None) -> None:
+    def __init__(self, args: list[str] | DeployArguments | None = None) -> None:
         super().__init__(args)
 
         self.infer_engine.strict = True
@@ -70,7 +70,7 @@ class SwiftDeploy(SwiftInfer):
         args = self.args
         model_list = [args.served_model_name or args.model_suffix]
         if args.adapter_mapping:
-            model_list += [name for name in args.adapter_mapping.keys()]
+            model_list += list(args.adapter_mapping.keys())
         return model_list
 
     async def get_available_models(self):
@@ -78,19 +78,19 @@ class SwiftDeploy(SwiftInfer):
         data = [Model(id=model_id, owned_by=self.args.owned_by) for model_id in model_list]
         return ModelList(data=data)
 
-    async def _check_model(self, request: ChatCompletionRequest) -> Optional[str]:
+    async def _check_model(self, request: ChatCompletionRequest) -> str | None:
         available_models = await self.get_available_models()
         model_list = [model.id for model in available_models.data]
         if request.model not in model_list:
-            return f'`{request.model}` is not in the model_list: `{model_list}`.'
+            return f"`{request.model}` is not in the model_list: `{model_list}`."
 
-    def _check_api_key(self, raw_request: Request) -> Optional[str]:
+    def _check_api_key(self, raw_request: Request) -> str | None:
         api_key = self.args.api_key
         if api_key is None:
             return
-        authorization = dict(raw_request.headers).get('authorization')
-        error_msg = 'API key error'
-        if authorization is None or not authorization.startswith('Bearer '):
+        authorization = dict(raw_request.headers).get("authorization")
+        error_msg = "API key error"
+        if authorization is None or not authorization.startswith("Bearer "):
             return error_msg
         request_api_key = authorization[7:]
         if request_api_key != api_key:
@@ -99,31 +99,34 @@ class SwiftDeploy(SwiftInfer):
     def _check_max_logprobs(self, request):
         args = self.args
         if isinstance(request.top_logprobs, int) and request.top_logprobs > args.max_logprobs:
-            return (f'The value of top_logprobs({request.top_logprobs}) is greater than '
-                    f'the server\'s max_logprobs({args.max_logprobs}).')
+            return (
+                f"The value of top_logprobs({request.top_logprobs}) is greater than "
+                f"the server's max_logprobs({args.max_logprobs})."
+            )
 
     @staticmethod
-    def create_error_response(status_code: Union[int, str, HTTPStatus], message: str) -> JSONResponse:
+    def create_error_response(status_code: int | str | HTTPStatus, message: str) -> JSONResponse:
         status_code = int(status_code)
-        return JSONResponse({'message': message, 'object': 'error'}, status_code)
+        return JSONResponse({"message": message, "object": "error"}, status_code)
 
     def _post_process(self, request_info, response, return_cmpl_response: bool = False):
         args = self.args
 
         for i in range(len(response.choices)):
-            if not hasattr(response.choices[i], 'message') or not isinstance(response.choices[i].message.content,
-                                                                             (tuple, list)):
+            if not hasattr(response.choices[i], "message") or not isinstance(
+                response.choices[i].message.content, (tuple, list)
+            ):
                 continue
             for j, content in enumerate(response.choices[i].message.content):
-                if content['type'] == 'image':
-                    b64_image = MultiModalRequestMixin.to_base64(content['image'])
-                    response.choices[i].message.content[j]['image'] = f'data:image/jpg;base64,{b64_image}'
+                if content["type"] == "image":
+                    b64_image = MultiModalRequestMixin.to_base64(content["image"])
+                    response.choices[i].message.content[j]["image"] = f"data:image/jpg;base64,{b64_image}"
 
         is_finished = all(response.choices[i].finish_reason for i in range(len(response.choices)))
-        if 'stream' in response.__class__.__name__.lower():
-            request_info['response'] += response.choices[0].delta.content
+        if "stream" in response.__class__.__name__.lower():
+            request_info["response"] += response.choices[0].delta.content
         else:
-            request_info['response'] = response.choices[0].message.content
+            request_info["response"] = response.choices[0].message.content
         if return_cmpl_response:
             response = response.to_cmpl_response()
         if is_finished:
@@ -141,37 +144,37 @@ class SwiftDeploy(SwiftInfer):
             return
         for key, val in asdict(request_config).items():
             default_val = getattr(default_request_config, key)
-            if default_val is not None and (val is None or isinstance(val, (list, tuple)) and len(val) == 0):
+            if default_val is not None and (val is None or (isinstance(val, (list, tuple)) and len(val) == 0)):
                 setattr(request_config, key, default_val)
 
-    async def create_chat_completion(self,
-                                     request: ChatCompletionRequest,
-                                     raw_request: Request,
-                                     *,
-                                     return_cmpl_response: bool = False):
+    async def create_chat_completion(
+        self, request: ChatCompletionRequest, raw_request: Request, *, return_cmpl_response: bool = False
+    ):
         args = self.args
-        error_msg = (await self._check_model(request) or self._check_api_key(raw_request)
-                     or self._check_max_logprobs(request))
+        error_msg = (
+            await self._check_model(request) or self._check_api_key(raw_request) or self._check_max_logprobs(request)
+        )
         if error_msg:
             return self.create_error_response(HTTPStatus.BAD_REQUEST, error_msg)
         infer_kwargs = self.infer_kwargs.copy()
         adapter_path = args.adapter_mapping.get(request.model)
         if adapter_path:
-            infer_kwargs['adapter_request'] = AdapterRequest(request.model, adapter_path)
+            infer_kwargs["adapter_request"] = AdapterRequest(request.model, adapter_path)
 
         infer_request, request_config = request.parse()
         self._set_request_config(request_config)
-        request_info = {'response': '', 'infer_request': infer_request.to_printable()}
+        request_info = {"response": "", "infer_request": infer_request.to_printable()}
 
         def pre_infer_hook(kwargs):
-            request_info['generation_config'] = kwargs['generation_config']
+            request_info["generation_config"] = kwargs["generation_config"]
             return kwargs
 
-        infer_kwargs['pre_infer_hook'] = pre_infer_hook
+        infer_kwargs["pre_infer_hook"] = pre_infer_hook
         try:
             res_or_gen = await self.infer_async(infer_request, request_config, template=self.template, **infer_kwargs)
         except Exception as e:
             import traceback
+
             logger.info(traceback.format_exc())
             return self.create_error_response(HTTPStatus.BAD_REQUEST, str(e))
         if request_config.stream:
@@ -179,10 +182,10 @@ class SwiftDeploy(SwiftInfer):
             async def _gen_wrapper():
                 async for res in res_or_gen:
                     res = self._post_process(request_info, res, return_cmpl_response)
-                    yield f'data: {json.dumps(asdict(res), ensure_ascii=False)}\n\n'
-                yield 'data: [DONE]\n\n'
+                    yield f"data: {json.dumps(asdict(res), ensure_ascii=False)}\n\n"
+                yield "data: [DONE]\n\n"
 
-            return StreamingResponse(_gen_wrapper(), media_type='text/event-stream')
+            return StreamingResponse(_gen_wrapper(), media_type="text/event-stream")
         else:
             return self._post_process(request_info, res_or_gen, return_cmpl_response)
 
@@ -193,17 +196,18 @@ class SwiftDeploy(SwiftInfer):
     def run(self):
         args = self.args
         self.jsonl_writer = JsonlWriter(args.result_path) if args.result_path else None
-        logger.info(f'model_list: {self._get_model_list()}')
+        logger.info(f"model_list: {self._get_model_list()}")
         uvicorn.run(
             self.app,
             host=args.host,
             port=args.port,
             ssl_keyfile=args.ssl_keyfile,
             ssl_certfile=args.ssl_certfile,
-            log_level=args.log_level)
+            log_level=args.log_level,
+        )
 
 
-def deploy_main(args: Union[List[str], DeployArguments, None] = None) -> None:
+def deploy_main(args: list[str] | DeployArguments | None = None) -> None:
     SwiftDeploy(args).main()
 
 
@@ -218,7 +222,7 @@ def is_accessible(port: int):
 
 @contextmanager
 def run_deploy(args: DeployArguments, return_url: bool = False):
-    if isinstance(args, DeployArguments) and args.__class__.__name__ == 'DeployArguments':
+    if isinstance(args, DeployArguments) and args.__class__.__name__ == "DeployArguments":
         deploy_args = args
     else:
         args_dict = asdict(args)
@@ -228,13 +232,13 @@ def run_deploy(args: DeployArguments, return_url: bool = False):
                 args_dict.pop(k)
         deploy_args = DeployArguments(**args_dict)
 
-    mp = multiprocessing.get_context('spawn')
-    process = mp.Process(target=deploy_main, args=(deploy_args, ))
+    mp = multiprocessing.get_context("spawn")
+    process = mp.Process(target=deploy_main, args=(deploy_args,))
     process.start()
     try:
         while not is_accessible(deploy_args.port):
             time.sleep(1)
-        yield f'http://127.0.0.1:{deploy_args.port}/v1' if return_url else deploy_args.port
+        yield f"http://127.0.0.1:{deploy_args.port}/v1" if return_url else deploy_args.port
     finally:
         process.terminate()
-        logger.info('The deployment process has been terminated.')
+        logger.info("The deployment process has been terminated.")

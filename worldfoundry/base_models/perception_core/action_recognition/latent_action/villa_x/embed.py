@@ -29,9 +29,7 @@ class PatchEmbed(nn.Module):
         )
         self.num_patches = self.grid_size[0] * self.grid_size[1]
         self.flatten = flatten
-        self.proj = nn.Conv2d(
-            in_channels, embed_dim, kernel_size=self.patch_size, stride=self.patch_size
-        )
+        self.proj = nn.Conv2d(in_channels, embed_dim, kernel_size=self.patch_size, stride=self.patch_size)
 
     def forward(self, patches: torch.Tensor | list[torch.Tensor]) -> torch.Tensor:
         @flatten_internal

@@ -7,6 +7,7 @@ groups:
 - prior
 source_repos:
 - url: https://github.com/DepthAnything/Depth-Anything-V2
+  revision: a561b849ebae10a6f5ef49e26c83cbbcd36c71bf
 checkpoints:
 - repo_id: depth-anything/Depth-Anything-V2-Large
   filename: depth_anything_v2_vitl.pth
@@ -30,6 +31,3 @@ notes:
 - Independent base-model profile for the DAv2 prior under worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v2.
 - WorldFoundry exposes this prior through the shared geometry-prior pipeline/operator
   contract.
-backend_stage: in_tree_geometry_prior_runtime
-runtime_status: in_tree_runtime_wired
-integration_status: integrated

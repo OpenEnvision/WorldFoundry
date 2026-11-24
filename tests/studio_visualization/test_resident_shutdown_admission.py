@@ -9,8 +9,8 @@ from types import SimpleNamespace
 import pytest
 
 from worldfoundry.studio.inference.catalog import find_entry
-from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
 from worldfoundry.studio.visualization.backends.world_realtime import ResidentWorldRuntime
+from worldfoundry.studio.visualization.launch_config import StudioLaunchConfig
 
 
 @pytest.fixture

@@ -24,7 +24,7 @@ runner:
   normalization:
     dispatch: embodied
     embodied_track: vla
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:RoboCerebraContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:robocerebra
   expected_artifacts:
   - scorecard.json
   - raw_results.jsonl
@@ -42,7 +42,7 @@ runner:
     - official rollout result dump
   verification_status: normalizer_only
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -97,7 +97,7 @@ data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/robocerebra.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:RoboCerebraContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:robocerebra
   task_yaml_available: true
   runtime_verified: false
   normalizer_verified: true
@@ -105,7 +105,7 @@ runner_availability:
   runner_script_available: false
 checkpoint_refs: []
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -121,3 +121,20 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_ROBOCEREBRA_RESULTS_PATH
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - dataset_root
+  - simulator_root
+  - task_manifest
+  - policy_results_path
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_results
+  - per_sample_metrics
+  - rollout_logs
+  - videos
+  notes:
+  - Contract covers RoboCerebra embodied policy rollouts and official result normalization.
+  - WorldFoundry exposes the native request/result surface; simulator assets, policy checkpoints, and
+    full official rollout evidence remain explicit runtime inputs.

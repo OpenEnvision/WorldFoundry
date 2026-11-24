@@ -7,12 +7,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from worldfoundry.core.execution.process import package_module_command
+
 RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _run(python: str, script: str, *arguments: object) -> None:
+def _run(python: str, module: str, *arguments: object) -> None:
     subprocess.run(
-        [python, str(RUNTIME_ROOT / script), *(str(argument) for argument in arguments)],
+        package_module_command(module, [str(argument) for argument in arguments], python_executable=python),
         cwd=RUNTIME_ROOT,
         check=True,
     )
@@ -35,6 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--default_config_path", required=True)
     parser.add_argument("--num_frames", type=int, default=161)
     parser.add_argument("--fps", type=int, default=16)
+    parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--python_executable", default=sys.executable)
     return parser.parse_args()
 
@@ -51,15 +54,26 @@ def main() -> None:
         trajectory.write_text("0 0\n0 0\n0 0\n", encoding="utf-8")
 
     panorama_args: list[object] = [
-        "--image", image,
-        "--prompt", args.prompt,
-        "--ckpt_dir", args.gimbal360_dir,
-        "--basemodel_name_or_path", args.flux_model_path,
-        "--output_dir", output_dir,
+        "--image",
+        image,
+        "--prompt",
+        args.prompt,
+        "--ckpt_dir",
+        args.gimbal360_dir,
+        "--basemodel_name_or_path",
+        args.flux_model_path,
+        "--output_dir",
+        output_dir,
     ]
     if args.back_prompt:
         panorama_args.extend(["--back_prompt", args.back_prompt])
-    _run(args.python_executable, "pano_gen/inference.py", *panorama_args)
+    seed_args: list[object] = [] if args.seed is None else ["--seed", args.seed]
+    _run(
+        args.python_executable,
+        "worldfoundry.synthesis.visual_generation.moverse.moverse_runtime.pano_gen.inference",
+        *panorama_args,
+        *seed_args,
+    )
 
     panorama = output_dir / f"{stem}_pano.png"
     depth = output_dir / "depth.npy"
@@ -68,33 +82,51 @@ def main() -> None:
 
     _run(
         args.python_executable,
-        "gaussian_gen/infer_da3.py",
-        "--path", panorama,
-        "--output_dir", output_dir,
-        "--model_dir", args.da3_model_dir,
+        "worldfoundry.synthesis.visual_generation.moverse.moverse_runtime.gaussian_gen.infer_da3",
+        "--path",
+        panorama,
+        "--output_dir",
+        output_dir,
+        "--model_dir",
+        args.da3_model_dir,
     )
     _run(
         args.python_executable,
-        "gaussian_gen/infer_pano.py",
-        "--image", panorama,
-        "--depth", depth,
-        "--checkpoint", args.gaussian_checkpoint,
-        "--output_dir", output_dir,
+        "worldfoundry.synthesis.visual_generation.moverse.moverse_runtime.gaussian_gen.infer_pano",
+        "--image",
+        panorama,
+        "--depth",
+        depth,
+        "--checkpoint",
+        args.gaussian_checkpoint,
+        "--output_dir",
+        output_dir,
     )
     _run(
         args.python_executable,
-        "scripts/run_pipeline.py",
-        "--scene", scene,
-        "--traj", trajectory,
-        "--config_path", args.config_path,
-        "--default_config_path", args.default_config_path,
-        "--checkpoint_path", args.video_checkpoint,
+        "worldfoundry.synthesis.visual_generation.moverse.moverse_runtime.scripts.run_pipeline",
+        "--scene",
+        scene,
+        "--traj",
+        trajectory,
+        "--config_path",
+        args.config_path,
+        "--default_config_path",
+        args.default_config_path,
+        "--checkpoint_path",
+        args.video_checkpoint,
         "--taehv",
-        "--taehv_checkpoint", args.taehv_checkpoint,
-        "--prompt", f"A video of {args.prompt}",
-        "--output", video,
-        "--num_frames", args.num_frames,
-        "--fps", args.fps,
+        "--taehv_checkpoint",
+        args.taehv_checkpoint,
+        "--prompt",
+        f"A video of {args.prompt}",
+        "--output",
+        video,
+        "--num_frames",
+        args.num_frames,
+        "--fps",
+        args.fps,
+        *seed_args,
     )
 
 

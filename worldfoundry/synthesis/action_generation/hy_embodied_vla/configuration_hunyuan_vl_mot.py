@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2025 THL A29 Limited, a Tencent company and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +18,8 @@ WorldFoundry modification: removed one unused typing import; model behavior and
 the serialized configuration contract are unchanged.
 """
 
+from typing import ClassVar
+
 from transformers.configuration_utils import PretrainedConfig
 
 
@@ -26,6 +27,7 @@ class HunYuanVLMoTVisionConfig(PretrainedConfig):
     """
     Configuration class for HunYuanVL-MoT Vision Transformer.
     """
+
     model_type = "hunyuan_vl_mot"
     base_config_key = "vision_config"
 
@@ -147,7 +149,7 @@ class HunYuanVLMoTTextConfig(PretrainedConfig):
     """
 
     model_type = "hunyuan_vl_mot"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference: ClassVar[list] = ["past_key_values"]
 
     def __init__(
         self,
@@ -247,11 +249,11 @@ class HunYuanVLMoTConfig(PretrainedConfig):
     """
 
     model_type = "hunyuan_vl_mot"
-    sub_configs = {
+    sub_configs: ClassVar[dict] = {
         "vision_config": HunYuanVLMoTVisionConfig,
         "text_config": HunYuanVLMoTTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference: ClassVar[list] = ["past_key_values"]
 
     def __init__(
         self,

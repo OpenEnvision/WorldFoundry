@@ -7,21 +7,19 @@
 # --------------------------------------------------------
 
 
-"""Module for base_models -> three_dimensions -> point_clouds -> cut3r -> croco_base.py functionality."""
-
 from functools import partial
 
 import torch
 import torch.nn as nn
 from transformers import PretrainedConfig, PreTrainedModel
 
+from worldfoundry.core.attention.rotary.rope_2d import CrocoRotaryPositionEmbedding2D as RoPE2D
+
 from .blocks import Block, DecoderBlock, PatchEmbed
-from .pos_embed import RoPE2D, get_2d_sincos_pos_embed
+from .pos_embed import get_2d_sincos_pos_embed
 
 
 class CrocoConfig(PretrainedConfig):
-    """Croco config implementation."""
-
     model_type = "croco"
 
     def __init__(
@@ -36,27 +34,10 @@ class CrocoConfig(PretrainedConfig):
         dec_depth=8,  # decoder depth
         dec_num_heads=16,  # decoder number of heads in the transformer block
         mlp_ratio=4,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6),
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),  # noqa: B008 - Default evaluated once at definition, as upstream.
         norm_im2_in_dec=True,  # whether to apply normalization of the 'memory' = (second image) in the decoder
         pos_embed="cosine",  # positional embedding (either cosine or RoPE100)
     ):
-        """Init.
-
-        Args:
-            img_size: The img size.
-            patch_size: The patch size.
-            mask_ratio: The mask ratio.
-            enc_embed_dim: The enc embed dim.
-            enc_depth: The enc depth.
-            enc_num_heads: The enc num heads.
-            dec_embed_dim: The dec embed dim.
-            dec_depth: The dec depth.
-            dec_num_heads: The dec num heads.
-            mlp_ratio: The mlp ratio.
-            norm_layer: The norm layer.
-            norm_im2_in_dec: The norm im2 in dec.
-            pos_embed: The pos embed.
-        """
         super().__init__()
         self.img_size = img_size
         self.patch_size = patch_size
@@ -74,18 +55,10 @@ class CrocoConfig(PretrainedConfig):
 
 
 class CroCoNet(PreTrainedModel):
-    """Cro co net implementation."""
-
     config_class = CrocoConfig
     base_model_prefix = "croco"
 
     def __init__(self, config: CrocoConfig):
-        """Init.
-
-        Args:
-            config: The config.
-        """
-
         super().__init__(config)
 
         # patch embeddings  (with initialization done as in MAE)
@@ -159,13 +132,6 @@ class CroCoNet(PreTrainedModel):
         self.initialize_weights()
 
     def _set_patch_embed(self, img_size=224, patch_size=16, enc_embed_dim=768):
-        """Helper function to set patch embed.
-
-        Args:
-            img_size: The img size.
-            patch_size: The patch size.
-            enc_embed_dim: The enc embed dim.
-        """
         self.patch_embed = PatchEmbed(img_size, patch_size, 3, enc_embed_dim)
 
     def _set_decoder(
@@ -178,17 +144,6 @@ class CroCoNet(PreTrainedModel):
         norm_layer,
         norm_im2_in_dec,
     ):
-        """Helper function to set decoder.
-
-        Args:
-            enc_embed_dim: The enc embed dim.
-            dec_embed_dim: The dec embed dim.
-            dec_num_heads: The dec num heads.
-            dec_depth: The dec depth.
-            mlp_ratio: The mlp ratio.
-            norm_layer: The norm layer.
-            norm_im2_in_dec: The norm im2 in dec.
-        """
         self.dec_depth = dec_depth
         self.dec_embed_dim = dec_embed_dim
         # transfer from encoder to decoder
@@ -212,16 +167,9 @@ class CroCoNet(PreTrainedModel):
         self.dec_norm = norm_layer(dec_embed_dim)
 
     def _set_prediction_head(self, dec_embed_dim, patch_size):
-        """Helper function to set prediction head.
-
-        Args:
-            dec_embed_dim: The dec embed dim.
-            patch_size: The patch size.
-        """
         self.prediction_head = nn.Linear(dec_embed_dim, patch_size**2 * 3, bias=True)
 
     def initialize_weights(self):
-        """Initialize weights."""
         # patch embed
         self.patch_embed._init_weights()
         # mask tokens
@@ -231,11 +179,6 @@ class CroCoNet(PreTrainedModel):
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
-        """Helper function to init weights.
-
-        Args:
-            m: The m.
-        """
         if isinstance(m, nn.Linear):
             # we use xavier_uniform following official JAX ViT:
             torch.nn.init.xavier_uniform_(m.weight)

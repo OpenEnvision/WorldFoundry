@@ -1,52 +1,38 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> flash_world -> utils.py functionality."""
-
-from io import BytesIO
+import importlib
 import math
+
 import numpy as np
-import torch 
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import importlib
 from plyfile import PlyData, PlyElement
 
-import copy
+from worldfoundry.core.geometry.transforms import quaternion_wxyz_to_rotation_matrix as quaternion_to_matrix
+from worldfoundry.core.geometry.transforms import rotation_matrix_to_quaternion_wxyz_tensor as matrix_to_quaternion
+
 
 class EmbedContainer(nn.Module):
-    """Embed container implementation."""
     def __init__(self, tensor):
-        """Init.
-
-        Args:
-            tensor: The tensor.
-        """
         super().__init__()
         self.tensor = nn.Parameter(tensor)
-    
+
     def forward(self):
-        """Forward."""
         return self.tensor
+
 
 @torch.no_grad
 def zero_init(module):
-    """Zero init.
-
-    Args:
-        module: The module.
-    """
     if type(module) is torch.nn.Conv2d or type(module) is torch.nn.Linear:
         module.weight.zero_()
         module.bias.zero_()
     return module
 
-def import_str(string):
-    """Import str.
 
-    Args:
-        string: The string.
-    """
+def import_str(string):
     # From https://github.com/CompVis/taming-transformers
     module, cls = string.rsplit(".", 1)
     return getattr(importlib.import_module(module, package=None), cls)
+
 
 """
 from https://github.com/Kai-46/minFM/blob/main/utils/ema.py
@@ -57,28 +43,21 @@ which are commonly used to improve model stability and generalization
 in training deep neural networks. It supports both regular tensors and
 DTensors (from FSDP-wrapped models).
 """
+
+
 class EMA_FSDP:
     """Fsdp implementation."""
-    def __init__(self, fsdp_module: torch.nn.Module, decay: float = 0.999):
-        """Init.
 
-        Args:
-            fsdp_module: The fsdp module.
-            decay: The decay.
-        """
+    def __init__(self, fsdp_module: torch.nn.Module, decay: float = 0.999):
         self.decay = decay
         self.shadow = {}
         self._init_shadow(fsdp_module)
 
     @torch.no_grad()
     def _init_shadow(self, fsdp_module):
-        """Helper function to init shadow.
-
-        Args:
-            fsdp_module: The fsdp module.
-        """
-        # 判断是否是FSDP模型
+        # Check whether the model uses FSDP.
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
         if isinstance(fsdp_module, FSDP):
             with FSDP.summon_full_params(fsdp_module, writeback=False):
                 for n, p in fsdp_module.module.named_parameters():
@@ -89,101 +68,64 @@ class EMA_FSDP:
 
     @torch.no_grad()
     def update(self, fsdp_module):
-        """Update.
-
-        Args:
-            fsdp_module: The fsdp module.
-        """
         d = self.decay
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
         if isinstance(fsdp_module, FSDP):
             with FSDP.summon_full_params(fsdp_module, writeback=False):
                 for n, p in fsdp_module.module.named_parameters():
-                    self.shadow[n].mul_(d).add_(p.detach().float().cpu(), alpha=1. - d)
+                    self.shadow[n].mul_(d).add_(p.detach().float().cpu(), alpha=1.0 - d)
         else:
             for n, p in fsdp_module.named_parameters():
                 print(n, self.shadow[n])
-                self.shadow[n].mul_(d).add_(p.detach().float().cpu(), alpha=1. - d)
+                self.shadow[n].mul_(d).add_(p.detach().float().cpu(), alpha=1.0 - d)
 
     # Optional helpers ---------------------------------------------------
     def state_dict(self):
-        """State dict."""
-        return self.shadow            # picklable
+        return self.shadow  # picklable
 
     def load_state_dict(self, sd):
-        """Load state dict.
-
-        Args:
-            sd: The sd.
-        """
         self.shadow = {k: v.clone() for k, v in sd.items()}
 
     def copy_to(self, fsdp_module):
-        """Copy to.
-
-        Args:
-            fsdp_module: The fsdp module.
-        """
         # load EMA weights into an (unwrapped) copy of the generator
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
         with FSDP.summon_full_params(fsdp_module, writeback=True):
             for n, p in fsdp_module.module.named_parameters():
                 if n in self.shadow:
                     p.data.copy_(self.shadow[n].to(p.dtype, device=p.device))
 
-def create_raymaps(cameras, h, w):
-    """Create raymaps.
 
-    Args:
-        cameras: The cameras.
-        h: The h.
-        w: The w.
-    """
+def create_raymaps(cameras, h, w):
     rays_o, rays_d = create_rays(cameras, h, w)
     raymaps = torch.cat([rays_d, rays_o - (rays_o * rays_d).sum(dim=-1, keepdim=True) * rays_d], dim=-1)
     return raymaps
+
 
 # def create_raymaps(cameras, h, w):
 #     rays_o, rays_d = create_rays(cameras, h, w)
 #     raymaps = torch.cat([rays_d, torch.cross(rays_d, rays_o, dim=-1)], dim=-1)
 #     return raymaps
 
-class EMANorm(nn.Module):
-    """Ema norm implementation."""
-    def __init__(self, beta):
-        """Init.
 
-        Args:
-            beta: The beta.
-        """
+class EMANorm(nn.Module):
+    def __init__(self, beta):
         super().__init__()
-        self.register_buffer('magnitude_ema', torch.ones([]))
+        self.register_buffer("magnitude_ema", torch.ones([]))
         self.beta = beta
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         if self.training:
             magnitude_cur = x.detach().to(torch.float32).square().mean()
             self.magnitude_ema.copy_(magnitude_cur.lerp(self.magnitude_ema.to(torch.float32), self.beta))
         input_gain = self.magnitude_ema.rsqrt()
         x = x.mul(input_gain)
         return x
-    
-class TimestepEmbedding(nn.Module):
-    """Timestep embedding implementation."""
-    def __init__(self, dim, max_period=10000, time_factor: float = 1000.0, zero_weight: bool = True):
-        """Init.
 
-        Args:
-            dim: The dim.
-            max_period: The max period.
-            time_factor: The time factor.
-            zero_weight: The zero weight.
-        """
+
+class TimestepEmbedding(nn.Module):
+    def __init__(self, dim, max_period=10000, time_factor: float = 1000.0, zero_weight: bool = True):
         super().__init__()
         self.max_period = max_period
         self.time_factor = time_factor
@@ -194,15 +136,11 @@ class TimestepEmbedding(nn.Module):
             self.weight = None
 
     def forward(self, t):
-        """Forward.
-
-        Args:
-            t: The t.
-        """
         if self.weight is None:
             return timestep_embedding(t, self.dim, self.max_period, self.time_factor)
         else:
             return timestep_embedding(t, self.dim, self.max_period, self.time_factor) * self.weight.unsqueeze(0)
+
 
 # @torch.compile(mode="max-autotune-no-cudagraphs", dynamic=True)
 def timestep_embedding(t, dim, max_period=10000, time_factor: float = 1000.0):
@@ -226,137 +164,12 @@ def timestep_embedding(t, dim, max_period=10000, time_factor: float = 1000.0):
         embedding = embedding.to(t)
     return embedding
 
-def quaternion_to_matrix(quaternions):
-    """
-    Convert rotations given as quaternions to rotation matrices.
-    Args:
-        quaternions: quaternions with real part first,
-            as tensor of shape (..., 4).
-    Returns:
-        Rotation matrices as tensor of shape (..., 3, 3).
-    """
-    r, i, j, k = torch.unbind(quaternions, -1)
-    two_s = 2.0 / (quaternions * quaternions).sum(-1)
-
-    o = torch.stack(
-        (
-            1 - two_s * (j * j + k * k),
-            two_s * (i * j - k * r),
-            two_s * (i * k + j * r),
-            two_s * (i * j + k * r),
-            1 - two_s * (i * i + k * k),
-            two_s * (j * k - i * r),
-            two_s * (i * k - j * r),
-            two_s * (j * k + i * r),
-            1 - two_s * (i * i + j * j),
-        ),
-        -1,
-    )
-    return o.reshape(quaternions.shape[:-1] + (3, 3))
 
 # from https://pytorch3d.readthedocs.io/en/latest/_modules/pytorch3d/transforms/rotation_conversions.html#matrix_to_quaternion
-def standardize_quaternion(quaternions: torch.Tensor) -> torch.Tensor:
-    """
-    Convert a unit quaternion to a standard form: one in which the real
-    part is non negative.
-
-    Args:
-        quaternions: Quaternions with real part first,
-            as tensor of shape (..., 4).
-
-    Returns:
-        Standardized quaternions as tensor of shape (..., 4).
-    """
-    return torch.where(quaternions[..., 0:1] < 0, -quaternions, quaternions)
-
-def _sqrt_positive_part(x: torch.Tensor) -> torch.Tensor:
-    """
-    Returns torch.sqrt(torch.max(0, x))
-    but with a zero subgradient where x is 0.
-    """
-    ret = torch.zeros_like(x)
-    positive_mask = x > 0
-    if torch.is_grad_enabled():
-        ret[positive_mask] = torch.sqrt(x[positive_mask])
-    else:
-        ret = torch.where(positive_mask, torch.sqrt(x), ret)
-    return ret
-
-def matrix_to_quaternion(matrix: torch.Tensor) -> torch.Tensor:
-    """
-    Convert rotations given as rotation matrices to quaternions.
-
-    Args:
-        matrix: Rotation matrices as tensor of shape (..., 3, 3).
-
-    Returns:
-        quaternions with real part first, as tensor of shape (..., 4).
-    """
-    if matrix.size(-1) != 3 or matrix.size(-2) != 3:
-        raise ValueError(f"Invalid rotation matrix shape {matrix.shape}.")
-
-    batch_dim = matrix.shape[:-2]
-    m00, m01, m02, m10, m11, m12, m20, m21, m22 = torch.unbind(
-        matrix.reshape(batch_dim + (9,)), dim=-1
-    )
-
-    q_abs = _sqrt_positive_part(
-        torch.stack(
-            [
-                1.0 + m00 + m11 + m22,
-                1.0 + m00 - m11 - m22,
-                1.0 - m00 + m11 - m22,
-                1.0 - m00 - m11 + m22,
-            ],
-            dim=-1,
-        )
-    )
-
-    # we produce the desired quaternion multiplied by each of r, i, j, k
-    quat_by_rijk = torch.stack(
-        [
-            # pyre-fixme[58]: `**` is not supported for operand types `Tensor` and
-            #  `int`.
-            torch.stack([q_abs[..., 0] ** 2, m21 - m12, m02 - m20, m10 - m01], dim=-1),
-            # pyre-fixme[58]: `**` is not supported for operand types `Tensor` and
-            #  `int`.
-            torch.stack([m21 - m12, q_abs[..., 1] ** 2, m10 + m01, m02 + m20], dim=-1),
-            # pyre-fixme[58]: `**` is not supported for operand types `Tensor` and
-            #  `int`.
-            torch.stack([m02 - m20, m10 + m01, q_abs[..., 2] ** 2, m12 + m21], dim=-1),
-            # pyre-fixme[58]: `**` is not supported for operand types `Tensor` and
-            #  `int`.
-            torch.stack([m10 - m01, m20 + m02, m21 + m12, q_abs[..., 3] ** 2], dim=-1),
-        ],
-        dim=-2,
-    )
-
-    # We floor here at 0.1 but the exact level is not important; if q_abs is small,
-    # the candidate won't be picked.
-    flr = torch.tensor(0.1).to(dtype=q_abs.dtype, device=q_abs.device)
-    quat_candidates = quat_by_rijk / (2.0 * q_abs[..., None].max(flr))
-
-    # if not for numerical problems, quat_candidates[i] should be same (up to a sign),
-    # forall i; we pick the best-conditioned one (with the largest denominator)
-    indices = q_abs.argmax(dim=-1, keepdim=True)
-    expand_dims = list(batch_dim) + [1, 4]
-    gather_indices = indices.unsqueeze(-1).expand(expand_dims)
-    out = torch.gather(quat_candidates, -2, gather_indices).squeeze(-2)
-    return standardize_quaternion(out)
-
 @torch.amp.autocast(device_type="cuda", enabled=False)
 def normalize_cameras(cameras, return_meta=False, ref_w2c=None, T_norm=None, n_frame=None):
-    """Normalize cameras.
-
-    Args:
-        cameras: The cameras.
-        return_meta: The return meta.
-        ref_w2c: The ref w2c.
-        T_norm: The t norm.
-        n_frame: The n frame.
-    """
     B, N = cameras.shape[:2]
-     
+
     c2ws = torch.zeros(B, N, 3, 4, device=cameras.device)
 
     c2ws[..., :3, :3] = quaternion_to_matrix(cameras[..., 0:4])
@@ -383,15 +196,8 @@ def normalize_cameras(cameras, return_meta=False, ref_w2c=None, T_norm=None, n_f
     else:
         return cameras
 
-def create_rays(cameras, h, w, uv_offset=None):
-    """Create rays.
 
-    Args:
-        cameras: The cameras.
-        h: The h.
-        w: The w.
-        uv_offset: The uv offset.
-    """
+def create_rays(cameras, h, w, uv_offset=None):
     prefix_shape = cameras.shape[:-1]
     cameras = cameras.flatten(0, -2)
     device = cameras.device
@@ -407,22 +213,22 @@ def create_rays(cameras, h, w, uv_offset=None):
     fx, cx = fx * w, cx * w
     fy, cy = fy * h, cy * h
 
-    inds = torch.arange(0, h*w, device=device).expand(N, h*w)
-        
+    inds = torch.arange(0, h * w, device=device).expand(N, h * w)
+
     i = inds % w + 0.5
-    j = torch.div(inds, w, rounding_mode='floor') + 0.5
+    j = torch.div(inds, w, rounding_mode="floor") + 0.5
 
-    u = i / cx + (uv_offset[..., 0].reshape(N, h*w) if uv_offset is not None else 0) 
-    v = j / cy + (uv_offset[..., 1].reshape(N, h*w) if uv_offset is not None else 0) 
+    u = i / cx + (uv_offset[..., 0].reshape(N, h * w) if uv_offset is not None else 0)
+    v = j / cy + (uv_offset[..., 1].reshape(N, h * w) if uv_offset is not None else 0)
 
-    zs = - torch.ones_like(i)
-    xs = - (u - 1) * cx / fx * zs
+    zs = -torch.ones_like(i)
+    xs = -(u - 1) * cx / fx * zs
     ys = (v - 1) * cy / fy * zs
     directions = torch.stack((xs, ys, zs), dim=-1)
 
     rays_d = F.normalize(directions @ c2w[:, :3, :3].transpose(-1, -2), dim=-1)
 
-    rays_o = c2w[..., :3, 3] # [B, 3]
+    rays_o = c2w[..., :3, 3]  # [B, 3]
     rays_o = rays_o[..., None, :].expand_as(rays_d)
 
     rays_o = rays_o.reshape(*prefix_shape, h, w, 3)
@@ -430,38 +236,27 @@ def create_rays(cameras, h, w, uv_offset=None):
 
     return rays_o, rays_d
 
-def matrix_to_square(mat):
-    """Matrix to square.
 
-    Args:
-        mat: The mat.
-    """
-    l = len(mat.shape)
-    if l==3:
-        return torch.cat([mat, torch.tensor([0,0,0,1]).repeat(mat.shape[0],1,1).to(mat.device)],dim=1)
-    elif l==4:
-        return torch.cat([mat, torch.tensor([0,0,0,1]).repeat(mat.shape[0],mat.shape[1],1,1).to(mat.device)],dim=2)
+def matrix_to_square(mat):
+    l = len(mat.shape)  # noqa: E741 - Ambiguous upstream name kept as written.
+    if l == 3:
+        return torch.cat([mat, torch.tensor([0, 0, 0, 1]).repeat(mat.shape[0], 1, 1).to(mat.device)], dim=1)
+    elif l == 4:
+        return torch.cat(
+            [mat, torch.tensor([0, 0, 0, 1]).repeat(mat.shape[0], mat.shape[1], 1, 1).to(mat.device)], dim=2
+        )
+
 
 def export_gaussians(gaussians, opacity_threshold=0.00, T_norm=None, ply_path=None, spz_path=None):
-    """Export gaussians.
-
-    Args:
-        gaussians: The gaussians.
-        opacity_threshold: The opacity threshold.
-        T_norm: The t norm.
-        ply_path: The ply path.
-        spz_path: The spz path.
-    """
-
     sh_degree = int(math.sqrt((gaussians.shape[-1] - sum([3, 1, 3, 4])) / 3 - 1))
 
-    xyz, opacity, scale, rotation, feature = gaussians.float().split([3, 1, 3, 4, (sh_degree + 1)**2 * 3], dim=-1)
-     
+    xyz, opacity, scale, rotation, feature = gaussians.float().split([3, 1, 3, 4, (sh_degree + 1) ** 2 * 3], dim=-1)
+
     means3D = xyz.contiguous().float()
     opacity = opacity.contiguous().float()
     scales = scale.contiguous().float()
     rotations = rotation.contiguous().float()
-    shs = feature.contiguous().float() # [N, 1, 3]
+    shs = feature.contiguous().float()  # [N, 1, 3]
 
     # print(means3D.shape, opacity.shape, scales.shape, rotations.shape, shs.shape)
 
@@ -481,14 +276,14 @@ def export_gaussians(gaussians, opacity_threshold=0.00, T_norm=None, ply_path=No
         scales = scales * T_norm.item()
 
     # invert activation to make it compatible with the original ply format
-    opacity = torch.log(opacity/(1-opacity))
+    opacity = torch.log(opacity / (1 - opacity))
     scales = torch.log(scales + 1e-8)
 
-    xyzs = means3D.detach() # .cpu().numpy()
-    f_dc = shs.detach().flatten(start_dim=1).contiguous() #.cpu().numpy()
-    opacities = opacity.detach() #.cpu().numpy()
-    scales = scales.detach() #.cpu().numpy()
-    rotations = rotations.detach() #.cpu().numpy()
+    xyzs = means3D.detach()  # .cpu().numpy()
+    f_dc = shs.detach().flatten(start_dim=1).contiguous()  # .cpu().numpy()
+    opacities = opacity.detach()  # .cpu().numpy()
+    scales = scales.detach()  # .cpu().numpy()
+    rotations = rotations.detach()  # .cpu().numpy()
 
     """spz
     Data Layout
@@ -515,30 +310,31 @@ def export_gaussians(gaussians, opacity_threshold=0.00, T_norm=None, ply_path=No
         cloud.sh = f_dc[..., 3:].flatten().cpu().numpy()
 
         spz.save_spz(cloud, spz.PackOptions(), spz_path)
-    
+
     if ply_path is not None:
-        l = ['x', 'y', 'z']
+        l = ["x", "y", "z"]  # noqa: E741 - Ambiguous upstream name kept as written.
         # All channels except the 3 DC
         for i in range(f_dc.shape[1]):
-            l.append('f_dc_{}'.format(i))
-        l.append('opacity')
+            l.append(f"f_dc_{i}")
+        l.append("opacity")
         for i in range(scales.shape[1]):
-            l.append('scale_{}'.format(i))
+            l.append(f"scale_{i}")
         for i in range(rotations.shape[1]):
-            l.append('rot_{}'.format(i))
+            l.append(f"rot_{i}")
 
-        dtype_full = [(attribute, 'f4') for attribute in l]
+        _dtype_full = [(attribute, "f4") for attribute in l]
 
         attributes = torch.cat((xyzs, f_dc, opacities, scales, rotations), dim=1).cpu().numpy()
 
-        elements = np.rec.fromarrays([attributes[:, i] for i in range(attributes.shape[1])], names=l, formats=['f4'] * len(l))
-        el = PlyElement.describe(elements, 'vertex')
+        elements = np.rec.fromarrays(
+            [attributes[:, i] for i in range(attributes.shape[1])], names=l, formats=["f4"] * len(l)
+        )
+        el = PlyElement.describe(elements, "vertex")
         PlyData([el]).write(ply_path)
 
+
 @torch.amp.autocast(device_type="cuda", enabled=False)
-def quaternion_slerp(
-    q0, q1, fraction, spin: int = 0, shortestpath: bool = True
-):
+def quaternion_slerp(q0, q1, fraction, spin: int = 0, shortestpath: bool = True):
     """Return spherical linear interpolation between two quaternions.
     Args:
         quat0: first quaternion
@@ -558,11 +354,11 @@ def quaternion_slerp(
     # theta = torch.arccos(d) * fraction
     # q2 = q1 - q0 * d
     # q2 = q2 / (q2.norm(dim=-1) + 1e-10)
-    
+
     # return torch.cos(theta) * q0 + torch.sin(theta) * q2
 
     angle = torch.acos(_d) + spin * math.pi
-    isin = 1.0 / (torch.sin(angle)+ 1e-10)
+    isin = 1.0 / (torch.sin(angle) + 1e-10)
     q0_ = q0 * (torch.sin((1.0 - fraction) * angle) * isin)[..., None]
     q1_ = q1 * (torch.sin(fraction * angle) * isin)[..., None]
 
@@ -575,7 +371,8 @@ def quaternion_slerp(
 
     return q
 
-def sample_from_two_pose(pose_a, pose_b, fraction, noise_strengths=[0, 0]):
+
+def sample_from_two_pose(pose_a, pose_b, fraction, noise_strengths=[0, 0]):  # noqa: B006 - Keeps the upstream default object and signature.
     """
     Args:
         pose_a: first pose
@@ -600,26 +397,19 @@ def sample_from_two_pose(pose_a, pose_b, fraction, noise_strengths=[0, 0]):
     new_pose[..., 4:] = T
     return new_pose
 
-def sample_from_dense_cameras(dense_cameras, t, noise_strengths=[0, 0, 0, 0]):
-    """Sample from dense cameras.
 
-    Args:
-        dense_cameras: The dense cameras.
-        t: The t.
-        noise_strengths: The noise strengths.
-    """
+def sample_from_dense_cameras(dense_cameras, t, noise_strengths=[0, 0, 0, 0]):  # noqa: B006 - Keeps the upstream default object and signature.
     N, C = dense_cameras.shape
-    M = t.shape
-    
-    left = torch.floor(t * (N-1)).long().clamp(0, N-2)
+    _M = t.shape
+
+    left = torch.floor(t * (N - 1)).long().clamp(0, N - 2)
     right = left + 1
-    fraction = t * (N-1) - left
+    fraction = t * (N - 1) - left
 
     a = torch.gather(dense_cameras, 0, left[..., None].repeat(1, C))
     b = torch.gather(dense_cameras, 0, right[..., None].repeat(1, C))
 
-    new_pose = sample_from_two_pose(a[:, :7], 
-                                    b[:, :7], fraction, noise_strengths=noise_strengths[:2])
+    new_pose = sample_from_two_pose(a[:, :7], b[:, :7], fraction, noise_strengths=noise_strengths[:2])
 
     new_ins = (1 - fraction)[:, None] * a[:, 7:] + fraction[:, None] * b[:, 7:]
 

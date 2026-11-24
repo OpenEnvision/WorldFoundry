@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 import io
 import json
-from pathlib import Path
 import pickle
-from typing import Any
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, ClassVar
 
 from worldfoundry.core.io.paths import resolve_data_path, resolve_worldfoundry_path
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
@@ -70,7 +70,7 @@ def _strict_local_path(location: str | None, label: str, *, required: bool = Tru
 class _RestrictedStatsUnpickler(pickle.Unpickler):
     """Load the upstream numeric stats pickle without arbitrary globals."""
 
-    _ALLOWED = {
+    _ALLOWED: ClassVar[set] = {
         ("numpy", "dtype"),
         ("numpy", "ndarray"),
         ("numpy.core.multiarray", "_reconstruct"),
@@ -215,7 +215,7 @@ class TinyVLARuntime:
 
         import torch
 
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .loader import load_local_policy
 
@@ -272,14 +272,12 @@ class TinyVLARuntime:
         for key in ("qpos_mean", "qpos_std"):
             if self._stats[key].size != state_dim:
                 raise ValueError(
-                    f"TinyVLA statistic {key!r} has dimension "
-                    f"{self._stats[key].size}, expected {state_dim}"
+                    f"TinyVLA statistic {key!r} has dimension {self._stats[key].size}, expected {state_dim}"
                 )
         for key in required[2:]:
             if self._stats[key].size != action_dim:
                 raise ValueError(
-                    f"TinyVLA statistic {key!r} has dimension "
-                    f"{self._stats[key].size}, expected {action_dim}"
+                    f"TinyVLA statistic {key!r} has dimension {self._stats[key].size}, expected {action_dim}"
                 )
         if (self._stats["qpos_std"] <= 0).any():
             raise ValueError("TinyVLA qpos_std must be positive")
@@ -302,13 +300,9 @@ class TinyVLARuntime:
         views = collect_images(observation, image, self.config.camera_keys)
         if len(views) < 2:
             raise ValueError("TinyVLA requires at least left and right RGB camera views")
-        cameras = [
-            _rgb_chw(view, width=self.config.image_width, height=self.config.image_height)
-            for view in views[:3]
-        ]
+        cameras = [_rgb_chw(view, width=self.config.image_width, height=self.config.image_height) for view in views[:3]]
         processed = [
-            _process_camera(camera, self._processor, device=self._device, dtype=self._dtype)
-            for camera in cameras
+            _process_camera(camera, self._processor, device=self._device, dtype=self._dtype) for camera in cameras
         ]
         state = _state_vector(observation, state_dim)
         normalized_state = (state - self._stats["qpos_mean"]) / self._stats["qpos_std"]
@@ -332,9 +326,9 @@ class TinyVLARuntime:
             )
         actions = actions[0].detach().to(device="cpu", dtype=torch.float32).numpy()
         if head_type == "droid_diffusion":
-            actions = (actions + 1.0) * 0.5 * (
-                self._stats["action_max"] - self._stats["action_min"]
-            ) + self._stats["action_min"]
+            actions = (actions + 1.0) * 0.5 * (self._stats["action_max"] - self._stats["action_min"]) + self._stats[
+                "action_min"
+            ]
         else:
             actions = actions * self._stats["action_std"] + self._stats["action_mean"]
         actions = np.asarray(actions, dtype=np.float32)

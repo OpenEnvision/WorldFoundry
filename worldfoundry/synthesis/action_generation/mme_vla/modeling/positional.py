@@ -59,8 +59,8 @@ class PosEmb3D:
         # 2 for temporal (t sin, t cos), 4 for spatial (h sin, h cos, w sin, w cos)
 
         omega = jnp.arange(width) / (width - 1)
-        self.temporal_omega = 1.0 / (temporal_base ** omega)
-        self.spatial_omega = 1.0 / (spatial_base ** omega)
+        self.temporal_omega = 1.0 / (temporal_base**omega)
+        self.spatial_omega = 1.0 / (spatial_base**omega)
 
         # Pre-compute spatial embeddings for different pool sizes
         self.spatial_pe8x8 = self.compute_spatial_pe8x8()
@@ -73,9 +73,7 @@ class PosEmb3D:
         x = 2 * x + 1
         y = jnp.einsum("m,d->md", y.flatten(), self.spatial_omega)
         x = jnp.einsum("m,d->md", x.flatten(), self.spatial_omega)
-        spatial_pe = jnp.concatenate(
-            [jnp.sin(y), jnp.cos(y), jnp.sin(x), jnp.cos(x)], axis=-1
-        )
+        spatial_pe = jnp.concatenate([jnp.sin(y), jnp.cos(y), jnp.sin(x), jnp.cos(x)], axis=-1)
         return spatial_pe
 
     def compute_spatial_pe4x4(self):
@@ -84,9 +82,7 @@ class PosEmb3D:
         x = 4 * x + 2
         y = jnp.einsum("m,d->md", y.flatten(), self.spatial_omega)
         x = jnp.einsum("m,d->md", x.flatten(), self.spatial_omega)
-        spatial_pe = jnp.concatenate(
-            [jnp.sin(y), jnp.cos(y), jnp.sin(x), jnp.cos(x)], axis=-1
-        )
+        spatial_pe = jnp.concatenate([jnp.sin(y), jnp.cos(y), jnp.sin(x), jnp.cos(x)], axis=-1)
         return spatial_pe
 
     def compute_spatial_pe2x2(self):
@@ -95,16 +91,12 @@ class PosEmb3D:
         x = 8 * x + 4
         y = jnp.einsum("m,d->md", y.flatten(), self.spatial_omega)
         x = jnp.einsum("m,d->md", x.flatten(), self.spatial_omega)
-        spatial_pe = jnp.concatenate(
-            [jnp.sin(y), jnp.cos(y), jnp.sin(x), jnp.cos(x)], axis=-1
-        )
+        spatial_pe = jnp.concatenate([jnp.sin(y), jnp.cos(y), jnp.sin(x), jnp.cos(x)], axis=-1)
         return spatial_pe
 
     def compute_temporal_pe(self, pos):
         sinusoid_input = jnp.einsum("m,d->md", pos, self.temporal_omega)
-        temporal_pe = jnp.concatenate(
-            [jnp.sin(sinusoid_input), jnp.cos(sinusoid_input)], axis=-1
-        )
+        temporal_pe = jnp.concatenate([jnp.sin(sinusoid_input), jnp.cos(sinusoid_input)], axis=-1)
         return temporal_pe
 
     def __call__(self, pos, spatial_size: int):
@@ -129,10 +121,6 @@ class PosEmb3D:
             spatial_pe = self.spatial_pe2x2
 
         temporal_pe = self.compute_temporal_pe(jnp.asarray(pos, dtype=jnp.float32))
-        temporal_pe_repeat = einops.repeat(
-            temporal_pe, "t d -> t hw d", hw=spatial_size * spatial_size
-        )
-        spatial_pe_repeat = einops.repeat(
-            spatial_pe, "hw d -> t hw d", t=pos.shape[0]
-        )
+        temporal_pe_repeat = einops.repeat(temporal_pe, "t d -> t hw d", hw=spatial_size * spatial_size)
+        spatial_pe_repeat = einops.repeat(spatial_pe, "hw d -> t hw d", t=pos.shape[0])
         return jnp.concatenate([temporal_pe_repeat, spatial_pe_repeat], axis=-1)

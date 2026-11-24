@@ -16,60 +16,22 @@ Example:
         --seq_path /path/to/frames --device cuda --size 512
 """
 
+import argparse
+import glob
 import os
+import random
+import tempfile
+import time
+
+import cv2
+import imageio.v2 as iio
 import numpy as np
 import torch
-import time
-import glob
-import random
-import cv2
-import argparse
-import tempfile
-import shutil
-from copy import deepcopy
-import imageio.v2 as iio
+
+from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.utils.device import collate_with_cat
 
 # Set random seed for reproducibility.
 random.seed(42)
-
-
-
-def listify(elems):
-    return [x for e in elems for x in e]
-
-
-def collate_with_cat(whatever, lists=False):
-    if isinstance(whatever, dict):
-        return {k: collate_with_cat(vals, lists=lists) for k, vals in whatever.items()}
-
-    elif isinstance(whatever, (tuple, list)):
-        if len(whatever) == 0:
-            return whatever
-        elem = whatever[0]
-        T = type(whatever)
-
-        if elem is None:
-            return None
-        if isinstance(elem, (bool, float, int, str)):
-            return whatever
-        if isinstance(elem, tuple):
-            return T(collate_with_cat(x, lists=lists) for x in zip(*whatever))
-        if isinstance(elem, dict):
-            return {
-                k: collate_with_cat([e[k] for e in whatever], lists=lists) for k in elem
-            }
-
-        if isinstance(elem, torch.Tensor):
-            return listify(whatever) if lists else torch.cat(whatever)
-        if isinstance(elem, np.ndarray):
-            return (
-                listify(whatever)
-                if lists
-                else torch.cat([torch.from_numpy(x) for x in whatever])
-            )
-
-        # otherwise, we just chain lists
-        return sum(whatever, T())
 
 
 def parse_args():
@@ -117,9 +79,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def prepare_input(
-    img_paths, img_mask, size, raymaps=None, raymap_mask=None, revisit=1, update=True
-):
+def prepare_input(img_paths, img_mask, size, raymaps=None, raymap_mask=None, revisit=1, update=True):
     """
     Prepare input views for inference from a list of image paths.
 
@@ -143,10 +103,9 @@ def prepare_input(
     views = []
 
     for i in range(num_views):
-        
         view = {
-        "img": images[i]["img"],
-        "ray_map": torch.full(
+            "img": images[i]["img"],
+            "ray_map": torch.full(
                 (
                     images[i]["img"].shape[0],
                     6,
@@ -158,9 +117,7 @@ def prepare_input(
             "true_shape": torch.from_numpy(images[i]["true_shape"]),
             "idx": i,
             "instance": str(i),
-            "camera_pose": torch.from_numpy(np.eye(4).astype(np.float32)).unsqueeze(
-                0
-            ),
+            "camera_pose": torch.from_numpy(np.eye(4).astype(np.float32)).unsqueeze(0),
             "img_mask": torch.tensor(True).unsqueeze(0),
             "ray_mask": torch.tensor(False).unsqueeze(0),
             "update": torch.tensor(True).unsqueeze(0),
@@ -178,7 +135,7 @@ def prepare_output(output, poses, depths, lr, niter, outdir, device, save_flag=F
 
     with torch.enable_grad():
         mode = GlobalAlignerMode.PointCloudOptimizer
-        
+
         scene = global_aligner(
             output,
             device=device,
@@ -189,8 +146,8 @@ def prepare_output(output, poses, depths, lr, niter, outdir, device, save_flag=F
             scene.preset_depth(depths)
         if poses is not None:
             scene.preset_pose(poses)
-        
-        loss = scene.compute_global_alignment(
+
+        _loss = scene.compute_global_alignment(
             init="mst",
             niter=niter,
             schedule="linear",
@@ -216,24 +173,21 @@ def prepare_output(output, poses, depths, lr, niter, outdir, device, save_flag=F
     }
     if save_flag:
         depths_tosave = torch.cat(depths)  # B, H, W
-        pts3ds_other_tosave = torch.cat(pts3ds_other)  # B, H, W, 3
+        _pts3ds_other_tosave = torch.cat(pts3ds_other)  # B, H, W, 3
         conf_self_tosave = torch.cat(confs)  # B, H, W
         colors_tosave = torch.cat(colors)  # [B, H, W, 3]
         cam2world_tosave = poses.detach().cpu()  # B, 4, 4
-        intrinsics_tosave = (
-            torch.eye(3).unsqueeze(0).repeat(cam2world_tosave.shape[0], 1, 1)
-        )  # B, 3, 3
+        intrinsics_tosave = torch.eye(3).unsqueeze(0).repeat(cam2world_tosave.shape[0], 1, 1)  # B, 3, 3
         intrinsics_tosave[:, 0, 0] = focals[:, 0].detach().cpu()
         intrinsics_tosave[:, 1, 1] = focals[:, 0].detach().cpu()
         intrinsics_tosave[:, 0, 2] = pps[:, 0].detach().cpu()
         intrinsics_tosave[:, 1, 2] = pps[:, 1].detach().cpu()
 
-    
         os.makedirs(os.path.join(outdir, "depth"), exist_ok=True)
         os.makedirs(os.path.join(outdir, "conf"), exist_ok=True)
         os.makedirs(os.path.join(outdir, "color"), exist_ok=True)
         os.makedirs(os.path.join(outdir, "camera"), exist_ok=True)
-        
+
         for f_id in range(len(depths_tosave)):
             depth = depths_tosave[f_id].cpu().numpy()
             conf = conf_self_tosave[f_id].cpu().numpy()
@@ -287,25 +241,23 @@ def parse_seq_path(p):
     return img_paths, tmpdirname
 
 
-
-
 def run_inference_from_pil(
-    pil_images, 
+    pil_images,
     model,
     poses=None,
     depths=None,
-    lr = 0.01,
-    niter = 300,
-    device="cuda", 
-    size=512, 
-    output_dir="./demo_tmp", 
-    visualize=False, 
+    lr=0.01,
+    niter=300,
+    device="cuda",
+    size=512,
+    output_dir="./demo_tmp",
+    visualize=False,
     vis_threshold=1.5,
-    save_flag=False
+    save_flag=False,
 ):
     """
     Run 3D reconstruction from a list of PIL images.
-    
+
     Args:
         pil_images (list): List of PIL image objects.
         poses (list): List of camera poses.
@@ -315,7 +267,7 @@ def run_inference_from_pil(
         output_dir (str): Directory to save outputs.
         visualize (bool): Whether to launch the point cloud viewer.
         vis_threshold (float): Visualization threshold for point cloud viewer.
-        
+
     Returns:
         dict: A dictionary containing the reconstruction results:
             - point_clouds: List of point cloud tensors
@@ -328,16 +280,10 @@ def run_inference_from_pil(
         print("CUDA not available. Switching to CPU.")
         device = "cpu"
 
-    # Add the checkpoint path (required for model imports in the dust3r package)
-    
-
-    # Import model and inference functions after adding the ckpt path
     from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.inference import (
         inference,
-        inference_recurrent,
     )
- 
-    
+
     # Prepare input views directly from PIL images
     print(f"Processing {len(pil_images)} images...")
     views = prepare_input_from_pil(
@@ -373,18 +319,14 @@ def run_inference_from_pil(
         key=lambda x: (
             list_of_tuples[x][0] > list_of_tuples[x][1],  # Grouping condition
             (
-                list_of_tuples[x][1]
-                if list_of_tuples[x][0] > list_of_tuples[x][1]
-                else list_of_tuples[x][0]
+                list_of_tuples[x][1] if list_of_tuples[x][0] > list_of_tuples[x][1] else list_of_tuples[x][0]
             ),  # First sort key
             (
-                list_of_tuples[x][0]
-                if list_of_tuples[x][0] > list_of_tuples[x][1]
-                else list_of_tuples[x][1]
+                list_of_tuples[x][0] if list_of_tuples[x][0] > list_of_tuples[x][1] else list_of_tuples[x][1]
             ),  # Second sort key
         ),
     )
-    
+
     new_output = {
         "view1": [],
         "view2": [],
@@ -396,7 +338,7 @@ def run_inference_from_pil(
         new_output["view2"].append(output["view2"][i])
         new_output["pred1"].append(output["pred1"][i])
         new_output["pred2"].append(output["pred2"][i])
-        
+
     output["view1"] = collate_with_cat(new_output["view1"])
     output["view2"] = collate_with_cat(new_output["view2"])
     output["pred1"] = collate_with_cat(new_output["pred1"])
@@ -408,15 +350,17 @@ def run_inference_from_pil(
 
     # Process outputs
     print("Processing reconstruction output...")
-    pts3ds_other, colors, depths, conf, cam_dict = prepare_output(output, poses, depths, lr, niter, output_dir, device, save_flag)
-    
+    pts3ds_other, colors, depths, conf, cam_dict = prepare_output(
+        output, poses, depths, lr, niter, output_dir, device, save_flag
+    )
+
     # Create result dictionary
     result = {
         "point_clouds": pts3ds_other,
         "colors": colors,
         "depths": depths,
         "confidences": conf,
-        "camera_info": cam_dict
+        "camera_info": cam_dict,
     }
 
     # Visualize if requested
@@ -424,7 +368,7 @@ def run_inference_from_pil(
         from worldfoundry.synthesis.visual_generation.vmem.vmem_runtime.surfel_alignment.viser_utils import (
             PointCloudViewer,
         )
-        
+
         # Convert tensors to numpy arrays for visualization
         pts3ds_to_vis = [p.cpu().numpy() for p in pts3ds_other]
         colors_to_vis = [c.cpu().numpy() for c in colors]
@@ -446,13 +390,11 @@ def run_inference_from_pil(
             size=size,
         )
         viewer.run()
-    
+
     return result
 
 
-def prepare_input_from_pil(
-    pil_images, size, square_ok=False, raymaps=None, raymap_mask=None, revisit=1, update=True
-):
+def prepare_input_from_pil(pil_images, size, square_ok=False, raymaps=None, raymap_mask=None, revisit=1, update=True):
     """
     Prepare input views for inference from a list of PIL images.
 
@@ -473,8 +415,9 @@ def prepare_input_from_pil(
         _resize_pil_image,
         exif_transpose,
     )
-    import PIL
-    
+
+    # isort: split
+
     # Process PIL images to have the same format as the load_images output
     imgs = []
     for i, img in enumerate(pil_images):
@@ -482,10 +425,8 @@ def prepare_input_from_pil(
         img = exif_transpose(img).convert("RGB")
         W1, H1 = img.size
         if size == 224:
-
             img = _resize_pil_image(img, round(size * max(W1 / H1, H1 / W1)))
         else:
-
             img = _resize_pil_image(img, size)
         W, H = img.size
         cx, cy = W // 2, H // 2
@@ -498,19 +439,20 @@ def prepare_input_from_pil(
                 halfh = 3 * halfw / 4
             img = img.crop((cx - halfw, cy - halfh, cx + halfw, cy + halfh))
 
-        
         # Create dictionary with the same structure as in load_images
-        imgs.append({
-            "img": ImgNorm(img)[None],  # Using ImgNorm for normalization
-            "true_shape": np.int32([img.size[::-1]]),
-            "idx": i,
-            "instance": str(i),
-        })
-    
+        imgs.append(
+            {
+                "img": ImgNorm(img)[None],  # Using ImgNorm for normalization
+                "true_shape": np.int32([img.size[::-1]]),
+                "idx": i,
+                "instance": str(i),
+            }
+        )
+
     # Prepare views similar to prepare_input
     views = []
     num_views = len(imgs)
-    
+
     for i in range(num_views):
         view = {
             "img": imgs[i]["img"],
@@ -533,5 +475,5 @@ def prepare_input_from_pil(
             "reset": torch.tensor(False).unsqueeze(0),
         }
         views.append(view)
-    
+
     return views

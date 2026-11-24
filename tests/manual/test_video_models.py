@@ -1,29 +1,25 @@
-from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
 from worldfoundry.pipelines.allegro.pipeline_allegro_ti2v import AllegroTi2VPipeline
 from worldfoundry.pipelines.cogvideox.pipeline_cogvideox_5b_t2v import CogVideoX5bT2VPipeline
 from worldfoundry.pipelines.dynamicrafter.pipeline_dynamicrafter_512_i2v import DynamiCrafter512I2VPipeline
 from worldfoundry.pipelines.ltx2.pipeline_ltx2_3_i2v import LTX23I2VPipeline
 from worldfoundry.pipelines.ltx2.pipeline_ltx2_i2v import LTX2I2VPipeline
-from worldfoundry.pipelines.runway.pipeline_gen_3_i2v import Gen3I2VPipeline
 from worldfoundry.pipelines.videocrafter.pipeline_videocrafter1_i2v import VideoCrafter1I2VPipeline
 from worldfoundry.pipelines.wan.pipeline_wan_2p1_i2v import Wan2p1I2VPipeline
 from worldfoundry.pipelines.wan.pipeline_wan_2p1_t2v import Wan2p1T2VPipeline
 from worldfoundry.synthesis.visual_generation.easyanimate.easyanimate_i2v_synthesis import EasyAnimateI2VSynthesis
 from worldfoundry.synthesis.visual_generation.ltx2.ltx2_3_i2v_synthesis import LTX23I2VSynthesis
 from worldfoundry.synthesis.visual_generation.videocrafter.videocrafter1_i2v_synthesis import VideoCrafter1I2VSynthesis
-from worldfoundry.synthesis.visual_generation.wan.wan_2p1_t2v_synthesis import Wan2p1T2VSynthesis
+from worldfoundry.zoo.catalog import load_model_zoo_registry
 
 hy_world_entry = load_model_zoo_registry().get("hy-world-2.0")
 assert hy_world_entry.pipeline_target == "worldfoundry.pipelines.hunyuan_world.pipeline_hy_world_2p0:HYWorld2Pipeline"
 assert "hyworld2.0" in hy_world_entry.aliases
 assert VideoCrafter1I2VSynthesis.GENERATION_TYPE == "i2v"
-assert Wan2p1T2VSynthesis.GENERATION_TYPE == "t2v"
 assert EasyAnimateI2VSynthesis.RUNTIME_CLS.__name__ == "EasyAnimate"
 assert LTX23I2VSynthesis.default_runtime_kwargs()["version_hint"] == "2.3"
 
 assert AllegroTi2VPipeline is not None
 assert DynamiCrafter512I2VPipeline is not None
-assert Gen3I2VPipeline is not None
 assert LTX2I2VPipeline is not None
 assert LTX23I2VPipeline is not None
 assert Wan2p1I2VPipeline is not None

@@ -108,16 +108,16 @@ metrics:
   unit: score
   primary: true
 runner:
-  official_script: worldfoundry/evaluation/tasks/execution/runners/vmbench/run_vmbench_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/vmbench/run_vmbench_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.vmbench.run_vmbench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.vmbench.run_vmbench_official_runner
     supports_official_runtime: true
     accepts_generated_artifacts: true
     supports_fixture: true
     default_metrics: [vmbench_average]
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VMBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:vmbench
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -145,7 +145,7 @@ runner:
   - Generated videos must follow the official prompt-index naming convention for leaderboard parity.
   runtime:
     kind: in_tree_official_runtime
-    root: worldfoundry/evaluation/tasks/execution/runners/vmbench
+    root: worldfoundry/evals/tasks/execution/runners/vmbench
     prompt_manifest_env: WORLDFOUNDRY_VMBENCH_PROMPT_MANIFEST
     results_path_env: WORLDFOUNDRY_VMBENCH_RESULTS_PATH
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -173,21 +173,21 @@ blockers:
 - Generated videos must follow the official 0001.mp4 ... 1050.mp4 prompt-index naming convention.
 data_refs:
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/vmbench/run_vmbench_official_runner.py
-  - worldfoundry/evaluation/tasks/execution/runners/vmbench/vmbench_official_runtime.py
-  - worldfoundry/evaluation/tasks/execution/runners/vmbench/runtime/official
+  - worldfoundry/evals/tasks/execution/runners/vmbench/run_vmbench_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/vmbench/vmbench_official_runtime.py
+  - worldfoundry/evals/tasks/execution/runners/vmbench/runtime/official
   bundled_prompt_assets: worldfoundry/data/benchmarks/assets/vmbench/prompts/prompts.json
   task_yaml: worldfoundry/data/benchmarks/tasks/external/vmbench.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VMBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:vmbench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
   surface: vmbench_official_in_tree
   normalizer_verified: true
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -206,3 +206,19 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - generated_video_dir
+  - prompt_json
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_metrics
+  notes:
+  - Contract maps official VMBench results.json/scores.csv outputs to WorldFoundry scorecard.
+  - Official runtime requires the upstream CUDA dependency stack, checkpoints, and 0001.mp4-style video
+    layout.
+generation:
+  request_provider: worldfoundry.evals.tasks.execution.runners.vmbench.vmbench_prompts:materialize_vmbench_generation_requests
+  missing_requests_hint: restore the bundled VMBench prompt assets

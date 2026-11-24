@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 
 from worldfoundry.core.model_loading.text_embeddings import (
     DEFAULT_EMBEDDING_CACHE_MAX_BYTES,
@@ -10,7 +11,7 @@ from worldfoundry.core.model_loading.text_embeddings import (
 )
 
 
-def reason1_component_options(options: Mapping[str, object]) -> dict[str, bool | int]:
+def reason1_component_options(options: Mapping[str, Any]) -> dict[str, bool | int]:
     """Resolve explicit CPU placement and bounded whole-batch embedding reuse.
 
     Validation runs before any native components or checkpoints are loaded.

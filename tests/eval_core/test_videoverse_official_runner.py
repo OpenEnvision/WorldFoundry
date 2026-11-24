@@ -10,7 +10,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNNER_PATH = (
     REPO_ROOT
-    / "worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py"
+    / "worldfoundry/evals/tasks/execution/runners/videoverse/run_videoverse_official_runner.py"
 )
 
 
@@ -86,7 +86,7 @@ def test_videoverse_official_run_with_mock_judge_writes_eval_res_and_scorecard(t
 
 
 def test_videoverse_prompt_materialization_uses_prompt_ids(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.tasks.execution.runners.videoverse.videoverse_prompts import (
+    from worldfoundry.evals.tasks.execution.runners.videoverse.videoverse_prompts import (
         materialize_videoverse_generation_requests,
     )
 

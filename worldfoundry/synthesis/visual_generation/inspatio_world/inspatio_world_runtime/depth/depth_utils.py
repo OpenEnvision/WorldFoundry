@@ -3,15 +3,15 @@
 Consolidated from DeployService/utils/ and DeployService/model/pi3/utils/.
 """
 
-import numpy as np
 import cv2
+import numpy as np
 import torch
 from PIL import Image
-
 
 # ──────────────────────────────────────────────
 # Depth I/O (from image_utils.py)
 # ──────────────────────────────────────────────
+
 
 def save_depth_rgba_float(path, depth_float32):
     """Save float32 depth map as lossless RGBA PNG.
@@ -19,9 +19,7 @@ def save_depth_rgba_float(path, depth_float32):
     Each float32 pixel is reinterpreted as 4 uint8 bytes → RGBA channels.
     """
     depth_bytes = depth_float32.astype(np.float32).tobytes()
-    depth_uint8 = np.frombuffer(depth_bytes, dtype=np.uint8).reshape(
-        depth_float32.shape[0], depth_float32.shape[1], 4
-    )
+    depth_uint8 = np.frombuffer(depth_bytes, dtype=np.uint8).reshape(depth_float32.shape[0], depth_float32.shape[1], 4)
     img = Image.fromarray(depth_uint8, mode="RGBA")
     img.save(path, format="PNG", compress_level=0)
 
@@ -29,6 +27,7 @@ def save_depth_rgba_float(path, depth_float32):
 # ──────────────────────────────────────────────
 # PLY writing (from pi3/utils/basic.py)
 # ──────────────────────────────────────────────
+
 
 def rotate_target_dim_to_last_axis(x, target_dim=3):
     """Move the last axis of size *target_dim* to the final position."""
@@ -79,24 +78,30 @@ def write_ply(xyz, rgb=None, path="output.ply"):
         m = hsv[:, 2:] - c
 
         rgb = np.zeros_like(hsv)
-        cond = (0 <= hsv[:, 0] * 6 % 6) & (hsv[:, 0] * 6 % 6 < 1)
+        cond = (hsv[:, 0] * 6 % 6 >= 0) & (hsv[:, 0] * 6 % 6 < 1)
         rgb[cond] = np.hstack([c[cond], x_val[cond], np.zeros_like(x_val[cond])])
-        cond = (1 <= hsv[:, 0] * 6 % 6) & (hsv[:, 0] * 6 % 6 < 2)
+        cond = (hsv[:, 0] * 6 % 6 >= 1) & (hsv[:, 0] * 6 % 6 < 2)
         rgb[cond] = np.hstack([x_val[cond], c[cond], np.zeros_like(x_val[cond])])
-        cond = (2 <= hsv[:, 0] * 6 % 6) & (hsv[:, 0] * 6 % 6 < 3)
+        cond = (hsv[:, 0] * 6 % 6 >= 2) & (hsv[:, 0] * 6 % 6 < 3)
         rgb[cond] = np.hstack([np.zeros_like(x_val[cond]), c[cond], x_val[cond]])
-        cond = (3 <= hsv[:, 0] * 6 % 6) & (hsv[:, 0] * 6 % 6 < 4)
+        cond = (hsv[:, 0] * 6 % 6 >= 3) & (hsv[:, 0] * 6 % 6 < 4)
         rgb[cond] = np.hstack([np.zeros_like(x_val[cond]), x_val[cond], c[cond]])
-        cond = (4 <= hsv[:, 0] * 6 % 6) & (hsv[:, 0] * 6 % 6 < 5)
+        cond = (hsv[:, 0] * 6 % 6 >= 4) & (hsv[:, 0] * 6 % 6 < 5)
         rgb[cond] = np.hstack([x_val[cond], np.zeros_like(x_val[cond]), c[cond]])
-        cond = (5 <= hsv[:, 0] * 6 % 6) & (hsv[:, 0] * 6 % 6 < 6)
+        cond = (hsv[:, 0] * 6 % 6 >= 5) & (hsv[:, 0] * 6 % 6 < 6)
         rgb[cond] = np.hstack([c[cond], np.zeros_like(x_val[cond]), x_val[cond]])
         rgb = rgb + m
 
     dtype = [
-        ("x", "f4"), ("y", "f4"), ("z", "f4"),
-        ("nx", "f4"), ("ny", "f4"), ("nz", "f4"),
-        ("red", "u1"), ("green", "u1"), ("blue", "u1"),
+        ("x", "f4"),
+        ("y", "f4"),
+        ("z", "f4"),
+        ("nx", "f4"),
+        ("ny", "f4"),
+        ("nz", "f4"),
+        ("red", "u1"),
+        ("green", "u1"),
+        ("blue", "u1"),
     ]
     normals = np.zeros_like(xyz)
     elements = np.empty(xyz.shape[0], dtype=dtype)
@@ -111,9 +116,8 @@ def write_ply(xyz, rgb=None, path="output.ply"):
 # Ground-plane alignment (from ground_align.py)
 # ──────────────────────────────────────────────
 
-def align_ground_plane(points, ground_mask,
-                       ransac_iterations=2000, ransac_threshold=0.05,
-                       min_inliers_ratio=0.2):
+
+def align_ground_plane(points, ground_mask, ransac_iterations=2000, ransac_threshold=0.05, min_inliers_ratio=0.2):
     """Fit a ground plane via RANSAC and compute RT matrix to make it horizontal.
 
     Args:
@@ -153,13 +157,14 @@ def align_ground_plane(points, ground_mask,
 
     ground_center = np.mean(ground_points, axis=0)
     rotation_matrix = _compute_ground_alignment_rotation(
-        best_plane_params, ground_points_center=ground_center,
-        normal_axis="y", normal_direction="down"
+        best_plane_params, ground_points_center=ground_center, normal_axis="y", normal_direction="down"
     )
 
     inlier_count = len(best_inliers) if best_inliers is not None else 0
-    print(f"Plane params: a={best_plane_params[0]:.4f}, b={best_plane_params[1]:.4f}, "
-          f"c={best_plane_params[2]:.4f}, d={best_plane_params[3]:.4f}")
+    print(
+        f"Plane params: a={best_plane_params[0]:.4f}, b={best_plane_params[1]:.4f}, "
+        f"c={best_plane_params[2]:.4f}, d={best_plane_params[3]:.4f}"
+    )
     print(f"Inliers: {inlier_count}/{len(ground_points)}, error: {best_error:.4f}")
 
     C_rotated = rotation_matrix @ ground_center
@@ -182,7 +187,7 @@ def _robust_ransac_plane_fitting(points, iterations, threshold, min_inliers_rati
 
     adaptive_thresholds = [threshold * 2, threshold * 1.5, threshold]
 
-    for stage, current_threshold in enumerate(adaptive_thresholds):
+    for _stage, current_threshold in enumerate(adaptive_thresholds):
         stage_iterations = iterations // len(adaptive_thresholds)
 
         for _ in range(stage_iterations):
@@ -229,8 +234,9 @@ def _robust_ransac_plane_fitting(points, iterations, threshold, min_inliers_rati
     return best_plane_params, best_inliers, best_error
 
 
-def _compute_ground_alignment_rotation(plane_params, ground_points_center=None,
-                                       normal_axis="y", normal_direction="down"):
+def _compute_ground_alignment_rotation(
+    plane_params, ground_points_center=None, normal_axis="y", normal_direction="down"
+):
     a, b, c, d = plane_params
     plane_normal = np.array([a, b, c])
     plane_normal = plane_normal / np.linalg.norm(plane_normal)
@@ -254,12 +260,14 @@ def _compute_ground_alignment_rotation(plane_params, ground_points_center=None,
 
 def _rodrigues_rotation_matrix(axis, angle):
     axis = axis / np.linalg.norm(axis)
-    K = np.array([
-        [0, -axis[2], axis[1]],
-        [axis[2], 0, -axis[0]],
-        [-axis[1], axis[0], 0],
-    ])
-    I = np.eye(3)
+    K = np.array(
+        [
+            [0, -axis[2], axis[1]],
+            [axis[2], 0, -axis[0]],
+            [-axis[1], axis[0], 0],
+        ]
+    )
+    I = np.eye(3)  # noqa: E741 - Ambiguous upstream name kept as written.
     return I + np.sin(angle) * K + (1 - np.cos(angle)) * np.dot(K, K)
 
 
@@ -281,6 +289,7 @@ def _least_squares_fallback(points):
 # ──────────────────────────────────────────────
 # Pose smoothing (from pose_smooth.py)
 # ──────────────────────────────────────────────
+
 
 def smooth_gaussian(poses, sigma=1.0):
     """Gaussian-smooth camera poses (quaternion + translation)."""
@@ -310,7 +319,7 @@ def smooth_gaussian(poses, sigma=1.0):
     smooth_quats = smooth_quats / norms[:, np.newaxis]
 
     smooth_poses = []
-    for q, t in zip(smooth_quats, smooth_trans):
+    for q, t in zip(smooth_quats, smooth_trans, strict=False):
         rot = R.from_quat(q).as_matrix()
         pose = np.eye(4)
         pose[:3, :3] = rot

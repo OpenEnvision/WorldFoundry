@@ -1,18 +1,19 @@
 import random
-from typing import Generator, Tuple, Union
+from collections.abc import Generator
 
 import torch
 import torch.nn as nn
 from torch.distributions.categorical import Categorical
 
+from worldfoundry.synthesis.visual_generation.diamond.envs import TorchEnv, WorldModelEnv
+
 from . import coroutine
-from envs import TorchEnv, WorldModelEnv
 
 
 @coroutine
 def make_env_loop(
-    env: Union[TorchEnv, WorldModelEnv], model: nn.Module, epsilon: float = 0.0
-) -> Generator[Tuple[torch.Tensor, ...], int, None]:
+    env: TorchEnv | WorldModelEnv, model: nn.Module, epsilon: float = 0.0
+) -> Generator[tuple[torch.Tensor, ...], int, None]:
     num_steps = yield
 
     hx = torch.zeros(env.num_envs, model.lstm_dim, device=model.device)
@@ -38,8 +39,8 @@ def make_env_loop(
 
             if n > 0:
                 val_bootstrap = val.detach().clone()
-                if dead.any():
-                    val_bootstrap[dead] = val_final_obs
+                if dead.any():  # noqa: F821 - Name is undefined in the upstream source.
+                    val_bootstrap[dead] = val_final_obs  # noqa: F821 - Name is undefined in the upstream source.
                 all_[-1][-1] = val_bootstrap
 
             dead = torch.logical_or(end, trunc)
@@ -69,6 +70,8 @@ def make_env_loop(
 
         all_[-1][-1] = val_bootstrap
 
-        all_obs, act, rew, end, trunc, logits_act, val, val_bootstrap = (torch.stack(x, dim=1) for x in zip(*all_))
+        all_obs, act, rew, end, trunc, logits_act, val, val_bootstrap = (
+            torch.stack(x, dim=1) for x in zip(*all_, strict=False)
+        )
 
         num_steps = yield all_obs, act, rew, end, trunc, logits_act, val, val_bootstrap, infos

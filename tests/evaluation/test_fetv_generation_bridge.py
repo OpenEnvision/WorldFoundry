@@ -8,11 +8,11 @@ import pytest
 from PIL import Image
 
 from worldfoundry.core.io.formats.serialization import read_jsonl_objects, write_jsonl
-from worldfoundry.evaluation.api import ArtifactRef, GenerationResult
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_generation import (
+from worldfoundry.evals.api import ArtifactRef, GenerationResult
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_generation import (
     get_benchmark_generation_adapter,
 )
-from worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_prompts import (
+from worldfoundry.evals.tasks.execution.runners.fetv.fetv_prompts import (
     FETV_BOUNDED_PROMPT_NAME,
     FETV_GENERATION_MANIFEST_NAME,
     copy_fetv_generated_videos,
@@ -85,7 +85,7 @@ def test_materializer_rejects_duplicate_sent_indices(tmp_path) -> None:
     request = materialize_fetv_generation_requests(limit=1)[0]
     duplicate = copy.deepcopy(request.to_dict())
     duplicate["sample_id"] = "different-sample"
-    from worldfoundry.evaluation.api import GenerationRequest
+    from worldfoundry.evals.api import GenerationRequest
 
     generation_dir = tmp_path / "generation"
     _write_generation_manifests(generation_dir, [request, GenerationRequest.from_dict(duplicate)], [])

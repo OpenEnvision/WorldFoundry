@@ -3,8 +3,9 @@
 # Academic-use terms: THIRD-PARTY-NOTICES (WorldCrafter)
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Mapping
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -45,8 +46,7 @@ class RepEncoderConfig:
             or (self.dino_input_block, self.dino_depth, self.dino_heads) != (2, 24, 16)
             or self.latent_special_tokens != 5
             or (self.patch_height, self.patch_width) != (22, 37)
-            or (self.vggt_depth, self.vggt_heads, self.vggt_register_tokens)
-            != (24, 16, 4)
+            or (self.vggt_depth, self.vggt_heads, self.vggt_register_tokens) != (24, 16, 4)
             or self.scene_dim != 768
             or (self.repfeature_depth, self.repfeature_heads) != (10, 12)
             or self.target_patch_size != 8
@@ -67,7 +67,7 @@ class RepEncoderConfig:
         return value
 
     @classmethod
-    def from_dict(cls, value: Mapping[str, Any]) -> "RepEncoderConfig":
+    def from_dict(cls, value: Mapping[str, Any]) -> RepEncoderConfig:
         payload = dict(value)
         if "output_kernel" in payload:
             payload["output_kernel"] = tuple(int(x) for x in payload["output_kernel"])

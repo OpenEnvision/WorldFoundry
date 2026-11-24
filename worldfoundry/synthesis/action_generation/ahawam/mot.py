@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional, cast
+from typing import Any, cast
 
 import torch
 import torch.nn as nn
 
-from .wan_video_dit import flash_attention, modulate, rope_apply
+from worldfoundry.core.nn import scale_shift as modulate
+
+from .wan_video_dit import flash_attention, rope_apply
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +139,7 @@ class LayerwiseChunkKVCacheEditor(nn.Module):
 class MoT(nn.Module):
     def __init__(
         self,
-        mixtures: Dict[str, nn.Module],
+        mixtures: dict[str, nn.Module],
     ):
         super().__init__()
         if not mixtures:
@@ -170,15 +172,15 @@ class MoT(nn.Module):
             expert = self.mixtures[name]
             logger.info(f"  Expert '{name}': num_params={sum(p.numel() for p in expert.parameters()) / 1e9:.2f} B")
         action_expert = cast(Any, self.mixtures["action"])
-        action_expert_hidden = int(getattr(action_expert, "hidden_dim"))
+        action_expert_hidden = int(action_expert.hidden_dim)
         # This unused tensor remains solely because it is present in released checkpoints.
         self.action_branch_embedding = nn.Parameter(torch.zeros(2, action_expert_hidden))
-        self.chunk_kv_cache_editor: Optional[LayerwiseChunkKVCacheEditor] = None
+        self.chunk_kv_cache_editor: LayerwiseChunkKVCacheEditor | None = None
 
     def configure_chunk_kv_cache_editor(
         self,
         *,
-        query_dim: Optional[int],
+        query_dim: int | None,
         use_delta_gate: bool,
         gate_init: float,
     ) -> None:
@@ -266,8 +268,8 @@ class MoT(nn.Module):
         shift_mlp: torch.Tensor,
         scale_mlp: torch.Tensor,
         gate_mlp: torch.Tensor,
-        context_payload: Optional[dict[str, torch.Tensor]],
-        cross_attn_kv: Optional[dict[str, torch.Tensor]] = None,
+        context_payload: dict[str, torch.Tensor] | None,
+        cross_attn_kv: dict[str, torch.Tensor] | None = None,
     ) -> torch.Tensor:
         x = block.gate(residual_x, gate_msa, block.self_attn.o(mixed_attn_out))
 
@@ -358,8 +360,8 @@ class MoT(nn.Module):
         scale_mlp: torch.Tensor,
         gate_mlp: torch.Tensor,
         mixed_slice: torch.Tensor,
-        context_payload: Optional[dict[str, torch.Tensor]],
-        cross_attn_kv: Optional[dict[str, torch.Tensor]] = None,
+        context_payload: dict[str, torch.Tensor] | None,
+        cross_attn_kv: dict[str, torch.Tensor] | None = None,
     ) -> torch.Tensor:
         """Apply inference post-attention computations.
 
@@ -396,7 +398,7 @@ class MoT(nn.Module):
         video_tokens: torch.Tensor,
         video_freqs: torch.Tensor,
         video_t_mod: torch.Tensor,
-        video_context_payload: Optional[dict[str, torch.Tensor]],
+        video_context_payload: dict[str, torch.Tensor] | None,
         prefix_video_kv_cache: list[dict[str, torch.Tensor]],
         prefix_video_seq_len: int,
         video_attention_mask: torch.Tensor,
@@ -467,7 +469,7 @@ class MoT(nn.Module):
         video_tokens: torch.Tensor,
         video_freqs: torch.Tensor,
         video_t_mod: torch.Tensor,
-        video_context_payload: Optional[dict[str, torch.Tensor]],
+        video_context_payload: dict[str, torch.Tensor] | None,
         video_attention_mask: torch.Tensor,
     ) -> list[dict[str, torch.Tensor]]:
         """Prefill video branch once and cache per-layer K/V for action denoising.
@@ -548,13 +550,13 @@ class MoT(nn.Module):
         action_tokens: torch.Tensor,
         action_freqs: torch.Tensor,
         action_t_mod: torch.Tensor,
-        action_context_payload: Optional[dict[str, torch.Tensor]],
+        action_context_payload: dict[str, torch.Tensor] | None,
         video_kv_cache: list[dict[str, torch.Tensor]],
         attention_mask: torch.Tensor,
         video_seq_len: int,
-        action_history_kv_cache: Optional[list[dict[str, torch.Tensor]]] = None,
+        action_history_kv_cache: list[dict[str, torch.Tensor]] | None = None,
         action_history_seq_len: int = 0,
-        cross_attn_kv_cache: Optional[list[dict[str, torch.Tensor]]] = None,
+        cross_attn_kv_cache: list[dict[str, torch.Tensor]] | None = None,
     ) -> torch.Tensor:
         """Run action branch with cached video K/V instead of recomputing video tokens.
 

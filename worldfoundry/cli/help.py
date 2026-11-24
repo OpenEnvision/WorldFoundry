@@ -6,6 +6,7 @@ import argparse
 import sys
 import textwrap
 from collections.abc import Sequence
+from typing import NoReturn
 
 from .presentation import (
     BOLD as _HEADING,
@@ -33,6 +34,20 @@ from .presentation import (
     terminal_enabled as _terminal_help_enabled,
 )
 
+_KIND_METAVARS = {"Path": "PATH", "int": "INT", "float": "FLOAT", "str": "STR"}
+
+
+class _OptionMetavarFormatter(argparse.HelpFormatter):
+    """Name option values by kind, such as ``--output-dir PATH`` or ``--steps INT``."""
+
+    def _get_default_metavar_for_optional(self, action: argparse.Action) -> str:
+        kind = getattr(action.type, "__name__", "")
+        if kind in _KIND_METAVARS:
+            return _KIND_METAVARS[kind]
+        if action.dest.endswith(("_path", "_dir", "_root", "_file")):
+            return "PATH"
+        return super()._get_default_metavar_for_optional(action)
+
 
 class WorldFoundryArgumentParser(argparse.ArgumentParser):
     """Argument parser with compact rich help in interactive terminals.
@@ -46,7 +61,7 @@ class WorldFoundryArgumentParser(argparse.ArgumentParser):
             return super().format_help()
         return self._format_terminal_help()
 
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> NoReturn:
         if not _terminal_help_enabled(sys.stderr):
             super().error(message)
         print_notice(
@@ -61,7 +76,7 @@ class WorldFoundryArgumentParser(argparse.ArgumentParser):
             usage = _paint("usage:", _HEADING) + usage[len("usage:") :]
 
         breadcrumb = self.prog.split(maxsplit=1)
-        title = "WorldFoundry" if breadcrumb[0].startswith("worldfoundry") else breadcrumb[0]
+        title = "WorldFoundry" if breadcrumb[0] in {"wf", "wf-studio"} else breadcrumb[0]
         if len(breadcrumb) > 1:
             title += " / " + breadcrumb[1]
         blocks = [_paint(_wrap_usage(title, width), _HEADING), usage]
@@ -178,18 +193,7 @@ class WorldFoundryArgumentParser(argparse.ArgumentParser):
         )
 
     def _help_row(self, action: argparse.Action) -> _HelpRow:
-        formatter = self._get_formatter()
-        original_metavar = formatter._get_default_metavar_for_optional
-
-        def metavar(item: argparse.Action) -> str:
-            kind = getattr(item.type, "__name__", "")
-            if kind in {"Path", "int", "float", "str"}:
-                return {"Path": "PATH", "int": "INT", "float": "FLOAT", "str": "STR"}[kind]
-            if item.dest.endswith(("_path", "_dir", "_root", "_file")):
-                return "PATH"
-            return original_metavar(item)
-
-        formatter._get_default_metavar_for_optional = metavar
+        formatter = _OptionMetavarFormatter(prog=self.prog)
         invocation = formatter._format_action_invocation(action)
         description = formatter._expand_help(action) if action.help else ""
         default = _format_default(action.default) if _should_show_default(action, description) else None
@@ -240,9 +244,7 @@ def _should_show_default(action: argparse.Action, description: str) -> bool:
         return False
     if action.dest == "help" or action.required:
         return False
-    if isinstance(action, (argparse._StoreTrueAction, argparse._StoreFalseAction)):
-        return False
-    return True
+    return not isinstance(action, (argparse._StoreTrueAction, argparse._StoreFalseAction))
 
 
 def _format_default(value: object) -> str:

@@ -6,8 +6,8 @@ import time
 import unittest
 from unittest import mock
 
-from worldfoundry.studio.serving import jobs as jobs_module
-from worldfoundry.studio.serving.jobs import StudioJob, StudioJobStore
+from worldfoundry.studio.workspace import jobs as jobs_module
+from worldfoundry.studio.workspace.jobs import StudioJob, StudioJobStore
 
 
 class StudioJobStoreShutdownTest(unittest.TestCase):
@@ -33,7 +33,7 @@ class StudioJobStoreShutdownTest(unittest.TestCase):
         self.assertIn("<redacted>", stored)
 
     def test_workspace_shutdown_returns_after_grace_and_cancels_queued_job(self) -> None:
-        from worldfoundry.studio.serving import workspace as workspace_app
+        from worldfoundry.studio.workspace import app as workspace_app
 
         started = threading.Event()
         release = threading.Event()
@@ -116,7 +116,7 @@ class StudioJobStoreShutdownTest(unittest.TestCase):
                 jobs_module._bounded_shutdown_grace_seconds(invalid)
 
     def test_fastapi_uses_shared_workspace_shutdown_handler(self) -> None:
-        from worldfoundry.studio.serving import workspace as workspace_app
+        from worldfoundry.studio.workspace import app as workspace_app
 
         app = workspace_app.create_app()
 

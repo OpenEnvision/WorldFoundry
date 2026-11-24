@@ -3,13 +3,13 @@
 
 """Tokenization classes for Qwen2."""
 
-from typing import Optional, Tuple
+from typing import ClassVar
 
 from transformers.tokenization_utils import AddedToken
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from transformers.utils import logging
-from .tokenization_qwen2 import Qwen2Tokenizer
 
+from .tokenization_qwen2 import Qwen2Tokenizer
 
 logger = logging.get_logger(__name__)
 
@@ -66,7 +66,7 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    model_input_names = ["input_ids", "attention_mask"]
+    model_input_names: ClassVar[list] = ["input_ids", "attention_mask"]
     slow_tokenizer_class = Qwen2Tokenizer
 
     def __init__(
@@ -80,17 +80,6 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
         pad_token="<|endoftext|>",
         **kwargs,
     ):
-        """Init.
-
-        Args:
-            vocab_file: The vocab file.
-            merges_file: The merges file.
-            tokenizer_file: The tokenizer file.
-            unk_token: The unk token.
-            bos_token: The bos token.
-            eos_token: The eos token.
-            pad_token: The pad token.
-        """
         # We need to at least pass vocab_file and merges_file to base class
         # in case a slow tokenizer needs to be initialized; other can be
         # configured through files.
@@ -129,15 +118,6 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
         )
 
     # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        """Save vocabulary.
-
-        Args:
-            save_directory: The save directory.
-            filename_prefix: The filename prefix.
-
-        Returns:
-            The return value.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)

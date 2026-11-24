@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from worldfoundry.cli import main
-from worldfoundry.evaluation.reporting import validate_contract_file, validate_contract_paths
+from worldfoundry.evals.reporting import validate_contract_file, validate_contract_paths
 
 
 def _write_json(path: Path, payload: dict) -> Path:

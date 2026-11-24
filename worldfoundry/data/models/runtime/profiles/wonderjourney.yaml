@@ -9,6 +9,7 @@ groups:
 - official_repo
 source_repos:
 - url: https://github.com/KovenYu/WonderJourney
+  revision: fecbbdff4d107e673c29c1d87b9e66fdc46f11af
 input_schema:
   prompt: true
   image: true

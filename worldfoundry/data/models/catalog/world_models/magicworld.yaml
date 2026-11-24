@@ -8,7 +8,7 @@ source:
   license: apache-2.0-code-and-cc-by-nc-sa-4.0-model-materials
 checkpoint: LuckyLiGY/MagicWorld
 runtime_profile: runtime-profile:magicworld
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: magicworld
 official_sources:
   project_page: https://vivocameraresearch.github.io/magicworld/
@@ -26,18 +26,16 @@ docs:
   publisher: vivo (Camera Research)
   publisher_kind: company
   publisher_zh: vivo（影像研究团队）
-  overview: 'MagicWorld is vivo''s interactive world model: from an image it generates camera-controlled world video, with a MagicWorld-Fast camera path wired in this catalog. The official source is vendored at a pinned revision; runner parity waits on checkpoints.'
-  overview_zh: MagicWorld 是 vivo 的交互式世界模型：从一张图生成相机可控的世界视频，本 catalog 已接通 MagicWorld-Fast 相机路径。官方源码以固定 revision 内置；runner parity 待 checkpoint 就位。
-  architecture: 'Architecture internals beyond the recorded tasks are not stored in this repository. Note the split licensing: code is apache-2.0, while the upstream README applies CC BY-NC-SA 4.0 terms to released model materials.'
-  architecture_zh: 除已记录任务外的架构内部细节仓库未存。注意分离的许可：代码为 apache-2.0，而上游 README 对发布的模型材料适用 CC BY-NC-SA 4.0 条款。
-  usage_notes: Inputs are prompt, image, and native_rows camera control. Model materials retain upstream non-commercial share-alike terms — review before commercial use.
-  usage_notes_zh: 输入为提示词、图像与 native_rows 相机控制。模型材料保留上游非商用相同方式共享条款——商用前请先审查。
+  overview: "MagicWorld is vivo's interactive world model: from an image it generates camera-controlled world video through the MagicWorld-Fast camera path."
+  overview_zh: MagicWorld 是 vivo 的交互式世界模型：从一张图经 MagicWorld-Fast 相机路径生成相机可控的世界视频。
+  architecture: 'Builds on Wan2.1-Fun-V1.1-1.3B-InP with Apple DepthPro for metric depth; the LuckyLiGY/MagicWorld checkpoint provides the MagicWorld-Fast and MagicWorld-Base weights. Licensing is split: code is apache-2.0, while the upstream README applies CC BY-NC-SA 4.0 terms to released model materials.'
+  architecture_zh: 基于 Wan2.1-Fun-V1.1-1.3B-InP，并用 Apple DepthPro 提供米制深度；LuckyLiGY/MagicWorld checkpoint 提供 MagicWorld-Fast 与 MagicWorld-Base 权重。许可分离：代码为 apache-2.0，而上游 README 对发布的模型材料适用 CC BY-NC-SA 4.0 条款。
+  usage_notes: Inputs are prompt, image, and native_rows camera control. Stage LuckyLiGY/MagicWorld (ModelScope, about 16 GB), alibaba-pai/Wan2.1-Fun-V1.1-1.3B-InP, and apple/DepthPro (ModelScope) before running.
+  usage_notes_zh: 输入为提示词、图像与 native_rows 相机控制。运行前需就位 LuckyLiGY/MagicWorld（ModelScope，约 16 GB）、alibaba-pai/Wan2.1-Fun-V1.1-1.3B-InP 与 apple/DepthPro（ModelScope）。
   limitations:
-  - Model materials are CC BY-NC-SA 4.0 (non-commercial).
-  - Runner parity is pending checkpoints.
+  - Model materials are CC BY-NC-SA 4.0 (non-commercial); review the terms before commercial use.
   limitations_zh:
-  - 模型材料为 CC BY-NC-SA 4.0（非商用）。
-  - runner parity 待 checkpoint 就位。
+  - 模型材料为 CC BY-NC-SA 4.0（非商用），商用前请先审查条款。
   recommended_benchmarks:
   - id: camerabench
     reason: Camera-control adherence of interactive rollouts.

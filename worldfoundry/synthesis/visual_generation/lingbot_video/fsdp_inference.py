@@ -94,9 +94,7 @@ def apply_fsdp_inference(
     blocks: Any = getattr(transformer, "blocks", ())
     wrapped_blocks = 0
     for block in blocks:
-        block_ignored_params = {
-            param for param in block.parameters() if param in ignored_params
-        }
+        block_ignored_params = {param for param in block.parameters() if param in ignored_params}
         fully_shard(block, mesh=mesh, ignored_params=block_ignored_params)
         wrapped_blocks += 1
     fully_shard(transformer, mesh=mesh, ignored_params=ignored_params)

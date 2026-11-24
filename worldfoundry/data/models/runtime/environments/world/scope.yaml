@@ -37,8 +37,6 @@ pip_packages:
 - peft
 - typing_extensions
 python: '3.10'
-pythonpath_dirs:
-- worldfoundry/synthesis/visual_generation/scope/scope_runtime
 validation_imports:
 - torch
 - torchvision

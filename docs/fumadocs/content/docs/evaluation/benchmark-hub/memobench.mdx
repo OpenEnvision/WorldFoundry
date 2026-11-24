@@ -1,6 +1,6 @@
 ---
 title: MemoBench
-description: "Harvard / MIT visual-memory bench: 360 V-D-R clips, automated metrics plus SAM-3 ORS and VQA. WorldFoundry vendors Step 1; it does not invent a board."
+description: "Harvard / MIT visual-memory bench: 360 V-D-R clips, automated metrics plus SAM-3 ORS and VQA. WorldFoundry vendors Step 1."
 ---
 
 MemoBench (Harvard, with MIT and MIT-IBM Watson AI Lab) diagnoses **visual memory** in world generators with a Visible → Disappeared → Reappear paradigm: the target is visible while a physical process runs (V), the camera pans away while the process continues off-screen (D), then the camera returns and the model must regenerate the object in its **updated** state (R). The suite is **360 ground-truth clips** (196 synthetic + 164 real) with camera trajectories and depth.
@@ -20,7 +20,7 @@ WorldFoundry **vendors the runtime** and can run Step 1 over `--generated-synthe
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id memobench \
   --mode official-validation \
   --official-results-path <official_results.csv> \
@@ -31,7 +31,7 @@ worldfoundry-eval zoo benchmark-run \
 
 `--run-official` executes vendored Step 1 (`--mode both|synthetic|real`). V-D-R boundaries rescale to the generated frame count. Env: `WORLDFOUNDRY_MEMOBENCH_RESULTS_PATH`, `WORLDFOUNDRY_MEMOBENCH_GENERATED_SYNTHETIC_DIR`, `WORLDFOUNDRY_MEMOBENCH_GENERATED_REAL_DIR`. Shared stack: `video_quality_dino_motion_stack`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/memobench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/memobench/runtime/memobench`.
+Manifest and vendored runtime: `worldfoundry/data/benchmarks/tasks/external/memobench.yaml`, `worldfoundry/evals/tasks/execution/runners/memobench/runtime/memobench`.
 
 Outputs include `scorecard.json` (primary `memobench_average`), `eval_csv`, `ors_scores.csv`, and `leaderboard.csv` when present.
 

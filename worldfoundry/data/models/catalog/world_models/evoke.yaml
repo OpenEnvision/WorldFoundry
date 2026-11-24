@@ -8,7 +8,7 @@ source:
   license: apache-2.0
 checkpoint: AlayaLab/Evoke
 runtime_profile: runtime-profile:evoke
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: evoke
 official_sources:
   project_page: https://evoke-world.github.io/Evoke/
@@ -23,4 +23,3 @@ runner_parity:
   notes:
   - The official three-step post-distillation command is wired; H200-class checkpoint execution has not been verified in this tree.
 catalog_category: world_models
-schema_version: 2

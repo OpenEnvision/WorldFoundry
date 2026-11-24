@@ -1,13 +1,12 @@
+import ast
 import importlib
 import importlib.util
-import ast
 from pathlib import Path
 
 import pytest
 
 import worldfoundry.operators as operators
 from worldfoundry.operators.base_operator import BaseOperator
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PUBLIC_FRAMEWORK_GLOBS = (
@@ -16,7 +15,7 @@ PUBLIC_FRAMEWORK_GLOBS = (
     "worldfoundry/core/memory/**/*.py",
     "worldfoundry/synthesis/action_generation/memory.py",
     "worldfoundry/synthesis/visual_generation/memory/**/*.py",
-    "worldfoundry/evaluation/**/*.py",
+    "worldfoundry/evals/**/*.py",
     "worldfoundry/studio/**/*.py",
 )
 
@@ -34,17 +33,6 @@ def test_base_operator_saves_operation_types_and_uses_fresh_default():
 
     assert first.operation_types == ["textual_instruction"]
     assert second.operation_types == []
-
-
-def test_hunyuan_world_voyager_has_no_historical_alias_module():
-    old_module = "worldfoundry.operators.hunyuan_world_" + "vo" + "ager_operator"
-    old_path = REPO_ROOT / "worldfoundry/operators" / ("hunyuan_world_" + "vo" + "ager_operator.py")
-
-    assert importlib.util.find_spec("worldfoundry.operators.hunyuan_world_voyager_operator") is not None
-    assert not old_path.exists()
-    assert importlib.util.find_spec(old_module) is None
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module(old_module)
 
 
 def test_visual_memories_use_canonical_stream_module():
@@ -110,7 +98,11 @@ def test_concrete_operator_classes_inherit_from_unified_base():
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and node.name.endswith("Operator") and not inherits_unified_base(node.name):
+            if (
+                isinstance(node, ast.ClassDef)
+                and node.name.endswith("Operator")
+                and not inherits_unified_base(node.name)
+            ):
                 relative = path.relative_to(REPO_ROOT)
                 violations.append(f"{relative}:{node.lineno}: {node.name}")
 
@@ -127,7 +119,7 @@ def test_public_framework_layers_do_not_use_mutable_defaults():
                 if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
 
-                default_args = node.args.args[-len(node.args.defaults):] if node.args.defaults else []
+                default_args = node.args.args[-len(node.args.defaults) :] if node.args.defaults else []
                 for arg, default in zip(default_args, node.args.defaults):
                     if isinstance(default, (ast.List, ast.Dict, ast.Set)):
                         relative = path.relative_to(REPO_ROOT)
@@ -157,7 +149,11 @@ def test_component_runtime_pipelines_use_pipelineabc_without_profilebacked_inher
             }
             if "PipelineABC" not in base_names:
                 continue
-            class_attrs = {node.targets[0].id for node in class_node.body if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)}
+            class_attrs = {
+                node.targets[0].id
+                for node in class_node.body
+                if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
+            }
             if {"OPERATOR_CLS", "MEMORY_CLS", "SYNTHESIS_CLS"} <= class_attrs:
                 component_pipelines.append(f"{path.relative_to(REPO_ROOT)}:{class_node.name}")
 

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any, ClassVar
 
 from .base_operator import BaseOperator
 
@@ -16,9 +17,14 @@ class OpenMAGVIT2Operator(BaseOperator):
     """
 
     MODEL_ID = "open-magvit2"
-    DEFAULT_INPUT_SCHEMA = {"prompt": True, "image": False, "video": False, "actions": ["class_id"]}
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
+        "prompt": True,
+        "image": False,
+        "video": False,
+        "actions": ["class_id"],
+    }
 
-    def __init__(self, input_schema: Dict[str, Any] | None = None):
+    def __init__(self, input_schema: dict[str, Any] | None = None):
         """Initialize the operator with specific configurations."""
         super().__init__(operation_types=["textual_instruction", "action_instruction"])
         self.input_schema = {**self.DEFAULT_INPUT_SCHEMA, **dict(input_schema or {})}
@@ -27,7 +33,6 @@ class OpenMAGVIT2Operator(BaseOperator):
 
     @staticmethod
     def _class_ids(interaction) -> list[str]:
-        """Class ids implementation."""
         if interaction is None:
             return []
         if isinstance(interaction, (int, float)):
@@ -40,7 +45,11 @@ class OpenMAGVIT2Operator(BaseOperator):
                 return [item.strip() for item in text.split(",") if item.strip()]
             return [text]
         if isinstance(interaction, Iterable):
-            return [str(int(item)) if isinstance(item, (int, float)) else str(item).strip() for item in interaction if str(item).strip()]
+            return [
+                str(int(item)) if isinstance(item, (int, float)) else str(item).strip()
+                for item in interaction
+                if str(item).strip()
+            ]
         raise TypeError(f"Open-MAGVIT2 class_id must be int, string, or sequence, got {type(interaction).__name__}.")
 
     def check_interaction(self, interaction):
@@ -55,16 +64,16 @@ class OpenMAGVIT2Operator(BaseOperator):
         self.check_interaction(interaction)
         self.current_interaction.append(interaction)
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         classes = self._class_ids(self.current_interaction[-1] if self.current_interaction else None)
         self.interaction_history.append(classes)
-        result: Dict[str, Any] = {"actions": classes}
+        result: dict[str, Any] = {"actions": classes}
         if classes:
             result["class_id"] = classes[0] if len(classes) == 1 else ",".join(classes)
         return result
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
         class_id = kwargs.get("class_id")
         if class_id is not None:
@@ -77,7 +86,7 @@ class OpenMAGVIT2Operator(BaseOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         if images is not None or video is not None or ref_image_path is not None:
             raise ValueError("Open-MAGVIT2 generation is class-conditional and does not accept visual inputs.")

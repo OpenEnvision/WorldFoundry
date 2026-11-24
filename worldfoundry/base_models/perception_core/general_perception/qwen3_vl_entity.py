@@ -3,18 +3,17 @@
 This module is shared from ``base_models`` so model integrations do not vendor
 their own Qwen inference wrapper.
 """
+
 from __future__ import annotations
 
 import os
 import re
 import tempfile
 from dataclasses import dataclass
-from typing import Iterable
 
 import cv2
 import torch
 from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
-
 
 # ---------------------------------------------------------------------------
 # Entity parsing helpers
@@ -40,23 +39,87 @@ _NO_ENTITY_PHRASES = (
 )
 
 _BACKGROUND_BLACKLIST = {
-    "road", "roads", "building", "buildings", "street", "streets",
-    "sidewalk", "sidewalks", "wall", "walls", "floor", "ceiling",
-    "tree", "trees", "grass", "furniture", "door", "doors",
-    "window", "windows", "scenery", "structure", "structures",
-    "bridge", "fence", "pole", "sign", "bench", "railing",
-    "parking lot", "pathway", "pavement", "ground",
-    "rug", "carpet", "mat", "curtain", "curtains",
-    "table", "chair", "sofa", "couch", "desk", "shelf", "shelves",
-    "lamp", "plant", "vase", "painting", "clock", "mirror", "pillow",
-    "cup", "bowl", "plate", "bottle", "box",
-    "sky", "cloud", "clouds", "water",
+    "road",
+    "roads",
+    "building",
+    "buildings",
+    "street",
+    "streets",
+    "sidewalk",
+    "sidewalks",
+    "wall",
+    "walls",
+    "floor",
+    "ceiling",
+    "tree",
+    "trees",
+    "grass",
+    "furniture",
+    "door",
+    "doors",
+    "window",
+    "windows",
+    "scenery",
+    "structure",
+    "structures",
+    "bridge",
+    "fence",
+    "pole",
+    "sign",
+    "bench",
+    "railing",
+    "parking lot",
+    "pathway",
+    "pavement",
+    "ground",
+    "rug",
+    "carpet",
+    "mat",
+    "curtain",
+    "curtains",
+    "table",
+    "chair",
+    "sofa",
+    "couch",
+    "desk",
+    "shelf",
+    "shelves",
+    "lamp",
+    "plant",
+    "vase",
+    "painting",
+    "clock",
+    "mirror",
+    "pillow",
+    "cup",
+    "bowl",
+    "plate",
+    "bottle",
+    "box",
+    "sky",
+    "cloud",
+    "clouds",
+    "water",
 }
 
 _PERSON_TERMS = (
-    "person", "people", "human", "man", "woman", "child", "kid",
-    "pedestrian", "hand", "hands", "arm", "arms", "leg", "legs",
-    "head", "face", "body",
+    "person",
+    "people",
+    "human",
+    "man",
+    "woman",
+    "child",
+    "kid",
+    "pedestrian",
+    "hand",
+    "hands",
+    "arm",
+    "arms",
+    "leg",
+    "legs",
+    "head",
+    "face",
+    "body",
 )
 
 DEFAULT_ENTITY_PROMPT = (
@@ -122,9 +185,11 @@ def parse_entities(text: str) -> list[str]:
 # Qwen3-VL entity extractor
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Qwen3VLEntityExtractor:
     """Qwen3-VL foreground entity extractor."""
+
     model_path: str
     device: str
     max_new_tokens: int = 128
@@ -164,8 +229,8 @@ class Qwen3VLEntityExtractor:
         Returns:
             Tuple of (entity_list, raw_output_text).
         """
-        video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
-        image_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.webp'}
+        video_extensions = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
+        image_extensions = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
 
         ext = os.path.splitext(input_path)[1].lower()
 
@@ -186,7 +251,7 @@ class Qwen3VLEntityExtractor:
                 cap.release()
                 if not ret or frame is None:
                     return [], "Failed to read video frame"
-                temp_image_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
+                temp_image_path = tempfile.NamedTemporaryFile(suffix=".png", delete=False).name  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
                 cv2.imwrite(temp_image_path, frame)
                 content_type = "image"
                 content_path = temp_image_path
@@ -216,7 +281,7 @@ class Qwen3VLEntityExtractor:
 
             generated_ids = self.model.generate(**inputs, max_new_tokens=self.max_new_tokens)
             generated_ids_trimmed = [
-                out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+                out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids, strict=False)
             ]
             output_text = self.processor.batch_decode(
                 generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
@@ -254,7 +319,7 @@ class Qwen3VLEntityExtractor:
 
         generated_ids = self.model.generate(**inputs, max_new_tokens=self.max_new_tokens)
         generated_ids_trimmed = [
-            out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids, strict=False)
         ]
         output_text = self.processor.batch_decode(
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False

@@ -1,0 +1,26 @@
+schema_version: 2
+model_id: magi2-preview
+env_name: magi2-preview
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu124
+driver_status: compatible
+conda_packages:
+- python=3.11
+- pip>=25
+pip_extra_index_url: https://download.pytorch.org/whl/cu124
+pip_packages:
+- torch==2.5.1
+- transformers==5.5.0
+- accelerate>=1.10
+- safetensors>=0.6
+validation_imports:
+- torch
+- transformers.models.qwen3_5.modeling_qwen3_5
+- accelerate
+- safetensors
+- worldfoundry.base_models.diffusion_model.models.encoders.magi2_qwen35
+notes:
+- MAGI-2 encodes prompts in an in-tree package-module worker using this environment's Python. Install WorldFoundry into this environment as well as the main inference environment.
+- Transformers 5.5 supplies Qwen3_5TextModel; the parent pipeline can keep Transformers 4.x in the unified environment.
+- The worker retains PyTorch 2.5.1 and its CUDA 12.4 wheel tier. Prompt precision, device, tokenization and hidden-state selection are unchanged.

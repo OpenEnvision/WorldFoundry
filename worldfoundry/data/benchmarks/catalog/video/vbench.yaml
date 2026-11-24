@@ -252,17 +252,17 @@ metrics:
 runner:
   workspace:
     dispatch: vbench_classic
-  official_script: worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VBenchContract
+  official_script: worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py
+  runner_target: worldfoundry.evals.tasks.contracts.external:vbench
   run_command: MASTER_ADDR="${MASTER_ADDR:-127.0.0.1}" MASTER_PORT="${WORLDFOUNDRY_VBENCH_MASTER_PORT:-29631}" 
     PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py --videos-path 
+    worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py --videos-path 
     "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --dimension "${WORLDFOUNDRY_VBENCH_DIMENSION:-aesthetic_quality}" --mode 
     "${WORLDFOUNDRY_VBENCH_MODE:-custom_input}" --python "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" --timeout 
     "${WORLDFOUNDRY_VBENCH_TIMEOUT:-900}" --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   validation_command: MASTER_ADDR="${MASTER_ADDR:-127.0.0.1}" MASTER_PORT="${WORLDFOUNDRY_VBENCH_MASTER_PORT:-29631}" 
     PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py --videos-path 
+    worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py --videos-path 
     "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --dimension "${WORLDFOUNDRY_VBENCH_DIMENSION:-aesthetic_quality}" --mode 
     "${WORLDFOUNDRY_VBENCH_MODE:-custom_input}" --python "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" --timeout 
     "${WORLDFOUNDRY_VBENCH_TIMEOUT:-900}" --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
@@ -270,11 +270,11 @@ runner:
     kind: in_tree_official_source
     repo_url: https://github.com/Vchitect/VBench.git
     revision: 45e79ec14e69a2187202c675d2dbce1a71843d53
-    root: worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
+    root: worldfoundry/evals/tasks/execution/runners/vbench/runtime
     override_root_env: WORLDFOUNDRY_VBENCH_ROOT
     setup_command:
     - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-    - worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py
+    - worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py
     - setup
     dimension_presets:
       validation:
@@ -348,11 +348,11 @@ release_status: stable
 maturity: verified_runner
 data_refs:
   in_tree_source_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
+  - worldfoundry/evals/tasks/execution/runners/vbench/runtime
   task_yaml: worldfoundry/data/benchmarks/tasks/external/vbench.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:vbench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
@@ -362,7 +362,7 @@ runner_availability:
   surface: bounded_official_gpu_validation
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-- worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py
 - run
 - --mode
 - custom_input
@@ -373,3 +373,19 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - prompt_suite_json
+  - generated_video_dir
+  output_keys:
+  - scorecard
+  - dimension_scores
+  - raw_metric_table
+  notes:
+  - Contract covers generated-video input and normalized scorecard output.
+  - Heavy upstream dimensions remain behind the official VBench runtime.
+generation:
+  request_provider: worldfoundry.evals.tasks.execution.orchestration.benchmark_generation:materialize_vbench_generation_requests
+  dataset_root_parameter: dataset_root
+  split_parameter: split
+  missing_requests_hint: restore the bundled VBench_full_info.json prompt suite

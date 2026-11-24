@@ -3,18 +3,18 @@ title: Kinetix
 description: "牛津 FLAIR 的开放式 2D 物理 RL 空间（ICLR 2025 口头）。WorldFoundry 导入官方 rollout，不跑 JAX 模拟器。"
 ---
 
-Kinetix（牛津大学 FLAIR；ICLR 2025 口头报告）是一个 **开放式、JAX 加速的 2D 物理 RL 环境空间**。可程序化表示的关卡在同一个模拟器里覆盖机器人式移动、抓取与经典控制，通用智能体可以大规模预训练，再在留出任务上评测。
+Kinetix（牛津大学 FLAIR；ICLR 2025 口头报告）是一个**开放式、JAX 加速的 2D 物理 RL 环境空间**。可程序化表示的关卡在同一个模拟器里覆盖机器人式移动、抓取与经典控制，通用智能体可以大规模预训练，再在留出任务上评测。
 
 论文：[Kinetix](https://arxiv.org/abs/2410.23208)。代码：[FLAIROx/Kinetix](https://github.com/FLAIROx/Kinetix)。许可证：上游条款。
 
-WorldFoundry 是 **官方结果导入器**。模拟器执行、策略加载与 rollout 采集仍在上游。scorecard 主键是 `success_rate`。
+WorldFoundry 是**官方结果导入器**。模拟器执行、策略加载与 rollout 采集仍在上游。scorecard 主键是 `success_rate`。
 
 <BenchmarkPageSections id="kinetix" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id kinetix \
   --mode official-validation \
   --official-results-path <official_results.json> \

@@ -4,13 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.runner import (
+from worldfoundry.evals.tasks.datasets import build_dataset_manifest, write_dataset_manifest
+from worldfoundry.evals.tasks.execution.orchestration.materialize import (
     MATERIALIZED_REQUESTS_SCHEMA_VERSION,
     materialize_generation_requests,
-    materialize_requests_from_dataset_manifest,
     materialize_requests_from_benchmark,
+    materialize_requests_from_dataset_manifest,
 )
-from worldfoundry.evaluation.tasks.datasets import build_dataset_manifest, write_dataset_manifest
 
 
 def test_materialize_generation_requests_preserves_inputs_controls_and_outputs() -> None:

@@ -13,21 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, Optional, Tuple, Union
-import os
 import json
-import torch
-from torch import nn
-import torch.nn.functional as F
-from huggingface_hub import snapshot_download
+import os
+from typing import Any
 
-from diffusers.models.attention import Attention, AdaLayerNorm, FeedForward
+import torch
 from diffusers import CogVideoXTransformer3DModel
+from diffusers.models.attention import Attention, FeedForward
 from diffusers.utils import is_torch_version
 from diffusers.utils.constants import USE_PEFT_BACKEND
 from diffusers.utils.peft_utils import scale_lora_layers, unscale_lora_layers
+from huggingface_hub import snapshot_download
+from torch import nn
 
-from .embeddings import TesserActDepthPatchEmbed, TesserActDepthNormalPatchEmbed
+from .embeddings import TesserActDepthNormalPatchEmbed
 
 
 class MLP(nn.Module):
@@ -151,7 +150,7 @@ class MapBlock(nn.Module):
         norm_elementwise_affine: bool = True,
         norm_eps: float = 1e-5,
         final_dropout: bool = True,
-        ff_inner_dim: Optional[int] = None,
+        ff_inner_dim: int | None = None,
         ff_bias: bool = True,
         attention_out_bias: bool = True,
     ):
@@ -198,7 +197,7 @@ class TesserActDepth(CogVideoXTransformer3DModel):
         self,
         pretrained_model_path,
         subfolder=None,
-        transformer_additional_kwargs={},
+        transformer_additional_kwargs={},  # noqa: B006 - Keeps the upstream default object and signature.
         low_cpu_mem_usage=False,
         torch_dtype=torch.bfloat16,
         **kwargs,
@@ -218,7 +217,7 @@ class TesserActDepth(CogVideoXTransformer3DModel):
         config_file = os.path.join(pretrained_model_path, "config.json")
         if not os.path.isfile(config_file):
             raise RuntimeError(f"{config_file} does not exist")
-        with open(config_file, "r") as f:
+        with open(config_file) as f:
             config = json.load(f)
 
         from diffusers.utils import WEIGHTS_NAME
@@ -229,12 +228,13 @@ class TesserActDepth(CogVideoXTransformer3DModel):
         if os.path.exists(model_file):
             state_dict = torch.load(model_file, map_location="cpu")
         elif os.path.exists(model_file_safetensors):
-            from safetensors.torch import load_file, safe_open
+            from safetensors.torch import load_file
 
             state_dict = load_file(model_file_safetensors)
         else:
-            from safetensors.torch import load_file, safe_open
             import glob
+
+            from safetensors.torch import load_file
 
             model_files_safetensors = glob.glob(os.path.join(pretrained_model_path, "*.safetensors"))
             state_dict = {}
@@ -254,11 +254,11 @@ class TesserActDepthNormal(TesserActDepth):
         num_attention_heads: int = 30,
         attention_head_dim: int = 64,
         in_channels: int = 16,
-        out_channels: Optional[int] = 16,
+        out_channels: int | None = 16,
         flip_sin_to_cos: bool = True,
         freq_shift: int = 0,
         time_embed_dim: int = 512,
-        ofs_embed_dim: Optional[int] = None,
+        ofs_embed_dim: int | None = None,
         text_embed_dim: int = 4096,
         num_layers: int = 30,
         dropout: float = 0.0,
@@ -267,7 +267,7 @@ class TesserActDepthNormal(TesserActDepth):
         sample_height: int = 60,
         sample_frames: int = 49,
         patch_size: int = 2,
-        patch_size_t: Optional[int] = None,
+        patch_size_t: int | None = None,
         temporal_compression_ratio: int = 4,
         max_text_seq_length: int = 226,
         activation_fn: str = "gelu-approximate",
@@ -312,7 +312,7 @@ class TesserActDepthNormal(TesserActDepth):
         )
         # Override the class name for PEFT compatibility
         self.__class__.__name__ = "CogVideoXTransformer3DModel"
-        
+
         inner_dim = num_attention_heads * attention_head_dim
 
         # Redefine Patch embedding
@@ -363,11 +363,11 @@ class TesserActDepthNormal(TesserActDepth):
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
-        timestep: Union[int, float, torch.LongTensor],
-        timestep_cond: Optional[torch.Tensor] = None,
-        ofs: Optional[Union[int, float, torch.LongTensor]] = None,
-        image_rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
+        timestep: int | float | torch.LongTensor,
+        timestep_cond: torch.Tensor | None = None,
+        ofs: int | float | torch.LongTensor | None = None,
+        image_rotary_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_kwargs: dict[str, Any] | None = None,
         return_dict: bool = True,
     ):
         if attention_kwargs is not None:
@@ -381,7 +381,7 @@ class TesserActDepthNormal(TesserActDepth):
             scale_lora_layers(self, lora_scale)
         else:
             if attention_kwargs is not None and attention_kwargs.get("scale", None) is not None:
-                logger.warning("Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective.")
+                logger.warning("Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective.")  # noqa: F821 - Name is undefined in the upstream source.
 
         batch_size, num_frames, channels, height, width = hidden_states.shape
 
@@ -412,7 +412,7 @@ class TesserActDepthNormal(TesserActDepth):
         hidden_states = hidden_states[:, text_seq_length:]
 
         # 3. Transformer blocks
-        for i, block in enumerate(self.transformer_blocks):
+        for _i, block in enumerate(self.transformer_blocks):
             if torch.is_grad_enabled() and self.gradient_checkpointing:
 
                 def create_custom_forward(module):
@@ -421,7 +421,7 @@ class TesserActDepthNormal(TesserActDepth):
 
                     return custom_forward
 
-                ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
+                ckpt_kwargs: dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
                 hidden_states, encoder_hidden_states = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
                     hidden_states,
@@ -491,4 +491,4 @@ class TesserActDepthNormal(TesserActDepth):
 
         if not return_dict:
             return (output,)
-        return Transformer2DModelOutput(sample=output)
+        return Transformer2DModelOutput(sample=output)  # noqa: F821 - Name is undefined in the upstream source.

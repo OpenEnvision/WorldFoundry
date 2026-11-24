@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import importlib
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
+from PIL import Image
 
 from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import TesserActPipeline
 from worldfoundry.synthesis.action_generation.tesseract import infer
 from worldfoundry.synthesis.action_generation.tesseract import worldfoundry_runtime as runtime
 from worldfoundry.synthesis.visual_generation import runtime_manifest
+
+pytestmark = pytest.mark.unit
 
 
 def _write_fixture(path: Path) -> None:
@@ -144,6 +150,7 @@ def test_build_command_expands_paths_and_plan_options(tmp_path, monkeypatch) -> 
         }
     )
 
+    assert command[:3] == ["python", "-m", "worldfoundry.synthesis.action_generation.tesseract.infer"]
     assert command[command.index("--checkpoint-dir") + 1] == str(checkpoint)
     assert command[command.index("--base-model-dir") + 1] == str(base)
     assert command[command.index("--input-image") + 1] == str(image)
@@ -162,13 +169,46 @@ def test_pipeline_promotes_image_path_for_runtime_gate(tmp_path) -> None:
     assert promoted["image_path"] == str(tmp_path / "input.png")
 
 
-def test_launcher_bootstraps_the_vendored_runtime_import_path(monkeypatch) -> None:
-    runtime_root = str(Path(infer.__file__).resolve().parent / "tesseract_runtime")
-    monkeypatch.setattr(infer.sys, "path", [item for item in infer.sys.path if item != runtime_root])
-
-    infer._ensure_vendored_runtime_importable()
-
-    assert infer.sys.path[0] == runtime_root
+@pytest.mark.parametrize("geometry_mode", ["files", "synthetic-gradient"])
+def test_launcher_builds_conditioning_with_packaged_imports(tmp_path: Path, geometry_mode: str) -> None:
+    image = np.arange(6 * 8 * 3, dtype=np.uint8).reshape(6, 8, 3)
+    input_image = tmp_path / "input.png"
+    normal_path = tmp_path / "normal.png"
+    depth_path = tmp_path / "depth.npy"
+    Image.fromarray(image).save(input_image)
+    Image.fromarray(image).save(normal_path)
+    np.save(depth_path, np.linspace(0, 2, 48, dtype=np.float32).reshape(6, 8))
+    args = infer._parser().parse_args(
+        [
+            "--checkpoint-dir",
+            str(tmp_path),
+            "--base-model-dir",
+            str(tmp_path),
+            "--input-image",
+            str(input_image),
+            "--output-path",
+            str(tmp_path / "out.mp4"),
+            "--prompt",
+            "move",
+            "--geometry-mode",
+            geometry_mode,
+            "--depth-path",
+            str(depth_path),
+            "--normal-path",
+            str(normal_path),
+            "--height",
+            "16",
+            "--width",
+            "32",
+        ]
+    )
+    importlib.import_module("worldfoundry.synthesis.action_generation.tesseract.tesseract_runtime.tesseract.utils")
+    before = list(sys.path)
+    conditioning = infer._conditioning_tensor(args)
+    assert sys.path == before
+    assert conditioning.shape == (1, 9, 16, 32)
+    assert str(conditioning.dtype) == "torch.float32"
+    assert conditioning.min() >= 0 and conditioning.max() <= 1
 
 
 def test_synthetic_geometry_is_deterministic_and_bounded() -> None:

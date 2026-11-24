@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from ...synthesis.visual_generation.scope import SCOPESynthesis
 from ..pipeline_utils import PipelineABC
@@ -26,7 +27,7 @@ class SCOPEPipeline(PipelineABC):
         self.model_id = model_id or self.MODEL_ID
         self.model_name = "SCOPE"
         self.generation_type = "action_conditioned_i2v"
-        self.synthesis_model = synthesis_model or self.SYNTHESIS_CLS.from_pretrained(device=device)
+        self.synthesis_model = synthesis_model or self._component("SYNTHESIS_CLS").from_pretrained(device=device)
         self.device = device
         self.history: list[dict[str, Any]] = []
 
@@ -38,7 +39,7 @@ class SCOPEPipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "SCOPEPipeline":
+    ) -> SCOPEPipeline:
         """Create a SCOPE pipeline without importing the heavyweight runtime."""
 
         options: dict[str, Any] = {}
@@ -49,7 +50,7 @@ class SCOPEPipeline(PipelineABC):
         options.update(required_components or {})
         options.update(kwargs)
         resolved_model_id = str(options.pop("model_id", model_id or cls.MODEL_ID))
-        synthesis_model = cls.SYNTHESIS_CLS.from_pretrained(
+        synthesis_model = cls._component("SYNTHESIS_CLS").from_pretrained(
             {
                 "model_dir": (
                     options.pop("model_dir", None)
@@ -64,7 +65,9 @@ class SCOPEPipeline(PipelineABC):
         return cls(model_id=resolved_model_id, synthesis_model=synthesis_model, device=device)
 
     @staticmethod
-    def _action_path_from(interactions: Any = None, action_path: Any = None, operator_kwargs: Mapping[str, Any] | None = None) -> Any:
+    def _action_path_from(
+        interactions: Any = None, action_path: Any = None, operator_kwargs: Mapping[str, Any] | None = None
+    ) -> Any:
         """Action path from for SCOPEPipeline."""
         if action_path is not None:
             return action_path

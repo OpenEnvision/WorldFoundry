@@ -3,6 +3,7 @@
 import torch
 import torch.nn as nn
 
+
 class ActionTransformerProjector(nn.Module):
     def __init__(self, action_dim, hidden_size, depth=2, num_heads=4, mlp_ratio=4.0, max_len=64):
         super().__init__()
@@ -15,7 +16,7 @@ class ActionTransformerProjector(nn.Module):
             dim_feedforward=int(hidden_size * mlp_ratio),
             activation="gelu",
             batch_first=True,
-            norm_first=True
+            norm_first=True,
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=depth)
         self.norm = nn.LayerNorm(hidden_size)
@@ -36,6 +37,7 @@ class ActionTransformerProjector(nn.Module):
         x = self.norm(x)
         return x
 
+
 class ActionTransformerDecoder(nn.Module):
     def __init__(self, action_dim, hidden_size, depth=1, num_heads=4, mlp_ratio=4.0, max_len=64):
         super().__init__()
@@ -47,7 +49,7 @@ class ActionTransformerDecoder(nn.Module):
             dim_feedforward=int(hidden_size * mlp_ratio),
             activation="gelu",
             batch_first=True,
-            norm_first=True
+            norm_first=True,
         )
         self.decoder = nn.TransformerEncoder(decoder_layer, num_layers=depth)
         self.norm = nn.LayerNorm(hidden_size)

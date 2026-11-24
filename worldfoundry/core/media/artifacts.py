@@ -17,7 +17,9 @@ game-control overlays, and open-loop action comparison plots.
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional, Sequence
+import contextlib
+from collections.abc import Sequence
+from typing import Any, Literal, cast
 
 import cv2
 import numpy as np
@@ -48,7 +50,7 @@ def _resolve_colormap(colormap: str) -> int:
     return _CV2_COLORMAPS.get(str(colormap).lower(), cv2.COLORMAP_VIRIDIS)
 
 
-def squeeze_depth_to_2d(depth: np.ndarray) -> Optional[np.ndarray]:
+def squeeze_depth_to_2d(depth: np.ndarray) -> np.ndarray | None:
     """Return ``(H, W)`` depth or ``None`` when leftover axes remain after squeeze."""
 
     arr = np.asarray(depth)
@@ -58,7 +60,7 @@ def squeeze_depth_to_2d(depth: np.ndarray) -> Optional[np.ndarray]:
     return arr
 
 
-def depth_to_uint8(depth: np.ndarray) -> Optional[np.ndarray]:
+def depth_to_uint8(depth: np.ndarray) -> np.ndarray | None:
     """Stretch finite depths onto ``[0, 255]``; all-NaN maps become zeros, not noise.
 
     Non-2D inputs return ``None`` so a batch visualizer can skip a frame.
@@ -100,7 +102,7 @@ def depth_to_colormap_pil(
     depth: np.ndarray,
     colormap: str = COLORMAP_VIRIDIS,
     grayscale: bool = False,
-) -> Optional[Image.Image]:
+) -> Image.Image | None:
     """Build a PIL RGB image; ``None`` when the depth plane cannot be squeezed."""
 
     depth_uint8 = depth_to_uint8(depth)
@@ -117,7 +119,7 @@ def save_depth_colormap(
     depth: np.ndarray,
     output_path: str,
     colormap: str = COLORMAP_VIRIDIS,
-) -> Optional[str]:
+) -> str | None:
     """Write a colormap image; return ``None`` instead of leaving an empty file."""
 
     img = depth_to_colormap_pil(depth, colormap=colormap)
@@ -131,14 +133,14 @@ def depths_to_pil_images(
     depth_maps: np.ndarray,
     mode: Literal["grayscale", "colormap"] = "grayscale",
     colormap: str = COLORMAP_VIRIDIS,
-) -> List[Image.Image]:
+) -> list[Image.Image]:
     """Convert a ``(H, W)`` or ``(N, H, W)`` stack, dropping unsqueezable frames."""
 
     arr = np.asarray(depth_maps)
     if arr.ndim == 2:
         arr = arr[np.newaxis, ...]
 
-    images: List[Image.Image] = []
+    images: list[Image.Image] = []
     for depth in arr:
         if mode == "grayscale":
             depth_uint8 = depth_to_uint8(depth)
@@ -165,10 +167,7 @@ def prepare_depth_visualization(
     because debug viewers prefer a garbage frame over a crashed job.
     """
 
-    if depth.dtype == np.uint8:
-        depth_uint8 = squeeze_depth_to_2d(depth)
-    else:
-        depth_uint8 = depth_to_uint8(depth)
+    depth_uint8 = squeeze_depth_to_2d(depth) if depth.dtype == np.uint8 else depth_to_uint8(depth)
     if depth_uint8 is None:
         depth_uint8 = np.asarray(depth, dtype=np.uint8)
     if grayscale:
@@ -200,7 +199,7 @@ def build_depth_visualizations(
 def create_depth_visualization(
     depth: np.ndarray,
     colormap: str = COLORMAP_VIRIDIS,
-) -> Optional[np.ndarray]:
+) -> np.ndarray | None:
     """Single-map RGB colormap, or ``None`` when *depth* is missing / not 2D."""
 
     if depth is None:
@@ -228,10 +227,7 @@ def colorize_depth_map(
     import matplotlib
 
     assert depth.ndim == 2, "depth should be of shape (H, W)"
-    if mask is None:
-        depth = np.where(depth > 0, depth, np.nan)
-    else:
-        depth = np.where((depth > 0) & mask, depth, np.nan)
+    depth = np.where(depth > 0, depth, np.nan) if mask is None else np.where((depth > 0) & mask, depth, np.nan)
     if near is None:
         near = np.nanquantile(depth, 0.001)
     if far is None:
@@ -239,7 +235,7 @@ def colorize_depth_map(
 
     # Inverse-depth stretch: linear depth compresses the near field.
     disp = (1 / depth - 1 / far) / (1 / near - 1 / far)
-    colored = np.nan_to_num(matplotlib.colormaps[cmap](1.0 - disp)[..., :3], 0)
+    colored = np.nan_to_num(matplotlib.colormaps[cmap](1.0 - disp)[..., :3], copy=False)
     return np.ascontiguousarray((colored.clip(0, 1) * 255).astype(np.uint8))
 
 
@@ -257,11 +253,8 @@ def colorize_normal_map(
 
     if mask is not None:
         normal = np.where(mask[..., None], normal, 0)
-    if flip_yz:
-        # OpenGL-style +Y-up / +Z-forward → OpenCV display axes.
-        normal = normal * [0.5, -0.5, -0.5] + 0.5
-    else:
-        normal = normal * 0.5 + 0.5
+    # flip_yz maps OpenGL-style +Y-up / +Z-forward to OpenCV display axes.
+    normal = normal * [0.5, -0.5, -0.5] + 0.5 if flip_yz else normal * 0.5 + 0.5
     return (normal.clip(0, 1) * 255).astype(np.uint8)
 
 
@@ -335,7 +328,7 @@ def download_file_from_url(url: str, filename: str, timeout: float = 60.0) -> st
     import logging
     import os
 
-    import requests
+    requests = __import__("requests")
 
     try:
         with requests.get(url, stream=True, allow_redirects=True, timeout=timeout) as response:
@@ -346,10 +339,8 @@ def download_file_from_url(url: str, filename: str, timeout: float = 60.0) -> st
                         handle.write(chunk)
         return filename
     except requests.exceptions.RequestException as exc:
-        try:
+        with contextlib.suppress(OSError):
             os.remove(filename)
-        except OSError:
-            pass
         logging.getLogger(__name__).warning("Error downloading %s to %s: %s", url, filename, exc)
         return None
 
@@ -370,7 +361,8 @@ def apply_color_map(x, color_map: str = "inferno"):
     except AttributeError:
         from matplotlib import cm
 
-        cmap = cm.get_cmap(color_map)
+        # Older Matplotlib releases expose the fallback only; current stubs omit it.
+        cmap = cast(Any, cm).get_cmap(color_map)
     mapped = cmap(x.detach().clip(min=0, max=1).cpu().numpy())[..., :3]
     return torch.tensor(mapped, device=x.device, dtype=torch.float32)
 
@@ -623,10 +615,7 @@ def render_point_cloud(
     pts_cam = pts_cam[valid]
     cols = colors[valid]
     if cols.dtype in (np.float64, np.float32):
-        if cols.max() <= 1.0:
-            cols = (cols * 255).clip(0, 255).astype(np.uint8)
-        else:
-            cols = cols.clip(0, 255).astype(np.uint8)
+        cols = (cols * 255).clip(0, 255).astype(np.uint8) if cols.max() <= 1.0 else cols.clip(0, 255).astype(np.uint8)
 
     fx = fy = focal_scale * max(height, width)
     cx_img, cy_img = width / 2.0, height / 2.0
@@ -678,6 +667,7 @@ def parse_game_control_config(
     else:
         key = config
         mouse = None
+    mouse_values = cast(Sequence[Sequence[float]], mouse)
 
     for i in range(len(key)):
         if mode == "templerun":
@@ -685,7 +675,7 @@ def parse_game_control_config(
         elif mode == "universal":
             w, s, a, d = key[i]
         else:
-            w, s, a, d = key[i][0], key[i][1], mouse[i][1] < 0, mouse[i][1] > 0
+            w, s, a, d = key[i][0], key[i][1], mouse_values[i][1] < 0, mouse_values[i][1] > 0
 
         key_data[i] = {
             "W": bool(w),
@@ -697,7 +687,7 @@ def parse_game_control_config(
             key_data[i].update({"left": bool(left), "right": bool(right)})
 
         if mode == "universal":
-            mouse_y, mouse_x = mouse[i]
+            mouse_y, mouse_x = mouse_values[i]
             mouse_y = -1 * mouse_y  # recipe Y is inverted relative to image +Y
             if i == 0:
                 # First frame pins the cursor to the 640×352 letterbox center.
@@ -1007,7 +997,7 @@ def draw_ijkl_ui(frame: np.ndarray, rotation_direction: str, width: int, height:
 
 
 def draw_rotation_ui(
-    frame: np.ndarray, rotation_direction: str, width: int, height: int,     mode: str = "arrow"
+    frame: np.ndarray, rotation_direction: str, width: int, height: int, mode: str = "arrow"
 ) -> np.ndarray:
     """Draw an edge chevron or IJKL keys; ``\"no\"`` / unknown directions are no-ops."""
 
@@ -1143,7 +1133,7 @@ def visualize_wasd_and_rotation_ui(
     if wasd_actions is None and c2ws is None:
         raise ValueError("Either wasd_actions or c2ws must be provided.")
     if wasd_actions is None:
-        wasd_actions = extract_translation_wasd(c2ws, translation_threshold)
+        wasd_actions = extract_translation_wasd(cast(np.ndarray, c2ws), translation_threshold)
 
     if ijkl_actions is not None:
         rotation_directions = [ijkl_onehot_to_direction(ijkl) for ijkl in ijkl_actions]
@@ -1221,7 +1211,7 @@ def save_openloop_action_comparison(
         ax.legend()
 
     fig.supxlabel(f"Continuous Timestep (across {n_chunk_action} inferences)")
-    plt.tight_layout(rect=[0, 0, 1, 0.98])
+    plt.tight_layout(rect=(0, 0, 1, 0.98))
     fig.suptitle("Comparison of Ground Truth and Inferred Actions", fontsize=18)
     plt.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.clf()
@@ -1264,8 +1254,8 @@ __all__ = [
     "rotation_matrix_to_euler_angles_opencv",
     "run_skyseg",
     "save_batch_img",
-    "save_openloop_action_comparison",
     "save_depth_colormap",
+    "save_openloop_action_comparison",
     "segment_sky",
     "show_batch_img",
     "squeeze_depth_to_2d",

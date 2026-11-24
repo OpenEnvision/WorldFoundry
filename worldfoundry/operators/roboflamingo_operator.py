@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,7 +16,7 @@ class RoboFlamingoOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "flamingo_vlm_robot_policy"
     ACTION_REPRESENTATION = "continuous_end_effector_action"
     OBSERVATION_LAYOUT = "interleaved_visual_history_language_proprio"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": True,
@@ -23,7 +24,7 @@ class RoboFlamingoOperator(EmbodiedActionOperator):
         "actions": ["eef_action", "gripper_action"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
         instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "instruction", "task_instruction")
         instruction = "" if instruction is None else str(instruction)
@@ -42,12 +43,19 @@ class RoboFlamingoOperator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         visual_history = _first_present(
-            {"video": video, "image_sequence": kwargs.get("image_sequence"),
-             "visual_history": kwargs.get("visual_history"), "images": images},
-            "video", "image_sequence", "visual_history", "images",
+            {
+                "video": video,
+                "image_sequence": kwargs.get("image_sequence"),
+                "visual_history": kwargs.get("visual_history"),
+                "images": images,
+            },
+            "video",
+            "image_sequence",
+            "visual_history",
+            "images",
         )
         observation = _compact_dict(
             {
@@ -73,7 +81,7 @@ class RoboFlamingoOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "eef_action", "gripper_action", "robot_action")

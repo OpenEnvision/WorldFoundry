@@ -1,6 +1,6 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -8,45 +8,44 @@ from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm impo
 
 try:
     # After setting the environment variables, import vllm. This way of writing allows lint to pass.
-    os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
-    os.environ['VLLM_ENGINE_ITERATION_TIMEOUT_S'] = '3600'
+    os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
+    os.environ["VLLM_ENGINE_ITERATION_TIMEOUT_S"] = "3600"
 except Exception:
     raise
 
 
 class GRPOVllmEngine(VllmEngine):
-
     def __init__(
         self,
         model_id_or_path: str,
-        torch_dtype: Optional[torch.dtype] = None,
+        torch_dtype: torch.dtype | None = None,
         *,
         use_async_engine: bool = False,
-        model_type: Optional[str] = None,
-        use_hf: Optional[bool] = None,
-        hub_token: Optional[str] = None,
-        revision: Optional[str] = None,
+        model_type: str | None = None,
+        use_hf: bool | None = None,
+        hub_token: str | None = None,
+        revision: str | None = None,
         # engine_kwargs
         gpu_memory_utilization: float = 0.9,
         tensor_parallel_size: int = 1,
         pipeline_parallel_size: int = 1,
-        max_model_len: Optional[int] = None,
+        max_model_len: int | None = None,
         max_num_seqs: int = 256,
         disable_custom_all_reduce: bool = True,
         enforce_eager: bool = False,
-        limit_mm_per_prompt: Optional[Dict[str, Any]] = None,
-        device: str = 'auto',
-        seed: Optional[int] = None,
+        limit_mm_per_prompt: dict[str, Any] | None = None,
+        device: str = "auto",
+        seed: int | None = None,
         # lora
         enable_lora: bool = False,
         max_loras: int = 1,
         max_lora_rank: int = 16,
         enable_prefix_caching: bool = False,
         enable_sleep_mode: bool = False,
-        distributed_executor_backend: Optional[str] = None,
-        quantization: Optional[str] = None,
-        engine_kwargs: Optional[Dict[str, Any]] = None,
-        template: Optional[Template] = None,
+        distributed_executor_backend: str | None = None,
+        quantization: str | None = None,
+        engine_kwargs: dict[str, Any] | None = None,
+        template: Template | None = None,
     ) -> None:
         assert not use_async_engine  # TODO
         super().__init__(

@@ -23,10 +23,14 @@
 import torch
 from einops import rearrange, repeat
 
-from opensora.acceleration.checkpoint import auto_grad_checkpoint
-from opensora.models.dit import DiT
-from opensora.registry import MODELS
-from opensora.utils.ckpt_utils import load_checkpoint
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.acceleration.checkpoint import (
+    auto_grad_checkpoint,
+)
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.models.dit import DiT
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import MODELS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.utils.ckpt_utils import (
+    load_checkpoint,
+)
 
 
 @MODELS.register_module()

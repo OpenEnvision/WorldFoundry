@@ -1,0 +1,103 @@
+schema: solarwm.run.v1
+action: infer
+name: wan22-ti2v-5b-stage2-sgf-camera-length-inference
+model:
+  family: wan22_ti2v_5b
+  name: Wan2.2-TI2V-5B-Camera
+  base_path: /path/to/Wan2.2-TI2V-5B
+  assets:
+    transformer_config: builtin
+    transformer_weights: transformer
+    text_encoder: text_encoder/models_t5_umt5-xxl-enc-bf16.pth
+    tokenizer: tokenizer
+    vae: vae/Wan2.2_VAE.pth
+  timestep_shift: 5.0
+  causal: true
+  camera_attention_mode: fused_prope
+  camera_translation_transform: linear
+  latent_channels: 48
+  frame_sequence_length: 405
+  num_frame_per_block: 3
+  num_output_frames: 21
+  max_prior_clean_chunks: 5
+  local_attn_size: 18
+  score_local_attn_size: 21
+  sink_size: 0
+  rope_train_frames: 21
+  use_echorope: false
+  score_use_echorope: true
+data:
+  encoding: online
+  latent_dtype: bfloat16
+  latent_shape: [21, 48, 30, 54]
+  prompt_shape: [512, 4096]
+  caption_source: frozen
+  camera_source: preserve
+  camera_array_key: c2w
+  transport: {kind: local, root: /path/to/SolarWM-Data/releases-v1}
+  index_root: /path/to/SolarWM-Data/releases-v1
+  train_index: recipes/clean-81f/raw-wds/train-index.jsonl.gz
+  test_index: recipes/clean-81f/raw-wds/test-index.jsonl.gz
+  pixel_frames: 81
+  latent_frames: 21
+  height: 480
+  width: 864
+  fps: 16.0
+  max_rel_translation: 20.0
+  max_camera_abs: 20.0
+  random_start: false
+  streaming_index: true
+  partition_mode: node_shard
+  shuffle_buffer: 64
+  seed: 42
+  num_workers: 8
+  prefetch_factor: 4
+distributed: {world_size: 1, sequence_parallel_size: 1, sample_sharding: logical_dp, rng_scope: logical_dp}
+train:
+  stage: stage2
+  causal_mode: self_gradient_forcing
+  objective: flow_matching
+  trainer: self_gradient_forcing
+  micro_batch_size: 1
+  grad_accum: 1
+  global_batch_size: 1
+  max_steps: 4000
+  timestep_mode: per_block
+  num_train_timesteps: 1000
+  i2v_image_condition_dropout: 0.0
+  save_optimizer: true
+  critic_updates_per_student: 5
+  denoising_step_list: [1000, 750, 500, 250]
+  per_rank_exit_step: true
+  self_gradient_forcing_match_context: true
+  self_gradient_forcing_cache_mode: exit
+  context_timestep: 0.0
+  last_step_only: false
+  ts_schedule: false
+  score_min_timestep: 20.0
+  score_max_timestep: 980.0
+  real_guidance_scale: 3.0
+  fake_guidance_scale: 0.0
+  negative_prompt: 色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，形态畸形的肢体，静止不动的画面，杂乱的背景
+  optimizer: {lr: 2.0e-6, betas: [0.0, 0.999], eps: 1.0e-8, weight_decay: 0.0, grad_clip: 10.0, warmup_steps: 0, min_lr_ratio: 1.0}
+  critic_optimizer: {lr: 4.0e-7, betas: [0.0, 0.999], eps: 1.0e-8, weight_decay: 0.0, grad_clip: 10.0, warmup_steps: 0, min_lr_ratio: 1.0}
+  ema: {enabled: true, device: cuda, dtype: float32, sharded: true, decay: 0.99, start_step: 39, update_every: 1}
+  fsdp: {strategy: HYBRID_SHARD, activation_checkpointing: true, cast_root_forward_inputs: false, param_dtype: bfloat16, reduce_dtype: float32, buffer_dtype: bfloat16}
+validation:
+  sample_count: 1
+  selection_seed: 42
+  noise_seed: 42
+  max_rel_translation: null
+  max_camera_abs: null
+  passes:
+    - {name: model_self_forcing_nfe4, weights: model, mode: autoregressive, solver: self_forcing, num_inference_steps: 4}
+checkpoint:
+  path: /path/to/SolarWM-models/SolarWM-5B-sgf-stage2-81f
+inference:
+  source: validation
+  length: camera
+  output_layout: dataset_triplet_v1
+  run_id: wan22-ti2v-5b-stage2-sgf-camera-length-inference
+runtime:
+  output_dir: /path/to/outputs/wan22-ti2v-5b-stage2-sgf-camera-length-inference
+  compile_flex: false

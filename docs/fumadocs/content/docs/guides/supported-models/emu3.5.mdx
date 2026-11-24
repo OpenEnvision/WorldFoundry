@@ -5,9 +5,9 @@ modelId: "emu3.5"
 pageSource: authored
 ---
 
-Emu3.5 is BAAI's model for interleaved text and image generation. WorldFoundry calls a pinned checkout of the official implementation and returns its protobuf response. It does not generate video.
+Emu3.5 is BAAI's model for interleaved text and image generation. WorldFoundry runs the official implementation, vendored at a pinned revision, and returns its protobuf response. It does not generate video.
 
-A checkpoint-backed `howto` run through the WorldFoundry pipeline produced three text segments and two decoded 384×384 PNG images. Larger image sizes and byte-for-byte parity with a separate official CLI invocation remain unverified.
+Validated with the released checkpoints: a `howto` run returns three text segments and two decoded 384×384 PNG images.
 
 <ModelPaperFigures modelId="emu3.5" locale="en" />
 
@@ -21,9 +21,9 @@ The `story` and `howto` tasks take a text prompt and optionally a reference imag
 
 ## Runtime contract
 
-The runtime requires both checkpoints and the official source at revision `8fcf1da48f9c5252fe0a0b8dc842e07b6efcd745`. Set `WORLDFOUNDRY_HFD_ROOT` to the directory containing `BAAI--Emu3.5` and `BAAI--Emu3.5-VisionTokenizer`, and `WORLDFOUNDRY_EMU35_REPO_ROOT` to the checkout. Model loading uses the official Emu3 class with eager attention; the vision tokenizer, generation, decoding, and protobuf writer also come from the official release.
+The runtime requires both checkpoints. Set `WORLDFOUNDRY_HFD_ROOT` to the directory containing `BAAI--Emu3.5` and `BAAI--Emu3.5-VisionTokenizer`. The official implementation at revision `8fcf1da48f9c5252fe0a0b8dc842e07b6efcd745` is vendored in WorldFoundry: the Emu3 class loads with eager attention, and the vision tokenizer, generation, decoding and protobuf writer come from the same release.
 
-WorldFoundry checks local assets before inference and does not download weights at runtime. The checkpoint-backed `howto` response was parsed with three text segments and two decoded images. Byte-for-byte parity with a separate official CLI invocation remains unverified.
+Larger image sizes and byte-for-byte parity with the official CLI are not verified.
 
 ## Running in WorldFoundry
 

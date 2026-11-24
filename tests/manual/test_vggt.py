@@ -1,9 +1,9 @@
-import sys
 import os
+import sys
+
 sys.path.append("..")
 
 from worldfoundry.pipelines.vggt.pipeline_vggt import VGGTPipeline
-
 
 DATA_PATH = os.environ.get("VGGT_DATA_PATH", "./worldfoundry/data/test_cases/test_image_case1/ref_image.png")
 MODEL_PATH = os.environ.get("VGGT_MODEL_PATH", "facebook/VGGT-1B")
@@ -12,7 +12,7 @@ TASK_TYPE = os.environ.get("VGGT_TASK_TYPE", "vggt_official_scene_export")
 
 # Interactions follow unified 3D schema, e.g.:
 # ["forward", "left", "camera_zoom_in"]
-INTERACTIONS = ["camera_zoom_in","left"]
+INTERACTIONS = ["camera_zoom_in", "left"]
 
 # camera_view: [dx, dy, dz, theta_x, theta_z]
 CAMERA_VIEW = None
@@ -27,11 +27,16 @@ OFFICIAL_CONF_THRES = float(os.environ.get("VGGT_CONF_THRES", "3.0"))
 OFFICIAL_FRAME_FILTER = os.environ.get("VGGT_FRAME_FILTER", "All")
 OFFICIAL_SHOW_CAM = os.environ.get("VGGT_SHOW_CAM", "1") != "0"
 OFFICIAL_PREDICTION_MODE = os.environ.get("VGGT_PREDICTION_MODE", "Pointmap Regression")
-DEFAULT_OUTPUT_NAME = "vggt_scene.glb" if TASK_TYPE in {
-    "vggt_official_scene_export",
-    "vggt_official_glb",
-    "official",
-} else "vggt_3dgs_demo.mp4"
+DEFAULT_OUTPUT_NAME = (
+    "vggt_scene.glb"
+    if TASK_TYPE
+    in {
+        "vggt_official_scene_export",
+        "vggt_official_glb",
+        "official",
+    }
+    else "vggt_3dgs_demo.mp4"
+)
 
 
 pipeline = VGGTPipeline.from_pretrained(

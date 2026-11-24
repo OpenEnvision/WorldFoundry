@@ -11,10 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> gsply_helpers.py functionality."""
-
 from pathlib import Path
-from typing import Optional
+
 import numpy as np
 import torch
 from einops import rearrange, repeat
@@ -25,14 +23,6 @@ from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anythi
 
 
 def construct_list_of_attributes(num_rest: int) -> list[str]:
-    """Construct list of attributes.
-
-    Args:
-        num_rest: The num rest.
-
-    Returns:
-        The return value.
-    """
     attributes = ["x", "y", "z", "nx", "ny", "nz"]
     for i in range(3):
         attributes.append(f"f_dc_{i}")
@@ -55,21 +45,8 @@ def export_ply(
     path: Path,
     shift_and_scale: bool = False,
     save_sh_dc_only: bool = True,
-    match_3dgs_mcmc_dev: Optional[bool] = False,
+    match_3dgs_mcmc_dev: bool | None = False,
 ):
-    """Export ply.
-
-    Args:
-        means: The means.
-        scales: The scales.
-        rotations: The rotations.
-        harmonics: The harmonics.
-        opacities: The opacities.
-        path: The path.
-        shift_and_scale: The shift and scale.
-        save_sh_dc_only: The save sh dc only.
-        match_3dgs_mcmc_dev: The match 3dgs mcmc dev.
-    """
     if shift_and_scale:
         # Shift the scene so that the median Gaussian is at the origin.
         means = means - means.median(dim=0).values
@@ -89,9 +66,9 @@ def export_ply(
     if match_3dgs_mcmc_dev:
         sh_degree = 3
         n_rest = 3 * (sh_degree + 1) ** 2 - 3
-        f_rest = repeat(
-            torch.zeros_like(harmonics[..., :1]), "... i -> ... (n i)", n=(n_rest // 3)
-        ).flatten(start_dim=1)
+        f_rest = repeat(torch.zeros_like(harmonics[..., :1]), "... i -> ... (n i)", n=(n_rest // 3)).flatten(
+            start_dim=1
+        )
         dtype_full = [
             (attribute, "f4")
             for attribute in construct_list_of_attributes(num_rest=n_rest)
@@ -99,10 +76,7 @@ def export_ply(
         ]
     else:
         dtype_full = [
-            (attribute, "f4")
-            for attribute in construct_list_of_attributes(
-                0 if save_sh_dc_only else f_rest.shape[1]
-            )
+            (attribute, "f4") for attribute in construct_list_of_attributes(0 if save_sh_dc_only else f_rest.shape[1])
         ]
     elements = np.empty(means.shape[0], dtype=dtype_full)
     attributes = [
@@ -126,11 +100,6 @@ def export_ply(
 
 
 def inverse_sigmoid(x):
-    """Inverse sigmoid.
-
-    Args:
-        x: The x.
-    """
     return torch.log(x / (1 - x))
 
 
@@ -141,28 +110,24 @@ def save_gaussian_ply(
     shift_and_scale: bool = False,
     save_sh_dc_only: bool = True,
     gs_views_interval: int = 1,
-    inv_opacity: Optional[bool] = True,
-    prune_by_depth_percent: Optional[float] = 1.0,
-    prune_border_gs: Optional[bool] = True,
-    match_3dgs_mcmc_dev: Optional[bool] = False,
+    inv_opacity: bool | None = True,
+    prune_by_depth_percent: float | None = 1.0,
+    prune_border_gs: bool | None = True,
+    match_3dgs_mcmc_dev: bool | None = False,
+    prune_by_opacity_percentile: float | None = None,
 ):
-    """Save gaussian ply.
-
-    Args:
-        gaussians: The gaussians.
-        save_path: The save path.
-        ctx_depth: The ctx depth.
-        shift_and_scale: The shift and scale.
-        save_sh_dc_only: The save sh dc only.
-        gs_views_interval: The gs views interval.
-        inv_opacity: The inv opacity.
-        prune_by_depth_percent: The prune by depth percent.
-        prune_border_gs: The prune border gs.
-        match_3dgs_mcmc_dev: The match 3dgs mcmc dev.
-    """
     b = gaussians.means.shape[0]
     assert b == 1, "must set batch_size=1 when exporting 3D gaussians"
     src_v, out_h, out_w, _ = ctx_depth.shape
+
+    # A downsampled GS head (gs_down_ratio > 1) yields fewer Gaussians per view
+    # than depth pixels; subsample the depth to the GS resolution.
+    n_per_view = gaussians.means.shape[1] // src_v
+    if n_per_view != out_h * out_w:
+        down_ratio = round(((out_h * out_w) / n_per_view) ** 0.5)
+        out_h, out_w = out_h // down_ratio, out_w // down_ratio
+        assert out_h * out_w == n_per_view, f"Cannot infer GS resolution: {n_per_view} != {out_h} * {out_w}"
+        ctx_depth = ctx_depth[:, ::down_ratio, ::down_ratio, :]
 
     # extract gs params
     world_means = gaussians.means
@@ -187,23 +152,27 @@ def save_gaussian_ply(
     # trim the far away point based on depth;
     if prune_by_depth_percent is not None and prune_by_depth_percent < 1:
         in_depths = ctx_depth
-        d_percentile = torch.quantile(
-            in_depths.view(in_depths.shape[0], -1), q=prune_by_depth_percent, dim=1
-        ).view(-1, 1, 1)
+        d_percentile = torch.quantile(in_depths.view(in_depths.shape[0], -1), q=prune_by_depth_percent, dim=1).view(
+            -1, 1, 1
+        )
         d_mask = (in_depths[..., 0] <= d_percentile).unsqueeze(-1)
         mask = mask & d_mask
     mask = mask.squeeze(-1)  # v h w
 
+    # trim low-opacity Gaussians by a global percentile, e.g. 0.1 drops the lowest 10%.
+    if prune_by_opacity_percentile is not None and 0.0 < prune_by_opacity_percentile < 1.0:
+        opacity = gaussians.opacities[0]
+        if opacity.ndim > 1 and opacity.shape[-1] == 1:
+            opacity = opacity[..., 0]
+        opacity_map = rearrange(opacity, "(v h w) -> v h w", v=src_v, h=out_h, w=out_w).to(mask.device)
+        if mask.any():
+            flat = opacity_map[mask].float().flatten()
+            k = max(1, min(flat.numel(), int(flat.numel() * prune_by_opacity_percentile)))
+            mask = mask & (opacity_map >= torch.kthvalue(flat, k).values)
+
     # helper fn, must place after mask
     def trim_select_reshape(element):
-        """Trim select reshape.
-
-        Args:
-            element: The element.
-        """
-        selected_element = rearrange(
-            element[0], "(v h w) ... -> v h w ...", v=src_v, h=out_h, w=out_w
-        )
+        selected_element = rearrange(element[0], "(v h w) ... -> v h w ...", v=src_v, h=out_h, w=out_w)
         selected_element = selected_element[::gs_views_interval][mask[::gs_views_interval]]
         return selected_element
 

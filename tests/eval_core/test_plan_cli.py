@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from worldfoundry import cli
-from worldfoundry.evaluation.tasks.datasets import build_dataset_manifest, write_dataset_manifest
+from worldfoundry.evals.tasks.datasets import build_dataset_manifest, write_dataset_manifest
 
 
 def _write_plan_cli_fixture(tmp_path: Path) -> tuple[Path, Path]:

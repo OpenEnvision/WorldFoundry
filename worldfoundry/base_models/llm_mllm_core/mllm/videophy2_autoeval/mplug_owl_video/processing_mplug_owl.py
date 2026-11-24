@@ -1,42 +1,43 @@
+import random as random
 import re
-import random
+from typing import ClassVar
+
+import numpy as np
 import torch
 import torch.utils.checkpoint
-
-from transformers.processing_utils import ProcessorMixin
-from transformers.tokenization_utils_base import BatchEncoding
-from transformers.models.clip.image_processing_clip import CLIPImageProcessor
-from .tokenization_mplug_owl import MplugOwlTokenizer
-
 from decord import VideoReader
-import numpy as np
 from PIL import Image
+from transformers.models.clip.image_processing_clip import CLIPImageProcessor
+from transformers.processing_utils import ProcessorMixin
+from transformers.tokenization_utils_base import BatchEncoding as BatchEncoding
+
+from .tokenization_mplug_owl import MplugOwlTokenizer as MplugOwlTokenizer
+
 
 def get_index(num_frames, num_segments):
     seg_size = float(num_frames - 1) / num_segments
     start = int(seg_size / 2)
-    offsets = np.array([
-        start + int(np.round(seg_size * idx)) for idx in range(num_segments)
-    ])
+    offsets = np.array([start + int(np.round(seg_size * idx)) for idx in range(num_segments)])
     return offsets
+
 
 def load_video(path, num_frames=4):
     vr = VideoReader(path, height=224, width=224)
     total_frames = len(vr)
     # print(f'total frames: {total_frames}')
     frame_indices = get_index(total_frames, num_frames)
-    images_group = list()
+    images_group = []
     for frame_index in frame_indices:
-        img = Image.fromarray(vr[frame_index].asnumpy()).convert('RGB')
+        img = Image.fromarray(vr[frame_index].asnumpy()).convert("RGB")
         images_group.append(img)
     return images_group
 
+
 class MplugOwlProcessor(ProcessorMixin):
-    attributes = []
-    tokenizer_class = ("MplugOwlTokenizer")
-    
+    attributes: ClassVar[list] = []
+    tokenizer_class = "MplugOwlTokenizer"
+
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-    
         super().__init__(**kwargs)
         self.tokens_to_generate = 0
         self.image_processor = image_processor
@@ -44,7 +45,6 @@ class MplugOwlProcessor(ProcessorMixin):
         self.add_BOS = True
 
     def __call__(self, videos=None, text=None, num_frames=4, return_tensors=None, **kwargs):
-
         if text is not None:
             encoding = tokenize_prompts(
                 prompts=text,
@@ -59,17 +59,19 @@ class MplugOwlProcessor(ProcessorMixin):
             video_features = []
             for video in videos:
                 video_frames = load_video(video, num_frames)
-                video_feature = self.image_processor(video_frames, return_tensors=return_tensors, **kwargs)['pixel_values']
+                video_feature = self.image_processor(video_frames, return_tensors=return_tensors, **kwargs)[
+                    "pixel_values"
+                ]
                 video_features.append(video_feature)
             video_features = torch.stack(video_features, dim=0)
             video_features = video_features.permute(0, 2, 1, 3, 4)
-    
+
         if text is not None and videos is not None:
             encoding["video_pixel_values"] = video_features
             return encoding
         if text is not None and videos is None:
             return encoding
-            
+
         return video_features
 
     def batch_decode(self, skip_special_tokens=True, *args, **kwargs):
@@ -100,7 +102,7 @@ def detokenize_generations(tokens_gpu_tensor, lengths_gpu_tensor, return_segment
 
     tokens = tokens_gpu_tensor.cpu().numpy().tolist()
     lengths = lengths_gpu_tensor.cpu().numpy().tolist()
-    for sequence_tokens, length in zip(tokens, lengths):
+    for sequence_tokens, length in zip(tokens, lengths, strict=False):
         sequence_tokens = sequence_tokens[:length]
         prompts_plus_generations.append(tokenizer.detokenize(sequence_tokens))
         if return_segments:
@@ -196,7 +198,7 @@ def _tokenize_prompts_and_batch(prompts, tokens_to_generate, add_BOS, tokenizer,
     # Number of tokens in the each sample of the batch.
     samples_length = max_prompt_len + tokens_to_generate
     # Now update the list of list to be of the same size: samples_length.
-    for prompt_tokens, prompt_length in zip(prompts_tokens, prompts_length):
+    for prompt_tokens, prompt_length in zip(prompts_tokens, prompts_length, strict=False):
         padding_size = samples_length - prompt_length
         prompt_tokens.extend([tokenizer.eos_token_id] * padding_size)
 
@@ -204,26 +206,19 @@ def _tokenize_prompts_and_batch(prompts, tokens_to_generate, add_BOS, tokenizer,
     prompts_tokens_tensor = torch.LongTensor(prompts_tokens)
     prompts_length_tensor = torch.LongTensor(prompts_length)
     attention_mask = torch.zeros(prompts_tokens_tensor.shape[:2])
-    for i, l in enumerate(prompts_length_tensor):
+    for i, l in enumerate(prompts_length_tensor):  # noqa: E741 - Ambiguous upstream name kept as written.
         attention_mask[i, :l] = 1
     return prompts_tokens_tensor, prompts_length_tensor, attention_mask
 
 
-def _tokenize_prompt(
-        prompt, tokenizer, add_BOS=False, 
-        media_info={"<image>": 65, "<|video|>": 65},
-        **kwargs
-    ):
+def _tokenize_prompt(prompt, tokenizer, add_BOS=False, media_info={"<image>": 65, "<|video|>": 65}, **kwargs):  # noqa: B006 - Keeps the upstream default object and signature.
     media_tokens = {k: -int(i + 1) for i, k in enumerate(media_info.keys())}
     media_lengths = media_info.copy()
 
-    if add_BOS:
-        prompt_chunk = [tokenizer.bos_token_id]
-    else:
-        prompt_chunk = []
+    prompt_chunk = [tokenizer.bos_token_id] if add_BOS else []
 
     # Pure Text
-    if all([media_token not in prompt for media_token in media_tokens.keys()]):
+    if all([media_token not in prompt for media_token in media_tokens]):  # noqa: C419 - Evaluates every element before testing, as upstream.
         enc_chunk = prompt_chunk + tokenizer(prompt, add_special_tokens=False, **kwargs)["input_ids"]
 
     # Multi-Modal Text
@@ -232,7 +227,7 @@ def _tokenize_prompt(
         pattern = "|".join(map(re.escape, list(media_tokens.keys())))
         chunk_strs = re.split(f"({pattern})", prompt)
         chunk_strs = [x for x in chunk_strs if len(x) > 0]
-        for idx, chunk_str in enumerate(chunk_strs):
+        for _idx, chunk_str in enumerate(chunk_strs):
             if chunk_str in media_tokens:
                 enc_chunk += [media_tokens[chunk_str]] * media_lengths[chunk_str]
             else:

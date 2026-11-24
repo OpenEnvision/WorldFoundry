@@ -12,9 +12,7 @@ and English negative prompts.
 
 from __future__ import annotations
 
-
 import torch
-
 from easydict import EasyDict
 
 wan_shared_cfg = EasyDict()

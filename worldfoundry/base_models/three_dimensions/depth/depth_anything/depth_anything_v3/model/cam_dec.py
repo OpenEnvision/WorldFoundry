@@ -12,20 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> model -> cam_dec.py functionality."""
-
 import torch
 import torch.nn as nn
 
 
 class CameraDec(nn.Module):
-    """Camera dec implementation."""
     def __init__(self, dim_in=1536):
-        """Init.
-
-        Args:
-            dim_in: The dim in.
-        """
         super().__init__()
         output_dim = dim_in
         self.backbone = nn.Sequential(
@@ -39,12 +31,6 @@ class CameraDec(nn.Module):
         self.fc_fov = nn.Sequential(nn.Linear(output_dim, 2), nn.ReLU())
 
     def forward(self, feat, camera_encoding=None, *args, **kwargs):
-        """Forward.
-
-        Args:
-            feat: The feat.
-            camera_encoding: The camera encoding.
-        """
         B, N = feat.shape[:2]
         feat = feat.reshape(B * N, -1)
         feat = self.backbone(feat)

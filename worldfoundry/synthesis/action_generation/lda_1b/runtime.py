@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import gc
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     completed_action_result,
@@ -15,6 +16,10 @@ from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     option_int,
     runtime_options_cache_key,
 )
+
+_LAYER_SCALE_CHECKPOINT_KEY_MAPPING = {
+    r"^(action_model\.vision_encoder\.layer\.\d+\.layer_scale[12])\.lambda1$": r"\1.gamma",
+}
 
 
 @dataclass(frozen=True)
@@ -151,6 +156,8 @@ class LDA1BRuntime:
     def _load_state_dict(path: Path) -> Mapping[str, Any]:
         import torch
 
+        from worldfoundry.core.model_loading.checkpoints.remap import remap_checkpoint_keys
+
         payload = torch.load(
             path,
             map_location="cpu",
@@ -166,7 +173,7 @@ class LDA1BRuntime:
             state = {str(key)[7:]: value for key, value in state.items()}
         if not all(isinstance(key, str) and isinstance(value, torch.Tensor) for key, value in state.items()):
             raise ValueError("LDA-1B checkpoint state dict must contain tensor values only")
-        return state
+        return remap_checkpoint_keys(state, _LAYER_SCALE_CHECKPOINT_KEY_MAPPING)
 
     def _load_model(self) -> Any:
         if self._model is not None:
@@ -176,7 +183,7 @@ class LDA1BRuntime:
         from transformers import AutoConfig, AutoImageProcessor, AutoProcessor
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .dinov3_configuration import DINOv3ViTConfig
         from .modeling import LDAInferenceModel
@@ -217,9 +224,7 @@ class LDA1BRuntime:
         except TypeError as exc:
             raise RuntimeError("LDA-1B meta loading requires load_state_dict(assign=True)") from exc
         if missing or unexpected:
-            raise RuntimeError(
-                f"LDA-1B checkpoint key mismatch: missing={missing}, unexpected={unexpected}"
-            )
+            raise RuntimeError(f"LDA-1B checkpoint key mismatch: missing={missing}, unexpected={unexpected}")
         model.qwen_vl_interface.model.tie_weights()
         model.qwen_vl_interface.to(device=vlm_device, dtype=vlm_dtype).eval()
         model.action_model.to(device=action_device, dtype=action_dtype).eval()
@@ -273,8 +278,7 @@ class LDA1BRuntime:
             path = root / self.config.statistics_file
         if not path.is_file():
             raise FileNotFoundError(
-                "LDA-1B requires dataset_statistics.json paired with the staged checkpoint: "
-                f"{path}"
+                f"LDA-1B requires dataset_statistics.json paired with the staged checkpoint: {path}"
             )
         payload: Any = json.loads(path.read_text(encoding="utf-8"))
         if self.config.statistics_key:
@@ -302,10 +306,7 @@ class LDA1BRuntime:
             if all(str(part["key"]) in observation for part in parts):
                 value = observation
             elif all(f"state.{part['key']}" in observation for part in parts):
-                value = {
-                    str(part["key"]): observation[f"state.{part['key']}"]
-                    for part in parts
-                }
+                value = {str(part["key"]): observation[f"state.{part['key']}"] for part in parts}
         if value is None:
             raise ValueError("LDA-1B requires robot state/proprio input")
         return value
@@ -380,24 +381,24 @@ class LDA1BRuntime:
         frames = select_history(temporal_images(self._image_value(observation, image)), steps)
         image_size = tuple(int(item) for item in self.variant["image_size"])
         frames = [frame.resize(image_size) for frame in frames]
+        state_parts = self.variant["state_parts"]
         raw_state = pack_parts(
             self._state_value(observation),
-            self.variant["state_parts"],
+            state_parts,
             label="state",
         )
         encoded_state = state_sincos(
             raw_state,
             steps=steps,
             expected_dim=int(self.variant["model_state_dim"]),
+            part_widths=[int(part["dim"]) for part in state_parts] if state_parts else None,
         )
         qwen_inputs = self._move_batch(
             self._qwen_inputs(frames, instruction),
             device=self._vlm_device,
             dtype=self._vlm_dtype,
         )
-        vision_pixels = self._vision_processor(images=list(frames), return_tensors="pt")[
-            "pixel_values"
-        ]
+        vision_pixels = self._vision_processor(images=list(frames), return_tensors="pt")["pixel_values"]
         vision_pixels = vision_pixels.reshape(1, 1, steps, *vision_pixels.shape[1:])
         with torch.inference_mode():
             outputs = model.qwen_vl_interface.model(
@@ -510,16 +511,12 @@ def predict_action(
         cache_dir=str(options["cache_dir"]) if options.get("cache_dir") else None,
         revision=str(options["revision"]) if options.get("revision") else None,
         qwen_revision=str(options["qwen_revision"]) if options.get("qwen_revision") else None,
-        vision_revision=(
-            str(options["vision_revision"]) if options.get("vision_revision") else None
-        ),
+        vision_revision=(str(options["vision_revision"]) if options.get("vision_revision") else None),
         statistics_path=str(options["statistics_path"]) if options.get("statistics_path") else None,
         statistics_file=str(options.get("statistics_file") or "dataset_statistics.json"),
         statistics_key=str(options["statistics_key"]) if options.get("statistics_key") else None,
         action_horizon=(
-            option_int(options.get("action_horizon"), 0)
-            if options.get("action_horizon") is not None
-            else None
+            option_int(options.get("action_horizon"), 0) if options.get("action_horizon") is not None else None
         ),
         seed=option_int(options.get("seed"), 42),
         compile_action_model=option_bool(options.get("compile_action_model"), False),

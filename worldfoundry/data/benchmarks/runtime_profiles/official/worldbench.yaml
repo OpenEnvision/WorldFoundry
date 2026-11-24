@@ -15,7 +15,7 @@ python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots: [.]
 preflight_command: >-
   PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight
+  worldfoundry.evals.tasks.execution.orchestration.runtime_preflight
   --profile worldbench
   --manifest worldfoundry/data/benchmarks/runtime_profiles/official/worldbench.yaml
   --output-dir tmp/worldfoundry_preflight/worldbench
@@ -23,8 +23,8 @@ preflight_command: >-
 
 required_assets:
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
-  - worldfoundry/evaluation/tasks/execution/runners/worldbench/runtime/worldbench
+  - worldfoundry/evals/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/worldbench/runtime/worldbench
   evaluator_config: worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml
   task_yaml: worldfoundry/data/benchmarks/tasks/external/worldbench.yaml
 
@@ -69,9 +69,9 @@ required_packages:
 
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
 - id: in_tree_runtime
-  path: worldfoundry/evaluation/tasks/execution/runners/worldbench/runtime/worldbench
+  path: worldfoundry/evals/tasks/execution/runners/worldbench/runtime/worldbench
 - id: evaluator_config
   path: worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml
 - id: task_yaml
@@ -109,7 +109,7 @@ bounded_fixture_validation:
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 - -m
-- worldfoundry.evaluation.tasks.execution.runners.worldbench.run_worldbench_official_runner
+- worldfoundry.evals.tasks.execution.runners.worldbench.run_worldbench_official_runner
 - --run-official
 - --dataset-root
 - ${WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT}

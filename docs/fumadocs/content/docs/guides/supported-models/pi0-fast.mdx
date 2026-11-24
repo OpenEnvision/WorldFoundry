@@ -5,7 +5,7 @@ modelId: "pi0-fast"
 pageSource: authored
 ---
 
-pi0-FAST is the autoregressive variant of pi0: instead of flow matching it uses the FAST action tokenizer to decode actions as discrete tokens, trading some smoothness for faster, simpler decoding. WorldFoundry reuses the in-tree OpenPI runtime with the pi0_fast_droid configuration and pi0-FAST checkpoint resolution.
+pi0-FAST is the autoregressive variant of pi0: instead of flow matching it uses the FAST action tokenizer to decode actions as discrete tokens, trading some smoothness for faster, simpler decoding. WorldFoundry runs it on the OpenPI runtime with the pi0_fast_droid configuration.
 
 <ModelPaperFigures modelId="pi0-fast" locale="en" />
 
@@ -13,7 +13,7 @@ pi0-FAST is the autoregressive variant of pi0: instead of flow matching it uses 
 
 ## What it is for
 
-Start on `pi0-fast` when you want discrete FAST tokens on the same PaliGemma backbone. Launch `worldfoundry-eval run pi0-fast`. Default configuration is `pi0_fast_droid`. Do not route this through LeRobot policy-zoo.
+Start on `pi0-fast` when you want discrete FAST tokens on the same PaliGemma backbone. Launch `wf run pi0-fast`. Default configuration is `pi0_fast_droid`. Do not route this through LeRobot policy-zoo.
 
 ## Runtime contract
 
@@ -21,6 +21,6 @@ Required `image`, `instruction`, and `prompt`. `actions`: `robot_action`, `propr
 
 ## Running in WorldFoundry
 
-Dedicated `worldfoundry-openpi-cu12` (Python 3.11, CUDA 12.4 or newer). Stage GCS checkpoints with gsutil. License is on the [OpenPI](/docs/guides/supported-models/openpi) card (Apache-2.0). Status: **Runner parity pending** until assets are present.
+Dedicated `worldfoundry-openpi-cu12` (Python 3.11, CUDA 12.4 or newer). Stage GCS checkpoints with gsutil. OpenPI is released under Apache-2.0; see [OpenPI](/docs/guides/supported-models/openpi).
 
 <ModelRelatedRecipes modelId="pi0-fast" locale="en" />

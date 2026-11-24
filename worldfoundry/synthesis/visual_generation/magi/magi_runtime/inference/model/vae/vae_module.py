@@ -14,7 +14,6 @@
 
 import math
 from functools import lru_cache
-from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -23,12 +22,14 @@ from einops import rearrange
 from flash_attn import flash_attn_func, flash_attn_qkvpacked_func
 from timm.models.layers import to_2tuple, trunc_normal_
 
+from worldfoundry.core.nn.blocks.layers import Mlp as Mlp
+
 ###################################################
 #     modified 3D rotary embedding from timm
 ###################################################
 
 
-def ndgrid(*tensors) -> Tuple[torch.Tensor, ...]:
+def ndgrid(*tensors) -> tuple[torch.Tensor, ...]:
     """generate N-D grid in dimension order.
 
     The ndgrid function is like meshgrid except that the order of the first two input arguments are switched.
@@ -45,7 +46,7 @@ def ndgrid(*tensors) -> Tuple[torch.Tensor, ...]:
 
     """
     try:
-        return torch.meshgrid(*tensors, indexing='ij')
+        return torch.meshgrid(*tensors, indexing="ij")
     except TypeError:
         # old PyTorch < 1.10 will follow this path as it does not have indexing arg,
         # the old behaviour of meshgrid was 'ij'
@@ -53,7 +54,7 @@ def ndgrid(*tensors) -> Tuple[torch.Tensor, ...]:
 
 
 def freq_bands(
-    num_bands: int, temperature: float = 10000.0, step: int = 2, device: Optional[torch.device] = None
+    num_bands: int, temperature: float = 10000.0, step: int = 2, device: torch.device | None = None
 ) -> torch.Tensor:
     exp = torch.arange(0, num_bands, step, dtype=torch.int64, device=device).to(torch.float32) / num_bands
     bands = 1.0 / (temperature**exp)
@@ -61,7 +62,7 @@ def freq_bands(
 
 
 def pixel_freq_bands(
-    num_bands: int, max_freq: float = 224.0, linear_bands: bool = True, device: Optional[torch.device] = None
+    num_bands: int, max_freq: float = 224.0, linear_bands: bool = True, device: torch.device | None = None
 ):
     if linear_bands:
         bands = torch.linspace(1.0, max_freq / 2, num_bands, dtype=torch.float32, device=device)
@@ -71,19 +72,19 @@ def pixel_freq_bands(
 
 
 def build_fourier_pos_embed(
-    feat_shape: List[int],
-    bands: Optional[torch.Tensor] = None,
+    feat_shape: list[int],
+    bands: torch.Tensor | None = None,
     num_bands: int = 64,
     max_res: int = 224,
     temperature: float = 10000.0,
     linear_bands: bool = False,
     include_grid: bool = False,
     in_pixels: bool = True,
-    ref_feat_shape: Optional[List[int]] = None,
+    ref_feat_shape: list[int] | None = None,
     dtype: torch.dtype = torch.float32,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
     center_imgidx=True,
-) -> List[torch.Tensor]:
+) -> list[torch.Tensor]:
     """
 
     Args:
@@ -127,9 +128,9 @@ def build_fourier_pos_embed(
             t = [torch.arange(s, device=device, dtype=torch.int64).to(torch.float32) for s in feat_shape]
 
     if ref_feat_shape is not None:
-        assert len(feat_shape) == len(ref_feat_shape), 'shape must be in same dimension'
+        assert len(feat_shape) == len(ref_feat_shape), "shape must be in same dimension"
         # eva's scheme for resizing rope embeddings (ref shape = pretrain)
-        t = [x / f * r for x, f, r in zip(t, feat_shape, ref_feat_shape)]
+        t = [x / f * r for x, f, r in zip(t, feat_shape, ref_feat_shape, strict=False)]
 
     grid = torch.stack(ndgrid(t), dim=-1)
     grid = grid.unsqueeze(-1)
@@ -151,16 +152,16 @@ def apply_rot_embed(x: torch.Tensor, sin_emb, cos_emb):
 
 
 def build_rotary_pos_embed(
-    feat_shape: List[int],
-    bands: Optional[torch.Tensor] = None,
+    feat_shape: list[int],
+    bands: torch.Tensor | None = None,
     dim: int = 64,
     max_res: int = 224,
     temperature: float = 10000.0,
     linear_bands: bool = False,
     in_pixels: bool = True,
-    ref_feat_shape: Optional[List[int]] = None,
+    ref_feat_shape: list[int] | None = None,
     dtype: torch.dtype = torch.float32,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
     center_imgidx=True,
 ):
     """
@@ -204,31 +205,12 @@ def build_rotary_pos_embed(
 ###################################################
 # Mlp
 ###################################################
-class Mlp(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
-        super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = act_layer()
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
-        return x
-
-
 ###################################################
 # ManualLayerNorm
 ###################################################
 class ManualLayerNorm(nn.Module):
     def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True):
-        super(ManualLayerNorm, self).__init__()
+        super().__init__()
         self.normalized_shape = normalized_shape
         self.eps = eps
         self.elementwise_affine = elementwise_affine
@@ -246,7 +228,7 @@ class ManualLayerNorm(nn.Module):
 # Attention
 ###################################################
 @lru_cache(maxsize=50)
-def cache_rotary_emb(feat_shape, device='cuda', dim=64, dtype=torch.bfloat16, max_res=512, ref_feat_shape=(4, 16, 16)):
+def cache_rotary_emb(feat_shape, device="cuda", dim=64, dtype=torch.bfloat16, max_res=512, ref_feat_shape=(4, 16, 16)):
     return build_rotary_pos_embed(
         feat_shape=feat_shape,
         dim=dim,
@@ -260,7 +242,15 @@ def cache_rotary_emb(feat_shape, device='cuda', dim=64, dtype=torch.bfloat16, ma
 
 class Attention(nn.Module):
     def __init__(
-        self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.0, proj_drop=0.0, ln_in_attn=False, use_rope=False
+        self,
+        dim,
+        num_heads=8,
+        qkv_bias=False,
+        qk_scale=None,
+        attn_drop=0.0,
+        proj_drop=0.0,
+        ln_in_attn=False,
+        use_rope=False,
     ):
         super().__init__()
         self.num_heads = num_heads
@@ -358,7 +348,9 @@ class PatchEmbed(nn.Module):
         video_size = to_2tuple(video_size)
         patch_size = to_2tuple(patch_size)
 
-        num_patches = (video_length // patch_length) * (video_size[1] // patch_size[1]) * (video_size[0] // patch_size[0])
+        num_patches = (
+            (video_length // patch_length) * (video_size[1] // patch_size[1]) * (video_size[0] // patch_size[0])
+        )
 
         self.video_size = video_size
         self.patch_size = patch_size
@@ -401,7 +393,7 @@ class PatchEmbed(nn.Module):
 def resize_pos_embed(posemb, src_shape, target_shape):
     posemb = posemb.reshape(1, src_shape[0], src_shape[1], src_shape[2], -1)
     posemb = posemb.permute(0, 4, 1, 2, 3)
-    posemb = nn.functional.interpolate(posemb, size=target_shape, mode='trilinear', align_corners=False)
+    posemb = nn.functional.interpolate(posemb, size=target_shape, mode="trilinear", align_corners=False)
     posemb = posemb.permute(0, 2, 3, 4, 1)
     posemb = posemb.reshape(1, target_shape[0] * target_shape[1] * target_shape[2], -1)
     return posemb
@@ -438,7 +430,7 @@ class ViTEncoder(nn.Module):
     ):
         super().__init__()
 
-        conv_last_layer = False  # duplicate argument
+        conv_last_layer = False  # noqa: F841 - Upstream assignment kept.  # duplicate argument
 
         # self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
@@ -510,7 +502,7 @@ class ViTEncoder(nn.Module):
 
     @torch.jit.ignore
     def no_weight_decay(self):
-        return {'pos_embed', 'cls_token'}
+        return {"pos_embed", "cls_token"}
 
     def forward(self, x):
         B = x.shape[0]
@@ -537,7 +529,7 @@ class ViTEncoder(nn.Module):
         x = x + pos_embed
         x = self.pos_drop(x)
 
-        for idx, blk in enumerate(self.blocks):
+        for _idx, blk in enumerate(self.blocks):
             x = blk(x, feat_shape=(latentT, latentH, latentW))
 
         x = self.norm(x)
@@ -641,7 +633,7 @@ class ViTDecoder(nn.Module):
         )
         self.norm = norm_layer(embed_dim)
 
-        assert conv_last_layer == True, "Only support conv_last_layer=True"
+        assert conv_last_layer == True, "Only support conv_last_layer=True"  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
 
         self.unpatch_channels = embed_dim // (patch_size * patch_size * patch_length)
         self.final_proj = nn.Identity()
@@ -650,10 +642,14 @@ class ViTDecoder(nn.Module):
         self.use_final_proj = use_final_proj
         if self.use_final_proj:
             self.unpatch_channels = 4
-            self.final_proj = nn.Linear(embed_dim, self.unpatch_channels * (patch_size * patch_size * patch_length), bias=True)
+            self.final_proj = nn.Linear(
+                embed_dim, self.unpatch_channels * (patch_size * patch_size * patch_length), bias=True
+            )
             self.final_norm = norm_layer(self.unpatch_channels * (patch_size * patch_size * patch_length))
 
-        self.last_layer = nn.Conv3d(in_channels=self.unpatch_channels, out_channels=3, kernel_size=3, stride=1, padding=1)
+        self.last_layer = nn.Conv3d(
+            in_channels=self.unpatch_channels, out_channels=3, kernel_size=3, stride=1, padding=1
+        )
 
         trunc_normal_(self.pos_embed, std=0.02)
 
@@ -672,7 +668,7 @@ class ViTDecoder(nn.Module):
 
     @torch.jit.ignore
     def no_weight_decay(self):
-        return {'pos_embed', 'cls_token'}
+        return {"pos_embed", "cls_token"}
 
     def forward(self, x):
         B, C, latentT, latentH, latentW = x.shape  # x: (B, C, latentT, latentH, latenW)
@@ -699,7 +695,7 @@ class ViTDecoder(nn.Module):
         x = x + pos_embed
         x = self.pos_drop(x)
 
-        for idx, blk in enumerate(self.blocks):
+        for _idx, blk in enumerate(self.blocks):
             x = blk(x, feat_shape=(latentT, latentH, latentW))
 
         x = self.norm(x)
@@ -710,8 +706,10 @@ class ViTDecoder(nn.Module):
         if self.use_final_proj:
             x = self.final_proj(x)
             x = self.final_norm(x)
-        x = x.reshape(B, latentT, latentH, latentW, self.patch_length, self.patch_size, self.patch_size, self.unpatch_channels)
-        x = rearrange(x, 'B lT lH lW pT pH pW C -> B C (lT pT) (lH pH) (lW pW)', C=self.unpatch_channels)
+        x = x.reshape(
+            B, latentT, latentH, latentW, self.patch_length, self.patch_size, self.patch_size, self.unpatch_channels
+        )
+        x = rearrange(x, "B lT lH lW pT pH pW C -> B C (lT pT) (lH pH) (lW pW)", C=self.unpatch_channels)
 
         x = self.last_layer(x)
         return x
@@ -720,7 +718,7 @@ class ViTDecoder(nn.Module):
 ###################################################
 # DiagonalGaussianDistribution
 ###################################################
-class DiagonalGaussianDistribution(object):
+class DiagonalGaussianDistribution:
     def __init__(self, parameters, deterministic=False):
         self.parameters = parameters
         self.mean, self.logvar = torch.chunk(parameters, 2, dim=1)
@@ -743,11 +741,15 @@ class DiagonalGaussianDistribution(object):
                 return 0.5 * torch.sum(torch.pow(self.mean, 2) + self.var - 1.0 - self.logvar, dim=[1, 2, 3])
             else:
                 return 0.5 * torch.sum(
-                    torch.pow(self.mean - other.mean, 2) / other.var + self.var / other.var - 1.0 - self.logvar + other.logvar,
+                    torch.pow(self.mean - other.mean, 2) / other.var
+                    + self.var / other.var
+                    - 1.0
+                    - self.logvar
+                    + other.logvar,
                     dim=[1, 2, 3],
                 )
 
-    def nll(self, sample, dims=[1, 2, 3]):
+    def nll(self, sample, dims=[1, 2, 3]):  # noqa: B006 - Keeps the upstream default object and signature.
         if self.deterministic:
             return torch.Tensor([0.0])
         logtwopi = np.log(2.0 * np.pi)

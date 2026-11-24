@@ -3,23 +3,21 @@
 from __future__ import annotations
 
 import inspect
-from typing import List, Optional, Union
 
 import torch
 from diffusers.utils import logging
 from diffusers.utils.torch_utils import randn_tensor
 from torch.nn import functional as F
 
-
 logger = logging.get_logger(__name__)
 
 
 def retrieve_timesteps(
     scheduler,
-    num_inference_steps: Optional[int] = None,
-    device: Optional[Union[str, torch.device]] = None,
-    timesteps: Optional[List[int]] = None,
-    sigmas: Optional[List[float]] = None,
+    num_inference_steps: int | None = None,
+    device: str | torch.device | None = None,
+    timesteps: list[int] | None = None,
+    sigmas: list[float] | None = None,
     **kwargs,
 ):
     """Configure an inference scheduler and return its effective timesteps."""
@@ -28,16 +26,12 @@ def retrieve_timesteps(
     parameters = set(inspect.signature(scheduler.set_timesteps).parameters)
     if timesteps is not None:
         if "timesteps" not in parameters:
-            raise ValueError(
-                f"{scheduler.__class__} does not support custom timestep schedules."
-            )
+            raise ValueError(f"{scheduler.__class__} does not support custom timestep schedules.")
         scheduler.set_timesteps(timesteps=timesteps, device=device, **kwargs)
         num_inference_steps = len(scheduler.timesteps)
     elif sigmas is not None:
         if "sigmas" not in parameters:
-            raise ValueError(
-                f"{scheduler.__class__} does not support custom sigma schedules."
-            )
+            raise ValueError(f"{scheduler.__class__} does not support custom sigma schedules.")
         scheduler.set_timesteps(sigmas=sigmas, device=device, **kwargs)
         num_inference_steps = len(scheduler.timesteps)
     else:
@@ -89,8 +83,8 @@ class WanDiffusersInferenceMixin:
         prompt=None,
         num_videos_per_prompt: int = 1,
         max_sequence_length: int = 512,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         device = device or self._execution_device
         dtype = dtype or self.text_encoder.dtype
@@ -111,13 +105,8 @@ class WanDiffusersInferenceMixin:
             padding="longest",
             return_tensors="pt",
         ).input_ids
-        if (
-            untruncated_ids.shape[-1] >= text_input_ids.shape[-1]
-            and not torch.equal(text_input_ids, untruncated_ids)
-        ):
-            removed = self.tokenizer.batch_decode(
-                untruncated_ids[:, max_sequence_length - 1 : -1]
-            )
+        if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(text_input_ids, untruncated_ids):
+            removed = self.tokenizer.batch_decode(untruncated_ids[:, max_sequence_length - 1 : -1])
             logger.warning(
                 "Prompt text after token %d was truncated: %s",
                 max_sequence_length,
@@ -135,7 +124,7 @@ class WanDiffusersInferenceMixin:
             sequence_length,
             -1,
         )
-        return [value[:length] for value, length in zip(embeddings, sequence_lengths)]
+        return [value[:length] for value, length in zip(embeddings, sequence_lengths, strict=False)]
 
     def encode_prompt(
         self,
@@ -146,8 +135,8 @@ class WanDiffusersInferenceMixin:
         prompt_embeds=None,
         negative_prompt_embeds=None,
         max_sequence_length: int = 512,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         device = device or self._execution_device
         prompt = [prompt] if isinstance(prompt, str) else prompt
@@ -165,13 +154,9 @@ class WanDiffusersInferenceMixin:
             if isinstance(negative_prompt, str):
                 negative_prompt = batch_size * [negative_prompt]
             if prompt is not None and type(prompt) is not type(negative_prompt):
-                raise TypeError(
-                    "`negative_prompt` and `prompt` must have the same type."
-                )
+                raise TypeError("`negative_prompt` and `prompt` must have the same type.")
             if batch_size != len(negative_prompt):
-                raise ValueError(
-                    "`negative_prompt` and `prompt` must have the same batch size."
-                )
+                raise ValueError("`negative_prompt` and `prompt` must have the same batch size.")
             negative_prompt_embeds = self._get_t5_prompt_embeds(
                 prompt=negative_prompt,
                 num_videos_per_prompt=num_videos_per_prompt,
@@ -194,9 +179,7 @@ class WanDiffusersInferenceMixin:
         latents=None,
     ):
         if isinstance(generator, list) and len(generator) != batch_size:
-            raise ValueError(
-                "The generator list length must equal the effective batch size."
-            )
+            raise ValueError("The generator list length must equal the effective batch size.")
         shape = (
             batch_size,
             num_channels_latents,
@@ -221,15 +204,14 @@ class WanDiffusersInferenceMixin:
         if value is None:
             return None
         value = value.to(device=device, dtype=dtype)
+
         def encode_mode(item):
             encoded = self.vae.encode(item)
             posterior = getattr(encoded, "latent_dist", None)
             if posterior is None:
                 # Diffusers VAEs can also be called with return_dict=False.
                 if not isinstance(encoded, (tuple, list)) or not encoded:
-                    raise TypeError(
-                        f"Unsupported VAE encode output: {type(encoded).__name__}"
-                    )
+                    raise TypeError(f"Unsupported VAE encode output: {type(encoded).__name__}")
                 posterior = encoded[0]
             return posterior.mode()
 
@@ -299,14 +281,10 @@ class WanDiffusersInferenceMixin:
         if height % 8 or width % 8:
             raise ValueError("`height` and `width` must be divisible by 8.")
         invalid_callbacks = [
-            key
-            for key in callback_on_step_end_tensor_inputs or ()
-            if key not in self._callback_tensor_inputs
+            key for key in callback_on_step_end_tensor_inputs or () if key not in self._callback_tensor_inputs
         ]
         if invalid_callbacks:
-            raise ValueError(
-                f"Unsupported callback tensor inputs: {invalid_callbacks}."
-            )
+            raise ValueError(f"Unsupported callback tensor inputs: {invalid_callbacks}.")
         if prompt is not None and prompt_embeds is not None:
             raise ValueError("Pass either `prompt` or `prompt_embeds`, not both.")
         if prompt is None and prompt_embeds is None:
@@ -314,21 +292,15 @@ class WanDiffusersInferenceMixin:
         if prompt is not None and not isinstance(prompt, (str, list)):
             raise ValueError("`prompt` must be a string or list.")
         if prompt is not None and negative_prompt_embeds is not None:
-            raise ValueError(
-                "`negative_prompt_embeds` cannot be combined with `prompt`."
-            )
+            raise ValueError("`negative_prompt_embeds` cannot be combined with `prompt`.")
         if negative_prompt is not None and negative_prompt_embeds is not None:
-            raise ValueError(
-                "Pass either `negative_prompt` or `negative_prompt_embeds`, not both."
-            )
+            raise ValueError("Pass either `negative_prompt` or `negative_prompt_embeds`, not both.")
         if (
             prompt_embeds is not None
             and negative_prompt_embeds is not None
             and prompt_embeds.shape != negative_prompt_embeds.shape
         ):
-            raise ValueError(
-                "`prompt_embeds` and `negative_prompt_embeds` must have the same shape."
-            )
+            raise ValueError("`prompt_embeds` and `negative_prompt_embeds` must have the same shape.")
 
 
 __all__ = [

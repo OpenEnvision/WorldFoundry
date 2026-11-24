@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from worldfoundry.evaluation.models.catalog import (
+from worldfoundry.zoo.catalog import (
     ModelCatalogManifest,
     catalog_manifest_from_mapping,
     load_model_catalog_manifest,
@@ -160,17 +160,15 @@ def test_model_catalog_loader_prefers_target_schema_over_legacy_duplicate(tmp_pa
     assert manifests[0].integration["pipeline_binding"] == "alpha"
 
 
-def test_packaged_model_catalog_uses_target_matrix_game_manifest() -> None:
-    manifests = [manifest for manifest in load_model_catalog_manifests() if manifest.model_id == "matrix-game-1"]
+def test_packaged_matrix_game_catalog_entry_resolves_profile_and_binding() -> None:
+    from worldfoundry.zoo.catalog.zoo_registry import load_model_zoo_registry
 
-    assert len(manifests) == 1
-    manifest = manifests[0]
-    public_manifest = manifest.to_world_model_manifest()
-    assert manifest.domain == "world"
-    assert manifest.task_family == "world_model"
-    assert manifest.integration["runtime_profile"] == "matrix-game-1"
-    assert manifest.integration["pipeline_target"].endswith("pipeline_matrix_game_1:MatrixGame1Pipeline")
-    assert public_manifest.metadata["integration"]["runner"] == "worldfoundry.pipeline"
+    entry = load_model_zoo_registry().by_model_id("matrix-game-1")
+
+    assert entry.runtime_profile == "runtime-profile:matrix-game-1"
+    assert entry.pipeline_binding == "matrix-game-1"
+    assert entry.pipeline_target.endswith("pipeline_matrix_game_1:MatrixGame1Pipeline")
+    assert "interactive-world-model" in entry.tasks
 
 
 def test_packaged_checkpoint_gated_vla_catalogs_use_canonical_integration_status() -> None:

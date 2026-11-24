@@ -33,7 +33,7 @@ class FrameQueuePolicy(str, Enum):
     ORDERED_QUALITY = "ordered-quality"
 
     @classmethod
-    def from_value(cls, value: "FrameQueuePolicy | str") -> "FrameQueuePolicy":
+    def from_value(cls, value: FrameQueuePolicy | str) -> FrameQueuePolicy:
         if isinstance(value, cls):
             return value
         normalized = str(value or "").strip().lower().replace("_", "-")
@@ -59,7 +59,7 @@ class RealtimePresentationMode(str, Enum):
     REAL_FRAMES = "real-frames"
 
     @classmethod
-    def from_value(cls, value: "RealtimePresentationMode | str") -> "RealtimePresentationMode":
+    def from_value(cls, value: RealtimePresentationMode | str) -> RealtimePresentationMode:
         if isinstance(value, cls):
             return value
         normalized = str(value or "").strip().lower().replace("_", "-")
@@ -87,7 +87,7 @@ class WebSocketPacingMode(str, Enum):
     CLIENT_ONLY = "client-only"
 
     @classmethod
-    def from_value(cls, value: "WebSocketPacingMode | str") -> "WebSocketPacingMode":
+    def from_value(cls, value: WebSocketPacingMode | str) -> WebSocketPacingMode:
         if isinstance(value, cls):
             return value
         normalized = str(value or "").strip().lower().replace("_", "-")
@@ -540,8 +540,8 @@ def resize_rgb_frame(
         )
     scale = min(width / source_width, height / source_height)
     fitted = (
-        max(min(int(round(source_width * scale)), width), 1),
-        max(min(int(round(source_height * scale)), height), 1),
+        max(min(round(source_width * scale), width), 1),
+        max(min(round(source_height * scale), height), 1),
     )
     resized = Image.fromarray(rgb, mode="RGB").resize(
         fitted,
@@ -590,14 +590,14 @@ def encode_jpeg_frames(
 
 
 __all__ = [
-    "ChunkPresentationBuffer",
-    "FrameQueuePolicy",
-    "LatestFrameBuffer",
     "MAX_OUTPUT_HEIGHT",
     "MAX_OUTPUT_PIXELS",
     "MAX_OUTPUT_WIDTH",
     "MIN_OUTPUT_HEIGHT",
     "MIN_OUTPUT_WIDTH",
+    "ChunkPresentationBuffer",
+    "FrameQueuePolicy",
+    "LatestFrameBuffer",
     "RealtimePresentationMode",
     "WebSocketPacingMode",
     "encode_jpeg_frames",

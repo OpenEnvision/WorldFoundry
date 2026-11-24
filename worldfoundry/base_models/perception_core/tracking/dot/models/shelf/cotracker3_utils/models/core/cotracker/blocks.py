@@ -4,28 +4,20 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from collections.abc import Callable
+from functools import partial
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from functools import partial
-from typing import Callable
-import collections
-from torch import Tensor
-from itertools import repeat
+from timm.layers import to_ntuple as _ntuple
 
-from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracker3_utils.models.core.model_utils import bilinear_sampler
+from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracker3_utils.models.core.model_utils import (
+    bilinear_sampler,
+)
 
 
 # From PyTorch internals
-def _ntuple(n):
-    def parse(x):
-        if isinstance(x, collections.abc.Iterable) and not isinstance(x, str):
-            return tuple(x)
-        return tuple(repeat(x, n))
-
-    return parse
-
-
 def exists(val):
     return val is not None
 
@@ -61,9 +53,7 @@ class Mlp(nn.Module):
         self.fc1 = linear_layer(in_features, hidden_features, bias=bias[0])
         self.act = act_layer()
         self.drop1 = nn.Dropout(drop_probs[0])
-        self.norm = (
-            norm_layer(hidden_features) if norm_layer is not None else nn.Identity()
-        )
+        self.norm = norm_layer(hidden_features) if norm_layer is not None else nn.Identity()
         self.fc2 = linear_layer(hidden_features, out_features, bias=bias[1])
         self.drop2 = nn.Dropout(drop_probs[1])
 
@@ -78,7 +68,7 @@ class Mlp(nn.Module):
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_planes, planes, norm_fn="group", stride=1):
-        super(ResidualBlock, self).__init__()
+        super().__init__()
 
         self.conv1 = nn.Conv2d(
             in_planes,
@@ -88,9 +78,7 @@ class ResidualBlock(nn.Module):
             stride=stride,
             padding_mode="zeros",
         )
-        self.conv2 = nn.Conv2d(
-            planes, planes, kernel_size=3, padding=1, padding_mode="zeros"
-        )
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, padding=1, padding_mode="zeros")
         self.relu = nn.ReLU(inplace=True)
 
         num_groups = planes // 8
@@ -98,34 +86,32 @@ class ResidualBlock(nn.Module):
         if norm_fn == "group":
             self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
             self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
-            if not stride == 1:
+            if not stride == 1:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 self.norm3 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
 
         elif norm_fn == "batch":
             self.norm1 = nn.BatchNorm2d(planes)
             self.norm2 = nn.BatchNorm2d(planes)
-            if not stride == 1:
+            if not stride == 1:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 self.norm3 = nn.BatchNorm2d(planes)
 
         elif norm_fn == "instance":
             self.norm1 = nn.InstanceNorm2d(planes)
             self.norm2 = nn.InstanceNorm2d(planes)
-            if not stride == 1:
+            if not stride == 1:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 self.norm3 = nn.InstanceNorm2d(planes)
 
         elif norm_fn == "none":
             self.norm1 = nn.Sequential()
             self.norm2 = nn.Sequential()
-            if not stride == 1:
+            if not stride == 1:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 self.norm3 = nn.Sequential()
 
         if stride == 1:
             self.downsample = None
 
         else:
-            self.downsample = nn.Sequential(
-                nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride), self.norm3
-            )
+            self.downsample = nn.Sequential(nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride), self.norm3)
 
     def forward(self, x):
         y = x
@@ -140,7 +126,7 @@ class ResidualBlock(nn.Module):
 
 class BasicEncoder(nn.Module):
     def __init__(self, input_dim=3, output_dim=128, stride=4):
-        super(BasicEncoder, self).__init__()
+        super().__init__()
         self.stride = stride
         self.norm_fn = "instance"
         self.in_planes = output_dim // 2
@@ -234,7 +220,7 @@ class EfficientCorrBlock:
         self.fmaps_pyramid = []
 
         self.fmaps_pyramid.append(fmaps)
-        for i in range(self.num_levels - 1):
+        for _i in range(self.num_levels - 1):
             fmaps_ = fmaps.reshape(B * S, C, H, W)
             fmaps_ = F.avg_pool2d(fmaps_, 2, stride=2)
             _, _, H, W = fmaps_.shape
@@ -254,9 +240,7 @@ class EfficientCorrBlock:
             pyramid = self.fmaps_pyramid[i]
             C, H, W = pyramid.shape[2:]
             centroid_lvl = (
-                torch.cat(
-                    [torch.zeros_like(coords[..., :1], device=device), coords], dim=-1
-                ).reshape(B * S, N, 1, 1, 3)
+                torch.cat([torch.zeros_like(coords[..., :1], device=device), coords], dim=-1).reshape(B * S, N, 1, 1, 3)
                 / 2**i
             )
 
@@ -268,9 +252,7 @@ class EfficientCorrBlock:
             delta = torch.stack([zgrid, xgrid, ygrid], axis=-1)
             delta_lvl = delta.view(1, 1, 2 * r + 1, 2 * r + 1, 3)
             coords_lvl = centroid_lvl + delta_lvl
-            pyramid_sample = bilinear_sampler(
-                pyramid.reshape(B * S, C, 1, H, W), coords_lvl
-            )
+            pyramid_sample = bilinear_sampler(pyramid.reshape(B * S, C, 1, H, W), coords_lvl)
 
             corr = torch.sum(target * pyramid_sample.reshape(B, S, C, N, -1), dim=2)
             corr = corr / torch.sqrt(torch.tensor(C).float())
@@ -299,7 +281,7 @@ class CorrBlock:
         self.multiple_track_feats = multiple_track_feats
 
         self.fmaps_pyramid.append(fmaps)
-        for i in range(self.num_levels - 1):
+        for _i in range(self.num_levels - 1):
             fmaps_ = fmaps.reshape(B * S, C, H, W)
             fmaps_ = F.avg_pool2d(fmaps_, 2, stride=2)
             _, _, H, W = fmaps_.shape
@@ -319,9 +301,7 @@ class CorrBlock:
 
             dx = torch.linspace(-r, r, 2 * r + 1)
             dy = torch.linspace(-r, r, 2 * r + 1)
-            delta = torch.stack(torch.meshgrid(dy, dx, indexing="ij"), axis=-1).to(
-                coords.device
-            )
+            delta = torch.stack(torch.meshgrid(dy, dx, indexing="ij"), axis=-1).to(coords.device)
 
             centroid_lvl = coords.reshape(B * S * N, 1, 1, 2) / 2**i
             delta_lvl = delta.view(1, 2 * r + 1, 2 * r + 1, 2)
@@ -363,9 +343,7 @@ class CorrBlock:
 
 
 class Attention(nn.Module):
-    def __init__(
-        self, query_dim, context_dim=None, num_heads=8, dim_head=48, qkv_bias=False
-    ):
+    def __init__(self, query_dim, context_dim=None, num_heads=8, dim_head=48, qkv_bias=False):
         super().__init__()
         inner_dim = dim_head * num_heads
         context_dim = default(context_dim, query_dim)
@@ -400,22 +378,18 @@ class Attention(nn.Module):
 
 class AttnBlock(nn.Module):
     def __init__(
-        self,
-        hidden_size,
-        num_heads,
-        attn_class: Callable[..., nn.Module] = Attention,
-        mlp_ratio=4.0,
-        **block_kwargs
+        self, hidden_size, num_heads, attn_class: Callable[..., nn.Module] = Attention, mlp_ratio=4.0, **block_kwargs
     ):
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.attn = attn_class(
-            hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs
-        )
+        self.attn = attn_class(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
 
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
         self.mlp = Mlp(
             in_features=hidden_size,
             hidden_features=mlp_hidden_dim,
@@ -426,11 +400,7 @@ class AttnBlock(nn.Module):
     def forward(self, x, mask=None):
         attn_bias = mask
         if mask is not None:
-            mask = (
-                (mask[:, None] * mask[:, :, None])
-                .unsqueeze(1)
-                .expand(-1, self.attn.num_heads, -1, -1)
-            )
+            mask = (mask[:, None] * mask[:, :, None]).unsqueeze(1).expand(-1, self.attn.num_heads, -1, -1)
             max_neg_value = -torch.finfo(x.dtype).max
             attn_bias = (~mask) * max_neg_value
         x = x + self.attn(self.norm1(x), attn_bias=attn_bias)

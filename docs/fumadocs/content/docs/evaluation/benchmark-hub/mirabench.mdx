@@ -1,13 +1,13 @@
 ---
 title: MiraBench
-description: "Tencent ARC long-video bench from MiraData: 150 prompts, 17 official metrics. WorldFoundry vendors the scorer; it does not invent a board."
+description: "Tencent ARC long-video bench from MiraData: 150 prompts, 17 official metrics. WorldFoundry vendors the scorer."
 ---
 
 MiraBench (Tencent ARC Lab) is the evaluation half of **MiraData**, a long-video dataset with structured captions. It scores long-video generation on six perspectives: temporal consistency, temporal motion strength, 3D consistency, visual quality, text-video alignment, and distribution consistency. The official scorer exposes **17 metrics** (DINO/CLIP temporal consistency, RAFT-style motion, 3D reconstruction error, aesthetic / imaging quality, ViCLIP alignment, FVD / FID / KID). The canonical suite is **150 prompts**. License: GPL-3.0.
 
 Paper: [MiraData](https://arxiv.org/abs/2407.06358). Project: [mira-space.github.io](https://mira-space.github.io/). Data: [`TencentARC/MiraData`](https://huggingface.co/datasets/TencentARC/MiraData). Code: [mira-space/MiraData](https://github.com/mira-space/MiraData).
 
-WorldFoundry **vendors the runtime** (`calculate_score.py`) and converts `average_score.csv` into a scorecard. `WORLDFOUNDRY_MIRABENCH_SCORER_BACKEND=mock` is wiring only.
+WorldFoundry **vendors the runtime** (`calculate_score.py`) and converts `average_score.csv` into a scorecard. `WORLDFOUNDRY_MIRABENCH_SCORER_BACKEND=mock` only checks the wiring and does not produce real scores.
 
 <BenchmarkPageSections id="mirabench" locale="en" />
 
@@ -20,7 +20,7 @@ export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/mirabench/generated_videos
 export WORLDFOUNDRY_MIRABENCH_CKPT_PATH=/path/to/mirabench/data/ckpt
 
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/mirabench/run_mirabench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/mirabench/run_mirabench_official_runner.py \
   --run-official \
   --meta-csv "${WORLDFOUNDRY_MIRABENCH_META_CSV}" \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
@@ -32,7 +32,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 Import `average_score.csv`:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id mirabench \
   --mode official-validation \
   --official-results-path /path/to/mirabench/average_score.csv \
@@ -43,7 +43,7 @@ worldfoundry-eval zoo benchmark-run \
 
 Name videos `1.mp4` … `150.mp4` (from `video_idx`). Example metas are bundled under `worldfoundry/data/benchmarks/assets/mirabench/data/evaluation_example/`. `--strict` fails on missing prompt videos. Full scoring needs AMT, ViCLIP, MUSIQ, FVD/FID/KID, and 3D-consistency assets.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/mirabench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/mirabench/runtime/mirabench`.
+Manifest and vendored runtime: `worldfoundry/data/benchmarks/tasks/external/mirabench.yaml`, `worldfoundry/evals/tasks/execution/runners/mirabench/runtime/mirabench`.
 
 Outputs include `scorecard.json` (primary `mirabench_average`) and `mirabench_average_score.json`.
 

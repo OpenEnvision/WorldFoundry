@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from ...synthesis.visual_generation.memory.video import VideoArtifactMemory
-from ..pipeline_utils import PipelineABC
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ...operators.runtime_video_operator import RuntimeVideoOperator
 from ...synthesis.visual_generation.cogvideox.cogvideox_5b_i2v_synthesis import CogVideoX5bI2VSynthesis
-
+from ...synthesis.visual_generation.memory.video import VideoArtifactMemory
+from ..pipeline_utils import PipelineABC
 
 DEFAULT_COGVIDEOX_5B_I2V_PROMPT = (
     "A young man holding a bright sparkler gently turns his head and smiles as "
@@ -24,9 +23,9 @@ class CogVideoX5bI2VPipeline(PipelineABC):
 
     def __init__(
         self,
-        operator: Optional[RuntimeVideoOperator] = None,
+        operator: RuntimeVideoOperator | None = None,
         synthesis_model=None,
-        memory_module: Optional[VideoArtifactMemory] = None,
+        memory_module: VideoArtifactMemory | None = None,
         device: str = "cuda",
     ) -> None:
         """Initialize the pipeline and configure runtime components."""
@@ -34,24 +33,24 @@ class CogVideoX5bI2VPipeline(PipelineABC):
         self.generation_type = getattr(synthesis_model, "generation_type", "i2v")
         self.model_name = getattr(synthesis_model, "model_name", None)
         self.operator = operator or RuntimeVideoOperator(generation_type=self.generation_type)
-        self.memory_module = memory_module or VideoArtifactMemory(model_id='cogvideox-5b-i2v')
+        self.memory_module = memory_module or VideoArtifactMemory(model_id="cogvideox-5b-i2v")
         self.device = device
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[str] = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        model_path: str | None = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
         lazy: bool = True,
         **kwargs,
-    ) -> "CogVideoX5bI2VPipeline":
+    ) -> CogVideoX5bI2VPipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         required_components = dict(required_components or {})
         generator_overrides = dict(required_components)
         generator_overrides.update(kwargs)
 
-        synthesis_model = cls.SYNTHESIS_CLS.from_pretrained(
+        synthesis_model = cls._component("SYNTHESIS_CLS").from_pretrained(
             pretrained_model_path=model_path,
             device=device,
             lazy=lazy,
@@ -60,11 +59,11 @@ class CogVideoX5bI2VPipeline(PipelineABC):
         return cls(
             operator=RuntimeVideoOperator(generation_type=synthesis_model.generation_type),
             synthesis_model=synthesis_model,
-            memory_module=VideoArtifactMemory(model_id='cogvideox-5b-i2v'),
+            memory_module=VideoArtifactMemory(model_id="cogvideox-5b-i2v"),
             device=device,
         )
 
-    def process(self, prompt: str | None = None, images=None, **kwargs) -> Dict[str, Any]:
+    def process(self, prompt: str | None = None, images=None, **kwargs) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
         del kwargs
         prompt = prompt or DEFAULT_COGVIDEOX_5B_I2V_PROMPT
@@ -83,8 +82,8 @@ class CogVideoX5bI2VPipeline(PipelineABC):
         self,
         prompt: str | None = None,
         images=None,
-        output_path: Optional[str] = None,
-        fps: Optional[int] = None,
+        output_path: str | None = None,
+        fps: int | None = None,
         return_dict: bool = False,
         **kwargs,
     ):
@@ -109,8 +108,8 @@ class CogVideoX5bI2VPipeline(PipelineABC):
         self,
         prompt: str | None = None,
         images=None,
-        output_path: Optional[str] = None,
-        fps: Optional[int] = None,
+        output_path: str | None = None,
+        fps: int | None = None,
         return_dict: bool = False,
         **kwargs,
     ):

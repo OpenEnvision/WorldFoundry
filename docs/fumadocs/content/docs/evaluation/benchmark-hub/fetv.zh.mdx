@@ -1,13 +1,13 @@
 ---
 title: FETV
-description: "NeurIPS 2023 细粒度 T2V 评测：619 条 prompt，覆盖内容、属性与复杂度。WorldFoundry 内置 CLIPScore 与导入器，不编造榜单。"
+description: "NeurIPS 2023 细粒度 T2V 评测：619 条 prompt，覆盖内容、属性与复杂度。WorldFoundry 内置 CLIPScore 与 FETV-EVAL 结果导入器。"
 ---
 
-FETV（北大与华为诺亚）是**细粒度**开放域文生视频评测。**619 条 prompt** 落在三个正交轴上：**主要内容**、**属性控制**（颜色、数量、风格）、**prompt 复杂度**（简单 vs 组合）。打分混合人工评分（静态质量、时序质量、整体 / 细粒度对齐）与自动指标（CLIPScore、BLIPScore、FID、FVD）。只有声明的分量齐备时才写出 `fetv_average`。
+FETV（北大与华为诺亚）是**细粒度**开放域文生视频评测。**619 条 prompt** 沿三个正交维度划分：**主要内容**、**属性控制**（颜色、数量、风格）、**prompt 复杂度**（简单 vs 组合）。打分混合人工评分（静态质量、时序质量、整体 / 细粒度对齐）与自动指标（CLIPScore、BLIPScore、FID、FVD）。只有声明的分量齐备时才写出 `fetv_average`。
 
 论文：[FETV（NeurIPS 2023 D&B）](https://proceedings.neurips.cc/paper_files/paper/2023/hash/c481049f7410f38e788f67c171c64ad5-Abstract-Datasets_and_Benchmarks.html)。Prompt：[llyx97/FETV](https://github.com/llyx97/FETV)。打分器：[llyx97/FETV-EVAL](https://github.com/llyx97/FETV-EVAL)。数据集：[`lyx97/FETV`](https://huggingface.co/datasets/lyx97/FETV)（CC-BY-4.0）。
 
-WorldFoundry **内置 FETV-EVAL**，把生成视频接到官方 prompt 索引（官方 16 帧布局），通过共享基座资源跑 **CLIPScore**，并归一化 FETV-EVAL 结果目录或 CSV。人工评分不能重算。BLIP / FID / FVD 需要对应包与参考帧。
+WorldFoundry **内置 FETV-EVAL**，将生成视频与官方 prompt 索引关联（官方 16 帧布局），通过共享基座资源运行 **CLIPScore**，并归一化 FETV-EVAL 结果目录或 CSV。人工评分不能重算。BLIP / FID / FVD 需要对应包与参考帧。
 
 <BenchmarkPageSections id="fetv" locale="zh" />
 
@@ -16,7 +16,7 @@ WorldFoundry **内置 FETV-EVAL**，把生成视频接到官方 prompt 索引（
 导入 FETV-EVAL 目录或官方 CSV：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id fetv \
   --mode official-validation \
   --official-results-path <official_results.csv-or-FETV-EVAL-dir> \
@@ -31,7 +31,7 @@ worldfoundry-eval zoo benchmark-run \
 
 ```text
 worldfoundry/data/benchmarks/tasks/external/fetv.yaml
-worldfoundry/evaluation/tasks/execution/runners/fetv/runtime/fetv_eval
+worldfoundry/evals/tasks/execution/runners/fetv/runtime/fetv_eval
 worldfoundry/data/benchmarks/assets/fetv/fetv_data.json
 ```
 

@@ -1,5 +1,5 @@
 model:
-  target: vwm.models.diffusion.DiffusionEngine
+  target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.models.diffusion.DiffusionEngine
   params:
     input_key: img_seq
     scale_factor: 0.18215
@@ -7,12 +7,12 @@ model:
     en_and_decode_n_samples_a_time: 7
     n_context_frames: 6
     denoiser_config:
-      target: vwm.modules.diffusionmodules.denoiser.Denoiser
+      target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.diffusionmodules.denoiser.Denoiser
       params:
         scaling_config:
-          target: vwm.modules.diffusionmodules.denoiser_scaling.VScalingWithEDMcNoise
+          target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.diffusionmodules.denoiser_scaling.VScalingWithEDMcNoise
     network_config:
-      target: vwm.modules.diffusionmodules.video_model.VideoUNet
+      target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.diffusionmodules.video_model.VideoUNet
       params:
         adm_in_channels: 544
         num_classes: sequential
@@ -43,25 +43,25 @@ model:
         - 1
         n_context_frames: 6
     conditioner_config:
-      target: vwm.modules.GeneralConditioner
+      target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.GeneralConditioner
       params:
         emb_models:
         - input_key: cond_frames_without_noise
           is_trainable: false
-          target: vwm.modules.encoders.modules.FrozenOpenCLIPImagePredictionEmbedder
+          target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.encoders.modules.FrozenOpenCLIPImagePredictionEmbedder
           params:
             open_clip_config:
-              target: vwm.modules.encoders.modules.FrozenOpenCLIPImageEmbedder
+              target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.encoders.modules.FrozenOpenCLIPImageEmbedder
               params:
                 freeze: true
         - input_key: cond_frames
           is_trainable: false
-          target: vwm.modules.encoders.modules.VideoPredictionEmbedderWithEncoder
+          target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.encoders.modules.VideoPredictionEmbedderWithEncoder
           params:
             disable_encoder_autocast: true
             n_context_frames: 6
             encoder_config:
-              target: vwm.models.autoencoder.AutoencoderKLModeOnly
+              target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.models.autoencoder.AutoencoderKLModeOnly
               params:
                 embed_dim: 4
                 ddconfig:
@@ -80,27 +80,27 @@ model:
                   dropout: 0.0
         - input_key: raw_action
           is_trainable: false
-          target: vwm.modules.encoders.modules.ActionMLP
+          target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.encoders.modules.ActionMLP
           params:
             num_actions: 2
             action_dim: 32
         - input_key: context_len
           is_trainable: false
-          target: vwm.modules.encoders.modules.ConcatTimestepEmbedderND
+          target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.encoders.modules.ConcatTimestepEmbedderND
           params:
             output_dim: 256
         - input_key: context_aug
           is_trainable: false
-          target: vwm.modules.encoders.modules.ConcatTimestepEmbedderND
+          target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.encoders.modules.ConcatTimestepEmbedderND
           params:
             output_dim: 256
     first_stage_config:
-      target: vwm.models.autoencoder.AutoencodingEngine
+      target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.models.autoencoder.AutoencodingEngine
       params:
         regularizer_config:
-          target: vwm.modules.autoencoding.regularizer.DiagonalGaussianRegularizer
+          target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.autoencoding.regularizer.DiagonalGaussianRegularizer
         encoder_config:
-          target: vwm.modules.diffusionmodules.model.Encoder
+          target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.diffusionmodules.model.Encoder
           params:
             attn_type: vanilla
             z_channels: 4
@@ -116,7 +116,7 @@ model:
             num_res_blocks: 2
             dropout: 0.0
         decoder_config:
-          target: vwm.modules.autoencoding.temporal_ae.VideoDecoder
+          target: worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.autoencoding.temporal_ae.VideoDecoder
           params:
             attn_type: vanilla
             z_channels: 4

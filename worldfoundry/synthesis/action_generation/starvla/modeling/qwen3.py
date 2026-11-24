@@ -16,20 +16,14 @@ class Qwen3VLInterface(nn.Module):
         from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         qwen_config = config.framework.get("qwenvl", {})
         model_id = str(qwen_config.get("base_vlm", "Qwen/Qwen3-VL-4B-Instruct"))
         requested_attention = str(qwen_config.get("attn_implementation", "auto"))
-        probe_device = resolve_inference_device(
-            str(qwen_config.get("device", "cuda")), allow_cpu_fallback=True
-        )
-        self.inference_dtype = resolve_inference_dtype(
-            probe_device, str(qwen_config.get("torch_dtype", "auto"))
-        )
-        self.attention_implementation = resolve_transformers_attention_implementation(
-            requested_attention, probe_device
-        )
+        probe_device = resolve_inference_device(str(qwen_config.get("device", "cuda")), allow_cpu_fallback=True)
+        self.inference_dtype = resolve_inference_dtype(probe_device, str(qwen_config.get("torch_dtype", "auto")))
+        self.attention_implementation = resolve_transformers_attention_implementation(requested_attention, probe_device)
 
         model_kwargs = {
             "attn_implementation": self.attention_implementation,
@@ -88,7 +82,7 @@ class Qwen3VLInterface(nn.Module):
         if vla_data is not None:
             cot_prompt = str(vla_data.get("CoT_prompt", ""))
 
-        for sample_images, instruction in zip(images, instructions):
+        for sample_images, instruction in zip(images, instructions, strict=False):
             content = [{"type": "image", "image": image} for image in sample_images]
             prompt = cot_prompt.replace("{instruction}", instruction) if cot_prompt else instruction
             content.append({"type": "text", "text": prompt})

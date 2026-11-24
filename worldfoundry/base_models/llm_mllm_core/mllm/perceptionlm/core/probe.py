@@ -12,4 +12,3 @@ import torch
 
 def log_stats(x: torch.Tensor, name: str) -> torch.Tensor:
     return x
-

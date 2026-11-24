@@ -80,11 +80,7 @@ def test_dataset_create_show_validate_and_materialize_cli(tmp_path: Path, capsys
         == 0
     )
     materialized = json.loads(capsys.readouterr().out)
-    request_rows = [
-        json.loads(line)
-        for line in requests_path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    request_rows = [json.loads(line) for line in requests_path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
     assert materialized["sample_count"] == 1
     assert request_rows[0]["sample_id"] == "sample-a"

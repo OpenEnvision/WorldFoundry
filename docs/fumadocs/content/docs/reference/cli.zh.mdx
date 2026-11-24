@@ -1,9 +1,9 @@
 ---
 title: CLI 参考
-description: worldfoundry-eval 的完整命令地图、执行模式、输出契约与自动化约定。
+description: wf 的完整命令地图、执行模式、输出契约与自动化约定。
 ---
 
-`worldfoundry-eval` 是 WorldFoundry 的标准命令行入口，覆盖 catalog 发现、readiness 检查、强类型模型推理、benchmark 执行、结果归一化、报告和验证。第一次从 clone 跑通流程请看[快速开始](/zh/docs/quickstart)；选择命令或核对命令契约时查本页。
+`wf` 是 WorldFoundry 的标准命令行入口，覆盖 catalog 发现、readiness 检查、强类型模型推理、benchmark 执行、结果归一化、报告和验证。首次从 clone 开始跑通流程，请看[快速开始](/zh/docs/quickstart)；选择命令或核对命令契约时查本页。
 
 <Callout type="info" title="可以安全检查">
   Help、catalog discovery、`--model-status`、`--print-config`、`--plan-only` 和本地资产检查都不会加载模型权重。CPU-only 机器或提交 GPU job 前，应先从这些命令开始。
@@ -20,7 +20,7 @@ description: worldfoundry-eval 的完整命令地图、执行模式、输出契�
 bash scripts/setup/bootstrap_worldfoundry.sh
 source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
-worldfoundry-eval --help
+wf --help
 ```
 
 `bootstrap_worldfoundry.sh` 是[快速开始](/zh/docs/quickstart)、TUI、Studio 共用的官方首次 clone 脚本。
@@ -53,34 +53,37 @@ python -m worldfoundry zoo models --json
   </Tab>
 </Tabs>
 
-不带参数运行 `worldfoundry-eval` 会打印简短的首次使用提示；加 `--help` 才会显示完整顶层命令列表。
+不带参数运行 `wf` 会打印简短的首次使用提示；加 `--help` 才会显示完整顶层命令列表。
 
 ## 命令入口
 
-- **`worldfoundry-eval`** — 文档统一使用的标准 CLI。
-- **`worldfoundry`** — `worldfoundry-eval` 的别名，调用同一个 `main()`。
+- **`wf`** — 文档统一使用的标准 CLI。
+- **`wf tui`** — 终端 UI。
+- **`wf mcp`** — MCP server。
+- **`wf-studio`** — 独立的 Studio launcher。详见 [Studio 指南](/zh/docs/guides/studio)。
 - **`python -m worldfoundry`** — Editable install 或 console-script `PATH` 尚未生效时的 module 备用入口。
-- **`worldfoundry-tui`** — TUI 专用别名，等价于 `worldfoundry-eval tui`。
-- **`worldfoundry-mcp`** — MCP server 专用入口；也可以用 `worldfoundry-eval mcp`。
-- **`worldfoundry-studio`** — 独立的 Studio launcher。详见 [Studio 指南](/zh/docs/guides/studio)。
 - **`python -m worldfoundry.studio.workspace_job infer`** — Workspace 视觉冒烟（与 Studio UI 提交的是同一条 job 路径）。不是文档里的第一次推理命令。
 
-**选哪条命令。** 日常可复现 / 模型页命令用 `worldfoundry-eval run <id> --pipeline.task-profile …`。只有 Workspace 视觉冒烟才用 `python -m worldfoundry.studio.workspace_job infer`。
+**选哪条命令。** 日常可复现 / 模型页命令用 `wf run <id> --pipeline.task-profile …`。只有 Workspace 视觉冒烟才用 `python -m worldfoundry.studio.workspace_job infer`。
 
-下面统一写 `worldfoundry-eval`，便于 shell history、job script 和问题报告保持一致。
+同一 Workspace 进程内，`WORLDFOUNDRY_STUDIO_BATCH_MAX_SIZE`（默认 `1`）和
+`WORLDFOUNDRY_STUDIO_BATCH_DELAY_MS`（默认 `5`）控制兼容原生 Wan T2V 与
+5B TI2V 常驻 worker 合批。准入要求并行作业槽、常驻权重及兼容的 Torch attention；编译批次使用 regional scope。配置在 worker 启动前生效，不跨独立 CLI 进程合批。精度与输入要求见[批处理准入、预热和取消契约](/zh/docs/guides/inference-optimization)。
+
+下面统一写 `wf`，便于 shell history、job script 和问题报告保持一致。
 
 ## 每一层都有 Help
 
 把 `--help` 放在需要查询参数的命令后面。选项属于叶子命令，因此应写成 `zoo models --json`，而不是把 `--json` 放在顶层入口后。
 
 ```bash
-worldfoundry-eval --help
-worldfoundry-eval zoo --help
-worldfoundry-eval zoo model-show --help
-worldfoundry-eval run --help
+wf --help
+wf zoo --help
+wf zoo model-show --help
+wf run --help
 ```
 
-![worldfoundry-eval --help 的终端输出](/images/cli/worldfoundry-eval-help.png)
+![wf --help 的终端输出](/images/cli/worldfoundry-eval-help.png)
 
 <div className="text-sm text-fd-muted-foreground">
 
@@ -93,9 +96,9 @@ worldfoundry-eval run --help
 位置参数形式 `run MODEL` 会加载该模型的推理 schema，并把强类型的 `--pipeline.*`、`--pipeline.load.*` 与 `--runtime.*` 选项加入帮助页。
 
 ```bash
-worldfoundry-eval run self-forcing --help
-worldfoundry-eval run self-forcing --model-status
-worldfoundry-eval run self-forcing --print-config --json
+wf run self-forcing --help
+wf run self-forcing --model-status
+wf run self-forcing --print-config --json
 ```
 
 - `--pipeline.*` 控制请求输入与生成默认值。
@@ -117,7 +120,7 @@ worldfoundry-eval run self-forcing --print-config --json
 - **执行已经物化的 run plan，或直接使用 eval-core 字段** — 优先使用 `evaluate`（别名 `eval`）。面向 requests/results ledger 与 model-mode evaluation 的底层确定性路径。
 - **从 dataset manifest 生成再评分** — 优先使用 `generate-score`。一个 intent 统一负责 dataset 物化、生成、cache 与 metric。
 - **导入或执行某个 benchmark 的官方界面** — 优先使用 `zoo benchmark-run`。暴露 benchmark 专属 mode 与参数；应配合对应 Benchmark Hub 页面。
-- **复现钉死的 model × benchmark 配方** — 优先使用 `reproduce`。解析 recipe YAML。
+- **复现固定版本的 model × benchmark 配方** — 优先使用 `reproduce`。解析 recipe YAML。
 - **创建索引、比较或做契约检查** — 优先使用 `index-runs`、`compare-runs`、`validate-artifact`。对持久化 run 输出操作，不重新运行模型。
 
 ## 完整命令地图
@@ -140,7 +143,7 @@ worldfoundry-eval run self-forcing --print-config --json
             <code>zoo</code>
           </div>
         </div>
-        <p><code>models</code>、<code>model-specs</code>、<code>model-show</code>、<code>model-download</code>、<code>embodied-assets</code>、<code>benchmarks</code>、<code>benchmark-specs</code>、<code>benchmark-show</code>、<code>benchmark-run</code>。</p>
+        <p><code>models</code>、<code>model-specs</code>、<code>model-show</code>、<code>model-download</code>、<code>embodied-assets</code>、<code>benchmarks</code>、<code>benchmark-specs</code>、<code>benchmark-show</code>、<code>benchmark-fetch</code>、<code>benchmark-run</code>。</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -316,7 +319,7 @@ worldfoundry-eval run self-forcing --print-config --json
             <code>mcp</code>
           </div>
         </div>
-        <p>启动 MCP server（<code>--transport stdio|sse</code>，默认 <code>stdio</code>）。</p>
+        <p>启动 MCP server（<code>--transport stdio|streamable-http|sse</code>，默认 <code>stdio</code>；HTTP 传输用 <code>--host</code>/<code>--port</code>）。</p>
       </li>
     </ul>
   </section>
@@ -324,43 +327,71 @@ worldfoundry-eval run self-forcing --print-config --json
 
 ### MCP 工具
 
-`worldfoundry-eval mcp` 与 `worldfoundry-mcp` 启动同一个 FastMCP server（`worldfoundry/mcp/server.py`）。先安装 `python -m pip install -e ".[mcp]"`：
+`wf mcp` 启动 FastMCP server（`worldfoundry/mcp/server.py`）。先安装 `python -m pip install -e ".[mcp]"`：
 
 ```bash
-worldfoundry-eval mcp --transport stdio
-worldfoundry-eval mcp --transport sse
+wf mcp                                              # stdio，供本地 agent 客户端使用
+wf mcp --transport streamable-http --port 8000      # HTTP 端点 http://127.0.0.1:8000/mcp
+wf mcp --transport sse                              # 旧版 SSE 客户端
 ```
 
-Server 注册 27 个工具：`server_info`；discovery（`list_models`、`get_model_info`、`list_benchmarks`、`get_benchmark_info`、`list_tasks`、`get_task_info`、`list_metrics`、`show_metric`、`check_benchmark_datasets`）；run 生命周期（`preview_run`、`evaluate`、`list_runs`、`get_run_status`、`get_run_result`、`get_run_samples`、`cancel_run`）；以及 Studio workspace（`list_studio_models`、`get_studio_model_info`、`submit_studio_inference`、`list_studio_jobs`、`get_studio_job`、`wait_for_studio_job`、`stop_studio_job`、`get_studio_job_logs`、`list_studio_artifacts`、`get_studio_manifest`）。Studio 工具默认访问 `WORLDFOUNDRY_STUDIO_WORKSPACE_URL`（通常是 `http://127.0.0.1:7870`）。Run 文件写到 `WORLDFOUNDRY_MCP_RUN_ROOT`；未设置时为 `runs/mcp`。
+HTTP 传输默认绑定 `127.0.0.1`，可用 `--host` 修改。建议先调用 `server_info`：它返回路径、带行为提示的工具清单和推荐流程。
+
+| 分组 | 工具 |
+| --- | --- |
+| Server | `server_info` |
+| 发现 | `list_models`、`get_model_info`、`list_benchmarks`、`get_benchmark_info`、`list_tasks`、`get_task_info`、`list_metrics`、`show_metric`、`check_benchmark_datasets` |
+| Run | `preview_run`、`evaluate`、`list_runs`、`get_run_status`、`get_run_result`、`get_run_samples`、`cancel_run` |
+| Studio workspace | `list_studio_models`、`get_studio_model_info`、`submit_studio_inference`、`list_studio_jobs`、`get_studio_job`、`wait_for_studio_job`、`stop_studio_job`、`get_studio_job_logs`、`list_studio_artifacts`、`get_studio_manifest` |
+
+工具约定：
+
+- 每个参数在工具的 JSON schema 中都带说明，固定取值用 enum 表示（`wait`：`auto|async|sync`；`generation_cache_mode`：`off|read|write|read-write|refresh`；`mode`；`detail`；run 的 `status`）。
+- 每个工具都声明 MCP annotations。发现和状态类工具只读；`evaluate` 与 `submit_studio_inference` 会启动任务；
+  `cancel_run` 与 `stop_studio_job` 是破坏性操作；Studio 工具会调用 Studio HTTP API，因此标记为 open-world。
+- `list_*` 工具以 `summary` 视图返回一页结果：用 `offset`/`limit` 翻页（最后一页 `next_offset` 为 `null`），传 `detail="full"` 获取全部字段。`get_*_info` 始终返回完整条目。
+- `preview_run` 和 `evaluate` 接收 `model`，以及 `benchmarks`（列表）或 `suite_ids`，并把 `mode`、`plan_only`、`resume`、
+  `generation_cache_dir`、`generation_cache_mode`、`model_variant`、`requests_path`、`task_name`、
+  `generated_artifact_dir`、`output_artifact`、`metrics` 传给 `wf run`。`preview_run` 只返回确切命令，不启动任务。
+- `evaluate` 返回 `run_id`。`wait="auto"` 时最多等待 `wait_timeout_s`，之后返回运行中状态；再用 `get_run_status`、`get_run_result`、`get_run_samples` 跟进。
+- 成功结果为 `{"ok": true, ...}`；失败为 `{"ok": false, "error": ..., "error_type": ...}`，其中 `error_type` 取
+  `not_found`（id 不存在，消息中会给出相近的 id）、`invalid_argument`、`unavailable`（例如 Studio 未启动）、`runtime` 或 `internal`。
+
+Studio 工具默认访问 `WORLDFOUNDRY_STUDIO_WORKSPACE_URL`（通常是 `http://127.0.0.1:7870`）。Run 文件写到
+`WORLDFOUNDRY_MCP_RUN_ROOT`；未设置时为 `runs/mcp`。
 
 Python 客户端可通过 `worldfoundry.mcp.client.MCPClient` 和
-`convert_result_to_openai_format()` 将工具结果转换为 OpenAI Chat 内容块。
-音频使用 `input_audio` 块，其中 `data` 为 base64，`format` 为 `wav` 或 `mp3`。
-转换器接受 WAV/MP3 的 MIME 别名，其他音频格式会抛出 `ValueError`。
-文本与图像块保留原内容和 data URI；转换在本地完成，不调用 API provider。
+`convert_result_to_openai_format()` 将工具结果转换为 OpenAI Chat 内容块。音频使用 `input_audio` 块，其中 `data` 为 base64，`format` 为 `wav` 或 `mp3`。转换器接受 WAV/MP3 的 MIME 别名，其他音频格式会抛出 `ValueError`。文本与图像块保留原内容和 data URI；转换在本地完成，不调用 API provider。
 
-Parser 才是 flag 的事实来源。请使用 `worldfoundry-eval <command> [<subcommand>] --help`，不要从无关模型或 benchmark recipe 复制参数。
+### 作业完成与取消
+
+持久化 command job 在 completion receipt 与恢复状态中保留最初的终止原因。超时保持 `failed` 及其 timeout error；用户取消保持 `cancelled`。
+
+POSIX 有界 benchmark command 在返回或向上传播中断前，清理其持有的进程组。
+Timeout payload 记录 `timed_out` 和 `kill_stuck`，后者表示清理尚未完成。
+
+Parser 才是 flag 的事实来源。请使用 `wf <command> [<subcommand>] --help`，不要从无关模型或 benchmark recipe 复制参数。
 
 ## 常用工作流
 
 ### 1. 发现与 readiness 检查
 
 ```bash
-worldfoundry-eval zoo models
-worldfoundry-eval zoo benchmarks --ready-now
+wf zoo models
+wf zoo benchmarks --ready-now
 
-worldfoundry-eval zoo model-show \
+wf zoo model-show \
   --model-id <model-id> \
   --include-manifest \
   --json
 
-worldfoundry-eval zoo benchmark-show \
+wf zoo benchmark-show \
   --benchmark-id <benchmark-id> \
   --include-spec \
   --json
 
 # 只检查本地 cache，不会下载。
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id <model-id> \
   --check-local \
   --json
@@ -373,18 +404,18 @@ worldfoundry-eval zoo model-download \
 分配 GPU 资源前先检查最终解析的字段：
 
 ```bash
-worldfoundry-eval run self-forcing --model-status
-worldfoundry-eval run self-forcing --print-config --json
+wf run self-forcing --model-status
+wf run self-forcing --print-config --json
 ```
 
 然后只提供本次运行需要覆盖的值：
 
 ```bash
-worldfoundry-eval run self-forcing \
+wf run self-forcing \
   --pipeline.prompt "A paper boat moving down a forest stream" \
-  --pipeline.num-output-frames 33 \
+  --pipeline.frames 33 \
   --pipeline.seed 7 \
-  --pipeline.load.ckpt-path /path/to/self_forcing_dmd.pt \
+  --pipeline.load.checkpoint-path /path/to/self_forcing_dmd.pt \
   --runtime.device cuda \
   --output-dir tmp/self_forcing_run
 ```
@@ -396,7 +427,7 @@ worldfoundry-eval run self-forcing \
 可能较大的 matrix 应先 plan：
 
 ```bash
-worldfoundry-eval run \
+wf run \
   --all-benchmarks \
   --model <model-id> \
   --plan-only \
@@ -407,7 +438,7 @@ worldfoundry-eval run \
 资产与环境通过 readiness 检查后，再执行一个 cell：
 
 ```bash
-worldfoundry-eval run \
+wf run \
   --benchmark <benchmark-id> \
   --model <model-id> \
   --mode official-run \
@@ -422,7 +453,7 @@ worldfoundry-eval run \
 针对 benchmark 自己定义的 artifact layout：
 
 ```bash
-worldfoundry-eval score \
+wf score \
   --benchmark <benchmark-id> \
   --artifacts /path/to/generated-artifacts \
   --mode official-run \
@@ -436,7 +467,7 @@ Prepared intent 报告 `ready: true` 后再移除 `--plan-only`。
 针对已经物化的 WorldFoundry result rows：
 
 ```bash
-worldfoundry-eval score \
+wf score \
   --results tmp/results.jsonl \
   --metric artifact_count \
   --metric required_artifacts_present \
@@ -446,16 +477,13 @@ worldfoundry-eval score \
 ```
 
 进程内 `score --results`、`generate-score`、`reproduce`、`evaluate` 和 `run`
-支持 `--resume` 与 `--metric-batch-size`（默认 `32`）。生成结果与 metric 批次分别
-持久化；resume 复用请求、模型配置及已有 artifact 均匹配的生成结果，metric 实现、
-版本和声明参数决定是否复用分数。中断后 `metrics/checkpoint.jsonl` 保留已完成批次。
-修改 metric 时只重算相应分数，不重跑仍匹配的生成。
+支持 `--resume` 与 `--metric-batch-size`（默认 `32`）。生成结果与 metric 批次分别持久化；resume 复用请求、模型配置及已有 artifact 均匹配的生成结果，metric 实现、版本和声明参数决定是否复用分数。中断后 `metrics/checkpoint.jsonl` 保留已完成批次。修改 metric 时只重算相应分数，不重跑仍匹配的生成。
 `score --benchmark --artifacts` 使用官方 evaluator 协议，拒绝这些进程内评分参数。
 
 `evaluate` 会进一步暴露底层 requests、task、runner、cache 与 model-mode 字段：
 
 ```bash
-worldfoundry-eval evaluate \
+wf evaluate \
   --results-path tmp/results.jsonl \
   --metric artifact_count \
   --required-artifact video \
@@ -466,7 +494,7 @@ worldfoundry-eval evaluate \
 ### 5. 导入官方形态的 benchmark 结果
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --mode official-validation \
   --official-results-path /path/to/official-results.json \
@@ -476,6 +504,33 @@ worldfoundry-eval zoo benchmark-run \
 ```
 
 Data root、score directory、prompt manifest、judge credential、metric subset 等 benchmark 专属输入见对应的 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub) 页面。
+
+部分官方 runner 执行的是 catalog 固定的上游代码（`repo_url`、`repo_revision`、`repo_subdir`），而不是仓内拷贝。runner 首次用到时把该 revision 拉取到 `${WORLDFOUNDRY_CACHE_DIR}/sources/<benchmark-id>/<revision>`；也可以在联网时提前拉取：
+
+```bash
+wf zoo benchmark-fetch \
+  --benchmark-id camerabench \
+  --json
+```
+
+如果要改用该 revision 已有的本地 checkout，把该 benchmark 的 `runtime_root_env` 变量（例如 `WORLDFOUNDRY_CAMERABENCH_RUNTIME_ROOT`）指向其中的 `repo_subdir` 目录。
+
+### 6. 回放原生 Wan 执行路径与请求批处理
+
+在已准备本地 checkpoint 的 checkout 中运行：
+
+```bash
+python -m benchmarks.inference.wan_execution_preparation \
+  --checkpoint /path/to/Wan2.1-T2V-1.3B \
+  --output-dir tmp/wan-execution --request-batching
+```
+
+`--request-batching` 在单请求对照之外增加 A/B、B/A、A/B 批次。用 `--model-id`
+选择 `wan2.1-t2v-1.3b`、`wan2.2-t2v-a14b`、`wan2.2-ti2v-5b` 或
+`wan2.2-i2v-a14b`；图像条件回放还需 `--images IMAGE_A IMAGE_B`。
+
+Dense 参照必须执行，并适用 latent/RGB 质量阈值。报告记录预热耗时/显存及同两个请求的诊断性吞吐对比。`report.json` 必须同时满足 `complete` 和 `passed`；计时仅作诊断，不是独占设备性能结果。Compile、Graph、精度与批处理兼容范围见
+[推理优化](/zh/docs/guides/inference-optimization)。
 
 ## Benchmark mode
 
@@ -494,7 +549,7 @@ Data root、score directory、prompt manifest、judge credential、metric subset
 [环境 → 日志](/zh/docs/reference/environments#日志) 中对应的环境变量：
 
 ```bash
-worldfoundry-eval --log-level DEBUG --log-json \
+wf --log-level DEBUG --log-json \
   --log-file tmp/worldfoundry.log zoo models --json
 ```
 
@@ -542,9 +597,7 @@ worldfoundry-eval --log-level DEBUG --log-json \
   </section>
 </div>
 
-拥有输出目录的命令会创建 run id；未显式选择文件 sink 时，生命周期事件写入
-每次 run 的 `events.jsonl`。它通常位于 `<output-dir>/logs/<run-id>/`；需要独占
-认领输出目录的命令则使用隔离的 sibling 日志目录。框架托管的子进程继承结构化的
+拥有输出目录的命令会创建 run id；未显式选择文件 sink 时，生命周期事件写入每次 run 的 `events.jsonl`。它通常位于 `<output-dir>/logs/<run-id>/`；需要独占认领输出目录的命令则使用隔离的 sibling 日志目录。框架托管的子进程继承结构化的
 `WORLDFOUNDRY_LOG_CONTEXT` 值。
 
 Evaluation 命令把持久化文件写入 `--output-dir`。各 benchmark 可能追加自己的文件，但共享 run surface 使用下列 artifact：
@@ -562,7 +615,7 @@ Evaluation 命令把持久化文件写入 `--output-dir`。各 benchmark 可能�
 需要确定性模型输出时，显式配置 generation cache：
 
 ```bash
-worldfoundry-eval run \
+wf run \
   --suite <suite-id> \
   --generation-cache-dir tmp/generation-cache \
   --generation-cache-mode read-write \
@@ -574,7 +627,7 @@ Cache 使用 SQLite 与 `audit.jsonl`，命中会写入 run manifest。复用 ca
 
 ## 自动化约定
 
-- 把 `--json` 放在叶子命令上，例如 `worldfoundry-eval zoo models --json`。
+- 把 `--json` 放在叶子命令上，例如 `wf zoo models --json`。
 - 除非某个命令明确支持逗号列表，否则应重复 list flag，例如 `--metric a --metric b`、`--model a --model b`。
 - `--model-parameter`、`--model-runtime`、`--benchmark-parameter`、`--env` 等 `KEY=VALUE` 参数会按对应 `--help` 的说明解析 JSON-compatible value。
 - 脚本中使用稳定的 canonical catalog ID。Alias 适合交互探索；canonical ID 更便于审查历史命令。

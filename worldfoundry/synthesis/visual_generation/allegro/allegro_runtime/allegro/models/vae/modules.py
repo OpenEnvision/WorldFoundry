@@ -1,12 +1,10 @@
-from typing import Optional, Tuple, Union
-from einops import rearrange
-
 import torch
 import torch.nn as nn
 from diffusers.models.attention_processor import Attention
+from diffusers.models.downsampling import Downsample2D
 from diffusers.models.resnet import ResnetBlock2D
 from diffusers.models.upsampling import Upsample2D
-from diffusers.models.downsampling import Downsample2D
+from einops import rearrange
 
 
 class TemporalConvBlock(nn.Module):
@@ -20,27 +18,29 @@ class TemporalConvBlock(nn.Module):
         out_dim = out_dim or in_dim
         self.in_dim = in_dim
         self.out_dim = out_dim
-        spa_pad = int((spa_stride-1)*0.5)
+        spa_pad = int((spa_stride - 1) * 0.5)
         temp_pad = 0
         self.temp_pad = temp_pad
 
         if down_sample:
             self.conv1 = nn.Sequential(
-                nn.GroupNorm(32, in_dim), 
-                nn.SiLU(), 
-                nn.Conv3d(in_dim, out_dim, (2, spa_stride, spa_stride), stride=(2,1,1), padding=(0, spa_pad, spa_pad))
+                nn.GroupNorm(32, in_dim),
+                nn.SiLU(),
+                nn.Conv3d(
+                    in_dim, out_dim, (2, spa_stride, spa_stride), stride=(2, 1, 1), padding=(0, spa_pad, spa_pad)
+                ),
             )
         elif up_sample:
             self.conv1 = nn.Sequential(
-                nn.GroupNorm(32, in_dim), 
-                nn.SiLU(), 
-                nn.Conv3d(in_dim, out_dim*2, (1, spa_stride, spa_stride), padding=(0, spa_pad, spa_pad))
+                nn.GroupNorm(32, in_dim),
+                nn.SiLU(),
+                nn.Conv3d(in_dim, out_dim * 2, (1, spa_stride, spa_stride), padding=(0, spa_pad, spa_pad)),
             )
         else:
             self.conv1 = nn.Sequential(
-            nn.GroupNorm(32, in_dim), 
-            nn.SiLU(), 
-            nn.Conv3d(in_dim, out_dim, (3, spa_stride, spa_stride), padding=(temp_pad, spa_pad, spa_pad))
+                nn.GroupNorm(32, in_dim),
+                nn.SiLU(),
+                nn.Conv3d(in_dim, out_dim, (3, spa_stride, spa_stride), padding=(temp_pad, spa_pad, spa_pad)),
             )
         self.conv2 = nn.Sequential(
             nn.GroupNorm(32, out_dim),
@@ -67,44 +67,42 @@ class TemporalConvBlock(nn.Module):
         self.down_sample = down_sample
         self.up_sample = up_sample
 
-
     def forward(self, hidden_states):
         identity = hidden_states
 
         if self.down_sample:
-            identity = identity[:,:,::2]
+            identity = identity[:, :, ::2]
         elif self.up_sample:
-            hidden_states_new = torch.cat((hidden_states,hidden_states),dim=2)
+            hidden_states_new = torch.cat((hidden_states, hidden_states), dim=2)
             hidden_states_new[:, :, 0::2] = hidden_states
             hidden_states_new[:, :, 1::2] = hidden_states
             identity = hidden_states_new
             del hidden_states_new
-        
+
         if self.down_sample or self.up_sample:
             hidden_states = self.conv1(hidden_states)
         else:
-            hidden_states = torch.cat((hidden_states[:,:,0:1], hidden_states), dim=2)
-            hidden_states = torch.cat((hidden_states,hidden_states[:,:,-1:]), dim=2)
+            hidden_states = torch.cat((hidden_states[:, :, 0:1], hidden_states), dim=2)
+            hidden_states = torch.cat((hidden_states, hidden_states[:, :, -1:]), dim=2)
             hidden_states = self.conv1(hidden_states)
 
-
         if self.up_sample:
-            hidden_states = rearrange(hidden_states, 'b (d c) f h w -> b c (f d) h w', d=2)
+            hidden_states = rearrange(hidden_states, "b (d c) f h w -> b c (f d) h w", d=2)
 
-        hidden_states = torch.cat((hidden_states[:,:,0:1], hidden_states), dim=2)
-        hidden_states = torch.cat((hidden_states,hidden_states[:,:,-1:]), dim=2)
+        hidden_states = torch.cat((hidden_states[:, :, 0:1], hidden_states), dim=2)
+        hidden_states = torch.cat((hidden_states, hidden_states[:, :, -1:]), dim=2)
         hidden_states = self.conv2(hidden_states)
-        hidden_states = torch.cat((hidden_states[:,:,0:1], hidden_states), dim=2)
-        hidden_states = torch.cat((hidden_states,hidden_states[:,:,-1:]), dim=2)
+        hidden_states = torch.cat((hidden_states[:, :, 0:1], hidden_states), dim=2)
+        hidden_states = torch.cat((hidden_states, hidden_states[:, :, -1:]), dim=2)
         hidden_states = self.conv3(hidden_states)
-        hidden_states = torch.cat((hidden_states[:,:,0:1], hidden_states), dim=2)
-        hidden_states = torch.cat((hidden_states,hidden_states[:,:,-1:]), dim=2)
+        hidden_states = torch.cat((hidden_states[:, :, 0:1], hidden_states), dim=2)
+        hidden_states = torch.cat((hidden_states, hidden_states[:, :, -1:]), dim=2)
         hidden_states = self.conv4(hidden_states)
 
         hidden_states = identity + hidden_states
 
         return hidden_states
-    
+
 
 class DownEncoderBlock3D(nn.Module):
     def __init__(
@@ -144,24 +142,20 @@ class DownEncoderBlock3D(nn.Module):
                 )
             )
             temp_convs.append(
-                    TemporalConvBlock(
+                TemporalConvBlock(
                     out_channels,
                     out_channels,
                     dropout=0.1,
-                    )
                 )
+            )
 
         self.resnets = nn.ModuleList(resnets)
         self.temp_convs = nn.ModuleList(temp_convs)
 
         if add_temp_downsample:
             self.temp_convs_down = TemporalConvBlock(
-                    out_channels,
-                    out_channels,
-                    dropout=0.1,
-                    down_sample=True,
-                    spa_stride=3
-                    )
+                out_channels, out_channels, dropout=0.1, down_sample=True, spa_stride=3
+            )
         self.add_temp_downsample = add_temp_downsample
 
         if add_downsample:
@@ -174,30 +168,30 @@ class DownEncoderBlock3D(nn.Module):
             )
         else:
             self.downsamplers = None
-    
+
     def _set_partial_grad(self):
         for temp_conv in self.temp_convs:
             temp_conv.requires_grad_(True)
         if self.downsamplers:
             for down_layer in self.downsamplers:
                 down_layer.requires_grad_(True)
-    
+
     def forward(self, hidden_states):
         bz = hidden_states.shape[0]
-        
-        for resnet, temp_conv in zip(self.resnets, self.temp_convs):
-            hidden_states = rearrange(hidden_states, 'b c n h w -> (b n) c h w')
+
+        for resnet, temp_conv in zip(self.resnets, self.temp_convs, strict=False):
+            hidden_states = rearrange(hidden_states, "b c n h w -> (b n) c h w")
             hidden_states = resnet(hidden_states, temb=None)
-            hidden_states = rearrange(hidden_states, '(b n) c h w -> b c n h w', b=bz)
+            hidden_states = rearrange(hidden_states, "(b n) c h w -> b c n h w", b=bz)
             hidden_states = temp_conv(hidden_states)
         if self.add_temp_downsample:
             hidden_states = self.temp_convs_down(hidden_states)
 
         if self.downsamplers is not None:
-            hidden_states = rearrange(hidden_states, 'b c n h w -> (b n) c h w')
+            hidden_states = rearrange(hidden_states, "b c n h w -> (b n) c h w")
             for upsampler in self.downsamplers:
                 hidden_states = upsampler(hidden_states)
-            hidden_states = rearrange(hidden_states, '(b n) c h w -> b c n h w', b=bz)
+            hidden_states = rearrange(hidden_states, "(b n) c h w -> b c n h w", b=bz)
         return hidden_states
 
 
@@ -242,33 +236,26 @@ class UpDecoderBlock3D(nn.Module):
                 )
             )
             temp_convs.append(
-                    TemporalConvBlock(
+                TemporalConvBlock(
                     out_channels,
                     out_channels,
                     dropout=0.1,
-                    )
                 )
-        
+            )
+
         self.resnets = nn.ModuleList(resnets)
         self.temp_convs = nn.ModuleList(temp_convs)
 
         self.add_temp_upsample = add_temp_upsample
         if add_temp_upsample:
-            self.temp_conv_up = TemporalConvBlock(
-                    out_channels,
-                    out_channels,
-                    dropout=0.1,
-                    up_sample=True,
-                    spa_stride=3
-                    )
-
+            self.temp_conv_up = TemporalConvBlock(out_channels, out_channels, dropout=0.1, up_sample=True, spa_stride=3)
 
         if self.add_upsample:
             # self.upsamplers = nn.ModuleList([PSUpsample2D(out_channels, use_conv=True, use_pixel_shuffle=True, out_channels=out_channels)])
             self.upsamplers = nn.ModuleList([Upsample2D(out_channels, use_conv=True, out_channels=out_channels)])
         else:
             self.upsamplers = None
-    
+
     def _set_partial_grad(self):
         for temp_conv in self.temp_convs:
             temp_conv.requires_grad_(True)
@@ -277,23 +264,23 @@ class UpDecoderBlock3D(nn.Module):
 
     def forward(self, hidden_states):
         bz = hidden_states.shape[0]
-        
-        for resnet, temp_conv in zip(self.resnets, self.temp_convs):
-            hidden_states = rearrange(hidden_states, 'b c n h w -> (b n) c h w')
+
+        for resnet, temp_conv in zip(self.resnets, self.temp_convs, strict=False):
+            hidden_states = rearrange(hidden_states, "b c n h w -> (b n) c h w")
             hidden_states = resnet(hidden_states, temb=None)
-            hidden_states = rearrange(hidden_states, '(b n) c h w -> b c n h w', b=bz)
+            hidden_states = rearrange(hidden_states, "(b n) c h w -> b c n h w", b=bz)
             hidden_states = temp_conv(hidden_states)
         if self.add_temp_upsample:
             hidden_states = self.temp_conv_up(hidden_states)
 
         if self.upsamplers is not None:
-            hidden_states = rearrange(hidden_states, 'b c n h w -> (b n) c h w')
+            hidden_states = rearrange(hidden_states, "b c n h w -> (b n) c h w")
             for upsampler in self.upsamplers:
                 hidden_states = upsampler(hidden_states)
-            hidden_states = rearrange(hidden_states, '(b n) c h w -> b c n h w', b=bz)
+            hidden_states = rearrange(hidden_states, "(b n) c h w -> b c n h w", b=bz)
         return hidden_states
 
-    
+
 class UNetMidBlock3DConv(nn.Module):
     def __init__(
         self,
@@ -387,29 +374,26 @@ class UNetMidBlock3DConv(nn.Module):
         self.resnets = nn.ModuleList(resnets)
         self.temp_convs = nn.ModuleList(temp_convs)
         self.attentions = nn.ModuleList(attentions)
-    
+
     def _set_partial_grad(self):
         for temp_conv in self.temp_convs:
             temp_conv.requires_grad_(True)
 
     def forward(
-        self, 
-        hidden_states, 
+        self,
+        hidden_states,
     ):
         bz = hidden_states.shape[0]
-        hidden_states = rearrange(hidden_states, 'b c n h w -> (b n) c h w')
+        hidden_states = rearrange(hidden_states, "b c n h w -> (b n) c h w")
 
         hidden_states = self.resnets[0](hidden_states, temb=None)
-        hidden_states = rearrange(hidden_states, '(b n) c h w -> b c n h w', b=bz)
+        hidden_states = rearrange(hidden_states, "(b n) c h w -> b c n h w", b=bz)
         hidden_states = self.temp_convs[0](hidden_states)
-        hidden_states = rearrange(hidden_states, 'b c n h w -> (b n) c h w')
+        hidden_states = rearrange(hidden_states, "b c n h w -> (b n) c h w")
 
-        for attn, resnet, temp_conv in zip(
-            self.attentions, self.resnets[1:], self.temp_convs[1:]
-        ):
+        for attn, resnet, temp_conv in zip(self.attentions, self.resnets[1:], self.temp_convs[1:], strict=False):
             hidden_states = attn(hidden_states)
             hidden_states = resnet(hidden_states, temb=None)
-            hidden_states = rearrange(hidden_states, '(b n) c h w -> b c n h w', b=bz)
+            hidden_states = rearrange(hidden_states, "(b n) c h w -> b c n h w", b=bz)
             hidden_states = temp_conv(hidden_states)
         return hidden_states
-    

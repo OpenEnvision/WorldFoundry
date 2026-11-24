@@ -3,18 +3,18 @@ title: SimplerEnv
 description: "Real-to-sim evaluation of real-robot policies (SIMPLER). Google Robot and WidowX/Bridge scenes; WorldFoundry imports official rollouts."
 ---
 
-SimplerEnv (SIMPLER — Simulated Manipulation Policy Evaluation for Real Robot Setups) is a **real-to-sim** bench from UC San Diego and Google DeepMind (with Stanford and UC Berkeley). ManiSkill2 / SAPIEN scenes are calibrated so that policies such as **RT-1**, **RT-1-X**, and **Octo** rank in simulation the way they rank on the corresponding **Google Robot** and **WidowX / Bridge** real setups. The point of the suite is that correlation, not a new kitchen asset pack.
+SimplerEnv (SIMPLER — Simulated Manipulation Policy Evaluation for Real Robot Setups) is a **real-to-sim** bench from UC San Diego and Google DeepMind (with Stanford and UC Berkeley). ManiSkill2 / SAPIEN scenes are calibrated so that policies such as **RT-1**, **RT-1-X**, and **Octo** rank in simulation the way they rank on the corresponding **Google Robot** and **WidowX / Bridge** real setups.
 
 Paper: [OpenReview](https://openreview.net/forum?id=LZh48DTg71). Project: [simpler-env.github.io](https://simpler-env.github.io/). Code: [simpler-env/SimplerEnv](https://github.com/simpler-env/SimplerEnv) (MIT).
 
-WorldFoundry **does not run** those scenes. It normalizes official rollout exports into the scorecard. Upstream rollouts still need the ManiSkill2/SAPIEN stack and the embodiment assets. Repo mirror: `cache/vla_va_wam/repos/simpler-env--SimplerEnv`.
+WorldFoundry **does not run** those scenes. It normalizes official rollout exports into the scorecard. Upstream rollouts need the ManiSkill2/SAPIEN stack and the embodiment assets.
 
 <BenchmarkPageSections id="simpler-env" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id simpler-env \
   --mode official-validation \
   --official-results-path <official_results.json> \

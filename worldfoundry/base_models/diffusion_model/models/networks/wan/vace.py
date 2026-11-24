@@ -230,19 +230,14 @@ class VaceWanModel(WanModel):
         if vace_context.ndim != 5:
             raise ValueError(f"Wan VACE context must be BCTHW, got {tuple(vace_context.shape)}")
         if vace_context.shape[0] != x.shape[0] or vace_context.shape[1] != self.vace_in_dim:
-            raise ValueError(
-                "Wan VACE context batch/channels do not match the network: "
-                f"{tuple(vace_context.shape)}"
-            )
+            raise ValueError(f"Wan VACE context batch/channels do not match the network: {tuple(vace_context.shape)}")
         timestep = timestep.reshape(-1)
         if timestep.numel() == 1 and x.shape[0] != 1:
             timestep = timestep.expand(x.shape[0])
         if timestep.numel() != x.shape[0]:
             raise ValueError("Wan VACE timestep must be scalar or have one value per sample")
 
-        time_embedding = self.time_embedding(
-            sinusoidal_embedding_1d(self.freq_dim, timestep).to(dtype=x.dtype)
-        )
+        time_embedding = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, timestep).to(dtype=x.dtype))
         timestep_modulation = self.time_projection(time_embedding).unflatten(1, (6, self.dim))
         context = self.text_embedding(context)
         hidden_states, (frames, height, width) = self.patchify(x)

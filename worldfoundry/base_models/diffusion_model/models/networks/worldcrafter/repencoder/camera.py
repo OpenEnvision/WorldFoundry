@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 
+from worldfoundry.core.geometry.transforms import _sqrt_positive_part as _sqrt_positive_part
 
 NUM_SOURCE_VIEWS = 9
 NUM_TARGET_VIEWS = 4
@@ -33,39 +34,27 @@ def _validate_metric_c2w(
     source_c2w_metric: torch.Tensor,
     target_c2w_metric: torch.Tensor,
 ) -> None:
-    if not isinstance(source_c2w_metric, torch.Tensor) or not isinstance(
-        target_c2w_metric, torch.Tensor
-    ):
+    if not isinstance(source_c2w_metric, torch.Tensor) or not isinstance(target_c2w_metric, torch.Tensor):
         raise TypeError("source and target c2w values must be torch tensors")
     if source_c2w_metric.ndim != 4 or source_c2w_metric.shape[1:] != (
         NUM_SOURCE_VIEWS,
         4,
         4,
     ):
-        raise ValueError(
-            "source_c2w_metric must be [B,9,4,4], got "
-            f"{tuple(source_c2w_metric.shape)}"
-        )
+        raise ValueError(f"source_c2w_metric must be [B,9,4,4], got {tuple(source_c2w_metric.shape)}")
     if target_c2w_metric.ndim != 4 or target_c2w_metric.shape[1:] != (
         NUM_TARGET_VIEWS,
         4,
         4,
     ):
-        raise ValueError(
-            "target_c2w_metric must be [B,4,4,4], got "
-            f"{tuple(target_c2w_metric.shape)}"
-        )
+        raise ValueError(f"target_c2w_metric must be [B,4,4,4], got {tuple(target_c2w_metric.shape)}")
     if source_c2w_metric.shape[0] != target_c2w_metric.shape[0]:
         raise ValueError("source and target camera batches differ")
     if source_c2w_metric.device != target_c2w_metric.device:
         raise ValueError("source and target cameras must share one device")
-    if not torch.is_floating_point(source_c2w_metric) or not torch.is_floating_point(
-        target_c2w_metric
-    ):
+    if not torch.is_floating_point(source_c2w_metric) or not torch.is_floating_point(target_c2w_metric):
         raise TypeError("camera matrices must use a floating-point dtype")
-    if not torch.isfinite(source_c2w_metric).all() or not torch.isfinite(
-        target_c2w_metric
-    ).all():
+    if not torch.isfinite(source_c2w_metric).all() or not torch.isfinite(target_c2w_metric).all():
         raise ValueError("camera matrices contain NaN or Inf")
 
 
@@ -111,9 +100,7 @@ def normalize_source_target_cameras(
         target[..., :3, 3] /= scene_scale[:, None, None]
 
     identity = torch.eye(4, dtype=source.dtype, device=source.device)
-    if not torch.allclose(
-        source[:, 0], identity.expand(source.shape[0], -1, -1), atol=2e-4, rtol=0
-    ):
+    if not torch.allclose(source[:, 0], identity.expand(source.shape[0], -1, -1), atol=2e-4, rtol=0):
         raise RuntimeError("source[0] is not identity after RepEncoder normalization")
     if not torch.isfinite(source).all() or not torch.isfinite(target).all():
         raise FloatingPointError("normalized RepEncoder cameras contain NaN or Inf")
@@ -125,22 +112,11 @@ def normalize_source_target_cameras(
     )
 
 
-def _sqrt_positive_part(value: torch.Tensor) -> torch.Tensor:
-    result = torch.zeros_like(value)
-    positive = value > 0
-    if torch.is_grad_enabled():
-        result[positive] = torch.sqrt(value[positive])
-        return result
-    return torch.where(positive, torch.sqrt(value), result)
-
-
 def _mat_to_quat_scalar_last(matrix: torch.Tensor) -> torch.Tensor:
     if matrix.shape[-2:] != (3, 3):
         raise ValueError(f"invalid rotation matrix shape {tuple(matrix.shape)}")
     batch_shape = matrix.shape[:-2]
-    m00, m01, m02, m10, m11, m12, m20, m21, m22 = torch.unbind(
-        matrix.reshape(*batch_shape, 9), dim=-1
-    )
+    m00, m01, m02, m10, m11, m12, m20, m21, m22 = torch.unbind(matrix.reshape(*batch_shape, 9), dim=-1)
     q_abs = _sqrt_positive_part(
         torch.stack(
             [
@@ -175,9 +151,7 @@ def _mat_to_quat_scalar_last(matrix: torch.Tensor) -> torch.Tensor:
     )
     floor = torch.tensor(0.1, dtype=q_abs.dtype, device=q_abs.device)
     candidates = quat_by_rijk / (2.0 * q_abs[..., None].max(floor))
-    selected = candidates[
-        F.one_hot(q_abs.argmax(dim=-1), num_classes=4) > 0.5, :
-    ].reshape(*batch_shape, 4)
+    selected = candidates[F.one_hot(q_abs.argmax(dim=-1), num_classes=4) > 0.5, :].reshape(*batch_shape, 4)
     selected = selected[..., [1, 2, 3, 0]]
     return torch.where(selected[..., 3:4] < 0, -selected, selected)
 
@@ -203,31 +177,17 @@ def _compute_plucker_rays(
 ) -> torch.Tensor:
     batch, views = target_c2w.shape[:2]
     device = target_c2w.device
-    pixel_x = torch.linspace(
-        0.5, RAY_WIDTH - 0.5, RAY_WIDTH, device=device, dtype=torch.float32
-    )
-    pixel_y = torch.linspace(
-        0.5, RAY_HEIGHT - 0.5, RAY_HEIGHT, device=device, dtype=torch.float32
-    )
+    pixel_x = torch.linspace(0.5, RAY_WIDTH - 0.5, RAY_WIDTH, device=device, dtype=torch.float32)
+    pixel_y = torch.linspace(0.5, RAY_HEIGHT - 0.5, RAY_HEIGHT, device=device, dtype=torch.float32)
     grid_y, grid_x = torch.meshgrid(pixel_y, pixel_x, indexing="ij")
     uv = torch.stack([grid_x, grid_y, torch.ones_like(grid_x)], dim=-1)
     inverse_intrinsics = torch.linalg.inv(target_intrinsics).float()
     directions_local = torch.einsum("bvij,hwj->bvhwi", inverse_intrinsics, uv)
-    directions_local = directions_local / torch.linalg.vector_norm(
-        directions_local, dim=-1, keepdim=True
-    )
-    directions_global = torch.einsum(
-        "bvij,bvhwj->bvhwi", target_c2w[..., :3, :3].float(), directions_local
-    )
-    ray_origin = target_c2w[..., :3, 3].float()[:, :, None, None, :].expand(
-        batch, views, RAY_HEIGHT, RAY_WIDTH, 3
-    )
+    directions_local = directions_local / torch.linalg.vector_norm(directions_local, dim=-1, keepdim=True)
+    directions_global = torch.einsum("bvij,bvhwj->bvhwi", target_c2w[..., :3, :3].float(), directions_local)
+    ray_origin = target_c2w[..., :3, 3].float()[:, :, None, None, :].expand(batch, views, RAY_HEIGHT, RAY_WIDTH, 3)
     moment = torch.cross(ray_origin, directions_global, dim=-1)
-    return (
-        torch.cat([moment, directions_global], dim=-1)
-        .permute(0, 1, 4, 2, 3)
-        .contiguous()
-    )
+    return torch.cat([moment, directions_global], dim=-1).permute(0, 1, 4, 2, 3).contiguous()
 
 
 def prepare_repencoder_camera_conditioning(
@@ -237,9 +197,7 @@ def prepare_repencoder_camera_conditioning(
     near_zero_baseline_m: float = DEFAULT_NEAR_ZERO_BASELINE_M,
     device: torch.device | str | None = None,
 ) -> RepEncoderCameraConditioning:
-    target_device = (
-        source_c2w_metric.device if device is None else torch.device(device)
-    )
+    target_device = source_c2w_metric.device if device is None else torch.device(device)
     with torch.autocast(device_type=target_device.type, enabled=False):
         source_metric = source_c2w_metric.to(device=target_device, dtype=torch.float32)
         target_metric = target_c2w_metric.to(device=target_device, dtype=torch.float32)
@@ -293,10 +251,10 @@ def prepare_repencoder_camera_conditioning(
 __all__ = [
     "CAMERA_SCALE_MULTIPLIER",
     "DEFAULT_NEAR_ZERO_BASELINE_M",
-    "RepEncoderCameraConditioning",
     "NUM_SOURCE_VIEWS",
     "NUM_TARGET_VIEWS",
     "RAY_HW",
+    "RepEncoderCameraConditioning",
     "normalize_source_target_cameras",
     "prepare_repencoder_camera_conditioning",
 ]

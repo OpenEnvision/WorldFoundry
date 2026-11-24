@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from .base import VideoCrafterPipelineBase
 from ...synthesis.visual_generation.videocrafter.videocrafter1_i2v_synthesis import VideoCrafter1I2VSynthesis
+from .base import VideoCrafterPipelineBase
 
 
 class VideoCrafter1I2VPipeline(VideoCrafterPipelineBase):

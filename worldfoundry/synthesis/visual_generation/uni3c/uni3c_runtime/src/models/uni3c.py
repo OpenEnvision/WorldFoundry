@@ -14,7 +14,7 @@
 import math
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, ClassVar
 
 import torch
 import torch.nn as nn
@@ -38,13 +38,13 @@ from diffusers.utils import (
     unscale_lora_layers,
 )
 
-from src.models.pcd_controller import MaskCamEmbed, WanXControlNet
-from src.xfuser_compat import (
+from ..xfuser_compat import (
     get_sequence_parallel_rank,
     get_sequence_parallel_world_size,
     get_sp_group,
     long_context_attention,
 )
+from .pcd_controller import MaskCamEmbed, WanXControlNet
 
 try:
     from diffusers.models.controlnet import zero_module
@@ -68,9 +68,9 @@ class AttnProcessorSP:
         self,
         attn: Attention,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        rotary_emb: Optional[torch.Tensor] = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        rotary_emb: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if encoder_hidden_states is None:
             encoder_hidden_states = hidden_states
@@ -105,13 +105,12 @@ class AttnProcessorSP:
             # convert to half
             def half(x):
                 return x if x.dtype in (torch.float16, torch.bfloat16) else x.to(torch.bfloat16)
+
             original_dtype = query.dtype
             query, key, value = half(query), half(key), half(value)
 
             # do attention
-            hidden_states = long_context_attention(
-                None, query=query, key=key, value=value
-            )
+            hidden_states = long_context_attention(None, query=query, key=key, value=value)
             # convert back
             hidden_states = hidden_states.flatten(2, 3)
             hidden_states = hidden_states.to(original_dtype)
@@ -162,25 +161,28 @@ class ShiftedWanRotaryPosEmbed(WanRotaryPosEmbed):
 
         if shift_f:
             # This solution is ugly. We will design new RoPE for condition insertion in the future.
-            cond_freqs_f = ori_freqs[0][shift_f_size:shift_f_size + cond_ppf].view(
-                cond_ppf, 1, 1, -1).expand(cond_ppf, cond_pph, cond_ppw, -1)
+            cond_freqs_f = (
+                ori_freqs[0][shift_f_size : shift_f_size + cond_ppf]
+                .view(cond_ppf, 1, 1, -1)
+                .expand(cond_ppf, cond_pph, cond_ppw, -1)
+            )
         else:
-            cond_freqs_f = ori_freqs[0][:cond_ppf].view(
-                cond_ppf, 1, 1, -1).expand(cond_ppf, cond_pph, cond_ppw, -1)
+            cond_freqs_f = ori_freqs[0][:cond_ppf].view(cond_ppf, 1, 1, -1).expand(cond_ppf, cond_pph, cond_ppw, -1)
         if shift_h:
-            cond_freqs_h = ori_freqs[1][pph:pph + cond_pph].view(
-                1, cond_pph, 1, -1).expand(cond_ppf, cond_pph, cond_ppw, -1)
+            cond_freqs_h = (
+                ori_freqs[1][pph : pph + cond_pph].view(1, cond_pph, 1, -1).expand(cond_ppf, cond_pph, cond_ppw, -1)
+            )
         else:
-            cond_freqs_h = ori_freqs[1][:cond_pph].view(
-                1, cond_pph, 1, -1).expand(cond_ppf, cond_pph, cond_ppw, -1)
+            cond_freqs_h = ori_freqs[1][:cond_pph].view(1, cond_pph, 1, -1).expand(cond_ppf, cond_pph, cond_ppw, -1)
         if shift_w:
-            cond_freqs_w = ori_freqs[2][ppw:ppw + cond_ppw].view(
-                1, 1, cond_ppw, -1).expand(cond_ppf, cond_pph, cond_ppw, -1)
+            cond_freqs_w = (
+                ori_freqs[2][ppw : ppw + cond_ppw].view(1, 1, cond_ppw, -1).expand(cond_ppf, cond_pph, cond_ppw, -1)
+            )
         else:
-            cond_freqs_w = ori_freqs[2][:cond_ppw].view(
-                1, 1, cond_ppw, -1).expand(cond_ppf, cond_pph, cond_ppw, -1)
-        cond_freqs = torch.cat(
-            [cond_freqs_f, cond_freqs_h, cond_freqs_w], dim=-1).reshape(1, 1, cond_ppf * cond_pph * cond_ppw, -1)
+            cond_freqs_w = ori_freqs[2][:cond_ppw].view(1, 1, cond_ppw, -1).expand(cond_ppf, cond_pph, cond_ppw, -1)
+        cond_freqs = torch.cat([cond_freqs_f, cond_freqs_h, cond_freqs_w], dim=-1).reshape(
+            1, 1, cond_ppf * cond_pph * cond_ppw, -1
+        )
 
         final_freqs = torch.cat((freqs, cond_freqs), dim=2)  # cat along sequence length
 
@@ -194,63 +196,63 @@ class RealisDanceDiTOutput(BaseOutput):
 
 class RealisDanceDiT(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalModelMixin, CacheMixin):
     r"""
-        A Transformer model for video-like data used in the Wan model.
+    A Transformer model for video-like data used in the Wan model.
 
-        Args:
-            patch_size (`Tuple[int]`, defaults to `(1, 2, 2)`):
-                3D patch dimensions for video embedding (t_patch, h_patch, w_patch).
-            num_attention_heads (`int`, defaults to `40`):
-                Fixed length for text embeddings.
-            attention_head_dim (`int`, defaults to `128`):
-                The number of channels in each head.
-            in_channels (`int`, defaults to `16`):
-                The number of channels in the input.
-            out_channels (`int`, defaults to `16`):
-                The number of channels in the output.
-            text_dim (`int`, defaults to `512`):
-                Input dimension for text embeddings.
-            freq_dim (`int`, defaults to `256`):
-                Dimension for sinusoidal time embeddings.
-            ffn_dim (`int`, defaults to `13824`):
-                Intermediate dimension in feed-forward network.
-            num_layers (`int`, defaults to `40`):
-                The number of layers of transformer blocks to use.
-            window_size (`Tuple[int]`, defaults to `(-1, -1)`):
-                Window size for local attention (-1 indicates global attention).
-            cross_attn_norm (`bool`, defaults to `True`):
-                Enable cross-attention normalization.
-            qk_norm (`bool`, defaults to `True`):
-                Enable query/key normalization.
-            eps (`float`, defaults to `1e-6`):
-                Epsilon value for normalization layers.
-            add_img_emb (`bool`, defaults to `False`):
-                Whether to use img_emb.
-            added_kv_proj_dim (`int`, *optional*, defaults to `None`):
-                The number of channels to use for the added key and value projections. If `None`, no projection is used.
+    Args:
+        patch_size (`Tuple[int]`, defaults to `(1, 2, 2)`):
+            3D patch dimensions for video embedding (t_patch, h_patch, w_patch).
+        num_attention_heads (`int`, defaults to `40`):
+            Fixed length for text embeddings.
+        attention_head_dim (`int`, defaults to `128`):
+            The number of channels in each head.
+        in_channels (`int`, defaults to `16`):
+            The number of channels in the input.
+        out_channels (`int`, defaults to `16`):
+            The number of channels in the output.
+        text_dim (`int`, defaults to `512`):
+            Input dimension for text embeddings.
+        freq_dim (`int`, defaults to `256`):
+            Dimension for sinusoidal time embeddings.
+        ffn_dim (`int`, defaults to `13824`):
+            Intermediate dimension in feed-forward network.
+        num_layers (`int`, defaults to `40`):
+            The number of layers of transformer blocks to use.
+        window_size (`Tuple[int]`, defaults to `(-1, -1)`):
+            Window size for local attention (-1 indicates global attention).
+        cross_attn_norm (`bool`, defaults to `True`):
+            Enable cross-attention normalization.
+        qk_norm (`bool`, defaults to `True`):
+            Enable query/key normalization.
+        eps (`float`, defaults to `1e-6`):
+            Epsilon value for normalization layers.
+        add_img_emb (`bool`, defaults to `False`):
+            Whether to use img_emb.
+        added_kv_proj_dim (`int`, *optional*, defaults to `None`):
+            The number of channels to use for the added key and value projections. If `None`, no projection is used.
 
-            # Adiitional Args for RealisDance-DiT
-            add_cond_in_dim (`int`, defaults to 16 * num_cond):
-                Input dimension for pose condition embeddings.
-            attn_cond_in_dim (`int`, defaults to 16):
-                Input dimension for reference image embeddings.
-            shift_f (`bool`, defaults to `True`):
-                Enable shifted RoPE for frame dimension.
-            shift_h (`bool`, defaults to `True`):
-                Enable shifted RoPE for height dimension.
-            shift_w (`bool`, defaults to `True`):
-                Enable shifted RoPE for width dimension.
-        """
+        # Adiitional Args for RealisDance-DiT
+        add_cond_in_dim (`int`, defaults to 16 * num_cond):
+            Input dimension for pose condition embeddings.
+        attn_cond_in_dim (`int`, defaults to 16):
+            Input dimension for reference image embeddings.
+        shift_f (`bool`, defaults to `True`):
+            Enable shifted RoPE for frame dimension.
+        shift_h (`bool`, defaults to `True`):
+            Enable shifted RoPE for height dimension.
+        shift_w (`bool`, defaults to `True`):
+            Enable shifted RoPE for width dimension.
+    """
 
     _supports_gradient_checkpointing = True
-    _skip_layerwise_casting_patterns = ["patch_embedding", "condition_embedder", "norm"]
-    _no_split_modules = ["WanTransformerBlock"]
-    _keep_in_fp32_modules = ["time_embedder", "scale_shift_table", "norm1", "norm2", "norm3"]
-    _keys_to_ignore_on_load_unexpected = ["norm_added_q"]
+    _skip_layerwise_casting_patterns: ClassVar[list] = ["patch_embedding", "condition_embedder", "norm"]
+    _no_split_modules: ClassVar[list] = ["WanTransformerBlock"]
+    _keep_in_fp32_modules: ClassVar[list] = ["time_embedder", "scale_shift_table", "norm1", "norm2", "norm3"]
+    _keys_to_ignore_on_load_unexpected: ClassVar[list] = ["norm_added_q"]
 
     @register_to_config
     def __init__(
         self,
-        patch_size: Tuple[int, int, int] = (1, 2, 2),
+        patch_size: tuple[int, int, int] = (1, 2, 2),
         num_attention_heads: int = 40,
         attention_head_dim: int = 128,
         in_channels: int = 36,
@@ -260,17 +262,17 @@ class RealisDanceDiT(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalMode
         ffn_dim: int = 13824,
         num_layers: int = 40,
         cross_attn_norm: bool = True,
-        qk_norm: Optional[str] = "rms_norm_across_heads",
+        qk_norm: str | None = "rms_norm_across_heads",
         eps: float = 1e-6,
-        image_dim: Optional[int] = None,
-        added_kv_proj_dim: Optional[int] = None,
+        image_dim: int | None = None,
+        added_kv_proj_dim: int | None = None,
         rope_max_seq_len: int = 1024,
         add_cond_in_dim: int = 32,
         attn_cond_in_dim: int = 16,
         shift_f: bool = True,
         shift_h: bool = True,
         shift_w: bool = True,
-        controlnet_cfg=None
+        controlnet_cfg=None,
     ) -> None:
         super().__init__()
 
@@ -294,13 +296,9 @@ class RealisDanceDiT(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalMode
             text_embed_dim=text_dim,
             image_embed_dim=image_dim,
         )
-        self.add_conv_in = nn.Conv3d(
-            add_cond_in_dim, inner_dim,
-            kernel_size=patch_size, stride=patch_size)
+        self.add_conv_in = nn.Conv3d(add_cond_in_dim, inner_dim, kernel_size=patch_size, stride=patch_size)
         self.add_proj = zero_module(nn.Linear(inner_dim, inner_dim))
-        self.attn_conv_in = nn.Conv3d(
-            attn_cond_in_dim, inner_dim,
-            kernel_size=patch_size, stride=patch_size)
+        self.attn_conv_in = nn.Conv3d(attn_cond_in_dim, inner_dim, kernel_size=patch_size, stride=patch_size)
 
         # 3. Transformer blocks
         self.blocks = nn.ModuleList(
@@ -315,7 +313,7 @@ class RealisDanceDiT(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalMode
         # 4. Output norm & projection
         self.norm_out = FP32LayerNorm(inner_dim, eps, elementwise_affine=False)
         self.proj_out = nn.Linear(inner_dim, out_channels * math.prod(patch_size))
-        self.scale_shift_table = nn.Parameter(torch.randn(1, 2, inner_dim) / inner_dim ** 0.5)
+        self.scale_shift_table = nn.Parameter(torch.randn(1, 2, inner_dim) / inner_dim**0.5)
 
         self.gradient_checkpointing = False
         self.sp_degree = 1
@@ -327,13 +325,13 @@ class RealisDanceDiT(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalMode
         )
         self.controlnet_mask_embedding = MaskCamEmbed(self.controlnet_cfg)
         self.controlnet = WanXControlNet(self.controlnet_cfg)
-        self.controlnet_rope = WanRotaryPosEmbed(self.controlnet_cfg.dim // self.controlnet_cfg.num_heads,
-                                                 self.patch_size, self.rope_max_seq_len)
+        self.controlnet_rope = WanRotaryPosEmbed(
+            self.controlnet_cfg.dim // self.controlnet_cfg.num_heads, self.patch_size, self.rope_max_seq_len
+        )
 
         if not os.path.isfile(model_path):
             raise FileNotFoundError(
-                f"Uni3C controlnet is not staged locally: {model_path}. "
-                "Runtime downloads are disabled."
+                f"Uni3C controlnet is not staged locally: {model_path}. Runtime downloads are disabled."
             )
         state_dict = torch.load(model_path, map_location="cpu", weights_only=True)
 
@@ -358,15 +356,15 @@ class RealisDanceDiT(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalMode
         hidden_states: torch.Tensor,
         timestep: torch.LongTensor,
         encoder_hidden_states: torch.Tensor,
-        encoder_hidden_states_image: Optional[torch.Tensor] = None,
+        encoder_hidden_states_image: torch.Tensor | None = None,
         return_dict: bool = True,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
-        add_cond: Optional[torch.Tensor] = None,
-        attn_cond: Optional[torch.Tensor] = None,
+        attention_kwargs: dict[str, Any] | None = None,
+        add_cond: torch.Tensor | None = None,
+        attn_cond: torch.Tensor | None = None,
         render_latent=None,
         render_mask=None,
         camera_embedding=None,
-    ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+    ) -> torch.Tensor | dict[str, torch.Tensor]:
         if attention_kwargs is not None:
             attention_kwargs = attention_kwargs.copy()
             lora_scale = attention_kwargs.pop("scale", 1.0)
@@ -378,9 +376,7 @@ class RealisDanceDiT(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalMode
             scale_lora_layers(self, lora_scale)
         else:
             if attention_kwargs is not None and attention_kwargs.get("scale", None) is not None:
-                logger.warning(
-                    "Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective."
-                )
+                logger.warning("Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective.")
 
         batch_size, num_channels, num_frames, height, width = hidden_states.shape
         p_t, p_h, p_w = self.config.patch_size
@@ -395,10 +391,7 @@ class RealisDanceDiT(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalMode
         controlnet_inputs = controlnet_inputs.flatten(2).transpose(1, 2)
 
         # additional inputs (mask, camera embedding)
-        if camera_embedding is not None:
-            add_inputs = torch.cat([render_mask, camera_embedding], dim=1)
-        else:
-            add_inputs = render_mask
+        add_inputs = torch.cat([render_mask, camera_embedding], dim=1) if camera_embedding is not None else render_mask
         add_inputs = self.controlnet_mask_embedding(add_inputs)
         controlnet_inputs = controlnet_inputs + add_inputs
         ### process controlnet inputs over ###
@@ -428,12 +421,14 @@ class RealisDanceDiT(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalMode
         if self.sp_degree > 1:
             assert controlnet_inputs.shape[1] % self.sp_degree == 0
             controlnet_inputs = torch.chunk(controlnet_inputs, self.sp_degree, dim=1)[get_sequence_parallel_rank()]
-            controlnet_rotary_emb = torch.chunk(controlnet_rotary_emb, self.sp_degree, dim=2)[get_sequence_parallel_rank()]
+            controlnet_rotary_emb = torch.chunk(controlnet_rotary_emb, self.sp_degree, dim=2)[
+                get_sequence_parallel_rank()
+            ]
 
         with torch.autocast("cuda", dtype=self.dtype, enabled=True):
-            controlnet_states = self.controlnet(hidden_states=controlnet_inputs,
-                                                temb=temb,
-                                                rotary_emb=controlnet_rotary_emb)
+            controlnet_states = self.controlnet(
+                hidden_states=controlnet_inputs, temb=temb, rotary_emb=controlnet_rotary_emb
+            )
         if self.sp_degree > 1:
             controlnet_states = [get_sp_group().all_gather(cs, dim=1) for cs in controlnet_states]
         ### controlnet encoding over ###
@@ -447,20 +442,28 @@ class RealisDanceDiT(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalMode
                 # TODO: But currently, xFuserLongContextAttention does not support attention mask.
                 padding_num = self.sp_degree - original_seq_len % self.sp_degree
                 hidden_states = torch.cat(
-                    [hidden_states, hidden_states.new_zeros(
-                        hidden_states.shape[0], padding_num, hidden_states.shape[2])], dim=1)
+                    [
+                        hidden_states,
+                        hidden_states.new_zeros(hidden_states.shape[0], padding_num, hidden_states.shape[2]),
+                    ],
+                    dim=1,
+                )
                 rotary_emb = torch.cat(
-                    [rotary_emb, rotary_emb.new_zeros(
-                        rotary_emb.shape[0], rotary_emb.shape[1], padding_num, rotary_emb.shape[-1])], dim=2)
+                    [
+                        rotary_emb,
+                        rotary_emb.new_zeros(
+                            rotary_emb.shape[0], rotary_emb.shape[1], padding_num, rotary_emb.shape[-1]
+                        ),
+                    ],
+                    dim=2,
+                )
             hidden_states = torch.chunk(hidden_states, self.sp_degree, dim=1)[get_sequence_parallel_rank()]
             rotary_emb = torch.chunk(rotary_emb, self.sp_degree, dim=2)[get_sequence_parallel_rank()]
 
         def _block_forward(x):
             if torch.is_grad_enabled() and self.gradient_checkpointing:
                 for i, block in enumerate(self.blocks):
-                    x = self._gradient_checkpointing_func(
-                        block, x, encoder_hidden_states, timestep_proj, rotary_emb
-                    )
+                    x = self._gradient_checkpointing_func(block, x, encoder_hidden_states, timestep_proj, rotary_emb)
                     # adding control features
                     if i < len(controlnet_states):
                         if self.sp_degree > 1:
@@ -484,7 +487,6 @@ class RealisDanceDiT(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalMode
                         if self.sp_degree > 1:
                             x = torch.chunk(x, self.sp_degree, dim=1)[get_sequence_parallel_rank()]
             return x
-
 
         hidden_states = _block_forward(hidden_states)
 

@@ -5,23 +5,23 @@ modelId: "act"
 pageSource: authored
 ---
 
-ACT（Action Chunking Transformer）是 ALOHA 的模仿策略：不逐步给一个关节目标，而是一次输出短视野的未来动作，让控制更平滑。测试时丢掉 CVAE 编码器，风格隐变量取先验均值（零）。官方论文是 [Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware](https://arxiv.org/abs/2304.13705)（arXiv 2304.13705）。项目页：[tonyzhaozh.github.io/aloha](https://tonyzhaozh.github.io/aloha/)。代码在 [tonyzhaozh/act](https://github.com/tonyzhaozh/act)。
+ACT（Action Chunking Transformer）是 ALOHA 的模仿策略：不逐步输出单个关节目标，而是一次输出短时段内的未来动作，让控制更平滑。测试时丢掉 CVAE 编码器，风格隐变量取先验均值（零）。官方论文是 [Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware](https://arxiv.org/abs/2304.13705)（arXiv 2304.13705）。项目页：[tonyzhaozh.github.io/aloha](https://tonyzhaozh.github.io/aloha/)。代码在 [tonyzhaozh/act](https://github.com/tonyzhaozh/act)。
 
 <ModelPaperFigures modelId="act" locale="zh" />
 
-WorldFoundry 在 `worldfoundry/synthesis/action_generation/act` 下保留完整推理栈——DETR-VAE、transformer 编解码器、ResNet-18 骨干、预处理与时间聚合。**没有 catalog variant，也没有官方权重文件**。checkpoint 驱动的 `predict_action` 已实现；它只卡在调用方就位的 `policy_best.ckpt` 与匹配的 `dataset_stats.pkl`。静态与 CPU 契约检查已通过。别名 `action-chunking-transformer` 指到这里。
+WorldFoundry 运行完整推理栈：DETR-VAE、transformer 编解码器、ResNet-18 骨干、预处理与时间聚合。**没有变体，也没有官方权重文件**：checkpoint 驱动的 `predict_action` 需要调用方准备好 `policy_best.ckpt` 与匹配的 `dataset_stats.pkl`。静态与 CPU 契约检查已通过。别名 `action-chunking-transformer` 解析到 `act`。
 
 <ModelCommandBuilder modelId="act" locale="zh" />
 
 ## 用来做什么
 
-把 ACT 当固定本体的 **动作分块** 基线——不是开放词汇 VLA。记录的输入是 RGB（`image`）和 `instruction`；`prompt` 不用。pipeline 是 `ACTPipeline`；产物是 `act_action_trace.json`。本 catalog 里最自然的本地目标，是你自己训练或 stage 的 scripted sim transfer-cube 策略，再和留出示范对比。
+把 ACT 当作固定本体的**动作分块**基线，它不是开放词汇 VLA。记录的输入是 RGB（`image`）和 `instruction`；`prompt` 不用。pipeline 是 `ACTPipeline`；产物是 `act_action_trace.json`。在本地，最适合用它运行你自行训练或准备好的 scripted sim transfer-cube 策略，再与留出示范对比。
 
-在接入更大的语言条件栈之前，用这一页核对 runner 一致性、checkpoint staging 与分块契约。
+在接入更大的语言条件栈之前，先用它检查 checkpoint 是否准备妥当以及分块契约。
 
 ## 运行时契约
 
-树内默认（不是下载来的 checkpoint）：
+树内默认：
 
 - 相机：`cam_head`、`cam_right_wrist`、`cam_left_wrist`
 - 本体感知：**`state_dim` 14**（两条 7 自由度臂）
@@ -30,20 +30,20 @@ WorldFoundry 在 `worldfoundry/synthesis/action_generation/act` 下保留完整�
 
 论文里 ALOHA 硬件写的是四路 480×640、50 Hz，并讨论真机 90 步块。那是上游硬件，不是上面的 WorldFoundry 配置。动作是 `action_chunk`，外加本体 / 动作空间元数据。
 
-权重放这里：
+权重路径：
 
 `${WORLDFOUNDRY_CKPT_DIR}/embodied_action/act/sim_transfer_cube_scripted/policy_best.ckpt`
 
-旁边放匹配的 `dataset_stats.pkl`。PyTorch 以 `weights_only=true` 和严格键加载。统计文件用仅 NumPy 读取器——不执行上游 pickle。
+同目录下放置匹配的 `dataset_stats.pkl`。PyTorch 以 `weights_only=true` 和严格键加载。统计文件用仅 NumPy 读取器——不执行上游 pickle。
 
 ## 在 WorldFoundry 中运行
 
-独立环境 `worldfoundry-act`（Python 3.10，CUDA 11.8 或更新）。运行时不下载任何包或 checkpoint。就位后：
+独立环境 `worldfoundry-act`（Python 3.10，CUDA 11.8 或更新）。准备好 checkpoint 与统计文件后：
 
 ```
-worldfoundry-eval run act
+wf run act
 ```
 
-本仓库未记录许可证。生产使用前请确认上游 ACT / ALOHA 条款。
+ACT 没有记录许可证。生产使用前请确认上游 ACT / ALOHA 条款。
 
 <ModelRelatedRecipes modelId="act" locale="zh" />

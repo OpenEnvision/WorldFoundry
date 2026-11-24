@@ -1,36 +1,36 @@
 ---
 title: Benchmark Hub
-description: "按「实际测什么」选 benchmark，再打开由 manifest 生成的配方——导入、打分或闭环——不编造排名。"
+description: "按实际测量内容选 benchmark，再打开对应配方：官方导入、仓内打分或闭环。"
 ---
 
-这个 Hub 是**配方索引**，不是排行榜站。每张卡片来自 benchmark catalog 与 task manifest：套件测什么、需要哪些文件、WorldFoundry 哪条路径是真的（官方导入、仓内打分，或闭环）。它**不会编造排名**。详情页在有作者维护的实时榜时链出去，否则引用论文表或如实写明缺失。
+这个 Hub 是**配方索引**。每张卡片说明套件测什么、需要哪些文件，以及 WorldFoundry 如何运行它（官方导入、仓内打分或闭环）。详情页在有作者维护的实时榜时链出去，否则引用论文表。
 
 <BenchmarkRecipeCatalog locale="zh" />
 
 ## 怎么选
 
-先想清楚要检验的主张，再打开对应配方——不要先装独立环境。
+先明确要验证的主张，再打开对应配方——不要先安装独立环境。
 
-- **终身 / 知识迁移操作** — [LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（Franka 桌面上的四个套件）。厨房相关看 [RoboCasa](/zh/docs/evaluation/benchmark-hub/robocasa)。
-- **GPU 并行技能族** — [ManiSkill](/zh/docs/evaluation/benchmark-hub/maniskill)（SAPIEN）。WorldFoundry 导入 rollout，不替代模拟器。
-- **长时程语言链** — [CALVIN](/zh/docs/evaluation/benchmark-hub/calvin)（A/B/C → D，链长度 1–5 的成功率）。
-- **真机到仿真的策略排序** — [SimplerEnv](/zh/docs/evaluation/benchmark-hub/simpler-env)（按真机标定的 Google Robot 与 WidowX/Bridge）。
-- **带逻辑目标的家务活动** — [BEHAVIOR-1K](/zh/docs/evaluation/benchmark-hub/behavior1k)（OmniGibson 中 1000 项 BDDL 活动）。
-- **视频模型会不会续写真实物理** — [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)（5 秒续写；仓内打分器）。只有当你要的就是那套协议时，才配 [Physics-IQ Verified](/zh/docs/evaluation/benchmark-hub/physics-iq-verified)——媒体不可互换。
-- **开源文生视频片段质量 / 组合** — [VBench](/zh/docs/evaluation/benchmark-hub/vbench)、[T2V-CompBench](/zh/docs/evaluation/benchmark-hub/t2v-compbench)、[FETV](/zh/docs/evaluation/benchmark-hub/fetv)。
+- **终身 / 知识迁移操作**：[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（Franka 桌面上的四个套件）。厨房相关看 [RoboCasa](/zh/docs/evaluation/benchmark-hub/robocasa)。
+- **GPU 并行技能族**：[ManiSkill](/zh/docs/evaluation/benchmark-hub/maniskill)（SAPIEN）。WorldFoundry 导入 rollout，不替代模拟器。
+- **长时程语言链**：[CALVIN](/zh/docs/evaluation/benchmark-hub/calvin)（A/B/C → D，链长度 1–5 的成功率）。
+- **真机到仿真的策略排序**：[SimplerEnv](/zh/docs/evaluation/benchmark-hub/simpler-env)（按真机标定的 Google Robot 与 WidowX/Bridge）。
+- **带逻辑目标的家务活动**：[BEHAVIOR-1K](/zh/docs/evaluation/benchmark-hub/behavior1k)（OmniGibson 中 1000 项 BDDL 活动）。
+- **视频模型能否续写真实物理**：[Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)（5 秒续写；仓内打分器）。只有当你要的就是那套协议时，才选择 [Physics-IQ Verified](/zh/docs/evaluation/benchmark-hub/physics-iq-verified)——媒体不可互换。
+- **开源文生视频片段质量 / 组合**：[VBench](/zh/docs/evaluation/benchmark-hub/vbench)、[T2V-CompBench](/zh/docs/evaluation/benchmark-hub/t2v-compbench)、[FETV](/zh/docs/evaluation/benchmark-hub/fetv)。
 
-安装 benchmark-specific package 前先看[运行环境矩阵](/zh/docs/evaluation/benchmark-hub/runtime-environments)。它区分统一环境、仓库管理的独立环境、托管 judge，以及按维度划分的 native/checkpoint 栈。
+安装 benchmark 专用依赖前先看[运行环境矩阵](/zh/docs/evaluation/benchmark-hub/runtime-environments)。它区分统一环境、仓库管理的独立环境、托管 judge，以及按维度划分的 native/checkpoint 栈。
 
 ## 每个配方记录什么
 
 <RecipeRecords items={[
   {
     term: '评测维度',
-    detail: '目录真正记录的任务、评测轴、套件、赛道或划分——不是营销标签。',
+    detail: 'benchmark 定义的任务、评测轴、套件、赛道或划分。',
   },
   {
     term: '数据组成',
-    detail: '已记录的 prompt / 任务规模、数据来源、模态与许可证。',
+    detail: 'prompt / 任务规模、数据来源、模态与许可证（如有）。',
   },
   {
     term: '指标',
@@ -38,7 +38,7 @@ description: "按「实际测什么」选 benchmark，再打开由 manifest 生�
   },
   {
     term: 'Leaderboard',
-    detail: '有作者维护的实时榜则链出去；否则引用论文表。目录收录不等于 WorldFoundry 排名。',
+    detail: '有作者维护的实时榜则链出去；否则引用论文表。收录于此不代表 WorldFoundry 排名。',
   },
   {
     term: '如何运行',
@@ -46,16 +46,16 @@ description: "按「实际测什么」选 benchmark，再打开由 manifest 生�
   },
 ]} />
 
-## 如何运行一个 Benchmark
+## 如何运行一个 benchmark
 
-先打开配方。Prompt 文件、generated-artifact 布局、checkpoint 名称、judge model 和 official result 格式都是 benchmark-specific 的。
+先打开配方。Prompt 文件、生成产物布局、checkpoint 名称、judge 模型和官方结果格式都因 benchmark 而异。
 
-### 导入 Official Result 文件
+### 导入官方结果文件
 
-配方写明 WorldFoundry **归一化**上游导出、不跑模拟器时用这条。
+当配方说明 WorldFoundry **归一化**上游导出、不运行模拟器时，使用此命令。
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --mode official-validation \
   --official-results-path <official-result-file-or-dir> \
@@ -66,10 +66,10 @@ worldfoundry-eval zoo benchmark-run \
 
 ### 在仓内给生成产物打分
 
-只有配方明确说仓内 runtime 能从 generated artifacts 重算分数，并且所需媒体或 checkpoint 已就位时，才用 `official-run`。常见例子是 Physics-IQ。
+只有配方明确说仓内 runtime 能从生成产物重算分数，并且所需媒体或 checkpoint 已就位时，才用 `official-run`。常见例子是 Physics-IQ。
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --mode official-run \
   --generated-artifact-dir <generated-artifact-dir> \
@@ -77,10 +77,10 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-需要先用已注册模型生成 artifact 时：
+需要先用已注册模型生成产物时：
 
 ```bash
-worldfoundry-eval run \
+wf run \
   --benchmark <benchmark-id> \
   --model <model-id> \
   --mode official-run \

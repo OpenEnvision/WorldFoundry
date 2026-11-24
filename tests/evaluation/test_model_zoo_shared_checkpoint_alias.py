@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from worldfoundry.evaluation.models.catalog.schema import ModelZooEntry
-from worldfoundry.evaluation.models.catalog.zoo_registry import (
+from worldfoundry.zoo.catalog.schema import ModelZooEntry
+from worldfoundry.zoo.catalog.zoo_registry import (
     ModelZooRegistry,
     UnknownModelZooKeyError,
 )
@@ -16,9 +16,7 @@ def _entry(model_id: str, name: str) -> ModelZooEntry:
             "name": name,
             "aliases": [f"{model_id}-alias"],
             "integration": {"status": "integrated"},
-            "checkpoint_refs": [
-                {"repo_id": "example/shared-checkpoints", "filename": f"{model_id}.safetensors"}
-            ],
+            "checkpoint_refs": [{"repo_id": "example/shared-checkpoints", "filename": f"{model_id}.safetensors"}],
         }
     )
 

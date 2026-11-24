@@ -3,13 +3,13 @@ title: PhysVidBench
 description: "Caption-mediated T2V QA: 383 prompts, physics yes/no questions about AuroraCap captions. WorldFoundry imports output.csv or runs Gemini on captions you supply."
 ---
 
-PhysVidBench (Koç University / Cyberiada) is **caption-mediated QA**, not pixel matching and not PhyGenEval. A T2V model generates a video; upstream **AuroraCap** captions it; an LLM answers physics **yes/no** questions about that caption (affordance, tool use, materials, temporal dynamics). Catalog records **383 prompts** and **4123 questions** (`cc-by-4.0`).
+PhysVidBench (Koç University / Cyberiada) is **caption-mediated QA**, not pixel matching and not PhyGenEval. A T2V model generates a video; upstream **AuroraCap** captions it; an LLM answers physics **yes/no** questions about that caption (affordance, tool use, materials, temporal dynamics). The suite has **383 prompts** and **4123 questions** (`cc-by-4.0`).
 
-[PhyGenBench](/docs/evaluation/benchmark-hub/phygenbench) judges the video with VQAScore/VLM stages. [PhyGround](/docs/evaluation/benchmark-hub/phyground) applies 1–5 law criteria. PhysVidBench never looks at pixels in tree — only captions + questions.
+[PhyGenBench](/docs/evaluation/benchmark-hub/phygenbench) judges the video with VQAScore/VLM stages. [PhyGround](/docs/evaluation/benchmark-hub/phyground) applies 1–5 law criteria. PhysVidBench scores captions and questions only, never pixels.
 
 Paper: [PhysVidBench](https://arxiv.org/abs/2507.15824). Project: [cyberiada.github.io/PhysVidBench](https://cyberiada.github.io/PhysVidBench/). Code: [ensanli/PhysVidBenchCode](https://github.com/ensanli/PhysVidBenchCode). Data: [Anonymousny/PhysVidBench](https://huggingface.co/datasets/Anonymousny/PhysVidBench).
 
-WorldFoundry bundles `prompts_questions.csv` and caption tracks. It **imports** upstream `output.csv`, or runs **bounded Gemini QA** on captions you supply. It does **not** run AuroraCap on your videos and cannot prove those captions came from them.
+WorldFoundry bundles `prompts_questions.csv` and caption tracks. It **imports** upstream `output.csv`, or runs **Gemini QA** on captions you supply. It does **not** run AuroraCap on your videos.
 
 <BenchmarkPageSections id="physvidbench" locale="en" />
 
@@ -18,7 +18,7 @@ WorldFoundry bundles `prompts_questions.csv` and caption tracks. It **imports** 
 Import an upstream QA export:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id physvidbench \
   --mode official-validation \
   --official-results-path <output.csv> \
@@ -27,11 +27,11 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-Bounded Gemini QA over supplied (or bundled) captions — not official pipeline evidence:
+Gemini QA over supplied (or bundled) captions; results are not comparable to the official pipeline:
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --captions-dir worldfoundry/data/benchmarks/assets/physvidbench/captions \

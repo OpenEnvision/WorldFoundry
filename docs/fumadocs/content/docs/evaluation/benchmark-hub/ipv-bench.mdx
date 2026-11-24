@@ -1,6 +1,6 @@
 ---
 title: IPV-Bench
-description: "NUS Show Lab impossible-video bench: generate and recognize physically impossible events. WorldFoundry normalizes official CSV/JSON; it does not invent a board."
+description: "NUS Show Lab impossible-video bench: generate and recognize physically impossible events. WorldFoundry normalizes official CSV/JSON exports."
 ---
 
 IPV-Bench (Impossible Videos; Show Lab, NUS) flips the usual physics question. It asks whether models can **depict** counterfactual, physically impossible events — and whether video-understanding models can **recognize** them. The taxonomy covers physical, biological, geographical, and social impossibilities. Two tracks:
@@ -12,14 +12,14 @@ IPV-Bench (Impossible Videos; Show Lab, NUS) flips the usual physics question. I
 
 Paper: [Impossible Videos](https://arxiv.org/abs/2503.14378). Code: [showlab/Impossible-Videos](https://github.com/showlab/Impossible-Videos).
 
-WorldFoundry **normalizes official CSV/JSON exports** for both tracks. It does not run the official judges or understanding models in tree. `--run-fixture` is wiring only.
+WorldFoundry **normalizes official CSV/JSON exports** for both tracks. It does not run the official judges or understanding models.
 
 <BenchmarkPageSections id="ipv-bench" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id ipv-bench \
   --mode official-validation \
   --official-results-path <official_results.csv> \
@@ -28,9 +28,9 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-Default import: `WORLDFOUNDRY_IPV_BENCH_RESULTS_PATH`. Optional root / backend: `WORLDFOUNDRY_IPV_BENCH_ROOT`, `WORLDFOUNDRY_IPV_BENCH_RUNTIME_BACKEND`. No Hugging Face dataset is required by the contract.
+Default import: `WORLDFOUNDRY_IPV_BENCH_RESULTS_PATH`. Optional root / backend: `WORLDFOUNDRY_IPV_BENCH_ROOT`, `WORLDFOUNDRY_IPV_BENCH_RUNTIME_BACKEND`. No Hugging Face dataset is required.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/ipv-bench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/ipv_bench`.
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/ipv-bench.yaml`, `worldfoundry/evals/tasks/execution/runners/ipv_bench`.
 
 Outputs include `scorecard.json` (primary `ipv_bench_average`) and `raw_metric_table.jsonl`.
 

@@ -3,14 +3,14 @@ title: WorldArena
 description: "清华 FIB Lab 具身世界模型评测：感知质量加数据引擎 / 策略 / 规划器效用。"
 ---
 
-WorldArena（清华 FIB Lab）从两个轴评具身世界模型。主键 `ewm_score` 汇总具身世界模型表面。本目录 id 是 **`worldarena`**。
+WorldArena（清华 FIB Lab）从两个维度评估具身世界模型。主键 `ewm_score` 是具身世界模型的聚合分。
 
-- **感知** — 视觉质量、运动质量、内容一致性、物理遵守、3D 精度、可控性、人体质量。
-- **功能** — 作为数据引擎（`data_engine_success`）、策略评估器（`policy_evaluator_correlation`）、动作规划器（`action_planner_success`）的效用。
+- **感知**：视觉质量、运动质量、内容一致性、物理遵守、3D 精度、可控性、人体质量。
+- **功能**：作为数据引擎（`data_engine_success`）、策略评估器（`policy_evaluator_correlation`）、动作规划器（`action_planner_success`）的效用。
 
 论文：[WorldArena](https://arxiv.org/abs/2602.08971)。项目：[world-arena.ai](https://world-arena.ai/)。代码：[tsinghua-fib-lab/WorldArena](https://github.com/tsinghua-fib-lab/WorldArena)。
 
-WorldFoundry **接入官方视频质量指标 runtime**（`runners/worldarena/runtime/video_quality`），可一次评一个 `--dimension`（目录有界示例：`action_following`）。**一个真实已准备数据的 PSNR 组件已验证。完整 Track 1 与具身赛道未验证。** 功能效用指标需要视频质量 runtime 之外的具身任务证据。
+WorldFoundry **接入官方视频质量指标 runtime**，可一次评一个 `--dimension`（下面的示例使用 `action_following`）。**PSNR 组件已在准备好的数据上验证；完整 Track 1 与具身赛道尚未验证。** 功能效用指标需要视频质量 runtime 之外的具身任务结果。
 
 <BenchmarkPageSections id="worldarena" locale="zh" />
 
@@ -18,7 +18,7 @@ WorldFoundry **接入官方视频质量指标 runtime**（`runners/worldarena/ru
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/worldarena/run_worldarena_official_runner.py \
   --run-official \
   --dimension action_following \
   --config-path <worldarena_config.yaml> \
@@ -27,9 +27,9 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
   --json
 ```
 
-真值比较用 `--gt-data-dir` / `--action-gt-data-dir`。权重从 `--ckpt-root` 解析。`--official-results-path` 导入已有结果文件。环境变量：`WORLDFOUNDRY_WORLDARENA_RESULTS_PATH`、`WORLDFOUNDRY_WORLDARENA_ROOT`。合同条目不要求 Hugging Face 数据集。
+真值比较用 `--gt-data-dir` / `--action-gt-data-dir`。权重从 `--ckpt-root` 解析。`--official-results-path` 导入已有结果文件。环境变量：`WORLDFOUNDRY_WORLDARENA_RESULTS_PATH`、`WORLDFOUNDRY_WORLDARENA_ROOT`。不需要 Hugging Face 数据集。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/worldarena.yaml`，`worldfoundry/evaluation/tasks/execution/runners/worldarena`。
+清单：`worldfoundry/data/benchmarks/tasks/external/worldarena.yaml`。
 
 产物包括 `scorecard.json`（主键 `ewm_score`）。
 

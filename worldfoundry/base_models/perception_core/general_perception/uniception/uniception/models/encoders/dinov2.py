@@ -2,16 +2,19 @@
 Encoder Class for DINOv2
 """
 
-from typing import List, Optional, Union
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.encoders.base import (
+    UniCeptionViTEncoderBase,
+    ViTEncoderInput,
+    ViTEncoderOutput,
+)
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.utils.intermediate_feature_return import (
+    IntermediateFeatureReturner,
+)
 from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
-
-from uniception.models.encoders.base import UniCeptionViTEncoderBase, ViTEncoderInput, ViTEncoderOutput
-from uniception.models.utils.intermediate_feature_return import IntermediateFeatureReturner
 
 
 class DINOv2Encoder(UniCeptionViTEncoderBase):
@@ -25,11 +28,11 @@ class DINOv2Encoder(UniCeptionViTEncoderBase):
         size: str = "large",
         with_registers: bool = False,
         norm_returned_features: bool = True,
-        pretrained_checkpoint_path: str = None,
+        pretrained_checkpoint_path: str | None = None,
         torch_hub_force_reload: bool = False,
         torch_hub_pretrained: bool = True,
         gradient_checkpointing: bool = False,
-        keep_first_n_layers: Optional[int] = None,
+        keep_first_n_layers: int | None = None,
         use_pytorch_sdpa=True,
         disable_torch_compile_for_pe=False,
         *args,
@@ -59,7 +62,7 @@ class DINOv2Encoder(UniCeptionViTEncoderBase):
             data_norm_type=data_norm_type,
             patch_size=patch_size,
             gradient_checkpointing=gradient_checkpointing,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -97,9 +100,7 @@ class DINOv2Encoder(UniCeptionViTEncoderBase):
                 backbones as in_tree_dinov2,
             )
         except ImportError as exc:
-            raise ImportError(
-                "UniCeption requires WorldFoundry's in-tree DINOv2 base model on PYTHONPATH"
-            ) from exc
+            raise ImportError("UniCeption requires WorldFoundry's in-tree DINOv2 base model on PYTHONPATH") from exc
         model_factory = getattr(in_tree_dinov2, model_name)
         self.model = model_factory(
             pretrained=torch_hub_pretrained if pretrained_checkpoint_path is None else False,
@@ -187,9 +188,9 @@ class DINOv2Encoder(UniCeptionViTEncoderBase):
         assert encoder_input.image.ndim == 4, "Input must be of shape (B, C, H, W)"
         batch_size, channels, height, width = encoder_input.image.shape
         assert channels == 3, "Input must have 3 channels"
-        assert (
-            height % self.patch_size == 0 and width % self.patch_size == 0
-        ), f"Input shape must be divisible by patch size: {self.patch_size}"
+        assert height % self.patch_size == 0 and width % self.patch_size == 0, (
+            f"Input shape must be divisible by patch size: {self.patch_size}"
+        )
 
         # Extract the features from the DINOv2 model
         result_dict = self.model.forward_features(encoder_input.image)
@@ -233,13 +234,13 @@ class DINOv2IntermediateFeatureReturner(DINOv2Encoder, IntermediateFeatureReturn
         patch_size: int = 14,
         size: str = "large",
         with_registers: bool = False,
-        pretrained_checkpoint_path: str = None,
+        pretrained_checkpoint_path: str | None = None,
         torch_hub_force_reload: bool = False,
         gradient_checkpointing: bool = False,
-        keep_first_n_layers: Optional[int] = None,
+        keep_first_n_layers: int | None = None,
         use_pytorch_sdpa=True,
         disable_torch_compile_for_pe=False,
-        indices: Optional[Union[int, List[int]]] = 1,
+        indices: int | list[int] | None = 1,
         norm_intermediate: bool = True,
         *args,
         **kwargs,
@@ -278,7 +279,7 @@ class DINOv2IntermediateFeatureReturner(DINOv2Encoder, IntermediateFeatureReturn
             keep_first_n_layers=keep_first_n_layers,
             use_pytorch_sdpa=use_pytorch_sdpa,
             disable_torch_compile_for_pe=disable_torch_compile_for_pe,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
         IntermediateFeatureReturner.__init__(
@@ -287,7 +288,7 @@ class DINOv2IntermediateFeatureReturner(DINOv2Encoder, IntermediateFeatureReturn
             norm_intermediate=norm_intermediate,
         )
 
-    def forward(self, encoder_input: ViTEncoderInput) -> List[ViTEncoderOutput]:
+    def forward(self, encoder_input: ViTEncoderInput) -> list[ViTEncoderOutput]:
         """
         DINOv2 Encoder Forward Pass with Intermediate Feature Return
 
@@ -305,9 +306,9 @@ class DINOv2IntermediateFeatureReturner(DINOv2Encoder, IntermediateFeatureReturn
         assert encoder_input.image.ndim == 4, "Input must be of shape (B, C, H, W)"
         batch_size, channels, height, width = encoder_input.image.shape
         assert channels == 3, "Input must have 3 channels"
-        assert (
-            height % self.patch_size == 0 and width % self.patch_size == 0
-        ), f"Input shape must be divisible by patch size: {self.patch_size}"
+        assert height % self.patch_size == 0 and width % self.patch_size == 0, (
+            f"Input shape must be divisible by patch size: {self.patch_size}"
+        )
 
         if self.indices is None:
             self.indices = range(len(self.model.blocks))

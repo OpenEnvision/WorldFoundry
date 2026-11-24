@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 
 from worldfoundry.core.io.formats.serialization import read_jsonl_objects, write_jsonl
-from worldfoundry.evaluation.api import ArtifactRef, GenerationResult
-from worldfoundry.evaluation.tasks.execution.framework.runner_common import iter_generation_video_artifacts
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_generation import (
+from worldfoundry.evals.api import ArtifactRef, GenerationResult
+from worldfoundry.evals.tasks.execution.framework.runner_common import iter_generation_video_artifacts
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_generation import (
     get_benchmark_generation_adapter,
 )
 
@@ -46,7 +46,7 @@ def test_registered_layout_uses_successful_artifact_uri(
     filename: str,
     uri_kind: str,
 ) -> None:
-    module = importlib.import_module("worldfoundry.evaluation.tasks.execution.runners." + module_name)
+    module = importlib.import_module("worldfoundry.evals.tasks.execution.runners." + module_name)
     if hasattr(module, "load_prompt_records"):
         monkeypatch.setattr(module, "load_prompt_records", lambda **kwargs: [{"prompt_id": "0001"}])
     generation = tmp_path / "generation"

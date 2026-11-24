@@ -5,19 +5,19 @@ modelId: "fastvideo-causal-wan2.2"
 pageSource: authored
 ---
 
-FastVideo CausalWan2.2 是 **8 步因果** Wan2.2 滚动：视频按**三潜帧**块出来，栈在高噪/低噪专家之间切换。WorldFoundry 让专家 KV / 交叉注意力缓存彼此独立，并在固定的 shifted flow 日程上执行 **self-forcing 再加噪**。原生角色覆盖两个 Wan2.2 专家、T5、VAE 和缓存遍历。Pipeline：`FastVideoCausalWanPipeline`。别名 `fastvideo-causal-wan` 解析到这里。相关 HF id：`FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers`。
+FastVideo CausalWan2.2 采用 **8 步因果** Wan2.2 滚动生成：视频以**三潜帧**为一块生成，模型栈在高噪/低噪专家之间切换。WorldFoundry 让专家 KV / 交叉注意力缓存彼此独立，并在固定的 shifted flow 日程上执行 **self-forcing 再加噪**。Pipeline：`FastVideoCausalWanPipeline`。别名 `fastvideo-causal-wan` 解析到这里。相关 HF id：`FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers`。
 
 <ModelPaperFigures modelId="fastvideo-causal-wan2.2" locale="zh" />
 
-论文：[arXiv 2606.03159](https://arxiv.org/abs/2606.03159)。项目页：[nvidia.github.io/flashdreams](https://nvidia.github.io/flashdreams/main/index.html)。代码：[NVIDIA/FlashDreams](https://github.com/NVIDIA/FlashDreams)。预览权重：`FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers`（**Apache-2.0**）。CPU 契约测试和真实权重 GPU 推理均已通过。
+论文：[arXiv 2606.03159](https://arxiv.org/abs/2606.03159)。项目页：[nvidia.github.io/flashdreams](https://nvidia.github.io/flashdreams/main/index.html)。代码：[NVIDIA/FlashDreams](https://github.com/NVIDIA/FlashDreams)。预览权重：`FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers`（**Apache-2.0**）。
 
 <ModelCommandBuilder modelId="fastvideo-causal-wan2.2" locale="zh" />
 
 ## 用来做什么
 
-因果 Wan2.2 快视频。不是完整 Wan2.2 家族卡。
+基于因果 Wan2.2 的 8 步快速图生视频。本页只介绍 CausalWan2.2 I2V 预览版，不覆盖完整 Wan2.2 家族。
 
-提供输入图像，并运行 `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b`。
+提供输入图像，并运行 `wf run fastvideo-causal-wan2.2-i2v-14b`。
 
 ## 运行时契约
 
@@ -34,6 +34,6 @@ FastVideo CausalWan2.2 是 **8 步因果** Wan2.2 滚动：视频按**三潜帧*
 
 ## 在 WorldFoundry 中运行
 
-状态：**已在 H100 上验证 848×464、81 帧真实权重推理**。提供图像运行 `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b`。同参数的 FastVideo 官方入口实际输出 73 帧，因为其去噪器舍弃最后两个潜帧。两者公共帧的构图和前进运动一致；随机数生成器和潜变量精度不同，逐像素数值一致性仍待验证。许可证：Apache-2.0。catalog 未记录 VRAM。
+提供图像后运行 `wf run fastvideo-causal-wan2.2-i2v-14b`。已用预览 checkpoint 在 H100 上验证 848×464、81 帧推理。同参数的 FastVideo 官方入口实际输出 73 帧，因为其去噪器舍弃最后两个潜帧；两者公共帧的构图和前进运动一致，但随机数生成器和潜变量精度不同，逐像素一致性未确立。许可证：Apache-2.0。
 
 <ModelRelatedRecipes modelId="fastvideo-causal-wan2.2" locale="zh" />

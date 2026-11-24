@@ -2,8 +2,6 @@
 # Modified from mmcv
 # ==========================================================
 
-"""Module for base_models -> perception_core -> detection -> grounding_dino -> util -> slio.py functionality."""
-
 import json
 import pickle
 from abc import ABCMeta, abstractmethod
@@ -12,9 +10,10 @@ from pathlib import Path
 import yaml
 
 try:
-    from yaml import CLoader as Loader, CDumper as Dumper
+    from yaml import CDumper as Dumper
+    from yaml import CLoader as Loader
 except ImportError:
-    from yaml import Loader, Dumper
+    from yaml import Dumper, Loader
 
 
 # ===========================
@@ -23,159 +22,67 @@ except ImportError:
 
 
 class BaseFileHandler(metaclass=ABCMeta):
-    """Base file handler implementation."""
     @abstractmethod
     def load_from_fileobj(self, file, **kwargs):
-        """Load from fileobj.
-
-        Args:
-            file: The file.
-        """
         pass
 
     @abstractmethod
     def dump_to_fileobj(self, obj, file, **kwargs):
-        """Dump to fileobj.
-
-        Args:
-            obj: The obj.
-            file: The file.
-        """
         pass
 
     @abstractmethod
     def dump_to_str(self, obj, **kwargs):
-        """Dump to str.
-
-        Args:
-            obj: The obj.
-        """
         pass
 
     def load_from_path(self, filepath, mode="r", **kwargs):
-        """Load from path.
-
-        Args:
-            filepath: The filepath.
-            mode: The mode.
-        """
         with open(filepath, mode) as f:
             return self.load_from_fileobj(f, **kwargs)
 
     def dump_to_path(self, obj, filepath, mode="w", **kwargs):
-        """Dump to path.
-
-        Args:
-            obj: The obj.
-            filepath: The filepath.
-            mode: The mode.
-        """
         with open(filepath, mode) as f:
             self.dump_to_fileobj(obj, f, **kwargs)
 
 
 class JsonHandler(BaseFileHandler):
-    """Json handler implementation."""
     def load_from_fileobj(self, file):
-        """Load from fileobj.
-
-        Args:
-            file: The file.
-        """
         return json.load(file)
 
     def dump_to_fileobj(self, obj, file, **kwargs):
-        """Dump to fileobj.
-
-        Args:
-            obj: The obj.
-            file: The file.
-        """
         json.dump(obj, file, **kwargs)
 
     def dump_to_str(self, obj, **kwargs):
-        """Dump to str.
-
-        Args:
-            obj: The obj.
-        """
         return json.dumps(obj, **kwargs)
 
 
 class PickleHandler(BaseFileHandler):
-    """Pickle handler implementation."""
     def load_from_fileobj(self, file, **kwargs):
-        """Load from fileobj.
-
-        Args:
-            file: The file.
-        """
         return pickle.load(file, **kwargs)
 
     def load_from_path(self, filepath, **kwargs):
-        """Load from path.
-
-        Args:
-            filepath: The filepath.
-        """
-        return super(PickleHandler, self).load_from_path(filepath, mode="rb", **kwargs)
+        return super().load_from_path(filepath, mode="rb", **kwargs)
 
     def dump_to_str(self, obj, **kwargs):
-        """Dump to str.
-
-        Args:
-            obj: The obj.
-        """
         kwargs.setdefault("protocol", 2)
         return pickle.dumps(obj, **kwargs)
 
     def dump_to_fileobj(self, obj, file, **kwargs):
-        """Dump to fileobj.
-
-        Args:
-            obj: The obj.
-            file: The file.
-        """
         kwargs.setdefault("protocol", 2)
         pickle.dump(obj, file, **kwargs)
 
     def dump_to_path(self, obj, filepath, **kwargs):
-        """Dump to path.
-
-        Args:
-            obj: The obj.
-            filepath: The filepath.
-        """
-        super(PickleHandler, self).dump_to_path(obj, filepath, mode="wb", **kwargs)
+        super().dump_to_path(obj, filepath, mode="wb", **kwargs)
 
 
 class YamlHandler(BaseFileHandler):
-    """Yaml handler implementation."""
     def load_from_fileobj(self, file, **kwargs):
-        """Load from fileobj.
-
-        Args:
-            file: The file.
-        """
         kwargs.setdefault("Loader", Loader)
         return yaml.load(file, **kwargs)
 
     def dump_to_fileobj(self, obj, file, **kwargs):
-        """Dump to fileobj.
-
-        Args:
-            obj: The obj.
-            file: The file.
-        """
         kwargs.setdefault("Dumper", Dumper)
         yaml.dump(obj, file, **kwargs)
 
     def dump_to_str(self, obj, **kwargs):
-        """Dump to str.
-
-        Args:
-            obj: The obj.
-        """
         kwargs.setdefault("Dumper", Dumper)
         return yaml.dump(obj, **kwargs)
 

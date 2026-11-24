@@ -14,53 +14,53 @@ metrics:
   visual_quality:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
   prompt_following:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
   impossible_video_score:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
   judgement_accuracy:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
   mcqa_accuracy:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
   open_qa_score:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
   ipv_bench_average:
     aggregation: mean
     primary: true
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: ipv-bench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ipv-bench --mode contract --output-dir
+  contract_validation_command: wf zoo benchmark-run --benchmark-id ipv-bench --mode contract --output-dir
     tmp/benchmark_zoo/benchmark_contract/ipv-bench --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:IPVBenchContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:ipv-bench
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py
   name: IPV-Bench
   domain:
   - impossible-videos
@@ -109,10 +109,10 @@ metadata:
   data_refs:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/ipv-bench.yaml
     in_tree_runtime_paths:
-    - worldfoundry/evaluation/tasks/execution/runners/ipv_bench
+    - worldfoundry/evals/tasks/execution/runners/ipv_bench
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:IPVBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:ipv-bench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
@@ -124,12 +124,12 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_official_runner
-    root: worldfoundry/evaluation/tasks/execution/runners/ipv_bench
+    root: worldfoundry/evals/tasks/execution/runners/ipv_bench
     root_env: WORLDFOUNDRY_IPV_BENCH_ROOT
     results_path_env: WORLDFOUNDRY_IPV_BENCH_RESULTS_PATH
     runtime_backend_env: WORLDFOUNDRY_IPV_BENCH_RUNTIME_BACKEND
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+    target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
     status: implemented
     protocol: local_manifest_metadata_and_official_result_normalization
     output_fields:
@@ -155,10 +155,10 @@ metadata:
       - csv
       - tsv
       provenance: normalizes caller-provided official outputs without executing upstream repos
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   runner:
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -174,11 +174,11 @@ metadata:
     - --json
     runtime:
       results_path_env: WORLDFOUNDRY_IPV_BENCH_RESULTS_PATH
-    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ipv-bench --mode official-validation
+    official_validation_command: wf zoo benchmark-run --benchmark-id ipv-bench --mode official-validation
       --official-results-path <official_results.csv> --generated-artifact-dir <generated_videos> --output-dir <out> 
       --json
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -251,11 +251,11 @@ tasks:
       metric_ids:
       - local_metadata_coverage
       - local_prompt_video_pair_completeness
-      evaluator_target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      evaluator_target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: implemented
     - name: external_official_runner
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:IPVBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:ipv-bench
+      runner_script: worldfoundry/evals/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py
       metric_ids:
       - visual_quality
       - prompt_following
@@ -269,9 +269,9 @@ tasks:
       - prompt_following annotation
       - judgement/mcqa/open_qa labels or official judge scores
       - prediction or model_answer for understanding tasks
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ipv-bench --mode 
+      official_validation_command: wf zoo benchmark-run --benchmark-id ipv-bench --mode 
         official-validation --official-results-path <official_results.csv> --generated-artifact-dir <generated_videos> 
         --output-dir <out> --json
-      official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+      official_result_entrypoint: wf zoo benchmark-run
     runtime_requirements:
       results_path_env: WORLDFOUNDRY_IPV_BENCH_RESULTS_PATH

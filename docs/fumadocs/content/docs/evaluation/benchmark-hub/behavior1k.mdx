@@ -5,16 +5,16 @@ description: "1,000 household activities in OmniGibson, specified in BDDL. World
 
 BEHAVIOR-1K is Stanford Vision & Learning Lab's human-centered embodied benchmark: **1,000** everyday activities (cleaning, cooking, tidying) chosen from human time-use surveys, written in the **BDDL** predicate language, and simulated in **OmniGibson** with fluids, object states, and household physics. Success is **logical goal satisfaction**, not a pixel score. **Subgoal** satisfaction is the partial-credit signal.
 
-Paper: [BEHAVIOR-1K](https://arxiv.org/abs/2403.09227). Project: [behavior.stanford.edu](https://behavior.stanford.edu/). Simulator / code: [StanfordVL/OmniGibson](https://github.com/StanfordVL/OmniGibson) (`upstream_terms` in this catalog).
+Paper: [BEHAVIOR-1K](https://arxiv.org/abs/2403.09227). Project: [behavior.stanford.edu](https://behavior.stanford.edu/). Simulator / code: [StanfordVL/OmniGibson](https://github.com/StanfordVL/OmniGibson).
 
-WorldFoundry **imports** official OmniGibson result exports. It does not vendor OmniGibson, the 1,000 activity definitions, or policy checkpoints. Those follow Stanford's documentation.
+WorldFoundry **imports** official OmniGibson result exports. It does not vendor OmniGibson, the 1,000 activity definitions, or policy checkpoints; set those up following Stanford's documentation.
 
 <BenchmarkPageSections id="behavior1k" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id behavior1k \
   --mode official-validation \
   --official-results-path <official_results.json> \

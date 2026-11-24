@@ -1,15 +1,15 @@
 ---
 title: "LongVie"
-description: "LongVie from Shanghai AI Laboratory (Vchitect): image-to-video and long-video-generation; Runner parity pending; dedicated `worldfoundry-longvie-cu128`."
+description: "LongVie from Shanghai AI Laboratory (Vchitect): image-to-video, long video generation, and 2 more tasks; Runner parity pending; dedicated `worldfoundry-longvie-cu128`."
 modelId: "longvie-1"
 pageSource: authored
 ---
 
-LongVie is a controllable ultra-long video generation framework from the Vchitect team: it drives a Wan-based diffusion backbone with dense depth and sparse point/track control videos to keep minute-scale videos consistent. This entry retains the first-generation adapter, but upstream has not published first-generation weights; the public Vchitect/LongVie2 checkpoint is not interchangeable.
+LongVie is a controllable ultra-long video generation framework from the Vchitect team: it drives a Wan-based diffusion backbone with dense depth and sparse point/track control videos to keep minute-scale videos consistent. longvie-1 is the first-generation adapter; upstream has not published first-generation weights, and the public Vchitect/LongVie2 checkpoint is not interchangeable.
 
 <ModelPaperFigures modelId="longvie-1" locale="en" />
 
-The recorded paper is [arXiv 2512.13604](https://arxiv.org/abs/2512.13604).
+Paper: [arXiv 2512.13604](https://arxiv.org/abs/2512.13604).
 
 Project page: [vchitect.github.io/LongVie2-project](https://vchitect.github.io/LongVie2-project/). Code: [Vchitect/LongVie](https://github.com/Vchitect/LongVie).
 
@@ -17,19 +17,19 @@ Project page: [vchitect.github.io/LongVie2-project](https://vchitect.github.io/L
 
 ## What it is for
 
-`longvie-1` is the recorded depth route. Start here when you need depth maps from the documented inputs.
+Use `longvie-1` to generate a video that starts from a reference image.
 
-LongVie-1 = canonical Wan model + encoders + VAE + VACE/control roles + checkpoint loaders + the shared staged runner. The native runner preserves the official 640x352 segment size and the history/noise continuation state, with optional USP ring/ulysses distributed controls. Its synthesis package is a thin product assembly boundary, not a separate engine. It is published by Shanghai AI Laboratory (Vchitect).
+LongVie-1 runs a Wan model with its encoders, VAE, and VACE control roles on the shared staged runner. The native runner preserves the official 640x352 segment size and the history/noise continuation state, with optional USP ring/ulysses distributed controls. It is published by Shanghai AI Laboratory (Vchitect).
 
-Catalog tasks include image-to-video, long-video-generation, depth-controlled-video, and trajectory-controlled-video. Catalog aliases include `longvie`, `longvie1`, and `longvie-v1`.
+Tasks: image-to-video, long video generation, depth-controlled video, and trajectory-controlled video. Aliases: `longvie`, `longvie1`, and `longvie-v1`. Modalities: image in, video and depth out.
 
-Recorded evaluation entry points include [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) (Long-horizon suite for minute-scale generation).
+Suggested benchmarks: [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) (Long-horizon suite for minute-scale generation).
 
-LongVie-1 long I2V with optional depth/trajectory control. v2 is a sibling.
+LongVie-1 generates long I2V clips with depth and point/track control. For the second generation with public weights, use [LongVie 2](/docs/guides/supported-models/longvie-2).
 
 ## Runtime contract
 
-Optional `prompt`, `negative_prompt`, `input_path`, `interactions`, and `frames`; artifacts `generated_video` and `longvie-1.mp4`.
+Inputs `prompt` and `input-path` (bundled samples are used when omitted); options `frames`, `fps`, `height`, `width`, `steps`, `seed`, and 3 more; artifacts `generated_video` and `longvie-1.mp4`.
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `LongVie1Pipeline`.
 
@@ -37,16 +37,12 @@ Family status: **Runner parity pending**.
 
 Default calls fail fast unless execute=True. Execution additionally requires an explicitly staged first-generation control checkpoint because no official LongVie-1 weights are published. For the public checkpoint-backed route, use longvie-2.
 
-WorldFoundry implements LongVie over the canonical Wan model, encoders, VAE, VACE/control roles, checkpoint loaders, and shared staged runner.
-
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run longvie-1 --pipeline.task-profile interactive-video` to write depth. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Animate a still image with `wf run longvie-1 --pipeline.task-profile interactive-video`.
 
 It runs in the dedicated environment `worldfoundry-longvie-cu128` (Python 3.10, CUDA 12.8).
 
-Recorded weight repositories include `Wan-AI/Wan2.1-I2V-14B-480P` and `Wan-AI/Wan2.1-T2V-1.3B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh longvie-1`. Add `--download` to fetch missing public checkpoints.
-
-Status: **Runner parity pending**.
+Weights: `Wan-AI/Wan2.1-I2V-14B-480P` and `Wan-AI/Wan2.1-T2V-1.3B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh longvie-1`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="longvie-1" locale="en" />

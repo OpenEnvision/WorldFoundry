@@ -85,6 +85,41 @@ Canonical checkpoint modules remain intact and decoder CUDA Graph capture is dis
 
 Select it with the 1.3B pipeline load option `vae_streaming_compile=True` or runner argument `--vae-streaming-compile`.
 
+## Deferred realtime frames
+
+LingBot-V2 `stream_realtime()` retains decoded uint8 RGB on CUDA as an ordered
+`LazyCudaFrame` list in `video` and `video_chunk` (`layout="frame-list"`). Each
+chunk owns its pixels and producer event, independent of subsequent decoder
+calls or session resets. The pixel conversion and 13/16-frame cadence are unchanged.
+Ordinary batch inference and direct `session.generate()` retain their CPU output.
+
+Studio's CPU transport starts pinned-memory copies on a side stream before
+materializing the frames. CUDA-capable transport with identity postprocessing
+keeps device pixels for the selected encoder. Custom postprocessors retain their
+CPU inputs. Generation timing waits for its decode event rather than all work
+on the device; it excludes deferred host materialization. Frame dropping and
+queue policies are unchanged.
+
+Run the local-weight comparison from the repository root:
+
+```bash
+python tests/manual/lingbot_v2_transport_replay.py \
+  --checkpoint ../ckpts/lingbot-world-v2-1.3b-causal-fast \
+  --shared-assets ../ckpts/Wan-AI--Wan2.1-T2V-1.3B \
+  --image testcase/012_abandoned-room.png \
+  --output tmp/lingbot-frame-transport --chunks 21 --rounds 3
+```
+
+The probe compares exact RGB through CPU delivery, A/B/A seeds and resets,
+separating generation and materialization time. It excludes browser presentation,
+networking and encoding, and does not certify NVENC hardware support or speed.
+On one H100 (1.3B, 464×832, Torch attention, eager DiT/VAE, 333-frame runs after
+warmup), deferred frames preserve exact RGB through A/B/A resets, and CPU delivery
+takes the same time as the original route: 1557.84 ms/chunk versus 1555.80 ms/chunk
+(+0.13%, first five chunks excluded). The benefit is for CUDA-resident consumers,
+which skip host materialization; host copies run as pinned D2H transfers on a
+separate stream. Queued device frames retain GPU storage until consumed or discarded.
+
 ## Independent LingBot-V2 1.3B
 
 `lingbot-world-v2-1.3b` declares 30 layers, width 1536, FFN width 8960, and 12 heads. It is separate from the 14B `lingbot-world-v2` checkpoint and distributed defaults. Defaults are one GPU, 317 frames, chunk_size=4, shift=5, 16 FPS, and no T5/DiT FSDP. The first chunk emits 13 frames; steady chunks emit 16.

@@ -30,14 +30,12 @@ License header above is Tencent Hunyuan; keep it intact.
 import os
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
-
 from transformers import (
-    AutoTokenizer,
     AutoModel,
+    AutoTokenizer,
 )
 from transformers.utils import ModelOutput
 
@@ -46,12 +44,14 @@ def use_default(value, default):
     """Utility: return value if not None, else default."""
     return value if value is not None else default
 
+
 # Prompt templates for different models and tasks
 
 
 __all__ = [
-    "C_SCALE", "PROMPT_TEMPLATE",
+    "C_SCALE",
     "MODEL_BASE",
+    "PROMPT_TEMPLATE",
 ]
 
 # =================== Constant Values =====================
@@ -60,26 +60,38 @@ __all__ = [
 C_SCALE = 1_000_000_000_000_000
 
 PROMPT_TEMPLATE_ENCODE_IMAGE_JSON = [
-    {"role": "system", "content": "You are a helpful assistant. Describe the image by detailing the following aspects: \
+    {
+        "role": "system",
+        "content": "You are a helpful assistant. Describe the image by detailing the following aspects: \
         1. The main content and theme of the image. \
         2. The color, shape, size, texture, quantity, text, and spatial relationships of the objects. \
-        3. The background environment, light, style and atmosphere."},
-    {"role": "user", "content": "{}"}
+        3. The background environment, light, style and atmosphere.",
+    },
+    {"role": "user", "content": "{}"},
 ]
 
 PROMPT_TEMPLATE_ENCODE_VIDEO_JSON = [
-    {"role": "system", "content": "You are a helpful assistant. Describe the video by detailing the following aspects: \
+    {
+        "role": "system",
+        "content": "You are a helpful assistant. Describe the video by detailing the following aspects: \
         1. The main content and theme of the video. \
         2. The color, shape, size, texture, quantity, text, and spatial relationships of the objects. \
         3. Actions, events, behaviors temporal relationships, physical movement changes of the objects. \
         4. background environment, light, style and atmosphere. \
-        5. camera angles, movements, and transitions used in the video."},
-    {"role": "user", "content": "{}"}
+        5. camera angles, movements, and transitions used in the video.",
+    },
+    {"role": "user", "content": "{}"},
 ]
 
 PROMPT_TEMPLATE = {
-    "li-dit-encode-image-json": {"template": PROMPT_TEMPLATE_ENCODE_IMAGE_JSON, "crop_start": -1}, # auto-calculate crop_start
-    "li-dit-encode-video-json": {"template": PROMPT_TEMPLATE_ENCODE_VIDEO_JSON, "crop_start": -1}, # auto-calculate crop_start
+    "li-dit-encode-image-json": {
+        "template": PROMPT_TEMPLATE_ENCODE_IMAGE_JSON,
+        "crop_start": -1,
+    },  # auto-calculate crop_start
+    "li-dit-encode-video-json": {
+        "template": PROMPT_TEMPLATE_ENCODE_VIDEO_JSON,
+        "crop_start": -1,
+    },  # auto-calculate crop_start
 }
 
 
@@ -88,9 +100,9 @@ TEXT_ENCODER_PATH = {}
 TOKENIZER_PATH = {}
 
 PRECISION_TO_TYPE = {
-    'fp32': torch.float32,
-    'fp16': torch.float16,
-    'bf16': torch.bfloat16,
+    "fp32": torch.float32,
+    "fp16": torch.float16,
+    "bf16": torch.bfloat16,
 }
 
 
@@ -101,26 +113,17 @@ def load_text_encoder(
     logger=None,
     device=None,
 ):
-    """Load text encoder.
-
-    Args:
-        text_encoder_type: The text encoder type.
-        text_encoder_precision: The text encoder precision.
-        text_encoder_path: The text encoder path.
-        logger: The logger.
-        device: The device.
-    """
     if text_encoder_path is None:
         if text_encoder_type not in TEXT_ENCODER_PATH:
             raise ValueError(f"Unsupported text encoder type: {text_encoder_type}")
         text_encoder_path = TEXT_ENCODER_PATH[text_encoder_type]
 
     text_encoder = AutoModel.from_pretrained(text_encoder_path, low_cpu_mem_usage=True)
-    
-    if hasattr(text_encoder, 'language_model'):
+
+    if hasattr(text_encoder, "language_model"):
         text_encoder = text_encoder.language_model
     text_encoder.final_layer_norm = text_encoder.norm
-    
+
     # from_pretrained will ensure that the model is in eval mode.
     if text_encoder_precision is not None:
         text_encoder = text_encoder.to(dtype=PRECISION_TO_TYPE[text_encoder_precision])
@@ -133,26 +136,14 @@ def load_text_encoder(
     return text_encoder, text_encoder_path
 
 
-def load_tokenizer(
-    tokenizer_type, tokenizer_path=None, padding_side="right", logger=None
-):
-    """Load tokenizer.
-
-    Args:
-        tokenizer_type: The tokenizer type.
-        tokenizer_path: The tokenizer path.
-        padding_side: The padding side.
-        logger: The logger.
-    """
+def load_tokenizer(tokenizer_type, tokenizer_path=None, padding_side="right", logger=None):
     processor = None
     if tokenizer_path is None:
         if tokenizer_type not in TOKENIZER_PATH:
             raise ValueError(f"Unsupported tokenizer type: {tokenizer_type}")
         tokenizer_path = TOKENIZER_PATH[tokenizer_type]
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_path, padding_side=padding_side
-    )
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, padding_side=padding_side)
 
     return tokenizer, tokenizer_path, processor
 
@@ -176,66 +167,41 @@ class TextEncoderModelOutput(ModelOutput):
     """
 
     hidden_state: torch.FloatTensor = None
-    attention_mask: Optional[torch.LongTensor] = None
-    hidden_states_list: Optional[Tuple[torch.FloatTensor, ...]] = None
-    text_outputs: Optional[list] = None
-    image_features: Optional[list] = None
+    attention_mask: torch.LongTensor | None = None
+    hidden_states_list: tuple[torch.FloatTensor, ...] | None = None
+    text_outputs: list | None = None
+    image_features: list | None = None
+
 
 class TextEncoder(nn.Module):
-    """Text encoder implementation."""
     def __init__(
         self,
         text_encoder_type: str,
         max_length: int,
-        text_encoder_precision: Optional[str] = None,
-        text_encoder_path: Optional[str] = None,
-        tokenizer_type: Optional[str] = None,
-        tokenizer_path: Optional[str] = None,
-        output_key: Optional[str] = None,
+        text_encoder_precision: str | None = None,
+        text_encoder_path: str | None = None,
+        tokenizer_type: str | None = None,
+        tokenizer_path: str | None = None,
+        output_key: str | None = None,
         use_attention_mask: bool = True,
-        prompt_template: Optional[dict] = None,
-        prompt_template_video: Optional[dict] = None,
-        hidden_state_skip_layer: Optional[int] = None,
+        prompt_template: dict | None = None,
+        prompt_template_video: dict | None = None,
+        hidden_state_skip_layer: int | None = None,
         apply_final_norm: bool = False,
         reproduce: bool = False,
         logger=None,
         device=None,
     ):
-        """Init.
-
-        Args:
-            text_encoder_type: The text encoder type.
-            max_length: The max length.
-            text_encoder_precision: The text encoder precision.
-            text_encoder_path: The text encoder path.
-            tokenizer_type: The tokenizer type.
-            tokenizer_path: The tokenizer path.
-            output_key: The output key.
-            use_attention_mask: The use attention mask.
-            prompt_template: The prompt template.
-            prompt_template_video: The prompt template video.
-            hidden_state_skip_layer: The hidden state skip layer.
-            apply_final_norm: The apply final norm.
-            reproduce: The reproduce.
-            logger: The logger.
-            device: The device.
-        """
         super().__init__()
         self.text_encoder_type = text_encoder_type
         self.max_length = max_length
         self.precision = text_encoder_precision
         self.model_path = text_encoder_path
-        self.tokenizer_type = (
-            tokenizer_type if tokenizer_type is not None else text_encoder_type
-        )
-        self.tokenizer_path = (
-            tokenizer_path if tokenizer_path is not None else text_encoder_path
-        )
+        self.tokenizer_type = tokenizer_type if tokenizer_type is not None else text_encoder_type
+        self.tokenizer_path = tokenizer_path if tokenizer_path is not None else text_encoder_path
         self.use_attention_mask = use_attention_mask
         if prompt_template_video is not None:
-            assert (
-                use_attention_mask is True
-            ), "Attention mask is True required when training videos."
+            assert use_attention_mask is True, "Attention mask is True required when training videos."
         self.prompt_template = prompt_template
         self.prompt_template_video = prompt_template_video
         self.hidden_state_skip_layer = hidden_state_skip_layer
@@ -245,10 +211,9 @@ class TextEncoder(nn.Module):
 
         self.use_template = self.prompt_template is not None
         if self.use_template:
-            assert (
-                isinstance(self.prompt_template, dict)
-                and "template" in self.prompt_template
-            ), f"`prompt_template` must be a dictionary with a key 'template', got {self.prompt_template}"
+            assert isinstance(self.prompt_template, dict) and "template" in self.prompt_template, (
+                f"`prompt_template` must be a dictionary with a key 'template', got {self.prompt_template}"
+            )
             assert "{}" in str(self.prompt_template["template"]), (
                 "`prompt_template['template']` must contain a placeholder `{}` for the input text, "
                 f"got {self.prompt_template['template']}"
@@ -257,10 +222,9 @@ class TextEncoder(nn.Module):
         self.use_video_template = self.prompt_template_video is not None
         if self.use_video_template:
             if self.prompt_template_video is not None:
-                assert (
-                    isinstance(self.prompt_template_video, dict)
-                    and "template" in self.prompt_template_video
-                ), f"`prompt_template_video` must be a dictionary with a key 'template', got {self.prompt_template_video}"
+                assert isinstance(self.prompt_template_video, dict) and "template" in self.prompt_template_video, (
+                    f"`prompt_template_video` must be a dictionary with a key 'template', got {self.prompt_template_video}"
+                )
             assert "{}" in str(self.prompt_template_video["template"]), (
                 "`prompt_template_video['template']` must contain a placeholder `{}` for the input text, "
                 f"got {self.prompt_template_video['template']}"
@@ -293,23 +257,18 @@ class TextEncoder(nn.Module):
 
     @property
     def dtype(self):
-        """Dtype."""
         return self.model.dtype
-    
+
     @property
     def device(self):
-        """Device."""
         return self.model.device
 
     def __repr__(self):
-        """Repr."""
         return f"{self.text_encoder_type} ({self.precision} - {self.model_path})"
 
     @staticmethod
     def apply_text_to_template(text, template, prevent_empty_text=True):
         """
-        Apply text to template.
-
         Args:
             text (str): Input text.
             template (str or list): Template string or list of chat conversation.
@@ -334,35 +293,35 @@ class TextEncoder(nn.Module):
     def calculate_crop_start(self, tokenized_input):
         """
         Automatically calculate the crop_start position based on identifying user tokens.
-        
+
         Args:
             tokenized_input: The output from the tokenizer containing input_ids
-            
+
         Returns:
             int: The position where the actual prompt content begins (after user markers)
         """
         input_ids = tokenized_input["input_ids"][0].tolist()  # Get the first example's tokens
-        
+
         marker = "<|im_start|>user\n"
-            
+
         # Tokenize just the marker to get its token IDs
         marker_tokens = self.tokenizer(marker, add_special_tokens=False)["input_ids"]
-        
+
         # Find the end position of the marker in the input sequence
         for i in range(len(input_ids) - len(marker_tokens) + 1):
-            if input_ids[i:i+len(marker_tokens)] == marker_tokens:
+            if input_ids[i : i + len(marker_tokens)] == marker_tokens:
                 # Return the position after the marker
                 return i + len(marker_tokens)
-                
+
         # If marker not found, try to find based on special tokens
-        if hasattr(self.tokenizer, 'special_tokens_map'):
+        if hasattr(self.tokenizer, "special_tokens_map"):
             # Check for user token or any other special token that might indicate user input start
             for token_name, token_value in self.tokenizer.special_tokens_map.items():
-                if 'user' in token_name.lower():
+                if "user" in token_name.lower():
                     user_token_id = self.tokenizer.convert_tokens_to_ids(token_value)
                     if user_token_id in input_ids:
                         return input_ids.index(user_token_id) + 1
-        
+
         # Default fallback: return 0 (no cropping)
         return 0
 
@@ -384,10 +343,7 @@ class TextEncoder(nn.Module):
             else:
                 raise ValueError(f"Unsupported data type: {data_type}")
             if isinstance(text, (list, tuple)):
-                text = [
-                    self.apply_text_to_template(one_text, prompt_template)
-                    for one_text in text
-                ]
+                text = [self.apply_text_to_template(one_text, prompt_template) for one_text in text]
                 if isinstance(text[0], list):
                     tokenize_input_type = "list"
             elif isinstance(text, str):
@@ -396,17 +352,17 @@ class TextEncoder(nn.Module):
                     tokenize_input_type = "list"
             else:
                 raise TypeError(f"Unsupported text type: {type(text)}")
-        
+
             # First pass: tokenize with arbitrary max_length to find crop_start
             if crop_start == -1:
                 # Use temporary max_length for the first pass (large enough)
-                temp_kwargs = dict(
-                    truncation=True,
-                    max_length=256,  # Temporary large value
-                    padding="max_length",
-                    return_tensors="pt",
-                )
-                
+                temp_kwargs = {
+                    "truncation": True,
+                    "max_length": 256,  # Temporary large value
+                    "padding": "max_length",
+                    "return_tensors": "pt",
+                }
+
                 # First tokenization pass to calculate crop_start
                 if tokenize_input_type == "str":
                     temp_tokenized = self.tokenizer(
@@ -424,10 +380,10 @@ class TextEncoder(nn.Module):
                         return_dict=True,
                         **temp_kwargs,
                     )
-                
+
                 # Calculate the crop_start from this first pass
                 crop_start = self.calculate_crop_start(temp_tokenized)
-                
+
                 # Store the calculated crop_start for future use
                 if data_type == "image":
                     self.prompt_template["crop_start"] = crop_start
@@ -435,15 +391,15 @@ class TextEncoder(nn.Module):
                     self.prompt_template_video["crop_start"] = crop_start
         else:
             crop_start = 0
-        
+
         # Second pass: tokenize with the proper max_length using the found crop_start
-        kwargs = dict(
-            truncation=True,
-            max_length=max_length + (crop_start if crop_start > 0 else 0),
-            padding="max_length",
-            return_tensors="pt",
-        )
-        
+        kwargs = {
+            "truncation": True,
+            "max_length": max_length + (crop_start if crop_start > 0 else 0),
+            "padding": "max_length",
+            "return_tensors": "pt",
+        }
+
         if tokenize_input_type == "str":
             tokenized_output = self.tokenizer(
                 text,
@@ -462,7 +418,7 @@ class TextEncoder(nn.Module):
             )
         else:
             raise ValueError(f"Unsupported tokenize_input_type: {tokenize_input_type}")
-                
+
         return tokenized_output
 
     def encode(
@@ -475,7 +431,7 @@ class TextEncoder(nn.Module):
         return_texts=False,
         data_type="image",
         device=None,
-        is_uncond=False
+        is_uncond=False,
     ):
         """
         Args:
@@ -493,19 +449,14 @@ class TextEncoder(nn.Module):
         """
         device = self.model.device if device is None else device
         use_attention_mask = use_default(use_attention_mask, self.use_attention_mask)
-        hidden_state_skip_layer = use_default(
-            hidden_state_skip_layer, self.hidden_state_skip_layer
-        )
+        hidden_state_skip_layer = use_default(hidden_state_skip_layer, self.hidden_state_skip_layer)
         do_sample = use_default(do_sample, not self.reproduce)
 
-        attention_mask = (
-            batch_encoding["attention_mask"].to(device) if use_attention_mask else None
-        )
+        attention_mask = batch_encoding["attention_mask"].to(device) if use_attention_mask else None
         outputs = self.model(
             input_ids=batch_encoding["input_ids"].to(device),
             attention_mask=attention_mask,
-            output_hidden_states=output_hidden_states
-            or hidden_state_skip_layer is not None,
+            output_hidden_states=output_hidden_states or hidden_state_skip_layer is not None,
         )
         if hidden_state_skip_layer is not None:
             last_hidden_state = outputs.hidden_states[-(hidden_state_skip_layer + 1)]
@@ -526,16 +477,11 @@ class TextEncoder(nn.Module):
                 raise ValueError(f"Unsupported data type: {data_type}")
             if crop_start > 0:
                 last_hidden_state = last_hidden_state[:, crop_start:]
-                attention_mask = (
-                    attention_mask[:, crop_start:] if use_attention_mask else None
-                )
+                attention_mask = attention_mask[:, crop_start:] if use_attention_mask else None
 
         if output_hidden_states:
-            return TextEncoderModelOutput(
-                last_hidden_state, attention_mask, outputs.hidden_states
-            )
+            return TextEncoderModelOutput(last_hidden_state, attention_mask, outputs.hidden_states)
         return TextEncoderModelOutput(last_hidden_state, attention_mask)
-
 
     def forward(
         self,
@@ -546,16 +492,6 @@ class TextEncoder(nn.Module):
         hidden_state_skip_layer=None,
         return_texts=False,
     ):
-        """Forward.
-
-        Args:
-            text: The text.
-            use_attention_mask: The use attention mask.
-            output_hidden_states: The output hidden states.
-            do_sample: The do sample.
-            hidden_state_skip_layer: The hidden state skip layer.
-            return_texts: The return texts.
-        """
         batch_encoding = self.text2tokens(text, max_length=self.max_length)
         return self.encode(
             batch_encoding,

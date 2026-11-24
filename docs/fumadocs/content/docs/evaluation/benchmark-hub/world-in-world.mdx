@@ -23,7 +23,7 @@ WorldFoundry is a **result importer**. Closed-loop environments, planners, worke
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id world-in-world \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -34,7 +34,7 @@ worldfoundry-eval zoo benchmark-run \
 
 Optional `--task` / `--exp-id` scope the import. Default: `WORLDFOUNDRY_WORLD_IN_WORLD_RESULTS_PATH`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/world-in-world.yaml`, `worldfoundry/data/benchmarks/assets/world-in-world`, `worldfoundry/evaluation/tasks/execution/runners/world_in_world`.
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/world-in-world.yaml`, `worldfoundry/data/benchmarks/assets/world-in-world`, `worldfoundry/evals/tasks/execution/runners/world_in_world`.
 
 Outputs include `scorecard.json` (primary `world_in_world_average`).
 

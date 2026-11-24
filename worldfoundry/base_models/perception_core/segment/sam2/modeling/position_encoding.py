@@ -4,15 +4,14 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> perception_core -> segment -> sam2 -> modeling -> position_encoding.py functionality."""
-
 import math
-from typing import Any, Optional, Tuple
-
-import numpy as np
 
 import torch
 from torch import nn
+
+from worldfoundry.core.attention.rotary.broadcast import (
+    reshape_for_broadcast as reshape_for_broadcast,
+)
 
 
 class PositionEmbeddingSine(nn.Module):
@@ -26,24 +25,13 @@ class PositionEmbeddingSine(nn.Module):
         num_pos_feats,
         temperature: int = 10000,
         normalize: bool = True,
-        scale: Optional[float] = None,
+        scale: float | None = None,
         # Following settings only relevant
         # for warmping up cache for compilation
         warmup_cache: bool = True,
         image_size: int = 1024,
-        strides: Tuple[int] = (4, 8, 16, 32),
+        strides: tuple[int] = (4, 8, 16, 32),
     ):
-        """Init.
-
-        Args:
-            num_pos_feats: The num pos feats.
-            temperature: The temperature.
-            normalize: The normalize.
-            scale: The scale.
-            warmup_cache: The warmup cache.
-            image_size: The image size.
-            strides: The strides.
-        """
         super().__init__()
         assert num_pos_feats % 2 == 0, "Expecting even model width"
         self.num_pos_feats = num_pos_feats // 2
@@ -64,12 +52,6 @@ class PositionEmbeddingSine(nn.Module):
                 self._pe(1, device, *cache_key)
 
     def _encode_xy(self, x, y):
-        """Helper function to encode xy.
-
-        Args:
-            x: The x.
-            y: The y.
-        """
         # The positions are expected to be normalized
         assert len(x) == len(y) and x.ndim == y.ndim == 1
         x_embed = x * self.scale
@@ -80,24 +62,12 @@ class PositionEmbeddingSine(nn.Module):
 
         pos_x = x_embed[:, None] / dim_t
         pos_y = y_embed[:, None] / dim_t
-        pos_x = torch.stack(
-            (pos_x[:, 0::2].sin(), pos_x[:, 1::2].cos()), dim=2
-        ).flatten(1)
-        pos_y = torch.stack(
-            (pos_y[:, 0::2].sin(), pos_y[:, 1::2].cos()), dim=2
-        ).flatten(1)
+        pos_x = torch.stack((pos_x[:, 0::2].sin(), pos_x[:, 1::2].cos()), dim=2).flatten(1)
+        pos_y = torch.stack((pos_y[:, 0::2].sin(), pos_y[:, 1::2].cos()), dim=2).flatten(1)
         return pos_x, pos_y
 
     @torch.no_grad()
     def encode_boxes(self, x, y, w, h):
-        """Encode boxes.
-
-        Args:
-            x: The x.
-            y: The y.
-            w: The w.
-            h: The h.
-        """
         pos_x, pos_y = self._encode_xy(x, y)
         pos = torch.cat((pos_y, pos_x, h[:, None], w[:, None]), dim=1)
         return pos
@@ -106,13 +76,6 @@ class PositionEmbeddingSine(nn.Module):
 
     @torch.no_grad()
     def encode_points(self, x, y, labels):
-        """Encode points.
-
-        Args:
-            x: The x.
-            y: The y.
-            labels: The labels.
-        """
         (bx, nx), (by, ny), (bl, nl) = x.shape, y.shape, labels.shape
         assert bx == by and nx == ny and bx == bl and nx == nl
         pos_x, pos_y = self._encode_xy(x.flatten(), y.flatten())
@@ -122,26 +85,12 @@ class PositionEmbeddingSine(nn.Module):
 
     @torch.no_grad()
     def _pe(self, B, device, *cache_key):
-        """Helper function to pe.
-
-        Args:
-            B: The b.
-            device: The device.
-        """
         H, W = cache_key
         if cache_key in self.cache:
             return self.cache[cache_key].to(device)[None].repeat(B, 1, 1, 1)
 
-        y_embed = (
-            torch.arange(1, H + 1, dtype=torch.float32, device=device)
-            .view(1, -1, 1)
-            .repeat(B, 1, W)
-        )
-        x_embed = (
-            torch.arange(1, W + 1, dtype=torch.float32, device=device)
-            .view(1, 1, -1)
-            .repeat(B, H, 1)
-        )
+        y_embed = torch.arange(1, H + 1, dtype=torch.float32, device=device).view(1, -1, 1).repeat(B, 1, W)
+        x_embed = torch.arange(1, W + 1, dtype=torch.float32, device=device).view(1, 1, -1).repeat(B, H, 1)
 
         if self.normalize:
             eps = 1e-6
@@ -153,23 +102,14 @@ class PositionEmbeddingSine(nn.Module):
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack(
-            (pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4
-        ).flatten(3)
-        pos_y = torch.stack(
-            (pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4
-        ).flatten(3)
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         self.cache[cache_key] = pos[0]
         return pos
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         B = x.shape[0]
         cache_key = (x.shape[-2], x.shape[-1])
         return self._pe(B, x.device, *cache_key)
@@ -182,12 +122,6 @@ class PositionEmbeddingSine(nn.Module):
 
 
 def init_t_xy(end_x: int, end_y: int):
-    """Init t xy.
-
-    Args:
-        end_x: The end x.
-        end_y: The end y.
-    """
     t = torch.arange(end_x * end_y, dtype=torch.float32)
     t_x = (t % end_x).float()
     t_y = torch.div(t, end_x, rounding_mode="floor").float()
@@ -195,14 +129,6 @@ def init_t_xy(end_x: int, end_y: int):
 
 
 def compute_axial_cis(dim: int, end_x: int, end_y: int, theta: float = 10000.0):
-    """Compute axial cis.
-
-    Args:
-        dim: The dim.
-        end_x: The end x.
-        end_y: The end y.
-        theta: The theta.
-    """
     freqs_x = 1.0 / (theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
     freqs_y = 1.0 / (theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
 
@@ -214,40 +140,14 @@ def compute_axial_cis(dim: int, end_x: int, end_y: int, theta: float = 10000.0):
     return torch.cat([freqs_cis_x, freqs_cis_y], dim=-1)
 
 
-def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
-    """Reshape for broadcast.
-
-    Args:
-        freqs_cis: The freqs cis.
-        x: The x.
-    """
-    ndim = x.ndim
-    assert 0 <= 1 < ndim
-    assert freqs_cis.shape == (x.shape[-2], x.shape[-1])
-    shape = [d if i >= ndim - 2 else 1 for i, d in enumerate(x.shape)]
-    return freqs_cis.view(*shape)
-
-
 def apply_rotary_enc(
     xq: torch.Tensor,
     xk: torch.Tensor,
     freqs_cis: torch.Tensor,
     repeat_freqs_k: bool = False,
 ):
-    """Apply rotary enc.
-
-    Args:
-        xq: The xq.
-        xk: The xk.
-        freqs_cis: The freqs cis.
-        repeat_freqs_k: The repeat freqs k.
-    """
     xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-    xk_ = (
-        torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-        if xk.shape[-2] != 0
-        else None
-    )
+    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2)) if xk.shape[-2] != 0 else None
     freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
     xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
     if xk_ is None:

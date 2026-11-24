@@ -4,11 +4,11 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import numpy as np
 import random
+
+import numpy as np
 import torch
 import torch.nn.functional as F
-from typing import Optional, Tuple
 
 EPS = 1e-6
 
@@ -22,13 +22,11 @@ def smart_cat(tensor1, tensor2, dim):
 def get_uniformly_sampled_pts(
     size: int,
     num_frames: int,
-    extent: Tuple[float, ...],
-    device: Optional[torch.device] = torch.device("cpu"),
+    extent: tuple[float, ...],
+    device: torch.device | None = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
 ):
     time_points = torch.randint(low=0, high=num_frames, size=(size, 1), device=device)
-    space_points = torch.rand(size, 2, device=device) * torch.tensor(
-        [extent[1], extent[0]], device=device
-    )
+    space_points = torch.rand(size, 2, device=device) * torch.tensor([extent[1], extent[0]], device=device)
     points = torch.cat((time_points, space_points), dim=1)
     return points[None]
 
@@ -37,16 +35,14 @@ def get_superpoint_sampled_pts(
     video,
     size: int,
     num_frames: int,
-    extent: Tuple[float, ...],
-    device: Optional[torch.device] = torch.device("cpu"),
+    extent: tuple[float, ...],
+    device: torch.device | None = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
 ):
-    extractor = SuperPoint(max_num_keypoints=48).eval().cuda()
-    points = list()
+    extractor = SuperPoint(max_num_keypoints=48).eval().cuda()  # noqa: F821 - Name is undefined in the upstream source.
+    points = []
     for _ in range(8):
         frame_num = random.randint(0, int(num_frames * 0.25))
-        key_points = extractor.extract(
-            video[0, frame_num, :, :, :] / 255.0, resize=None
-        )["keypoints"]
+        key_points = extractor.extract(video[0, frame_num, :, :, :] / 255.0, resize=None)["keypoints"]
         frame_tensor = torch.full((1, key_points.shape[1], 1), frame_num).cuda()
         points.append(torch.cat([frame_tensor.cuda(), key_points], dim=2))
     return torch.cat(points, dim=1)[:, :size, :]
@@ -56,23 +52,20 @@ def get_sift_sampled_pts(
     video,
     size: int,
     num_frames: int,
-    extent: Tuple[float, ...],
-    device: Optional[torch.device] = torch.device("cpu"),
+    extent: tuple[float, ...],
+    device: torch.device | None = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
     num_sampled_frames: int = 8,
     sampling_length_percent: float = 0.25,
 ):
     import cv2
+
     # assert size == 384, "hardcoded for experiment"
     sift = cv2.SIFT_create(nfeatures=size // num_sampled_frames)
-    points = list()
+    points = []
     for _ in range(num_sampled_frames):
         frame_num = random.randint(0, int(num_frames * sampling_length_percent))
         key_points, _ = sift.detectAndCompute(
-            video[0, frame_num, :, :, :]
-            .cpu()
-            .permute(1, 2, 0)
-            .numpy()
-            .astype(np.uint8),
+            video[0, frame_num, :, :, :].cpu().permute(1, 2, 0).numpy().astype(np.uint8),
             None,
         )
         for kp in key_points:
@@ -82,9 +75,9 @@ def get_sift_sampled_pts(
 
 def get_points_on_a_grid(
     size: int,
-    extent: Tuple[float, ...],
-    center: Optional[Tuple[float, ...]] = None,
-    device: Optional[torch.device] = torch.device("cpu"),
+    extent: tuple[float, ...],
+    center: tuple[float, ...] | None = None,
+    device: torch.device | None = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
 ):
     r"""Get a grid of points covering a rectangular region
 
@@ -165,7 +158,6 @@ def reduce_masked_mean(input, mask, dim=None, keepdim=False):
 
     Args:
         inout (Tensor): input tensor.
-        mask (Tensor): mask.
         dim (int, optional): Dimension to sum over. Defaults to None.
         keepdim (bool, optional): Keep the summed dimension. Defaults to False.
 
@@ -240,19 +232,13 @@ def bilinear_sampler(input, coords, align_corners=True, padding_mode="border"):
         coords = coords[..., [1, 2, 0]]
 
     if align_corners:
-        coords = coords * torch.tensor(
-            [2 / max(size - 1, 1) for size in reversed(sizes)], device=coords.device
-        )
+        coords = coords * torch.tensor([2 / max(size - 1, 1) for size in reversed(sizes)], device=coords.device)
     else:
-        coords = coords * torch.tensor(
-            [2 / size for size in reversed(sizes)], device=coords.device
-        )
+        coords = coords * torch.tensor([2 / size for size in reversed(sizes)], device=coords.device)
 
     coords -= 1
 
-    return F.grid_sample(
-        input, coords, align_corners=align_corners, padding_mode=padding_mode
-    )
+    return F.grid_sample(input, coords, align_corners=align_corners, padding_mode=padding_mode)
 
 
 def sample_features4d(input, coords):
@@ -285,9 +271,7 @@ def sample_features4d(input, coords):
     # B C R 1
     feats = bilinear_sampler(input, coords)
 
-    return feats.permute(0, 2, 1, 3).view(
-        B, -1, feats.shape[1] * feats.shape[3]
-    )  # B C R 1 -> B R C
+    return feats.permute(0, 2, 1, 3).view(B, -1, feats.shape[1] * feats.shape[3])  # B C R 1 -> B R C
 
 
 def sample_features5d(input, coords):
@@ -346,7 +330,7 @@ def get_grid(
         if not normalize:
             x = x * W
             y = y * H
-    x_view, y_view, exp = [1 for _ in S] + [1, -1], [1 for _ in S] + [-1, 1], S + [H, W]
+    x_view, y_view, exp = [1 for _ in S] + [1, -1], [1 for _ in S] + [-1, 1], S + [H, W]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     x = x.view(*x_view).expand(*exp)
     y = y.view(*y_view).expand(*exp)
     grid = torch.stack([x, y], dim=-1)
@@ -355,7 +339,7 @@ def get_grid(
     return grid
 
 
-def bilinear_sampler(input, coords, align_corners=True, padding_mode="border"):
+def bilinear_sampler(input, coords, align_corners=True, padding_mode="border"):  # noqa: F811 - Later definition replaces the earlier one, as upstream.
     r"""Sample a tensor using bilinear interpolation
 
     `bilinear_sampler(input, coords)` samples a tensor :attr:`input` at
@@ -407,19 +391,13 @@ def bilinear_sampler(input, coords, align_corners=True, padding_mode="border"):
         coords = coords[..., [1, 2, 0]]
 
     if align_corners:
-        coords = coords * torch.tensor(
-            [2 / max(size - 1, 1) for size in reversed(sizes)], device=coords.device
-        )
+        coords = coords * torch.tensor([2 / max(size - 1, 1) for size in reversed(sizes)], device=coords.device)
     else:
-        coords = coords * torch.tensor(
-            [2 / size for size in reversed(sizes)], device=coords.device
-        )
+        coords = coords * torch.tensor([2 / size for size in reversed(sizes)], device=coords.device)
 
     coords -= 1
 
-    return F.grid_sample(
-        input, coords, align_corners=align_corners, padding_mode=padding_mode
-    )
+    return F.grid_sample(input, coords, align_corners=align_corners, padding_mode=padding_mode)
 
 
 def round_to_multiple_of_4(n):

@@ -1,0 +1,359 @@
+# Named bundles of capabilities. A member may name another stack; it expands in place,
+# keeping first occurrences.
+
+depth_stack:
+  family: depth
+  capabilities:
+    - depth_anything_v3
+    - midas_v21_small_256
+    - moge_vitl
+    - moge_v2_vitl_normal
+    - unidepth_v2_vitl14
+  note: Shared monocular and metric-depth assets used by video-world and 3D perception benchmarks.
+
+geometry_stack:
+  family: geometry
+  capabilities: [slam_stack, moge_v2_vitl_normal, unidepth_v2_vitl14]
+  note: Reusable SLAM, camera-pose, multi-view geometry, and metric-depth assets.
+
+slam_stack:
+  family: geometry
+  capabilities: [droid_slam, vggt_1b]
+  note: Camera/trajectory and multi-view geometry assets.
+
+camera_geometry_stack:
+  family: geometry
+  capabilities: [vggt_1b, moge_v2_vitl_normal, unidepth_v2_vitl14, raft]
+  note: Driver-compatible camera, metric-depth, and motion assets for camera-control/video-motion metrics.
+
+detection_stack:
+  family: open_vocab_detection
+  capabilities: [grounding_dino]
+  note: Open-vocabulary object detection assets.
+
+segmentation_stack:
+  family: segmentation
+  capabilities: [repvit_sam, sam_v1, sam2, sam3]
+  note: SAM-family image and video segmentation assets.
+
+segmentation_tracking_stack:
+  family: video_object_segmentation
+  capabilities: [segmentation_stack, sam_vit_b, aot_deaot_l]
+  note: SAM-family segmentation plus DeAOT tracking assets for object-level video metrics.
+
+detection_segmentation_stack:
+  family: open_vocab_perception
+  capabilities: [detection_stack, segmentation_tracking_stack]
+  note: Open-vocabulary detection plus image/video segmentation and tracking assets.
+
+spatial_perception_core_stack:
+  family: video_world_perception
+  capabilities:
+    - depth_anything_v3
+    - moge_v2_vitl_normal
+    - unidepth_v2_vitl14
+    - droid_slam
+    - vggt_1b
+    - grounding_dino
+    - sam_v1
+    - sam2
+    - raft
+  note: Default depth, SLAM/geometry, detection, segmentation, and motion stack for benchmark validation runs.
+
+spatial_perception_heavy_stack:
+  family: video_world_perception
+  capabilities:
+    - depth_stack
+    - slam_stack
+    - detection_stack
+    - segmentation_tracking_stack
+    - motion_stack
+  note: Heavy depth, SLAM, multi-view geometry, detection, segmentation, tracking, and optical-flow assets.
+
+worldscore_spatial_metric_stack:
+  family: video_world_perception
+  capabilities:
+    - worldscore_official_assets
+    - droid_slam
+    - grounding_dino
+    - raft
+    - sam_v1
+    - sam2
+    - sea_raft
+    - flowformerplusplus
+    - vfimamba
+  note: WorldScore official dataset/checkpoint assets plus the reusable spatial metric models.
+
+grounded_depth_segmentation_stack:
+  family: grounded_video_perception
+  capabilities: [depth_anything_v3, grounding_dino, sam_v1, sam2]
+  note: Depth plus GroundingDINO/SAM segmentation assets used by compositional T2V metric runners.
+
+grounded_video_quality_stack:
+  family: video_quality
+  capabilities: [clip_vit_b32, grounding_dino, raft, sam_v1, sam2]
+  note: CLIP, flow, detection, and segmentation assets shared by object-aware video quality metrics.
+
+video_quality_motion_stack:
+  family: video_quality
+  capabilities: [clip_vit_b32, raft]
+  note: Compact CLIP and flow stack for lightweight video quality normalizers.
+
+video_quality_dino_motion_stack:
+  family: video_quality
+  capabilities: [clip_vit_b32, dinov2_base, raft]
+  note: CLIP, DINOv2, and flow stack for video quality metrics with DINO-style embeddings.
+
+vbench_perception_metric_stack:
+  family: video_quality
+  capabilities:
+    - clip_vit_b32
+    - dinov2_base
+    - grounding_dino
+    - sam_v1
+    - sam2
+    - sam3
+    - raft
+    - vbench_metric_checkpoint_assets
+  note: Shared VBench-family quality, detection, segmentation, embedding, motion, and metric checkpoint assets.
+
+wbench_metric_stack:
+  family: video_world
+  capabilities:
+    - wbench_quality_metric_assets
+    - dinov2_base
+    - sam2
+    - depth_anything_v3
+    - raft
+    - wbench_transnetv2
+    - wbench_hpsv3
+    - wbench_pavrm_qwen3vl
+    - wbench_dreamsim
+    - wbench_megasam
+    - unidepth_v2_vitl14
+  note: 'WBench in-tree metric stack: segmentation, depth, flow, quality, reward, DreamSim, and MegaSAM pose assets.'
+
+videoscore_reward_metric_stack:
+  family: video_reward_model
+  capabilities: [videoscore_reward_model_v1_1, videoscore_bench_dataset_assets]
+  note: VideoScore reward-model checkpoint plus VideoScore-Bench data assets for bounded official scorer runs.
+
+videophy_metric_stack:
+  family: video_metric_model
+  capabilities: [videophy_source_assets, videocon_physics_model]
+  note: VideoPhy prompt assets plus the in-tree VideoCon-Physics AutoEvaluator checkpoint.
+
+videophy2_autoeval_metric_stack:
+  family: video_metric_model
+  capabilities: [videophy2_dataset_assets, videophy2_autoeval_model]
+  note: VideoPhy2 prompt assets plus the in-tree AutoEval MLLM checkpoint.
+
+genai_bench_metric_stack:
+  family: video_metric_model
+  capabilities:
+    - t2v_metrics_source_assets
+    - t2v_metrics_clip_flant5_xxl
+    - genai_bench_dataset_assets
+    - t2v_metrics_blip2_itm
+    - t2v_metrics_internvideo2_itm
+  note: In-tree VQAScore backend plus GenAI-Bench dataset assets for mock or GPU scorer runs.
+
+t2v_metrics_metric_stack:
+  family: video_metric_model
+  capabilities:
+    - t2v_metrics_source_assets
+    - t2v_metrics_clip_flant5_xxl
+    - t2v_metrics_blip2_itm
+    - t2v_metrics_internvideo2_itm
+  note: Shared in-tree VQAScore/ITMScore model stack for GenAI-Bench, PhyGenBench, and CameraBench score generation.
+
+jedi_metric_stack:
+  family: video_metric_model
+  capabilities: [jedi_source_assets, jedi_vjepa_vith16, jedi_vjepa_ssv2_probe]
+  note: In-tree VideoJEDi package plus V-JEPA checkpoints for mock or GPU distribution-quality scoring.
+
+visual_chronometer_fps_metric_stack:
+  family: video_metric_model
+  capabilities: [visual_chronometer_fps_predictor, visual_chronometer_source_assets]
+  note: Visual Chronometer PhyFPS predictor checkpoint plus official inference source checkout.
+
+official_metric_asset_stack:
+  family: benchmark_data_asset
+  capabilities:
+    - worldscore_official_assets
+    - worldscore_dataset_assets
+    - videoscore_bench_dataset_assets
+    - chronomagic_dataset_assets
+    - aigcbench_dataset_assets
+    - camerabench_dataset_assets
+    - ewmbench_dataset_assets
+    - evalcrafter_dataset_assets
+    - t2v_compbench_dataset_assets
+    - fetv_dataset_assets
+    - genai_bench_dataset_assets
+    - t2v_metrics_source_assets
+    - t2v_metrics_clip_flant5_xxl
+    - t2v_metrics_blip2_itm
+    - t2v_metrics_internvideo2_itm
+    - jedi_source_assets
+    - jedi_vjepa_vith16
+    - jedi_vjepa_ssv2_probe
+    - iworld_bench_source_assets
+    - iworld_bench_dataset_assets
+    - libero_dataset_assets
+    - likephys_dataset_assets
+    - phyground_dataset_assets
+    - physvidbench_dataset_assets
+    - rbench_dataset_assets
+    - robotwin_dataset_assets
+    - vbench2_dataset_assets
+    - video_bench_dataset_assets
+    - videophy2_dataset_assets
+    - videophy2_autoeval_model
+    - videoverse_dataset_assets
+    - worldbench_dataset_assets
+    - worldmodelbench_dataset_assets
+    - bridgedata_v2_source_assets
+    - bridgedata_v2_dataset_assets
+    - calvin_source_assets
+    - calvin_dataset_assets
+    - maniskill_source_assets
+    - metaworld_source_assets
+    - rlbench_source_assets
+    - robocasa_source_assets
+    - simpler_env_source_assets
+    - t2vworldbench_source_assets
+    - vbench_source_assets
+    - vbench_plus_plus_source_assets
+    - vbench2_source_assets
+    - vmbench_source_assets
+    - mirabench_source_assets
+    - devil_dynamics_source_assets
+    - phygenbench_source_assets
+    - physvidbench_source_assets
+    - videophy_source_assets
+    - videocon_physics_model
+    - physics_iq_source_assets
+    - t2v_safety_bench_source_assets
+    - ipv_bench_source_assets
+    - videoscience_bench_source_assets
+    - phyeduvideo_source_assets
+    - visual_chronometer_source_assets
+    - worldarena_source_assets
+    - world_in_world_source_assets
+  note: Reusable benchmark data/checkpoint bundles staged through the base-model asset planner.
+
+benchmark_dataset_asset_stack:
+  family: benchmark_data_asset
+  capabilities:
+    - aigcbench_dataset_assets
+    - camerabench_dataset_assets
+    - chronomagic_dataset_assets
+    - ewmbench_dataset_assets
+    - evalcrafter_dataset_assets
+    - t2v_compbench_dataset_assets
+    - fetv_dataset_assets
+    - genai_bench_dataset_assets
+    - t2v_metrics_source_assets
+    - t2v_metrics_clip_flant5_xxl
+    - t2v_metrics_blip2_itm
+    - t2v_metrics_internvideo2_itm
+    - iworld_bench_source_assets
+    - iworld_bench_dataset_assets
+    - libero_dataset_assets
+    - likephys_dataset_assets
+    - phyground_dataset_assets
+    - physvidbench_dataset_assets
+    - rbench_dataset_assets
+    - robotwin_dataset_assets
+    - vbench2_dataset_assets
+    - video_bench_dataset_assets
+    - videophy2_dataset_assets
+    - videophy2_autoeval_model
+    - videoverse_dataset_assets
+    - worldbench_dataset_assets
+    - worldmodelbench_dataset_assets
+    - worldscore_dataset_assets
+    - videoscore_bench_dataset_assets
+    - bridgedata_v2_source_assets
+    - bridgedata_v2_dataset_assets
+    - calvin_source_assets
+    - calvin_dataset_assets
+    - maniskill_source_assets
+    - metaworld_source_assets
+    - rlbench_source_assets
+    - robocasa_source_assets
+    - simpler_env_source_assets
+    - t2vworldbench_source_assets
+    - vbench_source_assets
+    - vbench_plus_plus_source_assets
+    - vbench2_source_assets
+    - vmbench_source_assets
+    - mirabench_source_assets
+    - devil_dynamics_source_assets
+    - phygenbench_source_assets
+    - physvidbench_source_assets
+    - videophy_source_assets
+    - videocon_physics_model
+    - physics_iq_source_assets
+    - t2v_safety_bench_source_assets
+    - ipv_bench_source_assets
+    - videoscience_bench_source_assets
+    - phyeduvideo_source_assets
+    - visual_chronometer_source_assets
+    - worldarena_source_assets
+    - world_in_world_source_assets
+  note: Benchmark datasets, source repositories, and external staging roots with env exports and download commands
+    where available.
+
+depth_eval_data_stack:
+  family: perception_data_asset
+  capabilities: [tum_rgbd_slam_sample_assets, kitti_depth_slam_assets]
+  note: Depth-oriented RGB-D/KITTI data assets staged through the base-model asset planner.
+
+slam_eval_data_stack:
+  family: perception_data_asset
+  capabilities: [tum_rgbd_slam_sample_assets, kitti_depth_slam_assets]
+  note: SLAM/trajectory data assets for reusable camera-pose and trajectory sanity checks.
+
+detection_segmentation_eval_data_stack:
+  family: perception_data_asset
+  capabilities:
+    - coco2017_detection_segmentation_assets
+    - davis2017_video_segmentation_assets
+  note: Detection, image segmentation, and video object segmentation evaluation data assets.
+
+spatial_perception_data_stack:
+  family: perception_data_asset
+  capabilities: [detection_segmentation_eval_data_stack, depth_eval_data_stack]
+  note: Common depth, SLAM, detection, and segmentation datasets kept at the base-model layer.
+
+spatial_perception_full_eval_stack:
+  family: video_world_perception
+  capabilities: [spatial_perception_heavy_stack, spatial_perception_data_stack]
+  note: Heavy spatial perception model stack plus reusable eval data assets for end-to-end validation.
+
+motion_stack:
+  family: motion
+  capabilities: [raft, sea_raft, flowformerplusplus, vfimamba]
+  note: Optical-flow and motion-estimation assets shared by temporal quality metrics.
+
+video_world_perception_stack:
+  family: video_world
+  capabilities:
+    - clip_vit_b32
+    - dinov2_base
+    - siglip_so400m
+    - depth_anything_v3
+    - droid_slam
+    - grounding_dino
+    - sam_v1
+    - sam2
+    - raft
+    - sea_raft
+  note: Default shared perception stack for video-world benchmark runners.
+
+mind_metric_stack:
+  family: video_metric_model
+  capabilities: [dinov3_base, vipe_official_checkout]
+  note: MIND metric models — DINOv3 ViT-B/16 for the DINO metric and the official ViPE pipeline for action accuracy.

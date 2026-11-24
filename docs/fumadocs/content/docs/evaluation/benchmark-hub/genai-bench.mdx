@@ -1,6 +1,6 @@
 ---
 title: GenAI-Bench
-description: "TIGER-Lab judge-alignment bench: pairwise accuracy vs human preferences on image generation, editing, and video. WorldFoundry imports labels; it does not invent a board."
+description: "TIGER-Lab judge-alignment bench: pairwise accuracy vs human preferences on image generation, editing, and video. WorldFoundry imports official result rows."
 ---
 
 GenAI-Bench (TIGER-Lab, University of Waterloo; released with GenAI-Arena) measures whether an **automatic judge matches human preference**, not whether a generator looks pretty. Each record pairs two outputs for the same prompt with a human label. WorldFoundry scores **pairwise accuracy** overall and on three tasks:
@@ -20,7 +20,7 @@ WorldFoundry **normalizes official result rows**. A row must expose `task` (`ima
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id genai-bench \
   --mode official-validation \
   --official-results-path <official_results.jsonl> \
@@ -31,7 +31,7 @@ worldfoundry-eval zoo benchmark-run \
 
 `--preference-pairs-path` supplies the pair inventory. Default import path: `WORLDFOUNDRY_GENAI_BENCH_RESULTS_PATH`. Shared assets: `genai_bench_dataset_assets`, `t2v_metrics_source_assets`.
 
-In-tree pointer: `worldfoundry/data/benchmarks/tasks/external/genai-bench.yaml`.
+Manifest: `worldfoundry/data/benchmarks/tasks/external/genai-bench.yaml`.
 
 Outputs include `scorecard.json` (primary `genai_bench_average`), `benchmark_contract.json`, and `raw_metric_table.jsonl`.
 

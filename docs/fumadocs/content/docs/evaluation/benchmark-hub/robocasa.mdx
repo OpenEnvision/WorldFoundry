@@ -3,16 +3,16 @@ title: RoboCasa
 description: "UT Austin & NVIDIA kitchen simulation — 120 scenes, 100+ atomic and composite tasks. WorldFoundry imports official rollouts."
 ---
 
-RoboCasa is UT Austin and NVIDIA's large-scale **kitchen** simulation for generalist robots: **120** realistic kitchen layouts, **2,500+** 3D assets (many generated), and about **100** atomic skills plus **composite** long-horizon activities, with large demonstration sets. The paper is [RoboCasa: Large-Scale Simulation of Everyday Tasks for Generalist Robots](https://arxiv.org/abs/2406.02523). Project: [robocasa.ai](https://robocasa.ai/). Code: [robocasa/robocasa](https://github.com/robocasa/robocasa). GitHub license metadata in this catalog is `other:noassertion_github_api` — read the upstream terms before reuse.
+RoboCasa is UT Austin and NVIDIA's large-scale **kitchen** simulation for generalist robots: **120** realistic kitchen layouts, **2,500+** 3D assets (many generated), and about **100** atomic skills plus **composite** long-horizon activities, with large demonstration sets. The paper is [RoboCasa: Large-Scale Simulation of Everyday Tasks for Generalist Robots](https://arxiv.org/abs/2406.02523). Project: [robocasa.ai](https://robocasa.ai/). Code: [robocasa/robocasa](https://github.com/robocasa/robocasa). The GitHub repository does not declare a standard license; read the upstream terms before reuse.
 
-WorldFoundry **imports** official rollout exports. Scene assets and long-horizon policy execution stay upstream. Repo mirror: `cache/vla_va_wam/repos/robocasa--robocasa`. Models such as [Being-H0.5](/docs/guides/supported-models/being-h05) publish a RoboCasa specialist line; that is not a score on this page.
+WorldFoundry **imports** official rollout exports. Scene assets and long-horizon policy execution stay upstream. Repo mirror: `cache/vla_va_wam/repos/robocasa--robocasa`. Models such as [Being-H0.5](/docs/guides/supported-models/being-h05) publish a RoboCasa specialist variant.
 
 <BenchmarkPageSections id="robocasa" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id robocasa \
   --mode official-validation \
   --official-results-path <official_results.json> \

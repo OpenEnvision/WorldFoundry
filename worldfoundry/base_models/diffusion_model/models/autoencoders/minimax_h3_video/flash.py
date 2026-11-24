@@ -10,6 +10,7 @@ hard dependency on a FlashAttention wheel.
 
 This is H3 video decoder attention runtime, not a conditioner.
 """
+
 import os
 from contextlib import nullcontext
 
@@ -135,11 +136,7 @@ def make_block_causal_mask_mod(num_tokens, block_size, num_special=0, suffix=Fal
             del b, h, seqlen_info, aux_tensors
             q_is_special = q_idx >= num_tokens
             kv_is_special = kv_idx >= num_tokens
-            return (
-                q_is_special
-                | kv_is_special
-                | (q_idx // block_size >= kv_idx // block_size)
-            )
+            return q_is_special | kv_is_special | (q_idx // block_size >= kv_idx // block_size)
 
     else:
 
@@ -183,9 +180,7 @@ def flash_attn(
     if block_sparse is not None and mask_mod is None:
         raise ValueError("block_sparse requires mask_mod")
     if causal and mask_mod is not None:
-        raise ValueError(
-            "causal must be encoded in mask_mod when using masked attention"
-        )
+        raise ValueError("causal must be encoded in mask_mod when using masked attention")
     if aux_tensors is not None and not use_masked:
         raise ValueError("aux_tensors is only supported with masked attention")
 

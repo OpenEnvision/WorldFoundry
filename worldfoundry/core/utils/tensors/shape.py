@@ -23,23 +23,32 @@ Formulas::
 
 import math
 import warnings
+from collections.abc import Sequence
 from functools import partial
-from typing import List, Tuple, Union
+from typing import cast
 
 import numpy as np
 import torch
 
 # fmt: off
 __all__ = [
+    "check_shape",
+    "shape_avgpool1d",
+    "shape_avgpool2d",
+    "shape_avgpool3d",
+    "shape_conv1d",
+    "shape_conv2d",
+    "shape_conv3d",
     "shape_convnd",
-    "shape_conv1d", "shape_conv2d", "shape_conv3d",
-    "shape_transpose_convnd",
-    "shape_transpose_conv1d", "shape_transpose_conv2d", "shape_transpose_conv3d",
+    "shape_maxpool1d",
+    "shape_maxpool2d",
+    "shape_maxpool3d",
     "shape_poolnd",
-    "shape_maxpool1d", "shape_maxpool2d", "shape_maxpool3d",
-    "shape_avgpool1d", "shape_avgpool2d", "shape_avgpool3d",
     "shape_slice",
-    "check_shape"
+    "shape_transpose_conv1d",
+    "shape_transpose_conv2d",
+    "shape_transpose_conv3d",
+    "shape_transpose_convnd"
 ]
 # fmt: on
 
@@ -68,7 +77,7 @@ def _expands(dim, *xs):
             assert len(x) == dim
             return x
 
-    return map(lambda x: _expand(x), xs)
+    return map(_expand, xs)
 
 
 _HELPER_TENSOR = torch.zeros((1,))
@@ -102,8 +111,8 @@ class ShapeSlice:
 
 
 def check_shape(
-    value: Union[Tuple, List, torch.Tensor, np.ndarray],
-    expected: Union[Tuple, List, torch.Tensor, np.ndarray],
+    value: tuple | list | torch.Tensor | np.ndarray,
+    expected: tuple | list | torch.Tensor | np.ndarray,
     err_msg="",
     mode="raise",
 ):
@@ -119,10 +128,12 @@ def check_shape(
           - "warning": warnings.warn
     """
     assert mode in ["raise", "return", "warning"]
+    actual_shape: Sequence[int]
+    expected_shape: Sequence[int | None]
     if torch.is_tensor(value):
         actual_shape = value.size()
     elif hasattr(value, "shape"):
-        actual_shape = value.shape
+        actual_shape = cast(np.ndarray, value).shape
     else:
         assert isinstance(value, (list, tuple))
         actual_shape = value
@@ -131,7 +142,7 @@ def check_shape(
     if torch.is_tensor(expected):
         expected_shape = expected.size()
     elif hasattr(expected, "shape"):
-        expected_shape = expected.shape
+        expected_shape = cast(np.ndarray, expected).shape
     else:
         assert isinstance(expected, (list, tuple))
         expected_shape = expected
@@ -143,16 +154,16 @@ def check_shape(
         if mode == "raise":
             raise ValueError(err_msg)
         elif mode == "warning":
-            warnings.warn(err_msg)
+            warnings.warn(err_msg, stacklevel=1)
         return False
 
-    for s_a, s_e in zip(actual_shape, expected_shape):
+    for s_a, s_e in zip(actual_shape, expected_shape, strict=False):
         if s_e is not None and s_a != s_e:
             err_msg = f"Shape mismatch{err_msg}: actual shape {actual_shape} != expected shape {expected_shape}."
             if mode == "raise":
                 raise ValueError(err_msg)
             elif mode == "warning":
-                warnings.warn(err_msg)
+                warnings.warn(err_msg, stacklevel=1)
             return False
     return True
 
@@ -181,9 +192,9 @@ def shape_convnd(
         has_batch: whether the first dim is batch size or not
     """
     if has_batch:
-        assert len(input_shape) == dim + 2, "input shape with batch should be {}-dimensional".format(dim + 2)
+        assert len(input_shape) == dim + 2, f"input shape with batch should be {dim + 2}-dimensional"
     else:
-        assert len(input_shape) == dim + 1, "input shape without batch should be {}-dimensional".format(dim + 1)
+        assert len(input_shape) == dim + 1, f"input shape without batch should be {dim + 1}-dimensional"
     if stride is None:
         # for pooling convention in PyTorch
         stride = kernel_size
@@ -206,10 +217,7 @@ def shape_poolnd(dim, input_shape, kernel_size, stride=None, padding=0, dilation
     """
     The only difference from infer_shape_convnd is that `stride` default is None
     """
-    if has_batch:
-        out_channels = input_shape[1]
-    else:
-        out_channels = input_shape[0]
+    out_channels = input_shape[1] if has_batch else input_shape[0]
     return shape_convnd(
         dim,
         input_shape,
@@ -247,9 +255,9 @@ def shape_transpose_convnd(
         has_batch: whether the first dim is batch size or not
     """
     if has_batch:
-        assert len(input_shape) == dim + 2, "input shape with batch should be {}-dimensional".format(dim + 2)
+        assert len(input_shape) == dim + 2, f"input shape with batch should be {dim + 2}-dimensional"
     else:
-        assert len(input_shape) == dim + 1, "input shape without batch should be {}-dimensional".format(dim + 1)
+        assert len(input_shape) == dim + 1, f"input shape without batch should be {dim + 1}-dimensional"
     kernel_size, stride, padding, output_padding, dilation = _expands(
         dim, kernel_size, stride, padding, output_padding, dilation
     )

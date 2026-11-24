@@ -4,8 +4,6 @@ References:
 HuggingFace PyTorch Image Models (Timm)
 """
 
-from typing import List, Optional, Tuple, Union
-
 import torch
 
 try:
@@ -21,7 +19,7 @@ class IntermediateFeatureReturner:
 
     def __init__(
         self,
-        indices: Optional[Union[int, List[int]]] = None,
+        indices: int | list[int] | None = None,
         norm_intermediate: bool = True,
         stop_early: bool = False,
         intermediates_only: bool = True,
@@ -46,9 +44,9 @@ class IntermediateFeatureReturner:
 
 def feature_take_indices(
     num_features: int,
-    indices: Optional[Union[int, List[int]]] = None,
+    indices: int | list[int] | None = None,
     as_set: bool = False,
-) -> Tuple[List[int], int]:
+) -> tuple[list[int], int]:
     """Determine the absolute feature indices to 'take' from.
 
     Note: This function can be called in forwar() so must be torchscript compatible,
@@ -73,7 +71,7 @@ def feature_take_indices(
         _assert(0 < indices <= num_features, f"last-n ({indices}) is out of range (1 to {num_features})")
         take_indices = [num_features - indices + i for i in range(indices)]
     else:
-        take_indices: List[int] = []
+        take_indices: list[int] = []
         for i in indices:
             idx = num_features + i if i < 0 else i
             _assert(0 <= idx < num_features, f"feature index {idx} is out of range (0 to {num_features - 1})")

@@ -1,8 +1,8 @@
 import torch
+from einops import rearrange
 from torch import nn
 from torch.nn import functional as F
 
-from einops import rearrange
 from worldfoundry.core.distributed.collectives import objects as dist_fn
 
 # Copyright 2018 The Sonnet Authors. All Rights Reserved.
@@ -40,11 +40,7 @@ class Quantize(nn.Module):
 
     def forward(self, input):
         flatten = input.reshape(-1, self.dim)
-        dist = (
-            flatten.pow(2).sum(1, keepdim=True)
-            - 2 * flatten @ self.embed
-            + self.embed.pow(2).sum(0, keepdim=True)
-        )
+        dist = flatten.pow(2).sum(1, keepdim=True) - 2 * flatten @ self.embed + self.embed.pow(2).sum(0, keepdim=True)
         _, embed_ind = (-dist).max(1)
         embed_onehot = F.one_hot(embed_ind, self.n_embed).type(flatten.dtype)
         embed_ind = embed_ind.view(*input.shape[:-1])
@@ -57,14 +53,10 @@ class Quantize(nn.Module):
             dist_fn.all_reduce(embed_onehot_sum)
             dist_fn.all_reduce(embed_sum)
 
-            self.cluster_size.data.mul_(self.decay).add_(
-                embed_onehot_sum, alpha=1 - self.decay
-            )
+            self.cluster_size.data.mul_(self.decay).add_(embed_onehot_sum, alpha=1 - self.decay)
             self.embed_avg.data.mul_(self.decay).add_(embed_sum, alpha=1 - self.decay)
             n = self.cluster_size.sum()
-            cluster_size = (
-                (self.cluster_size + self.eps) / (n + self.n_embed * self.eps) * n
-            )
+            cluster_size = (self.cluster_size + self.eps) / (n + self.n_embed * self.eps) * n
             embed_normalized = self.embed_avg / cluster_size.unsqueeze(0)
             self.embed.data.copy_(embed_normalized)
 
@@ -115,7 +107,7 @@ class Encoder(nn.Module):
                 nn.Conv2d(channel // 2, channel, 3, padding=1),
             ]
 
-        for i in range(n_res_block):
+        for _i in range(n_res_block):
             blocks.append(ResBlock(channel, n_res_channel))
 
         blocks.append(nn.ReLU(inplace=True))
@@ -127,14 +119,12 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(
-        self, in_channel, out_channel, channel, n_res_block, n_res_channel, stride
-    ):
+    def __init__(self, in_channel, out_channel, channel, n_res_block, n_res_channel, stride):
         super().__init__()
 
         blocks = [nn.Conv2d(in_channel, channel, 3, padding=1)]
 
-        for i in range(n_res_block):
+        for _i in range(n_res_block):
             blocks.append(ResBlock(channel, n_res_channel))
 
         blocks.append(nn.ReLU(inplace=True))
@@ -144,16 +134,12 @@ class Decoder(nn.Module):
                 [
                     nn.ConvTranspose2d(channel, channel // 2, 4, stride=2, padding=1),
                     nn.ReLU(inplace=True),
-                    nn.ConvTranspose2d(
-                        channel // 2, out_channel, 4, stride=2, padding=1
-                    ),
+                    nn.ConvTranspose2d(channel // 2, out_channel, 4, stride=2, padding=1),
                 ]
             )
 
         elif stride == 2:
-            blocks.append(
-                nn.ConvTranspose2d(channel, out_channel, 4, stride=2, padding=1)
-            )
+            blocks.append(nn.ConvTranspose2d(channel, out_channel, 4, stride=2, padding=1))
 
         self.blocks = nn.Sequential(*blocks)
 
@@ -194,11 +180,11 @@ class VQVAE(nn.Module):
         self.info = f"in_channel: {in_channel}, channel: {channel}, n_res_block: {n_res_block}, n_res_channel: {n_res_channel}, emb_dim: {emb_dim}, n_embed: {n_embed}, decay: {decay}"
 
     def forward(self, input):
-        '''
-            input: (b, t, num_patches, emb_dim)
-        '''
+        """
+        input: (b, t, num_patches, emb_dim)
+        """
         num_patches = input.shape[2]
-        num_side_patches = int(num_patches ** 0.5)    
+        num_side_patches = int(num_patches**0.5)
         input = rearrange(input, "b t (h w) e -> (b t) h w e", h=num_side_patches, w=num_side_patches)
 
         if self.quantize:
@@ -209,14 +195,14 @@ class VQVAE(nn.Module):
         quant_b = quant_b.permute(0, 3, 1, 2)
         diff_b = diff_b.unsqueeze(0)
         dec = self.decode(quant_b)
-        return dec, diff_b # diff is 0 if no quantization
+        return dec, diff_b  # diff is 0 if no quantization
 
     def decode(self, quant_b):
-        upsample_b = self.upsample_b(quant_b) 
-        dec = self.dec(upsample_b) # quant: (128, 64, 64)
+        upsample_b = self.upsample_b(quant_b)
+        dec = self.dec(upsample_b)  # quant: (128, 64, 64)
         return dec
 
-    def decode_code(self, code_b): # not used (only used in sample.py in original repo)
+    def decode_code(self, code_b):  # not used (only used in sample.py in original repo)
         quant_b = self.quantize_b.embed_code(code_b)
         quant_b = quant_b.permute(0, 3, 1, 2)
         dec = self.decode(quant_b)

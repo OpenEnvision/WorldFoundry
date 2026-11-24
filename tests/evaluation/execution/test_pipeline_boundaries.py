@@ -11,13 +11,13 @@ import pytest
 
 from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_MODEL_ID, CONTRACT_FIXTURE_RUNNER_TARGET
 from worldfoundry.core.io.formats.serialization import write_jsonl
-from worldfoundry.evaluation.api import ArtifactRef, GenerationRequest, GenerationResult
-from worldfoundry.evaluation.tasks.execution.orchestration import model_benchmark as mb
-from worldfoundry.evaluation.tasks.execution.orchestration import model_benchmark_suite as suite
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_generation import get_benchmark_generation_adapter
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import run_benchmark_execution
-from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import OfficialRunResult
-from worldfoundry.evaluation.utils import BENCHMARK_ZOO_DIR
+from worldfoundry.evals.api import ArtifactRef, GenerationRequest, GenerationResult
+from worldfoundry.evals.tasks.execution.orchestration import model_benchmark as mb
+from worldfoundry.evals.tasks.execution.orchestration import model_benchmark_suite as suite
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_generation import get_benchmark_generation_adapter
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_runner import run_benchmark_execution
+from worldfoundry.evals.tasks.execution.orchestration.interfaces import OfficialRunResult
+from worldfoundry.evals.utils import BENCHMARK_ZOO_DIR
 
 pytestmark = pytest.mark.unit
 
@@ -268,7 +268,7 @@ def test_suite_comparison_retains_native_benchmark_scores(tmp_path: Path) -> Non
 
 
 def test_adapter_consumes_explicit_root_and_split(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_prompts import PROMPT_MANIFEST_REL
+    from worldfoundry.evals.tasks.execution.runners.aigcbench.aigcbench_prompts import PROMPT_MANIFEST_REL
 
     manifest = tmp_path / PROMPT_MANIFEST_REL
     manifest.parent.mkdir(parents=True, exist_ok=True)

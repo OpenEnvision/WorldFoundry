@@ -12,8 +12,6 @@ This is LTX audio graph math, not a tiling helper (video
 tiling lives in :mod:`~..video.tiling`).
 """
 
-from typing import Set, Tuple
-
 import torch
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.attention import AttentionType, make_attn
@@ -71,10 +69,10 @@ class Downsample(torch.nn.Module):
         return x
 
 
-def build_downsampling_path(  # noqa: PLR0913
+def build_downsampling_path(
     *,
     ch: int,
-    ch_mult: Tuple[int, ...],
+    ch_mult: tuple[int, ...],
     num_resolutions: int,
     num_res_blocks: int,
     resolution: int,
@@ -83,7 +81,7 @@ def build_downsampling_path(  # noqa: PLR0913
     norm_type: NormType,
     causality_axis: CausalityAxis,
     attn_type: AttentionType,
-    attn_resolutions: Set[int],
+    attn_resolutions: set[int],
     resamp_with_conv: bool,
 ) -> tuple[torch.nn.ModuleList, int]:
     """Build the downsampling path with residual blocks, attention, and downsampling layers."""

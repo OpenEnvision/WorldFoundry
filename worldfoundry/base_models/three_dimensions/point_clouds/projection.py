@@ -1,27 +1,37 @@
 """Reusable point-cloud projection utilities for inference.
 
-将3D点云投影到2D图像平面，生成:
-- depth: 深度图
-- mask: 有效像素mask
-- rgb: 颜色投影 (可选)
+Project 3D points onto a 2D image plane to produce:
+- depth: depth map
+- mask: valid-pixel mask
+- rgb: optional projected colors
 
-使用z-buffer处理遮挡关系 (保留最近的点)
+Resolve occlusion with a z-buffer that keeps the nearest point.
 """
+
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 import numpy as np
 import torch
 
+
 class ZBufferResult:
     """Cached z-buffer result for recoloring with different point colors."""
-    __slots__ = ("H", "W", "valid", "order", "unique_flat", "first_idx",
-                 "depth_img", "mask_img")
 
-    def __init__(self, H: int, W: int, valid: np.ndarray, order: np.ndarray,
-                 unique_flat: np.ndarray, first_idx: np.ndarray,
-                 depth_img: np.ndarray, mask_img: np.ndarray):
+    __slots__ = ("H", "W", "depth_img", "first_idx", "mask_img", "order", "unique_flat", "valid")
+
+    def __init__(
+        self,
+        H: int,
+        W: int,
+        valid: np.ndarray,
+        order: np.ndarray,
+        unique_flat: np.ndarray,
+        first_idx: np.ndarray,
+        depth_img: np.ndarray,
+        mask_img: np.ndarray,
+    ):
         self.H = H
         self.W = W
         self.valid = valid
@@ -53,7 +63,7 @@ def _compute_zbuffer(
     fx, fy = float(K[0, 0]), float(K[1, 1])
     cx, cy = float(K[0, 2]), float(K[1, 2])
 
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", invalid="ignore"):
         z_safe = np.where(z > 0, z, 1.0)
         u_f = x / z_safe * fx + cx
         v_f = y / z_safe * fy + cy
@@ -62,12 +72,7 @@ def _compute_zbuffer(
 
     # Validity check
     int32_max = np.iinfo(np.int32).max
-    uv_valid = (
-        np.isfinite(u_f) & np.isfinite(v_f) &
-        (z > 0) &
-        (np.abs(u_f) < int32_max) &
-        (np.abs(v_f) < int32_max)
-    )
+    uv_valid = np.isfinite(u_f) & np.isfinite(v_f) & (z > 0) & (np.abs(u_f) < int32_max) & (np.abs(v_f) < int32_max)
     u_i = np.zeros(len(u_f), dtype=np.int32)
     v_i = np.zeros(len(v_f), dtype=np.int32)
     if uv_valid.any():
@@ -96,8 +101,7 @@ def _compute_zbuffer(
         depth_img = depth_min.reshape(H, W)
         depth_img[~mask_img] = 0.0
 
-    return ZBufferResult(H, W, valid, order, unique_flat, first_idx,
-                         depth_img, mask_img)
+    return ZBufferResult(H, W, valid, order, unique_flat, first_idx, depth_img, mask_img)
 
 
 def _assemble_channels(
@@ -152,16 +156,16 @@ def render_projection(
     device: str = "cuda",
 ) -> np.ndarray | tuple[np.ndarray, ZBufferResult]:
     """
-    渲染点云投影 (GPU加速)
+    Render a point cloud with NumPy on the CPU.
 
-    将世界坐标点云投影到指定相机视角，支持:
-    - depth: 深度通道
-    - mask: 有效区域mask
-    - rgb: 颜色通道 (需提供colors)
+    Project world-space points into the specified camera view, supporting:
+    - depth: depth channel
+    - mask: valid-region mask
+    - rgb: color channels (requires colors)
 
     Args:
         return_zbuffer: If True, also return the ZBufferResult for recoloring.
-        device: GPU device string.
+        device: Accepted but unused by the CPU projection.
     """
     channels = list(channels)
     if points_world.ndim != 2 or points_world.shape[1] != 3:
@@ -187,10 +191,10 @@ def recolor_projection(
     colors: np.ndarray,
 ) -> np.ndarray:
     """
-    用不同的颜色重新着色已有的z-buffer投影结果。
+    Recolor a cached z-buffer projection with new point colors.
 
-    复用 zbuf 中的几何信息（投影坐标、z-buffer排序），只替换颜色。
-    比重新调用 render_projection 快很多（省去矩阵乘法和排序）。
+    Reuse the projected coordinates and depth ordering in zbuf, replacing only colors.
+    Avoid the matrix products and sorting required by render_projection.
     """
     channels = list(channels)
     rgb_img = _colorize_zbuffer(zbuf, colors) if "rgb" in channels else None
@@ -198,8 +202,9 @@ def recolor_projection(
 
 
 # ---------------------------------------------------------------------------
-# GPU-batched projection: 所有帧共享同一点云，一次性在GPU上完成投影
+# GPU-batched projection: share one point cloud across all camera views.
 # ---------------------------------------------------------------------------
+
 
 def render_projection_batch_gpu(
     points_world: np.ndarray,
@@ -212,23 +217,23 @@ def render_projection_batch_gpu(
     return_zbuffers: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, list[ZBufferResult]]:
     """
-    GPU批量投影: 同一点云投影到多个视角，一次完成。
+    Project one point cloud into multiple camera views in a batched tensor pass.
 
-    将矩阵乘法和投影放在GPU上并行计算，z-buffer scatter回CPU完成。
-    相比逐帧调用 render_projection，省去重复的 GPU↔CPU 传输和 Python 循环开销。
+    Compute transforms and projection on device, then scatter into z-buffers on CPU.
+    Share the point upload and batch the transforms instead of projecting each view separately.
 
     Args:
-        points_world: [N, 3] 世界坐标点
-        Ks: [F, 3, 3] 每帧内参
-        c2ws: [F, 4, 4] 每帧 camera-to-world
+        points_world: [N, 3] world-space points.
+        Ks: [F, 3, 3] per-frame intrinsics.
+        c2ws: [F, 4, 4] per-frame camera-to-world matrices.
         image_size: (H, W)
-        channels: 输出通道列表
-        colors: [N, 3] 点颜色 (可选)
-        device: GPU设备
-        return_zbuffers: 是否返回 ZBufferResult 列表供 recolor 使用
+        channels: Requested output channels.
+        colors: [N, 3] optional point colors.
+        device: Tensor computation device.
+        return_zbuffers: Whether to return ZBufferResult objects for recoloring.
 
     Returns:
-        [F, H, W, C] 投影结果, 可选 ZBufferResult 列表
+        [F, H, W, C] projection, optionally paired with a list of ZBufferResult objects.
     """
     channels = list(channels)
     if points_world.ndim != 2 or points_world.shape[1] != 3:
@@ -280,9 +285,9 @@ def render_projection_batch_gpu(
         flat[~valid] = 0  # safe index for invalid points
 
         # Move to CPU for z-buffer scatter
-        z_cpu = z.float().cpu().numpy()     # [F, N] ensure float32
-        flat_cpu = flat.cpu().numpy()       # [F, N]
-        valid_cpu = valid.cpu().numpy()     # [F, N]
+        z_cpu = z.float().cpu().numpy()  # [F, N] ensure float32
+        flat_cpu = flat.cpu().numpy()  # [F, N]
+        valid_cpu = valid.cpu().numpy()  # [F, N]
 
         # Free GPU memory
         del pts, pts_homo, w2cs, Ks_t, pts_cam, x, y, z, safe_z
@@ -319,8 +324,7 @@ def render_projection_batch_gpu(
             depth_img = depth_min.reshape(H, W)
             depth_img[~mask_img] = 0.0
 
-        zbuf = ZBufferResult(H, W, v_mask, order, unique_flat, first_idx,
-                             depth_img, mask_img)
+        zbuf = ZBufferResult(H, W, v_mask, order, unique_flat, first_idx, depth_img, mask_img)
 
         rgb_img = None
         if need_rgb:

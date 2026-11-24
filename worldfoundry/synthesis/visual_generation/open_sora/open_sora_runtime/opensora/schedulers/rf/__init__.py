@@ -1,7 +1,7 @@
 import torch
 from tqdm import tqdm
 
-from opensora.registry import SCHEDULERS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import SCHEDULERS
 
 from .rectified_flow import RFlowScheduler, timestep_transform
 
@@ -58,7 +58,7 @@ class RFLOW:
         # prepare timesteps
         timesteps = [(1.0 - i / self.num_sampling_steps) * self.num_timesteps for i in range(self.num_sampling_steps)]
         if self.use_discrete_timesteps:
-            timesteps = [int(round(t)) for t in timesteps]
+            timesteps = [int(round(t)) for t in timesteps]  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         timesteps = [torch.tensor([t] * z.shape[0], device=device) for t in timesteps]
         if self.use_timestep_transform:
             timesteps = [timestep_transform(t, additional_args, num_timesteps=self.num_timesteps) for t in timesteps]

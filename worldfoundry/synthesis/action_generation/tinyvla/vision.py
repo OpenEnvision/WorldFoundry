@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-import torch
 from torch import nn
 from transformers import CLIPPreTrainedModel
 from transformers.models.clip.modeling_clip import CLIPVisionTransformer

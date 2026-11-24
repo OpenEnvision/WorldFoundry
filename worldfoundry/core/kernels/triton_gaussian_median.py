@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
-
 import torch
 import triton
 import triton.language as tl
@@ -76,7 +74,7 @@ def gaussian_median_depth(
     output = depths.new_empty((1, 1, height, width))
     tile_width = triton.cdiv(width, tile_size)
     tile_count = tile_width * triton.cdiv(height, tile_size)
-    cast(Any, _median_depth_kernel)[(tile_count,)](
+    _median_depth_kernel[(tile_count,)](
         means2d.contiguous(),
         conics.contiguous(),
         opacities.contiguous(),

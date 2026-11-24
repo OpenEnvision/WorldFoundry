@@ -14,17 +14,17 @@ from .side import Side, SideConfig
 
 
 class SwiftTuners:
-    ADAPTER = 'ADAPTER'
-    PROMPT = 'PROMPT'
-    LORA = 'LORA'
-    SIDE = 'SIDE'
-    RESTUNING = 'RESTUNING'
-    LONGLORA = 'longlora'
-    NEFTUNE = 'neftune'
-    LLAMAPRO = 'LLAMAPRO'
-    SCETUNING = 'SCETuning'
-    PART = 'part'
-    REFT = 'reft'
+    ADAPTER = "ADAPTER"
+    PROMPT = "PROMPT"
+    LORA = "LORA"
+    SIDE = "SIDE"
+    RESTUNING = "RESTUNING"
+    LONGLORA = "longlora"
+    NEFTUNE = "neftune"
+    LLAMAPRO = "LLAMAPRO"
+    SCETUNING = "SCETuning"
+    PART = "part"
+    REFT = "reft"
 
 
 SWIFT_MAPPING = {

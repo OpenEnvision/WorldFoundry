@@ -7,6 +7,7 @@ groups:
 - prior
 source_repos:
 - url: https://github.com/ByteDance-Seed/Depth-Anything-3
+  revision: 3fe327a6abe2e5db95b54444ea95463dbfef5610
 checkpoints:
 - repo_id: depth-anything/DA3METRIC-LARGE
   filename: model.safetensors
@@ -30,6 +31,3 @@ notes:
 - Independent base-model profile for the DAv3 prior under worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.
 - WorldFoundry exposes this prior through the shared geometry-prior pipeline/operator
   contract.
-backend_stage: in_tree_geometry_prior_runtime
-runtime_status: in_tree_runtime_wired
-integration_status: integrated

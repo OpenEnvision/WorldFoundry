@@ -26,7 +26,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Capture index — KV must be shape-stable before the first graph record
 # ──────────────────────────────────────────────────────────────────────────

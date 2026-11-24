@@ -8,7 +8,7 @@ groups:
 - action_chunk
 source_repos:
 - url: https://github.com/microsoft/CogACT
-  revision: b174a1b86dee
+  revision: b174a1b86deedfab4d198d935207e7bb0527994e
 checkpoints:
 - repo_id: meta-llama/Llama-2-7b-hf
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/meta-llama--Llama-2-7b-hf

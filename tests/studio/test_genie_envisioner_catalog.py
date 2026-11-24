@@ -7,12 +7,7 @@ def test_genie_envisioner_catalog_executes_local_checkpoint_by_default(tmp_path,
 
     entry = find_entry("genie-envisioner")
 
-    checkpoint = (
-        tmp_path
-        / "ckpts"
-        / "agibot-world--Genie-Envisioner"
-        / "GE_base_fast_v0.1.safetensors"
-    )
+    checkpoint = tmp_path / "ckpts" / "agibot-world--Genie-Envisioner" / "GE_base_fast_v0.1.safetensors"
     assert entry.display_name == "Genie Envisioner"
     assert entry.supports_from_pretrained is True
     assert entry.default_backend == "from_pretrained"

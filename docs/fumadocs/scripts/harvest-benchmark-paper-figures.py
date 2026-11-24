@@ -288,7 +288,10 @@ CURATED_FIGURES: dict[str, dict[str, str]] = {
 }
 
 AR5IV_FALLBACK: dict[str, dict[str, str]] = {
-    bench: {role: url.replace("https://arxiv.org/html/", "https://ar5iv.labs.arxiv.org/html/") for role, url in roles.items()}
+    bench: {
+        role: url.replace("https://arxiv.org/html/", "https://ar5iv.labs.arxiv.org/html/")
+        for role, url in roles.items()
+    }
     for bench, roles in CURATED_FIGURES.items()
 }
 

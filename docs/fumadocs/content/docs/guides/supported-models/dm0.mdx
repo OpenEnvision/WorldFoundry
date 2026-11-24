@@ -1,52 +1,50 @@
 ---
 title: "DM0"
-description: "DM0 from Dexmal: vla and vla action prediction; Runner parity pending."
+description: "DM0 from Dexmal: VLA, VLA action prediction, and 1 more task; Runner parity pending."
 modelId: "dm0"
 pageSource: authored
 ---
 
-DM0 is Dexmal's Dexbotic-family flow-matching VLA: a Qwen3 flow action expert with merged prefix/suffix attention and triple-view preprocessing. Base and LIBERO checkpoints are recorded (Dexmal/DM0-base, Dexmal/DM0-libero, CC license) and the full inference loop — normalization plus Euler sampler — runs in process from local checkpoints.
+DM0 is Dexmal's Dexbotic-family flow-matching VLA: a Qwen3 flow action expert with merged prefix/suffix attention and triple-view preprocessing. Two checkpoints are released, Dexmal/DM0-base and Dexmal/DM0-libero, under a CC license; the full inference loop — normalization plus Euler sampler — runs in process from local checkpoints.
 
 <ModelPaperFigures modelId="dm0" locale="en" />
 
-The recorded paper is [arXiv 2510.23511](https://arxiv.org/abs/2510.23511).
+Paper: [arXiv 2510.23511](https://arxiv.org/abs/2510.23511).
 
 Code: [Dexmal/dexbotic](https://github.com/Dexmal/dexbotic).
 
-Same Dexbotic paper lineage: [arXiv 2510.23511](https://arxiv.org/abs/2510.23511). Code: [Dexmal/dexbotic](https://github.com/Dexmal/dexbotic). Weights: `Dexmal/DM0-base`, `Dexmal/DM0-libero` (**CC** — review before commercial use). Code license recorded as **MIT**. Runtime: `checkpoint_ready`. **No GPU rollout validation** is recorded.
+Weights: `Dexmal/DM0-base`, `Dexmal/DM0-libero` (**CC** — review before commercial use). The code is **MIT**-licensed.
 
 <ModelCommandBuilder modelId="dm0" locale="en" />
 
 ## What it is for
 
-Use `dm0` for vision-language-action inference on this card. The recipe exists so you can launch the recorded policy profile.
+`dm0` maps camera observations and an instruction to an action trajectory.
 
-A Qwen3-based flow action expert decodes actions with an Euler sampler; the Perception Encoder and multimodal base are reused from the compatible in-tree DB-CogACT implementation, keeping the Dexbotic family consistent.
+A Qwen3-based flow action expert decodes actions with an Euler sampler; the Perception Encoder and multimodal base are shared with DB-CogACT from the same Dexbotic family.
 
-Catalog tasks include vla, vla action prediction, and vla policy rollout. Catalog aliases include `dexbotic-dm0` and `dm0-base`.
+Tasks: VLA, VLA action prediction, and VLA policy rollout. Aliases: `dexbotic-dm0` and `dm0-base`.
 
-Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub/libero) (Dedicated DM0-libero policy checkpoint).
+Suggested benchmarks: [LIBERO](/docs/evaluation/benchmark-hub/libero) (Dedicated DM0-libero policy checkpoint).
 
 ## Runtime contract
 
-Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `dm0_action_trace.json`.
+Inputs `prompt` and `input-path` (bundled samples are used when omitted); artifacts `action_trace` and `dm0_action_trace.json`.
 
 CLI task profiles: `default`. WorldFoundry binds `DM0Pipeline`.
 
 Family status: **Runner parity pending**.
 
-Use DM0-libero for LIBERO evaluation and DM0-base for initialization. Training, datasets, servers, benchmark launchers, and the optional Triton realtime backend are excluded.
+Use DM0-libero for LIBERO evaluation and DM0-base for initialization. Training, datasets, servers, benchmark launchers, and the optional Triton realtime backend are not included.
 
-The Qwen3 flow action expert, merged prefix/suffix attention, triple-view preprocessing, normalization, and Euler sampler run in process from local checkpoints.
+Checkpoints carry a CC license — review terms before commercial deployment.
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run dm0 --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Run `wf run dm0 --pipeline.task-profile default` to predict actions.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.6.0).
 
-Recorded weight repositories include `Dexmal/DM0-libero` and `Dexmal/DM0-base`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh dm0`. Add `--download` to fetch missing public checkpoints.
-
-Status: **Runner parity pending**.
+Weights: `Dexmal/DM0-libero` and `Dexmal/DM0-base`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh dm0`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="dm0" locale="en" />

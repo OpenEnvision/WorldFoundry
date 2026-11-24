@@ -1,16 +1,17 @@
 import argparse
-import torch
 import os
-from omegaconf import OmegaConf
-from tqdm import tqdm
-from worldfoundry.core.media.codecs.video import write_video_torchvision as write_video
-from einops import rearrange
+
+import torch
 import torch.distributed as dist
+from einops import rearrange
+from omegaconf import OmegaConf
 from torch.utils.data import DataLoader, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm
 
 from worldfoundry.core.geometry.trajectory import camera_trajectory_tensors
 from worldfoundry.core.io import TextPromptDataset
+from worldfoundry.core.media.codecs.video import write_video_torchvision as write_video
 from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 from worldfoundry.core.vram import DynamicSwapInstaller, get_cuda_free_memory_gb, gpu
 
@@ -19,12 +20,21 @@ parser.add_argument("--config_path", type=str, required=True, help="Path to the 
 parser.add_argument("--checkpoint_path", type=str, required=True, help="Path to the inference checkpoint")
 parser.add_argument("--data_path", type=str, required=True, help="Path to the prompt file")
 parser.add_argument("--output_folder", type=str, required=True, help="Output folder")
-parser.add_argument("--num_output_frames", type=int, default=20, help="Number of overlap frames between sliding windows")
+parser.add_argument(
+    "--num_output_frames", type=int, default=20, help="Number of overlap frames between sliding windows"
+)
 parser.add_argument("--use_ema", action="store_true", help="Whether to use EMA parameters")
 parser.add_argument("--seed", type=int, default=0, help="Random seed")
 parser.add_argument("--sp_size", type=int, default=1, help="Sequence parallel size (1=disabled)")
-parser.add_argument("--trajectory", type=str, default=None, help="Camera trajectory string (e.g., 'w*19' for camera control)")
-parser.add_argument("--trajectory_path", type=str, default=None, help="Path to trajectory file (one trajectory string per line, aligned with data_path)")
+parser.add_argument(
+    "--trajectory", type=str, default=None, help="Camera trajectory string (e.g., 'w*19' for camera control)"
+)
+parser.add_argument(
+    "--trajectory_path",
+    type=str,
+    default=None,
+    help="Path to trajectory file (one trajectory string per line, aligned with data_path)",
+)
 args = parser.parse_args()
 
 # Initialize distributed inference
@@ -38,12 +48,13 @@ if args.sp_size > 1:
         f"Launch with: torchrun --nproc_per_node={args.sp_size} inference.py ... --sp_size {args.sp_size}"
     )
     from .wan_utils.distributed import get_sp_seed_offset, launch_distributed_job
+
     launch_distributed_job(backend="nccl", sp_size=args.sp_size)
     local_rank = int(os.environ["LOCAL_RANK"])
     device = torch.device(f"cuda:{local_rank}")
     world_size = dist.get_world_size()
 elif "LOCAL_RANK" in os.environ:
-    dist.init_process_group(backend='nccl')
+    dist.init_process_group(backend="nccl")
     local_rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(local_rank)
     device = torch.device(f"cuda:{local_rank}")
@@ -61,11 +72,12 @@ else:
     set_seed_everywhere(args.seed)
 
 # Refresh the shared VRAM helper after distributed init selects the local GPU.
-from worldfoundry.core.vram import memory as _mem
-_mem.gpu = torch.device(f'cuda:{local_rank}')
-gpu = _mem.gpu
+from worldfoundry.core.vram import memory as _mem  # noqa: E402 - Follows the conditional setup block.
 
-print(f'Free VRAM {get_cuda_free_memory_gb(gpu)} GB')
+_mem.gpu = torch.device(f"cuda:{local_rank}")
+gpu = _mem.gpu  # noqa: F811 - Later definition replaces the earlier one, as upstream.
+
+print(f"Free VRAM {get_cuda_free_memory_gb(gpu)} GB")
 low_memory = get_cuda_free_memory_gb(gpu) < 40
 
 torch.set_grad_enabled(False)
@@ -73,17 +85,17 @@ torch.set_grad_enabled(False)
 config = OmegaConf.load(args.config_path)
 
 # Import pipeline AFTER distributed init so causal_model.py sees CleanCode SP infra
-from .pipeline import (
-    CausalDiffusionInferencePipeline,
-    CausalInferencePipeline,
+from .pipeline import (  # noqa: E402 - Follows module-level setup, as upstream.
     BidirectionalDiffusionInferencePipeline,
     BidirectionalInferencePipeline,
+    CausalDiffusionInferencePipeline,
+    CausalInferencePipeline,
 )
 
 # Initialize pipeline
-is_causal = config.get('causal', True)
+is_causal = config.get("causal", True)
 
-if hasattr(config, 'denoising_step_list'):
+if hasattr(config, "denoising_step_list"):
     # Few-step inference
     if is_causal:
         pipeline = CausalInferencePipeline(config, device=device)
@@ -98,11 +110,11 @@ else:
 
 if args.checkpoint_path:
     state_dict = torch.load(args.checkpoint_path, map_location="cpu", weights_only=True)
-    key = 'generator_ema'
+    key = "generator_ema"
     try:
         gen_sd = state_dict[key]
-    except:
-        key = 'generator'
+    except BaseException:
+        key = "generator"
         gen_sd = state_dict[key]
 
     try:
@@ -135,6 +147,7 @@ if dist.is_initialized() and args.sp_size <= 1:
 elif dist.is_initialized() and args.sp_size > 1:
     # SP mode: use SP-aware sampler so ranks in the same SP group get the same data
     from .wan_utils.distributed import get_sp_data_sampler
+
     sampler = get_sp_data_sampler(dataset, shuffle=False, drop_last=True)
 else:
     sampler = SequentialSampler(dataset)
@@ -162,8 +175,8 @@ if args.trajectory_path:
 chunk0_latencies = []
 
 
-for i, batch_data in tqdm(enumerate(dataloader), disable=(local_rank != 0)):
-    idx = batch_data['idx'].item()
+for i, batch_data in tqdm(enumerate(dataloader), disable=(local_rank != 0)):  # noqa: B007 - Loop target name kept as upstream.
+    idx = batch_data["idx"].item()
 
     if isinstance(batch_data, dict):
         batch = batch_data
@@ -173,18 +186,15 @@ for i, batch_data in tqdm(enumerate(dataloader), disable=(local_rank != 0)):
     all_video = []
     num_generated_frames = 0  # Number of generated (latent) frames
 
-
-    prompt = batch['prompts'][0]
-    output_path = os.path.join(args.output_folder, f'{prompt[:100]}.mp4')
+    prompt = batch["prompts"][0]
+    output_path = os.path.join(args.output_folder, f"{prompt[:100]}.mp4")
     if os.path.exists(output_path):
-        print('Video has been generated. Pass!')
+        print("Video has been generated. Pass!")
         continue
-    extended_prompt = batch['extended_prompts'][0] if 'extended_prompts' in batch else None
+    extended_prompt = batch["extended_prompts"][0] if "extended_prompts" in batch else None
     prompts = [extended_prompt if extended_prompt is not None else prompt]
     initial_latent = None
-    sampled_noise = torch.randn(
-        [1, args.num_output_frames, 16, 60, 104], device=device, dtype=torch.bfloat16
-    )
+    sampled_noise = torch.randn([1, args.num_output_frames, 16, 60, 104], device=device, dtype=torch.bfloat16)
 
     # Parse camera trajectory if provided
     viewmats = None
@@ -213,7 +223,7 @@ for i, batch_data in tqdm(enumerate(dataloader), disable=(local_rank != 0)):
         return_latents=True,
         initial_latent=initial_latent,
         viewmats=viewmats,
-        Ks=Ks
+        Ks=Ks,
     )
 
     # Record latency on rank 0; first prompt is warmup → None.
@@ -225,7 +235,7 @@ for i, batch_data in tqdm(enumerate(dataloader), disable=(local_rank != 0)):
         else:
             chunk0_latencies.append(None)
 
-    current_video = rearrange(video, 'b t c h w -> b t h w c').cpu()
+    current_video = rearrange(video, "b t c h w -> b t h w c").cpu()
     all_video.append(current_video)
     num_generated_frames += latents.shape[1]
 
@@ -237,7 +247,7 @@ for i, batch_data in tqdm(enumerate(dataloader), disable=(local_rank != 0)):
     pipeline.vae.model.clear_cache()
 
     traj_suffix = "_" + traj_str.replace("*", "").replace(",", "") if traj_str else ""
-    output_path = os.path.join(args.output_folder, f'{prompt[:100]}{traj_suffix}.mp4')
+    output_path = os.path.join(args.output_folder, f"{prompt[:100]}{traj_suffix}.mp4")
     if not (args.sp_size > 1 and local_rank != 0):
         write_video(output_path, video[0], fps=16)
     if dist.is_initialized():
@@ -248,5 +258,7 @@ for i, batch_data in tqdm(enumerate(dataloader), disable=(local_rank != 0)):
 if local_rank == 0:
     valid = [v for v in chunk0_latencies[1:] if v is not None]
     if valid:
-        print(f"[timing] rank0 chunk0 latency excl. decode (from 2nd prompt): "
-              f"avg={sum(valid)/len(valid):.3f}s over {len(valid)} samples")
+        print(
+            f"[timing] rank0 chunk0 latency excl. decode (from 2nd prompt): "
+            f"avg={sum(valid) / len(valid):.3f}s over {len(valid)} samples"
+        )

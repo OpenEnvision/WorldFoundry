@@ -7,8 +7,10 @@ All participating ranks must construct, call, and close a context together.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass, field
 from datetime import timedelta
+from typing import cast
 
 import torch
 import torch.distributed as dist
@@ -103,7 +105,7 @@ class InferenceParallelContext:
         self._check()
         values = [secrets.randbits(63) if self.is_main and seed < 0 else seed]
         if self.world_size > 1:
-            dist.broadcast_object_list(values, src=0, group=self.control_group)
+            dist.broadcast_object_list(values, src=0, group=cast(dist.ProcessGroup | None, self.control_group))
         return values[0]
 
     @torch.inference_mode(False)
@@ -124,7 +126,11 @@ class InferenceParallelContext:
             moved = torch.cat((moved, moved.new_zeros((maximum - moved.shape[0], *moved.shape[1:]))))
         gathered = [torch.empty_like(moved) for _ in lengths]
         dist.all_gather(gathered, moved, group=self.cp_group)
-        return torch.cat([part[:length] for part, length in zip(gathered, lengths)]).movedim(0, dim).contiguous()
+        return (
+            torch.cat([part[:length] for part, length in zip(gathered, lengths, strict=False)])
+            .movedim(0, dim)
+            .contiguous()
+        )
 
     @torch.inference_mode(False)
     @torch.no_grad()
@@ -155,7 +161,10 @@ class InferenceParallelContext:
 
 
 def build_inference_parallel_context(
-    *, tensor_parallel: int, context_parallel: int, device: str | torch.device,
+    *,
+    tensor_parallel: int,
+    context_parallel: int,
+    device: str | torch.device,
 ) -> InferenceParallelContext:
     """Reuse a caller-owned world; never initialize or destroy it implicitly."""
 
@@ -207,35 +216,22 @@ def build_inference_parallel_context(
                 if rank in ranks:
                     cp_group = group
         context = InferenceParallelContext(
-            tp_size=tp_size, cp_size=cp_size, tp_rank=rank % tp_size, cp_rank=rank // tp_size,
-            tp_group=tp_group, cp_group=cp_group, control_group=control, device=device,
+            tp_size=tp_size,
+            cp_size=cp_size,
+            tp_rank=rank % tp_size,
+            cp_rank=rank // tp_size,
+            tp_group=tp_group,
+            cp_group=cp_group,
+            control_group=control,
+            device=device,
             _owned_groups=tuple(owned),
         )
         return context
     except BaseException:
         for group in reversed(owned):
-            try:
+            with contextlib.suppress(Exception):
                 dist.destroy_process_group(group)
-            except Exception:
-                pass
         raise
-
-
-def validate_inference_parallel_policy(policy) -> None:
-    """Reject combinations that have no distributed inference validation."""
-
-    from worldfoundry.core.model_loading.policy import OffloadMode, QuantizationMode
-
-    if policy.offload.mode is not OffloadMode.NONE:
-        raise ValueError("multi-rank Cosmos inference requires offload_mode=none")
-    if policy.dtype is not torch.float32:
-        raise ValueError("multi-rank Cosmos inference currently requires torch_dtype=float32 for numerical stability")
-    if torch.is_autocast_enabled(policy.device.type):
-        raise ValueError("multi-rank Cosmos inference requires autocast to be disabled")
-    if policy.device.type == "cuda" and torch.backends.cuda.matmul.allow_tf32:
-        raise ValueError("multi-rank Cosmos inference requires CUDA matmul TF32 to be disabled")
-    if policy.quantization.mode is not QuantizationMode.NONE or policy.compile or policy.options:
-        raise ValueError("multi-rank Cosmos inference requires dense, uncompiled weights without runtime options")
 
 
 class ColumnParallelLinear(torch.nn.Module):
@@ -250,7 +246,8 @@ class ColumnParallelLinear(torch.nn.Module):
         self.weight = torch.nn.Parameter(linear.weight[start:end].detach().clone(), requires_grad=False)
         self.bias = (
             torch.nn.Parameter(linear.bias[start:end].detach().clone(), requires_grad=False)
-            if linear.bias is not None else None
+            if linear.bias is not None
+            else None
         )
         self.train(linear.training)
 
@@ -267,7 +264,12 @@ class RowParallelLinear(torch.nn.Module):
     """
 
     def __init__(
-        self, linear: torch.nn.Linear, *, start: int, end: int, parallel: InferenceParallelContext,
+        self,
+        linear: torch.nn.Linear,
+        *,
+        start: int,
+        end: int,
+        parallel: InferenceParallelContext,
     ) -> None:
         super().__init__()
         if not 0 <= start < end <= linear.in_features:
@@ -294,7 +296,10 @@ class RowParallelLinear(torch.nn.Module):
 
 
 __all__ = [
-    "ColumnParallelLinear", "InferenceParallelContext", "RowParallelLinear", "balanced_ranges",
-    "build_inference_parallel_context", "validate_parallel_degrees",
-    "validate_inference_parallel_policy",
+    "ColumnParallelLinear",
+    "InferenceParallelContext",
+    "RowParallelLinear",
+    "balanced_ranges",
+    "build_inference_parallel_context",
+    "validate_parallel_degrees",
 ]

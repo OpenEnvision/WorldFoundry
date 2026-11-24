@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from worldfoundry.evaluation.api import MetricResult
-from worldfoundry.evaluation.api.metrics import aggregate_mean
-from worldfoundry.evaluation.reporting.scorecard import build_scorecard
+from worldfoundry.evals.api import MetricResult
+from worldfoundry.evals.api.metrics import aggregate_mean
+from worldfoundry.evals.reporting.scorecard import build_scorecard
 
 
 def _successful_scorecard(**kwargs: Any) -> dict[str, Any]:

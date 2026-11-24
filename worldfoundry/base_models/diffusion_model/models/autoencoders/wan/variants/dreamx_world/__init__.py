@@ -11,4 +11,3 @@ naming adapter, not a new residual graph.
 Sibling of :mod:`~...reference_22` and the runner
 :class:`~...component.WanVideoDecoder` VAE38 path.
 """
-

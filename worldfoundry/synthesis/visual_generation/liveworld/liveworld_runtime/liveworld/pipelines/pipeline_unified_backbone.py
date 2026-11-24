@@ -10,88 +10,86 @@ This pipeline handles:
 6. Multi-iteration video generation
 
 Usage:
-    from liveworld.pipelines.pipeline_unified_backbone import UnifiedBackbonePipeline
+    from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.pipelines.pipeline_unified_backbone import UnifiedBackbonePipeline
     pipeline = UnifiedBackbonePipeline(config, device, generator, text_encoder, vae)
     video = pipeline.run_single_iteration(...)
     # or for multi-iteration:
     video, iterations = pipeline.run_multi_iteration(...)
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple, Set, Iterable, Dict, Any
-import os
-import sys
 import json
+import os
 import time as _time
 import traceback
+from dataclasses import dataclass, field
+from typing import Any
+
 import cv2
-import torch
 import numpy as np
+import torch
+from einops import rearrange
 from PIL import Image
 from tqdm import tqdm
-import torchvision.transforms.functional as TF
-from einops import rearrange
 
-import open3d as o3d
-
-from liveworld.pipelines.pointcloud_updater import create_pointcloud_updater, ReconstructionResult
-from liveworld.utils import set_seed, FlowMatchScheduler
-from ..wan.utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
-from ..geometry_utils import (
-    BackboneInferenceOptions,
-    voxel_downsample_with_colors,
-    scale_intrinsics_batch,
-    scale_intrinsics as scale_intrinsics_from_size,
-    generate_blue_noise_tile,
-    save_point_cloud_ply,
-    load_video_frames,
-    # Moved from this file to break circular dep with pointcloud_updater
-    compute_iteration_plan,
-    _safe_frame_index,
-    compute_depth_scale_factor,
-    _unproject_depth_to_points,
-    _transform_points,
-    _merge_pointcloud_incremental,
-    _voxel_indices,
-    _occupancy_from_frame,
-    _iou_occupancy,
-    select_reference_frames,
-    render_projection,
-    scale_intrinsics,
-    _project_points_to_pixels,
-    _compute_projection_density_max_pixels,
-    _limit_points_by_density,
-    _voxel_downsample,
-    _compute_3d_iou_numpy,
-    compute_3d_iou_batched,
-    _compute_3d_iou_batched_gpu,
-    compute_3d_iou,
-    get_visible_points_for_frame,
-    _get_visible_points_and_coverage_gpu,
+from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc_compat import (
+    FlowUniPCMultistepScheduler as FlowUniPCMultistepScheduler,
 )
-from ..utils import save_video_h264
 from worldfoundry.base_models.perception_core.general_perception.qwen3_vl_entity import (
     Qwen3VLEntityExtractor,
 )
+from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.pipelines.pointcloud_updater import (
+    ReconstructionResult,
+    create_pointcloud_updater,
+)
+from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.utils import (
+    FlowMatchScheduler,
+    set_seed,
+)
+
+from ..geometry_utils import (
+    BackboneInferenceOptions,
+    _compute_projection_density_max_pixels,
+    _get_visible_points_and_coverage_gpu,
+    _limit_points_by_density,
+    _merge_pointcloud_incremental,
+    _safe_frame_index,
+    _voxel_downsample,
+    compute_3d_iou,
+    compute_3d_iou_batched,
+    # Moved from this file to break circular dep with pointcloud_updater
+    compute_iteration_plan,
+    generate_blue_noise_tile,
+    get_visible_points_for_frame,
+    render_projection,
+    save_point_cloud_ply,
+    scale_intrinsics_batch,
+)
+from ..geometry_utils import (
+    scale_intrinsics as scale_intrinsics_from_size,
+)
+from ..utils import save_video_h264
+
+# isort: split
 from worldfoundry.base_models.perception_core.segment.sam3.video_segmenter import (
     Sam3VideoSegmenter,
 )
-
 
 # =============================================================================
 # Iteration Planning Utilities
 # =============================================================================
 
 
-
 # =============================================================================
 # Pipeline Config and State
 # =============================================================================
 
+
 @dataclass
 class BackboneIterationConfig:
     """Configuration for a single iteration of LiveWorld generation."""
+
     num_frames: int = 33  # Number of frames to generate (4N+1)
     infer_steps: int = 50  # Denoising steps
     guidance_scale: float = 5.0
@@ -102,14 +100,15 @@ class BackboneIterationConfig:
 @dataclass
 class BackboneIterationState:
     """State maintained across multiple iterations."""
-    all_generated_frames: List[np.ndarray] = field(default_factory=list)
-    current_first_frame: Optional[Image.Image] = None
 
+    all_generated_frames: list[np.ndarray] = field(default_factory=list)
+    current_first_frame: Image.Image | None = None
 
 
 @dataclass
 class BackboneOutputPaths:
     """Output paths for iterative inference artifacts."""
+
     output_dir: str
     video_dir: str
     pointcloud_dir: str
@@ -118,39 +117,41 @@ class BackboneOutputPaths:
 @dataclass
 class IterationState:
     """State shared across iterative inference steps."""
-    all_generated_frames: List[np.ndarray] = field(default_factory=list)
-    current_first_frame: Optional[Image.Image] = None
-    all_scene_proj_frames: List[np.ndarray] = field(default_factory=list)
-    all_used_scene_proj_frames: List[np.ndarray] = field(default_factory=list)
-    points_world: Optional[np.ndarray] = None
-    colors: Optional[np.ndarray] = None
-    poses_c2w: Optional[np.ndarray] = None
 
-    intrinsics: Optional[np.ndarray] = None
-    intrinsics_size: Optional[Tuple[int, int]] = None
-    accumulated_anchor_frames: Optional[np.ndarray] = None
-    accumulated_anchor_poses: Optional[np.ndarray] = None
-    accumulated_anchor_intrinsics: Optional[np.ndarray] = None
-    accumulated_anchor_depths: Optional[np.ndarray] = None
-    accumulated_anchor_global_indices: List[int] = field(default_factory=list)
-    frame_visible_points: Dict[int, np.ndarray] = field(default_factory=dict)
-    target_scene_proj: Optional[torch.Tensor] = None
-    projection_density_max_pixels: Optional[int] = None
-    projection_density_blue_noise: Optional[np.ndarray] = None
-    projection_density_rng: Optional[np.random.Generator] = None
-    pointcloud_updater: Optional[Any] = None  # PointCloudUpdater instance
-    initial_dynamic_mask: Optional[np.ndarray] = None  # First-frame dynamic mask from SAM3 (dynamic + sky)
-    initial_fg_only_mask: Optional[np.ndarray] = None  # First-frame foreground mask (dynamic only, no sky)
+    all_generated_frames: list[np.ndarray] = field(default_factory=list)
+    current_first_frame: Image.Image | None = None
+    all_scene_proj_frames: list[np.ndarray] = field(default_factory=list)
+    all_used_scene_proj_frames: list[np.ndarray] = field(default_factory=list)
+    points_world: np.ndarray | None = None
+    colors: np.ndarray | None = None
+    poses_c2w: np.ndarray | None = None
+
+    intrinsics: np.ndarray | None = None
+    intrinsics_size: tuple[int, int] | None = None
+    accumulated_anchor_frames: np.ndarray | None = None
+    accumulated_anchor_poses: np.ndarray | None = None
+    accumulated_anchor_intrinsics: np.ndarray | None = None
+    accumulated_anchor_depths: np.ndarray | None = None
+    accumulated_anchor_global_indices: list[int] = field(default_factory=list)
+    frame_visible_points: dict[int, np.ndarray] = field(default_factory=dict)
+    target_scene_proj: torch.Tensor | None = None
+    projection_density_max_pixels: int | None = None
+    projection_density_blue_noise: np.ndarray | None = None
+    projection_density_rng: np.random.Generator | None = None
+    pointcloud_updater: Any | None = None  # PointCloudUpdater instance
+    initial_dynamic_mask: np.ndarray | None = None  # First-frame dynamic mask from SAM3 (dynamic + sky)
+    initial_fg_only_mask: np.ndarray | None = None  # First-frame foreground mask (dynamic only, no sky)
 
 
 @dataclass
 class IterationResult:
     """Result of a single iteration."""
+
     generated_video: torch.Tensor
-    frames_to_store: List[np.ndarray]
-    scene_proj_frames: Optional[List[np.ndarray]] = None
-    updated_points_world: Optional[np.ndarray] = None
-    updated_colors: Optional[np.ndarray] = None
+    frames_to_store: list[np.ndarray]
+    scene_proj_frames: list[np.ndarray] | None = None
+    updated_points_world: np.ndarray | None = None
+    updated_colors: np.ndarray | None = None
     iter_idx: int = 0
     output_start: int = 0
     output_end: int = 0
@@ -160,20 +161,22 @@ class IterationResult:
 @dataclass
 class BackboneInferenceResult:
     """Final result of iterative inference."""
+
     state: IterationState
-    iteration_plan: List[Tuple[int, int, int]]
+    iteration_plan: list[tuple[int, int, int]]
     generated_video: torch.Tensor
-    output_size: Tuple[int, int]
+    output_size: tuple[int, int]
     start_frame: int
     num_frames: int
-    first_frame: Optional[Image.Image] = None
-    initial_points_world: Optional[np.ndarray] = None
-    initial_colors: Optional[np.ndarray] = None
+    first_frame: Image.Image | None = None
+    initial_points_world: np.ndarray | None = None
+    initial_colors: np.ndarray | None = None
 
 
 # =============================================================================
 # Main Pipeline Class
 # =============================================================================
+
 
 class UnifiedBackbonePipeline:
     """
@@ -205,7 +208,6 @@ class UnifiedBackbonePipeline:
             device: torch device
             generator: State Adapter generator model
             vae: VAE wrapper
-            text_encoder: Text encoder
             dtype: Model dtype
         """
         self.config = config
@@ -216,13 +218,13 @@ class UnifiedBackbonePipeline:
         self.dtype = dtype
 
         # Config values
-        self.vae_stride = getattr(config, 'vae_stride', (4, 8, 8))
-        self.timestep_shift = getattr(config, 'timestep_shift', 3.0)
-        self.num_train_timesteps = getattr(config, 'num_train_timestep', 1000)
-        self.negative_prompt = getattr(config, 'negative_prompt', '')
+        self.vae_stride = getattr(config, "vae_stride", (4, 8, 8))
+        self.timestep_shift = getattr(config, "timestep_shift", 3.0)
+        self.num_train_timesteps = getattr(config, "num_train_timestep", 1000)
+        self.negative_prompt = getattr(config, "negative_prompt", "")
 
         # State Adapter config: always use 32 channels (scene 16 + fg 16)
-        self.use_fg_proj = getattr(config, 'use_fg_proj', False)
+        self.use_fg_proj = getattr(config, "use_fg_proj", False)
 
         # Get latent shape
         self.h, self.w = config.image_or_video_shape[-2:]
@@ -261,12 +263,12 @@ class UnifiedBackbonePipeline:
     def _prepare_sp_context(
         self,
         target_scene_proj: torch.Tensor,
-        target_fg_proj: Optional[torch.Tensor],
-        preceding_scene_proj: Optional[torch.Tensor],
-        preceding_fg_proj: Optional[torch.Tensor],
+        target_fg_proj: torch.Tensor | None,
+        preceding_scene_proj: torch.Tensor | None,
+        preceding_fg_proj: torch.Tensor | None,
         num_t: int,
         num_p: int,
-    ) -> List[torch.Tensor]:
+    ) -> list[torch.Tensor]:
         """
         Prepare State Adapter context by concatenating scene and fg projections.
 
@@ -290,6 +292,7 @@ class UnifiedBackbonePipeline:
         Returns:
             sp_context: List containing the concatenated projection tensor [32, T+P, h, w]
         """
+
         def _adjust_frames(proj: torch.Tensor, target_frames: int) -> torch.Tensor:
             """Adjust projection to target number of frames."""
             if proj.shape[1] > target_frames:
@@ -318,8 +321,12 @@ class UnifiedBackbonePipeline:
             else:
                 # No preceding_scene_proj provided, use zeros
                 prec_scene = torch.zeros(
-                    target_scene.shape[0], num_p, target_scene.shape[2], target_scene.shape[3],
-                    device=target_scene.device, dtype=target_scene.dtype
+                    target_scene.shape[0],
+                    num_p,
+                    target_scene.shape[2],
+                    target_scene.shape[3],
+                    device=target_scene.device,
+                    dtype=target_scene.dtype,
                 )
 
             # Prepare preceding fg (use zeros if not provided)
@@ -340,7 +347,7 @@ class UnifiedBackbonePipeline:
 
     def _resolve_few_step_timesteps(
         self,
-        denoising_step_list: Optional[List[float]] = None,
+        denoising_step_list: list[float] | None = None,
     ) -> torch.Tensor:
         """
         Resolve few-step timesteps for CausVid-style bidirectional inference.
@@ -370,18 +377,18 @@ class UnifiedBackbonePipeline:
         prompt: str,
         num_frames: int,
         infer_steps: int = 50,
-        guidance_scale: Optional[float] = None,
+        guidance_scale: float | None = None,
         use_cfg: bool = True,
         cpu_offload: bool = False,
-        preceding_frames: Optional[np.ndarray] = None,
-        preceding_scene_proj: Optional[torch.Tensor] = None,
-        reference_frames: Optional[np.ndarray] = None,
-        target_fg_proj: Optional[torch.Tensor] = None,
-        preceding_fg_proj: Optional[torch.Tensor] = None,
-        seed: Optional[int] = None,
+        preceding_frames: np.ndarray | None = None,
+        preceding_scene_proj: torch.Tensor | None = None,
+        reference_frames: np.ndarray | None = None,
+        target_fg_proj: torch.Tensor | None = None,
+        preceding_fg_proj: torch.Tensor | None = None,
+        seed: int | None = None,
         sp_context_scale: float = 1.0,
         preceding_noise_timestep: int = 0,
-        instance_reference_frames: Optional[np.ndarray] = None,
+        instance_reference_frames: np.ndarray | None = None,
     ) -> torch.Tensor:
         """
         Run a single iteration of video generation.
@@ -414,7 +421,7 @@ class UnifiedBackbonePipeline:
             generated_video: [T_pixel, H, W, 3] uint8 tensor
         """
         if guidance_scale is None:
-            guidance_scale = getattr(self.config, 'guidance_scale', 5.0)
+            guidance_scale = getattr(self.config, "guidance_scale", 5.0)
 
         # Calculate latent frames
         num_latent_frames = self._pixel_to_latent_frames(num_frames)
@@ -432,7 +439,7 @@ class UnifiedBackbonePipeline:
             self.vae.std = self.vae.std.to(self.device)
             self.text_encoder.to(self.device)
             torch.cuda.empty_cache()
-            print(f"    [offload] encoders → GPU  {_time.time()-_t0:.1f}s")
+            print(f"    [offload] encoders → GPU  {_time.time() - _t0:.1f}s")
 
         # ========== Prepare preceding latents (P) ==========
         _t0 = _time.time()
@@ -451,14 +458,18 @@ class UnifiedBackbonePipeline:
                 )
                 noise_p = torch.randn_like(preceding_latent)
                 t_p = torch.full(
-                    [num_p], preceding_noise_timestep,
-                    device=self.device, dtype=torch.float32,
+                    [num_p],
+                    preceding_noise_timestep,
+                    device=self.device,
+                    dtype=torch.float32,
                 )
                 preceding_latent = _noise_sched.add_noise(
-                    preceding_latent.squeeze(0), noise_p.squeeze(0), t_p,
+                    preceding_latent.squeeze(0),
+                    noise_p.squeeze(0),
+                    t_p,
                 ).unsqueeze(0)
                 print(f"  Added noise to preceding frames: timestep={preceding_noise_timestep}")
-        print(f"    [encode] preceding P={num_p}  {_time.time()-_t0:.1f}s")
+        print(f"    [encode] preceding P={num_p}  {_time.time() - _t0:.1f}s")
 
         # ========== Prepare reference latents (R_scene + R_inst) ==========
         _t0 = _time.time()
@@ -467,7 +478,7 @@ class UnifiedBackbonePipeline:
         if reference_frames is not None and len(reference_frames) > 0:
             ref_latents = []
             for i in range(len(reference_frames)):
-                single = self._encode_frames_to_latent(reference_frames[i:i+1])
+                single = self._encode_frames_to_latent(reference_frames[i : i + 1])
                 ref_latents.append(single)
             reference_scene_latent = torch.cat(ref_latents, dim=1)
             num_r_scene = reference_scene_latent.shape[1]
@@ -477,7 +488,7 @@ class UnifiedBackbonePipeline:
         if instance_reference_frames is not None and len(instance_reference_frames) > 0:
             inst_latents = []
             for i in range(len(instance_reference_frames)):
-                single = self._encode_frames_to_latent(instance_reference_frames[i:i+1])
+                single = self._encode_frames_to_latent(instance_reference_frames[i : i + 1])
                 inst_latents.append(single)
             reference_inst_latent = torch.cat(inst_latents, dim=1)
             num_r_inst = reference_inst_latent.shape[1]
@@ -491,7 +502,7 @@ class UnifiedBackbonePipeline:
             if reference_inst_latent is not None:
                 parts.append(reference_inst_latent)
             reference_latent = torch.cat(parts, dim=1)
-        print(f"    [encode] refs R_scene={num_r_scene} R_inst={num_r_inst}  {_time.time()-_t0:.1f}s")
+        print(f"    [encode] refs R_scene={num_r_scene} R_inst={num_r_inst}  {_time.time() - _t0:.1f}s")
 
         # ========== Prepare text conditioning ==========
         _t0 = _time.time()
@@ -504,19 +515,18 @@ class UnifiedBackbonePipeline:
             unconditional_dict = self.text_encoder(text_prompts=[self.negative_prompt])
             uncon_context = unconditional_dict["prompt_embeds"]
             uncon_context = [c.to(self.device) for c in uncon_context]
-        print(f"    [encode] text  {_time.time()-_t0:.1f}s")
+        print(f"    [encode] text  {_time.time() - _t0:.1f}s")
 
         # ========== CPU offload: move encoders to CPU, generator to GPU ==========
         if cpu_offload:
             _t0 = _time.time()
-            self.text_encoder.to('cpu')
-            self.vae.model.to('cpu')
-            self.vae.mean = self.vae.mean.to('cpu')
-            self.vae.std = self.vae.std.to('cpu')
+            self.text_encoder.to("cpu")
+            self.vae.model.to("cpu")
+            self.vae.mean = self.vae.mean.to("cpu")
+            self.vae.std = self.vae.std.to("cpu")
             torch.cuda.empty_cache()
             self.generator.to(self.device)
-            print(f"    [offload] generator → GPU  {_time.time()-_t0:.1f}s")
-
+            print(f"    [offload] generator → GPU  {_time.time() - _t0:.1f}s")
 
         # ========== Prepare State Adapter context ==========
         sp_context = self._prepare_sp_context(
@@ -530,15 +540,12 @@ class UnifiedBackbonePipeline:
 
         # ========== Initialize noise ==========
         noise = torch.randn(
-            1, num_latent_frames, self.latent_channels, self.h, self.w,
-            device=self.device, dtype=self.dtype
+            1, num_latent_frames, self.latent_channels, self.h, self.w, device=self.device, dtype=self.dtype
         )
 
         # ========== Setup scheduler ==========
         sample_scheduler = FlowUniPCMultistepScheduler(
-            num_train_timesteps=self.num_train_timesteps,
-            shift=1,
-            use_dynamic_shifting=False
+            num_train_timesteps=self.num_train_timesteps, shift=1, use_dynamic_shifting=False
         )
         sample_scheduler.set_timesteps(infer_steps, device=self.device, shift=self.timestep_shift)
 
@@ -548,7 +555,7 @@ class UnifiedBackbonePipeline:
         denoising_pbar = tqdm(
             enumerate(sample_scheduler.timesteps),
             total=len(sample_scheduler.timesteps),
-            desc=f"Denoising (T={num_t}, P={num_p}, R_scene={num_r_scene}, R_inst={num_r_inst})"
+            desc=f"Denoising (T={num_t}, P={num_p}, R_scene={num_r_scene}, R_inst={num_r_inst})",
         )
 
         for step_idx, t in denoising_pbar:
@@ -598,20 +605,19 @@ class UnifiedBackbonePipeline:
 
             latents = sample_scheduler.step(flow_pred_t, t, latents, return_dict=False)[0]
 
-            denoising_pbar.set_postfix({
-                'timestep': f'{t:.3f}',
-                'step': f'{step_idx + 1}/{len(sample_scheduler.timesteps)}'
-            })
+            denoising_pbar.set_postfix(
+                {"timestep": f"{t:.3f}", "step": f"{step_idx + 1}/{len(sample_scheduler.timesteps)}"}
+            )
 
         # ========== CPU offload: move generator to CPU, VAE to GPU for decoding ==========
         if cpu_offload:
             _t0 = _time.time()
-            self.generator.to('cpu')
+            self.generator.to("cpu")
             torch.cuda.empty_cache()
             self.vae.model.to(self.device)
             self.vae.mean = self.vae.mean.to(self.device)
             self.vae.std = self.vae.std.to(self.device)
-            print(f"    [offload] VAE → GPU  {_time.time()-_t0:.1f}s")
+            print(f"    [offload] VAE → GPU  {_time.time() - _t0:.1f}s")
 
         # ========== Decode latents ==========
         _t0 = _time.time()
@@ -622,15 +628,15 @@ class UnifiedBackbonePipeline:
         generated_video = videos[0]  # [T, 3, H, W]
         generated_video = (generated_video * 255).byte().cpu()
         generated_video = rearrange(generated_video, "t c h w -> t h w c")
-        print(f"    [decode] VAE decode  {_time.time()-_t0:.1f}s")
+        print(f"    [decode] VAE decode  {_time.time() - _t0:.1f}s")
 
         if cpu_offload:
             _t0 = _time.time()
-            self.vae.model.to('cpu')
-            self.vae.mean = self.vae.mean.to('cpu')
-            self.vae.std = self.vae.std.to('cpu')
+            self.vae.model.to("cpu")
+            self.vae.mean = self.vae.mean.to("cpu")
+            self.vae.std = self.vae.std.to("cpu")
             torch.cuda.empty_cache()
-            print(f"    [offload] VAE → CPU  {_time.time()-_t0:.1f}s")
+            print(f"    [offload] VAE → CPU  {_time.time() - _t0:.1f}s")
 
         return generated_video
 
@@ -642,19 +648,19 @@ class UnifiedBackbonePipeline:
         prompt: str,
         num_frames: int,
         infer_steps: int = 50,  # kept for signature compatibility
-        guidance_scale: Optional[float] = None,
+        guidance_scale: float | None = None,
         use_cfg: bool = True,
         cpu_offload: bool = False,
-        preceding_frames: Optional[np.ndarray] = None,
-        preceding_scene_proj: Optional[torch.Tensor] = None,
-        reference_frames: Optional[np.ndarray] = None,
-        target_fg_proj: Optional[torch.Tensor] = None,
-        preceding_fg_proj: Optional[torch.Tensor] = None,
-        seed: Optional[int] = None,
+        preceding_frames: np.ndarray | None = None,
+        preceding_scene_proj: torch.Tensor | None = None,
+        reference_frames: np.ndarray | None = None,
+        target_fg_proj: torch.Tensor | None = None,
+        preceding_fg_proj: torch.Tensor | None = None,
+        seed: int | None = None,
         sp_context_scale: float = 1.0,
         preceding_noise_timestep: int = 0,
-        instance_reference_frames: Optional[np.ndarray] = None,
-        denoising_step_list: Optional[List[float]] = None,
+        instance_reference_frames: np.ndarray | None = None,
+        denoising_step_list: list[float] | None = None,
     ) -> torch.Tensor:
         """
         Run a single iteration using CausVid-style few-step bidirectional inference.
@@ -671,7 +677,7 @@ class UnifiedBackbonePipeline:
           guidance_scale has value -> use_cfg=True
         """
         if use_cfg and guidance_scale is None:
-            guidance_scale = getattr(self.config, 'guidance_scale', 5.0)
+            guidance_scale = getattr(self.config, "guidance_scale", 5.0)
 
         # Calculate latent frames
         num_latent_frames = self._pixel_to_latent_frames(num_frames)
@@ -705,11 +711,15 @@ class UnifiedBackbonePipeline:
                 )
                 noise_p = torch.randn_like(preceding_latent)
                 t_p = torch.full(
-                    [num_p], preceding_noise_timestep,
-                    device=self.device, dtype=torch.float32,
+                    [num_p],
+                    preceding_noise_timestep,
+                    device=self.device,
+                    dtype=torch.float32,
                 )
                 preceding_latent = _noise_sched.add_noise(
-                    preceding_latent.squeeze(0), noise_p.squeeze(0), t_p,
+                    preceding_latent.squeeze(0),
+                    noise_p.squeeze(0),
+                    t_p,
                 ).unsqueeze(0)
                 print(f"  Added noise to preceding frames: timestep={preceding_noise_timestep}")
 
@@ -719,7 +729,7 @@ class UnifiedBackbonePipeline:
         if reference_frames is not None and len(reference_frames) > 0:
             ref_latents = []
             for i in range(len(reference_frames)):
-                single = self._encode_frames_to_latent(reference_frames[i:i+1])  # [1, 1, C, h, w]
+                single = self._encode_frames_to_latent(reference_frames[i : i + 1])  # [1, 1, C, h, w]
                 ref_latents.append(single)
             reference_scene_latent = torch.cat(ref_latents, dim=1)  # [1, R_scene, C, h, w]
             num_r_scene = reference_scene_latent.shape[1]
@@ -729,7 +739,7 @@ class UnifiedBackbonePipeline:
         if instance_reference_frames is not None and len(instance_reference_frames) > 0:
             inst_latents = []
             for i in range(len(instance_reference_frames)):
-                single = self._encode_frames_to_latent(instance_reference_frames[i:i+1])
+                single = self._encode_frames_to_latent(instance_reference_frames[i : i + 1])
                 inst_latents.append(single)
             reference_inst_latent = torch.cat(inst_latents, dim=1)  # [1, R_inst, C, h, w]
             num_r_inst = reference_inst_latent.shape[1]
@@ -757,10 +767,10 @@ class UnifiedBackbonePipeline:
 
         # ========== CPU offload: move encoders to CPU, generator to GPU ==========
         if cpu_offload:
-            self.text_encoder.to('cpu')
-            self.vae.model.to('cpu')
-            self.vae.mean = self.vae.mean.to('cpu')
-            self.vae.std = self.vae.std.to('cpu')
+            self.text_encoder.to("cpu")
+            self.vae.model.to("cpu")
+            self.vae.mean = self.vae.mean.to("cpu")
+            self.vae.std = self.vae.std.to("cpu")
             torch.cuda.empty_cache()
             self.generator.to(self.device)
 
@@ -780,8 +790,7 @@ class UnifiedBackbonePipeline:
         )
         # Initial noisy target
         latents = torch.randn(
-            1, num_latent_frames, self.latent_channels, self.h, self.w,
-            device=self.device, dtype=self.dtype
+            1, num_latent_frames, self.latent_channels, self.h, self.w, device=self.device, dtype=self.dtype
         )
 
         # Base scheduler for add_noise between explicit few steps.
@@ -791,7 +800,7 @@ class UnifiedBackbonePipeline:
         denoising_pbar = tqdm(
             enumerate(few_step_timesteps),
             total=len(few_step_timesteps),
-            desc=f"Denoising (T={num_t}, P={num_p}, R_scene={num_r_scene}, R_inst={num_r_inst})"
+            desc=f"Denoising (T={num_t}, P={num_p}, R_scene={num_r_scene}, R_inst={num_r_inst})",
         )
 
         for step_idx, current_timestep in denoising_pbar:
@@ -847,14 +856,13 @@ class UnifiedBackbonePipeline:
             else:
                 latents = pred_x0
 
-            denoising_pbar.set_postfix({
-                'timestep': f'{float(current_timestep):.3f}',
-                'step': f'{step_idx + 1}/{len(few_step_timesteps)}'
-            })
+            denoising_pbar.set_postfix(
+                {"timestep": f"{float(current_timestep):.3f}", "step": f"{step_idx + 1}/{len(few_step_timesteps)}"}
+            )
 
         # ========== CPU offload: move generator to CPU, VAE to GPU for decoding ==========
         if cpu_offload:
-            self.generator.to('cpu')
+            self.generator.to("cpu")
             torch.cuda.empty_cache()
             self.vae.model.to(self.device)
             self.vae.mean = self.vae.mean.to(self.device)
@@ -870,9 +878,9 @@ class UnifiedBackbonePipeline:
         generated_video = rearrange(generated_video, "t c h w -> t h w c")
 
         if cpu_offload:
-            self.vae.model.to('cpu')
-            self.vae.mean = self.vae.mean.to('cpu')
-            self.vae.std = self.vae.std.to('cpu')
+            self.vae.model.to("cpu")
+            self.vae.mean = self.vae.mean.to("cpu")
+            self.vae.std = self.vae.std.to("cpu")
             torch.cuda.empty_cache()
 
         return generated_video
@@ -884,11 +892,11 @@ class UnifiedBackbonePipeline:
         num_frames: int,
         first_frame_image: str,
         geometry_poses_c2w: np.ndarray,
-        frames_per_iter: Optional[int] = None,
-        options: Optional[BackboneInferenceOptions] = None,
-        target_scene_proj: Optional[torch.Tensor] = None,
-        output_paths: Optional[BackboneOutputPaths] = None,
-        iter_inputs: Optional[Dict[int, dict]] = None,
+        frames_per_iter: int | None = None,
+        options: BackboneInferenceOptions | None = None,
+        target_scene_proj: torch.Tensor | None = None,
+        output_paths: BackboneOutputPaths | None = None,
+        iter_inputs: dict[int, dict] | None = None,
     ) -> BackboneInferenceResult:
         """
         Run full iterative inference with optional point cloud updates.
@@ -929,8 +937,8 @@ class UnifiedBackbonePipeline:
         result: BackboneInferenceResult,
         output_paths: BackboneOutputPaths,
         options: BackboneInferenceOptions,
-        output_name: Optional[str] = None,
-        input_dir: Optional[str] = None,
+        output_name: str | None = None,
+        input_dir: str | None = None,
     ) -> None:
         """Save videos, point clouds, and metadata for iterative inference."""
         save_iterative_outputs(
@@ -947,12 +955,8 @@ class UnifiedBackbonePipeline:
 # Iterative Inference Utilities
 # =============================================================================
 
-def _get_project_root() -> str:
-    """Return the repository root for local imports."""
-    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-
-def load_frame_from_image(image_path: str, target_size: Tuple[int, int]) -> Image.Image:
+def load_frame_from_image(image_path: str, target_size: tuple[int, int]) -> Image.Image:
     """Load the first frame from an image file.
 
     Args:
@@ -964,29 +968,21 @@ def load_frame_from_image(image_path: str, target_size: Tuple[int, int]) -> Imag
     return img
 
 
-
-
-
-
-
-
-
-
 def retrieve_reference_frames(
-    target_frame_indices: List[int],
-    all_generated_frames: List[np.ndarray],
-    frame_visible_points: Dict[int, np.ndarray],
+    target_frame_indices: list[int],
+    all_generated_frames: list[np.ndarray],
+    frame_visible_points: dict[int, np.ndarray],
     points_world: np.ndarray,
     poses_c2w: np.ndarray,
     intrinsics: np.ndarray,
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     max_reference_frames: int = 7,
     iou_threshold: float = 0.1,
     voxel_size_iou: float = 0.1,
     iou_device: str | torch.device | None = "auto",
     max_iou_frames: int = 50,
     max_iou_points: int = 50000,
-) -> Tuple[Optional[np.ndarray], List[int], List[str]]:
+) -> tuple[np.ndarray | None, list[int], list[str]]:
     """Retrieve reference frames following LiveWorld paper Algorithm 1.
 
     For each target frame, find the candidate frame with maximal 3D IoU
@@ -999,8 +995,8 @@ def retrieve_reference_frames(
         - ref_indices: list of selected frame indices
         - diagnostics: list of human-readable diagnostic lines
     """
-    diag: List[str] = []
-    diag.append(f"=== retrieve_reference_frames ===")
+    diag: list[str] = []
+    diag.append("=== retrieve_reference_frames ===")
     diag.append(f"target_frame_indices: {list(target_frame_indices)}")
     diag.append(f"max_reference_frames: {max_reference_frames}, iou_threshold: {iou_threshold}")
     diag.append(f"voxel_size_iou: {voxel_size_iou}")
@@ -1011,7 +1007,9 @@ def retrieve_reference_frames(
     diag.append("")
 
     if max_reference_frames <= 0 or len(all_generated_frames) == 0 or points_world is None:
-        diag.append(f"EARLY EXIT: max_refs={max_reference_frames}, n_gen={len(all_generated_frames)}, pts={'None' if points_world is None else len(points_world)}")
+        diag.append(
+            f"EARLY EXIT: max_refs={max_reference_frames}, n_gen={len(all_generated_frames)}, pts={'None' if points_world is None else len(points_world)}"
+        )
         return None, [], diag
 
     if intrinsics.ndim == 2:
@@ -1035,24 +1033,32 @@ def retrieve_reference_frames(
     height, width = image_size
     total_pixels = max(1, height * width)
     min_coverage = 0.20
-    target_scene_maps: List[np.ndarray] = []
-    target_scene_map_indices: List[int] = []
+    target_scene_maps: list[np.ndarray] = []
+    target_scene_map_indices: list[int] = []
     diag.append(f"--- Target frame coverage (min_coverage={min_coverage:.2f}, device={_vis_device}) ---")
 
     if _vis_device is not None and str(_vis_device).startswith("cuda"):
         # GPU path: batch visibility + coverage computation.
         vis_results = _get_visible_points_and_coverage_gpu(
-            points_world, poses_c2w, intrinsics, target_list,
-            image_size, device=_vis_device,
+            points_world,
+            poses_c2w,
+            intrinsics,
+            target_list,
+            image_size,
+            device=_vis_device,
         )
         for frame_idx, visible_pts, coverage, n_unique in vis_results:
             if len(visible_pts) == 0:
                 diag.append(f"  target frame {frame_idx}: 0 visible points -> SKIP")
                 continue
             if coverage < min_coverage:
-                diag.append(f"  target frame {frame_idx}: {len(visible_pts)} visible pts, coverage={coverage:.4f} ({n_unique}/{total_pixels} pixels) -> SKIP (< {min_coverage})")
+                diag.append(
+                    f"  target frame {frame_idx}: {len(visible_pts)} visible pts, coverage={coverage:.4f} ({n_unique}/{total_pixels} pixels) -> SKIP (< {min_coverage})"
+                )
                 continue
-            diag.append(f"  target frame {frame_idx}: {len(visible_pts)} visible pts, coverage={coverage:.4f} ({n_unique}/{total_pixels} pixels) -> PASS")
+            diag.append(
+                f"  target frame {frame_idx}: {len(visible_pts)} visible pts, coverage={coverage:.4f} ({n_unique}/{total_pixels} pixels) -> PASS"
+            )
             target_scene_maps.append(visible_pts)
             target_scene_map_indices.append(frame_idx)
     else:
@@ -1075,9 +1081,13 @@ def retrieve_reference_frames(
             n_unique = len(np.unique(pixel_ids))
             coverage = n_unique / total_pixels
             if coverage < min_coverage:
-                diag.append(f"  target frame {frame_idx}: {len(visible_pts)} visible pts, coverage={coverage:.4f} ({n_unique}/{total_pixels} pixels) -> SKIP (< {min_coverage})")
+                diag.append(
+                    f"  target frame {frame_idx}: {len(visible_pts)} visible pts, coverage={coverage:.4f} ({n_unique}/{total_pixels} pixels) -> SKIP (< {min_coverage})"
+                )
                 continue
-            diag.append(f"  target frame {frame_idx}: {len(visible_pts)} visible pts, coverage={coverage:.4f} ({n_unique}/{total_pixels} pixels) -> PASS")
+            diag.append(
+                f"  target frame {frame_idx}: {len(visible_pts)} visible pts, coverage={coverage:.4f} ({n_unique}/{total_pixels} pixels) -> PASS"
+            )
             target_scene_maps.append(visible_pts)
             target_scene_map_indices.append(frame_idx)
 
@@ -1096,7 +1106,7 @@ def retrieve_reference_frames(
         for idx, pts in hist_items
         if pts is not None and len(pts) > 0 and 0 <= idx < len(all_generated_frames)
     ]
-    diag.append(f"--- Historical candidates ---")
+    diag.append("--- Historical candidates ---")
     diag.append(f"  {len(hist_items)} candidates from frame_visible_points (frames: {[idx for idx, _ in hist_items]})")
     for idx, pts in hist_items:
         diag.append(f"    hist frame {idx}: {len(pts)} visible pts")
@@ -1112,20 +1122,23 @@ def retrieve_reference_frames(
     use_gpu = resolved_device is not None and str(resolved_device).startswith("cuda")
 
     selected_set: set[int] = set()
-    selected_indices: List[int] = []
+    selected_indices: list[int] = []
 
     diag.append(f"--- IoU matching (use_gpu={use_gpu}, device={resolved_device}) ---")
     for ti, target_pts in enumerate(target_scene_maps):
         target_fidx = target_scene_map_indices[ti]
         if len(selected_indices) >= max_reference_frames:
-            diag.append(f"  target frame {target_fidx}: SKIP (already reached max_reference_frames={max_reference_frames})")
+            diag.append(
+                f"  target frame {target_fidx}: SKIP (already reached max_reference_frames={max_reference_frames})"
+            )
             break
         if use_gpu:
             scores = compute_3d_iou_batched(
                 target_pts,
                 hist_items,
                 voxel_size_iou,
-                device=resolved_device, max_points=max_iou_points,
+                device=resolved_device,
+                max_points=max_iou_points,
             )
         else:
             scores = []
@@ -1165,19 +1178,19 @@ def retrieve_reference_frames(
             selected_indices.append(best_hist_idx)
             diag.append(f"    => SELECTED hist frame {best_hist_idx} (IoU={best_iou:.6f}) [oldest-first]")
         else:
-            diag.append(f"    => NO match (all below threshold or already selected)")
+            diag.append("    => NO match (all below threshold or already selected)")
 
     _dt_iou = _time.time() - _t_iou
     diag.append(f"  IoU matching took {_dt_iou:.1f}s")
-    diag.append(f"  [timing] visible_pts={_dt_vis:.1f}s  iou_match={_dt_iou:.1f}s  total={_dt_vis+_dt_iou:.1f}s")
+    diag.append(f"  [timing] visible_pts={_dt_vis:.1f}s  iou_match={_dt_iou:.1f}s  total={_dt_vis + _dt_iou:.1f}s")
     diag.append("")
 
     if not selected_indices:
         diag.append("RESULT: no reference frames selected")
         return None, [], diag
 
-    reference_frames: List[np.ndarray] = []
-    final_indices: List[int] = []
+    reference_frames: list[np.ndarray] = []
+    final_indices: list[int] = []
     for idx in selected_indices:
         if 0 <= idx < len(all_generated_frames):
             reference_frames.append(all_generated_frames[idx])
@@ -1195,25 +1208,26 @@ def retrieve_reference_frames(
 # Scene Projection Generation
 # =============================================================================
 
+
 def generate_scene_projection_from_pointcloud(
     points_world: np.ndarray,
     colors: np.ndarray,
-    target_frames: List[int],
+    target_frames: list[int],
     poses_c2w: np.ndarray,
     intrinsics: np.ndarray,
-    output_size: Tuple[int, int],
-    intrinsics_size: Tuple[int, int],
+    output_size: tuple[int, int],
+    intrinsics_size: tuple[int, int],
     vae,
     device,
     dtype,
-    density_max_pixels: Optional[int] = None,
-    density_rng: Optional[np.random.Generator] = None,
-    density_blue_noise: Optional[np.ndarray] = None,
+    density_max_pixels: int | None = None,
+    density_rng: np.random.Generator | None = None,
+    density_blue_noise: np.ndarray | None = None,
     verbose: bool = False,
 ) -> torch.Tensor:
     """Generate scene projection latent from a point cloud."""
 
-    def _normalize_intrinsics_matrix(intrinsics_in: np.ndarray, size_hw: Tuple[int, int]) -> np.ndarray:
+    def _normalize_intrinsics_matrix(intrinsics_in: np.ndarray, size_hw: tuple[int, int]) -> np.ndarray:
         """Ensure intrinsics is a 3x3 matrix."""
         if intrinsics_in.ndim == 2 and intrinsics_in.shape == (3, 3):
             return intrinsics_in.astype(np.float32)
@@ -1221,17 +1235,13 @@ def generate_scene_projection_from_pointcloud(
         if flat.size >= 4:
             fx, fy, cx, cy = flat[:4]
             return np.array(
-                [[fx, 0.0, cx],
-                 [0.0, fy, cy],
-                 [0.0, 0.0, 1.0]],
+                [[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]],
                 dtype=np.float32,
             )
         H, W = size_hw
         focal = max(H, W) * 1.2
         return np.array(
-            [[focal, 0.0, W / 2.0],
-             [0.0, focal, H / 2.0],
-             [0.0, 0.0, 1.0]],
+            [[focal, 0.0, W / 2.0], [0.0, focal, H / 2.0], [0.0, 0.0, 1.0]],
             dtype=np.float32,
         )
 
@@ -1254,10 +1264,14 @@ def generate_scene_projection_from_pointcloud(
 
         if use_density:
             pts, cols = _limit_points_by_density(
-                points_world, colors,
-                poses_c2w[pose_idx], K_scaled,
-                (height, width), density_max_pixels,
-                rng=density_rng, blue_noise=density_blue_noise,
+                points_world,
+                colors,
+                poses_c2w[pose_idx],
+                K_scaled,
+                (height, width),
+                density_max_pixels,
+                rng=density_rng,
+                blue_noise=density_blue_noise,
             )
         else:
             pts, cols = points_world, colors
@@ -1297,15 +1311,15 @@ def generate_scene_projection_from_pointcloud(
 
 def generate_scene_projection_with_handler(
     first_frame_image: str,
-    target_frames: List[int],
-    output_size: Tuple[int, int],
+    target_frames: list[int],
+    output_size: tuple[int, int],
     handler,
     geometry_poses_c2w: np.ndarray,
     vae,
     device,
     dtype,
     options,
-) -> Tuple[Any, ...]:
+) -> tuple[Any, ...]:
     """Generate initial scene projection using the 3D handler (Stream3R or MapAnything).
 
     Workflow:
@@ -1320,10 +1334,6 @@ def generate_scene_projection_with_handler(
         (scene_proj_latent, points_world, colors, first_frame,
          intrinsics, alignment_transform, intrinsics_size)
     """
-    project_root = _get_project_root()
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-
     if not os.path.exists(first_frame_image):
         raise FileNotFoundError(f"First frame image not found: {first_frame_image}")
 
@@ -1348,7 +1358,7 @@ def generate_scene_projection_with_handler(
         torch.cuda.empty_cache()
 
     fg_prompts_only = list(dynamic_prompts) if dynamic_prompts else []
-    all_prompts_init = fg_prompts_only + ["sky"]
+    all_prompts_init = fg_prompts_only + ["sky"]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     sam3_segmenter = Sam3VideoSegmenter(
         checkpoint_path=options.sam3_model_path,
@@ -1392,7 +1402,7 @@ def generate_scene_projection_with_handler(
         dynamic_mask=dynamic_mask,
         options=options,
     )
-    if options.cpu_offload and hasattr(handler, 'offload_to_cpu'):
+    if options.cpu_offload and hasattr(handler, "offload_to_cpu"):
         handler.offload_to_cpu()
 
     print(f"\n  [Step 3/3] Rendering scene projections for {len(target_frames)} target frames...")
@@ -1425,17 +1435,18 @@ def generate_scene_projection_with_handler(
 # Iteration Processing
 # =============================================================================
 
+
 def process_iteration(
     pipeline: UnifiedBackbonePipeline,
     iter_idx: int,
-    iteration_plan: List[Tuple[int, int, int]],
+    iteration_plan: list[tuple[int, int, int]],
     state: IterationState,
     prompt: str,
-    iter_input: Optional[dict],
+    iter_input: dict | None,
     options: BackboneInferenceOptions,
     t0: int,
-    output_size: Tuple[int, int],
-    output_paths: Optional[BackboneOutputPaths] = None,
+    output_size: tuple[int, int],
+    output_paths: BackboneOutputPaths | None = None,
 ) -> IterationResult:
     """Process a single iteration of multi-round inference."""
     height, width = output_size
@@ -1471,7 +1482,7 @@ def process_iteration(
     # clip frame = t0 + 1 + generated_frame_index
     target_frame_indices = list(range(t0 + 1 + output_start, t0 + 1 + output_end))
 
-    if options.limit_projection_density and iter_idx == 0 and state.projection_density_max_pixels is None:
+    if options.limit_projection_density and iter_idx == 0 and state.projection_density_max_pixels is None:  # noqa: SIM102 - Statement form kept for readability.
         if state.points_world is not None and state.intrinsics is not None:
             intr_size = state.intrinsics_size
             state.projection_density_max_pixels = _compute_projection_density_max_pixels(
@@ -1558,9 +1569,13 @@ def process_iteration(
                     vae=pipeline.vae,
                     device=device,
                     dtype=pipeline.dtype,
-                    density_max_pixels=state.projection_density_max_pixels if options.limit_projection_density else None,
+                    density_max_pixels=state.projection_density_max_pixels
+                    if options.limit_projection_density
+                    else None,
                     density_rng=state.projection_density_rng if options.limit_projection_density else None,
-                    density_blue_noise=state.projection_density_blue_noise if options.limit_projection_density else None,
+                    density_blue_noise=state.projection_density_blue_noise
+                    if options.limit_projection_density
+                    else None,
                 )
                 print(f"  Preceding scene projection shape: {preceding_scene_proj.shape}")
 
@@ -1572,7 +1587,8 @@ def process_iteration(
                 # Resize mask to match output_size if needed
                 if fg_mask.shape[:2] != (output_size[0], output_size[1]):
                     fg_mask = cv2.resize(
-                        fg_mask.astype(np.uint8), (output_size[1], output_size[0]),
+                        fg_mask.astype(np.uint8),
+                        (output_size[1], output_size[0]),
                         interpolation=cv2.INTER_NEAREST,
                     ).astype(bool)
                 # Resize fg_img to output_size if needed
@@ -1620,16 +1636,20 @@ def process_iteration(
                         vae=pipeline.vae,
                         device=device,
                         dtype=pipeline.dtype,
-                        density_max_pixels=state.projection_density_max_pixels if options.limit_projection_density else None,
+                        density_max_pixels=state.projection_density_max_pixels
+                        if options.limit_projection_density
+                        else None,
                         density_rng=state.projection_density_rng if options.limit_projection_density else None,
-                        density_blue_noise=state.projection_density_blue_noise if options.limit_projection_density else None,
+                        density_blue_noise=state.projection_density_blue_noise
+                        if options.limit_projection_density
+                        else None,
                     )
                     print(f"  Preceding scene projection shape: {preceding_scene_proj.shape}")
 
     if vae_for_proj_on_gpu:
-        pipeline.vae.model.to('cpu')
-        pipeline.vae.mean = pipeline.vae.mean.to('cpu')
-        pipeline.vae.std = pipeline.vae.std.to('cpu')
+        pipeline.vae.model.to("cpu")
+        pipeline.vae.mean = pipeline.vae.mean.to("cpu")
+        pipeline.vae.std = pipeline.vae.std.to("cpu")
         torch.cuda.empty_cache()
 
     reference_frames = None
@@ -1652,28 +1672,23 @@ def process_iteration(
             max_iou_frames=options.max_iou_frames,
             max_iou_points=options.max_iou_points,
         )
-        if reference_frames is not None:
-            if output_paths is not None:
-                os.makedirs(output_paths.video_dir, exist_ok=True)
-                ref_video_path = os.path.join(
-                    output_paths.video_dir, f"reference_iter_{iter_idx + 1:02d}.mp4"
-                )
-                ref_video = reference_frames.astype(np.uint8)
-                save_video_h264(ref_video_path, ref_video, fps=options.fps)
+        if reference_frames is not None and output_paths is not None:
+            os.makedirs(output_paths.video_dir, exist_ok=True)
+            ref_video_path = os.path.join(output_paths.video_dir, f"reference_iter_{iter_idx + 1:02d}.mp4")
+            ref_video = reference_frames.astype(np.uint8)
+            save_video_h264(ref_video_path, ref_video, fps=options.fps)
 
-                ref_meta_path = os.path.join(
-                    output_paths.video_dir, f"reference_iter_{iter_idx + 1:02d}.json"
+            ref_meta_path = os.path.join(output_paths.video_dir, f"reference_iter_{iter_idx + 1:02d}.json")
+            with open(ref_meta_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "iter_idx": iter_idx,
+                        "reference_indices": ref_indices,
+                        "target_frame_indices": target_frame_indices,
+                    },
+                    f,
+                    indent=2,
                 )
-                with open(ref_meta_path, "w", encoding="utf-8") as f:
-                    json.dump(
-                        {
-                            "iter_idx": iter_idx,
-                            "reference_indices": ref_indices,
-                            "target_frame_indices": target_frame_indices,
-                        },
-                        f,
-                        indent=2,
-                    )
 
     # Decode scene projection before generation so we can inspect the input early
     scene_proj_decoded = None
@@ -1689,9 +1704,9 @@ def process_iteration(
             scene_proj_decoded = (_proj_pixel[0] * 255).byte().cpu()
             scene_proj_decoded = rearrange(scene_proj_decoded, "t c h w -> t h w c")
         if options.cpu_offload:
-            pipeline.vae.model.to('cpu')
-            pipeline.vae.mean = pipeline.vae.mean.to('cpu')
-            pipeline.vae.std = pipeline.vae.std.to('cpu')
+            pipeline.vae.model.to("cpu")
+            pipeline.vae.mean = pipeline.vae.mean.to("cpu")
+            pipeline.vae.std = pipeline.vae.std.to("cpu")
             torch.cuda.empty_cache()
         if output_paths is not None:
             os.makedirs(output_paths.video_dir, exist_ok=True)
@@ -1750,12 +1765,12 @@ def process_iteration(
     if iter_idx == 0:
         # First iteration: prepend input first frame
         first_frame_np = np.array(state.current_first_frame)
-        frames_to_store = [first_frame_np] + frames_to_store
+        frames_to_store = [first_frame_np] + frames_to_store  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         print(f"  Storing {len(frames_to_store)} frames (first_frame + {len(generated_video)} generated)")
     else:
         print(f"  Storing all {len(frames_to_store)} generated frames (no overlap)")
 
-    _update_point_cloud_with_iteration(        # update after every round video generation
+    _update_point_cloud_with_iteration(  # update after every round video generation
         iter_idx=iter_idx,
         generated_video=generated_video,
         target_frame_indices=target_frame_indices,
@@ -1765,7 +1780,6 @@ def process_iteration(
         pointcloud_dir=output_paths.pointcloud_dir if output_paths else None,
         device=device,
     )
-
 
     if output_paths is not None:
         if iter_idx == 0:
@@ -1831,7 +1845,6 @@ def process_iteration(
         last_frame_np = generated_video[-1].numpy()
         state.current_first_frame = Image.fromarray(last_frame_np)
 
-
     return IterationResult(
         generated_video=generated_video,
         frames_to_store=frames_to_store,
@@ -1848,11 +1861,11 @@ def process_iteration(
 def _update_point_cloud_with_iteration(
     iter_idx: int,
     generated_video: torch.Tensor,
-    target_frame_indices: List[int],
+    target_frame_indices: list[int],
     state: IterationState,
     options: BackboneInferenceOptions,
-    output_size: Tuple[int, int],
-    pointcloud_dir: Optional[str],
+    output_size: tuple[int, int],
+    pointcloud_dir: str | None,
     device: torch.device,
 ) -> None:
     """Update point cloud with generated frames."""
@@ -1886,7 +1899,7 @@ def _update_point_cloud_with_iteration(
             options=options,
             debug_dir=pointcloud_dir,
         )
-        if options.cpu_offload and hasattr(state.pointcloud_updater, 'offload_to_cpu'):
+        if options.cpu_offload and hasattr(state.pointcloud_updater, "offload_to_cpu"):
             state.pointcloud_updater.offload_to_cpu()
         if new_points is not None and len(new_points) > 0:
             # Sync authoritative state from handler
@@ -1896,12 +1909,16 @@ def _update_point_cloud_with_iteration(
                 state.colors = handler.colors
             else:
                 # Fallback: merge manually
-                merge_voxel = (options.stream3r_merge_voxel_size
-                               if options.pointcloud_backend == "stream3r"
-                               else (options.voxel_size or 0.001))
+                merge_voxel = (
+                    options.stream3r_merge_voxel_size
+                    if options.pointcloud_backend == "stream3r"
+                    else (options.voxel_size or 0.001)
+                )
                 state.points_world, state.colors = _merge_pointcloud_incremental(
-                    state.points_world, state.colors,
-                    new_points, new_colors,
+                    state.points_world,
+                    state.colors,
+                    new_points,
+                    new_colors,
                     merge_voxel,
                 )
             print(f"  [PointCloud] Update: {len(state.points_world)} points")
@@ -1914,7 +1931,6 @@ def _update_point_cloud_with_iteration(
             if idx not in state.accumulated_anchor_global_indices:
                 state.accumulated_anchor_global_indices.append(idx)
     except Exception as exc:
-
         print(f"  Warning: {options.pointcloud_backend} update failed: {exc}")
         traceback.print_exc()
         print("  Continuing with existing point cloud...")
@@ -1922,10 +1938,10 @@ def _update_point_cloud_with_iteration(
 
 def _update_frame_visibility(
     iter_idx: int,
-    target_frame_indices: List[int],
+    target_frame_indices: list[int],
     output_start: int,
     state: IterationState,
-    output_size: Tuple[int, int],
+    output_size: tuple[int, int],
 ) -> None:
     """Update visibility data for reference frame retrieval."""
     if state.points_world is None or state.poses_c2w is None:
@@ -1960,27 +1976,26 @@ def _update_frame_visibility(
         if len(visible_pts) > 0:
             state.frame_visible_points[global_frame_idx] = visible_pts
 
-    print(f"  Updated visible points for {len(frames_to_process)} frames, total tracked: {len(state.frame_visible_points)}")
+    print(
+        f"  Updated visible points for {len(frames_to_process)} frames, total tracked: {len(state.frame_visible_points)}"
+    )
 
 
 def _render_iteration_scene_projection(
     iter_idx: int,
-    target_frame_indices: List[int],
+    target_frame_indices: list[int],
     state: IterationState,
     pipeline: UnifiedBackbonePipeline,
-    output_size: Tuple[int, int],
+    output_size: tuple[int, int],
     options: BackboneInferenceOptions,
-) -> Optional[List[np.ndarray]]:
+) -> list[np.ndarray] | None:
     """Render scene projections for visualization."""
     if state.points_world is None or state.colors is None:
         return None
 
     print("\n[Rendering scene projection for visualization...]")
 
-    if iter_idx == 0:
-        proj_frame_indices = target_frame_indices
-    else:
-        proj_frame_indices = target_frame_indices[1:]
+    proj_frame_indices = target_frame_indices if iter_idx == 0 else target_frame_indices[1:]
 
     if len(proj_frame_indices) == 0:
         return None
@@ -2011,32 +2026,33 @@ def _render_iteration_scene_projection(
     iter_scene_proj_np = rearrange(iter_scene_proj_np, "t c h w -> t h w c").numpy()
 
     if options.cpu_offload:
-        pipeline.vae.model.to('cpu')
-        pipeline.vae.mean = pipeline.vae.mean.to('cpu')
-        pipeline.vae.std = pipeline.vae.std.to('cpu')
+        pipeline.vae.model.to("cpu")
+        pipeline.vae.mean = pipeline.vae.mean.to("cpu")
+        pipeline.vae.std = pipeline.vae.std.to("cpu")
         torch.cuda.empty_cache()
 
     print(f"  Rendered {len(proj_frame_indices)} scene projection frames")
 
-    return [f for f in iter_scene_proj_np]
+    return list(iter_scene_proj_np)
 
 
 # =============================================================================
 # High-level Iterative Inference
 # =============================================================================
 
+
 def run_iterative_inference(
     pipeline: UnifiedBackbonePipeline,
     first_frame: Image.Image,
     prompt: str,
     num_frames: int,
-    frames_per_iter: Optional[int],
+    frames_per_iter: int | None,
     options: BackboneInferenceOptions,
     first_frame_image: str,
     geometry_poses_c2w: np.ndarray,
-    target_scene_proj: Optional[torch.Tensor] = None,
-    output_paths: Optional[BackboneOutputPaths] = None,
-    iter_inputs: Optional[Dict[int, dict]] = None,
+    target_scene_proj: torch.Tensor | None = None,
+    output_paths: BackboneOutputPaths | None = None,
+    iter_inputs: dict[int, dict] | None = None,
 ) -> BackboneInferenceResult:
     """Run the full iterative LiveWorld inference loop.
 
@@ -2083,7 +2099,7 @@ def run_iterative_inference(
     print(f"[PointCloud] Using backend: {options.pointcloud_backend}")
 
     # Configure dynamic object detection for point cloud updates
-    if hasattr(handler, 'set_dynamic_models'):
+    if hasattr(handler, "set_dynamic_models"):
         handler.set_dynamic_models(
             qwen_model_path=options.qwen_model_path,
             sam3_model_path=options.sam3_model_path,
@@ -2109,18 +2125,29 @@ def run_iterative_inference(
             options=options,
         )
 
-        (target_scene_proj, points_world, colors, anchor_frame0,
-         intrinsics, alignment_transform, intrinsics_size,
-         initial_dynamic_mask, initial_fg_only_mask) = result
+        (
+            target_scene_proj,
+            points_world,
+            colors,
+            anchor_frame0,
+            intrinsics,
+            alignment_transform,
+            intrinsics_size,
+            initial_dynamic_mask,
+            initial_fg_only_mask,
+        ) = result
 
         # Transform geometry poses into Stream3R world coordinate system
         if alignment_transform is not None:
-            poses_c2w = np.array([
-                alignment_transform @ p.astype(np.float32)
-                if p.shape == (4, 4)
-                else alignment_transform @ np.vstack([p.astype(np.float32), [0, 0, 0, 1]])
-                for p in geometry_poses_c2w
-            ], dtype=np.float32)
+            poses_c2w = np.array(
+                [
+                    alignment_transform @ p.astype(np.float32)
+                    if p.shape == (4, 4)
+                    else alignment_transform @ np.vstack([p.astype(np.float32), [0, 0, 0, 1]])
+                    for p in geometry_poses_c2w
+                ],
+                dtype=np.float32,
+            )
             print(f"  Aligned geometry poses to Stream3R coords: {poses_c2w.shape}")
         else:
             poses_c2w = geometry_poses_c2w.copy()
@@ -2132,9 +2159,9 @@ def run_iterative_inference(
             initial_colors = colors.copy()
 
         if options.cpu_offload:
-            pipeline.vae.model.to('cpu')
-            pipeline.vae.mean = pipeline.vae.mean.to('cpu')
-            pipeline.vae.std = pipeline.vae.std.to('cpu')
+            pipeline.vae.model.to("cpu")
+            pipeline.vae.mean = pipeline.vae.mean.to("cpu")
+            pipeline.vae.std = pipeline.vae.std.to("cpu")
             torch.cuda.empty_cache()
 
     elif target_scene_proj is not None:
@@ -2143,8 +2170,9 @@ def run_iterative_inference(
             target_scene_proj = target_scene_proj.permute(1, 0, 2, 3)
     else:
         num_latent_frames = pipeline._pixel_to_latent_frames(num_frames)
-        target_scene_proj = torch.zeros(16, num_latent_frames, pipeline.h, pipeline.w,
-                                 device=pipeline.device, dtype=pipeline.dtype)
+        target_scene_proj = torch.zeros(
+            16, num_latent_frames, pipeline.h, pipeline.w, device=pipeline.device, dtype=pipeline.dtype
+        )
 
     if output_paths is not None:
         os.makedirs(output_paths.output_dir, exist_ok=True)
@@ -2186,7 +2214,7 @@ def run_iterative_inference(
         state.accumulated_anchor_intrinsics = scale_intrinsics_batch(
             init_intrinsics,
             (intrinsics_size[0], intrinsics_size[1]) if intrinsics_size else (height, width),
-            (height, width)
+            (height, width),
         )
         state.accumulated_anchor_global_indices = [0]
 
@@ -2197,7 +2225,7 @@ def run_iterative_inference(
             )
 
     iter_inputs = iter_inputs or {}
-    for iter_idx in range(len(iteration_plan)):       # iterative video generation process
+    for iter_idx in range(len(iteration_plan)):  # iterative video generation process
         # Reset all random states for deterministic per-iteration behavior
         set_seed(options.seed + iter_idx)
         state.projection_density_rng = np.random.default_rng(options.seed + iter_idx)
@@ -2240,8 +2268,8 @@ def save_iterative_outputs(
     result: BackboneInferenceResult,
     output_paths: BackboneOutputPaths,
     options: BackboneInferenceOptions,
-    output_name: Optional[str] = None,
-    input_dir: Optional[str] = None,
+    output_name: str | None = None,
+    input_dir: str | None = None,
 ) -> None:
     """Save outputs for iterative inference."""
 
@@ -2251,7 +2279,7 @@ def save_iterative_outputs(
     num_gen_frames = generated_video_final.shape[0]
 
     if output_name is None:
-        output_name = os.path.basename(output_paths.output_dir.rstrip('/'))
+        output_name = os.path.basename(output_paths.output_dir.rstrip("/"))
 
     if state.all_scene_proj_frames:
         scene_proj_video_save = torch.from_numpy(np.stack(state.all_scene_proj_frames, axis=0))
@@ -2293,9 +2321,9 @@ def save_iterative_outputs(
             scene_proj_video_save = rearrange(scene_proj_video_save, "t c h w -> t h w c")
 
             if options.cpu_offload:
-                pipeline.vae.model.to('cpu')
-                pipeline.vae.mean = pipeline.vae.mean.to('cpu')
-                pipeline.vae.std = pipeline.vae.std.to('cpu')
+                pipeline.vae.model.to("cpu")
+                pipeline.vae.mean = pipeline.vae.mean.to("cpu")
+                pipeline.vae.std = pipeline.vae.std.to("cpu")
                 torch.cuda.empty_cache()
         else:
             scene_proj_video_save = torch.zeros_like(generated_video_final)
@@ -2338,9 +2366,9 @@ def save_iterative_outputs(
             )
 
         if options.cpu_offload:
-            pipeline.vae.model.to('cpu')
-            pipeline.vae.mean = pipeline.vae.mean.to('cpu')
-            pipeline.vae.std = pipeline.vae.std.to('cpu')
+            pipeline.vae.model.to("cpu")
+            pipeline.vae.mean = pipeline.vae.mean.to("cpu")
+            pipeline.vae.std = pipeline.vae.std.to("cpu")
             torch.cuda.empty_cache()
     else:
         initial_proj_video_save = scene_proj_video_save
@@ -2402,5 +2430,5 @@ def save_iterative_outputs(
         "input_dir": input_dir,
     }
     metadata_path = os.path.join(output_paths.output_dir, "metadata.json")
-    with open(metadata_path, 'w') as f:
+    with open(metadata_path, "w") as f:
         json.dump(metadata, f, indent=2)

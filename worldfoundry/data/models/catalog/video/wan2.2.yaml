@@ -3,7 +3,7 @@ name: Wan2.2
 aliases:
   - wan-2p2
   - wan2p2
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 runtime_profile: runtime-profile:wan2.2-ti2v-5b-1280x704-121f
 tasks:
   - text-to-video
@@ -54,7 +54,7 @@ variants:
         gated: false
     min_vram_gb: 80
     runtime_profile: wan2.2-t2v-a14b
-    runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+    runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
     pipeline_binding: wan2.2-t2v-a14b
     integration:
       status: integrated
@@ -70,7 +70,7 @@ variants:
         gated: false
     min_vram_gb: 80
     runtime_profile: wan2.2-i2v-a14b
-    runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+    runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
     pipeline_binding: wan2.2-i2v-a14b
     integration:
       status: integrated
@@ -94,7 +94,7 @@ variants:
       status: verified
       notes: The WorldFoundry Wan2.2 TI2V-5B pipeline completed the full 121-frame,
         1280x704, 24 FPS, 50-step route with block offload and no collapsed frames.
-    runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+    runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
     pipeline_binding: wan2.2-ti2v-5b
     integration:
       status: integrated
@@ -128,16 +128,16 @@ docs:
   publisher: Alibaba (Tongyi Lab)
   publisher_kind: company
   publisher_zh: 阿里巴巴（通义实验室）
-  overview: Wan2.2 is the next Wan generation, tracked separately from Wan2.1 because upstream versions code and checkpoints separately. The recorded runnable surface is the TI2V 5B variant — a compact text+image-to-video model. WorldFoundry wraps the in-tree Wan2.2 TI2V runtime.
-  overview_zh: Wan2.2 是 Wan 的下一代，因上游代码与 checkpoint 独立版本化而与 Wan2.1 分开跟踪。记录的可运行面是 TI2V 5B variant——紧凑的图文生视频模型。WorldFoundry 封装了树内 Wan2.2 TI2V 运行时。
-  architecture: 'Upstream Wan2.2 introduces MoE denoising in its larger variants and a high-compression VAE in the TI2V 5B; this catalog''s recorded route is the 5B dense TI2V model. Contract: prompt/image/video/ actions in, generated_video out.'
-  architecture_zh: 上游 Wan2.2 在大 variant 中引入 MoE 去噪、在 TI2V 5B 中使用高压缩 VAE；本 catalog 记录的路径是 5B 稠密 TI2V 模型。契约：输入 prompt/image/video/actions，输出 generated_video。
-  usage_notes: 'The default TI2V 5B route is verified for 121 frames at 1280x704, 24 FPS, and 50 steps. Stage the official checkpoint locally before running it; the A14B variants require their own checkpoints and validation.'
-  usage_notes_zh: 默认 TI2V 5B 路径已按 1280x704、24 FPS、121 帧、50 步完成验证。运行前请在本地准备官方 checkpoint；A14B variants 需要各自的 checkpoint 与验证。
+  overview: 'Wan2.2 is the next Wan generation after Wan2.1, with its own code and checkpoints. It has three variants: T2V A14B and I2V A14B (MoE) and TI2V 5B, a compact text+image-to-video model. Validated with the released checkpoint: TI2V 5B generates 121 frames at 1280x704, 24 FPS, with 50 steps.'
+  overview_zh: Wan2.2 是 Wan2.1 之后的下一代 Wan，代码与 checkpoint 独立发布。它有三个 variant：T2V A14B 与 I2V A14B（MoE），以及紧凑的图文生视频模型 TI2V 5B。已用发布的 checkpoint 验证：TI2V 5B 以 50 步生成 1280x704、24 FPS 的 121 帧视频。
+  architecture: 'Upstream Wan2.2 introduces MoE denoising in its larger variants and a high-compression VAE in the TI2V 5B, which is a dense model. Contract: prompt/image/video/actions in, generated_video out.'
+  architecture_zh: 上游 Wan2.2 在大 variant 中引入 MoE 去噪，在 TI2V 5B 中使用高压缩 VAE；TI2V 5B 是稠密模型。契约：输入 prompt/image/video/actions，输出 generated_video。
+  usage_notes: 'Start with `wan2.2-ti2v-5b`: its default is 121 frames at 1280x704, 24 FPS, and 50 steps, and it needs 24 GB of VRAM. Stage the official checkpoint locally before running it; the A14B variants need their own checkpoints and 80 GB of VRAM.'
+  usage_notes_zh: 从 `wan2.2-ti2v-5b` 起步：默认 1280x704、24 FPS、121 帧、50 步，需要 24 GB 显存。运行前请在本地准备官方 checkpoint；A14B variant 需要各自的 checkpoint 与 80 GB 显存。
   limitations:
-  - This demo result covers only the TI2V 5B variant; the A14B routes require separate quality validation.
+  - Only the TI2V 5B variant has been validated; the A14B variants have not been compared with official output.
   limitations_zh:
-  - 本次 demo 结果仅覆盖 TI2V 5B variant；A14B 路径需要单独进行质量验证。
+  - 只有 TI2V 5B variant 已验证；A14B variant 尚未与官方输出对照。
   recommended_benchmarks:
   - id: vbench
     reason: Standard quality suite.

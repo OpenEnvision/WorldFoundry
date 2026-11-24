@@ -5,29 +5,33 @@
 # LICENSE file in the root directory of this source tree.
 
 # Adapted from https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/automatic_mask_generator.py
-"""Module for base_models -> perception_core -> segment -> sam2 -> automatic_mask_generator.py functionality."""
-
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import torch
 from torchvision.ops.boxes import batched_nms, box_area  # type: ignore
 
 from worldfoundry.base_models.perception_core.segment.mask_data import MaskData
-from worldfoundry.base_models.perception_core.segment.sam2.modeling.sam2_base import SAM2Base
-from worldfoundry.base_models.perception_core.segment.sam2.sam2_image_predictor import SAM2ImagePredictor
+from worldfoundry.base_models.perception_core.segment.sam2.modeling.sam2_base import (
+    SAM2Base,
+)
+from worldfoundry.base_models.perception_core.segment.sam2.sam2_image_predictor import (
+    SAM2ImagePredictor,
+)
 from worldfoundry.base_models.perception_core.segment.sam2.utils.amg import (
     area_from_rle,
     batch_iterator,
-    batched_mask_to_box,
     box_xyxy_to_xywh,
     build_all_layer_point_grids,
     calculate_stability_score,
     coco_encode_rle,
     generate_crop_boxes,
+    remove_small_regions,
+)
+from worldfoundry.base_models.perception_core.segment.sam_components.mask_ops import (
+    batched_mask_to_box,
     is_box_near_crop_edge,
     mask_to_rle_pytorch,
-    remove_small_regions,
     rle_to_mask,
     uncrop_boxes_xyxy,
     uncrop_masks,
@@ -37,10 +41,11 @@ from worldfoundry.base_models.perception_core.segment.sam2.utils.amg import (
 
 class SAM2AutomaticMaskGenerator:
     """Automatic mask generator implementation."""
+
     def __init__(
         self,
         model: SAM2Base,
-        points_per_side: Optional[int] = 32,
+        points_per_side: int | None = 32,
         points_per_batch: int = 64,
         pred_iou_thresh: float = 0.8,
         stability_score_thresh: float = 0.95,
@@ -51,7 +56,7 @@ class SAM2AutomaticMaskGenerator:
         crop_nms_thresh: float = 0.7,
         crop_overlap_ratio: float = 512 / 1500,
         crop_n_points_downscale_factor: int = 1,
-        point_grids: Optional[List[np.ndarray]] = None,
+        point_grids: list[np.ndarray] | None = None,
         min_mask_region_area: int = 0,
         output_mode: str = "binary_mask",
         use_m2m: bool = False,
@@ -106,9 +111,9 @@ class SAM2AutomaticMaskGenerator:
           multimask_output (bool): Whether to output multimask at each point of the grid.
         """
 
-        assert (points_per_side is None) != (
-            point_grids is None
-        ), "Exactly one of points_per_side or point_grid must be provided."
+        assert (points_per_side is None) != (point_grids is None), (
+            "Exactly one of points_per_side or point_grid must be provided."
+        )
         if points_per_side is not None:
             self.point_grids = build_all_layer_point_grids(
                 points_per_side,
@@ -164,13 +169,15 @@ class SAM2AutomaticMaskGenerator:
         Returns:
           (SAM2AutomaticMaskGenerator): The loaded model.
         """
-        from worldfoundry.base_models.perception_core.segment.sam2.build_sam import build_sam2_hf
+        from worldfoundry.base_models.perception_core.segment.sam2.build_sam import (
+            build_sam2_hf,
+        )
 
         sam_model = build_sam2_hf(model_id, **kwargs)
         return cls(sam_model, **kwargs)
 
     @torch.no_grad()
-    def generate(self, image: np.ndarray) -> List[Dict[str, Any]]:
+    def generate(self, image: np.ndarray) -> list[dict[str, Any]]:
         """
         Generates masks for the given image.
 
@@ -200,9 +207,7 @@ class SAM2AutomaticMaskGenerator:
 
         # Encode masks
         if self.output_mode == "coco_rle":
-            mask_data["segmentations"] = [
-                coco_encode_rle(rle) for rle in mask_data["rles"]
-            ]
+            mask_data["segmentations"] = [coco_encode_rle(rle) for rle in mask_data["rles"]]
         elif self.output_mode == "binary_mask":
             mask_data["segmentations"] = [rle_to_mask(rle) for rle in mask_data["rles"]]
         else:
@@ -225,22 +230,12 @@ class SAM2AutomaticMaskGenerator:
         return curr_anns
 
     def _generate_masks(self, image: np.ndarray) -> MaskData:
-        """Helper function to generate masks.
-
-        Args:
-            image: The image.
-
-        Returns:
-            The return value.
-        """
         orig_size = image.shape[:2]
-        crop_boxes, layer_idxs = generate_crop_boxes(
-            orig_size, self.crop_n_layers, self.crop_overlap_ratio
-        )
+        crop_boxes, layer_idxs = generate_crop_boxes(orig_size, self.crop_n_layers, self.crop_overlap_ratio)
 
         # Iterate over image crops
         data = MaskData()
-        for crop_box, layer_idx in zip(crop_boxes, layer_idxs):
+        for crop_box, layer_idx in zip(crop_boxes, layer_idxs, strict=False):
             crop_data = self._process_crop(image, crop_box, layer_idx, orig_size)
             data.cat(crop_data)
 
@@ -262,21 +257,10 @@ class SAM2AutomaticMaskGenerator:
     def _process_crop(
         self,
         image: np.ndarray,
-        crop_box: List[int],
+        crop_box: list[int],
         crop_layer_idx: int,
-        orig_size: Tuple[int, ...],
+        orig_size: tuple[int, ...],
     ) -> MaskData:
-        """Helper function to process crop.
-
-        Args:
-            image: The image.
-            crop_box: The crop box.
-            crop_layer_idx: The crop layer idx.
-            orig_size: The orig size.
-
-        Returns:
-            The return value.
-        """
         # Crop the image and calculate embeddings
         x0, y0, x1, y1 = crop_box
         cropped_im = image[y0:y1, x0:x1, :]
@@ -290,9 +274,7 @@ class SAM2AutomaticMaskGenerator:
         # Generate masks for this crop in batches
         data = MaskData()
         for (points,) in batch_iterator(self.points_per_batch, points_for_image):
-            batch_data = self._process_batch(
-                points, cropped_im_size, crop_box, orig_size, normalize=True
-            )
+            batch_data = self._process_batch(points, cropped_im_size, crop_box, orig_size, normalize=True)
             data.cat(batch_data)
             del batch_data
         self.predictor.reset_predictor()
@@ -316,35 +298,17 @@ class SAM2AutomaticMaskGenerator:
     def _process_batch(
         self,
         points: np.ndarray,
-        im_size: Tuple[int, ...],
-        crop_box: List[int],
-        orig_size: Tuple[int, ...],
+        im_size: tuple[int, ...],
+        crop_box: list[int],
+        orig_size: tuple[int, ...],
         normalize=False,
     ) -> MaskData:
-        """Helper function to process batch.
-
-        Args:
-            points: The points.
-            im_size: The im size.
-            crop_box: The crop box.
-            orig_size: The orig size.
-            normalize: The normalize.
-
-        Returns:
-            The return value.
-        """
         orig_h, orig_w = orig_size
 
         # Run model on this batch
-        points = torch.as_tensor(
-            points, dtype=torch.float32, device=self.predictor.device
-        )
-        in_points = self.predictor._transforms.transform_coords(
-            points, normalize=normalize, orig_hw=im_size
-        )
-        in_labels = torch.ones(
-            in_points.shape[0], dtype=torch.int, device=in_points.device
-        )
+        points = torch.as_tensor(points, dtype=torch.float32, device=self.predictor.device)
+        in_points = self.predictor._transforms.transform_coords(points, normalize=normalize, orig_hw=im_size)
+        in_labels = torch.ones(in_points.shape[0], dtype=torch.int, device=in_points.device)
         masks, iou_preds, low_res_masks = self.predictor._predict(
             in_points[:, None, :],
             in_labels[:, None],
@@ -379,12 +343,8 @@ class SAM2AutomaticMaskGenerator:
             in_points = self.predictor._transforms.transform_coords(
                 data["points"], normalize=normalize, orig_hw=im_size
             )
-            labels = torch.ones(
-                in_points.shape[0], dtype=torch.int, device=in_points.device
-            )
-            masks, ious = self.refine_with_m2m(
-                in_points, labels, data["low_res_masks"], self.points_per_batch
-            )
+            labels = torch.ones(in_points.shape[0], dtype=torch.int, device=in_points.device)
+            masks, ious = self.refine_with_m2m(in_points, labels, data["low_res_masks"], self.points_per_batch)
             data["masks"] = masks.squeeze(1)
             data["iou_preds"] = ious.squeeze(1)
 
@@ -404,9 +364,7 @@ class SAM2AutomaticMaskGenerator:
         data["boxes"] = batched_mask_to_box(data["masks"])
 
         # Filter boxes that touch crop boundaries
-        keep_mask = ~is_box_near_crop_edge(
-            data["boxes"], crop_box, [0, 0, orig_w, orig_h]
-        )
+        keep_mask = ~is_box_near_crop_edge(data["boxes"], crop_box, [0, 0, orig_w, orig_h])
         if not torch.all(keep_mask):
             data.filter(keep_mask)
 
@@ -418,9 +376,7 @@ class SAM2AutomaticMaskGenerator:
         return data
 
     @staticmethod
-    def postprocess_small_regions(
-        mask_data: MaskData, min_area: int, nms_thresh: float
-    ) -> MaskData:
+    def postprocess_small_regions(mask_data: MaskData, min_area: int, nms_thresh: float) -> MaskData:
         """
         Removes small disconnected regions and holes in masks, then reruns
         box NMS to remove any new duplicates.
@@ -469,14 +425,6 @@ class SAM2AutomaticMaskGenerator:
         return mask_data
 
     def refine_with_m2m(self, points, point_labels, low_res_masks, points_per_batch):
-        """Refine with m2m.
-
-        Args:
-            points: The points.
-            point_labels: The point labels.
-            low_res_masks: The low res masks.
-            points_per_batch: The points per batch.
-        """
         new_masks = []
         new_iou_preds = []
 

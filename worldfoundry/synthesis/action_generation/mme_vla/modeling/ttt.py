@@ -1,24 +1,24 @@
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 """
 Adapted from TTT-LM-JAX and LaCT repository.
 """
 
+from functools import partial
+
+import einops
 import flax.nnx as nnx
 import jax
 import jax.numpy as jnp
-import einops
+from jax import vmap
+
 from ...openpi import array_typing as at
 from ...openpi import sharding
-from functools import partial
-from jax import vmap
 from .memory_utils import (
-    kernel_init,
-    kernel_init_out_proj,
-    kernel_init_ttt_v,
-    kernel_init_ttt_out_proj,
     apply_layer_norm,
-    rms_normalize,
-    precompute_freqs_cis,
     inv_softplus,
+    kernel_init,
+    kernel_init_ttt_out_proj,
+    kernel_init_ttt_v,
     scan_remat_every_n_iterations_scan,
 )
 
@@ -38,18 +38,18 @@ class TTTBase(nnx.Module):
 
         self.output_stats = config.recurrent_memory.output_stats
 
-        self.dtype = dtype = jnp.float32 # fix this dtype
+        self.dtype = dtype = jnp.float32  # fix this dtype
 
         self._setup_lr(rngs, dtype)
         self._setup_qkvo(rngs, dtype)
         self._setup_ttt_weights(rngs, dtype)
-        
+
         if self.config.recurrent_memory.ttt_config.qk_norm:
             self.q_norm = nnx.LayerNorm(self.head_dim, rngs=rngs, dtype=dtype)
             self.k_norm = nnx.LayerNorm(self.head_dim, rngs=rngs, dtype=dtype)
         if self.config.recurrent_memory.ttt_config.v_norm:
             self.v_norm = nnx.LayerNorm(self.head_dim, rngs=rngs, dtype=dtype)
-        
+
         self.post_norm = nnx.LayerNorm(self.hidden_dim, rngs=rngs, dtype=dtype)
         # self.freqs_cis = nnx.Variable(
         #     precompute_freqs_cis(self.head_dim, self.mini_batch_size * 2),
@@ -58,12 +58,8 @@ class TTTBase(nnx.Module):
         # and our recurrent embedding already incorporates M-rope
 
     def _setup_lr(self, rngs: nnx.Rngs, dtype: jnp.dtype):
-        self.ttt_base_lr_inv = nnx.Variable(
-            inv_softplus(self.config.recurrent_memory.ttt_config.base_lr)
-        )
-        self.lr_proj = nnx.Linear(
-            self.hidden_dim, 1 * self.num_heads, rngs=rngs, kernel_init=kernel_init
-        )
+        self.ttt_base_lr_inv = nnx.Variable(inv_softplus(self.config.recurrent_memory.ttt_config.base_lr))
+        self.lr_proj = nnx.Linear(self.hidden_dim, 1 * self.num_heads, rngs=rngs, kernel_init=kernel_init)
 
     def _setup_qkvo(self, rngs: nnx.Rngs, dtype: jnp.dtype):
         self.wq = nnx.Linear(
@@ -126,10 +122,8 @@ class TTTBase(nnx.Module):
 
         @partial(vmap, axis_name="batch")
         def update_batch(xq, xk, xv, eta, mask):
-
             @partial(vmap, axis_name="head")
             def parallelize_over_heads(xq, xk, xv, eta, mask, ttt_params):
-
                 def compute_mini_batch(ttt_params_carry, inputs):
                     """Process single mini-batch."""
                     xq_mb = inputs["XQ"]  # (mb, head_dim)
@@ -174,9 +168,7 @@ class TTTBase(nnx.Module):
 
                 return ttt_params_new, output
 
-            ttt_params_new, output = parallelize_over_heads(
-                xq, xk, xv, eta, mask, ttt_params
-            )
+            ttt_params_new, output = parallelize_over_heads(xq, xk, xv, eta, mask, ttt_params)
             return ttt_params_new, output
 
         ttt_params_new, output = update_batch(xq, xk, xv, eta, mask)
@@ -222,9 +214,7 @@ class TTTBase(nnx.Module):
         return xq, xk, xv, x_mask
 
     def reset(self):
-        return jax.tree.map(
-            lambda x: x.value if isinstance(x, nnx.Param) else x, self.get_memory_state()
-        )
+        return jax.tree.map(lambda x: x.value if isinstance(x, nnx.Param) else x, self.get_memory_state())
 
     def __call__(
         self,
@@ -243,20 +233,17 @@ class TTTBase(nnx.Module):
 
         Z, mem_state_new, stats_dict = self.ttt(xq, xk, xv, eta_clipped, x_mask, mem_state)
         Z = self.wo(self.post_norm(Z))
-        
-        # control Z as the residual        
+
+        # control Z as the residual
         hidden_states_flat = einops.rearrange(hidden_states, "b nm mb d -> b (nm mb) d")
 
-        return hidden_states_flat+Z, mem_state_new, stats_dict
+        return hidden_states_flat + Z, mem_state_new, stats_dict
 
 
 class TTTLayerLinear(TTTBase):
-
     def _setup_ttt_weights(self, rngs: nnx.Rngs, dtype: jnp.dtype):
         self.W1 = nnx.Param(
-            jax.random.normal(
-                rngs.params(), (self.num_heads, self.head_dim, self.head_dim), dtype=self.dtype
-            )
+            jax.random.normal(rngs.params(), (self.num_heads, self.head_dim, self.head_dim), dtype=self.dtype)
             * jnp.sqrt(1 / self.head_dim),
         )
         self.b1 = nnx.Param(jnp.zeros((self.num_heads, self.head_dim), dtype=self.dtype))
@@ -266,7 +253,7 @@ class TTTLayerLinear(TTTBase):
 
     def get_memory_state(self):
         return (self.W1, self.b1, self.norm)
-    
+
     def process_mini_batch(
         self,
         xq_mini_batch,  # (mb, d)
@@ -305,10 +292,8 @@ class TTTLayerLinear(TTTBase):
                 w1_init, b1_init, norm_init = memory_state_init
                 z_0 = xi[-1:] @ w1_init + b1_init
                 ttt_norm_out_0 = apply_layer_norm(z_0, norm_init)
-                ttt_stats_dict["ttt_loss_mse_init"] = (
-                    (ttt_norm_out_0 - ssl_target[-1:]) ** 2
-                ).mean()
-            
+                ttt_stats_dict["ttt_loss_mse_init"] = ((ttt_norm_out_0 - ssl_target[-1:]) ** 2).mean()
+
             eta_expanded = eta_mini_batch[:, None]  # (mb, 1)
             dw1 = xi.T @ (eta_expanded * dz)  # (d, d)
             db1 = (eta_expanded * dz).sum(axis=0)  # (d,)
@@ -328,9 +313,7 @@ class TTTLayerLinear(TTTBase):
 
             if self.output_stats:
                 z_new = apply_layer_norm(xi[-1:] @ w1_new + b1_new, norm)
-                ttt_stats_dict["ttt_loss_mse_step_1"] = (
-                    (z_new - ssl_target[-1:]) ** 2
-                ).mean()
+                ttt_stats_dict["ttt_loss_mse_step_1"] = ((z_new - ssl_target[-1:]) ** 2).mean()
 
                 ttt_stats_dict["diff_w_norm"] = jnp.linalg.norm(w1_new - w1)
                 ttt_stats_dict["diff_b_norm"] = jnp.linalg.norm(b1_new - b1)
@@ -341,10 +324,9 @@ class TTTLayerLinear(TTTBase):
                 ttt_stats_dict["xv"] = jnp.linalg.norm(xv_mini_batch, axis=-1).mean()
                 ttt_stats_dict["mask"] = mask_mb.astype(jnp.bool_)
 
-            output = apply_layer_norm(
-                xq_mini_batch @ w1_new + b1_new, norm) + xq_mini_batch
+            output = apply_layer_norm(xq_mini_batch @ w1_new + b1_new, norm) + xq_mini_batch
             output = sharding.activation_sharding_constraint(output)
-            
+
             output = output.astype(data_dtype)
             memory_state_new = (w1_new.astype(mem_dtype), b1_new.astype(mem_dtype), norm.astype(mem_dtype))
             return memory_state_new, output, ttt_stats_dict
@@ -366,9 +348,7 @@ class TTTLayerLinear(TTTBase):
             }
             return memory_state, jnp.zeros_like(xq_mini_batch), ttt_stats_dict
 
-        memory_state_new, output, ttt_stats_dict = jax.lax.cond(
-            mask_mb, apply_gradients, keep_original
-        )
+        memory_state_new, output, ttt_stats_dict = jax.lax.cond(mask_mb, apply_gradients, keep_original)
 
         return memory_state_new, (
             output,

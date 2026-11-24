@@ -3,8 +3,6 @@ model_id: framepack
 runtime:
   kind: official_cli
   backend_quality: in_tree_official_runtime
-  repo_root_candidates:
-  - ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/synthesis/visual_generation/framepack/framepack_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_CKPT_DIR/FramePackI2V_HY
   - $WORLDFOUNDRY_CKPT_DIR/lllyasviel--FramePackI2V_HY
@@ -25,12 +23,8 @@ runtime:
     gpu_memory_preservation: 6
     use_teacache: true
     mp4_crf: 16
-  command:
-  - "{python}"
-  - "-m"
-  - "worldfoundry.synthesis.visual_generation.framepack.worldfoundry_runner"
-  - "--repo-root"
-  - "{repo_root}"
+  module: worldfoundry.synthesis.visual_generation.framepack.worldfoundry_runner
+  args:
   - "--checkpoint-path"
   - "{checkpoint_path}"
   - "--hf-home"

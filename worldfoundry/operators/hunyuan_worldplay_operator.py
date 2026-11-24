@@ -1,23 +1,25 @@
 """Module for the HunyuanWorldPlay operator implementation."""
 
 import os
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 
-from .base_operator import BaseOperator
 from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_worldplay.commons.pose_utils import (
     parse_pose_string,
-    pose_to_latent_num,
     pose_to_input,
+    pose_to_latent_num,
 )
 from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_worldplay.generate_custom_trajectory import (
     generate_camera_trajectory_local,
 )
 
+from .base_operator import BaseOperator
+
 
 class HunyuanWorldPlayOperator(BaseOperator):
     """Operator class for the HunyuanWorldPlay model integration."""
+
     def __init__(
         self,
         operation_types=None,
@@ -98,7 +100,7 @@ class HunyuanWorldPlayOperator(BaseOperator):
             self.check_interaction(item)
         self.current_interaction.append(interaction)
 
-    def process_interaction(self, latent_frames: int) -> Dict[str, Any]:
+    def process_interaction(self, latent_frames: int) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         if len(self.current_interaction) == 0:
             raise ValueError("No interaction to process")
@@ -130,7 +132,6 @@ class HunyuanWorldPlayOperator(BaseOperator):
         return latent_num * 4 - 3
 
     def _is_action_sequence(self, interaction) -> bool:
-        """Is action sequence implementation."""
         if not isinstance(interaction, list) or len(interaction) == 0:
             return False
         if not all(isinstance(item, str) for item in interaction):
@@ -138,7 +139,6 @@ class HunyuanWorldPlayOperator(BaseOperator):
         return all(item in self.interaction_template for item in interaction)
 
     def _actions_to_pose_json(self, actions: list[str]) -> dict:
-        """Actions to pose json implementation."""
         forward_speed = self.forward_speed
         yaw_speed = np.deg2rad(self.yaw_speed_deg)
         pitch_speed = np.deg2rad(self.pitch_speed_deg)

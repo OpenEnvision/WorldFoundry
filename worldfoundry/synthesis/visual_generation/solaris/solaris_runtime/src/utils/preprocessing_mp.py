@@ -1,4 +1,3 @@
-
 import jax
 import jax.numpy as jnp
 
@@ -24,9 +23,7 @@ def crop_and_resize_image(
     h_start = (H - new_h) // 2
     w_start = (W - new_w) // 2
 
-    cropped_BFHWC = image_BPFHWC[
-        :, :, :, h_start : h_start + new_h, w_start : w_start + new_w, :
-    ]
+    cropped_BFHWC = image_BPFHWC[:, :, :, h_start : h_start + new_h, w_start : w_start + new_w, :]
 
     new_shape = list(image_BPFHWC.shape)
     new_shape[h_dim] = target_height
@@ -57,9 +54,7 @@ def wan_image_condition_preprocess(
     h_dim=3,
     w_dim=4,
 ):
-    image_BPFHWC = crop_and_resize_image(
-        image_BPFHWC, target_height, target_width, h_dim=h_dim, w_dim=w_dim
-    )
+    image_BPFHWC = crop_and_resize_image(image_BPFHWC, target_height, target_width, h_dim=h_dim, w_dim=w_dim)
     image_BPFHWC = image_BPFHWC / 255.0  # [0, 255] -> [0, 1]
     image_BPFHWC = normalize_image(image_BPFHWC)  # [0, 1] -> [-1, 1]
     return image_BPFHWC

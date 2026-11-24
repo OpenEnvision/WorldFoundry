@@ -1,52 +1,49 @@
 import argparse
+import json
 import os
 import re
-import json
-import sys
 from pathlib import Path
-from typing import List, Optional
-
-_RUNTIME_ROOT = str(Path(__file__).resolve().parents[1])
-if _RUNTIME_ROOT in sys.path:
-    sys.path.remove(_RUNTIME_ROOT)
-sys.path.insert(0, _RUNTIME_ROOT)
-
-from uni3c_cam_render_api import render_from_image_and_traj
 
 import torch
 import torch.distributed as dist
-from omegaconf import OmegaConf
-from torchvision import transforms
-from einops import rearrange
 import torchvision.transforms.functional as TF
+from einops import rearrange
+from omegaconf import OmegaConf
 from PIL import Image
-
-from torch.utils.data import Dataset, DataLoader, SequentialSampler
+from torch.utils.data import DataLoader, Dataset, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
-
-from pipeline import CausalInferencePipeline
+from torchvision import transforms
 
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.video_x_fun import (
     CLIPModel,
 )
-from utils.camera_pose import process_pose_file
-from videox_fun.utils.utils import get_video_to_video_render_latent
-from worldfoundry.core.utils.tensors.torch import set_seed_everywhere as set_seed
 from worldfoundry.core.io.paths import resolve_data_path
-from worldfoundry.core.media.codecs.video import write_video_torchvision as write_video
+from worldfoundry.core.media.codecs.video import (
+    write_video_torchvision as write_video,
+)
+from worldfoundry.core.utils.tensors.torch import (
+    set_seed_everywhere as set_seed,
+)
+from worldfoundry.core.vram import (
+    DynamicSwapInstaller,
+    get_cuda_free_memory_gb,
+)
+from worldfoundry.synthesis.visual_generation.video_x_fun.video_x_fun_runtime.videox_fun.utils.utils import (
+    get_video_to_video_render_latent,
+)
 
-from worldfoundry.core.vram import DynamicSwapInstaller, get_cuda_free_memory_gb
+from ..pipeline import CausalInferencePipeline
+from ..utils.camera_pose import process_pose_file
+from .uni3c_cam_render_api import render_from_image_and_traj
 
 
 # -------------------------
 # Image & Prompt helpers
 # -------------------------
 def apply_transform(image: Image.Image) -> torch.Tensor:
-    transform = transforms.Compose([
-        transforms.Resize((480, 832)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.5], [0.5])
-    ])
+    transform = transforms.Compose(
+        [transforms.Resize((480, 832)), transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
+    )
     return transform(image)
 
 
@@ -57,7 +54,7 @@ def load_prompt_index(json_path: str) -> dict:
       - exact filename -> describe
       - stem -> describe
     """
-    with open(json_path, "r", encoding="utf-8") as f:
+    with open(json_path, encoding="utf-8") as f:
         items = json.load(f)
 
     by_name = {}
@@ -130,7 +127,7 @@ def _normalize_feats(feats: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
 
 def _pool_latent_frames(latent: torch.Tensor, mode: str = "mean") -> torch.Tensor:
     """
-    支持:
+    Pool latent frames over H and W:
       - [B, C, H, W] -> [B, C]
       - [B, F, C, H, W] -> [B*F, C]
     """
@@ -148,7 +145,7 @@ def _pool_latent_frames(latent: torch.Tensor, mode: str = "mean") -> torch.Tenso
         B, F, C, H, W = latent.shape
         x = latent.reshape(B * F, C, H, W)
         if mode == "mean":
-            return x.mean(dim=(-1, -2))   # [B*F, C]
+            return x.mean(dim=(-1, -2))  # [B*F, C]
         elif mode == "max":
             return x.amax(dim=(-1, -2))
         else:
@@ -159,9 +156,7 @@ def _pool_latent_frames(latent: torch.Tensor, mode: str = "mean") -> torch.Tenso
 
 
 def _append_cache_from_pred_latent(
-    cache_list: List[torch.Tensor],
-    pred_latent: torch.Tensor,
-    detach: bool = True
+    cache_list: list[torch.Tensor], pred_latent: torch.Tensor, detach: bool = True
 ) -> None:
     """
     pred_latent: [B, F, C, H, W]
@@ -172,7 +167,7 @@ def _append_cache_from_pred_latent(
     cache_list.append(frames)
 
 
-def _pack_cache_list(cache_list: List[torch.Tensor]) -> Optional[torch.Tensor]:
+def _pack_cache_list(cache_list: list[torch.Tensor]) -> torch.Tensor | None:
     """
     List[[B,F_i,C,H,W]] -> [B,F_total,C,H,W]
     """
@@ -183,17 +178,15 @@ def _pack_cache_list(cache_list: List[torch.Tensor]) -> Optional[torch.Tensor]:
     device, dtype = cache_list[0].device, cache_list[0].dtype
 
     for t in cache_list:
-        assert t.dim() == 5 and t.shape[0] == B and t.shape[2] == C and t.shape[3] == H and t.shape[4] == W, \
+        assert t.dim() == 5 and t.shape[0] == B and t.shape[2] == C and t.shape[3] == H and t.shape[4] == W, (
             f"Incompatible cache tensor: expect [B,*,C,H,W], got {t.shape}"
+        )
         assert t.device == device and t.dtype == dtype, "All cache tensors must share device/dtype"
 
     return torch.cat(cache_list, dim=1)  # [B,F_total,C,H,W]
 
 
-def _trim_cache_list_to_max_frames(
-    cache_list: List[torch.Tensor],
-    max_frames: int
-) -> List[torch.Tensor]:
+def _trim_cache_list_to_max_frames(cache_list: list[torch.Tensor], max_frames: int) -> list[torch.Tensor]:
     if max_frames <= 0:
         return []
 
@@ -218,13 +211,13 @@ def _trim_cache_list_to_max_frames(
 
 
 def _select_topk_from_cache_list(
-    query_first_latent: torch.Tensor,   # [B,Fq,C,H,W]，只用首帧
-    cache_list: List[torch.Tensor],     # List[[B,F_i,C,H,W]]
+    query_first_latent: torch.Tensor,  # [B,Fq,C,H,W]; only the first frame is used
+    cache_list: list[torch.Tensor],  # List[[B,F_i,C,H,W]]
     topk: int,
-    cache_pool: str = "mean"
+    cache_pool: str = "mean",
 ) -> torch.Tensor:
     """
-    返回 [B, C, K, H, W]
+    Return the top-k cached frames most similar to the query's first frame as [B, C, K, H, W].
     """
     assert query_first_latent.dim() == 5
     B, _, C, H, W = query_first_latent.shape
@@ -239,7 +232,7 @@ def _select_topk_from_cache_list(
     if cache_frames is None or cache_frames.size(1) == 0:
         return _empty_like()
 
-    # query 取首帧
+    # Query features from the first frame
     q = query_first_latent[:, 0, ...]  # [B,C,H,W]
     q_feats = _normalize_feats(_pool_latent_frames(q, mode=cache_pool))  # [B,C]
 
@@ -248,15 +241,15 @@ def _select_topk_from_cache_list(
     assert Bc == B and Cc == C and Hc == H and Wc == W, "cache dims mismatch"
 
     cache_feats_flat = _pool_latent_frames(cache_frames, mode=cache_pool)  # [B*F_total,C]
-    cache_feats = _normalize_feats(cache_feats_flat.view(B, F_total, C))   # [B,F_total,C]
+    cache_feats = _normalize_feats(cache_feats_flat.view(B, F_total, C))  # [B,F_total,C]
 
     K = min(topk, F_total)
     sim = torch.einsum("bc,bfc->bf", q_feats, cache_feats)  # [B,F_total]
-    _, idx = torch.topk(sim, k=K, dim=1)                    # [B,K]
+    _, idx = torch.topk(sim, k=K, dim=1)  # [B,K]
 
     gather_idx = idx.view(B, K, 1, 1, 1).expand(B, K, C, H, W)
     topk_frames = torch.gather(cache_frames, dim=1, index=gather_idx)  # [B,K,C,H,W]
-    topk_frames = topk_frames.permute(0, 2, 1, 3, 4).contiguous()      # [B,C,K,H,W]
+    topk_frames = topk_frames.permute(0, 2, 1, 3, 4).contiguous()  # [B,C,K,H,W]
     return topk_frames
 
 
@@ -271,10 +264,7 @@ def video_last_frame_to_pil(video_btchw: torch.Tensor) -> Image.Image:
     assert video_btchw.ndim == 5
     frame = video_btchw[0, -1].detach().float().cpu()  # [C,H,W]
 
-    if frame.min().item() < 0:
-        frame = (frame * 0.5 + 0.5).clamp(0, 1)
-    else:
-        frame = frame.clamp(0, 1)
+    frame = (frame * 0.5 + 0.5).clamp(0, 1) if frame.min().item() < 0 else frame.clamp(0, 1)
 
     frame_u8 = (frame * 255.0).round().to(torch.uint8)
     frame_u8 = frame_u8.permute(1, 2, 0).numpy()
@@ -305,9 +295,10 @@ def build_i2v_conditions_from_pil(
 
     # start image latent
     # y_input from VAE latent of resized start image
-    start_tensor = apply_transform(start_pil.convert("RGB")).squeeze(0).unsqueeze(0).unsqueeze(2).to(device=device, dtype=dtype)
+    start_tensor = (
+        apply_transform(start_pil.convert("RGB")).squeeze(0).unsqueeze(0).unsqueeze(2).to(device=device, dtype=dtype)
+    )
     start_latent = pipeline.vae.encode_to_latent(start_tensor).to(device=device, dtype=dtype).permute(0, 2, 1, 3, 4)
-
 
     start_latent_bfchw = start_latent.permute(0, 2, 1, 3, 4).contiguous()  # [B,F,C,H,W]
 
@@ -318,19 +309,20 @@ def build_i2v_conditions_from_pil(
     y_input = start_latents_conv_in
 
     # render latent
-    render_latent_bcfhw = pipeline.vae.encode_to_latent(render_input).to(device=device, dtype=dtype).permute(0, 2, 1, 3, 4)
+    render_latent_bcfhw = (
+        pipeline.vae.encode_to_latent(render_input).to(device=device, dtype=dtype).permute(0, 2, 1, 3, 4)
+    )
 
-    # 如果启用 render，则把 render_latent 在通道维拼到 y_input 上
+    # With rendering enabled, concatenate render_latent to y_input along the channel dimension.
     if use_render:
         y_input = torch.cat([y_input, render_latent_bcfhw], dim=1)
-
 
     return y_input, clip_context, start_latent_bfchw
 
 
 def build_camera_latents_for_segment(
-    control_camera_video_full: torch.Tensor,   # [L,H,W,C]
-    control_camera_traj_full,                  # list[L][D]
+    control_camera_video_full: torch.Tensor,  # [L,H,W,C]
+    control_camera_traj_full,  # list[L][D]
     current_start_pil,
     sample_size: list,
     seg_id: int,
@@ -346,8 +338,8 @@ def build_camera_latents_for_segment(
     start = seg_id * camera_length
     end = (seg_id + 1) * camera_length
 
-    seg_cam_video = control_camera_video_full[start:end]   # [L,H,W,C]
-    seg_cam_traj = control_camera_traj_full[start:end]     # list of [D]
+    seg_cam_video = control_camera_video_full[start:end]  # [L,H,W,C]
+    seg_cam_traj = control_camera_traj_full[start:end]  # list of [D]
 
     render_frames, mask_frames = render_from_image_and_traj(
         reference_image=current_start_pil,
@@ -358,21 +350,13 @@ def build_camera_latents_for_segment(
     )
 
     render_video, _, _, _, _ = get_video_to_video_render_latent(
-        render_frames,
-        mask_frames,
-        video_length=camera_length,
-        sample_size=sample_size,
-        ref_image=None
+        render_frames, mask_frames, video_length=camera_length, sample_size=sample_size, ref_image=None
     )
 
     seg_cam_video = seg_cam_video.permute([3, 0, 1, 2]).unsqueeze(0)  # [B,C,L,H,W]
 
     control_camera_latents = torch.concat(
-        [
-            torch.repeat_interleave(seg_cam_video[:, :, 0:1], repeats=4, dim=2),
-            seg_cam_video[:, :, 1:]
-        ],
-        dim=2
+        [torch.repeat_interleave(seg_cam_video[:, :, 0:1], repeats=4, dim=2), seg_cam_video[:, :, 1:]], dim=2
     ).transpose(1, 2)
 
     b, f, c, h, w = control_camera_latents.shape
@@ -382,13 +366,10 @@ def build_camera_latents_for_segment(
     return control_camera_latents.to(device=device, dtype=dtype), render_video.to(device=device, dtype=dtype)
 
 
-def normalize_pred_latents_to_bfchw(
-    pred_latents: torch.Tensor,
-    num_output_frames: int
-) -> torch.Tensor:
+def normalize_pred_latents_to_bfchw(pred_latents: torch.Tensor, num_output_frames: int) -> torch.Tensor:
     """
-    统一把 pipeline 返回的 latent 转成 [B,F,C,H,W]
-    支持:
+    Convert pipeline output latents to [B,F,C,H,W].
+    Supported layouts:
       - [B,F,C,H,W]
       - [B,C,F,H,W]
     """
@@ -416,7 +397,9 @@ def main():
     parser.add_argument("--data_path", type=str, required=True, help="Folder containing start images")
     parser.add_argument("--extended_prompt_path", type=str, required=True, help="JSON prompt index")
     parser.add_argument("--output_folder", type=str, required=True)
-    parser.add_argument("--control_camera_txt", type=str, required=True, help="One fixed camera txt used for all images")
+    parser.add_argument(
+        "--control_camera_txt", type=str, required=True, help="One fixed camera txt used for all images"
+    )
 
     parser.add_argument("--num_output_frames", type=int, default=21)
     parser.add_argument("--i2v", action="store_true")
@@ -438,11 +421,10 @@ def main():
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
         device = torch.device(f"cuda:{local_rank}")
-        world_size = dist.get_world_size()
+        world_size = dist.get_world_size()  # noqa: F841 - Upstream assignment kept.
         set_seed(args.seed + local_rank)
     else:
         local_rank = 0
-        world_size = 1
         device = torch.device("cuda")
         set_seed(args.seed)
 
@@ -463,9 +445,7 @@ def main():
 
     # -------- load checkpoint --------
     state_dict = torch.load(args.checkpoint_path, map_location="cpu", weights_only=True)
-    pipeline.generator.load_state_dict(
-        state_dict["generator" if not args.use_ema else "generator_ema"]
-    )
+    pipeline.generator.load_state_dict(state_dict["generator" if not args.use_ema else "generator_ema"])
     checkpoint_step = os.path.basename(os.path.dirname(args.checkpoint_path))
     checkpoint_step = checkpoint_step.split("_")[-1]
 
@@ -482,11 +462,7 @@ def main():
     # -------- clip image encoder --------
     clip_config_path = os.environ.get(
         "WORLDFOUNDRY_MAGICWORLD_CONFIG",
-        str(
-            resolve_data_path(
-                "models", "runtime", "configs", "video_x_fun", "wan2.1", "wan_civitai.yaml"
-            )
-        ),
+        str(resolve_data_path("models", "runtime", "configs", "video_x_fun", "wan2.1", "wan_civitai.yaml")),
     )
     clip_name = os.environ.get(
         "WORLDFOUNDRY_MAGICWORLD_WAN_ROOT",
@@ -495,10 +471,7 @@ def main():
     clip_config = OmegaConf.load(clip_config_path)
 
     clip_image_encoder = CLIPModel.from_pretrained(
-        os.path.join(
-            clip_name,
-            clip_config["image_encoder_kwargs"].get("image_encoder_subpath", "image_encoder")
-        ),
+        os.path.join(clip_name, clip_config["image_encoder_kwargs"].get("image_encoder_subpath", "image_encoder")),
     ).to(device=device, dtype=torch.bfloat16)
     clip_image_encoder = clip_image_encoder.eval()
 
@@ -518,7 +491,6 @@ def main():
     )
 
     segments = 1
-
 
     need_len = segments * camera_length
     if control_camera_video_full.shape[0] < need_len:
@@ -557,7 +529,7 @@ def main():
         img_path = img_path[0]
         img_name = Path(img_path).name
         img_stem = Path(img_path).stem
-        history_cache = []   # List[[B,F,C,H,W]]
+        history_cache = []  # List[[B,F,C,H,W]]
 
         prompt = query_prompt(prompt_index, img_path, default_prompt=default_prompt)
         if not prompt:
@@ -565,7 +537,7 @@ def main():
 
         prompts = [prompt] * args.num_samples
 
-        # 自回归交互：start 图像会被更新为上一段 last frame (RGB)
+        # Autoregressive interaction: the start image becomes the last RGB frame of the previous segment.
         current_start_pil = Image.open(img_path).convert("RGB")
 
         all_video = []
@@ -573,9 +545,7 @@ def main():
         for seg_id in range(segments):
             # -------- noise per segment --------
             sampled_noise = torch.randn(
-                [args.num_samples, args.num_output_frames, 16, 60, 104],
-                device=device,
-                dtype=torch.bfloat16
+                [args.num_samples, args.num_output_frames, 16, 60, 104], device=device, dtype=torch.bfloat16
             )
 
             # -------- fixed camera segment --------
@@ -587,7 +557,7 @@ def main():
                 seg_id=seg_id,
                 camera_length=camera_length,
                 device=device,
-                dtype=torch.bfloat16
+                dtype=torch.bfloat16,
             )
 
             # -------- build conditions from current_start_pil --------
@@ -610,7 +580,7 @@ def main():
                     y_history = None
                 else:
                     y_history = _select_topk_from_cache_list(
-                        query_first_latent=start_latent_bfchw,   # [B,F,C,H,W]
+                        query_first_latent=start_latent_bfchw,  # [B,F,C,H,W]
                         cache_list=history_cache,
                         topk=args.history_topk,
                         cache_pool="mean",
@@ -637,19 +607,11 @@ def main():
             # -------- append current latents to history cache --------
             if args.use_history and (_latents is not None):
                 pred_latent_bfchw = normalize_pred_latents_to_bfchw(
-                    pred_latents=_latents,
-                    num_output_frames=args.num_output_frames
+                    pred_latents=_latents, num_output_frames=args.num_output_frames
                 )
 
-                _append_cache_from_pred_latent(
-                    cache_list=history_cache,
-                    pred_latent=pred_latent_bfchw,
-                    detach=True
-                )
-                history_cache = _trim_cache_list_to_max_frames(
-                    history_cache,
-                    max_frames=args.history_max_frames
-                )
+                _append_cache_from_pred_latent(cache_list=history_cache, pred_latent=pred_latent_bfchw, detach=True)
+                history_cache = _trim_cache_list_to_max_frames(history_cache, max_frames=args.history_max_frames)
 
                 total_hist_frames = sum(x.shape[1] for x in history_cache)
                 print(f"history cache size: {len(history_cache)} chunks, total_frames={total_hist_frames}")
@@ -670,10 +632,7 @@ def main():
         pipeline.vae.model.clear_cache()
 
         # -------- filename --------
-        if args.save_with_index:
-            base = f"{idx:06d}_{img_stem}"
-        else:
-            base = img_stem
+        base = f"{idx:06d}_{img_stem}" if args.save_with_index else img_stem
 
         base = safe_filename(base)
         output_path = os.path.join(out_dir, f"{base}.mp4")

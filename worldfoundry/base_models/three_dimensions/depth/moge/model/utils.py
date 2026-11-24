@@ -1,83 +1,52 @@
-"""Module for base_models -> three_dimensions -> depth -> moge -> model -> utils.py functionality."""
-
-from typing import *
+from typing import *  # noqa: F403 - Upstream star import kept as written.
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
-def wrap_module_with_gradient_checkpointing(module: nn.Module):
-    """Wrap module with gradient checkpointing.
 
-    Args:
-        module: The module.
-    """
+def wrap_module_with_gradient_checkpointing(module: nn.Module):
     from torch.utils.checkpoint import checkpoint
+
     class _CheckpointingWrapper(module.__class__):
-        """Checkpointing wrapper implementation."""
         _restore_cls = module.__class__
+
         def forward(self, *args, **kwargs):
-            """Forward."""
             return checkpoint(super().forward, *args, use_reentrant=False, **kwargs)
-        
+
     module.__class__ = _CheckpointingWrapper
     return module
 
 
 def unwrap_module_with_gradient_checkpointing(module: nn.Module):
-    """Unwrap module with gradient checkpointing.
-
-    Args:
-        module: The module.
-    """
     module.__class__ = module.__class__._restore_cls
 
 
 def wrap_dinov2_attention_with_sdpa(module: nn.Module):
-    """Wrap dinov2 attention with sdpa.
+    assert torch.__version__ >= "2.0", "SDPA requires PyTorch 2.0 or later"
 
-    Args:
-        module: The module.
-    """
-    assert torch.__version__ >= '2.0', "SDPA requires PyTorch 2.0 or later"
     class _AttentionWrapper(module.__class__):
-        """Attention wrapper implementation."""
         def forward(self, x: torch.Tensor, attn_bias=None) -> torch.Tensor:
-            """Forward.
-
-            Args:
-                x: The x.
-                attn_bias: The attn bias.
-
-            Returns:
-                The return value.
-            """
             B, N, C = x.shape
-            qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)  # (3, B, H, N, C // H)
+            qkv = (
+                self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+            )  # (3, B, H, N, C // H)
 
-            q, k, v = torch.unbind(qkv, 0)      # (B, H, N, C // H)
+            q, k, v = torch.unbind(qkv, 0)  # (B, H, N, C // H)
 
             x = _worldfoundry_scaled_dot_product_attention(q, k, v, attn_bias)
-            x = x.permute(0, 2, 1, 3).reshape(B, N, C) 
+            x = x.permute(0, 2, 1, 3).reshape(B, N, C)
 
             x = self.proj(x)
             x = self.proj_drop(x)
             return x
+
     module.__class__ = _AttentionWrapper
     return module
 
 
 def sync_ddp_hook(state, bucket: torch.distributed.GradBucket) -> torch.futures.Future[torch.Tensor]:
-    """Sync ddp hook.
-
-    Args:
-        state: The state.
-        bucket: The bucket.
-
-    Returns:
-        The return value.
-    """
     group_to_use = torch.distributed.group.WORLD
     world_size = group_to_use.size()
     grad = bucket.buffer()

@@ -28,7 +28,6 @@ from worldfoundry.core.kernels.triton_autotune import custom_autotune
 
 
 def get_cuda_autotune_config():
-    """Get cuda autotune config."""
     return [
         triton.Config({"BLOCK_SIZE_N": 256}, num_stages=3, num_warps=8),
         triton.Config({"BLOCK_SIZE_N": 256}, num_stages=4, num_warps=4),
@@ -42,7 +41,6 @@ def get_cuda_autotune_config():
 
 
 def get_autotune_config():
-    """Get autotune config."""
     return get_cuda_autotune_config()
 
 
@@ -138,7 +136,7 @@ def vk_q_mm_relu_bwd_kernel(
 
     vk = tl.load(vk_ptr + vk_offs, mask=c1_mask[:, None] & c_mask[None, :], other=0.0)  # C1, C
     grad_vk = tl.zeros((BLOCK_SIZE_C, BLOCK_SIZE_C1), dtype=tl.float32)
-    for n in range(0, tl.cdiv(N, BLOCK_SIZE_N)):
+    for n in range(tl.cdiv(N, BLOCK_SIZE_N)):
         n_mask = offs_n < N - n * BLOCK_SIZE_N
 
         grad_vk_q = tl.load(grad_vk_q_ptrs, mask=n_mask[:, None] & c1_mask[None, :], other=0.0)  # n, C1
@@ -179,7 +177,9 @@ def vk_q_mm_relu_bwd(
     grad_vk = torch.empty_like(vk)
 
     # 1D launch kernel where each block gets its own program.
-    grid = lambda META: (B * H,)
+    def grid(META):
+        return (B * H,)
+
     vk_q_mm_relu_bwd_kernel[grid](
         grad_vk_q,
         vk,

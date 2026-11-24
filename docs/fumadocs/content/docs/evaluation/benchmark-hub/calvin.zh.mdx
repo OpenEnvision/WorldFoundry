@@ -3,18 +3,18 @@ title: CALVIN
 description: "长时程语言条件桌面评测（RA-L 2022）。官方协议是在 A/B/C 上训练、在 D 上测试后，报告链长度 1–5 的成功率。"
 ---
 
-CALVIN（Composing Actions from Language and Vision）是弗莱堡大学的长时程、语言条件操作评测（IEEE RA-L 2022）。策略在 **PyBullet** 桌面上必须串起最多**五条**语言指令。四个环境配置 **A/B/C/D** 测零样本迁移：标志性划分是在 A/B/C 上训练，在未见过的 **D** 上评测。论文报告的是每个链长度的成功率，以及**平均完成的指令数**，不是单一的 episode 成败比特。
+CALVIN（Composing Actions from Language and Vision）是弗莱堡大学的长时程、语言条件操作评测（IEEE RA-L 2022）。策略在 **PyBullet** 桌面上必须连续执行最多**五条**语言指令。四个环境配置 **A/B/C/D** 测零样本迁移：标志性划分是在 A/B/C 上训练，在未见过的 **D** 上评测。论文报告每个链长度的成功率，以及**平均完成的指令数**。
 
 论文：[CALVIN](https://ieeexplore.ieee.org/document/9788026)（项目 [calvin.cs.uni-freiburg.de](http://calvin.cs.uni-freiburg.de/)）。代码：[mees/calvin](https://github.com/mees/calvin)（MIT）。
 
-WorldFoundry 是**官方结果导入器**。你在上游跑序列评测器，再归一化导出。模拟器、数据集根目录和策略权重遵循官方 CALVIN 文档。仓库镜像：`cache/vla_va_wam/repos/mees--calvin`。
+WorldFoundry 是**官方结果导入器**。先在上游运行序列评测器，再归一化导出结果。模拟器、数据集根目录和策略权重遵循官方 CALVIN 文档。
 
 <BenchmarkPageSections id="calvin" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id calvin \
   --mode official-validation \
   --official-results-path <official_results.json> \

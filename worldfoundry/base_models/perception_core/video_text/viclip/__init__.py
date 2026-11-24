@@ -68,7 +68,7 @@ def normalize_frames(data):
     return (data / 255.0 - _V_MEAN) / _V_STD
 
 
-def frames2tensor(vid_list, fnum=8, target_size=(224, 224), device=torch.device("cuda")):
+def frames2tensor(vid_list, fnum=8, target_size=(224, 224), device=torch.device("cuda")):  # noqa: B008 - Default evaluated once at definition, as upstream.
     if len(vid_list) < fnum:
         raise ValueError(f"ViCLIP expects at least {fnum} frames, got {len(vid_list)}.")
     step = len(vid_list) // fnum
@@ -80,7 +80,7 @@ def frames2tensor(vid_list, fnum=8, target_size=(224, 224), device=torch.device(
     return torch.from_numpy(vid_tube).to(device, non_blocking=True).float()
 
 
-def retrieve_text(frames, texts, models=None, topk=5, device=torch.device("cuda")):
+def retrieve_text(frames, texts, models=None, topk=5, device=torch.device("cuda")):  # noqa: B008 - Default evaluated once at definition, as upstream.
     if not isinstance(models, dict) or models.get("viclip") is None or models.get("tokenizer") is None:
         raise ValueError("models must contain loaded 'viclip' and 'tokenizer' entries.")
     clip, tokenizer = models["viclip"], models["tokenizer"]
@@ -94,11 +94,11 @@ def retrieve_text(frames, texts, models=None, topk=5, device=torch.device("cuda"
 
 
 __all__ = [
-    "ViCLIP",
     "SimpleTokenizer",
+    "ViCLIP",
     "_Tokenizer",
-    "checkpoint_path",
     "_frame_from_video",
+    "checkpoint_path",
     "frame_from_video",
     "frames2tensor",
     "get_text_feat_dict",

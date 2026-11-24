@@ -1,6 +1,6 @@
 ---
 title: Video-Bench
-description: "CVPR 2025 human-aligned MLLM video bench: GPT-4o judges on 1-5 / 1-3 scales. WorldFoundry vendors the runtime; it does not invent a board."
+description: "CVPR 2025 human-aligned MLLM video bench: GPT-4o judges on 1-5 / 1-3 scales. WorldFoundry vendors the runtime."
 ---
 
 Video-Bench (SJTU, with NUS, CMU, Stanford and others; CVPR 2025) scores generated video with **MLLM judges aligned to human preference**. Two families (official scales, then mapped 0–1 in WorldFoundry):
@@ -12,7 +12,7 @@ Few-shot scoring and chain-of-query structure the GPT-4o judge. A human-annotati
 
 Paper: [Video-Bench](https://arxiv.org/abs/2504.04907). Code: [Video-Bench/Video-Bench](https://github.com/Video-Bench/Video-Bench). Annotations: [`Video-Bench/Video-Bench_human_annotation`](https://huggingface.co/datasets/Video-Bench/Video-Bench_human_annotation). Official videos are gated (`Video-Bench_videos`).
 
-WorldFoundry **vendors the runtime** and wraps `evaluate.py`. It writes a temporary private config from env vars instead of mutating upstream `config.json`, and rebuilds prompt metadata from human-annotation JSONs when `VideoBench_full.json` is missing. Credential-gated path is present; no credentialed release run is claimed.
+WorldFoundry **vendors the runtime** and wraps `evaluate.py`. It writes a temporary private config from env vars instead of mutating upstream `config.json`, and rebuilds prompt metadata from human-annotation JSONs when `VideoBench_full.json` is missing. A full credentialed GPT-4o judge run has not been validated.
 
 <BenchmarkPageSections id="video-bench" locale="en" />
 
@@ -22,7 +22,7 @@ WorldFoundry **vendors the runtime** and wraps `evaluate.py`. It writes a tempor
 hf download Video-Bench/Video-Bench_human_annotation --repo-type dataset \
   --local-dir cache/worldfoundry/data/hfd_datasets/Video-Bench/Video-Bench_human_annotation
 
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id video-bench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -33,7 +33,7 @@ worldfoundry-eval zoo benchmark-run \
 
 Runtime judging needs `WORLDFOUNDRY_VIDEOBENCH_GPT4O_API_KEY` (or `OPENAI_API_KEY`), annotation root, and generated videos. `--dimension` / `--mode` restrict the protocol. Env: `WORLDFOUNDRY_VIDEOBENCH_RESULTS_PATH`, `WORLDFOUNDRY_VIDEOBENCH_ANNOTATION_ROOT`, `WORLDFOUNDRY_VIDEOBENCH_MODEL_OUTPUT_DIR`. Shared asset: `video_bench_dataset_assets`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/video-bench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/videobench/runtime`.
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/video-bench.yaml`, `worldfoundry/evals/tasks/execution/runners/videobench/runtime`.
 
 Outputs include `scorecard.json` (primary `videobench_average`, leaderboard key `overall_average`).
 

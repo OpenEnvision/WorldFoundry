@@ -5,7 +5,6 @@
 # --------------------------------------------------------
 
 import os
-from typing import Union
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
@@ -105,7 +104,7 @@ class InternVisionConfig(PretrainedConfig):
         self.use_flash_attn = use_flash_attn
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs) -> "PretrainedConfig":
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         if "vision_config" in config_dict:

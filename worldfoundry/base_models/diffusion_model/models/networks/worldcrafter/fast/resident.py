@@ -10,10 +10,11 @@ shared storage on the current CUDA stream; concurrent branch forwards are not
 supported. Both complete checkpoints remain represented on GPU at all times.
 """
 
-from dataclasses import dataclass
 import gc
 import logging
 import time
+from dataclasses import dataclass
+
 import torch
 import torch.nn.functional as F
 import triton
@@ -51,18 +52,14 @@ def _switch_dense(
             exceptional = ((flags >> (i % 32)) & 1) != 0
             prefix = tl.load(PREFIX + i // 32, valid, other=0).to(tl.int32)
             rank = libdevice.popc((flags & lower).to(tl.int32)).to(tl.int32)
-            exc = tl.load(VALUES + prefix + rank, valid & exceptional, other=0).to(
-                tl.int32
-            )
+            exc = tl.load(VALUES + prefix + rank, valid & exceptional, other=0).to(tl.int32)
             d = tl.where(exceptional, exc, d)
     before = tl.load(W + i, valid, other=0).to(tl.int32)
     tl.store(W + i, (before + SIGN * d).to(tl.int16), valid)
 
 
 @triton.jit
-def _switch_sparse(
-    W, INDEX, VALUES, N: tl.constexpr, SIGN: tl.constexpr, BLOCK: tl.constexpr
-):
+def _switch_sparse(W, INDEX, VALUES, N: tl.constexpr, SIGN: tl.constexpr, BLOCK: tl.constexpr):
     i = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
     idx = tl.load(INDEX + i, i < N, other=0).to(tl.int32)
     d = tl.load(VALUES + i, i < N, other=0).to(tl.int32)
@@ -110,8 +107,7 @@ class PackedDelta:
     @property
     def encoded_bytes(self):
         return sum(
-            t.numel() * t.element_size()
-            for t in [self.packed, self.indices, self.values, self.bitmap, self.prefix]
+            t.numel() * t.element_size() for t in [self.packed, self.indices, self.values, self.bitmap, self.prefix]
         )
 
     def apply(self, sign):
@@ -142,14 +138,7 @@ def encode(left, right, name=""):
     if not (left.is_cuda and left.is_contiguous() and right.is_contiguous()):
         raise ValueError("Invalid branch weight layout")
     right = right.to(left.device)
-    d = (
-        (
-            right.view(torch.int16).flatten().int()
-            - left.view(torch.int16).flatten().int()
-        )
-        .to(torch.int16)
-        .int()
-    )
+    d = (right.view(torch.int16).flatten().int() - left.view(torch.int16).flatten().int()).to(torch.int16).int()
     expected_bytes, bits, mode = choose_format(d)
     empty = torch.empty(0, device=left.device, dtype=torch.int32)
     p = PackedDelta(
@@ -210,11 +199,7 @@ class ResidentBranches:
         independent = []
         for name, left in early_params.items():
             right = late_params[name]
-            if (
-                ".lora_" in name
-                or ".cam_self_attn." in name
-                or left.dtype != torch.bfloat16
-            ):
+            if ".lora_" in name or ".cam_self_attn." in name or left.dtype != torch.bfloat16:
                 independent.append(name)
                 continue
             if not (left.dtype == right.dtype and left.shape == right.shape):
@@ -230,9 +215,7 @@ class ResidentBranches:
             ):
                 raise ValueError(name)
             plan.apply(-1)
-            right.data = (
-                left.data
-            )  # Both module objects reference one materialized BF16 tensor.
+            right.data = left.data  # Both module objects reference one materialized BF16 tensor.
             self.plans.append(plan)
             shared_bytes += left.numel() * left.element_size()
             if len(self.plans) % 100 == 0:
@@ -251,24 +234,23 @@ class ResidentBranches:
                     self._apply(sign)
                 self.graphs[sign] = graph
             torch.cuda.synchronize()
-        self.report = dict(
-            shared_dense_bytes=shared_bytes,
-            delta_bytes=sum(p.encoded_bytes for p in self.plans),
-            base_parameter_tensors=len(self.plans),
-            independent_parameter_tensors=len(independent),
-            format_counts={
-                mode: sum(p.mode == mode for p in self.plans)
-                for mode in ["shared", "dense", "sparse", "bitmap"]
+        self.report = {
+            "shared_dense_bytes": shared_bytes,
+            "delta_bytes": sum(p.encoded_bytes for p in self.plans),
+            "base_parameter_tensors": len(self.plans),
+            "independent_parameter_tensors": len(independent),
+            "format_counts": {
+                mode: sum(p.mode == mode for p in self.plans) for mode in ["shared", "dense", "sparse", "bitmap"]
             },
-            gpu_allocated_before=before,
-            gpu_allocated_after=torch.cuda.memory_allocated(),
-            gpu_reserved_after=torch.cuda.memory_reserved(),
-            setup_seconds=time.perf_counter() - start,
-            gpu_only_switch=True,
-            lossless_bf16_bit_patterns=True,
-            cuda_graph=use_graph,
-            all_reconstructed_base_tensors_bitwise_verified=True,
-        )
+            "gpu_allocated_before": before,
+            "gpu_allocated_after": torch.cuda.memory_allocated(),
+            "gpu_reserved_after": torch.cuda.memory_reserved(),
+            "setup_seconds": time.perf_counter() - start,
+            "gpu_only_switch": True,
+            "lossless_bf16_bit_patterns": True,
+            "cuda_graph": use_graph,
+            "all_reconstructed_base_tensors_bitwise_verified": True,
+        }
         logger.info("Prepared resident branches in %.1fs", self.report["setup_seconds"])
 
     def _apply(self, sign):

@@ -9,12 +9,12 @@ from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import patch
 
-from worldfoundry.evaluation.api import GenerationRequest, WorldModelConfig
-from worldfoundry.evaluation.models.pipelines.lifecycle import PipelineRuntimeProfile
-from worldfoundry.evaluation.models.pipelines.loading import PipelineRunnerSpec
-from worldfoundry.evaluation.models.runners.pipeline import WorldFoundryPipelineRunner
-from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import run_evaluate
-from worldfoundry.evaluation.utils import model_runner_fingerprint
+from worldfoundry.evals.api import GenerationRequest, WorldModelConfig
+from worldfoundry.evals.models.pipelines.lifecycle import PipelineRuntimeProfile
+from worldfoundry.evals.models.pipelines.loading import PipelineRunnerSpec
+from worldfoundry.evals.models.runners.pipeline import WorldFoundryPipelineRunner
+from worldfoundry.evals.tasks.execution.orchestration.evaluate import run_evaluate
+from worldfoundry.evals.utils import model_runner_fingerprint
 
 
 class RecordingPipeline:
@@ -35,20 +35,31 @@ class RunnerConfigurationTests(unittest.TestCase):
                 root = Path(temp)
                 pipeline = RecordingPipeline()
                 runner = WorldFoundryPipelineRunner(
-                    "review", pipeline, pipeline_target="review:Pipeline", output_dir=root / "artifacts",
+                    "review",
+                    pipeline,
+                    pipeline_target="review:Pipeline",
+                    output_dir=root / "artifacts",
                     generation_defaults={"guidance_scale": 1},
                 )
                 profile = PipelineRuntimeProfile("sample.txt", "text", "review")
-                with patch.object(runner, "_runtime_profile", return_value=profile), patch(
-                    "worldfoundry.core.worldfoundry_inference_context", side_effect=nullcontext,
+                with (
+                    patch.object(runner, "_runtime_profile", return_value=profile),
+                    patch(
+                        "worldfoundry.core.worldfoundry_inference_context",
+                        side_effect=nullcontext,
+                    ),
                 ):
                     for index, scale in enumerate((1, 1, 9)):
                         runner.generation_defaults["guidance_scale"] = scale
                         output = root / ("run" if strategy == "resume" else f"run-{index}")
                         run_evaluate(
-                            mode="model", runner=runner, cleanup_runner=False, output_dir=output,
+                            mode="model",
+                            runner=runner,
+                            cleanup_runner=False,
+                            output_dir=output,
                             requests=[GenerationRequest(sample_id="one", task_name="review")],
-                            metrics=["artifact_count"], resume=strategy == "resume",
+                            metrics=["artifact_count"],
+                            resume=strategy == "resume",
                             generation_cache_dir=root / "cache",
                             generation_cache_mode="read-write" if strategy == "cache" else "off",
                         )
@@ -62,8 +73,10 @@ class RunnerConfigurationTests(unittest.TestCase):
         for weights in ("weights-a", "weights-b"):
             config = WorldModelConfig("review", "worldfoundry.pipeline", parameters={"model_path": weights})
             spec = PipelineRunnerSpec("review", "review:Pipeline", "review", weights, weights, None, "cpu")
-            with patch("worldfoundry.evaluation.models.runners.pipeline.load_pipeline_from_config",
-                       return_value=(spec, RecordingPipeline())):
+            with patch(
+                "worldfoundry.evals.models.runners.pipeline.load_pipeline_from_config",
+                return_value=(spec, RecordingPipeline()),
+            ):
                 runner = WorldFoundryPipelineRunner.from_config(config)
             identities.append(model_runner_fingerprint(runner))
         self.assertNotEqual(*identities)

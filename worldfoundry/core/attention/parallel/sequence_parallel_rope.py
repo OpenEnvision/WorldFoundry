@@ -8,10 +8,9 @@ positions. :func:`pad_freqs` and
 rank rotates with its global offsets.
 
 Not this module:
-    Causal vs non-causal attention is *not* chosen here — callers pick
-    :mod:`.causal_rope_sequence_parallel` or
-    :mod:`.rope_sequence_parallel` (and the padded-Ulysses variant for
-    memory tokens). Does not own the SP process group.
+    Causal vs non-causal attention is *not* chosen here; model families
+    bind these helpers to their own DiT forwards (Wan, LingBot World,
+    Matrix-Game 3). Does not own the SP process group.
 
 Public surface:
 
@@ -24,13 +23,12 @@ Public surface:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import torch
 from torch import Tensor
 
 from worldfoundry.core.kernels import hidden_qk_rmsnorm_rope_3d
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Frequency pad / apply — global offsets on a contiguous token shard
@@ -141,7 +139,7 @@ def sequence_parallel_attention_forward(
     v = module.v(x).view(batch, sequence_len, num_heads, head_dim)
     rope_is_fused = bool(getattr(module, "qk_norm", False)) and batch == 1
     if rope_is_fused:
-        grid_size = tuple(int(value) for value in grid_sizes[0].tolist())
+        grid_size = cast(tuple[int, int, int], tuple(int(value) for value in grid_sizes[0].tolist()))
         q, k = hidden_qk_rmsnorm_rope_3d(
             q,
             k,

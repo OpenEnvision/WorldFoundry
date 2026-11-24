@@ -6,7 +6,7 @@ import sys
 import tempfile
 from inspect import signature
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -24,10 +24,10 @@ SUPPORTED_LINGBOT_TASKS = frozenset({"i2v-A14B"})
 
 
 def _candidate_official_runtime_roots() -> tuple[Path, ...]:
-    return tuple()
+    return ()
 
 
-def _official_runtime_root() -> Optional[Path]:
+def _official_runtime_root() -> Path | None:
     for root in _candidate_official_runtime_roots():
         if (root / "wan" / "image2video.py").is_file() and (root / "wan" / "configs").is_dir():
             return root
@@ -98,9 +98,9 @@ class LingBotWorldRuntime:
         t5_cpu=False,
         offload_model=True,
         convert_model_dtype=False,
-        runtime_variant: Optional[str] = None,
-        fast_model_path: Optional[str] = None,
-        control_type: Optional[str] = None,
+        runtime_variant: str | None = None,
+        fast_model_path: str | None = None,
+        control_type: str | None = None,
         **kwargs,
     ):
         if task not in SUPPORTED_LINGBOT_TASKS:
@@ -134,18 +134,18 @@ class LingBotWorldRuntime:
         device_id = cls._parse_device_id(device)
         use_sp = ulysses_size > 1
         core_model_cls = wan_i2v_fast if use_fast else wan_i2v
-        core_model_kwargs = dict(
-            config=config,
-            checkpoint_dir=base_model_path,
-            device_id=device_id,
-            rank=rank,
-            t5_fsdp=t5_fsdp,
-            dit_fsdp=dit_fsdp,
-            use_sp=use_sp,
-            t5_cpu=t5_cpu,
-            convert_model_dtype=convert_model_dtype,
-            control_type=control_type,
-        )
+        core_model_kwargs = {
+            "config": config,
+            "checkpoint_dir": base_model_path,
+            "device_id": device_id,
+            "rank": rank,
+            "t5_fsdp": t5_fsdp,
+            "dit_fsdp": dit_fsdp,
+            "use_sp": use_sp,
+            "t5_cpu": t5_cpu,
+            "convert_model_dtype": convert_model_dtype,
+            "control_type": control_type,
+        }
         if use_fast and "fast_checkpoint_dir" in signature(core_model_cls.__init__).parameters:
             core_model_kwargs["fast_checkpoint_dir"] = resolved_fast_model_path
         core_model = core_model_cls(**core_model_kwargs)
@@ -183,9 +183,7 @@ class LingBotWorldRuntime:
         if offload_model and dit_fsdp:
             raise ValueError("LingBot-World offload_model is not supported together with DiT FSDP.")
         if initialized and rank != int(dist.get_rank()):
-            raise ValueError(
-                f"LingBot-World rank={rank} does not match process-group rank={dist.get_rank()}."
-            )
+            raise ValueError(f"LingBot-World rank={rank} does not match process-group rank={dist.get_rank()}.")
         if ulysses_size > 1 and ulysses_size != world_size:
             raise ValueError(
                 "LingBot-World ulysses_size must equal torchrun WORLD_SIZE; "
@@ -193,12 +191,10 @@ class LingBotWorldRuntime:
             )
         num_heads = int(config.num_heads)
         if ulysses_size > 1 and num_heads % ulysses_size:
-            raise ValueError(
-                f"LingBot-World num_heads={num_heads} is not divisible by ulysses_size={ulysses_size}."
-            )
+            raise ValueError(f"LingBot-World num_heads={num_heads} is not divisible by ulysses_size={ulysses_size}.")
 
     @staticmethod
-    def _looks_like_fast_repo(path_or_repo: Optional[str]) -> bool:
+    def _looks_like_fast_repo(path_or_repo: str | None) -> bool:
         """Identify LingBot fast checkpoint refs by repo id or local directory name."""
 
         if not isinstance(path_or_repo, str):
@@ -215,8 +211,8 @@ class LingBotWorldRuntime:
         cls,
         *,
         pretrained_model_path,
-        runtime_variant: Optional[str],
-        fast_model_path: Optional[str],
+        runtime_variant: str | None,
+        fast_model_path: str | None,
     ) -> bool:
         """Resolve whether the fast runtime is requested by variant or checkpoint ref."""
 
@@ -224,9 +220,7 @@ class LingBotWorldRuntime:
             return True
         if fast_model_path:
             return True
-        if isinstance(pretrained_model_path, str) and cls._looks_like_fast_repo(pretrained_model_path):
-            return True
-        return False
+        return bool(isinstance(pretrained_model_path, str) and cls._looks_like_fast_repo(pretrained_model_path))
 
     @staticmethod
     def _candidate_hfd_roots() -> tuple[Path, ...]:
@@ -254,7 +248,7 @@ class LingBotWorldRuntime:
         return names
 
     @classmethod
-    def _resolve_cached_sibling(cls, path_or_repo: Optional[str], repo_id: str) -> Optional[str]:
+    def _resolve_cached_sibling(cls, path_or_repo: str | None, repo_id: str) -> str | None:
         """Find a locally staged checkpoint next to a requested HFD path or cache root."""
 
         if not isinstance(path_or_repo, str) or not path_or_repo.strip():
@@ -314,10 +308,10 @@ class LingBotWorldRuntime:
         cls,
         *,
         pretrained_model_path,
-        fast_model_path: Optional[str],
+        fast_model_path: str | None,
         use_fast: bool,
         rank: int,
-    ) -> tuple[str, Optional[str]]:
+    ) -> tuple[str, str | None]:
         """Resolve base and optional fast checkpoint directories from local storage."""
 
         if not isinstance(pretrained_model_path, str) or not pretrained_model_path.strip():
@@ -329,13 +323,17 @@ class LingBotWorldRuntime:
         if use_fast:
             if cls._looks_like_fast_repo(requested_path):
                 resolved_fast = requested_path
-                base_request = cls._resolve_cached_sibling(requested_path, DEFAULT_LINGBOT_BASE_REPO) or DEFAULT_LINGBOT_BASE_REPO
+                base_request = (
+                    cls._resolve_cached_sibling(requested_path, DEFAULT_LINGBOT_BASE_REPO) or DEFAULT_LINGBOT_BASE_REPO
+                )
             elif fast_model_path:
                 resolved_fast = fast_model_path
                 base_request = requested_path
             else:
                 base_request = requested_path
-                resolved_fast = cls._resolve_cached_sibling(requested_path, DEFAULT_LINGBOT_FAST_REPO) or DEFAULT_LINGBOT_FAST_REPO
+                resolved_fast = (
+                    cls._resolve_cached_sibling(requested_path, DEFAULT_LINGBOT_FAST_REPO) or DEFAULT_LINGBOT_FAST_REPO
+                )
         else:
             base_request = requested_path
 
@@ -350,8 +348,8 @@ class LingBotWorldRuntime:
         cls,
         pretrained_model_path,
         task: str = "i2v-A14B",
-        runtime_variant: Optional[str] = None,
-        fast_model_path: Optional[str] = None,
+        runtime_variant: str | None = None,
+        fast_model_path: str | None = None,
         rank: int = 0,
         **kwargs: Any,
     ) -> dict[str, Any]:
@@ -394,8 +392,8 @@ class LingBotWorldRuntime:
 
     @staticmethod
     def _to_pil_image(
-        pil_image: Optional[Image.Image] = None,
-        image_tensor: Optional[torch.Tensor] = None,
+        pil_image: Image.Image | None = None,
+        image_tensor: torch.Tensor | None = None,
     ) -> Image.Image:
         if pil_image is not None:
             return pil_image.convert("RGB")
@@ -419,7 +417,7 @@ class LingBotWorldRuntime:
         return Image.fromarray((array * 255.0).round().astype(np.uint8))
 
     @staticmethod
-    def _video_to_numpy(video: Optional[torch.Tensor]) -> Optional[np.ndarray]:
+    def _video_to_numpy(video: torch.Tensor | None) -> np.ndarray | None:
         if video is None:
             return None
 
@@ -436,7 +434,7 @@ class LingBotWorldRuntime:
         action_dir: str,
         c2ws: np.ndarray,
         Ks: np.ndarray,
-        action_matrix: Optional[np.ndarray] = None,
+        action_matrix: np.ndarray | None = None,
     ) -> None:
         np.save(os.path.join(action_dir, "poses.npy"), np.asarray(c2ws, dtype=np.float32))
         np.save(os.path.join(action_dir, "intrinsics.npy"), np.asarray(Ks, dtype=np.float32))
@@ -455,11 +453,7 @@ class LingBotWorldRuntime:
         resolved = int(seed)
         dist = torch.distributed
         if dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1:
-            payload = [
-                resolved if resolved >= 0 else random.randint(0, sys.maxsize)
-                if dist.get_rank() == 0
-                else 0
-            ]
+            payload = [resolved if resolved >= 0 else random.randint(0, sys.maxsize) if dist.get_rank() == 0 else 0]
             dist.broadcast_object_list(payload, src=0)
             return int(payload[0])
         return resolved if resolved >= 0 else random.randint(0, sys.maxsize)
@@ -473,22 +467,18 @@ class LingBotWorldRuntime:
             "offload_model": offload_model,
             **kwargs,
         }
-        filtered_payload = {
-            key: value
-            for key, value in payload.items()
-            if value is not None and key in accepted
-        }
+        filtered_payload = {key: value for key, value in payload.items() if value is not None and key in accepted}
         return generate(**filtered_payload)
 
     @torch.no_grad()
     def predict(
         self,
         prompt: str,
-        pil_image: Optional[Image.Image] = None,
-        image_tensor: Optional[torch.Tensor] = None,
-        action_path: Optional[str] = None,
-        c2ws: Optional[np.ndarray] = None,
-        Ks: Optional[np.ndarray] = None,
+        pil_image: Image.Image | None = None,
+        image_tensor: torch.Tensor | None = None,
+        action_path: str | None = None,
+        c2ws: np.ndarray | None = None,
+        Ks: np.ndarray | None = None,
         num_output_frames: int = 81,
         max_area: int = 720 * 1280,
         shift=None,
@@ -497,11 +487,11 @@ class LingBotWorldRuntime:
         guide_scale=None,
         n_prompt: str = "",
         seed: int = -1,
-        offload_model: Optional[bool] = None,
+        offload_model: bool | None = None,
         vis_ui: bool = False,
         allow_act2cam: bool = False,
-        action_string: Optional[str] = None,
-        action_matrix: Optional[np.ndarray] = None,
+        action_string: str | None = None,
+        action_matrix: np.ndarray | None = None,
         **kwargs,
     ):
         if self.runtime_variant == "fast":
@@ -524,7 +514,9 @@ class LingBotWorldRuntime:
             if control_type == "act" and action_matrix is None:
                 raise ValueError("LingBot Base-Act requires action_matrix alongside c2ws/Ks.")
             if control_type == "act" and allow_act2cam:
-                raise ValueError("allow_act2cam is a Base-Cam conversion mode and cannot be used with Base-Act weights.")
+                raise ValueError(
+                    "allow_act2cam is a Base-Cam conversion mode and cannot be used with Base-Act weights."
+                )
             with tempfile.TemporaryDirectory(prefix="lingbot_action_") as action_dir:
                 self._save_camera_controls(action_dir, c2ws, Ks, action_matrix=action_matrix)
                 video = self._generate_video(
@@ -578,9 +570,9 @@ __all__ = [
     "DEFAULT_LINGBOT_BASE_REPO",
     "DEFAULT_LINGBOT_FAST_REPO",
     "DEFAULT_LINGBOT_HFD_ROOT",
+    "SUPPORTED_LINGBOT_TASKS",
     "LingBotRuntime",
     "LingBotWorldRuntime",
-    "SUPPORTED_LINGBOT_TASKS",
     "lingbot_runtime_root",
     "load_runtime",
 ]

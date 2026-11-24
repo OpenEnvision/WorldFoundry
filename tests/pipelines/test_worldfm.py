@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from worldfoundry.evaluation.utils import worldfoundry_data_path
+from worldfoundry.evals.utils import worldfoundry_data_path
 from worldfoundry.pipelines.worldfm.pipeline_worldfm import WorldFMPipeline
 
 

@@ -17,11 +17,7 @@ def get_freqs(dim: int, max_period: float = 10000.0) -> Tensor:
     Returns:
         `torch.Tensor`: Frequency values in float32.
     """
-    return torch.exp(
-        -math.log(max_period)
-        * torch.arange(start=0, end=dim, dtype=torch.float32)
-        / dim
-    )
+    return torch.exp(-math.log(max_period) * torch.arange(start=0, end=dim, dtype=torch.float32) / dim)
 
 
 def apply_scale_shift_norm(norm, x: Tensor, scale: Tensor, shift: Tensor) -> Tensor:

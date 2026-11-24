@@ -155,8 +155,8 @@ def test_attention_forward_falls_back_for_missing_optional_backend(monkeypatch: 
 @pytest.mark.parametrize(
     "relative_path",
     (
-        "worldfoundry/core/attention/parallel/patch_xdit_context_parallel.py",
-        "worldfoundry/core/attention/parallel/scope_xdit_context_parallel.py",
+        "worldfoundry/base_models/diffusion_model/models/networks/wan/sequence_parallel.py",
+        "worldfoundry/synthesis/visual_generation/ati/ati_runtime/xdit_context_parallel.py",
     ),
 )
 def test_xdit_attention_hot_path_does_not_empty_allocator_cache(relative_path: str) -> None:

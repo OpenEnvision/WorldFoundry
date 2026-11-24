@@ -12,7 +12,7 @@ notes:
 - AMT, ViCLIP, MUSIQ, FVD/FID/KID, 3D consistency assets, generated videos, and full upstream scorer execution remain
   full-suite blockers.
 preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile mirabench --manifest
+  worldfoundry.evals.tasks.execution.orchestration.runtime_preflight --profile mirabench --manifest
   worldfoundry/data/benchmarks/runtime_profiles/official/mirabench.yaml --output-dir
   tmp/worldfoundry_preflight/mirabench --json
 python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
@@ -20,7 +20,7 @@ pythonpath_roots:
 - .
 required_assets:
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/mirabench/runtime/mirabench
+  - worldfoundry/evals/tasks/execution/runners/mirabench/runtime/mirabench
   bundled_asset_paths:
   - worldfoundry/data/benchmarks/assets/mirabench
   task_yaml: worldfoundry/data/benchmarks/tasks/external/mirabench.yaml
@@ -35,11 +35,11 @@ required_packages:
 - numpy
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/mirabench/run_mirabench_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/mirabench/run_mirabench_official_runner.py
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/mirabench.yaml
 - id: in_tree_runtime_root
-  path: worldfoundry/evaluation/tasks/execution/runners/mirabench/runtime/mirabench
+  path: worldfoundry/evals/tasks/execution/runners/mirabench/runtime/mirabench
 - id: bundled_assets
   path: worldfoundry/data/benchmarks/assets/mirabench
 requires_cuda_visibility: false
@@ -55,7 +55,7 @@ optional_imports:
 - cv2
 - pandas
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id

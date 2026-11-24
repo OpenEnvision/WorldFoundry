@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 availability: open_source
 checkpoints:
 - nvidia/Cosmos-Transfer2.5-2B
@@ -34,6 +34,7 @@ official_sources:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
     url: https://github.com/nvidia-cosmos/cosmos-transfer2.5
+    revision: 2ff49d0717af02057ae79bc75c00fbff9da1b4e7
   huggingface:
   - confirmed_by: https://huggingface.co/api/models/nvidia/Cosmos-Transfer2.5-2B
     repo_id: nvidia/Cosmos-Transfer2.5-2B
@@ -90,10 +91,10 @@ docs:
   publisher: NVIDIA
   publisher_kind: company
   publisher_zh: 英伟达（NVIDIA）
-  overview: 'Cosmos Transfer 2.5 does controlled world-to-world translation: it takes structured control inputs (e.g. edge maps or simulation renders) and generates photoreal world video that follows them — the sim-to-real arm of the Cosmos family. In this catalog it reuses the same native runner, Reason1 conditioner, flow-UniPC scheduler, and Wan VAE as Predict 2.5, adding only the checkpoint-shaped VACE control branch.'
-  overview_zh: Cosmos Transfer 2.5 做受控的世界到世界转换：接受结构化控制输入（如边缘图或仿真渲染），生成遵循这些控制的写实世界视频——是 Cosmos 家族的 sim-to-real 分支。本 catalog 中它复用与 Predict 2.5 相同的原生 runner、Reason1 条件器、flow-UniPC 调度器与 Wan VAE，仅新增按 checkpoint 形状实现的 VACE 控制分支。
-  architecture: The native VACE network adds a four-block control branch at base layers 0/7/14/21 plus an 8-modality control embedder over the 28-layer base; control and conditional video encoding reuse the same framework-owned Wan VAE instance. No Diffusers, ControlNet backend, or model-specific runner is retained.
-  architecture_zh: 原生 VACE 网络在 28 层基座的第 0/7/14/21 层添加四块控制分支，外加 8 模态控制嵌入器；控制与条件视频编码复用同一个框架自有 Wan VAE 实例。不保留 Diffusers、ControlNet 后端或模型专属 runner。
+  overview: 'Cosmos Transfer 2.5 does controlled world-to-world translation: it takes structured control inputs (e.g. edge maps or simulation renders) and generates photoreal world video that follows them — the sim-to-real arm of the Cosmos family. It reuses the same native runner, Reason1 conditioner, flow-UniPC scheduler, and Wan VAE as Predict 2.5, adding only the VACE control branch.'
+  overview_zh: Cosmos Transfer 2.5 做受控的世界到世界转换：接受结构化控制输入（如边缘图或仿真渲染），生成遵循这些控制的写实世界视频——是 Cosmos 家族的 sim-to-real 分支。它复用与 Predict 2.5 相同的原生 runner、Reason1 条件器、flow-UniPC 调度器与 Wan VAE，仅新增 VACE 控制分支。
+  architecture: The native VACE network adds a four-block control branch at base layers 0/7/14/21 plus an 8-modality control embedder over the 28-layer base; control and conditional video encoding share one Wan VAE instance.
+  architecture_zh: 原生 VACE 网络在 28 层基座的第 0/7/14/21 层添加四块控制分支，外加 8 模态控制嵌入器；控制视频与条件视频编码共用同一个 Wan VAE 实例。
   usage_notes: Stage the official 2B edge checkpoint plus the Predict2.5 VAE and Reason1 text encoder, then provide a raw RGB control video. The native route extracts Canny edges automatically; set control_is_preprocessed only when supplying edge maps directly.
   usage_notes_zh: 请先准备官方 2B edge checkpoint、Predict2.5 VAE 与 Reason1 文本编码器，再提供原始 RGB 控制视频。原生路径会自动提取 Canny 边缘；仅在直接提供边缘图时设置 control_is_preprocessed。
   limitations:

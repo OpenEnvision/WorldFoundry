@@ -1,19 +1,23 @@
-artifact_filename: open_magvit2.png
-artifact_kind: generated_image
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: open-magvit2
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/TencentARC--Open-MAGVIT2
   repo_id: TencentARC/Open-MAGVIT2
   role: class_conditional_image_generation_checkpoints
-id: open-magvit2
 input_schema:
   class_id: true
   image: false
   prompt: false
-integration_status: integrated
+artifact_kind: generated_image
+artifact_filename: open_magvit2.png
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: checkpoint_backed_verified
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - WorldFoundry vendors the Open-MAGVIT2 architecture, generation helpers, and ImageNet
   class-conditional config under worldfoundry/synthesis/visual_generation/open_magvit2/open_magvit2_runtime.
 - The runtime is class-conditional image generation rather than prompt-to-video.
-runtime_status: checkpoint_backed_verified
 verification_status: checkpoint_backed_gpu_verified_cuda_open_magvit2_ar256_steps256

@@ -3,18 +3,18 @@ title: CALVIN
 description: "Long-horizon language-conditioned tabletop (RA-L 2022). Official protocol is success at chain lengths 1–5 after training on A/B/C and testing on D."
 ---
 
-CALVIN (Composing Actions from Language and Vision) is the University of Freiburg's long-horizon, language-conditioned manipulation benchmark (IEEE RA-L 2022). A policy in a **PyBullet** tabletop must chain up to **five** language instructions. Four environment configurations **A/B/C/D** test zero-shot transfer: the signature split trains on A/B/C and evaluates on unseen **D**. The paper reports success at each chain length and the **average number of completed instructions**, not a single binary episode bit.
+CALVIN (Composing Actions from Language and Vision) is the University of Freiburg's long-horizon, language-conditioned manipulation benchmark (IEEE RA-L 2022). A policy in a **PyBullet** tabletop must chain up to **five** language instructions. Four environment configurations **A/B/C/D** test zero-shot transfer: the signature split trains on A/B/C and evaluates on unseen **D**. The paper reports success at each chain length and the **average number of completed instructions**.
 
-Paper: [CALVIN](https://ieeexplore.ieee.org/document/9788026) (also discussed at [calvin.cs.uni-freiburg.de](http://calvin.cs.uni-freiburg.de/)). Code: [mees/calvin](https://github.com/mees/calvin) (MIT).
+Paper: [CALVIN](https://ieeexplore.ieee.org/document/9788026) (project: [calvin.cs.uni-freiburg.de](http://calvin.cs.uni-freiburg.de/)). Code: [mees/calvin](https://github.com/mees/calvin) (MIT).
 
-WorldFoundry is an **official-results importer**. You run the upstream sequence evaluator, then normalize the export. Simulator, dataset roots, and policy checkpoints follow the official CALVIN docs. Repo mirror: `cache/vla_va_wam/repos/mees--calvin`.
+WorldFoundry is an **official-results importer**. You run the upstream sequence evaluator, then normalize the export. Simulator, dataset roots, and policy checkpoints follow the official CALVIN docs.
 
 <BenchmarkPageSections id="calvin" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id calvin \
   --mode official-validation \
   --official-results-path <official_results.json> \

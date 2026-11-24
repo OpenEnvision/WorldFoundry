@@ -2,23 +2,22 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import logging
 import os
+from dataclasses import dataclass, field
 
-from hydra.utils import instantiate
 import numpy as np
-from safetensors.torch import load_file
 import torch
 import torch.distributed as dist
-from torch.distributed.device_mesh import DeviceMesh
 import tree
+from hydra.utils import instantiate
+from safetensors.torch import load_file
+from torch.distributed.device_mesh import DeviceMesh
 from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedModel
 from transformers.feature_extraction_utils import BatchFeature
 
 from .targets import rewrite_targets, validate_inference_targets
-
 
 BACKBONE_FEATURE_KEY = "backbone_features"
 ACTION_KEY = "action_pred"
@@ -56,15 +55,10 @@ def _checkpoint_state_dict(checkpoint_dir: str) -> dict[str, torch.Tensor]:
     elif os.path.isfile(single_path):
         state_dict = dict(load_file(single_path))
     else:
-        raise FileNotFoundError(
-            f"No model.safetensors checkpoint found in {checkpoint_dir!r}"
-        )
+        raise FileNotFoundError(f"No model.safetensors checkpoint found in {checkpoint_dir!r}")
 
     if any(".base_layer." in key for key in state_dict):
-        state_dict = {
-            key.replace(".base_layer.", "."): value
-            for key, value in state_dict.items()
-        }
+        state_dict = {key.replace(".base_layer.", "."): value for key, value in state_dict.items()}
     return state_dict
 
 
@@ -102,11 +96,7 @@ class VLA(PreTrainedModel):
         if action is not None:
             if not isinstance(action, torch.Tensor):
                 raise TypeError(f"action must be a tensor, got {type(action)!r}")
-            if (
-                action.ndim != 3
-                or action.shape[1] % self.action_horizon
-                or action.shape[2] != self.action_dim
-            ):
+            if action.ndim != 3 or action.shape[1] % self.action_horizon or action.shape[2] != self.action_dim:
                 raise ValueError(f"invalid action shape: {tuple(action.shape)}")
 
         video = inputs.get("video")
@@ -176,7 +166,7 @@ class VLA(PreTrainedModel):
         *,
         load_base_components: bool,
         config: VLAConfig | None = None,
-    ) -> "VLA":
+    ) -> VLA:
         if config is None:
             config_path = os.path.join(checkpoint_dir, "config.json")
             with open(config_path, encoding="utf-8") as handle:
@@ -215,7 +205,7 @@ class VLA(PreTrainedModel):
         return model
 
     @classmethod
-    def load_lora(cls, pretrained_model_name_or_path: str) -> "VLA":
+    def load_lora(cls, pretrained_model_name_or_path: str) -> VLA:
         """Load an adapter-only checkpoint on top of its frozen Wan components."""
 
         return cls._from_local_checkpoint(
@@ -230,7 +220,7 @@ class VLA(PreTrainedModel):
         pretrained_model_name_or_path: str,
         config: VLAConfig | None = None,
         **_: object,
-    ) -> "VLA":
+    ) -> VLA:
         return cls._from_local_checkpoint(
             pretrained_model_name_or_path,
             load_base_components=False,

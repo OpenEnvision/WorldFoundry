@@ -1,17 +1,19 @@
-from PIL import Image
-import torch
-import argparse
 import numpy as np
-from transformers import OneFormerProcessor, OneFormerForUniversalSegmentation
-from .utils.general_utils import pano_to_cube, cube_to_pano
+import torch
+from PIL import Image
+from transformers import OneFormerForUniversalSegmentation, OneFormerProcessor
 
-def build_segment_model(device: torch.device = 'cuda'):
+from .utils.general_utils import cube_to_pano, pano_to_cube
+
+
+def build_segment_model(device: torch.device = "cuda"):
     processor = OneFormerProcessor.from_pretrained("shi-labs/oneformer_ade20k_swin_large")
     model = OneFormerForUniversalSegmentation.from_pretrained("shi-labs/oneformer_ade20k_swin_large")
-    torch.set_float32_matmul_precision(['high', 'highest'][0])
+    torch.set_float32_matmul_precision(["high", "highest"][0])
     model.to(device)
     model.eval()
     return processor, model
+
 
 @torch.inference_mode()
 def segment_image_oneformer(processor, model, image: Image.Image):
@@ -31,25 +33,26 @@ def segment_image_oneformer(processor, model, image: Image.Image):
 @torch.inference_mode()
 def seg_pano(processor, model, image: Image.Image):
     H, W = image.height, image.width
-    assert (H / W == 0.5),  "Input image aspect ratio is not 2:1. Is it a panorama?"
+    assert H / W == 0.5, "Input image aspect ratio is not 2:1. Is it a panorama?"
     cube_face_res = H // 2
 
     print(f"Processing as panorama. Converting to cubemap (calculated face res: {cube_face_res}px)...")
     cube_faces = pano_to_cube(image, face_w=cube_face_res)
 
     cube_masks = []
-    for i, face in enumerate(cube_faces):
+    for _i, face in enumerate(cube_faces):
         seg_map = segment_image_oneformer(processor, model, face)
         cube_masks.append(seg_map)
 
-    pano_mask = cube_to_pano(cube_masks, h=H, w=W, mode='nearest')
+    pano_mask = cube_to_pano(cube_masks, h=H, w=W, mode="nearest")
     return pano_mask
 
+
 def seg_pano_fg(processor, model, image: Image.Image, depth: torch.Tensor):
-    '''
+    """
     Segment the foreground of a panorama image using semantic segmentation # and depth map.
-    '''
-    background_labels = [0, 2, 3, 5, 8, 9, 13, 21, 23, 16, 46] # ADE20K background labels
+    """
+    background_labels = [0, 2, 3, 5, 8, 9, 13, 21, 23, 16, 46]  # ADE20K background labels
     pano_semantic_mask = seg_pano(processor, model, image)
     pano_semantic_mask = torch.tensor(np.array(pano_semantic_mask)).to(depth.device)
     semantic_labels = torch.unique(pano_semantic_mask).tolist()
@@ -61,7 +64,7 @@ def seg_pano_fg(processor, model, image: Image.Image, depth: torch.Tensor):
     for label in semantic_labels:
         if label in background_labels:
             continue
-        mask = (pano_semantic_mask == label)
+        mask = pano_semantic_mask == label
         instance_depth = depth[mask]
         if instance_depth.min() < depth_min or instance_depth.max() > depth_max:
             continue
@@ -71,4 +74,3 @@ def seg_pano_fg(processor, model, image: Image.Image, depth: torch.Tensor):
     fg_mask = torch.isin(pano_semantic_mask, instance_labels).to(torch.uint8)
     fg_mask = fg_mask.cpu().numpy()
     return fg_mask
-    

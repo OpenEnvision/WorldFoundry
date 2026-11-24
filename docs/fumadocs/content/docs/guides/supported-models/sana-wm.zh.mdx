@@ -1,15 +1,15 @@
 ---
 title: "SANA-WM"
-description: "SANA-WM（NVIDIA）：世界模型、相机可控视频；Runner 一致性待确认; 独立环境 `sana`。"
+description: "SANA-WM，英伟达（NVIDIA）：原生世界模型与相机可控视频配方；Runner 一致性待确认；统一环境 `worldfoundry-unified-cu128`。"
 modelId: "sana-wm"
 pageSource: authored
 ---
 
-SANA-WM 是基于英伟达高效 Sana 架构的世界模型：两阶段设计（交互阶段加 LTX-2 精修器），以常驻多卡 pipeline 生成相机可控的世界视频。真实 Workspace 运行把组件划分到四张 A100 上，从九帧原生窗口生成八帧有限、可解码的 1280x704 画面。
+SANA-WM 是基于英伟达高效 Sana 架构的世界模型。WorldFoundry 提供用于相机可控视频的原生双向与流式配方；流式配方包含 LTX-2 精修器。
 
 <ModelPaperFigures modelId="sana-wm" locale="zh" />
 
-记录论文为[SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear Diffusion Transformer](https://arxiv.org/abs/2605.15178)（2026）。
+论文：[SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear Diffusion Transformer](https://arxiv.org/abs/2605.15178)（2026）。
 
 项目页：[nvlabs.github.io/Sana/WM](https://nvlabs.github.io/Sana/WM/)。代码：[NVlabs/Sana](https://github.com/NVlabs/Sana)。
 
@@ -17,36 +17,57 @@ SANA-WM 是基于英伟达高效 Sana 架构的世界模型：两阶段设计（
 
 ## 用来做什么
 
-用 `sana-wm-streaming` 做相机条件视频推理。配方绑定了已记录的相机控制 profile。
+`sana-wm-streaming` 以相机位姿为条件生成视频。
 
-相机动作遵循当前官方 SANA-WM 控制约定：`w/s` 前进/后退，`a/d` 向左/右转头，`j/l` 向左/右平移，`i/k` 向上/下俯仰。持续按键的默认速度为每帧 0.025 个单位和 0.6°，松键后逐渐减速。首图之后的每个过渡帧提供一个动作，也可直接传入 `camera_to_world` 位姿。
+相机动作遵循官方 SANA-WM 控制约定：`w/s` 前进/后退，`a/d` 向左/右转头，`j/l` 向左/右平移，`i/k` 向上/下俯仰。持续按键的默认速度为每帧 0.025 个单位和 0.6°，松键后逐渐减速。首图之后的每个过渡帧提供一个动作，也可直接传入 `camera_to_world` 位姿。
 
-SANA-WM 复用规范的 Sana 网络、编码器、自编码器、调度器与配方角色——不再保留模态自有的 Sana 运行时（论文 arXiv 2605.15178，apache-2.0）。交互 pipeline 保持两阶段模型常驻，以原生 8k+1 时间窗口推进；质量档案保持双向阶段与 LTX-2 精修器开启。该模型由英伟达（NVIDIA）发布。
+SANA-WM 复用 WorldFoundry 共享的 Sana 网络、编码器、自编码器、调度器与配方组件（论文 arXiv 2605.15178，apache-2.0）。常驻适配器使用原生 8k+1 时间窗口。流式配方管理相机条件阶段与 LTX-2 精修器；组件放置与 offload 使用共享 `RuntimePolicy`。
 
-catalog 记录的任务包括 世界模型、相机可控视频、controllable-world-generation。别名包括 `sana world model`、`sana-wm-2.6b`、`sana-wm-streaming`、`Efficient-Large-Model/SANA-WM_streaming`。
+任务：世界模型、相机可控视频、controllable-world-generation。别名：`sana world model`、`sana-wm-2.6b`、`sana-wm-streaming`、`Efficient-Large-Model/SANA-WM_streaming`。
 
-记录的评测入口包括[SANA-WM 80-Scene Benchmark](/zh/docs/evaluation/benchmark-hub/sana-wm-bench)（本仓库记录的 SANA-WM 专用评测）、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（世界滚动生成的相机控制贴合度）。
+推荐评测：[SANA-WM 80-Scene Benchmark](/zh/docs/evaluation/benchmark-hub/sana-wm-bench)（SANA-WM 专用的 80 场景评测）、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（世界滚动生成的相机控制贴合度）。
 
-不是 [SANA](/zh/docs/guides/supported-models/sana)。 评测看 [SANA-WM 80-Scene Benchmark](/zh/docs/evaluation/benchmark-hub/sana-wm-bench)、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)。
+SANA-WM 与 [SANA](/zh/docs/guides/supported-models/sana) 是不同的模型。评测请参见 [SANA-WM 80-Scene Benchmark](/zh/docs/evaluation/benchmark-hub/sana-wm-bench)、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)。
 
 ## 运行时契约
 
-可选 `prompt`、`input_path`、`interactions`、`fps`、`guidance_scale`；产物 `sana-wm-streaming.mp4`。
+CLI 输入 `prompt`、`input-path`；参数 `fps`、`guidance-scale`、`seed`、`window-frames`、`step`；产物 `sana-wm-streaming.mp4`。
 
-CLI task profile：`interactive-video`。绑定的 pipeline 类是 `SanaWMPipeline`。
+CLI task profile：`interactive-video`。`sana-wm` 绑定 `SanaWMPipeline`，
+`sana-wm-streaming` 绑定 `SanaWMStreamingPipeline`。`from_pretrained` 会装配
+原生模型并加载权重；不加载权重的构建预览使用 `plan`。
 
-系列状态：**Runner 一致性待确认**。
+实时 API 要求用户提供图像和提示词。`configure_realtime` 校验输入，保存图像副本，并通过 `RealtimeSpec`
+上报配置的 FPS 和窗口。N 帧输出窗口消费参考图之后的 N−1 个动作过渡。
+`stream_realtime` 接受逐帧 interactions 或 Studio 的 `realtime_segments`；
+后者会在构建 native request 前重采样为对应的动作过渡。
 
-已验证的四卡 A100 运行是四阶段冒烟测试，确认执行与条件连贯性——不代表默认 60 步质量配方。 组件在多卡上的放置可配置。
+随生成提交的提示词只在 native 执行成功后生效。失败时保留之前已提交的提示词，
+后续请求继续复用同一个模型。`reset_realtime` 清除会话配置，生成前需要重新
+配置，但不会重新加载权重。
 
-WorldFoundry registers an in-tree resident pipeline with configurable multi-GPU component placement.
+**验证状态：** Runner 一致性待确认。双向配置记录了一次单 H100 的第一阶段运行，
+以 60 步采样生成 33 帧可解码的 1280x704 画面；视觉检查记录了偏暗、粗糙和首帧
+伪影，未执行 LTX-2 精修阶段。另一项四卡 A100 冒烟记录从九帧窗口生成八帧有限、
+可解码的 1280x704 画面。这些记录不代表完整精修路径的一致性或当前实时改动
+已通过验收。无权重实时测试替换模型执行，覆盖原生加载委托、Studio 分发、控制、
+请求状态与重置；生成验收仍需 checkpoint 回放。
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run sana-wm-streaming --pipeline.task-profile interactive-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+提供首帧图像和提示词以生成视频：
 
-记录的权重仓库包括 `Efficient-Large-Model/SANA-WM_streaming`、`Efficient-Large-Model/SANA-WM_bidirectional`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh sana-wm-streaming`；下载缺失的公开权重时加 `--download`。
+```bash
+wf run sana-wm-streaming \
+  --pipeline.task-profile interactive-video \
+  --pipeline.input-path /path/to/first-frame.png \
+  --pipeline.prompt "A sunlit forest."
+```
 
-记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+用 `scripts/setup/bootstrap_worldfoundry.sh` 准备统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+权重仓库：`Efficient-Large-Model/SANA-WM_streaming`、`Efficient-Large-Model/SANA-WM_bidirectional`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh sana-wm-streaming`；下载缺失的公开权重时加 `--download`。
+
+许可证：Apache-2.0。
 
 <ModelRelatedRecipes modelId="sana-wm" locale="zh" />

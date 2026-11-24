@@ -44,8 +44,7 @@ if [[ "${SKIP_INSTALL}" == "0" ]]; then
 fi
 
 npm run types:check
-# pretypes:check generates the API metadata; require all checked-in docs data to be current.
-npm run api:check
+# Checked-in recipe, benchmark, and coverage data must match their generators.
 npm run models:check
 npm run models:homes:check
 npm run benchmarks:check

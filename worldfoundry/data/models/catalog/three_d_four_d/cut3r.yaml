@@ -14,6 +14,7 @@ official_sources:
   project_page: https://cut3r.github.io/
   github:
     url: https://github.com/CUT3R/CUT3R
+    revision: 8bc15dc92a6d7fd92920b4ec81540d3dec7d3ecf
   huggingface:
   - repo_id: liguang0115/cut3r
     type: model
@@ -22,7 +23,7 @@ integration:
   status: runtime_ported
   notes:
   - In-tree CUT3R point-cloud and two-stage 3DGS routes are registered through Studio discovery.
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: cut3r
 runner_parity:
   status: pending
@@ -34,15 +35,13 @@ docs:
   publisher: UC Berkeley
   publisher_kind: university
   publisher_zh: 加州大学伯克利分校（UC Berkeley）
-  overview: 'CUT3R is a continuous 3D perception model with persistent state: it ingests a stream of images and continuously updates a metric-scale 3D reconstruction, without offline bundling. In this catalog the in-tree point-cloud and two-stage 3DGS routes are registered through Studio discovery. CUT3R also serves as the geometry backbone for the verified VMem entry in the video category.'
-  overview_zh: CUT3R 是带持久状态的连续 3D 感知模型：接收图像流并持续更新米制尺度的 3D 重建，无需离线捆绑优化。本 catalog 中已通过 Studio 发现机制注册了树内点云与两段式 3DGS 路径。CUT3R 同时是 video 类别中已验证的 VMem 条目的几何主干。
-  architecture: A recurrent transformer maintains a persistent scene state; each new frame updates the state and outputs pointmaps and camera parameters online (per the upstream publication). The recorded routes cover raw point-cloud export and a two-stage 3DGS pipeline; weights are apache-2.0.
-  architecture_zh: 循环 Transformer 维护持久场景状态；每帧新图像更新状态并在线输出点图与相机参数（见上游论文）。已记录路径覆盖点云导出与两段式 3DGS pipeline；权重为 apache-2.0。
-  usage_notes: 'Runner parity is pending: checkpoint-backed inference depends on staged local or Hugging Face cut3r weights. Stage them before submitting Studio jobs.'
-  usage_notes_zh: Runner parity 为 pending：checkpoint 加载推理依赖就位的本地或 Hugging Face cut3r 权重。提交 Studio 任务前请先就位权重。
+  overview: 'CUT3R is a continuous 3D perception model with persistent state: it ingests a stream of images and continuously updates a metric-scale 3D reconstruction, without offline bundling. WorldFoundry provides an in-tree point-cloud export route and a two-stage 3DGS route, both available in Studio. CUT3R also serves as the geometry backbone for VMem.'
+  overview_zh: CUT3R 是带持久状态的连续 3D 感知模型：接收图像流并持续更新米制尺度的 3D 重建，无需离线捆绑优化。WorldFoundry 提供树内点云导出与两段式 3DGS 两条路径，均可在 Studio 中使用。CUT3R 同时是 VMem 的几何主干。
+  architecture: A recurrent transformer maintains a persistent scene state; each new frame updates the state and outputs pointmaps and camera parameters online (per the upstream publication). WorldFoundry exposes raw point-cloud export and a two-stage 3DGS pipeline; weights are apache-2.0.
+  architecture_zh: 循环 Transformer 维护持久场景状态；每帧新图像更新状态并在线输出点图与相机参数（见上游论文）。WorldFoundry 提供点云导出与两段式 3DGS pipeline；权重为 apache-2.0。
+  usage_notes: Stage the `liguang0115/cut3r` weights locally or from Hugging Face before submitting Studio jobs.
+  usage_notes_zh: 提交 Studio 任务前，先在本地或从 Hugging Face 就位 `liguang0115/cut3r` 权重。
   limitations:
-  - Checkpoint-backed parity is pending; the routes are registered but unverified in this workspace.
   - Streaming reconstruction quality degrades on long sequences with severe viewpoint changes.
   limitations_zh:
-  - checkpoint 加载一致性待验证；路径已注册但本工作区尚未验证。
   - 长序列且视角剧烈变化时，流式重建质量会下降。

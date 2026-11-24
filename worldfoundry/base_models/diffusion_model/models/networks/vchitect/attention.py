@@ -92,20 +92,26 @@ class Attention(nn.Module):
         query, key, value = heads(query), heads(key), heads(value)
         temporal_q, temporal_k, temporal_v = heads(temporal_q), heads(temporal_k), heads(temporal_v)
 
-        spatial = scaled_dot_product_attention(
-            query.transpose(1, 2), key.transpose(1, 2), value.transpose(1, 2)
-        ).transpose(1, 2).reshape(frame_batch, -1, self.heads * head_dim)
+        spatial = (
+            scaled_dot_product_attention(query.transpose(1, 2), key.transpose(1, 2), value.transpose(1, 2))
+            .transpose(1, 2)
+            .reshape(frame_batch, -1, self.heads * head_dim)
+        )
 
         temporal_q = rearrange(temporal_q, "(b t) s h d -> (b s) t h d", b=batch, t=frames)
         temporal_k = rearrange(temporal_k, "(b t) s h d -> (b s) t h d", b=batch, t=frames)
         temporal_v = rearrange(temporal_v, "(b t) s h d -> (b s) t h d", b=batch, t=frames)
         temporal_q = self._rotary(temporal_q, frequencies)
         temporal_k = self._rotary(temporal_k, frequencies)
-        temporal = scaled_dot_product_attention(
-            temporal_q.transpose(1, 2),
-            temporal_k.transpose(1, 2),
-            temporal_v.transpose(1, 2),
-        ).transpose(1, 2).reshape(temporal_v.shape[0], frames, self.heads * head_dim)
+        temporal = (
+            scaled_dot_product_attention(
+                temporal_q.transpose(1, 2),
+                temporal_k.transpose(1, 2),
+                temporal_v.transpose(1, 2),
+            )
+            .transpose(1, 2)
+            .reshape(temporal_v.shape[0], frames, self.heads * head_dim)
+        )
         temporal = rearrange(temporal, "(b s) t d -> (b t) s d", b=batch, t=frames)
 
         cross_q = heads(cross_q)

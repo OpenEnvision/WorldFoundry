@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_generation import (
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_generation import (
     get_benchmark_generation_adapter,
 )
-from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_prompts import (
+from worldfoundry.evals.tasks.execution.runners.iworldbench.iworldbench_prompts import (
     materialize_iworldbench_generation_requests,
     resolve_metadata_csv_path,
 )

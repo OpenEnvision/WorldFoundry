@@ -3,7 +3,7 @@ name: EasyAnimate
 aliases:
   - easyanimate_i2v
   - easyanimate-i2v
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 runtime_profile: runtime-profile:easyanimate-i2v
 tasks:
   - text-to-video
@@ -85,18 +85,16 @@ docs:
   publisher: Alibaba (PAI)
   publisher_kind: company
   publisher_zh: 阿里巴巴（PAI 团队）
-  overview: EasyAnimate is Alibaba PAI's DiT-based video generation project, covering text-to-video, image-to-video, and video-to-video. WorldFoundry wraps the V5.1 image-to-video runtime in-tree; the same independent runtime is reused by WRBench camera-control evaluation, so it never resolves an external source checkout. Aliases easyanimate_i2v and easyanimate-i2v resolve here.
-  overview_zh: EasyAnimate 是阿里 PAI 团队基于 DiT 的视频生成项目，覆盖文生视频、图生视频与视频到视频。 WorldFoundry 在树内封装了其 V5.1 图生视频运行时；WRBench 相机控制评测复用同一独立运行时，从不解析外部源码检出。别名 easyanimate_i2v、easyanimate-i2v 解析到本条目。
-  architecture: 'The recorded route uses the official V5.1 Flow scheduler with the InP (inpainting-style image-conditioned) checkpoint family and a height/width-to-sample_size mapping. The manifest notes the distinction explicitly: `*-InP` checkpoints are the I2V demos, while the non-InP EasyAnimateV5.1-7b-zh checkpoint is the text-to-video model.'
-  architecture_zh: 记录的路径使用官方 V5.1 Flow 调度器、InP（图像条件补全式）checkpoint 系列，以及 height/width 到 sample_size 的映射。manifest 特别注明：`*-InP` checkpoint 对应 I2V demo，非 InP 的 EasyAnimateV5.1-7b-zh 才是文生视频模型。
-  usage_notes: Integration is complete; runner parity is pending with per-run visual QA tracked outside the catalog. When picking checkpoints, remember the InP/non-InP distinction above — using the wrong family is the most common configuration mistake. Official code lives at aigc-apps/EasyAnimate with checkpoints under the alibaba-pai HF org.
-  usage_notes_zh: 集成已完成；runner parity 为 pending，每次运行的视觉 QA 在 catalog 外跟踪。选择 checkpoint 时牢记上述 InP/非 InP 之分——选错系列是最常见的配置错误。官方代码在 aigc-apps/EasyAnimate，checkpoint 在 alibaba-pai 的 HF 组织下。
+  overview: EasyAnimate is Alibaba PAI's DiT-based video generation project, covering text-to-video, image-to-video, and video-to-video. WorldFoundry runs its V5.1 image-to-video route, and WRBench camera-control evaluation uses the same runtime. The aliases easyanimate_i2v and easyanimate-i2v select this model.
+  overview_zh: EasyAnimate 是阿里 PAI 团队基于 DiT 的视频生成项目，覆盖文生视频、图生视频与视频到视频。WorldFoundry 运行其 V5.1 图生视频路径，WRBench 相机控制评测使用同一运行时。别名 easyanimate_i2v、easyanimate-i2v 指向该模型。
+  architecture: The route uses the official V5.1 Flow scheduler with the InP (inpainting-style image-conditioned) checkpoint family and maps height/width to sample_size. `*-InP` checkpoints are the image-to-video models; the non-InP EasyAnimateV5.1-7b-zh checkpoint is the text-to-video model.
+  architecture_zh: 该路径使用官方 V5.1 Flow 调度器、InP（图像条件补全式）checkpoint 系列，并把 height/width 映射到 sample_size。`*-InP` checkpoint 是图生视频模型；非 InP 的 EasyAnimateV5.1-7b-zh 是文生视频模型。
+  usage_notes: Use the `*-InP` checkpoints for image-to-video; picking the non-InP family is the most common configuration mistake. Official code is at aigc-apps/EasyAnimate, with checkpoints under the alibaba-pai Hugging Face organization.
+  usage_notes_zh: 图生视频请使用 `*-InP` checkpoint；选成非 InP 系列是最常见的配置错误。官方代码在 aigc-apps/EasyAnimate，checkpoint 在 alibaba-pai 的 Hugging Face 组织下。
   limitations:
-  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
-  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - Only the V5.1 image-to-video route runs in WorldFoundry; upstream control-to-video and camera-trajectory weights are not supported.
   limitations_zh:
-  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
-  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - WorldFoundry 只运行 V5.1 图生视频路径；上游的控制到视频与相机轨迹权重不受支持。
   recommended_benchmarks:
   - id: vbench
     reason: General video generation quality suite.

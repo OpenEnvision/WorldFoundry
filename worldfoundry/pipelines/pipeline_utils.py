@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Generator, Iterable, Mapping
+from collections.abc import Generator, Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, ClassVar, Sequence
+from typing import Any, ClassVar
 
 
 class PipelineABC:
@@ -39,6 +39,12 @@ class PipelineABC:
     RESERVED_SYNTHESIS_KEYS: ClassVar[frozenset[str]] = frozenset(
         {"prompt", "images", "video", "actions", "ref_image_path", "extra_inputs"}
     )
+
+    # Duck-typed components installed by ``__init__``; subclasses narrow them freely.
+    synthesis_model: Any
+    operator: Any
+    operators: Any
+    memory_module: Any
 
     def __init__(
         self,
@@ -122,7 +128,7 @@ class PipelineABC:
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "PipelineABC":
+    ) -> PipelineABC:
         """Create a pipeline with the unified loading signature.
 
         This default is a compatibility implementation for lightweight or test
@@ -165,8 +171,7 @@ class PipelineABC:
             key: value
             for key, value in init_kwargs.items()
             if key in parameters
-            and parameters[key].kind
-            in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+            and parameters[key].kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
         }
         return cls(**supported_kwargs)
 
@@ -290,9 +295,7 @@ class PipelineABC:
                 f"({type(self.operator).__name__ if self.operator is not None else None}) "
                 "process_prompt/process_perception/process_interaction outputs"
             )
-        model_specific = {
-            key: value for key, value in processed.items() if key not in self.RESERVED_SYNTHESIS_KEYS
-        }
+        model_specific = {key: value for key, value in processed.items() if key not in self.RESERVED_SYNTHESIS_KEYS}
         synthesis_kwargs = {**processed.get("extra_inputs", {}), **model_specific, **kwargs}
         result = self.synthesis_model.predict(
             prompt=processed["prompt"],

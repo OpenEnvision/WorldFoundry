@@ -5,10 +5,12 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
 
@@ -18,6 +20,7 @@ CHECKPOINT_REVISION = "7fa34ecef85754fde6f08996b1ece9d195dcd2f4"
 VIGEO_REPO = "pkqbajng/ViGeo1.1"
 VIGEO_REVISION = "49103e6eeab888bae974251d3578b496bec711d7"
 SUPPORTED_MODES = frozenset({"auto", "t2v", "i2v", "v2v"})
+_INFERENCE_MODULE = "worldfoundry.synthesis.visual_generation.evoke.evoke_runtime.scripts.inference.infer_single"
 OFFLINE_ENV = {
     "DIFFUSERS_OFFLINE": "1",
     "HF_DATASETS_OFFLINE": "1",
@@ -132,13 +135,11 @@ class EvokeRuntime:
         base_model_path: Any = None,
         transformer_path: Any = None,
         vigeo_path: Any = None,
-        runtime_root: Any = None,
         python_executable: Any = None,
         device: str = "cuda",
         env: Mapping[str, Any] | None = None,
     ) -> None:
-        requested_runtime = Path(runtime_root).expanduser() if runtime_root else self.bundled_repo_root()
-        self.repo_root = ensure_in_tree_runtime(requested_runtime, package_file=__file__)
+        self.repo_root = ensure_in_tree_runtime(self.bundled_repo_root(), package_file=__file__)
         self.checkpoint_source = checkpoint_path or CHECKPOINT_REPO
         self.base_model_source = base_model_path
         self.transformer_source = transformer_path
@@ -152,7 +153,7 @@ class EvokeRuntime:
         return Path(__file__).resolve().parent / "evoke_runtime"
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> "EvokeRuntime":
+    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> EvokeRuntime:
         return cls(checkpoint_path=pretrained_model_path, **kwargs)
 
     def _cuda_visible_devices(self) -> str:
@@ -220,7 +221,10 @@ class EvokeRuntime:
         values = [value for value in (trajectory_npz, pose_path, camera_trajectory) if value is not None]
         if not values:
             return None
-        resolved = [require_path(_as_single_path(value, "camera trajectory"), "Evoke camera trajectory", kind="file") for value in values]
+        resolved = [
+            require_path(_as_single_path(value, "camera trajectory"), "Evoke camera trajectory", kind="file")
+            for value in values
+        ]
         if any(path != resolved[0] for path in resolved[1:]):
             raise ValueError("Evoke camera trajectory aliases refer to different files")
         return resolved[0]
@@ -277,13 +281,10 @@ class EvokeRuntime:
         compatibility = self.runtime_compatibility()
         if not compatibility["ready"]:
             missing.append(str(compatibility["detail"]))
-        script = self.repo_root / "scripts" / "inference" / "infer_single.py"
-        if not script.is_file():
-            missing.append(f"bundled Evoke inference entrypoint not found: {script}")
         return {
             "status": "ready" if not missing else "blocked",
             "runtime_root": str(self.repo_root),
-            "runtime_script": str(script),
+            "runtime_module": _INFERENCE_MODULE,
             "source_revision": SOURCE_REVISION,
             "paths": paths,
             "compatibility": compatibility,
@@ -374,9 +375,7 @@ class EvokeRuntime:
         base, transformer, vigeo = self._resolve_model_paths(use_geometric_state=geometric)
         self._require_runtime_compatibility()
 
-        command: list[Any] = [
-            self.python_executable,
-            "scripts/inference/infer_single.py",
+        command_args: list[Any] = [
             "--ckpt_path",
             base,
             "--transformer_path",
@@ -424,9 +423,9 @@ class EvokeRuntime:
             run_dir,
         ]
         if image is not None:
-            command.extend(["--image_path", image])
+            command_args.extend(["--image_path", image])
         if video is not None:
-            command.extend(
+            command_args.extend(
                 [
                     "--video_path",
                     video,
@@ -439,7 +438,7 @@ class EvokeRuntime:
         if geometric:
             assert pose is not None and vigeo is not None
             source_height, source_width = (int(value) for value in lingbot_pose_source_resolution)
-            command.extend(
+            command_args.extend(
                 [
                     "--use_geometric_state",
                     "--lingbot_pose_path",
@@ -516,15 +515,13 @@ class EvokeRuntime:
             **OFFLINE_ENV,
             "CUDA_VISIBLE_DEVICES": self._cuda_visible_devices(),
         }
-        project_root = Path(__file__).resolve().parents[4]
         result = execute_in_tree(
-            command,
+            package_module_command(_INFERENCE_MODULE, command_args, python_executable=self.python_executable),
             cwd=self.repo_root,
             output_path=output,
             search_roots=(run_dir,),
             preferred_names=("geo_pred.mp4",),
             env=runtime_env,
-            python_paths=(project_root, self.repo_root),
         )
         metadata = result.setdefault("metadata", {})
         metadata.update(
@@ -546,8 +543,8 @@ class EvokeRuntime:
 __all__ = [
     "CHECKPOINT_REPO",
     "CHECKPOINT_REVISION",
-    "EvokeRuntime",
     "SOURCE_REVISION",
     "VIGEO_REPO",
     "VIGEO_REVISION",
+    "EvokeRuntime",
 ]

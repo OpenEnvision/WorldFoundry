@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 
 from transformers.utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
-
 _import_structure = {
     "configuration_mplug_owl": ["MPLUG_OWL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MplugOwlConfig"],
     "processing_mplug_owl": ["MplugOwlImageProcessor", "MplugOwlProcessor"],
@@ -43,8 +42,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_mplug_owl import MPLUG_OWL_PRETRAINED_CONFIG_ARCHIVE_MAP, MplugOwlConfig
-    from .tokenization_mplug_owl import MplugOwlTokenizer
+    from .configuration_mplug_owl import (
+        MPLUG_OWL_PRETRAINED_CONFIG_ARCHIVE_MAP as MPLUG_OWL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    )
+    from .configuration_mplug_owl import MplugOwlConfig as MplugOwlConfig
+    from .tokenization_mplug_owl import MplugOwlTokenizer as MplugOwlTokenizer
 
     try:
         if not is_tokenizers_available():
@@ -59,10 +61,16 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mplug_owl import (
-            MPLUG_OWL_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MplugOwlForConditionalGeneration,
-            MplugOwlModel,
-            MplugOwlPreTrainedModel,
+            MPLUG_OWL_PRETRAINED_MODEL_ARCHIVE_LIST as MPLUG_OWL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        )
+        from .modeling_mplug_owl import (
+            MplugOwlForConditionalGeneration as MplugOwlForConditionalGeneration,
+        )
+        from .modeling_mplug_owl import (
+            MplugOwlModel as MplugOwlModel,
+        )
+        from .modeling_mplug_owl import (
+            MplugOwlPreTrainedModel as MplugOwlPreTrainedModel,
         )
 
 
@@ -71,7 +79,7 @@ else:
 
     sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
 
-from .configuration_mplug_owl import *
-from .modeling_mplug_owl import *
-from .processing_mplug_owl import *
-from .tokenization_mplug_owl import *
+from .configuration_mplug_owl import *  # noqa: E402, F403 - Follows the module alias setup.; Upstream star import kept as written.
+from .modeling_mplug_owl import *  # noqa: E402, F403 - Follows the module alias setup.; Upstream star import kept as written.
+from .processing_mplug_owl import *  # noqa: E402, F403 - Follows the module alias setup.; Upstream star import kept as written.
+from .tokenization_mplug_owl import *  # noqa: E402, F403 - Follows the module alias setup.; Upstream star import kept as written.

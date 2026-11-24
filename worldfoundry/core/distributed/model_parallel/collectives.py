@@ -9,6 +9,7 @@ all-reduce — that stays inside the parallel Linear/Attention.
 """
 
 import logging
+from typing import cast
 
 import torch
 import torch.distributed as dist
@@ -92,9 +93,9 @@ def broadcast_data_batch_in_tp_cp_group(data_batch: dict) -> None:
             continue
         tensor = tensor.contiguous()
         if tp_group is not None:
-            broadcast(tensor, min(tp_ranks), group=tp_group)
+            broadcast(tensor, min(cast(list[int], tp_ranks)), group=tp_group)
         if cp_group is not None:
-            broadcast(tensor, min(cp_ranks), group=cp_group)
+            broadcast(tensor, min(cast(list[int], cp_ranks)), group=cp_group)
 
 
 __all__ = [

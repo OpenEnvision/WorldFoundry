@@ -1,12 +1,13 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import torch
 import torch.nn.functional as F
+
 from ...common.registry import registry
 from .blip2_qformer import Blip2Qformer
 
@@ -57,9 +58,7 @@ class Blip2ITM(Blip2Qformer):
         with self.maybe_autocast():
             image_embeds = self.ln_vision(self.visual_encoder(image))
         image_embeds = image_embeds.float()
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
         text = self.tokenizer(
             caption,
@@ -70,9 +69,7 @@ class Blip2ITM(Blip2Qformer):
 
         if match_head == "itm":
             query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-            query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(
-                image.device
-            )
+            query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
             attention_mask = torch.cat([query_atts, text.attention_mask], dim=1)
             output_itm = self.Qformer.bert(
                 text.input_ids,
@@ -97,18 +94,14 @@ class Blip2ITM(Blip2Qformer):
                 encoder_attention_mask=image_atts,
                 return_dict=True,
             )
-            image_feats = F.normalize(
-                self.vision_proj(query_output.last_hidden_state), dim=-1
-            )
+            image_feats = F.normalize(self.vision_proj(query_output.last_hidden_state), dim=-1)
 
             text_output = self.Qformer.bert(
                 text.input_ids,
                 attention_mask=text.attention_mask,
                 return_dict=True,
             )
-            text_feat = F.normalize(
-                self.text_proj(text_output.last_hidden_state[:, 0, :]), dim=-1
-            )
+            text_feat = F.normalize(self.text_proj(text_output.last_hidden_state[:, 0, :]), dim=-1)
 
             sims = torch.bmm(image_feats, text_feat.unsqueeze(-1))
             sim, _ = torch.max(sims, dim=1)

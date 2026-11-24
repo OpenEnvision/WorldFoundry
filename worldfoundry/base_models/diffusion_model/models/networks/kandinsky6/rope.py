@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import torch
-from torch import nn, Tensor
+from torch import Tensor, nn
 
 from worldfoundry.base_models.diffusion_model.models.networks.kandinsky6.tensors import get_freqs
 
@@ -48,7 +48,7 @@ class RoPE3D(nn.Module):
         self.axes_dims = axes_dims
         self.max_pos = max_pos
         self.max_period = max_period
-        for i, (d, mp) in enumerate(zip(axes_dims, max_pos)):
+        for i, (d, mp) in enumerate(zip(axes_dims, max_pos, strict=False)):
             freq = get_freqs(d // 2, max_period)
             self.register_buffer(f"args_{i}", torch.outer(torch.arange(mp, dtype=freq.dtype), freq), persistent=False)
 
@@ -59,9 +59,9 @@ class RoPE3D(nn.Module):
         scale_factor: tuple[float, float, float] = (1.0, 1.0, 1.0),
     ) -> Tensor:
         T, H, W = shape
-        args_t = getattr(self, "args_0")[pos[0]] / scale_factor[0]  # (T, d//2)
-        args_h = getattr(self, "args_1")[pos[1]] / scale_factor[1]  # (H, d//2)
-        args_w = getattr(self, "args_2")[pos[2]] / scale_factor[2]  # (W, d//2)
+        args_t = self.args_0[pos[0]] / scale_factor[0]  # (T, d//2)
+        args_h = self.args_1[pos[1]] / scale_factor[1]  # (H, d//2)
+        args_w = self.args_2[pos[2]] / scale_factor[2]  # (W, d//2)
 
         args = torch.cat(
             [
@@ -73,10 +73,10 @@ class RoPE3D(nn.Module):
         )
         cos, sin = torch.cos(args), torch.sin(args)
         rope = torch.stack([cos, -sin, sin, cos], dim=-1)  # (T, H, W, total_dim, 4)
-        rope = rope.view(*rope.shape[:-1], 2, 2)           # (T, H, W, total_dim, 2, 2)
-        return rope.unsqueeze(-4)                           # (T, H, W, 1, total_dim, 2, 2)
+        rope = rope.view(*rope.shape[:-1], 2, 2)  # (T, H, W, total_dim, 2, 2)
+        return rope.unsqueeze(-4)  # (T, H, W, 1, total_dim, 2, 2)
 
     def reset_parameters(self) -> None:
-        for i, (d, mp) in enumerate(zip(self.axes_dims, self.max_pos)):
+        for i, (d, mp) in enumerate(zip(self.axes_dims, self.max_pos, strict=False)):
             freq = get_freqs(d // 2, self.max_period).to(getattr(self, f"args_{i}").device)
             setattr(self, f"args_{i}", torch.outer(torch.arange(mp, dtype=freq.dtype, device=freq.device), freq))

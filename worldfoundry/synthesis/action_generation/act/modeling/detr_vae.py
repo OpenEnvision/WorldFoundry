@@ -70,7 +70,9 @@ def _build_detr_vae_class():
     from torch import nn
 
     class DETRVAE(nn.Module):
-        def __init__(self, backbones, transformer, encoder, state_dim: int, num_queries: int, camera_names: list[str]) -> None:
+        def __init__(
+            self, backbones, transformer, encoder, state_dim: int, num_queries: int, camera_names: list[str]
+        ) -> None:
             super().__init__()
             self.num_queries = num_queries
             self.camera_names = camera_names

@@ -3,14 +3,12 @@ Author: Luigi Piccinelli
 Licensed under the CC-BY NC 4.0 license (http://creativecommons.org/licenses/by-nc/4.0/)
 """
 
-from typing import Tuple
-
 import torch
 from torch.nn import functional as F
 
 
 @torch.jit.script
-def generate_rays(camera_intrinsics: torch.Tensor, image_shape: Tuple[int, int], noisy: bool = False):
+def generate_rays(camera_intrinsics: torch.Tensor, image_shape: tuple[int, int], noisy: bool = False):
     batch_size, device, dtype = (
         camera_intrinsics.shape[0],
         camera_intrinsics.device,
@@ -90,8 +88,8 @@ def downsample(data: torch.Tensor, downsample_factor: int = 2):
 @torch.jit.script
 def flat_interpolate(
     flat_tensor: torch.Tensor,
-    old: Tuple[int, int],
-    new: Tuple[int, int],
+    old: tuple[int, int],
+    new: tuple[int, int],
     antialias: bool = True,
     mode: str = "bilinear",
 ) -> torch.Tensor:

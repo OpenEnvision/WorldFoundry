@@ -1,20 +1,22 @@
 # Copyright (c) Tencent Inc. All rights reserved.
 import torch
-from torch import Tensor
-from mmyolo.registry import TASK_UTILS
 from mmyolo.models.task_modules.assigners import BatchTaskAlignedAssigner
 from mmyolo.models.task_modules.assigners.utils import select_highest_overlaps
+from mmyolo.registry import TASK_UTILS
+from torch import Tensor
+
 
 @TASK_UTILS.register_module()
 class YOLOWorldSegAssigner(BatchTaskAlignedAssigner):
-
-    def __init__(self,
-                 num_classes: int,
-                 topk: int = 13,
-                 alpha: float = 1,
-                 beta: float = 6,
-                 eps: float = 1e-7,
-                 use_ciou: bool = False):
+    def __init__(
+        self,
+        num_classes: int,
+        topk: int = 13,
+        alpha: float = 1,
+        beta: float = 6,
+        eps: float = 1e-7,
+        use_ciou: bool = False,
+    ):
         super().__init__(num_classes, topk, alpha, beta, eps, use_ciou)
 
     @torch.no_grad()
@@ -66,43 +68,36 @@ class YOLOWorldSegAssigner(BatchTaskAlignedAssigner):
         num_gt = gt_bboxes.size(1)
 
         assigned_result = {
-            'assigned_labels':
-            gt_bboxes.new_full(pred_scores[..., 0].shape, self.num_classes),
-            'assigned_bboxes':
-            gt_bboxes.new_full(pred_bboxes.shape, 0),
-            'assigned_scores':
-            gt_bboxes.new_full(pred_scores.shape, 0),
-            'fg_mask_pre_prior':
-            gt_bboxes.new_full(pred_scores[..., 0].shape, 0)
+            "assigned_labels": gt_bboxes.new_full(pred_scores[..., 0].shape, self.num_classes),
+            "assigned_bboxes": gt_bboxes.new_full(pred_bboxes.shape, 0),
+            "assigned_scores": gt_bboxes.new_full(pred_scores.shape, 0),
+            "fg_mask_pre_prior": gt_bboxes.new_full(pred_scores[..., 0].shape, 0),
         }
 
         if num_gt == 0:
             return assigned_result
 
         pos_mask, alignment_metrics, overlaps = self.get_pos_mask(
-            pred_bboxes, pred_scores, priors, gt_labels, gt_bboxes,
-            pad_bbox_flag, batch_size, num_gt)
+            pred_bboxes, pred_scores, priors, gt_labels, gt_bboxes, pad_bbox_flag, batch_size, num_gt
+        )
 
-        (assigned_gt_idxs, fg_mask_pre_prior,
-         pos_mask) = select_highest_overlaps(pos_mask, overlaps, num_gt)
+        (assigned_gt_idxs, fg_mask_pre_prior, pos_mask) = select_highest_overlaps(pos_mask, overlaps, num_gt)
 
         # assigned target
         assigned_labels, assigned_bboxes, assigned_scores = self.get_targets(
-            gt_labels, gt_bboxes, assigned_gt_idxs, fg_mask_pre_prior,
-            batch_size, num_gt)
+            gt_labels, gt_bboxes, assigned_gt_idxs, fg_mask_pre_prior, batch_size, num_gt
+        )
 
         # normalize
         alignment_metrics *= pos_mask
         pos_align_metrics = alignment_metrics.max(axis=-1, keepdim=True)[0]
         pos_overlaps = (overlaps * pos_mask).max(axis=-1, keepdim=True)[0]
-        norm_align_metric = (
-            alignment_metrics * pos_overlaps /
-            (pos_align_metrics + self.eps)).max(-2)[0].unsqueeze(-1)
+        norm_align_metric = (alignment_metrics * pos_overlaps / (pos_align_metrics + self.eps)).max(-2)[0].unsqueeze(-1)
         assigned_scores = assigned_scores * norm_align_metric
 
-        assigned_result['assigned_labels'] = assigned_labels
-        assigned_result['assigned_bboxes'] = assigned_bboxes
-        assigned_result['assigned_scores'] = assigned_scores
-        assigned_result['fg_mask_pre_prior'] = fg_mask_pre_prior.bool()
-        assigned_result['assigned_gt_idxs'] = assigned_gt_idxs
+        assigned_result["assigned_labels"] = assigned_labels
+        assigned_result["assigned_bboxes"] = assigned_bboxes
+        assigned_result["assigned_scores"] = assigned_scores
+        assigned_result["fg_mask_pre_prior"] = fg_mask_pre_prior.bool()
+        assigned_result["assigned_gt_idxs"] = assigned_gt_idxs
         return assigned_result

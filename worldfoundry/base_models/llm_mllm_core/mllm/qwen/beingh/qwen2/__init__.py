@@ -1,8 +1,6 @@
 # Copyright 2024 The Qwen Team and The HuggingFace Inc. team.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Module for base_models -> llm_mllm_core -> mllm -> qwen -> beingh -> qwen2 -> __init__.py functionality."""
-
 from typing import TYPE_CHECKING
 
 from transformers.utils import (
@@ -11,7 +9,6 @@ from transformers.utils import (
     is_tokenizers_available,
     is_torch_available,
 )
-
 
 _import_structure = {
     "configuration_qwen2": ["Qwen2Config"],
@@ -40,8 +37,8 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen2 import Qwen2Config
-    from .tokenization_qwen2 import Qwen2Tokenizer
+    from .configuration_qwen2 import Qwen2Config as Qwen2Config
+    from .tokenization_qwen2 import Qwen2Tokenizer as Qwen2Tokenizer
 
     try:
         if not is_tokenizers_available():
@@ -49,7 +46,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_qwen2_fast import Qwen2TokenizerFast
+        from .tokenization_qwen2_fast import Qwen2TokenizerFast as Qwen2TokenizerFast
 
     try:
         if not is_torch_available():
@@ -58,9 +55,13 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_qwen2 import (
-            Qwen2ForCausalLM,
-            Qwen2Model,
-            Qwen2PreTrainedModel,
+            Qwen2ForCausalLM as Qwen2ForCausalLM,
+        )
+        from .modeling_qwen2 import (
+            Qwen2Model as Qwen2Model,
+        )
+        from .modeling_qwen2 import (
+            Qwen2PreTrainedModel as Qwen2PreTrainedModel,
         )
 
 

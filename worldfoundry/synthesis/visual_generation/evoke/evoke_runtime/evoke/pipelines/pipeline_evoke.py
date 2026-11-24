@@ -12,19 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import contextlib
 import html
 import math
+from collections.abc import Callable
 from enum import Enum
 from itertools import accumulate
-from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from typing import Any, ClassVar, Literal, Optional
 
 import regex as re
 import torch
 import torch.nn.functional as F
-from einops import rearrange
-from transformers import AutoTokenizer, UMT5EncoderModel
-
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.image_processor import PipelineImageInput
 from diffusers.loaders import WanLoraLoaderMixin
@@ -34,9 +32,12 @@ from diffusers.schedulers import UniPCMultistepScheduler
 from diffusers.utils import is_ftfy_available, is_torch_xla_available, logging, replace_example_docstring
 from diffusers.utils.torch_utils import randn_tensor
 from diffusers.video_processor import VideoProcessor
+from einops import rearrange
+from transformers import AutoTokenizer, UMT5EncoderModel
 
-from worldfoundry.base_models.diffusion_model.schedulers.evoke import EvokeScheduler
 from worldfoundry.base_models.diffusion_model.models.networks.evoke.model import EvokeTransformer3DModel
+from worldfoundry.base_models.diffusion_model.schedulers.evoke import EvokeScheduler
+
 from ..utils.inference_utils import (
     AdaptiveAntiDrifting,
     add_noise,
@@ -46,7 +47,6 @@ from ..utils.inference_utils import (
     vigeo_opts_from_cfg,
 )
 from .pipeline_output import EvokePipelineOutput
-
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -157,8 +157,8 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
     """
 
     model_cpu_offload_seq = "text_encoder->transformer->vae"
-    _callback_tensor_inputs = ["latents", "prompt_embeds", "negative_prompt_embeds"]
-    _optional_components = ["transformer"]
+    _callback_tensor_inputs: ClassVar[list] = ["latents", "prompt_embeds", "negative_prompt_embeds"]
+    _optional_components: ClassVar[list] = ["transformer"]
 
     def __init__(
         self,
@@ -183,11 +183,11 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
     def _get_t5_prompt_embeds(
         self,
-        prompt: Union[str, List[str]] = None,
+        prompt: str | list[str] | None = None,
         num_videos_per_prompt: int = 1,
         max_sequence_length: int = 226,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         device = device or self._execution_device
         dtype = dtype or self.text_encoder.dtype
@@ -210,7 +210,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
         prompt_embeds = self.text_encoder(text_input_ids.to(device), mask.to(device)).last_hidden_state
         prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
-        prompt_embeds = [u[:v] for u, v in zip(prompt_embeds, seq_lens)]
+        prompt_embeds = [u[:v] for u, v in zip(prompt_embeds, seq_lens, strict=False)]
         prompt_embeds = torch.stack(
             [torch.cat([u, u.new_zeros(max_sequence_length - u.size(0), u.size(1))]) for u in prompt_embeds], dim=0
         )
@@ -224,15 +224,15 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
     def encode_prompt(
         self,
-        prompt: Union[str, List[str]],
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        prompt: str | list[str],
+        negative_prompt: str | list[str] | None = None,
         do_classifier_free_guidance: bool = True,
         num_videos_per_prompt: int = 1,
-        prompt_embeds: Optional[torch.Tensor] = None,
-        negative_prompt_embeds: Optional[torch.Tensor] = None,
+        prompt_embeds: torch.Tensor | None = None,
+        negative_prompt_embeds: torch.Tensor | None = None,
         max_sequence_length: int = 226,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         r"""
         Encodes the prompt into text encoder hidden states.
@@ -263,10 +263,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         device = device or self._execution_device
 
         prompt = [prompt] if isinstance(prompt, str) else prompt
-        if prompt is not None:
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
+        batch_size = len(prompt) if prompt is not None else prompt_embeds.shape[0]
 
         if prompt_embeds is None:
             prompt_embeds, prompt_attention_mask = self._get_t5_prompt_embeds(
@@ -352,10 +349,10 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         height: int = 480,
         width: int = 832,
         num_frames: int = 81,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.Tensor] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if latents is not None:
             return latents.to(device=device, dtype=dtype)
@@ -382,11 +379,11 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         image: torch.Tensor,
         latents_mean: torch.Tensor,
         latents_std: torch.Tensor,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.Tensor] = None,
-        fake_latents: Optional[torch.Tensor] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.Tensor | None = None,
+        fake_latents: torch.Tensor | None = None,
     ) -> torch.Tensor:
         device = device or self._execution_device
         if latents is None:
@@ -406,10 +403,10 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         latents_mean: torch.Tensor,
         latents_std: torch.Tensor,
         latent_window_size: int,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.Tensor] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.Tensor | None = None,
     ) -> torch.Tensor:
         device = device or self._execution_device
         video = video.to(device=device, dtype=self.vae.dtype)
@@ -448,7 +445,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         latents_mean: torch.Tensor,
         latents_std: torch.Tensor,
         vae_dtype: torch.dtype,
-        warm_latents: Optional[torch.Tensor] = None,
+        warm_latents: torch.Tensor | None = None,
         warm_repeat: int = 0,
         warm_as_prior: bool = False,
     ) -> torch.Tensor:
@@ -461,12 +458,16 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         chunk's first frame decodes with a warm cache. No-op when warm_latents is None / warm_repeat<=0.
         """
         import os as _os
+
         _sd = _os.environ.get("EVOKE_SAVE_DECODE_LATENTS")
         if _sd:
             _idx = getattr(self, "_decode_dump_idx", 0)
             torch.save(z_chunk.detach().float().cpu(), f"{_sd}/decode_chunk{_idx}_first{int(is_first_chunk)}.pt")
-            print(f"[DECODE-DUMP] chunk{_idx} first={is_first_chunk} shape={tuple(z_chunk.shape)} "
-                  f"warm={None if warm_latents is None else tuple(warm_latents.shape)}", flush=True)
+            print(
+                f"[DECODE-DUMP] chunk{_idx} first={is_first_chunk} shape={tuple(z_chunk.shape)} "
+                f"warm={None if warm_latents is None else tuple(warm_latents.shape)}",
+                flush=True,
+            )
             self._decode_dump_idx = _idx + 1
         if is_first_chunk:
             self.vae.clear_cache()
@@ -497,7 +498,9 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         if warm_n > 0:
             warm_n = min(warm_n, int(warm_latents.shape[2]))
         if warm_n > 0:
-            warm = warm_latents[:, :, -warm_n:].to(z_chunk.dtype).to(z_chunk.device)   # genuine lead-in, no static repeat
+            warm = (
+                warm_latents[:, :, -warm_n:].to(z_chunk.dtype).to(z_chunk.device)
+            )  # genuine lead-in, no static repeat
             z_chunk = torch.cat([warm, z_chunk], dim=2)
 
         z = z_chunk.to(vae_dtype) / latents_std + latents_mean
@@ -527,8 +530,8 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             out = unpatchify(out, patch_size=self.vae.config.patch_size)
 
         if warm_n > 0:
-            drop = 1 + 4 * (warm_n - 1)                 # pixel frames produced by the warm-up lead-in (i0=1px, rest=4px)
-            out = out[:, :, drop:]                      # keep every real-latent frame (each latent -> 4 px, continuous ckpt)
+            drop = 1 + 4 * (warm_n - 1)  # pixel frames produced by the warm-up lead-in (i0=1px, rest=4px)
+            out = out[:, :, drop:]  # keep every real-latent frame (each latent -> 4 px, continuous ckpt)
 
         return torch.clamp(out, min=-1.0, max=1.0)
 
@@ -586,29 +589,33 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
     # ---------------- geometric state helpers ----------------
 
-    def _geo_init_state(self, source_image_pixel: torch.Tensor, bank_max_size: Optional[int] = None) -> dict:
+    def _geo_init_state(self, source_image_pixel: torch.Tensor, bank_max_size: int | None = None) -> dict:
         """Initialize per-call GEO state with a FrameBank (warp render goes through DA3, see _geo_da3_setup)."""
-        from evoke.modules.geometric_state.frame_bank import FrameBank
+        from ..modules.geometric_state.frame_bank import FrameBank
 
         fb = FrameBank(max_size=bank_max_size)
 
         return {
             "source_image_pixel": source_image_pixel.detach().cpu(),
             "frame_bank": fb,
-            "prev_chunk_last_frame": None,    # pixel [1,3,H,W] used as source for the next chunk
+            "prev_chunk_last_frame": None,  # pixel [1,3,H,W] used as source for the next chunk
             "warp_history_prefix_latent": None,  # cached prefix latent for the first frame
         }
 
     # ---------------- DA3 FrameBank recall-based warp (inference/validation;) ----------------
     def _geo_da3_setup(self, geo_state, cfg, lingbot_Ks, height, width, pix_stride, device):
         """Init DA3FrameBank + estimator + render-resolution intrinsics (adaptively rescaled from lingbot_Ks)."""
-        from evoke.modules.geometric_state.da3_cloud import DA3FrameBank
-        from evoke.modules.geometric_state.depth_backend import build_estimator
         import numpy as _np
-        kn = lingbot_Ks.detach().cpu().numpy().reshape(-1)[:4]      # [fx,fy,cx,cy] @ pose source resolution
+
+        from ..modules.geometric_state.da3_cloud import DA3FrameBank
+        from ..modules.geometric_state.depth_backend import build_estimator
+
+        kn = lingbot_Ks.detach().cpu().numpy().reshape(-1)[:4]  # [fx,fy,cx,cy] @ pose source resolution
         fx, fy, cx, cy = float(kn[0]), float(kn[1]), float(kn[2]), float(kn[3])
-        src_w = max(2.0 * cx, 1.0); src_h = max(2.0 * cy, 1.0)     # principal point ~= centre -> back out source resolution, rescale to render
-        sx = float(width) / src_w; sy = float(height) / src_h
+        src_w = max(2.0 * cx, 1.0)
+        src_h = max(2.0 * cy, 1.0)  # principal point ~= centre -> back out source resolution, rescale to render
+        sx = float(width) / src_w
+        sy = float(height) / src_h
         K_pix = _np.array([[fx * sx, 0.0, cx * sx], [0.0, fy * sy, cy * sy], [0.0, 0.0, 1.0]], _np.float32)
         pr = int(cfg.get("da3_process_res", 644))
         # depth_backend picks the estimator ('da3' | 'vigeo'); everything below is shared.
@@ -618,25 +625,34 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         # per-case wall time. `reset_stream` is what makes a shared instance correct -- it drops the kv-cache, the
         # locked depth scale, the anchor list and the window counter, i.e. everything that must not cross a video
         # boundary. The FrameBank below is still built fresh, so the point cloud does not cross cases either.
-        from evoke.modules.geometric_state.depth_backend import reset_stream as _depth_reset_stream
+        from ..modules.geometric_state.depth_backend import reset_stream as _depth_reset_stream
+
         _backend = str(cfg.get("depth_backend", "da3"))
-        _est_key = (_backend.lower(), pr, str(cfg.get("da3_weights") or ""),
-                    str(cfg.get("da3_src") or ""),
-                    tuple(sorted((k, str(v)) for k, v in vigeo_opts_from_cfg(cfg).items())))
+        _est_key = (
+            _backend.lower(),
+            pr,
+            str(cfg.get("da3_weights") or ""),
+            tuple(sorted((k, str(v)) for k, v in vigeo_opts_from_cfg(cfg).items())),
+        )
         _est = _GEO_DEPTH_ESTIMATORS.get(_est_key)
         if _est is None:
             # One recipe per process: a second entry would keep a second copy of the weights resident
             # on the same device. A changed recipe means a new run, so dropping the old one is right.
             _GEO_DEPTH_ESTIMATORS.clear()
             _est = build_estimator(
-                _backend, device, pr, weights=(cfg.get("da3_weights") or None),
-                src=(cfg.get("da3_src") or None), vigeo_opts=vigeo_opts_from_cfg(cfg))
+                _backend,
+                device,
+                pr,
+                weights=(cfg.get("da3_weights") or None),
+                vigeo_opts=vigeo_opts_from_cfg(cfg),
+            )
             _GEO_DEPTH_ESTIMATORS[_est_key] = _est
         else:
             _depth_reset_stream(_est)
         geo_state["da3_est"] = _est
         geo_state["da3_bank"] = DA3FrameBank(
-            device=device, conf_percentile=float(cfg.get("conf_percentile", 30.0)),
+            device=device,
+            conf_percentile=float(cfg.get("conf_percentile", 30.0)),
             cloud_hygiene=bool(cfg.get("cloud_hygiene", False)),
             hygiene_sat_max=float(cfg.get("hygiene_sat_max", 1.0)),
             hygiene_flat_std=float(cfg.get("hygiene_flat_std", 0.0)),
@@ -655,7 +671,9 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             consist_conf_ref=float(cfg.get("consist_conf_ref", 12.0)),
             # hole probation (0=off=holes pass straight through, legacy; only takes effect with consist_gate on)
             consist_probation=int(cfg.get("consist_probation", 0)),
-            consist_probation_frac=float(cfg.get("consist_probation_frac", 0.0)),   # >0 = only hold pixels inside large holes
+            consist_probation_frac=float(
+                cfg.get("consist_probation_frac", 0.0)
+            ),  # >0 = only hold pixels inside large holes
             consist_probation_win=int(cfg.get("consist_probation_win", 25)),
             # per-window ingest scale alignment (off by default; cures the compounding per-window Umeyama scale drift, measured 1.05-1.18)
             consist_scale_align=bool(cfg.get("consist_scale_align", False)),
@@ -670,8 +688,10 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             self_reanchor_min_gap=int(cfg.get("self_reanchor_min_gap", 8)),
             self_reanchor_keep_windows=int(cfg.get("self_reanchor_keep_windows", 3)),
             self_reanchor_lookback=int(cfg.get("self_reanchor_lookback", 20)),
-            self_reanchor_anchor_min_conf=float(cfg.get("self_reanchor_anchor_min_conf", 0.0)),  # [v3] anchor quality floor
-            self_reanchor_pin_prime=bool(cfg.get("self_reanchor_pin_prime", False)),    # [v4] pin the prime anchor
+            self_reanchor_anchor_min_conf=float(
+                cfg.get("self_reanchor_anchor_min_conf", 0.0)
+            ),  # [v3] anchor quality floor
+            self_reanchor_pin_prime=bool(cfg.get("self_reanchor_pin_prime", False)),  # [v4] pin the prime anchor
             self_reanchor_pin_windows=int(cfg.get("self_reanchor_pin_windows", 4)),
             # [method 2] bounded / periodically re-anchored history
             hist_max_frames=int(cfg.get("hist_max_frames", 0)),
@@ -681,56 +701,91 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             carve=bool(cfg.get("carve", False)),
             carve_margin=float(cfg.get("carve_margin", 0.10)),
             carve_ref_frames=int(cfg.get("carve_ref_frames", 24)),
-            carve_min_views=int(cfg.get("carve_min_views", 1)),   # [variant 2] multi-view vote threshold
+            carve_min_views=int(cfg.get("carve_min_views", 1)),  # [variant 2] multi-view vote threshold
             # cross-window strike (1=off=delete within the window, legacy; needs N consecutive windows of confirmation before a real delete)
             carve_strike_windows=int(cfg.get("carve_strike_windows", 1)),
         )
-        if bool(cfg.get("color_anchor", False)):   # independent of consist_gate
-            print(f"[GEO-da3] [P1b] colour-statistics re-anchoring ON: channel mean/std accumulated over the first {cfg.get('color_anchor_ref_windows', 4)} "
-                  f"windows (GT prime) is the reference; every later window is linearly matched back to it then blended with alpha={cfg.get('color_anchor_alpha', 0.5)} "
-                  f"(affects only the DA3 input + cloud RGB, never the model output; past information only)", flush=True)
+        if bool(cfg.get("color_anchor", False)):  # independent of consist_gate
+            print(
+                f"[GEO-da3] [P1b] colour-statistics re-anchoring ON: channel mean/std accumulated over the first {cfg.get('color_anchor_ref_windows', 4)} "
+                f"windows (GT prime) is the reference; every later window is linearly matched back to it then blended with alpha={cfg.get('color_anchor_alpha', 0.5)} "
+                f"(affects only the DA3 input + cloud RGB, never the model output; past information only)",
+                flush=True,
+            )
         if bool(cfg.get("cloud_hygiene", False)):
-            print(f"[GEO-da3] cloud_hygiene ON: conf_abs={cfg.get('hygiene_conf_abs', 0.0)}(master gate,>0=on) "
-                  f"sat_max={cfg.get('hygiene_sat_max', 1.0)}(>=1=off) flat_std={cfg.get('hygiene_flat_std', 0.0)}(0=off) "
-                  f"conf_pct={cfg.get('hygiene_conf_pct', 0.0)}", flush=True)
+            print(
+                f"[GEO-da3] cloud_hygiene ON: conf_abs={cfg.get('hygiene_conf_abs', 0.0)}(master gate,>0=on) "
+                f"sat_max={cfg.get('hygiene_sat_max', 1.0)}(>=1=off) flat_std={cfg.get('hygiene_flat_std', 0.0)}(0=off) "
+                f"conf_pct={cfg.get('hygiene_conf_pct', 0.0)}",
+                flush=True,
+            )
         if bool(cfg.get("consist_gate", False)):
             if bool(cfg.get("consist_adaptive", False)):
-                print(f"[GEO-da3] [method 1+variant 1] consistency gate ON (confidence-adaptive tolerance): "
-                      f"tau_lo={cfg.get('consist_tau_lo', 0.20)}→tau_hi={cfg.get('consist_tau_hi', 0.30)} "
-                      f"conf_ref={cfg.get('consist_conf_ref', 12.0)} (strict where conf is low / loose where it is high) "
-                      f"ref_frames={cfg.get('consist_ref_frames', 24)} min_ref={cfg.get('consist_min_ref', 2000)}", flush=True)
+                print(
+                    f"[GEO-da3] [method 1+variant 1] consistency gate ON (confidence-adaptive tolerance): "
+                    f"tau_lo={cfg.get('consist_tau_lo', 0.20)}→tau_hi={cfg.get('consist_tau_hi', 0.30)} "
+                    f"conf_ref={cfg.get('consist_conf_ref', 12.0)} (strict where conf is low / loose where it is high) "
+                    f"ref_frames={cfg.get('consist_ref_frames', 24)} min_ref={cfg.get('consist_min_ref', 2000)}",
+                    flush=True,
+                )
             else:
-                print(f"[GEO-da3] [method 1] ingest consistency gate ON: tau={cfg.get('consist_tau', 0.15)}(fixed) "
-                      f"ref_frames={cfg.get('consist_ref_frames', 24)} min_ref={cfg.get('consist_min_ref', 2000)}", flush=True)
+                print(
+                    f"[GEO-da3] [method 1] ingest consistency gate ON: tau={cfg.get('consist_tau', 0.15)}(fixed) "
+                    f"ref_frames={cfg.get('consist_ref_frames', 24)} min_ref={cfg.get('consist_min_ref', 2000)}",
+                    flush=True,
+                )
             if int(cfg.get("consist_probation", 0)) > 0:
                 _pf = float(cfg.get("consist_probation_frac", 0.0))
-                print(f"[GEO-da3] [P0] hole probation ON: pixels with no reference wait one round, geometry re-check next window (tau={cfg.get('consist_tau', 0.15)})"
-                      f" then admitted/dropped; fully invisible = admitted (benefit of the doubt)"
-                      + (f"; [v2 narrowed] only hold inside large holes (win={cfg.get('consist_probation_win', 25)} hole frac>{_pf})" if _pf > 0 else ""),
-                      flush=True)
+                print(
+                    f"[GEO-da3] [P0] hole probation ON: pixels with no reference wait one round, geometry re-check next window (tau={cfg.get('consist_tau', 0.15)})"
+                    f" then admitted/dropped; fully invisible = admitted (benefit of the doubt)"
+                    + (
+                        f"; [v2 narrowed] only hold inside large holes (win={cfg.get('consist_probation_win', 25)} hole frac>{_pf})"
+                        if _pf > 0
+                        else ""
+                    ),
+                    flush=True,
+                )
             if bool(cfg.get("consist_scale_align", False)):
-                print(f"[GEO-da3] [P1a] per-window ingest scale alignment ON: correct the whole window depth by median(d/d_cloud) before gating "
-                      f"(clip[0.75,1.33], overlap<2000px or absurd ratio -> skip)", flush=True)
+                print(
+                    "[GEO-da3] [P1a] per-window ingest scale alignment ON: correct the whole window depth by median(d/d_cloud) before gating "
+                    "(clip[0.75,1.33], overlap<2000px or absurd ratio -> skip)",
+                    flush=True,
+                )
             if bool(cfg.get("self_reanchor", False)):
-                print(f"[GEO-da3] [self re-anchor] ON: divergence trigger (scale outside [1/{cfg.get('self_reanchor_scale_thr', 1.5)},"
-                      f"{cfg.get('self_reanchor_scale_thr', 1.5)}] or rej>{cfg.get('self_reanchor_rej_thr', 0.8)}) -> "
-                      f"re-anchor to the best past contiguous {cfg.get('self_reanchor_keep_windows', 3)} windows "
-                      f"(min_gap={cfg.get('self_reanchor_min_gap', 8)} lookback={cfg.get('self_reanchor_lookback', 20)})", flush=True)
+                print(
+                    f"[GEO-da3] [self re-anchor] ON: divergence trigger (scale outside [1/{cfg.get('self_reanchor_scale_thr', 1.5)},"
+                    f"{cfg.get('self_reanchor_scale_thr', 1.5)}] or rej>{cfg.get('self_reanchor_rej_thr', 0.8)}) -> "
+                    f"re-anchor to the best past contiguous {cfg.get('self_reanchor_keep_windows', 3)} windows "
+                    f"(min_gap={cfg.get('self_reanchor_min_gap', 8)} lookback={cfg.get('self_reanchor_lookback', 20)})",
+                    flush=True,
+                )
         if int(cfg.get("hist_max_frames", 0)) > 0 or int(cfg.get("reanchor_every", 0)) > 0:
-            print(f"[GEO-da3] [method 2] bounded / re-anchored history ON: hist_max_frames={cfg.get('hist_max_frames', 0)}(0=off) "
-                  f"reanchor_every={cfg.get('reanchor_every', 0)}(0=off) keep={cfg.get('reanchor_keep_frames', 0)}", flush=True)
+            print(
+                f"[GEO-da3] [method 2] bounded / re-anchored history ON: hist_max_frames={cfg.get('hist_max_frames', 0)}(0=off) "
+                f"reanchor_every={cfg.get('reanchor_every', 0)}(0=off) keep={cfg.get('reanchor_keep_frames', 0)}",
+                flush=True,
+            )
         if bool(cfg.get("carve", False)):
-            print(f"[GEO-da3] [method 3{'+variant 2' if int(cfg.get('carve_min_views', 1)) > 1 else ''}] free-space carving ON: "
-                  f"margin={cfg.get('carve_margin', 0.10)} ref_frames={cfg.get('carve_ref_frames', 24)} "
-                  f"min_views={cfg.get('carve_min_views', 1)}(1=delete on any single frame/OR; >=3=multi-view voting)", flush=True)
+            print(
+                f"[GEO-da3] [method 3{'+variant 2' if int(cfg.get('carve_min_views', 1)) > 1 else ''}] free-space carving ON: "
+                f"margin={cfg.get('carve_margin', 0.10)} ref_frames={cfg.get('carve_ref_frames', 24)} "
+                f"min_views={cfg.get('carve_min_views', 1)}(1=delete on any single frame/OR; >=3=multi-view voting)",
+                flush=True,
+            )
             if int(cfg.get("carve_strike_windows", 1)) > 1:
-                print(f"[GEO-da3] carve cross-window strike ON: needs {cfg.get('carve_strike_windows', 1)} consecutive ingest windows"
-                      f" of confirmation (votes>=min_views) before a real delete; any break resets the count (cures the systematic over-deletion from correlated same-window votes)", flush=True)
+                print(
+                    f"[GEO-da3] carve cross-window strike ON: needs {cfg.get('carve_strike_windows', 1)} consecutive ingest windows"
+                    f" of confirmation (votes>=min_views) before a real delete; any break resets the count (cures the systematic over-deletion from correlated same-window votes)",
+                    flush=True,
+                )
         geo_state["da3_K_pix"] = K_pix
         geo_state["da3_pix_stride"] = int(pix_stride)
         geo_state["da3_ingest_n"] = int(cfg.get("cloud_update_n", cfg.get("update_frames_per_chunk", 12)) or 12)
-        geo_state["da3_recall_k"] = int(cfg.get("recall_k", 12)); geo_state["da3_n_nearby"] = int(cfg.get("n_nearby", 4))
-        geo_state["da3_n_tframe"] = int(cfg.get("n_tframe", 6)); geo_state["da3_grid_div"] = int(cfg.get("recall_grid_div", 8))
+        geo_state["da3_recall_k"] = int(cfg.get("recall_k", 12))
+        geo_state["da3_n_nearby"] = int(cfg.get("n_nearby", 4))
+        geo_state["da3_n_tframe"] = int(cfg.get("n_tframe", 6))
+        geo_state["da3_grid_div"] = int(cfg.get("recall_grid_div", 8))
         geo_state["da3_mask_pts"] = int(cfg.get("recall_mask_pts", 8000))
         geo_state["da3_lag"] = int(cfg.get("warp_lag_chunks", 1))
         geo_state["da3_splat"] = int(cfg.get("cloud_splat_radius", 2))
@@ -749,10 +804,13 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         geo_state["da3_zbuf_despeckle"] = bool(cfg.get("zbuf_despeckle", False))
         geo_state["da3_zbuf_despeckle_ksize"] = int(cfg.get("zbuf_despeckle_ksize", 3))
         geo_state["da3_zbuf_despeckle_fill_iters"] = int(cfg.get("zbuf_despeckle_fill_iters", 4))
-        print(f"[GEO-da3] setup: depth_backend={_backend} process_res={pr} "
-              f"K_render~[fx{fx*sx:.1f} fy{fy*sy:.1f} cx{cx*sx:.1f} cy{cy*sy:.1f}] "
-              f"(src~{int(src_w)}x{int(src_h)}->{width}x{height}) ingest_n={geo_state['da3_ingest_n']} "
-              f"recall_k={geo_state['da3_recall_k']} lag={geo_state['da3_lag']}", flush=True)
+        print(
+            f"[GEO-da3] setup: depth_backend={_backend} process_res={pr} "
+            f"K_render~[fx{fx * sx:.1f} fy{fy * sy:.1f} cx{cx * sx:.1f} cy{cy * sy:.1f}] "
+            f"(src~{int(src_w)}x{int(src_h)}->{width}x{height}) ingest_n={geo_state['da3_ingest_n']} "
+            f"recall_k={geo_state['da3_recall_k']} lag={geo_state['da3_lag']}",
+            flush=True,
+        )
 
     def _geo_da3_ingest(self, geo_state, frames_local, global_pix_start, c2w_full, device):
         """Ingest a contiguous pixel-frame span [3,Nloc,H,W] in[-1,1] (ref seed or an already generated chunk) by sampling ingest_n frames.
@@ -760,7 +818,8 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         bank = geo_state.get("da3_bank")
         if bank is None:
             return
-        Nloc = int(frames_local.shape[1]); n = int(geo_state["da3_ingest_n"])
+        Nloc = int(frames_local.shape[1])
+        n = int(geo_state["da3_ingest_n"])
         if Nloc < 3:
             return
         loc = torch.unique(torch.linspace(0, Nloc - 1, n).round().long().clamp(0, Nloc - 1))
@@ -772,19 +831,32 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         frames01 = (frames_local[:, loc].permute(1, 2, 3, 0) * 0.5 + 0.5).clamp(0, 1).float().cpu().numpy()  # [N,H,W,3]
         bank.ingest(geo_state["da3_est"], frames01, c2w, geo_state["da3_K_pix"], gids)
 
-    def _geo_render_chunk_da3(self, geo_state, chunk_idx, camera_poses_pix_window, height, width,
-                              device, anchor_c2w=None, source_frame_pix=None, **kwargs):
+    def _geo_render_chunk_da3(
+        self,
+        geo_state,
+        chunk_idx,
+        camera_poses_pix_window,
+        height,
+        width,
+        device,
+        anchor_c2w=None,
+        source_frame_pix=None,
+        **kwargs,
+    ):
         """DA3 recall-based warp render (replaces Pi3X). pool = bank frames with chunk <= k-1-lag -> recall -> render to the target GT poses."""
         # multi-source priority fusion (the same _render_multisrc as training build_multisrc_warp, keeping
         # train/infer consistent). Replaces the old recall-cloud render_recalled.
-        from evoke.modules.geometric_state.da3_cloud import _render_multisrc
+        from ..modules.geometric_state.da3_cloud import _render_multisrc
+
         cfg = getattr(self, "_geo_vsnoise_cfg", None) or {}
-        bank = geo_state["da3_bank"]; K_pix = geo_state["da3_K_pix"]
-        stride = int(geo_state["da3_pix_stride"]); lag = int(geo_state["da3_lag"])
+        bank = geo_state["da3_bank"]
+        K_pix = geo_state["da3_K_pix"]
+        stride = int(geo_state["da3_pix_stride"])
+        lag = int(geo_state["da3_lag"])
         tgt = camera_poses_pix_window
         if tgt.ndim == 4:
             tgt = tgt[0]
-        tgt = tgt.to(device=device, dtype=torch.float32)            # [F,4,4]
+        tgt = tgt.to(device=device, dtype=torch.float32)  # [F,4,4]
         # gid = absolute pixel index (seed/generated frames); lag: exclude the most recent lag chunks in the bank (based on max gid).
         _keys = list(bank.frames.keys())
         if _keys:
@@ -801,47 +873,80 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         # only when the pool really is empty, gated by the default-on _geo_chunk0_ref_warp. Any failure inside falls
         # back to a blank warp, i.e. the previous behaviour.
         _chunk0_ref = (
-            int(chunk_idx) == 0 and not pool
+            int(chunk_idx) == 0
+            and not pool
             and source_frame_pix is not None
             and bool(geo_state.get("da3_is_i2v", False))
             and bool(getattr(self, "_geo_chunk0_ref_warp", True))
         )
         if _chunk0_ref:
-            from evoke.modules.geometric_state.da3_cloud import build_single_source_warp_mono
-            _ref = source_frame_pix[0] if source_frame_pix.ndim == 4 else source_frame_pix   # [3,H,W]
-            _ref_pose = tgt[0]                                # chunk-0 first target pose = the reference view
-            from evoke.modules.geometric_state.da3_cloud import CHUNK0_TARGET_DISPARITY_PX_DEFAULT
+            from ..modules.geometric_state.da3_cloud import build_single_source_warp_mono
+
+            _ref = source_frame_pix[0] if source_frame_pix.ndim == 4 else source_frame_pix  # [3,H,W]
+            _ref_pose = tgt[0]  # chunk-0 first target pose = the reference view
+            from ..modules.geometric_state.da3_cloud import CHUNK0_TARGET_DISPARITY_PX_DEFAULT
+
             warp_video, visibility_mask = build_single_source_warp_mono(
-                geo_state["da3_est"], _ref.to(device), _ref_pose, K_pix, tgt,
-                height=int(height), width=int(width),
-                splat_radius=int(geo_state.get("da3_ms_splat", 1)), device=device,
-                chunk0_target_disparity_px=float(getattr(
-                    self, "_geo_chunk0_target_disparity_px", CHUNK0_TARGET_DISPARITY_PX_DEFAULT)))
+                geo_state["da3_est"],
+                _ref.to(device),
+                _ref_pose,
+                K_pix,
+                tgt,
+                height=int(height),
+                width=int(width),
+                splat_radius=int(geo_state.get("da3_ms_splat", 1)),
+                device=device,
+                chunk0_target_disparity_px=float(
+                    getattr(self, "_geo_chunk0_target_disparity_px", CHUNK0_TARGET_DISPARITY_PX_DEFAULT)
+                ),
+            )
             render_mode = "i2v_chunk0_ref"
         elif render_mode in ("backward", "backward_zbuf"):
             # render_mode picks the backward render core: backward (default, single main source) / backward_zbuf (per-pixel multi-source z-buffer).
-            from evoke.modules.geometric_state.da3_cloud import _render_backward, _render_backward_multisrc_zbuf
+            from ..modules.geometric_state.da3_cloud import _render_backward, _render_backward_multisrc_zbuf
+
             _render_bw = _render_backward_multisrc_zbuf if render_mode == "backward_zbuf" else _render_backward
             # the zbuf despeckle params are only accepted by the backward_zbuf path (same function and params as training build_backward_warp) -> only added to kwargs there.
-            _zbuf_extra = dict(
-                zbuf_despeckle=bool(geo_state.get("da3_zbuf_despeckle", False)),
-                zbuf_despeckle_ksize=int(geo_state.get("da3_zbuf_despeckle_ksize", 3)),
-                zbuf_despeckle_fill_iters=int(geo_state.get("da3_zbuf_despeckle_fill_iters", 4)),
-            ) if render_mode == "backward_zbuf" else {}
+            _zbuf_extra = (
+                {
+                    "zbuf_despeckle": bool(geo_state.get("da3_zbuf_despeckle", False)),
+                    "zbuf_despeckle_ksize": int(geo_state.get("da3_zbuf_despeckle_ksize", 3)),
+                    "zbuf_despeckle_fill_iters": int(geo_state.get("da3_zbuf_despeckle_fill_iters", 4)),
+                }
+                if render_mode == "backward_zbuf"
+                else {}
+            )
             warp_video, visibility_mask = _render_bw(
-                store, pool, tgt, K_pix, int(height), int(width),
+                store,
+                pool,
+                tgt,
+                K_pix,
+                int(height),
+                int(width),
                 nearby=int(geo_state.get("da3_nearby", 16)),
                 fill_iters=int(geo_state.get("da3_bw_fill_iters", 12)),
                 recall_min_cov=float(geo_state.get("da3_recall_min_cov", 0.5)),
-                recall_margin=float(geo_state.get("da3_recall_margin", 0.15)), device=device, **_zbuf_extra)
+                recall_margin=float(geo_state.get("da3_recall_margin", 0.15)),
+                device=device,
+                **_zbuf_extra,
+            )
         else:
             warp_video, visibility_mask = _render_multisrc(
-                store, pool, tgt, K_pix, int(height), int(width),
-                nsrc=int(geo_state.get("da3_nsrc", 8)), nearby=int(geo_state.get("da3_nearby", 16)),
+                store,
+                pool,
+                tgt,
+                K_pix,
+                int(height),
+                int(width),
+                nsrc=int(geo_state.get("da3_nsrc", 8)),
+                nearby=int(geo_state.get("da3_nearby", 16)),
                 splat_radius=int(geo_state.get("da3_ms_splat", 1)),
-                dens_thresh=float(geo_state.get("da3_dens_thresh", 0.45)), dens_win=int(geo_state.get("da3_dens_win", 7)),
+                dens_thresh=float(geo_state.get("da3_dens_thresh", 0.45)),
+                dens_win=int(geo_state.get("da3_dens_win", 7)),
                 recall_min_cov=float(geo_state.get("da3_recall_min_cov", 0.5)),
-                recall_margin=float(geo_state.get("da3_recall_margin", 0.15)), device=device)
+                recall_margin=float(geo_state.get("da3_recall_margin", 0.15)),
+                device=device,
+            )
         warp_video = warp_video.to(device=device, dtype=torch.float32)
         visibility_mask = visibility_mask.to(device=device, dtype=torch.float32)
         # warp_keep_clean_anchor: overwrite warp[0] with the previous chunk's clean last frame (same as the Pi3X/persistent branch)
@@ -852,15 +957,20 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             if _anc is not None:
                 _anc = _anc[0:1] if _anc.ndim == 4 else _anc.unsqueeze(0)
                 if tuple(_anc.shape[-2:]) != tuple(warp_video.shape[-2:]):
-                    _anc = torch.nn.functional.interpolate(_anc, size=tuple(warp_video.shape[-2:]),
-                                                           mode="bilinear", align_corners=False)
+                    _anc = torch.nn.functional.interpolate(
+                        _anc, size=tuple(warp_video.shape[-2:]), mode="bilinear", align_corners=False
+                    )
                 warp_video[:, :, 0] = _anc.to(device=device, dtype=warp_video.dtype).clamp(-1, 1)
                 visibility_mask[:, :, 0] = 1.0
         # Debug dump (same as the Pi3X branch): writes chunk_NNN_warp.mp4 + chunk_NNN_vis.mp4 -> fed to combine_gt_pred_with_cam_viz for the 4-column layout.
         _dump_dir = getattr(self, "_geo_dump_dir", None)
         if _dump_dir is not None:
             try:
-                import os, cv2, numpy as np
+                import os
+
+                import cv2
+                import numpy as np
+
                 os.makedirs(_dump_dir, exist_ok=True)
                 _warp = warp_video[0].permute(1, 2, 3, 0).clamp(-1, 1).cpu().numpy()
                 _warp_u8 = ((_warp * 0.5 + 0.5) * 255.0).clip(0, 255).astype(np.uint8)
@@ -871,8 +981,9 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                     _ww.write(cv2.cvtColor(f_rgb, cv2.COLOR_RGB2BGR))
                 _ww.release()
                 # show the blocky patch mask (= the one the latent conditioning actually uses, VAE8x + patch2 -> 16px blocks), not the speckly per-pixel keep
-                _vt = visibility_mask[0, 0].clamp(0, 1)                       # [T,H,W]
-                _gh = max(1, (int(_h) // 8) // 2); _gw = max(1, (int(_w) // 8) // 2)
+                _vt = visibility_mask[0, 0].clamp(0, 1)  # [T,H,W]
+                _gh = max(1, (int(_h) // 8) // 2)
+                _gw = max(1, (int(_w) // 8) // 2)
                 _vb = torch.nn.functional.adaptive_avg_pool2d(_vt.unsqueeze(1), (_gh, _gw))
                 _vb = (_vb > 0.5).float()
                 _vb = torch.nn.functional.interpolate(_vb, size=(int(_h), int(_w)), mode="nearest")[:, 0]
@@ -888,11 +999,17 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                 print(f"[GEO-da3-dump] WARN dump failed ({type(_e).__name__}: {_e})", flush=True)
         # Published for the per-chunk progress line; the raw print stays for training validation and
         #   for EVOKE_INFER_DEBUG=1, where there is no bar to interleave with.
-        self._geo_last_render_stats = {"pool": len(pool), "render_mode": render_mode,
-                                       "cov": float(visibility_mask[0, 0].mean())}
+        self._geo_last_render_stats = {
+            "pool": len(pool),
+            "render_mode": render_mode,
+            "cov": float(visibility_mask[0, 0].mean()),
+        }
         if not getattr(self, "_geo_quiet_chunk_logs", False):
-            print(f"[GEO-da3] chunk {int(chunk_idx):03d}: pool={len(pool)} ({render_mode}) "
-                  f"cov={float(visibility_mask[0,0].mean()):.3f} warp={tuple(warp_video.shape)}", flush=True)
+            print(
+                f"[GEO-da3] chunk {int(chunk_idx):03d}: pool={len(pool)} ({render_mode}) "
+                f"cov={float(visibility_mask[0, 0].mean()):.3f} warp={tuple(warp_video.shape)}",
+                flush=True,
+            )
         return warp_video, visibility_mask
 
     def _geo_render_chunk(
@@ -904,12 +1021,12 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         height: int,
         width: int,
         device: torch.device,
-        anchor_c2w: Optional[torch.Tensor] = None,  # anchor pose for this chunk
-        top_k: int = 8,                             # retrieve up to K frames from FrameBank
-        nearby_k: int = 0,                          # take N most-recent frames by pixel_idx
-        select_k: Optional[int] = None,              # score-based selection count; None=top_k
-        metric: str = "v1",                          # FrameBank score: v1/v2/v3
-        metric_kwargs: Optional[dict] = None,        # per-metric kwargs
+        anchor_c2w: torch.Tensor | None = None,  # anchor pose for this chunk
+        top_k: int = 8,  # retrieve up to K frames from FrameBank
+        nearby_k: int = 0,  # take N most-recent frames by pixel_idx
+        select_k: int | None = None,  # score-based selection count; None=top_k
+        metric: str = "v1",  # FrameBank score: v1/v2/v3
+        metric_kwargs: dict | None = None,  # per-metric kwargs
     ):
         """Render warp_video and visibility_mask for the current chunk (DA3 backend)."""
         # Prepend anchor pose so the renderer emits one extra frame; the first output frame is dropped.
@@ -918,13 +1035,20 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             "chunk 0 anchor = source pose; chunk>=1 anchor = previous chunk's last-frame pose."
         )
         # DA3 FrameBank recall-based warp (recon_backend=da3): replaces Pi3X, feeds validation/inference the same warp distribution as training.
-        if str((getattr(self, "_geo_vsnoise_cfg", None) or {}).get("recon_backend", "da3")) == "da3" \
-                and geo_state.get("da3_bank") is not None:
+        if (
+            str((getattr(self, "_geo_vsnoise_cfg", None) or {}).get("recon_backend", "da3")) == "da3"
+            and geo_state.get("da3_bank") is not None
+        ):
             return self._geo_render_chunk_da3(
-                geo_state=geo_state, chunk_idx=chunk_idx,
+                geo_state=geo_state,
+                chunk_idx=chunk_idx,
                 camera_poses_pix_window=camera_poses_pix_window,
-                height=height, width=width, device=device,
-                anchor_c2w=anchor_c2w, source_frame_pix=source_frame_pix)
+                height=height,
+                width=width,
+                device=device,
+                anchor_c2w=anchor_c2w,
+                source_frame_pix=source_frame_pix,
+            )
         # the Pi3X path (legacy keyframe recall + persistent cloud) has been removed: DA3 is the only warp backend.
         raise RuntimeError(
             "[GEO] warp render requires the DA3 backend: recon_backend=da3 and an initialized da3_bank "
@@ -957,7 +1081,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             _min_frames = (int(latent_window_size) - 1) * _vt + 1
             _vid = warp_video[:, :, -_min_frames:].to(device=device, dtype=self.vae.dtype)
             _warm = _vid[:, :, :1].repeat(1, 1, _vt, 1, 1)
-            _padded = torch.cat([_warm, _vid], dim=2)   # (_min_frames + _vt) frames -> (latent_window+1) latents
+            _padded = torch.cat([_warm, _vid], dim=2)  # (_min_frames + _vt) frames -> (latent_window+1) latents
             self.vae.clear_cache()
             _lat = self.vae.encode(_padded).latent_dist.sample(generator=generator)
             self.vae.clear_cache()
@@ -984,16 +1108,17 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
         if visibility_aware_noise and visibility_mask_pix is not None:
             # Spatial-sigma path: pool pixel mask to latent domain and broadcast per-pixel sigma.
-            assert 0.0 < float(sigma_invisible) <= 1.0, (
-                f"sigma_invisible must be in (0, 1.0], got {sigma_invisible}"
-            )
+            assert 0.0 < float(sigma_invisible) <= 1.0, f"sigma_invisible must be in (0, 1.0], got {sigma_invisible}"
             H_lat = int(warp_latents.shape[3])
             W_lat = int(warp_latents.shape[4])
             # Downsample pixel-domain mask to latent domain — BLOCKY (coverage-style patch mask),
             # reusing the same function as training so train/val/infer match, no more per-pixel speckle.
             mask_lat = geo_resize_visibility_to_latent(
                 visibility_mask_pix.to(device=device, dtype=torch.float32),
-                chunk_frames, H_lat, W_lat, vae_t_stride=int(self.vae_scale_factor_temporal),
+                chunk_frames,
+                H_lat,
+                W_lat,
+                vae_t_stride=int(self.vae_scale_factor_temporal),
             ).to(dtype=warp_latents.dtype)
             sigma_visible_5d = frame_sigmas.view(1, 1, chunk_frames, 1, 1)
             sigmas = mask_lat * sigma_visible_5d + (1.0 - mask_lat) * float(sigma_invisible)
@@ -1020,7 +1145,9 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         if latents_history_long is not None:
             _z = (latents_history_long == 0).all(dim=(0, 1, 3, 4), keepdim=True)
             if bool(_z.any()):
-                latents_history_long = torch.where(_z, _sig * torch.randn_like(latents_history_long), latents_history_long)
+                latents_history_long = torch.where(
+                    _z, _sig * torch.randn_like(latents_history_long), latents_history_long
+                )
         if latents_history_mid is not None:
             _z = (latents_history_mid == 0).all(dim=(0, 1, 3, 4), keepdim=True)
             if bool(_z.any()):
@@ -1037,14 +1164,13 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             m = torch.zeros(1, 1, device=device)
             size = 1
             while size < n:
-                m = torch.cat([torch.cat([4 * m, 4 * m + 2], dim=1),
-                               torch.cat([4 * m + 3, 4 * m + 1], dim=1)], dim=0)
+                m = torch.cat([torch.cat([4 * m, 4 * m + 2], dim=1), torch.cat([4 * m + 3, 4 * m + 1], dim=1)], dim=0)
                 size *= 2
-            base = (m + 0.5) / (n * n)        # [8,8] in (0,1), 64 levels
+            base = (m + 0.5) / (n * n)  # [8,8] in (0,1), 64 levels
             self._geo_bayer8 = base
         n = base.shape[0]
         gh, gw = (H + g - 1) // g, (W + g - 1) // g
-        tile = base.repeat((gh + n - 1) // n, (gw + n - 1) // n)[:gh, :gw]   # [gh,gw]
+        tile = base.repeat((gh + n - 1) // n, (gw + n - 1) // n)[:gh, :gw]  # [gh,gw]
         out = torch.empty(Tn, gh, gw, device=device)
         for t in range(Tn):
             out[t] = torch.roll(tile, shifts=((t * 3) % n, (t * 5) % n), dims=(0, 1))
@@ -1063,7 +1189,10 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         """Build short-tier latent-domain visibility mask from pixel-domain mask (BLOCKY patch mask)."""
         sampled = geo_resize_visibility_to_latent(
             visibility_mask_pix.to(device=device, dtype=torch.float32),
-            num_lat_per_chunk, H_lat, W_lat, vae_t_stride=int(vae_t_stride),
+            num_lat_per_chunk,
+            H_lat,
+            W_lat,
+            vae_t_stride=int(vae_t_stride),
         )
 
         # diagnostic (--geo_drop_warp): force the warp segment visibility to all 0 -> the downstream token filter drops every warp token ->
@@ -1080,10 +1209,10 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         _Tn = sampled.shape[2] if sampled.dim() == 5 else 0
         if 0.0 < _cap < 1.0 and sampled.numel() > 0 and _Tn > 0:
             _g = max(1, int(_vs_cfg.get("warp_patch_drop_grid", 1)))
-            _vis = sampled.mean(dim=(0, 1, 3, 4)).clamp_min(1e-6)                  # [Tn] visible fraction per frame
-            _keep_frac = (_cap / _vis).clamp(max=1.0)                             # [Tn] v<=cap -> 1 (keep all)
+            _vis = sampled.mean(dim=(0, 1, 3, 4)).clamp_min(1e-6)  # [Tn] visible fraction per frame
+            _keep_frac = (_cap / _vis).clamp(max=1.0)  # [Tn] v<=cap -> 1 (keep all)
             _thr = self._geo_even_threshold_map(_Tn, H_lat, W_lat, _g, sampled.device)  # [Tn,H,W] in (0,1)
-            _keep = (_thr < _keep_frac.view(_Tn, 1, 1)).to(sampled.dtype)          # 1=keep
+            _keep = (_thr < _keep_frac.view(_Tn, 1, 1)).to(sampled.dtype)  # 1=keep
             sampled = sampled * _keep.view(1, 1, _Tn, H_lat, W_lat)
             # thinned warp frames get no extra handling beyond the keep-clean / cache reuse semantics; only visibility changes -> downstream token filtering stays identical.
 
@@ -1094,9 +1223,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             _g = max(1, int(_vs_cfg.get("warp_patch_drop_grid", 4)))
             _gen = getattr(self, "_geo_patchdrop_gen", None)
             if _gen is None:
-                _gen = torch.Generator(device=sampled.device).manual_seed(
-                    int(_vs_cfg.get("warp_patch_drop_seed", 0))
-                )
+                _gen = torch.Generator(device=sampled.device).manual_seed(int(_vs_cfg.get("warp_patch_drop_seed", 0)))
                 self._geo_patchdrop_gen = _gen
             _Tn = sampled.shape[2]
             _gh, _gw = (H_lat + _g - 1) // _g, (W_lat + _g - 1) // _g
@@ -1134,7 +1261,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         transformer = getattr(self, "transformer", None)
         if transformer is None:
             return False
-        for module in transformer.modules():
+        for module in transformer.modules():  # noqa: SIM110 - Keeps the explicit loop.
             if bool(getattr(module, "merged", False)):
                 return True
         return False
@@ -1190,10 +1317,8 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         loaded_path = getattr(self, "_geo_loaded_lora_path", None)
         if loaded_path != lora_path:
             if loaded_path is not None and hasattr(self, "delete_adapters"):
-                try:
+                with contextlib.suppress(Exception):
                     self.delete_adapters(self._GEO_ADAPTER_NAME)
-                except Exception:
-                    pass
             self.load_lora_weights(str(lora_path), adapter_name=self._GEO_ADAPTER_NAME)
             self._geo_loaded_lora_path = lora_path
         if hasattr(self, "set_adapters"):
@@ -1207,7 +1332,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         prompt_embeds: torch.Tensor = None,
         negative_prompt_embeds: torch.Tensor = None,
         timesteps: torch.Tensor = None,
-        guidance_scale: Optional[float] = 5.0,
+        guidance_scale: float | None = 5.0,
         indices_hidden_states: torch.Tensor = None,
         indices_latents_history_short: torch.Tensor = None,
         indices_latents_history_mid: torch.Tensor = None,
@@ -1219,27 +1344,27 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         nearby_sink_latents: torch.Tensor = None,
         nearby_sink_indices: torch.Tensor = None,  # explicit sink indices for GEO + raw_sink mode
         # GEO visibility masks; None = baseline.
-        history_visible_mask_short: Optional[torch.Tensor] = None,
-        history_visible_mask_mid: Optional[torch.Tensor] = None,
-        history_visible_mask_long: Optional[torch.Tensor] = None,
-        attention_kwargs: Optional[dict] = None,
-        device: Optional[torch.device] = None,
+        history_visible_mask_short: torch.Tensor | None = None,
+        history_visible_mask_mid: torch.Tensor | None = None,
+        history_visible_mask_long: torch.Tensor | None = None,
+        attention_kwargs: dict | None = None,
+        device: torch.device | None = None,
         transformer_dtype: torch.dtype = None,
-        generator: Optional[torch.Generator] = None,
+        generator: torch.Generator | None = None,
         # Camera plucker embedding for the current section; None skips cam control path.
-        cam_plucker_emb: Optional[torch.Tensor] = None,
+        cam_plucker_emb: torch.Tensor | None = None,
         # ------------ CFG Zero ------------
-        use_cfg_zero_star: Optional[bool] = False,
-        use_zero_init: Optional[bool] = True,
-        zero_steps: Optional[int] = 1,
+        use_cfg_zero_star: bool | None = False,
+        use_zero_init: bool | None = True,
+        zero_steps: int | None = 1,
         # -------------- DMD --------------
         use_dmd: bool = False,
         dmd_sigmas: torch.Tensor = None,
         dmd_timesteps: torch.Tensor = None,
         is_amplify_first_chunk: bool = False,
         # ------------ Callback ------------
-        callback_on_step_end: Optional[callable] = None,
-        callback_on_step_end_tensor_inputs: list = None,
+        callback_on_step_end: Optional[callable] = None,  # noqa: UP045 - callable is a function in the upstream annotation.
+        callback_on_step_end_tensor_inputs: list | None = None,
         progress_bar=None,
     ):
         batch_size = latents.shape[0]
@@ -1363,11 +1488,11 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
     def stage2_sample(
         self,
         latents: torch.Tensor = None,
-        stage2_num_stages: int = None,
-        stage2_num_inference_steps_list: List[int] = None,
+        stage2_num_stages: int | None = None,
+        stage2_num_inference_steps_list: list[int] | None = None,
         prompt_embeds: torch.Tensor = None,
         negative_prompt_embeds: torch.Tensor = None,
-        guidance_scale: Optional[float] = 5.0,
+        guidance_scale: float | None = 5.0,
         indices_hidden_states: torch.Tensor = None,
         indices_latents_history_short: torch.Tensor = None,
         indices_latents_history_mid: torch.Tensor = None,
@@ -1379,38 +1504,38 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         nearby_sink_latents: torch.Tensor = None,
         nearby_sink_indices: torch.Tensor = None,  # explicit sink indices for GEO + raw_sink mode
         # GEO visibility masks; None = baseline.
-        history_visible_mask_short: Optional[torch.Tensor] = None,
-        history_visible_mask_mid: Optional[torch.Tensor] = None,
-        history_visible_mask_long: Optional[torch.Tensor] = None,
+        history_visible_mask_short: torch.Tensor | None = None,
+        history_visible_mask_mid: torch.Tensor | None = None,
+        history_visible_mask_long: torch.Tensor | None = None,
         # GEO LoRA: fused only at pyramid stage 0, unfused at other stages.
         geo_lora_active: bool = False,
         # Geo: inject warp into the short tier ONLY at pyramid stage 0 (matches the Geo
         # reference, which builds the warp-bearing short history only at the coarsest stage and
         # conditions finer stages on [prefix|prev_short]). At i_s>0 the warp segment is stripped.
         geo_warp_stage0_only: bool = False,
-        attention_kwargs: Optional[dict] = None,
-        device: Optional[torch.device] = None,
+        attention_kwargs: dict | None = None,
+        device: torch.device | None = None,
         transformer_dtype: torch.dtype = None,
         scheduler_type: str = "unipc",  # unipc, euler
         use_dynamic_shifting: bool = False,
         time_shift_type: Literal["exponential", "linear"] = "linear",
         generator: torch.Generator | list[torch.Generator] | None = None,
         # Per-stage cam plucker is recomputed from c2ws_chunk + Ks at each pyramid stage resolution.
-        cam_lingbot_Ks_chunk: Optional[torch.Tensor] = None,           # [B, 4]
-        cam_lingbot_c2ws_chunk: Optional[torch.Tensor] = None,         # [B, F_pix_chunk, 4, 4]
-        cam_base_height_pix: Optional[int] = None,
-        cam_base_width_pix: Optional[int] = None,
+        cam_lingbot_Ks_chunk: torch.Tensor | None = None,  # [B, 4]
+        cam_lingbot_c2ws_chunk: torch.Tensor | None = None,  # [B, F_pix_chunk, 4, 4]
+        cam_base_height_pix: int | None = None,
+        cam_base_width_pix: int | None = None,
         cam_pc_resolution_strategy: str = "scale_ks",
         # ------------ CFG Zero ------------
-        use_cfg_zero_star: Optional[bool] = False,
-        use_zero_init: Optional[bool] = True,
-        zero_steps: Optional[int] = 1,
+        use_cfg_zero_star: bool | None = False,
+        use_zero_init: bool | None = True,
+        zero_steps: int | None = 1,
         # -------------- DMD --------------
         use_dmd: bool = False,
         is_amplify_first_chunk: bool = False,
         # ------------ Callback ------------
-        callback_on_step_end: Optional[callable] = None,
-        callback_on_step_end_tensor_inputs: list = None,
+        callback_on_step_end: Optional[callable] = None,  # noqa: UP045 - callable is a function in the upstream annotation.
+        callback_on_step_end_tensor_inputs: list | None = None,
         progress_bar=None,
     ):
         num_frames, height, width = (
@@ -1433,10 +1558,11 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         latents = rearrange(latents, "(b t) c h w -> b c t h w", t=num_frames)
 
         batch_size = latents.shape[0]
-        import time as _time  # [difftime] per-step DiT timing below
         # Per-step timing is debug output: it fires 3x per chunk and, being newline-terminated while a
         #   progress bar is not, it lands in the middle of the bar. Opt in with EVOKE_INFER_DEBUG=1.
         import os as _os_dt
+        import time as _time  # [difftime] per-step DiT timing below
+
         _difftime_log = _os_dt.environ.get("EVOKE_INFER_DEBUG", "0") == "1"
         if use_dmd:
             start_point_list = [latents]
@@ -1519,19 +1645,24 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                 and cam_lingbot_c2ws_chunk is not None
                 and getattr(self.transformer, "enable_cam_control", False)
             ):
-                from worldfoundry.base_models.diffusion_model.models.networks.evoke.camera_control import prepare_cam_plucker_emb
+                from worldfoundry.base_models.diffusion_model.models.networks.evoke.camera_control import (
+                    prepare_cam_plucker_emb,
+                )
+
                 _H_lat_stage, _W_lat_stage = latents.shape[-2], latents.shape[-1]
                 _H_pix_stage = _H_lat_stage * self.vae_scale_factor_spatial
                 _W_pix_stage = _W_lat_stage * self.vae_scale_factor_spatial
-                _base_h = cam_base_height_pix or _H_pix_stage   # default to current stage resolution
+                _base_h = cam_base_height_pix or _H_pix_stage  # default to current stage resolution
                 _base_w = cam_base_width_pix or _W_pix_stage
                 _Ks_f = cam_lingbot_Ks_chunk.to(device=device, dtype=torch.float32)
                 _c2ws_f = cam_lingbot_c2ws_chunk.to(device=device, dtype=torch.float32)
                 cam_plucker_emb_stage = prepare_cam_plucker_emb(
                     Ks=_Ks_f,
                     c2ws_window=_c2ws_f,
-                    H_pix=_H_pix_stage, W_pix=_W_pix_stage,
-                    base_h_pix=_base_h, base_w_pix=_base_w,
+                    H_pix=_H_pix_stage,
+                    W_pix=_W_pix_stage,
+                    base_h_pix=_base_h,
+                    base_w_pix=_base_w,
                     vae_stride_t=self.vae_scale_factor_temporal,
                     vae_stride_h=self.vae_scale_factor_spatial,
                     vae_stride_w=self.vae_scale_factor_spatial,
@@ -1550,20 +1681,20 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             if geo_warp_stage0_only and i_s > 0 and _wf > 0 and latents_history_short is not None:
                 # short-tier layout along temporal dim: [prefix(1) | warp(_wf) | prev_short(Sp)]
                 _cur_lat_short = torch.cat(
-                    [latents_history_short[:, :, :1], latents_history_short[:, :, 1 + _wf:]], dim=2
+                    [latents_history_short[:, :, :1], latents_history_short[:, :, 1 + _wf :]], dim=2
                 )
                 if indices_latents_history_short is not None:
                     if indices_latents_history_short.dim() == 1:
                         _cur_idx_short = torch.cat(
-                            [indices_latents_history_short[:1], indices_latents_history_short[1 + _wf:]], dim=0
+                            [indices_latents_history_short[:1], indices_latents_history_short[1 + _wf :]], dim=0
                         )
                     else:
                         _cur_idx_short = torch.cat(
-                            [indices_latents_history_short[:, :1], indices_latents_history_short[:, 1 + _wf:]], dim=1
+                            [indices_latents_history_short[:, :1], indices_latents_history_short[:, 1 + _wf :]], dim=1
                         )
                 if history_visible_mask_short is not None:
                     _cur_mask_short = torch.cat(
-                        [history_visible_mask_short[:, :, :1], history_visible_mask_short[:, :, 1 + _wf:]], dim=2
+                        [history_visible_mask_short[:, :, :1], history_visible_mask_short[:, :, 1 + _wf :]], dim=2
                     )
                 _cur_attn_kwargs = dict(attention_kwargs or {})
                 _cur_attn_kwargs["geo_warp_frames"] = 0
@@ -1603,8 +1734,11 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                     if torch.cuda.is_available():
                         torch.cuda.synchronize()
                     if _difftime_log:
-                        print(f"[difftime] i_s={i_s} idx={idx} H={latents.shape[-2]} W={latents.shape[-1]} "
-                              f"dit_forward={_time.time() - _difft0:.3f}s", flush=True)
+                        print(
+                            f"[difftime] i_s={i_s} idx={idx} H={latents.shape[-2]} W={latents.shape[-1]} "
+                            f"dit_forward={_time.time() - _difft0:.3f}s",
+                            flush=True,
+                        )
 
                 if self.do_classifier_free_guidance:
                     with self.transformer.cache_context("cond_uncond"):
@@ -1723,53 +1857,54 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
         self,
-        prompt: Union[str, List[str]] = None,
-        negative_prompt: Union[str, List[str]] = None,
+        prompt: str | list[str] | None = None,
+        negative_prompt: str | list[str] | None = None,
         height: int = 384,
         width: int = 640,
         num_frames: int = 73,
         num_inference_steps: int = 50,
         guidance_scale: float = 5.0,
-        num_videos_per_prompt: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.Tensor] = None,
-        prompt_embeds: Optional[torch.Tensor] = None,
-        negative_prompt_embeds: Optional[torch.Tensor] = None,
-        output_type: Optional[str] = "np",
+        num_videos_per_prompt: int | None = 1,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.Tensor | None = None,
+        prompt_embeds: torch.Tensor | None = None,
+        negative_prompt_embeds: torch.Tensor | None = None,
+        output_type: str | None = "np",
         return_dict: bool = True,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
-        callback_on_step_end: Optional[
-            Union[Callable[[int, int, Dict], None], PipelineCallback, MultiPipelineCallbacks]
-        ] = None,
-        callback_on_step_end_tensor_inputs: List[str] = ["latents"],
+        attention_kwargs: dict[str, Any] | None = None,
+        callback_on_step_end: Callable[[int, int, dict], None]
+        | PipelineCallback
+        | MultiPipelineCallbacks
+        | None = None,
+        callback_on_step_end_tensor_inputs: list[str] = ["latents"],  # noqa: B006 - Keeps the upstream default object and signature.
         max_sequence_length: int = 512,
         # ------------ I2V ------------
-        image: Optional[PipelineImageInput] = None,
-        image_latents: Optional[torch.Tensor] = None,
-        fake_image_latents: Optional[torch.Tensor] = None,
+        image: PipelineImageInput | None = None,
+        image_latents: torch.Tensor | None = None,
+        fake_image_latents: torch.Tensor | None = None,
         add_noise_to_image_latents: bool = True,
         image_noise_sigma_min: float = 0.111,
         image_noise_sigma_max: float = 0.135,
         # ------------ V2V ------------
-        video: Optional[PipelineImageInput] = None,
-        video_latents: Optional[torch.Tensor] = None,
+        video: PipelineImageInput | None = None,
+        video_latents: torch.Tensor | None = None,
         add_noise_to_video_latents: bool = True,
         video_noise_sigma_min: float = 0.111,
         video_noise_sigma_max: float = 0.135,
         # ------------ Camera control (lingbot-style AdaLN, optional) ------------
         # lingbot_Ks: [B,4] or [4] camera intrinsics [fx,fy,cx,cy]; lingbot_c2ws: frame-wise c2w poses.
         # Skipped when None or transformer has no cam control.
-        lingbot_Ks: Optional[torch.Tensor] = None,
-        lingbot_c2ws: Optional[torch.Tensor] = None,
-        cam_pc_resolution_strategy: str = "scale_ks",   # "scale_ks" | "resample"
-        cam_base_height_pix: Optional[int] = None,       # None defaults to pipeline `height`
-        cam_base_width_pix: Optional[int] = None,        # None defaults to pipeline `width`
+        lingbot_Ks: torch.Tensor | None = None,
+        lingbot_c2ws: torch.Tensor | None = None,
+        cam_pc_resolution_strategy: str = "scale_ks",  # "scale_ks" | "resample"
+        cam_base_height_pix: int | None = None,  # None defaults to pipeline `height`
+        cam_base_width_pix: int | None = None,  # None defaults to pipeline `width`
         # ------------ Interactive ------------
         use_interpolate_prompt: bool = False,
-        interpolate_time_list: list = [7, 7, 7],
+        interpolate_time_list: list = [7, 7, 7],  # noqa: B006 - Keeps the upstream default object and signature.
         interpolation_steps: int = 3,
         # ------------ Stage 1 ------------
-        history_sizes: list = [16, 2, 1],
+        history_sizes: list = [16, 2, 1],  # noqa: B006 - Keeps the upstream default object and signature.
         latent_window_size: int = 9,
         use_dynamic_shifting: bool = False,
         time_shift_type: Literal["exponential", "linear"] = "linear",
@@ -1777,12 +1912,12 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         # ------------ Stage 2 ------------
         is_enable_stage2: bool = False,
         stage2_num_stages: int = 3,
-        stage2_num_inference_steps_list: list = [10, 10, 10],
+        stage2_num_inference_steps_list: list = [10, 10, 10],  # noqa: B006 - Keeps the upstream default object and signature.
         scheduler_type: str = "unipc",  # unipc, euler
         # ------------ CFG Zero ------------
-        use_cfg_zero_star: Optional[bool] = False,
-        use_zero_init: Optional[bool] = True,
-        zero_steps: Optional[int] = 1,
+        use_cfg_zero_star: bool | None = False,
+        use_zero_init: bool | None = True,
+        zero_steps: int | None = 1,
         # ------------ DMD ------------
         use_dmd: bool = False,
         is_skip_first_section: bool = False,
@@ -1800,22 +1935,22 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         # Diagnostic: skip the prev_short token -> short tier reverts to [prefix, warp] (geo_prev_short_frames=0).
         geo_disable_prev_short: bool = False,
         # Path to GEO LoRA weights; None disables LoRA.
-        geo_lora_path: Optional[str] = None,
+        geo_lora_path: str | None = None,
         # Number of keyframes retrieved from FrameBank per chunk for Pi3X.
         geo_top_k: int = 8,
         # FrameBank retrieval config: nearby_k = most-recent frames; select_k = score-based; score = metric.
         geo_nearby_k: int = 0,
-        geo_select_k: Optional[int] = None,
+        geo_select_k: int | None = None,
         geo_score: str = "v1",
-        geo_score_kwargs: Optional[dict] = None,
+        geo_score_kwargs: dict | None = None,
         # FrameBank size cap and v2v seeding limit.
-        geo_bank_max: Optional[int] = None,
+        geo_bank_max: int | None = None,
         geo_init_k: int = 10,
         # Per-chunk skill/VFX event control. event_chunks = 0-indexed rollout chunks marked as "event":
         # for those chunks warp is dropped, the camera is frozen (static plucker), the chunk's frames are
         # NOT added to the frame bank (warp retrieval source), and event_prompt (if non-empty) is used.
         # event_chunks=None/[] => no event chunks => rollout path is byte-for-byte identical to baseline.
-        event_chunks: Optional[list] = None,
+        event_chunks: list | None = None,
         event_prompt: str = "",
         # Per-chunk prompt schedule (segment prompts). {chunk_index: prompt_text}; a chunk keeps the
         # global `prompt` until an entry takes over, and the entry stays in force until the next one.
@@ -1823,7 +1958,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         # (data caption_key=segments + use_full_rollout_interleave). Unlike event_chunks it ONLY
         # swaps the text embedding: warp, camera and the frame bank are untouched.
         # None/{} => every chunk uses `prompt` => rollout is byte-for-byte identical to baseline.
-        chunk_prompts: Optional[dict] = None,
+        chunk_prompts: dict | None = None,
         # ------------ other ------------
         use_kv_cache: bool = False,
         vae_decode_type: VAEDecodeType = "default",  # "default", "default_batch", "long", "persistent"
@@ -1901,7 +2036,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                 indicating whether the corresponding generated image contains "not-safe-for-work" (nsfw) content.
         """
 
-        if image is not None and video is not None:
+        if image is not None and video is not None:  # noqa: SIM102 - Branches carry per-case comments.
             # image + video coexist only in GEO mode (image = Pi3X source; video = v2v conditioning).
             if not use_geometric_state:
                 raise ValueError(
@@ -2037,8 +2172,11 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                     )
                     _uniq[_ctext] = _ce.to(transformer_dtype)
                 _chunk_prompt_embeds[int(_ck)] = _uniq[_ctext]
-            print(f"[prompt-schedule] {len(_chunk_prompt_embeds)} switch point(s) at chunks "
-                  f"{sorted(_chunk_prompt_embeds)}, {len(_uniq)} distinct prompt(s)", flush=True)
+            print(
+                f"[prompt-schedule] {len(_chunk_prompt_embeds)} switch point(s) at chunks "
+                f"{sorted(_chunk_prompt_embeds)}, {len(_uniq)} distinct prompt(s)",
+                flush=True,
+            )
 
         # 4. Prepare image latents.
         _v2v_decode_warm_latents = None
@@ -2153,9 +2291,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
         # Pixel-domain v2v offset from raw video shape (not latent shape, which differs due to chunk encoding).
         geo_ref_pose_offset_pix = (
-            int(video.shape[2])
-            if (video is not None and isinstance(video, torch.Tensor) and video.ndim == 5)
-            else 0
+            int(video.shape[2]) if (video is not None and isinstance(video, torch.Tensor) and video.ndim == 5) else 0
         )
         if geo_ref_pose_offset_pix > 0 or cam_video_lat_offset > 0:
             print(
@@ -2167,8 +2303,8 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             )
 
         # 5.5 Camera control: move full-sequence c2ws/Ks to device; slice per-section window in main loop.
-        cam_Ks_dev = None         # full segment Ks on device
-        cam_c2ws_dev = None       # full segment absolute c2ws on device
+        cam_Ks_dev = None  # full segment Ks on device
+        cam_c2ws_dev = None  # full segment absolute c2ws on device
         cam_base_h_used = None
         cam_base_w_used = None
         # Populate the per-section Plucker pose buffers when EITHER the camera_control AdaLN path OR the GEO
@@ -2197,7 +2333,9 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         geo_lora_active = False
         geo_c2ws_dev = None
         if use_geometric_state:
-            assert lingbot_c2ws is not None, "use_geometric_state=True requires lingbot_c2ws (the target poses the Pi3X render needs)"
+            assert lingbot_c2ws is not None, (
+                "use_geometric_state=True requires lingbot_c2ws (the target poses the Pi3X render needs)"
+            )
             assert image is not None, (
                 "use_geometric_state=True requires image (PIL/np/Tensor) as the first chunk source. "
                 "image_latents-only input is not supported yet (Pi3X needs the source pixels)."
@@ -2255,14 +2393,16 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             if _is_v2v_geo:
                 _video_pix_len = int(video.shape[2])
                 _seed_max_extra = _geo_init_max - 1  # anchor already occupies 1 slot
-                _seed_pixel_idxs = list(range(
-                    0,
-                    min(_video_pix_len, _ref_pix_end),
-                    _geo_pix_stride_seed,
-                ))[:_seed_max_extra]
+                _seed_pixel_idxs = list(
+                    range(
+                        0,
+                        min(_video_pix_len, _ref_pix_end),
+                        _geo_pix_stride_seed,
+                    )
+                )[:_seed_max_extra]
                 for _pi in _seed_pixel_idxs:
                     if _pi == _geo_source_pixel_idx_seed:
-                        continue   # skip if duplicate with anchor
+                        continue  # skip if duplicate with anchor
                     _seed_pix = video[0, :, _pi].detach().float().cpu()  # [3, H, W] in [-1, 1]
                     _seed_pose_idx = min(_pi, geo_c2ws_dev.shape[1] - 1)
                     _seed_pose = geo_c2ws_dev[0, _seed_pose_idx].detach().cpu().float()
@@ -2283,19 +2423,25 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             # -- DA3 recall backend: build bank/est/K + seed the ref frames (coexists with the Pi3X frame_bank; active when recon_backend=da3) --
             _da3_cfg = getattr(self, "_geo_vsnoise_cfg", None) or {}
             if str(_da3_cfg.get("recon_backend", "da3")) == "da3" and lingbot_Ks is not None:
-                _da3_stride = latent_window_size * self.vae_scale_factor_temporal   # 36
+                _da3_stride = latent_window_size * self.vae_scale_factor_temporal  # 36
                 self._geo_da3_setup(geo_state, _da3_cfg, lingbot_Ks, int(height), int(width), _da3_stride, device)
                 # i2v (not v2v) is the only mode whose chunk 0 has no warp source at all -- v2v seeds the
                 # bank from the ref video above, so its chunk 0 already has a pool. GEO forbids t2v
                 # (infer_single.py), so `not _is_v2v_geo` is exactly i2v. Gates the chunk-0 reference-image
                 # warp in _geo_render_chunk_da3.
-                geo_state["da3_is_i2v"] = (not _is_v2v_geo)
-                if _is_v2v_geo and video is not None:        # v2v: ingest the ref video chunk by chunk as seed (i2v/t2v accumulate from generated frames)
+                geo_state["da3_is_i2v"] = not _is_v2v_geo
+                if (
+                    _is_v2v_geo and video is not None
+                ):  # v2v: ingest the ref video chunk by chunk as seed (i2v/t2v accumulate from generated frames)
                     _vlen = int(video.shape[2])
                     for _cs in range(0, _vlen, _da3_stride):
-                        self._geo_da3_ingest(geo_state, video[0, :, _cs:min(_cs + _da3_stride, _vlen)],
-                                             _cs, geo_c2ws_dev, device)
-                    print(f"[GEO-da3] v2v seed: ref {_vlen} frames -> bank {geo_state['da3_bank'].num_frames} frames", flush=True)
+                        self._geo_da3_ingest(
+                            geo_state, video[0, :, _cs : min(_cs + _da3_stride, _vlen)], _cs, geo_c2ws_dev, device
+                        )
+                    print(
+                        f"[GEO-da3] v2v seed: ref {_vlen} frames -> bank {geo_state['da3_bank'].num_frames} frames",
+                        flush=True,
+                    )
 
         if not is_keep_x0:
             history_sizes[-1] = history_sizes[-1] + 1
@@ -2322,17 +2468,16 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             total_generated_latent_frames += video_latents.shape[2]
 
         # 6. Main denoising loop.
-        if use_interpolate_prompt:
-            if num_latent_sections < max(interpolate_cumulative_list):
-                num_latent_sections = sum(interpolate_cumulative_list)
-                print(f"Update num_latent_sections to: {num_latent_sections}")
+        if use_interpolate_prompt and num_latent_sections < max(interpolate_cumulative_list):
+            num_latent_sections = sum(interpolate_cumulative_list)
+            print(f"Update num_latent_sections to: {num_latent_sections}")
 
         # Reset per-rollout short-tier noise state.
         self._short_tier_print_count = 0
         self._short_tier_rollout_sigma = None
         _st_cfg_pre = getattr(self, "_short_tier_noise_cfg", None) or {}
         if (
-            use_geometric_state     # only active in GEO path
+            use_geometric_state  # only active in GEO path
             and bool(_st_cfg_pre.get("enabled", False))
             and bool(_st_cfg_pre.get("apply_at_inference", True))
             and bool(_st_cfg_pre.get("sigma_lock_per_rollout", False))
@@ -2343,14 +2488,18 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             self._short_tier_rollout_sigma = float(
                 torch.rand(1, device=device, generator=_st_gen).item() * (_st_max - _st_min) + _st_min
             )
-            print(f"[ShortTier-Noise INFER] sigma_lock_per_rollout: sigma={self._short_tier_rollout_sigma:.3f}", flush=True)
+            print(
+                f"[ShortTier-Noise INFER] sigma_lock_per_rollout: sigma={self._short_tier_rollout_sigma:.3f}",
+                flush=True,
+            )
 
         # -- rollout progress, two levels: the bar counts chunks, and each chunk reports its own two
         #    phases (warp render + diffusion) as a single line written through the bar. Opt-in via env
         #    var, because this pipeline also runs training validation where per-chunk output on every
         #    rank floods the log. EVOKE_INFER_DEBUG=1 keeps the raw per-chunk prints instead.
-        import os as _os      # not a module-level import in this file; the methods import it locally
+        import os as _os  # not a module-level import in this file; the methods import it locally
         import time as _ptime
+
         _prog_on = _os.environ.get("EVOKE_INFER_PROGRESS", "0") == "1"
         _prog_debug = _os.environ.get("EVOKE_INFER_DEBUG", "0") == "1"
         # Read by _geo_render_chunk_da3: its own per-chunk prints are folded into the summary line.
@@ -2359,19 +2508,27 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
         _prog_bar = None
         if _prog_on:
             import sys as _psys
+
             from tqdm.auto import tqdm as _tqdm
+
             # file=stdout on purpose: tqdm draws to stderr but tqdm.write() goes to stdout, and once the
             #   two are merged (2>&1) the bar can no longer erase itself before a line is written, so
             #   every summary line ends up with a bar frame glued to its front.
-            _prog_bar = _tqdm(range(num_latent_sections), total=num_latent_sections,
-                              desc="chunks", unit="chunk", dynamic_ncols=True, file=_psys.stdout)
+            _prog_bar = _tqdm(
+                range(num_latent_sections),
+                total=num_latent_sections,
+                desc="chunks",
+                unit="chunk",
+                dynamic_ncols=True,
+                file=_psys.stdout,
+            )
             _chunk_iter = _prog_bar
 
         for k in _chunk_iter:
             _t_chunk0 = _ptime.time()
-            _t_warp_s = None      # None = phase did not run for this chunk (t2v, or warp disabled)
+            _t_warp_s = None  # None = phase did not run for this chunk (t2v, or warp disabled)
             _t_diff_s = None
-            self._geo_last_render_stats = None   # else an event chunk reports the previous chunk's warp
+            self._geo_last_render_stats = None  # else an event chunk reports the previous chunk's warp
             if use_interpolate_prompt:
                 assert num_latent_sections >= max(interpolate_cumulative_list)
 
@@ -2404,7 +2561,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
             # Per-chunk skill/VFX event flag. False for every chunk when event_chunks is empty/unset,
             # so all event hooks below collapse to the original code path (baseline byte-for-byte).
-            is_event_k = (k in _event_set)
+            is_event_k = k in _event_set
             # EVENT = a camera-control gap (A6'): skill/VFX frames cannot be DA3-estimated -> they do not enter the frame bank, and they do NOT advance the camera trajectory cursor.
             #   after the skill, poses are indexed by the "real (non-event) chunk count" _geo_pose_k so the trajectory resumes from the pre-skill pose; otherwise the target poses skip
             #   a whole stretch of trajectory and desync from the lagging bank -> warp goes fully black after the skill (the user-reported bug).
@@ -2428,7 +2585,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
             nearby_sink_latents = None
             if is_keep_x0:
                 if is_first_section:
-                    history_sizes_first_section = [1] + history_sizes.copy()
+                    history_sizes_first_section = [1] + history_sizes.copy()  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                     history_latents_first_section = torch.zeros(
                         batch_size,
                         num_channels_latents,
@@ -2473,7 +2630,9 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                         )
                     )
                     latents_history_long, latents_history_mid = self._geo_maybe_noise_invisible_history(
-                        latents_history_long, latents_history_mid, video_latents,
+                        latents_history_long,
+                        latents_history_mid,
+                        video_latents,
                     )
                     if image_latents is not None:
                         latents_prefix = image_latents
@@ -2506,7 +2665,9 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                         :, :, -sum(history_sizes) :
                     ].split(history_sizes, dim=2)
                     latents_history_long, latents_history_mid = self._geo_maybe_noise_invisible_history(
-                        latents_history_long, latents_history_mid, video_latents,
+                        latents_history_long,
+                        latents_history_mid,
+                        video_latents,
                     )
                     if _use_raw_sink_frames:
                         sink_latents = latents_prefix
@@ -2543,10 +2704,12 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                 assert is_keep_x0, "use_geometric_state requires is_keep_x0=True (it depends on the image prefix)"
 
                 # Pixel stride = 36 (9 latents * 4), window length = 33.
-                _geo_pix_stride = latent_window_size * self.vae_scale_factor_temporal       # 36
-                _geo_window_pix = window_num_frames                                          # 33
-                _geo_pix_start = geo_ref_pose_offset_pix + _geo_pose_k * _geo_pix_stride   # _geo_pose_k: events do not advance the cursor -> resume after the skill
-                _geo_pix_count = _geo_window_pix                                              # 33 (always)
+                _geo_pix_stride = latent_window_size * self.vae_scale_factor_temporal  # 36
+                _geo_window_pix = window_num_frames  # 33
+                _geo_pix_start = (
+                    geo_ref_pose_offset_pix + _geo_pose_k * _geo_pix_stride
+                )  # _geo_pose_k: events do not advance the cursor -> resume after the skill
+                _geo_pix_count = _geo_window_pix  # 33 (always)
                 _geo_pix_end = _geo_pix_start + _geo_pix_count
 
                 if is_first_section and geo_ref_pose_offset_pix > 0:
@@ -2569,7 +2732,12 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
                 if is_first_section:
                     # chunk-0 source: use last ref frame (v2v) or user image (i2v/t2v).
-                    if video is not None and isinstance(video, torch.Tensor) and video.ndim == 5 and int(cam_video_lat_offset) > 0:
+                    if (
+                        video is not None
+                        and isinstance(video, torch.Tensor)
+                        and video.ndim == 5
+                        and int(cam_video_lat_offset) > 0
+                    ):
                         _geo_source = video[:, :, -1].to(device=device, dtype=torch.float32)  # [B, 3, H, W]
                         # Anchor pose = last ref frame (pixel idx = ref_pix - 1).
                         _geo_anchor_pix_idx = max(0, geo_ref_pose_offset_pix - 1)
@@ -2602,25 +2770,48 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                 _vsnoise_sigma_min = float(_vsnoise_cfg.get("sigma_min", 0.111))
                 _vsnoise_sigma_max = float(_vsnoise_cfg.get("sigma_max", 0.135))
 
-                _t_warp0 = _ptime.time()   # phase 1 of the chunk: warp render + encode to latents
+                _t_warp0 = _ptime.time()  # phase 1 of the chunk: warp render + encode to latents
                 if is_event_k:
                     # EVENT/SKILL drop warp (A5): skip the warp render compute and feed a ZERO warp tier with an
                     # all-INVISIBLE mask (matches training online_materialize.py:~789). Downstream
                     # filter_history_tokens_by_mask removes the warp tokens, collapsing the short tier to
                     # [prefix | prev_short]. The static plucker from A4 still flows independently.
-                    _geo_warp_video = torch.zeros(1, 3, latent_window_size * self.vae_scale_factor_temporal,
-                                                  height, width, device=device, dtype=torch.float32)
-                    _geo_visibility_mask = torch.zeros(1, 1, latent_window_size * self.vae_scale_factor_temporal,
-                                                       _H_lat, _W_lat, device=device, dtype=torch.float32)
+                    _geo_warp_video = torch.zeros(
+                        1,
+                        3,
+                        latent_window_size * self.vae_scale_factor_temporal,
+                        height,
+                        width,
+                        device=device,
+                        dtype=torch.float32,
+                    )
+                    _geo_visibility_mask = torch.zeros(
+                        1,
+                        1,
+                        latent_window_size * self.vae_scale_factor_temporal,
+                        _H_lat,
+                        _W_lat,
+                        device=device,
+                        dtype=torch.float32,
+                    )
                     _geo_warp_latents = torch.zeros(
-                        batch_size, num_channels_latents, latent_window_size, _H_lat, _W_lat,
-                        device=device, dtype=torch.float32,
+                        batch_size,
+                        num_channels_latents,
+                        latent_window_size,
+                        _H_lat,
+                        _W_lat,
+                        device=device,
+                        dtype=torch.float32,
                     )
                 else:
                     _geo_warp_video, _geo_visibility_mask = self._geo_render_chunk(
-                        geo_state=geo_state, chunk_idx=k, source_frame_pix=_geo_source,
+                        geo_state=geo_state,
+                        chunk_idx=k,
+                        source_frame_pix=_geo_source,
                         camera_poses_pix_window=_geo_pose_window,
-                        height=height, width=width, device=device,
+                        height=height,
+                        width=width,
+                        device=device,
                         anchor_c2w=_geo_anchor_c2w,
                         top_k=int(geo_top_k),
                         nearby_k=int(geo_nearby_k),
@@ -2630,9 +2821,11 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                     )
                     _geo_warp_latents = self._geo_encode_warp_to_latents(
                         warp_video=_geo_warp_video,
-                        latents_mean=latents_mean, latents_std=latents_std,
+                        latents_mean=latents_mean,
+                        latents_std=latents_std,
                         latent_window_size=latent_window_size,
-                        device=device, generator=generator,
+                        device=device,
+                        generator=generator,
                         sigma_min=_vsnoise_sigma_min,
                         sigma_max=_vsnoise_sigma_max,
                         visibility_aware_noise=_vsnoise_enabled,
@@ -2651,7 +2844,9 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                 if _warp_rope_mode == "before_prev_short":
                     # Plan 16: warp takes the prev_short slot [s..s+W-1]; prev_short -> noise[0]-1; noise += W; prefix stays 0.
                     assert not _rope_align, "warp_rope_mode='before_prev_short' requires rope_alignment=False."
-                    assert _prefix_idx_mode == "zero", "warp_rope_mode='before_prev_short' requires prefix_idx_mode='zero'."
+                    assert _prefix_idx_mode == "zero", (
+                        "warp_rope_mode='before_prev_short' requires prefix_idx_mode='zero'."
+                    )
                     assert int(indices_latents_history_1x.numel()) == 1, (
                         "warp_rope_mode='before_prev_short' only supports history_sizes[-1]==1 "
                         f"(got 1x tier numel={int(indices_latents_history_1x.numel())})."
@@ -2659,13 +2854,16 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                     _prev_short_idx_old = int(indices_latents_history_1x.flatten()[0].item())
                     _W_p16 = int(latent_window_size)
                     _geo_warp_indices = torch.arange(
-                        _prev_short_idx_old, _prev_short_idx_old + _W_p16,
-                        dtype=indices_hidden_states.dtype, device=indices_hidden_states.device,
+                        _prev_short_idx_old,
+                        _prev_short_idx_old + _W_p16,
+                        dtype=indices_hidden_states.dtype,
+                        device=indices_hidden_states.device,
                     )
                     # prev_short pushed to noise[0]-1; noise shifted +W.
                     indices_latents_history_1x = torch.tensor(
                         [_prev_short_idx_old + _W_p16],
-                        dtype=indices_latents_history_1x.dtype, device=indices_latents_history_1x.device,
+                        dtype=indices_latents_history_1x.dtype,
+                        device=indices_latents_history_1x.device,
                     )
                     indices_hidden_states = indices_hidden_states + _W_p16
                 elif _warp_rope_mode == "before_prev_mid":
@@ -2693,7 +2891,9 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
                 # Short-tier noise config (injected via self._short_tier_noise_cfg).
                 _short_noise_cfg = getattr(self, "_short_tier_noise_cfg", None) or {}
-                _apply_short_noise = bool(_short_noise_cfg.get("enabled", False)) and bool(_short_noise_cfg.get("apply_at_inference", True))
+                _apply_short_noise = bool(_short_noise_cfg.get("enabled", False)) and bool(
+                    _short_noise_cfg.get("apply_at_inference", True)
+                )
                 _short_noise_min = float(_short_noise_cfg.get("sigma_min", 0.2))
                 _short_noise_max = float(_short_noise_cfg.get("sigma_max", 0.6))
                 _short_noise_targets = set(_short_noise_cfg.get("target_tiers", []) or [])
@@ -2702,20 +2902,31 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
                 def _corrupt_clean_latent(clean: torch.Tensor, tier_name: str) -> torch.Tensor:
                     """Add sigma noise to a clean latent if the tier is in target_tiers."""
-                    if (not _apply_short_noise) or (not _short_noise_targets) or (tier_name not in _short_noise_targets):
+                    if (
+                        (not _apply_short_noise)  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                        or (not _short_noise_targets)  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                        or (tier_name not in _short_noise_targets)  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                    ):
                         return clean
                     _gen = generator[0] if isinstance(generator, list) else generator
-                    if _rollout_locked_sigma is not None:
-                        sigma_scalar = float(_rollout_locked_sigma)
+                    if _rollout_locked_sigma is not None:  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                        sigma_scalar = float(_rollout_locked_sigma)  # noqa: B023 - Keeps the upstream late binding of the loop variable.
                     else:
-                        sigma_scalar = torch.rand(1, device=clean.device, generator=_gen).item() * (_short_noise_max - _short_noise_min) + _short_noise_min
+                        sigma_scalar = (
+                            torch.rand(1, device=clean.device, generator=_gen).item()
+                            * (_short_noise_max - _short_noise_min)  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                            + _short_noise_min  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                        )
                     sigmas = torch.full((1, 1, 1, 1, 1), sigma_scalar, device=clean.device, dtype=clean.dtype)
                     _noise = randn_tensor(clean.shape, generator=generator, device=clean.device, dtype=clean.dtype)
                     out = sigmas * _noise + (1 - sigmas) * clean
                     # Rate-limited print (first 3 per rollout).
                     _pcount = getattr(self, "_short_tier_print_count", 0)
                     if _pcount < 3:
-                        print(f"[ShortTier-Noise INFER] σ={sigma_scalar:.3f} applied to {tier_name} (lock={_rollout_locked_sigma is not None})", flush=True)
+                        print(
+                            f"[ShortTier-Noise INFER] σ={sigma_scalar:.3f} applied to {tier_name} (lock={_rollout_locked_sigma is not None})",  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                            flush=True,
+                        )
                         self._short_tier_print_count = _pcount + 1
                     return out
 
@@ -2725,7 +2936,11 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                 # short tier physical layout: [prefix | warp | prev_short] — matches RoPE order
                 # (prefix < warp < prev_short < noise). prev_short is the frame CLOSEST to noise and goes LAST.
                 _short_lat_parts = [_corrupt_clean_latent(latents_prefix, "prefix")]
-                _short_idx_parts = [indices_prefix.flatten() if hasattr(indices_prefix, 'ndim') and indices_prefix.ndim > 1 else indices_prefix]
+                _short_idx_parts = [
+                    indices_prefix.flatten()
+                    if hasattr(indices_prefix, "ndim") and indices_prefix.ndim > 1
+                    else indices_prefix
+                ]
                 # warp goes in the MIDDLE (after prefix, before prev_short).
                 _short_lat_parts.append(_geo_warp_latents)
                 _short_idx_parts.append(_geo_warp_indices)
@@ -2756,8 +2971,10 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                     visibility_mask_pix=_geo_visibility_mask,
                     num_lat_per_chunk=latent_window_size,
                     has_prev_short=_geo_has_prev_short,
-                    H_lat=_H_lat, W_lat=_W_lat,
-                    device=device, vae_t_stride=self.vae_scale_factor_temporal,
+                    H_lat=_H_lat,
+                    W_lat=_W_lat,
+                    device=device,
+                    vae_t_stride=self.vae_scale_factor_temporal,
                 )
 
                 # GEO + raw_sink: provide explicit sink content and indices.
@@ -2841,14 +3058,16 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                     else sum(stage2_num_inference_steps_list)
                 )
 
-            _t_diff0 = _ptime.time()   # phase 2 of the chunk: the denoising steps themselves
+            _t_diff0 = _ptime.time()  # phase 2 of the chunk: the denoising steps themselves
             with self.progress_bar(total=num_inference_steps) as progress_bar:
                 if is_enable_stage2:
                     # Slice per-chunk c2ws using pixel-domain offset; stage2 recomputes plucker per stage.
                     _cam_c2ws_chunk = None
                     _cam_Ks_chunk = None
                     if cam_c2ws_dev is not None:
-                        _s_pix = geo_ref_pose_offset_pix + _geo_pose_k * latent_window_size * self.vae_scale_factor_temporal   # events do not advance the cursor: plucker uses the same convention as the GEO warp (resume after the skill)
+                        _s_pix = (
+                            geo_ref_pose_offset_pix + _geo_pose_k * latent_window_size * self.vae_scale_factor_temporal
+                        )  # events do not advance the cursor: plucker uses the same convention as the GEO warp (resume after the skill)
                         _e_pix = _s_pix + (latent_window_size - 1) * self.vae_scale_factor_temporal + 1
                         _window_pix_len = _e_pix - _s_pix  # = (W-1)*stride + 1
                         _pose_len = cam_c2ws_dev.shape[1]
@@ -2924,7 +3143,9 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                     # Slice per-section c2w window using pixel-domain offset; compute plucker per window.
                     _cam_emb_section = None
                     if cam_c2ws_dev is not None and cam_Ks_dev is not None:
-                        _s_pix = geo_ref_pose_offset_pix + _geo_pose_k * latent_window_size * self.vae_scale_factor_temporal   # events do not advance the cursor: plucker uses the same convention as the GEO warp (resume after the skill)
+                        _s_pix = (
+                            geo_ref_pose_offset_pix + _geo_pose_k * latent_window_size * self.vae_scale_factor_temporal
+                        )  # events do not advance the cursor: plucker uses the same convention as the GEO warp (resume after the skill)
                         _e_pix = _s_pix + (latent_window_size - 1) * self.vae_scale_factor_temporal + 1
                         _window_pix_len = _e_pix - _s_pix
                         _pose_len = cam_c2ws_dev.shape[1]
@@ -2934,21 +3155,24 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                             _valid_n = _pose_len - _s_pix
                             _tail_n = _window_pix_len - _valid_n
                             _tail = cam_c2ws_dev[:, -1:].expand(-1, _tail_n, -1, -1)
-                            _cam_c2ws_window = torch.cat(
-                                [cam_c2ws_dev[:, _s_pix:_pose_len], _tail], dim=1
-                            )
+                            _cam_c2ws_window = torch.cat([cam_c2ws_dev[:, _s_pix:_pose_len], _tail], dim=1)
                         else:
                             _cam_c2ws_window = cam_c2ws_dev[:, _s_pix:_e_pix]
                         # EVENT/SKILL static camera (A4): freeze the plucker cam poses to the window's first pose
                         # so the stage1 plucker is static during the skill. No-op for non-event chunks.
                         if is_event_k:
                             _cam_c2ws_window = _cam_c2ws_window[:, :1].expand(-1, _cam_c2ws_window.shape[1], -1, -1)
-                        from worldfoundry.base_models.diffusion_model.models.networks.evoke.camera_control import prepare_cam_plucker_emb
+                        from worldfoundry.base_models.diffusion_model.models.networks.evoke.camera_control import (
+                            prepare_cam_plucker_emb,
+                        )
+
                         _cam_emb_section = prepare_cam_plucker_emb(
                             Ks=cam_Ks_dev,
                             c2ws_window=_cam_c2ws_window,
-                            H_pix=height, W_pix=width,
-                            base_h_pix=cam_base_h_used, base_w_pix=cam_base_w_used,
+                            H_pix=height,
+                            W_pix=width,
+                            base_h_pix=cam_base_h_used,
+                            base_w_pix=cam_base_w_used,
                             vae_stride_t=self.vae_scale_factor_temporal,
                             vae_stride_h=self.vae_scale_factor_spatial,
                             vae_stride_w=self.vae_scale_factor_spatial,
@@ -3039,7 +3263,9 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                             latents_mean=latents_mean,
                             latents_std=latents_std,
                             vae_dtype=vae_dtype,
-                            warm_latents=_v2v_decode_warm_latents if _v2v_decode_warm_latents is not None else image_latents,
+                            warm_latents=_v2v_decode_warm_latents
+                            if _v2v_decode_warm_latents is not None
+                            else image_latents,
                             warm_repeat=getattr(self, "_geo_first_chunk_decode_warm", 4),
                             warm_as_prior=_warm_is_real_prior,
                         )
@@ -3050,7 +3276,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                         current_video = self.vae.decode(current_latents, return_dict=False)[0]
 
                     if stream_output:
-                        pass                       # streaming: use this chunk only (the downstream hook already wrote it out), no accumulation
+                        pass  # streaming: use this chunk only (the downstream hook already wrote it out), no accumulation
                     elif history_video is None:
                         history_video = current_video
                     else:
@@ -3066,12 +3292,14 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                         # First-chunk cold-start fix: warm the empty feat cache with the clean image/prefix
                         # latent so the first decoded frame isn't an over-saturated I-frame. No-op when
                         # image_latents is None (t2v) or k>0 (cache already warm). See EXP.
-                        warm_latents=_v2v_decode_warm_latents if _v2v_decode_warm_latents is not None else image_latents,
+                        warm_latents=_v2v_decode_warm_latents
+                        if _v2v_decode_warm_latents is not None
+                        else image_latents,
                         warm_repeat=getattr(self, "_geo_first_chunk_decode_warm", 4),
                         warm_as_prior=_warm_is_real_prior,
                     )
                     if stream_output:
-                        pass                       # streaming: same as above, history_video stays None
+                        pass  # streaming: same as above, history_video stays None
                     elif history_video is None:
                         history_video = new_pixels
                     else:
@@ -3092,17 +3320,19 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
                     # Add N decoded frames to FrameBank using 36-stride pixel indices.
                     _geo_num_pix = int(_geo_chunk_decoded.shape[2])
-                    _geo_pix_stride_add = latent_window_size * self.vae_scale_factor_temporal   # 36
-                    _geo_chunk_pixel_start = geo_ref_pose_offset_pix + _geo_pose_k * _geo_pix_stride_add   # events do not advance the cursor (gid stays contiguous, no gaps)
+                    _geo_pix_stride_add = latent_window_size * self.vae_scale_factor_temporal  # 36
+                    _geo_chunk_pixel_start = (
+                        geo_ref_pose_offset_pix + _geo_pose_k * _geo_pix_stride_add
+                    )  # events do not advance the cursor (gid stays contiguous, no gaps)
                     _geo_add_n = int(getattr(self, "_geo_chunk_add_n", 1) or 1)
                     if _geo_add_n == 1:
-                        _geo_frame_offsets = (_geo_num_pix - 1,)                                # last frame
+                        _geo_frame_offsets = (_geo_num_pix - 1,)  # last frame
                     elif _geo_add_n == 3:
-                        _geo_frame_offsets = (0, _geo_num_pix // 2, _geo_num_pix - 1)           # first/mid/last
+                        _geo_frame_offsets = (0, _geo_num_pix // 2, _geo_num_pix - 1)  # first/mid/last
                     else:
                         # Uniformly distributed offsets for arbitrary N.
                         _geo_frame_offsets = tuple(
-                            min(_geo_num_pix - 1, max(0, int(round(i * (_geo_num_pix - 1) / max(1, _geo_add_n - 1)))))
+                            min(_geo_num_pix - 1, max(0, int(round(i * (_geo_num_pix - 1) / max(1, _geo_add_n - 1)))))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
                             for i in range(_geo_add_n)
                         )
                     # EVENT/SKILL skip frame bank (A6): event-chunk (VFX) frames must NOT pollute the warp
@@ -3129,8 +3359,9 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                     # DA3 recall: ingest this chunk's decoded frames (gid=global pixel index) so later chunks can recall them.
                     # Skip for event chunks (A6): VFX frames must not enter the DA3 warp-recall bank either.
                     if (not is_event_k) and geo_state.get("da3_bank") is not None and geo_c2ws_dev is not None:
-                        self._geo_da3_ingest(geo_state, _geo_chunk_decoded[0],
-                                             int(_geo_chunk_pixel_start), geo_c2ws_dev, device)
+                        self._geo_da3_ingest(
+                            geo_state, _geo_chunk_decoded[0], int(_geo_chunk_pixel_start), geo_c2ws_dev, device
+                        )
                         # -- [oracle diagnostic] env EVOKE_ORACLE_REANCHOR_EVERY=N (>0): every N non-event chunks,
                         #    clear the DA3 cloud after this chunk's ingest and rebuild it from GT source video frames -> the next
                         #    chunk's warp renders from the GT cloud. Pure diagnostic cheating (real inference has no GT, never ships in a product recipe), quantifying the warp reconstruction quality ceiling:
@@ -3152,27 +3383,39 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                             _orc_win = int(geo_ref_pose_offset_pix) if int(geo_ref_pose_offset_pix) > 0 else 120
 
                             def _orc_evict():
-                                _n = int(_orc_bank.num_frames)
-                                if _orc_bank.pts:  # clearing = a hard re-anchor blood swap, avoiding GT/on-policy double-image geometry
-                                    _orc_bank.evict_before(max(_orc_bank.pts.keys()) + 1)
+                                _n = int(_orc_bank.num_frames)  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                                if _orc_bank.pts:  # noqa: B023 - Keeps the upstream late binding of the loop variable.  # clearing = a hard re-anchor blood swap, avoiding GT/on-policy double-image geometry
+                                    _orc_bank.evict_before(max(_orc_bank.pts.keys()) + 1)  # noqa: B023 - Keeps the upstream late binding of the loop variable.
                                 return _n
 
                             def _orc_ingest(_fr, _a, _b, _ws):
                                 # exactly like the v2v seed: feed 36-stride segments to _geo_da3_ingest (gid=absolute pixel index,
                                 # pose taken from geo_c2ws_dev[gid] -- the same pose source as the seed/normal ingest, same umeyama scale convention)
-                                self._geo_da3_ingest(geo_state, _fr[:, _a - _ws:_b - _ws],
-                                                     _a, geo_c2ws_dev, device)
+                                self._geo_da3_ingest(geo_state, _fr[:, _a - _ws : _b - _ws], _a, geo_c2ws_dev, device)
 
                             if _oracle_reanchor_maybe(
-                                chunk_num=int(_geo_pose_k) + 1, every=_orc_every,
+                                chunk_num=int(_geo_pose_k) + 1,
+                                every=_orc_every,
                                 window_end=int(_geo_chunk_pixel_start) + int(_geo_num_pix),
-                                window_pix=_orc_win, stride=int(_geo_pix_stride_add), gt_avail=_orc_avail,
+                                window_pix=_orc_win,
+                                stride=int(_geo_pix_stride_add),
+                                gt_avail=_orc_avail,
                                 fetch_fn=lambda _a, _b: _oracle_gt_fetch(
-                                    _orc_cache, _a, _b, int(height), int(width), ref_video=video),
-                                evict_fn=_orc_evict, ingest_fn=_orc_ingest,
+                                    _orc_cache,  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                                    _a,
+                                    _b,
+                                    int(height),
+                                    int(width),
+                                    ref_video=video,
+                                ),
+                                evict_fn=_orc_evict,
+                                ingest_fn=_orc_ingest,
                             ):
-                                print(f"[oracle-reanchor] bank now {int(_orc_bank.num_frames)} GT frames "
-                                      f"(the next chunk's warp renders from the GT cloud)", flush=True)
+                                print(
+                                    f"[oracle-reanchor] bank now {int(_orc_bank.num_frames)} GT frames "
+                                    f"(the next chunk's warp renders from the GT cloud)",
+                                    flush=True,
+                                )
 
             # -- chunk k is done: one line for its phases, written through the bar so tqdm lifts the bar
             #    out of the way instead of letting the text land in the middle of it. Placed at the very
@@ -3191,7 +3434,8 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
                     f"  |  diffusion {_t_diff_s:6.2f}s ({num_inference_steps} steps)"
                     f"  |  decode+dump {_rest_s:6.2f}s"
                     f"  |  total {_t_total_s:6.2f}s",
-                    file=_psys.stdout)
+                    file=_psys.stdout,
+                )
 
         self._current_timestep = None
 
@@ -3201,8 +3445,11 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
         if stream_output:
             # streaming: there is no accumulated history_video to post-process; the caller stitches the segments.
-            print(f"[stream_output] history_video was not accumulated (frames=None); stitch the full video from the per-chunk "
-                  f"segment mp4 files.", flush=True)
+            print(
+                "[stream_output] history_video was not accumulated (frames=None); stitch the full video from the per-chunk "
+                "segment mp4 files.",
+                flush=True,
+            )
             video = None
         elif output_type != "latent":
             if use_geometric_state and bool(
@@ -3306,6 +3553,7 @@ class EvokePipeline(DiffusionPipeline, WanLoraLoaderMixin):
 def _oracle_reanchor_every():
     """env EVOKE_ORACLE_REANCHOR_EVERY -> int N; unset/empty/invalid/negative -> 0 (= off, behaviour unchanged)."""
     import os as _os
+
     try:
         return max(0, int(_os.environ.get("EVOKE_ORACLE_REANCHOR_EVERY", "0") or "0"))
     except (TypeError, ValueError):
@@ -3317,34 +3565,45 @@ def _oracle_gt_avail_pix(cache, ref_video=None):
     if env EVOKE_ORACLE_GT_VIDEO is set -> open the source video and derive it (same fps resampling map as _load_test_clip, result cached);
     unset -> fall back to the length of the pipeline's own ref video tensor (covers the ref section only, hint printed once)."""
     import os as _os
+
     path = (_os.environ.get("EVOKE_ORACLE_GT_VIDEO", "") or "").strip()
     if not path:
         if ref_video is not None and isinstance(ref_video, torch.Tensor) and ref_video.ndim == 5:
             if not cache.get("_hint_ref_fallback"):
                 cache["_hint_ref_fallback"] = True
-                print(f"[oracle-reanchor] EVOKE_ORACLE_GT_VIDEO unset -> GT source falls back to the ref tensor "
-                      f"(covers gid<{int(ref_video.shape[2])} only; every later trigger is skipped as out-of-range)", flush=True)
+                print(
+                    f"[oracle-reanchor] EVOKE_ORACLE_GT_VIDEO unset -> GT source falls back to the ref tensor "
+                    f"(covers gid<{int(ref_video.shape[2])} only; every later trigger is skipped as out-of-range)",
+                    flush=True,
+                )
             return int(ref_video.shape[2])
         return None
     if "avail" not in cache:
         try:
             from video_reader import PyVideoReader
+
             src_fps = float(_os.environ.get("EVOKE_ORACLE_GT_FPS", "30") or 30.0)
             start_s = float(_os.environ.get("EVOKE_ORACLE_GT_START", "0") or 0.0)
             vr = PyVideoReader(path, threads=0)
             total_src = int(vr.get_shape()[0])
-            start_src = int(round(start_s * src_fps))
+            start_src = int(round(start_s * src_fps))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
             # max target frame count p_avail: for every p < p_avail, start_src + round(p*src_fps/24) < total_src
             # (byte-for-byte the same index mapping as ev_validation._load_test_clip).
             p = max(0, int((total_src - start_src) * 24.0 / src_fps) + 2)
             while p > 0 and start_src + round((p - 1) * src_fps / 24.0) >= total_src:
                 p -= 1
             cache.update(vr=vr, total_src=total_src, src_fps=src_fps, start_src=start_src, avail=int(p))
-            print(f"[oracle-reanchor] GT source opened: {path} total_src={total_src} "
-                  f"src_fps={src_fps} start_src={start_src} → avail {p} target(24fps) frames", flush=True)
+            print(
+                f"[oracle-reanchor] GT source opened: {path} total_src={total_src} "
+                f"src_fps={src_fps} start_src={start_src} → avail {p} target(24fps) frames",
+                flush=True,
+            )
         except Exception as _e:
-            print(f"[oracle-reanchor] WARN GT source open failed ({type(_e).__name__}: {_e}) "
-                  f"-> every oracle trigger will be skipped", flush=True)
+            print(
+                f"[oracle-reanchor] WARN GT source open failed ({type(_e).__name__}: {_e}) "
+                f"-> every oracle trigger will be skipped",
+                flush=True,
+            )
             cache["avail"] = None
     return cache.get("avail")
 
@@ -3354,38 +3613,49 @@ def _oracle_gt_fetch(cache, pix_a, pix_b, height, width, ref_video=None):
     env source: replicates the fps resampling + centre crop + resize of ev_validation._load_test_clip -> same distribution and
     geometry as the frames the v2v ref seed feeds into the bank (same K_pix convention). Returns [3,N,H,W] fp32 CPU in [-1,1] or None."""
     import os as _os
+
     path = (_os.environ.get("EVOKE_ORACLE_GT_VIDEO", "") or "").strip()
     if not path:
-        if (ref_video is not None and isinstance(ref_video, torch.Tensor) and ref_video.ndim == 5
-                and int(pix_b) <= int(ref_video.shape[2])):
-            return ref_video[0, :, int(pix_a):int(pix_b)].detach().float().cpu()
+        if (
+            ref_video is not None
+            and isinstance(ref_video, torch.Tensor)
+            and ref_video.ndim == 5
+            and int(pix_b) <= int(ref_video.shape[2])
+        ):
+            return ref_video[0, :, int(pix_a) : int(pix_b)].detach().float().cpu()
         return None
     if cache.get("avail") is None or int(pix_b) > int(cache["avail"]):
         return None
     try:
         import torchvision as _tv
-        vr = cache["vr"]; src_fps = cache["src_fps"]; start_src = cache["start_src"]
+
+        vr = cache["vr"]
+        src_fps = cache["src_fps"]
+        start_src = cache["start_src"]
         idxs = [start_src + round(p * src_fps / 24.0) for p in range(int(pix_a), int(pix_b))]
         import numpy as _np
-        fr = torch.from_numpy(_np.asarray(vr.get_batch(idxs))).float()   # [N,h,w,3] 0..255
-        v = ((fr / 127.5) - 1.0).permute(0, 3, 1, 2)                      # [N,3,h,w] in [-1,1]
-        _, _, h, w = v.shape                                              # centre crop: same as _load_test_clip
-        target_ar = float(height) / float(width); src_ar = float(h) / float(w)
+
+        fr = torch.from_numpy(_np.asarray(vr.get_batch(idxs))).float()  # [N,h,w,3] 0..255
+        v = ((fr / 127.5) - 1.0).permute(0, 3, 1, 2)  # [N,3,h,w] in [-1,1]
+        _, _, h, w = v.shape  # centre crop: same as _load_test_clip
+        target_ar = float(height) / float(width)
+        src_ar = float(h) / float(w)
         if src_ar >= target_ar:
-            nh = int(w * target_ar); top = (h - nh) // 2
-            v = v[:, :, top:top + nh, :]
+            nh = int(w * target_ar)
+            top = (h - nh) // 2
+            v = v[:, :, top : top + nh, :]
         else:
-            nw = int(h / target_ar); left = (w - nw) // 2
-            v = v[:, :, :, left:left + nw]
+            nw = int(h / target_ar)
+            left = (w - nw) // 2
+            v = v[:, :, :, left : left + nw]
         v = _tv.transforms.functional.resize(v, (int(height), int(width)))
-        return v.permute(1, 0, 2, 3).contiguous()                         # [3,N,H,W]
+        return v.permute(1, 0, 2, 3).contiguous()  # [3,N,H,W]
     except Exception as _e:
         print(f"[oracle-reanchor] WARN GT frame read failed ({type(_e).__name__}: {_e})", flush=True)
         return None
 
 
-def _oracle_reanchor_maybe(chunk_num, every, window_end, window_pix, stride, gt_avail,
-                           fetch_fn, evict_fn, ingest_fn):
+def _oracle_reanchor_maybe(chunk_num, every, window_end, window_pix, stride, gt_avail, fetch_fn, evict_fn, ingest_fn):
     """[oracle diagnostic] pure control logic (no torch/bank dependency, so it can be unit-tested with CPU mocks): decides whether
     chunk number chunk_num (1-based, non-event) triggers a GT hard re-anchor at its end, and orchestrates evict -> segmented ingest in the v2v seed convention.
       only triggers when chunk_num % every == 0 (every<=0 -> never, fully disabled).
@@ -3397,19 +3667,28 @@ def _oracle_reanchor_maybe(chunk_num, every, window_end, window_pix, stride, gt_
     every = int(every)
     if every <= 0 or int(chunk_num) % every != 0:
         return False
-    ws = max(0, int(window_end) - int(window_pix)); we = int(window_end)
+    ws = max(0, int(window_end) - int(window_pix))
+    we = int(window_end)
     if gt_avail is None or we > int(gt_avail):
-        print(f"[oracle-reanchor] chunk={int(chunk_num)} SKIP: window [{ws}..{we - 1}] beyond the GT available range "
-              f"(gt_avail={gt_avail}; the relative_replay tail has no GT) -> keeping the on-policy cloud", flush=True)
+        print(
+            f"[oracle-reanchor] chunk={int(chunk_num)} SKIP: window [{ws}..{we - 1}] beyond the GT available range "
+            f"(gt_avail={gt_avail}; the relative_replay tail has no GT) -> keeping the on-policy cloud",
+            flush=True,
+        )
         return False
     frames = fetch_fn(ws, we)
     if frames is None:
-        print(f"[oracle-reanchor] chunk={int(chunk_num)} SKIP: GT frame read failed [{ws}..{we - 1}] "
-              f"-> keeping the on-policy cloud", flush=True)
+        print(
+            f"[oracle-reanchor] chunk={int(chunk_num)} SKIP: GT frame read failed [{ws}..{we - 1}] "
+            f"-> keeping the on-policy cloud",
+            flush=True,
+        )
         return False
     n_evicted = evict_fn()
     for seg_a in range(ws, we, max(1, int(stride))):
         ingest_fn(frames, seg_a, min(seg_a + max(1, int(stride)), we), ws)
-    print(f"[oracle-reanchor] chunk={int(chunk_num)} evicted={n_evicted} "
-          f"reingested GT frames [{ws}..{we - 1}]", flush=True)
+    print(
+        f"[oracle-reanchor] chunk={int(chunk_num)} evicted={n_evicted} reingested GT frames [{ws}..{we - 1}]",
+        flush=True,
+    )
     return True

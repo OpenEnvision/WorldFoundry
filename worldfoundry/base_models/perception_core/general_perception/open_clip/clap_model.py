@@ -1,5 +1,4 @@
 """CLAP model."""
-from typing import Optional
 
 import numpy as np
 import torch
@@ -11,15 +10,9 @@ from .model import CLIPTextCfg, _build_text_tower
 
 
 def _build_audio_tower(
-        embed_dim: int,
-        audio_cfg: CLIPAudioCfg,
+    embed_dim: int,
+    audio_cfg: CLIPAudioCfg,
 ):
-    """Helper function to build audio tower.
-
-    Args:
-        embed_dim: The embed dim.
-        audio_cfg: The audio cfg.
-    """
     from .audio.tower import AudioTower
 
     return AudioTower(audio_cfg, embed_dim)
@@ -31,37 +24,24 @@ class CLAP(nn.Module):
     output_dict: torch.jit.Final[bool]
 
     def __init__(
-            self,
-            embed_dim: int,
-            audio_cfg: CLIPAudioCfg,
-            text_cfg: CLIPTextCfg,
-            quick_gelu: bool = False,
-            init_logit_scale: float = np.log(1 / 0.07),
-            init_logit_bias: Optional[float] = None,
-            nonscalar_logit_scale: bool = False,
-            cast_dtype: Optional[torch.dtype] = None,
-            output_dict: bool = False,
+        self,
+        embed_dim: int,
+        audio_cfg: CLIPAudioCfg,
+        text_cfg: CLIPTextCfg,
+        quick_gelu: bool = False,
+        init_logit_scale: float = np.log(1 / 0.07),
+        init_logit_bias: float | None = None,
+        nonscalar_logit_scale: bool = False,
+        cast_dtype: torch.dtype | None = None,
+        output_dict: bool = False,
     ):
-        """Init.
-
-        Args:
-            embed_dim: The embed dim.
-            audio_cfg: The audio cfg.
-            text_cfg: The text cfg.
-            quick_gelu: The quick gelu.
-            init_logit_scale: The init logit scale.
-            init_logit_bias: The init logit bias.
-            nonscalar_logit_scale: The nonscalar logit scale.
-            cast_dtype: The cast dtype.
-            output_dict: The output dict.
-        """
         super().__init__()
         self.output_dict = output_dict
         self.audio = _build_audio_tower(embed_dim, audio_cfg)
         self.text = _build_text_tower(embed_dim, text_cfg, quick_gelu, cast_dtype)
         self.context_length = self.text.context_length
         self.vocab_size = self.text.vocab_size
-        self._training_head = getattr(self.audio, 'training_head', False)
+        self._training_head = getattr(self.audio, "training_head", False)
 
         lshape = [1] if nonscalar_logit_scale else []
         self.logit_scale = nn.Parameter(torch.ones(lshape) * init_logit_scale)
@@ -71,65 +51,31 @@ class CLAP(nn.Module):
             self.logit_bias = None
 
     def lock_text_tower(self, unlocked_layers: int = 0, freeze_layer_norm: bool = True):
-        """Lock text tower.
-
-        Args:
-            unlocked_layers: The unlocked layers.
-            freeze_layer_norm: The freeze layer norm.
-        """
         self.text.lock(unlocked_layers, freeze_layer_norm)
 
-    def set_grad_checkpointing(self, enable: bool = True, impl: str = 'inline'):
-        """Set grad checkpointing.
-
-        Args:
-            enable: The enable.
-            impl: The impl.
-        """
+    def set_grad_checkpointing(self, enable: bool = True, impl: str = "inline"):
         self.audio.set_grad_checkpointing(enable, impl=impl)
         self.text.set_grad_checkpointing(enable, impl=impl)
 
     def no_weight_decay(self):
-        """No weight decay."""
         no_wd = set()
-        if hasattr(self.audio, 'no_weight_decay'):
+        if hasattr(self.audio, "no_weight_decay"):
             for n in self.audio.no_weight_decay():
-                no_wd.add('audio.' + n)
-        if hasattr(self.text, 'no_weight_decay'):
+                no_wd.add("audio." + n)
+        if hasattr(self.text, "no_weight_decay"):
             for n in self.text.no_weight_decay():
-                no_wd.add('text.' + n)
+                no_wd.add("text." + n)
         return no_wd
 
     def encode_audio(self, audio, normalize: bool = False):
-        """Encode audio.
-
-        Args:
-            audio: The audio.
-            normalize: The normalize.
-        """
-        if self._training_head:
-            features = self.audio(audio, apply_proj=False)
-        else:
-            features = self.audio(audio)
+        features = self.audio(audio, apply_proj=False) if self._training_head else self.audio(audio)
         return F.normalize(features, dim=-1) if normalize else features
 
     def encode_text(self, text, normalize: bool = False):
-        """Encode text.
-
-        Args:
-            text: The text.
-            normalize: The normalize.
-        """
         features = self.text(text)
         return F.normalize(features, dim=-1) if normalize else features
 
     def get_logits(self, audio, text):
-        """Get logits.
-
-        Args:
-            audio: The audio.
-            text: The text.
-        """
         audio_features = self.encode_audio(audio, normalize=True)
         text_features = self.encode_text(text, normalize=True)
         audio_logits = self.logit_scale.exp() * audio_features @ text_features.T
@@ -139,16 +85,10 @@ class CLAP(nn.Module):
         return audio_logits, text_logits
 
     def forward(
-            self,
-            audio=None,
-            text: Optional[torch.Tensor] = None,
+        self,
+        audio=None,
+        text: torch.Tensor | None = None,
     ):
-        """Forward.
-
-        Args:
-            audio: The audio.
-            text: The text.
-        """
         if self._training_head and audio is not None:
             audio_features = self.encode_audio(audio, normalize=True)
             audio_features = self.audio.proj(audio_features)
@@ -164,7 +104,7 @@ class CLAP(nn.Module):
                 "logit_scale": self.logit_scale.exp(),
             }
             if self.logit_bias is not None:
-                out_dict['logit_bias'] = self.logit_bias.clone()
+                out_dict["logit_bias"] = self.logit_bias.clone()
             return out_dict
 
         if self.logit_bias is not None:

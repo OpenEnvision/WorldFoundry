@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Union
+from typing import Any, ClassVar
 
 from PIL import Image
 
@@ -67,7 +68,7 @@ class WoWArgs:
         self.offload_prompt_refiner = offload_prompt_refiner
         self.negative_prompt = negative_prompt
 
-    def replace(self, **overrides: Any) -> "WoWArgs":
+    def replace(self, **overrides: Any) -> WoWArgs:
         values = {
             name: getattr(self, name)
             for name in (
@@ -104,13 +105,13 @@ class WoWArgs:
 class WoWPipeline(PipelineABC):
     """Public WoW pipeline backed by canonical diffusion runtimes."""
 
-    MODEL_ID = "wow"
+    MODEL_ID: ClassVar[str] = "wow"  # ty: ignore[invalid-mutable-override]  # each pipeline binds one model id
 
     def __init__(
         self,
-        operator: Optional[WoWOperator] = None,
-        synthesis_model: Optional[WoWSynthesis] = None,
-        synthesis_args: Optional[WoWArgs] = None,
+        operator: WoWOperator | None = None,
+        synthesis_model: WoWSynthesis | None = None,
+        synthesis_args: WoWArgs | None = None,
         device: str = "cuda",
         model_id: str = MODEL_ID,
     ) -> None:
@@ -121,16 +122,16 @@ class WoWPipeline(PipelineABC):
         self.device = device
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[Union[str, Mapping[str, Any]]] = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        model_path: str | Mapping[str, Any] | None = None,
+        required_components: dict[str, Any] | None = None,
         synthesis_model_path: str = "X-Humanoid/WoW-1-Wan-14B-600k",
-        synthesis_args: Optional[WoWArgs] = None,
-        device: Optional[str] = None,
+        synthesis_args: WoWArgs | None = None,
+        device: str | None = None,
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "WoWPipeline":
+    ) -> WoWPipeline:
         """Create a WoWPipeline from local checkpoint components."""
 
         component_options: dict[str, Any] = dict(required_components or {})
@@ -172,9 +173,9 @@ class WoWPipeline(PipelineABC):
 
     def process(
         self,
-        input_path: Union[str, Path, Image.Image],
+        input_path: str | Path | Image.Image,
         text_prompt: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
 
         processed_perception = self.operator.process_perception(input_path)
@@ -192,34 +193,34 @@ class WoWPipeline(PipelineABC):
 
     def __call__(
         self,
-        input_path: Union[str, Path, Image.Image, None] = None,
-        text_prompt: Optional[str] = None,
-        prompt: Optional[str] = None,
+        input_path: str | Path | Image.Image | None = None,
+        text_prompt: str | None = None,
+        prompt: str | None = None,
         images: Any = None,
         image: Any = None,
         video: Any = None,
         ref_image_path: Any = None,
-        args: Optional[WoWArgs] = None,
-        steps: Optional[int] = None,
-        seed: Optional[int] = None,
-        num_frames: Optional[int] = None,
-        frames: Optional[int] = None,
-        no_tiled: Optional[bool] = None,
+        args: WoWArgs | None = None,
+        steps: int | None = None,
+        seed: int | None = None,
+        num_frames: int | None = None,
+        frames: int | None = None,
+        no_tiled: bool | None = None,
         output_path: str | Path | None = None,
         return_dict: bool = False,
-        fps: Optional[int] = None,
-        output_fps: Optional[int] = None,
-        runtime_backend: Optional[str] = None,
-        model_size: Optional[str] = None,
-        resolution: Optional[str] = None,
-        dit_path: Optional[str] = None,
-        num_conditional_frames: Optional[int] = None,
-        guidance: Optional[float] = None,
-        num_sampling_step: Optional[int] = None,
-        num_gpus: Optional[int] = None,
-        disable_guardrail: Optional[bool] = None,
-        disable_prompt_refiner: Optional[bool] = None,
-        negative_prompt: Optional[str] = None,
+        fps: int | None = None,
+        output_fps: int | None = None,
+        runtime_backend: str | None = None,
+        model_size: str | None = None,
+        resolution: str | None = None,
+        dit_path: str | None = None,
+        num_conditional_frames: int | None = None,
+        guidance: float | None = None,
+        num_sampling_step: int | None = None,
+        num_gpus: int | None = None,
+        disable_guardrail: bool | None = None,
+        disable_prompt_refiner: bool | None = None,
+        negative_prompt: str | None = None,
         operator_kwargs: Mapping[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:

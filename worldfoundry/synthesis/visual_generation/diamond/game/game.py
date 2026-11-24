@@ -1,5 +1,4 @@
 from collections import OrderedDict
-from typing import Tuple, Union
 
 import numpy as np
 import pygame
@@ -13,9 +12,9 @@ from .play_env import PlayEnv
 class Game:
     def __init__(
         self,
-        play_env: Union[PlayEnv, DatasetEnv],
+        play_env: PlayEnv | DatasetEnv,
         keymap: Keymap,
-        size: Tuple[int, int],
+        size: tuple[int, int],
         fps: int,
         verbose: bool,
     ) -> None:
@@ -113,8 +112,8 @@ class Game:
 
             if action == 0:
                 pressed = pygame.key.get_pressed()
-                for keys, action in self.keymap.items():
-                    if all([pressed[key] for key in keys]):
+                for keys, action in self.keymap.items():  # noqa: B007 - The loop variable is read outside the loop.
+                    if all([pressed[key] for key in keys]):  # noqa: C419 - Evaluates every element before testing, as upstream.
                         break
                 else:
                     action = 0

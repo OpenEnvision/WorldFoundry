@@ -112,26 +112,40 @@ PAPER_MEDIA_PATH = DOCS_ROOT / "lib" / "model-paper-media.json"
 
 # Inference specs expose resolved default paths. Pin their path environment so
 # checked-in docs do not depend on the developer's home, cache, or adjacent
-# checkpoint directories.
-CANONICAL_PROJECT_ROOT = "/workspace"
+# checkpoint directories. The project root is a checkout inside the container
+# working directory (/workspace in docker/Dockerfile).
+CANONICAL_PROJECT_ROOT = "/workspace/WorldFoundry"
 CANONICAL_PACKAGE_ROOT = f"{CANONICAL_PROJECT_ROOT}/worldfoundry"
 CANONICAL_HOME = "/home/ubuntu/.cache/worldfoundry"
+# Defaults resolved through realpath map back to the canonical home; on macOS
+# /home is a firmlink that realpath expands. On multi-user Linux hosts where
+# /home/ubuntu exists with 0750 permissions, probing paths underneath it raises
+# PermissionError, so route env defaults through a nonexistent prefix and map
+# back to CANONICAL_HOME in portable_doc_value().
+try:
+    Path(CANONICAL_HOME).exists()
+    _DOCS_ENV_HOME = CANONICAL_HOME
+except OSError:
+    _DOCS_ENV_HOME = "/nonexistent/worldfoundry-docs-home"
+CANONICAL_HOME_RESOLVED = str(Path(CANONICAL_HOME).resolve())
+_DOCS_ENV_HOME_RESOLVED = str(Path(_DOCS_ENV_HOME).resolve())
 os.environ.update(
     {
-        "WORLDFOUNDRY_HOME": CANONICAL_HOME,
-        "WORLDFOUNDRY_CACHE_DIR": CANONICAL_HOME,
-        "WORLDFOUNDRY_DATA_DIR": f"{CANONICAL_HOME}/data",
-        "WORLDFOUNDRY_ARTIFACT_DIR": f"{CANONICAL_HOME}/artifacts",
-        "WORLDFOUNDRY_MODEL_DIR": f"{CANONICAL_HOME}/models",
-        "WORLDFOUNDRY_MODEL_SOURCE_DIR": f"{CANONICAL_HOME}/official_runtime_repos",
-        "WORLDFOUNDRY_GITHUB_REPOS_ROOT": f"{CANONICAL_HOME}/official_runtime_repos",
-        "WORLDFOUNDRY_CKPT_DIR": f"{CANONICAL_HOME}/checkpoints",
-        "WORLDFOUNDRY_HFD_ROOT": f"{CANONICAL_HOME}/checkpoints/hfd",
+        "WORLDFOUNDRY_HOME": _DOCS_ENV_HOME,
+        "WORLDFOUNDRY_CACHE_DIR": _DOCS_ENV_HOME,
+        "WORLDFOUNDRY_DATA_DIR": f"{_DOCS_ENV_HOME}/data",
+        "WORLDFOUNDRY_ARTIFACT_DIR": f"{_DOCS_ENV_HOME}/artifacts",
+        "WORLDFOUNDRY_MODEL_DIR": f"{_DOCS_ENV_HOME}/models",
+        "WORLDFOUNDRY_MODEL_SOURCE_DIR": f"{_DOCS_ENV_HOME}/official_runtime_repos",
+        "WORLDFOUNDRY_GITHUB_REPOS_ROOT": f"{_DOCS_ENV_HOME}/official_runtime_repos",
+        "WORLDFOUNDRY_CKPT_DIR": f"{_DOCS_ENV_HOME}/checkpoints",
+        "WORLDFOUNDRY_HFD_ROOT": f"{_DOCS_ENV_HOME}/checkpoints/hfd",
     }
 )
 
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from generate_model_home_prose import task_phrase_en as prose_task_phrase_en  # noqa: E402
 from model_page_mdx import sync_model_pages  # noqa: E402
 
 from worldfoundry.cli.model_run import load_model_run_schema  # noqa: E402
@@ -187,7 +201,6 @@ STATUS_ORDER = {
 # Docs catalog hides blocked 3D/4D entries.
 # Extra IDs are runtime/profile rows of a model that already has a public recipe.
 DOCS_EXCLUDED_RECIPE_IDS: set[str] = {
-    "dust3r-base-model",
     "dreamx-world-5b-cam",
     "matrix-game-3.5-third-person",
     "minwm-wan-action2v",
@@ -213,6 +226,10 @@ def as_list(value: Any) -> list[Any]:
     if isinstance(value, list):
         return value
     return [value]
+
+
+def as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def text(value: Any) -> str | None:
@@ -256,13 +273,14 @@ def _canonical_catalog_defaults() -> Generator[None, None, None]:
     from unittest.mock import patch
 
     from worldfoundry.studio.inference import catalog
+    from worldfoundry.studio.inference.catalog import resolve as catalog_resolve
 
     catalog.discover_catalog.cache_clear()
     try:
         with (
-            patch.object(catalog, "_checkpoint_model_ref", _canonical_checkpoint_ref),
-            patch.object(catalog, "_prefer_existing_model_ref", _first_model_ref),
-            patch.object(catalog, "_local_root_with_files", return_value=""),
+            patch.object(catalog_resolve, "_checkpoint_model_ref", _canonical_checkpoint_ref),
+            patch.object(catalog_resolve, "_prefer_existing_model_ref", _first_model_ref),
+            patch.object(catalog_resolve, "_local_root_with_files", return_value=""),
         ):
             yield
     finally:
@@ -282,6 +300,9 @@ def portable_doc_value(value: Any) -> Any:
         if value == sys.executable:
             return "python3"
         replacements = (
+            (_DOCS_ENV_HOME_RESOLVED, CANONICAL_HOME),
+            (_DOCS_ENV_HOME, CANONICAL_HOME),
+            (CANONICAL_HOME_RESOLVED, CANONICAL_HOME),
             (str(ROOT.parent / "ckpts") + "/", f"{CANONICAL_HOME}/checkpoints/"),
             (str(ROOT.parent / "ckpt") + "/", f"{CANONICAL_HOME}/checkpoints/"),
             (str(ROOT / "worldfoundry"), CANONICAL_PACKAGE_ROOT),
@@ -352,7 +373,7 @@ def status_data(item: dict[str, Any], profile: dict[str, Any] | None) -> dict[st
         get_status(item.get("integration")) or text(item.get("integration_status")) or text(item.get("status"))
     )
     if not integration and profile:
-        execution = profile.get("execution") if isinstance(profile.get("execution"), dict) else {}
+        execution = as_dict(profile.get("execution"))
         integration = (
             get_status(profile.get("integration"))
             or text(profile.get("integration_status"))
@@ -406,6 +427,21 @@ def profile_candidates(item: dict[str, Any], model_id: str) -> list[str]:
     )
 
 
+def profile_environment(
+    profile: dict[str, Any] | None, requested_id: str, environments: dict[str, dict[str, Any]]
+) -> list[str]:
+    """Environment named by ``execution.environment``, resolved like ``model_env_install.sh``.
+
+    An environment manifest for the requested model or variant id wins; otherwise the
+    runtime profile's environment applies, and ``_unified`` keeps the default lookup.
+    """
+
+    name = text(as_dict(profile.get("execution")).get("environment")) if profile else None
+    if not name or name == "_unified" or requested_id in environments:
+        return []
+    return [name]
+
+
 def select_manifest(
     index: dict[str, dict[str, Any]], candidates: list[str]
 ) -> tuple[str | None, dict[str, Any] | None]:
@@ -456,7 +492,7 @@ def source_links(item: dict[str, Any], profile: dict[str, Any] | None) -> list[d
             entry["revision"] = normalized_revision
         links.append(entry)
 
-    official = item.get("official_sources") if isinstance(item.get("official_sources"), dict) else {}
+    official = as_dict(item.get("official_sources"))
     for key, label, kind in [
         ("project_page", "Project", "project"),
         ("paper", "Paper", "paper"),
@@ -475,7 +511,7 @@ def source_links(item: dict[str, Any], profile: dict[str, Any] | None) -> list[d
         else:
             add("source", "GitHub", record)
 
-    source = item.get("source") if isinstance(item.get("source"), dict) else {}
+    source = as_dict(item.get("source"))
     for key in ("official_repo_url", "repo_url", "github", "url"):
         value = source.get(key)
         if isinstance(value, dict):
@@ -488,8 +524,8 @@ def source_links(item: dict[str, Any], profile: dict[str, Any] | None) -> list[d
         f"https://huggingface.co/{source['hf_repo_id']}" if source.get("hf_repo_id") else None,
     )
 
-    source_status = item.get("source_status") if isinstance(item.get("source_status"), dict) else {}
-    github_status = source_status.get("github") if isinstance(source_status.get("github"), dict) else {}
+    source_status = as_dict(item.get("source_status"))
+    github_status = as_dict(source_status.get("github"))
     add("source", "GitHub", github_status.get("url"), github_status.get("head_sha"))
 
     for record in as_list(official.get("huggingface")):
@@ -559,7 +595,7 @@ def checkpoint_data(item: dict[str, Any], profile: dict[str, Any] | None) -> lis
 
     for record in as_list(item.get("checkpoints")) + as_list(item.get("checkpoint_refs")):
         add(record)
-    checkpoint = item.get("checkpoint") if isinstance(item.get("checkpoint"), dict) else {}
+    checkpoint = as_dict(item.get("checkpoint"))
     for record in as_list(checkpoint.get("repos")):
         add(record)
     for variant in as_list(item.get("variants")):
@@ -569,7 +605,7 @@ def checkpoint_data(item: dict[str, Any], profile: dict[str, Any] | None) -> lis
     if profile:
         for record in as_list(profile.get("checkpoints")):
             add(record)
-    source = item.get("source") if isinstance(item.get("source"), dict) else {}
+    source = as_dict(item.get("source"))
     if source.get("hf_repo_id"):
         add({"repo_id": source.get("hf_repo_id"), "license": source.get("license")})
     return output
@@ -583,14 +619,14 @@ def provider_name(item: dict[str, Any], links: list[dict[str, str]], checkpoints
     for candidate in (curated.get("publisher"), item.get("publisher"), item.get("organization")):
         normalized = text(candidate)
         if normalized:
-            return normalized
-    for key in ("developer", "organization", "family"):
-        candidate = text(item.get(key))
-        if candidate:
-            return candidate
+            # A recorded "institution not recorded" placeholder means the publisher is unknown.
+            return "" if re.search(r"not recorded|未记录", normalized, re.IGNORECASE) else normalized
+    candidate = text(item.get("developer"))
+    if candidate:
+        return candidate
     raw_provider = text(item.get("provider"))
     if raw_provider and raw_provider not in {"official_repo", "hosted_api", "pipeline", "local"}:
-        return humanize(raw_provider)
+        return raw_provider if re.search(r"[A-Z]", raw_provider) else humanize(raw_provider)
     for checkpoint in checkpoints:
         if "/" in checkpoint["id"]:
             return checkpoint["id"].split("/", 1)[0]
@@ -642,7 +678,7 @@ def variant_data(
             )
         )
         profile_id, profile = select_manifest(profiles, profile_candidates)
-        profile_execution = profile.get("execution") if profile and isinstance(profile.get("execution"), dict) else {}
+        profile_execution = as_dict(profile.get("execution")) if profile else {}
         profile_integration = get_status(profile.get("integration")) if profile else None
         integration = get_status(variant.get("integration")) or profile_integration
         integration = integration or text(profile_execution.get("integration_status")) or default_status["integration"]
@@ -665,7 +701,10 @@ def variant_data(
                 text(item.get("id") or item.get("model_id")),
             )
         )
-        environment_candidates = [candidate.removeprefix("runtime-profile:") for candidate in environment_candidates]
+        environment_candidates = [
+            *profile_environment(profile, variant_id, environments),
+            *(candidate.removeprefix("runtime-profile:") for candidate in environment_candidates),
+        ]
         environment_id, environment = select_manifest(environments, environment_candidates)
         if environment is None and profile is not None:
             environment_id, environment = "_unified", unified_environment
@@ -679,9 +718,9 @@ def variant_data(
             binding,
             unified_environment,
         )
-        pipeline = binding.get("pipeline") if binding and isinstance(binding.get("pipeline"), dict) else {}
-        loading = pipeline.get("loading") if isinstance(pipeline.get("loading"), dict) else {}
-        invocation = pipeline.get("invocation") if isinstance(pipeline.get("invocation"), dict) else {}
+        pipeline = as_dict(binding.get("pipeline")) if binding else {}
+        loading = as_dict(pipeline.get("loading"))
+        invocation = as_dict(pipeline.get("invocation"))
         variant_item = {**item, **variant}
         entry = {
             "id": variant_id,
@@ -759,10 +798,10 @@ def runtime_data(
     binding: dict[str, Any] | None,
     unified_environment: dict[str, Any],
 ) -> dict[str, Any]:
-    execution = profile.get("execution") if profile and isinstance(profile.get("execution"), dict) else {}
-    pipeline = binding.get("pipeline") if binding and isinstance(binding.get("pipeline"), dict) else {}
-    loading = pipeline.get("loading") if isinstance(pipeline.get("loading"), dict) else {}
-    invocation = pipeline.get("invocation") if isinstance(pipeline.get("invocation"), dict) else {}
+    execution = as_dict(profile.get("execution")) if profile else {}
+    pipeline = as_dict(binding.get("pipeline")) if binding else {}
+    loading = as_dict(pipeline.get("loading"))
+    invocation = as_dict(pipeline.get("invocation"))
     pip_packages = unique_strings(as_list(environment.get("pip_packages")) if environment else [])
     conda_packages = unique_strings(as_list(environment.get("conda_packages")) if environment else [])
     env_name = text(environment.get("env_name")) if environment else None
@@ -809,7 +848,9 @@ def runtime_data(
 
 
 def input_contract(profile: dict[str, Any] | None) -> list[dict[str, str]]:
-    schema = profile.get("input_schema") if profile else None
+    if not profile:
+        return []
+    schema = profile.get("input_schema")
     if not isinstance(schema, dict):
         return []
     output: list[dict[str, str]] = []
@@ -858,10 +899,29 @@ def artifact_data(item: dict[str, Any], profile: dict[str, Any] | None) -> list[
     return output
 
 
+# The shared ``interactive-video`` profile is the default `wf run` / Studio route
+# for every category, so its display label follows what the model produces.
+DEFAULT_PROFILE_LABELS = {
+    "video": "Video generation",
+    "world_models": "World model rollout",
+    "vla_va_wam": "Policy rollout",
+    "three_d_four_d": "3D/4D inference",
+    "multimodal": "Multimodal inference",
+    "hosted_api": "Hosted generation",
+}
+
+
+def task_label(task_id: str, category_id: str) -> str:
+    if task_id == "interactive-video":
+        return DEFAULT_PROFILE_LABELS.get(category_id, "Default inference")
+    return humanize(task_id)
+
+
 def inference_task_data(
     item: dict[str, Any],
     profile: dict[str, Any] | None,
     variant_records: list[dict[str, Any]],
+    category_id: str = "",
 ) -> list[dict[str, Any]]:
     """Use the installed CLI contract for executable task ids and options."""
     model_id = text(item.get("id") or item.get("model_id")) or ""
@@ -891,7 +951,7 @@ def inference_task_data(
             output.append(
                 {
                     "id": task_id,
-                    "label": humanize(task_id),
+                    "label": task_label(task_id, category_id),
                     "description": f"Run {schema.display_name} through the public CLI contract.",
                     "source": "cli",
                     "variantIds": [run_id] if variant_records else [],
@@ -906,10 +966,10 @@ def inference_task_data(
 
 
 def recipe_notes(item: dict[str, Any], profile: dict[str, Any] | None) -> list[str]:
-    integration = item.get("integration") if isinstance(item.get("integration"), dict) else {}
-    runner = item.get("runner_parity") if isinstance(item.get("runner_parity"), dict) else {}
-    demo = item.get("demo_parity") if isinstance(item.get("demo_parity"), dict) else {}
-    checkpoint = item.get("checkpoint") if isinstance(item.get("checkpoint"), dict) else {}
+    integration = as_dict(item.get("integration"))
+    runner = as_dict(item.get("runner_parity"))
+    demo = as_dict(item.get("demo_parity"))
+    checkpoint = as_dict(item.get("checkpoint"))
     return unique_strings(
         [
             *as_list(item.get("notes")),
@@ -1020,22 +1080,6 @@ MODALITY_TOKEN_MAP = {
     "point-cloud": "point cloud",
 }
 
-MODALITY_LABELS_ZH = {
-    "text": "文本",
-    "image": "图像",
-    "video": "视频",
-    "audio": "音频",
-    "action": "动作",
-    "depth": "深度",
-    "trajectory": "轨迹",
-    "camera pose": "相机位姿",
-    "3D scene": "3D 场景",
-    "4D scene": "4D 场景",
-    "world state": "世界状态",
-    "mesh": "网格",
-    "point cloud": "点云",
-}
-
 
 def load_benchmark_status() -> dict[str, dict[str, Any]]:
     if not BENCH_STATUS_PATH.exists():
@@ -1058,12 +1102,14 @@ PAPER_MEDIA = load_paper_media()
 
 
 def paper_media_for(model_id: str, docs: dict[str, Any]) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
-    extra = PAPER_MEDIA.get(model_id) if isinstance(PAPER_MEDIA.get(model_id), dict) else {}
-    paper = extra.get("paper") if isinstance(extra.get("paper"), dict) else None
+    extra = as_dict(PAPER_MEDIA.get(model_id))
+    harvested_paper = extra.get("paper")
+    paper = harvested_paper if isinstance(harvested_paper, dict) else None
     curated_paper = docs.get("paper") if isinstance(docs.get("paper"), dict) else None
     if curated_paper:
         paper = {**(paper or {}), **curated_paper}
-    figures = extra.get("figures") if isinstance(extra.get("figures"), list) else []
+    harvested_figures = extra.get("figures")
+    figures = harvested_figures if isinstance(harvested_figures, list) else []
     curated_figures = docs.get("figures") if isinstance(docs.get("figures"), list) else []
     if curated_figures:
         figures = curated_figures
@@ -1135,21 +1181,6 @@ def evidence_texts(item: dict[str, Any]) -> list[str]:
             for key in ("integration", "runner_parity", "demo_parity"):
                 collect(variant.get(key))
     return texts
-
-
-def parity_note_quotes(item: dict[str, Any], limit: int = 4) -> list[str]:
-    quotes: list[str] = []
-    for key in ("runner_parity", "demo_parity"):
-        record = item.get(key)
-        if isinstance(record, dict):
-            quotes.extend(as_list(record.get("notes")))
-    for variant in as_list(item.get("variants")):
-        if isinstance(variant, dict):
-            for key in ("runner_parity", "demo_parity"):
-                record = variant.get(key)
-                if isinstance(record, dict):
-                    quotes.extend(as_list(record.get("notes")))
-    return unique_strings(quotes, limit=limit)
 
 
 def benchmark_refs(item: dict[str, Any], docs: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1224,7 +1255,7 @@ def find_min_vram(value: Any) -> int | None:
 
 
 def hardware_data(item: dict[str, Any], docs: dict[str, Any]) -> dict[str, Any]:
-    block = docs.get("hardware") if isinstance(docs.get("hardware"), dict) else {}
+    block = as_dict(docs.get("hardware"))
     min_vram = None
     if block.get("min_vram_gb") is not None:
         try:
@@ -1241,7 +1272,7 @@ def hardware_data(item: dict[str, Any], docs: dict[str, Any]) -> dict[str, Any]:
 
 
 def modality_data(tasks: list[str], docs: dict[str, Any]) -> dict[str, list[str]]:
-    block = docs.get("modalities") if isinstance(docs.get("modalities"), dict) else {}
+    block = as_dict(docs.get("modalities"))
     curated_inputs = unique_strings(as_list(block.get("inputs")))
     curated_outputs = unique_strings(as_list(block.get("outputs")))
     if curated_inputs or curated_outputs:
@@ -1274,9 +1305,7 @@ def modality_data(tasks: list[str], docs: dict[str, Any]) -> dict[str, list[str]
 
 
 def task_phrase_en(task: str) -> str:
-    # Keep hyphenated task ids readable ("text-to-video"), only soften
-    # underscores and namespace dots ("vla.policy_rollout" -> "vla policy rollout").
-    return task.replace("_", " ").replace(".", " ").strip().lower()
+    return prose_task_phrase_en(task)
 
 
 def task_phrase_zh(task: str) -> str:
@@ -1325,55 +1354,32 @@ def synthesize_overview(
     zh: list[str] = []
 
     # Identity and recorded capabilities.
-    identity_en = f"{name} is a {noun_en} from {provider}."
-    identity_zh = f"{name} 是来自 {provider} 的{noun_zh}。"
+    identity_en = f"{name} is a {noun_en}" + (f" from {provider}" if provider else "")
+    identity_zh = f"{name} 是" + (f"来自 {provider} 的" if provider else "") + noun_zh
     if tasks:
         task_list_en = join_en([task_phrase_en(task) for task in tasks[:4]])
         task_list_zh = join_zh([task_phrase_zh(task) for task in tasks[:4]])
-        identity_en += f" The catalog records it for {task_list_en}."
-        identity_zh += f"Catalog 将它记录为{task_list_zh}任务。"
-    if aliases:
-        identity_en += (
-            f" It is also cataloged under the alias{'es' if len(aliases) > 1 else ''} {join_en(aliases[:3])}."
-        )
-        identity_zh += f"它还有别名 {join_zh(aliases[:3])}。"
-    en.append(identity_en)
-    zh.append(identity_zh)
+        identity_en += f" for {task_list_en}"
+        identity_zh += f"，支持{task_list_zh}"
+    en.append(identity_en + ".")
+    zh.append(identity_zh + "。")
 
     # WorldFoundry integration route.
     runnable_ids = runnable_variant_ids(variant_records)
     pipeline_target = runtime.get("pipelineTarget")
-    runner = runtime.get("runner") or runtime.get("runnerTarget")
     if runnable_ids:
-        route_en = (
-            f"WorldFoundry serves it through {len(runnable_ids)} recorded runnable "
+        en.append(
+            f"WorldFoundry runs it through {len(runnable_ids)} "
             f"variant{'s' if len(runnable_ids) > 1 else ''} ({join_en(runnable_ids[:4])})."
         )
-        route_zh = (
-            f"WorldFoundry 通过 {len(runnable_ids)} 个已记录的可运行 variant（{join_zh(runnable_ids[:4])}）来运行它。"
-        )
-        if pipeline_target:
-            route_en += f" The default route binds to the {pipeline_target} pipeline."
-            route_zh += f"默认路径绑定到 {pipeline_target} pipeline。"
-        en.append(route_en)
-        zh.append(route_zh)
+        zh.append(f"WorldFoundry 通过 {len(runnable_ids)} 个 variant（{join_zh(runnable_ids[:4])}）运行它。")
     elif pipeline_target:
-        route_en = f"WorldFoundry records a binding to the {pipeline_target} pipeline"
-        route_zh = f"WorldFoundry 记录了到 {pipeline_target} pipeline 的绑定"
-        if runner:
-            route_en += f" via {runner}"
-            route_zh += f"（runner：{runner}）"
-        if status["group"] in {"planned", "profile", "runtime_ported", "blocked"}:
-            route_en += "; this binding alone does not establish a successful run"
-            route_zh += "；仅有绑定记录并不代表已成功运行"
-        en.append(route_en + ".")
-        zh.append(route_zh + "。")
+        class_name = str(pipeline_target).rsplit(":", 1)[-1]
+        en.append(f"WorldFoundry binds it to the `{class_name}` pipeline.")
+        zh.append(f"WorldFoundry 将它绑定到 `{class_name}` pipeline。")
     else:
-        en.append(
-            "No runnable WorldFoundry pipeline is bound to this entry yet; "
-            "this page records upstream provenance and readiness state only."
-        )
-        zh.append("该条目目前尚未绑定可运行的 WorldFoundry pipeline；本页只记录上游来源与就绪状态。")
+        en.append("WorldFoundry does not run this model yet.")
+        zh.append("WorldFoundry 目前还不能运行该模型。")
 
     # Environment.
     env_name = runtime.get("environmentName")
@@ -1381,8 +1387,8 @@ def synthesize_overview(
         env_kind = runtime.get("environmentKind")
         kind_en = "dedicated" if env_kind == "dedicated" else "shared unified"
         kind_zh = "独立" if env_kind == "dedicated" else "统一"
-        env_en = f"It runs in the {kind_en} environment {env_name}"
-        env_zh = f"它运行在{kind_zh}环境 {env_name} 中"
+        env_en = f"It runs in the {kind_en} environment `{env_name}`"
+        env_zh = f"它运行在{kind_zh}环境 `{env_name}` 中"
         details_en = []
         details_zh = []
         if runtime.get("python"):
@@ -1404,8 +1410,8 @@ def synthesize_overview(
     # Weights.
     if checkpoints:
         first = checkpoints[0]
-        weight_en = f"Weights are pulled from the Hugging Face repository {first['id']}"
-        weight_zh = f"权重来自 Hugging Face 仓库 {first['id']}"
+        weight_en = f"Weights come from the Hugging Face repository `{first['id']}`"
+        weight_zh = f"权重来自 Hugging Face 仓库 `{first['id']}`"
         if first.get("revision"):
             weight_en += f", pinned to revision {first['revision'][:9]}"
             weight_zh += f"，固定在 revision {first['revision'][:9]}"
@@ -1413,10 +1419,8 @@ def synthesize_overview(
             weight_en += f" (license: {first['license']})"
             weight_zh += f"（license：{first['license']}）"
         if len(checkpoints) > 1:
-            weight_en += (
-                f", plus {len(checkpoints) - 1} more recorded repositor{'ies' if len(checkpoints) > 2 else 'y'}"
-            )
-            weight_zh += f"，另有 {len(checkpoints) - 1} 个已记录仓库"
+            weight_en += f", plus {len(checkpoints) - 1} more repositor{'ies' if len(checkpoints) > 2 else 'y'}"
+            weight_zh += f"，另有 {len(checkpoints) - 1} 个仓库"
         gated = [checkpoint["id"] for checkpoint in checkpoints if checkpoint.get("gated")]
         weight_en += "."
         weight_zh += "。"
@@ -1425,27 +1429,6 @@ def synthesize_overview(
             weight_zh += f"其中 {join_zh(gated[:2])} 为 gated 仓库，需要先在上游接受使用条款。"
         en.append(weight_en)
         zh.append(weight_zh)
-
-    # Evidence honesty.
-    runner_status = status.get("runner", "not_recorded")
-    demo_status = status.get("demo", "not_recorded")
-    if runner_status.lower().replace("-", "_") in {"verified", "validated", "passed"}:
-        en.append("A WorldFoundry runner-parity artifact is recorded for this route.")
-        zh.append("该路径已记录 WorldFoundry runner parity 产物。")
-    elif runner_status != "not_recorded" or demo_status != "not_recorded":
-        en.append(
-            f"Runner parity is currently \u201c{humanize(runner_status)}\u201d and native-demo parity is "
-            f"\u201c{humanize(demo_status)}\u201d; treat end-to-end GPU evidence as not yet recorded."
-        )
-        zh.append(
-            f"当前 runner parity 为“{humanize(runner_status)}”，原生 demo parity 为“{humanize(demo_status)}”；"
-            "端到端 GPU 证据应视为尚未记录。"
-        )
-    else:
-        en.append(
-            "No runner or native-demo evidence is recorded; a catalog entry alone is not proof of a successful GPU run."
-        )
-        zh.append("尚未记录任何 runner 或原生 demo 证据；仅有 catalog 条目并不代表 GPU 已成功跑通。")
 
     return en, zh
 
@@ -1490,54 +1473,22 @@ def synthesize_limitations(
     runtime: dict[str, Any],
     checkpoints: list[dict[str, Any]],
 ) -> tuple[list[str], list[str]]:
+    """Reader-facing limitations for entries without curated docs; the status label covers parity."""
+
     en: list[str] = []
     zh: list[str] = []
-    group = status["group"]
-    if group == "blocked":
-        en.append("This entry is currently blocked; see the manifest notes below for the recorded blocker.")
-        zh.append("该条目当前处于 blocked 状态；具体 blocker 见下方 manifest 记录。")
-    elif group in {"planned", "profile"}:
-        if runtime.get("pipelineTarget"):
-            en.append("A pipeline binding is recorded, but a successful run has not been established for this entry.")
-            zh.append("该条目已记录 pipeline 绑定，但尚未建立成功运行的证据。")
-        else:
-            en.append(
-                "No runnable WorldFoundry route exists yet. The entry records provenance and readiness only; "
-                "run commands are intentionally omitted."
-            )
-            zh.append("尚无可运行的 WorldFoundry 路径。该条目只记录来源与就绪状态，因此有意省略了运行命令。")
-    runner_status = status.get("runner", "not_recorded").lower().replace("-", "_")
-    if runner_status not in {"verified", "validated", "passed"}:
-        if runner_status == "not_recorded":
-            en.append(
-                "Runner evidence: Not recorded. No verified end-to-end WorldFoundry GPU artifact exists for this model."
-            )
-            zh.append("Runner 证据：未记录。该模型还没有经过验证的 WorldFoundry 端到端 GPU 产物。")
-        else:
-            en.append(
-                f"Runner evidence is \u201c{humanize(status['runner'])}\u201d — not a verified end-to-end GPU run. "
-                "Do not treat this page as proof the route is fully validated."
-            )
-            zh.append(
-                f"Runner 证据为“{humanize(status['runner'])}”——这不是经过验证的端到端 GPU 运行结果，"
-                "请勿将本页视为该路径已被完整验证的证明。"
-            )
-    demo_status = status.get("demo", "not_recorded").lower().replace("-", "_")
-    if demo_status == "not_recorded":
-        en.append("Native demo evidence: Not recorded.")
-        zh.append("原生 Demo 证据：未记录。")
+    if status["group"] in {"planned", "profile", "blocked"} and not runtime.get("pipelineTarget"):
+        en.append("WorldFoundry does not run this model yet.")
+        zh.append("WorldFoundry 目前还不能运行该模型。")
     gated = [checkpoint["id"] for checkpoint in checkpoints if checkpoint.get("gated")]
     if gated:
         en.append(f"Checkpoint access is gated for {join_en(gated[:3])}; accept the upstream terms before downloading.")
         zh.append(f"Checkpoint {join_zh(gated[:3])} 为 gated 仓库，下载前需要先在上游接受条款。")
     private = [checkpoint["id"] for checkpoint in checkpoints if checkpoint.get("private")]
     if private:
-        en.append(f"Recorded checkpoint repositories are private: {join_en(private[:3])}.")
+        en.append(f"These checkpoint repositories are private: {join_en(private[:3])}.")
         zh.append(f"以下 checkpoint 仓库为私有：{join_zh(private[:3])}。")
-    quotes = parity_note_quotes(item)
-    en.extend(quotes)
-    zh.extend(quotes)
-    return en[:8], zh[:8]
+    return en, zh
 
 
 def docs_data(
@@ -1585,7 +1536,7 @@ def docs_data(
 
     limitations = unique_strings(as_list(docs.get("limitations")), limit=8)
     limitations_zh = unique_strings(as_list(docs.get("limitations_zh")), limit=8)
-    if not limitations or not limitations_zh:
+    if not curated and (not limitations or not limitations_zh):
         synthesized_l_en, synthesized_l_zh = synthesize_limitations(item, status, runtime, checkpoints)
         limitations = limitations or synthesized_l_en
         limitations_zh = limitations_zh or synthesized_l_zh
@@ -1605,7 +1556,7 @@ def docs_data(
         else None
     )
 
-    paper, figures = paper_media_for(model_id or text(item.get("id")), docs)
+    paper, figures = paper_media_for(model_id or text(item.get("id")) or "", docs)
 
     return {
         "curated": curated,
@@ -1666,7 +1617,7 @@ def command_placeholder(field: dict[str, Any]) -> str | None:
 
 def direct_run_command(runtime_model_id: str, task: dict[str, Any]) -> str:
     lines = [
-        "worldfoundry-eval run \\",
+        "wf run \\",
         f"  {shlex.quote(runtime_model_id)} \\",
         f"  --pipeline.task-profile {shlex.quote(str(task['id']))} \\",
     ]
@@ -1684,8 +1635,8 @@ def command_data(model_id: str, runtime_model_id: str, default_task: dict[str, A
     return {
         "prepare": f"bash scripts/inference/prepare_model_infer.sh {runtime_model_id}",
         "install": f"bash scripts/setup/model_env_install.sh --model {runtime_model_id}",
-        "inspect": f"worldfoundry-eval zoo model-show --model-id {model_id} --include-manifest --json",
-        "check": f"worldfoundry-eval zoo model-download --model-id {model_id} --check-local --json",
+        "inspect": f"wf zoo model-show --model-id {model_id} --include-manifest --json",
+        "check": f"wf zoo model-download --model-id {model_id} --check-local --json",
         "run": direct_run_command(runtime_model_id, default_task),
     }
 
@@ -1722,14 +1673,19 @@ def main() -> int:
                 profile_id, profile = select_manifest(profiles, candidates)
 
                 variants = [variant for variant in as_list(item.get("variants")) if isinstance(variant, dict)]
+                # Family runtime describes the base profile; variant_data resolves
+                # variant-specific environments separately below.
                 env_candidates = unique_strings(
                     [
+                        *candidates,
                         *(variant.get("runtime_profile") for variant in variants),
                         *(variant.get("id") for variant in variants),
-                        *candidates,
                     ]
                 )
-                env_candidates = [candidate.removeprefix("runtime-profile:") for candidate in env_candidates]
+                env_candidates = [
+                    *profile_environment(profile, model_id, environments),
+                    *(candidate.removeprefix("runtime-profile:") for candidate in env_candidates),
+                ]
                 env_id, environment = select_manifest(environments, env_candidates)
                 if environment is None and profile is not None:
                     env_id, environment = "_unified", unified_environment
@@ -1749,7 +1705,7 @@ def main() -> int:
                 checkpoints = checkpoint_data(item, profile)
                 notes = recipe_notes(item, profile)
                 variant_records = variant_data(item, status, profiles, environments, bindings, unified_environment)
-                inference_tasks = inference_task_data(item, profile, variant_records)
+                inference_tasks = inference_task_data(item, profile, variant_records, category_id)
                 runtime_model_id = variant_records[0]["id"] if variant_records else model_id
                 aliases = unique_strings(as_list(item.get("aliases")))
                 provider = provider_name(item, links, checkpoints)

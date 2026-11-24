@@ -1,4 +1,3 @@
-
 import pytest
 
 # This test module imports worldfoundry code that requires the optional
@@ -8,10 +7,10 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from worldfoundry.evaluation.tasks.datasets import build_dataset_manifest, write_dataset_manifest
-from worldfoundry.studio.serving import workspace as workspace_app
-from worldfoundry.studio.serving.jobs import StudioJob
-from worldfoundry.studio.serving.workspace import WORKSPACE_HTML, create_app
+from worldfoundry.evals.tasks.datasets import build_dataset_manifest, write_dataset_manifest
+from worldfoundry.studio.workspace import app as workspace_app
+from worldfoundry.studio.workspace.app import WORKSPACE_HTML, create_app
+from worldfoundry.studio.workspace.jobs import StudioJob
 
 
 def test_workspace_prepares_custom_artifact_scoring(tmp_path: Path) -> None:

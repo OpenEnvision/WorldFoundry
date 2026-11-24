@@ -13,10 +13,11 @@ import ast
 import importlib.util
 import re
 import sys
+from collections.abc import Iterable
 from copy import deepcopy
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Iterable
+from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────────
 # Trusted .py configs — exec_module + restricted eval; never load untrusted files
@@ -129,7 +130,7 @@ def _restricted_eval(expression: str, root: EasyDict) -> Any:
     value* reach ``__import__`` and execute arbitrary code. Config
     expressions only need ``d``-rooted lookups, literals, and operators.
     """
-    return eval(expression, {"__builtins__": {}}, {"d": root})  # noqa: S307 - restricted namespace
+    return eval(expression, {"__builtins__": {}}, {"d": root})
 
 
 def _is_single_whole_interpolation(value: str) -> bool:

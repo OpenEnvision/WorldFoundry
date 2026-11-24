@@ -20,17 +20,25 @@ class WorldPlay2LatentInitializer(WanImageToVideoLatentInitializer):
         if request.height % 64 or request.width % 64:
             raise ValueError("WorldPlay2 height and width must be divisible by 64 for compressed memory")
         initialized = super().initialize_with_encoder(
-            request, latent_encoder=latent_encoder, generator=generator, device=device, dtype=dtype,
+            request,
+            latent_encoder=latent_encoder,
+            generator=generator,
+            device=device,
+            dtype=dtype,
         )
         frames = initialized.latents.shape[2]
         if frames % 2:
             raise ValueError("WorldPlay2 requires an even number of latent frames")
         reference = initialized.conditioning["reference_pixels"]
-        low_resolution = F.interpolate(reference[:, :, 0].cpu(),
-                                       size=(request.height // 4, request.width // 4), mode="bilinear")
+        low_resolution = F.interpolate(
+            reference[:, :, 0].cpu(), size=(request.height // 4, request.width // 4), mode="bilinear"
+        )
         low_condition = encode_wan_image_condition(
-            low_resolution.unsqueeze(2), num_frames=(frames // 2 - 1) * 4 + 1,
-            latent_encoder=latent_encoder, device=device, dtype=initialized.latents.dtype,
+            low_resolution.unsqueeze(2),
+            num_frames=(frames // 2 - 1) * 4 + 1,
+            latent_encoder=latent_encoder,
+            device=device,
+            dtype=initialized.latents.dtype,
         )
         return LatentInitialization(
             initialized.latents,

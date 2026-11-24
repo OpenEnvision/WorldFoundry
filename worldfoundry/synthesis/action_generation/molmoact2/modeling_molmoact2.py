@@ -4,9 +4,10 @@ import json
 import math
 import os
 import re
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, ClassVar, Optional
 
 import numpy as np
 import torch
@@ -37,6 +38,14 @@ from transformers.utils import (
     can_return_tuple,
     logging,
 )
+
+from worldfoundry.base_models.llm_mllm_core.mllm.qwen.layers import (
+    eager_attention_forward,
+    repeat_kv,
+)
+from worldfoundry.core.attention.rotary.embedding import apply_rotary_pos_emb
+from worldfoundry.core.nn.transformer.dit import _rms_norm_reference
+from worldfoundry.core.nn.transformer.dit import modulate_sequence as _modulate
 
 from .configuration_molmoact2 import (
     MolmoAct2ActionExpertConfig,
@@ -87,12 +96,6 @@ _DEPTH_REASONING_PATCH_SIZE = 32
 _DEPTH_REASONING_THRESHOLD = 0.996
 
 
-def _modulate(
-    x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor
-) -> torch.Tensor:
-    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
-
-
 def _round_up_multiple(value: int, multiple_of: int) -> int:
     if multiple_of <= 0:
         return value
@@ -113,18 +116,18 @@ def _init_linear(linear: nn.Linear, *, zero: bool = False, scale: float = 1.0) -
 
 @dataclass
 class ActionExpertContext:
-    kv_contexts: Sequence[Tuple[torch.Tensor, torch.Tensor]]
-    cross_mask: Optional[torch.Tensor]
-    self_mask: Optional[torch.Tensor]
-    valid_action: Optional[torch.Tensor]
-    rope_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+    kv_contexts: Sequence[tuple[torch.Tensor, torch.Tensor]]
+    cross_mask: torch.Tensor | None
+    self_mask: torch.Tensor | None
+    valid_action: torch.Tensor | None
+    rope_cache: tuple[torch.Tensor, torch.Tensor] | None = None
 
 
 @dataclass
 class ActionExpertStepModulation:
     conditioning: torch.Tensor
-    block_modulations: Sequence[Tuple[torch.Tensor, ...]]
-    final_modulation: Tuple[torch.Tensor, torch.Tensor]
+    block_modulations: Sequence[tuple[torch.Tensor, ...]]
+    final_modulation: tuple[torch.Tensor, torch.Tensor]
 
 
 class ActionExpertRMSNorm(nn.Module):
@@ -148,8 +151,7 @@ class ActionExpertRMSNorm(nn.Module):
         with torch.autocast(enabled=False, device_type=x.device.type):
             dtype = x.dtype
             x_float = x.to(torch.float32)
-            variance = x_float.pow(2).mean(dim=-1, keepdim=True)
-            out = x_float * torch.rsqrt(variance + self.eps)
+            out = _rms_norm_reference(x_float, None, self.eps, "fp32")
             out = out.to(dtype)
         if self.weight is not None:
             out = out * self.weight
@@ -174,14 +176,10 @@ class ActionExpertRotaryEmbedding(nn.Module):
         seq_len: int,
         device: torch.device,
         dtype: torch.dtype,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         half_dim = self.head_dim // 2
         inv_freq = 1.0 / (
-            self.base
-            ** (
-                torch.arange(0, half_dim, device=device, dtype=torch.float32)
-                / max(half_dim, 1)
-            )
+            self.base ** (torch.arange(0, half_dim, device=device, dtype=torch.float32) / max(half_dim, 1))
         )
         positions = torch.arange(seq_len, device=device, dtype=torch.float32)
         freqs = torch.outer(positions, inv_freq)
@@ -194,12 +192,10 @@ class ActionExpertRotaryEmbedding(nn.Module):
         q: torch.Tensor,
         k: torch.Tensor,
         *,
-        rope_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        rope_cache: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if rope_cache is None:
-            rope_cache = self.build_cache(
-                seq_len=q.shape[-2], device=q.device, dtype=q.dtype
-            )
+            rope_cache = self.build_cache(seq_len=q.shape[-2], device=q.device, dtype=q.dtype)
         cos, sin = rope_cache
         half_dim = self.head_dim // 2
 
@@ -229,20 +225,14 @@ class ActionExpertSelfAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
         self.attn_dropout = attn_dropout
-        self.q_norm = (
-            ActionExpertRMSNorm(self.head_dim, eps=qk_norm_eps) if qk_norm else None
-        )
-        self.k_norm = (
-            ActionExpertRMSNorm(self.head_dim, eps=qk_norm_eps) if qk_norm else None
-        )
+        self.q_norm = ActionExpertRMSNorm(self.head_dim, eps=qk_norm_eps) if qk_norm else None
+        self.k_norm = ActionExpertRMSNorm(self.head_dim, eps=qk_norm_eps) if qk_norm else None
         self.rope = ActionExpertRotaryEmbedding(self.head_dim) if use_rope else None
         self.qkv = nn.Linear(hidden_size, hidden_size * 3)
         self.out_proj = nn.Linear(hidden_size, hidden_size)
         self.out_drop = nn.Dropout(proj_dropout)
 
-    def _apply_qk_norm(
-        self, q: torch.Tensor, k: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _apply_qk_norm(self, q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if self.q_norm is None or self.k_norm is None:
             return q, k
         return self.q_norm(q), self.k_norm(k)
@@ -253,7 +243,7 @@ class ActionExpertSelfAttention(nn.Module):
         k: torch.Tensor,
         v: torch.Tensor,
         *,
-        attn_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
         is_causal: bool = False,
     ) -> torch.Tensor:
         dropout_p = self.attn_dropout if self.training else 0.0
@@ -271,9 +261,9 @@ class ActionExpertSelfAttention(nn.Module):
         self,
         x: torch.Tensor,
         *,
-        attn_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
         is_causal: bool = False,
-        rope_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        rope_cache: tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> torch.Tensor:
         bsz, seq_len, _ = x.shape
         qkv = self.qkv(x).view(bsz, seq_len, 3, self.num_heads, self.head_dim)
@@ -308,12 +298,8 @@ class ActionExpertCrossAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
         self.attn_dropout = attn_dropout
-        self.q_norm = (
-            ActionExpertRMSNorm(self.head_dim, eps=qk_norm_eps) if qk_norm else None
-        )
-        self.k_norm = (
-            ActionExpertRMSNorm(self.head_dim, eps=qk_norm_eps) if qk_norm else None
-        )
+        self.q_norm = ActionExpertRMSNorm(self.head_dim, eps=qk_norm_eps) if qk_norm else None
+        self.k_norm = ActionExpertRMSNorm(self.head_dim, eps=qk_norm_eps) if qk_norm else None
         self.q_proj = nn.Linear(hidden_size, hidden_size)
         self.out_proj = nn.Linear(hidden_size, hidden_size)
         self.out_drop = nn.Dropout(proj_dropout)
@@ -336,7 +322,7 @@ class ActionExpertCrossAttention(nn.Module):
         k: torch.Tensor,
         v: torch.Tensor,
         *,
-        attn_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         dropout_p = self.attn_dropout if self.training else 0.0
         out = F.scaled_dot_product_attention(
@@ -355,7 +341,7 @@ class ActionExpertCrossAttention(nn.Module):
         *,
         kv_k: torch.Tensor,
         kv_v: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         bsz, tgt_len, _ = x.shape
         q = self.q_proj(x).view(bsz, tgt_len, self.num_heads, self.head_dim)
@@ -453,12 +439,12 @@ class ActionExpertBlock(nn.Module):
         x: torch.Tensor,
         conditioning: torch.Tensor,
         *,
-        cross_kv: Tuple[torch.Tensor, torch.Tensor],
-        self_attn_mask: Optional[torch.Tensor] = None,
-        attn_mask: Optional[torch.Tensor] = None,
+        cross_kv: tuple[torch.Tensor, torch.Tensor],
+        self_attn_mask: torch.Tensor | None = None,
+        attn_mask: torch.Tensor | None = None,
         is_causal: bool = False,
-        modulation: Optional[Tuple[torch.Tensor, ...]] = None,
-        rope_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        modulation: tuple[torch.Tensor, ...] | None = None,
+        rope_cache: tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> torch.Tensor:
         if modulation is None:
             modulation = self.modulation(conditioning).chunk(9, dim=1)
@@ -485,9 +471,7 @@ class ActionExpertBlock(nn.Module):
             kv_v=cross_kv[1],
             attn_mask=attn_mask,
         )
-        x = x + gate_mlp.unsqueeze(1) * self.mlp(
-            _modulate(self.ff_norm(x), shift_mlp, scale_mlp)
-        )
+        x = x + gate_mlp.unsqueeze(1) * self.mlp(_modulate(self.ff_norm(x), shift_mlp, scale_mlp))
         return x
 
 
@@ -503,7 +487,7 @@ class ActionExpertFinalLayer(nn.Module):
         x: torch.Tensor,
         conditioning: torch.Tensor,
         *,
-        modulation: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        modulation: tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> torch.Tensor:
         if modulation is None:
             modulation = self.modulation(conditioning).chunk(2, dim=1)
@@ -561,24 +545,14 @@ class ActionExpert(nn.Module):
             nn.SiLU(),
             nn.Linear(config.hidden_size, config.hidden_size, device=device),
         )
-        self.action_embed = nn.Linear(
-            config.max_action_dim, config.hidden_size, device=device
-        )
-        self.context_k_proj = nn.Linear(
-            self.llm_kv_dim, config.hidden_size, bias=False, device=device
-        )
-        self.context_v_proj = nn.Linear(
-            self.llm_kv_dim, config.hidden_size, bias=False, device=device
-        )
+        self.action_embed = nn.Linear(config.max_action_dim, config.hidden_size, device=device)
+        self.context_k_proj = nn.Linear(self.llm_kv_dim, config.hidden_size, bias=False, device=device)
+        self.context_v_proj = nn.Linear(self.llm_kv_dim, config.hidden_size, bias=False, device=device)
         self.context_norm = (
-            ActionExpertRMSNorm(config.hidden_size, eps=1e-6)
-            if config.context_layer_norm
-            else nn.Identity()
+            ActionExpertRMSNorm(config.hidden_size, eps=1e-6) if config.context_layer_norm else nn.Identity()
         )
-        self._modulation_cache_key: Optional[Tuple[Any, ...]] = None
-        self._modulation_cache_value: Optional[Sequence[ActionExpertStepModulation]] = (
-            None
-        )
+        self._modulation_cache_key: tuple[Any, ...] | None = None
+        self._modulation_cache_value: Sequence[ActionExpertStepModulation] | None = None
         self.blocks = nn.ModuleList(
             [
                 ActionExpertBlock(
@@ -595,9 +569,7 @@ class ActionExpert(nn.Module):
                 for _ in range(config.num_layers)
             ]
         )
-        self.final_layer = ActionExpertFinalLayer(
-            config.hidden_size, config.max_action_dim
-        )
+        self.final_layer = ActionExpertFinalLayer(config.hidden_size, config.max_action_dim)
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
@@ -635,9 +607,7 @@ class ActionExpert(nn.Module):
         _init_linear(self.final_layer.linear, zero=True)
 
     def _reshape_hidden_to_heads(self, x: torch.Tensor) -> torch.Tensor:
-        return x.view(
-            x.shape[0], x.shape[1], self.config.num_heads, self.action_head_dim
-        )
+        return x.view(x.shape[0], x.shape[1], self.config.num_heads, self.action_head_dim)
 
     def _time_conditioning(self, timesteps: torch.Tensor) -> torch.Tensor:
         conditioning = self.time_embed[0](timesteps)
@@ -654,15 +624,14 @@ class ActionExpert(nn.Module):
 
     def _prepare_kv_context(
         self,
-        encoder_kv_states: Sequence[Tuple[torch.Tensor, torch.Tensor]],
-    ) -> Sequence[Tuple[torch.Tensor, torch.Tensor]]:
+        encoder_kv_states: Sequence[tuple[torch.Tensor, torch.Tensor]],
+    ) -> Sequence[tuple[torch.Tensor, torch.Tensor]]:
         if len(encoder_kv_states) != len(self.blocks):
             raise ValueError(
-                f"Expected {len(self.blocks)} KV layers for per-layer conditioning, "
-                f"got {len(encoder_kv_states)}."
+                f"Expected {len(self.blocks)} KV layers for per-layer conditioning, got {len(encoder_kv_states)}."
             )
         kv_contexts = []
-        for block, (k_in, v_in) in zip(self.blocks, encoder_kv_states):
+        for block, (k_in, v_in) in zip(self.blocks, encoder_kv_states, strict=False):
             k_ctx = self._project_kv_tensor(k_in, self.context_k_proj)
             v_ctx = self._project_kv_tensor(v_in, self.context_v_proj)
             k_norm = block.cross_attn.k_norm
@@ -673,10 +642,10 @@ class ActionExpert(nn.Module):
 
     @staticmethod
     def _build_cross_attention_mask(
-        encoder_attention_mask: Optional[torch.Tensor],
+        encoder_attention_mask: torch.Tensor | None,
         batch_size: int,
         dtype: torch.dtype,
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         if encoder_attention_mask is None:
             return None
         mask = encoder_attention_mask[:, None, None, :].to(dtype=dtype)
@@ -684,34 +653,29 @@ class ActionExpert(nn.Module):
 
     def _build_self_attention_mask(
         self,
-        action_attention_mask: Optional[torch.Tensor],
+        action_attention_mask: torch.Tensor | None,
         seq_len: int,
         device: torch.device,
         dtype: torch.dtype,
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         mask = None
         if action_attention_mask is not None:
             valid = action_attention_mask.to(device=device, dtype=torch.bool)
             key_mask = (~valid)[:, None, None, :].to(dtype=dtype)
             mask = key_mask * torch.finfo(dtype).min
         if self.config.causal_attn:
-            causal = torch.ones(seq_len, seq_len, device=device, dtype=torch.bool).triu(
-                diagonal=1
-            )
-            causal = (
-                causal.unsqueeze(0).unsqueeze(0).to(dtype=dtype)
-                * torch.finfo(dtype).min
-            )
+            causal = torch.ones(seq_len, seq_len, device=device, dtype=torch.bool).triu(diagonal=1)
+            causal = causal.unsqueeze(0).unsqueeze(0).to(dtype=dtype) * torch.finfo(dtype).min
             mask = causal if mask is None else mask + causal
         return mask
 
     def prepare_context(
         self,
         *,
-        encoder_kv_states: Sequence[Tuple[torch.Tensor, torch.Tensor]],
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        action_attention_mask: Optional[torch.Tensor] = None,
-        state_embeddings: Optional[torch.Tensor] = None,
+        encoder_kv_states: Sequence[tuple[torch.Tensor, torch.Tensor]],
+        encoder_attention_mask: torch.Tensor | None = None,
+        action_attention_mask: torch.Tensor | None = None,
+        state_embeddings: torch.Tensor | None = None,
         batch_size: int,
         seq_len: int,
         device: torch.device,
@@ -724,9 +688,7 @@ class ActionExpert(nn.Module):
             )
         valid_action = None
         if action_attention_mask is not None:
-            valid_action = action_attention_mask.to(
-                device=device, dtype=dtype
-            ).unsqueeze(-1)
+            valid_action = action_attention_mask.to(device=device, dtype=dtype).unsqueeze(-1)
         rope_cache = None
         if len(self.blocks) > 0 and self.blocks[0].self_attn.rope is not None:
             rope_cache = self.blocks[0].self_attn.rope.build_cache(
@@ -740,9 +702,7 @@ class ActionExpert(nn.Module):
             batch_size,
             dtype,
         )
-        self_mask = self._build_self_attention_mask(
-            action_attention_mask, seq_len, device, dtype
-        )
+        self_mask = self._build_self_attention_mask(action_attention_mask, seq_len, device, dtype)
         return ActionExpertContext(
             kv_contexts=kv_contexts,
             cross_mask=cross_mask,
@@ -756,16 +716,12 @@ class ActionExpert(nn.Module):
         timesteps: Sequence[torch.Tensor],
     ) -> Sequence[ActionExpertStepModulation]:
         cache = []
-        for idx, step_t in enumerate(timesteps):
+        for _idx, step_t in enumerate(timesteps):
             conditioning = self._time_conditioning(step_t)
             block_modulations = []
             for block in self.blocks:
-                block_modulations.append(
-                    tuple(block.modulation(conditioning).chunk(9, dim=1))
-                )
-            final_modulation = tuple(
-                self.final_layer.modulation(conditioning).chunk(2, dim=1)
-            )
+                block_modulations.append(tuple(block.modulation(conditioning).chunk(9, dim=1)))
+            final_modulation = tuple(self.final_layer.modulation(conditioning).chunk(2, dim=1))
             cache.append(
                 ActionExpertStepModulation(
                     conditioning=conditioning,
@@ -779,14 +735,11 @@ class ActionExpert(nn.Module):
         self,
         timesteps: Sequence[torch.Tensor],
         *,
-        cache_key: Optional[Tuple[Any, ...]] = None,
+        cache_key: tuple[Any, ...] | None = None,
     ) -> Sequence[ActionExpertStepModulation]:
         if self.training or cache_key is None:
             return self.prepare_modulation_cache(timesteps)
-        if (
-            self._modulation_cache_key == cache_key
-            and self._modulation_cache_value is not None
-        ):
+        if self._modulation_cache_key == cache_key and self._modulation_cache_value is not None:
             return self._modulation_cache_value
         cached = self.prepare_modulation_cache(timesteps)
         self._modulation_cache_key = cache_key
@@ -799,7 +752,7 @@ class ActionExpert(nn.Module):
         timesteps: torch.Tensor,
         *,
         context: ActionExpertContext,
-        modulation: Optional[ActionExpertStepModulation] = None,
+        modulation: ActionExpertStepModulation | None = None,
     ) -> torch.Tensor:
         bsz, seq_len, _ = actions.shape
         if seq_len > self.config.max_action_horizon:
@@ -808,9 +761,7 @@ class ActionExpert(nn.Module):
             )
         if modulation is None:
             conditioning = self._time_conditioning(timesteps)
-            block_modulations: Sequence[Optional[Tuple[torch.Tensor, ...]]] = [
-                None
-            ] * len(self.blocks)
+            block_modulations: Sequence[tuple[torch.Tensor, ...] | None] = [None] * len(self.blocks)
             final_modulation = None
         else:
             conditioning = modulation.conditioning
@@ -819,8 +770,8 @@ class ActionExpert(nn.Module):
         x = self.action_embed(actions)
         if context.valid_action is not None:
             x = x * context.valid_action
-        for idx, (block, kv_context, block_modulation) in enumerate(
-            zip(self.blocks, context.kv_contexts, block_modulations)
+        for _idx, (block, kv_context, block_modulation) in enumerate(
+            zip(self.blocks, context.kv_contexts, block_modulations, strict=False)
         ):
             x = block(
                 x,
@@ -844,10 +795,10 @@ class ActionExpert(nn.Module):
         actions: torch.Tensor,
         timesteps: torch.Tensor,
         *,
-        encoder_kv_states: Sequence[Tuple[torch.Tensor, torch.Tensor]],
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        action_attention_mask: Optional[torch.Tensor] = None,
-        state_embeddings: Optional[torch.Tensor] = None,
+        encoder_kv_states: Sequence[tuple[torch.Tensor, torch.Tensor]],
+        encoder_attention_mask: torch.Tensor | None = None,
+        action_attention_mask: torch.Tensor | None = None,
+        state_embeddings: torch.Tensor | None = None,
     ) -> torch.Tensor:
         bsz, seq_len, _ = actions.shape
         context = self.prepare_context(
@@ -871,7 +822,7 @@ def _to_numpy(value: Any) -> np.ndarray:
     return np.asarray(value)
 
 
-def _to_array(value: Any) -> Optional[np.ndarray]:
+def _to_array(value: Any) -> np.ndarray | None:
     if value is None:
         return None
     if torch.is_tensor(value):
@@ -882,7 +833,7 @@ def _to_array(value: Any) -> Optional[np.ndarray]:
     return np.asarray(value, dtype=np.float32)
 
 
-def _to_mask(value: Any, fallback_like: Optional[np.ndarray]) -> Optional[np.ndarray]:
+def _to_mask(value: Any, fallback_like: np.ndarray | None) -> np.ndarray | None:
     if value is None:
         return None
     mask = np.asarray(value, dtype=np.bool_)
@@ -891,7 +842,7 @@ def _to_mask(value: Any, fallback_like: Optional[np.ndarray]) -> Optional[np.nda
     return mask
 
 
-def _feature_dim_from_stats(stats: Optional[Mapping[str, Any]]) -> Optional[int]:
+def _feature_dim_from_stats(stats: Mapping[str, Any] | None) -> int | None:
     if not isinstance(stats, Mapping):
         return None
     for key in (
@@ -913,7 +864,7 @@ def _feature_dim_from_stats(stats: Optional[Mapping[str, Any]]) -> Optional[int]
         if arr.shape:
             return int(arr.shape[-1])
         if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-            return int(len(value))
+            return len(value)
     return None
 
 
@@ -922,14 +873,14 @@ class _FeatureNormalizer:
         self,
         *,
         mode: str,
-        mean: Optional[np.ndarray] = None,
-        std: Optional[np.ndarray] = None,
-        min_val: Optional[np.ndarray] = None,
-        max_val: Optional[np.ndarray] = None,
-        q_low: Optional[np.ndarray] = None,
-        q_high: Optional[np.ndarray] = None,
-        mask: Optional[np.ndarray] = None,
-        zero_mask: Optional[np.ndarray] = None,
+        mean: np.ndarray | None = None,
+        std: np.ndarray | None = None,
+        min_val: np.ndarray | None = None,
+        max_val: np.ndarray | None = None,
+        q_low: np.ndarray | None = None,
+        q_high: np.ndarray | None = None,
+        mask: np.ndarray | None = None,
+        zero_mask: np.ndarray | None = None,
     ):
         self.mode = mode
         self.mean = mean
@@ -942,9 +893,7 @@ class _FeatureNormalizer:
         self.zero_mask = zero_mask
 
     @classmethod
-    def from_stats(
-        cls, stats: Optional[Mapping[str, Any]], mode: str
-    ) -> Optional["_FeatureNormalizer"]:
+    def from_stats(cls, stats: Mapping[str, Any] | None, mode: str) -> Optional["_FeatureNormalizer"]:
         if stats is None:
             return None
         raw_mask = stats.get("mask") if isinstance(stats, Mapping) else None
@@ -988,15 +937,11 @@ class _FeatureNormalizer:
             q_low = _to_array(stats.get(low_key))
             q_high = _to_array(stats.get(high_key))
             if q_low is None or q_high is None:
-                raise ValueError(
-                    f"norm_mode={mode!r} requires {low_key} and {high_key} stats."
-                )
+                raise ValueError(f"norm_mode={mode!r} requires {low_key} and {high_key} stats.")
             min_val = _to_array(stats.get("min"))
             max_val = _to_array(stats.get("max"))
             fallback = min_val if min_val is not None else q_low
-            zero_mask = (
-                None if min_val is None or max_val is None else (min_val == max_val)
-            )
+            zero_mask = None if min_val is None or max_val is None else (min_val == max_val)
             return cls(
                 mode=mode,
                 min_val=min_val,
@@ -1018,17 +963,9 @@ class _FeatureNormalizer:
         elif self.mode == "mean_std":
             normed = (arr - self.mean) / np.maximum(self.std, eps)
         elif self.mode == "min_max":
-            normed = (
-                2.0
-                * (arr - self.min_val)
-                / np.maximum(self.max_val - self.min_val, eps)
-                - 1.0
-            )
+            normed = 2.0 * (arr - self.min_val) / np.maximum(self.max_val - self.min_val, eps) - 1.0
         elif self.mode in {"q01_q99", "q10_q90"}:
-            normed = (
-                2.0 * (arr - self.q_low) / np.maximum(self.q_high - self.q_low, eps)
-                - 1.0
-            )
+            normed = 2.0 * (arr - self.q_low) / np.maximum(self.q_high - self.q_low, eps) - 1.0
         else:
             normed = arr
         if self.mode in {"min_max", "q01_q99", "q10_q90"}:
@@ -1067,9 +1004,8 @@ class _FeatureNormalizer:
 class _RobotStats:
     def __init__(self, payload: Mapping[str, Any]):
         self.norm_mode = str(payload.get("norm_mode", "min_max"))
-        self.metadata_by_tag: Dict[str, Dict[str, Any]] = {
-            str(tag): dict(metadata or {})
-            for tag, metadata in dict(payload.get("metadata_by_tag") or {}).items()
+        self.metadata_by_tag: dict[str, dict[str, Any]] = {
+            str(tag): dict(metadata or {}) for tag, metadata in dict(payload.get("metadata_by_tag") or {}).items()
         }
         self.action_normalizers = {}
         self.state_normalizers = {}
@@ -1085,18 +1021,16 @@ class _RobotStats:
                     self.norm_mode,
                 )
 
-    def validate_tag(self, norm_tag: Optional[str]) -> str:
+    def validate_tag(self, norm_tag: str | None) -> str:
         tag = str(norm_tag or "").strip()
         if not tag:
             raise ValueError("MolmoAct2 `predict_action` requires `norm_tag`.")
         if tag not in self.metadata_by_tag:
             allowed = ", ".join(sorted(self.metadata_by_tag))
-            raise ValueError(
-                f"Unknown MolmoAct2 normalization tag {tag!r}. Allowed tags: {allowed}."
-            )
+            raise ValueError(f"Unknown MolmoAct2 normalization tag {tag!r}. Allowed tags: {allowed}.")
         return tag
 
-    def get_metadata(self, norm_tag: Optional[str]) -> Dict[str, Any]:
+    def get_metadata(self, norm_tag: str | None) -> dict[str, Any]:
         if norm_tag is None:
             return {}
         return dict(self.metadata_by_tag.get(str(norm_tag), {}) or {})
@@ -1109,31 +1043,29 @@ class _RobotStats:
         normalizer = self.action_normalizers.get(str(norm_tag))
         return action if normalizer is None else normalizer.unnormalize(action)
 
-    def get_action_dim(self, norm_tag: str) -> Optional[int]:
+    def get_action_dim(self, norm_tag: str) -> int | None:
         metadata = self.get_metadata(norm_tag)
         stats = metadata.get("action_stats")
         dim = _feature_dim_from_stats(stats)
         return dim
 
-    def get_state_dim(self, norm_tag: str) -> Optional[int]:
+    def get_state_dim(self, norm_tag: str) -> int | None:
         metadata = self.get_metadata(norm_tag)
         return _feature_dim_from_stats(metadata.get("state_stats"))
 
-    def get_action_horizon(self, norm_tag: str) -> Optional[int]:
+    def get_action_horizon(self, norm_tag: str) -> int | None:
         return self._get_positive_int(norm_tag, "action_horizon")
 
-    def get_n_action_steps(self, norm_tag: str) -> Optional[int]:
+    def get_n_action_steps(self, norm_tag: str) -> int | None:
         return self._get_positive_int(norm_tag, "n_action_steps")
 
-    def _get_positive_int(self, norm_tag: str, key: str) -> Optional[int]:
+    def _get_positive_int(self, norm_tag: str, key: str) -> int | None:
         value = self.get_metadata(norm_tag).get(key)
         if value is None:
             return None
         value = int(value)
         if value < 1:
-            raise ValueError(
-                f"Robot metadata for norm_tag={norm_tag!r} must define {key} >= 1."
-            )
+            raise ValueError(f"Robot metadata for norm_tag={norm_tag!r} must define {key} >= 1.")
         return value
 
 
@@ -1154,7 +1086,7 @@ def _normalize_image_for_cache(image: Any) -> np.ndarray:
     return arr
 
 
-def _extract_first_image(images: Any) -> Optional[np.ndarray]:
+def _extract_first_image(images: Any) -> np.ndarray | None:
     if images is None:
         return None
     if isinstance(images, (list, tuple)):
@@ -1182,18 +1114,12 @@ def _compute_depth_update_mask(
     *,
     num_depth_codes: int,
 ) -> np.ndarray:
-    grid_side = int(math.isqrt(int(num_depth_codes)))
+    grid_side = math.isqrt(int(num_depth_codes))
     if grid_side * grid_side != int(num_depth_codes):
-        raise ValueError(
-            f"Depth reasoning requires a square depth grid, got num_depth_codes={int(num_depth_codes)}."
-        )
+        raise ValueError(f"Depth reasoning requires a square depth grid, got num_depth_codes={int(num_depth_codes)}.")
     target_size = grid_side * _DEPTH_REASONING_PATCH_SIZE
-    current_resized = _resize_depth_reasoning_image(current_image, target_size).astype(
-        np.float32
-    )
-    previous_resized = _resize_depth_reasoning_image(
-        previous_image, target_size
-    ).astype(np.float32)
+    current_resized = _resize_depth_reasoning_image(current_image, target_size).astype(np.float32)
+    previous_resized = _resize_depth_reasoning_image(previous_image, target_size).astype(np.float32)
     current_patches = (
         current_resized.reshape(
             grid_side,
@@ -1221,18 +1147,16 @@ def _compute_depth_update_mask(
     norm_previous = np.linalg.norm(previous_patches, axis=-1)
     denom = norm_current * norm_previous
     similarity = np.where(denom < 1e-8, 1.0, dot / (denom + 1e-12))
-    return np.asarray(similarity < _DEPTH_REASONING_THRESHOLD, dtype=np.bool_).reshape(
-        -1
-    )
+    return np.asarray(similarity < _DEPTH_REASONING_THRESHOLD, dtype=np.bool_).reshape(-1)
 
 
 def _build_depth_update_spans(
     update_mask: Sequence[bool],
-) -> List[Tuple[int, int, bool]]:
+) -> list[tuple[int, int, bool]]:
     flat_mask = np.asarray(update_mask, dtype=np.bool_).reshape(-1)
     if flat_mask.size == 0:
         return []
-    spans: List[Tuple[int, int, bool]] = []
+    spans: list[tuple[int, int, bool]] = []
     start = 0
     current_value = bool(flat_mask[0])
     for idx in range(1, int(flat_mask.shape[0])):
@@ -1248,9 +1172,7 @@ def _build_depth_update_spans(
 
 def _wrap_setup_text(setup_type: str, add_setup_tokens: bool = False) -> str:
     setup_type = str(setup_type or "")
-    if setup_type.startswith(SETUP_START_TOKEN) and setup_type.endswith(
-        SETUP_END_TOKEN
-    ):
+    if setup_type.startswith(SETUP_START_TOKEN) and setup_type.endswith(SETUP_END_TOKEN):
         return setup_type
     if not setup_type or not add_setup_tokens:
         return setup_type
@@ -1259,18 +1181,14 @@ def _wrap_setup_text(setup_type: str, add_setup_tokens: bool = False) -> str:
 
 def _wrap_control_text(control_mode: str, add_control_tokens: bool = False) -> str:
     control_mode = str(control_mode or "")
-    if control_mode.startswith(CONTROL_START_TOKEN) and control_mode.endswith(
-        CONTROL_END_TOKEN
-    ):
+    if control_mode.startswith(CONTROL_START_TOKEN) and control_mode.endswith(CONTROL_END_TOKEN):
         return control_mode
     if not control_mode or not add_control_tokens:
         return control_mode
     return f"{CONTROL_START_TOKEN}{control_mode}{CONTROL_END_TOKEN}"
 
 
-def _discretize_normalized_state(
-    state: np.ndarray, num_state_tokens: int
-) -> np.ndarray:
+def _discretize_normalized_state(state: np.ndarray, num_state_tokens: int) -> np.ndarray:
     arr = np.asarray(state, dtype=np.float32)
     arr = np.nan_to_num(arr, nan=0.0, posinf=1.0, neginf=-1.0)
     arr = np.clip(arr, -1.0, 1.0)
@@ -1278,9 +1196,7 @@ def _discretize_normalized_state(
     return np.clip(np.rint(scaled).astype(np.int64), 0, int(num_state_tokens) - 1)
 
 
-def _build_discrete_state_string(
-    state: Optional[np.ndarray], num_state_tokens: int
-) -> str:
+def _build_discrete_state_string(state: np.ndarray | None, num_state_tokens: int) -> str:
     if state is None:
         return ""
     token_ids = _discretize_normalized_state(state, num_state_tokens).reshape(-1)
@@ -1300,9 +1216,7 @@ def _normalize_question_text(text: str) -> str:
         normalized = normalized.rstrip(_QUESTION_TRAILING_SENTENCE_PUNCTUATION).rstrip()
         normalized = normalized.rstrip(_QUESTION_TRAILING_CLOSERS).rstrip()
         normalized = normalized.rstrip(_QUESTION_TRAILING_SENTENCE_PUNCTUATION).rstrip()
-    sentence_chunks = [
-        chunk.strip() for chunk in re.split(r"[.!?]+", normalized) if chunk.strip()
-    ]
+    sentence_chunks = [chunk.strip() for chunk in re.split(r"[.!?]+", normalized) if chunk.strip()]
     if len(sentence_chunks) > 1:
         normalized = "; ".join(sentence_chunks)
     normalized = normalized.lower()
@@ -1321,14 +1235,8 @@ def _build_robot_text(
     num_images: int,
 ) -> str:
     setup_text = _wrap_setup_text(setup_type, add_setup_tokens=add_setup_tokens)
-    control_text = _wrap_control_text(
-        control_mode, add_control_tokens=add_control_tokens
-    )
-    state_clause = (
-        f" The current state of the robot is {discrete_state_string}."
-        if discrete_state_string
-        else ""
-    )
+    control_text = _wrap_control_text(control_mode, add_control_tokens=add_control_tokens)
+    state_clause = f" The current state of the robot is {discrete_state_string}." if discrete_state_string else ""
     if style == "robot_depth_action":
         prompt = (
             f"The task is to {task}. The setup is {setup_text}.{state_clause} "
@@ -1351,24 +1259,22 @@ def _build_robot_text(
     return f"{image_prefix}<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n{trigger}"
 
 
-def _flatten_generated_token_ids(token_ids: torch.Tensor) -> List[int]:
+def _flatten_generated_token_ids(token_ids: torch.Tensor) -> list[int]:
     if token_ids.ndim == 3:
         return [int(x) for x in token_ids[0, 0].detach().cpu().tolist()]
     if token_ids.ndim == 2:
         return [int(x) for x in token_ids[0].detach().cpu().tolist()]
     if token_ids.ndim == 1:
         return [int(x) for x in token_ids.detach().cpu().tolist()]
-    raise ValueError(
-        f"Unexpected generated token tensor shape {tuple(token_ids.shape)}"
-    )
+    raise ValueError(f"Unexpected generated token tensor shape {tuple(token_ids.shape)}")
 
 
 def _extract_discrete_token_bins(
-    generated_ids: List[int],
+    generated_ids: list[int],
     start_token_id: int,
     end_token_id: int,
-    token_id_to_bin: Dict[int, int],
-) -> List[int]:
+    token_id_to_bin: dict[int, int],
+) -> list[int]:
     start_idx = None
     end_idx = None
     for idx, token_id in enumerate(generated_ids):
@@ -1383,18 +1289,16 @@ def _extract_discrete_token_bins(
     span_start = 0 if start_idx is None else start_idx + 1
     span_end = len(generated_ids) if end_idx is None else end_idx
     return [
-        int(token_id_to_bin[token_id])
-        for token_id in generated_ids[span_start:span_end]
-        if token_id in token_id_to_bin
+        int(token_id_to_bin[token_id]) for token_id in generated_ids[span_start:span_end] if token_id in token_id_to_bin
     ]
 
 
 @dataclass
 class MolmoAct2ActionOutput(ModelOutput):
-    actions: Optional[torch.FloatTensor] = None
-    generated_token_ids: Optional[torch.LongTensor] = None
-    depth_bins: Optional[torch.LongTensor] = None
-    depth_cache: Optional[Dict[str, Any]] = None
+    actions: torch.FloatTensor | None = None
+    generated_token_ids: torch.LongTensor | None = None
+    depth_bins: torch.LongTensor | None = None
+    depth_cache: dict[str, Any] | None = None
 
 
 @dataclass
@@ -1402,10 +1306,10 @@ class _DepthPrefix:
     token_ids: torch.Tensor
     depth_bins: torch.Tensor
     full_input_ids: torch.Tensor
-    attention_mask: Optional[torch.Tensor]
-    encoder_kv_states: Sequence[Tuple[torch.Tensor, torch.Tensor]]
+    attention_mask: torch.Tensor | None
+    encoder_kv_states: Sequence[tuple[torch.Tensor, torch.Tensor]]
     next_output: Any
-    past_key_values: Optional[Cache]
+    past_key_values: Cache | None
 
 
 @dataclass
@@ -1428,12 +1332,12 @@ class MolmoAct2CausalLMOutputWithPast(ModelOutput):
             image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -1447,11 +1351,11 @@ class MolmoAct2ModelOutputWithPast(BaseModelOutputWithPast):
             image_hidden_states of the model produced by the vision backbone
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 class ViTMLP(nn.Module):
@@ -1460,7 +1364,7 @@ class ViTMLP(nn.Module):
         dim: int,
         hidden_dim: int,
         hidden_act: str,
-        device: Union[str, torch.device] = None,
+        device: str | torch.device = None,
     ):
         super().__init__()
         self.w1 = nn.Linear(dim, hidden_dim, bias=True, device=device)
@@ -1479,11 +1383,11 @@ class ViTMultiHeadDotProductAttention(nn.Module):
         num_key_value_heads: int,
         head_dim: int,
         use_bias: bool = True,
-        input_dim: Optional[int] = None,
+        input_dim: int | None = None,
         float32_attention: bool = True,
         attention_dropout: float = 0.0,
         residual_dropout: float = 0.0,
-        device: Union[str, torch.device] = None,
+        device: str | torch.device = None,
         attn_implementation: str = "eager",
     ):
         super().__init__()
@@ -1531,20 +1435,17 @@ class ViTMultiHeadDotProductAttention(nn.Module):
         ]
 
     def _split_heads(self, hidden_states, num_heads) -> torch.Tensor:
-        return hidden_states.reshape(
-            hidden_states.shape[:2] + (num_heads, self.head_dim)
-        )
+        return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     def _merge_heads(self, hidden_states) -> torch.Tensor:
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))
+        return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     def forward(
         self,
         inputs_q: torch.Tensor,
-        inputs_kv: Optional[torch.Tensor] = None,
-        attn_mask: Optional[torch.Tensor] = None,
+        inputs_kv: torch.Tensor | None = None,
+        attn_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-
         if inputs_kv is not None:
             inputs_k = inputs_kv
             inputs_v = inputs_kv
@@ -1559,12 +1460,8 @@ class ViTMultiHeadDotProductAttention(nn.Module):
         xv = self._split_heads(xv, self.num_key_value_heads)
 
         if self.num_heads != self.num_key_value_heads:
-            xk = xk.repeat_interleave(
-                self.num_key_value_groups, dim=2, output_size=self.num_heads
-            )
-            xv = xv.repeat_interleave(
-                self.num_key_value_groups, dim=2, output_size=self.num_heads
-            )
+            xk = xk.repeat_interleave(self.num_key_value_groups, dim=2, output_size=self.num_heads)
+            xv = xv.repeat_interleave(self.num_key_value_groups, dim=2, output_size=self.num_heads)
 
         og_dtype = xq.dtype
 
@@ -1575,16 +1472,10 @@ class ViTMultiHeadDotProductAttention(nn.Module):
         dropout_p = 0.0 if not self.training else self.attention_dropout
 
         if self.attn_implementation == "eager":
-            attn_weights = torch.einsum(
-                "...qhd,...khd->...hqk", xq / math.sqrt(xq.size(-1)), xk
-            )
-            attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
-                xq.dtype
-            )
+            attn_weights = torch.einsum("...qhd,...khd->...hqk", xq / math.sqrt(xq.size(-1)), xk)
+            attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(xq.dtype)
             attn_weights = F.dropout(attn_weights, p=dropout_p, training=self.training)
-            attn_output = torch.einsum(
-                "...hqk,...khd->...qhd", attn_weights.to(xv.dtype), xv
-            )
+            attn_output = torch.einsum("...hqk,...khd->...qhd", attn_weights.to(xv.dtype), xv)
 
         elif self.attn_implementation == "sdpa":
             if self.float32_attention:
@@ -1615,10 +1506,7 @@ class ViTMultiHeadDotProductAttention(nn.Module):
 
         elif self.attn_implementation == "flash_attention_2":
             if xq.dtype == torch.float32:
-                if torch.is_autocast_enabled():
-                    target_dtype = torch.get_autocast_gpu_dtype()
-                else:
-                    target_dtype = self.wq.weight.dtype
+                target_dtype = torch.get_autocast_gpu_dtype() if torch.is_autocast_enabled() else self.wq.weight.dtype
             attn_output = _flash_attention_forward(
                 xq,
                 xk,
@@ -1633,9 +1521,7 @@ class ViTMultiHeadDotProductAttention(nn.Module):
                 implementation=self.attn_implementation,
             )
         else:
-            raise ValueError(
-                f"Attention implementation {self.attn_implementation} not supported"
-            )
+            raise ValueError(f"Attention implementation {self.attn_implementation} not supported")
 
         attn_output = attn_output.to(og_dtype)
         attn_output = self._merge_heads(attn_output)
@@ -1646,9 +1532,7 @@ class ViTMultiHeadDotProductAttention(nn.Module):
 
 
 class MolmoAct2VisionBlock(nn.Module):
-    def __init__(
-        self, config: MolmoAct2VitConfig, device: Union[str, torch.device] = None
-    ):
+    def __init__(self, config: MolmoAct2VitConfig, device: str | torch.device = None):
         super().__init__()
         self.attention = ViTMultiHeadDotProductAttention(
             hidden_size=config.hidden_size,
@@ -1667,12 +1551,8 @@ class MolmoAct2VisionBlock(nn.Module):
             config.hidden_act,
             device=device,
         )
-        self.attention_norm = nn.LayerNorm(
-            config.hidden_size, eps=config.layer_norm_eps, device=device
-        )
-        self.ffn_norm = nn.LayerNorm(
-            config.hidden_size, eps=config.layer_norm_eps, device=device
-        )
+        self.attention_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
+        self.ffn_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x + self.attention(self.attention_norm(x))
@@ -1681,17 +1561,10 @@ class MolmoAct2VisionBlock(nn.Module):
 
 
 class MolmoAct2VisionBlockCollection(nn.Module):
-    def __init__(
-        self, config: MolmoAct2VitConfig, device: Union[str, torch.device] = None
-    ):
+    def __init__(self, config: MolmoAct2VitConfig, device: str | torch.device = None):
         super().__init__()
         self.conifg = config
-        self.resblocks = nn.ModuleList(
-            [
-                MolmoAct2VisionBlock(config, device)
-                for _ in range(config.num_hidden_layers)
-            ]
-        )
+        self.resblocks = nn.ModuleList([MolmoAct2VisionBlock(config, device) for _ in range(config.num_hidden_layers)])
 
     def forward(self, x: torch.Tensor) -> list[torch.Tensor]:
         hidden_states = []
@@ -1702,9 +1575,7 @@ class MolmoAct2VisionBlockCollection(nn.Module):
 
 
 class MolmoAct2VisionTransformer(nn.Module):
-    def __init__(
-        self, config: MolmoAct2VitConfig, device: Union[str, torch.device] = None
-    ):
+    def __init__(self, config: MolmoAct2VitConfig, device: str | torch.device = None):
         super().__init__()
         self.config = config
 
@@ -1755,7 +1626,7 @@ class MolmoAct2VisionTransformer(nn.Module):
         x = x + pos_emb[None, :, :].to(x.dtype)
         return x
 
-    def forward(self, x: torch.Tensor, patch_num: int = None) -> list[torch.Tensor]:
+    def forward(self, x: torch.Tensor, patch_num: int | None = None) -> list[torch.Tensor]:
         """
         : param x: (batch_size, num_patch, n_pixels)
         """
@@ -1780,7 +1651,7 @@ class ImageProjectorMLP(nn.Module):
         hidden_dim: int,
         output_dim: int,
         hidden_act: str,
-        device: Union[str, torch.device] = None,
+        device: str | torch.device = None,
     ):
         super().__init__()
         self.w1 = nn.Linear(input_dim, hidden_dim, bias=False, device=device)
@@ -1793,9 +1664,7 @@ class ImageProjectorMLP(nn.Module):
 
 
 class MolmoAct2VisionBackbone(nn.Module):
-    def __init__(
-        self, vit_config: MolmoAct2VitConfig, adapter_config: MolmoAct2AdapterConfig
-    ):
+    def __init__(self, vit_config: MolmoAct2VitConfig, adapter_config: MolmoAct2AdapterConfig):
         super().__init__()
         self.vit_config = vit_config
         self.adapter_config = adapter_config
@@ -1867,8 +1736,7 @@ class MolmoAct2VisionBackbone(nn.Module):
         self,
         images: torch.Tensor,
         pooled_patches_idx: torch.Tensor,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # image_features: (batch_size, num_crops(=num_image), num_patch, nximage_emb_dim)
         batch_size, num_image = images.shape[:2]
         images = images.to(device=self.device)
@@ -1901,69 +1769,26 @@ class MolmoAct2VisionBackbone(nn.Module):
         )
 
         # Now [batch, num_high_res_features, pool_dim, dim]
-        to_pool = image_features.reshape(batch_size, -1, dim)[
-            batch_idx, torch.clip(pooled_patches_idx, 0)
-        ]
+        to_pool = image_features.reshape(batch_size, -1, dim)[batch_idx, torch.clip(pooled_patches_idx, 0)]
         to_pool = to_pool * valid.to(self.dtype)[:, :, :, None]
         to_pool = to_pool.reshape([-1, pooled_patches_idx.shape[-1], dim])
         if self.adapter_config.pooling_attention_mask:
             attn_mask = valid.reshape([-1, 1, 1, valid.shape[-1]])
             denom = valid.view(-1, to_pool.shape[-2]).float().sum(-1)
             denom = torch.where(denom == 0, 1, denom)
-            query = to_pool.sum(-2, keepdim=True) / denom[:, None, None].to(
-                to_pool.dtype
-            )
+            query = to_pool.sum(-2, keepdim=True) / denom[:, None, None].to(to_pool.dtype)
         else:
             attn_mask = None
             query = to_pool.mean(-2, keepdim=True)
         pooled_features = self.image_pooling_2d(query, to_pool, attn_mask=attn_mask)
-        pooled_features = pooled_features.reshape(
-            [batch_size, -1, pooled_features.shape[-1]]
-        )
+        pooled_features = pooled_features.reshape([batch_size, -1, pooled_features.shape[-1]])
 
         # MLP layer to map the feature.
         pooled_features = self.image_projector(pooled_features)
-        return pooled_features.view(-1, pooled_features.shape[-1])[
-            valid_token.flatten()
-        ]
+        return pooled_features.view(-1, pooled_features.shape[-1])[valid_token.flatten()]
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 
 class MolmoAct2RotaryEmbedding(nn.Module):
@@ -1972,17 +1797,15 @@ class MolmoAct2RotaryEmbedding(nn.Module):
     def __init__(
         self,
         config: MolmoAct2TextConfig,
-        device: Union[str, torch.device] = None,
-        rope_type: Optional[str] = None,
+        device: str | torch.device = None,
+        rope_type: str | None = None,
     ):
         super().__init__()
         if rope_type is not None:
             self.rope_type = rope_type
         elif hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             # BC: "rope_type" was originally "type"
-            self.rope_type = config.rope_scaling.get(
-                "rope_type", config.rope_scaling.get("type")
-            )
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
@@ -2002,20 +1825,15 @@ class MolmoAct2RotaryEmbedding(nn.Module):
 
     @staticmethod
     def _default_rope_init(
-        config: MolmoAct2TextConfig, device: Union[str, torch.device] = None, **_
+        config: MolmoAct2TextConfig, device: str | torch.device = None, **_
     ) -> tuple[torch.Tensor, float]:
         inv_freq = 1.0 / (
             config.rope_theta
-            ** (
-                torch.arange(0, config.head_dim, 2, dtype=torch.float32, device=device)
-                / config.head_dim
-            )
+            ** (torch.arange(0, config.head_dim, 2, dtype=torch.float32, device=device) / config.head_dim)
         )
         return inv_freq, 1.0
 
-    def _target_cache_seq_len(
-        self, x: torch.Tensor, position_ids: Optional[torch.Tensor]
-    ) -> int:
+    def _target_cache_seq_len(self, x: torch.Tensor, position_ids: torch.Tensor | None) -> int:
         if self.config.max_position_embeddings:
             return int(self.config.max_position_embeddings)
         if position_ids is not None:
@@ -2046,9 +1864,7 @@ class MolmoAct2RotaryEmbedding(nn.Module):
             needs_refresh = (
                 not bool(torch.isfinite(inv_freq_cpu).all().item())
                 or bool((inv_freq_cpu <= 0).any().item())
-                or not bool(
-                    torch.isclose(inv_freq_cpu[0].cpu(), torch.tensor(1.0)).item()
-                )
+                or not bool(torch.isclose(inv_freq_cpu[0].cpu(), torch.tensor(1.0)).item())
             )
         if needs_refresh:
             inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
@@ -2061,9 +1877,7 @@ class MolmoAct2RotaryEmbedding(nn.Module):
         device_type = device.type if device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             seq = torch.arange(seq_len, device=device, dtype=torch.float)
-            freqs = torch.einsum(
-                "i,j->ij", seq, self.inv_freq.to(device=device, dtype=torch.float)
-            )
+            freqs = torch.einsum("i,j->ij", seq, self.inv_freq.to(device=device, dtype=torch.float))
             emb = torch.cat((freqs, freqs), dim=-1)
             self._pos_sin_cache = emb.sin()[None, None, :, :] * self.attention_scaling
             self._pos_cos_cache = emb.cos()[None, None, :, :] * self.attention_scaling
@@ -2072,17 +1886,15 @@ class MolmoAct2RotaryEmbedding(nn.Module):
     def prepare_rope_cache(
         self,
         *,
-        device: Union[str, torch.device],
-        max_seq_len: Optional[int] = None,
+        device: str | torch.device,
+        max_seq_len: int | None = None,
     ) -> None:
         if self.rope_type != "default":
             return
         device = torch.device(device)
         seq_len = int(max_seq_len or self.config.max_position_embeddings or 0)
         if seq_len <= 0:
-            raise ValueError(
-                "RoPE cache preparation requires a positive max sequence length."
-            )
+            raise ValueError("RoPE cache preparation requires a positive max sequence length.")
         if self._rope_cache_ready(device, seq_len):
             return
         self._refresh_inv_freq_if_needed(device)
@@ -2091,7 +1903,7 @@ class MolmoAct2RotaryEmbedding(nn.Module):
     def _select_rope_cache(
         self,
         x: torch.Tensor,
-        position_ids: Optional[torch.Tensor],
+        position_ids: torch.Tensor | None,
         seq_len: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         pos_sin = self._pos_sin_cache[:, :, :seq_len, :]
@@ -2100,19 +1912,13 @@ class MolmoAct2RotaryEmbedding(nn.Module):
             sin = pos_sin[0, 0, : x.shape[-2], :]
             cos = pos_cos[0, 0, : x.shape[-2], :]
         else:
-            sin = pos_sin[0, 0][position_ids].view(
-                position_ids.shape + (pos_sin.shape[-1],)
-            )
-            cos = pos_cos[0, 0][position_ids].view(
-                position_ids.shape + (pos_cos.shape[-1],)
-            )
+            sin = pos_sin[0, 0][position_ids].view(position_ids.shape + (pos_sin.shape[-1],))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+            cos = pos_cos[0, 0][position_ids].view(position_ids.shape + (pos_cos.shape[-1],))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(
-        self, x, position_ids: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         seq_len = self._target_cache_seq_len(x, position_ids)
         if not self._rope_cache_ready(x.device, seq_len):
             self._refresh_inv_freq_if_needed(x.device)
@@ -2125,7 +1931,7 @@ class MolmoAct2RMSNorm(nn.Module):
         self,
         size: int,
         eps: float = 1e-6,
-        device: Union[str, torch.device] = None,
+        device: str | torch.device = None,
     ):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(size, device=device))
@@ -2135,59 +1941,13 @@ class MolmoAct2RMSNorm(nn.Module):
         with torch.autocast(enabled=False, device_type=x.device.type):
             og_dtype = x.dtype
             x = x.to(torch.float32)
-            variance = x.pow(2).mean(-1, keepdim=True)
-            x = x * torch.rsqrt(variance + self.eps)
+            x = _rms_norm_reference(x, None, self.eps, "fp32")
             x = x.to(og_dtype)
 
         return self.weight * x
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
-
-
-# Copied from transformers.models.llama.modeling_llama.repeat_kv
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(
-        batch, num_key_value_heads, n_rep, slen, head_dim
-    )
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
-        query.dtype
-    )
-    attn_weights = nn.functional.dropout(
-        attn_weights, p=dropout, training=module.training
-    )
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
 
 
 class MolmoAct2Attention(nn.Module):
@@ -2199,9 +1959,7 @@ class MolmoAct2Attention(nn.Module):
         self.layer_idx = layer_idx
         self.num_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = (
-            config.num_attention_heads // config.num_key_value_heads
-        )
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.head_dim = config.head_dim
         self.scaling = self.head_dim**-0.5
         self.is_causal = True
@@ -2218,20 +1976,16 @@ class MolmoAct2Attention(nn.Module):
         )
 
         # Layer norms.
-        self.k_norm: Optional[MolmoAct2RMSNorm] = None
-        self.q_norm: Optional[MolmoAct2RMSNorm] = None
-        self.qk_norm_type: Optional[str] = None
+        self.k_norm: MolmoAct2RMSNorm | None = None
+        self.q_norm: MolmoAct2RMSNorm | None = None
+        self.qk_norm_type: str | None = None
         if config.use_qk_norm:
             k_norm_size = (
-                config.head_dim
-                if config.qk_norm_type == "qwen3"
-                else config.num_key_value_heads * config.head_dim
+                config.head_dim if config.qk_norm_type == "qwen3" else config.num_key_value_heads * config.head_dim
             )
             self.k_norm = MolmoAct2RMSNorm(k_norm_size, eps=config.layer_norm_eps)
             q_norm_size = (
-                config.head_dim
-                if config.qk_norm_type == "qwen3"
-                else config.num_attention_heads * config.head_dim
+                config.head_dim if config.qk_norm_type == "qwen3" else config.num_attention_heads * config.head_dim
             )
             self.q_norm = MolmoAct2RMSNorm(q_norm_size, eps=config.layer_norm_eps)
             self.qk_norm_type = config.qk_norm_type
@@ -2248,11 +2002,11 @@ class MolmoAct2Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -2261,21 +2015,13 @@ class MolmoAct2Attention(nn.Module):
         value_states = value_states.view(hidden_shape)
 
         # Optionally apply layer norm to keys and queries.
-        if (
-            self.q_norm is not None
-            and self.k_norm is not None
-            and self.qk_norm_type != "qwen3"
-        ):
+        if self.q_norm is not None and self.k_norm is not None and self.qk_norm_type != "qwen3":
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
 
         query_states = query_states.view(hidden_shape)
         key_states = key_states.view(hidden_shape)
-        if (
-            self.q_norm is not None
-            and self.k_norm is not None
-            and self.qk_norm_type == "qwen3"
-        ):
+        if self.q_norm is not None and self.k_norm is not None and self.qk_norm_type == "qwen3":
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
         query_states = query_states.transpose(1, 2)
@@ -2283,21 +2029,15 @@ class MolmoAct2Attention(nn.Module):
         value_states = value_states.transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(
-            query_states, key_states, cos, sin
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(
-                key_states, value_states, self.layer_idx, cache_kwargs
-            )
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         dropout_p = 0.0 if not self.training else self.attention_dropout
-        if self.config._attn_implementation == "sdpa" and (
-            attention_mask is None or torch.is_tensor(attention_mask)
-        ):
+        if self.config._attn_implementation == "sdpa" and (attention_mask is None or torch.is_tensor(attention_mask)):
             key_states = repeat_kv(key_states, self.num_key_value_groups)
             value_states = repeat_kv(value_states, self.num_key_value_groups)
             attn_output = F.scaled_dot_product_attention(
@@ -2313,9 +2053,7 @@ class MolmoAct2Attention(nn.Module):
         else:
             attention_interface: Callable = eager_attention_forward
             if self.config._attn_implementation != "eager":
-                attention_interface = ALL_ATTENTION_FUNCTIONS[
-                    self.config._attn_implementation
-                ]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
             attn_output, attn_weights = attention_interface(
                 self,
@@ -2339,12 +2077,10 @@ class LanguageModelMLP(nn.Module):
         input_dim: int,
         intermediate_size: int,
         hidden_act: str,
-        device: Union[str, torch.device] = None,
+        device: str | torch.device = None,
     ):
         super().__init__()
-        self.ff_proj = nn.Linear(
-            input_dim, intermediate_size * 2, bias=False, device=device
-        )
+        self.ff_proj = nn.Linear(input_dim, intermediate_size * 2, bias=False, device=device)
         self.ff_out = nn.Linear(intermediate_size, input_dim, bias=False, device=device)
         self.act = ACT2FN[hidden_act]
 
@@ -2360,16 +2096,14 @@ class MolmoAct2DecoderLayer(GradientCheckpointingLayer):
     def __init__(
         self,
         config: MolmoAct2TextConfig,
-        layer_idx: Optional[int] = None,
-        device: Union[str, torch.device] = None,
+        layer_idx: int | None = None,
+        device: str | torch.device = None,
     ):
         super().__init__()
         self.config = config
 
         self.self_attn = MolmoAct2Attention(config, layer_idx)
-        self.attn_norm = MolmoAct2RMSNorm(
-            config.hidden_size, eps=config.layer_norm_eps, device=device
-        )
+        self.attn_norm = MolmoAct2RMSNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
         self.dropout = nn.Dropout(config.residual_dropout)
         self.mlp = LanguageModelMLP(
             config.hidden_size,
@@ -2377,25 +2111,20 @@ class MolmoAct2DecoderLayer(GradientCheckpointingLayer):
             config.hidden_act,
             device=device,
         )
-        self.ff_norm = MolmoAct2RMSNorm(
-            config.hidden_size, eps=config.layer_norm_eps, device=device
-        )
+        self.ff_norm = MolmoAct2RMSNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[
-        torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]
-    ]:
-
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
         hidden_states = self.attn_norm(hidden_states)
 
@@ -2434,17 +2163,14 @@ class MolmoAct2PostNormDecoderLayer(MolmoAct2DecoderLayer):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple[
-        torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]
-    ]:
-
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
 
         # Self Attention
@@ -2483,7 +2209,7 @@ class MolmoAct2Embedding(nn.Module):
         num_embeddings: int,
         num_new_embeddings: int,
         features: int,
-        device: Union[str, torch.device] = None,
+        device: str | torch.device = None,
     ):
         super().__init__()
         self.embedding = nn.Parameter(
@@ -2501,7 +2227,7 @@ class MolmoAct2PreTrainedModel(PreTrainedModel):
     config: MolmoAct2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = [
+    _no_split_modules: ClassVar[list] = [
         "MolmoAct2DecoderLayer",
         "MolmoAct2PostNormDecoderLayer",
         "MolmoAct2VisionBlock",
@@ -2513,7 +2239,7 @@ class MolmoAct2PreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {
+    _can_record_outputs: ClassVar[dict] = {
         "hidden_states": MolmoAct2DecoderLayer,
         "attentions": MolmoAct2Attention,
     }
@@ -2541,7 +2267,7 @@ class MolmoAct2PreTrainedModel(PreTrainedModel):
 
 class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
     config: MolmoAct2TextConfig
-    _no_split_modules = ["MolmoAct2DecoderLayer", "MolmoAct2PostNormDecoderLayer"]
+    _no_split_modules: ClassVar[list] = ["MolmoAct2DecoderLayer", "MolmoAct2PostNormDecoderLayer"]
 
     def __init__(self, config: MolmoAct2TextConfig):
         super().__init__(config)
@@ -2554,17 +2280,8 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
         else:
             self.wte = nn.Embedding(config.vocab_size, config.hidden_size)
         self.emb_drop = nn.Dropout(config.embedding_dropout)
-        decoder_layer = (
-            MolmoAct2PostNormDecoderLayer
-            if config.norm_after
-            else MolmoAct2DecoderLayer
-        )
-        self.blocks = nn.ModuleList(
-            [
-                decoder_layer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
-            ]
-        )
+        decoder_layer = MolmoAct2PostNormDecoderLayer if config.norm_after else MolmoAct2DecoderLayer
+        self.blocks = nn.ModuleList([decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
         self.ln_f = MolmoAct2RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         if config.rope_scaling_layers is not None:
             self.rotary_embs = nn.ModuleDict(
@@ -2584,8 +2301,8 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
     def prepare_rope_cache(
         self,
         *,
-        device: Union[str, torch.device],
-        max_seq_len: Optional[int] = None,
+        device: str | torch.device,
+        max_seq_len: int | None = None,
     ) -> None:
         if self.config.rope_scaling_layers is not None:
             for rotary_emb in self.rotary_embs.values():
@@ -2602,33 +2319,25 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You must specify exactly one of input_ids or inputs_embeds"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -2645,9 +2354,7 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
             past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
-            past_seen_tokens = (
-                past_key_values.get_seq_length() if past_key_values is not None else 0
-            )
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens,
                 past_seen_tokens + inputs_embeds.shape[1],
@@ -2689,9 +2396,7 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for layer_idx, decoder_block in enumerate(
-            self.blocks[: self.config.num_hidden_layers]
-        ):
+        for layer_idx, decoder_block in enumerate(self.blocks[: self.config.num_hidden_layers]):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -2737,8 +2442,8 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
 
 # Adapted from transformers.models.gemma3.modeling_gemma3
 def token_type_ids_mask_function(
-    token_type_ids: Optional[torch.Tensor] = None,
-) -> Optional[Callable]:
+    token_type_ids: torch.Tensor | None = None,
+) -> Callable | None:
     """
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
     not start and end indices.
@@ -2753,13 +2458,9 @@ def token_type_ids_mask_function(
         # Since vmap doesn't support `if statement` we workaround it with `torch.where`
         safe_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
         token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_idx]
-        token_type_ids_at_kv_idx = torch.where(
-            kv_idx < token_type_ids.shape[1], token_type_ids_at_kv_idx, 0
-        )
+        token_type_ids_at_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], token_type_ids_at_kv_idx, 0)
 
-        is_image_block = (token_type_ids[batch_idx, q_idx] == 1) & (
-            token_type_ids_at_kv_idx == 1
-        )
+        is_image_block = (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids_at_kv_idx == 1)
 
         # This is bidirectional attention whenever we are dealing with image tokens
         return is_image_block & is_image_block
@@ -2769,7 +2470,7 @@ def token_type_ids_mask_function(
 
 class MolmoAct2Model(MolmoAct2PreTrainedModel):
     base_model_prefix = ""
-    _checkpoint_conversion_mapping = {}
+    _checkpoint_conversion_mapping: ClassVar[dict] = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: MolmoAct2Config
@@ -2777,14 +2478,10 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
     def __init__(self, config: MolmoAct2Config):
         super().__init__(config)
         self.transformer: MolmoAct2TextModel = MolmoAct2TextModel(config.text_config)
-        self.vision_backbone: Optional[MolmoAct2VisionBackbone] = None
+        self.vision_backbone: MolmoAct2VisionBackbone | None = None
         if config.vit_config is not None and config.adapter_config is not None:
-            self.vision_backbone = MolmoAct2VisionBackbone(
-                config.vit_config, config.adapter_config
-            )
-        llm_kv_dim = (
-            config.text_config.num_key_value_heads * config.text_config.head_dim
-        )
+            self.vision_backbone = MolmoAct2VisionBackbone(config.vit_config, config.adapter_config)
+        llm_kv_dim = config.text_config.num_key_value_heads * config.text_config.head_dim
         if config.add_action_expert:
             self.action_expert = ActionExpert(
                 config.action_expert_config,
@@ -2797,8 +2494,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         if config.add_action_expert and config.action_expert_depth_gate:
             if config.action_expert_depth_gate_per_layer:
                 self.action_expert_depth_gate = nn.ModuleList(
-                    nn.Linear(llm_kv_dim, 1)
-                    for _ in range(config.action_expert_config.num_layers)
+                    nn.Linear(llm_kv_dim, 1) for _ in range(config.action_expert_config.num_layers)
                 )
             else:
                 self.action_expert_depth_gate = nn.Linear(llm_kv_dim, 1)
@@ -2806,7 +2502,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         else:
             self.action_expert_depth_gate = None
         self._depth_gate_token_ids = self._resolve_depth_gate_token_ids()
-        self.action_cuda_graph_manager: Optional[ActionCudaGraphManager] = None
+        self.action_cuda_graph_manager: ActionCudaGraphManager | None = None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2837,11 +2533,9 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         )
         for gate in gates:
             nn.init.zeros_(gate.weight)
-            nn.init.constant_(
-                gate.bias, float(self.config.action_expert_depth_gate_init_bias)
-            )
+            nn.init.constant_(gate.bias, float(self.config.action_expert_depth_gate_init_bias))
 
-    def _resolve_depth_gate_token_ids(self) -> Tuple[int, ...]:
+    def _resolve_depth_gate_token_ids(self) -> tuple[int, ...]:
         if not self.config.action_expert_depth_gate:
             return ()
         token_ids = []
@@ -2852,26 +2546,19 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         ):
             if token_id is not None:
                 token_ids.append(int(token_id))
-        if (
-            self.config.depth_token_start_id is not None
-            and int(self.config.num_depth_tokens or 0) > 0
-        ):
+        if self.config.depth_token_start_id is not None and int(self.config.num_depth_tokens or 0) > 0:
             start = int(self.config.depth_token_start_id)
             token_ids.extend(range(start, start + int(self.config.num_depth_tokens)))
         return tuple(dict.fromkeys(token_ids))
 
     def _require_action_expert(self) -> ActionExpert:
         if self.action_expert is None:
-            raise RuntimeError(
-                "This MolmoAct2 checkpoint does not include an action expert."
-            )
+            raise RuntimeError("This MolmoAct2 checkpoint does not include an action expert.")
         return self.action_expert
 
     def _cache_to_sequence(self, cache: torch.Tensor) -> torch.Tensor:
         if cache.dim() != 4:
-            raise ValueError(
-                f"Expected KV cache tensor with 4 dims, got shape {tuple(cache.shape)}"
-            )
+            raise ValueError(f"Expected KV cache tensor with 4 dims, got shape {tuple(cache.shape)}")
         head_candidates = {
             self.config.text_config.num_key_value_heads,
             self.config.text_config.num_attention_heads,
@@ -2888,13 +2575,9 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         bsz, seq_len, n_heads, head_dim = cache.shape
         return cache.reshape(bsz, seq_len, n_heads * head_dim)
 
-    def _extract_kv_states(
-        self, past_key_values: Cache
-    ) -> Sequence[Tuple[torch.Tensor, torch.Tensor]]:
+    def _extract_kv_states(self, past_key_values: Cache) -> Sequence[tuple[torch.Tensor, torch.Tensor]]:
         if past_key_values is None:
-            raise RuntimeError(
-                "Action generation requires past_key_values from the VLM forward pass."
-            )
+            raise RuntimeError("Action generation requires past_key_values from the VLM forward pass.")
         seq_len = _cache_seq_len_int(past_key_values)
         kv_states = []
         for key, value in _iter_cache_key_values(past_key_values):
@@ -2903,9 +2586,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             if key.shape[-2] > seq_len:
                 key = key[..., :seq_len, :]
                 value = value[..., :seq_len, :]
-            kv_states.append(
-                (self._cache_to_sequence(key), self._cache_to_sequence(value))
-            )
+            kv_states.append((self._cache_to_sequence(key), self._cache_to_sequence(value)))
         if len(kv_states) != self.config.action_expert_config.num_layers:
             raise RuntimeError(
                 f"Expected {self.config.action_expert_config.num_layers} KV layers, got {len(kv_states)}."
@@ -2916,14 +2597,12 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
     def _mask_discrete_output_span(
         row_ids: torch.Tensor,
         row_mask: torch.Tensor,
-        start_id: Optional[int],
-        end_id: Optional[int],
+        start_id: int | None,
+        end_id: int | None,
     ) -> None:
         if start_id is None or end_id is None:
             return
-        start_positions = (
-            (row_ids == start_id).nonzero(as_tuple=False).flatten().tolist()
-        )
+        start_positions = (row_ids == start_id).nonzero(as_tuple=False).flatten().tolist()
         if not start_positions:
             return
         end_positions = (row_ids == end_id).nonzero(as_tuple=False).flatten().tolist()
@@ -2940,9 +2619,9 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
 
     def _get_encoder_attention_mask(
         self,
-        input_ids: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-    ) -> Optional[torch.Tensor]:
+        input_ids: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+    ) -> torch.Tensor | None:
         if attention_mask is not None:
             mask = attention_mask.to(dtype=torch.bool).clone()
         elif input_ids is not None:
@@ -2965,14 +2644,10 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
 
     def _get_depth_token_mask(
         self,
-        input_ids: Optional[torch.Tensor],
-        encoder_attention_mask: Optional[torch.Tensor],
-    ) -> Optional[torch.Tensor]:
-        if (
-            not self.config.action_expert_depth_gate
-            or input_ids is None
-            or not self._depth_gate_token_ids
-        ):
+        input_ids: torch.Tensor | None,
+        encoder_attention_mask: torch.Tensor | None,
+    ) -> torch.Tensor | None:
+        if not self.config.action_expert_depth_gate or input_ids is None or not self._depth_gate_token_ids:
             return None
         depth_token_ids = torch.as_tensor(
             self._depth_gate_token_ids,
@@ -2981,9 +2656,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         )
         depth_mask = (input_ids.unsqueeze(-1) == depth_token_ids).any(dim=-1)
         if encoder_attention_mask is not None:
-            depth_mask = depth_mask & encoder_attention_mask.to(
-                device=input_ids.device, dtype=torch.bool
-            )
+            depth_mask = depth_mask & encoder_attention_mask.to(device=input_ids.device, dtype=torch.bool)
         return depth_mask
 
     @staticmethod
@@ -2992,22 +2665,16 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         *,
         source: torch.Tensor,
         depth_mask: torch.Tensor,
-        encoder_attention_mask: Optional[torch.Tensor],
+        encoder_attention_mask: torch.Tensor | None,
     ) -> torch.Tensor:
         if source.ndim == 4:
             source = source.reshape(source.shape[0], source.shape[1], -1)
         if source.ndim != 3:
-            raise ValueError(
-                f"Depth gate expected a 3D sequence tensor, got {tuple(source.shape)}."
-            )
+            raise ValueError(f"Depth gate expected a 3D sequence tensor, got {tuple(source.shape)}.")
         if encoder_attention_mask is not None:
-            valid_mask = encoder_attention_mask.to(
-                device=source.device, dtype=torch.bool
-            )
+            valid_mask = encoder_attention_mask.to(device=source.device, dtype=torch.bool)
         else:
-            valid_mask = torch.ones(
-                depth_mask.shape, device=source.device, dtype=torch.bool
-            )
+            valid_mask = torch.ones(depth_mask.shape, device=source.device, dtype=torch.bool)
         depth_mask = depth_mask.to(device=source.device, dtype=torch.bool)
         pool_mask = valid_mask & ~depth_mask
         has_pool = pool_mask.any(dim=-1, keepdim=True)
@@ -3020,12 +2687,10 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
     def _depth_gate_from_condition(
         self,
         *,
-        input_ids: Optional[torch.Tensor],
-        encoder_attention_mask: Optional[torch.Tensor],
-        layer_kv_states: Optional[Sequence[Tuple[torch.Tensor, torch.Tensor]]],
-    ) -> Tuple[
-        Optional[Union[torch.Tensor, Sequence[torch.Tensor]]], Optional[torch.Tensor]
-    ]:
+        input_ids: torch.Tensor | None,
+        encoder_attention_mask: torch.Tensor | None,
+        layer_kv_states: Sequence[tuple[torch.Tensor, torch.Tensor]] | None,
+    ) -> tuple[torch.Tensor | Sequence[torch.Tensor] | None, torch.Tensor | None]:
         gate_head = self.action_expert_depth_gate
         if gate_head is None:
             return None, None
@@ -3035,9 +2700,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         sources = [value for _, value in layer_kv_states]
         if isinstance(gate_head, nn.ModuleList):
             if len(gate_head) != len(sources):
-                raise ValueError(
-                    f"Depth gate layer count mismatch: gates={len(gate_head)}, sources={len(sources)}."
-                )
+                raise ValueError(f"Depth gate layer count mismatch: gates={len(gate_head)}, sources={len(sources)}.")
             gates = [
                 self._depth_gate_from_source(
                     gate,
@@ -3045,7 +2708,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
                     depth_mask=depth_mask,
                     encoder_attention_mask=encoder_attention_mask,
                 )
-                for gate, source in zip(gate_head, sources)
+                for gate, source in zip(gate_head, sources, strict=False)
             ]
             return gates, depth_mask
         gate = self._depth_gate_from_source(
@@ -3058,7 +2721,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
 
     @staticmethod
     def _depth_gate_for_layer(
-        gate: Union[torch.Tensor, Sequence[torch.Tensor]],
+        gate: torch.Tensor | Sequence[torch.Tensor],
         layer_idx: int,
         *,
         num_layers: int,
@@ -3066,24 +2729,20 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         if isinstance(gate, torch.Tensor):
             return gate
         if len(gate) != num_layers:
-            raise ValueError(
-                f"Depth gate layer count mismatch: gates={len(gate)}, layers={num_layers}."
-            )
+            raise ValueError(f"Depth gate layer count mismatch: gates={len(gate)}, layers={num_layers}.")
         return gate[layer_idx]
 
     def _apply_depth_gate_to_layer_kv_states(
         self,
-        layer_kv_states: Optional[Sequence[Tuple[torch.Tensor, torch.Tensor]]],
-        depth_mask: Optional[torch.Tensor],
-        gate: Optional[Union[torch.Tensor, Sequence[torch.Tensor]]],
-    ) -> Optional[Sequence[Tuple[torch.Tensor, torch.Tensor]]]:
+        layer_kv_states: Sequence[tuple[torch.Tensor, torch.Tensor]] | None,
+        depth_mask: torch.Tensor | None,
+        gate: torch.Tensor | Sequence[torch.Tensor] | None,
+    ) -> Sequence[tuple[torch.Tensor, torch.Tensor]] | None:
         if layer_kv_states is None or depth_mask is None or gate is None:
             return layer_kv_states
         gated_kv = []
         for layer_idx, (key, value) in enumerate(layer_kv_states):
-            layer_gate = self._depth_gate_for_layer(
-                gate, layer_idx, num_layers=len(layer_kv_states)
-            )
+            layer_gate = self._depth_gate_for_layer(gate, layer_idx, num_layers=len(layer_kv_states))
             mask = depth_mask.to(device=key.device, dtype=torch.bool)
             view_shape = [mask.shape[0], mask.shape[1]] + [1] * (key.ndim - 2)
             scale = torch.ones(view_shape, device=key.device, dtype=key.dtype)
@@ -3098,8 +2757,8 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
     @staticmethod
     def _action_dim_valid_mask(
         target: torch.Tensor,
-        action_dim_is_pad: Optional[torch.Tensor],
-    ) -> Optional[torch.Tensor]:
+        action_dim_is_pad: torch.Tensor | None,
+    ) -> torch.Tensor | None:
         if action_dim_is_pad is None:
             return None
         mask = ~action_dim_is_pad.to(device=target.device, dtype=torch.bool)
@@ -3112,9 +2771,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         if mask.shape[0] == 1 and target.shape[0] != 1:
             mask = mask.expand(target.shape[0], -1)
         if mask.shape[0] != target.shape[0]:
-            raise ValueError(
-                f"action_dim_is_pad batch {mask.shape[0]} does not match target batch {target.shape[0]}."
-            )
+            raise ValueError(f"action_dim_is_pad batch {mask.shape[0]} does not match target batch {target.shape[0]}.")
         while mask.ndim < target.ndim:
             mask = mask.unsqueeze(1)
         return mask
@@ -3124,7 +2781,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         cls,
         tensor: torch.Tensor,
         *,
-        action_dim_is_pad: Optional[torch.Tensor],
+        action_dim_is_pad: torch.Tensor | None,
         enabled: bool,
     ) -> torch.Tensor:
         if not enabled:
@@ -3134,9 +2791,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             return tensor
         return tensor.masked_fill(~valid_mask, 0)
 
-    def _run_action_flow_loop(
-        self, inputs: _ActionFlowInputs, steps: int
-    ) -> torch.Tensor:
+    def _run_action_flow_loop(self, inputs: _ActionFlowInputs, steps: int) -> torch.Tensor:
         action_expert = self._require_action_expert()
         dt = 1.0 / steps
         trajectory = inputs.trajectory
@@ -3162,7 +2817,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             )
         return trajectory
 
-    def _resolve_action_horizon(self, action_horizon: Optional[int] = None) -> int:
+    def _resolve_action_horizon(self, action_horizon: int | None = None) -> int:
         max_action_horizon = int(self.config.max_action_horizon or 1)
         resolved = max_action_horizon if action_horizon is None else int(action_horizon)
         if resolved < 1:
@@ -3178,22 +2833,22 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         self,
         *,
         input_ids: torch.LongTensor,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_token_pooling: Optional[torch.Tensor] = None,
-        image_grids: Optional[torch.Tensor] = None,
-        image_num_crops: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.Tensor] = None,
-        video_token_pooling: Optional[torch.Tensor] = None,
-        video_grids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        states: Optional[torch.Tensor] = None,
-        action_dim_is_pad: Optional[torch.Tensor] = None,
-        action_horizon: Optional[int] = None,
-        num_steps: Optional[int] = None,
-        generator: Optional[torch.Generator] = None,
-        encoder_kv_states: Optional[Sequence[Tuple[torch.Tensor, torch.Tensor]]] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        image_token_pooling: torch.Tensor | None = None,
+        image_grids: torch.Tensor | None = None,
+        image_num_crops: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_token_pooling: torch.Tensor | None = None,
+        video_grids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        states: torch.Tensor | None = None,
+        action_dim_is_pad: torch.Tensor | None = None,
+        action_horizon: int | None = None,
+        num_steps: int | None = None,
+        generator: torch.Generator | None = None,
+        encoder_kv_states: Sequence[tuple[torch.Tensor, torch.Tensor]] | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         action_expert = self._require_action_expert()
         if encoder_kv_states is None:
@@ -3211,13 +2866,9 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
                 use_cache=True,
             )
             encoder_kv_states = self._extract_kv_states(outputs.past_key_values)
-            encoder_attention_mask = self._get_encoder_attention_mask(
-                input_ids, attention_mask
-            )
+            encoder_attention_mask = self._get_encoder_attention_mask(input_ids, attention_mask)
         elif encoder_attention_mask is None:
-            encoder_attention_mask = self._get_encoder_attention_mask(
-                input_ids, attention_mask
-            )
+            encoder_attention_mask = self._get_encoder_attention_mask(input_ids, attention_mask)
 
         depth_gate, depth_mask = self._depth_gate_from_condition(
             input_ids=input_ids,
@@ -3258,10 +2909,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             dtype=trajectory.dtype,
         )
         flow_timesteps = [
-            torch.full(
-                (batch_size,), idx / steps, device=device, dtype=torch.float32
-            )
-            for idx in range(steps)
+            torch.full((batch_size,), idx / steps, device=device, dtype=torch.float32) for idx in range(steps)
         ]
         modulation_cache = action_expert.get_or_prepare_modulation_cache(
             flow_timesteps,
@@ -3274,13 +2922,8 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             action_dim_is_pad=action_dim_is_pad,
         )
         action_cuda_graph_manager = self.action_cuda_graph_manager
-        if (
-            action_cuda_graph_manager is not None
-            and action_cuda_graph_manager.can_use_action_flow(flow_inputs)
-        ):
-            trajectory = action_cuda_graph_manager.run_action_flow(
-                flow_inputs, steps, self._run_action_flow_loop
-            )
+        if action_cuda_graph_manager is not None and action_cuda_graph_manager.can_use_action_flow(flow_inputs):
+            trajectory = action_cuda_graph_manager.run_action_flow(flow_inputs, steps, self._run_action_flow_loop)
         else:
             trajectory = self._run_action_flow_loop(flow_inputs, steps)
         return trajectory
@@ -3315,9 +2958,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         num_images = total_images
 
         # Sanity check
-        assert image_grids.size(0) == num_images, (
-            f"Expected {num_images} image grids, but got {image_grids.size(0)}"
-        )
+        assert image_grids.size(0) == num_images, f"Expected {num_images} image grids, but got {image_grids.size(0)}"
         assert image_num_crops.size(0) == num_images, (
             f"Expected {num_images} image num crops, but got {image_num_crops.size(0)}"
         )
@@ -3326,24 +2967,18 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         with torch.no_grad():
             first_prod = image_grids[:, :2].prod(dim=1)  # [num_images]
             second_prod = image_grids[:, 2:].prod(dim=1)  # [num_images]
-            num_pooled_patches_per_image = (first_prod + second_prod).to(
-                image_num_crops.dtype
-            )  # [num_images]
+            num_pooled_patches_per_image = (first_prod + second_prod).to(image_num_crops.dtype)  # [num_images]
 
         # pixel_values: [n_crops, n_patches, pixels_per_patch]
         n_crops, n_patches, pixels_per_patch = pixel_values.shape
 
         # 2) Map each image index → example index
         # Example: if counts = [2, 1, 3], then this becomes [0,0,1,2,2,2]
-        example_ids_for_image = torch.arange(N, device=device).repeat_interleave(
-            counts
-        )  # [num_images]
+        example_ids_for_image = torch.arange(N, device=device).repeat_interleave(counts)  # [num_images]
         assert example_ids_for_image.numel() == num_images
 
         # 2-1) Compute crops_per_example by summing per-image crop counts
-        crops_per_example = torch.zeros(
-            N, dtype=image_num_crops.dtype, device=image_num_crops.device
-        )
+        crops_per_example = torch.zeros(N, dtype=image_num_crops.dtype, device=image_num_crops.device)
         crops_per_example.index_add_(0, example_ids_for_image, image_num_crops)  # [N]
 
         # 2-2) Per-image number of patches = (crops per image) * n_patches
@@ -3356,7 +2991,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         for c in counts_list:
             per_img_patches = patches_per_image[offset_img : offset_img + c]  # [c]
             # Offsets: [0, img0_total_patches, img0+img1_total_patches, ...]
-            index_offset = [0] + per_img_patches.cumsum(0).tolist()[:-1]
+            index_offset = [0] + per_img_patches.cumsum(0).tolist()[:-1]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             index_offset_per_example_list.append(index_offset)
             offset_img += c
 
@@ -3366,15 +3001,11 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             dtype=num_pooled_patches_per_image.dtype,
             device=num_pooled_patches_per_image.device,
         )
-        num_pooled_patches_per_example.index_add_(
-            0, example_ids_for_image, num_pooled_patches_per_image
-        )
+        num_pooled_patches_per_example.index_add_(0, example_ids_for_image, num_pooled_patches_per_image)
 
         # Sanity checks
         total_crops = int(crops_per_example.sum().item())
-        assert total_crops == n_crops, (
-            f"Expected {total_crops} crops, but got {n_crops}"
-        )
+        assert total_crops == n_crops, f"Expected {total_crops} crops, but got {n_crops}"
 
         total_num_pooled_patches = int(num_pooled_patches_per_example.sum().item())
         assert total_num_pooled_patches == image_token_pooling.size(0), (
@@ -3394,9 +3025,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         offset_crop = 0
         for i in range(N):
             num = int(crops_per_example[i].item())
-            cur = pixel_values[
-                offset_crop : offset_crop + num
-            ]  # [num, n_patches, pixels_per_patch]
+            cur = pixel_values[offset_crop : offset_crop + num]  # [num, n_patches, pixels_per_patch]
             images[i, :num] = cur
             offset_crop += num
 
@@ -3421,14 +3050,10 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             num_patches = int(num_pooled_patches_per_example[i].item())
 
             # Subsequence of pooled tokens belonging to this example
-            cur = image_token_pooling[
-                patch_offset : patch_offset + num_patches
-            ].clone()  # [num_patches, dim]
+            cur = image_token_pooling[patch_offset : patch_offset + num_patches].clone()  # [num_patches, dim]
 
             index_offset_per_example = index_offset_per_example_list[i]  # length = c
-            per_img_pooled = num_pooled_patches_per_image[
-                img_offset : img_offset + c
-            ]  # [c]
+            per_img_pooled = num_pooled_patches_per_image[img_offset : img_offset + c]  # [c]
 
             assert len(index_offset_per_example) == per_img_pooled.numel()
 
@@ -3465,7 +3090,6 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         video_token_pooling: torch.Tensor,
         video_grids: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-
         # 1) Count the number of videos in each example
         if self.config.use_frame_special_tokens:
             end_token_id = self.config.frame_end_token_id
@@ -3479,9 +3103,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         num_videos = int(counts.sum().item())
 
         # Sanity check
-        assert video_grids.size(0) == num_videos, (
-            f"Expected {num_videos} videos, but got {video_grids.size(0)}"
-        )
+        assert video_grids.size(0) == num_videos, f"Expected {num_videos} videos, but got {video_grids.size(0)}"
 
         video_num_frames = video_grids[:, 0]  # [num_videos]
         num_pooled_patches_per_video = video_grids.prod(dim=1)  # [num_videos]
@@ -3491,9 +3113,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
 
         # 2) Map each video index -> example index
         # Example: if counts = [2, 1, 3], then this becomes [0,0,1,2,2,2]
-        example_ids_for_video = torch.arange(N, device=device).repeat_interleave(
-            counts
-        )  # [num_videos]
+        example_ids_for_video = torch.arange(N, device=device).repeat_interleave(counts)  # [num_videos]
         assert example_ids_for_video.numel() == num_videos
 
         # 2-1) Compute frames_per_example by summing per-video frame counts
@@ -3518,9 +3138,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
 
         # Sanity checks
         total_frames = int(frames_per_example.sum().item())
-        assert total_frames == n_frames, (
-            f"Expected {total_frames} frames, but got {n_frames}"
-        )
+        assert total_frames == n_frames, f"Expected {total_frames} frames, but got {n_frames}"
 
         total_num_pooled_patches = int(num_pooled_patches_per_example.sum().item())
         assert total_num_pooled_patches == video_token_pooling.size(0), (
@@ -3540,9 +3158,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         offset_frame = 0
         for i in range(N):
             num = int(frames_per_example[i].item())
-            cur = pixel_values_videos[
-                offset_frame : offset_frame + num
-            ]  # [num, n_patches, pixels_per_patch]
+            cur = pixel_values_videos[offset_frame : offset_frame + num]  # [num, n_patches, pixels_per_patch]
             videos[i, :num] = cur
             offset_frame += num
 
@@ -3563,9 +3179,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         patch_offset = 0
         for i in range(N):
             num_patches = int(num_pooled_patches_per_example[i].item())
-            cur = video_token_pooling[
-                patch_offset : patch_offset + num_patches
-            ]  # [num_patches, dim]
+            cur = video_token_pooling[patch_offset : patch_offset + num_patches]  # [num_patches, dim]
             new_token_pooling[i, :num_patches] = cur
             patch_offset += num_patches
 
@@ -3576,19 +3190,17 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
 
     def merge_visual_inputs(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_token_pooling: Optional[torch.Tensor] = None,
-        image_grids: Optional[torch.Tensor] = None,
-        image_num_crops: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.Tensor] = None,
-        video_token_pooling: Optional[torch.Tensor] = None,
-        video_grids: Optional[torch.Tensor] = None,
-    ) -> tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_token_pooling: torch.Tensor | None = None,
+        image_grids: torch.Tensor | None = None,
+        image_num_crops: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_token_pooling: torch.Tensor | None = None,
+        video_grids: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         if pixel_values is not None and pixel_values_videos is not None:
-            raise ValueError(
-                "pixel_values and pixel_values_videos are provided at the same time"
-            )
+            raise ValueError("pixel_values and pixel_values_videos are provided at the same time")
         elif pixel_values is not None:
             assert input_ids is not None
             images, token_pooling = self.build_batched_images(
@@ -3613,16 +3225,15 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
     def build_input_embeddings(
         self,
         input_ids: torch.LongTensor,
-        images: Optional[torch.FloatTensor] = None,  # image inputs
-        token_pooling: Optional[torch.LongTensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-
+        images: torch.FloatTensor | None = None,  # image inputs
+        token_pooling: torch.LongTensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # Get embeddings of input.
         # shape: (batch_size, seq_len, d_model)
         input_ids = input_ids * (input_ids != -1).to(input_ids.dtype)
         x = self.transformer.wte(input_ids)
 
-        image_features: Optional[torch.FloatTensor] = None
+        image_features: torch.FloatTensor | None = None
         if images is not None:
             image_features = self.vision_backbone(images, token_pooling).to(x.device)
             is_image_patch = input_ids.view(-1) == self.config.image_patch_id
@@ -3638,9 +3249,9 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         self,
         *,
         inputs_embeds: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
-        token_type_ids: Optional[torch.Tensor],
-        past_key_values: Optional[Cache],
+        attention_mask: torch.Tensor | None,
+        token_type_ids: torch.Tensor | None,
+        past_key_values: Cache | None,
     ) -> torch.Tensor:
         if attention_mask is not None and attention_mask.ndim == 4:
             return attention_mask.to(device=inputs_embeds.device)
@@ -3656,9 +3267,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             valid_mask = positions.unsqueeze(0) < current_length
             valid_mask = valid_mask.expand(batch_size, -1)
         elif attention_mask.ndim == 2:
-            valid_mask = torch.zeros(
-                (batch_size, attention_mask_len), device=device, dtype=torch.bool
-            )
+            valid_mask = torch.zeros((batch_size, attention_mask_len), device=device, dtype=torch.bool)
             source_mask = attention_mask.to(device=device, dtype=torch.bool)
             copy_len = min(int(source_mask.shape[-1]), attention_mask_len)
             if copy_len > 0:
@@ -3666,24 +3275,19 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             if attention_mask_len > current_length:
                 valid_mask[:, current_length:] = False
         else:
-            raise ValueError(
-                f"Unsupported attention_mask shape for MolmoAct2: {tuple(attention_mask.shape)}"
-            )
+            raise ValueError(f"Unsupported attention_mask shape for MolmoAct2: {tuple(attention_mask.shape)}")
 
         valid_mask = valid_mask[:, None, None, :]
-        causal_mask = torch.tril(
-            torch.ones(
-                attention_mask_len, attention_mask_len, device=device, dtype=torch.bool
-            )
-        )[None, None, past_length:current_length, :attention_mask_len]
+        causal_mask = torch.tril(torch.ones(attention_mask_len, attention_mask_len, device=device, dtype=torch.bool))[
+            None, None, past_length:current_length, :attention_mask_len
+        ]
 
         if token_type_ids is not None and past_length == 0:
             image_mask = token_type_ids.to(device=device, dtype=torch.bool)
             can_attend_back = image_mask[:, :, None] & image_mask[:, None, :]
             image_len = min(int(token_type_ids.shape[1]), attention_mask_len)
             causal_mask[:, :, :, :image_len] = (
-                causal_mask[:, :, :, :image_len]
-                | can_attend_back[:, None, :, :image_len]
+                causal_mask[:, :, :, :image_len] | can_attend_back[:, None, :, :image_len]
             )
 
         allowed = valid_mask & causal_mask
@@ -3701,42 +3305,33 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_token_pooling: Optional[torch.Tensor] = None,
-        image_grids: Optional[torch.Tensor] = None,
-        image_num_crops: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.Tensor] = None,
-        video_token_pooling: Optional[torch.Tensor] = None,
-        video_grids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_token_pooling: torch.Tensor | None = None,
+        image_grids: torch.Tensor | None = None,
+        image_num_crops: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_token_pooling: torch.Tensor | None = None,
+        video_grids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, MolmoAct2ModelOutputWithPast]:
-
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+    ) -> tuple | MolmoAct2ModelOutputWithPast:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You must specify exactly one of input_ids or inputs_embeds"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         images, token_pooling = self.merge_visual_inputs(
             input_ids=input_ids,
@@ -3750,9 +3345,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         )
 
         if images is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both images and inputs_embeds at the same time."
-            )
+            raise ValueError("You cannot specify both images and inputs_embeds at the same time.")
 
         if inputs_embeds is None:
             inputs_embeds, image_features = self.build_input_embeddings(
@@ -3801,8 +3394,8 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
 
 
 class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = []  # Weights are not tied
+    _checkpoint_conversion_mapping: ClassVar[dict] = {}
+    _tied_weights_keys: ClassVar[list] = []  # Weights are not tied
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: MolmoAct2Config
@@ -3844,9 +3437,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         if stats is not None:
             return stats
         filename = getattr(self.config, "norm_stats_filename", "norm_stats.json")
-        base_dir = getattr(self.config, "_name_or_path", None) or getattr(
-            self, "name_or_path", None
-        )
+        base_dir = getattr(self.config, "_name_or_path", None) or getattr(self, "name_or_path", None)
         if not base_dir:
             raise ValueError(
                 "MolmoAct2 normalization stats are not loaded and config._name_or_path is empty; "
@@ -3858,28 +3449,24 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
                 f"MolmoAct2 normalization stats file is missing: {stats_path}. "
                 "Stage a complete local checkpoint containing norm_stats.json."
             )
-        with open(stats_path, "r", encoding="utf-8") as f:
+        with open(stats_path, encoding="utf-8") as f:
             payload = json.load(f)
         stats = _RobotStats(payload)
         self._molmoact2_robot_stats = stats
         return stats
 
     @staticmethod
-    def _move_inputs_to_device(
-        inputs: Mapping[str, Any], device: torch.device
-    ) -> Dict[str, Any]:
+    def _move_inputs_to_device(inputs: Mapping[str, Any], device: torch.device) -> dict[str, Any]:
         out = {}
         for key, value in inputs.items():
             out[key] = value.to(device) if torch.is_tensor(value) else value
         return out
 
     @staticmethod
-    def _drop_trivial_attention_mask(inputs: Mapping[str, Any]) -> Dict[str, Any]:
+    def _drop_trivial_attention_mask(inputs: Mapping[str, Any]) -> dict[str, Any]:
         out = dict(inputs)
         attention_mask = out.get("attention_mask")
-        if torch.is_tensor(attention_mask) and bool(
-            attention_mask.to(dtype=torch.bool).all().item()
-        ):
+        if torch.is_tensor(attention_mask) and bool(attention_mask.to(dtype=torch.bool).all().item()):
             out.pop("attention_mask", None)
         return out
 
@@ -3901,89 +3488,61 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         max_action_dim: int,
         batch_size: int,
         device: torch.device,
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         if int(action_dim) > int(max_action_dim):
             raise ValueError(
                 f"Requested action_dim {int(action_dim)} exceeds checkpoint max_action_dim {int(max_action_dim)}."
             )
         if int(action_dim) == int(max_action_dim):
             return None
-        mask = torch.ones(
-            (int(batch_size), int(max_action_dim)), device=device, dtype=torch.bool
-        )
+        mask = torch.ones((int(batch_size), int(max_action_dim)), device=device, dtype=torch.bool)
         mask[:, : int(action_dim)] = False
         return mask
 
     @staticmethod
     def _slice_action_dim(actions: torch.Tensor, action_dim: int) -> torch.Tensor:
         if actions.shape[-1] < int(action_dim):
-            raise ValueError(
-                f"Requested action_dim {int(action_dim)} but chunk only has width {actions.shape[-1]}."
-            )
+            raise ValueError(f"Requested action_dim {int(action_dim)} but chunk only has width {actions.shape[-1]}.")
         return actions[..., : int(action_dim)]
 
     @staticmethod
-    def _slice_action_chunk(
-        actions: torch.Tensor, n_obs_steps: int, n_action_steps: Optional[int]
-    ) -> torch.Tensor:
+    def _slice_action_chunk(actions: torch.Tensor, n_obs_steps: int, n_action_steps: int | None) -> torch.Tensor:
         if n_action_steps is None:
             return actions
         start = int(n_obs_steps) - 1
         end = start + int(n_action_steps)
         if end > actions.shape[1]:
-            raise ValueError(
-                f"Requested actions up to {end} but model produced horizon {actions.shape[1]}."
-            )
+            raise ValueError(f"Requested actions up to {end} but model produced horizon {actions.shape[1]}.")
         return actions[:, start:end]
 
-    def _depth_token_id_to_bin(self) -> Dict[int, int]:
-        if (
-            self.config.depth_token_start_id is None
-            or int(self.config.num_depth_tokens or 0) <= 0
-        ):
+    def _depth_token_id_to_bin(self) -> dict[int, int]:
+        if self.config.depth_token_start_id is None or int(self.config.num_depth_tokens or 0) <= 0:
             return {}
         start = int(self.config.depth_token_start_id)
         return {start + idx: idx for idx in range(int(self.config.num_depth_tokens))}
 
-    def _action_token_id_to_bin(self) -> Dict[int, int]:
-        if (
-            self.config.action_token_start_id is None
-            or int(self.config.num_action_tokens or 0) <= 0
-        ):
+    def _action_token_id_to_bin(self) -> dict[int, int]:
+        if self.config.action_token_start_id is None or int(self.config.num_action_tokens or 0) <= 0:
             return {}
         start = int(self.config.action_token_start_id)
         return {start + idx: idx for idx in range(int(self.config.num_action_tokens))}
 
     def _require_eos_token_id(self) -> int:
         eos_token_id = getattr(self.config, "eos_token_id", None)
-        if (
-            eos_token_id is None
-            and getattr(self, "generation_config", None) is not None
-        ):
+        if eos_token_id is None and getattr(self, "generation_config", None) is not None:
             eos_token_id = getattr(self.generation_config, "eos_token_id", None)
         if isinstance(eos_token_id, (list, tuple)):
             eos_token_id = eos_token_id[0] if eos_token_id else None
         if eos_token_id is None:
-            raise RuntimeError(
-                "Discrete action generation requires `eos_token_id` in the converted HF config."
-            )
+            raise RuntimeError("Discrete action generation requires `eos_token_id` in the converted HF config.")
         return int(eos_token_id)
 
-    def _decode_depth_bins_from_token_ids(
-        self, token_ids: torch.Tensor
-    ) -> torch.Tensor:
-        if (
-            self.config.depth_start_token_id is None
-            or self.config.depth_end_token_id is None
-        ):
-            raise RuntimeError(
-                "Depth generation requires <depth_start>/<depth_end> token IDs."
-            )
+    def _decode_depth_bins_from_token_ids(self, token_ids: torch.Tensor) -> torch.Tensor:
+        if self.config.depth_start_token_id is None or self.config.depth_end_token_id is None:
+            raise RuntimeError("Depth generation requires <depth_start>/<depth_end> token IDs.")
         token_id_to_bin = self._depth_token_id_to_bin()
         if not token_id_to_bin:
-            raise RuntimeError(
-                "Depth generation requires indexed depth tokens in the converted config."
-            )
+            raise RuntimeError("Depth generation requires indexed depth tokens in the converted config.")
         depth_token_bins = _extract_discrete_token_bins(
             _flatten_generated_token_ids(token_ids),
             int(self.config.depth_start_token_id),
@@ -3991,26 +3550,22 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
             token_id_to_bin,
         )
         if not depth_token_bins:
-            raise RuntimeError(
-                "Model generated no decodable depth tokens between <depth_start>/<depth_end>."
-            )
+            raise RuntimeError("Model generated no decodable depth tokens between <depth_start>/<depth_end>.")
         return torch.as_tensor([depth_token_bins], device=self.device, dtype=torch.long)
 
     def _consume_generation_tokens(
         self,
         token_ids: torch.Tensor,
         *,
-        past_key_values: Optional[Cache],
-        attention_mask: Optional[torch.Tensor],
-    ) -> Tuple[MolmoAct2CausalLMOutputWithPast, Optional[torch.Tensor]]:
+        past_key_values: Cache | None,
+        attention_mask: torch.Tensor | None,
+    ) -> tuple[MolmoAct2CausalLMOutputWithPast, torch.Tensor | None]:
         if token_ids.ndim == 1:
             next_input_ids = token_ids.unsqueeze(1)
         elif token_ids.ndim == 2:
             next_input_ids = token_ids
         else:
-            raise ValueError(
-                f"Expected token_ids to have rank 1 or 2, got {tuple(token_ids.shape)}."
-            )
+            raise ValueError(f"Expected token_ids to have rank 1 or 2, got {tuple(token_ids.shape)}.")
         next_attention_mask = attention_mask
         if next_attention_mask is not None:
             past_length = _cache_seq_len_int(past_key_values)
@@ -4020,9 +3575,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
                 next_attention_mask = torch.cat(
                     (
                         next_attention_mask,
-                        next_attention_mask.new_ones(
-                            (next_input_ids.shape[0], pad_len)
-                        ),
+                        next_attention_mask.new_ones((next_input_ids.shape[0], pad_len)),
                     ),
                     dim=-1,
                 )
@@ -4044,24 +3597,18 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         )
         return output, next_attention_mask
 
-    def _make_depth_decode_attention_bias(
-        self, inputs: Mapping[str, Any], past_key_values: Cache
-    ) -> torch.Tensor:
+    def _make_depth_decode_attention_bias(self, inputs: Mapping[str, Any], past_key_values: Cache) -> torch.Tensor:
         layers = getattr(past_key_values, "layers", None)
         max_cache_len = int(getattr(layers[0], "max_cache_len", 0)) if layers else 0
         if max_cache_len <= 0:
-            raise RuntimeError(
-                "Depth decode fast path requires a cache with a fixed maximum length."
-            )
+            raise RuntimeError("Depth decode fast path requires a cache with a fixed maximum length.")
         input_ids = inputs["input_ids"]
         batch_size = int(input_ids.shape[0])
         device = input_ids.device
         dtype = self.lm_head.weight.dtype
 
         positions = torch.arange(max_cache_len, device=device, dtype=torch.long)
-        valid_mask = torch.ones(
-            (batch_size, max_cache_len), device=device, dtype=torch.bool
-        )
+        valid_mask = torch.ones((batch_size, max_cache_len), device=device, dtype=torch.bool)
         attention_mask = inputs.get("attention_mask")
         if attention_mask is not None:
             source_mask = attention_mask.to(device=device, dtype=torch.bool)
@@ -4092,15 +3639,13 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         *,
         past_key_values: Cache,
         attention_bias: torch.Tensor,
-    ) -> Tuple[torch.Tensor, Cache]:
+    ) -> tuple[torch.Tensor, Cache]:
         if token_ids.ndim == 1:
             next_input_ids = token_ids.unsqueeze(1)
         elif token_ids.ndim == 2:
             next_input_ids = token_ids
         else:
-            raise ValueError(
-                f"Expected token_ids to have rank 1 or 2, got {tuple(token_ids.shape)}."
-            )
+            raise ValueError(f"Expected token_ids to have rank 1 or 2, got {tuple(token_ids.shape)}.")
         past_length = _cache_seq_len_int(past_key_values)
         end = past_length + int(next_input_ids.shape[1])
         if self.depth_decode_cuda_graph_manager.can_use(
@@ -4114,9 +3659,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
                 attention_bias=attention_bias,
                 past_length=past_length,
             )
-        cache_position = torch.arange(
-            past_length, end, device=next_input_ids.device, dtype=torch.long
-        )
+        cache_position = torch.arange(past_length, end, device=next_input_ids.device, dtype=torch.long)
         attention_bias = attention_bias[:, :, past_length:end, :end]
         inputs_embeds = self._embed_base_tokens(next_input_ids)
         outputs = self.model.transformer(
@@ -4136,7 +3679,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         *,
         past_key_values: Cache,
         attention_bias: torch.Tensor,
-    ) -> Tuple[torch.Tensor, Cache]:
+    ) -> tuple[torch.Tensor, Cache]:
         return self._run_ar_decode_step(
             token_ids,
             past_key_values=past_key_values,
@@ -4167,23 +3710,20 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         max_end_steps = max(8, action_horizon)
         action_token_budget = max(1, action_horizon * 16)
         return self.depth_decode_cuda_graph_manager.make_static_cache(
-            max_cache_len=prompt_len
-            + self._max_depth_decode_steps()
-            + max_end_steps
-            + action_token_budget,
+            max_cache_len=prompt_len + self._max_depth_decode_steps() + max_end_steps + action_token_budget,
         )
 
     def _continue_discrete_generation_from_output(
         self,
         initial_output: MolmoAct2CausalLMOutputWithPast,
         *,
-        past_key_values: Optional[Cache],
-        attention_mask: Optional[torch.Tensor],
+        past_key_values: Cache | None,
+        attention_mask: torch.Tensor | None,
         end_token_id: int,
         max_steps: int,
-        attention_bias: Optional[torch.Tensor] = None,
+        attention_bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        generated_tokens: List[torch.Tensor] = []
+        generated_tokens: list[torch.Tensor] = []
         current_output = initial_output
         current_past_key_values = past_key_values
         current_attention_mask = attention_mask
@@ -4223,20 +3763,12 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         self,
         inputs: Mapping[str, Any],
         *,
-        latest_first_image: Optional[np.ndarray],
-        depth_cache: Optional[Mapping[str, Any]],
+        latest_first_image: np.ndarray | None,
+        depth_cache: Mapping[str, Any] | None,
     ) -> _DepthPrefix:
-        if (
-            self.config.depth_start_token_id is None
-            or self.config.depth_end_token_id is None
-        ):
-            raise RuntimeError(
-                "Depth reasoning requires single-token <depth_start>/<depth_end>."
-            )
-        if (
-            self.config.depth_token_start_id is None
-            or int(self.config.num_depth_tokens or 0) <= 0
-        ):
+        if self.config.depth_start_token_id is None or self.config.depth_end_token_id is None:
+            raise RuntimeError("Depth reasoning requires single-token <depth_start>/<depth_end>.")
+        if self.config.depth_token_start_id is None or int(self.config.num_depth_tokens or 0) <= 0:
             raise RuntimeError("Depth reasoning requires indexed depth tokens.")
         batch_size = int(inputs["input_ids"].shape[0])
         if batch_size != 1:
@@ -4245,8 +3777,8 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         output = self(**inputs, use_cache=True, past_key_values=static_cache)
         current_output = output
         current_past_key_values = output.past_key_values
-        current_attention_mask = inputs.get("attention_mask")
-        generated_tokens: List[torch.Tensor] = []
+        _current_attention_mask = inputs.get("attention_mask")
+        generated_tokens: list[torch.Tensor] = []
 
         depth_start = torch.full(
             (batch_size,),
@@ -4260,9 +3792,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
             device=self.device,
             dtype=torch.long,
         )
-        depth_attention_bias = self._make_depth_decode_attention_bias(
-            inputs, current_past_key_values
-        )
+        depth_attention_bias = self._make_depth_decode_attention_bias(inputs, current_past_key_values)
         generated_tokens.append(depth_start)
         last_hidden, current_past_key_values = self._run_depth_decode_step(
             depth_start,
@@ -4274,11 +3804,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         if depth_cache is not None:
             previous_image = depth_cache.get("image")
             previous_bins = depth_cache.get("depth_bins")
-        selective = (
-            latest_first_image is not None
-            and previous_image is not None
-            and previous_bins is not None
-        )
+        selective = latest_first_image is not None and previous_image is not None and previous_bins is not None
         update_mask = None
         previous_buffer_t = None
         if selective:
@@ -4319,9 +3845,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
                     attention_bias=depth_attention_bias,
                 )
         else:
-            for start_idx, end_idx, should_generate in _build_depth_update_spans(
-                update_mask
-            ):
+            for start_idx, end_idx, should_generate in _build_depth_update_spans(update_mask):
                 if should_generate:
                     for depth_idx in range(start_idx, end_idx):
                         depth_logits = self._project_depth_logits(last_hidden)
@@ -4329,17 +3853,13 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
                         depth_bins[:, depth_idx] = predicted_bins
                         chosen_token_ids = code_token_ids[predicted_bins]
                         generated_tokens.append(chosen_token_ids)
-                        last_hidden, current_past_key_values = (
-                            self._run_depth_decode_step(
-                                chosen_token_ids,
-                                past_key_values=current_past_key_values,
-                                attention_bias=depth_attention_bias,
-                            )
+                        last_hidden, current_past_key_values = self._run_depth_decode_step(
+                            chosen_token_ids,
+                            past_key_values=current_past_key_values,
+                            attention_bias=depth_attention_bias,
                         )
                     continue
-                replay_bins = previous_buffer_t[:, start_idx:end_idx].expand(
-                    batch_size, -1
-                )
+                replay_bins = previous_buffer_t[:, start_idx:end_idx].expand(batch_size, -1)
                 depth_bins[:, start_idx:end_idx] = replay_bins
                 replay_token_ids = code_token_ids[replay_bins]
                 generated_tokens.extend(replay_token_ids.unbind(dim=1))
@@ -4403,21 +3923,12 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         action_horizon: int,
     ) -> torch.Tensor:
         if action_tokenizer is None:
-            raise ValueError(
-                "inference_action_mode='discrete' requires an `action_tokenizer` input."
-            )
-        if (
-            self.config.action_start_token_id is None
-            or self.config.action_end_token_id is None
-        ):
-            raise RuntimeError(
-                "Discrete action generation requires <action_start>/<action_end> token IDs."
-            )
+            raise ValueError("inference_action_mode='discrete' requires an `action_tokenizer` input.")
+        if self.config.action_start_token_id is None or self.config.action_end_token_id is None:
+            raise RuntimeError("Discrete action generation requires <action_start>/<action_end> token IDs.")
         token_id_to_bin = self._action_token_id_to_bin()
         if not token_id_to_bin:
-            raise RuntimeError(
-                "Discrete action generation requires indexed action tokens in the converted config."
-            )
+            raise RuntimeError("Discrete action generation requires indexed action tokens in the converted config.")
         discrete_token_ids = _extract_discrete_token_bins(
             _flatten_generated_token_ids(generated_token_ids),
             int(self.config.action_start_token_id),
@@ -4425,9 +3936,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
             token_id_to_bin,
         )
         if not discrete_token_ids:
-            raise RuntimeError(
-                "Model generated no decodable action tokens between <action_start>/<action_end>."
-            )
+            raise RuntimeError("Model generated no decodable action tokens between <action_start>/<action_end>.")
         try:
             decoded = action_tokenizer.decode(
                 [discrete_token_ids],
@@ -4442,13 +3951,9 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         elif action_chunk.ndim == 2:
             action_chunk = action_chunk[None, :, :]
         elif action_chunk.ndim > 3:
-            action_chunk = action_chunk.reshape(
-                1, action_chunk.shape[-2], action_chunk.shape[-1]
-            )
+            action_chunk = action_chunk.reshape(1, action_chunk.shape[-2], action_chunk.shape[-1])
         if action_chunk.ndim != 3:
-            raise RuntimeError(
-                f"Decoded action chunk has unexpected shape {action_chunk.shape}."
-            )
+            raise RuntimeError(f"Decoded action chunk has unexpected shape {action_chunk.shape}.")
         return torch.as_tensor(action_chunk, device=self.device, dtype=torch.float32)
 
     @torch.no_grad()
@@ -4460,25 +3965,22 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         task: str,
         state: Any,
         norm_tag: str,
-        inference_action_mode: Optional[str] = None,
+        inference_action_mode: str | None = None,
         enable_depth_reasoning: bool = False,
-        depth_cache: Optional[Mapping[str, Any]] = None,
+        depth_cache: Mapping[str, Any] | None = None,
         action_tokenizer: Any = None,
-        num_steps: Optional[int] = None,
-        n_action_steps: Optional[int] = None,
-        generator: Optional[torch.Generator] = None,
+        num_steps: int | None = None,
+        n_action_steps: int | None = None,
+        generator: torch.Generator | None = None,
         normalize_language: bool = True,
         enable_cuda_graph: bool = True,
         return_dict: bool = True,
-    ) -> Union[MolmoAct2ActionOutput, torch.Tensor]:
+    ) -> MolmoAct2ActionOutput | torch.Tensor:
         if state is None:
-            raise ValueError(
-                "MolmoAct2 `predict_action` requires `state` for discrete state prompting."
-            )
+            raise ValueError("MolmoAct2 `predict_action` requires `state` for discrete state prompting.")
         if inference_action_mode is None:
             raise ValueError(
-                "`inference_action_mode` must be provided explicitly as either "
-                "'continuous' or 'discrete'."
+                "`inference_action_mode` must be provided explicitly as either 'continuous' or 'discrete'."
             )
         inference_action_mode = str(inference_action_mode)
         if inference_action_mode not in {"continuous", "discrete"}:
@@ -4498,33 +4000,23 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
             )
         if inference_action_mode == "discrete":
             if action_tokenizer is None:
-                raise ValueError(
-                    "inference_action_mode='discrete' requires an `action_tokenizer` input."
-                )
+                raise ValueError("inference_action_mode='discrete' requires an `action_tokenizer` input.")
             if self.config.action_mode not in {"discrete", "both"}:
                 raise ValueError(
                     "inference_action_mode='discrete' requires checkpoint action_mode in "
                     f"{{'discrete', 'both'}}, got {self.config.action_mode!r}."
                 )
         if enable_depth_reasoning and not bool(self.config.enable_depth_reasoning):
-            raise ValueError(
-                "this model was not trained with `--enable_depth_reasoning`."
-            )
+            raise ValueError("this model was not trained with `--enable_depth_reasoning`.")
 
         stats = self._get_robot_stats()
         norm_tag = stats.validate_tag(norm_tag)
         metadata = stats.get_metadata(norm_tag)
-        normalized_state = np.asarray(
-            stats.normalize_state(state, norm_tag), dtype=np.float32
-        )
+        normalized_state = np.asarray(stats.normalize_state(state, norm_tag), dtype=np.float32)
         num_state_tokens = int(self.config.num_state_tokens or 0)
         if num_state_tokens <= 0:
-            raise RuntimeError(
-                "Discrete state prompting requires indexed state tokens in the converted config."
-            )
-        discrete_state_string = _build_discrete_state_string(
-            normalized_state, num_state_tokens
-        )
+            raise RuntimeError("Discrete state prompting requires indexed state tokens in the converted config.")
+        discrete_state_string = _build_discrete_state_string(normalized_state, num_state_tokens)
         style = "robot_depth_action" if enable_depth_reasoning else "robot_action"
         task_text = str(task or "")
         if normalize_language:
@@ -4561,9 +4053,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
             resolved_n_action_steps = int(action_horizon)
         resolved_n_action_steps = int(resolved_n_action_steps)
         if resolved_n_action_steps < 1:
-            raise ValueError(
-                f"n_action_steps must be >= 1, got {resolved_n_action_steps}."
-            )
+            raise ValueError(f"n_action_steps must be >= 1, got {resolved_n_action_steps}.")
         if resolved_n_action_steps > int(action_horizon):
             raise ValueError(
                 f"Requested n_action_steps={resolved_n_action_steps} exceeds tag action_horizon={int(action_horizon)}."
@@ -4607,11 +4097,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
                 if latest_first_image is not None:
                     updated_depth_cache = {
                         "image": latest_first_image,
-                        "depth_bins": depth_bins.detach()
-                        .cpu()
-                        .reshape(-1)
-                        .numpy()
-                        .astype(np.int64),
+                        "depth_bins": depth_bins.detach().cpu().reshape(-1).numpy().astype(np.int64),
                     }
             else:
                 actions = self.model.generate_actions_from_inputs(
@@ -4636,18 +4122,12 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
                     end_token_id=self._require_eos_token_id(),
                     max_steps=max(1, int(generation_horizon * 16)),
                 )
-                generated_token_ids = torch.cat(
-                    [depth_prefix.token_ids, action_token_ids], dim=1
-                )
+                generated_token_ids = torch.cat([depth_prefix.token_ids, action_token_ids], dim=1)
                 depth_bins = depth_prefix.depth_bins
                 if latest_first_image is not None:
                     updated_depth_cache = {
                         "image": latest_first_image,
-                        "depth_bins": depth_bins.detach()
-                        .cpu()
-                        .reshape(-1)
-                        .numpy()
-                        .astype(np.int64),
+                        "depth_bins": depth_bins.detach().cpu().reshape(-1).numpy().astype(np.int64),
                     }
             else:
                 max_action_decode_steps = max(1, int(generation_horizon * 16))
@@ -4685,9 +4165,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
             )
 
         actions = self._slice_action_dim(actions, action_dim)
-        actions = self._slice_action_chunk(
-            actions, int(self.config.n_obs_steps), resolved_n_action_steps
-        )
+        actions = self._slice_action_chunk(actions, int(self.config.n_obs_steps), resolved_n_action_steps)
         actions = stats.unnormalize_action(actions, norm_tag)
         if not torch.is_tensor(actions):
             actions = torch.as_tensor(actions, device=self.device, dtype=torch.float32)
@@ -4707,26 +4185,26 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_token_pooling: Optional[torch.Tensor] = None,
-        image_grids: Optional[torch.Tensor] = None,
-        image_num_crops: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.Tensor] = None,
-        video_token_pooling: Optional[torch.Tensor] = None,
-        video_grids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        pixel_values: torch.Tensor | None = None,
+        image_token_pooling: torch.Tensor | None = None,
+        image_grids: torch.Tensor | None = None,
+        image_num_crops: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_token_pooling: torch.Tensor | None = None,
+        video_grids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, MolmoAct2CausalLMOutputWithPast]:
+    ) -> tuple | MolmoAct2CausalLMOutputWithPast:
         r"""
         ```python
         >>> from PIL import Image
@@ -4771,18 +4249,12 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = (
-            slice(-logits_to_keep, None)
-            if isinstance(logits_to_keep, int)
-            else logits_to_keep
-        )
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.vocab_size
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.vocab_size)
 
         return MolmoAct2CausalLMOutputWithPast(
             loss=loss,
@@ -4796,22 +4268,21 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_token_pooling: Optional[torch.Tensor] = None,
-        image_grids: Optional[torch.Tensor] = None,
-        image_num_crops: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.Tensor] = None,
-        video_token_pooling: Optional[torch.Tensor] = None,
-        video_grids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Optional[Union[int, torch.Tensor]] = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_token_pooling: torch.Tensor | None = None,
+        image_grids: torch.Tensor | None = None,
+        image_num_crops: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_token_pooling: torch.Tensor | None = None,
+        video_grids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor | None = None,
         **kwargs,
     ):
-
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -4842,11 +4313,11 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
     def create_masks_for_generate(
         config: PretrainedConfig,
         input_embeds: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
+        attention_mask: torch.Tensor | None,
         cache_position: torch.Tensor,
-        past_key_values: Optional[Cache],
-        position_ids: Optional[torch.Tensor],
-        token_type_ids: Optional[torch.Tensor] = None,
+        past_key_values: Cache | None,
+        position_ids: torch.Tensor | None,
+        token_type_ids: torch.Tensor | None = None,
         **kwargs,
     ) -> dict:
         # Prepare mask arguments
@@ -4861,9 +4332,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         # Add the token type ids mask for generate as well
         if token_type_ids is not None and input_embeds.shape[1] != 1:
             # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
-            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-                token_type_ids.to(cache_position.device)
-            )
+            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(token_type_ids.to(cache_position.device))
 
         return create_masks_for_generate(**mask_kwargs)
 

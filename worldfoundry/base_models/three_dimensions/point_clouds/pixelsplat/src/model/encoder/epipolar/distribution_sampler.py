@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> encoder -> epipolar -> distribution_sampler.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 import torch
 from jaxtyping import Float, Int64, Shaped
 from torch import Tensor
@@ -11,7 +10,6 @@ from ....misc.discrete_probability_distribution import (
 
 
 class DistributionSampler:
-    """Distribution sampler implementation."""
     def sample(
         self,
         pdf: Float[Tensor, "*batch bucket"],

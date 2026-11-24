@@ -1,99 +1,47 @@
-"""Module for base_models -> three_dimensions -> depth -> midas -> backbones -> utils.py functionality."""
-
 import torch
-
 import torch.nn as nn
 
 
 class Slice(nn.Module):
-    """Slice implementation."""
     def __init__(self, start_index=1):
-        """Init.
-
-        Args:
-            start_index: The start index.
-        """
-        super(Slice, self).__init__()
+        super().__init__()
         self.start_index = start_index
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        return x[:, self.start_index:]
+        return x[:, self.start_index :]
 
 
 class AddReadout(nn.Module):
-    """Add readout implementation."""
     def __init__(self, start_index=1):
-        """Init.
-
-        Args:
-            start_index: The start index.
-        """
-        super(AddReadout, self).__init__()
+        super().__init__()
         self.start_index = start_index
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        if self.start_index == 2:
-            readout = (x[:, 0] + x[:, 1]) / 2
-        else:
-            readout = x[:, 0]
-        return x[:, self.start_index:] + readout.unsqueeze(1)
+        readout = (x[:, 0] + x[:, 1]) / 2 if self.start_index == 2 else x[:, 0]
+        return x[:, self.start_index :] + readout.unsqueeze(1)
 
 
 class ProjectReadout(nn.Module):
-    """Project readout implementation."""
     def __init__(self, in_features, start_index=1):
-        """Init.
-
-        Args:
-            in_features: The in features.
-            start_index: The start index.
-        """
-        super(ProjectReadout, self).__init__()
+        super().__init__()
         self.start_index = start_index
 
         self.project = nn.Sequential(nn.Linear(2 * in_features, in_features), nn.GELU())
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        readout = x[:, 0].unsqueeze(1).expand_as(x[:, self.start_index:])
-        features = torch.cat((x[:, self.start_index:], readout), -1)
+        readout = x[:, 0].unsqueeze(1).expand_as(x[:, self.start_index :])
+        features = torch.cat((x[:, self.start_index :], readout), -1)
 
         return self.project(features)
 
 
 class Transpose(nn.Module):
-    """Transpose implementation."""
     def __init__(self, dim0, dim1):
-        """Init.
-
-        Args:
-            dim0: The dim0.
-            dim1: The dim1.
-        """
-        super(Transpose, self).__init__()
+        super().__init__()
         self.dim0 = dim0
         self.dim1 = dim1
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         x = x.transpose(self.dim0, self.dim1)
         return x
 
@@ -102,32 +50,13 @@ activations = {}
 
 
 def get_activation(name):
-    """Get activation.
-
-    Args:
-        name: The name.
-    """
     def hook(model, input, output):
-        """Hook.
-
-        Args:
-            model: The model.
-            input: The input.
-            output: The output.
-        """
         activations[name] = output
 
     return hook
 
 
 def forward_default(pretrained, x, function_name="forward_features"):
-    """Forward default.
-
-    Args:
-        pretrained: The pretrained.
-        x: The x.
-        function_name: The function name.
-    """
     exec(f"pretrained.model.{function_name}(x)")
 
     layer_1 = pretrained.activations["1"]
@@ -148,13 +77,6 @@ def forward_default(pretrained, x, function_name="forward_features"):
 
 
 def forward_adapted_unflatten(pretrained, x, function_name="forward_features"):
-    """Forward adapted unflatten.
-
-    Args:
-        pretrained: The pretrained.
-        x: The x.
-        function_name: The function name.
-    """
     b, c, h, w = x.shape
 
     exec(f"glob = pretrained.model.{function_name}(x)")
@@ -190,61 +112,37 @@ def forward_adapted_unflatten(pretrained, x, function_name="forward_features"):
     if layer_4.ndim == 3:
         layer_4 = unflatten(layer_4)
 
-    layer_1 = pretrained.act_postprocess1[3: len(pretrained.act_postprocess1)](layer_1)
-    layer_2 = pretrained.act_postprocess2[3: len(pretrained.act_postprocess2)](layer_2)
-    layer_3 = pretrained.act_postprocess3[3: len(pretrained.act_postprocess3)](layer_3)
-    layer_4 = pretrained.act_postprocess4[3: len(pretrained.act_postprocess4)](layer_4)
+    layer_1 = pretrained.act_postprocess1[3 : len(pretrained.act_postprocess1)](layer_1)
+    layer_2 = pretrained.act_postprocess2[3 : len(pretrained.act_postprocess2)](layer_2)
+    layer_3 = pretrained.act_postprocess3[3 : len(pretrained.act_postprocess3)](layer_3)
+    layer_4 = pretrained.act_postprocess4[3 : len(pretrained.act_postprocess4)](layer_4)
 
     return layer_1, layer_2, layer_3, layer_4
 
 
 def get_readout_oper(vit_features, features, use_readout, start_index=1):
-    """Get readout oper.
-
-    Args:
-        vit_features: The vit features.
-        features: The features.
-        use_readout: The use readout.
-        start_index: The start index.
-    """
     if use_readout == "ignore":
         readout_oper = [Slice(start_index)] * len(features)
     elif use_readout == "add":
         readout_oper = [AddReadout(start_index)] * len(features)
     elif use_readout == "project":
-        readout_oper = [
-            ProjectReadout(vit_features, start_index) for out_feat in features
-        ]
+        readout_oper = [ProjectReadout(vit_features, start_index) for out_feat in features]
     else:
-        assert (
-            False
-        ), "wrong operation for readout token, use_readout can be 'ignore', 'add', or 'project'"
+        assert False, "wrong operation for readout token, use_readout can be 'ignore', 'add', or 'project'"  # noqa: B011 - Keeps the assertion semantics under -O.
 
     return readout_oper
 
 
 def make_backbone_default(
-        model,
-        features=[96, 192, 384, 768],
-        size=[384, 384],
-        hooks=[2, 5, 8, 11],
-        vit_features=768,
-        use_readout="ignore",
-        start_index=1,
-        start_index_readout=1,
+    model,
+    features=[96, 192, 384, 768],  # noqa: B006 - Keeps the upstream default object and signature.
+    size=[384, 384],  # noqa: B006 - Keeps the upstream default object and signature.
+    hooks=[2, 5, 8, 11],  # noqa: B006 - Keeps the upstream default object and signature.
+    vit_features=768,
+    use_readout="ignore",
+    start_index=1,
+    start_index_readout=1,
 ):
-    """Make backbone default.
-
-    Args:
-        model: The model.
-        features: The features.
-        size: The size.
-        hooks: The hooks.
-        vit_features: The vit features.
-        use_readout: The use readout.
-        start_index: The start index.
-        start_index_readout: The start index readout.
-    """
     pretrained = nn.Module()
 
     pretrained.model = model

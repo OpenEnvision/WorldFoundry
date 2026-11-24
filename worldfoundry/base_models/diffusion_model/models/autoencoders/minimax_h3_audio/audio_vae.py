@@ -14,7 +14,6 @@ in :mod:`~..minimax_h3_common`.
 
 # DAC-lineage audio VAE: waveform encoder + BigVGAN decoder (inference-only bundle).
 import math
-from typing import List
 
 import numpy as np
 import torch
@@ -28,6 +27,7 @@ from .bigvgan import AttrDict, BigVGAN
 
 class GeGluMlp(nn.Module):
     """Gated-GELU MLP used inside DAC attention projections."""
+
     def __init__(self, in_features, hidden_features):
         super().__init__()
         self.norm = nn.LayerNorm(in_features)
@@ -45,6 +45,7 @@ class GeGluMlp(nn.Module):
 
 class CausalAttention(nn.Module):
     """Causal self-attention over DAC audio feature sequences."""
+
     def __init__(self, in_dim, out_dim, num_heads):
         super().__init__()
         if in_dim > out_dim:
@@ -75,15 +76,9 @@ class CausalAttention(nn.Module):
             weight=self.qkv.weight,
             bias=torch.cat((self.q_bias, self.zero_k_bias, self.v_bias)),
         )
-        q, k, v = (
-            qkv.reshape(B, N, 3, self.num_heads, self.head_dim)
-            .permute(2, 0, 3, 1, 4)
-            .unbind(0)
-        )
+        q, k, v = qkv.reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4).unbind(0)
 
-        x = scaled_dot_product_attention(
-            q, k, v, attn_mask=None, dropout_p=0.0, is_causal=True
-        )
+        x = scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=True)
 
         if self.in_dim > self.out_dim:
             x = torch.mean(x, dim=1)
@@ -97,9 +92,8 @@ class CausalAttention(nn.Module):
 
 class AttnProjection(nn.Module):
     """Optional attention projection inserted in the DAC encoder."""
-    def __init__(
-        self, in_dim, out_dim, num_heads, norm_layer=nn.LayerNorm, mlp_ratio=2
-    ):
+
+    def __init__(self, in_dim, out_dim, num_heads, norm_layer=nn.LayerNorm, mlp_ratio=2):
         super().__init__()
         assert out_dim % in_dim == 0 or in_dim % out_dim == 0
         self.in_dim = in_dim
@@ -136,6 +130,7 @@ def snake(x, alpha):
 
 class Snake1d(nn.Module):
     """Learned Snake activation applied channel-wise to 1-D features."""
+
     def __init__(self, channels):
         super().__init__()
         self.alpha = nn.Parameter(torch.ones(1, channels, 1))
@@ -146,6 +141,7 @@ class Snake1d(nn.Module):
 
 class ResidualUnit(nn.Module):
     """Dilated residual unit used by the DAC encoder."""
+
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
@@ -166,6 +162,7 @@ class ResidualUnit(nn.Module):
 
 class EncoderBlock(nn.Module):
     """Strided DAC encoder stage wrapping residual units."""
+
     def __init__(self, dim: int = 16, stride: int = 1):
         super().__init__()
         self.block = nn.Sequential(
@@ -188,10 +185,11 @@ class EncoderBlock(nn.Module):
 
 class Encoder(nn.Module):
     """Full DAC convolutional encoder stack."""
+
     def __init__(
         self,
         d_model: int = 64,
-        strides: list = [2, 4, 8, 8],
+        strides: list = [2, 4, 8, 8],  # noqa: B006 - Keeps the upstream default object and signature.
         d_latent: int = 64,
     ):
         super().__init__()
@@ -221,13 +219,14 @@ class DacAudioVAE(nn.Module):
     # Ported from SGLang: the SGLang base was already ``torch.nn.Module`` (no
     # framework mixin), so no substitution was required for this class.
     """DAC-lineage audio VAE CNN used by MiniMax H3."""
+
     def __init__(
         self,
         encoder_dim: int = 64,
-        encoder_rates: List[int] = [2, 4, 8, 8],
-        latent_dim: int = None,
+        encoder_rates: list[int] = [2, 4, 8, 8],  # noqa: B006 - Keeps the upstream default object and signature.
+        latent_dim: int | None = None,
         decoder_dim: int = 1536,
-        decoder_rates: List[int] = [8, 8, 4, 2],
+        decoder_rates: list[int] = [8, 8, 4, 2],  # noqa: B006 - Keeps the upstream default object and signature.
         sample_rate: int = 44100,
         vae_latent_channels: int = 64,
         attn_proj: bool = False,
@@ -315,7 +314,7 @@ class DacAudioVAE(nn.Module):
 
         return audio_data
 
-    def encode(self, audio_data: torch.Tensor, sample_rate: int = None):
+    def encode(self, audio_data: torch.Tensor, sample_rate: int | None = None):
         """Encode waveform into the deterministic posterior-mean latent.
 
         Mirrors the SGLang MiniMax H3 reference-encoding path

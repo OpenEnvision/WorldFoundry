@@ -3,24 +3,22 @@
 from __future__ import annotations
 
 import abc
-from collections.abc import Sequence
 import dataclasses
 import difflib
 import logging
 import pathlib
+from collections.abc import Sequence
 from typing import Any, Protocol, TypeAlias
 
-from .modeling import model as _model
-from .modeling import pi0_config
-from .modeling import pi0_fast
-from .modeling import tokenizer as _tokenizer
-from .policies import aloha_policy
-from .policies import droid_policy
-from .policies import libero_policy
-from .checkpoints import resolve_local_path
+from worldfoundry.core.io.paths import resolve_data_path
+
 from . import normalize as _normalize
 from . import transforms as _transforms
-from worldfoundry.core.io.paths import resolve_data_path
+from .checkpoints import resolve_local_path
+from .modeling import model as _model
+from .modeling import pi0_config, pi0_fast
+from .modeling import tokenizer as _tokenizer
+from .policies import aloha_policy, droid_policy, libero_policy
 
 ModelType: TypeAlias = _model.ModelType
 
@@ -117,7 +115,9 @@ class DataConfigFactory(abc.ABC):
             use_quantile_norm=model_config.model_type != ModelType.PI0,
         )
 
-    def _load_norm_stats(self, assets_dir: pathlib.Path, asset_id: str | None) -> dict[str, _transforms.NormStats] | None:
+    def _load_norm_stats(
+        self, assets_dir: pathlib.Path, asset_id: str | None
+    ) -> dict[str, _transforms.NormStats] | None:
         if asset_id is None:
             return None
         try:
@@ -148,7 +148,9 @@ class SimpleDataConfig(DataConfigFactory):
     model_transforms: GroupFactory = dataclasses.field(default_factory=ModelTransformFactory)
 
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-        data_transforms = self.data_transforms(model_config) if self.data_transforms is not None else _transforms.Group()
+        data_transforms = (
+            self.data_transforms(model_config) if self.data_transforms is not None else _transforms.Group()
+        )
         return dataclasses.replace(
             self.create_base_config(assets_dirs, model_config),
             data_transforms=data_transforms,
@@ -315,9 +317,7 @@ def _load_configs() -> list[RuntimeConfig]:
         data_spec = values.pop("data")
         data_family = str(data_spec.get("kind") or "").strip().lower()
         if data_family not in {"aloha", "droid", "libero"}:
-            raise ValueError(
-                f"OpenPI config {name!r} has unsupported data family {data_family!r}"
-            )
+            raise ValueError(f"OpenPI config {name!r} has unsupported data family {data_family!r}")
         configs.append(
             RuntimeConfig(
                 name=str(name),

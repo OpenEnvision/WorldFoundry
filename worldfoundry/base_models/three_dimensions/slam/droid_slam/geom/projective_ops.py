@@ -1,29 +1,14 @@
-"""Module for base_models -> three_dimensions -> slam -> droid_slam -> geom -> projective_ops.py functionality."""
-
 import torch
-import torch.nn.functional as F
-
 from lietorch import SE3, Sim3
 
 MIN_DEPTH = 0.2
 
 
 def extract_intrinsics(intrinsics):
-    """Extract intrinsics.
-
-    Args:
-        intrinsics: The intrinsics.
-    """
     return intrinsics[..., None, None, :].unbind(dim=-1)
 
 
 def coords_grid(ht, wd, **kwargs):
-    """Coords grid.
-
-    Args:
-        ht: The ht.
-        wd: The wd.
-    """
     y, x = torch.meshgrid(
         torch.arange(ht, dtype=torch.float, **kwargs),
         torch.arange(wd, dtype=torch.float, **kwargs),
@@ -67,10 +52,7 @@ def proj(Xs, intrinsics, jacobian=False, return_depth=False):
 
     x = fx * (X * d) + cx
     y = fy * (Y * d) + cy
-    if return_depth:
-        coords = torch.stack([x, y, D * d], dim=-1)
-    else:
-        coords = torch.stack([x, y], dim=-1)
+    coords = torch.stack([x, y, D * d], dim=-1) if return_depth else torch.stack([x, y], dim=-1)
 
     if jacobian:
         B, N, H, W = d.shape
@@ -175,9 +157,7 @@ def actp(Gij, X0, jacobian=False):
     return X1, None
 
 
-def projective_transform(
-    poses, depths, intrinsics, ii, jj, jacobian=False, return_depth=False
-):
+def projective_transform(poses, depths, intrinsics, ii, jj, jacobian=False, return_depth=False):
     """map points from ii->jj"""
 
     # inverse project (pinhole)
@@ -222,7 +202,7 @@ def induced_flow(poses, disps, intrinsics, ii, jj):
         torch.arange(wd, device=disps.device, dtype=torch.float),
         indexing="ij",
     )
-    
+
     coords0 = torch.stack([x, y], dim=-1)
     coords1, valid = projective_transform(poses, disps, intrinsics, ii, jj, False)
 

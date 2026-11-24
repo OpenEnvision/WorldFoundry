@@ -5,30 +5,28 @@ from dataclasses import dataclass
 from itertools import pairwise
 
 import torch
+
+from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.variants.jing.control import control_vector
 from worldfoundry.base_models.diffusion_model.schedulers.minimax_h3 import (
     minimax_h3_align_frame_count as align_num_frames,
-    minimax_h3_video_latent_t as video_latent_num_frames,
 )
-from worldfoundry.pipelines.minimax._minimax_h3.packed_tokens import (
-    minimax_h3_patchify_video_latent,
+from worldfoundry.base_models.diffusion_model.schedulers.minimax_h3 import (
+    minimax_h3_video_latent_t as video_latent_num_frames,
 )
 from worldfoundry.pipelines.minimax._minimax_h3.packed_sequence import (
     _axis_from_sqrt_area as _spatial_position_grid,
 )
-from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.variants.jing.control import control_vector
-
+from worldfoundry.pipelines.minimax._minimax_h3.packed_tokens import (
+    minimax_h3_patchify_video_latent,
+)
 
 
 def chunk_lengths(num_frames, first_chunk_size=2):
     frames = align_num_frames(num_frames)
     count, tail = divmod(video_latent_num_frames(frames), 5)
     if count < 1 or tail != 2 or first_chunk_size not in (0, 2):
-        raise ValueError(
-            "Expected at least 22 pixel frames and first_chunk_size 0 or 2"
-        )
-    return frames, (
-        [7] + [5] * (count - 1) if first_chunk_size == 2 else [5] * count + [2]
-    )
+        raise ValueError("Expected at least 22 pixel frames and first_chunk_size 0 or 2")
+    return frames, ([7] + [5] * (count - 1) if first_chunk_size == 2 else [5] * count + [2])
 
 
 def expand_slices(case, count):
@@ -56,10 +54,7 @@ def expand_slices(case, count):
                     raise ValueError(f"Chunk {index}: each control must be a string, e.g. 'w,a' or ''")
                 slices.append({"prompt": chunk.get("prompt", case.get("prompt")), "control": control})
     if slices is None:
-        slices = [
-            {"prompt": case.get("prompt"), "control": case.get("control", [])}
-            for _ in range(count)
-        ]
+        slices = [{"prompt": case.get("prompt"), "control": case.get("control", [])} for _ in range(count)]
     if not isinstance(slices, list) or len(slices) != count:
         raise ValueError(f"Expected exactly {count} slices")
     result = []
@@ -72,8 +67,7 @@ def expand_slices(case, count):
         keys = item.get("control", [])
         vector = control_vector(keys)
         if isinstance(keys, str):
-            keys = ([key.strip().lower() for key in keys.split(",")]
-                    if "," in keys else list(keys.strip().lower()))
+            keys = [key.strip().lower() for key in keys.split(",")] if "," in keys else list(keys.strip().lower())
         result.append(
             {
                 "prompt": prompt,
@@ -100,17 +94,13 @@ def positions(frames, height, width, patch_size):
     index = torch.arange(frames + 1)
     pixel_starts = (index // 5) * 17 + torch.tensor([0, 1, 5, 9, 13])[index % 5]
     clock = pixel_starts.to(torch.float64) * (5.0 / 3.0)
-    video = torch.stack(
-        torch.meshgrid(clock[:frames], h, w, indexing="ij"), dim=-1
-    ).reshape(-1, 3)
-    boundaries = list(range(0, frames - 1, 5)) + [frames]
+    video = torch.stack(torch.meshgrid(clock[:frames], h, w, indexing="ij"), dim=-1).reshape(-1, 3)
+    boundaries = list(range(0, frames - 1, 5)) + [frames]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     audio_time = []
     for start, end in pairwise(boundaries):
         length = audio_endpoint(end) - audio_endpoint(start)
         audio_time.append(
-            clock[start]
-            + torch.arange(length, dtype=torch.float64)
-            * ((clock[end] - clock[start]) / length)
+            clock[start] + torch.arange(length, dtype=torch.float64) * ((clock[end] - clock[start]) / length)
         )
     time = torch.cat(audio_time)
     audio = torch.zeros(2, len(time), 3, dtype=torch.float64)
@@ -151,10 +141,7 @@ class Packed:
     def audio_channel_major(self):
         pieces = self.audio[0].split([2 * length for length in self.audio_lengths])
         return torch.cat(
-            [
-                part.reshape(2, length, -1)
-                for part, length in zip(pieces, self.audio_lengths)
-            ],
+            [part.reshape(2, length, -1) for part, length in zip(pieces, self.audio_lengths, strict=False)],
             dim=1,
         ).flatten(0, 1)
 
@@ -166,17 +153,13 @@ def pack(payload, model_config, generation, device):
     video, audio = payload["video"].to(device), payload["audio"].to(device)
     _, frames, height, width = video.shape
     if sum(payload["lengths"]) != frames or height % patch[1] or width % patch[2]:
-        raise ValueError(
-            "Slice lengths and spatial patches must cover the video exactly"
-        )
+        raise ValueError("Slice lengths and spatial patches must cover the video exactly")
     if tuple(audio.shape) != (
         2,
         audio_endpoint(frames),
         model_config["audio_in_channels"],
     ):
-        raise ValueError(
-            "Audio must contain both channels on the complete video timeline"
-        )
+        raise ValueError("Audio must contain both channels on the complete video timeline")
     video_pos, audio_pos = positions(frames, height, width, patch)
     video_pos, audio_pos = video_pos.to(device), audio_pos.to(device)
     spatial_rows = height * width // (patch[1] * patch[2])
@@ -229,9 +212,7 @@ def pack(payload, model_config, generation, device):
         parts["video"].append(ref_rows)
         video_offset += len(ref_rows)
 
-    for index, (length, item) in enumerate(
-        zip(payload["lengths"], payload["slices"], strict=True)
-    ):
+    for index, (length, item) in enumerate(zip(payload["lengths"], payload["slices"], strict=True)):
         end = start + length
         a0, a1 = audio_endpoint(start), audio_endpoint(end)
         text, tags = payload["text_bank"][item["prompt"]]
@@ -268,9 +249,7 @@ def pack(payload, model_config, generation, device):
         )
         parts["video"].append(v)
         # Empty set still encodes the model's zero camera command when control is enabled.
-        raw = torch.tensor(item["vector"], device=device, dtype=video.dtype).expand(
-            length, -1
-        )
+        raw = torch.tensor(item["vector"], device=device, dtype=video.dtype).expand(length, -1)
         controls.append((raw, height, width, vi))
         start = end
 
@@ -288,9 +267,7 @@ def pack(payload, model_config, generation, device):
         cat("tags"),
         cat("owners"),
         cat("media"),
-        cat("refs")
-        if parts["refs"]
-        else torch.empty(0, device=device, dtype=torch.long),
+        cat("refs") if parts["refs"] else torch.empty(0, device=device, dtype=torch.long),
         tuple(text_lengths),
         controls,
         video_offset,

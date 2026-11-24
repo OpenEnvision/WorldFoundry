@@ -1,14 +1,11 @@
-from typing import Dict, List, Tuple
-
 import gymnasium
 import pygame
 
+ActionNames = list[str]
+Keymap = dict[tuple[int], int]
 
-ActionNames = List[str]
-Keymap = Dict[Tuple[int], int]
 
-
-def get_keymap_and_action_names(name: str) -> Tuple[Keymap, ActionNames]:
+def get_keymap_and_action_names(name: str) -> tuple[Keymap, ActionNames]:
     if name == "empty":
         return EMPTY_KEYMAP, EMPTY_ACTION_NAMES
 
@@ -55,22 +52,18 @@ ATARI_KEYMAP = {
     (pygame.K_d,): 3,
     (pygame.K_a,): 4,
     (pygame.K_s,): 5,
-
     (pygame.K_w, pygame.K_d): 6,
     (pygame.K_w, pygame.K_a): 7,
     (pygame.K_s, pygame.K_d): 8,
     (pygame.K_s, pygame.K_a): 9,
-
     (pygame.K_w, pygame.K_SPACE): 10,
     (pygame.K_d, pygame.K_SPACE): 11,
     (pygame.K_a, pygame.K_SPACE): 12,
     (pygame.K_s, pygame.K_SPACE): 13,
-
     (pygame.K_w, pygame.K_d, pygame.K_SPACE): 14,
     (pygame.K_w, pygame.K_a, pygame.K_SPACE): 15,
     (pygame.K_s, pygame.K_d, pygame.K_SPACE): 16,
     (pygame.K_s, pygame.K_a, pygame.K_SPACE): 17,
-
 }
 
 DATASET_MODE_ACTION_NAMES = [

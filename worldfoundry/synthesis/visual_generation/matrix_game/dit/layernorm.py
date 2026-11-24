@@ -1,4 +1,3 @@
-
 import importlib
 import inspect
 import numbers
@@ -98,7 +97,7 @@ def make_viewless_tensor(inp, requires_grad, keep_graph):
         return MakeViewlessTensor.apply(inp, requires_grad)
     else:
         return _kernel_make_viewless_tensor(inp, requires_grad)
-    
+
 
 class FusedLayerNorm(torch.nn.Module):
     """Layer Norm, fused into a single CUDA kernel.
@@ -125,17 +124,16 @@ class FusedLayerNorm(torch.nn.Module):
     def __init__(
         self,
         hidden_size: int,
-        elementwise_affine: bool = False, 
+        elementwise_affine: bool = False,
         eps: float = 1e-5,
         persist_layer_norm: bool = True,
         zero_centered_gamma: bool = False,
         normalization: str = "LayerNorm",  # included to match TE interface
-        memory_efficient : bool = False
+        memory_efficient: bool = False,
     ):
         super().__init__()
 
         self.zero_centered_gamma = zero_centered_gamma
-        
 
         # List of hiddens sizes supported in the persistent layer norm kernel
         # If the hidden size is not supported, fall back to the non-persistent
@@ -203,25 +201,22 @@ class FusedLayerNorm(torch.nn.Module):
             else:
                 init.ones_(self.weight)
             if self.bias is not None:
-                init.zeros_(self.bias)    
+                init.zeros_(self.bias)
 
     def forward(self, input: Tensor) -> Tensor:
-
         if not self.elementwise_affine:
             if fused_layer_norm is None:
                 return F.layer_norm(input, self.normalized_shape, None, None, self.eps)
             return fused_layer_norm(input, self.normalized_shape, self.eps, self.memory_efficient)
-        
+
         weight = self.weight + 1 if self.zero_centered_gamma else self.weight
 
         if not self.persist_layer_norm and not HAVE_FUSED_LAYER_NORM:
             return F.layer_norm(input, self.normalized_shape, weight, self.bias, self.eps)
 
         if self.persist_layer_norm:
-            if 'memory_efficient' in inspect.getfullargspec(FastLayerNormFN.forward).args:
-                output = FastLayerNormFN.apply(
-                    input, weight, self.bias, self.eps, False
-                )
+            if "memory_efficient" in inspect.getfullargspec(FastLayerNormFN.forward).args:
+                output = FastLayerNormFN.apply(input, weight, self.bias, self.eps, False)
             else:
                 output = FastLayerNormFN.apply(input, weight, self.bias, self.eps)
 
@@ -229,15 +224,10 @@ class FusedLayerNorm(torch.nn.Module):
             # a populated '_base' field). This will result in schedule.py's
             # deallocate_output_tensor() throwing an error, so a viewless tensor is
             # created to prevent this.
-            output = make_viewless_tensor(
-                inp=output, requires_grad=input.requires_grad, keep_graph=True
-            )
+            output = make_viewless_tensor(inp=output, requires_grad=input.requires_grad, keep_graph=True)
 
         else:
-            if (
-                'memory_efficient'
-                in inspect.getfullargspec(FusedLayerNormAffineFunction.forward).args
-            ):
+            if "memory_efficient" in inspect.getfullargspec(FusedLayerNormAffineFunction.forward).args:
                 return FusedLayerNormAffineFunction.apply(
                     input,
                     weight,
@@ -247,26 +237,17 @@ class FusedLayerNorm(torch.nn.Module):
                     False,
                 )
             else:
-                return FusedLayerNormAffineFunction.apply(
-                    input, weight, self.bias, self.hidden_size, self.eps
-                )
+                return FusedLayerNormAffineFunction.apply(input, weight, self.bias, self.hidden_size, self.eps)
 
         return output
-    
+
 
 class MixedFusedRMSNorm(torch.nn.Module):
-
-  def __init__(self, 
-               normalized_shape, 
-               elementwise_affine=True,
-               eps=1e-5,
-               device = None, 
-               dtype = None):
-        super(MixedFusedRMSNorm, self).__init__()
+    def __init__(self, normalized_shape, elementwise_affine=True, eps=1e-5, device=None, dtype=None):
+        super().__init__()
 
         global fused_layer_norm_cuda
         fused_layer_norm_cuda = importlib.import_module("fused_layer_norm_cuda")
-
 
         if isinstance(normalized_shape, numbers.Integral):
             normalized_shape = (normalized_shape,)
@@ -278,16 +259,20 @@ class MixedFusedRMSNorm(torch.nn.Module):
         # set sequence parallelism flag on weight and bias parameters
         # setattr(self.weight, 'sequence_parallel', sequence_parallel)
 
-  def reset_parameters(self):
-    init.ones_(self.weight)
+    def reset_parameters(self):
+        init.ones_(self.weight)
 
-  def forward(self, input):
-    try:
-      try:
-        return FusedRMSNormAffineMixedDtypesFunction.apply(input, self.weight, self.normalized_shape, self.eps, True)
-      except Exception:
-        return FusedRMSNormAffineMixedDtypesFunction.apply(input, self.weight, self.normalized_shape, self.eps)
-    except Exception:
-      # `memory_efficient=False` aligns with the old version
-      # `apply` doesn't accept keyword arguments
-      return FusedRMSNormAffineMixedDtypesFunction.apply(input, self.weight, self.normalized_shape, self.eps, False)
+    def forward(self, input):
+        try:
+            try:
+                return FusedRMSNormAffineMixedDtypesFunction.apply(
+                    input, self.weight, self.normalized_shape, self.eps, True
+                )
+            except Exception:
+                return FusedRMSNormAffineMixedDtypesFunction.apply(input, self.weight, self.normalized_shape, self.eps)
+        except Exception:
+            # `memory_efficient=False` aligns with the old version
+            # `apply` doesn't accept keyword arguments
+            return FusedRMSNormAffineMixedDtypesFunction.apply(
+                input, self.weight, self.normalized_shape, self.eps, False
+            )

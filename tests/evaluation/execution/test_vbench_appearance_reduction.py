@@ -29,7 +29,7 @@ def appearance(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
         setattr(utils, name, lambda *args, **kwargs: None)
     monkeypatch.setitem(sys.modules, "vbench.utils", utils)
     source = Path(__file__).resolve().parents[3] / (
-        "worldfoundry/evaluation/tasks/execution/runners/vbench/runtime/vbench/appearance_style.py"
+        "worldfoundry/evals/tasks/execution/runners/vbench/runtime/vbench/appearance_style.py"
     )
     spec = importlib.util.spec_from_file_location("test_vbench_appearance_runtime", source)
     assert spec is not None and spec.loader is not None

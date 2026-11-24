@@ -5,16 +5,21 @@ import jax.numpy as jnp
 import torch
 from einops import rearrange, repeat
 from flax import nnx
-from worldfoundry.core.media.codecs.video import write_video as _worldfoundry_write_video
 
-import src.data.utils as data_utils
-import src.utils.sharding as sharding_utils
-from src.models.utils import jax_to_torch
-from src.models.wan_vae import VAE_SCALE
-from src.runners.base_runner import BaseRunner
-from src.utils.multiplayer import handle_multiplayer_input, handle_multiplayer_output
-from src.utils.preprocessing_mp import wan_image_condition_preprocess
-from src.utils.rollout import (
+import worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.data.utils as data_utils
+import worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.utils.sharding as sharding_utils
+from worldfoundry.core.media.codecs.video import write_video as _worldfoundry_write_video
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.models.utils import jax_to_torch
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.models.wan_vae import VAE_SCALE
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.runners.base_runner import BaseRunner
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.utils.multiplayer import (
+    handle_multiplayer_input,
+    handle_multiplayer_output,
+)
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.utils.preprocessing_mp import (
+    wan_image_condition_preprocess,
+)
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.utils.rollout import (
     change_tensor_range,
     perform_bidirectional_multiplayer_rollout,
     perform_multiplayer_rollout,
@@ -40,15 +45,18 @@ def get_model_inputs_for_eval(
     first_frame_BPFHWC = video_BPFHWC[:, :, 0:1, :, :, :]
     visual_context_BPFD = rearrange(
         jax.lax.stop_gradient(
-            clip_model.encode_video(
-                rearrange(first_frame_BPFHWC, "b p f h w c -> (b p) c f h w")
-            )
+            clip_model.encode_video(rearrange(first_frame_BPFHWC, "b p f h w c -> (b p) c f h w"))
         ).astype(jnp.bfloat16),
         "(b p) f d -> b p f d",
         b=B,
     )
-    compress = lambda x: rearrange(x, "b p f h w c -> (b p) f h w c")
-    uncompress = lambda x: rearrange(x, "(b p) f h w c -> b p f h w c", b=B)
+
+    def compress(x):
+        return rearrange(x, "b p f h w c -> (b p) f h w c")
+
+    def uncompress(x):
+        return rearrange(x, "(b p) f h w c -> b p f h w c", b=B)
+
     img_cond_BPFHWC = uncompress(
         jax.lax.stop_gradient(
             vae_model.encode(
@@ -65,12 +73,10 @@ def get_model_inputs_for_eval(
             )
         )
     )
-    mask_cond_BPFHWC = (
-        jnp.ones(img_cond_BPFHWC.shape, dtype=jnp.bfloat16).at[:, :, 1:].set(0)
+    mask_cond_BPFHWC = jnp.ones(img_cond_BPFHWC.shape, dtype=jnp.bfloat16).at[:, :, 1:].set(0)
+    cond_concat_BPFHWC = jnp.concatenate([mask_cond_BPFHWC[:, :, :, :, :, :4], img_cond_BPFHWC], axis=-1).astype(
+        jnp.bfloat16
     )
-    cond_concat_BPFHWC = jnp.concatenate(
-        [mask_cond_BPFHWC[:, :, :, :, :, :4], img_cond_BPFHWC], axis=-1
-    ).astype(jnp.bfloat16)
 
     (
         cond_concat_BPFHWC,
@@ -104,20 +110,19 @@ def get_model_inputs(
     first_frame_BPFHWC = video_BPFHWC[:, :, 0:1, :, :, :]
     visual_context_BPFD = rearrange(
         jax.lax.stop_gradient(
-            clip_model.encode_video(
-                rearrange(first_frame_BPFHWC, "b p f h w c -> (b p) c f h w")
-            )
+            clip_model.encode_video(rearrange(first_frame_BPFHWC, "b p f h w c -> (b p) c f h w"))
         ).astype(jnp.bfloat16),
         "(b p) f d -> b p f d",
         b=B,
     )
-    compress = lambda x: rearrange(x, "b p f h w c -> (b p) f h w c")
-    uncompress = lambda x: rearrange(x, "(b p) f h w c -> b p f h w c", b=B)
-    encoded_outputs = uncompress(
-        jax.lax.stop_gradient(
-            vae_model.cacheless_encode(compress(video_BPFHWC), VAE_SCALE)
-        )
-    )
+
+    def compress(x):
+        return rearrange(x, "b p f h w c -> (b p) f h w c")
+
+    def uncompress(x):
+        return rearrange(x, "(b p) f h w c -> b p f h w c", b=B)
+
+    encoded_outputs = uncompress(jax.lax.stop_gradient(vae_model.cacheless_encode(compress(video_BPFHWC), VAE_SCALE)))
     img_cond_BPFHWC = uncompress(
         jax.lax.stop_gradient(
             vae_model.cacheless_encode(
@@ -134,12 +139,10 @@ def get_model_inputs(
             )
         )
     )
-    mask_cond_BPFHWC = (
-        jnp.ones(img_cond_BPFHWC.shape, dtype=jnp.bfloat16).at[:, :, 1:].set(0)
+    mask_cond_BPFHWC = jnp.ones(img_cond_BPFHWC.shape, dtype=jnp.bfloat16).at[:, :, 1:].set(0)
+    cond_concat_BPFHWC = jnp.concatenate([mask_cond_BPFHWC[:, :, :, :, :, :4], img_cond_BPFHWC], axis=-1).astype(
+        jnp.bfloat16
     )
-    cond_concat_BPFHWC = jnp.concatenate(
-        [mask_cond_BPFHWC[:, :, :, :, :, :4], img_cond_BPFHWC], axis=-1
-    ).astype(jnp.bfloat16)
     return encoded_outputs, cond_concat_BPFHWC, visual_context_BPFD
 
 
@@ -154,17 +157,13 @@ class BaseMPRunner(BaseRunner):
         batch = data_utils.torch_pytree_to_numpy(batch)
         batch = self.globalize_batch(batch)
         real_lengths = batch["real_lengths"]
-        video_BPFHWC = rearrange(
-            batch["obs"].astype(jnp.bfloat16), "b f p h w c -> b p f h w c"
-        )
+        video_BPFHWC = rearrange(batch["obs"].astype(jnp.bfloat16), "b f p h w c -> b p f h w c")
         action_BPFD = rearrange(batch["act"].astype(jnp.bfloat16), "b f p d -> b p f d")
 
         actions_mouse_BPFD = action_BPFD[:, :, :, -2:]
         actions_keyboard_BPFD = action_BPFD[:, :, :, :-2]
         video_BPFHWC_unprocessed = video_BPFHWC
-        video_BPFHWC = wan_image_condition_preprocess(video_BPFHWC, 352, 640).astype(
-            jnp.bfloat16
-        )
+        video_BPFHWC = wan_image_condition_preprocess(video_BPFHWC, 352, 640).astype(jnp.bfloat16)
         return (
             video_BPFHWC,
             video_BPFHWC_unprocessed,
@@ -182,7 +181,7 @@ class BaseMPRunner(BaseRunner):
         vae_graph,
         clip_state,
         clip_graph,
-        video,  
+        video,
         mouse_actions,
         keyboard_actions,
         real_lengths,
@@ -193,12 +192,8 @@ class BaseMPRunner(BaseRunner):
     ):
         num_eval_frames = video.shape[2]
         processed_video_BPFHWC = wan_image_condition_preprocess(video, 352, 640)
-        video = change_tensor_range(
-            processed_video_BPFHWC, [-1, 1], [0, 255], dtype=jnp.uint8
-        )  # we
-        first_frame_BPHWC = processed_video_BPFHWC[:, :, 0, :, :, :].astype(
-            jnp.bfloat16
-        )
+        video = change_tensor_range(processed_video_BPFHWC, [-1, 1], [0, 255], dtype=jnp.uint8)  # we
+        first_frame_BPHWC = processed_video_BPFHWC[:, :, 0, :, :, :].astype(jnp.bfloat16)
         n_frames_decode = video.shape[2]
 
         if bidirectional:
@@ -228,9 +223,7 @@ class BaseMPRunner(BaseRunner):
                 model = nnx.merge(model_graph, model_state)
                 vae_model = nnx.merge(vae_graph, vae_state)
                 clip_model = nnx.merge(clip_graph, clip_state)
-                repeated_first_frames_BPFHWC = repeat(
-                    first_frames_BPHWC, "b p h w c -> b p f h w c", f=n_frames_decode
-                )
+                repeated_first_frames_BPFHWC = repeat(first_frames_BPHWC, "b p h w c -> b p f h w c", f=n_frames_decode)
                 (
                     cond_concat_BPFHWC,
                     visual_context_BPFD,
@@ -291,15 +284,9 @@ class BaseMPRunner(BaseRunner):
 
         D = len(jax.devices())
 
-        first_frame_DBPHWC = rearrange(
-            first_frame_BPHWC, "(d b) p h w c -> d b p h w c", d=D
-        )
-        mouse_actions_DBPFD = rearrange(
-            mouse_actions, "(device b) p f d -> device b p f d", device=D
-        )
-        keyboard_actions_DBPFD = rearrange(
-            keyboard_actions, "(device b) p f d -> device b p f d", device=D
-        )
+        first_frame_DBPHWC = rearrange(first_frame_BPHWC, "(d b) p h w c -> d b p h w c", d=D)
+        mouse_actions_DBPFD = rearrange(mouse_actions, "(device b) p f d -> device b p f d", device=D)
+        keyboard_actions_DBPFD = rearrange(keyboard_actions, "(device b) p f d -> device b p f d", device=D)
 
         local_batch_size = first_frame_DBPHWC.shape[1]
         rollouts = []
@@ -320,14 +307,10 @@ class BaseMPRunner(BaseRunner):
             )
             rollouts.append(rollout)
         res_DBPFHWC = jnp.stack(rollouts, axis=1)
-        rollout_frames_BPFHWC = rearrange(
-            res_DBPFHWC, "d b p f h w c -> (d b) p f h w c", d=D
-        )
+        rollout_frames_BPFHWC = rearrange(res_DBPFHWC, "d b p f h w c -> (d b) p f h w c", d=D)
 
         if eval_dir is not None:
-            rollout_local_slice = sharding_utils.get_local_slice_from_fsarray(
-                rollout_frames_BPFHWC
-            )
+            rollout_local_slice = sharding_utils.get_local_slice_from_fsarray(rollout_frames_BPFHWC)
             gt_local_slice = sharding_utils.get_local_slice_from_fsarray(video)
 
             torch_rollout_local_slice = jax_to_torch(rollout_local_slice)
@@ -337,18 +320,14 @@ class BaseMPRunner(BaseRunner):
                 [torch_gt_local_slice, torch_rollout_local_slice], axis=4
             )
             # we concatenate the players among the height dimension.
-            torch_side_by_side_video_BFHWC = rearrange(
-                torch_side_by_side_video_BPFHWC, "b p f h w c -> b f (p h) w c"
-            )
+            torch_side_by_side_video_BFHWC = rearrange(torch_side_by_side_video_BPFHWC, "b p f h w c -> b f (p h) w c")
 
             num_processes = jax.process_count()
             process_index = jax.process_index()
             global_i = process_index
             for i in range(torch_side_by_side_video_BFHWC.shape[0]):
                 video_int8 = torch_side_by_side_video_BFHWC[i]
-                write_video(
-                    f"{eval_dir}/video_{global_i}_side_by_side.mp4", video_int8, fps=20
-                )
+                write_video(f"{eval_dir}/video_{global_i}_side_by_side.mp4", video_int8, fps=20)
                 global_i += num_processes
 
         return {}

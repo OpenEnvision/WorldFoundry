@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 x-plug and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,9 +13,8 @@
 # limitations under the License.
 """Tokenization classes for MplugOwl."""
 
-from transformers.utils import logging
 from transformers.models.llama.tokenization_llama import LlamaTokenizer
-
+from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 

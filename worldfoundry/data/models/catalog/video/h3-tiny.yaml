@@ -1,0 +1,87 @@
+id: h3-tiny
+name: H3-Tiny
+aliases:
+- minimax-h3-tiny
+- h3-tiny-17b-fewstep
+- h3-tiny-17b-pruned
+- h3-tiny-17b-fl2va
+- h3-tiny-14b-okd
+tasks:
+- text-to-video
+- image-to-video
+- reference-to-video
+- audio-video-generation
+output_artifacts:
+- generated_video
+provider: H3-Tiny
+source:
+  status: open_source
+  official_repo_url: https://github.com/fuyi25/H3-Tiny
+  revision: a3f17f0ef85e9af5d07b2007c4b2dbd6d035e69c
+  license: minimax-h3-community
+  requires_auth: false
+official_sources:
+  github:
+    url: https://github.com/fuyi25/H3-Tiny
+    revision: a3f17f0ef85e9af5d07b2007c4b2dbd6d035e69c
+  huggingface:
+  - repo_id: H3-Tiny/MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1
+    type: model
+  - repo_id: H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-Ref2VA
+    type: model
+  - repo_id: H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-FL2VA
+    type: model
+  - repo_id: H3-Tiny/MiniMax-H3-Tiny-14B-OKD-Ref2VA-v0.1
+    type: model
+  - repo_id: H3-Tiny/MiniMax-H3-Tiny-ComfyUI
+    type: model
+checkpoints:
+- repo_id: H3-Tiny/MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1
+  revision: 83aa8091053aeed77de0b94fe1a6450d112de512
+  role: transformer_17b_fewstep_ref2va
+- repo_id: H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-Ref2VA
+  revision: e0ce7d0de6becc72e2de98f4cafe29c4b1e1c445
+  role: transformer_17b_pruned_ref2va
+- repo_id: H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-FL2VA
+  revision: e026f495b8816b87b8441dee82f718867e9f5d42
+  role: transformer_17b_pruned_fl2va
+- repo_id: H3-Tiny/MiniMax-H3-Tiny-14B-OKD-Ref2VA-v0.1
+  revision: 30b4ca94a49929602ba665d21ff50169fd815826
+  role: transformer_14b_okd_ref2va
+- repo_id: H3-Tiny/MiniMax-H3-Tiny-ComfyUI
+  revision: dce9a7901140ea19a935bf303ddab60e870c67e2
+  role: comfyui_single_file_weights
+- repo_id: MiniMaxAI/MiniMax-H3
+  revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+  role: shared_h3_base
+integration:
+  status: integrated
+  backend_stage: shared_base_model_runtime
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+runtime_profile: runtime-profile:h3-tiny
+pipeline_binding: h3-tiny
+runner_parity:
+  status: all_released_checkpoints_gpu_validated
+  expected_artifacts:
+  - h3-tiny.mp4
+  notes:
+  - Reuses the canonical MiniMax-H3 DiT blocks, token refiner, Qwen3-VL encoder, video/audio VAEs, and MP4 muxer.
+  - Supports pruned 42-layer depth, narrowed 9792 block FFN vs 14336 refiner FFN, rank-8 AdaLN, and MeanFlow interval conditioning (6-step default, >=4 steps).
+  - Diffusers-to-WorldFoundry key mapping is bijective across all 630 (FewStep) and 626 (Pruned) tensors; tiny FP32/BF16 numerical parity matches upstream modeling and schedule math.
+  - Verified on H200 across all 4 released Diffusers checkpoints alongside MiniMaxAI/MiniMax-H3 (1376x768, 124 frames at 24 fps, 32 kHz stereo AAC) covering 17b-fewstep-ref2va (6-step MeanFlow Ref2VA), 17b-pruned-ref2va (50-step Ref2VA), 17b-pruned-fl2va (50-step T2VA and I2VA), and 14b-okd-ref2va (50-step narrowed-FFN 9792 Ref2VA).
+  - Video/standalone-audio reference inputs and multi-GPU execution are not yet wired.
+catalog_category: video
+docs:
+  publisher: H3-Tiny
+  overview: Structured-pruned 17B/14B MiniMax-H3 checkpoints with rank-8 AdaLN and optional MeanFlow few-step distillation for joint video and stereo audio generation.
+  overview_zh: 结构化剪枝的 17B/14B MiniMax-H3 模型，采用 8 秩 AdaLN 与可选 MeanFlow 少步蒸馏，支持联合音视频生成。
+  usage_notes: Stage an H3-Tiny transformer checkpoint alongside the shared MiniMax-H3 base snapshot (text encoder, processor, video/audio VAEs). Use a Ref2VA variant for reference conditioning and 17b-pruned-fl2va for T2VA/FL2VA; MeanFlow checkpoints default to 6 steps (>=4) and pruned/OKD checkpoints default to 50 steps.
+  usage_notes_zh: 将 H3-Tiny Transformer 权重与共享 MiniMax-H3 基础快照（文本编码器、处理器、视频/音频 VAE）一同准备。参考图生成使用 Ref2VA 变体，T2VA/FL2VA 使用 17b-pruned-fl2va；MeanFlow 权重默认 6 步（>=4），剪枝/OKD 权重默认 50 步。
+  limitations:
+  - Outputs are 24 fps video with 32 kHz stereo audio; frame counts align upward to 17n+5.
+  - In-tree reference conditioning currently accepts image references only; video/standalone-audio references and multi-GPU execution are not yet wired.
+  - Code is Apache-2.0; model weights are distributed under the MiniMax H3 Community License.
+  limitations_zh:
+  - 原生输出为 24 fps 视频与 32 kHz 立体声音频，帧数向上对齐至 17n+5。
+  - 当前树内参考条件仅支持图像参考，视频/独立音频参考与多卡执行尚未接入。
+  - 代码采用 Apache-2.0，模型权重采用 MiniMax H3 Community License。

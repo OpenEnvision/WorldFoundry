@@ -8,6 +8,7 @@ groups:
 - cogvideox
 source_repos:
 - url: https://github.com/THUDM/CogVideo
+  revision: 7a1af7154511e0ce4e4be8d62faa8c5e5a3532d2
 checkpoints:
 - repo_id: THUDM/CogVideoX-5b-I2V
   revision: a6f0f4858a8395e7429d82493864ce92bf73af11

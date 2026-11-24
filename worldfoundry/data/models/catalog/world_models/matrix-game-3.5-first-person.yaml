@@ -98,7 +98,7 @@ runner_parity:
 starred: true
 catalog_category: world_models
 catalog_scope: Matrix-Game independent inference models
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 availability:
   status: open_source
   open_source: true
@@ -109,18 +109,16 @@ docs:
   publisher: Riemann Dynamics
   publisher_kind: company
   publisher_zh: Riemann Dynamics（黎曼动力）
-  overview: 'Matrix-Game 3.5 First-Person Base is the first-person profile of the Matrix-Game 3.5 release: long-horizon interactive world video at 1280x704, generated block by block (84 new frames per block) under camera-NPZ control. This model id is permanently bound to first-person.safetensors. A default 25-step one-block A100 run exported 85 non-empty frames on 2026-07-20; official sample parity is still pending.'
-  overview_zh: Matrix-Game 3.5 First-Person Base 是 Matrix-Game 3.5 发布的第一人称档案：在 camera NPZ 控制下逐块（每块新增 84 帧）生成 1280x704 的长时程交互世界视频。该模型 id 永久绑定 first-person.safetensors。2026-07-20 的默认 25 步单块 A100 运行导出 85 帧非空输出；官方样例一致性仍待验证。
-  architecture: The recorded stack builds on Wan2.2-TI2V-5B (apache-2.0) with the Matrix-Game-3.5-Base weights and a DA3NESTED-GIANT-LARGE-1.1 depth dependency (CC-BY-NC-4.0 — separate non-commercial terms). Inference is integrated through the canonical NativeDiffusionPipeline with no DiffSynth pipeline remaining; the released checkpoint is the 25-step bidirectional 5B base, not the announced few-step real-time distilled model.
-  architecture_zh: 记录的栈基于 Wan2.2-TI2V-5B（apache-2.0），加 Matrix-Game-3.5-Base 权重与 DA3NESTED-GIANT-LARGE-1.1 深度依赖（CC-BY-NC-4.0——独立的非商用条款）。推理经规范 NativeDiffusionPipeline 集成、不再保留 DiffSynth pipeline；当前发布的 checkpoint 是 25 步双向 5B 基座，而非官宣的少步实时蒸馏模型。
-  usage_notes: Each block consumes 84 camera poses and generates 84 new frames (exports include the anchor frame). The shared resolver prefers staged local checkpoints and can materialize missing Hub files. The recorded A100 artifact predates the NativeDiffusionPipeline cutover — regenerate before claiming native parity.
-  usage_notes_zh: 每块消费 84 个相机位姿、生成 84 帧新画面（导出含锚帧）。共享解析器优先使用本地就位 checkpoint，也可补齐缺失的 Hub 文件。已记录的 A100 产物早于 NativeDiffusionPipeline 切换——声称原生一致性前请重新生成。
+  overview: 'Matrix-Game 3.5 First-Person Base is the first-person profile of the Matrix-Game 3.5 release: long-horizon interactive world video at 1280x704, generated block by block (84 new frames per block) under camera-NPZ control. This model id always loads the first-person.safetensors weights.'
+  overview_zh: Matrix-Game 3.5 First-Person Base 是 Matrix-Game 3.5 发布的第一人称档案：在 camera NPZ 控制下逐块（每块新增 84 帧）生成 1280x704 的长时程交互世界视频。该模型 id 固定加载 first-person.safetensors 权重。
+  architecture: Builds on Wan2.2-TI2V-5B (apache-2.0) with the Matrix-Game-3.5-Base weights and a DA3NESTED-GIANT-LARGE-1.1 depth dependency (CC-BY-NC-4.0 — separate non-commercial terms). The released checkpoint is the 25-step bidirectional 5B base, not the announced few-step real-time distilled model.
+  architecture_zh: 基于 Wan2.2-TI2V-5B（apache-2.0），加 Matrix-Game-3.5-Base 权重与 DA3NESTED-GIANT-LARGE-1.1 深度依赖（CC-BY-NC-4.0——独立的非商用条款）。当前发布的 checkpoint 是 25 步双向 5B 基座，而非官宣的少步实时蒸馏模型。
+  usage_notes: Each block consumes 84 camera poses and generates 84 new frames (exports include the anchor frame), so a one-block run exports 85 frames. Locally staged checkpoints are used first; missing Hub files can be fetched.
+  usage_notes_zh: 每块消费 84 个相机位姿、生成 84 帧新画面（导出含锚帧），因此单块运行导出 85 帧。优先使用本地就位的 checkpoint，也可补齐缺失的 Hub 文件。
   limitations:
-  - Official sample-quality parity and benchmark scoring are pending.
   - The DA3 depth dependency is CC-BY-NC-4.0 (non-commercial).
   - The released checkpoint is the 25-step base, not the few-step real-time model.
   limitations_zh:
-  - 官方样例质量一致性与 benchmark 打分待验证。
   - DA3 深度依赖为 CC-BY-NC-4.0（非商用）。
   - 发布的 checkpoint 是 25 步基座，不是少步实时模型。
   recommended_benchmarks:

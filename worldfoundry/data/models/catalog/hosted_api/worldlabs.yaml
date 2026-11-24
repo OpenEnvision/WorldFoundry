@@ -1,0 +1,45 @@
+id: worldlabs
+name: World Labs API
+tasks:
+- world-generation
+- assets
+- hosted-api
+provider: api
+source:
+  status: api
+  official_repo_url: https://www.worldlabs.ai/
+official_sources:
+  project_page: https://www.worldlabs.ai/
+integration:
+  status: integrated
+  notes:
+  - Hosted API Studio pipeline is available; users must provide their own provider
+    API key.
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: worldlabs
+runner_parity:
+  status: not_applicable
+demo_parity:
+  status: not_applicable
+docs:
+  publisher: World Labs
+  publisher_kind: company
+  publisher_zh: World Labs
+  overview: World Labs API is the hosted route to World Labs' generative world service, for world generation and asset outputs rather than flat video. Instead of returning a clip, the service produces explorable 3D world content on World Labs' infrastructure; WorldFoundry saves what the API returns as artifacts.
+  overview_zh: World Labs API 是 World Labs 生成式世界服务的托管入口，用于世界生成与资产输出，而非普通视频。服务在 World Labs 的基础设施上生成可探索的 3D 世界内容，WorldFoundry 将 API 返回的内容保存为产物。
+  architecture: World Labs has not published the architecture behind its world generation service.
+  architecture_zh: World Labs 未公开其世界生成服务背后的架构。
+  usage_notes: Supply your own World Labs account and API key through WORLDLABS_API_KEY (or WLT_API_KEY); access is provisioned through World Labs' platform (worldlabs.ai). No weights are downloaded and no local GPU is needed — generation happens on the provider side, so cost, quota, and content policy follow your provider account.
+  usage_notes_zh: 需自备 World Labs 账号与 API key，通过 WORLDLABS_API_KEY（或 WLT_API_KEY）提供；访问权限通过 World Labs 平台（worldlabs.ai）开通。本地不会下载任何权重，也不需要 GPU——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。
+  limitations:
+  - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+  - The provider controls model versioning, so outputs can change over time.
+  - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+  limitations_zh:
+  - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+  - 模型版本由服务方控制，输出可能随时间变化。
+  - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Unified benchmark for scoring generated explorable worlds.
+    reason_zh: 评估可探索生成世界的统一基准。

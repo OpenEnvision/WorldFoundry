@@ -14,7 +14,8 @@ codecs; sibling of :mod:`~..audio.audio_vae`.
 """
 
 import logging
-from typing import Any, Callable, Iterator, List, Tuple
+from collections.abc import Callable, Iterator
+from typing import Any
 
 import torch
 from einops import rearrange
@@ -93,7 +94,7 @@ def _make_encoder_block(
     norm_layer: NormLayerType,
     norm_num_groups: int,
     spatial_padding_mode: PaddingModeType,
-) -> Tuple[nn.Module, int]:
+) -> tuple[nn.Module, int]:
     out_channels = in_channels
 
     if block_name == "res_x":
@@ -193,6 +194,7 @@ def _make_encoder_block(
 
 class VideoEncoder(nn.Module):
     """LTX video VAE encoder: BCTHW pixels to 128-channel latents."""
+
     _DEFAULT_NORM_NUM_GROUPS = 32
     """
     Variational Autoencoder Encoder. Encodes video frames into a latent representation.
@@ -229,7 +231,7 @@ class VideoEncoder(nn.Module):
         convolution_dimensions: int = 3,
         in_channels: int = 3,
         out_channels: int = 128,
-        encoder_blocks: List[Tuple[str, int]] | List[Tuple[str, dict[str, Any]]] = [],  # noqa: B006
+        encoder_blocks: list[tuple[str, int]] | list[tuple[str, dict[str, Any]]] = [],  # noqa: B006 - Read-only default; the blocks are only iterated.
         patch_size: int = 4,
         norm_layer: NormLayerType = NormLayerType.PIXEL_NORM,
         latent_log_var: LogVarianceType = LogVarianceType.UNIFORM,
@@ -303,6 +305,15 @@ class VideoEncoder(nn.Module):
             causal=True,
             spatial_padding_mode=encoder_spatial_padding_mode,
         )
+        self._channels_last_3d: bool = False
+
+    def enable_channels_last_3d(self) -> int:
+        """Convert Conv3d weights to ``channels_last_3d`` (NDHWC) for Tensor Core acceleration."""
+        from worldfoundry.core.acceleration.convolution_layout import convert_convolution_weight_layouts
+
+        report = convert_convolution_weight_layouts(self, conv3d=True)
+        self._channels_last_3d = report.conv3d_converted > 0
+        return report.conv3d_converted
 
     def _posterior_moments(self, sample: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Encode pixels to the checkpoint posterior before latent normalization."""
@@ -439,9 +450,7 @@ class VideoEncoder(nn.Module):
 
             # Encode tile to latent (output on model device)
             latent_tile = (
-                self.sample_posterior(video_tile, generator=generator)
-                if sample_posterior
-                else self.forward(video_tile)
+                self.sample_posterior(video_tile, generator=generator) if sample_posterior else self.forward(video_tile)
             )
 
             # Move blend mask to model device
@@ -464,7 +473,7 @@ class VideoEncoder(nn.Module):
 def prepare_tiles_for_encoding(
     video: torch.Tensor,
     tiling_config: TilingConfig | None = None,
-) -> List[Tile]:
+) -> list[Tile]:
     """Prepare tiles for VAE encoding.
     Args:
         video: Input video tensor (B, 3, F, H, W) in range [-1, 1]
@@ -532,7 +541,7 @@ def _make_decoder_block(
     timestep_conditioning: bool,
     norm_num_groups: int,
     spatial_padding_mode: PaddingModeType,
-) -> Tuple[nn.Module, int]:
+) -> tuple[nn.Module, int]:
     out_channels = in_channels
     if block_name == "res_x":
         block = UNetMidBlock3D(
@@ -607,6 +616,7 @@ def _make_decoder_block(
 
 class VideoDecoder(nn.Module):
     """LTX video VAE decoder: 128-channel latents to BCTHW pixels."""
+
     _DEFAULT_NORM_NUM_GROUPS = 32
     """
     Variational Autoencoder Decoder. Decodes latent representation into video frames.
@@ -641,7 +651,7 @@ class VideoDecoder(nn.Module):
         convolution_dimensions: int = 3,
         in_channels: int = 128,
         out_channels: int = 3,
-        decoder_blocks: List[Tuple[str, int | dict]] = [],  # noqa: B006
+        decoder_blocks: list[tuple[str, int | dict]] = [],  # noqa: B006 - Read-only default; the blocks are only iterated.
         patch_size: int = 4,
         norm_layer: NormLayerType = NormLayerType.PIXEL_NORM,
         causal: bool = False,
@@ -731,6 +741,93 @@ class VideoDecoder(nn.Module):
                 embedding_dim=feature_channels * 2, size_emb_dim=0
             )
             self.last_scale_shift_table = nn.Parameter(torch.empty(2, feature_channels))
+        self._channels_last_3d: bool = False
+        self._compiled_forward: Callable[[torch.Tensor], torch.Tensor] | None = None
+        self._compiled_decode_rgb: Callable[[torch.Tensor], torch.Tensor] | None = None
+        self._compile_mode: str | None = None
+
+    def enable_channels_last_3d(self) -> int:
+        """Convert Conv3d weights to ``channels_last_3d`` (NDHWC) for Tensor Core acceleration."""
+        from worldfoundry.core.acceleration.convolution_layout import convert_convolution_weight_layouts
+
+        report = convert_convolution_weight_layouts(self, conv3d=True)
+        self._channels_last_3d = report.conv3d_converted > 0
+        return report.conv3d_converted
+
+    def _has_stochastic_ops(self) -> bool:
+        """Return True when timestep conditioning or spatial noise injection consumes ``generator``."""
+        if self.timestep_conditioning:
+            return True
+        return any(bool(getattr(child, "inject_noise", False)) for child in self.modules())
+
+    def _has_vram_managed_submodules(self) -> bool:
+        """Return True when submodules use dynamic CPU-offload VRAM management wrappers."""
+        return any(getattr(child, "computation_device", None) is not None for child in self.modules())
+
+    def _call_compiled(
+        self,
+        fn: Callable[[torch.Tensor], torch.Tensor],
+        sample: torch.Tensor,
+    ) -> torch.Tensor:
+        """Invoke a compiled decoder callable safely across CUDAGraph and non-CUDAGraph modes."""
+        uses_cudagraphs = self._compile_mode in {"reduce-overhead", "max-autotune"}
+        if uses_cudagraphs:
+            mark_step = getattr(getattr(torch, "compiler", None), "cudagraph_mark_step_begin", None)
+            if callable(mark_step):
+                mark_step()
+        out = fn(sample)
+        return out.clone() if uses_cudagraphs else out
+
+    def _forward_deterministic(self, sample: torch.Tensor) -> torch.Tensor:
+        """Deterministic decode path (no timestep conditioning or noise injection) for compilation."""
+        output_dtype = sample.dtype
+        weights_dtype = next(self.parameters()).dtype
+        sample = sample.to(weights_dtype)
+        if self._channels_last_3d and sample.ndim == 5 and sample.device.type == "cuda":
+            sample = sample.contiguous(memory_format=torch.channels_last_3d)
+        sample = self.per_channel_statistics.un_normalize(sample)
+        sample = self.conv_in(sample, causal=self.causal)
+        for up_block in self.up_blocks:
+            if isinstance(up_block, UNetMidBlock3D):
+                sample = up_block(sample, causal=self.causal, timestep=None, generator=None)
+            elif isinstance(up_block, ResnetBlock3D):
+                sample = up_block(sample, causal=self.causal, generator=None)
+            else:
+                sample = up_block(sample, causal=self.causal)
+        sample = self.conv_norm_out(sample)
+        sample = self.conv_act(sample)
+        sample = self.conv_out(sample, causal=self.causal)
+        sample = unpatchify(sample, patch_size_hw=self.patch_size, patch_size_t=1)
+        return sample.to(output_dtype)
+
+    def _decode_rgb_deterministic(self, sample: torch.Tensor) -> torch.Tensor:
+        """Deterministic untiled decode fused with ``[c, f, h, w] -> [f, h, w, c]`` RGB scaling."""
+        frames = self._forward_deterministic(sample)
+        video = frames[0].permute(1, 2, 3, 0)
+        return (video * 0.5 + 0.5).clamp(0.0, 1.0)
+
+    def enable_compile(
+        self,
+        *,
+        mode: str = "default",
+        dynamic: bool | None = None,
+    ) -> bool:
+        """Compile deterministic ``VideoDecoder`` forward + RGB post-process with ``torch.compile``.
+
+        Returns ``False`` (leaving eager execution intact) when the decoder relies on
+        ``timestep_conditioning`` or stochastic ``inject_noise`` blocks.
+        """
+        if self._has_stochastic_ops() or self._has_vram_managed_submodules():
+            return False
+        if mode not in {"default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"}:
+            raise ValueError(f"unsupported VideoDecoder compile mode: {mode!r}")
+        from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
+
+        configure_persistent_compile_cache(namespace="ltx-video-vae")
+        self._compiled_forward = torch.compile(self._forward_deterministic, mode=mode, dynamic=dynamic)
+        self._compiled_decode_rgb = torch.compile(self._decode_rgb_deterministic, mode=mode, dynamic=dynamic)
+        self._compile_mode = mode
+        return True
 
     def forward(
         self,
@@ -750,10 +847,21 @@ class VideoDecoder(nn.Module):
             Note: First frame is removed after temporal upsampling regardless of causal mode.
             When causal=False, allows future frame dependencies in convolutions but maintains same output shape.
         """
+        if (
+            self._compiled_forward is not None
+            and timestep is None
+            and sample.device.type == "cuda"
+            and not torch.is_grad_enabled()
+            and not self.training
+        ):
+            return self._call_compiled(self._compiled_forward, sample)
+
         batch_size = sample.shape[0]
         output_dtype = sample.dtype
         weights_dtype = next(self.parameters()).dtype
         sample = sample.to(weights_dtype)
+        if self._channels_last_3d and sample.ndim == 5 and sample.device.type == "cuda":
+            sample = sample.contiguous(memory_format=torch.channels_last_3d)
 
         # Add noise if timestep conditioning is enabled
         if self.timestep_conditioning:
@@ -832,7 +940,7 @@ class VideoDecoder(nn.Module):
         self,
         latent: torch.Tensor,
         tiling_config: TilingConfig | None = None,
-    ) -> List[Tile]:
+    ) -> list[Tile]:
         splitters = [DEFAULT_SPLIT_OPERATION] * len(latent.shape)
         mappers = [DEFAULT_MAPPING_OPERATION] * len(latent.shape)
         if tiling_config is not None and tiling_config.spatial_config is not None:
@@ -971,11 +1079,18 @@ class VideoDecoder(nn.Module):
         if tiling_config is not None:
             for frames in self.tiled_decode(latent, tiling_config, generator=generator):
                 yield to_rgb(frames)
+        elif (
+            self._compiled_decode_rgb is not None
+            and latent.device.type == "cuda"
+            and not torch.is_grad_enabled()
+            and not self.training
+        ):
+            yield self._call_compiled(self._compiled_decode_rgb, latent)
         else:
             decoded = self(latent, generator=generator)
             yield to_rgb(decoded)
 
-    def _group_tiles_by_temporal_slice(self, tiles: List[Tile]) -> List[List[Tile]]:
+    def _group_tiles_by_temporal_slice(self, tiles: list[Tile]) -> list[list[Tile]]:
         """Group tiles by their temporal output slice."""
         if not tiles:
             return []
@@ -1001,7 +1116,7 @@ class VideoDecoder(nn.Module):
 
     def _accumulate_temporal_group_into_buffer(
         self,
-        group_tiles: List[Tile],
+        group_tiles: list[Tile],
         buffer: torch.Tensor,
         latent: torch.Tensor,
         timestep: torch.Tensor | None,
@@ -1016,8 +1131,20 @@ class VideoDecoder(nn.Module):
 
         weights = torch.zeros_like(buffer)
 
+        use_compiled = (
+            self._compiled_forward is not None
+            and timestep is None
+            and latent.device.type == "cuda"
+            and not torch.is_grad_enabled()
+            and not self.training
+        )
         for tile in group_tiles:
-            decoded_tile = self.forward(latent[tile.in_coords], timestep, generator)
+            tile_in = latent[tile.in_coords]
+            decoded_tile = (
+                self._call_compiled(self._compiled_forward, tile_in)
+                if use_compiled and self._compiled_forward is not None
+                else self.forward(tile_in, timestep, generator)
+            )
             mask = tile.blend_mask.to(device=buffer.device, dtype=buffer.dtype)
             temporal_offset = tile.out_coords[2].start - temporal_slice.start
             # Use the tile's output coordinate length, not the decoded tile's length,
@@ -1063,7 +1190,7 @@ def get_video_chunks_number(num_frames: int, tiling_config: TilingConfig | None 
 
 
 def to_mapping_operation(
-    map_func: Callable[[int, int, int, int, int], Tuple[slice, torch.Tensor | None]],
+    map_func: Callable[[int, int, int, int, int], tuple[slice, torch.Tensor | None]],
     scale: int,
 ) -> MappingOperation:
     """Create a mapping operation over a set of tiling intervals.
@@ -1091,7 +1218,7 @@ def to_mapping_operation(
     return map_op
 
 
-def map_temporal_slice(begin: int, end: int, left_ramp: int, right_ramp: int, scale: int) -> Tuple[slice, torch.Tensor]:
+def map_temporal_slice(begin: int, end: int, left_ramp: int, right_ramp: int, scale: int) -> tuple[slice, torch.Tensor]:
     """Map a latent time tile to a pixel slice and trapezoidal blend weights."""
     start = begin * scale
     stop = 1 + (end - 1) * scale
@@ -1103,7 +1230,7 @@ def map_temporal_slice(begin: int, end: int, left_ramp: int, right_ramp: int, sc
 
 def map_temporal_interval_to_latent(
     begin: int, end: int, left_ramp: int, right_ramp: int | None = None, scale: int = 1
-) -> Tuple[slice, torch.Tensor]:
+) -> tuple[slice, torch.Tensor]:
     """
     Map temporal interval in video frame space to latent space.
     Args:
@@ -1129,7 +1256,7 @@ def map_temporal_interval_to_latent(
     return slice(start, stop), mask_1d
 
 
-def map_spatial_slice(begin: int, end: int, left_ramp: int, right_ramp: int, scale: int) -> Tuple[slice, torch.Tensor]:
+def map_spatial_slice(begin: int, end: int, left_ramp: int, right_ramp: int, scale: int) -> tuple[slice, torch.Tensor]:
     """Map a latent spatial tile to a pixel slice and trapezoidal blend weights."""
     start = begin * scale
     stop = end * scale
@@ -1145,7 +1272,7 @@ def map_spatial_interval_to_latent(
     left_ramp: int,
     right_ramp: int,
     scale: int,
-) -> Tuple[slice, torch.Tensor]:
+) -> tuple[slice, torch.Tensor]:
     """Map spatial interval in pixel space to latent space.
        Args:
         begin: Start position in pixel space

@@ -99,10 +99,10 @@ runner:
   scoring:
     engines: [physics_contract]
     hooks:
-      physics_contract: worldfoundry.evaluation.tasks.execution.runners.likephys.likephys_contract_evaluator:write_likephys_evaluation
-  official_script: worldfoundry/evaluation/tasks/execution/runners/likephys/run_likephys_official_runner.py
+      physics_contract: worldfoundry.evals.tasks.execution.runners.likephys.likephys_contract_evaluator:write_likephys_evaluation
+  official_script: worldfoundry/evals/tasks/execution/runners/likephys/run_likephys_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.likephys.run_likephys_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.likephys.run_likephys_official_runner
     generated_arg: --generated-artifact-dir
     dataset_root_arg: --benchmark-data-root
     limit_arg: --limit
@@ -111,10 +111,10 @@ runner:
     supports_official_runtime: true
     default_metrics: [likephys_misrank_rate]
     input_kind: likephys_results_root_or_probe_dataset
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:LikePhysContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/likephys/run_likephys_official_runner.py
+  runner_target: worldfoundry.evals.tasks.contracts.external:likephys
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/likephys/run_likephys_official_runner.py
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -128,7 +128,7 @@ runner:
   - --json
   runtime:
     kind: in_tree_official_runner
-    root: worldfoundry/evaluation/tasks/execution/runners/likephys
+    root: worldfoundry/evals/tasks/execution/runners/likephys
     repo_url: https://github.com/YuanJianhao508/LikePhys.git
     evaluator_root_env: WORLDFOUNDRY_LIKEPHYS_EVALUATOR_ROOT
     results_path_env: WORLDFOUNDRY_LIKEPHYS_RESULTS_PATH
@@ -175,10 +175,10 @@ data_refs:
   - <likephys_data_root>/<scenario>_videos/subgroup_XXX/<variation>_00.mp4
   local_results_layout:
   - <likephys_results_root>/<scenario>/results_<probe_model>.json
-official_runner_script: worldfoundry/evaluation/tasks/execution/runners/likephys/run_likephys_official_runner.py
+official_runner_script: worldfoundry/evals/tasks/execution/runners/likephys/run_likephys_official_runner.py
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:LikePhysContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:likephys
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
@@ -188,7 +188,7 @@ base_model_dependencies: []
 optional_base_model_dependencies:
 - likephys_dataset_assets
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -205,3 +205,21 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - likephys_dataset_root
+  - likephys_evaluator_root
+  - probe_model
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_scores
+  - benchmark_contract
+  - misrank_breakdown
+  notes:
+  - Contract covers LikePhys likelihood-preference probing of video diffusion models over paired physically
+    valid and impossible clips.
+  - 'LikePhys scores a model, not generated videos: the probe reads the denoiser, VAE, and scheduler directly,
+    so it needs the upstream evaluator checkout, CUDA, and the probed checkpoints.'
+  - Every metric is a mis-rank error rate where lower is better.

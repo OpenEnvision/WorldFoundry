@@ -1,12 +1,17 @@
 import logoMap from '@/lib/model-logo-map.json';
-import { modelOrgSrc } from '@/lib/model-org-src';
 
 export type OrgIdentity = {
   key: string;
   name: string;
   abbr: string;
   src?: string;
+  /** Square symbol cropped from a wide logo, used below title size. */
+  markSrc?: string;
+  /** Wide text-only logo; below title size the mark shows `abbr`. */
+  wordmark?: boolean;
 };
+
+export type IdentityMarkSize = 'small' | 'medium' | 'large';
 
 const orgs = logoMap.orgs as Record<string, OrgIdentity>;
 const modelLogos = logoMap.modelLogos as Record<string, string>;
@@ -21,12 +26,10 @@ const HUNYUAN_MODEL_IDS = new Set([
   'hunyuanvideo-1.5',
   'hunyuanworld-1',
   'hunyuanworld-mirror',
-  'hunyuanworld-voyager',
   'hy-embodied',
   'hy-embodied-vla',
   'hy-world-2.0',
   'hy-worldplay',
-  'hyworld-worldgen',
 ]);
 
 const WAN_MODEL_IDS = new Set([
@@ -62,21 +65,7 @@ function lookupModelOrgKey(id: string, provider?: string) {
 }
 
 function orgFromKey(key: string | undefined): OrgIdentity | undefined {
-  if (!key) return undefined;
-
-  const org = orgs[key];
-  const src = org?.src ?? modelOrgSrc[key];
-  if (!org) {
-    if (!src) return undefined;
-    return {
-      key,
-      name: key,
-      abbr: key.slice(0, 2).toUpperCase(),
-      src,
-    };
-  }
-
-  return src && !org.src ? { ...org, src } : org;
+  return key ? orgs[key] : undefined;
 }
 
 export function resolveModelOrg(id: string, provider?: string): OrgIdentity | undefined {
@@ -89,4 +78,10 @@ export function resolveModelOrgKey(id: string, provider?: string) {
 
 export function resolveBenchmarkOrg(id: string, logoKey?: string): OrgIdentity | undefined {
   return orgFromKey(logoKey || benchmarkLogos[id]);
+}
+
+/** Image for an identity mark; wide logos only appear in full at title size. */
+export function orgMarkSrc(org: OrgIdentity | undefined, size: IdentityMarkSize): string | undefined {
+  if (!org || size === 'large') return org?.src;
+  return org.markSrc ?? (org.wordmark ? undefined : org.src);
 }

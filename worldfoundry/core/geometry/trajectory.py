@@ -8,13 +8,11 @@ importing a model family.
 
 Groups:
 
-- **Rollout** — :func:`rollout_wasd_camera_actions` and
-  :func:`rollout_sana_wm_camera_actions` (held keys → c2w),
+- **Rollout** — :func:`rollout_wasd_camera_actions` (held keys → c2w),
   :func:`parse_camera_trajectory` / :func:`camera_trajectory_view_matrices`
   / :func:`camera_trajectory_tensors` (string → w2c + intrinsics).
-- **Named / planar** — :func:`named_camera_trajectory_tensors` (GEN3C
-  left/right/zoom/orbit), :func:`generate_planar_camera_coordinates`
-  plus :func:`wan_camera_coordinates_to_plucker`.
+- **Named** — :func:`named_camera_trajectory_tensors` (GEN3C
+  left/right/zoom/orbit).
 - **Action tokens** — :func:`camera_poses_to_adaln_actions`,
   :func:`camera_poses_to_relative_rt12_actions`,
   :func:`discretize_camera_poses_to_actions`,
@@ -71,19 +69,6 @@ _NAMED_WASD_ACTIONS = {
     "camera_right": "l",
 }
 
-_SANA_WM_NAMED_ACTIONS = {
-    "forward": "w",
-    "back": "s",
-    "backward": "s",
-    "left": "j",
-    "right": "l",
-    "camera_up": "i",
-    "camera_down": "k",
-    "camera_l": "a",
-    "camera_left": "a",
-    "camera_r": "d",
-    "camera_right": "d",
-}
 
 # ──────────────────────────────────────────────────────────────────────────
 # Rollout — held WASD/IJKL keys or compact trajectory strings → poses
@@ -126,9 +111,7 @@ def rollout_wasd_camera_actions(
             per_frame: list[str] = []
             for segment in cleaned.split(","):
                 if "-" not in segment:
-                    raise ValueError(
-                        f"Invalid camera action segment {segment!r}; expected '<keys>-<duration>'"
-                    )
+                    raise ValueError(f"Invalid camera action segment {segment!r}; expected '<keys>-<duration>'")
                 keys, raw_duration = segment.rsplit("-", 1)
                 if not raw_duration.isdigit() or int(raw_duration) <= 0:
                     raise ValueError(f"camera action duration must be positive: {segment!r}")
@@ -137,8 +120,7 @@ def rollout_wasd_camera_actions(
             per_frame = []
     if not isinstance(actions, str):
         per_frame = [
-            _NAMED_WASD_ACTIONS.get(str(value).strip().lower(), str(value).strip().lower())
-            for value in actions
+            _NAMED_WASD_ACTIONS.get(str(value).strip().lower(), str(value).strip().lower()) for value in actions
         ]
 
     target_transitions = None if num_frames is None else max(int(num_frames) - 1, 0)
@@ -158,16 +140,12 @@ def rollout_wasd_camera_actions(
         held = set(keys)
         rotation = current[:3, :3]
         translation = current[:3, 3]
-        pitch_delta = (rotation_step if "i" in held else 0.0) - (
-            rotation_step if "k" in held else 0.0
-        )
+        pitch_delta = (rotation_step if "i" in held else 0.0) - (rotation_step if "k" in held else 0.0)
         if not -pitch_limit <= current_pitch + pitch_delta <= pitch_limit:
             pitch_delta = 0.0
         else:
             current_pitch += pitch_delta
-        yaw_delta = (rotation_step if "l" in held else 0.0) - (
-            rotation_step if "j" in held else 0.0
-        )
+        yaw_delta = (rotation_step if "l" in held else 0.0) - (rotation_step if "j" in held else 0.0)
         next_rotation = _rotation_y(yaw_delta) @ rotation @ _rotation_x(pitch_delta)
         forward = next_rotation[:, 2].copy()
         right = next_rotation[:, 0].copy()
@@ -181,89 +159,6 @@ def rollout_wasd_camera_actions(
         current[:3, :3] = next_rotation
         current[:3, 3] = translation + movement
         poses.append(current.copy())
-    return np.stack(poses).astype(np.float32)
-
-
-def rollout_sana_wm_camera_actions(
-    actions: str | Sequence[str],
-    *,
-    num_frames: int | None = None,
-    translation_step: float = 0.025,
-    rotation_step_degrees: float = 0.6,
-    pitch_limit_degrees: float = 60.0,
-) -> np.ndarray:
-    """Roll out the current official SANA-WM action DSL as OpenCV c2w poses.
-
-    SANA-WM assigns ``a/d`` to yaw and ``j/l`` to strafe, unlike the older
-    shared WASD convention. Its held-key velocity coasts after a key release.
-    Keep this model-specific contract separate from the generic rollout.
-    """
-    allowed = frozenset("wasdijkl")
-    if isinstance(actions, str):
-        cleaned = "".join(actions.replace("，", ",").split())
-        per_frame = []
-        if cleaned and "-" not in cleaned:
-            per_frame = [segment.lower() for segment in cleaned.split(",") if segment]
-        else:
-            for segment in cleaned.split(",") if cleaned else []:
-                if "-" not in segment:
-                    raise ValueError(f"Invalid SANA-WM action segment {segment!r}; expected '<keys>-<duration>'")
-                keys, duration = segment.rsplit("-", 1)
-                if not duration.isdigit() or int(duration) <= 0:
-                    raise ValueError(f"SANA-WM action duration must be positive: {segment!r}")
-                per_frame.extend([keys.lower()] * int(duration))
-    else:
-        per_frame = [
-            _SANA_WM_NAMED_ACTIONS.get(str(action).strip().lower(), str(action).strip().lower())
-            for action in actions
-        ]
-    if num_frames is not None:
-        count = max(int(num_frames) - 1, 0)
-        per_frame = (per_frame + ["none"] * count)[:count]
-
-    rotation_step = np.deg2rad(float(rotation_step_degrees))
-    pitch_limit = np.deg2rad(float(pitch_limit_degrees))
-    pose = np.eye(4, dtype=np.float64)
-    poses = [pose.copy()]
-    velocity = np.zeros(4, dtype=np.float64)  # forward, strafe, yaw, pitch
-    previous_controls: set[str] = set()
-    pitch = 0.0
-    for raw_keys in per_frame:
-        keys = "" if raw_keys in {"", "none", "noop"} else raw_keys
-        invalid = sorted(set(keys) - allowed)
-        if invalid:
-            raise ValueError(f"unknown SANA-WM camera action keys {invalid}")
-        controls = set(keys)
-        target = np.array(
-            [
-                (("w" in controls) - ("s" in controls)) * translation_step,
-                (("l" in controls) - ("j" in controls)) * translation_step,
-                (("d" in controls) - ("a" in controls)) * rotation_step,
-                (("i" in controls) - ("k" in controls)) * rotation_step,
-            ],
-            dtype=np.float64,
-        )
-        if controls - previous_controls:
-            velocity = target
-        else:
-            tau = np.where(np.abs(target) > 1e-12, 0.45, 1.0)
-            velocity += (1.0 - np.exp(-1.0 / (16.0 * tau))) * (target - velocity)
-        previous_controls = controls
-
-        next_pitch = np.clip(pitch + velocity[3], -pitch_limit, pitch_limit)
-        pitch_delta = next_pitch - pitch
-        pitch = next_pitch
-        rotation = _rotation_y(velocity[2]) @ pose[:3, :3] @ _rotation_x(pitch_delta)
-        forward = rotation[:, 2].copy()
-        right = rotation[:, 0].copy()
-        forward[1] = right[1] = 0.0
-        forward /= float(np.linalg.norm(forward)) + 1e-6
-        right /= float(np.linalg.norm(right)) + 1e-6
-        next_pose = np.eye(4, dtype=np.float64)
-        next_pose[:3, :3] = rotation
-        next_pose[:3, 3] = pose[:3, 3] + forward * velocity[0] + right * velocity[1]
-        pose = next_pose
-        poses.append(pose.copy())
     return np.stack(poses).astype(np.float32)
 
 
@@ -401,117 +296,8 @@ def camera_trajectory_tensors(
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Named / planar paths — GEN3C left/right/zoom/orbit and Wan Plücker
+# Named paths — GEN3C left/right/zoom/orbit
 # ──────────────────────────────────────────────────────────────────────────
-
-
-def generate_planar_camera_coordinates(
-    direction: str,
-    length: int,
-    *,
-    speed: float = 1 / 54,
-    origin: Sequence[float] = (
-        0,
-        0.532139961,
-        0.946026558,
-        0.5,
-        0.5,
-        0,
-        0,
-        1,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-    ),
-) -> list[list[float]]:
-    """Create the compact camera rows used by Wan camera-control checkpoints.
-
-    Each row is the 19-D layout ``[id, fx, fy, cx, cy, 0, 0, *w2c_3x4]``.
-    Planar directions translate the camera along world X (left/right)
-    and Y (up/down) by *speed* per frame, starting from *origin*.
-    """
-
-    if length <= 0:
-        raise ValueError("length must be positive")
-    supported = {
-        "Left",
-        "Right",
-        "Up",
-        "Down",
-        "LeftUp",
-        "LeftDown",
-        "RightUp",
-        "RightDown",
-    }
-    if direction not in supported:
-        raise ValueError(f"unsupported camera direction {direction!r}")
-    coordinates = [list(origin)]
-    while len(coordinates) < length:
-        row = coordinates[-1].copy()
-        if "Left" in direction:
-            row[9] += speed
-        if "Right" in direction:
-            row[9] -= speed
-        if "Up" in direction:
-            row[13] += speed
-        if "Down" in direction:
-            row[13] -= speed
-        coordinates.append(row)
-    return coordinates
-
-
-def wan_camera_coordinates_to_plucker(
-    coordinates: Sequence[Sequence[float]],
-    *,
-    width: int = 672,
-    height: int = 384,
-    original_width: int = 1280,
-    original_height: int = 720,
-    device: Any = "cpu",
-):
-    """Convert Wan 19-D camera rows to ``[T, H, W, 6]`` Plücker features.
-
-    Rescales normalized fx/fy for letterboxed resize from
-    ``original_width x original_height`` to ``width x height``, recenters
-    poses so frame 0 is the identity, then calls
-    :func:`worldfoundry.core.geometry.transforms.ray_condition`.
-    """
-
-    import torch
-
-    from worldfoundry.core.geometry.transforms import ray_condition
-
-    rows = np.asarray(coordinates, dtype=np.float32)
-    if rows.ndim != 2 or rows.shape[1] != 19:
-        raise ValueError(f"camera coordinates must be [T,19], got {rows.shape}")
-    intrinsics = rows[:, 1:5].copy()
-    sample_ratio = float(width) / float(height)
-    source_ratio = float(original_width) / float(original_height)
-    if source_ratio > sample_ratio:
-        intrinsics[:, 0] *= (height * source_ratio) / width
-    else:
-        intrinsics[:, 1] *= (width / source_ratio) / height
-    intrinsics *= np.asarray((width, height, width, height), dtype=np.float32)
-
-    world_to_camera = np.repeat(np.eye(4, dtype=np.float32)[None], len(rows), axis=0)
-    world_to_camera[:, :3, :] = rows[:, 7:].reshape(-1, 3, 4)
-    camera_to_world = np.linalg.inv(world_to_camera)
-    target = np.eye(4, dtype=np.float32)
-    relative_transform = target @ world_to_camera[0]
-    relative_camera_to_world = np.stack(
-        [target, *[relative_transform @ pose for pose in camera_to_world[1:]]]
-    )
-    k = torch.as_tensor(intrinsics, device=device).unsqueeze(0)
-    c2w = torch.as_tensor(relative_camera_to_world, device=device).unsqueeze(0)
-    return ray_condition(k, c2w, height, width, device=device)[0]
 
 
 def named_camera_trajectory_tensors(
@@ -550,9 +336,7 @@ def named_camera_trajectory_tensors(
     if trajectory not in supported:
         raise ValueError(f"unsupported named camera trajectory {trajectory!r}")
     if camera_rotation not in {"center_facing", "no_rotation", "trajectory_aligned"}:
-        raise ValueError(
-            "camera_rotation must be center_facing, no_rotation, or trajectory_aligned"
-        )
+        raise ValueError("camera_rotation must be center_facing, no_rotation, or trajectory_aligned")
 
     world_to_camera = torch.as_tensor(initial_world_to_camera)
     intrinsic = torch.as_tensor(initial_intrinsic, device=world_to_camera.device)
@@ -837,13 +621,10 @@ __all__ = [
     "camera_trajectory_action_labels",
     "camera_trajectory_tensors",
     "camera_trajectory_view_matrices",
-    "generate_planar_camera_coordinates",
-    "named_camera_trajectory_tensors",
     "discretize_camera_poses_to_actions",
+    "named_camera_trajectory_tensors",
     "one_hot_camera_actions_to_labels",
     "parse_camera_trajectory",
-    "rollout_sana_wm_camera_actions",
     "rollout_wasd_camera_actions",
     "select_adaln_actions",
-    "wan_camera_coordinates_to_plucker",
 ]

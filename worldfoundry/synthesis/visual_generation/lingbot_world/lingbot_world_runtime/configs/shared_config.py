@@ -2,14 +2,10 @@ from pathlib import Path
 
 import torch
 import yaml
-
 from easydict import EasyDict
 
-
 WORLDFOUNDRY_DATA_ROOT = Path(__file__).resolve().parents[5] / "data"
-LINGBOT_WORLD_RUNTIME_CONFIG_ROOT = (
-    WORLDFOUNDRY_DATA_ROOT / "models" / "runtime" / "configs" / "lingbot_world"
-)
+LINGBOT_WORLD_RUNTIME_CONFIG_ROOT = WORLDFOUNDRY_DATA_ROOT / "models" / "runtime" / "configs" / "lingbot_world"
 
 
 def _load_yaml_config(name: str) -> dict:

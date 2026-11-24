@@ -64,7 +64,7 @@ def all_to_all(tensor, scatter_idx, gather_idx, group=None, gather=True):
         chunk_size = t_shape[scatter_idx] // world_size
 
         # Split scatter_idx into [world_size, chunk_size]
-        new_shape = list()
+        new_shape = []
         for i in range(len(t_shape)):
             if i != scatter_idx:
                 new_shape.append(t_shape[i])
@@ -95,7 +95,7 @@ def all_to_all(tensor, scatter_idx, gather_idx, group=None, gather=True):
         world_size = t_shape[0]
 
         # Build permutation indices, inserting world_size dimension (dim 0) right after gather_idx.
-        permute_idx = list()
+        permute_idx = []
         for i in range(1, len(t_shape)):
             if i != gather_idx + 1:
                 permute_idx.append(i)
@@ -104,7 +104,7 @@ def all_to_all(tensor, scatter_idx, gather_idx, group=None, gather=True):
         tensor = tensor.permute(*permute_idx).contiguous()
 
         # Reshape to merge the inserted world_size with the chunk dimension, restoring sequence/head length.
-        new_shape = list()
+        new_shape = []
         if gather:
             for i in range(1, len(t_shape)):
                 if i != gather_idx + 1:

@@ -114,10 +114,14 @@ def minimax_h3_packed_sequence(
     include_keyframe_cond: bool,
     keyframe_frame_indices: list[int] | tuple[int, ...] | None = None,
     frame_count: int | None = None,
+    action_text_spans: Sequence[tuple[int, int]] | None = None,
 ) -> dict[str, Any]:
     """Build the packed-sequence structural fields for one CFG branch.
 
-    The used length is padded up to a multiple of 64.
+    The used length is padded up to a multiple of 64. When ``action_text_spans``
+    is supplied (H3-World per-latent action conditioning), each annotation span
+    receives a mirrored temporal offset relative to its bound video latent and
+    the span metadata is attached for segmented refiner and directed attention.
     """
 
     ph, pw = latent_h // _PATCH_H, latent_w // _PATCH_W
@@ -142,11 +146,7 @@ def minimax_h3_packed_sequence(
     audio_sl = slice(cond_sl.stop, cond_sl.stop + audio_rows)
     video_sl = slice(audio_sl.stop, audio_sl.stop + video_rows)
     target_img_pos = torch.arange(video_sl.start, video_sl.stop)
-    img_pos = (
-        torch.cat([torch.arange(cond_sl.start, cond_sl.stop), target_img_pos])
-        if cond_rows
-        else target_img_pos
-    )
+    img_pos = torch.cat([torch.arange(cond_sl.start, cond_sl.stop), target_img_pos]) if cond_rows else target_img_pos
     update_mask = torch.zeros(img_pos.shape[0], dtype=torch.bool)
     update_mask[cond_rows:] = True
     audio_pos = torch.arange(audio_sl.start, audio_sl.stop)
@@ -154,6 +154,36 @@ def minimax_h3_packed_sequence(
 
     g = torch.zeros(seq_len, 3, dtype=torch.float64)
     g[text_sl, 0] = torch.arange(text_len, dtype=torch.float64)
+
+    action_text_rows = None
+    action_text_spans_local: list[tuple[int, int]] | None = None
+    if action_text_spans is not None:
+        if len(action_text_spans) != latent_t:
+            raise ValueError(f"action_text_spans must have {latent_t} entries, got {len(action_text_spans)}")
+        prev = 0
+        rows: list[tuple[int, int]] = []
+        for k, (lo_raw, hi_raw) in enumerate(action_text_spans):
+            lo, hi = int(lo_raw), int(hi_raw)
+            if not (0 <= lo < hi <= text_len):
+                raise ValueError(f"action_text_spans[{k}] ({lo}, {hi}) is outside text segment [0, {text_len})")
+            if lo < prev:
+                raise ValueError(f"action_text_spans[{k}] ({lo}, {hi}) overlaps or is out of order")
+            prev = hi
+            rows.append((lo, hi))
+        s_k = _video_t_grid(latent_t, 0.0)
+        # Back off by one step so the last annotation row stays strictly before
+        # the first-frame anchor at text_len.
+        origin = float(text_len) - float(s_k[-1]) - 1.0
+        head_end = rows[0][0]
+        if origin < head_end:
+            raise ValueError(
+                f"action annotations require t in [{origin:.0f}, {origin + float(s_k[-1]):.0f}], "
+                f"overlapping head segment [0, {head_end})"
+            )
+        for k, (lo, hi) in enumerate(rows):
+            g[lo:hi, 0] = origin + float(s_k[k])
+        action_text_rows = torch.tensor(rows, dtype=torch.long)
+        action_text_spans_local = rows
 
     t_grid = _video_t_grid(latent_t, float(text_len))
     sqrt_area = np.sqrt(latent_h * latent_w)
@@ -175,8 +205,7 @@ def minimax_h3_packed_sequence(
             cond_t = float(text_len) + _temporal_position_span(latent_t) - _FRAME_RESCALE
         else:
             raise ValueError(
-                "fl2va packed layout only supports first/last keyframe anchors, "
-                f"got resolved frame index {pixel_index}"
+                f"fl2va packed layout only supports first/last keyframe anchors, got resolved frame index {pixel_index}"
             )
         g[sl, 0] = cond_t
         g[sl, 1:] = frame
@@ -191,7 +220,7 @@ def minimax_h3_packed_sequence(
     token_tags[img_pos] = 0  # VIDEO
 
     cu = torch.tensor([0, used, seq_len], dtype=torch.int32)
-    return {
+    out: dict[str, Any] = {
         "seq_len": seq_len,
         "img_pos": img_pos,
         "audio_pos": audio_pos,
@@ -201,6 +230,12 @@ def minimax_h3_packed_sequence(
         "token_tags": token_tags,
         "cu_seqlens": cu,
     }
+    if action_text_rows is not None:
+        out["action_text_rows"] = action_text_rows
+        out["action_text_spans_local"] = action_text_spans_local
+        out["action_video_start"] = video_sl.start
+        out["action_frame_rows"] = frame_rows
+    return out
 
 
 def _positive_int(
@@ -280,7 +315,7 @@ def minimax_h3_packed_sequence_ref2va_blocks(
     if not isinstance(ref_blocks, Sequence) or isinstance(ref_blocks, (str, bytes)):
         raise ValueError("ref_blocks must be a sequence")
 
-    parsed: list[dict[str, object]] = []
+    parsed: list[dict[str, Any]] = []
     ref_visual_rows = 0
     ref_audio_rows = 0
     for index, raw in enumerate(ref_blocks):
@@ -342,7 +377,7 @@ def minimax_h3_packed_sequence_ref2va_blocks(
 
     text_sl = slice(0, text_len)
     cursor = text_len
-    block_slices: list[dict[str, object]] = []
+    block_slices: list[dict[str, Any]] = []
     for item in parsed:
         kind = str(item["kind"])
         if kind == "image":
@@ -446,8 +481,8 @@ def minimax_h3_packed_sequence_ref2va_blocks(
 
     target_img_pos = _range_for_slice(video_sl)
     target_audio_pos = _range_for_slice(audio_sl)
-    img_pos = _cat_ranges(ref_img_pos_parts + [target_img_pos])
-    audio_pos = _cat_ranges(ref_audio_pos_parts + [target_audio_pos])
+    img_pos = _cat_ranges([*ref_img_pos_parts, target_img_pos])
+    audio_pos = _cat_ranges([*ref_audio_pos_parts, target_audio_pos])
 
     update_mask = torch.zeros(img_pos.shape[0], dtype=torch.bool)
     update_mask[ref_visual_rows:] = True

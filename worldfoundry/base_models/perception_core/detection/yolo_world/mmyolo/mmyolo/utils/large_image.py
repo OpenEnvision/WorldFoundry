@@ -1,5 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import Sequence, Tuple
+from collections.abc import Sequence
 
 import torch
 from mmcv.ops import batched_nms
@@ -23,9 +23,9 @@ def shift_rbboxes(bboxes: torch.Tensor, offset: Sequence[int]):
     return shifted_bboxes
 
 
-def shift_predictions(det_data_samples: SampleList,
-                      offsets: Sequence[Tuple[int, int]],
-                      src_image_shape: Tuple[int, int]) -> SampleList:
+def shift_predictions(
+    det_data_samples: SampleList, offsets: Sequence[tuple[int, int]], src_image_shape: tuple[int, int]
+) -> SampleList:
     """Shift predictions to the original image.
 
     Args:
@@ -40,13 +40,11 @@ def shift_predictions(det_data_samples: SampleList,
     try:
         from sahi.slicing import shift_bboxes, shift_masks
     except ImportError:
-        raise ImportError('Please run "pip install -U sahi" '
-                          'to install sahi first for large image inference.')
+        raise ImportError('Please run "pip install -U sahi" to install sahi first for large image inference.')  # noqa: B904 - Keeps the implicit exception context.
 
-    assert len(det_data_samples) == len(
-        offsets), 'The `results` should has the ' 'same length with `offsets`.'
+    assert len(det_data_samples) == len(offsets), "The `results` should has the same length with `offsets`."
     shifted_predictions = []
-    for det_data_sample, offset in zip(det_data_samples, offsets):
+    for det_data_sample, offset in zip(det_data_samples, offsets, strict=False):
         pred_inst = det_data_sample.pred_instances.clone()
 
         # Check bbox type
@@ -61,9 +59,8 @@ def shift_predictions(det_data_samples: SampleList,
 
         # shift bboxes and masks
         pred_inst.bboxes = shifted_bboxes
-        if 'masks' in det_data_sample:
-            pred_inst.masks = shift_masks(pred_inst.masks, offset,
-                                          src_image_shape)
+        if "masks" in det_data_sample:
+            pred_inst.masks = shift_masks(pred_inst.masks, offset, src_image_shape)
 
         shifted_predictions.append(pred_inst.clone())
 
@@ -72,10 +69,9 @@ def shift_predictions(det_data_samples: SampleList,
     return shifted_predictions
 
 
-def merge_results_by_nms(results: SampleList, offsets: Sequence[Tuple[int,
-                                                                      int]],
-                         src_image_shape: Tuple[int, int],
-                         nms_cfg: dict) -> DetDataSample:
+def merge_results_by_nms(
+    results: SampleList, offsets: Sequence[tuple[int, int]], src_image_shape: tuple[int, int], nms_cfg: dict
+) -> DetDataSample:
     """Merge patch results by nms.
 
     Args:
@@ -92,10 +88,8 @@ def merge_results_by_nms(results: SampleList, offsets: Sequence[Tuple[int,
     shifted_instances = shift_predictions(results, offsets, src_image_shape)
 
     _, keeps = batched_nms(
-        boxes=shifted_instances.bboxes,
-        scores=shifted_instances.scores,
-        idxs=shifted_instances.labels,
-        nms_cfg=nms_cfg)
+        boxes=shifted_instances.bboxes, scores=shifted_instances.scores, idxs=shifted_instances.labels, nms_cfg=nms_cfg
+    )
     merged_instances = shifted_instances[keeps]
 
     merged_result = results[0].clone()

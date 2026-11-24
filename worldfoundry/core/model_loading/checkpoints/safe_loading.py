@@ -96,10 +96,7 @@ def tensor_state_dict(
             continue
         if all(isinstance(key, str) and torch.is_tensor(value) for key, value in candidate.items()):
             return dict(candidate)
-    raise TypeError(
-        f"Checkpoint {source!r} does not contain a "
-        "flat string-to-tensor state dictionary"
-    )
+    raise TypeError(f"Checkpoint {source!r} does not contain a flat string-to-tensor state dictionary")
 
 
 def load_tensor_state_dict(

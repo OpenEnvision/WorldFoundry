@@ -1,11 +1,11 @@
-_target_: agent.AgentConfig
+_target_: worldfoundry.synthesis.visual_generation.diamond.agent.AgentConfig
 
 denoiser:
-  _target_: models.diffusion.DenoiserConfig
+  _target_: worldfoundry.synthesis.visual_generation.diamond.models.diffusion.DenoiserConfig
   sigma_data: 0.5
   sigma_offset_noise: 0.3
   inner_model:
-    _target_: models.diffusion.InnerModelConfig
+    _target_: worldfoundry.synthesis.visual_generation.diamond.models.diffusion.InnerModelConfig
     img_channels: 3
     num_steps_conditioning: 4
     cond_channels: 256
@@ -14,7 +14,7 @@ denoiser:
     attn_depths: [0,0,0,0]
 
 rew_end_model:
-  _target_: models.rew_end_model.RewEndModelConfig
+  _target_: worldfoundry.synthesis.visual_generation.diamond.models.rew_end_model.RewEndModelConfig
   lstm_dim: 512
   img_channels: ${agent.denoiser.inner_model.img_channels}
   img_size: ${env.train.size}
@@ -24,7 +24,7 @@ rew_end_model:
   attn_depths: [0,0,0,0]
 
 actor_critic:
-  _target_: models.actor_critic.ActorCriticConfig
+  _target_: worldfoundry.synthesis.visual_generation.diamond.models.actor_critic.ActorCriticConfig
   lstm_dim: 512
   img_channels: ${agent.denoiser.inner_model.img_channels}
   img_size: ${env.train.size}

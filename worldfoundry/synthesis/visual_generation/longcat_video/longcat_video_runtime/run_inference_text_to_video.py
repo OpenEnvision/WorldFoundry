@@ -1,23 +1,38 @@
-import os
 import argparse
 import datetime
 import json
-import PIL.Image
-import numpy as np
+import os
 
+import numpy as np
+import PIL.Image
 import torch
 import torch.distributed as dist
-
 from transformers import UMT5EncoderModel
-from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.video_io import write_video
+
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.tokenizer_loading import (
     load_longcat_tokenizer,
 )
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.video_io import write_video
 
-from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.pipeline_longcat_video import LongCatVideoPipeline
-from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.scheduling_flow_match_euler import FlowMatchEulerDiscreteScheduler
-from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.autoencoder_kl_wan import AutoencoderKLWan
-from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.longcat_video_dit import LongCatVideoTransformer3DModel
+# isort: split
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.pipeline_longcat_video import (
+    LongCatVideoPipeline,
+)
+
+# isort: split
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.autoencoder_kl_wan import (
+    AutoencoderKLWan,
+)
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.scheduling_flow_match_euler import (
+    FlowMatchEulerDiscreteScheduler,
+)
+
+# isort: split
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.longcat_video_dit import (
+    LongCatVideoTransformer3DModel,
+)
+
+# isort: split
 from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
 from worldfoundry.core.distributed.model_parallel.context_state import init_context_parallel
 
@@ -32,7 +47,7 @@ def _load_worldfoundry_request() -> dict:
     if not request_path:
         return {}
     try:
-        with open(request_path, "r", encoding="utf-8") as handle:
+        with open(request_path, encoding="utf-8") as handle:
             payload = json.load(handle)
     except FileNotFoundError:
         return {}
@@ -73,8 +88,14 @@ def _request_bool(request: dict, key: str, default: bool) -> bool:
 def generate(args):
     # case setup
     request = _load_worldfoundry_request()
-    prompt = request.get("prompt") or "In a realistic photography style, a white boy around seven or eight years old sits on a park bench, wearing a light blue T-shirt, denim shorts, and white sneakers. He holds an ice cream cone with vanilla and chocolate flavors, and beside him is a medium-sized golden Labrador. Smiling, the boy offers the ice cream to the dog, who eagerly licks it with its tongue. The sun is shining brightly, and the background features a green lawn and several tall trees, creating a warm and loving scene."
-    negative_prompt = request.get("negative_prompt") or "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
+    prompt = (
+        request.get("prompt")
+        or "In a realistic photography style, a white boy around seven or eight years old sits on a park bench, wearing a light blue T-shirt, denim shorts, and white sneakers. He holds an ice cream cone with vanilla and chocolate flavors, and beside him is a medium-sized golden Labrador. Smiling, the boy offers the ice cream to the dog, who eagerly licks it with its tongue. The sun is shining brightly, and the background features a green lawn and several tall trees, creating a warm and loving scene."
+    )
+    negative_prompt = (
+        request.get("negative_prompt")
+        or "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
+    )
     spatial_refine_only = bool(request.get("spatial_refine_only", False))
     height = _request_int(request, "height", 480)
     width = _request_int(request, "width", 832)
@@ -100,34 +121,42 @@ def generate(args):
     enable_compile = args.enable_compile
 
     # prepare distributed environment
-    rank = int(os.environ['RANK'])
+    rank = int(os.environ["RANK"])
     num_gpus = torch.cuda.device_count()
     local_rank = rank % num_gpus
     torch.cuda.set_device(local_rank)
-    dist.init_process_group(backend="nccl", timeout=datetime.timedelta(seconds=3600*24))
-    global_rank    = dist.get_rank()
-    num_processes  = dist.get_world_size()
+    dist.init_process_group(backend="nccl", timeout=datetime.timedelta(seconds=3600 * 24))
+    global_rank = dist.get_rank()
+    num_processes = dist.get_world_size()
 
     # initialize context parallel before loading models
-    init_context_parallel(context_parallel_size=context_parallel_size, global_rank=global_rank, world_size=num_processes)
+    init_context_parallel(
+        context_parallel_size=context_parallel_size, global_rank=global_rank, world_size=num_processes
+    )
     cp_size = context_parallel_util.get_cp_size()
     cp_split_hw = context_parallel_util.get_optimal_split(cp_size)
 
     tokenizer = load_longcat_tokenizer(checkpoint_dir)
-    text_encoder = UMT5EncoderModel.from_pretrained(checkpoint_dir, subfolder="text_encoder", torch_dtype=torch.bfloat16)
+    text_encoder = UMT5EncoderModel.from_pretrained(
+        checkpoint_dir, subfolder="text_encoder", torch_dtype=torch.bfloat16
+    )
     vae = AutoencoderKLWan.from_pretrained(checkpoint_dir, subfolder="vae", torch_dtype=torch.bfloat16)
-    scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(checkpoint_dir, subfolder="scheduler", torch_dtype=torch.bfloat16)
-    dit = LongCatVideoTransformer3DModel.from_pretrained(checkpoint_dir, subfolder="dit", cp_split_hw=cp_split_hw, torch_dtype=torch.bfloat16)
+    scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
+        checkpoint_dir, subfolder="scheduler", torch_dtype=torch.bfloat16
+    )
+    dit = LongCatVideoTransformer3DModel.from_pretrained(
+        checkpoint_dir, subfolder="dit", cp_split_hw=cp_split_hw, torch_dtype=torch.bfloat16
+    )
 
     if enable_compile:
         dit = torch.compile(dit)
 
     pipe = LongCatVideoPipeline(
-        tokenizer = tokenizer,
-        text_encoder = text_encoder,
-        vae = vae,
-        scheduler = scheduler,
-        dit = dit,
+        tokenizer=tokenizer,
+        text_encoder=text_encoder,
+        vae=vae,
+        scheduler=scheduler,
+        dit=dit,
     )
     if cpu_offload:
         pipe.enable_t2v_cpu_offload(local_rank)
@@ -164,9 +193,9 @@ def generate(args):
     output_distill = None
     if run_distill:
         ### t2v distill (480p)
-        cfg_step_lora_path = os.path.join(checkpoint_dir, 'lora/cfg_step_lora.safetensors')
-        pipe.dit.load_lora(cfg_step_lora_path, 'cfg_step_lora')
-        pipe.dit.enable_loras(['cfg_step_lora'])
+        cfg_step_lora_path = os.path.join(checkpoint_dir, "lora/cfg_step_lora.safetensors")
+        pipe.dit.load_lora(cfg_step_lora_path, "cfg_step_lora")
+        pipe.dit.enable_loras(["cfg_step_lora"])
 
         if enable_compile:
             dit = torch.compile(dit)
@@ -187,13 +216,19 @@ def generate(args):
         if local_rank == 0:
             output_processed_tensor = torch.from_numpy(np.array(output_distill))
             output_processed_tensor = (output_processed_tensor * 255).clamp(0, 255).to(torch.uint8)
-            write_video("output_t2v_distill.mp4", output_processed_tensor, fps=fps, video_codec="libx264", options={"crf": f"{18}"})
+            write_video(
+                "output_t2v_distill.mp4",
+                output_processed_tensor,
+                fps=fps,
+                video_codec="libx264",
+                options={"crf": f"{18}"},
+            )
 
     if run_refiner:
         ### t2v refinement (720p)
-        refinement_lora_path = os.path.join(checkpoint_dir, 'lora/refinement_lora.safetensors')
-        pipe.dit.load_lora(refinement_lora_path, 'refinement_lora')
-        pipe.dit.enable_loras(['refinement_lora'])
+        refinement_lora_path = os.path.join(checkpoint_dir, "lora/refinement_lora.safetensors")
+        pipe.dit.load_lora(refinement_lora_path, "refinement_lora")
+        pipe.dit.enable_loras(["refinement_lora"])
         pipe.dit.enable_bsa()
 
         if enable_compile:
@@ -219,7 +254,9 @@ def generate(args):
             output_tensor = torch.from_numpy(output_refine)
             output_tensor = (output_tensor * 255).clamp(0, 255).to(torch.uint8)
             refine_fps = fps if spatial_refine_only else fps * 2
-            write_video("output_t2v_refine.mp4", output_tensor, fps=refine_fps, video_codec="libx264", options={"crf": f"{10}"})
+            write_video(
+                "output_t2v_refine.mp4", output_tensor, fps=refine_fps, video_codec="libx264", options={"crf": f"{10}"}
+            )
 
 
 def _parse_args():
@@ -235,8 +272,8 @@ def _parse_args():
         default=None,
     )
     parser.add_argument(
-        '--enable_compile',
-        action='store_true',
+        "--enable_compile",
+        action="store_true",
     )
 
     args = parser.parse_args()

@@ -1,0 +1,55 @@
+---
+title: "H3-Tiny"
+description: "采用 8 秩 AdaLN 与可选 MeanFlow 少步蒸馏的结构化剪枝 17B/14B MiniMax-H3 模型。"
+modelId: "h3-tiny"
+pageSource: authored
+---
+
+H3-Tiny 提供结构化剪枝的 17B 与 14B MiniMax-H3 Transformer（42 层、8 秩 AdaLN，14B 学生模型将主干块 FFN 缩窄至 9792 通道并保留 14336 通道的文本细化器）以及 MeanFlow 少步蒸馏权重，用于联合视频与立体声音频生成。树内集成复用 WorldFoundry 的规范 MiniMax-H3 Transformer 块、文本细化器、Qwen3-VL 编码器、视频/音频 VAE 以及 MP4 混流器。
+
+代码：[fuyi25/H3-Tiny](https://github.com/fuyi25/H3-Tiny/tree/a3f17f0ef85e9af5d07b2007c4b2dbd6d035e69c)（Apache-2.0）。模型权重依据 MiniMax H3 Community License 分发。
+
+## 权重与变体
+
+| 变体 | Hugging Face 权重 | 采样步数 | 支持工作流 |
+| --- | --- | --- | --- |
+| `17b-fewstep-ref2va`（默认） | `H3-Tiny/MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1` | 默认 6 步（`>=4`，MeanFlow） | `ref2va` |
+| `17b-pruned-ref2va` | `H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-Ref2VA` | 50 步 | `ref2va` |
+| `17b-pruned-fl2va` | `H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-FL2VA` | 50 步 | `t2va`、`i2va`、`l2va`、`fl2va` |
+| `14b-okd-ref2va` | `H3-Tiny/MiniMax-H3-Tiny-14B-OKD-Ref2VA-v0.1` | 50 步 | `ref2va` |
+
+单文件 ComfyUI 权重同样发布于 `H3-Tiny/MiniMax-H3-Tiny-ComfyUI`。所有 Diffusers 格式权重共享 `MiniMaxAI/MiniMax-H3` 的 Qwen3-VL 文本编码器、处理器、视频 VAE 和音频 VAE。
+
+## 运行时契约
+
+公开模型 ID 为 `h3-tiny`（别名：`minimax-h3-tiny`、`h3-tiny-17b-fewstep`、`h3-tiny-17b-pruned`、`h3-tiny-17b-fl2va`、`h3-tiny-14b-okd`）。输出为 24 FPS 视频与同步 32 kHz 立体声音频（`h3-tiny.mp4`）；帧数向上对齐到 `17n + 5`（例如 124 帧 ≈ 5.2 秒，243 帧 ≈ 10.1 秒）。
+
+```bash
+wf run h3-tiny --pipeline.task-profile ref2va --json
+```
+
+```python
+from worldfoundry.pipelines.h3_tiny import H3TinyPipeline
+
+pipe = H3TinyPipeline.from_pretrained(
+    weights_path="/local/H3-Tiny--MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1",
+    base_model_path="/local/MiniMaxAI--MiniMax-H3",
+    variant="17b-fewstep-ref2va",
+    device="cuda",
+)
+result = pipe(
+    prompt="<Picture 1> A sunlit studio portrait turns smoothly toward the camera.",
+    references=["/local/ref1.png"],
+    num_frames=124,
+    num_inference_steps=6,
+    seed=1234,
+    output_path="/local/outputs/h3-tiny.mp4",
+    return_dict=True,
+)
+```
+
+在统一 CUDA 12.8 环境中运行前，请准备好所选 H3-Tiny 权重目录以及共享的 `MiniMaxAI/MiniMax-H3` 基础快照。
+
+## 限制
+
+当前树内参考条件仅接受图像参考，视频/独立音频参考与多卡执行尚未接入。Diffusers 至 WorldFoundry 键映射（FewStep 630 键 / Pruned 626 键）、小型 FP32/BF16 组件数值一致性及调度公式已通过 CPU 单元测试，且全部 4 个已发布 Diffusers 权重（`17b-fewstep-ref2va`、`17b-pruned-ref2va`、`17b-pruned-fl2va`、`14b-okd-ref2va`）均已配合 `MiniMaxAI/MiniMax-H3` 在 H200 上完成端到端真实权重验证（1376×768、124 帧 24 fps、32 kHz 立体声 AAC）。在 141 GB H200 上建议传入 `component_devices={"text_encoder": "cuda", "video_vae": "cuda", "audio_vae": "cuda"}` 以避免 CPU 解码耗时。

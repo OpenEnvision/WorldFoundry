@@ -3,11 +3,11 @@ import glob
 import json
 import os
 import random
+from typing import ClassVar
 
 import cv2
 import einops
 import numpy as np
-import safetensors.torch as sf
 import torch
 import torchvision
 from PIL import Image
@@ -24,10 +24,7 @@ def min_resize(x, m):
         s1 = m
     new_max = max(s1, s0)
     raw_max = max(x.shape[0], x.shape[1])
-    if new_max < raw_max:
-        interpolation = cv2.INTER_AREA
-    else:
-        interpolation = cv2.INTER_LANCZOS4
+    interpolation = cv2.INTER_AREA if new_max < raw_max else cv2.INTER_LANCZOS4
     y = cv2.resize(x, (s1, s0), interpolation=interpolation)
     return y
 
@@ -36,10 +33,7 @@ def d_resize(x, y):
     H, W, C = y.shape
     new_min = min(H, W)
     raw_min = min(x.shape[0], x.shape[1])
-    if new_min < raw_min:
-        interpolation = cv2.INTER_AREA
-    else:
-        interpolation = cv2.INTER_LANCZOS4
+    interpolation = cv2.INTER_AREA if new_min < raw_min else cv2.INTER_LANCZOS4
     y = cv2.resize(x, (W, H), interpolation=interpolation)
     return y
 
@@ -51,8 +45,8 @@ def resize_and_center_crop(image, target_width, target_height):
     pil_image = Image.fromarray(image)
     original_width, original_height = pil_image.size
     scale_factor = max(target_width / original_width, target_height / original_height)
-    resized_width = int(round(original_width * scale_factor))
-    resized_height = int(round(original_height * scale_factor))
+    resized_width = int(round(original_width * scale_factor))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+    resized_height = int(round(original_height * scale_factor))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     resized_image = pil_image.resize((resized_width, resized_height), Image.LANCZOS)
     left = (resized_width - target_width) / 2
     top = (resized_height - target_height) / 2
@@ -65,18 +59,20 @@ def resize_and_center_crop(image, target_width, target_height):
 def resize_and_center_crop_pytorch(image, target_width, target_height):
     B, C, H, W = image.shape
 
-    if H == target_height and W == target_width:
+    if target_height == H and target_width == W:
         return image
 
     scale_factor = max(target_width / W, target_height / H)
-    resized_width = int(round(W * scale_factor))
-    resized_height = int(round(H * scale_factor))
+    resized_width = int(round(W * scale_factor))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+    resized_height = int(round(H * scale_factor))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
-    resized = torch.nn.functional.interpolate(image, size=(resized_height, resized_width), mode='bilinear', align_corners=False)
+    resized = torch.nn.functional.interpolate(
+        image, size=(resized_height, resized_width), mode="bilinear", align_corners=False
+    )
 
     top = (resized_height - target_height) // 2
     left = (resized_width - target_width) // 2
-    cropped = resized[:, :, top:top + target_height, left:left + target_width]
+    cropped = resized[:, :, top : top + target_height, left : left + target_width]
 
     return cropped
 
@@ -96,24 +92,24 @@ def just_crop(image, w, h):
 
     original_height, original_width = image.shape[:2]
     k = min(original_height / h, original_width / w)
-    new_width = int(round(w * k))
-    new_height = int(round(h * k))
+    new_width = int(round(w * k))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+    new_height = int(round(h * k))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     x_start = (original_width - new_width) // 2
     y_start = (original_height - new_height) // 2
-    cropped_image = image[y_start:y_start + new_height, x_start:x_start + new_width]
+    cropped_image = image[y_start : y_start + new_height, x_start : x_start + new_width]
     return cropped_image
 
 
 def write_to_json(data, file_path):
     temp_file_path = file_path + ".tmp"
-    with open(temp_file_path, 'wt', encoding='utf-8') as temp_file:
+    with open(temp_file_path, "w", encoding="utf-8") as temp_file:
         json.dump(data, temp_file, indent=4)
     os.replace(temp_file_path, file_path)
     return
 
 
 def read_from_json(file_path):
-    with open(file_path, 'rt', encoding='utf-8') as file:
+    with open(file_path, encoding="utf-8") as file:
         data = json.load(file)
     return data
 
@@ -136,7 +132,7 @@ def separate_lora_AB(parameters, B_patterns=None):
     parameters_B = {}
 
     if B_patterns is None:
-        B_patterns = ['.lora_B.', '__zero__']
+        B_patterns = [".lora_B.", "__zero__"]
 
     for k, v in parameters.items():
         if any(B_pattern in k for B_pattern in B_patterns):
@@ -166,7 +162,7 @@ def print_tensor_list_size(tensors):
         total_size += tensor.nelement() * tensor.element_size()
         total_elements += tensor.nelement()
 
-    total_size_MB = total_size / (1024 ** 2)
+    total_size_MB = total_size / (1024**2)
     total_elements_B = total_elements / 1e9
 
     print(f"Total number of tensors: {len(tensors)}")
@@ -210,7 +206,7 @@ def supress_lower_channels(m, k, alpha=0.01):
 
 
 def freeze_module(m):
-    if not hasattr(m, '_forward_inside_frozen_module'):
+    if not hasattr(m, "_forward_inside_frozen_module"):
         m._forward_inside_frozen_module = m.forward
     m.requires_grad_(False)
     m.forward = torch.no_grad()(m.forward)
@@ -218,10 +214,10 @@ def freeze_module(m):
 
 
 def get_latest_safetensors(folder_path):
-    safetensors_files = glob.glob(os.path.join(folder_path, '*.safetensors'))
+    safetensors_files = glob.glob(os.path.join(folder_path, "*.safetensors"))
 
     if not safetensors_files:
-        raise ValueError('No file to resume!')
+        raise ValueError("No file to resume!")
 
     latest_file = max(safetensors_files, key=os.path.getmtime)
     latest_file = os.path.abspath(os.path.realpath(latest_file))
@@ -229,9 +225,9 @@ def get_latest_safetensors(folder_path):
 
 
 def generate_random_prompt_from_tags(tags_str, min_length=3, max_length=32):
-    tags = tags_str.split(', ')
+    tags = tags_str.split(", ")
     tags = random.sample(tags, k=min(random.randint(min_length, max_length), len(tags)))
-    prompt = ', '.join(tags)
+    prompt = ", ".join(tags)
     return prompt
 
 
@@ -257,7 +253,7 @@ def soft_append_bcthw(history, current, overlap=0):
 
     assert history.shape[2] >= overlap, f"History length ({history.shape[2]}) must be >= overlap ({overlap})"
     assert current.shape[2] >= overlap, f"Current length ({current.shape[2]}) must be >= overlap ({overlap})"
-    
+
     weights = torch.linspace(1, 0, overlap, dtype=history.dtype, device=history.device).view(1, 1, -1, 1, 1)
     blended = weights * history[:, :, -overlap:] + (1 - weights) * current[:, :, :overlap]
     output = torch.cat([history[:, :, :-overlap], blended, current[:, :, overlap:]], dim=2)
@@ -275,27 +271,27 @@ def save_bcthw_as_mp4(x, output_filename, fps=10, crf=0):
             break
 
     os.makedirs(os.path.dirname(os.path.abspath(os.path.realpath(output_filename))), exist_ok=True)
-    x = torch.clamp(x.float(), -1., 1.) * 127.5 + 127.5
+    x = torch.clamp(x.float(), -1.0, 1.0) * 127.5 + 127.5
     x = x.detach().cpu().to(torch.uint8)
-    x = einops.rearrange(x, '(m n) c t h w -> t (m h) (n w) c', n=per_row)
-    write_video_torchvision(output_filename, x, fps=fps, video_codec='libx264', options={'crf': str(int(crf))})
+    x = einops.rearrange(x, "(m n) c t h w -> t (m h) (n w) c", n=per_row)
+    write_video_torchvision(output_filename, x, fps=fps, video_codec="libx264", options={"crf": str(int(crf))})
     return x
 
 
 def save_bcthw_as_png(x, output_filename):
     os.makedirs(os.path.dirname(os.path.abspath(os.path.realpath(output_filename))), exist_ok=True)
-    x = torch.clamp(x.float(), -1., 1.) * 127.5 + 127.5
+    x = torch.clamp(x.float(), -1.0, 1.0) * 127.5 + 127.5
     x = x.detach().cpu().to(torch.uint8)
-    x = einops.rearrange(x, 'b c t h w -> c (b h) (t w)')
+    x = einops.rearrange(x, "b c t h w -> c (b h) (t w)")
     torchvision.io.write_png(x, output_filename)
     return output_filename
 
 
 def save_bchw_as_png(x, output_filename):
     os.makedirs(os.path.dirname(os.path.abspath(os.path.realpath(output_filename))), exist_ok=True)
-    x = torch.clamp(x.float(), -1., 1.) * 127.5 + 127.5
+    x = torch.clamp(x.float(), -1.0, 1.0) * 127.5 + 127.5
     x = x.detach().cpu().to(torch.uint8)
-    x = einops.rearrange(x, 'b c h w -> c h (b w)')
+    x = einops.rearrange(x, "b c h w -> c h (b w)")
     torchvision.io.write_png(x, output_filename)
     return output_filename
 
@@ -307,7 +303,7 @@ def add_tensors_with_padding(tensor1, tensor2):
     shape1 = tensor1.shape
     shape2 = tensor2.shape
 
-    new_shape = tuple(max(s1, s2) for s1, s2 in zip(shape1, shape2))
+    new_shape = tuple(max(s1, s2) for s1, s2 in zip(shape1, shape2, strict=False))
 
     padded_tensor1 = torch.zeros(new_shape)
     padded_tensor2 = torch.zeros(new_shape)
@@ -322,8 +318,8 @@ def add_tensors_with_padding(tensor1, tensor2):
 def print_free_mem():
     torch.cuda.empty_cache()
     free_mem, total_mem = torch.cuda.mem_get_info(0)
-    free_mem_mb = free_mem / (1024 ** 2)
-    total_mem_mb = total_mem / (1024 ** 2)
+    free_mem_mb = free_mem / (1024**2)
+    total_mem_mb = total_mem / (1024**2)
     print(f"Free memory: {free_mem_mb:.2f} MB")
     print(f"Total memory: {total_mem_mb:.2f} MB")
     return
@@ -344,14 +340,14 @@ def print_gpu_parameters(device, state_dict, log_count=1):
     return
 
 
-def visualize_txt_as_img(width, height, text, font_path='font/DejaVuSans.ttf', size=18):
+def visualize_txt_as_img(width, height, text, font_path="font/DejaVuSans.ttf", size=18):
     from PIL import Image, ImageDraw, ImageFont
 
     txt = Image.new("RGB", (width, height), color="white")
     draw = ImageDraw.Draw(txt)
     font = ImageFont.truetype(font_path, size=size)
 
-    if text == '':
+    if text == "":
         return np.array(txt)
 
     # Split text into lines that fit within the image width
@@ -439,7 +435,7 @@ def weighted_mse(a, b, weight):
 def clamped_linear_interpolation(x, x_min, y_min, x_max, y_max, sigma=1.0):
     x = (x - x_min) / (x_max - x_min)
     x = max(0.0, min(x, 1.0))
-    x = x ** sigma
+    x = x**sigma
     return y_min + x * (y_max - y_min)
 
 
@@ -481,7 +477,7 @@ def crop_or_pad_yield_mask(x, length):
     device = x.device
     dtype = x.dtype
 
-    if F < length:
+    if length > F:
         y = torch.zeros((B, length, C), dtype=dtype, device=device)
         mask = torch.zeros((B, length), dtype=torch.bool, device=device)
         y[:, :F, :] = x
@@ -516,7 +512,9 @@ def lazy_positional_encoding(t, repeats=None):
     from diffusers.models.embeddings import get_timestep_embedding
 
     te = torch.tensor(t)
-    te = get_timestep_embedding(timesteps=te, embedding_dim=256, flip_sin_to_cos=True, downscale_freq_shift=0.0, scale=1.0)
+    te = get_timestep_embedding(
+        timesteps=te, embedding_dim=256, flip_sin_to_cos=True, downscale_freq_shift=0.0, scale=1.0
+    )
 
     if repeats is None:
         return te
@@ -585,7 +583,7 @@ def group_files_by_folder(all_files):
 
 def generate_timestamp():
     now = datetime.datetime.now()
-    timestamp = now.strftime('%y%m%d_%H%M%S')
+    timestamp = now.strftime("%y%m%d_%H%M%S")
     milliseconds = f"{int(now.microsecond / 1000):03d}"
     random_number = random.randint(0, 9999)
     return f"{timestamp}_{milliseconds}_{random_number}"
@@ -603,8 +601,8 @@ def write_PIL_image_with_png_info(image, metadata, path):
 
 
 def torch_safe_save(content, path):
-    torch.save(content, path + '_tmp')
-    os.replace(path + '_tmp', path)
+    torch.save(content, path + "_tmp")
+    os.replace(path + "_tmp", path)
     return path
 
 
@@ -638,9 +636,9 @@ bucket_options = {
 
 
 def find_nearest_bucket(h, w, resolution=640):
-    min_metric = float('inf')
+    min_metric = float("inf")
     best_bucket = None
-    for (bucket_h, bucket_w) in bucket_options[resolution]:
+    for bucket_h, bucket_w in bucket_options[resolution]:
         metric = abs(h * bucket_w - w * bucket_h)
         if metric <= min_metric:
             min_metric = metric
@@ -650,12 +648,15 @@ def find_nearest_bucket(h, w, resolution=640):
 
 # --- CLIP vision helper --------------------------------------------------------
 
+
 def hf_clip_vision_encode(image, feature_extractor, image_encoder):
     assert isinstance(image, np.ndarray)
     assert image.ndim == 3 and image.shape[2] == 3
     assert image.dtype == np.uint8
 
-    preprocessed = feature_extractor.preprocess(images=image, return_tensors="pt").to(device=image_encoder.device, dtype=image_encoder.dtype)
+    preprocessed = feature_extractor.preprocess(images=image, return_tensors="pt").to(
+        device=image_encoder.device, dtype=image_encoder.dtype
+    )
     image_encoder_output = image_encoder(**preprocessed)
 
     return image_encoder_output
@@ -663,12 +664,12 @@ def hf_clip_vision_encode(image, feature_extractor, image_encoder):
 
 # --- async worker helpers ------------------------------------------------------
 
-import time
-from threading import Lock, Thread
+import time  # noqa: E402 - Follows module-level definitions, as upstream.
+from threading import Lock, Thread  # noqa: E402 - Follows module-level definitions, as upstream.
 
 
 class Listener:
-    task_queue = []
+    task_queue: ClassVar[list] = []
     lock = Lock()
     thread = None
 

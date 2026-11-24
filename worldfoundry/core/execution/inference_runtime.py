@@ -22,14 +22,13 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from typing import Any
 
 import numpy as np
 import torch
 
 from worldfoundry.core.observability.colors import Color
-
 from worldfoundry.core.utils.tensors.torch import set_random_seed
 
 _FALSE_VALUES = {"0", "false", "no", "off", "disable", "disabled", "none"}
@@ -207,7 +206,7 @@ def _compile_eval_forward(
     if failure_key in failures:
         return forward
 
-    from worldfoundry.core.execution.compile_cache import CompilePolicy, compile_callable_cached
+    from worldfoundry.core.platform.compile_cache import CompilePolicy, compile_callable_cached
 
     compiled = compile_callable_cached(
         forward,
@@ -241,12 +240,10 @@ def _compile_eval_forward(
             ):
                 raise
             compiled_active = False
-            remembered = set(getattr(owner, "_worldfoundry_eval_compile_failures", ()))
+            remembered: set[tuple[str, str, str]] = set(getattr(owner, "_worldfoundry_eval_compile_failures", ()))
             remembered.add(failure_key)
-            try:
-                setattr(owner, "_worldfoundry_eval_compile_failures", remembered)
-            except Exception:
-                pass
+            with suppress(Exception):
+                owner._worldfoundry_eval_compile_failures = remembered
             return forward(batch)
 
     return compiled_or_eager
@@ -392,11 +389,7 @@ def adaptive_batched_inference(
         should_compile
         and target_device.type == "cuda"
         and torch.cuda.is_available()
-        and (
-            compile_forward is True
-            or bool(persistent_forward)
-            or _has_persistent_compile_owner(forward)
-        )
+        and (compile_forward is True or bool(persistent_forward) or _has_persistent_compile_owner(forward))
     )
     if compile_candidate:
         forward = _compile_eval_forward(
@@ -455,9 +448,7 @@ def adaptive_batched_inference(
                 or final_output.dtype != output.dtype
                 or final_output.device != output.device
             ):
-                raise ValueError(
-                    "forward output shape, dtype, and device must remain stable across batches"
-                )
+                raise ValueError("forward output shape, dtype, and device must remain stable across batches")
             # reduce-overhead may replay a CUDA Graph whose output storage is
             # overwritten by the next call. Copy directly into the final owning
             # buffer before replay; this replaces both the old per-batch clone
@@ -548,7 +539,7 @@ def timer(name: str):
     """Log wall time of a block; import logger lazily to stay CPU-importable."""
     started = time.perf_counter()
     yield
-    from worldfoundry.core.distributed.runtime.logging import log
+    from worldfoundry.core.observability.rank_logging import log
 
     log.info("{} takes {:.4f}s", name, time.perf_counter() - started)
 

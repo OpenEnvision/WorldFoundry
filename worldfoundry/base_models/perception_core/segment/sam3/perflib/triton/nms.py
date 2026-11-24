@@ -4,8 +4,6 @@
 
 # Adapted from https://github.com/stackav-oss/conch/blob/main/conch/kernels/vision/nms.py
 
-"""Module for base_models -> perception_core -> segment -> sam3 -> perflib -> triton -> nms.py functionality."""
-
 import torch
 import triton
 import triton.language as tl
@@ -35,8 +33,7 @@ def _nms_suppression_kernel(
     # Constexprs
     cxpr_block_size: tl.constexpr,
 ) -> None:
-    """NMS suppression kernel.
-
+    """
     Args:
         iou_mask_ptr: Pointer to precomputed IoU mask, shape: (N, N).
         keep_mask_ptr: Pointer to keep mask tensor, shape: (N,).
@@ -74,9 +71,7 @@ def _nms_suppression_kernel(
                 suppression_mask = tl.cast(suppression_mask, tl.int1)
 
                 # Conditionally store suppression result for high-IoU boxes
-                tl.store(
-                    keep_mask_ptr + target_box_offsets, False, mask=suppression_mask
-                )
+                tl.store(keep_mask_ptr + target_box_offsets, False, mask=suppression_mask)
 
             # Potential race condition: we need to ensure all threads complete the store before the next
             # iteration otherwise we may load stale data for whether or not a box has been suppressed.

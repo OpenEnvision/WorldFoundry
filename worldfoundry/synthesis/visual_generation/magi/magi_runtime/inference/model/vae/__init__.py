@@ -15,4 +15,4 @@
 from .vae_model import AutoModel, VideoTokenizerABC, ViTVAE
 from .vae_module import DiagonalGaussianDistribution
 
-__all__ = ["AutoModel", "VideoTokenizerABC", "ViTVAE", "DiagonalGaussianDistribution"]
+__all__ = ["AutoModel", "DiagonalGaussianDistribution", "ViTVAE", "VideoTokenizerABC"]

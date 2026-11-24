@@ -4,6 +4,7 @@ This module provides a function to determine the absolute path to the
 'tesseract_runtime' directory, which is typically expected to be
 a sibling directory to where the current script resides.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -27,7 +28,7 @@ def runtime_root() -> Path:
     """
     # Resolve the absolute path of the current file, then get its parent directory,
     # and append the 'tesseract_runtime' subdirectory name.
-    return Path(__file__).resolve().parent / 'tesseract_runtime'
+    return Path(__file__).resolve().parent / "tesseract_runtime"
 
 
 __all__ = ["runtime_root"]

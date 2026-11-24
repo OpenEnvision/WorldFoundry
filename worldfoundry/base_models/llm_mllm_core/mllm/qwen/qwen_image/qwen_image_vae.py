@@ -1,12 +1,13 @@
-"""Module for base_models -> llm_mllm_core -> mllm -> qwen -> qwen_image -> qwen_image_vae.py functionality."""
+import itertools
 
 import torch
-from typing import List, Optional, Tuple, Union
 from torch import nn
+
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import Upsample as QwenImageUpsample
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
-
 CACHE_T = 2
+
 
 class QwenImageCausalConv3d(torch.nn.Conv3d):
     r"""
@@ -27,22 +28,10 @@ class QwenImageCausalConv3d(torch.nn.Conv3d):
         self,
         in_channels: int,
         out_channels: int,
-        kernel_size: Union[int, Tuple[int, int, int]],
-        stride: Union[int, Tuple[int, int, int]] = 1,
-        padding: Union[int, Tuple[int, int, int]] = 0,
+        kernel_size: int | tuple[int, int, int],
+        stride: int | tuple[int, int, int] = 1,
+        padding: int | tuple[int, int, int] = 0,
     ) -> None:
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            stride: The stride.
-            padding: The padding.
-
-        Returns:
-            The return value.
-        """
         super().__init__(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -56,12 +45,6 @@ class QwenImageCausalConv3d(torch.nn.Conv3d):
         self.padding = (0, 0, 0)
 
     def forward(self, x, cache_x=None):
-        """Forward.
-
-        Args:
-            x: The x.
-            cache_x: The cache x.
-        """
         padding = list(self._padding)
         if cache_x is not None and self._padding[4] > 0:
             cache_x = cache_x.to(x.device)
@@ -69,7 +52,6 @@ class QwenImageCausalConv3d(torch.nn.Conv3d):
             padding[4] -= cache_x.shape[2]
         x = torch.nn.functional.pad(x, padding)
         return super().forward(x)
-
 
 
 class QwenImageRMS_norm(nn.Module):
@@ -85,17 +67,6 @@ class QwenImageRMS_norm(nn.Module):
     """
 
     def __init__(self, dim: int, channel_first: bool = True, images: bool = True, bias: bool = False) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            channel_first: The channel first.
-            images: The images.
-            bias: The bias.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         broadcastable_dims = (1, 1, 1) if not images else (1, 1)
         shape = (dim, *broadcastable_dims) if channel_first else (dim,)
@@ -106,13 +77,10 @@ class QwenImageRMS_norm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(shape)) if bias else 0.0
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        return torch.nn.functional.normalize(x, dim=(1 if self.channel_first else -1)) * self.scale * self.gamma + self.bias
-
+        return (
+            torch.nn.functional.normalize(x, dim=(1 if self.channel_first else -1)) * self.scale * self.gamma
+            + self.bias
+        )
 
 
 class QwenImageResidualBlock(nn.Module):
@@ -133,17 +101,6 @@ class QwenImageResidualBlock(nn.Module):
         dropout: float = 0.0,
         non_linearity: str = "silu",
     ) -> None:
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            dropout: The dropout.
-            non_linearity: The non linearity.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.in_dim = in_dim
         self.out_dim = out_dim
@@ -157,14 +114,7 @@ class QwenImageResidualBlock(nn.Module):
         self.conv2 = QwenImageCausalConv3d(out_dim, out_dim, 3, padding=1)
         self.conv_shortcut = QwenImageCausalConv3d(in_dim, out_dim, 1) if in_dim != out_dim else nn.Identity()
 
-    def forward(self, x, feat_cache=None, feat_idx=[0]):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-        """
+    def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         # Apply shortcut connection
         h = self.conv_shortcut(x)
 
@@ -207,7 +157,6 @@ class QwenImageResidualBlock(nn.Module):
         return x + h
 
 
-
 class QwenImageAttentionBlock(nn.Module):
     r"""
     Causal self-attention with a single head.
@@ -217,11 +166,6 @@ class QwenImageAttentionBlock(nn.Module):
     """
 
     def __init__(self, dim):
-        """Init.
-
-        Args:
-            dim: The dim.
-        """
         super().__init__()
         self.dim = dim
 
@@ -231,11 +175,6 @@ class QwenImageAttentionBlock(nn.Module):
         self.proj = nn.Conv2d(dim, dim, 1)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         identity = x
         batch_size, channels, time, height, width = x.size()
 
@@ -263,28 +202,6 @@ class QwenImageAttentionBlock(nn.Module):
         return x + identity
 
 
-
-class QwenImageUpsample(nn.Upsample):
-    r"""
-    Perform upsampling while ensuring the output tensor has the same data type as the input.
-
-    Args:
-        x (torch.Tensor): Input tensor to be upsampled.
-
-    Returns:
-        torch.Tensor: Upsampled tensor with the same data type as the input.
-    """
-
-    def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        return super().forward(x.float()).type_as(x)
-
-
-
 class QwenImageResample(nn.Module):
     r"""
     A custom resampling module for 2D and 3D data.
@@ -300,15 +217,6 @@ class QwenImageResample(nn.Module):
     """
 
     def __init__(self, dim: int, mode: str) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            mode: The mode.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.dim = dim
         self.mode = mode
@@ -333,58 +241,45 @@ class QwenImageResample(nn.Module):
         else:
             self.resample = nn.Identity()
 
-    def forward(self, x, feat_cache=None, feat_idx=[0]):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-        """
+    def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         b, c, t, h, w = x.size()
-        if self.mode == "upsample3d":
-            if feat_cache is not None:
-                idx = feat_idx[0]
-                if feat_cache[idx] is None:
-                    feat_cache[idx] = "Rep"
-                    feat_idx[0] += 1
-                else:
-                    cache_x = x[:, :, -CACHE_T:, :, :].clone()
-                    if cache_x.shape[2] < 2 and feat_cache[idx] is not None and feat_cache[idx] != "Rep":
-                        # cache last frame of last two chunk
-                        cache_x = torch.cat(
-                            [feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2
-                        )
-                    if cache_x.shape[2] < 2 and feat_cache[idx] is not None and feat_cache[idx] == "Rep":
-                        cache_x = torch.cat([torch.zeros_like(cache_x).to(cache_x.device), cache_x], dim=2)
-                    if feat_cache[idx] == "Rep":
-                        x = self.time_conv(x)
-                    else:
-                        x = self.time_conv(x, feat_cache[idx])
-                    feat_cache[idx] = cache_x
-                    feat_idx[0] += 1
+        if self.mode == "upsample3d" and feat_cache is not None:
+            idx = feat_idx[0]
+            if feat_cache[idx] is None:
+                feat_cache[idx] = "Rep"
+                feat_idx[0] += 1
+            else:
+                cache_x = x[:, :, -CACHE_T:, :, :].clone()
+                if cache_x.shape[2] < 2 and feat_cache[idx] is not None and feat_cache[idx] != "Rep":
+                    # cache last frame of last two chunk
+                    cache_x = torch.cat(
+                        [feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2
+                    )
+                if cache_x.shape[2] < 2 and feat_cache[idx] is not None and feat_cache[idx] == "Rep":
+                    cache_x = torch.cat([torch.zeros_like(cache_x).to(cache_x.device), cache_x], dim=2)
+                x = self.time_conv(x) if feat_cache[idx] == "Rep" else self.time_conv(x, feat_cache[idx])
+                feat_cache[idx] = cache_x
+                feat_idx[0] += 1
 
-                    x = x.reshape(b, 2, c, t, h, w)
-                    x = torch.stack((x[:, 0, :, :, :, :], x[:, 1, :, :, :, :]), 3)
-                    x = x.reshape(b, c, t * 2, h, w)
+                x = x.reshape(b, 2, c, t, h, w)
+                x = torch.stack((x[:, 0, :, :, :, :], x[:, 1, :, :, :, :]), 3)
+                x = x.reshape(b, c, t * 2, h, w)
         t = x.shape[2]
         x = x.permute(0, 2, 1, 3, 4).reshape(b * t, c, h, w)
         x = self.resample(x)
         x = x.view(b, t, x.size(1), x.size(2), x.size(3)).permute(0, 2, 1, 3, 4)
 
-        if self.mode == "downsample3d":
-            if feat_cache is not None:
-                idx = feat_idx[0]
-                if feat_cache[idx] is None:
-                    feat_cache[idx] = x.clone()
-                    feat_idx[0] += 1
-                else:
-                    cache_x = x[:, :, -1:, :, :].clone()
-                    x = self.time_conv(torch.cat([feat_cache[idx][:, :, -1:, :, :], x], 2))
-                    feat_cache[idx] = cache_x
-                    feat_idx[0] += 1
+        if self.mode == "downsample3d" and feat_cache is not None:
+            idx = feat_idx[0]
+            if feat_cache[idx] is None:
+                feat_cache[idx] = x.clone()
+                feat_idx[0] += 1
+            else:
+                cache_x = x[:, :, -1:, :, :].clone()
+                x = self.time_conv(torch.cat([feat_cache[idx][:, :, -1:, :, :], x], 2))
+                feat_cache[idx] = cache_x
+                feat_idx[0] += 1
         return x
-
 
 
 class QwenImageMidBlock(nn.Module):
@@ -398,14 +293,6 @@ class QwenImageMidBlock(nn.Module):
     """
 
     def __init__(self, dim: int, dropout: float = 0.0, non_linearity: str = "silu", num_layers: int = 1):
-        """Init.
-
-        Args:
-            dim: The dim.
-            dropout: The dropout.
-            non_linearity: The non linearity.
-            num_layers: The num layers.
-        """
         super().__init__()
         self.dim = dim
 
@@ -420,26 +307,18 @@ class QwenImageMidBlock(nn.Module):
 
         self.gradient_checkpointing = False
 
-    def forward(self, x, feat_cache=None, feat_idx=[0]):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-        """
+    def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         # First residual block
         x = self.resnets[0](x, feat_cache, feat_idx)
 
         # Process through attention and residual blocks
-        for attn, resnet in zip(self.attentions, self.resnets[1:]):
+        for attn, resnet in zip(self.attentions, self.resnets[1:], strict=False):
             if attn is not None:
                 x = attn(x)
 
             x = resnet(x, feat_cache, feat_idx)
 
         return x
-
 
 
 class QwenImageEncoder3d(nn.Module):
@@ -461,25 +340,13 @@ class QwenImageEncoder3d(nn.Module):
         self,
         dim=128,
         z_dim=4,
-        dim_mult=[1, 2, 4, 4],
+        dim_mult=[1, 2, 4, 4],  # noqa: B006 - Keeps the upstream default object and signature.
         num_res_blocks=2,
-        attn_scales=[],
-        temperal_downsample=[True, True, False],
+        attn_scales=[],  # noqa: B006 - Keeps the upstream default object and signature.
+        temperal_downsample=[True, True, False],  # noqa: B006 - Keeps the upstream default object and signature.
         dropout=0.0,
         non_linearity: str = "silu",
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            z_dim: The z dim.
-            dim_mult: The dim mult.
-            num_res_blocks: The num res blocks.
-            attn_scales: The attn scales.
-            temperal_downsample: The temperal downsample.
-            dropout: The dropout.
-            non_linearity: The non linearity.
-        """
         super().__init__()
         self.dim = dim
         self.z_dim = z_dim
@@ -490,7 +357,7 @@ class QwenImageEncoder3d(nn.Module):
         self.nonlinearity = torch.nn.SiLU()
 
         # dimensions
-        dims = [dim * u for u in [1] + dim_mult]
+        dims = [dim * u for u in [1] + dim_mult]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         scale = 1.0
 
         # init block
@@ -498,7 +365,7 @@ class QwenImageEncoder3d(nn.Module):
 
         # downsample blocks
         self.down_blocks = torch.nn.ModuleList([])
-        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
+        for i, (in_dim, out_dim) in enumerate(itertools.pairwise(dims)):
             # residual (+attention) blocks
             for _ in range(num_res_blocks):
                 self.down_blocks.append(QwenImageResidualBlock(in_dim, out_dim, dropout))
@@ -521,14 +388,7 @@ class QwenImageEncoder3d(nn.Module):
 
         self.gradient_checkpointing = False
 
-    def forward(self, x, feat_cache=None, feat_idx=[0]):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-        """
+    def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         if feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :].clone()
@@ -543,10 +403,7 @@ class QwenImageEncoder3d(nn.Module):
 
         ## downsamples
         for layer in self.down_blocks:
-            if feat_cache is not None:
-                x = layer(x, feat_cache, feat_idx)
-            else:
-                x = layer(x)
+            x = layer(x, feat_cache, feat_idx) if feat_cache is not None else layer(x)
 
         ## middle
         x = self.mid_block(x, feat_cache, feat_idx)
@@ -568,7 +425,6 @@ class QwenImageEncoder3d(nn.Module):
         return x
 
 
-
 class QwenImageUpBlock(nn.Module):
     """
     A block that handles upsampling for the WanVAE decoder.
@@ -588,19 +444,9 @@ class QwenImageUpBlock(nn.Module):
         out_dim: int,
         num_res_blocks: int,
         dropout: float = 0.0,
-        upsample_mode: Optional[str] = None,
+        upsample_mode: str | None = None,
         non_linearity: str = "silu",
     ):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            num_res_blocks: The num res blocks.
-            dropout: The dropout.
-            upsample_mode: The upsample mode.
-            non_linearity: The non linearity.
-        """
         super().__init__()
         self.in_dim = in_dim
         self.out_dim = out_dim
@@ -622,7 +468,7 @@ class QwenImageUpBlock(nn.Module):
 
         self.gradient_checkpointing = False
 
-    def forward(self, x, feat_cache=None, feat_idx=[0]):
+    def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         """
         Forward pass through the upsampling block.
 
@@ -635,18 +481,11 @@ class QwenImageUpBlock(nn.Module):
             torch.Tensor: Output tensor
         """
         for resnet in self.resnets:
-            if feat_cache is not None:
-                x = resnet(x, feat_cache, feat_idx)
-            else:
-                x = resnet(x)
+            x = resnet(x, feat_cache, feat_idx) if feat_cache is not None else resnet(x)
 
         if self.upsamplers is not None:
-            if feat_cache is not None:
-                x = self.upsamplers[0](x, feat_cache, feat_idx)
-            else:
-                x = self.upsamplers[0](x)
+            x = self.upsamplers[0](x, feat_cache, feat_idx) if feat_cache is not None else self.upsamplers[0](x)
         return x
-
 
 
 class QwenImageDecoder3d(nn.Module):
@@ -668,25 +507,13 @@ class QwenImageDecoder3d(nn.Module):
         self,
         dim=128,
         z_dim=4,
-        dim_mult=[1, 2, 4, 4],
+        dim_mult=[1, 2, 4, 4],  # noqa: B006 - Keeps the upstream default object and signature.
         num_res_blocks=2,
-        attn_scales=[],
-        temperal_upsample=[False, True, True],
+        attn_scales=[],  # noqa: B006 - Keeps the upstream default object and signature.
+        temperal_upsample=[False, True, True],  # noqa: B006 - Keeps the upstream default object and signature.
         dropout=0.0,
         non_linearity: str = "silu",
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            z_dim: The z dim.
-            dim_mult: The dim mult.
-            num_res_blocks: The num res blocks.
-            attn_scales: The attn scales.
-            temperal_upsample: The temperal upsample.
-            dropout: The dropout.
-            non_linearity: The non linearity.
-        """
         super().__init__()
         self.dim = dim
         self.z_dim = z_dim
@@ -698,7 +525,7 @@ class QwenImageDecoder3d(nn.Module):
         self.nonlinearity = torch.nn.SiLU()
 
         # dimensions
-        dims = [dim * u for u in [dim_mult[-1]] + dim_mult[::-1]]
+        dims = [dim * u for u in [dim_mult[-1]] + dim_mult[::-1]]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         scale = 1.0 / 2 ** (len(dim_mult) - 2)
 
         # init block
@@ -709,7 +536,7 @@ class QwenImageDecoder3d(nn.Module):
 
         # upsample blocks
         self.up_blocks = nn.ModuleList([])
-        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
+        for i, (in_dim, out_dim) in enumerate(itertools.pairwise(dims)):
             # residual (+attention) blocks
             if i > 0:
                 in_dim = in_dim // 2
@@ -740,14 +567,7 @@ class QwenImageDecoder3d(nn.Module):
 
         self.gradient_checkpointing = False
 
-    def forward(self, x, feat_cache=None, feat_idx=[0]):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-        """
+    def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         ## conv1
         if feat_cache is not None:
             idx = feat_idx[0]
@@ -785,33 +605,17 @@ class QwenImageDecoder3d(nn.Module):
         return x
 
 
-
 class QwenImageVAE(torch.nn.Module):
-    """Qwen image vae implementation."""
     def __init__(
         self,
         base_dim: int = 96,
         z_dim: int = 16,
-        dim_mult: Tuple[int] = [1, 2, 4, 4],
+        dim_mult: tuple[int] = [1, 2, 4, 4],
         num_res_blocks: int = 2,
-        attn_scales: List[float] = [],
-        temperal_downsample: List[bool] = [False, True, True],
+        attn_scales: list[float] = [],  # noqa: B006 - Keeps the upstream default object and signature.
+        temperal_downsample: list[bool] = [False, True, True],  # noqa: B006 - Keeps the upstream default object and signature.
         dropout: float = 0.0,
     ) -> None:
-        """Init.
-
-        Args:
-            base_dim: The base dim.
-            z_dim: The z dim.
-            dim_mult: The dim mult.
-            num_res_blocks: The num res blocks.
-            attn_scales: The attn scales.
-            temperal_downsample: The temperal downsample.
-            dropout: The dropout.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         self.z_dim = z_dim
@@ -868,11 +672,6 @@ class QwenImageVAE(torch.nn.Module):
         self.std = 1 / torch.tensor(std).view(1, 16, 1, 1, 1)
 
     def encode(self, x, **kwargs):
-        """Encode.
-
-        Args:
-            x: The x.
-        """
         x = x.unsqueeze(2)
         x = self.encoder(x)
         x = self.quant_conv(x)
@@ -881,13 +680,8 @@ class QwenImageVAE(torch.nn.Module):
         x = (x - mean) * std
         x = x.squeeze(2)
         return x
-    
-    def decode(self, x, **kwargs):
-        """Decode.
 
-        Args:
-            x: The x.
-        """
+    def decode(self, x, **kwargs):
         x = x.unsqueeze(2)
         mean, std = self.mean.to(dtype=x.dtype, device=x.device), self.std.to(dtype=x.dtype, device=x.device)
         x = x / std + mean
@@ -895,24 +689,15 @@ class QwenImageVAE(torch.nn.Module):
         x = self.decoder(x)
         x = x.squeeze(2)
         return x
-    
+
     @staticmethod
     def state_dict_converter():
-        """State dict converter."""
         return QwenImageVAEStateDictConverter()
 
 
-
-class QwenImageVAEStateDictConverter():
-    """Qwen image vae state dict converter implementation."""
+class QwenImageVAEStateDictConverter:
     def __init__(self):
-        """Init."""
         pass
 
     def from_diffusers(self, state_dict):
-        """From diffusers.
-
-        Args:
-            state_dict: The state dict.
-        """
         return state_dict

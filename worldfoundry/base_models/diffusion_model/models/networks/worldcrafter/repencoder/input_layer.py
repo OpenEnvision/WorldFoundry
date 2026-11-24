@@ -53,8 +53,7 @@ class InputLayer(nn.Module):
         )
         if source_latents.ndim != 5 or tuple(source_latents.shape[1:]) != expected_tail:
             raise ValueError(
-                f"source_latents must be [B,{','.join(map(str, expected_tail))}], "
-                f"got {tuple(source_latents.shape)}"
+                f"source_latents must be [B,{','.join(map(str, expected_tail))}], got {tuple(source_latents.shape)}"
             )
         if not torch.is_floating_point(source_latents):
             raise TypeError("source_latents must be floating point")

@@ -2,23 +2,32 @@
 UniCeption Cross-Attention Transformer for Information Sharing
 """
 
+from collections.abc import Callable
 from copy import deepcopy
 from functools import partial
-from typing import Callable, List, Optional, Tuple, Type, Union
 
 import torch
-
-from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 import torch.nn as nn
 
-from uniception.models.info_sharing.base import (
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.info_sharing.base import (
     MultiViewTransformerInput,
     MultiViewTransformerOutput,
     UniCeptionInfoSharingBase,
 )
-from uniception.models.utils.intermediate_feature_return import IntermediateFeatureReturner, feature_take_indices
-from uniception.models.utils.positional_encoding import PositionGetter
-from uniception.models.utils.transformer_blocks import CrossAttentionBlock, Mlp
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.utils.intermediate_feature_return import (
+    IntermediateFeatureReturner,
+    feature_take_indices,
+)
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.utils.positional_encoding import (
+    PositionGetter,
+)
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
+
+# isort: split
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.utils.transformer_blocks import (
+    CrossAttentionBlock,
+    Mlp,
+)
 
 
 class MultiViewCrossAttentionTransformer(UniCeptionInfoSharingBase):
@@ -29,7 +38,7 @@ class MultiViewCrossAttentionTransformer(UniCeptionInfoSharingBase):
         name: str,
         input_embed_dim: int,
         num_views: int,
-        size: Optional[str] = None,
+        size: str | None = None,
         depth: int = 12,
         dim: int = 768,
         num_heads: int = 12,
@@ -38,18 +47,18 @@ class MultiViewCrossAttentionTransformer(UniCeptionInfoSharingBase):
         qk_norm: bool = False,
         proj_drop: float = 0.0,
         attn_drop: float = 0.0,
-        init_values: Optional[float] = None,
+        init_values: float | None = None,
         drop_path: float = 0.0,
-        act_layer: Type[nn.Module] = nn.GELU,
-        norm_layer: Union[Type[nn.Module], Callable[..., nn.Module]] = partial(nn.LayerNorm, eps=1e-6),
-        mlp_layer: Type[nn.Module] = Mlp,
-        custom_positional_encoding: Optional[Callable] = None,
+        act_layer: type[nn.Module] = nn.GELU,
+        norm_layer: type[nn.Module] | Callable[..., nn.Module] = partial(nn.LayerNorm, eps=1e-6),  # noqa: B008 - Default evaluated once at definition, as upstream.
+        mlp_layer: type[nn.Module] = Mlp,
+        custom_positional_encoding: Callable | None = None,
         norm_cross_tokens: bool = True,
         use_scalable_softmax: bool = False,
         use_entropy_scaling: bool = False,
         base_token_count_for_entropy_scaling: int = 444,
         entropy_scaling_growth_factor: float = 1.4,
-        pretrained_checkpoint_path: Optional[str] = None,
+        pretrained_checkpoint_path: str | None = None,
         gradient_checkpointing: bool = False,
         *args,
         **kwargs,
@@ -86,7 +95,7 @@ class MultiViewCrossAttentionTransformer(UniCeptionInfoSharingBase):
             gradient_checkpointing (bool, optional): Whether to use gradient checkpointing for memory efficiency. (default: False)
         """
         # Initialize the base class
-        super().__init__(name=name, size=size, *args, **kwargs)
+        super().__init__(name=name, size=size, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         # Initialize the specific attributes of the transformer
         self.input_embed_dim = input_embed_dim
@@ -206,15 +215,15 @@ class MultiViewCrossAttentionTransformer(UniCeptionInfoSharingBase):
             MultiViewTransformerOutput: Output of the model post information sharing.
         """
         # Check that the number of views matches the input and the features are of expected shape
-        assert (
-            len(model_input.features) == self.num_views
-        ), f"Expected {self.num_views} views, got {len(model_input.features)}"
-        assert all(
-            view_features.shape[1] == self.input_embed_dim for view_features in model_input.features
-        ), f"All views must have input dimension {self.input_embed_dim}"
-        assert all(
-            view_features.ndim == 4 for view_features in model_input.features
-        ), "All views must have 4 dimensions (N, C, H, W)"
+        assert len(model_input.features) == self.num_views, (
+            f"Expected {self.num_views} views, got {len(model_input.features)}"
+        )
+        assert all(view_features.shape[1] == self.input_embed_dim for view_features in model_input.features), (
+            f"All views must have input dimension {self.input_embed_dim}"
+        )
+        assert all(view_features.ndim == 4 for view_features in model_input.features), (
+            "All views must have 4 dimensions (N, C, H, W)"
+        )
 
         # Initialize the multi-view features from the model input
         multi_view_features = model_input.features
@@ -285,7 +294,7 @@ class MultiViewCrossAttentionTransformerIFR(MultiViewCrossAttentionTransformer, 
         name: str,
         input_embed_dim: int,
         num_views: int,
-        size: Optional[str] = None,
+        size: str | None = None,
         depth: int = 12,
         dim: int = 768,
         num_heads: int = 12,
@@ -294,19 +303,19 @@ class MultiViewCrossAttentionTransformerIFR(MultiViewCrossAttentionTransformer, 
         qk_norm: bool = False,
         proj_drop: float = 0.0,
         attn_drop: float = 0.0,
-        init_values: Optional[float] = None,
+        init_values: float | None = None,
         drop_path: float = 0.0,
         act_layer: nn.Module = nn.GELU,
-        norm_layer: nn.Module = partial(nn.LayerNorm, eps=1e-6),
+        norm_layer: nn.Module = partial(nn.LayerNorm, eps=1e-6),  # noqa: B008 - Default evaluated once at definition, as upstream.
         mlp_layer: nn.Module = Mlp,
-        custom_positional_encoding: Callable = None,
+        custom_positional_encoding: Callable | None = None,
         norm_cross_tokens: bool = True,
         use_scalable_softmax: bool = False,
         use_entropy_scaling: bool = False,
         base_token_count_for_entropy_scaling: int = 444,
         entropy_scaling_growth_factor: float = 1.4,
-        pretrained_checkpoint_path: str = None,
-        indices: Optional[Union[int, List[int]]] = None,
+        pretrained_checkpoint_path: str | None = None,
+        indices: int | list[int] | None = None,
         norm_intermediate: bool = True,
         intermediates_only: bool = False,
         gradient_checkpointing: bool = False,
@@ -379,7 +388,7 @@ class MultiViewCrossAttentionTransformerIFR(MultiViewCrossAttentionTransformer, 
             entropy_scaling_growth_factor=entropy_scaling_growth_factor,
             pretrained_checkpoint_path=pretrained_checkpoint_path,
             gradient_checkpointing=gradient_checkpointing,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
         IntermediateFeatureReturner.__init__(
@@ -392,7 +401,7 @@ class MultiViewCrossAttentionTransformerIFR(MultiViewCrossAttentionTransformer, 
     def forward(
         self,
         model_input: MultiViewTransformerInput,
-    ) -> Union[List[MultiViewTransformerOutput], Tuple[MultiViewTransformerOutput, List[MultiViewTransformerOutput]],]:
+    ) -> list[MultiViewTransformerOutput] | tuple[MultiViewTransformerOutput, list[MultiViewTransformerOutput]]:
         """
         Forward interface for the Multi-View Cross-Attention Transformer with Intermediate Feature Return.
 
@@ -408,15 +417,15 @@ class MultiViewCrossAttentionTransformerIFR(MultiViewCrossAttentionTransformer, 
                 If intermediates_only is False, returns a tuple of final output and a list of intermediate outputs.
         """
         # Check that the number of views matches the input and the features are of expected shape
-        assert (
-            len(model_input.features) == self.num_views
-        ), f"Expected {self.num_views} views, got {len(model_input.features)}"
-        assert all(
-            view_features.shape[1] == self.input_embed_dim for view_features in model_input.features
-        ), f"All views must have input dimension {self.input_embed_dim}"
-        assert all(
-            view_features.ndim == 4 for view_features in model_input.features
-        ), "All views must have 4 dimensions (N, C, H, W)"
+        assert len(model_input.features) == self.num_views, (
+            f"Expected {self.num_views} views, got {len(model_input.features)}"
+        )
+        assert all(view_features.shape[1] == self.input_embed_dim for view_features in model_input.features), (
+            f"All views must have input dimension {self.input_embed_dim}"
+        )
+        assert all(view_features.ndim == 4 for view_features in model_input.features), (
+            "All views must have 4 dimensions (N, C, H, W)"
+        )
 
         # Get the indices of the intermediate features to return
         intermediate_multi_view_features = []

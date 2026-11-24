@@ -1,20 +1,20 @@
 ---
 title: BridgeData V2
-description: "Berkeley RAIL real-robot set: 60,096 WidowX trajectories in 24 environments. WorldFoundry imports policy evals; it does not teleop the arm."
+description: "Berkeley RAIL real-robot set: 60,096 WidowX trajectories in 24 environments. WorldFoundry imports policy-evaluation exports."
 ---
 
 BridgeData V2 (UC Berkeley RAIL) is a **real-robot** manipulation dataset for open-vocabulary, multi-task policies. Official numbers: **60,096** trajectories on a **WidowX 250** 6-DoF arm across **24** environments (**13** skills) — **50,365** VR teleop demos and **9,731** scripted pick-and-place rollouts. Seven toy kitchens dominate; the rest are tabletops, sinks, and similar. Control is **5 Hz** (mean length ~38 steps). Sensing is 640×480: fixed RGB-D over-the-shoulder, two randomized RGB views, and a wrist camera. Every trajectory has a language label; eval is **language-conditioned** (`eval_lc`) or **goal-image-conditioned** (`eval_gc`).
 
 Paper: [BridgeData V2](https://arxiv.org/abs/2308.12952). Project: [rail-berkeley.github.io/bridgedata](https://rail-berkeley.github.io/bridgedata/). Code: [rail-berkeley/bridge_data_v2](https://github.com/rail-berkeley/bridge_data_v2) (MIT). Official media are HTTP / project-page downloads, not a single Hugging Face table.
 
-WorldFoundry **imports** policy-evaluation exports (task / goal success, offline action accuracy, rollout success). It does **not** materialize the dataset, run WidowX inference, or execute real-robot rollouts. Stage data under `${WORLDFOUNDRY_DATA_DIR}/datasets/bridgedata-v2` if you need it locally.
+WorldFoundry **imports** policy-evaluation exports (task / goal success, offline action accuracy, rollout success). It does **not** download the dataset, run WidowX inference, or execute real-robot rollouts. Stage data under `${WORLDFOUNDRY_DATA_DIR}/datasets/bridgedata-v2` if you need it locally.
 
 <BenchmarkPageSections id="bridgedata-v2" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id bridgedata-v2 \
   --mode official-validation \
   --official-results-path <official_results.json> \

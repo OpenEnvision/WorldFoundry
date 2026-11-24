@@ -10,14 +10,18 @@ pip_packages:
 - torch==2.11.0+cu128
 - torchvision==0.26.0+cu128
 - torchaudio==2.11.0+cu128
-- hyperflow-h3[examples] @ git+https://github.com/Video-Rebirth/hyperflow.git@1dd2f342aba5ab51da02b62885939655e8e268da
 - diffusers==0.40.0
 - transformers==5.12.1
 - accelerate
-- peft==0.18.0
 - safetensors>=0.8
 - pillow
-validation_imports: [torch, diffusers, transformers, hyperflow_h3, peft, av]
+- av
+- numpy
+- scipy
+- einops
+- msgspec
+validation_imports: [torch, diffusers, transformers, av, worldfoundry.synthesis.visual_generation.hyperflow.pipeline]
 notes:
-- The pinned upstream package supplies inference only. No runtime clone, package installation or weight download is performed during generation.
+- In-tree HyperFlow reuses canonical MiniMax-H3 components. Generation uses local weights and performs no clone, installation or weight download.
+- Diffusers supplies automatic CPU eviction and selected attention dispatch utilities only; model, VAE and scheduler forwards are canonical WorldFoundry code.
 - Sol-Attn and FlashAttention-3 are optional installations; the default backend is PyTorch SDPA.

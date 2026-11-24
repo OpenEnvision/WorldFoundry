@@ -18,8 +18,6 @@
 # Licensed under the MIT License.
 # -------------------------------------------------------------------------------------------------
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> components -> backend.py functionality."""
-
 import torch
 from omegaconf import DictConfig
 
@@ -38,14 +36,6 @@ class SLAMBackend:
     depth_model: DepthEstimationModel | None = None
 
     def __init__(self, net: DroidNet, video: GraphBuffer, args: DictConfig, device: torch.device):
-        """Init.
-
-        Args:
-            net: The net.
-            video: The video.
-            args: The args.
-            device: The device.
-        """
         self.net = net
         self.video = video
         self.args = args
@@ -53,13 +43,6 @@ class SLAMBackend:
         self.last_graph: torch.Tensor | None = None
 
     def _iterate_with_depth(self, graph: FactorGraph, steps: int, more_iters: bool):
-        """Helper function to iterate with depth.
-
-        Args:
-            graph: The graph.
-            steps: The steps.
-            more_iters: The more iters.
-        """
         steps_preintr = steps // 2
         steps_postintr = steps - steps_preintr
         graph.update_batch(
@@ -80,13 +63,6 @@ class SLAMBackend:
         )
 
     def _iterate_without_depth(self, graph: FactorGraph, steps: int, more_iters: bool):
-        """Helper function to iterate without depth.
-
-        Args:
-            graph: The graph.
-            steps: The steps.
-            more_iters: The more iters.
-        """
         graph.update_batch(
             itrs=16 if more_iters else 8,
             steps=steps,
@@ -143,11 +119,5 @@ class SLAMBackend:
 
     @torch.no_grad()
     def run_if_necessary(self, steps: int = 12, log: bool = False):
-        """Run if necessary.
-
-        Args:
-            steps: The steps.
-            log: The log.
-        """
         if self.args.optimize_intrinsics or self.args.optimize_rig_rotation:
             self.run(steps=steps, update_depth=True, log=log)

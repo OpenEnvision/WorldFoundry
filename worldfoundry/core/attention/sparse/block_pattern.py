@@ -19,8 +19,9 @@ them into range lists, or evaluate them on CPU for visualization and tests.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Literal
+from typing import Any, Literal, cast
 
 import torch
 
@@ -164,7 +165,7 @@ class AttnMaskSpec:
 
 def _block_causal_mask_fn(spec: AttnMaskSpec, q_real: int, kv_real: int) -> tuple[Callable[..., Any], tuple]:
     """Build the block-causal predicate and its cache signature."""
-    pattern = spec.pattern
+    pattern = cast(BlockPattern, spec.pattern)
     q_block_offset = spec.q_block_offset
     # `local_attn_blocks` counts the current block, so the lookback is one less.
     # The upstream sentinel keeps -1 meaningful: 0 disables windowing entirely.
@@ -193,7 +194,7 @@ def _block_causal_mask_fn(spec: AttnMaskSpec, q_real: int, kv_real: int) -> tupl
 
 def _teacher_forcing_mask_fn(spec: AttnMaskSpec, q_real: int, kv_real: int) -> tuple[Callable[..., Any], tuple]:
     """Build the packed teacher-forcing predicate and its cache signature."""
-    pattern = spec.pattern
+    pattern = cast(BlockPattern, spec.pattern)
     clean_blocks = spec.clean_blocks
     local_lookback = spec.local_attn_blocks - 1
     sink_blocks = spec.sink_blocks

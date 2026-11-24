@@ -20,9 +20,10 @@ world_size == 1 (no all-to-all, no Ulysses).
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, IntEnum
-from typing import Callable, List, Optional, Tuple, TypeAlias, Union
+from typing import ClassVar, TypeAlias
 
 import torch
 import torch.nn as nn
@@ -69,7 +70,7 @@ def create_activation_func(activation_type: MLPActivationType) -> Callable:
 # ============================================================
 
 
-def _maybe_gather(input: torch.Tensor, gather_ids: Optional[torch.Tensor]) -> torch.Tensor:
+def _maybe_gather(input: torch.Tensor, gather_ids: torch.Tensor | None) -> torch.Tensor:
     if gather_ids is None:
         return input
     gather_ids = gather_ids.to(input.device)
@@ -78,9 +79,7 @@ def _maybe_gather(input: torch.Tensor, gather_ids: Optional[torch.Tensor]) -> to
     return torch.gather(input, 0, gather_ids)
 
 
-def _m_splits_from(
-    cu_seqlens: Optional[torch.Tensor], m_splits: Optional[Union[list[int], torch.Tensor]]
-) -> list[int]:
+def _m_splits_from(cu_seqlens: torch.Tensor | None, m_splits: list[int] | torch.Tensor | None) -> list[int]:
     if isinstance(m_splits, torch.Tensor):
         return [int(v) for v in m_splits.detach().cpu().tolist()]
     if m_splits is not None:
@@ -93,21 +92,14 @@ def _m_splits_from(
 def _torch_grouped_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
-    bias: Optional[torch.Tensor],
+    bias: torch.Tensor | None,
     m_splits: list[int],
-    gather_ids: Optional[torch.Tensor] = None,
+    gather_ids: torch.Tensor | None = None,
 ) -> torch.Tensor:
     ordered_input = _maybe_gather(input, gather_ids)
     chunks = list(torch.split(ordered_input, m_splits, dim=0))
-    outputs = [
-        F.linear(chunk, weight[i], None if bias is None else bias[i])
-        for i, chunk in enumerate(chunks)
-    ]
-    return (
-        torch.cat(outputs, dim=0)
-        if outputs
-        else ordered_input.new_empty((0, weight.size(1)))
-    )
+    outputs = [F.linear(chunk, weight[i], None if bias is None else bias[i]) for i, chunk in enumerate(chunks)]
+    return torch.cat(outputs, dim=0) if outputs else ordered_input.new_empty((0, weight.size(1)))
 
 
 class GroupedLinearBase(nn.Module):
@@ -133,29 +125,21 @@ class GroupedLinearBase(nn.Module):
         self.out_features = out_features
         self.num_experts = num_experts
         self.num_patterns = num_patterns
-        self.weight = nn.Parameter(
-            torch.empty(num_experts * out_features, in_features, device=device, dtype=dtype)
-        )
+        self.weight = nn.Parameter(torch.empty(num_experts * out_features, in_features, device=device, dtype=dtype))
         if bias:
-            self.bias = nn.Parameter(
-                torch.empty(num_experts * out_features, device=device, dtype=dtype)
-            )
+            self.bias = nn.Parameter(torch.empty(num_experts * out_features, device=device, dtype=dtype))
         else:
             self.register_parameter("bias", None)
 
     def forward(
         self,
         input: torch.Tensor,
-        cu_seqlens: Optional[torch.Tensor] = None,
-        m_splits: Optional[list[int]] = None,
-        gather_ids: Optional[torch.Tensor] = None,
+        cu_seqlens: torch.Tensor | None = None,
+        m_splits: list[int] | None = None,
+        gather_ids: torch.Tensor | None = None,
     ) -> torch.Tensor:
         weight = self.weight.view(self.num_experts, self.out_features, self.in_features)
-        bias = (
-            self.bias.view(self.num_experts, self.out_features)
-            if self.bias is not None
-            else None
-        )
+        bias = self.bias.view(self.num_experts, self.out_features) if self.bias is not None else None
         if self.num_experts == 1:
             return F.linear(input, weight[0], None if bias is None else bias[0])
         m_splits = _m_splits_from(cu_seqlens, m_splits)
@@ -189,8 +173,8 @@ class CustomGroupedLinear(GroupedLinearBase):
     def forward(
         self,
         input: torch.Tensor,
-        modality_dispatcher: Optional[Union["ModalityDispatcher", list[int]]] = None,
-        gather_ids: Optional[torch.Tensor] = None,
+        modality_dispatcher: ModalityDispatcher | list[int] | None = None,
+        gather_ids: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if isinstance(modality_dispatcher, ModalityDispatcher):
             m_splits = modality_dispatcher.group_size_cpu
@@ -204,9 +188,7 @@ class CustomGroupedLinear(GroupedLinearBase):
         else:  # base linear, no split info needed
             m_splits = None
             cu_seqlens = None
-        return super().forward(
-            input=input, cu_seqlens=cu_seqlens, m_splits=m_splits, gather_ids=gather_ids
-        )
+        return super().forward(input=input, cu_seqlens=cu_seqlens, m_splits=m_splits, gather_ids=gather_ids)
 
 
 def create_linear(
@@ -247,7 +229,7 @@ class MultiModalityRMSNorm(nn.Module):
     per modality and each group uses its own weight chunk.
     """
 
-    __constants__ = ["dim", "eps", "num_modality"]
+    __constants__: ClassVar[list] = ["dim", "eps", "num_modality"]
 
     def __init__(
         self,
@@ -267,24 +249,18 @@ class MultiModalityRMSNorm(nn.Module):
         self.out_dtype = out_dtype
         self.compute_dtype = _FP32
         self.weight_bias = 1.0
-        self.weight = nn.Parameter(
-            torch.zeros(num_patterns * dim * num_modality, device=device, dtype=_FP32)
-        )
+        self.weight = nn.Parameter(torch.zeros(num_patterns * dim * num_modality, device=device, dtype=_FP32))
 
-    def forward(
-        self, x: torch.Tensor, modality_dispatcher: Optional["ModalityDispatcher"] = None
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, modality_dispatcher: ModalityDispatcher | None = None) -> torch.Tensor:
         if self.num_modality > 1:
-            assert modality_dispatcher is not None, (
-                "modality_dispatcher is required for multi-modality RMSNorm"
-            )
+            assert modality_dispatcher is not None, "modality_dispatcher is required for multi-modality RMSNorm"
             return self._forward_multi_experts(x, modality_dispatcher, self.out_dtype)
         return self._forward_single_expert(x, self.out_dtype)
 
     def _forward_multi_experts(
         self,
         x: torch.Tensor,
-        modality_dispatcher: "ModalityDispatcher",
+        modality_dispatcher: ModalityDispatcher,
         target_dtype: torch.dtype | None,
     ) -> torch.Tensor:
         t, original_dtype = x.float(), x.dtype
@@ -293,42 +269,33 @@ class MultiModalityRMSNorm(nn.Module):
         weight_chunked = self.weight.chunk(self.num_modality, dim=-1)
         t_list = modality_dispatcher.dispatch(t)
         for i in range(self.num_modality):
-            t_list[i] = t_list[i] * (
-                weight_chunked[i].view(self.num_patterns, self.dim) + self.weight_bias
-            )
+            t_list[i] = t_list[i] * (weight_chunked[i].view(self.num_patterns, self.dim) + self.weight_bias)
         t = modality_dispatcher.undispatch(*t_list)
 
         out_dtype = target_dtype if target_dtype is not None else original_dtype
         return t.to(out_dtype)
 
-    def _forward_single_expert(
-        self, x: torch.Tensor, target_dtype: torch.dtype | None = None
-    ) -> torch.Tensor:
+    def _forward_single_expert(self, x: torch.Tensor, target_dtype: torch.dtype | None = None) -> torch.Tensor:
         t, original_dtype = x.float(), x.dtype
         t = t * torch.rsqrt(torch.mean(t**2, dim=-1, keepdim=True) + self.eps)
         out_dtype = target_dtype if target_dtype is not None else original_dtype
-        return (t * (self.weight.view(self.num_patterns, self.dim) + self.weight_bias)).to(
-            out_dtype
-        )
+        return (t * (self.weight.view(self.num_patterns, self.dim) + self.weight_bias)).to(out_dtype)
 
 
 # ============================================================
 # element-wise Fourier RoPE embedding
 # ============================================================
 
-Coords: TypeAlias = Tuple[int, int, int]
+Coords: TypeAlias = tuple[int, int, int]
 
 
 def freq_bands(
     num_bands: int,
     temperature: float = 10000.0,
     step: int = 2,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
 ) -> torch.Tensor:
-    exp = (
-        torch.arange(0, num_bands, step, dtype=torch.int64, device=device).to(_FP32)
-        / num_bands
-    )
+    exp = torch.arange(0, num_bands, step, dtype=torch.int64, device=device).to(_FP32) / num_bands
     return 1.0 / (temperature**exp)
 
 
@@ -347,7 +314,7 @@ class ElementWiseFourierEmbed(nn.Module):
         in_pixels: bool = True,
         linear_bands: bool = False,
         learnable: bool = False,
-        device: torch.device = torch.device("cpu"),
+        device: torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
         dtype: torch.dtype = _FP32,
     ) -> None:
         super().__init__()
@@ -391,18 +358,16 @@ class ElementWiseFourierEmbed(nn.Module):
     def get_default_bands(self):
         if self.in_pixels:
             raise NotImplementedError("in_pixels are not implemented yet")
-        return freq_bands(
-            self.dim // 8, temperature=self.temperature, step=1, device=self.device
-        ).to(self.dtype)
+        return freq_bands(self.dim // 8, temperature=self.temperature, step=1, device=self.device).to(self.dtype)
 
 
 def get_coords(
     shape: Coords,
     ref_feat_shape: Coords,
     offset_thw: Coords = (0, 0, 0),
-    device: torch.device = torch.device("cpu"),
+    device: torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
     dtype: torch.dtype = _FP32,
-    time_positions: Optional[torch.Tensor] = None,
+    time_positions: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Build ``[T*H*W, 9]`` grid coords + (orig size, ref size) metadata."""
     ori_t, ori_h, ori_w = shape
@@ -415,15 +380,11 @@ def get_coords(
     height_rng = torch.arange(ori_h, device=device, dtype=dtype) + offset_h
     width_rng = torch.arange(ori_w, device=device, dtype=dtype) + offset_w
 
-    time_grid, height_grid, width_grid = torch.meshgrid(
-        time_rng, height_rng, width_rng, indexing="ij"
-    )
+    time_grid, height_grid, width_grid = torch.meshgrid(time_rng, height_rng, width_rng, indexing="ij")
     coords_grid = torch.stack([time_grid, height_grid, width_grid], dim=-1)
     coords_flat = coords_grid.reshape(-1, 3)
 
-    meta = torch.tensor(
-        [ori_t, ori_h, ori_w, ref_t, ref_h, ref_w], device=device, dtype=dtype
-    )
+    meta = torch.tensor([ori_t, ori_h, ori_w, ref_t, ref_h, ref_w], device=device, dtype=dtype)
     meta_expanded = meta.expand(coords_flat.size(0), -1)
     return torch.cat([coords_flat, meta_expanded], dim=-1)
 
@@ -474,13 +435,9 @@ class ModalityDispatcher:
 
         self.permute_mapping = torch.argsort(modality_mapping)
         self.inv_permute_mapping = torch.argsort(self.permute_mapping)
-        self.permuted_modality_mapping = modality_mapping.index_select(
-            0, self.permute_mapping
-        )
+        self.permuted_modality_mapping = modality_mapping.index_select(0, self.permute_mapping)
 
-        self.group_size = torch.bincount(
-            self.permuted_modality_mapping, minlength=num_modalities
-        ).to(torch.int32)
+        self.group_size = torch.bincount(self.permuted_modality_mapping, minlength=num_modalities).to(torch.int32)
         self._group_size_cpu = [int(x) for x in self.group_size.to("cpu").tolist()]
 
         self.cu_group_sizes = seqlens2cu_seqlens(self.group_size)
@@ -493,9 +450,7 @@ class ModalityDispatcher:
             ],
             dim=0,
         )
-        self.expert_ranges = (
-            torch.stack([start_indices, end_indices], dim=1).to(torch.int32).cpu()
-        )
+        self.expert_ranges = torch.stack([start_indices, end_indices], dim=1).to(torch.int32).cpu()
 
     @property
     def group_size_cpu(self) -> list[int]:
@@ -518,7 +473,7 @@ class ModalityDispatcher:
 # MHC hyper-connections (pure-torch backend)
 # ============================================================
 
-MHCTensorTuple = Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+MHCTensorTuple = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
 
 
 def _sigmoid_affine(
@@ -529,9 +484,7 @@ def _sigmoid_affine(
     sigmoid_scale: float,
     out_dtype: torch.dtype,
 ) -> torch.Tensor:
-    return (
-        sigmoid_scale * torch.sigmoid(alpha * matmul_scale * x + bias.unsqueeze(0))
-    ).to(out_dtype)
+    return (sigmoid_scale * torch.sigmoid(alpha * matmul_scale * x + bias.unsqueeze(0))).to(out_dtype)
 
 
 def _sinkhorn_knopp(h: torch.Tensor, num_iters: int, eps: float) -> torch.Tensor:
@@ -606,9 +559,7 @@ class MHCHandler:
     ) -> MHCTensorTuple:
         self._check_flatten_mstream_shape(x)
         h_fused = torch.matmul(norm_fn(x).to(self.dtype), phi_fused)
-        h_pre, h_post, h_res = torch.split(
-            h_fused, [self.n, self.n, self.n * self.n], dim=-1
-        )
+        h_pre, h_post, h_res = torch.split(h_fused, [self.n, self.n, self.n * self.n], dim=-1)
         return h_pre, h_post, h_res.view(-1, self.n, self.n)
 
     def compute_and_apply_hpre(
@@ -620,9 +571,7 @@ class MHCHandler:
         self._check_mstream_shape(x)
         alpha, bias, h_pre_ = abh_pre
         dtype = out_dtype or x.dtype
-        h_pre = _sigmoid_affine(
-            h_pre_, alpha, bias, self.matmul_scale, sigmoid_scale=1.0, out_dtype=dtype
-        )
+        h_pre = _sigmoid_affine(h_pre_, alpha, bias, self.matmul_scale, sigmoid_scale=1.0, out_dtype=dtype)
         return _apply_hpre(h_pre, x)
 
     def compute_hpost_and_hres(
@@ -634,9 +583,7 @@ class MHCHandler:
         alpha_post, bias_post, h_post_ = abh_post
         alpha_res, bias_res, h_res_ = abh_res
         dtype = out_dtype or h_post_.dtype
-        h_post = _sigmoid_affine(
-            h_post_, alpha_post, bias_post, self.matmul_scale, sigmoid_scale=2.0, out_dtype=dtype
-        )
+        h_post = _sigmoid_affine(h_post_, alpha_post, bias_post, self.matmul_scale, sigmoid_scale=2.0, out_dtype=dtype)
         h_res = _sinkhorn_knopp_affine(
             h_res_, alpha_res, bias_res, self.matmul_scale, self.num_sk_iters, self.sk_eps, dtype
         )
@@ -655,22 +602,16 @@ class MHCHandler:
 
     def _check_sstream_shape(self, x: torch.Tensor) -> None:
         if x.dim() != 2 or x.size(-1) != self.hidden_size:
-            raise ValueError(
-                f"Expected single-stream shape (T, {self.hidden_size}), got {tuple(x.shape)}"
-            )
+            raise ValueError(f"Expected single-stream shape (T, {self.hidden_size}), got {tuple(x.shape)}")
 
     def _check_mstream_shape(self, x: torch.Tensor) -> None:
         if x.dim() != 3 or x.size(1) != self.n or x.size(-1) != self.hidden_size:
-            raise ValueError(
-                f"Expected multi-stream shape (T, {self.n}, {self.hidden_size}), got {tuple(x.shape)}"
-            )
+            raise ValueError(f"Expected multi-stream shape (T, {self.n}, {self.hidden_size}), got {tuple(x.shape)}")
 
     def _check_flatten_mstream_shape(self, x: torch.Tensor) -> None:
         expected = self.n * self.hidden_size
         if x.dim() != 2 or x.size(-1) != expected:
-            raise ValueError(
-                f"Expected flattened multi-stream shape (T, {expected}), got {tuple(x.shape)}"
-            )
+            raise ValueError(f"Expected flattened multi-stream shape (T, {expected}), got {tuple(x.shape)}")
 
 
 # ============================================================

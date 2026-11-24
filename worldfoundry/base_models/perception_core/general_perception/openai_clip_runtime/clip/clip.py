@@ -2,12 +2,11 @@ import os
 import urllib
 import warnings
 from functools import lru_cache
-from packaging import version
-from typing import Union, List
 
 import torch
+from packaging import version
 from PIL import Image
-from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
+from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 from tqdm import tqdm
 
 from worldfoundry.core.io.filesystem.file_utils import file_sha256
@@ -17,17 +16,23 @@ from .simple_tokenizer import SimpleTokenizer as _Tokenizer
 
 try:
     from torchvision.transforms import InterpolationMode
+
     BICUBIC = InterpolationMode.BICUBIC
 except ImportError:
     BICUBIC = Image.BICUBIC
 
 
 if version.parse(torch.__version__) < version.parse("1.7.1"):
-    warnings.warn("PyTorch version 1.7.1 or higher is recommended")
+    warnings.warn("PyTorch version 1.7.1 or higher is recommended", stacklevel=1)
 
 
 __all__ = ["available_models", "clear_checkpoint_cache", "load", "tokenize"]
-_tokenizer = _Tokenizer()
+
+
+@lru_cache(maxsize=1)
+def _get_tokenizer() -> _Tokenizer:
+    return _Tokenizer()
+
 
 _MODELS = {
     "RN50": "https://openaipublic.azureedge.net/clip/models/afeb0e10f9e5a86da6080e35cf09123aca3b358a0c3e3b6c78a7b63bc04b6762/RN50.pt",
@@ -56,17 +61,25 @@ def _download(url: str, root: str):
         if file_sha256(download_target) == expected_sha256:
             return download_target
         else:
-            warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
+            warnings.warn(
+                f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file",
+                stacklevel=1,
+            )
 
-    with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
-        with tqdm(total=int(source.info().get("Content-Length")), ncols=80, unit='iB', unit_scale=True, unit_divisor=1024) as loop:
-            while True:
-                buffer = source.read(8192)
-                if not buffer:
-                    break
+    with (
+        urllib.request.urlopen(url) as source,
+        open(download_target, "wb") as output,
+        tqdm(
+            total=int(source.info().get("Content-Length")), ncols=80, unit="iB", unit_scale=True, unit_divisor=1024
+        ) as loop,
+    ):
+        while True:
+            buffer = source.read(8192)
+            if not buffer:
+                break
 
-                output.write(buffer)
-                loop.update(len(buffer))
+            output.write(buffer)
+            loop.update(len(buffer))
 
     if file_sha256(download_target) != expected_sha256:
         raise RuntimeError("Model has been downloaded but the SHA256 checksum does not not match")
@@ -79,16 +92,18 @@ def _convert_image_to_rgb(image):
 
 
 def _transform(n_px):
-    return Compose([
-        Resize(n_px, interpolation=BICUBIC),
-        CenterCrop(n_px),
-        _convert_image_to_rgb,
-        ToTensor(),
-        Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
-    ])
+    return Compose(
+        [
+            Resize(n_px, interpolation=BICUBIC),
+            CenterCrop(n_px),
+            _convert_image_to_rgb,
+            ToTensor(),
+            Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+        ]
+    )
 
 
-def available_models() -> List[str]:
+def available_models() -> list[str]:
     """Returns the names of available CLIP models"""
     return list(_MODELS.keys())
 
@@ -99,7 +114,7 @@ def _load_checkpoint_state_dict(model_path: str):
     except RuntimeError:
         state_dict = torch.load(model_path, map_location="cpu", weights_only=True)
         if not isinstance(state_dict, dict):
-            raise TypeError(f"CLIP checkpoint must contain a state dict, got {type(state_dict)!r}")
+            raise TypeError(f"CLIP checkpoint must contain a state dict, got {type(state_dict)!r}")  # noqa: B904 - Keeps the implicit exception context.
         return state_dict
     return scripted_model.state_dict()
 
@@ -125,7 +140,12 @@ def clear_checkpoint_cache() -> None:
     _cached_checkpoint_state_dict.cache_clear()
 
 
-def load(name: str, device: Union[str, torch.device] = "cuda" if torch.cuda.is_available() else "cpu", jit: bool = False, download_root: str = None):
+def load(
+    name: str,
+    device: str | torch.device = "cuda" if torch.cuda.is_available() else "cpu",  # noqa: B008 - Default evaluated once at definition, as upstream.
+    jit: bool = False,
+    download_root: str | None = None,
+):
     """Load a CLIP model
 
     Parameters
@@ -168,7 +188,7 @@ def load(name: str, device: Union[str, torch.device] = "cuda" if torch.cuda.is_a
     try:
         model = torch.jit.load(model_path, map_location=device).eval()
     except RuntimeError:
-        warnings.warn(f"File {model_path} is not a JIT archive. Loading as a state dict instead")
+        warnings.warn(f"File {model_path} is not a JIT archive. Loading as a state dict instead", stacklevel=1)
         model = build_model(dict(_checkpoint_state_dict(model_path))).to(device)
         if str(device) == "cpu":
             model.float()
@@ -180,7 +200,7 @@ def load(name: str, device: Union[str, torch.device] = "cuda" if torch.cuda.is_a
 
     def _node_get(node: torch._C.Node, key: str):
         """Gets attributes of a node which is polymorphic over return type.
-        
+
         From https://github.com/pytorch/pytorch/pull/82628
         """
         sel = node.kindOf(key)
@@ -235,7 +255,9 @@ def load(name: str, device: Union[str, torch.device] = "cuda" if torch.cuda.is_a
     return model, _transform(model.input_resolution.item())
 
 
-def tokenize(texts: Union[str, List[str]], context_length: int = 77, truncate: bool = False) -> Union[torch.IntTensor, torch.LongTensor]:
+def tokenize(
+    texts: str | list[str], context_length: int = 77, truncate: bool = False
+) -> torch.IntTensor | torch.LongTensor:
     """
     Returns the tokenized representation of given input string(s)
 
@@ -258,9 +280,10 @@ def tokenize(texts: Union[str, List[str]], context_length: int = 77, truncate: b
     if isinstance(texts, str):
         texts = [texts]
 
-    sot_token = _tokenizer.encoder["<|startoftext|>"]
-    eot_token = _tokenizer.encoder["<|endoftext|>"]
-    all_tokens = [[sot_token] + _tokenizer.encode(text) + [eot_token] for text in texts]
+    tokenizer = _get_tokenizer()
+    sot_token = tokenizer.encoder["<|startoftext|>"]
+    eot_token = tokenizer.encoder["<|endoftext|>"]
+    all_tokens = [[sot_token] + tokenizer.encode(text) + [eot_token] for text in texts]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     if version.parse(torch.__version__) < version.parse("1.8.0"):
         result = torch.zeros(len(all_tokens), context_length, dtype=torch.long)
     else:
@@ -273,6 +296,6 @@ def tokenize(texts: Union[str, List[str]], context_length: int = 77, truncate: b
                 tokens[-1] = eot_token
             else:
                 raise RuntimeError(f"Input {texts[i]} is too long for context length {context_length}")
-        result[i, :len(tokens)] = torch.tensor(tokens)
+        result[i, : len(tokens)] = torch.tensor(tokens)
 
     return result

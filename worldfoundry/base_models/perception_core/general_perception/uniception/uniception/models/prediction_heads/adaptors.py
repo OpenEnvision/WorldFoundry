@@ -4,12 +4,11 @@ Adaptors for the UniCeption Prediction Heads.
 
 from functools import lru_cache
 from math import isfinite
-from typing import List, Tuple, Union
 
 import numpy as np
 import torch
 
-from uniception.models.prediction_heads import (
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.prediction_heads import (
     AdaptorInput,
     AdaptorOutput,
     Covariance2DAdaptorOutput,
@@ -26,9 +25,9 @@ class FlowAdaptor(UniCeptionAdaptorBase):
     def __init__(
         self,
         name: str,
-        flow_mean: Union[Tuple[float, float], List[float]],
-        flow_std: Union[Tuple[float, float], List[float]],
-        base_shape: Tuple[int, int],
+        flow_mean: tuple[float, float] | list[float],
+        flow_std: tuple[float, float] | list[float],
+        base_shape: tuple[int, int],
         scale_strategy: str,
         output_normalized_coordinate: bool = False,
         *args,
@@ -50,7 +49,7 @@ class FlowAdaptor(UniCeptionAdaptorBase):
             output_normalized_coordinate (bool): If True, will subtract the (X, Y) coordinate of the output pixel from input x after it is being scaled to pixel coordinates.
             In other words, the network will predict the pixel position that the source pixel will land on the target image, rather than the flow.
         """
-        super().__init__(name, required_channels=2, *args, **kwargs)
+        super().__init__(name, required_channels=2, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.name: str = name
 
@@ -58,11 +57,11 @@ class FlowAdaptor(UniCeptionAdaptorBase):
         flow_std = list(flow_std)
 
         # Handle the case where flow_mean and flow_std are passed as tuples
-        if isinstance(flow_mean, tuple) or isinstance(flow_mean, list):
+        if isinstance(flow_mean, (tuple, list)):
             flow_mean = torch.tensor(flow_mean, dtype=torch.float32)
             assert flow_mean.shape == (2,), f"Flow mean must be a 2D tensor, got {flow_mean.shape}"
 
-        if isinstance(flow_std, tuple) or isinstance(flow_std, list):
+        if isinstance(flow_std, (tuple, list)):
             flow_std = torch.tensor(flow_std, dtype=torch.float32)
             assert flow_std.shape == (2,), f"Flow std must be a 2D tensor, got {flow_std.shape}"
 
@@ -118,7 +117,7 @@ class FlowAdaptor(UniCeptionAdaptorBase):
 
         return RegressionAdaptorOutput(value=x)
 
-    def _get_xy_scale(self, output_shape: Tuple[int, int]):
+    def _get_xy_scale(self, output_shape: tuple[int, int]):
         """
         Get the scaling factor for the X and Y dimensions.
 
@@ -139,8 +138,8 @@ class FlowAdaptor(UniCeptionAdaptorBase):
         else:
             raise ValueError(f"Invalid scaling strategy: {self.scale_strategy}")
 
-    @lru_cache(maxsize=10)
-    def _get_coordinate_bias(self, output_shape: Tuple[int, int], device: str):
+    @lru_cache(maxsize=10)  # noqa: B019 - Keeps the upstream per-instance method cache.
+    def _get_coordinate_bias(self, output_shape: tuple[int, int], device: str):
         """
         Get the (X, Y) coordinate image for the given output shape.
 
@@ -178,7 +177,7 @@ class ScaleAdaptor(UniCeptionAdaptorBase):
             vmin (float): Minimum value of the scale prediction after scaling.
             vmax (float): Maximum value of the scale prediction after scaling.
         """
-        super().__init__(name, required_channels=1, *args, **kwargs)
+        super().__init__(name, required_channels=1, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.mode = mode
         self.vmin = vmin
@@ -222,7 +221,7 @@ class DepthAdaptor(UniCeptionAdaptorBase):
             vmin (float): Minimum value of the depth after scaling.
             vmax (float): Maximum value of the depth after scaling.
         """
-        super().__init__(name, required_channels=1, *args, **kwargs)
+        super().__init__(name, required_channels=1, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.mode = mode
         self.vmin = vmin
@@ -262,7 +261,7 @@ class SceneFlowAdaptor(UniCeptionAdaptorBase):
         """
         Adaptor for the Motion head in UniCeption.
         """
-        super().__init__(name, required_channels=3, *args, **kwargs)
+        super().__init__(name, required_channels=3, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.mode = mode
         self.vmin = vmin
@@ -307,7 +306,7 @@ class PointMapAdaptor(UniCeptionAdaptorBase):
             vmin (float): Minimum value of the point map after scaling.
             vmax (float): Maximum value of the point map after scaling.
         """
-        super().__init__(name, required_channels=3, *args, **kwargs)
+        super().__init__(name, required_channels=3, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.mode = mode
         self.vmin = vmin
@@ -366,7 +365,7 @@ class RayOriginsAdaptor(UniCeptionAdaptorBase):
             vmin (float): Minimum value of the ray origins after scaling.
             vmax (float): Maximum value of the ray origins after scaling.
         """
-        super().__init__(name, required_channels=3, *args, **kwargs)
+        super().__init__(name, required_channels=3, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.mode = mode
         self.vmin = vmin
@@ -433,7 +432,7 @@ class RayDirectionsAdaptor(UniCeptionAdaptorBase):
             clamp_min_of_z_dir (bool): If True, will clamp the z component of the ray directions before normalization. (default: False)
             z_dir_min (float): If clamp_min_of_z_dir is True, this minimum value is used for clamping. (default: 1)
         """
-        super().__init__(name, required_channels=3, *args, **kwargs)
+        super().__init__(name, required_channels=3, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.mode = mode
         self.normalize_to_unit_sphere = normalize_to_unit_sphere
@@ -504,7 +503,7 @@ class RayDirectionsPlusDepthAdaptor(UniCeptionAdaptorBase):
         """
         Adaptor for the RayDirections + Depth head in UniCeption.
         """
-        super().__init__(name, required_channels=4, *args, **kwargs)
+        super().__init__(name, required_channels=4, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.ray_directions_adaptor = RayDirectionsAdaptor(
             name,
@@ -565,7 +564,7 @@ class RayDirectionsPlusDepthPlusSceneFlowAdaptor(UniCeptionAdaptorBase):
         """
         Adaptor for the RayDirections + Depth + SceneFlow head in UniCeption.
         """
-        super().__init__(name, required_channels=7, *args, **kwargs)
+        super().__init__(name, required_channels=7, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.ray_directions_adaptor = RayDirectionsAdaptor(
             name,
@@ -617,7 +616,7 @@ class CamTranslationAdaptor(UniCeptionAdaptorBase):
             vmin (float): Minimum value of the camera translation after scaling.
             vmax (float): Maximum value of the camera translation after scaling.
         """
-        super().__init__(name, required_channels=3, *args, **kwargs)
+        super().__init__(name, required_channels=3, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.mode = mode
         self.vmin = vmin
@@ -672,7 +671,7 @@ class QuaternionsAdaptor(UniCeptionAdaptorBase):
             vmin (float): Minimum value of the quaternions after scaling & before normalization to unit quaternions if required.
             vmax (float): Maximum value of the quaternions after scaling & before normalization to unit quaternions if required.
         """
-        super().__init__(name, required_channels=4, *args, **kwargs)
+        super().__init__(name, required_channels=4, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.mode = mode
         self.normalize = normalize
@@ -727,7 +726,7 @@ class CamTranslationPlusQuatsAdaptor(UniCeptionAdaptorBase):
         """
         Adaptor for the Camera Translation + Quaternions head in UniCeption.
         """
-        super().__init__(name, required_channels=7, *args, **kwargs)
+        super().__init__(name, required_channels=7, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.cam_trans_adaptor = CamTranslationAdaptor(name, cam_trans_mode, cam_trans_vmin, cam_trans_vmax)
         self.quaternions_adaptor = QuaternionsAdaptor(
@@ -777,7 +776,7 @@ class RayMapAdaptor(UniCeptionAdaptorBase):
         """
         Adaptor for the RayMap (RayOrigins + RayDirections) head in UniCeption.
         """
-        super().__init__(name, required_channels=6, *args, **kwargs)
+        super().__init__(name, required_channels=6, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.ray_origins_adaptor = RayOriginsAdaptor(name, ray_origins_mode, ray_origins_vmin, ray_origins_vmax)
         self.ray_directions_adaptor = RayDirectionsAdaptor(
@@ -840,7 +839,7 @@ class RayMapPlusDepthAdaptor(UniCeptionAdaptorBase):
         """
         Adaptor for the RayMap (RayOrigins + RayDirections) + Depth head in UniCeption.
         """
-        super().__init__(name, required_channels=7, *args, **kwargs)
+        super().__init__(name, required_channels=7, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.ray_origins_adaptor = RayOriginsAdaptor(name, ray_origins_mode, ray_origins_vmin, ray_origins_vmax)
         self.ray_directions_adaptor = RayDirectionsAdaptor(
@@ -911,7 +910,7 @@ class RayMapPlusDepthPlusQuatsAdaptor(UniCeptionAdaptorBase):
         """
         Adaptor for the RayMap (RayOrigins + RayDirections) + Depth + Quaternions head in UniCeption.
         """
-        super().__init__(name, required_channels=11, *args, **kwargs)
+        super().__init__(name, required_channels=11, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.ray_origins_adaptor = RayOriginsAdaptor(name, ray_origins_mode, ray_origins_vmin, ray_origins_vmax)
         self.ray_directions_adaptor = RayDirectionsAdaptor(
@@ -994,7 +993,7 @@ class PointMapPlusRayDirectionsPlusDepthAdaptor(UniCeptionAdaptorBase):
         """
         Adaptor for the PointMap + RayDirections + Depth head in UniCeption.
         """
-        super().__init__(name, required_channels=7, *args, **kwargs)
+        super().__init__(name, required_channels=7, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.pointmap_adaptor = PointMapAdaptor(name, pointmap_mode, pointmap_vmin, pointmap_vmax)
         self.ray_directions_adaptor = RayDirectionsAdaptor(
@@ -1053,7 +1052,7 @@ class ConfidenceAdaptor(UniCeptionAdaptorBase):
             vmin (float): Minimum value of the confidence.
             vmax (float): Maximum value of the confidence.
         """
-        super().__init__(name, required_channels=1, *args, **kwargs)
+        super().__init__(name, required_channels=1, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         self.confidence_type = confidence_type
         self.vmin = vmin
@@ -1108,7 +1107,7 @@ class Covariance2DAdaptor(UniCeptionAdaptorBase):
         """
         Adaptor for the Covariance2D head in UniCeption.
         """
-        super().__init__(name, required_channels=3, *args, **kwargs)
+        super().__init__(name, required_channels=3, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
         self.parametrization = parametrization
         self.low_confidence_init = low_confidence_init
 
@@ -1176,7 +1175,7 @@ class MaskAdaptor(UniCeptionAdaptorBase):
         """
         Adaptor for the Mask head in UniCeption.
         """
-        super().__init__(name, required_channels=1, *args, **kwargs)
+        super().__init__(name, required_channels=1, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
     def forward(self, adaptor_input: AdaptorInput):
         x = adaptor_input.adaptor_feature
@@ -1207,7 +1206,7 @@ class ValueWithConfidenceAdaptor(UniCeptionAdaptorBase):
         super().__init__(
             name,
             required_channels=value_adaptor.required_channels + confidence_adaptor.required_channels,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -1237,7 +1236,7 @@ class FlowWithConfidenceAdaptor(ValueWithConfidenceAdaptor):
         # Flow adaptor
         flow_mean: torch.Tensor,
         flow_std: torch.Tensor,
-        base_shape: Tuple[int, int],
+        base_shape: tuple[int, int],
         scale_strategy: str,
         output_normalized_coordinate: bool,
         # Confidence adaptor
@@ -1263,7 +1262,7 @@ class FlowWithConfidenceAdaptor(ValueWithConfidenceAdaptor):
             name=f"{name}_confidence", confidence_type=confidence_type, vmin=vmin, vmax=vmax
         )
 
-        super().__init__(name, value_adaptor=flow_adaptor, confidence_adaptor=confidence_adaptor, *args, **kwargs)
+        super().__init__(name, value_adaptor=flow_adaptor, confidence_adaptor=confidence_adaptor, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
 
 class PointMapWithConfidenceAdaptor(ValueWithConfidenceAdaptor):
@@ -1290,7 +1289,7 @@ class PointMapWithConfidenceAdaptor(ValueWithConfidenceAdaptor):
             name=f"{name}_confidence", confidence_type=confidence_type, vmin=confidence_vmin, vmax=confidence_vmax
         )
 
-        super().__init__(name, value_adaptor=pointmap_adaptor, confidence_adaptor=confidence_adaptor, *args, **kwargs)
+        super().__init__(name, value_adaptor=pointmap_adaptor, confidence_adaptor=confidence_adaptor, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
 
 class PointMapPlusRayDirectionsPlusDepthWithConfidenceAdaptor(ValueWithConfidenceAdaptor):
@@ -1348,7 +1347,7 @@ class PointMapPlusRayDirectionsPlusDepthWithConfidenceAdaptor(ValueWithConfidenc
             name,
             value_adaptor=pointmap_plus_ray_directions_plus_depth_adaptor,
             confidence_adaptor=confidence_adaptor,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -1401,7 +1400,7 @@ class RayDirectionsPlusDepthWithConfidenceAdaptor(ValueWithConfidenceAdaptor):
             name,
             value_adaptor=ray_directions_plus_depth_adaptor,
             confidence_adaptor=confidence_adaptor,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -1461,7 +1460,7 @@ class RayDirectionsPlusDepthPlusSceneFlowWithConfidenceAdaptor(ValueWithConfiden
             name,
             value_adaptor=ray_directions_plus_depth_plus_scene_flow_adaptor,
             confidence_adaptor=confidence_adaptor,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -1517,7 +1516,11 @@ class RayMapPlusDepthWithConfidenceAdaptor(ValueWithConfidenceAdaptor):
         )
 
         super().__init__(
-            name, value_adaptor=raymap_plus_depth_adaptor, confidence_adaptor=confidence_adaptor, *args, **kwargs
+            name,
+            value_adaptor=raymap_plus_depth_adaptor,
+            confidence_adaptor=confidence_adaptor,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
+            **kwargs,
         )
 
 
@@ -1584,7 +1587,7 @@ class RayMapPlusDepthPlusQuatsWithConfidenceAdaptor(ValueWithConfidenceAdaptor):
             name,
             value_adaptor=raymap_plus_depth_plus_quats_adaptor,
             confidence_adaptor=confidence_adaptor,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -1610,7 +1613,7 @@ class ValueWithMaskAdaptor(UniCeptionAdaptorBase):
         super().__init__(
             name,
             required_channels=value_adaptor.required_channels + mask_adaptor.required_channels,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -1651,7 +1654,7 @@ class PointMapWithMaskAdaptor(ValueWithMaskAdaptor):
 
         mask_adaptor = MaskAdaptor(name=f"{name}_mask")
 
-        super().__init__(name, value_adaptor=pointmap_adaptor, mask_adaptor=mask_adaptor, *args, **kwargs)
+        super().__init__(name, value_adaptor=pointmap_adaptor, mask_adaptor=mask_adaptor, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
 
 class PointMapPlusRayDirectionsPlusDepthWithMaskAdaptor(ValueWithMaskAdaptor):
@@ -1703,7 +1706,7 @@ class PointMapPlusRayDirectionsPlusDepthWithMaskAdaptor(ValueWithMaskAdaptor):
             name,
             value_adaptor=pointmap_plus_ray_directions_plus_depth_adaptor,
             mask_adaptor=mask_adaptor,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -1747,7 +1750,11 @@ class RayDirectionsPlusDepthWithMaskAdaptor(ValueWithMaskAdaptor):
         mask_adaptor = MaskAdaptor(name=f"{name}_mask")
 
         super().__init__(
-            name, value_adaptor=ray_directions_plus_depth_adaptor, mask_adaptor=mask_adaptor, *args, **kwargs
+            name,
+            value_adaptor=ray_directions_plus_depth_adaptor,
+            mask_adaptor=mask_adaptor,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
+            **kwargs,
         )
 
 
@@ -1800,7 +1807,7 @@ class RayDirectionsPlusDepthPlusSceneFlowWithMaskAdaptor(ValueWithMaskAdaptor):
             name,
             value_adaptor=ray_directions_plus_depth_plus_scene_flow_adaptor,
             mask_adaptor=mask_adaptor,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -1849,7 +1856,7 @@ class RayMapPlusDepthWithMaskAdaptor(ValueWithMaskAdaptor):
 
         mask_adaptor = MaskAdaptor(name=f"{name}_mask")
 
-        super().__init__(name, value_adaptor=raymap_plus_depth_adaptor, mask_adaptor=mask_adaptor, *args, **kwargs)
+        super().__init__(name, value_adaptor=raymap_plus_depth_adaptor, mask_adaptor=mask_adaptor, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
 
 class RayMapPlusDepthPlusQuatsWithMaskAdaptor(ValueWithMaskAdaptor):
@@ -1906,7 +1913,11 @@ class RayMapPlusDepthPlusQuatsWithMaskAdaptor(ValueWithMaskAdaptor):
         mask_adaptor = MaskAdaptor(name=f"{name}_mask")
 
         super().__init__(
-            name, value_adaptor=raymap_plus_depth_plus_quats_adaptor, mask_adaptor=mask_adaptor, *args, **kwargs
+            name,
+            value_adaptor=raymap_plus_depth_plus_quats_adaptor,
+            mask_adaptor=mask_adaptor,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
+            **kwargs,
         )
 
 
@@ -1934,7 +1945,7 @@ class ValueWithConfidenceAndMaskAdaptor(UniCeptionAdaptorBase):
             required_channels=value_adaptor.required_channels
             + confidence_adaptor.required_channels
             + mask_adaptor.required_channels,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -2000,7 +2011,7 @@ class PointMapWithConfidenceAndMaskAdaptor(ValueWithConfidenceAndMaskAdaptor):
             value_adaptor=pointmap_adaptor,
             confidence_adaptor=confidence_adaptor,
             mask_adaptor=mask_adaptor,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -2063,7 +2074,7 @@ class PointMapPlusRayDirectionsPlusDepthWithConfidenceAndMaskAdaptor(ValueWithCo
             value_adaptor=pointmap_plus_ray_directions_plus_depth_adaptor,
             confidence_adaptor=confidence_adaptor,
             mask_adaptor=mask_adaptor,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -2119,7 +2130,7 @@ class RayDirectionsPlusDepthWithConfidenceAndMaskAdaptor(ValueWithConfidenceAndM
             value_adaptor=ray_directions_plus_depth_adaptor,
             confidence_adaptor=confidence_adaptor,
             mask_adaptor=mask_adaptor,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -2182,7 +2193,7 @@ class RayDirectionsPlusDepthPlusSceneFlowWithConfidenceAndMaskAdaptor(ValueWithC
             value_adaptor=ray_directions_plus_depth_plus_scene_flow_adaptor,
             confidence_adaptor=confidence_adaptor,
             mask_adaptor=mask_adaptor,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -2244,7 +2255,7 @@ class RayMapPlusDepthWithConfidenceAndMaskAdaptor(ValueWithConfidenceAndMaskAdap
             value_adaptor=raymap_plus_depth_adaptor,
             confidence_adaptor=confidence_adaptor,
             mask_adaptor=mask_adaptor,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -2315,6 +2326,6 @@ class RayMapPlusDepthPlusQuatsWithConfidenceAndMaskAdaptor(ValueWithConfidenceAn
             value_adaptor=raymap_plus_depth_plus_quats_adaptor,
             confidence_adaptor=confidence_adaptor,
             mask_adaptor=mask_adaptor,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )

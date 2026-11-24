@@ -1,6 +1,6 @@
 ---
 title: "pixelSplat"
-description: "pixelSplat from Massachusetts Institute of Technology (MIT): 3d-reconstruction and gaussian-splatting; Verified."
+description: "pixelSplat from Massachusetts Institute of Technology (MIT): 3D reconstruction, gaussian splatting, and 1 more task; Verified."
 modelId: "pixelsplat"
 pageSource: generated
 ---
@@ -9,7 +9,7 @@ pixelSplat reconstructs a 3D Gaussian scene from two calibrated views in a singl
 
 <ModelPaperFigures modelId="pixelsplat" locale="en" />
 
-The recorded paper is [arXiv 2312.12337](https://arxiv.org/abs/2312.12337).
+Paper: [arXiv 2312.12337](https://arxiv.org/abs/2312.12337).
 
 Project page: [dcharatan.github.io/pixelsplat](https://dcharatan.github.io/pixelsplat). Code: [dcharatan/pixelsplat](https://github.com/dcharatan/pixelsplat).
 
@@ -17,15 +17,15 @@ Project page: [dcharatan.github.io/pixelsplat](https://dcharatan.github.io/pixel
 
 ## What it is for
 
-Use `pixelsplat` for catalog geometry inference. Choose it when the artifact is a reconstruction, not a generated video.
+`pixelsplat` estimates scene geometry from the input views.
 
-Per the publication, an epipolar transformer resolves scale ambiguity between the two views, and the network predicts a probabilistic distribution over Gaussian parameters. WorldFoundry vendors the source under base_models/three_dimensions/point_clouds/pixelsplat with a lazy wrapper around the official test entrypoint (MIT license; checkpoint mirror dylanebert/pixelSplat). It is published by Massachusetts Institute of Technology (MIT).
+Per the publication, an epipolar transformer resolves scale ambiguity between the two views, and the network predicts a probabilistic distribution over Gaussian parameters. WorldFoundry wraps the official test entrypoint; the code and the dylanebert/pixelSplat checkpoint mirror are MIT-licensed. It is published by Massachusetts Institute of Technology (MIT).
 
-Catalog tasks include 3d-reconstruction, gaussian-splatting, and novel-view-synthesis. Catalog aliases include `pixel-splat` and `pixel_splat`.
+Tasks: 3D reconstruction, gaussian splatting, and novel view synthesis. Aliases: `pixel-splat` and `pixel_splat`.
 
 ## Runtime contract
 
-Optional `input_path`, `interactions`, `checkpoint_path`, `index_path`, and `dataset_roots`; artifacts `pixelsplat.ply`.
+Inputs `input-path` (bundled samples are used when omitted); artifacts `pixelsplat.ply`.
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `PixelSplatPipeline`.
 
@@ -33,16 +33,16 @@ Family status: **Verified**.
 
 Provide model_path pointing to re10k.ckpt or acid.ckpt, the matching experiment, and posed dataset_roots/index_path. Install the declared runtime dependencies and local Gaussian rasterizer. Bare image lists use a synthetic baseline. PLY output exports normalized geometry and DC color with standard opacity logits.
 
-Original convolutional re10k.ckpt and acid.ckpt are supported through the public pipeline with local rasterization dependencies and calibrated input views.
+Supports the original convolutional checkpoints; newer camera-ready architectures are not interchangeable.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run pixelsplat --pipeline.task-profile interactive-video` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Reconstruct the scene with `wf run pixelsplat --pipeline.task-profile interactive-video`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 11.3).
 
-Recorded weight repositories include `dylanebert/pixelSplat`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh pixelsplat`. Add `--download` to fetch missing public checkpoints.
+Weights: `dylanebert/pixelSplat`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh pixelsplat`. Add `--download` to fetch missing public checkpoints.
 
-Recorded licenses include mit; status: **Verified**.
+License: MIT.
 
 <ModelRelatedRecipes modelId="pixelsplat" locale="en" />

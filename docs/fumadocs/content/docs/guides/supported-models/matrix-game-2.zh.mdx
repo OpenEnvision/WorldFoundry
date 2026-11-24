@@ -1,11 +1,11 @@
 ---
 title: "Matrix-Game 2.0"
-description: "Matrix-Game 2.0（Skywork AI）：已与官方 universal 模式完成 15 个 latent 帧的短流程对比；完整 150 帧一致性尚未验证。"
+description: "Skywork AI 的交互式世界模型，在游戏场景中跟随键鼠动作；15 个 latent 帧的短流程与官方 universal 模式一致。"
 modelId: "matrix-game-2"
 pageSource: authored
 ---
 
-Matrix-Game 2.0 是昆仑万维面向实时的交互式世界模型：自回归扩散设计，在游戏场景中跟随键鼠动作。树内 runner 使用官方 bench 动作，在 12 fps、352×640 下与官方 universal 模式完成 15 个 latent 帧的短流程对比；完整 150 个 latent 帧的一致性尚未验证。
+Matrix-Game 2.0 是昆仑万维面向实时的交互式世界模型：自回归扩散设计，在游戏场景中跟随键鼠动作。使用官方 bench 动作，在 12 fps、352×640 下运行 15 个 latent 帧时，WorldFoundry 与官方 universal 模式一致；官方默认的完整 150 个 latent 帧尚未对照。
 
 <ModelPaperFigures modelId="matrix-game-2" locale="zh" />
 
@@ -15,26 +15,28 @@ Matrix-Game 2.0 是昆仑万维面向实时的交互式世界模型：自回归�
 
 ## 用来做什么
 
-从 `matrix-game-2-universal-action-validation` 起步，用官方 bench actions。不是 Matrix-Game 1 或 3。
+建议从 `matrix-game-2-universal-action-validation` 开始，使用官方 bench actions。Matrix-Game 1 与 3 是独立的模型。
 
-启动 `worldfoundry-eval run matrix-game-2-universal-action-validation --pipeline.task-profile official-universal-image`。
+启动 `wf run matrix-game-2-universal-action-validation --pipeline.task-profile official-universal-image`。
 
 评测入口：[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（动作条件游戏世界滚动生成质量）。
 
 ## 运行时契约
 
-必填 `image`、`official_bench_actions`；可选 `prompt`、`video`。已记录的短流程对比产出 `matrix_game2_official_universal_seed42_15f.mp4` 及 JSON 旁路文件；运行时 profile 列出 `matrix-game-2-universal-ref-image-seed42-15f.mp4`。
+必填 `image`、`official_bench_actions`；可选 `prompt`、`video`。产物：`matrix-game-2-universal-ref-image-seed42-15f.mp4`，或 `matrix_game2_official_universal_seed42_15f.mp4` 及 JSON 附属文件。
 
-官方默认设置为 150 个 latent 帧、12 fps、352×640、seed 42。已记录的对比仅使用 15 个 latent 帧，解码为 57 个 RGB 帧。本仓库未提供该对比的公开 model-zoo demo helper。
+官方默认设置为 150 个 latent 帧、12 fps、352×640、seed 42。15 个 latent 帧解码为 57 个 RGB 帧。
 
 加载器在恢复 DiT checkpoint 后接受显式启用的 `fuse_qkv`，以及 `qkv_strategy="packed"`、`"split"` 或 `"auto"`、`quantization` 和统一的 `compile` 参数。QKV 融合保留原有因果注意力和缓存算法。`vae_channels_last` 与 `vae_channels_last_3d` 在编译前转换匹配的 Conv2d/Conv3d 解码权重；DiT 使用 BF16 时，解码器仍保留 FP16 权重。不支持的优化请求会在加载前报错。
 
-`overlap_vae_decode=True` 可在 pipeline 自有 CUDA stream 上解码，同时由调用方 stream 刷新生成器的干净上下文。调用方通过 event join 排序返回视频、张量复制和循环缓存复用，正常生成过程不等待主机同步。每个 pipeline 维护一个活跃 session；调用方需串行执行 start、step、reset 和 close。reset、替换 session、close 或重叠生成失败时，只等待自有解码 stream。失败的重叠 session 必须重新建立；CPU 路径明确记录同步执行回退。
+`overlap_vae_decode=True` 可在 pipeline 自有 CUDA stream 上解码，同时由调用方 stream 刷新生成器的干净上下文。调用方通过 event join 对返回视频、张量复制和循环缓存复用进行排序，正常生成过程不等待主机同步。每个 pipeline 维护一个活跃 session；调用方需串行执行 start、step、reset 和 close。reset、替换 session、close 或重叠生成失败时，只等待自有解码 stream。失败的重叠 session 必须重新建立；CPU 路径明确记录同步执行回退。
 
-这些开关默认关闭。小规模 CPU/CUDA 回归验证数值输出、缓存推进、stream 顺序和清理。尚未测量它们在完整 checkpoint 上的延迟收益，也未验证完整长度的一致性；编译 wrapper 安装和侧 stream 工作入队均与运行时执行证据分别记录。
+这些开关默认关闭。尚未测量它们在完整 checkpoint 上的延迟收益。
+
+实时会话的 universal 模式保留 W/S/A/D 移动与 I/K/J/L 相机按键，并声明鼠标和右摇杆相机轴，Studio `world` 页面用锁定的鼠标指针和手柄右摇杆驱动它们；每帧的轴值与按键相机量相加，并裁剪到官方的 ±0.1。鼠标比例采用初始标定值：单帧约 40 像素的位移达到该上限。gta_drive 用 W/S 前进/后退、A/D 转向；templerun 用 W 跳跃、S 滑铲、A/D 侧移、Z/C 转向，空闲帧编码为 `nomove`。
 
 ## 在 WorldFoundry 中运行
 
-状态：**已验证 15 个 latent 帧的短流程一致性**；完整长度一致性及 benchmark 评分仍待完成。统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。先把 `Skywork/Matrix-Game-2.0` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run matrix-game-2-universal-action-validation --pipeline.task-profile official-universal-image`。许可证：MIT。记录最低显存 24 GB。
+统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。先在本地准备好 `Skywork/Matrix-Game-2.0`。在该环境执行 `wf run matrix-game-2-universal-action-validation --pipeline.task-profile official-universal-image`。许可证：MIT。显存至少需要 24 GB。
 
 <ModelRelatedRecipes modelId="matrix-game-2" locale="zh" />

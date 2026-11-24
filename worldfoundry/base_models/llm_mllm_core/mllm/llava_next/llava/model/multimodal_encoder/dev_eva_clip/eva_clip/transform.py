@@ -1,23 +1,27 @@
-from typing import Optional, Sequence, Tuple
-
 import torch
 import torch.nn as nn
 import torchvision.transforms.functional as F
-
-from torchvision.transforms import Normalize, Compose, RandomResizedCrop, InterpolationMode, ToTensor, Resize, CenterCrop
+from torchvision.transforms import (
+    CenterCrop,
+    Compose,
+    InterpolationMode,
+    Normalize,
+    RandomResizedCrop,
+    Resize,
+    ToTensor,
+)
 
 from .constants import OPENAI_DATASET_MEAN, OPENAI_DATASET_STD
 
 
 class ResizeMaxSize(nn.Module):
-
     def __init__(self, max_size, interpolation=InterpolationMode.BICUBIC, fn="max", fill=0):
         super().__init__()
         if not isinstance(max_size, int):
             raise TypeError(f"Size should be int. Got {type(max_size)}")
         self.max_size = max_size
         self.interpolation = interpolation
-        self.fn = min if fn == "min" else min
+        self.fn = min
         self.fill = fill
 
     def forward(self, img):
@@ -59,8 +63,8 @@ def _convert_to_rgb(image):
 def image_transform(
     image_size: int,
     is_train: bool,
-    mean: Optional[Tuple[float, ...]] = None,
-    std: Optional[Tuple[float, ...]] = None,
+    mean: tuple[float, ...] | None = None,
+    std: tuple[float, ...] | None = None,
     resize_longest_max: bool = False,
     fill_color: int = 0,
 ):

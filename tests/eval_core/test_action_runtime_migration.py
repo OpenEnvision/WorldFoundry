@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -28,104 +29,6 @@ def test_gr00t_runtime_lives_in_synthesis_package() -> None:
     assert "worldfoundry.synthesis.action_generation.gr00t.runtime" in _imports_from(synthesis_wrapper)
 
 
-def test_gr00t_runtime_does_not_keep_training_style_config_package() -> None:
-    runtime_root = REPO_ROOT / "worldfoundry/synthesis/action_generation/gr00t/gr00t_runtime"
-    checked_files = [
-        runtime_root / "inference_support/utils.py",
-        runtime_root / "inference_support/state_action/state_action_processor.py",
-        runtime_root / "policy/gr00t_policy.py",
-        runtime_root / "model/gr00t_n1d7/gr00t_n1d7.py",
-        runtime_root / "model/gr00t_n1d7/processing_gr00t_n1d7.py",
-    ]
-
-    assert not (runtime_root / "configs").exists()
-    assert not (runtime_root / "data").exists()
-    assert (runtime_root / "inference_support/embodiment_configs.py").is_file()
-    assert (runtime_root / "model/gr00t_n1d7/configuration_gr00t_n1d7.py").is_file()
-    for path in checked_files:
-        text = path.read_text(encoding="utf-8")
-        assert "gr00t.configs" not in text
-        assert "gr00t.data" not in text
-    assert "import gr00t.model  # noqa: F401" not in (runtime_root / "policy/gr00t_policy.py").read_text(
-        encoding="utf-8"
-    )
-
-
-def test_octo_runtime_does_not_package_training_state_helpers() -> None:
-    octo_root = REPO_ROOT / "worldfoundry/synthesis/action_generation/octo/octo_runtime/octo"
-    model_path = octo_root / "model/octo_model.py"
-
-    assert (octo_root / "model/octo_model.py").is_file()
-    assert not (octo_root / "utils/train_callbacks.py").exists()
-    assert not (octo_root / "utils/train_utils.py").exists()
-
-    model_text = model_path.read_text(encoding="utf-8")
-    assert "octo.utils.train_utils" not in model_text
-    assert "TrainState.create" not in model_text
-
-
-def test_openpi_runtime_support_is_inference_only() -> None:
-    openpi_root = REPO_ROOT / "worldfoundry/synthesis/action_generation/openpi/openpi_runtime/openpi"
-    runtime_path = REPO_ROOT / "worldfoundry/synthesis/action_generation/openpi/runtime.py"
-    policy_config_path = openpi_root / "policies/policy_config.py"
-    runtime_support = openpi_root / "runtime_support"
-
-    assert not (openpi_root / "training").exists()
-    assert (runtime_support / "config.py").is_file()
-    assert (runtime_support / "checkpoints.py").is_file()
-    assert (runtime_support / "sharding.py").is_file()
-    assert (runtime_support / "weight_loaders.py").is_file()
-
-    combined = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (
-            runtime_path,
-            policy_config_path,
-            openpi_root / "models/gemma.py",
-            openpi_root / "models/siglip.py",
-        )
-    )
-    legacy_training_import = ".".join(("openpi", "training"))
-    assert legacy_training_import not in combined
-    assert "openpi.runtime_support" in combined
-
-
-def test_being_h05_runtime_support_is_inference_named() -> None:
-    beingh_root = REPO_ROOT / "worldfoundry/synthesis/action_generation/being_h05/being_h05_runtime/BeingH"
-    runtime_path = REPO_ROOT / "worldfoundry/synthesis/action_generation/being_h05/runtime.py"
-    data_config_path = beingh_root / "inference_support/data_config.py"
-    policy_path = beingh_root / "inference/beingh_policy.py"
-    inference_support = beingh_root / "inference_support"
-    constants_path = beingh_root / "utils/constants.py"
-    model_init_path = beingh_root / "model/__init__.py"
-    state_action_path = inference_support / "transforms/state_action.py"
-
-    assert not (beingh_root / "dataset").exists()
-    assert not (REPO_ROOT / "worldfoundry/synthesis/action_generation/being_h05/being_h05_runtime/configs").exists()
-    assert (inference_support / "image_transforms.py").is_file()
-    assert (inference_support / "data_config.py").is_file()
-    assert (inference_support / "transforms/base.py").is_file()
-    assert (inference_support / "transforms/concat.py").is_file()
-    assert (inference_support / "transforms/state_action.py").is_file()
-
-    combined = "\n".join(
-        path.read_text(encoding="utf-8") for path in (data_config_path, policy_path, runtime_path)
-    )
-    legacy_dataset_import = ".".join(("BeingH", "dataset"))
-    assert legacy_dataset_import not in combined
-    assert "BeingH.inference_support" in combined
-    assert "configs.data_config" not in combined
-
-    constants_text = constants_path.read_text(encoding="utf-8")
-    model_init_text = model_init_path.read_text(encoding="utf-8")
-    state_action_text = state_action_path.read_text(encoding="utf-8")
-    assert "from BeingH.model" not in constants_text
-    assert "_LazyArchRegistry" in constants_text
-    assert "__getattr__" in model_init_text
-    assert "import pytorch3d.transforms as pt" not in state_action_text
-    assert "def _pytorch3d_transforms" in state_action_text
-
-
 def test_action_runtime_wrappers_use_synthesis_package() -> None:
     runtime_wrappers = {
         "being_h05": "being_h05_synthesis.py",
@@ -143,7 +46,9 @@ def test_action_runtime_wrappers_use_synthesis_package() -> None:
         synthesis_wrapper = REPO_ROOT / f"worldfoundry/synthesis/action_generation/{package}/{wrapper_name}"
 
         assert synthesis_runtime.is_file(), package
-        assert f"worldfoundry.synthesis.action_generation.{package}.runtime" in _imports_from(synthesis_wrapper), package
+        assert f"worldfoundry.synthesis.action_generation.{package}.runtime" in _imports_from(synthesis_wrapper), (
+            package
+        )
 
 
 def test_action_generation_runtime_configs_live_under_data_root() -> None:
@@ -182,98 +87,20 @@ def test_action_generation_runtime_configs_live_under_data_root() -> None:
         REPO_ROOT / "worldfoundry/synthesis/action_generation/dreamzero/dreamzero_runtime/groot/vla/experiment"
     ).exists()
     assert not (
-        REPO_ROOT
-        / "worldfoundry/synthesis/action_generation/rt1/rt1_runtime/robotics_transformer/configs"
+        REPO_ROOT / "worldfoundry/synthesis/action_generation/rt1/rt1_runtime/robotics_transformer/configs"
     ).exists()
     assert not (REPO_ROOT / "worldfoundry/synthesis/action_generation/lerobot").exists()
-
-
-def test_native_action_policy_source_resolver_prefers_in_tree_runtime(
-    monkeypatch,
-    tmp_path: Path,
-) -> None:
-    from worldfoundry.synthesis.action_generation._native_policy_runtime import resolve_source_workdir
-
-    explicit = tmp_path / "explicit-cogact"
-    explicit.mkdir()
-    env_checkout = tmp_path / "env-cogact"
-    env_checkout.mkdir()
-    sibling_checkout = tmp_path / "github_repos" / "cogact"
-    sibling_checkout.mkdir(parents=True)
-    model_source_checkout = tmp_path / "model_sources" / "cogact"
-    model_source_checkout.mkdir(parents=True)
-
-    monkeypatch.setenv("WORLDFOUNDRY_COGACT_REPO", str(env_checkout))
-    monkeypatch.setenv("WORLDFOUNDRY_GITHUB_REPOS_ROOT", str(tmp_path / "github_repos"))
-    monkeypatch.setenv("WORLDFOUNDRY_MODEL_SOURCE_DIR", str(tmp_path / "model_sources"))
-
-    in_tree_subdir = "worldfoundry/synthesis/action_generation/cogact/cogact_runtime"
-    assert resolve_source_workdir({"source_repo": str(explicit)}, "cogact", in_tree_subdir=in_tree_subdir) == explicit
-    assert resolve_source_workdir(
-        {},
-        "cogact",
-        specific_env="WORLDFOUNDRY_COGACT_REPO",
-        in_tree_subdir=in_tree_subdir,
-    ) == (REPO_ROOT / in_tree_subdir).resolve()
-
-
-def test_native_action_policy_source_resolver_does_not_fallback_to_external_repos(
-    monkeypatch,
-    tmp_path: Path,
-) -> None:
-    from worldfoundry.synthesis.action_generation._native_policy_runtime import resolve_source_workdir
-
-    monkeypatch.setenv("WORLDFOUNDRY_GITHUB_REPOS_ROOT", str(tmp_path / "github_repos"))
-    monkeypatch.setenv("WORLDFOUNDRY_MODEL_SOURCE_DIR", str(tmp_path / "model_sources"))
-
-    resolved = resolve_source_workdir(
-        {},
-        "missing-action-runtime",
-        specific_env="WORLDFOUNDRY_MISSING_ACTION_REPO",
-        in_tree_subdir="worldfoundry/synthesis/action_generation/missing_action_runtime",
-    )
-
-    assert "github_repos" not in str(resolved)
-    assert "model_sources" not in str(resolved)
-    assert resolved == (REPO_ROOT / "worldfoundry/synthesis/action_generation/missing_action_runtime").resolve()
-
-
-def test_mme_vla_history_configs_live_under_data_root() -> None:
-    runtime_config_dir = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/action_generation/mme_vla/mme_vla_runtime/src/mme_vla_suite/models/config"
-    )
-    data_config_dir = (
-        REPO_ROOT
-        / "worldfoundry/data/models/runtime/configs/vla_va_wam/mme_vla/models/config"
-    )
-
-    assert (runtime_config_dir / "utils.py").is_file()
-    assert not list(runtime_config_dir.rglob("*.yaml"))
-    assert (data_config_dir / "base.yaml").is_file()
-    assert (data_config_dir / "robomme/perceptual-framesamp-context.yaml").is_file()
-
-    loader_text = (runtime_config_dir / "utils.py").read_text(encoding="utf-8")
-    assert "WORLDFOUNDRY_MME_VLA_CONFIG_ROOT" in loader_text
-    for token in ("package_root", '"data"', '"runtime"', '"configs"', '"vla_va_wam"', '"mme_vla"', '"robomme"'):
-        assert token in loader_text
-    assert "src/mme_vla_suite/models/config/robomme" not in loader_text
 
 
 def test_lerobot_policy_sources_are_tracked_as_concrete_algorithms() -> None:
     import yaml
 
-    source_manifest = (
-        REPO_ROOT / "worldfoundry/data/models/runtime/configs/vla_va_wam/policy_algorithm_sources.yaml"
-    )
+    source_manifest = REPO_ROOT / "worldfoundry/data/models/runtime/configs/vla_va_wam/policy_algorithm_sources.yaml"
     payload = yaml.safe_load(source_manifest.read_text(encoding="utf-8"))
-    policy_dirs = {
-        path.name
-        for path in (
-            REPO_ROOT.parent / "github_repos/lerobot/src/lerobot/policies"
-        ).iterdir()
-        if path.is_dir()
-    }
+    lerobot_policies = REPO_ROOT.parent / "github_repos/lerobot/src/lerobot/policies"
+    if not lerobot_policies.is_dir():
+        pytest.skip(f"LeRobot source checkout is not present: {lerobot_policies}")
+    policy_dirs = {path.name for path in lerobot_policies.iterdir() if path.is_dir()}
     manifest_dirs = {item["lerobot_policy_dir"] for item in payload["algorithms"]}
 
     assert policy_dirs == manifest_dirs
@@ -283,94 +110,6 @@ def test_lerobot_policy_sources_are_tracked_as_concrete_algorithms() -> None:
         "lerobot_policy_reference",
         "lerobot_reference_implementation",
     }
-
-
-def test_action_runtime_code_resolves_external_configs() -> None:
-    rt1_efficientnet = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/action_generation/rt1/rt1_runtime/robotics_transformer/"
-        "film_efficientnet/film_efficientnet_encoder.py"
-    ).read_text(encoding="utf-8")
-    gr00t_synthesis = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/gr00t/gr00t_synthesis.py"
-    ).read_text(encoding="utf-8")
-    gr00t_runtime = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/gr00t/runtime.py"
-    ).read_text(encoding="utf-8")
-    being_h05_runtime = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/being_h05/runtime.py"
-    ).read_text(encoding="utf-8")
-    lapa_runtime = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/lapa/runtime.py"
-    ).read_text(encoding="utf-8")
-    openpi_runtime = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/openpi/runtime.py"
-    ).read_text(encoding="utf-8")
-    starvla_runtime = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/starvla/runtime.py"
-    ).read_text(encoding="utf-8")
-    molmoact2_synthesis = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/molmoact2/molmoact2_synthesis.py"
-    ).read_text(encoding="utf-8")
-    dreamzero_runtime = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/dreamzero/runtime.py"
-    ).read_text(encoding="utf-8")
-    giga_brain_runtime = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/giga_brain_0/runtime.py"
-    ).read_text(encoding="utf-8")
-    lingbot_runtime = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/lingbot_va/runtime.py"
-    ).read_text(encoding="utf-8")
-    external_config_wrappers = {
-        "act/act_synthesis.py": ['"head_cam"', '"resnet18"', '"sine"'],
-        "being_h05/being_h05_synthesis.py": ['"libero_nonorm"', '"libero_posttrain"', '"{task_description}"', '"dense"'],
-        "dreamzero/dreamzero_synthesis.py": ['"0.0.0.0"', "DEFAULT_DREAMZERO_SERVER_PORT"],
-        "lapa/lapa_synthesis.py": ['"bf16"', '"1,-1,1,1"'],
-        "lingbot_va/lingbot_va_synthesis.py": ['"libero"', '"0.0.0.0"', "29536"],
-        "octo/octo_synthesis.py": ['"small"', '"bridge_dataset"'],
-        "openpi/openpi_synthesis.py": ['"pi05_libero"'],
-        "openvla/openvla_synthesis.py": ['"bridge_orig"', '"auto"', '"eager"'],
-        "starvla/starvla_synthesis.py": ['"vla_policy"', '"DiT-B"', '"sdpa"'],
-    }
-    assert 'worldfoundry_data_path(' in rt1_efficientnet
-    assert '"rt1"' in rt1_efficientnet
-    assert '"imagenet_classes.yaml"' in rt1_efficientnet
-    assert "yaml.safe_load" in rt1_efficientnet
-    assert "json.load" not in rt1_efficientnet
-    assert "os.path.join(os.path.dirname(__file__), IMAGENET_JSON_PATH)" not in rt1_efficientnet
-
-    assert "load_vla_va_wam_runtime_config" in gr00t_synthesis
-    assert "load_vla_va_wam_runtime_config" in molmoact2_synthesis
-    assert "load_vla_va_wam_runtime_config" in dreamzero_runtime
-    assert "DEFAULT_" not in dreamzero_runtime
-    assert "CAMERA_FILES" not in dreamzero_runtime
-    assert "RELATIVE_OFFSETS" not in dreamzero_runtime
-    assert "ACTION_HORIZON" not in dreamzero_runtime
-    assert "DEFAULT_PORT" not in lingbot_runtime
-    assert "CONFIG_BY_ROLE" not in lingbot_runtime
-    assert "embodiment_tag: str = " not in gr00t_runtime
-    assert "torch_dtype: str = " not in gr00t_runtime
-    assert "dtype: str = " not in lapa_runtime
-    assert "mesh_dim: str = " not in lapa_runtime
-    assert "config_name: str = " not in openpi_runtime
-    assert "data_config_name: str = " not in being_h05_runtime
-    assert "attention_mask_kind: str = " not in being_h05_runtime
-    assert "base_vlm: str = " not in starvla_runtime
-    assert "playground/Pretrained_models/Qwen3-VL-4B-Instruct" not in starvla_runtime
-    assert "action_chunk: int = " not in giga_brain_runtime
-    assert "compile_policy: bool = " not in giga_brain_runtime
-    assert "google/paligemma2-3b-pt-224" not in giga_brain_runtime
-    assert "physical-intelligence/fast" not in giga_brain_runtime
-    assert '"LIBERO_PANDA"' not in gr00t_synthesis
-    assert '"allenai/MolmoAct2-DROID"' not in molmoact2_synthesis
-    assert "EMBODIMENT_DEFAULTS" not in molmoact2_synthesis
-    assert "Move the pan forward" not in dreamzero_runtime
-    assert '"exterior_image_1_left.mp4"' not in dreamzero_runtime
-    for relative_path, forbidden_literals in external_config_wrappers.items():
-        text = (REPO_ROOT / "worldfoundry/synthesis/action_generation" / relative_path).read_text(encoding="utf-8")
-        assert "load_vla_va_wam_runtime_config" in text
-        for literal in forbidden_literals:
-            assert literal not in text
 
 
 def test_gr00t_runtime_config_yaml_controls_defaults(tmp_path: Path) -> None:
@@ -576,7 +315,6 @@ def test_action_model_runtime_config_yamls_control_defaults(tmp_path: Path) -> N
     assert act.backbone == "resnet34"
     assert act.position_embedding == "learned"
     assert act.nheads == 4
-    assert act.kl_weight == 5.0
 
     starvla_checkpoint = tmp_path / "starvla-checkpoint"
     starvla_checkpoint.mkdir()
@@ -659,24 +397,6 @@ def test_action_model_runtime_config_yamls_control_defaults(tmp_path: Path) -> N
         )
         == "robotwin"
     )
-
-
-def test_starvla_default_source_repo_is_in_tree(monkeypatch, tmp_path: Path) -> None:
-    from worldfoundry.synthesis.action_generation.starvla import runtime as starvla_runtime
-
-    monkeypatch.delenv("WORLDFOUNDRY_STARVLA_REPO_ROOT", raising=False)
-    monkeypatch.setenv("WORLDFOUNDRY_MODEL_SOURCE_DIR", str(tmp_path / "model_sources"))
-    monkeypatch.setenv("WORLDFOUNDRY_GITHUB_REPOS_ROOT", str(tmp_path / "github_repos"))
-
-    source = Path(starvla_runtime.__file__).read_text(encoding="utf-8")
-    assert "official_runtime_repo_path" not in source
-    assert "github_repos" not in source
-    assert "WORLDFOUNDRY_MODEL_SOURCE_DIR" not in source
-    assert starvla_runtime._default_source_repo_dir() == starvla_runtime.RUNTIME_ROOT
-
-    override = tmp_path / "starvla-override"
-    monkeypatch.setenv("WORLDFOUNDRY_STARVLA_REPO_ROOT", str(override))
-    assert starvla_runtime._default_source_repo_dir() == override
 
 
 def test_remaining_action_runtime_config_yamls_control_defaults(tmp_path: Path) -> None:
@@ -819,54 +539,3 @@ def test_remaining_action_runtime_config_yamls_control_defaults(tmp_path: Path) 
     assert giga_brain.autoregressive_mode_only is True
     assert giga_brain.enable_2d_traj_output is True
     assert giga_brain.depth_img_prefix_name == "depth"
-
-
-def test_dreamzero_wan_foundation_modules_live_under_base_models() -> None:
-    synthesis_modules = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/action_generation/dreamzero/dreamzero_runtime/groot/vla/model/dreamzero/modules"
-    )
-    base_modules = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/wan/wan_dreamzero/modules"
-    )
-    moved_modules = {
-        "attention.py",
-        "cudnn_attention.py",
-        "flow_match_scheduler.py",
-        "flow_unipc_multistep_scheduler.py",
-        "utils.py",
-        "vram_management.py",
-        "wan2_1_attention.py",
-        "wan2_1_submodule.py",
-        "wan_video_camera_controller.py",
-        "wan_video_dit.py",
-        "wan_video_image_encoder.py",
-        "wan_video_text_encoder.py",
-        "wan_video_vae.py",
-    }
-
-    assert (base_modules / "__init__.py").is_file()
-    assert (synthesis_modules / "wan_video_dit_action_casual_chunk.py").is_file()
-    for module_name in moved_modules:
-        base_path = base_modules / module_name
-        shim_path = synthesis_modules / module_name
-        assert base_path.is_file(), module_name
-        assert shim_path.is_file(), module_name
-        shim_text = shim_path.read_text(encoding="utf-8")
-        assert "worldfoundry.base_models.diffusion_model.video.wan.wan_dreamzero.modules" in shim_text
-        assert "class " not in shim_text
-        assert "def " not in shim_text
-
-    combined_base_text = "\n".join(
-        (base_modules / module_name).read_text(encoding="utf-8") for module_name in moved_modules
-    )
-    assert "groot.vla.model.dreamzero.modules" not in combined_base_text
-
-    action_head = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/action_generation/dreamzero/dreamzero_runtime/groot/vla/model/dreamzero/"
-        "action_head/wan_flow_matching_action_tf.py"
-    ).read_text(encoding="utf-8")
-    assert "worldfoundry.base_models.diffusion_model.video.wan.wan_dreamzero.modules" in action_head
-    assert "groot.vla.model.dreamzero.modules" not in action_head

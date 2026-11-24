@@ -18,6 +18,7 @@ official_sources:
   worldarena_space: https://huggingface.co/spaces/WorldArena/WorldArena
   github:
     url: https://github.com/AgibotTech/Genie-Envisioner
+    revision: 65ab2fa2191f74d213a3447013f5ff90b55dcc3d
     head_sha: 65ab2fa2191f74d213a3447013f5ff90b55dcc3d
     verified_by: official GitHub repository selected from WorldArena open-source result names
   huggingface:
@@ -34,7 +35,7 @@ integration:
   - WorldFoundry registers an in-tree runtime manifest pipeline for the vendored Genie Envisioner source.
   - Official WorldArena-listed source is vendored in-tree under worldfoundry/synthesis/visual_generation/genie_envisioner/genie_envisioner_runtime.
 runtime_profile: runtime-profile:genie-envisioner
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: genie-envisioner
 runner_parity:
   status: implemented_checkpoint_required
@@ -52,20 +53,22 @@ docs:
   publisher: AgiBot
   publisher_kind: company
   publisher_zh: 智元机器人（AgiBot）
-  overview: 'Genie Envisioner is AgiBot''s robotics world model platform: a video-generative backbone that predicts action-conditioned robot manipulation futures, usable for policy learning and evaluation. In this catalog the official WorldArena-listed source is vendored in-tree; execution waits on the Genie-Envisioner and LTX-Video checkpoints plus robot task assets.'
-  overview_zh: Genie Envisioner 是智元机器人的机器人世界模型平台：以视频生成为骨干，预测动作条件下的机器人操作未来，可用于策略学习与评估。本 catalog 中其官方（WorldArena 收录的）源码已内置树内；执行待 Genie-Envisioner 与 LTX-Video checkpoint 及机器人任务资产就位。
-  architecture: The recorded checkpoints reveal an LTX-Video-based video backbone (Lightricks/LTX-Video) with AgiBot's own world-model weights (agibot-world/Genie-Envisioner). The runtime is vendored under synthesis/visual_generation/genie_envisioner/genie_envisioner_runtime.
-  architecture_zh: 记录的 checkpoint 显示其视频骨干基于 LTX-Video（Lightricks/LTX-Video），加上智元自有的世界模型权重（agibot-world/Genie-Envisioner）。运行时内置于 synthesis/visual_generation/genie_envisioner/genie_envisioner_runtime。
-  usage_notes: For official GE-base history inference, pass input_views as three head/left-wrist/right-wrist directories with 0.png through 3.png each. The default three still images repeat across four history slots for smoke use. Stage both recorded checkpoint sets before submitting jobs.
-  usage_notes_zh: 官方 GE-base 历史推理需将 input_views 设为 head、left-wrist、right-wrist 三个目录，每个目录包含 0.png 到 3.png。默认三张单图会各自复制到四个历史槽位，仅用于冒烟测试。提交任务前请就位两套记录的 checkpoint。
+  overview: "Genie Envisioner is AgiBot's robotics world model platform: a video-generative backbone that predicts action-conditioned robot manipulation futures, usable for policy learning and evaluation. WorldFoundry includes the official WorldArena-listed source; running it requires the Genie-Envisioner and LTX-Video checkpoints plus robot task assets."
+  overview_zh: Genie Envisioner 是智元机器人的机器人世界模型平台：以视频生成为骨干，预测动作条件下的机器人操作未来，可用于策略学习与评估。WorldFoundry 内置其官方（WorldArena 收录的）源码；运行需要 Genie-Envisioner 与 LTX-Video checkpoint 及机器人任务资产。
+  architecture: The checkpoints show an LTX-Video-based video backbone (Lightricks/LTX-Video) with AgiBot's own world-model weights (agibot-world/Genie-Envisioner).
+  architecture_zh: 其 checkpoint 显示视频骨干基于 LTX-Video（Lightricks/LTX-Video），加上智元自有的世界模型权重（agibot-world/Genie-Envisioner）。
+  usage_notes: For official GE-base history inference, pass input_views as three head/left-wrist/right-wrist directories with 0.png through 3.png each. The default three still images repeat across four history slots for smoke use. Stage both checkpoint sets before submitting jobs.
+  usage_notes_zh: 官方 GE-base 历史推理需将 input_views 设为 head、left-wrist、right-wrist 三个目录，每个目录包含 0.png 到 3.png。默认三张单图会各自复制到四个历史槽位，仅用于冒烟测试。提交任务前请就位两套 checkpoint。
   limitations:
-  - Execution is checkpoint and robot-task gated.
+  - Only the published GE-base-fast video sample has been validated; action-quality parity needs checkpoint-matched AgiBot or LeRobot trajectories.
+  - The GE-base video launcher does not consume action arrays.
   limitations_zh:
-  - 执行受 checkpoint 与机器人任务资产限制。
+  - 仅验证了发布的 GE-base-fast 视频样例；动作质量一致性需要与 checkpoint 匹配的 AgiBot 或 LeRobot 轨迹。
+  - GE-base 视频启动器不读取动作数组。
   recommended_benchmarks:
   - id: worldarena
-    reason: The entry is listed on WorldArena for robot world-model evaluation.
-    reason_zh: 该条目已收录于 WorldArena 的机器人世界模型评测。
+    reason: Genie Envisioner is listed on WorldArena for robot world-model evaluation.
+    reason_zh: Genie Envisioner 已收录于 WorldArena 的机器人世界模型评测。
   - id: ewmbench
     reason: Embodied world-model video prediction quality.
     reason_zh: 具身世界模型视频预测质量。

@@ -9,11 +9,16 @@ fused public operator returned numerically correct tensors.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from threading import Lock
+from typing import Any
+from weakref import WeakValueDictionary
 
 import torch
 from torch import nn
+
+_FUSED_ROPE_DISPATCH_OPS = frozenset({"hidden_qk_rmsnorm_rope_3d", "hidden_qk_rmsnorm_rope_freqs"})
 
 
 @dataclass
@@ -24,6 +29,7 @@ class FusedRoPERuntimeState:
     eager_calls: int = 0
     compiled_graph_traces: int = 0
     provider_calls: int = 0
+    lifetime_provider_calls: int = 0
     torch_fallback_calls: int = 0
     provider_failures: int = 0
     quarantined_skips: int = 0
@@ -50,10 +56,7 @@ class FusedRoPERuntimeState:
             self.malformed_receipts += 1
             return
         dispatches = [
-            item
-            for item in raw_dispatches
-            if isinstance(item, Mapping)
-            and item.get("op") == "hidden_qk_rmsnorm_rope_3d"
+            item for item in raw_dispatches if isinstance(item, Mapping) and item.get("op") in _FUSED_ROPE_DISPATCH_OPS
         ]
         if len(dispatches) != 1:
             self.malformed_receipts += 1
@@ -72,17 +75,40 @@ class FusedRoPERuntimeState:
         fallback = dispatch.get("fallback") is True
         if accelerated and not fallback and isinstance(provider, str) and provider:
             self.provider_calls += 1
+            self.lifetime_provider_calls += 1
             self.provider_paths.add(provider)
         else:
             self.torch_fallback_calls += 1
 
 
+_FUSED_ROPE_STATES: WeakValueDictionary[str, FusedRoPERuntimeState] = WeakValueDictionary()
+_FUSED_ROPE_STATES_LOCK = Lock()
+
+
+def _register_fused_rope_state(state: FusedRoPERuntimeState) -> str:
+    token = str(id(state))
+    with _FUSED_ROPE_STATES_LOCK:
+        _FUSED_ROPE_STATES[token] = state
+    return token
+
+
 @torch.compiler.assume_constant_result
 def record_compiled_fused_rope_graph_trace(
-    state: FusedRoPERuntimeState,
+    state: FusedRoPERuntimeState | str,
 ) -> int:
-    """Record that Dynamo embedded the fused primitive in this model graph."""
+    """Record that Dynamo embedded the fused primitive in this model graph.
 
+    Accepts a string receipt token (safe as a TorchDynamo constant) or a
+    direct ``FusedRoPERuntimeState`` instance for eager/unit callers.
+    """
+
+    if isinstance(state, str):
+        with _FUSED_ROPE_STATES_LOCK:
+            resolved = _FUSED_ROPE_STATES.get(state)
+        if resolved is None:
+            raise RuntimeError("fused RoPE compile receipt state expired during tracing")
+        resolved.compiled_graph_traces += 1
+        return resolved.compiled_graph_traces
     state.compiled_graph_traces += 1
     return state.compiled_graph_traces
 
@@ -92,14 +118,22 @@ def install_fused_rope_runtime(model: nn.Module) -> FusedRoPERuntimeState:
 
     existing = getattr(model, "_worldfoundry_fused_rope_runtime", None)
     if isinstance(existing, FusedRoPERuntimeState):
+        token = _register_fused_rope_state(existing)
+        model._worldfoundry_fused_rope_token = token
+        for module in model.modules():
+            if type(module).__name__ == "SelfAttention":
+                module._worldfoundry_fused_rope_token = token
         return existing
     state = FusedRoPERuntimeState()
+    token = _register_fused_rope_state(state)
     for module in model.modules():
         if type(module).__name__ != "SelfAttention":
             continue
         module._worldfoundry_fused_rope_runtime = state
+        module._worldfoundry_fused_rope_token = token
         state.installed_blocks += 1
     model._worldfoundry_fused_rope_runtime = state
+    model._worldfoundry_fused_rope_token = token
     return state
 
 
@@ -133,9 +167,7 @@ def fused_rope_runtime_report(
         "quarantined_skips": state.quarantined_skips,
         "malformed_receipts": state.malformed_receipts,
         "provider_paths": sorted(state.provider_paths),
-        "last_dispatch": (
-            None if state.last_dispatch is None else dict(state.last_dispatch)
-        ),
+        "last_dispatch": (None if state.last_dispatch is None else dict(state.last_dispatch)),
     }
 
 

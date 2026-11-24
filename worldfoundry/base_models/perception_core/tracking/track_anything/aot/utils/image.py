@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot -> utils -> image.py functionality."""
-
 import threading
 
 import numpy as np
@@ -783,11 +781,6 @@ _palette = [
 
 
 def label2colormap(label):
-    """Label2colormap.
-
-    Args:
-        label: The label.
-    """
     m = label.astype(np.uint8)
     r, c = m.shape
     cmap = np.zeros((r, c, 3), dtype=np.uint8)
@@ -798,12 +791,6 @@ def label2colormap(label):
 
 
 def one_hot_mask(mask, cls_num):
-    """One hot mask.
-
-    Args:
-        mask: The mask.
-        cls_num: The cls num.
-    """
     if len(mask.size()) == 3:
         mask = mask.unsqueeze(1)
     indices = torch.arange(0, cls_num + 1, device=mask.device).view(1, -1, 1, 1)
@@ -811,14 +798,6 @@ def one_hot_mask(mask, cls_num):
 
 
 def masked_image(image, colored_mask, mask, alpha=0.7):
-    """Masked image.
-
-    Args:
-        image: The image.
-        colored_mask: The colored mask.
-        mask: The mask.
-        alpha: The alpha.
-    """
     mask = np.expand_dims(mask > 0, axis=0)
     mask = np.repeat(mask, 3, axis=0)
     show_img = (image * alpha + colored_mask * (1 - alpha)) * mask + image * (1 - mask)
@@ -826,24 +805,11 @@ def masked_image(image, colored_mask, mask, alpha=0.7):
 
 
 def save_image(image, path):
-    """Save image.
-
-    Args:
-        image: The image.
-        path: The path.
-    """
     im = Image.fromarray(np.uint8(image * 255.0).transpose((1, 2, 0)))
     im.save(path)
 
 
 def _save_mask(mask, path, squeeze_idx=None):
-    """Helper function to save mask.
-
-    Args:
-        mask: The mask.
-        path: The path.
-        squeeze_idx: The squeeze idx.
-    """
     if squeeze_idx is not None:
         unsqueezed_mask = mask * 0
         for idx in range(1, len(squeeze_idx)):
@@ -857,35 +823,17 @@ def _save_mask(mask, path, squeeze_idx=None):
 
 
 def save_mask(mask_tensor, path, squeeze_idx=None):
-    """Save mask.
-
-    Args:
-        mask_tensor: The mask tensor.
-        path: The path.
-        squeeze_idx: The squeeze idx.
-    """
     mask = mask_tensor.cpu().numpy().astype("uint8")
     threading.Thread(target=_save_mask, args=[mask, path, squeeze_idx]).start()
 
 
 def flip_tensor(tensor, dim=0):
-    """Flip tensor.
-
-    Args:
-        tensor: The tensor.
-        dim: The dim.
-    """
     inv_idx = torch.arange(tensor.size(dim) - 1, -1, -1, device=tensor.device).long()
     tensor = tensor.index_select(dim, inv_idx)
     return tensor
 
 
 def shuffle_obj_mask(mask):
-    """Shuffle obj mask.
-
-    Args:
-        mask: The mask.
-    """
     bs, obj_num, _, _ = mask.size()
     new_masks = []
     for idx in range(bs):

@@ -52,12 +52,10 @@ class MidBlock3D(nn.Module):
         attention_head_dim (`int`, *optional*, defaults to 1):
             Dimension of a single attention head. The number of attention heads is determined based on this value and
             the number of input channels.
-        output_scale_factor (`float`, *optional*, defaults to 1.0): The output scale factor.
 
     Returns:
         `torch.FloatTensor`: The output of the last residual block, which is a tensor of shape `(batch_size,
         in_channels, temporal_length, height, width)`.
-
     """
 
     def __init__(
@@ -79,17 +77,19 @@ class MidBlock3D(nn.Module):
 
         norm_num_groups = norm_num_groups if norm_num_groups is not None else min(in_channels // 4, 32)
 
-        self.convs = nn.ModuleList([
-            ResidualBlock3D(
-                in_channels=in_channels,
-                out_channels=in_channels,
-                non_linearity=act_fn,
-                norm_num_groups=norm_num_groups,
-                norm_eps=norm_eps,
-                dropout=dropout,
-                output_scale_factor=output_scale_factor,
-            )
-        ])
+        self.convs = nn.ModuleList(
+            [
+                ResidualBlock3D(
+                    in_channels=in_channels,
+                    out_channels=in_channels,
+                    non_linearity=act_fn,
+                    norm_num_groups=norm_num_groups,
+                    norm_eps=norm_eps,
+                    dropout=dropout,
+                    output_scale_factor=output_scale_factor,
+                )
+            ]
+        )
 
         self.attentions = nn.ModuleList([])
         for _ in range(num_layers - 1):
@@ -110,30 +110,32 @@ class MidBlock3D(nn.Module):
                     )
                 elif attention_type == "spatial_temporal":
                     self.attentions.append(
-                        nn.ModuleList([
-                            SpatialAttention(
-                                in_channels,
-                                nheads=in_channels // attention_head_dim,
-                                head_dim=attention_head_dim,
-                                bias=True,
-                                upcast_softmax=True,
-                                norm_num_groups=norm_num_groups,
-                                eps=norm_eps,
-                                rescale_output_factor=output_scale_factor,
-                                residual_connection=True,
-                            ),
-                            TemporalAttention(
-                                in_channels,
-                                nheads=in_channels // attention_head_dim,
-                                head_dim=attention_head_dim,
-                                bias=True,
-                                upcast_softmax=True,
-                                norm_num_groups=norm_num_groups,
-                                eps=norm_eps,
-                                rescale_output_factor=output_scale_factor,
-                                residual_connection=True,
-                            ),
-                        ])
+                        nn.ModuleList(
+                            [
+                                SpatialAttention(
+                                    in_channels,
+                                    nheads=in_channels // attention_head_dim,
+                                    head_dim=attention_head_dim,
+                                    bias=True,
+                                    upcast_softmax=True,
+                                    norm_num_groups=norm_num_groups,
+                                    eps=norm_eps,
+                                    rescale_output_factor=output_scale_factor,
+                                    residual_connection=True,
+                                ),
+                                TemporalAttention(
+                                    in_channels,
+                                    nheads=in_channels // attention_head_dim,
+                                    head_dim=attention_head_dim,
+                                    bias=True,
+                                    upcast_softmax=True,
+                                    norm_num_groups=norm_num_groups,
+                                    eps=norm_eps,
+                                    rescale_output_factor=output_scale_factor,
+                                    residual_connection=True,
+                                ),
+                            ]
+                        )
                     )
                 elif attention_type == "spatial":
                     self.attentions.append(
@@ -183,7 +185,7 @@ class MidBlock3D(nn.Module):
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         hidden_states = self.convs[0](hidden_states)
 
-        for attn, resnet in zip(self.attentions, self.convs[1:]):
+        for attn, resnet in zip(self.attentions, self.convs[1:], strict=False):
             if attn is not None:
                 if self.attention_type == "spatial_temporal":
                     spatial_attn, temporal_attn = attn

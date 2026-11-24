@@ -5,6 +5,7 @@ task_family: video_generation
 groups: [video, text_to_video]
 source_repos:
 - url: https://github.com/PKU-YuanGroup/Open-Sora-Plan
+  revision: f7fa604f4e3a523d6b973e4c89a5620ed1aff65a
 checkpoints:
 - repo_id: LanguageBind/Open-Sora-Plan-v1.3.0
   role: t2v_checkpoint

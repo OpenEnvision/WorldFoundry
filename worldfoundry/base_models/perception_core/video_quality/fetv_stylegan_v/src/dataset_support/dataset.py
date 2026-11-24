@@ -1,4 +1,4 @@
-﻿# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
 #
 # NVIDIA CORPORATION and its licensors retain all intellectual property
 # and proprietary rights in and to this software, related documentation
@@ -6,20 +6,17 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-import os
-import copy
-from typing import List, Dict
-import zipfile
+import contextlib
 import json
+import os
 import random
-from typing import Tuple
+import zipfile
 
 import numpy as np
 import PIL.Image
 import torch
-from src import dnnlib
 from omegaconf import DictConfig, OmegaConf
-
+from src import dnnlib
 from src.dataset_support.layers import sample_frames
 from torchvision import transforms
 
@@ -28,21 +25,23 @@ try:
 except ImportError:
     pyspng = None
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 NUMPY_INTEGER_TYPES = [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64]
 NUMPY_FLOAT_TYPES = [np.float16, np.float32, np.float64, np.single, np.double]
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self,
-        name,                   # Name of the dataset.
-        raw_shape,              # Shape of the raw image data (NCHW).
-        max_size    = None,     # Artificially limit the size of the dataset. None = no limit. Applied before xflip.
-        use_labels  = False,    # Enable conditioning labels? False = label dimension is zero.
-        xflip       = False,    # Artificially double the size of the dataset via x-flips. Applied after max_size.
-        random_seed = 0,        # Random seed to use when applying max_size.
+    def __init__(
+        self,
+        name,  # Name of the dataset.
+        raw_shape,  # Shape of the raw image data (NCHW).
+        max_size=None,  # Artificially limit the size of the dataset. None = no limit. Applied before xflip.
+        use_labels=False,  # Enable conditioning labels? False = label dimension is zero.
+        xflip=False,  # Artificially double the size of the dataset via x-flips. Applied after max_size.
+        random_seed=0,  # Random seed to use when applying max_size.
     ):
         self._name = name
         self._raw_shape = list(raw_shape)
@@ -78,23 +77,21 @@ class Dataset(torch.utils.data.Dataset):
                 assert np.all(self._raw_labels >= 0)
         return self._raw_labels
 
-    def close(self): # to be overridden by subclass
+    def close(self):  # to be overridden by subclass
         pass
 
-    def _load_raw_image(self, raw_idx): # to be overridden by subclass
+    def _load_raw_image(self, raw_idx):  # to be overridden by subclass
         raise NotImplementedError
 
-    def _load_raw_labels(self): # to be overridden by subclass
+    def _load_raw_labels(self):  # to be overridden by subclass
         raise NotImplementedError
 
     def __getstate__(self):
         return dict(self.__dict__, _raw_labels=None)
 
     def __del__(self):
-        try:
+        with contextlib.suppress(BaseException):
             self.close()
-        except:
-            pass
 
     def __len__(self):
         return self._raw_idx.size
@@ -105,12 +102,12 @@ class Dataset(torch.utils.data.Dataset):
         assert list(image.shape) == self.image_shape
         assert image.dtype == np.uint8
         if self._xflip[idx]:
-            assert image.ndim == 3 # CHW
+            assert image.ndim == 3  # CHW
             image = image[:, :, ::-1]
 
         return {
-            'image': image.copy(),
-            'label': self.get_label(idx),
+            "image": image.copy(),
+            "label": self.get_label(idx),
         }
 
     def get_label(self, idx):
@@ -124,7 +121,7 @@ class Dataset(torch.utils.data.Dataset):
     def get_details(self, idx):
         d = dnnlib.EasyDict()
         d.raw_idx = int(self._raw_idx[idx])
-        d.xflip = (int(self._xflip[idx]) != 0)
+        d.xflip = int(self._xflip[idx]) != 0
         d.raw_label = self._get_raw_labels()[d.raw_idx].copy()
         return d
 
@@ -138,12 +135,12 @@ class Dataset(torch.utils.data.Dataset):
 
     @property
     def num_channels(self):
-        assert len(self.image_shape) == 3 # CHW
+        assert len(self.image_shape) == 3  # CHW
         return self.image_shape[0]
 
     @property
     def resolution(self):
-        assert len(self.image_shape) == 3 # CHW
+        assert len(self.image_shape) == 3  # CHW
         assert self.image_shape[1] == self.image_shape[2]
         return self.image_shape[1]
 
@@ -170,48 +167,57 @@ class Dataset(torch.utils.data.Dataset):
     def has_onehot_labels(self):
         return self._get_raw_labels().dtype == np.int64
 
-#----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+
 
 class ImageFolderDataset(Dataset):
-    def __init__(self,
-        path,                   # Path to directory or zip.
-        resolution      = None, # Ensure specific resolution, None = highest available.
-        **super_kwargs,         # Additional arguments for the Dataset base class.
+    def __init__(
+        self,
+        path,  # Path to directory or zip.
+        resolution=None,  # Ensure specific resolution, None = highest available.
+        **super_kwargs,  # Additional arguments for the Dataset base class.
     ):
         self._path = path
         self._zipfile = None
 
         if os.path.isdir(self._path):
-            self._type = 'dir'
-            self._all_fnames = {os.path.relpath(os.path.join(root, fname), start=self._path) for root, _dirs, files in os.walk(self._path) for fname in files}
-        elif self._file_ext(self._path) == '.zip':
-            self._type = 'zip'
+            self._type = "dir"
+            self._all_fnames = {
+                os.path.relpath(os.path.join(root, fname), start=self._path)
+                for root, _dirs, files in os.walk(self._path)
+                for fname in files
+            }
+        elif self._file_ext(self._path) == ".zip":
+            self._type = "zip"
             self._all_fnames = set(self._get_zipfile().namelist())
         else:
-            raise IOError('Path must point to a directory or zip')
+            raise OSError("Path must point to a directory or zip")
 
         PIL.Image.init()
         self._image_fnames = sorted(fname for fname in self._all_fnames if self._file_ext(fname) in PIL.Image.EXTENSION)
         if len(self._image_fnames) == 0:
-            raise IOError('No image files found in the specified path')
+            raise OSError("No image files found in the specified path")
 
         name = os.path.splitext(os.path.basename(self._path))[0]
-        raw_shape = [len(self._image_fnames)] + list(self._load_raw_image(0).shape)
+        raw_shape = [len(self._image_fnames)] + list(self._load_raw_image(0).shape)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         if resolution is not None and (raw_shape[2] != resolution or raw_shape[3] != resolution):
-            raise IOError(f'Image files do not match the specified resolution. Resolution is {resolution}, shape is {raw_shape}')
+            raise OSError(
+                f"Image files do not match the specified resolution. Resolution is {resolution}, shape is {raw_shape}"
+            )
         super().__init__(name=name, raw_shape=raw_shape, **super_kwargs)
 
     def _get_zipfile(self):
-        assert self._type == 'zip'
+        assert self._type == "zip"
         if self._zipfile is None:
             self._zipfile = zipfile.ZipFile(self._path)
         return self._zipfile
 
     def _open_file(self, fname):
-        if self._type == 'dir':
-            return open(os.path.join(self._path, fname), 'rb')
-        if self._type == 'zip':
-            return self._get_zipfile().open(fname, 'r')
+        if self._type == "dir":
+            return open(os.path.join(self._path, fname), "rb")
+        if self._type == "zip":
+            return self._get_zipfile().open(fname, "r")
         return None
 
     def close(self):
@@ -228,23 +234,23 @@ class ImageFolderDataset(Dataset):
         fname = self._image_fnames[raw_idx]
 
         with self._open_file(fname) as f:
-            use_pyspng = pyspng is not None and self._file_ext(fname) == '.png'
+            use_pyspng = pyspng is not None and self._file_ext(fname) == ".png"
             image = load_image_from_buffer(f, use_pyspng=use_pyspng)
 
         return image
 
     def _load_raw_labels(self):
-        fname = 'dataset.json'
+        fname = "dataset.json"
         labels_files = [f for f in self._all_fnames if f.endswith(fname)]
         if len(labels_files) == 0:
             return None
         assert len(labels_files) == 1, f"There can be only a single {fname} file"
         with self._open_file(labels_files[0]) as f:
-            labels = json.load(f)['labels']
+            labels = json.load(f)["labels"]
         if labels is None:
             return None
         labels = dict(labels)
-        labels = [labels[remove_root(fname, self._name).replace('\\', '/')] for fname in self._image_fnames]
+        labels = [labels[remove_root(fname, self._name).replace("\\", "/")] for fname in self._image_fnames]
         labels = np.array(labels)
 
         if labels.dtype in NUMPY_INTEGER_TYPES:
@@ -256,20 +262,23 @@ class ImageFolderDataset(Dataset):
 
         return labels
 
-#----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+
 
 class VideoFramesFolderDataset(Dataset):
-    def __init__(self,
-        path,                                           # Path to directory or zip.
-        cfg: DictConfig,                                # Config
-        resolution=None,                                # Unused arg for backward compatibility
-        load_n_consecutive: int=None,                   # Should we load first N frames for each video?
-        load_n_consecutive_random_offset: bool=True,    # Should we use a random offset when loading consecutive frames?
-        subsample_factor: int=1,                        # Sampling factor, i.e. decreasing the temporal resolution
-        discard_short_videos: bool=False,               # Should we discard videos that are shorter than `load_n_consecutive`?
-        **super_kwargs,                                 # Additional arguments for the Dataset base class.
+    def __init__(
+        self,
+        path,  # Path to directory or zip.
+        cfg: DictConfig,  # Config
+        resolution=None,  # Unused arg for backward compatibility
+        load_n_consecutive: int | None = None,  # Should we load first N frames for each video?
+        load_n_consecutive_random_offset: bool = True,  # Should we use a random offset when loading consecutive frames?
+        subsample_factor: int = 1,  # Sampling factor, i.e. decreasing the temporal resolution
+        discard_short_videos: bool = False,  # Should we discard videos that are shorter than `load_n_consecutive`?
+        **super_kwargs,  # Additional arguments for the Dataset base class.
     ):
-        self.sampling_dict = OmegaConf.to_container(OmegaConf.create({**cfg.sampling})) if 'sampling' in cfg else None
+        self.sampling_dict = OmegaConf.to_container(OmegaConf.create({**cfg.sampling})) if "sampling" in cfg else None
         self.max_num_frames = cfg.max_num_frames
         self._path = path
         self._zipfile = None
@@ -279,36 +288,46 @@ class VideoFramesFolderDataset(Dataset):
         self.discard_short_videos = discard_short_videos
 
         if resolution is not None:
-            self.transforms = transforms.Compose([
-                transforms.Resize(resolution),
-                transforms.CenterCrop(resolution),
-                # transforms.ToTensor(),
-            ])
+            self.transforms = transforms.Compose(
+                [
+                    transforms.Resize(resolution),
+                    transforms.CenterCrop(resolution),
+                    # transforms.ToTensor(),
+                ]
+            )
         else:
             self.transforms = None
 
         if self.subsample_factor > 1 and self.load_n_consecutive is None:
             raise NotImplementedError("Can do subsampling only when loading consecutive frames.")
 
-        listdir_full_paths = lambda d: sorted([os.path.join(d, x) for x in os.listdir(d)])
+        def listdir_full_paths(d):
+            return sorted([os.path.join(d, x) for x in os.listdir(d)])
+
         name = os.path.splitext(os.path.basename(self._path))[0]
 
         if os.path.isdir(self._path):
-            self._type = 'dir'
+            self._type = "dir"
             # We assume that the depth is 2
-            self._all_objects = {o for d in listdir_full_paths(self._path) for o in (([d] + listdir_full_paths(d)) if os.path.isdir(d) else [d])}
-            self._all_objects = {os.path.relpath(o, start=os.path.dirname(self._path)) for o in {self._path}.union(self._all_objects)}
-        elif self._file_ext(self._path) == '.zip':
-            self._type = 'zip'
+            self._all_objects = {
+                o
+                for d in listdir_full_paths(self._path)
+                for o in (([d] + listdir_full_paths(d)) if os.path.isdir(d) else [d])  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+            }
+            self._all_objects = {
+                os.path.relpath(o, start=os.path.dirname(self._path)) for o in {self._path}.union(self._all_objects)
+            }
+        elif self._file_ext(self._path) == ".zip":
+            self._type = "zip"
             self._all_objects = set(self._get_zipfile().namelist())
         else:
-            raise IOError('Path must be either a directory or point to a zip archive')
+            raise OSError("Path must be either a directory or point to a zip archive")
 
         PIL.Image.init()
         self._video_dir2frames = {}
-        objects = sorted([d for d in self._all_objects])
+        objects = sorted(self._all_objects)
         root_path_depth = len(os.path.normpath(objects[0]).split(os.path.sep))
-        curr_d = objects[1] # Root path is the first element
+        curr_d = objects[1]  # Root path is the first element
 
         for o in objects[1:]:
             curr_obj_depth = len(os.path.normpath(o).split(os.path.sep))
@@ -316,43 +335,48 @@ class VideoFramesFolderDataset(Dataset):
             if self._file_ext(o) in PIL.Image.EXTENSION:
                 assert o.startswith(curr_d), f"Object {o} is out of sync. It should lie inside {curr_d}"
                 assert curr_obj_depth == root_path_depth + 2, "Frame images should be inside directories"
-                if not curr_d in self._video_dir2frames:
+                if curr_d not in self._video_dir2frames:
                     self._video_dir2frames[curr_d] = []
                 self._video_dir2frames[curr_d].append(o)
-            elif self._file_ext(o) == 'json':
+            elif self._file_ext(o) == "json":
                 assert curr_obj_depth == root_path_depth + 1, "Classes info file should be inside the root dir"
-                pass
             else:
                 # We encountered a new directory
-                assert curr_obj_depth == root_path_depth + 1, f"Video directories should be inside the root dir. {o} is not."
+                assert curr_obj_depth == root_path_depth + 1, (
+                    f"Video directories should be inside the root dir. {o} is not."
+                )
                 if curr_d in self._video_dir2frames:
                     sorted_files = sorted(self._video_dir2frames[curr_d])
                     self._video_dir2frames[curr_d] = sorted_files
                 curr_d = o
 
         if self.discard_short_videos:
-            self._video_dir2frames = {d: fs for d, fs in self._video_dir2frames.items() if len(fs) >= self.load_n_consecutive * self.subsample_factor}
+            self._video_dir2frames = {
+                d: fs
+                for d, fs in self._video_dir2frames.items()
+                if len(fs) >= self.load_n_consecutive * self.subsample_factor
+            }
 
-        self._video_idx2frames = [frames for frames in self._video_dir2frames.values()]
+        self._video_idx2frames = list(self._video_dir2frames.values())
 
         if len(self._video_idx2frames) == 0:
-            raise IOError('No videos found in the specified archive')
+            raise OSError("No videos found in the specified archive")
 
-        raw_shape = [len(self._video_idx2frames)] + list(self._load_raw_frames(0, [0])[0][0].shape)
+        raw_shape = [len(self._video_idx2frames)] + list(self._load_raw_frames(0, [0])[0][0].shape)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         super().__init__(name=name, raw_shape=raw_shape, **super_kwargs)
 
     def _get_zipfile(self):
-        assert self._type == 'zip'
+        assert self._type == "zip"
         if self._zipfile is None:
             self._zipfile = zipfile.ZipFile(self._path)
         return self._zipfile
 
     def _open_file(self, fname):
-        if self._type == 'dir':
-            return open(os.path.join(os.path.dirname(self._path), fname), 'rb')
-        if self._type == 'zip':
-            return self._get_zipfile().open(fname, 'r')
+        if self._type == "dir":
+            return open(os.path.join(os.path.dirname(self._path), fname), "rb")
+        if self._type == "zip":
+            return self._get_zipfile().open(fname, "r")
         return None
 
     def close(self):
@@ -370,13 +394,13 @@ class VideoFramesFolderDataset(Dataset):
         We leave the `dataset.json` file in the same format as in the original SG2-ADA repo:
         it's `labels` field is a hashmap of filename-label pairs.
         """
-        fname = 'dataset.json'
+        fname = "dataset.json"
         labels_files = [f for f in self._all_objects if f.endswith(fname)]
         if len(labels_files) == 0:
             return None
         assert len(labels_files) == 1, f"There can be only a single {fname} file"
         with self._open_file(labels_files[0]) as f:
-            labels = json.load(f)['labels']
+            labels = json.load(f)["labels"]
         if labels is None:
             return None
 
@@ -404,16 +428,23 @@ class VideoFramesFolderDataset(Dataset):
 
         return labels
 
-    def __getitem__(self, idx: int) -> Dict:
+    def __getitem__(self, idx: int) -> dict:
         if self.load_n_consecutive:
             num_frames_available = len(self._video_idx2frames[self._raw_idx[idx]])
-            assert num_frames_available - self.load_n_consecutive * self.subsample_factor >= 0, f"We have only {num_frames_available} frames available, cannot load {self.load_n_consecutive} frames."
+            assert num_frames_available - self.load_n_consecutive * self.subsample_factor >= 0, (
+                f"We have only {num_frames_available} frames available, cannot load {self.load_n_consecutive} frames."
+            )
 
             if self.load_n_consecutive_random_offset:
-                random_offset = random.randint(0, num_frames_available - self.load_n_consecutive * self.subsample_factor + self.subsample_factor - 1)
+                random_offset = random.randint(
+                    0,
+                    num_frames_available - self.load_n_consecutive * self.subsample_factor + self.subsample_factor - 1,
+                )
             else:
                 random_offset = 0
-            frames_idx = np.arange(0, self.load_n_consecutive * self.subsample_factor, self.subsample_factor) + random_offset
+            frames_idx = (
+                np.arange(0, self.load_n_consecutive * self.subsample_factor, self.subsample_factor) + random_offset
+            )
         else:
             frames_idx = None
 
@@ -425,27 +456,29 @@ class VideoFramesFolderDataset(Dataset):
         assert len(frames) == len(times)
 
         if self._xflip[idx]:
-            assert frames.ndim == 4 # TCHW
+            assert frames.ndim == 4  # TCHW
             frames = frames[:, :, :, ::-1]
 
         return {
-            'image': frames.copy(),
-            'label': self.get_label(idx),
-            'times': times,
-            'video_len': self.get_video_len(idx),
+            "image": frames.copy(),
+            "label": self.get_label(idx),
+            "times": times,
+            "video_len": self.get_video_len(idx),
         }
 
     def get_video_len(self, idx: int) -> int:
         return min(self.max_num_frames, len(self._video_idx2frames[self._raw_idx[idx]]))
 
-    def _load_raw_frames(self, raw_idx: int, frames_idx: List[int]=None) -> Tuple[np.ndarray, np.ndarray]:
+    def _load_raw_frames(self, raw_idx: int, frames_idx: list[int] | None = None) -> tuple[np.ndarray, np.ndarray]:
         frame_paths = self._video_idx2frames[raw_idx]
         total_len = len(frame_paths)
         offset = 0
         images = []
 
         if frames_idx is None:
-            assert not self.sampling_dict is None, f"The dataset was created without `cfg.sampling` config and cannot sample frames on its own."
+            assert self.sampling_dict is not None, (
+                "The dataset was created without `cfg.sampling` config and cannot sample frames on its own."
+            )
             if total_len > self.max_num_frames:
                 offset = random.randint(0, total_len - self.max_num_frames)
             frames_idx = sample_frames(self.sampling_dict, total_video_len=min(total_len, self.max_num_frames)) + offset
@@ -463,46 +496,53 @@ class VideoFramesFolderDataset(Dataset):
     def compute_max_num_frames(self) -> int:
         return max(len(frames) for frames in self._video_idx2frames)
 
-#----------------------------------------------------------------------------
 
-def load_image_from_buffer(f, use_pyspng: bool=False, transforms=None) -> np.ndarray:
+# ----------------------------------------------------------------------------
+
+
+def load_image_from_buffer(f, use_pyspng: bool = False, transforms=None) -> np.ndarray:
     if use_pyspng:
         image = pyspng.load(f.read())
     else:
         image = np.array(PIL.Image.open(f)) if transforms is None else np.array(transforms(PIL.Image.open(f)))
     if image.ndim == 2:
-        image = image[:, :, np.newaxis] # HW => HWC
-    image = image.transpose(2, 0, 1) # HWC => CHW
+        image = image[:, :, np.newaxis]  # HW => HWC
+    image = image.transpose(2, 0, 1)  # HWC => CHW
 
     return image
 
-#----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+
 
 def video_to_image_dataset_kwargs(video_dataset_kwargs: dnnlib.EasyDict) -> dnnlib.EasyDict:
     """Converts video dataset kwargs to image dataset kwargs"""
     return dnnlib.EasyDict(
-        class_name='dataset_support.dataset.ImageFolderDataset',
+        class_name="dataset_support.dataset.ImageFolderDataset",
         path=video_dataset_kwargs.path,
         use_labels=video_dataset_kwargs.use_labels,
         xflip=video_dataset_kwargs.xflip,
         resolution=video_dataset_kwargs.resolution,
-        random_seed=video_dataset_kwargs.get('random_seed'),
+        random_seed=video_dataset_kwargs.get("random_seed"),
         # Explicitly ignoring the max size, since we are now interested
         # in the number of images instead of the number of videos
         # max_size=video_dataset_kwargs.max_size,
     )
 
-#----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+
 
 def remove_root(fname: os.PathLike, root_name: os.PathLike):
     """`root_name` should NOT start with '/'"""
-    if fname == root_name or fname == ('/' + root_name):
-        return ''
-    elif fname.startswith(root_name + '/'):
-        return fname[len(root_name) + 1:]
-    elif fname.startswith('/' + root_name + '/'):
-        return fname[len(root_name) + 2:]
+    if fname == root_name or fname == ("/" + root_name):
+        return ""
+    elif fname.startswith(root_name + "/"):
+        return fname[len(root_name) + 1 :]
+    elif fname.startswith("/" + root_name + "/"):
+        return fname[len(root_name) + 2 :]
     else:
         return fname
 
-#----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------

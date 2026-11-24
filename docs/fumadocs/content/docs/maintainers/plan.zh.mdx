@@ -15,13 +15,11 @@ World model 社区迭代很快：新架构、训练 recipe 和开源 checkpoint 
 
 ## Runtime 范围
 
-WorldFoundry 当前对外发布面聚焦 inference、evaluation、Studio 与 runtime 集成。
-
-训练 launcher、dataset builder、finetune script 和 experiment-only callback 暂时不进入当前 release tree。后续如果恢复训练支持，应作为独立且重新设计的子系统接入，并遵循与 inference、evaluation 相同的证据标准，而不是恢复已经删除的 prototype 代码。
+WorldFoundry 对外发布面覆盖 inference、evaluation、Studio 与 runtime 集成。
 
 ## 代码库统一
 
-WorldFoundry 通过集成大量上游 runtime 长大。下一阶段是在**共享抽象**上收敛，并删除重复实现。
+WorldFoundry 通过集成大量上游 runtime 逐步扩展而来。下一阶段是在**共享抽象**上收敛，并删除重复实现。
 
 `worldfoundry/core/` 已有 checkpoint 加载、分布式、attention、geometry、VRAM 等公共层。我们会继续扩展这些抽象，让各 model runtime 依赖框架代码，而不是拷贝 vendor 模块。若 vendored 文件只为薄 wrapper 服务，应把逻辑迁入 in-tree 或换成共享 helper；因 license / ABI 必须 vendoring 时，边界要小且明确。
 
@@ -29,7 +27,7 @@ WorldFoundry 通过集成大量上游 runtime 长大。下一阶段是在**共�
 
 ## UI 与产品体验
 
-Studio 与文档站是多数用户的主入口，应体现 catalog 广度，而不是调试控制台。
+Studio 与文档站是多数用户的主入口，应体现 catalog 广度，而不应只是调试控制台。
 
 近期 UX 目标：更快的模型发现（筛选、profile、readiness 提示）、更清晰的运行配置（环境、checkpoint、profile 驱动的多卡默认项）、更丰富的产物审查（视频、action trace、3D 导出、外部路径）。CLI / TUI 继续服务高级用户；Studio 应覆盖常见的“选模型 → 运行 → 查看”闭环，减少手填 env 与导出路径。
 

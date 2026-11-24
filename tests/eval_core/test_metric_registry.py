@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from worldfoundry.evaluation.api import ArtifactRef, GenerationRequest, GenerationResult
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.api import ArtifactRef, GenerationRequest, GenerationResult
+from worldfoundry.evals.tasks.metrics import (
     BuiltinExistingResultsMetric,
     DuplicateMetricRegistryKeyError,
     MetricRegistry,

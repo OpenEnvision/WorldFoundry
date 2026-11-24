@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,7 +16,7 @@ class GigaBrain0Operator(EmbodiedActionOperator):
     POLICY_FAMILY = "world_model_powered_vision_language_action_policy"
     ACTION_REPRESENTATION = "multi_embodiment_continuous_action_chunk_with_optional_subtask_and_2d_traj"
     OBSERVATION_LAYOUT = "multi_view_rgb_optional_depth_language_state"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "instruction": True,
         "image": True,
@@ -25,9 +26,11 @@ class GigaBrain0Operator(EmbodiedActionOperator):
         "actions": ["robot_action", "action_chunk", "continuous_action", "subtask", "trajectory_2d"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
-        instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "instruction", "task", "task_instruction")
+        instruction = (
+            prompt if prompt not in (None, "") else _first_present(kwargs, "instruction", "task", "task_instruction")
+        )
         instruction = "" if instruction is None else str(instruction)
         return {
             "prompt": instruction,
@@ -46,7 +49,7 @@ class GigaBrain0Operator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         rgb_views = _first_present(
             kwargs,
@@ -98,7 +101,7 @@ class GigaBrain0Operator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(
@@ -130,6 +133,7 @@ class GigaBrain0Operator(EmbodiedActionOperator):
                 "decoder": "fast_action_or_autoregressive_action_head",
                 "autoregressive_mode_only": bool(autoregressive) if autoregressive is not None else "optional",
                 "normalization": "norm_stats_json",
-                "delta_mask": (raw.get("delta_mask") if isinstance(raw, Mapping) else None) or self.input_schema.get("delta_mask"),
+                "delta_mask": (raw.get("delta_mask") if isinstance(raw, Mapping) else None)
+                or self.input_schema.get("delta_mask"),
             },
         }

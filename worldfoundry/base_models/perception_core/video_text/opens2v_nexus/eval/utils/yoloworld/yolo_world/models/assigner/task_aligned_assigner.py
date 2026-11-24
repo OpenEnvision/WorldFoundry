@@ -1,9 +1,9 @@
 # Copyright (c) Tencent Inc. All rights reserved.
 import torch
-from torch import Tensor
-from mmyolo.registry import TASK_UTILS
 from mmyolo.models.task_modules.assigners import BatchTaskAlignedAssigner
 from mmyolo.models.task_modules.assigners.utils import select_highest_overlaps
+from mmyolo.registry import TASK_UTILS
+from torch import Tensor
 
 
 @TASK_UTILS.register_module()
@@ -68,9 +68,7 @@ class YOLOWorldSegAssigner(BatchTaskAlignedAssigner):
         num_gt = gt_bboxes.size(1)
 
         assigned_result = {
-            "assigned_labels": gt_bboxes.new_full(
-                pred_scores[..., 0].shape, self.num_classes
-            ),
+            "assigned_labels": gt_bboxes.new_full(pred_scores[..., 0].shape, self.num_classes),
             "assigned_bboxes": gt_bboxes.new_full(pred_bboxes.shape, 0),
             "assigned_scores": gt_bboxes.new_full(pred_scores.shape, 0),
             "fg_mask_pre_prior": gt_bboxes.new_full(pred_scores[..., 0].shape, 0),
@@ -90,9 +88,7 @@ class YOLOWorldSegAssigner(BatchTaskAlignedAssigner):
             num_gt,
         )
 
-        (assigned_gt_idxs, fg_mask_pre_prior, pos_mask) = select_highest_overlaps(
-            pos_mask, overlaps, num_gt
-        )
+        (assigned_gt_idxs, fg_mask_pre_prior, pos_mask) = select_highest_overlaps(pos_mask, overlaps, num_gt)
 
         # assigned target
         assigned_labels, assigned_bboxes, assigned_scores = self.get_targets(
@@ -108,11 +104,7 @@ class YOLOWorldSegAssigner(BatchTaskAlignedAssigner):
         alignment_metrics *= pos_mask
         pos_align_metrics = alignment_metrics.max(axis=-1, keepdim=True)[0]
         pos_overlaps = (overlaps * pos_mask).max(axis=-1, keepdim=True)[0]
-        norm_align_metric = (
-            (alignment_metrics * pos_overlaps / (pos_align_metrics + self.eps))
-            .max(-2)[0]
-            .unsqueeze(-1)
-        )
+        norm_align_metric = (alignment_metrics * pos_overlaps / (pos_align_metrics + self.eps)).max(-2)[0].unsqueeze(-1)
         assigned_scores = assigned_scores * norm_align_metric
 
         assigned_result["assigned_labels"] = assigned_labels

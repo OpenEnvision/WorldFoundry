@@ -80,9 +80,7 @@ def test_get_video_info_uses_configurable_bounded_probe(monkeypatch: pytest.Monk
     def fake_run_bounded_command(command, *, timeout):
         calls.append((command, timeout))
         return {
-            "stdout": json.dumps(
-                {"streams": [{"duration": "12.5", "avg_frame_rate": "30000/1001"}]}
-            ),
+            "stdout": json.dumps({"streams": [{"duration": "12.5", "avg_frame_rate": "30000/1001"}]}),
             "stderr": "",
             "returncode": 0,
             "timed_out": False,

@@ -19,7 +19,7 @@ _APPLICATION_PACKAGES = (
     "worldfoundry.synthesis",
     "worldfoundry.pipelines",
     "worldfoundry.studio",
-    "worldfoundry.evaluation",
+    "worldfoundry.evals",
     "worldfoundry.operators",
 )
 _MODULE_TARGET = re.compile(r"\.*[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?::[A-Za-z_]\w*)?")

@@ -5,74 +5,30 @@
 Utilities for bounding box manipulation and GIoU.
 """
 
-from typing import Tuple
-
 import torch
 
 
-def box_cxcywh_to_xyxy(x):
-    """Box cxcywh to xyxy.
-
-    Args:
-        x: The x.
-    """
-    x_c, y_c, w, h = x.unbind(-1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
-    return torch.stack(b, dim=-1)
-
-
 def box_cxcywh_to_xywh(x):
-    """Box cxcywh to xywh.
-
-    Args:
-        x: The x.
-    """
     x_c, y_c, w, h = x.unbind(-1)
     b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (w), (h)]
     return torch.stack(b, dim=-1)
 
 
 def box_xywh_to_xyxy(x):
-    """Box xywh to xyxy.
-
-    Args:
-        x: The x.
-    """
     x, y, w, h = x.unbind(-1)
     b = [(x), (y), (x + w), (y + h)]
     return torch.stack(b, dim=-1)
 
 
 def box_xywh_to_cxcywh(x):
-    """Box xywh to cxcywh.
-
-    Args:
-        x: The x.
-    """
     x, y, w, h = x.unbind(-1)
     b = [(x + 0.5 * w), (y + 0.5 * h), (w), (h)]
     return torch.stack(b, dim=-1)
 
 
 def box_xyxy_to_xywh(x):
-    """Box xyxy to xywh.
-
-    Args:
-        x: The x.
-    """
     x, y, X, Y = x.unbind(-1)
     b = [(x), (y), (X - x), (Y - y)]
-    return torch.stack(b, dim=-1)
-
-
-def box_xyxy_to_cxcywh(x):
-    """Box xyxy to cxcywh.
-
-    Args:
-        x: The x.
-    """
-    x0, y0, x1, y1 = x.unbind(-1)
-    b = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0), (y1 - y0)]
     return torch.stack(b, dim=-1)
 
 
@@ -176,12 +132,6 @@ def generalized_box_iou(boxes1, boxes2):
 
 @torch.jit.script
 def fast_diag_generalized_box_iou(boxes1, boxes2):
-    """Fast diag generalized box iou.
-
-    Args:
-        boxes1: The boxes1.
-        boxes2: The boxes2.
-    """
     assert len(boxes1) == len(boxes2)
     box1_xy = boxes1[:, 2:]
     box1_XY = boxes1[:, :2]
@@ -209,12 +159,6 @@ def fast_diag_generalized_box_iou(boxes1, boxes2):
 
 @torch.jit.script
 def fast_diag_box_iou(boxes1, boxes2):
-    """Fast diag box iou.
-
-    Args:
-        boxes1: The boxes1.
-        boxes2: The boxes2.
-    """
     assert len(boxes1) == len(boxes2)
     box1_xy = boxes1[:, 2:]
     box1_XY = boxes1[:, :2]
@@ -237,18 +181,7 @@ def fast_diag_box_iou(boxes1, boxes2):
     return iou
 
 
-def box_xywh_inter_union(
-    boxes1: torch.Tensor, boxes2: torch.Tensor
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Box xywh inter union.
-
-    Args:
-        boxes1: The boxes1.
-        boxes2: The boxes2.
-
-    Returns:
-        The return value.
-    """
+def box_xywh_inter_union(boxes1: torch.Tensor, boxes2: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     # Asuumes boxes in xywh format
     assert boxes1.size(-1) == 4 and boxes2.size(-1) == 4
     boxes1 = box_xywh_to_xyxy(boxes1)

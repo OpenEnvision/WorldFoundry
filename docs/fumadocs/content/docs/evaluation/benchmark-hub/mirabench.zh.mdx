@@ -1,13 +1,13 @@
 ---
 title: MiraBench
-description: "腾讯 ARC 的长视频评测（随 MiraData）：150 条 prompt、17 个官方指标。WorldFoundry 内置打分器，不编造榜单。"
+description: "腾讯 ARC 的长视频评测（随 MiraData）：150 条 prompt、17 个官方指标。WorldFoundry 内置打分器。"
 ---
 
-MiraBench（腾讯 ARC Lab）是 **MiraData** 的评测半边。MiraData 是带结构化字幕的长视频数据集。它从六个视角打分：时间一致性、时间运动强度、3D 一致性、视觉质量、文本-视频对齐、分布一致性。官方打分器暴露 **17 个指标**（DINO/CLIP 时间一致性、RAFT 风格运动、3D 重建误差、美学 / 成像质量、ViCLIP 对齐、FVD / FID / KID）。标准套件是 **150 条 prompt**。许可证：GPL-3.0。
+MiraBench（腾讯 ARC Lab）是 **MiraData** 的评测部分。MiraData 是带结构化字幕的长视频数据集。它从六个视角打分：时间一致性、时间运动强度、3D 一致性、视觉质量、文本-视频对齐、分布一致性。官方打分器提供 **17 个指标**（DINO/CLIP 时间一致性、RAFT 风格运动、3D 重建误差、美学 / 成像质量、ViCLIP 对齐、FVD / FID / KID）。标准套件是 **150 条 prompt**。许可证：GPL-3.0。
 
 论文：[MiraData](https://arxiv.org/abs/2407.06358)。项目：[mira-space.github.io](https://mira-space.github.io/)。数据：[`TencentARC/MiraData`](https://huggingface.co/datasets/TencentARC/MiraData)。代码：[mira-space/MiraData](https://github.com/mira-space/MiraData)。
 
-WorldFoundry **仓内内置 runtime**（`calculate_score.py`），并把 `average_score.csv` 转成 scorecard。`WORLDFOUNDRY_MIRABENCH_SCORER_BACKEND=mock` 只是接线。
+WorldFoundry **仓内内置 runtime**（`calculate_score.py`），并把 `average_score.csv` 转成 scorecard。`WORLDFOUNDRY_MIRABENCH_SCORER_BACKEND=mock` 只检查流程，不产生真实分数。
 
 <BenchmarkPageSections id="mirabench" locale="zh" />
 
@@ -20,7 +20,7 @@ export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/mirabench/generated_videos
 export WORLDFOUNDRY_MIRABENCH_CKPT_PATH=/path/to/mirabench/data/ckpt
 
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/mirabench/run_mirabench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/mirabench/run_mirabench_official_runner.py \
   --run-official \
   --meta-csv "${WORLDFOUNDRY_MIRABENCH_META_CSV}" \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
@@ -32,7 +32,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 导入 `average_score.csv`：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id mirabench \
   --mode official-validation \
   --official-results-path /path/to/mirabench/average_score.csv \
@@ -41,9 +41,9 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-视频命名 `1.mp4` … `150.mp4`（来自 `video_idx`）。示例 meta 捆绑在 `worldfoundry/data/benchmarks/assets/mirabench/data/evaluation_example/`。`--strict` 会在缺 prompt 视频时失败。完整打分需要 AMT、ViCLIP、MUSIQ、FVD/FID/KID 与 3D 一致性资产。
+视频命名 `1.mp4` … `150.mp4`（来自 `video_idx`）。示例 meta 文件位于 `worldfoundry/data/benchmarks/assets/mirabench/data/evaluation_example/`。缺少 prompt 对应视频时，`--strict` 会使运行失败。完整打分需要 AMT、ViCLIP、MUSIQ、FVD/FID/KID 与 3D 一致性资产。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/mirabench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/mirabench/runtime/mirabench`。
+清单与内置 runtime：`worldfoundry/data/benchmarks/tasks/external/mirabench.yaml`、`worldfoundry/evals/tasks/execution/runners/mirabench/runtime/mirabench`。
 
 产物包括 `scorecard.json`（主键 `mirabench_average`）与 `mirabench_average_score.json`。
 

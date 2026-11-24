@@ -17,9 +17,9 @@ import torch.nn as nn
 from einops import rearrange
 from torch import Tensor
 
-from mira.ml.init import init_weights
-from mira.world_model.actions_config import ActionTensors
-from mira.world_model.schedule import symlog_normalize
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.ml.init import init_weights
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.actions_config import ActionTensors
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.schedule import symlog_normalize
 
 logger = logging.getLogger(__name__)
 

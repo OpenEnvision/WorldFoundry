@@ -28,9 +28,7 @@ def test_official_cotracker_visualizer_renders_without_saving():
     tracks = torch.tensor([[[[5, 8]], [[18, 12]], [[30, 20]]]], dtype=torch.float32)
     visibility = torch.ones((1, 3, 1), dtype=torch.bool)
 
-    rendered = Visualizer(tracks_leave_trace=2).visualize(
-        video, tracks, visibility, save_video=False
-    )
+    rendered = Visualizer(tracks_leave_trace=2).visualize(video, tracks, visibility, save_video=False)
 
     assert rendered.shape == (1, 12, 3, 32, 48)
     assert np.asarray(rendered).std() > 0

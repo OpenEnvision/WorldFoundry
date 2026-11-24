@@ -1,3 +1,4 @@
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 import logging
 
 import einops
@@ -7,11 +8,11 @@ import jax
 import jax.numpy as jnp
 from typing_extensions import override
 
+from .. import array_typing as at
+from . import gemma as _gemma
 from . import model as _model
 from . import pi0_config
-from . import gemma as _gemma
 from . import siglip as _siglip
-from .. import array_typing as at
 
 logger = logging.getLogger("openpi")
 
@@ -100,6 +101,7 @@ class Pi0(_model.BaseModel):
         self.action_out_proj = nnx.Linear(action_expert_config.width, config.action_dim, rngs=rngs)
 
         # This attribute gets automatically set by model.train() and model.eval().
+
     @at.typecheck
     def embed_prefix(
         self, obs: _model.Observation
@@ -182,7 +184,6 @@ class Pi0(_model.BaseModel):
         input_mask = jnp.concatenate(input_mask, axis=1)
         ar_mask = jnp.array(ar_mask)
         return tokens, input_mask, ar_mask, adarms_cond
-
 
     @override
     def sample_actions(

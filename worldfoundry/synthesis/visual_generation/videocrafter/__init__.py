@@ -9,10 +9,10 @@ from .videocrafter2_t2v_synthesis import VideoCrafter2T2VSynthesis
 
 __all__ = [
     "VideoCrafter",
-    "VideoCrafterComponents",
     "VideoCrafter1I2VSynthesis",
     "VideoCrafter1T2VSynthesis",
     "VideoCrafter2T2VSynthesis",
+    "VideoCrafterComponents",
     "load_videocrafter_components",
     "resolve_runtime_config",
 ]

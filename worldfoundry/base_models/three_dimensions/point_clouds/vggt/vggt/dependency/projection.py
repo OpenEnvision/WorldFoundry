@@ -4,10 +4,9 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> dependency -> projection.py functionality."""
-
-import torch
 import numpy as np
+import torch
+
 from .distortion import apply_distortion
 
 
@@ -120,7 +119,7 @@ def project_3D_points(points3D, extrinsics, intrinsics=None, extra_params=None, 
                and points_cam is of shape Bx3xN.
     """
     with torch.cuda.amp.autocast(dtype=torch.double):
-        N = points3D.shape[0]  # Number of points
+        _N = points3D.shape[0]  # Number of points
         B = extrinsics.shape[0]  # Batch size, i.e., number of cameras
         points3D_homogeneous = torch.cat([points3D, torch.ones_like(points3D[..., 0:1])], dim=1)  # Nx4
         # Reshape for batch processing

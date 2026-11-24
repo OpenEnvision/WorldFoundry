@@ -51,11 +51,13 @@ class FixedPDD4Scheduler:
 
     def __init__(self):
         raw_boundary = self.boundary / (self.shift - (self.shift - 1.0) * self.boundary)
-        high_count = int(round(self.num_intervals * (1.0 - raw_boundary)))
-        raw = torch.cat((
-            torch.linspace(1.0, raw_boundary, high_count + 1),
-            torch.linspace(raw_boundary, 0.0, self.num_intervals - high_count + 1)[1:],
-        ))
+        high_count = int(round(self.num_intervals * (1.0 - raw_boundary)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        raw = torch.cat(
+            (
+                torch.linspace(1.0, raw_boundary, high_count + 1),
+                torch.linspace(raw_boundary, 0.0, self.num_intervals - high_count + 1)[1:],
+            )
+        )
         self.sigmas = (self.shift * raw / (1.0 + (self.shift - 1.0) * raw)).float()
         self.sigmas[0] = 1.0
         self.sigmas[high_count] = self.boundary
@@ -71,7 +73,11 @@ class FixedPDD4Scheduler:
         self.ordered_blocks = self._blocks["high"] + self._blocks["low"]
 
     def schedule(
-        self, sampling: SamplingConfig, *, device: torch.device, dtype: torch.dtype,
+        self,
+        sampling: SamplingConfig,
+        *,
+        device: torch.device,
+        dtype: torch.dtype,
     ) -> tuple[SchedulerStep, ...]:
         del dtype
         unsupported = set(sampling.scheduler_options) - {"shift"}
@@ -95,8 +101,12 @@ class FixedPDD4Scheduler:
         return latents
 
     def step(
-        self, model_output: torch.Tensor, step: SchedulerStep, latents: torch.Tensor,
-        *, generator: torch.Generator,
+        self,
+        model_output: torch.Tensor,
+        step: SchedulerStep,
+        latents: torch.Tensor,
+        *,
+        generator: torch.Generator,
     ) -> torch.Tensor:
         block = self.ordered_blocks[step.index]
         displacement, endpoint_velocity = model_output.chunk(2, dim=1)
@@ -136,9 +146,9 @@ class FixedPDD4Scheduler:
         weights, biases = [], []
         for block in self.blocks(expert):
             indices = list(range(block.start - expert_start, block.end - 1 - expert_start))
-            coefficients = (
-                self.sigmas[block.start + 1:block.end] - self.sigmas[block.start:block.end - 1]
-            ).to(interval_weight)
+            coefficients = (self.sigmas[block.start + 1 : block.end] - self.sigmas[block.start : block.end - 1]).to(
+                interval_weight
+            )
             displacement_weight = torch.einsum("k,koi->oi", coefficients, interval_weight[indices])
             displacement_bias = torch.einsum("k,ko->o", coefficients, interval_bias[indices])
             endpoint_index = block.end - 1 - expert_start

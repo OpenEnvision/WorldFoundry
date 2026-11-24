@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     import torch
 
-    from mira.world_model.latent_world_model import LatentWorldModel
+    from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.latent_world_model import (
+        LatentWorldModel,
+    )
 
 
 def load_world_model(checkpoint_path: Path, device: str | torch.device) -> tuple[LatentWorldModel, Any]:
@@ -19,10 +21,14 @@ def load_world_model(checkpoint_path: Path, device: str | torch.device) -> tuple
     through the same ``_target_``/removed-field cleaning the dedicated loaders apply. Falls back to
     :class:`LatentWorldModel` for older checkpoints without a ``_target_``. Returns ``(model, run_config)``.
     """
-    from omegaconf import OmegaConf  # noqa: PLC0415 -- optional dep, used only on the real path
+    from omegaconf import OmegaConf  # optional dep, used only on the real path
 
-    from mira.world_model.latent_world_model import LatentWorldModel  # noqa: PLC0415
-    from mira.world_model.multi_wrapper_world_model import MultiWrapperWorldModel  # noqa: PLC0415
+    from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.latent_world_model import (
+        LatentWorldModel,
+    )
+    from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.multi_wrapper_world_model import (
+        MultiWrapperWorldModel,
+    )
 
     config_path = LatentWorldModel._find_config(checkpoint_path)
     if config_path is None:

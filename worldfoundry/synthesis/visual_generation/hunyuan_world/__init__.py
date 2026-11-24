@@ -3,42 +3,33 @@
 from importlib import import_module
 
 __all__ = [
-    "hunyuan_worldplay",
-    "HunyuanWorldPlaySynthesis",
-    "_HunyuanWorldPlayInternalPipeline",
-    "HunyuanWorldVoyagerSynthesis",
+    "HYWorld2Synthesis",
     "HunyuanGameCraftSynthesis",
+    "HunyuanWorld1Synthesis",
     "HunyuanWorldIntegrationError",
     "HunyuanWorldIntegrationStatus",
-    "HunyuanWorldPlanSynthesis",
-    "HunyuanWorld1Synthesis",
     "HunyuanWorldMirrorSynthesis",
-    "HYWorld2Synthesis",
-    "HYWorld2PanoSynthesis",
+    "HunyuanWorldPlanSynthesis",
+    "HunyuanWorldPlaySynthesis",
+    "_HunyuanWorldPlayInternalPipeline",
     "apply_hunyuan_world_argparse_defaults",
-    "hunyuan_world_runtime_config_path",
-    "load_hunyuan_world_runtime_defaults",
-    "load_hunyuan_world_state_dict",
     "generate_crop_size_list",
     "get_closest_ratio",
+    "hunyuan_world_runtime_config_path",
+    "hunyuan_worldplay",
+    "load_hunyuan_world_runtime_defaults",
+    "load_hunyuan_world_state_dict",
     "resize_and_center_crop",
 ]
 
 
 def __getattr__(name):
     if name == "hunyuan_worldplay":
-        module = import_module(
-            "worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_worldplay"
-        )
+        module = import_module("worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_worldplay")
         globals()[name] = module
         return module
     if name in {"HunyuanWorldPlaySynthesis", "_HunyuanWorldPlayInternalPipeline"}:
         module = import_module(".hunyuan_worldplay_synthesis", __name__)
-        value = getattr(module, name)
-        globals()[name] = value
-        return value
-    if name == "HunyuanWorldVoyagerSynthesis":
-        module = import_module(".hunyuan_world_voyager_synthesis", __name__)
         value = getattr(module, name)
         globals()[name] = value
         return value
@@ -54,7 +45,6 @@ def __getattr__(name):
         "HunyuanWorld1Synthesis",
         "HunyuanWorldMirrorSynthesis",
         "HYWorld2Synthesis",
-        "HYWorld2PanoSynthesis",
     }:
         module = import_module(".hunyuan_world_family_synthesis", __name__)
         value = getattr(module, name)

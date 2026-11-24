@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from worldfoundry.evaluation.utils import BENCHMARK_TASK_ROOT, write_json, write_jsonl
+from worldfoundry.evals.utils import BENCHMARK_TASK_ROOT, write_json, write_jsonl
 
 from .presentation import print_details, print_table, terminal_enabled
 from .utils import CliUsageError, json_dump
@@ -30,7 +30,7 @@ def _add_task_selector(parser: argparse.ArgumentParser, *, require_data_path: bo
 
 def _handle_tasks_list(args: argparse.Namespace) -> int:
     """Print benchmark task index entries from the built-in task registry."""
-    from worldfoundry.evaluation.tasks.catalog.specs import list_benchmark_zoo_cli_tasks
+    from worldfoundry.evals.tasks.catalog.specs import list_benchmark_zoo_cli_tasks
 
     items = list_benchmark_zoo_cli_tasks(
         task_type=args.task_type,
@@ -50,14 +50,12 @@ def _handle_tasks_list(args: argparse.Namespace) -> int:
     _print_grouped_task_list(items)
     return 0
 
+
 def _format_flat_task_list_item(item: dict) -> str:
     """Format one task entry for the compact one-line listing."""
     label = _task_list_label(item)
-    return (
-        f"{label} "
-        f"[{item['suite']}/{item['backend']}] "
-        f"[{item['evaluation_protocol']}] {item['description']}"
-    )
+    return f"{label} [{item['suite']}/{item['backend']}] [{item['evaluation_protocol']}] {item['description']}"
+
 
 def _task_list_group_key(item: dict) -> tuple[str, str, str, str]:
     """Derive the grouping key for a task list entry."""
@@ -68,6 +66,7 @@ def _task_list_group_key(item: dict) -> tuple[str, str, str, str]:
         str(item.get("evaluation_protocol", "")),
     )
 
+
 def _task_list_group_title(item: dict) -> str:
     """Build a human-readable group title from the grouping key."""
     source_kind, suite, backend, protocol = _task_list_group_key(item)
@@ -77,11 +76,13 @@ def _task_list_group_title(item: dict) -> str:
         return f"{suite}: {backend}"
     return f"{suite}: {backend} [{protocol}]"
 
+
 def _task_list_label(item: dict) -> str:
     """Render the primary label for a task entry, preferring ``benchmark_zoo_id`` when available."""
     if item.get("source_kind") == "benchmark_zoo":
         return str(item.get("benchmark_zoo_id") or item["task_type"])
     return str(item["task_type"])
+
 
 def _task_list_detail(item: dict) -> str:
     """Render the detail line for a task entry, including validation surface or benchmark name."""
@@ -89,6 +90,7 @@ def _task_list_detail(item: dict) -> str:
         status = "validated" if item.get("official_runtime_validated") else "contract"
         return f"{status} surface | {item['description']}"
     return f"benchmark={item['benchmark_name']} | {item['description']}"
+
 
 def _print_grouped_task_list(items: list[dict]) -> None:
     """Print task entries grouped by suite, backend, and evaluation protocol."""
@@ -118,9 +120,10 @@ def _print_grouped_task_list(items: list[dict]) -> None:
 
         print(f"  {_task_list_label(item):<34} {_task_list_detail(item)}")
 
+
 def _handle_tasks_show(args: argparse.Namespace) -> int:
     """Show one built-in benchmark task entry by task type/benchmark pair."""
-    from worldfoundry.evaluation.tasks.catalog.specs import get_benchmark_zoo_cli_task, list_benchmark_zoo_cli_tasks
+    from worldfoundry.evals.tasks.catalog.specs import get_benchmark_zoo_cli_task, list_benchmark_zoo_cli_tasks
 
     if args.benchmark_name:
         item = get_benchmark_zoo_cli_task(args.task_type, args.benchmark_name)
@@ -189,8 +192,9 @@ def _handle_tasks_show(args: argparse.Namespace) -> int:
     print(f"description: {item['description']}")
     return 0
 
+
 def _handle_tasks_catalog(args: argparse.Namespace) -> int:
-    from worldfoundry.evaluation.tasks.catalog.specs import build_benchmark_zoo_catalog_registry
+    from worldfoundry.evals.tasks.catalog.specs import build_benchmark_zoo_catalog_registry
 
     catalog = build_benchmark_zoo_catalog_registry(
         task_type=args.task_type,
@@ -219,11 +223,14 @@ def _handle_tasks_catalog(args: argparse.Namespace) -> int:
         print(f"{item['name']} [{item['schema_version']}] tasks={task_names} tags={', '.join(item['tags'])}")
     return 0
 
+
 # ── Suite commands ───────────────────────────────────────────────
 
 
 def _handle_suites_list(args: argparse.Namespace) -> int:
-    from worldfoundry.evaluation.runner import list_model_benchmark_suite_presets
+    from worldfoundry.evals.tasks.execution.orchestration.suite_presets import (
+        list_model_benchmark_suite_presets,
+    )
 
     suites = [dict(item) for item in list_model_benchmark_suite_presets(args.suite_preset_path)]
     if args.json:
@@ -252,9 +259,12 @@ def _handle_suites_list(args: argparse.Namespace) -> int:
         )
     return 0
 
+
 def _handle_suites_show(args: argparse.Namespace) -> int:
     """Show one model-benchmark suite preset with its models and benchmarks."""
-    from worldfoundry.evaluation.runner import get_model_benchmark_suite_preset
+    from worldfoundry.evals.tasks.execution.orchestration.suite_presets import (
+        get_model_benchmark_suite_preset,
+    )
 
     try:
         suite = dict(get_model_benchmark_suite_preset(args.suite, args.suite_preset_path))
@@ -275,18 +285,20 @@ def _handle_suites_show(args: argparse.Namespace) -> int:
     )
     return 0
 
+
 # ── Filesystem task catalog commands ─────────────────────────────
 
 
 def _load_filesystem_task_registry(args: argparse.Namespace):
     """Load a task registry from filesystem YAML roots derived from CLI args."""
-    from worldfoundry.evaluation.tasks.catalog.registry import load_task_registry_from_paths
+    from worldfoundry.evals.tasks.catalog.registry import load_task_registry_from_paths
 
     return load_task_registry_from_paths(
         _task_roots_from_args(args),
         recursive=args.recursive,
         root_dir=args.root_dir,
     )
+
 
 def _handle_task_list(args: argparse.Namespace) -> int:
     """List filesystem task YAML entries from one or more root paths."""
@@ -320,6 +332,7 @@ def _handle_task_list(args: argparse.Namespace) -> int:
         )
     return 0
 
+
 def _handle_task_show(args: argparse.Namespace) -> int:
     """Display one filesystem task entry in a normalized, user-readable form."""
     registry = _load_filesystem_task_registry(args)
@@ -346,9 +359,10 @@ def _handle_task_show(args: argparse.Namespace) -> int:
     )
     return 0
 
+
 def _task_validation_paths(args: argparse.Namespace) -> tuple[Path, ...]:
     """Collect YAML paths for validation from explicit args or task roots."""
-    from worldfoundry.evaluation.tasks.catalog.registry import iter_task_yaml_paths
+    from worldfoundry.evals.tasks.catalog.registry import iter_task_yaml_paths
 
     roots = tuple(Path(path) for path in (args.path or ()))
     if not roots:
@@ -362,9 +376,10 @@ def _task_validation_paths(args: argparse.Namespace) -> tuple[Path, ...]:
             paths.append(root)
     return tuple(paths)
 
+
 def _handle_task_validate(args: argparse.Namespace) -> int:
     """Validate one or many task YAML paths and return non-zero when invalid."""
-    from worldfoundry.evaluation.tasks.catalog.registry import validate_task_yaml_file
+    from worldfoundry.evals.tasks.catalog.registry import validate_task_yaml_file
 
     items = [
         validate_task_yaml_file(
@@ -423,12 +438,12 @@ def _handle_task_validate(args: argparse.Namespace) -> int:
 
 def _handle_task_materialize(args: argparse.Namespace) -> int:
     """Materialize GenerationRequest rows from one task YAML entry."""
-    from worldfoundry.evaluation.api import GenerationRequest
-    from worldfoundry.evaluation.tasks.execution.orchestration.materialize import (
+    from worldfoundry.evals.api import GenerationRequest
+    from worldfoundry.evals.tasks.execution.orchestration.materialize import (
         MATERIALIZED_REQUESTS_SCHEMA_VERSION,
         MaterializedRequests,
     )
-    from worldfoundry.evaluation.tasks.execution.orchestration.plan import build_run_plan
+    from worldfoundry.evals.tasks.execution.orchestration.plan import build_run_plan
 
     if args.dataset_root is None and args.dataset_manifest is None:
         raise CliUsageError("task materialize requires --dataset-root or --dataset-manifest")
@@ -486,7 +501,7 @@ def _handle_task_materialize(args: argparse.Namespace) -> int:
 # ── Parser registration ─────────────────────────────────────────
 
 
-def register_task_subparsers(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def register_task_subparsers(subparsers: argparse._SubParsersAction) -> None:
     """Register task commands and keep related argument groups contiguous."""
     tasks_parser = subparsers.add_parser("tasks", help="Browse benchmark tasks and evaluation suites")
     tasks_subparsers = tasks_parser.add_subparsers(dest="tasks_command", required=True)
@@ -505,7 +520,9 @@ def register_task_subparsers(subparsers: argparse._SubParsersAction[argparse.Arg
     tasks_show_parser.add_argument("--json", action="store_true")
     tasks_show_parser.set_defaults(func=_handle_tasks_show)
 
-    tasks_catalog_parser = tasks_subparsers.add_parser("catalog", help="Export active task registry entries as BenchmarkSpec objects")
+    tasks_catalog_parser = tasks_subparsers.add_parser(
+        "catalog", help="Export active task registry entries as BenchmarkSpec objects"
+    )
     tasks_catalog_parser.add_argument("--task-type")
     tasks_catalog_parser.add_argument("--suite")
     tasks_catalog_parser.add_argument("--backend")
@@ -533,7 +550,9 @@ def register_task_subparsers(subparsers: argparse._SubParsersAction[argparse.Arg
 
     task_list_parser = task_subparsers.add_parser("list", help="List task YAML entries from a filesystem catalog")
     task_list_parser.add_argument("--task-root", action="append", type=Path)
-    task_list_parser.add_argument("--include-path", "--benchmark-include-path", action="append", type=Path, dest="include_path")
+    task_list_parser.add_argument(
+        "--include-path", "--benchmark-include-path", action="append", type=Path, dest="include_path"
+    )
     task_list_parser.add_argument("--root-dir", type=Path)
     task_list_parser.add_argument("--recursive", action="store_true")
     task_list_parser.add_argument("--benchmark")
@@ -545,17 +564,23 @@ def register_task_subparsers(subparsers: argparse._SubParsersAction[argparse.Arg
     task_show_parser = task_subparsers.add_parser("show", help="Show one task YAML entry by task name")
     task_show_parser.add_argument("task_name")
     task_show_parser.add_argument("--task-root", action="append", type=Path)
-    task_show_parser.add_argument("--include-path", "--benchmark-include-path", action="append", type=Path, dest="include_path")
+    task_show_parser.add_argument(
+        "--include-path", "--benchmark-include-path", action="append", type=Path, dest="include_path"
+    )
     task_show_parser.add_argument("--root-dir", type=Path)
     task_show_parser.add_argument("--recursive", action="store_true")
     task_show_parser.add_argument("--benchmark")
     task_show_parser.add_argument("--json", action="store_true")
     task_show_parser.set_defaults(func=_handle_task_show)
 
-    task_validate_parser = task_subparsers.add_parser("validate", help="Validate task YAML files or directories without loading runtime backends")
+    task_validate_parser = task_subparsers.add_parser(
+        "validate", help="Validate task YAML files or directories without loading runtime backends"
+    )
     task_validate_parser.add_argument("path", nargs="*", type=Path)
     task_validate_parser.add_argument("--task-root", action="append", type=Path)
-    task_validate_parser.add_argument("--include-path", "--benchmark-include-path", action="append", type=Path, dest="include_path")
+    task_validate_parser.add_argument(
+        "--include-path", "--benchmark-include-path", action="append", type=Path, dest="include_path"
+    )
     task_validate_parser.add_argument("--root-dir", type=Path)
     task_validate_parser.add_argument("--recursive", action="store_true")
     task_validate_parser.add_argument("--json", action="store_true")
@@ -567,7 +592,9 @@ def register_task_subparsers(subparsers: argparse._SubParsersAction[argparse.Arg
     )
     task_materialize_parser.add_argument("task_name")
     task_materialize_parser.add_argument("--task-root", action="append", type=Path)
-    task_materialize_parser.add_argument("--include-path", "--benchmark-include-path", action="append", type=Path, dest="include_path")
+    task_materialize_parser.add_argument(
+        "--include-path", "--benchmark-include-path", action="append", type=Path, dest="include_path"
+    )
     task_materialize_parser.add_argument("--root-dir", type=Path)
     task_materialize_parser.add_argument("--recursive", action="store_true")
     task_materialize_parser.add_argument("--benchmark")

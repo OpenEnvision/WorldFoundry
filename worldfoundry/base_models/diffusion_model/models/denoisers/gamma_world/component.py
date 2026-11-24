@@ -18,7 +18,6 @@ from ....components import ComponentBuildContext
 from ....contracts import DenoiserInput, DenoiserOutput
 from ....loaders import ModuleLoadSpec, NativeModuleLoader
 
-
 _BASE_NETWORK_CONFIG: dict[str, object] = {
     "max_img_h": 240,
     "max_img_w": 240,
@@ -135,10 +134,10 @@ class GammaWorldDenoiser:
         # cache only fits the local-attention variant and overflows halfway
         # through the released 48-latent-frame causal rollout.
         local_frames = local_attention if local_attention > 0 else int(latent_frames_per_view)
-        heads = int(getattr(self.net, "num_heads"))
-        channels = int(getattr(self.net, "model_channels"))
+        heads = int(self.net.num_heads)
+        channels = int(self.net.model_channels)
         return GammaCacheSpec(
-            num_layers=int(getattr(self.net, "num_layers", getattr(self.net, "num_blocks"))),
+            num_layers=int(getattr(self.net, "num_layers", self.net.num_blocks)),
             num_heads=heads,
             head_dim=channels // heads,
             local_frames=local_frames,
@@ -164,20 +163,38 @@ class GammaWorldDenoiser:
             def one() -> dict[str, torch.Tensor]:
                 return {
                     "k_players": torch.zeros(
-                        batch_size, n_views, player_tokens, spec.num_heads, spec.head_dim,
-                        device=device, dtype=dtype,
+                        batch_size,
+                        n_views,
+                        player_tokens,
+                        spec.num_heads,
+                        spec.head_dim,
+                        device=device,
+                        dtype=dtype,
                     ),
                     "v_players": torch.zeros(
-                        batch_size, n_views, player_tokens, spec.num_heads, spec.head_dim,
-                        device=device, dtype=dtype,
+                        batch_size,
+                        n_views,
+                        player_tokens,
+                        spec.num_heads,
+                        spec.head_dim,
+                        device=device,
+                        dtype=dtype,
                     ),
                     "k_z": torch.zeros(
-                        batch_size, z_tokens, spec.num_heads, spec.head_dim,
-                        device=device, dtype=dtype,
+                        batch_size,
+                        z_tokens,
+                        spec.num_heads,
+                        spec.head_dim,
+                        device=device,
+                        dtype=dtype,
                     ),
                     "v_z": torch.zeros(
-                        batch_size, z_tokens, spec.num_heads, spec.head_dim,
-                        device=device, dtype=dtype,
+                        batch_size,
+                        z_tokens,
+                        spec.num_heads,
+                        spec.head_dim,
+                        device=device,
+                        dtype=dtype,
                     ),
                     "global_end_index": torch.zeros(1, device=device, dtype=torch.long),
                     "local_end_index": torch.zeros(1, device=device, dtype=torch.long),
@@ -189,16 +206,25 @@ class GammaWorldDenoiser:
             def one() -> dict[str, torch.Tensor]:
                 return {
                     "k": torch.zeros(
-                        batch_size, sequence_tokens, spec.num_heads, spec.head_dim,
-                        device=device, dtype=dtype,
+                        batch_size,
+                        sequence_tokens,
+                        spec.num_heads,
+                        spec.head_dim,
+                        device=device,
+                        dtype=dtype,
                     ),
                     "v": torch.zeros(
-                        batch_size, sequence_tokens, spec.num_heads, spec.head_dim,
-                        device=device, dtype=dtype,
+                        batch_size,
+                        sequence_tokens,
+                        spec.num_heads,
+                        spec.head_dim,
+                        device=device,
+                        dtype=dtype,
                     ),
                     "global_end_index": torch.zeros(1, device=device, dtype=torch.long),
                     "local_end_index": torch.zeros(1, device=device, dtype=torch.long),
                 }
+
         return [one() for _ in range(spec.num_layers)]
 
     @staticmethod
@@ -251,8 +277,13 @@ class GammaWorldDenoiser:
                 mask.to(device=model_device, dtype=model_dtype)
                 if isinstance(mask, torch.Tensor)
                 else torch.zeros(
-                    latents.shape[0], 1, latents.shape[2], latents.shape[3], latents.shape[4],
-                    device=model_device, dtype=model_dtype,
+                    latents.shape[0],
+                    1,
+                    latents.shape[2],
+                    latents.shape[3],
+                    latents.shape[4],
+                    device=model_device,
+                    dtype=model_dtype,
                 )
             ),
             "fps": fps.to(device=model_device),

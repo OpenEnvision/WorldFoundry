@@ -74,10 +74,10 @@ alone do not establish parity.
 Replace `<model-id>` with the declared catalog ID:
 
 ```bash
-worldfoundry-eval zoo model-show --model-id <model-id> --include-manifest --json
-worldfoundry-eval zoo model-download --model-id <model-id> --check-local --json
-worldfoundry-eval run <model-id> --model-status
-worldfoundry-eval run <model-id> --print-config --json
+wf zoo model-show --model-id <model-id> --include-manifest --json
+wf zoo model-download --model-id <model-id> --check-local --json
+wf run <model-id> --model-status
+wf run <model-id> --print-config --json
 ```
 
 Add focused tests for resolution, loading options, supported inputs, request

@@ -1,5 +1,3 @@
-"""Module for base_models -> perception_core -> general_perception -> open_clip -> audio -> __init__.py functionality."""
-
 import importlib.util
 
 from .config import CLIPAudioCfg
@@ -15,12 +13,9 @@ AUDIO_AVAILABLE = all(importlib.util.find_spec(dep) is not None for dep in _AUDI
 
 
 def require_audio():
-    """Require audio."""
     missing = [package for module, package in _AUDIO_DEPS.items() if importlib.util.find_spec(module) is None]
     if missing:
-        raise RuntimeError(
-            "CLAP audio support requires optional audio dependencies: " + ", ".join(missing)
-        )
+        raise RuntimeError("CLAP audio support requires optional audio dependencies: " + ", ".join(missing))
 
 
 __all__ = [

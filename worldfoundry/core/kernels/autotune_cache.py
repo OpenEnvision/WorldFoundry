@@ -25,6 +25,7 @@ Public surface:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.metadata
 import json
@@ -32,9 +33,10 @@ import os
 import sys
 import tempfile
 import time
+from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 _CACHE_SCHEMA = "worldfoundry-kernel-autotune-v1"
 _FALSE_VALUES = frozenset({"0", "false", "no", "off", "disable", "disabled", "none"})
@@ -124,6 +126,7 @@ def _device_profile(tensor: Any) -> dict[str, Any]:
     """Describe performance-relevant properties without using a device UUID."""
 
     import torch
+    import torch.version
 
     device = tensor.device
     if device.type != "cuda" or not torch.cuda.is_available():
@@ -131,9 +134,7 @@ def _device_profile(tensor: Any) -> dict[str, Any]:
     index = torch.cuda.current_device() if device.index is None else int(device.index)
     properties = torch.cuda.get_device_properties(index)
     try:
-        capability: tuple[int, int] | str = tuple(
-            int(item) for item in torch.cuda.get_device_capability(index)
-        )
+        capability: tuple[int, ...] | str = tuple(int(item) for item in torch.cuda.get_device_capability(index))
     except (AssertionError, RuntimeError, TypeError, ValueError):
         capability = "unknown"
     return {
@@ -141,9 +142,7 @@ def _device_profile(tensor: Any) -> dict[str, Any]:
         "name": str(getattr(properties, "name", "unknown")),
         "compute_capability": capability,
         "multiprocessors": int(getattr(properties, "multi_processor_count", 0)),
-        "shared_memory_per_multiprocessor": int(
-            getattr(properties, "shared_memory_per_multiprocessor", 0)
-        ),
+        "shared_memory_per_multiprocessor": int(getattr(properties, "shared_memory_per_multiprocessor", 0)),
         "total_memory": int(getattr(properties, "total_memory", 0)),
         "warp_size": int(getattr(properties, "warp_size", 0)),
     }
@@ -154,6 +153,7 @@ def _runtime_profile() -> dict[str, Any]:
     """Describe runtime components that can change generated kernel code."""
 
     import torch
+    import torch.version
 
     try:
         triton_version = importlib.metadata.version("triton")
@@ -215,7 +215,7 @@ def _cache_directory() -> Path | None:
         if configured:
             root = Path(configured).expanduser()
         else:
-            from worldfoundry.core.execution.compile_cache import configure_persistent_compile_cache
+            from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
 
             root = configure_persistent_compile_cache(namespace="kernel-autotune").root / "kernel-autotune"
         directory = root / _kernel_source_fingerprint()[:20]
@@ -332,10 +332,8 @@ def store_persistent_selection(
         return
     finally:
         if temporary is not None:
-            try:
+            with contextlib.suppress(OSError):
                 temporary.unlink(missing_ok=True)
-            except OSError:
-                pass
 
 
 def invalidate_persistent_selection(
@@ -356,10 +354,8 @@ def invalidate_persistent_selection(
         signature=signature,
         tensor=tensor,
     )
-    try:
+    with contextlib.suppress(OSError):
         (directory / f"{key}.json").unlink(missing_ok=True)
-    except OSError:
-        pass
 
 
 __all__ = [

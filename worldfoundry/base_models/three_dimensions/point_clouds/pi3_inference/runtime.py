@@ -1,7 +1,6 @@
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
-import numpy as np
 import torch
 from huggingface_hub import snapshot_download
 
@@ -21,7 +20,7 @@ class Pi3Representation:
     def __init__(
         self,
         model=None,
-        device: Optional[str] = None,
+        device: str | None = None,
     ):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model
@@ -40,7 +39,7 @@ class Pi3Representation:
     def from_pretrained(
         cls,
         pretrained_model_path: str,
-        device: Optional[str] = None,
+        device: str | None = None,
         **kwargs,
     ) -> "Pi3Representation":
         """
@@ -59,16 +58,16 @@ class Pi3Representation:
 
             ckpt_path = os.path.join(model_root, "model.safetensors")
             if not os.path.exists(ckpt_path):
-                raise FileNotFoundError(f"model.safetensors not found in {model_root}")
+                raise FileNotFoundError(f"model.safetensors not found in {model_root}")  # noqa: B904 - Keeps the implicit exception context.
 
             from safetensors.torch import load_file
+
             model = Pi3()
             model.load_state_dict(load_file(ckpt_path), strict=True)
 
         return cls(model=model, device=device)
 
-
-    def get_representation(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def get_representation(self, data: dict[str, Any]) -> dict[str, Any]:
         """Run Pi3 inference and return all outputs.
         Returns: Dict with numpy arrays for all model outputs.
         """
@@ -90,17 +89,17 @@ class Pi3Representation:
             with torch.amp.autocast("cuda", dtype=self.dtype, enabled=autocast_enabled):
                 res = self.model(imgs)
 
-        results["points"] = res["points"].cpu().numpy()              # (B, N, H, W, 3)
+        results["points"] = res["points"].cpu().numpy()  # (B, N, H, W, 3)
         results["local_points"] = res["local_points"].cpu().numpy()  # (B, N, H, W, 3)
         results["camera_poses"] = res["camera_poses"].cpu().numpy()  # (B, N, 4, 4)
-        results["conf"] = res["conf"].cpu().numpy()                  # (B, N, H, W, 1)
+        results["conf"] = res["conf"].cpu().numpy()  # (B, N, H, W, 1)
 
         # Quality masks: confidence + depth-edge filtering
         conf_tensor = res["conf"]
         masks = torch.sigmoid(conf_tensor[..., 0]) > conf_threshold
         non_edge = ~depth_edge(res["local_points"][..., 2], rtol=edge_rtol)
         masks = torch.logical_and(masks, non_edge)
-        results["masks"] = masks.cpu().numpy()                       # (B, N, H, W)
+        results["masks"] = masks.cpu().numpy()  # (B, N, H, W)
 
         results["depth_map"] = res["local_points"][..., 2].cpu().numpy()  # (B, N, H, W)
 

@@ -1,8 +1,9 @@
 import dataclasses
 import typing
-from typing import Callable, Optional, List, cast, Dict, Type
-import numpy as np
+from collections.abc import Callable
+from typing import cast
 
+import numpy as np
 from omegaconf import OmegaConf as om
 
 from .config import BaseConfig
@@ -10,7 +11,7 @@ from .io import PathOrStr, read_file
 from .modeling.model import ModelBase
 
 
-def get_model_types() -> Dict[str, Type['BaseModelConfig']]:
+def get_model_types() -> dict[str, type["BaseModelConfig"]]:
     """Return the action-policy model types supported by this inference runtime."""
     # Imported lazily to avoid the BaseModelConfig/MolmoBotConfig cycle.
     from .modeling.molmobot import MolmoBotConfig
@@ -43,9 +44,9 @@ class BaseModelConfig(BaseConfig):
         self,
         for_inference,
         is_training=False,
-        max_text_len: Optional[int] = None,
-        max_seq_len: Optional[int] = None,
-    ) -> Callable[[Dict, np.random.RandomState], Dict]:
+        max_text_len: int | None = None,
+        max_seq_len: int | None = None,
+    ) -> Callable[[dict, np.random.RandomState], dict]:
         """
         Build a preprocessor that processes individual examples
 
@@ -54,12 +55,7 @@ class BaseModelConfig(BaseConfig):
         """
         raise NotImplementedError()
 
-    def build_collator(
-        self,
-        shapes_to_pad_to,
-        pad_mode: str,
-        include_metadata=True
-    ) -> Callable[[List[Dict]], Dict]:
+    def build_collator(self, shapes_to_pad_to, pad_mode: str, include_metadata=True) -> Callable[[list[dict]], dict]:
         """
         Build a collator to build batches from preprocessed examples,
 
@@ -84,11 +80,11 @@ class BaseModelConfig(BaseConfig):
     def load(
         cls,
         path: PathOrStr,
-        overrides: Optional[List[str]] = None,
-        key: Optional[str] = None,
+        overrides: list[str] | None = None,
+        key: str | None = None,
         validate_paths: bool = True,
-        override_model_name: Optional[str] = None
-    ) -> 'BaseModelConfig':
+        override_model_name: str | None = None,
+    ) -> "BaseModelConfig":
         """Load only the model section needed by the in-tree inference runtime."""
         del validate_paths
         raw = om.create(read_file(path))

@@ -15,9 +15,7 @@ class SiglipVisionTower(nn.Module):
         self.local_files_only = True
         self.select_feature = getattr(args, "mm_vision_select_feature", "patch")
 
-        if not delay_load:
-            self.load_model()
-        elif getattr(args, "unfreeze_mm_vision_tower", False):
+        if not delay_load or getattr(args, "unfreeze_mm_vision_tower", False):
             self.load_model()
         else:
             self.cfg_only = AutoConfig.from_pretrained(
@@ -28,7 +26,7 @@ class SiglipVisionTower(nn.Module):
 
     def load_model(self, device_map=None):
         if self.is_loaded:
-            print("{} is already loaded, `load_model` called again, skipping.".format(self.vision_tower_name))
+            print(f"{self.vision_tower_name} is already loaded, `load_model` called again, skipping.")
             return
 
         self.image_processor = SiglipImageProcessor.from_pretrained(

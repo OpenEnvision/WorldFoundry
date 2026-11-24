@@ -1,0 +1,785 @@
+# Benchmark-owned datasets and metric assets.
+# Schema and templates: see the module docstring of worldfoundry/base_models/capabilities.py.
+
+worldscore_official_assets:
+  family: benchmark_data_asset
+  asset_env_policy: all
+  gpu_required: false
+  assets:
+    - id: worldscore_prompt_dataset
+      kind: dir
+      role: benchmark_dataset
+      env: [WORLDFOUNDRY_WORLDSCORE_DATASET_DIR]
+      local_path: ${WORLDFOUNDRY_WORLDSCORE_DATASET_DIR}
+      alternate_paths:
+        - ${WORLDFOUNDRY_WORLDSCORE_ASSET_DIR}/data/WorldScore-Dataset
+        - ${WORLDFOUNDRY_BENCH_ROOT}/data/WorldScore-Dataset
+      min_file_count: 4
+      note: WorldScore static/dynamic prompt metadata used by bounded and full official metric runs.
+    - id: worldscore_metric_checkpoint_dir
+      kind: dir
+      role: metric_checkpoint_bundle
+      env: [WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR]
+      local_path: ${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}
+      alternate_paths: ['${WORLDFOUNDRY_WORLDSCORE_ASSET_DIR}/metrics/checkpoints']
+      min_file_count: 8
+      note: WorldScore metric checkpoint bundle containing DROID, SAM, SAM2, RAFT, SEA-RAFT, and quality checkpoints.
+
+videoscore_bench_dataset_assets:
+  family: benchmark_data_asset
+  gpu_required: false
+  assets:
+    - id: videoscore_bench_dataset_dir
+      kind: dir
+      role: benchmark_dataset
+      env: [WORLDFOUNDRY_VIDEOSCORE_BENCH_DATASET_ROOT]
+      local_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/TIGER-Lab__VideoScore-Bench
+      alternate_paths:
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/TIGER-Lab__VideoScore-Bench
+      hf_repo_id: TIGER-Lab/VideoScore-Bench
+      hf_repo_type: dataset
+      min_file_count: 4
+      required_files: [README.md, video_feedback/test-00000-of-00001.parquet]
+      note: VideoScore-Bench metadata and frame archives for the bounded VideoScore official scorer path.
+    - id: videofeedback_dataset_dir
+      kind: dir
+      role: benchmark_dataset
+      env: [WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT]
+      local_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/TIGER-Lab__VideoFeedback
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/TIGER-Lab/VideoFeedback
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/TIGER-Lab/VideoFeedback
+      hf_repo_id: TIGER-Lab/VideoFeedback
+      hf_repo_type: dataset
+      min_file_count: 1
+      note: VideoFeedback split referenced by VideoScore reward-model benchmark manifests.
+
+camerabench_dataset_assets:
+  family: benchmark_data_asset
+  gpu_required: false
+  assets:
+    - id: camerabench_dataset_dir
+      kind: dir
+      role: benchmark_dataset
+      env: [WORLDFOUNDRY_CAMERABENCH_DATASET_ROOT]
+      local_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/syCen__CameraBench
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/syCen/CameraBench
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/syCen/CameraBench
+      hf_repo_id: syCen/CameraBench
+      hf_repo_type: dataset
+      hf_revision: 659f73c8899d81ffebd85876e3cdd137435b5e1b
+      min_file_count: 1
+      note: CameraBench official prompt/video metadata used by camera-motion classification metrics.
+
+t2v_compbench_dataset_assets:
+  family: benchmark_data_asset
+  gpu_required: false
+  assets:
+    - id: t2v_compbench_videos_dir
+      kind: dir
+      role: benchmark_dataset
+      env: [WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT]
+      local_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/Kaiyue__T2V-CompBench-Videos
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/Kaiyue/T2V-CompBench-Videos
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/Kaiyue/T2V-CompBench-Videos
+      hf_repo_id: Kaiyue/T2V-CompBench-Videos
+      hf_repo_type: dataset
+      hf_revision: 92f9ef4642f244567e8aa2789827ec301500a2ff
+      min_file_count: 1
+      note: T2V-CompBench reference videos and annotations for compositional video evaluation.
+
+fetv_dataset_assets:
+  family: benchmark_data_asset
+  gpu_required: false
+  assets:
+    - id: fetv_dataset_dir
+      kind: dir
+      role: benchmark_dataset
+      env: [WORLDFOUNDRY_FETV_DATASET_ROOT]
+      local_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/lyx97__FETV
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/lyx97/FETV
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/lyx97/FETV
+      hf_repo_id: lyx97/FETV
+      hf_repo_type: dataset
+      hf_revision: e9a6c057cb6ee9257f29e44d427117e8bd0d704f
+      min_file_count: 1
+      note: FETV fine-grained text-to-video evaluation prompts, annotations, and references.
+
+vbench2_dataset_assets:
+  family: benchmark_data_asset
+  asset_env_policy: all
+  gpu_required: false
+  assets:
+    - id: vbench2_sampled_videos_dir
+      kind: dir
+      role: reference_video_dataset
+      env: [WORLDFOUNDRY_VBENCH2_SAMPLED_VIDEOS_ROOT]
+      local_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/Vchitect__VBench-2.0_sampled_videos
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/Vchitect/VBench-2.0_sampled_videos
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/Vchitect/VBench-2.0_sampled_videos
+      hf_repo_id: Vchitect/VBench-2.0_sampled_videos
+      hf_repo_type: dataset
+      hf_revision: f9ee15efcfb86d96bd5379e8d85f8d69b901aad1
+      min_file_count: 1
+      note: VBench-2.0 sampled videos used by full-reference and human-alignment dimensions.
+    - id: vbench2_human_annotation_dir
+      kind: dir
+      role: benchmark_annotation_dataset
+      env: [WORLDFOUNDRY_VBENCH2_HUMAN_ANNOTATION_ROOT]
+      local_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/Vchitect__VBench-2.0_human_annotation
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/Vchitect/VBench-2.0_human_annotation
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/Vchitect/VBench-2.0_human_annotation
+      hf_repo_id: Vchitect/VBench-2.0_human_annotation
+      hf_repo_type: dataset
+      hf_revision: 3301a1a2d1cdb743b6dfdd641033c354335d1d48
+      min_file_count: 1
+      note: VBench-2.0 human preference annotations.
+    - id: vbench2_human_anomaly_dir
+      kind: dir
+      role: benchmark_annotation_dataset
+      env: [WORLDFOUNDRY_VBENCH2_HUMAN_ANOMALY_ROOT]
+      local_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/Vchitect__VBench-2.0_human_anomaly
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/Vchitect/VBench-2.0_human_anomaly
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/Vchitect/VBench-2.0_human_anomaly
+      hf_repo_id: Vchitect/VBench-2.0_human_anomaly
+      hf_repo_type: dataset
+      hf_revision: c84fad03a01bb93446588080f55004fe46d40125
+      min_file_count: 1
+      note: VBench-2.0 human anomaly annotations.
+
+video_bench_dataset_assets:
+  family: benchmark_data_asset
+  asset_env_policy: all
+  gpu_required: false
+  assets:
+    - id: video_bench_human_annotation_dir
+      kind: dir
+      role: benchmark_annotation_dataset
+      env: [WORLDFOUNDRY_VIDEOBENCH_ANNOTATION_ROOT]
+      local_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/Video-Bench__Video-Bench_human_annotation
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/Video-Bench/Video-Bench_human_annotation
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/Video-Bench/Video-Bench_human_annotation
+      hf_repo_id: Video-Bench/Video-Bench_human_annotation
+      hf_repo_type: dataset
+      hf_revision: a8371b69c4a91ef1162d8b6af12c1759f1f19983
+      min_file_count: 1
+      note: Video-Bench human annotation split used by official-result normalization.
+    - id: video_bench_official_videos_dir
+      kind: dir
+      role: reference_video_dataset
+      env: [WORLDFOUNDRY_VIDEOBENCH_OFFICIAL_VIDEOS_ROOT]
+      local_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/Video-Bench__Video-Bench_videos
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/Video-Bench/Video-Bench_videos
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/Video-Bench/Video-Bench_videos
+      hf_repo_id: Video-Bench/Video-Bench_videos
+      hf_repo_type: dataset
+      hf_revision: 9000d1e14055106c8b8383c59e48da3d31648225
+      min_file_count: 1
+      note: Gated Video-Bench official videos; hf download works only after access is granted.
+
+worldbench_dataset_assets:
+  family: benchmark_data_asset
+  gpu_required: false
+  assets:
+    - id: worldbench_dataset_dir
+      kind: dir
+      role: benchmark_dataset
+      env: [WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT]
+      local_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/worldbenchmark__WorldBench
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/worldbenchmark/WorldBench
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/worldbenchmark/WorldBench
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/worldbenchmark/IntuitivePhysics
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/worldbenchmark/IntuitivePhysics
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/worldbenchmark__IntuitivePhysics
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/worldbenchmark__IntuitivePhysics
+      hf_repo_id: worldbenchmark/WorldBench
+      hf_repo_type: dataset
+      hf_revision: c72084cfc4500035032450b812bfd6b2956ed3e9
+      min_file_count: 1
+      note: WorldBench public HF dataset used by world-understanding normalizer surfaces.
+
+wbench_dataset_assets:
+  family: benchmark_data_asset
+  gpu_required: false
+  assets:
+    - id: wbench_dataset_dir
+      kind: dir
+      role: benchmark_dataset
+      env: [WORLDFOUNDRY_WBENCH_DATASET_ROOT]
+      local_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/meituan-longcat__WBench
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/meituan-longcat/WBench
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/meituan-longcat/WBench
+      hf_repo_id: meituan-longcat/WBench
+      hf_repo_type: dataset
+      min_file_count: 1
+      note: WBench public HF dataset used by the in-tree official runtime.
+
+aigcbench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: aigcbench_dataset_dir
+      env: WORLDFOUNDRY_AIGCBENCH_DATASET_ROOT
+      repo_id: stevenfan/AIGCBench_v1.0
+      local_name: stevenfan__AIGCBench_v1.0
+      alternate_local_names: [stevenfan/AIGCBench_v1.0]
+      note: AIGCBench public dataset for prompt/reference assets and official-result normalization.
+
+chronomagic_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: chronomagic_bench_dataset_dir
+      env: WORLDFOUNDRY_CHRONOMAGIC_BENCH_DATASET_ROOT
+      repo_id: BestWishYsh/ChronoMagic-Bench
+      local_name: BestWishYsh__ChronoMagic-Bench
+      alternate_local_names: [BestWishYsh/ChronoMagic-Bench]
+      note: ChronoMagic-Bench reference dataset for bounded and full official temporal reasoning runs.
+    - id: chronomagic_pro_dataset_dir
+      env: WORLDFOUNDRY_CHRONOMAGIC_PRO_DATASET_ROOT
+      repo_id: BestWishYsh/ChronoMagic-Pro
+      local_name: BestWishYsh__ChronoMagic-Pro
+      alternate_local_names: [BestWishYsh/ChronoMagic-Pro]
+      note: ChronoMagic-Pro reference dataset for extended temporal reasoning evaluation.
+    - id: chronomagic_proh_dataset_dir
+      env: WORLDFOUNDRY_CHRONOMAGIC_PROH_DATASET_ROOT
+      repo_id: BestWishYsh/ChronoMagic-ProH
+      local_name: BestWishYsh__ChronoMagic-ProH
+      alternate_local_names: [BestWishYsh/ChronoMagic-ProH]
+      note: ChronoMagic-ProH hard split assets for full official evaluation.
+
+ewmbench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: ewmbench_dataset_dir
+      env: WORLDFOUNDRY_EWMBENCH_DATASET_ROOT
+      repo_id: agibot-world/EWMBench
+      local_name: agibot-world__EWMBench
+      alternate_local_names: [agibot-world/EWMBench]
+      note: EWMBench official HF dataset for embodied world-model evaluation inputs.
+
+evalcrafter_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: evalcrafter_dataset_dir
+      env: WORLDFOUNDRY_EVALCRAFTER_DATASET_ROOT
+      repo_id: RaphaelLiu/EvalCrafter_T2V_Dataset
+      local_name: RaphaelLiu__EvalCrafter_T2V_Dataset
+      alternate_local_names: [RaphaelLiu/EvalCrafter_T2V_Dataset, EvalCrafter_T2V_Dataset]
+      note: EvalCrafter public T2V dataset used by official-result normalization.
+
+genai_bench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: genai_bench_dataset_dir
+      env: WORLDFOUNDRY_GENAI_BENCH_DATASET_ROOT
+      repo_id: TIGER-Lab/GenAI-Bench
+      local_name: TIGER-Lab__GenAI-Bench
+      alternate_local_names: [TIGER-Lab/GenAI-Bench]
+      note: GenAI-Bench public annotations and prompts for official result normalization.
+
+t2v_metrics_source_assets:
+  family: benchmark_data_asset
+  canonical_path: worldfoundry/base_models/perception_core/video_text/vqa_score
+  gpu_required: false
+  assets:
+    - id: t2v_metrics_in_tree_source
+      kind: dir
+      role: benchmark_source
+      env: []
+      local_path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/base_models/perception_core/video_text/vqa_score
+      min_file_count: 8
+      required_files: [constants.py, models/model.py, models/vqascore_models/__init__.py]
+      required_paths: [models]
+      note: In-tree VQAScore model backend shared by evaluation scorers.
+
+jedi_source_assets:
+  family: benchmark_data_asset
+  canonical_path: worldfoundry/evals/tasks/metrics/distribution/jedi
+  gpu_required: false
+  assets:
+    - id: jedi_in_tree_source
+      kind: dir
+      role: benchmark_source
+      env: [WORLDFOUNDRY_JEDI_ROOT]
+      local_path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evals/tasks/metrics/distribution/jedi
+      min_file_count: 4
+      required_files: [JEDi.py, V_JEPA.py, mmd_polynomial.py, utils.py]
+      note: In-tree VideoJEDi metric package vendored from oooolga/JEDi. WORLDFOUNDRY_JEDI_ROOT is only an optional
+        upstream parity override.
+    - id: jedi_bundled_config
+      kind: file
+      role: benchmark_config
+      env: [WORLDFOUNDRY_JEDI_CONFIG_PATH]
+      local_path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/data/benchmarks/assets/jedi/vith16_ssv2_16x2x3.yaml
+      required_files: [vith16_ssv2_16x2x3.yaml]
+      note: Bundled V-JEPA config for official JEDi feature extraction.
+
+iworld_bench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: iworld_bench_dataset_dir
+      env: WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT
+      repo_id: EmbodiedCity/iWorld-Bench-Dataset
+      local_name: EmbodiedCity__iWorld-Bench-Dataset
+      revision: 530c48cd3d8e9bb20ed685a96521c3a9b68cf6d2
+      alternate_local_names: [EmbodiedCity/iWorld-Bench-Dataset]
+      min_file_count: 100
+      note: iWorld-Bench released HF dataset with dataset/all_pack metadata and first-frame assets.
+
+libero_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: libero_lerobot_dataset_dir
+      env: WORLDFOUNDRY_LIBERO_LEROBOT_DATASET_ROOT
+      repo_id: lerobot/libero
+      local_name: lerobot__libero
+      alternate_local_names: [lerobot/libero]
+      note: LeRobot LIBERO conversion used for dataset-level preflight and offline normalization.
+    - id: libero_official_dataset_dir
+      env: WORLDFOUNDRY_LIBERO_DATASETS_ROOT
+      repo_id: yifengzhu-hf/LIBERO-datasets
+      local_name: yifengzhu-hf__LIBERO-datasets
+      alternate_local_names: [yifengzhu-hf/LIBERO-datasets]
+      note: Official LIBERO dataset archive bundle for simulator/evaluation setup.
+
+likephys_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: likephys_dataset_dir
+      env: WORLDFOUNDRY_LIKEPHYS_DATASET_ROOT
+      repo_id: JianhaoDYDY/LikePhys-Benchmark
+      local_name: JianhaoDYDY__LikePhys-Benchmark
+      alternate_local_names:
+        - JianhaoDYDY/LikePhys-Benchmark
+        - datasets--JianhaoDYDY--LikePhys-Benchmark
+        - LikePhys-Benchmark
+      note: LikePhys paired valid/impossible physics clips probed by the likelihood-preference evaluator.
+
+phyground_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: phyground_dataset_dir
+      env: WORLDFOUNDRY_PHYGROUND_DATASET_ROOT
+      repo_id: NU-World-Model-Embodied-AI/phyground
+      local_name: NU-World-Model-Embodied-AI__phyground
+      alternate_local_names: [NU-World-Model-Embodied-AI/phyground]
+      note: PhyGround official HF dataset for grounded physical-reasoning evaluation.
+
+rbench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: rbench_dataset_dir
+      env: WORLDFOUNDRY_RBENCH_DATASET_ROOT
+      repo_id: DAGroup-PKU/RBench
+      local_name: DAGroup-PKU__RBench
+      alternate_local_names: [DAGroup-PKU/RBench, datasets--DAGroup-PKU--RBench, RBench]
+      note: RBench prompts and first-frame conditioning images for robotics image-to-video evaluation.
+
+physvidbench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: physvidbench_dataset_dir
+      env: WORLDFOUNDRY_PHYSVIDBENCH_DATASET_ROOT
+      repo_id: Anonymousny/PhysVidBench
+      local_name: Anonymousny__PhysVidBench
+      alternate_local_names:
+        - Anonymousny/PhysVidBench
+        - datasets--Anonymousny--PhysVidBench
+        - PhysVidBench
+      note: PhysVidBench public prompt/question data for physical video consistency metrics.
+
+robotwin_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: robotwin2_dataset_dir
+      env: WORLDFOUNDRY_ROBOTWIN2_DATASET_ROOT
+      repo_id: TianxingChen/RoboTwin2.0
+      local_name: TianxingChen__RoboTwin2.0
+      alternate_local_names: [TianxingChen/RoboTwin2.0]
+      note: RoboTwin 2.0 official dataset bundle for simulator asset preparation.
+    - id: robotwin_lerobot_dataset_dir
+      env: WORLDFOUNDRY_ROBOTWIN_UNIFIED_DATASET_ROOT
+      repo_id: lerobot/robotwin_unified
+      local_name: lerobot__robotwin_unified
+      alternate_local_names: [lerobot/robotwin_unified]
+      note: LeRobot unified RoboTwin dataset for offline checks and normalized result import.
+
+videophy2_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: videophy2_test_dataset_dir
+      env: WORLDFOUNDRY_VIDEOPHY2_TEST_DATASET_ROOT
+      repo_id: videophysics/videophy2_test
+      local_name: videophysics__videophy2_test
+      alternate_local_names: [videophysics/videophy2_test]
+      note: VideoPhy2 public test split for physics-alignment evaluation.
+    - id: videophy2_train_dataset_dir
+      env: WORLDFOUNDRY_VIDEOPHY2_TRAIN_DATASET_ROOT
+      repo_id: videophysics/videophy2_train
+      local_name: videophysics__videophy2_train
+      alternate_local_names: [videophysics/videophy2_train]
+      note: VideoPhy2 public train/reference split used by official tooling.
+
+videoverse_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: videoverse_dataset_dir
+      env: WORLDFOUNDRY_VIDEOVERSE_DATASET_ROOT
+      repo_id: NNaptmn/VideoVerse
+      local_name: NNaptmn__VideoVerse
+      alternate_local_names: [NNaptmn/VideoVerse]
+      note: VideoVerse public HF dataset for video-world evaluation normalization.
+
+worldmodelbench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: worldmodelbench_dataset_dir
+      env: WORLDFOUNDRY_WORLDMODELBENCH_DATASET_ROOT
+      repo_id: Efficient-Large-Model/worldmodelbench
+      local_name: Efficient-Large-Model__worldmodelbench
+      alternate_local_names:
+        - Efficient-Large-Model/worldmodelbench
+        - datasets--Efficient-Large-Model--worldmodelbench
+        - worldmodelbench
+      note: WorldModelBench public prompt/reference dataset for world-model evaluation.
+
+worldscore_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: worldscore_hf_dataset_dir
+      env: WORLDFOUNDRY_WORLDSCORE_HF_DATASET_ROOT
+      repo_id: Howieeeee/WorldScore
+      local_name: Howieeeee__WorldScore
+      revision: 42c4e267e1cc0529af1b0284ce018e04d43906e3
+      alternate_local_names: [Howieeeee/WorldScore]
+      note: WorldScore public HF dataset archive used to stage the official prompt suite.
+
+bridgedata_v2_dataset_assets:
+  family: benchmark_data_asset
+  gpu_required: false
+  assets:
+    - id: bridgedata_v2_dataset_assets_dir
+      kind: dir
+      role: external_benchmark_dataset
+      env: [WORLDFOUNDRY_BRIDGEDATA_V2_DATASET_ROOT]
+      local_path: ${WORLDFOUNDRY_DATA_DIR}/datasets/bridgedata-v2
+      manual_action: Download the official BridgeData V2 raw or TFDS files from https://rail.eecs.berkeley.edu/datasets/bridge_release/data/
+        into $WORLDFOUNDRY_BRIDGEDATA_V2_DATASET_ROOT, then rerun readiness. The release is an HTTP directory, so
+        choose the demos/scripted zips or tfds subset needed for your evaluation instead of blindly mirroring the
+        whole dataset.
+      min_file_count: 1
+      note: BridgeData V2 dataset root; no single public HF mirror is declared in the benchmark manifest.
+
+calvin_dataset_assets:
+  family: benchmark_data_asset
+  gpu_required: false
+  assets:
+    - id: calvin_dataset_assets_dir
+      kind: dir
+      role: external_benchmark_dataset
+      env: [WORLDFOUNDRY_CALVIN_DATASET_ROOT]
+      local_path: ${WORLDFOUNDRY_DATA_DIR}/datasets/calvin
+      alternate_paths: ['${WORLDFOUNDRY_WORKSPACE_ROOT}/data/worldfoundry/datasets/calvin']
+      manual_action: Stage the official CALVIN dataset split directly under $WORLDFOUNDRY_CALVIN_DATASET_ROOT or
+        $WORLDFOUNDRY_DATA_DIR/datasets/calvin. WorldFoundry does not run the upstream calvin repository download_data.sh
+        script during readiness.
+      min_file_count: 1
+      required_any_paths: [task_D_D, task_ABC_D, task_ABCD_D]
+      note: CALVIN dataset split root; users must stage the official dataset before full rollouts.
+
+vbench_source_assets:
+  family: benchmark_data_asset
+  canonical_path: worldfoundry/evals/tasks/execution/runners/vbench/runtime
+  canonical_owner: worldfoundry.evals.tasks.execution.runners.vbench
+  gpu_required: false
+  assets:
+    - id: vbench_in_tree_official_source
+      kind: dir
+      role: benchmark_source
+      env: []
+      local_path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evals/tasks/execution/runners/vbench/runtime
+      min_file_count: 1
+      required_files: [vbench/__init__.py, entrypoints/__init__.py]
+      note: In-tree VBench official evaluator source.
+
+vbench_plus_plus_source_assets:
+  family: benchmark_data_asset
+  canonical_path: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
+  canonical_owner: worldfoundry.evals.tasks.execution.runners.vbench_plus_plus
+  gpu_required: false
+  assets:
+    - id: vbench_plus_plus_in_tree_runtime
+      kind: dir
+      role: benchmark_source
+      env: []
+      local_path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
+      min_file_count: 1
+      required_files:
+        - entrypoints/__init__.py
+        - vbench2_beta_i2v/__init__.py
+        - vbench2_beta_long/__init__.py
+        - vbench2_beta_trustworthiness/__init__.py
+      note: In-tree VBench++ I2V, long-video, and trustworthiness runtime source.
+
+vbench2_source_assets:
+  family: benchmark_data_asset
+  canonical_path: worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime
+  canonical_owner: worldfoundry.evals.tasks.execution.runners.vbench_2_0
+  gpu_required: false
+  assets:
+    - id: vbench2_in_tree_runtime
+      kind: dir
+      role: benchmark_source
+      env: []
+      local_path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime
+      min_file_count: 1
+      required_files: [vbench2/__init__.py, entrypoints/__init__.py]
+      note: In-tree VBench-2.0 official evaluator source.
+
+world_in_world_source_assets:
+  family: benchmark_data_asset
+  gpu_required: false
+  assets:
+    - id: world_in_world_source_assets_dir
+      kind: dir
+      role: external_benchmark_asset
+      env: [WORLDFOUNDRY_WORLD_IN_WORLD_ASSETS_ROOT]
+      local_path: ${WORLDFOUNDRY_DATA_DIR}/datasets/world-in-world
+      alternate_paths: [worldfoundry/data/benchmarks/assets/world-in-world]
+      min_file_count: 1
+      required: false
+      note: Optional World-in-World asset override; bundled prompt assets are used by default.
+
+harnesseval_w_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: harnesseval_w_dataset_dir
+      repo_id: MirroS-Lab/HarnessEval-W
+      local_name: MirroS-Lab__HarnessEval-W
+      note: HarnessEval-W official cases; pass with --assets-root.
+
+larybench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: larybench_dataset_dir
+      repo_id: meituan-longcat/LARYBench
+      local_name: meituan-longcat__LARYBench
+      note: LARYBench videos, robot image pairs, and trajectories; pass with --dataset-root.
+
+memobench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: memobench_dataset_dir
+      repo_id: tonyc54/MemoBench
+      local_name: tonyc54__MemoBench
+      revision: fcdb9d2138c4152c76a84b9a57b4106b47f89e7b
+      note: MemoBench prompt suite.
+
+mind_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: mind_dataset_dir
+      env: WORLDFOUNDRY_MIND_GT_ROOT
+      repo_id: CSU-JPG/MIND
+      local_name: CSU-JPG__MIND
+      note: MIND ground-truth clips.
+
+pawbench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: pawbench_dataset_dir
+      env: WORLDFOUNDRY_PAWBENCH_DATA_ROOT
+      repo_id: Andrew613/PAWBench
+      local_name: Andrew613__PAWBench
+      note: PAWBench scenes and source images.
+
+physical_ai_bench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: physical_ai_bench_generation_dataset_dir
+      repo_id: shi-labs/physical-ai-bench-generation
+      local_name: shi-labs__physical-ai-bench-generation
+      note: PAI-Bench-G prompts, condition images, and VQA; pass the track root with --dataset-root.
+    - id: physical_ai_bench_conditional_generation_dataset_dir
+      repo_id: shi-labs/physical-ai-bench-conditional-generation
+      local_name: shi-labs__physical-ai-bench-conditional-generation
+      note: PAI-Bench-C metadata and control signals; pass the track root with --dataset-root.
+
+physics_iq_verified_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: physics_iq_verified_dataset_dir
+      env: WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT
+      repo_id: Anates-Labs-Research/Physics-IQ-Verified
+      local_name: Anates-Labs-Research__Physics-IQ-Verified
+      note: Physics-IQ-Verified media.
+
+sana_wm_bench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: sana_wm_bench_dataset_dir
+      env: WORLDFOUNDRY_SANA_WM_BENCH_DATASET_ROOT
+      repo_id: Efficient-Large-Model/SANA-WM-Bench
+      local_name: Efficient-Large-Model__SANA-WM-Bench
+      note: SANA-WM-Bench images, trajectories, and run manifests (simple_60s, hard_60s).
+
+stevo_bench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: stevo_bench_task_dir
+      env: WORLDFOUNDRY_STEVO_BENCH_TASK_ROOT
+      repo_id: JhanLiufu/StEvo-Bench
+      local_name: JhanLiufu__StEvo-Bench
+      note: StEvo-Bench task YAMLs.
+
+worldmembench_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: worldmembench_dataset_dir
+      repo_id: rescuerz/WorldMemBench
+      local_name: rescuerz__WorldMemBench
+      note: WorldMemBench evaluation data.
+
+worldolympiad_dataset_assets:
+  template: hf_dataset
+  datasets:
+    - id: worldolympiad_dataset_dir
+      repo_id: ziplab/WorldOlympiad
+      local_name: ziplab__WorldOlympiad
+      note: WorldOlympiad cases (robotics, gaming, general).
+
+apple_pi_gt_dataset_assets:
+  family: benchmark_data_asset
+  gpu_required: false
+  assets:
+    - id: apple_pi_gt_dir
+      kind: dir
+      role: benchmark_dataset
+      env: [WORLDFOUNDRY_APPLE_PI_GT_DIR]
+      local_path: ${WORLDFOUNDRY_DATA_DIR}/datasets/apple-pi-gt
+      min_file_count: 1
+      required: false
+      manual_action: The Apple-PI GT release (yaorunmao/Apple-PI-GT) is documented upstream but not public yet;
+        stage it under WORLDFOUNDRY_APPLE_PI_GT_DIR once released.
+      note: Apple-PI ground truth; scoring official result dumps does not need it.
+
+worldreasonbench_dataset_assets:
+  family: benchmark_data_asset
+  gpu_required: false
+  assets:
+    - id: worldreasonbench_dataset_dir
+      kind: dir
+      role: benchmark_dataset
+      env: [WORLDFOUNDRY_WORLDREASONBENCH_ROOT]
+      local_path: ${WORLDFOUNDRY_DATA_DIR}/datasets/worldreasonbench
+      min_file_count: 1
+      manual_action: WorldReasonBench data is restricted (no redistribution or commercial use without approval);
+        obtain it from the authors and set WORLDFOUNDRY_WORLDREASONBENCH_ROOT.
+      note: WorldReasonBench cases and reward pairs.
+
+ai2thor_official_runtime_assets:
+  template: external_official_runtime
+  upstream: https://github.com/allenai/ai2thor
+  root_env: WORLDFOUNDRY_AI2THOR_ROOT
+  checkout: ${WORLDFOUNDRY_CACHE_DIR}/repos/allenai--ai2thor
+  requires:
+    - AI2-THOR Python package
+    - AI2-THOR Unity simulator build/cache
+    - display backend or CloudRendering headless runtime
+
+behavior1k_official_runtime_assets:
+  template: external_official_runtime
+  upstream: https://github.com/StanfordVL/OmniGibson
+  root_env: WORLDFOUNDRY_BEHAVIOR1K_ROOT
+  checkout: ${WORLDFOUNDRY_CACHE_DIR}/repos/StanfordVL--OmniGibson
+  dataset: ${WORLDFOUNDRY_DATA_DIR}/datasets/behavior1k
+  requires: [OmniGibson runtime, BEHAVIOR-1K datasets]
+
+kinetix_official_runtime_assets:
+  template: external_official_runtime
+  upstream: https://github.com/FLAIROx/Kinetix
+  root_env: WORLDFOUNDRY_KINETIX_ROOT
+  checkout: ${WORLDFOUNDRY_CACHE_DIR}/repos/FLAIROx--Kinetix
+  dataset: ${WORLDFOUNDRY_DATA_DIR}/datasets/kinetix
+  requires: [Kinetix checkout, JAX simulator runtime]
+
+libero_mem_official_runtime_assets:
+  template: external_official_runtime
+  upstream: https://github.com/Lifelong-Robot-Learning/LIBERO
+  root_env: WORLDFOUNDRY_LIBERO_MEM_ROOT
+  checkout: ${WORLDFOUNDRY_CACHE_DIR}/repos/Lifelong-Robot-Learning--LIBERO
+  dataset: ${WORLDFOUNDRY_DATA_DIR}/datasets/libero-mem
+  requires: [LIBERO runtime, LIBERO-Mem task assets]
+
+libero_plus_official_runtime_assets:
+  template: external_official_runtime
+  upstream: https://github.com/Lifelong-Robot-Learning/LIBERO
+  root_env: WORLDFOUNDRY_LIBERO_PLUS_ROOT
+  checkout: ${WORLDFOUNDRY_CACHE_DIR}/repos/Lifelong-Robot-Learning--LIBERO
+  dataset: ${WORLDFOUNDRY_DATA_DIR}/datasets/libero-plus
+  requires: [LIBERO-Plus runtime, task assets]
+
+libero_pro_official_runtime_assets:
+  template: external_official_runtime
+  upstream: https://github.com/Lifelong-Robot-Learning/LIBERO
+  root_env: WORLDFOUNDRY_LIBERO_PRO_ROOT
+  checkout: ${WORLDFOUNDRY_CACHE_DIR}/repos/Lifelong-Robot-Learning--LIBERO
+  dataset: ${WORLDFOUNDRY_DATA_DIR}/datasets/libero-pro
+  requires: [LIBERO-Pro runtime, task assets]
+
+maniskill2_official_runtime_assets:
+  template: external_official_runtime
+  upstream: https://github.com/haosulab/ManiSkill
+  root_env: WORLDFOUNDRY_MANISKILL2_ROOT
+  checkout: ${WORLDFOUNDRY_CACHE_DIR}/repos/haosulab--ManiSkill
+  dataset: ${WORLDFOUNDRY_DATA_DIR}/datasets/maniskill2
+  requires: [ManiSkill2 runtime, SAPIEN assets]
+
+mikasa_official_runtime_assets:
+  template: external_official_runtime
+  upstream: https://github.com/CognitiveAISystems/MIKASA-Robo
+  root_env: WORLDFOUNDRY_MIKASA_ROOT
+  checkout: ${WORLDFOUNDRY_CACHE_DIR}/repos/CognitiveAISystems--MIKASA-Robo
+  dataset: ${WORLDFOUNDRY_DATA_DIR}/datasets/mikasa
+  requires: [MiKASA-Robo runtime, task assets]
+
+molmospaces_official_runtime_assets:
+  template: external_official_runtime
+  upstream: https://github.com/allenai/MolmoBot
+  root_env: WORLDFOUNDRY_MOLMOSPACES_ROOT
+  checkout: ${WORLDFOUNDRY_CACHE_DIR}/repos/allenai--MolmoBot
+  dataset: ${WORLDFOUNDRY_DATA_DIR}/datasets/molmospaces
+  requires: [MolmoSpaces runtime, benchmark subset assets]
+
+robocerebra_official_runtime_assets:
+  template: external_official_runtime
+  upstream: https://github.com/buaa-colalab/RoboCerebra
+  root_env: WORLDFOUNDRY_ROBOCEREBRA_ROOT
+  checkout: ${WORLDFOUNDRY_CACHE_DIR}/repos/buaa-colalab--RoboCerebra
+  dataset: ${WORLDFOUNDRY_DATA_DIR}/datasets/robocerebra
+  requires: [RoboCerebra runtime, task assets]
+
+robomme_official_runtime_assets:
+  template: external_official_runtime
+  upstream: https://github.com/RoboMME/robomme_policy_learning
+  root_env: WORLDFOUNDRY_ROBOMME_ROOT
+  checkout: ${WORLDFOUNDRY_CACHE_DIR}/repos/RoboMME--robomme_policy_learning
+  dataset: ${WORLDFOUNDRY_DATA_DIR}/datasets/robomme
+  requires: [RoboMME runtime, memory task assets]
+
+vlabench_official_runtime_assets:
+  template: external_official_runtime
+  upstream: https://github.com/OpenMOSS/VLABench
+  root_env: WORLDFOUNDRY_VLABENCH_ROOT
+  checkout: ${WORLDFOUNDRY_CACHE_DIR}/repos/OpenMOSS--VLABench
+  dataset: ${WORLDFOUNDRY_DATA_DIR}/datasets/vlabench
+  requires: [VLABench runtime, SAPIEN assets]

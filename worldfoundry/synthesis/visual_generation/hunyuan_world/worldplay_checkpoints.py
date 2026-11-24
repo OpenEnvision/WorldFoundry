@@ -66,9 +66,8 @@ def _resolve_local_worldplay_action_ckpt(repo_id: str) -> str:
 
 
 def _stage_worldplay_action_ckpt_if_requested(path: str) -> str:
-    cache_root = (
-        os.environ.get("WORLDFOUNDRY_HY_WORLDPLAY_LOCAL_CKPT_CACHE_DIR")
-        or os.environ.get("WORLDFOUNDRY_LOCAL_CKPT_CACHE_DIR")
+    cache_root = os.environ.get("WORLDFOUNDRY_HY_WORLDPLAY_LOCAL_CKPT_CACHE_DIR") or os.environ.get(
+        "WORLDFOUNDRY_LOCAL_CKPT_CACHE_DIR"
     )
     if not cache_root:
         return path
@@ -140,9 +139,8 @@ def _copy_tree_if_needed(source_root: Path, target_root: Path) -> None:
 
 
 def _stage_worldplay_video_model_if_requested(path: str, transformer_version: str) -> str:
-    cache_root = (
-        os.environ.get("WORLDFOUNDRY_HY_WORLDPLAY_LOCAL_CKPT_CACHE_DIR")
-        or os.environ.get("WORLDFOUNDRY_LOCAL_CKPT_CACHE_DIR")
+    cache_root = os.environ.get("WORLDFOUNDRY_HY_WORLDPLAY_LOCAL_CKPT_CACHE_DIR") or os.environ.get(
+        "WORLDFOUNDRY_LOCAL_CKPT_CACHE_DIR"
     )
     if not cache_root:
         return path
@@ -201,13 +199,9 @@ def resolve_worldplay_action_ckpt(action_ckpt: str | os.PathLike[str] | None) ->
         return _stage_worldplay_action_ckpt_if_requested(local)
 
     if _looks_like_hf_repo_id(value):
-        return _stage_worldplay_action_ckpt_if_requested(
-            _resolve_local_worldplay_action_ckpt(value)
-        )
+        return _stage_worldplay_action_ckpt_if_requested(_resolve_local_worldplay_action_ckpt(value))
 
-    raise FileNotFoundError(
-        f"HY-WorldPlay action checkpoint is not available locally: {value}"
-    )
+    raise FileNotFoundError(f"HY-WorldPlay action checkpoint is not available locally: {value}")
 
 
 def resolve_worldplay_video_model_path(
@@ -222,9 +216,5 @@ def resolve_worldplay_video_model_path(
         return _stage_worldplay_video_model_if_requested(value, transformer_version)
     if _looks_like_hf_repo_id(value):
         local_root = resolve_local_hf_model_path(value)
-        return _stage_worldplay_video_model_if_requested(
-            str(local_root), transformer_version
-        )
-    raise FileNotFoundError(
-        f"HY-WorldPlay video model is not available locally: {value}"
-    )
+        return _stage_worldplay_video_model_if_requested(str(local_root), transformer_version)
+    raise FileNotFoundError(f"HY-WorldPlay video model is not available locally: {value}")

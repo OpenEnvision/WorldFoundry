@@ -1,58 +1,58 @@
 ---
 title: "DB-CogACT / Dexbotic"
-description: "DB-CogACT / Dexbotic（Dexmal）：视觉-语言-动作（VLA）、VLA 动作预测；Runner 一致性待确认。"
+description: "DB-CogACT / Dexbotic，Dexmal（原力灵机）：视觉-语言-动作（VLA）、VLA 动作预测等 3 项任务；Runner 一致性待确认。"
 modelId: "db-cogact"
 pageSource: authored
 ---
 
-DB-CogACT 是在 Dexmal 的 Dexbotic 框架内重建的 CogACT 配方，发布的 checkpoint 阵容相当完整：单臂与双臂基础模型，外加 LIBERO、CALVIN、SimplerEnv 任务 checkpoint，全部 Apache-2.0。 WorldFoundry 从内置推理子集在进程内构建官方 Dexbotic 策略，无需外部 checkout 即输出 LIBERO 动作轨迹。
+DB-CogACT 是在 Dexmal 的 Dexbotic 框架内重建的 CogACT 配方，发布的 checkpoint 包括单臂与双臂基础模型，以及 LIBERO、CALVIN、SimplerEnv 任务 checkpoint，全部采用 Apache-2.0 许可。WorldFoundry 在进程内构建官方 Dexbotic 策略，输出 LIBERO 动作轨迹。
 
 <ModelPaperFigures modelId="db-cogact" locale="zh" />
 
-记录论文为[arXiv 2510.23511](https://arxiv.org/abs/2510.23511)。
+论文：[arXiv 2510.23511](https://arxiv.org/abs/2510.23511)。
 
 代码：[Dexmal/dexbotic](https://github.com/Dexmal/dexbotic)。
 
-这不是微软 [CogACT](/zh/docs/guides/supported-models/cogact)。论文：[arXiv 2510.23511](https://arxiv.org/abs/2510.23511)。代码：[Dexmal/dexbotic](https://github.com/Dexmal/dexbotic)。权重：`Dexmal/Dexbotic-CogACT-SArm`、`Dexbotic-CogACT-HArm`、`libero-db-cogact`、`calvin-db-cogact`、`simpler-db-cogact`。
+这不是微软 [CogACT](/zh/docs/guides/supported-models/cogact)。权重：`Dexmal/Dexbotic-CogACT-SArm`、`Dexbotic-CogACT-HArm`、`libero-db-cogact`、`calvin-db-cogact`、`simpler-db-cogact`。
 
 <ModelCommandBuilder modelId="db-cogact" locale="zh" />
 
 ## 用来做什么
 
-`db-cogact-libero` 是记录的指令到动作线。需要 WorldFoundry VLA rollout 而不是视频生成时从这里起步。
+用 `db-cogact-libero` 根据观测和语言指令预测机器人动作。
 
-仓库记录 Dexbotic v1 推理契约：请求携带 observation.prompt 与观测图像，策略沿用 CogACT 的 VLM+DiT 动作设计并在 Dexbotic 中重实现。内置推理子集位于 worldfoundry/synthesis/action_generation/db_cogact/db_cogact_runtime。
+WorldFoundry 遵循 Dexbotic v1 推理契约：请求携带 observation.prompt 与观测图像，策略沿用 CogACT 的 VLM+DiT 动作设计并在 Dexbotic 中重实现。
 
-catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测、VLA 策略执行。别名包括 `dexbotic`、`db_cogact`、`dexbotic-cogact`。
+任务：视觉-语言-动作（VLA）、VLA 动作预测、VLA 策略执行。别名：`dexbotic`、`db_cogact`、`dexbotic-cogact`。
 
-记录的评测入口包括[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（有专门的 libero-db-cogact checkpoint）、[CALVIN](/zh/docs/evaluation/benchmark-hub/calvin)（有专门的 calvin-db-cogact checkpoint）、[SimplerEnv](/zh/docs/evaluation/benchmark-hub/simpler-env)（有专门的 simpler-db-cogact checkpoint）。
+推荐评测：[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（有专门的 libero-db-cogact checkpoint）、[CALVIN](/zh/docs/evaluation/benchmark-hub/calvin)（有专门的 calvin-db-cogact checkpoint）、[SimplerEnv](/zh/docs/evaluation/benchmark-hub/simpler-env)（有专门的 simpler-db-cogact checkpoint）。
 
 ## 运行时契约
 
-可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`db-cogact_action_trace.json`。
+输入 `prompt`、`input-path`（不传时使用内置示例）；参数 `official-policy-observation`；产物 `action_trace`、`db-cogact_action_trace.json`。
 
 CLI task profile：`default`。绑定的 pipeline 类是 `DBCogACTPipeline`。
 
-Native runtime 复用 checkpoint 对应的模型与 tokenizer 资源。每个请求独立构造 policy wrapper 并解析动作归一化，优先使用 `norm_stats`，其次 `norm_stats_path` / `normalization_stats_path`、checkpoint 的 `norm_stats.json`，最后使用 `[-1, 1]` 默认值。同一路径的统计文件更新会在下一请求生效，无需重载模型权重。请求改变 `num_steps` 时会重建 DDIM 调度器，步数相同则复用。
+原生运行时复用 checkpoint 对应的模型与 tokenizer 资源。每个请求独立构造 policy wrapper 并解析动作归一化，优先使用 `norm_stats`，其次 `norm_stats_path` / `normalization_stats_path`、checkpoint 的 `norm_stats.json`，最后使用 `[-1, 1]` 默认值。同一路径的统计文件更新会在下一请求生效，无需重载模型权重。请求改变 `num_steps` 时会重建 DDIM 调度器，步数相同则复用。
 
 系列状态：**Runner 一致性待确认**。
 
-按基准选择 checkpoint：libero-db-cogact、calvin-db-cogact 或 simpler-db-cogact；SArm/HArm 基础模型用于微调。 集成状态为 Runner 一致性待确认。
+按基准选择 checkpoint：libero-db-cogact、calvin-db-cogact 或 simpler-db-cogact；SArm/HArm 基础模型用于微调。
 
-WorldFoundry records the Dexbotic v1 inference contract with an independent DB-CogACT synthesis entrypoint.
+WorldFoundry 通过独立的 DB-CogACT 合成入口实现 Dexbotic v1 推理契约。
 
-必填 `image`、`prompt`；可选 `model_id`、`state`、`image_slots`、`policy_family`、`action_representation`；产物 `action_trace`、`db-cogact_action_trace.json`。
+已使用 `Dexmal/libero-db-cogact` 验证：LIBERO 路径写出形状为 **`[1, 16, 7]`** 的有限动作轨迹。CALVIN 与 SimplerEnv checkpoint 已接入，但尚未单独验证其动作轨迹。
 
-Workspace 的 LIBERO 路径用了 `Dexmal/libero-db-cogact`，写出形状 **`[1, 16, 7]`** 的有限轨迹。这是已记录的 GPU action-trace 检查。CALVIN / SimplerEnv 专家是接线好的 checkpoint，不是额外已验证轨迹。
+已发布权重使用 Transformers 原生 Qwen2 tokenizer。`trust_remote_code` 默认为 `false`；启用该选项的请求会在查询模型与 tokenizer 缓存之前报错。请将 tokenizer 资产与权重一起就位。
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run db-cogact-libero --pipeline.task-profile default` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+用 `wf run db-cogact-libero --pipeline.task-profile default` 运行策略。
 
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch>=2.6.0）。
+运行环境：统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch>=2.6.0）。
 
-记录的权重仓库包括 `Dexmal/libero-db-cogact`、`Dexmal/Dexbotic-CogACT-SArm`、`Dexmal/Dexbotic-CogACT-HArm` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh db-cogact-libero`；下载缺失的公开权重时加 `--download`。
+权重仓库：`Dexmal/libero-db-cogact`、`Dexmal/Dexbotic-CogACT-SArm`、`Dexmal/Dexbotic-CogACT-HArm` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh db-cogact-libero`；下载缺失的公开权重时加 `--download`。
 
-记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+许可证：Apache-2.0。
 
 <ModelRelatedRecipes modelId="db-cogact" locale="zh" />

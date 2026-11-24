@@ -14,39 +14,27 @@
 # Modified from Deformable DETR (https://github.com/fundamentalvision/Deformable-DETR)
 # Copyright (c) 2020 SenseTime. All Rights Reserved.
 # ------------------------------------------------------------------------
-"""Module for base_models -> perception_core -> detection -> grounding_dino -> models -> GroundingDINO -> groundingdino.py functionality."""
-
 import copy
-from typing import List
 
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torchvision.ops.boxes import nms
-from transformers import AutoTokenizer, BertModel, BertTokenizer, RobertaModel, RobertaTokenizerFast
 
-from worldfoundry.base_models.perception_core.detection.grounding_dino.util import box_ops, get_tokenlizer
+from worldfoundry.base_models.perception_core.detection.grounding_dino.util import get_tokenlizer
 from worldfoundry.base_models.perception_core.detection.grounding_dino.util.misc import (
     NestedTensor,
-    accuracy,
-    get_world_size,
-    interpolate,
-    inverse_sigmoid,
-    is_dist_avail_and_initialized,
     nested_tensor_from_tensor_list,
 )
-from worldfoundry.base_models.perception_core.detection.grounding_dino.util.misc import get_phrases_from_posmap
-from worldfoundry.base_models.perception_core.detection.grounding_dino.util.vl_utils import create_positive_map_from_span
+from worldfoundry.core.nn.blocks.layers import inverse_sigmoid
 
 from ..registry import MODULE_BUILD_FUNCS
 from .backbone import build_backbone
 from .bertwarper import (
     BertModelWarper,
-    generate_masks_with_special_tokens,
     generate_masks_with_special_tokens_and_transfer_map,
 )
 from .transformer import build_transformer
-from .utils import MLP, ContrastiveEmbed, sigmoid_focal_loss
+from .utils import MLP, ContrastiveEmbed
 
 
 class GroundingDINO(nn.Module):
@@ -153,7 +141,7 @@ class GroundingDINO(nn.Module):
 
         self.backbone = backbone
         self.aux_loss = aux_loss
-        self.box_pred_damping = box_pred_damping = None
+        self.box_pred_damping = box_pred_damping = None  # noqa: F841 - Upstream assignment kept.
 
         self.iter_update = iter_update
         assert iter_update, "Why not iter_update?"
@@ -170,9 +158,7 @@ class GroundingDINO(nn.Module):
         if dec_pred_bbox_embed_share:
             box_embed_layerlist = [_bbox_embed for i in range(transformer.num_decoder_layers)]
         else:
-            box_embed_layerlist = [
-                copy.deepcopy(_bbox_embed) for i in range(transformer.num_decoder_layers)
-            ]
+            box_embed_layerlist = [copy.deepcopy(_bbox_embed) for i in range(transformer.num_decoder_layers)]
         class_embed_layerlist = [_class_embed for i in range(transformer.num_decoder_layers)]
         self.bbox_embed = nn.ModuleList(box_embed_layerlist)
         self.class_embed = nn.ModuleList(class_embed_layerlist)
@@ -181,9 +167,7 @@ class GroundingDINO(nn.Module):
 
         # two stage
         self.two_stage_type = two_stage_type
-        assert two_stage_type in ["no", "standard"], "unknown param {} of two_stage_type".format(
-            two_stage_type
-        )
+        assert two_stage_type in ["no", "standard"], f"unknown param {two_stage_type} of two_stage_type"
         if two_stage_type != "no":
             if two_stage_bbox_embed_share:
                 assert dec_pred_bbox_embed_share
@@ -202,48 +186,30 @@ class GroundingDINO(nn.Module):
         self._reset_parameters()
 
     def _reset_parameters(self):
-        """Helper function to reset parameters."""
         # init input_proj
         for proj in self.input_proj:
             nn.init.xavier_uniform_(proj[0].weight, gain=1)
             nn.init.constant_(proj[0].bias, 0)
 
     def set_image_tensor(self, samples: NestedTensor):
-        """Set image tensor.
-
-        Args:
-            samples: The samples.
-        """
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
         self.features, self.poss = self.backbone(samples)
 
     def unset_image_tensor(self):
-        """Unset image tensor."""
-        if hasattr(self, 'features'):
+        if hasattr(self, "features"):
             del self.features
-        if hasattr(self,'poss'):
-            del self.poss 
+        if hasattr(self, "poss"):
+            del self.poss
 
-    def set_image_features(self, features , poss):
-        """Set image features.
-
-        Args:
-            features: The features.
-            poss: The poss.
-        """
+    def set_image_features(self, features, poss):
         self.features = features
         self.poss = poss
 
     def init_ref_points(self, use_num_queries):
-        """Init ref points.
-
-        Args:
-            use_num_queries: The use num queries.
-        """
         self.refpoint_embed = nn.Embedding(use_num_queries, self.query_dim)
 
-    def forward(self, samples: NestedTensor, targets: List = None, **kw):
+    def forward(self, samples: NestedTensor, targets: list | None = None, **kw):
         """The forward expects a NestedTensor, which consists of:
            - samples.tensor: batched images, of shape [batch_size x 3 x H x W]
            - samples.mask: a binary mask of shape [batch_size x H x W], containing 1 on padded pixels
@@ -258,27 +224,18 @@ class GroundingDINO(nn.Module):
            - "aux_outputs": Optional, only returned when auxilary losses are activated. It is a list of
                             dictionnaries containing the two above keys for each decoder layer.
         """
-        if targets is None:
-            captions = kw["captions"]
-        else:
-            captions = [t["caption"] for t in targets]
+        captions = kw["captions"] if targets is None else [t["caption"] for t in targets]
 
         # encoder texts
-        tokenized = self.tokenizer(captions, padding="longest", return_tensors="pt").to(
-            samples.device
-        )
+        tokenized = self.tokenizer(captions, padding="longest", return_tensors="pt").to(samples.device)
         (
             text_self_attention_masks,
             position_ids,
             cate_to_token_mask_list,
-        ) = generate_masks_with_special_tokens_and_transfer_map(
-            tokenized, self.specical_tokens, self.tokenizer
-        )
+        ) = generate_masks_with_special_tokens_and_transfer_map(tokenized, self.specical_tokens, self.tokenizer)
 
         if text_self_attention_masks.shape[1] > self.max_text_len:
-            text_self_attention_masks = text_self_attention_masks[
-                :, : self.max_text_len, : self.max_text_len
-            ]
+            text_self_attention_masks = text_self_attention_masks[:, : self.max_text_len, : self.max_text_len]
             position_ids = position_ids[:, : self.max_text_len]
             tokenized["input_ids"] = tokenized["input_ids"][:, : self.max_text_len]
             tokenized["attention_mask"] = tokenized["attention_mask"][:, : self.max_text_len]
@@ -304,9 +261,7 @@ class GroundingDINO(nn.Module):
             encoded_text = encoded_text[:, : self.max_text_len, :]
             text_token_mask = text_token_mask[:, : self.max_text_len]
             position_ids = position_ids[:, : self.max_text_len]
-            text_self_attention_masks = text_self_attention_masks[
-                :, : self.max_text_len, : self.max_text_len
-            ]
+            text_self_attention_masks = text_self_attention_masks[:, : self.max_text_len, : self.max_text_len]
 
         text_dict = {
             "encoded_text": encoded_text,  # bs, 195, d_model
@@ -318,23 +273,20 @@ class GroundingDINO(nn.Module):
         # import ipdb; ipdb.set_trace()
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
-        if not hasattr(self, 'features') or not hasattr(self, 'poss'):
+        if not hasattr(self, "features") or not hasattr(self, "poss"):
             self.set_image_tensor(samples)
 
         srcs = []
         masks = []
-        for l, feat in enumerate(self.features):
+        for l, feat in enumerate(self.features):  # noqa: E741 - Ambiguous upstream name kept as written.
             src, mask = feat.decompose()
             srcs.append(self.input_proj[l](src))
             masks.append(mask)
             assert mask is not None
         if self.num_feature_levels > len(srcs):
             _len_srcs = len(srcs)
-            for l in range(_len_srcs, self.num_feature_levels):
-                if l == _len_srcs:
-                    src = self.input_proj[l](self.features[-1].tensors)
-                else:
-                    src = self.input_proj[l](srcs[-1])
+            for l in range(_len_srcs, self.num_feature_levels):  # noqa: E741 - Ambiguous upstream name kept as written.
+                src = self.input_proj[l](self.features[-1].tensors) if l == _len_srcs else self.input_proj[l](srcs[-1])
                 m = samples.mask
                 mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
                 pos_l = self.backbone[1](NestedTensor(src, mask)).to(src.dtype)
@@ -342,15 +294,15 @@ class GroundingDINO(nn.Module):
                 masks.append(mask)
                 self.poss.append(pos_l)
 
-        input_query_bbox = input_query_label = attn_mask = dn_meta = None
+        input_query_bbox = input_query_label = attn_mask = dn_meta = None  # noqa: F841 - Upstream assignment kept.
         hs, reference, hs_enc, ref_enc, init_box_proposal = self.transformer(
             srcs, masks, input_query_bbox, self.poss, input_query_label, attn_mask, text_dict
         )
 
         # deformable-detr-like anchor update
         outputs_coord_list = []
-        for dec_lid, (layer_ref_sig, layer_bbox_embed, layer_hs) in enumerate(
-            zip(reference[:-1], self.bbox_embed, hs)
+        for _dec_lid, (layer_ref_sig, layer_bbox_embed, layer_hs) in enumerate(
+            zip(reference[:-1], self.bbox_embed, hs, strict=False)
         ):
             layer_delta_unsig = layer_bbox_embed(layer_hs)
             layer_outputs_unsig = layer_delta_unsig + inverse_sigmoid(layer_ref_sig)
@@ -362,7 +314,7 @@ class GroundingDINO(nn.Module):
         outputs_class = torch.stack(
             [
                 layer_cls_embed(layer_hs, text_dict)
-                for layer_cls_embed, layer_hs in zip(self.class_embed, hs)
+                for layer_cls_embed, layer_hs in zip(self.class_embed, hs, strict=False)
             ]
         )
         out = {"pred_logits": outputs_class[-1], "pred_boxes": outputs_coord_list[-1]}
@@ -378,36 +330,23 @@ class GroundingDINO(nn.Module):
         #     interm_class = self.transformer.enc_out_class_embed(hs_enc[-1], text_dict)
         #     out['interm_outputs'] = {'pred_logits': interm_class, 'pred_boxes': interm_coord}
         #     out['interm_outputs_for_matching_pre'] = {'pred_logits': interm_class, 'pred_boxes': init_box_proposal}
-        unset_image_tensor = kw.get('unset_image_tensor', True)
+        unset_image_tensor = kw.get("unset_image_tensor", True)
         if unset_image_tensor:
-            self.unset_image_tensor() ## If necessary
+            self.unset_image_tensor()  ## If necessary
         return out
 
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
-        """Helper function to set aux loss.
-
-        Args:
-            outputs_class: The outputs class.
-            outputs_coord: The outputs coord.
-        """
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
         return [
-            {"pred_logits": a, "pred_boxes": b}
-            for a, b in zip(outputs_class[:-1], outputs_coord[:-1])
+            {"pred_logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1], strict=False)
         ]
 
 
 @MODULE_BUILD_FUNCS.registe_with_name(module_name="groundingdino")
 def build_groundingdino(args):
-    """Build groundingdino.
-
-    Args:
-        args: The args.
-    """
-
     backbone = build_backbone(args)
     transformer = build_transformer(args)
 

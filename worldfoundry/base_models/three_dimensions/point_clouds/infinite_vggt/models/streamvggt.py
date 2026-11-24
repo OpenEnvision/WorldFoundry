@@ -1,34 +1,26 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> infinite_vggt -> models -> streamvggt.py functionality."""
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 from huggingface_hub import PyTorchModelHubMixin  # used for model hub
+from transformers.file_utils import ModelOutput
 
-from .aggregator import Aggregator
-from ..heads.camera_head import CameraHead
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.dpt_head import DPTHead
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.track_head import TrackHead
-from transformers.file_utils import ModelOutput
-from typing import Optional, Tuple, List, Any, Callable
-from dataclasses import dataclass
+
+from ..heads.camera_head import CameraHead
+from .aggregator import Aggregator
+
 
 @dataclass
 class StreamVGGTOutput(ModelOutput):
-    """Stream vggt output implementation."""
-    ress: Optional[List[dict]] = None
-    views: Optional[torch.Tensor] = None
+    ress: list[dict] | None = None
+    views: torch.Tensor | None = None
+
 
 class StreamVGGT(nn.Module, PyTorchModelHubMixin):
-    """Stream vggt implementation."""
     def __init__(self, img_size=518, patch_size=14, embed_dim=1024, total_budget=1200000):
-        """Init.
-
-        Args:
-            img_size: The img size.
-            patch_size: The patch size.
-            embed_dim: The embed dim.
-            total_budget: The total budget.
-        """
         super().__init__()
 
         self.aggregator = Aggregator(img_size=img_size, patch_size=patch_size, embed_dim=embed_dim)
@@ -37,31 +29,17 @@ class StreamVGGT(nn.Module, PyTorchModelHubMixin):
         self.depth_head = DPTHead(dim_in=2 * embed_dim, output_dim=2, activation="exp", conf_activation="expp1")
         self.track_head = TrackHead(dim_in=2 * embed_dim, patch_size=patch_size)
         self.total_budget = total_budget
-    
-
 
     def forward(
         self,
         views,
         query_points: torch.Tensor = None,
-        history_info: Optional[dict] = None,
+        history_info: dict | None = None,
         past_key_values=None,
         use_cache=False,
-        past_frame_idx=0
+        past_frame_idx=0,
     ):
-        """Forward.
-
-        Args:
-            views: The views.
-            query_points: The query points.
-            history_info: The history info.
-            past_key_values: The past key values.
-            use_cache: The use cache.
-            past_frame_idx: The past frame idx.
-        """
-        images = torch.stack(
-            [view["img"] for view in views], dim=0
-        ).permute(1, 0, 2, 3, 4)    # B S C H W
+        images = torch.stack([view["img"] for view in views], dim=0).permute(1, 0, 2, 3, 4)  # B S C H W
 
         # If without batch dimension, add it
         if len(images.shape) == 4:
@@ -107,70 +85,57 @@ class StreamVGGT(nn.Module, PyTorchModelHubMixin):
             ress = []
             for s in range(S):
                 res = {
-                    'pts3d_in_other_view': predictions['world_points'][:, s],  # [B, H, W, 3]
-                    'conf': predictions['world_points_conf'][:, s],  # [B, H, W]
-
-                    'depth': predictions['depth'][:, s],  # [B, H, W, 1]
-                    'depth_conf': predictions['depth_conf'][:, s],  # [B, H, W]
-                    'camera_pose': predictions['pose_enc'][:, s, :],  # [B, 9]
-
-                    **({'valid_mask': views[s]["valid_mask"]}
-                    if 'valid_mask' in views[s] else {}),  # [B, H, W]
-
-                    **({'track': predictions['track'][:, s],  # [B, N, 2]
-                        'vis': predictions['vis'][:, s],  # [B, N]
-                        'track_conf': predictions['conf'][:, s]}
-                    if 'track' in predictions else {})
+                    "pts3d_in_other_view": predictions["world_points"][:, s],  # [B, H, W, 3]
+                    "conf": predictions["world_points_conf"][:, s],  # [B, H, W]
+                    "depth": predictions["depth"][:, s],  # [B, H, W, 1]
+                    "depth_conf": predictions["depth_conf"][:, s],  # [B, H, W]
+                    "camera_pose": predictions["pose_enc"][:, s, :],  # [B, 9]
+                    **({"valid_mask": views[s]["valid_mask"]} if "valid_mask" in views[s] else {}),  # [B, H, W]
+                    **(
+                        {
+                            "track": predictions["track"][:, s],  # [B, N, 2]
+                            "vis": predictions["vis"][:, s],  # [B, N]
+                            "track_conf": predictions["conf"][:, s],
+                        }
+                        if "track" in predictions
+                        else {}
+                    ),
                 }
                 ress.append(res)
             return StreamVGGTOutput(ress=ress, views=views)  # [S] [B, C, H, W]
-    
-    def inference(
-        self, 
-        frames, 
-        query_points: torch.Tensor = None, 
-        past_key_values=None, 
-        frame_writer: Optional[Callable[[int, dict, dict], None]] = None,
-        cache_results: bool = True,
-        total_budget=None
-    ):
-        """Inference.
 
-        Args:
-            frames: The frames.
-            query_points: The query points.
-            past_key_values: The past key values.
-            frame_writer: The frame writer.
-            cache_results: The cache results.
-            total_budget: The total budget.
-        """
+    def inference(
+        self,
+        frames,
+        query_points: torch.Tensor = None,
+        past_key_values=None,
+        frame_writer: Callable[[int, dict, dict], None] | None = None,
+        cache_results: bool = True,
+        total_budget=None,
+    ):
         past_key_values = [None] * self.aggregator.depth
         past_key_values_camera = [None] * self.camera_head.trunk_depth
         total_budget = self.total_budget
-        
+
         all_ress = []
-        processed_frames = [] 
+        processed_frames = []
 
         for i, frame in enumerate(frames):
-
-            images = frame["img"].unsqueeze(0) 
+            images = frame["img"].unsqueeze(0)
             aggregator_output = self.aggregator(
-                images, 
-                past_key_values=past_key_values,
-                use_cache=True, 
-                past_frame_idx=i,
-                total_budget=total_budget
+                images, past_key_values=past_key_values, use_cache=True, past_frame_idx=i, total_budget=total_budget
             )
 
-            
             if isinstance(aggregator_output, tuple) and len(aggregator_output) == 3:
                 aggregated_tokens, patch_start_idx, past_key_values = aggregator_output
             else:
-                aggregated_tokens, patch_start_idx = aggregator_output        
-            
+                aggregated_tokens, patch_start_idx = aggregator_output
+
             with torch.cuda.amp.autocast(enabled=False):
                 if self.camera_head is not None:
-                    pose_enc, past_key_values_camera = self.camera_head(aggregated_tokens, past_key_values_camera=past_key_values_camera, use_cache=True)
+                    pose_enc, past_key_values_camera = self.camera_head(
+                        aggregated_tokens, past_key_values_camera=past_key_values_camera, use_cache=True
+                    )
                     pose_enc = pose_enc[-1]
                     camera_pose = pose_enc[:, 0, :]
 
@@ -178,21 +143,21 @@ class StreamVGGT(nn.Module, PyTorchModelHubMixin):
                     depth, depth_conf = self.depth_head(
                         aggregated_tokens, images=images, patch_start_idx=patch_start_idx
                     )
-                    depth = depth[:, 0] 
+                    depth = depth[:, 0]
                     depth_conf = depth_conf[:, 0]
-                
+
                 if self.point_head is not None:
                     pts3d, pts3d_conf = self.point_head(
                         aggregated_tokens, images=images, patch_start_idx=patch_start_idx
                     )
-                    pts3d = pts3d[:, 0] 
+                    pts3d = pts3d[:, 0]
                     pts3d_conf = pts3d_conf[:, 0]
 
                 if self.track_head is not None and query_points is not None:
                     track_list, vis, conf = self.track_head(
                         aggregated_tokens, images=images, patch_start_idx=patch_start_idx, query_points=query_points
-                )
-                    track = track_list[-1][:, 0]  
+                    )
+                    track = track_list[-1][:, 0]
                     query_points = track
                     vis = vis[:, 0]
                     track_conf = conf[:, 0]
@@ -204,16 +169,9 @@ class StreamVGGT(nn.Module, PyTorchModelHubMixin):
                 "depth_conf": depth_conf,
                 "camera_pose": camera_pose,
                 **({"valid_mask": frame["valid_mask"]} if "valid_mask" in frame else {}),
-                **(
-                    {"track": track, "vis": vis, "track_conf": track_conf}
-                    if query_points is not None
-                    else {}
-                ),
+                **({"track": track, "vis": vis, "track_conf": track_conf} if query_points is not None else {}),
             }
-            res_cpu = {
-                k: v.detach().cpu() if isinstance(v, torch.Tensor) else v
-                for k, v in res_gpu.items()
-            }
+            res_cpu = {k: v.detach().cpu() if isinstance(v, torch.Tensor) else v for k, v in res_gpu.items()}
             if frame_writer is not None:
                 frame_writer(i, frame, res_cpu)
 

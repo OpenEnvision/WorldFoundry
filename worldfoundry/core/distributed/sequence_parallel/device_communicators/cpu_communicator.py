@@ -12,12 +12,12 @@ Do not use this for large activation shards.
 """
 
 import os
+from typing import cast
 
 import torch
 from torch.distributed import ProcessGroup
 
 from .base_device_communicator import DeviceCommunicatorBase
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # gloo path — host tensors; concat-style all-gather for torch.compile
@@ -39,7 +39,7 @@ class CpuCommunicator(DeviceCommunicatorBase):
         self.dist_module = torch.distributed
 
     def all_reduce(
-        self, input_: torch.Tensor, op:         torch.distributed.ReduceOp | None = torch.distributed.ReduceOp.SUM
+        self, input_: torch.Tensor, op: torch.distributed.ReduceOp.RedOpType | None = torch.distributed.ReduceOp.SUM
     ) -> torch.Tensor:
         """In-place gloo all-reduce; no autograd — metadata is not a training tensor."""
         self.dist_module.all_reduce(input_, group=self.device_group, op=op)
@@ -58,18 +58,12 @@ class CpuCommunicator(DeviceCommunicatorBase):
             dim += input_.dim()
 
         # Allocate output tensor.
-        if self.rank_in_group == dst:
-            gather_list = [torch.empty_like(input_) for _ in range(world_size)]
-        else:
-            gather_list = None
+        gather_list = [torch.empty_like(input_) for _ in range(world_size)] if self.rank_in_group == dst else None
 
         # Gather.
         self.dist_module.gather(input_, gather_list, dst=self.ranks[dst], group=self.device_group)
 
-        if self.rank_in_group == dst:
-            output_tensor = torch.cat(gather_list, dim=dim)
-        else:
-            output_tensor = None
+        output_tensor = torch.cat(cast(list[torch.Tensor], gather_list), dim=dim) if self.rank_in_group == dst else None
         return output_tensor
 
     def all_gather(self, input_: torch.Tensor, dim: int = -1) -> torch.Tensor:
@@ -81,17 +75,17 @@ class CpuCommunicator(DeviceCommunicatorBase):
         # NOTE: we have to use concat-style all-gather here,
         # stack-style all-gather has compatibility issues with
         # torch.compile . see https://github.com/pytorch/pytorch/issues/138795
-        output_size = (input_size[0] * self.world_size,) + input_size[1:]
+        output_size = (input_size[0] * self.world_size, *input_size[1:])
         # Allocate output tensor.
         output_tensor = torch.empty(output_size, dtype=input_.dtype, device=input_.device)
         # All-gather.
         self.dist_module.all_gather_into_tensor(output_tensor, input_, group=self.device_group)
 
         # Reshape
-        output_tensor = output_tensor.reshape((self.world_size,) + input_size)
+        output_tensor = output_tensor.reshape((self.world_size, *input_size))
         output_tensor = output_tensor.movedim(0, dim)
         output_tensor = output_tensor.reshape(
-            input_size[:dim] + (self.world_size * input_size[dim],) + input_size[dim + 1 :]
+            (*input_size[:dim], self.world_size * input_size[dim], *input_size[dim + 1 :])
         )
         return output_tensor
 
@@ -151,10 +145,12 @@ class _CPUSHMDistributed:
     ) -> None:
         """Gather into ``gather_list``; ``dst`` is a *local* group rank, not WORLD."""
         # Note: different from the torch gather, here we use local dst rank.
-        torch.ops._C.shm_gather(self.handle, input, gather_list, torch.distributed.get_group_rank(group, dst))
+        torch.ops._C.shm_gather(
+            self.handle, input, gather_list, torch.distributed.get_group_rank(cast(ProcessGroup, group), dst)
+        )
 
     def all_gather_into_tensor(
-        self, output: torch.Tensor, input: torch.Tensor,         group: ProcessGroup | None = None
+        self, output: torch.Tensor, input: torch.Tensor, group: ProcessGroup | None = None
     ) -> None:
         """Fill ``output`` from every rank's ``input`` through the SHM manager."""
         torch.ops._C.shm_all_gather(self.handle, input, output)

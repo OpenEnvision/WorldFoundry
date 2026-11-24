@@ -1,4 +1,4 @@
-""" CLIP tokenizer
+"""CLIP tokenizer
 
 Copied from https://github.com/openai/CLIP. Originally MIT License, Copyright (c) 2021 OpenAI.
 """
@@ -8,8 +8,8 @@ import html
 import os
 import random
 import string
+from collections.abc import Callable
 from functools import lru_cache, partial
-from typing import Callable, List, Optional, Union
 
 import ftfy
 import regex as re
@@ -21,14 +21,12 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 DEFAULT_CONTEXT_LENGTH = 77  # default context length for OpenAI CLIP
 
 
-@lru_cache()
+@lru_cache
 def default_bpe():
-    return os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "bpe_simple_vocab_16e6.txt.gz"
-    )
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "bpe_simple_vocab_16e6.txt.gz")
 
 
-@lru_cache()
+@lru_cache
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a corresponding list of unicode strings.
@@ -39,11 +37,7 @@ def bytes_to_unicode():
     To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
     And avoids mapping to whitespace/control characters the bpe code barfs on.
     """
-    bs = (
-        list(range(ord("!"), ord("~") + 1))
-        + list(range(ord("¡"), ord("¬") + 1))
-        + list(range(ord("®"), ord("ÿ") + 1))
-    )
+    bs = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
     cs = bs[:]
     n = 0
     for b in range(2**8):
@@ -52,7 +46,7 @@ def bytes_to_unicode():
             cs.append(2**8 + n)
             n += 1
     cs = [chr(n) for n in cs]
-    return dict(zip(bs, cs))
+    return dict(zip(bs, cs, strict=False))
 
 
 def get_pairs(word):
@@ -102,7 +96,7 @@ def get_clean_fn(type: str):
     elif type == "whitespace":
         return _clean_whitespace
     else:
-        assert False, f"Invalid clean function ({type})."
+        assert False, f"Invalid clean function ({type})."  # noqa: B011 - Keeps the assertion semantics under -O.
 
 
 def canonicalize_text(text, *, keep_punctuation_exact_string=None):
@@ -129,18 +123,18 @@ def canonicalize_text(text, *, keep_punctuation_exact_string=None):
     return text.strip()
 
 
-class SimpleTokenizer(object):
+class SimpleTokenizer:
     def __init__(
         self,
         bpe_path: str = default_bpe(),
-        additional_special_tokens: Optional[List[str]] = None,
-        context_length: Optional[int] = DEFAULT_CONTEXT_LENGTH,
+        additional_special_tokens: list[str] | None = None,
+        context_length: int | None = DEFAULT_CONTEXT_LENGTH,
         clean: str = "lower",
         reduction_mask: str = "",
     ):
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        merges = gzip.open(bpe_path).read().decode("utf-8").split("\n")
+        merges = gzip.open(bpe_path).read().decode("utf-8").split("\n")  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
         merges = merges[1 : 49152 - 256 - 2 + 1]
         merges = [tuple(merge.split()) for merge in merges]
         vocab = list(bytes_to_unicode().values())
@@ -151,9 +145,9 @@ class SimpleTokenizer(object):
         if additional_special_tokens:
             special_tokens += additional_special_tokens
         vocab.extend(special_tokens)
-        self.encoder = dict(zip(vocab, range(len(vocab))))
+        self.encoder = dict(zip(vocab, range(len(vocab)), strict=False))
         self.decoder = {v: k for k, v in self.encoder.items()}
-        self.bpe_ranks = dict(zip(merges, range(len(merges))))
+        self.bpe_ranks = dict(zip(merges, range(len(merges)), strict=False))
         self.cache = {t: t for t in special_tokens}
         special = "|".join(special_tokens)
         self.pat = re.compile(
@@ -166,14 +160,12 @@ class SimpleTokenizer(object):
         self.eot_token_id = self.all_special_ids[1]
         self.context_length = context_length
         self.clean_fn = get_clean_fn(clean)
-        self.reduction_fn = (
-            get_reduction_mask_fn(reduction_mask) if reduction_mask else None
-        )
+        self.reduction_fn = get_reduction_mask_fn(reduction_mask) if reduction_mask else None
 
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
-        word = tuple(token[:-1]) + (token[-1] + "</w>",)
+        word = tuple(token[:-1]) + (token[-1] + "</w>",)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         pairs = get_pairs(word)
 
         if not pairs:
@@ -191,7 +183,7 @@ class SimpleTokenizer(object):
                     j = word.index(first, i)
                     new_word.extend(word[i:j])
                     i = j
-                except:
+                except BaseException:
                     new_word.extend(word[i:])
                     break
 
@@ -216,23 +208,15 @@ class SimpleTokenizer(object):
         text = self.clean_fn(text)
         for token in re.findall(self.pat, text):
             token = "".join(self.byte_encoder[b] for b in token.encode("utf-8"))
-            bpe_tokens.extend(
-                self.encoder[bpe_token] for bpe_token in self.bpe(token).split(" ")
-            )
+            bpe_tokens.extend(self.encoder[bpe_token] for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
     def decode(self, tokens):
         text = "".join([self.decoder[token] for token in tokens])
-        text = (
-            bytearray([self.byte_decoder[c] for c in text])
-            .decode("utf-8", errors="replace")
-            .replace("</w>", " ")
-        )
+        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors="replace").replace("</w>", " ")
         return text
 
-    def __call__(
-        self, texts: Union[str, List[str]], context_length: Optional[int] = None
-    ) -> torch.LongTensor:
+    def __call__(self, texts: str | list[str], context_length: int | None = None) -> torch.LongTensor:
         """Returns the tokenized representation of given input string(s)
 
         Parameters
@@ -262,10 +246,7 @@ class SimpleTokenizer(object):
                 encode_fn=self.encode,
             )
 
-        all_tokens = [
-            [self.sot_token_id] + self.encode(text) + [self.eot_token_id]
-            for text in texts
-        ]
+        all_tokens = [[self.sot_token_id] + self.encode(text) + [self.eot_token_id] for text in texts]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         result = torch.zeros(len(all_tokens), context_length, dtype=torch.long)
 
         for i, tokens in enumerate(all_tokens):
@@ -278,7 +259,7 @@ class SimpleTokenizer(object):
 
 
 def random_mask_tokenize(
-    texts: Union[str, List[str]],
+    texts: str | list[str],
     context_length: int,
     sot_token_id: int,
     eot_token_id: int,
@@ -307,7 +288,7 @@ def random_mask_tokenize(
 
 
 def simple_mask_tokenize(
-    texts: Union[str, List[str]],
+    texts: str | list[str],
     context_length: int,
     sot_token_id: int,
     eot_token_id: int,
@@ -322,11 +303,10 @@ def simple_mask_tokenize(
             num_keep = context_length - 2
             start_index = random.randint(0, num_tokens - num_keep)  # high is incl
             tokens = tokens[start_index : start_index + num_keep]
-        tokens = [sot_token_id] + tokens + [eot_token_id]
+        tokens = [sot_token_id] + tokens + [eot_token_id]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         result[i, : len(tokens)] = torch.tensor(tokens)
 
     return result
-
 
 
 def get_reduction_mask_fn(type: str):
@@ -337,6 +317,4 @@ def get_reduction_mask_fn(type: str):
     elif type == "random":
         return random_mask_tokenize  # randomly drop tokens (keep order)
     elif type == "shuffle":
-        return partial(
-            random_mask_tokenize, shuffle=True
-        )  # randomly drop tokens (shuffle order)
+        return partial(random_mask_tokenize, shuffle=True)  # randomly drop tokens (shuffle order)

@@ -33,7 +33,8 @@ class LowMemoryVideo:
     def __len__(self) -> int:
         """Frame count from the container; may be expensive on some codecs."""
 
-        return self.reader.count_frames()
+        # FFmpeg readers supply count_frames beyond ImageIO's generic Reader interface.
+        return self.reader.count_frames()  # ty: ignore[unresolved-attribute]
 
     def __getitem__(self, item: int) -> Image.Image:
         """Decode frame *item* as RGB PIL (drops alpha)."""
@@ -72,7 +73,7 @@ def search_for_images(folder):
     Embedded digit runs are compared numerically, so ``2.png`` sorts before
     ``10.png``. The search is non-recursive.
     """
-    file_list = [i for i in os.listdir(folder) if i.endswith(".jpg") or i.endswith(".png")]
+    file_list = [i for i in os.listdir(folder) if i.endswith((".jpg", ".png"))]
     file_list = [(split_file_name(file_name), file_name) for file_name in file_list]
     file_list = [i[1] for i in sorted(file_list)]
     return [os.path.join(folder, i) for i in file_list]
@@ -102,30 +103,26 @@ class LowMemoryImageFolder:
     def __del__(self):
         """No open handles to close; kept for API symmetry with :class:`LowMemoryVideo`."""
 
-        pass
-
 
 def crop_and_resize(image: Image.Image, height: int, width: int) -> Image.Image:
     """Center-crop and resize a PIL image to ``(width, height)``."""
-    image = np.array(image)
-    image_height, image_width, _ = image.shape
+    pixels = np.array(image)
+    image_height, image_width, _ = pixels.shape
     if image_height / image_width < height / width:
         croped_width = int(image_height / height * width)
         left = (image_width - croped_width) // 2
-        image = image[:, left : left + croped_width]
-        image = Image.fromarray(image).resize((width, height))
+        pixels = pixels[:, left : left + croped_width]
     else:
         croped_height = int(image_width / width * height)
         left = (image_height - croped_height) // 2
-        image = image[left : left + croped_height, :]
-        image = Image.fromarray(image).resize((width, height))
-    return image
+        pixels = pixels[left : left + croped_height, :]
+    return Image.fromarray(pixels).resize((width, height))
 
 
 class VideoData:
     """Lazy video or image-folder dataset with optional resize."""
 
-    def __init__(self, video_file=None, image_folder=None, height=None, width=None, **kwargs):
+    def __init__(self, video_file=None, image_folder=None, height=None, width=None, center_crop: bool = True, **kwargs):
         """Open exactly one of *video_file* or *image_folder*; raise if both/neither."""
 
         if video_file is not None:
@@ -137,6 +134,7 @@ class VideoData:
         else:
             raise ValueError("Cannot open video or image folder")
         self.length = None
+        self.center_crop = bool(center_crop)
         self.set_shape(height, width)
 
     def raw_data(self):
@@ -175,19 +173,20 @@ class VideoData:
         return height, width
 
     def __getitem__(self, item):
-        """Fetch one PIL frame and crop-resize only when the stored size differs."""
+        """Fetch one PIL frame and resize (with optional center-crop) when the stored size differs."""
 
         frame = self.data.__getitem__(item)
         width, height = frame.size
-        if self.height is not None and self.width is not None:
-            if self.height != height or self.width != width:
-                frame = crop_and_resize(frame, self.height, self.width)
+        if self.height is not None and self.width is not None and (self.height != height or self.width != width):
+            frame = (
+                crop_and_resize(frame, self.height, self.width)
+                if self.center_crop
+                else frame.resize((self.width, self.height))
+            )
         return frame
 
     def __del__(self):
         """Underlying readers close themselves; this is a no-op hook."""
-
-        pass
 
     def save_images(self, folder):
         """Dump every frame as ``{i}.png`` (0-based) under *folder*."""
@@ -252,7 +251,7 @@ def merge_video_audio(video_path: str, audio_path: str) -> None:
             "-shortest",
             temp_output,
         ]
-        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        result = subprocess.run(command, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(f"FFmpeg execute failed: {result.stderr}")
         shutil.move(temp_output, video_path)

@@ -2,18 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import numpy as np
-from numpy.core.numeric import full
+
 import torch
 import torch.nn as nn
+import torchvision
 from torch.nn.modules.activation import Sigmoid
 from torch.nn.modules.linear import Identity
-import torchvision
 from torchvision import transforms
-from .. import utils
-from pathlib import Path
-from torchvision.utils import save_image
-import torchvision.transforms as T
 
 epsilon = 1e-8
 
@@ -47,7 +42,7 @@ class R3M(nn.Module):
         self.langweight = langweight  ## Weight on language reward
         self.size = size  ## Size ResNet or ViT
         self.num_negatives = 3
-        
+
         self.latent_ndim = 1
         self.emb_dim = 512
         self.name = "r3m"
@@ -73,18 +68,14 @@ class R3M(nn.Module):
             from transformers import AutoConfig
 
             self.outdim = 768
-            self.convnet = AutoModel.from_config(
+            self.convnet = AutoModel.from_config(  # noqa: F821 - Name is undefined in the upstream source.
                 config=AutoConfig.from_pretrained("google/vit-base-patch32-224-in21k")
             ).to(self.device)
 
         if self.size == 0:
-            self.normlayer = transforms.Normalize(
-                mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
-            )
+            self.normlayer = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
         else:
-            self.normlayer = transforms.Normalize(
-                mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-            )
+            self.normlayer = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         self.convnet.fc = Identity()
         self.convnet.train()
         params += list(self.convnet.parameters())
@@ -92,12 +83,13 @@ class R3M(nn.Module):
         ## Language Reward
         if self.langweight > 0.0:
             ## Pretrained DistilBERT Sentence Encoder
-            from r3m.models.models_language import LangEncoder, LanguageReward
+            from worldfoundry.synthesis.visual_generation.dino_wm.models.encoder.r3m.models.models_language import (
+                LangEncoder,
+                LanguageReward,
+            )
 
             self.lang_enc = LangEncoder(self.device, 0, 0)
-            self.lang_rew = LanguageReward(
-                None, self.outdim, hidden_dim, self.lang_enc.lang_size, simfunc=self.sim
-            )
+            self.lang_rew = LanguageReward(None, self.outdim, hidden_dim, self.lang_enc.lang_size, simfunc=self.sim)
             params += list(self.lang_rew.parameters())
         ########################################################################
 
@@ -110,7 +102,7 @@ class R3M(nn.Module):
         return self.lang_rew(e0, es, le)
 
     ## Forward Call (im --> representation)
-    def forward(self, obs, num_ims=1, obs_shape=[3, 224, 224]):
+    def forward(self, obs, num_ims=1, obs_shape=[3, 224, 224]):  # noqa: B006 - Keeps the upstream default object and signature.
         if obs_shape != [3, 224, 224]:
             preprocess = nn.Sequential(
                 transforms.Resize(256),
@@ -135,12 +127,9 @@ class R3M(nn.Module):
             h = h.squeeze(0)
         elif dims > 4:
             h = h.reshape(*orig_shape[:-3], -1)
-        h = h.unsqueeze(1) 
+        h = h.unsqueeze(1)
         return h
 
     def sim(self, tensor1, tensor2):
-        if self.l2dist:
-            d = -torch.linalg.norm(tensor1 - tensor2, dim=-1)
-        else:
-            d = self.cs(tensor1, tensor2)
+        d = -torch.linalg.norm(tensor1 - tensor2, dim=-1) if self.l2dist else self.cs(tensor1, tensor2)
         return d

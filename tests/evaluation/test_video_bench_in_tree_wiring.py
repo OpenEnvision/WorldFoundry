@@ -6,8 +6,9 @@ network access:
 * every official-runner entry module imports and exposes a ``main`` callable;
 * every catalog entry stays consistent with the code it points at (task yaml,
   runtime profile, in-tree runtime roots, bundled assets);
-* the vendored CameraBench official runtime is present and reachable from the
-  runner without executing it.
+* the CameraBench official sources are pinned to an upstream revision, an
+  explicit checkout override resolves without fetching, and the official
+  scripts write only to the run's output directory.
 """
 
 from __future__ import annotations
@@ -18,12 +19,14 @@ from pathlib import Path
 import pytest
 import yaml
 
+from worldfoundry.evals.tasks.execution.framework.official_sources import benchmark_source_spec
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNNERS_ROOT = REPO_ROOT / "worldfoundry" / "evaluation" / "tasks" / "execution" / "runners"
+RUNNERS_ROOT = REPO_ROOT / "worldfoundry" / "evals" / "tasks" / "execution" / "runners"
 CATALOG_ROOT = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "catalog" / "video"
 TASKS_ROOT = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "tasks" / "external"
 PROFILES_ROOT = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "runtime_profiles" / "official"
-RUNNER_BASE = "worldfoundry.evaluation.tasks.execution.runners"
+RUNNER_BASE = "worldfoundry.evals.tasks.execution.runners"
 
 # runner package -> (entry module, catalog file stem)
 VIDEO_BENCH_RUNNERS: dict[str, tuple[str, str]] = {
@@ -102,21 +105,57 @@ def test_catalog_wiring_is_consistent_with_tree(runner_pkg: str) -> None:
         assert (REPO_ROOT / runtime_root).exists(), f"declared runner.runtime.root missing: {runtime_root}"
 
 
-def test_camerabench_vendored_runtime_is_wired() -> None:
+def test_camerabench_official_sources_are_pinned() -> None:
+    catalog = yaml.safe_load((CATALOG_ROOT / "camerabench.yaml").read_text(encoding="utf-8"))
+    spec = benchmark_source_spec("camerabench", catalog["runner"]["runtime"])
+
+    assert spec.url == "https://github.com/linzhiqiu/t2v_metrics.git"
+    assert spec.subdir == "camerabench"
+    assert "root" not in catalog["runner"]["runtime"]
+
+
+def test_camerabench_runtime_root_prefers_local_checkout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     runner = importlib.import_module(f"{RUNNER_BASE}.camerabench.run_camerabench_official_runner")
-    runtime_root = runner.DEFAULT_CAMERABENCH_RUNTIME_ROOT
-    assert runtime_root.is_dir(), f"missing vendored CameraBench runtime: {runtime_root}"
-    for task, script in runner.VENDORED_TASK_SCRIPTS.items():
-        assert (runtime_root / script).is_file(), f"missing vendored CameraBench {task} script: {script}"
-    assert callable(runner.run_vendored_official_scripts)
+    checkout = tmp_path / "camerabench"
+    checkout.mkdir()
+    monkeypatch.setenv("WORLDFOUNDRY_CAMERABENCH_RUNTIME_ROOT", str(checkout))
+
+    assert runner._camerabench_runtime_root() == checkout.resolve()
+    assert runner._camerabench_runtime_root(tmp_path) == tmp_path.resolve()
 
 
-def test_camerabench_run_official_requires_vendored_scripts(tmp_path: Path) -> None:
+def test_camerabench_run_official_requires_official_scripts(tmp_path: Path) -> None:
     runner = importlib.import_module(f"{RUNNER_BASE}.camerabench.run_camerabench_official_runner")
     with pytest.raises(FileNotFoundError):
-        runner.run_vendored_official_scripts(
+        runner.run_official_scripts(
             score_dir=tmp_path,
             output_dir=tmp_path / "out",
             runtime_root=tmp_path / "not-a-runtime",
             task="binary",
         )
+
+
+def test_camerabench_official_scripts_leave_the_source_tree_untouched(tmp_path: Path) -> None:
+    runner = importlib.import_module(f"{RUNNER_BASE}.camerabench.run_camerabench_official_runner")
+    runtime_root = tmp_path / "camerabench"
+    runtime_root.mkdir()
+    # Like the upstream evaluator, the stub creates --output_dir (default relative to its cwd).
+    (runtime_root / runner.OFFICIAL_TASK_SCRIPTS["binary"]).write_text(
+        "import argparse, json\n"
+        "from pathlib import Path\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--score_dir')\n"
+        "parser.add_argument('--output_dir', default='evaluation_results')\n"
+        "parser.add_argument('--output_file')\n"
+        "args = parser.parse_args()\n"
+        "Path(args.output_dir).mkdir(exist_ok=True)\n"
+        "Path(args.output_file).write_text(json.dumps({'overall_average_precision': 0.5}))\n",
+        encoding="utf-8",
+    )
+
+    results, _, _, _ = runner.run_official_scripts(
+        score_dir=tmp_path, output_dir=tmp_path / "out", runtime_root=runtime_root, task="binary"
+    )
+
+    assert results["binary"]["overall_average_precision"] == 0.5
+    assert sorted(path.name for path in runtime_root.iterdir()) == [runner.OFFICIAL_TASK_SCRIPTS["binary"]]

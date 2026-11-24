@@ -13,6 +13,7 @@ import importlib.util
 import json
 import math
 import re
+import subprocess
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location("inference_gate_impact", Path(__file__).with_name("geometry_regression_impact.py"))
@@ -84,6 +85,19 @@ def verify_checkout_plan(plan: dict, root: Path, matrix: Path, dependencies: Pat
     for key, path in (("matrix_sha256", matrix), ("dependencies_sha256", dependencies)):
         if plan.get(key) != impact.digest(path):
             raise ValueError(f"Affected plan definitions have changed: {key}")
+        relative = path.relative_to(root).as_posix()
+        committed = subprocess.run(
+            ["git", "-C", str(root), "cat-file", "blob", f"{head}:{relative}"], capture_output=True
+        )
+        if committed.returncode or plan[key] != hashlib.sha256(committed.stdout).hexdigest():
+            raise ValueError(f"Affected plan does not match committed definitions: {key}")
+    # The import graph discovers tracked modules from the index and reads their checkout content.
+    sources = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no", "--", ":(glob)worldfoundry/**/*.py"],
+        capture_output=True,
+    )
+    if sources.returncode or sources.stdout:
+        raise ValueError("Affected planning requires committed checkout sources")
     minimum = impact.select_cases(matrix, dependencies, root, plan["changed_paths"], base=base, head=head)
     for key in ("proven_relocations", "cpu_only_changes", "required_cpu_contracts"):
         if plan.get(key, []) != minimum[key]:

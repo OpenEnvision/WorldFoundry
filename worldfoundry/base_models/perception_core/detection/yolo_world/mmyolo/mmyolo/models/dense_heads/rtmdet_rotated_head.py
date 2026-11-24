@@ -1,26 +1,27 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import copy
 import warnings
-from typing import List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 import torch
 import torch.nn as nn
 from mmdet.models.utils import filter_scores_and_topk
 from mmdet.structures.bbox import HorizontalBoxes, distance2bbox
 from mmdet.structures.bbox.transforms import bbox_cxcywh_to_xyxy, scale_boxes
-from mmdet.utils import (ConfigType, InstanceList, OptConfigType,
-                         OptInstanceList, OptMultiConfig, reduce_mean)
+from mmdet.utils import ConfigType, InstanceList, OptConfigType, OptInstanceList, OptMultiConfig, reduce_mean
 from mmengine.config import ConfigDict
 from mmengine.model import normal_init
 from mmengine.structures import InstanceData
 from torch import Tensor
 
 from mmyolo.registry import MODELS, TASK_UTILS
+
 from ..utils import gt_instances_preprocess
 from .rtmdet_head import RTMDetHead, RTMDetSepBNHeadModule
 
 try:
     from mmrotate.structures.bbox import RotatedBoxes, distance2obb
+
     MMROTATE_AVAILABLE = True
 except ImportError:
     RotatedBoxes = None
@@ -80,8 +81,8 @@ class RTMDetRotatedSepBNHeadModule(RTMDetSepBNHeadModule):
         pred_kernel_size: int = 1,
         angle_out_dim: int = 1,
         conv_cfg: OptConfigType = None,
-        norm_cfg: ConfigType = dict(type='BN'),
-        act_cfg: ConfigType = dict(type='SiLU', inplace=True),
+        norm_cfg: ConfigType = {"type": "BN"},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "SiLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
         init_cfg: OptMultiConfig = None,
     ):
         self.angle_out_dim = angle_out_dim
@@ -98,7 +99,8 @@ class RTMDetRotatedSepBNHeadModule(RTMDetSepBNHeadModule):
             conv_cfg=conv_cfg,
             norm_cfg=norm_cfg,
             act_cfg=act_cfg,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
 
     def _init_layers(self):
         """Initialize layers of the head."""
@@ -110,7 +112,9 @@ class RTMDetRotatedSepBNHeadModule(RTMDetSepBNHeadModule):
                     self.feat_channels,
                     self.num_base_priors * self.angle_out_dim,
                     self.pred_kernel_size,
-                    padding=self.pred_kernel_size // 2))
+                    padding=self.pred_kernel_size // 2,
+                )
+            )
 
     def init_weights(self) -> None:
         """Initialize weights of the head."""
@@ -119,7 +123,7 @@ class RTMDetRotatedSepBNHeadModule(RTMDetSepBNHeadModule):
         for rtm_ang in self.rtm_ang:
             normal_init(rtm_ang, std=0.01)
 
-    def forward(self, feats: Tuple[Tensor, ...]) -> tuple:
+    def forward(self, feats: tuple[Tensor, ...]) -> tuple:
         """Forward features from the upstream network.
 
         Args:
@@ -255,44 +259,37 @@ class RTMDetRotatedHead(RTMDetHead):
     """
 
     def __init__(
-            self,
-            head_module: ConfigType,
-            prior_generator: ConfigType = dict(
-                type='mmdet.MlvlPointGenerator', strides=[8, 16, 32],
-                offset=0),
-            bbox_coder: ConfigType = dict(type='DistanceAnglePointCoder'),
-            loss_cls: ConfigType = dict(
-                type='mmdet.QualityFocalLoss',
-                use_sigmoid=True,
-                beta=2.0,
-                loss_weight=1.0),
-            loss_bbox: ConfigType = dict(
-                type='mmrotate.RotatedIoULoss', mode='linear',
-                loss_weight=2.0),
-            angle_version: str = 'le90',
-            use_hbbox_loss: bool = False,
-            angle_coder: ConfigType = dict(type='mmrotate.PseudoAngleCoder'),
-            loss_angle: OptConfigType = None,
-            train_cfg: OptConfigType = None,
-            test_cfg: OptConfigType = None,
-            init_cfg: OptMultiConfig = None):
+        self,
+        head_module: ConfigType,
+        prior_generator: ConfigType = {"type": "mmdet.MlvlPointGenerator", "strides": [8, 16, 32], "offset": 0},  # noqa: B006 - Keeps the upstream default object and signature.
+        bbox_coder: ConfigType = {"type": "DistanceAnglePointCoder"},  # noqa: B006 - Keeps the upstream default object and signature.
+        loss_cls: ConfigType = {"type": "mmdet.QualityFocalLoss", "use_sigmoid": True, "beta": 2.0, "loss_weight": 1.0},  # noqa: B006 - Keeps the upstream default object and signature.
+        loss_bbox: ConfigType = {"type": "mmrotate.RotatedIoULoss", "mode": "linear", "loss_weight": 2.0},  # noqa: B006 - Keeps the upstream default object and signature.
+        angle_version: str = "le90",
+        use_hbbox_loss: bool = False,
+        angle_coder: ConfigType = {"type": "mmrotate.PseudoAngleCoder"},  # noqa: B006 - Keeps the upstream default object and signature.
+        loss_angle: OptConfigType = None,
+        train_cfg: OptConfigType = None,
+        test_cfg: OptConfigType = None,
+        init_cfg: OptMultiConfig = None,
+    ):
         if not MMROTATE_AVAILABLE:
             raise ImportError(
-                'Please run "mim install -r requirements/mmrotate.txt" '
-                'to install mmrotate first for rotated detection.')
+                'Please run "mim install -r requirements/mmrotate.txt" to install mmrotate first for rotated detection.'
+            )
 
         self.angle_version = angle_version
         self.use_hbbox_loss = use_hbbox_loss
         if self.use_hbbox_loss:
-            assert loss_angle is not None, \
-                ('When use hbbox loss, loss_angle needs to be specified')
+            assert loss_angle is not None, "When use hbbox loss, loss_angle needs to be specified"
         self.angle_coder = TASK_UTILS.build(angle_coder)
         self.angle_out_dim = self.angle_coder.encode_size
-        if head_module.get('angle_out_dim') is not None:
-            warnings.warn('angle_out_dim will be overridden by angle_coder '
-                          'and does not need to be set manually')
+        if head_module.get("angle_out_dim") is not None:
+            warnings.warn(
+                "angle_out_dim will be overridden by angle_coder and does not need to be set manually", stacklevel=1
+            )
 
-        head_module['angle_out_dim'] = self.angle_out_dim
+        head_module["angle_out_dim"] = self.angle_out_dim
         super().__init__(
             head_module=head_module,
             prior_generator=prior_generator,
@@ -301,22 +298,25 @@ class RTMDetRotatedHead(RTMDetHead):
             loss_bbox=loss_bbox,
             train_cfg=train_cfg,
             test_cfg=test_cfg,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
 
         if loss_angle is not None:
             self.loss_angle = MODELS.build(loss_angle)
         else:
             self.loss_angle = None
 
-    def predict_by_feat(self,
-                        cls_scores: List[Tensor],
-                        bbox_preds: List[Tensor],
-                        angle_preds: List[Tensor],
-                        objectnesses: Optional[List[Tensor]] = None,
-                        batch_img_metas: Optional[List[dict]] = None,
-                        cfg: Optional[ConfigDict] = None,
-                        rescale: bool = True,
-                        with_nms: bool = True) -> List[InstanceData]:
+    def predict_by_feat(
+        self,
+        cls_scores: list[Tensor],
+        bbox_preds: list[Tensor],
+        angle_preds: list[Tensor],
+        objectnesses: list[Tensor] | None = None,
+        batch_img_metas: list[dict] | None = None,
+        cfg: ConfigDict | None = None,
+        rescale: bool = True,
+        with_nms: bool = True,
+    ) -> list[InstanceData]:
         """Transform a batch of output features extracted by the head into bbox
         results.
 
@@ -369,7 +369,7 @@ class RTMDetRotatedHead(RTMDetHead):
         # Whether to decode rbox with angle.
         # different setting lead to different final results.
         # Defaults to True.
-        decode_with_angle = cfg.get('decode_with_angle', True)
+        decode_with_angle = cfg.get("decode_with_angle", True)
 
         num_imgs = len(batch_img_metas)
         featmap_sizes = [cls_score.shape[2:] for cls_score in cls_scores]
@@ -377,77 +377,55 @@ class RTMDetRotatedHead(RTMDetHead):
         # If the shape does not change, use the previous mlvl_priors
         if featmap_sizes != self.featmap_sizes:
             self.mlvl_priors = self.prior_generator.grid_priors(
-                featmap_sizes,
-                dtype=cls_scores[0].dtype,
-                device=cls_scores[0].device)
+                featmap_sizes, dtype=cls_scores[0].dtype, device=cls_scores[0].device
+            )
             self.featmap_sizes = featmap_sizes
         flatten_priors = torch.cat(self.mlvl_priors)
 
         mlvl_strides = [
-            flatten_priors.new_full(
-                (featmap_size.numel() * self.num_base_priors, ), stride) for
-            featmap_size, stride in zip(featmap_sizes, self.featmap_strides)
+            flatten_priors.new_full((featmap_size.numel() * self.num_base_priors,), stride)
+            for featmap_size, stride in zip(featmap_sizes, self.featmap_strides, strict=False)
         ]
         flatten_stride = torch.cat(mlvl_strides)
 
         # flatten cls_scores, bbox_preds and objectness
         flatten_cls_scores = [
-            cls_score.permute(0, 2, 3, 1).reshape(num_imgs, -1,
-                                                  self.num_classes)
-            for cls_score in cls_scores
+            cls_score.permute(0, 2, 3, 1).reshape(num_imgs, -1, self.num_classes) for cls_score in cls_scores
         ]
-        flatten_bbox_preds = [
-            bbox_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, 4)
-            for bbox_pred in bbox_preds
-        ]
+        flatten_bbox_preds = [bbox_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, 4) for bbox_pred in bbox_preds]
         flatten_angle_preds = [
-            angle_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1,
-                                                   self.angle_out_dim)
-            for angle_pred in angle_preds
+            angle_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, self.angle_out_dim) for angle_pred in angle_preds
         ]
 
         flatten_cls_scores = torch.cat(flatten_cls_scores, dim=1).sigmoid()
         flatten_bbox_preds = torch.cat(flatten_bbox_preds, dim=1)
         flatten_angle_preds = torch.cat(flatten_angle_preds, dim=1)
-        flatten_angle_preds = self.angle_coder.decode(
-            flatten_angle_preds, keepdim=True)
+        flatten_angle_preds = self.angle_coder.decode(flatten_angle_preds, keepdim=True)
 
         if decode_with_angle:
-            flatten_rbbox_preds = torch.cat(
-                [flatten_bbox_preds, flatten_angle_preds], dim=-1)
-            flatten_decoded_bboxes = self.bbox_coder.decode(
-                flatten_priors[None], flatten_rbbox_preds, flatten_stride)
+            flatten_rbbox_preds = torch.cat([flatten_bbox_preds, flatten_angle_preds], dim=-1)
+            flatten_decoded_bboxes = self.bbox_coder.decode(flatten_priors[None], flatten_rbbox_preds, flatten_stride)
         else:
-            flatten_decoded_hbboxes = self.bbox_coder.decode(
-                flatten_priors[None], flatten_bbox_preds, flatten_stride)
-            flatten_decoded_hbboxes = HorizontalBoxes.xyxy_to_cxcywh(
-                flatten_decoded_hbboxes)
-            flatten_decoded_bboxes = torch.cat(
-                [flatten_decoded_hbboxes, flatten_angle_preds], dim=-1)
+            flatten_decoded_hbboxes = self.bbox_coder.decode(flatten_priors[None], flatten_bbox_preds, flatten_stride)
+            flatten_decoded_hbboxes = HorizontalBoxes.xyxy_to_cxcywh(flatten_decoded_hbboxes)
+            flatten_decoded_bboxes = torch.cat([flatten_decoded_hbboxes, flatten_angle_preds], dim=-1)
 
         if with_objectnesses:
-            flatten_objectness = [
-                objectness.permute(0, 2, 3, 1).reshape(num_imgs, -1)
-                for objectness in objectnesses
-            ]
+            flatten_objectness = [objectness.permute(0, 2, 3, 1).reshape(num_imgs, -1) for objectness in objectnesses]
             flatten_objectness = torch.cat(flatten_objectness, dim=1).sigmoid()
         else:
             flatten_objectness = [None for _ in range(num_imgs)]
 
         results_list = []
-        for (bboxes, scores, objectness,
-             img_meta) in zip(flatten_decoded_bboxes, flatten_cls_scores,
-                              flatten_objectness, batch_img_metas):
-            scale_factor = img_meta['scale_factor']
-            if 'pad_param' in img_meta:
-                pad_param = img_meta['pad_param']
-            else:
-                pad_param = None
+        for bboxes, scores, objectness, img_meta in zip(
+            flatten_decoded_bboxes, flatten_cls_scores, flatten_objectness, batch_img_metas, strict=False
+        ):
+            scale_factor = img_meta["scale_factor"]
+            pad_param = img_meta["pad_param"] if "pad_param" in img_meta else None  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
 
-            score_thr = cfg.get('score_thr', -1)
+            score_thr = cfg.get("score_thr", -1)
             # yolox_style does not require the following operations
-            if objectness is not None and score_thr > 0 and not cfg.get(
-                    'yolox_style', False):
+            if objectness is not None and score_thr > 0 and not cfg.get("yolox_style", False):
                 conf_inds = objectness > score_thr
                 bboxes = bboxes[conf_inds, :]
                 scores = scores[conf_inds, :]
@@ -465,53 +443,45 @@ class RTMDetRotatedHead(RTMDetHead):
                 results_list.append(empty_results)
                 continue
 
-            nms_pre = cfg.get('nms_pre', 100000)
+            nms_pre = cfg.get("nms_pre", 100000)
             if cfg.multi_label is False:
                 scores, labels = scores.max(1, keepdim=True)
                 scores, _, keep_idxs, results = filter_scores_and_topk(
-                    scores,
-                    score_thr,
-                    nms_pre,
-                    results=dict(labels=labels[:, 0]))
-                labels = results['labels']
+                    scores, score_thr, nms_pre, results={"labels": labels[:, 0]}
+                )
+                labels = results["labels"]
             else:
-                scores, labels, keep_idxs, _ = filter_scores_and_topk(
-                    scores, score_thr, nms_pre)
+                scores, labels, keep_idxs, _ = filter_scores_and_topk(scores, score_thr, nms_pre)
 
-            results = InstanceData(
-                scores=scores,
-                labels=labels,
-                bboxes=RotatedBoxes(bboxes[keep_idxs]))
+            results = InstanceData(scores=scores, labels=labels, bboxes=RotatedBoxes(bboxes[keep_idxs]))
 
             if rescale:
                 if pad_param is not None:
                     results.bboxes.translate_([-pad_param[2], -pad_param[0]])
 
-                scale_factor = [1 / s for s in img_meta['scale_factor']]
+                scale_factor = [1 / s for s in img_meta["scale_factor"]]
                 results.bboxes = scale_boxes(results.bboxes, scale_factor)
 
-            if cfg.get('yolox_style', False):
+            if cfg.get("yolox_style", False):
                 # do not need max_per_img
                 cfg.max_per_img = len(results)
 
             results = self._bbox_post_process(
-                results=results,
-                cfg=cfg,
-                rescale=False,
-                with_nms=with_nms,
-                img_meta=img_meta)
+                results=results, cfg=cfg, rescale=False, with_nms=with_nms, img_meta=img_meta
+            )
 
             results_list.append(results)
         return results_list
 
     def loss_by_feat(
-            self,
-            cls_scores: List[Tensor],
-            bbox_preds: List[Tensor],
-            angle_preds: List[Tensor],
-            batch_gt_instances: InstanceList,
-            batch_img_metas: List[dict],
-            batch_gt_instances_ignore: OptInstanceList = None) -> dict:
+        self,
+        cls_scores: list[Tensor],
+        bbox_preds: list[Tensor],
+        angle_preds: list[Tensor],
+        batch_gt_instances: InstanceList,
+        batch_img_metas: list[dict],
+        batch_gt_instances_ignore: OptInstanceList = None,
+    ) -> dict:
         """Compute losses of the head.
 
         Args:
@@ -549,60 +519,49 @@ class RTMDetRotatedHead(RTMDetHead):
         # If the shape does not equal, generate new one
         if featmap_sizes != self.featmap_sizes_train:
             self.featmap_sizes_train = featmap_sizes
-            mlvl_priors_with_stride = self.prior_generator.grid_priors(
-                featmap_sizes, device=device, with_stride=True)
-            self.flatten_priors_train = torch.cat(
-                mlvl_priors_with_stride, dim=0)
+            mlvl_priors_with_stride = self.prior_generator.grid_priors(featmap_sizes, device=device, with_stride=True)
+            self.flatten_priors_train = torch.cat(mlvl_priors_with_stride, dim=0)
 
-        flatten_cls_scores = torch.cat([
-            cls_score.permute(0, 2, 3, 1).reshape(num_imgs, -1,
-                                                  self.cls_out_channels)
-            for cls_score in cls_scores
-        ], 1).contiguous()
+        flatten_cls_scores = torch.cat(
+            [cls_score.permute(0, 2, 3, 1).reshape(num_imgs, -1, self.cls_out_channels) for cls_score in cls_scores], 1
+        ).contiguous()
 
-        flatten_tblrs = torch.cat([
-            bbox_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, 4)
-            for bbox_pred in bbox_preds
-        ], 1)
-        flatten_tblrs = flatten_tblrs * self.flatten_priors_train[..., -1,
-                                                                  None]
-        flatten_angles = torch.cat([
-            angle_pred.permute(0, 2, 3, 1).reshape(
-                num_imgs, -1, self.angle_out_dim) for angle_pred in angle_preds
-        ], 1)
-        flatten_decoded_angle = self.angle_coder.decode(
-            flatten_angles, keepdim=True)
-        flatten_tblra = torch.cat([flatten_tblrs, flatten_decoded_angle],
-                                  dim=-1)
+        flatten_tblrs = torch.cat(
+            [bbox_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, 4) for bbox_pred in bbox_preds], 1
+        )
+        flatten_tblrs = flatten_tblrs * self.flatten_priors_train[..., -1, None]
+        flatten_angles = torch.cat(
+            [angle_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, self.angle_out_dim) for angle_pred in angle_preds], 1
+        )
+        flatten_decoded_angle = self.angle_coder.decode(flatten_angles, keepdim=True)
+        flatten_tblra = torch.cat([flatten_tblrs, flatten_decoded_angle], dim=-1)
         flatten_rbboxes = distance2obb(
-            self.flatten_priors_train[..., :2],
-            flatten_tblra,
-            angle_version=self.angle_version)
+            self.flatten_priors_train[..., :2], flatten_tblra, angle_version=self.angle_version
+        )
         if self.use_hbbox_loss:
-            flatten_hbboxes = distance2bbox(self.flatten_priors_train[..., :2],
-                                            flatten_tblrs)
+            flatten_hbboxes = distance2bbox(self.flatten_priors_train[..., :2], flatten_tblrs)
 
-        assigned_result = self.assigner(flatten_rbboxes.detach(),
-                                        flatten_cls_scores.detach(),
-                                        self.flatten_priors_train, gt_labels,
-                                        gt_bboxes, pad_bbox_flag)
+        assigned_result = self.assigner(
+            flatten_rbboxes.detach(),
+            flatten_cls_scores.detach(),
+            self.flatten_priors_train,
+            gt_labels,
+            gt_bboxes,
+            pad_bbox_flag,
+        )
 
-        labels = assigned_result['assigned_labels'].reshape(-1)
-        label_weights = assigned_result['assigned_labels_weights'].reshape(-1)
-        bbox_targets = assigned_result['assigned_bboxes'].reshape(-1, 5)
-        assign_metrics = assigned_result['assign_metrics'].reshape(-1)
+        labels = assigned_result["assigned_labels"].reshape(-1)
+        label_weights = assigned_result["assigned_labels_weights"].reshape(-1)
+        bbox_targets = assigned_result["assigned_bboxes"].reshape(-1, 5)
+        assign_metrics = assigned_result["assign_metrics"].reshape(-1)
         cls_preds = flatten_cls_scores.reshape(-1, self.num_classes)
 
         # FG cat_id: [0, num_classes -1], BG cat_id: num_classes
         bg_class_ind = self.num_classes
-        pos_inds = ((labels >= 0)
-                    & (labels < bg_class_ind)).nonzero().squeeze(1)
+        pos_inds = ((labels >= 0) & (labels < bg_class_ind)).nonzero().squeeze(1)
         avg_factor = reduce_mean(assign_metrics.sum()).clamp_(min=1).item()
 
-        loss_cls = self.loss_cls(
-            cls_preds, (labels, assign_metrics),
-            label_weights,
-            avg_factor=avg_factor)
+        loss_cls = self.loss_cls(cls_preds, (labels, assign_metrics), label_weights, avg_factor=avg_factor)
 
         pos_bbox_targets = bbox_targets[pos_inds]
 
@@ -615,27 +574,23 @@ class RTMDetRotatedHead(RTMDetHead):
 
         if len(pos_inds) > 0:
             loss_bbox = self.loss_bbox(
-                bbox_preds[pos_inds],
-                pos_bbox_targets,
-                weight=assign_metrics[pos_inds],
-                avg_factor=avg_factor)
+                bbox_preds[pos_inds], pos_bbox_targets, weight=assign_metrics[pos_inds], avg_factor=avg_factor
+            )
             loss_angle = angle_preds.sum() * 0
             if self.loss_angle is not None:
                 pos_angle_targets = bbox_targets[pos_inds][:, 4:5]
                 pos_angle_targets = self.angle_coder.encode(pos_angle_targets)
                 loss_angle = self.loss_angle(
-                    angle_preds[pos_inds],
-                    pos_angle_targets,
-                    weight=assign_metrics[pos_inds],
-                    avg_factor=avg_factor)
+                    angle_preds[pos_inds], pos_angle_targets, weight=assign_metrics[pos_inds], avg_factor=avg_factor
+                )
         else:
             loss_bbox = bbox_preds.sum() * 0
             loss_angle = angle_preds.sum() * 0
 
-        losses = dict()
-        losses['loss_cls'] = loss_cls
-        losses['loss_bbox'] = loss_bbox
+        losses = {}
+        losses["loss_cls"] = loss_cls
+        losses["loss_bbox"] = loss_bbox
         if self.loss_angle is not None:
-            losses['loss_angle'] = loss_angle
+            losses["loss_angle"] = loss_angle
 
         return losses

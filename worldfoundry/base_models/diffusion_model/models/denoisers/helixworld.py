@@ -30,5 +30,7 @@ class HelixWorldDenoiser(LTXJointDenoiser):
 
 def build_helixworld_denoiser(context):
     return build_ltx_joint_denoiser(
-        context, module_class=HelixWorldTransformerModule, denoiser_class=HelixWorldDenoiser,
+        context,
+        module_class=HelixWorldTransformerModule,
+        denoiser_class=HelixWorldDenoiser,
     )

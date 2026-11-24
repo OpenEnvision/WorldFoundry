@@ -15,9 +15,8 @@
 """LingBot-VLA v2 inference attention implementations."""
 
 import torch
-import torch.nn.functional as F  # noqa: N812
+import torch.nn.functional as F
 from packaging.version import Version
-import einops
 
 FLEX_SPARSE_BLOCK_SIZE = 128
 FLEX_KERNEL_OPTIONS = {"BLOCK_M": 32, "BLOCK_N": 64, "num_warps": 4, "num_stages": 2}
@@ -32,6 +31,7 @@ if Version(torch.__version__) > Version("2.5.0"):
         flex_attention,
     )
 
+
 # @torch.compile(dynamic=False)
 def flex_attention_forward(
     query_states: torch.Tensor,
@@ -45,7 +45,7 @@ def flex_attention_forward(
     """
     batch_size, seq_len, num_att_heads, head_dim = query_states.shape
     original_dtype = query_states.dtype
-    num_key_value_heads = key_states.shape[2]
+    _num_key_value_heads = key_states.shape[2]
     # num_key_value_groups = num_att_heads // num_key_value_heads # 16 // 2 = 8
 
     query_states = query_states.transpose(1, 2)
@@ -144,7 +144,6 @@ def build_block_mask(
     This allocates the dense 4D mask once; the returned BlockMask can be reused across layers.
     """
     from torch.nn.attention.flex_attention import (
-        _mask_mod_signature,
         _round_up_to_multiple,
         create_block_mask,
         create_mask,
@@ -163,19 +162,24 @@ def build_block_mask(
     def precomputed_mask_factory(precomputed_mask: torch.Tensor):
         def mask_mod(b, h, q_idx, kv_idx):
             return precomputed_mask[b][h][q_idx][kv_idx]
+
         return mask_mod
 
     mask_4d = create_mask(
         mod_fn=precomputed_mask_factory(padded_mask),
-        B=b_mask, H=h_mask,
-        Q_LEN=q_len_rounded, KV_LEN=kv_len_rounded,
+        B=b_mask,
+        H=h_mask,
+        Q_LEN=q_len_rounded,
+        KV_LEN=kv_len_rounded,
         device=causal_mask.device,
     )
 
     block_mask = create_block_mask(
         mask_mod=precomputed_mask_factory(mask_4d),
-        B=b_mask, H=h_mask,
-        Q_LEN=q_len_rounded, KV_LEN=kv_len_rounded,
+        B=b_mask,
+        H=h_mask,
+        Q_LEN=q_len_rounded,
+        KV_LEN=kv_len_rounded,
         BLOCK_SIZE=block_size,
         device=causal_mask.device,
         _compile=False,
@@ -195,7 +199,7 @@ def flex_attention_with_block_mask(
     Run flex_attention with a pre-built BlockMask (no create_mask allocation per call).
     """
     batch_size = query_states.shape[0]
-    num_att_heads = query_states.shape[2]
+    _num_att_heads = query_states.shape[2]
     head_dim = query_states.shape[3]
     original_dtype = query_states.dtype
 
@@ -203,8 +207,8 @@ def flex_attention_with_block_mask(
     key_states = key_states.transpose(1, 2).to(torch.float32)
     value_states = value_states.transpose(1, 2).to(torch.float32)
 
-    q_len_rounded = block_mask.shape[-2] if hasattr(block_mask, 'shape') else query_states.shape[2]
-    kv_len_rounded = block_mask.shape[-1] if hasattr(block_mask, 'shape') else key_states.shape[2]
+    q_len_rounded = block_mask.shape[-2] if hasattr(block_mask, "shape") else query_states.shape[2]
+    kv_len_rounded = block_mask.shape[-1] if hasattr(block_mask, "shape") else key_states.shape[2]
 
     pad_q = q_len_rounded - query_states.shape[2]
     pad_k = kv_len_rounded - key_states.shape[2]

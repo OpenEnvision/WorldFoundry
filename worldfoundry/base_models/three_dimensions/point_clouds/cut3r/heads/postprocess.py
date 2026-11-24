@@ -4,10 +4,9 @@
 # --------------------------------------------------------
 # modified from DUSt3R
 
-"""Module for base_models -> three_dimensions -> point_clouds -> cut3r -> heads -> postprocess.py functionality."""
-
 import torch
-import torch.nn.functional as F
+
+from worldfoundry.core.geometry.transforms import normalize_quaternion_wxyz as standardize_quaternion
 
 
 def postprocess(out, depth_mode, conf_mode, pos_z=False):
@@ -15,7 +14,7 @@ def postprocess(out, depth_mode, conf_mode, pos_z=False):
     extract 3D points/confidence from prediction head output
     """
     fmap = out.permute(0, 2, 3, 1)  # B,H,W,3
-    res = dict(pts3d=reg_dense_depth(fmap[:, :, :, 0:3], mode=depth_mode, pos_z=pos_z))
+    res = {"pts3d": reg_dense_depth(fmap[:, :, :, 0:3], mode=depth_mode, pos_z=pos_z)}
 
     if conf_mode is not None:
         res["conf"] = reg_dense_conf(fmap[:, :, :, 3], mode=conf_mode)
@@ -23,16 +22,10 @@ def postprocess(out, depth_mode, conf_mode, pos_z=False):
 
 
 def postprocess_rgb(out, eps=1e-6):
-    """Postprocess rgb.
-
-    Args:
-        out: The out.
-        eps: The eps.
-    """
     fmap = out.permute(0, 2, 3, 1)  # B,H,W,3
     res = torch.sigmoid(fmap) * (1 - 2 * eps) + eps
     res = (res - 0.5) * 2
-    return dict(rgb=res)
+    return {"rgb": res}
 
 
 def postprocess_pose(out, mode, inverse=False):
@@ -54,16 +47,10 @@ def postprocess_pose(out, mode, inverse=False):
     d = trans.norm(dim=-1, keepdim=True)
 
     if mode == "square":
-        if inverse:
-            scale = d / d.square().clip(min=1e-8)
-        else:
-            scale = d.square() / d.clip(min=1e-8)
+        scale = d / d.square().clip(min=1e-08) if inverse else d.square() / d.clip(min=1e-08)
 
     if mode == "exp":
-        if inverse:
-            scale = d / torch.expm1(d).clip(min=1e-8)
-        else:
-            scale = torch.expm1(d) / d.clip(min=1e-8)
+        scale = d / torch.expm1(d).clip(min=1e-08) if inverse else torch.expm1(d) / d.clip(min=1e-08)
 
     trans = trans * scale
     quats = standardize_quaternion(quats)
@@ -72,13 +59,8 @@ def postprocess_pose(out, mode, inverse=False):
 
 
 def postprocess_pose_conf(out):
-    """Postprocess pose conf.
-
-    Args:
-        out: The out.
-    """
     fmap = out.permute(0, 2, 3, 1)  # B,H,W,1
-    return dict(pose_conf=torch.sigmoid(fmap))
+    return {"pose_conf": torch.sigmoid(fmap)}
 
 
 def postprocess_desc(out, depth_mode, conf_mode, desc_dim, double_channel=False):
@@ -86,7 +68,7 @@ def postprocess_desc(out, depth_mode, conf_mode, desc_dim, double_channel=False)
     extract 3D points/confidence from prediction head output
     """
     fmap = out.permute(0, 2, 3, 1)  # B,H,W,3
-    res = dict(pts3d=reg_dense_depth(fmap[:, :, :, 0:3], mode=depth_mode))
+    res = {"pts3d": reg_dense_depth(fmap[:, :, :, 0:3], mode=depth_mode)}
 
     if conf_mode is not None:
         res["conf"] = reg_dense_conf(fmap[:, :, :, 3], mode=conf_mode)
@@ -108,12 +90,6 @@ def postprocess_desc(out, depth_mode, conf_mode, desc_dim, double_channel=False)
 
 
 def reg_desc(desc, mode="norm"):
-    """Reg desc.
-
-    Args:
-        desc: The desc.
-        mode: The mode.
-    """
     if "norm" in mode:
         desc = desc / desc.norm(dim=-1, keepdim=True)
     else:
@@ -160,19 +136,3 @@ def reg_dense_conf(x, mode):
     if mode == "sigmoid":
         return (vmax - vmin) * torch.sigmoid(x) + vmin
     raise ValueError(f"bad {mode=}")
-
-
-def standardize_quaternion(quaternions: torch.Tensor) -> torch.Tensor:
-    """
-    Convert a unit quaternion to a standard form: one in which the real
-    part is non negative.
-
-    Args:
-        quaternions: Quaternions with real part first,
-            as tensor of shape (..., 4).
-
-    Returns:
-        Standardized quaternions as tensor of shape (..., 4).
-    """
-    quaternions = F.normalize(quaternions, p=2, dim=-1)
-    return torch.where(quaternions[..., 0:1] < 0, -quaternions, quaternions)

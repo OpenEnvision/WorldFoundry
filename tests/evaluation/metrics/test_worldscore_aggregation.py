@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from worldfoundry.evaluation.tasks.execution.runners.worldscore import run_worldscore_official_runner as runner
+from worldfoundry.evals.tasks.execution.runners.worldscore import run_worldscore_official_runner as runner
 
 pytestmark = pytest.mark.unit
 

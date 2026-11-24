@@ -1,15 +1,13 @@
-
+import random
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-import random
-from typing import Any, Dict, Tuple, Union
+from typing import Any
 
 import numpy as np
 import torch
-from torch import Tensor
 import torch.nn as nn
-
+from torch import Tensor
 
 ATARI_100K_GAMES = [
     "Alien",
@@ -42,7 +40,7 @@ ATARI_100K_GAMES = [
 
 
 Logs = list[dict[str, float]]
-LossAndLogs = Tuple[Tensor, Dict[str, Any]]
+LossAndLogs = tuple[Tensor, dict[str, Any]]
 
 
 class StateDictMixin:
@@ -59,15 +57,15 @@ class StateDictMixin:
     def _set_field(self, k: str, v: Any) -> None:
         getattr(self, k).load_state_dict(v) if k in self._fields_sd else setattr(self, k, v)
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         if not hasattr(self, "_all_fields"):
             self._init_fields()
         return {k: self._get_field(k) for k in self._all_fields}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         if not hasattr(self, "_all_fields"):
             self._init_fields()
-        assert set(list(state_dict.keys())) == self._all_fields
+        assert set(state_dict.keys()) == self._all_fields
         for k, v in state_dict.items():
             self._set_field(k, v)
 
@@ -85,15 +83,12 @@ class CommonTools(StateDictMixin):
         return setattr(self, name, value)
 
 
-
-
 def count_parameters(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters())
 
 
 def extract_state_dict(state_dict: OrderedDict, module_name: str) -> OrderedDict:
     return OrderedDict({k.split(".", 1)[1]: v for k, v in state_dict.items() if k.startswith(module_name)})
-
 
 
 def init_lstm(model: nn.Module) -> None:
@@ -111,16 +106,14 @@ def init_lstm(model: nn.Module) -> None:
             p.data.fill_(0)
 
 
-def get_path_agent_ckpt(path_ckpt_dir: Union[str, Path], epoch: int, num_zeros: int = 5) -> Path:
+def get_path_agent_ckpt(path_ckpt_dir: str | Path, epoch: int, num_zeros: int = 5) -> Path:
     d = Path(path_ckpt_dir) / "agent_versions"
     if epoch >= 0:
         return d / f"agent_epoch_{epoch:0{num_zeros}d}.pt"
     else:
-        all_ = sorted(list(d.iterdir()))
+        all_ = sorted(d.iterdir())
         assert len(all_) >= -epoch
         return all_[epoch]
-
-
 
 
 def prompt_atari_game():
@@ -138,9 +131,6 @@ def prompt_atari_game():
         break
     game = ATARI_100K_GAMES[x]
     return game
-
-
-
 
 
 def set_seed(seed: int) -> None:

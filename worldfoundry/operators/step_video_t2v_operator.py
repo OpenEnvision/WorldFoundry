@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, ClassVar
 
 from .base_operator import BaseOperator
 
@@ -17,9 +17,9 @@ class StepVideoT2VOperator(BaseOperator):
     """
 
     MODEL_ID = "step-video-t2v"
-    DEFAULT_INPUT_SCHEMA = {"prompt": True, "image": False, "video": False, "actions": []}
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {"prompt": True, "image": False, "video": False, "actions": []}
 
-    def __init__(self, input_schema: Dict[str, Any] | None = None):
+    def __init__(self, input_schema: dict[str, Any] | None = None):
         """Initialize the operator with specific configurations."""
         super().__init__(operation_types=["textual_instruction"])
         self.input_schema = {**self.DEFAULT_INPUT_SCHEMA, **dict(input_schema or {})}
@@ -37,12 +37,12 @@ class StepVideoT2VOperator(BaseOperator):
         self.check_interaction(interaction)
         self.current_interaction.append(None)
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         self.interaction_history.append([])
         return {"actions": []}
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
         del kwargs
         text = "" if prompt is None else str(prompt).strip()
@@ -56,7 +56,7 @@ class StepVideoT2VOperator(BaseOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         if images is not None or video is not None or ref_image_path is not None:
             raise ValueError("Step-Video-T2V does not accept image or video conditioning inputs.")

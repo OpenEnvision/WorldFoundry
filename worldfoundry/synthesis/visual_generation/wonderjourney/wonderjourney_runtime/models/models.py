@@ -4,37 +4,48 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import skimage
 import torch
 import torch.nn.functional as F
-import skimage
-from PIL import Image
 from einops import rearrange
 from kornia.geometry import PinholeCamera
+from PIL import Image
+
 from worldfoundry.base_models.three_dimensions.three_d_four_d.pytorch3d_compat import (
     configure_pytorch3d_extension,
 )
 
 configure_pytorch3d_extension()
 
-from pytorch3d.renderer import (
+
+from kornia.morphology import erosion  # noqa: E402 - Follows a module-level setup call, as upstream.
+from pytorch3d.renderer import (  # noqa: E402 - Follows a module-level setup call, as upstream.
     PerspectiveCameras,
     PointsRasterizationSettings,
     PointsRasterizer,
 )
-from pytorch3d.renderer.points.compositor import _add_background_color_to_images
-from pytorch3d.structures import Pointclouds
-from torchvision.transforms import ToTensor, ToPILImage, Resize
-from util.midas_utils import (
+from pytorch3d.renderer.points.compositor import (  # noqa: E402 - Follows a module-level setup call, as upstream.
+    _add_background_color_to_images,
+)
+from pytorch3d.structures import Pointclouds  # noqa: E402 - Follows a module-level setup call, as upstream.
+from torchvision.transforms import (  # noqa: E402 - Follows a module-level setup call, as upstream.
+    Resize,
+    ToPILImage,
+    ToTensor,
+)
+
+from ..util.midas_utils import (  # noqa: E402 - Follows a module-level setup call, as upstream.
     dpt_512_transform,
     dpt_transform,
 )
-from util.utils import functbl, save_depth_map
+from ..util.segment_utils import (  # noqa: E402 - Follows a module-level setup call, as upstream.
+    refine_disp_with_segments,
+    save_sam_anns,
+)
+from ..util.utils import functbl, save_depth_map  # noqa: E402 - Follows a module-level setup call, as upstream.
 
-from util.segment_utils import refine_disp_with_segments, save_sam_anns
-from typing import List, Optional, Tuple, Union
-from kornia.morphology import erosion
+BG_COLOR = (1, 0, 0)
 
-BG_COLOR=(1, 0, 0)
 
 class PointsRenderer(torch.nn.Module):
     def __init__(self, rasterizer, compositor) -> None:
@@ -42,10 +53,12 @@ class PointsRenderer(torch.nn.Module):
         self.rasterizer = rasterizer
         self.compositor = compositor
 
-    def forward(self, point_clouds, return_z=False, return_bg_mask=False, return_fragment_idx=False, **kwargs) -> torch.Tensor:
+    def forward(
+        self, point_clouds, return_z=False, return_bg_mask=False, return_fragment_idx=False, **kwargs
+    ) -> torch.Tensor:
         fragments = self.rasterizer(point_clouds, **kwargs)
 
-        r = self.rasterizer.raster_settings.radius
+        _r = self.rasterizer.raster_settings.radius
 
         zbuf = fragments.zbuf.permute(0, 3, 1, 2)
         fragment_idx = fragments.idx.long().permute(0, 3, 1, 2)
@@ -67,7 +80,7 @@ class PointsRenderer(torch.nn.Module):
             ret.append(background_mask)
         if return_fragment_idx:
             ret.append(fragments.idx.long())
-        
+
         if len(ret) == 1:
             ret = images
         return ret
@@ -79,7 +92,9 @@ class SoftmaxImportanceCompositor(torch.nn.Module):
     """
 
     def __init__(
-        self, background_color: Optional[Union[Tuple, List, torch.Tensor]] = None, softmax_scale=1.0,
+        self,
+        background_color: tuple | list | torch.Tensor | None = None,
+        softmax_scale=1.0,
     ) -> None:
         super().__init__()
         self.background_color = background_color
@@ -96,7 +111,7 @@ class SoftmaxImportanceCompositor(torch.nn.Module):
                 giving the indices of the nearest points at each pixel, sorted in z-order.
                 Concretely pointsidx[n, k, y, x] = p means that features[:, p] is the
                 feature of the kth closest point (along the z-direction) to pixel (y, x) in
-                batch element n. 
+                batch element n.
             zbuf: float32 Tensor of shape (N, points_per_pixel, image_size,
                 image_size) giving the depth value of each point in the z-buffer.
                 Value -1 means no points assigned to the pixel.
@@ -110,13 +125,15 @@ class SoftmaxImportanceCompositor(torch.nn.Module):
         background_color = kwargs.get("background_color", self.background_color)
 
         zbuf_processed = zbuf.clone()
-        zbuf_processed[zbuf_processed < 0] = - 1e-4
+        zbuf_processed[zbuf_processed < 0] = -1e-4
         importance = 1.0 / (zbuf_processed + 1e-6)
         weights = torch.softmax(importance * self.scale, dim=1)
 
         fragments_flat = fragments.flatten()
         gathered = ptclds[:, fragments_flat]
-        gathered_features = gathered.reshape(ptclds.shape[0], fragments.shape[0], fragments.shape[1], fragments.shape[2], fragments.shape[3])
+        gathered_features = gathered.reshape(
+            ptclds.shape[0], fragments.shape[0], fragments.shape[1], fragments.shape[2], fragments.shape[3]
+        )
         images = (weights[None, ...] * gathered_features).sum(dim=2).permute(1, 0, 2, 3)
 
         # images are of shape (N, C, H, W)
@@ -127,16 +144,17 @@ class SoftmaxImportanceCompositor(torch.nn.Module):
 
 
 class FrameSyn(torch.nn.Module):
-    def __init__(self, config, inpainter_pipeline, depth_model, vae, rotation,
-                 image, inpainting_prompt, adaptive_negative_prompt):
+    def __init__(
+        self, config, inpainter_pipeline, depth_model, vae, rotation, image, inpainting_prompt, adaptive_negative_prompt
+    ):
         super().__init__()
 
         self.device = config["device"]
         self.config = config
-        self.background_hard_depth = config['depth_shift'] + config['fg_depth_range']
+        self.background_hard_depth = config["depth_shift"] + config["fg_depth_range"]
         self.is_upper_mask_aggressive = False
         self.use_noprompt = False
-        self.total_frames = config['frames']
+        self.total_frames = config["frames"]
 
         self.inpainting_prompt = inpainting_prompt
         self.adaptive_negative_prompt = adaptive_negative_prompt
@@ -148,7 +166,7 @@ class FrameSyn(torch.nn.Module):
 
         self.depth_model = depth_model
         with torch.no_grad():
-                self.depth, self.disparity = self.get_depth(self.image_tensor)
+            self.depth, self.disparity = self.get_depth(self.image_tensor)
 
         self.current_camera = self.get_init_camera()
         if self.config["motion"] == "rotations":
@@ -156,7 +174,9 @@ class FrameSyn(torch.nn.Module):
             self.current_camera.no_rotations_count = 0
             self.current_camera.rotations_count = 0
             self.current_camera.rotating_right = rotation
-            self.current_camera.move_dir = torch.tensor([[-config['right_multiplier'], 0.0, -config['forward_speed_multiplier']]], device=self.device)
+            self.current_camera.move_dir = torch.tensor(
+                [[-config["right_multiplier"], 0.0, -config["forward_speed_multiplier"]]], device=self.device
+            )
         elif self.config["motion"] == "predefined":
             intrinsics = np.load(self.config["intrinsics"]).astype(np.float32)
             extrinsics = np.load(self.config["extrinsics"]).astype(np.float32)
@@ -175,7 +195,7 @@ class FrameSyn(torch.nn.Module):
 
             self.predefined_cameras = [
                 PerspectiveCameras(K=K.unsqueeze(0), R=R.T.unsqueeze(0), T=t.unsqueeze(0), device=self.device)
-                for K, R, t in zip(Ks, Rs, ts)
+                for K, R, t in zip(Ks, Rs, ts, strict=False)
             ]
             self.current_camera = self.predefined_cameras[0]
 
@@ -191,7 +211,11 @@ class FrameSyn(torch.nn.Module):
 
         self.vae = vae
 
-        self.camera_speed = self.config["camera_speed"] if rotation == 0 else self.config["camera_speed"] * self.config["camera_speed_multiplier_rotation"]
+        self.camera_speed = (
+            self.config["camera_speed"]
+            if rotation == 0
+            else self.config["camera_speed"] * self.config["camera_speed_multiplier_rotation"]
+        )
         self.cameras = [self.current_camera]
 
         # create mask for inpainting of the right size, white area around the image in the middle
@@ -209,7 +233,7 @@ class FrameSyn(torch.nn.Module):
 
         x = torch.arange(512).float() + 0.5
         y = torch.arange(512).float() + 0.5
-        self.points = torch.stack(torch.meshgrid(x, y, indexing='ij'), -1)
+        self.points = torch.stack(torch.meshgrid(x, y, indexing="ij"), -1)
         self.points = rearrange(self.points, "h w c -> (h w) c").to(self.device)
 
         self.kf_delta_t = self.camera_speed
@@ -219,7 +243,7 @@ class FrameSyn(torch.nn.Module):
             depth = torch.zeros_like(image[:, 0:1])
             disparity = torch.zeros_like(image[:, 0:1])
             return depth, disparity
-        if self.config['depth_model'].lower() == "midas":
+        if self.config["depth_model"].lower() == "midas":
             # MiDaS
             disparity = self.depth_model(dpt_transform(image))
             disparity = torch.nn.functional.interpolate(
@@ -230,7 +254,7 @@ class FrameSyn(torch.nn.Module):
             )
             disparity = disparity.clip(1e-6, max=None)
             depth = 1 / disparity
-        if self.config['depth_model'].lower() == "midas_v3.1":
+        if self.config["depth_model"].lower() == "midas_v3.1":
             img_transformed = dpt_512_transform(image)
             disparity = self.depth_model(img_transformed)
             disparity = torch.nn.functional.interpolate(
@@ -241,10 +265,10 @@ class FrameSyn(torch.nn.Module):
             )
             disparity = disparity.clip(1e-6, max=None)
             depth = 1 / disparity
-        elif self.config['depth_model'].lower() == "zoedepth":
+        elif self.config["depth_model"].lower() == "zoedepth":
             # ZeoDepth
-            depth = self.depth_model(image)['metric_depth']
-        depth = depth + self.config['depth_shift']
+            depth = self.depth_model(image)["metric_depth"]
+        depth = depth + self.config["depth_shift"]
         disparity = 1 / depth
         return depth, disparity
 
@@ -262,7 +286,7 @@ class FrameSyn(torch.nn.Module):
         return camera
 
     @torch.no_grad()
-    def inpaint(self, rendered_image, inpaint_mask, fill_mask=None, fill_mode = 'cv2_telea'):
+    def inpaint(self, rendered_image, inpaint_mask, fill_mask=None, fill_mode="cv2_telea"):
         # set resolution
         process_width, process_height = self.config["inpainting_resolution"], self.config["inpainting_resolution"]
 
@@ -275,12 +299,18 @@ class FrameSyn(torch.nn.Module):
             img, _ = functbl[fill_mode](img, fill_mask_)
 
         # process mask
-        if self.config['use_postmask']:
+        if self.config["use_postmask"]:
             mask_block_size = 8
             mask_boundary = mask.shape[0] // 2
-            mask_upper = skimage.measure.block_reduce(mask[:mask_boundary, :], (mask_block_size, mask_block_size), np.max if self.is_upper_mask_aggressive else np.min)
+            mask_upper = skimage.measure.block_reduce(
+                mask[:mask_boundary, :],
+                (mask_block_size, mask_block_size),
+                np.max if self.is_upper_mask_aggressive else np.min,
+            )
             mask_upper = mask_upper.repeat(mask_block_size, axis=0).repeat(mask_block_size, axis=1)
-            mask_lower = skimage.measure.block_reduce(mask[mask_boundary:, :], (mask_block_size, mask_block_size), np.min)
+            mask_lower = skimage.measure.block_reduce(
+                mask[mask_boundary:, :], (mask_block_size, mask_block_size), np.min
+            )
             mask_lower = mask_lower.repeat(mask_block_size, axis=0).repeat(mask_block_size, axis=1)
             mask = np.concatenate([mask_upper, mask_lower], axis=0)
 
@@ -288,7 +318,7 @@ class FrameSyn(torch.nn.Module):
         mask_image = Image.fromarray(mask)
 
         inpainted_image_latents = self.inpainting_pipeline(
-            prompt='' if self.use_noprompt else self.inpainting_prompt,
+            prompt="" if self.use_noprompt else self.inpainting_prompt,
             negative_prompt=self.adaptive_negative_prompt + self.config["negative_inpainting_prompt"],
             image=init_image,
             mask_image=mask_image,
@@ -296,10 +326,12 @@ class FrameSyn(torch.nn.Module):
             guidance_scale=0 if self.use_noprompt else 7.5,
             height=process_height,
             width=process_width,
-            output_type='latent',
+            output_type="latent",
         ).images
 
-        inpainted_image = self.inpainting_pipeline.vae.decode(inpainted_image_latents / self.inpainting_pipeline.vae.config.scaling_factor, return_dict=False)[0]
+        inpainted_image = self.inpainting_pipeline.vae.decode(
+            inpainted_image_latents / self.inpainting_pipeline.vae.config.scaling_factor, return_dict=False
+        )[0]
         inpainted_image = (inpainted_image / 2 + 0.5).clamp(0, 1).to(torch.float32)
         post_mask = torch.from_numpy(mask).unsqueeze(0).unsqueeze(0).float() * 255
         self.post_mask_tmp = post_mask
@@ -319,9 +351,7 @@ class FrameSyn(torch.nn.Module):
             inpaint_mask = inpaint_mask[
                 :, :, self.border_size : -self.border_size, self.border_size : -self.border_size
             ]
-            post_mask = post_mask[
-                :, :, self.border_size : -self.border_size, self.border_size : -self.border_size
-            ]
+            post_mask = post_mask[:, :, self.border_size : -self.border_size, self.border_size : -self.border_size]
         else:
             decoded_image = decoded_image
             inpaint_mask = inpaint_mask
@@ -339,7 +369,7 @@ class FrameSyn(torch.nn.Module):
 
     def get_next_camera_rotation(self):
         next_camera = copy.deepcopy(self.current_camera)
-        
+
         if next_camera.rotating:
             next_camera.rotating_right = self.current_camera.rotating_right
             theta = torch.tensor(self.config["rotation_range_theta"] * next_camera.rotating_right)
@@ -349,25 +379,41 @@ class FrameSyn(torch.nn.Module):
             )
             next_camera.R[0] = rotation_matrix @ next_camera.R[0]
             # next_camera.T[0] = rotation_matrix @ next_camera.T[0]
-            
+
             if self.current_camera.rotations_count != 0:  # this is for KFInterp only
-                theta_current = theta * (self.config['frames'] + 2 - self.current_camera.rotations_count)
-                next_camera.move_dir = torch.tensor([-self.config['forward_speed_multiplier'] * torch.sin(theta_current).item(), 0.0, self.config['forward_speed_multiplier'] * torch.cos(theta_current).item()], device=self.device)
+                theta_current = theta * (self.config["frames"] + 2 - self.current_camera.rotations_count)
+                next_camera.move_dir = torch.tensor(
+                    [
+                        -self.config["forward_speed_multiplier"] * torch.sin(theta_current).item(),
+                        0.0,
+                        self.config["forward_speed_multiplier"] * torch.cos(theta_current).item(),
+                    ],
+                    device=self.device,
+                )
                 next_camera.rotations_count = self.current_camera.rotations_count + 1
         else:
             if self.current_camera.rotations_count != 0:  # this is for KFInterp only
-                v = self.config['forward_speed_multiplier']
+                v = self.config["forward_speed_multiplier"]
                 rc = self.current_camera.rotations_count
-                k = self.config['camera_speed_multiplier_rotation']
+                k = self.config["camera_speed_multiplier_rotation"]
                 acceleration_frames = self.config["frames"] // 2
-                if self.speed_up and rc <= acceleration_frames:  # will have rotation in next kf; need to speed up in the first 5 frames
-                    next_camera.move_dir = torch.tensor([0.0, 0.0, v * (k + (1-k) * (rc/acceleration_frames))], device=self.device)
-                elif self.speed_down and rc > self.total_frames - acceleration_frames:  # had rotation in previous kf; need to slow donw in the last 5 frames
-                    next_camera.move_dir = torch.tensor([0.0, 0.0, v * (k + (1-k) * ((self.total_frames-rc+1)/acceleration_frames))], device=self.device)
+                if (
+                    self.speed_up and rc <= acceleration_frames
+                ):  # will have rotation in next kf; need to speed up in the first 5 frames
+                    next_camera.move_dir = torch.tensor(
+                        [0.0, 0.0, v * (k + (1 - k) * (rc / acceleration_frames))], device=self.device
+                    )
+                elif (
+                    self.speed_down and rc > self.total_frames - acceleration_frames
+                ):  # had rotation in previous kf; need to slow donw in the last 5 frames
+                    next_camera.move_dir = torch.tensor(
+                        [0.0, 0.0, v * (k + (1 - k) * ((self.total_frames - rc + 1) / acceleration_frames))],
+                        device=self.device,
+                    )
                 else:
                     next_camera.move_dir = torch.tensor([0.0, 0.0, v], device=self.device)  # do not change speed
 
-                # random walk                
+                # random walk
                 theta = torch.tensor(2 * torch.pi * self.current_camera.rotations_count / (self.total_frames + 1))
                 next_camera.move_dir[1] = -self.random_walk_scale_vertical * 0.01 * torch.sin(theta).item()
 
@@ -381,78 +427,114 @@ class FrameSyn(torch.nn.Module):
 
 
 class KeyframeGen(FrameSyn):
-    def __init__(self, config, inpainter_pipeline, mask_generator, depth_model, vae, rotation, 
-                 image, inpainting_prompt, adaptive_negative_prompt="", 
-                 segment_model=None, segment_processor=None):
-        
+    def __init__(
+        self,
+        config,
+        inpainter_pipeline,
+        mask_generator,
+        depth_model,
+        vae,
+        rotation,
+        image,
+        inpainting_prompt,
+        adaptive_negative_prompt="",
+        segment_model=None,
+        segment_processor=None,
+    ):
         dt_string = datetime.now().strftime("%d-%m_%H-%M-%S")
         run_dir_root = Path(config["runs_dir"])
         self.run_dir = run_dir_root / f"Gen-{dt_string}_{inpainting_prompt.replace(' ', '_')[:40]}"
-        (self.run_dir / 'images').mkdir(parents=True, exist_ok=True)
-        config['rotation_range_theta'] = config['rotation_range']
+        (self.run_dir / "images").mkdir(parents=True, exist_ok=True)
+        config["rotation_range_theta"] = config["rotation_range"]
 
         if rotation == 0:
-            config['forward_speed_multiplier'] = -1.0
-            config['right_multiplier'] = 0
+            config["forward_speed_multiplier"] = -1.0
+            config["right_multiplier"] = 0
         else:  # Compute camera movement
-            theta = torch.tensor(config['rotation_range_theta'] / (config['frames'] + 1)) * rotation
-            sin = torch.sum(torch.stack([torch.sin(i*theta) for i in range(1, config['frames']+2)]))
-            cos = torch.sum(torch.stack([torch.cos(i*theta) for i in range(1, config['frames']+2)]))
-            config['forward_speed_multiplier'] = -1.0 / (config['frames'] + 1) * cos.item()
-            config['right_multiplier'] = -1.0 / (config['frames'] + 1) * sin.item()
-        config['inpainting_resolution'] = config['inpainting_resolution_gen']
-        super().__init__(config, inpainter_pipeline, depth_model, vae, rotation,
-                         image, inpainting_prompt, adaptive_negative_prompt)
-        
+            theta = torch.tensor(config["rotation_range_theta"] / (config["frames"] + 1)) * rotation
+            sin = torch.sum(torch.stack([torch.sin(i * theta) for i in range(1, config["frames"] + 2)]))
+            cos = torch.sum(torch.stack([torch.cos(i * theta) for i in range(1, config["frames"] + 2)]))
+            config["forward_speed_multiplier"] = -1.0 / (config["frames"] + 1) * cos.item()
+            config["right_multiplier"] = -1.0 / (config["frames"] + 1) * sin.item()
+        config["inpainting_resolution"] = config["inpainting_resolution_gen"]
+        super().__init__(
+            config, inpainter_pipeline, depth_model, vae, rotation, image, inpainting_prompt, adaptive_negative_prompt
+        )
+
         self.mask_generator = mask_generator
         self.segment_model = segment_model
         self.segment_processor = segment_processor
         self.is_upper_mask_aggressive = True
 
     @torch.no_grad()
-    def refine_disp_with_segments(self, kf_idx, background_depth_cutoff=1./7.):
+    def refine_disp_with_segments(self, kf_idx, background_depth_cutoff=1.0 / 7.0):
         image = ToPILImage()(self.images[kf_idx].squeeze())
         segmenter_input = self.segment_processor(image, ["semantic"], return_tensors="pt")
         segmenter_input = {name: tensor.to("cuda") for name, tensor in segmenter_input.items()}
         segment_output = self.segment_model(**segmenter_input)
         pred_semantic_map = self.segment_processor.post_process_semantic_segmentation(
-                                segment_output, target_sizes=[image.size[::-1]])[0]
+            segment_output, target_sizes=[image.size[::-1]]
+        )[0]
         sky_mask = pred_semantic_map.cpu() == 119
-        sky_mask = erosion(sky_mask.float()[None, None], 
-                           kernel=torch.ones(self.config['sky_erode_kernel_size'], self.config['sky_erode_kernel_size'])
-                           ).squeeze() > 0.5
+        sky_mask = (
+            erosion(
+                sky_mask.float()[None, None],
+                kernel=torch.ones(self.config["sky_erode_kernel_size"], self.config["sky_erode_kernel_size"]),
+            ).squeeze()
+            > 0.5
+        )
         sky_mask = sky_mask.cpu()
-        ToPILImage()(sky_mask.float()).save(self.run_dir / 'images' / f"kf{kf_idx+1}_sky_mask.png")
+        ToPILImage()(sky_mask.float()).save(self.run_dir / "images" / f"kf{kf_idx + 1}_sky_mask.png")
 
         image_np = np.array(image)
         masks = self.mask_generator.generate(image_np)
-        sorted_mask = sorted(masks, key=(lambda x: x['area']), reverse=False)
+        sorted_mask = sorted(masks, key=(lambda x: x["area"]), reverse=False)
         min_mask_area = 30
-        sorted_mask = [m for m in sorted_mask if m['area'] > min_mask_area]
+        sorted_mask = [m for m in sorted_mask if m["area"] > min_mask_area]
 
-        save_sam_anns(masks, self.run_dir / 'images' / f"SAM_kf{kf_idx+1}.png")
+        save_sam_anns(masks, self.run_dir / "images" / f"SAM_kf{kf_idx + 1}.png")
         disparity_np = self.disparities[kf_idx].squeeze().cpu().numpy()
         keep_threshold_ratio = 0.3
-        refined_disparity = refine_disp_with_segments(disparity_np, sorted_mask, keep_threshold=1 / background_depth_cutoff * keep_threshold_ratio)
+        refined_disparity = refine_disp_with_segments(
+            disparity_np, sorted_mask, keep_threshold=1 / background_depth_cutoff * keep_threshold_ratio
+        )
 
-        save_depth_map(1/refined_disparity, self.run_dir / 'images' / f"kf{kf_idx+1}_p1_SAM", vmax=self.config['sky_hard_depth'])
+        save_depth_map(
+            1 / refined_disparity,
+            self.run_dir / "images" / f"kf{kf_idx + 1}_p1_SAM",
+            vmax=self.config["sky_hard_depth"],
+        )
 
-        sky_hard_disp = 1. / self.config['sky_hard_depth']
-        bg_hard_disp = 1. / (background_depth_cutoff)
+        sky_hard_disp = 1.0 / self.config["sky_hard_depth"]
+        bg_hard_disp = 1.0 / (background_depth_cutoff)
         refined_disparity[sky_mask] = sky_hard_disp
 
-        save_depth_map(1/refined_disparity, self.run_dir / 'images' / f"kf{kf_idx+1}_p2_sky", vmax=self.config['sky_hard_depth'])
+        save_depth_map(
+            1 / refined_disparity,
+            self.run_dir / "images" / f"kf{kf_idx + 1}_p2_sky",
+            vmax=self.config["sky_hard_depth"],
+        )
 
-        background_cutoff = 1./background_depth_cutoff
+        background_cutoff = 1.0 / background_depth_cutoff
         background_mask = refined_disparity < background_cutoff
         background_but_not_sky_mask = np.logical_and(background_mask, np.logical_not(sky_mask.numpy()))
         refined_disparity[background_but_not_sky_mask] = bg_hard_disp
 
-        save_depth_map(1/refined_disparity, self.run_dir / 'images' / f"kf{kf_idx+1}_p3_cutoff", vmax=self.config['sky_hard_depth'])
+        save_depth_map(
+            1 / refined_disparity,
+            self.run_dir / "images" / f"kf{kf_idx + 1}_p3_cutoff",
+            vmax=self.config["sky_hard_depth"],
+        )
 
-        refined_disparity = refine_disp_with_segments(refined_disparity, sorted_mask, keep_threshold=1 / background_depth_cutoff * keep_threshold_ratio)
-        
-        save_depth_map(1/refined_disparity, self.run_dir / 'images' / f"kf{kf_idx+1}_p4_SAM", vmax=self.config['sky_hard_depth'])
+        refined_disparity = refine_disp_with_segments(
+            refined_disparity, sorted_mask, keep_threshold=1 / background_depth_cutoff * keep_threshold_ratio
+        )
+
+        save_depth_map(
+            1 / refined_disparity,
+            self.run_dir / "images" / f"kf{kf_idx + 1}_p4_SAM",
+            vmax=self.config["sky_hard_depth"],
+        )
 
         refined_depth = 1 / refined_disparity
 
@@ -478,25 +560,27 @@ class KeyframeGen(FrameSyn):
 
         colors = rearrange(self.images[epoch - 1], "b c h w -> (w h b) c")
         depth_normalizer = self.background_hard_depth
-        min_ratio = self.config['point_size_min_ratio']
-        radius = self.config['point_size'] * (min_ratio + (1 - min_ratio) * (point_depth.permute([1, 0]) / depth_normalizer))
-        radius = radius.clamp(max=self.config['point_size']*self.config['sky_point_size_multiplier'])
+        min_ratio = self.config["point_size_min_ratio"]
+        radius = self.config["point_size"] * (
+            min_ratio + (1 - min_ratio) * (point_depth.permute([1, 0]) / depth_normalizer)
+        )
+        radius = radius.clamp(max=self.config["point_size"] * self.config["sky_point_size_multiplier"])
         raster_settings = PointsRasterizationSettings(
             image_size=512,
-            radius = radius,
-            points_per_pixel = 8,
+            radius=radius,
+            points_per_pixel=8,
         )
         renderer = PointsRenderer(
             rasterizer=PointsRasterizer(cameras=camera, raster_settings=raster_settings),
-            compositor=SoftmaxImportanceCompositor(background_color=BG_COLOR, softmax_scale=1.0)
+            compositor=SoftmaxImportanceCompositor(background_color=BG_COLOR, softmax_scale=1.0),
         )
-        points_3d[..., :2] = - points_3d[..., :2]
+        points_3d[..., :2] = -points_3d[..., :2]
         point_cloud = Pointclouds(points=[points_3d], features=[colors])
         images, zbuf, bg_mask = renderer(point_cloud, return_z=True, return_bg_mask=True)
 
         renderer = PointsRenderer(
             rasterizer=PointsRasterizer(cameras=camera, raster_settings=raster_settings),
-            compositor=SoftmaxImportanceCompositor(background_color=(0,), softmax_scale=1.0)
+            compositor=SoftmaxImportanceCompositor(background_color=(0,), softmax_scale=1.0),
         )
         orig_depth, _ = self.get_depth(self.images[epoch - 1])  # kf1_estimate under kf1 frame
         orig_depth = rearrange(orig_depth, "b c h w -> (w h b) c")
@@ -516,13 +600,13 @@ class KeyframeGen(FrameSyn):
 
         if self.config["inpainting_resolution"] > 512:
             padded_inpainting_mask = self.border_mask.clone()
-            padded_inpainting_mask[
-                :, :, self.border_size : -self.border_size, self.border_size : -self.border_size
-            ] = inpaint_mask
+            padded_inpainting_mask[:, :, self.border_size : -self.border_size, self.border_size : -self.border_size] = (
+                inpaint_mask
+            )
             padded_image = self.border_image.clone()
-            padded_image[
-                :, :, self.border_size : -self.border_size, self.border_size : -self.border_size
-            ] = rendered_image
+            padded_image[:, :, self.border_size : -self.border_size, self.border_size : -self.border_size] = (
+                rendered_image
+            )
         else:
             padded_inpainting_mask = inpaint_mask
             padded_image = rendered_image
@@ -534,31 +618,49 @@ class KeyframeGen(FrameSyn):
             "inpaint_mask_512": inpaint_mask,
             "rendered_depth_original": rendered_depth,
         }
-    
+
 
 class KeyframeInterp(FrameSyn):
-    def __init__(self, config, inpainter_pipeline, depth_model, vae, rotation, 
-                 image, inpainting_prompt, adaptive_negative_prompt, kf2_upsample_coef=1,
-                 kf1_image=None, kf2_image=None, kf1_depth=None, kf2_depth=None, kf1_camera=None, kf2_camera=None, kf2_mask=None,
-                 speed_up=False, speed_down=False, total_frames=None):
-        
+    def __init__(
+        self,
+        config,
+        inpainter_pipeline,
+        depth_model,
+        vae,
+        rotation,
+        image,
+        inpainting_prompt,
+        adaptive_negative_prompt,
+        kf2_upsample_coef=1,
+        kf1_image=None,
+        kf2_image=None,
+        kf1_depth=None,
+        kf2_depth=None,
+        kf1_camera=None,
+        kf2_camera=None,
+        kf2_mask=None,
+        speed_up=False,
+        speed_down=False,
+        total_frames=None,
+    ):
         dt_string = datetime.now().strftime("%d-%m_%H-%M-%S")
         run_dir_root = Path(config["runs_dir"])
         self.run_dir = run_dir_root / f"Interp-{dt_string}_{inpainting_prompt.replace(' ', '_')[:40]}"
-        (self.run_dir / 'images').mkdir(parents=True, exist_ok=True)
+        (self.run_dir / "images").mkdir(parents=True, exist_ok=True)
 
         self.speed_up = speed_up
         self.speed_down = speed_down
 
         self.random_walk_scale_vertical = np.random.uniform(0.1, 0.3)
 
-        config['forward_speed_multiplier'] = -1. / (config['frames'] + 1)
-        config['inpainting_resolution'] = config['inpainting_resolution_interp']
-        config['right_multiplier'] = 0
-        config['rotation_range_theta'] = config['rotation_range'] / (config['frames'] + 1)
-        super().__init__(config, inpainter_pipeline, depth_model, vae, rotation,  
-                         image, inpainting_prompt, adaptive_negative_prompt)
-        self.total_frames = config['frames'] if total_frames is None else total_frames
+        config["forward_speed_multiplier"] = -1.0 / (config["frames"] + 1)
+        config["inpainting_resolution"] = config["inpainting_resolution_interp"]
+        config["right_multiplier"] = 0
+        config["rotation_range_theta"] = config["rotation_range"] / (config["frames"] + 1)
+        super().__init__(
+            config, inpainter_pipeline, depth_model, vae, rotation, image, inpainting_prompt, adaptive_negative_prompt
+        )
+        self.total_frames = config["frames"] if total_frames is None else total_frames
 
         self.additional_points_3d = torch.tensor([]).cuda()
         self.additional_colors = torch.tensor([]).cuda()
@@ -566,7 +668,7 @@ class KeyframeInterp(FrameSyn):
         self.kf2_upsample_coef = kf2_upsample_coef
         x = torch.arange(512 * kf2_upsample_coef)
         y = torch.arange(512 * kf2_upsample_coef)
-        self.points_kf2 = torch.stack(torch.meshgrid(x, y, indexing='ij'), -1)
+        self.points_kf2 = torch.stack(torch.meshgrid(x, y, indexing="ij"), -1)
         self.points_kf2 = rearrange(self.points_kf2, "h w c -> (h w) c").to(self.device)
         self.use_noprompt = True
         self.kf1_colors = rearrange(kf1_image, "b c h w -> (w h b) c")
@@ -582,13 +684,12 @@ class KeyframeInterp(FrameSyn):
         self.point_depth = rearrange(kf1_depth, "b c h w -> (w h b) c")
         kf1_camera = convert_pytorch3d_kornia(kf1_camera, self.config["init_focal_length"])
         self.points_3d = kf1_camera.unproject(self.points, self.point_depth)
-        self.points_3d[..., :2] = - self.points_3d[..., :2]
+        self.points_3d[..., :2] = -self.points_3d[..., :2]
 
         self.reinit()
 
     @torch.no_grad()
     def reinit(self):
-
         # Image logs
         self.images = [self.kf2_image]
         self.inpaint_input_image = [self.inpaint_input_image[-1]]
@@ -605,10 +706,12 @@ class KeyframeInterp(FrameSyn):
             self.current_camera.no_rotations_count = 0
             self.current_camera.rotations_count = 1
             self.current_camera.rotating_right = -self.current_camera.rotating_right
-            self.current_camera.move_dir = torch.tensor([[0.0, 0.0, self.config['forward_speed_multiplier']]], device=self.device)
+            self.current_camera.move_dir = torch.tensor(
+                [[0.0, 0.0, self.config["forward_speed_multiplier"]]], device=self.device
+            )
         else:
             raise NotImplementedError
-        
+
     @torch.no_grad()
     def upsample_kf2(self):
         kf2_size = 512 * self.kf2_upsample_coef
@@ -617,9 +720,9 @@ class KeyframeInterp(FrameSyn):
         kf2_depth_upsample = F.interpolate(self.kf2_depth, size=(kf2_size, kf2_size), mode="nearest")
         kf2_mask_upsample = F.interpolate(self.kf2_mask, size=(kf2_size, kf2_size), mode="nearest")
         kf2_pil_upsample = ToPILImage()(self.kf2_image[0]).resize((kf2_size, kf2_size), resample=Image.LANCZOS)
-        kf2_image_upsample = ToTensor()(kf2_pil_upsample).unsqueeze(0).to(self.config['device'])
+        kf2_image_upsample = ToTensor()(kf2_pil_upsample).unsqueeze(0).to(self.config["device"])
         return kf2_camera_upsample, kf2_depth_upsample, kf2_mask_upsample, kf2_image_upsample
-    
+
     @torch.no_grad()
     def render_kf1(self, epoch):
         if self.config["motion"] == "rotations":
@@ -633,18 +736,20 @@ class KeyframeInterp(FrameSyn):
         point_depth_aug = torch.cat([self.point_depth, self.additional_points_3d[..., -1:]], dim=0)
 
         depth_normalizer = self.background_hard_depth
-        min_ratio = self.config['point_size_min_ratio']
-        radius = self.config['point_size'] * (min_ratio + (1 - min_ratio) * (point_depth_aug.permute([1, 0]) / depth_normalizer))
-        radius = radius.clamp(max=self.config['point_size']*self.config['sky_point_size_multiplier'])
+        min_ratio = self.config["point_size_min_ratio"]
+        radius = self.config["point_size"] * (
+            min_ratio + (1 - min_ratio) * (point_depth_aug.permute([1, 0]) / depth_normalizer)
+        )
+        radius = radius.clamp(max=self.config["point_size"] * self.config["sky_point_size_multiplier"])
         raster_settings = PointsRasterizationSettings(
             image_size=512,
-            radius = radius,
-            points_per_pixel = 8,
+            radius=radius,
+            points_per_pixel=8,
         )
         renderer = PointsRenderer(
-                    rasterizer=PointsRasterizer(cameras=camera, raster_settings=raster_settings),
-                    compositor=SoftmaxImportanceCompositor(background_color=BG_COLOR, softmax_scale=1.0)
-                )
+            rasterizer=PointsRasterizer(cameras=camera, raster_settings=raster_settings),
+            compositor=SoftmaxImportanceCompositor(background_color=BG_COLOR, softmax_scale=1.0),
+        )
         points_3d_aug = torch.cat([self.points_3d, self.additional_points_3d], dim=0)
         colors_aug = torch.cat([self.kf1_colors, self.additional_colors], dim=0)
         point_cloud = Pointclouds(points=[points_3d_aug], features=[colors_aug])
@@ -662,13 +767,13 @@ class KeyframeInterp(FrameSyn):
 
         if self.config["inpainting_resolution"] > 512:
             padded_inpainting_mask = self.border_mask.clone()
-            padded_inpainting_mask[
-                :, :, self.border_size : -self.border_size, self.border_size : -self.border_size
-            ] = inpaint_mask
+            padded_inpainting_mask[:, :, self.border_size : -self.border_size, self.border_size : -self.border_size] = (
+                inpaint_mask
+            )
             padded_image = self.border_image.clone()
-            padded_image[
-                :, :, self.border_size : -self.border_size, self.border_size : -self.border_size
-            ] = rendered_image
+            padded_image[:, :, self.border_size : -self.border_size, self.border_size : -self.border_size] = (
+                rendered_image
+            )
         else:
             padded_inpainting_mask = inpaint_mask
             padded_image = rendered_image
@@ -681,17 +786,17 @@ class KeyframeInterp(FrameSyn):
 
     @torch.no_grad()
     def visibility_check(self):
-        radius = self.config['point_size']
+        radius = self.config["point_size"]
         K = 32
         raster_settings = PointsRasterizationSettings(
             image_size=512,
-            radius = radius,
-            points_per_pixel = K,
+            radius=radius,
+            points_per_pixel=K,
         )
         renderer = PointsRenderer(
-                    rasterizer=PointsRasterizer(cameras=self.kf1_camera, raster_settings=raster_settings),
-                    compositor=SoftmaxImportanceCompositor(background_color=BG_COLOR, softmax_scale=1.0)
-                )
+            rasterizer=PointsRasterizer(cameras=self.kf1_camera, raster_settings=raster_settings),
+            compositor=SoftmaxImportanceCompositor(background_color=BG_COLOR, softmax_scale=1.0),
+        )
         points_3d = self.points_3d
         n_kf1_points = points_3d.shape[0]
         colors = self.kf1_colors
@@ -709,7 +814,9 @@ class KeyframeInterp(FrameSyn):
         difference_image = torch.abs(re_rendered - re_rendered_aug).sum(dim=1)  # [B, H, W]
         inconsistent_px = difference_image > 0
         inconsistent_px_point_idx = fragment_idx[inconsistent_px]  # [N, K]
-        inconsistent_px_point_from_kf1 = (inconsistent_px_point_idx < n_kf1_points) & (inconsistent_px_point_idx >= 0)  # [N, K], only one True in each
+        inconsistent_px_point_from_kf1 = (inconsistent_px_point_idx < n_kf1_points) & (
+            inconsistent_px_point_idx >= 0
+        )  # [N, K], only one True in each
 
         def find_nearer_points(x):
             """
@@ -729,7 +836,7 @@ class KeyframeInterp(FrameSyn):
             # Compare these indices with the True indices to determine if they come before or after
             y_vectorized = indices < true_indices.unsqueeze(1)
             return y_vectorized
-        
+
         inconsistent_px_point_from_addi = find_nearer_points(inconsistent_px_point_from_kf1)  # [N, K]
         inconsistent_px_point_from_addi_ = inconsistent_px_point_idx[inconsistent_px_point_from_addi]
         inconsistent_px_point_from_addi_ = inconsistent_px_point_from_addi_.unique()  # [T]
@@ -738,7 +845,9 @@ class KeyframeInterp(FrameSyn):
         return inconsistent_addi_point_idx
 
     @torch.no_grad()
-    def update_additional_point_cloud(self, rendered_depth, image, valid_mask=None, camera=None, points_2d=None, append_depth=False):
+    def update_additional_point_cloud(
+        self, rendered_depth, image, valid_mask=None, camera=None, points_2d=None, append_depth=False
+    ):
         """
         args:
             rendered_depth: Depth relative to camera. Note that KF2 camera is represented in KF1 camera-centered coord frame.
@@ -786,25 +895,37 @@ class KeyframeInterp(FrameSyn):
                 y_start, y_end = max(0, y - hw), min(rendered_depth.size(3), y + hw + 1)
 
                 # Extract valid coordinates within the window
-                local_valid_coords = valid_coords[(valid_coords[:, 0] >= x_start) & (valid_coords[:, 0] < x_end) & 
-                                                (valid_coords[:, 1] >= y_start) & (valid_coords[:, 1] < y_end)]
+                local_valid_coords = valid_coords[
+                    (valid_coords[:, 0] >= x_start)
+                    & (valid_coords[:, 0] < x_end)
+                    & (valid_coords[:, 1] >= y_start)
+                    & (valid_coords[:, 1] < y_end)
+                ]
 
                 # Compute distances and find nearest neighbor
                 if local_valid_coords.size(0) > 0:
                     dists = torch.cdist(invalid_coords[idx, :].unsqueeze(0).float(), local_valid_coords.float())
                     min_idx = torch.argmin(dists)
-                    rendered_depth_copy[0, 0, x, y] = rendered_depth[0, 0, local_valid_coords[min_idx, 0], local_valid_coords[min_idx, 1]]
+                    rendered_depth_copy[0, 0, x, y] = rendered_depth[
+                        0, 0, local_valid_coords[min_idx, 0], local_valid_coords[min_idx, 1]
+                    ]
 
             return rendered_depth_copy
 
         while inpaint_mask_onthefly.sum() > 0:  # iteratively inpaint depth until all depth holes are filled
-            rendered_depth_filled = nearest_neighbor_inpainting(inpaint_mask_onthefly, rendered_depth_filled, window_size=50)
+            rendered_depth_filled = nearest_neighbor_inpainting(
+                inpaint_mask_onthefly, rendered_depth_filled, window_size=50
+            )
             inpaint_mask_onthefly = rendered_depth_filled == 0
 
-        current_camera = convert_pytorch3d_kornia(self.current_camera, self.config["init_focal_length"]) if camera is None else camera
+        current_camera = (
+            convert_pytorch3d_kornia(self.current_camera, self.config["init_focal_length"])
+            if camera is None
+            else camera
+        )
         points_2d = self.points if points_2d is None else points_2d
         points_3d = current_camera.unproject(points_2d, rearrange(rendered_depth_filled, "b c h w -> (w h b) c"))
-        points_3d[..., :2] = - points_3d[..., :2]
+        points_3d[..., :2] = -points_3d[..., :2]
         inpaint_mask = rearrange(inpaint_mask, "b c h w -> (w h b) c")
         colors = rearrange(image, "b c h w -> (w h b) c")
         if valid_mask is None:
@@ -820,7 +941,7 @@ class KeyframeInterp(FrameSyn):
         additional_colors = colors[extract_mask]
 
         # remove additional points that are behind the camera
-        backward_points = (- additional_points_3d[..., 2]) > current_camera.tz
+        backward_points = (-additional_points_3d[..., 2]) > current_camera.tz
         additional_points_3d = additional_points_3d[~backward_points]
         additional_colors = additional_colors[~backward_points]
 
@@ -830,7 +951,6 @@ class KeyframeInterp(FrameSyn):
         if append_depth:
             self.depths.append(rendered_depth_filled.cpu())
 
-
     @torch.no_grad()
     def update_additional_point_depth(self, inconsistent_point_index, depth, mask):
         h, w = depth.shape[2:]
@@ -839,7 +959,7 @@ class KeyframeInterp(FrameSyn):
         depth_extracted = depth[extract_mask]
         if inconsistent_point_index.shape[0] > 0:
             assert depth_extracted.shape[0] >= inconsistent_point_index.max() + 1
-        depth_extracted[inconsistent_point_index] = self.config['sky_hard_depth'] * 2
+        depth_extracted[inconsistent_point_index] = self.config["sky_hard_depth"] * 2
         depth[extract_mask] = depth_extracted
         depth = rearrange(depth, "(w h b) c -> b c h w", w=w, h=h)
         return depth
@@ -856,22 +976,23 @@ def get_extrinsics(camera):
     extrinsics = torch.cat([extrinsics, padding], dim=0)
     return extrinsics
 
+
 def save_point_cloud_as_ply(points, filename="output.ply", colors=None):
     """
     Save a PyTorch tensor of shape [N, 3] as a PLY file. Optionally with colors.
-    
+
     Parameters:
     - points (torch.Tensor): The point cloud tensor of shape [N, 3].
     - filename (str): The name of the output PLY file.
     - colors (torch.Tensor, optional): The color tensor of shape [N, 3] with values in [0, 1]. Default is None.
     """
-    
+
     assert points.dim() == 2 and points.size(1) == 3, "Input tensor should be of shape [N, 3]."
-    
+
     if colors is not None:
         assert colors.dim() == 2 and colors.size(1) == 3, "Color tensor should be of shape [N, 3]."
         assert points.size(0) == colors.size(0), "Points and colors tensors should have the same number of entries."
-    
+
     # Header for the PLY file
     header = [
         "ply",
@@ -879,34 +1000,31 @@ def save_point_cloud_as_ply(points, filename="output.ply", colors=None):
         f"element vertex {points.size(0)}",
         "property float x",
         "property float y",
-        "property float z"
+        "property float z",
     ]
-    
+
     # Add color properties to header if colors are provided
     if colors is not None:
-        header.extend([
-            "property uchar red",
-            "property uchar green",
-            "property uchar blue"
-        ])
-    
+        header.extend(["property uchar red", "property uchar green", "property uchar blue"])
+
     header.append("end_header")
-    
+
     # Write to file
     with open(filename, "w") as f:
         for line in header:
             f.write(line + "\n")
-        
+
         for i in range(points.size(0)):
             line = f"{points[i, 0].item()} {points[i, 1].item()} {points[i, 2].item()}"
-            
+
             # Add color data to the line if colors are provided
             if colors is not None:
                 # Scale color values from [0, 1] to [0, 255] and convert to integers
                 r, g, b = (colors[i] * 255).clamp(0, 255).int().tolist()
                 line += f" {r} {g} {b}"
-            
+
             f.write(line + "\n")
+
 
 def convert_pytorch3d_kornia(camera, focal_length, size=512):
     R = torch.clone(camera.R)
@@ -923,6 +1041,7 @@ def convert_pytorch3d_kornia(camera, focal_length, size=512):
     K[0, 0, 0] = focal_length
     K[0, 1, 1] = focal_length
     return PinholeCamera(K, extrinsics, h, w)
+
 
 def inpaint_cv2(rendered_image, mask_diff):
     image_cv2 = rendered_image[0].permute(1, 2, 0).cpu().numpy()

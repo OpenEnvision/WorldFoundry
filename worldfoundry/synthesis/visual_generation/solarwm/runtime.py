@@ -1,4 +1,4 @@
-"""SolarWM's released inference routes, without vendored backbones or trainers."""
+"""SolarWM's released inference routes through the vendored solarwm package."""
 
 from __future__ import annotations
 
@@ -7,18 +7,22 @@ import shutil
 import tempfile
 from dataclasses import replace
 from pathlib import Path
+from typing import ClassVar
 
 import yaml
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io import resolve_data_path
 from worldfoundry.runtime.official_inference import InferencePlan, OfficialInferenceRuntime, local_path
+
+SOLARWM_MODULE = "worldfoundry.synthesis.visual_generation.solarwm.solarwm_runtime.solarwm"
+CONFIG_ROOT = Path(resolve_data_path("models/runtime/configs/solarwm"))
 
 
 class SolarWMRuntime(OfficialInferenceRuntime):
     MODEL_ID = "solarwm"
     REVISION = "2fe1ea9aca072f787bbba07ee9380b0e1ea7563b"
-    REQUIRED_SOURCE_FILES = ("src/solarwm/__main__.py", "src/solarwm/cli.py")
-    ASSET_KEYS = {
+    ASSET_KEYS: ClassVar[set] = {
         "model.codec.video_vae_path",
         "model.codec.gemma4_path",
         "data.silence_latents_path",
@@ -28,7 +32,7 @@ class SolarWMRuntime(OfficialInferenceRuntime):
         "inference.plan",
         "inference.dataset_root",
     }
-    REQUEST_KEYS = {
+    REQUEST_KEYS: ClassVar[set] = {
         "data.test_index",
         "data.index",
         "inference.sample_count",
@@ -45,7 +49,6 @@ class SolarWMRuntime(OfficialInferenceRuntime):
     def __init__(
         self,
         *,
-        source_root="${WORLDFOUNDRY_MODEL_SOURCE_DIR}/Junchao-cs--SolarWM",
         checkpoint_dir=None,
         base_path=None,
         data_root=None,
@@ -54,8 +57,8 @@ class SolarWMRuntime(OfficialInferenceRuntime):
         python_executable=None,
         device="cuda",
     ):
-        super().__init__(source_root=source_root, python_executable=python_executable, device=device)
-        config = yaml.safe_load(Path(resolve_data_path("models/runtime/configs/solarwm/routes.yaml")).read_text())
+        super().__init__(python_executable=python_executable, device=device)
+        config = yaml.safe_load((CONFIG_ROOT / "routes.yaml").read_text())
         if variant not in config["variants"]:
             raise ValueError(f"Unknown SolarWM variant {variant!r}; choose {list(config['variants'])}")
         self.variant, self.route = variant, config["variants"][variant]
@@ -67,7 +70,7 @@ class SolarWMRuntime(OfficialInferenceRuntime):
         if unknown:
             raise ValueError(f"Unsupported SolarWM asset keys: {sorted(unknown)}")
         self.assets = {key: str(local_path(value)) for key, value in self.assets.items()}
-        self.config_path = self.source_root / self.route["config"]
+        self.config_path = CONFIG_ROOT / self.route["config"]
 
     def required_assets(self):
         return (
@@ -112,7 +115,7 @@ class SolarWMRuntime(OfficialInferenceRuntime):
                         command[index] = f"{key}={json.dumps(scratch)}"
                     elif key == "inference.work_dir":
                         command[index] = f"{key}={json.dumps(str(Path(scratch) / 'conditioning'))}"
-            staged = replace(plan, command=tuple(command), output_dir=scratch)
+            staged = replace(plan, command=tuple(command), workdir=scratch, output_dir=scratch)
             result = super().run_plan(staged, timeout_seconds=timeout_seconds)
             shutil.copytree(scratch, output, dirs_exist_ok=True)
 
@@ -162,20 +165,12 @@ class SolarWMRuntime(OfficialInferenceRuntime):
             values["inference.run_id"] = "worldfoundry"
         if self.variant == "h3-dmd-long":
             values["inference.work_dir"] = str(local_path(output_dir) / "conditioning")
-        command = [
-            self.python_executable,
-            "-m",
-            "torch.distributed.run",
-            "--standalone",
-            f"--nproc-per-node={processes}",
-            "-m",
-            "solarwm",
-            "infer",
-            "--config",
-            str(self.config_path),
-        ]
+        args = ["infer", "--config", str(self.config_path)]
         for key, value in values.items():
-            command.extend(("--set", f"{key}={json.dumps(value, ensure_ascii=False)}"))
+            args.extend(("--set", f"{key}={json.dumps(value, ensure_ascii=False)}"))
+        command = package_module_command(
+            SOLARWM_MODULE, args, python_executable=self.python_executable, nproc_per_node=processes
+        )
         if self.variant == "wan-5b-dmd":
             artifacts, markers = ("generate/**/*.mp4",), ("runs/worldfoundry/COMPLETE.json",)
         elif self.variant == "h3-dmd-long":
@@ -192,10 +187,10 @@ class SolarWMRuntime(OfficialInferenceRuntime):
         return InferencePlan(
             self.MODEL_ID,
             tuple(command),
-            str(self.source_root),
+            str(local_path(output_dir)),
             str(local_path(output_dir)),
             self.REVISION,
-            self.environment(self.source_root / "src"),
+            self.environment(),
             artifact_globs=artifacts,
             completion_globs=markers,
         )

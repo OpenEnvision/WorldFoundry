@@ -45,8 +45,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--guidance_scale", default="auto")
     parser.add_argument("--zero_steps", type=int, default=1)
     parser.add_argument("--num_latent_frames_per_chunk", type=int, default=9)
-    parser.add_argument("--pyramid_num_inference_steps_list", nargs="+", default=None,
-                        help="Three positive step counts, or 'auto' for the model variant defaults.")
+    parser.add_argument(
+        "--pyramid_num_inference_steps_list",
+        nargs="+",
+        default=None,
+        help="Three positive step counts, or 'auto' for the model variant defaults.",
+    )
     parser.add_argument("--image_path")
     parser.add_argument("--video_path")
     parser.add_argument("--prompt", required=True)

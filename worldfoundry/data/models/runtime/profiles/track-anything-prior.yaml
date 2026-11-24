@@ -8,6 +8,7 @@ groups:
 - tracking
 source_repos:
 - url: https://github.com/z-x-yang/Segment-and-Track-Anything
+  revision: c0815c7e9f897fb17c68210360867e7a70aa9085
 checkpoints:
 - uri: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
   filename: sam_vit_b_01ec64.pth
@@ -37,6 +38,3 @@ notes:
 - Independent base-model profile for the Segment-and-Track-Anything prior under worldfoundry.base_models.perception_core.tracking.track_anything.
 - WorldFoundry exposes this prior through the shared geometry-prior pipeline/operator
   contract.
-backend_stage: in_tree_geometry_prior_runtime
-runtime_status: in_tree_runtime_wired
-integration_status: integrated

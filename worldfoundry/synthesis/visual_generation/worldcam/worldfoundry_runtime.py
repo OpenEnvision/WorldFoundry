@@ -10,15 +10,15 @@ It supports both direct model inference and the creation of lightweight executio
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Mapping, Sequence
 from functools import wraps
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional, Sequence
+from typing import Any
 
 from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path
 from worldfoundry.runtime.env import resolve_hfd_root
 
 from .worldcam_runtime import runtime_root as worldcam_runtime_root
-
 
 DEFAULT_WEIGHT_DTYPE = "bfloat16"
 DEFAULT_NEGATIVE_PROMPT = (
@@ -152,7 +152,7 @@ class WorldCamRuntime:
 
     def __init__(
         self,
-        pipeline: Optional[Any],
+        pipeline: Any | None,
         device: str = "cuda",
         weight_dtype: Any = DEFAULT_WEIGHT_DTYPE,
         prompt_prefix: str = "<A first-person shooter CS game> ",
@@ -195,7 +195,7 @@ class WorldCamRuntime:
         self.checkpoint_name = checkpoint_name
 
     @staticmethod
-    def _default_cache_dir(path_or_repo: str | Path, repo_id: str, cache_dir: Path) -> Optional[Path]:
+    def _default_cache_dir(path_or_repo: str | Path, repo_id: str, cache_dir: Path) -> Path | None:
         """
         Returns the default cache directory if the provided path matches the repo ID
         and the cache directory exists.
@@ -219,7 +219,7 @@ class WorldCamRuntime:
         path_or_repo: str | Path,
         repo_id: str,
         cache_dir: Path,
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """
         Resolves a candidate local directory for a model or checkpoint.
 
@@ -358,7 +358,7 @@ class WorldCamRuntime:
         cls,
         checkpoint_path_or_repo: str | Path,
         checkpoint_name: str = DEFAULT_WORLDCAM_CHECKPOINT,
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """
         Attempts to find the WorldCam DiT checkpoint path without raising an error if not found.
 
@@ -442,7 +442,7 @@ class WorldCamRuntime:
         load_model: bool = True,
         allow_download: bool = False,
         **kwargs,
-    ) -> "WorldCamRuntime":
+    ) -> WorldCamRuntime:
         """
         Build WorldCam from local in-tree runtime code and local model assets.
 
@@ -504,8 +504,7 @@ class WorldCamRuntime:
         # Resolve the PyTorch dtype for model weights.
         weight_dtype = _resolve_torch_dtype(weight_dtype)
         # Import necessary components for pipeline loading.
-        from worldfoundry.core.model_loading import ModelConfig
-        from worldfoundry.core.model_loading import load_state_dict
+        from worldfoundry.core.model_loading import ModelConfig, load_state_dict
         from worldfoundry.synthesis.visual_generation.worldcam.worldcam_runtime.pipelines.wan_video_new import (
             WanVideoPipeline,
         )
@@ -627,16 +626,16 @@ class WorldCamRuntime:
         # If the WorldCam checkpoint wasn't found, add it to missing assets.
         if checkpoint_path is None:
             missing_assets.append(str(DEFAULT_WORLDCAM_CKPT_DIR / self.checkpoint_name))
-        
+
         # Determine the target output path for the JSON plan.
         target = Path(output_path) if output_path is not None else Path.cwd() / "worldcam_plan.json"
         target = target.expanduser().resolve()
         # Ensure the parent directory for the output path exists.
         target.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Construct the payload for the JSON plan.
         payload = {
-            "status": "blocked" if missing_assets else "prepared", # Status indicates if assets are missing.
+            "status": "blocked" if missing_assets else "prepared",  # Status indicates if assets are missing.
             "model_id": "worldcam",
             "artifact_kind": "generated_world",
             "backend": "worldfoundry.worldcam.in_tree_runtime",
@@ -673,12 +672,12 @@ class WorldCamRuntime:
         intrinsics: Any,
         extrinsics: Any,
         num_ar_steps: int,
-        negative_prompt: Optional[str] = None,
+        negative_prompt: str | None = None,
         cfg_scale: float = 4.0,
         seed: int = 0,
         long_term_memory_start_step: int = 30,
         long_term_memory_num_clips: int = 4,
-        long_term_memory_ref_indices: Optional[list[int]] = None,
+        long_term_memory_ref_indices: list[int] | None = None,
         attention_sink_inference: bool = False,
         trim_conditioning: bool = True,
         num_inference_steps: int = 50,
@@ -712,7 +711,7 @@ class WorldCamRuntime:
         if self.pipeline is None:
             raise RuntimeError("WorldCam model is not loaded. Use from_pretrained(load_model=True) for generation.")
         torch = _require_torch()
-        
+
         # Compose the final prompt by prepending the instance's prompt prefix.
         composed_prompt = (self.prompt_prefix or "") + (prompt or "")
         composed_prompt = composed_prompt.strip()
@@ -729,7 +728,7 @@ class WorldCamRuntime:
             tiled=tiled,
             height=self.height,
             width=self.width,
-            num_frames=self.warmup_output_frames + num_ar_steps * self.frames_per_latent, # Total frames to generate.
+            num_frames=self.warmup_output_frames + num_ar_steps * self.frames_per_latent,  # Total frames to generate.
             num_inference_steps=num_inference_steps,
             num_ar_steps=num_ar_steps,
             long_term_memory_start_step=long_term_memory_start_step,
@@ -739,8 +738,8 @@ class WorldCamRuntime:
             **kwargs,
         )
         # Trim conditioning frames from the output if requested.
-        video = full_video[self.warmup_output_frames:] if trim_conditioning else full_video
-        
+        video = full_video[self.warmup_output_frames :] if trim_conditioning else full_video
+
         # Prepare the result dictionary.
         result = {
             "video": video,
@@ -757,9 +756,9 @@ class WorldCamRuntime:
 __all__ = [
     "DEFAULT_NEGATIVE_PROMPT",
     "DEFAULT_SHARED_HFD_ROOT",
-    "DEFAULT_WEIGHT_DTYPE",
     "DEFAULT_WAN_MODEL_DIR",
     "DEFAULT_WAN_REPO",
+    "DEFAULT_WEIGHT_DTYPE",
     "DEFAULT_WORLDCAM_CHECKPOINT",
     "DEFAULT_WORLDCAM_CKPT_DIR",
     "DEFAULT_WORLDCAM_REPO",

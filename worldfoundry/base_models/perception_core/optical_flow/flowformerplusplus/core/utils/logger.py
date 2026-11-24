@@ -1,5 +1,6 @@
-from torch.utils.tensorboard import SummaryWriter
 from loguru import logger as loguru_logger
+from torch.utils.tensorboard import SummaryWriter
+
 
 class Logger:
     def __init__(self, model, scheduler, cfg):
@@ -11,10 +12,10 @@ class Logger:
         self.cfg = cfg
 
     def _print_training_status(self):
-        metrics_data = [self.running_loss[k]/self.cfg.sum_freq for k in sorted(self.running_loss.keys())]
-        training_str = "[{:6d}, {}] ".format(self.total_steps+1, self.scheduler.get_last_lr())
-        metrics_str = ("{:10.4f}, "*len(metrics_data)).format(*metrics_data)
-        
+        metrics_data = [self.running_loss[k] / self.cfg.sum_freq for k in sorted(self.running_loss.keys())]
+        training_str = f"[{self.total_steps + 1:6d}, {self.scheduler.get_last_lr()}] "
+        metrics_str = ("{:10.4f}, " * len(metrics_data)).format(*metrics_data)
+
         # print the training status
         loguru_logger.info(training_str + metrics_str)
 
@@ -25,7 +26,7 @@ class Logger:
                 self.writer = SummaryWriter(self.cfg.log_dir)
 
         for k in self.running_loss:
-            self.writer.add_scalar(k, self.running_loss[k]/self.cfg.sum_freq, self.total_steps)
+            self.writer.add_scalar(k, self.running_loss[k] / self.cfg.sum_freq, self.total_steps)
             self.running_loss[k] = 0.0
 
     def push(self, metrics):
@@ -37,7 +38,7 @@ class Logger:
 
             self.running_loss[key] += metrics[key]
 
-        if self.total_steps % self.cfg.sum_freq == self.cfg.sum_freq-1:
+        if self.total_steps % self.cfg.sum_freq == self.cfg.sum_freq - 1:
             self._print_training_status()
             self.running_loss = {}
 
@@ -50,4 +51,3 @@ class Logger:
 
     def close(self):
         self.writer.close()
-

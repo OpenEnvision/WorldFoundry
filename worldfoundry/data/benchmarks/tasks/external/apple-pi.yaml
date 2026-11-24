@@ -19,16 +19,16 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: apple-pi
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:ApplePIContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id apple-pi --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/apple-pi --json
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:apple-pi
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
+  contract_validation_command: wf zoo benchmark-run --benchmark-id apple-pi --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/apple-pi --json
   runtime:
     kind: in_tree_model_backed
-    evaluator: worldfoundry.evaluation.tasks.execution.runners.apple_pi.apple_pi_runtime:evaluate_native_apple_pi
+    evaluator: worldfoundry.evals.tasks.execution.runners.apple_pi.apple_pi_runtime:evaluate_native_apple_pi
     results_path_env: WORLDFOUNDRY_APPLE_PI_RESULTS_PATH
     gt_dir_env: WORLDFOUNDRY_APPLE_PI_GT_DIR
     prediction_dir_env: WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR
-    root: worldfoundry/evaluation/tasks/execution/runners/apple_pi
+    root: worldfoundry/evals/tasks/execution/runners/apple_pi
     root_env: WORLDFOUNDRY_APPLE_PI_ROOT
   release_status: experimental
   maturity: verified_runner
@@ -58,7 +58,7 @@ metadata:
   base_model_dependencies: [sam3, moge_v2_vitl_normal]
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:ApplePIContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:apple-pi
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
@@ -67,7 +67,7 @@ metadata:
   validation_command:
   - ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
   - -m
-  - worldfoundry.evaluation.tasks.execution.runners.apple_pi.run_apple_pi_official_runner
+  - worldfoundry.evals.tasks.execution.runners.apple_pi.run_apple_pi_official_runner
   - --run-official
   - --gt-dir
   - ${WORLDFOUNDRY_APPLE_PI_GT_DIR}
@@ -143,8 +143,8 @@ tasks:
       - formulation_graphic
       - deduction
       - apple_pi_average
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:ApplePIContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:apple-pi
+      runner_script: worldfoundry/evals/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
     metadata:
       source_kind: benchmark_zoo
       benchmark_id: apple-pi

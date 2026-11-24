@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 id: h-rdt
 name: H-RDT
 aliases:
@@ -10,12 +10,13 @@ license: mpl-2.0
 official_sources:
   github:
     url: https://github.com/HongzheBi/H_RDT
+    revision: 8be02cb5e631898dfab12f9b6bbb77e32999547a
     head_sha: 8be02cb5e631898dfab12f9b6bbb77e32999547a
   huggingface:
   - repo_id: embodiedfoundation/H-RDT
     revision: d3b0e6ffddf36c7734804c649be13f3af05125e7
     type: model
-  paper: https://arxiv.org/abs/2506.23503
+  paper: https://arxiv.org/abs/2507.23523
   project_page: https://embodiedfoundation.github.io/hrdt/
 integration:
   status: in_tree_checkpoint_runtime_static_verified
@@ -44,15 +45,13 @@ docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: 'H-RDT (Human-to-Robotics Diffusion Transformer) pretrains a diffusion-transformer policy on large-scale human manipulation data before robot fine-tuning (paper: arXiv 2506.23503, MPL-2.0). The official release is the 48-dimensional human-motion pretraining checkpoint (embodiedfoundation/H-RDT); WorldFoundry keeps the transformer, flow-matching sampler, DINOv2+SigLIP vision path, and optional T5 language path in-tree.'
-  overview_zh: H-RDT（Human-to-Robotics Diffusion Transformer）先在大规模人类操作数据上预训练扩散 transformer 策略，再做机器人微调（论文：arXiv 2506.23503，MPL-2.0）。官方发布为 48 维人体动作预训练 checkpoint（embodiedfoundation/H-RDT）；WorldFoundry 将 transformer、flow-matching 采样器、 DINOv2+SigLIP 视觉路径与可选 T5 语言路径内置树内。
-  architecture: A diffusion transformer with flow-matching sampling; vision uses DINOv2 plus SigLIP and language optionally uses T5. Module and parameter names preserve the official checkpoint contract with strict restoration.
-  architecture_zh: 扩散 transformer 配 flow-matching 采样；视觉用 DINOv2 加 SigLIP，语言可选 T5。模块与参数名保持官方 checkpoint 契约，恢复为严格模式。
-  usage_notes: The released checkpoint is the human-motion pretraining stage (48-DoF), not the unreleased 14-dimensional robot fine-tune — plan your own fine-tuning for robot deployment. Training, datasets, ROS, robot drivers, simulator clients, and hub mixins are excluded.
-  usage_notes_zh: 发布的 checkpoint 是人体动作预训练阶段（48 维），而非未发布的 14 维机器人微调——机器人部署需自行微调。训练、数据集、ROS、机器人驱动、模拟器客户端与 hub mixin 均被排除。
+  overview: 'H-RDT (Human-to-Robotics Diffusion Transformer) pretrains a diffusion-transformer policy on large-scale human manipulation data before robot fine-tuning (paper: arXiv 2507.23523, MPL-2.0). The official release is the 48-dimensional human-motion pretraining checkpoint (embodiedfoundation/H-RDT).'
+  overview_zh: H-RDT（Human-to-Robotics Diffusion Transformer）先在大规模人类操作数据上预训练扩散 transformer 策略，再做机器人微调（论文：arXiv 2507.23523，MPL-2.0）。官方发布为 48 维人体动作预训练 checkpoint（embodiedfoundation/H-RDT）。
+  architecture: A diffusion transformer with flow-matching sampling; vision uses DINOv2 plus SigLIP and language optionally uses T5. The official checkpoint loads with strict parameter-name matching.
+  architecture_zh: 扩散 transformer 配 flow-matching 采样；视觉用 DINOv2 加 SigLIP，语言可选 T5。官方 checkpoint 按参数名严格匹配加载。
+  usage_notes: The integration covers inference only; training, datasets, ROS, robot drivers, and simulator clients are not included.
+  usage_notes_zh: 集成仅覆盖推理；不包含训练、数据集、ROS、机器人驱动与模拟器客户端。
   limitations:
-  - Only the human-motion pretraining checkpoint is released; the robot fine-tune is not.
-  - Numerical and GPU rollout validation remain pending until checkpoint assets are materialized.
+  - Only the 48-dimensional human-motion pretraining checkpoint is released; the 14-dimensional robot fine-tune is not, so robot deployment needs your own fine-tuning.
   limitations_zh:
-  - 仅发布人体动作预训练 checkpoint；机器人微调版未发布。
-  - 数值与 GPU rollout 验证待 checkpoint 资产就位后进行。
+  - 仅发布 48 维人体动作预训练 checkpoint；14 维机器人微调版未发布，机器人部署需自行微调。

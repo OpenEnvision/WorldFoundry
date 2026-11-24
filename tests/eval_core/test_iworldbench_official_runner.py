@@ -6,15 +6,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_metrics import (
+from worldfoundry.evals.tasks.execution.runners.iworldbench.iworldbench_metrics import (
     METRIC_ORDER,
     compute_iworldbench_metrics,
 )
-from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_prompts import (
+from worldfoundry.evals.tasks.execution.runners.iworldbench.iworldbench_prompts import (
     CANONICAL_PROMPT_COUNT,
 )
-from worldfoundry.evaluation.utils import benchmark_task_sample_path
-
+from worldfoundry.evals.utils import benchmark_task_sample_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 UPSTREAM_ROOT = REPO_ROOT.parent / "github_repos" / "iWorld-Bench"
@@ -40,7 +39,7 @@ def test_iworldbench_official_runner_normalizes_sample_results(tmp_path: Path) -
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py",
             "--official-results-path",
             str(sample_path),
             "--output-dir",
@@ -73,7 +72,7 @@ def test_iworldbench_official_run_with_mock_backend_writes_scorecard(tmp_path: P
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py",
             "--run-official",
             "--generated-artifact-dir",
             str(generated_dir),

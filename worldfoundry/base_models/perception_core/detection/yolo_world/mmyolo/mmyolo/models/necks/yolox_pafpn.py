@@ -1,5 +1,4 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import List
 
 import torch.nn as nn
 from mmcv.cnn import ConvModule, DepthwiseSeparableConvModule
@@ -7,6 +6,7 @@ from mmdet.models.backbones.csp_darknet import CSPLayer
 from mmdet.utils import ConfigType, OptMultiConfig
 
 from mmyolo.registry import MODELS
+
 from .base_yolo_neck import BaseYOLONeck
 
 
@@ -33,36 +33,35 @@ class YOLOXPAFPN(BaseYOLONeck):
             Defaults to None.
     """
 
-    def __init__(self,
-                 in_channels: List[int],
-                 out_channels: int,
-                 deepen_factor: float = 1.0,
-                 widen_factor: float = 1.0,
-                 num_csp_blocks: int = 3,
-                 use_depthwise: bool = False,
-                 freeze_all: bool = False,
-                 norm_cfg: ConfigType = dict(
-                     type='BN', momentum=0.03, eps=0.001),
-                 act_cfg: ConfigType = dict(type='SiLU', inplace=True),
-                 init_cfg: OptMultiConfig = None):
+    def __init__(
+        self,
+        in_channels: list[int],
+        out_channels: int,
+        deepen_factor: float = 1.0,
+        widen_factor: float = 1.0,
+        num_csp_blocks: int = 3,
+        use_depthwise: bool = False,
+        freeze_all: bool = False,
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.03, "eps": 0.001},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "SiLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
+        init_cfg: OptMultiConfig = None,
+    ):
         self.num_csp_blocks = round(num_csp_blocks * deepen_factor)
         self.use_depthwise = use_depthwise
 
         super().__init__(
-            in_channels=[
-                int(channel * widen_factor) for channel in in_channels
-            ],
+            in_channels=[int(channel * widen_factor) for channel in in_channels],
             out_channels=int(out_channels * widen_factor),
             deepen_factor=deepen_factor,
             widen_factor=widen_factor,
             freeze_all=freeze_all,
             norm_cfg=norm_cfg,
             act_cfg=act_cfg,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
 
     def build_reduce_layer(self, idx: int) -> nn.Module:
-        """build reduce layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -71,23 +70,18 @@ class YOLOXPAFPN(BaseYOLONeck):
         """
         if idx == 2:
             layer = ConvModule(
-                self.in_channels[idx],
-                self.in_channels[idx - 1],
-                1,
-                norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg)
+                self.in_channels[idx], self.in_channels[idx - 1], 1, norm_cfg=self.norm_cfg, act_cfg=self.act_cfg
+            )
         else:
             layer = nn.Identity()
 
         return layer
 
     def build_upsample_layer(self, *args, **kwargs) -> nn.Module:
-        """build upsample layer."""
-        return nn.Upsample(scale_factor=2, mode='nearest')
+        return nn.Upsample(scale_factor=2, mode="nearest")
 
     def build_top_down_layer(self, idx: int) -> nn.Module:
-        """build top down layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -101,7 +95,8 @@ class YOLOXPAFPN(BaseYOLONeck):
                 num_blocks=self.num_csp_blocks,
                 add_identity=False,
                 norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg)
+                act_cfg=self.act_cfg,
+            )
         elif idx == 2:
             return nn.Sequential(
                 CSPLayer(
@@ -110,25 +105,26 @@ class YOLOXPAFPN(BaseYOLONeck):
                     num_blocks=self.num_csp_blocks,
                     add_identity=False,
                     norm_cfg=self.norm_cfg,
-                    act_cfg=self.act_cfg),
+                    act_cfg=self.act_cfg,
+                ),
                 ConvModule(
                     self.in_channels[idx - 1],
                     self.in_channels[idx - 2],
                     kernel_size=1,
                     norm_cfg=self.norm_cfg,
-                    act_cfg=self.act_cfg))
+                    act_cfg=self.act_cfg,
+                ),
+            )
 
     def build_downsample_layer(self, idx: int) -> nn.Module:
-        """build downsample layer.
-
+        """
         Args:
             idx (int): layer idx.
 
         Returns:
             nn.Module: The downsample layer.
         """
-        conv = DepthwiseSeparableConvModule \
-            if self.use_depthwise else ConvModule
+        conv = DepthwiseSeparableConvModule if self.use_depthwise else ConvModule
         return conv(
             self.in_channels[idx],
             self.in_channels[idx],
@@ -136,11 +132,11 @@ class YOLOXPAFPN(BaseYOLONeck):
             stride=2,
             padding=1,
             norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
+            act_cfg=self.act_cfg,
+        )
 
     def build_bottom_up_layer(self, idx: int) -> nn.Module:
-        """build bottom up layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -153,20 +149,15 @@ class YOLOXPAFPN(BaseYOLONeck):
             num_blocks=self.num_csp_blocks,
             add_identity=False,
             norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
+            act_cfg=self.act_cfg,
+        )
 
     def build_out_layer(self, idx: int) -> nn.Module:
-        """build out layer.
-
+        """
         Args:
             idx (int): layer idx.
 
         Returns:
             nn.Module: The out layer.
         """
-        return ConvModule(
-            self.in_channels[idx],
-            self.out_channels,
-            1,
-            norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
+        return ConvModule(self.in_channels[idx], self.out_channels, 1, norm_cfg=self.norm_cfg, act_cfg=self.act_cfg)

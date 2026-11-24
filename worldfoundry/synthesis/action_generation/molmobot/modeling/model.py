@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Dict, NamedTuple, Optional, Sequence
+from collections.abc import Sequence
+from typing import NamedTuple
 
 import torch
 
@@ -14,10 +15,10 @@ class OLMoOutput(NamedTuple):
     action head consumes ``internal['layer_hidden_states']`` instead.
     """
 
-    logits: Optional[torch.Tensor] = None
-    attn_key_values: Optional[Sequence[tuple[torch.Tensor, torch.Tensor]]] = None
-    hidden_states: Optional[Sequence[torch.Tensor]] = None
-    internal: Optional[Dict[str, Sequence[torch.Tensor]]] = None
+    logits: torch.Tensor | None = None
+    attn_key_values: Sequence[tuple[torch.Tensor, torch.Tensor]] | None = None
+    hidden_states: Sequence[torch.Tensor] | None = None
+    internal: dict[str, Sequence[torch.Tensor]] | None = None
 
 
 class ModelBase(torch.nn.Module):

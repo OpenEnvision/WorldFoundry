@@ -9,6 +9,7 @@ groups:
 - camera_control
 source_repos:
 - url: https://github.com/Fantasy-AMAP/fantasy-world
+  revision: 2645441c706f122033cbbb7be9af245d6a91b658
 checkpoints:
 - repo_id: acvlab/FantasyWorld-Wan2.1-I2V-14B-480P
   role: fantasyworld_wan21_checkpoint

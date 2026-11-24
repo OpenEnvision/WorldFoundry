@@ -3,7 +3,7 @@ title: TUI 指南
 description: 如何使用终端界面（TUI）进行发现、配置和命令生成。
 ---
 
-终端界面（TUI）是一个跑在终端里的交互式文本面板。它是浏览模型与 benchmark catalog、检查 readiness、生成 CLI 命令最省事的方式，不必记住各种参数。
+终端界面（TUI）是一个跑在终端里的交互式文本面板。它是浏览模型与 benchmark catalog、检查 readiness、生成 CLI 命令的便捷方式，不必记住各种参数。
 
 ## 启动 TUI
 
@@ -24,10 +24,10 @@ python -m pip install -e ".[tui]"
 环境激活后启动 TUI：
 
 ```bash
-worldfoundry-eval tui
+wf tui
 ```
 
-TUI 读取的 model-zoo 与 benchmark-zoo manifest 和 CLI 发现命令完全相同。它不会绕过 manifest readiness、runtime profile 或 runner 验证。
+TUI 与 CLI 发现命令使用完全相同的 model-zoo 和 benchmark-zoo manifest。它不会绕过 manifest readiness、runtime profile 或 runner 验证。
 
 ### 启动选项
 
@@ -74,7 +74,7 @@ TUI 读取的 model-zoo 与 benchmark-zoo manifest 和 CLI 发现命令完全相
 示例——为指定的 model × benchmark 组合生成命令后退出：
 
 ```bash
-worldfoundry-eval tui --model-id openvla --benchmark-id libero --print-command
+wf tui --model-id openvla --benchmark-id libero --print-command
 ```
 
 这在脚本或 CI 流水线中很有用：只要标准命令，不需要人工交互。
@@ -87,7 +87,7 @@ TUI 是一个四栏面板。左侧显示 OpenEnvision 标识、当前 conda 环�
 
 ### Inference（推理）
 
-Inference 用于选择模型、填写模型相关输入，并生成可执行的 `worldfoundry-eval run` 命令。工具栏提供 **Run**、**Stop**、**Copy**、**Cmd**、**Check**、**Files**、**GPU**、**Sync**。日常可复现 / 模型页命令用 `worldfoundry-eval run`；Workspace 视觉冒烟用 `python -m worldfoundry.studio.workspace_job infer`。入口对照见 [CLI 命令入口](/zh/docs/reference/cli#命令入口)。
+Inference 用于选择模型、填写模型相关输入，并生成可执行的 `wf run` 命令。工具栏提供 **Run**、**Stop**、**Copy**、**Cmd**、**Check**、**Files**、**GPU**、**Sync**。日常可复现 / 模型页命令用 `wf run`；Workspace 视觉冒烟用 `python -m worldfoundry.studio.workspace_job infer`。入口对照见 [CLI 命令入口](/zh/docs/reference/cli#命令入口)。
 
 ![TUI Inference 模式](/images/tui/tui-inference.png)
 
@@ -101,7 +101,7 @@ Studio 用于从终端启动本地 Studio Web UI。按 **Run** 启动服务，�
 
 ### Evaluation（评测）
 
-Evaluation 用于配置 benchmark run。选择评测意图、metric 和输出目录后，TUI 会为当前 model × benchmark 组合生成对应的 `worldfoundry-eval` 命令。
+Evaluation 用于配置 benchmark run。选择评测意图、metric 和输出目录后，TUI 会为当前 model × benchmark 组合生成对应的 `wf` 命令。
 
 ![TUI Evaluation 模式](/images/tui/tui-evaluation.png)
 
@@ -215,8 +215,6 @@ TUI 会在 catalog 条目旁显示 readiness 警告：
 - **缺失 dataset** — benchmark 需要的 dataset 尚未准备到本地。
 - **缺失环境** — runtime profile 声明的 conda 包或 CUDA 版本未满足。
 - **License 限制** — 模型或 dataset 带 gated 或非商业 license，需要人工确认。
-
-存在 readiness blocker 时，生成的命令默认带上 `--mode official-validation`。这样可以先验证链路是否接通，而不必为一个被阻断的 run 占用 GPU。
 
 ## 回退模式
 

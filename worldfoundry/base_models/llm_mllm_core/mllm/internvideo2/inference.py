@@ -1,28 +1,31 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
 
-from worldfoundry.core.configuration.python import load_python_config
 from worldfoundry.core import (
     get_video_details,
     load_frames_from_video,
 )
+from worldfoundry.core.configuration.python import load_python_config
 
+# isort: split
 from .multi_modality.models import InternVideo2_Stage2
+
+# isort: split
 from worldfoundry.base_models.llm_mllm_core.mllm.umt.models.backbones.bert.tokenization_bert import (
     BertTokenizer,
 )
+
 from .multi_modality.models.backbones.internvideo2.pos_embed import (
     interpolate_pos_embed_internvideo2_new,
 )
 from .multi_modality.models.criterions import get_sim
-
 
 _MODEL_REPOS = {
     "internvideo2_1b_stage2": (
@@ -65,14 +68,10 @@ def evaluation(
         image_paths, transforms, model, device, num_frames=num_frames
     )
     pooled_image_feats = pooled_image_feats.to(device, non_blocking=True)
-    i2t_scores, _ = get_sim(
-        model.vision_proj(pooled_image_feats), model.text_proj(text_feats[:, 0])
-    )
+    i2t_scores, _ = get_sim(model.vision_proj(pooled_image_feats), model.text_proj(text_feats[:, 0]))
 
     encoder_output = image_feats[:, 0].to(device, non_blocking=True)
-    encoder_att = torch.ones(encoder_output.size()[:-1], dtype=torch.long).to(
-        device, non_blocking=True
-    )
+    encoder_att = torch.ones(encoder_output.size()[:-1], dtype=torch.long).to(device, non_blocking=True)
     output = model.get_text_encoder()(
         encoder_embeds=text_feats,
         attention_mask=text_atts,
@@ -130,13 +129,9 @@ def create_transforms(image_res=224):
 
 def _setup_model(config, device="cuda"):
     try:
-        tokenizer = BertTokenizer.from_pretrained(
-            config.model.text_encoder.pretrained, local_files_only=True
-        )
+        tokenizer = BertTokenizer.from_pretrained(config.model.text_encoder.pretrained, local_files_only=True)
     except Exception:
-        tokenizer = BertTokenizer.from_pretrained(
-            config.model.text_encoder.pretrained, local_files_only=False
-        )
+        tokenizer = BertTokenizer.from_pretrained(config.model.text_encoder.pretrained, local_files_only=False)
     model = InternVideo2_Stage2(config=config, tokenizer=tokenizer, is_pretrain=True).to(device)
     checkpoint = torch.load(config.pretrained_path, map_location="cpu")
     if isinstance(checkpoint, dict) and "model" in checkpoint:
@@ -146,9 +141,7 @@ def _setup_model(config, device="cuda"):
     else:
         state_dict = checkpoint
     if config.get("origin_num_frames", None) is not None:
-        interpolate_pos_embed_internvideo2_new(
-            state_dict, model.vision_encoder, orig_t_size=config.origin_num_frames
-        )
+        interpolate_pos_embed_internvideo2_new(state_dict, model.vision_encoder, orig_t_size=config.origin_num_frames)
     model.load_state_dict(state_dict, strict=False)
     return model, tokenizer
 
@@ -171,9 +164,7 @@ def _resolve_checkpoint(model_name: str, cache_dir: str | os.PathLike[str]) -> s
     raise FileNotFoundError(f"Could not resolve InternVideo2 checkpoint {model_name}") from last_error
 
 
-def _find_local_file(
-    cache_dir: str | os.PathLike[str], repo_id: str, filename: str
-) -> Path | None:
+def _find_local_file(cache_dir: str | os.PathLike[str], repo_id: str, filename: str) -> Path | None:
     root = Path(cache_dir).expanduser()
     repo_dir = repo_id.replace("/", "--")
     candidates: Iterable[Path] = (

@@ -1,12 +1,12 @@
 schema_version: worldfoundry.open_magvit2.infer_config.v1
 model:
-  class_path: src.Open_MAGVIT2.models.cond_transformer_gpt.Net2NetTransformer
+  class_path: worldfoundry.synthesis.visual_generation.open_magvit2.open_magvit2_runtime.src.Open_MAGVIT2.models.cond_transformer_gpt.Net2NetTransformer
   init_args:
     first_stage_key: image
     cond_stage_key: class_label
     token_factorization: true
     transformer_config:
-      target: src.Open_MAGVIT2.modules.transformer.gpt.GPT
+      target: worldfoundry.synthesis.visual_generation.open_magvit2.open_magvit2_runtime.src.Open_MAGVIT2.modules.transformer.gpt.GPT
       params:
         vocab_size: 512
         block_size: 256
@@ -23,7 +23,7 @@ model:
         token_factorization: true
         class_num: 1000
     first_stage_config:
-      target: src.Open_MAGVIT2.models.lfqgan.VQModel
+      target: worldfoundry.synthesis.visual_generation.open_magvit2.open_magvit2_runtime.src.Open_MAGVIT2.models.lfqgan.VQModel
       params:
         n_embed: 262144
         embed_dim: 18
@@ -48,10 +48,10 @@ model:
           - 4
           num_res_blocks: 4
     cond_stage_config:
-      target: src.Open_MAGVIT2.modules.util.Labelator
+      target: worldfoundry.synthesis.visual_generation.open_magvit2.open_magvit2_runtime.src.Open_MAGVIT2.modules.util.Labelator
       params:
         n_classes: 1000
     permuter_config:
-      target: src.Open_MAGVIT2.modules.transformer.permuter.ShiftPermuter
+      target: worldfoundry.synthesis.visual_generation.open_magvit2.open_magvit2_runtime.src.Open_MAGVIT2.modules.transformer.permuter.ShiftPermuter
       params:
         shift_pos: 1000

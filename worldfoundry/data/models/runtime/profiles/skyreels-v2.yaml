@@ -8,6 +8,7 @@ groups:
 - image_to_video
 source_repos:
 - url: https://github.com/SkyworkAI/SkyReels-V2
+  revision: 9351d13152207cc04de780e055346b08ade0b851
 checkpoints:
 - repo_id: Skywork/SkyReels-V2-DF-1.3B-540P
   role: t2v_checkpoint

@@ -4,27 +4,18 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> general_3d -> lagernvs -> lagernvs_runtime -> models -> renderer.py functionality."""
-
 import time
 
 import einops
 import torch
 import torch.nn as nn
-from models.layers.embeddings import (
-    init_weights_normal,
-    PatchEmbed,
-)
-from models.layers.final_layer import FinalLayer
-from models.layers.renderer_blocks import (
-    BidirectionalCrossAttentionBlock,
-    CrossAttentionBlock,
-    FullAttentionBlock,
-)
+
+from .layers.embeddings import PatchEmbed, init_weights_normal
+from .layers.final_layer import FinalLayer
+from .layers.renderer_blocks import BidirectionalCrossAttentionBlock, CrossAttentionBlock, FullAttentionBlock
 
 
 class Renderer(nn.Module):
-    """Renderer implementation."""
     def __init__(
         self,
         depth,
@@ -35,17 +26,6 @@ class Renderer(nn.Module):
         out_channels=3,
         attention_to_features_type="cross_attention",
     ):
-        """Init.
-
-        Args:
-            depth: The depth.
-            hidden_size: The hidden size.
-            patch_size: The patch size.
-            num_heads: The num heads.
-            pre_transformer_norm_bias: The pre transformer norm bias.
-            out_channels: The out channels.
-            attention_to_features_type: The attention to features type.
-        """
         super().__init__()
 
         self.out_channels = out_channels
@@ -63,21 +43,13 @@ class Renderer(nn.Module):
 
         self.attention_to_features_type = attention_to_features_type
         if attention_to_features_type == "cross_attention":
-            self.renderer_core = CrossAttentionRendererCore(
-                hidden_size, num_heads, depth
-            )
+            self.renderer_core = CrossAttentionRendererCore(hidden_size, num_heads, depth)
         elif attention_to_features_type == "bidirectional_cross_attention":
-            self.renderer_core = BidirectionalCrossAttentionRendererCore(
-                hidden_size, num_heads, depth
-            )
+            self.renderer_core = BidirectionalCrossAttentionRendererCore(hidden_size, num_heads, depth)
         elif attention_to_features_type == "full_attention":
-            self.renderer_core = FullAttentionRendererCore(
-                hidden_size, num_heads, depth
-            )
+            self.renderer_core = FullAttentionRendererCore(hidden_size, num_heads, depth)
         else:
-            raise ValueError(
-                f"Unknown attention_to_features_type {attention_to_features_type}"
-            )
+            raise ValueError(f"Unknown attention_to_features_type {attention_to_features_type}")
         self.patch_start_idx = self.n_registers
 
         self.final_layer = FinalLayer(
@@ -89,10 +61,9 @@ class Renderer(nn.Module):
         self.initialize_weights()
 
     def initialize_weights(self):
-        """Initialize weights."""
         for idx, block in enumerate(self.renderer_core.renderer_blocks):
             weight_init_std = 0.02 / (2 * (idx + 1)) ** 0.5
-            block.apply(lambda module: init_weights_normal(module, weight_init_std))
+            block.apply(lambda module: init_weights_normal(module, weight_init_std))  # noqa: B023 - Keeps the upstream late binding of the loop variable.
 
         wc = self.tgt_embedder.proj.weight.data
         nn.init.normal_(wc.view([wc.shape[0], -1]), mean=0.0, std=0.02)
@@ -117,9 +88,7 @@ class Renderer(nn.Module):
         target_tokens = self.tgt_embedder(target_rays)
         target_tokens = self.tgt_norm(target_tokens)
 
-        register_tokens_target = einops.repeat(
-            self.per_view_register_tokens, "n p c -> (n b1) p c", b1=b * v_target
-        )
+        register_tokens_target = einops.repeat(self.per_view_register_tokens, "n p c -> (n b1) p c", b1=b * v_target)
 
         x = torch.cat([register_tokens_target, target_tokens], dim=1)
 
@@ -151,13 +120,6 @@ class CrossAttentionRendererCore(nn.Module):
     """Renderer transformer that conditions on encoder features via cross-attention."""
 
     def __init__(self, hidden_size, num_heads, depth):
-        """Init.
-
-        Args:
-            hidden_size: The hidden size.
-            num_heads: The num heads.
-            depth: The depth.
-        """
         super().__init__()
         self.depth = depth
         self.renderer_blocks = nn.ModuleList(
@@ -171,12 +133,6 @@ class CrossAttentionRendererCore(nn.Module):
         )
 
     def forward(self, x, rec_tokens):
-        """Forward.
-
-        Args:
-            x: The x.
-            rec_tokens: The rec tokens.
-        """
         for renderer_block_idx in range(self.depth):
             if self.training:
                 x = torch.utils.checkpoint.checkpoint(
@@ -195,13 +151,6 @@ class BidirectionalCrossAttentionRendererCore(nn.Module):
     """Renderer transformer with bidirectional cross-attention between target and encoder features."""
 
     def __init__(self, hidden_size, num_heads, depth):
-        """Init.
-
-        Args:
-            hidden_size: The hidden size.
-            num_heads: The num heads.
-            depth: The depth.
-        """
         super().__init__()
         self.depth = depth
         self.renderer_blocks = nn.ModuleList(
@@ -216,12 +165,6 @@ class BidirectionalCrossAttentionRendererCore(nn.Module):
         )
 
     def forward(self, x, rec_tokens):
-        """Forward.
-
-        Args:
-            x: The x.
-            rec_tokens: The rec tokens.
-        """
         for renderer_block_idx in range(self.depth - 1):
             if self.training:
                 x, rec_tokens = torch.utils.checkpoint.checkpoint(
@@ -249,29 +192,13 @@ class FullAttentionRendererCore(nn.Module):
     """Renderer transformer with full self-attention over concatenated target and encoder features."""
 
     def __init__(self, hidden_size, num_heads, depth):
-        """Init.
-
-        Args:
-            hidden_size: The hidden size.
-            num_heads: The num heads.
-            depth: The depth.
-        """
         super().__init__()
         self.depth = depth
         self.renderer_blocks = nn.ModuleList(
-            [
-                FullAttentionBlock(hidden_dim=hidden_size, num_heads=num_heads)
-                for _ in range(self.depth)
-            ]
+            [FullAttentionBlock(hidden_dim=hidden_size, num_heads=num_heads) for _ in range(self.depth)]
         )
 
     def forward(self, x, rec_tokens):
-        """Forward.
-
-        Args:
-            x: The x.
-            rec_tokens: The rec tokens.
-        """
         num_rec_tokens = rec_tokens.shape[1]
         x = torch.cat([rec_tokens, x], dim=1)
         for renderer_block_idx in range(self.depth):

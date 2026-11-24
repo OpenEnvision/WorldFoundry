@@ -2,13 +2,14 @@
 
 import logging
 import os
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator, List, Mapping, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 from PIL import Image
 
-from worldfoundry.core.io import write_video
+from worldfoundry.core.media.codecs.video import write_video
 from worldfoundry.synthesis.visual_generation.hunyuan_world import load_hunyuan_world_runtime_defaults
 from worldfoundry.synthesis.visual_generation.hunyuan_world.worldplay_checkpoints import (
     resolve_worldplay_video_model_path,
@@ -24,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 
 def _initialize_worldplay_parallel_runtime() -> None:
-    """Initialize worldplay parallel runtime helper function."""
     # Attempt to retrieve from environment variables as a fallback resolution
     world_size = int(os.getenv("WORLD_SIZE", "1") or "1")
     # Attempt to retrieve from environment variables as a fallback resolution
@@ -39,6 +39,7 @@ def _initialize_worldplay_parallel_runtime() -> None:
 
 class HunyuanWorldPlayPipeline(PipelineABC):
     """Pipeline implementation for HunyuanWorldPlay visual generation."""
+
     def __init__(
         self,
         *,
@@ -46,7 +47,7 @@ class HunyuanWorldPlayPipeline(PipelineABC):
         reasoning_model=None,
         synthesis_model: Optional["HunyuanWorldPlaySynthesis"] = None,
         operators=None,
-        device: str = 'cuda'
+        device: str = "cuda",
     ):
         """Initialize the pipeline and configure runtime components."""
         super().__init__()
@@ -58,41 +59,39 @@ class HunyuanWorldPlayPipeline(PipelineABC):
         self._realtime_session = None
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         *,
-        model_path: Optional[str] = None,
+        model_path: str | None = None,
         required_components=None,
-        mode: Optional[str] = None,
-        device: Optional[str] = None,
-        create_sr_pipeline: Optional[bool] = None,
-        force_sparse_attn: Optional[bool] = None,
+        mode: str | None = None,
+        device: str | None = None,
+        create_sr_pipeline: bool | None = None,
+        force_sparse_attn: bool | None = None,
         transformer_dtype=None,
-        enable_offloading: bool = None,
-        enable_group_offloading: bool = None,
-        overlap_group_offloading: Optional[bool] = None,
-        init_infer_state: Optional[bool] = None,
-        infer_state_kwargs: Optional[dict] = None,
-        forward_speed: Optional[float] = None,
-        yaw_speed_deg: Optional[float] = None,
-        pitch_speed_deg: Optional[float] = None,
-        **kwargs
-    ) -> 'HunyuanWorldPlayPipeline':
+        enable_offloading: bool | None = None,
+        enable_group_offloading: bool | None = None,
+        overlap_group_offloading: bool | None = None,
+        init_infer_state: bool | None = None,
+        infer_state_kwargs: dict | None = None,
+        forward_speed: float | None = None,
+        yaw_speed_deg: float | None = None,
+        pitch_speed_deg: float | None = None,
+        **kwargs,
+    ) -> "HunyuanWorldPlayPipeline":
         """
-        从预训练模型加载 Pipeline
-        
+        Load the pipeline from pretrained checkpoints; unset options use the runtime defaults.
+
         Args:
-            device: 设备
-            create_sr_pipeline: 是否创建超分辨率 pipeline
-            force_sparse_attn: 是否强制使用稀疏注意力
-            transformer_dtype: transformer 数据类型
-            enable_offloading: 是否启用 offloading
-            enable_group_offloading: 是否启用 group offloading
-            overlap_group_offloading: 是否重叠 group offloading
-            **kwargs: 其他参数
-            
+            create_sr_pipeline: Whether to create the super-resolution pipeline.
+            force_sparse_attn: Whether to force sparse attention.
+            enable_offloading: Whether to enable offloading.
+            enable_group_offloading: Whether to enable group offloading.
+            overlap_group_offloading: Whether to overlap group offloading.
+            **kwargs: Forwarded to ``HunyuanWorldPlaySynthesis.from_pretrained``.
+
         Returns:
-            HunyuanWorldPlayPipeline: Pipeline 实例
+            HunyuanWorldPlayPipeline: The loaded pipeline.
         """
         defaults = load_hunyuan_world_runtime_defaults("worldplay")
         model_options = dict(model_path) if isinstance(model_path, Mapping) else {}
@@ -146,7 +145,7 @@ class HunyuanWorldPlayPipeline(PipelineABC):
             enable_group_offloading=enable_group_offloading,
             overlap_group_offloading=overlap_group_offloading,
             action_ckpt=model_path,
-            **kwargs
+            **kwargs,
         )
         operator_defaults = defaults["operator"]
         forward_speed = float(operator_defaults["forward_speed"] if forward_speed is None else forward_speed)
@@ -157,23 +156,20 @@ class HunyuanWorldPlayPipeline(PipelineABC):
             yaw_speed_deg=yaw_speed_deg,
             pitch_speed_deg=pitch_speed_deg,
         )
-        
-        return cls(
-            synthesis_model=synthesis_model,
-            operators=operators,
-            device=device
-        )
+
+        return cls(synthesis_model=synthesis_model, operators=operators, device=device)
 
     def process(self, *, input_, interaction, video_length: int):
         """
-        处理输入
-        
+        Preprocess the reference input and turn the interaction into camera and action conditions.
+
         Args:
-            input_: 输入数据（图片、视频等）
-            interaction: 交互信号
-            
+            input_: Input data such as an image or video.
+            interaction: Interaction signal (pose string).
+            video_length: Number of output frames.
+
         Returns:
-            处理后的数据
+            Dict with ``reference_image`` and ``operator_condition``.
         """
         if self.operators is None:
             raise ValueError("operators must be provided")
@@ -212,60 +208,57 @@ class HunyuanWorldPlayPipeline(PipelineABC):
         self,
         *,
         prompt: str,
-        images: Optional[Image.Image] = None,
-        image_path: Optional[str] = None,
-        interactions: Optional[str] = None,
+        images: Image.Image | None = None,
+        image_path: str | None = None,
+        interactions: str | None = None,
         num_frames: int = 125,
-        pose: Optional[str] = None,
-        aspect_ratio: str = '16:9',
+        pose: str | None = None,
+        aspect_ratio: str = "16:9",
         num_inference_steps: int = 4,
         negative_prompt: str = "",
         seed: int = 1,
         output_type: str = "pt",
         prompt_rewrite: bool = False,
         enable_sr: bool = False,
-        sr_num_inference_steps: Optional[int] = None,
+        sr_num_inference_steps: int | None = None,
         return_pre_sr_video: bool = False,
         few_step: bool = True,
         chunk_latent_frames: int = 4,
         model_type: str = "ar",
-        user_height: Optional[int] = None,
-        user_width: Optional[int] = None,
-        forward_speed: Optional[float] = None,
-        yaw_speed_deg: Optional[float] = None,
-        pitch_speed_deg: Optional[float] = None,
-        output_path: Optional[str | os.PathLike[str]] = None,
+        user_height: int | None = None,
+        user_width: int | None = None,
+        forward_speed: float | None = None,
+        yaw_speed_deg: float | None = None,
+        pitch_speed_deg: float | None = None,
+        output_path: str | os.PathLike[str] | None = None,
         fps: int = 24,
         return_dict: bool = False,
-        **kwargs
+        **kwargs,
     ):
         """
-        Pipeline 调用入口
+        Generate a video from a reference image and a camera trajectory.
 
         Args:
-            prompt: 文本提示
-            images: 参考图像（PIL.Image）
-            image_path: 参考图像路径（如果 images 未提供则使用）
-            pose: 相机轨迹（如 "w-10, right-10, d-11"）
-            aspect_ratio: 宽高比
-            num_frames: 帧数
-            num_inference_steps: 推理步数
-            negative_prompt: 负面提示
-            seed: 随机种子
-            output_type: 输出类型
-            prompt_rewrite: 是否重写提示
-            enable_sr: 是否启用超分辨率
-            sr_num_inference_steps: 超分辨率推理步数
-            return_pre_sr_video: 是否返回超分辨率前的视频
-            few_step: 是否使用少步推理
-            chunk_latent_frames: chunk latent frames
-            model_type: 模型类型（"ar" 或 "bi"）
-            user_height: 用户指定高度
-            user_width: 用户指定宽度
-            **kwargs: 其他参数
+            prompt: Text prompt.
+            images: Reference PIL image.
+            image_path: Reference image path, used when ``images`` is not given.
+            pose: Camera trajectory such as ``"w-10, right-10, d-11"``.
+            num_frames: Number of frames; replaced by the length the trajectory implies when they differ.
+            num_inference_steps: Number of inference steps.
+            seed: Random seed.
+            prompt_rewrite: Whether to rewrite the prompt.
+            enable_sr: Whether to enable super-resolution.
+            sr_num_inference_steps: Number of super-resolution inference steps.
+            return_pre_sr_video: Whether to also return the video before super-resolution.
+            few_step: Whether to use few-step inference.
+            model_type: Model type (``"ar"`` or ``"bi"``).
+            user_height: User-specified height.
+            user_width: User-specified width.
+            **kwargs: Forwarded to the synthesis model.
 
         Returns:
-            HunyuanVideoPipelineOutput: 包含生成的视频帧
+            HunyuanVideoPipelineOutput with the generated video frames, or, with ``output_path``,
+            a dict describing the saved video.
         """
         if forward_speed is not None:
             self.operators.forward_speed = forward_speed
@@ -301,7 +294,7 @@ class HunyuanWorldPlayPipeline(PipelineABC):
             video_length=video_length,
         )
         operator_condition = processed["operator_condition"]
-        
+
         output = self.synthesis_model(
             enable_sr=enable_sr,
             prompt=prompt,
@@ -323,9 +316,9 @@ class HunyuanWorldPlayPipeline(PipelineABC):
             user_height=user_height,
             user_width=user_width,
             reference_image=processed["reference_image"],
-            **kwargs
+            **kwargs,
         )
-        
+
         if output_path is None:
             return output
 
@@ -341,11 +334,8 @@ class HunyuanWorldPlayPipeline(PipelineABC):
         }
         return result if return_dict or output_path is not None else output
 
-    def stream(self, *args, **kwds) -> Generator[torch.Tensor, List[str], None]:
-        """
-        流式输出
-        """
-        pass
+    def stream(self, *args, **kwds) -> None:
+        """No-op; streaming goes through the ``*_realtime`` methods."""
 
     def _ensure_realtime_session(self):
         """Create the model-owned resident rollout adapter once."""

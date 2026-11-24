@@ -12,28 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> export_glb.py functionality."""
-
 from __future__ import annotations
 
+import itertools
 import os
+
 import numpy as np
 import trimesh
 
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.specs import Prediction
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.logger import logger
-
-from worldfoundry.studio.visualization.plugins.scene3d.depth_anything_v3.export_vis import export_to_depth_vis
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.visualize import (
+    export_to_depth_vis,
+)
 
 
 def set_sky_depth(prediction: Prediction, sky_mask: np.ndarray, sky_depth_def: float = 98.0):
-    """Set sky depth.
-
-    Args:
-        prediction: The prediction.
-        sky_mask: The sky mask.
-        sky_depth_def: The sky depth def.
-    """
     non_sky_mask = ~sky_mask
     valid_depth = prediction.depth[non_sky_mask]
     if valid_depth.size > 0:
@@ -48,19 +42,7 @@ def get_conf_thresh(
     conf_thresh_percentile: float = 10.0,
     ensure_thresh_percentile: float = 90.0,
 ):
-    """Get conf thresh.
-
-    Args:
-        prediction: The prediction.
-        sky_mask: The sky mask.
-        conf_thresh: The conf thresh.
-        conf_thresh_percentile: The conf thresh percentile.
-        ensure_thresh_percentile: The ensure thresh percentile.
-    """
-    if sky_mask is not None and (~sky_mask).sum() > 10:
-        conf_pixels = prediction.conf[~sky_mask]
-    else:
-        conf_pixels = prediction.conf
+    conf_pixels = prediction.conf[~sky_mask] if sky_mask is not None and (~sky_mask).sum() > 10 else prediction.conf
     lower = np.percentile(conf_pixels, conf_thresh_percentile)
     upper = np.percentile(conf_pixels, ensure_thresh_percentile)
     conf_thresh = min(max(conf_thresh, lower), upper)
@@ -107,21 +89,13 @@ def export_to_glb(
         Path to the exported ``scene.glb`` file.
     """
     # 1) Use prediction.processed_images, which is already processed image data
-    assert (
-        prediction.processed_images is not None
-    ), "Export to GLB: prediction.processed_images is required but not available"
-    assert (
-        prediction.depth is not None
-    ), "Export to GLB: prediction.depth is required but not available"
-    assert (
-        prediction.intrinsics is not None
-    ), "Export to GLB: prediction.intrinsics is required but not available"
-    assert (
-        prediction.extrinsics is not None
-    ), "Export to GLB: prediction.extrinsics is required but not available"
-    assert (
-        prediction.conf is not None
-    ), "Export to GLB: prediction.conf is required but not available"
+    assert prediction.processed_images is not None, (
+        "Export to GLB: prediction.processed_images is required but not available"
+    )
+    assert prediction.depth is not None, "Export to GLB: prediction.depth is required but not available"
+    assert prediction.intrinsics is not None, "Export to GLB: prediction.intrinsics is required but not available"
+    assert prediction.extrinsics is not None, "Export to GLB: prediction.extrinsics is required but not available"
+    assert prediction.conf is not None, "Export to GLB: prediction.conf is required but not available"
     logger.info(f"conf_thresh_percentile: {conf_thresh_percentile}")
     logger.info(f"num max points: {num_max_points}")
     logger.info(f"Exporting to GLB with num_max_points: {num_max_points}")
@@ -159,9 +133,7 @@ def export_to_glb(
 
     # 5) Based on first camera orientation + glTF axis system, center by point cloud,
     # construct alignment transform, and apply to point cloud
-    A = _compute_alignment_transform_first_cam_glTF_center_by_points(
-        prediction.extrinsics[0], points
-    )  # (4,4)
+    A = _compute_alignment_transform_first_cam_glTF_center_by_points(prediction.extrinsics[0], points)  # (4,4)
 
     if points.shape[0] > 0:
         points = trimesh.transform_points(points, A)
@@ -271,13 +243,6 @@ def _depths_to_world_points_with_colors(
 
 
 def _filter_and_downsample(points: np.ndarray, colors: np.ndarray, num_max: int):
-    """Helper function to filter and downsample.
-
-    Args:
-        points: The points.
-        colors: The colors.
-        num_max: The num max.
-    """
     if points.shape[0] == 0:
         return points, colors
     finite = np.isfinite(points).all(axis=1)
@@ -289,15 +254,6 @@ def _filter_and_downsample(points: np.ndarray, colors: np.ndarray, num_max: int)
 
 
 def _estimate_scene_scale(points: np.ndarray, fallback: float = 1.0) -> float:
-    """Helper function to estimate scene scale.
-
-    Args:
-        points: The points.
-        fallback: The fallback.
-
-    Returns:
-        The return value.
-    """
     if points.shape[0] < 2:
         return fallback
     lo = np.percentile(points, 5, axis=0)
@@ -393,21 +349,7 @@ def _add_cameras_to_scene(
         scene.add_geometry(path)
 
 
-def _camera_frustum_lines(
-    K: np.ndarray, ext_w2c: np.ndarray, W: int, H: int, scale: float
-) -> np.ndarray:
-    """Helper function to camera frustum lines.
-
-    Args:
-        K: The k.
-        ext_w2c: The ext w2c.
-        W: The w.
-        H: The h.
-        scale: The scale.
-
-    Returns:
-        The return value.
-    """
+def _camera_frustum_lines(K: np.ndarray, ext_w2c: np.ndarray, W: int, H: int, scale: float) -> np.ndarray:
     corners = np.array(
         [
             [0, 0, 1.0],
@@ -443,22 +385,13 @@ def _camera_frustum_lines(
         segs.append(np.stack([Cw, plane_w[k]], 0))
     # rectangle edges
     order = [0, 1, 2, 3, 0]
-    for a, b in zip(order[:-1], order[1:]):
+    for a, b in itertools.pairwise(order):
         segs.append(np.stack([plane_w[a], plane_w[b]], 0))
 
     return np.stack(segs, 0)  # (8,2,3)
 
 
 def _index_color_rgb(i: int, n: int) -> np.ndarray:
-    """Helper function to index color rgb.
-
-    Args:
-        i: The i.
-        n: The n.
-
-    Returns:
-        The return value.
-    """
     h = (i + 0.5) / max(n, 1)
     s, v = 0.85, 0.95
     r, g, b = _hsv_to_rgb(h, s, v)
@@ -466,16 +399,6 @@ def _index_color_rgb(i: int, n: int) -> np.ndarray:
 
 
 def _hsv_to_rgb(h: float, s: float, v: float) -> tuple[float, float, float]:
-    """Helper function to hsv to rgb.
-
-    Args:
-        h: The h.
-        s: The s.
-        v: The v.
-
-    Returns:
-        The return value.
-    """
     i = int(h * 6.0)
     f = h * 6.0 - i
     p = v * (1.0 - s)

@@ -1,0 +1,52 @@
+# Echo 1.5 packed ModelOpt FP4 low-VRAM inference profile.
+
+paths:
+  checkpoint: checkpoints/echo15_fp4
+  gemma_path: checkpoints/gemma-3-12b
+  requests_dir: examples/the_last_visa/requests
+  requests_glob: "*.json"
+  output_root: inference_result/low_vram_fp4
+  # Set this after precomputing complete text/image/audio R2V conditioning.
+  conditioning_cache_dir:
+
+video:
+  num_frames: 241
+  height: 736
+  width: 1280
+  fps: 25
+  seed: 42
+
+video_vae:
+  decode_mode: tiled
+  tile_size_frames: 64
+  tile_overlap_frames: 24
+  tile_size_pixels: 512
+  tile_overlap_pixels: 64
+
+denoising:
+  steps: [1000, 994, 988, 981, 975, 909, 725, 422, 0]
+  sigmas: [1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0]
+
+memory:
+  max_size: 7
+  downscale_factor: 1
+  enable_audio: true
+  position_mode: slot_center
+  position_offset: 500.0
+  position_slot_stride: 50.0
+  voice_filter:
+    enabled: true
+    backend: msst_speech
+
+inference:
+  device: cuda
+  dtype: bfloat16
+  prompt_max_chars: 1500
+  text_batch_size: 1
+  image_batch_size: 1
+  audio_batch_size: 1
+  dit_layerwise_offload:
+    enabled: true
+    resident_blocks: 0
+    prefetch_blocks: 1
+    pin_memory: true

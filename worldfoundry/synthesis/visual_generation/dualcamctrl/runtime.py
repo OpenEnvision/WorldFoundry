@@ -2,26 +2,28 @@
 
 from __future__ import annotations
 
+import contextlib
 import re
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import torch
 from PIL import Image
 
-from worldfoundry.core.model_loading.checkpoints import load_weights_only
-from worldfoundry.synthesis.visual_generation.dualcamctrl.native_pipeline import (
-    WanVideoCameraPipeline,
-)
 from worldfoundry.core.io.paths import (
     checkpoint_root_path,
     local_model_root_path,
+    package_data_path,
     resolve_local_hf_model_path,
 )
 from worldfoundry.core.media.codecs.video import write_video
 from worldfoundry.core.model_loading import ModelConfig, load_state_dict
-from worldfoundry.evaluation.utils import worldfoundry_data_path
+from worldfoundry.core.model_loading.checkpoints import load_weights_only
+from worldfoundry.synthesis.visual_generation.dualcamctrl.native_pipeline import (
+    WanVideoCameraPipeline,
+)
 
 MODEL_ID = "dualcamctrl"
 DISPLAY_NAME = "DualCamCtrl"
@@ -31,8 +33,8 @@ DEFAULT_TOKENIZER_REPO = "Wan-AI/Wan2.1-T2V-1.3B"
 DEFAULT_CLIP_REPO = "Wan-AI/Wan2.1-I2V-14B-480P"
 DEFAULT_DUALCAMCTRL_REPO = "FayeHongfeiZhang/DualCamCtrl"
 DEFAULT_DUALCAMCTRL_CHECKPOINT = "checkpoints/dualcamctrl_diffusion_transformer.pt"
-DEFAULT_CONFIG = worldfoundry_data_path("models", "runtime", "configs", "dualcamctrl", "controlnet_gate_asym_5_10.yaml")
-DEFAULT_TEST_CASE_DIR = worldfoundry_data_path("test_cases", "dualcamctrl", "demo_pic")
+DEFAULT_CONFIG = package_data_path("models", "runtime", "configs", "dualcamctrl", "controlnet_gate_asym_5_10.yaml")
+DEFAULT_TEST_CASE_DIR = package_data_path("test_cases", "dualcamctrl", "demo_pic")
 DEFAULT_NEGATIVE_PROMPT = (
     "Vibrant colors, overexposed, static, blurry details, subtitles, poorly drawn style or artwork, "
     "still image, overall grayish, worst quality, low quality, JPEG artifacts, ugly, incomplete, extra fingers, "
@@ -43,6 +45,7 @@ DEFAULT_NEGATIVE_PROMPT = (
 
 def _looks_like_hf_repo_id(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", value.strip()))
+
 
 OFFICIAL_DEMO_PROMPTS = {
     "astronaut": (
@@ -190,7 +193,9 @@ class DualCamCtrlRuntime:
         self.tokenizer_repo = tokenizer_repo
         self.dualcamctrl_repo = dualcamctrl_repo
         self.checkpoint_name = checkpoint_name
-        self.local_model_path = str(Path(local_model_path).expanduser()) if local_model_path is not None else str(local_model_root_path())
+        self.local_model_path = (
+            str(Path(local_model_path).expanduser()) if local_model_path is not None else str(local_model_root_path())
+        )
         self.download_resource = download_resource
         self.allow_download = bool(allow_download)
         self.base_model_path = None if base_model_path is None else str(Path(base_model_path).expanduser())
@@ -210,7 +215,7 @@ class DualCamCtrlRuntime:
         device: str | None = None,
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "DualCamCtrlRuntime":
+    ) -> DualCamCtrlRuntime:
         options = dict(pretrained_model_path) if isinstance(pretrained_model_path, Mapping) else {}
         if pretrained_model_path is not None and not isinstance(pretrained_model_path, Mapping):
             model_ref = str(pretrained_model_path)
@@ -263,10 +268,8 @@ class DualCamCtrlRuntime:
                 checkpoint_root_path(Path(model_id).name),
             )
         )
-        try:
+        with contextlib.suppress(FileNotFoundError):
             roots.append(resolve_local_hf_model_path(model_id))
-        except FileNotFoundError:
-            pass
         roots.extend(
             (
                 Path(self.local_model_path) / Path(model_id),
@@ -428,11 +431,7 @@ class DualCamCtrlRuntime:
         checkpoint = self._resolve_checkpoint_path()
         state_dict = load_state_dict(checkpoint, torch_dtype=self.torch_dtype, device="cpu")
         state_dict = self._strip_pipe_prefix(state_dict)
-        dit_state = {
-            name.removeprefix("dit."): value
-            for name, value in state_dict.items()
-            if name.startswith("dit.")
-        }
+        dit_state = {name.removeprefix("dit."): value for name, value in state_dict.items() if name.startswith("dit.")}
         if not dit_state:
             dit_state = state_dict
         load_state = pipe.dit.load_state_dict(dit_state, strict=False)
@@ -475,7 +474,9 @@ class DualCamCtrlRuntime:
         if cameras_info.shape[1] == 18:
             cameras_info = torch.cat([torch.zeros(cameras_info.shape[0], 1), cameras_info], dim=1)
         if cameras_info.shape[0] < frame_len:
-            raise ValueError(f"DualCamCtrl camera path has {cameras_info.shape[0]} frames, but {frame_len} are required.")
+            raise ValueError(
+                f"DualCamCtrl camera path has {cameras_info.shape[0]} frames, but {frame_len} are required."
+            )
         cam_params = [_Camera(cameras_info[index]) for index in range(frame_len)]
 
         sample_wh_ratio = width / height
@@ -512,12 +513,18 @@ class DualCamCtrlRuntime:
         **kwargs: Any,
     ) -> dict[str, Any]:
         if video is not None:
-            raise ValueError("DualCamCtrl consumes an image, a depth image, and a camera path; it does not accept input video.")
+            raise ValueError(
+                "DualCamCtrl consumes an image, a depth image, and a camera path; it does not accept input video."
+            )
         demo_name = str(kwargs.get("demo_name") or "seaside")
         default_image, default_depth, default_camera, default_prompt = self.demo_assets(demo_name)
         image_path = Path(kwargs.get("image_path") or images or default_image).expanduser()
         depth_path = Path(kwargs.get("depth_image") or kwargs.get("depth_path") or default_depth).expanduser()
-        camera_path = Path(kwargs.get("camera_path") or kwargs.get("trajectory_file") or (interactions[0] if interactions else default_camera)).expanduser()
+        camera_path = Path(
+            kwargs.get("camera_path")
+            or kwargs.get("trajectory_file")
+            or (interactions[0] if interactions else default_camera)
+        ).expanduser()
         text_prompt = prompt or kwargs.get("caption") or default_prompt
 
         frame_len = int(kwargs.get("num_frames", kwargs.get("frame_len", 61)))
@@ -593,8 +600,8 @@ __all__ = [
     "DEFAULT_DUALCAMCTRL_REPO",
     "DEFAULT_NEGATIVE_PROMPT",
     "DEFAULT_TEST_CASE_DIR",
-    "DualCamCtrlRuntime",
     "OFFICIAL_DEMO_FILES",
     "OFFICIAL_DEMO_PROMPTS",
     "OFFICIAL_SOURCE_REPO",
+    "DualCamCtrlRuntime",
 ]

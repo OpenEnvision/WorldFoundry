@@ -1,4 +1,3 @@
-schema_version: 2
 id: kandinsky6-pro-pretrain
 name: Kandinsky 6.0 pro-pretrain
 family: Kandinsky6
@@ -28,7 +27,7 @@ checkpoints:
     revision: fd9a3fcd1967acc20a1911444b733405f51b6530
 pipeline_binding: kandinsky6-pro-pretrain
 runtime_profile: runtime-profile:kandinsky6-pro-pretrain
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 integration:
   status: integrated
   runtime_profile: kandinsky6-pro-pretrain

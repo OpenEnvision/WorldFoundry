@@ -8,6 +8,7 @@ groups:
 - camera_control
 source_repos:
 - url: https://github.com/stdstu12/YUME
+  revision: 111c3fab7fb020d1e261a68be6ec78a3fecc8d5b
 - url: https://huggingface.co/stdstu123/Yume-5B-720P
 checkpoints:
 - repo_id: stdstu123/Yume-5B-720P

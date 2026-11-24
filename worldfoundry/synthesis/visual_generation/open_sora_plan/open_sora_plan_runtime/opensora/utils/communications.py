@@ -1,14 +1,21 @@
 import torch
 import torch.distributed as dist
 from einops import rearrange
-from opensora.utils.parallel_states import nccl_info
+
+from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.utils.parallel_states import (
+    nccl_info,
+)
+
 
 def broadcast(input_: torch.Tensor):
     sp_size = nccl_info.world_size
     src = nccl_info.rank // sp_size * sp_size
     dist.broadcast(input_, src=src, group=nccl_info.group)
 
+
 _COUNT = 0
+
+
 def _all_to_all(
     input_: torch.Tensor,
     scatter_dim: int,
@@ -21,27 +28,25 @@ def _all_to_all(
     dist.all_to_all(output_list, input_list, group=group)
     return torch.cat(output_list, dim=gather_dim).contiguous()
 
+
 def _single_all_to_all(
     input_: torch.Tensor,
     scatter_dim: int,
     gather_dim: int,
     enable_HCCL=False,
 ):
-
     sp_size = nccl_info.world_size
     inp_shape = list(input_.shape)
     inp_shape[scatter_dim] = inp_shape[scatter_dim] // sp_size
     if scatter_dim < 1:
-        input_t = input_.reshape(
-            [sp_size, inp_shape[scatter_dim]] + \
-            inp_shape[scatter_dim + 1:]
-        )
+        input_t = input_.reshape([sp_size, inp_shape[scatter_dim]] + inp_shape[scatter_dim + 1 :])  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     else:
         # transpose groups of heads with the seq-len parallel dimension, so that we can scatter them!
-        input_t = input_.reshape(
-            [-1, sp_size, inp_shape[scatter_dim]] + \
-            inp_shape[scatter_dim + 1:]
-        ).transpose(0, 1).contiguous()
+        input_t = (
+            input_.reshape([-1, sp_size, inp_shape[scatter_dim]] + inp_shape[scatter_dim + 1 :])  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+            .transpose(0, 1)
+            .contiguous()
+        )
 
     output = torch.empty_like(input_t)
     dist.all_to_all_single(output, input_t, group=nccl_info.group)
@@ -50,7 +55,12 @@ def _single_all_to_all(
         output = output.transpose(0, 1).contiguous()
 
     return output.reshape(
-        inp_shape[: gather_dim] + [inp_shape[gather_dim] * sp_size, ] + inp_shape[gather_dim + 1:])
+        inp_shape[:gather_dim]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+        + [
+            inp_shape[gather_dim] * sp_size,
+        ]
+        + inp_shape[gather_dim + 1 :]
+    )
 
 
 class _AllToAll(torch.autograd.Function):
@@ -85,12 +95,14 @@ class _AllToAll(torch.autograd.Function):
             None,
         )
 
+
 def all_to_all_SBH(
     input_: torch.Tensor,
     scatter_dim: int = 1,
     gather_dim: int = 0,
 ):
     return _AllToAll.apply(input_, scatter_dim, gather_dim, _single_all_to_all)
+
 
 def all_to_all_BSND(
     input_: torch.Tensor,
@@ -101,19 +113,19 @@ def all_to_all_BSND(
 
 
 def prepare_parallel_data(
-        hidden_states, 
-        encoder_hidden_states, 
-        attention_mask, 
-        encoder_attention_mask, 
-        pooled_projections, 
-        ):
+    hidden_states,
+    encoder_hidden_states,
+    attention_mask,
+    encoder_attention_mask,
+    pooled_projections,
+):
     def all_to_all(
-            hidden_states, 
-            encoder_hidden_states, 
-            attention_mask, 
-            encoder_attention_mask, 
-            pooled_projections, 
-            ):
+        hidden_states,
+        encoder_hidden_states,
+        attention_mask,
+        encoder_attention_mask,
+        pooled_projections,
+    ):
         # hidden_states          (b c t h w)   -gather0-> (sp*b c t h w)   -scatter2-> (sp*b c t//sp h w)
         # encoder_hidden_states  (b sp l/sp d) -gather0-> (sp*b sp l/sp d) -scatter1-> (sp*b 1 l/sp d)
         # attention_mask         (b t*sp h w)  -gather0-> (sp*b t*sp h w)  -scatter1-> (sp*b t h w)
@@ -122,7 +134,9 @@ def prepare_parallel_data(
         hidden_states = _single_all_to_all(hidden_states, scatter_dim=2, gather_dim=0, enable_HCCL=True)
         encoder_hidden_states = _single_all_to_all(encoder_hidden_states, scatter_dim=1, gather_dim=0, enable_HCCL=True)
         attention_mask = _single_all_to_all(attention_mask, scatter_dim=1, gather_dim=0, enable_HCCL=True)
-        encoder_attention_mask = _single_all_to_all(encoder_attention_mask, scatter_dim=1, gather_dim=0, enable_HCCL=True)
+        encoder_attention_mask = _single_all_to_all(
+            encoder_attention_mask, scatter_dim=1, gather_dim=0, enable_HCCL=True
+        )
         if pooled_projections is not None:
             pooled_projections = _single_all_to_all(pooled_projections, scatter_dim=1, gather_dim=0, enable_HCCL=True)
 
@@ -133,14 +147,14 @@ def prepare_parallel_data(
     assert frame % sp_size == 0, "frame should be a multiple of sp_size"
 
     encoder_hidden_states = rearrange(
-        encoder_hidden_states, 'b 1 (n x) h -> b n x h', n=sp_size, x=encoder_hidden_states.shape[2]//sp_size
-        ).contiguous()
+        encoder_hidden_states, "b 1 (n x) h -> b n x h", n=sp_size, x=encoder_hidden_states.shape[2] // sp_size
+    ).contiguous()
     hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, pooled_projections = all_to_all(
-        hidden_states, 
-        encoder_hidden_states, 
-        attention_mask.repeat(1, sp_size, 1, 1), 
-        encoder_attention_mask.repeat(1, sp_size, 1), 
-        pooled_projections.repeat(1, sp_size, 1) if pooled_projections is not None else None, 
-        )
+        hidden_states,
+        encoder_hidden_states,
+        attention_mask.repeat(1, sp_size, 1, 1),
+        encoder_attention_mask.repeat(1, sp_size, 1),
+        pooled_projections.repeat(1, sp_size, 1) if pooled_projections is not None else None,
+    )
 
     return hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, pooled_projections

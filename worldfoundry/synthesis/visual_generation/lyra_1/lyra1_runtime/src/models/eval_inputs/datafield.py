@@ -15,6 +15,7 @@
 
 from enum import Enum
 
+
 # class DataField(Enum):
 class DataField(str, Enum):
     # [B, C, H, W], float32, RGB image ranges from 0 to 1.

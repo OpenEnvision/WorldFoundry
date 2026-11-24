@@ -1,6 +1,6 @@
 ---
 title: VideoScience-Bench
-description: "UCSD Hao AI Lab science-understanding T2V bench: 1-4 rubric across five dimensions. WorldFoundry wires the VLM judge; it does not invent a board."
+description: "UCSD Hao AI Lab science-understanding T2V bench: 1-4 rubric across five dimensions. WorldFoundry normalizes official results or runs the VLM judge."
 ---
 
 VideoScience-Bench (Hao AI Lab, UC San Diego) asks whether video generators **understand science**. Prompts describe real experiments and phenomena. A VLM judge scores five dimensions on a **1–4 rubric**; the official weighted overall normalizes to the unit interval as `videoscience_average`:
@@ -11,16 +11,16 @@ VideoScience-Bench (Hao AI Lab, UC San Diego) asks whether video generators **un
 - **Immutability** — do invariant properties stay invariant?
 - **Spatio-temporal coherence**
 
-Paper: [VideoScience-Bench](https://arxiv.org/abs/2512.02942). Space: [lmgame/videoscience-bench](https://huggingface.co/spaces/lmgame/videoscience-bench/blob/main/README.md). Code: [hao-ai-lab/VideoScience](https://github.com/hao-ai-lab/VideoScience). Catalog release status: experimental. No Hugging Face dataset is required by the contract.
+Paper: [VideoScience-Bench](https://arxiv.org/abs/2512.02942). Space: [lmgame/videoscience-bench](https://huggingface.co/spaces/lmgame/videoscience-bench/blob/main/README.md). Code: [hao-ai-lab/VideoScience](https://github.com/hao-ai-lab/VideoScience). No Hugging Face dataset is required.
 
-WorldFoundry **normalizes official result files** and can drive judge runs over an experiments CSV when a provider / model / credential is configured. No complete credentialed upstream run is claimed.
+WorldFoundry **normalizes official result files** and can drive judge runs over an experiments CSV when a provider / model / credential is configured.
 
 <BenchmarkPageSections id="videoscience-bench" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id videoscience-bench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -31,7 +31,7 @@ worldfoundry-eval zoo benchmark-run \
 
 Runtime CLI takes `--experiments-csv`, `--evaluation-results-dir`, optional `--reference-videos-dir`, and judge flags (`--judge-provider`, `--judge-model`, `--judge-max-runs`, `--max-frames`, `--judge-fps`). `--ready-only` scores only complete artifacts. Default import: `WORLDFOUNDRY_VIDEOSCIENCE_BENCH_RESULTS_PATH`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/videoscience-bench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/runtime/videoscience_bench`.
+Manifest: `worldfoundry/data/benchmarks/tasks/external/videoscience-bench.yaml`.
 
 Outputs include `scorecard.json` (primary `videoscience_average`).
 

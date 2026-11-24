@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from opensora.registry import SCHEDULERS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import SCHEDULERS
 
 from . import gaussian_diffusion as gd
 from .respace import SpacedDiffusion, space_timesteps
@@ -69,7 +69,7 @@ class SpeeDiffusion(SpacedDiffusion):
 
     def training_losses(self, model, x, *args, **kwargs):  # pylint: disable=signature-differs
         t = self.t_sample(x.shape[0], x.device)
-        return super().training_losses(model, x, t, weights=self.weights, *args, **kwargs)
+        return super().training_losses(model, x, t, weights=self.weights, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
     def sample(self, *args, **kwargs):
         raise NotImplementedError("SpeeDiffusion is only for training")

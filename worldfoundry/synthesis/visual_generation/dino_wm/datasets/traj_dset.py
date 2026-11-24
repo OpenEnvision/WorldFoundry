@@ -1,11 +1,12 @@
 import abc
-import torch
+from collections.abc import Sequence
+
 import numpy as np
-from torch.utils.data import Dataset
-from typing import Optional, Sequence, List
-from torch.utils.data import Dataset, Subset
-from torch import default_generator, randperm
+import torch
 from einops import rearrange
+from torch import default_generator, randperm
+from torch.utils.data import Dataset, Subset
+
 
 # https://github.com/JaidedAI/EasyOCR/issues/1243
 def _accumulate(iterable, fn=lambda x, y: x + y):
@@ -22,6 +23,7 @@ def _accumulate(iterable, fn=lambda x, y: x + y):
         total = fn(total, element)
         yield total
 
+
 class TrajDataset(Dataset, abc.ABC):
     @abc.abstractmethod
     def get_seq_length(self, idx):
@@ -29,6 +31,7 @@ class TrajDataset(Dataset, abc.ABC):
         Returns the length of the idx-th trajectory.
         """
         raise NotImplementedError
+
 
 class TrajSubset(TrajDataset, Subset):
     """
@@ -38,6 +41,7 @@ class TrajSubset(TrajDataset, Subset):
         dataset (TrajectoryDataset): The whole Dataset
         indices (sequence): Indices in the whole set selected for subset
     """
+
     def __init__(self, dataset: TrajDataset, indices: Sequence[int]):
         Subset.__init__(self, dataset, indices)
 
@@ -68,8 +72,7 @@ class TrajSlicerDataset(TrajDataset):
                 print(f"Ignored short sequence #{i}: len={T}, num_frames={num_frames}")
             else:
                 self.slices += [
-                    (i, start, start + num_frames * self.frameskip)
-                    for start in range(T - num_frames * frameskip + 1)
+                    (i, start, start + num_frames * self.frameskip) for start in range(T - num_frames * frameskip + 1)
                 ]  # slice indices follow convention [start, end)
         # randomly permute the slices
         self.slices = np.random.permutation(self.slices)
@@ -82,7 +85,6 @@ class TrajSlicerDataset(TrajDataset):
 
         self.state_dim = self.dataset.state_dim
 
-
     def get_seq_length(self, idx: int) -> int:
         return self.num_frames
 
@@ -93,28 +95,26 @@ class TrajSlicerDataset(TrajDataset):
         i, start, end = self.slices[idx]
         obs, act, state, _ = self.dataset[i]
         for k, v in obs.items():
-            obs[k] = v[start:end:self.frameskip]
-        state = state[start:end:self.frameskip]
+            obs[k] = v[start : end : self.frameskip]
+        state = state[start : end : self.frameskip]
         act = act[start:end]
         act = rearrange(act, "(n f) d -> n (f d)", n=self.num_frames)  # concat actions
-        return tuple([obs, act, state])
+        return (obs, act, state)
 
 
 def random_split_traj(
     dataset: TrajDataset,
     lengths: Sequence[int],
-    generator: Optional[torch.Generator] = default_generator,
-) -> List[TrajSubset]:
+    generator: torch.Generator | None = default_generator,
+) -> list[TrajSubset]:
     if sum(lengths) != len(dataset):  # type: ignore[arg-type]
-        raise ValueError(
-            "Sum of input lengths does not equal the length of the input dataset!"
-        )
+        raise ValueError("Sum of input lengths does not equal the length of the input dataset!")
 
     indices = randperm(sum(lengths), generator=generator).tolist()
     print(f"Split {len(dataset)} trajectories into {lengths}")
     return [
         TrajSubset(dataset, indices[offset - length : offset])
-        for offset, length in zip(_accumulate(lengths), lengths)
+        for offset, length in zip(_accumulate(lengths), lengths, strict=False)
     ]
 
 
@@ -124,9 +124,7 @@ def split_traj_datasets(dataset, train_fraction=0.95, random_seed=42):
         int(train_fraction * dataset_length),
         dataset_length - int(train_fraction * dataset_length),
     ]
-    train_set, val_set = random_split_traj(
-        dataset, lengths, generator=torch.Generator().manual_seed(random_seed)
-    )
+    train_set, val_set = random_split_traj(dataset, lengths, generator=torch.Generator().manual_seed(random_seed))
     return train_set, val_set
 
 

@@ -48,13 +48,13 @@ class TextEncoder(SharedTextEncoder):
                     tokenize_input_type = "list"
             else:
                 raise TypeError(f"Unsupported text type: {type(text)}")
-        kwargs = dict(truncation=True, max_length=self.max_length, padding="max_length", return_tensors="pt")
+        kwargs = {"truncation": True, "max_length": self.max_length, "padding": "max_length", "return_tensors": "pt"}
         if self.text_encoder_type == "llava-llama-3-8b":
             if isinstance(text, list):
                 for i in range(len(text)):
-                    text[i] = text[i] + "\nThe %s looks like<image>" % name
+                    text[i] = text[i] + "\nThe %s looks like<image>" % name  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             elif isinstance(text, str):
-                text = text + "\nThe %s looks like<image>" % name
+                text = text + "\nThe %s looks like<image>" % name  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             else:
                 raise NotImplementedError
         if tokenize_input_type == "str":

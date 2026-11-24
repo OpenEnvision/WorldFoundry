@@ -1,0 +1,49 @@
+id: wan-2p7
+name: Wan 2.7 API
+aliases:
+- wan2.7
+- wan-2.7
+tasks:
+- image-to-video
+- hosted-api
+provider: api
+source:
+  status: api
+  official_repo_url: https://dashscope.aliyun.com/
+official_sources:
+  project_page: https://dashscope.aliyun.com/
+integration:
+  status: integrated
+  notes:
+  - Hosted DashScope API Studio pipeline is available; users must provide their own
+    provider API key.
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: wan-2p7
+runner_parity:
+  status: not_applicable
+demo_parity:
+  status: not_applicable
+docs:
+  publisher: Alibaba (Tongyi Lab)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（通义实验室）
+  overview: Wan 2.7 API is Alibaba's DashScope-hosted Wan 2.7 endpoint for image-to-video. As with the Wan 2.5/2.6 APIs, WorldFoundry submits the start image to Alibaba Cloud and archives the returned clip; the aliases wan2.7 and wan-2.7 resolve to it. Alibaba controls the exact served model revision.
+  overview_zh: Wan 2.7 API 是阿里云 DashScope 托管的 Wan 2.7 图生视频接入点。与 Wan 2.5/2.6 API 一样，WorldFoundry 把起始图提交给阿里云并归档返回的视频；别名 wan2.7、wan-2.7 同样指向它。实际服务的模型修订版由阿里控制。
+  architecture: Wan 2.7 belongs to Tongyi Lab's Wan video-generation family; the architecture and scale of the API-served model are not published.
+  architecture_zh: Wan 2.7 属于通义实验室的 Wan 视频生成系列；其 API 版本的架构与规模未公开。
+  usage_notes: Issue an API key through Alibaba Cloud DashScope (dashscope.aliyun.com) and use your own paid account. No weights are downloaded and no local GPU environment is needed; generation happens on the provider side, so cost, quota, and content policy follow your provider account.
+  usage_notes_zh: 通过阿里云 DashScope（dashscope.aliyun.com）开通 API key，并使用你自己的付费账号。本地不下载权重，也不需要 GPU 环境；生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。
+  limitations:
+  - Alibaba controls model versioning, so outputs can change over time.
+  - No local weights and no offline mode; reproducibility is limited to the request parameters WorldFoundry stores.
+  limitations_zh:
+  - 模型版本由阿里控制，输出可能随时间变化。
+  - 没有本地权重、不支持离线运行；可复现性仅限于 WorldFoundry 保存的请求参数。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video
+      outputs.
+    reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+  - id: physics-iq
+    reason: Probes whether provider-side video models respect basic physical plausibility.
+    reason_zh: 检验服务方视频模型是否遵循基本物理合理性。

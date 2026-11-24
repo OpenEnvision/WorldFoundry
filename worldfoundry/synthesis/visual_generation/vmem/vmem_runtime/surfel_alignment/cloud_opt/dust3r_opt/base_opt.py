@@ -6,41 +6,55 @@
 # --------------------------------------------------------
 from copy import deepcopy
 
+import cv2
 import numpy as np
+import roma
 import torch
 import torch.nn as nn
-import roma
-from copy import deepcopy
 import tqdm
-import cv2
 from PIL import Image
-from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.utils.geometry import inv, geotrf
+
 from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.utils.device import to_numpy
+from worldfoundry.core.geometry.projection import invert_matrix as inv
+from worldfoundry.core.geometry.projection import transform_points as geotrf
+
+# isort: split
 from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.utils.image import rgb
+
+# isort: split
+# isort: split
 from worldfoundry.synthesis.visual_generation.vmem.vmem_runtime.surfel_alignment.viz import (
     SceneViz,
     auto_cam_size,
     segment_sky,
 )
 
+# isort: split
+
 from ..commons import (
-    edge_str,
     ALL_DISTS,
     NoGradParamDict,
+    cosine_schedule,
+    edge_str,
+    get_conf_trf,
     get_imshapes,
+    linear_schedule,
     signed_expm1,
     signed_log1p,
-    cosine_schedule,
-    linear_schedule,
-    get_conf_trf,
 )
+
+# isort: split
 from . import init_im_poses as init_fun
+
+# isort: split
 from pathlib import Path
+
 from scipy.spatial.transform import Rotation
 
 try:
     from evo.core.trajectory import PosePath3D, PoseTrajectory3D
 except ImportError:
+
     class PoseTrajectory3D:
         """Minimal trajectory container used when the optional evo package is absent."""
 
@@ -62,7 +76,7 @@ def adjust_learning_rate_by_lr(optimizer, lr):
 
 
 def make_traj(args) -> PoseTrajectory3D:
-    if isinstance(args, tuple) or isinstance(args, list):
+    if isinstance(args, (tuple, list)):
         traj, tstamps = args
         return PoseTrajectory3D(
             positions_xyz=traj[:, :3],
@@ -75,11 +89,14 @@ def make_traj(args) -> PoseTrajectory3D:
 
 def save_trajectory_tum_format(traj, filename):
     traj = make_traj(traj)
-    tostr = lambda a: " ".join(map(str, a))
+
+    def tostr(a):
+        return " ".join(map(str, a))
+
     with Path(filename).open("w") as f:
         for i in range(traj.num_poses):
             f.write(
-                f"{traj.timestamps[i]} {tostr(traj.positions_xyz[i])} {tostr(traj.orientations_quat_wxyz[i][[0,1,2,3]])}\n"
+                f"{traj.timestamps[i]} {tostr(traj.positions_xyz[i])} {tostr(traj.orientations_quat_wxyz[i][[0, 1, 2, 3]])}\n"
             )
     print(f"Saved trajectory to {filename}")
 
@@ -109,10 +126,30 @@ class BasePCOptimizer(nn.Module):
     def __init__(self, *args, **kwargs):
         if len(args) == 1 and len(kwargs) == 0:
             other = deepcopy(args[0])
-            attrs = """edges is_symmetrized dist n_imgs pred_i pred_j imshapes 
-                        min_conf_thr conf_thr conf_i conf_j im_conf
-                        base_scale norm_pw_scale POSE_DIM pw_poses 
-                        pw_adaptors pw_adaptors has_im_poses rand_pose imgs verbose""".split()
+            attrs = [
+                "edges",
+                "is_symmetrized",
+                "dist",
+                "n_imgs",
+                "pred_i",
+                "pred_j",
+                "imshapes",
+                "min_conf_thr",
+                "conf_thr",
+                "conf_i",
+                "conf_j",
+                "im_conf",
+                "base_scale",
+                "norm_pw_scale",
+                "POSE_DIM",
+                "pw_poses",
+                "pw_adaptors",
+                "pw_adaptors",
+                "has_im_poses",
+                "rand_pose",
+                "imgs",
+                "verbose",
+            ]
             self.__dict__.update({k: other[k] for k in attrs})
         else:
             self._init_from_views(*args, **kwargs)
@@ -138,7 +175,7 @@ class BasePCOptimizer(nn.Module):
             view1["idx"] = view1["idx"].tolist()
         if not isinstance(view2["idx"], list):
             view2["idx"] = view2["idx"].tolist()
-        self.edges = [(int(i), int(j)) for i, j in zip(view1["idx"], view2["idx"])]
+        self.edges = [(int(i), int(j)) for i, j in zip(view1["idx"], view2["idx"], strict=False)]
         self.is_symmetrized = set(self.edges) == {(j, i) for i, j in self.edges}
         self.dist = ALL_DISTS[dist]
         self.verbose = verbose
@@ -148,12 +185,8 @@ class BasePCOptimizer(nn.Module):
         # input data
         pred1_pts = pred1["pts3d_in_self_view"]
         pred2_pts = pred2["pts3d_in_other_view"]
-        self.pred_i = NoGradParamDict(
-            {ij: pred1_pts[n] for n, ij in enumerate(self.str_edges)}
-        )
-        self.pred_j = NoGradParamDict(
-            {ij: pred2_pts[n] for n, ij in enumerate(self.str_edges)}
-        )
+        self.pred_i = NoGradParamDict({ij: pred1_pts[n] for n, ij in enumerate(self.str_edges)})
+        self.pred_j = NoGradParamDict({ij: pred2_pts[n] for n, ij in enumerate(self.str_edges)})
         self.imshapes = get_imshapes(self.edges, pred1_pts, pred2_pts)
 
         # work in log-scale with conf
@@ -162,12 +195,8 @@ class BasePCOptimizer(nn.Module):
         self.min_conf_thr = min_conf_thr
         self.conf_trf = get_conf_trf(conf)
 
-        self.conf_i = NoGradParamDict(
-            {ij: pred1_conf[n] for n, ij in enumerate(self.str_edges)}
-        )
-        self.conf_j = NoGradParamDict(
-            {ij: pred2_conf[n] for n, ij in enumerate(self.str_edges)}
-        )
+        self.conf_i = NoGradParamDict({ij: pred1_conf[n] for n, ij in enumerate(self.str_edges)})
+        self.conf_j = NoGradParamDict({ij: pred2_conf[n] for n, ij in enumerate(self.str_edges)})
         self.im_conf = self._compute_img_conf(pred1_conf, pred2_conf)
         for i in range(len(self.im_conf)):
             self.im_conf[i].requires_grad = False
@@ -177,12 +206,8 @@ class BasePCOptimizer(nn.Module):
         self.norm_pw_scale = True
         self.pw_break = pw_break
         self.POSE_DIM = 7
-        self.pw_poses = nn.Parameter(
-            rand_pose((self.n_edges, 1 + self.POSE_DIM))
-        )  # pairwise poses
-        self.pw_adaptors = nn.Parameter(
-            torch.zeros((self.n_edges, 2))
-        )  # slight xy/z adaptation
+        self.pw_poses = nn.Parameter(rand_pose((self.n_edges, 1 + self.POSE_DIM)))  # pairwise poses
+        self.pw_adaptors = nn.Parameter(torch.zeros((self.n_edges, 2)))  # slight xy/z adaptation
         self.pw_adaptors.requires_grad_(allow_pw_adaptors)
         self.has_im_poses = False
         self.rand_pose = rand_pose
@@ -190,7 +215,7 @@ class BasePCOptimizer(nn.Module):
         # possibly store images for show_pointcloud
         self.imgs = None
         if "img" in view1 and "img" in view2:
-            imgs = [torch.zeros((3,) + hw) for hw in self.imshapes]
+            imgs = [torch.zeros((3,) + hw) for hw in self.imshapes]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             for v in range(len(self.edges)):
                 idx = view1["idx"][v]
                 imgs[idx] = view1["img"][v]
@@ -219,8 +244,7 @@ class BasePCOptimizer(nn.Module):
         return {
             k: v
             for k, v in all_params.items()
-            if k.startswith(("_", "pred_i.", "pred_j.", "conf_i.", "conf_j."))
-            != trainable
+            if k.startswith(("_", "pred_i.", "pred_j.", "conf_i.", "conf_j.")) != trainable
         }
 
     def load_state_dict(self, data):
@@ -233,9 +257,7 @@ class BasePCOptimizer(nn.Module):
 
     @torch.no_grad()
     def _compute_img_conf(self, pred1_conf, pred2_conf):
-        im_conf = nn.ParameterList(
-            [torch.zeros(hw, device=self.device) for hw in self.imshapes]
-        )
+        im_conf = nn.ParameterList([torch.zeros(hw, device=self.device) for hw in self.imshapes])
         for e, (i, j) in enumerate(self.edges):
             im_conf[i] = torch.maximum(im_conf[i], pred1_conf[e])
             im_conf[j] = torch.maximum(im_conf[j], pred2_conf[e])
@@ -243,9 +265,7 @@ class BasePCOptimizer(nn.Module):
 
     def get_adaptors(self):
         adapt = self.pw_adaptors
-        adapt = torch.cat(
-            (adapt[:, 0:1], adapt), dim=-1
-        )  # (scale_xy, scale_xy, scale_z)
+        adapt = torch.cat((adapt[:, 0:1], adapt), dim=-1)  # (scale_xy, scale_xy, scale_z)
         if self.norm_pw_scale:  # normalize so that the product == 1
             adapt = adapt - adapt.mean(dim=1, keepdim=True)
         return (adapt / self.pw_break).exp()
@@ -271,9 +291,7 @@ class BasePCOptimizer(nn.Module):
         if R is not None:
             pose.data[0:4] = roma.rotmat_to_unitquat(R)
         if T is not None:
-            pose.data[4:7] = signed_log1p(
-                T / (scale or 1)
-            )  # translation is function of scale
+            pose.data[4:7] = signed_log1p(T / (scale or 1))  # translation is function of scale
 
         if scale is not None:
             assert poses.shape[-1] in (8, 13)
@@ -296,9 +314,7 @@ class BasePCOptimizer(nn.Module):
     def get_pw_poses(self):  # cam to world
         RT = self._get_poses(self.pw_poses)
         scaled_RT = RT.clone()
-        scaled_RT[:, :3] *= self.get_pw_scale().view(
-            -1, 1, 1
-        )  # scale the rotation AND translation
+        scaled_RT[:, :3] *= self.get_pw_scale().view(-1, 1, 1)  # scale the rotation AND translation
         return scaled_RT
 
     def get_masks(self):
@@ -310,7 +326,7 @@ class BasePCOptimizer(nn.Module):
     def get_pts3d(self, raw=False):
         res = self.depth_to_pts3d()
         if not raw:
-            res = [dm[: h * w].view(h, w, 3) for dm, (h, w) in zip(res, self.imshapes)]
+            res = [dm[: h * w].view(h, w, 3) for dm, (h, w) in zip(res, self.imshapes, strict=False)]
         return res
 
     def _set_focal(self, idx, focal, force=False):
@@ -369,9 +385,7 @@ class BasePCOptimizer(nn.Module):
         depthmaps = self.get_depthmaps()
         all_pts3d = self.get_pts3d()
 
-        new_im_confs = clean_pointcloud(
-            self.im_conf, K, cams, depthmaps, all_pts3d, **kw
-        )
+        new_im_confs = clean_pointcloud(self.im_conf, K, cams, depthmaps, all_pts3d, **kw)
         for i, new_conf in enumerate(new_im_confs):
             self.im_conf[i].data[:] = new_conf
         return self
@@ -422,9 +436,7 @@ class BasePCOptimizer(nn.Module):
 
     def save_dynamic_masks(self, path):
         dynamic_masks = (
-            self.dynamic_masks
-            if getattr(self, "sam2_dynamic_masks", None) is None
-            else self.sam2_dynamic_masks
+            self.dynamic_masks if getattr(self, "sam2_dynamic_masks", None) is None else self.sam2_dynamic_masks
         )
         for i, dynamic_mask in enumerate(dynamic_masks):
             cv2.imwrite(
@@ -433,7 +445,7 @@ class BasePCOptimizer(nn.Module):
             )
         return dynamic_masks
 
-    def save_depth_maps(self, path):
+    def save_depth_maps(self, path):  # noqa: F811 - Later definition replaces the earlier one, as upstream.
         depth_maps = self.get_depthmaps()
         images = []
 
@@ -494,9 +506,7 @@ class BasePCOptimizer(nn.Module):
         elif init == "msp" or init == "mst":
             init_fun.init_minimum_spanning_tree(self, niter_PnP=niter_PnP)
         elif init == "known_poses":
-            init_fun.init_from_known_poses(
-                self, min_conf_thr=self.min_conf_thr, niter_PnP=niter_PnP
-            )
+            init_fun.init_from_known_poses(self, min_conf_thr=self.min_conf_thr, niter_PnP=niter_PnP)
         else:
             raise ValueError(f"bad value for {init=}")
         return global_alignment_loop(self, **kw)
@@ -537,10 +547,7 @@ class BasePCOptimizer(nn.Module):
             viz.add_cameras(pw_poses, color=(192, 0, 192), cam_size=cam_size)
 
             if show_pw_pts3d:
-                pts = [
-                    geotrf(pw_poses[e], self.pred_i[edge_str(i, j)])
-                    for e, (i, j) in enumerate(self.edges)
-                ]
+                pts = [geotrf(pw_poses[e], self.pred_i[edge_str(i, j)]) for e, (i, j) in enumerate(self.edges)]
                 viz.add_pointcloud(pts, (128, 0, 128))
 
         viz.show(**kw)
@@ -564,16 +571,12 @@ def global_alignment_loop(net, lr=0.01, niter=300, schedule="cosine", lr_min=1e-
     if verbose:
         with tqdm.tqdm(total=niter) as bar:
             while bar.n < bar.total:
-                loss, lr = global_alignment_iter(
-                    net, bar.n, niter, lr_base, lr_min, optimizer, schedule
-                )
+                loss, lr = global_alignment_iter(net, bar.n, niter, lr_base, lr_min, optimizer, schedule)
                 bar.set_postfix_str(f"{lr=:g} loss={loss:g}")
                 bar.update()
     else:
         for n in range(niter):
-            loss, _ = global_alignment_iter(
-                net, n, niter, lr_base, lr_min, optimizer, schedule
-            )
+            loss, _ = global_alignment_iter(net, n, niter, lr_base, lr_min, optimizer, schedule)
     return loss
 
 
@@ -595,9 +598,7 @@ def global_alignment_iter(net, cur_iter, niter, lr_base, lr_min, optimizer, sche
 
 
 @torch.no_grad()
-def clean_pointcloud(
-    im_confs, K, cams, depthmaps, all_pts3d, tol=0.001, bad_conf=0, dbg=()
-):
+def clean_pointcloud(im_confs, K, cams, depthmaps, all_pts3d, tol=0.001, bad_conf=0, dbg=()):
     """Method:
     1) express all 3d points in each camera coordinate frame
     2) if they're in front of a depthmap --> then lower their confidence
@@ -607,8 +608,8 @@ def clean_pointcloud(
     res = [c.clone() for c in im_confs]
 
     # reshape appropriately
-    all_pts3d = [p.view(*c.shape, 3) for p, c in zip(all_pts3d, im_confs)]
-    depthmaps = [d.view(*c.shape) for d, c in zip(depthmaps, im_confs)]
+    all_pts3d = [p.view(*c.shape, 3) for p, c in zip(all_pts3d, im_confs, strict=False)]
+    depthmaps = [d.view(*c.shape) for d, c in zip(depthmaps, im_confs, strict=False)]
 
     for i, pts3d in enumerate(all_pts3d):
         for j in range(len(all_pts3d)):
@@ -622,13 +623,11 @@ def clean_pointcloud(
 
             # check which points are actually in the visible cone
             H, W = im_confs[j].shape
-            msk_i = (proj_depth > 0) & (0 <= u) & (u < W) & (0 <= v) & (v < H)
+            msk_i = (proj_depth > 0) & (u >= 0) & (u < W) & (v >= 0) & (v < H)
             msk_j = v[msk_i], u[msk_i]
 
             # find bad points = those in front but less confident
-            bad_points = (proj_depth[msk_i] < (1 - tol) * depthmaps[j][msk_j]) & (
-                res[i][msk_i] < res[j][msk_j]
-            )
+            bad_points = (proj_depth[msk_i] < (1 - tol) * depthmaps[j][msk_j]) & (res[i][msk_i] < res[j][msk_j])
 
             bad_msk_i = msk_i.clone()
             bad_msk_i[msk_i] = bad_points

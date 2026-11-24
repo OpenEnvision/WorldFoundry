@@ -1,0 +1,51 @@
+id: sora2
+name: Sora2
+tasks:
+- text-to-video
+- image-to-video
+- hosted-api
+provider: api
+source:
+  status: api
+  official_repo_url: https://openai.com/sora/
+official_sources:
+  project_page: https://openai.com/sora/
+integration:
+  status: integrated
+  notes:
+  - Hosted API Studio pipeline is available; users must provide their own provider
+    API key.
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: sora2
+runner_parity:
+  status: not_applicable
+demo_parity:
+  status: not_applicable
+docs:
+  publisher: OpenAI
+  publisher_kind: company
+  publisher_zh: OpenAI
+  overview: Sora2 runs OpenAI's Sora 2 hosted video model for text-to-video and image-to-video. Prompts are submitted to OpenAI's API and the generated clips are stored as standard WorldFoundry artifacts, so Sora 2 output can be evaluated with the same tooling as local models. Sora cannot run locally; only the hosted API is supported.
+  overview_zh: Sora2 调用 OpenAI 的 Sora 2 托管视频模型，支持文生视频与图生视频。提示词提交给 OpenAI 的 API，生成的视频以标准 WorldFoundry 产物保存，因此 Sora 2 的输出可以用与本地模型相同的工具链评测。Sora 无法在本地运行，仅支持托管 API。
+  architecture: OpenAI has publicly described the original Sora as a diffusion transformer operating on spacetime patches of video latents; beyond that public statement, no architecture, scale, or training details for Sora 2 are disclosed.
+  architecture_zh: OpenAI 曾公开将初代 Sora 描述为在视频潜空间时空 patch 上运行的扩散 Transformer；除这一公开表述外，Sora 2 的架构、规模与训练细节均未披露。
+  usage_notes: 'The hosted-API Studio pipeline needs your own provider account and API key: pass api_key or set SORA2_API_KEY, SORA_API_KEY, or OPENAI_API_KEY. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Access requires an OpenAI account with Sora API availability in your region and tier.'
+  usage_notes_zh: 托管 API 的 Studio pipeline 需要你自备服务方账号与 API key：传入 api_key，或设置 SORA2_API_KEY、SORA_API_KEY 或 OPENAI_API_KEY。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。使用前需确认你的 OpenAI 账号在所在地区与订阅层级下拥有 Sora API 权限。
+  limitations:
+  - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+  - The provider controls model versioning, so outputs can change over time without any change in WorldFoundry.
+  - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+  - Sora API access is region- and tier-gated by OpenAI.
+  limitations_zh:
+  - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+  - 模型版本由服务方控制，即使 WorldFoundry 没有任何改动，输出也可能随时间变化。
+  - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+  - Sora API 的访问受 OpenAI 的地区与层级限制。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video
+      outputs.
+    reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+  - id: physics-iq
+    reason: Probes whether provider-side video models respect basic physical plausibility.
+    reason_zh: 检验服务方视频模型是否遵循基本物理合理性。

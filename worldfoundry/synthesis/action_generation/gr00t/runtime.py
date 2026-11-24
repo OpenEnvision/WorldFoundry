@@ -10,9 +10,10 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.runtime.env import resolve_ckpt_dir, resolve_hfd_root
 from worldfoundry.synthesis.action_generation.gr00t.architecture import (
@@ -82,6 +83,7 @@ def select_gr00t_checkpoint(
         FileNotFoundError: If no local GR00T checkpoint could be found matching
             the criteria.
     """
+
     def _expand_path_template(value: str) -> str:
         """Expands environment variables and WorldFoundry specific path templates."""
         defaults = {
@@ -324,9 +326,12 @@ def _resolve_observation(
         if joint_state is None:
             joint_state = gr00t_observation.get("joint_state")
         if joint_state is None:
-            joint_state = gr00t_observation.get("proprio") # Fallback for older naming conventions
+            joint_state = gr00t_observation.get("proprio")  # Fallback for older naming conventions
         if isinstance(joint_state, Mapping):
-            state.update(joint_state)
+            import numpy as np
+
+            for key, value in joint_state.items():
+                state[str(key)] = np.asarray(value, dtype=np.float32)
 
     # Construct the final observation dictionary in the format expected by GR00T
     return (
@@ -418,7 +423,7 @@ class GR00TRuntime:
         """
         if self.policy is not None:
             return
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         # Ensure gr00t modules are correctly aliased before policy import
         checkpoint = self.config.checkpoint_dir.expanduser().resolve()
@@ -502,10 +507,10 @@ class GR00TRuntime:
             "image_source": image_source,
             "instruction": instruction,
             "seed": self.config.seed,
-            "action": _jsonable(action), # Ensure action is JSON-serializable
-            "info": _jsonable(info), # Ensure info is JSON-serializable
+            "action": _jsonable(action),  # Ensure action is JSON-serializable
+            "info": _jsonable(info),  # Ensure info is JSON-serializable
             "duration_seconds": round(time.monotonic() - started, 3),
-            "metadata": _jsonable(dict(extra_metadata or {})), # Include extra metadata
+            "metadata": _jsonable(dict(extra_metadata or {})),  # Include extra metadata
         }
         # Write the action trace to the specified output path
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")

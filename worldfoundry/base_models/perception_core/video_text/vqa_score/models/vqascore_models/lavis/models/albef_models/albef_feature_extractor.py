@@ -1,27 +1,42 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import warnings
+from typing import ClassVar
 
 import torch
 import torch.nn.functional as F
+
 from ...common.registry import registry
 from ...common.utils import get_abs_path
+
+# isort: split
 from ...models.albef_models import AlbefBase
+
+# isort: split
+# isort: split
 from ...models.albef_models.albef_outputs import AlbefOutputFeatures
+
+# isort: split
+# isort: split
 from ...models.med import BertForMaskedLM
+
+# isort: split
+# isort: split
 from ...models.vit import VisionTransformerEncoder
+
+# isort: split
 from torch import nn
 from transformers import BertConfig
 
 
 @registry.register_model("albef_feature_extractor")
 class AlbefFeatureExtractor(AlbefBase):
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "base": "configs/models/albef_feature_extractor.yaml",
     }
 
@@ -112,24 +127,20 @@ class AlbefFeatureExtractor(AlbefBase):
                 "multimodal",
                 "image",
                 "text",
-            ], "mode must be one of [multimodal, image, text], but got {}".format(m)
+            ], f"mode must be one of [multimodal, image, text], but got {m}"
 
         # initalize output
         image_embeds, text_embeds, multimodal_embeds = None, None, None
         image_features, text_features = None, None
 
         if "image" in mode or "multimodal" in mode:
-            assert (
-                image is not None
-            ), "image must be provided if mode is 'image' or 'multimodal'"
+            assert image is not None, "image must be provided if mode is 'image' or 'multimodal'"
 
             image_embeds = self.visual_encoder.forward_features(image)
             image_features = F.normalize(self.vision_proj(image_embeds), dim=-1)
 
         if "text" in mode or "multimodal" in mode:
-            assert (
-                caption is not None
-            ), "text must be provided if mode is 'text' or 'multimodal'"
+            assert caption is not None, "text must be provided if mode is 'text' or 'multimodal'"
 
             text = self.tokenizer(
                 caption,
@@ -147,9 +158,7 @@ class AlbefFeatureExtractor(AlbefBase):
             text_features = F.normalize(self.text_proj(text_embeds), dim=-1)
 
         if "multimodal" in mode:
-            image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-                self.device
-            )
+            image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(self.device)
 
             # forward the positve image-text pair
             output = self.text_encoder.bert(
@@ -174,13 +183,9 @@ class AlbefFeatureExtractor(AlbefBase):
     @classmethod
     def from_config(cls, cfg=None):
         image_encoder = VisionTransformerEncoder.from_config(cfg, from_pretrained=True)
-        config_text_encoder = BertConfig.from_json_file(
-            get_abs_path(cfg["med_config_path"])
-        )
+        config_text_encoder = BertConfig.from_json_file(get_abs_path(cfg["med_config_path"]))
         config_text_encoder.fusion_layer = 6
-        text_encoder = BertForMaskedLM.from_pretrained(
-            "bert-base-uncased", config=config_text_encoder
-        )
+        text_encoder = BertForMaskedLM.from_pretrained("bert-base-uncased", config=config_text_encoder)
 
         embed_dim = cfg.get("embed_dim", 256)
         max_txt_len = cfg.get("max_txt_len", 30)
@@ -195,10 +200,8 @@ class AlbefFeatureExtractor(AlbefBase):
         # load pre-trained weights
         pretrain_path = cfg.get("pretrained", None)
         if pretrain_path is not None:
-            msg = model.load_from_pretrained(
-                url_or_filename=pretrain_path, rename_text_keys=False
-            )
+            _msg = model.load_from_pretrained(url_or_filename=pretrain_path, rename_text_keys=False)
         else:
-            warnings.warn("No pretrained weights are loaded.")
+            warnings.warn("No pretrained weights are loaded.", stacklevel=1)
 
         return model

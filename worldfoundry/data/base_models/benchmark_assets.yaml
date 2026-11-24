@@ -1,0 +1,90 @@
+# Benchmark id -> data-asset capabilities staged with its base-model dependencies.
+
+4dworldbench: [four_d_worldbench_source_assets]
+ai2thor: [ai2thor_official_runtime_assets]
+aigcbench: [aigcbench_dataset_assets]
+apple-pi: [apple_pi_source_assets, apple_pi_gt_dataset_assets]
+behavior1k: [behavior1k_official_runtime_assets]
+bridgedata-v2: [bridgedata_v2_source_assets, bridgedata_v2_dataset_assets]
+calvin: [calvin_source_assets, calvin_dataset_assets]
+camerabench: [camerabench_dataset_assets, t2v_metrics_source_assets, t2v_metrics_blip2_itm]
+chronomagic-bench: [chronomagic_dataset_assets]
+devil-dynamics: [devil_dynamics_source_assets]
+evalcrafter: [evalcrafter_dataset_assets, jedi_source_assets]
+ewmbench: [ewmbench_dataset_assets]
+fetv:
+  - fetv_dataset_assets
+  - fetv_blip_retrieval_source
+  - fetv_stylegan_v_fvd_source
+  - jedi_source_assets
+genai-bench:
+  - genai_bench_dataset_assets
+  - t2v_metrics_source_assets
+  - t2v_metrics_clip_flant5_xxl
+harnesseval-w: [harnesseval_w_source_assets, harnesseval_w_dataset_assets]
+ipv-bench: [ipv_bench_source_assets]
+iworld-bench: [iworld_bench_source_assets, iworld_bench_dataset_assets]
+kinetix: [kinetix_official_runtime_assets]
+larybench: [larybench_source_assets, larybench_dataset_assets]
+libero: [libero_source_assets, libero_dataset_assets]
+libero-mem: [libero_mem_official_runtime_assets]
+libero-plus: [libero_plus_official_runtime_assets]
+libero-pro: [libero_pro_official_runtime_assets]
+likephys: [likephys_dataset_assets]
+maniskill: [maniskill_source_assets]
+maniskill2: [maniskill2_official_runtime_assets]
+memobench: [memobench_source_assets, memobench_dataset_assets]
+metaworld: [metaworld_source_assets]
+mikasa: [mikasa_official_runtime_assets]
+mind: [mind_source_assets, mind_dataset_assets]
+mirabench: [mirabench_source_assets]
+molmospaces: [molmospaces_official_runtime_assets]
+pawbench: [pawbench_source_assets, pawbench_dataset_assets]
+phyeduvideo: [phyeduvideo_source_assets]
+phyfps-bench-gen: [visual_chronometer_source_assets]
+phygenbench:
+  - phygenbench_source_assets
+  - t2v_metrics_source_assets
+  - t2v_metrics_clip_flant5_xxl
+phyground: [phyground_dataset_assets]
+physical-ai-bench: [physical_ai_bench_source_assets, physical_ai_bench_dataset_assets]
+physics-iq: [physics_iq_source_assets]
+physics-iq-verified: [physics_iq_source_assets, physics_iq_verified_dataset_assets]
+physvidbench: [physvidbench_dataset_assets, physvidbench_source_assets]
+rbench: [rbench_dataset_assets]
+rlbench: [rlbench_source_assets]
+robocasa: [robocasa_source_assets]
+robocerebra: [robocerebra_official_runtime_assets]
+robomme: [robomme_official_runtime_assets]
+robotwin: [robotwin_dataset_assets]
+sana-wm-bench: [sana_wm_bench_source_assets, sana_wm_bench_dataset_assets]
+simpler-env: [simpler_env_source_assets]
+stevo-bench: [stevo_bench_source_assets, stevo_bench_dataset_assets]
+t2v-compbench: [t2v_compbench_dataset_assets]
+t2v-safety-bench: [t2v_safety_bench_source_assets]
+t2vworldbench: [t2vworldbench_source_assets]
+vbench: [vbench_source_assets, vbench_metric_checkpoint_assets]
+vbench-2.0: [vbench2_source_assets, vbench_metric_checkpoint_assets, vbench2_dataset_assets]
+vbench-plus-plus:
+  - vbench_source_assets
+  - vbench_plus_plus_source_assets
+  - vbench_metric_checkpoint_assets
+video-bench: [video_bench_dataset_assets]
+videophy: [videophy_source_assets, videocon_physics_model]
+videophy2: [videophy2_dataset_assets, videophy2_autoeval_model]
+videoscience-bench: [videoscience_bench_source_assets]
+videoscore: [videoscore_bench_dataset_assets]
+videoverse: [videoverse_dataset_assets]
+visual-chronometer: [visual_chronometer_source_assets]
+vlabench: [vlabench_official_runtime_assets]
+vmbench: [vmbench_source_assets]
+wbench: [wbench_dataset_assets]
+world-in-world: [world_in_world_source_assets]
+worldarena: [worldarena_source_assets]
+worldbench: [worldbench_dataset_assets]
+worldmembench: [worldmembench_source_assets, worldmembench_dataset_assets]
+worldmodelbench: [worldmodelbench_dataset_assets, worldmodelbench_vila_judge_model]
+worldolympiad: [worldolympiad_source_assets, worldolympiad_dataset_assets]
+worldreasonbench: [worldreasonbench_source_assets, worldreasonbench_dataset_assets]
+worldscore: [worldscore_official_assets, worldscore_dataset_assets]
+wrbench: [wrbench_source_assets]

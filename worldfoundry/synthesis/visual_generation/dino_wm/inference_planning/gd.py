@@ -1,8 +1,10 @@
-import torch
 import numpy as np
+import torch
 from einops import rearrange
+
+from worldfoundry.synthesis.visual_generation.dino_wm.utils import move_to_device
+
 from .base_planner import BasePlanner
-from utils import move_to_device
 
 
 class GDPlanner(BasePlanner):
@@ -57,9 +59,7 @@ class GDPlanner(BasePlanner):
                 new_actions = torch.randn(n_evals, remaining_t, self.action_dim)
             elif self.sample_type == "zero":  # zero action of env
                 new_actions = torch.zeros(n_evals, remaining_t, self.action_dim)
-                new_actions = rearrange(
-                    new_actions, "... (f d) -> ... f d", f=self.evaluator.frameskip
-                )
+                new_actions = rearrange(new_actions, "... (f d) -> ... f d", f=self.evaluator.frameskip)
                 new_actions = self.preprocessor.normalize_actions(new_actions)
                 new_actions = rearrange(new_actions, "... f d -> ... (f d)")
             actions = torch.cat([actions, new_actions.to(device)], dim=1)
@@ -75,12 +75,8 @@ class GDPlanner(BasePlanner):
         Returns:
             actions: (B, T, action_dim) torch.Tensor
         """
-        trans_obs_0 = move_to_device(
-            self.preprocessor.transform_obs(obs_0), self.device
-        )
-        trans_obs_g = move_to_device(
-            self.preprocessor.transform_obs(obs_g), self.device
-        )
+        trans_obs_0 = move_to_device(self.preprocessor.transform_obs(obs_0), self.device)
+        trans_obs_g = move_to_device(self.preprocessor.transform_obs(obs_g), self.device)
         z_obs_g = self.wm.encode_obs(trans_obs_g)
         z_obs_g_detached = {key: value.detach() for key, value in z_obs_g.items()}
 
@@ -100,17 +96,13 @@ class GDPlanner(BasePlanner):
             total_loss.backward()
             with torch.no_grad():
                 actions_new = actions - optimizer.param_groups[0]["lr"] * actions.grad
-                actions_new += (
-                    torch.randn_like(actions_new) * self.action_noise
-                )  # Add Gaussian noise
+                actions_new += torch.randn_like(actions_new) * self.action_noise  # Add Gaussian noise
                 actions.copy_(actions_new)
 
-            self.wandb_run.log(
-                {f"{self.logging_prefix}/loss": total_loss.item(), "step": i + 1}
-            )
+            self.wandb_run.log({f"{self.logging_prefix}/loss": total_loss.item(), "step": i + 1})
             if self.evaluator is not None and i % self.eval_every == 0:
                 logs, successes, _, _ = self.evaluator.eval_actions(
-                    actions.detach(), filename=f"{self.logging_prefix}_output_{i+1}"
+                    actions.detach(), filename=f"{self.logging_prefix}_output_{i + 1}"
                 )
                 logs = {f"{self.logging_prefix}/{k}": v for k, v in logs.items()}
                 logs.update({"step": i + 1})

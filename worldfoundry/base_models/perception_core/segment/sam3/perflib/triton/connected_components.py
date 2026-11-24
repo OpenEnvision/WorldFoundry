@@ -1,10 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved
 
 # pyre-unsafe
-"""Module for base_models -> perception_core -> segment -> sam3 -> perflib -> triton -> connected_components.py functionality."""
-
-import math
-
 import torch
 import triton
 import triton.language as tl
@@ -12,23 +8,11 @@ import triton.language as tl
 
 @triton.jit
 def _any_combine(a, b):
-    """Helper function to any combine.
-
-    Args:
-        a: The a.
-        b: The b.
-    """
     return a | b
 
 
 @triton.jit
 def tl_any(a, dim=0):
-    """Tl any.
-
-    Args:
-        a: The a.
-        dim: The dim.
-    """
     return tl.reduce(a, dim, _any_combine)
 
 
@@ -42,17 +26,7 @@ def tl_any(a, dim=0):
 
 
 @triton.jit
-def _init_labels_kernel(
-    input_ptr, labels_ptr, numel: tl.constexpr, BLOCK_SIZE: tl.constexpr
-):
-    """Helper function to init labels kernel.
-
-    Args:
-        input_ptr: The input ptr.
-        labels_ptr: The labels ptr.
-        numel: The numel.
-        BLOCK_SIZE: The block size.
-    """
+def _init_labels_kernel(input_ptr, labels_ptr, numel: tl.constexpr, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(0)
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < numel
@@ -71,13 +45,6 @@ def _init_labels_kernel(
 
 @triton.jit
 def find(labels_ptr, indices, mask):
-    """Find.
-
-    Args:
-        labels_ptr: The labels ptr.
-        indices: The indices.
-        mask: The mask.
-    """
     current_pids = indices
 
     # 'is_done' tracks lanes that have finished their work.
@@ -104,14 +71,6 @@ def find(labels_ptr, indices, mask):
 
 @triton.jit
 def union(labels_ptr, a, b, process_mask):
-    """Union.
-
-    Args:
-        labels_ptr: The labels ptr.
-        a: The a.
-        b: The b.
-        process_mask: The process mask.
-    """
     # This function implements a disjoint-set union
     # As an invariant, we use the fact that the roots have the lower id. That helps parallelization
     # However, that is not sufficient by itself. Suppose two threads want to do union(0,2) and union(1,2) at the same time
@@ -191,23 +150,6 @@ def _merge_helper(
     dx: tl.constexpr,
     dy: tl.constexpr,
 ):
-    """Helper function to merge helper.
-
-    Args:
-        input_ptr: The input ptr.
-        labels_ptr: The labels ptr.
-        base_offset: The base offset.
-        offsets_h: The offsets h.
-        offsets_w: The offsets w.
-        mask_2d: The mask 2d.
-        valid_current: The valid current.
-        current_values: The current values.
-        current_labels: The current labels.
-        H: The h.
-        W: The w.
-        dx: The dx.
-        dy: The dy.
-    """
     # Helper functions to compute merge with a specific neighbor offset (dx, dy)
 
     neighbor_h = offsets_h + dy
@@ -222,18 +164,12 @@ def _merge_helper(
     )
 
     offsets_neighbor = neighbor_h[:, None] * W + neighbor_w[None, :]
-    neighbor_values = tl.load(
-        input_ptr + base_offset + offsets_neighbor, mask=mask_n, other=-1
-    )
+    neighbor_values = tl.load(input_ptr + base_offset + offsets_neighbor, mask=mask_n, other=-1)
 
     mask_n = tl.ravel(mask_n)
-    neighbor_labels = tl.load(
-        labels_ptr + tl.ravel(base_offset + offsets_neighbor), mask=mask_n, other=-1
-    )
+    neighbor_labels = tl.load(labels_ptr + tl.ravel(base_offset + offsets_neighbor), mask=mask_n, other=-1)
 
-    to_merge = (
-        mask_n & (neighbor_labels != -1) & tl.ravel(current_values == neighbor_values)
-    )
+    to_merge = mask_n & (neighbor_labels != -1) & tl.ravel(current_values == neighbor_values)
     valid_write = valid_current & to_merge
 
     # returns new parents for the pixels that were merged (otherwise keeps current labels)
@@ -246,12 +182,8 @@ def _merge_helper(
 
 @triton.autotune(
     configs=[
-        triton.Config(
-            {"BLOCK_SIZE_H": 4, "BLOCK_SIZE_W": 16}, num_stages=1, num_warps=2
-        ),
-        triton.Config(
-            {"BLOCK_SIZE_H": 4, "BLOCK_SIZE_W": 32}, num_stages=2, num_warps=4
-        ),
+        triton.Config({"BLOCK_SIZE_H": 4, "BLOCK_SIZE_W": 16}, num_stages=1, num_warps=2),
+        triton.Config({"BLOCK_SIZE_H": 4, "BLOCK_SIZE_W": 32}, num_stages=2, num_warps=4),
     ],
     key=["H", "W"],
     restore_value=["labels_ptr"],
@@ -265,16 +197,6 @@ def _local_prop_kernel(
     BLOCK_SIZE_H: tl.constexpr,
     BLOCK_SIZE_W: tl.constexpr,
 ):
-    """Helper function to local prop kernel.
-
-    Args:
-        labels_ptr: The labels ptr.
-        input_ptr: The input ptr.
-        H: The h.
-        W: The w.
-        BLOCK_SIZE_H: The block size h.
-        BLOCK_SIZE_W: The block size w.
-    """
     # This is the meat of the Phase 2 to do local merging
     # It will be launched with a 2D grid:
     # - dim 0: batch index
@@ -283,12 +205,8 @@ def _local_prop_kernel(
     pid_hw = tl.program_id(1)
 
     # Calculate offsets for the core block
-    offsets_h = (pid_hw // tl.cdiv(W, BLOCK_SIZE_W)) * BLOCK_SIZE_H + tl.arange(
-        0, BLOCK_SIZE_H
-    )
-    offsets_w = (pid_hw % tl.cdiv(W, BLOCK_SIZE_W)) * BLOCK_SIZE_W + tl.arange(
-        0, BLOCK_SIZE_W
-    )
+    offsets_h = (pid_hw // tl.cdiv(W, BLOCK_SIZE_W)) * BLOCK_SIZE_H + tl.arange(0, BLOCK_SIZE_H)
+    offsets_w = (pid_hw % tl.cdiv(W, BLOCK_SIZE_W)) * BLOCK_SIZE_W + tl.arange(0, BLOCK_SIZE_W)
 
     base_offset = pid_b * H * W
     offsets_2d = offsets_h[:, None] * W + offsets_w[None, :]
@@ -296,12 +214,8 @@ def _local_prop_kernel(
     mask_1d = tl.ravel(mask_2d)
 
     # Load the current labels for the block - these are parent pointers
-    current_labels = tl.load(
-        labels_ptr + tl.ravel(base_offset + offsets_2d), mask=mask_1d, other=-1
-    )
-    current_values = tl.load(
-        input_ptr + base_offset + offsets_2d, mask=mask_2d, other=-1
-    )
+    current_labels = tl.load(labels_ptr + tl.ravel(base_offset + offsets_2d), mask=mask_1d, other=-1)
+    current_values = tl.load(input_ptr + base_offset + offsets_2d, mask=mask_2d, other=-1)
     valid_current = mask_1d & (current_labels != -1)
 
     # Horizontal merge
@@ -369,9 +283,7 @@ def _local_prop_kernel(
     )
 
     # This actually does some path compression, in a lightweight but beneficial way
-    tl.atomic_min(
-        labels_ptr + tl.ravel(base_offset + offsets_2d), current_labels, mask=mask_1d
-    )
+    tl.atomic_min(labels_ptr + tl.ravel(base_offset + offsets_2d), current_labels, mask=mask_1d)
 
 
 # ==============================================================================
@@ -382,9 +294,7 @@ def _local_prop_kernel(
 
 
 @triton.jit
-def _pointer_jump_kernel(
-    labels_in_ptr, labels_out_ptr, numel: tl.constexpr, BLOCK_SIZE: tl.constexpr
-):
+def _pointer_jump_kernel(labels_in_ptr, labels_out_ptr, numel: tl.constexpr, BLOCK_SIZE: tl.constexpr):
     """
     Pointer jumping kernel with double buffering to avoid race conditions.
     Reads from labels_in_ptr and writes to labels_out_ptr.
@@ -404,16 +314,12 @@ def _pointer_jump_kernel(
     # A mask to track which lanes have successfully completed their union.
     done_mask = ~valid_mask
     while tl_any(~(done_mask | ~valid_mask)):
-        parent_labels = tl.load(
-            labels_in_ptr + current_labels, mask=valid_mask, other=-1
-        )
+        parent_labels = tl.load(labels_in_ptr + current_labels, mask=valid_mask, other=-1)
 
         are_equal = current_labels == parent_labels
         done_mask |= are_equal & valid_mask
 
-        current_labels = tl.where(
-            ~done_mask, tl.minimum(current_labels, parent_labels), current_labels
-        )
+        current_labels = tl.where(~done_mask, tl.minimum(current_labels, parent_labels), current_labels)
 
     # Write to output buffer (safe because we're not reading from it)
     tl.store(labels_out_ptr + offsets, current_labels, mask=mask)
@@ -427,14 +333,6 @@ def _pointer_jump_kernel(
 # Step 4.1: Count occurrences of each root label using atomic adds.
 @triton.jit
 def _count_labels_kernel(labels_ptr, sizes_ptr, numel, BLOCK_SIZE: tl.constexpr):
-    """Helper function to count labels kernel.
-
-    Args:
-        labels_ptr: The labels ptr.
-        sizes_ptr: The sizes ptr.
-        numel: The numel.
-        BLOCK_SIZE: The block size.
-    """
     pid = tl.program_id(0)
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < numel
@@ -449,18 +347,7 @@ def _count_labels_kernel(labels_ptr, sizes_ptr, numel, BLOCK_SIZE: tl.constexpr)
 
 # Step 4.2: Broadcast the computed sizes back to the output tensor.
 @triton.jit
-def _broadcast_sizes_kernel(
-    labels_ptr, sizes_ptr, out_ptr, numel, BLOCK_SIZE: tl.constexpr
-):
-    """Helper function to broadcast sizes kernel.
-
-    Args:
-        labels_ptr: The labels ptr.
-        sizes_ptr: The sizes ptr.
-        out_ptr: The out ptr.
-        numel: The numel.
-        BLOCK_SIZE: The block size.
-    """
+def _broadcast_sizes_kernel(labels_ptr, sizes_ptr, out_ptr, numel, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(0)
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < numel
@@ -488,16 +375,12 @@ def connected_components_triton(input_tensor: torch.Tensor):
             - A BxHxW output tensor with dense labels. Background is 0.
             - A BxHxW tensor with the size of the connected component for each pixel.
     """
-    assert input_tensor.is_cuda and input_tensor.is_contiguous(), (
-        "Input tensor must be a contiguous CUDA tensor."
-    )
+    assert input_tensor.is_cuda and input_tensor.is_contiguous(), "Input tensor must be a contiguous CUDA tensor."
     out_shape = input_tensor.shape
     if input_tensor.dim() == 4 and input_tensor.shape[1] == 1:
         input_tensor = input_tensor.squeeze(1)
     else:
-        assert input_tensor.dim() == 3, (
-            "Input tensor must be (B, H, W) or (B, 1, H, W)."
-        )
+        assert input_tensor.dim() == 3, "Input tensor must be (B, H, W) or (B, 1, H, W)."
 
     B, H, W = input_tensor.shape
     numel = B * H * W
@@ -518,15 +401,20 @@ def connected_components_triton(input_tensor: torch.Tensor):
     )
 
     # --- Phase 2 ---
-    grid_local_prop = lambda meta: (
-        B,
-        triton.cdiv(H, meta["BLOCK_SIZE_H"]) * triton.cdiv(W, meta["BLOCK_SIZE_W"]),
-    )
+    def grid_local_prop(meta):
+        return (
+            B,
+            triton.cdiv(H, meta["BLOCK_SIZE_H"]) * triton.cdiv(W, meta["BLOCK_SIZE_W"]),
+        )
+
     _local_prop_kernel[grid_local_prop](labels, input_tensor, H, W)
 
     # --- Phase 3 ---
     BLOCK_SIZE = 256
-    grid_jump = lambda meta: (triton.cdiv(numel, meta["BLOCK_SIZE"]),)
+
+    def grid_jump(meta):
+        return (triton.cdiv(numel, meta["BLOCK_SIZE"]),)
+
     _pointer_jump_kernel[grid_jump](labels, output, numel, BLOCK_SIZE=BLOCK_SIZE)
 
     # --- Phase 4 ---
@@ -539,13 +427,9 @@ def connected_components_triton(input_tensor: torch.Tensor):
 
     # 4.1: Count the occurrences of each label
     grid_count = (triton.cdiv(numel, BLOCK_SIZE),)
-    _count_labels_kernel[grid_count](
-        output, sizes_histogram, numel, BLOCK_SIZE=BLOCK_SIZE
-    )
+    _count_labels_kernel[grid_count](output, sizes_histogram, numel, BLOCK_SIZE=BLOCK_SIZE)
 
     # 2.2: Broadcast the counts to the final output tensor
     grid_broadcast = (triton.cdiv(numel, BLOCK_SIZE),)
-    _broadcast_sizes_kernel[grid_broadcast](
-        output, sizes_histogram, component_sizes_out, numel, BLOCK_SIZE=BLOCK_SIZE
-    )
+    _broadcast_sizes_kernel[grid_broadcast](output, sizes_histogram, component_sizes_out, numel, BLOCK_SIZE=BLOCK_SIZE)
     return output.view(out_shape) + 1, component_sizes_out.view(out_shape)

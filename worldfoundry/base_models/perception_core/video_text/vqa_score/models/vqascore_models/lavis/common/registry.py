@@ -1,13 +1,15 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
+
+from typing import ClassVar
 
 
 class Registry:
-    mapping = {
+    mapping: ClassVar[dict] = {
         "builder_name_mapping": {},
         "task_name_mapping": {},
         "processor_name_mapping": {},
@@ -94,14 +96,10 @@ class Registry:
         def wrap(model_cls):
             from ..models import BaseModel
 
-            assert issubclass(
-                model_cls, BaseModel
-            ), "All models must inherit BaseModel class"
+            assert issubclass(model_cls, BaseModel), "All models must inherit BaseModel class"
             if name in cls.mapping["model_name_mapping"]:
                 raise KeyError(
-                    "Name '{}' already registered for {}.".format(
-                        name, cls.mapping["model_name_mapping"][name]
-                    )
+                    "Name '{}' already registered for {}.".format(name, cls.mapping["model_name_mapping"][name])
                 )
             cls.mapping["model_name_mapping"][name] = model_cls
             return model_cls
@@ -123,14 +121,10 @@ class Registry:
         def wrap(processor_cls):
             from ..processors import BaseProcessor
 
-            assert issubclass(
-                processor_cls, BaseProcessor
-            ), "All processors must inherit BaseProcessor class"
+            assert issubclass(processor_cls, BaseProcessor), "All processors must inherit BaseProcessor class"
             if name in cls.mapping["processor_name_mapping"]:
                 raise KeyError(
-                    "Name '{}' already registered for {}.".format(
-                        name, cls.mapping["processor_name_mapping"][name]
-                    )
+                    "Name '{}' already registered for {}.".format(name, cls.mapping["processor_name_mapping"][name])
                 )
             cls.mapping["processor_name_mapping"][name] = processor_cls
             return processor_cls
@@ -152,9 +146,7 @@ class Registry:
         def wrap(lr_sched_cls):
             if name in cls.mapping["lr_scheduler_name_mapping"]:
                 raise KeyError(
-                    "Name '{}' already registered for {}.".format(
-                        name, cls.mapping["lr_scheduler_name_mapping"][name]
-                    )
+                    "Name '{}' already registered for {}.".format(name, cls.mapping["lr_scheduler_name_mapping"][name])
                 )
             cls.mapping["lr_scheduler_name_mapping"][name] = lr_sched_cls
             return lr_sched_cls
@@ -176,9 +168,7 @@ class Registry:
         def wrap(runner_cls):
             if name in cls.mapping["runner_name_mapping"]:
                 raise KeyError(
-                    "Name '{}' already registered for {}.".format(
-                        name, cls.mapping["runner_name_mapping"][name]
-                    )
+                    "Name '{}' already registered for {}.".format(name, cls.mapping["runner_name_mapping"][name])
                 )
             cls.mapping["runner_name_mapping"][name] = runner_cls
             return runner_cls
@@ -198,7 +188,7 @@ class Registry:
         """
         assert isinstance(path, str), "All path must be str."
         if name in cls.mapping["paths"]:
-            raise KeyError("Name '{}' already registered.".format(name))
+            raise KeyError(f"Name '{name}' already registered.")
         cls.mapping["paths"][name] = path
 
     @classmethod
@@ -300,14 +290,9 @@ class Registry:
             if value is default:
                 break
 
-        if (
-            "writer" in cls.mapping["state"]
-            and value == default
-            and no_warning is False
-        ):
+        if "writer" in cls.mapping["state"] and value == default and no_warning is False:
             cls.mapping["state"]["writer"].warning(
-                "Key {} is not present in registry, returning default value "
-                "of {}".format(original_name, default)
+                f"Key {original_name} is not present in registry, returning default value of {default}"
             )
         return value
 

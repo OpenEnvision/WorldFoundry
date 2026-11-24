@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
 
@@ -405,6 +406,7 @@ class BeingH05Runtime:
             return self._policy
 
         from .policy import BeingHPolicy
+
         # Instantiate the policy with parameters from the runtime configuration.
         self._policy = BeingHPolicy(
             model_path=str(self.config.checkpoint_dir),

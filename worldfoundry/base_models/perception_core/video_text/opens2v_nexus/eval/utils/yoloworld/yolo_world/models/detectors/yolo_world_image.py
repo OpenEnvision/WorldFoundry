@@ -1,28 +1,21 @@
 # Copyright (c) Tencent Inc. All rights reserved.
 import random
-from typing import List, Tuple, Union
 
 import torch
 import torch.nn as nn
-from torch import Tensor
 import torch.nn.functional as F
 from mmdet.structures import OptSampleList, SampleList
 from mmyolo.models.detectors import YOLODetector
 from mmyolo.registry import MODELS
+from torch import Tensor
 from transformers import CLIPVisionModelWithProjection
 
 
 class ImagePromptEncoder(nn.Module):
-    def __init__(
-        self, vision_encoder="openai/clip-vit-base-patch32", img_size=224, dim=512
-    ) -> None:
+    def __init__(self, vision_encoder="openai/clip-vit-base-patch32", img_size=224, dim=512) -> None:
         super().__init__()
-        self.image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-            vision_encoder
-        )
-        self.projector = nn.Sequential(
-            nn.Linear(dim, dim * 2), nn.GELU(), nn.Linear(dim * 2, dim)
-        )
+        self.image_encoder = CLIPVisionModelWithProjection.from_pretrained(vision_encoder)
+        self.projector = nn.Sequential(nn.Linear(dim, dim * 2), nn.GELU(), nn.Linear(dim * 2, dim))
         mean = torch.tensor([0.48145466, 0.4578275, 0.40821073]).view(1, 3, 1, 1)
         std = torch.tensor([0.26862954, 0.26130258, 0.27577711]).view(1, 3, 1, 1)
         self.register_buffer("img_mean", mean)
@@ -66,17 +59,11 @@ class ImagePromptEncoder(nn.Module):
 
         for bbox in bboxes_per_image:
             scale = min(random.random(), 0.7) + 0.8
-            scaled_bbox = scale_bbox(
-                bbox, scale=scale, image_width=width, image_height=height
-            )
+            scaled_bbox = scale_bbox(bbox, scale=scale, image_width=width, image_height=height)
             left, top, right, bottom = scaled_bbox
             region_image = image[:, top : bottom + 1, left : right + 1].unsqueeze(0)
             # print(region_image.shape)
-            region_images.append(
-                F.interpolate(
-                    region_image, size=(224, 224), mode="bilinear", align_corners=False
-                )
-            )
+            region_images.append(F.interpolate(region_image, size=(224, 224), mode="bilinear", align_corners=False))
 
         region_images = torch.cat(region_images, dim=0)
         # forward images
@@ -100,9 +87,7 @@ class ImagePromptEncoder(nn.Module):
             # print(class_inds)
             sample_embeddings = self.transform(images[ind], bboxes_per_img)
             sample_embeddings = self.projector(sample_embeddings) + sample_embeddings
-            embeddings[ind, class_inds_per_image] = (
-                embeddings[ind, class_inds_per_image] * 0 + sample_embeddings
-            )
+            embeddings[ind, class_inds_per_image] = embeddings[ind, class_inds_per_image] * 0 + sample_embeddings
         embeddings = embeddings / embeddings.norm(p=2, dim=-1, keepdim=True)
         return embeddings
 
@@ -132,16 +117,12 @@ def sample_random_class_bboxes(bbox_labels, batch_size, min_area=64 * 64):
         sample_bboxes_per_image = []
         sample_cls_per_image = []
         for class_id in unique_cls:
-            class_bbox_inds = (
-                (class_id == cls_per_image) & (area_per_image >= min_area)
-            ).nonzero()
+            class_bbox_inds = ((class_id == cls_per_image) & (area_per_image >= min_area)).nonzero()
             if len(class_bbox_inds) > 0:
                 class_bbox_inds = class_bbox_inds[:, 0]
             else:
                 continue
-            sample_bbox_ind = class_bbox_inds[
-                torch.randint(0, class_bbox_inds.shape[0], (1,)).item()
-            ]
+            sample_bbox_ind = class_bbox_inds[torch.randint(0, class_bbox_inds.shape[0], (1,)).item()]
             sample_bboxes_per_image.append(bbox_per_image[sample_bbox_ind])
             sample_cls_per_image.append(class_id)
         if len(sample_bboxes_per_image) > 0:
@@ -178,9 +159,7 @@ class YOLOWorldImageDetector(YOLODetector):
         self.txt_feats = None
         self.image_prompt_encoder = ImagePromptEncoder(vision_encoder=vision_model)
 
-    def loss(
-        self, batch_inputs: Tensor, batch_data_samples: SampleList
-    ) -> Union[dict, list]:
+    def loss(self, batch_inputs: Tensor, batch_data_samples: SampleList) -> dict | list:
         """Calculate losses from a batch of inputs and data samples."""
         self.bbox_head.num_classes = self.num_training_classes
         img_feats, txt_feats = self.extract_feat(batch_inputs, batch_data_samples)
@@ -188,9 +167,7 @@ class YOLOWorldImageDetector(YOLODetector):
         losses = self.bbox_head.loss(img_feats, txt_feats, batch_data_samples)
         return losses
 
-    def predict(
-        self, batch_inputs: Tensor, batch_data_samples: SampleList, rescale: bool = True
-    ) -> SampleList:
+    def predict(self, batch_inputs: Tensor, batch_data_samples: SampleList, rescale: bool = True) -> SampleList:
         """Predict results from a batch of inputs and data samples with post-
         processing.
         """
@@ -199,18 +176,12 @@ class YOLOWorldImageDetector(YOLODetector):
 
         self.bbox_head.num_classes = txt_feats[0].shape[0]
 
-        results_list = self.bbox_head.predict(
-            img_feats, txt_feats, batch_data_samples, rescale=rescale
-        )
+        results_list = self.bbox_head.predict(img_feats, txt_feats, batch_data_samples, rescale=rescale)
 
-        batch_data_samples = self.add_pred_to_datasample(
-            batch_data_samples, results_list
-        )
+        batch_data_samples = self.add_pred_to_datasample(batch_data_samples, results_list)
         return batch_data_samples
 
-    def _forward(
-        self, batch_inputs: Tensor, batch_data_samples: OptSampleList = None
-    ) -> Tuple[List[Tensor]]:
+    def _forward(self, batch_inputs: Tensor, batch_data_samples: OptSampleList = None) -> tuple[list[Tensor]]:
         """Network forward process. Usually includes backbone, neck and head
         forward without any post-processing.
         """
@@ -225,9 +196,7 @@ class YOLOWorldImageDetector(YOLODetector):
         else:
             self.has_embed = False
 
-    def extract_feat(
-        self, batch_inputs: Tensor, batch_data_samples: SampleList
-    ) -> Tuple[Tuple[Tensor], Tensor]:
+    def extract_feat(self, batch_inputs: Tensor, batch_data_samples: SampleList) -> tuple[tuple[Tensor], Tensor]:
         """Extract features."""
         # only image features
         texts = None
@@ -237,9 +206,7 @@ class YOLOWorldImageDetector(YOLODetector):
         else:
             if isinstance(batch_data_samples, dict) and "texts" in batch_data_samples:
                 texts = batch_data_samples["texts"]
-            elif isinstance(batch_data_samples, list) and hasattr(
-                batch_data_samples[0], "texts"
-            ):
+            elif isinstance(batch_data_samples, list) and hasattr(batch_data_samples[0], "texts"):
                 texts = [data_sample.texts for data_sample in batch_data_samples]
             else:
                 texts = None
@@ -271,8 +238,5 @@ class YOLOWorldImageDetector(YOLODetector):
             #         self.test_embeddings)
 
         if self.with_neck:
-            if self.mm_neck:
-                img_feats = self.neck(img_feats, txt_feats)
-            else:
-                img_feats = self.neck(img_feats)
+            img_feats = self.neck(img_feats, txt_feats) if self.mm_neck else self.neck(img_feats)
         return img_feats, txt_feats

@@ -46,21 +46,6 @@ def _rms_norm_2d_fwd_fused(
     eps,  # epsilon to avoid division by zero
     BLOCK_SIZE: tl.constexpr,
 ):
-    """Helper function to rms norm 2d fwd fused.
-
-    Args:
-        X: The x.
-        Y: The y.
-        W: The w.
-        B: The b.
-        Rrms: The rrms.
-        M: The m.
-        C: The c.
-        N: The n.
-        num_blocks: The num blocks.
-        eps: The eps.
-        BLOCK_SIZE: The block size.
-    """
     # Map the program id to the row of X and Y it should compute.
     m_n = tl.program_id(0)
     m, n = m_n // num_blocks, m_n % num_blocks
@@ -73,7 +58,7 @@ def _rms_norm_2d_fwd_fused(
     mask = cols < N
 
     x_sum_square = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
-    for off in range(0, C):
+    for off in range(C):
         x = tl.load(X + off * N + cols, mask=mask, other=0.0).to(tl.float32)
         x_sum_square += x * x
     mean_square = x_sum_square / C
@@ -81,7 +66,7 @@ def _rms_norm_2d_fwd_fused(
     # Write rstd
     tl.store(Rrms + m * N + cols, rrms, mask=mask)
     # Normalize and apply linear transformation
-    for off in range(0, C):
+    for off in range(C):
         pos = off * N + cols
         w = tl.load(W + off)
         b = tl.load(B + off)
@@ -111,26 +96,6 @@ def _rms_norm_2d_bwd_dx_fused(
     BLOCK_SIZE: tl.constexpr,
     BLOCK_SIZE_C: tl.constexpr,
 ):
-    """Helper function to rms norm 2d bwd dx fused.
-
-    Args:
-        DX: The dx.
-        DY: The dy.
-        DW: The dw.
-        DB: The db.
-        X: The x.
-        W: The w.
-        B: The b.
-        Rrms: The rrms.
-        M: The m.
-        C: The c.
-        N: The n.
-        num_blocks: The num blocks.
-        eps: The eps.
-        GROUP_SIZE_M: The group size m.
-        BLOCK_SIZE: The block size.
-        BLOCK_SIZE_C: The block size c.
-    """
     # Map the program id to the elements of X, DX, and DY it should compute.
     m_n = tl.program_id(0)
     m, n = m_n // num_blocks, m_n % num_blocks
@@ -147,7 +112,7 @@ def _rms_norm_2d_bwd_dx_fused(
     rrms = tl.load(Rrms + cols, mask=mask, other=1)
     # Load data to SRAM
     c1 = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
-    for off in range(0, C):
+    for off in range(C):
         pos = off * N + cols
         x = tl.load(X + pos, mask=mask, other=0).to(tl.float32)
         dy = tl.load(DY + pos, mask=mask, other=0).to(tl.float32)
@@ -163,7 +128,7 @@ def _rms_norm_2d_bwd_dx_fused(
         tl.store(DB + off, tl.sum(dy.to(w.dtype), axis=0))
 
     c1 /= C
-    for off in range(0, C):
+    for off in range(C):
         pos = off * N + cols
         x = tl.load(X + pos, mask=mask, other=0).to(tl.float32)
         dy = tl.load(DY + pos, mask=mask, other=0).to(tl.float32)
@@ -177,17 +142,9 @@ def _rms_norm_2d_bwd_dx_fused(
 
 class TritonRMSNorm2dFunc(torch.autograd.Function):
     """Triton rms norm d func implementation."""
+
     @staticmethod
     def forward(ctx, x, weight, bias, eps):
-        """Forward.
-
-        Args:
-            ctx: The ctx.
-            x: The x.
-            weight: The weight.
-            bias: The bias.
-            eps: The eps.
-        """
         # allocate output
         y = torch.empty_like(x)
         # reshape input data into 2D tensor
@@ -223,12 +180,6 @@ class TritonRMSNorm2dFunc(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dy):
-        """Backward.
-
-        Args:
-            ctx: The ctx.
-            dy: The dy.
-        """
         x, w, b, rrms = ctx.saved_tensors
         num_blocks = ctx.num_blocks
 

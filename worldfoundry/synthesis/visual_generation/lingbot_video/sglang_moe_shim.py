@@ -6,7 +6,7 @@ import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from types import ModuleType, SimpleNamespace
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import torch
 import torch.nn.functional as F
@@ -16,24 +16,24 @@ from worldfoundry.core.kernels import silu_and_mul
 
 @dataclass
 class LightSglangMoeRunnerConfig:
-    num_experts: Optional[int] = None
-    num_local_experts: Optional[int] = None
-    hidden_size: Optional[int] = None
-    intermediate_size_per_partition: Optional[int] = None
-    layer_id: Optional[int] = None
-    top_k: Optional[int] = None
-    num_fused_shared_experts: Optional[int] = None
-    params_dtype: Optional[torch.dtype] = None
-    routing_method_type: Optional[object] = None
+    num_experts: int | None = None
+    num_local_experts: int | None = None
+    hidden_size: int | None = None
+    intermediate_size_per_partition: int | None = None
+    layer_id: int | None = None
+    top_k: int | None = None
+    num_fused_shared_experts: int | None = None
+    params_dtype: torch.dtype | None = None
+    routing_method_type: object | None = None
     activation: str = "silu"
     is_gated: bool = True
     apply_router_weight_on_input: bool = False
     inplace: bool = False
     no_combine: bool = False
-    routed_scaling_factor: Optional[float] = None
-    gemm1_alpha: Optional[float] = None
-    gemm1_clamp_limit: Optional[float] = None
-    swiglu_limit: Optional[float] = None
+    routed_scaling_factor: float | None = None
+    gemm1_alpha: float | None = None
+    gemm1_clamp_limit: float | None = None
+    swiglu_limit: float | None = None
     gate_up_interleaved: bool = False
 
 
@@ -82,9 +82,7 @@ def fp8_scale_from_amax(amax: torch.Tensor) -> torch.Tensor:
 
 
 def quantize_to_fp8_e4m3fn(input: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
-    return torch.clamp(input.float() / scale, -FP8_E4M3_MAX, FP8_E4M3_MAX).to(
-        torch.float8_e4m3fn
-    )
+    return torch.clamp(input.float() / scale, -FP8_E4M3_MAX, FP8_E4M3_MAX).to(torch.float8_e4m3fn)
 
 
 def raise_unsupported_sglang_quantization(*args, **kwargs):
@@ -93,8 +91,8 @@ def raise_unsupported_sglang_quantization(*args, **kwargs):
 
 def sglang_scaled_fp8_quant(
     input: torch.Tensor,
-    scale: Optional[torch.Tensor] = None,
-    num_token_padding: Optional[int] = None,
+    scale: torch.Tensor | None = None,
+    num_token_padding: int | None = None,
     use_per_token_if_dynamic: bool = False,
 ):
     if input.ndim != 2:
@@ -129,8 +127,8 @@ def sglang_per_token_group_quant_fp8(
     scale_tma_aligned: bool = False,
     scale_ue8m0: bool = False,
     fuse_silu_and_mul: bool = False,
-    masked_m: Optional[torch.Tensor] = None,
-    enable_v2: Optional[bool] = None,
+    masked_m: torch.Tensor | None = None,
+    enable_v2: bool | None = None,
 ):
     if fuse_silu_and_mul:
         x = silu_and_mul(x)
@@ -188,9 +186,7 @@ def install_sglang_moe_import_shims() -> None:
     ensure_module("sglang.srt.layers.moe", moe_dir)
     moe_runner_module = ensure_module("sglang.srt.layers.moe.moe_runner", moe_runner_dir)
     moe_runner_module.MoeRunnerConfig = LightSglangMoeRunnerConfig
-    triton_utils_module = ensure_module(
-        "sglang.srt.layers.moe.moe_runner.triton_utils", triton_utils_dir
-    )
+    triton_utils_module = ensure_module("sglang.srt.layers.moe.moe_runner.triton_utils", triton_utils_dir)
     triton_utils_module.get_config = lambda: None
     triton_utils_module.override_config = null_sglang_config_override
     ensure_module("sglang.jit_kernel", jit_kernel_dir)
@@ -221,9 +217,7 @@ def install_sglang_moe_import_shims() -> None:
     utils_module.is_xpu = lambda: False
     utils_module.use_intel_xpu_backend = lambda: False
     utils_module.get_device_name = lambda: torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu"
-    utils_module.is_sm90_supported = (
-        lambda: torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 9
-    )
+    utils_module.is_sm90_supported = lambda: torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 9
 
     custom_op_module = ensure_module("sglang.srt.utils.custom_op")
     custom_op_module.register_custom_op = lambda *args, **kwargs: (lambda fn: fn)
@@ -246,7 +240,7 @@ try:
     from sglang.srt.layers.moe.moe_runner.triton_utils.fused_moe import (
         fused_experts as sglang_fused_experts,
     )
-except Exception as direct_exc:  # pragma: no cover - optional deployment dependency
+except Exception:  # pragma: no cover - optional deployment dependency
     install_sglang_moe_import_shims()
     try:
         from sglang.srt.layers.moe.moe_runner.triton_utils.fused_moe import (
@@ -263,6 +257,8 @@ else:
 try:
     from sglang.srt.server_args import (
         get_global_server_args as sglang_get_global_server_args,
+    )
+    from sglang.srt.server_args import (
         set_global_server_args_for_scheduler as sglang_set_global_server_args_for_scheduler,
     )
 except Exception:  # pragma: no cover - optional deployment dependency

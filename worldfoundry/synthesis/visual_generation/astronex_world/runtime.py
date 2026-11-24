@@ -1,4 +1,4 @@
-"""Inference-only Astronex camera/action/event adapter; no duplicated Wan model."""
+"""Inference-only Astronex camera/action/event adapter over the vendored release."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import math
 import re
 from pathlib import Path
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io import resolve_data_path
 from worldfoundry.runtime.official_inference import (
     InferencePlan,
@@ -14,23 +15,23 @@ from worldfoundry.runtime.official_inference import (
     positive_int,
 )
 
+ENTRYPOINT_MODULE = "worldfoundry.synthesis.visual_generation.astronex_world.astronex_world_runtime.inference.generate"
+
 
 class AstronexWorldRuntime(OfficialInferenceRuntime):
     MODEL_ID = "astronex-world"
     REVISION = "27584bf1a89da01ef35a03b48d83bc818d2adf2b"
-    REQUIRED_SOURCE_FILES = ("inference/generate.py", "inference/sample.py", "astronex_env.py")
 
     def __init__(
         self,
         *,
-        source_root="${WORLDFOUNDRY_MODEL_SOURCE_DIR}/Astronex-Robotics--Astronex-World",
         checkpoint_dir="${WORLDFOUNDRY_HFD_ROOT}/Astronex-Lab--Astronex-World",
         mode="causal",
         consumer=False,
         python_executable=None,
         device="cuda",
     ):
-        super().__init__(source_root=source_root, python_executable=python_executable, device=device)
+        super().__init__(python_executable=python_executable, device=device)
         if mode not in {"causal", "bidirectional"}:
             raise ValueError("Astronex mode must be causal or bidirectional")
         if consumer and mode != "causal":
@@ -40,7 +41,7 @@ class AstronexWorldRuntime(OfficialInferenceRuntime):
         self.checkpoint_dir = local_path(checkpoint_dir)
         self.mode = mode
         self.config_path = Path(
-            resolve_data_path(f"models/runtime/configs/astronex-world/{'causal_consumer' if consumer else mode}.yaml")
+            resolve_data_path(f"models/runtime/configs/astronex_world/{'causal_consumer' if consumer else mode}.yaml")
         )
 
     def required_assets(self):
@@ -131,9 +132,7 @@ class AstronexWorldRuntime(OfficialInferenceRuntime):
         output.mkdir(parents=True, exist_ok=True)
         prompt_path = output / "prompt.txt"
         prompt_path.write_text(" ".join(prompt.split()) + "\n", encoding="utf-8")
-        command = [
-            self.python_executable,
-            str(self.source_root / "inference/generate.py"),
+        args = [
             "--mode",
             self.mode,
             "--prompt",
@@ -163,7 +162,7 @@ class AstronexWorldRuntime(OfficialInferenceRuntime):
             if self.device.startswith("cuda:")
             else os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")[0]
         )
-        command.extend(("--gpu", visible))
+        args.extend(("--gpu", visible))
         if reference:
             from worldfoundry.core.media.codecs.image import (
                 load_pil_image,
@@ -171,7 +170,7 @@ class AstronexWorldRuntime(OfficialInferenceRuntime):
             )
 
             image_path = materialize_image_input(load_pil_image(image), str(output), filename="input.png")
-            command.extend(("--image", str(image_path)))
+            args.extend(("--image", str(image_path)))
         flags = {
             "event_prompt": "--event-prompt",
             "event_start_frame": "--event-start-frame",
@@ -182,21 +181,22 @@ class AstronexWorldRuntime(OfficialInferenceRuntime):
         }
         for name, flag in flags.items():
             if request.get(name) is not None:
-                command.extend((flag, str(request[name])))
+                args.extend((flag, str(request[name])))
         if request.get("action_keys"):
-            command.append("--action_keys")
+            args.append("--action_keys")
         for name in ("height", "width"):
             if name in request:
                 value = positive_int(request[name], name)
                 if value % 32:
                     raise ValueError(f"{name} must be a multiple of 32")
-                command.extend((f"--latent_{name}", str(value // 16)))
+                args.extend((f"--latent_{name}", str(value // 16)))
+        command = package_module_command(ENTRYPOINT_MODULE, args, python_executable=self.python_executable)
         return InferencePlan(
             self.MODEL_ID,
             tuple(command),
-            str(self.source_root),
+            str(output),
             str(output),
             self.REVISION,
-            self.environment(self.source_root),
+            self.environment(),
             artifact_globs=("artifacts/**/*.mp4",),
         )

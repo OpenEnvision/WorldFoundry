@@ -78,7 +78,9 @@ def test_redact_env_for_manifest_records_secret_presence_only() -> None:
         "CUDA_VISIBLE_DEVICES": "0,1",
     }
 
-    redacted = redact_env_for_manifest(env, keys=("WORLDFOUNDRY_HOME", "HF_TOKEN", "OPENAI_API_KEY", "CUDA_VISIBLE_DEVICES"))
+    redacted = redact_env_for_manifest(
+        env, keys=("WORLDFOUNDRY_HOME", "HF_TOKEN", "OPENAI_API_KEY", "CUDA_VISIBLE_DEVICES")
+    )
 
     assert redacted == {
         "WORLDFOUNDRY_HOME": "/runtime",

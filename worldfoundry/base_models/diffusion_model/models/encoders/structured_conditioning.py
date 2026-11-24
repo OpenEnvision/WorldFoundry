@@ -18,24 +18,26 @@ from __future__ import annotations
 import copy
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass, fields
 from enum import Enum
-from typing import Any, Mapping, Sequence
+from typing import Any, ClassVar
 
 import torch
 from torch import nn
 
 from worldfoundry.core.configuration.lazy_config import instantiate
 from worldfoundry.core.distributed.model_parallel.context import broadcast
-from worldfoundry.core.distributed.runtime.logging import log
-from worldfoundry.core.io.assets.easy_io import easy_io
-from worldfoundry.core.utils.tensors.batch import batch_mul
 from worldfoundry.core.execution.inference_runtime import disabled_train
+from worldfoundry.core.io.assets.easy_io import easy_io
+from worldfoundry.core.observability.rank_logging import log
+from worldfoundry.core.utils.tensors.batch import batch_mul
 
 
 class DataType(str, Enum):
     """Whether a structured condition batch is image, video, or mixed."""
+
     IMAGE = "image"
     VIDEO = "video"
     MIX = "mix"
@@ -45,8 +47,9 @@ class DataType(str, Enum):
 
 
 @dataclass(frozen=True)
-class BaseCondition(ABC):
+class BaseCondition(ABC):  # noqa: B024 - Keeps the ABCMeta base shared by its subclasses.
     """Typed tensor bundle passed into native model-internal forwards."""
+
     _is_broadcasted: bool = False
 
     def to_dict(self, skip_underscore: bool = True) -> dict[str, Any]:
@@ -60,7 +63,7 @@ class BaseCondition(ABC):
     def is_broadcasted(self) -> bool:
         return self._is_broadcasted
 
-    def broadcast(self, process_group: torch.distributed.ProcessGroup | None) -> "BaseCondition":
+    def broadcast(self, process_group: torch.distributed.ProcessGroup | None) -> BaseCondition:
         return broadcast_condition(self, process_group)
 
 
@@ -82,12 +85,13 @@ def broadcast_condition(
 @dataclass(frozen=True)
 class Text2WorldCondition(BaseCondition):
     """Text-to-world structured condition (tokens, masks, fps, type)."""
+
     crossattn_emb: torch.Tensor | None = None
     data_type: DataType = DataType.VIDEO
     padding_mask: torch.Tensor | None = None
     fps: torch.Tensor | None = None
 
-    def edit_data_type(self, data_type: DataType) -> "Text2WorldCondition":
+    def edit_data_type(self, data_type: DataType) -> Text2WorldCondition:
         values = self.to_dict(skip_underscore=False)
         values["data_type"] = DataType(data_type)
         return type(self)(**values)
@@ -99,6 +103,7 @@ class Text2WorldCondition(BaseCondition):
 
 class AbstractEmbModel(nn.Module):
     """Base embedding module used by :class:`GeneralConditioner`."""
+
     def __init__(self) -> None:
         super().__init__()
         self._is_trainable = True
@@ -159,6 +164,7 @@ class AbstractEmbModel(nn.Module):
 
 class TextAttr(AbstractEmbModel):
     """Embed a text-attribute tensor for structured conditioning."""
+
     def __init__(
         self,
         input_key: Sequence[str],
@@ -188,6 +194,7 @@ class TextAttr(AbstractEmbModel):
 
 class TextAttrEmptyStringDrop(TextAttr):
     """Text attribute embedder that can drop empty strings."""
+
     def __init__(
         self,
         input_key: Sequence[str],
@@ -238,6 +245,7 @@ class TextAttrEmptyStringDrop(TextAttr):
 
 class ReMapkey(AbstractEmbModel):
     """Rename / copy a condition tensor under a new key."""
+
     def __init__(
         self,
         input_key: str,
@@ -297,7 +305,8 @@ class BooleanFlag(AbstractEmbModel):
 
 class GeneralConditioner(nn.Module, ABC):
     """Compose multiple embedding modules into one structured condition."""
-    KEY2DIM = {"crossattn_emb": 1}
+
+    KEY2DIM: ClassVar[dict] = {"crossattn_emb": 1}
 
     def __init__(self, **emb_models: Any) -> None:
         super().__init__()
@@ -340,10 +349,7 @@ class GeneralConditioner(nn.Module, ABC):
                     value = embedder.random_dropout_input(batch[keys], overrides.get(name))
                     embedded = embedder(value)
                 elif isinstance(keys, Sequence):
-                    values = [
-                        embedder.random_dropout_input(batch.get(key), overrides.get(name), key)
-                        for key in keys
-                    ]
+                    values = [embedder.random_dropout_input(batch.get(key), overrides.get(name), key) for key in keys]
                     embedded = embedder(*values)
                 else:
                     raise TypeError(f"condition embedder {name!r} has invalid input_key {keys!r}")
@@ -355,22 +361,17 @@ class GeneralConditioner(nn.Module, ABC):
         }
 
     def get_condition_uncondition(self, data_batch: Mapping[str, Any]) -> tuple[BaseCondition, BaseCondition]:
-        positive = {name: 0.0 for name in self.embedders}
-        negative = {
-            name: 1.0 if embedder.dropout_rate > 1e-4 else 0.0
-            for name, embedder in self.embedders.items()
-        }
+        positive = dict.fromkeys(self.embedders, 0.0)
+        negative = {name: 1.0 if embedder.dropout_rate > 1e-4 else 0.0 for name, embedder in self.embedders.items()}
         return self(data_batch, positive), self(data_batch, negative)
 
     def get_condition_with_negative_prompt(
         self,
         data_batch: Mapping[str, Any],
     ) -> tuple[BaseCondition, BaseCondition]:
-        positive = {name: 0.0 for name in self.embedders}
+        positive = dict.fromkeys(self.embedders, 0.0)
         negative = {
-            name: 0.0
-            if isinstance(embedder, TextAttr)
-            else (1.0 if embedder.dropout_rate > 1e-4 else 0.0)
+            name: 0.0 if isinstance(embedder, TextAttr) else (1.0 if embedder.dropout_rate > 1e-4 else 0.0)
             for name, embedder in self.embedders.items()
         }
         negative_batch = copy.copy(dict(data_batch))

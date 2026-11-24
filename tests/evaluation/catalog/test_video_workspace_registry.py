@@ -7,11 +7,11 @@ the same assertions via ``make workspace-registry-check`` / ``make lint``.
 
 from __future__ import annotations
 
-from worldfoundry.evaluation.tasks.catalog.integrity import (
+from worldfoundry.evals.tasks.catalog.integrity import (
     catalog_runner_table_issues,
     video_catalog_dispatch_issues,
 )
-from worldfoundry.evaluation.tasks.catalog.workspace_registry import (
+from worldfoundry.evals.tasks.catalog.workspace_registry import (
     validate_workspace_registry,
 )
 

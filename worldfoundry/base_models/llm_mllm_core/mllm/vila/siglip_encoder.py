@@ -16,10 +16,8 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from accelerate.hooks import add_hook_to_module
-from einops import rearrange
-from transformers import AutoConfig, PretrainedConfig, PreTrainedModel, SiglipImageProcessor
+from transformers import PretrainedConfig, PreTrainedModel, SiglipImageProcessor
 from transformers.image_processing_utils import BaseImageProcessor
 from transformers.integrations.deepspeed import is_deepspeed_zero3_enabled
 from transformers.models.siglip import SiglipVisionModel
@@ -85,7 +83,7 @@ class VisionTower(nn.Module):
                     try:
                         import deepspeed
                     except ImportError:
-                        raise ImportError("DeepSpeed is not installed. Please install it with `pip install deepspeed`.")
+                        raise ImportError("DeepSpeed is not installed. Please install it with `pip install deepspeed`.")  # noqa: B904 - Keeps the implicit exception context.
                     with deepspeed.zero.GatheredParameters([old_embeddings.weight], modifier_rank=None):
                         old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
                 else:

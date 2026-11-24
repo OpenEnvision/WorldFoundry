@@ -32,17 +32,17 @@ base_model_dependency_preflight:
     VBench-family metric dimensions.
   - Detectron2-specific upstream dimensions remain external official-runtime dependencies.
   missing: []
-preflight_command: PYTHONPATH=worldfoundry/evaluation/tasks/execution/runners/vbench/runtime:. 
+preflight_command: PYTHONPATH=worldfoundry/evals/tasks/execution/runners/vbench/runtime:. 
   ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile vbench --manifest 
+  worldfoundry.evals.tasks.execution.orchestration.runtime_preflight --profile vbench --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/vbench.yaml --output-dir tmp/worldfoundry_preflight/vbench 
   --json
 python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
-- worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
+- worldfoundry/evals/tasks/execution/runners/vbench/runtime
 required_assets:
   in_tree_source_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
+  - worldfoundry/evals/tasks/execution/runners/vbench/runtime
   task_yaml: worldfoundry/data/benchmarks/tasks/external/vbench.yaml
   scorecard_paths:
   - tmp/local_open_eval/vbench_zeroscope_aesthetic_official_gpu_validation_after_prompt_file_fix_20260525/scorecard.json
@@ -67,15 +67,15 @@ required_packages:
 - In-tree VBench source package via PYTHONPATH
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/vbench.yaml
 - id: in_tree_vbench_source
-  path: worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
+  path: worldfoundry/evals/tasks/execution/runners/vbench/runtime
 requires_cuda_visibility: true
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-- worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py
 - run
 - --mode
 - custom_input

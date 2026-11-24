@@ -6,9 +6,9 @@ from unittest.mock import Mock
 import pytest
 
 from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_MODEL_ID
-from worldfoundry.evaluation.tasks.execution.orchestration import model_benchmark
-from worldfoundry.evaluation.tasks.execution.orchestration.model_benchmark import ModelBenchmarkRunRequest
-from worldfoundry.evaluation.tasks.execution.orchestration.service import ModelBenchmarkIntent, prepare_evaluation
+from worldfoundry.evals.tasks.execution.orchestration import model_benchmark
+from worldfoundry.evals.tasks.execution.orchestration.model_benchmark import ModelBenchmarkRunRequest
+from worldfoundry.evals.tasks.execution.orchestration.service import ModelBenchmarkIntent, prepare_evaluation
 
 pytestmark = pytest.mark.unit
 MANIFEST_PATH = Path(__file__).resolve().parents[2] / "worldfoundry/data/benchmarks/catalog"

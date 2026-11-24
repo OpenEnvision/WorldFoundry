@@ -3,6 +3,6 @@ defaults:
   - _self_
 
 network_config:
-  target: src.models.multiplayer.world_model.SolarisMPModel
+  target: worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.models.multiplayer.world_model.SolarisMPModel
   params:
     multiplayer_method: concat_c

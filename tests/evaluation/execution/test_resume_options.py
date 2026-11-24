@@ -12,12 +12,17 @@ from typing import Any
 import pytest
 
 from worldfoundry.cli.main import main
-from worldfoundry.evaluation import framework
-from worldfoundry.evaluation.tasks.datasets import build_dataset_manifest, write_dataset_manifest
-from worldfoundry.evaluation.tasks.execution.orchestration import model_benchmark, model_benchmark_suite, service
-from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import EvaluateRunRequest
-from worldfoundry.studio.serving import workspace
-from worldfoundry.studio.serving.workspace import JobCreateRequest
+from worldfoundry.evals.tasks.datasets import build_dataset_manifest, write_dataset_manifest
+from worldfoundry.evals.tasks.execution.orchestration import (
+    model_benchmark,
+    model_benchmark_suite,
+    service,
+    suite_cells,
+)
+from worldfoundry.evals.tasks.execution.orchestration import run as unified_run
+from worldfoundry.evals.tasks.execution.orchestration.evaluate import EvaluateRunRequest
+from worldfoundry.studio.workspace import app as workspace
+from worldfoundry.studio.workspace.app import JobCreateRequest
 
 pytestmark = pytest.mark.unit
 
@@ -121,12 +126,12 @@ def test_public_facade_preserves_checkpoint_controls(
         captured.append(request)
         return SimpleNamespace(status="succeeded", exit_code=0, output_dir=tmp_path)
 
-    monkeypatch.setattr(framework, "execute_evaluate_run", execute)
-    monkeypatch.setattr(framework, "run_model_benchmark", execute)
-    monkeypatch.setattr(framework, "run_model_benchmark_suite", execute)
+    monkeypatch.setattr(unified_run, "execute_evaluate_run", execute)
+    monkeypatch.setattr(unified_run, "run_model_benchmark", execute)
+    monkeypatch.setattr(unified_run, "run_model_benchmark_suite", execute)
     benchmarks = () if kind == "evaluate" else ("vbench",) if kind == "single" else ("vbench", "libero")
-    framework.run_worldfoundry(
-        framework.WorldFoundryRunRequest(
+    unified_run.run_worldfoundry(
+        unified_run.WorldFoundryRunRequest(
             output_dir=tmp_path,
             model_ids=("custom",),
             benchmark_ids=benchmarks,
@@ -152,14 +157,14 @@ def test_public_facade_scores_imported_results_without_starting_generation(
         return SimpleNamespace(status="succeeded", exit_code=0, output_dir=tmp_path)
 
     def generate(request: Any) -> None:
-        pytest.fail("existing results must not start benchmark generation")
+        raise pytest.fail.Exception("existing results must not start benchmark generation")
 
-    monkeypatch.setattr(framework, "execute_evaluate_run", evaluate)
-    monkeypatch.setattr(framework, "run_model_benchmark", generate)
-    monkeypatch.setattr(framework, "run_model_benchmark_suite", generate)
+    monkeypatch.setattr(unified_run, "execute_evaluate_run", evaluate)
+    monkeypatch.setattr(unified_run, "run_model_benchmark", generate)
+    monkeypatch.setattr(unified_run, "run_model_benchmark_suite", generate)
     results_path = tmp_path / "results.jsonl"
-    result = framework.run_worldfoundry(
-        framework.WorldFoundryRunRequest(
+    result = unified_run.run_worldfoundry(
+        unified_run.WorldFoundryRunRequest(
             output_dir=tmp_path,
             results_path=results_path,
             engine=engine,
@@ -226,8 +231,8 @@ def test_suite_cell_forwards_controls_to_single_benchmark(tmp_path: Path, monkey
             to_dict=lambda: {"benchmark_result": {}, "artifacts": {}},
         )
 
-    monkeypatch.setattr(model_benchmark_suite, "run_model_benchmark", execute)
-    plan = SimpleNamespace(
+    monkeypatch.setattr(suite_cells, "run_model_benchmark", execute)
+    plan: Any = SimpleNamespace(
         output_artifact="generated_video",
         model_id="custom",
         requested_model_id="custom",
@@ -238,7 +243,7 @@ def test_suite_cell_forwards_controls_to_single_benchmark(tmp_path: Path, monkey
         evaluation_provenance={},
     )
     request = model_benchmark_suite.ModelBenchmarkSuiteRequest(output_dir=tmp_path, resume=True, metric_batch_size=7)
-    model_benchmark_suite._run_cell(request, root=tmp_path, plan=plan)
+    suite_cells._run_cell(request, root=tmp_path, plan=plan)
     assert captured[0].resume is True
     assert captured[0].metric_batch_size == 7
 
@@ -246,7 +251,7 @@ def test_suite_cell_forwards_controls_to_single_benchmark(tmp_path: Path, monkey
 def test_metric_batch_size_does_not_change_suite_identity(tmp_path: Path) -> None:
     first = model_benchmark_suite.ModelBenchmarkSuiteRequest(output_dir=tmp_path, metric_batch_size=1)
     second = model_benchmark_suite.ModelBenchmarkSuiteRequest(output_dir=tmp_path, metric_batch_size=7)
-    assert model_benchmark_suite._fingerprint_request(first) == model_benchmark_suite._fingerprint_request(second)
+    assert suite_cells._fingerprint_request(first) == suite_cells._fingerprint_request(second)
 
 
 @pytest.mark.parametrize("command", ["evaluate", "run"])
@@ -260,8 +265,8 @@ def test_materialized_cli_forwards_controls(
         captured.append(request)
         return SimpleNamespace(exit_code=0, to_dict=lambda: {"status": "succeeded", "exit_code": 0})
 
-    monkeypatch.setattr("worldfoundry.evaluation.runner.execute_evaluate_run", execute)
-    monkeypatch.setattr(framework, "execute_evaluate_run", execute)
+    monkeypatch.setattr("worldfoundry.evals.tasks.execution.orchestration.evaluate.execute_evaluate_run", execute)
+    monkeypatch.setattr(unified_run, "execute_evaluate_run", execute)
     arguments = [command, "--results-path", str(samples)]
     if command == "run":
         arguments += ["--engine", "existing-results"]
@@ -280,7 +285,7 @@ def test_direct_model_cli_forwards_controls(
 ) -> None:
     captured: list[EvaluateRunRequest] = []
     monkeypatch.setattr(
-        "worldfoundry.evaluation.runner.execute_evaluate_run",
+        "worldfoundry.evals.tasks.execution.orchestration.evaluate.execute_evaluate_run",
         lambda request: (
             captured.append(request) or SimpleNamespace(exit_code=0, to_dict=lambda: {"status": "succeeded"})
         ),
@@ -311,13 +316,13 @@ def test_evaluate_plan_replay_preserves_controls(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     captured: list[EvaluateRunRequest] = []
-    monkeypatch.setattr("worldfoundry.evaluation.runner.load_run_plan", lambda path: object())
+    monkeypatch.setattr("worldfoundry.evals.tasks.execution.orchestration.plan.load_run_plan", lambda path: object())
     monkeypatch.setattr(
-        "worldfoundry.evaluation.runner.evaluate_request_from_run_plan",
+        "worldfoundry.evals.tasks.execution.orchestration.plan.evaluate_request_from_run_plan",
         lambda plan: EvaluateRunRequest(output_dir=tmp_path),
     )
     monkeypatch.setattr(
-        "worldfoundry.evaluation.runner.execute_evaluate_run",
+        "worldfoundry.evals.tasks.execution.orchestration.evaluate.execute_evaluate_run",
         lambda row: (captured.append(row) or SimpleNamespace(exit_code=0, to_dict=lambda: {"status": "succeeded"})),
     )
     assert (
@@ -347,17 +352,15 @@ def test_workspace_request_preserves_controls(
 ) -> None:
     captured: list[EvaluateRunRequest] = []
     monkeypatch.setattr(
-        "worldfoundry.evaluation.runner.run_evaluate",
+        "worldfoundry.evals.tasks.execution.orchestration.evaluate.run_evaluate",
         lambda row: (captured.append(row) or SimpleNamespace(to_dict=lambda: {"status": "succeeded"})),
     )
+    monkeypatch.setattr("worldfoundry.evals.tasks.execution.orchestration.plan.load_run_plan", lambda path: object())
     monkeypatch.setattr(
-        "worldfoundry.evaluation.tasks.execution.orchestration.plan.load_run_plan", lambda path: object()
+        "worldfoundry.evals.tasks.execution.orchestration.plan.validate_run_plan", lambda plan: {"ok": True}
     )
     monkeypatch.setattr(
-        "worldfoundry.evaluation.tasks.execution.orchestration.plan.validate_run_plan", lambda plan: {"ok": True}
-    )
-    monkeypatch.setattr(
-        "worldfoundry.evaluation.tasks.execution.orchestration.plan.evaluate_request_from_run_plan",
+        "worldfoundry.evals.tasks.execution.orchestration.plan.evaluate_request_from_run_plan",
         lambda plan: EvaluateRunRequest(output_dir=tmp_path),
     )
     workspace._run_evaluation(
@@ -390,7 +393,7 @@ def test_preparation_rejects_nonpositive_metric_batch_size(tmp_path: Path) -> No
 def test_public_requests_reject_nonpositive_batch_before_model_loading(tmp_path: Path, entry: str) -> None:
     with pytest.raises(ValueError, match="metric_batch_size must be positive"):
         if entry == "facade":
-            framework.run_worldfoundry(framework.WorldFoundryRunRequest(output_dir=tmp_path, metric_batch_size=0))
+            unified_run.run_worldfoundry(unified_run.WorldFoundryRunRequest(output_dir=tmp_path, metric_batch_size=0))
         elif entry == "single":
             model_benchmark.run_model_benchmark(
                 model_benchmark.ModelBenchmarkRunRequest(

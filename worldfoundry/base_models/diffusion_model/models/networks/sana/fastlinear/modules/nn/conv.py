@@ -28,10 +28,10 @@ follow :mod:`.norm` (``bn2d``, ``ln2d``, …); act names follow
 import torch
 from torch import nn
 
-from worldfoundry.base_models.diffusion_model.models.networks.sana.activation import build_act, get_act_name
-
+from worldfoundry.base_models.diffusion_model.models.networks.sana.activation import build_act
 from worldfoundry.core.nn import get_same_padding
-from .norm import build_norm, get_norm_name
+
+from .norm import build_norm
 
 
 class ConvLayer(nn.Module):
@@ -51,21 +51,6 @@ class ConvLayer(nn.Module):
         norm="bn2d",
         act="relu",
     ):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            kernel_size: The kernel size.
-            stride: The stride.
-            dilation: The dilation.
-            groups: The groups.
-            padding: The padding.
-            use_bias: The use bias.
-            dropout: The dropout.
-            norm: The norm.
-            act: The act.
-        """
         super().__init__()
         if padding is None:
             padding = get_same_padding(kernel_size)
@@ -95,14 +80,6 @@ class ConvLayer(nn.Module):
         self.act = build_act(act)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         if self.dropout is not None:
             x = self.dropout(x)
         x = self.conv(x)

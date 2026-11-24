@@ -5,14 +5,15 @@ Used by the DiT stem: RMSNorm on Q/K, Fourier timestep features, and
 broadcast over ``B S C`` tokens.
 """
 
-from typing import Any, Dict, Optional, Union, Tuple
 import torch
 import torch.nn as nn
-import math
+
+from worldfoundry.core.nn.diffusion.timestep import get_timestep_embedding as get_timestep_embedding
 
 
 class RMSNorm(nn.Module):
     """RMSNorm over the last dim of Q/K or tokens (``[..., dim]``)."""
+
     def __init__(
         self,
         dim: int,
@@ -67,7 +68,7 @@ class RMSNorm(nn.Module):
         if hasattr(self, "weight"):
             output = output * self.weight
         return output
-    
+
 
 ACTIVATION_FUNCTIONS = {
     "swish": nn.SiLU(),
@@ -95,51 +96,6 @@ def get_activation(act_fn: str) -> nn.Module:
         raise ValueError(f"Unsupported activation function: {act_fn}")
 
 
-
-def get_timestep_embedding(
-    timesteps: torch.Tensor,
-    embedding_dim: int,
-    flip_sin_to_cos: bool = False,
-    downscale_freq_shift: float = 1,
-    scale: float = 1,
-    max_period: int = 10000,
-):
-    """
-    This matches the implementation in Denoising Diffusion Probabilistic Models: Create sinusoidal timestep embeddings.
-
-    :param timesteps: a 1-D Tensor of N indices, one per batch element.
-                      These may be fractional.
-    :param embedding_dim: the dimension of the output. :param max_period: controls the minimum frequency of the
-    embeddings. :return: an [N x dim] Tensor of positional embeddings.
-    """
-    assert len(timesteps.shape) == 1, "Timesteps should be a 1d-array"
-
-    half_dim = embedding_dim // 2
-    exponent = -math.log(max_period) * torch.arange(
-        start=0, end=half_dim, dtype=torch.float32, device=timesteps.device
-    )
-    exponent = exponent / (half_dim - downscale_freq_shift)
-
-    emb = torch.exp(exponent)
-    emb = timesteps[:, None].float() * emb[None, :]
-
-    # scale embeddings
-    emb = scale * emb
-
-    # concat sine and cosine embeddings
-    emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=-1)
-
-    # flip sine and cosine embeddings
-    if flip_sin_to_cos:
-        emb = torch.cat([emb[:, half_dim:], emb[:, :half_dim]], dim=-1)
-
-    # zero pad
-    if embedding_dim % 2 == 1:
-        emb = torch.nn.functional.pad(emb, (0, 1, 0, 0))
-    return emb
-
-
-
 class Timesteps(nn.Module):
     """Sinusoidal timestep features of width ``num_channels``."""
 
@@ -160,49 +116,46 @@ class Timesteps(nn.Module):
         return t_emb
 
 
-
 class TimestepEmbedding(nn.Module):
     """SiLU MLP that maps Fourier timestep features to AdaLN width."""
+
     def __init__(
         self,
         in_channels: int,
         time_embed_dim: int,
         act_fn: str = "silu",
-        out_dim: int = None,
-        post_act_fn: Optional[str] = None,
+        out_dim: int | None = None,
+        post_act_fn: str | None = None,
         cond_proj_dim=None,
-        sample_proj_bias=True
+        sample_proj_bias=True,
     ):
         super().__init__()
         linear_cls = nn.Linear
 
         self.linear_1 = linear_cls(
-                in_channels, 
-                time_embed_dim, 
-                bias=sample_proj_bias,
-            )
+            in_channels,
+            time_embed_dim,
+            bias=sample_proj_bias,
+        )
 
         if cond_proj_dim is not None:
             self.cond_proj = linear_cls(
-                    cond_proj_dim, 
-                    in_channels, 
-                    bias=False,
-                )
+                cond_proj_dim,
+                in_channels,
+                bias=False,
+            )
         else:
             self.cond_proj = None
 
         self.act = get_activation(act_fn)
 
-        if out_dim is not None:
-            time_embed_dim_out = out_dim
-        else:
-            time_embed_dim_out = time_embed_dim
-            
+        time_embed_dim_out = out_dim if out_dim is not None else time_embed_dim
+
         self.linear_2 = linear_cls(
-                time_embed_dim, 
-                time_embed_dim_out, 
-                bias=sample_proj_bias, 
-            )
+            time_embed_dim,
+            time_embed_dim_out,
+            bias=sample_proj_bias,
+        )
 
         if post_act_fn is None:
             self.post_act = None
@@ -223,8 +176,6 @@ class TimestepEmbedding(nn.Module):
         if self.post_act is not None:
             sample = self.post_act(sample)
         return sample
-
-
 
 
 class PixArtAlphaCombinedTimestepSizeEmbeddings(nn.Module):
@@ -269,17 +220,17 @@ class PixArtAlphaCombinedTimestepSizeEmbeddings(nn.Module):
         return conditioning
 
 
-
 class AdaLayerNormSingle(nn.Module):
     r"""
-        Norm layer adaptive layer norm single (adaLN-single).
+    Norm layer adaptive layer norm single (adaLN-single).
 
-        As proposed in PixArt-Alpha (see: https://arxiv.org/abs/2310.00426; Section 2.3).
+    As proposed in PixArt-Alpha (see: https://arxiv.org/abs/2310.00426; Section 2.3).
 
-        Parameters:
-            embedding_dim (`int`): The size of each embedding vector.
-            use_additional_conditions (`bool`): To use additional conditions for normalization or not.
+    Parameters:
+        embedding_dim (`int`): The size of each embedding vector.
+        use_additional_conditions (`bool`): To use additional conditions for normalization or not.
     """
+
     def __init__(self, embedding_dim: int, use_additional_conditions: bool = False, time_step_rescale=1000):
         super().__init__()
 
@@ -290,20 +241,22 @@ class AdaLayerNormSingle(nn.Module):
         self.silu = nn.SiLU()
         self.linear = nn.Linear(embedding_dim, 6 * embedding_dim, bias=True)
 
-        self.time_step_rescale = time_step_rescale  ## timestep usually in [0, 1], we rescale it to [0,1000] for stability
+        self.time_step_rescale = (
+            time_step_rescale  ## timestep usually in [0, 1], we rescale it to [0,1000] for stability
+        )
 
     def forward(
         self,
         timestep: torch.Tensor,
-        added_cond_kwargs: Dict[str, torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        added_cond_kwargs: dict[str, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Return ``(6*C modulation, raw timestep embedding)`` for the DiT blocks."""
-        embedded_timestep = self.emb(timestep*self.time_step_rescale, **added_cond_kwargs)
+        embedded_timestep = self.emb(timestep * self.time_step_rescale, **added_cond_kwargs)
 
         out = self.linear(self.silu(embedded_timestep))
 
         return out, embedded_timestep
-    
+
 
 class PixArtAlphaTextProjection(nn.Module):
     """
@@ -315,16 +268,16 @@ class PixArtAlphaTextProjection(nn.Module):
     def __init__(self, in_features, hidden_size):
         super().__init__()
         self.linear_1 = nn.Linear(
-                in_features, 
-                hidden_size, 
-                bias=True, 
-            )        
+            in_features,
+            hidden_size,
+            bias=True,
+        )
         self.act_1 = nn.GELU(approximate="tanh")
         self.linear_2 = nn.Linear(
-                hidden_size, 
-                hidden_size, 
-                bias=True, 
-            )
+            hidden_size,
+            hidden_size,
+            bias=True,
+        )
 
     def forward(self, caption):
         """Project caption tokens ``B L C_text`` to DiT hidden size."""

@@ -1,5 +1,5 @@
 # Copyright 2025 StepFun Inc. All Rights Reserved.
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -20,8 +20,8 @@ timestep table.
 
 import torch
 import torch.nn as nn
-from typing import Optional
 from einops import rearrange
+
 from .attention import Attention
 from .normalization import RMSNorm
 from .rope import RoPE3D
@@ -30,119 +30,95 @@ from .rope import RoPE3D
 class SelfAttention(Attention):
     """QK-RMSNorm self-attn with optional 3D RoPE on ``B S H D`` heads."""
 
-    def __init__(self, hidden_dim, head_dim, bias=False, with_rope=True, with_qk_norm=True, attn_type='torch'):
+    def __init__(self, hidden_dim, head_dim, bias=False, with_rope=True, with_qk_norm=True, attn_type="torch"):
         super().__init__()
         self.head_dim = head_dim
         self.n_heads = hidden_dim // head_dim
-        
-        self.wqkv = nn.Linear(hidden_dim, hidden_dim*3, bias=bias)
+
+        self.wqkv = nn.Linear(hidden_dim, hidden_dim * 3, bias=bias)
         self.wo = nn.Linear(hidden_dim, hidden_dim, bias=bias)
-        
+
         self.with_rope = with_rope
         self.with_qk_norm = with_qk_norm
         if self.with_qk_norm:
             self.q_norm = RMSNorm(head_dim, elementwise_affine=True)
             self.k_norm = RMSNorm(head_dim, elementwise_affine=True)
-        
+
         if self.with_rope:
             self.rope_3d = RoPE3D(freq=1e4, F0=1.0, scaling_factor=1.0)
             self.rope_ch_split = [64, 32, 32]
-        
+
         self.core_attention = self.attn_processor(attn_type=attn_type)
-        self.parallel = attn_type=='parallel'
-        
+        self.parallel = attn_type == "parallel"
+
     def apply_rope3d(self, x, fhw_positions, rope_ch_split, parallel=True):
         """Rotate ``x`` with factorized (F, H, W) RoPE; ``parallel`` is unused here."""
         x = self.rope_3d(x, fhw_positions, rope_ch_split, parallel)
         return x
-        
-    def forward(
-        self, 
-        x,
-        cu_seqlens=None,
-        max_seqlen=None,
-        rope_positions=None,
-        attn_mask=None
-    ):
-        """Self-attend ``B S C`` video tokens; ``rope_positions`` is ``[F, H', W']``."""
-        xqkv = self.wqkv(x) 
-        xqkv = xqkv.view(*x.shape[:-1], self.n_heads, 3*self.head_dim)
 
-        xq, xk, xv = torch.split(xqkv, [self.head_dim]*3, dim=-1)  ## seq_len, n, dim
-    
+    def forward(self, x, cu_seqlens=None, max_seqlen=None, rope_positions=None, attn_mask=None):
+        """Self-attend ``B S C`` video tokens; ``rope_positions`` is ``[F, H', W']``."""
+        xqkv = self.wqkv(x)
+        xqkv = xqkv.view(*x.shape[:-1], self.n_heads, 3 * self.head_dim)
+
+        xq, xk, xv = torch.split(xqkv, [self.head_dim] * 3, dim=-1)  ## seq_len, n, dim
+
         if self.with_qk_norm:
             xq = self.q_norm(xq)
             xk = self.k_norm(xk)
-    
+
         if self.with_rope:
             xq = self.apply_rope3d(xq, rope_positions, self.rope_ch_split, parallel=self.parallel)
             xk = self.apply_rope3d(xk, rope_positions, self.rope_ch_split, parallel=self.parallel)
-            
-        output = self.core_attention(
-                    xq,
-                    xk,
-                    xv,
-                    cu_seqlens=cu_seqlens,
-                    max_seqlen=max_seqlen,
-                    attn_mask=attn_mask
-                )
-        output = rearrange(output, 'b s h d -> b s (h d)')
+
+        output = self.core_attention(xq, xk, xv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen, attn_mask=attn_mask)
+        output = rearrange(output, "b s h d -> b s (h d)")
         output = self.wo(output)
-        
+
         return output
-    
-    
+
+
 class CrossAttention(Attention):
     """Text cross-attn: queries from video tokens, keys/values from captions."""
 
-    def __init__(self, hidden_dim, head_dim, bias=False, with_qk_norm=True, attn_type='torch'):
+    def __init__(self, hidden_dim, head_dim, bias=False, with_qk_norm=True, attn_type="torch"):
         super().__init__()
         self.head_dim = head_dim
         self.n_heads = hidden_dim // head_dim
-        
+
         self.wq = nn.Linear(hidden_dim, hidden_dim, bias=bias)
-        self.wkv = nn.Linear(hidden_dim, hidden_dim*2, bias=bias)
+        self.wkv = nn.Linear(hidden_dim, hidden_dim * 2, bias=bias)
         self.wo = nn.Linear(hidden_dim, hidden_dim, bias=bias)
-        
+
         self.with_qk_norm = with_qk_norm
         if self.with_qk_norm:
             self.q_norm = RMSNorm(head_dim, elementwise_affine=True)
             self.k_norm = RMSNorm(head_dim, elementwise_affine=True)
-        
+
         self.core_attention = self.attn_processor(attn_type=attn_type)
 
-    def forward(
-            self, 
-            x: torch.Tensor,
-            encoder_hidden_states: torch.Tensor,
-            attn_mask=None
-        ):
+    def forward(self, x: torch.Tensor, encoder_hidden_states: torch.Tensor, attn_mask=None):
         """Attend ``B S C`` queries to ``B L C`` text context."""
-        xq = self.wq(x) 
+        xq = self.wq(x)
         xq = xq.view(*xq.shape[:-1], self.n_heads, self.head_dim)
-        
-        xkv = self.wkv(encoder_hidden_states)
-        xkv = xkv.view(*xkv.shape[:-1], self.n_heads, 2*self.head_dim)
 
-        xk, xv = torch.split(xkv, [self.head_dim]*2, dim=-1)  ## seq_len, n, dim
-    
+        xkv = self.wkv(encoder_hidden_states)
+        xkv = xkv.view(*xkv.shape[:-1], self.n_heads, 2 * self.head_dim)
+
+        xk, xv = torch.split(xkv, [self.head_dim] * 2, dim=-1)  ## seq_len, n, dim
+
         if self.with_qk_norm:
             xq = self.q_norm(xq)
             xk = self.k_norm(xk)
 
-        output = self.core_attention(
-                    xq,
-                    xk,
-                    xv,
-                    attn_mask=attn_mask
-                )
-        
-        output = rearrange(output, 'b s h d -> b s (h d)')
+        output = self.core_attention(xq, xk, xv, attn_mask=attn_mask)
+
+        output = rearrange(output, "b s h d -> b s (h d)")
         output = self.wo(output)
-        
+
         return output
 
-    
+
 class GELU(nn.Module):
     r"""
     GELU activation function with tanh approximation support with `approximate="tanh"`.
@@ -168,39 +144,42 @@ class GELU(nn.Module):
         hidden_states = self.proj(hidden_states)
         hidden_states = self.gelu(hidden_states)
         return hidden_states
-    
-    
+
+
 class FeedForward(nn.Module):
     """Tanh-GELU MLP with an Identity slot matching the checkpoint ``net`` keys."""
+
     def __init__(
-        self, 
+        self,
         dim: int,
-        inner_dim: Optional[int] = None,
-        dim_out: Optional[int] = None,
+        inner_dim: int | None = None,
+        dim_out: int | None = None,
         mult: int = 4,
         bias: bool = False,
     ):
         super().__init__()
-        inner_dim = dim*mult if inner_dim is None else inner_dim
+        inner_dim = dim * mult if inner_dim is None else inner_dim
         dim_out = dim if dim_out is None else dim_out
-        self.net = nn.ModuleList([
-            GELU(dim, inner_dim, approximate="tanh", bias=bias),
-            nn.Identity(),
-            nn.Linear(inner_dim, dim_out, bias=bias)
-        ])
-        
-        
+        self.net = nn.ModuleList(
+            [
+                GELU(dim, inner_dim, approximate="tanh", bias=bias),
+                nn.Identity(),
+                nn.Linear(inner_dim, dim_out, bias=bias),
+            ]
+        )
+
     def forward(self, hidden_states: torch.Tensor, *args, **kwargs) -> torch.Tensor:
         """Map ``B S C`` through GELU expand → linear contract."""
         for module in self.net:
             hidden_states = module(hidden_states)
         return hidden_states
-    
+
 
 def modulate(x, scale, shift):
     """AdaLN affine: ``x * (1 + scale) + shift`` on the last dim."""
     x = x * (1 + scale) + shift
     return x
+
 
 def gate(x, gate):
     """Residual gate multiply used after attn/FFN."""
@@ -248,62 +227,58 @@ class StepVideoTransformerBlock(nn.Module):
         dim: int,
         attention_head_dim: int,
         norm_eps: float = 1e-5,
-        ff_inner_dim: Optional[int] = None,
+        ff_inner_dim: int | None = None,
         ff_bias: bool = False,
-        attention_type: str = 'parallel'
+        attention_type: str = "parallel",
     ):
         super().__init__()
         self.dim = dim
         self.norm1 = nn.LayerNorm(dim, eps=norm_eps)
-        self.attn1 = SelfAttention(dim, attention_head_dim, bias=False, with_rope=True, with_qk_norm=True, attn_type=attention_type)
-        
+        self.attn1 = SelfAttention(
+            dim, attention_head_dim, bias=False, with_rope=True, with_qk_norm=True, attn_type=attention_type
+        )
+
         self.norm2 = nn.LayerNorm(dim, eps=norm_eps)
-        self.attn2 = CrossAttention(dim, attention_head_dim, bias=False, with_qk_norm=True, attn_type='torch')
+        self.attn2 = CrossAttention(dim, attention_head_dim, bias=False, with_qk_norm=True, attn_type="torch")
 
         self.ff = FeedForward(dim=dim, inner_dim=ff_inner_dim, dim_out=dim, bias=ff_bias)
 
-        self.scale_shift_table = nn.Parameter(torch.randn(6, dim) /dim**0.5)
+        self.scale_shift_table = nn.Parameter(torch.randn(6, dim) / dim**0.5)
 
     @torch.no_grad()
     def forward(
         self,
         q: torch.Tensor,
-        kv: Optional[torch.Tensor] = None,
-        timestep: Optional[torch.LongTensor] =  None,
-        attn_mask = None,
-        rope_positions: list = None, 
+        kv: torch.Tensor | None = None,
+        timestep: torch.LongTensor | None = None,
+        attn_mask=None,
+        rope_positions: list | None = None,
     ) -> torch.Tensor:
         """AdaLN-gated self-attn + text CA + FFN on ``B S C`` tokens."""
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-            torch.clone(chunk) for chunk in (self.scale_shift_table[None] + timestep.reshape(-1, 6, self.dim)).chunk(6, dim=1)
+            torch.clone(chunk)
+            for chunk in (self.scale_shift_table[None] + timestep.reshape(-1, 6, self.dim)).chunk(6, dim=1)
         )
-        
+
         scale_shift_q = modulate(self.norm1(q), scale_msa, shift_msa)
 
-        attn_q = self.attn1(
-            scale_shift_q,
-            rope_positions=rope_positions
-        )
+        attn_q = self.attn1(scale_shift_q, rope_positions=rope_positions)
 
         q = gate(attn_q, gate_msa) + q
-        
-        attn_q = self.attn2(
-                q,
-                kv,
-                attn_mask
-            )
+
+        attn_q = self.attn2(q, kv, attn_mask)
 
         q = attn_q + q
 
         scale_shift_q = modulate(self.norm2(q), scale_mlp, shift_mlp)
 
         ff_output = self.ff(scale_shift_q)
-        
+
         q = gate(ff_output, gate_mlp) + q
-        
+
         return q
-    
-    
+
+
 class PatchEmbed(nn.Module):
     """2D Image to Patch Embedding"""
 
@@ -327,11 +302,10 @@ class PatchEmbed(nn.Module):
 
     def forward(self, latent):
         """Conv2d-patch ``B C H W`` (already folded over frames) to ``B (H'W') C``."""
-        latent = self.proj(latent).to(latent.dtype)   
+        latent = self.proj(latent).to(latent.dtype)
         if self.flatten:
             latent = latent.flatten(2).transpose(1, 2)  # BCHW -> BNC
         if self.layer_norm:
             latent = self.norm(latent)
 
         return latent
-    

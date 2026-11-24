@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> ext -> __init__.py functionality."""
-
 import os
 import sys
 
@@ -25,26 +23,11 @@ from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext.build import 
 
 
 class _MissingVipeExtModule:
-    """Missing vipe ext module implementation."""
     def __init__(self, module_name: str, reason: str) -> None:
-        """Init.
-
-        Args:
-            module_name: The module name.
-            reason: The reason.
-
-        Returns:
-            The return value.
-        """
         self._module_name = module_name
         self._reason = reason
 
     def __getattr__(self, op_name: str):
-        """Getattr.
-
-        Args:
-            op_name: The op name.
-        """
         raise RuntimeError(
             f"VIPE extension module {self._module_name!r} is unavailable; "
             f"operation {op_name!r} cannot run. {self._reason}"
@@ -52,27 +35,10 @@ class _MissingVipeExtModule:
 
 
 class _MissingVipeExt:
-    """Missing vipe ext implementation."""
     def __init__(self, reason: str) -> None:
-        """Init.
-
-        Args:
-            reason: The reason.
-
-        Returns:
-            The return value.
-        """
         self._reason = reason
 
     def __getattr__(self, module_name: str) -> _MissingVipeExtModule:
-        """Getattr.
-
-        Args:
-            module_name: The module name.
-
-        Returns:
-            The return value.
-        """
         return _MissingVipeExtModule(module_name, self._reason)
 
 

@@ -14,8 +14,6 @@
 # limitations under the License.
 
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> pipeline -> default.py functionality."""
-
 import logging
 import pickle
 from pathlib import Path
@@ -23,7 +21,11 @@ from pathlib import Path
 import torch
 from omegaconf import DictConfig
 
+# isort: split
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.slam.system import SLAMOutput, SLAMSystem
+
+# isort: split
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.adaptive_models import AdaptiveDepthModels
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base import (
     AssignAttributesProcessor,
     FrameAttribute,
@@ -34,10 +36,9 @@ from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base impo
 )
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils import io
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.cameras import CameraType
-from worldfoundry.studio.visualization.plugins.scene3d.projection import save_projection_video
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.visualization import save_projection_video
 
 from . import AnnotationPipelineOutput, Pipeline
-from worldfoundry.base_models.three_dimensions.general_3d.vipe.adaptive_models import AdaptiveDepthModels
 from .processors import (
     AdaptiveDepthProcessor,
     GeoCalibIntrinsicsProcessor,
@@ -49,19 +50,7 @@ logger = logging.getLogger(__name__)
 
 
 class DefaultAnnotationPipeline(Pipeline):
-    """Default annotation pipeline implementation."""
     def __init__(self, init: DictConfig, slam: DictConfig, post: DictConfig, output: DictConfig) -> None:
-        """Init.
-
-        Args:
-            init: The init.
-            slam: The slam.
-            post: The post.
-            output: The output.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.init_cfg = init
         self.slam_cfg = slam
@@ -80,14 +69,6 @@ class DefaultAnnotationPipeline(Pipeline):
         self.out_path.mkdir(exist_ok=True, parents=True)
 
     def _add_init_processors(self, video_stream: VideoStream) -> ProcessedVideoStream:
-        """Helper function to add init processors.
-
-        Args:
-            video_stream: The video stream.
-
-        Returns:
-            The return value.
-        """
         init_processors: list[StreamProcessor] = []
 
         # The assertions make sure that the attributes are not estimated previously.
@@ -117,16 +98,6 @@ class DefaultAnnotationPipeline(Pipeline):
     def _add_post_processors(
         self, view_idx: int, video_stream: VideoStream, slam_output: SLAMOutput
     ) -> ProcessedVideoStream:
-        """Helper function to add post processors.
-
-        Args:
-            view_idx: The view idx.
-            video_stream: The video stream.
-            slam_output: The slam output.
-
-        Returns:
-            The return value.
-        """
         post_processors: list[StreamProcessor] = [
             AssignAttributesProcessor(
                 {
@@ -151,14 +122,6 @@ class DefaultAnnotationPipeline(Pipeline):
         return ProcessedVideoStream(video_stream, post_processors)
 
     def run(self, video_data: VideoStream | MultiviewVideoList) -> AnnotationPipelineOutput:
-        """Run.
-
-        Args:
-            video_data: The video data.
-
-        Returns:
-            The return value.
-        """
         if isinstance(video_data, MultiviewVideoList):
             video_streams = [video_data[view_idx] for view_idx in range(len(video_data))]
             artifact_paths = [io.ArtifactPath(self.out_path, video_stream.name()) for video_stream in video_streams]
@@ -172,7 +135,7 @@ class DefaultAnnotationPipeline(Pipeline):
 
         annotate_output = AnnotationPipelineOutput()
 
-        if all([self.should_filter(video_stream.name()) for video_stream in video_streams]):
+        if all([self.should_filter(video_stream.name()) for video_stream in video_streams]):  # noqa: C419 - Evaluates every element before testing, as upstream.
             logger.info(f"{video_data.name()} has been proccessed already, skip it!!")
             return annotate_output
 
@@ -192,7 +155,7 @@ class DefaultAnnotationPipeline(Pipeline):
         ]
 
         # Dumping artifacts for all views in the streams
-        for output_stream, artifact_path in zip(output_streams, artifact_paths):
+        for output_stream, artifact_path in zip(output_streams, artifact_paths, strict=False):
             artifact_path.meta_info_path.parent.mkdir(exist_ok=True, parents=True)
             if self.out_cfg.save_artifacts:
                 logger.info(f"Saving artifacts to {artifact_path}")

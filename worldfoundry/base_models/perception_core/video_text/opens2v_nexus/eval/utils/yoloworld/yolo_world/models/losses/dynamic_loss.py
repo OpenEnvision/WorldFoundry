@@ -1,11 +1,10 @@
 # Copyright (c) Tencent Inc. All rights reserved.
-from typing import Optional
 
 import torch
 import torch.nn as nn
-from torch import Tensor
 from mmdet.models.losses.mse_loss import mse_loss
 from mmyolo.registry import MODELS
+from torch import Tensor
 
 
 @MODELS.register_module()
@@ -26,16 +25,14 @@ class CoVMSELoss(nn.Module):
     def forward(
         self,
         pred: Tensor,
-        weight: Optional[Tensor] = None,
-        avg_factor: Optional[int] = None,
-        reduction_override: Optional[str] = None,
+        weight: Tensor | None = None,
+        avg_factor: int | None = None,
+        reduction_override: str | None = None,
     ) -> Tensor:
         """Forward function of loss."""
         assert reduction_override in (None, "none", "mean", "sum")
         reduction = reduction_override if reduction_override else self.reduction
         cov = pred.std(self.dim) / pred.mean(self.dim).clamp(min=self.eps)
         target = torch.zeros_like(cov)
-        loss = self.loss_weight * mse_loss(
-            cov, target, weight, reduction=reduction, avg_factor=avg_factor
-        )
+        loss = self.loss_weight * mse_loss(cov, target, weight, reduction=reduction, avg_factor=avg_factor)
         return loss

@@ -7,22 +7,24 @@
 Inference utilities.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 import torch
 
-from mapanything.utils.geometry import (
+from worldfoundry.base_models.three_dimensions.general_3d.mapanything.mapanything.utils.geometry import (
     depth_edge,
     get_rays_in_camera_frame,
     normals_edge,
     points_to_normals,
     quaternion_to_rotation_matrix,
     recover_pinhole_intrinsics_from_ray_directions,
-    rotation_matrix_to_quaternion,
 )
-from mapanything.utils.image import rgb
-from mapanything.utils.multiview_confidence import compute_multiview_depth_confidence
+from worldfoundry.base_models.three_dimensions.general_3d.mapanything.mapanything.utils.image import rgb
+from worldfoundry.base_models.three_dimensions.general_3d.mapanything.mapanything.utils.multiview_confidence import (
+    compute_multiview_depth_confidence,
+)
+from worldfoundry.core.geometry.transforms import rotation_matrix_to_quaternion_xyzw as rotation_matrix_to_quaternion
 
 # Hard constraints - exactly what users can provide
 ALLOWED_VIEW_KEYS = {
@@ -47,8 +49,8 @@ CONFLICTING_KEYS = [
 
 
 def validate_input_views_for_inference(
-    views: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    views: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """
     Strict validation and preprocessing of input views.
 
@@ -75,8 +77,7 @@ def validate_input_views_for_inference(
         invalid_keys = provided_keys - ALLOWED_VIEW_KEYS
         if invalid_keys:
             raise ValueError(
-                f"View {view_idx} contains invalid keys: {invalid_keys}. "
-                f"Allowed keys are: {sorted(ALLOWED_VIEW_KEYS)}"
+                f"View {view_idx} contains invalid keys: {invalid_keys}. Allowed keys are: {sorted(ALLOWED_VIEW_KEYS)}"
             )
 
         # Check for missing required keys
@@ -94,11 +95,8 @@ def validate_input_views_for_inference(
                 )
 
         # Check depth constraint: If depth is provided, intrinsics or ray_directions must also be provided
-        if "depth_z" in provided_keys:
-            if (
-                "intrinsics" not in provided_keys
-                and "ray_directions" not in provided_keys
-            ):
+        if "depth_z" in provided_keys:  # noqa: SIM102 - Statement form kept for readability.
+            if "intrinsics" not in provided_keys and "ray_directions" not in provided_keys:
                 raise ValueError(
                     f"View {view_idx} depth constraint violation: If 'depth_z' is provided, "
                     f"then 'intrinsics' or 'ray_directions' must also be provided. "
@@ -121,8 +119,8 @@ def validate_input_views_for_inference(
 
 
 def preprocess_input_views_for_inference(
-    views: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    views: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """
     Pre-process input views to match the expected internal input format.
 
@@ -197,9 +195,7 @@ def preprocess_input_views_for_inference(
             # Get batch size from the image tensor
             batch_size = view["img"].shape[0]
             # Default to True for all samples in the batch
-            processed_view["is_metric_scale"] = torch.ones(
-                batch_size, dtype=torch.bool, device=view["img"].device
-            )
+            processed_view["is_metric_scale"] = torch.ones(batch_size, dtype=torch.bool, device=view["img"].device)
 
         # Rename keys to match expected model input format
         if "ray_directions" in processed_view:
@@ -213,8 +209,8 @@ def preprocess_input_views_for_inference(
 
 
 def postprocess_model_outputs_for_inference(
-    raw_outputs: List[Dict[str, torch.Tensor]],
-    input_views: List[Dict[str, Any]],
+    raw_outputs: list[dict[str, torch.Tensor]],
+    input_views: list[dict[str, Any]],
     apply_mask: bool = True,
     mask_edges: bool = True,
     edge_normal_threshold: float = 5.0,
@@ -224,7 +220,7 @@ def postprocess_model_outputs_for_inference(
     use_multiview_confidence: bool = False,
     multiview_conf_depth_abs_thresh: float = 0.02,
     multiview_conf_depth_rel_thresh: float = 0.02,
-) -> List[Dict[str, torch.Tensor]]:
+) -> list[dict[str, torch.Tensor]]:
     """
     Post-process raw model outputs by copying raw outputs and adding essential derived fields.
 
@@ -263,7 +259,7 @@ def postprocess_model_outputs_for_inference(
     processed_outputs = []
 
     # First loop: Compute derived fields (steps 1-4) for all views
-    for raw_output, original_view in zip(raw_outputs, input_views):
+    for raw_output, original_view in zip(raw_outputs, input_views, strict=False):
         # Start by copying all raw outputs
         processed_output = dict(raw_output)
 
@@ -284,9 +280,7 @@ def postprocess_model_outputs_for_inference(
 
         # 3. Recover pinhole camera intrinsics from ray directions if available
         if "ray_directions" in processed_output:
-            intrinsics = recover_pinhole_intrinsics_from_ray_directions(
-                processed_output["ray_directions"]
-            )
+            intrinsics = recover_pinhole_intrinsics_from_ray_directions(processed_output["ray_directions"])
             processed_output["intrinsics"] = intrinsics
 
         # 4. Add camera pose matrices if both translation and quaternions are available
@@ -299,9 +293,7 @@ def postprocess_model_outputs_for_inference(
             rotation_matrices = quaternion_to_rotation_matrix(cam_quats)  # (B, 3, 3)
 
             # Create 4x4 pose matrices
-            pose_matrices = (
-                torch.eye(4, device=img.device).unsqueeze(0).repeat(batch_size, 1, 1)
-            )
+            pose_matrices = torch.eye(4, device=img.device).unsqueeze(0).repeat(batch_size, 1, 1)
             pose_matrices[:, :3, :3] = rotation_matrices
             pose_matrices[:, :3, 3] = cam_trans
 
@@ -343,9 +335,7 @@ def postprocess_model_outputs_for_inference(
 
             # Start with non-ambiguous mask if available
             if "non_ambiguous_mask" in processed_output:
-                non_ambiguous_mask = (
-                    processed_output["non_ambiguous_mask"].cpu().numpy()
-                )  # (B, H, W)
+                non_ambiguous_mask = processed_output["non_ambiguous_mask"].cpu().numpy()  # (B, H, W)
                 final_mask = non_ambiguous_mask
 
             # Apply confidence mask if requested and available
@@ -368,10 +358,7 @@ def postprocess_model_outputs_for_inference(
                 conf_mask = confidences > percentile_threshold
                 conf_mask = conf_mask.numpy()
 
-                if final_mask is not None:
-                    final_mask = final_mask & conf_mask
-                else:
-                    final_mask = conf_mask
+                final_mask = final_mask & conf_mask if final_mask is not None else conf_mask
 
             # Apply edge mask if requested and we have the required data
             if mask_edges and final_mask is not None and "pts3d" in processed_output:
@@ -386,20 +373,12 @@ def postprocess_model_outputs_for_inference(
 
                     if batch_final_mask.any():  # Only compute if we have valid points
                         # Compute normals and normal-based edge mask
-                        normals, normals_mask = points_to_normals(
-                            batch_pts3d, mask=batch_final_mask
-                        )
-                        normal_edges = normals_edge(
-                            normals, tol=edge_normal_threshold, mask=normals_mask
-                        )
+                        normals, normals_mask = points_to_normals(batch_pts3d, mask=batch_final_mask)
+                        normal_edges = normals_edge(normals, tol=edge_normal_threshold, mask=normals_mask)
 
                         # Compute depth-based edge mask
-                        depth_z = (
-                            processed_output["depth_z"][b].squeeze(-1).cpu().numpy()
-                        )
-                        depth_edges = depth_edge(
-                            depth_z, rtol=edge_depth_threshold, mask=batch_final_mask
-                        )
+                        depth_z = processed_output["depth_z"][b].squeeze(-1).cpu().numpy()
+                        depth_edges = depth_edge(depth_z, rtol=edge_depth_threshold, mask=batch_final_mask)
 
                         # Combine both edge types
                         edge_mask = ~(depth_edges & normal_edges)
@@ -415,9 +394,7 @@ def postprocess_model_outputs_for_inference(
             # Apply final mask to dense geometry outputs if we have a mask
             if final_mask is not None:
                 # Convert mask to torch tensor
-                final_mask_torch = torch.from_numpy(final_mask).to(
-                    processed_output["pts3d"].device
-                )
+                final_mask_torch = torch.from_numpy(final_mask).to(processed_output["pts3d"].device)
                 final_mask_torch = final_mask_torch.unsqueeze(-1)  # (B, H, W, 1)
 
                 # Apply mask to dense geometry outputs (zero out invalid regions)

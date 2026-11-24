@@ -1,9 +1,9 @@
 model:
-  target: lvm.LlamaLVM
+  target: worldfoundry.synthesis.visual_generation.mineworld.lvm.LlamaLVM
   params:
-    model_class: lvm.LlamaForCausalLM
+    model_class: worldfoundry.synthesis.visual_generation.mineworld.lvm.LlamaForCausalLM
     tokenizer_config:
-      target: vae.VAE
+      target: worldfoundry.synthesis.visual_generation.mineworld.vae.VAE
       params:
         config_path: checkpoints/vae/config.json
         ckpt_path: checkpoints/vae/vae.ckpt     

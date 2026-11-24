@@ -1,12 +1,20 @@
 """Public JING-Flash-v1 pipeline with the shared WorldFoundry invocation contract."""
+
+from __future__ import annotations
+
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
+
+if TYPE_CHECKING:
+    from worldfoundry.synthesis.visual_generation.xgen_jing.runtime import JINGRuntime
 
 
 class XGENJINGPipeline(PipelineABC):
     MODEL_ID = "xgen-jing"
     MODEL_PATH_OPTION = "checkpoint_path"
+    runtime: JINGRuntime
 
     @classmethod
     def from_pretrained(cls, model_path=None, required_components=None, device="cuda", model_id=None, **kwargs):

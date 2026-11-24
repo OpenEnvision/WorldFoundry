@@ -4,9 +4,9 @@ import json
 
 from PIL import Image
 
-from worldfoundry.evaluation.tasks.catalog.dispatch import IntegrationTier, integration_spec
-from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
-from worldfoundry.evaluation.tasks.execution.runners.apple_pi.run_apple_pi_official_runner import main
+from worldfoundry.evals.tasks.catalog.dispatch import IntegrationTier, integration_spec
+from worldfoundry.evals.tasks.contracts.external import get_external_benchmark_contract
+from worldfoundry.evals.tasks.execution.runners.apple_pi.run_apple_pi_official_runner import main
 
 
 def test_apple_pi_is_model_backed_and_does_not_require_upstream_runtime():

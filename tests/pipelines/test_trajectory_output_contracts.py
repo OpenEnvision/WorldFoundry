@@ -320,7 +320,7 @@ def test_astra_declares_cropped_pil_rgb_without_changing_latent_history(
         encoded.append(frames)
         path.write_bytes(b"recorded astra")
 
-    monkeypatch.setattr("worldfoundry.core.io.write_video", write)
+    monkeypatch.setattr("worldfoundry.core.media.codecs.video.write_video", write)
     kwargs: dict[str, Any] = {
         "image_path": "input.png",
         "interactions": ["forward"],

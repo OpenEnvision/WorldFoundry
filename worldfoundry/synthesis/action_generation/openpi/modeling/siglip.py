@@ -266,7 +266,7 @@ class _Module(nn.Module):
         return x, out
 
 
-def Module(num_classes=None, *, variant=None, **kw):  # pylint: disable=invalid-name  # noqa: N802
+def Module(num_classes=None, *, variant=None, **kw):  # pylint: disable=invalid-name
     """Factory function, because linen really don't like what I'm doing!"""
     return _Module(num_classes, **{**decode_variant(variant), **kw})
 

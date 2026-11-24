@@ -45,10 +45,10 @@ def _read_image(image: np.ndarray, target_size: int = 320):
     aspect = img_width / img_height
     if img_height > img_width:
         new_height = target_size
-        new_width = int(round(target_size * aspect))
+        new_width = int(round(target_size * aspect))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     else:
         new_width = target_size
-        new_height = int(round(target_size / aspect))
+        new_height = int(round(target_size / aspect))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
     resize_factor = math.sqrt((img_width**2 + img_height**2) / (new_width**2 + new_height**2))
     image = cv2.resize(image, (new_width, new_height))
@@ -85,10 +85,10 @@ def _postprocess(output, resize_factor, pad_left, pad_top):
             continue
         class_id = int(np.argmax(classes_scores))
         x, y, w, h = row[0], row[1], row[2], row[3]
-        left = int(round((x - w * 0.5 - pad_left) * resize_factor))
-        top = int(round((y - h * 0.5 - pad_top) * resize_factor))
-        width = int(round(w * resize_factor))
-        height = int(round(h * resize_factor))
+        left = int(round((x - w * 0.5 - pad_left) * resize_factor))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        top = int(round((y - h * 0.5 - pad_top) * resize_factor))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        width = int(round(w * resize_factor))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        height = int(round(h * resize_factor))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         class_ids.append(class_id)
         scores.append(max_score)
         boxes.append([left, top, width, height])
@@ -103,7 +103,7 @@ class NudeDetector:
     def __init__(self, providers=None, model: str | os.PathLike | None = None):
         self.onnx_session = onnxruntime.InferenceSession(
             str(model_path() if model is None else model),
-            providers=ort_state.get_available_providers() if not providers else providers,
+            providers=providers if providers else ort_state.get_available_providers(),
         )
         model_inputs = self.onnx_session.get_inputs()
         input_shape = model_inputs[0].shape

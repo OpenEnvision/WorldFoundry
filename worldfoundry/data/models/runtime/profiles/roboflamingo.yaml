@@ -1,6 +1,6 @@
-artifact_filename: roboflamingo_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: roboflamingo
+task_family: vla_policy
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/robovlms--RoboFlamingo
   repo_id: robovlms/RoboFlamingo
@@ -11,7 +11,6 @@ checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/anas-awadalla--mpt-1b-redpajama-200b-dolly
   repo_id: anas-awadalla/mpt-1b-redpajama-200b-dolly
   role: mpt_dolly_language_backbone
-id: roboflamingo
 input_schema:
   actions:
   - robot_action
@@ -20,13 +19,18 @@ input_schema:
   instruction: true
   prompt: true
   video: true
-integration_status: integrated
+artifact_kind: action_trace
+artifact_filename: roboflamingo_action_trace.json
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_roboflamingo_predict_action_gpu_ready
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - RoboFlamingo is represented as a VLM/VLA policy profile for robot action traces.
 - WorldFoundry stages the released RoboFlamingo policy checkpoint plus its OpenFlamingo
   and MPT backbone components.
 - It remains in the embodied action pipeline maps and must not be routed through video-generation
   scorecards.
-runtime_status: in_tree_roboflamingo_predict_action_gpu_ready
-task_family: vla_policy
 verification_status: public_pipeline_runner_gpu_ready

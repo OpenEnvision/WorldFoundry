@@ -1,0 +1,57 @@
+schema_version: 2
+model_id: h3-tiny
+display_name: H3-Tiny
+task_family: video_generation
+groups: [video, audio, image_conditioning]
+environment: h3-tiny
+source_repos:
+- url: https://github.com/fuyi25/H3-Tiny
+  revision: a3f17f0ef85e9af5d07b2007c4b2dbd6d035e69c
+  in_tree_path: worldfoundry/pipelines/h3_tiny
+checkpoints:
+- repo_id: H3-Tiny/MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1
+  revision: 83aa8091053aeed77de0b94fe1a6450d112de512
+  role: transformer_17b_fewstep_ref2va
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/H3-Tiny--MiniMax-H3-Tiny-17B-FewStep-Ref2VA-v0.1
+- repo_id: H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-Ref2VA
+  revision: e0ce7d0de6becc72e2de98f4cafe29c4b1e1c445
+  role: transformer_17b_pruned_ref2va
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/H3-Tiny--MiniMax-H3-Tiny-17B-Pruned-Ref2VA
+- repo_id: H3-Tiny/MiniMax-H3-Tiny-17B-Pruned-FL2VA
+  revision: e026f495b8816b87b8441dee82f718867e9f5d42
+  role: transformer_17b_pruned_fl2va
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/H3-Tiny--MiniMax-H3-Tiny-17B-Pruned-FL2VA
+- repo_id: H3-Tiny/MiniMax-H3-Tiny-14B-OKD-Ref2VA-v0.1
+  revision: 30b4ca94a49929602ba665d21ff50169fd815826
+  role: transformer_14b_okd_ref2va
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/H3-Tiny--MiniMax-H3-Tiny-14B-OKD-Ref2VA-v0.1
+- repo_id: MiniMaxAI/MiniMax-H3
+  revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+  role: shared_h3_base
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/MiniMaxAI--MiniMax-H3
+input_schema:
+  prompt: true
+  image: optional
+  video: false
+  actions: [task, workflow, references, aspect_ratio, short_edge, height, width, num_frames, num_inference_steps, seed, variant]
+artifact_kind: generated_video
+artifact_filename: h3-tiny.mp4
+execution:
+  environment: h3-tiny
+  backend_stage: shared_base_model_runtime
+  runtime_status: all_released_checkpoints_gpu_validated
+  integration_status: integrated
+  pipeline_binding: h3-tiny
+  defaults:
+    num_frames: 124
+    fps: 24
+    num_inference_steps: 6
+    seed: 1234
+integration:
+  status: integrated
+notes:
+- H3-Tiny reuses the canonical WorldFoundry MiniMax-H3 DiT blocks, token refiner, Qwen3-VL encoder, video/audio VAEs, and MP4 muxer.
+- Supports 42-layer pruned 17B and narrowed-FFN (9792 vs 14336 refiner) 14B checkpoints with rank-8 AdaLN and optional MeanFlow r_time_embedder.
+- MeanFlow checkpoints default to 6 inference steps (>=4); pruned and OKD checkpoints default to 50 steps.
+- Use a Ref2VA checkpoint for ref2va and 17b-pruned-fl2va for t2va/i2va/l2va/fl2va.
+- Code is Apache-2.0; model weights use the MiniMax H3 Community License. Verified on H200 across all 4 released Diffusers checkpoints (17b-fewstep-ref2va, 17b-pruned-ref2va, 17b-pruned-fl2va, 14b-okd-ref2va) at 1376x768, 124 frames, 32 kHz stereo AAC.

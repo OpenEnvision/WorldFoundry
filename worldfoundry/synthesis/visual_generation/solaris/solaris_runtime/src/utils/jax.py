@@ -1,7 +1,7 @@
 import logging
 import os
 
-from src.utils.config import instantiate_from_config
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.utils.config import instantiate_from_config
 
 
 def setup_jax_cache(cache_dir):

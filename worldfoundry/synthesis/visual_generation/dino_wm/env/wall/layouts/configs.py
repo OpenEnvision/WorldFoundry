@@ -1,8 +1,9 @@
 import argparse
 import dataclasses
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Iterable, Tuple, Union, cast, List
+from typing import Any, cast
 
 from omegaconf import OmegaConf
 
@@ -27,13 +28,9 @@ class ConfigBase:
 
     @classmethod
     def parse_from_command_line_deprecated(cls):
-        result = DataclassArgParser(
-            cls, fromfile_prefix_chars="@"
-        ).parse_args_into_dataclasses()
+        result = DataclassArgParser(cls, fromfile_prefix_chars="@").parse_args_into_dataclasses()
         if len(result) > 1:
-            raise RuntimeError(
-                f"The following arguments were not recognized: {result[1:]}"
-            )
+            raise RuntimeError(f"The following arguments were not recognized: {result[1:]}")
         return result[0]
 
     @classmethod
@@ -57,7 +54,7 @@ class DataclassArgParser(argparse.ArgumentParser):
 
     def __init__(
         self,
-        dataclass_types: Union[DataClassType, Iterable[DataClassType]],
+        dataclass_types: DataClassType | Iterable[DataClassType],
         **kwargs,
     ):
         """
@@ -108,7 +105,7 @@ class DataclassArgParser(argparse.ArgumentParser):
     def parse_args_into_dataclasses(
         self,
         args=None,
-    ) -> Tuple[DataClass, ...]:
+    ) -> tuple[DataClass, ...]:
         """
         Parse command-line args into instances of the specified dataclass
         types.  This relies on argparse's `ArgumentParser.parse_known_args`.
@@ -146,11 +143,7 @@ class DataclassArgParser(argparse.ArgumentParser):
         inputs = {k: v for k, v in vars(namespace).items() if k in keys}
         for k in keys:
             delattr(namespace, k)
-        sub_dataclasses = {
-            f.name: f.type
-            for f in dataclasses.fields(dtype)
-            if dataclasses.is_dataclass(f.type)
-        }
+        sub_dataclasses = {f.name: f.type for f in dataclasses.fields(dtype) if dataclasses.is_dataclass(f.type)}
         for k, s in sub_dataclasses.items():
             inputs[k] = DataclassArgParser._populate_dataclass(s, namespace)
         obj = dtype(**inputs)
@@ -164,16 +157,9 @@ class DataclassArgParser(argparse.ArgumentParser):
         for k in keys:
             if k in d:
                 del d[k]
-        sub_dataclasses = {
-            f.name: f.type
-            for f in dataclasses.fields(dtype)
-            if dataclasses.is_dataclass(f.type)
-        }
+        sub_dataclasses = {f.name: f.type for f in dataclasses.fields(dtype) if dataclasses.is_dataclass(f.type)}
         for k, s in sub_dataclasses.items():
-            if k not in inputs:
-                v = {}
-            else:
-                v = inputs[k]
+            v = {} if k not in inputs else inputs[k]  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
             inputs[k] = DataclassArgParser._populate_dataclass_from_dict(s, v)
         obj = dtype(**inputs)
         return obj
@@ -186,11 +172,7 @@ class DataclassArgParser(argparse.ArgumentParser):
         for k in keys:
             if k in d:
                 del d[k]
-        sub_dataclasses = {
-            f.name: f.type
-            for f in dataclasses.fields(dtype)
-            if dataclasses.is_dataclass(f.type)
-        }
+        sub_dataclasses = {f.name: f.type for f in dataclasses.fields(dtype) if dataclasses.is_dataclass(f.type)}
         for k, s in sub_dataclasses.items():
             inputs[k] = DataclassArgParser._populate_dataclass_from_dict(s, d)
         obj = dtype(**inputs)
@@ -232,7 +214,7 @@ def omegaconf_parse(cls):
     return omegaconf_parse_files_vals(cls, args.configs, args.values)
 
 
-def omegaconf_parse_files_vals(cls, files_paths: List[str], dotlist: List[str]):
+def omegaconf_parse_files_vals(cls, files_paths: list[str], dotlist: list[str]):
     configs = [OmegaConf.structured(cls)]
     for path in files_paths:
         configs.append(OmegaConf.load(path))

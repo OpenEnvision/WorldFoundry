@@ -1,5 +1,5 @@
 # Copyright 2025 StepFun Inc. All Rights Reserved.
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -23,49 +23,33 @@ Paired with Hunyuan CLIP in :class:`~.component.StepVideoPromptConditioner`.
 """
 
 import os
-from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .flash_attention import FlashSelfAttention
-from .tokenizer import LLaMaEmbedding, Wrapped_StepChatTokenizer
-from ...networks.step_video.normalization import RMSNorm
-from safetensors.torch import load_file
+from einops import rearrange
 from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_utils import PreTrainedModel
-from einops import rearrange
-import json
+
+from ...networks.step_video.normalization import RMSNorm
+from .flash_attention import FlashSelfAttention
+from .tokenizer import LLaMaEmbedding, Wrapped_StepChatTokenizer
 
 
-    
 def safediv(n, d):
-    """Safediv.
-
-    Args:
-        n: The n.
-        d: The d.
-    """
     q, r = divmod(n, d)
     assert r == 0
     return q
 
 
 class MultiQueryAttention(nn.Module):
-    """Multi query attention implementation."""
     def __init__(self, cfg, layer_id=None):
-        """Init.
-
-        Args:
-            cfg: The cfg.
-            layer_id: The layer id.
-        """
         super().__init__()
 
         self.head_dim = cfg.hidden_size // cfg.num_attention_heads
         self.max_seq_len = cfg.seq_length
         self.use_flash_attention = cfg.use_flash_attn
-        assert self.use_flash_attention, 'FlashAttention is required!'
+        assert self.use_flash_attention, "FlashAttention is required!"
 
         self.n_groups = cfg.num_attention_groups
         self.tp_size = 1
@@ -83,34 +67,24 @@ class MultiQueryAttention(nn.Module):
             bias=False,
         )
 
-        assert self.use_flash_attention, 'non-Flash attention not supported yet.'
+        assert self.use_flash_attention, "non-Flash attention not supported yet."
         self.core_attention = FlashSelfAttention(attention_dropout=cfg.attention_dropout)
-        
+
         self.layer_id = layer_id
 
     def forward(
         self,
         x: torch.Tensor,
-        mask: Optional[torch.Tensor],
-        cu_seqlens: Optional[torch.Tensor],
-        max_seq_len: Optional[torch.Tensor],
+        mask: torch.Tensor | None,
+        cu_seqlens: torch.Tensor | None,
+        max_seq_len: torch.Tensor | None,
     ):
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            cu_seqlens: The cu seqlens.
-            max_seq_len: The max seq len.
-        """
         seqlen, bsz, dim = x.shape
         xqkv = self.wqkv(x)
 
         xq, xkv = torch.split(
             xqkv,
-            (dim // self.tp_size,
-             self.head_dim*2*self.n_groups // self.tp_size
-            ),
+            (dim // self.tp_size, self.head_dim * 2 * self.n_groups // self.tp_size),
             dim=-1,
         )
 
@@ -131,65 +105,46 @@ class MultiQueryAttention(nn.Module):
                 xk = xk.expand(b, s, q_per_kv, d)
                 xv = xv.expand(b, s, q_per_kv, d)
             else:
-                ''' To cover the cases where h > 1, we have
+                """ To cover the cases where h > 1, we have
                     the following implementation, which is equivalent to:
                         xk = xk.repeat_interleave(q_per_kv, dim=-2)
                         xv = xv.repeat_interleave(q_per_kv, dim=-2)
                     but can avoid calling aten::item() that involves cpu.
-                '''
+                """
                 idx = torch.arange(q_per_kv * h, device=xk.device).reshape(q_per_kv, -1).permute(1, 0).flatten()
                 xk = torch.index_select(xk.repeat(1, 1, q_per_kv, 1), 2, idx).contiguous()
                 xv = torch.index_select(xv.repeat(1, 1, q_per_kv, 1), 2, idx).contiguous()
 
         if self.use_flash_attention:
-            output = self.core_attention(xq, xk, xv,
-                                      cu_seqlens=cu_seqlens,
-                                      max_seq_len=max_seq_len)
+            output = self.core_attention(xq, xk, xv, cu_seqlens=cu_seqlens, max_seq_len=max_seq_len)
             # reduce-scatter only support first dimention now
             output = rearrange(output, "b s h d -> s b (h d)").contiguous()
         else:
-            xq, xk, xv = [
-                rearrange(x, "b s ... -> s b ...").contiguous()
-                for x in (xq, xk, xv)
-            ]
+            xq, xk, xv = [rearrange(x, "b s ... -> s b ...").contiguous() for x in (xq, xk, xv)]
             output = self.core_attention(xq, xk, xv, mask)
         output = self.wo(output)
         return output
 
 
-
 class FeedForward(nn.Module):
-    """Feed forward implementation."""
     def __init__(
         self,
         cfg,
         dim: int,
         hidden_dim: int,
         layer_id: int,
-        multiple_of: int=256,
+        multiple_of: int = 256,
     ):
-        """Init.
-
-        Args:
-            cfg: The cfg.
-            dim: The dim.
-            hidden_dim: The hidden dim.
-            layer_id: The layer id.
-            multiple_of: The multiple of.
-        """
         super().__init__()
 
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
-        def swiglu(x):
-            """Swiglu.
 
-            Args:
-                x: The x.
-            """
+        def swiglu(x):
             x = torch.chunk(x, 2, dim=-1)
             return F.silu(x[0]) * x[1]
+
         self.swiglu = swiglu
-            
+
         self.w1 = nn.Linear(
             dim,
             2 * hidden_dim,
@@ -202,28 +157,13 @@ class FeedForward(nn.Module):
         )
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         x = self.swiglu(self.w1(x))
         output = self.w2(x)
         return output
 
 
-
 class TransformerBlock(nn.Module):
-    """Transformer block implementation."""
-    def __init__(
-        self, cfg, layer_id: int
-    ):
-        """Init.
-
-        Args:
-            cfg: The cfg.
-            layer_id: The layer id.
-        """
+    def __init__(self, cfg, layer_id: int):
         super().__init__()
 
         self.n_heads = cfg.num_attention_heads
@@ -253,22 +193,11 @@ class TransformerBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        mask: Optional[torch.Tensor],
-        cu_seqlens: Optional[torch.Tensor],
-        max_seq_len: Optional[torch.Tensor],
+        mask: torch.Tensor | None,
+        cu_seqlens: torch.Tensor | None,
+        max_seq_len: torch.Tensor | None,
     ):
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            cu_seqlens: The cu seqlens.
-            max_seq_len: The max seq len.
-        """
-        residual = self.attention.forward(
-            self.attention_norm(x), mask,
-            cu_seqlens, max_seq_len
-        )
+        residual = self.attention.forward(self.attention_norm(x), mask, cu_seqlens, max_seq_len)
         h = x + residual
         ffn_res = self.feed_forward.forward(self.ffn_norm(h))
         out = h + ffn_res
@@ -276,34 +205,22 @@ class TransformerBlock(nn.Module):
 
 
 class Transformer(nn.Module):
-    """Transformer implementation."""
     def __init__(
         self,
         config,
         max_seq_size=8192,
     ):
-        """Init.
-
-        Args:
-            config: The config.
-            max_seq_size: The max seq size.
-        """
         super().__init__()
         self.num_layers = config.num_layers
         self.layers = self._build_layers(config)
 
     def _build_layers(self, config):
-        """Helper function to build layers.
-
-        Args:
-            config: The config.
-        """
         layers = torch.nn.ModuleList()
         for layer_id in range(self.num_layers):
             layers.append(
                 TransformerBlock(
                     config,
-                    layer_id=layer_id + 1 ,
+                    layer_id=layer_id + 1,
                 )
             )
         return layers
@@ -315,40 +232,28 @@ class Transformer(nn.Module):
         cu_seqlens=None,
         max_seq_len=None,
     ):
-        """Forward.
-
-        Args:
-            hidden_states: The hidden states.
-            attention_mask: The attention mask.
-            cu_seqlens: The cu seqlens.
-            max_seq_len: The max seq len.
-        """
-
         if max_seq_len is not None and not isinstance(max_seq_len, torch.Tensor):
             max_seq_len = torch.tensor(max_seq_len, dtype=torch.int32, device="cpu")
 
-        for lid, layer in enumerate(self.layers):
+        for _lid, layer in enumerate(self.layers):
             hidden_states = layer(
-                                    hidden_states,
-                                    attention_mask,
-                                    cu_seqlens,
-                                    max_seq_len,
-                                )
+                hidden_states,
+                attention_mask,
+                cu_seqlens,
+                max_seq_len,
+            )
         return hidden_states
 
 
 class Step1Model(PreTrainedModel):
     """Step model implementation."""
-    config_class=PretrainedConfig
+
+    config_class = PretrainedConfig
+
     def __init__(
         self,
         config,
     ):
-        """Init.
-
-        Args:
-            config: The config.
-        """
         super().__init__(config)
         self.tok_embeddings = LLaMaEmbedding(config)
         self.transformer = Transformer(config)
@@ -362,13 +267,6 @@ class Step1Model(PreTrainedModel):
         input_ids=None,
         attention_mask=None,
     ):
-        """Forward.
-
-        Args:
-            input_ids: The input ids.
-            attention_mask: The attention mask.
-        """
-
         hidden_states = self.tok_embeddings(input_ids)
 
         hidden_states = self.transformer(
@@ -376,44 +274,35 @@ class Step1Model(PreTrainedModel):
             attention_mask,
         )
         return hidden_states
-    
-    
+
 
 class STEP1TextEncoder(torch.nn.Module):
     """Text encoder implementation."""
-    def __init__(self, model_dir, max_length=320):
-        """Init.
 
-        Args:
-            model_dir: The model dir.
-            max_length: The max length.
-        """
-        super(STEP1TextEncoder, self).__init__()
+    def __init__(self, model_dir, max_length=320):
+        super().__init__()
         self.max_length = max_length
-        self.text_tokenizer = Wrapped_StepChatTokenizer(os.path.join(model_dir, 'step1_chat_tokenizer.model'))
+        self.text_tokenizer = Wrapped_StepChatTokenizer(os.path.join(model_dir, "step1_chat_tokenizer.model"))
         text_encoder = Step1Model.from_pretrained(model_dir)
         self.text_encoder = text_encoder.eval().to(torch.bfloat16)
-        
+
     @torch.no_grad
     def forward(self, prompts, with_mask=True, max_length=None):
-        """Forward.
-
-        Args:
-            prompts: The prompts.
-            with_mask: The with mask.
-            max_length: The max length.
-        """
         self.device = next(self.text_encoder.parameters()).device
         with torch.no_grad():
             if type(prompts) is str:
                 prompts = [prompts]
-            
+
             txt_tokens = self.text_tokenizer(
-                prompts, max_length=max_length or self.max_length, padding="max_length", truncation=True, return_tensors="pt"
+                prompts,
+                max_length=max_length or self.max_length,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
             )
             y = self.text_encoder(
-                txt_tokens.input_ids.to(self.device), 
-                attention_mask=txt_tokens.attention_mask.to(self.device) if with_mask else None
+                txt_tokens.input_ids.to(self.device),
+                attention_mask=txt_tokens.attention_mask.to(self.device) if with_mask else None,
             )
             y_mask = txt_tokens.attention_mask
-        return y.transpose(0,1), y_mask
+        return y.transpose(0, 1), y_mask

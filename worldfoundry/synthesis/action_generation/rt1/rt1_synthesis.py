@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any
 
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
 
 from ..base_action_synthesis import ActionModelSynthesis
 
@@ -77,7 +78,7 @@ class RT1Synthesis(ActionModelSynthesis):
         hf_models_root: str | Path | None = None,
         command_template: Sequence[str] | None = None,
         **kwargs: Any,
-    ) -> "RT1Synthesis":
+    ) -> RT1Synthesis:
         """Create RT-1 from profile metadata without importing TensorFlow.
 
         This class method is the primary way to instantiate an RT-1 synthesis
@@ -170,7 +171,7 @@ class RT1Synthesis(ActionModelSynthesis):
                 return expand(str(local_dir))
         raise ValueError("RT-1 requires a TensorFlow SavedModel checkpoint directory.")
 
-    def _runtime_config(self, options: Mapping[str, Any]) -> "RT1RuntimeConfig":
+    def _runtime_config(self, options: Mapping[str, Any]) -> RT1RuntimeConfig:
         """Build RT-1 runtime config without loading the SavedModel.
 
         This method prepares the configuration required to instantiate the
@@ -191,7 +192,7 @@ class RT1Synthesis(ActionModelSynthesis):
             device=str(options.get("device") or self.runtime_options.get("device") or self.device or "cpu"),
         )
 
-    def _runtime_for(self, config: "RT1RuntimeConfig") -> "RT1SavedModelRuntime":
+    def _runtime_for(self, config: RT1RuntimeConfig) -> RT1SavedModelRuntime:
         """Return a cached RT-1 runtime for one checkpoint and device.
 
         This method ensures that the RT-1 SavedModel runtime is loaded only once
@@ -328,7 +329,9 @@ class RT1Synthesis(ActionModelSynthesis):
             },
         }
         # Write the plan to a JSON file in the run directory.
-        plan_path.write_text(json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        plan_path.write_text(
+            json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
         if plan_only:
             # If only a plan is requested, return the planning details and exit early.

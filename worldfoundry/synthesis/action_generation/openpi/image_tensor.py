@@ -1,9 +1,10 @@
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 import functools
 
 import jax
 import jax.numpy as jnp
 import torch
-import torch.nn.functional as F  # noqa: N812
+import torch.nn.functional as F
 
 from . import array_typing as at
 

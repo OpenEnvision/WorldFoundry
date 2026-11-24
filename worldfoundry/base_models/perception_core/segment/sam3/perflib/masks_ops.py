@@ -2,18 +2,10 @@
 
 # pyre-unsafe
 
-"""Module for base_models -> perception_core -> segment -> sam3 -> perflib -> masks_ops.py functionality."""
-
 import torch
 
 
 def masks_to_boxes(masks: torch.Tensor, obj_ids: list[int]):
-    """Masks to boxes.
-
-    Args:
-        masks: The masks.
-        obj_ids: The obj ids.
-    """
     with torch.autograd.profiler.record_function("perflib: masks_to_boxes"):
         # Sanity check based on callsite for replacement
         assert masks.shape[0] == len(obj_ids)
@@ -29,19 +21,13 @@ def masks_to_boxes(masks: torch.Tensor, obj_ids: list[int]):
         x = torch.arange(W, device=device).view(1, W)
 
         masks_with_obj = masks != 0  # N, H, W
-        masks_with_obj_x = masks_with_obj.amax(
-            dim=1
-        )  # N, H (which columns have objects)
+        masks_with_obj_x = masks_with_obj.amax(dim=1)  # N, H (which columns have objects)
         masks_with_obj_y = masks_with_obj.amax(dim=2)  # N, W (which rows have objects)
         masks_without_obj_x = ~masks_with_obj_x
         masks_without_obj_y = ~masks_with_obj_y
 
-        bounding_boxes_0 = torch.amin(
-            (masks_without_obj_x * W) + (masks_with_obj_x * x), dim=1
-        )
-        bounding_boxes_1 = torch.amin(
-            (masks_without_obj_y * H) + (masks_with_obj_y * y), dim=1
-        )
+        bounding_boxes_0 = torch.amin((masks_without_obj_x * W) + (masks_with_obj_x * x), dim=1)
+        bounding_boxes_1 = torch.amin((masks_without_obj_y * H) + (masks_with_obj_y * y), dim=1)
         bounding_boxes_2 = torch.amax(masks_with_obj_x * x, dim=1)
         bounding_boxes_3 = torch.amax(masks_with_obj_y * y, dim=1)
 

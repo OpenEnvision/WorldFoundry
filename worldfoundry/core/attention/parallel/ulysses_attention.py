@@ -24,7 +24,6 @@ import torch.distributed as dist
 from worldfoundry.core.attention import flash_attention
 from worldfoundry.core.distributed.sequence_parallel.ops import all_to_all, all_to_all_many
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Wan Ulysses — scatter heads, gather sequence, local kernel, swap back
 # ──────────────────────────────────────────────────────────────────────────
@@ -117,10 +116,7 @@ def flattened_ulysses_attention(
     if hidden % heads:
         raise ValueError(f"hidden size ({hidden}) must be divisible by attention heads ({heads})")
     head_dim = hidden // heads
-    q, k, v = (
-        tensor.view(batch, -1, heads, head_dim)
-        for tensor in (q, k, v)
-    )
+    q, k, v = (tensor.view(batch, -1, heads, head_dim) for tensor in (q, k, v))
     q, k, v = all_to_all_many(
         (q, k, v),
         scatter_dim=2,

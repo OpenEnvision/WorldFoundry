@@ -12,18 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> export -> gs.py functionality."""
-
 import os
-from typing import Literal, Optional
+from typing import Literal
+
 import moviepy.editor as mpy
 import torch
 
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.utils.gs_renderer import run_renderer_in_chunk_w_trj_mode
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.utils.gs_renderer import (
+    run_renderer_in_chunk_w_trj_mode,
+)
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.specs import Prediction
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.gsply_helpers import save_gaussian_ply
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.layout_helpers import hcat, vcat
-from worldfoundry.studio.visualization.plugins.scene3d.depth_anything_v3.export_vis import vis_depth_map_tensor
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.gsply_helpers import (
+    save_gaussian_ply,
+)
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.layout_helpers import (
+    hcat,
+    vcat,
+)
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.visualize import (
+    vis_depth_map_tensor,
+)
 
 VIDEO_QUALITY_MAP = {
     "low": {"crf": "28", "preset": "veryfast"},
@@ -35,17 +43,8 @@ VIDEO_QUALITY_MAP = {
 def export_to_gs_ply(
     prediction: Prediction,
     export_dir: str,
-    gs_views_interval: Optional[
-        int
-    ] = 1,  # export GS every N views, useful for extremely dense inputs
+    gs_views_interval: int | None = 1,  # export GS every N views, useful for extremely dense inputs
 ):
-    """Export to gs ply.
-
-    Args:
-        prediction: The prediction.
-        export_dir: The export dir.
-        gs_views_interval: The gs views interval.
-    """
     gs_world = prediction.gaussians
     pred_depth = torch.from_numpy(prediction.depth).unsqueeze(-1).to(gs_world.means)  # v h w 1
     idx = 0
@@ -70,10 +69,10 @@ def export_to_gs_ply(
 def export_to_gs_video(
     prediction: Prediction,
     export_dir: str,
-    extrinsics: Optional[torch.Tensor] = None,  # render views' world2cam, "b v 4 4"
-    intrinsics: Optional[torch.Tensor] = None,  # render views' unnormed intrinsics, "b v 3 3"
-    out_image_hw: Optional[tuple[int, int]] = None,  # render views' resolution, (h, w)
-    chunk_size: Optional[int] = 4,
+    extrinsics: torch.Tensor | None = None,  # render views' world2cam, "b v 4 4"
+    intrinsics: torch.Tensor | None = None,  # render views' unnormed intrinsics, "b v 3 3"
+    out_image_hw: tuple[int, int] | None = None,  # render views' resolution, (h, w)
+    chunk_size: int | None = 4,
     trj_mode: Literal[
         "original",
         "smooth",
@@ -85,30 +84,11 @@ def export_to_gs_video(
         "wobble_inter",
     ] = "extend",
     color_mode: Literal["RGB+D", "RGB+ED"] = "RGB+ED",
-    vis_depth: Optional[Literal["hcat", "vcat"]] = "hcat",
-    enable_tqdm: Optional[bool] = True,
-    output_name: Optional[str] = None,
+    vis_depth: Literal["hcat", "vcat"] | None = "hcat",
+    enable_tqdm: bool | None = True,
+    output_name: str | None = None,
     video_quality: Literal["low", "medium", "high"] = "high",
 ) -> None:
-    """Export to gs video.
-
-    Args:
-        prediction: The prediction.
-        export_dir: The export dir.
-        extrinsics: The extrinsics.
-        intrinsics: The intrinsics.
-        out_image_hw: The out image hw.
-        chunk_size: The chunk size.
-        trj_mode: The trj mode.
-        color_mode: The color mode.
-        vis_depth: The vis depth.
-        enable_tqdm: The enable tqdm.
-        output_name: The output name.
-        video_quality: The video quality.
-
-    Returns:
-        The return value.
-    """
     gs_world = prediction.gaussians
     # if target poses are not provided, render the (smooth/interpolate) input poses
     if extrinsics is not None:
@@ -162,7 +142,7 @@ def export_to_gs_video(
         if vis_depth is not None:
             depth_i = vis_depth_map_tensor(depth[0])
             cat_fn = hcat if vis_depth == "hcat" else vcat
-            video_i = torch.stack([cat_fn(c, d) for c, d in zip(video_i, depth_i)])
+            video_i = torch.stack([cat_fn(c, d) for c, d in zip(video_i, depth_i, strict=False)])
         frames = list(
             (video_i.clamp(0, 1) * 255).byte().permute(0, 2, 3, 1).cpu().numpy()
         )  # T x H x W x C, uint8, numpy()

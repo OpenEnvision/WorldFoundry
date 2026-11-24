@@ -41,10 +41,10 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: t2v-safety-bench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id t2v-safety-bench --mode contract 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id t2v-safety-bench --mode contract 
     --output-dir tmp/benchmark_zoo/benchmark_contract/t2v-safety-bench --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:T2VSafetyBenchContract
-  official_runner_command: worldfoundry-eval zoo benchmark-run
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:t2v-safety-bench
+  official_runner_command: wf zoo benchmark-run
   name: T2VSafetyBench
   domain:
   - safety
@@ -91,12 +91,12 @@ metadata:
   data_refs:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/t2v-safety-bench.yaml
     in_tree_runtime_paths:
-    - worldfoundry/evaluation/tasks/execution/runners/t2v_safety_bench/runtime/t2v_safety_bench
+    - worldfoundry/evals/tasks/execution/runners/t2v_safety_bench/runtime/t2v_safety_bench
   official_runner_script: 
-    worldfoundry/evaluation/tasks/execution/runners/t2v_safety_bench/run_t2v_safety_bench_official_runner.py
+    worldfoundry/evals/tasks/execution/runners/t2v_safety_bench/run_t2v_safety_bench_official_runner.py
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:T2VSafetyBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:t2v-safety-bench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
@@ -108,7 +108,7 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_official_source
-    root: worldfoundry/evaluation/tasks/execution/runners/t2v_safety_bench/runtime/t2v_safety_bench
+    root: worldfoundry/evals/tasks/execution/runners/t2v_safety_bench/runtime/t2v_safety_bench
     root_env: WORLDFOUNDRY_T2V_SAFETY_BENCH_ROOT
     repo_url: https://github.com/yibo-miao/T2VSafetyBench.git
     revision: 97a841699fc25bc61662e6453bd6a2d9d187a9db
@@ -135,7 +135,7 @@ metadata:
     - violation_manifest
     - artifact_presence_format
   local_evaluator:
-    target: worldfoundry/evaluation/tasks/execution/runners/t2v_safety_bench/run_t2v_safety_bench_official_runner.py
+    target: worldfoundry/evals/tasks/execution/runners/t2v_safety_bench/run_t2v_safety_bench_official_runner.py
     status: implemented
     protocol: official_result_normalization
     official_result_normalization:
@@ -149,10 +149,10 @@ metadata:
       - jsonl
       - csv
       provenance: normalizes caller-provided official outputs without executing upstream repos
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   runner:
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -168,11 +168,11 @@ metadata:
     - --json
     runtime:
       results_path_env: WORLDFOUNDRY_T2V_SAFETY_BENCH_RESULTS_PATH
-    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id t2v-safety-bench --mode 
+    official_validation_command: wf zoo benchmark-run --benchmark-id t2v-safety-bench --mode 
       official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
       --output-dir <out> --json
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -269,9 +269,9 @@ tasks:
           kind: video
     evaluation_protocol:
     - name: external_official_runner
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:T2VSafetyBenchContract
+      runner_target: worldfoundry.evals.tasks.contracts.external:t2v-safety-bench
       runner_script: 
-        worldfoundry/evaluation/tasks/execution/runners/t2v_safety_bench/run_t2v_safety_bench_official_runner.py
+        worldfoundry/evals/tasks/execution/runners/t2v_safety_bench/run_t2v_safety_bench_official_runner.py
       metric_ids:
       - pornography_nsfw_rate
       - borderline_pornography_nsfw_rate
@@ -286,14 +286,14 @@ tasks:
       - copyright_trademark_nsfw_rate
       - temporal_risk_nsfw_rate
       - nsfw_average
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id t2v-safety-bench --mode 
+      official_validation_command: wf zoo benchmark-run --benchmark-id t2v-safety-bench --mode 
         official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
         --output-dir <out> --json
       required_inputs:
       - official_results_path or official_results
       - generated_video artifacts for the official prompt/task suite
       - official upstream scorer or judge assets for leaderboard parity
-      official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+      official_result_entrypoint: wf zoo benchmark-run
     - name: in_tree_local_quality_evaluator
       metric_ids:
       - pornography_nsfw_rate
@@ -309,7 +309,7 @@ tasks:
       - copyright_trademark_nsfw_rate
       - temporal_risk_nsfw_rate
       - nsfw_average
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.t2v_safety_bench.t2v_safety_bench_in_tree_evaluator:T2VSafetyBenchInTreeEvaluator
+      evaluator_target: worldfoundry.evals.tasks.execution.runners.t2v_safety_bench.t2v_safety_bench_in_tree_evaluator:T2VSafetyBenchInTreeEvaluator
       status: available_for_structured_evidence
       metadata:
         scoring_modes:
@@ -324,7 +324,7 @@ tasks:
         - nsfw_labels or violation_manifest keyed by official T2VSafetyBench aspect
         - official GPT-4/manual judge outputs for leaderboard parity
     runtime_requirements:
-      in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/t2v_safety_bench/runtime/t2v_safety_bench
+      in_tree_runtime: worldfoundry/evals/tasks/execution/runners/t2v_safety_bench/runtime/t2v_safety_bench
       optional_root_env: WORLDFOUNDRY_T2V_SAFETY_BENCH_ROOT
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
       results_path_env: WORLDFOUNDRY_T2V_SAFETY_BENCH_RESULTS_PATH

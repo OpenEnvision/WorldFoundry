@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot -> networks -> decoders -> fpn.py functionality."""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,26 +10,15 @@ from ..layers.basic import ConvGN
 
 
 class FPNSegmentationHead(nn.Module):
-    """Fpn segmentation head implementation."""
     def __init__(
         self,
         in_dim,
         out_dim,
         decode_intermediate_input=True,
         hidden_dim=256,
-        shortcut_dims=[24, 32, 96, 1280],
+        shortcut_dims=[24, 32, 96, 1280],  # noqa: B006 - Keeps the upstream default object and signature.
         align_corners=True,
     ):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            decode_intermediate_input: The decode intermediate input.
-            hidden_dim: The hidden dim.
-            shortcut_dims: The shortcut dims.
-            align_corners: The align corners.
-        """
         super().__init__()
         self.align_corners = align_corners
 
@@ -52,16 +39,7 @@ class FPNSegmentationHead(nn.Module):
         self._init_weight()
 
     def forward(self, inputs, shortcuts):
-        """Forward.
-
-        Args:
-            inputs: The inputs.
-            shortcuts: The shortcuts.
-        """
-        if self.decode_intermediate_input:
-            x = torch.cat(inputs, dim=1)
-        else:
-            x = inputs[-1]
+        x = torch.cat(inputs, dim=1) if self.decode_intermediate_input else inputs[-1]
 
         x = F.relu_(self.conv_in(x))
         x = F.relu_(self.conv_16x(self.adapter_16x(shortcuts[-2]) + x))
@@ -87,7 +65,6 @@ class FPNSegmentationHead(nn.Module):
         return x
 
     def _init_weight(self):
-        """Helper function to init weight."""
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)

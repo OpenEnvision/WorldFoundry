@@ -1,13 +1,14 @@
 # Inference-only DB-CogACT source retained in-tree.
 import dataclasses
-from enum import auto, Enum
-from typing import List
+from enum import Enum, auto
 
 import torch
 from transformers import StoppingCriteria
 
+
 class SeparatorStyle(Enum):
     """Different separator style."""
+
     TWO = auto()
     PLAIN = auto()
     LLAMA_3 = auto()
@@ -16,6 +17,7 @@ class SeparatorStyle(Enum):
 
 class KeywordsStoppingCriteria(StoppingCriteria):
     """Stopping criteria for meeting keywords."""
+
     def __init__(self, keywords, tokenizer, input_ids):
         self.keywords = keywords
         self.keyword_ids = []
@@ -34,11 +36,11 @@ class KeywordsStoppingCriteria(StoppingCriteria):
         offset = min(output_ids.shape[1] - self.start_len, self.max_keyword_len)
         self.keyword_ids = [keyword_id.to(output_ids.device) for keyword_id in self.keyword_ids]
         for keyword_id in self.keyword_ids:
-            truncated_output_ids = output_ids[0, -keyword_id.shape[0]:]
+            truncated_output_ids = output_ids[0, -keyword_id.shape[0] :]
             if torch.equal(truncated_output_ids, keyword_id):
                 return True
         outputs = self.tokenizer.batch_decode(output_ids[:, -offset:], skip_special_tokens=True)[0]
-        for keyword in self.keywords:
+        for keyword in self.keywords:  # noqa: SIM110 - Keeps the explicit loop.
             if keyword in outputs:
                 return True
         return False
@@ -50,13 +52,13 @@ class KeywordsStoppingCriteria(StoppingCriteria):
         return all(outputs)
 
 
-
 @dataclasses.dataclass
 class Conversation:
     """A class that keeps all conversation history."""
+
     system: str
-    roles: List[str]
-    messages: List[List[str]]
+    roles: list[str]
+    messages: list[list[str]]
     offset: int
     sep_style: SeparatorStyle
     sep: str = "###"
@@ -87,7 +89,7 @@ class Conversation:
         elif self.sep_style == SeparatorStyle.PLAIN:
             seps = [self.sep, self.sep2]
             ret = self.system
-            for i, (role, message) in enumerate(messages):
+            for i, (role, message) in enumerate(messages):  # noqa: B007 - The loop variable is read outside the loop.
                 if message:
                     if isinstance(message, tuple):
                         message, _, _ = message
@@ -123,45 +125,44 @@ class Conversation:
 
     def get_images(self, return_pil=False):
         images = []
-        for i, (role, msg) in enumerate(self.messages[self.offset:]):
-            if i % 2 == 0:
-                if isinstance(msg, tuple):
-                    import base64
-                    from io import BytesIO
-                    from PIL import Image
-                    msg, image, image_process_mode = msg
-                    if image_process_mode == "Pad":
-                        def expand2square(pil_img, background_color=(122, 116, 104)):
-                            width, height = pil_img.size
-                            if width == height:
-                                return pil_img
-                            elif width > height:
-                                result = Image.new(
-                                    pil_img.mode, (width, width), background_color)
-                                result.paste(pil_img, (0, (width - height) // 2))
-                                return result
-                            else:
-                                result = Image.new(
-                                    pil_img.mode, (height, height), background_color)
-                                result.paste(pil_img, ((height - width) // 2, 0))
-                                return result
+        for i, (_role, msg) in enumerate(self.messages[self.offset :]):
+            if i % 2 == 0 and isinstance(msg, tuple):
+                import base64
+                from io import BytesIO
 
-                        image = expand2square(image)
-                    elif image_process_mode in ["Default", "Crop"]:
-                        pass
-                    elif image_process_mode == "Resize":
-                        image = image.resize((336, 336))
-                    else:
-                        raise ValueError(
-                            f"Invalid image_process_mode: {image_process_mode}")
+                from PIL import Image
 
-                    if return_pil:
-                        images.append(image)
-                    else:
-                        buffered = BytesIO()
-                        image.save(buffered, format="PNG")
-                        img_b64_str = base64.b64encode(buffered.getvalue()).decode()
-                        images.append(img_b64_str)
+                msg, image, image_process_mode = msg
+                if image_process_mode == "Pad":
+
+                    def expand2square(pil_img, background_color=(122, 116, 104)):
+                        width, height = pil_img.size
+                        if width == height:
+                            return pil_img
+                        elif width > height:
+                            result = Image.new(pil_img.mode, (width, width), background_color)
+                            result.paste(pil_img, (0, (width - height) // 2))
+                            return result
+                        else:
+                            result = Image.new(pil_img.mode, (height, height), background_color)
+                            result.paste(pil_img, ((height - width) // 2, 0))
+                            return result
+
+                    image = expand2square(image)
+                elif image_process_mode in ["Default", "Crop"]:
+                    pass
+                elif image_process_mode == "Resize":
+                    image = image.resize((336, 336))
+                else:
+                    raise ValueError(f"Invalid image_process_mode: {image_process_mode}")
+
+                if return_pil:
+                    images.append(image)
+                else:
+                    buffered = BytesIO()
+                    image.save(buffered, format="PNG")
+                    img_b64_str = base64.b64encode(buffered.getvalue()).decode()
+                    images.append(img_b64_str)
         return images
 
     def copy(self):
@@ -173,7 +174,8 @@ class Conversation:
             sep_style=self.sep_style,
             sep=self.sep,
             sep2=self.sep2,
-            version=self.version)
+            version=self.version,
+        )
 
     def dict(self):
         if len(self.get_images()) > 0:
@@ -198,9 +200,7 @@ class Conversation:
 conv_dexbotic = Conversation(
     system="A chat between a curious user and an artificial intelligence assistant. "
     "The assistant gives helpful, detailed, and polite answers to the user's questions.",
-    roles=(
-        "USER",
-        "ASSISTANT"),
+    roles=("USER", "ASSISTANT"),
     version="dexbotic",
     messages=(),
     offset=0,

@@ -9,7 +9,11 @@ import torch
 
 from worldfoundry.core.geometry.transforms import (
     quaternion_xyzw_to_rotation_matrix as quat_to_mat,
+)
+from worldfoundry.core.geometry.transforms import (
     rotation_matrix_to_quaternion_xyzw as mat_to_quat,
+)
+from worldfoundry.core.geometry.transforms import (
     standardize_quaternion_xyzw as standardize_quaternion,
 )
 
@@ -39,7 +43,7 @@ def pose_encoding_to_extri_intri(pose_encoding, image_size_hw=None):
     height, width = image_size_hw
     fy = (height / 2.0) / torch.clamp(torch.tan(fov_h / 2.0), 1e-6)
     fx = (width / 2.0) / torch.clamp(torch.tan(fov_w / 2.0), 1e-6)
-    intrinsics = torch.zeros(pose_encoding.shape[:2] + (3, 3), device=pose_encoding.device)
+    intrinsics = torch.zeros(pose_encoding.shape[:2] + (3, 3), device=pose_encoding.device)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     intrinsics[..., 0, 0] = fx
     intrinsics[..., 1, 1] = fy
     intrinsics[..., 0, 2] = width / 2

@@ -11,15 +11,15 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
-from worldfoundry.studio.serving import workspace as workspace_app
 from worldfoundry.studio.inference.execution import (
     RunRecord,
     StudioManager,
     bind_run_preview_image,
     ensure_run_preview_image,
 )
-from worldfoundry.studio.serving.jobs import StudioJob, StudioJobStore
-from worldfoundry.studio.serving.workspace import create_app
+from worldfoundry.studio.workspace import app as workspace_app
+from worldfoundry.studio.workspace.app import create_app
+from worldfoundry.studio.workspace.jobs import StudioJob, StudioJobStore
 
 
 def _write_png(path: Path, color: tuple[int, int, int] = (220, 40, 40)) -> Path:

@@ -31,4 +31,5 @@ def test_echo_memory_context_k1_workspace_defaults_use_public_checkpoint(monkeyp
         "seed": 42,
         "camera_trajectory": "z*80",
         "return_dict": True,
+        "frames": 81,
     }

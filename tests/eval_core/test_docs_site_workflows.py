@@ -17,7 +17,7 @@ GENERATED_SITE_PATHS = {
     "scripts/docs/**",
     "worldfoundry/data/models/**",
     "worldfoundry/data/benchmarks/**",
-    "worldfoundry/evaluation/api/**",
+    "worldfoundry/evals/api/**",
 }
 
 
@@ -47,7 +47,7 @@ def test_deploy_docs_scopes_permissions_and_bounds_jobs() -> None:
     text = DEPLOY_PATH.read_text(encoding="utf-8")
     assert payload["permissions"] == {"contents": "read"}
     assert payload["concurrency"] == {"group": "github-pages", "cancel-in-progress": False}
-    assert "Drop demos from Pages artifact and add .nojekyll" in text
+    assert "Add .nojekyll to Pages artifact" in text
     assert "Preserve Next.js assets" not in text
     assert "--skip-bootstrap" not in text
 
@@ -61,13 +61,11 @@ def test_deploy_docs_scopes_permissions_and_bounds_jobs() -> None:
     assert deploy["permissions"] == {"pages": "write", "id-token": "write"}
 
 
-def test_deploy_docs_derives_site_url_without_rewriting_demo_asset_ref() -> None:
+def test_deploy_docs_derives_site_url_from_repository_owner() -> None:
     payload = _workflow(DEPLOY_PATH)
     env = payload["jobs"]["build"]["env"]
 
     assert env["NEXT_PUBLIC_SITE_URL"] == "https://${{ github.repository_owner }}.github.io"
-    assert "${{ github.ref_name }}" in env["NEXT_PUBLIC_DEMO_ASSET_BASE_URL"]
-    assert "default_branch" not in env["NEXT_PUBLIC_DEMO_ASSET_BASE_URL"]
 
 
 def test_docs_build_is_read_only_and_never_deploys() -> None:
@@ -103,6 +101,8 @@ def test_docs_workflows_use_the_checked_in_node_version() -> None:
 
 def test_codeowners_covers_docs_workflows_and_generated_data() -> None:
     text = (REPO_ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
-
+    lines = {line.strip() for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")}
+    if "* @dhsaikhgdius" in lines:
+        return
     for pattern in (".github/workflows/", "docs/", "scripts/docs/", "worldfoundry/data/"):
-        assert f"{pattern} @dhsaikhgdius" in text
+        assert f"{pattern} @dhsaikhgdius" in lines

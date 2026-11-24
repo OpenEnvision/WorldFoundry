@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight import (
+from worldfoundry.evals.tasks.execution.orchestration.runtime_preflight import (
     DEFAULT_PROFILE_DIR,
     REPO_ROOT,
     run_preflight,
@@ -14,7 +14,7 @@ from worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight imp
 from .presentation import print_details
 
 
-def register_preflight_subparser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def register_preflight_subparser(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser(
         "preflight",
         help="Check benchmark runtime requirements without running a benchmark",

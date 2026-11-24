@@ -6,10 +6,11 @@ bundle). Ported to single-GPU PyTorch: SGLang distributed tile parallelism
 (decode-parallel group / all-gather / ulysses) is removed; the tiled path runs
 locally with world_size=1, rank=0, which is what SGLang used by default.
 """
+
 import logging
 import math
 import os
-from typing import List, Union
+from typing import ClassVar
 
 import numpy as np
 import torch
@@ -28,9 +29,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 def _resolve_temporal_cat_dtype():
-    raw = (
-        os.environ.get("MINIMAX_H3_VAE_DECODER_TEMPORAL_CAT_DTYPE", "").strip().lower()
-    )
+    raw = os.environ.get("MINIMAX_H3_VAE_DECODER_TEMPORAL_CAT_DTYPE", "").strip().lower()
     if raw in ("", "0", "false", "no", "off", "none", "keep", "default"):
         return None
     mapping = {
@@ -43,19 +42,12 @@ def _resolve_temporal_cat_dtype():
         "float32": torch.float32,
     }
     if raw not in mapping:
-        raise ValueError(
-            "MINIMAX_H3_VAE_DECODER_TEMPORAL_CAT_DTYPE must be one of "
-            "fp16|bf16|fp32|keep, got %r" % raw
-        )
+        raise ValueError("MINIMAX_H3_VAE_DECODER_TEMPORAL_CAT_DTYPE must be one of fp16|bf16|fp32|keep, got %r" % raw)  # noqa: UP031 - Keeps printf conversions that depend on argument types.
     return mapping[raw]
 
 
 def _resolve_temporal_stream_cat():
-    raw = (
-        os.environ.get("MINIMAX_H3_VAE_DECODER_STREAM_TEMPORAL_CAT", "1")
-        .strip()
-        .lower()
-    )
+    raw = os.environ.get("MINIMAX_H3_VAE_DECODER_STREAM_TEMPORAL_CAT", "1").strip().lower()
     return raw not in ("0", "false", "no", "off", "disable", "disabled")
 
 
@@ -65,7 +57,7 @@ def get_tile_parallel_state():
     return 0, 1
 
 
-class DiagonalGaussianDistribution(object):
+class DiagonalGaussianDistribution:
     def __init__(self, parameters, upcast_fp32=True):
         if upcast_fp32:
             parameters = parameters.to(dtype=torch.float32)
@@ -81,6 +73,9 @@ class DiagonalGaussianDistribution(object):
         noise = noise.to(device=self.parameters.device)
         return noise.mul_(self.std).add_(self.mean)
 
+    def mode(self):
+        return self.mean
+
 
 class ClsTokenAggregator:
     def __init__(self, vae_model):
@@ -92,23 +87,15 @@ class ClsTokenAggregator:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.cls_tokens and hasattr(self.vae.encoder, "loss_info"):
-            self.vae.encoder.loss_info["cls_token"] = torch.stack(
-                self.cls_tokens, dim=0
-            ).mean(dim=0)
+            self.vae.encoder.loss_info["cls_token"] = torch.stack(self.cls_tokens, dim=0).mean(dim=0)
         return False
 
     def collect(self):
-        if (
-            hasattr(self.vae.encoder, "loss_info")
-            and "cls_token" in self.vae.encoder.loss_info
-        ):
+        if hasattr(self.vae.encoder, "loss_info") and "cls_token" in self.vae.encoder.loss_info:
             self.cls_tokens.append(self.vae.encoder.loss_info["cls_token"].clone())
 
     def collect_stacked(self, num_tiles, sample_batch_size):
-        if (
-            hasattr(self.vae.encoder, "loss_info")
-            and "cls_token" in self.vae.encoder.loss_info
-        ):
+        if hasattr(self.vae.encoder, "loss_info") and "cls_token" in self.vae.encoder.loss_info:
             cls_token = self.vae.encoder.loss_info["cls_token"]
             cls_token = cls_token.unflatten(0, (num_tiles, sample_batch_size))
             self.cls_tokens.extend(token.clone() for token in cls_token)
@@ -128,7 +115,7 @@ class AutoencoderKL(nn.Module):
     values the original stored via ``@register_to_config``.
     """
 
-    _compilable_modules = ["encoder", "decoder"]
+    _compilable_modules: ClassVar[list] = ["encoder", "decoder"]
 
     def setup_forward(self, **kwargs):
         self.clip_length = kwargs.get("clip_length", 17)
@@ -137,9 +124,7 @@ class AutoencoderKL(nn.Module):
         self.frame_pre_padding = (-self.clip_length) % self.vae_ratio_t
         self.tokens_chunk_size = math.ceil(self.clip_length / self.vae_ratio_t)
         self.token_overlap = (-self.token_drop) % self.tokens_chunk_size
-        self.frame_overlap = max(
-            self.token_overlap * self.vae_ratio_t - self.frame_pre_padding, 0
-        )
+        self.frame_overlap = max(self.token_overlap * self.vae_ratio_t - self.frame_pre_padding, 0)
         self.isolated_first_frame = kwargs.get("isolated_first_frame", False)
         self.isolated_last_frame = kwargs.get("isolated_last_frame", False)
         self.isolated_key_frame = kwargs.get("isolated_key_frame", False)
@@ -147,29 +132,23 @@ class AutoencoderKL(nn.Module):
         self.encoder_tiling = kwargs.get("encoder_tiling", False)
         self.decoder_tiling = kwargs.get("decoder_tiling", False)
         self.stack_tiling = kwargs.get("stack_tiling", False)
+        self.tile_batch_size = kwargs.get("tile_batch_size")
         self.tile_size = kwargs.get("tile_size", 256)
         self.tile_overlap_min = kwargs.get("tile_overlap_min", 64)
         self.decoder_tile_size = kwargs.get("decoder_tile_size", self.tile_size)
-        self.decoder_tile_overlap_min = kwargs.get(
-            "decoder_tile_overlap_min", self.tile_overlap_min
-        )
+        self.decoder_tile_overlap_min = kwargs.get("decoder_tile_overlap_min", self.tile_overlap_min)
         self._blend_weight_cache = {}
         self.latent_patch_size = kwargs.get("latent_patch_size", 1)
         self.crop_mode = kwargs.get("crop_mode", "top_left")
         self.pixel_norm_type = kwargs.get("pixel_norm_type", "imagenet")
 
-        if kwargs.get("encoder_parallel", False) or kwargs.get(
-            "decoder_parallel", False
-        ):
+        if kwargs.get("encoder_parallel", False) or kwargs.get("decoder_parallel", False):
             raise ValueError(
-                "MiniMax H3 VAE spatial sharding is unsupported; use complete-tile "
-                "parallel decode instead"
+                "MiniMax H3 VAE spatial sharding is unsupported; use complete-tile parallel decode instead"
             )
         parallel_tiling = kwargs.get("parallel_tiling", False)
         if hasattr(self, "parallel_tiling") and parallel_tiling != self.parallel_tiling:
-            logger.warning(
-                "Do not support changing parallel tiling after initialization"
-            )
+            logger.warning("Do not support changing parallel tiling after initialization")
         else:
             self.parallel_tiling = parallel_tiling
 
@@ -196,9 +175,7 @@ class AutoencoderKL(nn.Module):
 
     def split_tiles(self, input_len, is_decoder=False):
         tile_size = self.decoder_tile_size if is_decoder else self.tile_size
-        tile_overlap_min = (
-            self.decoder_tile_overlap_min if is_decoder else self.tile_overlap_min
-        )
+        tile_overlap_min = self.decoder_tile_overlap_min if is_decoder else self.tile_overlap_min
 
         if tile_size >= input_len:
             return [0], [input_len], []
@@ -224,9 +201,7 @@ class AutoencoderKL(nn.Module):
         tile_len = [tile_size] * N
         return tile_start_idx, tile_len, overlaps
 
-    def blend(
-        self, a: torch.Tensor, b: torch.Tensor, blend_extent: int, dim: int
-    ) -> torch.Tensor:
+    def blend(self, a: torch.Tensor, b: torch.Tensor, blend_extent: int, dim: int) -> torch.Tensor:
         blend_extent = min(a.shape[dim], b.shape[dim], blend_extent)
 
         cache_key = (blend_extent, b.device, b.dtype)
@@ -262,17 +237,11 @@ class AutoencoderKL(nn.Module):
             return blended
 
     def _assemble_tiles(self, rows, y_overlap, x_overlap):
-        output_height = sum(
-            row[0].shape[-2] - (y_overlap[i] if i < len(rows) - 1 else 0)
-            for i, row in enumerate(rows)
-        )
+        output_height = sum(row[0].shape[-2] - (y_overlap[i] if i < len(rows) - 1 else 0) for i, row in enumerate(rows))
         output_width = sum(
-            tile.shape[-1] - (x_overlap[j] if j < len(rows[0]) - 1 else 0)
-            for j, tile in enumerate(rows[0])
+            tile.shape[-1] - (x_overlap[j] if j < len(rows[0]) - 1 else 0) for j, tile in enumerate(rows[0])
         )
-        output = rows[0][0].new_empty(
-            (*rows[0][0].shape[:-2], output_height, output_width)
-        )
+        output = rows[0][0].new_empty((*rows[0][0].shape[:-2], output_height, output_width))
 
         y_offset = 0
         # released VAE blends vertically before horizontally; preserve that
@@ -304,19 +273,27 @@ class AutoencoderKL(nn.Module):
     def _local_tile_indices(self, num_tiles, tile_rank, tile_world_size):
         return list(range(tile_rank, num_tiles, tile_world_size))
 
-    def _run_tile_tasks(
-        self, tiles, tile_indices, forward_fn, stack_tiling, cls_agg=None
-    ):
+    def _run_tile_tasks(self, tiles, tile_indices, forward_fn, stack_tiling, cls_agg=None):
         if stack_tiling and tile_indices:
             sample_batch_size = tiles[0].shape[0]
-            tile_batch = torch.cat([tiles[idx] for idx in tile_indices], dim=0)
-            output_batch = forward_fn(tile_batch)
-            output_tiles = output_batch.unflatten(
-                0, (len(tile_indices), sample_batch_size)
-            ).unbind(dim=0)
-            if cls_agg is not None:
-                cls_agg.collect_stacked(len(tile_indices), sample_batch_size)
-            return list(output_tiles)
+            max_batch = getattr(self, "tile_batch_size", None)
+            if max_batch is None or int(max_batch) <= 0 or int(max_batch) >= len(tile_indices):
+                tile_batch = torch.cat([tiles[idx] for idx in tile_indices], dim=0)
+                output_batch = forward_fn(tile_batch)
+                output_tiles = output_batch.unflatten(0, (len(tile_indices), sample_batch_size)).unbind(dim=0)
+                if cls_agg is not None:
+                    cls_agg.collect_stacked(len(tile_indices), sample_batch_size)
+                return list(output_tiles)
+            chunk_size = int(max_batch)
+            outputs = []
+            for start in range(0, len(tile_indices), chunk_size):
+                chunk_ids = tile_indices[start : start + chunk_size]
+                tile_batch = torch.cat([tiles[idx] for idx in chunk_ids], dim=0)
+                output_batch = forward_fn(tile_batch)
+                outputs.extend(output_batch.unflatten(0, (len(chunk_ids), sample_batch_size)).unbind(dim=0))
+                if cls_agg is not None:
+                    cls_agg.collect_stacked(len(chunk_ids), sample_batch_size)
+            return outputs
 
         tasks = []
         for idx in tile_indices:
@@ -337,21 +314,15 @@ class AutoencoderKL(nn.Module):
         num_tiles = i_max * j_max
 
         x_tiles = []
-        for i, (i_pos, i_len) in enumerate(zip(y_idx, y_len)):
-            for j, (j_pos, j_len) in enumerate(zip(x_idx, x_len)):
+        for i, (i_pos, i_len) in enumerate(zip(y_idx, y_len, strict=False)):  # noqa: B007 - The loop variable is read outside the loop.
+            for j, (j_pos, j_len) in enumerate(zip(x_idx, x_len, strict=False)):  # noqa: B007 - The loop variable is read outside the loop.
                 tile = x[..., i_pos : i_pos + i_len, j_pos : j_pos + j_len]
                 x_tiles.append(tile)
 
         with ClsTokenAggregator(self) as agg:
-            local_tile_indices = self._local_tile_indices(
-                num_tiles, tile_rank, tile_world_size
-            )
-            stack_tiling = self.stack_tiling and not (
-                self.training and getattr(self.encoder, "mask_enabled", False)
-            )
-            encoded_tasks = self._run_tile_tasks(
-                x_tiles, local_tile_indices, self.encode, stack_tiling, agg
-            )
+            local_tile_indices = self._local_tile_indices(num_tiles, tile_rank, tile_world_size)
+            stack_tiling = self.stack_tiling and not (self.training and getattr(self.encoder, "mask_enabled", False))
+            encoded_tasks = self._run_tile_tasks(x_tiles, local_tile_indices, self.encode, stack_tiling, agg)
 
             all_encoded = encoded_tasks
 
@@ -360,12 +331,8 @@ class AutoencoderKL(nn.Module):
             i, j = idx // j_max, idx % j_max
             rows[i][j] = encoded.to(x.device)
 
-        latent_y_overlap = [
-            tile_overlap // self.vae_ratio for tile_overlap in y_overlap
-        ]
-        latent_x_overlap = [
-            tile_overlap // self.vae_ratio for tile_overlap in x_overlap
-        ]
+        latent_y_overlap = [tile_overlap // self.vae_ratio for tile_overlap in y_overlap]
+        latent_x_overlap = [tile_overlap // self.vae_ratio for tile_overlap in x_overlap]
 
         z = self._assemble_tiles(rows, latent_y_overlap, latent_x_overlap)
 
@@ -386,25 +353,19 @@ class AutoencoderKL(nn.Module):
         num_tiles = i_max * j_max
 
         z_tiles = []
-        for i, (i_pos, i_len) in enumerate(zip(y_idx, y_len)):
+        for i, (i_pos, i_len) in enumerate(zip(y_idx, y_len, strict=False)):  # noqa: B007 - The loop variable is read outside the loop.
             i_pos, i_len = (
                 i_pos // self.vae_ratio,
                 i_len // self.vae_ratio,
             )
-            for j, (j_pos, j_len) in enumerate(zip(x_idx, x_len)):
+            for j, (j_pos, j_len) in enumerate(zip(x_idx, x_len, strict=False)):  # noqa: B007 - The loop variable is read outside the loop.
                 j_pos, j_len = (j_pos // self.vae_ratio, j_len // self.vae_ratio)
                 tile = z[..., i_pos : i_pos + i_len, j_pos : j_pos + j_len]
                 z_tiles.append(tile)
 
-        local_tile_indices = self._local_tile_indices(
-            num_tiles, tile_rank, tile_world_size
-        )
-        stack_tiling = self.stack_tiling and not (
-            self.training and getattr(self.decoder, "mask_enabled", False)
-        )
-        decoded_tasks = self._run_tile_tasks(
-            z_tiles, local_tile_indices, self.decode, stack_tiling
-        )
+        local_tile_indices = self._local_tile_indices(num_tiles, tile_rank, tile_world_size)
+        stack_tiling = self.stack_tiling and not (self.training and getattr(self.decoder, "mask_enabled", False))
+        decoded_tasks = self._run_tile_tasks(z_tiles, local_tile_indices, self.decode, stack_tiling)
 
         all_decoded = decoded_tasks
 
@@ -447,9 +408,7 @@ class AutoencoderKL(nn.Module):
         return dec
 
     def encode_temporal(self, x):
-        offset_frame = (
-            1 if self.isolated_first_frame and self.frame_pre_padding == 0 else 0
-        )
+        offset_frame = 1 if self.isolated_first_frame and self.frame_pre_padding == 0 else 0
 
         frame_num = x.shape[2]
         pad_size = (offset_frame - frame_num) % self.clip_length
@@ -513,17 +472,11 @@ class AutoencoderKL(nn.Module):
 
         z_len_before_pad = z.shape[2] - pad_tokens
         return sum(
-            (
-                intra_tail
-                if (z_len_before_pad + k) % self.tokens_chunk_size == 0
-                else self.vae_ratio_t
-            )
+            (intra_tail if (z_len_before_pad + k) % self.tokens_chunk_size == 0 else self.vae_ratio_t)
             for k in range(pad_tokens)
         )
 
-    def _decode_temporal_output_frame_plan(
-        self, z, z_head, z_tail, num_chunks, pad_tokens
-    ):
+    def _decode_temporal_output_frame_plan(self, z, z_head, z_tail, num_chunks, pad_tokens):
         chunk_dec = self.tokens_chunk_size * self.vae_ratio_t
         split_count = int(self.token_drop > 0) + 1
         total_frames = 0
@@ -535,9 +488,7 @@ class AutoencoderKL(nn.Module):
         for i in range(num_chunks):
             t_start_idx = i * self.tokens_chunk_size
             t_end_idx = t_start_idx + self.tokens_chunk_size + self.token_overlap
-            clip_token_len = max(
-                0, min(t_end_idx, z.shape[2]) - min(t_start_idx, z.shape[2])
-            )
+            clip_token_len = max(0, min(t_end_idx, z.shape[2]) - min(t_start_idx, z.shape[2]))
             if i == 0 and z_head is not None:
                 clip_token_len += z_head.shape[2]
             if i == num_chunks - 1 and z_tail is not None:
@@ -565,13 +516,9 @@ class AutoencoderKL(nn.Module):
         pad_frames = self._decode_temporal_pad_frames(z, pad_tokens)
         return int(total_frames), int(pad_frames), int(total_frames - pad_frames)
 
-    def _decode_temporal_streaming(
-        self, z, z_head, z_tail, num_chunks, pad_tokens, temporal_cat_dtype
-    ):
-        total_frames, pad_frames, output_frames = (
-            self._decode_temporal_output_frame_plan(
-                z, z_head, z_tail, num_chunks, pad_tokens
-            )
+    def _decode_temporal_streaming(self, z, z_head, z_tail, num_chunks, pad_tokens, temporal_cat_dtype):
+        total_frames, pad_frames, output_frames = self._decode_temporal_output_frame_plan(
+            z, z_head, z_tail, num_chunks, pad_tokens
         )
         if output_frames <= 0:
             raise ValueError(
@@ -602,9 +549,7 @@ class AutoencoderKL(nn.Module):
             remaining = int(dec.shape[2]) - write_pos
             copy_frames = min(part_frames, max(0, remaining))
             if copy_frames > 0:
-                dec[:, :, write_pos : write_pos + copy_frames, :, :].copy_(
-                    part[:, :, :copy_frames, :, :]
-                )
+                dec[:, :, write_pos : write_pos + copy_frames, :, :].copy_(part[:, :, :copy_frames, :, :])
                 write_pos += copy_frames
             dropped_frames += part_frames - copy_frames
 
@@ -620,7 +565,7 @@ class AutoencoderKL(nn.Module):
                 clip_z = torch.cat([clip_z, z_tail], dim=2)
 
             clip_dec = self._adaptive_decode(clip_z)
-            decoded_count += 1
+            decoded_count += 1  # noqa: SIM113 - Keeps the explicit loop counter.
             if temporal_cat_dtype is not None and clip_dec.dtype != temporal_cat_dtype:
                 clip_dec = clip_dec.to(temporal_cat_dtype)
             if clip_dec.device != z.device:
@@ -628,9 +573,7 @@ class AutoencoderKL(nn.Module):
 
             dec_tail = None
             if i == 0 and z_head is not None:
-                write_part(
-                    clip_dec[:, :, self.vae_ratio_t - 1 : self.vae_ratio_t, :, :]
-                )
+                write_part(clip_dec[:, :, self.vae_ratio_t - 1 : self.vae_ratio_t, :, :])
                 clip_dec = clip_dec[:, :, self.vae_ratio_t :, :, :]
 
             if i == num_chunks - 1 and z_tail is not None:
@@ -645,9 +588,7 @@ class AutoencoderKL(nn.Module):
 
                 if j == 0:
                     if dec_overlap is not None:
-                        clip_dec_chunk = self.blend(
-                            dec_overlap, clip_dec_chunk, self.frame_overlap, dim=-3
-                        )
+                        clip_dec_chunk = self.blend(dec_overlap, clip_dec_chunk, self.frame_overlap, dim=-3)
                         dec_overlap = None
                     write_part(clip_dec_chunk)
                 else:
@@ -666,11 +607,7 @@ class AutoencoderKL(nn.Module):
 
         if dec is None:
             raise RuntimeError("decode_temporal streaming produced no output tensor")
-        if (
-            logical_frames != total_frames
-            or dropped_frames != pad_frames
-            or write_pos != output_frames
-        ):
+        if logical_frames != total_frames or dropped_frames != pad_frames or write_pos != output_frames:
             raise RuntimeError(
                 "decode_temporal streaming frame plan mismatch: "
                 f"logical_frames={logical_frames} total_frames={total_frames} "
@@ -719,9 +656,7 @@ class AutoencoderKL(nn.Module):
 
         temporal_cat_dtype = _resolve_temporal_cat_dtype()
         if not self.training and _resolve_temporal_stream_cat():
-            return self._decode_temporal_streaming(
-                z, z_head, z_tail, num_chunks, pad_tokens, temporal_cat_dtype
-            )
+            return self._decode_temporal_streaming(z, z_head, z_tail, num_chunks, pad_tokens, temporal_cat_dtype)
 
         decoded_tasks = []
         for i in range(num_chunks):
@@ -748,9 +683,7 @@ class AutoencoderKL(nn.Module):
 
         dec_head = None
         if z_head is not None:
-            dec_head = clip_dec_list[0][
-                :, :, self.vae_ratio_t - 1 : self.vae_ratio_t, :, :
-            ]
+            dec_head = clip_dec_list[0][:, :, self.vae_ratio_t - 1 : self.vae_ratio_t, :, :]
             clip_dec_list[0] = clip_dec_list[0][:, :, self.vae_ratio_t :, :, :]
 
         dec_tail = None
@@ -772,9 +705,7 @@ class AutoencoderKL(nn.Module):
 
                 if j == 0:
                     if dec_overlap is not None:
-                        clip_dec_chunk = self.blend(
-                            dec_overlap, clip_dec_chunk, self.frame_overlap, dim=-3
-                        )
+                        clip_dec_chunk = self.blend(dec_overlap, clip_dec_chunk, self.frame_overlap, dim=-3)
                     dec_list.append(clip_dec_chunk)
                 else:
                     dec_overlap = clip_dec_chunk
@@ -803,10 +734,7 @@ class AutoencoderKL(nn.Module):
             recon = self.decode_temporal(z)
 
         if self.use_3d_conv:
-            if frame_num is not None:
-                target_frames = frame_num
-            else:
-                target_frames = recon.shape[2]
+            target_frames = frame_num if frame_num is not None else recon.shape[2]
 
             recon = self.trim_output(recon, target_frames)
             if process_image:
@@ -821,11 +749,12 @@ class AutoencoderKL(nn.Module):
     @torch.no_grad()
     def encode_images(
         self,
-        images: Union[List[np.ndarray], List[torch.Tensor]],
+        images: list[np.ndarray] | list[torch.Tensor],
         transform_input: bool = False,
         use_fp16_latent: bool = False,
         verbose: bool = False,
-    ) -> List[torch.Tensor]:
+        deterministic: bool = False,
+    ) -> list[torch.Tensor]:
         """encode images into latents
 
         Args:
@@ -862,13 +791,8 @@ class AutoencoderKL(nn.Module):
             runtime_owned = True
 
         if transform_input:
-            images = [
-                image.unsqueeze(0) if image.ndim == 3 else image for image in images
-            ]
-            images = [
-                self.processor.transform_tensor(image, runtime_owned=runtime_owned)
-                for image in images
-            ]
+            images = [image.unsqueeze(0) if image.ndim == 3 else image for image in images]
+            images = [self.processor.transform_tensor(image, runtime_owned=runtime_owned) for image in images]
 
         prepared = []
         for image_tensor in images:
@@ -879,20 +803,18 @@ class AutoencoderKL(nn.Module):
             image_tensor = self.processor._crop_to_align(image_tensor, new_h, new_w)
             prepared.append(image_tensor)
 
-        if len(prepared) > 1 and len(set(t.shape for t in prepared)) == 1:
+        if len(prepared) > 1 and len({t.shape for t in prepared}) == 1:
             stacked = torch.cat(prepared, dim=0)
             if verbose:
                 logger.info(f"batch encode input shape {tuple(stacked.shape)}")
-            all_latents = self.encode_base(stacked, True)
-            image_latents = [
-                all_latents[i].contiguous() for i in range(all_latents.shape[0])
-            ]
+            all_latents = self.encode_base(stacked, True, deterministic=deterministic)
+            image_latents = [all_latents[i].contiguous() for i in range(all_latents.shape[0])]
         else:
             image_latents = []
             for image_tensor in prepared:
                 if verbose:
                     logger.info(f"input shape {tuple(image_tensor.shape)}")
-                image_latent = self.encode_base(image_tensor, True)
+                image_latent = self.encode_base(image_tensor, True, deterministic=deterministic)
                 image_latents.append(image_latent.squeeze(0).contiguous())
 
         if use_fp16_latent:
@@ -907,12 +829,12 @@ class AutoencoderKL(nn.Module):
     @torch.no_grad()
     def encode_videos(
         self,
-        videos: Union[List[np.ndarray], List[torch.Tensor]],
+        videos: list[np.ndarray] | list[torch.Tensor],
         transform_input: bool = False,
         use_fp16_latent: bool = False,
         verbose: bool = False,
         encode_prefix: bool = False,
-    ) -> List[torch.Tensor]:
+    ) -> list[torch.Tensor]:
         """encode videos into latents
 
         Args:
@@ -946,18 +868,12 @@ class AutoencoderKL(nn.Module):
 
         if isinstance(videos[0], np.ndarray):
             device = next(self.parameters()).device
-            videos = [
-                self.processor.convert_numpy_to_tensor(video, device)
-                for video in videos
-            ]
+            videos = [self.processor.convert_numpy_to_tensor(video, device) for video in videos]
             transform_input = True
             runtime_owned = True
 
         if transform_input:
-            videos = [
-                self.processor.transform_tensor(video, runtime_owned=runtime_owned)
-                for video in videos
-            ]
+            videos = [self.processor.transform_tensor(video, runtime_owned=runtime_owned) for video in videos]
             videos = [video.transpose(0, 1) for video in videos]
 
         if encode_prefix:
@@ -971,9 +887,7 @@ class AutoencoderKL(nn.Module):
                     video = video.unsqueeze(0)
                 _, _, _, h, w = video.shape
                 new_h, new_w = self.processor._align_to_total_patch_size(h, w)
-                video = self.processor._crop_to_align(
-                    video, new_h, new_w, is_video=True
-                )
+                video = self.processor._crop_to_align(video, new_h, new_w, is_video=True)
 
                 model_alignment = (
                     self.token_drop,
@@ -993,20 +907,14 @@ class AutoencoderKL(nn.Module):
                 self.processor.frame_overlap = 0
                 try:
                     orig_frames = video.shape[2]
-                    leading, trailing, drop_tokens = (
-                        self.processor.align_video_length_2pass(orig_frames)
-                    )
+                    leading, trailing, drop_tokens = self.processor.align_video_length_2pass(orig_frames)
                     _, _, _, cropped_h, cropped_w = video.shape
                     if leading > 0:
-                        black = self.processor.transform(
-                            video.new_zeros(leading, 3, cropped_h, cropped_w)
-                        )
+                        black = self.processor.transform(video.new_zeros(leading, 3, cropped_h, cropped_w))
                         black = black.unsqueeze(0).permute(0, 2, 1, 3, 4)
                         video = torch.cat([black, video], dim=2)
                     if trailing > 0:
-                        black = self.processor.transform(
-                            video.new_zeros(trailing, 3, cropped_h, cropped_w)
-                        )
+                        black = self.processor.transform(video.new_zeros(trailing, 3, cropped_h, cropped_w))
                         black = black.unsqueeze(0).permute(0, 2, 1, 3, 4)
                         video = torch.cat([video, black], dim=2)
 
@@ -1046,23 +954,19 @@ class AutoencoderKL(nn.Module):
         for video in videos:
             if video.ndim == 4:
                 video = video.unsqueeze(0)
-            used_frame_length = self.processor.get_suitable_video_length(
-                video.shape[2], verbose
-            )
+            used_frame_length = self.processor.get_suitable_video_length(video.shape[2], verbose)
             _, _, _, h, w = video.shape
             new_h, new_w = self.processor._align_to_total_patch_size(h, w)
             video = video[:, :, :used_frame_length, :, :]
             video = self.processor._crop_to_align(video, new_h, new_w, is_video=True)
             prepared.append(video)
 
-        if len(prepared) > 1 and len(set(t.shape for t in prepared)) == 1:
+        if len(prepared) > 1 and len({t.shape for t in prepared}) == 1:
             stacked = torch.cat(prepared, dim=0)
             if verbose:
                 logger.info(f"batch encode input shape {tuple(stacked.shape)}")
             all_latents = self.encode_base(stacked, False)
-            video_latents = [
-                all_latents[i].contiguous() for i in range(all_latents.shape[0])
-            ]
+            video_latents = [all_latents[i].contiguous() for i in range(all_latents.shape[0])]
         else:
             video_latents = []
             for video in prepared:
@@ -1104,9 +1008,9 @@ class AutoencoderKLLegacy(AutoencoderKL):
         zq_ch_decoder=None,
         num_res_blocks=2,
         num_res_blocks_decoder=None,
-        ch_mult=[1, 2, 2, 4, 4, 8],
-        space_down=[2, 2, 2, 2, 1, 1],
-        space_up=[1, 2, 2, 2, 2, 1],
+        ch_mult=[1, 2, 2, 4, 4, 8],  # noqa: B006 - Keeps the upstream default object and signature.
+        space_down=[2, 2, 2, 2, 1, 1],  # noqa: B006 - Keeps the upstream default object and signature.
+        space_up=[1, 2, 2, 2, 2, 1],  # noqa: B006 - Keeps the upstream default object and signature.
         time_down=None,
         time_up=None,
         padding_mode="zeros",
@@ -1131,9 +1035,7 @@ class AutoencoderKLLegacy(AutoencoderKL):
         self.config = {}
 
         if not use_3d_conv or not use_vit_decoder:
-            raise NotImplementedError(
-                "this release only supports use_3d_conv=True with use_vit_decoder=True"
-            )
+            raise NotImplementedError("this release only supports use_3d_conv=True with use_vit_decoder=True")
 
         self.transform = get_normalize_transform(pixel_norm_type)
         self.transform_rev = get_denormalize_transform(pixel_norm_type)
@@ -1198,16 +1100,14 @@ class AutoencoderKLLegacy(AutoencoderKL):
             return self.decoder(z2)
         return self.decoder(z2, z)
 
-    def encode_base(self, input, process_image=False):
+    def encode_base(self, input, process_image=False, deterministic=False):
         if self.use_3d_conv and input.ndim == 4:
             input = input.unsqueeze(2)
 
-        if process_image or not self.use_3d_conv:
-            moments = self._adaptive_encode(input)
-        else:
-            moments = self.encode_temporal(input)
+        moments = self._adaptive_encode(input) if process_image or not self.use_3d_conv else self.encode_temporal(input)
 
-        z = DiagonalGaussianDistribution(moments).sample()
+        dist = DiagonalGaussianDistribution(moments)
+        z = dist.mode() if deterministic else dist.sample()
 
         if process_image and self.use_3d_conv:
             z = self.trim_code(z, 1)

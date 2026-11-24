@@ -1,6 +1,6 @@
-# coding=utf-8
+from typing import ClassVar
+
 # WorldFoundry modification: vendored in-tree from the pinned official checkpoint runtime.
-# ruff: noqa
 # Copyright (C) 2026 Xiaomi Corporation.
 # Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
 #
@@ -15,34 +15,41 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from typing import Optional, Union, List
 import numpy as np
 import torch
-
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import ImageInput
-from transformers.processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from transformers.processing_utils import (
+    ImagesKwargs,
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+    VideosKwargs,
+)
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from transformers.utils import logging
 from transformers.video_utils import VideoInput
 
 logger = logging.get_logger(__name__)
 
+
 class Qwen3VLVideosProcessorKwargs(VideosKwargs, total=False):
     pass
 
+
 class Qwen3VLImagesKwargs(ImagesKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+    min_pixels: int | None
+    max_pixels: int | None
+    patch_size: int | None
+    temporal_patch_size: int | None
+    merge_size: int | None
+
 
 class Qwen3VLProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Qwen3VLImagesKwargs
     videos_kwargs: Qwen3VLVideosProcessorKwargs
-    _defaults = {
+    _defaults = {  # noqa: RUF012 - TypedDict subclass; Transformers reads these defaults and ClassVar is invalid here.
         "text_kwargs": {
             "padding": False,
             "return_token_type_ids": False,
@@ -50,6 +57,7 @@ class Qwen3VLProcessorKwargs(ProcessingKwargs, total=False):
         },
         "videos_kwargs": {"return_metadata": True},
     }
+
 
 class MiBotProcessor(ProcessorMixin):
     r"""
@@ -66,7 +74,8 @@ class MiBotProcessor(ProcessorMixin):
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
-    attributes = ["image_processor", "tokenizer", "video_processor"]
+
+    attributes: ClassVar[list] = ["image_processor", "tokenizer", "video_processor"]
     image_processor_class = "AutoImageProcessor"
     video_processor_class = "AutoVideoProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
@@ -110,10 +119,10 @@ class MiBotProcessor(ProcessorMixin):
             std = config.get("std", 1.0)
             self.action_config[robot_type] = {
                 "mean": torch.tensor(mean, dtype=torch.float32)[None],
-                "std": torch.tensor(std, dtype=torch.float32)[None]
+                "std": torch.tensor(std, dtype=torch.float32)[None],
             }
 
-    def list_robot_types(self) -> List[str]:
+    def list_robot_types(self) -> list[str]:
         """Return list of available robot types in action_config."""
         return list(self.action_config.keys())
 
@@ -154,7 +163,7 @@ class MiBotProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput = None,
         **kwargs: Unpack[Qwen3VLProcessorKwargs],
     ) -> BatchFeature:
@@ -272,6 +281,7 @@ class MiBotProcessor(ProcessorMixin):
             mm_token_type_ids[array_ids == self.image_token_id] = 1
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
@@ -305,6 +315,7 @@ class MiBotProcessor(ProcessorMixin):
             num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
             vision_data["num_video_tokens"] = num_video_tokens
         return MultiModalData(**vision_data)
+
     def post_process_image_text_to_text(
         self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
     ):
@@ -329,7 +340,8 @@ class MiBotProcessor(ProcessorMixin):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
-    def _calculate_timestamps(self, indices: Union[list[int], np.ndarray], video_fps: float, merge_size: int = 2):
+
+    def _calculate_timestamps(self, indices: list[int] | np.ndarray, video_fps: float, merge_size: int = 2):
         if not isinstance(indices, list):
             indices = indices.tolist()
         if len(indices) % merge_size != 0:
@@ -341,5 +353,6 @@ class MiBotProcessor(ProcessorMixin):
             (timestamps[i] + timestamps[i + merge_size - 1]) / 2 for i in range(0, len(timestamps), merge_size)
         ]
         return timestamps
+
 
 __all__ = ["MiBotProcessor"]

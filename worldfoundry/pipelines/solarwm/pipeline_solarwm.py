@@ -1,5 +1,7 @@
 """Dataset-indexed SolarWM inference through its official runtime."""
 
+from typing import ClassVar
+
 from worldfoundry.pipelines.official_world import OfficialWorldPipeline
 from worldfoundry.synthesis.visual_generation.solarwm import SolarWMRuntime
 
@@ -8,7 +10,7 @@ class SolarWMPipeline(OfficialWorldPipeline):
     MODEL_ID = "solarwm"
     RUNTIME_CLS = SolarWMRuntime
 
-    VARIANT_ALIASES = {
+    VARIANT_ALIASES: ClassVar[dict[str, str]] = {
         "solarwm-wan2.2-5b": "wan-5b-dmd",
         "solarwm-wan22-5b": "wan-5b-dmd",
         "solarwm-wan2.2-14b": "wan-14b",

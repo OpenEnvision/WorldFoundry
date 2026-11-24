@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot -> networks -> models -> deaot.py functionality."""
-
 import torch.nn as nn
 
 from ..decoders import build_decoder
@@ -12,15 +10,7 @@ from .aot import AOT
 
 
 class DeAOT(AOT):
-    """De aot implementation."""
     def __init__(self, cfg, encoder="mobilenetv2", decoder="fpn"):
-        """Init.
-
-        Args:
-            cfg: The cfg.
-            encoder: The encoder.
-            decoder: The decoder.
-        """
         super().__init__(cfg, encoder, decoder)
 
         self.LSTT = DualBranchGPM(
@@ -59,12 +49,6 @@ class DeAOT(AOT):
         self._init_weight()
 
     def decode_id_logits(self, lstt_emb, shortcuts):
-        """Decode id logits.
-
-        Args:
-            lstt_emb: The lstt emb.
-            shortcuts: The shortcuts.
-        """
         n, c, h, w = shortcuts[-1].size()
         decoder_inputs = [shortcuts[-1]]
         for emb in lstt_emb:
@@ -73,11 +57,6 @@ class DeAOT(AOT):
         return pred_logit
 
     def get_id_emb(self, x):
-        """Get id emb.
-
-        Args:
-            x: The x.
-        """
         id_emb = self.patch_wise_id_bank(x)
         id_emb = self.id_norm(id_emb.permute(2, 3, 0, 1)).permute(2, 3, 0, 1)
         id_emb = self.id_dropout(id_emb)

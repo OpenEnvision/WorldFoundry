@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 aliases:
 - hy-vla
 - hy-embodied-0.5-vla
@@ -23,6 +23,7 @@ official_sources:
   github:
     head_sha: 8ba4c8cbdf42a4bcf0a19be4bd2841405dfe15e9
     url: https://github.com/Tencent-Hunyuan/Hy-Embodied-0.5-VLA
+    revision: 8ba4c8cbdf42a4bcf0a19be4bd2841405dfe15e9
   huggingface:
   - license: Apache-2.0
     repo_id: tencent/Hy-Embodied-0.5-VLA-UMI
@@ -74,16 +75,16 @@ docs:
   publisher: Tencent Hunyuan
   publisher_kind: company
   publisher_zh: 腾讯混元
-  overview: 'Hy-Embodied-0.5-VLA is Tencent Hunyuan''s bimanual manipulation VLA, GPU-validated in this catalog: the RoboTwin checkpoint restored strictly and produced finite 20x20 decoded actions from the official six-frame, three-camera input on an A100, and the UMI checkpoint produced a finite 50x20 relative-action chunk in BF16. Both Apache-2.0 checkpoints are pinned on Hugging Face and ModelScope.'
-  overview_zh: Hy-Embodied-0.5-VLA 是腾讯混元的双臂操作 VLA，本 catalog 中已 GPU 验证：RoboTwin checkpoint 严格恢复，并在 A100 上从官方六帧三相机输入产出有限的 20x20 解码动作；UMI checkpoint 以 BF16 产出有限的 50x20 相对动作块。两个 Apache-2.0 checkpoint 均在 Hugging Face 与 ModelScope 上锁定 revision。
+  overview: "Hy-Embodied-0.5-VLA is Tencent Hunyuan's bimanual manipulation VLA, released as two Apache-2.0 checkpoints on Hugging Face and ModelScope: RoboTwin and UMI. Validated on an A100: the RoboTwin checkpoint decodes a 20x20 action chunk from the official six-frame, three-camera input, and the UMI checkpoint decodes a 50x20 relative-action chunk in BF16."
+  overview_zh: Hy-Embodied-0.5-VLA 是腾讯混元的双臂操作 VLA，在 Hugging Face 与 ModelScope 上发布了两个 Apache-2.0 checkpoint：RoboTwin 与 UMI。已在 A100 上验证：RoboTwin checkpoint 从官方六帧三相机输入解码出 20x20 动作块，UMI checkpoint 以 BF16 解码出 50x20 相对动作块。
   architecture: An inference-only mixture-of-transformers (MoT) backbone with in-tree preprocessing and action decoding. The official input contract is six frames from three cameras; RoboTwin decodes absolute joint actions while UMI decodes relative actions.
   architecture_zh: 推理专用的 mixture-of-transformers（MoT）骨干，预处理与动作解码内置树内。官方输入契约为三相机六帧；RoboTwin 解码绝对关节动作，UMI 解码相对动作。
-  usage_notes: Choose the RoboTwin checkpoint for simulator benchmark work and the UMI checkpoint for UMI-style relative-action deployments; both run through the same in-tree runtime.
-  usage_notes_zh: 模拟器基准工作选 RoboTwin checkpoint，UMI 式相对动作部署选 UMI checkpoint；两者共用同一树内运行时。
+  usage_notes: Choose the RoboTwin checkpoint for simulator benchmark work and the UMI checkpoint for UMI-style relative-action deployments; both run through the same pipeline.
+  usage_notes_zh: 模拟器基准工作选 RoboTwin checkpoint，UMI 式相对动作部署选 UMI checkpoint；两者共用同一 pipeline。
   limitations:
-  - Validation covers action decoding on A100; full benchmark rollout parity is tracked separately.
+  - Validation covers action decoding only; full benchmark rollouts have not been validated.
   limitations_zh:
-  - 验证覆盖 A100 上的动作解码；完整基准 rollout parity 单独跟踪。
+  - 验证仅覆盖动作解码；完整基准 rollout 尚未验证。
   recommended_benchmarks:
   - id: robotwin
     reason: GPU-validated RoboTwin policy checkpoint.

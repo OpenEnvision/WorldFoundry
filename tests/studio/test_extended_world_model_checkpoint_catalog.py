@@ -108,8 +108,6 @@ def test_echo_memory_catalog_maps_each_model_to_its_immutable_checkpoint(
     entry = find_entry(model_id)
 
     assert entry.default_model_ref == str(checkpoint)
-    assert entry.default_load_kwargs["wan_base_dir"] == str(
-        checkpoint_root / "Wan-AI--Wan2.1-T2V-1.3B"
-    )
+    assert entry.default_load_kwargs["wan_base_dir"] == str(checkpoint_root / "Wan-AI--Wan2.1-T2V-1.3B")
     assert entry.default_call_kwargs["num_frames"] == 81
     assert Path(entry.default_input_path).is_file()

@@ -6,7 +6,8 @@ groups:
 - world
 - video
 source_repos:
-- url: https://github.com/world-fm/worldfm
+- url: https://github.com/inspatio/worldfm
+  revision: 84dfff171f8c24be71585bcc2f140b8ef08d1cd0
 checkpoints:
 - role: worldfm_checkpoint
   local_dir: ${WORLDFOUNDRY_CKPT_DIR}/worldfm

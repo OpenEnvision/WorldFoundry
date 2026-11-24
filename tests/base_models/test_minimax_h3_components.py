@@ -25,28 +25,20 @@ class _StatsConfig:
 
 
 def test_contract_accepts_valid_video_and_audio_stats() -> None:
-    validate_minimax_h3_vae_latent_stats(
-        _StatsConfig(24, [0.0] * 24, [1.0] * 24), "video_vae", 24
-    )
-    validate_minimax_h3_vae_latent_stats(
-        _StatsConfig(32, [0.0] * 32, [1.0] * 32), "audio_vae", 32
-    )
+    validate_minimax_h3_vae_latent_stats(_StatsConfig(24, [0.0] * 24, [1.0] * 24), "video_vae", 24)
+    validate_minimax_h3_vae_latent_stats(_StatsConfig(32, [0.0] * 32, [1.0] * 32), "audio_vae", 32)
 
 
 def test_contract_rejects_wrong_channel_count() -> None:
     with pytest.raises(MiniMaxH3VAEContractError):
-        validate_minimax_h3_vae_latent_stats(
-            _StatsConfig(16, [0.0] * 16, [1.0] * 16), "video_vae", 24
-        )
+        validate_minimax_h3_vae_latent_stats(_StatsConfig(16, [0.0] * 16, [1.0] * 16), "video_vae", 24)
 
 
 def test_contract_rejects_missing_and_nonpositive_std() -> None:
     with pytest.raises(MiniMaxH3VAEContractError):
         validate_minimax_h3_vae_latent_stats(_StatsConfig(24, None, [1.0] * 24), "video_vae", 24)
     with pytest.raises(MiniMaxH3VAEContractError):
-        validate_minimax_h3_vae_latent_stats(
-            _StatsConfig(24, [0.0] * 24, [0.0] * 24), "video_vae", 24
-        )
+        validate_minimax_h3_vae_latent_stats(_StatsConfig(24, [0.0] * 24, [0.0] * 24), "video_vae", 24)
 
 
 def test_video_vae_config_defaults() -> None:
@@ -120,7 +112,5 @@ def test_qwen_checkpoint_stream_does_not_read_unused_layers(monkeypatch, tmp_pat
     monkeypatch.setattr(safetensors, "safe_open", lambda *_args, **_kwargs: FakeSafeOpen())
     pairs = list(enc._iter_checkpoint_weights(str(tmp_path)))
 
-    assert [name for name, _ in pairs] == [
-        "model.language_model.layers.0.self_attn.q_proj.weight"
-    ]
+    assert [name for name, _ in pairs] == ["model.language_model.layers.0.self_attn.q_proj.weight"]
     assert read_names == ["model.language_model.layers.0.self_attn.q_proj.weight"]

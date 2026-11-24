@@ -25,31 +25,14 @@ DiffusionScheduler path.  Cosmos3 uses UniPC in ``schedulers/cosmos3``
 instead.
 """
 
-from typing import Tuple
-
 import torch
 
 
 class EDMScaling:
-    """Edm scaling implementation."""
-
     def __init__(self, sigma_data: float = 0.5):
-        """Init.
-
-        Args:
-            sigma_data: The sigma data.
-        """
         self.sigma_data = sigma_data
 
-    def __call__(self, sigma: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Call.
-
-        Args:
-            sigma: The sigma.
-
-        Returns:
-            The return value.
-        """
+    def __call__(self, sigma: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         c_skip = self.sigma_data**2 / (sigma**2 + self.sigma_data**2)
         c_out = sigma * self.sigma_data / (sigma**2 + self.sigma_data**2) ** 0.5
         c_in = 1 / (sigma**2 + self.sigma_data**2) ** 0.5
@@ -69,7 +52,7 @@ class RectifiedFlowScaling:
             raise ValueError("sigma_data must be 1.0 for RectifiedFlowScaling")
         self.t_scaling_factor = t_scaling_factor
 
-    def __call__(self, sigma: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __call__(self, sigma: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         t = sigma / (sigma + 1)
         return 1.0 - t, -t, 1.0 - t, t * self.t_scaling_factor
 

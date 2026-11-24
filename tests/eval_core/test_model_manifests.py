@@ -6,19 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.models import (
-    build_model_manifest_registry,
-    model_manifests_from_source_maps,
-)
-from worldfoundry.evaluation.api.registry import DuplicateRegistryKeyError, ModelRegistry
-
-
-def test_model_manifest_facade_resolves_catalog_manifest_helpers() -> None:
-    import worldfoundry.evaluation.models.catalog.manifest as canonical_manifest
-    import worldfoundry.evaluation.models as models
-
-    assert models.model_manifests_from_source_maps is canonical_manifest.model_manifests_from_source_maps
-    assert models.build_model_manifest_registry is canonical_manifest.build_model_manifest_registry
+from worldfoundry.evals.api.registry import DuplicateRegistryKeyError, ModelRegistry
+from worldfoundry.zoo.catalog.manifest import build_model_manifest_registry, model_manifests_from_source_maps
 
 
 def _load_alpha(model_path: str, device: str) -> object:
@@ -118,7 +107,7 @@ def test_duplicate_keys_and_aliases_are_left_to_registry() -> None:
 def test_model_package_facade_imports_are_stdlib_or_local() -> None:
     # The repository uses a flat package layout (no src/ directory).
     repo_root = Path(__file__).resolve().parents[2]
-    models_root = repo_root / "worldfoundry" / "evaluation" / "models"
+    models_root = repo_root / "worldfoundry" / "evals" / "models"
     allowed_modules = set(sys.stdlib_module_names) | {"__future__"}
 
     path = models_root / "__init__.py"

@@ -110,8 +110,7 @@ def test_task_materialize_writes_generation_request_rows(tmp_path, capsys) -> No
     _write_cli_task_catalog(task_root)
     (data_root / "manifests").mkdir(parents=True)
     (data_root / "manifests" / "cli.jsonl").write_text(
-        '{"sample_id": "sample-a", "prompt": "orbit left"}\n'
-        '{"sample_id": "sample-b", "prompt": "orbit right"}\n',
+        '{"sample_id": "sample-a", "prompt": "orbit left"}\n{"sample_id": "sample-b", "prompt": "orbit right"}\n',
         encoding="utf-8",
     )
 
@@ -132,11 +131,7 @@ def test_task_materialize_writes_generation_request_rows(tmp_path, capsys) -> No
         ]
     )
     payload = json.loads(capsys.readouterr().out)
-    rows = [
-        json.loads(line)
-        for line in requests_path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    rows = [json.loads(line) for line in requests_path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
     assert exit_code == 0
     assert payload["schema_version"] == "worldfoundry-materialized-requests"

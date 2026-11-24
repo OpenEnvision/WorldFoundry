@@ -12,7 +12,7 @@ ensuring consistent metadata tagging for different policy models.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from worldfoundry.core.memory import BaseMemory
 
@@ -82,7 +82,7 @@ class ActionTraceMemory(BaseMemory):
             return self.records
         raise AttributeError(name)
 
-    def record(self, data: Any, metadata: Optional[Dict[str, Any]] = None, **kwargs: Any):
+    def record(self, data: Any, metadata: dict[str, Any] | None = None, **kwargs: Any):
         """
         Append one action trace entry with model metadata.
 
@@ -125,10 +125,7 @@ class ActionTraceMemory(BaseMemory):
         """
         del context_query, kwargs  # context_query and kwargs are explicitly ignored
         # Retrieve the latest record, optionally filtering by a preferred type.
-        if prefer_type is None:
-            record = self.latest_record()
-        else:
-            record = self.latest_record(prefer_type=prefer_type)
+        record = self.latest_record() if prefer_type is None else self.latest_record(prefer_type=prefer_type)
         return record["content"] if record is not None else None
 
     def manage(self, action: str = "reset", **kwargs: Any):
@@ -325,8 +322,8 @@ __all__ = [
     "BeingH05Memory",
     "DiffusionPolicyMemory",
     "DreamZeroMemory",
-    "GigaBrain0Memory",
     "GR00TMemory",
+    "GigaBrain0Memory",
     "LAPAMemory",
     "LingBotVAMemory",
     "MolmoAct2Memory",

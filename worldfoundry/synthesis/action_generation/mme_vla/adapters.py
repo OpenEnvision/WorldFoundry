@@ -49,18 +49,18 @@ class RoboMMEInputs(transforms.DataTransformFn):
                 # "right_wrist_0_rgb": np.False_,
             },
             # perceptual memory
-            "static_image_emb": data.get("static_image_emb", None), # (budget, d1)
-            "static_pos_emb": data.get("static_pos_emb", None), # (budget, d2)
-            "static_state_emb": data.get("static_state_emb", None), # (budget, d3)
-            "static_mask": data.get("static_mask", None), # (budget)
+            "static_image_emb": data.get("static_image_emb"),  # (budget, d1)
+            "static_pos_emb": data.get("static_pos_emb"),  # (budget, d2)
+            "static_state_emb": data.get("static_state_emb"),  # (budget, d3)
+            "static_mask": data.get("static_mask"),  # (budget)
             # recurrent memory
-            "recur_image_emb": data.get("recur_image_emb", None), # (max_recur_steps, views, p, d1)
-            "recur_pos_emb": data.get("recur_pos_emb", None), # (max_recur_steps, views, p, d2)
-            "recur_state_emb": data.get("recur_state_emb", None), # (max_recur_steps, d3)
-            "recur_mask": data.get("recur_mask", None), # (max_recur_steps)
+            "recur_image_emb": data.get("recur_image_emb"),  # (max_recur_steps, views, p, d1)
+            "recur_pos_emb": data.get("recur_pos_emb"),  # (max_recur_steps, views, p, d2)
+            "recur_state_emb": data.get("recur_state_emb"),  # (max_recur_steps, d3)
+            "recur_mask": data.get("recur_mask"),  # (max_recur_steps)
             # symbolic memory
-            "simple_subgoal": data.get("simple_subgoal", None),
-            "grounded_subgoal": data.get("grounded_subgoal", None),
+            "simple_subgoal": data.get("simple_subgoal"),
+            "grounded_subgoal": data.get("grounded_subgoal"),
         }
 
         # Pass the prompt (aka language instruction) to the model.
@@ -77,4 +77,4 @@ class RoboMMEOutputs(transforms.DataTransformFn):
     """Return RoboMME's seven joints plus gripper action."""
 
     def __call__(self, data: dict) -> dict:
-        return {"actions": np.asarray(data["actions"][:, :8])} # joint angles + gripper (1 open -1 close)
+        return {"actions": np.asarray(data["actions"][:, :8])}  # joint angles + gripper (1 open -1 close)

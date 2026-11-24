@@ -9,7 +9,6 @@ import math
 import torch
 import torch.nn.functional as F
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Chunked 5-D interpolate — stay under int32 element counts
 # ──────────────────────────────────────────────────────────────────────────
@@ -27,9 +26,9 @@ def chunked_interpolate(x, scale_factor, mode="nearest"):
     Returns:
         torch.Tensor: Interpolated tensor
     """
-    assert (
-        mode == "nearest"
-    ), "Only the nearest mode is supported"  # actually other modes are theoretically supported but not tested
+    assert mode == "nearest", (
+        "Only the nearest mode is supported"
+    )  # actually other modes are theoretically supported but not tested
     if len(x.shape) != 5:
         raise ValueError("Expected 5D input tensor (B, C, D, H, W)")
 
@@ -120,21 +119,36 @@ def pixel_unshuffle_3d(x, downsample_factor):
 
 
 def ceil_to_divisible(n: int, dividend: int) -> int:
-    """Ceil to divisible.
+    """Return ``ceil(dividend / (dividend // n))``, the chunk size that splits ``dividend`` into ``dividend // n`` chunks.
 
-    Args:
-        n: The n.
-        dividend: The dividend.
+    The result is at least ``n``.
 
-    Returns:
-        The return value.
+    Raises:
+        ZeroDivisionError: ``n`` is 0 or larger than ``dividend``.
     """
     return math.ceil(dividend / (dividend // n))
 
 
+def pad_for_3d_conv(x: torch.Tensor, kernel_size: tuple[int, int, int]) -> torch.Tensor:
+    """Replicate trailing T/H/W values to multiples of a 3-D convolution kernel."""
+    b, c, t, h, w = x.shape
+    pt, ph, pw = kernel_size
+    pad_t = (pt - (t % pt)) % pt
+    pad_h = (ph - (h % ph)) % ph
+    pad_w = (pw - (w % pw)) % pw
+    return torch.nn.functional.pad(x, (0, pad_w, 0, pad_h, 0, pad_t), mode="replicate")
+
+
+def center_down_sample_3d(x: torch.Tensor, kernel_size: tuple[int, int, int]) -> torch.Tensor:
+    """Average non-overlapping 3-D kernel regions in a BCTHW tensor."""
+    return torch.nn.functional.avg_pool3d(x, kernel_size, stride=kernel_size)
+
+
 __all__ = [
     "ceil_to_divisible",
+    "center_down_sample_3d",
     "chunked_interpolate",
+    "pad_for_3d_conv",
     "pixel_shuffle_3d",
     "pixel_unshuffle_3d",
 ]

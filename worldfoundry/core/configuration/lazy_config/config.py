@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ast
 import builtins
+import contextlib
 import importlib.machinery
 import importlib.util
 import inspect
@@ -25,7 +26,7 @@ from copy import deepcopy
 from dataclasses import asdict as dataclass_asdict
 from dataclasses import is_dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import attrs
 import yaml
@@ -85,7 +86,7 @@ def _config_builtins() -> dict[str, Any]:
         if level and package.startswith(_CONFIG_PACKAGE_PREFIX):
             if not name:
                 raise ImportError("Relative config imports must name a Python config file.")
-            source = Path(globals["__file__"])
+            source = Path(cast(dict[str, Any], globals)["__file__"])
             target = source.parent
             for _ in range(level - 1):
                 target = target.parent
@@ -227,10 +228,8 @@ class LazyConfig:
 
         path = Path(filename)
         path.parent.mkdir(parents=True, exist_ok=True)
-        try:
+        with contextlib.suppress(Exception):
             config = deepcopy(config)
-        except Exception:
-            pass
         value = _sort_recursive(_plain_config(config))
         yaml.add_representer(
             OrderedDict,

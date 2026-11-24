@@ -222,7 +222,7 @@ class LingBotVideoNativePipeline:
         *,
         model_path: str | Path,
         server_args: Any | None = None,
-    ) -> "LingBotVideoNativePipeline":
+    ) -> LingBotVideoNativePipeline:
         return cls(diffusers_pipe, model_path=model_path, server_args=server_args)
 
     @classmethod
@@ -235,7 +235,7 @@ class LingBotVideoNativePipeline:
         mode: str = "t2v",
         transformer_subfolder: str = "transformer",
         **kwargs: Any,
-    ) -> "LingBotVideoNativePipeline":
+    ) -> LingBotVideoNativePipeline:
         return cls(
             model_path,
             model_path=model_path,
@@ -263,18 +263,18 @@ class LingBotVideoNativePipeline:
         output_type: str = "np",
         **kwargs: Any,
     ) -> LingBotVideoPipelineOutput:
-        call_kwargs = dict(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            height=height,
-            width=width,
-            num_frames=num_frames,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale,
-            shift=shift,
-            generator=generator,
-            output_type=output_type,
-        )
+        call_kwargs = {
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "height": height,
+            "width": width,
+            "num_frames": num_frames,
+            "num_inference_steps": num_inference_steps,
+            "guidance_scale": guidance_scale,
+            "shift": shift,
+            "generator": generator,
+            "output_type": output_type,
+        }
         if image is not None:
             call_kwargs["image"] = image
         call_kwargs.update(kwargs)

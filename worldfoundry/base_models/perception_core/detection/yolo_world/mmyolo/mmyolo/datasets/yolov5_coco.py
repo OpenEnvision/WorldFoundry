@@ -1,5 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import Any, Optional
+from typing import Any
 
 from mmdet.datasets import BaseDetDataset, CocoDataset
 
@@ -11,10 +11,7 @@ class BatchShapePolicyDataset(BaseDetDataset):
     pixels during batch inference process, which does not require the image
     scales of all batches to be the same throughout validation."""
 
-    def __init__(self,
-                 *args,
-                 batch_shapes_cfg: Optional[dict] = None,
-                 **kwargs):
+    def __init__(self, *args, batch_shapes_cfg: dict | None = None, **kwargs):
         self.batch_shapes_cfg = batch_shapes_cfg
         super().__init__(*args, **kwargs)
 
@@ -49,7 +46,7 @@ class BatchShapePolicyDataset(BaseDetDataset):
         data augmentation, such as Mosaic and MixUp."""
         if self.test_mode is False:
             data_info = self.get_data_info(idx)
-            data_info['dataset'] = self
+            data_info["dataset"] = self
             return self.pipeline(data_info)
         else:
             return super().prepare_data(idx)
@@ -62,4 +59,3 @@ class YOLOv5CocoDataset(BatchShapePolicyDataset, CocoDataset):
     We only add `BatchShapePolicy` function compared with CocoDataset. See
     `mmyolo/datasets/utils.py#BatchShapePolicy` for details
     """
-    pass

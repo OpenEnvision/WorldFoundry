@@ -24,21 +24,37 @@ import warnings
 from collections.abc import Sequence, Sized
 from copy import deepcopy
 from importlib import import_module
-from typing import Any, List, Optional, Tuple, Union, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 import torch
 import torch.nn as nn
-from typing_extensions import Literal
 
-from worldfoundry.core.io.filesystem.file_utils import f_join
-from worldfoundry.core.observability.formatting import to_readable_count_str
 from worldfoundry.core.utils.python.functional_utils import assert_implements_method, implements_method
 from worldfoundry.core.utils.python.tree_utils import _require_tree, tree_value_at_path
 
 # ──────────────────────────────────────────────────────────────────────────
 # Init / seeds — process-wide; PYTHONHASHSEED only affects child processes
 # ──────────────────────────────────────────────────────────────────────────
+
+
+def merge_info(info_a: dict[str, torch.Tensor], info_b: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Concatenate shared episode fields and retain fields present on only one side."""
+    keys_a = set(info_a)
+    keys_b = set(info_b)
+    intersection = keys_a & keys_b
+    return {
+        **{k: info_a[k] for k in keys_a if k not in intersection},
+        **{k: info_b[k] for k in keys_b if k not in intersection},
+        **{k: torch.cat((info_a[k], info_b[k]), dim=0) for k in intersection},
+    }
+
+
+def mult_along_first_dims(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    """Broadcast ``y`` over the trailing dimensions of ``x`` before multiplication."""
+    for _ in range(x.ndim - y.ndim):
+        y = y.unsqueeze(-1)
+    return x * y
 
 
 def weight_init(m):
@@ -52,7 +68,7 @@ def weight_init(m):
         nn.init.orthogonal_(m.weight.data)
         if hasattr(m.bias, "data"):
             m.bias.data.fill_(0.0)
-    elif isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+    elif isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
         gain = nn.init.calculate_gain("relu")
         nn.init.orthogonal_(m.weight.data, gain)
         if hasattr(m.bias, "data"):
@@ -60,9 +76,9 @@ def weight_init(m):
 
 
 def get_seed(
-    seed: Union[int, str, None],
+    seed: int | str | None,
     handle_invalid_seed: Literal["none", "system", "raise"] = "none",
-) -> Optional[int]:
+) -> int | None:
     """Resolves and standardizes random seed inputs.
 
     Translates special verbal seed flags like `"system"` into high-entropy,
@@ -141,11 +157,11 @@ def apply_deterministic_from_env() -> bool:
 
 
 def set_seed_everywhere(
-    seed: Optional[Union[int, str]],
+    seed: int | str | None,
     deterministic=False,
     set_tensorflow=False,
     handle_invalid_seed: Literal["none", "system", "raise"] = "none",
-) -> Optional[int]:
+) -> int | None:
     """Inoculates random seeds globally across all standard runtime backends.
 
     Binds random seeds across Python builtin random, NumPy, PyTorch (CPU and CUDA),
@@ -227,7 +243,7 @@ def temporal_feature_consistency(features: torch.Tensor) -> torch.Tensor:
 # ──────────────────────────────────────────────────────────────────────────
 
 
-class eval_mode(object):
+class eval_mode:
     """Temporarily ``train(False)`` one or more modules; restore on exit."""
 
     def __init__(self, *models):
@@ -243,7 +259,7 @@ class eval_mode(object):
 
     def __exit__(self, *args):
         """Restore prior flags; never suppress exceptions."""
-        for model, state in zip(self.models, self.prev_states):
+        for model, state in zip(self.models, self.prev_states, strict=False):
             model.train(state)
         return False
 
@@ -272,39 +288,6 @@ def get_device(x, strict: bool = False) -> int:
         return devices[0]
     else:
         return _get_device(xs[0])
-
-
-def load_torch(*fpath: str, map_location="cpu") -> dict:
-    """
-    Default maps to "cpu"
-    """
-    from worldfoundry.core.model_loading import load_torch_checkpoint
-
-    path = str(f_join(fpath))
-    try:
-        return load_torch_checkpoint(path, map_location=map_location)
-    except RuntimeError as e:
-        raise RuntimeError(f"{e}\n\n --- Error loading {path}")
-
-
-def save_torch(D, *fpath):
-    """
-    Supports both (D, fpath) and (fpath, D) arg order, as long as one of them is a str
-    """
-    if isinstance(D, str):
-        assert not isinstance(fpath, str), "Either torch_save(D, fpath) or torch_save(fpath, D)"
-        # ``fpath`` is a varargs tuple here; unwrap the payload so the swapped
-        # call order saves the object itself instead of a 1-tuple.
-        if len(fpath) != 1:
-            raise ValueError("save_torch(fpath, D) expects exactly one object to save")
-        fpath, D = (D,), fpath[0]
-    torch.save(D, str(f_join(fpath)))
-
-
-# Aliases for consistency with load_pickle, load_text, load_json/yaml, etc.
-torch_load = load_torch
-torch_save = save_torch
-dump_torch = save_torch
 
 
 def torch_compute_stats(x, precision: int = 2):
@@ -360,10 +343,8 @@ def torch_multi_index_select(x: torch.Tensor, indices: torch.Tensor):
     x_shape = x.size()
     assert len(x_shape) >= idx_dim
     remainder_dim = len(x_shape) - idx_dim
-    if remainder_dim == 0:
-        x = torch.flatten(x)
-    else:
-        x = x.view(-1, *x_shape[-remainder_dim:])  # flatten the first M dims
+    # Flatten the first M dims (every dim when none remain).
+    x = torch.flatten(x) if remainder_dim == 0 else x.view(-1, *x_shape[-remainder_dim:])
     # convert indices to a 1D flattened array
     indices = torch_flatten_indices(indices, x_shape[:idx_dim])
     selected = x[indices]
@@ -528,19 +509,20 @@ def load_state_dict(objects, states, strip_prefix=None, strict=False):
     return tree.map_structure_with_path(_load, objects)
 
 
-def count_parameters(model, verbose: bool = False):
-    """Sum ``numel`` over parameters (includes frozen); optionally log the count."""
-    count = sum(parameter.numel() for parameter in model.parameters())
+def count_parameters(model: nn.Module, *, trainable_only: bool = False) -> int:
+    """Return the number of parameters owned by a torch-style module."""
+    parameters = model.parameters()
+    if trainable_only:
+        parameters = (parameter for parameter in parameters if parameter.requires_grad)
+    return sum(parameter.numel() for parameter in parameters)
+
+
+def count_params(model: nn.Module, verbose: bool = False) -> int:
+    """Count every parameter and optionally print the total in millions, as LVDM modules expect."""
+    total = count_parameters(model)
     if verbose:
-        from worldfoundry.core.distributed.runtime.logging import log
-
-        log.info("parameter count: {:,}", count)
-    return count
-
-
-def readable_count_parameters(model, precision: int = 2):
-    """Human-readable parameter count (e.g. ``12.3M``)."""
-    return to_readable_count_str(count_parameters(model), precision=precision)
+        print(f"{model.__class__.__name__} has {total * 1e-6:.2f} M params.")
+    return total
 
 
 def get_module_device(model):
@@ -580,7 +562,7 @@ def clone_model(model):
 
 def update_soft_params(net, target_net, tau):
     """Polyak average ``target = tau * net + (1-tau) * target`` in place."""
-    for param, target_param in zip(net.parameters(), target_net.parameters()):
+    for param, target_param in zip(net.parameters(), target_net.parameters(), strict=False):
         target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
 
@@ -613,7 +595,7 @@ def torch_normalize(tensor: torch.Tensor, mean, std, inplace=False):
         Tensor: Normalized Tensor image.
     """
     if not torch.is_tensor(tensor):
-        raise TypeError("tensor should be a torch tensor. Got {}.".format(type(tensor)))
+        raise TypeError(f"tensor should be a torch tensor. Got {type(tensor)}.")
 
     if not inplace:
         tensor = tensor.clone()
@@ -633,13 +615,10 @@ def torch_normalize(tensor: torch.Tensor, mean, std, inplace=False):
 
 def contains_rnn(net: nn.Module) -> bool:
     """True if any submodule is an ``nn.RNNBase`` (LSTM / GRU / RNN)."""
-    for m in net.modules():
-        if isinstance(m, nn.RNNBase):
-            return True
-    return False
+    return any(isinstance(m, nn.RNNBase) for m in net.modules())
 
 
-def multi_one_hot(x, num_classes: List[int], to_float=True):
+def multi_one_hot(x, num_classes: list[int], to_float=True):
     """
     Concatenates multiple one-hot matrices, useful for embedding MultiDiscrete action space
 
@@ -655,7 +634,7 @@ def multi_one_hot(x, num_classes: List[int], to_float=True):
     assert x.dtype == torch.long
     assert x.dim() >= 2, x.size()
     assert len(num_classes) == x.size(-1), f"{len(num_classes)} != {x.size(1)}"
-    result = torch.cat([one_hot(t, c) for t, c in zip(torch.unbind(x, dim=-1), num_classes)], dim=-1)
+    result = torch.cat([one_hot(t, c) for t, c in zip(torch.unbind(x, dim=-1), num_classes, strict=False)], dim=-1)
     if to_float:
         return result.float()
     else:
@@ -665,7 +644,7 @@ def multi_one_hot(x, num_classes: List[int], to_float=True):
 def _random_derangement(n):
     """Sattolo-style rejection sample of a permutation with no fixed points."""
     while True:
-        v = [i for i in range(n)]
+        v = list(range(n))
         for j in range(n - 1, -1, -1):
             p = random.randint(0, j)
             if v[p] == j:
@@ -699,7 +678,7 @@ def random_derangement(n, format: Literal["list", "numpy", "torch"] = "torch"):
 def classify_accuracy(
     output,
     target,
-    topk: Union[int, List[int], Tuple[int]] = 1,
+    topk: int | list[int] | tuple[int] = 1,
     mask=None,
     reduction="mean",
     scale_100=False,
@@ -805,7 +784,7 @@ def sequential_split_dataset(
 
     return [
         torch.utils.data.Subset(dataset, indices[offset - length : offset])
-        for offset, length in zip(accumulate(lengths), lengths)
+        for offset, length in zip(accumulate(lengths), lengths, strict=False)
     ]
 
 
@@ -871,7 +850,8 @@ class RunningMeanStd:
         if self._var is None:
             self._var = _zeros(batch_var.shape) + 1.0
 
-        delta = batch_mean - self._mean
+        # Moments retain the first batch's backend; numpy and torch are not mixed.
+        delta = batch_mean - cast(Any, self._mean)
         tot_count = self._count + batch_count
         assert tot_count > 0, "count must be > 0"
 
@@ -900,10 +880,7 @@ def fix_random_seeds(seed=31):
 def has_batchnorms(model):
     """Check whether a model contains any BatchNorm layers."""
     bn_types = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.SyncBatchNorm)
-    for _, module in model.named_modules():
-        if isinstance(module, bn_types):
-            return True
-    return False
+    return any(isinstance(module, bn_types) for _, module in model.named_modules())
 
 
 class AverageMeter:
@@ -939,10 +916,7 @@ class AverageMeter:
 
     def __str__(self):
         """Format the current mean; include ``name`` when set."""
-        if self._fmt:
-            s = f"{float(self):{self._fmt}}"
-        else:
-            s = str(float(self))
+        s = f"{float(self):{self._fmt}}" if self._fmt else str(float(self))
         if self._name:
             return f"{self._name}: {s}"
         return s

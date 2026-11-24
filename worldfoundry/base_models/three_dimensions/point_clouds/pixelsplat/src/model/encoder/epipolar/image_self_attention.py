@@ -1,19 +1,20 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> encoder -> epipolar -> image_self_attention.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from dataclasses import dataclass
 
 from einops import rearrange
 from jaxtyping import Float
 from torch import Tensor, nn
 
-from ....geometry.projection import sample_image_grid
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import (
+    sample_image_grid,
+)
+
 from ...encodings.positional_encoding import PositionalEncoding
 from ...transformer.transformer import Transformer
 
 
 @dataclass
 class ImageSelfAttentionCfg:
-    """Image self attention cfg implementation."""
     patch_size: int
     num_octaves: int
     num_layers: int
@@ -24,7 +25,6 @@ class ImageSelfAttentionCfg:
 
 
 class ImageSelfAttention(nn.Module):
-    """Image self attention implementation."""
     positional_encoding: nn.Sequential
     patch_embedder: nn.Sequential
     transformer: Transformer
@@ -35,13 +35,6 @@ class ImageSelfAttention(nn.Module):
         d_in: int,
         d_out: int,
     ):
-        """Init.
-
-        Args:
-            cfg: The cfg.
-            d_in: The d in.
-            d_out: The d out.
-        """
         super().__init__()
         self.positional_encoding = nn.Sequential(
             (pe := PositionalEncoding(cfg.num_octaves)),
@@ -69,14 +62,6 @@ class ImageSelfAttention(nn.Module):
         self,
         image: Float[Tensor, "batch d_in height width"],
     ) -> Float[Tensor, "batch d_out height width"]:
-        """Forward.
-
-        Args:
-            image: The image.
-
-        Returns:
-            The return value.
-        """
         # Embed patches so they become tokens.
         tokens = self.patch_embedder.forward(image)
 

@@ -41,9 +41,9 @@ def test_concrete_runtime_lookup_retains_its_own_canonical_defaults(
 
     monkeypatch.delenv("WORLDFOUNDRY_STUDIO_MODEL_REF", raising=False)
     monkeypatch.delenv(f"WORLDFOUNDRY_STUDIO_MODEL_REF_{canonical_id.upper()}", raising=False)
-    monkeypatch.setattr(catalog, "discover_catalog", _unexpected_catalog_scan)
-    monkeypatch.setattr(catalog, "_discover_catalog_infos", _unexpected_catalog_scan)
-    monkeypatch.setattr(catalog, "_checkpoint_model_ref", checkpoint_ref)
+    monkeypatch.setattr(catalog.discovery, "discover_catalog", _unexpected_catalog_scan)
+    monkeypatch.setattr(catalog.discovery, "_discover_catalog_infos", _unexpected_catalog_scan)
+    monkeypatch.setattr(catalog.resolve, "_checkpoint_model_ref", checkpoint_ref)
 
     entry = catalog.find_runtime_entry(model_id)
 

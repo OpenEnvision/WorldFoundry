@@ -43,10 +43,10 @@ runner:
   normalization:
     dispatch: embodied
     embodied_track: vla
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:BridgeDataV2Contract
+  runner_target: worldfoundry.evals.tasks.contracts.external:bridgedata-v2
   verification_status: normalizer_only
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -116,7 +116,7 @@ data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/bridgedata-v2.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:BridgeDataV2Contract
+  runner_target: worldfoundry.evals.tasks.contracts.external:bridgedata-v2
   runner_script_available: false
   task_yaml_available: true
   runtime_verified: false
@@ -125,7 +125,7 @@ runner_availability:
 optional_base_model_dependencies:
 - spatial_perception_core_stack
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -142,3 +142,18 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_BRIDGEDATA_V2_RESULTS_PATH
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - dataset_root
+  - episode_manifest
+  - policy_results_path
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_results
+  - per_sample_metrics
+  - rollout_logs
+  notes:
+  - Contract covers BridgeData V2 real-robot dataset and policy evaluation result normalization.
+  - Dataset conversion, checkpoint selection, and robot/runtime execution stay outside the core scorecard
+    path.

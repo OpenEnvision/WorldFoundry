@@ -95,9 +95,9 @@ def _all_to_all_tensor(x, scatter_dim, gather_dim, group):
             gather_dim_bef = x.shape[gather_dim]
             scatter_dim_bef = x.shape[scatter_dim]
             x = (
-                x.reshape([gather_dim_bef, world, scatter_dim_bef // world] + list(x.shape[2:]))
+                x.reshape([gather_dim_bef, world, scatter_dim_bef // world] + list(x.shape[2:]))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                 .transpose(0, 1)
-                .reshape([gather_dim_bef * world, scatter_dim_bef // world] + list(x.shape[2:]))
+                .reshape([gather_dim_bef * world, scatter_dim_bef // world] + list(x.shape[2:]))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                 .contiguous()
             )
         output = torch.empty_like(x)

@@ -20,7 +20,7 @@ import importlib
 import os
 from itertools import chain
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 
 class LazyModule(ModuleType):
@@ -57,7 +57,7 @@ class LazyModule(ModuleType):
 
     def __dir__(self) -> list[str]:
         """Advertise every lazy export so completion tools see names before import."""
-        result = super().__dir__()
+        result = list(super().__dir__())
         for attr in self.__all__:
             if attr not in result:
                 result.append(attr)
@@ -87,9 +87,9 @@ class LazyModule(ModuleType):
         """Import ``.<module_name>`` relative to this wrapper's package name."""
         return importlib.import_module("." + module_name, self.__name__)
 
-    def __reduce__(self) -> tuple[type["LazyModule"], tuple[str, str, dict[str, list[str]]]]:
+    def __reduce__(self) -> tuple[type[LazyModule], tuple[str, str, dict[str, list[str]]]]:
         """Reconstruct from name / file / structure; extras are dropped on pickle."""
-        return self.__class__, (self._name, self.__file__, self._import_structure)
+        return type(self), (self._name, cast(str, self.__file__), self._import_structure)
 
 
 _LazyModule = LazyModule

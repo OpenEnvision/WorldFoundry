@@ -1,14 +1,15 @@
 """Hunyuan Game Craft visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
 import inspect
+from typing import TYPE_CHECKING, Any, Optional
+
 import torch
-from PIL import Image
-from typing import Optional, Any, List, TYPE_CHECKING
+
+from worldfoundry.synthesis.visual_generation.hunyuan_world.gamecraft_inference.config import parse_args
 
 from ...operators.hunyuan_game_craft_operator import HunyuanGameCraftOperator
-from worldfoundry.synthesis.visual_generation.hunyuan_world.gamecraft_inference.config import parse_args
 from ...synthesis.visual_generation.memory.stream import LatentContextMemory
+from ..pipeline_utils import PipelineABC
 
 if TYPE_CHECKING:
     from ...synthesis.visual_generation.hunyuan_world.hunyuan_game_craft_synthesis import HunyuanGameCraftSynthesis
@@ -16,11 +17,12 @@ if TYPE_CHECKING:
 
 class HunyuanGameCraftPipeline(PipelineABC):
     """Pipeline implementation for HunyuanGameCraft visual generation."""
+
     def __init__(
         self,
-        operators: Optional[HunyuanGameCraftOperator] = None,
+        operators: HunyuanGameCraftOperator | None = None,
         synthesis_model: Optional["HunyuanGameCraftSynthesis"] = None,
-        memory_module: Optional[Any] = None,
+        memory_module: Any | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype=torch.bfloat16,
@@ -40,10 +42,10 @@ class HunyuanGameCraftPipeline(PipelineABC):
                 self._predict_sig = None
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[str] = None,
-        required_components: Optional[dict[str, Any]] = None,
+        model_path: str | None = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype=torch.bfloat16,
@@ -68,10 +70,7 @@ class HunyuanGameCraftPipeline(PipelineABC):
 
         initialize_distributed(args.seed)
 
-        if model_path is not None:
-            synthesis_model_path = model_path
-        else:
-            synthesis_model_path = "tencent/Hunyuan-GameCraft-1.0"
+        synthesis_model_path = model_path if model_path is not None else "tencent/Hunyuan-GameCraft-1.0"
 
         from ...synthesis.visual_generation.hunyuan_world.hunyuan_game_craft_synthesis import HunyuanGameCraftSynthesis
 
@@ -120,17 +119,15 @@ class HunyuanGameCraftPipeline(PipelineABC):
                 filtered[k] = v
         return self.synthesis_model.predict(**filtered)
 
-    def process(self,
-                input_image,
-                output_H,
-                output_W,
-                interaction_signal):
+    def process(self, input_image, output_H, output_W, interaction_signal):
         """
         the input_image is PIL image
         """
 
-        visual_context = self.operators.process_perception(image=input_image, output_H=output_H, output_W=output_W, process_model=self.synthesis_model)
-        
+        visual_context = self.operators.process_perception(
+            image=input_image, output_H=output_H, output_W=output_W, process_model=self.synthesis_model
+        )
+
         # define the interaction
         self.operators.get_interaction(interaction_signal)
         operator_condition = self.operators.process_interaction()
@@ -140,29 +137,31 @@ class HunyuanGameCraftPipeline(PipelineABC):
             "visual_context": visual_context,
             "operator_condition": operator_condition,
         }
-        
+
         return output_dict
 
-    def __call__(self,
-                # default condition
-                images,     # PIL image
-                prompt="",
-                interactions=None,
-                size=(704, 1216),
-                height=None,
-                width=None,
-                num_frames=None,
-                # other generation condition
-                interaction_speed=None,
-                interaction_positive_prompt="Realistic, High-quality.",
-                interaction_negative_prompt="overexposed, low quality, deformation, a poor composition, bad hands, bad teeth, bad eyes, bad limbs, distortion, blurring, text, subtitles, static, picture, black border.",
-                cfg_scale=2.0,
-                infer_steps=50,
-                flow_shift_eval_video=5.0,
-                output_path=None,
-                fps=24,
-                return_dict=False,
-                **kwds):
+    def __call__(
+        self,
+        # default condition
+        images,  # PIL image
+        prompt="",
+        interactions=None,
+        size=(704, 1216),
+        height=None,
+        width=None,
+        num_frames=None,
+        # other generation condition
+        interaction_speed=None,
+        interaction_positive_prompt="Realistic, High-quality.",
+        interaction_negative_prompt="overexposed, low quality, deformation, a poor composition, bad hands, bad teeth, bad eyes, bad limbs, distortion, blurring, text, subtitles, static, picture, black border.",
+        cfg_scale=2.0,
+        infer_steps=50,
+        flow_shift_eval_video=5.0,
+        output_path=None,
+        fps=24,
+        return_dict=False,
+        **kwds,
+    ):
         """Execute the complete pipeline generation flow."""
         if interactions is None:
             interactions = ["forward", "left", "right", "right", "camera_l", "camera_r", "camera_up", "camera_down"]
@@ -185,17 +184,14 @@ class HunyuanGameCraftPipeline(PipelineABC):
         input_image = images
         output_H, output_W = size
         output_dict = self.process(
-            input_image=input_image,
-            output_H=output_H,
-            output_W=output_W,
-            interaction_signal=interactions
+            input_image=input_image, output_H=output_H, output_W=output_W, interaction_signal=interactions
         )
         output_video = self.synthesis_model.predict(
             # condition
-            ref_images=output_dict["visual_context"]['ref_images'],
-            last_latents=output_dict["visual_context"]['last_latents'],
-            ref_latents=output_dict["visual_context"]['ref_latents'],
-            action_list=output_dict['operator_condition'],
+            ref_images=output_dict["visual_context"]["ref_images"],
+            last_latents=output_dict["visual_context"]["last_latents"],
+            ref_latents=output_dict["visual_context"]["ref_latents"],
+            action_list=output_dict["operator_condition"],
             action_speed_list=interaction_speed,
             prompt=prompt,
             negative_prompt=interaction_negative_prompt,
@@ -205,13 +201,13 @@ class HunyuanGameCraftPipeline(PipelineABC):
             guidance_scale=cfg_scale,
             infer_steps=infer_steps,
             flow_shift=flow_shift_eval_video,
-            **kwds
+            **kwds,
         )
         frames = output_video["video"] if isinstance(output_video, dict) else output_video
         if frames is not None and len(frames) != expected_frames:
             raise RuntimeError(f"GameCraft returned {len(frames)} frames; expected {expected_frames}.")
         if output_path is not None and frames is not None:
-            from worldfoundry.core.io import write_video
+            from worldfoundry.core.media.codecs.video import write_video
 
             write_video(frames, output_path, fps=int(fps))
         if return_dict:
@@ -224,8 +220,8 @@ class HunyuanGameCraftPipeline(PipelineABC):
 
     def stream(
         self,
-        interactions: List[str],
-        interaction_speed: List[float],
+        interactions: list[str],
+        interaction_speed: list[float],
         images=None,
         prompt: str = "",
         size=(704, 1216),
@@ -269,13 +265,12 @@ class HunyuanGameCraftPipeline(PipelineABC):
                 f"interaction_speed length mismatch: {len(interaction_speed)} vs actions {len(operator_condition)}"
             )
 
-        first_is_image = (getattr(self.memory_module, "n_generated_segments", 0) == 0)
+        first_is_image = getattr(self.memory_module, "n_generated_segments", 0) == 0
 
         prompt = prompt or ""
         positive_prompt = interaction_positive_prompt or ""
-        if not self._has_predict_arg("positive_prompt"):
-            if positive_prompt.strip():
-                prompt = (prompt + " " + positive_prompt).strip()
+        if not self._has_predict_arg("positive_prompt") and positive_prompt.strip():
+            prompt = (prompt + " " + positive_prompt).strip()
 
         out = self._predict_call(
             ref_images=ctx.get("ref_images"),
@@ -312,4 +307,4 @@ class HunyuanGameCraftPipeline(PipelineABC):
             record_frames=(rank == 0),
         )
 
-        return video_frames 
+        return video_frames

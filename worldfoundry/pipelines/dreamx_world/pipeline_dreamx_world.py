@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from PIL import Image
 
-from worldfoundry.core.io import write_video
+from worldfoundry.core.media.codecs.video import write_video
 
 from ..pipeline_utils import PipelineABC
 
@@ -40,16 +41,14 @@ class DreamXWorld5BCamPipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "DreamXWorld5BCamPipeline":
+    ) -> DreamXWorld5BCamPipeline:
         options = cls._runtime_options(model_path, required_components, kwargs)
         resolved_model_id = cls._resolve_model_id(options, model_id=model_id)
         checkpoint_source = options.pop(
             "checkpoint_source",
             options.pop("checkpoint_dir", options.pop("model_path", None)),
         )
-        wan_model_path = options.pop(
-            "wan_model_path", options.pop("base_model_path", None)
-        )
+        wan_model_path = options.pop("wan_model_path", options.pop("base_model_path", None))
         cls._strip_framework_loading_options(options)
         return cls(
             checkpoint_source=checkpoint_source,
@@ -192,7 +191,7 @@ class DreamXWorld5BARPipeline(DreamXWorld5BCamPipeline):
             )
         return self._realtime_session
 
-    def configure_realtime(
+    def configure_realtime(  # ty: ignore[invalid-method-override]  # model-specific realtime options, passed by keyword
         self,
         images: Any,
         prompt: str = "",

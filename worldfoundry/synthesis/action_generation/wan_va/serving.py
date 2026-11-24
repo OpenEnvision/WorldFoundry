@@ -27,9 +27,7 @@ def distributed_infer(model, obs, local_rank):
     rank = dist.get_rank()
     assert rank == local_rank, "distributed_infer can only run at（rank 0)"
 
-    cmd = torch.tensor(1,
-                       dtype=torch.int64,
-                       device='cuda' if torch.cuda.is_available() else 'cpu')
+    cmd = torch.tensor(1, dtype=torch.int64, device="cuda" if torch.cuda.is_available() else "cpu")
     dist.broadcast(cmd, src=0)
 
     obj_list = [obs]
@@ -44,7 +42,7 @@ def worker_loop(model, local_rank):
     """
     TODO
     """
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     rank = dist.get_rank()
 
     while True:
@@ -72,10 +70,7 @@ def run_async_server_mode(model, local_rank, host, port):
         model_server = WebsocketPolicyServer(dist_model, host=host, port=port)
         model_server.serve_forever()
 
-        cmd = torch.tensor(
-            -1,
-            dtype=torch.int64,
-            device='cuda' if torch.cuda.is_available() else 'cpu')
+        cmd = torch.tensor(-1, dtype=torch.int64, device="cuda" if torch.cuda.is_available() else "cpu")
         dist.broadcast(cmd, src=0)
     else:
         try:

@@ -5,9 +5,11 @@ encoder, fusion model).  The host DiT remains canonical native Wan.
 
 Adds camera / IRG fusion.  No VACE trunk, causal cache, or linear attn.
 """
+
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any, ClassVar
 
 import torch
 import torch.nn.functional as F
@@ -115,12 +117,8 @@ class BiMultiHeadAttention(nn.Module):
         update_one = scaled_dot_product_attention(query, key, value_two, dropout_p=0.0)
         update_two = scaled_dot_product_attention(key, query, value_one, dropout_p=0.0)
 
-        update_one = update_one.transpose(1, 2).reshape(
-            modality_one.shape[0], modality_one.shape[1], self.embed_dim
-        )
-        update_two = update_two.transpose(1, 2).reshape(
-            modality_two.shape[0], modality_two.shape[1], self.embed_dim
-        )
+        update_one = update_one.transpose(1, 2).reshape(modality_one.shape[0], modality_one.shape[1], self.embed_dim)
+        update_two = update_two.transpose(1, 2).reshape(modality_two.shape[0], modality_two.shape[1], self.embed_dim)
         return self.out_m1_proj(update_one), self.out_m2_proj(update_two)
 
 
@@ -398,7 +396,7 @@ class CameraPoseEncoder(nn.Module):
 class FantasyWorldCameraCondition(nn.Module):
     """Install released Wan2.1 camera processors and own their pose encoder."""
 
-    _CHANNELS_BY_INFORMATION = {"all": 12, "rgb_conf": 4, "plucker": 6}
+    _CHANNELS_BY_INFORMATION: ClassVar[dict] = {"all": 12, "rgb_conf": 4, "plucker": 6}
 
     def __init__(
         self,
@@ -462,16 +460,13 @@ class FantasyWorldFusionModel(nn.Module):
             self.camera_condition = camera_condition
         self.start_index = int(start_index)
         remaining_blocks = len(self.pipe.dit.blocks) - self.start_index
-        self.cross_attention_list = list(
-            range(remaining_blocks) if fusion_blocks is None else fusion_blocks
-        )
+        self.cross_attention_list = list(range(remaining_blocks) if fusion_blocks is None else fusion_blocks)
         if any(index < 0 or index >= remaining_blocks for index in self.cross_attention_list):
             raise ValueError("FantasyWorld fusion block index is outside the remaining Wan stack")
         if max(self.cross_attention_list, default=-1) >= len(self.vggt.aggregator.global_blocks):
             raise ValueError("FantasyWorld fusion requires a matching VGGT global block")
         self._fusion_positions = {
-            block_index: position
-            for position, block_index in enumerate(self.cross_attention_list)
+            block_index: position for position, block_index in enumerate(self.cross_attention_list)
         }
         self.bicross_dim = fusion_dim
         self.bicross_num_heads = fusion_heads
@@ -506,14 +501,18 @@ class FantasyWorldFusionModel(nn.Module):
     ) -> torch.Tensor:
         frames, height, width = grid_size
         temporal, vertical, horizontal = frequencies_3d
-        return torch.cat(
-            (
-                temporal[:frames].view(frames, 1, 1, -1).expand(frames, height, width, -1),
-                vertical[:height].view(1, height, 1, -1).expand(frames, height, width, -1),
-                horizontal[:width].view(1, 1, width, -1).expand(frames, height, width, -1),
-            ),
-            dim=-1,
-        ).reshape(frames * height * width, 1, -1).to(device)
+        return (
+            torch.cat(
+                (
+                    temporal[:frames].view(frames, 1, 1, -1).expand(frames, height, width, -1),
+                    vertical[:height].view(1, height, 1, -1).expand(frames, height, width, -1),
+                    horizontal[:width].view(1, 1, width, -1).expand(frames, height, width, -1),
+                ),
+                dim=-1,
+            )
+            .reshape(frames * height * width, 1, -1)
+            .to(device)
+        )
 
     def joint_forward(
         self,
@@ -536,9 +535,7 @@ class FantasyWorldFusionModel(nn.Module):
         dit = self.pipe.dit
         if timestep.ndim != 1:
             raise ValueError("FantasyWorld timestep must contain one value per sample")
-        time_embedding = dit.time_embedding(
-            sinusoidal_embedding_1d(dit.freq_dim, timestep).to(dtype=x.dtype)
-        )
+        time_embedding = dit.time_embedding(sinusoidal_embedding_1d(dit.freq_dim, timestep).to(dtype=x.dtype))
         time_modulation = dit.time_projection(time_embedding).unflatten(1, (6, dit.dim))
         condition = dit.prepare_condition_context(
             context,
@@ -645,7 +642,7 @@ class FantasyWorldFusionModel(nn.Module):
                 )
             prediction_features.extend(
                 torch.cat((frame_value, global_value), dim=-1)
-                for frame_value, global_value in zip(frame_features, global_features)
+                for frame_value, global_value in zip(frame_features, global_features, strict=False)
             )
 
         output = dit.unpatchify(dit.head(x, time_embedding), grid_size)

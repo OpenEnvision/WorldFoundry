@@ -55,9 +55,8 @@ try:
 except ImportError:  # pragma: no cover - selected by the installed torch
     from torch.distributed.device_mesh import DeviceMesh
 
-from worldfoundry.core.attention.rotary.rope_kernel import apply_rotary_pos_emb
 from worldfoundry.core.distributed.model_parallel.context import split_inputs_cp
-from worldfoundry.core.execution.device import get_current_torch_device
+from worldfoundry.core.platform.device import get_current_torch_device
 
 T = TypeVar("T")
 
@@ -124,10 +123,7 @@ def apply_rotary_embedding(
             "cos/sin last dimension must be at least rotary_dim or rotary_dim // 2 "
             f"(got cos={cos_width}, sin={sin_width}, rotary_dim={dim})."
         )
-    if int(passthrough.shape[-1]) == 0:
-        output = rotated
-    else:
-        output = _concat((rotated, passthrough), like=value)
+    output = rotated if int(passthrough.shape[-1]) == 0 else _concat((rotated, passthrough), like=value)
     if isinstance(value, torch.Tensor) and output.dtype != value.dtype:
         output = output.to(dtype=value.dtype)
     return output
@@ -666,6 +662,8 @@ def apply_rope_freqs(x: Tensor, freqs: Tensor, interleaved: bool = False) -> Ten
     Returns:
         Rotated tensor of shape ``[B, S, H, D]``, sharing storage with ``x``.
     """
+    from worldfoundry.core.attention.rotary.rope_kernel import apply_rotary_pos_emb
+
     return apply_rotary_pos_emb(x, freqs, interleaved=interleaved, inplace=True)
 
 

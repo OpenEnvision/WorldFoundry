@@ -3,13 +3,13 @@
 import inspect
 import logging
 import os
-from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Sequence, Union, cast
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
 from PIL import Image
 
-from worldfoundry.core.io import write_video
-from worldfoundry.core.media.codecs.video import video_chunk_to_uint8_frames
+from worldfoundry.core.media.codecs.video import video_chunk_to_uint8_frames, write_video
 from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.runtime.env import resolve_ckpt_dir
 
@@ -28,9 +28,9 @@ class MatrixGame2Pipeline(PipelineABC):
 
     def __init__(
         self,
-        operators: Optional[MatrixGame2Operator] = None,
+        operators: MatrixGame2Operator | None = None,
         synthesis_model: Optional["MatrixGame2Synthesis"] = None,
-        memory_module: Optional[Any] = None,
+        memory_module: Any | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype=torch.bfloat16,
@@ -48,10 +48,10 @@ class MatrixGame2Pipeline(PipelineABC):
 
     @classmethod
     # The public loader retains positional weight_dtype and mode options.
-    def from_pretrained(  # ty: ignore[invalid-method-override]
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: Any = None,
-        required_components: Optional[Mapping[str, Any]] = None,
+        required_components: Mapping[str, Any] | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype=torch.bfloat16,
@@ -110,7 +110,7 @@ class MatrixGame2Pipeline(PipelineABC):
         resize_W=640,
         interaction_signal=None,
         official_bench_actions: bool = False,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ):
         """
         the input_image is PIL image
@@ -160,13 +160,13 @@ class MatrixGame2Pipeline(PipelineABC):
         interactions=None,
         num_frames=None,
         size=(352, 640),
-        seed: Optional[int] = None,
+        seed: int | None = None,
         visualize_ops=True,
         visualize_warning=False,
         official_bench_actions: bool = False,
         return_dict: bool = False,
-        output_path: Optional[Union[str, os.PathLike]] = None,
-        fps: Optional[int] = None,
+        output_path: str | os.PathLike | None = None,
+        fps: int | None = None,
         **kwds: Any,
     ) -> Any:
         """Generate raw unit-range frame lists or an explicitly declared result."""
@@ -257,15 +257,15 @@ class MatrixGame2Pipeline(PipelineABC):
 
     def stream(
         self,
-        images: Optional[Image.Image],
-        interactions: List[str],
+        images: Image.Image | None,
+        interactions: list[str],
         num_frames: int = 15,
         size=(352, 640),
-        seed: Optional[int] = None,
+        seed: int | None = None,
         visualize_ops: bool = False,
         visualize_warning=False,
         return_dict: bool = False,
-        fps: Optional[int] = None,
+        fps: int | None = None,
         **kwds: Any,
     ) -> Any:
         """Stream visual generation outputs chunk by chunk."""
@@ -343,11 +343,15 @@ class MatrixGame2Pipeline(PipelineABC):
         self,
         interactions: Sequence[str] | None = None,
         realtime_segments: Sequence[Mapping[str, Any]] | None = None,
+        realtime_axes: Mapping[str, Sequence[float]] | None = None,
         seed: int = 42,
         prompt: str = "",
         **_: Any,
     ) -> dict[str, Any]:
-        """Advance the existing causal rollout by exactly one native block."""
+        """Advance the existing causal rollout by exactly one native block.
+
+        ``realtime_axes`` maps each declared axis to one value per output frame.
+        """
 
         # The rollout owns one continuous RNG stream. Re-seeding every control
         # chunk would repeat diffusion noise and create visible temporal beats.
@@ -355,7 +359,19 @@ class MatrixGame2Pipeline(PipelineABC):
         return self._ensure_realtime_session().generate(
             interactions=list(interactions or ()),
             control_segments=realtime_segments,
+            realtime_axes=realtime_axes,
         )
+
+    def stream_realtime_overlapped(
+        self,
+        images: Any,
+        actions_sequence: Sequence[Sequence[str]],
+        *,
+        seed: int = 42,
+    ):
+        """Configure and stream chunks while overlapping chunk ``k`` DiT with chunk ``k-1`` VAE decode."""
+        self.configure_realtime(images=images, seed=seed)
+        yield from self._ensure_realtime_session().stream_overlapped(actions_sequence)
 
     def realtime_next_output_frames(self) -> int:
         return int(self._ensure_realtime_session().next_output_frames())

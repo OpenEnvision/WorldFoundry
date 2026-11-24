@@ -1,16 +1,15 @@
 """Wan 2P6 visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
 import logging
-from typing import Optional, Dict, Any, List, Union
+from typing import Any
 
 from PIL import Image
 
 from ...operators.wan_2p6_operator import Wan2p6Operator
 from ...synthesis.visual_generation.wan.wan_2p6_synthesis import Wan2p6Synthesis
 from ..api_runtime import load_api_pipeline_from_pretrained, resolve_api_key
+from ..pipeline_utils import PipelineABC
 from ._hosted_polling import poll_wan_task_status
-
 
 _API_KEY_ENV = ("DASHSCOPE_API_KEY", "WAN_API_KEY", "ALIYUN_API_KEY")
 
@@ -24,8 +23,8 @@ class Wan2p6Pipeline(PipelineABC):
 
     def __init__(
         self,
-        operator: Optional[Wan2p6Operator] = None,
-        synthesis_model: Optional[Wan2p6Synthesis] = None,
+        operator: Wan2p6Operator | None = None,
+        synthesis_model: Wan2p6Synthesis | None = None,
         endpoint: str = "https://dashscope.aliyuncs.com/api/v1",
         api_key: str = "your_api_key",
     ):
@@ -40,9 +39,9 @@ class Wan2p6Pipeline(PipelineABC):
     def from_pretrained(
         cls,
         model_path: Any = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
-        model_id: Optional[str] = None,
+        model_id: str | None = None,
         **kwargs: Any,
     ) -> "Wan2p6Pipeline":
         """Build the API-only pipeline through the unified loader contract."""
@@ -63,7 +62,7 @@ class Wan2p6Pipeline(PipelineABC):
         endpoint: str = "https://dashscope.aliyuncs.com/api/v1",
         api_key: str = "your_api_key",
         logger=None,
-        **kwargs
+        **kwargs,
     ) -> "Wan2p6Pipeline":
         """Initialize API client credentials and runtime endpoints."""
         api_key = resolve_api_key(api_key, _API_KEY_ENV, "Wan2.6")
@@ -84,16 +83,16 @@ class Wan2p6Pipeline(PipelineABC):
     def process(
         self,
         prompt: str,
-        images: Optional[Union[Image.Image, str]] = None,
-        reference_urls: Optional[List[str]] = None,
-        audio_url: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        images: Image.Image | str | None = None,
+        reference_urls: list[str] | None = None,
+        audio_url: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
         if self.operator is None:
             raise ValueError("Operator is not initialized")
 
-        processed_data: Dict[str, Any] = {}
+        processed_data: dict[str, Any] = {}
 
         self.operator.get_interaction(prompt)
         processed_interaction = self.operator.process_interaction()
@@ -112,15 +111,15 @@ class Wan2p6Pipeline(PipelineABC):
 
         return processed_data
 
-    def _extract_task_id(self, response: Dict[str, Any]) -> Optional[str]:
+    def _extract_task_id(self, response: dict[str, Any]) -> str | None:
         """Extract the task identifier from a service response."""
         return response.get("output", {}).get("task_id")
 
-    def _extract_task_status(self, response: Dict[str, Any]) -> str:
+    def _extract_task_status(self, response: dict[str, Any]) -> str:
         """Query and extract the task status from a service response."""
         return response.get("output", {}).get("task_status", "")
 
-    def _extract_video_url(self, response: Dict[str, Any]) -> Optional[str]:
+    def _extract_video_url(self, response: dict[str, Any]) -> str | None:
         """Extract video url for Wan2p6Pipeline."""
         return response.get("output", {}).get("video_url")
 
@@ -129,7 +128,7 @@ class Wan2p6Pipeline(PipelineABC):
         task_id: str,
         poll_interval: int = 10,
         max_retries: int = 120,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Poll task status for Wan2p6Pipeline."""
         if self.synthesis_model is None:
             raise ValueError("Synthesis model is not initialized")
@@ -147,26 +146,26 @@ class Wan2p6Pipeline(PipelineABC):
     def __call__(
         self,
         prompt: str,
-        images: Optional[Union[Image.Image, str]] = None,
-        reference_urls: Optional[List[str]] = None,
-        audio_url: Optional[str] = None,
+        images: Image.Image | str | None = None,
+        reference_urls: list[str] | None = None,
+        audio_url: str | None = None,
         task_type: str = "auto",
-        model: Optional[str] = None,
+        model: str | None = None,
         size: str = "1280*720",
         resolution: str = "720P",
         duration: int = 5,
         negative_prompt: str = "",
-        audio: Optional[bool] = None,
+        audio: bool | None = None,
         prompt_extend: bool = True,
-        shot_type: Optional[str] = None,
+        shot_type: str | None = None,
         watermark: bool = False,
-        seed: Optional[int] = None,
+        seed: int | None = None,
         wait: bool = True,
         poll_interval: int = 10,
         max_retries: int = 120,
-        output_path: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        output_path: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Execute the complete pipeline generation flow."""
         if self.synthesis_model is None:
             raise ValueError("Synthesis model is not initialized")
@@ -221,10 +220,10 @@ class Wan2p6Pipeline(PipelineABC):
 
         return result
 
-    def get_operator(self) -> Optional[Wan2p6Operator]:
+    def get_operator(self) -> Wan2p6Operator | None:
         """Get operator for Wan2p6Pipeline."""
         return self.operator
 
-    def get_synthesis_model(self) -> Optional[Wan2p6Synthesis]:
+    def get_synthesis_model(self) -> Wan2p6Synthesis | None:
         """Get synthesis model for Wan2p6Pipeline."""
         return self.synthesis_model

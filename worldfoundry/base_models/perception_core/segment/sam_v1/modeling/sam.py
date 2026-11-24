@@ -4,13 +4,11 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> perception_core -> segment -> sam_v1 -> modeling -> sam.py functionality."""
+from typing import Any
 
 import torch
 from torch import nn
 from torch.nn import functional as F
-
-from typing import Any, Dict, List, Tuple
 
 from .image_encoder import ImageEncoderViT
 from .mask_decoder import MaskDecoder
@@ -18,7 +16,6 @@ from .prompt_encoder import PromptEncoder
 
 
 class Sam(nn.Module):
-    """Sam implementation."""
     mask_threshold: float = 0.0
     image_format: str = "RGB"
 
@@ -27,8 +24,8 @@ class Sam(nn.Module):
         image_encoder: ImageEncoderViT,
         prompt_encoder: PromptEncoder,
         mask_decoder: MaskDecoder,
-        pixel_mean: List[float] = [123.675, 116.28, 103.53],
-        pixel_std: List[float] = [58.395, 57.12, 57.375],
+        pixel_mean: list[float] = [123.675, 116.28, 103.53],  # noqa: B006 - Keeps the upstream default object and signature.
+        pixel_std: list[float] = [58.395, 57.12, 57.375],  # noqa: B006 - Keeps the upstream default object and signature.
     ) -> None:
         """
         SAM predicts object masks from an image and input prompts.
@@ -51,19 +48,14 @@ class Sam(nn.Module):
 
     @property
     def device(self) -> Any:
-        """Device.
-
-        Returns:
-            The return value.
-        """
         return self.pixel_mean.device
 
     @torch.no_grad()
     def forward(
         self,
-        batched_input: List[Dict[str, Any]],
+        batched_input: list[dict[str, Any]],
         multimask_output: bool,
-    ) -> List[Dict[str, torch.Tensor]]:
+    ) -> list[dict[str, torch.Tensor]]:
         """
         Predicts masks end-to-end from provided images and prompts.
         If prompts are not known in advance, using SamPredictor is
@@ -106,7 +98,7 @@ class Sam(nn.Module):
         image_embeddings = self.image_encoder(input_images)
 
         outputs = []
-        for image_record, curr_embedding in zip(batched_input, image_embeddings):
+        for image_record, curr_embedding in zip(batched_input, image_embeddings, strict=False):
             if "point_coords" in image_record:
                 points = (image_record["point_coords"], image_record["point_labels"])
             else:
@@ -141,8 +133,8 @@ class Sam(nn.Module):
     def postprocess_masks(
         self,
         masks: torch.Tensor,
-        input_size: Tuple[int, ...],
-        original_size: Tuple[int, ...],
+        input_size: tuple[int, ...],
+        original_size: tuple[int, ...],
     ) -> torch.Tensor:
         """
         Remove padding and upscale masks to the original image size.

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,6 +14,7 @@
 """Florence-2 configuration."""
 
 import warnings
+from typing import ClassVar
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
@@ -78,25 +78,25 @@ class Florence2VisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "davit"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference: ClassVar[list] = ["past_key_values"]
 
     def __init__(
         self,
         drop_path_rate=0.1,
-        patch_size=[7, 3, 3, 3],
-        patch_stride=[4, 2, 2, 2],
-        patch_padding=[3, 1, 1, 1],
-        patch_prenorm=[False, True, True, True],
+        patch_size=[7, 3, 3, 3],  # noqa: B006 - Keeps the upstream default object and signature.
+        patch_stride=[4, 2, 2, 2],  # noqa: B006 - Keeps the upstream default object and signature.
+        patch_padding=[3, 1, 1, 1],  # noqa: B006 - Keeps the upstream default object and signature.
+        patch_prenorm=[False, True, True, True],  # noqa: B006 - Keeps the upstream default object and signature.
         enable_checkpoint=False,
-        dim_embed=[256, 512, 1024, 2048],
-        num_heads=[8, 16, 32, 64],
-        num_groups=[8, 16, 32, 64],
-        depths=[1, 1, 9, 1],
+        dim_embed=[256, 512, 1024, 2048],  # noqa: B006 - Keeps the upstream default object and signature.
+        num_heads=[8, 16, 32, 64],  # noqa: B006 - Keeps the upstream default object and signature.
+        num_groups=[8, 16, 32, 64],  # noqa: B006 - Keeps the upstream default object and signature.
+        depths=[1, 1, 9, 1],  # noqa: B006 - Keeps the upstream default object and signature.
         window_size=12,
         projection_dim=1024,
         visual_temporal_embedding=None,
         image_pos_embed=None,
-        image_feature_source=["spatial_avg_pool", "temporal_avg_pool"],
+        image_feature_source=["spatial_avg_pool", "temporal_avg_pool"],  # noqa: B006 - Keeps the upstream default object and signature.
         **kwargs,
     ):
         self.drop_path_rate = drop_path_rate
@@ -116,7 +116,6 @@ class Florence2VisionConfig(PretrainedConfig):
         self.image_feature_source = image_feature_source
 
         super().__init__(**kwargs)
-
 
 
 class Florence2LanguageConfig(PretrainedConfig):
@@ -196,8 +195,8 @@ class Florence2LanguageConfig(PretrainedConfig):
     ```"""
 
     model_type = "florence2_language"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    keys_to_ignore_at_inference: ClassVar[list] = ["past_key_values"]
+    attribute_map: ClassVar[dict] = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
@@ -262,14 +261,14 @@ class Florence2LanguageConfig(PretrainedConfig):
         )
 
         # ensure backward compatibility for BART CNN models
-        if getattr(self, "forced_bos_token_id", None) is None and kwargs.get(
-            "force_bos_token_to_be_generated", False
-        ):
+        if getattr(self, "forced_bos_token_id", None) is None and kwargs.get("force_bos_token_to_be_generated", False):
             self.forced_bos_token_id = self.bos_token_id
             warnings.warn(
                 f"Please make sure the config includes `forced_bos_token_id={self.bos_token_id}` in future versions. "
-                "The config can simply be saved and uploaded again to be fixed."
+                "The config can simply be saved and uploaded again to be fixed.",
+                stacklevel=1,
             )
+
 
 class Florence2Config(PretrainedConfig):
     r"""
@@ -336,6 +335,5 @@ class Florence2Config(PretrainedConfig):
         self.text_config = text_config
         if text_config is not None:
             self.text_config = Florence2LanguageConfig(**text_config)
-
 
         super().__init__(**kwargs)

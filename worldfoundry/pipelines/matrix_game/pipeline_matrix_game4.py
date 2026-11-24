@@ -29,7 +29,7 @@ class MatrixGame4EgyptPipeline(NativeVisualDiffusionPipeline):
     DEFAULT_NUM_INFERENCE_STEPS = 2
     DEFAULT_GUIDANCE_SCALE = 1.0
     DEFAULT_FPS = 20
-    DEFAULT_SCHEDULER_OPTIONS = {"shift": 5.0}
+    DEFAULT_SCHEDULER_OPTIONS: Mapping[str, object] = {"shift": 5.0}
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

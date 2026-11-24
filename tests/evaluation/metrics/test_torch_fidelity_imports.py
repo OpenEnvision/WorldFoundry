@@ -18,7 +18,7 @@ class TorchFidelityImportTests(unittest.TestCase):
 import inspect
 import sys
 from pathlib import Path
-from worldfoundry.evaluation.tasks.metrics._shared.torch_fidelity import calculate_metrics, vendor_root
+from worldfoundry.evals.tasks.metrics._shared.torch_fidelity import calculate_metrics, vendor_root
 
 if sys.argv[1] == 'external-first':
     import torchmetrics
@@ -33,23 +33,6 @@ assert not Path(torch_fidelity.__file__).is_relative_to(vendor_root())
 if sys.argv[1] == 'external-first':
     assert torch_fidelity is external
 assert calculate_metrics() is backend
-
-import torch
-from unittest.mock import patch
-from worldfoundry.evaluation.tasks.metrics import compute_ppl
-from worldfoundry.evaluation.tasks.metrics._shared.vendor.torch_fidelity import metric_ppl
-
-class Generator(torch.nn.Module):
-    def forward(self, z, labels):
-        return (z[:, :1] + labels[:, None])[:, :, None, None].expand(-1, 3, 8, 8)
-
-def distance(a, b):
-    return (a - b).square().flatten(1).mean(1)
-
-model = torch_fidelity.GenerativeModelModuleWrapper(Generator(), 2, 'normal', 2)
-with patch.object(metric_ppl, 'create_sample_similarity', return_value=distance):
-    score = compute_ppl(model, cuda=False, num_samples=5, batch_size=2, verbose=False)
-assert score['perceptual_path_length_mean'] > 0
 """
         for order in ("external-first", "bundled-first"):
             with self.subTest(order=order):

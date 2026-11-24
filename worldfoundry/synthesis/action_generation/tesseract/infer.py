@@ -3,14 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
-
-
-def _ensure_vendored_runtime_importable() -> None:
-    runtime_root = str(Path(__file__).resolve().parent / "tesseract_runtime")
-    if runtime_root not in sys.path:
-        sys.path.insert(0, runtime_root)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -69,7 +62,10 @@ def _load_rgb(path: Path, *, height: int, width: int):
     import numpy as np
     from PIL import Image
 
-    from tesseract.utils import crop_and_resize_frames, read_video_first_frame
+    from worldfoundry.synthesis.action_generation.tesseract.tesseract_runtime.tesseract.utils import (
+        crop_and_resize_frames,
+        read_video_first_frame,
+    )
 
     if path.suffix.lower() in {".mp4", ".mov", ".webm", ".avi"}:
         image = np.asarray(read_video_first_frame(str(path)), dtype=np.float32)
@@ -100,7 +96,9 @@ def _file_geometry(depth_path: Path, normal_path: Path, *, height: int, width: i
     import cv2
     import numpy as np
 
-    from tesseract.utils import crop_and_resize_frames
+    from worldfoundry.synthesis.action_generation.tesseract.tesseract_runtime.tesseract.utils import (
+        crop_and_resize_frames,
+    )
 
     depth = np.asarray(np.load(depth_path), dtype=np.float32).squeeze()
     if depth.ndim != 2:
@@ -142,15 +140,18 @@ def _conditioning_tensor(args: argparse.Namespace):
 def run(args: argparse.Namespace) -> Path:
     """Generate a TesserAct RGB/depth/normal rollout with the official model classes."""
     _validate_args(args)
-    _ensure_vendored_runtime_importable()
 
     import numpy as np
     import torch
     from diffusers import CogVideoXDPMScheduler
 
-    from tesseract.modules.tesseract_model import TesserActDepthNormal
-    from tesseract.modules.tesseract_pipeline import TesserActImageToDepthNormalVideoPipeline
     from worldfoundry.core.media.codecs.video import save_video_h264
+    from worldfoundry.synthesis.action_generation.tesseract.tesseract_runtime.tesseract.modules.tesseract_model import (
+        TesserActDepthNormal,
+    )
+    from worldfoundry.synthesis.action_generation.tesseract.tesseract_runtime.tesseract.modules.tesseract_pipeline import (
+        TesserActImageToDepthNormalVideoPipeline,
+    )
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is unavailable; TesserAct inference cannot run")

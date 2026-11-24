@@ -1,0 +1,80 @@
+---
+title: Hy-Nomas
+description: 支持文本与相机控制的原生分段自回归世界生成。
+pageSource: authored
+---
+
+## 概述
+
+Hy-Nomas 根据文本和相机姿态连续生成同一个世界的片段。蒸馏 DiT 以 Qwen2.5-VL 文本基座为条件，用 Euler 调度和压缩 KV 历史生成 latent 片段，再由 PixelUMM 解码器解码为视频帧。
+
+上游参考：[Tencent-Hunyuan/Hy-Nomas](https://github.com/Tencent-Hunyuan/Hy-Nomas/tree/911cea6458a89c2663513ff7099561ec190dd491)。组件转换参考 Apache-2.0 [Diffusers 实现](https://github.com/jiaxiangc/diffusers/tree/12722ef11acf8e335f96cfd4faea17de78cd8909)。
+
+## Checkpoint
+
+分别准备以下资源：
+
+- `tencent/Hy-Nomas`，revision `bac719a80c8d02f91c485fca804bb8221e149b70`：
+  `DiT/distilled/diffusion_pytorch_model_ema_0_995.safetensors` 与
+  `VAE/PixelUMM_FT/diffusion_pytorch_model.safetensors`。
+- `Qwen/Qwen2.5-VL-7B-Instruct`，revision
+  `cc594898137f460bfe9f0759e9844b3ce807cfb5`：权重、config 和 tokenizer。
+
+下载总量约 82 GB。Hy-Nomas 根目录保留上述层级；通过 `text_encoder_path`
+单独指定 Qwen 目录。文本基座必须输出 3584 维特征。
+
+## 生成
+
+```python
+from worldfoundry.pipelines.hy_nomas.pipeline_hy_nomas import HyNomasPipeline
+
+pipeline = HyNomasPipeline.from_pretrained(
+    model_path="/checkpoints/Hy-Nomas",
+    text_encoder_path="/checkpoints/Qwen2.5-VL-7B-Instruct",
+    device="cuda",
+)
+result = pipeline(
+    prompt=["A camera moves through a forest.", "The path opens into a clearing."],
+    num_frames=120,
+    segment_latent_lengths=[15, 15],
+    height=720,
+    width=1280,
+    num_inference_steps=8,
+    seed=42,
+    output_path="hy-nomas.mp4",
+    return_dict=True,
+)
+```
+
+prompt 列表表示有序 rollout，而不是独立 batch。`segment_latent_lengths` 需要为每个 prompt 提供一个正整数，总和为 `ceil(num_frames / 4)`；省略时将总长度分配到各段。空间尺寸先向上取整，再压缩 32 倍，解码后裁剪回请求尺寸。结构化动作 JSON 保留逐动作的文本可见范围与时间戳窗口。
+
+`camera_extrinsics` 接受归一化 OpenCV camera-to-world 矩阵，形状为
+`(num_frames, 4, 4)` 或 `(1, num_frames, 4, 4)`。只为最后一个 latent 补齐姿态；这些矩阵不是 world-to-camera view matrix。
+
+共享 CLI 可以解析两个 variant：
+
+```bash
+wf zoo model-show --model-id hy-nomas --include-manifest --json
+wf run hy-nomas --model-status
+wf run hy-nomas --print-config --json
+```
+
+## 低显存推理
+
+加载时传入 `low_memory=True`，或选择 `hy-nomas-low-memory`。原生预设对 DiT 使用 weight-only INT8，对 KV 使用 INT8 存储，对 PixelUMM 线性层使用 FP8，并按阶段进行 CPU offload。Qwen、去噪和解码分阶段加载。预设在加载时量化上述浮点 checkpoint，无需单独的量化 checkpoint。FP8 执行需要符合要求的 CUDA 硬件与 BF16/FP16 输入。
+
+`max_cache_segments` 可限制保留的片段 KV 历史。淘汰历史会减少时间上下文；位置偏移仍单调递增。
+
+## Studio 与常驻会话
+
+Studio 可发现 `Hy-Nomas`，使用文本初始化及 WASD/视角控制。公开的 `configure_realtime`、`stream_realtime`、`reset_realtime` 复用现有常驻 worker 和内存 RGB 传输。更新文本时保留世界历史；重置释放该会话的 KV、相机与解码历史，不重新加载权重。
+
+默认 PixelUMM 窗口与重叠设置下，首块消费 40 帧输入并输出 4 帧稳定前缀，后续每块消费、输出各 20 帧。剩余前缀会缓冲到后续窗口或最终收尾阶段，然后再输出，已通过 WebRTC 发送的帧无需回写。片段失败会使所属会话失效；需要重新开始 rollout，不能继续使用已部分推进的历史。
+
+## 验证与限制
+
+已使用小型随机初始化模型在 CPU 与 H100 CUDA 上验证：生成、相机条件、缓存续写、分阶段 offload、重置、INT8/FP8 低显存内核与 Studio API 接线均可工作，DiT、PixelUMM 与 Qwen 文本输出与固定参考源码一致，官方 checkpoint 的参数名称和形状与原生模块一致。
+
+- 尚未使用完整发布权重验证生成：输出质量、部署规模下的低显存量化、浏览器流式运行和延迟均未测量。
+- 上游 `PE` 目录声明 Qwen3.5、5120 维特征，与推理配置不一致。使用上述独立 Qwen2.5-VL checkpoint；不同文本架构会被拒绝。
+- 低显存预设不加载上游打包的 INT8/FP8 导出文件，也不使用其专用 CUDA kernel。

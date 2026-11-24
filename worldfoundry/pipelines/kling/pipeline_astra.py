@@ -1,9 +1,10 @@
 """Astra visual generation pipeline module."""
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 import torch
 from PIL import Image
@@ -39,11 +40,11 @@ class AstraConfig:
     # MoE models parameters
     moe_num_experts: int = 3
     moe_top_k: int = 1
-    moe_hidden_dim: Optional[int] = None
+    moe_hidden_dim: int | None = None
     # data parameters
     modality_type: str = "sekai"
     use_real_poses: bool = False
-    scene_info_path: Optional[str] = None
+    scene_info_path: str | None = None
     use_gt_prompt: bool = False
     # inference parameters
     device: str = "cuda"
@@ -62,13 +63,13 @@ class AstraPipeline(PipelineABC):
         self.device = synthesis.device
 
     @classmethod
-    def from_pretrained(  # ty: ignore[invalid-method-override]
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls, model_path: str, required_components: dict, device: str = "cuda", **kwargs: Any
     ) -> "AstraPipeline":
         """
         Load pretrained models and initialize the pipeline.
         """
-        if isinstance(required_components, dict) and "wan_model_path" in required_components.keys():
+        if isinstance(required_components, dict) and "wan_model_path" in required_components:
             wan_model_path = required_components.get("wan_model_path", "Wan-AI/Wan2.1-T2V-1.3B")
         else:
             wan_model_path = "Wan-AI/Wan2.1-T2V-1.3B"
@@ -86,7 +87,7 @@ class AstraPipeline(PipelineABC):
 
     def _stitch_camera_embeddings(
         self,
-        direction_embeddings: List[torch.Tensor],
+        direction_embeddings: list[torch.Tensor],
         initial_condition_frames: int,
         per_direction_frames: int,
         total_frames: int,
@@ -146,7 +147,7 @@ class AstraPipeline(PipelineABC):
             combined[dst_offset:] = combined[dst_offset - 1].clone()
         return combined
 
-    def process(self, input_: str, interaction: Dict[str, Any], args: Optional[AstraConfig] = None):
+    def process(self, input_: str, interaction: dict[str, Any], args: AstraConfig | None = None):
         """
         Process the input image and interaction signals to prepare all data
         needed for autoregressive generation.
@@ -181,7 +182,7 @@ class AstraPipeline(PipelineABC):
 
         target_height, target_width = 60, 104
         C, T, H, W = latents.shape
-        if H > target_height or W > target_width:
+        if target_height < H or target_width < W:
             h_start = (H - target_height) // 2
             w_start = (W - target_width) // 2
             latents = latents[:, :, h_start : h_start + target_height, w_start : w_start + target_width]
@@ -243,8 +244,8 @@ class AstraPipeline(PipelineABC):
     def _normalise_workspace_interaction(
         *,
         prompt: str = "",
-        interactions: Dict[str, Any] | Sequence[Any] | str | None = None,
-    ) -> Dict[str, Any]:
+        interactions: dict[str, Any] | Sequence[Any] | str | None = None,
+    ) -> dict[str, Any]:
         """Normalise workspace interaction for AstraPipeline."""
         if isinstance(interactions, dict):
             payload = dict(interactions)
@@ -262,8 +263,8 @@ class AstraPipeline(PipelineABC):
     def __call__(
         self,
         image_path: str = "",
-        interactions: Dict[str, Any] | Sequence[Any] | str | None = None,
-        images: Optional[List[Image.Image]] = None,
+        interactions: dict[str, Any] | Sequence[Any] | str | None = None,
+        images: list[Image.Image] | None = None,
         prompt: str = "",
         output_path: str | Path | None = None,
         fps: int | None = None,
@@ -276,7 +277,7 @@ class AstraPipeline(PipelineABC):
         height: int | None = None,
         width: int | None = None,
         **kwargs: Any,
-    ) -> List[Image.Image] | Dict[str, Any]:
+    ) -> list[Image.Image] | dict[str, Any]:
         """
         Main entry point. Supports multi-step direction interaction.
 
@@ -399,7 +400,7 @@ class AstraPipeline(PipelineABC):
             video_np = video_np[: int(num_frames)]
         pil_frames = [Image.fromarray(frame) for frame in video_np]
         if output_path is not None:
-            from worldfoundry.core.io import write_video
+            from worldfoundry.core.media.codecs.video import write_video
 
             write_video(pil_frames, output_path, fps=16 if fps is None else fps)
         self.memory = memory

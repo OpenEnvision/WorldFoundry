@@ -9,6 +9,7 @@ groups:
 - camera_control
 source_repos:
 - url: https://github.com/nv-tlabs/lyra
+  revision: 87f79a52b81b366d1d4aa3a526aa12e54207c998
 checkpoints:
 - role: lyra2_checkpoint
   local_dir: ${WORLDFOUNDRY_CKPT_DIR}/lyra-2

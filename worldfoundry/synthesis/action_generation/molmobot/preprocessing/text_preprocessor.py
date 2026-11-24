@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -14,10 +14,10 @@ from ..config import BaseConfig
 class TextPreprocessorConfig(BaseConfig):
     # Serialized by released checkpoints; loss-related values are accepted for
     # strict config compatibility but no label/loss path is implemented.
-    max_answer_len: Optional[int] = None
+    max_answer_len: int | None = None
     last_message_loss_only: bool = False
-    max_text_tokens: Optional[int] = None
-    loss_token_weighting: Optional[str] = None
+    max_text_tokens: int | None = None
+    loss_token_weighting: str | None = None
 
     def build_text_preprocessor(self, tokenizer, max_seq_len):
         return InterleavedTextPreprocessor(
@@ -30,10 +30,10 @@ class TextPreprocessorConfig(BaseConfig):
 @dataclasses.dataclass
 class InterleavedTextPreprocessor:
     tokenizer: Any
-    max_text_tokens: Optional[int] = None
-    max_sequence_length: Optional[int] = None
+    max_text_tokens: int | None = None
+    max_sequence_length: int | None = None
 
-    def _tokenize_prompt(self, messages: List[str]) -> np.ndarray:
+    def _tokenize_prompt(self, messages: list[str]) -> np.ndarray:
         if not messages or len(messages) % 2 != 1:
             raise ValueError("MolmoBot inference expects an odd, non-empty message list.")
         bos = self.tokenizer.bos_token_id or self.tokenizer.eos_token_id
@@ -46,25 +46,20 @@ class InterleavedTextPreprocessor:
 
     def tokenize_and_interleave(
         self,
-        message_list: List[str],
-        multimodal_tokens: List[np.ndarray],
-        multimodal_position_ids: Optional[List[np.ndarray]] = None,
-    ) -> Dict[str, np.ndarray]:
+        message_list: list[str],
+        multimodal_tokens: list[np.ndarray],
+        multimodal_position_ids: list[np.ndarray] | None = None,
+    ) -> dict[str, np.ndarray]:
         text = self._tokenize_prompt(message_list)
         prompt_positions = np.flatnonzero(text == self.tokenizer.image_prompt_token_id)
         if len(prompt_positions) not in {0, len(multimodal_tokens)}:
             raise ValueError(
-                f"Found {len(prompt_positions)} image placeholders for "
-                f"{len(multimodal_tokens)} visual inputs."
+                f"Found {len(prompt_positions)} image placeholders for {len(multimodal_tokens)} visual inputs."
             )
-        insertion_points = (
-            prompt_positions.tolist()
-            if len(prompt_positions)
-            else [1] * len(multimodal_tokens)
-        )
+        insertion_points = prompt_positions.tolist() if len(prompt_positions) else [1] * len(multimodal_tokens)
 
-        chunks: List[np.ndarray] = []
-        positions: List[np.ndarray] = []
+        chunks: list[np.ndarray] = []
+        positions: list[np.ndarray] = []
         text_offset = 0
         absolute_position = 0
         for index, insertion in enumerate(insertion_points):

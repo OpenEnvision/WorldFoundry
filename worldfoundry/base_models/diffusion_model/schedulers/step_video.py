@@ -16,6 +16,7 @@ from ..contracts import SamplingConfig, SchedulerStep
 
 class StepVideoFlowScheduler:
     """Euler flow integrator with StepVideo's rational time-shift."""
+
     def __init__(self, *, time_shift: float = 13.0, reverse: bool = False) -> None:
         self.time_shift = float(time_shift)
         self.reverse = bool(reverse)

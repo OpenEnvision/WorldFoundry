@@ -2,6 +2,7 @@
 from mmdet.datasets import VOCDataset
 
 from mmyolo.datasets.yolov5_coco import BatchShapePolicyDataset
+
 from ..registry import DATASETS
 
 
@@ -12,4 +13,3 @@ class YOLOv5VOCDataset(BatchShapePolicyDataset, VOCDataset):
     We only add `BatchShapePolicy` function compared with VOCDataset. See
     `mmyolo/datasets/utils.py#BatchShapePolicy` for details
     """
-    pass

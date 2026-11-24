@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import argparse
-import csv
 import json
 from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_metrics import compute_phyfps_metrics
-from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_predict import (
+from worldfoundry.evals.tasks.execution.runners.phyfps_bench_gen.phyfps_metrics import compute_phyfps_metrics
+from worldfoundry.evals.tasks.execution.runners.phyfps_bench_gen.phyfps_predict import (
     VideoPhyFPSRecord,
     mock_predict_directory,
     parse_results_csv,
@@ -52,7 +50,7 @@ def test_phyfps_official_run_with_mock_backend_writes_scorecard(tmp_path: Path, 
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py",
             "--run-official",
             "--generated-artifact-dir",
             str(generated_dir),
@@ -80,7 +78,7 @@ def test_phyfps_official_run_with_mock_backend_writes_scorecard(tmp_path: Path, 
 
 
 def test_phyfps_prompt_materialization_uses_zero_padded_ids(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_prompts import (
+    from worldfoundry.evals.tasks.execution.runners.phyfps_bench_gen.phyfps_prompts import (
         materialize_phyfps_generation_requests,
     )
 

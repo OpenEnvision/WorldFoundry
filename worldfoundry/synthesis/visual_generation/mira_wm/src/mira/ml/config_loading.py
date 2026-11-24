@@ -15,7 +15,7 @@ genuinely exercised a since-removed feature still fails loudly instead of loadin
 
 from __future__ import annotations
 
-from typing import Mapping
+from collections.abc import Mapping
 
 
 def strip_hydra_targets(node: object) -> object:

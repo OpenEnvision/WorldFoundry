@@ -5,7 +5,7 @@ aliases: [matrix-game-4-ancient-egypt]
 provider: Skywork AI
 tasks: [video-to-video, low-poly-rendering]
 output_artifacts: [generated_video]
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: matrix-game-4-egypt
 runtime_profile: runtime-profile:matrix-game-4-egypt
 catalog_category: world_models
@@ -17,6 +17,7 @@ source:
 official_sources:
   github:
     url: https://github.com/SkyworkAI/Matrix-Game
+    revision: 5446525c80da2a4a2f87801addbbc7faa8d2486e
     head_sha: 5446525c80da2a4a2f87801addbbc7faa8d2486e
   huggingface:
   - repo_id: Skywork/Matrix-Game-4.0
@@ -68,9 +69,9 @@ docs:
     inputs: [video, text]
     outputs: [video]
   limitations:
-  - Accepted-reference replay, gameplay-quality validation and measured throughput remain pending.
+  - Gameplay visual quality and rendering throughput have not been measured. Only the Ancient Egypt scene is available; Castle, Racing, TAEHV one-step rendering, and live game interaction are not integrated.
   limitations_zh:
-  - accepted-reference 回放、游戏画面质量及实测吞吐量仍待验证。
+  - 游戏画面质量与渲染吞吐量尚未测量。目前只提供古埃及场景；Castle、Racing、TAEHV 一步渲染及实时游戏交互尚未集成。
 notes:
 - Native two-step offline Wan VAE route; fixed 864x480, guidance scale 1, one prompt per clip.
 - A separately encoded KV-only sink is not an output frame and does not initialize the control VAE history.

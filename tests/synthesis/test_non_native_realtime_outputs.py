@@ -91,8 +91,9 @@ def test_dreamx_camera_chunk_describes_only_new_rgb_frames(monkeypatch: pytest.M
     "session_cls", [LingBotRealtimeSession, LingBotWorldV2RealtimeSession, LingBotWorldV2SmallRealtimeSession]
 )
 @pytest.mark.parametrize("rank", [0, 1])
+@pytest.mark.parametrize("deferred", [False, True])
 def test_lingbot_inherited_output_contract_keeps_rank_and_cadence(
-    monkeypatch: pytest.MonkeyPatch, session_cls: type[LingBotRealtimeSession], rank: int
+    monkeypatch: pytest.MonkeyPatch, session_cls: type[LingBotRealtimeSession], rank: int, deferred: bool
 ) -> None:
     class Event:
         def __init__(self, **kwargs: Any) -> None:
@@ -103,6 +104,9 @@ def test_lingbot_inherited_output_contract_keeps_rank_and_cadence(
 
         def elapsed_time(self, other: Any) -> float:
             return 0.0
+
+        def synchronize(self) -> None:
+            pass
 
     monkeypatch.setattr(torch.cuda, "Event", Event)
     monkeypatch.setattr(torch.cuda, "synchronize", lambda *args: None)
@@ -149,13 +153,14 @@ def test_lingbot_inherited_output_contract_keeps_rank_and_cadence(
         decoded.append(frames)
         return frames
 
-    monkeypatch.setattr(session, "_decode", decode)
+    monkeypatch.setattr(session, "_decode_pixels", lambda latent: torch.from_numpy(decode(latent)))
     for count in (session.first_output_frames, session.steady_output_frames):
-        result = session.generate(interactions=["forward"])
+        result = session.generate(interactions=["forward"], defer_frame_materialization=deferred)
         if rank == 0:
             assert result is not None
             chunk = result["video_chunk"]
-            assert chunk.frames is result["video"] is decoded[-1]
+            assert chunk.frames is result["video"]
+            assert isinstance(result["video"], np.ndarray)
             assert (chunk.layout, chunk.value_range, chunk.frame_count) == ("thwc", "0,255", count)
             np.testing.assert_array_equal(video_chunk_to_uint8_frames(chunk), decoded[-1])
             np.testing.assert_array_equal(np.stack(realtime_frames_from_result(result)), decoded[-1])

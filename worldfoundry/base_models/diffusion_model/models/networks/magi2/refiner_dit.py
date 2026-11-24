@@ -37,8 +37,8 @@ checkpoint-facing parameter name are preserved.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -86,7 +86,7 @@ class LocalAttnHandler:
     max_seqlen_q: int
     max_seqlen_k: int
     attn_type_map: torch.Tensor
-    softmax_scale: Optional[float] = None
+    softmax_scale: float | None = None
 
 
 def calc_local_qk_range(
@@ -94,7 +94,7 @@ def calc_local_qk_range(
     num_audio_and_txt_tokens: int,
     num_frames: int,
     frame_receptive_field: int,
-    device: torch.device = torch.device("cpu"),
+    device: torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Reproduce upstream ``calc_local_qk_range`` (L1348) without CUDA pinning.
 
@@ -141,7 +141,7 @@ def calc_local_attn_handler(
     num_audio_and_txt_tokens: int,
     num_frames: int,
     frame_receptive_field: int,
-    device: torch.device = torch.device("cpu"),
+    device: torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
 ) -> LocalAttnHandler:
     """Build a :class:`LocalAttnHandler` (upstream ``calc_local_attn_ffa_handler``)."""
     q_ranges, k_ranges = calc_local_qk_range(
@@ -172,7 +172,7 @@ def build_range_mask(
     a single masked softmax equals the upstream online-softmax merge.
     """
     mask = torch.zeros(total_tokens, total_tokens, dtype=torch.bool, device=device)
-    for (qs, qe), (ks, ke) in zip(q_ranges.tolist(), k_ranges.tolist()):
+    for (qs, qe), (ks, ke) in zip(q_ranges.tolist(), k_ranges.tolist(), strict=False):
         if qe > qs and ke > ks:
             mask[qs:qe, ks:ke] = True
     return mask
@@ -183,7 +183,7 @@ def build_block_diag_mask(cu_seqlens: torch.Tensor, device: torch.device) -> tor
     bounds = cu_seqlens.tolist()
     total = int(bounds[-1])
     mask = torch.zeros(total, total, dtype=torch.bool, device=device)
-    for start, stop in zip(bounds[:-1], bounds[1:]):
+    for start, stop in itertools.pairwise(bounds):
         mask[int(start) : int(stop), int(start) : int(stop)] = True
     return mask
 
@@ -193,7 +193,7 @@ def attention_varlen(
     k: torch.Tensor,
     v: torch.Tensor,
     attn_mask: torch.Tensor | AttentionRanges,
-    softmax_scale: Optional[float] = None,
+    softmax_scale: float | None = None,
 ) -> torch.Tensor:
     """Plain non-causal masked attention with GQA kv-head broadcast (fp32 math).
 
@@ -635,12 +635,12 @@ class Transformer(nn.Module):
 
 
 __all__ = [
+    "MLP",
     "Adapter",
     "AdapterConfig",
     "Attention",
     "AttentionConfig",
     "LocalAttnHandler",
-    "MLP",
     "MLPConfig",
     "PostAdapter",
     "Transformer",

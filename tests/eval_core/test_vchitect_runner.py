@@ -6,17 +6,23 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import pytest
 
-from worldfoundry.evaluation.models import resolve_model_zoo_runner
-from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
-from worldfoundry.evaluation.runner import ModelBenchmarkSuiteRequest, run_model_benchmark_suite
+from worldfoundry.evals.models.runners.resolver import resolve_model_zoo_runner
+from worldfoundry.evals.tasks.execution.orchestration.model_benchmark_suite import run_model_benchmark_suite
+from worldfoundry.evals.tasks.execution.orchestration.suite_requests import ModelBenchmarkSuiteRequest
 from worldfoundry.pipelines.vchitect.pipeline_vchitect_2_t2v import Vchitect2T2VPipeline
+from worldfoundry.zoo.catalog import load_model_zoo_registry
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
 
 pytestmark = pytest.mark.unit
+
+
+def _fail_weight_load(*args: Any, **kwargs: Any) -> NoReturn:
+    raise pytest.fail.Exception("weights")
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODEL_MANIFEST_DIR = REPO_ROOT / "worldfoundry" / "data" / "models" / "catalog"
@@ -88,9 +94,7 @@ def test_vchitect_default_runner_loads_canonical_native_pipeline(monkeypatch: py
 def test_vchitect_rejects_plan_only_before_loading_weights(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from worldfoundry.pipelines.vchitect import pipeline_vchitect_2_t2v as module
 
-    monkeypatch.setattr(
-        module.NativeDiffusionPipeline, "from_pretrained", lambda *args, **kwargs: pytest.fail("weights")
-    )
+    monkeypatch.setattr(module.NativeDiffusionPipeline, "from_pretrained", _fail_weight_load)
     with pytest.raises(ValueError, match="no longer supports plan_only"):
         Vchitect2T2VPipeline.from_pretrained(
             model_path=str(tmp_path / "checkpoints"),
@@ -102,9 +106,7 @@ def test_vchitect_rejects_plan_only_before_loading_weights(tmp_path: Path, monke
 def test_vchitect_runner_rejects_plan_only_parameter_before_weights(monkeypatch: pytest.MonkeyPatch) -> None:
     from worldfoundry.pipelines.vchitect import pipeline_vchitect_2_t2v as module
 
-    monkeypatch.setattr(
-        module.NativeDiffusionPipeline, "from_pretrained", lambda *args, **kwargs: pytest.fail("weights")
-    )
+    monkeypatch.setattr(module.NativeDiffusionPipeline, "from_pretrained", _fail_weight_load)
     with pytest.raises(ValueError, match="no longer supports plan_only"):
         resolve_model_zoo_runner(
             "vchitect-2-t2v",
@@ -115,7 +117,7 @@ def test_vchitect_runner_rejects_plan_only_parameter_before_weights(monkeypatch:
 
 def test_vchitect_call_rejects_plan_only_without_inference() -> None:
     def native(request: Any) -> Any:
-        pytest.fail("sampling")
+        raise pytest.fail.Exception("sampling")
 
     pipeline = Vchitect2T2VPipeline(native_pipeline=native, device="cpu")
     with pytest.raises(ValueError, match="no longer supports plan_only"):
@@ -125,9 +127,7 @@ def test_vchitect_call_rejects_plan_only_without_inference() -> None:
 def test_vchitect_plan_is_weight_free_and_retains_recipe_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     from worldfoundry.pipelines.vchitect import pipeline_vchitect_2_t2v as module
 
-    monkeypatch.setattr(
-        module.NativeDiffusionPipeline, "from_pretrained", lambda *args, **kwargs: pytest.fail("weights")
-    )
+    monkeypatch.setattr(module.NativeDiffusionPipeline, "from_pretrained", _fail_weight_load)
     result = Vchitect2T2VPipeline.plan("local-vchitect")
     assert result == {
         "model_id": "vchitect-2-t2v",

@@ -4,16 +4,12 @@
 # --------------------------------------------------------
 # modified from DUSt3R
 
-"""Module for base_models -> three_dimensions -> point_clouds -> cut3r -> heads -> dpt_head.py functionality."""
-
-from typing import List
-
 import torch
 import torch.nn as nn
 from einops import rearrange
 
 from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.libs.croco.dpt_block import (
-    DPTOutputAdapter,  # noqa
+    DPTOutputAdapter,
 )
 
 from ..blocks import ConditionModulationBlock
@@ -32,11 +28,6 @@ class DPTOutputAdapter_fix(DPTOutputAdapter):
     """
 
     def init(self, dim_tokens_enc=768):
-        """Init.
-
-        Args:
-            dim_tokens_enc: The dim tokens enc.
-        """
         super().init(dim_tokens_enc)
 
         del self.act_1_postprocess
@@ -44,13 +35,7 @@ class DPTOutputAdapter_fix(DPTOutputAdapter):
         del self.act_3_postprocess
         del self.act_4_postprocess
 
-    def forward(self, encoder_tokens: List[torch.Tensor], image_size=None):
-        """Forward.
-
-        Args:
-            encoder_tokens: The encoder tokens.
-            image_size: The image size.
-        """
+    def forward(self, encoder_tokens: list[torch.Tensor], image_size=None):
         assert self.dim_tokens_enc is not None, "Need to call init(dim_tokens_enc) function first"
 
         image_size = self.image_size if image_size is None else image_size
@@ -95,8 +80,7 @@ class PixelwiseTaskWithDPT(nn.Module):
         conf_mode=None,
         **kwargs,
     ):
-        """Init."""
-        super(PixelwiseTaskWithDPT, self).__init__()
+        super().__init__()
         self.return_all_layers = True  # backbone needs to return all layers
         self.postprocess = postprocess
         self.depth_mode = depth_mode
@@ -111,12 +95,6 @@ class PixelwiseTaskWithDPT(nn.Module):
         self.dpt.init(**dpt_init_args)
 
     def forward(self, x, img_info):
-        """Forward.
-
-        Args:
-            x: The x.
-            img_info: The img info.
-        """
         out = self.dpt(x, image_size=(img_info[0], img_info[1]))
         if self.postprocess:
             out = self.postprocess(out, self.depth_mode, self.conf_mode)
@@ -151,15 +129,7 @@ class DPTPts3dPose(nn.Module):
     """Dpt pts d pose implementation."""
 
     def __init__(self, net, has_conf=False, has_rgb=False, has_pose=False):
-        """Init.
-
-        Args:
-            net: The net.
-            has_conf: The has conf.
-            has_rgb: The has rgb.
-            has_pose: The has pose.
-        """
-        super(DPTPts3dPose, self).__init__()
+        super().__init__()
         self.return_all_layers = True  # backbone needs to return all layers
         self.depth_mode = net.depth_mode
         self.conf_mode = net.conf_mode
@@ -180,24 +150,24 @@ class DPTPts3dPose(nn.Module):
         head_type = "regression"
         output_width_ratio = 1
 
-        pts_dpt_args = dict(
-            output_width_ratio=output_width_ratio,
-            num_channels=pts_channels,
-            feature_dim=feature_dim,
-            last_dim=last_dim,
-            dim_tokens=dim_tokens,
-            hooks_idx=hooks_idx,
-            head_type=head_type,
-        )
-        rgb_dpt_args = dict(
-            output_width_ratio=output_width_ratio,
-            num_channels=rgb_channels,
-            feature_dim=feature_dim,
-            last_dim=last_dim,
-            dim_tokens=dim_tokens,
-            hooks_idx=hooks_idx,
-            head_type=head_type,
-        )
+        pts_dpt_args = {
+            "output_width_ratio": output_width_ratio,
+            "num_channels": pts_channels,
+            "feature_dim": feature_dim,
+            "last_dim": last_dim,
+            "dim_tokens": dim_tokens,
+            "hooks_idx": hooks_idx,
+            "head_type": head_type,
+        }
+        rgb_dpt_args = {
+            "output_width_ratio": output_width_ratio,
+            "num_channels": rgb_channels,
+            "feature_dim": feature_dim,
+            "last_dim": last_dim,
+            "dim_tokens": dim_tokens,
+            "hooks_idx": hooks_idx,
+            "head_type": head_type,
+        }
         if hooks_idx is not None:
             pts_dpt_args.update(hooks=hooks_idx)
             rgb_dpt_args.update(hooks=hooks_idx)
@@ -233,12 +203,6 @@ class DPTPts3dPose(nn.Module):
             self.pose_head = PoseDecoder(hidden_size=in_dim)
 
     def forward(self, x, img_info, **kwargs):
-        """Forward.
-
-        Args:
-            x: The x.
-            img_info: The img info.
-        """
         if self.has_pose:
             pose_token = x[-1][:, 0].clone()
             token = x[-1][:, 1:]
@@ -248,8 +212,8 @@ class DPTPts3dPose(nn.Module):
             token_cross = token.clone()
             for blk in self.final_transform:
                 token_cross = blk(token_cross, pose_token, kwargs.get("pos"))
-            x = x[:-1] + [token]
-            x_cross = x[:-1] + [token_cross]
+            x = x[:-1] + [token]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+            x_cross = x[:-1] + [token_cross]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         with torch.autocast(device_type="cuda", enabled=False):
             self_out = self.dpt_self(

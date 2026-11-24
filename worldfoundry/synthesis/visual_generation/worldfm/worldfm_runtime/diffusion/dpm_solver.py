@@ -1,23 +1,27 @@
 import torch
-from worldfoundry.synthesis.visual_generation.worldfm.worldfm_runtime.diffusion.model.nets import gaussian_diffusion as gd
-from .model.dpm_solver import model_wrapper, DPM_Solver, NoiseScheduleVP
+
+from worldfoundry.synthesis.visual_generation.worldfm.worldfm_runtime.diffusion.model.nets import (
+    gaussian_diffusion as gd,
+)
+
+from .model.dpm_solver import DPM_Solver, NoiseScheduleVP, model_wrapper
 
 
 def DPMS(
-        model,
-        condition,
-        uncondition,
-        cfg_scale,
-        model_type='noise',  # or "x_start" or "v" or "score"
-        noise_schedule="linear",
-        guidance_type='classifier-free',
-        model_kwargs={},
-        diffusion_steps=1000
+    model,
+    condition,
+    uncondition,
+    cfg_scale,
+    model_type="noise",  # or "x_start" or "v" or "score"
+    noise_schedule="linear",
+    guidance_type="classifier-free",
+    model_kwargs={},  # noqa: B006 - Keeps the upstream default object and signature.
+    diffusion_steps=1000,
 ):
     betas = torch.tensor(gd.get_named_beta_schedule(noise_schedule, diffusion_steps))
 
     ## 1. Define the noise schedule.
-    noise_schedule = NoiseScheduleVP(schedule='discrete', betas=betas)
+    noise_schedule = NoiseScheduleVP(schedule="discrete", betas=betas)
 
     ## 2. Convert your discrete-time `model` to the continuous-time
     ## noise prediction model. Here is an example for a diffusion model

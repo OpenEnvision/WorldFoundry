@@ -5,13 +5,18 @@ This operator handles user interactions for the HunyuanMirror pipeline.
 It processes user commands like camera control, object manipulation, etc.
 """
 
-import numpy as np
 import torch
+
+from worldfoundry.base_models.three_dimensions.point_clouds.hunyuan_mirror.models.utils.camera_utils import (
+    vector_to_camera_matrices,
+)
+
 from .base_operator import BaseOperator
-from worldfoundry.base_models.three_dimensions.point_clouds.hunyuan_mirror.models.utils.camera_utils import vector_to_camera_matrices
+
 
 class HunyuanMirrorOperator(BaseOperator):
     """Operator class for the HunyuanMirror model integration."""
+
     def __init__(self, operation_types=None, interaction_template=None):
         """Initialize the operator with specific configurations."""
         if operation_types is None:
@@ -30,57 +35,58 @@ class HunyuanMirrorOperator(BaseOperator):
                 "object_move_right",
                 "reset_camera",
             ]
-        super(HunyuanMirrorOperator, self).__init__(operation_types=operation_types)
+        super().__init__(operation_types=operation_types)
         self.interaction_template = interaction_template
         self.interaction_template_init()
 
-        self.current_interaction = []  # 保存用户的交互指令序列
+        self.current_interaction = []  # interactions in the order the user issued them
 
     def check_interaction(self, interaction):
-        """
-        检查用户交互是否在模板范围内
-        """
+        """Check that the interaction is one of the interaction template entries."""
         if interaction not in self.interaction_template:
             raise ValueError(f"{interaction} not in interaction template: {self.interaction_template}")
         return True
-    
+
     def get_interaction(self, interaction):
-        """
-        获得用户的交互指令
-        """
+        """Validate an interaction and append it to the current sequence."""
         self.check_interaction(interaction)
         self.current_interaction.append(interaction)
 
     def process_interaction(self, num_frames, image_hw=(518, 518)):
         """
-        处理用户交互指令，将其转换为representation和synthesis可以处理的形式
-        
+        Convert the latest interaction into camera parameters for the representation and synthesis models.
+
         Args:
-            num_frames: 生成的帧数
-            image_hw: 图像的高度和宽度
-            
+            num_frames: Number of frames to generate.
+            image_hw: Image (height, width).
+
         Returns:
-            dict: 包含处理后的相机参数或其他控制信息
+            dict: The interaction, ``num_frames``, ``image_hw``, ``camera_poses`` (num_frames, 3, 4)
+            and ``camera_intrinsics`` (num_frames, 3, 3).
         """
         if len(self.current_interaction) == 0:
             raise ValueError("No interaction to process")
-        
-        # 处理最近的交互指令
+
         latest_interaction = self.current_interaction[-1]
-        
-        # 将交互记录到历史
+
         self.interaction_history.append(latest_interaction)
-        
-        # 根据不同的交互指令生成相机参数
+
         h, w = image_hw
-        
-        # 默认相机参数
-        default_cam_vec = torch.tensor([
-            0.0, 0.0, 0.0,  # 位置 (x, y, z)
-            0.0, 0.0, 0.0, 1.0,  # 旋转 (quaternion: x, y, z, w; scalar-last)
-            torch.pi / 3,  # 垂直FOV
-            torch.pi / 3   # 水平FOV
-        ])
+
+        # Camera vector: position, scalar-last quaternion, vertical and horizontal FOV.
+        default_cam_vec = torch.tensor(
+            [
+                0.0,
+                0.0,
+                0.0,  # position (x, y, z)
+                0.0,
+                0.0,
+                0.0,
+                1.0,  # rotation (quaternion: x, y, z, w; scalar-last)
+                torch.pi / 3,  # vertical FOV
+                torch.pi / 3,  # horizontal FOV
+            ]
+        )
 
         def with_axis_angle(vec, axis, angle):
             """Return ``vec`` with a normalized scalar-last axis-angle quaternion."""
@@ -91,41 +97,39 @@ class HunyuanMirrorOperator(BaseOperator):
             adjusted = vec.clone()
             adjusted[3:7] = quaternion
             return adjusted
-        
-        # 相机参数调整量
+
+        # Each adjustment is applied to the default camera, not to the previous one.
         cam_adjustments = {
             "camera_look_up": lambda vec: with_axis_angle(vec, (1.0, 0.0, 0.0), 0.2),
             "camera_look_down": lambda vec: with_axis_angle(vec, (1.0, 0.0, 0.0), -0.2),
             "camera_look_left": lambda vec: with_axis_angle(vec, (0.0, 0.0, 1.0), 0.2),
             "camera_look_right": lambda vec: with_axis_angle(vec, (0.0, 0.0, 1.0), -0.2),
-            "camera_zoom_in": lambda vec: torch.cat([vec[:2], vec[2:3] - 0.1, vec[3:7], vec[7:]]),  # 靠近物体
-            "camera_zoom_out": lambda vec: torch.cat([vec[:2], vec[2:3] + 0.1, vec[3:7], vec[7:]]),  # 远离物体
-            "reset_camera": lambda vec: default_cam_vec.clone(),  # 重置相机
-            # 物体移动的处理可以在这里扩展
-            "object_move_forward": lambda vec: vec,  # 示例：暂时不处理物体移动
+            # Zooming moves the camera along z, toward (-0.1) or away from (+0.1) the object.
+            "camera_zoom_in": lambda vec: torch.cat([vec[:2], vec[2:3] - 0.1, vec[3:7], vec[7:]]),
+            "camera_zoom_out": lambda vec: torch.cat([vec[:2], vec[2:3] + 0.1, vec[3:7], vec[7:]]),
+            "reset_camera": lambda vec: default_cam_vec.clone(),
+            # Object moves leave the camera unchanged.
+            "object_move_forward": lambda vec: vec,
             "object_move_backward": lambda vec: vec,
             "object_move_left": lambda vec: vec,
             "object_move_right": lambda vec: vec,
         }
-        
-        # 应用相机调整
+
         if latest_interaction in cam_adjustments:
             adjusted_cam_vec = cam_adjustments[latest_interaction](default_cam_vec)
         else:
             adjusted_cam_vec = default_cam_vec.clone()
-        
-        # 生成相机矩阵
+
         ext, intr = vector_to_camera_matrices(adjusted_cam_vec, image_hw=image_hw)
-        
-        # 重复参数以匹配帧数
+
+        # The same camera is used for every frame.
         ext = ext.unsqueeze(0).repeat(num_frames, 1, 1)
         intr = intr.unsqueeze(0).repeat(num_frames, 1, 1)
-        
-        # 返回处理后的相机参数
+
         return {
             "interaction": latest_interaction,
             "num_frames": num_frames,
-            "camera_poses": ext,  # 相机姿态矩阵 (num_frames, 3, 4)
-            "camera_intrinsics": intr,  # 相机内参 (num_frames, 3, 3)
+            "camera_poses": ext,  # extrinsics (num_frames, 3, 4)
+            "camera_intrinsics": intr,  # intrinsics (num_frames, 3, 3)
             "image_hw": image_hw,
         }

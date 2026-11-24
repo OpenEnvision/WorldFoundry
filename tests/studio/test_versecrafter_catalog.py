@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 import numpy as np
 import pytest
 
-import worldfoundry.studio.inference.catalog as catalog
-from worldfoundry.studio.inference.catalog import (
+from worldfoundry.pipelines.versecrafter.pipeline_versecrafter import VerseCrafterPipeline
+from worldfoundry.studio.inference.catalog import resolve as catalog_resolve
+from worldfoundry.studio.inference.catalog.models.video_generation import (
     _versecrafter_default_load_kwargs,
     _versecrafter_default_ref,
 )
-from worldfoundry.pipelines.versecrafter.pipeline_versecrafter import VerseCrafterPipeline
 from worldfoundry.synthesis.visual_generation.versecrafter.worldfoundry_runtime import (
     VerseCrafterRuntime,
 )
@@ -38,7 +41,7 @@ def test_versecrafter_catalog_resolves_all_local_checkpoints(tmp_path, monkeypat
 def test_versecrafter_catalog_uses_public_hub_fallbacks(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path / "ckpt"))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
-    monkeypatch.setattr(catalog, "_cache_candidates", lambda *names: [])
+    monkeypatch.setattr(catalog_resolve, "_cache_candidates", lambda *names: [])
 
     assert _versecrafter_default_ref() == "TencentARC/VerseCrafter"
     assert _versecrafter_default_load_kwargs() == {
@@ -58,15 +61,36 @@ def test_versecrafter_default_trajectory_is_deterministic(tmp_path) -> None:
     assert first_extrinsics[-1, 0, 3] > first_extrinsics[0, 0, 3]
 
 
-def test_versecrafter_torchrun_uses_isolated_standalone_rendezvous() -> None:
-    command = VerseCrafterRuntime._torchrun_prefix("/env/bin/python")
+def test_versecrafter_torchrun_uses_isolated_standalone_rendezvous(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from worldfoundry.synthesis.visual_generation.versecrafter import worldfoundry_runtime
 
-    assert command == [
+    calls: list[list[str]] = []
+
+    def execute(command: list[str], **kwargs: Any) -> dict[str, str]:
+        calls.append(command)
+        return {"video": str(kwargs["output_path"])}
+
+    monkeypatch.setattr(worldfoundry_runtime, "require_path", lambda value, *args, **kwargs: Path(value))
+    monkeypatch.setattr(worldfoundry_runtime, "execute_in_tree", execute)
+    monkeypatch.setattr(VerseCrafterRuntime, "_run_stage", lambda *args, **kwargs: None)
+    runtime = VerseCrafterRuntime(python_executable="/env/bin/python")
+    runtime.predict(
+        prompt="orchard",
+        image_path=tmp_path / "image.png",
+        trajectory_npz=tmp_path / "camera.npz",
+        output_path=tmp_path / "result.mp4",
+    )
+    assert calls[0][:8] == [
         "/env/bin/python",
         "-m",
         "torch.distributed.run",
         "--standalone",
-        "--nproc_per_node=1",
+        "--nproc_per_node",
+        "1",
+        "-m",
+        "worldfoundry.synthesis.visual_generation.versecrafter.versecrafter_runtime.inference.versecrafter_inference",
     ]
 
 

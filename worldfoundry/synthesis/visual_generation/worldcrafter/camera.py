@@ -5,17 +5,16 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import json
 import math
-from pathlib import Path
 import re
+from dataclasses import asdict, dataclass
 from functools import partial
+from pathlib import Path
 
 import numpy as np
 
 from worldfoundry.core.io.filesystem.file_utils import file_sha256
-
 
 CHUNK_FRAMES = 33
 FPS = 16
@@ -33,8 +32,14 @@ ACTION_FIELDS = {
     "pitch_down": ("pitch", -1),
 }
 ALIASES = {
-    "f": "forward", "b": "backward", "l": "left", "r": "right",
-    "yl": "yaw_left", "yr": "yaw_right", "pu": "pitch_up", "pd": "pitch_down",
+    "f": "forward",
+    "b": "backward",
+    "l": "left",
+    "r": "right",
+    "yl": "yaw_left",
+    "yr": "yaw_right",
+    "pu": "pitch_up",
+    "pd": "pitch_down",
 }
 
 
@@ -139,10 +144,7 @@ def parse_trajectory(text: str) -> tuple[list[str], dict[str, str]]:
 
 
 def count_chunks(events: list[str]) -> int:
-    return sum(
-        int(re.search(r"[0-9]+$", event).group()) if event.startswith("reverse") else 1
-        for event in events
-    )
+    return sum(int(re.search(r"[0-9]+$", event).group()) if event.startswith("reverse") else 1 for event in events)
 
 
 def action_from_event(event: str) -> Action:
@@ -186,7 +188,10 @@ def horizontal_direction(rotation: np.ndarray, forward: bool) -> np.ndarray:
 
 
 def sample_chunk(
-    start: np.ndarray, action: Action, *, fractions: np.ndarray | None = None,
+    start: np.ndarray,
+    action: Action,
+    *,
+    fractions: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Sample one action; the logical endpoint starts the next chunk."""
     action.validate()
@@ -194,6 +199,7 @@ def sample_chunk(
     poses = np.repeat(start[None], len(alpha), axis=0)
     end = start.copy()
     if action.yaw or action.pitch:
+
         def rotated(fraction):
             if action.yaw:
                 return rotation_y(action.yaw * fraction) @ start[:3, :3]
@@ -244,7 +250,8 @@ def _sample_curve(start, event, tangent_start, tangent_end, times):
     fractions = times
     if tangent_start is not None:
         fractions = (
-            -2 * times**3 + 3 * times**2
+            -2 * times**3
+            + 3 * times**2
             + (times**3 - 2 * times**2 + times) * tangent_start
             + (times**3 - times**2) * tangent_end
         )
@@ -260,7 +267,10 @@ def _reverse_sampled_curve(curve, last_time, times):
 
 
 def build_trajectory(
-    events: list[str], *, dtype: str = "float64", sampling: str = "linear",
+    events: list[str],
+    *,
+    dtype: str = "float64",
+    sampling: str = "linear",
     last_frame: str = "exclude",
 ) -> tuple[np.ndarray, list[dict[str, object]]]:
     if not events:
@@ -272,10 +282,14 @@ def build_trajectory(
         nonlocal world
         start, end = curve(np.array([0.0, 1.0]))
         chunks.append(curve(times) if poses is None else poses)
-        records.append({
-            "chunk_index": len(records), "event": event,
-            "logical_start_c2w": start.tolist(), "logical_end_c2w": end.tolist(),
-        })
+        records.append(
+            {
+                "chunk_index": len(records),
+                "event": event,
+                "logical_start_c2w": start.tolist(),
+                "logical_end_c2w": end.tolist(),
+            }
+        )
         curves.append(curve)
         sample_times.append(times)
         world = end
@@ -295,7 +309,8 @@ def build_trajectory(
                     curve = partial(_reverse_curve, curves[source])
                     include_end = last_frame == "include" and index == len(events) - 1 and source == indices[-1]
                     times = (
-                        np.linspace(0.0, 1.0, CHUNK_FRAMES) if include_end
+                        np.linspace(0.0, 1.0, CHUNK_FRAMES)
+                        if include_end
                         else np.arange(CHUNK_FRAMES, dtype=np.float64) / CHUNK_FRAMES
                     )
                     poses = None
@@ -313,20 +328,29 @@ def build_trajectory(
         leaving = index + 1 < len(events) and events[index + 1] == event
         include_end = (smooth and not leaving) or (last_frame == "include" and index == len(events) - 1)
         times = (
-            np.linspace(0.0, 1.0, CHUNK_FRAMES) if include_end
+            np.linspace(0.0, 1.0, CHUNK_FRAMES)
+            if include_end
             else np.arange(CHUNK_FRAMES, dtype=np.float64) / CHUNK_FRAMES
         )
         curve = partial(
-            _sample_curve, world.copy(), event,
-            float(entering) if smooth else None, float(leaving),
+            _sample_curve,
+            world.copy(),
+            event,
+            float(entering) if smooth else None,
+            float(leaving),
         )
         append(event, curve, times)
     return np.concatenate(chunks).astype(dtype), records
 
 
 def save_trajectory(
-    directory: Path, camera: np.ndarray, records: list[dict[str, object]], *, fps: int = FPS,
-    events: list[str] | None = None, options: dict[str, str] | None = None,
+    directory: Path,
+    camera: np.ndarray,
+    records: list[dict[str, object]],
+    *,
+    fps: int = FPS,
+    events: list[str] | None = None,
+    options: dict[str, str] | None = None,
 ) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     camera_path = directory / "camera.npy"
@@ -348,6 +372,7 @@ def save_trajectory(
         "chunks": records,
     }
     (directory / "trajectory.json").write_text(
-        json.dumps(manifest, indent=2) + "\n", encoding="utf-8",
+        json.dumps(manifest, indent=2) + "\n",
+        encoding="utf-8",
     )
     return camera_path

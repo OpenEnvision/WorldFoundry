@@ -58,9 +58,14 @@ def frames(value=0):
 
 def test_partial_start_closes_opened_sessions_and_preserves_start_error():
     events = []
-    stream = VideoPostprocessStream(chain=VideoPostprocessChain((
-        Processor("first", events, fail="close"), Processor("second", events, fail="start"),
-    )))
+    stream = VideoPostprocessStream(
+        chain=VideoPostprocessChain(
+            (
+                Processor("first", events, fail="close"),
+                Processor("second", events, fail="start"),
+            )
+        )
+    )
     with pytest.raises(ValueError, match="start failed"):
         stream.process(frames(), layout="frame-list")
     assert ("first", "close") in events
@@ -97,9 +102,14 @@ def test_reset_closes_every_stage_even_when_one_close_fails():
 
 def test_flush_failure_releases_remaining_stages_and_does_not_retry_tails():
     events = []
-    stream = VideoPostprocessStream(chain=VideoPostprocessChain((
-        Processor("first", events, fail="flush"), Processor("second", events),
-    )))
+    stream = VideoPostprocessStream(
+        chain=VideoPostprocessChain(
+            (
+                Processor("first", events, fail="flush"),
+                Processor("second", events),
+            )
+        )
+    )
     stream.process(frames(), layout="frame-list")
     with pytest.raises(ValueError, match="flush failed"):
         stream.finish()
@@ -158,6 +168,7 @@ def test_cleanup_preserves_primary_failure_without_exception_notes():
 
     events = []
     primary = LegacyError("primary failed")
-    _close_sessions([Session(Processor("first", events, fail="close")),
-                     Session(Processor("second", events))], primary_error=primary)
+    _close_sessions(
+        [Session(Processor("first", events, fail="close")), Session(Processor("second", events))], primary_error=primary
+    )
     assert events == [("first", "close"), ("second", "close")]

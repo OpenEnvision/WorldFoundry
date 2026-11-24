@@ -80,7 +80,9 @@ def default_worldfoundry_cache_dir() -> Path:
 
 def default_huggingface_cache_dir() -> Path:
     """Return the Hugging Face Hub cache directory used for model downloads."""
-    from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
+    HUGGINGFACE_HUB_CACHE = __import__(
+        "huggingface_hub.constants", fromlist=["HUGGINGFACE_HUB_CACHE"]
+    ).HUGGINGFACE_HUB_CACHE
 
     return Path(HUGGINGFACE_HUB_CACHE).expanduser()
 

@@ -37,7 +37,6 @@ from .parallel_state import (
     model_parallel_is_initialized,
 )
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Read-only view — properties fail closed (sp=1, rank=0) before init
 # ──────────────────────────────────────────────────────────────────────────

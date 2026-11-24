@@ -11,6 +11,7 @@ import numpy as np
 import torch
 from PIL import Image
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io import VideoData, save_video
 from worldfoundry.synthesis.visual_generation.spatia.native_pipeline import load_spatia_pipeline
 from worldfoundry.synthesis.visual_generation.spatia.spatia_runtime.utils.camera_io import (
@@ -22,10 +23,8 @@ from worldfoundry.synthesis.visual_generation.spatia.spatia_runtime.utils.frustu
     frustum_frontmost_mask_triton,
 )
 
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR
-UTILS_DIR = SCRIPT_DIR / "utils"
 
 NEGATIVE_PROMPT = (
     "画面切换，画面切出，镜头切换，镜头渐黑，镜头渐亮，最差质量, 节目横幅, 低质量, 正常质量, "
@@ -68,6 +67,8 @@ def run_command(command, cwd=None, quiet=False, env=None):
             )
     else:
         subprocess.run(command, check=True, **run_kwargs)
+
+
 def save_extrinsic_and_intrinsics(extrinsic=None, intrinsic=None, extrinsic_path=None, intrinsics_path=None):
     if extrinsic_path is not None:
         os.makedirs(os.path.dirname(extrinsic_path), exist_ok=True)
@@ -158,7 +159,7 @@ def get_round_range(round_idx, total_frames, first_round_frames, round_frames, h
 
 
 def load_video_frames(video_path, height, width):
-    return [frame for frame in VideoData(str(video_path), height=height, width=width)]
+    return list(VideoData(str(video_path), height=height, width=width))
 
 
 def run_mapanything(args, round_idx, map_frames, map_extrinsics, intrinsic_path, work_dir):
@@ -176,8 +177,6 @@ def run_mapanything(args, round_idx, map_frames, map_extrinsics, intrinsic_path,
     need_map = args.force_rebuild_intermediate or (not points_path.exists()) or (not intrinsic_output_path.exists())
     if need_map:
         map_cmd = [
-            args.map_python,
-            str(UTILS_DIR / "map_anything_inference.py"),
             "--model_path",
             str(args.map_model_path),
             "--vid_path",
@@ -200,7 +199,11 @@ def run_mapanything(args, round_idx, map_frames, map_extrinsics, intrinsic_path,
         if args.per_frame_mask:
             map_cmd.append("--per_frame_mask")
         run_command(
-            map_cmd,
+            package_module_command(
+                "worldfoundry.synthesis.visual_generation.spatia.spatia_runtime.utils.map_anything_inference",
+                map_cmd,
+                python_executable=args.map_python,
+            ),
             cwd=SCRIPT_DIR,
             quiet=not args.verbose_subprocess,
         )
@@ -235,14 +238,10 @@ def run_render(args, round_idx, points_path, map_video_path, round_extrinsic, in
     render_video_path = render_output_dir / "render.mp4"
     render_score_path = render_output_dir / "render-score.mp4"
     need_render = (
-        args.force_rebuild_intermediate
-        or (not render_video_path.exists())
-        or (not render_score_path.exists())
+        args.force_rebuild_intermediate or (not render_video_path.exists()) or (not render_score_path.exists())
     )
     if need_render:
         render_cmd = [
-            args.render_python,
-            str(UTILS_DIR / "render_point.py"),
             "--data_path",
             str(points_path),
             "--w2c_path",
@@ -270,7 +269,11 @@ def run_render(args, round_idx, points_path, map_video_path, round_extrinsic, in
             str(render_output_dir),
         ]
         run_command(
-            render_cmd,
+            package_module_command(
+                "worldfoundry.synthesis.visual_generation.spatia.spatia_runtime.utils.render_point",
+                render_cmd,
+                python_executable=args.render_python,
+            ),
             cwd=SCRIPT_DIR,
             quiet=not args.verbose_subprocess,
         )
@@ -457,7 +460,7 @@ def generate_video(args):
         )
 
         round_hist_frames = all_hist_frames[-args.hist_frames :]
-        round_ref_frames = all_hist_frames[:-args.hist_frames]
+        round_ref_frames = all_hist_frames[: -args.hist_frames]
         round_hist_latents_num = max(0, (len(round_hist_frames) - 1) // 4 + 1)
         input_point = load_video_frames(point_video_path, args.height, args.width)
         input_point_score = load_video_frames(point_score_path, args.height, args.width)
@@ -553,7 +556,11 @@ def get_args():
     parser.add_argument("--save_path", type=str, default="test_cases/case_2/output.mp4")
     parser.add_argument("--prompt", type=str, default="")
     parser.add_argument("--prompt_path", type=str, default="")
-    parser.add_argument("--vace_path", type=str, default="/home/aiscuser/4D-Representation/wan2.2/outputs/vace_point-bs64-lr1e-5/step-8500.safetensors")
+    parser.add_argument(
+        "--vace_path",
+        type=str,
+        default="/home/aiscuser/4D-Representation/wan2.2/outputs/vace_point-bs64-lr1e-5/step-8500.safetensors",
+    )
     parser.add_argument("--control_path", type=str, default="", help="Alias of --vace_path.")
     parser.add_argument("--lora_path", type=str, default="")
     parser.add_argument("--model_root", type=str, default="", help="Wan2.2-TI2V-5B checkpoint directory.")
@@ -597,9 +604,9 @@ def get_args():
 
     args = parser.parse_args()
     args.mask_path = [resolve_path(path) for path in args.mask_path]
-    args.map_stride = max(1, int(round(args.fps / args.map_fps)))
-    args.ref_stride = max(1, int(round(args.fps / args.ref_fps)))
-    args.ref_hist_stride = max(1, int(round(args.fps / args.ref_hist_fps)))
+    args.map_stride = max(1, int(round(args.fps / args.map_fps)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+    args.ref_stride = max(1, int(round(args.fps / args.ref_fps)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+    args.ref_hist_stride = max(1, int(round(args.fps / args.ref_hist_fps)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     return args
 
 

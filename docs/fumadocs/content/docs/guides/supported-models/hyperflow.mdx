@@ -1,44 +1,75 @@
 ---
 title: "HyperFlow for MiniMax-H3"
-description: "HyperFlow for MiniMax-H3 from Video Rebirth: text-to-video and image-to-video; Runner parity pending; dedicated `hyperflow`."
+description: "Eight-step joint video/audio generation using canonical in-tree MiniMax-H3 components; runner parity pending."
 modelId: "hyperflow"
-pageSource: generated
+pageSource: authored
 ---
 
-Eight-step MiniMax-H3 adapter with joint video/audio, first/last-frame conditioning and ordered multimodal references.
+HyperFlow generates video with stereo audio in eight steps. The in-tree integration reuses the canonical MiniMax-H3 transformer, text refiner, Qwen3-VL feature encoder and video/audio VAEs. Its H3 variant owns two-time conditioning, unmerged LoRA, the Sol-Attn policy and the fixed sampling grid.
 
 <ModelPaperFigures modelId="hyperflow" locale="en" />
 
-Code: [Video-Rebirth/hyperflow](https://github.com/Video-Rebirth/hyperflow).
+Source: [Video-Rebirth/hyperflow](https://github.com/Video-Rebirth/hyperflow/tree/1dd2f342aba5ab51da02b62885939655e8e268da), Apache-2.0. The base and adapter weights are separate downloads under the MiniMax H3 Community License.
 
 <ModelCommandBuilder modelId="hyperflow" locale="en" />
 
-## What it is for
-
-Use `hyperflow` for the family's joint T2V/I2V inference path. The catalog records both task profiles on this page.
-
-It is published by Video Rebirth.
-
-Catalog tasks include text-to-video, image-to-video, reference-to-video, and audio-video-generation. Catalog aliases include `hyperflow-h3` and `minimax-h3-hyperflow`. Documented modalities: text and image in, video out.
-
 ## Runtime contract
 
-Optional `prompt`, `num_frames`, `height`, `width`, and `seed`; artifacts `generated_video` and `hyperflow.mp4`.
+The public model ID is `hyperflow`; aliases are `hyperflow-h3` and `minimax-h3-hyperflow`. The pipeline target remains `HyperFlowPipeline`.
 
-CLI task profiles: `t2va`, `fl2va`, and `ref2va`. WorldFoundry binds `HyperFlowPipeline`.
+- `t2va`: prompt to video and audio.
+- `fl2va`: first frame, last frame, or both. Pass `image` / `last_image`, or one/two paths in `images`.
+- `ref2va`: ordered `references`, each a local path or a `{"kind": "image|video|audio", "path": "..."}` mapping. Order determines presentation labels and rotary positions. A video reference retains its soundtrack.
 
-Family status: **Runner parity pending**.
+The prompt is required. `num_inference_steps=8` and `fps=24` are fixed. `num_frames` rounds upward to `17n+5`; supported aligned counts are 124–345. Pass `height` and `width` together, both positive multiples of 32. Otherwise the canvas follows the first supplied keyframe or the default 16:9 rule. The artifact is `hyperflow.mp4`, containing video and stereo audio.
 
-Recorded `t2va` defaults: seed=42 Recorded `fl2va` defaults: seed=42.
+## Environment and local weights
 
-Supply a complete local diffusers MiniMax-H3 snapshot, weights_path and the dedicated Python executable. The upstream loader supplies the fixed grid; num_inference_steps must be 8 and output fps must be 24.
+Use Linux, an NVIDIA GPU and a driver compatible with CUDA 12.8. Prepare the dedicated environment and inspect local assets:
 
-## Running in WorldFoundry
+```bash
+bash scripts/inference/prepare_model_infer.sh hyperflow
+wf run hyperflow --model-status
+```
 
-Launch `worldfoundry-eval run hyperflow --pipeline.task-profile t2va` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Add `--download` to the preparation command to acquire missing checkpoints. Inference itself is offline. Provide `model_path` pointing to a complete local **Diffusers-format checkpoint snapshot** of `MiniMaxAI/MiniMax-H3`, plus `weights_path` pointing to the adapter directory or `minimax_h3_hyperflow_8step_v1.0.safetensors`. Ref2VA uses the snapshot's `transformer_ref` partition; T2VA/FL2VA use `transformer`.
 
-Recorded weight repositories include `videorebirth/hyperflow` and `MiniMaxAI/MiniMax-H3`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh hyperflow`. Add `--download` to fetch missing public checkpoints.
+The dedicated `hyperflow` environment uses Python 3.11, CUDA 12.8, PyTorch 2.11, Transformers 5.12.1 and Diffusers 0.40.0. Generate a clip with `wf run hyperflow --pipeline.task-profile t2va`; the command builder above selects other tasks.
 
-Status: **Runner parity pending**.
+```python
+from worldfoundry.pipelines.hyperflow.pipeline_hyperflow import HyperFlowPipeline
+
+pipe = HyperFlowPipeline.from_pretrained(
+    model_path="/local/MiniMaxAI--MiniMax-H3",
+    weights_path="/local/videorebirth--hyperflow",
+    python_executable="/envs/hyperflow/bin/python",
+    device="cuda",
+    gpus=1,
+)
+result = pipe(
+    prompt="A red fox trotting through a snowy pine forest",
+    images=["/local/first.png", "/local/last.png"],
+    num_frames=124,
+    seed=42,
+    output_path="/local/output/hyperflow.mp4",
+    return_dict=True,
+)
+```
+
+For Ref2VA, replace `images` with `references`; the two conditioning modes cannot be combined. References are limited to nine images, three videos, three audio clips and twelve entries total. Audio references need an image or video reference alongside them.
+
+## Execution options
+
+`gpus` accepts 1, 2 or 4. Multi-GPU execution uses Ulysses sequence parallelism through core collectives. `offload=True` and `memory_reserve_margin="24GB"` retain the release's automatic CPU-offload policy; disabling offload requires enough device memory for all components.
+
+`attention_backend="sdpa"` is the default. `"fa3"` selects the Hub FA3 kernel and requires the optional `kernels` package and a locally available kernel for offline execution. Other accepted backend names are single-GPU only. `sol_attn=True` requires the optional pinned [Sol-Attn package](https://github.com/NVlabs/Sana/tree/9bfca5c4bf35774a1d44c27b0c3c91041fb8dad0/techniques/sparse_backends); the first two steps and first two DiT blocks remain dense.
+
+## Validation and limitations
+
+Recorded single-H100 validation covers T2VA, single-image FL2VA and image-reference Ref2VA at 640×384 and 124 frames in eight steps, with full video and stereo audio decoding.
+
+Released checkpoint headers map bijectively to the canonical foundation and adapter. Small random-weight FP32 comparisons against the pinned reference are exact for conditioning, LoRA-applied blocks, codecs, text features, layouts, RNG order and eight-step denoising across T2VA, FL2VA and Ref2VA. Existing canonical H3 output remains bit-identical.
+
+CUDA kernel parity, multi-GPU execution, automatic offload placement and full released-weight output replay are pending. CPU component checks are not GPU generation or quality evidence. GPU inference requires substantial device and host memory. Runner parity remains pending.
 
 <ModelRelatedRecipes modelId="hyperflow" locale="en" />

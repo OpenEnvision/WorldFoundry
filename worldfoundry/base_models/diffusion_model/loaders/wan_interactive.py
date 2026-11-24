@@ -87,7 +87,7 @@ class WanInteractiveTextEncoder(nn.Module):
 
     def encode(self, prompts: list[str]):
         context, lengths = self.padded(prompts)
-        return torch.cat([row[: int(n)] for row, n in zip(context, lengths)]), lengths
+        return torch.cat([row[: int(n)] for row, n in zip(context, lengths, strict=False)]), lengths
 
     def forward(self, text_prompts: list[str]):
         return {"prompt_embeds": self.padded(text_prompts, fixed=True)[0]}

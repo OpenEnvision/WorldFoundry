@@ -1,0 +1,26 @@
+---
+title: "Pika H3 Flex"
+description: "基于共享 MiniMax-H3 运行时的 Pika H3 Flex 六步联合音视频生成。"
+modelId: "pika-h3-flex"
+pageSource: authored
+---
+
+Pika H3 Flex 是基于 MiniMax-H3 的六步联合音视频适配器，运行在 MiniMax-H3 基础模型及其 Qwen3-VL 条件编码器之上。
+
+代码：[Pika-Labs/Pika-H3-Flex](https://github.com/Pika-Labs/Pika-H3-Flex)。
+
+## 运行时契约
+
+文本和首尾帧生成使用 `fl2va` 适配器，图像参考生成使用 `ref2va` 适配器。输出为 24 FPS 视频及同步的 32 kHz 立体声音频。
+
+加载适配器时使用 `adapter_task=fl2va` 或 `adapter_task=ref2va`：
+
+```bash
+wf run pika-h3-flex --pipeline.task-profile t2va --json
+```
+
+运行前准备固定版本的 MiniMax-H3 基础快照和 Pika 适配器文件。
+
+## 限制
+
+参考生成仅接受图像参考；不支持视频与独立音频参考。多卡执行、完整 480p/768p bucket 以及真实权重输出尚未验证。

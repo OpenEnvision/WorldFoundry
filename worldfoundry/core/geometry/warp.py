@@ -295,10 +295,7 @@ class Sparse3DCache:
         valid = (z > 0) & (x >= 0) & (x < target_width) & (y >= 0) & (y < target_height)
         view_ids, candidate_ids, batch_ids, _source_y, _source_x = valid.nonzero(as_tuple=True)
         keys = (
-            view_ids * pixels_per_view
-            + batch_ids * target_height * target_width
-            + y[valid] * target_width
-            + x[valid]
+            view_ids * pixels_per_view + batch_ids * target_height * target_width + y[valid] * target_width + x[valid]
         )
         return candidate_ids, keys, z[valid].to(torch.float32)
 

@@ -1,6 +1,6 @@
 ---
 title: LIBERO-Mem
-description: "Non-Markovian LIBERO suite: 10 object-memory tasks (OM / OS / OR / OO). WorldFoundry imports official rollouts — it does not run the simulator."
+description: "Non-Markovian LIBERO suite: 10 object-memory tasks (OM / OS / OR / OO). WorldFoundry imports official rollout results."
 ---
 
 LIBERO-Mem (AAAI 2026) is **not** the Spatial / Object / Goal / LIBERO-100 lifelong suites. FPT Software AI Center (with Arkansas, Stuttgart, CMU, Aalborg, and Liverpool) added **10 new** tabletop tasks on the LIBERO / robosuite stack so a policy cannot succeed from the current frame. Cues live in **object history**: what moved, how many times, in what order, or behind an occlusion. The four official memory axes:
@@ -10,18 +10,18 @@ LIBERO-Mem (AAAI 2026) is **not** the Spatial / Object / Goal / LIBERO-100 lifel
 - **Object Relations (OR)** — swap or rotate identical bowls across plates.
 - **Object Occlusion (OO)** — remember which basket hid which object.
 
-Each task ships **120** trajectories (100 train / 20 val), **200–700** frames, instance IDs, masks, and symbolic subgoals (`→`, `∨`). Official scoring reports **task success** and **subgoal completion**. Embodied-SlotSSM is the authors' companion VLA — a model-card fact, not a WorldFoundry board row.
+Each task ships **120** trajectories (100 train / 20 val), **200–700** frames, instance IDs, masks, and symbolic subgoals (`→`, `∨`). Official scoring reports **task success** and **subgoal completion**. Embodied-SlotSSM is the authors' companion VLA.
 
 Paper: [Rethinking Progression of Memory State in Robotic Manipulation](https://arxiv.org/abs/2511.11478). Project: [libero-mem.github.io](https://libero-mem.github.io/). Code: [libero-mem/libero-mem](https://github.com/libero-mem/libero-mem).
 
-WorldFoundry is **official-results only**. You run the upstream evaluator, then `official-validation` normalizes JSON/CSV into the scorecard. No in-tree simulator, no Embodied-SlotSSM weights. That is different from [base LIBERO](/docs/evaluation/benchmark-hub/libero), which can also wire closed-loop execution.
+WorldFoundry is **official-results only**. You run the upstream evaluator, then `official-validation` normalizes JSON/CSV into the scorecard. WorldFoundry does not ship the simulator or Embodied-SlotSSM weights. That is different from [base LIBERO](/docs/evaluation/benchmark-hub/libero), which can also run closed-loop execution.
 
 <BenchmarkPageSections id="libero-mem" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id libero-mem \
   --mode official-validation \
   --official-results-path <official_results.json> \

@@ -10,7 +10,7 @@ import {
   type ArchSequenceSpec,
   type ArchSplitSpec,
 } from '@/lib/arch-diagrams';
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties } from 'react';
 
 function t(text: Parameters<typeof archText>[0], locale: ArchLocale): string {
   return archText(text, locale);

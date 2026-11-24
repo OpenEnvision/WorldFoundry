@@ -106,4 +106,4 @@ def compose_sensor_frames(result):
     return output
 
 
-__all__ = ["sensor_layout_from_result", "compose_sensor_frames"]
+__all__ = ["compose_sensor_frames", "sensor_layout_from_result"]

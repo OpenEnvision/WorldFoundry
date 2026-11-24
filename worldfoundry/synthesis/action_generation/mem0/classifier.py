@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import itertools
+
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -37,7 +39,7 @@ class SubtaskEndClassifier(nn.Module):
         self.blocks = nn.ModuleList(
             [
                 ResidualMLPBlock(input_dim, output_dim, dropout)
-                for input_dim, output_dim in zip(hidden_sizes, hidden_sizes[1:], strict=False)
+                for input_dim, output_dim in itertools.pairwise(hidden_sizes)
             ]
         )
         self.final_norm = nn.LayerNorm(hidden_sizes[-1])

@@ -4,11 +4,11 @@ import json
 import subprocess
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import (
+from worldfoundry.evals.tasks.catalog.benchmark_catalog import (
     formal_benchmark_ids,
     iter_benchmark_catalog_manifest_paths,
 )
-from worldfoundry.evaluation.utils import load_manifest
+from worldfoundry.evals.utils import load_manifest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -16,12 +16,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def test_quickstart_documents_discovery_and_explicit_gpu_execution() -> None:
     quickstart = (REPO_ROOT / "docs" / "fumadocs" / "content" / "docs" / "quickstart.mdx").read_text(encoding="utf-8")
 
-    assert "worldfoundry-eval zoo benchmarks" in quickstart
-    assert "worldfoundry-eval zoo models" in quickstart
-    assert "worldfoundry-eval run" in quickstart
-    legacy_command = " ".join(("worldfoundry-eval", "validation"))
+    assert "wf zoo benchmarks" in quickstart
+    assert "wf zoo models" in quickstart
+    assert "wf run" in quickstart
+    legacy_command = " ".join(("wf", "validation"))
     assert legacy_command not in quickstart
-    assert "worldfoundry-eval contract run" not in quickstart
+    assert "wf contract run" not in quickstart
     assert "--check-local" in quickstart
     assert "prepare_model_infer.sh <model-id> --download" in quickstart
     assert "bootstrap_worldfoundry.sh --verify-only" in quickstart
@@ -45,7 +45,7 @@ def test_public_docs_document_model_download_and_inference_contract() -> None:
     )
     for path in inference_paths:
         text = path.read_text(encoding="utf-8")
-        assert "worldfoundry-eval run" in text
+        assert "wf run" in text
         assert "--pipeline.task-profile" in text
         assert "scripts/inference/prepare_model_infer.sh <model-id> --download" in text
         assert "zoo model-download --check-local" in text
@@ -59,7 +59,7 @@ def test_public_docs_document_model_download_and_inference_contract() -> None:
         assert "matrix-game-2" in text
         assert repo_id in text
         assert revision in text
-        assert "worldfoundry-eval zoo model-download" in text
+        assert "wf zoo model-download" in text
         assert "--model-id matrix-game-2" in text
         assert "--check-local" in text
         assert "Skywork--Matrix-Game-2.0" in text
@@ -94,7 +94,7 @@ def test_cli_docs_expose_all_benchmarks_run_shortcut() -> None:
 
     for path in paths:
         text = path.read_text(encoding="utf-8")
-        assert "worldfoundry-eval run" in text
+        assert "wf run" in text
         assert "--all-benchmarks" in text
         assert "--output-dir" in text
         assert "--plan-only" in text
@@ -144,15 +144,21 @@ def test_readme_keeps_news_and_community_qr_codes() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
 
     assert (
-        readme.index("![WorldFoundry teaser]")
+        readme.index('src="assets/logo.png"')
         < readme.index("## 📰 News")
         < readme.index("## 🤝 Community")
         < readme.index("## Highlights")
     )
+    logo_path = REPO_ROOT / "assets/logo.png"
+    assert logo_path.is_file()
+    logo_header = logo_path.read_bytes()[:26]
+    assert logo_header[:8] == b"\x89PNG\r\n\x1a\n"
+    assert logo_header[12:16] == b"IHDR"
+    assert logo_header[25] == 6  # RGBA PNG with alpha transparency
     assert "https://join.slack.com/t/worldfoundrycommunity/" in readme
     assert "https://discord.gg/ybUQMDA4x" in readme
     for filename in ("wechat_qr.png", "wechat_qr_2.png", "wechat_qr_3.png"):
-        image = f"docs/fumadocs/public/{filename}"
+        image = f"assets/{filename}"
         assert f'src="{image}"' in readme
         assert (REPO_ROOT / image).is_file()
 
@@ -207,8 +213,8 @@ def test_public_docs_use_unified_run_facade_for_model_benchmark_commands() -> No
         *sorted((REPO_ROOT / "docs" / "fumadocs" / "content" / "docs").rglob("*.mdx")),
     ]
     forbidden = (
-        "worldfoundry-eval run-benchmark",
-        "worldfoundry-eval run-suite",
+        "wf run-benchmark",
+        "wf run-suite",
         "run-benchmark --",
         "run-suite --",
         "run-suite as the canonical",

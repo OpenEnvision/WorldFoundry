@@ -12,20 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> model -> gsdpt.py functionality."""
+from collections.abc import Sequence
 
-from typing import Dict as TyDict
-from typing import List, Sequence
 import torch
 import torch.nn as nn
 
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.dpt import DPT
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.utils.head_utils import activate_head_gs, custom_interpolate
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.utils.head_utils import (
+    activate_head_gs,
+    custom_interpolate,
+)
 
 
 class GSDPT(DPT):
-    """Gsdpt implementation."""
-
     def __init__(
         self,
         dim_in: int,
@@ -42,26 +41,6 @@ class GSDPT(DPT):
         norm_type: str = "idt",  # use to match legacy GS-DPT head, "idt" / "layer"
         fusion_block_inplace: bool = False,
     ) -> None:
-        """Init.
-
-        Args:
-            dim_in: The dim in.
-            patch_size: The patch size.
-            output_dim: The output dim.
-            activation: The activation.
-            conf_activation: The conf activation.
-            features: The features.
-            out_channels: The out channels.
-            pos_embed: The pos embed.
-            feature_only: The feature only.
-            down_ratio: The down ratio.
-            conf_dim: The conf dim.
-            norm_type: The norm type.
-            fusion_block_inplace: The fusion block inplace.
-
-        Returns:
-            The return value.
-        """
         super().__init__(
             dim_in=dim_in,
             patch_size=patch_size,
@@ -78,10 +57,10 @@ class GSDPT(DPT):
             fusion_block_inplace=fusion_block_inplace,
         )
         self.conf_dim = conf_dim
+        # Average-pool full-resolution image-merger features when the output is downsampled.
+        self.gs_ds_feature_mode = False
         if conf_dim and conf_dim > 1:
-            assert (
-                conf_activation == "linear"
-            ), "use linear prediction when using view-dependent opacity"
+            assert conf_activation == "linear", "use linear prediction when using view-dependent opacity"
 
         merger_out_dim = features if feature_only else features // 2
         self.images_merger = nn.Sequential(
@@ -98,24 +77,12 @@ class GSDPT(DPT):
     # -------------------------------------------------------------------------
     def _forward_impl(
         self,
-        feats: List[torch.Tensor],
+        feats: list[torch.Tensor],
         H: int,
         W: int,
         patch_start_idx: int,
         images: torch.Tensor,
-    ) -> TyDict[str, torch.Tensor]:
-        """Helper function to forward impl.
-
-        Args:
-            feats: The feats.
-            H: The h.
-            W: The w.
-            patch_start_idx: The patch start idx.
-            images: The images.
-
-        Returns:
-            The return value.
-        """
+    ) -> dict[str, torch.Tensor]:
         B, _, C = feats[0].shape
         ph, pw = H // self.patch_size, W // self.patch_size
         resized_feats = []
@@ -141,7 +108,14 @@ class GSDPT(DPT):
         fused = custom_interpolate(fused, (h_out, w_out), mode="bilinear", align_corners=True)
 
         # inject the image information here
-        fused = fused + self.images_merger(images)
+        if images.shape[-2:] == fused.shape[-2:]:
+            img_feat = self.images_merger(images)
+        elif self.gs_ds_feature_mode:
+            img_feat = torch.nn.functional.adaptive_avg_pool2d(self.images_merger(images), (h_out, w_out))
+        else:
+            images = custom_interpolate(images, (h_out, w_out), mode="bilinear", align_corners=True)
+            img_feat = self.images_merger(images)
+        fused = fused + img_feat
 
         if self.pos_embed:
             fused = self._add_pos_embed(fused, W, H)
@@ -152,7 +126,7 @@ class GSDPT(DPT):
 
         # 5) Main head: logits -> activate_head or single channel activation
         main_logits = self.scratch.output_conv2(feat)
-        outs: TyDict[str, torch.Tensor] = {}
+        outs: dict[str, torch.Tensor] = {}
         if self.has_conf:
             pred, conf = activate_head_gs(
                 main_logits,

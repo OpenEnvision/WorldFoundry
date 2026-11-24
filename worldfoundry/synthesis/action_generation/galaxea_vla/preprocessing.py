@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 
 class PaliGemmaTokenizer:
@@ -116,9 +117,7 @@ def prepare_images(
 
     frames = [frame for image in images for frame in _frames(image)]
     if len(frames) != int(expected_count):
-        raise ValueError(
-            f"G0Plus expects {expected_count} camera/history frames, got {len(frames)}"
-        )
+        raise ValueError(f"G0Plus expects {expected_count} camera/history frames, got {len(frames)}")
     output = []
     for frame in frames:
         if frame.ndim != 3:

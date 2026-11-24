@@ -5,8 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> heads -> head_act.py functionality."""
-
 import torch
 import torch.nn.functional as F
 

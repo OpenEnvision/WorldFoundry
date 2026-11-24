@@ -9,7 +9,6 @@ and offload remain framework-owned.
 from __future__ import annotations
 
 import contextlib
-from typing import Optional
 
 import numpy as np
 import torch
@@ -139,7 +138,7 @@ def _build_mosaic_cross_attn_keep_mask(
 
 def _build_subject_ref_memory_tokens(
     dit: WanModel,
-    subject_ref_latents: Optional[torch.Tensor],
+    subject_ref_latents: torch.Tensor | None,
     *,
     batch_size: int,
     video_h: int,
@@ -201,11 +200,11 @@ def _build_subject_ref_memory_tokens(
     _, _, _, ref_h, ref_w = ref_x.shape
 
     ratio = min(1.0, max(0.01, float(subject_ref_slot_ratio)))
-    slot_size = int(round(min(int(video_h), int(video_w)) * ratio))
+    slot_size = int(round(min(int(video_h), int(video_w)) * ratio))  # noqa: RUF046 - Shape arithmetic keeps its explicit int conversion.
     if slot_size <= 0:
         return None
-    slot_h = max(1, int(round(ref_h * slot_size / float(video_h))))
-    slot_w = max(1, int(round(ref_w * slot_size / float(video_w))))
+    slot_h = max(1, int(round(ref_h * slot_size / float(video_h))))  # noqa: RUF046 - Shape arithmetic keeps its explicit int conversion.
+    slot_w = max(1, int(round(ref_w * slot_size / float(video_w))))  # noqa: RUF046 - Shape arithmetic keeps its explicit int conversion.
     slot_h = min(slot_h, ref_h)
     slot_w = min(slot_w, ref_w)
     h_start = int(ref_h - slot_h)
@@ -388,9 +387,9 @@ def _prepend_subject_ref_prope_camera_info(
     *,
     prefix_token_count: int,
     tokens_per_frame: int,
-    frame_count: Optional[int] = None,
+    frame_count: int | None = None,
     mode: str = "identity",
-    clean_anchor_token_index: Optional[int] = None,
+    clean_anchor_token_index: int | None = None,
 ):
     if camera_info is None or int(prefix_token_count) <= 0:
         return camera_info
@@ -439,7 +438,7 @@ def _prepend_subject_ref_prope_camera_info(
                 device=mat_pt.device,
                 dtype=mat_pt.dtype,
             )
-            view_shape = (1, 1) + tuple(1 for _ in mat_pt.shape[2:-2]) + (mat_pt.shape[-2], mat_pt.shape[-1])
+            view_shape = (1, 1, *(1 for _ in mat_pt.shape[2:-2]), mat_pt.shape[-2], mat_pt.shape[-1])
             prefix = eye.view(view_shape).expand(b_cam, token_count, *mat_pt.shape[2:])
         return torch.cat([prefix, mat_pt], dim=1).contiguous()
 
@@ -797,27 +796,27 @@ def matrix_game_35_forward(
     timestep: torch.Tensor,
     context: torch.Tensor,
     fuse_vae_embedding_in_latents: bool = False,
-    first_frame_latents: Optional[torch.Tensor] = None,
-    mosaic_latent: Optional[torch.Tensor] = None,
+    first_frame_latents: torch.Tensor | None = None,
+    mosaic_latent: torch.Tensor | None = None,
     mosaic_timestep_zero: bool = True,
-    mosaic_revgrid: Optional[np.ndarray] = None,
+    mosaic_revgrid: np.ndarray | None = None,
     mosaic_use_revgrid_rope: bool = False,
-    mosaic_view_change: Optional[torch.Tensor] = None,
+    mosaic_view_change: torch.Tensor | None = None,
     mosaic_view_change_prope: bool = False,
     mosaic_mask_holes: bool = True,
     mosaic_drop_holes: bool = False,
-    mosaic_frame_indices: Optional[torch.Tensor] = None,
-    latent_rope_time_indices: Optional[torch.Tensor] = None,
-    height: Optional[int] = None,
-    width: Optional[int] = None,
-    subject_ref_latents: Optional[torch.Tensor] = None,
+    mosaic_frame_indices: torch.Tensor | None = None,
+    latent_rope_time_indices: torch.Tensor | None = None,
+    height: int | None = None,
+    width: int | None = None,
+    subject_ref_latents: torch.Tensor | None = None,
     subject_ref_slot_ratio: float = 0.5,
     subject_ref_time_gap: int = 1,
     subject_ref_prope_mode: str = "identity",
-    clean_latent_indices_prope_intrinsic: Optional[torch.Tensor] = None,
-    clean_latent_indices_prope_extrinsic: Optional[torch.Tensor] = None,
-    noisy_latent_indices_prope_intrinsic: Optional[torch.Tensor] = None,
-    noisy_latent_indices_prope_extrinsic: Optional[torch.Tensor] = None,
+    clean_latent_indices_prope_intrinsic: torch.Tensor | None = None,
+    clean_latent_indices_prope_extrinsic: torch.Tensor | None = None,
+    noisy_latent_indices_prope_intrinsic: torch.Tensor | None = None,
+    noisy_latent_indices_prope_extrinsic: torch.Tensor | None = None,
     **kwargs,
 ):
     """Matrix-Game 3.5 denoiser with Mosaic, PRoPE, and subject memory."""
@@ -1065,8 +1064,8 @@ def matrix_game_35_forward(
             device=x.device,
         )
     mosaic_attn_mask = None
-    drop_holes_keep_idx_full: Optional[torch.Tensor] = None
-    drop_holes_pre_seq_len: Optional[int] = None
+    drop_holes_keep_idx_full: torch.Tensor | None = None
+    drop_holes_pre_seq_len: int | None = None
     if mosaic_hole_mask is not None:
         _hm = mosaic_hole_mask.to(x.device)
         hm_parts = []
@@ -1156,22 +1155,24 @@ class MatrixGame35Denoiser:
             conditioning = _negative_no_context_inputs_shared(conditioning)
         compute_dtype = next(self.model.parameters()).dtype
         autocast_enabled = compute_dtype in {torch.float16, torch.bfloat16}
-        with self._temporary_no_prope(model_input.branch == "negative" and negative_no_prope):
-            with torch.autocast(
+        with (
+            self._temporary_no_prope(model_input.branch == "negative" and negative_no_prope),
+            torch.autocast(
                 device_type=model_input.latents.device.type,
                 dtype=compute_dtype,
                 enabled=autocast_enabled,
-            ):
-                sample = matrix_game_35_forward(
-                    dit=self.model,
-                    latents=model_input.latents,
-                    timestep=model_input.timestep.to(
-                        device=model_input.latents.device,
-                        dtype=compute_dtype,
-                    ),
-                    context=context,
-                    **conditioning,
-                )
+            ),
+        ):
+            sample = matrix_game_35_forward(
+                dit=self.model,
+                latents=model_input.latents,
+                timestep=model_input.timestep.to(
+                    device=model_input.latents.device,
+                    dtype=compute_dtype,
+                ),
+                context=context,
+                **conditioning,
+            )
         return DenoiserOutput(sample=sample)
 
 
@@ -1239,10 +1240,10 @@ def build_matrix_game_35_denoiser(context: ComponentBuildContext) -> MatrixGame3
 
 __all__ = [
     "MATRIX_GAME_35_DIT_CONFIG",
+    "WAN_VIDEO_PROPE_CAMERA_KEYS",
     "MatrixGame35Denoiser",
     "MatrixLatentSequence",
     "MatrixPropeCameraBuilder",
-    "WAN_VIDEO_PROPE_CAMERA_KEYS",
     "build_matrix_game_35_denoiser",
     "matrix_game_35_forward",
 ]

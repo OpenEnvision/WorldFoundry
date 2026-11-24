@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
+from worldfoundry.synthesis.visual_generation.wonderjourney.wonderjourney_runtime.util import chatGPT4
 from worldfoundry.synthesis.visual_generation.wonderjourney.wonderjourney_runtime.util.checkpoints import (
     diffusers_fp16_load_kwargs,
     local_model_ref,
     oneformer_local_load_kwargs,
     require_existing_checkpoint,
 )
-from worldfoundry.synthesis.visual_generation.wonderjourney.wonderjourney_runtime.util import chatGPT4
 
 
 def test_checkpoint_lookup_falls_back_to_sibling_ckpt_root(tmp_path: Path, monkeypatch) -> None:
@@ -60,9 +60,7 @@ def test_local_diffusers_fp16_variant_requires_all_components(tmp_path: Path) ->
         "variant": "fp16",
         "use_safetensors": True,
     }
-    assert diffusers_fp16_load_kwargs("stabilityai/stable-diffusion-2-inpainting") == {
-        "revision": "fp16"
-    }
+    assert diffusers_fp16_load_kwargs("stabilityai/stable-diffusion-2-inpainting") == {"revision": "fp16"}
 
 
 def test_keyword_generation_falls_back_when_spacy_is_unavailable(tmp_path: Path, monkeypatch) -> None:

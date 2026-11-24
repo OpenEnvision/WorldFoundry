@@ -15,7 +15,7 @@ Used by DreamX-World recipes; runner VAE38 path is
 from __future__ import annotations
 
 import inspect
-from typing import Sequence
+from collections.abc import Sequence
 
 import torch
 from torch import nn
@@ -31,8 +31,10 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_
 )
 from worldfoundry.core.model_loading import load_model
 
+
 class AutoencoderKLWan3_8(WanAutoencoderAdapterMixin, nn.Module):
     """DreamX-World wrapper around the Wan 2.2 48-channel VAE38."""
+
     def __init__(
         self,
         latent_channels: int = 48,
@@ -49,44 +51,41 @@ class AutoencoderKLWan3_8(WanAutoencoderAdapterMixin, nn.Module):
             temporal_compression_ratio=int(temporal_compression_ratio),
             spatial_compression_ratio=int(spatial_compression_ratio),
         )
-        self.register_buffer(
-            "latent_mean", torch.tensor(WAN_2P2_VAE_MEAN), persistent=False
-        )
+        self.register_buffer("latent_mean", torch.tensor(WAN_2P2_VAE_MEAN), persistent=False)
         self.register_buffer(
             "latent_inverse_std",
             1.0 / torch.tensor(WAN_2P2_VAE_STD),
             persistent=False,
         )
-        self.model = _video_vae(
-            pretrained_path=vae_pth,
-            z_dim=latent_channels,
-            dim=c_dim,
-            dim_mult=list(dim_mult),
-            temperal_downsample=list(temperal_downsample),
-        ).eval().requires_grad_(False)
+        self.model = (
+            _video_vae(
+                pretrained_path=vae_pth,
+                z_dim=latent_channels,
+                dim=c_dim,
+                dim_mult=list(dim_mult),
+                temperal_downsample=list(temperal_downsample),
+            )
+            .eval()
+            .requires_grad_(False)
+        )
 
     @property
     def scale(self) -> list[torch.Tensor]:
         return [self.latent_mean, self.latent_inverse_std]
+
     @classmethod
     def from_pretrained(
         cls,
         pretrained_model_path: str,
         additional_kwargs: dict | None = None,
-    ) -> "AutoencoderKLWan3_8":
+    ) -> AutoencoderKLWan3_8:
         parameters = set(inspect.signature(cls.__init__).parameters) - {"self", "cls"}
-        config = {
-            key: value
-            for key, value in (additional_kwargs or {}).items()
-            if key in parameters
-        }
+        config = {key: value for key, value in (additional_kwargs or {}).items() if key in parameters}
         return load_model(
             cls,
             pretrained_model_path,
             config=config,
             torch_dtype=torch.float32,
             device="cpu",
-            state_dict_converter=lambda state: {
-                f"model.{key}": value for key, value in state.items()
-            },
+            state_dict_converter=lambda state: {f"model.{key}": value for key, value in state.items()},
         )

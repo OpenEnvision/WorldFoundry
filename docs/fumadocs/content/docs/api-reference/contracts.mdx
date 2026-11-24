@@ -5,7 +5,7 @@ description: Serializable request, result, and artifact types used across model 
 
 These contracts are stdlib-only dataclasses. They can cross process and environment boundaries as JSON, which is why evaluation can consume outputs without importing the model runtime that produced them.
 
-Import the symbols on this page from `worldfoundry.evaluation.api`.
+Import the symbols on this page from `worldfoundry.evals.api`.
 
 ## `ArtifactRef`
 
@@ -19,19 +19,19 @@ artifact = ArtifactRef.from_uri(
 )
 ```
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.ArtifactRef" />
+<PythonApiReference symbol="worldfoundry.evals.api.ArtifactRef" />
 
 ## `local_path_for_uri`
 
 Use this helper before treating a URI as a local file. HTTP, object-store, Hugging Face, and in-memory URIs return `None`; relative local paths can be resolved against `base_dir`.
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.local_path_for_uri" />
+<PythonApiReference symbol="worldfoundry.evals.api.local_path_for_uri" />
 
 ## `enrich_artifact_ref`
 
 This function adds hash and size evidence when an artifact reference resolves to an existing local file. Remote or missing artifacts remain unchanged.
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.enrich_artifact_ref" />
+<PythonApiReference symbol="worldfoundry.evals.api.enrich_artifact_ref" />
 
 ## `GenerationRequest`
 
@@ -39,7 +39,7 @@ A request represents one sample, not an entire batch. Put source media or text i
 
 For example, two models can receive the same `sample_id` and action sequence even if their operators translate those controls into different native argument names.
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.GenerationRequest" />
+<PythonApiReference symbol="worldfoundry.evals.api.GenerationRequest" />
 
 ## `GenerationResult`
 
@@ -54,19 +54,19 @@ result = GenerationResult(
 )
 ```
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.GenerationResult" />
+<PythonApiReference symbol="worldfoundry.evals.api.GenerationResult" />
 
 ## `normalize_generation_status`
 
 Runners may use nearby status words such as `success`, `completed`, or `done`. This helper normalizes text before the success predicate is applied; it does not inspect whether a referenced file exists.
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.normalize_generation_status" />
+<PythonApiReference symbol="worldfoundry.evals.api.normalize_generation_status" />
 
 ## `is_generation_result_successful`
 
 A result is considered successful when its normalized status is in the accepted success set and `error` is empty. Artifact existence and benchmark eligibility are separate checks.
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.is_generation_result_successful" />
+<PythonApiReference symbol="worldfoundry.evals.api.is_generation_result_successful" />
 
 ## Serialization round trip
 

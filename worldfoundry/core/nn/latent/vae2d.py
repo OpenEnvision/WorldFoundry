@@ -25,7 +25,6 @@ from torch.nn import functional as F
 
 from worldfoundry.core.attention import scaled_dot_product_attention
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Residual + spatial attention — names match released 2D VAE checkpoints
 # ──────────────────────────────────────────────────────────────────────────
@@ -43,9 +42,7 @@ class VAE2DResnetBlock(nn.Module):
         self.norm2 = nn.GroupNorm(groups, out_channels, eps=eps)
         self.conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
         self.nonlinearity = nn.SiLU()
-        self.conv_shortcut = (
-            nn.Conv2d(in_channels, out_channels, 1) if in_channels != out_channels else None
-        )
+        self.conv_shortcut = nn.Conv2d(in_channels, out_channels, 1) if in_channels != out_channels else None
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """``[B, C_in, H, W]`` → ``[B, C_out, H, W]`` with a residual add."""

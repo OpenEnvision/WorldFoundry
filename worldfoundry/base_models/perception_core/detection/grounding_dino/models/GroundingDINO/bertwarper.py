@@ -5,15 +5,10 @@
 # Licensed under the Apache License, Version 2.0 [see LICENSE for details]
 # ------------------------------------------------------------------------
 
-"""Module for base_models -> perception_core -> detection -> grounding_dino -> models -> GroundingDINO -> bertwarper.py functionality."""
+import inspect
 
 import torch
-import inspect
-import torch.nn.functional as F
-import torch.utils.checkpoint as checkpoint
-from torch import Tensor, nn
-from torchvision.ops.boxes import nms
-from transformers import BertConfig, BertModel, BertPreTrainedModel
+from torch import nn
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 
 from worldfoundry.core.nn.transformers_compat import prepare_head_mask
@@ -25,13 +20,7 @@ _prepare_head_mask = prepare_head_mask
 
 
 class BertModelWarper(nn.Module):
-    """Bert model warper implementation."""
     def __init__(self, bert_model):
-        """Init.
-
-        Args:
-            bert_model: The bert model.
-        """
         super().__init__()
         # self.bert = bert_modelc
 
@@ -81,20 +70,13 @@ class BertModelWarper(nn.Module):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
         """
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
-            use_cache = False
+        use_cache = (use_cache if use_cache is not None else self.config.use_cache) if self.config.is_decoder else False
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -110,14 +92,10 @@ class BertModelWarper(nn.Module):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
-        past_key_values_length = (
-            past_key_values[0][0].shape[2] if past_key_values is not None else 0
-        )
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
-            attention_mask = torch.ones(
-                ((batch_size, seq_length + past_key_values_length)), device=device
-            )
+            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
@@ -174,7 +152,7 @@ class BertModelWarper(nn.Module):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -187,19 +165,12 @@ class BertModelWarper(nn.Module):
 
 
 class TextEncoderShell(nn.Module):
-    """Text encoder shell implementation."""
     def __init__(self, text_encoder):
-        """Init.
-
-        Args:
-            text_encoder: The text encoder.
-        """
         super().__init__()
         self.text_encoder = text_encoder
         self.config = self.text_encoder.config
 
     def forward(self, **kw):
-        """Forward."""
         # feed into text encoder
         return self.text_encoder(**kw)
 
@@ -208,7 +179,6 @@ def generate_masks_with_special_tokens(tokenized, special_tokens_list, tokenizer
     """Generate attention mask between each pair of special tokens
     Args:
         input_ids (torch.Tensor): input ids. Shape: [bs, num_token]
-        special_tokens_mask (list): special tokens mask.
     Returns:
         torch.Tensor: attention mask between each special tokens.
     """
@@ -223,9 +193,7 @@ def generate_masks_with_special_tokens(tokenized, special_tokens_list, tokenizer
     idxs = torch.nonzero(special_tokens_mask)
 
     # generate attention mask and positional ids
-    attention_mask = (
-        torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(bs, 1, 1)
-    )
+    attention_mask = torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(bs, 1, 1)
     position_ids = torch.zeros((bs, num_token), device=input_ids.device)
     previous_col = 0
     for i in range(idxs.shape[0]):
@@ -235,9 +203,7 @@ def generate_masks_with_special_tokens(tokenized, special_tokens_list, tokenizer
             position_ids[row, col] = 0
         else:
             attention_mask[row, previous_col + 1 : col + 1, previous_col + 1 : col + 1] = True
-            position_ids[row, previous_col + 1 : col + 1] = torch.arange(
-                0, col - previous_col, device=input_ids.device
-            )
+            position_ids[row, previous_col + 1 : col + 1] = torch.arange(0, col - previous_col, device=input_ids.device)
 
         previous_col = col
 
@@ -252,7 +218,6 @@ def generate_masks_with_special_tokens_and_transfer_map(tokenized, special_token
     """Generate attention mask between each pair of special tokens
     Args:
         input_ids (torch.Tensor): input ids. Shape: [bs, num_token]
-        special_tokens_mask (list): special tokens mask.
     Returns:
         torch.Tensor: attention mask between each special tokens.
     """
@@ -267,9 +232,7 @@ def generate_masks_with_special_tokens_and_transfer_map(tokenized, special_token
     idxs = torch.nonzero(special_tokens_mask)
 
     # generate attention mask and positional ids
-    attention_mask = (
-        torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(bs, 1, 1)
-    )
+    attention_mask = torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(bs, 1, 1)
     position_ids = torch.zeros((bs, num_token), device=input_ids.device)
     cate_to_token_mask_list = [[] for _ in range(bs)]
     previous_col = 0
@@ -280,17 +243,14 @@ def generate_masks_with_special_tokens_and_transfer_map(tokenized, special_token
             position_ids[row, col] = 0
         else:
             attention_mask[row, previous_col + 1 : col + 1, previous_col + 1 : col + 1] = True
-            position_ids[row, previous_col + 1 : col + 1] = torch.arange(
-                0, col - previous_col, device=input_ids.device
-            )
+            position_ids[row, previous_col + 1 : col + 1] = torch.arange(0, col - previous_col, device=input_ids.device)
             c2t_maski = torch.zeros((num_token), device=input_ids.device).bool()
             c2t_maski[previous_col + 1 : col] = True
             cate_to_token_mask_list[row].append(c2t_maski)
         previous_col = col
 
     cate_to_token_mask_list = [
-        torch.stack(cate_to_token_mask_listi, dim=0)
-        for cate_to_token_mask_listi in cate_to_token_mask_list
+        torch.stack(cate_to_token_mask_listi, dim=0) for cate_to_token_mask_listi in cate_to_token_mask_list
     ]
 
     # # padding mask

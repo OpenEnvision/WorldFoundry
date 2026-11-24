@@ -1,27 +1,30 @@
-artifact_filename: hunyuan_mirror_outputs.zip
-artifact_kind: generated_3d_asset
-backend_stage: framework_pipeline
+schema_version: 2
+model_id: hunyuanworld-mirror
+display_name: HunyuanWorld-Mirror
+task_family: three_dimension
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/tencent--HunyuanWorld-Mirror
   repo_id: tencent/HunyuanWorld-Mirror
   role: official_hunyuanworld_mirror_checkpoint
-display_name: HunyuanWorld-Mirror
-execution:
-  pipeline_binding: hunyuanworld-mirror
-id: hunyuanworld-mirror
 input_schema:
   image: true
   prompt: false
   video: false
-integration_status: integrated
+artifact_kind: generated_3d_asset
+artifact_filename: hunyuan_mirror_outputs.zip
+execution:
+  pipeline_binding: hunyuanworld-mirror
+  backend_stage: framework_pipeline
+  runtime_status: framework_inference_gpu_verified
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
-- WorldFoundry inference is routed through the in-tree HunyuanMirrorPipeline and
-  vendored inference-only WorldMirror model code.
+- WorldFoundry inference is routed through the in-tree HunyuanMirrorPipeline and vendored
+  inference-only WorldMirror model code.
 - HunyuanMirrorPipeline accepts image, input, images, or image_path payloads from
   the standard pipeline runner and writes reconstruction artifacts to the sample output
   directory.
 - Real inference requires the configured Python environment, local checkpoint assets,
   and GPU-compatible torch/gsplat packages.
-runtime_status: framework_inference_gpu_verified
-task_family: three_dimension
 verification_status: gpu_runtime_verified

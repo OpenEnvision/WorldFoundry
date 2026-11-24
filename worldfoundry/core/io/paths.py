@@ -22,9 +22,9 @@ from __future__ import annotations
 import os
 import sysconfig
 import tempfile
+from collections.abc import Mapping, Sequence
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Mapping, Sequence
 
 # ──────────────────────────────────────────────────────────────────────────
 # Package / repo roots — walk to pyproject.toml; never hard-code host paths
@@ -527,35 +527,35 @@ def repo_relative_path(path: str | Path, *, root: str | Path | None = None) -> s
 
 
 # Canonical roots consumed by runtime/evaluation. Kept here so lower layers
-# do not import ``worldfoundry.evaluation.utils``.
+# do not import ``worldfoundry.evals.utils``.
 REPO_ROOT = project_root()
 DATA_ROOT = package_data_root()
 BENCHMARKS_DATA_ROOT = DATA_ROOT / "benchmarks"
 
 
 __all__ = [
-    "checkpoint_root_candidates",
-    "checkpoint_root_path",
-    "artifact_root_path",
     "BENCHMARKS_DATA_ROOT",
     "DATA_ROOT",
     "REPO_ROOT",
+    "artifact_root_path",
     "cache_root_path",
+    "checkpoint_root_candidates",
+    "checkpoint_root_path",
     "conda_envs_root_path",
     "conda_root_path",
     "hfd_dataset_root_path",
     "hfd_root_path",
     "local_data_root_path",
     "local_model_root_path",
-    "resolve_local_checkpoint_file",
-    "resolve_local_hf_model_path",
     "model_source_root_path",
-    "package_module_root",
     "official_runtime_repo_path",
+    "package_module_root",
     "package_root",
     "project_root",
     "repo_relative_path",
     "resolve_data_path",
+    "resolve_local_checkpoint_file",
+    "resolve_local_hf_model_path",
     "resolve_package_path",
     "resolve_worldfoundry_path",
     "worldfoundry_path_tokens",

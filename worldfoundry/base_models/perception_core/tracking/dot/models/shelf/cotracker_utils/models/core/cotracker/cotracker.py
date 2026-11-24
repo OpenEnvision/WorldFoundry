@@ -13,37 +13,31 @@ from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracke
     CorrBlock,
     UpdateFormer,
 )
-
-from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracker_utils.models.core.model_utils import meshgrid2d, bilinear_sample2d, smart_cat
 from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracker_utils.models.core.embeddings import (
-    get_2d_embedding,
     get_1d_sincos_pos_embed_from_grid,
+    get_2d_embedding,
     get_2d_sincos_pos_embed,
 )
-
+from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracker_utils.models.core.model_utils import (
+    bilinear_sample2d,
+    meshgrid2d,
+    smart_cat,
+)
 
 torch.manual_seed(0)
 
 
 def get_points_on_a_grid(grid_size, interp_shape, grid_center=(0, 0), device="cpu"):
     if grid_size == 1:
-        return torch.tensor([interp_shape[1] / 2, interp_shape[0] / 2], device=device)[
-            None, None
-        ]
+        return torch.tensor([interp_shape[1] / 2, interp_shape[0] / 2], device=device)[None, None]
 
-    grid_y, grid_x = meshgrid2d(
-        1, grid_size, grid_size, stack=False, norm=False, device=device
-    )
+    grid_y, grid_x = meshgrid2d(1, grid_size, grid_size, stack=False, norm=False, device=device)
     step = interp_shape[1] // 64
     if grid_center[0] != 0 or grid_center[1] != 0:
         grid_y = grid_y - grid_size / 2.0
         grid_x = grid_x - grid_size / 2.0
-    grid_y = step + grid_y.reshape(1, -1) / float(grid_size - 1) * (
-        interp_shape[0] - step * 2
-    )
-    grid_x = step + grid_x.reshape(1, -1) / float(grid_size - 1) * (
-        interp_shape[1] - step * 2
-    )
+    grid_y = step + grid_y.reshape(1, -1) / float(grid_size - 1) * (interp_shape[0] - step * 2)
+    grid_x = step + grid_x.reshape(1, -1) / float(grid_size - 1) * (interp_shape[1] - step * 2)
 
     grid_y = grid_y + grid_center[0]
     grid_x = grid_x + grid_center[1]
@@ -60,9 +54,7 @@ def sample_pos_embed(grid_size, embed_dim, coords):
         .unsqueeze(0)
         .to(coords.device)
     )
-    sampled_pos_embed = bilinear_sample2d(
-        pos_embed.permute(0, 3, 1, 2), coords[:, 0, :, 0], coords[:, 0, :, 1]
-    )
+    sampled_pos_embed = bilinear_sample2d(pos_embed.permute(0, 3, 1, 2), coords[:, 0, :, 0], coords[:, 0, :, 1])
     return sampled_pos_embed
 
 
@@ -77,7 +69,7 @@ class CoTracker(nn.Module):
         space_depth=12,
         time_depth=12,
     ):
-        super(CoTracker, self).__init__()
+        super().__init__()
         self.S = S
         self.stride = stride
         self.hidden_dim = 256
@@ -85,9 +77,7 @@ class CoTracker(nn.Module):
         self.corr_levels = 4
         self.corr_radius = 3
         self.add_space_attn = add_space_attn
-        self.fnet = BasicEncoder(
-            output_dim=self.latent_dim, norm_fn="instance", dropout=0, stride=stride
-        )
+        self.fnet = BasicEncoder(output_dim=self.latent_dim, norm_fn="instance", dropout=0, stride=stride)
 
         self.updateformer = UpdateFormer(
             space_depth=space_depth,
@@ -127,18 +117,12 @@ class CoTracker(nn.Module):
         device = fmaps.device
 
         if S_init < S:
-            coords = torch.cat(
-                [coords_init, coords_init[:, -1].repeat(1, S - S_init, 1, 1)], dim=1
-            )
-            vis_init = torch.cat(
-                [vis_init, vis_init[:, -1].repeat(1, S - S_init, 1, 1)], dim=1
-            )
+            coords = torch.cat([coords_init, coords_init[:, -1].repeat(1, S - S_init, 1, 1)], dim=1)
+            vis_init = torch.cat([vis_init, vis_init[:, -1].repeat(1, S - S_init, 1, 1)], dim=1)
         else:
             coords = coords_init.clone()
 
-        fcorr_fn = CorrBlock(
-            fmaps, num_levels=self.corr_levels, radius=self.corr_radius
-        )
+        fcorr_fn = CorrBlock(fmaps, num_levels=self.corr_levels, radius=self.corr_radius)
 
         ffeats = feat_init.clone()
 
@@ -151,10 +135,7 @@ class CoTracker(nn.Module):
         )
         pos_embed = rearrange(pos_embed, "b e n -> (b n) e").unsqueeze(1)
         times_embed = (
-            torch.from_numpy(get_1d_sincos_pos_embed_from_grid(456, times_[0]))[None]
-            .repeat(B, 1, 1)
-            .float()
-            .to(device)
+            torch.from_numpy(get_1d_sincos_pos_embed_from_grid(456, times_[0]))[None].repeat(B, 1, 1).float().to(device)
         )
         coord_predictions = []
 
@@ -175,17 +156,11 @@ class CoTracker(nn.Module):
                 track_mask = torch.cat(
                     [
                         track_mask,
-                        torch.zeros_like(track_mask[:, 0]).repeat(
-                            1, vis_init.shape[1] - track_mask.shape[1], 1, 1
-                        ),
+                        torch.zeros_like(track_mask[:, 0]).repeat(1, vis_init.shape[1] - track_mask.shape[1], 1, 1),
                     ],
                     dim=1,
                 )
-            concat = (
-                torch.cat([track_mask, vis_init], dim=2)
-                .permute(0, 2, 1, 3)
-                .reshape(B * N, S, 2)
-            )
+            concat = torch.cat([track_mask, vis_init], dim=2).permute(0, 2, 1, 3).reshape(B * N, S, 2)
 
             transformer_input = torch.cat([flows_cat, fcorrs_, ffeats_, concat], dim=2)
             x = transformer_input + pos_embed + times_embed
@@ -204,16 +179,12 @@ class CoTracker(nn.Module):
 
             ffeats_ = self.ffeat_updater(self.norm(delta_feats_)) + ffeats_
 
-            ffeats = ffeats_.reshape(B, N, S, self.latent_dim).permute(
-                0, 2, 1, 3
-            )  # B,S,N,C
+            ffeats = ffeats_.reshape(B, N, S, self.latent_dim).permute(0, 2, 1, 3)  # B,S,N,C
 
             coords = coords + delta_coords_.reshape(B, N, S, 2).permute(0, 2, 1, 3)
             coord_predictions.append(coords * self.stride)
 
-        vis_e = self.vis_predictor(ffeats.reshape(B * S * N, self.latent_dim)).reshape(
-            B, S, N
-        )
+        vis_e = self.vis_predictor(ffeats.reshape(B * S * N, self.latent_dim)).reshape(B, S, N)
         return coord_predictions, vis_e, feat_init
 
     def forward(self, rgbs, queries, iters=4, cached_feat=None, feat_init=None, is_train=False):
@@ -230,13 +201,9 @@ class CoTracker(nn.Module):
         inv_sort_inds = torch.argsort(sort_inds, dim=0)
         first_positive_sorted_inds = first_positive_inds[0][sort_inds]
 
-        assert torch.allclose(
-            first_positive_inds[0], first_positive_inds[0][sort_inds][inv_sort_inds]
-        )
+        assert torch.allclose(first_positive_inds[0], first_positive_inds[0][sort_inds][inv_sort_inds])
 
-        coords_init = queries[:, :, 1:].reshape(B, 1, N, 2).repeat(
-            1, self.S, 1, 1
-        ) / float(self.stride)
+        coords_init = queries[:, :, 1:].reshape(B, 1, N, 2).repeat(1, self.S, 1, 1) / float(self.stride)
 
         rgbs = 2 * rgbs - 1.0
 
@@ -278,12 +245,8 @@ class CoTracker(nn.Module):
                 if fmaps_ is None:
                     fmaps_ = self.fnet(rgbs_)
                 else:
-                    fmaps_ = torch.cat(
-                        [fmaps_[self.S // 2 :], self.fnet(rgbs_[self.S // 2 :])], dim=0
-                    )
-                fmaps = fmaps_.reshape(
-                    B, S, self.latent_dim, H // self.stride, W // self.stride
-                )
+                    fmaps_ = torch.cat([fmaps_[self.S // 2 :], self.fnet(rgbs_[self.S // 2 :])], dim=0)
+                fmaps = fmaps_.reshape(B, S, self.latent_dim, H // self.stride, W // self.stride)
             else:
                 fmaps = cached_feat[:, ind : ind + self.S]
                 if S < self.S:
@@ -299,9 +262,7 @@ class CoTracker(nn.Module):
             wind_idx = curr_wind_points[-1] + 1
 
             if wind_idx - prev_wind_idx > 0:
-                fmaps_sample = fmaps[
-                    :, first_positive_sorted_inds[prev_wind_idx:wind_idx] - ind
-                ]
+                fmaps_sample = fmaps[:, first_positive_sorted_inds[prev_wind_idx:wind_idx] - ind]
 
                 feat_init_ = bilinear_sample2d(
                     fmaps_sample,
@@ -313,18 +274,14 @@ class CoTracker(nn.Module):
                 feat_init = smart_cat(feat_init, feat_init_, dim=2)
 
             if prev_wind_idx > 0:
-                new_coords = coords[-1][:, self.S // 2 :] / float(self.stride)
+                new_coords = coords[-1][:, self.S // 2 :] / float(self.stride)  # noqa: F821 - Reuses the previous tracking window after the initial window.
 
                 coords_init_[:, : self.S // 2, :prev_wind_idx] = new_coords
-                coords_init_[:, self.S // 2 :, :prev_wind_idx] = new_coords[
-                    :, -1
-                ].repeat(1, self.S // 2, 1, 1)
+                coords_init_[:, self.S // 2 :, :prev_wind_idx] = new_coords[:, -1].repeat(1, self.S // 2, 1, 1)
 
-                new_vis = vis[:, self.S // 2 :].unsqueeze(-1)
+                new_vis = vis[:, self.S // 2 :].unsqueeze(-1)  # noqa: F821 - Reuses the previous tracking window after the initial window.
                 vis_init_[:, : self.S // 2, :prev_wind_idx] = new_vis
-                vis_init_[:, self.S // 2 :, :prev_wind_idx] = new_vis[:, -1].repeat(
-                    1, self.S // 2, 1, 1
-                )
+                vis_init_[:, self.S // 2 :, :prev_wind_idx] = new_vis[:, -1].repeat(1, self.S // 2, 1, 1)
 
             coords, vis, __ = self.forward_iteration(
                 fmaps=fmaps,
@@ -352,9 +309,5 @@ class CoTracker(nn.Module):
 
         vis_e = torch.sigmoid(vis_e)
 
-        train_data = (
-            (vis_predictions, coord_predictions, wind_inds, sort_inds)
-            if is_train
-            else None
-        )
+        train_data = (vis_predictions, coord_predictions, wind_inds, sort_inds) if is_train else None
         return traj_e, feat_init, vis_e, train_data

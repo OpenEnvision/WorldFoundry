@@ -30,7 +30,6 @@ from typing import Any
 
 import numpy as np
 
-
 _BOUNDED_MODES = {
     "min_max": ("min", "max"),
     "q99": ("q01", "q99"),
@@ -77,10 +76,7 @@ def select_modality_statistics(
     available = tuple(str(item) for item in dataset_statistics)
     if key is None:
         if len(available) != 1:
-            raise ValueError(
-                f"Multiple normalization keys are available: {list(available)}; "
-                "select one explicitly."
-            )
+            raise ValueError(f"Multiple normalization keys are available: {list(available)}; select one explicitly.")
         key = available[0]
     if key not in dataset_statistics:
         raise KeyError(f"Normalization key {key!r} is unavailable; choices: {list(available)}.")
@@ -99,10 +95,7 @@ def _coerce_values_and_mask(
     array = np.asarray(values)
     if array.ndim == 0:
         raise ValueError("Action values must have at least one dimension.")
-    if not np.issubdtype(array.dtype, np.floating):
-        array = array.astype(np.float32)
-    else:
-        array = array.copy()
+    array = array.astype(np.float32) if not np.issubdtype(array.dtype, np.floating) else array.copy()
 
     width = array.shape[-1]
     raw_mask = statistics.get("mask")
@@ -152,9 +145,7 @@ def normalize_action_values(
         low = _stat_vector(statistics, low_name, normalized.shape[-1], normalized.dtype)
         high = _stat_vector(statistics, high_name, normalized.shape[-1], normalized.dtype)
         valid = mask & (high != low)
-        normalized[..., valid] = 2.0 * (
-            (normalized[..., valid] - low[valid]) / (high[valid] - low[valid])
-        ) - 1.0
+        normalized[..., valid] = 2.0 * ((normalized[..., valid] - low[valid]) / (high[valid] - low[valid])) - 1.0
     elif normalized_mode in {"mean_std", "standard", "zscore"}:
         mean = _stat_vector(statistics, "mean", normalized.shape[-1], normalized.dtype)
         std = _stat_vector(statistics, "std", normalized.shape[-1], normalized.dtype)
@@ -196,9 +187,7 @@ def unnormalize_action_values(
         low_name, high_name = _BOUNDED_MODES[normalized_mode]
         low = _stat_vector(statistics, low_name, actions.shape[-1], actions.dtype)
         high = _stat_vector(statistics, high_name, actions.shape[-1], actions.dtype)
-        actions[..., mask] = (
-            (actions[..., mask] + 1.0) * 0.5 * (high[mask] - low[mask]) + low[mask]
-        )
+        actions[..., mask] = (actions[..., mask] + 1.0) * 0.5 * (high[mask] - low[mask]) + low[mask]
     elif normalized_mode in {"mean_std", "standard", "zscore"}:
         mean = _stat_vector(statistics, "mean", actions.shape[-1], actions.dtype)
         std = _stat_vector(statistics, "std", actions.shape[-1], actions.dtype)

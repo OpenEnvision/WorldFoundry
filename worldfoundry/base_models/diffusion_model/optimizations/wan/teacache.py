@@ -18,27 +18,39 @@ import torch
 
 def get_teacache_coefficients(model_name):
     """Return published rescale coefficients, or ``None`` if the name is unknown."""
-    if "wan2.1-t2v-1.3b" in model_name.lower() or "wan2.1-fun-1.3b" in model_name.lower() \
-        or "wan2.1-fun-v1.1-1.3b" in model_name.lower() or "wan2.1-vace-1.3b" in model_name.lower():
-        return [-5.21862437e+04, 9.23041404e+03, -5.28275948e+02, 1.36987616e+01, -4.99875664e-02]
+    if (
+        "wan2.1-t2v-1.3b" in model_name.lower()
+        or "wan2.1-fun-1.3b" in model_name.lower()
+        or "wan2.1-fun-v1.1-1.3b" in model_name.lower()
+        or "wan2.1-vace-1.3b" in model_name.lower()
+    ):
+        return [-5.21862437e04, 9.23041404e03, -5.28275948e02, 1.36987616e01, -4.99875664e-02]
     elif "wan2.1-t2v-14b" in model_name.lower():
-        return [-3.03318725e+05, 4.90537029e+04, -2.65530556e+03, 5.87365115e+01, -3.15583525e-01]
+        return [-3.03318725e05, 4.90537029e04, -2.65530556e03, 5.87365115e01, -3.15583525e-01]
     elif "wan2.1-i2v-14b-480p" in model_name.lower():
-        return [2.57151496e+05, -3.54229917e+04,  1.40286849e+03, -1.35890334e+01, 1.32517977e-01]
-    elif "wan2.1-i2v-14b-720p" in model_name.lower() or "wan2.1-fun-14b" in model_name.lower() or "wan2.2-fun" in model_name.lower() \
-        or "wan2.2-i2v-a14b" in model_name.lower() or "wan2.2-t2v-a14b" in model_name.lower() or "wan2.2-ti2v-5b" in model_name.lower() \
-        or "wan2.2-s2v" in model_name.lower() or "wan2.1-vace-14b" in model_name.lower() or "wan2.2-vace-fun" in model_name.lower() \
-        or "wan2.2-animate" in model_name.lower():
-        return [8.10705460e+03,  2.13393892e+03, -3.72934672e+02,  1.66203073e+01, -4.17769401e-02]
+        return [2.57151496e05, -3.54229917e04, 1.40286849e03, -1.35890334e01, 1.32517977e-01]
+    elif (
+        "wan2.1-i2v-14b-720p" in model_name.lower()
+        or "wan2.1-fun-14b" in model_name.lower()
+        or "wan2.2-fun" in model_name.lower()
+        or "wan2.2-i2v-a14b" in model_name.lower()
+        or "wan2.2-t2v-a14b" in model_name.lower()
+        or "wan2.2-ti2v-5b" in model_name.lower()
+        or "wan2.2-s2v" in model_name.lower()
+        or "wan2.1-vace-14b" in model_name.lower()
+        or "wan2.2-vace-fun" in model_name.lower()
+        or "wan2.2-animate" in model_name.lower()
+    ):
+        return [8.10705460e03, 2.13393892e03, -3.72934672e02, 1.66203073e01, -4.17769401e-02]
     elif "qwen-image" in model_name.lower():
         # Copied from https://github.com/chenpipi0807/ComfyUI-TeaCache/blob/main/nodes.py
-        return [-4.50000000e+02, 2.80000000e+02, -4.50000000e+01, 3.20000000e+00, -2.00000000e-02]
+        return [-4.50000000e02, 2.80000000e02, -4.50000000e01, 3.20000000e00, -2.00000000e-02]
     else:
         print(f"The model {model_name} is not supported by TeaCache.")
         return None
 
 
-class TeaCache():
+class TeaCache:
     """
     Timestep Embedding Aware Cache, a training-free caching approach that estimates and leverages
     the fluctuating differences among model outputs across timesteps, thereby accelerating the inference.
@@ -46,6 +58,7 @@ class TeaCache():
     1. https://github.com/ali-vilab/TeaCache.
     2. Liu, Feng, et al. "Timestep Embedding Tells: It's Time to Cache for Video Diffusion Model." arXiv preprint arXiv:2411.19108 (2024).
     """
+
     def __init__(
         self,
         coefficients: list[float],

@@ -4,7 +4,7 @@ import os
 import os.path as osp
 from collections import defaultdict
 from io import BytesIO
-from typing import List, Optional, Union
+from typing import ClassVar
 
 import PIL.Image
 import requests
@@ -12,7 +12,6 @@ import torch
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
-from transformers.utils import logging
 
 try:
     from transformers.image_utils import ImageInput, VideoInput
@@ -20,9 +19,9 @@ except ImportError:
     from typing import Any as ImageInput
     from typing import Any as VideoInput
 
-from .constants import DEFAULT_IMAGE_TOKEN, MEDIA_TOKENS
 from .configuration_vila import VILAConfig
-from .media import Image, Video, _load_video, extract_media
+from .constants import DEFAULT_IMAGE_TOKEN, MEDIA_TOKENS
+from .media import Image, _load_video, extract_media
 from .mm_utils import process_image, process_images
 from .tokenizer_utils import tokenize_conversation
 
@@ -37,14 +36,11 @@ def to_rgb(pil_image: PIL.Image.Image) -> PIL.Image.Image:
 
 
 def fetch_image(ele: dict[str, str | PIL.Image.Image], size_factor=None) -> PIL.Image.Image:
-    if "image" in ele:
-        image = ele["image"]
-    else:
-        image = ele["image_url"]
+    image = ele["image"] if "image" in ele else ele["image_url"]
     image_obj = None
     if isinstance(image, PIL.Image.Image):
         image_obj = image
-    elif image.startswith("http://") or image.startswith("https://"):
+    elif image.startswith(("http://", "https://")):
         response = requests.get(image, stream=True)
         image_obj = PIL.Image.open(BytesIO(response.content))
     elif image.startswith("file://"):
@@ -64,7 +60,7 @@ def fetch_image(ele: dict[str, str | PIL.Image.Image], size_factor=None) -> PIL.
 
 
 def fetch_image_url_or_fpath(url_or_fpath):
-    if url_or_fpath.startswith("http") or url_or_fpath.startswith("https"):
+    if url_or_fpath.startswith(("http", "https")):
         import tempfile
 
         import requests
@@ -107,7 +103,7 @@ def fetch_video(ele: dict, return_video_sample_fps: bool = False):
     return frames
 
 
-def pad_fn(input_ids_list: List[torch.Tensor], padding_value=0, target_len=None, padding_side="left") -> torch.Tensor:
+def pad_fn(input_ids_list: list[torch.Tensor], padding_value=0, target_len=None, padding_side="left") -> torch.Tensor:
     # tensor shape is (batch_size, seq_len)
     max_len = max([ids.shape[1] for ids in input_ids_list])
     if target_len is not None:
@@ -115,7 +111,7 @@ def pad_fn(input_ids_list: List[torch.Tensor], padding_value=0, target_len=None,
         max_len = target_len
 
     new_input_ids_list = []
-    for i, input_ids in enumerate(input_ids_list):
+    for _i, input_ids in enumerate(input_ids_list):
         pad_tensor = torch.ones_like(input_ids) * padding_value
         curr_len = input_ids.shape[1]
         pad_tensor = pad_tensor[:, : max_len - curr_len]
@@ -145,10 +141,10 @@ def extract_value_from_conv(chat):
                 value.append(Image(fetch_image_url_or_fpath(content["image"])))
             elif "image_pil" in content:
                 # Qwen style
-                assert isinstance(content["image_pil"], PIL.Image.Image), f"Type of {media_key} must be PIL.Image.Image"
+                assert isinstance(content["image_pil"], PIL.Image.Image), f"Type of {media_key} must be PIL.Image.Image"  # noqa: F821 - Name is undefined in the upstream source.
                 value.append(content["image_pil"])
             else:
-                raise ValueError(f"Type = `image` , but no `path` or `image` in | {content=}, {conversation=}")
+                raise ValueError(f"Type = `image` , but no `path` or `image` in | {content=}, {conversation=}")  # noqa: F821 - Name is undefined in the upstream source.
         elif content["type"] == "text":
             value.append(content["text"])
         # NOTE(ligeng): video supports are needed here
@@ -158,7 +154,7 @@ def extract_value_from_conv(chat):
 
 
 class VILAProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
+    _defaults = {  # noqa: RUF012 - TypedDict subclass; Transformers reads these defaults and ClassVar is invalid here.
         "text_kwargs": {
             "padding": False,
         },
@@ -167,9 +163,9 @@ class VILAProcessorKwargs(ProcessingKwargs, total=False):
 
 class VILAProcessor(ProcessorMixin):
     # attributes = ["image_processor", "tokenizer"]
-    attributes = []
+    attributes: ClassVar[list] = []
     # valid_kwargs = ["chat_template"]
-    valid_kwargs = []
+    valid_kwargs: ClassVar[list] = []
     # image_processor_class = "VILAImageProcessor"
     # tokenizer_class = ("VILATokenizer", "VILATokenizerFast")
 
@@ -214,7 +210,7 @@ class VILAProcessor(ProcessorMixin):
     def process_vision_info(
         conversations: list[dict] | list[list[dict]],
         return_video_kwargs: bool = False,
-    ) -> tuple[list[PIL.Image.Image] | None, list[torch.Tensor | list[PIL.Image.Image]] | None, Optional[dict]]:
+    ) -> tuple[list[PIL.Image.Image] | None, list[torch.Tensor | list[PIL.Image.Image]] | None, dict | None]:
         """
         referernce from qwen_vl_utils
         NVILA does not depend on the function, but the interface is the same.
@@ -285,7 +281,7 @@ class VILAProcessor(ProcessorMixin):
         ]
         and `conversation` will be a list of such `conv`s
         """
-        if kwargs.get("text", None) is not None:
+        if kwargs.get("text") is not None:
             conversation = kwargs.get("text")
         assert conversation is not None, "`conversation` or `text` is required"
         padding_side = kwargs.get("padding_side", self.padding_side)
@@ -313,7 +309,7 @@ class VILAProcessor(ProcessorMixin):
         attention_mask = torch.ones_like(input_ids, dtype=torch.bool)
         attention_mask[input_ids == self.pad_token_id] = False
         # print("[DEBUGAAA]", self.pad_token_id, self.tokenizer.pad_token_id); exit(0)
-        input_texts = self.tokenizer.batch_decode(input_ids)
+        _input_texts = self.tokenizer.batch_decode(input_ids)
         bdata = BatchFeature(
             data={
                 # "input_texts": input_texts,
@@ -333,7 +329,7 @@ class VILAProcessor(ProcessorMixin):
         self,
         conversation,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput = None,
         **kwargs: Unpack[VILAProcessorKwargs],
     ) -> BatchFeature:
@@ -363,7 +359,7 @@ class VILAProcessor(ProcessorMixin):
                         media_config[name]["block_sizes"] = [block_sizes]
                 else:
                     images = process_images(media["image"], self.image_processor, self.config).half()
-                media[name] = [image for image in images]
+                media[name] = list(images)
             elif name == "video":
                 media[name] = [
                     process_images(images, self.image_processor, self.config).half() for images in media[name]

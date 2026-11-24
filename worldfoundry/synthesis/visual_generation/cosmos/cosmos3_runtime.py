@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any
 
 from worldfoundry.pipelines.cosmos.pipeline_cosmos3 import Cosmos3Pipeline
 
@@ -51,7 +52,7 @@ class Cosmos3Runtime:
         device: str = "cuda",
         variant_id: str | None = None,
         **kwargs: Any,
-    ) -> "Cosmos3Runtime":
+    ) -> Cosmos3Runtime:
         return cls(
             Cosmos3Pipeline.from_pretrained(
                 model_path=model_path,

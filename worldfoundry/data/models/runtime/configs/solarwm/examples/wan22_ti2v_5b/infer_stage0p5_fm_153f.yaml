@@ -1,0 +1,75 @@
+schema: solarwm.run.v1
+action: infer
+name: wan22-ti2v-5b-stage0p5-fm-153f-inference
+model:
+  family: wan22_ti2v_5b
+  name: Wan2.2-TI2V-5B-Camera
+  base_path: /path/to/Wan2.2-TI2V-5B
+  assets:
+    transformer_config: builtin
+    transformer_weights: transformer
+    text_encoder: text_encoder/models_t5_umt5-xxl-enc-bf16.pth
+    tokenizer: tokenizer
+    vae: vae/Wan2.2_VAE.pth
+  timestep_shift: 5.0
+  causal: false
+  camera_attention_mode: fused_prope
+  camera_translation_transform: linear
+  latent_channels: 48
+  frame_sequence_length: 405
+  num_frame_per_block: 3
+  num_output_frames: 39
+  local_attn_size: 21
+data:
+  encoding: online
+  latent_dtype: bfloat16
+  latent_shape: [39, 48, 30, 54]
+  prompt_shape: [512, 4096]
+  caption_source: frozen
+  camera_source: preserve
+  camera_array_key: c2w
+  transport: {kind: local, root: /path/to/SolarWM-Data/releases-v1}
+  index_root: /path/to/SolarWM-Data/releases-v1
+  train_index: recipes/clean-153f/latent-wds/wan22-ti2v5b-153f-480p-v1/train-index.jsonl.gz
+  test_index: recipes/clean-153f/raw-wds/test-index.jsonl.gz
+  pixel_frames: 153
+  latent_frames: 39
+  height: 480
+  width: 864
+  fps: 16.0
+  max_rel_translation: 20.0
+  max_camera_abs: 20.0
+  random_start: false
+  streaming_index: true
+  partition_mode: node_shard
+  shuffle_buffer: 32
+  seed: 42
+  num_workers: 4
+distributed: {world_size: 8, sequence_parallel_size: 1, sample_sharding: logical_dp, rng_scope: logical_dp}
+train:
+  stage: stage0p5
+  causal_mode: bidirectional
+  objective: flow_matching
+  micro_batch_size: 1
+  grad_accum: 1
+  global_batch_size: 8
+  timestep_mode: uniform_per_video
+  num_train_timesteps: 1000
+  i2v_image_condition_dropout: 0.1
+  optimizer: {lr: 5.0e-5, betas: [0.9, 0.95]}
+  ema: {enabled: true, device: cuda, dtype: float32, sharded: true, decay: 0.9999, start_step: 0}
+  fsdp: {strategy: HYBRID_SHARD, param_dtype: bfloat16, reduce_dtype: float32}
+validation:
+  sample_count: 16
+  selection_seed: 42
+  noise_seed: 42
+  passes:
+    - {name: ema_bidirectional_153f, weights: ema, mode: bidirectional, solver: unipc, num_inference_steps: 50, rollout_latent_frames: 39}
+checkpoint:
+  path: /path/to/SolarWM-models/SolarWM-5B-bid-stage0p5-153f
+  weights: ema
+inference:
+  source: validation
+runtime:
+  output_dir: /path/to/outputs/wan22-ti2v-5b-stage0p5-fm-153f-inference
+  compile_flex: false

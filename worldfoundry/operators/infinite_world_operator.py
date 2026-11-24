@@ -2,7 +2,8 @@
 
 import os
 import re
-from typing import Any, Dict, List, Sequence, Union
+from collections.abc import Sequence
+from typing import Any
 
 import cv2
 import numpy as np
@@ -11,7 +12,6 @@ from PIL import Image
 from torchvision.transforms import functional as TF
 
 from .base_operator import BaseOperator
-
 
 MOVE_ACTION_MAP = {
     "no-op": 0,
@@ -108,12 +108,10 @@ _VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 
 
 def _sanitize_token(text: str) -> str:
-    """Sanitize token implementation."""
     return text.strip().lower().replace("-", "_").replace(" ", "_")
 
 
 def _resize_and_center_crop(frame: np.ndarray, target_size) -> np.ndarray:
-    """Resize and center crop implementation."""
     target_h, target_w = target_size
     orig_h, orig_w = frame.shape[:2]
     scale = max(target_h / orig_h, target_w / orig_w)
@@ -126,7 +124,6 @@ def _resize_and_center_crop(frame: np.ndarray, target_size) -> np.ndarray:
 
 
 def _normalize_video_tensor(video_tensor: torch.Tensor) -> torch.Tensor:
-    """Normalize video tensor implementation."""
     video_tensor = video_tensor.float()
     if video_tensor.max() <= 1.0 and video_tensor.min() >= -1.0:
         if video_tensor.min() >= 0.0:
@@ -138,7 +135,6 @@ def _normalize_video_tensor(video_tensor: torch.Tensor) -> torch.Tensor:
 
 
 def _frames_to_video_tensor(frames: Sequence[np.ndarray], target_size) -> torch.Tensor:
-    """Frames to video tensor implementation."""
     processed_frames = []
     for frame in frames:
         frame = _resize_and_center_crop(frame, target_size)
@@ -150,7 +146,6 @@ def _frames_to_video_tensor(frames: Sequence[np.ndarray], target_size) -> torch.
 
 
 def _tensor_to_video_tensor(tensor: torch.Tensor) -> torch.Tensor:
-    """Tensor to video tensor implementation."""
     tensor = tensor.detach().cpu()
     if tensor.ndim == 5:
         if tensor.shape[0] != 1:
@@ -177,16 +172,14 @@ def _tensor_to_video_tensor(tensor: torch.Tensor) -> torch.Tensor:
     raise ValueError("Unsupported tensor input for Infinite-World operator.")
 
 
-def _select_target_size(bucket_config: Dict[str, Any], frame: np.ndarray):
-    """Select target size implementation."""
+def _select_target_size(bucket_config: dict[str, Any], frame: np.ndarray):
     aspect_ratio = frame.shape[0] / frame.shape[1]
     closest_bucket = min(bucket_config, key=lambda key: abs(float(key) - aspect_ratio))
     target_h, target_w = bucket_config[closest_bucket][0]
     return int(target_h), int(target_w)
 
 
-def _load_frames_from_path(path: str) -> List[np.ndarray]:
-    """Load frames from path implementation."""
+def _load_frames_from_path(path: str) -> list[np.ndarray]:
     path = os.path.abspath(path)
     if not os.path.exists(path):
         raise FileNotFoundError(f"Condition path not found: {path}")
@@ -222,7 +215,9 @@ class InfiniteWorldOperator(BaseOperator):
         interaction_template=None,
     ):
         """Initialize the operator with specific configurations."""
-        super().__init__(operation_types=operation_types or ["textual_instruction", "visual_instruction", "action_instruction"])
+        super().__init__(
+            operation_types=operation_types or ["textual_instruction", "visual_instruction", "action_instruction"]
+        )
         self.interaction_template = interaction_template or [
             "no-op",
             "forward",
@@ -245,8 +240,7 @@ class InfiniteWorldOperator(BaseOperator):
         ]
         self.interaction_template_init()
 
-    def _normalize_interaction(self, interaction: Union[str, Dict[str, str]]) -> Dict[str, str]:
-        """Normalize interaction implementation."""
+    def _normalize_interaction(self, interaction: str | dict[str, str]) -> dict[str, str]:
         if isinstance(interaction, dict):
             move = interaction.get("move", "no-op")
             view = interaction.get("view", "no-op")
@@ -342,7 +336,7 @@ class InfiniteWorldOperator(BaseOperator):
                 "target_size": tuple(video_tensor.shape[-2:]),
             }
 
-        frames: List[np.ndarray] = []
+        frames: list[np.ndarray] = []
         if isinstance(input_data, str):
             frames.extend(_load_frames_from_path(input_data))
         elif isinstance(input_data, Image.Image):

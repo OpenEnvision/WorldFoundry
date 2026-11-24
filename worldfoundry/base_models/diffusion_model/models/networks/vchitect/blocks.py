@@ -50,9 +50,9 @@ class AdaLayerNormZero(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, embedding: torch.Tensor):
         """Return ``(normed_for_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp)``."""
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.linear(
-            self.silu(embedding)
-        ).chunk(6, dim=1)
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.linear(self.silu(embedding)).chunk(
+            6, dim=1
+        )
         normalized = self.norm(hidden_states) * (1 + scale_msa[:, None]) + shift_msa[:, None]
         return normalized, gate_msa, shift_mlp, scale_mlp, gate_mlp
 
@@ -123,9 +123,9 @@ class JointTransformerBlock(nn.Module):
 
 
 __all__ = [
+    "GELU",
     "AdaLayerNormContinuous",
     "AdaLayerNormZero",
     "FeedForward",
-    "GELU",
     "JointTransformerBlock",
 ]

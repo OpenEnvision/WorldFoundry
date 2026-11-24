@@ -3,14 +3,10 @@
 # Vision: YOLOv8 CSPDarknet
 # Language: CLIP Text Encoder (12-layer transformer)
 from .mm_backbone import (
-    MultiModalYOLOBackbone,
-    HuggingVisionBackbone,
     HuggingCLIPLanguageBackbone,
-    PseudoLanguageBackbone)
+    HuggingVisionBackbone,
+    MultiModalYOLOBackbone,
+    PseudoLanguageBackbone,
+)
 
-__all__ = [
-    'MultiModalYOLOBackbone',
-    'HuggingVisionBackbone',
-    'HuggingCLIPLanguageBackbone',
-    'PseudoLanguageBackbone'
-]
+__all__ = ["HuggingCLIPLanguageBackbone", "HuggingVisionBackbone", "MultiModalYOLOBackbone", "PseudoLanguageBackbone"]

@@ -5,6 +5,22 @@ import pytest
 torch = pytest.importorskip("torch")
 
 
+@pytest.mark.parametrize(
+    ("stats", "available"), [({}, 6), ({"active_bytes.all.current": 1, "reserved_bytes.all.current": 3}, 8)]
+)
+def test_cuda_free_memory_before_and_after_allocator_initialization(
+    monkeypatch: pytest.MonkeyPatch, stats: dict[str, int], available: int
+) -> None:
+    from worldfoundry.core.vram import memory
+
+    gib = 1024**3
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "memory_stats", lambda device: {key: value * gib for key, value in stats.items()})
+    monkeypatch.setattr(torch.cuda, "mem_get_info", lambda device: (6 * gib, 16 * gib))
+
+    assert memory.get_cuda_free_memory_gb(0) == available
+
+
 def test_move_preflights_capacity_before_touching_model(monkeypatch: pytest.MonkeyPatch) -> None:
     from worldfoundry.core.vram import memory
 

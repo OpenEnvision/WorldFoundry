@@ -8,7 +8,7 @@ Core runtime makes a model's runnable surface explicit before loading its implem
 ## Build or retrieve an inference spec
 
 ```python
-from worldfoundry.core import model_inference_spec
+from worldfoundry.runtime.inference_catalog import model_inference_spec
 
 spec = model_inference_spec(
     model_family_id="my-world-model",
@@ -47,6 +47,8 @@ print(command)  # builds the command; it does not start a process
 ```
 
 Use `run_torchrun_module` only when the current process should own launching and capturing a bounded single-node job. It returns `CompletedProcess` even on a non-zero child exit, so callers must inspect `returncode` and logs.
+
+Model runtimes start workers with `package_module_command`, which accepts only `worldfoundry.` modules and returns `python -m MODULE ARGS`, or the torchrun form when `nproc_per_node` is set. The child inherits the caller's environment and import path; the command adds no `PYTHONPATH` entries.
 
 ## Complete reference
 

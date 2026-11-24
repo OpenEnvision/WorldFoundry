@@ -1,4 +1,3 @@
-
 import pytest
 
 # This test module imports worldfoundry code that requires the optional

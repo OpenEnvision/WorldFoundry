@@ -66,7 +66,7 @@ def import_short_convolution() -> type[Any]:
     # convenience __init__ from registering every unrelated attention kernel.
     _package_namespace("fla.ops", root / "ops")
     module = importlib.import_module("fla.modules.conv.short_conv")
-    setattr(sys.modules["fla.modules"], "ShortConvolution", module.ShortConvolution)
+    sys.modules["fla.modules"].ShortConvolution = module.ShortConvolution
     return module.ShortConvolution
 
 

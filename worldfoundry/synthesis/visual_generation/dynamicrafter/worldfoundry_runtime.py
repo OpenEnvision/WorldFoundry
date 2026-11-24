@@ -1,14 +1,15 @@
-from dataclasses import dataclass
 import importlib.util
 import os
-from pathlib import Path
 import random
+from dataclasses import dataclass
+from pathlib import Path
 
-from worldfoundry.evaluation.utils import worldfoundry_data_path
+from worldfoundry.core.io.paths import package_data_path
 
-DEFAULT_DYNAMICRAFTER_CONFIG_ROOT = worldfoundry_data_path(
+DEFAULT_DYNAMICRAFTER_CONFIG_ROOT = package_data_path(
     "models",
-    "runtime", "configs",
+    "runtime",
+    "configs",
     "dynamicrafter",
 )
 REQUIRED_IMPORTS = {
@@ -61,7 +62,7 @@ def _resolve_config_path(config: str) -> Path:
     if config_path.is_absolute():
         return config_path
     if config_path.parts and config_path.parts[:2] == ("runtime", "configs"):
-        return worldfoundry_data_path("models", *config_path.parts)
+        return package_data_path("models", *config_path.parts)
     if len(config_path.parts) == 1:
         return DEFAULT_DYNAMICRAFTER_CONFIG_ROOT / config_path
     return config_path.resolve()
@@ -86,9 +87,7 @@ def plan_runtime(config: str, ckpt_path: str) -> DynamiCrafterRuntimePlan:
     config_path = _resolve_config_path(config)
     checkpoint_path = _resolve_checkpoint_path(ckpt_path)
     missing_imports = tuple(
-        name
-        for name, import_name in REQUIRED_IMPORTS.items()
-        if importlib.util.find_spec(import_name) is None
+        name for name, import_name in REQUIRED_IMPORTS.items() if importlib.util.find_spec(import_name) is None
     )
     return DynamiCrafterRuntimePlan(
         config_path=config_path,
@@ -193,10 +192,10 @@ class DynamiCrafter:
                 "Weights are external assets and must be provided separately."
             )
 
-        from omegaconf import OmegaConf
         import torch
+        from omegaconf import OmegaConf
 
-        from worldfoundry.core.model_loading.factory import (
+        from worldfoundry.core.configuration.factory import (
             instantiate_from_config,
         )
 
@@ -253,9 +252,12 @@ class DynamiCrafter:
         n_frames = self.video_length
         noise_shape = [1, self.channels, self.video_length, h, w]
 
-        with torch.no_grad(), torch.amp.autocast(
-            self.device.type,
-            enabled=self.device.type == "cuda",
+        with (
+            torch.no_grad(),
+            torch.amp.autocast(
+                self.device.type,
+                enabled=self.device.type == "cuda",
+            ),
         ):
             videos = load_data_images(
                 image_path,
@@ -315,14 +317,11 @@ def load_model_checkpoint(model, ckpt):
         model_keys = set(model.state_dict().keys())
         state_keys = set(state_dict.keys())
         if state_keys != model_keys:
-            state_dict = {
-                key.replace("framestride_embed", "fps_embedding"): value
-                for key, value in state_dict.items()
-            }
+            state_dict = {key.replace("framestride_embed", "fps_embedding"): value for key, value in state_dict.items()}
         model.load_state_dict(state_dict, strict=True)
     else:
         # deepspeed
-        new_pl_sd = dict()
+        new_pl_sd = {}
         for key in state_dict["module"]:
             new_pl_sd[key[16:]] = state_dict["module"][key]
         model.load_state_dict(new_pl_sd)
@@ -353,9 +352,7 @@ def load_data_images(file_path, video_size=(256, 256), video_frames=16):
 
     image = Image.open(file_path).convert("RGB")
     image_tensor = transform(image).unsqueeze(1)  # [c,1,h,w]
-    frame_tensor = repeat(
-        image_tensor, "c t h w -> c (repeat t) h w", repeat=video_frames
-    )
+    frame_tensor = repeat(image_tensor, "c t h w -> c (repeat t) h w", repeat=video_frames)
 
     return frame_tensor
 
@@ -423,9 +420,7 @@ def image_guided_synthesis(
     )
 
     kwargs = {}
-    ddim_sampler = (
-        DDIMSampler(model) if not multiple_cond_cfg else DDIMSampler_multicond(model)
-    )
+    ddim_sampler = DDIMSampler(model) if not multiple_cond_cfg else DDIMSampler_multicond(model)
     batch_size = noise_shape[0]
     fs = torch.tensor([fs] * batch_size, dtype=torch.long, device=model.device)
 
@@ -446,9 +441,7 @@ def image_guided_synthesis(
             img_cat_cond[:, :, -1, :, :] = z[:, :, -1, :, :]
         else:
             img_cat_cond = z[:, :, :1, :, :]
-            img_cat_cond = repeat(
-                img_cat_cond, "b c t h w -> b c (repeat t) h w", repeat=z.shape[2]
-            )
+            img_cat_cond = repeat(img_cat_cond, "b c t h w -> b c (repeat t) h w", repeat=z.shape[2])
         cond["c_concat"] = [img_cat_cond]  # b c 1 h w
 
     if unconditional_guidance_scale != 1.0:

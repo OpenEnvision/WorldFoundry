@@ -104,10 +104,10 @@ metrics:
   name: iWorld-Bench Average
   primary: true
 runner:
-  official_script: worldfoundry/evaluation/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py
   pass_benchmark_id: false
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.iworldbench.run_iworldbench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.iworldbench.run_iworldbench_official_runner
     dataset_root_arg: --dataset-root
     metric_arg: --metric
     limit_arg: --limit
@@ -115,13 +115,13 @@ runner:
     supports_official_runtime: true
     accepts_generated_artifacts: true
     supports_fixture: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:IWorldBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:iworld-bench
   run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
-    worldfoundry/evaluation/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py --run-official
+    worldfoundry/evals/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py --run-official
     --generated-videos-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --metric
     "${WORLDFOUNDRY_IWORLD_BENCH_METRIC:-all}" --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   validation_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
-    worldfoundry/evaluation/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py --run-official
+    worldfoundry/evals/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py --run-official
     --generated-videos-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --metric
     "${WORLDFOUNDRY_IWORLD_BENCH_METRIC:-memory}" --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   verification_status: official_runtime_ready_real_data_validation_pending
@@ -169,7 +169,7 @@ data_refs:
   dataset_revision: 530c48cd3d8e9bb20ed685a96521c3a9b68cf6d2
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:IWorldBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:iworld-bench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
@@ -192,7 +192,7 @@ optional_base_model_dependencies:
 - vbench_source_assets
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-- worldfoundry/evaluation/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py
 - --run-official
 - --generated-videos-dir
 - ${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}
@@ -206,3 +206,23 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_IWORLD_BENCH_RESULTS_PATH
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - generated_video_dir
+  - official_results_path
+  - camera_trajectory_dir
+  - source_npz_dir
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - reports
+  - generated_video
+  notes:
+  - Contract maps official iWorld-Bench report CSV/JSON files to WorldFoundry scorecards.
+  - WorldFoundry vendors the official iWorld-Bench metric runtime in-tree; full execution still needs
+    generated videos, dataset metadata, and the VBench/VIPe checkpoint assets.
+generation:
+  request_provider: worldfoundry.evals.tasks.execution.runners.iworldbench.iworldbench_prompts:materialize_iworldbench_generation_requests
+  dataset_root_parameter: dataset_root
+  split_parameter: split
+  missing_requests_hint: set WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT or WORLDFOUNDRY_IWORLD_BENCH_PROMPT_MANIFEST

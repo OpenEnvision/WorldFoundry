@@ -1,6 +1,6 @@
 ---
 title: "LaST-R1"
-description: "LaST-R1：视觉-语言-动作（VLA）、策略执行；Runner 一致性待确认。"
+description: "LaST-R1：视觉-语言-动作（VLA）、策略执行等 3 项任务；Runner 一致性待确认。"
 modelId: "last-r1"
 pageSource: generated
 ---
@@ -9,7 +9,7 @@ LaST-R1 是 MIT 许可的 VLA 策略。WorldFoundry 已通过模型专用 latent
 
 <ModelPaperFigures modelId="last-r1" locale="zh" />
 
-记录论文为[arXiv 2604.28192](https://arxiv.org/abs/2604.28192)。
+论文：[arXiv 2604.28192](https://arxiv.org/abs/2604.28192)。
 
 项目页：[siriyep.github.io/last-r1](https://siriyep.github.io/last-r1/)。代码：[CHEN-H01/LaST-R1](https://github.com/CHEN-H01/LaST-R1)。
 
@@ -17,34 +17,32 @@ LaST-R1 是 MIT 许可的 VLA 策略。WorldFoundry 已通过模型专用 latent
 
 ## 用来做什么
 
-用 `last-r1` 做本卡的视觉-语言-动作推理。这条配方用来启动已记录的策略 profile。
+`last-r1` 把相机观测和指令映射为动作轨迹。
 
-任务标签记录其为 VLA 加强化学习设计。官方仓库指针（CHEN-H01/LaST-R1，锁定 head ba4e9396）之外的架构内部细节仓库未记录。
+LaST-R1 在 Qwen3-VL 上增加 latent 推理 token、由 56 个双向注意的动作 token 解码出的 8 步 7 维动作，以及价值头。WorldFoundry 已将官方模型代码（CHEN-H01/LaST-R1，ba4e9396）的推理路径纳入包内。
 
-catalog 记录的任务包括 视觉-语言-动作（VLA）、reinforcement_learning、策略执行。
+任务：视觉-语言-动作（VLA）、reinforcement_learning、策略执行。
 
-记录的评测入口包括[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（该模型 manifest 的证据记录中提到了这一评测）。
+推荐评测：[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（该模型 manifest 的证据记录中提到了这一评测）。
 
 ## 运行时契约
 
-可选 `prompt`、`input_path`、`interactions`、`fps`；产物 `action_trace`、`last-r1_action_trace.json`。
+输入 `prompt`、`input-path`（不传时使用内置示例）；产物 `action_trace`、`last-r1_action_trace.json`。
 
 CLI task profile：`interactive-video`。绑定的 pipeline 类是 `LastR1Pipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
-准备 runtime profile 声明的 libero_10 权重与锁定版本的官方源码。 适配器从一幅图像与一条指令返回八步有限值的七维动作。
+准备 chenhao01/LaST-R1 固定版本 d62fa3df151cd3dd65cc4a1fbc230f3632ed3390 的 LIBERO-10 RL 权重。树内适配器从一幅图像与一条指令返回八步有限值的七维动作。
 
 集成范围为离线动作推理；尚未验证闭环 LIBERO rollout 与任务成功率。
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run last-r1 --pipeline.task-profile interactive-video` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+用 `wf run last-r1 --pipeline.task-profile interactive-video` 运行策略。
 
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+运行环境：统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `chenhao01/LaST-R1`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh last-r1`；下载缺失的公开权重时加 `--download`。
-
-状态：**Runner 一致性待确认**。
+权重仓库：`chenhao01/LaST-R1`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh last-r1`；下载缺失的公开权重时加 `--download`。
 
 <ModelRelatedRecipes modelId="last-r1" locale="zh" />

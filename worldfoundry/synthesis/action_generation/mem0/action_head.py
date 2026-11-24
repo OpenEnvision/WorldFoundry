@@ -7,21 +7,15 @@ from __future__ import annotations
 from typing import Any
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
-from .action_encoder import SinusoidalPositionalEncoding, swish
+from worldfoundry.base_models.diffusion_model.models.autoencoders.lvdm.blocks import nonlinearity as swish
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.dreamzero.action_encoder import (
+    SinusoidalPositionalEncoding,
+)
+from worldfoundry.core.nn.blocks.layers import TwoLayerReLU as MLP
+
 from .cross_attention_dit import DiT
-
-
-class MLP(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int) -> None:
-        super().__init__()
-        self.layer1 = nn.Linear(input_dim, hidden_dim)
-        self.layer2 = nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, value: torch.Tensor) -> torch.Tensor:
-        return self.layer2(F.relu(self.layer1(value)))
 
 
 class ActionEncoder(nn.Module):
@@ -52,9 +46,7 @@ class FlowmatchingActionHead(nn.Module):
         super().__init__()
         self.hidden_size = hidden_size
         if int(config.hidden_size) != hidden_size:
-            raise ValueError(
-                f"Mem-0 action hidden_size {config.hidden_size} does not match backbone {hidden_size}"
-            )
+            raise ValueError(f"Mem-0 action hidden_size {config.hidden_size} does not match backbone {hidden_size}")
         action_model_config = {
             "input_embedding_dim": int(config.input_embedding_dim),
             "attention_head_dim": int(config.attention_head_dim),
@@ -124,9 +116,7 @@ class FlowmatchingActionHead(nn.Module):
                 position_ids = torch.arange(action_features.shape[1], device=device)
                 action_features = action_features + self.position_embedding(position_ids).unsqueeze(0)
             state_action_features = (
-                torch.cat((state_features, action_features), dim=1)
-                if state_features is not None
-                else action_features
+                torch.cat((state_features, action_features), dim=1) if state_features is not None else action_features
             )
             model_output = self.model(
                 hidden_states=state_action_features,

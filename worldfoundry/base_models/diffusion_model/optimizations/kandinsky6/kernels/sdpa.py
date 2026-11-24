@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import torch.nn.functional as F  # noqa: N812
+import torch.nn.functional as F
 from torch import Tensor
 
 

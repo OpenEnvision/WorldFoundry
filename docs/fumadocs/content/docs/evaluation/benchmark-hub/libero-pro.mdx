@@ -13,18 +13,18 @@ Five official types (Figure 6 in the paper):
 - **Task redesign** — new object sets or composed goals. These do **not** mix with the other four.
 - **Environment** — background, lighting, texture; feasibility unchanged.
 
-The other four types can be combined. Official eval matches stock LIBERO: **50 episodes per task**. The paper reports models above **90%** on clean LIBERO collapsing to **0%** under generalized PRO settings — an upstream finding, not a hub row.
+The other four types can be combined. Official eval matches stock LIBERO: **50 episodes per task**. The paper reports models above **90%** on clean LIBERO collapsing to **0%** under generalized PRO settings.
 
 Paper: [LIBERO-PRO](https://arxiv.org/abs/2510.03827). Project: [LIBERO-PRO webpage](https://zxy-mllab.github.io/LIBERO-PRO-Webpage/). Code: [Zxy-MLlab/LIBERO-PRO](https://github.com/Zxy-MLlab/LIBERO-PRO) (MIT). Dataset: `zhouxueyang/LIBERO-Pro`.
 
-WorldFoundry is **official-results only**. You run the upstream overlay, then `official-validation` normalizes the export. No in-tree robosuite. [Base LIBERO](/docs/evaluation/benchmark-hub/libero) can wire closed-loop execution; this card cannot.
+WorldFoundry **imports official results** only: run the upstream overlay, then `official-validation` normalizes the export. For closed-loop execution in WorldFoundry, use [base LIBERO](/docs/evaluation/benchmark-hub/libero).
 
 <BenchmarkPageSections id="libero-pro" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id libero-pro \
   --mode official-validation \
   --official-results-path <official_results.json> \

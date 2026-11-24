@@ -1,27 +1,30 @@
-import os
 import numpy as np
-import gym
-from env.pusht.pusht_env import PushTEnv
-from utils import aggregate_dct
+
+# isort: split
+from worldfoundry.synthesis.visual_generation.dino_wm.env.pusht.pusht_env import PushTEnv
+
+# isort: split
+from worldfoundry.synthesis.visual_generation.dino_wm.utils import aggregate_dct
+
 
 class PushTWrapper(PushTEnv):
     def __init__(
-            self, 
-            with_velocity=True,
-            with_target=True,
-        ):
+        self,
+        with_velocity=True,
+        with_target=True,
+    ):
         super().__init__(
             with_velocity=with_velocity,
-            with_target=with_target, 
+            with_target=with_target,
         )
         self.action_dim = self.action_space.shape[0]
-    
+
     def sample_random_init_goal_states(self, seed):
         """
         Return two random states: one as the initial state and one as the goal state.
         """
         rs = np.random.RandomState(seed)
-        
+
         def generate_state():
             if self.with_velocity:
                 return np.array(
@@ -45,15 +48,15 @@ class PushTWrapper(PushTEnv):
                         rs.randn() * 2 * np.pi - np.pi,
                     ]
                 )
-        
+
         init_state = generate_state()
         goal_state = generate_state()
-        
+
         return init_state, goal_state
-    
+
     def update_env(self, env_info):
-        self.shape = env_info['shape']
-    
+        self.shape = env_info["shape"]
+
     def eval_state(self, goal_state, cur_state):
         """
         Return True if the goal is reached
@@ -66,8 +69,8 @@ class PushTWrapper(PushTEnv):
         success = pos_diff < 20 and angle_diff < np.pi / 9
         state_dist = np.linalg.norm(goal_state - cur_state)
         return {
-            'success': success,
-            'state_dist': state_dist,
+            "success": success,
+            "state_dist": state_dist,
         }
 
     def prepare(self, seed, init_state):
@@ -112,7 +115,7 @@ class PushTWrapper(PushTEnv):
         """
         obs, state = self.prepare(seed, init_state)
         obses, rewards, dones, infos = self.step_multiple(actions)
-        for k in obses.keys():
+        for k in obses.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             obses[k] = np.vstack([np.expand_dims(obs[k], 0), obses[k]])
         states = np.vstack([np.expand_dims(state, 0), infos["state"]])
         states = np.stack(states)

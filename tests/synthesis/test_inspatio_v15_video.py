@@ -1,6 +1,5 @@
 """Real video I/O contracts, run in the model environment with FFmpeg/OpenCV."""
 
-
 import json
 
 import cv2
@@ -37,7 +36,7 @@ def test_bounded_decode_pads_last_frame_and_image_source_repeats_first(tmp_path)
     assert [chunk.shape[0] for chunk in chunks] == [1, 4, 4]
     decoded = torch.cat(chunks).permute(0, 2, 3, 1).numpy()
     np.testing.assert_array_equal(decoded[:5], frames)
-    np.testing.assert_array_equal(decoded[5:], np.repeat(frames[-1: ], 4, axis=0))
+    np.testing.assert_array_equal(decoded[5:], np.repeat(frames[-1:], 4, axis=0))
     single = torch.cat(list(iter_video_chunks(path, 5, 9, video_size=(16, 16), repeat_first=True)))
     assert torch.all(single == 0)
     with pytest.raises(ValueError, match="shorter"):
@@ -69,7 +68,9 @@ def test_direct_video_staging_preserves_frame_cadence_and_validates_trajectory(t
     assert record["valid_frames"] == record["views"] == 5
     assert video_metadata(directory / "input/video.mp4") == (5, 12.0, (480, 832))
     assert (directory / "input/video.mp4").is_symlink() is (size == (480, 832))
-    assert json.loads((directory / "scene.json").read_text())["target_intrinsics"] == "estimated_source_frame_000000_fixed"
+    assert (
+        json.loads((directory / "scene.json").read_text())["target_intrinsics"] == "estimated_source_frame_000000_fixed"
+    )
     assert source.is_file()
     np.savetxt(trajectory, np.tile(np.eye(4), (4, 1, 1)).reshape(-1, 16))
     with pytest.raises(ValueError, match="one Tcw matrix"):

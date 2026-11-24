@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import secrets
 from collections.abc import Mapping
 from pathlib import Path
@@ -85,7 +86,7 @@ class CosmosPredict2p5Pipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "CosmosPredict2p5Pipeline":
+    ) -> CosmosPredict2p5Pipeline:
         """Load native components with optional Reason1 placement and reuse.
 
         ``text_embedding_cache_size`` counts complete prompt batches (default
@@ -179,10 +180,8 @@ class CosmosPredict2p5Pipeline(PipelineABC):
             )
         except BaseException:
             if parallel is not None:
-                try:
+                with contextlib.suppress(Exception):
                     parallel.close()
-                except Exception:
-                    pass
             raise
         return cls(native_pipeline=native, device=device, model_id=resolved_model_id, parallel_context=parallel)
 

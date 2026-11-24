@@ -14,9 +14,10 @@ side effect; let a model package construct a runner while skipping binding check
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Callable, Mapping, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from ..components import ComponentKey
 from ..contracts import DiffusionOutput, DiffusionRequest
@@ -116,18 +117,14 @@ class ExecutionStrategyRegistry:
             "masked-latent",
             "wan22-dual-expert-guidance",
         }:
-            raise ValueError(
-                f"cfg_parallel is not implemented for execution strategy {key!r}"
-            )
+            raise ValueError(f"cfg_parallel is not implemented for execution strategy {key!r}")
         cfg_gate_step = _cfg_gate_step(context)
         if cfg_gate_step < 1.0 and key not in {
             "standard",
             "frozen-context",
             "masked-latent",
         }:
-            raise ValueError(
-                f"cfg_gate_step is not implemented for execution strategy {key!r}"
-            )
+            raise ValueError(f"cfg_gate_step is not implemented for execution strategy {key!r}")
         try:
             builder = self._builders[key]
         except KeyError as error:
@@ -241,9 +238,7 @@ def build_dual_condition_guidance_strategy(
         device=context.policy.device,
         dtype=context.policy.dtype,
         extensions=context.extensions,
-        secondary_guidance_scale=float(
-            context.recipe.execution.options.get("secondary_guidance_scale", 1.0)
-        ),
+        secondary_guidance_scale=float(context.recipe.execution.options.get("secondary_guidance_scale", 1.0)),
         secondary_guidance_input=str(
             context.recipe.execution.options.get(
                 "secondary_guidance_input",
@@ -267,9 +262,7 @@ def build_wan22_dual_expert_guidance_strategy(
     optional = {"latent_encoder"}
     bindings = context.recipe.execution.bindings
     if not required.issubset(bindings) or set(bindings) - required - optional:
-        raise ValueError(
-            "wan22-dual-expert-guidance requires canonical bindings and optionally latent_encoder"
-        )
+        raise ValueError("wan22-dual-expert-guidance requires canonical bindings and optionally latent_encoder")
     bound = {role: context.components[key] for role, key in bindings.items()}
     options = context.recipe.execution.options
     return Wan22DualExpertGuidanceRunner(
@@ -338,7 +331,8 @@ def build_joint_multistage_strategy(
 ) -> JointMultiStageDiffusionRunner:
     """Joint-modality multi-stage runner. Bindings declare one scheduler per stage via ``scheduler-*``.
 
-    Required: denoiser / conditioner / latent_initializer / decoder. Optional: processor.
+    Required: denoiser / conditioner / latent_initializer / decoder. Optional: processor
+    and a complete set of denoiser-* bindings for stage-specific weights.
     Missing ``scheduler-*``, a stage_steps length mismatch, or multi-stage without a
     processor all raise :exc:`ValueError`.
     """
@@ -351,8 +345,11 @@ def build_joint_multistage_strategy(
     scheduler_roles = tuple(sorted(role for role in bindings if role.startswith("scheduler-")))
     if not scheduler_roles:
         raise ValueError("joint-multistage execution requires scheduler-* bindings")
+    denoiser_roles = tuple(sorted(role for role in bindings if role.startswith("denoiser-")))
+    if denoiser_roles and tuple(role.replace("denoiser-", "scheduler-") for role in denoiser_roles) != scheduler_roles:
+        raise ValueError("joint-multistage denoiser-* bindings must match scheduler-* bindings")
     optional = {"processor"}
-    unexpected = sorted(set(bindings) - required - optional - set(scheduler_roles))
+    unexpected = sorted(set(bindings) - required - optional - set(scheduler_roles) - set(denoiser_roles))
     if unexpected:
         raise ValueError(f"joint-multistage execution has unsupported bindings: {unexpected}")
     stage_steps = tuple(int(value) for value in context.recipe.execution.options.get("stage_steps", ()))
@@ -370,10 +367,12 @@ def build_joint_multistage_strategy(
             schedulers=tuple(bound[role] for role in scheduler_roles),  # type: ignore[arg-type]
             processor=bound.get("processor"),  # type: ignore[arg-type]
             decoder=bound["decoder"],  # type: ignore[arg-type]
+            stage_denoisers=tuple(bound[role] for role in denoiser_roles),
         ),
         stage_steps=stage_steps,
         device=context.policy.device,
         dtype=context.policy.dtype,
+        step_noise_seed_offset=context.recipe.execution.options.get("step_noise_seed_offset"),
     )
 
 
@@ -384,8 +383,11 @@ def build_joint_chunked_strategy(context: ExecutionBuildContext) -> DiffusionExe
     bound = build_joint_multistage_strategy(context)
     options = context.recipe.execution.options
     return JointChunkedDiffusionRunner(
-        model_id=bound.model_id, components=bound.components, stage_steps=bound.stage_steps,
-        device=bound.device, dtype=bound.dtype,
+        model_id=bound.model_id,
+        components=bound.components,
+        stage_steps=bound.stage_steps,
+        device=bound.device,
+        dtype=bound.dtype,
         frames_per_chunk=int(options.get("frames_per_chunk", 4)),
         temporal_compression=int(options.get("temporal_compression", 8)),
         history_chunks=int(options.get("history_chunks", 3)),
@@ -431,6 +433,7 @@ def build_autoregressive_window_strategy(
         extensions=context.extensions,
         prediction_mode=str(options.get("prediction_mode", "flow")),
         fixed_timesteps=tuple(int(value) for value in options.get("fixed_timesteps", ())),
+        first_block_timesteps=tuple(int(value) for value in options.get("first_block_timesteps", ())),
         context_timestep=int(options.get("context_timestep", 0)),
         renoise_dtype=(parse_torch_dtype(options["renoise_dtype"]) if "renoise_dtype" in options else None),
         guidance_mode=str(options.get("guidance_mode", "standard")),
@@ -502,9 +505,7 @@ def build_prefix_recompute_strategy(
             f"got={sorted(bindings)}"
         )
     if ("refiner" in bindings) != ("refiner_conditioner" in bindings):
-        raise ValueError(
-            "prefix-recompute refiner and refiner_conditioner bindings must be provided together"
-        )
+        raise ValueError("prefix-recompute refiner and refiner_conditioner bindings must be provided together")
     bound = {role: context.components[key] for role, key in bindings.items()}
     options = context.recipe.execution.options
     return PrefixRecomputeRunner(
@@ -538,6 +539,7 @@ def default_execution_strategy_registry() -> ExecutionStrategyRegistry:
     registry.register("compressed-memory", build_compressed_memory_strategy)
     registry.register("vchitect-guidance", build_vchitect_strategy)
     from .kandinsky6 import build_kandinsky6_strategy
+
     registry.register("kandinsky6-joint", build_kandinsky6_strategy)
     registry.register("dual-condition-guidance", build_dual_condition_guidance_strategy)
     registry.register("wan22-dual-expert-guidance", build_wan22_dual_expert_guidance_strategy)
@@ -546,10 +548,14 @@ def default_execution_strategy_registry() -> ExecutionStrategyRegistry:
     registry.register("joint-multistage", build_joint_multistage_strategy)
     registry.register("joint-chunked", build_joint_chunked_strategy)
     registry.register("autoregressive-window", build_autoregressive_window_strategy)
+    from .segmented import build_segmented_strategy
+
+    registry.register("segment-autoregressive", build_segmented_strategy)
     registry.register("chunked-kv-cache", build_chunked_kv_cache_strategy)
     registry.register("chunked-additive-cache", build_chunked_kv_cache_strategy)
     registry.register("prefix-recompute", build_prefix_recompute_strategy)
     from .causal_trigflow import build_causal_trigflow_strategy
+
     registry.register("causal-trigflow", build_causal_trigflow_strategy)
     registry.freeze()
     return registry
@@ -586,9 +592,7 @@ def _cfg_gate_step(context: ExecutionBuildContext) -> float:
     alias = options.get("cfg_gate_fraction")
     if primary is not None and alias is not None and float(primary) != float(alias):
         raise ValueError("cfg_gate_step and cfg_gate_fraction must match")
-    value = 1.0 if primary is None and alias is None else float(
-        primary if primary is not None else alias
-    )
+    value = 1.0 if primary is None and alias is None else float(primary if primary is not None else alias)
     if not 0.0 <= value <= 1.0:
         raise ValueError("cfg_gate_step must be in [0.0, 1.0]")
     return value
@@ -600,15 +604,15 @@ __all__ = [
     "ExecutionStrategyBuilder",
     "ExecutionStrategyRegistry",
     "UnsupportedExecutionStrategyError",
-    "build_dual_condition_guidance_strategy",
-    "build_wan22_dual_expert_guidance_strategy",
     "build_autoregressive_window_strategy",
     "build_chunked_kv_cache_strategy",
-    "build_prefix_recompute_strategy",
-    "build_standard_strategy",
-    "build_vchitect_strategy",
+    "build_dual_condition_guidance_strategy",
     "build_frozen_context_strategy",
     "build_joint_multistage_strategy",
     "build_masked_latent_strategy",
+    "build_prefix_recompute_strategy",
+    "build_standard_strategy",
+    "build_vchitect_strategy",
+    "build_wan22_dual_expert_guidance_strategy",
     "default_execution_strategy_registry",
 ]

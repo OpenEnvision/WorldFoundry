@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.runners.t2vworldbench.run_t2vworldbench_official_runner import (
+from worldfoundry.evals.tasks.execution.runners.t2vworldbench.run_t2vworldbench_official_runner import (
     CONFIG,
     extract_metrics,
     main,

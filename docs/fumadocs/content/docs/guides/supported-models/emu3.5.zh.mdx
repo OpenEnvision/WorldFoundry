@@ -1,11 +1,11 @@
 ---
 title: "Emu3.5"
-description: "Emu3.5（Beijing Academy of Artificial Intelligence (BAAI)）：图像生成；Runner 一致性待确认。"
+description: "Emu3.5，北京智源人工智能研究院（BAAI）：图像生成；Runner 一致性待确认。"
 modelId: "emu3.5"
 pageSource: generated
 ---
 
-Emu3.5 是北京智源（BAAI）面向交错文本与图像的原生多模态模型。WorldFoundry 调用固定版本的官方实现并输出其 protobuf 响应。权重支持的 GPU 推理已生成文本和可解码图像；不宣称视频输出。
+Emu3.5 是北京智源（BAAI）面向交错文本与图像的原生多模态模型。WorldFoundry 运行仓库内固定版本的官方实现并输出其 protobuf 响应。已用发布权重验证：GPU 推理生成文本与可解码图像。它不生成视频。
 
 <ModelPaperFigures modelId="emu3.5" locale="zh" />
 
@@ -15,32 +15,30 @@ Emu3.5 是北京智源（BAAI）面向交错文本与图像的原生多模态模
 
 ## 用来做什么
 
-本卡做文生图时选 `emu3.5`：prompt 进、图像出。catalog 任务是静帧而不是视频时用它。
+`emu3.5` 根据文本提示词生成图像。
 
 Emu3.5 预测统一的图文 token 序列，并以离散扩散生成视觉 token，再通过独立的视觉 tokenizer 解码。该模型由北京智源人工智能研究院（BAAI）发布。
 
-catalog 记录的任务包括 multimodal-generation、图像生成。别名包括 `emu3p5`、`emu3_5`、`BAAI/Emu3.5`。
+任务：multimodal-generation、图像生成。别名：`emu3p5`、`emu3_5`、`BAAI/Emu3.5`。
 
 ## 运行时契约
 
-可选 `prompt`、`image`、`seed`、`frames`、`fps`；产物 `emu3.5.pb`。
+输入 `prompt`、`image`；产物 `emu3.5.pb`。
 
 CLI task profile：`multimodal-generation`、`image-generation`。绑定的 pipeline 类是 `Emu35Pipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
-就位 BAAI/Emu3.5、BAAI/Emu3.5-VisionTokenizer 权重和固定版本的官方源码。 默认 story 和 howto 任务返回官方 protobuf 响应。
+就位 BAAI/Emu3.5 与 BAAI/Emu3.5-VisionTokenizer 权重。默认 story 和 howto 任务返回官方 protobuf 响应。
 
-本工作区尚未验证与官方 CLI 的逐字节一致性或更大尺寸图像。
+与官方 CLI 的逐字节一致性以及 384×384 以上的图像尺寸尚未验证。
 
 ## 在 WorldFoundry 中运行
 
-catalog 启动命令是 `worldfoundry-eval run emu3.5 --pipeline.task-profile multimodal-generation`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+运行 `wf run emu3.5 --pipeline.task-profile multimodal-generation` 写出图像。在上方命令构建器中切换任务，即可改变 `--pipeline.task-profile`。
 
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+运行环境：统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `BAAI/Emu3.5`、`BAAI/Emu3.5-VisionTokenizer`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh emu3.5`；下载缺失的公开权重时加 `--download`。
-
-状态：**Runner 一致性待确认**。
+权重仓库：`BAAI/Emu3.5`、`BAAI/Emu3.5-VisionTokenizer`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh emu3.5`；下载缺失的公开权重时加 `--download`。
 
 <ModelRelatedRecipes modelId="emu3.5" locale="zh" />

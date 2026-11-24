@@ -79,7 +79,7 @@ class RoPEAttention(Attention):
         offset = 0
         query_parts = []
         key_parts = []
-        for size, position in zip(self.axis_dimensions, (depth, row, column)):
+        for size, position in zip(self.axis_dimensions, (depth, row, column), strict=False):
             query_parts.append(_apply_rope(query[..., offset : offset + size], position))
             key_parts.append(_apply_rope(key[..., offset : offset + size], position))
             offset += size

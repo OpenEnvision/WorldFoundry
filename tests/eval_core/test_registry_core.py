@@ -5,7 +5,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from worldfoundry.evaluation.api.registry import (
+from worldfoundry.evals.api.registry import (
     DuplicateRegistryKeyError,
     MetricRegistry,
     MetricSpec,
@@ -98,7 +98,7 @@ class RegistryCoreTest(unittest.TestCase):
 
     def test_registry_imports_are_stdlib_or_local(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
-        registry_root = repo_root / "src" / "worldfoundry" / "evaluation" / "registry"
+        registry_root = repo_root / "src" / "worldfoundry" / "evals" / "registry"
         allowed_modules = set(sys.stdlib_module_names) | {"__future__"}
 
         for path in registry_root.glob("*.py"):

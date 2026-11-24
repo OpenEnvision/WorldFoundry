@@ -17,12 +17,27 @@ from worldfoundry.base_models.diffusion_model.models.networks.ltx.variants.helix
 from worldfoundry.core.media.processing.image_utils import center_crop_resize_geometry
 
 _NAVIGATION = {
-    "W": (1, 0, 0, 0), "S": (-1, 0, 0, 0), "A": (0, -1, 0, 0), "D": (0, 1, 0, 0),
-    "left": (0, 0, -1, 0), "right": (0, 0, 1, 0), "up": (0, 0, 0, 1),
-    "down": (0, 0, 0, -1), "stop": (0, 0, 0, 0),
+    "W": (1, 0, 0, 0),
+    "S": (-1, 0, 0, 0),
+    "A": (0, -1, 0, 0),
+    "D": (0, 1, 0, 0),
+    "left": (0, 0, -1, 0),
+    "right": (0, 0, 1, 0),
+    "up": (0, 0, 0, 1),
+    "down": (0, 0, 0, -1),
+    "stop": (0, 0, 0, 0),
 }
-_DIRECTION_IDS = {(0, 0): 0, (1, 0): 1, (-1, 0): 2, (0, 1): 3, (0, -1): 4,
-                  (1, 1): 5, (1, -1): 6, (-1, 1): 7, (-1, -1): 8}
+_DIRECTION_IDS = {
+    (0, 0): 0,
+    (1, 0): 1,
+    (-1, 0): 2,
+    (0, 1): 3,
+    (0, -1): 4,
+    (1, 1): 5,
+    (1, -1): 6,
+    (-1, 1): 7,
+    (-1, -1): 8,
+}
 
 
 def navigation(action: str) -> tuple[int, int, int, int]:
@@ -82,11 +97,13 @@ def camera_poses(actions: list[str], perspective: str) -> torch.Tensor:
         radius, orbit_height = speed / angle, 0.3
 
         def orbit_pose():
-            position = character + np.array([
-                radius * np.cos(elevation) * np.sin(azimuth),
-                orbit_height + radius * np.sin(elevation),
-                radius * np.cos(elevation) * np.cos(azimuth),
-            ])
+            position = character + np.array(
+                [
+                    radius * np.cos(elevation) * np.sin(azimuth),
+                    orbit_height + radius * np.sin(elevation),
+                    radius * np.cos(elevation) * np.cos(azimuth),
+                ]
+            )
             forward = character + np.array([0, orbit_height * 0.5, 0]) - position
             forward /= np.linalg.norm(forward) + 1e-8
             right = np.cross(forward, np.array([0.0, 1.0, 0.0]))
@@ -158,19 +175,37 @@ def prepare_video_control(request, *, device, dtype) -> VideoControlCondition:
             image = image[0] if len(image) == 1 else None
         source_height, source_width = _source_size(image)
         resized_height, resized_width, top, left = center_crop_resize_geometry(
-            source_height, source_width, request.height, request.width,
+            source_height,
+            source_width,
+            request.height,
+            request.width,
         )
-        intrinsics = torch.tensor([
-            [969.6969696969696 * resized_width / 1920 / request.width, 0, (resized_width / 2 - left) / request.width],
-            [0, 969.6969696969696 * resized_height / 1080 / request.height, (resized_height / 2 - top) / request.height],
-            [0, 0, 1],
-        ])
+        intrinsics = torch.tensor(
+            [
+                [
+                    969.6969696969696 * resized_width / 1920 / request.width,
+                    0,
+                    (resized_width / 2 - left) / request.width,
+                ],
+                [
+                    0,
+                    969.6969696969696 * resized_height / 1080 / request.height,
+                    (resized_height / 2 - top) / request.height,
+                ],
+                [0, 0, 1],
+            ]
+        )
         tokens = latent_frames * tokens_per_frame
         control = VideoControlCondition(
             camera_intrinsics=intrinsics.expand(request.batch_size, tokens, -1, -1).to(device=device, dtype=dtype),
-            camera_w2c=relative.repeat_interleave(tokens_per_frame, dim=0).unsqueeze(0).expand(request.batch_size, -1, -1, -1).to(device=device, dtype=dtype),
+            camera_w2c=relative.repeat_interleave(tokens_per_frame, dim=0)
+            .unsqueeze(0)
+            .expand(request.batch_size, -1, -1, -1)
+            .to(device=device, dtype=dtype),
             camera_valid_mask=torch.ones(request.batch_size, tokens, device=device, dtype=torch.bool),
-            action_ids=torch.tensor([0, *(action_id(action) for action in actions)], device=device).repeat_interleave(tokens_per_frame).expand(request.batch_size, -1),
+            action_ids=torch.tensor([0, *(action_id(action) for action in actions)], device=device)
+            .repeat_interleave(tokens_per_frame)
+            .expand(request.batch_size, -1),
             action_valid_mask=torch.ones(request.batch_size, tokens, device=device, dtype=torch.bool),
         )
     expected = (request.batch_size, latent_frames * tokens_per_frame)

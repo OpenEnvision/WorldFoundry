@@ -13,8 +13,8 @@ class Kandinsky6Decoder:
 
 def build_kandinsky6_decoder(context):
     from ....loaders.kandinsky6 import component_config
-    from .vae_video import build_vae
     from .vae_audio import build_audio_vae, build_vocoder
+    from .vae_video import build_vae
 
     cfg, device = component_config(context)
     video = build_vae(cfg.paths.vae, device=device)

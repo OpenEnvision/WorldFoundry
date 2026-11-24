@@ -15,7 +15,6 @@ def spectral_normalize_torch(magnitudes, norm_fn):
 
 
 class MelConverter(nn.Module):
-
     def __init__(
         self,
         *,
@@ -55,33 +54,35 @@ class MelConverter(nn.Module):
         mel_basis = torch.from_numpy(mel).float()
         hann_window = torch.hann_window(self.win_size)
 
-        self.register_buffer('mel_basis', mel_basis)
-        self.register_buffer('hann_window', hann_window)
+        self.register_buffer("mel_basis", mel_basis)
+        self.register_buffer("hann_window", hann_window)
 
     @property
     def device(self):
         return self.mel_basis.device
 
     def forward(self, waveform: torch.Tensor, center: bool = False) -> torch.Tensor:
-        waveform = waveform.clamp(min=-1., max=1.).to(self.device)
+        waveform = waveform.clamp(min=-1.0, max=1.0).to(self.device)
 
         waveform = torch.nn.functional.pad(
             waveform.unsqueeze(1),
-            [int((self.n_fft - self.hop_size) / 2),
-             int((self.n_fft - self.hop_size) / 2)],
-            mode='reflect')
+            [int((self.n_fft - self.hop_size) / 2), int((self.n_fft - self.hop_size) / 2)],
+            mode="reflect",
+        )
         waveform = waveform.squeeze(1)
 
-        spec = torch.stft(waveform,
-                          self.n_fft,
-                          hop_length=self.hop_size,
-                          win_length=self.win_size,
-                          window=self.hann_window,
-                          center=center,
-                          pad_mode='reflect',
-                          normalized=False,
-                          onesided=True,
-                          return_complex=True)
+        spec = torch.stft(
+            waveform,
+            self.n_fft,
+            hop_length=self.hop_size,
+            win_length=self.win_size,
+            window=self.hann_window,
+            center=center,
+            pad_mode="reflect",
+            normalized=False,
+            onesided=True,
+            return_complex=True,
+        )
 
         spec = torch.view_as_real(spec)
         spec = torch.sqrt(spec.pow(2).sum(-1) + (1e-9)).float()
@@ -91,13 +92,15 @@ class MelConverter(nn.Module):
         return spec
 
 
-def get_mel_converter(mode: Literal['44k']) -> MelConverter:
+def get_mel_converter(mode: Literal["44k"]) -> MelConverter:
     """Create the 44.1 kHz mel-spectrogram converter used by MMAudio."""
-    return MelConverter(sampling_rate=44_100,
-                        n_fft=2048,
-                        num_mels=128,
-                        hop_size=512,
-                        win_size=2048,
-                        fmin=0,
-                        fmax=44100 / 2,
-                        norm_fn=torch.log)
+    return MelConverter(
+        sampling_rate=44_100,
+        n_fft=2048,
+        num_mels=128,
+        hop_size=512,
+        win_size=2048,
+        fmin=0,
+        fmax=44100 / 2,
+        norm_fn=torch.log,
+    )

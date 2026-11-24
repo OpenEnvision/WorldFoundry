@@ -10,12 +10,9 @@ from PIL import Image
 
 from worldfoundry.pipelines.longvie.pipeline_longvie import LongVie2Pipeline
 from worldfoundry.studio.inference.catalog import find_entry
-from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
+from worldfoundry.studio.visualization.launch_config import StudioLaunchConfig
 from worldfoundry.studio.visualization.backends.frontends import resolve_frontend_mode
-from worldfoundry.studio.visualization.backends.world import world_frontend_html
-from worldfoundry.studio.visualization.backends.world_realtime_client import (
-    WORLD_REALTIME_CLIENT_JS,
-)
+from worldfoundry.studio.visualization.backends.world import world_frontend_html, world_frontend_js
 from worldfoundry.synthesis.visual_generation.longvie.longvie_synthesis import (
     LONGVIE_HISTORY_FRAMES,
     LONGVIE_SEGMENT_FPS,
@@ -166,11 +163,11 @@ def test_longvie2_auto_routes_to_native_queued_segment_surface() -> None:
     assert 'id="sparseVideoInput"' in html
     assert ">RUN<" in html
     assert "HOLD WASD / DRAG STICKS" not in html
-    assert 'type: "segment_update"' in WORLD_REALTIME_CLIENT_JS
-    assert "dense_video_path" in WORLD_REALTIME_CLIENT_JS
-    assert "sparse_video_path" in WORLD_REALTIME_CLIENT_JS
-    assert "denseWasConsumed" in WORLD_REALTIME_CLIENT_JS
-    assert "DISCONNECTED · START A NEW SESSION" in WORLD_REALTIME_CLIENT_JS
+    assert 'type: "segment_update"' in world_frontend_js()
+    assert "dense_video_path" in world_frontend_js()
+    assert "sparse_video_path" in world_frontend_js()
+    assert "denseWasConsumed" in world_frontend_js()
+    assert "DISCONNECTED · START A NEW SESSION" in world_frontend_js()
 
 
 def test_longvie2_pipeline_stream_marks_continuation_without_encoding() -> None:

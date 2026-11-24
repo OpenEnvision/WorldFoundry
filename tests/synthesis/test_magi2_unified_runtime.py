@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
+import pytest
 import torch
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.magi2 import (
@@ -71,16 +73,19 @@ def test_audio_vae_factory_accepts_published_stable_audio_config() -> None:
     assert audio_vae.downsampling_ratio == 2
 
 
-def test_qwen35_subprocess_uses_same_python_and_local_overlay(
-    monkeypatch, tmp_path: Path
+def test_qwen35_subprocess_uses_environment_python_and_package_module(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    overlay = tmp_path / "overlay"
-    (overlay / "transformers").mkdir(parents=True)
-    (overlay / "huggingface_hub").mkdir()
+    monkeypatch.setenv("PYTHONPATH", "/caller/module-path")
     calls: list[tuple[list[str], dict[str, str]]] = []
 
-    def fake_run(command, *, env, text, capture_output, check):
+    def fake_run(
+        command: list[str], *, env: dict[str, str], text: bool, capture_output: bool, check: bool
+    ) -> subprocess.CompletedProcess[str]:
+        assert text and capture_output and not check
         calls.append((command, env))
+        request = Path(command[command.index("--request") + 1])
+        assert json.loads(request.read_text()) == {"prompt": "a red fox"}
         output = Path(command[command.index("--output") + 1])
         torch.save(torch.ones(1, 3, 5120, dtype=torch.bfloat16), output)
         return subprocess.CompletedProcess(command, 0, "", "")
@@ -89,16 +94,47 @@ def test_qwen35_subprocess_uses_same_python_and_local_overlay(
     encoder = Magi2Qwen35SubprocessTextEncoder(
         str(tmp_path / "text_encoder"),
         device="cpu",
-        python_executable="/shared/worldfoundry/bin/python",
-        transformers_overlay=overlay,
+        python_executable="/envs/magi2-preview/bin/python",
         skip_layer=2,
     )
 
     context = encoder.encode("a red fox")
 
     command, env = calls[0]
-    assert command[0] == "/shared/worldfoundry/bin/python"
-    assert env["PYTHONPATH"].split(":")[0] == str(overlay)
+    assert command[:3] == [
+        "/envs/magi2-preview/bin/python",
+        "-m",
+        "worldfoundry.base_models.diffusion_model.models.encoders.magi2_qwen35",
+    ]
+    assert command[command.index("--device") + 1] == "cpu"
+    assert command[command.index("--precision") + 1] == "bfloat16"
+    assert command[command.index("--max-length") + 1] == "7000"
+    assert command[command.index("--skip-layer") + 1] == "2"
+    assert env["PYTHONPATH"] == "/caller/module-path"
     assert env["HF_HUB_OFFLINE"] == "1"
     assert context.shape == (1, 3, 5120)
     assert context.dtype == torch.bfloat16
+
+
+def test_qwen35_subprocess_reports_worker_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 1, "", "text encoder load failed")
+
+    monkeypatch.setattr(magi2_qwen35.subprocess, "run", fail)
+    encoder = Magi2Qwen35SubprocessTextEncoder("/weights/text_encoder", device="cpu")
+    with pytest.raises(RuntimeError, match="text encoder load failed"):
+        encoder.encode("a red fox")
+
+
+def test_magi2_loader_forwards_text_encoder_python(tmp_path: Path) -> None:
+    pipe = NativeMagi2Pipeline.from_pretrained(
+        str(tmp_path),
+        device="cpu",
+        required_components={"python_executable": "/envs/magi2-preview/bin/python"},
+        preview_transformer=object(),
+    )
+    pipe._ensure_components(load_decoders=False)
+    assert isinstance(pipe.text_encoder, Magi2Qwen35SubprocessTextEncoder)
+    assert pipe.text_encoder.python_executable == "/envs/magi2-preview/bin/python"
+    assert pipe.text_encoder.model_path == str(tmp_path / "text_encoder")
+    assert pipe.text_encoder.skip_layer == 2

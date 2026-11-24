@@ -1,6 +1,6 @@
 ---
 title: LIBERO
-description: "Lifelong robot-learning benchmark with four tabletop suites. WorldFoundry can import official results or wire closed-loop execution — no invented ranks."
+description: "Lifelong robot-learning benchmark with four tabletop suites. WorldFoundry imports official results or runs closed-loop execution."
 ---
 
 LIBERO (NeurIPS 2023 Datasets & Benchmarks) is the University of Texas at Austin's lifelong manipulation benchmark, with Tsinghua and Sony AI. A Franka on a **robosuite / MuJoCo** table must transfer **declarative** and **procedural** knowledge across tasks. The four official suites isolate what transfers:
@@ -12,7 +12,7 @@ LIBERO (NeurIPS 2023 Datasets & Benchmarks) is the University of Texas at Austin
 
 It has become the default VLA report card. The paper is [LIBERO: Benchmarking Knowledge Transfer for Lifelong Robot Learning](https://arxiv.org/abs/2306.03310). Project: [libero-project.github.io](https://libero-project.github.io/). Code: [Lifelong-Robot-Learning/LIBERO](https://github.com/Lifelong-Robot-Learning/LIBERO) (MIT).
 
-WorldFoundry supports **two** paths. Official `eval_result` trees (or structured exports) go through `worldfoundry.evaluation.tasks.embodied.normalizer`. Closed-loop execution is wired via `worldfoundry-eval embodied run` and needs the upstream simulator, suite assets, and the policy the official script expects. Dataset snapshots `yifengzhu-hf/LIBERO-datasets` and `lerobot/libero` are tracked as staged assets. Models such as [Being-H0.5](/docs/guides/supported-models/being-h05) expose a LIBERO specialist checkpoint; that is a model-card fact, not a hub leaderboard row.
+WorldFoundry supports **two** paths. Official `eval_result` trees (or structured exports) go through `worldfoundry.evals.tasks.embodied.normalizer`. Closed-loop execution runs through `wf embodied run` and needs the upstream simulator, suite assets, and the policy the official script expects. Dataset snapshots: `yifengzhu-hf/LIBERO-datasets` (official demos) and `lerobot/libero` (LeRobot conversion). Models such as [Being-H0.5](/docs/guides/supported-models/being-h05) ship a LIBERO specialist checkpoint.
 
 <BenchmarkPageSections id="libero" locale="en" />
 
@@ -21,7 +21,7 @@ WorldFoundry supports **two** paths. Official `eval_result` trees (or structured
 Import an official result tree (no simulator):
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id libero \
   --mode official-validation \
   --official-results-path <official_results.json> \

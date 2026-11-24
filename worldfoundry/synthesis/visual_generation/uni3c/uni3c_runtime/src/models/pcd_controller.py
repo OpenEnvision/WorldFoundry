@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
 import einops
 import torch
@@ -9,9 +9,11 @@ from diffusers.models.modeling_outputs import Transformer2DModelOutput
 from diffusers.models.transformers.transformer_wan import WanRotaryPosEmbed, WanTransformer3DModel
 from diffusers.utils import USE_PEFT_BACKEND, logging, scale_lora_layers, unscale_lora_layers
 
-from src.models.controlnet import WanXControlNet, zero_module
-from src.models.rotary_compat import split_rotary_embedding
-from src.xfuser_compat import get_sequence_parallel_rank, get_sp_group
+from worldfoundry.core.nn.blocks.layers import zero_module
+
+from ..xfuser_compat import get_sequence_parallel_rank, get_sp_group
+from .controlnet import WanXControlNet
+from .rotary_compat import split_rotary_embedding
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -20,16 +22,21 @@ class MaskCamEmbed(nn.Module):
     def __init__(self, controlnet_cfg) -> None:
         super().__init__()
 
-        # padding bug fixed
+        # F.pad order: left, right, top, bottom, front, back (time).
         if controlnet_cfg.get("interp", False):
-            self.mask_padding = [0, 0, 0, 0, 3, 3]  # 左右上下前后, I2V-interp，首尾帧
+            self.mask_padding = [0, 0, 0, 0, 3, 3]  # I2V interpolation: first and last frames
         else:
-            self.mask_padding = [0, 0, 0, 0, 3, 0]  # 左右上下前后, I2V
+            self.mask_padding = [0, 0, 0, 0, 3, 0]  # I2V
         add_channels = controlnet_cfg.get("add_channels", 1)
         mid_channels = controlnet_cfg.get("mid_channels", 64)
-        self.mask_proj = nn.Sequential(nn.Conv3d(add_channels, mid_channels, kernel_size=(4, 8, 8), stride=(4, 8, 8)),
-                                       nn.GroupNorm(mid_channels // 8, mid_channels), nn.SiLU())
-        self.mask_zero_proj = zero_module(nn.Conv3d(mid_channels, controlnet_cfg.conv_out_dim, kernel_size=(1, 2, 2), stride=(1, 2, 2)))
+        self.mask_proj = nn.Sequential(
+            nn.Conv3d(add_channels, mid_channels, kernel_size=(4, 8, 8), stride=(4, 8, 8)),
+            nn.GroupNorm(mid_channels // 8, mid_channels),
+            nn.SiLU(),
+        )
+        self.mask_zero_proj = zero_module(
+            nn.Conv3d(mid_channels, controlnet_cfg.conv_out_dim, kernel_size=(1, 2, 2), stride=(1, 2, 2))
+        )
 
     def forward(self, add_inputs: torch.Tensor):
         # render_mask.shape [b,c,f,h,w]
@@ -47,39 +54,41 @@ class PCDController(WanTransformer3DModel):
     """
 
     def __init__(
-            self,
-            patch_size: Tuple[int] = (1, 2, 2),
-            num_attention_heads: int = 40,
-            attention_head_dim: int = 128,
-            in_channels: int = 16,
-            out_channels: int = 16,
-            text_dim: int = 4096,
-            freq_dim: int = 256,
-            ffn_dim: int = 13824,
-            num_layers: int = 40,
-            cross_attn_norm: bool = True,
-            qk_norm: Optional[str] = "rms_norm_across_heads",
-            eps: float = 1e-6,
-            image_dim: Optional[int] = None,
-            added_kv_proj_dim: Optional[int] = None,
-            rope_max_seq_len: int = 1024,
-            controlnet_cfg=None
+        self,
+        patch_size: tuple[int] = (1, 2, 2),
+        num_attention_heads: int = 40,
+        attention_head_dim: int = 128,
+        in_channels: int = 16,
+        out_channels: int = 16,
+        text_dim: int = 4096,
+        freq_dim: int = 256,
+        ffn_dim: int = 13824,
+        num_layers: int = 40,
+        cross_attn_norm: bool = True,
+        qk_norm: str | None = "rms_norm_across_heads",
+        eps: float = 1e-6,
+        image_dim: int | None = None,
+        added_kv_proj_dim: int | None = None,
+        rope_max_seq_len: int = 1024,
+        controlnet_cfg=None,
     ) -> None:
-        super().__init__(patch_size=patch_size,
-                         num_attention_heads=num_attention_heads,
-                         attention_head_dim=attention_head_dim,
-                         in_channels=in_channels,
-                         out_channels=out_channels,
-                         text_dim=text_dim,
-                         freq_dim=freq_dim,
-                         ffn_dim=ffn_dim,
-                         num_layers=num_layers,
-                         cross_attn_norm=cross_attn_norm,
-                         qk_norm=qk_norm,
-                         eps=eps,
-                         image_dim=image_dim,
-                         added_kv_proj_dim=added_kv_proj_dim,
-                         rope_max_seq_len=rope_max_seq_len)
+        super().__init__(
+            patch_size=patch_size,
+            num_attention_heads=num_attention_heads,
+            attention_head_dim=attention_head_dim,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            text_dim=text_dim,
+            freq_dim=freq_dim,
+            ffn_dim=ffn_dim,
+            num_layers=num_layers,
+            cross_attn_norm=cross_attn_norm,
+            qk_norm=qk_norm,
+            eps=eps,
+            image_dim=image_dim,
+            added_kv_proj_dim=added_kv_proj_dim,
+            rope_max_seq_len=rope_max_seq_len,
+        )
 
         self.controlnet_cfg = controlnet_cfg
         self.in_channels = in_channels
@@ -94,13 +103,13 @@ class PCDController(WanTransformer3DModel):
         )
         self.controlnet_mask_embedding = MaskCamEmbed(self.controlnet_cfg)
         self.controlnet = WanXControlNet(self.controlnet_cfg)
-        self.controlnet_rope = WanRotaryPosEmbed(self.controlnet_cfg.dim // self.controlnet_cfg.num_heads,
-                                                 self.patch_size, self.rope_max_seq_len)
+        self.controlnet_rope = WanRotaryPosEmbed(
+            self.controlnet_cfg.dim // self.controlnet_cfg.num_heads, self.patch_size, self.rope_max_seq_len
+        )
 
         if not os.path.isfile(model_path):
             raise FileNotFoundError(
-                f"Uni3C controlnet is not staged locally: {model_path}. "
-                "Runtime downloads are disabled."
+                f"Uni3C controlnet is not staged locally: {model_path}. Runtime downloads are disabled."
             )
         state_dict = torch.load(model_path, map_location="cpu", weights_only=True)
 
@@ -112,17 +121,17 @@ class PCDController(WanTransformer3DModel):
             print("Unexpected keys:", unexpected_keys)
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            timestep: torch.LongTensor,
-            encoder_hidden_states: torch.Tensor,
-            encoder_hidden_states_image: Optional[torch.Tensor] = None,
-            render_latent=None,
-            render_mask=None,
-            camera_embedding=None,
-            return_dict: bool = True,
-            attention_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+        self,
+        hidden_states: torch.Tensor,
+        timestep: torch.LongTensor,
+        encoder_hidden_states: torch.Tensor,
+        encoder_hidden_states_image: torch.Tensor | None = None,
+        render_latent=None,
+        render_mask=None,
+        camera_embedding=None,
+        return_dict: bool = True,
+        attention_kwargs: dict[str, Any] | None = None,
+    ) -> torch.Tensor | dict[str, torch.Tensor]:
         """
         :param render_latent: [b,c,f,h,w]
         :param render_mask: [b,1,f,h,w]
@@ -139,9 +148,7 @@ class PCDController(WanTransformer3DModel):
             scale_lora_layers(self, lora_scale)
         else:
             if attention_kwargs is not None and attention_kwargs.get("scale", None) is not None:
-                logger.warning(
-                    "Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective."
-                )
+                logger.warning("Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective.")
 
         batch_size, num_channels, num_frames, height, width = hidden_states.shape
         p_t, p_h, p_w = self.config.patch_size
@@ -156,10 +163,7 @@ class PCDController(WanTransformer3DModel):
         controlnet_inputs = controlnet_inputs.flatten(2).transpose(1, 2)
 
         # additional inputs (mask, camera embedding)
-        if camera_embedding is not None:
-            add_inputs = torch.cat([render_mask, camera_embedding], dim=1)
-        else:
-            add_inputs = render_mask
+        add_inputs = torch.cat([render_mask, camera_embedding], dim=1) if camera_embedding is not None else render_mask
         add_inputs = self.controlnet_mask_embedding(add_inputs)
         controlnet_inputs = controlnet_inputs + add_inputs
         ### process controlnet inputs over ###
@@ -188,9 +192,9 @@ class PCDController(WanTransformer3DModel):
             )
 
         with torch.autocast("cuda", dtype=self.dtype, enabled=True):
-            controlnet_states = self.controlnet(hidden_states=controlnet_inputs,
-                                                temb=temb,
-                                                rotary_emb=controlnet_rotary_emb)
+            controlnet_states = self.controlnet(
+                hidden_states=controlnet_inputs, temb=temb, rotary_emb=controlnet_rotary_emb
+            )
         ### controlnet encoding over ###
 
         ### sp

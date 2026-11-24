@@ -1,54 +1,57 @@
-"""Model Context Protocol interface for WorldFoundry evaluation.
+"""Model Context Protocol server for WorldFoundry.
 
-Provides lazy-loaded access to :class:`MCPClient` and a CLI entry point
-(:func:`main`) for launching the MCP server.
+Start it with ``wf mcp`` (or ``python -m worldfoundry.mcp``). Importing this
+package stays lightweight: :class:`MCPClient` and the server load the optional
+``mcp`` dependency only when used.
 """
 
 from __future__ import annotations
 
+import argparse
 from typing import Any
 
-__all__ = ["MCPClient", "main"]
+__all__ = ["DEFAULT_HTTP_HOST", "DEFAULT_HTTP_PORT", "TRANSPORTS", "MCPClient", "add_server_arguments", "main"]
 
-# ── Lazy imports ───────────────────────────────────────────────
+TRANSPORTS = ("stdio", "streamable-http", "sse")
+DEFAULT_HTTP_HOST = "127.0.0.1"
+DEFAULT_HTTP_PORT = 8000
 
 
 def __getattr__(name: str) -> Any:
-    """Lazy-load ``MCPClient`` on first attribute access to avoid importing the MCP extra at package load time."""
-    # NOTE: ``MCPClient`` depends on the optional ``mcp`` package; deferring
-    # the import keeps the core ``worldfoundry`` import lightweight.
+    """Load ``MCPClient`` on first access so the optional ``mcp`` extra is imported lazily."""
+
     if name == "MCPClient":
         from .client import MCPClient
 
         return MCPClient
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-# ── CLI entry point ────────────────────────────────────────────
+
+def add_server_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the server's transport options; shared by ``wf mcp`` and ``python -m worldfoundry.mcp``."""
+
+    parser.add_argument(
+        "--transport",
+        choices=TRANSPORTS,
+        default="stdio",
+        help="stdio for local clients that spawn the server; streamable-http (or legacy sse) to serve over HTTP.",
+    )
+    parser.add_argument("--host", default=DEFAULT_HTTP_HOST, help="Bind host for HTTP transports.")
+    parser.add_argument("--port", type=int, default=DEFAULT_HTTP_PORT, help="Bind port for HTTP transports.")
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Parse CLI arguments and launch the MCP server.
+    """Parse the server options and run the MCP server."""
 
-    Args:
-        argv: Optional argument list (defaults to ``sys.argv[1:]``).
-
-    Returns:
-        Exit code — 0 on success, non-zero on failure.
-    """
     from worldfoundry.cli.help import WorldFoundryArgumentParser
 
-    parser = WorldFoundryArgumentParser(prog="worldfoundry-mcp", description="Start the WorldFoundry MCP server.")
-    parser.add_argument(
-        "--transport",
-        choices=("stdio", "sse"),
-        default="stdio",
-        help="MCP transport type.",
-    )
+    parser = WorldFoundryArgumentParser(prog="wf mcp", description="Start the WorldFoundry MCP server.")
+    add_server_arguments(parser)
     args = parser.parse_args(argv)
 
     from .server import run_server
 
-    return run_server(args.transport)
+    return run_server(args.transport, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

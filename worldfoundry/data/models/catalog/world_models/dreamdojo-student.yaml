@@ -4,7 +4,7 @@ family: NVIDIA DreamDojo
 availability: open_source
 license: other:nvidia-open-model-license
 provider: official_repo
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: dreamdojo-student
 runtime_profile: runtime-profile:dreamdojo-student
 release_type: code_only
@@ -21,6 +21,7 @@ official_sources:
   project_page: https://dreamdojo-world.github.io/
   github:
     url: https://github.com/NVIDIA/DreamDojo
+    revision: 02f119b759d5c7f84a399fdeea3c6e82e7ed6cff
     confirmed_ref: 02f119b759d5c7f84a399fdeea3c6e82e7ed6cff
 runner_parity:
   status: implemented_pending_gpu_parity

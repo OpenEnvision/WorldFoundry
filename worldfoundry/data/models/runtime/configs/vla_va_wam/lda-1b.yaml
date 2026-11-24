@@ -85,4 +85,4 @@ action_config:
     positional_embeddings: null
 action_contract: lda_robocasa_gr1_minmax_action_chunk
 runtime_backend: lda_1b_in_tree_model
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner

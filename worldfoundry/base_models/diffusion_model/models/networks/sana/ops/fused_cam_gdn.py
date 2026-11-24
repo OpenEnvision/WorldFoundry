@@ -40,8 +40,6 @@ The camera-branch *scan* runs through ``cam_scan_bidi_chunkwise`` in
 ``fused_gdn_chunkwise``.
 """
 
-# ruff: noqa: E501
-
 from __future__ import annotations
 
 import torch
@@ -57,21 +55,6 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_camctrl_
 # =============================================================================
 # Scalar helpers
 # =============================================================================
-
-
-def _invert_SE3(transforms: torch.Tensor) -> torch.Tensor:
-    """Invert a 4x4 SE(3) matrix batch (closed-form).
-
-    Mirrors the production ``_invert_SE3`` in ``sana_camctrl_blocks.py``;
-    inlined to keep this module dependency-light.
-    """
-    assert transforms.shape[-2:] == (4, 4)
-    Rinv = transforms[..., :3, :3].transpose(-1, -2)
-    out = torch.zeros_like(transforms)
-    out[..., :3, :3] = Rinv
-    out[..., :3, 3] = -torch.einsum("...ij,...j->...i", Rinv, transforms[..., :3, 3])
-    out[..., 3, 3] = 1.0
-    return out
 
 
 def _process_camera_conditions_raymats_only(

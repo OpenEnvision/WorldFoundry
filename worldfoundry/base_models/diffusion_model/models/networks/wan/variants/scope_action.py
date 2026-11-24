@@ -96,8 +96,7 @@ class ScopeActionModule(nn.Module):
             [
                 padded[
                     :,
-                    index * self.vae_time_compression_ratio :
-                    index * self.vae_time_compression_ratio + window,
+                    index * self.vae_time_compression_ratio : index * self.vae_time_compression_ratio + window,
                 ]
                 for index in range(latent_frames)
             ],
@@ -196,8 +195,7 @@ class ScopeActionBlock(DiTBlock):
         ).chunk(6, dim=chunk_dim)
         if sequence_timestep:
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-                value.squeeze(2)
-                for value in (shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp)
+                value.squeeze(2) for value in (shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp)
             )
         x = self.gate(
             x,

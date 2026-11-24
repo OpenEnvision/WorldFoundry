@@ -10,12 +10,13 @@ vendored configurations and checkpoints provided within the WorldFoundry framewo
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from worldfoundry.evaluation.models.runtime.profiles import DEFAULT_SHARED_HFD_ROOT
-from worldfoundry.evaluation.utils import worldfoundry_data_path
+from worldfoundry.core.io.paths import package_data_path
+from worldfoundry.zoo.runtime.profiles import DEFAULT_SHARED_HFD_ROOT
 
 
 def _find_official_motionctrl_root() -> Path | None:
@@ -35,11 +36,8 @@ OFFICIAL_MOTIONCTRL_CONFIG = (
     else None
 )
 # Path to the MotionCtrl configuration file vendored within WorldFoundry data.
-WORLDFOUNDRY_MOTIONCTRL_CONFIG = worldfoundry_data_path(
-    "models",
-    "runtime", "configs",
-    "camera_control",
-    "motionctrl_config_both.yaml",
+WORLDFOUNDRY_MOTIONCTRL_CONFIG = package_data_path(
+    "models", "runtime", "configs", "camera_control", "motionctrl_config_both.yaml"
 )
 # The default configuration path for MotionCtrl, preferring the official config if it exists.
 DEFAULT_MOTIONCTRL_CONFIG = (
@@ -48,7 +46,7 @@ DEFAULT_MOTIONCTRL_CONFIG = (
     else WORLDFOUNDRY_MOTIONCTRL_CONFIG
 )
 # Default directory for MotionCtrl condition files (e.g., camera poses, object trajectories).
-DEFAULT_MOTIONCTRL_COND_DIR = worldfoundry_data_path("test_cases", "motionctrl_conditions")
+DEFAULT_MOTIONCTRL_COND_DIR = package_data_path("test_cases", "motionctrl_conditions")
 # Default path to the MotionCtrl model checkpoint.
 DEFAULT_MOTIONCTRL_CKPT = DEFAULT_SHARED_HFD_ROOT / "TencentARC--MotionCtrl" / "motionctrl.pth"
 # Hugging Face ID for the OpenCLIP model used by MotionCtrl.
@@ -199,7 +197,7 @@ class MotionCtrlRuntime:
         device: str | None = None,
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "MotionCtrlRuntime":
+    ) -> MotionCtrlRuntime:
         """
         Factory method to build a lazy MotionCtrl runtime instance.
         It parses various ways of specifying model paths and options.
@@ -227,7 +225,10 @@ class MotionCtrlRuntime:
             model_id=str(options.get("model_id") or options.get("profile_id") or model_id or cls.MODEL_ID),
             device=str(device or options.get("device") or "cuda"),
             ckpt_path=options.get("ckpt_path") or options.get("checkpoint_path") or DEFAULT_MOTIONCTRL_CKPT,
-            config_path=options.get("config_path") or options.get("config") or options.get("base") or DEFAULT_MOTIONCTRL_CONFIG,
+            config_path=options.get("config_path")
+            or options.get("config")
+            or options.get("base")
+            or DEFAULT_MOTIONCTRL_CONFIG,
             cond_dir=options.get("cond_dir") or DEFAULT_MOTIONCTRL_COND_DIR,
             adapter_ckpt=options.get("adapter_ckpt"),
             condtype=str(options.get("condtype") or "both"),
@@ -250,7 +251,7 @@ class MotionCtrlRuntime:
 
         import torch
 
-        from worldfoundry.core.model_loading.factory import instantiate_from_config
+        from worldfoundry.core.configuration.factory import instantiate_from_config
         from worldfoundry.synthesis.visual_generation.motionctrl.motionctrl_runtime.main.inference.motionctrl_inference import (
             load_model_checkpoint,
         )
@@ -408,7 +409,7 @@ class MotionCtrlRuntime:
         import torch
         import torchvision
 
-        from worldfoundry.core.io import write_video
+        from worldfoundry.core.media.codecs.video import write_video
 
         raw = samples.detach().cpu().float()
 

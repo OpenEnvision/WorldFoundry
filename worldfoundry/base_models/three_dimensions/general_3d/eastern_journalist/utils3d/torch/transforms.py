@@ -1,70 +1,67 @@
-"""Module for base_models -> three_dimensions -> general_3d -> eastern_journalist -> utils3d -> torch -> transforms.py functionality."""
-
-from typing import *
-from numbers import Number 
+# ruff: noqa: F405 - Names come from the upstream star import.
 import itertools
+from numbers import Number
+from typing import *  # noqa: F403 - Upstream star import kept as written.
 
 import torch
-from torch import Tensor
 import torch.nn.functional as F
+from torch import Tensor
 
 from .helpers import batched, totensor
 
-
 __all__ = [
-    'perspective_from_fov',
-    'perspective_from_window', 
-    'intrinsics_from_fov',
-    'intrinsics_from_focal_center',
-    'focal_to_fov',
-    'fov_to_focal',
-    'intrinsics_to_fov',
-    'view_look_at',
-    'extrinsics_look_at',
-    'perspective_to_intrinsics',
-    'intrinsics_to_perspective',
-    'extrinsics_to_view',
-    'view_to_extrinsics',
-    'normalize_intrinsics',
-    'denormalize_intrinsics',
-    'crop_intrinsics',
-    'pixel_to_uv',
-    'pixel_to_ndc',
-    'uv_to_pixel',
-    'depth_linear_to_buffer',
-    'depth_buffer_to_linear',
-    'project_gl',
-    'project_cv',
-    'unproject_gl',
-    'unproject_cv',
-    'project',
-    'unproject',
-    'skew_symmetric',
-    'rotation_matrix_from_vectors',
-    'euler_axis_angle_rotation',
-    'euler_angles_to_matrix',
-    'matrix_to_euler_angles',
-    'matrix_to_quaternion',
-    'quaternion_to_matrix',
-    'matrix_to_axis_angle',
-    'axis_angle_to_matrix',
-    'axis_angle_to_quaternion',
-    'quaternion_to_axis_angle',
-    'make_affine_matrix',
-    'random_rotation_matrix',
-    'lerp',
-    'slerp',
-    'slerp_rotation_matrix',
-    'interpolate_se3_matrix',
-    'extrinsics_to_essential',
-    'rotation_matrix_2d',
-    'rotate_2d',
-    'translate_2d',
-    'scale_2d',
-    'transform_points',
-    'angle_between'
+    "angle_between",
+    "axis_angle_to_matrix",
+    "axis_angle_to_quaternion",
+    "crop_intrinsics",
+    "denormalize_intrinsics",
+    "depth_buffer_to_linear",
+    "depth_linear_to_buffer",
+    "euler_angles_to_matrix",
+    "euler_axis_angle_rotation",
+    "extrinsics_look_at",
+    "extrinsics_to_essential",
+    "extrinsics_to_view",
+    "focal_to_fov",
+    "fov_to_focal",
+    "interpolate_se3_matrix",
+    "intrinsics_from_focal_center",
+    "intrinsics_from_fov",
+    "intrinsics_to_fov",
+    "intrinsics_to_perspective",
+    "lerp",
+    "make_affine_matrix",
+    "matrix_to_axis_angle",
+    "matrix_to_euler_angles",
+    "matrix_to_quaternion",
+    "normalize_intrinsics",
+    "perspective_from_fov",
+    "perspective_from_window",
+    "perspective_to_intrinsics",
+    "pixel_to_ndc",
+    "pixel_to_uv",
+    "project",
+    "project_cv",
+    "project_gl",
+    "quaternion_to_axis_angle",
+    "quaternion_to_matrix",
+    "random_rotation_matrix",
+    "rotate_2d",
+    "rotation_matrix_2d",
+    "rotation_matrix_from_vectors",
+    "scale_2d",
+    "skew_symmetric",
+    "slerp",
+    "slerp_rotation_matrix",
+    "transform_points",
+    "translate_2d",
+    "unproject",
+    "unproject_cv",
+    "unproject_gl",
+    "uv_to_pixel",
+    "view_look_at",
+    "view_to_extrinsics",
 ]
-
 
 
 @totensor(_others=torch.float32)
@@ -80,7 +77,7 @@ def perspective_from_fov(
     far: Optional[Union[float, Tensor]],
 ) -> Tensor:
     """
-    Get OpenGL perspective matrix from field of view 
+    Get OpenGL perspective matrix from field of view
 
     ## Returns
         (Tensor): [..., 4, 4] perspective matrix
@@ -102,12 +99,27 @@ def perspective_from_fov(
         fx = fy / aspect_ratio
     zeros = torch.zeros_like(fx)
     ones = torch.ones_like(fx)
-    perspective = torch.stack([
-        fx, zeros, zeros, zeros,
-        zeros, fy, zeros, zeros,
-        zeros, zeros, (near / far + 1) / (near / far - 1), 2. * near / (near / far - 1),
-        zeros, zeros, -ones, zeros
-    ], dim=-1).unflatten(-1, (4, 4))
+    perspective = torch.stack(
+        [
+            fx,
+            zeros,
+            zeros,
+            zeros,
+            zeros,
+            fy,
+            zeros,
+            zeros,
+            zeros,
+            zeros,
+            (near / far + 1) / (near / far - 1),
+            2.0 * near / (near / far - 1),
+            zeros,
+            zeros,
+            -ones,
+            zeros,
+        ],
+        dim=-1,
+    ).unflatten(-1, (4, 4))
     return perspective
 
 
@@ -119,7 +131,7 @@ def perspective_from_window(
     bottom: Union[float, Tensor],
     top: Union[float, Tensor],
     near: Union[float, Tensor],
-    far: Union[float, Tensor]
+    far: Union[float, Tensor],
 ) -> Tensor:
     """
     Get OpenGL perspective matrix from the window of z=-1 projection plane
@@ -129,22 +141,34 @@ def perspective_from_window(
     """
     zeros = torch.zeros_like(left)
     ones = torch.ones_like(left)
-    perspective = torch.stack([
-        2 / (right - left), zeros, (right + left) / (right - left), zeros,
-        zeros, 2 / (top - bottom), (top + bottom) / (top - bottom), zeros,
-        zeros, zeros, (near / far + 1) / (near / far - 1), 2. * near / (near / far - 1),
-        zeros, zeros, -ones, zeros
-    ], dim=-1).unflatten(-1, (4, 4))
+    perspective = torch.stack(
+        [
+            2 / (right - left),
+            zeros,
+            (right + left) / (right - left),
+            zeros,
+            zeros,
+            2 / (top - bottom),
+            (top + bottom) / (top - bottom),
+            zeros,
+            zeros,
+            zeros,
+            (near / far + 1) / (near / far - 1),
+            2.0 * near / (near / far - 1),
+            zeros,
+            zeros,
+            -ones,
+            zeros,
+        ],
+        dim=-1,
+    ).unflatten(-1, (4, 4))
     return perspective
 
 
 @totensor(_others=torch.float32)
 @batched(_others=0)
 def intrinsics_from_focal_center(
-    fx: Union[float, Tensor],
-    fy: Union[float, Tensor],
-    cx: Union[float, Tensor],
-    cy: Union[float, Tensor]
+    fx: Union[float, Tensor], fy: Union[float, Tensor], cx: Union[float, Tensor], cy: Union[float, Tensor]
 ) -> Tensor:
     """
     Get OpenCV intrinsics matrix
@@ -165,13 +189,8 @@ def intrinsics_from_focal_center(
         dtype = torch.promote_types(dtype, x.dtype)
     fx, fy, cx, cy = (x.to(device=device, dtype=dtype) for x in (fx, fy, cx, cy))
     zeros, ones = torch.zeros_like(fx), torch.ones_like(fx)
-    ret = torch.stack([
-        fx, zeros, cx, 
-        zeros, fy, cy, 
-        zeros, zeros, ones
-    ], dim=-1).unflatten(-1, (3, 3))
+    ret = torch.stack([fx, zeros, cx, zeros, fy, cy, zeros, zeros, ones], dim=-1).unflatten(-1, (3, 3))
     return ret
-
 
 
 @totensor(_others=torch.float32)
@@ -219,20 +238,10 @@ def intrinsics_from_fov(
 
 
 def focal_to_fov(focal: Tensor):
-    """Focal to fov.
-
-    Args:
-        focal: The focal.
-    """
     return 2 * torch.atan(0.5 / focal)
 
 
 def fov_to_focal(fov: Tensor):
-    """Fov to focal.
-
-    Args:
-        fov: The fov.
-    """
     return 0.5 / torch.tan(fov / 2)
 
 
@@ -245,11 +254,7 @@ def intrinsics_to_fov(intrinsics: Tensor) -> Tuple[Tensor, Tensor]:
 
 @totensor(_others=torch.float32)
 @batched(1, 1, 1)
-def view_look_at(
-    eye: Tensor,
-    look_at: Tensor,
-    up: Tensor
-) -> Tensor:
+def view_look_at(eye: Tensor, look_at: Tensor, up: Tensor) -> Tensor:
     """
     Get OpenGL view matrix looking at something
 
@@ -272,11 +277,7 @@ def view_look_at(
 
 @totensor(_others=torch.float32)
 @batched(1, 1, 1)
-def extrinsics_look_at(
-    eye: Tensor,
-    look_at: Tensor,
-    up: Tensor
-) -> Tensor:
+def extrinsics_look_at(eye: Tensor, look_at: Tensor, up: Tensor) -> Tensor:
     """
     Get OpenCV extrinsics matrix looking at something
 
@@ -303,13 +304,17 @@ def perspective_to_intrinsics(perspective: Tensor) -> Tensor:
         (Tensor): shape [..., 3, 3] OpenCV intrinsics
     """
     assert torch.allclose(perspective[:, [0, 1, 3], 3], 0), "The matrix is not a perspective projection matrix"
-    ret = torch.tensor([[0.5, 0., 0.5], [0., -0.5, 0.5], [0., 0., 1.]], dtype=perspective.dtype, device=perspective.device) \
-        @ perspective[:, [0, 1, 3], :3] \
+    ret = (
+        torch.tensor(
+            [[0.5, 0.0, 0.5], [0.0, -0.5, 0.5], [0.0, 0.0, 1.0]], dtype=perspective.dtype, device=perspective.device
+        )
+        @ perspective[:, [0, 1, 3], :3]
         @ torch.diag(torch.tensor([1, -1, -1], dtype=perspective.dtype, device=perspective.device))
+    )
     return ret / ret[:, 2, 2, None, None]
 
 
-@totensor(None, _others='intrinsics')
+@totensor(None, _others="intrinsics")
 @batched(2, 0, 0)
 def intrinsics_to_perspective(
     intrinsics: Tensor,
@@ -329,12 +334,26 @@ def intrinsics_to_perspective(
     """
     device, dtype = intrinsics.device, intrinsics.dtype
     batch_shape = intrinsics.shape[:-2]
-    m = torch.tensor([[2, 0, -1], [0, -2, 1], [0, 0, 1]], dtype=dtype, device=device) @ intrinsics @ torch.diag(torch.tensor([1, -1, -1], dtype=dtype, device=device))
-    perspective = torch.cat([
-        torch.cat([m[..., :2, :], torch.zeros((*batch_shape, 2, 1), dtype=dtype, device=device)], dim=-1),
-        torch.cat([torch.zeros((*batch_shape, 1, 2), dtype=dtype, device=device), ((near / far + 1) / (near / far - 1))[..., None, None], (2. * near / (near / far - 1))[..., None, None]], dim=-1),
-        torch.tensor([0., 0., -1, 0], dtype=dtype, device=device).expand(*batch_shape, 1, 4)
-    ], dim=-2)
+    m = (
+        torch.tensor([[2, 0, -1], [0, -2, 1], [0, 0, 1]], dtype=dtype, device=device)
+        @ intrinsics
+        @ torch.diag(torch.tensor([1, -1, -1], dtype=dtype, device=device))
+    )
+    perspective = torch.cat(
+        [
+            torch.cat([m[..., :2, :], torch.zeros((*batch_shape, 2, 1), dtype=dtype, device=device)], dim=-1),
+            torch.cat(
+                [
+                    torch.zeros((*batch_shape, 1, 2), dtype=dtype, device=device),
+                    ((near / far + 1) / (near / far - 1))[..., None, None],
+                    (2.0 * near / (near / far - 1))[..., None, None],
+                ],
+                dim=-1,
+            ),
+            torch.tensor([0.0, 0.0, -1, 0], dtype=dtype, device=device).expand(*batch_shape, 1, 4),
+        ],
+        dim=-2,
+    )
     return perspective
 
 
@@ -361,15 +380,15 @@ def view_to_extrinsics(view: Tensor) -> Tensor:
     ## Returns
         (Tensor): [..., 4, 4] OpenCV camera extrinsics matrix
     """
-    return view  * torch.tensor([1, -1, -1, 1], dtype=view.dtype, device=view.device)[:, None]
+    return view * torch.tensor([1, -1, -1, 1], dtype=view.dtype, device=view.device)[:, None]
 
 
-@totensor(None, 'intrinsics')
+@totensor(None, "intrinsics")
 @batched(2, 1)
 def normalize_intrinsics(
     intrinsics: Tensor,
     size: Union[Tuple[Number, Number], Tensor],
-    pixel_convention: Literal['integer-corner', 'integer-center'] = 'integer-center',
+    pixel_convention: Literal["integer-corner", "integer-center"] = "integer-center",
 ) -> Tensor:
     """
     Normalize camera intrinsics to uv space
@@ -390,27 +409,23 @@ def normalize_intrinsics(
     height, width = size.unbind(-1)
     zeros = torch.zeros_like(width)
     ones = torch.ones_like(width)
-    if pixel_convention == 'integer-center':
-        transform = torch.stack([
-            1 / width, zeros, 0.5 / width,
-            zeros, 1 / height, 0.5 / height,
-            zeros, zeros, ones
-        ]).reshape(*zeros.shape, 3, 3)
-    elif pixel_convention == 'integer-corner':
-        transform = torch.stack([
-            1 / width, zeros, zeros,
-            zeros, 1 / height, zeros,
-            zeros, zeros, ones
-        ]).reshape(*zeros.shape, 3, 3)
+    if pixel_convention == "integer-center":
+        transform = torch.stack(
+            [1 / width, zeros, 0.5 / width, zeros, 1 / height, 0.5 / height, zeros, zeros, ones]
+        ).reshape(*zeros.shape, 3, 3)
+    elif pixel_convention == "integer-corner":
+        transform = torch.stack([1 / width, zeros, zeros, zeros, 1 / height, zeros, zeros, zeros, ones]).reshape(
+            *zeros.shape, 3, 3
+        )
     return transform @ intrinsics
 
 
-@totensor(None, 'intrinsics')
+@totensor(None, "intrinsics")
 @batched(2, 1)
 def denormalize_intrinsics(
     intrinsics: Tensor,
     size: Union[Tuple[Number, Number], Tensor],
-    pixel_convention: Literal['integer-center', 'integer-corner'] = 'integer-center',
+    pixel_convention: Literal["integer-center", "integer-corner"] = "integer-center",
 ) -> Tensor:
     """
     Denormalize camera intrinsics(s) from uv space to pixel space
@@ -431,22 +446,18 @@ def denormalize_intrinsics(
     height, width = size.unbind(-1)
     zeros = torch.zeros_like(width)
     ones = torch.ones_like(width)
-    if pixel_convention == 'integer-center':
-        transform = torch.stack([
-            width, zeros, -0.5 * ones,
-            zeros, height, -0.5 * ones,
-            zeros, zeros, ones
-        ]).reshape(*zeros.shape, 3, 3)
-    elif pixel_convention == 'integer-corner':
-        transform = torch.stack([
-            width, zeros, zeros,
-            zeros, height, zeros,
-            zeros, zeros, ones
-        ]).reshape(*zeros.shape, 3, 3)
+    if pixel_convention == "integer-center":
+        transform = torch.stack([width, zeros, -0.5 * ones, zeros, height, -0.5 * ones, zeros, zeros, ones]).reshape(
+            *zeros.shape, 3, 3
+        )
+    elif pixel_convention == "integer-corner":
+        transform = torch.stack([width, zeros, zeros, zeros, height, zeros, zeros, zeros, ones]).reshape(
+            *zeros.shape, 3, 3
+        )
     return transform @ intrinsics
 
 
-@totensor(None, _others='intrinsics')
+@totensor(None, _others="intrinsics")
 @batched(2, 1, _others=0)
 def crop_intrinsics(
     intrinsics: Tensor,
@@ -474,22 +485,30 @@ def crop_intrinsics(
     height, width = size.unbind(-1)
     zeros = torch.zeros_like(height)
     ones = torch.ones_like(height)
-    transform = torch.stack([
-        width / cropped_width, zeros, -cropped_left / cropped_width,
-        zeros, height / cropped_height, -cropped_top / cropped_height,
-        zeros, zeros, ones
-    ]).reshape(*zeros.shape, 3, 3)
+    transform = torch.stack(
+        [
+            width / cropped_width,
+            zeros,
+            -cropped_left / cropped_width,
+            zeros,
+            height / cropped_height,
+            -cropped_top / cropped_height,
+            zeros,
+            zeros,
+            ones,
+        ]
+    ).reshape(*zeros.shape, 3, 3)
     return transform @ intrinsics
 
 
 def pixel_to_uv(
     pixel: Tensor,
     size: Union[Tuple[Number, Number], Tensor],
-    pixel_convention: Literal['integer-corner', 'integer-center'] = 'integer-center',
+    pixel_convention: Literal["integer-corner", "integer-center"] = "integer-center",
 ) -> Tensor:
     """
     ## Parameters
-    - `pixel` (Tensor): `(..., 2)` pixel coordinrates 
+    - `pixel` (Tensor): `(..., 2)` pixel coordinrates
     - `size` (tuple | Tensor): A tuple `(height, width)` of the image size,
         or an array of shape `(..., 2)` corresponding to the multiple image size(s)
     - `pixel_convention`: `str`, optional `'integer-center'` or `'integer-corner'`, whether integer coordinates correspond to pixel centers or corners. Defaults to 'integer-center'.
@@ -500,7 +519,7 @@ def pixel_to_uv(
     """
     if not torch.is_floating_point(pixel):
         pixel = pixel.float()
-    if pixel_convention == 'integer-center':
+    if pixel_convention == "integer-center":
         pixel = pixel + 0.5
     uv = pixel / torch.as_tensor(size, device=pixel.device).flip(-1)
     return uv
@@ -509,7 +528,7 @@ def pixel_to_uv(
 def uv_to_pixel(
     uv: Tensor,
     size: Optional[Union[Tuple[Number, Number], Tensor]] = None,
-    pixel_convention: Literal['integer-corner', 'integer-center'] = 'integer-center',
+    pixel_convention: Literal["integer-corner", "integer-center"] = "integer-center",
     *,
     width: Optional[Number] = None,
     height: Optional[Number] = None,
@@ -532,7 +551,7 @@ def uv_to_pixel(
             raise ValueError("Either size or both width and height must be provided.")
         size = (height, width)
     pixel = uv * torch.as_tensor(size, device=uv.device).flip(-1)
-    if pixel_convention == 'integer-center':
+    if pixel_convention == "integer-center":
         pixel = pixel - 0.5
     return pixel
 
@@ -540,7 +559,7 @@ def uv_to_pixel(
 def pixel_to_ndc(
     pixel: Tensor,
     size: Union[Tuple[Number, Number], Tensor],
-    pixel_convention: Literal['integer-corner', 'integer-center'] = 'integer-center',
+    pixel_convention: Literal["integer-corner", "integer-center"] = "integer-center",
 ) -> Tensor:
     """
     Convert pixel coordinates to NDC (Normalized Device Coordinates).
@@ -557,18 +576,16 @@ def pixel_to_ndc(
     """
     if not torch.is_floating_point(pixel):
         pixel = pixel.float()
-    if pixel_convention == 'integer-center':
+    if pixel_convention == "integer-center":
         pixel = pixel + 0.5
-    ndc = pixel / (torch.as_tensor(size, device=pixel.device).flip(-1) * torch.tensor([2, -2], dtype=pixel.dtype, device=pixel.device)) \
-        + torch.tensor([-1, 1], dtype=pixel.dtype, device=pixel.device)
+    ndc = pixel / (
+        torch.as_tensor(size, device=pixel.device).flip(-1)
+        * torch.tensor([2, -2], dtype=pixel.dtype, device=pixel.device)
+    ) + torch.tensor([-1, 1], dtype=pixel.dtype, device=pixel.device)
     return ndc
 
 
-def depth_linear_to_buffer(
-    depth: Tensor,
-    near: Union[float, Tensor],
-    far: Union[float, Tensor]
-) -> Tensor:
+def depth_linear_to_buffer(depth: Tensor, near: Union[float, Tensor], far: Union[float, Tensor]) -> Tensor:
     """
     Project linear depth to depth value in screen space
 
@@ -583,11 +600,7 @@ def depth_linear_to_buffer(
     return (1 - near / depth) / (1 - near / far)
 
 
-def depth_buffer_to_linear(
-    depth: Tensor,
-    near: Union[float, Tensor],
-    far: Union[float, Tensor]
-) -> Tensor:
+def depth_buffer_to_linear(depth: Tensor, near: Union[float, Tensor], far: Union[float, Tensor]) -> Tensor:
     """
     Linearize depth value to linear depth
 
@@ -611,7 +624,7 @@ def project_gl(
     Project 3D points to 2D following the OpenGL convention (except for row major matrices)
 
     ## Parameters
-        points (Tensor): [..., N, 3] or [..., N, 4] 3D points to project, if the last 
+        points (Tensor): [..., N, 3] or [..., N, 4] 3D points to project, if the last
             dimension is 4, the points are assumed to be in homogeneous coordinates
         view (Tensor): [..., 4, 4] view matrix
         projection (Tensor): [..., 4, 4] projection matrix
@@ -622,7 +635,9 @@ def project_gl(
         linear_depth (Tensor): [..., N] linear depth
     """
     if points.shape[-1] == 3:
-        points = torch.cat([points, torch.ones((*points.shape[:-1], 1), dtype=points.dtype, device=points.device)], dim=-1)
+        points = torch.cat(
+            [points, torch.ones((*points.shape[:-1], 1), dtype=points.dtype, device=points.device)], dim=-1
+        )
     transform = projection if view is None else projection @ view
     clip_coord = points @ transform.mT
     ndc_coord = clip_coord[..., :3] / clip_coord[..., 3:]
@@ -649,10 +664,21 @@ def project_cv(
             The origin (0., 0.) is corresponding to the left & top
         linear_depth (Tensor): [..., N] linear depth
     """
-    intrinsics = torch.cat([
-        torch.cat([intrinsics, torch.zeros((*intrinsics.shape[:-2], 3, 1), dtype=intrinsics.dtype, device=intrinsics.device)], dim=-1),
-        torch.tensor([[0, 0, 0, 1]], dtype=intrinsics.dtype, device=intrinsics.device).expand(*intrinsics.shape[:-2], 1, 4)
-    ], dim=-2)
+    intrinsics = torch.cat(
+        [
+            torch.cat(
+                [
+                    intrinsics,
+                    torch.zeros((*intrinsics.shape[:-2], 3, 1), dtype=intrinsics.dtype, device=intrinsics.device),
+                ],
+                dim=-1,
+            ),
+            torch.tensor([[0, 0, 0, 1]], dtype=intrinsics.dtype, device=intrinsics.device).expand(
+                *intrinsics.shape[:-2], 1, 4
+            ),
+        ],
+        dim=-2,
+    )
     transform = intrinsics @ extrinsics if extrinsics is not None else intrinsics
     points = torch.cat([points, torch.ones((*points.shape[:-1], 1), dtype=points.dtype, device=points.device)], dim=-1)
     points = points @ transform.mT
@@ -676,20 +702,21 @@ def unproject_gl(
         depth (Tensor): (..., N) linear depth values
         projection (Tensor): (..., 4, 4) projection  matrix
         view (Tensor): (..., 4, 4) view matrix
-        
+
     ## Returns
         points (Tensor): (..., N, 3) 3d points
     """
     ndc_xy = uv * 2 - 1
     view_z = -depth
-    clip_xy = torch.linalg.inv(projection[..., :2, :2] - ndc_xy[..., :, None] * projection[..., 3:, :2]) \
-        @ ((ndc_xy[..., :, None] * projection[..., 3:, 2:] - projection[..., :2, 2:]) \
-        @ torch.cat([view_z[..., None, None], torch.ones_like(view_z[..., None, None])], axis=-2))
+    clip_xy = torch.linalg.inv(projection[..., :2, :2] - ndc_xy[..., :, None] * projection[..., 3:, :2]) @ (
+        (ndc_xy[..., :, None] * projection[..., 3:, 2:] - projection[..., :2, 2:])
+        @ torch.cat([view_z[..., None, None], torch.ones_like(view_z[..., None, None])], axis=-2)
+    )
     points = torch.cat([clip_xy.squeeze(-1), view_z[..., None], torch.ones_like(view_z)[..., None]], axis=-1)
     if view is not None:
         points = points @ torch.linalg.inv(view).mT
     return points[..., :3]
-    
+
 
 def unproject_cv(
     uv: Tensor,
@@ -714,12 +741,25 @@ def unproject_cv(
         raise ValueError("intrinsics is required")
     if depth is None:
         depth = torch.ones(uv.shape[:-1], dtype=uv.dtype, device=uv.device)
-    intrinsics = torch.cat([
-        torch.cat([intrinsics, torch.zeros((*intrinsics.shape[:-2], 3, 1), dtype=intrinsics.dtype, device=intrinsics.device)], dim=-1),
-        torch.tensor([[0, 0, 0, 1]], dtype=intrinsics.dtype, device=intrinsics.device).expand(*intrinsics.shape[:-2], 1, 4)
-    ], dim=-2)
+    intrinsics = torch.cat(
+        [
+            torch.cat(
+                [
+                    intrinsics,
+                    torch.zeros((*intrinsics.shape[:-2], 3, 1), dtype=intrinsics.dtype, device=intrinsics.device),
+                ],
+                dim=-1,
+            ),
+            torch.tensor([[0, 0, 0, 1]], dtype=intrinsics.dtype, device=intrinsics.device).expand(
+                *intrinsics.shape[:-2], 1, 4
+            ),
+        ],
+        dim=-2,
+    )
     transform = intrinsics @ extrinsics if extrinsics is not None else intrinsics
-    points = torch.cat([uv, torch.ones((*uv.shape[:-1], 1), dtype=uv.dtype, device=uv.device)], dim=-1) * depth[..., None]
+    points = (
+        torch.cat([uv, torch.ones((*uv.shape[:-1], 1), dtype=uv.dtype, device=uv.device)], dim=-1) * depth[..., None]
+    )
     points = torch.cat([points, torch.ones((*points.shape[:-1], 1), dtype=uv.dtype, device=uv.device)], dim=-1)
     points = points @ torch.linalg.inv(transform).mT
     points = points[..., :3]
@@ -732,11 +772,11 @@ def project(
     intrinsics: Optional[Tensor] = None,
     extrinsics: Optional[Tensor] = None,
     view: Optional[Tensor] = None,
-    projection: Optional[Tensor] = None
+    projection: Optional[Tensor] = None,
 ) -> Tuple[Tensor, Tensor]:
     """
-    Calculate projection. 
-    - For OpenCV convention, use `intrinsics` and `extrinsics` matrices. 
+    Calculate projection.
+    - For OpenCV convention, use `intrinsics` and `extrinsics` matrices.
     - For OpenGL convention, use `view` and `projection` matrices.
 
     ## Parameters
@@ -749,16 +789,17 @@ def project(
 
     ## Returns
 
-    - `uv`: (..., N, 2) 2D coordinates. 
+    - `uv`: (..., N, 2) 2D coordinates.
         - For OpenCV convention, it is the normalized image coordinate where (0, 0) is the top left corner.
         - For OpenGL convention, it is the screen space XY coordinate where (0, 0) is the bottom left corner.
     - `depth`: (..., N) linear depth values, where `depth > 0` is visible.
         - For OpenCV convention, it is the Z coordinate in camera space.
         - For OpenGL convention, it is the -Z coordinate in camera space.
     """
-    assert (intrinsics is not None or extrinsics is not None) ^ (view is not None or projection is not None), \
+    assert (intrinsics is not None or extrinsics is not None) ^ (view is not None or projection is not None), (
         "Either camera intrinsics (and extrinsics) or projection (and view) matrices must be provided."
-    
+    )
+
     if intrinsics is not None:
         return project_cv(points, intrinsics, extrinsics)
     elif projection is not None:
@@ -777,13 +818,13 @@ def unproject(
     view: Optional[Tensor] = None,
 ) -> Tensor:
     """
-    Calculate inverse projection. 
-    - For OpenCV convention, use `intrinsics` and `extrinsics` matrices. 
+    Calculate inverse projection.
+    - For OpenCV convention, use `intrinsics` and `extrinsics` matrices.
     - For OpenGL convention, use `view` and `projection` matrices.
 
     ## Parameters
 
-    - `uv`: (..., N, 2) 2D coordinates. 
+    - `uv`: (..., N, 2) 2D coordinates.
         - For OpenCV convention, it is the normalized image coordinate where (0, 0) is the top left corner.
         - For OpenGL convention, it is the screen space XY coordinate where (0, 0) is the bottom left corner.
     - `depth`: (..., N) linear depth values, where `depth > 0` is visible.
@@ -798,9 +839,10 @@ def unproject(
 
     - `points`: (..., N, 3) 3D world-space points
     """
-    assert (intrinsics is not None or extrinsics is not None) ^ (view is not None or projection is not None), \
+    assert (intrinsics is not None or extrinsics is not None) ^ (view is not None or projection is not None), (
         "Either camera intrinsics (and extrinsics) or projection (and view) matrices must be provided."
-    
+    )
+
     if intrinsics is not None:
         return unproject_cv(uv, depth, intrinsics, extrinsics)
     elif projection is not None:
@@ -836,10 +878,10 @@ def euler_axis_angle_rotation(axis: str, angle: Tensor) -> Tensor:
     else:
         raise ValueError("letter must be either X, Y or Z.")
 
-    return torch.stack(R_flat, -1).reshape(angle.shape + (3, 3))
+    return torch.stack(R_flat, -1).reshape(angle.shape + (3, 3))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
 
-def euler_angles_to_matrix(euler_angles: Tensor, convention: str = 'XYZ') -> Tensor:
+def euler_angles_to_matrix(euler_angles: Tensor, convention: str = "XYZ") -> Tensor:
     """
     Convert rotations given as Euler angles in radians to rotation matrices.
 
@@ -859,10 +901,7 @@ def euler_angles_to_matrix(euler_angles: Tensor, convention: str = 'XYZ') -> Ten
     for letter in convention:
         if letter not in ("X", "Y", "Z"):
             raise ValueError(f"Invalid letter {letter} in convention string.")
-    matrices = [
-        euler_axis_angle_rotation(c, euler_angles[..., 'XYZ'.index(c)])
-        for c in convention
-    ]
+    matrices = [euler_axis_angle_rotation(c, euler_angles[..., "XYZ".index(c)]) for c in convention]
     # return functools.reduce(torch.matmul, matrices)
     return matrices[2] @ matrices[1] @ matrices[0]
 
@@ -872,16 +911,25 @@ def skew_symmetric(v: Tensor):
     assert v.shape[-1] == 3, "v must be 3D"
     x, y, z = v.unbind(dim=-1)
     zeros = torch.zeros_like(x)
-    return torch.stack([
-        zeros, -z, y,
-        z, zeros, -x,
-        -y, x, zeros,
-    ], dim=-1).reshape(*v.shape[:-1], 3, 3)
+    return torch.stack(
+        [
+            zeros,
+            -z,
+            y,
+            z,
+            zeros,
+            -x,
+            -y,
+            x,
+            zeros,
+        ],
+        dim=-1,
+    ).reshape(*v.shape[:-1], 3, 3)
 
 
 def rotation_matrix_from_vectors(v1: Tensor, v2: Tensor):
     "Rotation matrix that rotates v1 to v2"
-    I = torch.eye(3).to(v1)
+    I = torch.eye(3).to(v1)  # noqa: E741 - Ambiguous upstream name kept as written.
     v1 = F.normalize(v1, dim=-1)
     v2 = F.normalize(v2, dim=-1)
     v = torch.cross(v1, v2, dim=-1)
@@ -891,9 +939,7 @@ def rotation_matrix_from_vectors(v1: Tensor, v2: Tensor):
     return R
 
 
-def _angle_from_tan(
-    axis: str, other_axis: str, data, horizontal: bool, tait_bryan: bool
-) -> Tensor:
+def _angle_from_tan(axis: str, other_axis: str, data, horizontal: bool, tait_bryan: bool) -> Tensor:
     """
     Extract the first or third Euler angle from the two members of
     the matrix which are positive constant times its sine and cosine.
@@ -936,13 +982,13 @@ def matrix_to_euler_angles(matrix: Tensor, convention: str) -> Tensor:
     ## Returns
         Euler angles in radians as tensor of shape (..., 3), in the order of XYZ (like blender), instead of convention (like pytorch3d)
     """
-    if not all(c in 'XYZ' for c in convention) or not all(c in convention for c in 'XYZ'):
+    if not all(c in "XYZ" for c in convention) or not all(c in convention for c in "XYZ"):
         raise ValueError(f"Invalid convention {convention}.")
     if not matrix.shape[-2:] == (3, 3):
         raise ValueError(f"Invalid rotation matrix shape {matrix.shape}.")
-    
-    i0 = 'XYZ'.index(convention[0])
-    i2 = 'XYZ'.index(convention[2])
+
+    i0 = "XYZ".index(convention[0])
+    i2 = "XYZ".index(convention[2])
     tait_bryan = i0 != i2
     if tait_bryan:
         central_angle = torch.asin(matrix[..., i2, i0] * (-1.0 if i2 - i0 in [-1, 2] else 1.0))
@@ -951,15 +997,11 @@ def matrix_to_euler_angles(matrix: Tensor, convention: str) -> Tensor:
 
     # Angles in composition order
     o = [
-        _angle_from_tan(
-            convention[0], convention[1], matrix[..., i2, :], True, tait_bryan
-        ),
+        _angle_from_tan(convention[0], convention[1], matrix[..., i2, :], True, tait_bryan),
         central_angle,
-        _angle_from_tan(
-            convention[2], convention[1], matrix[..., i0], False, tait_bryan
-        ),
+        _angle_from_tan(convention[2], convention[1], matrix[..., i0], False, tait_bryan),
     ]
-    return torch.stack([o[convention.index(c)] for c in 'XYZ'], -1)
+    return torch.stack([o[convention.index(c)] for c in "XYZ"], -1)
 
 
 def axis_angle_to_matrix(axis_angle: Tensor, eps: float = 1e-12) -> Tensor:
@@ -1047,12 +1089,7 @@ def matrix_to_quaternion(rot_mat: Tensor, eps: float = 1e-12) -> Tensor:
     m00, m01, m02, m10, m11, m12, m20, m21, m22 = rot_mat.flatten(-2).unbind(dim=-1)
 
     diag = torch.diagonal(rot_mat, dim1=-2, dim2=-1)
-    M = torch.tensor([
-        [1, 1, 1],
-        [1, -1, -1],
-        [-1, 1, -1],
-        [-1, -1, 1]
-    ], dtype=rot_mat.dtype, device=rot_mat.device)
+    M = torch.tensor([[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]], dtype=rot_mat.dtype, device=rot_mat.device)
     wxyz = (1 + diag @ M.transpose(-1, -2)).clamp_(0).sqrt().mul(0.5)
     _, max_idx = wxyz.max(dim=-1)
     xw = torch.sign(m21 - m12)
@@ -1071,9 +1108,9 @@ def matrix_to_quaternion(rot_mat: Tensor, eps: float = 1e-12) -> Tensor:
             torch.where(
                 max_idx[..., None] == 2,
                 torch.stack([yw, xy, ones, yz], dim=-1),
-                torch.stack([zw, xz, yz, ones], dim=-1)
-            )
-        )
+                torch.stack([zw, xz, yz, ones], dim=-1),
+            ),
+        ),
     )
     quat = sign * wxyz
     quat = F.normalize(quat, dim=-1, eps=eps)
@@ -1082,10 +1119,10 @@ def matrix_to_quaternion(rot_mat: Tensor, eps: float = 1e-12) -> Tensor:
 
 def quaternion_to_matrix(quaternion: Tensor, eps: float = 1e-12) -> Tensor:
     """Converts a batch of quaternions (w, x, y, z) to rotation matrices
-    
+
     ## Parameters
         quaternion (Tensor): shape (..., 4), the quaternions to convert
-    
+
     ## Returns
         Tensor: shape (..., 3, 3), the rotation matrices corresponding to the given quaternions
     """
@@ -1093,14 +1130,10 @@ def quaternion_to_matrix(quaternion: Tensor, eps: float = 1e-12) -> Tensor:
     quaternion = F.normalize(quaternion, dim=-1, eps=eps)
     w, x, y, z = quaternion.unbind(dim=-1)
     zeros = torch.zeros_like(w)
-    I = torch.eye(3, dtype=quaternion.dtype, device=quaternion.device)
+    I = torch.eye(3, dtype=quaternion.dtype, device=quaternion.device)  # noqa: E741 - Ambiguous upstream name kept as written.
     xyz = quaternion[..., 1:]
-    A = xyz[..., :, None] * xyz[..., None, :] - I * (xyz ** 2).sum(dim=-1)[..., None, None]
-    B = torch.stack([
-        zeros, -z, y,
-        z, zeros, -x,
-        -y, x, zeros
-    ], dim=-1).unflatten(-1, (3, 3))
+    A = xyz[..., :, None] * xyz[..., None, :] - I * (xyz**2).sum(dim=-1)[..., None, None]
+    B = torch.stack([zeros, -z, y, z, zeros, -x, -y, x, zeros], dim=-1).unflatten(-1, (3, 3))
     rot_mat = I + 2 * (A + w[..., None, None] * B)
     return rot_mat
 
@@ -1142,7 +1175,7 @@ def lerp(v1: torch.Tensor, v2: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
 @batched(1, 1, 1)
 def slerp(v1: Tensor, v2: Tensor, t: Tensor, eps: float = 1e-12) -> Tensor:
     """
-    Spherical linear interpolation between two (unit) vectors. 
+    Spherical linear interpolation between two (unit) vectors.
 
     ## Parameters
         `v1` (Tensor): `(..., D)` (unit) vector 1
@@ -1220,11 +1253,9 @@ def extrinsics_to_essential(extrinsics: Tensor):
     R = extrinsics[..., :3, :3]
     t = extrinsics[..., :3, 3]
     zeros = torch.zeros_like(t)
-    t_x = torch.stack([
-        zeros, -t[..., 2], t[..., 1],
-        t[..., 2], zeros, -t[..., 0],
-        -t[..., 1], t[..., 0], zeros
-    ]).reshape(*t.shape[:-1], 3, 3)
+    t_x = torch.stack(
+        [zeros, -t[..., 2], t[..., 1], t[..., 2], zeros, -t[..., 0], -t[..., 1], t[..., 0], zeros]
+    ).reshape(*t.shape[:-1], 3, 3)
     return R @ t_x
 
 
@@ -1240,10 +1271,13 @@ def make_affine_matrix(M: Tensor, t: Tensor):
     ## Returns
         Tensor: [..., D + 1, D + 1] affine transformation matrix
     """
-    return torch.cat([
-        torch.cat([M, t[..., None]], dim=-1),
-        torch.tensor([0, 0, 0, 1], dtype=M.dtype, device=M.device).expand(*M.shape[:-2], 1, 4)
-    ], dim=-2)
+    return torch.cat(
+        [
+            torch.cat([M, t[..., None]], dim=-1),
+            torch.tensor([0, 0, 0, 1], dtype=M.dtype, device=M.device).expand(*M.shape[:-2], 1, 4),
+        ],
+        dim=-2,
+    )
 
 
 def rotation_matrix_2d(theta: Union[float, Tensor]):
@@ -1258,10 +1292,15 @@ def rotation_matrix_2d(theta: Union[float, Tensor]):
     """
     if isinstance(theta, float):
         theta = torch.tensor(theta)
-    return torch.stack([
-        torch.cos(theta), -torch.sin(theta),
-        torch.sin(theta), torch.cos(theta),
-    ], dim=-1).unflatten(-1, (2, 2))
+    return torch.stack(
+        [
+            torch.cos(theta),
+            -torch.sin(theta),
+            torch.sin(theta),
+            torch.cos(theta),
+        ],
+        dim=-1,
+    ).unflatten(-1, (2, 2))
 
 
 def rotate_2d(theta: Union[float, Tensor], center: Tensor = None):
@@ -1275,7 +1314,7 @@ def rotate_2d(theta: Union[float, Tensor], center: Tensor = None):
     ## Parameters
         theta (float | Tensor): rotation angle in radians, arbitrary shape (...,)
         center (Tensor): rotation center, arbitrary shape (..., 2). Default to (0, 0)
-        
+
     ## Returns
         (Tensor): (..., 3, 3) transformation matrix
     """
@@ -1286,13 +1325,19 @@ def rotate_2d(theta: Union[float, Tensor], center: Tensor = None):
     if center is None:
         center = torch.zeros(2).to(theta).expand(*theta.shape, -1)
     R = rotation_matrix_2d(theta)
-    return torch.cat([
-        torch.cat([
-            R, 
-            center[..., :, None] - R @ center[..., :, None],
-        ], dim=-1),
-        torch.tensor([[0, 0, 1]], dtype=center.dtype, device=center.device).expand(*center.shape[:-1], -1, -1),
-    ], dim=-2)
+    return torch.cat(
+        [
+            torch.cat(
+                [
+                    R,
+                    center[..., :, None] - R @ center[..., :, None],
+                ],
+                dim=-1,
+            ),
+            torch.tensor([[0, 0, 1]], dtype=center.dtype, device=center.device).expand(*center.shape[:-1], -1, -1),
+        ],
+        dim=-2,
+    )
 
 
 def translate_2d(translation: Tensor):
@@ -1305,17 +1350,27 @@ def translate_2d(translation: Tensor):
     ```
     ## Parameters
         translation (Tensor): translation vector, arbitrary shape (..., 2)
-    
+
     ## Returns
         (Tensor): (..., 3, 3) transformation matrix
     """
-    return torch.cat([
-        torch.cat([
-            torch.eye(2, dtype=translation.dtype, device=translation.device).expand(*translation.shape[:-1], -1, -1),
-            translation[..., None],
-        ], dim=-1),
-        torch.tensor([[0, 0, 1]], dtype=translation.dtype, device=translation.device).expand(*translation.shape[:-1], -1, -1),
-    ], dim=-2)
+    return torch.cat(
+        [
+            torch.cat(
+                [
+                    torch.eye(2, dtype=translation.dtype, device=translation.device).expand(
+                        *translation.shape[:-1], -1, -1
+                    ),
+                    translation[..., None],
+                ],
+                dim=-1,
+            ),
+            torch.tensor([[0, 0, 1]], dtype=translation.dtype, device=translation.device).expand(
+                *translation.shape[:-1], -1, -1
+            ),
+        ],
+        dim=-2,
+    )
 
 
 def scale_2d(scale: Union[float, Tensor], center: Tensor = None):
@@ -1339,22 +1394,28 @@ def scale_2d(scale: Union[float, Tensor], center: Tensor = None):
             scale = scale.to(center)
     if center is None:
         center = torch.zeros(2, dtype=scale.dtype, device=scale.device).expand(*scale.shape, -1)
-    return torch.cat([
-        torch.cat([
-            scale * torch.eye(2, dtype=scale.dtype, device=scale.device).expand(*scale.shape[:-1], -1, -1),
-            center[..., :, None] - center[..., :, None] * scale[..., None, None],
-        ], dim=-1),
-        torch.tensor([[0, 0, 1]], dtype=scale.dtype, device=scale.device).expand(*center.shape[:-1], -1, -1),
-    ], dim=-2)
+    return torch.cat(
+        [
+            torch.cat(
+                [
+                    scale * torch.eye(2, dtype=scale.dtype, device=scale.device).expand(*scale.shape[:-1], -1, -1),
+                    center[..., :, None] - center[..., :, None] * scale[..., None, None],
+                ],
+                dim=-1,
+            ),
+            torch.tensor([[0, 0, 1]], dtype=scale.dtype, device=scale.device).expand(*center.shape[:-1], -1, -1),
+        ],
+        dim=-2,
+    )
 
 
 def transform_points(x: Tensor, *Ts: Tensor) -> Tensor:
     """
     Apply transformation(s) to a point or a set of points.
-    It is like `(Tn @ ... @ T2 @ T1 @ x[:, None]).squeeze(0)`, but: 
+    It is like `(Tn @ ... @ T2 @ T1 @ x[:, None]).squeeze(0)`, but:
     1. Automatically handle the homogeneous coordinate;
             - x will be padded with homogeneous coordinate 1.
-            - Each T will be padded by identity matrix to match the dimension. 
+            - Each T will be padded by identity matrix to match the dimension.
     2. Using efficient contraction path when array sizes are large, based on `einsum`.
 
     ## Parameters
@@ -1365,11 +1426,11 @@ def transform_points(x: Tensor, *Ts: Tensor) -> Tensor:
     - `y`: Tensor, shape `(..., D)`: the transformed point or a set of points.
 
     ## Example Usage
-    
+
     - Just linear transformation
 
         ```
-        y = transform(x_3, mat_3x3) 
+        y = transform(x_3, mat_3x3)
         ```
 
     - Affine transformation
@@ -1387,12 +1448,15 @@ def transform_points(x: Tensor, *Ts: Tensor) -> Tensor:
     input_dim = x.shape[-1]
     pad_dim = max(max(max(T.shape[-2:]) for T in Ts), x.shape[-1])
     x = torch.cat([x, torch.ones((*x.shape[:-1], pad_dim - x.shape[-1]), dtype=x.dtype, device=x.device)], dim=-1)
-    I = torch.eye(pad_dim, dtype=x.dtype, device=x.device)
+    I = torch.eye(pad_dim, dtype=x.dtype, device=x.device)  # noqa: E741 - Ambiguous upstream name kept as written.
     Ts = [
-        torch.cat([
-            torch.cat([T, I[:T.shape[-2], T.shape[-1]:].expand(*T.shape[:-2], -1, -1)], dim=-1),
-            I[T.shape[-2]:, :].expand(*T.shape[:-2], -1, -1)
-        ], dim=-2)
+        torch.cat(
+            [
+                torch.cat([T, I[: T.shape[-2], T.shape[-1] :].expand(*T.shape[:-2], -1, -1)], dim=-1),
+                I[T.shape[-2] :, :].expand(*T.shape[:-2], -1, -1),
+            ],
+            dim=-2,
+        )
         for T in Ts
     ]
     total_numel = sum(t.numel() for t in Ts) + x.numel()
@@ -1405,16 +1469,25 @@ def transform_points(x: Tensor, *Ts: Tensor) -> Tensor:
         # Broadcasted size 1 dimensions can be squeezed to avoid redundant broadcasting in einsum
         subscripts, squeezed_operands = [], []
         for i, m in enumerate(operands):
-            squeezable = tuple(b_m == 1 and b > 1 for b_m, b in zip(m.shape[:-2], batch_shape[len(batch_shape) - (m.ndim - 2):]))
-            squeezed_operands.append(
-                m.squeeze(axis=tuple(j for j, s in enumerate(squeezable) if s))
+            squeezable = tuple(
+                b_m == 1 and b > 1
+                for b_m, b in zip(m.shape[:-2], batch_shape[len(batch_shape) - (m.ndim - 2) :], strict=False)
             )
+            squeezed_operands.append(m.squeeze(axis=tuple(j for j, s in enumerate(squeezable) if s)))
             subscripts.append(
-                (*tuple(j for j, s in zip(batch_subscripts[len(batch_shape) - (m.ndim - 2):], squeezable) if not s), i, i + 1)
+                (
+                    *tuple(
+                        j
+                        for j, s in zip(batch_subscripts[len(batch_shape) - (m.ndim - 2) :], squeezable, strict=False)
+                        if not s
+                    ),
+                    i,
+                    i + 1,
+                )
             )
         y = torch.einsum(
-            *itertools.chain(*zip(squeezed_operands, subscripts)), 
-            (*range(offset, offset + len(batch_shape)), 0, len(operands)), 
+            *itertools.chain(*zip(squeezed_operands, subscripts, strict=False)),
+            (*range(offset, offset + len(batch_shape)), 0, len(operands)),
         )
         y = y.squeeze(-1)
     else:

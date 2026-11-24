@@ -7,7 +7,6 @@ from PIL import Image
 
 from worldfoundry.pipelines.gen3c.pipeline_gen3c import Gen3CPipeline
 
-
 DATA_PATH = os.environ.get(
     "GEN3C_DATA_PATH",
     "./worldfoundry/data/test_cases/gen3c/image.png",

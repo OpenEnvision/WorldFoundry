@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> constants.py functionality."""
-
 DEFAULT_MODEL = "depth-anything/DA3NESTED-GIANT-LARGE-1.1"
 DEFAULT_EXPORT_DIR = "workspace/gallery/scene"
 DEFAULT_GALLERY_DIR = "workspace/gallery"
@@ -137,12 +135,31 @@ ETH3D_FILTER_KEYS = {
     "electro": ["9289.JPG", "9290.JPG", "9291.JPG", "9292.JPG", "9293.JPG", "9298.JPG"],
     "playground": ["587.JPG", "588.JPG", "589.JPG", "590.JPG", "591.JPG", "592.JPG"],
     "relief": [
-        "427.JPG", "428.JPG", "429.JPG", "430.JPG", "431.JPG", "432.JPG",
-        "433.JPG", "434.JPG", "435.JPG", "436.JPG", "437.JPG", "438.JPG",
+        "427.JPG",
+        "428.JPG",
+        "429.JPG",
+        "430.JPG",
+        "431.JPG",
+        "432.JPG",
+        "433.JPG",
+        "434.JPG",
+        "435.JPG",
+        "436.JPG",
+        "437.JPG",
+        "438.JPG",
     ],
     "relief_2": [
-        "458.JPG", "459.JPG", "460.JPG", "461.JPG", "462.JPG", "463.JPG",
-        "464.JPG", "465.JPG", "466.JPG", "467.JPG", "468.JPG",
+        "458.JPG",
+        "459.JPG",
+        "460.JPG",
+        "461.JPG",
+        "462.JPG",
+        "463.JPG",
+        "464.JPG",
+        "465.JPG",
+        "466.JPG",
+        "467.JPG",
+        "468.JPG",
     ],
 }
 

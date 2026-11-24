@@ -22,6 +22,8 @@ Public surface: :class:`RTXVideoSuperResolutionConfig`,
 
 from __future__ import annotations
 
+import contextlib
+import logging
 import os
 import sys
 from collections.abc import Sequence
@@ -38,6 +40,8 @@ from worldfoundry.core.media.processing.postprocess import (
     VideoSpec,
     VideoTensorLayout,
 )
+
+logger = logging.getLogger(__name__)
 
 RTXVideoSuperResolutionQuality = Literal[
     "BICUBIC",
@@ -148,8 +152,8 @@ class RTXVideoSuperResolutionConfig:
             output_height = self.output_height
             output_width = self.output_width
         else:
-            output_height = int(round(input_spec.height * self.scale))
-            output_width = int(round(input_spec.width * self.scale))
+            output_height = round(input_spec.height * self.scale)
+            output_width = round(input_spec.width * self.scale)
         if output_height <= 0 or output_width <= 0:  # guarded above, retained for rounded scales
             raise ValueError(f"RTX VSR output dimensions must be positive; got {output_height}x{output_width}.")
         if self.quality in _SAME_RESOLUTION_QUALITIES:
@@ -195,6 +199,23 @@ class RTXVideoSuperResolutionPostProcessor(VideoPostProcessor):
         """Delegate geometry to the config so the chain can size the sink first."""
 
         return self.config.output_spec(input_spec)
+
+    def probe(self, input_spec: VideoSpec | None) -> None:
+        """Load the native effect and process one frame on the configured device."""
+
+        capability = require_rtx_vfx_runtime(
+            device=self.config.device,
+            config=self.config,
+            input_spec=input_spec,
+            run_inference=True,
+        )
+        logger.info(
+            "RTX postprocess probe passed quality=%s device=cuda:%d gpu=%s nvidia_vfx=%s",
+            self.config.quality,
+            self.config.device,
+            capability.gpu_name or "unknown",
+            capability.package_version or "unknown",
+        )
 
     def start(self, spec: VideoSpec) -> VideoPostProcessorSession:
         """Open a session; the native effect is created later in ``prepare``."""
@@ -533,10 +554,8 @@ class _RTXVideoSuperResolutionSession(VideoPostProcessorSession):
             effect.load()
         except Exception as exc:
             if effect is not None:
-                try:
+                with contextlib.suppress(Exception):
                     effect.close()
-                except Exception:
-                    pass
             raise RuntimeError(
                 "Failed to initialize NVIDIA RTX VSR "
                 f"on cuda:{self._config.device} at {self._output_spec.width}x{self._output_spec.height} "
@@ -752,7 +771,7 @@ def _load_video_super_res_class() -> Any:
     """Import ``VideoSuperRes`` only when a session or probe actually needs it."""
 
     try:
-        from nvvfx import VideoSuperRes  # ty: ignore[unresolved-import]  # noqa: PLC0415
+        from nvvfx import VideoSuperRes  # ty: ignore[import-not-found]  # Optional NVIDIA Video Effects SDK.
     except Exception as exc:
         raise RuntimeError(
             "RTX video post-processing requires the optional proprietary `nvidia-vfx` package. "
@@ -783,7 +802,9 @@ def _load_quality_level_enum() -> Any:
     """
 
     try:
-        from nvvfx.effects.video_super_res import QualityLevel  # ty: ignore[unresolved-import]  # noqa: PLC0415
+        from nvvfx.effects.video_super_res import (  # ty: ignore[import-not-found]  # Optional NVIDIA Video Effects SDK.
+            QualityLevel,
+        )
     except Exception as exc:
         raise RuntimeError("The installed nvidia-vfx package does not expose VideoSuperRes QualityLevel.") from exc
     return QualityLevel
@@ -880,7 +901,7 @@ def _import_torch() -> Any:
     """Import torch at call time so CPU-only processes can import this module."""
 
     try:
-        import torch  # noqa: PLC0415
+        import torch
     except ImportError as exc:
         raise RuntimeError(
             "RTX video post-processing requires PyTorch for DLPack frame exchange. "
@@ -893,7 +914,7 @@ def _import_numpy() -> Any:
     """Import NumPy at call time; required only for ndarray / frame-list-numpy input."""
 
     try:
-        import numpy as np  # noqa: PLC0415
+        import numpy as np
     except ImportError as exc:  # pragma: no cover - Studio and tests require NumPy
         raise RuntimeError("NumPy is required for RTX VSR NumPy frame input.") from exc
     return np

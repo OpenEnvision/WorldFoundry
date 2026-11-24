@@ -1,11 +1,10 @@
-artifact_filename: openpi_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: openpi
+task_family: vla_policy
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi-assets/checkpoints/pi05_libero
   path: gs://openpi-assets/checkpoints/pi05_libero
   role: pi05_libero_demo_checkpoint
-id: openpi
 input_schema:
   actions:
   - robot_action
@@ -15,15 +14,21 @@ input_schema:
   instruction: true
   prompt: true
   video: false
-integration_status: integrated
+artifact_kind: action_trace
+artifact_filename: openpi_action_trace.json
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_openpi_pi05_libero_local_checkpoint_runtime_ready
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
-- VLA policy profile for pi0/pi0.5-style policies. Runtime construction accepts only complete staged local checkpoints.
+- VLA policy profile for pi0/pi0.5-style policies. Runtime construction accepts only
+  complete staged local checkpoints.
 - Acquisition remains an explicit preparation step and is never invoked by model code.
 - Not a video-generation profile; scorecards should consume action_trace and rollout
   metadata.
 - WorldFoundry keeps the inference-only OpenPI runtime directly under worldfoundry/synthesis/action_generation/openpi.
   py_compile, wrapper import, from_pretrained, and plan-only predict were ready in
   the OpenPI prepare environment.
-runtime_status: in_tree_openpi_pi05_libero_local_checkpoint_runtime_ready
-task_family: vla_policy
 verification_status: official_demo_jax_gpu_ready

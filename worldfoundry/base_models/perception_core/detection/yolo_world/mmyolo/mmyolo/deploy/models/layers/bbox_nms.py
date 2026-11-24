@@ -39,8 +39,8 @@ def _efficient_nms(
     """
     boxes = boxes if boxes.dim() == 4 else boxes.unsqueeze(2)
     _, det_boxes, det_scores, labels = TRTEfficientNMSop.apply(
-        boxes, scores, -1, box_coding, iou_threshold, keep_top_k, '1', 0,
-        score_threshold)
+        boxes, scores, -1, box_coding, iou_threshold, keep_top_k, "1", 0, score_threshold
+    )
     dets = torch.cat([det_boxes, det_scores.unsqueeze(2)], -1)
 
     # retain shape info
@@ -53,7 +53,7 @@ def _efficient_nms(
     return dets, labels
 
 
-@mark('efficient_nms', inputs=['boxes', 'scores'], outputs=['dets', 'labels'])
+@mark("efficient_nms", inputs=["boxes", "scores"], outputs=["dets", "labels"])
 def efficient_nms(*args, **kwargs):
     """Wrapper function for `_efficient_nms`."""
     return _efficient_nms(*args, **kwargs)
@@ -71,34 +71,34 @@ class TRTEfficientNMSop(torch.autograd.Function):
         box_coding=0,
         iou_threshold=0.45,
         max_output_boxes=100,
-        plugin_version='1',
+        plugin_version="1",
         score_activation=0,
         score_threshold=0.25,
     ):
         """Forward function of TRTEfficientNMSop."""
         batch_size, num_boxes, num_classes = scores.shape
-        num_det = torch.randint(
-            0, max_output_boxes, (batch_size, 1), dtype=torch.int32)
+        num_det = torch.randint(0, max_output_boxes, (batch_size, 1), dtype=torch.int32)
         det_boxes = torch.randn(batch_size, max_output_boxes, 4)
         det_scores = torch.randn(batch_size, max_output_boxes)
-        det_classes = torch.randint(
-            0, num_classes, (batch_size, max_output_boxes), dtype=torch.int32)
+        det_classes = torch.randint(0, num_classes, (batch_size, max_output_boxes), dtype=torch.int32)
         return num_det, det_boxes, det_scores, det_classes
 
     @staticmethod
-    def symbolic(g,
-                 boxes,
-                 scores,
-                 background_class=-1,
-                 box_coding=0,
-                 iou_threshold=0.45,
-                 max_output_boxes=100,
-                 plugin_version='1',
-                 score_activation=0,
-                 score_threshold=0.25):
+    def symbolic(
+        g,
+        boxes,
+        scores,
+        background_class=-1,
+        box_coding=0,
+        iou_threshold=0.45,
+        max_output_boxes=100,
+        plugin_version="1",
+        score_activation=0,
+        score_threshold=0.25,
+    ):
         """Symbolic function of TRTEfficientNMSop."""
         out = g.op(
-            'TRT::EfficientNMS_TRT',
+            "TRT::EfficientNMS_TRT",
             boxes,
             scores,
             background_class_i=background_class,
@@ -108,6 +108,7 @@ class TRTEfficientNMSop(torch.autograd.Function):
             plugin_version_s=plugin_version,
             score_activation_i=score_activation,
             score_threshold_f=score_threshold,
-            outputs=4)
+            outputs=4,
+        )
         nums, boxes, scores, classes = out
         return nums, boxes, scores, classes

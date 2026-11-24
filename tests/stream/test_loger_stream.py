@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+
 sys.path.append("..")
 
 from worldfoundry.pipelines.pi3.pipeline_loger import LoGeRPipeline
@@ -13,11 +14,24 @@ OUTPUT_DIR = "output_loger_stream"
 DATA_PATH = VIDEO_INPUT if VIDEO_INPUT is not None else IMAGE_INPUT
 
 AVAILABLE_INTERACTIONS = [
-    "forward", "backward", "left", "right",
-    "forward_left", "forward_right", "backward_left", "backward_right",
-    "camera_up", "camera_down", "camera_l", "camera_r",
-    "camera_ul", "camera_ur", "camera_dl", "camera_dr",
-    "camera_zoom_in", "camera_zoom_out",
+    "forward",
+    "backward",
+    "left",
+    "right",
+    "forward_left",
+    "forward_right",
+    "backward_left",
+    "backward_right",
+    "camera_up",
+    "camera_down",
+    "camera_l",
+    "camera_r",
+    "camera_ul",
+    "camera_ur",
+    "camera_dl",
+    "camera_dr",
+    "camera_zoom_in",
+    "camera_zoom_out",
 ]
 
 pipeline = LoGeRPipeline.from_pretrained(model_path=MODEL_PATH, mode=MODE)

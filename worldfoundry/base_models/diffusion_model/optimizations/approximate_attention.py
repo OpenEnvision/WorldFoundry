@@ -97,9 +97,7 @@ _LIGHTX2V_SPARSE_KINDS = frozenset(
 )
 _FASTVIDEO_SLA_KINDS = frozenset({"fastvideo_sla", "fastvideo_sagesla"})
 _GRID_REQUIRED_STRICT_KINDS = frozenset({"vmoba", *_LIGHTX2V_SPARSE_KINDS})
-_STRICT_SPARSE_KINDS = frozenset(
-    {*_GRID_REQUIRED_STRICT_KINDS, *_FASTVIDEO_SLA_KINDS}
-)
+_STRICT_SPARSE_KINDS = frozenset({*_GRID_REQUIRED_STRICT_KINDS, *_FASTVIDEO_SLA_KINDS})
 
 
 def _positive_int_triplet(name: str, values: Any) -> tuple[int, int, int]:
@@ -129,25 +127,17 @@ def _positive_int_pair(name: str, values: Any) -> tuple[int, int]:
     try:
         raw_values = tuple(values)
     except TypeError as exc:
-        raise ValueError(
-            f"{name} must be an iterable of two positive integers, got {values!r}"
-        ) from exc
+        raise ValueError(f"{name} must be an iterable of two positive integers, got {values!r}") from exc
     if len(raw_values) != 2:
-        raise ValueError(
-            f"{name} must contain two positive integers, got {raw_values!r}"
-        )
+        raise ValueError(f"{name} must contain two positive integers, got {raw_values!r}")
     normalized: list[int] = []
     for value in raw_values:
         if isinstance(value, bool):
-            raise ValueError(
-                f"{name} must contain two positive integers, got {raw_values!r}"
-            )
+            raise ValueError(f"{name} must contain two positive integers, got {raw_values!r}")
         try:
             normalized.append(operator.index(value))
         except TypeError as exc:
-            raise ValueError(
-                f"{name} must contain two positive integers, got {raw_values!r}"
-            ) from exc
+            raise ValueError(f"{name} must contain two positive integers, got {raw_values!r}") from exc
     result = tuple(normalized)
     if any(value <= 0 for value in result):
         raise ValueError(f"{name} must contain two positive integers, got {result!r}")
@@ -162,9 +152,7 @@ def _positive_int(name: str, value: Any) -> int:
     try:
         normalized = operator.index(value)
     except TypeError as exc:
-        raise ValueError(
-            f"{name} must be a positive integer, got {value!r}"
-        ) from exc
+        raise ValueError(f"{name} must be a positive integer, got {value!r}") from exc
     if normalized <= 0:
         raise ValueError(f"{name} must be a positive integer, got {normalized}")
     return normalized
@@ -178,9 +166,7 @@ def _nonnegative_int(name: str, value: Any) -> int:
     try:
         normalized = operator.index(value)
     except TypeError as exc:
-        raise ValueError(
-            f"{name} must be a non-negative integer, got {value!r}"
-        ) from exc
+        raise ValueError(f"{name} must be a non-negative integer, got {value!r}") from exc
     if normalized < 0:
         raise ValueError(f"{name} must be a non-negative integer, got {normalized}")
     return normalized
@@ -260,8 +246,7 @@ class ApproximateAttentionConfig:
                     }
                 )
                 raise ValueError(
-                    f"unsupported approximate attention kind {self.kind!r}; "
-                    f"expected one of {allowed}"
+                    f"unsupported approximate attention kind {self.kind!r}; expected one of {allowed}"
                 ) from exc
         if self.kind not in {
             "sta",
@@ -270,9 +255,7 @@ class ApproximateAttentionConfig:
             *_LIGHTX2V_SPARSE_KINDS,
             *_FASTVIDEO_SLA_KINDS,
         }:
-            raise ValueError(
-                f"unsupported approximate attention kind {self.kind!r}"
-            )
+            raise ValueError(f"unsupported approximate attention kind {self.kind!r}")
         if not (0.0 <= self.sparsity < 1.0):
             raise ValueError(f"sparsity must be in [0.0, 1.0), got {self.sparsity}")
         if isinstance(self.dense_steps, bool):
@@ -291,33 +274,20 @@ class ApproximateAttentionConfig:
                 f"unsupported VSA block_tile volume {block_volume} for {self.block_tile!r}; "
                 f"supported volumes are {sorted(_SUPPORTED_VSA_BLOCK_VOLUMES)}"
             )
-        self.temporal_chunk_size = _positive_int(
-            "temporal_chunk_size", self.temporal_chunk_size
-        )
+        self.temporal_chunk_size = _positive_int("temporal_chunk_size", self.temporal_chunk_size)
         self.temporal_topk = _positive_int("temporal_topk", self.temporal_topk)
-        self.spatial_chunk_size = _positive_int_pair(
-            "spatial_chunk_size", self.spatial_chunk_size
-        )
+        self.spatial_chunk_size = _positive_int_pair("spatial_chunk_size", self.spatial_chunk_size)
         self.spatial_topk = _positive_int("spatial_topk", self.spatial_topk)
-        self.st_chunk_size = _positive_int_triplet(
-            "st_chunk_size", self.st_chunk_size
-        )
+        self.st_chunk_size = _positive_int_triplet("st_chunk_size", self.st_chunk_size)
         self.st_topk = _positive_int("st_topk", self.st_topk)
-        self.first_full_step = _nonnegative_int(
-            "first_full_step", self.first_full_step
-        )
-        self.first_full_layer = _nonnegative_int(
-            "first_full_layer", self.first_full_layer
-        )
+        self.first_full_step = _nonnegative_int("first_full_step", self.first_full_step)
+        self.first_full_layer = _nonnegative_int("first_full_layer", self.first_full_layer)
         self.temporal_layer = _positive_int("temporal_layer", self.temporal_layer)
         self.spatial_layer = _positive_int("spatial_layer", self.spatial_layer)
         self.st_layer = _positive_int("st_layer", self.st_layer)
         self.moba_select_mode = str(self.moba_select_mode).strip().lower()
         if self.moba_select_mode not in {"threshold", "topk"}:
-            raise ValueError(
-                "moba_select_mode must be 'threshold' or 'topk', got "
-                f"{self.moba_select_mode!r}"
-            )
+            raise ValueError(f"moba_select_mode must be 'threshold' or 'topk', got {self.moba_select_mode!r}")
         self.moba_threshold_type = str(self.moba_threshold_type).strip().lower()
         allowed_threshold_types = (
             {"query_head", "block", "overall", "head_global"}
@@ -331,13 +301,8 @@ class ApproximateAttentionConfig:
                 f"expected one of {sorted(allowed_threshold_types)}"
             )
         self.moba_threshold = float(self.moba_threshold)
-        if not math.isfinite(self.moba_threshold) or not (
-            0.0 <= self.moba_threshold <= 1.0
-        ):
-            raise ValueError(
-                "moba_threshold must be finite and in [0, 1], got "
-                f"{self.moba_threshold!r}"
-            )
+        if not math.isfinite(self.moba_threshold) or not (0.0 <= self.moba_threshold <= 1.0):
+            raise ValueError(f"moba_threshold must be finite and in [0, 1], got {self.moba_threshold!r}")
         if self.kind in _LIGHTX2V_SPARSE_KINDS:
             lightx2v = LightX2VSparseConfig(
                 kind=self.kind,
@@ -367,9 +332,7 @@ class ApproximateAttentionConfig:
             self.svg_num_sampled_rows = lightx2v.svg_num_sampled_rows
             self.svg_context_length = lightx2v.svg_context_length
         elif self.lightx2v_operator is not None or self.attnmap_frame_num is not None:
-            raise ValueError(
-                "lightx2v_operator/attnmap_frame_num require a LightX2V sparse kind"
-            )
+            raise ValueError("lightx2v_operator/attnmap_frame_num require a LightX2V sparse kind")
         if self.kind in _FASTVIDEO_SLA_KINDS:
             fastvideo = FastVideoSLAConfig(
                 kind=self.kind,
@@ -379,10 +342,7 @@ class ApproximateAttentionConfig:
             self.fastvideo_topk_ratio = fastvideo.topk_ratio
             self.fastvideo_feature_map = fastvideo.feature_map
         elif self.fastvideo_topk_ratio is not None or self.fastvideo_feature_map != "softmax":
-            raise ValueError(
-                "fastvideo_topk_ratio/fastvideo_feature_map require "
-                "fastvideo_sla or fastvideo_sagesla"
-            )
+            raise ValueError("fastvideo_topk_ratio/fastvideo_feature_map require fastvideo_sla or fastvideo_sagesla")
 
 
 def _lightx2v_config(config: ApproximateAttentionConfig) -> LightX2VSparseConfig:
@@ -536,11 +496,7 @@ class _ApproxState:
         """Boundary schedule: first/last ``dense_steps`` steps run dense."""
         invocation = self._current_invocation.get()
         active_step = (
-            invocation.step
-            if step is None and invocation is not None
-            else self.step
-            if step is None
-            else step
+            invocation.step if step is None and invocation is not None else self.step if step is None else step
         )
         active_total_steps = (
             invocation.total_steps
@@ -556,9 +512,7 @@ class _ApproxState:
             return False
         if active_step < d:
             return True
-        if active_total_steps is not None and active_step >= active_total_steps - d:
-            return True
-        return False
+        return bool(active_total_steps is not None and active_step >= active_total_steps - d)
 
     def current_invocation(self) -> _ApproxInvocation | None:
         return self._current_invocation.get()
@@ -585,9 +539,7 @@ class _ApproxState:
             request = self._requests.get(request_id)
             if request is None and create:
                 if total_steps is None or total_steps <= 0:
-                    raise ValueError(
-                        "approximate-attention requests require positive total_steps"
-                    )
+                    raise ValueError("approximate-attention requests require positive total_steps")
                 self._request_epoch_counter += 1
                 request = _ApproxRequestState(
                     request_id=request_id,
@@ -596,24 +548,13 @@ class _ApproxState:
                     routed_steps=bool(routed_steps),
                 )
                 self._requests[request_id] = request
-            elif (
-                request is not None
-                and total_steps is not None
-                and request.total_steps != total_steps
-            ):
+            elif request is not None and total_steps is not None and request.total_steps != total_steps:
                 raise ValueError(
                     "approximate-attention total_steps changed within request "
                     f"{request_id!r}: {request.total_steps} -> {total_steps}"
                 )
-            elif (
-                request is not None
-                and routed_steps is not None
-                and request.routed_steps != routed_steps
-            ):
-                raise ValueError(
-                    "approximate-attention routed-step ownership changed within "
-                    f"request {request_id!r}"
-                )
+            elif request is not None and routed_steps is not None and request.routed_steps != routed_steps:
+                raise ValueError(f"approximate-attention routed-step ownership changed within request {request_id!r}")
             return request
 
     def begin_invocation(
@@ -628,16 +569,12 @@ class _ApproxState:
         """Select one request branch and reject ambiguous step histories."""
 
         if not isinstance(request_id, str) or not request_id.strip():
-            raise ValueError(
-                "approximate attention requires an explicit non-empty request_id"
-            )
+            raise ValueError("approximate attention requires an explicit non-empty request_id")
         normalized_branch = str(branch).strip()
         if not normalized_branch:
             raise ValueError("approximate-attention branch cannot be empty")
         if step < 0 or step >= total_steps:
-            raise ValueError(
-                f"approximate-attention step must be in [0, {total_steps}), got {step}"
-            )
+            raise ValueError(f"approximate-attention step must be in [0, {total_steps}), got {step}")
         request = self.request_state(
             request_id,
             create=True,
@@ -649,13 +586,8 @@ class _ApproxState:
             previous_step = request.branch_steps.get(normalized_branch)
             if previous_step is None:
                 if step != 0 and not request.routed_steps:
-                    raise ValueError(
-                        "an approximate-attention request branch must begin at step 0"
-                    )
-            elif (
-                step <= previous_step
-                or (not request.routed_steps and step != previous_step + 1)
-            ):
+                    raise ValueError("an approximate-attention request branch must begin at step 0")
+            elif step <= previous_step or (not request.routed_steps and step != previous_step + 1):
                 raise ValueError(
                     "approximate-attention branch steps must be unique and "
                     + ("increasing" if request.routed_steps else "contiguous")
@@ -680,8 +612,7 @@ class _ApproxState:
         invocation = self.current_invocation()
         if invocation is None:
             if (
-                self.config.kind == "vmoba"
-                and frozen.get("execution") == "sparse"
+                self.config.kind == "vmoba" and frozen.get("execution") == "sparse"
             ) or self.config.kind in _LIGHTX2V_SPARSE_KINDS:
                 self.vmoba_events.append(frozen)
             return
@@ -689,9 +620,7 @@ class _ApproxState:
         with self._lock:
             request = invocation.request_state
             if request is None or request.request_epoch != invocation.request_epoch:
-                raise RuntimeError(
-                    "approximate-attention invocation refers to a stale request epoch"
-                )
+                raise RuntimeError("approximate-attention invocation refers to a stale request epoch")
             if key in request.event_keys:
                 raise RuntimeError(
                     "duplicate approximate-attention event for "
@@ -733,9 +662,7 @@ class _ApproxState:
             return
         with self._lock:
             if request is None or request.request_epoch != invocation.request_epoch:
-                raise RuntimeError(
-                    "approximate-attention grid refers to a stale request epoch"
-                )
+                raise RuntimeError("approximate-attention grid refers to a stale request epoch")
             if request.grid_size is not None and request.grid_size != grid:
                 raise ValueError(
                     "approximate-attention grid changed within request "
@@ -771,13 +698,9 @@ class _ApproxState:
                 )
             ]
             if len(matches) != 1:
-                raise RuntimeError(
-                    "approximate-attention fallback receipt could not resolve its event"
-                )
+                raise RuntimeError("approximate-attention fallback receipt could not resolve its event")
             event = matches[0]
-            if event.get("execution") == "fallback" and not bool(
-                event.get("dense_fallback_executed")
-            ):
+            if event.get("execution") == "fallback" and not bool(event.get("dense_fallback_executed")):
                 event["dense_fallback_executed"] = True
                 request.dense_fallback_calls += 1
 
@@ -815,9 +738,7 @@ class _ApproxState:
         if self.sparse_calls:
             self.effective_kernel = self.config.kind
         else:
-            self.effective_kernel = (
-                f"{self.config.kind} (provider-designed dense phase only)"
-            )
+            self.effective_kernel = f"{self.config.kind} (provider-designed dense phase only)"
 
     def record_vmoba_success(self, receipt: Mapping[str, Any]) -> None:
         """Record one provider-complete VMoBA call in the current request window."""
@@ -847,7 +768,7 @@ def _load_sparse_ops() -> Any:
     Triton path. This loader does not manufacture a second sparse fallback.
     """
     try:
-        import fastvideo_kernel  # noqa: F401
+        import fastvideo_kernel
 
         return fastvideo_kernel
     except (ImportError, OSError):
@@ -867,18 +788,11 @@ def _require_vmoba_ops(ops: Any | None = None) -> Any:
 
     provider = _load_sparse_ops() if ops is None else ops
     if provider is None:
-        raise RuntimeError(
-            "VMoBA was requested but fastvideo_kernel could not be imported"
-        )
-    missing = [
-        name
-        for name in _VMOBA_PROVIDER_SYMBOLS
-        if not callable(getattr(provider, name, None))
-    ]
+        raise RuntimeError("VMoBA was requested but fastvideo_kernel could not be imported")
+    missing = [name for name in _VMOBA_PROVIDER_SYMBOLS if not callable(getattr(provider, name, None))]
     if missing:
         raise RuntimeError(
-            "VMoBA was requested but fastvideo_kernel is missing callable symbols: "
-            + ", ".join(missing)
+            "VMoBA was requested but fastvideo_kernel is missing callable symbols: " + ", ".join(missing)
         )
     return provider
 
@@ -897,9 +811,7 @@ def _vmoba_route(
     """Select temporal → spatial → 3D routing exactly from the layer cycle."""
 
     if layer_idx < config.first_full_layer:
-        raise ValueError(
-            f"VMoBA layer {layer_idx} precedes first_full_layer={config.first_full_layer}"
-        )
+        raise ValueError(f"VMoBA layer {layer_idx} precedes first_full_layer={config.first_full_layer}")
     relative_layer = layer_idx - config.first_full_layer
     period = config.temporal_layer + config.spatial_layer + config.st_layer
     cycle_position = relative_layer % period
@@ -923,7 +835,7 @@ def _validate_vmoba_grid_profile(
             f"VMoBA grid {grid} is incompatible with spatial_chunk_size="
             f"{config.spatial_chunk_size}; h and w must be divisible respectively"
         )
-    if any(size % chunk for size, chunk in zip(grid, config.st_chunk_size)):
+    if any(size % chunk for size, chunk in zip(grid, config.st_chunk_size, strict=False)):
         raise RuntimeError(
             f"VMoBA grid {grid} is incompatible with st_chunk_size="
             f"{config.st_chunk_size}; t, h, and w must be divisible respectively"
@@ -949,13 +861,9 @@ def _require_vmoba_tensor(
     """Validate every provider boundary without coercing a malformed result."""
 
     if not isinstance(value, torch.Tensor):
-        raise RuntimeError(
-            f"VMoBA {name} must be a Tensor, got {type(value).__name__}"
-        )
+        raise RuntimeError(f"VMoBA {name} must be a Tensor, got {type(value).__name__}")
     if tuple(value.shape) != shape:
-        raise RuntimeError(
-            f"VMoBA {name} returned shape {tuple(value.shape)}, expected {shape}"
-        )
+        raise RuntimeError(f"VMoBA {name} returned shape {tuple(value.shape)}, expected {shape}")
     if value.device != device or value.dtype != dtype:
         raise RuntimeError(
             f"VMoBA {name} must preserve device/dtype; got "
@@ -1140,13 +1048,9 @@ class ApproximateSelfAttentionProcessor:
 
     def _get_lightx2v_adapter(self) -> LightX2VSparseAdapter:
         if self._state.config.kind not in _LIGHTX2V_SPARSE_KINDS:
-            raise RuntimeError(
-                "a LightX2V sparse adapter was requested for a non-LightX2V lane"
-            )
+            raise RuntimeError("a LightX2V sparse adapter was requested for a non-LightX2V lane")
         if self._lightx2v_adapter is None:
-            self._lightx2v_adapter = LightX2VSparseAdapter(
-                _lightx2v_config(self._state.config)
-            )
+            self._lightx2v_adapter = LightX2VSparseAdapter(_lightx2v_config(self._state.config))
         return self._lightx2v_adapter
 
     @property
@@ -1168,9 +1072,7 @@ class ApproximateSelfAttentionProcessor:
         invocation = state.current_invocation()
         current_grid = state.current_grid()
         input_contract = _tensor_contract(input_tensor)
-        output_contract = (
-            _tensor_contract(output_tensor) if output_tensor is not None else None
-        )
+        output_contract = _tensor_contract(output_tensor) if output_tensor is not None else None
         event: dict[str, Any] = {
             **self._event_identity,
             "request_id": invocation.request_id if invocation is not None else None,
@@ -1179,14 +1081,8 @@ class ApproximateSelfAttentionProcessor:
             "branch": invocation.branch if invocation is not None else "legacy",
             "step": invocation.step if invocation is not None else state.step,
             "step_index": invocation.step if invocation is not None else state.step,
-            "total_steps": (
-                invocation.total_steps
-                if invocation is not None
-                else state.total_steps
-            ),
-            "grid_size": (
-                list(current_grid) if current_grid is not None else None
-            ),
+            "total_steps": (invocation.total_steps if invocation is not None else state.total_steps),
+            "grid_size": (list(current_grid) if current_grid is not None else None),
             "execution": execution,
             "provider_attempted": provider_attempted,
             "provider_path": provider_path,
@@ -1256,10 +1152,7 @@ class ApproximateSelfAttentionProcessor:
             # Exact fallback: reuse the module's own attention module so the
             # numerics match the dense path exactly. Planned first/last/full
             # steps already have a dedicated receipt and are not fallbacks.
-            if (
-                invocation is None
-                and self._state.scheduled_dense_calls == scheduled_dense_before
-            ):
+            if invocation is None and self._state.scheduled_dense_calls == scheduled_dense_before:
                 self._state.dense_fallback_calls += 1
             out = attention.attn(q, k, v)
             if invocation is not None:
@@ -1285,15 +1178,10 @@ class ApproximateSelfAttentionProcessor:
                 self._record_event(
                     execution="error",
                     input_tensor=q,
-                    fallback_reason=(
-                        f"unsupported {state.config.kind} self-attention kwargs: "
-                        f"{sorted(kwargs)}"
-                    ),
+                    fallback_reason=(f"unsupported {state.config.kind} self-attention kwargs: {sorted(kwargs)}"),
                 )
                 raise ValueError(
-                    f"{state.config.kind} cannot compose with unsupported "
-                    "self-attention kwargs: "
-                    f"{sorted(kwargs)}"
+                    f"{state.config.kind} cannot compose with unsupported self-attention kwargs: {sorted(kwargs)}"
                 )
             state.record_kernel_fallback(
                 "unsupported sparse-attention composition",
@@ -1307,11 +1195,7 @@ class ApproximateSelfAttentionProcessor:
         normalized_grid: tuple[int, int, int] | None = None
         grid_profile_receipt: dict[str, Any] | None = None
         grid_error: ValueError | None = None
-        grid_candidate = (
-            explicit_grid
-            if explicit_grid is not None
-            else state.default_grid_size
-        )
+        grid_candidate = explicit_grid if explicit_grid is not None else state.default_grid_size
         if grid_candidate is not None:
             try:
                 normalized_grid = _normalize_grid(grid_candidate)
@@ -1320,13 +1204,9 @@ class ApproximateSelfAttentionProcessor:
                     self._record_event(
                         execution="error",
                         input_tensor=q,
-                        fallback_reason=(
-                            f"invalid {state.config.kind} patch grid: {exc}"
-                        ),
+                        fallback_reason=(f"invalid {state.config.kind} patch grid: {exc}"),
                     )
-                    raise RuntimeError(
-                        f"invalid {state.config.kind} patch grid: {exc}"
-                    ) from exc
+                    raise RuntimeError(f"invalid {state.config.kind} patch grid: {exc}") from exc
                 grid_error = exc
             else:
                 if state.config.kind == "vmoba":
@@ -1348,13 +1228,11 @@ class ApproximateSelfAttentionProcessor:
                 execution="error",
                 input_tensor=q,
                 fallback_reason=(
-                    f"{state.config.kind} requires the current Wan 3D patch grid "
-                    "on every dynamic-shape call"
+                    f"{state.config.kind} requires the current Wan 3D patch grid on every dynamic-shape call"
                 ),
             )
             raise RuntimeError(
-                f"{state.config.kind} requires the current Wan 3D patch grid on "
-                "every dynamic-shape call"
+                f"{state.config.kind} requires the current Wan 3D patch grid on every dynamic-shape call"
             )
         if state.is_dense_step():
             state.scheduled_dense_calls += 1
@@ -1425,14 +1303,10 @@ class ApproximateSelfAttentionProcessor:
                 self._record_event(
                     execution="error",
                     input_tensor=q,
-                    provider_path=lightx2v_kernel_symbol(
-                        _lightx2v_config(state.config)
-                    ),
+                    provider_path=lightx2v_kernel_symbol(_lightx2v_config(state.config)),
                     fallback_reason=capability_reason,
                 )
-                raise RuntimeError(
-                    f"{state.config.kind} cannot execute: {capability_reason}"
-                )
+                raise RuntimeError(f"{state.config.kind} cannot execute: {capability_reason}")
             state.record_kernel_fallback(capability_reason)
             self._record_fallback(q, capability_reason)
             return None
@@ -1440,9 +1314,7 @@ class ApproximateSelfAttentionProcessor:
             try:
                 return self._run_lightx2v(q, k, v, grid, num_heads, head_dim)
             except Exception as exc:
-                provider_path = lightx2v_kernel_symbol(
-                    _lightx2v_config(state.config)
-                )
+                provider_path = lightx2v_kernel_symbol(_lightx2v_config(state.config))
                 self._record_event(
                     execution="error",
                     input_tensor=q,
@@ -1520,11 +1392,7 @@ class ApproximateSelfAttentionProcessor:
             self._record_fallback(
                 q,
                 f"{state.config.kind} provider error: {type(exc).__name__}: {exc}",
-                provider_path=(
-                    "fastvideo_kernel.sliding_tile_attention"
-                    if state.config.kind == "sta"
-                    else None
-                ),
+                provider_path=("fastvideo_kernel.sliding_tile_attention" if state.config.kind == "sta" else None),
                 provider_attempted=state.provider_attempted(),
             )
             return None
@@ -1566,12 +1434,9 @@ class ApproximateSelfAttentionProcessor:
             grid=grid,
             softmax_scale=head_dim**-0.5,
             layer_idx=self._layer_idx,
-            step_index=(
-                invocation.step if invocation is not None else state.step
-            ),
+            step_index=(invocation.step if invocation is not None else state.step),
             request_key=(
-                f"{invocation.request_id}:{invocation.request_epoch}:"
-                f"{invocation.branch}"
+                f"{invocation.request_id}:{invocation.request_epoch}:{invocation.branch}"
                 if invocation is not None
                 else None
             ),
@@ -1585,9 +1450,7 @@ class ApproximateSelfAttentionProcessor:
         elif execution == "provider_dense":
             state.record_provider_dense_success(provider_path)
         else:
-            raise RuntimeError(
-                f"LightX2V adapter returned invalid execution {execution!r}"
-            )
+            raise RuntimeError(f"LightX2V adapter returned invalid execution {execution!r}")
         event_extra = {
             key: value
             for key, value in receipt.items()
@@ -1623,29 +1486,19 @@ class ApproximateSelfAttentionProcessor:
         state = self._state
         adapter = state.fastvideo_sla_adapter
         if adapter is None:
-            raise RuntimeError(
-                f"{state.config.kind} requested without a learned-SLA adapter"
-            )
+            raise RuntimeError(f"{state.config.kind} requested without a learned-SLA adapter")
         if self._layer_idx is None:
-            raise RuntimeError(
-                f"{state.config.kind} requires a Wan blocks.<index> module path"
-            )
+            raise RuntimeError(f"{state.config.kind} requires a Wan blocks.<index> module path")
         if q.ndim != 3 or q.shape != k.shape or q.shape != v.shape:
-            raise RuntimeError(
-                "FastVideo learned SLA requires matching packed [B,S,C] Q/K/V"
-            )
+            raise RuntimeError("FastVideo learned SLA requires matching packed [B,S,C] Q/K/V")
         batch, sequence, dim = q.shape
         num_heads = int(attention.num_heads)
         if dim % num_heads:
-            raise RuntimeError(
-                f"attention dim {dim} is not divisible by num_heads={num_heads}"
-            )
+            raise RuntimeError(f"attention dim {dim} is not divisible by num_heads={num_heads}")
         head_dim = dim // num_heads
         capability_reason = _sparse_runtime_ineligibility(q, head_dim)
         if capability_reason is not None:
-            raise RuntimeError(
-                f"{state.config.kind} cannot execute: {capability_reason}"
-            )
+            raise RuntimeError(f"{state.config.kind} cannot execute: {capability_reason}")
         q_bshd = q.reshape(batch, sequence, num_heads, head_dim).contiguous()
         k_bshd = k.reshape(batch, sequence, num_heads, head_dim).contiguous()
         v_bshd = v.reshape(batch, sequence, num_heads, head_dim).contiguous()
@@ -1699,10 +1552,7 @@ class ApproximateSelfAttentionProcessor:
         state = self._state
         layer_idx = self._layer_idx
         if layer_idx is None:
-            raise RuntimeError(
-                "VMoBA requires a Wan blocks.<index>.self_attn module path; got "
-                f"{self._module_path!r}"
-            )
+            raise RuntimeError(f"VMoBA requires a Wan blocks.<index>.self_attn module path; got {self._module_path!r}")
         if layer_idx < state.config.first_full_layer:
             state.scheduled_dense_calls += 1
             self._record_event(
@@ -1715,9 +1565,7 @@ class ApproximateSelfAttentionProcessor:
         if explicit_grid is None:
             grid = state.default_grid_size
             if grid is None:
-                raise RuntimeError(
-                    "VMoBA requires the current Wan 3D patch grid on every dynamic-shape call"
-                )
+                raise RuntimeError("VMoBA requires the current Wan 3D patch grid on every dynamic-shape call")
         else:
             try:
                 grid = _normalize_grid(explicit_grid)
@@ -1733,32 +1581,21 @@ class ApproximateSelfAttentionProcessor:
             )
         if q.shape != k.shape or q.shape != v.shape:
             raise RuntimeError(
-                "VMoBA Q/K/V shapes must match exactly; got "
-                f"q={tuple(q.shape)}, k={tuple(k.shape)}, v={tuple(v.shape)}"
+                f"VMoBA Q/K/V shapes must match exactly; got q={tuple(q.shape)}, k={tuple(k.shape)}, v={tuple(v.shape)}"
             )
         if q.device != k.device or q.device != v.device:
-            raise RuntimeError(
-                "VMoBA Q/K/V devices must match exactly; got "
-                f"q={q.device}, k={k.device}, v={v.device}"
-            )
+            raise RuntimeError(f"VMoBA Q/K/V devices must match exactly; got q={q.device}, k={k.device}, v={v.device}")
         if q.dtype != k.dtype or q.dtype != v.dtype:
-            raise RuntimeError(
-                "VMoBA Q/K/V dtypes must match exactly; got "
-                f"q={q.dtype}, k={k.dtype}, v={v.dtype}"
-            )
+            raise RuntimeError(f"VMoBA Q/K/V dtypes must match exactly; got q={q.dtype}, k={k.dtype}, v={v.dtype}")
 
         batch, sequence, dim = q.shape
         if math.prod(grid) != sequence:
-            raise RuntimeError(
-                f"VMoBA grid {grid} has {math.prod(grid)} tokens, but Q/K/V have {sequence}"
-            )
+            raise RuntimeError(f"VMoBA grid {grid} has {math.prod(grid)} tokens, but Q/K/V have {sequence}")
         attention_heads = getattr(attention, "num_heads", None)
         if not isinstance(attention_heads, int) or attention_heads <= 0:
             raise RuntimeError("VMoBA requires a positive integer Wan num_heads")
         if dim % attention_heads:
-            raise RuntimeError(
-                f"VMoBA projection width {dim} is not divisible by num_heads={attention_heads}"
-            )
+            raise RuntimeError(f"VMoBA projection width {dim} is not divisible by num_heads={attention_heads}")
         head_dim = dim // attention_heads
         capability_reason = _sparse_runtime_ineligibility(q, head_dim)
         if capability_reason is not None:
@@ -1772,15 +1609,13 @@ class ApproximateSelfAttentionProcessor:
             chunk_h, chunk_w = chunk_layout  # type: ignore[misc]
             if grid[1] % chunk_h or grid[2] % chunk_w:
                 raise RuntimeError(
-                    f"VMoBA spatial grid {grid[1:]} must be divisible by chunk "
-                    f"{chunk_layout} at layer {layer_idx}"
+                    f"VMoBA spatial grid {grid[1:]} must be divisible by chunk {chunk_layout} at layer {layer_idx}"
                 )
         elif chunk_kind == "spatiotemporal":
             chunk_t, chunk_h, chunk_w = chunk_layout  # type: ignore[misc]
             if grid[0] % chunk_t or grid[1] % chunk_h or grid[2] % chunk_w:
                 raise RuntimeError(
-                    f"VMoBA grid {grid} must be divisible by 3D chunk "
-                    f"{chunk_layout} at layer {layer_idx}"
+                    f"VMoBA grid {grid} must be divisible by 3D chunk {chunk_layout} at layer {layer_idx}"
                 )
 
         ops = _require_vmoba_ops()
@@ -1795,9 +1630,7 @@ class ApproximateSelfAttentionProcessor:
         for name, tensor in (("processed Q", q_bshd), ("processed K", k_bshd), ("processed V", v_bshd)):
             result = ops.process_moba_input(tensor, grid, chunk_layout)
             if not isinstance(result, tuple) or len(result) != 2:
-                raise RuntimeError(
-                    "fastvideo_kernel.process_moba_input must return (Tensor, chunk_size)"
-                )
+                raise RuntimeError("fastvideo_kernel.process_moba_input must return (Tensor, chunk_size)")
             transformed = _require_vmoba_tensor(
                 result[0],
                 name=name,
@@ -1808,18 +1641,12 @@ class ApproximateSelfAttentionProcessor:
             provider_chunk_sizes.append(_positive_int("provider moba_chunk_size", result[1]))
             processed.append(transformed)
         if len(set(provider_chunk_sizes)) != 1:
-            raise RuntimeError(
-                "VMoBA provider returned inconsistent Q/K/V chunk sizes: "
-                f"{provider_chunk_sizes}"
-            )
+            raise RuntimeError(f"VMoBA provider returned inconsistent Q/K/V chunk sizes: {provider_chunk_sizes}")
         provider_chunk_size = provider_chunk_sizes[0]
         chunks_per_sample = math.ceil(sequence / provider_chunk_size)
         effective_topk = min(requested_topk, chunks_per_sample)
 
-        q_flat, k_flat, v_flat = (
-            tensor.reshape(batch * sequence, attention_heads, head_dim)
-            for tensor in processed
-        )
+        q_flat, k_flat, v_flat = (tensor.reshape(batch * sequence, attention_heads, head_dim) for tensor in processed)
         cu_seqlens = torch.arange(
             0,
             batch * sequence + 1,
@@ -1861,26 +1688,22 @@ class ApproximateSelfAttentionProcessor:
         )
         packed = restored.reshape(batch, sequence, dim)
         vmoba_receipt = {
-                "algorithm": "vmoba",
-                "grid_size": list(grid),
-                "chunk_kind": chunk_kind,
-                "chunk_layout": (
-                    list(chunk_layout)
-                    if isinstance(chunk_layout, tuple)
-                    else chunk_layout
-                ),
-                "provider_chunk_size": provider_chunk_size,
-                "requested_topk": requested_topk,
-                "effective_topk": effective_topk,
-                "select_mode": state.config.moba_select_mode,
-                "threshold": state.config.moba_threshold,
-                "threshold_type": state.config.moba_threshold_type,
-                "provider_path": "fastvideo_kernel.moba_attn_varlen",
-                "provider_symbols": list(_VMOBA_PROVIDER_SYMBOLS),
-                "packed_input": _tensor_contract(q_bshd),
-                "restored_output": _tensor_contract(restored),
-                **grid_profile_receipt,
-            }
+            "algorithm": "vmoba",
+            "grid_size": list(grid),
+            "chunk_kind": chunk_kind,
+            "chunk_layout": (list(chunk_layout) if isinstance(chunk_layout, tuple) else chunk_layout),
+            "provider_chunk_size": provider_chunk_size,
+            "requested_topk": requested_topk,
+            "effective_topk": effective_topk,
+            "select_mode": state.config.moba_select_mode,
+            "threshold": state.config.moba_threshold,
+            "threshold_type": state.config.moba_threshold_type,
+            "provider_path": "fastvideo_kernel.moba_attn_varlen",
+            "provider_symbols": list(_VMOBA_PROVIDER_SYMBOLS),
+            "packed_input": _tensor_contract(q_bshd),
+            "restored_output": _tensor_contract(restored),
+            **grid_profile_receipt,
+        }
         state.record_vmoba_success(vmoba_receipt)
         self._record_event(
             execution="sparse",
@@ -2010,16 +1833,20 @@ class ApproximateSelfAttentionProcessor:
         batch, sequence, heads, head_dim = raster_output.shape
         packed = raster_output.reshape(batch, sequence, heads * head_dim)
         provider_output = output if provider_layout == "BSHD" else output_bhsd
-        return packed, provider_path, {
-            "input_tensor": provider_q,
-            "output_tensor": provider_output,
-            "grid_size": list(grid),
-            "block_tile": list(tile),
-            "provider_layout": provider_layout,
-            "topk": topk,
-            "num_blocks": metadata.num_blocks,
-            "padded_sequence": metadata.padded_sequence,
-        }
+        return (
+            packed,
+            provider_path,
+            {
+                "input_tensor": provider_q,
+                "output_tensor": provider_output,
+                "grid_size": list(grid),
+                "block_tile": list(tile),
+                "provider_layout": provider_layout,
+                "topk": topk,
+                "num_blocks": metadata.num_blocks,
+                "padded_sequence": metadata.padded_sequence,
+            },
+        )
 
 
 def parse_approximate_attention(option: Any) -> ApproximateAttentionConfig:
@@ -2158,31 +1985,23 @@ def install_approximate_attention(
         _require_vmoba_ops()
         if not matching_attention:
             raise RuntimeError("VMoBA requested but no Wan SelfAttention blocks matched")
-        missing_paths = [
-            module_path
-            for module_path, _ in matching_attention
-            if _wan_block_index(module_path) is None
-        ]
+        missing_paths = [module_path for module_path, _ in matching_attention if _wan_block_index(module_path) is None]
         if missing_paths:
             raise RuntimeError(
-                "VMoBA requires every attention module to live under blocks.<index>; "
-                f"unmatched paths={missing_paths}"
+                f"VMoBA requires every attention module to live under blocks.<index>; unmatched paths={missing_paths}"
             )
-        layer_indices = [
-            _wan_block_index(module_path)
-            for module_path, _ in matching_attention
-        ]
+        layer_indices = [_wan_block_index(module_path) for module_path, _ in matching_attention]
         if len(set(layer_indices)) != len(layer_indices):
-            raise RuntimeError(
-                f"VMoBA found duplicate Wan block indices: {layer_indices}"
-            )
-    elif config.kind in {
-        *_LIGHTX2V_SPARSE_KINDS,
-        *_FASTVIDEO_SLA_KINDS,
-    } and not matching_attention:
-        raise RuntimeError(
-            f"{config.kind} requested but no Wan SelfAttention blocks matched"
-        )
+            raise RuntimeError(f"VMoBA found duplicate Wan block indices: {layer_indices}")
+    elif (
+        config.kind
+        in {
+            *_LIGHTX2V_SPARSE_KINDS,
+            *_FASTVIDEO_SLA_KINDS,
+        }
+        and not matching_attention
+    ):
+        raise RuntimeError(f"{config.kind} requested but no Wan SelfAttention blocks matched")
     if config.kind in _FASTVIDEO_SLA_KINDS:
         indexed_attention: dict[int, tuple[str, nn.Module]] = {}
         for ordinal, (module_path, module) in enumerate(matching_attention):
@@ -2190,10 +2009,7 @@ def install_approximate_attention(
             if layer_idx is None:
                 layer_idx = ordinal
             if layer_idx in indexed_attention:
-                raise RuntimeError(
-                    "FastVideo learned SLA found duplicate Wan block index "
-                    f"{layer_idx}"
-                )
+                raise RuntimeError(f"FastVideo learned SLA found duplicate Wan block index {layer_idx}")
             indexed_attention[layer_idx] = (module_path, module)
         expected_layers = list(range(len(indexed_attention)))
         if sorted(indexed_attention) != expected_layers:
@@ -2202,9 +2018,7 @@ def install_approximate_attention(
                 f"expected={expected_layers}, actual={sorted(indexed_attention)}"
             )
         if checkpoint_state_dict is None:
-            raise RuntimeError(
-                f"{config.kind} requires learned proj_l checkpoint tensors"
-            )
+            raise RuntimeError(f"{config.kind} requires learned proj_l checkpoint tensors")
         layer_specs = []
         for layer_idx in expected_layers:
             module_path, module = indexed_attention[layer_idx]
@@ -2228,11 +2042,7 @@ def install_approximate_attention(
             layer_specs=layer_specs,
             checkpoint_state_dict=checkpoint_state_dict,
         )
-        setattr(
-            model,
-            "_worldfoundry_fastvideo_sla_adapter",
-            state.fastvideo_sla_adapter,
-        )
+        model._worldfoundry_fastvideo_sla_adapter = state.fastvideo_sla_adapter
     wrapped = 0
     installed_layer_indices: list[int] = []
     for ordinal, (module_path, module) in enumerate(matching_attention):
@@ -2267,10 +2077,7 @@ def install_approximate_attention(
     if (
         config.kind == "vsa"
         and matching_attention
-        and not any(
-            _gate_projection(module) is not None
-            for _, module in matching_attention
-        )
+        and not any(_gate_projection(module) is not None for _, module in matching_attention)
     ):
         install_reasons.append("VSA-QAT gate weights unavailable")
         state.notes.append(
@@ -2357,18 +2164,13 @@ def prepare_lightx2v_providers(
             continue
         layer_idx = processor._layer_idx
         if layer_idx is None:
-            raise RuntimeError(
-                f"LightX2V provider preparation needs a layer index for {module_path}"
-            )
+            raise RuntimeError(f"LightX2V provider preparation needs a layer index for {module_path}")
         projection = getattr(module, "qkv", None)
         if projection is None:
             projection = getattr(module, "q", None)
         weight = getattr(projection, "weight", None)
         layer_device = (
-            weight.device
-            if isinstance(weight, torch.Tensor)
-            and weight.device.type == "cuda"
-            else default_device
+            weight.device if isinstance(weight, torch.Tensor) and weight.device.type == "cuda" else default_device
         )
         receipt = processor._get_lightx2v_adapter().prepare(
             device=layer_device,
@@ -2385,24 +2187,14 @@ def prepare_lightx2v_providers(
             f"{state.config.kind} load preparation incomplete: "
             f"expected={sorted(expected_layers)}, prepared={sorted(prepared_layers)}"
         )
-    materialized = sum(
-        receipt.get("provider_materialized") is True for receipt in receipts
-    )
-    preflight = sum(
-        receipt.get("preflight_completed") is True for receipt in receipts
-    )
+    materialized = sum(receipt.get("provider_materialized") is True for receipt in receipts)
+    preflight = sum(receipt.get("preflight_completed") is True for receipt in receipts)
     state.lightx2v_load_preparation = {
         "attempted": True,
         "preflight_blocks": preflight,
         "materialized_blocks": materialized,
         "deferred_blocks": len(receipts) - materialized,
-        "devices": sorted(
-            {
-                str(receipt["device"])
-                for receipt in receipts
-                if isinstance(receipt.get("device"), str)
-            }
-        ),
+        "devices": sorted({str(receipt["device"]) for receipt in receipts if isinstance(receipt.get("device"), str)}),
     }
 
 
@@ -2431,14 +2223,10 @@ def advance_approximate_step(
         state._last_finalized_request_id.set(None)
         return
     if request_id is None or branch is None:
-        raise ValueError(
-            "request_id and branch must be supplied together for approximate attention"
-        )
+        raise ValueError("request_id and branch must be supplied together for approximate attention")
     resolved_total_steps = state.total_steps
     if resolved_total_steps is None:
-        raise ValueError(
-            "request-local approximate attention requires explicit total_steps"
-        )
+        raise ValueError("request-local approximate attention requires explicit total_steps")
     state.begin_invocation(
         request_id=request_id,
         branch=branch,
@@ -2526,28 +2314,18 @@ def _lightx2v_report_view(
         return None
     config = _lightx2v_config(state.config)
     canonical_symbol = lightx2v_kernel_symbol(config)
-    sparse_events = [
-        event for event in events if event.get("execution") == "sparse"
-    ]
-    provider_dense_events = [
-        event for event in events if event.get("execution") == "provider_dense"
-    ]
+    sparse_events = [event for event in events if event.get("execution") == "sparse"]
+    provider_dense_events = [event for event in events if event.get("execution") == "provider_dense"]
     provider_events = [*sparse_events, *provider_dense_events]
     # Provider events are normalized receipts. Tensor contracts are
     # stored once by ``_record_event`` instead of embedding a duplicate nested
     # receipt for every layer and denoise step.
-    provider_receipts = [
-        event
-        for event in provider_events
-        if isinstance(event.get("provider_family"), str)
-    ]
+    provider_receipts = [event for event in provider_events if isinstance(event.get("provider_family"), str)]
     source_commits = sorted(
         {
             str(commit)
             for receipt in provider_receipts
-            if isinstance(
-                (commit := receipt.get("provider_source_commit")), str
-            )
+            if isinstance((commit := receipt.get("provider_source_commit")), str)
         }
     )
     source_fingerprints = sorted(
@@ -2555,21 +2333,13 @@ def _lightx2v_report_view(
             str(fingerprint)
             for receipt in provider_receipts
             if isinstance(
-                (
-                    fingerprint := receipt.get(
-                        "provider_source_fingerprint"
-                    )
-                ),
+                (fingerprint := receipt.get("provider_source_fingerprint")),
                 str,
             )
         }
     )
     provider_paths = sorted(
-        {
-            str(path)
-            for event in sparse_events
-            if isinstance((path := event.get("provider_path")), str)
-        }
+        {str(path) for event in sparse_events if isinstance((path := event.get("provider_path")), str)}
     )
     complete_receipts = len(provider_receipts) == len(provider_events)
     return {
@@ -2579,41 +2349,24 @@ def _lightx2v_report_view(
             {
                 str(family)
                 for receipt in provider_receipts
-                if isinstance(
-                    (family := receipt.get("provider_family")), str
-                )
+                if isinstance((family := receipt.get("provider_family")), str)
             }
         ),
         "operator": config.operator,
         "canonical_provider_symbol": canonical_symbol,
-        "canonical_provider_executed": bool(sparse_events)
-        and provider_paths == [canonical_symbol],
+        "canonical_provider_executed": bool(sparse_events) and provider_paths == [canonical_symbol],
         "reference_lightx2v_commit": PINNED_LIGHTX2V_COMMIT,
-        "provider_source_commit": (
-            source_commits[0] if len(source_commits) == 1 else None
-        ),
+        "provider_source_commit": (source_commits[0] if len(source_commits) == 1 else None),
         "provider_source_commits": source_commits,
         "provider_source_fingerprints": source_fingerprints,
         "provider_commit_complete": bool(provider_receipts)
-        and all(
-            isinstance(receipt.get("provider_source_commit"), str)
-            for receipt in provider_receipts
-        ),
+        and all(isinstance(receipt.get("provider_source_commit"), str) for receipt in provider_receipts),
         "provider_source_clean": bool(provider_receipts)
-        and all(
-            receipt.get("provider_source_clean") is True
-            for receipt in provider_receipts
-        ),
+        and all(receipt.get("provider_source_clean") is True for receipt in provider_receipts),
         "reference_parity_verified": bool(provider_receipts)
         and complete_receipts
-        and all(
-            receipt.get("reference_parity_verified") is True
-            for receipt in provider_receipts
-        ),
-        "provider_calls": sum(
-            int(receipt.get("provider_calls", 0))
-            for receipt in provider_receipts
-        ),
+        and all(receipt.get("reference_parity_verified") is True for receipt in provider_receipts),
+        "provider_calls": sum(int(receipt.get("provider_calls", 0)) for receipt in provider_receipts),
         "receipt_count": len(provider_receipts),
         "sparse_event_count": len(sparse_events),
         "provider_dense_event_count": len(provider_dense_events),
@@ -2631,29 +2384,15 @@ def _fastvideo_sla_report_view(
 
     if state.config.kind not in _FASTVIDEO_SLA_KINDS:
         return None
-    sparse_events = [
-        event for event in events if event.get("execution") == "sparse"
-    ]
+    sparse_events = [event for event in events if event.get("execution") == "sparse"]
     provider_paths = sorted(
-        {
-            str(path)
-            for event in sparse_events
-            if isinstance((path := event.get("provider_path")), str)
-        }
+        {str(path) for event in sparse_events if isinstance((path := event.get("provider_path")), str)}
     )
     reference_paths = sorted(
-        {
-            str(path)
-            for event in sparse_events
-            if isinstance((path := event.get("reference_provider_path")), str)
-        }
+        {str(path) for event in sparse_events if isinstance((path := event.get("reference_provider_path")), str)}
     )
     source_commits = sorted(
-        {
-            str(commit)
-            for event in sparse_events
-            if isinstance((commit := event.get("provider_source_commit")), str)
-        }
+        {str(commit) for event in sparse_events if isinstance((commit := event.get("provider_source_commit")), str)}
     )
     provider_fingerprints = sorted(
         {
@@ -2667,35 +2406,19 @@ def _fastvideo_sla_report_view(
             str(fingerprint)
             for event in sparse_events
             if isinstance(
-                (
-                    fingerprint := event.get(
-                        "all_projection_weights_fingerprint"
-                    )
-                ),
+                (fingerprint := event.get("all_projection_weights_fingerprint")),
                 str,
             )
         }
     )
     checkpoint_layouts = sorted(
-        {
-            str(layout)
-            for event in sparse_events
-            if isinstance((layout := event.get("checkpoint_layout")), str)
-        }
+        {str(layout) for event in sparse_events if isinstance((layout := event.get("checkpoint_layout")), str)}
     )
     source_roots = sorted(
-        {
-            str(root)
-            for event in sparse_events
-            if isinstance((root := event.get("provider_source_root")), str)
-        }
+        {str(root) for event in sparse_events if isinstance((root := event.get("provider_source_root")), str)}
     )
     source_files = sorted(
-        {
-            str(path)
-            for event in sparse_events
-            if isinstance((path := event.get("provider_source_file")), str)
-        }
+        {str(path) for event in sparse_events if isinstance((path := event.get("provider_source_file")), str)}
     )
     layer_projection_values: dict[int, set[str]] = {}
     layer_source_key_values: dict[int, set[tuple[str, ...]]] = {}
@@ -2707,16 +2430,10 @@ def _fastvideo_sla_report_view(
         if isinstance(fingerprint, str):
             layer_projection_values.setdefault(layer_index, set()).add(fingerprint)
         source_keys = event.get("projection_source_keys")
-        if isinstance(source_keys, (list, tuple)) and all(
-            isinstance(key, str) for key in source_keys
-        ):
-            layer_source_key_values.setdefault(layer_index, set()).add(
-                tuple(source_keys)
-            )
+        if isinstance(source_keys, (list, tuple)) and all(isinstance(key, str) for key in source_keys):
+            layer_source_key_values.setdefault(layer_index, set()).add(tuple(source_keys))
     layer_projection_fingerprints = {
-        str(layer): next(iter(values))
-        for layer, values in sorted(layer_projection_values.items())
-        if len(values) == 1
+        str(layer): next(iter(values)) for layer, values in sorted(layer_projection_values.items()) if len(values) == 1
     }
     projection_source_keys = {
         str(layer): list(next(iter(values)))
@@ -2724,11 +2441,7 @@ def _fastvideo_sla_report_view(
         if len(values) == 1
     }
     provider_families = sorted(
-        {
-            str(family)
-            for event in sparse_events
-            if isinstance((family := event.get("provider_family")), str)
-        }
+        {str(family) for event in sparse_events if isinstance((family := event.get("provider_family")), str)}
     )
     expected_family = (
         "fastvideo/sparse-linear-attention"
@@ -2741,78 +2454,61 @@ def _fastvideo_sla_report_view(
         else "fastvideo.attention.backends.sla.SageSLAAttentionImpl"
     )
     expected_layers = set(state.layer_indices)
-    complete = bool(sparse_events) and all(
-        event.get("provider_calls") == 1
-        and event.get("provider_family") == expected_family
-        and event.get("provider_path") == expected_provider_path
-        and event.get("reference_provider_path") == expected_provider_path
-        and event.get("injected_test_provider") is False
-        and event.get("reference_fastvideo_commit") == PINNED_FASTVIDEO_COMMIT
-        and event.get("provider_source_commit") == PINNED_FASTVIDEO_COMMIT
-        and event.get("provider_source_clean") is True
-        and event.get("reference_parity_verified") is True
-        and event.get("topk_ratio") == state.config.fastvideo_topk_ratio
-        and event.get("feature_map") == state.config.fastvideo_feature_map
-        and event.get("runtime_effective") is True
-        for event in sparse_events
-    ) and set(layer_projection_values) == expected_layers and all(
-        len(values) == 1 for values in layer_projection_values.values()
-    ) and set(layer_source_key_values) == expected_layers and all(
-        len(values) == 1 for values in layer_source_key_values.values()
+    complete = (
+        bool(sparse_events)
+        and all(
+            event.get("provider_calls") == 1
+            and event.get("provider_family") == expected_family
+            and event.get("provider_path") == expected_provider_path
+            and event.get("reference_provider_path") == expected_provider_path
+            and event.get("injected_test_provider") is False
+            and event.get("reference_fastvideo_commit") == PINNED_FASTVIDEO_COMMIT
+            and event.get("provider_source_commit") == PINNED_FASTVIDEO_COMMIT
+            and event.get("provider_source_clean") is True
+            and event.get("reference_parity_verified") is True
+            and event.get("topk_ratio") == state.config.fastvideo_topk_ratio
+            and event.get("feature_map") == state.config.fastvideo_feature_map
+            and event.get("runtime_effective") is True
+            for event in sparse_events
+        )
+        and set(layer_projection_values) == expected_layers
+        and all(len(values) == 1 for values in layer_projection_values.values())
+        and set(layer_source_key_values) == expected_layers
+        and all(len(values) == 1 for values in layer_source_key_values.values())
     )
     return {
         "algorithm": state.config.kind,
         "provider_family": expected_family,
         "provider_families": provider_families,
         "expected_layers": list(state.layer_indices),
-        "canonical_provider_path": (
-            reference_paths[0] if len(reference_paths) == 1 else None
-        ),
+        "canonical_provider_path": (reference_paths[0] if len(reference_paths) == 1 else None),
         "canonical_provider_executed": bool(sparse_events)
         and len(reference_paths) == 1
         and provider_paths == reference_paths,
         "reference_fastvideo_commit": PINNED_FASTVIDEO_COMMIT,
-        "provider_source_commit": (
-            source_commits[0] if len(source_commits) == 1 else None
-        ),
+        "provider_source_commit": (source_commits[0] if len(source_commits) == 1 else None),
         "provider_source_commits": source_commits,
         "provider_fingerprints": provider_fingerprints,
-        "provider_source_root": (
-            source_roots[0] if len(source_roots) == 1 else None
-        ),
+        "provider_source_root": (source_roots[0] if len(source_roots) == 1 else None),
         "provider_source_roots": source_roots,
-        "provider_source_file": (
-            source_files[0] if len(source_files) == 1 else None
-        ),
+        "provider_source_file": (source_files[0] if len(source_files) == 1 else None),
         "provider_source_files": source_files,
         "provider_commit_complete": bool(sparse_events)
-        and all(
-            event.get("provider_source_commit") == PINNED_FASTVIDEO_COMMIT
-            for event in sparse_events
-        ),
+        and all(event.get("provider_source_commit") == PINNED_FASTVIDEO_COMMIT for event in sparse_events),
         "provider_source_clean": bool(sparse_events)
-        and all(
-            event.get("provider_source_clean") is True
-            for event in sparse_events
-        ),
+        and all(event.get("provider_source_clean") is True for event in sparse_events),
         "reference_parity_verified": complete,
-        "checkpoint_layout": (
-            checkpoint_layouts[0] if len(checkpoint_layouts) == 1 else None
-        ),
+        "checkpoint_layout": (checkpoint_layouts[0] if len(checkpoint_layouts) == 1 else None),
         "checkpoint_layouts": checkpoint_layouts,
         "all_projection_weights_fingerprint": (
-            projection_fingerprints[0]
-            if len(projection_fingerprints) == 1
-            else None
+            projection_fingerprints[0] if len(projection_fingerprints) == 1 else None
         ),
         "projection_fingerprints": projection_fingerprints,
         "layer_projection_fingerprints": layer_projection_fingerprints,
         "projection_source_keys": projection_source_keys,
         "topk_ratio": state.config.fastvideo_topk_ratio,
         "feature_map": state.config.fastvideo_feature_map,
-        "provider_calls": sum(
-            int(event.get("provider_calls", 0)) for event in sparse_events
-        ),
+        "provider_calls": sum(int(event.get("provider_calls", 0)) for event in sparse_events),
         "receipt_count": len(sparse_events),
         "sparse_event_count": len(sparse_events),
         "events": sparse_events,
@@ -2843,12 +2539,9 @@ def _request_coverage(
         )
         observed_steps = sorted(step_layers)
         routed_history = list(request.branch_step_history.get(branch, ()))
-        expected_steps = (
-            routed_history if request.routed_steps else list(range(request.total_steps))
-        )
+        expected_steps = routed_history if request.routed_steps else list(range(request.total_steps))
         steps_valid = (
-            len(routed_history) == len(set(routed_history))
-            and routed_history == sorted(routed_history)
+            len(routed_history) == len(set(routed_history)) and routed_history == sorted(routed_history)
             if request.routed_steps
             else observed_steps == list(range(observed_steps[-1] + 1))
             if observed_steps
@@ -2892,15 +2585,11 @@ def _request_coverage(
     event_totals_match_counters = (
         counter_event_total == len(events)
         and execution_counts.get("sparse", 0) == request.sparse_calls
-        and execution_counts.get("provider_dense", 0)
-        == request.provider_dense_calls
-        and execution_counts.get("scheduled_dense", 0)
-        == request.scheduled_dense_calls
+        and execution_counts.get("provider_dense", 0) == request.provider_dense_calls
+        and execution_counts.get("scheduled_dense", 0) == request.scheduled_dense_calls
         and execution_counts.get("fallback", 0) == request.kernel_fallbacks
-        and sum(bool(event.get("provider_attempted")) for event in events)
-        == request.kernel_attempts
-        and sum(bool(event.get("dense_fallback_executed")) for event in events)
-        == request.dense_fallback_calls
+        and sum(bool(event.get("provider_attempted")) for event in events) == request.kernel_attempts
+        and sum(bool(event.get("dense_fallback_executed")) for event in events) == request.dense_fallback_calls
     )
     provider_contract_complete = all(
         isinstance(event.get("provider_path"), str)
@@ -2960,15 +2649,11 @@ def _active_request_report(
     if request.sparse_calls and not request.kernel_fallbacks:
         effective_kernel = state.config.kind
     elif request.sparse_calls:
-        effective_kernel = (
-            f"exact/{state.config.kind} mixed (sparse provider fallback)"
-        )
+        effective_kernel = f"exact/{state.config.kind} mixed (sparse provider fallback)"
     elif request.kernel_fallbacks:
         effective_kernel = "exact (sparse provider runtime fallback)"
     elif request.provider_dense_calls:
-        effective_kernel = (
-            f"{state.config.kind} (provider-designed dense phase only)"
-        )
+        effective_kernel = f"{state.config.kind} (provider-designed dense phase only)"
     elif request.scheduled_dense_calls:
         effective_kernel = "exact (scheduled dense)"
     else:
@@ -2988,11 +2673,7 @@ def _active_request_report(
         "wrapped_blocks": state.wrapped_blocks,
         "expected_layers": list(state.layer_indices),
         "expected_calls": coverage["expected_calls"],
-        "runtime_effective": (
-            request.sparse_calls > 0
-            and request.kernel_fallbacks == 0
-            and error_calls == 0
-        ),
+        "runtime_effective": (request.sparse_calls > 0 and request.kernel_fallbacks == 0 and error_calls == 0),
         "kernel_attempts": request.kernel_attempts,
         "sparse_calls": request.sparse_calls,
         "provider_dense_calls": request.provider_dense_calls,
@@ -3002,9 +2683,7 @@ def _active_request_report(
         "effective_kernel": effective_kernel,
         "provider_path": provider_paths[0] if len(provider_paths) == 1 else None,
         "provider_paths": provider_paths,
-        "provider_dense_path": (
-            provider_dense_paths[0] if len(provider_dense_paths) == 1 else None
-        ),
+        "provider_dense_path": (provider_dense_paths[0] if len(provider_dense_paths) == 1 else None),
         "provider_dense_paths": provider_dense_paths,
         "grid_size": request.grid_size,
         "branches": coverage["branches"],
@@ -3027,9 +2706,7 @@ def finalize_approximate_attention_request(
     """Freeze one immutable receipt, then release its active event ledger."""
 
     if not isinstance(request_id, str) or not request_id.strip():
-        raise ValueError(
-            "finalize_approximate_attention_request requires a non-empty request_id"
-        )
+        raise ValueError("finalize_approximate_attention_request requires a non-empty request_id")
     request = state.request_state(request_id, create=False)
     if request is None:
         return
@@ -3090,9 +2767,7 @@ def approximate_attention_report(
         if isinstance(encoded, str):
             report = json.loads(encoded)
             if not isinstance(report, dict):
-                raise TypeError(
-                    "approximate-attention receipt snapshot must decode to an object"
-                )
+                raise TypeError("approximate-attention receipt snapshot must decode to an object")
             report["lifecycle"] = approximate_attention_lifecycle_report(state)
             return report
 
@@ -3154,26 +2829,22 @@ def fastvideo_sla_attention_report(
 
     report = approximate_attention_report(state, request_id)
     fastvideo_sla = report.get("fastvideo_sla")
-    return (
-        dict(fastvideo_sla)
-        if isinstance(fastvideo_sla, Mapping)
-        else None
-    )
+    return dict(fastvideo_sla) if isinstance(fastvideo_sla, Mapping) else None
 
 
 __all__ = [
     "ApproximateAttentionConfig",
     "ApproximateSelfAttentionProcessor",
-    "parse_approximate_attention",
-    "install_approximate_attention",
+    "_recoverable_sparse_kernel_error",
     "advance_approximate_step",
-    "finalize_approximate_attention_request",
     "approximate_attention_lifecycle_report",
-    "reset_approximate_attention",
     "approximate_attention_report",
-    "lightx2v_attention_report",
     "fastvideo_sla_attention_report",
+    "finalize_approximate_attention_request",
+    "install_approximate_attention",
+    "lightx2v_attention_report",
+    "parse_approximate_attention",
     "place_fastvideo_sla_providers",
     "prepare_lightx2v_providers",
-    "_recoverable_sparse_kernel_error",
+    "reset_approximate_attention",
 ]

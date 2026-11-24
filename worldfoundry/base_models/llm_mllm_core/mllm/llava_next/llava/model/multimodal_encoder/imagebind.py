@@ -1,12 +1,11 @@
 import torch
 import torch.nn as nn
-
 from transformers import CLIPImageProcessor
 
 try:
+    from imagebind.data import load_and_transform_audio_data
     from imagebind.models import imagebind_model
     from imagebind.models.imagebind_model import ModalityType
-    from imagebind.data import load_and_transform_audio_data
 except ImportError:
     pass
 
@@ -40,7 +39,7 @@ class ImageBindWrapper(nn.Module):
 
     @torch.no_grad()
     def forward(self, x):
-        if type(x) == dict:
+        if type(x) is dict:
             if x["audios"] is not None:
                 inputs = {ModalityType.AUDIO: load_and_transform_audio_data(x["audios"], device=self.device).half()}
                 embeddings = self.vision_tower(inputs)

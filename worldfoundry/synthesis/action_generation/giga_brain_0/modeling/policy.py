@@ -1,13 +1,15 @@
 import math
 
 import torch
-import torch.nn.functional as F  # noqa: N812
+import torch.nn.functional as F
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.modeling_utils import ModelMixin
 from torch import Tensor, nn
 
-from .paligemma2 import PaliGemma2WithExpertModel
+from worldfoundry.base_models.llm_mllm_core.action.tensor_ops import make_att_2d_masks as make_att_2d_masks
+
 from .paligemma import PaliGemmaWithExpertModel
+from .paligemma2 import PaliGemma2WithExpertModel
 
 
 class GigaBrain0Policy(ModelMixin, ConfigMixin):
@@ -17,7 +19,7 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
         max_state_dim: int = 32,
         max_action_dim: int = 32,
         proj_width: int = 1024,
-        vlm_type: str = 'paligemma2',
+        vlm_type: str = "paligemma2",
         vlm_hidden_size: int = 2304,
         n_action_steps: int = 50,
         num_steps: int = 10,
@@ -47,12 +49,12 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
         self.vlm_type = vlm_type
         self.vlm_hidden_size = vlm_hidden_size
 
-        if self.vlm_type == 'paligemma2':
+        if self.vlm_type == "paligemma2":
             self.paligemma_with_expert = PaliGemma2WithExpertModel(
                 vision_in_channels=vision_in_channels,
                 enable_next_token_prediction=enable_next_token_prediction,
             )
-        elif self.vlm_type == 'paligemma':
+        elif self.vlm_type == "paligemma":
             self.paligemma_with_expert = PaliGemmaWithExpertModel(
                 vision_in_channels=vision_in_channels,
                 enable_next_token_prediction=enable_next_token_prediction,
@@ -60,8 +62,12 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
             )
 
         # Projections are float32
-        self.action_in_proj = EmbodimentSpecificLinear(self.max_action_dim, self.proj_width, num_categories=num_embodiments, dtype=torch.float32)
-        self.action_out_proj = EmbodimentSpecificLinear(self.proj_width, self.max_action_dim, num_categories=num_embodiments, dtype=torch.float32)
+        self.action_in_proj = EmbodimentSpecificLinear(
+            self.max_action_dim, self.proj_width, num_categories=num_embodiments, dtype=torch.float32
+        )
+        self.action_out_proj = EmbodimentSpecificLinear(
+            self.proj_width, self.max_action_dim, num_categories=num_embodiments, dtype=torch.float32
+        )
         self.time_mlp_in = nn.Linear(self.proj_width, self.proj_width, dtype=torch.float32)
         self.time_mlp_out = nn.Linear(self.proj_width, self.proj_width, dtype=torch.float32)
 
@@ -72,7 +78,9 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
             self.max_traj_dim = max_traj_dim
             self.traj_hidden_dim = traj_hidden_dim
             self.traj_token = nn.Parameter(torch.randn(num_traj_tokens, self.vlm_hidden_size), requires_grad=True)
-            self.traj_decoder = nn.GRU(input_size=self.vlm_hidden_size, hidden_size=self.traj_hidden_dim, batch_first=True)
+            self.traj_decoder = nn.GRU(
+                input_size=self.vlm_hidden_size, hidden_size=self.traj_hidden_dim, batch_first=True
+            )
             self.traj_out_proj = nn.Linear(self.traj_hidden_dim, self.max_traj_dim, dtype=torch.float32)
 
     def forward(
@@ -112,8 +120,8 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
         """
         lang_length = lang_masks.shape[-1]
 
-        prefix_embs, prefix_pad_masks, prefix_att_masks, fast_action_indicator, traj_token_start_idx = self.embed_prefix(
-            images, img_masks, lang_tokens, lang_masks, lang_att_masks, fast_action_indicator
+        prefix_embs, prefix_pad_masks, prefix_att_masks, fast_action_indicator, traj_token_start_idx = (
+            self.embed_prefix(images, img_masks, lang_tokens, lang_masks, lang_att_masks, fast_action_indicator)
         )
         suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(x_t, timestep, emb_ids=emb_ids)
 
@@ -154,9 +162,9 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
             )
 
             # Detach KV cache for knowledge insulation
-            for key in past_key_values.keys():
-                past_key_values[key]['key_states'] = past_key_values[key]['key_states'].detach()
-                past_key_values[key]['value_states'] = past_key_values[key]['value_states'].detach()
+            for key in past_key_values.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+                past_key_values[key]["key_states"] = past_key_values[key]["key_states"].detach()
+                past_key_values[key]["value_states"] = past_key_values[key]["value_states"].detach()
 
             suffix_att_2d_masks = full_att_2d[:, prefix_len:, :]
 
@@ -189,14 +197,14 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
         suffix_out = suffix_out[:, -self.n_action_steps :]
         suffix_out = suffix_out.to(dtype=self.action_out_proj.weight.dtype)
         v_t = self.action_out_proj(suffix_out, emb_ids=emb_ids)
-        output['v_t'] = v_t
+        output["v_t"] = v_t
 
         # Compute language logits
         if self.enable_next_token_prediction:
             lang_out = prefix_out[:, -lang_length:, :]
             lang_out = lang_out.to(dtype=self.paligemma_with_expert.lm_head.weight.dtype)
             lang_logits = self.paligemma_with_expert.language_out_proj(lang_out)
-            output['lang_logits'] = lang_logits
+            output["lang_logits"] = lang_logits
 
         # Compute trajectory predictions
         if self.enable_learnable_traj_token:
@@ -204,7 +212,7 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
             traj_out = traj_out.to(dtype=self.traj_out_proj.weight.dtype)
             traj_out, _ = self.traj_decoder(traj_out)
             traj_pred = self.traj_out_proj(traj_out)
-            output['traj_pred'] = traj_pred
+            output["traj_pred"] = traj_pred
 
         return output
 
@@ -279,7 +287,9 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
         total_seq_len = num_img_embs_total + num_traj_embs + num_lang_embs
 
         # Pre-allocate final tensors
-        embs = torch.empty(bsize, total_seq_len, img_emb_dim, dtype=img_embs_concat.dtype, device=img_embs_concat.device)
+        embs = torch.empty(
+            bsize, total_seq_len, img_emb_dim, dtype=img_embs_concat.dtype, device=img_embs_concat.device
+        )
         pad_masks = torch.empty(bsize, total_seq_len, dtype=torch.bool, device=img_embs_concat.device)
 
         # Fill pre-allocated tensors
@@ -310,7 +320,9 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
 
         return embs, pad_masks, att_masks, fast_action_indicator, traj_token_start_idx
 
-    def embed_suffix(self, noisy_actions: Tensor, timestep: Tensor, emb_ids: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    def embed_suffix(
+        self, noisy_actions: Tensor, timestep: Tensor, emb_ids: Tensor
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         """Embeds suffix inputs (noisy actions and timestep) for the
         transformer.
 
@@ -336,7 +348,9 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
         device = action_emb.device
 
         # Embed timestep using sine-cosine positional encoding with sensitivity in the range [0, 1]
-        time_emb = create_sinusoidal_pos_embedding(timestep, self.proj_width, min_period=4e-3, max_period=4.0, device=device)
+        time_emb = create_sinusoidal_pos_embedding(
+            timestep, self.proj_width, min_period=4e-3, max_period=4.0, device=device
+        )
         time_emb = time_emb.type(dtype=dtype)
 
         # Time MLP (for adaRMS)
@@ -419,7 +433,9 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
             noise = self.sample_noise(actions_shape, device)
         noise = noise.to(dtype=self.action_in_proj.weight.dtype, device=device)
 
-        prefix_embs, prefix_pad_masks, prefix_att_masks, _, traj_token_start_idx = self.embed_prefix(images, img_masks, lang_tokens, lang_masks)
+        prefix_embs, prefix_pad_masks, prefix_att_masks, _, traj_token_start_idx = self.embed_prefix(
+            images, img_masks, lang_tokens, lang_masks
+        )
         prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
         prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
 
@@ -521,7 +537,9 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
         device = lang_tokens.device
 
         # embed prefix (images + lang)
-        prefix_embs, prefix_pad_masks, prefix_att_masks, _, _ = self.embed_prefix(images, img_masks, lang_tokens, lang_masks)
+        prefix_embs, prefix_pad_masks, prefix_att_masks, _, _ = self.embed_prefix(
+            images, img_masks, lang_tokens, lang_masks
+        )
         prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
         prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
 
@@ -549,11 +567,11 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
         position_cursor = torch.sum(prefix_pad_masks, dim=-1).to(dtype=torch.long)
 
         state = {
-            'past_key_values': past_key_values,
-            'position_cursor': position_cursor,
-            'batch_size': bsize,
-            'device': device,
-            'prefix_pad_masks': prefix_pad_masks[:, None, :],
+            "past_key_values": past_key_values,
+            "position_cursor": position_cursor,
+            "batch_size": bsize,
+            "device": device,
+            "prefix_pad_masks": prefix_pad_masks[:, None, :],
         }
         return next_logits, state
 
@@ -576,11 +594,11 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
             - next_logits: Logits for the next token prediction, shape (batch_size, vocab_size).
             - state: The updated state dictionary for the next generation step.
         """
-        past_key_values = state['past_key_values']
-        position_cursor = state['position_cursor']
-        bsize = state['batch_size']
-        device = state['device']
-        prefix_pad_masks = state['prefix_pad_masks']
+        past_key_values = state["past_key_values"]
+        position_cursor = state["position_cursor"]
+        bsize = state["batch_size"]
+        device = state["device"]
+        prefix_pad_masks = state["prefix_pad_masks"]
 
         # Prepare single-step language token embedding
         if input_token.dtype != torch.long:
@@ -613,9 +631,9 @@ class GigaBrain0Policy(ModelMixin, ConfigMixin):
         next_logits = self.paligemma_with_expert.language_out_proj(lang_out)[:, 0, :]
 
         # Advance the cursor; KV cache is persistently appended inside the model
-        state['past_key_values'] = past_key_values
-        state['position_cursor'] = position_cursor + 1
-        state['prefix_pad_masks'] = att_2d_masks
+        state["past_key_values"] = past_key_values
+        state["position_cursor"] = position_cursor + 1
+        state["prefix_pad_masks"] = att_2d_masks
         return next_logits, state
 
 
@@ -652,33 +670,35 @@ class EmbodimentSpecificLinear(nn.Module):
 
         one_hot = F.one_hot(emb_ids, num_classes=self.num_categories).to(dtype=self.weight.dtype)
 
-        selected_weight = torch.einsum('bc,cij->bij', one_hot, self.weight)
-        selected_bias = torch.einsum('bc,cj->bj', one_hot, self.bias)
+        selected_weight = torch.einsum("bc,cij->bij", one_hot, self.weight)
+        selected_bias = torch.einsum("bc,cj->bj", one_hot, self.bias)
 
         return torch.bmm(x, selected_weight) + selected_bias.unsqueeze(1)
 
     def extra_repr(self):
-        return f'EmbodimentSpecificLinear(num_categories={self.num_categories}, input_dim={self.weight.shape[1]}, output_dim={self.weight.shape[2]})'
+        return f"EmbodimentSpecificLinear(num_categories={self.num_categories}, input_dim={self.weight.shape[1]}, output_dim={self.weight.shape[2]})"
 
 
 def get_safe_dtype(dtype: torch.dtype, device: str | torch.device):
     """MPS is currently not compatible with float64."""
     if isinstance(device, torch.device):
         device = device.type
-    if device == 'mps' and dtype == torch.float64:
+    if device == "mps" and dtype == torch.float64:
         return torch.float32
     else:
         return dtype
 
 
-def create_sinusoidal_pos_embedding(time: torch.Tensor, dimension: int, min_period: float, max_period: float, device='cpu') -> Tensor:
+def create_sinusoidal_pos_embedding(
+    time: torch.Tensor, dimension: int, min_period: float, max_period: float, device="cpu"
+) -> Tensor:
     """Computes sine-cosine positional embedding vectors for scalar
     positions."""
     if dimension % 2 != 0:
-        raise ValueError(f'dimension ({dimension}) must be divisible by 2')
+        raise ValueError(f"dimension ({dimension}) must be divisible by 2")
 
     if time.ndim != 1:
-        raise ValueError('The time tensor is expected to be of shape `(batch_size, )`.')
+        raise ValueError("The time tensor is expected to be of shape `(batch_size, )`.")
 
     dtype = get_safe_dtype(torch.float64, device)
     fraction = torch.linspace(0.0, 1.0, dimension // 2, dtype=dtype, device=device)
@@ -689,35 +709,3 @@ def create_sinusoidal_pos_embedding(time: torch.Tensor, dimension: int, min_peri
     sin_input = scaling_factor[None, :] * time[:, None]
     pos_emb = torch.cat([torch.sin(sin_input), torch.cos(sin_input)], dim=1)
     return pos_emb
-
-
-def make_att_2d_masks(pad_masks: Tensor, att_masks: Tensor) -> Tensor:
-    """Creates a 2D attention mask from 1D padding and attention-type masks.
-
-    This function is copied from big_vision.
-
-    The `att_masks` allow for different attention patterns:
-    - `[[1, 1, 1, 1, 1, 1]]`: Purely causal attention.
-    - `[[0, 0, 0, 1, 1, 1]]`: Prefix-LM attention. The first 3 tokens attend
-      to each other, and the last 3 tokens are causal.
-    - `[[1, 0, 1, 0, 1, 0]]`: Causal attention between blocks. Tokens can
-      attend to previous blocks and tokens within the same block.
-
-    Args:
-        pad_masks: bool[B, N] indicating valid (true) vs. padding (false) tokens.
-        att_masks: int[B, N] defining attention type. A `1` at a position
-                   indicates the start of a new causal block.
-
-    Returns:
-        A 2D boolean attention mask of shape (B, N, N).
-    """
-    if att_masks.ndim != 2:
-        raise ValueError(att_masks.ndim)
-    if pad_masks.ndim != 2:
-        raise ValueError(pad_masks.ndim)
-
-    cumsum = torch.cumsum(att_masks, dim=1)
-    att_2d_masks = cumsum[:, None, :] <= cumsum[:, :, None]
-    pad_2d_masks = pad_masks[:, None, :] * pad_masks[:, :, None]
-    att_2d_masks = att_2d_masks & pad_2d_masks
-    return att_2d_masks

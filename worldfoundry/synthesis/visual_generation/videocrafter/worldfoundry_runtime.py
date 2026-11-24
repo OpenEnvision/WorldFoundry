@@ -5,17 +5,12 @@ from __future__ import annotations
 
 from importlib.resources import files
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 from .components import load_videocrafter_components
 
 
 def _config_root() -> Path:
-    """Helper function to config root.
-
-    Returns:
-        The return value.
-    """
     return Path(str(files("worldfoundry.data").joinpath("models", "runtime", "configs", "videocrafter")))
 
 
@@ -47,14 +42,6 @@ def resolve_runtime_config(config: str) -> Path:
 
 
 def _clear_open_clip_attn_mask(model) -> None:
-    """Helper function to clear open clip attn mask.
-
-    Args:
-        model: The model.
-
-    Returns:
-        The return value.
-    """
     cond_stage = getattr(model, "cond_stage_model", None)
     clip_model = getattr(cond_stage, "model", None)
     if clip_model is not None and hasattr(clip_model, "attn_mask"):
@@ -104,7 +91,6 @@ def _normalize_lvdm_config(model_config) -> None:
 
 
 class VideoCrafter:
-    """Video crafter implementation."""
     def __init__(
         self,
         model_name: str,
@@ -120,7 +106,7 @@ class VideoCrafter:
         ddim_eta: float = 1.0,
         unconditional_guidance_scale: float = 12.0,
         seed: int = 123,
-        device: Optional[str] = None,
+        device: str | None = None,
     ):
         """
         Initialize VideoCrafter from packaged runtime code and external weights.
@@ -161,9 +147,8 @@ class VideoCrafter:
 
         components = load_videocrafter_components()
 
-        from omegaconf import OmegaConf
-
         import torch
+        from omegaconf import OmegaConf
 
         torch.manual_seed(seed)
         if torch.cuda.is_available():
@@ -179,7 +164,7 @@ class VideoCrafter:
         self.model = components.load_model_checkpoint(model, self.ckpt_path).float().to(target_device)
         self.model.eval()
 
-    def generate_video(self, prompt: str, image_path: Optional[str] = None):
+    def generate_video(self, prompt: str, image_path: str | None = None):
         """
         Generate video frames through the packaged VideoCrafter implementation.
 

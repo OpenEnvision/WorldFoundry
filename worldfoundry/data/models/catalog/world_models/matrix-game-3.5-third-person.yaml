@@ -100,7 +100,7 @@ runner_parity:
 starred: true
 catalog_category: world_models
 catalog_scope: Matrix-Game independent inference models
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 availability:
   status: open_source
   open_source: true
@@ -111,18 +111,18 @@ docs:
   publisher: Riemann Dynamics
   publisher_kind: company
   publisher_zh: Riemann Dynamics（黎曼动力）
-  overview: 'Matrix-Game 3.5 Third-Person Base adds subject-reference control to the 3.5 family: alongside camera-NPZ control it accepts up to two protagonist reference images so a consistent character appears in the generated world. This model id is permanently bound to third-person.safetensors; a one-step smoke run with one protagonist reference passed on A100, while the default 25-step run and official sample parity remain pending.'
-  overview_zh: Matrix-Game 3.5 Third-Person Base 为 3.5 家族增加主体参照控制：在 camera NPZ 控制之外，它接受最多两张主角参照图，使生成世界中出现一致的角色。该模型 id 永久绑定 third-person.safetensors；带一张主角参照的单步冒烟运行已在 A100 通过，默认 25 步运行与官方样例一致性仍待验证。
-  architecture: 'Same recorded stack as the first-person profile (Wan2.2-TI2V-5B + Matrix-Game-3.5-Base + DA3 depth, CC-BY-NC-4.0 for the depth dependency), with a difference: the checkpoint has four subject-reference embedding slots, of which the released runtime accepts at most two per request.'
-  architecture_zh: 与第一人称档案相同的记录栈（Wan2.2-TI2V-5B + Matrix-Game-3.5-Base + DA3 深度，深度依赖为 CC-BY-NC-4.0），差异在于：checkpoint 有四个主体参照嵌入槽位，发布的运行时每次请求最多接受两个。
+  overview: 'Matrix-Game 3.5 Third-Person Base adds subject-reference control to the 3.5 family: alongside camera-NPZ control it accepts up to two protagonist reference images so a consistent character appears in the generated world. This model id always loads third-person.safetensors.'
+  overview_zh: Matrix-Game 3.5 Third-Person Base 为 3.5 家族增加主体参照控制：在 camera NPZ 控制之外，它接受最多两张主角参照图，使生成世界中出现一致的角色。该模型 id 固定加载 third-person.safetensors。
+  architecture: 'Same stack as the first-person model (Wan2.2-TI2V-5B + Matrix-Game-3.5-Base + DA3 depth, CC-BY-NC-4.0 for the depth dependency), with one difference: the checkpoint has four subject-reference embedding slots, of which the released runtime accepts at most two per request.'
+  architecture_zh: 与第一人称模型使用相同的栈（Wan2.2-TI2V-5B + Matrix-Game-3.5-Base + DA3 深度，深度依赖为 CC-BY-NC-4.0），差异在于：checkpoint 有四个主体参照嵌入槽位，发布的运行时每次请求最多接受两个。
   usage_notes: Subject references are optional — paths may name an official export directory, one image, or a sequence of zero to four crops (two used). Memory visualization, subject-reference previews, and logs are persisted beside the primary video when produced.
   usage_notes_zh: 主体参照可选——路径可指向官方导出目录、单张图，或零到四张裁剪图的序列（实际使用两张）。记忆可视化、主体参照预览与日志在生成时保存在主视频旁。
   limitations:
-  - The default 25-step route and official sample parity are pending (only a one-step smoke passed).
+  - Only a one-step run with one protagonist reference has been validated (on A100); the default 25-step route and official sample parity are not yet validated.
   - At most two subject references per request in the released runtime.
   - The DA3 depth dependency is CC-BY-NC-4.0 (non-commercial).
   limitations_zh:
-  - 默认 25 步路径与官方样例一致性待验证（仅单步冒烟通过）。
+  - 仅验证了带一张主角参照的单步运行（A100）；默认 25 步路径与官方样例一致性尚未验证。
   - 发布运行时每次请求最多两个主体参照。
   - DA3 深度依赖为 CC-BY-NC-4.0（非商用）。
   recommended_benchmarks:

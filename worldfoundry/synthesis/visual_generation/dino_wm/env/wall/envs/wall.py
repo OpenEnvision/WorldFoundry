@@ -1,27 +1,25 @@
 import math
-from typing import Optional
+import random
 
-import torch
 import gym
 import numpy as np
-import random
+import torch
 
 from ..layouts.wall import WallDatasetConfig
 from ..layouts.wall_utils import generate_wall_layouts
 from .utils import check_wall_intersect
-from ..layouts.single import DotDataset
 
 
 class DotWall(gym.Env):
     def __init__(
         self,
-        rng: Optional[np.random.Generator] = None,
-        wall_config: Optional[WallDatasetConfig] = None,
+        rng: np.random.Generator | None = None,
+        wall_config: WallDatasetConfig | None = None,
         fix_wall: bool = True,
         cross_wall: bool = False,
         level: str = "normal",
-        fix_wall_location: Optional[int] = None,
-        fix_door_location: Optional[int] = None,
+        fix_wall_location: int | None = None,
+        fix_door_location: int | None = None,
         device="cpu",
     ):
         super().__init__()
@@ -46,25 +44,24 @@ class DotWall(gym.Env):
         self.right_wall_x = self.wall_x + self.wall_config.wall_width // 2
 
         self.reset_to_state = None
-    
+
     def channels_to_img(self, wall_img, dot_img):
         h, w = wall_img.shape
         rgb_image = torch.ones((3, h, w), dtype=torch.uint8).to(self.device) * 255
-        
+
         wall_mask = wall_img == 1
         rgb_image[:, wall_mask] = torch.tensor([0, 0, 0], dtype=torch.uint8).to(self.device).unsqueeze(1)
-        
+
         no_wall_mask = wall_img == 0  # Mask where there are no walls
         red_intensity = (dot_img * 255).to(torch.uint8)
-        
+
         rgb_image[1, no_wall_mask] = 255 - red_intensity[no_wall_mask]  # Green channel reduced
         rgb_image[2, no_wall_mask] = 255 - red_intensity[no_wall_mask]  # Blue channel reduced
         return rgb_image
 
-
     def reset(self, location=None):
         if location is None:
-            location = self.reset_to_state # self.reset_to_state can be None
+            location = self.reset_to_state  # self.reset_to_state can be None
 
         self.wall_img = self._render_walls(self.wall_x, self.hole_y)
         if location is None:
@@ -80,7 +77,7 @@ class DotWall(gym.Env):
         self.position_history = [self.dot_position]
         state = self.dot_position
         visual = self.channels_to_img(self.wall_img, self.dot_img)
-        observation = {'visual': visual.float(), 'proprio': state.float()}
+        observation = {"visual": visual.float(), "proprio": state.float()}
         return observation, state
 
     def step(self, action: torch.Tensor):
@@ -89,11 +86,11 @@ class DotWall(gym.Env):
         self.dot_img = self._render_dot(self.dot_position)
         self.observation = (self.wall_img + self.dot_img) / 2
         visual = self.channels_to_img(self.wall_img, self.dot_img)
-        observation = {'visual': visual.float(), 'proprio': self.dot_position.float()}
+        observation = {"visual": visual.float(), "proprio": self.dot_position.float()}
         info = {}
-        info['state'] = self.dot_position
-        info['pos_agent'] = self.dot_position
-        return observation, 0, False, info # observation, reward, done, info
+        info["state"] = self.dot_position
+        info["pos_agent"] = self.dot_position
+        return observation, 0, False, info  # observation, reward, done, info
 
     def _calculate_next_position(self, action):
         next_dot_position = self._generate_transition(self.dot_position, action)
@@ -114,7 +111,7 @@ class DotWall(gym.Env):
         return next_dot_position
 
     def _generate_transition(self, location, action):
-        next_location = location + action * 2   # [..., :-1] * action[..., -1]
+        next_location = location + action * 2  # [..., :-1] * action[..., -1]
         return next_location
 
     def _generate_wall(self):
@@ -129,7 +126,7 @@ class DotWall(gym.Env):
         door_loc = torch.tensor(door_loc, device=self.device)
 
         return wall_loc, door_loc
-    
+
     def generate_random_state(self, seed=None):
         seed = random.randint(0, 2**32 - 1) if seed is None else seed
         rs = np.random.RandomState(seed)
@@ -163,9 +160,7 @@ class DotWall(gym.Env):
                 avg_dist_n_steps = n_steps * self.wall_config.action_step_mean
 
                 assert (
-                    self.wall_config.wall_padding
-                    - self.wall_config.wall_width // 2
-                    - self.wall_config.border_wall_loc
+                    self.wall_config.wall_padding - self.wall_config.wall_width // 2 - self.wall_config.border_wall_loc
                     >= math.ceil(avg_dist_n_steps * 3 / 4)
                 )
 
@@ -194,12 +189,8 @@ class DotWall(gym.Env):
             start_x = start_min_x + random.random() * (start_max_x - start_min_x)
             target_x = target_min_x + random.random() * (target_max_x - target_min_x)
 
-            start_y = torch.tensor(
-                min_y + random.random() * (max_y - min_y), device=self.device
-            )
-            target_y = torch.tensor(
-                min_y + random.random() * (max_y - min_y), device=self.device
-            )
+            start_y = torch.tensor(min_y + random.random() * (max_y - min_y), device=self.device)
+            target_y = torch.tensor(min_y + random.random() * (max_y - min_y), device=self.device)
 
             if random.random() < 0.5:  # inverse travel direction 50% of time
                 start_x, target_x = target_x, start_x
@@ -208,6 +199,7 @@ class DotWall(gym.Env):
             self.target_position = torch.stack([target_x, target_y])
         else:
             raise NotImplementedError
+
     def _render_walls(self, wall_loc, hole_loc):
         # Generates an image of the wall with the door and specified wall thickness.
         x = torch.arange(0, self.img_size, device=self.device)
@@ -218,9 +210,7 @@ class DotWall(gym.Env):
         half_width = self.wall_config.wall_width // 2
 
         # Create the wall mask centered at wall_loc with the given wall_width
-        wall_mask = (grid_x >= (wall_loc - half_width)) & (
-            grid_x <= (wall_loc + half_width)
-        )
+        wall_mask = (grid_x >= (wall_loc - half_width)) & (grid_x <= (wall_loc + half_width))
 
         # Door logic remains the same
         door_mask = (hole_loc - self.wall_config.door_space <= grid_y) & (
@@ -243,18 +233,14 @@ class DotWall(gym.Env):
         return res
 
     def _render_dot(self, location):
-        x = torch.linspace(
-            0, self.img_size - 1, steps=self.img_size, device=self.device
-        )
-        y = torch.linspace(
-            0, self.img_size - 1, steps=self.img_size, device=self.device
-        )
+        x = torch.linspace(0, self.img_size - 1, steps=self.img_size, device=self.device)
+        y = torch.linspace(0, self.img_size - 1, steps=self.img_size, device=self.device)
         xx, yy = torch.meshgrid(x, y, indexing="xy")
         c = torch.stack([xx, yy], dim=-1)
-        img = torch.exp(
-            -(c - location).norm(dim=-1).pow(2) / (2 * self.dot_std * self.dot_std)
-        ) / (2 * math.pi * self.dot_std * self.dot_std)
-        
+        img = torch.exp(-(c - location).norm(dim=-1).pow(2) / (2 * self.dot_std * self.dot_std)) / (
+            2 * math.pi * self.dot_std * self.dot_std
+        )
+
         max_value = img.max()
         img = img / max_value
         return img
@@ -262,10 +248,10 @@ class DotWall(gym.Env):
     def _render_dot_and_wall(self, location):
         dot_img = self._render_dot(location)
         return torch.stack([dot_img, self.wall_img * dot_img.max()], dim=0)
-    
+
     def set_init_state(self, init_state):
         self.reset_to_state = torch.tensor(init_state)
-        dot_location = init_state[-2:] if init_state is not None else None
-        
+        _dot_location = init_state[-2:] if init_state is not None else None
+
     def seed(self, seed):
         self.rng = np.random.default_rng(seed)

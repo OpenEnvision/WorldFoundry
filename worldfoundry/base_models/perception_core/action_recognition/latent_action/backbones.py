@@ -28,9 +28,7 @@ def _source(
     legacy = values.get(legacy_env)
     if legacy:
         return legacy.replace("hdfs:///", "/mnt/hdfs/")
-    return _preferred_hf_model_source(
-        capability_id, asset_id, fallback_repo_id, values
-    )
+    return _preferred_hf_model_source(capability_id, asset_id, fallback_repo_id, values)
 
 
 def freeze_backbone(backbone: torch.nn.Module) -> torch.nn.Module:
@@ -38,9 +36,7 @@ def freeze_backbone(backbone: torch.nn.Module) -> torch.nn.Module:
     return backbone.eval()
 
 
-def get_dino_tokenizer(
-    *, device: str | torch.device = "cuda", env: Mapping[str, str] | None = None
-) -> torch.nn.Module:
+def get_dino_tokenizer(*, device: str | torch.device = "cuda", env: Mapping[str, str] | None = None) -> torch.nn.Module:
     from transformers import Dinov2Model
 
     source = _source(
@@ -64,11 +60,7 @@ def get_dinov2_vitb14_reg_tokenizer(
         dinov2_vitb14_reg,
     )
 
-    configured = (
-        checkpoint_path
-        or os.environ.get("UNIVLA_DINO_CKPT_PATH")
-        or os.environ.get("DINO_V2_REG_PATH")
-    )
+    configured = checkpoint_path or os.environ.get("UNIVLA_DINO_CKPT_PATH") or os.environ.get("DINO_V2_REG_PATH")
     legacy_path = Path("huggingface/dinov2_vitb14_reg4_pretrain.pth")
     if not configured and legacy_path.is_file():
         configured = legacy_path
@@ -104,14 +96,9 @@ def get_siglip2_tokenizer(
     from transformers import AutoModel
 
     values = os.environ if env is None else env
-    source = values.get("SIGLIP2_PATH") or values.get(
-        "WORLDFOUNDRY_SIGLIP2_MODEL_DIR"
-    )
+    source = values.get("SIGLIP2_PATH") or values.get("WORLDFOUNDRY_SIGLIP2_MODEL_DIR")
     if not source:
-        raise ValueError(
-            "Set SIGLIP2_PATH or WORLDFOUNDRY_SIGLIP2_MODEL_DIR to the "
-            "SigLIP2 checkpoint directory."
-        )
+        raise ValueError("Set SIGLIP2_PATH or WORLDFOUNDRY_SIGLIP2_MODEL_DIR to the SigLIP2 checkpoint directory.")
     model = AutoModel.from_pretrained(
         source.replace("hdfs:///", "/mnt/hdfs/"),
         low_cpu_mem_usage=True,
@@ -145,9 +132,7 @@ def get_siglip2_reps(input_tensor: torch.Tensor, encoder: torch.nn.Module) -> to
     return tokens.reshape(batch, 1, 14, 14, dim)
 
 
-def get_reps_magvit2(
-    input_tensor: torch.Tensor, model: torch.nn.Module
-) -> torch.Tensor:
+def get_reps_magvit2(input_tensor: torch.Tensor, model: torch.nn.Module) -> torch.Tensor:
     return model.encoder(input_tensor.squeeze(2)).detach()
 
 

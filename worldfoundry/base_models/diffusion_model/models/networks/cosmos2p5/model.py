@@ -232,8 +232,11 @@ class Cosmos25TransformerBlock(nn.Module):
         """Run the three AdaLN-gated residual branches on ``B S C`` tokens."""
         normalized, gate = self.norm1(hidden_states, embedded_timestep, temb)
         hidden_states = hidden_states + gate * self.attn1(
-            normalized, rotary_emb=rotary_emb, total_context_tokens=total_context_tokens,
-            kv_cache=kv_cache, store_kv=store_kv,
+            normalized,
+            rotary_emb=rotary_emb,
+            total_context_tokens=total_context_tokens,
+            kv_cache=kv_cache,
+            store_kv=store_kv,
         )
         normalized, gate = self.norm2(hidden_states, embedded_timestep, temb)
         hidden_states = hidden_states + gate * self.attn2(
@@ -345,7 +348,7 @@ class Cosmos25Transformer3DModel(nn.Module):
         self.proj_out = nn.Linear(hidden_size, patch_volume * out_channels, bias=False)
         self.parallel_context = None
 
-    def parallelize(self, parallel) -> "Cosmos25Transformer3DModel":
+    def parallelize(self, parallel) -> Cosmos25Transformer3DModel:
         """Shard inference attention/FFN weights and optionally partition tokens.
 
         Load the original checkpoint first. This method is opt-in and requires
@@ -370,11 +373,17 @@ class Cosmos25Transformer3DModel(nn.Module):
             return self
         if any(parameter.dtype is not torch.float32 for parameter in self.parameters()):
             raise ValueError("parallel Cosmos inference currently requires float32 weights for numerical stability")
-        parallel.agree((
-            "cosmos25-model", vars(self.config), self.rope_enable_fps_modulation,
-            tuple((block.attn1.heads, block.attn1.head_dim, block.ff.net[0].proj.out_features)
-                  for block in self.transformer_blocks),
-        ))
+        parallel.agree(
+            (
+                "cosmos25-model",
+                vars(self.config),
+                self.rope_enable_fps_modulation,
+                tuple(
+                    (block.attn1.heads, block.attn1.head_dim, block.ff.net[0].proj.out_features)
+                    for block in self.transformer_blocks
+                ),
+            )
+        )
         for block in self.transformer_blocks:
             if block.attn1.heads % parallel.tp_size or block.attn2.heads % parallel.tp_size:
                 raise ValueError("tensor_parallel must evenly divide Cosmos2.5 attention heads")
@@ -389,7 +398,10 @@ class Cosmos25Transformer3DModel(nn.Module):
                     for name in ("to_q", "to_k", "to_v"):
                         setattr(attention, name, ColumnParallelLinear(getattr(attention, name), start=start, end=end))
                     attention.to_out[0] = RowParallelLinear(
-                        attention.to_out[0], start=start, end=end, parallel=parallel,
+                        attention.to_out[0],
+                        start=start,
+                        end=end,
+                        parallel=parallel,
                     )
                     attention.heads = local_heads
             if parallel.tp_size > 1:
@@ -487,25 +499,43 @@ class Cosmos25Transformer3DModel(nn.Module):
         """Denoise ``B C T H W`` latents; optional per-block ``control_hidden_states`` are added in."""
         parallel = self.parallel_context
         if parallel is not None:
-            def tensor_spec(value):
-                return (tuple(value.shape), str(value.dtype), value.device.type, value.requires_grad) if value is not None else None
 
-            parallel.agree((
-                "cosmos25-forward", self.training, torch.is_grad_enabled(),
-                torch.is_autocast_enabled(hidden_states.device.type), torch.get_float32_matmul_precision(),
-                torch.backends.cuda.matmul.allow_tf32,
-                tensor_spec(hidden_states), tensor_spec(timestep), tensor_spec(encoder_hidden_states),
-                tensor_spec(attention_mask), fps, tensor_spec(condition_mask), tensor_spec(padding_mask),
-                tuple((key, tensor_spec(value)) for key, value in sorted((control_hidden_states or {}).items())),
-            ))
+            def tensor_spec(value):
+                return (
+                    (tuple(value.shape), str(value.dtype), value.device.type, value.requires_grad)
+                    if value is not None
+                    else None
+                )
+
+            parallel.agree(
+                (
+                    "cosmos25-forward",
+                    self.training,
+                    torch.is_grad_enabled(),
+                    torch.is_autocast_enabled(hidden_states.device.type),
+                    torch.get_float32_matmul_precision(),
+                    torch.backends.cuda.matmul.allow_tf32,
+                    tensor_spec(hidden_states),
+                    tensor_spec(timestep),
+                    tensor_spec(encoder_hidden_states),
+                    tensor_spec(attention_mask),
+                    fps,
+                    tensor_spec(condition_mask),
+                    tensor_spec(padding_mask),
+                    tuple((key, tensor_spec(value)) for key, value in sorted((control_hidden_states or {}).items())),
+                )
+            )
             if torch.is_autocast_enabled(hidden_states.device.type):
                 raise ValueError("parallel Cosmos inference requires autocast to be disabled")
             if hidden_states.device.type == "cuda" and torch.backends.cuda.matmul.allow_tf32:
                 raise ValueError("parallel Cosmos inference requires CUDA matmul TF32 to be disabled")
-            if self.training or (torch.is_grad_enabled() and any(
-                value is not None and value.requires_grad
-                for value in (hidden_states, timestep, encoder_hidden_states, condition_mask, padding_mask)
-            )):
+            if self.training or (
+                torch.is_grad_enabled()
+                and any(
+                    value is not None and value.requires_grad
+                    for value in (hidden_states, timestep, encoder_hidden_states, condition_mask, padding_mask)
+                )
+            ):
                 raise RuntimeError("parallelized Cosmos transformers support eval-mode inference only")
             if hidden_states.device != parallel.device:
                 raise ValueError("Cosmos latents must be on the inference parallel context device")
@@ -534,11 +564,15 @@ class Cosmos25Transformer3DModel(nn.Module):
             rotary_emb = tuple(value[local_start:local_end] for value in rotary_emb)
         for index, block in enumerate(self.transformer_blocks):
             block_options = (
-                {"total_context_tokens": total_tokens}
-                if parallel is not None and parallel.cp_size > 1 else {}
+                {"total_context_tokens": total_tokens} if parallel is not None and parallel.cp_size > 1 else {}
             )
             hidden_states = block(
-                hidden_states, encoder_hidden_states, projected, temb, rotary_emb, attention_mask,
+                hidden_states,
+                encoder_hidden_states,
+                projected,
+                temb,
+                rotary_emb,
+                attention_mask,
                 **block_options,
             )
             if control_hidden_states is not None and str(index) in control_hidden_states:

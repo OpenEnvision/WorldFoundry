@@ -1,12 +1,15 @@
-import torch
 import numpy as np
+import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoTokenizer, SiglipImageProcessor
+
 from worldfoundry.core.attention import resolve_transformers_attention_implementation
-from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 from worldfoundry.core.vram import skip_model_initialization
-from .modeling.model import VLANeXt, LlamaProcessorWrapper
+
+from .modeling.model import LlamaProcessorWrapper, VLANeXt
 from .modeling.rt2_baseline import RT2LikeBaseline
+
 
 def _get_checkpoint_path(cfg) -> str:
     if hasattr(cfg, "eval") and hasattr(cfg.eval, "finetuned_checkpoint"):
@@ -130,6 +133,7 @@ def get_vla(cfg, *, device=None, torch_dtype="auto"):
     del state_dict, checkpoint
     return model
 
+
 def get_processor(cfg, checkpoint_config=None):
     config = checkpoint_config
     if config is None:
@@ -140,7 +144,8 @@ def get_processor(cfg, checkpoint_config=None):
     if "llama" in lmm_path.lower():
         vision_encoder_path = config["model"].get("vision_encoder_path", "google/siglip2-base-patch16-256")
         tokenizer = AutoTokenizer.from_pretrained(lmm_path, local_files_only=True)
-        if tokenizer.pad_token is None: tokenizer.pad_token = tokenizer.eos_token
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
         image_processor = SiglipImageProcessor.from_pretrained(
             vision_encoder_path,
             local_files_only=True,
@@ -152,6 +157,7 @@ def get_processor(cfg, checkpoint_config=None):
         trust_remote_code=False,
         local_files_only=True,
     )
+
 
 def get_vla_action(cfg, model, processor, obs, task_label, *, seed=None):
     data_cfg = model.checkpoint_config["data"]
@@ -194,14 +200,18 @@ def get_vla_action(cfg, model, processor, obs, task_label, *, seed=None):
         if history_len > 0:
             states = all_states[-history_len:]
             if len(states) < history_len:
-                states = ([states[0]] * (history_len - len(states))) + states if states else [np.zeros(model.action_dim)] * history_len
+                states = (
+                    ([states[0]] * (history_len - len(states))) + states
+                    if states
+                    else [np.zeros(model.action_dim)] * history_len
+                )
         else:
             states = []
         if len(states) > 0:
             proprioception = torch.tensor(np.stack(states), dtype=model_dtype).unsqueeze(0).to(device)
 
     history_actions = None
-    if getattr(model, 'use_action_input_policy', False):
+    if getattr(model, "use_action_input_policy", False):
         all_actions = obs.get("action_history", [])
         if history_len > 0:
             actions = all_actions[-history_len:]
@@ -216,9 +226,7 @@ def get_vla_action(cfg, model, processor, obs, task_label, *, seed=None):
 
     if input_modality == "video":
         if is_paligemma or is_llama:
-            raise ValueError(
-                f"{effective_processor.__class__.__name__} only supports image input in VLANeXt."
-            )
+            raise ValueError(f"{effective_processor.__class__.__name__} only supports image input in VLANeXt.")
         content = []
         if view_mode == "multi":
             content.extend([{"type": "video", "video": pil_images}, {"type": "video", "video": pil_wrist}])
@@ -240,10 +248,7 @@ def get_vla_action(cfg, model, processor, obs, task_label, *, seed=None):
         )
 
     elif input_modality == "image":
-        if view_mode == "multi":
-            images = [pil_images[-1], pil_wrist[-1]]
-        else:
-            images = [pil_images[-1]]
+        images = [pil_images[-1], pil_wrist[-1]] if view_mode == "multi" else [pil_images[-1]]
 
         if is_llama:
             text = [task_label]
@@ -278,8 +283,14 @@ def get_vla_action(cfg, model, processor, obs, task_label, *, seed=None):
         raise ValueError(f"Unknown input_modality: {input_modality} for model type")
 
     valid_keys = {
-        "input_ids", "attention_mask", "pixel_values", "pixel_values_videos",
-        "image_grid_thw", "video_grid_thw", "token_type_ids", "mm_token_type_ids",
+        "input_ids",
+        "attention_mask",
+        "pixel_values",
+        "pixel_values_videos",
+        "image_grid_thw",
+        "video_grid_thw",
+        "token_type_ids",
+        "mm_token_type_ids",
     }
     inputs = {k: v.to(device) for k, v in inputs.items() if k in valid_keys}
 

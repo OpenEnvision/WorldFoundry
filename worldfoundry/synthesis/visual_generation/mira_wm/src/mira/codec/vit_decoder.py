@@ -18,8 +18,12 @@ import torch.utils.checkpoint
 from einops import rearrange
 from torch import Tensor, nn
 
-from mira.codec.config import ViTDecoderConfig
-from mira.ml import SelfAttention, SelfAttentionConfig, init_weights
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.codec.config import ViTDecoderConfig
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.ml import (
+    SelfAttention,
+    SelfAttentionConfig,
+    init_weights,
+)
 
 
 def _rope_cos_sin(positions: Tensor, dim: int, theta: float) -> tuple[Tensor, Tensor]:

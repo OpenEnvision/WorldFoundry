@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.execution.runners.harnesseval_w import run_harnesseval_w as runner
-from worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.metrics import METRIC_IDS, normalize_results
-from worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.runtime.io import file_fingerprint
-from worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.runtime.protocols import CORE_SKILLS, FAMILIES
-from worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.runtime.report import OBSERVATION_SKILLS
+from worldfoundry.evals.tasks.execution.runners.harnesseval_w import run_harnesseval_w as runner
+from worldfoundry.evals.tasks.execution.runners.harnesseval_w.metrics import METRIC_IDS, normalize_results
+from worldfoundry.evals.tasks.execution.runners.harnesseval_w.runtime.io import file_fingerprint
+from worldfoundry.evals.tasks.execution.runners.harnesseval_w.runtime.protocols import CORE_SKILLS, FAMILIES
+from worldfoundry.evals.tasks.execution.runners.harnesseval_w.runtime.report import OBSERVATION_SKILLS
 
 
 def write(path, payload):
@@ -93,8 +93,8 @@ def test_report_rejects_tampered_macro_and_coverage(tmp_path):
 
 
 def test_fixture_evidence_and_contract_discovery(tmp_path):
-    from worldfoundry.evaluation.tasks.catalog.dispatch import official_runner_spec
-    from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
+    from worldfoundry.evals.tasks.catalog.dispatch import official_runner_spec
+    from worldfoundry.evals.tasks.contracts.external import get_external_benchmark_contract
 
     assert set(get_external_benchmark_contract("harnesseval-w").metric_ids) == set(METRIC_IDS)
     assert official_runner_spec("harnesseval-w").module == runner.MODULE
@@ -253,7 +253,7 @@ def test_python_skill_workers_and_drift_stages(cached_run, monkeypatch):
 
 
 def test_workspace_forwards_selected_model_and_manifest(tmp_path):
-    from worldfoundry.evaluation.tasks.catalog.workspace_registry import build_workspace_benchmark_command
+    from worldfoundry.evals.tasks.catalog.workspace_registry import build_workspace_benchmark_command
 
     command = build_workspace_benchmark_command(
         {
@@ -269,8 +269,8 @@ def test_workspace_forwards_selected_model_and_manifest(tmp_path):
 
 
 def test_motion_backend_reuses_metrics_across_videos(cached_run, monkeypatch):
-    from worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.runtime.metrics import video_quality
-    from worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.runtime.skill_backend.motion_quality import (
+    from worldfoundry.evals.tasks.execution.runners.harnesseval_w.runtime.metrics import video_quality
+    from worldfoundry.evals.tasks.execution.runners.harnesseval_w.runtime.skill_backend.motion_quality import (
         LocalBackend,
     )
 

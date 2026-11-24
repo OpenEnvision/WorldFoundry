@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from ..api_video_client import ApiVideoSynthesis
 
@@ -18,7 +19,7 @@ class Hailuo2p3Synthesis(ApiVideoSynthesis):
     DEFAULT_ENDPOINT = "https://api.minimax.io/v1"
 
     @staticmethod
-    def _ensure_success(payload: Dict[str, Any]) -> None:
+    def _ensure_success(payload: dict[str, Any]) -> None:
         """Raise when MiniMax reports a failure in the ``base_resp`` envelope.
 
         Raises:
@@ -27,16 +28,14 @@ class Hailuo2p3Synthesis(ApiVideoSynthesis):
         base_resp = payload.get("base_resp", {})
         status_code = base_resp.get("status_code", 0)
         if status_code not in (0, "0"):
-            raise RuntimeError(
-                base_resp.get("status_msg", f"MiniMax request failed with status_code={status_code}")
-            )
+            raise RuntimeError(base_resp.get("status_msg", f"MiniMax request failed with status_code={status_code}"))
 
-    def _post(self, route: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _post(self, route: str, payload: dict[str, Any]) -> dict[str, Any]:
         result = super()._post(route, payload)
         self._ensure_success(result)
         return result
 
-    def _get(self, route: str, params: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+    def _get(self, route: str, params: Mapping[str, Any] | None = None) -> dict[str, Any]:
         result = super()._get(route, params)
         self._ensure_success(result)
         return result
@@ -47,10 +46,10 @@ class Hailuo2p3Synthesis(ApiVideoSynthesis):
         model: str = "MiniMax-Hailuo-2.3",
         resolution: str = "768P",
         duration: int = 6,
-        **kwargs
-    ) -> Dict[str, Any]:
+        **kwargs,
+    ) -> dict[str, Any]:
         """Submit a text-to-video generation task."""
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": model,
             "prompt": input_prompt,
             "resolution": resolution,
@@ -66,10 +65,10 @@ class Hailuo2p3Synthesis(ApiVideoSynthesis):
         model: str = "MiniMax-Hailuo-2.3",
         resolution: str = "768P",
         duration: int = 6,
-        **kwargs
-    ) -> Dict[str, Any]:
+        **kwargs,
+    ) -> dict[str, Any]:
         """Submit an image-to-video generation task anchored on ``first_frame_image``."""
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": model,
             "prompt": input_prompt,
             "first_frame_image": first_frame_image,
@@ -79,23 +78,23 @@ class Hailuo2p3Synthesis(ApiVideoSynthesis):
         payload.update(kwargs)
         return self._post("/video_generation", payload)
 
-    def query_task(self, task_id: str) -> Dict[str, Any]:
+    def query_task(self, task_id: str) -> dict[str, Any]:
         """Return the status and details of a submitted generation task."""
         return self._get("/query/video_generation", {"task_id": task_id})
 
-    def retrieve_file(self, file_id: str) -> Dict[str, Any]:
+    def retrieve_file(self, file_id: str) -> dict[str, Any]:
         """Return metadata and the download URL for a generated file."""
         return self._get("/files/retrieve", {"file_id": file_id})
 
     def predict(
         self,
-        processed_data: Dict[str, Any],
+        processed_data: dict[str, Any],
         task_type: str = "auto",
         model: str = "MiniMax-Hailuo-2.3",
         resolution: str = "768P",
         duration: int = 6,
-        **kwargs
-    ) -> Dict[str, Any]:
+        **kwargs,
+    ) -> dict[str, Any]:
         """Submit a generation, choosing the route from the presence of a first frame.
 
         Args:
@@ -108,7 +107,7 @@ class Hailuo2p3Synthesis(ApiVideoSynthesis):
                 no first frame.
         """
         prompt = processed_data.get("prompt", "")
-        first_frame_image = processed_data.get("first_frame_image", None)
+        first_frame_image = processed_data.get("first_frame_image")
 
         if task_type == "auto":
             task_type = "i2av" if first_frame_image is not None else "t2av"

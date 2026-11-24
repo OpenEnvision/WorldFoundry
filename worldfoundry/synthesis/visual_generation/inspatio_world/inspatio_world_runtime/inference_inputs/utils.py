@@ -1,29 +1,28 @@
 import os
 import re
 
+import decord
 import numpy as np
 import requests
 import torch
+from einops import rearrange
 from torchvision.datasets.folder import IMG_EXTENSIONS
 from torchvision.transforms import InterpolationMode
 from torchvision.transforms.functional import resize
-import decord
-from einops import rearrange
 
 VID_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv")
 
 
-
 def read_frames(path):
-    vr = decord.VideoReader( 
-    uri=path,
-    height=-1,
-    width=-1,
-    ) 
+    vr = decord.VideoReader(
+        uri=path,
+        height=-1,
+        width=-1,
+    )
     frames = vr.get_batch(range(len(vr)))
-    frames = rearrange(frames, 'T H W C -> C T H W').contiguous() #> C T H W
-    frames = frames.float()/255.0
-    frames = frames.permute(1, 0, 2, 3) # t c h w
+    frames = rearrange(frames, "T H W C -> C T H W").contiguous()  # > C T H W
+    frames = frames.float() / 255.0
+    frames = frames.permute(1, 0, 2, 3)  # t c h w
     return frames
 
 
@@ -64,12 +63,8 @@ def download_url(input_path):
     return output_path
 
 
-def recursively_find(root_dir: str, ext: list = None, relative_path: str = None):
-    all_fnames = [
-        os.path.join(root, fname)
-        for root, _dirs, files in os.walk(root_dir)
-        for fname in files
-    ]
+def recursively_find(root_dir: str, ext: list | None = None, relative_path: str | None = None):
+    all_fnames = [os.path.join(root, fname) for root, _dirs, files in os.walk(root_dir) for fname in files]
     if relative_path is not None:
         all_fnames = [os.path.relpath(fname, relative_path) for fname in all_fnames]
     else:
@@ -114,16 +109,12 @@ def isotropic_crop_resize(frames: torch.Tensor, size: tuple, is_mask: bool = Fal
     else:
         interpolation_mode = InterpolationMode.BICUBIC
         use_antialias = True
-    
-    resized_frames = resize(
-        cropped_frames, size, interpolation_mode, antialias=use_antialias
-    )
+
+    resized_frames = resize(cropped_frames, size, interpolation_mode, antialias=use_antialias)
     return resized_frames
 
 
-def get_random_crop_bbox(
-    ori_h, ori_w, crop_max_ratio: float, rnd_state: np.random.RandomState
-):
+def get_random_crop_bbox(ori_h, ori_w, crop_max_ratio: float, rnd_state: np.random.RandomState):
     if crop_max_ratio >= 1:
         raise ValueError("crop_max_ratio should be smaller than 1")
     random_ratio = rnd_state.random((4,))
@@ -159,9 +150,10 @@ def read_txt(in_path):
     with open(in_path) as f:
         return f.read()
 
+
 def center_poses_by_mean_translation(T_w2c):
-    R = T_w2c[:, :3, :3]   # (N, 3, 3)
-    t = T_w2c[:, :3, 3]    # (N, 3)
+    R = T_w2c[:, :3, :3]  # (N, 3, 3)
+    t = T_w2c[:, :3, 3]  # (N, 3)
     centers = -(np.transpose(R, (0, 2, 1)) @ t[..., None]).squeeze(-1)  # (N, 3)
     mu = np.mean(centers, axis=0)  # (3,)
     Ginv = np.eye(4, dtype=T_w2c.dtype)
@@ -170,19 +162,23 @@ def center_poses_by_mean_translation(T_w2c):
 
     return T_centered
 
+
 ##### traj pose generation #####
-from scipy.interpolate import UnivariateSpline, interp1d
-def txt_interpolation(input_list, n, mode='smooth'):
+from scipy.interpolate import UnivariateSpline, interp1d  # noqa: E402 - Follows module-level definitions, as upstream.
+
+
+def txt_interpolation(input_list, n, mode="smooth"):
     x = np.linspace(0, 1, len(input_list))
-    if mode == 'smooth':
+    if mode == "smooth":
         f = UnivariateSpline(x, input_list, k=3)
-    elif mode == 'linear':
+    elif mode == "linear":
         f = interp1d(x, input_list)
     else:
         raise KeyError(f"Invalid txt interpolation mode: {mode}")
     xnew = np.linspace(0, 1, n)
     ynew = f(xnew)
     return ynew
+
 
 # def sphere2pose(x_up_angle, y_left_angle, r, is_zoom=False):
 #     angle_y = np.deg2rad(y_left_angle)
@@ -244,7 +240,7 @@ def txt_interpolation(input_list, n, mode='smooth'):
 #         rs[-1] = r[-1]
 #     else:
 #         rs = txt_interpolation(r, frame, mode='linear')
-    
+
 #     if len(r_zoom) > 3:
 #         r_zooms = txt_interpolation(r_zoom, frame, mode='smooth')
 #         r_zooms[0] = r_zoom[0]
@@ -268,10 +264,9 @@ def txt_interpolation(input_list, n, mode='smooth'):
 #                 np.float32(x_up_angle), np.float32(y_left_angle), np.float32(r),
 #                 is_zoom=is_zoom
 #             )
-#         c2ws_list.append(c2w_new) 
+#         c2ws_list.append(c2w_new)
 #     c2ws = np.stack(c2ws_list, axis=0) # N, 4, 4
 #     return c2ws # Twc
-
 
 
 def sphere2pose(x_up_angle, y_left_angle, r, is_zoom=False, is_translation=False):
@@ -298,20 +293,21 @@ def sphere2pose(x_up_angle, y_left_angle, r, is_zoom=False, is_translation=False
 
     # Spherical rotation matrix and translation vector
     R = rot_mat_y @ rot_mat_x
-    T = np.array([-r*cos_value_x*sin_value_y, -r*sin_value_x, r-r*cos_value_x*cos_value_y])
+    T = np.array([-r * cos_value_x * sin_value_y, -r * sin_value_x, r - r * cos_value_x * cos_value_y])
 
     # In translation mode, zero out the rotational translation component
     if is_translation:
-        T = np.array([0, 0, 0]) 
+        T = np.array([0, 0, 0])
 
     if is_zoom:
         T = np.array([0, 0, r])
 
     c2w = np.eye(4)
-    c2w[:3,:3] = R
-    c2w[:3,3] = T
+    c2w[:3, :3] = R
+    c2w[:3, 3] = T
 
-    return c2w # 4x4
+    return c2w  # 4x4
+
 
 def generate_traj_txt(x_up_angles, y_left_angles, r, r_zoom, frame, is_translation=False):
     # Initialize a camera.
@@ -320,51 +316,55 @@ def generate_traj_txt(x_up_angles, y_left_angles, r, r_zoom, frame, is_translati
     """
 
     if len(x_up_angles) > 3:
-        x_up_angles = txt_interpolation(x_up_angles, frame, mode='smooth')
+        x_up_angles = txt_interpolation(x_up_angles, frame, mode="smooth")
         x_up_angles[0] = x_up_angles[0]
         x_up_angles[-1] = x_up_angles[-1]
     else:
-        x_up_angles = txt_interpolation(x_up_angles, frame, mode='linear')
+        x_up_angles = txt_interpolation(x_up_angles, frame, mode="linear")
 
     if len(y_left_angles) > 3:
-        y_left_angles = txt_interpolation(y_left_angles, frame, mode='smooth')
+        y_left_angles = txt_interpolation(y_left_angles, frame, mode="smooth")
         y_left_angles[0] = y_left_angles[0]
         y_left_angles[-1] = y_left_angles[-1]
     else:
-        y_left_angles = txt_interpolation(y_left_angles, frame, mode='linear')
+        y_left_angles = txt_interpolation(y_left_angles, frame, mode="linear")
 
     if len(r) > 3:
-        rs = txt_interpolation(r, frame, mode='smooth')
+        rs = txt_interpolation(r, frame, mode="smooth")
         rs[0] = r[0]
         rs[-1] = r[-1]
     else:
-        rs = txt_interpolation(r, frame, mode='linear')
-    
+        rs = txt_interpolation(r, frame, mode="linear")
+
     if len(r_zoom) > 3:
-        r_zooms = txt_interpolation(r_zoom, frame, mode='smooth')
+        r_zooms = txt_interpolation(r_zoom, frame, mode="smooth")
         r_zooms[0] = r_zoom[0]
         r_zooms[-1] = r_zoom[-1]
     else:
-        r_zooms = txt_interpolation(r_zoom, frame, mode='linear')
+        r_zooms = txt_interpolation(r_zoom, frame, mode="linear")
 
     c2ws_list = []
     # if x_up_anlge is 0, and y_left_angle is 0, the set flag to True
     # is_all_zero = all(x == 0 for x in x_up_angles) and all(y == 0 for y in y_left_angles)
     is_zoom = all(x == 0 for x in x_up_angles) and all(y == 0 for y in y_left_angles)
     is_not_y = all(y == 0 for y in y_left_angles)
-    
-    for x_up_angle, y_left_angle, r_val, r_zoom_val in zip(x_up_angles, y_left_angles, rs, r_zooms):
+
+    for x_up_angle, y_left_angle, r_val, r_zoom_val in zip(x_up_angles, y_left_angles, rs, r_zooms, strict=False):
         if is_not_y:
             c2w_new = sphere2pose(
-                np.float32(x_up_angle), np.float32(y_left_angle), np.float32(r_zoom_val),
+                np.float32(x_up_angle),
+                np.float32(y_left_angle),
+                np.float32(r_zoom_val),
                 is_zoom=is_zoom,
-                is_translation=is_translation
+                is_translation=is_translation,
             )
         else:
             c2w_new = sphere2pose(
-                np.float32(x_up_angle), np.float32(y_left_angle), np.float32(r_val),
+                np.float32(x_up_angle),
+                np.float32(y_left_angle),
+                np.float32(r_val),
                 is_zoom=is_zoom,
-                is_translation=is_translation
+                is_translation=is_translation,
             )
         c2ws_list.append(c2w_new)
 

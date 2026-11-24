@@ -13,6 +13,7 @@ import {
 import { CatalogCoverage } from '@/components/catalog-coverage';
 import { HomeConfigureSection } from '@/components/home-configure-section';
 import { HomeHeroMedia } from '@/components/home-hero-media';
+import { HomeSectionNav } from '@/components/home-section-nav';
 import { type HomeRecipeOption } from '@/components/home-run-configurator';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteHeader } from '@/components/site-header';
@@ -27,6 +28,7 @@ import {
   WORLDFOUNDRY_WECHAT_QR,
 } from '@/lib/site-links';
 import { modelRecipeIndex } from '@/lib/model-recipe-index';
+import { getModelRecipe } from '@/lib/model-recipes';
 import { catalogCoverage } from '@/lib/catalog-coverage';
 import { catalogReadinessLabel } from '@/lib/model-recipe-types';
 import { withBasePath } from '@/lib/site-path';
@@ -108,17 +110,27 @@ const featuredModels: HomeRecipeOption[] = [
   ),
 ]
   .slice(0, 8)
-  .map((recipe) => ({
-    id: recipe.id,
-    name: recipe.name,
-    provider: recipe.provider,
-    category: recipe.category,
-    tasks: recipe.tasks,
-    status: catalogReadinessLabel(recipe.status.group),
-    environment: recipe.runtime.environmentName,
-    python: recipe.runtime.python,
-    cuda: recipe.runtime.cudaLabel,
-  }));
+  .map((recipe) => {
+    const fullRecipe = getModelRecipe(recipe.id);
+    const inferenceTaskIds = Array.from(
+      new Set(
+        (fullRecipe?.inferenceTasks ?? [])
+          .map((task) => task.id.trim())
+          .filter(Boolean),
+      ),
+    );
+    return {
+      id: recipe.id,
+      name: recipe.name,
+      provider: recipe.provider,
+      category: recipe.category,
+      tasks: inferenceTaskIds.length > 0 ? inferenceTaskIds : recipe.tasks,
+      status: catalogReadinessLabel(recipe.status.group),
+      environment: recipe.runtime.environmentName,
+      python: recipe.runtime.python,
+      cuda: recipe.runtime.cudaLabel,
+    };
+  });
 
 const communityLinks = [
   {
@@ -185,6 +197,7 @@ const workflowRail = ['Discover', 'Prepare', 'Run', 'Inspect', 'Evaluate'] as co
 export default function HomePage() {
   return (
     <main className="pi-home-shell wf-home-shell">
+      <HomeSectionNav />
       <div className="wf-home-stage">
         <SiteHeader
           variant="hero"
@@ -198,29 +211,28 @@ export default function HomePage() {
 
         <section className="wf-home-hero" aria-labelledby="wf-home-title">
           <div className="wf-home-hero-showcase">
-            <HomeHeroMedia>
-              <div className="wf-home-hero-content">
-                <p className="wf-home-hero-kicker">Toward a general infrastructure for world intelligence</p>
-                <h1 id="wf-home-title">WorldFoundry</h1>
-                <p className="wf-home-hero-lead">
-                  Discover, run, inspect, and evaluate world models under one operational
-                  definition — without flattening them into a single interface.
-                </p>
-                <div className="wf-home-hero-actions">
-                  <Link href="/docs/quickstart" className="wf-home-button wf-home-button-primary">
-                    <span>Get started</span>
-                    <ArrowRight aria-hidden="true" size={16} strokeWidth={1.8} />
-                  </Link>
-                  <Link href="/docs/guides/supported-models" className="wf-home-button wf-home-button-secondary">
-                    <span>Explore model recipes</span>
-                  </Link>
-                </div>
-                <Link className="wf-home-hero-catalog-link" href="/docs/guides/supported-models">
-                  {catalogCoverage.modelsTotal} model entries · {catalogCoverage.benchmarksTotal} browsable benchmarks
-                  <ArrowRight aria-hidden="true" size={13} strokeWidth={1.7} />
-                </Link>
-              </div>
-            </HomeHeroMedia>
+            <HomeHeroMedia />
+          </div>
+          <div className="wf-home-hero-content">
+            <p className="wf-home-hero-kicker">Toward a general infrastructure for world intelligence</p>
+            <h1 id="wf-home-title">WorldFoundry</h1>
+            <p className="wf-home-hero-lead">
+              Discover, run, inspect, and evaluate world models under one operational
+              definition — without flattening them into a single interface.
+            </p>
+            <div className="wf-home-hero-actions">
+              <Link href="/docs/quickstart" className="wf-home-button wf-home-button-primary">
+                <span>Get started</span>
+                <ArrowRight aria-hidden="true" size={16} strokeWidth={1.8} />
+              </Link>
+              <Link href="/docs/guides/supported-models" className="wf-home-button wf-home-button-secondary">
+                <span>Explore model recipes</span>
+              </Link>
+            </div>
+            <Link className="wf-home-hero-catalog-link" href="/docs/guides/supported-models">
+              {modelRecipeIndex.total} models · {catalogCoverage.benchmarksTotal} browsable benchmarks
+              <ArrowRight aria-hidden="true" size={13} strokeWidth={1.7} />
+            </Link>
           </div>
         </section>
       </div>
@@ -275,14 +287,14 @@ export default function HomePage() {
               Catalog
             </p>
             <h2 id="wf-catalog-title">
-              {catalogCoverage.modelsTotal} model entries, <span>one</span> operational vocabulary.
+              {modelRecipeIndex.total} models, <span>one</span> operational vocabulary.
             </h2>
             <p>
               Video, 3D/4D, interactive worlds, and embodied systems share manifests and readiness
               signals. Catalog inclusion is not uniform runtime maturity.
             </p>
           </header>
-          <CatalogCoverage />
+          <CatalogCoverage modelCount={modelRecipeIndex.total} />
         </section>
 
         <section

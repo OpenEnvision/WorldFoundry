@@ -11,37 +11,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
-import diffusers
-import pkg_resources
+import pkg_resources  # noqa: F401 - Keeps the module's import-time setup.
 import torch
 import torch.nn.functional as F
 import torch.nn.init as init
-from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.attention import Attention, FeedForward
-from diffusers.models.attention_processor import (Attention,
-                                                  AttentionProcessor,
-                                                  AttnProcessor2_0,
-                                                  HunyuanAttnProcessor2_0)
-from diffusers.models.embeddings import (SinusoidalPositionalEmbedding,
-                                         TimestepEmbedding, Timesteps,
-                                         get_3d_sincos_pos_embed)
-from diffusers.models.modeling_outputs import Transformer2DModelOutput
-from diffusers.models.modeling_utils import ModelMixin
-from diffusers.models.normalization import (AdaLayerNorm, AdaLayerNormZero,
-                                            CogVideoXLayerNormZero)
-from diffusers.utils import USE_PEFT_BACKEND, is_torch_version, logging
+from diffusers.models.attention_processor import (
+    Attention,  # noqa: F811 - Later import provides the binding, as upstream.
+    AttnProcessor2_0,
+    HunyuanAttnProcessor2_0,
+)
+from diffusers.models.embeddings import (
+    SinusoidalPositionalEmbedding,
+)
+from diffusers.models.normalization import AdaLayerNorm, AdaLayerNormZero
 from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import maybe_allow_in_graph
-from einops import rearrange, repeat
+from einops import rearrange
 from torch import nn
+
+from worldfoundry.core.nn.blocks.layers import zero_module as zero_module
 
 from .motion_module import PositionalEncoding, get_motion_module
 from .norm import AdaLayerNormShift, EasyAnimateLayerNormZero, FP32LayerNorm
-from .processor import (EasyAnimateAttnProcessor2_0,
-                        EasyAnimateSWAttnProcessor2_0,
-                        LazyKVCompressionProcessor2_0)
+from .processor import EasyAnimateAttnProcessor2_0, EasyAnimateSWAttnProcessor2_0, LazyKVCompressionProcessor2_0
 
 if is_xformers_available():
     import xformers
@@ -49,12 +44,6 @@ if is_xformers_available():
 else:
     xformers = None
 
-
-def zero_module(module):
-    # Zero out the parameters of a module and return it.
-    for p in module.parameters():
-        p.detach().zero_()
-    return module
 
 @maybe_allow_in_graph
 class GatedSelfAttentionDense(nn.Module):
@@ -97,11 +86,9 @@ class GatedSelfAttentionDense(nn.Module):
 
         return x
 
+
 class LazyKVCompressionAttention(Attention):
-    def __init__(
-            self, 
-            sr_ratio=2, *args, **kwargs
-        ):
+    def __init__(self, sr_ratio=2, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.sr_ratio = sr_ratio
         self.k_compression = nn.Conv2d(
@@ -110,7 +97,7 @@ class LazyKVCompressionAttention(Attention):
             groups=kwargs["query_dim"],
             kernel_size=sr_ratio,
             stride=sr_ratio,
-            bias=True
+            bias=True,
         )
         self.v_compression = nn.Conv2d(
             kwargs["query_dim"],
@@ -118,12 +105,13 @@ class LazyKVCompressionAttention(Attention):
             groups=kwargs["query_dim"],
             kernel_size=sr_ratio,
             stride=sr_ratio,
-            bias=True
+            bias=True,
         )
         init.constant_(self.k_compression.weight, 1 / (sr_ratio * sr_ratio))
         init.constant_(self.v_compression.weight, 1 / (sr_ratio * sr_ratio))
         init.constant_(self.k_compression.bias, 0)
         init.constant_(self.v_compression.bias, 0)
+
 
 @maybe_allow_in_graph
 class TemporalTransformerBlock(nn.Module):
@@ -167,9 +155,9 @@ class TemporalTransformerBlock(nn.Module):
         num_attention_heads: int,
         attention_head_dim: int,
         dropout=0.0,
-        cross_attention_dim: Optional[int] = None,
+        cross_attention_dim: int | None = None,
         activation_fn: str = "geglu",
-        num_embeds_ada_norm: Optional[int] = None,
+        num_embeds_ada_norm: int | None = None,
         attention_bias: bool = False,
         only_cross_attention: bool = False,
         double_self_attention: bool = False,
@@ -179,13 +167,13 @@ class TemporalTransformerBlock(nn.Module):
         norm_eps: float = 1e-5,
         final_dropout: bool = False,
         attention_type: str = "default",
-        positional_embeddings: Optional[str] = None,
-        num_positional_embeddings: Optional[int] = None,
+        positional_embeddings: str | None = None,
+        num_positional_embeddings: int | None = None,
         # motion module kwargs
-        motion_module_type = "VanillaGrid",
-        motion_module_kwargs = None,
-        qk_norm = False,
-        after_norm = False,
+        motion_module_type="VanillaGrid",
+        motion_module_kwargs=None,
+        qk_norm=False,
+        after_norm=False,
     ):
         super().__init__()
         self.only_cross_attention = only_cross_attention
@@ -233,9 +221,9 @@ class TemporalTransformerBlock(nn.Module):
         )
 
         self.attn_temporal = get_motion_module(
-            in_channels = dim,
-            motion_module_type = motion_module_type,
-            motion_module_kwargs = motion_module_kwargs,
+            in_channels=dim,
+            motion_module_type=motion_module_type,
+            motion_module_kwargs=motion_module_kwargs,
         )
 
         # 2. Cross-Attn
@@ -286,7 +274,7 @@ class TemporalTransformerBlock(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
-    def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int):
+    def set_chunk_feed_forward(self, chunk_size: int | None, dim: int):
         # Sets chunk feed-forward
         self._chunk_size = chunk_size
         self._chunk_dim = dim
@@ -294,12 +282,12 @@ class TemporalTransformerBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        timestep: Optional[torch.LongTensor] = None,
-        cross_attention_kwargs: Dict[str, Any] = None,
-        class_labels: Optional[torch.LongTensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        timestep: torch.LongTensor | None = None,
+        cross_attention_kwargs: dict[str, Any] | None = None,
+        class_labels: torch.LongTensor | None = None,
         num_frames: int = 16,
         height: int = 32,
         width: int = 32,
@@ -379,7 +367,10 @@ class TemporalTransformerBlock(nn.Module):
             if self.pos_embed is not None and self.use_ada_layer_norm_single is None:
                 norm_hidden_states = self.pos_embed(norm_hidden_states)
 
-            if norm_hidden_states.dtype != encoder_hidden_states.dtype or norm_hidden_states.dtype != encoder_attention_mask.dtype:
+            if (
+                norm_hidden_states.dtype != encoder_hidden_states.dtype
+                or norm_hidden_states.dtype != encoder_attention_mask.dtype
+            ):
                 norm_hidden_states = norm_hidden_states.to(encoder_hidden_states.dtype)
 
             attn_output = self.attn2(
@@ -418,7 +409,7 @@ class TemporalTransformerBlock(nn.Module):
             )
         else:
             ff_output = self.ff(norm_hidden_states, scale=lora_scale)
-        
+
         if self.norm4 is not None:
             ff_output = self.norm4(ff_output)
 
@@ -476,22 +467,22 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
         num_attention_heads: int,
         attention_head_dim: int,
         dropout=0.0,
-        cross_attention_dim: Optional[int] = None,
+        cross_attention_dim: int | None = None,
         activation_fn: str = "geglu",
-        num_embeds_ada_norm: Optional[int] = None,
+        num_embeds_ada_norm: int | None = None,
         attention_bias: bool = False,
         only_cross_attention: bool = False,
         double_self_attention: bool = False,
         upcast_attention: bool = False,
         norm_elementwise_affine: bool = True,
-        norm_type: str = "layer_norm", 
+        norm_type: str = "layer_norm",
         norm_eps: float = 1e-5,
         final_dropout: bool = False,
         attention_type: str = "default",
-        positional_embeddings: Optional[str] = None,
-        num_positional_embeddings: Optional[int] = None,
-        qk_norm = False,
-        after_norm = False,
+        positional_embeddings: str | None = None,
+        num_positional_embeddings: int | None = None,
+        qk_norm=False,
+        after_norm=False,
     ):
         super().__init__()
         self.only_cross_attention = only_cross_attention
@@ -525,7 +516,7 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
             self.norm1 = AdaLayerNormZero(dim, num_embeds_ada_norm)
         else:
             self.norm1 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
-            
+
         self.attn1 = Attention(
             query_dim=dim,
             heads=num_attention_heads,
@@ -586,7 +577,7 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
-    def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int):
+    def set_chunk_feed_forward(self, chunk_size: int | None, dim: int):
         # Sets chunk feed-forward
         self._chunk_size = chunk_size
         self._chunk_dim = dim
@@ -594,12 +585,12 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        timestep: Optional[torch.LongTensor] = None,
-        cross_attention_kwargs: Dict[str, Any] = None,
-        class_labels: Optional[torch.LongTensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        timestep: torch.LongTensor | None = None,
+        cross_attention_kwargs: dict[str, Any] | None = None,
+        class_labels: torch.LongTensor | None = None,
     ) -> torch.FloatTensor:
         # Notice that normalization is always applied before the real computation in the following blocks.
         # 0. Self-Attention
@@ -632,7 +623,7 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
         # 2. Prepare GLIGEN inputs
         cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
         gligen_kwargs = cross_attention_kwargs.pop("gligen", None)
-        
+
         attn_output = self.attn1(
             norm_hidden_states,
             encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
@@ -705,7 +696,7 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
             )
         else:
             ff_output = self.ff(norm_hidden_states, scale=lora_scale)
-        
+
         if self.norm4 is not None:
             ff_output = self.norm4(ff_output)
 
@@ -720,6 +711,7 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
 
         return hidden_states
 
+
 class GEGLU(nn.Module):
     def __init__(self, dim_in, dim_out, norm_elementwise_affine):
         super().__init__()
@@ -729,6 +721,7 @@ class GEGLU(nn.Module):
     def forward(self, x):
         x, gate = self.proj(self.norm(x)).chunk(2, dim=-1)
         return x * F.gelu(gate)
+
 
 @maybe_allow_in_graph
 class HunyuanDiTBlock(nn.Module):
@@ -773,7 +766,7 @@ class HunyuanDiTBlock(nn.Module):
         norm_elementwise_affine: bool = True,
         norm_eps: float = 1e-6,
         final_dropout: bool = False,
-        ff_inner_dim: Optional[int] = None,
+        ff_inner_dim: int | None = None,
         ff_bias: bool = True,
         skip: bool = False,
         qk_norm: bool = True,
@@ -782,7 +775,7 @@ class HunyuanDiTBlock(nn.Module):
         is_local_attention: bool = False,
         local_attention_frames: int = 2,
         enable_inpaint: bool = False,
-        kvcompression = False,
+        kvcompression=False,
     ):
         super().__init__()
 
@@ -790,8 +783,7 @@ class HunyuanDiTBlock(nn.Module):
         # NOTE: when new version comes, check norm2 and norm 3
         # 1. Self-Attn
         self.norm1 = AdaLayerNormShift(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
-        self.t_embed = PositionalEncoding(dim, dropout=0., max_len=512) \
-            if time_position_encoding else nn.Identity()
+        self.t_embed = PositionalEncoding(dim, dropout=0.0, max_len=512) if time_position_encoding else nn.Identity()
 
         self.is_local_attention = is_local_attention
         self.local_attention_frames = local_attention_frames
@@ -824,22 +816,23 @@ class HunyuanDiTBlock(nn.Module):
 
         if self.is_local_attention:
             from mamba_ssm import Mamba2
+
             self.mamba_norm_in = FP32LayerNorm(dim, norm_eps, norm_elementwise_affine)
             self.in_linear = nn.Linear(dim, 1536)
             self.mamba_norm_1 = FP32LayerNorm(1536, norm_eps, norm_elementwise_affine)
             self.mamba_norm_2 = FP32LayerNorm(1536, norm_eps, norm_elementwise_affine)
 
             self.mamba_block_1 = Mamba2(
-                d_model=1536, 
-                d_state=64, 
-                d_conv=4, 
-                expand=2, 
+                d_model=1536,
+                d_state=64,
+                d_conv=4,
+                expand=2,
             )
             self.mamba_block_2 = Mamba2(
-                d_model=1536, 
-                d_state=64, 
-                d_conv=4, 
-                expand=2, 
+                d_model=1536,
+                d_state=64,
+                d_conv=4,
+                expand=2,
             )
             self.mamba_norm_after_mamba_block = FP32LayerNorm(1536, norm_eps, norm_elementwise_affine)
 
@@ -877,7 +870,7 @@ class HunyuanDiTBlock(nn.Module):
             self.norm_clip = None
             self.gate_clip = None
             self.norm_clip_out = None
-            
+
         # 3. Feed-forward
         self.norm3 = FP32LayerNorm(dim, norm_eps, norm_elementwise_affine)
 
@@ -906,7 +899,7 @@ class HunyuanDiTBlock(nn.Module):
         self._chunk_size = None
         self._chunk_dim = 0
 
-    def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
+    def set_chunk_feed_forward(self, chunk_size: int | None, dim: int = 0):
         # Sets chunk feed-forward
         self._chunk_size = chunk_size
         self._chunk_dim = dim
@@ -914,14 +907,14 @@ class HunyuanDiTBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        temb: Optional[torch.Tensor] = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        temb: torch.Tensor | None = None,
         image_rotary_emb=None,
         skip=None,
         num_frames: int = 1,
         height: int = 32,
         width: int = 32,
-        clip_encoder_hidden_states: Optional[torch.Tensor] = None,
+        clip_encoder_hidden_states: torch.Tensor | None = None,
         disable_image_rotary_emb_in_attn1=False,
     ) -> torch.Tensor:
         # Notice that normalization is always applied before the real computation in the following blocks.
@@ -932,7 +925,10 @@ class HunyuanDiTBlock(nn.Module):
             hidden_states = self.skip_linear(cat)
 
         if image_rotary_emb is not None:
-            image_rotary_emb = (torch.cat([image_rotary_emb[0] for i in range(num_frames)], dim=0), torch.cat([image_rotary_emb[1] for i in range(num_frames)], dim=0))
+            image_rotary_emb = (
+                torch.cat([image_rotary_emb[0] for i in range(num_frames)], dim=0),
+                torch.cat([image_rotary_emb[1] for i in range(num_frames)], dim=0),
+            )
 
         if num_frames != 1:
             # add time embedding
@@ -945,32 +941,37 @@ class HunyuanDiTBlock(nn.Module):
         norm_hidden_states = self.norm1(hidden_states, temb)  ### checked: self.norm1 is correct
         if num_frames > 2 and self.is_local_attention:
             if image_rotary_emb is not None:
-                attn1_image_rotary_emb = (image_rotary_emb[0][:int(height * width * 2)], image_rotary_emb[1][:int(height * width * 2)])
+                attn1_image_rotary_emb = (
+                    image_rotary_emb[0][: int(height * width * 2)],
+                    image_rotary_emb[1][: int(height * width * 2)],
+                )
             else:
                 attn1_image_rotary_emb = image_rotary_emb
             norm_hidden_states_1 = rearrange(norm_hidden_states, "b (f d) c -> b f d c", d=height * width)
-            norm_hidden_states_1 = rearrange(norm_hidden_states_1, "b (f p) d c -> (b f) (p d) c", p = 2)
-            
+            norm_hidden_states_1 = rearrange(norm_hidden_states_1, "b (f p) d c -> (b f) (p d) c", p=2)
+
             attn_output = self.attn1(
                 norm_hidden_states_1,
                 image_rotary_emb=attn1_image_rotary_emb if not disable_image_rotary_emb_in_attn1 else None,
             )
-            attn_output = rearrange(attn_output, "(b f) (p d) c -> b (f p) d c", p = 2, f = num_frames // 2)
+            attn_output = rearrange(attn_output, "(b f) (p d) c -> b (f p) d c", p=2, f=num_frames // 2)
 
-            norm_hidden_states_2 = rearrange(norm_hidden_states, "b (f d) c -> b f d c", d = height * width)[:, 1:-1]
+            norm_hidden_states_2 = rearrange(norm_hidden_states, "b (f d) c -> b f d c", d=height * width)[:, 1:-1]
             local_attention_frames_num = norm_hidden_states_2.size()[1] // 2
-            norm_hidden_states_2 = rearrange(norm_hidden_states_2, "b (f p) d c -> (b f) (p d) c", p = 2)
+            norm_hidden_states_2 = rearrange(norm_hidden_states_2, "b (f p) d c -> (b f) (p d) c", p=2)
             attn_output_2 = self.attn1(
                 norm_hidden_states_2,
                 image_rotary_emb=attn1_image_rotary_emb if not disable_image_rotary_emb_in_attn1 else None,
             )
-            attn_output_2 = rearrange(attn_output_2, "(b f) (p d) c -> b (f p) d c", p = 2, f = local_attention_frames_num)
+            attn_output_2 = rearrange(attn_output_2, "(b f) (p d) c -> b (f p) d c", p=2, f=local_attention_frames_num)
             attn_output[:, 1:-1] = (attn_output[:, 1:-1] + attn_output_2) / 2
 
             attn_output = rearrange(attn_output, "b f d c -> b (f d) c")
         else:
             if self.kvcompression:
-                norm_hidden_states = rearrange(norm_hidden_states, "b (f h w) c -> b c f h w", f = num_frames, h = height, w = width)
+                norm_hidden_states = rearrange(
+                    norm_hidden_states, "b (f h w) c -> b c f h w", f=num_frames, h=height, w=width
+                )
                 attn_output = self.attn1(
                     norm_hidden_states,
                     image_rotary_emb=image_rotary_emb if not disable_image_rotary_emb_in_attn1 else None,
@@ -987,16 +988,12 @@ class HunyuanDiTBlock(nn.Module):
             hidden_states = hidden_states + self.mamba_norm_out(
                 self.out_linear(
                     self.mamba_norm_after_mamba_block(
-                        self.mamba_block_1(
-                            self.mamba_norm_1(hidden_states_in)
-                        ) + 
-                        self.mamba_block_2(
-                            self.mamba_norm_2(hidden_states_in.flip(1))
-                        ).flip(1)
+                        self.mamba_block_1(self.mamba_norm_1(hidden_states_in))
+                        + self.mamba_block_2(self.mamba_norm_2(hidden_states_in.flip(1))).flip(1)
                     )
                 )
             )
-        
+
         # 2. Cross-Attention
         hidden_states = hidden_states + self.attn2(
             self.norm2(hidden_states),
@@ -1024,6 +1021,7 @@ class HunyuanDiTBlock(nn.Module):
 
         return hidden_states
 
+
 @maybe_allow_in_graph
 class EasyAnimateDiTBlock(nn.Module):
     def __init__(
@@ -1037,11 +1035,11 @@ class EasyAnimateDiTBlock(nn.Module):
         norm_elementwise_affine: bool = True,
         norm_eps: float = 1e-6,
         final_dropout: bool = True,
-        ff_inner_dim: Optional[int] = None,
+        ff_inner_dim: int | None = None,
         ff_bias: bool = True,
         qk_norm: bool = True,
         after_norm: bool = False,
-        norm_type: str="fp32_layer_norm",
+        norm_type: str = "fp32_layer_norm",
         is_mmdit_block: bool = True,
         is_swa: bool = False,
     ):
@@ -1074,7 +1072,7 @@ class EasyAnimateDiTBlock(nn.Module):
             )
         else:
             self.attn2 = None
-        
+
         # FFN Part
         self.norm2 = EasyAnimateLayerNormZero(
             time_embed_dim, dim, norm_elementwise_affine, norm_eps, norm_type=norm_type, bias=True
@@ -1098,7 +1096,7 @@ class EasyAnimateDiTBlock(nn.Module):
             )
         else:
             self.txt_ff = None
-            
+
         if after_norm:
             self.norm3 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
         else:
@@ -1109,10 +1107,10 @@ class EasyAnimateDiTBlock(nn.Module):
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
         temb: torch.Tensor,
-        image_rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        num_frames = None,
-        height = None,
-        width = None
+        image_rotary_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
+        num_frames=None,
+        height=None,
+        width=None,
     ) -> torch.Tensor:
         # Norm
         norm_hidden_states, norm_encoder_hidden_states, gate_msa, enc_gate_msa = self.norm1(
@@ -1135,7 +1133,7 @@ class EasyAnimateDiTBlock(nn.Module):
                 hidden_states=norm_hidden_states,
                 encoder_hidden_states=norm_encoder_hidden_states,
                 image_rotary_emb=image_rotary_emb,
-                attn2=self.attn2
+                attn2=self.attn2,
             )
         hidden_states = hidden_states + gate_msa * attn_hidden_states
         encoder_hidden_states = encoder_hidden_states + enc_gate_msa * attn_encoder_hidden_states

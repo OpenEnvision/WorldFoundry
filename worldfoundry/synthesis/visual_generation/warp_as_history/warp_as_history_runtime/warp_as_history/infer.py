@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
 from typing import Any
 
@@ -85,7 +84,7 @@ def load_camera_poses(path: Path, key: str) -> tuple[np.ndarray, int]:
         if key not in data:
             raise KeyError(f"{path} does not contain key {key!r}. Available keys: {list(data.files)}")
         poses = np.asarray(data[key], dtype=np.float32)
-        fps = int(round(float(data["fps"]))) if "fps" in data else 16
+        fps = int(round(float(data["fps"]))) if "fps" in data else 16  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     if poses.ndim != 3 or poses.shape[-2:] != (4, 4):
         raise ValueError(f"Expected camera poses with shape [T, 4, 4], got {poses.shape}")
     return poses, fps
@@ -102,7 +101,7 @@ def load_video_frames(path: Path) -> tuple[list[np.ndarray], int]:
         reader.close()
     if not frames:
         raise ValueError(f"{path} contains no frames")
-    fps = int(round(float(meta.get("fps") or 16)))
+    fps = int(round(float(meta.get("fps") or 16)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     return frames, fps
 
 
@@ -285,7 +284,7 @@ def run_infer_from_csv(
 
     import torch
 
-    from warp_as_history import WarpAsHistoryPipeline
+    from . import WarpAsHistoryPipeline
 
     torch_dtype = torch_dtype_from_arg(dtype, device)
     generator = torch.Generator(device=device).manual_seed(int(seed)) if device.startswith("cuda") else None

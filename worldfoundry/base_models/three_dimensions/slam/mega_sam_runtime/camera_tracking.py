@@ -110,16 +110,16 @@ def run_tracking(frames_dir, mono_root, metric_root, scene_name, output_path, *,
         backend_radius=2,
         backend_nms=3,
     )
-    print("Running evaluation on {}".format(args.datapath))
+    print(f"Running evaluation on {args.datapath}")
     print(args)
 
     scene_name = args.scene_name.split("/")[-1]
 
-    image_list = sorted(glob.glob(os.path.join("%s" % (args.datapath), "*.jpg")))
-    image_list += sorted(glob.glob(os.path.join("%s" % (args.datapath), "*.png")))
+    image_list = sorted(glob.glob(os.path.join("%s" % (args.datapath), "*.jpg")))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
+    image_list += sorted(glob.glob(os.path.join("%s" % (args.datapath), "*.png")))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
-    mono_disp_paths = sorted(glob.glob(os.path.join("%s/%s" % (args.mono_depth_path, scene_name), "*.npy")))
-    metric_depth_paths = sorted(glob.glob(os.path.join("%s/%s" % (args.metric_depth_path, scene_name), "*.npz")))
+    mono_disp_paths = sorted(glob.glob(os.path.join("%s/%s" % (args.mono_depth_path, scene_name), "*.npy")))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
+    metric_depth_paths = sorted(glob.glob(os.path.join("%s/%s" % (args.metric_depth_path, scene_name), "*.npz")))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
     if len(image_list) < 2:
         raise ValueError("MegaSAM tracking requires at least two frames")
@@ -131,7 +131,7 @@ def run_tracking(frames_dir, mono_root, metric_root, scene_name, output_path, *,
     shifts = []
     mono_disp_list = []
     fovs = []
-    for t, (mono_disp_file, metric_depth_file) in enumerate(zip(mono_disp_paths, metric_depth_paths)):
+    for t, (mono_disp_file, metric_depth_file) in enumerate(zip(mono_disp_paths, metric_depth_paths, strict=False)):  # noqa: B007 - The loop variable is read outside the loop.
         da_disp = np.float32(np.load(mono_disp_file))  # / 300.0
         with np.load(metric_depth_file) as uni_data:
             metric_depth = uni_data["depth"]

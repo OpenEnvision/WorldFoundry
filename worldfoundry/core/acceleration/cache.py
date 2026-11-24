@@ -26,7 +26,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, cast
 
 import torch
 
@@ -41,39 +41,39 @@ T = TypeVar("T")
 def _detach(value: T) -> T:
     """Strip ``requires_grad`` from nested tensor containers before storing a hit."""
     if isinstance(value, torch.Tensor):
-        return value.detach()  # type: ignore[return-value]
+        return cast(T, value.detach())
     if isinstance(value, tuple):
-        return tuple(_detach(item) for item in value)  # type: ignore[return-value]
+        return cast(T, tuple(_detach(item) for item in value))
     if isinstance(value, list):
-        return [_detach(item) for item in value]  # type: ignore[return-value]
+        return cast(T, [_detach(item) for item in value])
     if isinstance(value, dict):
-        return {key: _detach(item) for key, item in value.items()}  # type: ignore[return-value]
+        return cast(T, {key: _detach(item) for key, item in value.items()})
     return value
 
 
 def _tree_sub(left: T, right: T) -> T:
     """Subtract matching tensor trees; refuse mixed layouts so a hit cannot silently skip."""
     if isinstance(left, torch.Tensor) and isinstance(right, torch.Tensor):
-        return left - right  # type: ignore[return-value]
+        return cast(T, left - right)
     if isinstance(left, tuple) and isinstance(right, tuple) and len(left) == len(right):
-        return tuple(_tree_sub(a, b) for a, b in zip(left, right, strict=True))  # type: ignore[return-value]
+        return cast(T, tuple(_tree_sub(a, b) for a, b in zip(left, right, strict=True)))
     if isinstance(left, list) and isinstance(right, list) and len(left) == len(right):
-        return [_tree_sub(a, b) for a, b in zip(left, right, strict=True)]  # type: ignore[return-value]
+        return cast(T, [_tree_sub(a, b) for a, b in zip(left, right, strict=True)])
     if isinstance(left, dict) and isinstance(right, dict) and left.keys() == right.keys():
-        return {key: _tree_sub(left[key], right[key]) for key in left}  # type: ignore[return-value]
+        return cast(T, {key: _tree_sub(left[key], right[key]) for key in left})
     raise TypeError("cached output trees must have matching tensor containers")
 
 
 def _tree_add_scaled(value: T, delta: T, scale: float) -> T:
     """First-order extrapolation: ``value + scale * delta`` on a matching tree."""
     if isinstance(value, torch.Tensor) and isinstance(delta, torch.Tensor):
-        return value + delta * scale  # type: ignore[return-value]
+        return cast(T, value + delta * scale)
     if isinstance(value, tuple) and isinstance(delta, tuple) and len(value) == len(delta):
-        return tuple(_tree_add_scaled(a, b, scale) for a, b in zip(value, delta, strict=True))  # type: ignore[return-value]
+        return cast(T, tuple(_tree_add_scaled(a, b, scale) for a, b in zip(value, delta, strict=True)))
     if isinstance(value, list) and isinstance(delta, list) and len(value) == len(delta):
-        return [_tree_add_scaled(a, b, scale) for a, b in zip(value, delta, strict=True)]  # type: ignore[return-value]
+        return cast(T, [_tree_add_scaled(a, b, scale) for a, b in zip(value, delta, strict=True)])
     if isinstance(value, dict) and isinstance(delta, dict) and value.keys() == delta.keys():
-        return {key: _tree_add_scaled(value[key], delta[key], scale) for key in value}  # type: ignore[return-value]
+        return cast(T, {key: _tree_add_scaled(value[key], delta[key], scale) for key in value})
     raise TypeError("cached output trees must have matching tensor containers")
 
 
@@ -209,8 +209,8 @@ class FixedStepCache(Generic[T]):
         if skip:
             self.events.append(CacheEvent(step=step, hit=True, reason=reason))
             if self.delta_scale and self._delta is not None:
-                return _tree_add_scaled(self._last, self._delta, self.delta_scale)
-            return self._last
+                return _tree_add_scaled(cast(T, self._last), self._delta, self.delta_scale)
+            return cast(T, self._last)
 
         output = compute()
         previous = self._last
@@ -330,7 +330,7 @@ class AdaptiveResidualCache:
         if can_hit:
             self._consecutive_hits += 1
             self.events.append(CacheEvent(int(step), True, "below-threshold", self._accumulated_change))
-            return self._residual
+            return cast(torch.Tensor, self._residual)
 
         residual = compute_residual()
         self._residual = residual.detach()
@@ -544,9 +544,9 @@ class _BlockFeatureCache:
         if request_id is not None:
             receipt["request_id"] = str(request_id)
         if hasattr(self, "front_blocks"):
-            receipt["front_blocks"] = int(self.front_blocks)
+            receipt["front_blocks"] = int(cast(int, self.front_blocks))
         if hasattr(self, "back_blocks"):
-            receipt["back_blocks"] = int(self.back_blocks)
+            receipt["back_blocks"] = int(cast(int, self.back_blocks))
         return receipt
 
 
@@ -884,9 +884,9 @@ class DynamicBlockFeatureCache(_BlockFeatureCache):
                     decision_reasons.add("threshold")
 
             if can_hit:
-                hidden = current + cached_residual
+                hidden = current + cast(torch.Tensor, cached_residual)
                 skipped_blocks.append(block_id)
-                residual = cached_residual
+                residual = cast(torch.Tensor, cached_residual)
             else:
                 hidden = run_block(block_id, current)
                 if not isinstance(hidden, torch.Tensor):
@@ -1015,8 +1015,7 @@ class BlockTaylorSeerCache:
         expected = set(BlockTaylorSeerCache.phase_names)
         if set(outputs) != expected:
             raise ValueError(
-                "BlockTaylorSeer phase callback must return exactly "
-                + ", ".join(BlockTaylorSeerCache.phase_names)
+                "BlockTaylorSeer phase callback must return exactly " + ", ".join(BlockTaylorSeerCache.phase_names)
             )
         parsed: _PhaseOutputs = {}
         for name in BlockTaylorSeerCache.phase_names:
@@ -1048,10 +1047,7 @@ class BlockTaylorSeerCache:
             for state in phases.values():
                 if _tensor_signature(state.value) != root_signature:
                     return False
-                if (
-                    state.derivative is not None
-                    and _tensor_signature(state.derivative) != root_signature
-                ):
+                if state.derivative is not None and _tensor_signature(state.derivative) != root_signature:
                     return False
         return True
 
@@ -1113,9 +1109,14 @@ class BlockTaylorSeerCache:
         count = self.total_steps if total_steps is None else total_steps
         if count is not None and int(count) < 1:
             raise ValueError("BlockTaylorSeer total_steps must be positive")
-        dense_boundary = self.dense_last > 0 and count is not None and step >= max(
-            int(count) - self.dense_last,
-            0,
+        dense_boundary = (
+            self.dense_last > 0
+            and count is not None
+            and step
+            >= max(
+                int(count) - self.dense_last,
+                0,
+            )
         )
         if self.dense_last > 0 and count is None:
             raise ValueError("BlockTaylorSeer dense_last requires total_steps")
@@ -1153,11 +1154,7 @@ class BlockTaylorSeerCache:
 
         previous_blocks = self._blocks
         previous_dense_step = self._last_dense_step
-        dense_gap = (
-            max(step - previous_dense_step, 1)
-            if previous_dense_step is not None
-            else None
-        )
+        dense_gap = max(step - previous_dense_step, 1) if previous_dense_step is not None else None
         next_blocks: dict[int, dict[str, _TaylorPhaseState]] = {}
         hidden = block_input
         for block_id in all_blocks:
@@ -1323,9 +1320,7 @@ class TeaCacheResidualCache:
             and self._accumulated_change < self.threshold
         )
         if can_hit:
-            self.events.append(
-                CacheEvent(step, True, "polynomial-below-threshold", self._accumulated_change)
-            )
+            self.events.append(CacheEvent(step, True, "polynomial-below-threshold", self._accumulated_change))
             return self._residual
 
         residual = compute_residual()
@@ -1435,14 +1430,11 @@ class CustomTaylorResidualCache:
         self._previous_signal = signal.detach().clone()
         non_monotonic = self._last_dense_step is not None and step <= self._last_dense_step
 
-        finite_metric = (
-            relative_change is None
-            or (
-                math.isfinite(relative_change)
-                and scaled_change is not None
-                and math.isfinite(scaled_change)
-                and math.isfinite(self._accumulated_change)
-            )
+        finite_metric = relative_change is None or (
+            math.isfinite(relative_change)
+            and scaled_change is not None
+            and math.isfinite(scaled_change)
+            and math.isfinite(self._accumulated_change)
         )
         can_hit = (
             not dense_boundary
@@ -1601,9 +1593,7 @@ class MagCacheResidualCache:
         if count is None:
             count = len(self.ratios)
         if len(self.ratios) < int(count):
-            raise ValueError(
-                f"MagCache has {len(self.ratios)} calibrated ratios for {count} steps"
-            )
+            raise ValueError(f"MagCache has {len(self.ratios)} calibrated ratios for {count} steps")
         retained_steps = int(int(count) * self.retention_ratio)
         can_consider = step >= retained_steps and self._residual is not None
         skip_error = None
@@ -1612,13 +1602,8 @@ class MagCacheResidualCache:
             self._accumulated_steps += 1
             skip_error = abs(1.0 - self._accumulated_ratio)
             self._accumulated_error += skip_error
-            if (
-                self._accumulated_error < self.threshold
-                and self._accumulated_steps <= self.max_skip_steps
-            ):
-                self.events.append(
-                    CacheEvent(step, True, "calibrated-magnitude", self._accumulated_error)
-                )
+            if self._accumulated_error < self.threshold and self._accumulated_steps <= self.max_skip_steps:
+                self.events.append(CacheEvent(step, True, "calibrated-magnitude", self._accumulated_error))
                 return self._residual
 
         residual = compute_residual()
@@ -1789,10 +1774,7 @@ class TaylorSeerResidualCache:
         dense_boundary = count is not None and step >= max(int(count) - self.dense_last, 0)
         scheduled_dense = step % self.interval == 0
         can_hit = (
-            not torch.is_grad_enabled()
-            and not dense_boundary
-            and not scheduled_dense
-            and self._residual is not None
+            not torch.is_grad_enabled() and not dense_boundary and not scheduled_dense and self._residual is not None
         )
         if can_hit:
             distance = step - int(self._last_dense_step or 0)
@@ -1823,8 +1805,8 @@ class TaylorSeerResidualCache:
 __all__ = [
     "AdaCacheResidualCache",
     "AdaptiveResidualCache",
-    "BlockTaylorSeerCache",
     "BlockCacheEvent",
+    "BlockTaylorSeerCache",
     "CacheEvent",
     "CustomTaylorResidualCache",
     "DualBlockFeatureCache",

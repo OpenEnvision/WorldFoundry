@@ -1,11 +1,15 @@
 import re
 import textwrap
 from copy import deepcopy
-from typing import Dict, List
 
 import torch
 
-from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm import PtEngine, RequestConfig, Template, to_device
+from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm import (
+    PtEngine,
+    RequestConfig,
+    Template,
+    to_device,
+)
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm.infer.protocol import ChatCompletionResponse
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.utils import get_logger
 
@@ -28,14 +32,13 @@ class DefaultRMPlugin:
     def __call__(self, inputs):
         batched_inputs = [self.template.encode(deepcopy(infer_request)) for infer_request in inputs]
         reward_inputs = to_device(self.template.data_collator(batched_inputs), self.model.device)
-        reward_inputs.pop('labels')
+        reward_inputs.pop("labels")
 
         with torch.inference_mode():
             return self.model(**reward_inputs).logits[:, 0]
 
 
 class GenRMPlugin(DefaultRMPlugin):
-
     def __init__(self, model, template):
         """
         Generative Reward Model Plugin Example.
@@ -47,7 +50,7 @@ class GenRMPlugin(DefaultRMPlugin):
         Args:
             model (torch.nn.Module): The generative reward model.
             template (Template): The template used for encoding input data.
-    """
+        """
 
         super().__init__(model, template)
         # initilize PTEngine to infer
@@ -62,7 +65,7 @@ class GenRMPlugin(DefaultRMPlugin):
 
             For example:
             Reward: 0.85
-        """)  # noqa
+        """)
 
     def __call__(self, inputs):
         """
@@ -87,7 +90,7 @@ class GenRMPlugin(DefaultRMPlugin):
         rewards = self.compute_rewards(results)
         return torch.tensor(rewards, dtype=torch.float32)
 
-    def prepare_rm_inputs(self, inputs: List[Dict]) -> List[Dict]:
+    def prepare_rm_inputs(self, inputs: list[dict]) -> list[dict]:
         """
         Prepare inputs for the reward model by converting messages into queries.
 
@@ -98,19 +101,19 @@ class GenRMPlugin(DefaultRMPlugin):
             List[Dict]: Processed inputs for the reward model.
         """
         rm_inputs = []
-        for idx, infer_request in enumerate(inputs):
+        for _idx, infer_request in enumerate(inputs):
             # Deep copy to prevent modification of original input
             rm_infer_request = deepcopy(infer_request)
 
             # Extract and convert messages to a single query string
-            messages = rm_infer_request.get('messages')
+            messages = rm_infer_request.get("messages")
             query = self.messages_to_query(messages)
 
             # Construct new messages tailored for the reward model
-            rm_messages = [{'role': 'system', 'content': self.system}, {'role': 'user', 'content': query}]
+            rm_messages = [{"role": "system", "content": self.system}, {"role": "user", "content": query}]
 
             # Update the messages in the reward infer request
-            rm_infer_request['messages'] = rm_messages
+            rm_infer_request["messages"] = rm_messages
             rm_inputs.append(rm_infer_request)
         return rm_inputs
 
@@ -128,7 +131,7 @@ class GenRMPlugin(DefaultRMPlugin):
         Raises:
             ValueError: If the reward score cannot be extracted or the format is incorrect.
         """
-        match = re.search(r'Reward:\s*([0-1](?:\.\d+)?)', model_output)
+        match = re.search(r"Reward:\s*([0-1](?:\.\d+)?)", model_output)
         if match:
             return float(match.group(1))
         else:
@@ -164,19 +167,19 @@ class GenRMPlugin(DefaultRMPlugin):
 
         # Define a mapping for role capitalization if needed
         role_mapping = {
-            'user': 'User',
-            'assistant': 'Assistant',
-            'system': 'System'
+            "user": "User",
+            "assistant": "Assistant",
+            "system": "System",
             # Add more roles here as needed
         }
 
         for idx, message in enumerate(messages):
             if not isinstance(message, dict):
-                raise TypeError(f'Each message must be a dictionary. Found {type(message)} at index {idx}.')
+                raise TypeError(f"Each message must be a dictionary. Found {type(message)} at index {idx}.")
 
             # Extract 'role' and 'content' from each message
-            role = message.get('role')
-            content = message.get('content')
+            role = message.get("role")
+            content = message.get("content")
             if not content:
                 continue
 
@@ -184,14 +187,14 @@ class GenRMPlugin(DefaultRMPlugin):
             role_formatted = role_mapping.get(role.lower(), role.capitalize())
 
             # Append the formatted message to the list
-            formatted_messages.append(f'{role_formatted}: {content}')
+            formatted_messages.append(f"{role_formatted}: {content}")
 
         # Join all formatted messages with newline characters
-        query = '\n'.join(formatted_messages)
+        query = "\n".join(formatted_messages)
 
         return query
 
-    def compute_rewards(self, results: List[ChatCompletionResponse]) -> List[float]:
+    def compute_rewards(self, results: list[ChatCompletionResponse]) -> list[float]:
         """
         Compute average reward scores from the reward model's outputs.
 
@@ -202,7 +205,7 @@ class GenRMPlugin(DefaultRMPlugin):
             List[float]: A list of average reward scores.
         """
         rewards = []
-        for idx, output in enumerate(results):
+        for _idx, output in enumerate(results):
             try:
                 cur_rewards = []
                 for choice in output.choices:
@@ -214,16 +217,16 @@ class GenRMPlugin(DefaultRMPlugin):
                     average_reward = sum(cur_rewards) / len(cur_rewards)
                 else:
                     average_reward = 0.0
-                    logger.warning('No valid rewards extracted. Assigning reward score of 0.0.')
+                    logger.warning("No valid rewards extracted. Assigning reward score of 0.0.")
 
                 rewards.append(average_reward)
             except Exception as e:
-                logger.error(f'Error computing reward: {e}')
+                logger.error(f"Error computing reward: {e}")
                 rewards.append(0.0)  # Assign default reward score on failure
         return rewards
 
 
 rm_plugins = {
-    'default': DefaultRMPlugin,
-    'genrm': GenRMPlugin,
+    "default": DefaultRMPlugin,
+    "genrm": GenRMPlugin,
 }

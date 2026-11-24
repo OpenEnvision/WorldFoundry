@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.studio.ui import vendor_assets as vendor_assets
+from worldfoundry.studio.visualization import vendor_assets as vendor_assets
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-INSTALL_COMMAND = "python -m worldfoundry.studio.ui.vendor_assets"
+INSTALL_COMMAND = "python -m worldfoundry.studio.visualization.vendor_assets"
 
 
 class _ChunkedResponse:
@@ -298,7 +298,7 @@ def test_standalone_spark_frontend_checks_assets_before_binding(monkeypatch) -> 
 
 
 def test_catalog_and_frontends_explain_deferred_provisioning() -> None:
-    interfaces_source = (REPO_ROOT / "worldfoundry/studio/ui/interfaces.py").read_text(encoding="utf-8")
+    interfaces_source = (REPO_ROOT / "worldfoundry/studio/visualization/interfaces.py").read_text(encoding="utf-8")
     frontends_source = (REPO_ROOT / "worldfoundry/studio/visualization/backends/frontends.py").read_text(
         encoding="utf-8"
     )

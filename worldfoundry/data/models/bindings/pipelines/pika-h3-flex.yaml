@@ -1,0 +1,15 @@
+schema_version: 2
+binding_id: pika-h3-flex
+model_id: pika-h3-flex
+aliases:
+- pika-h3
+- pika-h3-flex-fl2va
+- pika-h3-flex-ref2va
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.pika_h3_flex.pipeline_pika_h3_flex:PikaH3FlexPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

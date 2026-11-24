@@ -1,58 +1,100 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import logging
+
 import torch
 from omegaconf import OmegaConf
-from ..common.registry import registry
 
+from ..common.registry import registry
 from .base_model import BaseModel
 
+# isort: split
 from .blip_models.blip import BlipBase
+
+# isort: split
+# isort: split
 from .blip_models.blip_caption import BlipCaption
+
+# isort: split
+# isort: split
 from .blip_models.blip_classification import BlipClassification
+
+# isort: split
+# isort: split
 from .blip_models.blip_feature_extractor import BlipFeatureExtractor
+
+# isort: split
+# isort: split
 from .blip_models.blip_image_text_matching import BlipITM
+
+# isort: split
+# isort: split
 from .blip_models.blip_nlvr import BlipNLVR
+
+# isort: split
+# isort: split
 from .blip_models.blip_pretrain import BlipPretrain
+
+# isort: split
+# isort: split
 from .blip_models.blip_retrieval import BlipRetrieval
+
+# isort: split
+# isort: split
 from .blip_models.blip_vqa import BlipVQA
 
-from .blip2_models.blip2 import Blip2Base
-from .blip2_models.blip2_t5 import Blip2T5
-from .blip2_models.blip2_t5_instruct import Blip2T5Instruct
-from .blip2_models.blip2_vicuna import Blip2Vicuna
-from .blip2_models.blip2_vicuna_instruct import Blip2VicunaInstruct
-from .blip2_models.blip2_qformer import Blip2Qformer
-from .blip2_models.blip2_image_text_matching import Blip2ITM
+# isort: split
 
-from .med import XBertLMHeadDecoder
-from .vit import VisionTransformerEncoder
+# isort: split
+from .blip2_models.blip2 import Blip2Base
+
+# isort: split
+# isort: split
+from .blip2_models.blip2_t5 import Blip2T5
+
+# isort: split
+# isort: split
+from .blip2_models.blip2_t5_instruct import Blip2T5Instruct
+
+# isort: split
+from .blip2_models.blip2_image_text_matching import Blip2ITM
+from .blip2_models.blip2_qformer import Blip2Qformer
+from .blip2_models.blip2_vicuna import Blip2Vicuna as Blip2Vicuna
+from .blip2_models.blip2_vicuna_instruct import Blip2VicunaInstruct as Blip2VicunaInstruct
+
+# isort: split
+from .med import XBertLMHeadDecoder as XBertLMHeadDecoder
+
+# isort: split
+# isort: split
+from .vit import VisionTransformerEncoder as VisionTransformerEncoder
+
+# isort: split
 
 from ..processors.base_processor import BaseProcessor
 
-
 __all__ = [
-    "load_model",
     "BaseModel",
+    "Blip2Base",
+    "Blip2ITM",
+    "Blip2Qformer",
+    "Blip2T5",
+    "Blip2T5Instruct",
     "BlipBase",
-    "BlipFeatureExtractor",
     "BlipCaption",
     "BlipClassification",
+    "BlipFeatureExtractor",
     "BlipITM",
     "BlipNLVR",
     "BlipPretrain",
     "BlipRetrieval",
     "BlipVQA",
-    "Blip2Qformer",
-    "Blip2Base",
-    "Blip2ITM",
-    "Blip2T5",
-    "Blip2T5Instruct",
+    "load_model",
 ]
 
 
@@ -107,14 +149,10 @@ def load_preprocess(config):
     """
 
     def _build_proc_from_cfg(cfg):
-        return (
-            registry.get_processor_class(cfg.name).from_config(cfg)
-            if cfg is not None
-            else BaseProcessor()
-        )
+        return registry.get_processor_class(cfg.name).from_config(cfg) if cfg is not None else BaseProcessor()
 
-    vis_processors = dict()
-    txt_processors = dict()
+    vis_processors = {}
+    txt_processors = {}
 
     vis_proc_cfg = config.get("vis_processor")
     txt_proc_cfg = config.get("text_processor")
@@ -203,8 +241,7 @@ class ModelZoo:
 
     def __init__(self) -> None:
         self.model_zoo = {
-            k: list(v.PRETRAINED_MODEL_CONFIG_DICT.keys())
-            for k, v in registry.mapping["model_name_mapping"].items()
+            k: list(v.PRETRAINED_MODEL_CONFIG_DICT.keys()) for k, v in registry.mapping["model_name_mapping"].items()
         }
 
     def __str__(self) -> str:
@@ -214,12 +251,7 @@ class ModelZoo:
             + f"{'Architectures':<30} {'Types'}\n"
             + "=" * 50
             + "\n"
-            + "\n".join(
-                [
-                    f"{name:<30} {', '.join(types)}"
-                    for name, types in self.model_zoo.items()
-                ]
-            )
+            + "\n".join([f"{name:<30} {', '.join(types)}" for name, types in self.model_zoo.items()])
         )
 
     def __iter__(self):

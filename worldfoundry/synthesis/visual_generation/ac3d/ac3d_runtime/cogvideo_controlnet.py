@@ -1,24 +1,20 @@
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
 import torch
-from torch import nn
-from einops import rearrange
 import torch.nn.functional as F
-from diffusers.models.transformers.cogvideox_transformer_3d import Transformer2DModelOutput, CogVideoXBlock
-from diffusers.utils import is_torch_version
-from diffusers.loaders import  PeftAdapterMixin
-from diffusers.utils.torch_utils import maybe_allow_in_graph
-from diffusers.models.embeddings import CogVideoXPatchEmbed, TimestepEmbedding, Timesteps, get_3d_sincos_pos_embed
-from diffusers.models.modeling_utils import ModelMixin
-from diffusers.models.attention import Attention, FeedForward
-from diffusers.models.attention_processor import AttentionProcessor, AttnProcessor2_0
-from diffusers.models.normalization import AdaLayerNorm, CogVideoXLayerNormZero, AdaLayerNormZeroSingle
 from diffusers.configuration_utils import ConfigMixin, register_to_config
+from diffusers.loaders import PeftAdapterMixin
+from diffusers.models.embeddings import CogVideoXPatchEmbed, TimestepEmbedding, Timesteps
+from diffusers.models.modeling_utils import ModelMixin
+from diffusers.models.transformers.cogvideox_transformer_3d import CogVideoXBlock, Transformer2DModelOutput
+from diffusers.utils import is_torch_version
+from einops import rearrange
+from torch import nn
 
 
 class CogVideoXControlnet(ModelMixin, ConfigMixin, PeftAdapterMixin):
     _supports_gradient_checkpointing = True
-    
+
     @register_to_config
     def __init__(
         self,
@@ -47,7 +43,7 @@ class CogVideoXControlnet(ModelMixin, ConfigMixin, PeftAdapterMixin):
         temporal_interpolation_scale: float = 1.0,
         use_rotary_positional_embeddings: bool = False,
         use_learned_positional_embeddings: bool = False,
-        out_proj_dim: int = None,
+        out_proj_dim: int | None = None,
         out_proj_dim_zero_init: bool = False,
     ):
         super().__init__()
@@ -59,11 +55,11 @@ class CogVideoXControlnet(ModelMixin, ConfigMixin, PeftAdapterMixin):
                 "embeddings. If you're using a custom model and/or believe this should be supported, please open an "
                 "issue at https://github.com/huggingface/diffusers/issues."
             )
-            
-        start_channels = in_channels * (downscale_coef ** 2)
+
+        start_channels = in_channels * (downscale_coef**2)
         input_channels = [start_channels, start_channels // 2, start_channels // 4]
         self.unshuffle = nn.PixelUnshuffle(downscale_coef)
-        
+
         self.controlnet_encode_first = nn.Sequential(
             nn.Conv2d(input_channels[0], input_channels[1], kernel_size=1, stride=1, padding=0),
             nn.GroupNorm(2, input_channels[1]),
@@ -75,7 +71,7 @@ class CogVideoXControlnet(ModelMixin, ConfigMixin, PeftAdapterMixin):
             nn.GroupNorm(2, input_channels[2]),
             nn.ReLU(),
         )
-        
+
         # 1. Patch embedding
         self.patch_embed = CogVideoXPatchEmbed(
             patch_size=patch_size,
@@ -91,7 +87,7 @@ class CogVideoXControlnet(ModelMixin, ConfigMixin, PeftAdapterMixin):
             use_positional_embeddings=not use_rotary_positional_embeddings,
             use_learned_positional_embeddings=use_learned_positional_embeddings,
         )
-        
+
         self.embedding_dropout = nn.Dropout(dropout)
 
         # 2. Time embeddings
@@ -118,30 +114,28 @@ class CogVideoXControlnet(ModelMixin, ConfigMixin, PeftAdapterMixin):
 
         self.out_projectors = None
         if out_proj_dim is not None:
-            self.out_projectors = nn.ModuleList(
-                [nn.Linear(inner_dim, out_proj_dim) for _ in range(num_layers)]
-            )
+            self.out_projectors = nn.ModuleList([nn.Linear(inner_dim, out_proj_dim) for _ in range(num_layers)])
             if out_proj_dim_zero_init:
                 for out_projector in self.out_projectors:
-                    self.zeros_init_linear(out_projector)   
-            
+                    self.zeros_init_linear(out_projector)
+
         self.gradient_checkpointing = False
-    
+
     def zeros_init_linear(self, linear: nn.Module):
         if isinstance(linear, (nn.Linear, nn.Conv1d)):
             if hasattr(linear, "weight"):
                 nn.init.zeros_(linear.weight)
             if hasattr(linear, "bias"):
                 nn.init.zeros_(linear.bias)
-        
+
     def _set_gradient_checkpointing(self, module, value=False):
         self.gradient_checkpointing = value
 
     def compress_time(self, x, num_frames):
-        x = rearrange(x, '(b f) c h w -> b f c h w', f=num_frames)
+        x = rearrange(x, "(b f) c h w -> b f c h w", f=num_frames)
         batch_size, frames, channels, height, width = x.shape
-        x = rearrange(x, 'b f c h w -> (b h w) c f')
-        
+        x = rearrange(x, "b f c h w -> (b h w) c f")
+
         if x.shape[-1] % 2 == 1:
             x_first, x_rest = x[..., 0], x[..., 1:]
             if x_rest.shape[-1] > 0:
@@ -150,30 +144,30 @@ class CogVideoXControlnet(ModelMixin, ConfigMixin, PeftAdapterMixin):
             x = torch.cat([x_first[..., None], x_rest], dim=-1)
         else:
             x = F.avg_pool1d(x, kernel_size=2, stride=2)
-        x = rearrange(x, '(b h w) c f -> (b f) c h w', b=batch_size, h=height, w=width)
+        x = rearrange(x, "(b h w) c f -> (b f) c h w", b=batch_size, h=height, w=width)
         return x
-        
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
         controlnet_states: torch.Tensor,
-        timestep: Union[int, float, torch.LongTensor],
-        image_rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        timestep_cond: Optional[torch.Tensor] = None,
+        timestep: int | float | torch.LongTensor,
+        image_rotary_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
+        timestep_cond: torch.Tensor | None = None,
         return_dict: bool = True,
     ):
         batch_size, num_frames, channels, height, width = controlnet_states.shape
         # 0. Controlnet encoder
-        controlnet_states = rearrange(controlnet_states, 'b f c h w -> (b f) c h w')
+        controlnet_states = rearrange(controlnet_states, "b f c h w -> (b f) c h w")
         controlnet_states = self.unshuffle(controlnet_states)
         controlnet_states = self.controlnet_encode_first(controlnet_states)
-        controlnet_states = self.compress_time(controlnet_states, num_frames=num_frames) 
+        controlnet_states = self.compress_time(controlnet_states, num_frames=num_frames)
         num_frames = controlnet_states.shape[0] // batch_size
 
         controlnet_states = self.controlnet_encode_second(controlnet_states)
-        controlnet_states = self.compress_time(controlnet_states, num_frames=num_frames) 
-        controlnet_states = rearrange(controlnet_states, '(b f) c h w -> b f c h w', b=batch_size)
+        controlnet_states = self.compress_time(controlnet_states, num_frames=num_frames)
+        controlnet_states = rearrange(controlnet_states, "(b f) c h w -> b f c h w", b=batch_size)
 
         hidden_states = torch.cat([hidden_states, controlnet_states], dim=2)
         # controlnet_states = self.controlnext_encoder(controlnet_states, timestep=timestep)
@@ -186,16 +180,14 @@ class CogVideoXControlnet(ModelMixin, ConfigMixin, PeftAdapterMixin):
         # there might be better ways to encapsulate this.
         t_emb = t_emb.to(dtype=hidden_states.dtype)
         emb = self.time_embedding(t_emb, timestep_cond)
-        
+
         hidden_states = self.patch_embed(encoder_hidden_states, hidden_states)
         hidden_states = self.embedding_dropout(hidden_states)
-
 
         text_seq_length = encoder_hidden_states.shape[1]
         encoder_hidden_states = hidden_states[:, :text_seq_length]
         hidden_states = hidden_states[:, text_seq_length:]
 
-        
         controlnet_hidden_states = ()
         # 3. Transformer blocks
         for i, block in enumerate(self.transformer_blocks):
@@ -207,7 +199,7 @@ class CogVideoXControlnet(ModelMixin, ConfigMixin, PeftAdapterMixin):
 
                     return custom_forward
 
-                ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
+                ckpt_kwargs: dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
                 hidden_states, encoder_hidden_states = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
                     hidden_states,
@@ -223,7 +215,7 @@ class CogVideoXControlnet(ModelMixin, ConfigMixin, PeftAdapterMixin):
                     temb=emb,
                     image_rotary_emb=image_rotary_emb,
                 )
-                
+
             if self.out_projectors is not None:
                 controlnet_hidden_states += (self.out_projectors[i](hidden_states),)
             else:

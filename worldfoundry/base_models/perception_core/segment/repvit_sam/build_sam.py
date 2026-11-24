@@ -4,21 +4,14 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> perception_core -> segment -> repvit_sam -> build_sam.py functionality."""
+from functools import partial
 
 import torch
 
-from functools import partial
-
-from .modeling import ImageEncoderViT, MaskDecoder, PromptEncoder, Sam, TwoWayTransformer, TinyViT
+from .modeling import ImageEncoderViT, MaskDecoder, PromptEncoder, Sam, TwoWayTransformer
 
 
 def build_sam_vit_h(checkpoint=None):
-    """Build sam vit h.
-
-    Args:
-        checkpoint: The checkpoint.
-    """
     return _build_sam(
         encoder_embed_dim=1280,
         encoder_depth=32,
@@ -32,11 +25,6 @@ build_sam = build_sam_vit_h
 
 
 def build_sam_vit_l(checkpoint=None):
-    """Build sam vit l.
-
-    Args:
-        checkpoint: The checkpoint.
-    """
     return _build_sam(
         encoder_embed_dim=1024,
         encoder_depth=24,
@@ -47,11 +35,6 @@ def build_sam_vit_l(checkpoint=None):
 
 
 def build_sam_vit_b(checkpoint=None):
-    """Build sam vit b.
-
-    Args:
-        checkpoint: The checkpoint.
-    """
     return _build_sam(
         encoder_embed_dim=768,
         encoder_depth=12,
@@ -60,41 +43,38 @@ def build_sam_vit_b(checkpoint=None):
         checkpoint=checkpoint,
     )
 
-from timm.models import create_model
+
+from timm.models import create_model  # noqa: E402 - Follows module-level definitions, as upstream.
+
 
 def build_sam_repvit(checkpoint=None):
-    """Build sam repvit.
-
-    Args:
-        checkpoint: The checkpoint.
-    """
     prompt_embed_dim = 256
     image_size = 1024
     vit_patch_size = 16
     image_embedding_size = image_size // vit_patch_size
     repvit_sam = Sam(
-            image_encoder=create_model('repvit'),
-            prompt_encoder=PromptEncoder(
+        image_encoder=create_model("repvit"),
+        prompt_encoder=PromptEncoder(
             embed_dim=prompt_embed_dim,
             image_embedding_size=(image_embedding_size, image_embedding_size),
             input_image_size=(image_size, image_size),
             mask_in_chans=16,
+        ),
+        mask_decoder=MaskDecoder(
+            num_multimask_outputs=3,
+            transformer=TwoWayTransformer(
+                depth=2,
+                embedding_dim=prompt_embed_dim,
+                mlp_dim=2048,
+                num_heads=8,
             ),
-            mask_decoder=MaskDecoder(
-                    num_multimask_outputs=3,
-                    transformer=TwoWayTransformer(
-                    depth=2,
-                    embedding_dim=prompt_embed_dim,
-                    mlp_dim=2048,
-                    num_heads=8,
-                ),
-                transformer_dim=prompt_embed_dim,
-                iou_head_depth=3,
-                iou_head_hidden_dim=256,
-            ),
-            pixel_mean=[123.675, 116.28, 103.53],
-            pixel_std=[58.395, 57.12, 57.375],
-        )
+            transformer_dim=prompt_embed_dim,
+            iou_head_depth=3,
+            iou_head_hidden_dim=256,
+        ),
+        pixel_mean=[123.675, 116.28, 103.53],
+        pixel_std=[58.395, 57.12, 57.375],
+    )
 
     repvit_sam.eval()
     if checkpoint is not None:
@@ -103,67 +83,12 @@ def build_sam_repvit(checkpoint=None):
         repvit_sam.load_state_dict(state_dict)
     return repvit_sam
 
-def build_sam_vit_t(checkpoint=None):
-    """Build sam vit t.
-
-    Args:
-        checkpoint: The checkpoint.
-    """
-    prompt_embed_dim = 256
-    image_size = 1024
-    vit_patch_size = 16
-    image_embedding_size = image_size // vit_patch_size
-    mobile_sam = Sam(
-            image_encoder=TinyViT(img_size=1024, in_chans=3, num_classes=1000,
-                embed_dims=[64, 128, 160, 320],
-                depths=[2, 2, 6, 2],
-                num_heads=[2, 4, 5, 10],
-                window_sizes=[7, 7, 14, 7],
-                mlp_ratio=4.,
-                drop_rate=0.,
-                drop_path_rate=0.0,
-                use_checkpoint=False,
-                mbconv_expand_ratio=4.0,
-                local_conv_size=3,
-                layer_lr_decay=0.8
-            ),
-            prompt_encoder=PromptEncoder(
-            embed_dim=prompt_embed_dim,
-            image_embedding_size=(image_embedding_size, image_embedding_size),
-            input_image_size=(image_size, image_size),
-            mask_in_chans=16,
-            ),
-            mask_decoder=MaskDecoder(
-                    num_multimask_outputs=3,
-                    transformer=TwoWayTransformer(
-                    depth=2,
-                    embedding_dim=prompt_embed_dim,
-                    mlp_dim=2048,
-                    num_heads=8,
-                ),
-                transformer_dim=prompt_embed_dim,
-                iou_head_depth=3,
-                iou_head_hidden_dim=256,
-            ),
-            pixel_mean=[123.675, 116.28, 103.53],
-            pixel_std=[58.395, 57.12, 57.375],
-        )
-
-    mobile_sam.eval()
-    if checkpoint is not None:
-        with open(checkpoint, "rb") as f:
-            state_dict = torch.load(f)
-        mobile_sam.load_state_dict(state_dict)
-    return mobile_sam
-
-from functools import partial
 
 sam_model_registry = {
     "default": build_sam_vit_h,
     "vit_h": build_sam_vit_h,
     "vit_l": build_sam_vit_l,
     "vit_b": build_sam_vit_b,
-    "vit_t": build_sam_vit_t,
     "repvit": partial(build_sam_repvit),
 }
 
@@ -175,15 +100,6 @@ def _build_sam(
     encoder_global_attn_indexes,
     checkpoint=None,
 ):
-    """Helper function to build sam.
-
-    Args:
-        encoder_embed_dim: The encoder embed dim.
-        encoder_depth: The encoder depth.
-        encoder_num_heads: The encoder num heads.
-        encoder_global_attn_indexes: The encoder global attn indexes.
-        checkpoint: The checkpoint.
-    """
     prompt_embed_dim = 256
     image_size = 1024
     vit_patch_size = 16

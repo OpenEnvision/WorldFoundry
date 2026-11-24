@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 availability: open_source
 checkpoints:
 - robbyant/lingbot-world-base-cam
@@ -24,6 +24,7 @@ official_sources:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
     url: https://github.com/robbyant/lingbot-world
+    revision: a43bec7f8091c83e9b30b16b912f6fc906236fa6
   huggingface:
   - confirmed_by: https://huggingface.co/api/models/robbyant/lingbot-world-base-cam
     repo_id: robbyant/lingbot-world-base-cam
@@ -93,18 +94,20 @@ docs:
   publisher: Robbyant (Ant Group)
   publisher_kind: company
   publisher_zh: 蚂蚁灵波科技（Robbyant，蚂蚁集团）
-  overview: 'LingBot-World is Robbyant''s camera-controlled world video model. In this catalog it is fully verified: the base-cam checkpoint completed full-quality artifact validation on 2026-07-28 using the official 161-frame, 70-step camera-control demo — including a four-A100 compact topology that adapted FSDP/Ulysses settings and produced a coherent artifact.'
-  overview_zh: LingBot-World 是蚂蚁灵波的相机可控世界视频模型。本 catalog 中它已完整验证：base-cam checkpoint 于 2026-07-28 按官方 161 帧、70 步相机控制 demo 完成全质量产物验证——包括一个四张 A100 的紧凑拓扑，自适应调整 FSDP/Ulysses 设置并产出连贯产物。
-  architecture: The official base-cam recipe uses eight GPUs with DiT/T5 FSDP plus Ulysses sequence parallelism; Workspace also supports a four-GPU compact topology (both 4 and 8 divide the model's 40 attention heads). A shared timestep embedding preserves floating precision for integer scheduler timesteps, preventing distributed sequence-parallel output corruption.
-  architecture_zh: 官方 base-cam 配方使用八卡，DiT/T5 FSDP 加 Ulysses 序列并行；Workspace 亦支持四卡紧凑拓扑（4 与 8 都能整除模型的 40 个注意力头）。共享的时间步嵌入为整数调度时间步保留浮点精度，避免分布式序列并行的输出损坏。
-  usage_notes: The wrapper resolves only local HFD or explicit checkpoint directories — no runtime downloads. Base-cam runs in the dedicated lingbot-world environment; Base-Act is separately cataloged. The official Fast checkpoint uses Base-Cam's T5/VAE assets plus its own 16 shards; pass runtime_variant=fast and fast_model_path, and request 9, 21, 33, ... frames. The public binding was validated at 21 frames only.
-  usage_notes_zh: 封装仅解析本地 HFD 或显式 checkpoint 目录，不在运行时下载。Base-Cam 使用专属 lingbot-world 环境，Base-Act 单独记录。官方 Fast 权重复用 Base-Cam 的 T5/VAE 组件，并使用独立的 16 个分片；需传入 runtime_variant=fast、fast_model_path，帧数取 9、21、33 等。公开 binding 仅验证了 21 帧配置。
+  overview: "LingBot-World is Robbyant's camera-controlled world video model. Validated with the base-cam checkpoint on the official camera-control demo: the pipeline generates all 161 frames at 832x464 and 16 fps with 70 denoising steps, and a four-A100 compact topology completes the same full setting."
+  overview_zh: LingBot-World 是蚂蚁灵波的相机可控世界视频模型。已用 base-cam checkpoint 按官方相机控制 demo 验证：pipeline 以 70 步去噪生成全部 161 帧（832x464，16 fps），四张 A100 的紧凑拓扑也能完成同样的完整设置。
+  architecture: The official base-cam recipe uses eight GPUs with DiT/T5 FSDP plus Ulysses sequence parallelism; WorldFoundry also supports a four-GPU compact topology (both 4 and 8 divide the model's 40 attention heads). A shared timestep embedding preserves floating precision for integer scheduler timesteps, preventing distributed sequence-parallel output corruption.
+  architecture_zh: 官方 base-cam 配方使用八卡，DiT/T5 FSDP 加 Ulysses 序列并行；WorldFoundry 亦支持四卡紧凑拓扑（4 与 8 都能整除模型的 40 个注意力头）。共享的时间步嵌入为整数调度时间步保留浮点精度，避免分布式序列并行的输出损坏。
+  usage_notes: The wrapper resolves only local HFD or explicit checkpoint directories and does not download at runtime. Base-Cam runs in the dedicated lingbot-world environment; Base-Act is documented separately. The official Fast checkpoint uses Base-Cam's T5/VAE assets plus its own 16 shards; pass runtime_variant=fast and fast_model_path, and request 9, 21, 33, ... frames.
+  usage_notes_zh: 封装仅解析本地 HFD 或显式 checkpoint 目录，不在运行时下载。Base-Cam 使用专属 lingbot-world 环境，Base-Act 另有独立文档。官方 Fast 权重复用 Base-Cam 的 T5/VAE 组件，并使用独立的 16 个分片；需传入 runtime_variant=fast、fast_model_path，帧数取 9、21、33 等。
   limitations:
-  - Dedicated conda environment for base-cam inference.
-  - Official full-length Base-Cam inference needs 4-8 A100-class GPUs; short Fast inference was validated on one H100.
+  - Base-Cam inference needs the dedicated lingbot-world conda environment.
+  - Official full-length Base-Cam inference needs 4-8 A100-class GPUs.
+  - Fast is validated only for a 21-frame, 544x720, 16 fps clip on one H100; longer Fast rollouts and camera adherence are unmeasured.
   limitations_zh:
-  - base-cam 推理需要专属 conda 环境。
-  - 官方完整长度的 Base-Cam 推理需要 4-8 张 A100 级 GPU；Fast 短片段已在单张 H100 上验证。
+  - Base-Cam 推理需要专属的 lingbot-world conda 环境。
+  - 官方完整长度的 Base-Cam 推理需要 4-8 张 A100 级 GPU。
+  - Fast 仅在单张 H100 上验证了 21 帧、544x720、16 fps 的片段；更长的 Fast 视频与相机贴合度尚未测量。
   recommended_benchmarks:
   - id: camerabench
     reason: Camera-control adherence of world rollouts.

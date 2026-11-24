@@ -5,34 +5,37 @@ This module contains utility functions for:
 - LiveWorld pipeline initialization
 - Geometry and video loading
 """
+
 from __future__ import annotations
 
 import os
-from typing import Dict, Optional, Tuple
 
-import cv2
 import numpy as np
 import torch
 from omegaconf import OmegaConf
+from peft import LoraConfig, get_peft_model, set_peft_model_state_dict
 from PIL import Image
-from peft import get_peft_model, LoraConfig, set_peft_model_state_dict
 from safetensors.torch import load_file
 
-from liveworld.pipelines.pipeline_unified_backbone import UnifiedBackbonePipeline
-from liveworld.wrapper import BidirectionalWanWrapperSP
-from liveworld.wrapper import WanTextEncoder, WanVAEWrapper
-from .logger import logger
+from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.pipelines.pipeline_unified_backbone import (
+    UnifiedBackbonePipeline,
+)
+from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.wrapper import (
+    BidirectionalWanWrapperSP,
+    WanTextEncoder,
+    WanVAEWrapper,
+)
 
+from .logger import logger
 
 # =============================================================================
 # Project path utilities
 # =============================================================================
 
+
 def get_project_root() -> str:
-    """Return the repository root for local imports."""
-    return os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    )
+    """Return the runtime root for relative config lookup."""
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 def resolve_train_config(config_path: str):
@@ -55,14 +58,11 @@ def resolve_train_config(config_path: str):
         if os.path.exists(candidate_from_cfg_dir):
             default_config_path = candidate_from_cfg_dir
         else:
-            default_config_path = os.path.normpath(
-                os.path.join(get_project_root(), default_config_path)
-            )
+            default_config_path = os.path.normpath(os.path.join(get_project_root(), default_config_path))
 
     if not os.path.exists(default_config_path):
         logger.warning(
-            f"default_config_path not found ({default_config_path}); "
-            "loading observer config without defaults merge."
+            f"default_config_path not found ({default_config_path}); loading observer config without defaults merge."
         )
         return cfg
 
@@ -73,6 +73,7 @@ def resolve_train_config(config_path: str):
 # =============================================================================
 # Checkpoint loading utilities
 # =============================================================================
+
 
 def find_checkpoint_file(ckpt_path: str) -> str:
     """Resolve a checkpoint path that can be a file or directory."""
@@ -117,12 +118,13 @@ def load_checkpoint(ckpt_path: str, device: str = "cpu") -> dict:
 # Model creation utilities
 # =============================================================================
 
+
 def create_generator(
     config,
     state_dict: dict,
     device: torch.device,
     dtype: torch.dtype,
-    state_source: Optional[str] = None,
+    state_source: str | None = None,
 ):
     """Create the LiveWorld generator model and load weights."""
     generator = BidirectionalWanWrapperSP(config=config, role="generator")
@@ -136,7 +138,7 @@ def create_generator(
             clean_key = k.replace("._fsdp_wrapped_module", "")
             for prefix in ("base_model.model.model.", "model.model.", "base_model.model.", "model."):
                 if clean_key.startswith(prefix):
-                    clean_key = clean_key[len(prefix):]
+                    clean_key = clean_key[len(prefix) :]
                     break
             sp_keys[clean_key] = v
         return sp_keys
@@ -187,9 +189,9 @@ def create_generator(
                 continue
             clean_key = k.replace("._fsdp_wrapped_module", "")
             while clean_key.startswith("module."):
-                clean_key = clean_key[len("module."):]
+                clean_key = clean_key[len("module.") :]
             while clean_key.startswith("model."):
-                clean_key = clean_key[len("model."):]
+                clean_key = clean_key[len("model.") :]
             clean_key = clean_key.replace(".default.", ".")
             lora_state_dict[clean_key] = v
         result = set_peft_model_state_dict(generator, lora_state_dict)
@@ -219,9 +221,7 @@ def create_generator(
                 "State Adapter explicit checkpoint did not provide weights; "
                 f"loading from state checkpoint: {state_source}"
             )
-            loaded_sp = _load_sp_weights(
-                _extract_sp_keys(state_dict), f"state checkpoint ({state_source})"
-            )
+            loaded_sp = _load_sp_weights(_extract_sp_keys(state_dict), f"state checkpoint ({state_source})")
 
         if loaded_sp == 0:
             raise RuntimeError(
@@ -235,13 +235,11 @@ def create_generator(
             clean_key = k
             for prefix in ("model.model.", "model.", "module."):
                 if clean_key.startswith(prefix):
-                    clean_key = clean_key[len(prefix):]
+                    clean_key = clean_key[len(prefix) :]
                     break
             cleaned_state_dict[clean_key] = v
         generator.model.load_state_dict(cleaned_state_dict, strict=False)
-        logger.info(
-            f"Loaded {len(cleaned_state_dict)} parameters into generator model from: {state_source}"
-        )
+        logger.info(f"Loaded {len(cleaned_state_dict)} parameters into generator model from: {state_source}")
 
     generator.to(device=device, dtype=dtype)
     generator.eval()
@@ -249,7 +247,7 @@ def create_generator(
 
 
 def load_unified_backbone_pipeline(
-    observer_cfg: Dict,
+    observer_cfg: dict,
     device: torch.device,
     cpu_offload: bool,
 ) -> UnifiedBackbonePipeline:
@@ -276,10 +274,10 @@ def load_unified_backbone_pipeline(
     # - lora_path: LoRA checkpoint used to populate PEFT adapters
     # - sp_path: State Adapter checkpoint used by create_generator() priority load
     # Keep backward compatibility with legacy single observer.ckpt_path.
-    backbone_path = observer_cfg.get("backbone_path", None)
-    lora_path = observer_cfg.get("lora_path", None)
-    sp_path = observer_cfg.get("sp_path", None)
-    legacy_ckpt_path = observer_cfg.get("ckpt_path", None)
+    backbone_path = observer_cfg.get("backbone_path")
+    lora_path = observer_cfg.get("lora_path")
+    sp_path = observer_cfg.get("sp_path")
+    legacy_ckpt_path = observer_cfg.get("ckpt_path")
 
     if backbone_path:
         train_config.generator_backbone_ckpt_path = backbone_path
@@ -290,15 +288,11 @@ def load_unified_backbone_pipeline(
     if use_lora:
         state_ckpt_path = lora_path or legacy_ckpt_path
         if not state_ckpt_path:
-            raise KeyError(
-                "observer must provide `lora_path` (or legacy `ckpt_path`) when use_lora=true"
-            )
+            raise KeyError("observer must provide `lora_path` (or legacy `ckpt_path`) when use_lora=true")
     else:
         state_ckpt_path = legacy_ckpt_path or backbone_path
         if not state_ckpt_path:
-            raise KeyError(
-                "observer must provide `ckpt_path` or `backbone_path` when use_lora=false"
-            )
+            raise KeyError("observer must provide `ckpt_path` or `backbone_path` when use_lora=false")
 
     resolved_backbone_file = None
     effective_backbone_path = getattr(train_config, "generator_backbone_ckpt_path", None)
@@ -362,7 +356,8 @@ def load_unified_backbone_pipeline(
 # Resolution parsing utilities
 # =============================================================================
 
-def parse_target_resolution(observer_cfg: Dict) -> Tuple[int, int]:
+
+def parse_target_resolution(observer_cfg: dict) -> tuple[int, int]:
     """Parse target resolution (H, W) from observer config.
 
     Reads the image_or_video_shape from the training config and computes
@@ -394,6 +389,7 @@ def parse_target_resolution(observer_cfg: Dict) -> Tuple[int, int]:
 # Geometry and video loading utilities
 # =============================================================================
 
+
 def load_geometry_poses(geometry_path: str) -> np.ndarray:
     """Load camera poses from geometry.npz file."""
     data = np.load(geometry_path)
@@ -406,9 +402,7 @@ def load_geometry_poses(geometry_path: str) -> np.ndarray:
     raise KeyError(f"No poses_c2w/poses/c2w found in geometry: {geometry_path}")
 
 
-def load_frame_from_image(
-    image_path: str, target_size: Optional[Tuple[int, int]] = None
-) -> Image.Image:
+def load_frame_from_image(image_path: str, target_size: tuple[int, int] | None = None) -> Image.Image:
     """Load the first frame from an image file.
 
     Args:

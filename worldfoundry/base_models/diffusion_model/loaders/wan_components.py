@@ -17,8 +17,8 @@ from pathlib import Path
 
 import torch
 
-from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 from worldfoundry.core.model_loading import load_model, load_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 from ..models.autoencoders.wan import (
     WanVideoVAE,
@@ -70,9 +70,7 @@ def _one(root: Path, patterns: tuple[str, ...], role: str) -> Path:
     matches = [path for pattern in patterns for path in sorted(root.glob(pattern))]
     matches = list(dict.fromkeys(matches))
     if len(matches) != 1:
-        raise FileNotFoundError(
-            f"Wan {role} expected one file under {root}; found {[path.name for path in matches]}"
-        )
+        raise FileNotFoundError(f"Wan {role} expected one file under {root}; found {[path.name for path in matches]}")
     return matches[0]
 
 
@@ -123,15 +121,10 @@ def load_wan_transformer_checkpoint(
                 map_location="cpu",
                 mmap=True,
             )
-            transformer_state = {
-                name: value.to(dtype=torch_dtype)
-                for name, value in transformer_state.items()
-            }
+            transformer_state = {name: value.to(dtype=torch_dtype) for name, value in transformer_state.items()}
         for prefix in state_dict_prefixes:
             prefixed = {
-                name[len(prefix) :]: value
-                for name, value in transformer_state.items()
-                if name.startswith(prefix)
+                name[len(prefix) :]: value for name, value in transformer_state.items() if name.startswith(prefix)
             }
             if prefixed:
                 transformer_state = prefixed
@@ -147,9 +140,7 @@ def load_wan_transformer_checkpoint(
     config = dict(detected_config or {})
     config.update(transformer_config or {})
     if not config:
-        raise ValueError(
-            "Wan transformer architecture could not be inferred; pass transformer_config explicitly"
-        )
+        raise ValueError("Wan transformer architecture could not be inferred; pass transformer_config explicitly")
     return load_model(
         transformer_class,
         path=None,

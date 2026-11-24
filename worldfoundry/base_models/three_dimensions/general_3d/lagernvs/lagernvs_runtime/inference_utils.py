@@ -4,51 +4,31 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> general_3d -> lagernvs -> lagernvs_runtime -> inference_utils.py functionality."""
-
-import math
 import io
+import math
 import os
 from pathlib import Path
-import sys
 
-_THIS_FILE = Path(__file__).resolve()
-for _path in (
-    _THIS_FILE.parents[6],
-    _THIS_FILE.parents[3] / "point_clouds" / "vggt",
-):
-    _path_str = str(_path)
-    if _path_str not in sys.path:
-        sys.path.insert(0, _path_str)
-
-import einops
 import av
+import einops
 import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms as TF
-from vggt.models.vggt import VGGT
-from vggt.utils.load_fn import load_and_preprocess_images as _vggt_load_and_preprocess_images
-from vggt.utils.pose_enc import pose_encoding_to_extri_intri
+
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.models.vggt import VGGT
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.utils.load_fn import (
+    load_and_preprocess_images as _vggt_load_and_preprocess_images,
+)
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
 
 def _round_to_multiple(value, multiple):
-    """Helper function to round to multiple.
-
-    Args:
-        value: The value.
-        multiple: The multiple.
-    """
     return max(multiple, int(round(value / multiple) * multiple))
 
 
 def _load_lagernvs_images(image_names, *, mode="resize", target_size=512, patch_size=8):
-    """Helper function to load lagernvs images.
-
-    Args:
-        image_names: The image names.
-    """
     if len(image_names) == 0:
         raise ValueError("At least 1 image is required")
 
@@ -104,11 +84,6 @@ def _load_lagernvs_images(image_names, *, mode="resize", target_size=512, patch_
 
 
 def load_and_preprocess_images_compat(image_names, *, mode="resize", target_size=512, patch_size=8):
-    """Load and preprocess images compat.
-
-    Args:
-        image_names: The image names.
-    """
     try:
         return _vggt_load_and_preprocess_images(
             image_names,
@@ -131,13 +106,6 @@ def load_and_preprocess_images_compat(image_names, *, mode="resize", target_size
 
 
 def save_video(video_tensor, output_path, fps=25):
-    """Save video.
-
-    Args:
-        video_tensor: The video tensor.
-        output_path: The output path.
-        fps: The fps.
-    """
     video = einops.rearrange(video_tensor, "v c h w -> v h w c")
     video = video.detach().cpu().numpy()
     video = np.clip(video, 0, 1)
@@ -275,9 +243,7 @@ def create_360_camera_trajectory_from_c2w_and_intrinsics(
 
     # Compute projection matrices for each ray: I - d_i d_i^T
     identity = torch.eye(3, device=device).unsqueeze(0).unsqueeze(0)  # 1 x 1 x 3 x 3
-    identity = identity.expand(
-        B, num_input_views, -1, -1
-    )  # B x num_input_views x 3 x 3
+    identity = identity.expand(B, num_input_views, -1, -1)  # B x num_input_views x 3 x 3
 
     d = cam_forward  # B x num_input_views x 3
     ddT = torch.einsum("bvi,bvj->bvij", d, d)  # B x num_input_views x 3 x 3
@@ -287,15 +253,11 @@ def create_360_camera_trajectory_from_c2w_and_intrinsics(
     proj_sum = proj.sum(dim=1)  # B x 3 x 3
 
     # Compute sum of projected positions
-    proj_p = torch.einsum(
-        "bvij,bvj->bvi", proj, cam_positions
-    )  # B x num_input_views x 3
+    proj_p = torch.einsum("bvij,bvj->bvi", proj, cam_positions)  # B x num_input_views x 3
     proj_p_sum = proj_p.sum(dim=1)  # B x 3
 
     # Solve for look-at point
-    look_at = torch.linalg.solve(proj_sum, proj_p_sum.unsqueeze(-1)).squeeze(
-        -1
-    )  # B x 3
+    look_at = torch.linalg.solve(proj_sum, proj_p_sum.unsqueeze(-1)).squeeze(-1)  # B x 3
 
     # Fit a plane to the camera positions using PCA
     # Center the positions
@@ -309,10 +271,7 @@ def create_360_camera_trajectory_from_c2w_and_intrinsics(
 
     for b in range(B):
         # Compute covariance matrix: 3 x 3
-        cov = (
-            torch.matmul(centered_positions[b].T, centered_positions[b])
-            / num_input_views
-        )  # 3 x 3
+        cov = torch.matmul(centered_positions[b].T, centered_positions[b]) / num_input_views  # 3 x 3
 
         # Perform SVD to get principal components
         # U contains the eigenvectors (principal components)
@@ -323,9 +282,7 @@ def create_360_camera_trajectory_from_c2w_and_intrinsics(
         # The smallest singular value corresponds to the plane normal
         plane_basis_1[b] = U[:, 0]  # First principal component (largest variance)
         plane_basis_2[b] = U[:, 1]  # Second principal component
-        plane_normal[b] = U[
-            :, 2
-        ]  # Third principal component (smallest variance, normal to plane)
+        plane_normal[b] = U[:, 2]  # Third principal component (smallest variance, normal to plane)
 
     # Ensure plane normal points in the general "up" direction
     # In OpenCV coordinate system, y-axis points down, so "up" is negative y-axis
@@ -348,9 +305,7 @@ def create_360_camera_trajectory_from_c2w_and_intrinsics(
     radius = torch.norm(projected_offsets, dim=2).mean(dim=1)  # B
 
     # Generate new camera positions on circular path in the fitted plane
-    angles = torch.linspace(bounds[0], bounds[1], num_frames_traj + 1, device=device)[
-        :-1
-    ]
+    angles = torch.linspace(bounds[0], bounds[1], num_frames_traj + 1, device=device)[:-1]
 
     # Create positions on circle for each batch using the fitted plane basis vectors
     new_positions = torch.zeros(B, num_frames_traj, 3, device=device)
@@ -358,10 +313,7 @@ def create_360_camera_trajectory_from_c2w_and_intrinsics(
         for v in range(num_frames_traj):
             angle = angles[v]
             # Use plane basis vectors to create circular path in the fitted plane
-            offset = radius[b] * (
-                torch.cos(angle) * plane_basis_1[b]
-                + torch.sin(angle) * plane_basis_2[b]
-            )
+            offset = radius[b] * (torch.cos(angle) * plane_basis_1[b] + torch.sin(angle) * plane_basis_2[b])
             new_positions[b, v] = center[b] + offset
 
     # Compute rotation matrices to look at the target point
@@ -515,9 +467,7 @@ def create_bspline_interp(
     cond_rotations = cond_c2w[:, :, :3, :3]  # B x num_cond x 3 x 3
 
     # Create interpolated trajectory
-    num_frames_traj_total = (
-        num_frames_traj if not double_to_repeat else num_frames_traj * 2
-    )
+    num_frames_traj_total = num_frames_traj if not double_to_repeat else num_frames_traj * 2
     new_c2w = torch.zeros(B, num_frames_traj_total, 4, 4, device=device)
 
     for b in range(B):
@@ -545,9 +495,7 @@ def create_bspline_interp(
         # Step 2: Compute cumulative arc length
         segments = positions_fine[1:] - positions_fine[:-1]
         segment_lengths = torch.norm(segments, dim=-1)
-        arc_lengths = torch.cat(
-            [torch.zeros(1, device=device), torch.cumsum(segment_lengths, dim=0)]
-        )
+        arc_lengths = torch.cat([torch.zeros(1, device=device), torch.cumsum(segment_lengths, dim=0)])
         total_length = arc_lengths[-1]
 
         # Step 3: Sample in arc length space (uniform or eased)
@@ -560,13 +508,9 @@ def create_bspline_interp(
             target_arc_lengths = t_eased * total_length
         else:
             # Uniform sampling (constant speed)
-            target_arc_lengths = torch.linspace(
-                0, total_length, num_frames_traj, device=device
-            )
+            target_arc_lengths = torch.linspace(0, total_length, num_frames_traj, device=device)
         if double_to_repeat:
-            target_arc_lengths = torch.cat(
-                [target_arc_lengths, torch.flip(target_arc_lengths, [0])], dim=0
-            )
+            target_arc_lengths = torch.cat([target_arc_lengths, torch.flip(target_arc_lengths, [0])], dim=0)
 
         new_positions = []
         new_quaternions = []
@@ -577,23 +521,16 @@ def create_bspline_interp(
             idx = max(0, min(idx, len(arc_lengths) - 2))
 
             # Interpolate within segment to get exact arc length
-            if segment_lengths[idx] > 1e-8:
-                alpha = (target_length - arc_lengths[idx]) / segment_lengths[idx]
-            else:
-                alpha = 0.0
+            alpha = (target_length - arc_lengths[idx]) / segment_lengths[idx] if segment_lengths[idx] > 1e-08 else 0.0
             alpha = max(0.0, min(1.0, float(alpha)))
 
             # Get position at this arc length
-            pos = positions_fine[idx] + alpha * (
-                positions_fine[idx + 1] - positions_fine[idx]
-            )
+            pos = positions_fine[idx] + alpha * (positions_fine[idx + 1] - positions_fine[idx])
             new_positions.append(pos)
 
             # Get quaternion at this arc length using SLERP between fine samples
             # This ensures smooth rotation even within the fine sampling
-            quat = _slerp_quaternions(
-                quaternions_fine[idx], quaternions_fine[idx + 1], alpha
-            )
+            quat = _slerp_quaternions(quaternions_fine[idx], quaternions_fine[idx + 1], alpha)
             new_quaternions.append(quat)
 
         # Stack into tensors
@@ -669,10 +606,7 @@ def _catmull_rom_interpolate_points(points, t_control, t):
     t3 = t2 * t_local
 
     result = 0.5 * (
-        (2 * p1)
-        + (-p0 + p2) * t_local
-        + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2
-        + (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+        (2 * p1) + (-p0 + p2) * t_local + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3
     )
 
     return result
@@ -730,9 +664,7 @@ def _cubic_bspline_interpolate_points(points, t):
     # Uniform spacing in the middle
     num_internal = num_knots - 2 * (degree + 1)
     if num_internal > 0:
-        knots[degree + 1 : -(degree + 1)] = torch.linspace(
-            0, 1, num_internal + 2, device=device
-        )[1:-1]
+        knots[degree + 1 : -(degree + 1)] = torch.linspace(0, 1, num_internal + 2, device=device)[1:-1]
 
     # Clamp t to [0, 1]
     t = float(torch.clamp(t, 0.0, 1.0))
@@ -928,11 +860,7 @@ def _slerp_two_rotations(R1, R2, t):
     K[2, 1] = axis[0]
 
     identity_matrix = torch.eye(3, device=R1.device, dtype=R1.dtype)
-    R_rel_interp = (
-        identity_matrix
-        + torch.sin(angle_interp) * K
-        + (1 - torch.cos(angle_interp)) * torch.matmul(K, K)
-    )
+    R_rel_interp = identity_matrix + torch.sin(angle_interp) * K + (1 - torch.cos(angle_interp)) * torch.matmul(K, K)
 
     # Apply interpolated relative rotation to R1
     R_result = torch.matmul(R1, R_rel_interp)
@@ -1071,9 +999,7 @@ def _cubic_bspline_interpolate_quaternions(quaternions, t):
 
     num_internal = num_knots - 2 * (degree + 1)
     if num_internal > 0:
-        knots[degree + 1 : -(degree + 1)] = torch.linspace(
-            0, 1, num_internal + 2, device=device
-        )[1:-1]
+        knots[degree + 1 : -(degree + 1)] = torch.linspace(0, 1, num_internal + 2, device=device)[1:-1]
 
     t = float(torch.clamp(t, 0.0, 1.0))
 
@@ -1138,9 +1064,7 @@ def _slerp_quaternions(q1, q2, t):
     return result / torch.norm(result)
 
 
-def create_target_camera_path(
-    image_names, video_length, num_cond_views, image_size_hw, device, dtype, mode="resize"
-):
+def create_target_camera_path(image_names, video_length, num_cond_views, image_size_hw, device, dtype, mode="resize"):
     """Create a target camera trajectory for rendering novel views.
 
     LagerNVS does not require input camera poses — it only needs a target
@@ -1169,9 +1093,7 @@ def create_target_camera_path(
     """
 
     # Load images at 518px for VGGT pose estimation
-    images = load_and_preprocess_images_compat(
-        image_names, mode=mode, target_size=518, patch_size=14
-    ).to(device)
+    images = load_and_preprocess_images_compat(image_names, mode=mode, target_size=518, patch_size=14).to(device)
 
     # Use VGGT to infer approximate input view positions (for trajectory planning only)
     vggt_model = VGGT(pred_cameras=True)
@@ -1191,9 +1113,8 @@ def create_target_camera_path(
         )
     vggt_model.load_state_dict(vggt_pretrained_state, strict=False)
     vggt_model.to(device)
-    with torch.no_grad():
-        with torch.cuda.amp.autocast(dtype=dtype):
-            pose_enc = vggt_model(images)
+    with torch.no_grad(), torch.cuda.amp.autocast(dtype=dtype):
+        pose_enc = vggt_model(images)
 
     # Free VGGT memory (it is not used by the viewgen model itself)
     del vggt_model, vggt_pretrained_state
@@ -1205,18 +1126,14 @@ def create_target_camera_path(
     # from VGGT, not its intrinsics — see default intrinsics construction below).
     if pose_enc.dim() == 2:
         pose_enc = pose_enc.unsqueeze(0)
-    extrinsics_w2c, _ = pose_encoding_to_extri_intri(
-        pose_enc, image_size_hw=image_size_hw
-    )
+    extrinsics_w2c, _ = pose_encoding_to_extri_intri(pose_enc, image_size_hw=image_size_hw)
 
     # Use default intrinsics instead of VGGT estimates. VGGT's intrinsics are
     # approximate and can be noisy for few-view inputs. A standard pinhole
     # assumption (fx = fy = image_width, principal point at center) is
     # sufficient here for target views
     B, S = extrinsics_w2c.shape[:2]
-    intrinsics = torch.zeros(
-        B, S, 3, 3, device=extrinsics_w2c.device, dtype=extrinsics_w2c.dtype
-    )
+    intrinsics = torch.zeros(B, S, 3, 3, device=extrinsics_w2c.device, dtype=extrinsics_w2c.dtype)
     intrinsics[:, :, 0, 0] = float(W)  # fx
     intrinsics[:, :, 1, 1] = float(W)  # fy (same as fx for square pixels)
     intrinsics[:, :, 0, 2] = float(W) / 2.0  # cx
@@ -1266,14 +1183,10 @@ def create_target_camera_path(
 
     if num_cond_views >= 2:
         # Camera-based normalization (base_dataset.py:288-299)
-        scene_scale = 1.35 * torch.max(
-            torch.norm(c2w[:, :num_cond_views, :3, 3], dim=-1)
-        )
+        scene_scale = 1.35 * torch.max(torch.norm(c2w[:, :num_cond_views, :3, 3], dim=-1))
         scene_scale = torch.clamp(scene_scale, min=1e-6)
         c2w[:, :, :3, 3] /= scene_scale
-        camera_scale = torch.max(
-            torch.norm(c2w[:, :num_cond_views, :3, 3], dim=-1)
-        ).item()
+        camera_scale = torch.max(torch.norm(c2w[:, :num_cond_views, :3, 3], dim=-1)).item()
 
         cam_tokens = torch.zeros(1, total_views, 11)
         cam_tokens[:, :, 9] = camera_scale
@@ -1318,9 +1231,7 @@ def create_target_camera_path(
         ref_fxfycxcy = default_fxfycxcy[:, 0, :]  # (B, 4)
         target_fxfycxcy = ref_fxfycxcy.unsqueeze(1).expand(B, video_length, 4)
 
-        target_rays = compute_plucker_coordinates(
-            target_c2w, target_fxfycxcy, image_size_hw
-        )
+        target_rays = compute_plucker_coordinates(target_c2w, target_fxfycxcy, image_size_hw)
 
     # Conditioning views get zero Plucker rays (model does not use input camera poses)
     cond_rays = torch.zeros(B, num_cond_views, 6, H, W, device=target_rays.device)

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,14 +16,14 @@ class RT1Operator(EmbodiedActionOperator):
     POLICY_FAMILY = "discretized_robotics_transformer_policy"
     ACTION_REPRESENTATION = "discretized_action_tokens"
     OBSERVATION_LAYOUT = "single_rgb_language_token_history"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": False,
         "actions": ["action_tokens", "tokenized_action"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
         instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "instruction", "task_instruction")
         instruction = "" if instruction is None else str(instruction)
@@ -41,7 +42,7 @@ class RT1Operator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         observation = _compact_dict(
             {
@@ -65,7 +66,7 @@ class RT1Operator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         tokens = _extract_action_signal(raw, "action_tokens", "tokenized_action", "discrete_action")
@@ -75,7 +76,8 @@ class RT1Operator(EmbodiedActionOperator):
                 tokens,
                 action_contract="discretized_robot_action_tokens",
                 control_mode="tokenized_control",
-                token_bins=(raw.get("token_bins") if isinstance(raw, Mapping) else None) or self.input_schema.get("token_bins"),
+                token_bins=(raw.get("token_bins") if isinstance(raw, Mapping) else None)
+                or self.input_schema.get("token_bins"),
             ),
             "action_tokens": tokens,
             "action_space": (raw.get("action_space") if isinstance(raw, Mapping) else None)

@@ -35,7 +35,7 @@ from huggingface_hub import hf_hub_download, snapshot_download
 from typing_extensions import override
 
 from worldfoundry.core.configuration.flags import EXPERIMENTAL_CHECKPOINTS, INTERNAL
-from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.observability.rank_logging import log
 
 
 class _CheckpointUri(pydantic.BaseModel):
@@ -64,14 +64,6 @@ class _CheckpointUri(pydantic.BaseModel):
 
 
 def is_s3_uri(uri: str) -> str:
-    """Is s3 uri.
-
-    Args:
-        uri: The uri.
-
-    Returns:
-        The return value.
-    """
     if not uri.startswith("s3://"):
         raise ValueError(f"Invalid S3 URI: {uri}. Must start with 's3://'")
     return uri.rstrip("/")
@@ -113,9 +105,12 @@ class CheckpointFileHf(_CheckpointHf):
     @override
     def _download(self) -> str:
         """Download checkpoint and return the local path."""
-        download_kwargs = dict(
-            repo_id=self.repository, repo_type="model", revision=self.revision, filename=self.filename
-        )
+        download_kwargs = {
+            "repo_id": self.repository,
+            "repo_type": "model",
+            "revision": self.revision,
+            "filename": self.filename,
+        }
         log.info(f"Downloading checkpoint file from Hugging Face with {download_kwargs}")
         path = hf_hub_download(**download_kwargs)
         assert os.path.exists(path), path
@@ -150,7 +145,7 @@ class CheckpointDirHf(_CheckpointHf):
             patterns["ignore_patterns"] = list(self.exclude)
         if self.subdirectory:
             patterns = {key: [os.path.join(self.subdirectory, x) for x in val] for key, val in patterns.items()}
-        download_kwargs = dict(repo_id=self.repository, repo_type="model", revision=self.revision) | patterns
+        download_kwargs = {"repo_id": self.repository, "repo_type": "model", "revision": self.revision} | patterns
         log.info(f"Downloading checkpoint from Hugging Face with {download_kwargs}")
         path = snapshot_download(**download_kwargs)
         if self.subdirectory:
@@ -200,11 +195,6 @@ _CHECKPOINTS_BY_S3: dict[str, CheckpointConfig] = {}
 
 
 def _register_checkpoint(checkpoint_config: CheckpointConfig):
-    """Helper function to register checkpoint.
-
-    Args:
-        checkpoint_config: The checkpoint config.
-    """
     if checkpoint_config.uuid in _CHECKPOINTS_BY_UUID:
         raise ValueError(f"Checkpoint UUID {checkpoint_config.uuid} already registered.")
     _CHECKPOINTS_BY_UUID[checkpoint_config.uuid] = checkpoint_config

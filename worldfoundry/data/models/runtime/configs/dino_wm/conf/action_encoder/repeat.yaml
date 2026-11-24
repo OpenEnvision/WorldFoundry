@@ -1,1 +1,1 @@
-_target_: models.identity.RepeatActionEncoder
+_target_: worldfoundry.synthesis.visual_generation.dino_wm.models.identity.RepeatActionEncoder

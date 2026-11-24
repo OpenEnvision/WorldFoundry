@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 availability: open_source
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_CKPT_DIR}/ac3d/2B/checkpoint-10000.pt
@@ -63,8 +63,8 @@ docs:
   publisher_zh: Snap 公司（Snap Research）
   overview: 'AC3D analyzes and improves camera control in video diffusion: it is a ControlNet-style plugin for CogVideoX. WorldFoundry includes the official inference adapter; checkpoint-backed inference requires the AC3D ControlNet and matching CogVideoX base weights.'
   overview_zh: AC3D 分析并改进视频扩散中的相机控制，是 CogVideoX 的 ControlNet 风格插件。WorldFoundry 已集成官方推理适配器；实际推理仍需本地 AC3D ControlNet 和对应 CogVideoX 底座权重。
-  architecture: Per the paper (arXiv 2411.18673), AC3D locates camera-motion information in low-frequency early-timestep components and conditions only a subset of layers, improving control precision and visual quality. Both 2B and 5B ControlNet checkpoints are recorded; the adapter preserves official 2B ControlNet shape settings.
-  architecture_zh: 按论文（arXiv 2411.18673），AC3D 发现相机运动信息集中在低频、早期时间步分量，因此仅对部分层做条件注入，同时提升控制精度与画质。catalog 记录 2B 与 5B 两个 ControlNet checkpoint；适配器保留官方 2B ControlNet 形状设置。
+  architecture: Per the paper (arXiv 2411.18673), AC3D locates camera-motion information in low-frequency early-timestep components and conditions only a subset of layers, improving control precision and visual quality. Both 2B and 5B ControlNet checkpoints are available; the adapter preserves official 2B ControlNet shape settings.
+  architecture_zh: 按论文（arXiv 2411.18673），AC3D 发现相机运动信息集中在低频、早期时间步分量，因此仅对部分层做条件注入，同时提升控制精度与画质。提供 2B 与 5B 两个 ControlNet checkpoint；适配器保留官方 2B ControlNet 形状设置。
   usage_notes: AC3D stays in its dedicated environment because the official torch 2.4/CUDA 12.4 stack is not ABI-compatible with the unified environment. Inputs accept either a RealEstate10K-style root or a direct source video plus 19-column camera pose rows.
   usage_notes_zh: AC3D 保留在专属环境中，因为官方 torch 2.4/CUDA 12.4 栈与统一环境的 ABI 不兼容。输入接受 RealEstate10K 风格的数据根目录，或「源视频 + 19 列相机位姿行」的直接输入。
   limitations:

@@ -29,17 +29,15 @@ KV caches --- There are a few different modes depending on the setting:
     - action flow integration, using cached non-active mixtures
 """
 
-import logging
-import math
+import logging  # noqa: E402 - Follows a module-level setup call, as upstream.
+import math  # noqa: E402 - Follows a module-level setup call, as upstream.
 
-from typing import List, Optional
+import torch  # noqa: E402 - Follows a module-level setup call, as upstream.
+import torch.nn as nn  # noqa: E402 - Follows a module-level setup call, as upstream.
 
-import torch
-import torch.nn as nn
-
-from .mixture import Mixture
-from .configuration import merge_config
-from .kv_cache import KVCache
+from .configuration import merge_config  # noqa: E402 - Follows a module-level setup call, as upstream.
+from .kv_cache import KVCache  # noqa: E402 - Follows a module-level setup call, as upstream.
+from .mixture import Mixture  # noqa: E402 - Follows a module-level setup call, as upstream.
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +50,7 @@ def forward_mixture_layers(
     layer_idx: int,
     kv_caches: dict[str, KVCache] | None = None,
     cache_mode: str = "append_non_active",
-    time_cond: Optional[torch.FloatTensor] = None,
+    time_cond: torch.FloatTensor | None = None,
 ) -> dict[torch.FloatTensor]:
     """the usual norm + attn + res + norm + mlp + res"""
     active_mixture_names = list(embeds_all.keys())
@@ -85,9 +83,7 @@ def forward_mixture_layers(
     # [Batch_Size, Seq_Len, Hidden_Size]
     hidden_states_post_res = {}
     for name in active_mixture_names:
-        hidden_states_post_res[name] = (
-            residuals_pre_attn[name] + hidden_states_pre_res[name]
-        )
+        hidden_states_post_res[name] = residuals_pre_attn[name] + hidden_states_pre_res[name]
     hidden_states_pre_post_attn = hidden_states_post_res
 
     # [Batch_Size, Seq_Len, Hidden_Size]
@@ -172,7 +168,9 @@ def forward_mixture_attn(
             )  # note: rope already applied before they were cached
 
         # always add to cache in append mode, or kv cache does not have the layer yet (in no_append mode)
-        flag_to_cache_mixture = (name in kv_caches and not kv_caches[name].has_item(layer_idx)) or cache_mode == "append"
+        flag_to_cache_mixture = (
+            name in kv_caches and not kv_caches[name].has_item(layer_idx)
+        ) or cache_mode == "append"
 
         # calculate kv for new tokens if in append mode or this layer is not cached
         key_states_new, value_states_new = None, None
@@ -267,7 +265,7 @@ def forward_mixture_attn(
 
     # Split into the different mixtures
     attn_outputs = torch.split(attn_output, q_lens, dim=1)
-    attn_outputs = {key: value for key, value in zip(active_mixture_names, attn_outputs)}
+    attn_outputs = dict(zip(active_mixture_names, attn_outputs, strict=False))
 
     # Multiply by W_o. [Batch_Size, Seq_Len_Q, Hidden_Size]
     attn_outputs_final = {}
@@ -312,7 +310,7 @@ class JointModel(nn.Module):
         attention_mask: torch.Tensor,
         position_ids_all: dict[torch.LongTensor],
         embeds_all: dict[torch.FloatTensor],
-        time_cond: Optional[torch.FloatTensor] = None,
+        time_cond: torch.FloatTensor | None = None,
         kv_caches: dict[str, KVCache] | None = None,
         cache_mode: str = "append_non_active",
         return_caches: bool = False,
@@ -338,11 +336,7 @@ class JointModel(nn.Module):
                 )
                 embeds_all[name] = embeds_all[name] * normalizer
 
-        intermediates = (
-            {k: [embeds_all[k]] for k in embeds_all.keys()}
-            if return_intermediate_layers
-            else None
-        )
+        intermediates = {k: [embeds_all[k]] for k in embeds_all} if return_intermediate_layers else None
         # layers
         for layer_idx in range(self.num_hidden_layers):
             embeds_all = forward_mixture_layers(
@@ -356,7 +350,7 @@ class JointModel(nn.Module):
                 cache_mode=cache_mode,
             )
             if intermediates is not None:
-                for k in embeds_all.keys():
+                for k in embeds_all.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                     intermediates[k].append(embeds_all[k])
 
         if intermediates is not None:

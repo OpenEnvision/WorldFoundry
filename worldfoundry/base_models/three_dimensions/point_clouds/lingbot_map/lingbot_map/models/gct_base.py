@@ -8,16 +8,17 @@ Provides shared functionality:
 """
 
 import logging
+from abc import ABC, abstractmethod
+
 import numpy as np
 import torch
 import torch.nn as nn
-from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, List, Union
 from huggingface_hub import PyTorchModelHubMixin
+
+from worldfoundry.core.geometry.transforms import closed_form_inverse_se3
 
 from ..heads.dpt_head import DPTHead
 from ..utils.pose_enc import pose_encoding_to_extri_intri
-from ..utils.geometry import closed_form_inverse_se3
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ class GCTBase(nn.Module, PyTorchModelHubMixin, ABC):
         img_size: int = 518,
         patch_size: int = 14,
         embed_dim: int = 1024,
-        patch_embed: str = 'dinov2_vitl14_reg',
+        patch_embed: str = "dinov2_vitl14_reg",
         disable_global_rope: bool = False,
         # Head configuration
         enable_camera: bool = True,
@@ -62,26 +63,6 @@ class GCTBase(nn.Module, PyTorchModelHubMixin, ABC):
         # Gradient checkpointing
         use_gradient_checkpoint: bool = True,
     ):
-        """Init.
-
-        Args:
-            img_size: The img size.
-            patch_size: The patch size.
-            embed_dim: The embed dim.
-            patch_embed: The patch embed.
-            disable_global_rope: The disable global rope.
-            enable_camera: The enable camera.
-            enable_point: The enable point.
-            enable_local_point: The enable local point.
-            enable_depth: The enable depth.
-            enable_track: The enable track.
-            enable_camera_sliding_window: The enable camera sliding window.
-            enable_3d_rope: The enable 3d rope.
-            enable_normalize: The enable normalize.
-            pred_normalization: The pred normalization.
-            pred_normalization_detach_scale: The pred normalization detach scale.
-            use_gradient_checkpoint: The use gradient checkpoint.
-        """
         super().__init__()
 
         # Store configuration
@@ -116,71 +97,40 @@ class GCTBase(nn.Module, PyTorchModelHubMixin, ABC):
 
     @abstractmethod
     def _build_aggregator(self) -> nn.Module:
-        """Helper function to build aggregator.
-
-        Returns:
-            The return value.
-        """
         pass
 
     @abstractmethod
     def _build_camera_head(self) -> nn.Module:
-        """Helper function to build camera head.
-
-        Returns:
-            The return value.
-        """
         pass
 
     def _build_depth_head(self) -> nn.Module:
-        """Helper function to build depth head.
-
-        Returns:
-            The return value.
-        """
         return DPTHead(
             dim_in=2 * self.embed_dim,
             patch_size=self.patch_size,
             output_dim=2,
             activation="exp",
-            conf_activation="expp1"
+            conf_activation="expp1",
         )
 
     def _build_point_head(self) -> nn.Module:
-        """Helper function to build point head.
-
-        Returns:
-            The return value.
-        """
         return DPTHead(
             dim_in=2 * self.embed_dim,
             patch_size=self.patch_size,
             output_dim=4,
             activation="inv_log",
-            conf_activation="expp1"
+            conf_activation="expp1",
         )
 
     def _build_local_point_head(self) -> nn.Module:
-        """Helper function to build local point head.
-
-        Returns:
-            The return value.
-        """
         return DPTHead(
             dim_in=2 * self.embed_dim,
             patch_size=self.patch_size,
             output_dim=4,
             activation="inv_log",
-            conf_activation="expp1"
+            conf_activation="expp1",
         )
 
     def _normalize_input(self, images: torch.Tensor, query_points=None):
-        """Helper function to normalize input.
-
-        Args:
-            images: The images.
-            query_points: The query points.
-        """
         if len(images.shape) == 4:
             images = images.unsqueeze(0)
         if query_points is not None and len(query_points.shape) == 2:
@@ -191,53 +141,25 @@ class GCTBase(nn.Module, PyTorchModelHubMixin, ABC):
     def _aggregate_features(
         self,
         images: torch.Tensor,
-        num_frame_for_scale: Optional[int] = None,
-        sliding_window_size: Optional[int] = None,
+        num_frame_for_scale: int | None = None,
+        sliding_window_size: int | None = None,
         num_frame_per_block: int = 1,
-        view_graphs: Optional[torch.Tensor] = None,
-        causal_graphs: Optional[Union[torch.Tensor, List[np.ndarray]]] = None,
-        ordered_video: Optional[torch.Tensor] = None,
+        view_graphs: torch.Tensor | None = None,
+        causal_graphs: torch.Tensor | list[np.ndarray] | None = None,
+        ordered_video: torch.Tensor | None = None,
     ) -> tuple:
-        """Helper function to aggregate features.
-
-        Args:
-            images: The images.
-            num_frame_for_scale: The num frame for scale.
-            sliding_window_size: The sliding window size.
-            num_frame_per_block: The num frame per block.
-            view_graphs: The view graphs.
-            causal_graphs: The causal graphs.
-            ordered_video: The ordered video.
-
-        Returns:
-            The return value.
-        """
         pass
 
     def _predict_camera(
         self,
         aggregated_tokens_list: list,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
         causal_inference: bool = False,
-        num_frame_for_scale: Optional[int] = None,
-        sliding_window_size: Optional[int] = None,
+        num_frame_for_scale: int | None = None,
+        sliding_window_size: int | None = None,
         num_frame_per_block: int = 1,
         gather_outputs: bool = True,
-    ) -> Dict[str, torch.Tensor]:
-        """Helper function to predict camera.
-
-        Args:
-            aggregated_tokens_list: The aggregated tokens list.
-            mask: The mask.
-            causal_inference: The causal inference.
-            num_frame_for_scale: The num frame for scale.
-            sliding_window_size: The sliding window size.
-            num_frame_per_block: The num frame per block.
-            gather_outputs: The gather outputs.
-
-        Returns:
-            The return value.
-        """
+    ) -> dict[str, torch.Tensor]:
         if self.camera_head is None:
             return {}
 
@@ -245,7 +167,7 @@ class GCTBase(nn.Module, PyTorchModelHubMixin, ABC):
 
         camera_sliding_window = sliding_window_size if self.enable_camera_sliding_window else -1
 
-        with torch.amp.autocast('cuda', enabled=False):
+        with torch.amp.autocast("cuda", enabled=False):
             pose_enc_list = self.camera_head(
                 aggregated_tokens_list_fp32,
                 mask=mask,
@@ -266,29 +188,16 @@ class GCTBase(nn.Module, PyTorchModelHubMixin, ABC):
         images: torch.Tensor,
         patch_start_idx: int,
         gather_outputs: bool = True,
-    ) -> Dict[str, torch.Tensor]:
-        """Helper function to predict depth.
-
-        Args:
-            aggregated_tokens_list: The aggregated tokens list.
-            images: The images.
-            patch_start_idx: The patch start idx.
-            gather_outputs: The gather outputs.
-
-        Returns:
-            The return value.
-        """
+    ) -> dict[str, torch.Tensor]:
         if self.depth_head is None:
             return {}
 
         aggregated_tokens_list_fp32 = [t.float() for t in aggregated_tokens_list]
         images_fp32 = images.float()
 
-        with torch.amp.autocast('cuda', enabled=False):
+        with torch.amp.autocast("cuda", enabled=False):
             depth, depth_conf = self.depth_head(
-                aggregated_tokens_list_fp32,
-                images=images_fp32,
-                patch_start_idx=patch_start_idx
+                aggregated_tokens_list_fp32, images=images_fp32, patch_start_idx=patch_start_idx
             )
 
         return {"depth": depth, "depth_conf": depth_conf}
@@ -299,29 +208,16 @@ class GCTBase(nn.Module, PyTorchModelHubMixin, ABC):
         images: torch.Tensor,
         patch_start_idx: int,
         gather_outputs: bool = True,
-    ) -> Dict[str, torch.Tensor]:
-        """Helper function to predict points.
-
-        Args:
-            aggregated_tokens_list: The aggregated tokens list.
-            images: The images.
-            patch_start_idx: The patch start idx.
-            gather_outputs: The gather outputs.
-
-        Returns:
-            The return value.
-        """
+    ) -> dict[str, torch.Tensor]:
         if self.point_head is None:
             return {}
 
         aggregated_tokens_list_fp32 = [t.float() for t in aggregated_tokens_list]
         images_fp32 = images.float()
 
-        with torch.amp.autocast('cuda', enabled=False):
+        with torch.amp.autocast("cuda", enabled=False):
             pts3d, pts3d_conf = self.point_head(
-                aggregated_tokens_list_fp32,
-                images=images_fp32,
-                patch_start_idx=patch_start_idx
+                aggregated_tokens_list_fp32, images=images_fp32, patch_start_idx=patch_start_idx
             )
 
         return {"world_points": pts3d, "world_points_conf": pts3d_conf}
@@ -332,29 +228,16 @@ class GCTBase(nn.Module, PyTorchModelHubMixin, ABC):
         images: torch.Tensor,
         patch_start_idx: int,
         gather_outputs: bool = True,
-    ) -> Dict[str, torch.Tensor]:
-        """Helper function to predict local points.
-
-        Args:
-            aggregated_tokens_list: The aggregated tokens list.
-            images: The images.
-            patch_start_idx: The patch start idx.
-            gather_outputs: The gather outputs.
-
-        Returns:
-            The return value.
-        """
+    ) -> dict[str, torch.Tensor]:
         if self.local_point_head is None:
             return {}
 
         aggregated_tokens_list_fp32 = [t.float() for t in aggregated_tokens_list]
         images_fp32 = images.float()
 
-        with torch.amp.autocast('cuda', enabled=False):
+        with torch.amp.autocast("cuda", enabled=False):
             pts3d, pts3d_conf = self.local_point_head(
-                aggregated_tokens_list_fp32,
-                images=images_fp32,
-                patch_start_idx=patch_start_idx
+                aggregated_tokens_list_fp32, images=images_fp32, patch_start_idx=patch_start_idx
             )
 
         return {"cam_points": pts3d, "cam_points_conf": pts3d_conf}
@@ -364,15 +247,6 @@ class GCTBase(nn.Module, PyTorchModelHubMixin, ABC):
         depth: torch.Tensor,
         pose_enc: torch.Tensor,
     ) -> torch.Tensor:
-        """Helper function to unproject depth to world.
-
-        Args:
-            depth: The depth.
-            pose_enc: The pose enc.
-
-        Returns:
-            The return value.
-        """
         B, S, H, W, _ = depth.shape
         device = depth.device
         dtype = depth.dtype
@@ -389,36 +263,34 @@ class GCTBase(nn.Module, PyTorchModelHubMixin, ABC):
         c2w = closed_form_inverse_se3(extrinsics_4x4).view(B, S, 4, 4)
 
         y_grid, x_grid = torch.meshgrid(
-            torch.arange(H, device=device, dtype=dtype),
-            torch.arange(W, device=device, dtype=dtype),
-            indexing='ij'
+            torch.arange(H, device=device, dtype=dtype), torch.arange(W, device=device, dtype=dtype), indexing="ij"
         )
         pixel_coords = torch.stack([x_grid, y_grid, torch.ones_like(x_grid)], dim=-1)
 
         intrinsics_inv = torch.inverse(intrinsics)
-        camera_coords = torch.einsum('bsij,hwj->bshwi', intrinsics_inv, pixel_coords)
+        camera_coords = torch.einsum("bsij,hwj->bshwi", intrinsics_inv, pixel_coords)
         camera_points = camera_coords * depth
 
         ones = torch.ones_like(camera_points[..., :1])
         camera_points_h = torch.cat([camera_points, ones], dim=-1)
-        world_points_h = torch.einsum('bsij,bshwj->bshwi', c2w, camera_points_h)
+        world_points_h = torch.einsum("bsij,bshwj->bshwi", c2w, camera_points_h)
 
         return world_points_h[..., :3]
 
     def forward(
         self,
         images: torch.Tensor,
-        query_points: Optional[torch.Tensor] = None,
-        num_frame_for_scale: Optional[int] = None,
-        sliding_window_size: Optional[int] = None,
+        query_points: torch.Tensor | None = None,
+        num_frame_for_scale: int | None = None,
+        sliding_window_size: int | None = None,
         num_frame_per_block: int = 1,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
         causal_inference: bool = False,
-        ordered_video: Optional[torch.Tensor] = None,
+        ordered_video: torch.Tensor | None = None,
         gather_outputs: bool = True,
-        point_masks: Optional[torch.Tensor] = None,
+        point_masks: torch.Tensor | None = None,
         **kwargs,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """
         Forward pass of the GCT model.
 
@@ -445,30 +317,44 @@ class GCTBase(nn.Module, PyTorchModelHubMixin, ABC):
 
         predictions = {}
 
-        predictions.update(self._predict_camera(
-            aggregated_tokens_list,
-            mask=ordered_video,
-            causal_inference=causal_inference,
-            num_frame_for_scale=num_frame_for_scale,
-            sliding_window_size=sliding_window_size,
-            num_frame_per_block=num_frame_per_block,
-            gather_outputs=gather_outputs,
-        ))
+        predictions.update(
+            self._predict_camera(
+                aggregated_tokens_list,
+                mask=ordered_video,
+                causal_inference=causal_inference,
+                num_frame_for_scale=num_frame_for_scale,
+                sliding_window_size=sliding_window_size,
+                num_frame_per_block=num_frame_per_block,
+                gather_outputs=gather_outputs,
+            )
+        )
 
-        predictions.update(self._predict_depth(
-            aggregated_tokens_list, images, patch_start_idx,
-            gather_outputs=gather_outputs,
-        ))
+        predictions.update(
+            self._predict_depth(
+                aggregated_tokens_list,
+                images,
+                patch_start_idx,
+                gather_outputs=gather_outputs,
+            )
+        )
 
-        predictions.update(self._predict_points(
-            aggregated_tokens_list, images, patch_start_idx,
-            gather_outputs=gather_outputs,
-        ))
+        predictions.update(
+            self._predict_points(
+                aggregated_tokens_list,
+                images,
+                patch_start_idx,
+                gather_outputs=gather_outputs,
+            )
+        )
 
-        predictions.update(self._predict_local_points(
-            aggregated_tokens_list, images, patch_start_idx,
-            gather_outputs=gather_outputs,
-        ))
+        predictions.update(
+            self._predict_local_points(
+                aggregated_tokens_list,
+                images,
+                patch_start_idx,
+                gather_outputs=gather_outputs,
+            )
+        )
 
         if not self.training:
             predictions["images"] = images

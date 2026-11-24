@@ -7,18 +7,17 @@ from .xbert import BertConfig, BertForMaskedLM, BertLMHeadModel, BertModel
 
 logger = logging.getLogger(__name__)
 
+
 def build_bert(model_config, pretrain, checkpoint, encoder_width=None):
     """build text encoder.
 
     Args:
-        model_config (dict): model config.
         pretrain (bool): Whether to do pretrain or finetuning.
         checkpoint (bool): whether to do gradient_checkpointing.
 
     Returns: TODO
-
     """
-    current_dir = str(package_data_path('models', 'runtime', 'configs', 'internvideo2', 'bert'))
+    current_dir = str(package_data_path("models", "runtime", "configs", "internvideo2", "bert"))
     target_file = os.path.join(current_dir, model_config.text_encoder.config)  # Construct the new file path
     bert_config = BertConfig.from_json_file(target_file)
     # bert_config = BertConfig.from_json_file(model_config.text_encoder.config)
@@ -26,7 +25,7 @@ def build_bert(model_config, pretrain, checkpoint, encoder_width=None):
         bert_config.encoder_width = model_config.vision_encoder.d_model
     else:
         bert_config.encoder_width = encoder_width
-        
+
     bert_config.gradient_checkpointing = checkpoint
     bert_config.fusion_layer = model_config.text_encoder.fusion_layer
 
@@ -38,15 +37,15 @@ def build_bert(model_config, pretrain, checkpoint, encoder_width=None):
             text_encoder, loading_info = BertForMaskedLM.from_pretrained(
                 model_config.text_encoder.pretrained,
                 config=bert_config,
-                output_loading_info=True, 
-                local_files_only=True
+                output_loading_info=True,
+                local_files_only=True,
             )
-        except:
+        except BaseException:
             text_encoder, loading_info = BertForMaskedLM.from_pretrained(
                 model_config.text_encoder.pretrained,
                 config=bert_config,
-                output_loading_info=True, 
-                local_files_only=False
+                output_loading_info=True,
+                local_files_only=False,
             )
     else:
         try:
@@ -55,15 +54,15 @@ def build_bert(model_config, pretrain, checkpoint, encoder_width=None):
                 config=bert_config,
                 add_pooling_layer=False,
                 output_loading_info=True,
-                local_files_only=True
+                local_files_only=True,
             )
-        except:
+        except BaseException:
             text_encoder, loading_info = BertModel.from_pretrained(
                 model_config.text_encoder.pretrained,
                 config=bert_config,
                 add_pooling_layer=False,
                 output_loading_info=True,
-                local_files_only=False
+                local_files_only=False,
             )
 
     return text_encoder
@@ -73,14 +72,12 @@ def build_bert_decoder(model_config, checkpoint, only_fusion_layer=True):
     """build text decoder the same as the multimodal encoder.
 
     Args:
-        model_config (dict): model config.
         pretrain (bool): Whether to do pretrain or finetuning.
         checkpoint (bool): whether to do gradient_checkpointing.
 
     Returns: TODO
-
     """
-    current_dir = str(package_data_path('models', 'runtime', 'configs', 'internvideo2', 'bert'))
+    current_dir = str(package_data_path("models", "runtime", "configs", "internvideo2", "bert"))
     target_file = os.path.join(current_dir, model_config.text_encoder.config)  # Construct the new file path
     bert_config = BertConfig.from_json_file(target_file)
     # bert_config = BertConfig.from_json_file(model_config.text_encoder.config)
@@ -90,43 +87,34 @@ def build_bert_decoder(model_config, checkpoint, only_fusion_layer=True):
     bert_config.fusion_layer = 0
 
     if only_fusion_layer:
-        bert_config.num_hidden_layers = (
-            bert_config.num_hidden_layers - model_config.text_encoder.fusion_layer
-        )
+        bert_config.num_hidden_layers = bert_config.num_hidden_layers - model_config.text_encoder.fusion_layer
 
     text_decoder, loading_info = BertLMHeadModel.from_pretrained(
-        model_config.text_encoder.pretrained,
-        config=bert_config,
-        output_loading_info=True,
-        local_files_only=True
+        model_config.text_encoder.pretrained, config=bert_config, output_loading_info=True, local_files_only=True
     )
 
     return text_decoder
+
 
 def build_lm_bert_decoder(model_config, checkpoint):
     """build text decoder the same as the multimodal encoder.
 
     Args:
-        model_config (dict): model config.
         pretrain (bool): Whether to do pretrain or finetuning.
         checkpoint (bool): whether to do gradient_checkpointing.
 
     Returns: TODO
-
     """
-    current_dir = str(package_data_path('models', 'runtime', 'configs', 'internvideo2', 'bert'))
+    current_dir = str(package_data_path("models", "runtime", "configs", "internvideo2", "bert"))
     target_file = os.path.join(current_dir, model_config.text_encoder.config)  # Construct the new file path
     bert_config = BertConfig.from_json_file(target_file)
     # bert_config = BertConfig.from_json_file(model_config.text_encoder.config)
     bert_config.encoder_width = model_config.vision_encoder.d_model
     bert_config.gradient_checkpointing = checkpoint
     bert_config.fusion_layer = model_config.text_encoder.fusion_layer
-    
+
     text_decoder, loading_info = BertLMHeadModel.from_pretrained(
-        model_config.text_encoder.pretrained,
-        config=bert_config,
-        output_loading_info=True,
-        local_files_only=True
+        model_config.text_encoder.pretrained, config=bert_config, output_loading_info=True, local_files_only=True
     )
 
     return text_decoder

@@ -199,10 +199,7 @@ def main() -> None:
         "benchmarkGroups": groups,
     }
     OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
-    print(
-        f"wrote {OUT} modelRepos={payload['modelsTotal']} "
-        f"benchmarks={payload['benchmarksTotal']}"
-    )
+    print(f"wrote {OUT} modelRepos={payload['modelsTotal']} benchmarks={payload['benchmarksTotal']}")
 
 
 if __name__ == "__main__":

@@ -1,19 +1,19 @@
-"""Compatibility launcher for official SolarWM Wan2.2-5B inference."""
+"""Launcher for SolarWM Wan2.2-5B inference through the vendored solarwm package."""
 
 from __future__ import annotations
 
 import argparse
-import os
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path, PurePosixPath
+
+from worldfoundry.core.execution.process import package_module_command
+from worldfoundry.synthesis.visual_generation.solarwm.runtime import SOLARWM_MODULE
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-dir", type=Path, required=True)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--base-model-dir", type=Path, required=True)
     parser.add_argument("--checkpoint-dir", type=Path, required=True)
@@ -40,17 +40,10 @@ def _relative_test_index(value: str) -> str:
 
 
 def build_official_command(args: argparse.Namespace, *, run_root: Path) -> list[str]:
-    """Return an argv-safe official SolarWM command with explicit paths."""
+    """Return an argv-safe SolarWM command with explicit paths."""
     if args.sample_count != 1:
         raise ValueError("SolarWM's single-MP4 WorldFoundry binding requires sample-count=1")
-    command = [
-        sys.executable,
-        "-m",
-        "solarwm",
-        "infer",
-        "--config",
-        str(args.config.expanduser().resolve()),
-    ]
+    arguments = ["infer", "--config", str(args.config.expanduser().resolve())]
     overrides = [
         f"model.base_path={args.base_model_dir.expanduser().resolve()}",
         f"checkpoint.path={args.checkpoint_dir.expanduser().resolve()}",
@@ -66,8 +59,8 @@ def build_official_command(args: argparse.Namespace, *, run_root: Path) -> list[
     if args.test_index:
         overrides.append(f"data.test_index={_relative_test_index(args.test_index)}")
     for override in overrides:
-        command.extend(["--set", override])
-    return command
+        arguments.extend(["--set", override])
+    return package_module_command(SOLARWM_MODULE, arguments)
 
 
 def _find_generated_video(run_root: Path) -> Path:
@@ -77,16 +70,12 @@ def _find_generated_video(run_root: Path) -> Path:
         candidates = sorted(run_root.glob("generation/**/video.mp4"))
     candidates = [path for path in candidates if path.is_file() and path.stat().st_size > 0]
     if not candidates:
-        raise RuntimeError("official SolarWM inference completed without producing generation/**/video.mp4")
+        raise RuntimeError("SolarWM inference completed without producing generation/**/video.mp4")
     return candidates[-1]
 
 
 def run(args: argparse.Namespace) -> Path:
-    """Launch the official module and normalize its artifact into one MP4."""
-    source_dir = args.source_dir.expanduser().resolve()
-    source_package = source_dir / "src" / "solarwm" / "__init__.py"
-    if not source_package.is_file():
-        raise FileNotFoundError(f"official SolarWM source package is missing: {source_package}")
+    """Launch the SolarWM module and normalize its artifact into one MP4."""
     if args.sample_count != 1:
         raise ValueError("SolarWM's single-MP4 WorldFoundry binding requires sample-count=1")
 
@@ -95,13 +84,9 @@ def run(args: argparse.Namespace) -> Path:
     with tempfile.TemporaryDirectory(prefix=f".{output_path.stem}-solarwm-", dir=output_path.parent) as temp_dir:
         run_root = Path(temp_dir) / "run"
         command = build_official_command(args, run_root=run_root)
-        env = os.environ.copy()
-        pythonpath = [str(source_dir / "src"), env.get("PYTHONPATH", "")]
-        env["PYTHONPATH"] = os.pathsep.join(item for item in pythonpath if item)
         completed = subprocess.run(
             command,
-            cwd=source_dir,
-            env=env,
+            cwd=temp_dir,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -111,7 +96,7 @@ def run(args: argparse.Namespace) -> Path:
             print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n")
         if completed.returncode != 0:
             tail = (completed.stdout or "")[-4000:]
-            raise RuntimeError(f"official SolarWM inference exited with code {completed.returncode}:\n{tail}")
+            raise RuntimeError(f"SolarWM inference exited with code {completed.returncode}:\n{tail}")
         generated = _find_generated_video(run_root)
         shutil.copy2(generated, output_path)
     print(f"SolarWM output: {output_path.name}")

@@ -4,8 +4,6 @@
 # --------------------------------------------------------
 # modified from DUSt3R
 
-"""Module for base_models -> three_dimensions -> point_clouds -> cut3r -> utils -> image.py functionality."""
-
 import os
 
 import numpy as np
@@ -15,10 +13,10 @@ import torchvision.transforms as tvf
 from PIL.ImageOps import exif_transpose
 
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
-import cv2  # noqa
+import cv2
 
 try:
-    from pillow_heif import register_heif_opener  # noqa
+    from pillow_heif import register_heif_opener
 
     register_heif_opener()
     heif_support_enabled = True
@@ -29,11 +27,6 @@ ImgNorm = tvf.Compose([tvf.ToTensor(), tvf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5,
 
 
 def img_to_arr(img):
-    """Img to arr.
-
-    Args:
-        img: The img.
-    """
     if isinstance(img, str):
         img = imread_cv2(img)
     return img
@@ -45,19 +38,13 @@ def imread_cv2(path, options=cv2.IMREAD_COLOR):
         options = cv2.IMREAD_ANYDEPTH
     img = cv2.imread(path, options)
     if img is None:
-        raise IOError(f"Could not load image={path} with {options=}")
+        raise OSError(f"Could not load image={path} with {options=}")
     if img.ndim == 3:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return img
 
 
 def rgb(ftensor, true_shape=None):
-    """Rgb.
-
-    Args:
-        ftensor: The ftensor.
-        true_shape: The true shape.
-    """
     if isinstance(ftensor, list):
         return [rgb(x, true_shape=true_shape) for x in ftensor]
     if isinstance(ftensor, torch.Tensor):
@@ -69,26 +56,17 @@ def rgb(ftensor, true_shape=None):
     if true_shape is not None:
         H, W = true_shape
         ftensor = ftensor[:H, :W]
-    if ftensor.dtype == np.uint8:
-        img = np.float32(ftensor) / 255
-    else:
-        img = (ftensor * 0.5) + 0.5
+    img = np.float32(ftensor) / 255 if ftensor.dtype == np.uint8 else ftensor * 0.5 + 0.5
     return img.clip(min=0, max=1)
 
 
 def _resize_pil_image(img, long_edge_size):
-    """Helper function to resize pil image.
-
-    Args:
-        img: The img.
-        long_edge_size: The long edge size.
-    """
     S = max(img.size)
-    if S > long_edge_size:
+    if long_edge_size < S:
         interp = PIL.Image.LANCZOS
-    elif S <= long_edge_size:
+    elif long_edge_size >= S:
         interp = PIL.Image.BICUBIC
-    new_size = tuple(int(round(x * long_edge_size / S)) for x in img.size)
+    new_size = tuple(int(round(x * long_edge_size / S)) for x in img.size)  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     return img.resize(new_size, interp)
 
 
@@ -137,12 +115,12 @@ def load_images(folder_or_list, size, square_ok=False, verbose=True):
         if verbose:
             print(f" - adding {path} with resolution {W1}x{H1} --> {W2}x{H2}")
         imgs.append(
-            dict(
-                img=ImgNorm(img)[None],
-                true_shape=np.int32([img.size[::-1]]),
-                idx=len(imgs),
-                instance=str(len(imgs)),
-            )
+            {
+                "img": ImgNorm(img)[None],
+                "true_shape": np.int32([img.size[::-1]]),
+                "idx": len(imgs),
+                "instance": str(len(imgs)),
+            }
         )
 
     assert imgs, "no images foud at " + root
@@ -203,12 +181,12 @@ def load_images_for_eval(folder_or_list, size, square_ok=False, verbose=True, cr
         if verbose:
             print(f" - adding {path} with resolution {W1}x{H1} --> {W2}x{H2}")
         imgs.append(
-            dict(
-                img=ImgNorm(img)[None],
-                true_shape=np.int32([img.size[::-1]]),
-                idx=len(imgs),
-                instance=str(len(imgs)),
-            )
+            {
+                "img": ImgNorm(img)[None],
+                "true_shape": np.int32([img.size[::-1]]),
+                "idx": len(imgs),
+                "instance": str(len(imgs)),
+            }
         )
 
     assert imgs, "no images foud at " + root
@@ -263,12 +241,12 @@ def load_images_512(folder_or_list, size, square_ok=False, verbose=True):
         if verbose:
             print(f" - adding {path} with resolution {W1}x{H1} --> {W2}x{H2}")
         imgs.append(
-            dict(
-                img=ImgNorm(img)[None],
-                true_shape=np.int32([img.size[::-1]]),
-                idx=len(imgs),
-                instance=str(len(imgs)),
-            )
+            {
+                "img": ImgNorm(img)[None],
+                "true_shape": np.int32([img.size[::-1]]),
+                "idx": len(imgs),
+                "instance": str(len(imgs)),
+            }
         )
 
     assert imgs, "no images foud at " + root

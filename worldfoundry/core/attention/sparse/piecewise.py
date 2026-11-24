@@ -27,9 +27,9 @@ from __future__ import annotations
 import os
 
 import torch
+import torch.version
 
 from worldfoundry.core.attention.backends.native import native_sdpa_priority, scaled_dot_product_attention
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Eligibility — TMA descriptors are Hopper / data-center Blackwell only
@@ -68,11 +68,13 @@ def piecewise_attention_available(device: torch.device | str | None = None) -> b
     if not _pisa_device_eligible(parsed):
         return False
     try:
-        from worldfoundry.core.execution.compile_cache import configure_persistent_compile_cache
+        from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
 
         configure_persistent_compile_cache(namespace="pisa-triton")
-        import triton  # noqa: F401
-        from triton.tools.tensor_descriptor import TensorDescriptor  # noqa: F401
+        import triton  # noqa: F401 - Availability probe for the Triton backend.
+        from triton.tools.tensor_descriptor import (
+            TensorDescriptor,  # noqa: F401 - Availability probe for the Triton backend.
+        )
     except (ImportError, OSError):
         return False
     return True
@@ -179,10 +181,14 @@ def piecewise_attention(
         ):
             raise
         from_triton = exc.__class__.__module__.startswith("triton")
-        optional_failure = isinstance(exc, (ImportError, OSError)) or any(
-            marker in message
-            for marker in ("triton", "ptxas", "no kernel image", "invalid device function", "out of resource")
-        ) or from_triton
+        optional_failure = (
+            isinstance(exc, (ImportError, OSError))
+            or any(
+                marker in message
+                for marker in ("triton", "ptxas", "no kernel image", "invalid device function", "out of resource")
+            )
+            or from_triton
+        )
         if strict or not optional_failure:
             raise
         return _exact_attention(q, k, v, scale)

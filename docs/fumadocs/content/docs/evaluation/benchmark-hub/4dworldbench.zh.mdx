@@ -1,9 +1,9 @@
 ---
 title: 4DWorldBench
-description: "CVPR 2026 的 3D/4D 世界生成评测：感知质量、Condition-4D 对齐、物理、4D 一致性。WorldFoundry 内置官方 runtime，不编造榜单。"
+description: "CVPR 2026 的 3D/4D 世界生成评测：感知质量、Condition-4D 对齐、物理、4D 一致性。WorldFoundry 内置官方 runtime，一次评一个维度。"
 ---
 
-4DWorldBench（中科大，联合浙大与北京中关村学院；CVPR 2026）评的是 **3D/4D 世界生成器**——图像转 3D/4D、视频转 4D、文本转 3D/4D——把各种条件模态映射到同一评测空间。四个轴汇总为 `four_d_worldbench_average`：
+4DWorldBench（中科大，联合浙大与北京中关村学院；CVPR 2026）评的是 **3D/4D 世界生成器**——图像转 3D/4D、视频转 4D、文本转 3D/4D——把各种条件模态映射到同一评测空间。四个维度汇总为 `four_d_worldbench_average`：
 
 - **感知质量** — CLIP-IQA、CLIP-aesthetic、FastVQA。
 - **Condition-4D 对齐** — Keye-VL 是/否 judge 覆盖属性 / 关系 / 运动 / 事件 / 场景控制，外加 DROID-SLAM 相机误差（原始误差越低越好，再反向归一化）。
@@ -12,7 +12,7 @@ description: "CVPR 2026 的 3D/4D 世界生成评测：感知质量、Condition-
 
 论文：[4DWorldBench](https://arxiv.org/pdf/2511.19836)。项目：[yeppp27.github.io/4DWorldBench.github.io](https://yeppp27.github.io/4DWorldBench.github.io/)。代码：[yeppp27/4dworldbench_code](https://github.com/yeppp27/4dworldbench_code)。
 
-WorldFoundry **仓内托管官方 runtime**（`run_four_d_worldbench_official_runner.py`），按官方 schema 的数据集 JSON 一次评一个 `--dimension`。官方数据集下载尚未发布；需自行提供 JSON 与生成视频。
+WorldFoundry **仓内托管官方 runtime**（`run_four_d_worldbench_official_runner.py`），按照官方 schema 的数据集 JSON，每次评测一个 `--dimension`。官方数据集下载尚未发布；需自行提供 JSON 与生成视频。
 
 <BenchmarkPageSections id="4dworldbench" locale="zh" />
 
@@ -20,7 +20,7 @@ WorldFoundry **仓内托管官方 runtime**（`run_four_d_worldbench_official_ru
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py \
   --run-official \
   --dataset-json <dataset.json> \
   --model-name <model_name> \
@@ -32,7 +32,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 依赖模型的维度会解析 `WORLDFOUNDRY_4DWORLDBENCH_KEYE_MODEL`、`WORLDFOUNDRY_4DWORLDBENCH_DROID_CKPT`、`OPENAI_API_KEY`。像素级维度不需要它们。共享栈：`keye_vl`、`droid_slam`、`vfimamba`、`fastvqa`。默认导入路径：`WORLDFOUNDRY_4DWORLDBENCH_RESULTS_PATH`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/4dworldbench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench`。
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/4dworldbench.yaml`、`worldfoundry/evals/tasks/execution/runners/four_d_worldbench`。
 
 产物包括 `scorecard.json`（主键 `four_d_worldbench_average`）与 `raw_metric_table.jsonl`。
 

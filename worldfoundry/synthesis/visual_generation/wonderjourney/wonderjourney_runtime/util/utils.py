@@ -1,33 +1,31 @@
-from PIL import Image
-from PIL import ImageFilter
+import io
+import os
+import shutil
+from collections import deque
+from pathlib import Path
+
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 import scipy.signal
-from scipy.spatial import cKDTree
-import matplotlib.pyplot as plt
 import torch
-import io
-
-from collections import deque
+from PIL import Image
+from scipy.spatial import cKDTree
 from torchvision.transforms import ToTensor
-import os
-import yaml
-import shutil
-from pathlib import Path
+
 from .general_utils import save_video
-from datetime import datetime
 
 
 def find_biggest_connected_inpaint_region(mask):
     H, W = mask.shape
     visited = torch.zeros((H, W), dtype=torch.bool)
     directions = [(1, 0), (0, 1), (-1, 0), (0, -1)]  # up, right, down, left
-    
+
     def bfs(i, j):
         queue = deque([(i, j)])
         region = []
-        
+
         while queue:
             x, y = queue.popleft()
             if 0 <= x < H and 0 <= y < W and not visited[x, y] and mask[x, y] == 1:
@@ -35,18 +33,18 @@ def find_biggest_connected_inpaint_region(mask):
                 region.append((x, y))
                 for dx, dy in directions:
                     queue.append((x + dx, y + dy))
-                    
+
         return region
-    
+
     max_region = []
-    
+
     for i in range(H):
         for j in range(W):
             if mask[i, j] == 1 and not visited[i, j]:
                 current_region = bfs(i, j)
                 if len(current_region) > len(max_region):
                     max_region = current_region
-    
+
     mask_connected = torch.zeros((H, W)).to(mask.device)
     for x, y in max_region:
         mask_connected[x, y] = 1
@@ -63,21 +61,19 @@ def edge_pad(img, mask, mode=1):
         p1 = np.stack(res1.nonzero(), axis=0).transpose()
         min_dists, min_dist_idx = cKDTree(p1).query(p0, 1)
         loc = p1[min_dist_idx]
-        for (a, b), (c, d) in zip(p0, loc):
+        for (a, b), (c, d) in zip(p0, loc, strict=False):
             img[a, b] = img[c, d]
     elif mode == 1:
         record = {}
         kernel = [[1] * 3 for _ in range(3)]
         nmask = mask.copy()
         nmask[nmask > 0] = 1
-        res = scipy.signal.convolve2d(
-            nmask, kernel, mode="same", boundary="fill", fillvalue=1
-        )
+        res = scipy.signal.convolve2d(nmask, kernel, mode="same", boundary="fill", fillvalue=1)
         res[nmask < 1] = 0
         res[res == 9] = 0
         res[res > 0] = 1
         ylst, xlst = res.nonzero()
-        queue = [(y, x) for y, x in zip(ylst, xlst)]
+        queue = [(y, x) for y, x in zip(ylst, xlst, strict=False)]
         # bfs here
         cnt = res.astype(np.float32)
         acc = img.astype(np.float32)
@@ -92,7 +88,7 @@ def edge_pad(img, mask, mode=1):
                 for yo, xo in offset:
                     yn = y + yo
                     xn = x + xo
-                    if 0 <= yn < h and 0 <= xn < w and nmask[yn][xn] < 1:
+                    if 0 <= yn < h and 0 <= xn < w and nmask[yn][xn] < 1:  # noqa: SIM102 - Statement form kept for readability.
                         if record.get((yn, xn), step) == step:
                             acc[yn][xn] = acc[yn][xn] * cnt[yn][xn] + val
                             cnt[yn][xn] += 1
@@ -142,6 +138,7 @@ def mean_fill(img, mask):
     img[mask < 1] = avg
     return img, mask
 
+
 def save_depth_map(depth_map, file_name, vmin=None, vmax=None, save_clean=False):
     depth_map = np.squeeze(depth_map)
     if depth_map.ndim != 2:
@@ -151,30 +148,31 @@ def save_depth_map(depth_map, file_name, vmin=None, vmax=None, save_clean=False)
     figsize = (depth_map.shape[1] / dpi, depth_map.shape[0] / dpi)  # Width, Height in inches
 
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    cax = ax.imshow(depth_map, cmap='viridis', vmin=vmin, vmax=vmax)
+    cax = ax.imshow(depth_map, cmap="viridis", vmin=vmin, vmax=vmax)
 
     if not save_clean:
         # Standard save with labels and color bar
-        cbar = fig.colorbar(cax)
+        _cbar = fig.colorbar(cax)
         ax.set_title("Depth Map")
         ax.set_xlabel("Width")
         ax.set_ylabel("Height")
     else:
         # Clean save without labels, color bar, or axis
-        plt.axis('off')
-        ax.set_aspect('equal', adjustable='box')
+        plt.axis("off")
+        ax.set_aspect("equal", adjustable="box")
 
     # Save to buffer
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
+    plt.savefig(buf, format="png", bbox_inches="tight", pad_inches=0)
     buf.seek(0)
     img = Image.open(buf)
-    img = img.convert('RGB')  # Convert to RGB
-    img = img.resize((depth_map.shape[1], depth_map.shape[0]), Image.Resampling.LANCZOS)  # Resize to original dimensions
-    img.save(file_name, format='png')
+    img = img.convert("RGB")  # Convert to RGB
+    img = img.resize(
+        (depth_map.shape[1], depth_map.shape[0]), Image.Resampling.LANCZOS
+    )  # Resize to original dimensions
+    img.save(file_name, format="png")
     buf.close()
     plt.close()
-
 
 
 """
@@ -196,7 +194,7 @@ def prepare_scheduler(scheduler):
     if hasattr(scheduler.config, "steps_offset") and scheduler.config.steps_offset != 1:
         new_config = dict(scheduler.config)
         new_config["steps_offset"] = 1
-        scheduler._internal_dict = FrozenDict(new_config)
+        scheduler._internal_dict = FrozenDict(new_config)  # noqa: F821 - Name is undefined in the upstream source.
     return scheduler
 
 
@@ -223,9 +221,7 @@ def load_inference_prompt_config(config):
     missing = [key for key in required if not config.get(key)]
     if missing:
         raise ValueError(
-            "WonderJourney inference config must define "
-            + ", ".join(required)
-            + f"; missing {', '.join(missing)}."
+            "WonderJourney inference config must define " + ", ".join(required) + f"; missing {', '.join(missing)}."
         )
     yaml_data = {key: config.get(key) for key in required}
     for optional_key in ("background", "control_text"):
@@ -238,23 +234,23 @@ def load_inference_prompt_config(config):
 def merge_frames(all_rundir, fps=10, save_dir=None, is_forward=False, save_depth=False, save_gif=True):
     """
     Merge frames from multiple run directories into a single directory with continuous naming.
-    
+
     Parameters:
         all_rundir (list of pathlib.Path): Directories containing the run data.
         save_dir (pathlib.Path): Directory where all frames should be saved.
     """
 
     # Ensure save_dir/frames exists
-    save_frames_dir = save_dir / 'frames'
+    save_frames_dir = save_dir / "frames"
     save_frames_dir.mkdir(parents=True, exist_ok=True)
 
     if save_depth:
-        save_depth_dir = save_dir / 'depth'
+        save_depth_dir = save_dir / "depth"
         save_depth_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Initialize a counter for the new filenames
     global_counter = 0
-    
+
     # Iterate through all provided run directories
     if is_forward:
         all_rundir = all_rundir[::-1]
@@ -263,23 +259,23 @@ def merge_frames(all_rundir, fps=10, save_dir=None, is_forward=False, save_depth
         if not rundir.exists():
             print(f"Warning: {rundir} does not exist. Skipping...")
             continue
-        
-        frames_dir = rundir / 'images' / 'frames'
+
+        frames_dir = rundir / "images" / "frames"
         if not frames_dir.exists():
             print(f"Warning: {frames_dir} does not exist. Skipping...")
             continue
 
         if save_depth:
-            depth_dir = rundir / 'images' / 'depth'
+            depth_dir = rundir / "images" / "depth"
             if not depth_dir.exists():
                 print(f"Warning: {depth_dir} does not exist. Skipping...")
                 continue
-        
+
         # Get all .png files in the frames directory, assuming no nested dirs
-        frame_files = sorted(frames_dir.glob('*.png'), key=lambda x: int(x.stem))
+        frame_files = sorted(frames_dir.glob("*.png"), key=lambda x: int(x.stem))
         if save_depth:
-            depth_files = sorted(depth_dir.glob('*.png'), key=lambda x: int(x.stem))
-        
+            depth_files = sorted(depth_dir.glob("*.png"), key=lambda x: int(x.stem))
+
         # Copy and rename each file
         for i, frame_file in enumerate(frame_files):
             # Form the new path and copy the file
@@ -290,30 +286,30 @@ def merge_frames(all_rundir, fps=10, save_dir=None, is_forward=False, save_depth
                 # Form the new path and copy the file
                 new_depth_path = save_depth_dir / f"{global_counter}.png"
                 shutil.copy(str(depth_files[i]), str(new_depth_path))
-            
+
             # Increment the global counter
             global_counter += 1
-    
-    last_keyframe_name = 'kf1.png' if is_forward else 'kf2.png'
-    last_keyframe = all_rundir[-1] / 'images' / last_keyframe_name
+
+    last_keyframe_name = "kf1.png" if is_forward else "kf2.png"
+    last_keyframe = all_rundir[-1] / "images" / last_keyframe_name
     new_frame_path = save_frames_dir / f"{global_counter}.png"
     shutil.copy(str(last_keyframe), str(new_frame_path))
 
     if save_depth:
-        last_depth_name = 'kf1_depth.png' if is_forward else 'kf2_depth.png'
-        last_depth = all_rundir[-1] / 'images' / last_depth_name
+        last_depth_name = "kf1_depth.png" if is_forward else "kf2_depth.png"
+        last_depth = all_rundir[-1] / "images" / last_depth_name
         new_depth_path = save_depth_dir / f"{global_counter}.png"
         shutil.copy(str(last_depth), str(new_depth_path))
 
     frames = []
-    for frame_file in sorted(save_frames_dir.glob('*.png'), key=lambda x: int(x.stem)):
+    for frame_file in sorted(save_frames_dir.glob("*.png"), key=lambda x: int(x.stem)):
         frame_image = Image.open(frame_file)
         frame = ToTensor()(frame_image).unsqueeze(0)
         frames.append(frame)
 
     if save_depth:
         depth = []
-        for depth_file in sorted(save_depth_dir.glob('*.png'), key=lambda x: int(x.stem)):
+        for depth_file in sorted(save_depth_dir.glob("*.png"), key=lambda x: int(x.stem)):
             depth_image = Image.open(depth_file)
             depth_frame = ToTensor()(depth_image).unsqueeze(0)
             depth.append(depth_frame)
@@ -332,7 +328,7 @@ def merge_frames(all_rundir, fps=10, save_dir=None, is_forward=False, save_depth
         save_video(depth_video_reverse, save_dir / "output_depth_reverse.mp4", fps=fps, save_gif=save_gif)
 
 
-def merge_keyframes(all_keyframes, save_dir, save_folder='keyframes', fps=1):
+def merge_keyframes(all_keyframes, save_dir, save_folder="keyframes", fps=1):
     """
     Save a list of PIL images sequentially into a directory.
 
@@ -343,10 +339,10 @@ def merge_keyframes(all_keyframes, save_dir, save_folder='keyframes', fps=1):
     # Ensure that the save_dir exists
     save_path = save_dir / save_folder
     save_path.mkdir(parents=True, exist_ok=True)
-    
+
     # Save each keyframe with a sequential filename
     for i, frame in enumerate(all_keyframes):
-        frame.save(save_path / f'{i}.png')
+        frame.save(save_path / f"{i}.png")
 
     all_keyframes = [ToTensor()(frame).unsqueeze(0) for frame in all_keyframes]
     all_keyframes = torch.cat(all_keyframes, dim=0)

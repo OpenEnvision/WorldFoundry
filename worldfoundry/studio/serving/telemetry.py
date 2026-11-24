@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Iterator
 
 
 @dataclass
@@ -22,7 +22,7 @@ class StudioServiceTelemetry:
     last_path: str = ""
 
     @contextmanager
-    def track(self, path: str = "") -> Iterator[None]:
+    def track(self, path: str = "") -> Generator[None, None, None]:
         started = time.perf_counter()
         with self._lock:
             self.active_requests += 1
@@ -58,8 +58,3 @@ class StudioServiceTelemetry:
             }
         payload.update(extra)
         return payload
-
-    def record_error(self, error: object) -> None:
-        with self._lock:
-            self.failed_requests += 1
-            self.last_error = str(error)

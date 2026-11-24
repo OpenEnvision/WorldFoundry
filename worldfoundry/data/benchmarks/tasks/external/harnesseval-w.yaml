@@ -40,13 +40,13 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: harnesseval-w
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:HarnessEvalWContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w/run_harnesseval_w.py
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:harnesseval-w
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/harnesseval_w/run_harnesseval_w.py
   runtime: &id002
     kind: in_tree_official_runtime
-    root: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w
-    runtime_root: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w/runtime
-    runtime_entrypoint: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w/run_harnesseval_w.py
+    root: worldfoundry/evals/tasks/execution/runners/harnesseval_w
+    runtime_root: worldfoundry/evals/tasks/execution/runners/harnesseval_w/runtime
+    runtime_entrypoint: worldfoundry/evals/tasks/execution/runners/harnesseval_w/run_harnesseval_w.py
     results_path_env: WORLDFOUNDRY_HARNESSEVAL_RESULTS_PATH
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   release_status: experimental
@@ -67,12 +67,12 @@ metadata:
   data_refs:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/harnesseval-w.yaml
     fixture: worldfoundry/data/benchmarks/assets/harnesseval-w
-    runtime_root: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w/runtime
+    runtime_root: worldfoundry/evals/tasks/execution/runners/harnesseval_w/runtime
     hf_dataset_ids:
     - MirroS-Lab/HarnessEval-W
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:HarnessEvalWContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:harnesseval-w
     runner_script_available: true
     task_yaml_available: true
     normalizer_verified: true
@@ -109,7 +109,7 @@ metadata:
   validation_command:
   - python
   - -m
-  - worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.run_harnesseval_w
+  - worldfoundry.evals.tasks.execution.runners.harnesseval_w.run_harnesseval_w
   - --run-fixture
   - --output-dir
   - <out>
@@ -152,8 +152,8 @@ tasks:
     evaluation_protocol:
     - name: in_tree_official_runtime
       metric_ids: *id001
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:HarnessEvalWContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w/run_harnesseval_w.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:harnesseval-w
+      runner_script: worldfoundry/evals/tasks/execution/runners/harnesseval_w/run_harnesseval_w.py
     runtime_requirements: *id002
     metadata:
       source_kind: benchmark_zoo

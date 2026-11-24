@@ -1,7 +1,5 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> hyworldmirror_2p0 -> models -> layers -> norm_rope.py functionality."""
-
 import math
-from typing import Dict, Literal, Tuple, Union
+from typing import Literal
 
 import numpy as np
 import torch
@@ -13,25 +11,9 @@ class PositionGetter:
     """Generates and caches 2D spatial positions for patches in a grid."""
 
     def __init__(self) -> None:
-        """Init.
-
-        Returns:
-            The return value.
-        """
-        self.position_cache: Dict[Tuple[int, int], torch.Tensor] = {}
+        self.position_cache: dict[tuple[int, int], torch.Tensor] = {}
 
     def __call__(self, batch_size: int, height: int, width: int, device: torch.device) -> torch.Tensor:
-        """Call.
-
-        Args:
-            batch_size: The batch size.
-            height: The height.
-            width: The width.
-            device: The device.
-
-        Returns:
-            The return value.
-        """
         if (height, width) not in self.position_cache:
             y_coords = torch.arange(height, device=device)
             x_coords = torch.arange(width, device=device)
@@ -42,14 +24,6 @@ class PositionGetter:
 
 
 def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-    """Helper function to rotate half.
-
-    Args:
-        x: The x.
-
-    Returns:
-        The return value.
-    """
     x1, x2 = x.chunk(2, dim=-1)
     return torch.cat((-x2, x1), dim=-1)
 
@@ -63,18 +37,13 @@ class NormalizedRotaryPositionEmbedding2D(nn.Module):
         head_dim: int,
         base: float = 100.0,
         normalize_coords: Literal["min", "max", "separate"] = "separate",
-        shift_coords: Union[float, None] = None,
-        jitter_coords: Union[float, None] = None,
-        rescale_coords: Union[float, None] = None,
-        dtype: Union[torch.dtype, None] = None,
-        device: Union[torch.device, None] = None,
+        shift_coords: float | None = None,
+        jitter_coords: float | None = None,
+        rescale_coords: float | None = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
         **ignored_kwargs,
     ) -> None:
-        """Init.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         if len(ignored_kwargs) > 0:
             # maintain parity with DINOv3 implementation that warns on ignored kwargs
@@ -100,29 +69,13 @@ class NormalizedRotaryPositionEmbedding2D(nn.Module):
         self._init_periods()
 
     def _init_periods(self) -> None:
-        """Helper function to init periods.
-
-        Returns:
-            The return value.
-        """
         quarter_dim = self.periods.shape[0]
         half_dim = self.head_dim // 2
         exponents = 2 * torch.arange(quarter_dim, device=self.periods.device, dtype=self.dtype) / half_dim
-        periods = self.base ** exponents
+        periods = self.base**exponents
         self.periods.data.copy_(periods)
 
-    def _get_sincos_for_grid(self, H: int, W: int, device: torch.device, dtype: torch.dtype) -> Tuple[Tensor, Tensor]:
-        """Helper function to get sincos for grid.
-
-        Args:
-            H: The h.
-            W: The w.
-            device: The device.
-            dtype: The dtype.
-
-        Returns:
-            The return value.
-        """
+    def _get_sincos_for_grid(self, H: int, W: int, device: torch.device, dtype: torch.dtype) -> tuple[Tensor, Tensor]:
         dd = {"device": device, "dtype": dtype}
 
         if self.normalize_coords == "max":
@@ -166,15 +119,6 @@ class NormalizedRotaryPositionEmbedding2D(nn.Module):
         return sin, cos
 
     def forward(self, tokens: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            tokens: The tokens.
-            positions: The positions.
-
-        Returns:
-            The return value.
-        """
         # Validate inputs
         assert tokens.size(-1) % 2 == 0, "Feature dimension must be even"
         assert positions.ndim == 3 and positions.shape[-1] == 2, "Positions must have shape (batch_size, n_tokens, 2)"

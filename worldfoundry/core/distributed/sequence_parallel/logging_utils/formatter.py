@@ -13,7 +13,7 @@ Public surface: :class:`NewLineFormatter`, :func:`setup_for_distributed`.
 """
 
 import logging
-
+from typing import Any, cast
 
 # ──────────────────────────────────────────────────────────────────────────
 # Continuation-line prefix — wrapped NCCL dumps stay aligned under the rank
@@ -53,4 +53,4 @@ def setup_for_distributed(is_master):
         if is_master or force:
             builtin_print(*args, **kwargs)
 
-    __builtin__.print = print
+    cast(Any, __builtin__).print = print

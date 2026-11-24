@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import os
-import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,10 +11,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image, ImageOps
-from worldfoundry.base_models.three_dimensions.point_clouds.pi3_source import (
-    SOURCE_ROOT as PI3_SOURCE_ROOT,
-    ensure_import_paths as ensure_pi3_import_paths,
-)
 
 try:
     import cv2
@@ -56,10 +52,6 @@ CAMERA_CONTROL_PI3X_KEYFRAME_FOCAL_CLAMP_MAX = 1.35
 CAMERA_CONTROL_PI3X_KEYFRAME_FOCAL_SMOOTH_ALPHA = 0.5
 CAMERA_CONTROL_PI3X_KEYFRAME_DEPTH_SCALE_CLAMP_MIN = 0.1
 CAMERA_CONTROL_PI3X_KEYFRAME_DEPTH_SCALE_CLAMP_MAX = 10.0
-
-
-def default_pi3_repo() -> Path:
-    return PI3_SOURCE_ROOT
 
 
 def default_pi3x_ckpt() -> Path:
@@ -158,14 +150,11 @@ def _pi3_target_size(width: int, height: int, pixel_limit: int) -> tuple[int, in
     return max(1, m) * 14, max(1, k) * 14
 
 
-def _import_pi3(pi3_repo: Path):
-    repo = Path(pi3_repo).expanduser().resolve()
-    if repo == PI3_SOURCE_ROOT:
-        ensure_pi3_import_paths()
-    elif str(repo) not in sys.path:
-        sys.path.insert(0, str(repo))
-    from pi3.models.pi3x import Pi3X
-    from pi3.utils.geometry import recover_intrinsic_from_rays_d
+def _import_pi3() -> tuple[type[torch.nn.Module], Callable[..., torch.Tensor]]:
+    from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.models.pi3x import Pi3X
+    from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.utils.geometry import (
+        recover_intrinsic_from_rays_d,
+    )
 
     return Pi3X, recover_intrinsic_from_rays_d
 
@@ -326,11 +315,14 @@ def _depth_scale_to_reference(
     if reference.shape != current.shape:
         reference = _resize_numpy_map(reference, current.shape, mode="bilinear").astype(np.float32, copy=False)
         if reference_valid_mask is not None:
-            reference_valid_mask = _resize_numpy_map(
-                np.asarray(reference_valid_mask, dtype=np.float32),
-                current.shape,
-                mode="nearest",
-            ) > 0.5
+            reference_valid_mask = (
+                _resize_numpy_map(
+                    np.asarray(reference_valid_mask, dtype=np.float32),
+                    current.shape,
+                    mode="nearest",
+                )
+                > 0.5
+            )
 
     valid = np.isfinite(reference) & np.isfinite(current) & (reference > 0.0) & (current > 0.0)
     if reference_valid_mask is not None:
@@ -385,7 +377,7 @@ def _depth_scale_to_reference(
 def _world_rays_from_intrinsic(height: int, width: int, intrinsic: np.ndarray, pose: np.ndarray) -> np.ndarray:
     intrinsic = np.asarray(intrinsic, dtype=np.float32)
     pose = np.asarray(pose, dtype=np.float32)
-    ys, xs = np.mgrid[0:int(height), 0:int(width)].astype(np.float32)
+    ys, xs = np.mgrid[0 : int(height), 0 : int(width)].astype(np.float32)
     fx = max(abs(float(intrinsic[0, 0])), 1e-6)
     fy = max(abs(float(intrinsic[1, 1])), 1e-6)
     cx = float(intrinsic[0, 2])
@@ -643,7 +635,7 @@ def _fill_top_invalid_with_far_plane(
 
     augmented_points = point_map_world.astype(np.float32, copy=True)
     fill_mask = np.zeros(valid_mask.shape, dtype=bool)
-    top_fill_limit = int(round(valid_mask.shape[0] * float(fill_top_max_y_frac)))
+    top_fill_limit = int(round(valid_mask.shape[0] * float(fill_top_max_y_frac)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     top_fill_limit = min(max(top_fill_limit, 0), valid_mask.shape[0] - 1)
 
     global_depths = depth_map[valid_mask]
@@ -712,12 +704,7 @@ def _sample_mesh_quads(
     samples_per_axis: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     samples_per_axis = max(1, int(samples_per_axis))
-    quad_mask = (
-        valid_mask[:-1, :-1]
-        & valid_mask[1:, :-1]
-        & valid_mask[1:, 1:]
-        & valid_mask[:-1, 1:]
-    )
+    quad_mask = valid_mask[:-1, :-1] & valid_mask[1:, :-1] & valid_mask[1:, 1:] & valid_mask[:-1, 1:]
     if not np.any(quad_mask):
         raise ValueError("No valid first-frame mesh quads were found.")
 
@@ -776,12 +763,7 @@ def _sample_mesh_quads_rejecting_mixed_fill(
             samples_per_axis=samples_per_axis,
         )
 
-    quad_mask = (
-        valid_mask[:-1, :-1]
-        & valid_mask[1:, :-1]
-        & valid_mask[1:, 1:]
-        & valid_mask[:-1, 1:]
-    )
+    quad_mask = valid_mask[:-1, :-1] & valid_mask[1:, :-1] & valid_mask[1:, 1:] & valid_mask[:-1, 1:]
     fill00 = fill_mask[:-1, :-1]
     fill10 = fill_mask[1:, :-1]
     fill11 = fill_mask[1:, 1:]
@@ -1058,7 +1040,9 @@ def _splat_mesh_samples_to_view_torch(
     points_cam = points_cam[valid]
     z = z[valid]
     colors = colors01[valid]
-    source_xy_valid = None if source_xy is None else source_xy.to(device=points_world.device, dtype=torch.float32)[valid]
+    source_xy_valid = (
+        None if source_xy is None else source_xy.to(device=points_world.device, dtype=torch.float32)[valid]
+    )
 
     u = intrinsic[0, 0] * (points_cam[:, 0] / z) + intrinsic[0, 2]
     v = intrinsic[1, 1] * (points_cam[:, 1] / z) + intrinsic[1, 2]
@@ -1233,22 +1217,19 @@ class Pi3XWarpRenderer:
         self.config = config if config is not None else Pi3XWarpRendererConfig(**kwargs)
         self._pi3x_runtime: dict[str, Any] | None = None
 
-    def _runtime_key(self) -> tuple[str, str | None]:
-        repo = default_pi3_repo().expanduser().resolve()
-        ckpt_key = str(default_pi3x_ckpt().expanduser().resolve())
-        return str(repo), ckpt_key
+    def _runtime_key(self) -> str:
+        return str(default_pi3x_ckpt().expanduser().resolve())
 
     def _get_pi3x_runtime(self, device: torch.device) -> dict[str, Any]:
-        repo_key, ckpt_key = self._runtime_key()
+        ckpt_key = self._runtime_key()
         runtime = self._pi3x_runtime
-        if runtime is None or runtime.get("repo_key") != repo_key or runtime.get("ckpt_key") != ckpt_key:
-            Pi3X, recover_intrinsic_from_rays_d = _import_pi3(Path(repo_key))
+        if runtime is None or runtime.get("ckpt_key") != ckpt_key:
+            Pi3X, recover_intrinsic_from_rays_d = _import_pi3()
             model = _load_pi3x_model(Pi3X, device)
             runtime = {
                 "ckpt_key": ckpt_key,
                 "model": model,
                 "recover_intrinsic_from_rays_d": recover_intrinsic_from_rays_d,
-                "repo_key": repo_key,
             }
             self._pi3x_runtime = runtime
 
@@ -1258,7 +1239,9 @@ class Pi3XWarpRenderer:
             runtime["model"] = model
         return runtime
 
-    def estimate_first_frame_geometry(self, image_tensor: torch.Tensor, device: torch.device | None = None) -> dict[str, Any]:
+    def estimate_first_frame_geometry(
+        self, image_tensor: torch.Tensor, device: torch.device | None = None
+    ) -> dict[str, Any]:
         if image_tensor.ndim != 4 or image_tensor.shape[0] != 1 or image_tensor.shape[1] != 3:
             raise ValueError(f"image_tensor must be [1, 3, H, W] in [-1, 1], got {tuple(image_tensor.shape)}.")
         device = torch.device(device or image_tensor.device)
@@ -1425,9 +1408,7 @@ class Pi3XWarpRenderer:
             reference_valid = scale_reference_geometry.get("valid_mask")
             scale, scale_alignment_stats = _depth_scale_to_reference(
                 reference_depth=np.asarray(scale_reference_geometry["depth_map"], dtype=np.float32),
-                reference_valid_mask=None
-                if reference_valid is None
-                else np.asarray(reference_valid, dtype=bool),
+                reference_valid_mask=None if reference_valid is None else np.asarray(reference_valid, dtype=bool),
                 current_depth=depth_maps[0],
                 current_valid_mask=valid_masks[0],
             )
@@ -1517,11 +1498,9 @@ class Pi3XWarpRenderer:
         candidate_conf = conf_map[candidate_mask]
         if candidate_conf.size > 0 and np.isfinite(candidate_conf).any():
             top_percent_value = (
-                float(CAMERA_CONTROL_EMPTY_DEPTH_FALLBACK_TOP_PERCENT)
-                if top_percent is None
-                else float(top_percent)
+                float(CAMERA_CONTROL_EMPTY_DEPTH_FALLBACK_TOP_PERCENT) if top_percent is None else float(top_percent)
             )
-            keep_count = max(1, int(math.ceil(candidate_conf.size * top_percent_value / 100.0)))
+            keep_count = max(1, int(math.ceil(candidate_conf.size * top_percent_value / 100.0)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
             threshold = np.partition(candidate_conf, max(0, candidate_conf.size - keep_count))[
                 max(0, candidate_conf.size - keep_count)
             ]
@@ -1639,7 +1618,7 @@ class Pi3XWarpRenderer:
                         if "No valid first-frame mesh quads" not in str(retry_exc):
                             raise
                         last_error = retry_exc
-            raise last_error
+            raise last_error  # noqa: B904 - Keeps the implicit exception context.
 
     def render_from_geometry(
         self,
@@ -1713,7 +1692,9 @@ class Pi3XWarpRenderer:
             if render_intrinsics_np.shape[0] > 1:
                 geometry["target_intrinsics_stats"]["first_target"] = _intrinsic_stats(render_intrinsics_np[1])
 
-        background_atlas = _build_keyframe_background_atlas(list(keyframe_geometries)) if keyframe_geometries is not None else None
+        background_atlas = (
+            _build_keyframe_background_atlas(list(keyframe_geometries)) if keyframe_geometries is not None else None
+        )
 
         mesh_break_stats_list: list[dict[str, Any]] = []
         if keyframe_geometries is not None:
@@ -1777,8 +1758,7 @@ class Pi3XWarpRenderer:
             invisible_fill_rgb = np.zeros((3,), dtype=np.uint8)
         else:
             raise ValueError(
-                "invisible_fill_mode must be one of {'mean_first_frame', 'black'}, "
-                f"got {invisible_fill_mode!r}."
+                f"invisible_fill_mode must be one of {{'mean_first_frame', 'black'}}, got {invisible_fill_mode!r}."
             )
 
         background_frames_uint8: list[np.ndarray] | None = None
@@ -1805,9 +1785,7 @@ class Pi3XWarpRenderer:
             )
         fill_radius = int(self.config.target_fill_radius if target_fill_radius is None else target_fill_radius)
         fill_min_neighbors = int(
-            self.config.target_fill_min_neighbors
-            if target_fill_min_neighbors is None
-            else target_fill_min_neighbors
+            self.config.target_fill_min_neighbors if target_fill_min_neighbors is None else target_fill_min_neighbors
         )
         target_fill_enabled = warp_render_mode == "target_fill" and fill_radius > 0
         warp_render_stats: dict[str, Any] = {

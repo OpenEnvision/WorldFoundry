@@ -62,9 +62,7 @@ def _native_model_config(config: Mapping[str, Any]) -> dict[str, Any]:
     return {
         **WAN22_TI2V_5B_CONFIG,
         "seperated_timestep": bool(params.get("seperated_timestep", True)),
-        "fuse_vae_embedding_in_latents": bool(
-            params.get("fuse_vae_embedding_in_latents", True)
-        ),
+        "fuse_vae_embedding_in_latents": bool(params.get("fuse_vae_embedding_in_latents", True)),
         "require_clip_embedding": False,
         "require_vae_embedding": False,
         "action_injection": str(params.get("action_injection", "bidi_cross_attention")),
@@ -213,9 +211,7 @@ class MultiWorldWanPipeline(StagedDiffusionPipeline):
         action = _to_device_tree(action, self.device)
         action_embeds = self.dit.action_encoder(action)
         self.scheduler.set_timesteps(num_inference_steps, shift=sigma_shift)
-        spatial_tokens = (latent_height // self.dit.patch_size[1]) * (
-            latent_width // self.dit.patch_size[2]
-        )
+        spatial_tokens = (latent_height // self.dit.patch_size[1]) * (latent_width // self.dit.patch_size[2])
         for timestep in progress_bar_cmd(self.scheduler.timesteps, disable=not show_progress):
             frame_timestep = torch.full(
                 (1, latent_frames),

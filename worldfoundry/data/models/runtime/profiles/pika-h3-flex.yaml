@@ -1,0 +1,48 @@
+schema_version: 2
+model_id: pika-h3-flex
+display_name: Pika H3 Flex
+task_family: video_generation
+groups: [video, audio, image_conditioning]
+environment: pika-h3-flex
+source_repos:
+- url: https://github.com/Pika-Labs/Pika-H3-Flex
+  revision: 0ddf55ad7067ca1e76812253bd7b4600df87f759
+  in_tree_path: worldfoundry/pipelines/pika_h3_flex
+checkpoints:
+- repo_id: Pika-Labs/Pika-H3-Flex
+  revision: 0ddf55ad7067ca1e76812253bd7b4600df87f759
+  subfolder: fl2va
+  role: fl2va_lora_adapter
+- repo_id: Pika-Labs/Pika-H3-Flex
+  revision: 0ddf55ad7067ca1e76812253bd7b4600df87f759
+  subfolder: ref2va
+  role: ref2va_lora_adapter
+- repo_id: MiniMaxAI/MiniMax-H3
+  revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+  role: shared_h3_base
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions: [task, references, aspect_ratio, short_edge, num_frames, seed, adapter_task]
+artifact_kind: generated_video
+artifact_filename: pika-h3-flex.mp4
+execution:
+  environment: pika-h3-flex
+  backend_stage: shared_base_model_runtime
+  runtime_status: checkpoint_gpu_validation_pending
+  integration_status: integrated
+  pipeline_binding: pika-h3-flex
+  defaults:
+    num_frames: 124
+    fps: 24
+    num_inference_steps: 6
+    seed: 0
+integration:
+  status: integrated
+notes:
+- Pika H3 Flex uses the canonical WorldFoundry MiniMax-H3 transformer, text encoder, geometry, codecs and MP4 writer.
+- The fl2va and ref2va PEFT adapters are converted into the fused native QKV/SwiGLU layout at load time.
+- Use adapter_task=fl2va for t2va/i2va/l2va/fl2va and adapter_task=ref2va for ref2va.
+- The adapter release uses a six-knot re-noising ladder, 24 fps and synchronized stereo audio.
+- Local image references are supported; video/audio references, full bucket parity and real-weight replay remain pending.

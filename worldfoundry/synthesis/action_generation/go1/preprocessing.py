@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 
 def to_pil_image(value: Any) -> Any:
@@ -73,8 +74,7 @@ def _closest_ratio(
     for ratio in ratios:
         difference = abs(aspect_ratio - ratio[0] / ratio[1])
         if difference < best_difference or (
-            difference == best_difference
-            and area > 0.5 * image_size * image_size * ratio[0] * ratio[1]
+            difference == best_difference and area > 0.5 * image_size * image_size * ratio[0] * ratio[1]
         ):
             best_difference = difference
             best = ratio

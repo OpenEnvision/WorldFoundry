@@ -33,7 +33,7 @@ def decode_frames(
 
         decoder = VideoDecoder(video_bytes, device="cpu")
         frames = decoder.get_frames_at(frame_indices).data  # (T, C, H, W) uint8
-    except Exception as torchcodec_error:  # noqa: BLE001 - native ABI/load errors require fallback.
+    except Exception as torchcodec_error:  # native ABI/load errors require fallback.
         frames = _decode_frames_pyav(video_bytes, frame_indices, torchcodec_error=torchcodec_error)
     if frame_size is not None:
         frames = _resize(frames, frame_size)
@@ -60,7 +60,7 @@ def _decode_frames_pyav(
             f"TorchCodec failed with: {torchcodec_error}"
         ) from exc
 
-    requested = set(int(index) for index in frame_indices)
+    requested = {int(index) for index in frame_indices}
     if min(requested) < 0:
         raise ValueError(f"frame indices must be non-negative, got {frame_indices}")
     decoded: dict[int, torch.Tensor] = {}
@@ -90,7 +90,5 @@ def _resize(frames: torch.Tensor, frame_size: tuple[int, int]) -> torch.Tensor:
 
     if tuple(frames.shape[-2:]) == tuple(frame_size):
         return frames
-    resized = F.interpolate(
-        frames.float(), size=frame_size, mode="bilinear", align_corners=False, antialias=True
-    )
+    resized = F.interpolate(frames.float(), size=frame_size, mode="bilinear", align_corners=False, antialias=True)
     return resized.round().clamp_(0, 255).to(torch.uint8)

@@ -5,7 +5,7 @@ modelId: "recammaster"
 pageSource: generated
 ---
 
-ReCamMaster re-renders an existing video along a new camera trajectory — camera-controlled generative rendering from a single video. In this catalog the in-tree pipeline, operator, and synthesis runtime live under the Kling namespace, and the runner is verified for the official camera-trajectory video-to-video demo with local ReCamMaster/Wan assets.
+ReCamMaster re-renders an existing video along a new camera trajectory — camera-controlled generative rendering from a single video. Validated with local ReCamMaster and Wan2.1 assets: the runner reproduces the official camera-trajectory video-to-video demo.
 
 <ModelPaperFigures modelId="recammaster" locale="en" />
 
@@ -15,34 +15,32 @@ Project page: [jianhongbai.github.io/ReCamMaster](https://jianhongbai.github.io/
 
 ## What it is for
 
-Use `recammaster` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+`recammaster` conditions video generation on camera poses.
 
-Per the paper (arXiv 2503.11647), ReCamMaster conditions a pre-trained text-to-video model (Wan-family in the open release) on the source video through frame-dimension conditioning, letting camera trajectories be swapped at generation time. Runtime execution requires local Wan2.1, the ReCamMaster checkpoint, torchvision, and CUDA assets. It is published by Kuaishou (Kling Team).
+Per the paper (arXiv 2503.11647), ReCamMaster conditions a pre-trained text-to-video model (Wan-family in the open release) on the source video through frame-dimension conditioning, letting camera trajectories be swapped at generation time. It is published by Kuaishou (Kling Team).
 
-Catalog tasks include camera-controlled video rerendering. Catalog aliases include `Camera-Controlled Generative Rendering from A Single Video`.
+Tasks: camera-controlled video rerendering. Aliases: `Camera-Controlled Generative Rendering from A Single Video`.
 
-Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Directly evaluates camera-trajectory control quality).
+Suggested benchmarks: [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Directly evaluates camera-trajectory control quality).
 
 ## Runtime contract
 
-Optional `prompt`, `input_path`, `frames`, `fps`, and `steps`; artifacts `generated_video`, `generated_4d_scene`, and `recammaster.mp4`.
+Inputs `prompt` and `input-path` (bundled samples are used when omitted); options `frames`, `fps`, `steps`, `guidance-scale`, and `camera-trajectory`; artifacts `generated_video`, `generated_4d_scene`, and `recammaster.mp4`.
 
 CLI task profiles: `default`. WorldFoundry binds `ReCamMasterPipeline`.
 
 Family status: **Verified**.
 
-Recorded `default` defaults: frames=81, fps=8.
+Defaults for `default`: frames=81, fps=8.
 
-The open-source reference runtime is checkpoint/GPU gated — no empty runner shim is registered.
+Stage Wan2.1 (Wan-AI/Wan2.1-T2V-1.3B) and the ReCamMaster checkpoint (KlingTeam/ReCamMaster-Wan2.1) before submitting jobs; the runtime also needs torchvision and a CUDA GPU.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run recammaster --pipeline.task-profile default` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Generate a camera-controlled clip with `wf run recammaster --pipeline.task-profile default`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `KlingTeam/ReCamMaster-Wan2.1` and `Wan-AI/Wan2.1-T2V-1.3B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh recammaster`. Add `--download` to fetch missing public checkpoints.
-
-Status: **Verified**.
+Weights: `KlingTeam/ReCamMaster-Wan2.1` and `Wan-AI/Wan2.1-T2V-1.3B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh recammaster`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="recammaster" locale="en" />

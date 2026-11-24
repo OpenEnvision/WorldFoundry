@@ -1,17 +1,19 @@
-import copy
-import glob
+import copy as copy
+import glob as glob
 import os
 import os.path as osp
 import random
 from functools import lru_cache
 
-import cv2
+import cv2 as cv2
 import decord
 import numpy as np
 import torch
 import torchvision
-from decord import VideoReader, cpu, gpu
-from tqdm import tqdm
+from decord import VideoReader
+from decord import cpu as cpu
+from decord import gpu as gpu
+from tqdm import tqdm as tqdm
 
 random.seed(42)
 
@@ -40,7 +42,7 @@ def get_spatial_fragments(
         else:
             h = upsample
             w = int(upsample * old_w / old_h)
-        
+
         video = get_resized_video(video, h, w)
     size_h = fragments_h * fsize_h
     size_w = fragments_w * fsize_w
@@ -52,58 +54,40 @@ def get_spatial_fragments(
     dur_t, res_h, res_w = video.shape[-3:]
     ratio = min(res_h / size_h, res_w / size_w)
     if fallback_type == "upsample" and ratio < 1:
-
         ovideo = video
-        video = torch.nn.functional.interpolate(
-            video / 255.0, scale_factor=1 / ratio, mode="bilinear"
-        )
+        video = torch.nn.functional.interpolate(video / 255.0, scale_factor=1 / ratio, mode="bilinear")
         video = (video * 255.0).type_as(ovideo)
 
     if random_upsample:
-
         randratio = random.random() * 0.5 + 1
-        video = torch.nn.functional.interpolate(
-            video / 255.0, scale_factor=randratio, mode="bilinear"
-        )
+        video = torch.nn.functional.interpolate(video / 255.0, scale_factor=randratio, mode="bilinear")
         video = (video * 255.0).type_as(ovideo)
-        
+
     assert dur_t % aligned == 0, "Please provide match vclip and align index"
     size = size_h, size_w
 
     ## make sure that sampling will not run out of the picture
-    hgrids = torch.LongTensor(
-        [min(res_h // fragments_h * i, res_h - fsize_h) for i in range(fragments_h)]
-    )
-    wgrids = torch.LongTensor(
-        [min(res_w // fragments_w * i, res_w - fsize_w) for i in range(fragments_w)]
-    )
+    hgrids = torch.LongTensor([min(res_h // fragments_h * i, res_h - fsize_h) for i in range(fragments_h)])
+    wgrids = torch.LongTensor([min(res_w // fragments_w * i, res_w - fsize_w) for i in range(fragments_w)])
     hlength, wlength = res_h // fragments_h, res_w // fragments_w
 
     if random:
         print("This part is deprecated. Please remind that.")
         if res_h > fsize_h:
-            rnd_h = torch.randint(
-                res_h - fsize_h, (len(hgrids), len(wgrids), dur_t // aligned)
-            )
+            rnd_h = torch.randint(res_h - fsize_h, (len(hgrids), len(wgrids), dur_t // aligned))
         else:
             rnd_h = torch.zeros((len(hgrids), len(wgrids), dur_t // aligned)).int()
         if res_w > fsize_w:
-            rnd_w = torch.randint(
-                res_w - fsize_w, (len(hgrids), len(wgrids), dur_t // aligned)
-            )
+            rnd_w = torch.randint(res_w - fsize_w, (len(hgrids), len(wgrids), dur_t // aligned))
         else:
             rnd_w = torch.zeros((len(hgrids), len(wgrids), dur_t // aligned)).int()
     else:
         if hlength > fsize_h:
-            rnd_h = torch.randint(
-                hlength - fsize_h, (len(hgrids), len(wgrids), dur_t // aligned)
-            )
+            rnd_h = torch.randint(hlength - fsize_h, (len(hgrids), len(wgrids), dur_t // aligned))
         else:
             rnd_h = torch.zeros((len(hgrids), len(wgrids), dur_t // aligned)).int()
         if wlength > fsize_w:
-            rnd_w = torch.randint(
-                wlength - fsize_w, (len(hgrids), len(wgrids), dur_t // aligned)
-            )
+            rnd_w = torch.randint(wlength - fsize_w, (len(hgrids), len(wgrids), dur_t // aligned))
         else:
             rnd_w = torch.zeros((len(hgrids), len(wgrids), dur_t // aligned)).int()
 
@@ -122,9 +106,7 @@ def get_spatial_fragments(
                 else:
                     h_so, h_eo = hs + rnd_h[i][j][t], hs + rnd_h[i][j][t] + fsize_h
                     w_so, w_eo = ws + rnd_w[i][j][t], ws + rnd_w[i][j][t] + fsize_w
-                target_video[:, t_s:t_e, h_s:h_e, w_s:w_e] = video[
-                    :, t_s:t_e, h_so:h_eo, w_so:w_eo
-                ]
+                target_video[:, t_s:t_e, h_s:h_e, w_s:w_e] = video[:, t_s:t_e, h_so:h_eo, w_so:w_eo]
     # target_videos.append(video[:,t_s:t_e,h_so:h_eo,w_so:w_eo])
     # target_video = torch.stack(target_videos, 0).reshape((dur_t // aligned, fragments, fragments,) + target_videos[0].shape).permute(3,0,4,1,5,2,6)
     # target_video = target_video.reshape((-1, dur_t,) + size) ## Splicing Fragments
@@ -134,9 +116,7 @@ def get_spatial_fragments(
 @lru_cache
 def get_resize_function(size_h, size_w, target_ratio=1, random_crop=False):
     if random_crop:
-        return torchvision.transforms.RandomResizedCrop(
-            (size_h, size_w), scale=(0.40, 1.0)
-        )
+        return torchvision.transforms.RandomResizedCrop((size_h, size_w), scale=(0.40, 1.0))
     if target_ratio > 1:
         size_h = int(target_ratio * size_w)
         assert size_h > size_w
@@ -147,18 +127,24 @@ def get_resize_function(size_h, size_w, target_ratio=1, random_crop=False):
 
 
 def get_resized_video(
-    video, size_h=224, size_w=224, random_crop=False, arp=False, **kwargs,
+    video,
+    size_h=224,
+    size_w=224,
+    random_crop=False,
+    arp=False,
+    **kwargs,
 ):
     video = video.permute(1, 0, 2, 3)
-    resize_opt = get_resize_function(
-        size_h, size_w, video.shape[-2] / video.shape[-1] if arp else 1, random_crop
-    )
+    resize_opt = get_resize_function(size_h, size_w, video.shape[-2] / video.shape[-1] if arp else 1, random_crop)
     video = resize_opt(video).permute(1, 0, 2, 3)
     return video
 
 
 def get_arp_resized_video(
-    video, short_edge=224, train=False, **kwargs,
+    video,
+    short_edge=224,
+    train=False,
+    **kwargs,
 ):
     if train:  ## if during training, will random crop into square and then resize
         res_h, res_w = video.shape[-2:]
@@ -167,31 +153,31 @@ def get_arp_resized_video(
             rnd_h = random.randrange(res_h - ori_short_edge)
             video = video[..., rnd_h : rnd_h + ori_short_edge, :]
         elif res_w > ori_short_edge:
-            rnd_w = random.randrange(res_w - ori_short_edge)
+            _rnd_w = random.randrange(res_w - ori_short_edge)
             video = video[..., :, rnd_h : rnd_h + ori_short_edge]
     ori_short_edge = min(video.shape[-2:])
     scale_factor = short_edge / ori_short_edge
     ovideo = video
-    video = torch.nn.functional.interpolate(
-        video / 255.0, scale_factors=scale_factor, mode="bilinear"
-    )
+    video = torch.nn.functional.interpolate(video / 255.0, scale_factors=scale_factor, mode="bilinear")
     video = (video * 255.0).type_as(ovideo)
     return video
 
 
 def get_arp_fragment_video(
-    video, short_fragments=7, fsize=32, train=False, **kwargs,
+    video,
+    short_fragments=7,
+    fsize=32,
+    train=False,
+    **kwargs,
 ):
-    if (
-        train
-    ):  ## if during training, will random crop into square and then get fragments
+    if train:  ## if during training, will random crop into square and then get fragments
         res_h, res_w = video.shape[-2:]
         ori_short_edge = min(video.shape[-2:])
         if res_h > ori_short_edge:
             rnd_h = random.randrange(res_h - ori_short_edge)
             video = video[..., rnd_h : rnd_h + ori_short_edge, :]
         elif res_w > ori_short_edge:
-            rnd_w = random.randrange(res_w - ori_short_edge)
+            _rnd_w = random.randrange(res_w - ori_short_edge)
             video = video[..., :, rnd_h : rnd_h + ori_short_edge]
     kwargs["fsize_h"], kwargs["fsize_w"] = fsize, fsize
     res_h, res_w = video.shape[-2:]
@@ -205,7 +191,10 @@ def get_arp_fragment_video(
 
 
 def get_cropped_video(
-    video, size_h=224, size_w=224, **kwargs,
+    video,
+    size_h=224,
+    size_w=224,
+    **kwargs,
 ):
     kwargs["fragments_h"], kwargs["fragments_w"] = 1, 1
     kwargs["fsize_h"], kwargs["fsize_w"] = size_h, size_w
@@ -213,7 +202,9 @@ def get_cropped_video(
 
 
 def get_single_view(
-    video, sample_type="aesthetic", **kwargs,
+    video,
+    sample_type="aesthetic",
+    **kwargs,
 ):
     if sample_type.startswith("aesthetic"):
         video = get_resized_video(video, **kwargs)
@@ -226,7 +217,11 @@ def get_single_view(
 
 
 def spatial_temporal_view_decomposition(
-    video_path, sample_types, samplers, is_train=False, augment=False,
+    video_path,
+    sample_types,
+    samplers,
+    is_train=False,
+    augment=False,
 ):
     video = {}
     if video_path.endswith(".yuv"):
@@ -234,9 +229,7 @@ def spatial_temporal_view_decomposition(
 
         print("This part will be deprecated due to large memory cost.")
         ## This is only an adaptation to LIVE-Qualcomm
-        ovideo = skvideo.io.vread(
-            video_path, 1080, 1920, inputdict={"-pix_fmt": "yuvj420p"}
-        )
+        ovideo = skvideo.io.vread(video_path, 1080, 1920, inputdict={"-pix_fmt": "yuvj420p"})
         for stype in samplers:
             frame_inds = samplers[stype](ovideo.shape[0], is_train)
             imgs = [torch.from_numpy(ovideo[idx]) for idx in frame_inds]
@@ -266,16 +259,18 @@ def spatial_temporal_view_decomposition(
     return sampled_video, frame_inds
 
 
-import random
-
-import numpy as np
+import random  # noqa: E402 - Follows the decord bridge setup.
 
 
 class UnifiedFrameSampler:
     def __init__(
-        self, fsize_t, fragments_t, frame_interval=1, num_clips=1, drop_rate=0.0,
+        self,
+        fsize_t,
+        fragments_t,
+        frame_interval=1,
+        num_clips=1,
+        drop_rate=0.0,
     ):
-
         self.fragments_t = fragments_t
         self.fsize_t = fsize_t
         self.size_t = fragments_t * fsize_t
@@ -284,7 +279,6 @@ class UnifiedFrameSampler:
         self.drop_rate = drop_rate
 
     def get_frame_indices(self, num_frames, train=False):
-
         tgrids = np.array(
             [num_frames // self.fragments_t * i for i in range(self.fragments_t)],
             dtype=np.int32,
@@ -292,21 +286,13 @@ class UnifiedFrameSampler:
         tlength = num_frames // self.fragments_t
 
         if tlength > self.fsize_t * self.frame_interval:
-            rnd_t = np.random.randint(
-                0, tlength - self.fsize_t * self.frame_interval, size=len(tgrids)
-            )
+            rnd_t = np.random.randint(0, tlength - self.fsize_t * self.frame_interval, size=len(tgrids))
         else:
             rnd_t = np.zeros(len(tgrids), dtype=np.int32)
 
-        ranges_t = (
-            np.arange(self.fsize_t)[None, :] * self.frame_interval
-            + rnd_t[:, None]
-            + tgrids[:, None]
-        )
+        ranges_t = np.arange(self.fsize_t)[None, :] * self.frame_interval + rnd_t[:, None] + tgrids[:, None]
 
-        drop = random.sample(
-            list(range(self.fragments_t)), int(self.fragments_t * self.drop_rate)
-        )
+        drop = random.sample(list(range(self.fragments_t)), int(self.fragments_t * self.drop_rate))
         dropped_ranges_t = []
         for i, rt in enumerate(ranges_t):
             if i not in drop:
@@ -316,7 +302,7 @@ class UnifiedFrameSampler:
     def __call__(self, total_frames, train=False, start_index=0):
         frame_inds = []
 
-        for i in range(self.num_clips):
+        for _i in range(self.num_clips):
             frame_inds += [self.get_frame_indices(total_frames)]
 
         frame_inds = np.concatenate(frame_inds)
@@ -331,10 +317,10 @@ class ViewDecompositionDataset(torch.utils.data.Dataset):
         super().__init__()
 
         self.weight = opt.get("weight", 0.5)
-        
+
         self.fully_supervised = opt.get("fully_supervised", False)
         print("Fully supervised:", self.fully_supervised)
-        
+
         self.video_infos = []
         self.ann_file = opt["anno_file"]
         self.data_prefix = opt["data_prefix"]
@@ -355,9 +341,7 @@ class ViewDecompositionDataset(torch.utils.data.Dataset):
         for stype, sopt in opt["sample_types"].items():
             if "t_frag" not in sopt:
                 # resized temporal sampling for TQE in DOVER
-                self.samplers[stype] = UnifiedFrameSampler(
-                    sopt["clip_len"], sopt["num_clips"], sopt["frame_interval"]
-                )
+                self.samplers[stype] = UnifiedFrameSampler(sopt["clip_len"], sopt["num_clips"], sopt["frame_interval"])
             else:
                 # temporal sampling for AQE in DOVER
                 self.samplers[stype] = UnifiedFrameSampler(
@@ -375,27 +359,24 @@ class ViewDecompositionDataset(torch.utils.data.Dataset):
             self.video_infos = self.ann_file
         else:
             try:
-                with open(self.ann_file, "r") as fin:
+                with open(self.ann_file) as fin:
                     for line in fin:
                         line_split = line.strip().split(",")
                         filename, a, t, label = line_split
-                        if self.fully_supervised:
-                            label = float(a), float(t), float(label)
-                        else:
-                            label = float(label)
+                        label = (float(a), float(t), float(label)) if self.fully_supervised else float(label)
                         filename = osp.join(self.data_prefix, filename)
-                        self.video_infos.append(dict(filename=filename, label=label))
-            except:
+                        self.video_infos.append({"filename": filename, "label": label})
+            except BaseException:
                 #### No Label Testing
                 video_filenames = []
-                for (root, dirs, files) in os.walk(self.data_prefix, topdown=True):
+                for root, _dirs, files in os.walk(self.data_prefix, topdown=True):
                     for file in files:
                         if file.endswith(".mp4"):
                             video_filenames += [os.path.join(root, file)]
                 print(len(video_filenames))
                 video_filenames = sorted(video_filenames)
                 for filename in video_filenames:
-                    self.video_infos.append(dict(filename=filename, label=-1))
+                    self.video_infos.append({"filename": filename, "label": -1})
 
     def __getitem__(self, index):
         video_info = self.video_infos[index]
@@ -414,9 +395,7 @@ class ViewDecompositionDataset(torch.utils.data.Dataset):
             )
 
             for k, v in data.items():
-                data[k] = ((v.permute(1, 2, 3, 0) - self.mean) / self.std).permute(
-                    3, 0, 1, 2
-                )
+                data[k] = ((v.permute(1, 2, 3, 0) - self.mean) / self.std).permute(3, 0, 1, 2)
 
             data["num_clips"] = {}
             for stype, sopt in self.sample_types.items():
@@ -424,7 +403,7 @@ class ViewDecompositionDataset(torch.utils.data.Dataset):
             data["frame_inds"] = frame_inds
             data["gt_label"] = label
             data["name"] = filename  # osp.basename(video_info["filename"])
-        except:
+        except BaseException:
             # exception flow
             return {"name": filename}
 

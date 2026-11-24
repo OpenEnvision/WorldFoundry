@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -37,12 +36,11 @@ The differentiable path supports:
 """
 
 import math
-from typing import Dict, List, Optional, Union
+from typing import ClassVar
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
 from transformers.image_transforms import (
     convert_to_rgb,
@@ -67,7 +65,6 @@ from transformers.image_utils import (
 )
 from transformers.utils import TensorType, is_vision_available, logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -75,7 +72,7 @@ if is_vision_available():
     from PIL import Image
 
 
-def make_batched_images(images) -> List[List[ImageInput]]:
+def make_batched_images(images) -> list[list[ImageInput]]:
     """
     Accepts images in list or nested list format, and makes a list of images for preprocessing.
 
@@ -99,7 +96,7 @@ def make_batched_images(images) -> List[List[ImageInput]]:
 
 
 # Copied from transformers.models.llava_next_video.image_processing_llava_next_video.make_batched_videos
-def make_batched_videos(videos) -> List[VideoInput]:
+def make_batched_videos(videos) -> list[VideoInput]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         return videos
 
@@ -179,17 +176,17 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             The merge size of the vision encoder to llm encoder.
     """
 
-    model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
+    model_input_names: ClassVar[list] = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
     def __init__(
         self,
         do_resize: bool = True,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_convert_rgb: bool = True,
         min_pixels: int = 56 * 56,
         max_pixels: int = 28 * 28 * 1280,
@@ -217,16 +214,16 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
     def _preprocess_differentiable(
         self,
         images: torch.Tensor,
-        do_resize: bool = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        do_resize: bool | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
     ):
         """
         Differentiable version of image preprocessing using torch operations.
-        
+
         Args:
             images: torch.Tensor of shape (B, C, H, W) or (C, H, W)
         Returns:
@@ -235,15 +232,15 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         """
         if images.dim() == 3:
             images = images.unsqueeze(0)  # Add batch dimension
-        
+
         batch_size, channels, height, width = images.shape
-        
+
         processed_images = []
         resized_height, resized_width = height, width
-        
+
         for i in range(batch_size):
             image = images[i]  # (C, H, W)
-            
+
             if do_resize:
                 resized_height, resized_width = smart_resize(
                     height,
@@ -254,10 +251,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 )
                 # Use differentiable interpolation
                 image = F.interpolate(
-                    image.unsqueeze(0), 
-                    size=(resized_height, resized_width), 
-                    mode='bilinear', 
-                    align_corners=False
+                    image.unsqueeze(0), size=(resized_height, resized_width), mode="bilinear", align_corners=False
                 ).squeeze(0)
 
             if do_rescale:
@@ -276,16 +270,16 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
 
         # Stack all processed images
         patches = torch.stack(processed_images)  # (B, C, H, W)
-        
+
         # Handle temporal dimension
         if patches.shape[0] == 1:
             patches = patches.repeat(self.temporal_patch_size, 1, 1, 1)
-        
+
         # Reshape for patch extraction
         batch_size, channel, resized_height, resized_width = patches.shape
         grid_t = batch_size // self.temporal_patch_size
         grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
-        
+
         # Differentiable patch extraction and reshaping
         patches = patches.view(
             grid_t,
@@ -307,17 +301,17 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
 
     def _preprocess(
         self,
-        images: Union[ImageInput, VideoInput],
-        do_resize: bool = None,
+        images: ImageInput | VideoInput,
+        do_resize: bool | None = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_convert_rgb: bool | None = None,
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
@@ -365,7 +359,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 image_mean=image_mean,
                 image_std=image_std,
             )
-        
+
         # Original non-differentiable path for backward compatibility
         images = make_list_of_images(images)
 
@@ -404,9 +398,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
 
             if do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
+                image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             processed_images.append(image)
@@ -442,19 +434,19 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
     def preprocess_tensor(
         self,
         images: torch.Tensor,
-        do_resize: bool = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        do_resize: bool | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
     ):
         """
         Differentiable preprocessing method for torch tensors.
-        
+
         Args:
             images: torch.Tensor of shape (B, C, H, W) or (C, H, W)
-            
+
         Returns:
             dict containing:
                 - pixel_values: torch.Tensor - processed patches
@@ -476,28 +468,25 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
         )
-        
-        return {
-            "pixel_values": patches,
-            "image_grid_thw": torch.tensor(image_grid_thw, device=patches.device)
-        }
+
+        return {"pixel_values": patches, "image_grid_thw": torch.tensor(image_grid_thw, device=patches.device)}
 
     def preprocess(
         self,
         images: ImageInput,
         videos: VideoInput = None,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_convert_rgb: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Args:

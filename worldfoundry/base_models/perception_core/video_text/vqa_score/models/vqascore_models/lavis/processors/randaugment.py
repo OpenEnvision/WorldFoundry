@@ -1,13 +1,12 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import cv2
 import numpy as np
-
 import torch
 
 
@@ -105,9 +104,9 @@ def color_func(img, factor):
     #      np.eye(3) * factor
     #      + np.float32([0.114, 0.587, 0.299]).reshape(3, 1) * (1. - factor)
     #  )[np.newaxis, np.newaxis, :]
-    M = np.float32(
-        [[0.886, -0.114, -0.114], [-0.587, 0.413, -0.587], [-0.299, -0.299, 0.701]]
-    ) * factor + np.float32([[0.114], [0.587], [0.299]])
+    M = np.float32([[0.886, -0.114, -0.114], [-0.587, 0.413, -0.587], [-0.299, -0.299, 0.701]]) * factor + np.float32(
+        [[0.114], [0.587], [0.299]]
+    )
     out = np.matmul(img, M).clip(0, 255).astype(np.uint8)
     return out
 
@@ -117,11 +116,7 @@ def contrast_func(img, factor):
     same output as PIL.ImageEnhance.Contrast
     """
     mean = np.sum(np.mean(img, axis=(0, 1)) * np.array([0.114, 0.587, 0.299]))
-    table = (
-        np.array([(el - mean) * factor + mean for el in range(256)])
-        .clip(0, 255)
-        .astype(np.uint8)
-    )
+    table = np.array([(el - mean) * factor + mean for el in range(256)]).clip(0, 255).astype(np.uint8)
     out = table[img]
     return out
 
@@ -159,9 +154,7 @@ def sharpness_func(img, factor):
 def shear_x_func(img, factor, fill=(0, 0, 0)):
     H, W = img.shape[0], img.shape[1]
     M = np.float32([[1, factor, 0], [0, 1, 0]])
-    out = cv2.warpAffine(
-        img, M, (W, H), borderValue=fill, flags=cv2.INTER_LINEAR
-    ).astype(np.uint8)
+    out = cv2.warpAffine(img, M, (W, H), borderValue=fill, flags=cv2.INTER_LINEAR).astype(np.uint8)
     return out
 
 
@@ -171,9 +164,7 @@ def translate_x_func(img, offset, fill=(0, 0, 0)):
     """
     H, W = img.shape[0], img.shape[1]
     M = np.float32([[1, 0, -offset], [0, 1, 0]])
-    out = cv2.warpAffine(
-        img, M, (W, H), borderValue=fill, flags=cv2.INTER_LINEAR
-    ).astype(np.uint8)
+    out = cv2.warpAffine(img, M, (W, H), borderValue=fill, flags=cv2.INTER_LINEAR).astype(np.uint8)
     return out
 
 
@@ -183,9 +174,7 @@ def translate_y_func(img, offset, fill=(0, 0, 0)):
     """
     H, W = img.shape[0], img.shape[1]
     M = np.float32([[1, 0, 0], [0, 1, -offset]])
-    out = cv2.warpAffine(
-        img, M, (W, H), borderValue=fill, flags=cv2.INTER_LINEAR
-    ).astype(np.uint8)
+    out = cv2.warpAffine(img, M, (W, H), borderValue=fill, flags=cv2.INTER_LINEAR).astype(np.uint8)
     return out
 
 
@@ -200,9 +189,7 @@ def posterize_func(img, bits):
 def shear_y_func(img, factor, fill=(0, 0, 0)):
     H, W = img.shape[0], img.shape[1]
     M = np.float32([[1, 0, 0], [factor, 1, 0]])
-    out = cv2.warpAffine(
-        img, M, (W, H), borderValue=fill, flags=cv2.INTER_LINEAR
-    ).astype(np.uint8)
+    out = cv2.warpAffine(img, M, (W, H), borderValue=fill, flags=cv2.INTER_LINEAR).astype(np.uint8)
     return out
 
 
@@ -323,8 +310,8 @@ arg_dict = {
 }
 
 
-class RandomAugment(object):
-    def __init__(self, N=2, M=10, isPIL=False, augs=[]):
+class RandomAugment:
+    def __init__(self, N=2, M=10, isPIL=False, augs=[]):  # noqa: B006 - Keeps the upstream default object and signature.
         self.N = N
         self.M = M
         self.isPIL = isPIL
@@ -349,8 +336,8 @@ class RandomAugment(object):
         return img
 
 
-class VideoRandomAugment(object):
-    def __init__(self, N=2, M=10, p=0.0, tensor_in_tensor_out=True, augs=[]):
+class VideoRandomAugment:
+    def __init__(self, N=2, M=10, p=0.0, tensor_in_tensor_out=True, augs=[]):  # noqa: B006 - Keeps the upstream default object and signature.
         self.N = N
         self.M = M
         self.p = p
@@ -365,9 +352,7 @@ class VideoRandomAugment(object):
         return [(op, self.M) for op in sampled_ops]
 
     def __call__(self, frames):
-        assert (
-            frames.shape[-1] == 3
-        ), "Expecting last dimension for 3-channels RGB (b, h, w, c)."
+        assert frames.shape[-1] == 3, "Expecting last dimension for 3-channels RGB (b, h, w, c)."
 
         if self.tensor_in_tensor_out:
             frames = frames.numpy().astype(np.uint8)
@@ -377,9 +362,7 @@ class VideoRandomAugment(object):
         ops = num_frames * [self.get_random_ops()]
         apply_or_not = num_frames * [np.random.random(size=self.N) > self.p]
 
-        frames = torch.stack(
-            list(map(self._aug, frames, ops, apply_or_not)), dim=0
-        ).float()
+        frames = torch.stack(list(map(self._aug, frames, ops, apply_or_not)), dim=0).float()
 
         return frames
 

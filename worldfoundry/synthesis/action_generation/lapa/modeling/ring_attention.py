@@ -4,18 +4,18 @@ It features blockwise computation for feedforward networks to reduce memory cost
 For more details, refer to 'RingAttention' at https://arxiv.org/abs/2305.19370 and 'Blockwise Parallel Transformers' at https://arxiv.org/abs/2310.01889.
 """
 
-import numpy as np
+import dataclasses
+import functools
+from functools import partial
+from typing import Any, NamedTuple
+
 import flax.linen as nn
 import jax
 import jax.lax as lax
 import jax.numpy as jnp
+from einops import rearrange
 from jax.experimental import pallas as pl
 from jax.experimental.pallas import tpu as pltpu
-from einops import rearrange
-from functools import partial
-import dataclasses
-import functools
-from typing import Any, NamedTuple
 
 
 def _ring_attention_fwd(q, k, v, attn_bias, segment_ids, axis_name, float32_logits, blockwise_kwargs):
@@ -26,7 +26,7 @@ def _ring_attention_fwd(q, k, v, attn_bias, segment_ids, axis_name, float32_logi
     numerator = jnp.zeros((batch, q_len, num_heads, dim_per_head)).astype(q.dtype)
     denominator = jnp.zeros((batch, num_heads, q_len)).astype(q.dtype)
     axis_size = lax.psum(1, axis_name)
-    q_block_size, kv_block_size = q_len, kv_len # assumes this function is pre-sharded inside shard_map
+    q_block_size, kv_block_size = q_len, kv_len  # assumes this function is pre-sharded inside shard_map
     query_chunk_size = blockwise_kwargs["query_chunk_size"]
     key_chunk_size = blockwise_kwargs["key_chunk_size"]
 
@@ -36,14 +36,27 @@ def _ring_attention_fwd(q, k, v, attn_bias, segment_ids, axis_name, float32_logi
         k_block_idx = (lax.axis_index(axis_name) - idx) % axis_size
         q_chunk_idx_start = q_block_idx * (q_block_size // query_chunk_size)
         k_chunk_idx_start = k_block_idx * (kv_block_size // key_chunk_size)
-        numerator, denominator, max_score = _blockwise_attention_fwd(q, k, v, (numerator, denominator, prev_max_score), q_chunk_idx_start, k_chunk_idx_start, bias=attn_bias, segment_ids=segment_ids, **blockwise_kwargs)
-        k, v = map(lambda x: lax.ppermute(x, axis_name, perm=[(i, (i + 1) % axis_size) for i in range(axis_size)]), (k, v))
+        numerator, denominator, max_score = _blockwise_attention_fwd(
+            q,
+            k,
+            v,
+            (numerator, denominator, prev_max_score),
+            q_chunk_idx_start,
+            k_chunk_idx_start,
+            bias=attn_bias,
+            segment_ids=segment_ids,
+            **blockwise_kwargs,
+        )
+        k, v = (lax.ppermute(x, axis_name, perm=[(i, (i + 1) % axis_size) for i in range(axis_size)]) for x in (k, v))
         return (max_score, numerator, denominator, k, v), None
+
     prev_max_score = jnp.full((batch, num_heads, q_len), -jnp.inf).astype(q.dtype)
-    (max_score, numerator, denominator, _, _), _ = lax.scan(scan_kv_block,
-        init=(prev_max_score, numerator, denominator, k, v), xs=jnp.arange(0, axis_size))
-    output = numerator / rearrange(denominator, 'b h q -> b q h')[..., None]
+    (max_score, numerator, denominator, _, _), _ = lax.scan(
+        scan_kv_block, init=(prev_max_score, numerator, denominator, k, v), xs=jnp.arange(0, axis_size)
+    )
+    output = numerator / rearrange(denominator, "b h q -> b q h")[..., None]
     return output.astype(v.dtype), (output, q, k, v, attn_bias, segment_ids, denominator, max_score)
+
 
 def _ring_attention_bwd(axis_name, float32_logits, blockwise_kwargs, res, g):
     del float32_logits
@@ -56,25 +69,42 @@ def _ring_attention_bwd(axis_name, float32_logits, blockwise_kwargs, res, g):
     dv = jnp.zeros_like(v, dtype=k.dtype)
     query_chunk_size = blockwise_kwargs["query_chunk_size"]
     key_chunk_size = blockwise_kwargs["key_chunk_size"]
-    q_block_size, kv_block_size = q_len, kv_len # assumes this function is pre-sharded inside shard_map
+    q_block_size, kv_block_size = q_len, kv_len  # assumes this function is pre-sharded inside shard_map
+
     def scan_kv_block(carry, idx):
         dq, dk, dv, k, v = carry
         q_block_idx = lax.axis_index(axis_name)
         k_block_idx = (lax.axis_index(axis_name) - idx) % axis_size
         q_chunk_idx_start = q_block_idx * (q_block_size // query_chunk_size)
         k_chunk_idx_start = k_block_idx * (kv_block_size // key_chunk_size)
-        dq, dk, dv = _blockwise_attention_bwd(q, k, v, g, (dq, dk, dv, output, denominator, max_score), q_chunk_idx_start, k_chunk_idx_start, bias=attn_bias, segment_ids=segment_ids, **blockwise_kwargs)
-        k, v, dk, dv = map(lambda x: lax.ppermute(x, axis_name, perm=[(i,
-            (i + 1) % axis_size) for i in range(axis_size)]), (k, v, dk, dv))
+        dq, dk, dv = _blockwise_attention_bwd(
+            q,
+            k,
+            v,
+            g,
+            (dq, dk, dv, output, denominator, max_score),
+            q_chunk_idx_start,
+            k_chunk_idx_start,
+            bias=attn_bias,
+            segment_ids=segment_ids,
+            **blockwise_kwargs,
+        )
+        k, v, dk, dv = (
+            lax.ppermute(x, axis_name, perm=[(i, (i + 1) % axis_size) for i in range(axis_size)])
+            for x in (k, v, dk, dv)
+        )
         return (dq, dk, dv, k, v), None
+
     (dq, dk, dv, k, v), _ = lax.scan(scan_kv_block, init=(dq, dk, dv, k, v), xs=jnp.arange(0, axis_size))
     dq, dk, dv = dq.astype(q.dtype), dk.astype(k.dtype), dv.astype(k.dtype)
     return dq, dk, dv, None, None
+
 
 @partial(jax.custom_vjp, nondiff_argnums=[5, 6, 7])
 def ring_attention(q, k, v, attn_bias, segment_ids, axis_name, float32_logits, blockwise_kwargs):
     y, _ = _ring_attention_fwd(q, k, v, attn_bias, segment_ids, axis_name, float32_logits, blockwise_kwargs)
     return y
+
 
 ring_attention.defvjp(_ring_attention_fwd, _ring_attention_bwd)
 
@@ -88,25 +118,29 @@ def _ring_attention_standard_fwd(q, k, v, attn_mask, axis_name, float32_logits):
     denominator = jnp.zeros((batch, num_heads, q_len)).astype(q.dtype)
     axis_size = lax.psum(1, axis_name)
     scale = jnp.sqrt(q.shape[-1])
+
     def scan_kv_block(carry, idx):
         prev_max_score, numerator, denominator, k, v = carry
-        mask = lax.dynamic_slice_in_dim(attn_mask,
-            (lax.axis_index(axis_name) - idx) % axis_size * kv_len, kv_len, axis=-1)
+        mask = lax.dynamic_slice_in_dim(
+            attn_mask, (lax.axis_index(axis_name) - idx) % axis_size * kv_len, kv_len, axis=-1
+        )
         attn_weights = jnp.einsum("bqhd,bkhd->bhqk", q, k) / scale
         attn_weights = jnp.where(mask, attn_weights, jnp.finfo(attn_weights.dtype).min)
         max_score = jnp.maximum(prev_max_score, jnp.max(attn_weights, axis=-1))
         exp_weights = jnp.exp(attn_weights - max_score[..., None])
-        correction = rearrange(jnp.exp(prev_max_score - max_score), 'b h q -> b q h')[..., None]
+        correction = rearrange(jnp.exp(prev_max_score - max_score), "b h q -> b q h")[..., None]
         numerator = numerator * correction + jnp.einsum("bhqk,bkhd->bqhd", exp_weights, v)
         denominator = denominator * jnp.exp(prev_max_score - max_score) + jnp.sum(exp_weights, axis=-1)
-        k, v = map(lambda x: lax.ppermute(x, axis_name, perm=[(i,
-            (i + 1) % axis_size) for i in range(axis_size)]), (k, v))
+        k, v = (lax.ppermute(x, axis_name, perm=[(i, (i + 1) % axis_size) for i in range(axis_size)]) for x in (k, v))
         return (max_score, numerator, denominator, k, v), None
+
     prev_max_score = jnp.full((batch, num_heads, q_len), -jnp.inf).astype(q.dtype)
-    (max_score, numerator, denominator, _, _), _ = lax.scan(scan_kv_block,
-    init=(prev_max_score, numerator, denominator, k, v), xs=jnp.arange(0, axis_size))
-    output = numerator / rearrange(denominator, 'b h q -> b q h')[..., None]
+    (max_score, numerator, denominator, _, _), _ = lax.scan(
+        scan_kv_block, init=(prev_max_score, numerator, denominator, k, v), xs=jnp.arange(0, axis_size)
+    )
+    output = numerator / rearrange(denominator, "b h q -> b q h")[..., None]
     return output.astype(v.dtype), (output, q, k, v, attn_mask, numerator, denominator, max_score)
+
 
 def _ring_attention_standard_bwd(axis_name, float32_logits, res, g):
     del float32_logits
@@ -117,10 +151,12 @@ def _ring_attention_standard_bwd(axis_name, float32_logits, res, g):
     dv = jnp.zeros_like(v, dtype=jnp.float32)
     batch, kv_len, num_heads, dim_per_head = k.shape
     scale = jnp.sqrt(q.shape[-1])
+
     def scan_kv_block(carry, idx):
         dq, dk, dv, k, v = carry
-        mask = lax.dynamic_slice_in_dim(attn_mask,
-            (lax.axis_index(axis_name) - idx) % axis_size * kv_len, kv_len, axis=-1)
+        mask = lax.dynamic_slice_in_dim(
+            attn_mask, (lax.axis_index(axis_name) - idx) % axis_size * kv_len, kv_len, axis=-1
+        )
         attn_weights = jnp.einsum("bqhd,bkhd->bhqk", q, k) / scale
         attn_weights = jnp.where(mask, attn_weights, jnp.finfo(attn_weights.dtype).min)
         exp_weights = jnp.exp(attn_weights - max_score[..., None]) / denominator[..., None]
@@ -129,23 +165,46 @@ def _ring_attention_standard_bwd(axis_name, float32_logits, res, g):
         dq = dq + jnp.einsum("bhqk,bkhd->bqhd", dl, k) / scale
         dk = dk + jnp.einsum("bqhd,bhqk->bkhd", q, dl) / scale
         dv = dv + jnp.einsum("bhqk,bqhd->bkhd", exp_weights, g)
-        k, v, dk, dv = map(lambda x: lax.ppermute(x, axis_name, perm=[(i,
-            (i + 1) % axis_size) for i in range(axis_size)]), (k, v, dk, dv))
+        k, v, dk, dv = (
+            lax.ppermute(x, axis_name, perm=[(i, (i + 1) % axis_size) for i in range(axis_size)])
+            for x in (k, v, dk, dv)
+        )
         return (dq, dk, dv, k, v), None
+
     (dq, dk, dv, k, v), _ = lax.scan(scan_kv_block, init=(dq, dk, dv, k, v), xs=jnp.arange(0, axis_size))
     dq, dk, dv = dq.astype(q.dtype), dk.astype(k.dtype), dv.astype(v.dtype)
     return dq, dk, dv, None
+
 
 @partial(jax.custom_vjp, nondiff_argnums=[4, 5])
 def ring_attention_standard(q, k, v, attn_mask, axis_name, float32_logits=True):
     y, _ = _ring_attention_standard_fwd(q, k, v, attn_mask, axis_name, float32_logits)
     return y
 
+
 ring_attention_standard.defvjp(_ring_attention_standard_fwd, _ring_attention_standard_bwd)
 
 
-def _blockwise_attention_fwd(q, k, v, carry, q_chunk_idx_start, k_chunk_idx_start, bias, segment_ids, causal, query_chunk_size,
-                             key_chunk_size, deterministic, dropout_rng, attn_pdrop, dtype, policy, precision, prevent_cse):
+def _blockwise_attention_fwd(
+    q,
+    k,
+    v,
+    carry,
+    q_chunk_idx_start,
+    k_chunk_idx_start,
+    bias,
+    segment_ids,
+    causal,
+    query_chunk_size,
+    key_chunk_size,
+    deterministic,
+    dropout_rng,
+    attn_pdrop,
+    dtype,
+    policy,
+    precision,
+    prevent_cse,
+):
     batch, q_len, num_heads, dim_per_head = q.shape
     batch, kv_len, num_heads, dim_per_head = k.shape
     batch, kv_len, num_heads, dim_per_head = v.shape
@@ -154,14 +213,14 @@ def _blockwise_attention_fwd(q, k, v, carry, q_chunk_idx_start, k_chunk_idx_star
     q = q.reshape((batch, num_q, query_chunk_size, num_heads, dim_per_head))
     k = k.reshape((batch, num_kv, key_chunk_size, num_heads, dim_per_head))
     v = v.reshape((batch, num_kv, key_chunk_size, num_heads, dim_per_head))
-    q, k, v = map(lambda x: jnp.moveaxis(x, 1, 0), (q, k, v))
+    q, k, v = (jnp.moveaxis(x, 1, 0) for x in (q, k, v))
 
     numerator, denominator, max_score = carry
     numerator = numerator.reshape((batch, num_q, query_chunk_size, num_heads, dim_per_head))
     numerator = jnp.moveaxis(numerator, 1, 0)
     denominator = denominator.reshape((batch, num_heads, num_q, query_chunk_size))
     max_score = max_score.reshape((batch, num_heads, num_q, query_chunk_size))
-    denominator, max_score = map(lambda x: rearrange(x, 'b h n c -> n b h c'), (denominator, max_score))
+    denominator, max_score = (rearrange(x, "b h n c -> n b h c") for x in (denominator, max_score))
 
     scale = jnp.sqrt(q.shape[-1])
     if not deterministic and attn_pdrop > 0.0:
@@ -171,25 +230,37 @@ def _blockwise_attention_fwd(q, k, v, carry, q_chunk_idx_start, k_chunk_idx_star
         attn_dropout = None
     _chunk_bias_fn = partial(
         _chunk_attention_bias,
-        query_chunk_size, key_chunk_size, bias, segment_ids, deterministic,
-        attn_dropout, attn_pdrop, causal, dtype)
+        query_chunk_size,
+        key_chunk_size,
+        bias,
+        segment_ids,
+        deterministic,
+        attn_dropout,
+        attn_pdrop,
+        causal,
+        dtype,
+    )
+
     def scan_attention(_, scan):
         q_chunk, numerator_chunk, denominator_chunk, max_score_chunk, q_chunk_idx = scan
+
         @partial(jax.checkpoint, prevent_cse=prevent_cse, policy=policy)
         def scan_kv_block(carry, scan):
             k_chunk, value_chunk, k_chunk_idx = scan
             numerator_chunk, denominator_chunk, prev_max_score_chunk = carry
-            attn_weights = jnp.einsum('bqhd,bkhd->bhqk', q_chunk, k_chunk, precision=precision) / scale
+            attn_weights = jnp.einsum("bqhd,bkhd->bhqk", q_chunk, k_chunk, precision=precision) / scale
             bias_chunk = _chunk_bias_fn(q_chunk_idx_start + q_chunk_idx, k_chunk_idx_start + k_chunk_idx)
             attn_weights = attn_weights + bias_chunk
 
             max_score_chunk = jnp.maximum(prev_max_score_chunk, jnp.max(attn_weights, axis=-1))
             max_score_chunk = lax.stop_gradient(max_score_chunk)
             exp_weights = jnp.exp(attn_weights - max_score_chunk[..., None])
-            exp_values = jnp.einsum('bhqk,bkhd->bqhd', exp_weights, value_chunk, precision=precision)
-            correction = rearrange(jnp.exp(prev_max_score_chunk - max_score_chunk), 'b h q -> b q h')[..., None]
+            exp_values = jnp.einsum("bhqk,bkhd->bqhd", exp_weights, value_chunk, precision=precision)
+            correction = rearrange(jnp.exp(prev_max_score_chunk - max_score_chunk), "b h q -> b q h")[..., None]
             numerator_chunk = numerator_chunk * correction + exp_values
-            denominator_chunk = denominator_chunk * jnp.exp(prev_max_score_chunk - max_score_chunk) + exp_weights.sum(axis=-1)
+            denominator_chunk = denominator_chunk * jnp.exp(prev_max_score_chunk - max_score_chunk) + exp_weights.sum(
+                axis=-1
+            )
             return (numerator_chunk, denominator_chunk, max_score_chunk), None
 
         def skip_upper_half(carry, args):
@@ -197,30 +268,50 @@ def _blockwise_attention_fwd(q, k, v, carry, q_chunk_idx_start, k_chunk_idx_star
             skip_block = jnp.array(False)
             if causal:
                 skip_block = q_chunk_idx_start + q_chunk_idx < k_chunk_idx_start + k_chunk_idx
-            return jax.lax.cond(
-                skip_block,
-                lambda carry, args: (carry, None),
-                scan_kv_block,
-                carry,
-                args
-            )
+            return jax.lax.cond(skip_block, lambda carry, args: (carry, None), scan_kv_block, carry, args)
 
         (numerator_chunk, denominator_chunk, max_score_chunk), _ = lax.scan(
-            skip_upper_half, init=(numerator_chunk, denominator_chunk, max_score_chunk), xs=(k, v, jnp.arange(0, num_kv))
+            skip_upper_half,
+            init=(numerator_chunk, denominator_chunk, max_score_chunk),
+            xs=(k, v, jnp.arange(0, num_kv)),
         )
-        output_chunk = numerator_chunk / rearrange(denominator_chunk, 'b h q -> b q h')[..., None].astype(dtype)
+        output_chunk = numerator_chunk / rearrange(denominator_chunk, "b h q -> b q h")[..., None].astype(dtype)
         return (), (output_chunk, numerator_chunk, denominator_chunk, max_score_chunk)
-    _, (_, numerator, denominator, max_score) = lax.scan(scan_attention, init=(), xs=(q, numerator, denominator, max_score, jnp.arange(0, num_q)))
+
+    _, (_, numerator, denominator, max_score) = lax.scan(
+        scan_attention, init=(), xs=(q, numerator, denominator, max_score, jnp.arange(0, num_q))
+    )
 
     numerator = jnp.moveaxis(numerator, 1, 0)
     numerator = numerator.reshape((batch, q_len, num_heads, dim_per_head))
-    denominator, max_score = map(lambda x: rearrange(x, 'n b h c -> b h n c'), (denominator, max_score))
+    denominator, max_score = (rearrange(x, "n b h c -> b h n c") for x in (denominator, max_score))
     denominator = denominator.reshape((batch, num_heads, q_len))
     max_score = max_score.reshape((batch, num_heads, q_len))
 
     return numerator, denominator, max_score
 
-def _blockwise_attention_bwd(q, k, v, g, carry, q_chunk_idx_start, k_chunk_idx_start, bias, segment_ids, causal, query_chunk_size, key_chunk_size, deterministic, dropout_rng, attn_pdrop, dtype, policy, precision, prevent_cse):
+
+def _blockwise_attention_bwd(
+    q,
+    k,
+    v,
+    g,
+    carry,
+    q_chunk_idx_start,
+    k_chunk_idx_start,
+    bias,
+    segment_ids,
+    causal,
+    query_chunk_size,
+    key_chunk_size,
+    deterministic,
+    dropout_rng,
+    attn_pdrop,
+    dtype,
+    policy,
+    precision,
+    prevent_cse,
+):
     batch, q_len, num_heads, dim_per_head = q.shape
     batch, kv_len, num_heads, dim_per_head = k.shape
     batch, kv_len, num_heads, dim_per_head = v.shape
@@ -233,16 +324,16 @@ def _blockwise_attention_bwd(q, k, v, g, carry, q_chunk_idx_start, k_chunk_idx_s
     dk = dk.reshape((batch, num_kv, key_chunk_size, num_heads, dim_per_head))
     dv = dv.reshape((batch, num_kv, key_chunk_size, num_heads, dim_per_head))
     output = output.reshape((batch, num_q, query_chunk_size, num_heads, dim_per_head))
-    g, dq, dk, dv, output = map(lambda x: jnp.moveaxis(x, 1, 0), (g, dq, dk, dv, output))
+    g, dq, dk, dv, output = (jnp.moveaxis(x, 1, 0) for x in (g, dq, dk, dv, output))
 
     denominator = denominator.reshape((batch, num_heads, num_q, query_chunk_size))
     max_score = max_score.reshape((batch, num_heads, num_q, query_chunk_size))
-    denominator, max_score = map(lambda x: rearrange(x, 'b h n c -> n b h c'), (denominator, max_score))
+    denominator, max_score = (rearrange(x, "b h n c -> n b h c") for x in (denominator, max_score))
 
     q = q.reshape((batch, num_q, query_chunk_size, num_heads, dim_per_head))
     k = k.reshape((batch, num_kv, key_chunk_size, num_heads, dim_per_head))
     v = v.reshape((batch, num_kv, key_chunk_size, num_heads, dim_per_head))
-    q, k, v = map(lambda x: jnp.moveaxis(x, 1, 0), (q, k, v))
+    q, k, v = (jnp.moveaxis(x, 1, 0) for x in (q, k, v))
 
     scale = jnp.sqrt(q.shape[-1])
     if not deterministic and attn_pdrop > 0.0:
@@ -252,17 +343,27 @@ def _blockwise_attention_bwd(q, k, v, g, carry, q_chunk_idx_start, k_chunk_idx_s
         attn_dropout = None
     _chunk_bias_fn = partial(
         _chunk_attention_bias,
-        query_chunk_size, key_chunk_size, bias, segment_ids, deterministic,
-        attn_dropout, attn_pdrop, causal, dtype)
+        query_chunk_size,
+        key_chunk_size,
+        bias,
+        segment_ids,
+        deterministic,
+        attn_dropout,
+        attn_pdrop,
+        causal,
+        dtype,
+    )
+
     def scan_attention(carry, scan):
         dk, dv = carry
         q_chunk, dq_chunk, g_chunk, output_chunk, denominator_chunk, max_score_chunk, q_chunk_idx = scan
         dl_part = jnp.einsum("bqhd,bqhd->bhq", g_chunk, output_chunk)[..., None]
+
         @partial(jax.checkpoint, prevent_cse=prevent_cse, policy=policy)
         def scan_kv_block(carry, scan):
             k_chunk, value_chunk, k_chunk_idx = scan
             dq_chunk = carry
-            attn_weights = jnp.einsum('bqhd,bkhd->bhqk', q_chunk, k_chunk, precision=precision) / scale
+            attn_weights = jnp.einsum("bqhd,bkhd->bhqk", q_chunk, k_chunk, precision=precision) / scale
             bias_chunk = _chunk_bias_fn(q_chunk_idx_start + q_chunk_idx, k_chunk_idx_start + k_chunk_idx)
             attn_weights = attn_weights + bias_chunk
             exp_weights = jnp.exp(attn_weights - max_score_chunk[..., None]) / denominator_chunk[..., None]
@@ -282,23 +383,25 @@ def _blockwise_attention_bwd(q, k, v, g, carry, q_chunk_idx_start, k_chunk_idx_s
             return lax.cond(
                 skip_block,
                 lambda carry, args: (
-                    carry, (
+                    carry,
+                    (
                         jnp.zeros((batch, key_chunk_size, num_heads, dim_per_head), dtype=dk.dtype),
                         jnp.zeros((batch, key_chunk_size, num_heads, dim_per_head), dtype=dk.dtype),
-                    )
+                    ),
                 ),
                 scan_kv_block,
                 carry,
-                args
+                args,
             )
 
-        dq_chunk, (dk_part, dv_part) = lax.scan(
-            skip_upper_half, init=dq_chunk, xs=(k, v, jnp.arange(0, num_kv))
-        )
+        dq_chunk, (dk_part, dv_part) = lax.scan(skip_upper_half, init=dq_chunk, xs=(k, v, jnp.arange(0, num_kv)))
         return (dk + dk_part, dv + dv_part), dq_chunk
-    (dk, dv), dq = lax.scan(scan_attention, init=(dk, dv), xs=(q, dq, g, output, denominator, max_score, jnp.arange(0, num_q)))
 
-    dq, dk, dv = map(lambda x: jnp.moveaxis(x, 1, 0), (dq, dk, dv))
+    (dk, dv), dq = lax.scan(
+        scan_attention, init=(dk, dv), xs=(q, dq, g, output, denominator, max_score, jnp.arange(0, num_q))
+    )
+
+    dq, dk, dv = (jnp.moveaxis(x, 1, 0) for x in (dq, dk, dv))
     dq = dq.reshape((batch, q_len, num_heads, dim_per_head))
     dk = dk.reshape((batch, kv_len, num_heads, dim_per_head))
     dv = dv.reshape((batch, kv_len, num_heads, dim_per_head))
@@ -308,10 +411,12 @@ def _blockwise_attention_bwd(q, k, v, g, carry, q_chunk_idx_start, k_chunk_idx_s
 
 # Blockwise feedforward network for memory-efficient training
 def blockwise_ffn(remat_ffn, inputs, chunk_size, deterministic):
-    inputs = rearrange(inputs, 'b (c n) d -> b c n d', c=chunk_size)
+    inputs = rearrange(inputs, "b (c n) d -> b c n d", c=chunk_size)
+
     def scan_ffn(remat_ffn, carry, hidden_states):
         outputs = remat_ffn(hidden_states, deterministic=deterministic)
         return carry, outputs
+
     scan_axis = inputs.ndim - 2
     _, output = nn.scan(
         scan_ffn,
@@ -320,13 +425,23 @@ def blockwise_ffn(remat_ffn, inputs, chunk_size, deterministic):
         in_axes=scan_axis,
         out_axes=scan_axis,
     )(remat_ffn, None, inputs)
-    output = rearrange(output, 'b c n d -> b (c n) d')
+    output = rearrange(output, "b c n d -> b (c n) d")
     return output
 
 
-def _chunk_attention_bias(query_chunk_size, key_chunk_size,
-            bias, segment_ids, deterministic, attn_dropout, attn_pdrop, causal,
-            dtype, query_chunk_idx, key_chunk_idx):
+def _chunk_attention_bias(
+    query_chunk_size,
+    key_chunk_size,
+    bias,
+    segment_ids,
+    deterministic,
+    attn_dropout,
+    attn_pdrop,
+    causal,
+    dtype,
+    query_chunk_idx,
+    key_chunk_idx,
+):
     query_offset = query_chunk_idx * query_chunk_size
     key_offset = key_chunk_idx * key_chunk_size
     chunk_bias = jnp.zeros((1, 1, 1, 1), dtype=dtype)
@@ -339,17 +454,13 @@ def _chunk_attention_bias(query_chunk_size, key_chunk_size,
 
     if segment_ids is not None:
         q_segment_ids = lax.dynamic_slice(
-            segment_ids,
-            start_indices=(0, query_offset),
-            slice_sizes=(segment_ids.shape[0], query_chunk_size)
+            segment_ids, start_indices=(0, query_offset), slice_sizes=(segment_ids.shape[0], query_chunk_size)
         )
         k_segment_ids = lax.dynamic_slice(
-            segment_ids,
-            start_indices=(0, key_offset),
-            slice_sizes=(segment_ids.shape[0], key_chunk_size)
+            segment_ids, start_indices=(0, key_offset), slice_sizes=(segment_ids.shape[0], key_chunk_size)
         )
         segment_ids_mask = q_segment_ids[:, :, None] != k_segment_ids[:, None, :]
-        segment_ids_mask = segment_ids_mask[:, None] # B1QK
+        segment_ids_mask = segment_ids_mask[:, None]  # B1QK
         segment_ids_bias = segment_ids_mask * jnp.finfo(dtype).min
         chunk_bias += segment_ids_bias
 
@@ -378,24 +489,21 @@ def _chunk_attention_bias(query_chunk_size, key_chunk_size,
 def _ring_flash_attention_fwd_tpu(q, k, v, attn_bias, segment_ids, axis_name, float32_logits, blockwise_kwargs):
     if float32_logits:
         q, k = q.astype(jnp.float32), k.astype(jnp.float32)
-    q, k, v = map(lambda x: rearrange(x, 'b q h d -> b h q d'), [q, k, v])
+    q, k, v = (rearrange(x, "b q h d -> b h q d") for x in [q, k, v])
     batch, num_heads, q_len, dim_per_head = q.shape
     batch, num_heads, kv_len, dim_per_head = k.shape
-    attn_bias = attn_bias[:, 0, 0] # (batch, k_len)
+    attn_bias = attn_bias[:, 0, 0]  # (batch, k_len)
 
     o = jnp.zeros((batch, num_heads, q_len, dim_per_head)).astype(q.dtype)
-    l = jnp.zeros((batch, num_heads, q_len)).astype(q.dtype)
+    l = jnp.zeros((batch, num_heads, q_len)).astype(q.dtype)  # noqa: E741 - Ambiguous upstream name kept as written.
     m = jnp.full((batch, num_heads, q_len), -jnp.inf).astype(q.dtype)
 
     axis_size = lax.psum(1, axis_name)
-    q_block_size, kv_block_size = q_len, kv_len # assumes this function is pre-sharded inside shard_map
+    q_block_size, kv_block_size = q_len, kv_len  # assumes this function is pre-sharded inside shard_map
     query_chunk_size = blockwise_kwargs["query_chunk_size"]
     key_chunk_size = blockwise_kwargs["key_chunk_size"]
     if segment_ids is not None:
-        q_segment_ids = lax.dynamic_slice_in_dim(
-            segment_ids,
-            lax.axis_index(axis_name) * q_len, q_len, axis=-1
-        )
+        q_segment_ids = lax.dynamic_slice_in_dim(segment_ids, lax.axis_index(axis_name) * q_len, q_len, axis=-1)
 
     block_sizes = BlockSizes(
         block_q=query_chunk_size,
@@ -412,16 +520,16 @@ def _ring_flash_attention_fwd_tpu(q, k, v, attn_bias, segment_ids, axis_name, fl
     )
 
     scale = q.shape[-1] ** -0.5
+
     def scan_kv_block(carry, idx):
-        o, l, m, k, v = carry
-        attn_bias_slice = lax.dynamic_slice_in_dim(attn_bias,
-            (lax.axis_index(axis_name) - idx) % axis_size * kv_len, kv_len, axis=-1
+        o, l, m, k, v = carry  # noqa: E741 - Ambiguous upstream name kept as written.
+        attn_bias_slice = lax.dynamic_slice_in_dim(
+            attn_bias, (lax.axis_index(axis_name) - idx) % axis_size * kv_len, kv_len, axis=-1
         )
-        attn_bias_slice = None # TODO
+        attn_bias_slice = None  # TODO
         if segment_ids is not None:
             kv_segment_ids = lax.dynamic_slice_in_dim(
-                segment_ids,
-                (lax.axis_index(axis_name) - idx) % axis_size * kv_len, kv_len, axis=-1
+                segment_ids, (lax.axis_index(axis_name) - idx) % axis_size * kv_len, kv_len, axis=-1
             )
             segment_ids_slice = SegmentIds(q=q_segment_ids, kv=kv_segment_ids)
         else:
@@ -430,8 +538,10 @@ def _ring_flash_attention_fwd_tpu(q, k, v, attn_bias, segment_ids, axis_name, fl
         k_block_idx = (lax.axis_index(axis_name) - idx) % axis_size
         q_chunk_idx_start = q_block_idx * (q_block_size // query_chunk_size)
         k_chunk_idx_start = k_block_idx * (kv_block_size // key_chunk_size)
-        o, l, m = _flash_attention_fwd(
-            q, k, v,
+        o, l, m = _flash_attention_fwd(  # noqa: E741 - Ambiguous upstream name kept as written.
+            q,
+            k,
+            v,
             carry=(o, l, m),
             q_chunk_idx_start=q_chunk_idx_start,
             k_chunk_idx_start=k_chunk_idx_start,
@@ -441,18 +551,19 @@ def _ring_flash_attention_fwd_tpu(q, k, v, attn_bias, segment_ids, axis_name, fl
             causal=blockwise_kwargs["causal"],
             sm_scale=scale,
             block_sizes=block_sizes,
-            debug=False
+            debug=False,
         )
-        k, v = map(lambda x: lax.ppermute(x, axis_name, perm=[(i, (i + 1) % axis_size) for i in range(axis_size)]), (k, v))
+        k, v = (lax.ppermute(x, axis_name, perm=[(i, (i + 1) % axis_size) for i in range(axis_size)]) for x in (k, v))
         return (o, l, m, k, v), None
-    (o, l, m, _, _), _ = lax.scan(scan_kv_block,
-        init=(o, l, m, k, v), xs=jnp.arange(0, axis_size))
-    output = rearrange(o.astype(v.dtype), 'b h q d -> b q h d')
+
+    (o, l, m, _, _), _ = lax.scan(scan_kv_block, init=(o, l, m, k, v), xs=jnp.arange(0, axis_size))  # noqa: E741 - Ambiguous upstream name kept as written.
+    output = rearrange(o.astype(v.dtype), "b h q d -> b q h d")
     return output, (o, q, k, v, attn_bias, segment_ids, l, m)
+
 
 def _ring_flash_attention_bwd_tpu(axis_name, float32_logits, blockwise_kwargs, res, g):
     del float32_logits
-    o, q, k, v, attn_bias, segment_ids, l, m = res
+    o, q, k, v, attn_bias, segment_ids, l, m = res  # noqa: E741 - Ambiguous upstream name kept as written.
     batch, num_heads, kv_len, dim_per_head = k.shape
     axis_size = lax.psum(1, axis_name)
     dq = jnp.zeros_like(q, dtype=jnp.float32)
@@ -460,16 +571,15 @@ def _ring_flash_attention_bwd_tpu(axis_name, float32_logits, blockwise_kwargs, r
     dv = jnp.zeros_like(v, dtype=jnp.float32)
     query_chunk_size = blockwise_kwargs["query_chunk_size"]
     key_chunk_size = blockwise_kwargs["key_chunk_size"]
-    q_block_size, kv_block_size = q.shape[2], k.shape[2] # assumes this function is pre-sharded inside shard_map
+    q_block_size, kv_block_size = q.shape[2], k.shape[2]  # assumes this function is pre-sharded inside shard_map
     scale = q.shape[-1] ** -0.5
 
     if segment_ids is not None:
         q_segment_ids = lax.dynamic_slice_in_dim(
-            segment_ids,
-            lax.axis_index(axis_name) * q_block_size, q_block_size, axis=-1
+            segment_ids, lax.axis_index(axis_name) * q_block_size, q_block_size, axis=-1
         )
 
-    g = rearrange(g, 'b q h d -> b h q d')
+    g = rearrange(g, "b q h d -> b h q d")
 
     block_sizes = BlockSizes(
         block_q=query_chunk_size,
@@ -487,14 +597,13 @@ def _ring_flash_attention_bwd_tpu(axis_name, float32_logits, blockwise_kwargs, r
 
     def scan_kv_block(carry, idx):
         dq, dk, dv, k, v = carry
-        attn_bias_slice = lax.dynamic_slice_in_dim(attn_bias,
-            (lax.axis_index(axis_name) - idx) % axis_size * kv_len, kv_len, axis=-1
+        attn_bias_slice = lax.dynamic_slice_in_dim(
+            attn_bias, (lax.axis_index(axis_name) - idx) % axis_size * kv_len, kv_len, axis=-1
         )
-        attn_bias_slice = None # TODO
+        attn_bias_slice = None  # TODO
         if segment_ids is not None:
             kv_segment_ids = lax.dynamic_slice_in_dim(
-                segment_ids,
-                (lax.axis_index(axis_name) - idx) % axis_size * kv_len, kv_len, axis=-1
+                segment_ids, (lax.axis_index(axis_name) - idx) % axis_size * kv_len, kv_len, axis=-1
             )
             segment_ids_slice = SegmentIds(q=q_segment_ids, kv=kv_segment_ids)
         else:
@@ -503,7 +612,11 @@ def _ring_flash_attention_bwd_tpu(axis_name, float32_logits, blockwise_kwargs, r
         k_block_idx = (lax.axis_index(axis_name) - idx) % axis_size
         q_chunk_idx_start = q_block_idx * (q_block_size // query_chunk_size)
         k_chunk_idx_start = k_block_idx * (kv_block_size // key_chunk_size)
-        dq_i, dk_i, dv_i, = _flash_attention_bwd(
+        (
+            dq_i,
+            dk_i,
+            dv_i,
+        ) = _flash_attention_bwd(
             save_residuals=False,
             causal=blockwise_kwargs["causal"],
             sm_scale=scale,
@@ -512,23 +625,28 @@ def _ring_flash_attention_bwd_tpu(axis_name, float32_logits, blockwise_kwargs, r
             q_chunk_idx_start=q_chunk_idx_start,
             k_chunk_idx_start=k_chunk_idx_start,
             residuals=(q, k, v, attn_bias_slice, segment_ids_slice, o, l, m),
-            do=g
+            do=g,
         )
         dq += dq_i
         dk += dk_i
         dv += dv_i
-        k, v, dk, dv = map(lambda x: lax.ppermute(x, axis_name, perm=[(i,
-            (i + 1) % axis_size) for i in range(axis_size)]), (k, v, dk, dv))
+        k, v, dk, dv = (
+            lax.ppermute(x, axis_name, perm=[(i, (i + 1) % axis_size) for i in range(axis_size)])
+            for x in (k, v, dk, dv)
+        )
         return (dq, dk, dv, k, v), None
+
     (dq, dk, dv, k, v), _ = lax.scan(scan_kv_block, init=(dq, dk, dv, k, v), xs=jnp.arange(0, axis_size))
     dq, dk, dv = dq.astype(q.dtype), dk.astype(k.dtype), dv.astype(v.dtype)
-    dq, dk, dv = map(lambda x: rearrange(x, 'b h q d -> b q h d'), (dq, dk, dv))
+    dq, dk, dv = (rearrange(x, "b h q d -> b q h d") for x in (dq, dk, dv))
     return dq, dk, dv, None, None
+
 
 @partial(jax.custom_vjp, nondiff_argnums=[5, 6, 7])
 def ring_flash_attention_tpu(q, k, v, attn_bias, segment_ids, axis_name, float32_logits, blockwise_kwargs):
     y, _ = _ring_flash_attention_fwd_tpu(q, k, v, attn_bias, segment_ids, axis_name, float32_logits, blockwise_kwargs)
     return y
+
 
 ring_flash_attention_tpu.defvjp(_ring_flash_attention_fwd_tpu, _ring_flash_attention_bwd_tpu)
 
@@ -536,6 +654,7 @@ ring_flash_attention_tpu.defvjp(_ring_flash_attention_fwd_tpu, _ring_flash_atten
 DEFAULT_MASK_VALUE = -0.7 * float(jnp.finfo(jnp.dtype("float32")).max)
 NUM_LANES = 128
 NUM_SUBLANES = 8
+
 
 class SegmentIds(NamedTuple):
     """SegmentIds for Q and KV sequences.
@@ -573,25 +692,15 @@ class BlockSizes:
     def __post_init__(self):
         def verify_major_minor(prefix, suffix, major, minor):
             if minor > major:
-                raise ValueError(
-                    f"{prefix}{suffix}={minor} should be smaller than"
-                    f" {prefix}_major{suffix}={major}"
-                )
+                raise ValueError(f"{prefix}{suffix}={minor} should be smaller than {prefix}_major{suffix}={major}")
             if major % minor != 0:
-                raise ValueError(
-                    f"{prefix}{suffix}={minor} should divide"
-                    f" {prefix}_major{suffix}={major}"
-                )
+                raise ValueError(f"{prefix}{suffix}={minor} should divide {prefix}_major{suffix}={major}")
 
         verify_major_minor("block_k", "", self.block_k_major, self.block_k)
         if self.block_q_major_dkv is not None and self.block_q_dkv is not None:
-            verify_major_minor(
-                "block_q", "_dkv", self.block_q_major_dkv, self.block_q_dkv
-            )
+            verify_major_minor("block_q", "_dkv", self.block_q_major_dkv, self.block_q_dkv)
         if self.block_k_major_dkv is not None and self.block_k_dkv is not None:
-            verify_major_minor(
-                "block_k", "_dkv", self.block_k_major_dkv, self.block_k_dkv
-            )
+            verify_major_minor("block_k", "_dkv", self.block_k_major_dkv, self.block_k_dkv)
         if self.block_k_major_dq is not None and self.block_k_dq is not None:
             verify_major_minor("block_k", "_dq", self.block_k_major_dq, self.block_k_dq)
 
@@ -678,7 +787,7 @@ def _flash_attention_fwd(
 ):
     if save_residuals:
         raise NotImplementedError("Higher-order AD not supported")
-    o, l, m = _flash_attention(
+    o, l, m = _flash_attention(  # noqa: E741 - Ambiguous upstream name kept as written.
         q,
         k,
         v,
@@ -710,16 +819,11 @@ def _flash_attention_bwd(
     """VJP rule for FlashAttention."""
     if save_residuals:
         raise NotImplementedError("Higher-order AD not supported")
-    (q, k, v, ab, segment_ids, o, l, m) = residuals
+    (q, k, v, ab, segment_ids, o, l, m) = residuals  # noqa: E741 - Ambiguous upstream name kept as written.
     if not block_sizes.has_backward_blocks:
-        raise ValueError(
-            "Program is being differentiated, but not all backward blocks are"
-            " specified"
-        )
+        raise ValueError("Program is being differentiated, but not all backward blocks are specified")
 
-    di = jnp.sum(
-        o.astype(jnp.float32) * do.astype(jnp.float32), axis=-1
-    )  # [batch_size, num_heads, q_seq_len]
+    di = jnp.sum(o.astype(jnp.float32) * do.astype(jnp.float32), axis=-1)  # [batch_size, num_heads, q_seq_len]
 
     dk, dv = _flash_attention_bwd_dkv(
         q_chunk_idx_start,
@@ -776,9 +880,7 @@ def below_or_on_diag(r, r_blk_size, c, c_blk_size):
     return ((r + 1) * r_blk_size - 1) > (c * c_blk_size)
 
 
-def _flash_attention_kernel(
-    q_idx_chunk_start, k_idx_chunk_start, q_tile_ref, *args, **kwargs
-):
+def _flash_attention_kernel(q_idx_chunk_start, k_idx_chunk_start, q_tile_ref, *args, **kwargs):
     block_b = q_tile_ref.shape[0]
     # The generic kernel is also correct when the full KV sequence fits in one
     # block.  The upstream tree referenced a never-defined single-step fast path
@@ -852,21 +954,15 @@ def _flash_attention_kernel_single_batch(
 
     @pl.when(should_run)
     def run():
-        @functools.partial(
-            lax.fori_loop, 0, block_k_major // block_k, init_val=None, unroll=True
-        )
+        @functools.partial(lax.fori_loop, 0, block_k_major // block_k, init_val=None, unroll=True)
         def body(i, _):
             m_prev = m_scratch_ref[batch_idx]
             l_prev = l_scratch_ref[batch_idx]
             q = q_tile_ref[batch_idx]  # [block_q, head_dim]
             start_k = i * block_k
-            k = pl.load(
-                k_tile_ref, (*batch_idx, pl.dslice(start_k, block_k), slice(None))
-            )  # [block_k, head_dim]
+            k = pl.load(k_tile_ref, (*batch_idx, pl.dslice(start_k, block_k), slice(None)))  # [block_k, head_dim]
 
-            s = jax.lax.dot_general(
-                q, k, TRANS_B_DIM_NUMBERS, preferred_element_type=jnp.float32
-            )  # [block_q, block_k]
+            s = jax.lax.dot_general(q, k, TRANS_B_DIM_NUMBERS, preferred_element_type=jnp.float32)  # [block_q, block_k]
 
             # Add attention bias if needed.
             if ab_tile_ref is not None:
@@ -883,9 +979,7 @@ def _flash_attention_kernel_single_batch(
             if q_segment_ids_tile_ref is not None:
                 repeats, rem = divmod(block_k, NUM_LANES)
                 if rem:
-                    raise NotImplementedError(
-                        f"kv block size must be a multiple of {NUM_LANES}"
-                    )
+                    raise NotImplementedError(f"kv block size must be a multiple of {NUM_LANES}")
                 q_segment_ids = pltpu.repeat(
                     q_segment_ids_tile_ref[batch_idx[0]], repeats, axis=1
                 )  # [block_q, block_k].
@@ -902,9 +996,7 @@ def _flash_attention_kernel_single_batch(
                 col_ids = jax.lax.broadcasted_iota(jnp.int32, mask_shape, 1)
                 col_ids += (kv_seq_idx + k_chunk_idx_start) * block_k_major + start_k
                 causal_mask = col_ids <= row_ids
-                mask = (
-                    causal_mask if mask is None else jnp.logical_and(mask, causal_mask)
-                )
+                mask = causal_mask if mask is None else jnp.logical_and(mask, causal_mask)
 
             s = s if mask is None else s + jnp.where(mask, 0.0, mask_value)
 
@@ -913,9 +1005,7 @@ def _flash_attention_kernel_single_batch(
 
             block_k_repeats, rem = divmod(block_k, MIN_BLOCK_SIZE)
             if rem:
-                raise NotImplementedError(
-                    f"{block_k=} should be a multiple of {MIN_BLOCK_SIZE}"
-                )
+                raise NotImplementedError(f"{block_k=} should be a multiple of {MIN_BLOCK_SIZE}")
             p = jnp.exp(s - pltpu.repeat(m_next, block_k_repeats, 1))
 
             alpha = jnp.exp(m_prev - m_next)  # Shape [block_q, 128].
@@ -925,25 +1015,24 @@ def _flash_attention_kernel_single_batch(
             l_next = jnp.sum(p, axis=1)[:, None] + l_corr  # Shape [block_q, 128]
 
             head_dim_repeats, rem = divmod(head_dim, MIN_BLOCK_SIZE)
-            l_broadcast = lambda l: pltpu.repeat(l, head_dim_repeats, 1)
+
+            def l_broadcast(l):  # noqa: E741 - Ambiguous upstream name kept as written.
+                return pltpu.repeat(l, head_dim_repeats, 1)
+
             if rem:
                 if head_dim_repeats == 0:
-                    l_broadcast = lambda l: l[:, :head_dim]
+
+                    def l_broadcast(l):  # noqa: E741 - Ambiguous upstream name kept as written.
+                        return l[:, :head_dim]
                 else:
-                    raise NotImplementedError(
-                        f"{head_dim=} should be a multiple of {MIN_BLOCK_SIZE} if larger"
-                    )
+                    raise NotImplementedError(f"{head_dim=} should be a multiple of {MIN_BLOCK_SIZE} if larger")
             l_scratch_ref[batch_idx] = l_next
             m_scratch_ref[batch_idx] = m_next
 
             l_next_inv_safe = jnp.where(l_next == 0.0, 1.0, 1.0 / l_next)
             acc_scratch_ref[batch_idx] *= l_broadcast(l_corr * l_next_inv_safe)
-            v = pl.load(
-                v_tile_ref, (*batch_idx, pl.dslice(start_k, block_k), slice(None))
-            )
-            o_curr = jax.lax.dot(
-                p.astype(v.dtype), v, preferred_element_type=jnp.float32
-            )
+            v = pl.load(v_tile_ref, (*batch_idx, pl.dslice(start_k, block_k), slice(None)))
+            o_curr = jax.lax.dot(p.astype(v.dtype), v, preferred_element_type=jnp.float32)
             acc_scratch_ref[batch_idx] += o_curr * l_broadcast(l_next_inv_safe)
 
     @pl.when(kv_seq_idx == (kv_seq_len // block_k_major) - 1)
@@ -977,10 +1066,7 @@ def _flash_attention_impl(
     batch_size, num_heads, q_seq_len, head_dim = q.shape
     _, _, kv_seq_len, _ = k.shape
     acc, l_prev, m_prev = carry
-    l_prev, m_prev = map(
-        lambda x: jnp.broadcast_to(x[..., None], (*x.shape, MIN_BLOCK_SIZE)),
-        (l_prev, m_prev),
-    )
+    l_prev, m_prev = (jnp.broadcast_to(x[..., None], (*x.shape, MIN_BLOCK_SIZE)) for x in (l_prev, m_prev))
     q_chunk_idx_start, k_chunk_idx_start = (
         q_chunk_idx_start[None],
         k_chunk_idx_start[None],
@@ -1000,9 +1086,7 @@ def _flash_attention_impl(
     def q_index_map(batch_index, head_index, q_seq_index, _, q_idx_ref, k_idx_ref):
         return (batch_index, head_index, q_seq_index, 0)
 
-    def kv_index_map(
-        batch_index, head_index, q_seq_index, kv_seq_index, q_idx_ref, k_idx_ref
-    ):
+    def kv_index_map(batch_index, head_index, q_seq_index, kv_seq_index, q_idx_ref, k_idx_ref):
         if causal:
             # If the kv block is skipped, prefetch the next valid kv block, i.e. the
             # 0th one to be used for the next block_q rows.
@@ -1020,9 +1104,7 @@ def _flash_attention_impl(
             next_kv_index = kv_seq_index
         return (batch_index, head_index, next_kv_index, 0)
 
-    def ab_index_map(
-        batch_index, head_index, q_seq_index, kv_seq_index, q_idx_ref, k_idx_ref
-    ):
+    def ab_index_map(batch_index, head_index, q_seq_index, kv_seq_index, q_idx_ref, k_idx_ref):
         if causal:
             should_run = below_or_on_diag(
                 q_seq_index + q_idx_ref[0],
@@ -1066,7 +1148,7 @@ def _flash_attention_impl(
             pl.BlockSpec(lambda *_: (0, 0, 0, 0), acc_scratch.shape),
         ]
     else:
-        assert False
+        assert False  # noqa: B011 - Keeps the assertion semantics under -O.
         out_shape += [None, None, None]
         out_specs += [None, None, None]
 
@@ -1076,19 +1158,11 @@ def _flash_attention_impl(
             pl.BlockSpec(lm_index_map, (block_b, 1, block_q, MIN_BLOCK_SIZE)),
             pl.BlockSpec(lm_index_map, (block_b, 1, block_q, MIN_BLOCK_SIZE)),
         ]
-        l = jax.ShapeDtypeStruct(
-            (batch_size, num_heads, q_seq_len, MIN_BLOCK_SIZE), dtype=jnp.float32
-        )
-        m = jax.ShapeDtypeStruct(
-            (batch_size, num_heads, q_seq_len, MIN_BLOCK_SIZE), dtype=jnp.float32
-        )
+        l = jax.ShapeDtypeStruct((batch_size, num_heads, q_seq_len, MIN_BLOCK_SIZE), dtype=jnp.float32)  # noqa: E741 - Ambiguous upstream name kept as written.
+        m = jax.ShapeDtypeStruct((batch_size, num_heads, q_seq_len, MIN_BLOCK_SIZE), dtype=jnp.float32)
         out_shape = (*out_shape, l, m)
 
-    ab_block_spec = (
-        pl.BlockSpec(ab_index_map, (block_b, block_q, block_k_major))
-        if ab is not None
-        else None
-    )
+    ab_block_spec = pl.BlockSpec(ab_index_map, (block_b, block_q, block_k_major)) if ab is not None else None
 
     if ab is not None:
         ab = ab[:, None].repeat(block_q, axis=1)
@@ -1097,15 +1171,11 @@ def _flash_attention_impl(
     q_segment_ids = kv_segment_ids = None
     if segment_ids is not None:
 
-        def q_segment_ids_index_map(
-            batch_index, head_index, q_seq_index, _, q_idx_ref, k_idx_ref
-        ):
+        def q_segment_ids_index_map(batch_index, head_index, q_seq_index, _, q_idx_ref, k_idx_ref):
             del head_index
             return (batch_index, q_seq_index, 0)
 
-        def kv_segment_ids_index_map(
-            batch_index, head_index, q_seq_index, kv_seq_index, q_idx_ref, k_idx_ref
-        ):
+        def kv_segment_ids_index_map(batch_index, head_index, q_seq_index, kv_seq_index, q_idx_ref, k_idx_ref):
             del head_index
             if causal:
                 next_kv_index = lax.select(
@@ -1122,12 +1192,8 @@ def _flash_attention_impl(
                 next_kv_index = kv_seq_index
             return (batch_index, 0, next_kv_index)
 
-        q_segment_ids_spec = pl.BlockSpec(
-            q_segment_ids_index_map, (block_b, block_q, NUM_LANES)
-        )
-        kv_segment_ids_spec = pl.BlockSpec(
-            kv_segment_ids_index_map, (block_b, NUM_SUBLANES, block_k_major)
-        )
+        q_segment_ids_spec = pl.BlockSpec(q_segment_ids_index_map, (block_b, block_q, NUM_LANES))
+        kv_segment_ids_spec = pl.BlockSpec(kv_segment_ids_index_map, (block_b, NUM_SUBLANES, block_k_major))
 
         q_segment_ids = jax.lax.broadcast_in_dim(
             segment_ids.q,
@@ -1165,9 +1231,7 @@ def _flash_attention_impl(
             num_scalar_prefetch=2, in_specs=in_specs, out_specs=out_specs, grid=grid
         ),
         debug=debug,
-        mosaic_params=dict(
-            dimension_semantics=("parallel", "parallel", "parallel", "arbitrary")
-        ),
+        mosaic_params={"dimension_semantics": ("parallel", "parallel", "parallel", "arbitrary")},
     )(
         q_chunk_idx_start,
         k_chunk_idx_start,
@@ -1182,7 +1246,7 @@ def _flash_attention_impl(
         kv_segment_ids,
     )
     if save_residuals:
-        l, m = (v[..., 0] for v in aux[-2:])
+        l, m = (v[..., 0] for v in aux[-2:])  # noqa: E741 - Ambiguous upstream name kept as written.
         return (o, l, m)
     else:
         return o
@@ -1234,21 +1298,11 @@ def _flash_attention_dkv_kernel(
             start_k = i * block_k
             k = pl.load(k_tile_ref, (0, 0, pl.ds(start_k, block_k), slice(None)))
             v = pl.load(v_tile_ref, (0, 0, pl.ds(start_k, block_k), slice(None)))
-            q = pl.load(
-                q_tile_ref, (0, 0, pl.ds(start_q, block_q), slice(None))
-            )  # [block_q, head_dim]
-            l = pl.load(
-                l_tile_ref, (0, 0, pl.ds(start_q, block_q), slice(None))
-            )  # [block_q, 128]
-            m = pl.load(
-                m_tile_ref, (0, 0, pl.ds(start_q, block_q), slice(None))
-            )  # [block_q, 128]
-            do = pl.load(
-                do_tile_ref, (0, 0, pl.ds(start_q, block_q), slice(None))
-            )  # [block_q, 128]
-            di = pl.load(
-                di_tile_ref, (0, 0, pl.ds(start_q, block_q), slice(None))
-            ).astype(
+            q = pl.load(q_tile_ref, (0, 0, pl.ds(start_q, block_q), slice(None)))  # [block_q, head_dim]
+            l = pl.load(l_tile_ref, (0, 0, pl.ds(start_q, block_q), slice(None)))  # noqa: E741 - Ambiguous upstream name kept as written.  # [block_q, 128]
+            m = pl.load(m_tile_ref, (0, 0, pl.ds(start_q, block_q), slice(None)))  # [block_q, 128]
+            do = pl.load(do_tile_ref, (0, 0, pl.ds(start_q, block_q), slice(None)))  # [block_q, 128]
+            di = pl.load(di_tile_ref, (0, 0, pl.ds(start_q, block_q), slice(None))).astype(
                 jnp.float32
             )  # [block_q, 128]
 
@@ -1278,9 +1332,7 @@ def _flash_attention_dkv_kernel(
                 q_segment_ids = pl.load(
                     q_segment_ids_tile_ref, (0, pl.ds(start_q, block_q), slice(None))
                 )  # [block_q, NUM_LANES].
-                q_segment_ids = pltpu.repeat(
-                    q_segment_ids, repeats, axis=1
-                )  # [block_q, block_k].
+                q_segment_ids = pltpu.repeat(q_segment_ids, repeats, axis=1)  # [block_q, block_k].
                 kv_segment_ids = pl.load(
                     kv_segment_ids_tile_ref, (slice(None), 0, pl.ds(start_k, block_k))
                 )  # [1, block_k].
@@ -1293,36 +1345,23 @@ def _flash_attention_dkv_kernel(
                 col_ids = jax.lax.broadcasted_iota(jnp.int32, mask_shape, 1)
                 col_ids += (kv_seq_index + k_chunk_idx_start) * block_k_major + start_k
                 causal_mask = col_ids <= row_ids
-                mask = (
-                    causal_mask if mask is None else jnp.logical_and(mask, causal_mask)
-                )
+                mask = causal_mask if mask is None else jnp.logical_and(mask, causal_mask)
 
-            capped_logits = (
-                capped_logits
-                if mask is None
-                else capped_logits + jnp.where(mask, 0.0, mask_value)
-            )
+            capped_logits = capped_logits if mask is None else capped_logits + jnp.where(mask, 0.0, mask_value)
 
-            p = jnp.exp(
-                capped_logits - pltpu.repeat(m, block_k // MIN_BLOCK_SIZE, axis=1)
-            )
-            p = p * pltpu.repeat(
-                1 / l, block_k // MIN_BLOCK_SIZE, axis=1
-            )  # [block_q_major, block_k_major]
+            p = jnp.exp(capped_logits - pltpu.repeat(m, block_k // MIN_BLOCK_SIZE, axis=1))
+            p = p * pltpu.repeat(1 / l, block_k // MIN_BLOCK_SIZE, axis=1)  # [block_q_major, block_k_major]
             dv = lax.dot(p.T.astype(do.dtype), do, preferred_element_type=jnp.float32)
             pl.store(
                 dv_scratch_ref,
                 (pl.ds(start_k, block_k), slice(None)),
-                pl.load(dv_scratch_ref, (pl.ds(start_k, block_k), slice(None)))
-                + dv.astype(dv_scratch_ref.dtype),
+                pl.load(dv_scratch_ref, (pl.ds(start_k, block_k), slice(None))) + dv.astype(dv_scratch_ref.dtype),
             )
 
             # di: [block_q, 128]
             # do: [block_q, head_dim]
             # v: [block_k_major, head_dim]
-            dp = lax.dot_general(
-                do, v, TRANS_B_DIM_NUMBERS, preferred_element_type=jnp.float32
-            )
+            dp = lax.dot_general(do, v, TRANS_B_DIM_NUMBERS, preferred_element_type=jnp.float32)
             ds = (dp - pltpu.repeat(di, block_k // MIN_BLOCK_SIZE, axis=1)) * p
 
             if sm_scale != 1.0:
@@ -1334,8 +1373,7 @@ def _flash_attention_dkv_kernel(
             pl.store(
                 dk_scratch_ref,
                 (pl.ds(start_k, block_k), slice(None)),
-                pl.load(dk_scratch_ref, (pl.ds(start_k, block_k), slice(None)))
-                + dk.astype(dk_scratch_ref.dtype),
+                pl.load(dk_scratch_ref, (pl.ds(start_k, block_k), slice(None))) + dk.astype(dk_scratch_ref.dtype),
             )
 
         lax.fori_loop(0, block_k_major // block_k, k_body, None, unroll=True)
@@ -1368,7 +1406,7 @@ def _flash_attention_bwd_dkv(
     v,
     ab,
     segment_ids,
-    l,
+    l,  # noqa: E741 - Ambiguous upstream name kept as written.
     m,
     do,
     di,
@@ -1395,7 +1433,7 @@ def _flash_attention_bwd_dkv(
 
     # Broadcast out scalar values
     m = jnp.broadcast_to(m[..., None], (*m.shape, MIN_BLOCK_SIZE))
-    l = jnp.broadcast_to(l[..., None], (*l.shape, MIN_BLOCK_SIZE))
+    l = jnp.broadcast_to(l[..., None], (*l.shape, MIN_BLOCK_SIZE))  # noqa: E741 - Ambiguous upstream name kept as written.
     # Preprocess contraction for bwd pass
     di = jnp.broadcast_to(di[..., None], (*di.shape, MIN_BLOCK_SIZE))
 
@@ -1408,9 +1446,7 @@ def _flash_attention_bwd_dkv(
         q_seq_len // block_q_major,
     )
 
-    def qo_index_map(
-        batch_index, head_index, kv_seq_index, q_seq_index, q_idx_ref, k_idx_ref
-    ):
+    def qo_index_map(batch_index, head_index, kv_seq_index, q_seq_index, q_idx_ref, k_idx_ref):
         if causal:
             # If the q block is skipped, stay at the 0th q block.
             next_q_index = lax.select(
@@ -1454,27 +1490,19 @@ def _flash_attention_bwd_dkv(
     assert di_spec.block_shape is not None
     assert di.ndim == len(di_spec.block_shape)
 
-    def ab_index_map(
-        batch_index, head_index, kv_seq_index, q_seq_index, q_idx_ref, k_idx_ref
-    ):
+    def ab_index_map(batch_index, head_index, kv_seq_index, q_seq_index, q_idx_ref, k_idx_ref):
         return (batch_index, 0, kv_seq_index)
 
     if ab is not None:
         ab = ab[:, None].repeat(block_q_major, axis=1)
 
-    dab_spec = (
-        pl.BlockSpec(ab_index_map, (1, block_q_major, block_k_major))
-        if ab is not None
-        else None
-    )
+    dab_spec = pl.BlockSpec(ab_index_map, (1, block_q_major, block_k_major)) if ab is not None else None
 
     q_segment_ids_spec = kv_segment_ids_spec = None
     q_segment_ids = kv_segment_ids = None
     if segment_ids is not None:
 
-        def q_segment_ids_index_map(
-            batch_index, head_index, kv_seq_index, q_seq_index, q_idx_ref, k_idx_ref
-        ):
+        def q_segment_ids_index_map(batch_index, head_index, kv_seq_index, q_seq_index, q_idx_ref, k_idx_ref):
             del head_index
             if causal:
                 next_q_index = lax.select(
@@ -1491,18 +1519,12 @@ def _flash_attention_bwd_dkv(
                 next_q_index = q_seq_index
             return (batch_index, next_q_index, 0)
 
-        def kv_segment_ids_index_map(
-            batch_index, head_index, kv_seq_index, _, q_idx_ref, k_idx_ref
-        ):
+        def kv_segment_ids_index_map(batch_index, head_index, kv_seq_index, _, q_idx_ref, k_idx_ref):
             del head_index
             return (batch_index, 0, kv_seq_index)
 
-        q_segment_ids_spec = pl.BlockSpec(
-            q_segment_ids_index_map, (1, block_q_major, NUM_LANES)
-        )
-        kv_segment_ids_spec = pl.BlockSpec(
-            kv_segment_ids_index_map, (1, NUM_SUBLANES, block_k_major)
-        )
+        q_segment_ids_spec = pl.BlockSpec(q_segment_ids_index_map, (1, block_q_major, NUM_LANES))
+        kv_segment_ids_spec = pl.BlockSpec(kv_segment_ids_index_map, (1, NUM_SUBLANES, block_k_major))
 
         q_segment_ids = jax.lax.broadcast_in_dim(
             segment_ids.q,
@@ -1561,9 +1583,7 @@ def _flash_attention_bwd_dkv(
         mask_value=mask_value,
         q_seq_len=q_seq_len,
     )
-    name_scope = (
-        f"flash_mha_bwd_dkv_{block_q_major=}_{block_q=}_{block_k_major=}_{block_k=}"
-    )
+    name_scope = f"flash_mha_bwd_dkv_{block_q_major=}_{block_q=}_{block_k_major=}_{block_k=}"
     with jax.named_scope(name_scope):
         dk, dv, _, _ = pl.pallas_call(
             kernel,
@@ -1572,14 +1592,14 @@ def _flash_attention_bwd_dkv(
                 num_scalar_prefetch=2, in_specs=in_specs, out_specs=out_specs, grid=grid
             ),
             debug=debug,
-            mosaic_params=dict(
-                dimension_semantics=(
+            mosaic_params={
+                "dimension_semantics": (
                     "parallel",
                     "parallel",
                     "parallel",
                     "arbitrary",
                 )
-            ),
+            },
         )(
             q_chunk_idx_start,
             k_chunk_idx_start,
@@ -1646,14 +1666,12 @@ def _flash_attention_dq_kernel(
             v_tile_ref,
             (0, 0, k_slice, slice(None)),
         )  # [block_k, head_dim]
-        l = l_tile_ref[0, 0, :, :]  # [block_q_major, 128]
+        l = l_tile_ref[0, 0, :, :]  # noqa: E741 - Ambiguous upstream name kept as written.  # [block_q_major, 128]
         m = m_tile_ref[0, 0, :, :]  # [block_q_major, 128]
         do = do_tile_ref[0, 0, :, :]  # [block_q_major, head_dim]
         di = di_tile_ref[0, 0, :].astype(jnp.float32)  # [block_q_major, 128]
 
-        capped_logits = jax.lax.dot_general(
-            q, k, TRANS_B_DIM_NUMBERS, preferred_element_type=jnp.float32
-        )
+        capped_logits = jax.lax.dot_general(q, k, TRANS_B_DIM_NUMBERS, preferred_element_type=jnp.float32)
 
         if ab_tile_ref is not None:
             ab = pl.load(
@@ -1669,15 +1687,9 @@ def _flash_attention_dq_kernel(
         if q_segment_ids_tile_ref is not None:
             repeats, rem = divmod(block_k, NUM_LANES)
             if rem:
-                raise NotImplementedError(
-                    f"kv block size must be a multiple of {NUM_LANES}"
-                )
-            q_segment_ids = pltpu.repeat(
-                q_segment_ids_tile_ref[0], repeats, axis=1
-            )  # [block_q, block_k].
-            kv_segment_ids = pl.load(
-                kv_segment_ids_tile_ref, (slice(None), 0, k_slice)
-            )  # [1, block_k].
+                raise NotImplementedError(f"kv block size must be a multiple of {NUM_LANES}")
+            q_segment_ids = pltpu.repeat(q_segment_ids_tile_ref[0], repeats, axis=1)  # [block_q, block_k].
+            kv_segment_ids = pl.load(kv_segment_ids_tile_ref, (slice(None), 0, k_slice))  # [1, block_k].
             mask = jnp.equal(q_segment_ids, kv_segment_ids).astype(jnp.bool_)
 
         if causal:
@@ -1688,16 +1700,10 @@ def _flash_attention_dq_kernel(
             col_ids += (kv_seq_index + k_chunk_idx_start) * block_k_major + i * block_k
             causal_mask = col_ids <= row_ids
             mask = causal_mask if mask is None else jnp.logical_and(mask, causal_mask)
-        capped_logits = (
-            capped_logits
-            if mask is None
-            else capped_logits + jnp.where(mask, 0.0, mask_value)
-        )
+        capped_logits = capped_logits if mask is None else capped_logits + jnp.where(mask, 0.0, mask_value)
 
         p = jnp.exp(capped_logits - pltpu.repeat(m, block_k // MIN_BLOCK_SIZE, axis=1))
-        p = p * pltpu.repeat(
-            1 / l, block_k // MIN_BLOCK_SIZE, axis=1
-        )  # [block_q_major, block_k]
+        p = p * pltpu.repeat(1 / l, block_k // MIN_BLOCK_SIZE, axis=1)  # [block_q_major, block_k]
 
         # di: [block_q_major, 128]
         # do: [block_q_major, head_dim]
@@ -1763,7 +1769,7 @@ def _flash_attention_bwd_dq(
     v,
     ab,
     segment_ids,
-    l,
+    l,  # noqa: E741 - Ambiguous upstream name kept as written.
     m,
     do,
     di,
@@ -1788,7 +1794,7 @@ def _flash_attention_bwd_dq(
 
     # Broadcast out scalar values
     m = jnp.broadcast_to(m[..., None], (*m.shape, MIN_BLOCK_SIZE))
-    l = jnp.broadcast_to(l[..., None], (*l.shape, MIN_BLOCK_SIZE))
+    l = jnp.broadcast_to(l[..., None], (*l.shape, MIN_BLOCK_SIZE))  # noqa: E741 - Ambiguous upstream name kept as written.
     # Preprocess contraction for bwd pass
     di = jnp.broadcast_to(di[..., None], (*di.shape, block_k_major))
 
@@ -1805,9 +1811,7 @@ def _flash_attention_bwd_dq(
     qo_spec = pl.BlockSpec(qo_index_map, (1, 1, block_q_major, head_dim))
     do_spec = qo_spec
 
-    def kv_index_map(
-        batch_index, head_index, q_seq_index, kv_seq_index, q_idx_ref, k_idx_ref
-    ):
+    def kv_index_map(batch_index, head_index, q_seq_index, kv_seq_index, q_idx_ref, k_idx_ref):
         if causal:
             # If the kv block is skipped, prefetch the next valid kv block, i.e. the
             # 0th one to be used for the next block_q rows.
@@ -1842,33 +1846,23 @@ def _flash_attention_bwd_dq(
     assert di_spec.block_shape is not None
     assert di.ndim == len(di_spec.block_shape)
 
-    def ab_index_map(
-        batch_index, head_index, q_seq_index, kv_seq_index, q_idx_ref, k_idx_ref
-    ):
+    def ab_index_map(batch_index, head_index, q_seq_index, kv_seq_index, q_idx_ref, k_idx_ref):
         return (batch_index, 0, kv_seq_index)
 
     if ab is not None:
         ab = ab[:, None].repeat(block_q_major, axis=1)
 
-    dab_spec = (
-        pl.BlockSpec(ab_index_map, (1, block_q_major, block_k_major))
-        if ab is not None
-        else None
-    )
+    dab_spec = pl.BlockSpec(ab_index_map, (1, block_q_major, block_k_major)) if ab is not None else None
 
     q_segment_ids_spec = kv_segment_ids_spec = None
     q_segment_ids = kv_segment_ids = None
     if segment_ids is not None:
 
-        def q_segment_ids_index_map(
-            batch_index, head_index, q_seq_index, _, q_idx_ref, k_idx_ref
-        ):
+        def q_segment_ids_index_map(batch_index, head_index, q_seq_index, _, q_idx_ref, k_idx_ref):
             del head_index
             return (batch_index, q_seq_index, 0)
 
-        def kv_segment_ids_index_map(
-            batch_index, head_index, q_seq_index, kv_seq_index, q_idx_ref, k_idx_ref
-        ):
+        def kv_segment_ids_index_map(batch_index, head_index, q_seq_index, kv_seq_index, q_idx_ref, k_idx_ref):
             del head_index
             if causal:
                 # If the kv block is skipped, prefetch the next valid kv block, i.e. the
@@ -1887,12 +1881,8 @@ def _flash_attention_bwd_dq(
                 next_kv_index = kv_seq_index
             return (batch_index, 0, next_kv_index)
 
-        q_segment_ids_spec = pl.BlockSpec(
-            q_segment_ids_index_map, (1, block_q_major, NUM_LANES)
-        )
-        kv_segment_ids_spec = pl.BlockSpec(
-            kv_segment_ids_index_map, (1, NUM_SUBLANES, block_k_major)
-        )
+        q_segment_ids_spec = pl.BlockSpec(q_segment_ids_index_map, (1, block_q_major, NUM_LANES))
+        kv_segment_ids_spec = pl.BlockSpec(kv_segment_ids_index_map, (1, NUM_SUBLANES, block_k_major))
 
         q_segment_ids = jax.lax.broadcast_in_dim(
             segment_ids.q,
@@ -1953,14 +1943,14 @@ def _flash_attention_bwd_dq(
                 num_scalar_prefetch=2, in_specs=in_specs, out_specs=out_specs, grid=grid
             ),
             debug=debug,
-            mosaic_params=dict(
-                dimension_semantics=(
+            mosaic_params={
+                "dimension_semantics": (
                     "parallel",
                     "parallel",
                     "parallel",
                     "arbitrary",
                 )
-            ),
+            },
         )(
             q_chunk_idx_start,
             k_chunk_idx_start,
@@ -1981,10 +1971,6 @@ def _flash_attention_bwd_dq(
 
 def _verify_block(block_name, dim_name, block, dim, should_divide=True):
     if block > dim:
-        raise ValueError(
-            f"{block_name}={block} should be smaller or equal to {dim_name}={dim}"
-        )
+        raise ValueError(f"{block_name}={block} should be smaller or equal to {dim_name}={dim}")
     if should_divide and dim % block != 0:
-        raise ValueError(
-            f"{dim_name}={dim} should be divisible by {block_name}={block}"
-        )
+        raise ValueError(f"{dim_name}={dim} should be divisible by {block_name}={block}")

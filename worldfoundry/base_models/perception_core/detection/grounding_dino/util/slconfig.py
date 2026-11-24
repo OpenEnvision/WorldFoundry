@@ -1,16 +1,9 @@
 # ==========================================================
 # Modified from mmcv
 # ==========================================================
-"""Module for base_models -> perception_core -> detection -> grounding_dino -> util -> slconfig.py functionality."""
-
 import ast
-import os
 import os.path as osp
-import shutil
-import sys
-import tempfile
 from argparse import Action
-from importlib import import_module
 
 from addict import Dict
 from yapf.yapflib.yapf_api import FormatCode
@@ -21,36 +14,19 @@ RESERVED_KEYS = ["filename", "text", "pretty_text", "get", "dump", "merge_from_d
 
 
 def check_file_exist(filename, msg_tmpl='file "{}" does not exist'):
-    """Check file exist.
-
-    Args:
-        filename: The filename.
-        msg_tmpl: The msg tmpl.
-    """
     if not osp.isfile(filename):
         raise FileNotFoundError(msg_tmpl.format(filename))
 
 
 class ConfigDict(Dict):
-    """Config dict implementation."""
     def __missing__(self, name):
-        """Missing.
-
-        Args:
-            name: The name.
-        """
         raise KeyError(name)
 
     def __getattr__(self, name):
-        """Getattr.
-
-        Args:
-            name: The name.
-        """
         try:
-            value = super(ConfigDict, self).__getattr__(name)
+            value = super().__getattr__(name)
         except KeyError:
-            ex = AttributeError(f"'{self.__class__.__name__}' object has no " f"attribute '{name}'")
+            ex = AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
         except Exception as e:
             ex = e
         else:
@@ -58,7 +34,7 @@ class ConfigDict(Dict):
         raise ex
 
 
-class SLConfig(object):
+class SLConfig:
     """
     config files.
     only support .py file as config now.
@@ -85,55 +61,60 @@ class SLConfig(object):
 
     @staticmethod
     def _validate_py_syntax(filename):
-        """Helper function to validate py syntax.
-
-        Args:
-            filename: The filename.
-        """
         with open(filename) as f:
             content = f.read()
         try:
             ast.parse(content)
         except SyntaxError:
-            raise SyntaxError("There are syntax errors in config " f"file {filename}")
+            raise SyntaxError(f"There are syntax errors in config file {filename}")  # noqa: B904 - Keeps the implicit exception context.
+
+    @staticmethod
+    def _literal_assignments(filename):
+        """Read a Python config file made of literal top-level assignments without executing it.
+
+        Args:
+            filename: Path to a ``.py`` config whose statements are ``name = <literal>``.
+
+        Returns:
+            Mapping of the assigned names, excluding dunder names, to their literal values.
+
+        Raises:
+            ValueError: If the file contains a statement other than a docstring or a literal assignment.
+        """
+        with open(filename, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=filename)
+        cfg_dict = {}
+        for node in tree.body:
+            if (
+                isinstance(node, ast.Expr)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                continue
+            if not (isinstance(node, ast.Assign) and all(isinstance(target, ast.Name) for target in node.targets)):
+                raise ValueError(f"{filename}:{node.lineno}: config files may only assign literal values to names")
+            value = ast.literal_eval(node.value)
+            for target in node.targets:
+                if not target.id.startswith("__"):
+                    cfg_dict[target.id] = value
+        return cfg_dict
 
     @staticmethod
     def _file2dict(filename):
-        """Helper function to file2dict.
-
-        Args:
-            filename: The filename.
-        """
         filename = osp.abspath(osp.expanduser(filename))
         check_file_exist(filename)
         if filename.lower().endswith(".py"):
-            with tempfile.TemporaryDirectory() as temp_config_dir:
-                temp_config_file = tempfile.NamedTemporaryFile(dir=temp_config_dir, suffix=".py")
-                temp_config_name = osp.basename(temp_config_file.name)
-                if os.name == 'nt':
-                    temp_config_file.close()
-                shutil.copyfile(filename, osp.join(temp_config_dir, temp_config_name))
-                temp_module_name = osp.splitext(temp_config_name)[0]
-                sys.path.insert(0, temp_config_dir)
-                SLConfig._validate_py_syntax(filename)
-                mod = import_module(temp_module_name)
-                sys.path.pop(0)
-                cfg_dict = {
-                    name: value for name, value in mod.__dict__.items() if not name.startswith("__")
-                }
-                # delete imported module
-                del sys.modules[temp_module_name]
-                # close temp file
-                temp_config_file.close()
+            SLConfig._validate_py_syntax(filename)
+            cfg_dict = SLConfig._literal_assignments(filename)
         elif filename.lower().endswith((".yml", ".yaml", ".json")):
             from .slio import slload
 
             cfg_dict = slload(filename)
         else:
-            raise IOError("Only py/yml/yaml/json type are supported now!")
+            raise OSError("Only py/yml/yaml/json type are supported now!")
 
         cfg_text = filename + "\n"
-        with open(filename, "r") as f:
+        with open(filename) as f:
             cfg_text += f.read()
 
         # parse the base file
@@ -142,14 +123,14 @@ class SLConfig(object):
             base_filename = cfg_dict.pop(BASE_KEY)
             base_filename = base_filename if isinstance(base_filename, list) else [base_filename]
 
-            cfg_dict_list = list()
-            cfg_text_list = list()
+            cfg_dict_list = []
+            cfg_text_list = []
             for f in base_filename:
                 _cfg_dict, _cfg_text = SLConfig._file2dict(osp.join(cfg_dir, f))
                 cfg_dict_list.append(_cfg_dict)
                 cfg_text_list.append(_cfg_text)
 
-            base_cfg_dict = dict()
+            base_cfg_dict = {}
             for c in cfg_dict_list:
                 if len(base_cfg_dict.keys() & c.keys()) > 0:
                     raise KeyError("Duplicate key is not allowed among bases")
@@ -185,7 +166,6 @@ class SLConfig(object):
         b = b.copy()
         for k, v in a.items():
             if isinstance(v, dict) and k in b and not v.pop(DELETE_KEY, False):
-
                 if not isinstance(b[k], dict) and not isinstance(b[k], list):
                     # if :
                     # import ipdb; ipdb.set_trace()
@@ -199,10 +179,8 @@ class SLConfig(object):
             elif isinstance(b, list):
                 try:
                     _ = int(k)
-                except:
-                    raise TypeError(
-                        f"b is a list, " f"index {k} should be an int when input but {type(k)}"
-                    )
+                except BaseException:
+                    raise TypeError(f"b is a list, index {k} should be an int when input but {type(k)}")  # noqa: B904 - Keeps the implicit exception context.
                 b[int(k)] = SLConfig._merge_a_into_b(v, b[int(k)])
             else:
                 b[k] = v
@@ -211,64 +189,42 @@ class SLConfig(object):
 
     @staticmethod
     def fromfile(filename):
-        """Fromfile.
-
-        Args:
-            filename: The filename.
-        """
         cfg_dict, cfg_text = SLConfig._file2dict(filename)
         return SLConfig(cfg_dict, cfg_text=cfg_text, filename=filename)
 
     def __init__(self, cfg_dict=None, cfg_text=None, filename=None):
-        """Init.
-
-        Args:
-            cfg_dict: The cfg dict.
-            cfg_text: The cfg text.
-            filename: The filename.
-        """
         if cfg_dict is None:
-            cfg_dict = dict()
+            cfg_dict = {}
         elif not isinstance(cfg_dict, dict):
-            raise TypeError("cfg_dict must be a dict, but " f"got {type(cfg_dict)}")
+            raise TypeError(f"cfg_dict must be a dict, but got {type(cfg_dict)}")
         for key in cfg_dict:
             if key in RESERVED_KEYS:
                 raise KeyError(f"{key} is reserved for config file")
 
-        super(SLConfig, self).__setattr__("_cfg_dict", ConfigDict(cfg_dict))
-        super(SLConfig, self).__setattr__("_filename", filename)
+        super().__setattr__("_cfg_dict", ConfigDict(cfg_dict))
+        super().__setattr__("_filename", filename)
         if cfg_text:
             text = cfg_text
         elif filename:
-            with open(filename, "r") as f:
+            with open(filename) as f:
                 text = f.read()
         else:
             text = ""
-        super(SLConfig, self).__setattr__("_text", text)
+        super().__setattr__("_text", text)
 
     @property
     def filename(self):
-        """Filename."""
         return self._filename
 
     @property
     def text(self):
-        """Text."""
         return self._text
 
     @property
     def pretty_text(self):
-        """Pretty text."""
-
         indent = 4
 
         def _indent(s_, num_spaces):
-            """Helper function to indent.
-
-            Args:
-                s_: The s.
-                num_spaces: The num spaces.
-            """
             s = s_.split("\n")
             if len(s) == 1:
                 return s_
@@ -279,69 +235,39 @@ class SLConfig(object):
             return s
 
         def _format_basic_types(k, v, use_mapping=False):
-            """Helper function to format basic types.
-
-            Args:
-                k: The k.
-                v: The v.
-                use_mapping: The use mapping.
-            """
-            if isinstance(v, str):
-                v_str = f"'{v}'"
-            else:
-                v_str = str(v)
+            v_str = f"'{v}'" if isinstance(v, str) else str(v)
 
             if use_mapping:
                 k_str = f"'{k}'" if isinstance(k, str) else str(k)
                 attr_str = f"{k_str}: {v_str}"
             else:
-                attr_str = f"{str(k)}={v_str}"
+                attr_str = f"{k!s}={v_str}"
             attr_str = _indent(attr_str, indent)
 
             return attr_str
 
         def _format_list(k, v, use_mapping=False):
-            """Helper function to format list.
-
-            Args:
-                k: The k.
-                v: The v.
-                use_mapping: The use mapping.
-            """
             # check if all items in the list are dict
             if all(isinstance(_, dict) for _ in v):
                 v_str = "[\n"
-                v_str += "\n".join(
-                    f"dict({_indent(_format_dict(v_), indent)})," for v_ in v
-                ).rstrip(",")
+                v_str += "\n".join(f"dict({_indent(_format_dict(v_), indent)})," for v_ in v).rstrip(",")
                 if use_mapping:
                     k_str = f"'{k}'" if isinstance(k, str) else str(k)
                     attr_str = f"{k_str}: {v_str}"
                 else:
-                    attr_str = f"{str(k)}={v_str}"
+                    attr_str = f"{k!s}={v_str}"
                 attr_str = _indent(attr_str, indent) + "]"
             else:
                 attr_str = _format_basic_types(k, v, use_mapping)
             return attr_str
 
         def _contain_invalid_identifier(dict_str):
-            """Helper function to contain invalid identifier.
-
-            Args:
-                dict_str: The dict str.
-            """
             contain_invalid_identifier = False
             for key_name in dict_str:
                 contain_invalid_identifier |= not str(key_name).isidentifier()
             return contain_invalid_identifier
 
         def _format_dict(input_dict, outest_level=False):
-            """Helper function to format dict.
-
-            Args:
-                input_dict: The input dict.
-                outest_level: The outest level.
-            """
             r = ""
             s = []
 
@@ -357,7 +283,7 @@ class SLConfig(object):
                         k_str = f"'{k}'" if isinstance(k, str) else str(k)
                         attr_str = f"{k_str}: dict({v_str}"
                     else:
-                        attr_str = f"{str(k)}=dict({v_str}"
+                        attr_str = f"{k!s}=dict({v_str}"
                     attr_str = _indent(attr_str, indent) + ")" + end
                 elif isinstance(v, list):
                     attr_str = _format_list(k, v, use_mapping) + end
@@ -373,29 +299,22 @@ class SLConfig(object):
         cfg_dict = self._cfg_dict.to_dict()
         text = _format_dict(cfg_dict, outest_level=True)
         # copied from setup.cfg
-        yapf_style = dict(
-            based_on_style="pep8",
-            blank_line_before_nested_class_or_def=True,
-            split_before_expression_after_opening_paren=True,
-        )
+        yapf_style = {
+            "based_on_style": "pep8",
+            "blank_line_before_nested_class_or_def": True,
+            "split_before_expression_after_opening_paren": True,
+        }
         text, _ = FormatCode(text, style_config=yapf_style, verify=True)
 
         return text
 
     def __repr__(self):
-        """Repr."""
         return f"Config (path: {self.filename}): {self._cfg_dict.__repr__()}"
 
     def __len__(self):
-        """Len."""
         return len(self._cfg_dict)
 
     def __getattr__(self, name):
-        """Getattr.
-
-        Args:
-            name: The name.
-        """
         # # debug
         # print('+'*15)
         # print('name=%s' % name)
@@ -409,45 +328,22 @@ class SLConfig(object):
         return getattr(self._cfg_dict, name)
 
     def __getitem__(self, name):
-        """Getitem.
-
-        Args:
-            name: The name.
-        """
         return self._cfg_dict.__getitem__(name)
 
     def __setattr__(self, name, value):
-        """Setattr.
-
-        Args:
-            name: The name.
-            value: The value.
-        """
         if isinstance(value, dict):
             value = ConfigDict(value)
         self._cfg_dict.__setattr__(name, value)
 
     def __setitem__(self, name, value):
-        """Setitem.
-
-        Args:
-            name: The name.
-            value: The value.
-        """
         if isinstance(value, dict):
             value = ConfigDict(value)
         self._cfg_dict.__setitem__(name, value)
 
     def __iter__(self):
-        """Iter."""
         return iter(self._cfg_dict)
 
     def dump(self, file=None):
-        """Dump.
-
-        Args:
-            file: The file.
-        """
         # import ipdb; ipdb.set_trace()
         if file is None:
             return self.pretty_text
@@ -482,26 +378,17 @@ class SLConfig(object):
             subkey = key_list[-1]
             d[subkey] = v
 
-        cfg_dict = super(SLConfig, self).__getattribute__("_cfg_dict")
-        super(SLConfig, self).__setattr__(
-            "_cfg_dict", SLConfig._merge_a_into_b(option_cfg_dict, cfg_dict)
-        )
+        cfg_dict = super().__getattribute__("_cfg_dict")
+        super().__setattr__("_cfg_dict", SLConfig._merge_a_into_b(option_cfg_dict, cfg_dict))
 
     # for multiprocess
     def __setstate__(self, state):
-        """Setstate.
-
-        Args:
-            state: The state.
-        """
         self.__init__(state)
 
     def copy(self):
-        """Copy."""
         return SLConfig(self._cfg_dict.copy())
 
     def deepcopy(self):
-        """Deepcopy."""
         return SLConfig(self._cfg_dict.deepcopy())
 
 
@@ -514,11 +401,6 @@ class DictAction(Action):
 
     @staticmethod
     def _parse_int_float_bool(val):
-        """Helper function to parse int float bool.
-
-        Args:
-            val: The val.
-        """
         try:
             return int(val)
         except ValueError:
@@ -528,20 +410,12 @@ class DictAction(Action):
         except ValueError:
             pass
         if val.lower() in ["true", "false"]:
-            return True if val.lower() == "true" else False
+            return val.lower() == "true"
         if val.lower() in ["none", "null"]:
             return None
         return val
 
     def __call__(self, parser, namespace, values, option_string=None):
-        """Call.
-
-        Args:
-            parser: The parser.
-            namespace: The namespace.
-            values: The values.
-            option_string: The option string.
-        """
         options = {}
         for kv in values:
             key, val = kv.split("=", maxsplit=1)

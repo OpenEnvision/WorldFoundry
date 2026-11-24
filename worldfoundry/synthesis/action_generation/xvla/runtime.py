@@ -7,11 +7,11 @@ robot/simulator clients are never consulted at runtime.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.core.io.paths import resolve_local_hf_model_path, resolve_worldfoundry_path
-from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     collect_images,
     completed_action_result,
@@ -20,6 +20,7 @@ from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     option_int,
     runtime_options_cache_key,
 )
+from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
 
 _DATA_CONFIG = load_vla_va_wam_runtime_config("xvla")
 _REQUIRED_CHECKPOINT_FILES = tuple(str(item) for item in _DATA_CONFIG["required_checkpoint_files"])
@@ -75,7 +76,7 @@ class XVLARuntime:
         from transformers import AutoImageProcessor, BartTokenizerFast
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .configuration import XVLAConfig
         from .modeling import XVLA
@@ -191,15 +192,12 @@ class XVLARuntime:
             raise ValueError(f"X-VLA runtime expects one proprio vector, got {tuple(proprio.shape)}")
         if int(proprio.shape[-1]) != expected_proprio:
             raise ValueError(
-                f"X-VLA {model.action_mode} expects {expected_proprio} proprio values, "
-                f"got {proprio.shape[-1]}"
+                f"X-VLA {model.action_mode} expects {expected_proprio} proprio values, got {proprio.shape[-1]}"
             )
 
         domain_id = int(self.config.domain_id)
         if domain_id < 0 or domain_id >= int(model.config.num_domains):
-            raise ValueError(
-                f"domain_id must be in [0, {model.config.num_domains}), got {domain_id}"
-            )
+            raise ValueError(f"domain_id must be in [0, {model.config.num_domains}), got {domain_id}")
         model_inputs: dict[str, torch.Tensor] = {}
         for key, value in inputs.items():
             if value.is_floating_point():
@@ -212,10 +210,14 @@ class XVLARuntime:
 
         set_seed_everywhere(int(self.config.seed))
         with torch.inference_mode():
-            action = model.generate_actions(
-                **model_inputs,
-                steps=int(self.config.denoising_steps),
-            )[0].float().cpu()
+            action = (
+                model.generate_actions(
+                    **model_inputs,
+                    steps=int(self.config.denoising_steps),
+                )[0]
+                .float()
+                .cpu()
+            )
         return completed_action_result(
             model_id="xvla",
             instruction=instruction,

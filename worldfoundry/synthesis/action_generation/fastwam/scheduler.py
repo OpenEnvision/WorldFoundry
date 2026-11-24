@@ -49,9 +49,7 @@ class WanContinuousFlowMatchScheduler:
         return weight
 
     def add_noise(self, original_samples: torch.Tensor, noise: torch.Tensor, timestep: torch.Tensor) -> torch.Tensor:
-        sigma = (timestep / float(self.num_train_timesteps)).to(
-            original_samples.device, dtype=original_samples.dtype
-        )
+        sigma = (timestep / float(self.num_train_timesteps)).to(original_samples.device, dtype=original_samples.dtype)
         if sigma.ndim == 0:
             return (1 - sigma) * original_samples + sigma * noise
         sigma = sigma.view(-1, *([1] * (original_samples.ndim - 1)))

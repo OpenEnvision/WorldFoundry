@@ -8,10 +8,10 @@ from worldfoundry.base_models.diffusion_model.recipes.sana_variants import SANA_
 from worldfoundry.studio.inference.catalog import (
     SANA_DEFAULT_IMAGE_VARIANT_ID,
     STUDIO_HIDDEN_CATALOG_MODEL_IDS,
-    _sana_folded_studio_model_ids,
     find_entry,
 )
-from worldfoundry.studio.serving.workspace import _model_payload
+from worldfoundry.studio.inference.catalog.params import _sana_folded_studio_model_ids
+from worldfoundry.studio.workspace.app import _model_payload
 
 
 def test_folded_sana_checkpoints_are_hidden_from_studio_rows() -> None:

@@ -5,19 +5,22 @@ It wraps the underlying WorldFM runtime to provide a standardized interface
 for generating visual content based on frame conditions, integrating it
 into a broader synthesis framework.
 """
+
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any
 
 import torch
 
-from ...base_synthesis import BaseSynthesis
 from worldfoundry.synthesis.visual_generation.worldfm.runtime import (
     WorldFMRuntime,
     load_worldfm_runtime,
 )
 from worldfoundry.synthesis.visual_generation.worldfm.worldfm_runtime import DEFAULT_WORLDFM_REPO
+
+from ...base_synthesis import BaseSynthesis
 
 
 class WorldFMSynthesis(BaseSynthesis):
@@ -52,11 +55,11 @@ class WorldFMSynthesis(BaseSynthesis):
     @classmethod
     def _resolve_assets(
         cls,
-        checkpoint_source: Optional[str],
-        vae_source: Optional[str],
+        checkpoint_source: str | None,
+        vae_source: str | None,
         *,
         step: int,
-        checkpoint_filename: Optional[str],
+        checkpoint_filename: str | None,
     ) -> tuple[str, str]:
         """
         Resolves asset paths for the WorldFM model.
@@ -88,16 +91,16 @@ class WorldFMSynthesis(BaseSynthesis):
         cls,
         pretrained_model_path: str = DEFAULT_WORLDFM_REPO,
         args: Any = None,
-        device: Optional[str] = None,
-        vae_path: Optional[str] = None,
-        checkpoint_filename: Optional[str] = None,
+        device: str | None = None,
+        vae_path: str | None = None,
+        checkpoint_filename: str | None = None,
         step: int = 2,
         image_size: int = 512,
         version: str = "sigma",
         cfg_scale: float = 4.5,
-        weight_dtype: Optional[torch.dtype] = None,
+        weight_dtype: torch.dtype | None = None,
         **kwargs: Any,
-    ) -> "WorldFMSynthesis":
+    ) -> WorldFMSynthesis:
         """
         Loads a pre-trained WorldFM model and initializes the synthesis adapter.
 
@@ -153,12 +156,12 @@ class WorldFMSynthesis(BaseSynthesis):
     def predict(
         self,
         frame_conditions: Sequence[dict[str, Any]],
-        output_dir: Optional[str | Path] = None,
+        output_dir: str | Path | None = None,
         scene_name: str = "worldfm_scene",
         save_mode: str = "video",
         fps: int = 30,
         return_dict: bool = True,
-        seed: Optional[int] = None,
+        seed: int | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | list[Any]:
         """

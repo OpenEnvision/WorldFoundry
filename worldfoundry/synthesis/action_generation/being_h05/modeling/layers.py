@@ -2,20 +2,18 @@
 # Copyright (c) 2026 BeingBeyond Ltd. and/or its affiliates.
 # SPDX-License-Identifier: Apache-2.0
 
-import math
 
-import numpy as np
 import torch
 from torch import nn
-from typing import Any
-import torch.nn.functional as F
-from transformers.activations import ACT2FN
+
+from worldfoundry.base_models.diffusion_model.models.autoencoders.lvdm.blocks import nonlinearity as swish
 
 
 class ProprioProjector(nn.Module):
     """
     Projects proprio state inputs into the LLM's embedding space.
     """
+
     def __init__(self, llm_dim: int, max_state_dim: int) -> None:
         super().__init__()
         self.llm_dim = llm_dim
@@ -35,122 +33,6 @@ class ProprioProjector(nn.Module):
         return projected_features
 
 
-class SinusoidalPositionalEncoding(nn.Module):
-    """
-    Sine- and cosine-based positional encoding that produces embeddings of a batch of timesteps.
-
-    For example, at train time, the input might be a batch of 32 randomly sampled diffusion timesteps -> shape (32,)
-    Then the output would be a batch of 32 timestep embeddings -> shape (32, D)
-
-    Adapted from: https://github.com/real-stanford/diffusion_policy/blob/main/diffusion_policy/model/diffusion/positional_embedding.py
-    """
-
-    def __init__(self, dim):
-        super().__init__()
-        self.dim = dim  # dimensionality of the positional encoding
-
-    def forward(self, x):
-        # x: (batch_size,)
-        device = x.device
-        assert self.dim % 2 == 0, f"# dimensions must be even but got {self.dim}"
-        half_dim = self.dim // 2
-        exponent = torch.arange(half_dim, device=device) * -math.log(10000) / (half_dim - 1)  # shape: (D/2,)
-        emb = torch.exp(exponent)  # shape: (D/2,)
-        emb = x[:, None] * emb[None, :]  # shape: (batch_size, 1) * (1, D/2) -> (batch_size, D/2)
-        emb = torch.cat((emb.sin(), emb.cos()), dim=-1)  # shape: (batch_size, D)
-        return emb
-
-class FlowMatchingHead(nn.Module):
-    def __init__(self, condition_dim: int, action_dim: int, hidden_dim: int):
-        super().__init__()
-        self.action_dim = action_dim
-
-        self.time_encoder = SinusoidalPositionalEncoding(dim=hidden_dim)
-
-        # 1. Define fusion layer
-        # Input dimension is the sum of three feature dimensions: condition + action + time
-        fusion_input_dim = condition_dim + action_dim + hidden_dim
-        self.fusion_layer = nn.Linear(fusion_input_dim, hidden_dim)
-
-        # 2. Core network
-        self.model = nn.Sequential(
-            nn.ReLU(),  # Apply activation immediately after fusion
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, action_dim)
-        )
-
-        # (Optional but recommended) Add layer normalization after fusion to stabilize training
-        self.layer_norm = nn.LayerNorm(hidden_dim)
-
-    def forward(self, noisy_action: torch.Tensor, time: torch.Tensor, condition: torch.Tensor) -> torch.Tensor:
-        # 1. Encode timestep t
-        time_embed = self.time_encoder(time).to(noisy_action.dtype).to(noisy_action.device)
-
-        if noisy_action.ndim == 3 and time_embed.ndim == 2:
-            time_embed = time_embed.unsqueeze(1).expand(-1, noisy_action.shape[1], -1)
-
-        # 2. Concatenate all features
-        # Note: Here we directly use the original noisy_action and condition without pre-projection
-        concatenated_features = torch.cat([condition, noisy_action, time_embed], dim=-1)
-
-        # 3. Project and fuse through the fusion layer
-        fused_features = self.fusion_layer(concatenated_features)
-
-        # (Optional but recommended) Apply layer normalization
-        fused_features = self.layer_norm(fused_features)
-
-        # 4. Predict through the core network
-        predicted_velocity = self.model(fused_features)
-
-        return predicted_velocity
-
-class MLPResNetBlock(nn.Module):
-    """One MLP ResNet block with a residual connection."""
-    def __init__(self, dim):
-        super().__init__()
-        self.dim = dim
-        self.ffn = nn.Sequential(  # feedforward network, similar to the ones in Transformers
-            nn.LayerNorm(dim),
-            nn.Linear(dim, dim),
-            nn.ReLU(),
-        )
-
-    def forward(self, x):
-        # x: (batch_size, hidden_dim)
-        # We follow the module ordering of "Pre-Layer Normalization" feedforward networks in Transformers as
-        # described here: https://arxiv.org/pdf/2002.04745.pdf
-        identity = x
-        x = self.ffn(x)
-        x = x + identity
-        return x
-
-
-class MLPResNet(nn.Module):
-    """MLP with residual connection blocks."""
-    def __init__(self, num_blocks, input_dim, hidden_dim, output_dim):
-        super().__init__()
-        self.layer_norm1 = nn.LayerNorm(input_dim)
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.relu = nn.ReLU()
-        self.mlp_resnet_blocks = nn.ModuleList()
-        for _ in range(num_blocks):
-            self.mlp_resnet_blocks.append(MLPResNetBlock(dim=hidden_dim))
-        self.layer_norm2 = nn.LayerNorm(hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, x):
-        # x: (batch_size, input_dim)
-        x = self.layer_norm1(x)  # shape: (batch_size, input_dim)
-        x = self.fc1(x)  # shape: (batch_size, hidden_dim)
-        x = self.relu(x)  # shape: (batch_size, hidden_dim)
-        for block in self.mlp_resnet_blocks:
-            x = block(x)  # shape: (batch_size, hidden_dim)
-        x = self.layer_norm2(x)  # shape: (batch_size, hidden_dim)
-        x = self.fc2(x)  # shape: (batch_size, output_dim)
-        return x
-
-
 class InternVLConnector(nn.Module):
     def __init__(self, llm_hidden_size, vit_hidden_size, downsample_ratio):
         super().__init__()
@@ -159,7 +41,7 @@ class InternVLConnector(nn.Module):
             nn.LayerNorm(vit_hidden_size * int(1 / self.downsample_ratio) ** 2),
             nn.Linear(vit_hidden_size * int(1 / self.downsample_ratio) ** 2, llm_hidden_size),
             nn.GELU(),
-            nn.Linear(llm_hidden_size, llm_hidden_size)
+            nn.Linear(llm_hidden_size, llm_hidden_size),
         )
 
     def init_weights(self, state_dict, logger):
@@ -174,11 +56,6 @@ class InternVLConnector(nn.Module):
 
     def forward(self, x):
         return self.mlp1(x)
-
-
-
-def swish(x):
-    return x * torch.sigmoid(x)
 
 
 class SinusoidalPositionalEncoding(nn.Module):
@@ -208,6 +85,7 @@ class SinusoidalPositionalEncoding(nn.Module):
 
         return enc
 
+
 class CategorySpecificLinear(nn.Module):
     def __init__(self, num_categories, input_dim, hidden_dim):
         super().__init__()
@@ -229,18 +107,6 @@ class CategorySpecificLinear(nn.Module):
             output = output.squeeze(1)
 
         return output
-
-
-class CategorySpecificMLP(nn.Module):
-    def __init__(self, num_categories, input_dim, hidden_dim, output_dim):
-        super().__init__()
-        self.num_categories = num_categories
-        self.layer1 = CategorySpecificLinear(num_categories, input_dim, hidden_dim)
-        self.layer2 = CategorySpecificLinear(num_categories, hidden_dim, output_dim)
-
-    def forward(self, x, cat_ids):
-        hidden = F.relu(self.layer1(x, cat_ids))
-        return self.layer2(hidden, cat_ids)
 
 
 class MultiEmbodimentActionEncoder(nn.Module):
@@ -283,34 +149,11 @@ class MultiEmbodimentActionEncoder(nn.Module):
         return x
 
 
-class SimpleMLP(nn.Module):
-    """
-    A simple two-layer MLP using standard torch.nn.Linear layers.
-    This is the standard version of CategorySpecificMLP.
-    """
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super().__init__()
-        # Use standard linear layers where all inputs share the same weights
-        self.layer1 = nn.Linear(input_dim, hidden_dim)
-        self.layer2 = nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, x):
-        """
-        Args:
-            x (torch.Tensor): Input tensor, shape can be (B, D_in) or (B, T, D_in).
-
-        Returns:
-            torch.Tensor: Output tensor, shape is (B, D_out) or (B, T, D_out).
-        """
-        # No longer requires cat_ids parameter
-        hidden = F.relu(self.layer1(x))
-        return self.layer2(hidden)
-
-
 class ActionEncoder(nn.Module):
     """
     Action encoder for Flow Matching.
     """
+
     def __init__(self, action_dim, hidden_size):
         super().__init__()
         self.hidden_size = hidden_size
@@ -400,6 +243,7 @@ class ActionEncoder(nn.Module):
 # MPG: Manifold-Preserving Gating Enhancement Module
 # =============================================================================
 
+
 class SlicedWassersteinDistance(nn.Module):
     """
     Compute Sliced Wasserstein-2 distance between two distributions.
@@ -427,7 +271,7 @@ class SlicedWassersteinDistance(nn.Module):
         self,
         x: torch.Tensor,
         y: torch.Tensor,
-        seed: int = None,
+        seed: int | None = None,
     ) -> torch.Tensor:
         """
         Compute Sliced Wasserstein-2 distance.
@@ -446,21 +290,13 @@ class SlicedWassersteinDistance(nn.Module):
         dtype = x.dtype
 
         # Set random seed if provided (for deterministic inference)
-        if seed is not None:
-            generator = torch.Generator(device=device).manual_seed(seed)
-        else:
-            generator = None
+        generator = torch.Generator(device=device).manual_seed(seed) if seed is not None else None
 
         total_transport_cost = 0.0
 
-        for k in range(self.num_projections):
+        for _k in range(self.num_projections):
             # Generate random unit direction theta_k
-            direction = torch.randn(
-                feature_dim,
-                device=device,
-                dtype=dtype,
-                generator=generator
-            )
+            direction = torch.randn(feature_dim, device=device, dtype=dtype, generator=generator)
             direction = direction / torch.norm(direction)  # Normalize to unit vector
 
             # Project features onto direction: x*theta, y*theta
@@ -534,8 +370,8 @@ class MPGEnhancement(nn.Module):
     def __init__(
         self,
         obs_feature_dim: int,
-        action_feature_dim: int = None,
-        embedding_dim: int = None,
+        action_feature_dim: int | None = None,
+        embedding_dim: int | None = None,
         num_projections: int = 32,
         lambda_strength: float = 0.0,
         use_stop_gradient: bool = True,
@@ -632,7 +468,7 @@ class MPGEnhancement(nn.Module):
             return obs_features
 
         # 1. Project features to common embedding space
-        obs_emb = self.obs_proj(obs_features)        # (B_obs, T_obs, D)
+        obs_emb = self.obs_proj(obs_features)  # (B_obs, T_obs, D)
         action_emb = self.action_proj(action_features)  # (B_act, T_act, D)
 
         # 2. Handle batch dimension mismatch
@@ -643,7 +479,7 @@ class MPGEnhancement(nn.Module):
 
         # 3. Apply LayerNorm for scale-invariant Wasserstein computation
         # This ensures transport cost stays bounded (~1.0) regardless of feature magnitude
-        obs_emb_norm = self.obs_layer_norm(obs_emb)        # (B, T_obs, D)
+        obs_emb_norm = self.obs_layer_norm(obs_emb)  # (B, T_obs, D)
         action_emb_norm = self.action_layer_norm(action_emb)  # (B, T_act, D)
 
         # 4. Pool action features and align with observation sequence
@@ -664,7 +500,7 @@ class MPGEnhancement(nn.Module):
 
         # 7. Apply gate to projected observation features (use unnormalized for enhancement)
         # CODE's formula: gate * projected_input (NOT gate * residual as in paper)
-        if self.use_stop_gradient:
+        if self.use_stop_gradient:  # noqa: SIM108 - Branches carry per-case comments.
             # Stop gradient through gate (prevents gate collapse)
             gated_obs = obs_emb * gate.detach()
         else:
@@ -685,11 +521,11 @@ class MPGEnhancement(nn.Module):
     def extra_repr(self) -> str:
         """String representation for debugging."""
         return (
-            f'obs_feature_dim={self.obs_feature_dim}, '
-            f'action_feature_dim={self.action_feature_dim}, '
-            f'embedding_dim={self.embedding_dim}, '
-            f'num_projections={self.num_projections}, '
-            f'lambda_strength={self.lambda_strength}, '
-            f'use_stop_gradient={self.use_stop_gradient}, '
-            f'gate_temperature={self.gate_temperature}'
+            f"obs_feature_dim={self.obs_feature_dim}, "
+            f"action_feature_dim={self.action_feature_dim}, "
+            f"embedding_dim={self.embedding_dim}, "
+            f"num_projections={self.num_projections}, "
+            f"lambda_strength={self.lambda_strength}, "
+            f"use_stop_gradient={self.use_stop_gradient}, "
+            f"gate_temperature={self.gate_temperature}"
         )

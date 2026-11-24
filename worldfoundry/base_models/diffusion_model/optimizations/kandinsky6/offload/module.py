@@ -8,7 +8,12 @@ from typing import Any
 
 import torch
 
-from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.offload.common import OffloadStrategy, _iter_named, _module_to, _pin_module
+from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.offload.common import (
+    OffloadStrategy,
+    _iter_named,
+    _module_to,
+    _pin_module,
+)
 
 
 class ModuleOffload:

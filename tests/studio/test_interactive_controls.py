@@ -5,9 +5,9 @@ import unittest
 
 from worldfoundry.studio.inference.catalog import find_entry
 from worldfoundry.studio.inference.execution import BaseRuntimeDriver, PipelineContext, PreparedInputs, StudioManager
-from worldfoundry.studio.ui.interfaces import compact_interface_summary, interface_spec_for_entry
 from worldfoundry.studio.visualization.backends.frontends import spark_viewer_html
 from worldfoundry.studio.visualization.backends.world import world_frontend_css, world_frontend_js
+from worldfoundry.studio.visualization.interfaces import interface_spec_for_entry
 
 
 class WorldFoundryStudioInteractiveControlsTest(unittest.TestCase):
@@ -20,9 +20,9 @@ class WorldFoundryStudioInteractiveControlsTest(unittest.TestCase):
         self.assertFalse(any("GEN3C authoring GUI" in ref for ref in gen3c.gui_refs))
         self.assertFalse(any("gui/api/client.py" in hint for hint in gen3c.launch_hints))
 
-        scene = compact_interface_summary(find_entry("vggt"))
-        self.assertEqual(scene["template_id"], "scene-3d")
-        self.assertTrue(any("In-tree Spark 3DGS viewer" in ref for ref in scene["gui_refs"]))
+        scene = interface_spec_for_entry(find_entry("vggt"))
+        self.assertEqual(scene.template_id, "scene-3d")
+        self.assertTrue(any("In-tree Spark 3DGS viewer" in ref for ref in scene.gui_refs))
 
         api_spec = interface_spec_for_entry(find_entry("wan-2p5"))
         self.assertEqual(api_spec.template_id, "hosted-api")

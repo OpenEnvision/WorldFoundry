@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import inspect
+from typing import ClassVar
 
 import torch
 
@@ -12,7 +13,7 @@ from worldfoundry.core.attention.sequence.varlen import varlen_scaled_dot_produc
 
 
 class CompiledSegment:
-    compiled = {}
+    compiled: ClassVar[dict] = {}
     mode = None
 
     @classmethod

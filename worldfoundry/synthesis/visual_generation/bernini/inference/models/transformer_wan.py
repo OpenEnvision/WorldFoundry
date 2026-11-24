@@ -12,13 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 # Adapted from diffusers/models/transformers/transformer_wan.py for Bernini
 # inference: variable-length attention with cu_seqlens, optional Ulysses
 # sequence parallel, and latents that are patch-embedded by the caller.
-
 import math
-from typing import Optional, Tuple
+from typing import ClassVar
 
 import torch
 import torch.nn as nn
@@ -69,11 +67,11 @@ class WanAttnProcessor2_0:
         self,
         attn: Attention,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor],
-        rotary_emb: Optional[torch.Tensor],
-        origin_hidden_states_seq_len: Optional[int],
+        encoder_hidden_states: torch.Tensor | None,
+        rotary_emb: torch.Tensor | None,
+        origin_hidden_states_seq_len: int | None,
         is_cross_attn: bool,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if not is_cross_attn:
             encoder_hidden_states = hidden_states
 
@@ -95,9 +93,7 @@ class WanAttnProcessor2_0:
             query = gather_seq_scatter_heads(
                 query, seq_dim=1, head_dim=2, unpadded_dim_size=origin_hidden_states_seq_len
             )
-            key = gather_seq_scatter_heads(
-                key, seq_dim=1, head_dim=2, unpadded_dim_size=origin_hidden_states_seq_len
-            )
+            key = gather_seq_scatter_heads(key, seq_dim=1, head_dim=2, unpadded_dim_size=origin_hidden_states_seq_len)
             value = gather_seq_scatter_heads(
                 value, seq_dim=1, head_dim=2, unpadded_dim_size=origin_hidden_states_seq_len
             )
@@ -113,13 +109,13 @@ class WanAttnProcessor2_0:
         self,
         attn: Attention,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        rotary_emb: Optional[torch.Tensor] = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        rotary_emb: torch.Tensor | None = None,
         batch_image_vae_seqlen=None,
         text_features_length=None,
-        origin_hidden_states_seq_len: Optional[int] = None,
-        split_hidden_states_seq_len: Optional[int] = None,
+        origin_hidden_states_seq_len: int | None = None,
+        split_hidden_states_seq_len: int | None = None,
         cu_seqlens_q_cache=None,
         max_seqlen_q_cache=None,
         cu_seqlens_k_cross_cache=None,
@@ -130,8 +126,12 @@ class WanAttnProcessor2_0:
         is_cross_attn = encoder_hidden_states is not None
 
         query, key, value = self._project_qkv(
-            attn, hidden_states, encoder_hidden_states, rotary_emb,
-            origin_hidden_states_seq_len, is_cross_attn,
+            attn,
+            hidden_states,
+            encoder_hidden_states,
+            rotary_emb,
+            origin_hidden_states_seq_len,
+            is_cross_attn,
         )
 
         if not is_cross_attn:
@@ -152,9 +152,14 @@ class WanAttnProcessor2_0:
                 query = unpad_tensor(query, 0, padding_size)
 
         hidden_states = varlen_attention(
-            query, key, value,
-            cu_seqlens_q=cu_seqlens_q, cu_seqlens_k=cu_seqlens_k,
-            max_seqlen_q=max_seqlen_q, max_seqlen_k=max_seqlen_k, causal=False,
+            query,
+            key,
+            value,
+            cu_seqlens_q=cu_seqlens_q,
+            cu_seqlens_k=cu_seqlens_k,
+            max_seqlen_q=max_seqlen_q,
+            max_seqlen_k=max_seqlen_k,
+            causal=False,
         )
         hidden_states = hidden_states.unsqueeze(0)
 
@@ -193,7 +198,7 @@ class WanTimeTextImageEmbedding(nn.Module):
         time_freq_dim: int,
         time_proj_dim: int,
         text_embed_dim: int,
-        image_embed_dim: Optional[int] = None,
+        image_embed_dim: int | None = None,
     ):
         super().__init__()
         self.timesteps_proj = Timesteps(num_channels=time_freq_dim, flip_sin_to_cos=True, downscale_freq_shift=0)
@@ -207,7 +212,7 @@ class WanTimeTextImageEmbedding(nn.Module):
         self,
         timestep: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
-        encoder_hidden_states_image: Optional[torch.Tensor] = None,
+        encoder_hidden_states_image: torch.Tensor | None = None,
     ):
         timestep = self.timesteps_proj(timestep)
         time_embedder_dtype = self.time_embedder.linear_1.weight.dtype
@@ -227,7 +232,7 @@ class WanRotaryPosEmbed(nn.Module):
     def __init__(
         self,
         attention_head_dim: int,
-        patch_size: Tuple[int, int, int],
+        patch_size: tuple[int, int, int],
         max_seq_len: int,
         theta: float = 10000.0,
         use_src_id_rotary_emb: bool = False,
@@ -281,8 +286,12 @@ class WanRotaryPosEmbed(nn.Module):
             # precomputed-table behaviour exactly.
             pos = torch.tensor([float(source_id)], dtype=torch.float64, device=hidden_states.device)
             freqs_visual_id = get_1d_rotary_pos_embed(
-                self.attention_head_dim, pos, self.theta,
-                use_real=False, repeat_interleave_real=False, freqs_dtype=torch.float64,
+                self.attention_head_dim,
+                pos,
+                self.theta,
+                use_real=False,
+                repeat_interleave_real=False,
+                freqs_dtype=torch.float64,
             )
             freqs_visual_id = freqs_visual_id.view(1, 1, 1, -1).expand(ppf, pph, ppw, -1)
             freqs_visual_id = freqs_visual_id.reshape(1, 1, ppf * pph * ppw, -1)
@@ -300,20 +309,35 @@ class WanTransformerBlock(nn.Module):
         qk_norm: str = "rms_norm_across_heads",
         cross_attn_norm: bool = False,
         eps: float = 1e-6,
-        added_kv_proj_dim: Optional[int] = None,
+        added_kv_proj_dim: int | None = None,
     ):
         super().__init__()
 
         self.norm1 = FP32LayerNorm(dim, eps, elementwise_affine=False)
         self.attn1 = Attention(
-            query_dim=dim, heads=num_heads, kv_heads=num_heads, dim_head=dim // num_heads,
-            qk_norm=qk_norm, eps=eps, bias=True, cross_attention_dim=None, out_bias=True,
+            query_dim=dim,
+            heads=num_heads,
+            kv_heads=num_heads,
+            dim_head=dim // num_heads,
+            qk_norm=qk_norm,
+            eps=eps,
+            bias=True,
+            cross_attention_dim=None,
+            out_bias=True,
             processor=WanAttnProcessor2_0(),
         )
         self.attn2 = Attention(
-            query_dim=dim, heads=num_heads, kv_heads=num_heads, dim_head=dim // num_heads,
-            qk_norm=qk_norm, eps=eps, bias=True, cross_attention_dim=None, out_bias=True,
-            added_kv_proj_dim=added_kv_proj_dim, added_proj_bias=True,
+            query_dim=dim,
+            heads=num_heads,
+            kv_heads=num_heads,
+            dim_head=dim // num_heads,
+            qk_norm=qk_norm,
+            eps=eps,
+            bias=True,
+            cross_attention_dim=None,
+            out_bias=True,
+            added_kv_proj_dim=added_kv_proj_dim,
+            added_proj_bias=True,
             processor=WanAttnProcessor2_0(),
         )
         self.norm2 = FP32LayerNorm(dim, eps, elementwise_affine=True) if cross_attn_norm else nn.Identity()
@@ -329,7 +353,7 @@ class WanTransformerBlock(nn.Module):
         rotary_emb: torch.Tensor,
         batch_image_vae_seqlen=None,
         text_features_length=None,
-        origin_hidden_states_seq_len: Optional[int] = None,
+        origin_hidden_states_seq_len: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         scale_shift_table = self.scale_shift_table.float()
@@ -366,9 +390,9 @@ class WanTransformerBlock(nn.Module):
         hidden_states = hidden_states + attn_output
 
         # 3. Feed-forward
-        norm_hidden_states = (
-            self.norm3(hidden_states.float()) * (1 + c_scale_msa) + c_shift_msa
-        ).type_as(hidden_states)
+        norm_hidden_states = (self.norm3(hidden_states.float()) * (1 + c_scale_msa) + c_shift_msa).type_as(
+            hidden_states
+        )
         ff_output = self.ffn(norm_hidden_states)
         hidden_states = (hidden_states.float() + ff_output.float() * c_gate_msa).type_as(hidden_states)
         return hidden_states
@@ -383,14 +407,14 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
     """
 
     _supports_gradient_checkpointing = False
-    _skip_layerwise_casting_patterns = ["patch_embedding", "condition_embedder", "norm"]
-    _no_split_modules = ["WanTransformerBlock"]
-    _keep_in_fp32_modules = ["time_embedder", "scale_shift_table", "norm1", "norm2", "norm3"]
+    _skip_layerwise_casting_patterns: ClassVar[list] = ["patch_embedding", "condition_embedder", "norm"]
+    _no_split_modules: ClassVar[list] = ["WanTransformerBlock"]
+    _keep_in_fp32_modules: ClassVar[list] = ["time_embedder", "scale_shift_table", "norm1", "norm2", "norm3"]
 
     @register_to_config
     def __init__(
         self,
-        patch_size: Tuple[int] = (1, 2, 2),
+        patch_size: tuple[int] = (1, 2, 2),
         num_attention_heads: int = 40,
         attention_head_dim: int = 128,
         in_channels: int = 16,
@@ -400,10 +424,10 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
         ffn_dim: int = 13824,
         num_layers: int = 40,
         cross_attn_norm: bool = True,
-        qk_norm: Optional[str] = "rms_norm_across_heads",
+        qk_norm: str | None = "rms_norm_across_heads",
         eps: float = 1e-6,
-        image_dim: Optional[int] = None,
-        added_kv_proj_dim: Optional[int] = None,
+        image_dim: int | None = None,
+        added_kv_proj_dim: int | None = None,
         rope_max_seq_len: int = 1024,
         use_src_id_rotary_emb: bool = False,
     ) -> None:
@@ -485,9 +509,7 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
 
         device = hidden_states.device
         cu_seqlens_q_cache = torch.zeros(len(batch_image_vae_seqlen) + 1, dtype=torch.int32, device=device)
-        cu_seqlens_q_cache[1:] = torch.tensor(
-            batch_image_vae_seqlen, dtype=torch.int32, device=device
-        ).cumsum(dim=0)
+        cu_seqlens_q_cache[1:] = torch.tensor(batch_image_vae_seqlen, dtype=torch.int32, device=device).cumsum(dim=0)
         max_seqlen_q_cache = max(batch_image_vae_seqlen)
 
         if get_parallel_state().ulysses_enabled:
@@ -505,12 +527,10 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
             ]
             cu_seqlens_k_cross_cache = cu_seqlens_k_cross_cache - cu_seqlens_k_cross_cache[0]
         else:
-            cu_seqlens_k_cross_cache = torch.zeros(
-                len(text_features_length) + 1, dtype=torch.int32, device=device
+            cu_seqlens_k_cross_cache = torch.zeros(len(text_features_length) + 1, dtype=torch.int32, device=device)
+            cu_seqlens_k_cross_cache[1:] = torch.tensor(text_features_length, dtype=torch.int32, device=device).cumsum(
+                dim=0
             )
-            cu_seqlens_k_cross_cache[1:] = torch.tensor(
-                text_features_length, dtype=torch.int32, device=device
-            ).cumsum(dim=0)
             max_seqlen_k_cross_cache = max(text_features_length)
             cu_seqlens_q_cross_cache = cu_seqlens_q_cache
             max_seqlen_q_cross_cache = max_seqlen_q_cache
@@ -538,9 +558,7 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
         return_dict: bool = True,
     ):
         # hidden_states: [1, total_tokens, inner_dim], already patch-embedded.
-        temb, timestep_proj, encoder_hidden_states, _ = self.condition_embedder(
-            timestep, encoder_hidden_states, None
-        )
+        temb, timestep_proj, encoder_hidden_states, _ = self.condition_embedder(timestep, encoder_hidden_states, None)
         timestep_proj = timestep_proj.unflatten(1, (6, -1))
 
         # Expand the per-sample timestep embedding over each sample's token count.
@@ -557,14 +575,24 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
         rotary_emb = rotary_emb.transpose(1, 2)
 
         hidden_states, encoder_hidden_states, timestep_proj, temb, kwargs = self.prepare_inputs_for_sp(
-            hidden_states, encoder_hidden_states, timestep_proj,
-            batch_image_vae_seqlen, text_features_length, timestep_proj_indices, temb,
+            hidden_states,
+            encoder_hidden_states,
+            timestep_proj,
+            batch_image_vae_seqlen,
+            text_features_length,
+            timestep_proj_indices,
+            temb,
         )
 
         for block in self.blocks:
             hidden_states = block(
-                hidden_states, encoder_hidden_states, timestep_proj, rotary_emb,
-                batch_image_vae_seqlen, text_features_length, **kwargs,
+                hidden_states,
+                encoder_hidden_states,
+                timestep_proj,
+                rotary_emb,
+                batch_image_vae_seqlen,
+                text_features_length,
+                **kwargs,
             )
 
         # Output norm, projection.
@@ -576,7 +604,9 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
 
         if get_parallel_state().ulysses_enabled:
             hidden_states = gather_outputs(
-                hidden_states, gather_dim=1, padding_dim=1,
+                hidden_states,
+                gather_dim=1,
+                padding_dim=1,
                 unpad_dim_size=kwargs["origin_hidden_states_seq_len"],
             )
 

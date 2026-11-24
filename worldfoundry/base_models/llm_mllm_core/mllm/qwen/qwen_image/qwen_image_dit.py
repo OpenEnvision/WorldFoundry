@@ -1,14 +1,15 @@
-"""Module for base_models -> llm_mllm_core -> mllm -> qwen -> qwen_image -> qwen_image_dit.py functionality."""
+import math
 
-import torch, math
+import torch
 import torch.nn as nn
-from typing import Tuple, Optional, Union, List
 from einops import rearrange
-from worldfoundry.core.nn import AdaLayerNorm, ProjectedTimestepEmbedding, RMSNorm
+
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+from worldfoundry.core.nn import AdaLayerNorm, ProjectedTimestepEmbedding, RMSNorm
 
 try:
     import flash_attn_interface
+
     FLASH_ATTN_3_AVAILABLE = True
 except ModuleNotFoundError:
     FLASH_ATTN_3_AVAILABLE = False
@@ -17,17 +18,14 @@ except ModuleNotFoundError:
 TimestepEmbeddings = ProjectedTimestepEmbedding
 
 
-def qwen_image_flash_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, num_heads: int, attention_mask = None, enable_fp8_attention: bool = False):
-    """Qwen image flash attention.
-
-    Args:
-        q: The q.
-        k: The k.
-        v: The v.
-        num_heads: The num heads.
-        attention_mask: The attention mask.
-        enable_fp8_attention: The enable fp8 attention.
-    """
+def qwen_image_flash_attention(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    num_heads: int,
+    attention_mask=None,
+    enable_fp8_attention: bool = False,
+):
     if FLASH_ATTN_3_AVAILABLE and attention_mask is None:
         if not enable_fp8_attention:
             q = rearrange(q, "b n s d -> b s n d", n=num_heads)
@@ -40,7 +38,11 @@ def qwen_image_flash_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor
         else:
             origin_dtype = q.dtype
             q_std, k_std, v_std = q.std(), k.std(), v.std()
-            q, k, v = (q / q_std).to(torch.float8_e4m3fn), (k / k_std).to(torch.float8_e4m3fn), (v / v_std).to(torch.float8_e4m3fn)
+            q, k, v = (
+                (q / q_std).to(torch.float8_e4m3fn),
+                (k / k_std).to(torch.float8_e4m3fn),
+                (v / v_std).to(torch.float8_e4m3fn),
+            )
             q = rearrange(q, "b n s d -> b s n d", n=num_heads)
             k = rearrange(k, "b n s d -> b s n d", n=num_heads)
             v = rearrange(v, "b n s d -> b s n d", n=num_heads)
@@ -56,101 +58,62 @@ def qwen_image_flash_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor
 
 
 class ApproximateGELU(nn.Module):
-    """Approximate gelu implementation."""
     def __init__(self, dim_in: int, dim_out: int, bias: bool = True):
-        """Init.
-
-        Args:
-            dim_in: The dim in.
-            dim_out: The dim out.
-            bias: The bias.
-        """
         super().__init__()
         self.proj = nn.Linear(dim_in, dim_out, bias=bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         x = self.proj(x)
         return x * torch.sigmoid(1.702 * x)
 
-def apply_rotary_emb_qwen(
-    x: torch.Tensor,
-    freqs_cis: Union[torch.Tensor, Tuple[torch.Tensor]]
-):
-    """Apply rotary emb qwen.
 
-    Args:
-        x: The x.
-        freqs_cis: The freqs cis.
-    """
+def apply_rotary_emb_qwen(x: torch.Tensor, freqs_cis: torch.Tensor | tuple[torch.Tensor]):
     x_rotated = torch.view_as_complex(x.float().reshape(*x.shape[:-1], -1, 2))
     x_out = torch.view_as_real(x_rotated * freqs_cis).flatten(3)
     return x_out.type_as(x)
 
 
 class QwenEmbedRope(nn.Module):
-    """Qwen embed rope implementation."""
     def __init__(self, theta: int, axes_dim: list[int], scale_rope=False):
-        """Init.
-
-        Args:
-            theta: The theta.
-            axes_dim: The axes dim.
-            scale_rope: The scale rope.
-        """
         super().__init__()
         self.theta = theta
         self.axes_dim = axes_dim
         pos_index = torch.arange(4096)
         neg_index = torch.arange(4096).flip(0) * -1 - 1
-        self.pos_freqs = torch.cat([
-            self.rope_params(pos_index, self.axes_dim[0], self.theta),
-            self.rope_params(pos_index, self.axes_dim[1], self.theta),
-            self.rope_params(pos_index, self.axes_dim[2], self.theta),
-        ], dim=1)
-        self.neg_freqs = torch.cat([
-            self.rope_params(neg_index, self.axes_dim[0], self.theta),
-            self.rope_params(neg_index, self.axes_dim[1], self.theta),
-            self.rope_params(neg_index, self.axes_dim[2], self.theta),
-        ], dim=1)
+        self.pos_freqs = torch.cat(
+            [
+                self.rope_params(pos_index, self.axes_dim[0], self.theta),
+                self.rope_params(pos_index, self.axes_dim[1], self.theta),
+                self.rope_params(pos_index, self.axes_dim[2], self.theta),
+            ],
+            dim=1,
+        )
+        self.neg_freqs = torch.cat(
+            [
+                self.rope_params(neg_index, self.axes_dim[0], self.theta),
+                self.rope_params(neg_index, self.axes_dim[1], self.theta),
+                self.rope_params(neg_index, self.axes_dim[2], self.theta),
+            ],
+            dim=1,
+        )
         self.rope_cache = {}
         self.scale_rope = scale_rope
-        
+
     def rope_params(self, index, dim, theta=10000):
         """
-            Args:
-                index: [0, 1, 2, 3] 1D Tensor representing the position index of the token
+        Args:
+            index: [0, 1, 2, 3] 1D Tensor representing the position index of the token
         """
         assert dim % 2 == 0
-        freqs = torch.outer(
-            index,
-            1.0 / torch.pow(theta, torch.arange(0, dim, 2).to(torch.float32).div(dim))
-        )
+        freqs = torch.outer(index, 1.0 / torch.pow(theta, torch.arange(0, dim, 2).to(torch.float32).div(dim)))
         freqs = torch.polar(torch.ones_like(freqs), freqs)
         return freqs
 
-
     def _expand_pos_freqs_if_needed(self, video_fhw, txt_seq_lens):
-        """Helper function to expand pos freqs if needed.
-
-        Args:
-            video_fhw: The video fhw.
-            txt_seq_lens: The txt seq lens.
-        """
         if isinstance(video_fhw, list):
             video_fhw = tuple(max([i[j] for i in video_fhw]) for j in range(3))
         _, height, width = video_fhw
-        if self.scale_rope:
-            max_vid_index = max(height // 2, width // 2)
-        else:
-            max_vid_index = max(height, width)
+        max_vid_index = max(height // 2, width // 2) if self.scale_rope else max(height, width)
         required_len = max_vid_index + max(txt_seq_lens)
         cur_max_len = self.pos_freqs.shape[0]
         if required_len <= cur_max_len:
@@ -159,27 +122,25 @@ class QwenEmbedRope(nn.Module):
         new_max_len = math.ceil(required_len / 512) * 512
         pos_index = torch.arange(new_max_len)
         neg_index = torch.arange(new_max_len).flip(0) * -1 - 1
-        self.pos_freqs = torch.cat([
-            self.rope_params(pos_index, self.axes_dim[0], self.theta),
-            self.rope_params(pos_index, self.axes_dim[1], self.theta),
-            self.rope_params(pos_index, self.axes_dim[2], self.theta),
-        ], dim=1)
-        self.neg_freqs = torch.cat([
-            self.rope_params(neg_index, self.axes_dim[0], self.theta),
-            self.rope_params(neg_index, self.axes_dim[1], self.theta),
-            self.rope_params(neg_index, self.axes_dim[2], self.theta),
-        ], dim=1)
+        self.pos_freqs = torch.cat(
+            [
+                self.rope_params(pos_index, self.axes_dim[0], self.theta),
+                self.rope_params(pos_index, self.axes_dim[1], self.theta),
+                self.rope_params(pos_index, self.axes_dim[2], self.theta),
+            ],
+            dim=1,
+        )
+        self.neg_freqs = torch.cat(
+            [
+                self.rope_params(neg_index, self.axes_dim[0], self.theta),
+                self.rope_params(neg_index, self.axes_dim[1], self.theta),
+                self.rope_params(neg_index, self.axes_dim[2], self.theta),
+            ],
+            dim=1,
+        )
         return
 
-
     def forward(self, video_fhw, txt_seq_lens, device):
-        """Forward.
-
-        Args:
-            video_fhw: The video fhw.
-            txt_seq_lens: The txt seq lens.
-            device: The device.
-        """
         self._expand_pos_freqs_if_needed(video_fhw, txt_seq_lens)
         if self.pos_freqs.device != device:
             self.pos_freqs = self.pos_freqs.to(device)
@@ -223,15 +184,7 @@ class QwenEmbedRope(nn.Module):
 
         return vid_freqs, txt_freqs
 
-
     def forward_sampling(self, video_fhw, txt_seq_lens, device):
-        """Forward sampling.
-
-        Args:
-            video_fhw: The video fhw.
-            txt_seq_lens: The txt seq lens.
-            device: The device.
-        """
         self._expand_pos_freqs_if_needed(video_fhw, txt_seq_lens)
         if self.pos_freqs.device != device:
             self.pos_freqs = self.pos_freqs.to(device)
@@ -249,12 +202,12 @@ class QwenEmbedRope(nn.Module):
                 spatial_freqs_0 = self.rope_cache[rope_key_0].reshape(frame_0, height_0, width_0, -1)
                 h_indices = torch.linspace(0, height_0 - 1, height).long()
                 w_indices = torch.linspace(0, width_0 - 1, width).long()
-                h_grid, w_grid = torch.meshgrid(h_indices, w_indices, indexing='ij')
+                h_grid, w_grid = torch.meshgrid(h_indices, w_indices, indexing="ij")
                 sampled_rope = spatial_freqs_0[:, h_grid, w_grid, :]
 
                 freqs_pos = self.pos_freqs.split([x // 2 for x in self.axes_dim], dim=1)
                 freqs_frame = freqs_pos[0][idx : idx + frame].view(frame, 1, 1, -1).expand(frame, height, width, -1)
-                sampled_rope[:, :, :, :freqs_frame.shape[-1]] = freqs_frame
+                sampled_rope[:, :, :, : freqs_frame.shape[-1]] = freqs_frame
 
                 seq_lens = frame * height * width
                 self.rope_cache[rope_key] = sampled_rope.reshape(seq_lens, -1).clone()
@@ -292,20 +245,12 @@ class QwenEmbedRope(nn.Module):
 
 
 class QwenFeedForward(nn.Module):
-    """Qwen feed forward implementation."""
     def __init__(
         self,
         dim: int,
-        dim_out: Optional[int] = None,
+        dim_out: int | None = None,
         dropout: float = 0.0,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            dim_out: The dim out.
-            dropout: The dropout.
-        """
         super().__init__()
         inner_dim = int(dim * 4)
         self.net = nn.ModuleList([])
@@ -314,20 +259,12 @@ class QwenFeedForward(nn.Module):
         self.net.append(nn.Linear(inner_dim, dim_out))
 
     def forward(self, hidden_states: torch.Tensor, *args, **kwargs) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            hidden_states: The hidden states.
-
-        Returns:
-            The return value.
-        """
         for module in self.net:
             hidden_states = module(hidden_states)
         return hidden_states
 
+
 class QwenDoubleStreamAttention(nn.Module):
-    """Qwen double stream attention implementation."""
     def __init__(
         self,
         dim_a,
@@ -335,14 +272,6 @@ class QwenDoubleStreamAttention(nn.Module):
         num_heads,
         head_dim,
     ):
-        """Init.
-
-        Args:
-            dim_a: The dim a.
-            dim_b: The dim b.
-            num_heads: The num heads.
-            head_dim: The head dim.
-        """
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = head_dim
@@ -366,37 +295,25 @@ class QwenDoubleStreamAttention(nn.Module):
         self,
         image: torch.FloatTensor,
         text: torch.FloatTensor,
-        image_rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        image_rotary_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.FloatTensor | None = None,
         enable_fp8_attention: bool = False,
-    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
-        """Forward.
-
-        Args:
-            image: The image.
-            text: The text.
-            image_rotary_emb: The image rotary emb.
-            attention_mask: The attention mask.
-            enable_fp8_attention: The enable fp8 attention.
-
-        Returns:
-            The return value.
-        """
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         img_q, img_k, img_v = self.to_q(image), self.to_k(image), self.to_v(image)
         txt_q, txt_k, txt_v = self.add_q_proj(text), self.add_k_proj(text), self.add_v_proj(text)
         seq_txt = txt_q.shape[1]
 
-        img_q = rearrange(img_q, 'b s (h d) -> b h s d', h=self.num_heads)
-        img_k = rearrange(img_k, 'b s (h d) -> b h s d', h=self.num_heads)
-        img_v = rearrange(img_v, 'b s (h d) -> b h s d', h=self.num_heads)
+        img_q = rearrange(img_q, "b s (h d) -> b h s d", h=self.num_heads)
+        img_k = rearrange(img_k, "b s (h d) -> b h s d", h=self.num_heads)
+        img_v = rearrange(img_v, "b s (h d) -> b h s d", h=self.num_heads)
 
-        txt_q = rearrange(txt_q, 'b s (h d) -> b h s d', h=self.num_heads)
-        txt_k = rearrange(txt_k, 'b s (h d) -> b h s d', h=self.num_heads)
-        txt_v = rearrange(txt_v, 'b s (h d) -> b h s d', h=self.num_heads)
+        txt_q = rearrange(txt_q, "b s (h d) -> b h s d", h=self.num_heads)
+        txt_k = rearrange(txt_k, "b s (h d) -> b h s d", h=self.num_heads)
+        txt_v = rearrange(txt_v, "b s (h d) -> b h s d", h=self.num_heads)
 
         img_q, img_k = self.norm_q(img_q), self.norm_k(img_k)
         txt_q, txt_k = self.norm_added_q(txt_q), self.norm_added_k(txt_k)
-        
+
         if image_rotary_emb is not None:
             img_freqs, txt_freqs = image_rotary_emb
             img_q = apply_rotary_emb_qwen(img_q, img_freqs)
@@ -408,7 +325,14 @@ class QwenDoubleStreamAttention(nn.Module):
         joint_k = torch.cat([txt_k, img_k], dim=2)
         joint_v = torch.cat([txt_v, img_v], dim=2)
 
-        joint_attn_out = qwen_image_flash_attention(joint_q, joint_k, joint_v, num_heads=joint_q.shape[1], attention_mask=attention_mask, enable_fp8_attention=enable_fp8_attention).to(joint_q.dtype)
+        joint_attn_out = qwen_image_flash_attention(
+            joint_q,
+            joint_k,
+            joint_v,
+            num_heads=joint_q.shape[1],
+            attention_mask=attention_mask,
+            enable_fp8_attention=enable_fp8_attention,
+        ).to(joint_q.dtype)
 
         txt_attn_output = joint_attn_out[:, :seq_txt, :]
         img_attn_output = joint_attn_out[:, seq_txt:, :]
@@ -420,31 +344,22 @@ class QwenDoubleStreamAttention(nn.Module):
 
 
 class QwenImageTransformerBlock(nn.Module):
-    """Qwen image transformer block implementation."""
     def __init__(
-        self, 
-        dim: int, 
-        num_attention_heads: int, 
-        attention_head_dim: int, 
+        self,
+        dim: int,
+        num_attention_heads: int,
+        attention_head_dim: int,
         eps: float = 1e-6,
-    ):    
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_attention_heads: The num attention heads.
-            attention_head_dim: The attention head dim.
-            eps: The eps.
-        """
+    ):
         super().__init__()
-        
+
         self.dim = dim
         self.num_attention_heads = num_attention_heads
         self.attention_head_dim = attention_head_dim
 
         self.img_mod = nn.Sequential(
             nn.SiLU(),
-            nn.Linear(dim, 6 * dim), 
+            nn.Linear(dim, 6 * dim),
         )
         self.img_norm1 = nn.LayerNorm(dim, elementwise_affine=False, eps=eps)
         self.attn = QwenDoubleStreamAttention(
@@ -458,45 +373,25 @@ class QwenImageTransformerBlock(nn.Module):
 
         self.txt_mod = nn.Sequential(
             nn.SiLU(),
-            nn.Linear(dim, 6 * dim, bias=True), 
+            nn.Linear(dim, 6 * dim, bias=True),
         )
         self.txt_norm1 = nn.LayerNorm(dim, elementwise_affine=False, eps=eps)
         self.txt_norm2 = nn.LayerNorm(dim, elementwise_affine=False, eps=eps)
         self.txt_mlp = QwenFeedForward(dim=dim, dim_out=dim)
-    
-    def _modulate(self, x, mod_params):
-        """Helper function to modulate.
 
-        Args:
-            x: The x.
-            mod_params: The mod params.
-        """
+    def _modulate(self, x, mod_params):
         shift, scale, gate = mod_params.chunk(3, dim=-1)
-        return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1), gate.unsqueeze(1)    
+        return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1), gate.unsqueeze(1)
 
     def forward(
         self,
-        image: torch.Tensor,  
+        image: torch.Tensor,
         text: torch.Tensor,
-        temb: torch.Tensor, 
-        image_rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        enable_fp8_attention = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Forward.
-
-        Args:
-            image: The image.
-            text: The text.
-            temb: The temb.
-            image_rotary_emb: The image rotary emb.
-            attention_mask: The attention mask.
-            enable_fp8_attention: The enable fp8 attention.
-
-        Returns:
-            The return value.
-        """
-
+        temb: torch.Tensor,
+        image_rotary_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        enable_fp8_attention=False,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         img_mod_attn, img_mod_mlp = self.img_mod(temb).chunk(2, dim=-1)  # [B, 3*dim] each
         txt_mod_attn, txt_mod_mlp = self.txt_mod(temb).chunk(2, dim=-1)  # [B, 3*dim] each
 
@@ -513,7 +408,7 @@ class QwenImageTransformerBlock(nn.Module):
             attention_mask=attention_mask,
             enable_fp8_attention=enable_fp8_attention,
         )
-        
+
         image = image + img_gate * img_attn_out
         text = text + txt_gate * txt_attn_out
 
@@ -533,21 +428,17 @@ class QwenImageTransformerBlock(nn.Module):
 
 
 class QwenImageDiT(torch.nn.Module):
-    """Qwen image di t implementation."""
     def __init__(
         self,
         num_layers: int = 60,
     ):
-        """Init.
-
-        Args:
-            num_layers: The num layers.
-        """
         super().__init__()
 
-        self.pos_embed = QwenEmbedRope(theta=10000, axes_dim=[16,56,56], scale_rope=True) 
+        self.pos_embed = QwenEmbedRope(theta=10000, axes_dim=[16, 56, 56], scale_rope=True)
 
-        self.time_text_embed = TimestepEmbeddings(256, 3072, diffusers_compatible_format=True, scale=1000, align_dtype_to_timestep=True)
+        self.time_text_embed = TimestepEmbeddings(
+            256, 3072, diffusers_compatible_format=True, scale=1000, align_dtype_to_timestep=True
+        )
         self.txt_norm = RMSNorm(3584, eps=1e-6)
 
         self.img_in = nn.Linear(64, 3072)
@@ -566,24 +457,21 @@ class QwenImageDiT(torch.nn.Module):
         self.norm_out = AdaLayerNorm(3072, single=True)
         self.proj_out = nn.Linear(3072, 64)
 
-
-    def process_entity_masks(self, latents, prompt_emb, prompt_emb_mask, entity_prompt_emb, entity_prompt_emb_mask, entity_masks, height, width, image, img_shapes):
-        """Process entity masks.
-
-        Args:
-            latents: The latents.
-            prompt_emb: The prompt emb.
-            prompt_emb_mask: The prompt emb mask.
-            entity_prompt_emb: The entity prompt emb.
-            entity_prompt_emb_mask: The entity prompt emb mask.
-            entity_masks: The entity masks.
-            height: The height.
-            width: The width.
-            image: The image.
-            img_shapes: The img shapes.
-        """
+    def process_entity_masks(
+        self,
+        latents,
+        prompt_emb,
+        prompt_emb_mask,
+        entity_prompt_emb,
+        entity_prompt_emb_mask,
+        entity_masks,
+        height,
+        width,
+        image,
+        img_shapes,
+    ):
         # prompt_emb
-        all_prompt_emb = entity_prompt_emb + [prompt_emb]
+        all_prompt_emb = entity_prompt_emb + [prompt_emb]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         all_prompt_emb = [self.txt_in(self.txt_norm(local_prompt_emb)) for local_prompt_emb in all_prompt_emb]
         all_prompt_emb = torch.cat(all_prompt_emb, dim=1)
 
@@ -591,8 +479,10 @@ class QwenImageDiT(torch.nn.Module):
         txt_seq_lens = prompt_emb_mask.sum(dim=1).tolist()
         image_rotary_emb = self.pos_embed(img_shapes, txt_seq_lens, device=latents.device)
         entity_seq_lens = [emb_mask.sum(dim=1).tolist() for emb_mask in entity_prompt_emb_mask]
-        entity_rotary_emb = [self.pos_embed(img_shapes, entity_seq_len, device=latents.device)[1] for entity_seq_len in entity_seq_lens]
-        txt_rotary_emb = torch.cat(entity_rotary_emb + [image_rotary_emb[1]], dim=0)
+        entity_rotary_emb = [
+            self.pos_embed(img_shapes, entity_seq_len, device=latents.device)[1] for entity_seq_len in entity_seq_lens
+        ]
+        txt_rotary_emb = torch.cat(entity_rotary_emb + [image_rotary_emb[1]], dim=0)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         image_rotary_emb = (image_rotary_emb[0], txt_rotary_emb)
 
         # attention_mask
@@ -601,7 +491,7 @@ class QwenImageDiT(torch.nn.Module):
         entity_masks = entity_masks.repeat(1, 1, repeat_dim, 1, 1)
         entity_masks = [entity_masks[:, i, None].squeeze(1) for i in range(max_masks)]
         global_mask = torch.ones_like(entity_masks[0]).to(device=latents.device, dtype=latents.dtype)
-        entity_masks = entity_masks + [global_mask]
+        entity_masks = entity_masks + [global_mask]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         N = len(entity_masks)
         batch_size = entity_masks[0].shape[0]
@@ -609,9 +499,13 @@ class QwenImageDiT(torch.nn.Module):
         total_seq_len = sum(seq_lens) + image.shape[1]
         patched_masks = []
         for i in range(N):
-            patched_mask = rearrange(entity_masks[i], "B C (H P) (W Q) -> B (H W) (C P Q)", H=height//16, W=width//16, P=2, Q=2)
+            patched_mask = rearrange(
+                entity_masks[i], "B C (H P) (W Q) -> B (H W) (C P Q)", H=height // 16, W=width // 16, P=2, Q=2
+            )
             patched_masks.append(patched_mask)
-        attention_mask = torch.ones((batch_size, total_seq_len, total_seq_len), dtype=torch.bool).to(device=entity_masks[0].device)
+        attention_mask = torch.ones((batch_size, total_seq_len, total_seq_len), dtype=torch.bool).to(
+            device=entity_masks[0].device
+        )
 
         # prompt-image attention mask
         image_start = sum(seq_lens)
@@ -622,7 +516,7 @@ class QwenImageDiT(torch.nn.Module):
             cumsum.append(cumsum[-1] + length)
         for i in range(N):
             prompt_start = cumsum[i]
-            prompt_end = cumsum[i+1]
+            prompt_end = cumsum[i + 1]
             image_mask = torch.sum(patched_masks[i], dim=-1) > 0
             image_mask = image_mask.unsqueeze(1).repeat(1, seq_lens[i], 1)
             # repeat image mask to match the single image sequence length
@@ -637,17 +531,16 @@ class QwenImageDiT(torch.nn.Module):
             for j in range(N):
                 if i == j:
                     continue
-                start_i, end_i = cumsum[i], cumsum[i+1]
-                start_j, end_j = cumsum[j], cumsum[j+1]
+                start_i, end_i = cumsum[i], cumsum[i + 1]
+                start_j, end_j = cumsum[j], cumsum[j + 1]
                 attention_mask[:, start_i:end_i, start_j:end_j] = False
 
         attention_mask = attention_mask.float()
-        attention_mask[attention_mask == 0] = float('-inf')
+        attention_mask[attention_mask == 0] = float("-inf")
         attention_mask[attention_mask == 1] = 0
         attention_mask = attention_mask.to(device=latents.device, dtype=latents.dtype).unsqueeze(1)
 
         return all_prompt_emb, image_rotary_emb, attention_mask
-
 
     def forward(
         self,
@@ -658,20 +551,10 @@ class QwenImageDiT(torch.nn.Module):
         height=None,
         width=None,
     ):
-        """Forward.
-
-        Args:
-            latents: The latents.
-            timestep: The timestep.
-            prompt_emb: The prompt emb.
-            prompt_emb_mask: The prompt emb mask.
-            height: The height.
-            width: The width.
-        """
-        img_shapes = [(latents.shape[0], latents.shape[2]//2, latents.shape[3]//2)]
+        img_shapes = [(latents.shape[0], latents.shape[2] // 2, latents.shape[3] // 2)]
         txt_seq_lens = prompt_emb_mask.sum(dim=1).tolist()
-        
-        image = rearrange(latents, "B C (H P) (W Q) -> B (H W) (C P Q)", H=height//16, W=width//16, P=2, Q=2)
+
+        image = rearrange(latents, "B C (H P) (W Q) -> B (H W) (C P Q)", H=height // 16, W=width // 16, P=2, Q=2)
         image = self.img_in(image)
         text = self.txt_in(self.txt_norm(prompt_emb))
 
@@ -686,30 +569,21 @@ class QwenImageDiT(torch.nn.Module):
                 temb=conditioning,
                 image_rotary_emb=image_rotary_emb,
             )
-        
+
         image = self.norm_out(image, conditioning)
         image = self.proj_out(image)
-        
-        latents = rearrange(image, "B (H W) (C P Q) -> B C (H P) (W Q)", H=height//16, W=width//16, P=2, Q=2)
+
+        latents = rearrange(image, "B (H W) (C P Q) -> B C (H P) (W Q)", H=height // 16, W=width // 16, P=2, Q=2)
         return image
-    
+
     @staticmethod
     def state_dict_converter():
-        """State dict converter."""
         return QwenImageDiTStateDictConverter()
 
 
-
-class QwenImageDiTStateDictConverter():
-    """Qwen image di t state dict converter implementation."""
+class QwenImageDiTStateDictConverter:
     def __init__(self):
-        """Init."""
         pass
 
     def from_civitai(self, state_dict):
-        """From civitai.
-
-        Args:
-            state_dict: The state dict.
-        """
         return state_dict

@@ -1,6 +1,6 @@
 ---
 title: AIGCBench
-description: "BenchCouncil I2V quality bench: first-frame fidelity, alignment, motion, temporality, DOVER. WorldFoundry imports official metrics; it does not invent a board."
+description: "BenchCouncil I2V quality bench: first-frame fidelity, alignment, motion, temporality, DOVER. WorldFoundry imports official metric exports."
 ---
 
 AIGCBench (BenchCouncil, ICT / CAS) evaluates **image-to-video** generation: given a condition image and a prompt, does the clip stay faithful, move, and stay temporally coherent? Metric families:
@@ -21,7 +21,7 @@ WorldFoundry **imports official metric CSV / TSV** (or pipeline score dumps) thr
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id aigcbench \
   --mode official-validation \
   --official-results-path <official_results.csv> \

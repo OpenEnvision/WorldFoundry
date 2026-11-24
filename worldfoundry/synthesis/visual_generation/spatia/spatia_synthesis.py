@@ -15,7 +15,7 @@ class SpatiaSynthesis(BaseSynthesis):
         self.runtime = runtime
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> "SpatiaSynthesis":
+    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> SpatiaSynthesis:
         return cls(SpatiaRuntime.from_pretrained(pretrained_model_path, **kwargs))
 
     def predict(self, **kwargs: Any) -> Any:

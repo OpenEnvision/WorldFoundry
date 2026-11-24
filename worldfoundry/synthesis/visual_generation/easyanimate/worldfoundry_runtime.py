@@ -12,8 +12,7 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from worldfoundry.core.io.paths import resolve_local_hf_model_path
-from worldfoundry.evaluation.utils import worldfoundry_data_path
+from worldfoundry.core.io.paths import package_data_path, resolve_local_hf_model_path
 
 from .easyanimate_runtime import load_easyanimate_components
 
@@ -29,21 +28,16 @@ def default_model_path() -> str:
     # Resolve the root directory for checkpoints, defaulting to 'checkpoints' if the env var is not set.
     ckpt_root = Path(os.environ.get("WORLDFOUNDRY_CKPT_DIR", "checkpoints"))
     # Construct the full path to the specific EasyAnimate model.
-    return str(
-        ckpt_root.expanduser()
-        / "hfd"
-        / "alibaba-pai--EasyAnimateV5.1-7b-zh-InP"
-    )
+    return str(ckpt_root.expanduser() / "hfd" / "alibaba-pai--EasyAnimateV5.1-7b-zh-InP")
 
 
-DEFAULT_EASYANIMATE_CONFIG_ROOT = worldfoundry_data_path(
+DEFAULT_EASYANIMATE_CONFIG_ROOT = package_data_path(
     "models",
-    "runtime", "configs",
+    "runtime",
+    "configs",
     "easyanimate",
 )
-DEFAULT_EASYANIMATE_CONFIG = (
-    "runtime/configs/easyanimate/easyanimate_video_v5.1_magvit_qwen.yaml"
-)
+DEFAULT_EASYANIMATE_CONFIG = "runtime/configs/easyanimate/easyanimate_video_v5.1_magvit_qwen.yaml"
 
 
 def resolve_config_path(config_path: str | Path) -> str:
@@ -67,7 +61,7 @@ def resolve_config_path(config_path: str | Path) -> str:
 
     # If the path starts with 'runtime_configs', it's relative to the 'models' directory within worldfoundry data.
     if path.parts and path.parts[:2] == ("runtime", "configs"):
-        return str(worldfoundry_data_path("models", *path.parts))
+        return str(package_data_path("models", *path.parts))
     # If it's a single file name, assume it's in the default EasyAnimate config root.
     if len(path.parts) == 1:
         return str(DEFAULT_EASYANIMATE_CONFIG_ROOT / path)
@@ -197,15 +191,11 @@ class EasyAnimate:
 
         # Determine which Transformer3DModel to use based on the config.
         Choosen_Transformer3DModel = name_to_transformer3d[
-            config["transformer_additional_kwargs"].get(
-                "transformer_type", "Transformer3DModel"
-            )
+            config["transformer_additional_kwargs"].get("transformer_type", "Transformer3DModel")
         ]
 
         # Prepare transformer additional arguments, including upcast_attention for float16.
-        transformer_additional_kwargs = OmegaConf.to_container(
-            config["transformer_additional_kwargs"]
-        )
+        transformer_additional_kwargs = OmegaConf.to_container(config["transformer_additional_kwargs"])
         if weight_dtype == torch.float16:
             transformer_additional_kwargs["upcast_attention"] = True
 
@@ -214,16 +204,12 @@ class EasyAnimate:
             model_path,
             subfolder="transformer",
             transformer_additional_kwargs=transformer_additional_kwargs,
-            torch_dtype=torch.float8_e4m3fn
-            if GPU_memory_mode == "model_cpu_offload_and_qfloat8"
-            else weight_dtype,
+            torch_dtype=torch.float8_e4m3fn if GPU_memory_mode == "model_cpu_offload_and_qfloat8" else weight_dtype,
             low_cpu_mem_usage=True,
         )
 
         # Determine and load the VAE model based on the config.
-        Choosen_AutoencoderKL = name_to_autoencoder_magvit[
-            config["vae_kwargs"].get("vae_type", "AutoencoderKL")
-        ]
+        Choosen_AutoencoderKL = name_to_autoencoder_magvit[config["vae_kwargs"].get("vae_type", "AutoencoderKL")]
         vae = Choosen_AutoencoderKL.from_pretrained(
             model_path,
             subfolder="vae",
@@ -232,8 +218,7 @@ class EasyAnimate:
 
         # Apply VAE upcasting if AutoencoderKLMagvit and float16 are used.
         if (
-            config["vae_kwargs"].get("vae_type", "AutoencoderKL")
-            == "AutoencoderKLMagvit"
+            config["vae_kwargs"].get("vae_type", "AutoencoderKL") == "AutoencoderKLMagvit"
             and weight_dtype == torch.float16
         ):
             vae.upcast_vae = True
@@ -246,27 +231,19 @@ class EasyAnimate:
         if multi_text_encoder:
             tokenizer = BertTokenizer.from_pretrained(model_path, subfolder="tokenizer")
             if replace_t5_to_llm:
-                tokenizer_2 = Qwen2Tokenizer.from_pretrained(
-                    os.path.join(model_path, "tokenizer_2")
-                )
+                tokenizer_2 = Qwen2Tokenizer.from_pretrained(os.path.join(model_path, "tokenizer_2"))
             else:
-                tokenizer_2 = T5Tokenizer.from_pretrained(
-                    model_path, subfolder="tokenizer_2"
-                )
+                tokenizer_2 = T5Tokenizer.from_pretrained(model_path, subfolder="tokenizer_2")
         else:
             if replace_t5_to_llm:
-                tokenizer = Qwen2Tokenizer.from_pretrained(
-                    os.path.join(model_path, "tokenizer")
-                )
+                tokenizer = Qwen2Tokenizer.from_pretrained(os.path.join(model_path, "tokenizer"))
             else:
                 tokenizer = T5Tokenizer.from_pretrained(model_path, subfolder="tokenizer")
             tokenizer_2 = None
 
         # Load text encoders based on multi-text encoder and LLM replacement settings.
         if multi_text_encoder:
-            text_encoder = BertModel.from_pretrained(
-                model_path, subfolder="text_encoder", torch_dtype=weight_dtype
-            )
+            text_encoder = BertModel.from_pretrained(model_path, subfolder="text_encoder", torch_dtype=weight_dtype)
             if replace_t5_to_llm:
                 text_encoder_2 = Qwen2VLForConditionalGeneration.from_pretrained(
                     os.path.join(model_path, "text_encoder_2"),
@@ -289,15 +266,13 @@ class EasyAnimate:
             text_encoder_2 = None
 
         # Load CLIP image encoder and processor if enabled and required by the transformer.
-        if transformer.config.in_channels != vae.config.latent_channels and config[
-            "transformer_additional_kwargs"
-        ].get("enable_clip_in_inpaint", True):
+        if transformer.config.in_channels != vae.config.latent_channels and config["transformer_additional_kwargs"].get(
+            "enable_clip_in_inpaint", True
+        ):
             clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
                 model_path, subfolder="image_encoder"
             ).to("cuda", weight_dtype)
-            clip_image_processor = CLIPImageProcessor.from_pretrained(
-                model_path, subfolder="image_encoder"
-            )
+            clip_image_processor = CLIPImageProcessor.from_pretrained(model_path, subfolder="image_encoder")
         else:
             clip_image_encoder = None
             clip_image_processor = None
@@ -465,7 +440,9 @@ class EasyAnimate:
             # If 4D and channels are in the first dimension (C, F, H, W or C, H, W, F),
             # permute to (F, C, H, W) for consistency.
             if sample.ndim == 4 and sample.shape[0] in channel_counts:
-                return sample.permute(1, 0, 2, 3)  # Assuming (C, F, H, W) -> (F, C, H, W) or (C, H, W, F) -> (F, C, H, W)
+                return sample.permute(
+                    1, 0, 2, 3
+                )  # Assuming (C, F, H, W) -> (F, C, H, W) or (C, H, W, F) -> (F, C, H, W)
             return sample
 
         if isinstance(sample, np.ndarray):
@@ -475,7 +452,9 @@ class EasyAnimate:
             # If 4D and channels are in the first dimension (C, F, H, W or C, H, W, F),
             # permute to (F, C, H, W) for consistency.
             if sample.ndim == 4 and sample.shape[0] in channel_counts:
-                return np.transpose(sample, (1, 0, 2, 3))  # Assuming (C, F, H, W) -> (F, C, H, W) or (C, H, W, F) -> (F, C, H, W)
+                return np.transpose(
+                    sample, (1, 0, 2, 3)
+                )  # Assuming (C, F, H, W) -> (F, C, H, W) or (C, H, W, F) -> (F, C, H, W)
             return sample
 
         # If the sample is a list or tuple containing a single item, unwrap and normalize recursively.

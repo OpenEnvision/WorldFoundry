@@ -3,23 +3,37 @@ import asyncio
 import inspect
 import os
 import time
+from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from copy import deepcopy
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Union
+from typing import Any
 
 import lmdeploy
 import torch
-from lmdeploy import PytorchEngineConfig, TurbomindEngineConfig, VisionConfig, pipeline
+from lmdeploy import TurbomindEngineConfig, VisionConfig, pipeline
 from lmdeploy.api import autoget_backend_config
 from lmdeploy.serve import async_engine
 from packaging import version
 from transformers import GenerationConfig
 
-from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm import InferRequest, Template, TemplateMeta, get_model_tokenizer
+from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm import (
+    InferRequest,
+    Template,
+    TemplateMeta,
+    get_model_tokenizer,
+)
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.plugin import Metric
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.utils import get_logger, get_seed
-from ..protocol import (ChatCompletionResponse, ChatCompletionResponseChoice, ChatCompletionResponseStreamChoice,
-                        ChatCompletionStreamResponse, ChatMessage, DeltaMessage, RequestConfig)
+
+from ..protocol import (
+    ChatCompletionResponse,
+    ChatCompletionResponseChoice,
+    ChatCompletionResponseStreamChoice,
+    ChatCompletionStreamResponse,
+    ChatMessage,
+    DeltaMessage,
+    RequestConfig,
+)
 from .infer_engine import InferEngine
 from .patch import patch_auto_config, patch_auto_tokenizer
 from .utils import InferStreamer
@@ -34,24 +48,23 @@ logger = get_logger()
 
 
 class LmdeployEngine(InferEngine):
-
     def __init__(
         self,
         model_id_or_path: str,
-        torch_dtype: Optional[torch.dtype] = None,
+        torch_dtype: torch.dtype | None = None,
         *,
-        model_type: Optional[str] = None,
-        use_hf: Optional[bool] = None,
-        hub_token: Optional[str] = None,
-        revision: Optional[str] = None,
+        model_type: str | None = None,
+        use_hf: bool | None = None,
+        hub_token: str | None = None,
+        revision: str | None = None,
         # engine_kwargs
         tp: int = 1,
-        session_len: Optional[int] = None,
+        session_len: int | None = None,
         cache_max_entry_count: float = 0.8,
         quant_policy: int = 0,  # e.g. 4, 8
         vision_batch_size: int = 1,  # max_batch_size in VisionConfig
-        engine_kwargs: Optional[Dict[str, Any]] = None,
-        template: Optional[Template] = None,
+        engine_kwargs: dict[str, Any] | None = None,
+        template: Template | None = None,
     ) -> None:
         if engine_kwargs is None:
             engine_kwargs = {}
@@ -63,7 +76,8 @@ class LmdeployEngine(InferEngine):
             model_type=model_type,
             use_hf=use_hf,
             hub_token=hub_token,
-            revision=revision)[1]
+            revision=revision,
+        )[1]
         self._post_init(template)
 
         if self.max_model_len is not None:
@@ -74,42 +88,45 @@ class LmdeployEngine(InferEngine):
             cache_max_entry_count=cache_max_entry_count,
             quant_policy=quant_policy,
             vision_batch_size=vision_batch_size,
-            **engine_kwargs)
+            **engine_kwargs,
+        )
 
         self.config.torch_dtype = torch_dtype or self.model_info.torch_dtype
 
         self._prepare_engine()
         self._load_generation_config()
 
-    def _prepare_engine_kwargs(self,
-                               tp: int = 1,
-                               session_len: Optional[int] = None,
-                               cache_max_entry_count: float = 0.8,
-                               quant_policy: int = 0,
-                               vision_batch_size: int = 1,
-                               **engine_kwargs):
-        engine_kwargs['tp'] = tp
-        engine_kwargs['session_len'] = session_len
-        engine_kwargs['cache_max_entry_count'] = cache_max_entry_count
-        engine_kwargs['quant_policy'] = quant_policy
+    def _prepare_engine_kwargs(
+        self,
+        tp: int = 1,
+        session_len: int | None = None,
+        cache_max_entry_count: float = 0.8,
+        quant_policy: int = 0,
+        vision_batch_size: int = 1,
+        **engine_kwargs,
+    ):
+        engine_kwargs["tp"] = tp
+        engine_kwargs["session_len"] = session_len
+        engine_kwargs["cache_max_entry_count"] = cache_max_entry_count
+        engine_kwargs["quant_policy"] = quant_policy
         backend_config = TurbomindEngineConfig(**engine_kwargs)
         backend_config = autoget_backend_config(self.model_dir, backend_config)
         self.backend_config = backend_config
-        logger.info(f'backend_config: {backend_config}')
+        logger.info(f"backend_config: {backend_config}")
 
         pipeline_kwargs = {}
         is_multimodal = self.model_meta.is_multimodal
         if is_multimodal:
             vision_config = VisionConfig(max_batch_size=vision_batch_size)
-            pipeline_kwargs['vision_config'] = vision_config
-            logger.info(f'vision_config: {vision_config}')
+            pipeline_kwargs["vision_config"] = vision_config
+            logger.info(f"vision_config: {vision_config}")
         self.pipeline_kwargs = pipeline_kwargs
 
     @contextmanager
     def _patch_pipeline(self):
         _old_best_match_model = async_engine.best_match_model
 
-        def _best_match_model(*args, **kwargs) -> Optional[str]:
+        def _best_match_model(*args, **kwargs) -> str | None:
             return self.model_info.model_type
 
         async_engine.best_match_model = _best_match_model
@@ -124,13 +141,13 @@ class LmdeployEngine(InferEngine):
         self.engine = engine
 
     def _load_generation_config(self):
-        generation_config_path = os.path.join(self.model_dir, 'generation_config.json')
+        generation_config_path = os.path.join(self.model_dir, "generation_config.json")
         if os.path.isfile(generation_config_path):
             generation_config = GenerationConfig.from_pretrained(self.model_dir)
             kwargs = generation_config.to_dict()
-            max_new_tokens = kwargs.get('max_new_tokens')
+            max_new_tokens = kwargs.get("max_new_tokens")
             if max_new_tokens is None:
-                kwargs.pop('max_new_tokens', None)
+                kwargs.pop("max_new_tokens", None)
             parameters = inspect.signature(LmdeployGenerationConfig).parameters
             for k, v in kwargs.copy().items():
                 if k not in parameters or v is None:
@@ -139,8 +156,8 @@ class LmdeployEngine(InferEngine):
         else:
             self.generation_config = LmdeployGenerationConfig()
 
-    def _get_stop_token_ids(self, stop_words: List[Union[str, List[int], None]]) -> List[int]:
-        stop_token_ids: List[int] = []
+    def _get_stop_token_ids(self, stop_words: list[str | list[int] | None]) -> list[int]:
+        stop_token_ids: list[int] = []
         for stop_word in stop_words:
             if stop_word is None:
                 continue
@@ -158,16 +175,17 @@ class LmdeployEngine(InferEngine):
                 stop_token_ids.append(stop_token)
         return stop_token_ids
 
-    def _add_stop_words(self, generation_config: LmdeployGenerationConfig, request_config: RequestConfig,
-                        template_meta: TemplateMeta) -> None:
+    def _add_stop_words(
+        self, generation_config: LmdeployGenerationConfig, request_config: RequestConfig, template_meta: TemplateMeta
+    ) -> None:
         stop_words = (request_config.stop or []) + (self.generation_config.stop_words or []) + template_meta.stop_words
         generation_config.stop_words = self._get_stop_token_ids(stop_words)
         # compat lmdeploy >= 0.6.*
         generation_config.stop_token_ids = generation_config.stop_words
 
     def _prepare_generation_config(self, request_config: RequestConfig) -> LmdeployGenerationConfig:
-        kwargs = {'max_new_tokens': request_config.max_tokens}
-        for key in ['temperature', 'top_k', 'top_p', 'repetition_penalty']:
+        kwargs = {"max_new_tokens": request_config.max_tokens}
+        for key in ["temperature", "top_k", "top_p", "repetition_penalty"]:
             new_value = getattr(request_config, key)
             if new_value is None:
                 kwargs[key] = getattr(self.generation_config, key)
@@ -175,26 +193,26 @@ class LmdeployEngine(InferEngine):
                 kwargs[key] = new_value
         if request_config.seed is None:
             request_config.seed = get_seed()
-        kwargs['random_seed'] = request_config.seed
+        kwargs["random_seed"] = request_config.seed
         if request_config.temperature == 0:
-            kwargs['temperature'] = 1  # avoid unnecessary process
-            kwargs['top_k'] = 1
+            kwargs["temperature"] = 1  # avoid unnecessary process
+            kwargs["top_k"] = 1
 
         if request_config.logprobs:
-            kwargs['logprobs'] = 1
+            kwargs["logprobs"] = 1
             if request_config.top_logprobs is not None:
-                kwargs['logprobs'] = max(1, request_config.top_logprobs)
+                kwargs["logprobs"] = max(1, request_config.top_logprobs)
 
         res = LmdeployGenerationConfig(**kwargs)
         res.top_logprobs = request_config.top_logprobs
         return res
 
     async def _infer_stream_async(
-            self, template: Template, inputs: Dict[str, Any],
-            generation_config: LmdeployGenerationConfig) -> AsyncIterator[ChatCompletionStreamResponse]:
+        self, template: Template, inputs: dict[str, Any], generation_config: LmdeployGenerationConfig
+    ) -> AsyncIterator[ChatCompletionStreamResponse]:
         session_id = time.time_ns()
-        kwargs = {'stream_output': True, 'gen_config': generation_config, 'sequence_start': True, 'sequence_end': True}
-        if version.parse(lmdeploy.__version__) >= version.parse('0.6.5'):
+        kwargs = {"stream_output": True, "gen_config": generation_config, "sequence_start": True, "sequence_end": True}
+        if version.parse(lmdeploy.__version__) >= version.parse("0.6.5"):
             async with self.engine.model_inst(session_id) as inst:
                 context = self.engine.safe_run(inst, session_id, **inputs, **kwargs)
         else:
@@ -203,7 +221,7 @@ class LmdeployEngine(InferEngine):
         infer_streamer = InferStreamer(template)
         token_idx = 0
         async with context as gen:
-            if version.parse(lmdeploy.__version__) < version.parse('0.6.5'):
+            if version.parse(lmdeploy.__version__) < version.parse("0.6.5"):
                 generator = await self.engine.get_generator(False, session_id)
                 gen = generator.async_stream_infer(session_id=session_id, **inputs, **kwargs)
             is_finished = False
@@ -216,97 +234,105 @@ class LmdeployEngine(InferEngine):
                 if not delta_text and not is_finished:
                     continue
 
-                logprobs = self._get_logprobs(output.logprobs, output.token_ids[token_idx:],
-                                              generation_config.top_logprobs)
+                logprobs = self._get_logprobs(
+                    output.logprobs, output.token_ids[token_idx:], generation_config.top_logprobs
+                )
                 token_idx = len(output.token_ids)
 
-                usage_info = self._get_usage_info(len(inputs['input_ids']), output.num_token)
+                usage_info = self._get_usage_info(len(inputs["input_ids"]), output.num_token)
                 toolcall = None
                 if is_finished:
                     toolcall = self._get_toolcall(template.decode(output.token_ids), template)
-                finish_reason = self._get_finish_reason(generation_config.max_new_tokens, output.num_token,
-                                                        output.status.name == 'FINISH')
+                finish_reason = self._get_finish_reason(
+                    generation_config.max_new_tokens, output.num_token, output.status.name == "FINISH"
+                )
                 choices = [
                     ChatCompletionResponseStreamChoice(
                         index=0,
-                        delta=DeltaMessage(role='assistant', content=delta_text, tool_calls=toolcall),
+                        delta=DeltaMessage(role="assistant", content=delta_text, tool_calls=toolcall),
                         finish_reason=finish_reason,
-                        logprobs=logprobs)
+                        logprobs=logprobs,
+                    )
                 ]
                 yield ChatCompletionStreamResponse(model=self.model_name, choices=choices, usage=usage_info)
 
-    async def _infer_full_async(self, template: Template, inputs: Dict[str, Any],
-                                generation_config: LmdeployGenerationConfig) -> ChatCompletionResponse:
+    async def _infer_full_async(
+        self, template: Template, inputs: dict[str, Any], generation_config: LmdeployGenerationConfig
+    ) -> ChatCompletionResponse:
         session_id = time.time_ns()
-        kwargs = {'stream_output': False, 'gen_config': generation_config, 'sequence_start': True, 'sequence_end': True}
-        if version.parse(lmdeploy.__version__) >= version.parse('0.6.5'):
+        kwargs = {"stream_output": False, "gen_config": generation_config, "sequence_start": True, "sequence_end": True}
+        if version.parse(lmdeploy.__version__) >= version.parse("0.6.5"):
             async with self.engine.model_inst(session_id) as inst:
                 async with self.engine.safe_run(inst, session_id, **inputs, **kwargs) as gen:
-                    async for output in gen:
+                    async for output in gen:  # noqa: B007 - The loop variable is read outside the loop.
                         pass
-                if self.engine.backend == 'pytorch':
+                if self.engine.backend == "pytorch":
                     # manually end pytorch session
                     await inst.async_end(session_id)
 
         else:
             async with self.engine.safe_run(session_id):
                 generator = await self.engine.get_generator(False, session_id)
-                async for output in generator.async_stream_infer(session_id=session_id, **inputs, **kwargs):
+                async for output in generator.async_stream_infer(session_id=session_id, **inputs, **kwargs):  # noqa: B007 - The loop variable is read outside the loop.
                     pass
 
         response = template.decode(output.token_ids)
         logprobs = self._get_logprobs(output.logprobs, output.token_ids, generation_config.top_logprobs)
 
-        usage_info = self._get_usage_info(len(inputs['input_ids']), output.num_token)
+        usage_info = self._get_usage_info(len(inputs["input_ids"]), output.num_token)
         toolcall = self._get_toolcall(response, template)
-        finish_reason = self._get_finish_reason(generation_config.max_new_tokens, output.num_token,
-                                                output.status.name == 'FINISH')
+        finish_reason = self._get_finish_reason(
+            generation_config.max_new_tokens, output.num_token, output.status.name == "FINISH"
+        )
         choices = [
             ChatCompletionResponseChoice(
                 index=0,
-                message=ChatMessage(role='assistant', content=response, tool_calls=toolcall),
+                message=ChatMessage(role="assistant", content=response, tool_calls=toolcall),
                 finish_reason=finish_reason,
-                logprobs=logprobs)
+                logprobs=logprobs,
+            )
         ]
         return ChatCompletionResponse(model=self.model_name, choices=choices, usage=usage_info)
 
-    async def infer_async(self,
-                          infer_request: InferRequest,
-                          request_config: Optional[RequestConfig] = None,
-                          *,
-                          template: Optional[Template] = None,
-                          pre_infer_hook=None,
-                          **kwargs) -> Union[ChatCompletionResponse, AsyncIterator[ChatCompletionStreamResponse]]:
+    async def infer_async(
+        self,
+        infer_request: InferRequest,
+        request_config: RequestConfig | None = None,
+        *,
+        template: Template | None = None,
+        pre_infer_hook=None,
+        **kwargs,
+    ) -> ChatCompletionResponse | AsyncIterator[ChatCompletionStreamResponse]:
         request_config = deepcopy(request_config or RequestConfig())
         if template is None:
             template = self.default_template
 
-        template.set_mode('lmdeploy')
+        template.set_mode("lmdeploy")
 
         loop = asyncio.get_running_loop()
         with torch.inference_mode():
             inputs = await loop.run_in_executor(None, template.encode, infer_request)
-        images = inputs.pop('images', None)
+        images = inputs.pop("images", None)
         if images:
-            if version.parse(lmdeploy.__version__) >= version.parse('0.6.5'):
-                messages = self.engine._convert_prompts(('', images))
+            if version.parse(lmdeploy.__version__) >= version.parse("0.6.5"):
+                messages = self.engine._convert_prompts(("", images))
                 messages = await self.engine.async_convert_to_pil_images(messages)
                 results = await self.engine.vl_encoder.preprocess(messages)
-                if self.engine.backend == 'turbomind':
+                if self.engine.backend == "turbomind":
                     results = await self.engine.vl_encoder.async_infer(results)
-                    inputs['images'] = [result['content'] for result in results if result['role'] == 'forward'][0]
+                    inputs["images"] = [result["content"] for result in results if result["role"] == "forward"][0]  # noqa: RUF015 - Keeps eager list construction and IndexError.
                     await template.prepare_lmdeploy_turbomind_inputs(inputs)
                 else:
-                    inputs['images'] = results[1]['content']
+                    inputs["images"] = results[1]["content"]
                     await template.prepare_lmdeploy_pytorch_inputs(inputs)
             else:
-                inputs['images'] = await self.engine.vl_encoder.async_infer(images)
+                inputs["images"] = await self.engine.vl_encoder.async_infer(images)
                 await template.prepare_lmdeploy_turbomind_inputs(inputs)
 
         self.set_default_max_tokens(request_config, inputs)
         generation_config = self._prepare_generation_config(request_config)
         self._add_stop_words(generation_config, request_config, template.template_meta)
-        kwargs.update({'template': template, 'inputs': inputs, 'generation_config': generation_config})
+        kwargs.update({"template": template, "inputs": inputs, "generation_config": generation_config})
         if pre_infer_hook:
             kwargs = pre_infer_hook(kwargs)
         if request_config.stream:
@@ -315,19 +341,19 @@ class LmdeployEngine(InferEngine):
             return await self._infer_full_async(**kwargs)
 
     def _batch_infer_stream(self, *args, **kwargs):
-        if hasattr(self.engine, 'vl_encoder'):
+        if hasattr(self.engine, "vl_encoder"):
             self.engine.vl_encoder._loop_task = None
-        if hasattr(self.engine, 'free_insts'):
+        if hasattr(self.engine, "free_insts"):
             self.engine.free_insts = None
         return super()._batch_infer_stream(*args, **kwargs)
 
     def infer(
         self,
-        infer_requests: List[InferRequest],
-        request_config: Optional[RequestConfig] = None,
-        metrics: Optional[List[Metric]] = None,
+        infer_requests: list[InferRequest],
+        request_config: RequestConfig | None = None,
+        metrics: list[Metric] | None = None,
         *,
-        template: Optional[Template] = None,
-        use_tqdm: Optional[bool] = None,
-    ) -> List[Union[ChatCompletionResponse, Iterator[ChatCompletionStreamResponse]]]:
+        template: Template | None = None,
+        use_tqdm: bool | None = None,
+    ) -> list[ChatCompletionResponse | Iterator[ChatCompletionStreamResponse]]:
         return super().infer(infer_requests, request_config, metrics, template=template, use_tqdm=use_tqdm)

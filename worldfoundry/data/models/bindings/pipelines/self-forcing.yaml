@@ -3,7 +3,7 @@ binding_id: self-forcing
 model_id: self-forcing
 runner: worldfoundry.pipeline
 pipeline:
-  target: worldfoundry.pipelines.forcing.pipeline_forcing:SelfForcingPipeline
+  target: worldfoundry.pipelines.forcing.pipeline_native_forcing:NativeSelfForcingPipeline
   loading:
     method: from_pretrained
     signature: unified

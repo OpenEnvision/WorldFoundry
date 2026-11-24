@@ -3,24 +3,10 @@ model_id: helios
 runtime:
   kind: official_cli
   backend_quality: official_vendored_helios_runtime
-  # Running from the Helios package directory shadows the external Hugging Face
-  # `kernels` package with `helios/kernels`.  The module entrypoint is package-
-  # qualified, so use the repository root as cwd and keep the package on
-  # PYTHONPATH instead.
-  cwd: ${WORLDFOUNDRY_REPO_ROOT}
-  prepend_repo_root_to_pythonpath: false
-  repo_root_candidates:
-  - ${WORLDFOUNDRY_PACKAGE_ROOT}/synthesis/visual_generation/helios
   checkpoint_candidates:
   - ${WORLDFOUNDRY_CKPT_DIR}/Helios-Distilled
   - ${WORLDFOUNDRY_HFD_ROOT}/BestWishYsh--Helios-Distilled
   required_paths:
-  - id: official_inference_entrypoint
-    base: repo
-    path: infer_helios.py
-  - id: official_pipeline
-    base: repo
-    path: pipeline_helios_diffusers.py
   - id: model_index
     path: model_index.json
   - id: transformer
@@ -53,13 +39,9 @@ runtime:
     nproc_per_node: 1
     cp_backend: ulysses
     negative_prompt: Bright tones, overexposed, static, blurred details, subtitles, paintings, still picture, overall gray, worst quality, low quality, JPEG artifacts, deformed, disfigured, misshapen limbs, fused fingers, messy background, walking backwards
-  command:
-  - "{torchrun}"
-  - "--master_port={master_port}"
-  - --nproc_per_node
-  - "{nproc_per_node}"
-  - --module
-  - worldfoundry.synthesis.visual_generation.helios.infer_helios
+  module: worldfoundry.synthesis.visual_generation.helios.infer_helios
+  nproc_per_node: "{nproc_per_node}"
+  args:
   - --base_model_path
   - "{checkpoint_path}"
   - --transformer_path

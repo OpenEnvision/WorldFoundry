@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import math
 from collections import OrderedDict
-from dataclasses import dataclass
-from typing import Any, NamedTuple, Sequence
+from collections.abc import Sequence
+from typing import Any, NamedTuple
 
 import torch
 import torch.nn.functional as F
@@ -60,9 +60,7 @@ class MLPResNet(nn.Module):
         self.layer_norm1 = nn.LayerNorm(input_dim, device=device)
         self.fc1 = nn.Linear(input_dim, hidden_dim, device=device)
         self.relu = nn.ReLU()
-        self.mlp_resnet_blocks = nn.ModuleList(
-            [MLPResNetBlock(hidden_dim, device=device) for _ in range(num_blocks)]
-        )
+        self.mlp_resnet_blocks = nn.ModuleList([MLPResNetBlock(hidden_dim, device=device) for _ in range(num_blocks)])
         self.layer_norm2 = nn.LayerNorm(hidden_dim, device=device)
         self.fc2 = nn.Linear(hidden_dim, output_dim, device=device)
 
@@ -100,9 +98,7 @@ class L1RegressionActionHead(nn.Module):
     def predict_action(self, hidden_states: torch.Tensor) -> torch.Tensor:
         expected = self.num_actions_chunk * self.action_token_dim
         if hidden_states.shape[1] != expected:
-            raise ValueError(
-                f"A1 action head expected {expected} hidden tokens, got {hidden_states.shape[1]}"
-            )
+            raise ValueError(f"A1 action head expected {expected} hidden tokens, got {hidden_states.shape[1]}")
         reshaped = hidden_states.reshape(hidden_states.shape[0], self.num_actions_chunk, -1)
         return self.model(reshaped)
 
@@ -174,9 +170,7 @@ class CrossAttention(nn.Module):
         batch, target_len, dim = x.shape
         source_len = condition.shape[1]
         q = self.q(x).reshape(batch, target_len, self.num_heads, self.head_dim).transpose(1, 2)
-        kv = self.kv(condition).reshape(
-            batch, source_len, 2, self.num_heads, self.head_dim
-        ).permute(2, 0, 3, 1, 4)
+        kv = self.kv(condition).reshape(batch, source_len, 2, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
         k, v = kv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
         attn_mask = None
@@ -261,9 +255,7 @@ class TimestepEmbedder(nn.Module):
     def timestep_embedding(t: torch.Tensor, dim: int, max_period: int = 10000) -> torch.Tensor:
         half = dim // 2
         frequencies = torch.exp(
-            -math.log(max_period)
-            * torch.arange(half, dtype=torch.float32, device=t.device)
-            / max(half, 1)
+            -math.log(max_period) * torch.arange(half, dtype=torch.float32, device=t.device) / max(half, 1)
         )
         args = t.reshape(-1, 1).float() * frequencies.reshape(1, -1)
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
@@ -315,16 +307,14 @@ class DiT(nn.Module):
         self.horizon = horizon
         self.hidden_size = hidden_size
         self.t_embedder = TimestepEmbedder(hidden_size, device=device)
-        x_position = _multimodal_positions(
-            hidden_size, OrderedDict((('timestep', 1), ('action', horizon)))
-        ).to(device=device)
+        x_position = _multimodal_positions(hidden_size, OrderedDict((("timestep", 1), ("action", horizon)))).to(
+            device=device
+        )
         self.x_pos_embed = nn.Parameter(x_position.unsqueeze(0))
         self.llm_state_cond_pos_embed = nn.Parameter(
             _sincos_1d(hidden_size, llm_state_cond_len).to(device=device).unsqueeze(0)
         )
-        self.blocks = nn.ModuleList(
-            [DiTBlock(hidden_size, num_heads, device=device) for _ in range(depth)]
-        )
+        self.blocks = nn.ModuleList([DiTBlock(hidden_size, num_heads, device=device) for _ in range(depth)])
         self.final_layer = FinalLayer(hidden_size, output_dim, device=device)
         self.llm_state_cond_dim = llm_state_cond_dim
 
@@ -508,10 +498,7 @@ class FlowMatchingActionHead(nn.Module):
         # Retain the older path as well so the in-tree runtime works across
         # both supported cache APIs without pinning a Transformers downgrade.
         from_legacy_cache = getattr(DynamicCache, "from_legacy_cache", None)
-        if from_legacy_cache is not None:
-            cache = from_legacy_cache(legacy_cache)
-        else:
-            cache = DynamicCache(legacy_cache)
+        cache = from_legacy_cache(legacy_cache) if from_legacy_cache is not None else DynamicCache(legacy_cache)
         output = self.qwen2.model(
             inputs_embeds=target,
             attention_mask=attention_mask,
@@ -536,9 +523,7 @@ class AffordVLA(nn.Module):
         self._cache = BufferCache()
         llm_config = config.build_llm_config(device=str(device) if device is not None else None)
         self.transformer = Llm(llm_config, self._cache, device)
-        self.vision_backbone = MolmoVisionBackbone(
-            config.build_vision_config(), llm_config, device
-        )
+        self.vision_backbone = MolmoVisionBackbone(config.build_vision_config(), llm_config, device)
         self.proprio_projector = (
             ProprioProjector(config.d_model, config.proprio_dim, device=device)
             # The released flow-matching checkpoints still project the state
@@ -593,14 +578,10 @@ class AffordVLA(nn.Module):
     ) -> torch.Tensor:
         features = self.vision_backbone(images, image_masks, image_pooling)
         batch = embeddings.shape[0]
-        features = features.reshape(batch, -1, features.shape[-1]).to(
-            device=embeddings.device, dtype=embeddings.dtype
-        )
+        features = features.reshape(batch, -1, features.shape[-1]).to(device=embeddings.device, dtype=embeddings.dtype)
         indices = image_input_idx.reshape(batch, -1).to(embeddings.device)
         if features.shape[:2] != indices.shape:
-            raise ValueError(
-                f"A1 image feature/index mismatch: {tuple(features.shape[:2])} vs {tuple(indices.shape)}"
-            )
+            raise ValueError(f"A1 image feature/index mismatch: {tuple(features.shape[:2])} vs {tuple(indices.shape)}")
         valid = indices >= 0
         rows = torch.arange(batch, device=embeddings.device).unsqueeze(1).expand_as(indices)
         embeddings = embeddings.clone()
@@ -626,9 +607,7 @@ class AffordVLA(nn.Module):
         if self.proprio_projector is not None:
             if action_proprio is None or proprio_token_idx is None:
                 raise ValueError("A1 checkpoint requires state and its proprio token index")
-            projected = self.proprio_projector(
-                action_proprio.to(self.proprio_projector.fc1.weight.dtype)
-            ).to(x.dtype)
+            projected = self.proprio_projector(action_proprio.to(self.proprio_projector.fc1.weight.dtype)).to(x.dtype)
             rows = torch.arange(x.shape[0], device=x.device)
             x = x.clone()
             x[rows, proprio_token_idx.to(x.device)] = projected
@@ -671,12 +650,8 @@ class AffordVLA(nn.Module):
         expected = self.config.num_actions_chunk * self.config.action_token_dim
         selected = []
         for batch_index in range(input_ids.shape[0]):
-            starts = torch.nonzero(
-                input_ids[batch_index] == action_start_token_id, as_tuple=False
-            ).flatten()
-            ends = torch.nonzero(
-                input_ids[batch_index] == action_end_token_id, as_tuple=False
-            ).flatten()
+            starts = torch.nonzero(input_ids[batch_index] == action_start_token_id, as_tuple=False).flatten()
+            ends = torch.nonzero(input_ids[batch_index] == action_end_token_id, as_tuple=False).flatten()
             if not len(starts) or not len(ends):
                 raise ValueError("A1 input is missing action boundary tokens")
             start = int(starts[-1])
@@ -685,9 +660,7 @@ class AffordVLA(nn.Module):
                 raise ValueError("A1 action end token occurs before its action start token")
             end = int(valid_ends[0])
             if end - start - 1 != expected:
-                raise ValueError(
-                    f"A1 expected {expected} action tokens between boundaries, got {end - start - 1}"
-                )
+                raise ValueError(f"A1 expected {expected} action tokens between boundaries, got {end - start - 1}")
             selected.append(hidden_states[batch_index, start + 1 : end])
         return torch.stack(selected, dim=0)
 

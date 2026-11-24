@@ -1,8 +1,0 @@
-schema_version: 2
-binding_id: hyworld-worldgen
-model_id: hyworld-worldgen
-runner: worldfoundry.pipeline
-pipeline:
-  target: worldfoundry.pipelines.hunyuan_world.pipeline_hy_world_2p0_worldgen:HYWorld2WorldgenPipeline
-  loading: {method: from_pretrained, signature: unified}
-  invocation: {mode: native_or_standard_invocation}

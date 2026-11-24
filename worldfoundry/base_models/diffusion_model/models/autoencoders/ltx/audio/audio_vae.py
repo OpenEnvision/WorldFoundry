@@ -13,8 +13,6 @@ implementation detail; do not comment every conv.
 
 from __future__ import annotations
 
-from typing import Set, Tuple
-
 import torch
 import torch.nn.functional as F
 
@@ -81,13 +79,13 @@ class AudioEncoder(torch.nn.Module):
     attention mechanisms, and configurable causal convolutions.
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         *,
         ch: int,
-        ch_mult: Tuple[int, ...] = (1, 2, 4, 8),
+        ch_mult: tuple[int, ...] = (1, 2, 4, 8),
         num_res_blocks: int,
-        attn_resolutions: Set[int],
+        attn_resolutions: set[int],
         dropout: float = 0.0,
         resamp_with_conv: bool = True,
         in_channels: int,
@@ -300,14 +298,14 @@ class AudioDecoder(torch.nn.Module):
     attention resolutions, and causal convolutions.
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         *,
         ch: int,
         out_ch: int,
-        ch_mult: Tuple[int, ...] = (1, 2, 4, 8),
+        ch_mult: tuple[int, ...] = (1, 2, 4, 8),
         num_res_blocks: int,
-        attn_resolutions: Set[int],
+        attn_resolutions: set[int],
         resolution: int,
         z_channels: int,
         norm_type: NormType = NormType.GROUP,
@@ -513,7 +511,7 @@ class AudioDecoder(torch.nn.Module):
         return torch.tanh(h) if self.tanh_out else h
 
 
-def decode_audio(latent: torch.Tensor, audio_decoder: "AudioDecoder", vocoder: "Vocoder") -> Audio:
+def decode_audio(latent: torch.Tensor, audio_decoder: AudioDecoder, vocoder: Vocoder) -> Audio:
     """
     Decode an audio latent representation using the provided audio decoder and vocoder.
     Args:

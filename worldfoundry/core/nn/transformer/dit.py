@@ -41,6 +41,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from functools import partial
 from math import prod
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -385,8 +386,8 @@ class SinusoidalTimestepEmbedder(nn.Module):
             act_layer(),
             nn.Linear(hidden_size, out_size, bias=True, **factory_kwargs),
         )
-        nn.init.normal_(self.mlp[0].weight, std=0.02)
-        nn.init.normal_(self.mlp[2].weight, std=0.02)
+        nn.init.normal_(cast(nn.Linear, self.mlp[0]).weight, std=0.02)
+        nn.init.normal_(cast(nn.Linear, self.mlp[2]).weight, std=0.02)
 
     def forward(self, timestep: torch.Tensor) -> torch.Tensor:
         """``[N]`` or broadcastable t → MLP output in the Linear weight dtype."""
@@ -397,7 +398,7 @@ class SinusoidalTimestepEmbedder(nn.Module):
             self.frequency_embedding_size,
             timestep,
             self.max_period,
-        ).type(self.mlp[0].weight.dtype)
+        ).type(cast(nn.Linear, self.mlp[0]).weight.dtype)
         return self.mlp(frequencies)
 
 
@@ -442,7 +443,7 @@ class DiTFinalLayer(nn.Module):
         """
 
         super().__init__()
-        factory_kwargs = {"device": device, "dtype": dtype}
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs)
         patch_volume = patch_size * patch_size if isinstance(patch_size, int) else prod(patch_size)
         self.linear = nn.Linear(hidden_size, patch_volume * out_channels, bias=True, **factory_kwargs)
@@ -452,8 +453,9 @@ class DiTFinalLayer(nn.Module):
             act_layer(),
             nn.Linear(hidden_size, 2 * hidden_size, bias=True, **factory_kwargs),
         )
-        nn.init.zeros_(self.adaLN_modulation[1].weight)
-        nn.init.zeros_(self.adaLN_modulation[1].bias)
+        modulation = cast(nn.Linear, self.adaLN_modulation[1])
+        nn.init.zeros_(modulation.weight)
+        nn.init.zeros_(modulation.bias)
 
     def forward(self, value: torch.Tensor, condition: torch.Tensor) -> torch.Tensor:
         """``[B, N, hidden]`` tokens → ``[B, N, patch_volume * out_channels]`` voxels."""
@@ -552,10 +554,26 @@ def velocity_to_denoised(
     return (sample.to(calc_dtype) - velocity.to(calc_dtype) * sigma).to(sample.dtype)
 
 
+def denoised_to_velocity(
+    sample: torch.Tensor,
+    sigma: float | torch.Tensor,
+    denoised: torch.Tensor,
+    *,
+    calc_dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """Recover the flow velocity that maps ``sample`` to ``denoised`` at a nonzero scalar ``sigma``."""
+
+    if isinstance(sigma, torch.Tensor):
+        sigma = sigma.to(calc_dtype).item()
+    if sigma == 0:
+        raise ValueError("Sigma can't be 0.0")
+    return ((sample.to(calc_dtype) - denoised.to(calc_dtype)) / sigma).to(sample.dtype)
+
+
 __all__ = [
     "AdaLayerNorm",
-    "ConditioningProjection",
     "ConcatenatedLinear",
+    "ConditioningProjection",
     "DiTFinalLayer",
     "DiTModulation",
     "MLPEmbedder",
@@ -565,6 +583,7 @@ __all__ = [
     "activation_layer",
     "apply_gate",
     "apply_gate_with_prefix",
+    "denoised_to_velocity",
     "modulate_sequence",
     "modulate_sequence_with_prefix",
     "normalization_layer",

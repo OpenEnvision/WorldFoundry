@@ -1,7 +1,6 @@
-from functools import partial
 import importlib
-from typing import Any, Dict, Tuple, TypedDict, Union
-
+from functools import partial
+from typing import Any, TypedDict, Union
 
 _PACKAGE = "worldfoundry.synthesis.action_generation.octo"
 _LEGACY_MODULES = {
@@ -51,11 +50,15 @@ class ModuleSpec(TypedDict):
 
     module: str
     name: str
-    args: Tuple[Any, ...]
-    kwargs: Dict[str, Any]
+    args: tuple[Any, ...]
+    kwargs: dict[str, Any]
 
     @staticmethod
-    def create(callable_or_full_name: Union[str, callable], *args, **kwargs) -> "ModuleSpec":  # type: ignore
+    def create(
+        callable_or_full_name: Union[str, callable],  # noqa: UP007 - callable is a function in the upstream annotation.
+        *args,
+        **kwargs,
+    ) -> "ModuleSpec":  # type: ignore
         """Create a module spec from a callable or import string.
 
         Args:

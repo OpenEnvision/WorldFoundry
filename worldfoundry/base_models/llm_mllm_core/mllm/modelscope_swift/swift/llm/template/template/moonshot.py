@@ -1,7 +1,6 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
-
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, ClassVar, Literal
 
 from ..base import Template
 from ..constant import LLMTemplateType, MLLMTemplateType
@@ -13,53 +12,58 @@ from ..utils import Context, Prompt, findall
 @dataclass
 class MoonlightTemplateMeta(TemplateMeta):
     prefix: Prompt = field(default_factory=list)
-    prompt: Prompt = field(default_factory=lambda:
-                           ['<|im_user|>user<|im_middle|>{{QUERY}}<|im_end|><|im_assistant|>assistant<|im_middle|>'])
-    chat_sep: Optional[Prompt] = field(default_factory=lambda: ['<|im_end|>'])
-    suffix: Prompt = field(default_factory=lambda: ['<|im_end|>'])
-    system_prefix: Optional[Prompt] = field(
-        default_factory=lambda: ['<|im_system|>system<|im_middle|>{{SYSTEM}}<|im_end|>'])
-    default_system: str = 'You are a helpful assistant'
+    prompt: Prompt = field(
+        default_factory=lambda: [
+            "<|im_user|>user<|im_middle|>{{QUERY}}<|im_end|><|im_assistant|>assistant<|im_middle|>"
+        ]
+    )
+    chat_sep: Prompt | None = field(default_factory=lambda: ["<|im_end|>"])
+    suffix: Prompt = field(default_factory=lambda: ["<|im_end|>"])
+    system_prefix: Prompt | None = field(
+        default_factory=lambda: ["<|im_system|>system<|im_middle|>{{SYSTEM}}<|im_end|>"]
+    )
+    default_system: str = "You are a helpful assistant"
 
 
 register_template(MoonlightTemplateMeta(LLMTemplateType.moonlight))
 
 
 class KimiVLTemplate(Template):
-    placeholder_tokens = ['<|media_pad|>']
+    placeholder_tokens: ClassVar[list] = ["<|media_pad|>"]
 
-    def replace_tag(self, media_type: Literal['image', 'video', 'audio'], index: int,
-                    inputs: StdTemplateInputs) -> List[Context]:
-        if media_type == 'image':
-            return ['<|media_start|>image<|media_content|><|media_pad|><|media_end|>']
+    def replace_tag(
+        self, media_type: Literal["image", "video", "audio"], index: int, inputs: StdTemplateInputs
+    ) -> list[Context]:
+        if media_type == "image":
+            return ["<|media_start|>image<|media_content|><|media_pad|><|media_end|>"]
 
-    def _encode(self, inputs: StdTemplateInputs) -> Dict[str, Any]:
+    def _encode(self, inputs: StdTemplateInputs) -> dict[str, Any]:
         encoded = super()._encode(inputs)
-        input_ids = encoded['input_ids']
-        labels = encoded['labels']
-        media_token = self._tokenize('<|media_pad|>')[0]
+        input_ids = encoded["input_ids"]
+        labels = encoded["labels"]
+        media_token = self._tokenize("<|media_pad|>")[0]
         idx_list = findall(input_ids, media_token)
         if inputs.images:
             image_processor = self.processor.image_processor
-            image_inputs = image_processor(inputs.images, return_tensors='pt')
-            image_grid_hws = image_inputs['image_grid_hws']
+            image_inputs = image_processor(inputs.images, return_tensors="pt")
+            image_grid_hws = image_inputs["image_grid_hws"]
             merge_length = image_processor.merge_kernel_size[0] * image_processor.merge_kernel_size[1]
 
             def _get_new_tokens(i):
-                token_len = (image_grid_hws[i].prod() // merge_length)
+                token_len = image_grid_hws[i].prod() // merge_length
                 return [media_token] * token_len
 
             input_ids, labels = self._extend_tokens(input_ids, labels, idx_list, _get_new_tokens)
-            encoded['input_ids'] = input_ids
-            encoded['labels'] = labels
+            encoded["input_ids"] = input_ids
+            encoded["labels"] = labels
             encoded.update(image_inputs)
         return encoded
 
-    def _data_collator_mm_data(self, batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _data_collator_mm_data(self, batch: list[dict[str, Any]]) -> dict[str, Any]:
         res = super()._data_collator_mm_data(batch)
-        image_grid_hws = self.concat_tensor(batch, 'image_grid_hws', 0)
+        image_grid_hws = self.concat_tensor(batch, "image_grid_hws", 0)
         if image_grid_hws is not None:
-            res['image_grid_hws'] = image_grid_hws
+            res["image_grid_hws"] = image_grid_hws
         return res
 
 

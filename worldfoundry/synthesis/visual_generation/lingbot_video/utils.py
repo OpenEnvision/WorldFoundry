@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -94,9 +95,7 @@ def _pad_prompt_embeds(
     if mask.ndim != 2:
         raise ValueError(f"prompt mask must be rank-2, got {tuple(mask.shape)}")
     if embeds.shape[:2] != mask.shape:
-        raise ValueError(
-            f"prompt embeds/mask shape mismatch: {tuple(embeds.shape)} vs {tuple(mask.shape)}"
-        )
+        raise ValueError(f"prompt embeds/mask shape mismatch: {tuple(embeds.shape)} vs {tuple(mask.shape)}")
     if embeds.shape[0] != 1:
         raise ValueError(f"batched CFG helper expects batch=1 inputs, got {embeds.shape[0]}")
     if embeds.shape[1] > target_length:
@@ -131,12 +130,8 @@ def batch_cfg_prompt_inputs(
         )
 
     target_length = max(int(prompt_embeds.shape[1]), int(negative_embeds.shape[1]))
-    prompt_padded, prompt_mask_padded = _pad_prompt_embeds(
-        prompt_embeds, prompt_mask, target_length
-    )
-    negative_padded, negative_mask_padded = _pad_prompt_embeds(
-        negative_embeds, negative_mask, target_length
-    )
+    prompt_padded, prompt_mask_padded = _pad_prompt_embeds(prompt_embeds, prompt_mask, target_length)
+    negative_padded, negative_mask_padded = _pad_prompt_embeds(negative_embeds, negative_mask, target_length)
     return (
         torch.cat([prompt_padded, negative_padded], dim=0),
         torch.cat([prompt_mask_padded, negative_mask_padded], dim=0),
@@ -170,10 +165,7 @@ def compute_training_frame_budget(
 ) -> tuple[int, float, int]:
     if num_source_frames <= 0:
         return 1, 0.0, 1
-    if source_fps > sample_fps:
-        raw_val = int(num_source_frames / source_fps * sample_fps)
-    else:
-        raw_val = int(num_source_frames)
+    raw_val = int(num_source_frames / source_fps * sample_fps) if source_fps > sample_fps else int(num_source_frames)
     sample_frame = ((raw_val - 1) // vae_tc) * vae_tc + 1
     sample_frame = max(sample_frame, 1)
     vae_fps = sample_frame / num_source_frames * float(source_fps)
@@ -272,14 +264,14 @@ def load_first_frame_condition_tensor(
     image_aspect = float(image_width) / float(image_height)
     if image_aspect > geometry_aspect:
         crop_height = image_height
-        crop_width = max(1, int(round(crop_height * geometry_aspect)))
-        left = int(round((image_width - crop_width) / 2.0))
+        crop_width = max(1, int(round(crop_height * geometry_aspect)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        left = int(round((image_width - crop_width) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         top = 0
     else:
         crop_width = image_width
-        crop_height = max(1, int(round(crop_width / geometry_aspect)))
+        crop_height = max(1, int(round(crop_width / geometry_aspect)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         left = 0
-        top = int(round((image_height - crop_height) / 2.0))
+        top = int(round((image_height - crop_height) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     crop = image.crop((left, top, left + crop_width, top + crop_height))
     crop = crop.resize((target_width, target_height), resample=Image.BICUBIC)
     arr = np.asarray(crop, dtype=np.float32) / 255.0

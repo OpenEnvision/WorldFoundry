@@ -137,20 +137,6 @@
       "caption": "Method overview: DualCamCtrl’s dual-branch framework jointly generates aligned RGB and depth video latents.",
       "captionZh": "论文方法总览：DualCamCtrl 的双分支框架联合生成对齐的 RGB 与深度视频潜变量。"
     },
-    "dust3r": {
-      "modelId": "dust3r",
-      "paperSrc": "/models/dust3r/paper.png",
-      "teaserSrc": "/models/dust3r/teaser.jpg",
-      "teaserAlt": "Official paper teaser: DUSt3R reconstructs a kitchen pointmap and cameras from four uncalibrated frames.",
-      "teaserAltZh": "论文官方 Teaser：DUSt3R 用四张未标定帧重建厨房点图与相机。",
-      "teaserCaption": "Official paper teaser: DUSt3R reconstructs a kitchen pointmap and cameras from four uncalibrated frames.",
-      "teaserCaptionZh": "论文官方 Teaser：DUSt3R 用四张未标定帧重建厨房点图与相机。",
-      "src": "/models/dust3r/overview.png",
-      "alt": "Method overview: shared ViT encoders and interacting decoders predict dense pointmaps in camera-1 coordinates.",
-      "altZh": "论文方法总览：共享 ViT 编码器与交互解码器，在相机 1 坐标系下预测密集点图。",
-      "caption": "Method overview: shared ViT encoders and interacting decoders predict dense pointmaps in camera-1 coordinates.",
-      "captionZh": "论文方法总览：共享 ViT 编码器与交互解码器，在相机 1 坐标系下预测密集点图。"
-    },
     "fantasyworld": {
       "modelId": "fantasyworld",
       "paperSrc": "/models/fantasyworld/paper.png",
@@ -369,14 +355,6 @@
       "caption": "MolmoAct2",
       "captionZh": "MolmoAct2"
     },
-    "monst3r": {
-      "modelId": "monst3r",
-      "teaserSrc": "/models/monst3r/teaser.webp",
-      "teaserAlt": "Official paper teaser: Watch the video.",
-      "teaserAltZh": "论文官方 Teaser：MonST3R 的视频生成论文配图。",
-      "teaserCaption": "Official paper teaser: Watch the video.",
-      "teaserCaptionZh": "论文官方 Teaser：MonST3R 的视频生成论文配图。"
-    },
     "motionctrl": {
       "modelId": "motionctrl",
       "paperSrc": "/models/motionctrl/paper.png",
@@ -481,15 +459,6 @@
       "altZh": "论文方法总览：多玩家视频 token 先做共享自注意力，再按玩家注入动作与首帧条件。",
       "caption": "Method overview: shared self-attention over multi-player video tokens, then per-player action and first-frame conditioning.",
       "captionZh": "论文方法总览：多玩家视频 token 先做共享自注意力，再按玩家注入动作与首帧条件。"
-    },
-    "splatt3r": {
-      "modelId": "splatt3r",
-      "paperSrc": "/models/splatt3r/paper.png",
-      "src": "/models/splatt3r/overview.png",
-      "alt": "Method overview: Method overview. We encode the two uncalibrated images using MASt3R’s pretrained ViT encoder and cross-attention transformers, which we freeze during training. In addition to MASt3R’s prediction head for point.",
-      "altZh": "论文方法总览：Splatt3R 的视频生成架构。",
-      "caption": "Method overview: Method overview. We encode the two uncalibrated images using MASt3R’s pretrained ViT encoder and cross-attention transformers, which we freeze during training. In addition to MASt3R’s prediction head for point.",
-      "captionZh": "论文方法总览：Splatt3R 的视频生成架构。"
     },
     "starvla": {
       "modelId": "starvla",
@@ -821,20 +790,6 @@
       "caption": "Method overview: Flowchart of the proposed DynamiCrafter . During training, we randomly select a video frame as the image condition of the denoising process through the proposed dual-stream image injection mechanism to inherit visual.",
       "captionZh": "论文方法总览：DynamiCrafter 的视频生成架构。"
     },
-    "dvlt": {
-      "modelId": "dvlt",
-      "paperSrc": "/models/dvlt/paper.png",
-      "teaserSrc": "/models/dvlt/teaser.webp",
-      "teaserAlt": "Official paper teaser: DéjàView. Given multiple input views (top-left) , DéjàView reconstructs camera poses and consistent depth by repeatedly applying the same transformer block, with the number of refinement steps K K exposed as an.",
-      "teaserAltZh": "论文官方 Teaser：Déjà View Looping Transformer 的几何与深度论文配图。",
-      "teaserCaption": "Official paper teaser: DéjàView. Given multiple input views (top-left) , DéjàView reconstructs camera poses and consistent depth by repeatedly applying the same transformer block, with the number of refinement steps K K exposed as an.",
-      "teaserCaptionZh": "论文官方 Teaser：Déjà View Looping Transformer 的几何与深度论文配图。",
-      "src": "/models/dvlt/overview.png",
-      "alt": "Method overview: Method overview. V V input images are encoded by a shared DINOv2 ( Oquab et al., 2024 ) backbone. A single looped transformer block with frame-wise and global attention sub-blocks is then applied recurrently to the.",
-      "altZh": "论文方法总览：Déjà View Looping Transformer 的方法架构。",
-      "caption": "Method overview: Method overview. V V input images are encoded by a shared DINOv2 ( Oquab et al., 2024 ) backbone. A single looped transformer block with frame-wise and global attention sub-blocks is then applied recurrently to the.",
-      "captionZh": "论文方法总览：Déjà View Looping Transformer 的方法架构。"
-    },
     "easyanimate": {
       "modelId": "easyanimate",
       "paperSrc": "/models/easyanimate/paper.png",
@@ -1009,19 +964,6 @@
       "altZh": "论文方法总览：HunyuanVideo 1.5 用于潜空间视频生成的 Diffusion Transformer。",
       "caption": "Method overview: HunyuanVideo 1.5’s Diffusion Transformer for latent video generation.",
       "captionZh": "论文方法总览：HunyuanVideo 1.5 用于潜空间视频生成的 Diffusion Transformer。"
-    },
-    "hunyuanworld-voyager": {
-      "modelId": "hunyuanworld-voyager",
-      "paperSrc": "/models/hunyuanworld-voyager/paper.png",
-      "teaserSrc": "/models/hunyuanworld-voyager/teaser.png",
-      "teaserAlt": "Official paper teaser: Loading Balancing for SP-Ring.",
-      "teaserAltZh": "论文官方 Teaser：HunyuanWorld-Voyager 的方法论文配图。",
-      "teaserCaption": "Official paper teaser: Loading Balancing for SP-Ring.",
-      "teaserCaptionZh": "论文官方 Teaser：HunyuanWorld-Voyager 的方法论文配图。",
-      "alt": "HunyuanWorld-Voyager",
-      "altZh": "HunyuanWorld-Voyager",
-      "caption": "HunyuanWorld-Voyager",
-      "captionZh": "HunyuanWorld-Voyager"
     },
     "hy-embodied-vla": {
       "modelId": "hy-embodied-vla",
@@ -1566,15 +1508,6 @@
       "caption": "Method overview: Stable Video Infinity . We (a) inject errors into clean latent to break the error-free hypothesis, (b) approximate predictions via one-step integration to calculate bidirectional errors, and (c) dynamically bank and.",
       "captionZh": "论文方法总览：Stable Video Infinity 2.0 的视频生成架构。"
     },
-    "stable-virtual-camera": {
-      "modelId": "stable-virtual-camera",
-      "paperSrc": "/models/stable-virtual-camera/paper.png",
-      "src": "/models/stable-virtual-camera/overview.png",
-      "alt": "Method overview: Method. Seva is trained with fixed sequence length as a “ M M -in N N -out” multi-view diffusion model with standard architecture. It conditions on CLIP embeddings, VAE latents of the input views, and their.",
-      "altZh": "论文方法总览：Stable Virtual Camera 的相机控制架构。",
-      "caption": "Method overview: Method. Seva is trained with fixed sequence length as a “ M M -in N N -out” multi-view diffusion model with standard architecture. It conditions on CLIP embeddings, VAE latents of the input views, and their.",
-      "captionZh": "论文方法总览：Stable Virtual Camera 的相机控制架构。"
-    },
     "t2v_turbo_t2v": {
       "modelId": "t2v_turbo_t2v",
       "paperSrc": "/models/t2v_turbo_t2v/paper.png",
@@ -1625,20 +1558,6 @@
       "altZh": "论文方法总览：UniDepth V2 的几何与深度架构。",
       "caption": "Method overview: Fig. 2: Model Architecture. UniDepthV2 utilizes solely the input image to generate the 3D output ( 𝐎 {O} ). It bootstraps a dense camera prediction ( 𝐂 {C} ) from the Camera Module, injecting prior knowledge on scene.",
       "captionZh": "论文方法总览：UniDepth V2 的几何与深度架构。"
-    },
-    "unik3d-prior": {
-      "modelId": "unik3d-prior",
-      "paperSrc": "/models/unik3d-prior/paper.png",
-      "teaserSrc": "/models/unik3d-prior/teaser.webp",
-      "teaserAlt": "Official paper teaser: UniK3D introduces a novel and versatile approach that delivers precise metric 3D geometry estimation from a single image and for any camera type, ranging from pinhole to panoramic, without requiring any camera.",
-      "teaserAltZh": "论文官方 Teaser：UniK3D 的几何与深度论文配图。",
-      "teaserCaption": "Official paper teaser: UniK3D introduces a novel and versatile approach that delivers precise metric 3D geometry estimation from a single image and for any camera type, ranging from pinhole to panoramic, without requiring any camera.",
-      "teaserCaptionZh": "论文官方 Teaser：UniK3D 的几何与深度论文配图。",
-      "src": "/models/unik3d-prior/overview.png",
-      "alt": "Method overview: Model architecture. UniK3D utilizes solely the single input image to generate the 3D output point cloud ( 𝐎 {O} ) for any camera. The projective geometry of the camera is predicted by the Angular Module. The camera.",
-      "altZh": "论文方法总览：UniK3D 的几何与深度架构。",
-      "caption": "Method overview: Model architecture. UniK3D utilizes solely the single input image to generate the 3D output point cloud ( 𝐎 {O} ) for any camera. The projective geometry of the camera is predicted by the Angular Module. The camera.",
-      "captionZh": "论文方法总览：UniK3D 的几何与深度架构。"
     },
     "vchitect-2-t2v": {
       "modelId": "vchitect-2-t2v",
@@ -1755,15 +1674,6 @@
     "worldlabs": {
       "modelId": "worldlabs"
     },
-    "worldgen": {
-      "modelId": "worldgen",
-      "paperSrc": "/models/worldgen/paper.png",
-      "src": "/models/worldgen/overview.webp",
-      "alt": "Method overview: WorldGen overview . Our pipeline begins by planning the scene layout, producing a blockout ( B B ), reference image ( 𝐑 {R} ), and navigation mesh (S) (Stage 1). Next, we generate a single 3D mesh that aligns with.",
-      "altZh": "论文方法总览：WorldGen 的方法架构。",
-      "caption": "Method overview: WorldGen overview . Our pipeline begins by planning the scene layout, producing a blockout ( B B ), reference image ( 𝐑 {R} ), and navigation mesh (S) (Stage 1). Next, we generate a single 3D mesh that aligns with.",
-      "captionZh": "论文方法总览：WorldGen 的方法架构。"
-    },
     "xgen-jing": {
       "modelId": "xgen-jing"
     },
@@ -1871,20 +1781,6 @@
       "caption": "Method overview: The overall architecture of Dexbotic. It introduces the Dexdata format to unify different embodiments. In Model Layer, Dexbotic integrates the open-source vision encoder, LLM and action expert through a unified.",
       "captionZh": "论文方法总览：DM0 的机器人操作架构。"
     },
-    "egowm": {
-      "modelId": "egowm",
-      "paperSrc": "/models/egowm/paper.png",
-      "teaserSrc": "/models/egowm/teaser.webp",
-      "teaserAlt": "Official paper teaser: EgoWM predicts future frames that follow robot actions for quadruped navigation and humanoid interaction.",
-      "teaserAltZh": "论文官方 Teaser：EgoWM 按机器人动作预测未来帧，覆盖四足导航与人形交互。",
-      "teaserCaption": "Official paper teaser: EgoWM predicts future frames that follow robot actions for quadruped navigation and humanoid interaction.",
-      "teaserCaptionZh": "论文官方 Teaser：EgoWM 按机器人动作预测未来帧，覆盖四足导航与人形交互。",
-      "src": "/models/egowm/overview.png",
-      "alt": "Method overview: an action-projection module conditions a trainable U-Net or DiT on a frozen VAE latent of the first frame.",
-      "altZh": "论文方法总览：动作投影模块在冻结 VAE 的首帧潜变量上条件化可训练的 U-Net 或 DiT。",
-      "caption": "Method overview: an action-projection module conditions a trainable U-Net or DiT on a frozen VAE latent of the first frame.",
-      "captionZh": "论文方法总览：动作投影模块在冻结 VAE 的首帧潜变量上条件化可训练的 U-Net 或 DiT。"
-    },
     "eventvla": {
       "modelId": "eventvla",
       "paperSrc": "/models/eventvla/paper.png",
@@ -1976,19 +1872,6 @@
       "altZh": "论文方法总览：HunyuanWorld 1.0 的视频生成架构。",
       "caption": "Method overview: An overview of HunyuanWorld 1.0 architecture for 3D world generation. Given a conditioned scene image or textual description, HunyuanWorld 1.0 generates layer-wise 3D worlds in mesh through a staged generative.",
       "captionZh": "论文方法总览：HunyuanWorld 1.0 的视频生成架构。"
-    },
-    "hyworld-worldgen": {
-      "modelId": "hyworld-worldgen",
-      "paperSrc": "/models/hyworld-worldgen/paper.png",
-      "teaserSrc": "/models/hy-world-2.0/teaser.jpg",
-      "teaserAlt": "Official paper teaser: HY-World 2.0 samples from the paper.",
-      "teaserAltZh": "论文官方 Teaser：HY-World 2.0 论文中的样例。",
-      "teaserCaption": "Official paper teaser: HY-World 2.0 samples from the paper.",
-      "teaserCaptionZh": "论文官方 Teaser：HY-World 2.0 论文中的样例。",
-      "alt": "HY-World 2.0 Trajectory Renderer",
-      "altZh": "HY-World 2.0 Trajectory Renderer",
-      "caption": "HY-World 2.0 Trajectory Renderer",
-      "captionZh": "HY-World 2.0 Trajectory Renderer"
     },
     "infinite-vggt": {
       "modelId": "infinite-vggt",
@@ -2171,19 +2054,6 @@
       "caption": "Method overview: OmniForcing breaks the latency barrier for joint audio-visual generation. Top: Our framework achieves real-time streaming at ∼ 25 FPS with an ultra-low Time-To-First-Chunk (TTFC) of ∼ 0.7s. Bottom: The bidirectional.",
       "captionZh": "论文方法总览：OmniForcing 的方法架构。"
     },
-    "open-dreamer": {
-      "modelId": "open-dreamer",
-      "paperSrc": "/models/open-dreamer/paper.png",
-      "teaserSrc": "/models/open-dreamer/teaser.png",
-      "teaserAlt": "Official paper teaser: Dreamer 4 learns to solve complex control tasks by reinforcement learning inside of its world model. We decode the imagined training sequences for visualization, showing that the world model has learned to simulate a.",
-      "teaserAltZh": "论文官方 Teaser：Open Dreamer 的交互世界模型论文配图。",
-      "teaserCaption": "Official paper teaser: Dreamer 4 learns to solve complex control tasks by reinforcement learning inside of its world model. We decode the imagined training sequences for visualization, showing that the world model has learned to simulate a.",
-      "teaserCaptionZh": "论文官方 Teaser：Open Dreamer 的交互世界模型论文配图。",
-      "alt": "Training Agents Inside of Scalable World Models",
-      "altZh": "Training Agents Inside of Scalable World Models",
-      "caption": "Training Agents Inside of Scalable World Models",
-      "captionZh": "Training Agents Inside of Scalable World Models"
-    },
     "pi0": {
       "modelId": "pi0",
       "teaserSrc": "/models/pi0/teaser.jpg",
@@ -2289,19 +2159,6 @@
       "caption": "Method overview: Sana’s linear DiT pipeline for deep-compression latent image generation.",
       "captionZh": "论文方法总览：Sana 用线性 DiT 在深压缩潜空间生成图像。"
     },
-    "shotstream": {
-      "modelId": "shotstream",
-      "teaserSrc": "/models/shotstream/teaser.png",
-      "teaserAlt": "Official paper teaser: Overview of the ShotStream workflow, which enables real-time, long, multi-shot video generation from streaming prompts.",
-      "teaserAltZh": "论文官方 Teaser：ShotStream 的视频生成论文配图。",
-      "teaserCaption": "Official paper teaser: Overview of the ShotStream workflow, which enables real-time, long, multi-shot video generation from streaming prompts.",
-      "teaserCaptionZh": "论文官方 Teaser：ShotStream 的视频生成论文配图。",
-      "src": "/models/shotstream/overview.png",
-      "alt": "Method overview: Architecture of the Bidirectional Next-Shot Teacher Model. To realize ShotStream, we first fine-tune a text-to-video model into a bidirectional next-shot model, which generates subsequent shots conditioned on sparse.",
-      "altZh": "论文方法总览：ShotStream 的视频生成架构。",
-      "caption": "Method overview: Architecture of the Bidirectional Next-Shot Teacher Model. To realize ShotStream, we first fine-tune a text-to-video model into a bidirectional next-shot model, which generates subsequent shots conditioned on sparse.",
-      "captionZh": "论文方法总览：ShotStream 的视频生成架构。"
-    },
     "simworld": {
       "modelId": "simworld",
       "teaserSrc": "/models/simworld/teaser.webp",
@@ -2402,19 +2259,6 @@
       "altZh": "论文方法总览：Vid2World 的交互世界模型架构。",
       "caption": "Method overview: Transforming video diffusion models into interactive world models involves two key challenges : (1) Causal generation: converting full-sequence diffusion models into causal diffusion models; (2) Action conditioning:.",
       "captionZh": "论文方法总览：Vid2World 的交互世界模型架构。"
-    },
-    "wilddet3d": {
-      "modelId": "wilddet3d",
-      "teaserSrc": "/models/wilddet3d/teaser.webp",
-      "teaserAlt": "Official paper teaser: WildDet3D does open-vocabulary 3D detection from any image, device, and prompt.",
-      "teaserAltZh": "论文官方 Teaser：WildDet3D 从任意图像、设备与提示做开放词汇三维检测。",
-      "teaserCaption": "Official paper teaser: WildDet3D does open-vocabulary 3D detection from any image, device, and prompt.",
-      "teaserCaptionZh": "论文官方 Teaser：WildDet3D 从任意图像、设备与提示做开放词汇三维检测。",
-      "src": "/models/wilddet3d/overview.webp",
-      "alt": "Method overview: an image encoder and RGBD encoder fuse depth latents into a promptable detector with 2D and 3D heads.",
-      "altZh": "论文方法总览：图像编码器与 RGBD 编码器融合深度潜变量，再进入带 2D/3D 头的可提示检测器。",
-      "caption": "Method overview: an image encoder and RGBD encoder fuse depth latents into a promptable detector with 2D and 3D heads.",
-      "captionZh": "论文方法总览：图像编码器与 RGBD 编码器融合深度潜变量，再进入带 2D/3D 头的可提示检测器。"
     },
     "wildworld": {
       "modelId": "wildworld",

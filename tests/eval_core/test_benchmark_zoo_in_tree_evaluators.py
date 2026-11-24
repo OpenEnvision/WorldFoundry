@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from worldfoundry.evaluation.api import ArtifactRef, GenerationRequest, GenerationResult
-from worldfoundry.evaluation.tasks.execution.framework.in_tree_evaluator import BenchmarkZooInTreeEvaluator
-from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import run_evaluate
+from worldfoundry.evals.api import ArtifactRef, GenerationRequest, GenerationResult
+from worldfoundry.evals.tasks.execution.framework.in_tree_evaluator import BenchmarkZooInTreeEvaluator
+from worldfoundry.evals.tasks.execution.orchestration.evaluate import run_evaluate
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TASK_ROOT = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "tasks" / "external"
@@ -250,11 +250,11 @@ def test_metric_protocol_returns_uniform_blocked_result() -> None:
 
 
 def test_new_benchmark_metric_evaluator_paths_are_discoverable() -> None:
-    from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
-    from worldfoundry.evaluation.tasks.execution.framework.video_quality_contract import (
+    from worldfoundry.evals.tasks.contracts.external import get_external_benchmark_contract
+    from worldfoundry.evals.tasks.execution.framework.video_quality_contract import (
         supports_video_quality_benchmark,
     )
-    from worldfoundry.evaluation.tasks.metrics import list_external_metric_evaluators
+    from worldfoundry.evals.tasks.metrics import list_external_metric_evaluators
 
     in_tree_ids = set(TARGET_BENCHMARKS)
     for benchmark_id in NEW_BENCHMARKS_WITH_EVALUATORS:

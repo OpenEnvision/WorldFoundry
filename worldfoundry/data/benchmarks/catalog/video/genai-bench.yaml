@@ -76,17 +76,17 @@ runner:
   scoring:
     engines: [video_quality]
     hooks:
-      video_quality: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_genai_bench_video_quality_contract_file
-  official_script: worldfoundry/evaluation/tasks/execution/runners/genai_bench/run_genai_bench_official_runner.py
+      video_quality: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_genai_bench_video_quality_contract_file
+  official_script: worldfoundry/evals/tasks/execution/runners/genai_bench/run_genai_bench_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.genai_bench.run_genai_bench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.genai_bench.run_genai_bench_official_runner
     generated_arg: null
     limit_arg: --limit
     supports_fixture: true
     default_metrics: [genai_bench_average]
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:GenAIBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:genai-bench
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -145,7 +145,7 @@ data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/genai-bench.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:GenAIBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:genai-bench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
@@ -163,7 +163,7 @@ optional_base_model_dependencies:
 - t2v_metrics_metric_stack
 - t2v_metrics_clip_flant5_xxl
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -182,3 +182,17 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - generated_artifact_manifest
+  - human_preference_data
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - pairwise_preferences
+  - benchmark_contract
+  notes:
+  - Contract records GenAI-Bench pairwise judge accuracy against human preference labels.
+  - Full inference requires MLLM judge outputs; existing human labels and model predictions can be normalized
+    locally.

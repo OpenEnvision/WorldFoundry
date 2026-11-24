@@ -1,2 +1,1 @@
 """MAGI official runtime adapters."""
-

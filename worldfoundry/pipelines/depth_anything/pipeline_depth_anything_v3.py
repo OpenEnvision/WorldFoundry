@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any
 
 import torch
 
@@ -21,9 +22,9 @@ class DepthAnything3Pipeline(PipelineABC):
 
     def __init__(
         self,
-        representation: Optional[DepthAnything3Representation] = None,
-        operator: Optional[DepthAnything3Operator] = None,
-        device: Optional[str] = None,
+        representation: DepthAnything3Representation | None = None,
+        operator: DepthAnything3Operator | None = None,
+        device: str | None = None,
         default_process_res: int = 504,
         default_process_res_method: str = "upper_bound_resize",
         default_ref_view_strategy: str = "saddle_balanced",
@@ -39,27 +40,25 @@ class DepthAnything3Pipeline(PipelineABC):
         self.default_align_to_input_ext_scale = bool(default_align_to_input_ext_scale)
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: str | Dict[str, Any] | None = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        model_path: str | dict[str, Any] | None = None,
+        required_components: dict[str, Any] | None = None,
         pretrained_model_path: str = DEFAULT_DEPTH_ANYTHING3_REPO,
-        device: Optional[str] = None,
+        device: str | None = None,
         default_process_res: int = 504,
         default_process_res_method: str = "upper_bound_resize",
         default_ref_view_strategy: str = "saddle_balanced",
         default_align_to_input_ext_scale: bool = True,
         **kwargs,
-    ) -> "DepthAnything3Pipeline":
+    ) -> DepthAnything3Pipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         component_options = dict(required_components or {})
         if isinstance(model_path, dict):
             component_options.update(model_path)
             model_path = component_options.pop("model_path", None)
         pretrained_model_path = (
-            model_path
-            or component_options.pop("pretrained_model_path", None)
-            or pretrained_model_path
+            model_path or component_options.pop("pretrained_model_path", None) or pretrained_model_path
         )
         default_process_res = component_options.pop("default_process_res", default_process_res)
         default_process_res_method = component_options.pop(
@@ -100,10 +99,10 @@ class DepthAnything3Pipeline(PipelineABC):
         input_data=None,
         images=None,
         videos=None,
-        data_type: Optional[str] = None,
-        max_frames: Optional[int] = None,
+        data_type: str | None = None,
+        max_frames: int | None = None,
         frame_stride: int = 1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Resolve input images for DepthAnything3Pipeline."""
         if videos is not None:
             video_info = self.operator.load_video_frames(
@@ -121,13 +120,7 @@ class DepthAnything3Pipeline(PipelineABC):
         if candidate is None:
             raise ValueError("DepthAnything3Pipeline requires `input_data`, `images`, or `videos`.")
 
-        if (
-            data_type == "video"
-            or (
-                isinstance(candidate, (str, Path))
-                and self.operator.is_video_path(candidate)
-            )
-        ):
+        if data_type == "video" or (isinstance(candidate, (str, Path)) and self.operator.is_video_path(candidate)):
             video_info = self.operator.load_video_frames(
                 candidate,
                 max_frames=max_frames,
@@ -147,9 +140,9 @@ class DepthAnything3Pipeline(PipelineABC):
 
     def _resolve_interaction_flags(
         self,
-        interactions: Optional[Sequence[str] | str],
+        interactions: Sequence[str] | str | None,
         infer_gs: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Resolve interaction flags for DepthAnything3Pipeline."""
         flags = {
             "infer_gs": infer_gs,
@@ -173,31 +166,31 @@ class DepthAnything3Pipeline(PipelineABC):
         input_data=None,
         images=None,
         videos=None,
-        interactions: Optional[Sequence[str] | str] = None,
+        interactions: Sequence[str] | str | None = None,
         extrinsics=None,
         intrinsics=None,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         export_format: str = "depth_vis",
         export_feat_layers=None,
-        process_res: Optional[int] = None,
-        process_res_method: Optional[str] = None,
+        process_res: int | None = None,
+        process_res_method: str | None = None,
         use_ray_pose: bool = False,
         infer_gs: bool = False,
-        ref_view_strategy: Optional[str] = None,
-        align_to_input_ext_scale: Optional[bool] = None,
+        ref_view_strategy: str | None = None,
+        align_to_input_ext_scale: bool | None = None,
         render_exts=None,
         render_ixts=None,
         render_hw=None,
-        data_type: Optional[str] = None,
-        max_frames: Optional[int] = None,
+        data_type: str | None = None,
+        max_frames: int | None = None,
         frame_stride: int = 1,
         conf_thresh_percentile: float = 40.0,
         num_max_points: int = 1_000_000,
         show_cameras: bool = True,
         feat_vis_fps: int = 15,
-        export_kwargs: Optional[Dict[str, Any]] = None,
+        export_kwargs: dict[str, Any] | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
         if self.representation is None:
             raise RuntimeError("Representation model not loaded. Use from_pretrained() first.")
@@ -215,9 +208,7 @@ class DepthAnything3Pipeline(PipelineABC):
             infer_gs=infer_gs,
         )
 
-        if interaction_flags["expects_camera_inputs"] and (
-            extrinsics is None or intrinsics is None
-        ):
+        if interaction_flags["expects_camera_inputs"] and (extrinsics is None or intrinsics is None):
             raise ValueError(
                 "DepthAnything3Pipeline received `pose_conditioned_depth` interaction but "
                 "no `extrinsics`/`intrinsics` were provided."
@@ -261,8 +252,8 @@ class DepthAnything3Pipeline(PipelineABC):
         images=None,
         videos=None,
         video=None,
-        interactions: Optional[Sequence[str] | str] = None,
-        output_dir: Optional[str] = None,
+        interactions: Sequence[str] | str | None = None,
+        output_dir: str | None = None,
         return_dict: bool = False,
         **kwargs,
     ):

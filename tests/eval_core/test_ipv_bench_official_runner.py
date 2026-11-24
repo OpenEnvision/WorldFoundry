@@ -6,16 +6,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_metrics import (
+from worldfoundry.evals.tasks.execution.runners.ipv_bench.ipv_bench_metrics import (
     METRIC_ORDER,
     compute_ipv_bench_metrics,
 )
-from worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_prompts import (
+from worldfoundry.evals.tasks.execution.runners.ipv_bench.ipv_bench_prompts import (
     CANONICAL_PROMPT_COUNT,
     materialize_ipv_bench_generation_requests,
     unique_prompt_records,
 )
-from worldfoundry.evaluation.utils import benchmark_task_sample_path
+from worldfoundry.evals.utils import benchmark_task_sample_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -27,7 +27,7 @@ def test_ipv_bench_prompt_materialization_uses_prompt_ids() -> None:
 
 
 def test_ipv_bench_canonical_prompt_count_from_bundled_assets() -> None:
-    from worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_prompts import load_prompt_records
+    from worldfoundry.evals.tasks.execution.runners.ipv_bench.ipv_bench_prompts import load_prompt_records
 
     records = unique_prompt_records(load_prompt_records())
     assert len(records) == 260
@@ -59,7 +59,7 @@ def test_ipv_bench_official_runner_normalizes_sample_results(tmp_path: Path) -> 
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py",
             "--official-results-path",
             str(sample_path),
             "--output-dir",
@@ -92,7 +92,7 @@ def test_ipv_bench_official_run_with_artifact_results_writes_scorecard(tmp_path:
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py",
             "--run-official",
             "--generated-artifact-dir",
             str(generated_dir),

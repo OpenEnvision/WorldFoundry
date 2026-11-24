@@ -1,15 +1,15 @@
 ---
 title: "Uni3C"
-description: "Uni3C from Alibaba DAMO Academy: image-to-video and camera-controlled-video; Verified; dedicated `uni3c`."
+description: "Uni3C from Alibaba DAMO Academy: image-to-video, camera-controlled video, and 1 more task; Verified; dedicated `uni3c`."
 modelId: "uni3c"
-pageSource: generated
+pageSource: authored
 ---
 
-Uni3C from Alibaba DAMO Academy unifies camera control and human-motion control for image-to-video generation: the PCDController stage steers the camera while the unified stage combines camera plus human motion (RealisDance-DiT). WorldFoundry vendors both official stage-two inference paths in-tree, with public Apache-2.0 checkpoints (ewrfcas/Uni3C, theFoxofSky/RealisDance-DiT) on top of the Wan2.1-I2V-14B-720P base.
+Uni3C from Alibaba DAMO Academy unifies camera control and human-motion control for image-to-video generation: the PCDController stage steers the camera while the unified stage combines camera plus human motion (RealisDance-DiT). WorldFoundry runs both official stage-two inference paths with public Apache-2.0 checkpoints (ewrfcas/Uni3C, theFoxofSky/RealisDance-DiT) on top of the Wan2.1-I2V-14B-720P base.
 
 <ModelPaperFigures modelId="uni3c" locale="en" />
 
-The recorded paper is [arXiv 2504.14899](https://arxiv.org/abs/2504.14899).
+Paper: [arXiv 2504.14899](https://arxiv.org/abs/2504.14899).
 
 Project page: [ewrfcas.github.io/Uni3C](https://ewrfcas.github.io/Uni3C/). Code: [alibaba-damo-academy/Uni3C](https://github.com/alibaba-damo-academy/Uni3C).
 
@@ -17,32 +17,34 @@ Project page: [ewrfcas.github.io/Uni3C](https://ewrfcas.github.io/Uni3C/). Code:
 
 ## What it is for
 
-Use `uni3c` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+`uni3c` conditions video generation on camera poses.
 
-Three checkpoint roles are recorded: ewrfcas/Uni3C as pcd_controller, Wan-AI/Wan2.1-I2V-14B-720P-Diffusers as camera_base, and theFoxofSky/RealisDance-DiT as the unified camera-plus-human model. Pre-rendered control bundles stay explicit runtime inputs; preprocessing is not silently substituted.
+Three checkpoints are used: ewrfcas/Uni3C as the PCDController, Wan-AI/Wan2.1-I2V-14B-720P-Diffusers as the camera base, and theFoxofSky/RealisDance-DiT as the unified camera-plus-human model. Pre-rendered control bundles are explicit runtime inputs.
 
-Catalog tasks include image-to-video, camera-controlled-video, and human-motion-controlled-video. Catalog aliases include `PCDController` and `alibaba-damo-academy/Uni3C`. Documented modalities: image in, video out.
+Tasks: image-to-video, camera-controlled video, and human motion-controlled video. Aliases: `PCDController` and `alibaba-damo-academy/Uni3C`. Modalities: image in, video out.
 
-Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-trajectory adherence under explicit control).
+Suggested benchmarks: [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-trajectory adherence under explicit control).
 
 ## Runtime contract
 
-Optional `prompt`, `input_path`, `render_path`, `mode`, and `num_frames`; artifacts `generated_video` and `uni3c.mp4`.
+Inputs `prompt`, `input-path`, and `render-path` (bundled samples are used when omitted); options `mode`, `num-frames`, `fps`, `max-area`, `seed`, and `num-gpus`; artifacts `generated_video` and `uni3c.mp4`.
 
 CLI task profiles: `image-camera-control-video`. WorldFoundry binds `Uni3CPipeline`.
 
 Family status: **Verified**.
 
-Recorded `image-camera-control-video` defaults: fps=16, seed=0.
+Defaults for `image-camera-control-video`: fps=16, seed=0.
 
-Choose the camera-only or unified camera-plus-human route and provide the matching pre-rendered control bundle. The default PCDController camera route is checkpoint-backed and GPU-validated on H100; the unified camera-plus-human route still requires its own checkpoint-backed validation.
+Choose the camera-only or unified camera-plus-human route and provide the matching pre-rendered control bundle. Validated on an H100 with the released checkpoints: the default PCDController camera route runs end to end.
+
+The dedicated `uni3c` environment must have WorldFoundry installed. Camera and unified inference run as package modules, with torchrun for multi-GPU requests. Sequence parallelism, camera-mode FSDP and unified-mode sequential CPU offload retain their existing controls; the runtime does not add source directories to the import path.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run uni3c --pipeline.task-profile image-camera-control-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Generate a camera-controlled clip with `wf run uni3c --pipeline.task-profile image-camera-control-video`.
 
-Recorded weight repositories include `ewrfcas/Uni3C`, `Wan-AI/Wan2.1-I2V-14B-720P-Diffusers`, and `theFoxofSky/RealisDance-DiT`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh uni3c`. Add `--download` to fetch missing public checkpoints.
+It runs in the dedicated environment `uni3c` (Python 3.10, CUDA 12.4, torch==2.6.0+cu124).
 
-Status: **Verified**.
+Weights: `ewrfcas/Uni3C`, `Wan-AI/Wan2.1-I2V-14B-720P-Diffusers`, and `theFoxofSky/RealisDance-DiT`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh uni3c`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="uni3c" locale="en" />

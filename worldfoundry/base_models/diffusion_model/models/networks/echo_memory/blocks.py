@@ -16,7 +16,8 @@ token (block-wise SSM) or apply a depthwise temporal convolution
 from __future__ import annotations
 
 import math
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -26,7 +27,7 @@ from worldfoundry.core.attention import packed_sequence_attention
 from worldfoundry.core.nn import RMSNorm
 from worldfoundry.core.nn import scale_shift as modulate
 
-from ..wan.model import DiTBlock, _SELF_ATTENTION_INTERNAL_KWARGS
+from ..wan.model import _SELF_ATTENTION_INTERNAL_KWARGS, DiTBlock
 from .architecture import EchoCheckpointArchitecture
 from .schema import EchoMemoryMechanism, EchoMemoryRecipe, SpatialInjection
 
@@ -305,11 +306,7 @@ class EchoWanAttentionBlock(DiTBlock):
         original_x = x
         x = self._inject_actions(x, memory_context)
         x = self._action_attention(x, original_x, memory_context)
-        self_attention_kwargs = {
-            key: kwargs.pop(key)
-            for key in _SELF_ATTENTION_INTERNAL_KWARGS
-            if key in kwargs
-        }
+        self_attention_kwargs = {key: kwargs.pop(key) for key in _SELF_ATTENTION_INTERNAL_KWARGS if key in kwargs}
         kwargs.pop("_worldfoundry_inplace_residual", None)
         y = self.self_attn(
             modulate(self.norm1(x), shift_msa, scale_msa),
@@ -350,7 +347,7 @@ class EchoWanMemoryAdapter(nn.Module):
             if architecture.spatial_grid_shape is None:
                 raise ValueError("spatial recipe has no checkpoint grid shape")
             cells, tokens = architecture.spatial_grid_shape
-            grid_size = int(round(math.sqrt(cells)))
+            grid_size = int(round(math.sqrt(cells)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
             self.spatial_memory_module = SpatialGridMemory(
                 dim,
                 grid_size=grid_size,

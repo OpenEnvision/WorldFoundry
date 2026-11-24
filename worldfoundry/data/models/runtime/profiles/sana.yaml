@@ -1,6 +1,7 @@
-artifact_filename: sana.png
-artifact_kind: generated_image
-backend_stage: in_tree_official_cli
+schema_version: 2
+model_id: sana
+display_name: Sana
+task_family: video_generation
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Efficient-Large-Model--Sana_1600M_1024px_BF16
   repo_id: Efficient-Large-Model/Sana_1600M_1024px_BF16
@@ -36,24 +37,29 @@ checkpoints:
   - model.safetensors.index.json
   - tokenizer_config.json
   - tokenizer.model
-display_name: Sana
-id: sana
 input_schema:
   image: true
   prompt: true
   video: true
-integration_status: runtime_ported_and_streaming_variants_workspace_validated
+artifact_kind: generated_image
+artifact_filename: sana.png
+execution:
+  backend_stage: in_tree_official_cli
+  runtime_status: in_tree_official_cli_streaming_variants_a100_workspace_validated
+  integration_status: runtime_ported_and_streaming_variants_workspace_validated
+integration:
+  status: runtime_ported_and_streaming_variants_workspace_validated
 notes:
-- The `sana` public ID defaults to `sana-1600m-1024px-bf16`; its default
-  checkpoint entry above matches that alias. Other Sana checkpoints belong to
-  their own variant IDs.
-- Sana inference uses the role-based canonical diffusion components under
-  worldfoundry/base_models/diffusion_model; the former image-owned runtime has been removed.
-- SanaSynthesis plan-onlys and executes official in-tree CLI scripts; full parity requires staged Hugging Face checkpoints
-  and GPU inference.
-- SANA-Streaming accepts a source video path or hf:// URI and exposes both the
-  minute-length long_streaming and short bidirectional routes.
-- The long-streaming checkpoint completed a real A100 Workspace run with 81 decoded 1280x704 frames at 16 FPS; artifact SHA256 is 93a5d67aeef77ea9b5cffe3304418c19737bfd605b8f2163985298d6d2f2fb29.
-- The bidirectional checkpoint independently completed a real A100 Workspace run with 81 decoded 1280x704 frames at 16 FPS; artifact SHA256 is 42f725c053c48c30b4d5458ded195e583a527501e0f4d759da6e7488c25d5513.
-runtime_status: in_tree_official_cli_streaming_variants_a100_workspace_validated
-task_family: video_generation
+- The `sana` public ID defaults to `sana-1600m-1024px-bf16`; its default checkpoint
+  entry above matches that alias. Other Sana checkpoints belong to their own variant
+  IDs.
+- Sana inference uses the role-based canonical diffusion components under worldfoundry/base_models/diffusion_model;
+  the former image-owned runtime has been removed.
+- SanaSynthesis plan-onlys and executes official in-tree CLI scripts; full parity
+  requires staged Hugging Face checkpoints and GPU inference.
+- SANA-Streaming accepts a source video path or hf:// URI and exposes both the minute-length
+  long_streaming and short bidirectional routes.
+- The long-streaming checkpoint completed a real A100 Workspace run with 81 decoded
+  1280x704 frames at 16 FPS; artifact SHA256 is 93a5d67aeef77ea9b5cffe3304418c19737bfd605b8f2163985298d6d2f2fb29.
+- The bidirectional checkpoint independently completed a real A100 Workspace run with
+  81 decoded 1280x704 frames at 16 FPS; artifact SHA256 is 42f725c053c48c30b4d5458ded195e583a527501e0f4d759da6e7488c25d5513.

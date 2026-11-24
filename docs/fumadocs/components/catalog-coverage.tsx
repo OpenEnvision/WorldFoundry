@@ -66,8 +66,9 @@ function EntryRow({
   );
 }
 
-export function CatalogCoverage() {
-  const { modelsTotal, benchmarksTotal, modelFamilies, benchmarkGroups } = catalogCoverage;
+/** `modelCount` is the number of published model recipes, so the totals match the model catalog. */
+export function CatalogCoverage({ modelCount }: { modelCount: number }) {
+  const { benchmarksTotal, modelFamilies, benchmarkGroups } = catalogCoverage;
   const [surface, setSurface] = useState<Surface>('models');
   const [familyId, setFamilyId] = useState(modelFamilies[0]?.id ?? 'video');
   const [groupId, setGroupId] = useState(benchmarkGroups[0]?.id ?? 'video');
@@ -84,9 +85,12 @@ export function CatalogCoverage() {
     const benchHits = benchmarkGroups.some((group) =>
       group.entries.some((entry) => matchesQuery(entry, deferredQuery)),
     );
-    if (surface === 'models' && !modelHits && benchHits) setSurface('benchmarks');
-    if (surface === 'benchmarks' && !benchHits && modelHits) setSurface('models');
-  }, [deferredQuery, isSearching, modelFamilies, benchmarkGroups, surface]);
+    setSurface((current) => {
+      if (current === 'models' && !modelHits && benchHits) return 'benchmarks';
+      if (current === 'benchmarks' && !benchHits && modelHits) return 'models';
+      return current;
+    });
+  }, [deferredQuery, isSearching, modelFamilies, benchmarkGroups]);
 
   const activeFamily = modelFamilies.find((family) => family.id === familyId) ?? modelFamilies[0];
   const activeGroup = benchmarkGroups.find((group) => group.id === groupId) ?? benchmarkGroups[0];
@@ -127,7 +131,7 @@ export function CatalogCoverage() {
       <div className="wf-catalog-lede">
         <div className="wf-catalog-totals" aria-label="Catalog totals">
           <p>
-            <strong>{modelsTotal}</strong> models
+            <strong>{modelCount}</strong> models
             <span aria-hidden="true"> · </span>
             <strong>{benchmarksTotal}</strong> benchmarks
           </p>

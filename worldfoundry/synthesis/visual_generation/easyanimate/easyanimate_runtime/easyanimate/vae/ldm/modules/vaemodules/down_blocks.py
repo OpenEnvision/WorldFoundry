@@ -3,8 +3,7 @@ import torch.nn as nn
 
 from .attention import SpatialAttention, TemporalAttention
 from .common import ResidualBlock3D
-from .downsamplers import (SpatialDownsampler3D, SpatialTemporalDownsampler3D,
-                           TemporalDownsampler3D)
+from .downsamplers import SpatialDownsampler3D, SpatialTemporalDownsampler3D, TemporalDownsampler3D
 from .gc_block import GlobalContextBlock
 
 
@@ -388,7 +387,7 @@ class SpatialAttnDownBlock3D(nn.Module):
         self.temporal_downsample_factor = 1
 
     def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
-        for conv, attn in zip(self.convs, self.attentions):
+        for conv, attn in zip(self.convs, self.attentions, strict=False):
             x = conv(x)
             x = attn(x)
 
@@ -401,7 +400,7 @@ class SpatialAttnDownBlock3D(nn.Module):
         return x
 
 
-class TemporalDownBlock3D(nn.Module):
+class TemporalDownBlock3D(nn.Module):  # noqa: F811 - Later definition replaces the earlier one, as upstream.
     def __init__(
         self,
         in_channels: int,
@@ -520,7 +519,7 @@ class TemporalAttnDownBlock3D(nn.Module):
         self.spatial_downsample_factor = 1
 
     def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
-        for conv, attn in zip(self.convs, self.attentions):
+        for conv, attn in zip(self.convs, self.attentions, strict=False):
             x = conv(x)
             x = attn(x)
 

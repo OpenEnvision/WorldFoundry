@@ -43,7 +43,7 @@ class Lyra2Synthesis(BaseSynthesis):
         self.runtime = runtime
 
     @classmethod
-    def from_pretrained(cls, *args: Any, **kwargs: Any) -> "Lyra2Synthesis":
+    def from_pretrained(cls, *args: Any, **kwargs: Any) -> Lyra2Synthesis:
         """
         Class method to create a Lyra2Synthesis instance by loading a pretrained Lyra-2 runtime.
 
@@ -77,7 +77,7 @@ class Lyra2Synthesis(BaseSynthesis):
         del api_key, endpoint  # Mark parameters as intentionally unused
         return None
 
-    def load_runtime(self, strict: bool = True) -> "Lyra2Synthesis":
+    def load_runtime(self, strict: bool = True) -> Lyra2Synthesis:
         """
         Loads or reloads the underlying Lyra-2 runtime.
 

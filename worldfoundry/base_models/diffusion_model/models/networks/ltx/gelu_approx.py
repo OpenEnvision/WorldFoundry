@@ -15,9 +15,9 @@ import torch
 class GELUApprox(torch.nn.Module):
     """Linear projection followed by ``gelu(..., approximate='tanh')``."""
 
-    def __init__(self, dim_in: int, dim_out: int) -> None:
+    def __init__(self, dim_in: int, dim_out: int, bias: bool = True) -> None:
         super().__init__()
-        self.proj = torch.nn.Linear(dim_in, dim_out)
+        self.proj = torch.nn.Linear(dim_in, dim_out, bias=bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Expand ``[..., dim_in]`` to ``[..., dim_out]`` with tanh-GELU."""

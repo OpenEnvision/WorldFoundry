@@ -1,11 +1,10 @@
 import numpy as np
-from PIL import Image
 import torch
+from PIL import Image
 
 
 def convert_img(img):
-    """Converts (H, W, C) numpy.ndarray to (C, W, H) format
-    """
+    """Converts (H, W, C) numpy.ndarray to (C, W, H) format"""
     if len(img.shape) == 3:
         img = img.transpose(2, 0, 1)
     if len(img.shape) == 2:
@@ -13,7 +12,7 @@ def convert_img(img):
     return img
 
 
-class ClipToTensor(object):
+class ClipToTensor:
     """Convert a list of m (H x W x C) numpy.ndarrays in the range [0, 255]
     to a torch.FloatTensor of shape (C x m x H x W) in the range [0, 1.0]
     """
@@ -31,13 +30,14 @@ class ClipToTensor(object):
         # Retrieve shape
         if isinstance(clip[0], np.ndarray):
             h, w, ch = clip[0].shape
-            assert ch == self.channel_nb, 'Got {0} instead of 3 channels'.format(
-                ch)
+            assert ch == self.channel_nb, f"Got {ch} instead of 3 channels"
         elif isinstance(clip[0], Image.Image):
             w, h = clip[0].size
         else:
-            raise TypeError('Expected numpy.ndarray or PIL.Image\
-            but got list of {0}'.format(type(clip[0])))
+            raise TypeError(
+                f"Expected numpy.ndarray or PIL.Image\
+            but got list of {type(clip[0])}"
+            )
 
         np_clip = np.zeros([self.channel_nb, len(clip), int(h), int(w)])
 
@@ -48,8 +48,10 @@ class ClipToTensor(object):
             elif isinstance(img, Image.Image):
                 img = np.array(img, copy=False)
             else:
-                raise TypeError('Expected numpy.ndarray or PIL.Image\
-                but got list of {0}'.format(type(clip[0])))
+                raise TypeError(
+                    f"Expected numpy.ndarray or PIL.Image\
+                but got list of {type(clip[0])}"
+                )
             img = convert_img(img)
             np_clip[:, img_idx, :, :] = img
         if self.numpy:
@@ -68,7 +70,7 @@ class ClipToTensor(object):
 
 
 # Note this norms data to -1/1
-class ClipToTensor_K(object):
+class ClipToTensor_K:
     """Convert a list of m (H x W x C) numpy.ndarrays in the range [0, 255]
     to a torch.FloatTensor of shape (C x m x H x W) in the range [0, 1.0]
     """
@@ -86,13 +88,14 @@ class ClipToTensor_K(object):
         # Retrieve shape
         if isinstance(clip[0], np.ndarray):
             h, w, ch = clip[0].shape
-            assert ch == self.channel_nb, 'Got {0} instead of 3 channels'.format(
-                ch)
+            assert ch == self.channel_nb, f"Got {ch} instead of 3 channels"
         elif isinstance(clip[0], Image.Image):
             w, h = clip[0].size
         else:
-            raise TypeError('Expected numpy.ndarray or PIL.Image\
-            but got list of {0}'.format(type(clip[0])))
+            raise TypeError(
+                f"Expected numpy.ndarray or PIL.Image\
+            but got list of {type(clip[0])}"
+            )
 
         np_clip = np.zeros([self.channel_nb, len(clip), int(h), int(w)])
 
@@ -103,8 +106,10 @@ class ClipToTensor_K(object):
             elif isinstance(img, Image.Image):
                 img = np.array(img, copy=False)
             else:
-                raise TypeError('Expected numpy.ndarray or PIL.Image\
-                but got list of {0}'.format(type(clip[0])))
+                raise TypeError(
+                    f"Expected numpy.ndarray or PIL.Image\
+                but got list of {type(clip[0])}"
+                )
             img = convert_img(img)
             np_clip[:, img_idx, :, :] = img
         if self.numpy:
@@ -122,9 +127,8 @@ class ClipToTensor_K(object):
             return tensor_clip
 
 
-class ToTensor(object):
-    """Converts numpy array to tensor
-    """
+class ToTensor:
+    """Converts numpy array to tensor"""
 
     def __call__(self, array):
         tensor = torch.from_numpy(array)

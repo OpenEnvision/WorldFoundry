@@ -4,8 +4,6 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt_omega -> vggt_omega -> utils -> load_fn.py functionality."""
-
 import warnings
 
 import numpy as np
@@ -60,11 +58,6 @@ def load_and_preprocess_images(image_path_list, mode="balanced", image_resolutio
 
 
 def _load_rgb_image(image_path):
-    """Helper function to load rgb image.
-
-    Args:
-        image_path: The image path.
-    """
     with Image.open(image_path) as image:
         if image.mode == "RGBA":
             background = Image.new("RGBA", image.size, (255, 255, 255, 255))
@@ -73,23 +66,16 @@ def _load_rgb_image(image_path):
 
 
 def _crop_to_supported_aspect_ratio(image, min_aspect_ratio=0.5, max_aspect_ratio=2.0):
-    """Helper function to crop to supported aspect ratio.
-
-    Args:
-        image: The image.
-        min_aspect_ratio: The min aspect ratio.
-        max_aspect_ratio: The max aspect ratio.
-    """
     width, height = image.size
     aspect_ratio = height / max(width, 1)
 
     if aspect_ratio < min_aspect_ratio:
-        crop_width = min(width, max(1, int(round(height / min_aspect_ratio))))
+        crop_width = min(width, max(1, int(round(height / min_aspect_ratio))))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         left = max((width - crop_width) // 2, 0)
         return image.crop((left, 0, left + crop_width, height))
 
     if aspect_ratio > max_aspect_ratio:
-        crop_height = min(height, max(1, int(round(width * max_aspect_ratio))))
+        crop_height = min(height, max(1, int(round(width * max_aspect_ratio))))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         top = max((height - crop_height) // 2, 0)
         return image.crop((0, top, width, top + crop_height))
 
@@ -97,13 +83,6 @@ def _crop_to_supported_aspect_ratio(image, min_aspect_ratio=0.5, max_aspect_rati
 
 
 def _balanced_target_shape(aspect_ratio, image_resolution, patch_size):
-    """Helper function to balanced target shape.
-
-    Args:
-        aspect_ratio: The aspect ratio.
-        image_resolution: The image resolution.
-        patch_size: The patch size.
-    """
     token_number = (image_resolution // patch_size) ** 2
     w_patches = np.sqrt(token_number / aspect_ratio)
     h_patches = token_number / w_patches
@@ -113,13 +92,6 @@ def _balanced_target_shape(aspect_ratio, image_resolution, patch_size):
 
 
 def _max_size_target_shape(aspect_ratio, image_resolution, patch_size):
-    """Helper function to max size target shape.
-
-    Args:
-        aspect_ratio: The aspect ratio.
-        image_resolution: The image resolution.
-        patch_size: The patch size.
-    """
     if aspect_ratio >= 1.0:
         height = image_resolution
         width = _round_to_patch_multiple(image_resolution / aspect_ratio, patch_size)
@@ -130,22 +102,10 @@ def _max_size_target_shape(aspect_ratio, image_resolution, patch_size):
 
 
 def _round_to_patch_multiple(value, patch_size):
-    """Helper function to round to patch multiple.
-
-    Args:
-        value: The value.
-        patch_size: The patch size.
-    """
     return max(patch_size, int(np.round(float(value) / patch_size)) * patch_size)
 
 
 def _pad_images_to_common_size(images, shapes):
-    """Helper function to pad images to common size.
-
-    Args:
-        images: The images.
-        shapes: The shapes.
-    """
     max_height = max(shape[0] for shape in shapes)
     max_width = max(shape[1] for shape in shapes)
 

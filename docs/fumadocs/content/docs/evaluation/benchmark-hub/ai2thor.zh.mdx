@@ -1,29 +1,29 @@
 ---
 title: AI2-THOR
-description: "Ai2 的 Unity 家居模拟器：120 个 iTHOR 房间。WorldFoundry 可跑闭环 FloorPlan 接线；不附带 ALFRED 或 TEACh。"
+description: "Ai2 的 Unity 家居模拟器：120 个 iTHOR 房间。WorldFoundry 可跑闭环 FloorPlan 检查，或导入 rollout 导出。"
 ---
 
-AI2-THOR（艾伦人工智能研究所，Ai2）是面向具身 AI 的 **Unity** 家居模拟器。原始 **iTHOR** 集合是 **120** 个美术手建房间：厨房、客厅、卧室、浴室各 30 个（`FloorPlan1–30`、`201–230`、`301–330`、`401–430`）。智能体使用**离散**动作（`MoveAhead`、`RotateLeft`、`PickupObject`、开关、拨动）与物理和物体状态交互。官方常用划分是每种房型 **20 / 5 / 5** 训练 / 验证 / 测试。后续场景包（RoboTHOR、ProcTHOR）和语言套件（**ALFRED**、**TEACh**）建立在这个引擎上——不是 WorldFoundry 默认任务。
+AI2-THOR（艾伦人工智能研究所，Ai2）是面向具身 AI 的 **Unity** 家居模拟器。原始 **iTHOR** 集合是 **120** 个美术手建房间：厨房、客厅、卧室、浴室各 30 个（`FloorPlan1–30`、`201–230`、`301–330`、`401–430`）。智能体使用**离散**动作（`MoveAhead`、`RotateLeft`、`PickupObject`、开关、拨动）与物理和物体状态交互。官方常用划分是每种房型 **20 / 5 / 5** 训练 / 验证 / 测试。后续场景包（RoboTHOR、ProcTHOR）和语言套件（**ALFRED**、**TEACh**）建立在这个引擎上，需另行下载。
 
 论文：[AI2-THOR: An Interactive 3D Environment for Visual AI](https://arxiv.org/abs/1712.05474)。项目：[ai2thor.allenai.org](https://ai2thor.allenai.org/)。代码：[allenai/ai2thor](https://github.com/allenai/ai2thor)（Apache-2.0）。
 
-WorldFoundry **评测**原生闭环：`worldfoundry-eval embodied run` 启动 Unity 构建，逐步执行已经输出模拟器 token 的策略。仓内配置（`FloorPlan1`–`FloorPlan3`）只做**接线检查**，不是 ALFRED/TEACh。也可以通过 `WORLDFOUNDRY_AI2THOR_RESULTS_PATH` **导入**已有 rollout 导出。本页**不跑** VLA 推理——策略或策略服务由你提供。
+WorldFoundry 原生支持**闭环评测**：`wf embodied run` 启动 Unity 构建，逐步执行输出模拟器 token 的策略。附带的配置（`FloorPlan1`–`FloorPlan3`）用于**闭环冒烟检查**，不是 ALFRED/TEACh 任务。也可以通过 `WORLDFOUNDRY_AI2THOR_RESULTS_PATH` **导入**已有 rollout 导出结果。WorldFoundry 在该基准上**不跑** VLA 推理，策略或策略服务需由你提供。
 
 <BenchmarkPageSections id="ai2thor" locale="zh" />
 
 ## 如何运行
 
-闭环接线（需要 Unity 包、模拟器缓存，以及 CloudRendering 或 X11 显示）：
+闭环检查（需要 Unity 包、模拟器缓存，以及 CloudRendering 或 X11 显示）：
 
 ```bash
-worldfoundry-eval embodied run \
+wf embodied run \
   --config worldfoundry/data/benchmarks/eval_configs/embodied/ai2thor/floorplan1.yaml
 ```
 
 导入已有导出：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id ai2thor \
   --mode official-validation \
   --official-results-path <official_results.json> \

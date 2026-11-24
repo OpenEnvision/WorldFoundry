@@ -13,6 +13,7 @@ from typing import Any
 
 import numpy as np
 
+
 def build_camera_params(
     camera_source: Any,
     image_size: tuple[int, int],

@@ -1,10 +1,8 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> cut3r -> model.py functionality."""
-
 import os
 from collections import OrderedDict
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, List, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -14,8 +12,8 @@ from transformers.file_utils import ModelOutput
 from .blocks import (
     Block,
     DecoderBlock,
-)  # noqa
-from .croco_base import CrocoConfig, CroCoNet  # noqa
+)
+from .croco_base import CrocoConfig, CroCoNet
 from .heads import head_factory
 from .patch_embed import get_patch_embed
 from .utils.misc import (
@@ -30,8 +28,8 @@ class ARCroco3DStereoOutput(ModelOutput):
     Custom output class for ARCroco3DStereo.
     """
 
-    ress: Optional[List[Any]] = None
-    views: Optional[List[Any]] = None
+    ress: list[Any] | None = None
+    views: list[Any] | None = None
 
 
 def strip_module(state_dict):
@@ -119,27 +117,6 @@ class ARCroco3DStereoConfig(PretrainedConfig):
         pose_head=False,
         **croco_kwargs,
     ):
-        """Init.
-
-        Args:
-            output_mode: The output mode.
-            head_type: The head type.
-            depth_mode: The depth mode.
-            conf_mode: The conf mode.
-            pose_mode: The pose mode.
-            freeze: The freeze.
-            landscape_only: The landscape only.
-            patch_embed_cls: The patch embed cls.
-            ray_enc_depth: The ray enc depth.
-            state_size: The state size.
-            local_mem_size: The local mem size.
-            state_pe: The state pe.
-            state_dec_num_heads: The state dec num heads.
-            depth_head: The depth head.
-            rgb_head: The rgb head.
-            pose_conf_head: The pose conf head.
-            pose_head: The pose head.
-        """
         super().__init__()
         self.output_mode = output_mode
         self.head_type = head_type
@@ -162,8 +139,6 @@ class ARCroco3DStereoConfig(PretrainedConfig):
 
 
 class LocalMemory(nn.Module):
-    """Local memory implementation."""
-
     def __init__(
         self,
         size,
@@ -181,27 +156,6 @@ class LocalMemory(nn.Module):
         norm_mem=True,
         rope=None,
     ) -> None:
-        """Init.
-
-        Args:
-            size: The size.
-            k_dim: The k dim.
-            v_dim: The v dim.
-            num_heads: The num heads.
-            depth: The depth.
-            mlp_ratio: The mlp ratio.
-            qkv_bias: The qkv bias.
-            drop: The drop.
-            attn_drop: The attn drop.
-            drop_path: The drop path.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            norm_mem: The norm mem.
-            rope: The rope.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.v_dim = v_dim
         self.proj_q = nn.Linear(k_dim, v_dim)
@@ -258,12 +212,6 @@ class LocalMemory(nn.Module):
         return mem
 
     def inquire(self, query, mem):
-        """Inquire.
-
-        Args:
-            query: The query.
-            mem: The mem.
-        """
         x = self.proj_q(query)  # [B, 1, C]
         x = torch.cat([x, self.masked_token.expand(x.shape[0], -1, -1)], dim=-1)
         for blk in self.read_blocks:
@@ -278,11 +226,6 @@ class ARCroco3DStereo(CroCoNet):
     base_model_prefix = "arcroco3dstereo"
 
     def __init__(self, config: ARCroco3DStereoConfig):
-        """Init.
-
-        Args:
-            config: The config.
-        """
         config.croco_kwargs = fill_default_args(config.croco_kwargs, CrocoConfig.__init__)
         self.config = config
         self.patch_embed_cls = config.patch_embed_cls
@@ -348,28 +291,16 @@ class ARCroco3DStereo(CroCoNet):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kw):
-        """From pretrained.
-
-        Args:
-            pretrained_model_name_or_path: The pretrained model name or path.
-        """
         if os.path.isfile(pretrained_model_name_or_path):
             return load_model(pretrained_model_name_or_path, device="cpu")
         else:
             try:
-                model = super(ARCroco3DStereo, cls).from_pretrained(pretrained_model_name_or_path, **kw)
+                model = super().from_pretrained(pretrained_model_name_or_path, **kw)
             except TypeError:
-                raise Exception(f"tried to load {pretrained_model_name_or_path} from huggingface, but failed")
+                raise Exception(f"tried to load {pretrained_model_name_or_path} from huggingface, but failed")  # noqa: B904 - Keeps the implicit exception context.
             return model
 
     def _set_patch_embed(self, img_size=224, patch_size=16, enc_embed_dim=768):
-        """Helper function to set patch embed.
-
-        Args:
-            img_size: The img size.
-            patch_size: The patch size.
-            enc_embed_dim: The enc embed dim.
-        """
         self.patch_embed = get_patch_embed(self.patch_embed_cls, img_size, patch_size, enc_embed_dim, in_chans=3)
         self.patch_embed_ray_map = get_patch_embed(
             self.patch_embed_cls, img_size, patch_size, enc_embed_dim, in_chans=6
@@ -385,17 +316,6 @@ class ARCroco3DStereo(CroCoNet):
         norm_layer,
         norm_im2_in_dec,
     ):
-        """Helper function to set decoder.
-
-        Args:
-            enc_embed_dim: The enc embed dim.
-            dec_embed_dim: The dec embed dim.
-            dec_num_heads: The dec num heads.
-            dec_depth: The dec depth.
-            mlp_ratio: The mlp ratio.
-            norm_layer: The norm layer.
-            norm_im2_in_dec: The norm im2 in dec.
-        """
         self.dec_depth = dec_depth
         self.dec_embed_dim = dec_embed_dim
         self.decoder_embed = nn.Linear(enc_embed_dim, dec_embed_dim, bias=True)
@@ -425,17 +345,6 @@ class ARCroco3DStereo(CroCoNet):
         norm_layer,
         norm_im2_in_dec,
     ):
-        """Helper function to set state decoder.
-
-        Args:
-            enc_embed_dim: The enc embed dim.
-            dec_embed_dim: The dec embed dim.
-            dec_num_heads: The dec num heads.
-            dec_depth: The dec depth.
-            mlp_ratio: The mlp ratio.
-            norm_layer: The norm layer.
-            norm_im2_in_dec: The norm im2 in dec.
-        """
         self.dec_depth_state = dec_depth
         self.dec_embed_dim_state = dec_embed_dim
         self.decoder_embed_state = nn.Linear(enc_embed_dim, dec_embed_dim, bias=True)
@@ -475,22 +384,6 @@ class ARCroco3DStereo(CroCoNet):
         img_size,
         **kw,
     ):
-        """Set downstream head.
-
-        Args:
-            output_mode: The output mode.
-            head_type: The head type.
-            landscape_only: The landscape only.
-            depth_mode: The depth mode.
-            conf_mode: The conf mode.
-            pose_mode: The pose mode.
-            depth_head: The depth head.
-            rgb_head: The rgb head.
-            pose_conf_head: The pose conf head.
-            pose_head: The pose head.
-            patch_size: The patch size.
-            img_size: The img size.
-        """
         assert img_size[0] % patch_size == 0 and img_size[1] % patch_size == 0, (
             f"{img_size=} must be multiple of {patch_size=}"
         )
@@ -512,12 +405,6 @@ class ARCroco3DStereo(CroCoNet):
         self.head = transpose_to_landscape(self.downstream_head, activate=landscape_only)
 
     def _encode_image(self, image, true_shape):
-        """Helper function to encode image.
-
-        Args:
-            image: The image.
-            true_shape: The true shape.
-        """
         x, pos = self.patch_embed(image, true_shape=true_shape)
         assert self.enc_pos_embed is None
         for blk in self.enc_blocks:
@@ -526,12 +413,6 @@ class ARCroco3DStereo(CroCoNet):
         return [x], pos, None
 
     def _encode_ray_map(self, ray_map, true_shape):
-        """Helper function to encode ray map.
-
-        Args:
-            ray_map: The ray map.
-            true_shape: The true shape.
-        """
         x, pos = self.patch_embed_ray_map(ray_map, true_shape=true_shape)
         assert self.enc_pos_embed is None
         for blk in self.enc_blocks_ray_map:
@@ -540,12 +421,6 @@ class ARCroco3DStereo(CroCoNet):
         return [x], pos, None
 
     def _encode_state(self, image_tokens, image_pos):
-        """Helper function to encode state.
-
-        Args:
-            image_tokens: The image tokens.
-            image_pos: The image pos.
-        """
         batch_size = image_tokens.shape[0]
         state_feat = self.register_tokens(torch.arange(self.state_size, device=image_pos.device))
         if self.state_pe == "1d":
@@ -576,13 +451,6 @@ class ARCroco3DStereo(CroCoNet):
         return state_feat, state_pos, None
 
     def _encode_views(self, views, img_mask=None, ray_mask=None):
-        """Helper function to encode views.
-
-        Args:
-            views: The views.
-            img_mask: The img mask.
-            ray_mask: The ray mask.
-        """
         device = views[0]["img"].device
         batch_size = views[0]["img"].shape[0]
         given = True
@@ -643,16 +511,6 @@ class ARCroco3DStereo(CroCoNet):
         )
 
     def _decoder(self, f_state, pos_state, f_img, pos_img, f_pose, pos_pose):
-        """Helper function to decoder.
-
-        Args:
-            f_state: The f state.
-            pos_state: The pos state.
-            f_img: The f img.
-            pos_img: The pos img.
-            f_pose: The f pose.
-            pos_pose: The pos pose.
-        """
         final_output = [(f_state, f_img)]  # before projection
         assert f_state.shape[-1] == self.dec_embed_dim
         f_img = self.decoder_embed(f_img)
@@ -661,7 +519,7 @@ class ARCroco3DStereo(CroCoNet):
             f_img = torch.cat([f_pose, f_img], dim=1)
             pos_img = torch.cat([pos_pose, pos_img], dim=1)
         final_output.append((f_state, f_img))
-        for blk_state, blk_img in zip(self.dec_blocks_state, self.dec_blocks):
+        for blk_state, blk_img in zip(self.dec_blocks_state, self.dec_blocks, strict=False):
             f_state, _ = blk_state(*final_output[-1][::+1], pos_state, pos_img)
             f_img, _ = blk_img(*final_output[-1][::-1], pos_img, pos_state)
             final_output.append((f_state, f_img))
@@ -670,17 +528,11 @@ class ARCroco3DStereo(CroCoNet):
             self.dec_norm_state(final_output[-1][0]),
             self.dec_norm(final_output[-1][1]),
         )
-        return zip(*final_output)
+        return zip(*final_output, strict=False)
 
     def _downstream_head(self, decout, img_shape, **kwargs):
-        """Helper function to downstream head.
-
-        Args:
-            decout: The decout.
-            img_shape: The img shape.
-        """
         B, S, D = decout[-1].shape
-        head = getattr(self, "head")
+        head = self.head
         return head(decout, img_shape, **kwargs)
 
     def _init_state(self, image_tokens, image_pos):
@@ -704,38 +556,14 @@ class ARCroco3DStereo(CroCoNet):
         reset_mask=None,
         update=None,
     ):
-        """Helper function to recurrent rollout.
-
-        Args:
-            state_feat: The state feat.
-            state_pos: The state pos.
-            current_feat: The current feat.
-            current_pos: The current pos.
-            pose_feat: The pose feat.
-            pose_pos: The pose pos.
-            init_state_feat: The init state feat.
-            img_mask: The img mask.
-            reset_mask: The reset mask.
-            update: The update.
-        """
         new_state_feat, dec = self._decoder(state_feat, state_pos, current_feat, current_pos, pose_feat, pose_pos)
         new_state_feat = new_state_feat[-1]
         return new_state_feat, dec
 
     def _get_img_level_feat(self, feat):
-        """Helper function to get img level feat.
-
-        Args:
-            feat: The feat.
-        """
         return torch.mean(feat, dim=1, keepdim=True)
 
     def _forward_encoder(self, views):
-        """Helper function to forward encoder.
-
-        Args:
-            views: The views.
-        """
         shape, feat_ls, pos = self._encode_views(views)
         feat = feat_ls[-1]
         state_feat, state_pos = self._init_state(feat[0], pos[0])
@@ -763,20 +591,6 @@ class ARCroco3DStereo(CroCoNet):
         state_pos,
         mem,
     ):
-        """Helper function to forward decoder step.
-
-        Args:
-            views: The views.
-            i: The i.
-            feat_i: The feat i.
-            pos_i: The pos i.
-            shape_i: The shape i.
-            init_state_feat: The init state feat.
-            init_mem: The init mem.
-            state_feat: The state feat.
-            state_pos: The state pos.
-            mem: The mem.
-        """
         if self.pose_head_flag:
             global_img_feat_i = self._get_img_level_feat(feat_i)
             if i == 0:
@@ -810,7 +624,7 @@ class ARCroco3DStereo(CroCoNet):
         res = self._downstream_head(head_input, shape_i, pos=pos_i)
         img_mask = views[i]["img_mask"]
         update = views[i].get("update", None)
-        if update is not None:
+        if update is not None:  # noqa: SIM108 - Branches carry per-case comments.
             update_mask = img_mask & update  # if don't update, then whatever img_mask
         else:
             update_mask = img_mask
@@ -825,12 +639,6 @@ class ARCroco3DStereo(CroCoNet):
         return res, (state_feat, mem)
 
     def _forward_impl(self, views, ret_state=False):
-        """Helper function to forward impl.
-
-        Args:
-            views: The views.
-            ret_state: The ret state.
-        """
         shape, feat_ls, pos = self._encode_views(views)
         feat = feat_ls[-1]
         state_feat, state_pos = self._init_state(feat[0], pos[0])
@@ -877,7 +685,7 @@ class ARCroco3DStereo(CroCoNet):
             ress.append(res)
             img_mask = views[i]["img_mask"]
             update = views[i].get("update", None)
-            if update is not None:
+            if update is not None:  # noqa: SIM108 - Branches carry per-case comments.
                 update_mask = img_mask & update  # if don't update, then whatever img_mask
             else:
                 update_mask = img_mask
@@ -895,12 +703,6 @@ class ARCroco3DStereo(CroCoNet):
         return ress, views
 
     def forward(self, views, ret_state=False):
-        """Forward.
-
-        Args:
-            views: The views.
-            ret_state: The ret state.
-        """
         if ret_state:
             ress, views, state_args = self._forward_impl(views, ret_state=ret_state)
             return ARCroco3DStereoOutput(ress=ress, views=views), state_args
@@ -909,16 +711,6 @@ class ARCroco3DStereo(CroCoNet):
             return ARCroco3DStereoOutput(ress=ress, views=views)
 
     def inference_step(self, view, state_feat, state_pos, init_state_feat, mem, init_mem):
-        """Inference step.
-
-        Args:
-            view: The view.
-            state_feat: The state feat.
-            state_pos: The state pos.
-            init_state_feat: The init state feat.
-            mem: The mem.
-            init_mem: The init mem.
-        """
         batch_size = view["img"].shape[0]
         raymaps = []
         shapes = []
@@ -972,13 +764,6 @@ class ARCroco3DStereo(CroCoNet):
         return res, view
 
     def forward_recurrent(self, views, device, ret_state=False):
-        """Forward recurrent.
-
-        Args:
-            views: The views.
-            device: The device.
-            ret_state: The ret state.
-        """
         ress = []
         all_state_args = []
         for i, view in enumerate(views):
@@ -1067,7 +852,7 @@ class ARCroco3DStereo(CroCoNet):
             ress.append(res)
             img_mask = view["img_mask"]
             update = view.get("update", None)
-            if update is not None:
+            if update is not None:  # noqa: SIM108 - Branches carry per-case comments.
                 update_mask = img_mask & update  # if don't update, then whatever img_mask
             else:
                 update_mask = img_mask

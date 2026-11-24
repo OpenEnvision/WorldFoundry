@@ -12,19 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
-import torch
-import torch.nn as nn
-import torch.distributed as dist
 import os
-from transformers import UMT5EncoderModel, Qwen2_5_VLConfig
+
+import torch
+import torch.distributed as dist
+import torch.nn as nn
+from transformers import Qwen2_5_VLConfig, UMT5EncoderModel
 from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
-from .diffloss_fm import DiffLoss_FM
-from .wan_diffusion import GEN_Wanx22
-from .modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
+from worldfoundry.core.nn.transformer.dit import _rms_norm_reference
 
+from .diffloss_fm import DiffLoss_FM
+from .modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
+from .wan_diffusion import GEN_Wanx22
 
 logger = logging.get_logger(__name__)
 
@@ -44,7 +46,7 @@ class RMSNorm(nn.Module):
     def forward(self, x):
         dtype = x.dtype
         x = x.float()
-        x = x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
+        x = _rms_norm_reference(x, None, self.eps, "fp32")
         return (x * self.weight).to(dtype)
 
 
@@ -98,6 +100,7 @@ class MLPConnector(nn.Module):
     def for_vit(self, x):
         return self._run_projection(self.pred_vit, x)
 
+
 def with_skip_config(config, skip_transformer_1=False, skip_transformer_2=False):
     """Create a copy of config with skip_transformer_* flags set."""
     config_copy = copy.deepcopy(config)
@@ -130,8 +133,8 @@ class BerniniConfig(PretrainedConfig):
         bernini_ckpt_subfolder=None,
         scratch_mllm=False,
         scratch=False,
-        noise_tmin=0.0, # [0, 0.875] for WAN2.2 high noise; [0.875, 1.0] for WAN2.2 low noise
-        noise_tmax=1.0, # [0, 1.0] for WAN2.1
+        noise_tmin=0.0,  # [0, 0.875] for WAN2.2 high noise; [0.875, 1.0] for WAN2.2 low noise
+        noise_tmax=1.0,  # [0, 1.0] for WAN2.1
         flow_shift=5,
         use_unipc=False,
         target_fps=16,
@@ -144,7 +147,7 @@ class BerniniConfig(PretrainedConfig):
         connector_cfg=None,
         mask_ratio_infer_cfg=None,
         feature_type_from_stage_one=None,
-        additional_special_tokens=[],
+        additional_special_tokens=[],  # noqa: B006 - Keeps the upstream default object and signature.
         tie_word_embeddings=False,
         ema_decay=None,
         partial_pretrain_model=None,
@@ -162,7 +165,7 @@ class BerniniConfig(PretrainedConfig):
         vae_model_path=None,
         vae_subfolder=None,
         vae_config_path=None,
-        wovae_task_list=['und_img', 'und_txt', 'und_vid'],
+        wovae_task_list=["und_img", "und_txt", "und_vid"],  # noqa: B006 - Keeps the upstream default object and signature.
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -187,9 +190,7 @@ class BerniniConfig(PretrainedConfig):
             else _join_if_present(base_dir, "transformer_2_config.json")
         )
         self.scheduler_config_path = scheduler_config_path or (
-            os.path.join(base_dir, "scheduler")
-            if base_dir is not None
-            else None
+            os.path.join(base_dir, "scheduler") if base_dir is not None else None
         )
         self.bernini_ckpt_subfolder = bernini_ckpt_subfolder
         self.vae_model_path = vae_model_path if vae_model_path is not None else base_dir
@@ -238,8 +239,10 @@ class BerniniConfig(PretrainedConfig):
 
         self.architectures = ["BerniniModel"]
 
+
 class BerniniModel(PreTrainedModel):
     config_class = BerniniConfig
+
     def __init__(self, config):
         super().__init__(config)
         self.mllm = None
@@ -256,9 +259,7 @@ class BerniniModel(PreTrainedModel):
 
         # =============== Init MLLM ===============
         self.mllm_attn_implementation = config.mllm_attn_implementation
-        logger.info(
-            f"MLLM attention implement: config.mllm_attn_implementation={config.mllm_attn_implementation}"
-        )
+        logger.info(f"MLLM attention implement: config.mllm_attn_implementation={config.mllm_attn_implementation}")
         if self.config.mllm_config_path is not None:
             mllm_config = Qwen2_5_VLConfig.from_pretrained(
                 self.config.mllm_config_path,
@@ -282,35 +283,37 @@ class BerniniModel(PreTrainedModel):
         if self.config.diff_dec_config_path:
             if getattr(self.config, "cotrain", False):
                 self.diff_dec = GEN_Wanx22(with_skip_config(config, skip_transformer_1=False, skip_transformer_2=True))
-                self.diff_dec_low = GEN_Wanx22(with_skip_config(config, skip_transformer_1=True, skip_transformer_2=False))
+                self.diff_dec_low = GEN_Wanx22(
+                    with_skip_config(config, skip_transformer_1=True, skip_transformer_2=False)
+                )
             else:
                 self.diff_dec = GEN_Wanx22(config)
                 self.diff_dec_low = None
 
         # =============== Init Connector ===============
-        if config.connector_cfg.get('enable_gen_branch', True):
+        if config.connector_cfg.get("enable_gen_branch", True):
             assert self.diff_dec is not None
-        if config.connector_cfg.get('enable_vit_branch', True):
+        if config.connector_cfg.get("enable_vit_branch", True):
             assert self.mllm is not None
         self.connector = MLPConnector(
             in_dim=self.mllm.config.hidden_size if self.mllm is not None else 3584,
             # setting for diffusion generator
-            num_layers_for_gen=config.connector_cfg.get('num_layers_for_gen', 1),
-            out_dim_for_gen=config.connector_cfg.get('out_dim_for_gen', 4096),
-            enable_gen_branch=config.connector_cfg.get('enable_gen_branch', True),
-            gen_head_type=config.connector_cfg.get('gen_head_type', 'mlp'),
+            num_layers_for_gen=config.connector_cfg.get("num_layers_for_gen", 1),
+            out_dim_for_gen=config.connector_cfg.get("out_dim_for_gen", 4096),
+            enable_gen_branch=config.connector_cfg.get("enable_gen_branch", True),
+            gen_head_type=config.connector_cfg.get("gen_head_type", "mlp"),
             # setting for predict vit embed
-            num_layers_for_vit=config.connector_cfg.get('num_layers_for_vit', 1),
-            out_dim_for_vit=config.connector_cfg.get('out_dim_for_vit', 3584),
-            enable_vit_branch=config.connector_cfg.get('enable_vit_branch', True),
+            num_layers_for_vit=config.connector_cfg.get("num_layers_for_vit", 1),
+            out_dim_for_vit=config.connector_cfg.get("out_dim_for_vit", 3584),
+            enable_vit_branch=config.connector_cfg.get("enable_vit_branch", True),
         )
 
         # =============== vit decoder ===============
         self.vit_decoder = DiffLoss_FM(
-            z_channels=config.clip_diff_cfg.get('z_channels', 3584),
-            target_channels=config.clip_diff_cfg.get('target_channels', 3584),
-            depth=config.clip_diff_cfg.get('depth', 16),
-            width=config.clip_diff_cfg.get('width', 1536),
+            z_channels=config.clip_diff_cfg.get("z_channels", 3584),
+            target_channels=config.clip_diff_cfg.get("target_channels", 3584),
+            depth=config.clip_diff_cfg.get("depth", 16),
+            width=config.clip_diff_cfg.get("width", 1536),
             diff_net=config.clip_diff_cfg.get("diff_net", "SimpleMLPAdaLN"),
             scheduler_type=config.clip_diff_cfg.get("scheduler_type", "FlowMatchScheduler"),
             shift=config.clip_diff_cfg.get("shift", 3.0),
@@ -323,6 +326,7 @@ class BerniniModel(PreTrainedModel):
         # =============== t5 embedding ===============
         if self.use_t5_encoder:
             logger.info(f"Initializing UMT5 encoder from {config.t5_text_encoder_path}")
+
             def load_t5_text_encoder():
                 return UMT5EncoderModel.from_pretrained(
                     config.t5_text_encoder_path,
@@ -340,7 +344,7 @@ class BerniniModel(PreTrainedModel):
                     dist.barrier()
             else:
                 self.t5_text_encoder = load_t5_text_encoder()
-            self.t5_max_sequence_length = getattr(config, 't5_max_sequence_length', 512)
+            self.t5_max_sequence_length = getattr(config, "t5_max_sequence_length", 512)
             self.t5_text_encoder.eval()
             for param in self.t5_text_encoder.parameters():
                 param.requires_grad = False
@@ -369,15 +373,15 @@ class BerniniModel(PreTrainedModel):
         # Pad each sample to t5_max_sequence_length
         padded_input_ids = []
         padded_attention_mask = []
-        for ids, mask in zip(input_ids_list, attention_mask_list):
+        for ids, mask in zip(input_ids_list, attention_mask_list, strict=False):
             seq_len = ids.size(0)
             if seq_len < self.t5_max_sequence_length:
                 pad_len = self.t5_max_sequence_length - seq_len
                 ids = torch.cat([ids, ids.new_zeros(pad_len)])
                 mask = torch.cat([mask, mask.new_zeros(pad_len)])
             else:
-                ids = ids[:self.t5_max_sequence_length]
-                mask = mask[:self.t5_max_sequence_length]
+                ids = ids[: self.t5_max_sequence_length]
+                mask = mask[: self.t5_max_sequence_length]
             padded_input_ids.append(ids)
             padded_attention_mask.append(mask)
 
@@ -400,11 +404,14 @@ class BerniniModel(PreTrainedModel):
 
         # Zero out padding positions
         if pad_text_embeds:
-            prompt_embeds = [u[:v] for u, v in zip(prompt_embeds, seq_lens)]
-            prompt_embeds = torch.stack([
-                torch.cat([u, u.new_zeros(self.t5_max_sequence_length - u.size(0), u.size(1))])
-                for u in prompt_embeds
-            ], dim=0)  # (batch_size, t5_max_sequence_length, hidden_dim)
+            prompt_embeds = [u[:v] for u, v in zip(prompt_embeds, seq_lens, strict=False)]
+            prompt_embeds = torch.stack(
+                [
+                    torch.cat([u, u.new_zeros(self.t5_max_sequence_length - u.size(0), u.size(1))])
+                    for u in prompt_embeds
+                ],
+                dim=0,
+            )  # (batch_size, t5_max_sequence_length, hidden_dim)
 
             # Build return values
             batch_text_seqlen = [self.t5_max_sequence_length] * batch_size
@@ -412,7 +419,7 @@ class BerniniModel(PreTrainedModel):
             return batch_text_embs, batch_text_seqlen
 
         else:
-            prompt_embeds = [u[:v].unsqueeze(0) for u, v in zip(prompt_embeds, seq_lens)]
+            prompt_embeds = [u[:v].unsqueeze(0) for u, v in zip(prompt_embeds, seq_lens, strict=False)]
             seq_lens = seq_lens.to(dtype=torch.long).cpu().tolist()
             batch_text_embs = torch.cat(prompt_embeds, dim=1)
             return batch_text_embs, seq_lens
@@ -423,24 +430,20 @@ class BerniniModel(PreTrainedModel):
         attention_mask = attention_mask.to(encoder_device)
         seq_lens = attention_mask.gt(0).sum(dim=1).long()
         with torch.no_grad():
-            prompt_embeds = self.t5_text_encoder(
-                input_ids, attention_mask).last_hidden_state
-        prompt_embeds = [u[:min(v, self.t5_max_sequence_length)] for u, v in zip(prompt_embeds, seq_lens)]
+            prompt_embeds = self.t5_text_encoder(input_ids, attention_mask).last_hidden_state
+        prompt_embeds = [
+            u[: min(v, self.t5_max_sequence_length)] for u, v in zip(prompt_embeds, seq_lens, strict=False)
+        ]
         prompt_embeds = torch.stack(prompt_embeds, dim=0)
         return prompt_embeds
 
     def get_ignore_modules_in_mixed_precision(self):
         from diffusers.models.embeddings import TimestepEmbedding
         from diffusers.models.normalization import FP32LayerNorm
+
         return (TimestepEmbedding, FP32LayerNorm)
 
-    def post_process_input_embeds(
-        self,
-        input_embeds,
-        visual_output_mask,
-        tgt_vit_mask,
-        inference=False
-    ):
+    def post_process_input_embeds(self, input_embeds, visual_output_mask, tgt_vit_mask, inference=False):
         target_vit_embed_mask = visual_output_mask.squeeze(0)
         target_vit_embeds = input_embeds[:, target_vit_embed_mask, :]
         target_vit_embeds_gt = target_vit_embeds.clone()
@@ -448,7 +451,6 @@ class BerniniModel(PreTrainedModel):
 
         if inference:
             # mask all tokens
-            mask_rate = 1
             all_vit_token_num = sum(target_vit_embed_mask).detach().cpu().numpy()
             target_vit_embeds[:, :, :] = mask_token.expand(1, all_vit_token_num, -1)
             input_embeds[:, target_vit_embed_mask, :] = target_vit_embeds
@@ -460,25 +462,19 @@ class BerniniModel(PreTrainedModel):
             target_vit_embeds[:, diff_loss_mask, :] = mask_token.expand(1, token_num, -1)
             input_embeds[:, target_vit_embed_mask, :] = target_vit_embeds
 
-        else: # tgt_vit_mask is None
+        else:  # tgt_vit_mask is None
             all_vit_token_num = sum(target_vit_embed_mask).detach().cpu().numpy()
             diff_loss_mask = torch.zeros(all_vit_token_num).to(target_vit_embeds.device)
 
-        return dict(
-            input_embeds=input_embeds,
-            diff_loss_mask=diff_loss_mask,
-            target_vit_embeds=target_vit_embeds_gt
-        )
+        return {
+            "input_embeds": input_embeds,
+            "diff_loss_mask": diff_loss_mask,
+            "target_vit_embeds": target_vit_embeds_gt,
+        }
 
-    def feat_from_planner_to_renderer(
-        self,
-        hidden_states,
-        tgt_vit_mask,
-        visual_output_mask,
-        inference=False
-    ):
+    def feat_from_planner_to_renderer(self, hidden_states, tgt_vit_mask, visual_output_mask, inference=False):
         pred_vit_embed_mask = visual_output_mask.squeeze(0)
-        pred_vit_embeds = hidden_states[:, pred_vit_embed_mask, :].clone() # For calculate vit decoder loss
+        pred_vit_embeds = hidden_states[:, pred_vit_embed_mask, :].clone()  # For calculate vit decoder loss
         txt_and_vit_token_mask = visual_output_mask.squeeze(0).logical_not()
 
         if not inference:
@@ -488,7 +484,7 @@ class BerniniModel(PreTrainedModel):
             pred_vit_embed_mask = torch.zeros(hidden_states.shape[1], dtype=torch.bool, device=hidden_states.device)
             pred_vit_embed_mask[valid_clip_idx] = True
 
-        cond_embed_mask = (txt_and_vit_token_mask | pred_vit_embed_mask)
+        cond_embed_mask = txt_and_vit_token_mask | pred_vit_embed_mask
         diff_mllm_context_txt_mask = txt_and_vit_token_mask[cond_embed_mask]
         diff_mllm_context_vit_mask = pred_vit_embed_mask[cond_embed_mask]
 
@@ -504,14 +500,14 @@ class BerniniModel(PreTrainedModel):
         mllm_context_seqlens.append(int(cond_embed_mask.sum().item()))
         pred_vit_embed_seqlens.append(int(pred_vit_embed_mask.sum().item()))
 
-        return dict(
-            diff_mllm_contexts=diff_mllm_contexts,
-            mllm_context_seqlens=mllm_context_seqlens,
-            pred_vit_embeds=pred_vit_embeds,
-            pred_vit_embed_seqlens=pred_vit_embed_seqlens,
-            diff_mllm_context_txt_mask=diff_mllm_context_txt_mask,
-            diff_mllm_context_vit_mask=diff_mllm_context_vit_mask,
-        )
+        return {
+            "diff_mllm_contexts": diff_mllm_contexts,
+            "mllm_context_seqlens": mllm_context_seqlens,
+            "pred_vit_embeds": pred_vit_embeds,
+            "pred_vit_embed_seqlens": pred_vit_embed_seqlens,
+            "diff_mllm_context_txt_mask": diff_mllm_context_txt_mask,
+            "diff_mllm_context_vit_mask": diff_mllm_context_vit_mask,
+        }
 
     def format_mllm_inputs_embeds(
         self,
@@ -531,14 +527,8 @@ class BerniniModel(PreTrainedModel):
                     f"Image features and image tokens do not match: tokens: {n_visual_tokens}, features {n_visual_features}"
                 )
 
-            visual_mask = (
-                visual_mask.unsqueeze(-1)
-                .expand_as(inputs_embeds)
-                .to(inputs_embeds.device)
-            )
-            visual_embeds = visual_embeds.to(
-                inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                visual_mask, visual_embeds)
+            visual_mask = visual_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            visual_embeds = visual_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(visual_mask, visual_embeds)
 
         return inputs_embeds

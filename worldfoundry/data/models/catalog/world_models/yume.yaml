@@ -16,6 +16,7 @@ official_sources:
   paper: https://arxiv.org/abs/2512.22096
   github:
     url: https://github.com/stdstu12/YUME
+    revision: 111c3fab7fb020d1e261a68be6ec78a3fecc8d5b
   project_page: https://stdstu12.github.io/YUME-Project/
   huggingface:
   - repo_id: stdstu123/Yume-I2V-540P
@@ -37,14 +38,14 @@ integration:
 output_artifacts:
 - generated_world
 runtime_profile: runtime-profile:yume
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: yume
 variants:
 - id: yume
   task: image/video-to-world-video
   provider: official_huggingface
   runtime_profile: runtime-profile:yume
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: yume
   checkpoint_refs:
   - repo_id: stdstu123/Yume-I2V-540P
@@ -59,7 +60,7 @@ variants:
   task: image/video/text-to-world-video
   provider: official_huggingface
   runtime_profile: runtime-profile:yume-1p5
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: yume-1p5
   checkpoint_refs:
   - repo_id: stdstu123/Yume-5B-720P
@@ -86,18 +87,16 @@ docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: 'YUME is an interactive world-video generator: from an image (and for YUME-1.5, text) it produces explorable first-person world videos that respond to keyboard-style motion input. Both recorded variants are verified in this catalog — YUME I2V on the official Yume-I2V-540P checkpoint and YUME-1.5 on Yume-5B-720P — running through in-tree vendored runtime adapters under Apache-2.0.'
-  overview_zh: YUME 是交互式世界视频生成器：从一张图（YUME-1.5 还支持文本）生成可探索的第一人称世界视频，响应键盘式运动输入。本 catalog 记录的两个变体均为 verified——YUME I2V 使用官方 Yume-I2V-540P checkpoint，YUME-1.5 使用 Yume-5B-720P——经树内内置运行时适配器运行，Apache-2.0 许可。
-  architecture: 'Two checkpoint lines are recorded: Yume-I2V-540P for image-conditioned world video and the 5B-parameter Yume-5B-720P for the 1.5 generation with image/video/text conditioning at 720P. Architecture internals beyond the vendored adapters are not recorded in this repository.'
-  architecture_zh: 仓库记录两条 checkpoint 线：面向图像条件世界视频的 Yume-I2V-540P，与 1.5 世代 5B 参数、支持图/视频/文本条件、720P 输出的 Yume-5B-720P。内置适配器之外的架构内部细节仓库未记录。
-  usage_notes: Both variants share the pipeline runner and unified environment profile; checkpoints stage into WORLDFOUNDRY_CKPT_DIR. Prefer yume-1p5 for text conditioning and 720P output. Per-run visual QA is tracked outside the catalog.
-  usage_notes_zh: 两个变体共享 pipeline runner 与统一环境 profile；checkpoint 就位于 WORLDFOUNDRY_CKPT_DIR。需要文本条件与 720P 输出时优先选 yume-1p5。每次运行的视觉 QA 在 catalog 外跟踪。
+  overview: 'YUME is an interactive world-video generator: from an image (and for YUME-1.5, text) it produces explorable first-person world videos that respond to keyboard-style motion input. Two variants are available under Apache-2.0: YUME I2V on the official Yume-I2V-540P checkpoint and YUME-1.5 on Yume-5B-720P.'
+  overview_zh: YUME 是交互式世界视频生成器：从一张图（YUME-1.5 还支持文本）生成可探索的第一人称世界视频，响应键盘式运动输入。提供两个 Apache-2.0 许可的变体：YUME I2V 使用官方 Yume-I2V-540P checkpoint，YUME-1.5 使用 Yume-5B-720P。
+  architecture: 'Two checkpoint lines: Yume-I2V-540P for image-conditioned world video and the 5B-parameter Yume-5B-720P for the 1.5 generation with image/video/text conditioning at 720P.'
+  architecture_zh: 两条 checkpoint 线：面向图像条件世界视频的 Yume-I2V-540P，与 1.5 世代 5B 参数、支持图/视频/文本条件、720P 输出的 Yume-5B-720P。
+  usage_notes: Both variants share the pipeline runner and unified environment profile; checkpoints stage into WORLDFOUNDRY_CKPT_DIR. Prefer yume-1p5 for text conditioning and 720P output.
+  usage_notes_zh: 两个变体共享 pipeline runner 与统一环境 profile；checkpoint 就位于 WORLDFOUNDRY_CKPT_DIR。需要文本条件与 720P 输出时优先选 yume-1p5。
   limitations:
   - 'First-person exploration focus: not a general text-to-video generator.'
-  - Verified status covers the runner paths; per-run visual QA is tracked outside the catalog.
   limitations_zh:
   - 聚焦第一人称探索：并非通用文生视频生成器。
-  - verified 状态覆盖 runner 路径；每次运行的视觉 QA 在 catalog 外跟踪。
   recommended_benchmarks:
   - id: worldmodelbench
     reason: Interactive first-person world rollout quality.

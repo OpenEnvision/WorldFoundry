@@ -1,13 +1,13 @@
 ---
 title: Physics-IQ Original
-description: "DeepMind 物理理解评测：把真实拍摄场景续写 5 秒。WorldFoundry 内置打分器，不编造榜单。"
+description: "DeepMind 物理理解评测：把真实拍摄场景续写 5 秒。WorldFoundry 内置打分器。"
 ---
 
-Physics-IQ（Google DeepMind）问的是视频模型会不会**续写真实物理**，不是像素好不好看。每个测试项给出一段实拍场景，模型必须生成接下来的 **5 秒**。发表协议是 **66 个场景 × 2 视角**（396 项）。WorldFoundry 的 contract 跟踪 **198 视频单次**划分。打分把续写与真实未来对比：基于运动 mask 的 **spatial / spatiotemporal** 一致度，再加 **MSE** 惩罚，聚合为 `physics_iq_score`（官方 `final_score_orig`）。当前官方代码还会输出分量截断的 `physics_iq_stable_score`。
+Physics-IQ（Google DeepMind）考察视频模型能否遵循**真实物理规律**续写视频，而非像素层面的观感。每个测试项给出一段实拍场景，模型必须生成接下来的 **5 秒**。发表协议是 **66 个场景 × 3 视角 × 2 次拍摄**（396 项）。WorldFoundry 评测采用 **198 段视频的单次拍摄**划分（每个视角取一次拍摄）。打分把续写与真实未来对比：基于运动 mask 的 **spatial / spatiotemporal** 一致度，再加 **MSE** 惩罚，聚合为 `physics_iq_score`（官方 `final_score_orig`）。当前官方代码还会输出分量截断的 `physics_iq_stable_score`。
 
 论文：[Physics-IQ](https://arxiv.org/abs/2501.09038)。项目：[physics-iq.github.io](https://physics-iq.github.io/)。代码：[google-deepmind/physics-IQ-benchmark](https://github.com/google-deepmind/physics-IQ-benchmark)。
 
-和本 Hub 上那些操作导入器不同，WorldFoundry **仓内内置打分 runtime**（`run_physics_iq_official_runner.py`，经 `--protocol` 与 `physics-iq-verified` 共享），并把 prompt/场景元数据放在 `worldfoundry/data/benchmarks/assets/physics-iq`。官方**媒体**（真实视频、mask、条件帧）仍要从 DeepMind 下载——不在仓库里。[Physics-IQ Verified](/zh/docs/evaluation/benchmark-hub/physics-iq-verified) 用另一套数据；两者**不可互换**。
+不同于本 Hub 中的操作类导入器，WorldFoundry **仓内内置打分 runtime**（`run_physics_iq_official_runner.py`，经 `--protocol` 与 `physics-iq-verified` 共享），并把 prompt/场景元数据放在 `worldfoundry/data/benchmarks/assets/physics-iq`。官方**媒体**（真实视频、mask、条件帧）需从 DeepMind 另行下载。[Physics-IQ Verified](/zh/docs/evaluation/benchmark-hub/physics-iq-verified) 用另一套数据；两者**不可互换**。
 
 <BenchmarkPageSections id="physics-iq" locale="zh" />
 
@@ -16,7 +16,7 @@ Physics-IQ（Google DeepMind）问的是视频模型会不会**续写真实物�
 导入已有的 `raw_metrics.csv`：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id physics-iq \
   --mode official-validation \
   --official-results-path <raw_metrics.csv> \
@@ -29,7 +29,7 @@ worldfoundry-eval zoo benchmark-run \
 ```bash
 export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/physics-iq/generated_videos
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py \
   --protocol physics-iq \
   --run-official \
   --dataset-root /path/to/physics-iq-benchmark \

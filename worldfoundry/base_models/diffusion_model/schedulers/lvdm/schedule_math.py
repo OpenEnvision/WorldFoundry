@@ -10,9 +10,9 @@ These functions are pure numerics.  Stateful sampling loops live in
 """
 
 import math
+
 import numpy as np
 import torch
-import torch.nn.functional as F
 from einops import repeat
 
 
@@ -27,37 +27,24 @@ def timestep_embedding(timesteps, dim, max_period=10000, repeat_only=False):
     """
     if not repeat_only:
         half = dim // 2
-        freqs = torch.exp(
-            -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.bfloat16) / half
-        ).to(device=timesteps.device)
+        freqs = torch.exp(-math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.bfloat16) / half).to(
+            device=timesteps.device
+        )
         args = timesteps[:, None].float() * freqs[None]
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
         if dim % 2:
             embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
     else:
-        embedding = repeat(timesteps, 'b -> b d', d=dim)
+        embedding = repeat(timesteps, "b -> b d", d=dim)
     return embedding
 
 
 def make_beta_schedule(schedule, n_timestep, linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3):
-    """Make beta schedule.
-
-    Args:
-        schedule: The schedule.
-        n_timestep: The n timestep.
-        linear_start: The linear start.
-        linear_end: The linear end.
-        cosine_s: The cosine s.
-    """
     if schedule == "linear":
-        betas = (
-                torch.linspace(linear_start ** 0.5, linear_end ** 0.5, n_timestep, dtype=torch.float64) ** 2
-        )
+        betas = torch.linspace(linear_start**0.5, linear_end**0.5, n_timestep, dtype=torch.float64) ** 2
 
     elif schedule == "cosine":
-        timesteps = (
-                torch.arange(n_timestep + 1, dtype=torch.float64) / n_timestep + cosine_s
-        )
+        timesteps = torch.arange(n_timestep + 1, dtype=torch.float64) / n_timestep + cosine_s
         alphas = timesteps / (1 + cosine_s) * np.pi / 2
         alphas = torch.cos(alphas).pow(2)
         alphas = alphas / alphas[0]
@@ -74,24 +61,16 @@ def make_beta_schedule(schedule, n_timestep, linear_start=1e-4, linear_end=2e-2,
 
 
 def make_ddim_timesteps(ddim_discr_method, num_ddim_timesteps, num_ddpm_timesteps, verbose=True):
-    """Make ddim timesteps.
-
-    Args:
-        ddim_discr_method: The ddim discr method.
-        num_ddim_timesteps: The num ddim timesteps.
-        num_ddpm_timesteps: The num ddpm timesteps.
-        verbose: The verbose.
-    """
-    if ddim_discr_method == 'uniform':
+    if ddim_discr_method == "uniform":
         c = num_ddpm_timesteps // num_ddim_timesteps
         ddim_timesteps = np.asarray(list(range(0, num_ddpm_timesteps, c)))
         steps_out = ddim_timesteps + 1
-    elif ddim_discr_method == 'uniform_trailing':
+    elif ddim_discr_method == "uniform_trailing":
         c = num_ddpm_timesteps / num_ddim_timesteps
         ddim_timesteps = np.flip(np.round(np.arange(num_ddpm_timesteps, 0, -c))).astype(np.int64)
         steps_out = ddim_timesteps - 1
-    elif ddim_discr_method == 'quad':
-        ddim_timesteps = ((np.linspace(0, np.sqrt(num_ddpm_timesteps * .8), num_ddim_timesteps)) ** 2).astype(int)
+    elif ddim_discr_method == "quad":
+        ddim_timesteps = ((np.linspace(0, np.sqrt(num_ddpm_timesteps * 0.8), num_ddim_timesteps)) ** 2).astype(int)
         steps_out = ddim_timesteps + 1
     else:
         raise NotImplementedError(f'There is no ddim discretization method called "{ddim_discr_method}"')
@@ -100,30 +79,24 @@ def make_ddim_timesteps(ddim_discr_method, num_ddim_timesteps, num_ddpm_timestep
     # add one to get the final alpha values right (the ones from first scale to data during sampling)
     # steps_out = ddim_timesteps + 1
     if verbose:
-        print(f'Selected timesteps for ddim sampler: {steps_out}')
+        print(f"Selected timesteps for ddim sampler: {steps_out}")
     return steps_out
 
 
 def make_ddim_sampling_parameters(alphacums, ddim_timesteps, eta, verbose=True):
-    """Make ddim sampling parameters.
-
-    Args:
-        alphacums: The alphacums.
-        ddim_timesteps: The ddim timesteps.
-        eta: The eta.
-        verbose: The verbose.
-    """
     # select alphas for computing the variance schedule
     # print(f'ddim_timesteps={ddim_timesteps}, len_alphacums={len(alphacums)}')
     alphas = alphacums[ddim_timesteps]
-    alphas_prev = np.asarray([alphacums[0]] + alphacums[ddim_timesteps[:-1]].tolist())
+    alphas_prev = np.asarray([alphacums[0]] + alphacums[ddim_timesteps[:-1]].tolist())  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     # according the the formula provided in https://arxiv.org/abs/2010.02502
     sigmas = eta * np.sqrt((1 - alphas_prev) / (1 - alphas) * (1 - alphas / alphas_prev))
     if verbose:
-        print(f'Selected alphas for ddim sampler: a_t: {alphas}; a_(t-1): {alphas_prev}')
-        print(f'For the chosen value of eta, which is {eta}, '
-              f'this results in the following sigma_t schedule for ddim sampler {sigmas}')
+        print(f"Selected alphas for ddim sampler: a_t: {alphas}; a_(t-1): {alphas_prev}")
+        print(
+            f"For the chosen value of eta, which is {eta}, "
+            f"this results in the following sigma_t schedule for ddim sampler {sigmas}"
+        )
     return sigmas, alphas, alphas_prev
 
 
@@ -144,6 +117,7 @@ def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
         t2 = (i + 1) / num_diffusion_timesteps
         betas.append(min(1 - alpha_bar(t2) / alpha_bar(t1), max_beta))
     return np.array(betas)
+
 
 def rescale_zero_terminal_snr(betas):
     """

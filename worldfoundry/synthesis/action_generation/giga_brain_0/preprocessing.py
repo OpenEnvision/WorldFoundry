@@ -13,7 +13,9 @@ from worldfoundry.synthesis.action_generation.openpi.modeling.action_tokenizer i
 class Normalize:
     """Normalizes a tensor using mean/std or quantile-based scaling."""
 
-    def __init__(self, stats: dict[int, dict[str, list[float]]], *, use_quantiles: bool = False, enable_clamp: bool = False):
+    def __init__(
+        self, stats: dict[int, dict[str, list[float]]], *, use_quantiles: bool = False, enable_clamp: bool = False
+    ):
         """Initializes the normalization transform.
 
         Args:
@@ -26,27 +28,27 @@ class Normalize:
         self.use_quantiles = use_quantiles
         self.enable_clamp = enable_clamp
 
-        required_attrs = ['mean', 'std']
+        required_attrs = ["mean", "std"]
         if self.use_quantiles:
-            required_attrs = ['q01', 'q99']
+            required_attrs = ["q01", "q99"]
 
         for attr in required_attrs:
             for key in stats:
                 if attr not in stats[key]:
-                    raise AttributeError(f'stats object is missing the following attribute: {attr}')
+                    raise AttributeError(f"stats object is missing the following attribute: {attr}")
 
         if self.use_quantiles:
-            self.q01 = dict()
-            self.q99 = dict()
+            self.q01 = {}
+            self.q99 = {}
             for key in stats:
-                self.q01[int(key)] = torch.tensor(stats[key]['q01'], dtype=torch.float32)
-                self.q99[int(key)] = torch.tensor(stats[key]['q99'], dtype=torch.float32)
+                self.q01[int(key)] = torch.tensor(stats[key]["q01"], dtype=torch.float32)
+                self.q99[int(key)] = torch.tensor(stats[key]["q99"], dtype=torch.float32)
         else:
-            self.mean = dict()
-            self.std = dict()
+            self.mean = {}
+            self.std = {}
             for key in stats:
-                self.mean[int(key)] = torch.tensor(stats[key]['mean'], dtype=torch.float32)
-                self.std[int(key)] = torch.tensor(stats[key]['std'], dtype=torch.float32)
+                self.mean[int(key)] = torch.tensor(stats[key]["mean"], dtype=torch.float32)
+                self.std[int(key)] = torch.tensor(stats[key]["std"], dtype=torch.float32)
 
     def to(self, device: str | torch.device):
         if self.use_quantiles:
@@ -100,27 +102,27 @@ class Unnormalize:
         self.stats = stats
         self.use_quantiles = use_quantiles
 
-        required_attrs = ['mean', 'std']
+        required_attrs = ["mean", "std"]
         if self.use_quantiles:
-            required_attrs = ['q01', 'q99']
+            required_attrs = ["q01", "q99"]
 
         for attr in required_attrs:
             for key in stats:
                 if attr not in stats[key]:
-                    raise AttributeError(f'stats object is missing the following attribute: {attr}')
+                    raise AttributeError(f"stats object is missing the following attribute: {attr}")
 
         if self.use_quantiles:
-            self.q01 = dict()
-            self.q99 = dict()
+            self.q01 = {}
+            self.q99 = {}
             for key in stats:
-                self.q01[int(key)] = torch.tensor(stats[key]['q01'], dtype=torch.float32)
-                self.q99[int(key)] = torch.tensor(stats[key]['q99'], dtype=torch.float32)
+                self.q01[int(key)] = torch.tensor(stats[key]["q01"], dtype=torch.float32)
+                self.q99[int(key)] = torch.tensor(stats[key]["q99"], dtype=torch.float32)
         else:
-            self.mean = dict()
-            self.std = dict()
+            self.mean = {}
+            self.std = {}
             for key in stats:
-                self.mean[int(key)] = torch.tensor(stats[key]['mean'], dtype=torch.float32)
-                self.std[int(key)] = torch.tensor(stats[key]['std'], dtype=torch.float32)
+                self.mean[int(key)] = torch.tensor(stats[key]["mean"], dtype=torch.float32)
+                self.std[int(key)] = torch.tensor(stats[key]["std"], dtype=torch.float32)
 
     def to(self, device: str | torch.device):
         if self.use_quantiles:
@@ -147,21 +149,19 @@ class Unnormalize:
         """
         x_dim = x.shape[-1]
         if self.use_quantiles:
-            return (x + 1.0) / 2.0 * (self.q99[embodiment_id][..., :x_dim] - self.q01[embodiment_id][..., :x_dim] + self.EPSILON) + self.q01[
-                embodiment_id
-            ][..., :x_dim]
+            return (x + 1.0) / 2.0 * (
+                self.q99[embodiment_id][..., :x_dim] - self.q01[embodiment_id][..., :x_dim] + self.EPSILON
+            ) + self.q01[embodiment_id][..., :x_dim]
         else:
             return x * (self.std[embodiment_id][..., :x_dim] + self.EPSILON) + self.mean[embodiment_id][..., :x_dim]
-
-
 
 
 class AbsoluteActions:
     """Repacks delta actions into absolute action space."""
 
     def __init__(self, mask: dict[int, list[bool]]):
-        self.mask = dict()
-        assert mask is not None, 'mask is required'
+        self.mask = {}
+        assert mask is not None, "mask is required"
         for key in mask:
             self.mask[int(key)] = torch.tensor(mask[key])
 
@@ -171,15 +171,17 @@ class AbsoluteActions:
         return self
 
     def __call__(self, data: dict) -> dict:
-        if 'action' not in data or 'observation.state' not in data:
+        if "action" not in data or "observation.state" not in data:
             return data
 
-        embodiment_id = data['embodiment_id']
+        embodiment_id = data["embodiment_id"]
 
-        state, action = data['observation.state'], data['action']
+        state, action = data["observation.state"], data["action"]
         dims = self.mask[embodiment_id].shape[-1]
-        action[..., :dims] += torch.where(self.mask[embodiment_id], state[..., :dims], torch.zeros_like(state[..., :dims])).unsqueeze(-2)
-        data['action'] = action
+        action[..., :dims] += torch.where(
+            self.mask[embodiment_id], state[..., :dims], torch.zeros_like(state[..., :dims])
+        ).unsqueeze(-2)
+        data["action"] = action
         return data
 
 
@@ -215,9 +217,9 @@ class PadStatesAndActions:
         Returns:
             The data dictionary with padded tensors.
         """
-        data['observation.state'] = self._pad_to_dim(data['observation.state'], self.action_dim, axis=-1)
-        if 'action' in data:
-            data['action'] = self._pad_to_dim(data['action'], self.action_dim, axis=-1)
+        data["observation.state"] = self._pad_to_dim(data["observation.state"], self.action_dim, axis=-1)
+        if "action" in data:
+            data["action"] = self._pad_to_dim(data["action"], self.action_dim, axis=-1)
         return data
 
 
@@ -242,14 +244,16 @@ def resize_with_pad(img: torch.Tensor, width: int, height: int, pad_value: float
     """
     # Validate input dimensions
     if img.ndim != 3:
-        raise ValueError(f'(C,H,W) expected, but got {img.shape}')
+        raise ValueError(f"(C,H,W) expected, but got {img.shape}")
 
     cur_height, cur_width = img.shape[1:]
 
     ratio = max(cur_width / width, cur_height / height)
     resized_height = int(cur_height / ratio)
     resized_width = int(cur_width / ratio)
-    resized_img = F.interpolate(img.unsqueeze(0), size=(resized_height, resized_width), mode='bilinear', align_corners=False).squeeze(0)
+    resized_img = F.interpolate(
+        img.unsqueeze(0), size=(resized_height, resized_width), mode="bilinear", align_corners=False
+    ).squeeze(0)
 
     pad_height = max(0, int(height - resized_height))
     pad_width = max(0, int(width - resized_width))
@@ -262,9 +266,9 @@ def resize_with_pad(img: torch.Tensor, width: int, height: int, pad_value: float
     padded_img = F.pad(resized_img, (pad_left, pad_right, pad_top, pad_bottom), value=pad_value)
 
     transform_params = {
-        'original_size': (cur_width, cur_height),
-        'ratio': ratio,
-        'padding': (pad_left, pad_top),
+        "original_size": (cur_width, cur_height),
+        "ratio": ratio,
+        "padding": (pad_left, pad_top),
     }
     return padded_img, transform_params
 
@@ -347,9 +351,7 @@ class PromptTokenizerTransform:
             trust_remote_code=False,
         )
         self.paligemma_tokenizer.add_bos_token = True
-        self.fast_tokenizer = UniversalActionTokenizer.from_pretrained(
-            fast_tokenizer_path
-        )
+        self.fast_tokenizer = UniversalActionTokenizer.from_pretrained(fast_tokenizer_path)
         self.discrete_state_input = discrete_state_input
         self.include_subtask = include_subtask
         self.fast_skip_tokens = 128
@@ -411,12 +413,16 @@ class PromptTokenizerTransform:
         if len(tokens) != 1:
             raise ValueError("GigaBrain-0 autoregressive action decoding supports batch size 1")
         sequence = tokens[0].tolist() if hasattr(tokens[0], "tolist") else list(tokens[0])
-        bos = self.paligemma_tokenizer(
-            "Action: ", add_special_tokens=False, return_tensors="pt"
-        )["input_ids"].squeeze(0).tolist()
-        eos = self.paligemma_tokenizer(
-            "|<eos>", add_special_tokens=False, return_tensors="pt"
-        )["input_ids"].squeeze(0).tolist()
+        bos = (
+            self.paligemma_tokenizer("Action: ", add_special_tokens=False, return_tensors="pt")["input_ids"]
+            .squeeze(0)
+            .tolist()
+        )
+        eos = (
+            self.paligemma_tokenizer("|<eos>", add_special_tokens=False, return_tensors="pt")["input_ids"]
+            .squeeze(0)
+            .tolist()
+        )
 
         def find(pattern: list[int], start: int = 0) -> int:
             for index in range(start, len(sequence) - len(pattern) + 1):
@@ -435,11 +441,7 @@ class PromptTokenizerTransform:
         if self.text_token_length is not None:
             vocab_size = min(vocab_size, self.text_token_length)
         base_token_id = vocab_size - 1 - self.fast_skip_tokens
-        fast_tokens = [
-            base_token_id - token
-            for token in action_ids
-            if 0 <= base_token_id - token
-        ]
+        fast_tokens = [base_token_id - token for token in action_ids if base_token_id - token >= 0]
         if not fast_tokens:
             return torch.zeros((1, 0, action_dim), dtype=torch.float32)
         decoded = self.fast_tokenizer.decode(

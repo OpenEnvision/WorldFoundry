@@ -1,17 +1,14 @@
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.loaders import UNet2DConditionLoadersMixin
-from diffusers.utils import BaseOutput, logging
 from diffusers.models.attention_processor import CROSS_ATTENTION_PROCESSORS, AttentionProcessor, AttnProcessor
 from diffusers.models.embeddings import TimestepEmbedding, Timesteps
 from diffusers.models.modeling_utils import ModelMixin
 from diffusers.models.unets.unet_3d_blocks import UNetMidBlockSpatioTemporal, get_down_block, get_up_block
-
+from diffusers.utils import BaseOutput, logging
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -70,28 +67,28 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
     @register_to_config
     def __init__(
         self,
-        sample_size: Optional[int] = None,
+        sample_size: int | None = None,
         in_channels: int = 8,
         out_channels: int = 4,
-        down_block_types: Tuple[str] = (
+        down_block_types: tuple[str] = (
             "CrossAttnDownBlockSpatioTemporal",
             "CrossAttnDownBlockSpatioTemporal",
             "CrossAttnDownBlockSpatioTemporal",
             "DownBlockSpatioTemporal",
         ),
-        up_block_types: Tuple[str] = (
+        up_block_types: tuple[str] = (
             "UpBlockSpatioTemporal",
             "CrossAttnUpBlockSpatioTemporal",
             "CrossAttnUpBlockSpatioTemporal",
             "CrossAttnUpBlockSpatioTemporal",
         ),
-        block_out_channels: Tuple[int] = (320, 640, 1280, 1280),
+        block_out_channels: tuple[int] = (320, 640, 1280, 1280),
         addition_time_embed_dim: int = 256,
         projection_class_embeddings_input_dim: int = 768,
-        layers_per_block: Union[int, Tuple[int]] = 2,
-        cross_attention_dim: Union[int, Tuple[int]] = 1024,
-        transformer_layers_per_block: Union[int, Tuple[int], Tuple[Tuple]] = 1,
-        num_attention_heads: Union[int, Tuple[int]] = (5, 10, 20, 20),
+        layers_per_block: int | tuple[int] = 2,
+        cross_attention_dim: int | tuple[int] = 1024,
+        transformer_layers_per_block: int | tuple[int] | tuple[tuple] = 1,
+        num_attention_heads: int | tuple[int] = (5, 10, 20, 20),
         num_frames: int = 25,
     ):
         super().__init__()
@@ -246,7 +243,7 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
         )
 
     @property
-    def attn_processors(self) -> Dict[str, AttentionProcessor]:
+    def attn_processors(self) -> dict[str, AttentionProcessor]:
         r"""
         Returns:
             `dict` of attention processors: A dictionary containing all attention processors used in the model with
@@ -258,7 +255,7 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
         def fn_recursive_add_processors(
             name: str,
             module: torch.nn.Module,
-            processors: Dict[str, AttentionProcessor],
+            processors: dict[str, AttentionProcessor],
         ):
             if hasattr(module, "get_processor"):
                 processors[f"{name}.processor"] = module.get_processor()
@@ -273,7 +270,7 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
 
         return processors
 
-    def set_attn_processor(self, processor: Union[AttentionProcessor, Dict[str, AttentionProcessor]]):
+    def set_attn_processor(self, processor: AttentionProcessor | dict[str, AttentionProcessor]):
         r"""
         Sets the attention processor to use to compute attention.
 
@@ -321,7 +318,7 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
         self.set_attn_processor(processor)
 
     # Copied from diffusers.models.unets.unet_3d_condition.UNet3DConditionModel.enable_forward_chunking
-    def enable_forward_chunking(self, chunk_size: Optional[int] = None, dim: int = 0) -> None:
+    def enable_forward_chunking(self, chunk_size: int | None = None, dim: int = 0) -> None:
         """
         Sets the attention processor to use [feed forward
         chunking](https://huggingface.co/blog/reformer#2-chunked-feed-forward-layers).
@@ -353,12 +350,12 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
     def forward(
         self,
         sample: torch.Tensor,
-        timestep: Union[torch.Tensor, float, int],
+        timestep: torch.Tensor | float | int,
         encoder_hidden_states: torch.Tensor,
         added_time_ids: torch.Tensor,
         return_dict: bool = True,
         frame_level_cond=False,
-    ) -> Union[UNetSpatioTemporalConditionOutput, Tuple]:
+    ) -> UNetSpatioTemporalConditionOutput | tuple:
         r"""
         The [`UNetSpatioTemporalConditionModel`] forward method.
 
@@ -444,7 +441,9 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
         if not frame_level_cond:
             encoder_hidden_states = encoder_hidden_states.repeat_interleave(num_frames, dim=0)
         else:
-            encoder_hidden_states = encoder_hidden_states.reshape(batch_size * num_frames, -1, encoder_hidden_states.shape[-1])
+            encoder_hidden_states = encoder_hidden_states.reshape(
+                batch_size * num_frames, -1, encoder_hidden_states.shape[-1]
+            )
         ############################################################################################################################
 
         # 2. pre-process

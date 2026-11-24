@@ -4,16 +4,16 @@ GPU memory utility helpers.
 Shared cleanup and memory checking logic used by both the backend API and
 the Gradio UI to keep memory-management behavior consistent.
 """
+
 from __future__ import annotations
 
 import gc
-
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
 
-def get_gpu_memory_info() -> Optional[Dict[str, Any]]:
+def get_gpu_memory_info() -> dict[str, Any] | None:
     """Return a snapshot of current GPU memory usage or None if CUDA not available.
 
     Keys in returned dict: total_gb, allocated_gb, reserved_gb, free_gb, utilization
@@ -29,10 +29,10 @@ def get_gpu_memory_info() -> Optional[Dict[str, Any]]:
         free_memory = total_memory - reserved_memory
 
         return {
-            "total_gb": total_memory / 1024 ** 3,
-            "allocated_gb": allocated_memory / 1024 ** 3,
-            "reserved_gb": reserved_memory / 1024 ** 3,
-            "free_gb": free_memory / 1024 ** 3,
+            "total_gb": total_memory / 1024**3,
+            "allocated_gb": allocated_memory / 1024**3,
+            "reserved_gb": reserved_memory / 1024**3,
+            "free_gb": free_memory / 1024**3,
             "utilization": (reserved_memory / total_memory) * 100,
         }
     except Exception:
@@ -54,7 +54,7 @@ def cleanup_cuda_memory() -> None:
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
             # Collect cross-process cuda resources
-            try:
+            try:  # noqa: SIM105 - The handler carries an explanatory comment.
                 torch.cuda.ipc_collect()
             except Exception:
                 # Older PyTorch versions or non-cuda devices may not support
@@ -100,13 +100,12 @@ def check_memory_availability(required_gb: float = 2.0) -> tuple[bool, str]:
 
         return (
             True,
-            (
-                f"Memory check passed: {mem_info['free_gb']:.2f}GB available, "
-                f"{required_gb:.2f}GB required"
-            ),
+            (f"Memory check passed: {mem_info['free_gb']:.2f}GB available, {required_gb:.2f}GB required"),
         )
     except Exception as e:
         return True, f"Memory check failed: {e}, proceeding anyway"
+
+
 def estimate_memory_requirement(num_images: int, process_res: int) -> float:
     """Heuristic estimate for memory usage (GB) based on image count and resolution.
 

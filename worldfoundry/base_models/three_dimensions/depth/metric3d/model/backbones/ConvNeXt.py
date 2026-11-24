@@ -2,8 +2,6 @@
 # https://github.com/YvanYin/Metric3D
 # Licensed under the BSD-2 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> three_dimensions -> depth -> metric3d -> model -> backbones -> ConvNeXt.py functionality."""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -23,13 +21,6 @@ class Block(nn.Module):
     """
 
     def __init__(self, dim, drop_path=0.0, layer_scale_init_value=1e-6):
-        """Init.
-
-        Args:
-            dim: The dim.
-            drop_path: The drop path.
-            layer_scale_init_value: The layer scale init value.
-        """
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
         self.norm = LayerNorm(dim, eps=1e-6)
@@ -37,18 +28,13 @@ class Block(nn.Module):
         self.act = nn.GELU()
         self.pwconv2 = nn.Linear(4 * dim, dim)
         self.gamma = (
-            nn.Parameter(layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            nn.Parameter(layer_scale_init_value * torch.ones(dim), requires_grad=True)
             if layer_scale_init_value > 0
             else None
         )
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         input = x
         x = self.dwconv(x)
         x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
@@ -82,24 +68,13 @@ class ConvNeXt(nn.Module):
         self,
         in_chans=3,
         num_classes=1000,
-        depths=[3, 3, 9, 3],
-        dims=[96, 192, 384, 768],
+        depths=[3, 3, 9, 3],  # noqa: B006 - Keeps the upstream default object and signature.
+        dims=[96, 192, 384, 768],  # noqa: B006 - Keeps the upstream default object and signature.
         drop_path_rate=0.0,
         layer_scale_init_value=1e-6,
         head_init_scale=1.0,
         **kwargs,
     ):
-        """Init.
-
-        Args:
-            in_chans: The in chans.
-            num_classes: The num classes.
-            depths: The depths.
-            dims: The dims.
-            drop_path_rate: The drop path rate.
-            layer_scale_init_value: The layer scale init value.
-            head_init_scale: The head init scale.
-        """
         super().__init__()
 
         self.downsample_layers = nn.ModuleList()  # stem and 3 intermediate downsampling conv layers
@@ -140,21 +115,11 @@ class ConvNeXt(nn.Module):
         # self.head.bias.data.mul_(head_init_scale)
 
     def _init_weights(self, m):
-        """Helper function to init weights.
-
-        Args:
-            m: The m.
-        """
         if isinstance(m, (nn.Conv2d, nn.Linear)):
             trunc_normal_(m.weight, std=0.02)
             nn.init.constant_(m.bias, 0)
 
     def forward_features(self, x):
-        """Forward features.
-
-        Args:
-            x: The x.
-        """
         features = []
         for i in range(4):
             x = self.downsample_layers[i](x)
@@ -163,11 +128,6 @@ class ConvNeXt(nn.Module):
         return features  # global average pooling, (N, C, H, W) -> (N, C)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         # x = self.forward_features(x)
         # x = self.head(x)
         features = self.forward_features(x)
@@ -182,13 +142,6 @@ class LayerNorm(nn.Module):
     """
 
     def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        """Init.
-
-        Args:
-            normalized_shape: The normalized shape.
-            eps: The eps.
-            data_format: The data format.
-        """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(normalized_shape))
         self.bias = nn.Parameter(torch.zeros(normalized_shape))
@@ -199,11 +152,6 @@ class LayerNorm(nn.Module):
         self.normalized_shape = (normalized_shape,)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         if self.data_format == "channels_last":
             return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         elif self.data_format == "channels_first":
@@ -228,12 +176,6 @@ model_urls = {
 
 
 def convnext_tiny(pretrained=True, in_22k=False, **kwargs):
-    """Convnext tiny.
-
-    Args:
-        pretrained: The pretrained.
-        in_22k: The in 22k.
-    """
     model = ConvNeXt(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
     if pretrained:
         checkpoint = torch.load(kwargs["checkpoint"], map_location="cpu")
@@ -250,7 +192,7 @@ def convnext_tiny(pretrained=True, in_22k=False, **kwargs):
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
         print(
-            "Successfully loaded pretrained %d params, and %d paras are unmatched."
+            "Successfully loaded pretrained %d params, and %d paras are unmatched."  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             % (len(pretrained_dict.keys()), len(unmatched_pretrained_dict.keys()))
         )
         print("Unmatched pretrained paras are :", unmatched_pretrained_dict.keys())
@@ -258,12 +200,6 @@ def convnext_tiny(pretrained=True, in_22k=False, **kwargs):
 
 
 def convnext_small(pretrained=True, in_22k=False, **kwargs):
-    """Convnext small.
-
-    Args:
-        pretrained: The pretrained.
-        in_22k: The in 22k.
-    """
     model = ConvNeXt(depths=[3, 3, 27, 3], dims=[96, 192, 384, 768], **kwargs)
     if pretrained:
         checkpoint = torch.load(kwargs["checkpoint"], map_location="cpu")
@@ -280,7 +216,7 @@ def convnext_small(pretrained=True, in_22k=False, **kwargs):
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
         print(
-            "Successfully loaded pretrained %d params, and %d paras are unmatched."
+            "Successfully loaded pretrained %d params, and %d paras are unmatched."  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             % (len(pretrained_dict.keys()), len(unmatched_pretrained_dict.keys()))
         )
         print("Unmatched pretrained paras are :", unmatched_pretrained_dict.keys())
@@ -288,12 +224,6 @@ def convnext_small(pretrained=True, in_22k=False, **kwargs):
 
 
 def convnext_base(pretrained=True, in_22k=False, **kwargs):
-    """Convnext base.
-
-    Args:
-        pretrained: The pretrained.
-        in_22k: The in 22k.
-    """
     model = ConvNeXt(depths=[3, 3, 27, 3], dims=[128, 256, 512, 1024], **kwargs)
     if pretrained:
         checkpoint = torch.load(kwargs["checkpoint"], map_location="cpu")
@@ -310,7 +240,7 @@ def convnext_base(pretrained=True, in_22k=False, **kwargs):
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
         print(
-            "Successfully loaded pretrained %d params, and %d paras are unmatched."
+            "Successfully loaded pretrained %d params, and %d paras are unmatched."  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             % (len(pretrained_dict.keys()), len(unmatched_pretrained_dict.keys()))
         )
         print("Unmatched pretrained paras are :", unmatched_pretrained_dict.keys())
@@ -318,12 +248,6 @@ def convnext_base(pretrained=True, in_22k=False, **kwargs):
 
 
 def convnext_large(pretrained=True, in_22k=False, **kwargs):
-    """Convnext large.
-
-    Args:
-        pretrained: The pretrained.
-        in_22k: The in 22k.
-    """
     model = ConvNeXt(depths=[3, 3, 27, 3], dims=[192, 384, 768, 1536], **kwargs)
     if pretrained:
         checkpoint = torch.load(kwargs["checkpoint"], map_location="cpu")
@@ -340,7 +264,7 @@ def convnext_large(pretrained=True, in_22k=False, **kwargs):
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
         print(
-            "Successfully loaded pretrained %d params, and %d paras are unmatched."
+            "Successfully loaded pretrained %d params, and %d paras are unmatched."  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             % (len(pretrained_dict.keys()), len(unmatched_pretrained_dict.keys()))
         )
         print("Unmatched pretrained paras are :", unmatched_pretrained_dict.keys())
@@ -348,12 +272,6 @@ def convnext_large(pretrained=True, in_22k=False, **kwargs):
 
 
 def convnext_xlarge(pretrained=True, in_22k=False, **kwargs):
-    """Convnext xlarge.
-
-    Args:
-        pretrained: The pretrained.
-        in_22k: The in 22k.
-    """
     model = ConvNeXt(depths=[3, 3, 27, 3], dims=[256, 512, 1024, 2048], **kwargs)
     if pretrained:
         assert in_22k, "only ImageNet-22K pre-trained ConvNeXt-XL is available; please set in_22k=True"
@@ -371,7 +289,7 @@ def convnext_xlarge(pretrained=True, in_22k=False, **kwargs):
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
         print(
-            "Successfully loaded pretrained %d params, and %d paras are unmatched."
+            "Successfully loaded pretrained %d params, and %d paras are unmatched."  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             % (len(pretrained_dict.keys()), len(unmatched_pretrained_dict.keys()))
         )
         print("Unmatched pretrained paras are :", unmatched_pretrained_dict.keys())

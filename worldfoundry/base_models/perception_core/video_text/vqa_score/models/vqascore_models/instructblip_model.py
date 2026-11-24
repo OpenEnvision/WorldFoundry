@@ -1,60 +1,59 @@
-from typing import List
-import torch
-import copy
 import os
+
+import torch
 from torchvision import transforms
 
 from .vqa_model import VQAScoreModel
+
+# isort: split
 from .lavis.models import load_model
+
+# isort: split
 from ...constants import HF_CACHE_DIR
 
 default_question_template = 'Question: Does this figure show "{}"? Please answer yes or no.'
-default_answer_template = "yes" # instruct-blip uses "yes" instead of "Yes"
+default_answer_template = "yes"  # instruct-blip uses "yes" instead of "Yes"
 
 InstructBLIP_MODELS = {
-    'instructblip-flant5-xxl': {'variant': 'flant5xxl'},
-    'instructblip-flant5-xl': {'variant': 'flant5xl'},
+    "instructblip-flant5-xxl": {"variant": "flant5xxl"},
+    "instructblip-flant5-xl": {"variant": "flant5xl"},
 }
+
 
 class InstructBLIPModel(VQAScoreModel):
     """A wrapper for the InstructBLIP (FlanT5-based) models"""
-    def __init__(self,
-                 model_name='instructblip-flant5-xxl',
-                 device='cuda',
-                 cache_dir=HF_CACHE_DIR):
+
+    def __init__(self, model_name="instructblip-flant5-xxl", device="cuda", cache_dir=HF_CACHE_DIR):
         assert model_name in InstructBLIP_MODELS, f"Model name {model_name} not found in InstructBLIP_MODELS"
-        os.environ['TORCH_HOME'] = cache_dir
-        import timm.models as timm_hub
-        video_mode = "concat"
-        allows_image = True
+        os.environ["TORCH_HOME"] = cache_dir
+
         # if cache_dir != timm_hub.get_cache_dir():
         #     print(f"Warning: cache_dir {cache_dir} won't be used because "
         #            "InstructBLIP is cached using timm_hub.get_cache_dir(). "
         #            "You may want to update os.environ['TORCH_HOME'] before importing to specify the cache_dir.")
         #     print(f"Model saved to {timm_hub.get_cache_dir()}")
-        super().__init__(model_name=model_name,
-                         device=device,
-                         cache_dir=cache_dir)
+        super().__init__(model_name=model_name, device=device, cache_dir=cache_dir)
 
     def load_model(self):
-        """Load the model, tokenizer, image transform
-        """
-        self.variant = InstructBLIP_MODELS[self.model_name]['variant']
+        """Load the model, tokenizer, image transform"""
+        self.variant = InstructBLIP_MODELS[self.model_name]["variant"]
         self.model = load_model("blip2_t5_instruct", self.variant, is_eval=True, device=self.device)
         size = 224
-        self.image_preprocess = transforms.Compose([
-            transforms.Resize((size),interpolation=transforms.functional.InterpolationMode.BICUBIC),
-            transforms.CenterCrop((size,size)),
-            transforms.ToTensor(),
-            transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))]
-        )  
+        self.image_preprocess = transforms.Compose(
+            [
+                transforms.Resize((size), interpolation=transforms.functional.InterpolationMode.BICUBIC),
+                transforms.CenterCrop((size, size)),
+                transforms.ToTensor(),
+                transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+            ]
+        )
 
-    def load_images(self,
-                    image: List[str]) -> torch.Tensor:
-        """Load the image(s), and return a tensor (after preprocessing) put on self.device
-        """
+    def load_images(self, image: list[str]) -> torch.Tensor:
+        """Load the image(s), and return a tensor (after preprocessing) put on self.device"""
         if any(path.startswith(("http://", "https://")) for path in image):
-            raise NotImplementedError("Web link image/video inputs are not yet supported for this model. Please use a local path, or otherwise, make a Github issue request if this feature is necessary.")
+            raise NotImplementedError(
+                "Web link image/video inputs are not yet supported for this model. Please use a local path, or otherwise, make a Github issue request if this feature is necessary."
+            )
         image = [self.image_loader(x) for x in image]
         image = [self.image_preprocess(image) for image in image]
         assert all(x.shape == image[0].shape for x in image)
@@ -62,21 +61,22 @@ class InstructBLIPModel(VQAScoreModel):
         return image
 
     @torch.no_grad()
-    @torch.autocast(device_type='cuda', dtype=torch.bfloat16)
-    def forward(self,
-                images: List[str],
-                texts: List[str],
-                question_template: str=default_question_template,
-                answer_template: str=default_answer_template) -> torch.Tensor:
-        """Forward pass of the model to return n scores for n (image, text) pairs (in PyTorch Tensor)
-        """
+    @torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+    def forward(
+        self,
+        images: list[str],
+        texts: list[str],
+        question_template: str = default_question_template,
+        answer_template: str = default_answer_template,
+    ) -> torch.Tensor:
+        """Forward pass of the model to return n scores for n (image, text) pairs (in PyTorch Tensor)"""
         assert len(images) == len(texts), "Number of images and texts must match"
         # Turn "a photo of a dog" into
         # Q: "Question: Does this figure show "a photo of a dog"? Please answer yes or no."
         # A: "yes"
         questions = [question_template.format(text) for text in texts]
         answers = [answer_template.format(text) for text in texts]
-        
+
         images = self.load_images(images)
 
         image_feat = self.model.ln_vision(self.model.visual_encoder(images))
@@ -86,12 +86,12 @@ class InstructBLIPModel(VQAScoreModel):
 
         question_text_Qformer = self.model.tokenizer(
             questions,
-            padding='longest',
+            padding="longest",
             truncation=True,
             max_length=self.model.max_txt_len,
             return_tensors="pt",
         ).to(query_token.device)
-        Qformer_atts = torch.cat([query_att, question_text_Qformer.attention_mask],dim=1)
+        Qformer_atts = torch.cat([query_att, question_text_Qformer.attention_mask], dim=1)
 
         query_output = self.model.Qformer.bert(
             question_text_Qformer.input_ids,
@@ -101,8 +101,8 @@ class InstructBLIPModel(VQAScoreModel):
             encoder_attention_mask=image_att,
             return_dict=True,
         )
-        
-        t5_input = self.model.t5_proj(query_output.last_hidden_state[:,:query_token.size(1),:])
+
+        t5_input = self.model.t5_proj(query_output.last_hidden_state[:, : query_token.size(1), :])
         t5_att = torch.ones(t5_input.size()[:-1], dtype=torch.long).to(query_token.device)
 
         question_text_t5 = self.model.t5_tokenizer(
@@ -119,7 +119,7 @@ class InstructBLIPModel(VQAScoreModel):
             max_length=self.model.max_output_txt_len,
             return_tensors="pt",
         ).to(query_token.device)
-        
+
         encoder_atts = torch.cat([t5_att, question_text_t5.attention_mask], dim=1)
 
         labels = answer_text_t5.input_ids.masked_fill(
@@ -135,24 +135,20 @@ class InstructBLIPModel(VQAScoreModel):
             return_dict=True,
             labels=labels,
         )
-        
-        loss_fct = torch.nn.CrossEntropyLoss(reduction='mean')
+
+        loss_fct = torch.nn.CrossEntropyLoss(reduction="mean")
         lm_prob = torch.zeros(outputs.logits.shape[0])
         for k in range(lm_prob.shape[0]):
             lm_prob[k] = (-loss_fct(outputs.logits[k], labels[k])).exp()
         return lm_prob
-    
+
     @torch.no_grad()
-    @torch.autocast(device_type='cuda', dtype=torch.bfloat16)
-    def generate(self,
-                images: List[str],
-                texts: List[str],
-                max_length: int = 256) -> List[str]:
-        """Forward pass of the model to generate text responses for n (image, text) pairs
-        """
+    @torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+    def generate(self, images: list[str], texts: list[str], max_length: int = 256) -> list[str]:
+        """Forward pass of the model to generate text responses for n (image, text) pairs"""
         assert len(images) == len(texts), "Number of images and texts must match"
         questions = texts
-        
+
         images = self.load_images(images)
 
         image_feat = self.model.ln_vision(self.model.visual_encoder(images))
@@ -162,7 +158,7 @@ class InstructBLIPModel(VQAScoreModel):
 
         question_text_Qformer = self.model.tokenizer(
             questions,
-            padding='longest',
+            padding="longest",
             truncation=True,
             max_length=self.model.max_txt_len,
             return_tensors="pt",
@@ -177,8 +173,8 @@ class InstructBLIPModel(VQAScoreModel):
             encoder_attention_mask=image_att,
             return_dict=True,
         )
-        
-        t5_input = self.model.t5_proj(query_output.last_hidden_state[:,:query_token.size(1),:])
+
+        t5_input = self.model.t5_proj(query_output.last_hidden_state[:, : query_token.size(1), :])
         t5_att = torch.ones(t5_input.size()[:-1], dtype=torch.long).to(query_token.device)
 
         question_text_t5 = self.model.t5_tokenizer(
@@ -188,7 +184,7 @@ class InstructBLIPModel(VQAScoreModel):
             max_length=self.model.max_txt_len,
             return_tensors="pt",
         ).to(query_token.device)
-        
+
         encoder_atts = torch.cat([t5_att, question_text_t5.attention_mask], dim=1)
         inputs_embeds = self.model.t5_model.encoder.embed_tokens(question_text_t5.input_ids)
         inputs_embeds = torch.cat([t5_input, inputs_embeds], dim=1)
@@ -201,7 +197,7 @@ class InstructBLIPModel(VQAScoreModel):
             min_length=1,
             length_penalty=1,
             num_return_sequences=1,
-            do_sample=False
+            do_sample=False,
         )
 
         # Decode the generated outputs

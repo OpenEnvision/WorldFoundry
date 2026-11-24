@@ -15,16 +15,9 @@ class DAF(nn.Module):
     """
 
     def __init__(self):
-        """Init."""
-        super(DAF, self).__init__()
+        super().__init__()
 
     def forward(self, x, residual):
-        """Forward.
-
-        Args:
-            x: The x.
-            residual: The residual.
-        """
         return x + residual
 
 
@@ -34,14 +27,7 @@ class iAFF(nn.Module):
     """
 
     def __init__(self, channels=64, r=4, type="2D"):
-        """Init.
-
-        Args:
-            channels: The channels.
-            r: The r.
-            type: The type.
-        """
-        super(iAFF, self).__init__()
+        super().__init__()
         inter_channels = int(channels // r)
 
         if type == "1D":
@@ -119,17 +105,11 @@ class iAFF(nn.Module):
                 nn.BatchNorm2d(channels),
             )
         else:
-            raise f"the type is not supported"
+            raise "the type is not supported"  # noqa: B016 - Upstream CLAP guard; callers pass only "1D" or "2D".
 
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x, residual):
-        """Forward.
-
-        Args:
-            x: The x.
-            residual: The residual.
-        """
         flag = False
         xa = x + residual
         if xa.size(0) == 1:
@@ -157,14 +137,7 @@ class AFF(nn.Module):
     """
 
     def __init__(self, channels=64, r=4, type="2D"):
-        """Init.
-
-        Args:
-            channels: The channels.
-            r: The r.
-            type: The type.
-        """
-        super(AFF, self).__init__()
+        super().__init__()
         inter_channels = int(channels // r)
 
         if type == "1D":
@@ -200,17 +173,11 @@ class AFF(nn.Module):
                 nn.BatchNorm2d(channels),
             )
         else:
-            raise f"the type is not supported."
+            raise "the type is not supported."  # noqa: B016 - Upstream CLAP guard; callers pass only "1D" or "2D".
 
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x, residual):
-        """Forward.
-
-        Args:
-            x: The x.
-            residual: The residual.
-        """
         flag = False
         xa = x + residual
         if xa.size(0) == 1:

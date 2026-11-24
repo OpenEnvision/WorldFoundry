@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> seg_tracker.py functionality."""
-
 import numpy as np
 
 from .aot_tracker import get_aot
@@ -12,7 +10,6 @@ from .segmentor import Segmentor
 
 
 class SegTracker:
-    """Seg tracker implementation."""
     def __init__(self, segtracker_args, sam_args, aot_args, grounding_dino_checkpoint: str | None = None) -> None:
         """
         Initialize SAM and AOT.
@@ -35,23 +32,12 @@ class SegTracker:
         self.everything_labels = []
 
     def update_origin_merged_mask(self, updated_merged_mask):
-        """Update origin merged mask.
-
-        Args:
-            updated_merged_mask: The updated merged mask.
-        """
         self.origin_merged_mask = updated_merged_mask
         # obj_ids = np.unique(updated_merged_mask)
         # obj_ids = obj_ids[obj_ids!=0]
         # self.object_idx = int(max(obj_ids)) + 1
 
     def reset_origin_merged_mask(self, mask, id):
-        """Reset origin merged mask.
-
-        Args:
-            mask: The mask.
-            id: The id.
-        """
         self.origin_merged_mask = mask
         self.curr_idx = id
 
@@ -81,16 +67,14 @@ class SegTracker:
         return pred_mask.squeeze(0).squeeze(0).detach().cpu().numpy().astype(np.uint8)
 
     def get_tracking_objs(self):
-        """Get tracking objs."""
         objs = set()
         for ref in self.reference_objs_list:
             objs.update(set(ref))
-        objs = list(sorted(list(objs)))
+        objs = sorted(objs)
         objs = [i for i in objs if i != 0]
         return objs
 
     def get_obj_num(self):
-        """Get obj num."""
         objs = self.get_tracking_objs()
         if len(objs) == 0:
             return 0
@@ -127,7 +111,6 @@ class SegTracker:
         return new_obj_mask, seg_to_new_mapping
 
     def restart_tracker(self):
-        """Restart tracker."""
         self.tracker.restart()
 
     def add_mask(self, interactive_mask: np.ndarray):

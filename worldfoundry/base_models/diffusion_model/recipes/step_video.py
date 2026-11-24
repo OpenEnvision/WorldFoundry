@@ -22,7 +22,6 @@ from ..models.initializers.step_video import build_step_video_latent_initializer
 from ..schedulers import build_step_video_flow_scheduler
 from .spec import NativeDiffusionRecipe
 
-
 STEP_VIDEO_MODEL_ID = "step-video-t2v"
 STEP_VIDEO_REPO_ID = "stepfun-ai/stepvideo-t2v"
 STEP_VIDEO_REVISION = "7a2b639ca2685350e87a4df7e4026285309f7fb6"

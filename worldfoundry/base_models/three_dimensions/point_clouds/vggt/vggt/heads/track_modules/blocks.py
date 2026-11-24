@@ -7,15 +7,14 @@
 
 # Modified from https://github.com/facebookresearch/co-tracker/
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> heads -> track_modules -> blocks.py functionality."""
-
 import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .modules import AttnBlock, CrossAttnBlock
 from .utils import bilinear_sampler
-from .modules import Mlp, AttnBlock, CrossAttnBlock, ResidualBlock
 
 
 class EfficientUpdateFormer(nn.Module):
@@ -35,19 +34,6 @@ class EfficientUpdateFormer(nn.Module):
         add_space_attn=True,
         num_virtual_tracks=64,
     ):
-        """Init.
-
-        Args:
-            space_depth: The space depth.
-            time_depth: The time depth.
-            input_dim: The input dim.
-            hidden_size: The hidden size.
-            num_heads: The num heads.
-            output_dim: The output dim.
-            mlp_ratio: The mlp ratio.
-            add_space_attn: The add space attn.
-            num_virtual_tracks: The num virtual tracks.
-        """
         super().__init__()
 
         self.out_channels = 2
@@ -93,13 +79,7 @@ class EfficientUpdateFormer(nn.Module):
         self.initialize_weights()
 
     def initialize_weights(self):
-        """Initialize weights."""
         def _basic_init(module):
-            """Helper function to basic init.
-
-            Args:
-                module: The module.
-            """
             if isinstance(module, nn.Linear):
                 torch.nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
@@ -109,12 +89,6 @@ class EfficientUpdateFormer(nn.Module):
         self.apply(_basic_init)
 
     def forward(self, input_tensor, mask=None):
-        """Forward.
-
-        Args:
-            input_tensor: The input tensor.
-            mask: The mask.
-        """
         # Apply input LayerNorm
         input_tensor = self.input_norm(input_tensor)
         tokens = self.input_transform(input_tensor)
@@ -162,7 +136,6 @@ class EfficientUpdateFormer(nn.Module):
 
 
 class CorrBlock:
-    """Corr block implementation."""
     def __init__(self, fmaps, num_levels=4, radius=4, multiple_track_feats=False, padding_mode="zeros"):
         """
         Build a pyramid of feature maps from the input.
@@ -183,7 +156,7 @@ class CorrBlock:
         # Build pyramid: each level is half the spatial resolution of the previous
         self.fmaps_pyramid = [fmaps]  # level 0 is full resolution
         current_fmaps = fmaps
-        for i in range(num_levels - 1):
+        for _i in range(num_levels - 1):
             B, S, C, H, W = current_fmaps.shape
             # Merge batch & sequence dimensions
             current_fmaps = current_fmaps.reshape(B * S, C, H, W)
@@ -257,13 +230,6 @@ class CorrBlock:
 
 
 def compute_corr_level(fmap1, fmap2s, C):
-    """Compute corr level.
-
-    Args:
-        fmap1: The fmap1.
-        fmap2s: The fmap2s.
-        C: The c.
-    """
     # fmap1: (B, S, N, C)
     # fmap2s: (B, S, C, H*W)
     corrs = torch.matmul(fmap1, fmap2s)  # (B, S, N, H*W)

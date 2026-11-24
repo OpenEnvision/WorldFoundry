@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> config -> base_schema.py functionality."""
-
 from __future__ import annotations
 
 from typing import Any
@@ -18,15 +16,6 @@ __all__ = ["BaseConfigSchema", "Field", "config_to_primitive"]
 
 
 def config_to_primitive(config: Any, resolve: bool = True) -> Any:
-    """Config to primitive.
-
-    Args:
-        config: The config.
-        resolve: The resolve.
-
-    Returns:
-        The return value.
-    """
     if config is None:
         return None
     if isinstance(config, BaseConfigSchema):
@@ -48,17 +37,7 @@ class BaseConfigSchema(PydanticBaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     def to_dictconfig(self) -> DictConfig:
-        """To dictconfig.
-
-        Returns:
-            The return value.
-        """
         return OmegaConf.create(self.model_dump())
 
     def __hash__(self) -> int:
-        """Hash.
-
-        Returns:
-            The return value.
-        """
         return hash((type(self), self.__repr__()))

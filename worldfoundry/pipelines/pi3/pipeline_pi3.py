@@ -3,7 +3,7 @@
 import json
 import math
 import os
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import Any, Optional, cast
 
 import numpy as np
 from PIL import Image
@@ -26,7 +26,7 @@ def _default_output_dir(name: str = "pi3_output") -> str:
     return str(artifact_root_path() / name)
 
 
-def _apply_camera_delta(c2w: np.ndarray, delta: List[float]) -> np.ndarray:
+def _apply_camera_delta(c2w: np.ndarray, delta: list[float]) -> np.ndarray:
     """Apply a [dx,dy,dz,theta_x,theta_z] delta to a 4x4 camera-to-world matrix."""
     dx, dy, dz, theta_x, theta_z = delta
     result = c2w.copy()
@@ -49,15 +49,15 @@ def _apply_camera_delta(c2w: np.ndarray, delta: List[float]) -> np.ndarray:
 
 
 class Pi3Result:
-
     """Result container representing outputs of Pi3 pipeline execution."""
+
     def __init__(
         self,
-        depth_images: List[Image.Image],
-        numpy_data: Dict[str, np.ndarray],
-        camera_params: List[Dict[str, Any]],
-        camera_range: Dict[str, Any],
-        input_images: Optional[List[np.ndarray]] = None,
+        depth_images: list[Image.Image],
+        numpy_data: dict[str, np.ndarray],
+        camera_params: list[dict[str, Any]],
+        camera_range: dict[str, Any],
+        input_images: list[np.ndarray] | None = None,
         data_type: str = "image",
     ):
         """Initialize the pipeline and configure runtime components."""
@@ -79,13 +79,13 @@ class Pi3Result:
             "camera_params": self.camera_params[idx] if idx < len(self.camera_params) else None,
         }
 
-    def save(self, output_dir: Optional[str] = None) -> List[str]:
+    def save(self, output_dir: str | None = None) -> list[str]:
         """Save for Pi3Result."""
         if output_dir is None:
             output_dir = _default_output_dir()
 
         os.makedirs(output_dir, exist_ok=True)
-        saved_files: List[str] = []
+        saved_files: list[str] = []
 
         # Point cloud (PLY)
         ply_dir = os.path.join(output_dir, "point_cloud")
@@ -104,9 +104,15 @@ class Pi3Result:
                 vertices = np.zeros(
                     pts.shape[0],
                     dtype=[
-                        ("x", "f4"), ("y", "f4"), ("z", "f4"),
-                        ("nx", "f4"), ("ny", "f4"), ("nz", "f4"),
-                        ("red", "u1"), ("green", "u1"), ("blue", "u1"),
+                        ("x", "f4"),
+                        ("y", "f4"),
+                        ("z", "f4"),
+                        ("nx", "f4"),
+                        ("ny", "f4"),
+                        ("nz", "f4"),
+                        ("red", "u1"),
+                        ("green", "u1"),
+                        ("blue", "u1"),
                     ],
                 )
                 vertices["x"], vertices["y"], vertices["z"] = pts[:, 0], pts[:, 1], pts[:, 2]
@@ -164,7 +170,7 @@ class Pi3Result:
         return saved_files
 
 
-def _build_camera_range(camera_params: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _build_camera_range(camera_params: list[dict[str, Any]]) -> dict[str, Any]:
     """Compute camera parameter range from a list of camera_to_world matrices."""
     n = len(camera_params)
     if n == 0:
@@ -181,33 +187,33 @@ def _build_camera_range(camera_params: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 class Pi3Pipeline(PipelineABC):
-
     """Pipeline implementation for Pi3 visual generation."""
+
     def __init__(
         self,
         representation_model=None,
-        reasoning_model: Optional[Any] = None,
-        synthesis_model: Optional[Any] = None,
-        operator: Optional[Pi3Operator] = None,
+        reasoning_model: Any | None = None,
+        synthesis_model: Any | None = None,
+        operator: Pi3Operator | None = None,
     ) -> None:
         """Initialize the pipeline and configure runtime components."""
         self.representation_model = representation_model
         self.reasoning_model = reasoning_model
         self.synthesis_model = synthesis_model
         self.operator = operator or Pi3Operator()
-        self._cached_result: Optional[Pi3Result] = None
-        self._current_camera: Optional[np.ndarray] = None
+        self._cached_result: Pi3Result | None = None
+        self._current_camera: np.ndarray | None = None
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[str] = None,
-        required_components: Optional[Dict[str, str]] = None,
+        model_path: str | None = None,
+        required_components: dict[str, str] | None = None,
         mode: str = "pi3x",
-        device: Optional[str] = None,
-        weight_dtype: Optional[str] = None,
-        representation_path: Optional[str] = None,
-        model_type: Optional[str] = None,
+        device: str | None = None,
+        weight_dtype: str | None = None,
+        representation_path: str | None = None,
+        model_type: str | None = None,
         **kwargs,
     ) -> "Pi3Pipeline":
         """Load the pipeline from pretrained checkpoints and configurations."""
@@ -218,11 +224,15 @@ class Pi3Pipeline(PipelineABC):
 
         if m == "pi3x":
             representation_model = Pi3XRepresentation.from_pretrained(
-                pretrained_model_path=path, device=device, **kwargs,
+                pretrained_model_path=path,
+                device=device,
+                **kwargs,
             )
         elif m == "pi3":
             representation_model = Pi3Representation.from_pretrained(
-                pretrained_model_path=path, device=device, **kwargs,
+                pretrained_model_path=path,
+                device=device,
+                **kwargs,
             )
         else:
             raise ValueError(f"Unknown mode: {m}. Choose 'pi3x' or 'pi3'.")
@@ -230,7 +240,7 @@ class Pi3Pipeline(PipelineABC):
 
     def _run_inference(
         self,
-        images: Union[str, np.ndarray, List[str], List[np.ndarray]],
+        images: str | np.ndarray | list[str] | list[np.ndarray],
         **kwargs,
     ) -> Pi3Result:
         """Run Pi3 model inference (single-shot, produces all outputs)."""
@@ -245,10 +255,7 @@ class Pi3Pipeline(PipelineABC):
         device = self.representation_model.device
         imgs_tensor = self.operator.images_to_tensor(images_data, device=device)
 
-        resized_images = [
-            imgs_tensor[0, i].permute(1, 2, 0).cpu().numpy()
-            for i in range(imgs_tensor.shape[1])
-        ]
+        resized_images = [imgs_tensor[0, i].permute(1, 2, 0).cpu().numpy() for i in range(imgs_tensor.shape[1])]
 
         data = {
             "images": imgs_tensor,
@@ -259,6 +266,7 @@ class Pi3Pipeline(PipelineABC):
         conditions_path = kwargs.get("conditions_path")
         if conditions_path is not None and os.path.exists(conditions_path):
             import torch as _torch
+
             cond_data = np.load(conditions_path, allow_pickle=True)
             if "poses" in cond_data:
                 data["poses"] = _torch.from_numpy(cond_data["poses"]).float().unsqueeze(0)
@@ -286,9 +294,11 @@ class Pi3Pipeline(PipelineABC):
         cam_poses = results.get("camera_poses")
         if cam_poses is not None:
             for i in range(cam_poses[0].shape[0]):
-                camera_params.append({
-                    "camera_to_world": cam_poses[0][i].tolist(),
-                })
+                camera_params.append(
+                    {
+                        "camera_to_world": cam_poses[0][i].tolist(),
+                    }
+                )
 
         camera_range = _build_camera_range(camera_params)
 
@@ -309,7 +319,7 @@ class Pi3Pipeline(PipelineABC):
         self,
         result: Optional["Pi3Result"] = None,
         camera_view=None,
-        camera_to_world: Optional[np.ndarray] = None,
+        camera_to_world: np.ndarray | None = None,
     ) -> Image.Image:
         """Render a view from cached point cloud (no model inference).
 
@@ -353,7 +363,7 @@ class Pi3Pipeline(PipelineABC):
 
         return render_point_cloud(pts, cols, c2w, h, w)
 
-    def _render_trajectory(self, n_interp: int = 15, fps: int = 15, **kwargs) -> List[Image.Image]:
+    def _render_trajectory(self, n_interp: int = 15, fps: int = 15, **kwargs) -> list[Image.Image]:
         """Render a trajectory video by interpolating between original camera poses.
         Returns a list of PIL.Image frames.
         """
@@ -363,7 +373,7 @@ class Pi3Pipeline(PipelineABC):
 
         pts_all = res.numpy_data["points"][0]
         masks = res.numpy_data["masks"][0].astype(bool)
-        colors_all = np.stack(res.input_images, axis=0)
+        colors_all = np.stack(cast(list[np.ndarray], res.input_images), axis=0)
         pts = pts_all[masks].astype(np.float64)
         cols = (colors_all[masks] * 255).clip(0, 255).astype(np.uint8)
         h, w = pts_all.shape[1], pts_all.shape[2]
@@ -380,12 +390,12 @@ class Pi3Pipeline(PipelineABC):
 
     def __call__(
         self,
-        images: Optional[Union[str, np.ndarray, List[str], List[np.ndarray]]] = None,
-        videos: Optional[Union[str, List[str]]] = None,
-        image_path: Optional[str] = None,
-        video_path: Optional[str] = None,
+        images: str | np.ndarray | list[str] | list[np.ndarray] | None = None,
+        videos: str | list[str] | None = None,
+        image_path: str | None = None,
+        video_path: str | None = None,
         task_type: str = "reconstruction",
-        interactions: Optional[List[str]] = None,
+        interactions: list[str] | None = None,
         camera_view=None,
         visualize_ops: bool = True,
         **kwargs,
@@ -422,23 +432,21 @@ class Pi3Pipeline(PipelineABC):
                 n_hold = kwargs.get("hold_frames", 10)
                 frames = []
                 if self._current_camera is None and self._cached_result is not None:
-                    self._current_camera = np.array(
-                        self._cached_result.camera_params[0]["camera_to_world"]
-                    )
+                    self._current_camera = np.array(self._cached_result.camera_params[0]["camera_to_world"])
+                camera = self._current_camera
+                if camera is None:
+                    raise RuntimeError("No result available. Run inference first via __call__().")
                 for sig in interactions:
-                    hold_img = self.render_view(camera_to_world=self._current_camera)
+                    hold_img = self.render_view(camera_to_world=camera)
                     for _ in range(n_hold):
                         frames.append(hold_img)
                     delta = self.operator.process_interaction_single(sig)
                     sub_delta = [d / n_move for d in delta]
                     for _ in range(n_move):
-                        self._current_camera = _apply_camera_delta(
-                            self._current_camera, sub_delta
-                        )
-                        frames.append(self.render_view(
-                            camera_to_world=self._current_camera
-                        ))
-                hold_img = self.render_view(camera_to_world=self._current_camera)
+                        camera = _apply_camera_delta(camera, sub_delta)
+                        self._current_camera = camera
+                        frames.append(self.render_view(camera_to_world=camera))
+                hold_img = self.render_view(camera_to_world=camera)
                 for _ in range(n_hold):
                     frames.append(hold_img)
                 return frames
@@ -449,14 +457,13 @@ class Pi3Pipeline(PipelineABC):
 
         else:
             raise ValueError(
-                f"Unknown task_type: {task_type}. "
-                "Choose 'reconstruction', 'render_view', or 'render_trajectory'."
+                f"Unknown task_type: {task_type}. Choose 'reconstruction', 'render_view', or 'render_trajectory'."
             )
 
     def stream(
         self,
-        interaction_signal: Union[str, List[str]],
-        result: Optional[Pi3Result] = None,
+        interaction_signal: str | list[str],
+        result: Pi3Result | None = None,
         **kwargs,
     ) -> Image.Image:
         """Interactive rendering: apply navigation interaction to current camera and render.

@@ -7,7 +7,7 @@ params:
   network_config: ${model.network_config}
 
   eval_dataloader_config:
-    target: src.data.loader.build_data_loader
+    target: worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.data.loader.build_data_loader
     params:
       batch_size: ${device.eval_num_samples}
       num_workers: ${device.num_workers}
@@ -19,7 +19,7 @@ params:
       eval_pseudo_process_count: null
 
   sharding_config:
-    target: src.utils.sharding.build_shardings
+    target: worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.utils.sharding.build_shardings
     params:
       mesh: [["data", -1]]
       data_axis: data

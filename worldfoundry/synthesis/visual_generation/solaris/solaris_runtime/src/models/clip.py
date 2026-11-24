@@ -146,10 +146,7 @@ class AttentionPool(nnx.Module):
 
         # Layers
         gain = 1.0 / math.sqrt(dim)
-        self.cls_embedding = nnx.Param(
-            gain
-            * jax.random.normal(jax.random.PRNGKey(0), (1, 1, dim), dtype=jnp.float32)
-        )
+        self.cls_embedding = nnx.Param(gain * jax.random.normal(jax.random.PRNGKey(0), (1, 1, dim), dtype=jnp.float32))
         self.to_q = nnx.Linear(dim, dim, use_bias=True, rngs=nnx.Rngs(0))
         self.to_kv = nnx.Linear(dim, dim * 2, use_bias=True, rngs=nnx.Rngs(0))
         self.proj = nnx.Linear(dim, dim, use_bias=True, rngs=nnx.Rngs(0))
@@ -242,20 +239,12 @@ class VisionTransformer(nnx.Module):
 
         if pool_type in ("token", "token_fc"):
             self.cls_embedding = nnx.Param(
-                gain
-                * jax.random.normal(
-                    jax.random.PRNGKey(1), (1, 1, dim), dtype=jnp.float32
-                )
+                gain * jax.random.normal(jax.random.PRNGKey(1), (1, 1, dim), dtype=jnp.float32)
             )
 
-        pos_embed_len = self.num_patches + (
-            1 if pool_type in ("token", "token_fc") else 0
-        )
+        pos_embed_len = self.num_patches + (1 if pool_type in ("token", "token_fc") else 0)
         self.pos_embedding = nnx.Param(
-            gain
-            * jax.random.normal(
-                jax.random.PRNGKey(2), (1, pos_embed_len, dim), dtype=jnp.float32
-            )
+            gain * jax.random.normal(jax.random.PRNGKey(2), (1, pos_embed_len, dim), dtype=jnp.float32)
         )
 
         # Note: Dropout is not implemented in this simplified version
@@ -280,18 +269,11 @@ class VisionTransformer(nnx.Module):
 
         # Head
         if pool_type == "token":
-            self.head = nnx.Param(
-                gain
-                * jax.random.normal(
-                    jax.random.PRNGKey(3), (dim, out_dim), dtype=jnp.float32
-                )
-            )
+            self.head = nnx.Param(gain * jax.random.normal(jax.random.PRNGKey(3), (dim, out_dim), dtype=jnp.float32))
         elif pool_type == "token_fc":
             self.head = nnx.Linear(dim, out_dim, use_bias=True, rngs=nnx.Rngs(0))
         elif pool_type == "attn_pool":
-            self.head = AttentionPool(
-                dim, mlp_ratio, num_heads, activation, proj_dropout, norm_eps
-            )
+            self.head = AttentionPool(dim, mlp_ratio, num_heads, activation, proj_dropout, norm_eps)
 
     def __call__(self, x, interpolation=False, use_31_block=False):
         b = x.shape[0]
@@ -308,9 +290,7 @@ class VisionTransformer(nnx.Module):
             cls_token = jnp.broadcast_to(self.cls_embedding.value, (b, 1, self.dim))
             x = jnp.concatenate([cls_token, x], axis=1)
         if interpolation:
-            raise NotImplementedError(
-                "Position interpolation not implemented in this simplified version"
-            )
+            raise NotImplementedError("Position interpolation not implemented in this simplified version")
         else:
             pos_embed = self.pos_embedding.value
 
@@ -322,6 +302,7 @@ class VisionTransformer(nnx.Module):
         return self.transformer[0](x)
 
         # Apply transformer blocks
+
 
 _MEAN = jnp.array([0.48145466, 0.4578275, 0.40821073], jnp.float32)
 _STD = jnp.array([0.26862954, 0.26130258, 0.27577711], jnp.float32)
@@ -342,9 +323,7 @@ def _prep_frame(frame_bchw, image_size):
 def clip_preprocess_videos(videos_bcfhw, image_size=224):
     videos_bchw = rearrange(videos_bcfhw, "b c f h w -> (b f) c h w")
     videos_bchw = _prep_frame(videos_bchw, image_size)
-    videos_bcfhw = rearrange(
-        videos_bchw, "(b f) c h w -> b c f h w", f=videos_bcfhw.shape[2]
-    )
+    videos_bcfhw = rearrange(videos_bchw, "(b f) c h w -> b c f h w", f=videos_bcfhw.shape[2])
     return videos_bchw
 
 

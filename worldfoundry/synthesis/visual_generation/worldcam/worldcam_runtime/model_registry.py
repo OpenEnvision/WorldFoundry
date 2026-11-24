@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from .models.wan_video_dit import WanModel
-from worldfoundry.base_models.diffusion_model.models.networks.wan.variants import WanS2VModel
 from worldfoundry.base_models.diffusion_model.models.encoders.wan import WanImageEncoder, WanTextEncoder
-from .models.wan_video_vae import WanVideoVAE, WanVideoVAE38
-from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants import WanMotionControllerModel
-from .models.wan_video_vace import VaceWanModel
-from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants import WanS2VAudioEncoder
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants import (
+    WanMotionControllerModel,
+    WanS2VAudioEncoder,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants import WanS2VModel
 from worldfoundry.core.model_loading import load_model_loader_registry
 
+from .models.wan_video_dit import WanModel
+from .models.wan_video_vace import VaceWanModel
+from .models.wan_video_vae import WanVideoVAE, WanVideoVAE38
 
 _CONFIG_RESOURCE = "models/runtime/configs/worldcam/model_loader.yaml"
 

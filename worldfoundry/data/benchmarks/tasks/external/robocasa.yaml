@@ -25,7 +25,7 @@ metadata:
   source_kind: benchmark_zoo
   benchmark_id: robocasa
   status: integrated
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id robocasa --mode contract --output-dir 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id robocasa --mode contract --output-dir 
     tmp/benchmark_zoo/benchmark_contract/robocasa --json
   release_status: normalizer_only
   maturity: contract_ready
@@ -46,10 +46,10 @@ metadata:
   blockers:
   - Official RoboCasa scene assets, policy checkpoints, and long-horizon simulator rollouts must be validated before 
     integrated status.
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:RoboCasaContract
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:robocasa
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:RoboCasaContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:robocasa
     runner_script_available: false
     task_yaml_available: true
     runtime_verified: false
@@ -68,7 +68,7 @@ metadata:
     results_path_env: WORLDFOUNDRY_ROBOCASA_RESULTS_PATH
     preflight_profile: robocasa
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -80,9 +80,9 @@ metadata:
     - --output-dir
     - <out>
     - --json
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.embodied.normalizer:normalize_results
+    target: worldfoundry.evals.tasks.embodied.normalizer:normalize_results
     status: implemented
     protocol: official_embodied_result_normalizer
     official_result_normalization:
@@ -100,7 +100,7 @@ metadata:
     - cache/vla_va_wam/repos/robocasa--robocasa
     task_yaml: worldfoundry/data/benchmarks/tasks/external/robocasa.yaml
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -175,4 +175,4 @@ tasks:
       - task_success
       - episode_success
       - reward
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:RoboCasaContract
+      runner_target: worldfoundry.evals.tasks.contracts.external:robocasa

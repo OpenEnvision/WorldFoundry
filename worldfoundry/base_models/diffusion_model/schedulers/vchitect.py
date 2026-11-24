@@ -33,9 +33,10 @@ class VchitectFlowMatchEulerScheduler(WanFlowMatchEulerScheduler):
             torch.tensor(1.0 / self.num_train_timesteps, dtype=torch.float32), self.shift
         ).item()
         # Diffusers uses NumPy's float64 linspace, then shifts before the float32 cast.
-        base = np.linspace(
-            float(self.num_train_timesteps), minimum * self.num_train_timesteps, count
-        ) / self.num_train_timesteps
+        base = (
+            np.linspace(float(self.num_train_timesteps), minimum * self.num_train_timesteps, count)
+            / self.num_train_timesteps
+        )
         shifted = self.shift * base / (1.0 + (self.shift - 1.0) * base)
         sigmas = torch.from_numpy(shifted).to(device=device, dtype=torch.float32)
         sigmas = torch.cat((sigmas, sigmas.new_zeros(1)))

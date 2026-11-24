@@ -22,9 +22,7 @@ class RepFeature(nn.Module):
             bias=False,
         )
         self.target_norm = nn.LayerNorm(self.config.scene_dim, bias=False)
-        self.target_register_tokens = nn.Parameter(
-            torch.zeros(1, 4, self.config.scene_dim)
-        )
+        self.target_register_tokens = nn.Parameter(torch.zeros(1, 4, self.config.scene_dim))
         self.blocks = nn.ModuleList(
             [
                 BidirectionalBlock(
@@ -75,9 +73,7 @@ class RepFeature(nn.Module):
         for start in range(0, self.config.target_views, target_microbatch):
             rays = target_rays[:, start : start + target_microbatch]
             views = rays.shape[1]
-            flat_rays = rays.reshape(
-                batch * views, 6, self.config.ray_height, self.config.ray_width
-            )
+            flat_rays = rays.reshape(batch * views, 6, self.config.ray_height, self.config.ray_width)
             target = self.target_embedding(flat_rays).flatten(2).transpose(1, 2)
             target = self.target_norm(target)
             registers = self.target_register_tokens.expand(batch * views, -1, -1).to(

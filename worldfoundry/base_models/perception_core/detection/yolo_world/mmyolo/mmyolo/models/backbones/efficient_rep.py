@@ -1,13 +1,13 @@
+from typing import ClassVar
+
 # Copyright (c) OpenMMLab. All rights reserved.
-
-from typing import List, Tuple, Union
-
 import torch
 import torch.nn as nn
 from mmdet.utils import ConfigType, OptMultiConfig
 
 from mmyolo.models.layers.yolo_bricks import CSPSPPFBottleneck, SPPFBottleneck
 from mmyolo.registry import MODELS
+
 from ..layers import BepC3StageBlock, RepStageBlock
 from ..utils import make_round
 from .base_backbone import BaseBackbone
@@ -57,28 +57,29 @@ class YOLOv6EfficientRep(BaseBackbone):
         (1, 512, 26, 26)
         (1, 1024, 13, 13)
     """
+
     # From left to right:
     # in_channels, out_channels, num_blocks, use_spp
-    arch_settings = {
-        'P5': [[64, 128, 6, False], [128, 256, 12, False],
-               [256, 512, 18, False], [512, 1024, 6, True]]
+    arch_settings: ClassVar[dict] = {
+        "P5": [[64, 128, 6, False], [128, 256, 12, False], [256, 512, 18, False], [512, 1024, 6, True]]
     }
 
-    def __init__(self,
-                 arch: str = 'P5',
-                 plugins: Union[dict, List[dict]] = None,
-                 deepen_factor: float = 1.0,
-                 widen_factor: float = 1.0,
-                 input_channels: int = 3,
-                 out_indices: Tuple[int] = (2, 3, 4),
-                 frozen_stages: int = -1,
-                 use_cspsppf: bool = False,
-                 norm_cfg: ConfigType = dict(
-                     type='BN', momentum=0.03, eps=0.001),
-                 act_cfg: ConfigType = dict(type='ReLU', inplace=True),
-                 norm_eval: bool = False,
-                 block_cfg: ConfigType = dict(type='RepVGGBlock'),
-                 init_cfg: OptMultiConfig = None):
+    def __init__(
+        self,
+        arch: str = "P5",
+        plugins: dict | list[dict] | None = None,
+        deepen_factor: float = 1.0,
+        widen_factor: float = 1.0,
+        input_channels: int = 3,
+        out_indices: tuple[int] = (2, 3, 4),
+        frozen_stages: int = -1,
+        use_cspsppf: bool = False,
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.03, "eps": 0.001},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "ReLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
+        norm_eval: bool = False,
+        block_cfg: ConfigType = {"type": "RepVGGBlock"},  # noqa: B006 - Keeps the upstream default object and signature.
+        init_cfg: OptMultiConfig = None,
+    ):
         self.block_cfg = block_cfg
         self.use_cspsppf = use_cspsppf
         super().__init__(
@@ -92,19 +93,21 @@ class YOLOv6EfficientRep(BaseBackbone):
             norm_cfg=norm_cfg,
             act_cfg=act_cfg,
             norm_eval=norm_eval,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
 
     def build_stem_layer(self) -> nn.Module:
         """Build a stem layer."""
 
         block_cfg = self.block_cfg.copy()
         block_cfg.update(
-            dict(
-                in_channels=self.input_channels,
-                out_channels=int(self.arch_setting[0][0] * self.widen_factor),
-                kernel_size=3,
-                stride=2,
-            ))
+            {
+                "in_channels": self.input_channels,
+                "out_channels": int(self.arch_setting[0][0] * self.widen_factor),
+                "kernel_size": 3,
+                "stride": 2,
+            }
+        )
         return MODELS.build(block_cfg)
 
     def build_stage_layer(self, stage_idx: int, setting: list) -> list:
@@ -128,12 +131,7 @@ class YOLOv6EfficientRep(BaseBackbone):
         )
 
         block_cfg = self.block_cfg.copy()
-        block_cfg.update(
-            dict(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=3,
-                stride=2))
+        block_cfg.update({"in_channels": in_channels, "out_channels": out_channels, "kernel_size": 3, "stride": 2})
         stage = []
 
         ef_block = nn.Sequential(MODELS.build(block_cfg), rep_stage_block)
@@ -146,14 +144,16 @@ class YOLOv6EfficientRep(BaseBackbone):
                 out_channels=out_channels,
                 kernel_sizes=5,
                 norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg)
+                act_cfg=self.act_cfg,
+            )
             if self.use_cspsppf:
                 spp = CSPSPPFBottleneck(
                     in_channels=out_channels,
                     out_channels=out_channels,
                     kernel_sizes=5,
                     norm_cfg=self.norm_cfg,
-                    act_cfg=self.act_cfg)
+                    act_cfg=self.act_cfg,
+                )
             stage.append(spp)
         return stage
 
@@ -215,29 +215,30 @@ class YOLOv6CSPBep(YOLOv6EfficientRep):
         (1, 512, 26, 26)
         (1, 1024, 13, 13)
     """
+
     # From left to right:
     # in_channels, out_channels, num_blocks, use_spp
-    arch_settings = {
-        'P5': [[64, 128, 6, False], [128, 256, 12, False],
-               [256, 512, 18, False], [512, 1024, 6, True]]
+    arch_settings: ClassVar[dict] = {
+        "P5": [[64, 128, 6, False], [128, 256, 12, False], [256, 512, 18, False], [512, 1024, 6, True]]
     }
 
-    def __init__(self,
-                 arch: str = 'P5',
-                 plugins: Union[dict, List[dict]] = None,
-                 deepen_factor: float = 1.0,
-                 widen_factor: float = 1.0,
-                 input_channels: int = 3,
-                 hidden_ratio: float = 0.5,
-                 out_indices: Tuple[int] = (2, 3, 4),
-                 frozen_stages: int = -1,
-                 use_cspsppf: bool = False,
-                 norm_cfg: ConfigType = dict(
-                     type='BN', momentum=0.03, eps=0.001),
-                 act_cfg: ConfigType = dict(type='SiLU', inplace=True),
-                 norm_eval: bool = False,
-                 block_cfg: ConfigType = dict(type='ConvWrapper'),
-                 init_cfg: OptMultiConfig = None):
+    def __init__(
+        self,
+        arch: str = "P5",
+        plugins: dict | list[dict] | None = None,
+        deepen_factor: float = 1.0,
+        widen_factor: float = 1.0,
+        input_channels: int = 3,
+        hidden_ratio: float = 0.5,
+        out_indices: tuple[int] = (2, 3, 4),
+        frozen_stages: int = -1,
+        use_cspsppf: bool = False,
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.03, "eps": 0.001},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "SiLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
+        norm_eval: bool = False,
+        block_cfg: ConfigType = {"type": "ConvWrapper"},  # noqa: B006 - Keeps the upstream default object and signature.
+        init_cfg: OptMultiConfig = None,
+    ):
         self.hidden_ratio = hidden_ratio
         self.use_cspsppf = use_cspsppf
         super().__init__(
@@ -252,7 +253,8 @@ class YOLOv6CSPBep(YOLOv6EfficientRep):
             act_cfg=act_cfg,
             norm_eval=norm_eval,
             block_cfg=block_cfg,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
 
     def build_stage_layer(self, stage_idx: int, setting: list) -> list:
         """Build a stage layer.
@@ -273,14 +275,10 @@ class YOLOv6CSPBep(YOLOv6EfficientRep):
             hidden_ratio=self.hidden_ratio,
             block_cfg=self.block_cfg,
             norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
+            act_cfg=self.act_cfg,
+        )
         block_cfg = self.block_cfg.copy()
-        block_cfg.update(
-            dict(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=3,
-                stride=2))
+        block_cfg.update({"in_channels": in_channels, "out_channels": out_channels, "kernel_size": 3, "stride": 2})
         stage = []
 
         ef_block = nn.Sequential(MODELS.build(block_cfg), rep_stage_block)
@@ -293,13 +291,15 @@ class YOLOv6CSPBep(YOLOv6EfficientRep):
                 out_channels=out_channels,
                 kernel_sizes=5,
                 norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg)
+                act_cfg=self.act_cfg,
+            )
             if self.use_cspsppf:
                 spp = CSPSPPFBottleneck(
                     in_channels=out_channels,
                     out_channels=out_channels,
                     kernel_sizes=5,
                     norm_cfg=self.norm_cfg,
-                    act_cfg=self.act_cfg)
+                    act_cfg=self.act_cfg,
+                )
             stage.append(spp)
         return stage

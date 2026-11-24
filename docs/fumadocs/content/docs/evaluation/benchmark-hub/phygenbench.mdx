@@ -1,6 +1,6 @@
 ---
 title: PhyGenBench
-description: "T2V physical-commonsense generation: 160 prompts over 27 laws, scored by PhyGenEval. WorldFoundry imports results or runs overall.py — not the stage judges."
+description: "T2V physical-commonsense generation: 160 prompts over 27 laws, scored by PhyGenEval. WorldFoundry imports results or runs overall.py over prepared stage outputs."
 ---
 
 PhyGenBench (Shanghai AI Lab / OpenGVLab) asks whether a **text-to-video generator** respects physical commonsense. It ships **160 prompts** spanning **27 claimed laws** in four domains (mechanics, optics, thermal, materials). Upstream scoring is **PhyGenEval**: VQAScore, GPT-4o/LLaVA-style order checks, and InternVideo2 naturalness, then `overall.py`.
@@ -9,7 +9,7 @@ This is **generation + hierarchical judges**, not [PhyGround](/docs/evaluation/b
 
 Paper: [PhyGenBench](https://arxiv.org/abs/2410.05363). Project: [phygenbench123.github.io](https://phygenbench123.github.io/). Code: [OpenGVLab/PhyGenBench](https://github.com/OpenGVLab/PhyGenBench).
 
-WorldFoundry bundles `prompts.json` and PhyGenEval `overall.py`. It **imports** an official result file, or runs **bounded** `overall.py` over already-prepared stage outputs. It does **not** run VQAScore, GPT-4o/LLaVA, or InternVideo2.
+WorldFoundry bundles `prompts.json` and PhyGenEval `overall.py`. It **imports** an official result file, or runs `overall.py` over already-prepared stage outputs. It does **not** run VQAScore, GPT-4o/LLaVA, or InternVideo2.
 
 <BenchmarkPageSections id="phygenbench" locale="en" />
 
@@ -18,7 +18,7 @@ WorldFoundry bundles `prompts.json` and PhyGenEval `overall.py`. It **imports** 
 Import an official result export:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id phygenbench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -31,7 +31,7 @@ Aggregate prepared stage outputs with in-tree `overall.py` (not a substitute for
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --output-dir tmp/phygenbench/official \

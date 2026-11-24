@@ -6,13 +6,23 @@ groups:
 - video
 source_repos:
 - url: https://github.com/Lightricks/LTX-2
+  revision: a95ab856bf29407b6b066ede0abe1846050db56c
 checkpoints:
 - repo_id: Lightricks/LTX-2
   revision: 47da56e2ad66ce4125a9922b4a8826bf407f9d0a
   role: distilled_base_checkpoint
+  files:
+  - ltx-2-19b-distilled.safetensors
+  - ltx-2-spatial-upscaler-x2-1.0.safetensors
 - repo_id: Lightricks/LTX-2-19b-IC-LoRA-Pose-Control
   revision: ecdabfb03acd2e807c90ea260ccc136140e7ac80
   role: pose_control_ic_lora
+  files:
+  - ltx-2-19b-ic-lora-pose-control.safetensors
+- repo_id: google/gemma-3-12b-it-qat-q4_0-unquantized
+  revision: 68f7ee4fbd59087436ada77ed2d62f373fdd4482
+  role: text_encoder
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/gemma-3-12b-it-qat-q4_0-unquantized
 input_schema:
   prompt: true
   image: false
@@ -23,14 +33,19 @@ input_schema:
 artifact_kind: generated_video
 artifact_filename: ltx-2-v2v.mp4
 execution:
-  backend_stage: official_ic_lora
-  runtime_status: verified_inference_only
+  environment: ltx-2.5
+  backend_stage: native_diffusion
+  runtime_status: native_checkpoint_demo_pending
   integration_status: integrated
   pipeline_binding: ltx-2-v2v
 integration:
   status: integrated
 notes:
-- Official V2V path uses the distilled LTX-2 checkpoint with Pose-Control IC-LoRA.
+- Native ltx-2-v2v uses the distilled checkpoint with its version-matched control IC-LoRA.
 - The input video must encode body-pose control; arbitrary RGB footage is not an equivalent conditioning signal.
-- The official ltx-pipelines runtime must be installed in the selected Python environment; set LTX_PIPELINES_PYTHON when it differs from WorldFoundry's interpreter.
-- A 17-frame 256x256 synthetic static-pose case completed the public binding; dynamic motion and default-resolution quality remain unverified.
+- Execution uses the ltx-2.5 environment (Torch 2.11, Transformers 5.x) for the canonical split-Gemma loader. T2V/I2V
+  remain on unified.
+- Stage 1 applies IC-LoRA and reference-video tokens; stage 2 uses clean base weights. skip_stage_2 returns half-resolution
+  output.
+- Released-key mapping and tiny FP32 denoise/decode parity against a95ab856 are exact. Released-weight GPU replay
+  and output quality remain pending.

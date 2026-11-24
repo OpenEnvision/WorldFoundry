@@ -1,6 +1,8 @@
-_base_ = './rtmdet-r_l_syncbn_fast_2xb4-36e_dota-ms.py'
+_base_ = "./rtmdet-r_l_syncbn_fast_2xb4-36e_dota-ms.py"
 
-checkpoint = 'https://download.openmmlab.com/mmdetection/v3.0/rtmdet/cspnext_rsb_pretrain/cspnext-tiny_imagenet_600e.pth'  # noqa
+checkpoint = (
+    "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/cspnext_rsb_pretrain/cspnext-tiny_imagenet_600e.pth"
+)
 
 # ========================modified parameters======================
 deepen_factor = 0.167
@@ -10,18 +12,16 @@ widen_factor = 0.375
 train_batch_size_per_gpu = 8
 
 # Submission dir for result submit
-submission_dir = './work_dirs/{{fileBasenameNoExtension}}/submission'
+submission_dir = "./work_dirs/{{fileBasenameNoExtension}}/submission"
 
 # =======================Unmodified in most cases==================
-model = dict(
-    backbone=dict(
-        deepen_factor=deepen_factor,
-        widen_factor=widen_factor,
-        init_cfg=dict(checkpoint=checkpoint)),
-    neck=dict(deepen_factor=deepen_factor, widen_factor=widen_factor),
-    bbox_head=dict(head_module=dict(widen_factor=widen_factor)))
+model = {
+    "backbone": {"deepen_factor": deepen_factor, "widen_factor": widen_factor, "init_cfg": {"checkpoint": checkpoint}},
+    "neck": {"deepen_factor": deepen_factor, "widen_factor": widen_factor},
+    "bbox_head": {"head_module": {"widen_factor": widen_factor}},
+}
 
-train_dataloader = dict(batch_size=train_batch_size_per_gpu)
+train_dataloader = {"batch_size": train_batch_size_per_gpu}
 
 # Inference on test dataset and format the output results
 # for submission. Note: the test set has no annotation.

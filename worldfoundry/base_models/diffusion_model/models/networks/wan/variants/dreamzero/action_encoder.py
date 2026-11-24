@@ -13,10 +13,7 @@ No camera, VACE, causal, or linear-attention logic.
 import torch
 import torch.nn as nn
 
-
-def swish(x):
-    """SiLU / Swish used between the action MLP layers."""
-    return x * torch.sigmoid(x)
+from worldfoundry.base_models.diffusion_model.models.autoencoders.lvdm.blocks import nonlinearity as swish
 
 
 class SinusoidalPositionalEncoding(nn.Module):
@@ -81,9 +78,7 @@ class ActionEncoder(nn.Module):
             # shape (B,) => (B,T)
             timesteps = timesteps.unsqueeze(1).expand(-1, T)
         else:
-            raise ValueError(
-                "Expected `timesteps` to have shape (B,) so we can replicate across T."
-            )
+            raise ValueError("Expected `timesteps` to have shape (B,) so we can replicate across T.")
 
         # 2) Standard action MLP step for shape => (B, T, w)
         a_emb = self.W1(actions)

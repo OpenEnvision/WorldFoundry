@@ -11,7 +11,6 @@ from __future__ import annotations
 import torch
 
 from ...components import ComponentBuildContext
-from ...contracts import DiffusionRequest
 
 
 class StepVideoLatentInitializer:

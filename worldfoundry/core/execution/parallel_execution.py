@@ -18,11 +18,12 @@ Public surface
 import asyncio
 import multiprocessing as mp
 import os
+from collections.abc import Callable
 from functools import wraps
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
 from threading import Thread
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 from tqdm import tqdm
 
@@ -165,7 +166,7 @@ def parallel_execution(
     """
     args = list(args)
 
-    def get_length(args: List, kwargs: Dict):
+    def get_length(args: list, kwargs: dict):
         """First list-valued arg/kwarg length; failure: :exc:`NotImplementedError`."""
         for arg in args:
             if isinstance(arg, list):
@@ -175,7 +176,7 @@ def parallel_execution(
                 return len(value)
         raise NotImplementedError
 
-    def get_action_args(length: int, args: List, kwargs: Dict, i: int):
+    def get_action_args(length: int, args: list, kwargs: dict, i: int):
         """Index list args of ``length``; broadcast scalars to every item."""
         action_args = [(arg[i] if isinstance(arg, list) and len(arg) == length else arg) for arg in args]
         action_kwargs = {

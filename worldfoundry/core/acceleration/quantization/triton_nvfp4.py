@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import torch
 
-from worldfoundry.core.execution.compile_cache import configure_persistent_compile_cache
+from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
 
 configure_persistent_compile_cache(namespace="nvfp4-triton")
 
@@ -24,9 +24,9 @@ configure_persistent_compile_cache(namespace="nvfp4-triton")
 # Kernel — 1x16 blocks; E4M3 local scale + RNE E2M1; cuBLAS 128x4 swizzle
 # ──────────────────────────────────────────────────────────────────────────
 
-import triton  # noqa: E402
-import triton.language as tl  # noqa: E402
-from triton.language.extra import libdevice  # noqa: E402
+import triton  # noqa: E402 - Follows the Triton compile-cache configuration.
+import triton.language as tl  # noqa: E402 - Follows the Triton compile-cache configuration.
+from triton.language.extra import libdevice  # noqa: E402 - Follows the Triton compile-cache configuration.
 
 
 @triton.jit

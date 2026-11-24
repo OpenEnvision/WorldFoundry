@@ -1,6 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import copy
-from typing import Sequence
+from collections.abc import Sequence
 
 from mmengine.hooks import Hook
 from mmengine.model import is_model_wrapper
@@ -22,9 +22,7 @@ class YOLOXModeSwitchHook(Hook):
             Defaults to 15.
     """
 
-    def __init__(self,
-                 num_last_epochs: int = 15,
-                 new_train_pipeline: Sequence[dict] = None):
+    def __init__(self, num_last_epochs: int = 15, new_train_pipeline: Sequence[dict] | None = None):
         self.num_last_epochs = num_last_epochs
         self.new_train_pipeline_cfg = new_train_pipeline
 
@@ -36,7 +34,7 @@ class YOLOXModeSwitchHook(Hook):
             model = model.module
 
         if (epoch + 1) == runner.max_epochs - self.num_last_epochs:
-            runner.logger.info(f'New Pipeline: {self.new_train_pipeline_cfg}')
+            runner.logger.info(f"New Pipeline: {self.new_train_pipeline_cfg}")
 
             train_dataloader_cfg = copy.deepcopy(runner.cfg.train_dataloader)
             train_dataloader_cfg.dataset.pipeline = self.new_train_pipeline_cfg
@@ -45,10 +43,9 @@ class YOLOXModeSwitchHook(Hook):
             # it will lead to potential risks, such as the global instance
             # object FileClient data is disordered.
             # This problem needs to be solved in the future.
-            new_train_dataloader = Runner.build_dataloader(
-                train_dataloader_cfg)
+            new_train_dataloader = Runner.build_dataloader(train_dataloader_cfg)
             runner.train_loop.dataloader = new_train_dataloader
 
-            runner.logger.info('recreate the dataloader!')
-            runner.logger.info('Add additional bbox reg loss now!')
+            runner.logger.info("recreate the dataloader!")
+            runner.logger.info("Add additional bbox reg loss now!")
             model.bbox_head.use_bbox_aux = True

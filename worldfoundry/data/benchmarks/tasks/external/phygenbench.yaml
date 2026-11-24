@@ -59,10 +59,10 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: phygenbench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phygenbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/phygenbench --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGenBenchContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py
-  metric_evaluator_target: worldfoundry.evaluation.tasks.execution.runners.phygenbench.phygenbench_contract_evaluator:write_phygenbench_evaluation
+  contract_validation_command: wf zoo benchmark-run --benchmark-id phygenbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/phygenbench --json
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:phygenbench
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py
+  metric_evaluator_target: worldfoundry.evals.tasks.execution.runners.phygenbench.phygenbench_contract_evaluator:write_phygenbench_evaluation
   metric_protocol:
     official_definition: PhyGenEval decomposes generated-video evaluation into semantic alignment and physical commonsense alignment through key physical phenomena detection, physics order verification, and overall naturalness evaluation; released leaderboard/category values are imported from official PhyGenEval result files only.
     official_results_fields:
@@ -88,7 +88,7 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_result_importer_and_bounded_overall_aggregator
-    root: worldfoundry/evaluation/tasks/execution/runners/phygenbench/runtime/phygenbench
+    root: worldfoundry/evals/tasks/execution/runners/phygenbench/runtime/phygenbench
     repo_url: https://github.com/OpenGVLab/PhyGenBench.git
     revision: f8642cb796f3bcb01f0b7c1b2ec53b75d357c739
     root_env: WORLDFOUNDRY_PHYGENBENCH_ROOT
@@ -111,18 +111,18 @@ metadata:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/phygenbench.yaml
     in_tree_runtime_paths:
     - worldfoundry/data/benchmarks/assets/phygenbench/PhyGenBench/prompts.json
-    - worldfoundry/evaluation/tasks/execution/runners/phygenbench/runtime/phygenbench/PhyGenEval/overall.py
+    - worldfoundry/evals/tasks/execution/runners/phygenbench/runtime/phygenbench/PhyGenEval/overall.py
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGenBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:phygenbench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
     surface: in_tree_result_importer_and_bounded_overall_aggregator
     normalizer_verified: true
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.execution.runners.phygenbench.phygenbench_contract_evaluator:write_phygenbench_evaluation
+    target: worldfoundry.evals.tasks.execution.runners.phygenbench.phygenbench_contract_evaluator:write_phygenbench_evaluation
     status: implemented
     protocol: local_artifact_checks_and_official_result_normalization
     official_result_normalization:
@@ -137,7 +137,7 @@ metadata:
       - yaml
       provenance: normalizes caller-provided official outputs without executing upstream repos
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -187,7 +187,7 @@ tasks:
     dataset:
       status: official_repo_or_generated_artifacts
     runtime_requirements:
-      in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/phygenbench/runtime/phygenbench
+      in_tree_runtime: worldfoundry/evals/tasks/execution/runners/phygenbench/runtime/phygenbench
       override_runtime_env: WORLDFOUNDRY_PHYGENBENCH_ROOT
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
       results_path_env: WORLDFOUNDRY_PHYGENBENCH_RESULTS_PATH
@@ -202,7 +202,7 @@ tasks:
       - physical_law_adherence
       - semantic_adherence
       - phygenbench_average
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.phygenbench.phygenbench_contract_evaluator:write_phygenbench_evaluation
+      evaluator_target: worldfoundry.evals.tasks.execution.runners.phygenbench.phygenbench_contract_evaluator:write_phygenbench_evaluation
       status: implemented
     - name: result_importer
       metric_ids:
@@ -210,15 +210,15 @@ tasks:
       - physical_law_adherence
       - semantic_adherence
       - phygenbench_average
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGenBenchContract
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.phygenbench.phygenbench_contract_evaluator:write_phygenbench_evaluation
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phygenbench --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
+      runner_target: worldfoundry.evals.tasks.contracts.external:phygenbench
+      evaluator_target: worldfoundry.evals.tasks.execution.runners.phygenbench.phygenbench_contract_evaluator:write_phygenbench_evaluation
+      runner_script: worldfoundry/evals/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py
+      official_validation_command: wf zoo benchmark-run --benchmark-id phygenbench --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
     - name: external_official_runner
       metric_ids:
       - physical_commonsense
       - physical_law_adherence
       - semantic_adherence
       - phygenbench_average
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGenBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:phygenbench
+      runner_script: worldfoundry/evals/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py

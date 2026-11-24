@@ -16,6 +16,7 @@ official_sources:
   worldarena_space: https://huggingface.co/spaces/WorldArena/WorldArena
   github:
     url: https://github.com/UMass-Embodied-AGI/TesserAct
+    revision: d2fe4b1d509e54a3cf95da40ec6e232b68361d07
     head_sha: d2fe4b1d509e54a3cf95da40ec6e232b68361d07
     verified_by: official GitHub repository selected from WorldArena open-source result names
   huggingface:
@@ -30,7 +31,7 @@ integration:
   - WorldFoundry registers an in-tree runtime manifest pipeline for the vendored TesserAct source.
   - Official WorldArena-listed source is vendored in-tree under worldfoundry/synthesis/action_generation/tesseract/tesseract_runtime.
 runtime_profile: runtime-profile:tesseract
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: tesseract
 runner_parity:
   status: implemented_checkpoint_required
@@ -44,16 +45,16 @@ docs:
   publisher: University of Massachusetts Amherst (Embodied AGI Lab)
   publisher_kind: university
   publisher_zh: 马萨诸塞大学阿默斯特分校（Embodied AGI 实验室）
-  overview: 'TesserAct is an embodied 4D world model for robotics: it predicts action-conditioned video of manipulation scenes with temporally consistent geometry. The official WorldArena-listed source is vendored in-tree, WorldFoundry registers a runtime manifest pipeline for it, and the confirmed anyeZHY/tesseract checkpoint is referenced on Hugging Face.'
-  overview_zh: TesserAct 是面向机器人的具身 4D 世界模型：预测操作场景的动作条件视频，并保持时序一致的几何。官方 WorldArena 收录源码已内置树内，WorldFoundry 为其注册了运行时 manifest pipeline，并引用 Hugging Face 上已确认的 anyeZHY/tesseract checkpoint。
-  architecture: The vendored runtime lives under synthesis/action_generation/tesseract/tesseract_runtime and resolves the official inference entrypoint. Architecture internals beyond the vendored source are not recorded in this repository.
-  architecture_zh: 内置运行时位于 synthesis/action_generation/tesseract/tesseract_runtime，解析官方推理入口。除内置源码外的架构内部细节仓库未记录。
-  usage_notes: The pipeline returns blocked runtime diagnostics until checkpoints and embodied task assets are staged locally. Stage anyeZHY/tesseract plus the task assets first, then rerun.
-  usage_notes_zh: 在 checkpoint 与具身任务资产本地就位前，pipeline 返回 blocked 运行时诊断。请先就位 anyeZHY/tesseract 与任务资产，再重新运行。
+  overview: 'TesserAct is an embodied 4D world model for robotics: it predicts action-conditioned video of manipulation scenes with temporally consistent geometry. It is one of the WorldArena open-source world models; weights are published as anyeZHY/tesseract on Hugging Face.'
+  overview_zh: TesserAct 是面向机器人的具身 4D 世界模型：预测操作场景的动作条件视频，并保持时序一致的几何。它是 WorldArena 收录的开源世界模型之一；权重发布在 Hugging Face 的 anyeZHY/tesseract。
+  architecture: The pipeline runs the official RGB-depth-normal SFT transformer (anyeZHY/tesseract) on a local CogVideoX-5b-I2V base model through the official inference entrypoint.
+  architecture_zh: pipeline 通过官方推理入口，在本地 CogVideoX-5b-I2V 基座上运行官方 RGB-深度-法线 SFT transformer（anyeZHY/tesseract）。
+  usage_notes: Stage anyeZHY/tesseract, THUDM/CogVideoX-5b-I2V, and the embodied task assets locally; until they are staged, the pipeline returns diagnostics that list what is missing.
+  usage_notes_zh: 先在本地准备 anyeZHY/tesseract、THUDM/CogVideoX-5b-I2V 与具身任务资产；在它们就位前，pipeline 只返回列出缺失项的诊断信息。
   limitations:
-  - Checkpoint and embodied task assets are runtime-gated; no GPU validation is recorded in this repository.
+  - The built-in synthetic-gradient depth/normal mode is only a demo path; supply official depth/normal conditioning files for meaningful output.
   limitations_zh:
-  - checkpoint 与具身任务资产为运行时门控；仓库未记录 GPU 验证。
+  - 内置的合成梯度深度/法线模式只是 demo 路径；需要有意义的输出时请提供官方深度/法线条件文件。
   recommended_benchmarks:
   - id: ewmbench
     reason: Embodied manipulation world-model quality.

@@ -2,8 +2,8 @@
 
 Single canonical implementation shared by the runtime and evaluation layers.
 This lives in ``worldfoundry.core`` so lower layers (``worldfoundry.runtime``)
-never have to import ``worldfoundry.evaluation`` for manifest IO (SA-10);
-``worldfoundry.evaluation.utils`` re-exports these names as its public
+never have to import ``worldfoundry.evals`` for manifest IO (SA-10);
+``worldfoundry.evals.utils`` re-exports these names as its public
 contract.
 """
 

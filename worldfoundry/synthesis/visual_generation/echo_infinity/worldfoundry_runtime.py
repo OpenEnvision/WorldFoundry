@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from omegaconf import OmegaConf
@@ -29,22 +29,22 @@ class EchoInfinity:
         wan_root: str,
         generator_ckpt: str,
         wan_model_name: str = "Wan2.1-T2V-1.3B",
-        lora_ckpt: Optional[str] = None,
-        adapter: Optional[dict[str, Any]] = None,
+        lora_ckpt: str | None = None,
+        adapter: dict[str, Any] | None = None,
         use_ema: bool = False,
         seed: int = 0,
         num_samples: int = 1,
         num_output_frames: int = 21,
-        denoising_step_list: Optional[list[int]] = None,
+        denoising_step_list: list[int] | None = None,
         warp_denoising_step: bool = True,
         num_frame_per_block: int = 3,
         context_noise: int = 0,
         global_sink: bool = True,
-        model_kwargs: Optional[dict[str, Any]] = None,
-        memory_kwargs: Optional[dict[str, Any]] = None,
+        model_kwargs: dict[str, Any] | None = None,
+        memory_kwargs: dict[str, Any] | None = None,
         dtype: str = "bfloat16",
-        device: Optional[str] = None,
-        low_memory: Optional[bool] = None,
+        device: str | None = None,
+        low_memory: bool | None = None,
     ) -> None:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -102,9 +102,7 @@ class EchoInfinity:
                 raw_state = state_dict["generator_ema"]
                 if "generator" in state_dict:
                     encoder_keys = {
-                        key: value
-                        for key, value in state_dict["generator"].items()
-                        if "query_memory_encoder" in key
+                        key: value for key, value in state_dict["generator"].items() if "query_memory_encoder" in key
                     }
                     if encoder_keys:
                         raw_state = dict(raw_state)
@@ -123,9 +121,10 @@ class EchoInfinity:
         if unexpected:
             print(f"[Echo-Infinity] {len(unexpected)} unexpected parameters: {unexpected[:8]} ...")
 
-    def _load_lora(self, adapter: dict[str, Any], lora_ckpt: Optional[str]) -> None:
-        from .echo_infinity_runtime.utils.lora_utils import configure_lora_for_model
+    def _load_lora(self, adapter: dict[str, Any], lora_ckpt: str | None) -> None:
         import peft
+
+        from .echo_infinity_runtime.utils.lora_utils import configure_lora_for_model
 
         adapter_cfg = OmegaConf.create(adapter)
         self.pipeline.generator.model = configure_lora_for_model(
@@ -150,7 +149,7 @@ class EchoInfinity:
                 inner.query_memory_encoder.load_state_dict(checkpoint["query_memory_encoder"], strict=False)
 
     @torch.no_grad()
-    def generate_video(self, prompt: str, image_path: Optional[str] = None):
+    def generate_video(self, prompt: str, image_path: str | None = None):
         if image_path is not None:
             raise ValueError("Echo-Infinity is a text-to-video runtime; image conditioning is not supported.")
         prompts = [prompt] * self.num_samples

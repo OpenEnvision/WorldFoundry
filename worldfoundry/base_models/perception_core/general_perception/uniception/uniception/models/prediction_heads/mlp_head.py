@@ -4,12 +4,13 @@ Downstream heads that coverts a batch of tokens to target representation.
 Assumes inputs of size BC (B: batch, C: Channels)
 """
 
-import torch
-
-from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 import torch.nn as nn
 
-from uniception.models.prediction_heads.base import PredictionHeadTokenInput, SummaryTaskOutput
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.prediction_heads.base import (
+    PredictionHeadTokenInput,
+    SummaryTaskOutput,
+)
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 
 class MLPHead(nn.Module):
@@ -23,7 +24,7 @@ class MLPHead(nn.Module):
         output_dim: int,
         num_mlp_layers: int = 2,
         hidden_dim: int = 196,
-        pretrained_checkpoint_path: str = None,
+        pretrained_checkpoint_path: str | None = None,
         *args,
         **kwargs,
     ):
@@ -75,9 +76,9 @@ class MLPHead(nn.Module):
 
         # Check the input dimensions
         assert feat.ndim == 3, f"Input feature tensor must have 3 dimensions (B, C, T), got {feat.ndim}"
-        assert (
-            feat.shape[1] == self.input_feature_dim
-        ), f"Input feature dimension {feat.shape[1]} does not match expected dimension {self.input_feature_dim}"
+        assert feat.shape[1] == self.input_feature_dim, (
+            f"Input feature dimension {feat.shape[1]} does not match expected dimension {self.input_feature_dim}"
+        )
 
         # Apply the projection layer
         feat = feat.permute(0, 2, 1)  # (B, T, C)

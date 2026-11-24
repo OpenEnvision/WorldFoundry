@@ -15,11 +15,7 @@ export type MetricQuickNavGroup = {
   items: MetricQuickNavItem[];
 };
 
-export type MetricQuickNavPageId =
-  | 'scorers'
-  | 'distribution'
-  | 'perceptual'
-  | 'editing';
+export type MetricQuickNavPageId = 'scorers' | 'distribution' | 'perceptual';
 
 export const metricQuickNavLabels: Record<
   Locale,
@@ -43,34 +39,26 @@ export const metricQuickNavPageMeta: Record<
 > = {
   scorers: {
     slug: '/evaluation/metrics/scorers',
-    label: { en: 'Scorers & quality', zh: '多模态 scorer 与质量' },
+    label: { en: 'Scorers', zh: 'Scorer 指标' },
     description: {
-      en: 'CLIPScore, VQAScore, ITMScore, FaceScore, ArtScore, OpenS2V',
-      zh: 'CLIPScore、VQAScore、ITMScore、FaceScore、ArtScore、OpenS2V',
+      en: 'CLIPScore, VQAScore, ITMScore, LAION aesthetic, FaceScore, ArtScore, OpenS2V, and editing/alignment scorers',
+      zh: 'CLIPScore、VQAScore、ITMScore、LAION 美学、FaceScore、ArtScore、OpenS2V 与编辑/对齐 scorer',
     },
   },
   distribution: {
     slug: '/evaluation/metrics/distribution',
     label: { en: 'Distribution', zh: '分布指标' },
     description: {
-      en: 'FID, FVD, JEDi, CMMD, Clean-FID, and feature-array metrics',
-      zh: 'FID、FVD、JEDi、CMMD、Clean-FID 及特征数组类指标',
+      en: 'FID, IS, KID, CMMD, Clean-FID, diversity/coverage, FVD, FVMD, and JEDi',
+      zh: 'FID、IS、KID、CMMD、Clean-FID、多样性/覆盖度、FVD、FVMD 与 JEDi',
     },
   },
   perceptual: {
     slug: '/evaluation/metrics/perceptual',
-    label: { en: 'Perceptual pairwise', zh: '感知成对' },
+    label: { en: 'Perceptual', zh: '感知指标' },
     description: {
-      en: 'LPIPS, SSIM, DINO similarity, mask accuracy, layout',
-      zh: 'LPIPS、SSIM、DINO 相似度、mask accuracy、layout',
-    },
-  },
-  editing: {
-    slug: '/evaluation/metrics/editing',
-    label: { en: 'Editing & layout', zh: '编辑与 layout' },
-    description: {
-      en: 'SemSR, IRS, CAS, manipulation direction, object-wise consistency',
-      zh: 'SemSR、IRS、CAS、编辑方向、object-wise consistency',
+      en: 'LPIPS, SSIM, MS-SSIM, PSNR, DINO, DreamSim, FSIM, CPBD, IRS, masks, detection, and layout',
+      zh: 'LPIPS、SSIM、MS-SSIM、PSNR、DINO、DreamSim、FSIM、CPBD、IRS、mask、检测与布局',
     },
   },
 };
@@ -92,6 +80,10 @@ export const metricQuickNavGroups: MetricQuickNavGroup[] = [
     page: 'scorers',
     label: { en: 'Quality & reward', zh: '质量与 reward' },
     items: [
+      {
+        id: { en: 'laion_aesthetic-', zh: 'laion_aesthetic-' },
+        label: { en: 'laion_aesthetic', zh: 'laion_aesthetic' },
+      },
       { id: { en: 'facescore-', zh: 'facescore-' }, label: { en: 'facescore', zh: 'facescore' } },
       { id: { en: 'artscore-', zh: 'artscore-' }, label: { en: 'artscore', zh: 'artscore' } },
       { id: { en: 'facesim_cur-', zh: 'facesim_cur-' }, label: { en: 'facesim_cur', zh: 'facesim_cur' } },
@@ -99,6 +91,20 @@ export const metricQuickNavGroups: MetricQuickNavGroup[] = [
         id: { en: 'gme_score--nexus_score--natural_score-', zh: 'gme_score--nexus_score--natural_score-' },
         label: { en: 'gme / nexus / natural', zh: 'gme / nexus / natural' },
       },
+    ],
+  },
+  {
+    id: 'editing-alignment-scorers',
+    page: 'scorers',
+    label: { en: 'Editing & alignment', zh: '编辑与语义对齐' },
+    items: [
+      { id: { en: 'semsr-', zh: 'semsr-' }, label: { en: 'semsr', zh: 'semsr' } },
+      {
+        id: { en: 'manipulation_direction-', zh: 'manipulation_direction-' },
+        label: { en: 'manipulation_direction', zh: 'manipulation_direction' },
+      },
+      { id: { en: 'vs_similarity-', zh: 'vs_similarity-' }, label: { en: 'vs_similarity', zh: 'vs_similarity' } },
+      { id: { en: 'quality_loss-', zh: 'quality_loss-' }, label: { en: 'quality_loss', zh: 'quality_loss' } },
     ],
   },
   {
@@ -137,6 +143,7 @@ export const metricQuickNavGroups: MetricQuickNavGroup[] = [
       },
       { id: { en: 'fdd-', zh: 'fdd-' }, label: { en: 'fdd', zh: 'fdd' } },
       { id: { en: 'cis-', zh: 'cis-' }, label: { en: 'cis', zh: 'cis' } },
+      { id: { en: 'cas-', zh: 'cas-' }, label: { en: 'cas', zh: 'cas' } },
       {
         id: { en: 'attribute_sad--attribute_pad-', zh: 'attribute_sad--attribute_pad-' },
         label: { en: 'attribute_sad / attribute_pad', zh: 'attribute_sad / attribute_pad' },
@@ -154,9 +161,9 @@ export const metricQuickNavGroups: MetricQuickNavGroup[] = [
     ],
   },
   {
-    id: 'perceptual',
+    id: 'perceptual-similarity',
     page: 'perceptual',
-    label: { en: 'Perceptual pairwise', zh: '感知成对' },
+    label: { en: 'Pairwise & quality', zh: '成对与图像质量' },
     items: [
       {
         id: { en: 'lpips--ssim--ms_ssim--psnr-mixed', zh: 'lpips--ssim--ms_ssim--psnr-mixed' },
@@ -166,25 +173,17 @@ export const metricQuickNavGroups: MetricQuickNavGroup[] = [
         id: { en: 'dino_similarity--dreamsim--fsim--cpbd-mixed', zh: 'dino_similarity--dreamsim--fsim--cpbd-mixed' },
         label: { en: 'dino / dreamsim / fsim / cpbd', zh: 'dino / dreamsim / fsim / cpbd' },
       },
-      { id: { en: 'mask_accuracy-', zh: 'mask_accuracy-' }, label: { en: 'mask_accuracy', zh: 'mask_accuracy' } },
-      { id: { en: 'object_detection-', zh: 'object_detection-' }, label: { en: 'object_detection', zh: 'object_detection' } },
-      { id: { en: 'lqs-', zh: 'lqs-' }, label: { en: 'lqs', zh: 'lqs' } },
+      { id: { en: 'irs-', zh: 'irs-' }, label: { en: 'irs', zh: 'irs' } },
     ],
   },
   {
-    id: 'editing',
-    page: 'editing',
-    label: { en: 'Editing & layout', zh: '编辑与 layout' },
+    id: 'perceptual-spatial',
+    page: 'perceptual',
+    label: { en: 'Masks, detection & layout', zh: 'Mask、检测与布局' },
     items: [
-      { id: { en: 'semsr-', zh: 'semsr-' }, label: { en: 'semsr', zh: 'semsr' } },
-      { id: { en: 'irs-', zh: 'irs-' }, label: { en: 'irs', zh: 'irs' } },
-      { id: { en: 'cas-', zh: 'cas-' }, label: { en: 'cas', zh: 'cas' } },
-      {
-        id: { en: 'manipulation_direction-', zh: 'manipulation_direction-' },
-        label: { en: 'manipulation_direction', zh: 'manipulation_direction' },
-      },
-      { id: { en: 'vs_similarity-', zh: 'vs_similarity-' }, label: { en: 'vs_similarity', zh: 'vs_similarity' } },
-      { id: { en: 'quality_loss-', zh: 'quality_loss-' }, label: { en: 'quality_loss', zh: 'quality_loss' } },
+      { id: { en: 'mask_accuracy-', zh: 'mask_accuracy-' }, label: { en: 'mask_accuracy', zh: 'mask_accuracy' } },
+      { id: { en: 'object_detection-', zh: 'object_detection-' }, label: { en: 'object_detection', zh: 'object_detection' } },
+      { id: { en: 'lqs-', zh: 'lqs-' }, label: { en: 'lqs', zh: 'lqs' } },
       {
         id: { en: 'object_wise_consistency-', zh: 'object_wise_consistency-' },
         label: { en: 'object_wise_consistency', zh: 'object_wise_consistency' },
@@ -219,7 +218,6 @@ export function resolveMetricQuickNavFromSlugs(
     slugs[2] === 'scorers'
     || slugs[2] === 'distribution'
     || slugs[2] === 'perceptual'
-    || slugs[2] === 'editing'
   ) {
     return { variant: 'page', page: slugs[2] };
   }

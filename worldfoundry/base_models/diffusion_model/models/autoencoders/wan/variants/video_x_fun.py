@@ -32,7 +32,6 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.c
 )
 from worldfoundry.core.model_loading import load_model
 
-
 _RESIDUAL_LAYER_MAP = {
     "conv1": "residual.2",
     "conv2": "residual.6",
@@ -98,9 +97,7 @@ def _convert_diffusers_vae_key(key: str) -> str | None:
     if match:
         prefix, side, residual, layer, parameter = match.groups()
         layer = _RESIDUAL_LAYER_MAP[layer]
-        return (
-            f"{prefix}.{side}.middle.{int(residual) * 2}.{layer}.{parameter}"
-        )
+        return f"{prefix}.{side}.middle.{int(residual) * 2}.{layer}.{parameter}"
 
     key = key.replace(".encoder.norm_out.", ".encoder.head.0.")
     key = key.replace(".decoder.norm_out.", ".decoder.head.0.")
@@ -122,6 +119,7 @@ def _convert_state_dict(state: dict[str, torch.Tensor]) -> dict[str, torch.Tenso
 
 class AutoencoderKLWan(WanAutoencoderAdapterMixin, nn.Module):
     """Fun-Control / Video-X wrapper around the Wan 2.1 16-channel VAE."""
+
     def __init__(
         self,
         latent_channels: int = 16,
@@ -134,9 +132,7 @@ class AutoencoderKLWan(WanAutoencoderAdapterMixin, nn.Module):
             temporal_compression_ratio=int(temporal_compression_ratio),
             spatial_compression_ratio=int(spatial_compression_ratio),
         )
-        self.register_buffer(
-            "latent_mean", torch.tensor(WAN_2P1_VAE_MEAN), persistent=False
-        )
+        self.register_buffer("latent_mean", torch.tensor(WAN_2P1_VAE_MEAN), persistent=False)
         self.register_buffer(
             "latent_inverse_std",
             1.0 / torch.tensor(WAN_2P1_VAE_STD),
@@ -147,18 +143,15 @@ class AutoencoderKLWan(WanAutoencoderAdapterMixin, nn.Module):
     @property
     def scale(self) -> list[torch.Tensor]:
         return [self.latent_mean, self.latent_inverse_std]
+
     @classmethod
     def from_pretrained(
         cls,
         pretrained_model_path: str,
         additional_kwargs: dict | None = None,
-    ) -> "AutoencoderKLWan":
+    ) -> AutoencoderKLWan:
         parameters = set(inspect.signature(cls.__init__).parameters) - {"self", "cls"}
-        config = {
-            key: value
-            for key, value in (additional_kwargs or {}).items()
-            if key in parameters
-        }
+        config = {key: value for key, value in (additional_kwargs or {}).items() if key in parameters}
         return load_model(
             cls,
             pretrained_model_path,

@@ -1,0 +1,92 @@
+schema: solarwm.run.v1
+action: infer
+name: wan22-ti2v-5b-stage1-anyflow-inference
+model:
+  family: wan22_ti2v_5b
+  name: Wan2.2-TI2V-5B-Camera
+  base_path: /path/to/Wan2.2-TI2V-5B
+  assets:
+    transformer_config: builtin
+    transformer_weights: transformer
+    text_encoder: text_encoder/models_t5_umt5-xxl-enc-bf16.pth
+    tokenizer: tokenizer
+    vae: vae/Wan2.2_VAE.pth
+  timestep_shift: 5.0
+  causal: true
+  camera_attention_mode: fused_prope
+  camera_translation_transform: linear
+  latent_channels: 48
+  frame_sequence_length: 405
+  num_frame_per_block: 3
+  num_output_frames: 21
+  max_prior_clean_chunks: 5
+  local_attn_size: 21
+  use_echorope: false
+data:
+  encoding: online
+  latent_dtype: bfloat16
+  latent_shape: [21, 48, 30, 54]
+  prompt_shape: [512, 4096]
+  caption_source: frozen
+  camera_source: preserve
+  camera_array_key: c2w
+  transport: {kind: local, root: /path/to/SolarWM-Data/releases-v1}
+  index_root: /path/to/SolarWM-Data/releases-v1
+  train_index: recipes/clean-81f/raw-wds/train-index.jsonl.gz
+  test_index: recipes/clean-81f/raw-wds/test-index.jsonl.gz
+  pixel_frames: 81
+  latent_frames: 21
+  height: 480
+  width: 864
+  fps: 16.0
+  max_rel_translation: 20.0
+  max_camera_abs: 20.0
+  random_start: true
+  streaming_index: true
+  partition_mode: node_shard
+  shuffle_buffer: 64
+  seed: 42
+  num_workers: 8
+distributed: {world_size: 8, sequence_parallel_size: 1, sample_sharding: logical_dp, rng_scope: logical_dp}
+train:
+  stage: stage1
+  causal_mode: teacher_forcing
+  objective: anyflow_forward_map
+  objective_variant: v1_5
+  anyflow_variant: v1_5
+  anyflow_weight_type: gaussian
+  anyflow_gate: 0.25
+  anyflow_deltatime_type: r
+  anyflow_epsilon: 5.0
+  anyflow_diffusion_ratio: 0.5
+  anyflow_consistency_ratio: 0.25
+  anyflow_fuse_guidance_scale: 3.0
+  anyflow_negative_embedding: conditioning/wan_negemb_cn.pth
+  micro_batch_size: 1
+  grad_accum: 1
+  global_batch_size: 8
+  timestep_mode: per_block
+  num_train_timesteps: 1000
+  noise_augmentation_max_timestep: 0
+  i2v_image_condition_dropout: 0.1
+  optimizer: {lr: 5.0e-5, betas: [0.9, 0.95]}
+  ema: {enabled: true, device: cuda, dtype: float32, sharded: true, decay: 0.999, start_step: 0, warmup_steps: 1000}
+  fsdp: {strategy: HYBRID_SHARD, param_dtype: bfloat16, reduce_dtype: float32}
+validation:
+  sample_count: 16
+  selection_seed: 42
+  noise_seed: 42
+  variable_rollout_by_source: true
+  min_rollout_latent_frames: 21
+  fixed_plan_pixel_frames: 237
+  passes:
+    - {name: ema_nfe50_autoregressive, weights: ema, mode: autoregressive, solver: flowmap, num_inference_steps: 50, rollout_latent_frames: 60}
+    - {name: ema_nfe4_autoregressive, weights: ema, mode: autoregressive, solver: flowmap, num_inference_steps: 4, rollout_latent_frames: 60}
+checkpoint:
+  path: /path/to/SolarWM-models/SolarWM-5B-tf-stage1-81f
+  weights: ema
+inference:
+  source: validation
+runtime:
+  output_dir: /path/to/outputs/wan22-ti2v-5b-inference
+  compile_flex: false

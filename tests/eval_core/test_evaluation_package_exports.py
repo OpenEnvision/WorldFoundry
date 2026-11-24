@@ -1,10 +1,10 @@
-"""Primary symbols re-exported from worldfoundry.evaluation (lazy __getattr__)."""
+"""The documented programmatic entry points resolve from worldfoundry.evals.public."""
 
 
-def test_evaluation_primary_exports_resolve():
-    import worldfoundry.evaluation as ev
+def test_public_entry_points_resolve():
+    from worldfoundry.evals import public
 
-    assert callable(ev.execute_evaluate_run)
-    assert callable(ev.run_worldfoundry)
-    assert callable(ev.run_model_benchmark)
-    assert callable(ev.resolve_model_zoo_runner)
+    assert callable(public.run_worldfoundry)
+    assert callable(public.run_model_benchmark)
+    assert callable(public.execute_evaluate_run)
+    assert callable(public.run_benchmark)

@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from worldfoundry.evaluation.tasks.embodied import docker_runner
-from worldfoundry.evaluation.tasks.embodied.docker_runner import build_docker_run_command
-from worldfoundry.evaluation.tasks.embodied.image_refs import (
+from worldfoundry.evals.tasks.embodied import docker_runner
+from worldfoundry.evals.tasks.embodied.docker_runner import build_docker_run_command
+from worldfoundry.evals.tasks.embodied.image_refs import (
     AUTH_GATED_FLOATING_OFFICIAL_PROFILES,
     CROSS_REPO_FLOATING_MIRROR_PROFILES,
     KNOWN_FLOATING_OFFICIAL_PROFILES,
@@ -77,10 +77,13 @@ def test_resolver_rejects_conflicting_digest_alias_fields() -> None:
 
 def test_matching_embedded_and_configured_digest_is_idempotent() -> None:
     digest = "sha256:" + ("A" * 64)
-    assert resolve_docker_image(
-        {"image": f"example/bench@{digest}", "image_digest": digest.lower()},
-        require_pinned=True,
-    ) == f"example/bench@{digest.lower()}"
+    assert (
+        resolve_docker_image(
+            {"image": f"example/bench@{digest}", "image_digest": digest.lower()},
+            require_pinned=True,
+        )
+        == f"example/bench@{digest.lower()}"
+    )
 
 
 def test_docker_command_uses_resolved_digest_and_platform(tmp_path: Path) -> None:

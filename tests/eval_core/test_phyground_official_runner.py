@@ -6,12 +6,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_metrics import compute_phyground_metrics
-from worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_prompts import (
+from worldfoundry.evals.tasks.execution.runners.phyground.phyground_metrics import compute_phyground_metrics
+from worldfoundry.evals.tasks.execution.runners.phyground.phyground_prompts import (
     materialize_phyground_generation_requests,
     unique_generation_records,
 )
-from worldfoundry.evaluation.utils import benchmark_task_sample_path
+from worldfoundry.evals.utils import benchmark_task_sample_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -93,7 +93,7 @@ def test_phyground_official_runner_normalizes_sample_results(tmp_path: Path) -> 
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/phyground/run_phyground_official_runner.py",
             "--official-results-path",
             str(sample_path),
             "--output-dir",
@@ -162,7 +162,7 @@ def test_phyground_official_run_with_artifact_scores_writes_scorecard(tmp_path: 
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/phyground/run_phyground_official_runner.py",
             "--run-official",
             "--generated-artifact-dir",
             str(generated_dir),

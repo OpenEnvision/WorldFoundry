@@ -12,14 +12,14 @@ Vendored from **hao-ai-lab/FastVideo** `fastvideo-kernel/`.
   as the optional, opt-in approximate self-attention lane. When this package is
   absent the approximate lane falls back to exact attention.
 
-## Bundled third-party headers (git submodules, not vendored in-tree)
+## Bundled third-party headers (fetched, not vendored in-tree)
 
-The 136 MiB of CUTLASS + ThunderKittens headers are NOT committed here. They are
-declared as git submodules pinned to the exact upstream-tested commits, mounted
-at the paths the kernel's `CMakeLists.txt` expects (`include/cutlass`,
-`include/tk`):
+The 136 MiB of CUTLASS + ThunderKittens headers are NOT committed here.
+`fetch_headers.sh` clones them at the exact upstream-tested commits into the
+paths the kernel's `CMakeLists.txt` expects (`include/cutlass`, `include/tk`);
+both paths are ignored by git:
 
-| submodule | path | url | commit |
+| component | path | url | commit |
 |---|---|---|---|
 | CUTLASS 4.3.0 | `include/cutlass` | `https://github.com/NVIDIA/cutlass.git` | `e67e63c331d6e4b729047c95cf6b92c8454cba89` |
 | ThunderKittens | `include/tk` | `https://github.com/HazyResearch/ThunderKittens.git` | `6c27e28c8115d1839d9eeeb530913c184a75fc87` |
@@ -27,10 +27,10 @@ at the paths the kernel's `CMakeLists.txt` expects (`include/cutlass`,
 Fetch before building:
 
 ```
-git submodule update --init --recursive thirdparty/fastvideo-kernel/include/cutlass thirdparty/fastvideo-kernel/include/tk
+bash thirdparty/fastvideo-kernel/fetch_headers.sh
 ```
 
-CUTLASS is BSD-3-Clause; ThunderKittens is MIT. See each submodule's upstream license.
+CUTLASS is BSD-3-Clause; ThunderKittens is MIT. See each checkout's upstream license.
 
 ## Modifications (vs upstream)
 
@@ -43,9 +43,10 @@ CUTLASS is BSD-3-Clause; ThunderKittens is MIT. See each submodule's upstream li
    The builtin `tuple[...]` is what `infer_schema` expects; behaviour is
    otherwise identical. This is the only functional change.
 
-2. **Bundled headers de-vendored to submodules** — the in-repo `include/cutlass`
-   and `include/tk` header trees were removed and replaced by the pinned
-   submodules above, to keep the WorldFoundry repository small.
+2. **Bundled headers de-vendored** — the in-repo `include/cutlass` and
+   `include/tk` header trees were removed and are fetched at the pinned
+   commits above by `fetch_headers.sh`, to keep the WorldFoundry repository
+   small.
 
 ## Build (Hopper / sm_90a)
 

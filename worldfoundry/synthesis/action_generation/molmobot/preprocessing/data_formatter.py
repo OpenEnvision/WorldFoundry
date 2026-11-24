@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from ..config import BaseConfig
 
@@ -22,13 +22,13 @@ class DataFormatter(BaseConfig):
     message_format: str = "qwen3"
     system_prompt: str = "demo_or_style_v2"
     always_start_with_space: bool = False
-    default_inference_len: Optional[int] = 65
+    default_inference_len: int | None = 65
     select_answer: str = "best"
     debug: bool = False
     image_last: bool = False
-    format_message_list: Optional[str] = None
+    format_message_list: str | None = None
     p_one_message: float = 0.0
-    eval_system_prompt_mapping: Optional[Dict[str, str]] = None
+    eval_system_prompt_mapping: dict[str, str] | None = None
     p_choice_content_in_mc: float = 1.0
     template_video_mc_questions: bool = True
     pointing_format: str = "html-v2"
@@ -47,18 +47,16 @@ class DataFormatter(BaseConfig):
 
     def __call__(
         self,
-        example: Dict[str, Any],
+        example: dict[str, Any],
         is_training: bool,
         for_inference: bool,
         rng: Any,
-    ) -> Tuple[list[str], Dict[str, Any]]:
+    ) -> tuple[list[str], dict[str, Any]]:
         del rng
         if is_training or not for_inference:
             raise ValueError("MolmoBot's in-tree DataFormatter supports inference only.")
         if example.get("style") != "demo":
-            raise ValueError(
-                f"MolmoBot action inference expects style='demo', got {example.get('style')!r}."
-            )
+            raise ValueError(f"MolmoBot action inference expects style='demo', got {example.get('style')!r}.")
         if self.prompt_templates not in {"uber_model", "uber_model_v2", "none"}:
             raise ValueError(f"Unsupported prompt_templates value: {self.prompt_templates!r}")
         if self.system_prompt not in {"demo_or_style", "demo_or_style_v2", "no_style", "none"}:

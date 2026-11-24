@@ -1,10 +1,9 @@
 from dataclasses import dataclass
-from typing import List, Optional
 
 import torch
-from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 
 from ..blocks import Conv3x3, FourierFeatures, GroupNorm, UNet
 
@@ -14,10 +13,10 @@ class InnerModelConfig:
     img_channels: int
     num_steps_conditioning: int
     cond_channels: int
-    depths: List[int]
-    channels: List[int]
-    attn_depths: List[bool]
-    num_actions: Optional[int] = None
+    depths: list[int]
+    channels: list[int]
+    attn_depths: list[bool]
+    num_actions: int | None = None
 
 
 class InnerModel(nn.Module):

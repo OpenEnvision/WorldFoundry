@@ -129,17 +129,17 @@ runner:
   normalization:
     artifact_official_run: true
     pass_generated_artifact_dir: true
-  official_script: worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.wrbench.run_wrbench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.wrbench.run_wrbench_official_runner
     generated_arg: --generated-artifact-dir
     limit_arg: --limit
     supports_official_runtime: true
     accepts_generated_artifacts: true
     supports_fixture: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:wrbench
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -155,13 +155,13 @@ runner:
   - --json
   run_command: >-
     ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
-    worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
+    worldfoundry/evals/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
     --benchmark-id wrbench --run-official
     --output-dir "$WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR"
     --generated-artifact-dir "$WORLDFOUNDRY_GENERATED_ARTIFACT_DIR" --json
   runtime:
     kind: in_tree_official_source
-    root: worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime
+    root: worldfoundry/evals/tasks/execution/runners/wrbench/runtime
     root_env: WORLDFOUNDRY_WRBENCH_ROOT
     repo_url: https://github.com/JinPLu/WRBench.git
     repo_revision: 629595dc60ec08a29711af0377280c4ac9dd40bc
@@ -200,18 +200,15 @@ requires:
 blockers:
 - Leaderboard parity requires complete Natural-25 generation plus VGGT-Omega, DINOv2, Qwen3.5, and Qwen3-VL checkpoints.
 base_model_dependencies:
-- vggt_omega
-- dinov2
-- qwen3_5_vl
-- qwen3_vl
+- wrbench_scorer_runtime_config
 data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/wrbench.yaml
   bundled_assets: worldfoundry/data/benchmarks/assets/wrbench
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench
+  - worldfoundry/evals/tasks/execution/runners/wrbench/runtime/wrbench
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:wrbench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
@@ -221,7 +218,7 @@ notes:
 - D1-CamPrec and D1-CamAlign are deliberately not merged.
 - D5 and D6 are conditional on the official re-observation applicability gate.
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -241,3 +238,26 @@ artifact_layout:
   results_path_env: WORLDFOUNDRY_WRBENCH_RESULTS_PATH
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - natural25_manifest
+  - generated_video_dir
+  - video_manifest
+  - camera_sidecars
+  - official_results_path
+  output_keys:
+  - scorecard
+  - benchmark_contract
+  - raw_metric_table
+  - per_sample_scores
+  - main_table
+  requires_upstream_runtime: false
+  notes:
+  - The complete WRBench Python package and Natural-25 assets are vendored in-tree at revision 629595dc60ec08a29711af0377280c4ac9dd40bc.
+  - D1-CamPrec and D1-CamAlign are separate metrics; D5/D6 use the official re-observation applicability
+    gate.
+  - Full scoring requires explicitly configured VGGT-Omega, DINOv2, Qwen3.5, and Qwen3-VL model assets.
+generation:
+  request_provider: worldfoundry.evals.tasks.execution.runners.wrbench.wrbench_prompts:materialize_wrbench_generation_requests
+  artifact_materializer: worldfoundry.evals.tasks.execution.runners.wrbench.wrbench_prompts:copy_wrbench_generated_videos
+  missing_requests_hint: restore the WRBench Natural-25 assets and first frames

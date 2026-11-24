@@ -14,9 +14,7 @@ class IdentityBackbone(Backbone):
         backbone_input_first_value = next(iter(backbone_input.values()))
         B = backbone_input_first_value.shape[0]
 
-        backbone_features = torch.empty(
-            B, 1, 0, dtype=torch.float32, device=backbone_input_first_value.device
-        )
+        backbone_features = torch.empty(B, 1, 0, dtype=torch.float32, device=backbone_input_first_value.device)
         output_dict = {
             "backbone_features": backbone_features,
         }

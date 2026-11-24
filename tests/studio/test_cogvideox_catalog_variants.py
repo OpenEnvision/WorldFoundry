@@ -8,12 +8,12 @@ from worldfoundry.studio.inference.catalog import (
     COGVIDEOX_DEFAULT_VARIANT_ID,
     COGVIDEOX_STUDIO_PARENT_ID,
     STUDIO_HIDDEN_CATALOG_MODEL_IDS,
-    _cogvideox_folded_studio_model_ids,
     cogvideox_runtime_model_id,
     find_entry,
     find_runtime_entry,
 )
-from worldfoundry.studio.serving.workspace import _model_payload
+from worldfoundry.studio.inference.catalog.params import _cogvideox_folded_studio_model_ids
+from worldfoundry.studio.workspace.app import _model_payload
 
 
 def test_folded_cogvideox_pipelines_are_hidden_from_studio_rows() -> None:

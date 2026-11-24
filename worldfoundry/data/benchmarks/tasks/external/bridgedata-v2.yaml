@@ -28,7 +28,7 @@ metadata:
   source_kind: benchmark_zoo
   benchmark_id: bridgedata-v2
   status: integrated
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id bridgedata-v2 --mode contract 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id bridgedata-v2 --mode contract 
     --output-dir tmp/benchmark_zoo/benchmark_contract/bridgedata-v2 --json
   release_status: normalizer_only
   maturity: contract_ready
@@ -49,10 +49,10 @@ metadata:
   blockers:
   - Dataset materialization, split definition, and policy-result import validation must be validated before integrated 
     status.
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:BridgeDataV2Contract
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:bridgedata-v2
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:BridgeDataV2Contract
+    runner_target: worldfoundry.evals.tasks.contracts.external:bridgedata-v2
     runner_script_available: false
     task_yaml_available: true
     runtime_verified: false
@@ -72,7 +72,7 @@ metadata:
     preflight_profile: bridgedata-v2
     dataset_root_env: WORLDFOUNDRY_BRIDGEDATA_V2_DATASET_ROOT
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -84,9 +84,9 @@ metadata:
     - --output-dir
     - <out>
     - --json
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.embodied.normalizer:normalize_results
+    target: worldfoundry.evals.tasks.embodied.normalizer:normalize_results
     status: implemented
     protocol: official_embodied_result_normalizer
     official_result_normalization:
@@ -102,7 +102,7 @@ metadata:
   data_refs:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/bridgedata-v2.yaml
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -187,4 +187,4 @@ tasks:
       - goal_success
       - action_accuracy
       - rollout_success
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:BridgeDataV2Contract
+      runner_target: worldfoundry.evals.tasks.contracts.external:bridgedata-v2

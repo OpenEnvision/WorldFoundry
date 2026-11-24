@@ -1,0 +1,51 @@
+id: runway-gen4p5
+name: Runway Gen-4.5
+aliases:
+- gen_3_i2v
+- gen-3-i2v
+tasks:
+- image-to-video
+- hosted-api
+provider: api
+source:
+  status: api
+  official_repo_url: https://runwayml.com/
+official_sources:
+  project_page: https://runwayml.com/
+integration:
+  status: integrated
+  notes:
+  - Hosted API Studio pipeline is available; users must provide their own provider
+    API key.
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: runway-gen4p5
+runner_parity:
+  status: not_applicable
+demo_parity:
+  status: not_applicable
+docs:
+  publisher: Runway
+  publisher_kind: company
+  publisher_zh: Runway
+  overview: Runway Gen-4.5 is Runway's hosted image-to-video model. Give it a start image and it returns an animated clip generated on Runway's service. The aliases gen_3_i2v and gen-3-i2v also resolve to this model. Results come back through the same Studio pipeline and artifact format as local models.
+  overview_zh: Runway Gen-4.5 是 Runway 的托管图生视频模型。提供一张起始图，它在 Runway 服务端生成动态视频。别名 gen_3_i2v、gen-3-i2v 也解析到该模型。结果经与本地模型一致的 Studio pipeline 返回，产物格式相同。
+  architecture: Runway has not published the architecture, parameter count, or training recipe. WorldFoundry submits requests to the provider endpoint through a Studio pipeline and collects the returned video.
+  architecture_zh: Runway 未公开其架构、参数规模或训练细节。WorldFoundry 通过 Studio pipeline 向服务方端点提交请求并回收生成的视频。
+  usage_notes: Supply your own Runway account and API key; credentials are managed in your Runway workspace settings. Generation runs on Runway's side, so no weights are downloaded and no local GPU environment is needed; cost, quota, and content policy follow your account.
+  usage_notes_zh: 需自备 Runway 账号与 API key，凭据在 Runway 工作区设置中管理。生成在 Runway 服务端完成，本地不下载权重、也不需要 GPU 环境；费用、配额与内容政策以你的账号为准。
+  limitations:
+  - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+  - Runway controls model versioning, so outputs can change over time.
+  - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+  limitations_zh:
+  - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+  - 模型版本由 Runway 控制，输出可能随时间变化。
+  - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video
+      outputs.
+    reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+  - id: physics-iq
+    reason: Probes whether provider-side video models respect basic physical plausibility.
+    reason_zh: 检验服务方视频模型是否遵循基本物理合理性。

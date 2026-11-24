@@ -1,35 +1,42 @@
-from typing import Any, Dict, List, Optional, Union, Literal
-
 import gc
 import math
-import torch
+from typing import Any, Literal
+
 import loguru
 import numpy as np
+import torch
 import torch.nn.functional as F
-from tqdm import tqdm 
-from PIL import Image
-from diffusers.video_processor import VideoProcessor
 from diffusers.image_processor import PipelineImageInput
+from diffusers.video_processor import VideoProcessor
+from PIL import Image
+from tqdm import tqdm
 from transformers import AutoTokenizer, UMT5EncoderModel
 
-from .scheduling_flow_match_euler import FlowMatchEulerDiscreteScheduler
 from .modules.autoencoder_kl_wan import AutoencoderKLWan
+from .scheduling_flow_match_euler import FlowMatchEulerDiscreteScheduler
+
+# isort: split
 from .modules.longcat_video_dit import LongCatVideoTransformer3DModel
-from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
-from .utils.bukcet_config import get_bucket_config
+
+# isort: split
+import html
 
 import ftfy
 import regex as re
-import html
+
+from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
+
+from .utils.bukcet_config import get_bucket_config
 
 
 def torch_gc():
     torch.cuda.empty_cache()
     torch.cuda.ipc_collect()
 
+
 # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.retrieve_latents
 def retrieve_latents(
-    encoder_output: torch.Tensor, generator: Optional[torch.Generator] = None, sample_mode: str = "sample"
+    encoder_output: torch.Tensor, generator: torch.Generator | None = None, sample_mode: str = "sample"
 ):
     if hasattr(encoder_output, "latent_dist") and sample_mode == "sample":
         return encoder_output.latent_dist.sample(generator)
@@ -39,6 +46,7 @@ def retrieve_latents(
         return encoder_output.latents
     else:
         raise AttributeError("Could not access latents of provided encoder_output")
+
 
 def basic_clean(text):
     text = ftfy.fix_text(text)
@@ -55,6 +63,7 @@ def whitespace_clean(text):
 def prompt_clean(text):
     text = whitespace_clean(basic_clean(text))
     return text
+
 
 class LongCatVideoPipeline:
     r"""
@@ -77,11 +86,11 @@ class LongCatVideoPipeline:
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
         self.scheduler = scheduler
-        self.dit = dit 
+        self.dit = dit
         self.device = "cuda"
 
         self.vae_scale_factor_temporal = self.vae.config.scale_factor_temporal if getattr(self, "vae", None) else 4
-        self.vae_scale_factor_spatial = self.vae.config.scale_factor_spatial if getattr(self, "vae", None) else 8 
+        self.vae_scale_factor_spatial = self.vae.config.scale_factor_spatial if getattr(self, "vae", None) else 8
         self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor_spatial)
 
         self._num_timesteps = 1000
@@ -132,11 +141,11 @@ class LongCatVideoPipeline:
 
     def _get_t5_prompt_embeds(
         self,
-        prompt: Union[str, List[str]] = None,
+        prompt: str | list[str] | None = None,
         num_videos_per_prompt: int = 1,
         max_sequence_length: int = 512,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         dtype = dtype or self.text_encoder.dtype
 
@@ -168,13 +177,13 @@ class LongCatVideoPipeline:
 
     def encode_prompt(
         self,
-        prompt: Union[str, List[str]],
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        prompt: str | list[str],
+        negative_prompt: str | list[str] | None = None,
         do_classifier_free_guidance: bool = True,
         num_videos_per_prompt: int = 1,
         max_sequence_length: int = 512,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         r"""
         Encodes the prompt into text encoder hidden states.
@@ -228,47 +237,43 @@ class LongCatVideoPipeline:
         else:
             negative_prompt_embeds = None
             negative_prompt_attention_mask = None
-            
+
         return prompt_embeds, prompt_attention_mask, negative_prompt_embeds, negative_prompt_attention_mask
 
-    def check_inputs(
-        self,
-        prompt,
-        negative_prompt,
-        height,
-        width,
-        scale_factor_spatial
-    ):
+    def check_inputs(self, prompt, negative_prompt, height, width, scale_factor_spatial):
         # Check height and width divisibility
         if height % scale_factor_spatial != 0 or width % scale_factor_spatial != 0:
-            raise ValueError(f"`height and width` have to be divisible by {scale_factor_spatial} but are {height} and {width}.")
+            raise ValueError(
+                f"`height and width` have to be divisible by {scale_factor_spatial} but are {height} and {width}."
+            )
 
         # Check prompt validity
         if prompt is None:
             raise ValueError("Cannot leave `prompt` undefined.")
-        
+
         if prompt is not None and (not isinstance(prompt, str) and not isinstance(prompt, list)):
             raise ValueError(f"`prompt has to be of type str or list` but is {type(prompt)}")
-        
+
         # Check negative prompt validity
-        if negative_prompt is not None and (not isinstance(negative_prompt, str) and not isinstance(negative_prompt, list)):
+        if negative_prompt is not None and (
+            not isinstance(negative_prompt, str) and not isinstance(negative_prompt, list)
+        ):
             raise ValueError(f"`negative_prompt has to be of type str or list` but is {type(negative_prompt)}")
 
-        
     def prepare_latents(
         self,
-        image: Optional[torch.Tensor] = None,
-        video: Optional[torch.Tensor] = None,
+        image: torch.Tensor | None = None,
+        video: torch.Tensor | None = None,
         batch_size: int = 1,
         num_channels_latents: int = 16,
         height: int = 480,
         width: int = 832,
         num_frames: int = 93,
         num_cond_frames: int = 0,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.Tensor] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.Tensor | None = None,
         num_cond_frames_added: int = 0,
     ) -> torch.Tensor:
         if (image is not None) and (video is not None):
@@ -294,12 +299,11 @@ class LongCatVideoPipeline:
             latents = torch.randn(shape, generator=generator, device=device, dtype=dtype)
 
         if image is not None or video is not None:
-            if isinstance(generator, list):
-                if len(generator) != batch_size:
-                    raise ValueError(
-                        f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
-                        f" size of {batch_size}. Make sure the batch size matches the length of the generators."
-                    )
+            if isinstance(generator, list) and len(generator) != batch_size:
+                raise ValueError(
+                    f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
+                    f" size of {batch_size}. Make sure the batch size matches the length of the generators."
+                )
 
             condition_data = image if image is not None else video
             is_image = image is not None
@@ -309,7 +313,7 @@ class LongCatVideoPipeline:
                 if is_image:
                     encoded_input = condition_data[i].unsqueeze(0).unsqueeze(2)
                 else:
-                    encoded_input = condition_data[i][:, -(num_cond_frames-num_cond_frames_added):].unsqueeze(0)
+                    encoded_input = condition_data[i][:, -(num_cond_frames - num_cond_frames_added) :].unsqueeze(0)
                 if num_cond_frames_added > 0:
                     pad_front = encoded_input[:, :, 0:1].repeat(1, 1, num_cond_frames_added, 1, 1)
                     encoded_input = torch.cat([pad_front, encoded_input], dim=2)
@@ -336,11 +340,11 @@ class LongCatVideoPipeline:
     @property
     def num_timesteps(self):
         return self._num_timesteps
-    
+
     @property
     def num_distill_sample_steps(self):
         return self._num_distill_sample_steps
-    
+
     @property
     def current_timestep(self):
         return self._current_timestep
@@ -352,15 +356,15 @@ class LongCatVideoPipeline:
     @property
     def attention_kwargs(self):
         return self._attention_kwargs
-    
-    def get_timesteps_sigmas(self, sampling_steps: int, use_distill: bool=False):
+
+    def get_timesteps_sigmas(self, sampling_steps: int, use_distill: bool = False):
         if use_distill:
             distill_indices = torch.arange(1, self.num_distill_sample_steps + 1, dtype=torch.float32)
             distill_indices = (distill_indices * (self.num_timesteps // self.num_distill_sample_steps)).round().long()
-            
+
             inference_indices = np.linspace(0, self.num_distill_sample_steps, num=sampling_steps, endpoint=False)
             inference_indices = np.floor(inference_indices).astype(np.int64)
-            
+
             sigmas = torch.flip(distill_indices, [0])[inference_indices].float() / self.num_timesteps
         else:
             sigmas = torch.linspace(1, 0.001, sampling_steps)
@@ -373,20 +377,22 @@ class LongCatVideoPipeline:
     def _cache_clean_latents(self, cond_latents, model_max_length, offload_kv_cache, device, dtype):
         timestep = torch.zeros(cond_latents.shape[0], cond_latents.shape[2]).to(device=device, dtype=dtype)
         # make null prompt tensor(skip_crs_attn=True, so tensors below will not be actually used)
-        empty_embeds = torch.zeros([cond_latents.shape[0], 1, model_max_length, self.text_encoder.config.d_model], device=device, dtype=dtype)
+        empty_embeds = torch.zeros(
+            [cond_latents.shape[0], 1, model_max_length, self.text_encoder.config.d_model], device=device, dtype=dtype
+        )
         _, kv_cache_dict = self.dit(
-            hidden_states=cond_latents, 
-            timestep=timestep, 
+            hidden_states=cond_latents,
+            timestep=timestep,
             encoder_hidden_states=empty_embeds,
-            return_kv=True, 
-            skip_crs_attn=True, 
-            offload_kv_cache=offload_kv_cache
+            return_kv=True,
+            skip_crs_attn=True,
+            offload_kv_cache=offload_kv_cache,
         )
         self._update_kv_cache_dict(kv_cache_dict)
-    
+
     def _get_kv_cache_dict(self):
         return self.kv_cache_dict
-    
+
     def _clear_cache(self):
         self.kv_cache_dict = None
         gc.collect()
@@ -397,28 +403,27 @@ class LongCatVideoPipeline:
 
         obj = condition[0] if isinstance(condition, list) and condition else condition
         try:
-            height = getattr(obj, "height")
-            width = getattr(obj, "width")
+            height = obj.height
+            width = obj.width
         except AttributeError:
-            raise ValueError("Unsupported condition type")
+            raise ValueError("Unsupported condition type")  # noqa: B904 - Keeps the implicit exception context.
 
         ratio = height / width
         # Find the closest bucket
-        closest_bucket = sorted(list(bucket_config.keys()), key=lambda x: abs(float(x) - ratio))[0]
+        closest_bucket = sorted(bucket_config.keys(), key=lambda x: abs(float(x) - ratio))[0]
         target_h, target_w = bucket_config[closest_bucket][0]
         return target_h, target_w
-    
+
     def optimized_scale(self, positive_flat, negative_flat):
-        """ from CFG-zero paper
-        """
+        """from CFG-zero paper"""
         # Calculate dot production
         dot_product = torch.sum(positive_flat * negative_flat, dim=1, keepdim=True)
         # Squared norm of uncondition
-        squared_norm = torch.sum(negative_flat ** 2, dim=1, keepdim=True) + 1e-8
+        squared_norm = torch.sum(negative_flat**2, dim=1, keepdim=True) + 1e-8
         # st_star = v_condˆT * v_uncond / ||v_uncond||ˆ2
         st_star = dot_product / squared_norm
         return st_star
-    
+
     def normalize_latents(self, latents):
         latents_mean = (
             torch.tensor(self.vae.config.latents_mean)
@@ -444,19 +449,19 @@ class LongCatVideoPipeline:
     @torch.no_grad()
     def generate_t2v(
         self,
-        prompt: Union[str, List[str]] = None,
-        negative_prompt: Union[str, List[str]] = None,
+        prompt: str | list[str] | None = None,
+        negative_prompt: str | list[str] | None = None,
         height: int = 480,
         width: int = 832,
         num_frames: int = 93,
         num_inference_steps: int = 50,
         use_distill: bool = False,
         guidance_scale: float = 4.0,
-        num_videos_per_prompt: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.Tensor] = None,
-        output_type: Optional[str] = "np",
-        attention_kwargs: Optional[Dict[str, Any]] = None,
+        num_videos_per_prompt: int | None = 1,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.Tensor | None = None,
+        output_type: str | None = "np",
+        attention_kwargs: dict[str, Any] | None = None,
         max_sequence_length: int = 512,
     ):
         r"""
@@ -525,10 +530,7 @@ class LongCatVideoPipeline:
         device = self.device
 
         # 2. Define call parameters
-        if isinstance(prompt, str):
-            batch_size = 1
-        else:
-            batch_size = len(prompt)
+        batch_size = 1 if isinstance(prompt, str) else len(prompt)
 
         # 3. Encode input prompt
         dit_dtype = self.dit.dtype
@@ -537,9 +539,9 @@ class LongCatVideoPipeline:
             if self._t2v_cpu_offload:
                 self._move_module("text_encoder", device)
             (
-                prompt_embeds, 
-                prompt_attention_mask, 
-                negative_prompt_embeds, 
+                prompt_embeds,
+                prompt_attention_mask,
+                negative_prompt_embeds,
                 negative_prompt_attention_mask,
             ) = self.encode_prompt(
                 prompt=prompt,
@@ -558,16 +560,22 @@ class LongCatVideoPipeline:
                     context_parallel_util.cp_broadcast(negative_prompt_attention_mask)
         elif context_parallel_util.get_cp_size() > 1:
             caption_channels = self.text_encoder.config.d_model
-            prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
+            prompt_embeds = torch.zeros(
+                [batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device
+            )
             prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
             context_parallel_util.cp_broadcast(prompt_embeds)
             context_parallel_util.cp_broadcast(prompt_attention_mask)
             if self.do_classifier_free_guidance:
-                negative_prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
-                negative_prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
+                negative_prompt_embeds = torch.zeros(
+                    [batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device
+                )
+                negative_prompt_attention_mask = torch.zeros(
+                    [batch_size, max_sequence_length], dtype=torch.int64, device=device
+                )
                 context_parallel_util.cp_broadcast(negative_prompt_embeds)
                 context_parallel_util.cp_broadcast(negative_prompt_attention_mask)
-        
+
         if self.do_classifier_free_guidance:
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
             prompt_attention_mask = torch.cat([negative_prompt_attention_mask, prompt_attention_mask], dim=0)
@@ -583,7 +591,7 @@ class LongCatVideoPipeline:
 
         # 5. Prepare latent variables
         num_channels_latents = self.dit.config.in_channels
-            
+
         latents = self.prepare_latents(
             batch_size=batch_size * num_videos_per_prompt,
             num_channels_latents=num_channels_latents,
@@ -633,7 +641,9 @@ class LongCatVideoPipeline:
                     st_star = st_star.view(B, 1, 1, 1)
                     # print(f'step i: {i} --> scale: {st_star}')
 
-                    noise_pred = noise_pred_uncond * st_star + guidance_scale * (noise_pred_cond - noise_pred_uncond * st_star) 
+                    noise_pred = noise_pred_uncond * st_star + guidance_scale * (
+                        noise_pred_cond - noise_pred_uncond * st_star
+                    )
 
                 # negate for scheduler compatibility
                 noise_pred = -noise_pred
@@ -647,7 +657,7 @@ class LongCatVideoPipeline:
 
         self._current_timestep = None
 
-        if not output_type == "latent":
+        if not output_type == "latent":  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             if self._t2v_cpu_offload:
                 self._move_module("dit", "cpu")
                 self._move_module("vae", device)
@@ -662,25 +672,24 @@ class LongCatVideoPipeline:
             if self._t2v_cpu_offload:
                 self._move_module("dit", "cpu")
 
-        return output_video 
-    
+        return output_video
 
     @torch.no_grad()
     def generate_i2v(
         self,
         image: PipelineImageInput,
-        prompt: Union[str, List[str]] = None,
-        negative_prompt: Union[str, List[str]] = None,
+        prompt: str | list[str] | None = None,
+        negative_prompt: str | list[str] | None = None,
         resolution: Literal["480p", "720p"] = "480p",
         num_frames: int = 93,
         num_inference_steps: int = 50,
         use_distill: bool = False,
         guidance_scale: float = 4.0,
-        num_videos_per_prompt: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.Tensor] = None,
-        output_type: Optional[str] = "np",
-        attention_kwargs: Optional[Dict[str, Any]] = None,
+        num_videos_per_prompt: int | None = 1,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.Tensor | None = None,
+        output_type: str | None = "np",
+        attention_kwargs: dict[str, Any] | None = None,
         max_sequence_length: int = 512,
     ):
         r"""
@@ -727,13 +736,7 @@ class LongCatVideoPipeline:
         if self.dit.cp_split_hw is not None:
             scale_factor_spatial *= max(self.dit.cp_split_hw)
         height, width = self.get_condition_shape(image, resolution, scale_factor_spatial=scale_factor_spatial)
-        self.check_inputs(
-            prompt,
-            negative_prompt,
-            height,
-            width,
-            scale_factor_spatial
-        )
+        self.check_inputs(prompt, negative_prompt, height, width, scale_factor_spatial)
 
         if num_frames % self.vae_scale_factor_temporal != 1:
             loguru.logger.warning(
@@ -742,8 +745,8 @@ class LongCatVideoPipeline:
             num_frames = num_frames // self.vae_scale_factor_temporal * self.vae_scale_factor_temporal + 1
         num_frames = max(num_frames, 1)
 
-        has_neg_prompt = negative_prompt is not None 
-        do_true_cfg = guidance_scale > 1 and has_neg_prompt
+        has_neg_prompt = negative_prompt is not None
+        _do_true_cfg = guidance_scale > 1 and has_neg_prompt
 
         self._guidance_scale = guidance_scale
         self._attention_kwargs = attention_kwargs
@@ -753,20 +756,16 @@ class LongCatVideoPipeline:
         device = self.device
 
         # 2. Define call parameters
-        if isinstance(prompt, str):
-            batch_size = 1
-        else:
-            batch_size = len(prompt)
-
+        batch_size = 1 if isinstance(prompt, str) else len(prompt)
 
         # 3. Encode input prompt
         dit_dtype = self.dit.dtype
 
         if context_parallel_util.get_cp_rank() == 0:
             (
-                prompt_embeds, 
-                prompt_attention_mask, 
-                negative_prompt_embeds, 
+                prompt_embeds,
+                prompt_attention_mask,
+                negative_prompt_embeds,
                 negative_prompt_attention_mask,
             ) = self.encode_prompt(
                 prompt=prompt,
@@ -785,20 +784,26 @@ class LongCatVideoPipeline:
                     context_parallel_util.cp_broadcast(negative_prompt_attention_mask)
         elif context_parallel_util.get_cp_size() > 1:
             caption_channels = self.text_encoder.config.d_model
-            prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
+            prompt_embeds = torch.zeros(
+                [batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device
+            )
             prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
             context_parallel_util.cp_broadcast(prompt_embeds)
             context_parallel_util.cp_broadcast(prompt_attention_mask)
             if self.do_classifier_free_guidance:
-                negative_prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
-                negative_prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
+                negative_prompt_embeds = torch.zeros(
+                    [batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device
+                )
+                negative_prompt_attention_mask = torch.zeros(
+                    [batch_size, max_sequence_length], dtype=torch.int64, device=device
+                )
                 context_parallel_util.cp_broadcast(negative_prompt_embeds)
                 context_parallel_util.cp_broadcast(negative_prompt_attention_mask)
 
         if self.do_classifier_free_guidance:
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
             prompt_attention_mask = torch.cat([negative_prompt_attention_mask, prompt_attention_mask], dim=0)
-        
+
         # 4. Prepare timesteps
         sigmas = self.get_timesteps_sigmas(num_inference_steps, use_distill=use_distill)
         self.scheduler.set_timesteps(num_inference_steps, sigmas=sigmas, device=device)
@@ -809,15 +814,15 @@ class LongCatVideoPipeline:
         image = image.to(device=device, dtype=prompt_embeds.dtype)
 
         num_channels_latents = self.dit.config.in_channels
-            
+
         latents = self.prepare_latents(
-            image=image, 
+            image=image,
             batch_size=batch_size * num_videos_per_prompt,
             num_channels_latents=num_channels_latents,
             height=height,
             width=width,
             num_frames=num_frames,
-            num_cond_frames=1, 
+            num_cond_frames=1,
             dtype=torch.float32,
             device=device,
             generator=generator,
@@ -854,7 +859,7 @@ class LongCatVideoPipeline:
 
                 if self.do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
-                    
+
                     B = noise_pred_cond.shape[0]
                     positive = noise_pred_cond.reshape(B, -1)
                     negative = noise_pred_uncond.reshape(B, -1)
@@ -864,13 +869,17 @@ class LongCatVideoPipeline:
                     st_star = st_star.view(B, 1, 1, 1)
                     # print(f'step i: {i} --> scale: {st_star}')
 
-                    noise_pred = noise_pred_uncond * st_star + guidance_scale * (noise_pred_cond - noise_pred_uncond * st_star)
+                    noise_pred = noise_pred_uncond * st_star + guidance_scale * (
+                        noise_pred_cond - noise_pred_uncond * st_star
+                    )
 
                 # negate for scheduler compatibility
                 noise_pred = -noise_pred
 
                 # compute the previous noisy sample x_t -> x_t-1
-                latents[:, :, 1:] = self.scheduler.step(noise_pred[:, :, 1:], t, latents[:, :, 1:], return_dict=False)[0]
+                latents[:, :, 1:] = self.scheduler.step(noise_pred[:, :, 1:], t, latents[:, :, 1:], return_dict=False)[
+                    0
+                ]
 
                 # call the callback, if provided
                 if i == len(timesteps) - 1 or (i + 1) % self.scheduler.order == 0:
@@ -878,7 +887,7 @@ class LongCatVideoPipeline:
 
         self._current_timestep = None
 
-        if not output_type == "latent":
+        if not output_type == "latent":  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             latents = latents.to(self.vae.dtype)
             latents = self.denormalize_latents(latents)
             output_video = self.vae.decode(latents, return_dict=False)[0]
@@ -886,26 +895,25 @@ class LongCatVideoPipeline:
         else:
             output_video = latents
 
-        return output_video 
-
+        return output_video
 
     @torch.no_grad()
     def generate_vc(
         self,
-        video: List[Image.Image],
-        prompt: Union[str, List[str]] = None,
-        negative_prompt: Union[str, List[str]] = None,
+        video: list[Image.Image],
+        prompt: str | list[str] | None = None,
+        negative_prompt: str | list[str] | None = None,
         resolution: Literal["480p", "720p"] = "480p",
         num_frames: int = 93,
         num_cond_frames: int = 13,
         num_inference_steps: int = 50,
         use_distill: bool = False,
         guidance_scale: float = 4.0,
-        num_videos_per_prompt: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.Tensor] = None,
-        output_type: Optional[str] = "np",
-        attention_kwargs: Optional[Dict[str, Any]] = None,
+        num_videos_per_prompt: int | None = 1,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.Tensor | None = None,
+        output_type: str | None = "np",
+        attention_kwargs: dict[str, Any] | None = None,
         max_sequence_length: int = 512,
         use_kv_cache=True,
         offload_kv_cache=False,
@@ -964,13 +972,7 @@ class LongCatVideoPipeline:
         if self.dit.cp_split_hw is not None:
             scale_factor_spatial *= max(self.dit.cp_split_hw)
         height, width = self.get_condition_shape(video, resolution, scale_factor_spatial=scale_factor_spatial)
-        self.check_inputs(
-            prompt,
-            negative_prompt,
-            height,
-            width,
-            scale_factor_spatial
-        )
+        self.check_inputs(prompt, negative_prompt, height, width, scale_factor_spatial)
 
         if num_frames % self.vae_scale_factor_temporal != 1:
             loguru.logger.warning(
@@ -987,19 +989,16 @@ class LongCatVideoPipeline:
         device = self.device
 
         # 2. Define call parameters
-        if isinstance(prompt, str):
-            batch_size = 1
-        else:
-            batch_size = len(prompt)
+        batch_size = 1 if isinstance(prompt, str) else len(prompt)
 
         # 3. Encode input prompt
         dit_dtype = self.dit.dtype
 
         if context_parallel_util.get_cp_rank() == 0:
             (
-                prompt_embeds, 
-                prompt_attention_mask, 
-                negative_prompt_embeds, 
+                prompt_embeds,
+                prompt_attention_mask,
+                negative_prompt_embeds,
                 negative_prompt_attention_mask,
             ) = self.encode_prompt(
                 prompt=prompt,
@@ -1018,13 +1017,19 @@ class LongCatVideoPipeline:
                     context_parallel_util.cp_broadcast(negative_prompt_attention_mask)
         elif context_parallel_util.get_cp_size() > 1:
             caption_channels = self.text_encoder.config.d_model
-            prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
+            prompt_embeds = torch.zeros(
+                [batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device
+            )
             prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
             context_parallel_util.cp_broadcast(prompt_embeds)
             context_parallel_util.cp_broadcast(prompt_attention_mask)
             if self.do_classifier_free_guidance:
-                negative_prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
-                negative_prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
+                negative_prompt_embeds = torch.zeros(
+                    [batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device
+                )
+                negative_prompt_attention_mask = torch.zeros(
+                    [batch_size, max_sequence_length], dtype=torch.int64, device=device
+                )
                 context_parallel_util.cp_broadcast(negative_prompt_embeds)
                 context_parallel_util.cp_broadcast(negative_prompt_attention_mask)
 
@@ -1041,7 +1046,15 @@ class LongCatVideoPipeline:
             tail_uniform_start = 500
             tail_uniform_end = 0
             num_tail_uniform_steps = 10
-            timesteps_uniform_tail = list(np.linspace(tail_uniform_start, tail_uniform_end, num_tail_uniform_steps, dtype=np.float32, endpoint=(tail_uniform_end != 0)))
+            timesteps_uniform_tail = list(
+                np.linspace(
+                    tail_uniform_start,
+                    tail_uniform_end,
+                    num_tail_uniform_steps,
+                    dtype=np.float32,
+                    endpoint=(tail_uniform_end != 0),
+                )
+            )
             timesteps_uniform_tail = [torch.tensor(t, device=device).unsqueeze(0) for t in timesteps_uniform_tail]
             filtered_timesteps = [timestep.unsqueeze(0) for timestep in timesteps if timestep > tail_uniform_start]
             timesteps = torch.cat(filtered_timesteps + timesteps_uniform_tail)
@@ -1070,14 +1083,20 @@ class LongCatVideoPipeline:
             context_parallel_util.cp_broadcast(latents)
 
         num_cond_latents = 1 + (num_cond_frames - 1) // self.vae_scale_factor_temporal
-        
+
         # 6. Denoising loop
         if context_parallel_util.get_cp_size() > 1:
             torch.distributed.barrier(group=context_parallel_util.get_cp_group())
 
         if use_kv_cache:
             cond_latents = latents[:, :, :num_cond_latents]
-            self._cache_clean_latents(cond_latents, max_sequence_length, offload_kv_cache=offload_kv_cache, device=self.device, dtype=dit_dtype)
+            self._cache_clean_latents(
+                cond_latents,
+                max_sequence_length,
+                offload_kv_cache=offload_kv_cache,
+                device=self.device,
+                dtype=dit_dtype,
+            )
             kv_cache_dict = self._get_kv_cache_dict()
             latents = latents[:, :, num_cond_latents:]
         else:
@@ -1104,12 +1123,12 @@ class LongCatVideoPipeline:
                     encoder_hidden_states=prompt_embeds,
                     encoder_attention_mask=prompt_attention_mask,
                     num_cond_latents=num_cond_latents,
-                    kv_cache_dict=kv_cache_dict
+                    kv_cache_dict=kv_cache_dict,
                 )
 
                 if self.do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
-                    
+
                     B = noise_pred_cond.shape[0]
                     positive = noise_pred_cond.reshape(B, -1)
                     negative = noise_pred_uncond.reshape(B, -1)
@@ -1119,8 +1138,10 @@ class LongCatVideoPipeline:
                     st_star = st_star.view(B, 1, 1, 1)
                     # print(f'step i: {i} --> scale: {st_star}')
 
-                    noise_pred = noise_pred_uncond * st_star + guidance_scale * (noise_pred_cond - noise_pred_uncond * st_star)
-                
+                    noise_pred = noise_pred_uncond * st_star + guidance_scale * (
+                        noise_pred_cond - noise_pred_uncond * st_star
+                    )
+
                 # negate for scheduler compatibility
                 noise_pred = -noise_pred
 
@@ -1128,46 +1149,47 @@ class LongCatVideoPipeline:
                 if use_kv_cache:
                     latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
                 else:
-                    latents[:, :, num_cond_latents:] = self.scheduler.step(noise_pred[:, :, num_cond_latents:], t, latents[:, :, num_cond_latents:], return_dict=False)[0]
+                    latents[:, :, num_cond_latents:] = self.scheduler.step(
+                        noise_pred[:, :, num_cond_latents:], t, latents[:, :, num_cond_latents:], return_dict=False
+                    )[0]
 
                 # call the callback, if provided
                 if i == len(timesteps) - 1 or (i + 1) % self.scheduler.order == 0:
                     progress_bar.update()
-            
+
             if use_kv_cache:
                 latents = torch.cat([cond_latents, latents], dim=2)
 
         self._current_timestep = None
 
-        if not output_type == "latent":
+        if not output_type == "latent":  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             latents = latents.to(self.vae.dtype)
             latents = self.denormalize_latents(latents)
             output_video = self.vae.decode(latents, return_dict=False)[0]
             output_video = self.video_processor.postprocess_video(output_video, output_type=output_type)
         else:
             output_video = latents
-        
+
         return output_video
-    
 
     @torch.no_grad()
     def generate_refine(
         self,
-        image: Optional[PipelineImageInput] = None,
-        video: Optional[List[Image.Image]] = None,
-        prompt: Union[str, List[str]] = None,
-        stage1_video: Optional[str] = None,
+        image: PipelineImageInput | None = None,
+        video: list[Image.Image] | None = None,
+        prompt: str | list[str] | None = None,
+        stage1_video: str | None = None,
         num_cond_frames: int = 0,
         num_inference_steps: int = 50,
-        num_videos_per_prompt: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.Tensor] = None,
-        output_type: Optional[str] = "np",
+        num_videos_per_prompt: int | None = 1,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.Tensor | None = None,
+        output_type: str | None = "np",
         return_dict: bool = True,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
+        attention_kwargs: dict[str, Any] | None = None,
         max_sequence_length: int = 512,
-        t_thresh = 0.5,
-        spatial_refine_only = False,
+        t_thresh=0.5,
+        spatial_refine_only=False,
     ):
         r"""
         Generates super-resolution video frames from a low-resolution input video, image, and text prompt using diffusion process.
@@ -1214,18 +1236,12 @@ class LongCatVideoPipeline:
         # 1. Check inputs. Raise error if not correct
         if (image is not None) and (video is not None):
             raise ValueError("Cannot provide both `image and video` at the same time. Please provide only one.")
-        
+
         scale_factor_spatial = self.vae_scale_factor_spatial * 2 * 4
         if self.dit.cp_split_hw is not None:
             scale_factor_spatial *= max(self.dit.cp_split_hw)
         height, width = self.get_condition_shape(stage1_video, "720p", scale_factor_spatial=scale_factor_spatial)
-        self.check_inputs(
-            prompt,
-            None,
-            height,
-            width,
-            scale_factor_spatial
-        )
+        self.check_inputs(prompt, None, height, width, scale_factor_spatial)
 
         self._attention_kwargs = attention_kwargs
         self._current_timestep = None
@@ -1234,10 +1250,7 @@ class LongCatVideoPipeline:
         device = self.device
 
         # 2. Define call parameters
-        if isinstance(prompt, str):
-            batch_size = 1
-        else:
-            batch_size = len(prompt)
+        batch_size = 1 if isinstance(prompt, str) else len(prompt)
 
         # 3. Encode input prompt
         dit_dtype = self.dit.dtype
@@ -1245,9 +1258,9 @@ class LongCatVideoPipeline:
         if context_parallel_util.get_cp_rank() == 0:
             self._transition_t2v_modules(activate="text_encoder")
             (
-                prompt_embeds, 
-                prompt_attention_mask, 
-                _, 
+                prompt_embeds,
+                prompt_attention_mask,
+                _,
                 _,
             ) = self.encode_prompt(
                 prompt=prompt,
@@ -1262,7 +1275,9 @@ class LongCatVideoPipeline:
                 context_parallel_util.cp_broadcast(prompt_attention_mask)
         elif context_parallel_util.get_cp_size() > 1:
             caption_channels = self.text_encoder.config.d_model
-            prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
+            prompt_embeds = torch.zeros(
+                [batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device
+            )
             prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
             context_parallel_util.cp_broadcast(prompt_embeds)
             context_parallel_util.cp_broadcast(prompt_attention_mask)
@@ -1271,7 +1286,7 @@ class LongCatVideoPipeline:
             activate="vae",
             deactivate=("text_encoder",),
         )
-        
+
         # 4. Prepare timesteps
         sigmas = self.get_timesteps_sigmas(num_inference_steps)
         self.scheduler.set_timesteps(num_inference_steps, sigmas=sigmas, device=device)
@@ -1282,18 +1297,20 @@ class LongCatVideoPipeline:
             timesteps = torch.cat([t_thresh_tensor.unsqueeze(0), timesteps[timesteps < t_thresh_tensor]])
             self.scheduler.timesteps = timesteps
             self.scheduler.sigmas = torch.cat([timesteps / 1000, torch.zeros(1, device=timesteps.device)])
-        
+
         # 5. Prepare latent variables
         num_frame = len(stage1_video)
         new_frame_size = num_frame if spatial_refine_only else 2 * num_frame
         stage1_video = torch.from_numpy(np.array(stage1_video)).permute(0, 3, 1, 2)
         stage1_video = stage1_video.to(device=device, dtype=prompt_embeds.dtype)
 
-        video_DOWN = F.interpolate(stage1_video, size=(height, width), mode='bilinear', align_corners=True)
-        video_DOWN = video_DOWN.permute(1, 0, 2, 3).unsqueeze(0) # [frame, C, H, W] -> [1, C, frame, H, W]
+        video_DOWN = F.interpolate(stage1_video, size=(height, width), mode="bilinear", align_corners=True)
+        video_DOWN = video_DOWN.permute(1, 0, 2, 3).unsqueeze(0)  # [frame, C, H, W] -> [1, C, frame, H, W]
         video_DOWN = video_DOWN / 255.0
 
-        video_UP = F.interpolate(video_DOWN, size=(new_frame_size, height, width), mode='trilinear', align_corners=True) # [B, C, frame, H, W]
+        video_UP = F.interpolate(
+            video_DOWN, size=(new_frame_size, height, width), mode="trilinear", align_corners=True
+        )  # [B, C, frame, H, W]
         video_UP = video_UP * 2 - 1
 
         # do padding
@@ -1311,11 +1328,11 @@ class LongCatVideoPipeline:
         num_noise_latents = math.ceil(num_noise_frames / self.vae_scale_factor_temporal)
         num_noise_latents = math.ceil(num_noise_latents / bsa_latent_granularity) * bsa_latent_granularity
         num_noise_frames_added = num_noise_latents * self.vae_scale_factor_temporal - num_noise_frames
-        
+
         pad_front = video_UP[:, :, 0:1].repeat(1, 1, num_cond_frames_added, 1, 1)
         pad_back = video_UP[:, :, -1:].repeat(1, 1, num_noise_frames_added, 1, 1)
         video_UP = torch.cat([pad_front, video_UP, pad_back], dim=2)
-            
+
         latent_up = retrieve_latents(self.vae.encode(video_UP))
         latent_up = self.normalize_latents(latent_up)
         latent_up = (1 - t_thresh) * latent_up + t_thresh * torch.randn_like(latent_up).contiguous()
@@ -1335,7 +1352,7 @@ class LongCatVideoPipeline:
         if video is not None:
             video = self.video_processor.preprocess_video(video, height=height, width=width)
             video = video.to(device=device, dtype=prompt_embeds.dtype)
-        
+
         latents = self.prepare_latents(
             image=image,
             video=video,
@@ -1384,7 +1401,9 @@ class LongCatVideoPipeline:
                 noise_pred = -noise_pred
 
                 # compute the previous noisy sample x_t -> x_t-1
-                latents[:, :, num_cond_latents:] = self.scheduler.step(noise_pred[:, :, num_cond_latents:], t, latents[:, :, num_cond_latents:], return_dict=False)[0]
+                latents[:, :, num_cond_latents:] = self.scheduler.step(
+                    noise_pred[:, :, num_cond_latents:], t, latents[:, :, num_cond_latents:], return_dict=False
+                )[0]
 
                 # call the callback, if provided
                 if i == len(timesteps) - 1 or (i + 1) % self.scheduler.order == 0:
@@ -1392,7 +1411,7 @@ class LongCatVideoPipeline:
 
         self._current_timestep = None
 
-        if not output_type == "latent":
+        if not output_type == "latent":  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             self._transition_t2v_modules(
                 activate="vae",
                 deactivate=("dit",),
@@ -1401,14 +1420,13 @@ class LongCatVideoPipeline:
             latents = self.denormalize_latents(latents)
             output_video = self.vae.decode(latents, return_dict=False)[0]
             output_video = self.video_processor.postprocess_video(output_video, output_type=output_type)
-            output_video = output_video[:, num_cond_frames_added: new_frame_size+num_cond_frames_added]
+            output_video = output_video[:, num_cond_frames_added : new_frame_size + num_cond_frames_added]
             self._transition_t2v_modules(deactivate=("vae",))
         else:
             output_video = latents
             self._transition_t2v_modules(deactivate=("dit",))
 
         return output_video
-    
 
     def to(self, device: str | torch.device):
         """
@@ -1423,8 +1441,8 @@ class LongCatVideoPipeline:
         self.device = device
         if self.dit is not None:
             self.dit = self.dit.to(device, non_blocking=True)
-            if hasattr(self.dit, 'lora_dict') and self.dit.lora_dict:
-                for lora_key, lora_network in self.dit.lora_dict.items():
+            if hasattr(self.dit, "lora_dict") and self.dit.lora_dict:
+                for _lora_key, lora_network in self.dit.lora_dict.items():
                     for lora in lora_network.loras:
                         lora.to(device, non_blocking=True)
         if self.text_encoder is not None:
@@ -1432,4 +1450,3 @@ class LongCatVideoPipeline:
         if self.vae is not None:
             self.vae = self.vae.to(device, non_blocking=True)
         return self
-    

@@ -23,8 +23,8 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence
 
 import numpy as np
 import torch
@@ -66,14 +66,6 @@ _REPO_TO_MODEL_NAME = {
 
 
 def _model_name_from_repo_id(repo_id: str) -> str:
-    """Helper function to model name from repo id.
-
-    Args:
-        repo_id: The repo id.
-
-    Returns:
-        The return value.
-    """
     if repo_id in _REPO_TO_MODEL_NAME:
         return _REPO_TO_MODEL_NAME[repo_id]
 
@@ -102,14 +94,6 @@ def _model_name_from_repo_id(repo_id: str) -> str:
 
 
 def _load_state_dict_file(path: str | Path) -> dict[str, torch.Tensor]:
-    """Helper function to load state dict file.
-
-    Args:
-        path: The path.
-
-    Returns:
-        The return value.
-    """
     path = Path(path)
     if path.suffix == ".safetensors":
         try:
@@ -124,11 +108,7 @@ def _load_state_dict_file(path: str | Path) -> dict[str, torch.Tensor]:
     state = torch.load(path, map_location="cpu")
     while isinstance(state, dict):
         wrapped = next(
-            (
-                state[key]
-                for key in ("state_dict", "module", "model")
-                if key in state and isinstance(state[key], dict)
-            ),
+            (state[key] for key in ("state_dict", "module", "model") if key in state and isinstance(state[key], dict)),
             None,
         )
         if wrapped is None:
@@ -198,7 +178,7 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
         model_name: str | None = None,
         weights_path: str | None = None,
         **kwargs,
-    ) -> "DepthAnything3":
+    ) -> DepthAnything3:
         """Load Depth Anything 3 from a local checkpoint or Hugging Face repo."""
         resolved_model_name = model_name or _model_name_from_repo_id(repo_id)
         model = cls(model_name=resolved_model_name, **kwargs)
@@ -224,23 +204,7 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
         return model
 
     def _load_flexible_state_dict(self, state: dict[str, torch.Tensor]) -> None:
-        """Helper function to load flexible state dict.
-
-        Args:
-            state: The state.
-
-        Returns:
-            The return value.
-        """
         def strip_prefix(prefix: str) -> dict[str, torch.Tensor]:
-            """Strip prefix.
-
-            Args:
-                prefix: The prefix.
-
-            Returns:
-                The return value.
-            """
             return {key[len(prefix) :]: value for key, value in state.items() if key.startswith(prefix)}
 
         candidates = [
@@ -253,6 +217,11 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
             key=lambda candidate: len(set(candidate[0].state_dict()).intersection(candidate[1])),
         )
         missing, unexpected = target.load_state_dict(target_state, strict=False)
+        if missing:
+            # A safetensors checkpoint can store a tied parameter under only one of its names.
+            model_state = target.state_dict(keep_vars=True)
+            populated = {id(model_state[key]) for key in model_state.keys() & target_state.keys()}
+            missing = [key for key in missing if key not in model_state or id(model_state[key]) not in populated]
         if missing:
             logger.warn(f"Depth Anything 3 checkpoint did not populate {len(missing)} parameters/buffers.")
         if unexpected:
@@ -268,6 +237,12 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
         infer_gs: bool = False,
         use_ray_pose: bool = False,
         ref_view_strategy: str = "saddle_balanced",
+        input_extrinsics: torch.Tensor | None = None,
+        input_intrinsics: torch.Tensor | None = None,
+        use_aligned_pred_cam: bool = False,
+        gs_down_ratio: int = 1,
+        gs_scale_extra_multiplier: float = 1.0,
+        gs_ds_feature_mode: bool = False,
     ) -> dict[str, torch.Tensor]:
         """
         Forward pass through the model.
@@ -280,6 +255,14 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
             infer_gs: Enable Gaussian Splatting branch.
             use_ray_pose: Use ray-based pose estimation instead of camera decoder.
             ref_view_strategy: Strategy for selecting reference view from multiple views.
+            input_extrinsics: Unnormalized input extrinsics ``(B, N, 4, 4)`` used by the GS branch.
+            input_intrinsics: Input intrinsics ``(B, N, 3, 3)`` used by the GS branch.
+            use_aligned_pred_cam: Unproject Gaussians with predicted cameras mapped into the
+                input-extrinsics frame by the inverse Umeyama Sim(3).
+            gs_down_ratio: Spatial downsampling factor of the GS head output.
+            gs_scale_extra_multiplier: Multiplier applied to the maximum Gaussian scale.
+            gs_ds_feature_mode: Run the GS image merger at full resolution and average-pool
+                its features when the GS head output is downsampled.
 
         Returns:
             Dictionary containing model predictions
@@ -291,15 +274,29 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
         # autoregressive spatial-memory updates.
         use_autocast = image.device.type == "cuda"
         autocast_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        with torch.no_grad():
-            with torch.autocast(
+        with (
+            torch.no_grad(),
+            torch.autocast(
                 device_type=image.device.type,
                 dtype=autocast_dtype,
                 enabled=use_autocast,
-            ):
-                return self.model(
-                    image, extrinsics, intrinsics, export_feat_layers, infer_gs, use_ray_pose, ref_view_strategy
-                )
+            ),
+        ):
+            return self.model(
+                image,
+                extrinsics,
+                intrinsics,
+                export_feat_layers,
+                infer_gs,
+                use_ray_pose,
+                ref_view_strategy,
+                input_extrinsics=input_extrinsics,
+                input_intrinsics=input_intrinsics,
+                use_aligned_pred_cam=use_aligned_pred_cam,
+                gs_down_ratio=gs_down_ratio,
+                gs_scale_extra_multiplier=gs_scale_extra_multiplier,
+                gs_ds_feature_mode=gs_ds_feature_mode,
+            )
 
     def inference(
         self,
@@ -326,7 +323,12 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
         # Feat_vis export parameters
         feat_vis_fps: int = 15,
         # Other export parameters, e.g., gs_ply, gs_video
-        export_kwargs: Optional[dict] = None,
+        export_kwargs: dict | None = None,
+        # Gaussian branch options
+        use_aligned_pred_cam: bool = False,
+        gs_down_ratio: int = 1,
+        gs_scale_extra_multiplier: float = 1.0,
+        gs_ds_feature_mode: bool = False,
     ) -> Prediction:
         """
         Run inference on input images.
@@ -355,6 +357,13 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
             show_cameras: [GLB] Show camera wireframes in the exported scene (default: True)
             feat_vis_fps: [FEAT_VIS] Frame rate for output video (default: 15)
             export_kwargs: additional arguments to export functions.
+            use_aligned_pred_cam: With input extrinsics, unproject Gaussians with the predicted
+                cameras mapped into the input-extrinsics frame (inverse Umeyama Sim(3)) and
+                rescale the GS depths to that frame.
+            gs_down_ratio: Spatial downsampling factor of the GS head output (1 = full resolution).
+            gs_scale_extra_multiplier: Multiplier applied to the maximum Gaussian scale.
+            gs_ds_feature_mode: Run the GS image merger at full resolution and average-pool its
+                features when ``gs_down_ratio > 1``.
 
         Returns:
             Prediction object containing depth maps and camera parameters
@@ -382,7 +391,19 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
         export_feat_layers = list(export_feat_layers) if export_feat_layers is not None else []
 
         raw_output = self._run_model_forward(
-            imgs, ex_t_norm, in_t, export_feat_layers, infer_gs, use_ray_pose, ref_view_strategy
+            imgs,
+            ex_t_norm,
+            in_t,
+            export_feat_layers,
+            infer_gs,
+            use_ray_pose,
+            ref_view_strategy,
+            input_extrinsics=ex_t,
+            input_intrinsics=in_t,
+            use_aligned_pred_cam=use_aligned_pred_cam,
+            gs_down_ratio=gs_down_ratio,
+            gs_scale_extra_multiplier=gs_scale_extra_multiplier,
+            gs_ds_feature_mode=gs_ds_feature_mode,
         )
 
         # Convert raw output to prediction
@@ -399,7 +420,6 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
 
         # Export if requested
         if export_dir is not None:
-
             if "gs" in export_format:
                 if infer_gs and "gs_video" not in export_format:
                     export_format = f"{export_format}-gs_video"
@@ -487,21 +507,12 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
         imgs = imgs_cpu.to(device, non_blocking=True)[None].float()
 
         # Convert camera parameters to tensors
-        ex_t = (
-            extrinsics.to(device, non_blocking=True)[None].float()
-            if extrinsics is not None
-            else None
-        )
-        in_t = (
-            intrinsics.to(device, non_blocking=True)[None].float()
-            if intrinsics is not None
-            else None
-        )
+        ex_t = extrinsics.to(device, non_blocking=True)[None].float() if extrinsics is not None else None
+        in_t = intrinsics.to(device, non_blocking=True)[None].float() if intrinsics is not None else None
 
         return imgs, ex_t, in_t
 
     def _normalize_extrinsics(self, ex_t: torch.Tensor | None) -> torch.Tensor | None:
-        """Normalize extrinsics"""
         if ex_t is None:
             return None
         transform = affine_inverse(ex_t[:, :1])
@@ -549,6 +560,13 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
         infer_gs: bool = False,
         use_ray_pose: bool = False,
         ref_view_strategy: str = "saddle_balanced",
+        *,
+        input_extrinsics: torch.Tensor | None = None,
+        input_intrinsics: torch.Tensor | None = None,
+        use_aligned_pred_cam: bool = False,
+        gs_down_ratio: int = 1,
+        gs_scale_extra_multiplier: float = 1.0,
+        gs_ds_feature_mode: bool = False,
     ) -> dict[str, torch.Tensor]:
         """Run model forward pass."""
         device = imgs.device
@@ -557,7 +575,21 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
             torch.cuda.synchronize(device)
         start_time = time.time()
         feat_layers = list(export_feat_layers) if export_feat_layers is not None else None
-        output = self.forward(imgs, ex_t, in_t, feat_layers, infer_gs, use_ray_pose, ref_view_strategy)
+        output = self.forward(
+            imgs,
+            ex_t,
+            in_t,
+            feat_layers,
+            infer_gs,
+            use_ray_pose,
+            ref_view_strategy,
+            input_extrinsics=input_extrinsics,
+            input_intrinsics=input_intrinsics,
+            use_aligned_pred_cam=use_aligned_pred_cam,
+            gs_down_ratio=gs_down_ratio,
+            gs_scale_extra_multiplier=gs_scale_extra_multiplier,
+            gs_ds_feature_mode=gs_ds_feature_mode,
+        )
         if need_sync:
             torch.cuda.synchronize(device)
         end_time = time.time()
@@ -587,9 +619,7 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
         prediction.processed_images = processed_imgs
         return prediction
 
-    def _export_results(
-        self, prediction: Prediction, export_format: str, export_dir: str, **kwargs
-    ) -> None:
+    def _export_results(self, prediction: Prediction, export_format: str, export_dir: str, **kwargs) -> None:
         """Export results to specified format and directory."""
         start_time = time.time()
         from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.export import export

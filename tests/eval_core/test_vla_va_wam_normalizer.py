@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import worldfoundry.evaluation.tasks.embodied.normalizer as normalizer
+import worldfoundry.evals.tasks.embodied.normalizer as normalizer
 
 
 def test_normalize_json_results_writes_scorecard_and_metrics(tmp_path: Path) -> None:
@@ -103,14 +103,7 @@ def test_normalize_embodied_benchmark_common_fields(tmp_path: Path) -> None:
 
 def test_normalize_robotwin_result_txt_tree(tmp_path: Path) -> None:
     result_file = (
-        tmp_path
-        / "eval_result"
-        / "handover_block"
-        / "ACT"
-        / "demo_clean"
-        / "ckpt100"
-        / "20260525"
-        / "_result.txt"
+        tmp_path / "eval_result" / "handover_block" / "ACT" / "demo_clean" / "ckpt100" / "20260525" / "_result.txt"
     )
     result_file.parent.mkdir(parents=True)
     result_file.write_text("Instruction Type: demo\n0.8\n", encoding="utf-8")

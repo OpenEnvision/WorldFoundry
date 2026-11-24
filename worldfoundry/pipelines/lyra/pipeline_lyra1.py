@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any
 
 import torch
 
@@ -22,6 +23,38 @@ from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
 from ..pipeline_utils import PipelineABC
 from .checkpoints import prepare_lyra1_checkpoint_root
 
+_REPRESENTATION_OPTION_KEYS: frozenset[str] = frozenset(
+    {
+        "ckpt_path",
+        "demo_config_path",
+        "inference_config_path",
+        "dataset_name",
+        "model_config_paths",
+        "vae_path",
+        "static_view_indices_fixed",
+        "target_index_subsample",
+        "set_manual_time_idx",
+        "target_index_manual",
+        "target_index_manual_start_idx",
+        "target_index_manual_num_idx",
+        "target_index_manual_stride",
+        "num_test_images",
+        "do_eval",
+        "use_depth",
+        "out_fps",
+        "save_grid",
+        "num_grid_samples",
+        "save_gt_input",
+        "save_video_input",
+        "save_gt_depth",
+        "save_rgb_decoding",
+        "save_gaussians",
+        "save_gaussians_orig",
+        "skip_existing",
+        "ckpt_name",
+    }
+)
+
 
 class Lyra1Pipeline(PipelineABC):
     """Lyra-1 pipeline supporting static image or dynamic video reconstruction."""
@@ -30,10 +63,10 @@ class Lyra1Pipeline(PipelineABC):
 
     def __init__(
         self,
-        synthesis_model: Optional[Lyra1Synthesis] = None,
-        representation_model: Optional[Lyra1Representation] = None,
-        operator: Optional[Lyra1Operator] = None,
-        memory_module: Optional[Any] = None,
+        synthesis_model: Lyra1Synthesis | None = None,
+        representation_model: Lyra1Representation | None = None,
+        operator: Lyra1Operator | None = None,
+        memory_module: Any | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype=torch.bfloat16,
@@ -49,15 +82,15 @@ class Lyra1Pipeline(PipelineABC):
         self.default_mode = str(default_mode).lower()
 
     @classmethod
-    def from_pretrained(  # ty: ignore[invalid-method-override]
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[str] = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        model_path: str | None = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype=torch.bfloat16,
         **kwargs,
-    ) -> "Lyra1Pipeline":
+    ) -> Lyra1Pipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         required_components = required_components or {}
         repo_root = required_components.get("repo_root") or model_path
@@ -115,11 +148,11 @@ class Lyra1Pipeline(PipelineABC):
         self,
         images=None,
         videos=None,
-        interactions: Optional[Sequence[Union[str, Dict[str, Any]]]] = None,
+        interactions: Sequence[str | dict[str, Any]] | None = None,
         prompt: str = "",
-        mode: Optional[str] = None,
-        trajectory: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        mode: str | None = None,
+        trajectory: str | None = None,
+    ) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
         mode = str(mode or self.default_mode).lower()
         if trajectory is not None and interactions is None:
@@ -149,12 +182,12 @@ class Lyra1Pipeline(PipelineABC):
         self,
         images=None,
         videos=None,
-        interactions: Optional[Sequence[Union[str, Dict[str, Any]]]] = None,
+        interactions: Sequence[str | dict[str, Any]] | None = None,
         prompt: str = "",
-        mode: Optional[str] = None,
-        trajectory: Optional[str] = None,
+        mode: str | None = None,
+        trajectory: str | None = None,
         reconstruct_3d: bool = False,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         return_dict: bool = False,
         *,
         fps: int | None = None,
@@ -183,7 +216,7 @@ class Lyra1Pipeline(PipelineABC):
             generated_root = scratch_directory(f"lyra1_{mode}_generated_")
             reconstruction_root = scratch_directory(f"lyra1_{mode}_recon_")
 
-        synthesis_kwargs = dict(kwargs)
+        synthesis_kwargs = {key: value for key, value in kwargs.items() if key not in _REPRESENTATION_OPTION_KEYS}
         multi_trajectory = bool(synthesis_kwargs.pop("multi_trajectory", reconstruct_3d))
         synthesis_result = self.synthesis_model.predict(
             visual_input=processed["visual_input"],
@@ -238,14 +271,14 @@ class Lyra1Pipeline(PipelineABC):
 
     def stream(
         self,
-        interactions: Sequence[Union[str, Dict[str, Any]]],
+        interactions: Sequence[str | dict[str, Any]],
         images=None,
         videos=None,
         prompt: str = "",
-        mode: Optional[str] = None,
-        trajectory: Optional[str] = None,
+        mode: str | None = None,
+        trajectory: str | None = None,
         reconstruct_3d: bool = False,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         reset_memory: bool = False,
         return_dict: bool = False,
         *,

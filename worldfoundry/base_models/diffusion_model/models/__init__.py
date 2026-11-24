@@ -9,7 +9,6 @@ Packages in this directory implement runner Protocols from
 - ``denoisers``: :class:`Denoiser` (``DenoiserInput`` → ``DenoiserOutput``)
 - ``upsamplers``: :class:`LatentProcessor` between multi-stage passes
 - ``representations``: packing / patchify helpers (not Protocols)
-- ``guardrails``: optional safety tables and classifiers
 - ``networks``: checkpoint-compatible DiT / UNet math (commented separately)
 """
 

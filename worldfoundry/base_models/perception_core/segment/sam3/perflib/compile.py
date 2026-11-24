@@ -2,27 +2,19 @@
 
 # pyre-unsafe
 
-"""Module for base_models -> perception_core -> segment -> sam3 -> perflib -> compile.py functionality."""
-
 from functools import wraps
 
 import torch
-from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import BatchedDatapoint, NestedTensor
+
+# isort: split
+from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import NestedTensor
+
+# isort: split
 from torch.utils._pytree import tree_map_only
 
 
 def recursive_fn_factory(fn):
-    """Recursive fn factory.
-
-    Args:
-        fn: The fn.
-    """
     def recursive_fn(b):
-        """Recursive fn.
-
-        Args:
-            b: The b.
-        """
         if isinstance(b, dict):
             return {k: recursive_fn(b[k]) for k in b}
         if isinstance(b, list):
@@ -31,10 +23,7 @@ def recursive_fn_factory(fn):
             return tuple(recursive_fn(t) for t in b)
         if isinstance(b, NestedTensor):
             tensors = fn(b.tensors)
-            if b.mask is None:
-                mask = None
-            else:
-                mask = fn(b.mask)
+            mask = None if b.mask is None else fn(b.mask)
             return NestedTensor(tensors=tensors, mask=mask)
         if isinstance(b, torch.Tensor):
             return fn(b)
@@ -62,27 +51,19 @@ def clone_output_wrapper(f):
 
     @wraps(f)
     def wrapped(*args, **kwargs):
-        """Wrapped."""
         outputs = f(*args, **kwargs)
-        return tree_map_only(
-            torch.Tensor, lambda t: t.clone() if t.is_cuda else t, outputs
-        )
+        return tree_map_only(torch.Tensor, lambda t: t.clone() if t.is_cuda else t, outputs)
 
     return wrapped
 
 
-def compile_wrapper(
-    fn, *, mode="max-autotune", fullgraph=True, dynamic=False, name=None
-):
+def compile_wrapper(fn, *, mode="max-autotune", fullgraph=True, dynamic=False, name=None):
     """Compile with recursive_contiguous on inputs and recursive_clone on outputs.
     Used for SAM2 tracker components that need contiguous inputs for CUDA graphs."""
     compiled_fn = torch.compile(fn, mode=mode, fullgraph=fullgraph, dynamic=dynamic)
 
     def compiled_fn_wrapper(*args, **kwargs):
-        """Compiled fn wrapper."""
-        with torch.autograd.profiler.record_function(
-            f"compiled {fn}" if name is None else name
-        ):
+        with torch.autograd.profiler.record_function(f"compiled {fn}" if name is None else name):
             CUDAGRAPH_MODES = ["max-autotune", "reduce-overhead"]
             args = recursive_contiguous(args)
             kwargs = recursive_contiguous(kwargs)
@@ -102,11 +83,6 @@ def shape_logging_wrapper(fn, keep_kwargs, enable_logging=False):
     seen_shapes = set()
 
     def get_shape(obj):
-        """Get shape.
-
-        Args:
-            obj: The obj.
-        """
         if isinstance(obj, torch.Tensor):
             return obj.shape
         elif isinstance(obj, (list, tuple)):
@@ -119,12 +95,10 @@ def shape_logging_wrapper(fn, keep_kwargs, enable_logging=False):
             return type(obj).__name__
 
     def wrapper(*args, **kwargs):
-        """Wrapper."""
         shapes = tuple(get_shape(arg) for arg in args) + tuple(
             (k, get_shape(v))
             for k, v in kwargs.items()
-            if isinstance(v, (torch.Tensor, list))
-            and (len(keep_kwargs) > 0 and k in keep_kwargs)
+            if isinstance(v, (torch.Tensor, list)) and (len(keep_kwargs) > 0 and k in keep_kwargs)
         )
         if shapes not in seen_shapes:
             seen_shapes.add(shapes)
@@ -135,11 +109,6 @@ def shape_logging_wrapper(fn, keep_kwargs, enable_logging=False):
     wrapper.enable_logging = enable_logging
 
     def set_logging(enabled=False):
-        """Set logging.
-
-        Args:
-            enabled: The enabled.
-        """
         nonlocal enable_logging
         enable_logging = enabled
         wrapper.enable_logging = enable_logging

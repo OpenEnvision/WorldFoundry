@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 aliases:
 - diffusion_policy
 - dp
@@ -18,6 +18,7 @@ official_sources:
   github:
     head_sha: 5ba07ac6661db573af695b419a7947ecb704690f
     url: https://github.com/real-stanford/diffusion_policy
+    revision: 5ba07ac6661db573af695b419a7947ecb704690f
 pipeline_binding: diffusion-policy
 provider: official_repo
 runtime_profile: runtime-profile:diffusion-policy
@@ -40,10 +41,10 @@ docs:
   publisher: Stanford University (REAL Lab)
   publisher_kind: university
   publisher_zh: 斯坦福大学（REAL 实验室）
-  overview: Diffusion Policy is the landmark visuomotor policy that models action generation as conditional denoising diffusion, substantially improving multimodal action distributions over regression policies. WorldFoundry vendors the low-dimensional PushT variant in-tree, reconstructed from an offline-converted, fully resolved config with tensor-only state dictionaries.
-  overview_zh: Diffusion Policy 是里程碑式的视觉运动策略：将动作生成建模为条件去噪扩散，相比回归策略大幅改进多模态动作分布。WorldFoundry 内置其低维 PushT 变体，从离线转换、完全解析的配置与纯张量 state dict 重建。
-  architecture: A denoising diffusion model over action sequences conditioned on observations. The in-tree runtime is the released low-dimensional PushT policy; the converted checkpoint passed weights-only reload, strict model/EMA restoration, CPU loading, and a finite GPU action probe.
-  architecture_zh: 在观测条件下对动作序列做去噪扩散。树内运行时为发布的低维 PushT 策略；转换后的 checkpoint 通过了 weights-only 重载、严格 model/EMA 恢复、CPU 加载与有限 GPU 动作探针。
+  overview: Diffusion Policy is the landmark visuomotor policy that models action generation as conditional denoising diffusion, substantially improving multimodal action distributions over regression policies. WorldFoundry runs the released low-dimensional PushT variant, rebuilt from an offline-converted, fully resolved config with tensor-only state dictionaries.
+  overview_zh: Diffusion Policy 是里程碑式的视觉运动策略：将动作生成建模为条件去噪扩散，相比回归策略大幅改进多模态动作分布。WorldFoundry 运行发布的低维 PushT 变体，从离线转换、完全解析的配置与纯张量 state dict 重建。
+  architecture: 'A denoising diffusion model over action sequences conditioned on observations. Validated with the converted low-dimensional PushT checkpoint: it reloads weights-only with strict model/EMA restoration and returns finite actions on GPU.'
+  architecture_zh: 在观测条件下对动作序列做去噪扩散。已用转换后的低维 PushT checkpoint 验证：以 weights-only 方式重载、严格恢复 model/EMA，并在 GPU 上输出有限动作。
   usage_notes: The executable dill workspace checkpoint is rejected at runtime with no unsafe deserialization fallback — conversion must happen once in a trusted offline environment. The predict_action route emits the configured low-dimensional PushT action schema.
   usage_notes_zh: 可执行的 dill workspace checkpoint 在运行时被拒绝，且无不安全反序列化回退——转换必须在可信离线环境中一次性完成。predict_action 路由输出配置的低维 PushT 动作 schema。
   limitations:

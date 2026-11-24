@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from ..pipeline_utils import PipelineABC
-from typing import Any, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import torch
 
-from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
 from ...operators.neoverse_operator import NeoVerseOperator
+from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
+from ..pipeline_utils import PipelineABC
 
 
 def _neoverse_synthesis_cls():
-    """Neoverse synthesis cls helper function."""
     from ...synthesis.visual_generation.neoverse.neoverse_synthesis import NeoVerseSynthesis
 
     return NeoVerseSynthesis
@@ -23,9 +23,9 @@ class NeoVersePipeline(PipelineABC):
 
     def __init__(
         self,
-        operator: Optional[NeoVerseOperator] = None,
-        synthesis_model: Optional[Any] = None,
-        memory_module: Optional[Any] = None,
+        operator: NeoVerseOperator | None = None,
+        synthesis_model: Any | None = None,
+        memory_module: Any | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype: torch.dtype = torch.bfloat16,
@@ -39,12 +39,12 @@ class NeoVersePipeline(PipelineABC):
 
     @staticmethod
     def _maybe_visual_input(
-        images: Optional[Any] = None,
+        images: Any | None = None,
         *,
-        videos: Optional[Any] = None,
-        video: Optional[Any] = None,
-        video_path: Optional[Any] = None,
-        input_path: Optional[Any] = None,
+        videos: Any | None = None,
+        video: Any | None = None,
+        video_path: Any | None = None,
+        input_path: Any | None = None,
     ) -> Any:
         """Maybe visual input for NeoVersePipeline."""
         for candidate in (images, videos, video, video_path, input_path):
@@ -55,12 +55,12 @@ class NeoVersePipeline(PipelineABC):
     @classmethod
     def _resolve_visual_input(
         cls,
-        images: Optional[Any] = None,
+        images: Any | None = None,
         *,
-        videos: Optional[Any] = None,
-        video: Optional[Any] = None,
-        video_path: Optional[Any] = None,
-        input_path: Optional[Any] = None,
+        videos: Any | None = None,
+        video: Any | None = None,
+        video_path: Any | None = None,
+        input_path: Any | None = None,
     ) -> Any:
         """Resolve visual input for NeoVersePipeline."""
         visual_input = cls._maybe_visual_input(
@@ -75,15 +75,15 @@ class NeoVersePipeline(PipelineABC):
         raise ValueError("NeoVerse requires an image or video input.")
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: Any = "Yuppie1204/NeoVerse",
-        required_components: Optional[dict] = None,
+        required_components: dict | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype: torch.dtype = torch.bfloat16,
         **kwargs,
-    ) -> "NeoVersePipeline":
+    ) -> NeoVersePipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         component_options = dict(required_components or {})
         if isinstance(model_path, dict):
@@ -99,7 +99,7 @@ class NeoVersePipeline(PipelineABC):
         if model_path is None:
             model_path = runtime_options.pop("repo_id", "Yuppie1204/NeoVerse")
 
-        operator_kwargs = {}
+        operator_kwargs: dict[str, Any] = {}
         for key in [
             "height",
             "width",
@@ -134,20 +134,20 @@ class NeoVersePipeline(PipelineABC):
         self,
         *,
         images,
-        interactions: Optional[Sequence[str]] = None,
-        predefined_trajectory: Optional[str] = None,
-        trajectory_file: Optional[str] = None,
+        interactions: Sequence[str] | None = None,
+        predefined_trajectory: str | None = None,
+        trajectory_file: str | None = None,
         trajectory_data=None,
         prompt: str = "",
-        static_scene: Optional[bool] = None,
-        zoom_ratio: Optional[float] = None,
-        trajectory_mode: Optional[str] = None,
-        trajectory_name: Optional[str] = None,
-        angle: Optional[float] = None,
-        distance: Optional[float] = None,
-        orbit_radius: Optional[float] = None,
+        static_scene: bool | None = None,
+        zoom_ratio: float | None = None,
+        trajectory_mode: str | None = None,
+        trajectory_name: str | None = None,
+        angle: float | None = None,
+        distance: float | None = None,
+        orbit_radius: float | None = None,
         use_first_frame: bool = True,
-        num_frames: Optional[int] = None,
+        num_frames: int | None = None,
     ):
         """Process and normalize input arguments and conditions for inference."""
         if self.synthesis_model is None:
@@ -201,26 +201,26 @@ class NeoVersePipeline(PipelineABC):
 
     def __call__(
         self,
-        images: Optional[Any] = None,
-        interactions: Optional[Sequence[str]] = None,
+        images: Any | None = None,
+        interactions: Sequence[str] | None = None,
         *,
-        videos: Optional[Any] = None,
-        video: Optional[Any] = None,
-        video_path: Optional[Any] = None,
-        input_path: Optional[Any] = None,
-        predefined_trajectory: Optional[str] = None,
-        trajectory_file: Optional[str] = None,
+        videos: Any | None = None,
+        video: Any | None = None,
+        video_path: Any | None = None,
+        input_path: Any | None = None,
+        predefined_trajectory: str | None = None,
+        trajectory_file: str | None = None,
         trajectory_data=None,
         prompt: str = "",
-        static_scene: Optional[bool] = None,
-        zoom_ratio: Optional[float] = None,
-        trajectory_mode: Optional[str] = None,
-        trajectory_name: Optional[str] = None,
-        angle: Optional[float] = None,
-        distance: Optional[float] = None,
-        orbit_radius: Optional[float] = None,
+        static_scene: bool | None = None,
+        zoom_ratio: float | None = None,
+        trajectory_mode: str | None = None,
+        trajectory_name: str | None = None,
+        angle: float | None = None,
+        distance: float | None = None,
+        orbit_radius: float | None = None,
         use_first_frame: bool = True,
-        num_frames: Optional[int] = None,
+        num_frames: int | None = None,
         return_dict: bool = False,
         **kwargs,
     ):
@@ -287,17 +287,17 @@ class NeoVersePipeline(PipelineABC):
 
     def stream(
         self,
-        images: Optional[Any] = None,
-        interactions: Optional[Sequence[str]] = None,
+        images: Any | None = None,
+        interactions: Sequence[str] | None = None,
         *,
-        videos: Optional[Any] = None,
-        video: Optional[Any] = None,
-        video_path: Optional[Any] = None,
-        input_path: Optional[Any] = None,
-        trajectory_file: Optional[str] = None,
+        videos: Any | None = None,
+        video: Any | None = None,
+        video_path: Any | None = None,
+        input_path: Any | None = None,
+        trajectory_file: str | None = None,
         trajectory_data=None,
         prompt: str = "",
-        static_scene: Optional[bool] = None,
+        static_scene: bool | None = None,
         reset_memory: bool = False,
         return_dict: bool = False,
         **kwargs,

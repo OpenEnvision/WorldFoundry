@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> encoder -> common -> gaussian_adapter.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from dataclasses import dataclass
 
 import torch
@@ -7,15 +6,15 @@ from einops import einsum, rearrange
 from jaxtyping import Float
 from torch import Tensor, nn
 
-from ....geometry.projection import get_world_rays
 from worldfoundry.base_models.three_dimensions.point_clouds.pixelsplat.src.misc.sh_rotation import rotate_sh
 from worldfoundry.core.geometry.transforms import rotation_matrix_to_quaternion_xyzw
+
+from ....geometry.projection import get_world_rays
 from .gaussians import build_covariance, quaternion_to_matrix
 
 
 @dataclass
 class Gaussians:
-    """Gaussians implementation."""
     means: Float[Tensor, "*batch 3"]
     covariances: Float[Tensor, "*batch 3 3"]
     scales: Float[Tensor, "*batch 3"]
@@ -26,22 +25,15 @@ class Gaussians:
 
 @dataclass
 class GaussianAdapterCfg:
-    """Gaussian adapter cfg implementation."""
     gaussian_scale_min: float
     gaussian_scale_max: float
     sh_degree: int
 
 
 class GaussianAdapter(nn.Module):
-    """Gaussian adapter implementation."""
     cfg: GaussianAdapterCfg
 
     def __init__(self, cfg: GaussianAdapterCfg):
-        """Init.
-
-        Args:
-            cfg: The cfg.
-        """
         super().__init__()
         self.cfg = cfg
 
@@ -67,21 +59,6 @@ class GaussianAdapter(nn.Module):
         image_shape: tuple[int, int],
         eps: float = 1e-8,
     ) -> Gaussians:
-        """Forward.
-
-        Args:
-            extrinsics: The extrinsics.
-            intrinsics: The intrinsics.
-            coordinates: The coordinates.
-            depths: The depths.
-            opacities: The opacities.
-            raw_gaussians: The raw gaussians.
-            image_shape: The image shape.
-            eps: The eps.
-
-        Returns:
-            The return value.
-        """
         device = extrinsics.device
         scales, rotations, sh = raw_gaussians.split((3, 4, 3 * self.d_sh), dim=-1)
 
@@ -110,9 +87,7 @@ class GaussianAdapter(nn.Module):
         means = origins + directions * depths[..., None]
 
         # PLY export needs the same world-space orientation as the renderer.
-        world_rotations = rotation_matrix_to_quaternion_xyzw(
-            c2w_rotations @ quaternion_to_matrix(rotations)
-        )
+        world_rotations = rotation_matrix_to_quaternion_xyzw(c2w_rotations @ quaternion_to_matrix(rotations))
 
         return Gaussians(
             means=means,
@@ -129,16 +104,6 @@ class GaussianAdapter(nn.Module):
         pixel_size: Float[Tensor, "*#batch 2"],
         multiplier: float = 0.1,
     ) -> Float[Tensor, " *batch"]:
-        """Get scale multiplier.
-
-        Args:
-            intrinsics: The intrinsics.
-            pixel_size: The pixel size.
-            multiplier: The multiplier.
-
-        Returns:
-            The return value.
-        """
         xy_multipliers = multiplier * einsum(
             intrinsics[..., :2, :2].inverse(),
             pixel_size,
@@ -148,18 +113,8 @@ class GaussianAdapter(nn.Module):
 
     @property
     def d_sh(self) -> int:
-        """D sh.
-
-        Returns:
-            The return value.
-        """
         return (self.cfg.sh_degree + 1) ** 2
 
     @property
     def d_in(self) -> int:
-        """D in.
-
-        Returns:
-            The return value.
-        """
         return 7 + 3 * self.d_sh

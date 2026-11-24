@@ -4,7 +4,6 @@ from torch.nn import functional as F
 
 
 class ChannelLastConv1d(nn.Conv1d):
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x.permute(0, 2, 1)
         x = super().forward(x)
@@ -14,7 +13,6 @@ class ChannelLastConv1d(nn.Conv1d):
 
 # https://github.com/Stability-AI/sd3-ref
 class MLP(nn.Module):
-
     def __init__(
         self,
         dim: int,
@@ -48,7 +46,6 @@ class MLP(nn.Module):
 
 
 class ConvMLP(nn.Module):
-
     def __init__(
         self,
         dim: int,
@@ -75,21 +72,9 @@ class ConvMLP(nn.Module):
         hidden_dim = int(2 * hidden_dim / 3)
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
-        self.w1 = ChannelLastConv1d(dim,
-                                    hidden_dim,
-                                    bias=False,
-                                    kernel_size=kernel_size,
-                                    padding=padding)
-        self.w2 = ChannelLastConv1d(hidden_dim,
-                                    dim,
-                                    bias=False,
-                                    kernel_size=kernel_size,
-                                    padding=padding)
-        self.w3 = ChannelLastConv1d(dim,
-                                    hidden_dim,
-                                    bias=False,
-                                    kernel_size=kernel_size,
-                                    padding=padding)
+        self.w1 = ChannelLastConv1d(dim, hidden_dim, bias=False, kernel_size=kernel_size, padding=padding)
+        self.w2 = ChannelLastConv1d(hidden_dim, dim, bias=False, kernel_size=kernel_size, padding=padding)
+        self.w3 = ChannelLastConv1d(dim, hidden_dim, bias=False, kernel_size=kernel_size, padding=padding)
 
     def forward(self, x):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))

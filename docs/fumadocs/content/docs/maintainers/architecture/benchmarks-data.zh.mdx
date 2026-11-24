@@ -7,7 +7,7 @@ description: Benchmark manifest、task YAML、dataset、model-zoo metadata 和 r
 
 Catalog YAML 是可读支持状态与可运行 evaluation 代码之间的桥梁。本文说明 `worldfoundry/data/` 下的文件如何变为 `WorldModelConfig`、`BenchmarkSpec` 以及物化后的 `GenerationRequest` 行。添加 benchmark entry、排查 `zoo benchmark-show` 列出的 metric 为何 runner 未计算、或从 manifest 追到 sample loader 时读这里。
 
-执行侧同一故事见 [Workflow](/zh/docs/maintainers/architecture/workflow#task-materialization)。
+执行侧的对应流程见 [Workflow](/zh/docs/maintainers/architecture/workflow#task-materialization)。
 
 ## Catalog 到 Scorecard
 
@@ -21,7 +21,7 @@ Model 与 benchmark catalog 是并行 pipeline。二者仅在 run time 汇合—
 
 磁盘上 manifest 按领域分组，便于维护者批量浏览。字段结构相近，但各类别的 readiness 信号不同：
 
-**视频、音频与多模态模型** 位于 `worldfoundry/data/models/catalog/video/`。Readiness 取决于 `runner_target` 与 checkpoint ref——完整 entry 暴露可解析 runner；metadata-only entry 只描述意图、无可运行路径。
+**视频、音频与多模态模型** 位于 `worldfoundry/data/models/catalog/video/` 与 `multimodal/`；托管 API 模型位于 `hosted_api/`。Readiness 取决于 `runner_target` 与 checkpoint ref——完整 entry 暴露可解析 runner；metadata-only entry 只描述意图、无可运行路径。
 
 **Interactive world model** 位于 `world_models/`。Schema 与 video 相同，但侧重 world-model task coverage 与 demo/runtime notes。
 
@@ -29,15 +29,34 @@ Model 与 benchmark catalog 是并行 pipeline。二者仅在 run time 汇合—
 
 **VLA、VA 与 embodied-action 模型** 位于 `vla_va_wam/`。记录 action/task compatibility、上游 provenance 与环境 notes。只有 in-tree runtime 完整后才会出现 `runner_target`。
 
-**Benchmark catalog entry** 在 `worldfoundry/data/benchmarks/catalog/` 中记录 `benchmark_id`、domains、metrics、runner spec、dataset ref 与 `integration_status`。**External task manifest** 在 `benchmarks/tasks/external/` 中以更细粒度定义 per-sample protocol、metric ID 与 runner expectations。
+**Benchmark catalog entry** 在 `worldfoundry/data/benchmarks/catalog/` 中记录 `benchmark_id`、domains、metrics、runner spec、dataset ref 与 `integration_status`。**External task manifest** 在 `worldfoundry/data/benchmarks/tasks/external/` 中以更细粒度定义 per-sample protocol、metric ID 与 runner expectations。
 
 **Runtime profile** 在 `worldfoundry/data/models/runtime/profiles/` 中与 catalog YAML 并列，记录 YAML 无法表达的 blocker：dependency stack、command shape、checkpoint layout、device expectations 与 demo parity status。
 
+## 目录总览
+
+`worldfoundry/data/` 下只放声明式元数据；checkpoint、数据集与运行产物都不放在这里。
+
+| 路径 | 内容 |
+| --- | --- |
+| `models/catalog/<category>/<model-id>.yaml` | 每个文件一个 catalog 条目，以 `id` 为键（公开身份、来源、变体、状态与文档种子） |
+| `models/bindings/pipelines/<binding-id>.yaml` | 通用 pipeline runner 的导入目标与调用方式 |
+| `models/runtime/profiles/<model-id>.yaml` | `schema_version: 2` 执行 profile：checkpoint、输入、产物类型、`execution` 块与调用默认值 |
+| `models/runtime/environments/` | 专用 conda 环境，仅用于有记录的依赖冲突 |
+| `models/runtime/configs/<package>/` | 静态预设与示例输入，目录以读取它们的 synthesis 或 pipeline 包命名（snake_case，如 `dino_wm/`、`alayaworld_v11/`）；多个模型共用的目录使用家族名（如 `vla_va_wam/`、`video_official/`） |
+| `models/runtime/assets/` | 模型 checkpoint 的资产清单 |
+| `base_models/capabilities/*.yaml`、`base_models/stacks.yaml`、`base_models/benchmark_assets.yaml` | 共享 base-model capability（import、checkpoint、数据集及其目录要求）、命名 stack，以及每个 benchmark 需要准备的数据资产；由 `worldfoundry/base_models/capabilities.py` 加载，字段与模板见其模块 docstring |
+| `benchmarks/catalog/`、`benchmarks/tasks/`、`benchmarks/runtime_profiles/` | 每棵树中每个 benchmark 一个文件，以 benchmark id 为键 |
+| `benchmarks/assets/`、`benchmarks/eval_configs/`、`benchmarks/requirements/` | Prompt 集、参考文件、评测预设与固定版本的评测依赖 |
+| `test_cases/` | 不纳入 Git；需要时在本地放置 fixture 语料 |
+
+Catalog 条目与变体通过 `runtime_profile` 与 `pipeline_binding` 引用 profile 和 binding，每个 profile 也通过 `execution.pipeline_binding` 声明自己执行的 binding。每个 binding 的 `model_id` 等于引用它的条目、变体或 profile 的 id，因此像 `wan2.1-t2v-1.3b-832x480-81f` 这样的预设 profile 即使与其 catalog 变体导入同一个 pipeline，也保留自己的 binding；`make lint` 会校验这一点。Studio 以 profile 的调用默认值为底、叠加自身 override，因此生成默认值只在 profile 中写一次。
+
 ## 解析 Pipeline
 
-Python 不会随意直读 raw YAML。每个 catalog 领域遵循相同三步：**schema 解析** 把较松的作者输入归一化为 typed entry；**registry 构建** 创建 CLI 查询用的 alias 索引；**spec 转换** 产出 evaluation API 导入的公开契约。
+Python 不会直接读取未经处理的 raw YAML。每个 catalog 领域遵循相同三步：**schema 解析** 把较松的作者输入归一化为 typed entry；**registry 构建** 创建 CLI 查询用的 alias 索引；**spec 转换** 产出 evaluation API 导入的公开契约。
 
-Model 侧：`schema.py` 产出 `ModelZooEntry`；`zoo_registry.py` 按 id、alias、task、integration status 索引；`manifest.py` 转为 `WorldModelManifest`。Benchmark 侧：`evaluation/tasks/catalog/` 中的平行链路产出 `BenchmarkZooEntry` → `BenchmarkZooRegistry` → `BenchmarkSpec`。
+Model 侧：`schema.py` 产出 `ModelZooEntry`；`zoo_registry.py` 按 id、alias、task、integration status 索引；`manifest.py` 转为 `WorldModelManifest`。Benchmark 侧：`evals/tasks/catalog/` 中的平行链路产出 `BenchmarkZooEntry` → `BenchmarkZooRegistry` → `BenchmarkSpec`。
 
 Catalog field 迁移或重命名时先改 schema parser——registry 查询、resolver 行为与 docs export 都依赖它。
 
@@ -47,7 +66,7 @@ Task YAML 比 benchmark-zoo catalog entry 更细：定义 sample 列、expected 
 
 <ArchDiagram id="task-materialize" locale="zh" />
 
-在 generation 耗 GPU 前用 `worldfoundry-eval task materialize` 证明此步。跳过 materialization 是“文档里 benchmark 可用、CI 却失败”最常见原因——runner 从未见到 task YAML 承诺的 sample ID。
+在 generation 消耗 GPU 资源前，用 `wf task materialize` 验证此步。跳过 materialization 是“文档里 benchmark 可用、CI 却失败”最常见原因——runner 从未见到 task YAML 承诺的 sample ID。
 
 ## External Benchmark 执行
 
@@ -74,7 +93,7 @@ Dataset manifest 指向 sample 文件或 object-storage key。Materialization �
     如果有 official runnable path，实现或指向一个 `ManifestBenchmarkRunner`。
   </Step>
   <Step>
-    运行 `worldfoundry-eval task materialize`，在 model generation 前证明 request materialization。
+    运行 `wf task materialize`，在 model generation 前证明 request materialization。
   </Step>
   <Step>
     用 `metrics/summary.json`、`scorecard.json` 和 benchmark-specific validation scripts 验证输出。

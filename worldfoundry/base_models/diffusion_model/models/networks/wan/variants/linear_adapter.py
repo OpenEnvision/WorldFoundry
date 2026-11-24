@@ -11,12 +11,15 @@ camera, VACE, causal, or TeaCache hooks are added here.
 
 import torch.nn as nn
 
-from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.linear import WanAttentionBlock, WanLinearAttentionModel, WanModel
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.linear import (
+    WanAttentionBlock,
+    WanLinearAttentionModel,
+    WanModel,
+)
 
 
 class SanaVideoMSBlock(WanAttentionBlock):
     """Checkpoint alias of :class:`WanAttentionBlock` for Sana-Video weights."""
-    pass
 
 
 class SanaWanModel(WanModel):

@@ -7,14 +7,18 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import imageio.v3 as iio
 import numpy as np
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import checkpoint_root_candidates
 from worldfoundry.core.media.codecs.video import materialize_video_input
+
+RUNTIME_DIR = Path(__file__).resolve().parent / "ac3d_runtime"
 
 DEFAULT_AC3D_REPO_ID = "snap-research/ac3d"
 DEFAULT_COGVIDEOX_2B_REPO = "THUDM/CogVideoX-2b"
@@ -25,15 +29,6 @@ DEFAULT_PROMPT = (
     "the bright red sauce splatters across their fur. The scene takes place in a lush, green "
     "meadow surrounded by rolling hills, with a few grazing cows in the background."
 )
-
-
-def _local_repo_candidates() -> tuple[Path, ...]:
-    candidates: list[Path] = []
-    configured = os.environ.get("WORLDFOUNDRY_AC3D_REPO_ROOT")
-    if configured:
-        candidates.append(Path(configured).expanduser())
-    candidates.append(Path(__file__).resolve().parent / "ac3d_runtime")
-    return tuple(candidates)
 
 
 def _ckpt_root_candidates() -> tuple[Path, ...]:
@@ -81,15 +76,6 @@ def _default_base_model_path(variant: str) -> str:
     if local:
         return local
     return DEFAULT_COGVIDEOX_5B_REPO if variant == "5b" else DEFAULT_COGVIDEOX_2B_REPO
-
-
-def _default_repo_root() -> str:
-    configured = os.environ.get("WORLDFOUNDRY_AC3D_REPO_ROOT")
-    if configured:
-        return str(Path(configured).expanduser())
-    local = _first_existing(_local_repo_candidates())
-    candidates = _local_repo_candidates()
-    return local or str(candidates[0])
 
 
 def _variant_controlnet_kwargs(variant: str) -> dict[str, Any]:
@@ -216,14 +202,18 @@ def stage_direct_camera_dataset(
     for directory in (video_dir, pose_dir, annotation_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
-    source_path = Path(
-        materialize_video_input(
-            video,
-            output_dir=str(video_dir),
-            filename="input.mp4",
-            fps=int(fps),
+    source_path = (
+        Path(
+            materialize_video_input(
+                video,
+                output_dir=str(video_dir),
+                filename="input.mp4",
+                fps=int(fps),
+            )
         )
-    ).expanduser().resolve()
+        .expanduser()
+        .resolve()
+    )
     suffix = source_path.suffix.lower() or ".mp4"
     staged_video = video_dir / f"input{suffix}"
     if source_path != staged_video.resolve(strict=False):
@@ -283,7 +273,6 @@ class AC3DRuntime:
         self,
         *,
         model_id: str = MODEL_ID,
-        runtime_root: str | Path | None = None,
         base_model_path: str | Path | None = None,
         controlnet_model_path: str | Path | None = None,
         variant: str = "2b",
@@ -296,7 +285,7 @@ class AC3DRuntime:
         self.model_name = self.DISPLAY_NAME
         self.generation_type = "camera_control_video"
         self.variant = resolved_variant
-        self.runtime_root = str(Path(runtime_root or _default_repo_root()).expanduser())
+        self.runtime_root = str(RUNTIME_DIR)
         self.base_model_path = str(base_model_path or _default_base_model_path(resolved_variant))
         self.controlnet_model_path = str(controlnet_model_path or _default_controlnet_path(resolved_variant))
         self.device = device
@@ -334,7 +323,7 @@ class AC3DRuntime:
         device: str | None = None,
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "AC3DRuntime":
+    ) -> AC3DRuntime:
         options = dict(pretrained_model_path) if isinstance(pretrained_model_path, Mapping) else {}
         if pretrained_model_path is not None and not isinstance(pretrained_model_path, Mapping):
             options["controlnet_model_path"] = str(pretrained_model_path)
@@ -372,7 +361,6 @@ class AC3DRuntime:
         }
         return cls(
             model_id=str(options.get("model_id") or options.get("profile_id") or model_id or cls.MODEL_ID),
-            runtime_root=options.get("runtime_root") or options.get("repo_root") or _default_repo_root(),
             base_model_path=options.get("base_model_path") or options.get("cogvideox_model_path"),
             controlnet_model_path=(
                 options.get("controlnet_model_path")
@@ -409,12 +397,7 @@ class AC3DRuntime:
 
     def _command(self, output_dir: Path, prompt: str, options: Mapping[str, Any]) -> list[str]:
         command = [
-            self.python_executable,
-            "-m",
-            "worldfoundry.synthesis.visual_generation.ac3d.runtime",
             "--run-official",
-            "--runtime_root",
-            self.runtime_root,
             "--prompt",
             prompt or DEFAULT_PROMPT,
             "--video_root_dir",
@@ -476,13 +459,14 @@ class AC3DRuntime:
                 command.extend([f"--{key}", str(value)])
         if _as_bool(options.get("controlnet_transformer_out_proj_dim_zero_init")):
             command.append("--controlnet_transformer_out_proj_dim_zero_init")
-        return command
+        return package_module_command(
+            "worldfoundry.synthesis.visual_generation.ac3d.runtime",
+            command,
+            python_executable=self.python_executable,
+        )
 
     def _subprocess_env(self) -> dict[str, str]:
         env = os.environ.copy()
-        src_root = Path(__file__).resolve().parents[4]
-        pythonpath = [str(src_root), self.runtime_root, env.get("PYTHONPATH", "")]
-        env["PYTHONPATH"] = os.pathsep.join(item for item in pythonpath if item)
         if self.device.startswith("cuda:"):
             env.setdefault("CUDA_VISIBLE_DEVICES", self.device.split(":", 1)[1])
         return env
@@ -580,7 +564,9 @@ class AC3DRuntime:
                 stderr=stderr,
             )
         except subprocess.CalledProcessError as error:
-            raise RuntimeError("AC3D generation failed. Check runtime dependencies, dataset paths, and GPU memory.") from error
+            raise RuntimeError(
+                "AC3D generation failed. Check runtime dependencies, dataset paths, and GPU memory."
+            ) from error
 
         start_idx = int(options["start_camera_idx"])
         generated_path = output_dir / f"{start_idx:05d}_out.mp4"
@@ -617,16 +603,10 @@ class AC3DRuntime:
         return frames
 
 
-def _prepend_sys_path(path_value: str | Path) -> None:
-    resolved = str(Path(path_value).expanduser().resolve())
-    if resolved not in sys.path:
-        sys.path.insert(0, resolved)
-
-
 def _run_official(args: argparse.Namespace) -> None:
-    _prepend_sys_path(args.runtime_root)
-    import inference.cli_demo_camera as cli_demo_camera
     import torch
+
+    from .ac3d_runtime.inference import cli_demo_camera
 
     # Upstream's generate_video reads the parsed CLI namespace as a module global
     # for a few ControlNet transformer options. Mirror the official CLI execution
@@ -671,7 +651,6 @@ def _run_official(args: argparse.Namespace) -> None:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="WorldFoundry AC3D official runtime bridge")
     parser.add_argument("--run-official", action="store_true")
-    parser.add_argument("--runtime_root", required=True)
     parser.add_argument("--prompt", default=DEFAULT_PROMPT)
     parser.add_argument("--video_root_dir", required=True)
     parser.add_argument("--annotation_json", default="annotations/test.json")
@@ -710,7 +689,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.run_official:
         _run_official(args)
     else:
-        print(json.dumps({"status": "ready", "runtime_root": args.runtime_root}))
+        print(json.dumps({"status": "ready", "runtime_root": str(RUNTIME_DIR)}))
 
 
 if __name__ == "__main__":

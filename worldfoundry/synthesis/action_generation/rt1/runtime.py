@@ -4,9 +4,10 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 
@@ -100,7 +101,7 @@ class RT1SavedModelRuntime:
         device = self.config.device.lower()
         if device.startswith("/"):
             return self.config.device
-        if device.startswith("cuda") or device.startswith("gpu"):
+        if device.startswith(("cuda", "gpu")):
             return "/GPU:0"
         return "/CPU:0"
 
@@ -113,8 +114,7 @@ class RT1SavedModelRuntime:
 
         if self._model is None:
             import tensorflow as tf
-            import tensorflow_probability as _tfp  # noqa: F401
-
+            import tensorflow_probability as _tfp  # noqa: F401 - Registers the TFP ops the SavedModel uses.
 
             self._tf = tf
             with tf.device(self.tf_device):

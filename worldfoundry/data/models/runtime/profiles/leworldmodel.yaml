@@ -7,6 +7,7 @@ groups:
 - latent
 source_repos:
 - url: https://github.com/lucas-maes/le-wm
+  revision: 8edfeb336732b5f3ce7b8b210d0ba370a09e2cac
 checkpoints:
 - repo_id: eren23/lewm-models
   role: leworldmodel_checkpoint

@@ -4,8 +4,8 @@ CUDA point-cloud renderer (pure PyTorch, no EGL/OpenGL).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -13,13 +13,13 @@ import torch
 
 @dataclass(frozen=True)
 class RenderOutput:
-    rgb_u8: np.ndarray       # (H,W,3) uint8
-    depth_f32: np.ndarray    # (H,W) float32, 0 = invalid
+    rgb_u8: np.ndarray  # (H,W,3) uint8
+    depth_f32: np.ndarray  # (H,W) float32, 0 = invalid
 
 
 @dataclass(frozen=True)
 class RenderOutputTorch:
-    rgb_u8: torch.Tensor     # (H,W,3) uint8 on device
+    rgb_u8: torch.Tensor  # (H,W,3) uint8 on device
     depth_f32: torch.Tensor  # (H,W) float32 on device
 
 
@@ -39,8 +39,8 @@ class TorchPointCloudRenderer:
         z_soft_alpha: float = 500.0,
         mode: str = "fast",
         use_fp16_cache: bool = True,
-        axis_flip: Optional[np.ndarray] = None,
-        max_points: Optional[int] = None,
+        axis_flip: np.ndarray | None = None,
+        max_points: int | None = None,
     ) -> None:
         self.width = int(width)
         self.height = int(height)
@@ -93,8 +93,8 @@ class TorchPointCloudRenderer:
         c2w_4x4: np.ndarray,
         c2w_is_camera_to_world: bool = True,
         return_torch: bool = False,
-        point_ranges: Optional[Sequence[Tuple[int, int]]] = None,
-    ) -> Union[RenderOutput, RenderOutputTorch]:
+        point_ranges: Sequence[tuple[int, int]] | None = None,
+    ) -> RenderOutput | RenderOutputTorch:
         K = torch.tensor(np.asarray(K_3x3, dtype=np.float32), device=self.device)
         if K.shape != (3, 3):
             raise ValueError(f"K must be (3,3), got {tuple(K.shape)}")
@@ -127,15 +127,15 @@ class TorchPointCloudRenderer:
             if not parts_xyz:
                 z_img = torch.zeros((self.height, self.width, 3), device=self.device, dtype=torch.uint8)
                 z_d = torch.zeros((self.height, self.width), device=self.device, dtype=torch.float32)
-                return RenderOutputTorch(rgb_u8=z_img, depth_f32=z_d) if return_torch else RenderOutput(
-                    rgb_u8=z_img.cpu().numpy(), depth_f32=z_d.cpu().numpy())
+                return (
+                    RenderOutputTorch(rgb_u8=z_img, depth_f32=z_d)
+                    if return_torch
+                    else RenderOutput(rgb_u8=z_img.cpu().numpy(), depth_f32=z_d.cpu().numpy())
+                )
             xyz = parts_xyz[0] if len(parts_xyz) == 1 else torch.cat(parts_xyz)
             rgb0 = parts_rgb[0] if len(parts_rgb) == 1 else torch.cat(parts_rgb)
 
-        if xyz.dtype == torch.float16 and R.dtype != torch.float16:
-            X = (xyz @ R.half().T) + t.half()
-        else:
-            X = (xyz @ R.T) + t
+        X = xyz @ R.half().T + t.half() if xyz.dtype == torch.float16 and R.dtype != torch.float16 else xyz @ R.T + t
         z = X[:, 2]
         valid = (z > self.near) & (z < self.far) & torch.isfinite(z)
         X, z, rgb_v = X[valid], z[valid], rgb0[valid]
@@ -197,12 +197,14 @@ class TorchPointCloudRenderer:
         K_3x3: np.ndarray,
         c2w_4x4: np.ndarray,
         c2w_is_camera_to_world: bool = True,
-        point_ranges: Optional[Sequence[Tuple[int, int]]] = None,
+        point_ranges: Sequence[tuple[int, int]] | None = None,
     ) -> RenderOutputTorch:
         out = self.render(
-            K_3x3=K_3x3, c2w_4x4=c2w_4x4,
+            K_3x3=K_3x3,
+            c2w_4x4=c2w_4x4,
             c2w_is_camera_to_world=c2w_is_camera_to_world,
-            return_torch=True, point_ranges=point_ranges,
+            return_torch=True,
+            point_ranges=point_ranges,
         )
         assert isinstance(out, RenderOutputTorch)
         return out

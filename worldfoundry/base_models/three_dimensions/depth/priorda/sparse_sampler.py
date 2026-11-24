@@ -2,11 +2,8 @@
 # https://github.com/SpatialVision/Prior-Depth-Anything
 # Licensed under the Apache-2.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> three_dimensions -> depth -> priorda -> sparse_sampler.py functionality."""
-
 import re
 import warnings
-from typing import Dict
 
 import cv2
 import numpy as np
@@ -21,17 +18,11 @@ except ImportError:
 
 
 class SparseSampler:
-    """Sparse sampler implementation."""
     def __init__(self, device="cuda:0"):
-        """Init.
-
-        Args:
-            device: The device.
-        """
         self.device = device
         self.min_depth = 0.0001  # We always filter out depth <= 0.
 
-    def __call__(self, image, prior, geometric=None, pattern=None, K=5, prior_cover=False) -> Dict[str, torch.Tensor]:
+    def __call__(self, image, prior, geometric=None, pattern=None, K=5, prior_cover=False) -> dict[str, torch.Tensor]:
         """
         1. Handles the loading and preprocessing of image and prior depth data.
         2. Samples sparse depth points based on the provided pattern or prior depth information.
@@ -149,13 +140,6 @@ class SparseSampler:
         return data
 
     def get_sparse_depth(self, image, prior, pattern=None):
-        """Get sparse depth.
-
-        Args:
-            image: The image.
-            prior: The prior.
-            pattern: The pattern.
-        """
         height, width, c = image.shape[-3:]
         low_height, low_width = prior.shape[-2:]
 
@@ -172,7 +156,9 @@ class SparseSampler:
             idx_nnz = torch.nonzero(prior.view(-1) > self.min_depth, as_tuple=False)
             num_idx = len(idx_nnz)
             if num_idx < num_sample:
-                warnings.warn(f"Aiming to sample {num_sample} points, but only {num_idx} valid points in the map.")
+                warnings.warn(
+                    f"Aiming to sample {num_sample} points, but only {num_idx} valid points in the map.", stacklevel=1
+                )
 
             idx_sample = torch.randperm(num_idx)[:num_sample]
             idx_nnz = idx_nnz[idx_sample[:]]
@@ -339,22 +325,13 @@ class SparseSampler:
 
         else:
             raise NotImplementedError(
-                (
-                    "'pattern' should be in format of ['^LiDAR_\d+$', 'sift', 'orb', '^cubic_\d+$', '^distance_\d+_\d+$',"
-                    "'^downscale_\d*$', '(int)'], but the provided 'pattern' is -- '{}'".format(pattern)
-                )
+                "'pattern' should be in format of ['^LiDAR_\d+$', 'sift', 'orb', '^cubic_\d+$', '^distance_\d+_\d+$',"
+                f"'^downscale_\d*$', '(int)'], but the provided 'pattern' is -- '{pattern}'"
             )
 
         return sparse_depth, sparse_mask, cover_mask
 
     def interpolate_depths(self, sparse_depths, sparse_masks, complete_masks):
-        """Interpolate depths.
-
-        Args:
-            sparse_depths: The sparse depths.
-            sparse_masks: The sparse masks.
-            complete_masks: The complete masks.
-        """
         if torch_cluster is None:
             raise ImportError("torch_cluster is required for SparseSampler.interpolate_depths")
 

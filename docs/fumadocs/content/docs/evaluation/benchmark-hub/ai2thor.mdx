@@ -1,29 +1,29 @@
 ---
 title: AI2-THOR
-description: "Ai2 Unity household simulator: 120 iTHOR rooms. WorldFoundry can step closed-loop FloorPlan wiring; it does not ship ALFRED or TEACh."
+description: "Ai2 Unity household simulator: 120 iTHOR rooms. WorldFoundry runs closed-loop FloorPlan checks or imports rollout exports."
 ---
 
-AI2-THOR (Allen Institute for AI) is a **Unity** household simulator for embodied AI. The original **iTHOR** set is **120** artist-built rooms: 30 kitchens, 30 living rooms, 30 bedrooms, 30 bathrooms (`FloorPlan1–30`, `201–230`, `301–330`, `401–430`). Agents take **discrete** actions (`MoveAhead`, `RotateLeft`, `PickupObject`, open/close, toggle) against physics and object state. The usual iTHOR split is **20 / 5 / 5** train / val / test rooms per type. Later packs (RoboTHOR, ProcTHOR) and language stacks (**ALFRED**, **TEACh**) sit on this engine — they are not the WorldFoundry default.
+AI2-THOR (Allen Institute for AI) is a **Unity** household simulator for embodied AI. The original **iTHOR** set is **120** artist-built rooms: 30 kitchens, 30 living rooms, 30 bedrooms, 30 bathrooms (`FloorPlan1–30`, `201–230`, `301–330`, `401–430`). Agents take **discrete** actions (`MoveAhead`, `RotateLeft`, `PickupObject`, open/close, toggle) against physics and object state. The usual iTHOR split is **20 / 5 / 5** train / val / test rooms per type. Later packs (RoboTHOR, ProcTHOR) and language stacks (**ALFRED**, **TEACh**) build on this engine and are separate downloads.
 
 Paper: [AI2-THOR: An Interactive 3D Environment for Visual AI](https://arxiv.org/abs/1712.05474). Project: [ai2thor.allenai.org](https://ai2thor.allenai.org/). Code: [allenai/ai2thor](https://github.com/allenai/ai2thor) (Apache-2.0).
 
-WorldFoundry **evaluates** a native closed loop: `worldfoundry-eval embodied run` boots the Unity build and steps a policy that already emits simulator tokens. In-tree configs (`FloorPlan1`–`FloorPlan3`) are **wiring checks**, not ALFRED/TEACh. You can also **import** a rollout export via `WORLDFOUNDRY_AI2THOR_RESULTS_PATH`. This page does **not** run VLA inference — supply the policy or policy server yourself.
+WorldFoundry **evaluates** a native closed loop: `wf embodied run` boots the Unity build and steps a policy that already emits simulator tokens. The bundled configs (`FloorPlan1`–`FloorPlan3`) are **closed-loop smoke checks**, not ALFRED/TEACh tasks. You can also **import** a rollout export via `WORLDFOUNDRY_AI2THOR_RESULTS_PATH`. WorldFoundry does **not** run VLA inference for this benchmark; supply the policy or policy server yourself.
 
 <BenchmarkPageSections id="ai2thor" locale="en" />
 
 ## How to run
 
-Closed-loop wiring (Unity package, simulator cache, and a CloudRendering or X11 display):
+Closed-loop check (requires the Unity package, simulator cache, and a CloudRendering or X11 display):
 
 ```bash
-worldfoundry-eval embodied run \
+wf embodied run \
   --config worldfoundry/data/benchmarks/eval_configs/embodied/ai2thor/floorplan1.yaml
 ```
 
 Import an existing export:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id ai2thor \
   --mode official-validation \
   --official-results-path <official_results.json> \

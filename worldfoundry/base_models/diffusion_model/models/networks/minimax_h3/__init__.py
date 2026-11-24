@@ -12,6 +12,16 @@ are intentionally omitted; the numerics and the fp32/bf16 parameter split are
 preserved exactly.
 """
 
+from .acceleration import (
+    DEFAULT_MINIMAX_H3_FP8_EXCLUDES,
+    MiniMaxH3AccelerationConfig,
+    accelerate_minimax_h3_dit,
+    compile_minimax_h3_blocks,
+    fuse_minimax_h3_projections,
+    install_minimax_h3_cuda_graph,
+    minimax_h3_sol_profile,
+    quantize_minimax_h3_fp8,
+)
 from .config import (
     MINIMAX_H3_ADALN_MODALITY_NUM,
     MINIMAX_H3_PACKED_SEQUENCE_ALIGNMENT,
@@ -20,16 +30,28 @@ from .config import (
 from .dit import (
     MINIMAX_H3_FP32_BUFFER_NAMES,
     MINIMAX_H3_FP32_PARAM_NAMES,
+    MiniMaxH3ContextParallelConfig,
     MiniMaxH3DiTModel,
     reorder_grouped_qkv_to_qkv,
+    resolve_minimax_h3_context_parallel,
 )
 
 __all__ = [
+    "DEFAULT_MINIMAX_H3_FP8_EXCLUDES",
     "MINIMAX_H3_ADALN_MODALITY_NUM",
     "MINIMAX_H3_FP32_BUFFER_NAMES",
     "MINIMAX_H3_FP32_PARAM_NAMES",
     "MINIMAX_H3_PACKED_SEQUENCE_ALIGNMENT",
+    "MiniMaxH3AccelerationConfig",
+    "MiniMaxH3ContextParallelConfig",
     "MiniMaxH3DiTArchConfig",
     "MiniMaxH3DiTModel",
+    "accelerate_minimax_h3_dit",
+    "compile_minimax_h3_blocks",
+    "fuse_minimax_h3_projections",
+    "install_minimax_h3_cuda_graph",
+    "minimax_h3_sol_profile",
+    "quantize_minimax_h3_fp8",
     "reorder_grouped_qkv_to_qkv",
+    "resolve_minimax_h3_context_parallel",
 ]

@@ -1,18 +1,7 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> dataset -> shims -> patch_shim.py functionality."""
-
 from ..types import BatchedExample, BatchedViews
 
 
 def apply_patch_shim_to_views(views: BatchedViews, patch_size: int) -> BatchedViews:
-    """Apply patch shim to views.
-
-    Args:
-        views: The views.
-        patch_size: The patch size.
-
-    Returns:
-        The return value.
-    """
     _, _, _, h, w = views["image"].shape
 
     # Image size must be even so that naive center-cropping does not cause misalignment.

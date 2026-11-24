@@ -15,7 +15,7 @@ SRC_ROOT = REPO_ROOT
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json  # noqa: E402
+from worldfoundry.evals.tasks.execution.framework.io import utc_now_iso, write_json  # noqa: E402
 from worldfoundry.runtime.assets import expand_worldfoundry_path  # noqa: E402
 
 
@@ -472,7 +472,7 @@ def _validation_commands(benchmarks: list[Mapping[str, Any]], output_root: Path)
         commands.extend(
             [
                 f"# {benchmark_id}",
-                "worldfoundry-eval zoo benchmark-run \\",
+                "wf zoo benchmark-run \\",
                 f"  --benchmark-id {shlex.quote(benchmark_id)} \\",
                 "  --mode official-validation \\",
                 f"  --official-results-path \"${{{result_env}}}\" \\",
@@ -544,7 +544,7 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
         "next_commands": [
             f"source {env_path}",
             f"bash {repo_check_path}",
-            "worldfoundry-eval zoo benchmarks --json",
+            "wf zoo benchmarks --json",
             f"bash {validation_plan_path}",
         ],
     }

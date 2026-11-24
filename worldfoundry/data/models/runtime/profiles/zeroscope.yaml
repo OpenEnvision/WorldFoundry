@@ -1,19 +1,23 @@
-artifact_filename: zeroscope.mp4
-artifact_kind: generated_video
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: zeroscope
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/cerspense--zeroscope_v2_576w
   repo_id: cerspense/zeroscope_v2_576w
   role: diffusers_text_to_video_checkpoint
-id: zeroscope
 input_schema:
   image: false
   prompt: true
-integration_status: integrated
+artifact_kind: generated_video
+artifact_filename: zeroscope.mp4
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: diffusers_text_to_video_ready
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - HF-only legacy U-Net diffusion model executed by worldfoundry/synthesis/visual_generation/zeroscope/worldfoundry_runtime.py
-  with worldfoundry/synthesis/visual_generation/zeroscope/zeroscope_synthesis.py
-  kept as a thin synthesis adapter.
+  with worldfoundry/synthesis/visual_generation/zeroscope/zeroscope_synthesis.py kept
+  as a thin synthesis adapter.
 - CC-BY-NC-4.0 requires benchmark policy review before commercial or automated benchmark
   use.
-runtime_status: diffusers_text_to_video_ready

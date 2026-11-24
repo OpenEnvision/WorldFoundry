@@ -1,104 +1,108 @@
 import argparse
 import os
-import sys
 import time
 
-import kairos.apis.kairos_embodied_api  # noqa: F401 - registers KairosEmbodiedAPI
 import mmengine
 import torch
 import torch.distributed as dist
-from kairos.apis.builder import build_model_pipeline
-from kairos.modules.utils import FLAGS_KAIROS_PLAT_DEVICE, parallel_state, save_image, save_video
-from kairos.modules.utils.prompt_rewriter import PromptRewriter
 from mmengine import Config
 from mmengine.dist import get_dist_info, init_dist
 from PIL import Image
 
+import worldfoundry.synthesis.visual_generation.kairos.kairos_runtime.kairos.apis.kairos_embodied_api  # noqa: F401 - registers KairosEmbodiedAPI
 from worldfoundry.core.io.paths import package_data_path
+from worldfoundry.synthesis.visual_generation.kairos.config import load_kairos_config
+from worldfoundry.synthesis.visual_generation.kairos.kairos_runtime.kairos.apis.builder import build_model_pipeline
+from worldfoundry.synthesis.visual_generation.kairos.kairos_runtime.kairos.modules.utils import (
+    parallel_state,
+    save_image,
+    save_video,
+)
+from worldfoundry.synthesis.visual_generation.kairos.kairos_runtime.kairos.modules.utils.prompt_rewriter import (
+    PromptRewriter,
+)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='TRAIN_MODEL_LOOP')
-    parser.add_argument('--input_file', default='', help='input_file')
+    parser = argparse.ArgumentParser(description="TRAIN_MODEL_LOOP")
+    parser.add_argument("--input_file", default="", help="input_file")
     parser.add_argument(
-        '--config_file',
-        default=str(package_data_path('models', 'runtime', 'configs', 'kairos', 'kairos_4b_config_DMD.py')),
-        help='path to config file'
+        "--config_file",
+        default=str(package_data_path("models", "runtime", "configs", "kairos", "kairos_4b_config_DMD.py")),
+        help="path to config file",
     )
 
     args = parser.parse_args()
 
     return args
 
+
 def print_gpu_memory(device_id=0):
     """
-     打印指定 GPU 的显存使用情况（只统计 PyTorch 占用）
+    Print the PyTorch memory usage of the GPU that belongs to this process.
 
+    The GPU is chosen from ``LOCAL_RANK`` or ``RANK`` (falling back to GPU 0); ``device_id`` is ignored.
     """
-        # 1. 获取当前进程的rank值（适配常见的分布式训练环境变量）
+
     def get_current_rank():
-        # 优先读取LOCAL_RANK（单机多卡），其次是RANK（多机多卡）
+        # LOCAL_RANK covers single-node multi-GPU runs; RANK covers multi-node runs.
         rank = os.environ.get("LOCAL_RANK") or os.environ.get("RANK")
         if rank is None:
-            # 未找到rank环境变量，默认使用0号卡
-            print("警告：未检测到RANK/LOCAL_RANK环境变量，默认使用GPU 0")
+            print("Warning: RANK/LOCAL_RANK is not set, using GPU 0")
             return 0
         try:
             return int(rank)
         except ValueError:
-            print(f"警告：环境变量中的rank值 '{rank}' 不是有效数字，默认使用GPU 0")
+            print(f"Warning: rank '{rank}' from the environment is not an integer, using GPU 0")
             return 0
 
-    # 获取当前rank对应的显卡ID
     device_id = get_current_rank()
 
-    # 安全检查：确保显卡ID有效
     if device_id >= torch.cuda.device_count():
-        print(f"警告：rank {device_id} 对应的GPU ID超出可用范围（可用GPU数：{torch.cuda.device_count()}），默认使用GPU 0")
+        print(
+            f"Warning: GPU ID {device_id} for this rank exceeds the available GPUs ({torch.cuda.device_count()}), using GPU 0"
+        )
         device_id = 0
-    # 切换到目标 GPU
     torch.cuda.set_device(device_id)
-    
-    # 1. PyTorch 实际使用的显存（核心）
-    used = torch.cuda.memory_allocated(device_id) / 1024**3  # 转 GB
-    # 2. PyTorch 缓存的显存（闲置未释放）
-    cached = torch.cuda.memory_reserved(device_id) / 1024**3
-    # 3. GPU 总显存
-    total = torch.cuda.get_device_properties(device_id).total_memory / 1024**3
-    
-    print(f"GPU {device_id} 显存统计：")
-    print(f"  实际使用：{used:.2f} GB")
-    print(f"  缓存显存：{cached:.2f} GB")
-    print(f"  总显存：{total:.2f} GB")
-    print(f"  实际使用率：{used/total*100:.2f}%")
 
-if __name__ == '__main__':
+    used = torch.cuda.memory_allocated(device_id) / 1024**3  # GiB held by tensors
+    cached = torch.cuda.memory_reserved(device_id) / 1024**3  # GiB reserved by the caching allocator
+    total = torch.cuda.get_device_properties(device_id).total_memory / 1024**3
+
+    print(f"GPU {device_id} memory:")
+    print(f"  Allocated: {used:.2f} GB")
+    print(f"  Reserved: {cached:.2f} GB")
+    print(f"  Total: {total:.2f} GB")
+    print(f"  Allocated ratio: {used / total * 100:.2f}%")
+
+
+if __name__ == "__main__":
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     torch.cuda.set_device(local_rank)
 
-    init_dist(launcher='pytorch')
+    init_dist(launcher="pytorch")
     rank, world_size = get_dist_info()
- 
-    print('RANK: {} || WORLD_SIZE: {}'.format(rank, world_size))
+
+    print(f"RANK: {rank} || WORLD_SIZE: {world_size}")
 
     args = parse_args()
 
     cfg_path = args.config_file
 
-    if cfg_path == '':
-        ValueError('config path is empty')
+    if cfg_path == "":
+        ValueError("config path is empty")
         exit()
 
     input_file = args.input_file
     input_args_d = mmengine.load(input_file)
-    
-    output_dir = input_args_d['output_dir']
+
+    output_dir = input_args_d["output_dir"]
     os.makedirs(output_dir, exist_ok=True)
-    save_path = f'{output_dir}/output.mp4'
+    save_path = f"{output_dir}/output.mp4"
 
-    cfg = Config.fromfile(cfg_path)
+    cfg = Config(load_kairos_config(cfg_path))
 
-    use_prompt_rewriter = input_args_d['use_prompt_rewriter']
+    use_prompt_rewriter = input_args_d["use_prompt_rewriter"]
     if rank == 0 and use_prompt_rewriter:
         prompt_rewriter_path = cfg.prompt_rewriter_path
         prompt_rewriter = PromptRewriter(prompt_rewriter_path)
@@ -114,7 +118,7 @@ if __name__ == '__main__':
     if not is_multi_gpu_dist:
         use_cfg_parallel = False  # treat cfg-parallel as OFF
         if rank == 0:
-            print(f"[init] dist=OFF or WORLD_SIZE=1 -> force parallel OFF ", flush=True)
+            print("[init] dist=OFF or WORLD_SIZE=1 -> force parallel OFF ", flush=True)
     else:
         parallel_state.set_vae_group(dist.group.WORLD)
 
@@ -126,8 +130,7 @@ if __name__ == '__main__':
             )
             tp_size = world_size // cfg_size  # -> 2 or 4
             assert tp_size in (2, 4), (
-                f"CFG-parallel derived tp_size={tp_size} is not supported. "
-                f"Supported tp_size: {{2, 4}}"
+                f"CFG-parallel derived tp_size={tp_size} is not supported. Supported tp_size: {{2, 4}}"
             )
         else:
             cfg_size = 1
@@ -158,58 +161,59 @@ if __name__ == '__main__':
                 f"[init] rank={rank} tp_rank={tp_rank} cfg_rank={cfg_rank} "
                 f"tp_group={dist.get_world_size(tp_group)} "
                 f"cfg_group={dist.get_world_size(cfg_group)}",
-                flush=True
+                flush=True,
             )
         else:
             if rank == 0:
                 print(f"[init] cfg_parallel=OFF tp_size={tp_size}", flush=True)
 
-    print('build pipeline ...')
+    print("build pipeline ...")
     pipeline = build_model_pipeline(cfg.pipeline)
     pipeline.eval()
-    print('build pipeline done')
+    print("build pipeline done")
 
-    print('start infer ...')
-    raw_prompt = input_args_d.get('prompt','')
-    if raw_prompt.strip() != '':
+    print("start infer ...")
+    raw_prompt = input_args_d.get("prompt", "")
+    if raw_prompt.strip() != "":
         if use_prompt_rewriter:
-            rewritten_prompt = prompt_rewriter.rewrite_prompt(raw_prompt, image_path=input_args_d.get('input_image',''))
+            rewritten_prompt = prompt_rewriter.rewrite_prompt(
+                raw_prompt, image_path=input_args_d.get("input_image", "")
+            )
         else:
             rewritten_prompt = raw_prompt
-        
-        input_args_d['raw_prompt'] = raw_prompt
-        input_args_d['prompt'] = rewritten_prompt
 
-        print('rewritten prompt from [{}] to [{}]'.format(raw_prompt, rewritten_prompt))
+        input_args_d["raw_prompt"] = raw_prompt
+        input_args_d["prompt"] = rewritten_prompt
 
-    input_args_d.pop('output_dir')
-    input_args_d.pop('use_prompt_rewriter')
+        print(f"rewritten prompt from [{raw_prompt}] to [{rewritten_prompt}]")
+
+    input_args_d.pop("output_dir")
+    input_args_d.pop("use_prompt_rewriter")
 
     # open image
-    if 'input_image' in input_args_d and isinstance(input_args_d['input_image'], str):
-        if not input_args_d['input_image']:
-            input_args_d.pop('input_image')
+    if "input_image" in input_args_d and isinstance(input_args_d["input_image"], str):
+        if not input_args_d["input_image"]:
+            input_args_d.pop("input_image")
         else:
-            raw_imgage = input_args_d['input_image']
-            image = Image.open(input_args_d['input_image'])
-            input_args_d['input_image'] = [image]
+            raw_imgage = input_args_d["input_image"]
+            image = Image.open(input_args_d["input_image"])
+            input_args_d["input_image"] = [image]
 
-    input_args_d.pop('raw_prompt', '') 
+    input_args_d.pop("raw_prompt", "")
 
     # add prompt prefix in ti2v mode
-    if raw_prompt.strip() != '' and 'input_image' in input_args_d:
-        prompt_prefix = 'high-quality video, realistic motion, single continuous shot, no jump cuts, smooth motion. '
-        input_args_d['prompt'] = prompt_prefix + input_args_d['prompt']
+    if raw_prompt.strip() != "" and "input_image" in input_args_d:
+        prompt_prefix = "high-quality video, realistic motion, single continuous shot, no jump cuts, smooth motion. "
+        input_args_d["prompt"] = prompt_prefix + input_args_d["prompt"]
 
-    warmup = bool(input_args_d.pop('warmup', False))
+    warmup = bool(input_args_d.pop("warmup", False))
     if warmup:
-        print(f'=====================warmup====================')
+        print("=====================warmup====================")
         pipeline(**input_args_d)
-
 
     print_gpu_memory()
 
-    print(f'=====================infer====================')
+    print("=====================infer====================")
 
     start_time = time.perf_counter()
     video = pipeline(**input_args_d)
@@ -217,13 +221,13 @@ if __name__ == '__main__':
     elapsed = time.perf_counter() - start_time
 
     print(f"infer time: {elapsed:.4f}s")
-    print('infer done')
+    print("infer done")
 
     # save video
     if rank == 0:
         save_fps = 16
         if len(video) == 1:
-            save_path = save_path.replace('.mp4', '.jpg')
+            save_path = save_path.replace(".mp4", ".jpg")
             save_image(video[0], save_path)
         else:
             save_video(video, save_path, fps=save_fps, quality=5)

@@ -1,13 +1,13 @@
 ---
 title: T2VSafetyBench
-description: "NeurIPS 2024 文生视频安全评测：14 面恶意 prompt、12 项 NSFW 率。WorldFoundry 可导入或调用裁判，不编造榜单。"
+description: "NeurIPS 2024 文生视频安全评测：14 面恶意 prompt、12 项 NSFW 率。WorldFoundry 可导入官方结果或调用 GPT 裁判。"
 ---
 
-T2VSafetyBench（中科院与清华，联合 RealAI）问的是文生视频模型会不会**拒绝不安全 prompt**，包括只在**跨帧**才出现的风险。官方指标全是 NSFW **触发率**（越低越安全）。Prompt 套件有 **14 个面**；WorldFoundry 报告 **12 项率**：11 个内容面，外加合并后的**时序风险**率（连续动作、动态变换、上下文连贯）。Prompt 来自真实文本、LLM 生成与越狱攻击。视频按面由 GPT 判 NSFW / 安全，论文报告了与人工复核的相关性。
+T2VSafetyBench（中科院与清华，联合 RealAI）问的是文生视频模型会不会**拒绝不安全 prompt**，包括只在**跨帧**才出现的风险。官方指标全是 NSFW **触发率**（越低越安全）。Prompt 套件有 **14 个方面**；WorldFoundry 报告 **12 项比率**：11 个内容方面，外加合并后的**时序风险**率（连续动作、动态变换、上下文连贯）。Prompt 来自真实文本、LLM 生成与越狱攻击。GPT 按方面将视频判定为 NSFW 或安全，论文报告了与人工复核的相关性。
 
 论文：[T2VSafetyBench](https://arxiv.org/abs/2407.05965)。代码 / prompt：[yibo-miao/T2VSafetyBench](https://github.com/yibo-miao/T2VSafetyBench)。不需要 Hugging Face 数据集。
 
-WorldFoundry **内置裁判 runtime** 与导入器。导入模式只归一化官方结果文件。Judge 模式按所选 prompt 类就位生成视频，并调用仓内 GPT 评测提示。Mock API 从不当作指标证据。主键：`nsfw_average`。
+WorldFoundry **内置裁判 runtime** 与导入器。导入模式只归一化官方结果文件。Judge 模式按所选 prompt 类整理生成视频，并调用内置的 GPT 评测提示。主键：`nsfw_average`。
 
 <BenchmarkPageSections id="t2v-safety-bench" locale="zh" />
 
@@ -16,7 +16,7 @@ WorldFoundry **内置裁判 runtime** 与导入器。导入模式只归一化官
 导入官方分面率：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id t2v-safety-bench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -25,13 +25,13 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-Judge 模式需要 `OPENAI_API_KEY` 或 `WORLDFOUNDRY_T2V_SAFETY_BENCH_GPT_API_KEY`，以及 `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` 下的生成视频。可选：`WORLDFOUNDRY_T2V_SAFETY_BENCH_ROOT`、`WORLDFOUNDRY_T2V_SAFETY_BENCH_GPT_MODEL`、`--classes` / `--prompt-path`，以及用于有界接线的 `--limit`。默认导入路径：`WORLDFOUNDRY_T2V_SAFETY_BENCH_RESULTS_PATH`。
+Judge 模式需要 `OPENAI_API_KEY` 或 `WORLDFOUNDRY_T2V_SAFETY_BENCH_GPT_API_KEY`，以及 `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` 下的生成视频。可选：`WORLDFOUNDRY_T2V_SAFETY_BENCH_ROOT`、`WORLDFOUNDRY_T2V_SAFETY_BENCH_GPT_MODEL`、`--classes` / `--prompt-path`，以及用于小规模试跑的 `--limit`。默认导入路径：`WORLDFOUNDRY_T2V_SAFETY_BENCH_RESULTS_PATH`。
 
-仓内指针：
+清单、裁判 runtime 与 prompt 资产：
 
 ```text
 worldfoundry/data/benchmarks/tasks/external/t2v-safety-bench.yaml
-worldfoundry/evaluation/tasks/execution/runners/t2v_safety_bench/runtime/t2v_safety_bench
+worldfoundry/evals/tasks/execution/runners/t2v_safety_bench/runtime/t2v_safety_bench
 worldfoundry/data/benchmarks/assets/t2v-safety-bench/
 ```
 

@@ -14,11 +14,8 @@
 # https://github.com/open-mmlab/mmcv/blob/master/mmcv/ops/multi_scale_deform_attn.py
 # ------------------------------------------------------------------------------------------------
 
-"""Module for base_models -> perception_core -> detection -> grounding_dino -> models -> GroundingDINO -> ms_deform_attn.py functionality."""
-
 import math
 import warnings
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -29,6 +26,7 @@ from torch.nn.init import constant_, xavier_uniform_
 
 try:
     from worldfoundry.base_models.perception_core.detection.grounding_dino import _C
+
     _HAS_CUSTOM_OPS = True
 except Exception:
     _C = None
@@ -37,18 +35,12 @@ except Exception:
 
 # helpers
 def _is_power_of_2(n):
-    """Helper function to is power of 2.
-
-    Args:
-        n: The n.
-    """
     if (not isinstance(n, int)) or (n < 0):
-        raise ValueError("invalid input for _is_power_of_2: {} (type: {})".format(n, type(n)))
+        raise ValueError(f"invalid input for _is_power_of_2: {n} (type: {type(n)})")
     return (n & (n - 1) == 0) and n != 0
 
 
 class MultiScaleDeformableAttnFunction(Function):
-    """Multi scale deformable attn function implementation."""
     @staticmethod
     def forward(
         ctx,
@@ -59,17 +51,6 @@ class MultiScaleDeformableAttnFunction(Function):
         attention_weights,
         im2col_step,
     ):
-        """Forward.
-
-        Args:
-            ctx: The ctx.
-            value: The value.
-            value_spatial_shapes: The value spatial shapes.
-            value_level_start_index: The value level start index.
-            sampling_locations: The sampling locations.
-            attention_weights: The attention weights.
-            im2col_step: The im2col step.
-        """
         ctx.im2col_step = im2col_step
         output = _C.ms_deform_attn_forward(
             value,
@@ -91,12 +72,6 @@ class MultiScaleDeformableAttnFunction(Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_output):
-        """Backward.
-
-        Args:
-            ctx: The ctx.
-            grad_output: The grad output.
-        """
         (
             value,
             value_spatial_shapes,
@@ -123,18 +98,6 @@ def multi_scale_deformable_attn_pytorch(
     sampling_locations: torch.Tensor,
     attention_weights: torch.Tensor,
 ) -> torch.Tensor:
-    """Multi scale deformable attn pytorch.
-
-    Args:
-        value: The value.
-        value_spatial_shapes: The value spatial shapes.
-        sampling_locations: The sampling locations.
-        attention_weights: The attention weights.
-
-    Returns:
-        The return value.
-    """
-
     bs, _, num_heads, embed_dims = value.shape
     _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
     value_list = value.split([H_ * W_ for H_, W_ in value_spatial_shapes], dim=1)
@@ -145,9 +108,7 @@ def multi_scale_deformable_attn_pytorch(
         # bs, H_*W_, num_heads*embed_dims ->
         # bs, num_heads*embed_dims, H_*W_ ->
         # bs*num_heads, embed_dims, H_, W_
-        value_l_ = (
-            value_list[level].flatten(2).transpose(1, 2).reshape(bs * num_heads, embed_dims, H_, W_)
-        )
+        value_l_ = value_list[level].flatten(2).transpose(1, 2).reshape(bs * num_heads, embed_dims, H_, W_)
         # bs, num_queries, num_heads, num_points, 2 ->
         # bs, num_heads, num_queries, num_points, 2 ->
         # bs*num_heads, num_queries, num_points, 2
@@ -198,23 +159,9 @@ class MultiScaleDeformableAttention(nn.Module):
         img2col_step: int = 64,
         batch_first: bool = False,
     ):
-        """Init.
-
-        Args:
-            embed_dim: The embed dim.
-            num_heads: The num heads.
-            num_levels: The num levels.
-            num_points: The num points.
-            img2col_step: The img2col step.
-            batch_first: The batch first.
-        """
         super().__init__()
         if embed_dim % num_heads != 0:
-            raise ValueError(
-                "embed_dim must be divisible by num_heads, but got {} and {}".format(
-                    embed_dim, num_heads
-                )
-            )
+            raise ValueError(f"embed_dim must be divisible by num_heads, but got {embed_dim} and {num_heads}")
         head_dim = embed_dim // num_heads
 
         self.batch_first = batch_first
@@ -224,7 +171,8 @@ class MultiScaleDeformableAttention(nn.Module):
                 """
                 You'd better set d_model in MSDeformAttn to make sure that
                 each dim of the attention head a power of 2, which is more efficient.
-                """
+                """,
+                stacklevel=1,
             )
 
         self.im2col_step = img2col_step
@@ -240,7 +188,6 @@ class MultiScaleDeformableAttention(nn.Module):
         self.init_weights()
 
     def _reset_parameters(self):
-        """Helper function to reset parameters."""
         return self.init_weights()
 
     def init_weights(self):
@@ -248,9 +195,7 @@ class MultiScaleDeformableAttention(nn.Module):
         Default initialization for Parameters of Module.
         """
         constant_(self.sampling_offsets.weight.data, 0.0)
-        thetas = torch.arange(self.num_heads, dtype=torch.float32) * (
-            2.0 * math.pi / self.num_heads
-        )
+        thetas = torch.arange(self.num_heads, dtype=torch.float32) * (2.0 * math.pi / self.num_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
             (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -269,13 +214,11 @@ class MultiScaleDeformableAttention(nn.Module):
         constant_(self.output_proj.bias.data, 0.0)
 
     def freeze_sampling_offsets(self):
-        """Freeze sampling offsets."""
         print("Freeze sampling offsets")
         self.sampling_offsets.weight.requires_grad = False
         self.sampling_offsets.bias.requires_grad = False
 
     def freeze_attention_weights(self):
-        """Freeze attention weights."""
         print("Freeze attention weights")
         self.attention_weights.weight.requires_grad = False
         self.attention_weights.bias.requires_grad = False
@@ -283,16 +226,15 @@ class MultiScaleDeformableAttention(nn.Module):
     def forward(
         self,
         query: torch.Tensor,
-        key: Optional[torch.Tensor] = None,
-        value: Optional[torch.Tensor] = None,
-        query_pos: Optional[torch.Tensor] = None,
-        key_padding_mask: Optional[torch.Tensor] = None,
-        reference_points: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[torch.Tensor] = None,
-        level_start_index: Optional[torch.Tensor] = None,
-        **kwargs
+        key: torch.Tensor | None = None,
+        value: torch.Tensor | None = None,
+        query_pos: torch.Tensor | None = None,
+        key_padding_mask: torch.Tensor | None = None,
+        reference_points: torch.Tensor | None = None,
+        spatial_shapes: torch.Tensor | None = None,
+        level_start_index: torch.Tensor | None = None,
+        **kwargs,
     ) -> torch.Tensor:
-
         """Forward Function of MultiScaleDeformableAttention
 
         Args:
@@ -366,18 +308,13 @@ class MultiScaleDeformableAttention(nn.Module):
         elif reference_points.shape[-1] == 4:
             sampling_locations = (
                 reference_points[:, :, None, :, None, :2]
-                + sampling_offsets
-                / self.num_points
-                * reference_points[:, :, None, :, None, 2:]
-                * 0.5
+                + sampling_offsets / self.num_points * reference_points[:, :, None, :, None, 2:] * 0.5
             )
         else:
             raise ValueError(
-                "Last dim of reference_points must be 2 or 4, but get {} instead.".format(
-                    reference_points.shape[-1]
-                )
+                f"Last dim of reference_points must be 2 or 4, but get {reference_points.shape[-1]} instead."
             )
-    
+
         if _HAS_CUSTOM_OPS and torch.cuda.is_available() and value.is_cuda:
             halffloat = False
             if value.dtype == torch.float16:
@@ -398,9 +335,7 @@ class MultiScaleDeformableAttention(nn.Module):
             if halffloat:
                 output = output.half()
         else:
-            output = multi_scale_deformable_attn_pytorch(
-                value, spatial_shapes, sampling_locations, attention_weights
-            )
+            output = multi_scale_deformable_attn_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
 
         output = self.output_proj(output)
 
@@ -422,27 +357,23 @@ def create_dummy_class(klass, dependency, message=""):
     Returns:
         class: a class object
     """
-    err = "Cannot import '{}', therefore '{}' is not available.".format(dependency, klass)
+    err = f"Cannot import '{dependency}', therefore '{klass}' is not available."
     if message:
         err = err + " " + message
 
     class _DummyMetaClass(type):
-        """Dummy meta class implementation."""
         # throw error on class attribute access
-        def __getattr__(_, __):  # noqa: B902
-            """Getattr.
-
+        def __getattr__(_, __):
+            """
             Args:
                 _: The _.
                 __: The __.
             """
             raise ImportError(err)
 
-    class _Dummy(object, metaclass=_DummyMetaClass):
-        """Dummy implementation."""
+    class _Dummy(metaclass=_DummyMetaClass):
         # throw error on constructor
         def __init__(self, *args, **kwargs):
-            """Init."""
             raise ImportError(err)
 
     return _Dummy
@@ -460,7 +391,7 @@ def create_dummy_func(func, dependency, message=""):
     Returns:
         function: a function object
     """
-    err = "Cannot import '{}', therefore '{}' is not available.".format(dependency, func)
+    err = f"Cannot import '{dependency}', therefore '{func}' is not available."
     if message:
         err = err + " " + message
 
@@ -468,7 +399,6 @@ def create_dummy_func(func, dependency, message=""):
         dependency = ",".join(dependency)
 
     def _dummy(*args, **kwargs):
-        """Helper function to dummy."""
         raise ImportError(err)
 
     return _dummy

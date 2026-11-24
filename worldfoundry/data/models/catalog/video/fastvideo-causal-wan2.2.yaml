@@ -32,7 +32,7 @@ variants:
   provider: official_repo
   runtime_profile: fastvideo-causal-wan2.2-i2v-14b
   pipeline_binding: fastvideo-causal-wan2.2-i2v-14b
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   integration:
     status: integrated
   runner_parity:
@@ -44,7 +44,7 @@ variants:
       denoiser discards the final two latent frames. The shared 73 frames have
       matching composition and forward motion, but numerical parity remains
       pending because the random generators and latent precision differ.
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 runtime_profile: runtime-profile:fastvideo-causal-wan2.2-i2v-14b
 pipeline_binding: fastvideo-causal-wan2.2-i2v-14b
 integration:
@@ -70,9 +70,8 @@ docs:
     the 16-pixel-aligned output canvas follows the source aspect ratio (a 1280x704
     image yields 848x464). Defaults are 81 requested frames, eight steps, guidance
     1, and 16 FPS.
-  usage_notes_zh: 必须提供输入图像。默认 832x480 是面积预算，实际画布按输入图像比例调整并对齐到 16 像素（1280x704 输入得到 848x464）。
-    默认请求 81 帧、八步、guidance 1、16 FPS。
+  usage_notes_zh: 必须提供输入图像。默认 832x480 是面积预算，实际画布按输入图像比例调整并对齐到 16 像素（1280x704 输入得到 848x464）。默认请求 81 帧、八步、guidance 1、16 FPS。
   limitations:
-  - Checkpoint-backed 81-frame inference passed at 848x464 on an H100. FastVideo's official 81-frame request emitted 73 frames; shared-frame numerical parity remains unverified because RNG and latent precision differ.
+  - Validated with the preview checkpoint at 848x464 and 81 frames on an H100. FastVideo's official runner emits 73 frames for the same 81-frame request, and pixel-level parity with it is not established because RNG and latent precision differ.
   limitations_zh:
-  - 已在 H100 上完成 848x464、81 帧真实权重推理。FastVideo 官方入口请求 81 帧实际输出 73 帧；随机数生成器和潜变量精度不同，公共帧的逐像素数值一致性尚未验证。
+  - 已用预览 checkpoint 在 H100 上验证 848x464、81 帧推理。FastVideo 官方入口对同一 81 帧请求实际输出 73 帧；由于随机数生成器和潜变量精度不同，与其逐像素一致性未确立。

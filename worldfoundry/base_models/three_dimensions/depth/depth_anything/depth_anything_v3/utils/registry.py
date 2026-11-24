@@ -12,28 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> registry.py functionality."""
-
 from typing import Any
 
 from addict import Dict as AttrDict
 
 
 class Registry(dict[str, Any]):
-    """Registry implementation."""
     def __init__(self):
-        """Init."""
         super().__init__()
         self._map = AttrDict({})
 
     def register(self, name=None):
-        """Register.
-
-        Args:
-            name: The name.
-        """
         def decorator(cls):
-            """Decorator."""
             key = name or cls.__name__
             self._map[key] = cls
             return cls
@@ -41,13 +31,7 @@ class Registry(dict[str, Any]):
         return decorator
 
     def get(self, name):
-        """Get.
-
-        Args:
-            name: The name.
-        """
         return self._map[name]
 
     def all(self):
-        """All."""
         return self._map

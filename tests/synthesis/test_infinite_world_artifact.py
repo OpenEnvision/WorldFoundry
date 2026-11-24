@@ -13,9 +13,9 @@ def test_catalog_normalizes_checkpoint_directory_to_model_root(monkeypatch, tmp_
     checkpoint_dir = model_root / "checkpoints"
     checkpoint_dir.mkdir(parents=True)
     (checkpoint_dir / "infinite_world_model.ckpt").touch()
-    monkeypatch.setattr(catalog, "_cache_candidates", lambda *_: [str(checkpoint_dir)])
+    monkeypatch.setattr(catalog.resolve, "_cache_candidates", lambda *_: [str(checkpoint_dir)])
 
-    assert catalog._infinite_world_default_ref() == str(model_root.resolve())
+    assert catalog.models.world_models._infinite_world_default_ref() == str(model_root.resolve())
 
 
 def test_runtime_accepts_unified_model_path_mapping(monkeypatch, tmp_path) -> None:

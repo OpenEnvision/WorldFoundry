@@ -3,7 +3,7 @@ title: Core 加速与内存
 description: 跨步 cache、token pruning、融合 kernel、显存生命周期 wrapper、DiskMap 与 memory store。
 ---
 
-Core 把精确实现加速与近似策略分开。融合 kernel 和 placement 调整的目标是保持模型语义；跨步 cache 和 token pruning 则明确用近似换计算量，因此会暴露 threshold、保留比例、event 和 reset 边界，让模型接入能够实际评测。
+Core 将精确加速实现与近似策略分开。融合 kernel 和 placement 调整的目标是保持模型语义；跨步 cache 和 token pruning 则明确用近似换计算量，因此会暴露 threshold、保留比例、event 和 reset 边界，便于在模型接入后实际评测。
 
 ## 跨步 cache 示例
 

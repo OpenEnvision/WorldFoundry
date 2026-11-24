@@ -21,7 +21,6 @@ by the DiT forward (that uses latent chunks instead).
 
 import math
 from collections import OrderedDict
-from typing import List
 
 import torch
 from tqdm import tqdm
@@ -45,12 +44,10 @@ class ParallelHelper:
     def __init__(self):
         """Stateless helper; all work is on the static methods."""
 
-        pass
-
     @staticmethod
     def split_tile_list(
-        tile_numel_dict: OrderedDict[int, int], parallel_group: torch.distributed.ProcessGroup = None
-    ) -> List[int]:
+        tile_numel_dict: OrderedDict[int, int], parallel_group: torch.distributed.ProcessGroup | None = None
+    ) -> tuple[list[int], list[int]]:
         """
         Splits the given tile size into a list of sizes that each rank should handle.
 
@@ -92,7 +89,7 @@ class ParallelHelper:
         tensor: torch.Tensor,
         *,
         world_size: int,
-        parallel_group: torch.distributed.ProcessGroup = None,
+        parallel_group: torch.distributed.ProcessGroup | None = None,
     ) -> torch.Tensor:
         """Gather equal-shaped tensors into ``[world_size, ...]`` storage."""
 
@@ -107,8 +104,10 @@ class ParallelHelper:
 
     @staticmethod
     def gather_frames(
-        frames: List[torch.Tensor], global_tile_idxs: List[int], parallel_group: torch.distributed.ProcessGroup = None
-    ) -> List[torch.Tensor]:
+        frames: list[torch.Tensor],
+        global_tile_idxs: list[int],
+        parallel_group: torch.distributed.ProcessGroup | None = None,
+    ) -> list[torch.Tensor]:
         """
         Gathers frame data from all ranks in a distributed environment.
 
@@ -190,7 +189,9 @@ class ParallelHelper:
         total_sizes = [sum(math.prod(shape) for shape in shapes) for shapes in all_rank_shapes]
         max_total_size = max(total_sizes, default=0)
 
-        flattened = torch.cat([frame.reshape(-1) for frame in frames]) if frames else torch.empty(0, dtype=dtype, device=device)
+        flattened = (
+            torch.cat([frame.reshape(-1) for frame in frames]) if frames else torch.empty(0, dtype=dtype, device=device)
+        )
         padded = torch.zeros(max_total_size, dtype=dtype, device=device)
         if flattened.numel():
             padded[: flattened.numel()].copy_(flattened)
@@ -212,11 +213,13 @@ class ParallelHelper:
                 "Distributed tile index count does not match gathered frames: "
                 f"{len(global_tile_idxs)} != {len(result_frames)}"
             )
-        result_frames_dict = OrderedDict((idx, frame) for idx, frame in zip(global_tile_idxs, result_frames))
+        result_frames_dict = OrderedDict(
+            (idx, frame) for idx, frame in zip(global_tile_idxs, result_frames, strict=False)
+        )
         return list(OrderedDict(sorted(result_frames_dict.items())).values())
 
     @staticmethod
-    def index_undot(index: int, loop_size: List[int]) -> List[int]:
+    def index_undot(index: int, loop_size: list[int]) -> list[int]:
         """
         Converts a single index into a list of indices, representing the position in a multi-dimensional space.
 
@@ -239,7 +242,7 @@ class ParallelHelper:
         return undotted_index
 
     @staticmethod
-    def index_dot(index: List[int], loop_size: List[int]) -> int:
+    def index_dot(index: list[int], loop_size: list[int]) -> int:
         """
         Converts a list of indices into a single index, representing the position in a multi-dimensional space.
 
@@ -288,7 +291,7 @@ class TileProcessor:
         temporal_tile_overlap_factor: float = 0,
         sr_ratio=1,
         first_frame_as_image: bool = False,
-        parallel_group: torch.distributed.ProcessGroup = None,
+        parallel_group: torch.distributed.ProcessGroup | None = None,
     ):
         """
         Initializes an instance of the class.
@@ -322,7 +325,7 @@ class TileProcessor:
         self.temporal_tile_overlap_factor = temporal_tile_overlap_factor
         self.sr_ratio = sr_ratio
         self.parallel_group = parallel_group
-        from worldfoundry.core.execution.compile_cache import CompilePolicy, compile_callable_cached
+        from worldfoundry.core.platform.compile_cache import CompilePolicy, compile_callable_cached
 
         blend_policy = CompilePolicy(dynamic=False)
         self._blend_t_compiled = compile_callable_cached(

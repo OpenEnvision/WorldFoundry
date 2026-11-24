@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> registry.py functionality."""
-
 from collections import OrderedDict
 from pathlib import Path
 
@@ -21,30 +19,12 @@ from worldfoundry.core.io.paths import resolve_data_path
 
 
 def _candidate_config_dirs(package_file: str | Path) -> tuple[Path, ...]:
-    """Helper function to candidate config dirs.
-
-    Args:
-        package_file: The package file.
-
-    Returns:
-        The return value.
-    """
     package_configs = Path(package_file).resolve().parent / "configs"
-    runtime_configs = resolve_data_path(
-        "models", "runtime", "configs", "depth_anything_v3", "configs"
-    )
+    runtime_configs = resolve_data_path("models", "runtime", "configs", "depth_anything_v3", "configs")
     return (package_configs, runtime_configs)
 
 
 def get_models_from_config_dir(configs_dir: str | Path) -> OrderedDict:
-    """Get models from config dir.
-
-    Args:
-        configs_dir: The configs dir.
-
-    Returns:
-        The return value.
-    """
     configs_dir = Path(configs_dir)
     if not configs_dir.is_dir():
         return OrderedDict()
@@ -56,14 +36,6 @@ def get_models_from_config_dir(configs_dir: str | Path) -> OrderedDict:
 
 
 def get_models_for_package_file(package_file: str | Path) -> OrderedDict:
-    """Get models for package file.
-
-    Args:
-        package_file: The package file.
-
-    Returns:
-        The return value.
-    """
     for configs_dir in _candidate_config_dirs(package_file):
         model_entries = get_models_from_config_dir(configs_dir)
         if model_entries:

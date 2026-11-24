@@ -1,5 +1,3 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> misc -> heterogeneous_pairings.py functionality."""
-
 import torch
 from einops import repeat
 from jaxtyping import Int
@@ -10,7 +8,7 @@ Index = Int[Tensor, "n n-1"]
 
 def generate_heterogeneous_index(
     n: int,
-    device: torch.device = torch.device("cpu"),
+    device: torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
 ) -> tuple[Index, Index]:
     """Generate indices for all pairs except self-pairs."""
     arange = torch.arange(n, device=device)
@@ -28,7 +26,7 @@ def generate_heterogeneous_index(
 
 def generate_heterogeneous_index_transpose(
     n: int,
-    device: torch.device = torch.device("cpu"),
+    device: torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
 ) -> tuple[Index, Index]:
     """Generate an index that can be used to "transpose" the heterogeneous index.
     Applying the index a second time inverts the "transpose."

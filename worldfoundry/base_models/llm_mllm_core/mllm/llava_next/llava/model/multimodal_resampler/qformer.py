@@ -1,42 +1,29 @@
 """
- * Copyright (c) 2023, salesforce.com, inc.
- * All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause
- * For full license text, see LICENSE.txt file in the repo root or https://opensource.org/licenses/BSD-3-Clause
- * By Junnan Li
- * Based on huggingface code base
- * https://github.com/huggingface/transformers/blob/v4.15.0/src/transformers/models/bert
+* Copyright (c) 2023, salesforce.com, inc.
+* All rights reserved.
+* SPDX-License-Identifier: BSD-3-Clause
+* For full license text, see LICENSE.txt file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+* By Junnan Li
+* Based on huggingface code base
+* https://github.com/huggingface/transformers/blob/v4.15.0/src/transformers/models/bert
 """
 
 import math
-import os
-import warnings
-from dataclasses import dataclass
-from typing import Optional, Tuple, Dict, Any
+from typing import ClassVar
 
 import torch
-from torch import Tensor, device, dtype, nn
 import torch.utils.checkpoint
-from torch import nn
+from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
-import torch.nn.functional as F
-
 from transformers.activations import ACT2FN
-from transformers.file_utils import (
-    ModelOutput,
-)
 from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    NextSentencePredictorOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
 )
 from transformers.modeling_utils import PreTrainedModel
+
 try:
     from transformers.pytorch_utils import (
         apply_chunking_to_forward,
@@ -49,8 +36,8 @@ except ImportError:
         find_pruneable_heads_and_indices,
         prune_linear_layer,
     )
-from transformers.utils import logging
 from transformers.models.bert.configuration_bert import BertConfig
+from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
@@ -87,10 +74,7 @@ class BertEmbeddings(nn.Module):
         query_embeds=None,
         past_key_values_length=0,
     ):
-        if input_ids is not None:
-            seq_length = input_ids.size()[1]
-        else:
-            seq_length = 0
+        seq_length = input_ids.size()[1] if input_ids is not None else 0
 
         if position_ids is None:
             position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length].clone()
@@ -116,7 +100,10 @@ class BertSelfAttention(nn.Module):
         super().__init__()
         self.config = config
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError("The hidden size (%d) is not a multiple of the number of attention " "heads (%d)" % (config.hidden_size, config.num_attention_heads))
+            raise ValueError(
+                "The hidden size (%d) is not a multiple of the number of attention "  # noqa: UP031 - Keeps printf conversions that depend on argument types.
+                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+            )
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
@@ -150,7 +137,7 @@ class BertSelfAttention(nn.Module):
         return self.attention_map
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (
+        new_x_shape = x.size()[:-1] + (  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             self.num_attention_heads,
             self.attention_head_size,
         )
@@ -167,7 +154,6 @@ class BertSelfAttention(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
-
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
@@ -234,12 +220,12 @@ class BertSelfAttention(nn.Module):
         context_layer = torch.matmul(attention_probs_dropped, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         context_layer = context_layer.view(*new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
-        outputs = outputs + (past_key_value,)
+        outputs = outputs + (past_key_value,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         return outputs
 
 
@@ -306,7 +292,7 @@ class BertAttention(nn.Module):
         )
         attention_output = self.output(self_outputs[0], hidden_states)
 
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[1:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.  # add attentions if we output them
         return outputs
 
 
@@ -387,7 +373,9 @@ class BertLayer(nn.Module):
             query_attention_output = attention_output[:, :query_length, :]
 
             if self.has_cross_attention:
-                assert encoder_hidden_states is not None, "encoder_hidden_states must be given for cross-attention layers"
+                assert encoder_hidden_states is not None, (
+                    "encoder_hidden_states must be given for cross-attention layers"
+                )
                 cross_attention_outputs = self.crossattention(
                     query_attention_output,
                     attention_mask,
@@ -420,9 +408,9 @@ class BertLayer(nn.Module):
                 self.seq_len_dim,
                 attention_output,
             )
-        outputs = (layer_output,) + outputs
+        outputs = (layer_output,) + outputs  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
-        outputs = outputs + (present_key_value,)
+        outputs = outputs + (present_key_value,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         return outputs
 
@@ -466,20 +454,21 @@ class BertEncoder(nn.Module):
         for i in range(self.config.num_hidden_layers):
             layer_module = self.layer[i]
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                all_hidden_states = all_hidden_states + (hidden_states,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
-
                 if use_cache:
-                    logger.warn("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`...")
+                    logger.warn(
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                    )
                     use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions, query_length)
+                        return module(*inputs, past_key_value, output_attentions, query_length)  # noqa: B023 - Keeps the upstream late binding of the loop variable.
 
                     return custom_forward
 
@@ -507,11 +496,11 @@ class BertEncoder(nn.Module):
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+                all_cross_attentions = all_cross_attentions + (layer_outputs[2],)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states = all_hidden_states + (hidden_states,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         if not return_dict:
             return tuple(
@@ -604,7 +593,7 @@ class BertPreTrainedModel(PreTrainedModel):
 
     config_class = BertConfig
     base_model_prefix = "bert"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_missing: ClassVar[list] = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -658,7 +647,7 @@ class BertModel(BertPreTrainedModel):
     def get_extended_attention_mask(
         self,
         attention_mask: Tensor,
-        input_shape: Tuple[int],
+        input_shape: tuple[int],
         device: device,
         is_decoder: bool,
         has_query: bool = False,
@@ -724,7 +713,9 @@ class BertModel(BertPreTrainedModel):
             else:
                 extended_attention_mask = attention_mask[:, None, None, :]
         else:
-            raise ValueError("Wrong shape for input_ids (shape {}) or attention_mask (shape {})".format(input_shape, attention_mask.shape))
+            raise ValueError(
+                f"Wrong shape for input_ids (shape {input_shape}) or attention_mask (shape {attention_mask.shape})"
+            )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
@@ -770,7 +761,9 @@ class BertModel(BertPreTrainedModel):
             decoding (see :obj:`past_key_values`).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -779,7 +772,9 @@ class BertModel(BertPreTrainedModel):
             assert query_embeds is not None, "You have to specify query_embeds when input_ids is None"
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] - self.config.query_length if past_key_values is not None else 0
+        past_key_values_length = (
+            past_key_values[0][0].shape[2] - self.config.query_length if past_key_values is not None else 0
+        )
 
         query_length = query_embeds.shape[1] if query_embeds is not None else 0
 
@@ -813,7 +808,7 @@ class BertModel(BertPreTrainedModel):
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if encoder_hidden_states is not None:
-            if type(encoder_hidden_states) == list:
+            if type(encoder_hidden_states) is list:
                 encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states[0].size()
             else:
                 (
@@ -823,7 +818,7 @@ class BertModel(BertPreTrainedModel):
                 ) = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
 
-            if type(encoder_attention_mask) == list:
+            if type(encoder_attention_mask) is list:
                 encoder_extended_attention_mask = [self.invert_attention_mask(mask) for mask in encoder_attention_mask]
             elif encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
@@ -857,7 +852,7 @@ class BertModel(BertPreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -870,9 +865,8 @@ class BertModel(BertPreTrainedModel):
 
 
 class BertLMHeadModel(BertPreTrainedModel):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_unexpected: ClassVar[list] = [r"pooler"]
+    _keys_to_ignore_on_load_missing: ClassVar[list] = [r"position_ids", r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -984,8 +978,8 @@ class BertLMHeadModel(BertPreTrainedModel):
                 lm_loss = lm_loss.view(prediction_scores.size(0), -1).sum(1)
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
+            output = (prediction_scores,) + outputs[2:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+            return ((lm_loss,) + output) if lm_loss is not None else output  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,
@@ -1012,8 +1006,8 @@ class BertLMHeadModel(BertPreTrainedModel):
             "query_embeds": query_embeds,
             "attention_mask": attention_mask,
             "past_key_values": past,
-            "encoder_hidden_states": model_kwargs.get("encoder_hidden_states", None),
-            "encoder_attention_mask": model_kwargs.get("encoder_attention_mask", None),
+            "encoder_hidden_states": model_kwargs.get("encoder_hidden_states"),
+            "encoder_attention_mask": model_kwargs.get("encoder_attention_mask"),
             "is_decoder": True,
         }
 
@@ -1025,9 +1019,8 @@ class BertLMHeadModel(BertPreTrainedModel):
 
 
 class BertForMaskedLM(BertPreTrainedModel):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_unexpected: ClassVar[list] = [r"pooler"]
+    _keys_to_ignore_on_load_missing: ClassVar[list] = [r"position_ids", r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1095,8 +1088,8 @@ class BertForMaskedLM(BertPreTrainedModel):
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            output = (prediction_scores,) + outputs[2:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -1114,7 +1107,9 @@ class Qformer(nn.Module):
         self.num_latents = model_args.mm_qformer_latents
         self.pretrained = model_args.mm_qformer_pretrained
 
-        self.Qformer, self.query_tokens, self.ln_vision = self.build_Qformer(vision_tower.hidden_size, self.depth, self.num_latents)
+        self.Qformer, self.query_tokens, self.ln_vision = self.build_Qformer(
+            vision_tower.hidden_size, self.depth, self.num_latents
+        )
 
         if self.pretrained is not None:
             pretrained_dict = torch.load(self.pretrained, map_location="cpu")["model"]

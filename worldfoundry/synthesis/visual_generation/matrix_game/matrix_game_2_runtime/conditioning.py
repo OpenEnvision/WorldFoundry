@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from torch import nn
 
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import CausalConv3d, RMS_norm
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.action_21 import (
     CACHE_T,
     AttentionBlock,
-    CausalConv3d,
     Encoder3d,
     Resample,
     ResidualBlock,
-    RMS_norm,
 )
 
 
@@ -20,10 +19,7 @@ def _ceil_div(value: int, divisor: int) -> int:
 
 
 def _unsupported(module: nn.Module, path: str) -> ValueError:
-    return ValueError(
-        "Cannot prove Matrix-Game 2 blank-tail stationarity for "
-        f"{type(module).__name__} at {path}."
-    )
+    return ValueError(f"Cannot prove Matrix-Game 2 blank-tail stationarity for {type(module).__name__} at {path}.")
 
 
 def _check_spatial_graph(module: nn.Module, path: str) -> None:
@@ -109,7 +105,10 @@ def first_stable_encoder_latent(encoder: Encoder3d) -> int:
     """
 
     if type(encoder) is not Encoder3d or set(encoder._modules) != {
-        "conv1", "downsamples", "middle", "head",
+        "conv1",
+        "downsamples",
+        "middle",
+        "head",
     }:
         raise _unsupported(encoder, "encoder")
     onset = 1

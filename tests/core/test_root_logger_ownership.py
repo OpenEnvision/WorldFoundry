@@ -1,8 +1,8 @@
 """XC-19 / XC-20 guard: first-party library code must not mutate the root logger.
 
-Scan ``worldfoundry/{core,cli,mcp,operators,training,evaluation/api,studio}``
-plus ``evaluation/tasks/execution/framework`` (the in-tree ``evaluation/framework``).
-Skip vendor trees and ``evaluation/tasks/execution/runners/*/runtime``.
+Scan ``worldfoundry/{core,cli,mcp,operators,training,evals/api,studio}``
+plus ``evals/tasks/execution/framework`` (the in-tree ``evaluation/framework``).
+Skip vendor trees and ``evals/tasks/execution/runners/*/runtime``.
 
 Allowlisted files are process entrypoints that are *supposed* to configure
 logging, or trees this tick is forbidden to edit.
@@ -23,8 +23,8 @@ SCAN_ROOTS = (
     REPO_ROOT / "worldfoundry/mcp",
     REPO_ROOT / "worldfoundry/operators",
     REPO_ROOT / "worldfoundry/training",
-    REPO_ROOT / "worldfoundry/evaluation/api",
-    REPO_ROOT / "worldfoundry/evaluation/tasks/execution/framework",
+    REPO_ROOT / "worldfoundry/evals/api",
+    REPO_ROOT / "worldfoundry/evals/tasks/execution/framework",
     REPO_ROOT / "worldfoundry/studio",
 )
 
@@ -41,8 +41,8 @@ ALLOWLIST = {
 
 FIRST_ROUND_CLEAN = (
     "worldfoundry/base_models/diffusion_model/models/networks/wan/media_geometry.py",
-    "worldfoundry/evaluation/tasks/metrics/jedi/V_JEPA.py",
-    "worldfoundry/evaluation/tasks/execution/runners/memobench/runtime/memobench/evaluation/run_eval.py",
+    "worldfoundry/evals/tasks/metrics/distribution/jedi/V_JEPA.py",
+    "worldfoundry/evals/tasks/execution/runners/memobench/runtime/memobench/evaluation/run_eval.py",
 )
 
 _ROOT_MUTATOR_ATTRS = frozenset({"setLevel", "addHandler", "removeHandler", "handlers"})

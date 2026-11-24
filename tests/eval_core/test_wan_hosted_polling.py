@@ -86,16 +86,12 @@ def test_wan_pipeline_wrappers_delegate_to_shared_poller(
     source = (root / "worldfoundry" / "pipelines" / "wan" / filename).read_text(encoding="utf-8")
     tree = ast.parse(source)
     poll_method = next(
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "_poll_task_status"
+        node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "_poll_task_status"
     )
     calls = [
         node
         for node in ast.walk(poll_method)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "poll_wan_task_status"
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "poll_wan_task_status"
     ]
 
     assert len(calls) == 1

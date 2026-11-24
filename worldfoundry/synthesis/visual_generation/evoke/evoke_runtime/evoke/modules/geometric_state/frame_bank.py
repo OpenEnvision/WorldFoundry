@@ -1,66 +1,66 @@
 """GEO FrameBank: keyframe store with top-K retrieval for Pi3X warp history."""
+
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 
 
 @dataclass
 class FrameBankEntry:
-    frame: torch.Tensor          # [3, H, W] CPU, 8-bit quantized
-    c2w: torch.Tensor            # [4, 4] CPU
+    frame: torch.Tensor  # [3, H, W] CPU, 8-bit quantized
+    c2w: torch.Tensor  # [4, 4] CPU
     chunk_idx: int
-    pixel_idx: int               # global pixel index used for recency sorting
+    pixel_idx: int  # global pixel index used for recency sorting
     # Optional Pi3X geometry cache; None by default.
-    cached_geometry: Optional[dict] = None
+    cached_geometry: dict | None = None
 
 
 class FrameBank:
     """Append-only keyframe store with top-K retrieval."""
 
-    def __init__(self, max_size: Optional[int] = None):
+    def __init__(self, max_size: int | None = None):
         """Args:
-            max_size: capacity cap; None or <=0 means unlimited; excess entries evicted FIFO.
+        max_size: capacity cap; None or <=0 means unlimited; excess entries evicted FIFO.
         """
         self.entries: list[FrameBankEntry] = []
-        self.max_size: Optional[int] = (
-            int(max_size) if (max_size is not None and int(max_size) > 0) else None
-        )
+        self.max_size: int | None = int(max_size) if (max_size is not None and int(max_size) > 0) else None
 
     # ---------------- ingest ----------------
 
     def add(self, frame: torch.Tensor, c2w: torch.Tensor, chunk_idx: int, pixel_idx: int) -> None:
         """Add a frame: detach, move to CPU, 8-bit quantize, FIFO evict if over max_size."""
-        self.entries.append(FrameBankEntry(
-            frame=self._quantize_8bit(frame.detach().float().cpu()),
-            c2w=c2w.detach().float().cpu(),
-            chunk_idx=int(chunk_idx),
-            pixel_idx=int(pixel_idx),
-        ))
+        self.entries.append(
+            FrameBankEntry(
+                frame=self._quantize_8bit(frame.detach().float().cpu()),
+                c2w=c2w.detach().float().cpu(),
+                chunk_idx=int(chunk_idx),
+                pixel_idx=int(pixel_idx),
+            )
+        )
         if self.max_size is not None and len(self.entries) > self.max_size:
             # Evict oldest entries to stay within max_size.
-            self.entries = self.entries[-self.max_size:]
+            self.entries = self.entries[-self.max_size :]
 
     # ---------------- query ----------------
 
     def retrieve(
         self,
-        target_c2w_window: torch.Tensor,     # [W, 4, 4] target pose window for current chunk
-        anchor_frame: torch.Tensor,          # [3, H, W] render origin for this chunk
-        anchor_c2w: torch.Tensor,            # [4, 4]
+        target_c2w_window: torch.Tensor,  # [W, 4, 4] target pose window for current chunk
+        anchor_frame: torch.Tensor,  # [3, H, W] render origin for this chunk
+        anchor_c2w: torch.Tensor,  # [4, 4]
         # Legacy API: top_k acts as select_k.
         top_k: int = 8,
         # Split API: nearby by recency + select by metric.
-        nearby_k: int = 0,                   # number of most-recent frames by pixel_idx
-        select_k: Optional[int] = None,       # number of frames chosen by metric; defaults to top_k
-        metric: str = "v1",                   # "v1" / "v2" / "v3"
-        metric_kwargs: Optional[dict] = None, # per-metric keyword args
+        nearby_k: int = 0,  # number of most-recent frames by pixel_idx
+        select_k: int | None = None,  # number of frames chosen by metric; defaults to top_k
+        metric: str = "v1",  # "v1" / "v2" / "v3"
+        metric_kwargs: dict | None = None,  # per-metric keyword args
         # V1-only heuristics kept for backward compat.
-        diversity_min_dist: float = 0.0,     # skip candidates closer than this to already-selected
-        time_decay_weight: float = 0.0,      # penalize recent frames by this weight
+        diversity_min_dist: float = 0.0,  # skip candidates closer than this to already-selected
+        time_decay_weight: float = 0.0,  # penalize recent frames by this weight
     ) -> list[torch.Tensor]:
         """Return [nearby + selected + anchor] RGB tensors; anchor is always last.
 
@@ -91,11 +91,10 @@ class FrameBank:
                 if len(nearby) >= nearby_k:
                     break
                 # Skip entry if it duplicates the anchor pose.
-                if anchor_c2w_cpu is not None:
-                    if float((e.c2w - anchor_c2w_cpu).norm()) < 1e-3:
-                        continue
+                if anchor_c2w_cpu is not None and float((e.c2w - anchor_c2w_cpu).norm()) < 1e-3:
+                    continue
                 nearby.append(e)
-        nearby_ids = set(id(e) for e in nearby)
+        nearby_ids = {id(e) for e in nearby}
 
         # 2) Score remaining entries by metric and greedily select up to select_k.
         remaining = [e for e in self.entries if id(e) not in nearby_ids]
@@ -117,13 +116,12 @@ class FrameBank:
                 scored.append((base - penalty, e))
             scored.sort(key=lambda x: -x[0])
 
-            for score, entry in scored:
+            for _score, entry in scored:
                 if len(selected) >= select_k:
                     break
                 if float(diversity_min_dist) > 0.0 and len(selected) > 0:
                     too_close = any(
-                        float((entry.c2w[:3, 3] - s.c2w[:3, 3]).norm()) < float(diversity_min_dist)
-                        for s in selected
+                        float((entry.c2w[:3, 3] - s.c2w[:3, 3]).norm()) < float(diversity_min_dist) for s in selected
                     )
                     if too_close:
                         continue
@@ -176,8 +174,8 @@ class FrameBank:
         else:
             raise ValueError(f"Unsupported target_c2w_window shape: {tuple(target_c2w_window.shape)}")
 
-        target_pos_mean = tw[:, :3, 3].mean(0)                          # [3]
-        target_dirs_mean = (-tw[:, :3, 2]).mean(0)                       # [3]
+        target_pos_mean = tw[:, :3, 3].mean(0)  # [3]
+        target_dirs_mean = (-tw[:, :3, 2]).mean(0)  # [3]
         target_dirs_mean = target_dirs_mean / (target_dirs_mean.norm() + 1e-8)
 
         cand_pos = candidate_c2w[:3, 3]
@@ -192,10 +190,10 @@ class FrameBank:
         if to_target_norm > 1e-6:
             facing_target = float((cand_dir @ (to_target / (to_target_norm + 1e-8))).clamp(-1, 1))
         else:
-            facing_target = 1.0   # same position counts as facing
+            facing_target = 1.0  # same position counts as facing
 
         # Component 3: Gaussian distance decay.
-        dist_score = float(math.exp(-(to_target_norm ** 2) / (2.0 * float(dist_sigma) ** 2)))
+        dist_score = float(math.exp(-(to_target_norm**2) / (2.0 * float(dist_sigma) ** 2)))
 
         return float(dir_w) * dir_sim + float(facing_w) * facing_target + float(dist_w) * dist_score
 
@@ -242,9 +240,9 @@ class FrameBank:
             return 1.0
         # area = 2r²·acos(d/2r) - (d/2)·sqrt(4r²-d²)
         x = d / (2.0 * r)
-        x = max(-1.0, min(1.0, x))   # clamp to avoid acos domain error
-        area = 2.0 * r ** 2 * math.acos(x) - (d / 2.0) * math.sqrt(max(0.0, 4.0 * r ** 2 - d ** 2))
-        iou = area / (math.pi * r ** 2)
+        x = max(-1.0, min(1.0, x))  # clamp to avoid acos domain error
+        area = 2.0 * r**2 * math.acos(x) - (d / 2.0) * math.sqrt(max(0.0, 4.0 * r**2 - d**2))
+        iou = area / (math.pi * r**2)
         return float(iou)
 
     # Backward-compat alias: _frustum_score == _score_v1

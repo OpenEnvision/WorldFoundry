@@ -10,6 +10,19 @@ transforms (QKV fusion, TeaCache, STA/VSA) live in sibling modules and are
 applied by :class:`~..loaders.module.NativeModuleLoader`, not by the runner.
 """
 
+from .policy import (
+    AttentionBackend,
+    OffloadMode,
+    OffloadPolicy,
+    QuantizationMode,
+    QuantizationPolicy,
+    RuntimePolicy,
+    parse_attention_backend,
+    parse_device_map,
+    parse_offload_policy,
+    parse_quantization_policy,
+    parse_torch_dtype,
+)
 from .sparse_linear_attention import (
     FastVideoSLAAdapter,
     FastVideoSLAConfig,
@@ -25,19 +38,6 @@ from .sparse_mask_attention import (
     LightX2VSparseResult,
     LightX2VSparseUnavailableError,
     parse_lightx2v_sparse,
-)
-from .policy import (
-    AttentionBackend,
-    OffloadMode,
-    OffloadPolicy,
-    QuantizationMode,
-    QuantizationPolicy,
-    RuntimePolicy,
-    parse_attention_backend,
-    parse_device_map,
-    parse_offload_policy,
-    parse_quantization_policy,
-    parse_torch_dtype,
 )
 
 __all__ = [
@@ -58,9 +58,9 @@ __all__ = [
     "RuntimePolicy",
     "parse_attention_backend",
     "parse_device_map",
+    "parse_lightx2v_sparse",
     "parse_offload_policy",
     "parse_quantization_policy",
-    "parse_lightx2v_sparse",
     "parse_torch_dtype",
     "resolve_fastvideo_sla_projection_weights",
     "split_fastvideo_sla_projection_weights",

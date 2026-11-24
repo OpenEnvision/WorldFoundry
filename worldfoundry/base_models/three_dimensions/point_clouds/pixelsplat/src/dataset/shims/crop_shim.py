@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> dataset -> shims -> crop_shim.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 import numpy as np
 import torch
 from einops import rearrange
@@ -14,15 +13,6 @@ def rescale(
     image: Float[Tensor, "3 h_in w_in"],
     shape: tuple[int, int],
 ) -> Float[Tensor, "3 h_out w_out"]:
-    """Rescale.
-
-    Args:
-        image: The image.
-        shape: The shape.
-
-    Returns:
-        The return value.
-    """
     h, w = shape
     image_new = (image * 255).clip(min=0, max=255).type(torch.uint8)
     image_new = rearrange(image_new, "c h w -> h w c").detach().cpu().numpy()
@@ -41,16 +31,6 @@ def center_crop(
     Float[Tensor, "*#batch c h_out w_out"],  # updated images
     Float[Tensor, "*#batch 3 3"],  # updated intrinsics
 ]:
-    """Center crop.
-
-    Args:
-        images: The images.
-        intrinsics: The intrinsics.
-        shape: The shape.
-
-    Returns:
-        The return value.
-    """
     *_, h_in, w_in = images.shape
     h_out, w_out = shape
 
@@ -77,16 +57,6 @@ def rescale_and_crop(
     Float[Tensor, "*#batch c h_out w_out"],  # updated images
     Float[Tensor, "*#batch 3 3"],  # updated intrinsics
 ]:
-    """Rescale and crop.
-
-    Args:
-        images: The images.
-        intrinsics: The intrinsics.
-        shape: The shape.
-
-    Returns:
-        The return value.
-    """
     *_, h_in, w_in = images.shape
     h_out, w_out = shape
     assert h_out <= h_in and w_out <= w_in
@@ -107,15 +77,6 @@ def rescale_and_crop(
 
 
 def apply_crop_shim_to_views(views: AnyViews, shape: tuple[int, int]) -> AnyViews:
-    """Apply crop shim to views.
-
-    Args:
-        views: The views.
-        shape: The shape.
-
-    Returns:
-        The return value.
-    """
     images, intrinsics = rescale_and_crop(views["image"], views["intrinsics"], shape)
     return {
         **views,

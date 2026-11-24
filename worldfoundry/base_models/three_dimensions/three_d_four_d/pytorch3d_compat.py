@@ -6,13 +6,7 @@ import importlib
 import os
 from pathlib import Path
 
-_DEFAULT_OVERLAY = (
-    Path(__file__).resolve().parents[4]
-    / "artifacts"
-    / "runtime_extensions"
-    / "pytorch3d"
-    / "pytorch3d"
-)
+_DEFAULT_OVERLAY = Path(__file__).resolve().parents[4] / "artifacts" / "runtime_extensions" / "pytorch3d" / "pytorch3d"
 
 
 def _extension_dir() -> Path:
@@ -42,4 +36,3 @@ def configure_pytorch3d_extension() -> Path | None:
         pytorch3d.__path__.insert(0, package_path)
         importlib.invalidate_caches()
     return extension_dir
-

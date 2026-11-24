@@ -8,11 +8,16 @@
   --pi-muted: #65645f;
   --pi-line: #d8d4c9;
   --pi-soft-line: #c9c4b8;
-  --pi-brand-font: var(--font-fraunces), 'Fraunces', Georgia, 'Times New Roman', serif;
+  --pi-brand-font: var(--font-fraunces), 'Fraunces', Georgia, 'Times New Roman', 'Noto Sans SC', serif;
   /* Align docs UI with Fumadocs (Geist); keep Noto Sans SC for CJK. */
   --pi-docs-font:
     var(--font-geist-sans), 'Geist', 'Noto Sans SC', ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --pi-mono-font:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Noto Sans SC', monospace;
+  /* Tailwind / Fumadocs `font-mono` utilities share the docs code font. */
+  --font-mono: var(--pi-mono-font);
   --pi-brand-accent: #6b5a45;
   --pi-brand-accent-soft: #9a8568;
   --pi-surface: rgba(255, 255, 255, 0.72);

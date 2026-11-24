@@ -49,6 +49,7 @@ execution:
 integration:
   status: integrated
 notes:
+- Qwen3.5 text encoding runs as an in-tree package module with the magi2-preview environment Python (Transformers 5.5); Studio sets python_executable automatically.
 - MAGI-2-preview 114B MoE (256 experts, top-6, 6B active/token) audio+video DiT, ported from SandAI Apache-2.0.
 - T2V supports joint preview audio and optional video-only refinement. Image conditioning is rejected.
 - Refiner defaults are five UniPC steps, shift 5, guidance 2, zero-SNR renoise index 220, and a 1920x1088 latent decode target. It doubles temporal resolution and exports at 25 fps while preserving preview audio.

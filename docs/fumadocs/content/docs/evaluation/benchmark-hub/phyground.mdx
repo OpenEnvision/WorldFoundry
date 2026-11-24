@@ -1,6 +1,6 @@
 ---
 title: PhyGround
-description: "Criteria-grounded TI2V: 250 prompts over 13 laws, judged 1–5 by PhyJudge or humans. WorldFoundry imports scores.json; it does not run the judge."
+description: "Criteria-grounded TI2V: 250 prompts over 13 laws, judged 1–5 by PhyJudge or humans. WorldFoundry imports judge scores.json files."
 ---
 
 PhyGround (Northeastern University) is **criteria grounding**, not filmed continuation and not PhyGenEval. Each of **250** text+image-to-video prompts names an expected physical outcome and **2–4** applicable laws from a **13-law** taxonomy (solid-body, fluids, optics). A judge (PhyJudge-9B or humans) rates the generated video **1–5** on semantic adherence, physical temporal validity, persistence, and each applicable law. That is closer to a rubric than to [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq) mask IoU.
@@ -20,7 +20,7 @@ Stage the data root (`prompts/`, `first_images/`, `annotations/`, `videos/<model
 ```bash
 hf download NU-World-Model-Embodied-AI/phyground --repo-type dataset --local-dir <phyground_data_root>
 
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id phyground \
   --mode official-validation \
   --benchmark-data-root <phyground_data_root> \

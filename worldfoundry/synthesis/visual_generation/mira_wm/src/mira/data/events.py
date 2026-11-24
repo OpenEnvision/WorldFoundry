@@ -49,9 +49,7 @@ def events_in_frame_window(
     return [e for e in events if f_start <= e.frame_index(fps, recording_offset_sec) < f_end]
 
 
-def replay_spans(
-    events: list[Event], fps: float, recording_offset_sec: float, n_frames: int
-) -> list[tuple[int, int]]:
+def replay_spans(events: list[Event], fps: float, recording_offset_sec: float, n_frames: int) -> list[tuple[int, int]]:
     """Frame-index [start, end) spans covering goal-replay segments (non-live-gameplay).
 
     Pairs each GoalReplayStarted with the next GoalReplayEnded. Spans are clamped to

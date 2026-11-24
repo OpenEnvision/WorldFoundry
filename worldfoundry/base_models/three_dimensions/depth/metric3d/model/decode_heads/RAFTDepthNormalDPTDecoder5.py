@@ -2,8 +2,6 @@
 # https://github.com/YvanYin/Metric3D
 # Licensed under the BSD-2 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> three_dimensions -> depth -> metric3d -> model -> decode_heads -> RAFTDepthNormalDPTDecoder5.py functionality."""
-
 import math
 
 import torch
@@ -13,7 +11,6 @@ import torch.nn.functional as F
 
 # LORA finetuning originally by edwardjhu
 class LoRALayer:
-    """Lo ra layer implementation."""
     def __init__(
         self,
         r: int,
@@ -21,14 +18,6 @@ class LoRALayer:
         lora_dropout: float,
         merge_weights: bool,
     ):
-        """Init.
-
-        Args:
-            r: The r.
-            lora_alpha: The lora alpha.
-            lora_dropout: The lora dropout.
-            merge_weights: The merge weights.
-        """
         self.r = r
         self.lora_alpha = lora_alpha
         # Optional dropout
@@ -42,7 +31,6 @@ class LoRALayer:
 
 
 class LoRALinear(nn.Linear, LoRALayer):
-    """Lo ra linear implementation."""
     # LoRA implemented in a dense layer
     def __init__(
         self,
@@ -55,17 +43,6 @@ class LoRALinear(nn.Linear, LoRALayer):
         merge_weights: bool = True,
         **kwargs,
     ):
-        """Init.
-
-        Args:
-            in_features: The in features.
-            out_features: The out features.
-            r: The r.
-            lora_alpha: The lora alpha.
-            lora_dropout: The lora dropout.
-            fan_in_fan_out: The fan in fan out.
-            merge_weights: The merge weights.
-        """
         nn.Linear.__init__(self, in_features, out_features, **kwargs)
         LoRALayer.__init__(
             self,
@@ -88,7 +65,6 @@ class LoRALinear(nn.Linear, LoRALayer):
             self.weight.data = self.weight.data.transpose(0, 1)
 
     def reset_parameters(self):
-        """Reset parameters."""
         # nn.Linear.reset_parameters(self)
         if hasattr(self, "lora_A"):
             # initialize B the same way as the default for nn.Linear and A to zero
@@ -114,17 +90,7 @@ class LoRALinear(nn.Linear, LoRALayer):
     #             self.merged = True
 
     def forward(self, x: torch.Tensor):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         def T(w):
-            """T.
-
-            Args:
-                w: The w.
-            """
             return w.transpose(0, 1) if self.fan_in_fan_out else w
 
         if self.r > 0 and not self.merged:
@@ -136,21 +102,9 @@ class LoRALinear(nn.Linear, LoRALayer):
 
 
 class ConvLoRA(nn.Conv2d, LoRALayer):
-    """Conv lo ra implementation."""
     def __init__(
         self, in_channels, out_channels, kernel_size, r=0, lora_alpha=1, lora_dropout=0.0, merge_weights=True, **kwargs
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            r: The r.
-            lora_alpha: The lora alpha.
-            lora_dropout: The lora dropout.
-            merge_weights: The merge weights.
-        """
         # self.conv = conv_module(in_channels, out_channels, kernel_size, **kwargs)
         nn.Conv2d.__init__(self, in_channels, out_channels, kernel_size, **kwargs)
         LoRALayer.__init__(
@@ -175,7 +129,6 @@ class ConvLoRA(nn.Conv2d, LoRALayer):
         self.merged = False
 
     def reset_parameters(self):
-        """Reset parameters."""
         # self.conv.reset_parameters()
         if hasattr(self, "lora_A"):
             # initialize A the same way as the default for nn.Linear and B to zero
@@ -198,11 +151,6 @@ class ConvLoRA(nn.Conv2d, LoRALayer):
     #             self.merged = True
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         if self.r > 0 and not self.merged:
             # return self.conv._conv_forward(
             #     x,
@@ -234,21 +182,9 @@ class ConvLoRA(nn.Conv2d, LoRALayer):
 
 
 class ConvTransposeLoRA(nn.ConvTranspose2d, LoRALayer):
-    """Conv transpose lo ra implementation."""
     def __init__(
         self, in_channels, out_channels, kernel_size, r=0, lora_alpha=1, lora_dropout=0.0, merge_weights=True, **kwargs
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            r: The r.
-            lora_alpha: The lora alpha.
-            lora_dropout: The lora dropout.
-            merge_weights: The merge weights.
-        """
         # self.conv = conv_module(in_channels, out_channels, kernel_size, **kwargs)
         nn.ConvTranspose2d.__init__(self, in_channels, out_channels, kernel_size, **kwargs)
         LoRALayer.__init__(
@@ -273,7 +209,6 @@ class ConvTransposeLoRA(nn.ConvTranspose2d, LoRALayer):
         self.merged = False
 
     def reset_parameters(self):
-        """Reset parameters."""
         # self.conv.reset_parameters()
         if hasattr(self, "lora_A"):
             # initialize A the same way as the default for nn.Linear and B to zero
@@ -296,11 +231,6 @@ class ConvTransposeLoRA(nn.ConvTranspose2d, LoRALayer):
     #             self.merged = True
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         if self.r > 0 and not self.merged:
             weight = self.weight + (self.lora_B @ self.lora_A).view(self.weight.shape) * self.scaling
             bias = self.bias
@@ -330,40 +260,25 @@ class ConvTransposeLoRA(nn.ConvTranspose2d, LoRALayer):
 
 class Conv2dLoRA(ConvLoRA):
     """Conv d lo ra implementation."""
+
     def __init__(self, *args, **kwargs):
-        """Init."""
-        super(Conv2dLoRA, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
 
 class ConvTranspose2dLoRA(ConvTransposeLoRA):
     """Conv transpose d lo ra implementation."""
+
     def __init__(self, *args, **kwargs):
-        """Init."""
-        super(ConvTranspose2dLoRA, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
 
 def compute_depth_expectation(prob, depth_values):
-    """Compute depth expectation.
-
-    Args:
-        prob: The prob.
-        depth_values: The depth values.
-    """
     depth_values = depth_values.view(*depth_values.shape, 1, 1)
     depth = torch.sum(prob * depth_values, 1)
     return depth
 
 
 def interpolate_float32(x, size=None, scale_factor=None, mode="nearest", align_corners=None):
-    """Interpolate float32.
-
-    Args:
-        x: The x.
-        size: The size.
-        scale_factor: The scale factor.
-        mode: The mode.
-        align_corners: The align corners.
-    """
     with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=False):
         return F.interpolate(
             x.float(),
@@ -380,25 +295,12 @@ def interpolate_float32(x, size=None, scale_factor=None, mode="nearest", align_c
 
 
 def upflow4(flow, mode="bilinear"):
-    """Upflow4.
-
-    Args:
-        flow: The flow.
-        mode: The mode.
-    """
     new_size = (4 * flow.shape[2], 4 * flow.shape[3])
     with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=False):
         return F.interpolate(flow, size=new_size, mode=mode, align_corners=True)
 
 
 def coords_grid(batch, ht, wd):
-    """Coords grid.
-
-    Args:
-        batch: The batch.
-        ht: The ht.
-        wd: The wd.
-    """
     # coords = torch.meshgrid(torch.arange(ht), torch.arange(wd))
     coords = (
         torch.zeros((ht, wd)),
@@ -413,11 +315,6 @@ def coords_grid(batch, ht, wd):
 
 
 def norm_normalize(norm_out):
-    """Norm normalize.
-
-    Args:
-        norm_out: The norm out.
-    """
     min_kappa = 0.01
     norm_x, norm_y, norm_z, kappa = torch.split(norm_out, 1, dim=1)
     norm = torch.sqrt(norm_x**2.0 + norm_y**2.0 + norm_z**2.0) + 1e-10
@@ -429,14 +326,6 @@ def norm_normalize(norm_out):
 # uncertainty-guided sampling (only used during training)
 @torch.no_grad()
 def sample_points(init_normal, gt_norm_mask, sampling_ratio, beta):
-    """Sample points.
-
-    Args:
-        init_normal: The init normal.
-        gt_norm_mask: The gt norm mask.
-        sampling_ratio: The sampling ratio.
-        beta: The beta.
-    """
     device = init_normal.device
     B, _, H, W = init_normal.shape
     N = int(sampling_ratio * H * W)
@@ -505,7 +394,6 @@ def sample_points(init_normal, gt_norm_mask, sampling_ratio, beta):
 
 
 class FlowHead(nn.Module):
-    """Flow head implementation."""
     def __init__(
         self,
         input_dim=128,
@@ -514,16 +402,7 @@ class FlowHead(nn.Module):
         output_dim_norm=4,
         tuning_mode=None,
     ):
-        """Init.
-
-        Args:
-            input_dim: The input dim.
-            hidden_dim: The hidden dim.
-            output_dim_depth: The output dim depth.
-            output_dim_norm: The output dim norm.
-            tuning_mode: The tuning mode.
-        """
-        super(FlowHead, self).__init__()
+        super().__init__()
         self.conv1d = Conv2dLoRA(
             input_dim,
             hidden_dim // 2,
@@ -556,28 +435,14 @@ class FlowHead(nn.Module):
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         depth = self.conv2d(self.relu(self.conv1d(x)))
         normal = self.conv2n(self.relu(self.conv1n(x)))
         return torch.cat((depth, normal), dim=1)
 
 
 class ConvGRU(nn.Module):
-    """Conv gru implementation."""
     def __init__(self, hidden_dim, input_dim, kernel_size=3, tuning_mode=None):
-        """Init.
-
-        Args:
-            hidden_dim: The hidden dim.
-            input_dim: The input dim.
-            kernel_size: The kernel size.
-            tuning_mode: The tuning mode.
-        """
-        super(ConvGRU, self).__init__()
+        super().__init__()
         self.convz = Conv2dLoRA(
             hidden_dim + input_dim,
             hidden_dim,
@@ -601,20 +466,12 @@ class ConvGRU(nn.Module):
         )
 
     def forward(self, h, cz, cr, cq, *x_list):
-        """Forward.
-
-        Args:
-            h: The h.
-            cz: The cz.
-            cr: The cr.
-            cq: The cq.
-        """
         x = torch.cat(x_list, dim=1)
         hx = torch.cat([h, x], dim=1)
 
-        z = torch.sigmoid((self.convz(hx) + cz))
-        r = torch.sigmoid((self.convr(hx) + cr))
-        q = torch.tanh((self.convq(torch.cat([r * h, x], dim=1)) + cq))
+        z = torch.sigmoid(self.convz(hx) + cz)
+        r = torch.sigmoid(self.convr(hx) + cr)
+        q = torch.tanh(self.convq(torch.cat([r * h, x], dim=1)) + cq)
 
         # z = torch.sigmoid((self.convz(hx) + cz).float())
         # r = torch.sigmoid((self.convr(hx) + cr).float())
@@ -625,45 +482,20 @@ class ConvGRU(nn.Module):
 
 
 def pool2x(x):
-    """Pool2x.
-
-    Args:
-        x: The x.
-    """
     return F.avg_pool2d(x, 3, stride=2, padding=1)
 
 
 def pool4x(x):
-    """Pool4x.
-
-    Args:
-        x: The x.
-    """
     return F.avg_pool2d(x, 5, stride=4, padding=1)
 
 
 def interp(x, dest):
-    """Interp.
-
-    Args:
-        x: The x.
-        dest: The dest.
-    """
     interp_args = {"mode": "bilinear", "align_corners": True}
     return interpolate_float32(x, dest.shape[2:], **interp_args)
 
 
 class BasicMultiUpdateBlock(nn.Module):
-    """Basic multi update block implementation."""
-    def __init__(self, args, hidden_dims=[], out_dims=2, tuning_mode=None):
-        """Init.
-
-        Args:
-            args: The args.
-            hidden_dims: The hidden dims.
-            out_dims: The out dims.
-            tuning_mode: The tuning mode.
-        """
+    def __init__(self, args, hidden_dims=[], out_dims=2, tuning_mode=None):  # noqa: B006 - Keeps the upstream default object and signature.
         super().__init__()
         self.args = args
         self.n_gru_layers = args.model.decode_head.n_gru_layers  # 3
@@ -716,18 +548,6 @@ class BasicMultiUpdateBlock(nn.Module):
         iter32=True,
         update=True,
     ):
-        """Forward.
-
-        Args:
-            net: The net.
-            inp: The inp.
-            corr: The corr.
-            flow: The flow.
-            iter08: The iter08.
-            iter16: The iter16.
-            iter32: The iter32.
-            update: The update.
-        """
         if iter32:
             net[2] = self.gru32(net[2], *(inp[2]), pool2x(net[1]))
         if iter16:
@@ -736,10 +556,7 @@ class BasicMultiUpdateBlock(nn.Module):
             else:
                 net[1] = self.gru16(net[1], *(inp[1]), interp(pool2x(net[0]), net[1]))
         if iter08:
-            if corr is not None:
-                motion_features = self.encoder(flow, corr)
-            else:
-                motion_features = flow
+            motion_features = self.encoder(flow, corr) if corr is not None else flow
             if self.n_gru_layers > 1:
                 net[0] = self.gru08(net[0], *(inp[0]), motion_features, interp(net[1], net[0]))
             else:
@@ -757,39 +574,20 @@ class BasicMultiUpdateBlock(nn.Module):
 
 class LayerNorm2d(nn.LayerNorm):
     """Layer norm d implementation."""
-    def __init__(self, dim):
-        """Init.
 
-        Args:
-            dim: The dim.
-        """
-        super(LayerNorm2d, self).__init__(dim)
+    def __init__(self, dim):
+        super().__init__(dim)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         x = x.permute(0, 2, 3, 1).contiguous()
-        x = super(LayerNorm2d, self).forward(x)
+        x = super().forward(x)
         x = x.permute(0, 3, 1, 2).contiguous()
         return x
 
 
 class ResidualBlock(nn.Module):
-    """Residual block implementation."""
     def __init__(self, in_planes, planes, norm_fn="group", stride=1, tuning_mode=None):
-        """Init.
-
-        Args:
-            in_planes: The in planes.
-            planes: The planes.
-            norm_fn: The norm fn.
-            stride: The stride.
-            tuning_mode: The tuning mode.
-        """
-        super(ResidualBlock, self).__init__()
+        super().__init__()
 
         self.conv1 = Conv2dLoRA(
             in_planes,
@@ -856,11 +654,6 @@ class ResidualBlock(nn.Module):
             )
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         y = x
         y = self.conv1(y)
         y = self.norm1(y)
@@ -928,11 +721,6 @@ class ContextFeatureEncoder(nn.Module):
         # self.outputs32 = nn.ModuleList(output_list)
 
     def forward(self, encoder_features):
-        """Forward.
-
-        Args:
-            encoder_features: The encoder features.
-        """
         x_4, x_8, x_16, x_32 = encoder_features
 
         outputs04 = [f(x_4) for f in self.outputs04]
@@ -944,16 +732,9 @@ class ContextFeatureEncoder(nn.Module):
 
 
 class ConvBlock(nn.Module):
-    """Conv block implementation."""
     # reimplementation of DPT
     def __init__(self, channels, tuning_mode=None):
-        """Init.
-
-        Args:
-            channels: The channels.
-            tuning_mode: The tuning mode.
-        """
-        super(ConvBlock, self).__init__()
+        super().__init__()
 
         self.act = nn.ReLU(inplace=True)
         self.conv1 = Conv2dLoRA(
@@ -974,11 +755,6 @@ class ConvBlock(nn.Module):
         )
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         out = self.act(x)
         out = self.conv1(out)
         out = self.act(out)
@@ -987,7 +763,6 @@ class ConvBlock(nn.Module):
 
 
 class FuseBlock(nn.Module):
-    """Fuse block implementation."""
     # reimplementation of DPT
     def __init__(
         self,
@@ -998,17 +773,7 @@ class FuseBlock(nn.Module):
         scale_factor=2,
         tuning_mode=None,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            fuse: The fuse.
-            upsample: The upsample.
-            scale_factor: The scale factor.
-            tuning_mode: The tuning mode.
-        """
-        super(FuseBlock, self).__init__()
+        super().__init__()
 
         self.fuse = fuse
         self.scale_factor = scale_factor
@@ -1027,12 +792,6 @@ class FuseBlock(nn.Module):
         self.upsample = upsample
 
     def forward(self, x1, x2=None):
-        """Forward.
-
-        Args:
-            x1: The x1.
-            x2: The x2.
-        """
         if x2 is not None:
             x2 = self.way_branch(x2)
             x1 = x1 + x2
@@ -1046,18 +805,9 @@ class FuseBlock(nn.Module):
 
 
 class Readout(nn.Module):
-    """Readout implementation."""
     # From DPT
     def __init__(self, in_features, use_cls_token=True, num_register_tokens=0, tuning_mode=None):
-        """Init.
-
-        Args:
-            in_features: The in features.
-            use_cls_token: The use cls token.
-            num_register_tokens: The num register tokens.
-            tuning_mode: The tuning mode.
-        """
-        super(Readout, self).__init__()
+        super().__init__()
         self.use_cls_token = use_cls_token
         if self.use_cls_token:
             self.project_patch = LoRALinear(in_features, in_features, r=8 if tuning_mode == "lora" else 0)
@@ -1072,11 +822,6 @@ class Readout(nn.Module):
             self.project = nn.Identity()
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         if self.use_cls_token:
             x_patch = self.project_patch(x[0])
             x_learn = self.project_learn(x[1])
@@ -1089,6 +834,7 @@ class Readout(nn.Module):
 
 class Token2Feature(nn.Module):
     """Token feature implementation."""
+
     # From DPT
     def __init__(
         self,
@@ -1099,17 +845,7 @@ class Token2Feature(nn.Module):
         num_register_tokens=0,
         tuning_mode=None,
     ):
-        """Init.
-
-        Args:
-            vit_channel: The vit channel.
-            feature_channel: The feature channel.
-            scale_factor: The scale factor.
-            use_cls_token: The use cls token.
-            num_register_tokens: The num register tokens.
-            tuning_mode: The tuning mode.
-        """
-        super(Token2Feature, self).__init__()
+        super().__init__()
         self.scale_factor = scale_factor
         self.readoper = Readout(
             in_features=vit_channel,
@@ -1156,11 +892,6 @@ class Token2Feature(nn.Module):
             self.sample = nn.Identity()
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         x = self.readoper(x)
         # if use_cls_token == True:
         x = x.permute(0, 3, 1, 2).contiguous()
@@ -1171,25 +902,15 @@ class Token2Feature(nn.Module):
 
 
 class EncoderFeature(nn.Module):
-    """Encoder feature implementation."""
     def __init__(
         self,
         vit_channel,
-        num_ch_dec=[256, 512, 1024, 1024],
+        num_ch_dec=[256, 512, 1024, 1024],  # noqa: B006 - Keeps the upstream default object and signature.
         use_cls_token=True,
         num_register_tokens=0,
         tuning_mode=None,
     ):
-        """Init.
-
-        Args:
-            vit_channel: The vit channel.
-            num_ch_dec: The num ch dec.
-            use_cls_token: The use cls token.
-            num_register_tokens: The num register tokens.
-            tuning_mode: The tuning mode.
-        """
-        super(EncoderFeature, self).__init__()
+        super().__init__()
         self.vit_channel = vit_channel
         self.num_ch_dec = num_ch_dec
 
@@ -1227,11 +948,6 @@ class EncoderFeature(nn.Module):
         )
 
     def forward(self, ref_feature):
-        """Forward.
-
-        Args:
-            ref_feature: The ref feature.
-        """
         x = self.read_3(ref_feature[3])  # 1/14
         x2 = self.read_2(ref_feature[2])  # 1/14
         x1 = self.read_1(ref_feature[1])  # 1/7
@@ -1241,23 +957,14 @@ class EncoderFeature(nn.Module):
 
 
 class DecoderFeature(nn.Module):
-    """Decoder feature implementation."""
     def __init__(
         self,
         vit_channel,
-        num_ch_dec=[128, 256, 512, 1024, 1024],
+        num_ch_dec=[128, 256, 512, 1024, 1024],  # noqa: B006 - Keeps the upstream default object and signature.
         use_cls_token=True,
         tuning_mode=None,
     ):
-        """Init.
-
-        Args:
-            vit_channel: The vit channel.
-            num_ch_dec: The num ch dec.
-            use_cls_token: The use cls token.
-            tuning_mode: The tuning mode.
-        """
-        super(DecoderFeature, self).__init__()
+        super().__init__()
         self.vit_channel = vit_channel
         self.num_ch_dec = num_ch_dec
 
@@ -1284,11 +991,6 @@ class DecoderFeature(nn.Module):
         # )
 
     def forward(self, ref_feature):
-        """Forward.
-
-        Args:
-            ref_feature: The ref feature.
-        """
         x, x2, x1, x0 = ref_feature  # 1/14 1/14 1/7 1/4
 
         x = self.upconv_3(x)  # 1/14
@@ -1300,12 +1002,8 @@ class DecoderFeature(nn.Module):
 
 class RAFTDepthNormalDPT5(nn.Module):
     """Raft depth normal implementation."""
-    def __init__(self, cfg):
-        """Init.
 
-        Args:
-            cfg: The cfg.
-        """
+    def __init__(self, cfg):
         super().__init__()
         self.in_channels = cfg.model.decode_head.in_channels  # [1024, 1024, 1024, 1024]
         self.feature_channels = cfg.model.decode_head.feature_channels  # [256, 512, 1024, 1024] [2/7, 1/7, 1/14, 1/14]
@@ -1398,42 +1096,21 @@ class RAFTDepthNormalDPT5(nn.Module):
         self.relu = nn.ReLU(inplace=True)
 
     def get_bins(self, bins_num):
-        """Get bins.
-
-        Args:
-            bins_num: The bins num.
-        """
         depth_bins_vec = torch.linspace(math.log(self.min_val), math.log(self.max_val), bins_num, device="cuda")
         depth_bins_vec = torch.exp(depth_bins_vec)
         return depth_bins_vec
 
     def register_depth_expectation_anchor(self, bins_num, B):
-        """Register depth expectation anchor.
-
-        Args:
-            bins_num: The bins num.
-            B: The b.
-        """
         depth_bins_vec = self.get_bins(bins_num)
         depth_bins_vec = depth_bins_vec.unsqueeze(0).repeat(B, 1)
         self.register_buffer("depth_expectation_anchor", depth_bins_vec, persistent=False)
 
     def clamp(self, x):
-        """Clamp.
-
-        Args:
-            x: The x.
-        """
         y = self.relu(x - self.min_val) + self.min_val
         y = self.max_val - self.relu(self.max_val - y)
         return y
 
     def regress_depth(self, feature_map_d):
-        """Regress depth.
-
-        Args:
-            feature_map_d: The feature map d.
-        """
         prob_feature = self.depth_regressor(feature_map_d)
         prob = prob_feature.softmax(dim=1)
         # prob = prob_feature.float().softmax(dim=1)
@@ -1452,12 +1129,6 @@ class RAFTDepthNormalDPT5(nn.Module):
         return (self.clamp(d) - self.max_val) / self.regress_scale, prob_feature
 
     def pred_normal(self, feature_map, confidence):
-        """Pred normal.
-
-        Args:
-            feature_map: The feature map.
-            confidence: The confidence.
-        """
         normal_out = self.normal_predictor(feature_map)
 
         ## Error logging
@@ -1470,15 +1141,6 @@ class RAFTDepthNormalDPT5(nn.Module):
         # return norm_normalize(torch.cat([normal_out, confidence], dim=1).float())
 
     def create_mesh_grid(self, height, width, batch, device="cuda", set_buffer=True):
-        """Create mesh grid.
-
-        Args:
-            height: The height.
-            width: The width.
-            batch: The batch.
-            device: The device.
-            set_buffer: The set buffer.
-        """
         y, x = torch.meshgrid(
             [
                 torch.arange(0, height, dtype=torch.float32, device=device),
@@ -1521,11 +1183,6 @@ class RAFTDepthNormalDPT5(nn.Module):
         return interpolate_float32(x, scale_factor=scale_factor * self.up_scale / 8, mode="nearest")
 
     def forward(self, vit_features, **kwargs):
-        """Forward.
-
-        Args:
-            vit_features: The vit features.
-        """
         ## read vit token to multi-scale features
         B, H, W, _, _, num_register_tokens = vit_features[1]
         vit_features = vit_features[0]
@@ -1584,7 +1241,7 @@ class RAFTDepthNormalDPT5(nn.Module):
         # Rather than running the GRU's conv layers on the context features multiple times, we do it once at the beginning
         inp_list = [
             list(conv(i).split(split_size=conv.out_channels // 3, dim=1))
-            for i, conv in zip(inp_list, self.context_zqr_convs)
+            for i, conv in zip(inp_list, self.context_zqr_convs, strict=False)
         ]
 
         coords0, coords1 = self.initialize_flow(net_list[0])
@@ -1608,7 +1265,7 @@ class RAFTDepthNormalDPT5(nn.Module):
             normal_outs = []
             low_resolution_init = []
 
-        for itr in range(self.iters):
+        for _itr in range(self.iters):
             # coords1 = coords1.detach()
             flow = coords1 - coords0
             if self.n_gru_layers == 3 and self.slow_fast_gru:  # Update low-res GRU
@@ -1656,17 +1313,17 @@ class RAFTDepthNormalDPT5(nn.Module):
             conf_predictions.append(flow_up[:, 1:2])
             normal_outs.append(norm_normalize(flow_up[:, 2:].clone()))
 
-        outputs = dict(
-            prediction=flow_predictions[-1],
-            predictions_list=flow_predictions,
-            confidence=conf_predictions[-1],
-            confidence_list=conf_predictions,
-            pred_logit=None,
+        outputs = {
+            "prediction": flow_predictions[-1],
+            "predictions_list": flow_predictions,
+            "confidence": conf_predictions[-1],
+            "confidence_list": conf_predictions,
+            "pred_logit": None,
             # samples_pred_list=samples_pred_list,
             # coord_list=coord_list,
-            prediction_normal=normal_outs[-1],
-            normal_out_list=normal_outs,
-            low_resolution_init=low_resolution_init,
-        )
+            "prediction_normal": normal_outs[-1],
+            "normal_out_list": normal_outs,
+            "low_resolution_init": low_resolution_init,
+        }
 
         return outputs

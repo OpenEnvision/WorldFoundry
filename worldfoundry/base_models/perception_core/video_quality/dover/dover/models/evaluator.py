@@ -1,11 +1,9 @@
-import time
-from functools import partial, reduce
+from functools import reduce
 
 import torch
 import torch.nn as nn
-from torch.nn.functional import adaptive_avg_pool3d
 
-from .conv_backbone import convnext_3d_small, convnext_3d_tiny, convnextv2_3d_pico, convnextv2_3d_femto
+from .conv_backbone import convnext_3d_small, convnext_3d_tiny, convnextv2_3d_femto, convnextv2_3d_pico
 from .head import IQAHead, VARHead, VQAHead
 from .swin_backbone import SwinTransformer2D as ImageBackbone
 from .swin_backbone import SwinTransformer3D as VideoBackbone
@@ -14,7 +12,9 @@ from .swin_backbone import swin_3d_small, swin_3d_tiny
 
 class BaseEvaluator(nn.Module):
     def __init__(
-        self, backbone=dict(), vqa_head=dict(),
+        self,
+        backbone={},  # noqa: B006 - Keeps the upstream default object and signature.
+        vqa_head={},  # noqa: B006 - Keeps the upstream default object and signature.
     ):
         super().__init__()
         self.backbone = VideoBackbone(**backbone)
@@ -48,11 +48,9 @@ class DOVER(nn.Module):
         backbone_preserve_keys="fragments,resize",
         multi=False,
         layer=-1,
-        backbone=dict(
-            resize={"window_size": (4, 4, 4)}, fragments={"window_size": (4, 4, 4)}
-        ),
+        backbone={"resize": {"window_size": (4, 4, 4)}, "fragments": {"window_size": (4, 4, 4)}},  # noqa: B006 - Keeps the upstream default object and signature.
         divide_head=False,
-        vqa_head=dict(in_channels=768),
+        vqa_head={"in_channels": 768},  # noqa: B006 - Keeps the upstream default object and signature.
         var=False,
     ):
         self.backbone_preserve_keys = backbone_preserve_keys.split(",")
@@ -63,10 +61,7 @@ class DOVER(nn.Module):
             print(backbone_size)
             if key not in self.backbone_preserve_keys:
                 continue
-            if backbone_size == "divided":
-                t_backbone_size = hypers["type"]
-            else:
-                t_backbone_size = backbone_size
+            t_backbone_size = hypers["type"] if backbone_size == "divided" else backbone_size
             if t_backbone_size == "swin_tiny":
                 b = swin_3d_tiny(**backbone[key])
             elif t_backbone_size == "swin_tiny_grpb":
@@ -94,7 +89,7 @@ class DOVER(nn.Module):
             setattr(self, key + "_backbone", b)
         if divide_head:
             for key in backbone:
-                pre_pool = False #if key == "technical" else True
+                pre_pool = False  # if key == "technical" else True
                 if key not in self.backbone_preserve_keys:
                     continue
                 b = VQAHead(pre_pool=pre_pool, **vqa_head)
@@ -115,9 +110,9 @@ class DOVER(nn.Module):
         return_raw_feats=False,
         reduce_scores=False,
         pooled=False,
-        **kwargs
+        **kwargs,
     ):
-        assert (return_pooled_feats & return_raw_feats) == False, "Please only choose one kind of features to return"
+        assert (return_pooled_feats & return_raw_feats) == False, "Please only choose one kind of features to return"  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
         if inference:
             self.eval()
             with torch.no_grad():
@@ -130,16 +125,13 @@ class DOVER(nn.Module):
                     if hasattr(self, key.split("_")[0] + "_head"):
                         scores += [getattr(self, key.split("_")[0] + "_head")(feat)]
                     else:
-                        scores += [getattr(self, "vqa_head")(feat)]
+                        scores += [self.vqa_head(feat)]
                     if return_pooled_feats:
                         feats[key] = feat
                     if return_raw_feats:
                         feats[key] = feat
                 if reduce_scores:
-                    if len(scores) > 1:
-                        scores = reduce(lambda x, y: x + y, scores)
-                    else:
-                        scores = scores[0]
+                    scores = reduce(lambda x, y: x + y, scores) if len(scores) > 1 else scores[0]
                     if pooled:
                         scores = torch.mean(scores, (1, 2, 3, 4))
             self.train()
@@ -157,14 +149,11 @@ class DOVER(nn.Module):
                 if hasattr(self, key.split("_")[0] + "_head"):
                     scores += [getattr(self, key.split("_")[0] + "_head")(feat)]
                 else:
-                    scores += [getattr(self, "vqa_head")(feat)]
+                    scores += [self.vqa_head(feat)]
                 if return_pooled_feats:
                     feats[key] = feat.mean((-3, -2, -1))
             if reduce_scores:
-                if len(scores) > 1:
-                    scores = reduce(lambda x, y: x + y, scores)
-                else:
-                    scores = scores[0]
+                scores = reduce(lambda x, y: x + y, scores) if len(scores) > 1 else scores[0]
                 if pooled:
                     print(scores.shape)
                     scores = torch.mean(scores, (1, 2, 3, 4))
@@ -173,15 +162,8 @@ class DOVER(nn.Module):
             if return_pooled_feats:
                 return scores, feats
             return scores
-        
-    def forward_head(
-        self,
-        feats,
-        inference=True,
-        reduce_scores=False,
-        pooled=False,
-        **kwargs
-    ):
+
+    def forward_head(self, feats, inference=True, reduce_scores=False, pooled=False, **kwargs):
         if inference:
             self.eval()
             with torch.no_grad():
@@ -192,12 +174,9 @@ class DOVER(nn.Module):
                     if hasattr(self, key.split("_")[0] + "_head"):
                         scores += [getattr(self, key.split("_")[0] + "_head")(feat)]
                     else:
-                        scores += [getattr(self, "vqa_head")(feat)]
+                        scores += [self.vqa_head(feat)]
                 if reduce_scores:
-                    if len(scores) > 1:
-                        scores = reduce(lambda x, y: x + y, scores)
-                    else:
-                        scores = scores[0]
+                    scores = reduce(lambda x, y: x + y, scores) if len(scores) > 1 else scores[0]
                     if pooled:
                         scores = torch.mean(scores, (1, 2, 3, 4))
             self.train()
@@ -206,30 +185,31 @@ class DOVER(nn.Module):
             self.train()
             scores = []
             feats = {}
-            for key in vclips:
+            for key in vclips:  # noqa: F821 - Name is undefined in the upstream source.
                 feat = getattr(self, key.split("_")[0] + "_backbone")(
-                    vclips[key], multi=self.multi, layer=self.layer, **kwargs
+                    vclips[key],  # noqa: F821 - Name is undefined in the upstream source.
+                    multi=self.multi,
+                    layer=self.layer,
+                    **kwargs,
                 )
                 if hasattr(self, key.split("_")[0] + "_head"):
                     scores += [getattr(self, key.split("_")[0] + "_head")(feat)]
                 else:
-                    scores += [getattr(self, "vqa_head")(feat)]
-                if return_pooled_feats:
+                    scores += [self.vqa_head(feat)]
+                if return_pooled_feats:  # noqa: F821 - Name is undefined in the upstream source.
                     feats[key] = feat
             if reduce_scores:
-                if len(scores) > 1:
-                    scores = reduce(lambda x, y: x + y, scores)
-                else:
-                    scores = scores[0]
+                scores = reduce(lambda x, y: x + y, scores) if len(scores) > 1 else scores[0]
                 if pooled:
                     print(scores.shape)
                     scores = torch.mean(scores, (1, 2, 3, 4))
                     print(scores.shape)
 
-            if return_pooled_feats:
+            if return_pooled_feats:  # noqa: F821 - Name is undefined in the upstream source.
                 return scores, feats
             return scores
-        
+
+
 class MinimumDOVER(nn.Module):
     def __init__(self):
         super().__init__()
@@ -238,22 +218,22 @@ class MinimumDOVER(nn.Module):
         self.technical_head = VQAHead(pre_pool=False, in_channels=768)
         self.aesthetic_head = VQAHead(pre_pool=False, in_channels=768)
 
-
-    def forward(self,aesthetic_view, technical_view):
+    def forward(self, aesthetic_view, technical_view):
         self.eval()
         with torch.no_grad():
             aesthetic_score = self.aesthetic_head(self.aesthetic_backbone(aesthetic_view))
             technical_score = self.technical_head(self.technical_backbone(technical_view))
-            
-        aesthetic_score_pooled = torch.mean(aesthetic_score, (1,2,3,4))
-        technical_score_pooled = torch.mean(technical_score, (1,2,3,4))
-        return [aesthetic_score_pooled, technical_score_pooled]
 
+        aesthetic_score_pooled = torch.mean(aesthetic_score, (1, 2, 3, 4))
+        technical_score_pooled = torch.mean(technical_score, (1, 2, 3, 4))
+        return [aesthetic_score_pooled, technical_score_pooled]
 
 
 class BaseImageEvaluator(nn.Module):
     def __init__(
-        self, backbone=dict(), iqa_head=dict(),
+        self,
+        backbone={},  # noqa: B006 - Keeps the upstream default object and signature.
+        iqa_head={},  # noqa: B006 - Keeps the upstream default object and signature.
     ):
         super().__init__()
         self.backbone = ImageBackbone(**backbone)

@@ -27,12 +27,12 @@ from .component import (
 __all__ = [
     "DiffusersLTX2TensorVideoCodec",
     "LTXMediaDecoder",
+    "LTXTensorVideoCodec",
     "LTXVideoEncoderModule",
     "LTXVideoMediaDecoder",
-    "LTXTensorVideoCodec",
     "build_diffusers_ltx2_tensor_video_codec",
     "build_ltx_media_decoder",
-    "build_ltx_video_media_decoder",
     "build_ltx_tensor_video_codec",
+    "build_ltx_video_media_decoder",
     "load_ltx_video_encoder",
 ]

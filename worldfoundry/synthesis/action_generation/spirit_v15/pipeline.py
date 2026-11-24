@@ -9,9 +9,7 @@ class SpiritV15Pipeline(ComponentPipeline):
     MODEL_ID = "spirit-v1.5"
     OPERATOR_TARGET = "worldfoundry.operators.official_policy_operator:OfficialPolicyOperator"
     MEMORY_TARGET = "worldfoundry.synthesis.action_generation.memory:ActionTraceMemory"
-    SYNTHESIS_TARGET = (
-        "worldfoundry.synthesis.action_generation.spirit_v15.spirit_v15_synthesis:SpiritV15Synthesis"
-    )
+    SYNTHESIS_TARGET = "worldfoundry.synthesis.action_generation.spirit_v15.spirit_v15_synthesis:SpiritV15Synthesis"
     generation_type = "vla_policy"
 
 

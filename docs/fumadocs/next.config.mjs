@@ -68,16 +68,18 @@ const config = {
             permanent: true,
           }));
         },
+        // Page markdown lives at `${page.url}.md`; the /llms.mdx route serves the
+        // same layout, and production builds move its export onto these paths.
         async rewrites() {
           return [
-            { source: '/docs.md', destination: '/llms.mdx/docs/index.md' },
-            { source: '/docs.mdx', destination: '/llms.mdx/docs/index.md' },
-            { source: '/zh/docs.md', destination: '/llms.mdx/docs/zh/index.md' },
-            { source: '/zh/docs.mdx', destination: '/llms.mdx/docs/zh/index.md' },
+            { source: '/docs.md', destination: '/llms.mdx/docs.md' },
+            { source: '/docs.mdx', destination: '/llms.mdx/docs.md' },
+            { source: '/zh/docs.md', destination: '/llms.mdx/zh/docs.md' },
+            { source: '/zh/docs.mdx', destination: '/llms.mdx/zh/docs.md' },
             { source: '/docs/:path*.md', destination: '/llms.mdx/docs/:path*.md' },
             { source: '/docs/:path*.mdx', destination: '/llms.mdx/docs/:path*.md' },
-            { source: '/zh/docs/:path*.md', destination: '/llms.mdx/docs/zh/:path*.md' },
-            { source: '/zh/docs/:path*.mdx', destination: '/llms.mdx/docs/zh/:path*.md' },
+            { source: '/zh/docs/:path*.md', destination: '/llms.mdx/zh/docs/:path*.md' },
+            { source: '/zh/docs/:path*.mdx', destination: '/llms.mdx/zh/docs/:path*.md' },
           ];
         },
       }),

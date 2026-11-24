@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.api import (
+from worldfoundry.evals.api import (
     AggregateResult,
     ArtifactRef,
     GenerationRequest,
     GenerationResult,
     MetricResult,
 )
-from worldfoundry.evaluation.runner import ContractRunRequest, execute_contract_run
+from worldfoundry.evals.tasks.execution.orchestration.contract import ContractRunRequest, execute_contract_run
 
 
 def _read_jsonl(path: Path) -> list[dict]:

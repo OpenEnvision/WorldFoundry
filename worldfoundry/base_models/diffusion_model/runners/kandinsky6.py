@@ -14,19 +14,19 @@ class Kandinsky6Runner:
         self.dtype = torch.bfloat16
 
     def run(self, request):
-        options = dict(
-            text=list(request.prompts),
-            negative_text=list(request.negative_prompts) if request.negative_prompts else "",
-            height=request.height,
-            width=request.width,
-            latent_frames=(request.num_frames - 1) // 4 + 1,
-            num_steps=request.sampling.num_inference_steps,
-            guidance_weight=request.sampling.guidance_scale,
-            seed=request.sampling.seed,
-            image=request.inputs.get("image"),
-            sample_audio=bool(request.inputs.get("sample_audio", True)),
-            save_path=request.inputs.get("save_path"),
-        )
+        options = {
+            "text": list(request.prompts),
+            "negative_text": list(request.negative_prompts) if request.negative_prompts else "",
+            "height": request.height,
+            "width": request.width,
+            "latent_frames": (request.num_frames - 1) // 4 + 1,
+            "num_steps": request.sampling.num_inference_steps,
+            "guidance_weight": request.sampling.guidance_scale,
+            "seed": request.sampling.seed,
+            "image": request.inputs.get("image"),
+            "sample_audio": bool(request.inputs.get("sample_audio", True)),
+            "save_path": request.inputs.get("save_path"),
+        }
         result = self.sampler(**options)
         return DiffusionOutput(
             sample=result.frames,

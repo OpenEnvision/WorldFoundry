@@ -18,6 +18,8 @@ Public surface: :class:`PyNcclCommunicator`.
 """
 
 # ===================== import region =====================
+from typing import cast
+
 import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup, ReduceOp
@@ -134,7 +136,9 @@ class PyNcclCommunicator:
                 stream.synchronize()
             del data
 
-    def all_reduce(self, in_tensor: torch.Tensor, op: ReduceOp = ReduceOp.SUM, stream=None) -> torch.Tensor:
+    def all_reduce(
+        self, in_tensor: torch.Tensor, op: ReduceOp.RedOpType = ReduceOp.SUM, stream=None
+    ) -> torch.Tensor | None:
         """Out-of-place NCCL all-reduce on ``self.device``; ``None`` if disabled.
 
         Tensor must already live on the communicator device — a mismatch
@@ -155,6 +159,7 @@ class PyNcclCommunicator:
 
         if stream is None:
             stream = current_stream()
+        stream = cast(torch.cuda.Stream, stream)
         self.nccl.ncclAllReduce(
             buffer_type(in_tensor.data_ptr()),
             buffer_type(out_tensor.data_ptr()),
@@ -179,6 +184,7 @@ class PyNcclCommunicator:
         )
         if stream is None:
             stream = current_stream()
+        stream = cast(torch.cuda.Stream, stream)
         self.nccl.ncclAllGather(
             buffer_type(input_tensor.data_ptr()),
             buffer_type(output_tensor.data_ptr()),
@@ -189,7 +195,11 @@ class PyNcclCommunicator:
         )
 
     def reduce_scatter(
-        self, output_tensor: torch.Tensor, input_tensor: torch.Tensor,         op: ReduceOp = ReduceOp.SUM, stream=None
+        self,
+        output_tensor: torch.Tensor,
+        input_tensor: torch.Tensor,
+        op: ReduceOp.RedOpType = ReduceOp.SUM,
+        stream=None,
     ):
         """Reduce-scatter into ``output_tensor``; count is the *output* numel per rank."""
         if self.disabled:
@@ -203,6 +213,7 @@ class PyNcclCommunicator:
         )
         if stream is None:
             stream = current_stream()
+        stream = cast(torch.cuda.Stream, stream)
         self.nccl.ncclReduceScatter(
             buffer_type(input_tensor.data_ptr()),
             buffer_type(output_tensor.data_ptr()),
@@ -222,6 +233,7 @@ class PyNcclCommunicator:
         )
         if stream is None:
             stream = current_stream()
+        stream = cast(torch.cuda.Stream, stream)
         self.nccl.ncclSend(
             buffer_type(tensor.data_ptr()),
             tensor.numel(),
@@ -240,6 +252,7 @@ class PyNcclCommunicator:
         )
         if stream is None:
             stream = current_stream()
+        stream = cast(torch.cuda.Stream, stream)
         self.nccl.ncclRecv(
             buffer_type(tensor.data_ptr()),
             tensor.numel(),
@@ -258,6 +271,7 @@ class PyNcclCommunicator:
         )
         if stream is None:
             stream = current_stream()
+        stream = cast(torch.cuda.Stream, stream)
         if src == self.rank:
             sendbuff = buffer_type(tensor.data_ptr())
             # NCCL requires the sender also to have a receive buffer

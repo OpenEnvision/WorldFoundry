@@ -1,7 +1,7 @@
 import { Provider } from '@/components/provider';
 import { ThemeBootstrap } from '@/components/theme-bootstrap';
 import { brandDisplayFont } from '@/lib/brand-font';
-import { docsSansFont } from '@/lib/docs-font';
+import { docsMonoFont, docsSansFont } from '@/lib/docs-font';
 import { withBasePath } from '@/lib/site-path';
 import 'fumadocs-ui/components/image-zoom2.css';
 import './styles/tokens.css';
@@ -31,7 +31,7 @@ export default function Layout({ children }: LayoutProps<'/'>) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${brandDisplayFont.variable} ${docsSansFont.variable}`}
+      className={`${brandDisplayFont.variable} ${docsSansFont.variable} ${docsMonoFont.variable}`}
     >
       <body className="flex flex-col min-h-screen" suppressHydrationWarning>
         <ThemeBootstrap />

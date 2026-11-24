@@ -16,7 +16,6 @@ import importlib.util
 import os
 import sys
 from pathlib import Path
-from types import ModuleType
 
 import cv2
 import numpy as np
@@ -39,43 +38,11 @@ def _ensure_torchvision_functional_tensor_alias() -> None:
     sys.modules.setdefault("torchvision.transforms.functional_tensor", functional_tensor)
 
 
-def _ensure_realesrgan_version_module() -> None:
-    """Make editable-install-only metadata importable from a plain checkout."""
-    import sys
-
-    if "realesrgan.version" in sys.modules:
-        return
-
-    for entry in sys.path:
-        base = Path(entry)
-        package_dir = base / "realesrgan"
-        version_file = package_dir / "version.py"
-        version_txt = base / "VERSION"
-        if not package_dir.is_dir():
-            continue
-        if version_file.is_file():
-            return
-        if not version_txt.is_file():
-            continue
-
-        short_version = version_txt.read_text(encoding="utf-8").strip()
-        version_info = tuple(int(item) if item.isdigit() else item for item in short_version.split("."))
-        module = ModuleType("realesrgan.version")
-        module.__file__ = str(version_file)
-        module.__package__ = "realesrgan"
-        module.__version__ = short_version
-        module.__gitsha__ = "unknown"
-        module.version_info = version_info
-        sys.modules.setdefault("realesrgan.version", module)
-        return
-
-
 # ---------------------------------------------------------------------------
 # Import-time compatibility shims.  hy3dworld itself is resolved lazily so this
 # module can always be imported for testing / inspection.
 # ---------------------------------------------------------------------------
 _ensure_torchvision_functional_tensor_alias()
-_ensure_realesrgan_version_module()
 
 Image2PanoramaPipelines = None
 Perspective = None
@@ -166,7 +133,6 @@ def ensure_hy3dworld(path: str | os.PathLike | None = None) -> None:
         )
 
     _ensure_torchvision_functional_tensor_alias()
-    _ensure_realesrgan_version_module()
     _ensure_utils3d_alias()
 
     try:
@@ -230,10 +196,7 @@ class Image2PanoramaDemo:
         self.pipe.enable_model_cpu_offload()
         self.pipe.enable_vae_tiling()
 
-        self.general_negative_prompt = (
-            "human, person, people, messy,"
-            "low-quality, blur, noise, low-resolution"
-        )
+        self.general_negative_prompt = "human, person, people, messy,low-quality, blur, noise, low-resolution"
         self.general_positive_prompt = "high-quality,  high-resolution, sharp, clear, 8k"
 
         if self.args.fp8_attention:
@@ -265,20 +228,16 @@ class Image2PanoramaDemo:
             ratio = width_fov / height_fov
             w = int((self.FOV / 360) * self.width)
             h = int(w / ratio)
-            perspective_img = cv2.resize(
-                perspective_img, (w, h), interpolation=cv2.INTER_AREA)
+            perspective_img = cv2.resize(perspective_img, (w, h), interpolation=cv2.INTER_AREA)
         else:
             ratio = height_fov / width_fov
             h = int((self.FOV / 180) * self.height)
             w = int(h / ratio)
-            perspective_img = cv2.resize(
-                perspective_img, (w, h), interpolation=cv2.INTER_AREA)
+            perspective_img = cv2.resize(perspective_img, (w, h), interpolation=cv2.INTER_AREA)
 
-        equ = Perspective(perspective_img, self.FOV,
-                          self.THETA, self.PHI, crop_bound=False)
+        equ = Perspective(perspective_img, self.FOV, self.THETA, self.PHI, crop_bound=False)
         img, mask = equ.GetEquirec(self.height, self.width)
-        mask = cv2.erode(mask.astype(np.uint8), np.ones(
-            (3, 3), np.uint8), iterations=5)
+        mask = cv2.erode(mask.astype(np.uint8), np.ones((3, 3), np.uint8), iterations=5)
 
         img = img * mask
 
@@ -293,7 +252,7 @@ class Image2PanoramaDemo:
         if self.args.cache:
             helper = DeepCacheHelper(
                 self.pipe.transformer,
-                no_cache_steps=list(range(0, 10)) + list(range(10, 40, 3)) + list(range(40, 50)),
+                no_cache_steps=list(range(10)) + list(range(10, 40, 3)) + list(range(40, 50)),
                 no_cache_block_id={"single": [38]},
             )
             helper.start_timestep = 0

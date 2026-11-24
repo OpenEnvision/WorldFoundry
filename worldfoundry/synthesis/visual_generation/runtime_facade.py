@@ -17,8 +17,9 @@ captured here so each adapter only spells out what genuinely differs.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, ClassVar, Sequence
+from typing import Any, ClassVar
 
 from ..base_synthesis import BaseSynthesis
 

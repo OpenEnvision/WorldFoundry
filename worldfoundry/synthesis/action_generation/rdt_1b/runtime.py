@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
@@ -76,7 +77,7 @@ class RDT1BRuntime:
         import torch
         from transformers import SiglipImageProcessor, SiglipVisionModel
 
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .runner import RDTRunner
 
@@ -116,13 +117,12 @@ class RDT1BRuntime:
         )
         if isinstance(weights, Mapping) and "state_dict" in weights:
             weights = weights["state_dict"]
-        if not isinstance(weights, Mapping) or not weights or not all(
-            isinstance(key, str) and isinstance(value, torch.Tensor)
-            for key, value in weights.items()
+        if (
+            not isinstance(weights, Mapping)
+            or not weights
+            or not all(isinstance(key, str) and isinstance(value, torch.Tensor) for key, value in weights.items())
         ):
-            raise TypeError(
-                f"RDT-1B checkpoint must contain a non-empty string-to-tensor state dict: {checkpoint}"
-            )
+            raise TypeError(f"RDT-1B checkpoint must contain a non-empty string-to-tensor state dict: {checkpoint}")
         policy.load_state_dict(weights, strict=True)
         policy.num_inference_timesteps = self.config.denoising_steps
         policy = policy.to(device=device, dtype=dtype).eval()
@@ -132,12 +132,16 @@ class RDT1BRuntime:
             local_files_only=True,
             trust_remote_code=False,
         )
-        vision_model = SiglipVisionModel.from_pretrained(
-            vision_location,
-            dtype=dtype,
-            local_files_only=True,
-            trust_remote_code=False,
-        ).to(device=device, dtype=dtype).eval()
+        vision_model = (
+            SiglipVisionModel.from_pretrained(
+                vision_location,
+                dtype=dtype,
+                local_files_only=True,
+                trust_remote_code=False,
+            )
+            .to(device=device, dtype=dtype)
+            .eval()
+        )
 
         self._policy = policy
         self._image_processor = image_processor
@@ -171,13 +175,17 @@ class RDT1BRuntime:
                 local_files_only=True,
                 trust_remote_code=False,
             )
-            self._text_model = T5EncoderModel.from_pretrained(
-                text_location,
-                dtype=self._dtype,
-                low_cpu_mem_usage=True,
-                local_files_only=True,
-                trust_remote_code=False,
-            ).to(device=self._device, dtype=self._dtype).eval()
+            self._text_model = (
+                T5EncoderModel.from_pretrained(
+                    text_location,
+                    dtype=self._dtype,
+                    low_cpu_mem_usage=True,
+                    local_files_only=True,
+                    trust_remote_code=False,
+                )
+                .to(device=self._device, dtype=self._dtype)
+                .eval()
+            )
             self._text_location = text_location
 
         tokens = self._tokenizer(
@@ -253,9 +261,7 @@ class RDT1BRuntime:
         expected_views = len(self.config.camera_views)
         for frame in frames[-self.config.history_frames :]:
             if len(frame) > expected_views:
-                raise ValueError(
-                    f"RDT-1B expects {expected_views} camera views per history frame"
-                )
+                raise ValueError(f"RDT-1B expects {expected_views} camera views per history frame")
             frame = [*frame, *([None] * (expected_views - len(frame)))]
             normalized_frames.extend(frame)
         return normalized_frames
@@ -280,9 +286,7 @@ class RDT1BRuntime:
         else:
             indices = configured
             if indices is None or len(indices) != values.numel():
-                raise ValueError(
-                    "RDT-1B non-universal states require state_indices with one index per value"
-                )
+                raise ValueError("RDT-1B non-universal states require state_indices with one index per value")
             if max(indices, default=-1) >= action_dim or min(indices, default=0) < 0:
                 raise ValueError(f"RDT-1B state_indices must be within [0, {action_dim - 1}]")
             if self.config.state_scale is not None:

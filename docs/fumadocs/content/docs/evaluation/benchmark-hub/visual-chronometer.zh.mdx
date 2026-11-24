@@ -1,22 +1,22 @@
 ---
 title: Visual Chronometer
-description: "TACO 的任意视频 PhyFPS 预测器。一致性指标全部越低越好。WorldFoundry 与 PhyFPS-Bench-Gen 共用 runtime，不编造榜单。"
+description: "TACO 的任意视频 PhyFPS 预测器。一致性指标全部越低越好。WorldFoundry 与 PhyFPS-Bench-Gen 共用 runtime。"
 ---
 
-Visual Chronometer（德州农工 TACO Group）预测 **物理帧率（PhyFPS）**——视觉运动暗示的时间尺度——忽略容器元数据。训练用受控时间重采样与物理增强（运动模糊、卷帘快门）。作为 WorldFoundry benchmark，它给 **任意视频目录** 打分（不是固定 prompt 套件）：平均 PhyFPS 加上视频内 / 视频间变异系数。**越低表示时间行为越稳。**
+Visual Chronometer（德州农工 TACO Group）预测**物理帧率（PhyFPS）**——视觉运动所体现的时间尺度——忽略容器元数据。训练用受控时间重采样与物理增强（运动模糊、卷帘快门）。作为 WorldFoundry benchmark，它给**任意视频目录**打分（不是固定 prompt 套件）：平均 PhyFPS 加上视频内 / 视频间变异系数。**越低表示时间行为越稳。**
 
 生成侧审计见 [PhyFPS-Bench-Gen](/zh/docs/evaluation/benchmark-hub/phyfps-bench-gen)（100 prompt 的 Meta-vs-PhyFPS）。
 
 代码：[taco-group/Visual_Chronometer](https://github.com/taco-group/Visual_Chronometer)。权重：[`xiangbog/Visual_Chronometer`](https://huggingface.co/xiangbog/Visual_Chronometer)（`vc_common_10_60fps.ckpt`，10–60 FPS）。
 
-WorldFoundry 通过与 PhyFPS-Bench-Gen 共享的封装在进程内跑 `predict.py`，或导入 `results.csv`。运行时 / 归一化表面存在；**不声称已做发布级完整官方运行**。
+WorldFoundry 通过与 PhyFPS-Bench-Gen 共享的封装在进程内跑 `predict.py`，或导入 `results.csv`。
 
 <BenchmarkPageSections id="visual-chronometer" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id visual-chronometer \
   --mode official-validation \
   --official-results-path <results.csv> \
@@ -25,9 +25,9 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-`--generated-artifact-dir` 加 `WORLDFOUNDRY_VISUAL_CHRONOMETER_PREDICT_BACKEND` 选择本地预测。环境变量：`WORLDFOUNDRY_VISUAL_CHRONOMETER_RESULTS_PATH`、`WORLDFOUNDRY_VISUAL_CHRONOMETER_ROOT`。
+同时设置 `--generated-artifact-dir` 与 `WORLDFOUNDRY_VISUAL_CHRONOMETER_PREDICT_BACKEND` 可选择本地预测。环境变量：`WORLDFOUNDRY_VISUAL_CHRONOMETER_RESULTS_PATH`、`WORLDFOUNDRY_VISUAL_CHRONOMETER_ROOT`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/visual-chronometer.yaml`，`worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer`。
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/visual-chronometer.yaml`、`worldfoundry/evals/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer`。
 
 产物包括 `scorecard.json`（主键 `visual_chronometer_average`）与 `results.csv`。
 

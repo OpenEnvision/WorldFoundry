@@ -13,19 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> model -> dualdpt.py functionality."""
-
 from typing import List, Sequence, Tuple
 import torch
 import torch.nn as nn
 
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.dpt import _make_fusion_block, _make_scratch
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.dpt import (
+    _make_fusion_block,
+    _make_scratch,
+)
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.utils.head_utils import (
     Permute,
-    create_uv_grid,
     custom_interpolate,
-    position_grid_to_embed,
 )
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.utils import (
+    position_grid_to_embed_fp32 as position_grid_to_embed,
+)
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.utils import create_uv_grid
 from addict import Dict
 
 
@@ -59,14 +62,6 @@ class DualDPT(nn.Module):
         aux_out1_conv_num: int = 5,
         head_names: Tuple[str, str] = ("depth", "ray"),
     ) -> None:
-        """Init.
-
-        Args:
-            dim_in: The dim in.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         # -------------------- configuration --------------------
@@ -95,12 +90,8 @@ class DualDPT(nn.Module):
         # design: stage strides (x4, x2, x1, /2) relative to patch grid to align to a common pivot scale
         self.resize_layers = nn.ModuleList(
             [
-                nn.ConvTranspose2d(
-                    out_channels[0], out_channels[0], kernel_size=4, stride=4, padding=0
-                ),
-                nn.ConvTranspose2d(
-                    out_channels[1], out_channels[1], kernel_size=2, stride=2, padding=0
-                ),
+                nn.ConvTranspose2d(out_channels[0], out_channels[0], kernel_size=4, stride=4, padding=0),
+                nn.ConvTranspose2d(out_channels[1], out_channels[1], kernel_size=2, stride=2, padding=0),
                 nn.Identity(),
                 nn.Conv2d(out_channels[3], out_channels[3], kernel_size=3, stride=2, padding=1),
             ]
@@ -118,9 +109,7 @@ class DualDPT(nn.Module):
         # Primary head neck + head (independent)
         head_features_1 = features
         head_features_2 = 32
-        self.scratch.output_conv1 = nn.Conv2d(
-            head_features_1, head_features_1 // 2, kernel_size=3, stride=1, padding=1
-        )
+        self.scratch.output_conv1 = nn.Conv2d(head_features_1, head_features_1 // 2, kernel_size=3, stride=1, padding=1)
         self.scratch.output_conv2 = nn.Sequential(
             nn.Conv2d(head_features_1 // 2, head_features_2, kernel_size=3, stride=1, padding=1),
             nn.ReLU(inplace=True),
@@ -140,17 +129,11 @@ class DualDPT(nn.Module):
 
         # Aux final projection per level
         use_ln = True
-        ln_seq = (
-            [Permute((0, 2, 3, 1)), nn.LayerNorm(head_features_2), Permute((0, 3, 1, 2))]
-            if use_ln
-            else []
-        )
+        ln_seq = [Permute((0, 2, 3, 1)), nn.LayerNorm(head_features_2), Permute((0, 3, 1, 2))] if use_ln else []
         self.scratch.output_conv2_aux = nn.ModuleList(
             [
                 nn.Sequential(
-                    nn.Conv2d(
-                        head_features_1 // 2, head_features_2, kernel_size=3, stride=1, padding=1
-                    ),
+                    nn.Conv2d(head_features_1 // 2, head_features_2, kernel_size=3, stride=1, padding=1),
                     *ln_seq,
                     nn.ReLU(inplace=True),
                     nn.Conv2d(head_features_2, 7, kernel_size=1, stride=1, padding=0),
@@ -204,10 +187,7 @@ class DualDPT(nn.Module):
                 patch_start_idx,
             )
             out_dicts.append(out_dict)
-        out_dict = {
-            k: torch.cat([out_dict[k] for out_dict in out_dicts], dim=0)
-            for k in out_dicts[0].keys()
-        }
+        out_dict = {k: torch.cat([out_dict[k] for out_dict in out_dicts], dim=0) for k in out_dicts[0].keys()}
         out_dict = {k: v.view(B, S, *v.shape[1:]) for k, v in out_dict.items()}
         return Dict(out_dict)
 
@@ -222,17 +202,6 @@ class DualDPT(nn.Module):
         W: int,
         patch_start_idx: int,
     ) -> Dict[str, torch.Tensor]:
-        """Helper function to forward impl.
-
-        Args:
-            feats: The feats.
-            H: The h.
-            W: The w.
-            patch_start_idx: The patch start idx.
-
-        Returns:
-            The return value.
-        """
         B, _, C = feats[0].shape
         ph, pw = H // self.patch_size, W // self.patch_size
         resized_feats = []
@@ -254,9 +223,7 @@ class DualDPT(nn.Module):
         h_out = int(ph * self.patch_size / self.down_ratio)
         w_out = int(pw * self.patch_size / self.down_ratio)
 
-        fused_main = custom_interpolate(
-            fused_main, (h_out, w_out), mode="bilinear", align_corners=True
-        )
+        fused_main = custom_interpolate(fused_main, (h_out, w_out), mode="bilinear", align_corners=True)
         if self.pos_embed:
             fused_main = self._add_pos_embed(fused_main, W, H)
 
@@ -359,9 +326,7 @@ class DualDPT(nn.Module):
             return nn.Sequential(nn.Conv2d(in_ch, in_ch // 2, 3, 1, 1))
         raise ValueError(f"aux_out1_conv_num {self.aux_out1_conv_num} not supported")
 
-    def _apply_activation_single(
-        self, x: torch.Tensor, activation: str = "linear"
-    ) -> torch.Tensor:
+    def _apply_activation_single(self, x: torch.Tensor, activation: str = "linear") -> torch.Tensor:
         """
         Apply activation to single channel output, maintaining semantic consistency with value branch in multi-channel case.
         Supports: exp / relu / sigmoid / softplus / tanh / linear / expp1

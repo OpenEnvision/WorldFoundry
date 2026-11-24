@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from ..pipeline_utils import PipelineABC
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any
 
-from worldfoundry.synthesis.visual_generation.worldcam import runtime_root as worldcam_runtime_root
 from worldfoundry.runtime.env import resolve_ckpt_dir, resolve_hfd_root
+from worldfoundry.synthesis.visual_generation.worldcam import runtime_root as worldcam_runtime_root
+
+from ..pipeline_utils import PipelineABC
 
 _DEFAULT_CKPT_ROOT = resolve_ckpt_dir()
 _DEFAULT_HFD_ROOT = resolve_hfd_root()
@@ -16,7 +18,6 @@ _DEFAULT_WAN_CKPT = _DEFAULT_HFD_ROOT / "Wan-AI--Wan2.1-T2V-1.3B"
 
 
 def _resolve_local_path(value: Any, repo_id: str, default_path: Path, label: str) -> str:
-    """Resolve local path helper function."""
     text = str(value or default_path)
     path = Path(text).expanduser()
     if path.exists():
@@ -38,9 +39,9 @@ class WorldCamPipeline(PipelineABC):
 
     def __init__(
         self,
-        operator: Optional[Any] = None,
-        synthesis_model: Optional[Any] = None,
-        memory_module: Optional[Any] = None,
+        operator: Any | None = None,
+        synthesis_model: Any | None = None,
+        memory_module: Any | None = None,
         device: str = "cuda",
         weight_dtype: Any = None,
         checkpoint_root: str | Path = _DEFAULT_CKPT_ROOT,
@@ -55,14 +56,14 @@ class WorldCamPipeline(PipelineABC):
         self.checkpoint_root = Path(checkpoint_root).expanduser().resolve()
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: Any = None,
-        required_components: Optional[dict] = None,
+        required_components: dict | None = None,
         device: str = "cuda",
         weight_dtype: Any = None,
         **kwargs,
-    ) -> "WorldCamPipeline":
+    ) -> WorldCamPipeline:
         """
         Load WorldCam from local checkpoint roots while keeping module import lightweight.
 
@@ -91,7 +92,10 @@ class WorldCamPipeline(PipelineABC):
             "Wan2.1 base model",
         )
         worldcam_ckpt_path = _resolve_local_path(
-            options.get("worldcam_ckpt_path") or options.get("checkpoint_path") or options.get("ckpt_path") or "worldcam/worldcam",
+            options.get("worldcam_ckpt_path")
+            or options.get("checkpoint_path")
+            or options.get("ckpt_path")
+            or "worldcam/worldcam",
             "worldcam/worldcam",
             _DEFAULT_WORLDCAM_CKPT,
             "WorldCam checkpoint",
@@ -172,9 +176,7 @@ class WorldCamPipeline(PipelineABC):
             tensor = source
         else:
             tensor = torch.as_tensor(source)
-        if tensor.ndim == 2 and tensor.shape[-1] == 4:
-            tensor = tensor.unsqueeze(0)
-        elif tensor.ndim == 3 and tuple(tensor.shape[-2:]) == (4, 4):
+        if (tensor.ndim == 2 and tensor.shape[-1] == 4) or (tensor.ndim == 3 and tuple(tensor.shape[-2:]) == (4, 4)):
             tensor = tensor.unsqueeze(0)
         return tensor
 
@@ -197,6 +199,7 @@ class WorldCamPipeline(PipelineABC):
                 str(path),
                 height=int(height or self.synthesis_model.height),
                 width=int(width or self.synthesis_model.width),
+                center_crop=False,
             )
             video.length = int(conditioning_frames or 65)
             return video
@@ -279,7 +282,7 @@ class WorldCamPipeline(PipelineABC):
             }
         )
         if output_path is not None:
-            from worldfoundry.core.io import write_video
+            from worldfoundry.core.media.codecs.video import write_video
 
             write_video(result["video"], output_path, fps=int(fps) if fps is not None else 30)
             result["artifact_path"] = str(output_path)
@@ -289,7 +292,7 @@ class WorldCamPipeline(PipelineABC):
 
     def stream(
         self,
-        images: Optional[Any],
+        images: Any | None,
         interactions: Sequence[str],
         prompt: str = "",
         reset_memory: bool = False,

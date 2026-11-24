@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> encoder -> backbone -> backbone_dino.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from dataclasses import dataclass
 from typing import Literal
 
@@ -16,24 +15,13 @@ from .backbone_resnet import BackboneResnet, BackboneResnetCfg
 
 @dataclass
 class BackboneDinoCfg:
-    """Backbone dino cfg implementation."""
     name: Literal["dino"]
     model: Literal["dino_vits16", "dino_vits8", "dino_vitb16", "dino_vitb8"]
     d_out: int
 
 
 class BackboneDino(Backbone[BackboneDinoCfg]):
-    """Backbone dino implementation."""
     def __init__(self, cfg: BackboneDinoCfg, d_in: int) -> None:
-        """Init.
-
-        Args:
-            cfg: The cfg.
-            d_in: The d in.
-
-        Returns:
-            The return value.
-        """
         super().__init__(cfg)
         assert d_in == 3
         self.dino = getattr(dino_hub, cfg.model)(pretrained=False)
@@ -56,14 +44,6 @@ class BackboneDino(Backbone[BackboneDinoCfg]):
         self,
         context: BatchedViews,
     ) -> Float[Tensor, "batch view d_out height width"]:
-        """Forward.
-
-        Args:
-            context: The context.
-
-        Returns:
-            The return value.
-        """
         # Compute features from the DINO-pretrained resnet50.
         resnet_features = self.resnet_backbone(context)
 
@@ -94,18 +74,8 @@ class BackboneDino(Backbone[BackboneDinoCfg]):
 
     @property
     def patch_size(self) -> int:
-        """Patch size.
-
-        Returns:
-            The return value.
-        """
         return int("".join(filter(str.isdigit, self.cfg.model)))
 
     @property
     def d_out(self) -> int:
-        """D out.
-
-        Returns:
-            The return value.
-        """
         return self.cfg.d_out

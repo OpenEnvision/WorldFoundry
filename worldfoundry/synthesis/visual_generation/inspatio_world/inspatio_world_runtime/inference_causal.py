@@ -3,7 +3,6 @@ import gc
 import os
 import time
 
-import numpy as np
 import torch
 import torch.distributed as dist
 from einops import rearrange
@@ -14,16 +13,20 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
 from worldfoundry.core.media.codecs.video import write_video_torchvision
-from worldfoundry.core.vram import DynamicSwapInstaller, get_cuda_free_memory_gb, gpu
-from pipeline import CausalInferencePipeline
-from pipeline.causal_inference import denoise_block
 from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
-from utils.render_warper import convert_mask_video
-from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.reproducibility import seed_for_rank
+from worldfoundry.core.vram import DynamicSwapInstaller, get_cuda_free_memory_gb, gpu
+from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.reproducibility import (
+    seed_for_rank,
+)
+
+from .pipeline import CausalInferencePipeline
+from .pipeline.causal_inference import denoise_block
+from .utils.render_warper import convert_mask_video
 
 
 def write_video(filename, video_array, fps):
     write_video_torchvision(filename, video_array, fps=fps)
+
 
 # ============================================================================
 # Argument parsing
@@ -49,7 +52,7 @@ args = parser.parse_args()
 # Distributed setup
 # ============================================================================
 if "LOCAL_RANK" in os.environ:
-    dist.init_process_group(backend='nccl')
+    dist.init_process_group(backend="nccl")
     local_rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(local_rank)
     device = torch.device(f"cuda:{local_rank}")
@@ -63,7 +66,7 @@ else:
     rank = 0
     set_seed_everywhere(seed_for_rank(args.seed, 0), deterministic=args.deterministic)
 
-print(f'[Rank {rank}] Free VRAM {get_cuda_free_memory_gb(gpu)} GB')
+print(f"[Rank {rank}] Free VRAM {get_cuda_free_memory_gb(gpu)} GB")
 low_memory = get_cuda_free_memory_gb(gpu) < 40
 
 torch.set_grad_enabled(False)
@@ -107,7 +110,7 @@ pipeline.generator.to(device=device)
 tae_model = None
 
 if args.use_tae:
-    from utils.taehv import TAEHV
+    from .utils.taehv import TAEHV
 
     assert args.tae_checkpoint_path is not None, "--tae_checkpoint_path is required when --use_tae is set"
     print(f"[Rank {rank}] Loading TAE from {args.tae_checkpoint_path}...")
@@ -135,6 +138,7 @@ if args.compile_dit:
     print(f"[Rank {rank}] Compiling DiT model with torch.compile (mode=max-autotune)...")
 
     import torch._inductor.config as inductor_config
+
     inductor_config.fx_graph_cache = True
     torch._dynamo.config.cache_size_limit = 32
 
@@ -161,8 +165,8 @@ pipeline._initialize_kv_cache(batch_size=1, dtype=torch.bfloat16, device=device)
 
 def reset_kv_cache():
     for block_cache in pipeline.kv_cache1:
-        block_cache['k'].detach_().zero_()
-        block_cache['v'].detach_().zero_()
+        block_cache["k"].detach_().zero_()
+        block_cache["v"].detach_().zero_()
 
 
 print(f"[Rank {rank}] Warming up DiT...")
@@ -176,10 +180,7 @@ with torch.no_grad():
 
     if args.compile_dit:
         # Warm up each distinct kv_size pattern to trigger compilation
-        if num_frame_per_block == 1:
-            warmup_ctx_sizes = [1, 3, 5, 6]
-        else:
-            warmup_ctx_sizes = [3, 6]
+        warmup_ctx_sizes = [1, 3, 5, 6] if num_frame_per_block == 1 else [3, 6]
 
         for wi, n_ctx in enumerate(warmup_ctx_sizes):
             kv_size = n_ctx * 1560
@@ -190,10 +191,16 @@ with torch.no_grad():
             for _ in range(3):
                 reset_kv_cache()
                 denoise_block(
-                    pipeline.generator, pipeline.scheduler, dummy_noise, dummy_cond,
+                    pipeline.generator,
+                    pipeline.scheduler,
+                    dummy_noise,
+                    dummy_cond,
                     pipeline.kv_cache1,
-                    context_frames=dummy_ctx, context_no_grad=True, context_freqs_offset=0,
-                    render_block=dummy_render, denoising_kv_size=kv_size,
+                    context_frames=dummy_ctx,
+                    context_no_grad=True,
+                    context_freqs_offset=0,
+                    render_block=dummy_render,
+                    denoising_kv_size=kv_size,
                     denoising_steps=pipeline.denoising_step_list,
                 )
 
@@ -206,10 +213,16 @@ with torch.no_grad():
         dummy_ctx = torch.randn(1, 3, 36, 60, 104, device=device, dtype=torch.bfloat16)
         reset_kv_cache()
         denoise_block(
-            pipeline.generator, pipeline.scheduler, dummy_noise, dummy_cond,
+            pipeline.generator,
+            pipeline.scheduler,
+            dummy_noise,
+            dummy_cond,
             pipeline.kv_cache1,
-            context_frames=dummy_ctx, context_no_grad=True, context_freqs_offset=0,
-            render_block=dummy_render, denoising_kv_size=1560 * 3,
+            context_frames=dummy_ctx,
+            context_no_grad=True,
+            context_freqs_offset=0,
+            render_block=dummy_render,
+            denoising_kv_size=1560 * 3,
             denoising_steps=pipeline.denoising_step_list,
         )
         torch.cuda.synchronize(device)
@@ -240,14 +253,15 @@ if not args.use_tae:
     torch.cuda.synchronize(device)
     print(f"[Rank {rank}] VAE warmup complete.")
 
+
 # ============================================================================
 # TAE encode / decode helpers
 # ============================================================================
 def tae_encode(video_bcthw: torch.Tensor) -> torch.Tensor:
     """Encode [B,C,T,H,W] [-1,1] bf16 -> [B,T_lat,C_lat,H_lat,W_lat] bf16."""
-    video = video_bcthw.permute(0, 2, 1, 3, 4)                       # -> [B,T,C,H,W]
-    video = ((video * 0.5 + 0.5).clamp(0, 1)).to(torch.float16)      # -> [0,1] fp16
-    latent = tae_model.encode_video(video, show_progress_bar=False)   # NTCHW
+    video = video_bcthw.permute(0, 2, 1, 3, 4)  # -> [B,T,C,H,W]
+    video = ((video * 0.5 + 0.5).clamp(0, 1)).to(torch.float16)  # -> [0,1] fp16
+    latent = tae_model.encode_video(video, show_progress_bar=False)  # NTCHW
     return latent.to(torch.bfloat16)
 
 
@@ -267,11 +281,11 @@ def encode_video(video_bcthw: torch.Tensor) -> torch.Tensor:
 # ============================================================================
 # Dataset
 # ============================================================================
-from inference_inputs.video_dataset import VideoDataset
+from .inference_inputs.video_dataset import VideoDataset  # noqa: E402 - Follows module-level definitions, as upstream.
 
 dataset_config = OmegaConf.to_container(config.dataset, resolve=True)
 if args.json_path:
-    dataset_config['json_path'] = args.json_path
+    dataset_config["json_path"] = args.json_path
 dataset = VideoDataset(**dataset_config)
 print(f"[Rank {rank}] Number of videos: {len(dataset)}")
 
@@ -291,18 +305,15 @@ if dist.is_initialized():
 # Inference loop
 # ============================================================================
 for i, batch_data in tqdm(enumerate(dataloader), total=len(dataloader), disable=(rank != 0), desc=f"Rank {rank}"):
-    if dist.is_initialized():
-        global_idx = i * world_size + rank
-    else:
-        global_idx = i
+    global_idx = i * world_size + rank if dist.is_initialized() else i
 
     batch = batch_data if isinstance(batch_data, dict) else batch_data[0]
 
     # Load pre-rendered render/mask videos from batch (produced by offline point cloud rendering)
     render_videos_ori = batch["render_video"].to(device, dtype=torch.bfloat16)
-    render_videos_ori = rearrange(render_videos_ori, 'b t c h w -> b c t h w')
+    render_videos_ori = rearrange(render_videos_ori, "b t c h w -> b c t h w")
     mask_videos_ori = batch["mask_video"].to(device, dtype=torch.bfloat16)
-    mask_videos_ori = rearrange(mask_videos_ori, 'b t c h w -> b c t h w')
+    mask_videos_ori = rearrange(mask_videos_ori, "b t c h w -> b c t h w")
 
     # --- VAE Encode ---
     torch.cuda.synchronize(device)
@@ -316,11 +327,11 @@ for i, batch_data in tqdm(enumerate(dataloader), total=len(dataloader), disable=
         target_video = batch["target_video"].to(device=device, dtype=torch.bfloat16)
     else:
         target_video = batch["source_video"].to(device=device, dtype=torch.bfloat16)
-    target_video = rearrange(target_video, 'b t c h w -> b c t h w')
+    target_video = rearrange(target_video, "b t c h w -> b c t h w")
     latent = encode_video(target_video)
 
     ref_video = batch["source_video"].to(device=device, dtype=torch.bfloat16)
-    ref_video = rearrange(ref_video, 'b t c h w -> b c t h w')
+    ref_video = rearrange(ref_video, "b t c h w -> b c t h w")
     ref_latent = encode_video(ref_video)
 
     torch.cuda.synchronize(device)
@@ -331,9 +342,7 @@ for i, batch_data in tqdm(enumerate(dataloader), total=len(dataloader), disable=
         num_output_frames = latent_length - latent_length % config.num_frame_per_block
     else:
         num_output_frames = latent_length
-    sampled_noise = torch.randn(
-        [args.num_samples, num_output_frames, 16, 60, 104], device=device, dtype=torch.bfloat16
-    )
+    sampled_noise = torch.randn([args.num_samples, num_output_frames, 16, 60, 104], device=device, dtype=torch.bfloat16)
 
     render_latent = render_latent[:, :num_output_frames, ...].to(device=device, dtype=torch.bfloat16)
     mask_latent = mask_latent[:, :num_output_frames, ...].to(device=device, dtype=torch.bfloat16)
@@ -362,25 +371,27 @@ for i, batch_data in tqdm(enumerate(dataloader), total=len(dataloader), disable=
     if args.use_tae:
         # result is denoised latents, decode with TAE
         video_out = tae_decode(result)
-        current_video = rearrange(video_out, 'b t c h w -> b t h w c').cpu()
+        current_video = rearrange(video_out, "b t c h w -> b t h w c").cpu()
     else:
         # result is already decoded [0,1] video
-        current_video = rearrange(result, 'b t c h w -> b t h w c').cpu()
+        current_video = rearrange(result, "b t c h w -> b t h w c").cpu()
 
     torch.cuda.synchronize(device)
     t_dec_end = time.time()
 
     # --- Timing summary ---
-    print(f"[Rank {rank}] Video {global_idx} timing: "
-          f"VAE Encode={t_enc_end - t_enc_start:.2f}s, "
-          f"DiT={'(+VAE Dec) ' if not args.use_tae else ''}{t_dit_end - t_dit_start:.2f}s, "
-          f"{'TAE' if args.use_tae else 'VAE'} Decode={t_dec_end - t_dec_start:.2f}s, "
-          f"Total={t_dec_end - t_enc_start:.2f}s")
+    print(
+        f"[Rank {rank}] Video {global_idx} timing: "
+        f"VAE Encode={t_enc_end - t_enc_start:.2f}s, "
+        f"DiT={'(+VAE Dec) ' if not args.use_tae else ''}{t_dit_end - t_dit_start:.2f}s, "
+        f"{'TAE' if args.use_tae else 'VAE'} Decode={t_dec_end - t_dec_start:.2f}s, "
+        f"Total={t_dec_end - t_enc_start:.2f}s"
+    )
 
-    source_video = rearrange(target_video, 'b c t h w -> b t h w c').cpu()
+    source_video = rearrange(target_video, "b c t h w -> b t h w c").cpu()
     source_video = (source_video * 0.5 + 0.5).clamp(0, 1)
 
-    render_video = rearrange(render_videos_ori, 'b c t h w -> b t h w c').cpu()
+    render_video = rearrange(render_videos_ori, "b c t h w -> b t h w c").cpu()
     render_video = (render_video * 0.5 + 0.5).clamp(0, 1)
 
     pred_video = 255.0 * current_video
@@ -394,13 +405,17 @@ for i, batch_data in tqdm(enumerate(dataloader), total=len(dataloader), disable=
     os.makedirs(output_dir, exist_ok=True)
 
     for seed_idx in range(args.num_samples):
-        write_video(os.path.join(output_dir, f'{global_idx}-pred_video_rank{rank}.mp4'), pred_video[seed_idx], fps=24)
-        write_video(os.path.join(output_dir, f'{global_idx}-source_video_rank{rank}.mp4'), source_video_out[seed_idx], fps=24)
-        write_video(os.path.join(output_dir, f'{global_idx}-render_video_rank{rank}.mp4'), render_video_out[seed_idx], fps=24)
+        write_video(os.path.join(output_dir, f"{global_idx}-pred_video_rank{rank}.mp4"), pred_video[seed_idx], fps=24)
+        write_video(
+            os.path.join(output_dir, f"{global_idx}-source_video_rank{rank}.mp4"), source_video_out[seed_idx], fps=24
+        )
+        write_video(
+            os.path.join(output_dir, f"{global_idx}-render_video_rank{rank}.mp4"), render_video_out[seed_idx], fps=24
+        )
 
-        if 'target_extrinsics' in batch:
+        if "target_extrinsics" in batch:
             target_extrinsics = batch["target_extrinsics"].float().to(device=device)
-            torch.save(target_extrinsics, os.path.join(output_dir, f'extrinsics_{global_idx}.pt'))
+            torch.save(target_extrinsics, os.path.join(output_dir, f"extrinsics_{global_idx}.pt"))
 
 if dist.is_initialized():
     dist.barrier()

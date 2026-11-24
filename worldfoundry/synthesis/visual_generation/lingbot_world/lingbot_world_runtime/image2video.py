@@ -15,34 +15,40 @@ from tqdm import tqdm
 
 from worldfoundry.core import autocast_context
 from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
-from worldfoundry.core.attention.parallel.causal_rope_sequence_parallel import sp_attn_forward, sp_dit_forward
+
+# isort: split
+from .sequence_parallel import sp_attn_forward, sp_dit_forward
+
+# isort: split
 from worldfoundry.core.distributed.sequence_parallel.ops import get_world_size
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.lingbot.model import WanModel
-from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import T5EncoderModel
+
+# isort: split
+from einops import rearrange
+
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21_streaming import Wan2_1_VAE
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import T5EncoderModel
+from worldfoundry.base_models.diffusion_model.models.networks.wan.camera_geometry import (
+    compute_relative_poses,
+    get_Ks_transformed,
+    interpolate_camera_poses,
+)
 from worldfoundry.base_models.diffusion_model.schedulers.flow_dpm import (
     FlowDPMSolverMultistepScheduler,
     get_sampling_sigmas,
     retrieve_timesteps,
 )
 from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import FlowUniPCMultistepScheduler
-from .utils.cam_utils import (
-    compute_relative_poses,
-    interpolate_camera_poses,
-    get_plucker_embeddings,
-    get_Ks_transformed,
-)
-from einops import rearrange
-
-from .utils.wasd_ijkl_to_c2ws import wasd_array_to_frame_keys
-from .utils.wasd_ijkl_to_c2ws import generate_and_save_trajectory
-from .utils.wasd_ijkl_to_c2ws import action_string_to_wasd_ijkl
 from worldfoundry.core.media.artifacts import visualize_wasd_and_rotation_ui
+
 from .distributed import distributed_barrier
+from .utils.cam_utils import get_plucker_embeddings
+from .utils.wasd_ijkl_to_c2ws import action_string_to_wasd_ijkl, generate_and_save_trajectory, wasd_array_to_frame_keys
 
 
 class WanI2V:
-
     def __init__(
         self,
         config,
@@ -97,19 +103,21 @@ class WanI2V:
             self.init_on_cpu = False
 
         inferred_control_type = control_type
-        if inferred_control_type is None and 'cam' in checkpoint_dir:
-            inferred_control_type = 'cam'
-        elif inferred_control_type is None and 'act' in checkpoint_dir:
-            inferred_control_type = 'act'
-        if inferred_control_type not in {'cam', 'act'}:
-            raise ValueError("LingBot control_type must be 'cam' or 'act'; pass it explicitly for custom checkpoint paths.")
+        if inferred_control_type is None and "cam" in checkpoint_dir:
+            inferred_control_type = "cam"
+        elif inferred_control_type is None and "act" in checkpoint_dir:
+            inferred_control_type = "act"
+        if inferred_control_type not in {"cam", "act"}:
+            raise ValueError(
+                "LingBot control_type must be 'cam' or 'act'; pass it explicitly for custom checkpoint paths."
+            )
         self.control_type = inferred_control_type
 
         shard_fn = partial(shard_model, device_id=device_id)
         self.text_encoder = T5EncoderModel(
             text_len=config.text_len,
             dtype=config.t5_dtype,
-            device=torch.device('cpu'),
+            device=torch.device("cpu"),
             checkpoint_path=os.path.join(checkpoint_dir, config.t5_checkpoint),
             tokenizer_path=os.path.join(checkpoint_dir, config.t5_tokenizer),
             shard_fn=shard_fn if t5_fsdp else None,
@@ -117,28 +125,36 @@ class WanI2V:
 
         self.vae_stride = config.vae_stride
         self.patch_size = config.patch_size
-        self.vae = Wan2_1_VAE(
-            vae_pth=os.path.join(checkpoint_dir, config.vae_checkpoint),
-            device=self.device)
+        self.vae = Wan2_1_VAE(vae_pth=os.path.join(checkpoint_dir, config.vae_checkpoint), device=self.device)
 
         logging.info(f"Creating WanModel from {checkpoint_dir}")
         self.low_noise_model = WanModel.from_pretrained(
-            checkpoint_dir, subfolder=config.low_noise_checkpoint, torch_dtype=torch.bfloat16, control_type=self.control_type)
+            checkpoint_dir,
+            subfolder=config.low_noise_checkpoint,
+            torch_dtype=torch.bfloat16,
+            control_type=self.control_type,
+        )
         self.low_noise_model = self._configure_model(
             model=self.low_noise_model,
             use_sp=use_sp,
             dit_fsdp=dit_fsdp,
             shard_fn=shard_fn,
-            convert_model_dtype=convert_model_dtype)
+            convert_model_dtype=convert_model_dtype,
+        )
 
         self.high_noise_model = WanModel.from_pretrained(
-            checkpoint_dir, subfolder=config.high_noise_checkpoint, torch_dtype=torch.bfloat16, control_type=self.control_type)
+            checkpoint_dir,
+            subfolder=config.high_noise_checkpoint,
+            torch_dtype=torch.bfloat16,
+            control_type=self.control_type,
+        )
         self.high_noise_model = self._configure_model(
             model=self.high_noise_model,
             use_sp=use_sp,
             dit_fsdp=dit_fsdp,
             shard_fn=shard_fn,
-            convert_model_dtype=convert_model_dtype)
+            convert_model_dtype=convert_model_dtype,
+        )
         if use_sp:
             self.sp_size = get_world_size()
         else:
@@ -146,8 +162,7 @@ class WanI2V:
 
         self.sample_neg_prompt = config.sample_neg_prompt
 
-    def _configure_model(self, model, use_sp, dit_fsdp, shard_fn,
-                         convert_model_dtype):
+    def _configure_model(self, model, use_sp, dit_fsdp, shard_fn, convert_model_dtype):
         """
         Configures a model object. This includes setting evaluation modes,
         applying distributed parallel strategy, and handling device placement.
@@ -173,8 +188,7 @@ class WanI2V:
 
         if use_sp:
             for block in model.blocks:
-                block.self_attn.forward = types.MethodType(
-                    sp_attn_forward, block.self_attn)
+                block.self_attn.forward = types.MethodType(sp_attn_forward, block.self_attn)
             model.forward = types.MethodType(sp_dit_forward, model)
 
         distributed_barrier(self.device)
@@ -207,38 +221,36 @@ class WanI2V:
                 The active model on the target device for the current timestep.
         """
         if t.item() >= boundary:
-            required_model_name = 'high_noise_model'
-            offload_model_name = 'low_noise_model'
+            required_model_name = "high_noise_model"
+            offload_model_name = "low_noise_model"
         else:
-            required_model_name = 'low_noise_model'
-            offload_model_name = 'high_noise_model'
+            required_model_name = "low_noise_model"
+            offload_model_name = "high_noise_model"
         if offload_model or self.init_on_cpu:
-            if next(getattr(
-                    self,
-                    offload_model_name).parameters()).device.type == 'cuda':
-                getattr(self, offload_model_name).to('cpu')
-            if next(getattr(
-                    self,
-                    required_model_name).parameters()).device.type == 'cpu':
+            if next(getattr(self, offload_model_name).parameters()).device.type == "cuda":
+                getattr(self, offload_model_name).to("cpu")
+            if next(getattr(self, required_model_name).parameters()).device.type == "cpu":
                 getattr(self, required_model_name).to(self.device)
         return getattr(self, required_model_name)
 
-    def generate(self,
-                 input_prompt,
-                 img,
-                 action_path=None,
-                 allow_act2cam=False,
-                 action_string=None,
-                 vis_ui=True,
-                 max_area=720 * 1280,
-                 frame_num=81,
-                 shift=5.0,
-                 sample_solver='unipc',
-                 sampling_steps=40,
-                 guide_scale=5.0,
-                 n_prompt="",
-                 seed=-1,
-                 offload_model=True):
+    def generate(
+        self,
+        input_prompt,
+        img,
+        action_path=None,
+        allow_act2cam=False,
+        action_string=None,
+        vis_ui=True,
+        max_area=720 * 1280,
+        frame_num=81,
+        shift=5.0,
+        sample_solver="unipc",
+        sampling_steps=40,
+        guide_scale=5.0,
+        n_prompt="",
+        seed=-1,
+        offload_model=True,
+    ):
         r"""
         Generates video frames from input image and text prompt using diffusion process.
 
@@ -291,19 +303,14 @@ class WanI2V:
                 assert self.control_type == "cam"
                 # For more precise control, we convert camera poses into wasd,ijkl actions and concatenate them with c2ws.
                 if action_string is not None:
-                    wasd_action, ijkl_action, str_frames = action_string_to_wasd_ijkl(
-                        action_string)
+                    wasd_action, ijkl_action, str_frames = action_string_to_wasd_ijkl(action_string)
                     if str_frames > frame_num:
-                        raise ValueError(
-                            f"action_string expands to {str_frames} frames but frame_num is {frame_num}"
-                        )
+                        raise ValueError(f"action_string expands to {str_frames} frames but frame_num is {frame_num}")
                     if str_frames < frame_num:
                         # frame_num may be auto-padded to 4n+1 in CLI; pad tail with no-key frames.
                         pad_len = frame_num - str_frames
-                        wasd_action = np.pad(
-                            wasd_action, ((0, pad_len), (0, 0)), mode="constant")
-                        ijkl_action = np.pad(
-                            ijkl_action, ((0, pad_len), (0, 0)), mode="constant")
+                        wasd_action = np.pad(wasd_action, ((0, pad_len), (0, 0)), mode="constant")
+                        ijkl_action = np.pad(ijkl_action, ((0, pad_len), (0, 0)), mode="constant")
                 else:
                     wasd_action = np.load(os.path.join(action_path, "wasd_action.npy"))  # wasd action
                     ijkl_action = np.load(os.path.join(action_path, "ijkl_action.npy"))  # ijkl action
@@ -315,36 +322,30 @@ class WanI2V:
                 c2ws_from_act = generate_and_save_trajectory(frame_keys)
                 c2ws = np.array(c2ws_from_act)
             else:
-                c2ws = np.load(os.path.join(action_path, "poses.npy")) # opencv coordinate
+                c2ws = np.load(os.path.join(action_path, "poses.npy"))  # opencv coordinate
                 len_c2ws = ((len(c2ws) - 1) // 4) * 4 + 1
                 frame_num = min(frame_num, len_c2ws)
                 c2ws = c2ws[:frame_num]
 
                 if self.control_type == "act":
                     # In 'act' mode, use rotation of c2ws to control orientation and wasd_action to drive movement.
-                    wasd_action = np.load(os.path.join(action_path, "action.npy")) # wasd action
+                    wasd_action = np.load(os.path.join(action_path, "action.npy"))  # wasd action
                     wasd_action = wasd_action[:frame_num]
 
         # preprocess
-        guide_scale = (guide_scale, guide_scale) if isinstance(
-            guide_scale, float) else guide_scale
+        guide_scale = (guide_scale, guide_scale) if isinstance(guide_scale, float) else guide_scale
         img = TF.to_tensor(img).sub_(0.5).div_(0.5).to(self.device)
 
         F = frame_num
         h, w = img.shape[1:]
         aspect_ratio = h / w
-        lat_h = round(
-            np.sqrt(max_area * aspect_ratio) // self.vae_stride[1] //
-            self.patch_size[1] * self.patch_size[1])
-        lat_w = round(
-            np.sqrt(max_area / aspect_ratio) // self.vae_stride[2] //
-            self.patch_size[2] * self.patch_size[2])
+        lat_h = round(np.sqrt(max_area * aspect_ratio) // self.vae_stride[1] // self.patch_size[1] * self.patch_size[1])
+        lat_w = round(np.sqrt(max_area / aspect_ratio) // self.vae_stride[2] // self.patch_size[2] * self.patch_size[2])
         h = lat_h * self.vae_stride[1]
         w = lat_w * self.vae_stride[2]
         lat_f = (F - 1) // self.vae_stride[0] + 1
-        max_seq_len = lat_f * lat_h * lat_w // (
-            self.patch_size[1] * self.patch_size[2])
-        max_seq_len = int(math.ceil(max_seq_len / self.sp_size)) * self.sp_size
+        max_seq_len = lat_f * lat_h * lat_w // (self.patch_size[1] * self.patch_size[2])
+        max_seq_len = int(math.ceil(max_seq_len / self.sp_size)) * self.sp_size  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
         seed = seed if seed >= 0 else random.randint(0, sys.maxsize)
         seed_g = torch.Generator(device=self.device)
@@ -356,14 +357,12 @@ class WanI2V:
             lat_w,
             dtype=torch.float32,
             generator=seed_g,
-            device=self.device)
+            device=self.device,
+        )
 
         msk = torch.ones(1, F, lat_h, lat_w, device=self.device)
         msk[:, 1:] = 0
-        msk = torch.concat([
-            torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]
-        ],
-                           dim=1)
+        msk = torch.concat([torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]], dim=1)
         msk = msk.view(1, msk.shape[1] // 4, 4, lat_h, lat_w)
         msk = msk.transpose(1, 2)[0]
 
@@ -378,8 +377,8 @@ class WanI2V:
             if offload_model:
                 self.text_encoder.model.cpu()
         else:
-            context = self.text_encoder([input_prompt], torch.device('cpu'))
-            context_null = self.text_encoder([n_prompt], torch.device('cpu'))
+            context = self.text_encoder([input_prompt], torch.device("cpu"))
+            context_null = self.text_encoder([n_prompt], torch.device("cpu"))
             context = [t.to(self.device) for t in context]
             context_null = [t.to(self.device) for t in context_null]
 
@@ -389,15 +388,11 @@ class WanI2V:
             Ks = torch.from_numpy(np.load(os.path.join(action_path, "intrinsics.npy"))).float()
 
             # The provided intrinsics are for original image size (480p). We need to transform them according to the new image size (h, w).
-            Ks = get_Ks_transformed(Ks,
-                                    height_org=480,
-                                    width_org=832,
-                                    height_resize=h,
-                                    width_resize=w,
-                                    height_final=h,
-                                    width_final=w)
+            Ks = get_Ks_transformed(
+                Ks, height_org=480, width_org=832, height_resize=h, width_resize=w, height_final=h, width_final=w
+            )
             Ks = Ks[0]
-            
+
             len_c2ws = len(c2ws)
             c2ws_infer = interpolate_camera_poses(
                 src_indices=np.linspace(0, len_c2ws - 1, len_c2ws),
@@ -410,7 +405,7 @@ class WanI2V:
 
             c2ws_infer = c2ws_infer.to(self.device)
             Ks = Ks.to(self.device)
-            if self.control_type == 'act':
+            if self.control_type == "act":
                 wasd_action = torch.from_numpy(wasd_action[::4]).float().to(self.device)
             else:
                 wasd_action = None
@@ -418,22 +413,26 @@ class WanI2V:
             c2ws_plucker_emb = get_plucker_embeddings(c2ws_infer, Ks, h, w, only_rays_d=only_rays_d)
             c2ws_plucker_emb = rearrange(
                 c2ws_plucker_emb,
-                'f (h c1) (w c2) c -> (f h w) (c c1 c2)',
+                "f (h c1) (w c2) c -> (f h w) (c c1 c2)",
                 c1=int(h // lat_h),
                 c2=int(w // lat_w),
             )
-            c2ws_plucker_emb = c2ws_plucker_emb[None, ...] # [b, f*h*w, c]
-            c2ws_plucker_emb = rearrange(c2ws_plucker_emb, 'b (f h w) c -> b c f h w', f=lat_f, h=lat_h, w=lat_w).to(self.param_dtype)
+            c2ws_plucker_emb = c2ws_plucker_emb[None, ...]  # [b, f*h*w, c]
+            c2ws_plucker_emb = rearrange(c2ws_plucker_emb, "b (f h w) c -> b c f h w", f=lat_f, h=lat_h, w=lat_w).to(
+                self.param_dtype
+            )
             if wasd_action is not None:
-                wasd_action_tensor = wasd_action[:, None, None, :].repeat(1, h, w, 1) # [f, h, w, 3]
+                wasd_action_tensor = wasd_action[:, None, None, :].repeat(1, h, w, 1)  # [f, h, w, 3]
                 wasd_action_tensor = rearrange(
                     wasd_action_tensor,
-                    'f (h c1) (w c2) c -> (f h w) (c c1 c2)',
+                    "f (h c1) (w c2) c -> (f h w) (c c1 c2)",
                     c1=int(h // lat_h),
                     c2=int(w // lat_w),
                 )
-                wasd_action_tensor = wasd_action_tensor[None, ...] # [b, f*h*w, c]
-                wasd_action_tensor = rearrange(wasd_action_tensor, 'b (f h w) c -> b c f h w', f=lat_f, h=lat_h, w=lat_w).to(self.param_dtype)
+                wasd_action_tensor = wasd_action_tensor[None, ...]  # [b, f*h*w, c]
+                wasd_action_tensor = rearrange(
+                    wasd_action_tensor, "b (f h w) c -> b c f h w", f=lat_f, h=lat_h, w=lat_w
+                ).to(self.param_dtype)
                 c2ws_plucker_emb = torch.cat([c2ws_plucker_emb, wasd_action_tensor], dim=1)
             dit_cond_dict = {
                 "c2ws_plucker_emb": c2ws_plucker_emb.chunk(1, dim=0),
@@ -449,60 +448,51 @@ class WanI2V:
         # residency policy; their default route does not request offloading.
         if offload_model:
             for model in (self.low_noise_model, self.high_noise_model):
-                if (
-                    not hasattr(model, "_fsdp_wrapped_module")
-                    and next(model.parameters()).device.type == "cuda"
-                ):
+                if not hasattr(model, "_fsdp_wrapped_module") and next(model.parameters()).device.type == "cuda":
                     model.to("cpu")
             torch.cuda.empty_cache()
 
-        y = self.vae.encode([
-            torch.concat([
-                torch.nn.functional.interpolate(
-                    img[None].cpu(), size=(h, w), mode='bicubic').transpose(
-                        0, 1),
-                torch.zeros(3, F - 1, h, w)
-            ],
-                         dim=1).to(self.device)
-        ])[0]
+        y = self.vae.encode(
+            [
+                torch.concat(
+                    [
+                        torch.nn.functional.interpolate(img[None].cpu(), size=(h, w), mode="bicubic").transpose(0, 1),
+                        torch.zeros(3, F - 1, h, w),
+                    ],
+                    dim=1,
+                ).to(self.device)
+            ]
+        )[0]
         y = torch.concat([msk, y])
 
         @contextmanager
         def noop_no_sync():
             yield
 
-        no_sync_low_noise = getattr(self.low_noise_model, 'no_sync',
-                                    noop_no_sync)
-        no_sync_high_noise = getattr(self.high_noise_model, 'no_sync',
-                                     noop_no_sync)
+        no_sync_low_noise = getattr(self.low_noise_model, "no_sync", noop_no_sync)
+        no_sync_high_noise = getattr(self.high_noise_model, "no_sync", noop_no_sync)
 
         # evaluation mode
         with (
-                autocast_context(self.device, dtype=self.param_dtype),
-                torch.no_grad(),
-                no_sync_low_noise(),
-                no_sync_high_noise(),
+            autocast_context(self.device, dtype=self.param_dtype),
+            torch.no_grad(),
+            no_sync_low_noise(),
+            no_sync_high_noise(),
         ):
             boundary = self.boundary * self.num_train_timesteps
 
-            if sample_solver == 'unipc':
+            if sample_solver == "unipc":
                 sample_scheduler = FlowUniPCMultistepScheduler(
-                    num_train_timesteps=self.num_train_timesteps,
-                    shift=1,
-                    use_dynamic_shifting=False)
-                sample_scheduler.set_timesteps(
-                    sampling_steps, device=self.device, shift=shift)
+                    num_train_timesteps=self.num_train_timesteps, shift=1, use_dynamic_shifting=False
+                )
+                sample_scheduler.set_timesteps(sampling_steps, device=self.device, shift=shift)
                 timesteps = sample_scheduler.timesteps
-            elif sample_solver == 'dpm++':
+            elif sample_solver == "dpm++":
                 sample_scheduler = FlowDPMSolverMultistepScheduler(
-                    num_train_timesteps=self.num_train_timesteps,
-                    shift=1,
-                    use_dynamic_shifting=False)
+                    num_train_timesteps=self.num_train_timesteps, shift=1, use_dynamic_shifting=False
+                )
                 sampling_sigmas = get_sampling_sigmas(sampling_steps, shift)
-                timesteps, _ = retrieve_timesteps(
-                    sample_scheduler,
-                    device=self.device,
-                    sigmas=sampling_sigmas)
+                timesteps, _ = retrieve_timesteps(sample_scheduler, device=self.device, sigmas=sampling_sigmas)
             else:
                 raise NotImplementedError("Unsupported solver.")
 
@@ -510,17 +500,17 @@ class WanI2V:
             latent = noise
 
             arg_c = {
-                'context': [context[0]],
-                'seq_len': max_seq_len,
-                'y': [y],
-                'dit_cond_dict': dit_cond_dict,
+                "context": [context[0]],
+                "seq_len": max_seq_len,
+                "y": [y],
+                "dit_cond_dict": dit_cond_dict,
             }
 
             arg_null = {
-                'context': context_null,
-                'seq_len': max_seq_len,
-                'y': [y],
-                'dit_cond_dict': dit_cond_dict,
+                "context": context_null,
+                "seq_len": max_seq_len,
+                "y": [y],
+                "dit_cond_dict": dit_cond_dict,
             }
 
             if offload_model:
@@ -532,28 +522,20 @@ class WanI2V:
 
                 timestep = torch.stack(timestep).to(self.device)
 
-                model = self._prepare_model_for_timestep(
-                    t, boundary, offload_model)
-                sample_guide_scale = guide_scale[1] if t.item(
-                ) >= boundary else guide_scale[0]
+                model = self._prepare_model_for_timestep(t, boundary, offload_model)
+                sample_guide_scale = guide_scale[1] if t.item() >= boundary else guide_scale[0]
 
-                noise_pred_cond = model(
-                    latent_model_input, t=timestep, **arg_c)[0]
+                noise_pred_cond = model(latent_model_input, t=timestep, **arg_c)[0]
                 if offload_model:
                     torch.cuda.empty_cache()
-                noise_pred_uncond = model(
-                    latent_model_input, t=timestep, **arg_null)[0]
+                noise_pred_uncond = model(latent_model_input, t=timestep, **arg_null)[0]
                 if offload_model:
                     torch.cuda.empty_cache()
-                noise_pred = noise_pred_uncond + sample_guide_scale * (
-                    noise_pred_cond - noise_pred_uncond)
+                noise_pred = noise_pred_uncond + sample_guide_scale * (noise_pred_cond - noise_pred_uncond)
 
                 temp_x0 = sample_scheduler.step(
-                    noise_pred.unsqueeze(0),
-                    t,
-                    latent.unsqueeze(0),
-                    return_dict=False,
-                    generator=seed_g)[0]
+                    noise_pred.unsqueeze(0), t, latent.unsqueeze(0), return_dict=False, generator=seed_g
+                )[0]
                 latent = temp_x0.squeeze(0)
 
                 x0 = [latent]
@@ -583,16 +565,16 @@ class WanI2V:
                 videos_np = np.transpose(videos_np, (1, 2, 3, 0))  # (C, F, H, W) -> (F, H, W, C)
                 videos_np = (videos_np + 1) / 2  # (-1, 1) -> (0, 1)
                 videos_np = visualize_wasd_and_rotation_ui(
-                            videos_np,
-                            c2ws,
-                            wasd_action_for_vis if wasd_action_for_vis is not None else wasd_action,
-                            ijkl_action_for_vis if ijkl_action_for_vis is not None else ijkl_action,
-                        )
+                    videos_np,
+                    c2ws,
+                    wasd_action_for_vis if wasd_action_for_vis is not None else wasd_action,
+                    ijkl_action_for_vis if ijkl_action_for_vis is not None else ijkl_action,
+                )
                 # Convert back: (F, H, W, C) -> (C, F, H, W), (0, 1) -> (-1, 1)
                 videos_np = np.transpose(videos_np, (3, 0, 1, 2))  # (F, H, W, C) -> (C, F, H, W)
                 videos_np = videos_np * 2 - 1  # (0, 1) -> (-1, 1)
                 videos = torch.from_numpy(videos_np)
         else:
             videos = None
-        
+
         return videos

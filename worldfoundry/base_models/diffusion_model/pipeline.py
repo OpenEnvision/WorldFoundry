@@ -75,7 +75,7 @@ class NativeDiffusionPipeline:
         checkpoint_overrides: Mapping[str, CheckpointSpec | str] | None = None,
         component_options: Mapping[str | ComponentKey, Mapping[str, object]] | None = None,
         extensions: Iterable[DiffusionExtension] = (),
-    ) -> "NativeDiffusionPipeline":
+    ) -> NativeDiffusionPipeline:
         """Construct a built-in model id through the canonical assembler.
 
         When ``registry`` is omitted, the frozen
@@ -108,7 +108,7 @@ class NativeDiffusionPipeline:
         checkpoint_overrides: Mapping[str, CheckpointSpec | str] | None = None,
         component_options: Mapping[str | ComponentKey, Mapping[str, object]] | None = None,
         extensions: Iterable[DiffusionExtension] = (),
-    ) -> "NativeDiffusionPipeline":
+    ) -> NativeDiffusionPipeline:
         """Resolve a recipe on ``registry`` and assemble its runner."""
         return cls(
             registry.build_runner(
@@ -154,10 +154,12 @@ class NativeDiffusionPipeline:
         denoiser = self.components.denoiser
         prepare = getattr(denoiser, "execution_warmup", None)
         device = torch.device(self.device)
-        devices = [device.index if device.index is not None else torch.cuda.current_device()] if device.type == "cuda" else []
+        devices = (
+            [device.index if device.index is not None else torch.cuda.current_device()] if device.type == "cuda" else []
+        )
         reports: list[Mapping[str, object]] = []
-        with torch.random.fork_rng(devices=devices), (prepare() if callable(prepare) else nullcontext()):
-            for case, group in zip(cases, groups):
+        with torch.random.fork_rng(devices=devices), prepare() if callable(prepare) else nullcontext():
+            for case, group in zip(cases, groups, strict=False):
                 request = group[0]
                 if devices:
                     torch.cuda.synchronize(device)
@@ -167,16 +169,18 @@ class NativeDiffusionPipeline:
                     torch.cuda.synchronize(device)
                 elapsed = perf_counter() - started
                 reporter = getattr(denoiser, "runtime_optimization_report", None)
-                reports.append({
-                    "height": request.height,
-                    "width": request.width,
-                    "num_frames": request.num_frames,
-                    "batch_size": sum(item.batch_size for item in group),
-                    "request_count": len(group),
-                    "num_inference_steps": request.sampling.num_inference_steps,
-                    "seconds": elapsed,
-                    "denoiser": reporter() if callable(reporter) else None,
-                })
+                reports.append(
+                    {
+                        "height": request.height,
+                        "width": request.width,
+                        "num_frames": request.num_frames,
+                        "batch_size": sum(item.batch_size for item in group),
+                        "request_count": len(group),
+                        "num_inference_steps": request.sampling.num_inference_steps,
+                        "seconds": elapsed,
+                        "denoiser": reporter() if callable(reporter) else None,
+                    }
+                )
                 del output
         return tuple(reports)
 

@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> maths -> matrix.py functionality."""
-
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -28,129 +26,43 @@ from .vector import RavelMapping, SparseBlockVector, SparseNullVector, SparseVec
 
 @dataclass(kw_only=True)
 class SparseBlockMatrix:
-    """Sparse block matrix implementation."""
     i_inds: torch.Tensor
     j_inds: torch.Tensor
 
     def tmult_vec(self, vec: torch.Tensor | SparseBlockVector) -> SparseBlockVector:
-        """Tmult vec.
-
-        Args:
-            vec: The vec.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def tmult_mat(self, mat: "SparseBlockMatrix") -> "SparseBlockMatrix":
-        """Tmult mat.
-
-        Args:
-            mat: The mat.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def scale_w_left(self, vec: torch.Tensor) -> "SparseBlockMatrix":
-        """Scale w left.
-
-        Args:
-            vec: The vec.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def coalesce(self) -> "SparseBlockMatrix":
-        """Coalesce.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def transpose(self) -> "SparseBlockMatrix":
-        """Transpose.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def subset(self, inds: torch.Tensor) -> "SparseBlockMatrix":
-        """Subset.
-
-        Args:
-            inds: The inds.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def has_inverse(self) -> bool:
-        """Has inverse.
-
-        Returns:
-            The return value.
-        """
         return False
 
     def inverse(self) -> "SparseBlockMatrix":
-        """Inverse.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def __add__(self, other: "SparseBlockMatrix") -> "SparseBlockMatrix":
-        """Add.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def __sub__(self, other: "SparseBlockMatrix") -> "SparseBlockMatrix":
-        """Sub.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def apply_damping_assume_coalesced(self, damping: SparseBlockVector | float, ep: float) -> None:
-        """Apply damping assume coalesced.
-
-        Args:
-            damping: The damping.
-            ep: The ep.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def _tmult_mat_elements(self, other_i_inds: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Helper function to tmult mat elements.
-
-        Args:
-            other_i_inds: The other i inds.
-
-        Returns:
-            The return value.
-        """
         other_mapping: defaultdict = defaultdict(list)
         for i, v in enumerate(other_i_inds.cpu().numpy()):
             other_mapping[v].append(i)
@@ -174,98 +86,41 @@ class SparseBlockMatrix:
         col_mapping: RavelMapping,
         col_start_inds: int,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Ravel.
-
-        Args:
-            row_mapping: The row mapping.
-            row_start_inds: The row start inds.
-            col_mapping: The col mapping.
-            col_start_inds: The col start inds.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
 
 @dataclass(kw_only=True)
 class SparseNullMatrix(SparseBlockMatrix):
-    """Sparse null matrix implementation."""
     def __init__(self):
-        """Init."""
         super().__init__(i_inds=torch.tensor([]), j_inds=torch.tensor([]))
 
     def __add__(self, other: SparseBlockMatrix) -> SparseBlockMatrix:
-        """Add.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         return other
 
     def transpose(self) -> SparseBlockMatrix:
-        """Transpose.
-
-        Returns:
-            The return value.
-        """
         return self
 
     def tmult_mat(self, mat: SparseBlockMatrix) -> SparseBlockMatrix:
-        """Tmult mat.
-
-        Args:
-            mat: The mat.
-
-        Returns:
-            The return value.
-        """
         return self
 
     def tmult_vec(self, vec: torch.Tensor | SparseBlockVector) -> SparseBlockVector:
-        """Tmult vec.
-
-        Args:
-            vec: The vec.
-
-        Returns:
-            The return value.
-        """
         return SparseNullVector()
 
     def coalesce(self) -> SparseBlockMatrix:
-        """Coalesce.
-
-        Returns:
-            The return value.
-        """
         return self
 
 
 @dataclass(kw_only=True)
 class SparseDenseBlockMatrix(SparseBlockMatrix):
-    """Sparse dense block matrix implementation."""
     # (n_blocks, n_block_rows, n_block_cols)
     data: torch.Tensor
 
     def __post_init__(self):
-        """Post init."""
         assert self.i_inds.shape == self.j_inds.shape
         assert self.i_inds.shape[0] == self.data.shape[0]
         assert len(self.data.shape) == 3
 
     def tmult_vec(self, vec: torch.Tensor | SparseBlockVector) -> SparseBlockVector:
-        """Tmult vec.
-
-        Args:
-            vec: The vec.
-
-        Returns:
-            The return value.
-        """
         if isinstance(vec, SparseBlockVector):
             self_inds, vec_inds = self._tmult_mat_elements(vec.inds)
             j_inds, data = self.j_inds[self_inds], self.data[self_inds]
@@ -282,14 +137,6 @@ class SparseDenseBlockMatrix(SparseBlockMatrix):
         )
 
     def tmult_mat(self, mat: SparseBlockMatrix) -> SparseBlockMatrix:
-        """Tmult mat.
-
-        Args:
-            mat: The mat.
-
-        Returns:
-            The return value.
-        """
         if not isinstance(mat, SparseDenseBlockMatrix):
             raise NotImplementedError
         self_inds, mat_inds = self._tmult_mat_elements(mat.i_inds)
@@ -302,14 +149,6 @@ class SparseDenseBlockMatrix(SparseBlockMatrix):
         )
 
     def scale_w_left(self, vec: torch.Tensor) -> SparseBlockMatrix:
-        """Scale w left.
-
-        Args:
-            vec: The vec.
-
-        Returns:
-            The return value.
-        """
         return SparseDenseBlockMatrix(
             i_inds=self.i_inds,
             j_inds=self.j_inds,
@@ -317,7 +156,6 @@ class SparseDenseBlockMatrix(SparseBlockMatrix):
         )
 
     def transpose(self):
-        """Transpose."""
         return SparseDenseBlockMatrix(
             i_inds=self.j_inds,
             j_inds=self.i_inds,
@@ -325,11 +163,6 @@ class SparseDenseBlockMatrix(SparseBlockMatrix):
         )
 
     def subset(self, inds: torch.Tensor):
-        """Subset.
-
-        Args:
-            inds: The inds.
-        """
         return SparseDenseBlockMatrix(
             i_inds=self.i_inds[inds],
             j_inds=self.j_inds[inds],
@@ -337,22 +170,12 @@ class SparseDenseBlockMatrix(SparseBlockMatrix):
         )
 
     def coalesce(self):
-        """Coalesce."""
         ij_inds = torch.stack([self.i_inds, self.j_inds], dim=0)
         ij_inds, inverse = torch.unique(ij_inds, return_inverse=True, dim=1)
         data = scatter_add(self.data, inverse, dim=0)
         return SparseDenseBlockMatrix(i_inds=ij_inds[0], j_inds=ij_inds[1], data=data)
 
     def apply_damping_assume_coalesced(self, damping: SparseBlockVector | float, ep: float) -> None:
-        """Apply damping assume coalesced.
-
-        Args:
-            damping: The damping.
-            ep: The ep.
-
-        Returns:
-            The return value.
-        """
         assert self.data.shape[1] == self.data.shape[2]
 
         diag_mask = self.i_inds == self.j_inds
@@ -368,14 +191,6 @@ class SparseDenseBlockMatrix(SparseBlockMatrix):
             self.data[torch.where(diag_mask)[0][damping_data_inds]] += ep + torch.diag_embed(damping.data)
 
     def __sub__(self, other: SparseBlockMatrix) -> SparseBlockMatrix:
-        """Sub.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         assert isinstance(other, SparseDenseBlockMatrix)
         return SparseDenseBlockMatrix(
             i_inds=torch.cat([self.i_inds, other.i_inds]),
@@ -384,14 +199,6 @@ class SparseDenseBlockMatrix(SparseBlockMatrix):
         ).coalesce()
 
     def __add__(self, other: SparseBlockMatrix) -> SparseBlockMatrix:
-        """Add.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         if isinstance(other, SparseDenseBlockMatrix):
             return SparseDenseBlockMatrix(
                 i_inds=torch.cat([self.i_inds, other.i_inds]),
@@ -410,17 +217,6 @@ class SparseDenseBlockMatrix(SparseBlockMatrix):
         col_mapping: RavelMapping,
         col_start_inds: int,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Ravel.
-
-        Args:
-            row_mapping: The row mapping.
-            row_start_inds: The row start inds.
-            col_mapping: The col mapping.
-            col_start_inds: The col start inds.
-
-        Returns:
-            The return value.
-        """
         data_n_rows, data_n_cols = self.data.shape[1], self.data.shape[2]
         data_row_inds, data_col_inds = torch.meshgrid(
             torch.arange(data_n_rows, device=self.data.device),
@@ -440,7 +236,6 @@ class SparseDenseBlockMatrix(SparseBlockMatrix):
 
 @dataclass(kw_only=True)
 class SparseMDiagonalBlockMatrix(SparseBlockMatrix):
-    """Sparse m diagonal block matrix implementation."""
     # (n_blocks, N, n_diags)
     #  +-----+
     #  |x    |
@@ -452,20 +247,11 @@ class SparseMDiagonalBlockMatrix(SparseBlockMatrix):
     data: torch.Tensor
 
     def __post_init__(self):
-        """Post init."""
         assert self.i_inds.shape == self.j_inds.shape
         assert self.i_inds.shape[0] == self.data.shape[0]
         assert len(self.data.shape) == 3
 
     def tmult_vec(self, vec: torch.Tensor | SparseBlockVector) -> SparseBlockVector:
-        """Tmult vec.
-
-        Args:
-            vec: The vec.
-
-        Returns:
-            The return value.
-        """
         if isinstance(vec, SparseBlockVector):
             self_inds, vec_inds = self._tmult_mat_elements(vec.inds)
             j_inds, data = self.j_inds[self_inds], self.data[self_inds]
@@ -482,14 +268,6 @@ class SparseMDiagonalBlockMatrix(SparseBlockMatrix):
         )
 
     def tmult_mat(self, mat: SparseBlockMatrix) -> SparseBlockMatrix:
-        """Tmult mat.
-
-        Args:
-            mat: The mat.
-
-        Returns:
-            The return value.
-        """
         self_inds, mat_inds = self._tmult_mat_elements(mat.i_inds)
 
         if isinstance(mat, SparseMDiagonalBlockMatrix):
@@ -514,14 +292,6 @@ class SparseMDiagonalBlockMatrix(SparseBlockMatrix):
             )
 
     def scale_w_left(self, vec: torch.Tensor) -> SparseBlockMatrix:
-        """Scale w left.
-
-        Args:
-            vec: The vec.
-
-        Returns:
-            The return value.
-        """
         return SparseMDiagonalBlockMatrix(
             i_inds=self.i_inds,
             j_inds=self.j_inds,
@@ -529,21 +299,12 @@ class SparseMDiagonalBlockMatrix(SparseBlockMatrix):
         )
 
     def coalesce(self):
-        """Coalesce."""
         ij_inds = torch.stack([self.i_inds, self.j_inds], dim=0)
         ij_inds, inverse = torch.unique(ij_inds, return_inverse=True, dim=1)
         data = scatter_add(self.data, inverse, dim=0)
         return SparseMDiagonalBlockMatrix(i_inds=ij_inds[0], j_inds=ij_inds[1], data=data)
 
     def subset(self, inds: torch.Tensor) -> SparseBlockMatrix:
-        """Subset.
-
-        Args:
-            inds: The inds.
-
-        Returns:
-            The return value.
-        """
         return SparseMDiagonalBlockMatrix(
             i_inds=self.i_inds[inds],
             j_inds=self.j_inds[inds],
@@ -551,28 +312,13 @@ class SparseMDiagonalBlockMatrix(SparseBlockMatrix):
         )
 
     def transpose(self) -> SparseBlockMatrix:
-        """Transpose.
-
-        Returns:
-            The return value.
-        """
         assert self.data.shape[-1] == 1
         return self
 
     def has_inverse(self) -> bool:
-        """Has inverse.
-
-        Returns:
-            The return value.
-        """
         return self.data.shape[-1] == 1
 
     def inverse(self) -> SparseBlockMatrix:
-        """Inverse.
-
-        Returns:
-            The return value.
-        """
         assert self.has_inverse(), "Only implemented for diagonal matrices"
         return SparseMDiagonalBlockMatrix(
             i_inds=self.i_inds,
@@ -581,14 +327,6 @@ class SparseMDiagonalBlockMatrix(SparseBlockMatrix):
         )
 
     def __add__(self, other: SparseBlockMatrix) -> SparseBlockMatrix:
-        """Add.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         assert isinstance(other, SparseMDiagonalBlockMatrix)
         return SparseMDiagonalBlockMatrix(
             i_inds=torch.cat([self.i_inds, other.i_inds]),
@@ -597,14 +335,6 @@ class SparseMDiagonalBlockMatrix(SparseBlockMatrix):
         ).coalesce()
 
     def __sub__(self, other: SparseBlockMatrix) -> SparseBlockMatrix:
-        """Sub.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         assert isinstance(other, SparseMDiagonalBlockMatrix)
         return SparseMDiagonalBlockMatrix(
             i_inds=torch.cat([self.i_inds, other.i_inds]),
@@ -613,15 +343,6 @@ class SparseMDiagonalBlockMatrix(SparseBlockMatrix):
         ).coalesce()
 
     def apply_damping_assume_coalesced(self, damping: SparseBlockVector | float, ep: float) -> None:
-        """Apply damping assume coalesced.
-
-        Args:
-            damping: The damping.
-            ep: The ep.
-
-        Returns:
-            The return value.
-        """
         assert self.data.shape[-1] == 1
 
         diag_mask = self.i_inds == self.j_inds
@@ -642,17 +363,6 @@ class SparseMDiagonalBlockMatrix(SparseBlockMatrix):
         col_mapping: RavelMapping,
         col_start_inds: int,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Ravel.
-
-        Args:
-            row_mapping: The row mapping.
-            row_start_inds: The row start inds.
-            col_mapping: The col mapping.
-            col_start_inds: The col start inds.
-
-        Returns:
-            The return value.
-        """
         n_size, n_diags = self.data.shape[1], self.data.shape[2]
         data_row_inds = (
             torch.arange(n_diags * n_size, device=self.data.device).reshape(n_diags, n_size).T.reshape(1, -1)
@@ -684,15 +394,6 @@ class SparseMatrixSubview:
     col_group_names: list[str]
 
     def get(self, row_group_name: str, col_group_name: str) -> SparseBlockMatrix:
-        """Get.
-
-        Args:
-            row_group_name: The row group name.
-            col_group_name: The col group name.
-
-        Returns:
-            The return value.
-        """
         if (row_group_name, col_group_name) in self.matrices:
             return self.matrices[(row_group_name, col_group_name)]
         elif (col_group_name, row_group_name) in self.matrices:
@@ -701,14 +402,6 @@ class SparseMatrixSubview:
             return SparseNullMatrix()
 
     def __matmul__(self, other: "SparseMatrixSubview") -> "SparseMatrixSubview":
-        """Matmul.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         matrices: SparseBlockMatrixDict = {}
         for self_row_name in self.row_group_names:
             for other_col_name in other.col_group_names:
@@ -733,11 +426,6 @@ class SparseMatrixSubview:
         )
 
     def has_inverse(self) -> bool:
-        """Has inverse.
-
-        Returns:
-            The return value.
-        """
         if self.row_group_names != self.col_group_names:
             return False
         for row_name in self.row_group_names:
@@ -749,11 +437,6 @@ class SparseMatrixSubview:
         return True
 
     def inverse(self) -> "SparseMatrixSubview":
-        """Inverse.
-
-        Returns:
-            The return value.
-        """
         assert self.has_inverse()
         matrices = {}
         for group_name in self.row_group_names:
@@ -766,11 +449,6 @@ class SparseMatrixSubview:
         )
 
     def transpose(self) -> "SparseMatrixSubview":
-        """Transpose.
-
-        Returns:
-            The return value.
-        """
         matrices = {}
         for row_name in self.row_group_names:
             for col_name in self.col_group_names:
@@ -782,14 +460,6 @@ class SparseMatrixSubview:
         )
 
     def __mul__(self, other: SparseVectorSubview) -> SparseVectorSubview:
-        """Mul.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         assert self.col_group_names == other.group_names
 
         vectors: SparseVectorDict = {group_name: SparseNullVector() for group_name in self.row_group_names}
@@ -802,14 +472,6 @@ class SparseMatrixSubview:
         return SparseVectorSubview(vectors=vectors, group_names=self.row_group_names)
 
     def __sub__(self, other: "SparseMatrixSubview") -> "SparseMatrixSubview":
-        """Sub.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         assert self.row_group_names == other.row_group_names
         assert self.col_group_names == other.col_group_names
 
@@ -825,14 +487,6 @@ class SparseMatrixSubview:
         )
 
     def ravel(self, ravel_mapping: list[RavelMapping]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Ravel.
-
-        Args:
-            ravel_mapping: The ravel mapping.
-
-        Returns:
-            The return value.
-        """
         assert len(ravel_mapping) == len(self.row_group_names) == len(self.col_group_names)
 
         pis, pjs, pds = [], [], []
@@ -855,7 +509,6 @@ class SparseMatrixSubview:
 
     @property
     def F(self):
-        """F."""
         assert len(self.row_group_names) == 1
         assert len(self.col_group_names) == 1
         return self.get(self.row_group_names[0], self.col_group_names[0])

@@ -22,7 +22,7 @@ assert metrics.get("TC") is metrics.get("temporal-consistency")
 assert metrics.keys() == ("temporal-consistency",)
 ```
 
-Key 和 alias 会经过 strip 与 case-fold 后查找，但 `RegistryItem` 会保留原始公开 key。注册冲突会显式报错，不会静默覆盖；枚举顺序是确定的，因此生成 manifest 和测试结果也稳定。
+查找 Key 和 alias 时，会先对它们进行 strip 与 case-fold 处理，但 `RegistryItem` 会保留原始公开 key。注册冲突会显式报错，不会静默覆盖；枚举顺序是确定的，因此生成 manifest 和测试结果也稳定。
 
 ## Guardrail 组合示例
 

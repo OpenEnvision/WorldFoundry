@@ -33,7 +33,7 @@ from worldfoundry.base_models.llm_mllm_core.mllm.qwen.cosmos_reason1.inference.c
 # from torchtitan.config_manager import TORCH_DTYPE_MAP
 # from torchtitan.logging import logger
 from worldfoundry.base_models.llm_mllm_core.mllm.qwen.cosmos_reason1.inference.parallel_dims import ParallelDims
-from worldfoundry.core.distributed.runtime.logging import log as logger
+from worldfoundry.core.observability.rank_logging import log as logger
 
 TORCH_DTYPE_MAP = {
     "float16": torch.float16,
@@ -71,10 +71,7 @@ def parallelize_qwen(
     if (
         parallel_dims.dp_shard_enabled or parallel_dims.cp_enabled
     ):  # apply FSDP or HSDP, potentially with Context Parallel
-        if parallel_dims.dp_replicate_enabled:
-            dp_mesh_dim_names = ("dp_replicate", "dp_shard_cp")
-        else:
-            dp_mesh_dim_names = ("dp_shard_cp",)
+        dp_mesh_dim_names = ("dp_replicate", "dp_shard_cp") if parallel_dims.dp_replicate_enabled else ("dp_shard_cp",)
 
         apply_fsdp(
             model,
@@ -243,10 +240,10 @@ def apply_fsdp(
         dp_mesh (DeviceMesh): The device mesh to use for data parallelism.
     """
     if model.visual is not None:
-        for layer_id, block in enumerate(model.visual.blocks):
+        for _layer_id, block in enumerate(model.visual.blocks):
             fully_shard(block, mesh=dp_mesh)
 
-    for layer_id, transformer_block in enumerate(model.model.layers):
+    for _layer_id, transformer_block in enumerate(model.model.layers):
         fully_shard(
             transformer_block,
             mesh=dp_mesh,

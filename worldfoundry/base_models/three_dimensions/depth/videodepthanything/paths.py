@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from worldfoundry.evaluation.utils import REPO_ROOT
+from worldfoundry.core.io.paths import REPO_ROOT
 
 VDA_FILENAMES = {
     "vits": "video_depth_anything_vits.pth",
@@ -43,9 +43,7 @@ def _checkpoint_roots() -> list[Path]:
 def checkpoint_path(model: str = "vits") -> Path | None:
     filename = VDA_FILENAMES[model]
     env_key = (
-        "WORLDFOUNDRY_VIDEO_DEPTH_ANYTHING_CKPT"
-        if model == "vits"
-        else "WORLDFOUNDRY_VIDEO_DEPTH_ANYTHING_VITL_CKPT"
+        "WORLDFOUNDRY_VIDEO_DEPTH_ANYTHING_CKPT" if model == "vits" else "WORLDFOUNDRY_VIDEO_DEPTH_ANYTHING_VITL_CKPT"
     )
     explicit = os.environ.get(env_key, "").strip()
     if explicit:

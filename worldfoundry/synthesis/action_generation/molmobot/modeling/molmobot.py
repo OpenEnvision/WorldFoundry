@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Sequence
 from dataclasses import field
-from typing import ClassVar, Optional, Sequence
+from typing import ClassVar
 
 import torch
 
@@ -37,10 +38,10 @@ class MolmoBotConfig(VideoOlmoConfig):
     same_noise_per_time: bool = False
 
     states_mode: str = "cross_attn"
-    robot_preprocessor: Optional[RobotProcessorConfig] = None
-    robot_postprocessor: Optional[RobotProcessorConfig] = None
+    robot_preprocessor: RobotProcessorConfig | None = None
+    robot_postprocessor: RobotProcessorConfig | None = None
 
-    def build_model(self, device=None) -> "MolmoBot":
+    def build_model(self, device=None) -> MolmoBot:
         return MolmoBot(self, device)
 
 
@@ -72,7 +73,7 @@ class MolmoBot(VideoOlmo):
             device=device,
         )
 
-    def _adapt_state(self, states: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+    def _adapt_state(self, states: torch.Tensor | None) -> torch.Tensor | None:
         mode = self.config.states_mode
         if mode == "skip":
             return None
@@ -96,18 +97,18 @@ class MolmoBot(VideoOlmo):
     def generate_actions(
         self,
         input_ids: torch.LongTensor,
-        input_embeddings: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        attention_bias: Optional[torch.Tensor] = None,
-        response_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        images: Optional[torch.Tensor] = None,
-        image_masks: Optional[torch.Tensor] = None,
-        token_pooling: Optional[torch.Tensor] = None,
-        low_res_token_pooling: Optional[torch.Tensor] = None,
-        states: Optional[torch.Tensor] = None,
-        num_steps: Optional[int] = None,
-        generator: Optional[torch.Generator] = None,
+        input_embeddings: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        attention_bias: torch.Tensor | None = None,
+        response_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        images: torch.Tensor | None = None,
+        image_masks: torch.Tensor | None = None,
+        token_pooling: torch.Tensor | None = None,
+        low_res_token_pooling: torch.Tensor | None = None,
+        states: torch.Tensor | None = None,
+        num_steps: int | None = None,
+        generator: torch.Generator | None = None,
     ) -> torch.Tensor:
         """Generate one action chunk using the released Euler flow solver."""
         if states is None:
@@ -164,9 +165,9 @@ class MolmoBot(VideoOlmo):
 
     @staticmethod
     def _get_encoder_attention_mask(
-        input_ids: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-    ) -> Optional[torch.Tensor]:
+        input_ids: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+    ) -> torch.Tensor | None:
         if attention_mask is not None:
             return attention_mask.to(dtype=torch.bool).clone()
         if input_ids is not None:
@@ -199,7 +200,7 @@ class MolmoBot(VideoOlmo):
             if target == 1:
                 return [layer_states[-1]]
             scale = (available - 1) / float(target - 1)
-            return [layer_states[int(round(i * scale))] for i in range(target)]
+            return [layer_states[int(round(i * scale))] for i in range(target)]  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         raise ValueError(f"Unsupported action_expert_layer_mode: {mode}")
 
 

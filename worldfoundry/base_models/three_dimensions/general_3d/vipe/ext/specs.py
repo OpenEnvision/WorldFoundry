@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> ext -> specs.py functionality."""
-
 import os
 import shutil
 import sys
@@ -24,20 +22,10 @@ UPSTREAM_REVISION = "157494a2aca56c9f5adbd36977d892e88401b4e2"
 
 
 def _csrc_path() -> Path:
-    """Helper function to csrc path.
-
-    Returns:
-        The return value.
-    """
     return Path(__file__).resolve().parent.parent / "csrc"
 
 
 def get_sources() -> list[str]:
-    """Get sources.
-
-    Returns:
-        The return value.
-    """
     csrc_path = _csrc_path()
     sources = sorted(p for p in csrc_path.rglob("*") if p.suffix in {".cpp", ".cu"})
     if not sources:
@@ -118,22 +106,12 @@ def resolve_eigen_include() -> Path:
 
 
 def _eigen_include_flags() -> list[str]:
-    """Helper function to eigen include flags.
-
-    Returns:
-        The return value.
-    """
     if os.environ.get("USE_SYSTEM_EIGEN", "0") == "1":
         return []
     return ["-isystem", str(resolve_eigen_include())]
 
 
 def _additional_include_flags() -> list[str]:
-    """Helper function to additional include flags.
-
-    Returns:
-        The return value.
-    """
     flags = _eigen_include_flags()
     seen_paths = {flags[index + 1] for index in range(0, len(flags), 2)}
     for conda_prefix in _environment_prefixes():
@@ -172,18 +150,8 @@ def _additional_include_flags() -> list[str]:
 
 
 def get_cpp_flags() -> list[str]:
-    """Get cpp flags.
-
-    Returns:
-        The return value.
-    """
-    return ["-O3", "-DWITH_CUDA"] + _additional_include_flags()
+    return ["-O3", "-DWITH_CUDA"] + _additional_include_flags()  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
 
 def get_cuda_flags() -> list[str]:
-    """Get cuda flags.
-
-    Returns:
-        The return value.
-    """
-    return ["-O3", "-DWITH_CUDA", "--use_fast_math"] + _additional_include_flags()
+    return ["-O3", "-DWITH_CUDA", "--use_fast_math"] + _additional_include_flags()  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.

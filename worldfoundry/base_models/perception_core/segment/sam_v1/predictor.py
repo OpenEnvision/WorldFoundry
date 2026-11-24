@@ -4,20 +4,15 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> perception_core -> segment -> sam_v1 -> predictor.py functionality."""
-
 import numpy as np
 import torch
 
 from worldfoundry.base_models.perception_core.segment.sam_v1.modeling import Sam
 
-from typing import Optional, Tuple
-
 from .utils.transforms import ResizeLongestSide
 
 
 class SamPredictor:
-    """Sam predictor implementation."""
     def __init__(
         self,
         sam_model: Sam,
@@ -66,7 +61,7 @@ class SamPredictor:
     def set_torch_image(
         self,
         transformed_image: torch.Tensor,
-        original_image_size: Tuple[int, ...],
+        original_image_size: tuple[int, ...],
     ) -> None:
         """
         Calculates the image embeddings for the provided image, allowing
@@ -94,13 +89,13 @@ class SamPredictor:
 
     def predict(
         self,
-        point_coords: Optional[np.ndarray] = None,
-        point_labels: Optional[np.ndarray] = None,
-        box: Optional[np.ndarray] = None,
-        mask_input: Optional[np.ndarray] = None,
+        point_coords: np.ndarray | None = None,
+        point_labels: np.ndarray | None = None,
+        box: np.ndarray | None = None,
+        mask_input: np.ndarray | None = None,
         multimask_output: bool = True,
         return_logits: bool = False,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Predict masks for the given input prompts, using the currently set image.
 
@@ -139,9 +134,7 @@ class SamPredictor:
         # Transform input prompts
         coords_torch, labels_torch, box_torch, mask_input_torch = None, None, None, None
         if point_coords is not None:
-            assert (
-                point_labels is not None
-            ), "point_labels must be supplied if point_coords is supplied."
+            assert point_labels is not None, "point_labels must be supplied if point_coords is supplied."
             point_coords = self.transform.apply_coords(point_coords, self.original_size)
             coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=self.device)
             labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=self.device)
@@ -171,13 +164,13 @@ class SamPredictor:
     @torch.no_grad()
     def predict_torch(
         self,
-        point_coords: Optional[torch.Tensor],
-        point_labels: Optional[torch.Tensor],
-        boxes: Optional[torch.Tensor] = None,
-        mask_input: Optional[torch.Tensor] = None,
+        point_coords: torch.Tensor | None,
+        point_labels: torch.Tensor | None,
+        boxes: torch.Tensor | None = None,
+        mask_input: torch.Tensor | None = None,
         multimask_output: bool = True,
         return_logits: bool = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Predict masks for the given input prompts, using the currently set image.
         Input prompts are batched torch tensors and are expected to already be
@@ -216,10 +209,7 @@ class SamPredictor:
         if not self.is_image_set:
             raise RuntimeError("An image must be set with .set_image(...) before mask prediction.")
 
-        if point_coords is not None:
-            points = (point_coords, point_labels)
-        else:
-            points = None
+        points = (point_coords, point_labels) if point_coords is not None else None
 
         # Embed prompts
         sparse_embeddings, dense_embeddings = self.model.prompt_encoder(
@@ -252,19 +242,12 @@ class SamPredictor:
         the embedding spatial dimension of SAM (typically C=256, H=W=64).
         """
         if not self.is_image_set:
-            raise RuntimeError(
-                "An image must be set with .set_image(...) to generate an embedding."
-            )
+            raise RuntimeError("An image must be set with .set_image(...) to generate an embedding.")
         assert self.features is not None, "Features must exist if an image has been set."
         return self.features
 
     @property
     def device(self) -> torch.device:
-        """Device.
-
-        Returns:
-            The return value.
-        """
         return self.model.device
 
     def reset_image(self) -> None:

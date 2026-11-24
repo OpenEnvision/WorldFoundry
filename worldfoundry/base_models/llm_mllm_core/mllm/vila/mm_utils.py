@@ -32,7 +32,7 @@ from .constants import DEFAULT_IMAGE_TOKEN
 def get_frame_from_vcap(vidcap, num_frames=10, max_fps=0.0, fps=None, frame_count=None, video_file_name=None):
     import cv2
 
-    if fps == None or frame_count == None:
+    if fps == None or frame_count == None:  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
         # if one of fps or frame_count is None, still recompute
         fps = vidcap.get(cv2.CAP_PROP_FPS)
         frame_count = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -42,7 +42,7 @@ def get_frame_from_vcap(vidcap, num_frames=10, max_fps=0.0, fps=None, frame_coun
             Image.new("RGB", (720, 720)),
         ] * num_frames, 0
 
-    duration = frame_count / fps
+    _duration = frame_count / fps
     frame_interval = frame_count // num_frames
     if frame_interval == 0 and frame_count <= 1:
         print(f"frame_interval is equal to 0. return empty image. {video_file_name}")
@@ -100,7 +100,7 @@ def get_frame_from_vcap_with_fps(vidcap, num_frames=10, max_fps=0.0, fps=None, f
 
     import cv2
 
-    if fps == None or frame_count == None:
+    if fps == None or frame_count == None:  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
         # if one of fps or frame_count is None, still recompute
         fps = vidcap.get(cv2.CAP_PROP_FPS)
         frame_count = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -141,7 +141,7 @@ def get_frame_from_vcap_with_fps(vidcap, num_frames=10, max_fps=0.0, fps=None, f
                         img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                         im_pil = Image.fromarray(img)
                         images.append(im_pil)
-                    except:
+                    except BaseException:
                         # print("Failed to read frame:", count)
                         continue
                     if len(images) >= num_frames:
@@ -157,7 +157,7 @@ def get_frame_from_vcap_with_fps(vidcap, num_frames=10, max_fps=0.0, fps=None, f
                         img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                         im_pil = Image.fromarray(img)
                         images.append(im_pil)
-                    except:
+                    except BaseException:
                         # print("Failed to read frame:", count)
                         continue
                     count += 1
@@ -186,7 +186,7 @@ def get_frame_from_vcap_with_fps(vidcap, num_frames=10, max_fps=0.0, fps=None, f
                     img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     im_pil = Image.fromarray(img)
                     images.append(im_pil)
-                except:
+                except BaseException:
                     continue
                 count += 1
             looked += 1
@@ -335,7 +335,7 @@ def dynamic_preprocess(image, min_num=1, max_num=12, image_size=384, use_thumbna
     return processed_images
 
 
-def dynamic_s2_preprocess(image, s2_scales=[384, 768, 1152], max_num=12, image_size=384):
+def dynamic_s2_preprocess(image, s2_scales=[384, 768, 1152], max_num=12, image_size=384):  # noqa: B006 - Keeps the upstream default object and signature.
     orig_width, orig_height = image.size
     aspect_ratio = orig_width / orig_height
     min_num = (s2_scales[-1] // s2_scales[0]) ** 2  # at least use number of tiles as the largest scale
@@ -429,10 +429,7 @@ def dynamic_s2_process_images_and_prompt(images, prompt, data_args, image_folder
         all_images.append(processed_images)
         all_block_size.append(block_size)
         idx += 2
-    if all_images:
-        all_images = torch.cat(all_images)
-    else:
-        all_images = None
+    all_images = torch.cat(all_images) if all_images else None
     return all_images, all_block_size
 
 
@@ -465,10 +462,7 @@ def process_image(
         return torch.stack(images), block_size
     if "dynamic" in data_args.image_aspect_ratio and enable_dynamic_res:
         assert crop_size["height"] == crop_size["width"]
-        if max_tiles is not None:
-            max_num = max_tiles
-        else:
-            max_num = data_args.max_tiles
+        max_num = max_tiles if max_tiles is not None else data_args.max_tiles
         images = dynamic_preprocess(image, min_num=data_args.min_tiles, max_num=max_num, image_size=crop_size["height"])
         images = [processor.preprocess(image, return_tensors="pt")["pixel_values"][0] for image in images]
         return torch.stack(images)
@@ -563,10 +557,7 @@ class KeywordsStoppingCriteria(StoppingCriteria):
             if (output_ids[0, -keyword_id.shape[0] :] == keyword_id).all():
                 return True
         outputs = self.tokenizer.batch_decode(output_ids[:, -offset:], skip_special_tokens=True)[0]
-        for keyword in self.keywords:
-            if keyword in outputs:
-                return True
-        return False
+        return any(keyword in outputs for keyword in self.keywords)
 
     def __call__(self, output_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
         outputs = []

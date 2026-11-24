@@ -24,39 +24,34 @@ Example:
         --device cuda:0 \
         --score-thr 0.5
 """
+
 import argparse
 import os
 
 import torch
 from mmengine import ProgressBar
-
 from mmyolo.utils.misc import get_file_list
 
 try:
     from mmdeploy.apis.utils import build_task_processor
     from mmdeploy.utils import get_input_shape, load_config
 except ImportError:
-    raise ImportError(
-        'mmdeploy is not installed, please see '
-        'https://mmdeploy.readthedocs.io/en/1.x/01-how-to-build/build_from_source.html'  # noqa
+    raise ImportError(  # noqa: B904 - Keeps the implicit exception context.
+        "mmdeploy is not installed, please see "
+        "https://mmdeploy.readthedocs.io/en/1.x/01-how-to-build/build_from_source.html"
     )
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='For mmdeploy predict')
-    parser.add_argument(
-        'img', help='Image path, include image file, dir and URL.')
-    parser.add_argument('config', help='model config root')
-    parser.add_argument('checkpoint', help='checkpoint backend model path')
-    parser.add_argument('--deploy-cfg', help='deploy config path')
-    parser.add_argument(
-        '--device', default='cuda:0', help='device used for conversion')
-    parser.add_argument(
-        '--out-dir', default='./output', help='Path to output file')
-    parser.add_argument(
-        '--show', action='store_true', help='Show the detection results')
-    parser.add_argument(
-        '--score-thr', type=float, default=0.3, help='Bbox score threshold')
+    parser = argparse.ArgumentParser(description="For mmdeploy predict")
+    parser.add_argument("img", help="Image path, include image file, dir and URL.")
+    parser.add_argument("config", help="model config root")
+    parser.add_argument("checkpoint", help="checkpoint backend model path")
+    parser.add_argument("--deploy-cfg", help="deploy config path")
+    parser.add_argument("--device", default="cuda:0", help="device used for conversion")
+    parser.add_argument("--out-dir", default="./output", help="Path to output file")
+    parser.add_argument("--show", action="store_true", help="Show the detection results")
+    parser.add_argument("--score-thr", type=float, default=0.3, help="Bbox score threshold")
     args = parser.parse_args()
     return args
 
@@ -91,16 +86,15 @@ def main():
         with torch.no_grad():
             result = model.test_step(model_inputs)
 
-        if source_type['is_dir']:
-            filename = os.path.relpath(file, args.img).replace('/', '_')
+        if source_type["is_dir"]:
+            filename = os.path.relpath(file, args.img).replace("/", "_")
         else:
             filename = os.path.basename(file)
         out_file = None if args.show else os.path.join(args.out_dir, filename)
 
         # filter score
         result = result[0]
-        result.pred_instances = result.pred_instances[
-            result.pred_instances.scores > args.score_thr]
+        result.pred_instances = result.pred_instances[result.pred_instances.scores > args.score_thr]
 
         # visualize results
         task_processor.visualize(
@@ -109,12 +103,13 @@ def main():
             result=result,
             show_result=args.show,
             window_name=os.path.basename(filename),
-            output_file=out_file)
+            output_file=out_file,
+        )
 
         progress_bar.update()
 
-    print('All done!')
+    print("All done!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

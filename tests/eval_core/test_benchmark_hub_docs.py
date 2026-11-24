@@ -7,7 +7,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Iterable, Iterator
 
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import formal_benchmark_ids
+from worldfoundry.evals.tasks.catalog.benchmark_catalog import formal_benchmark_ids
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FUMADOCS_ROOT = REPO_ROOT / "docs" / "fumadocs"
@@ -29,9 +29,7 @@ def _iter_text_files(root: Path, suffixes: Iterable[str]) -> Iterator[Path]:
 
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [
-            name
-            for name in dirnames
-            if name not in IGNORED_SCAN_DIRS and not name.startswith((".next-", "out.bak."))
+            name for name in dirnames if name not in IGNORED_SCAN_DIRS and not name.startswith((".next-", "out.bak."))
         ]
         directory = Path(dirpath)
         for filename in filenames:
@@ -62,11 +60,11 @@ def test_public_docs_do_not_reference_removed_evaluation_routes_or_gpu_zero_defa
         "CUDA_VISIBLE_DEVICES=" + "0",
         "--cuda-visible-devices " + "0",
         "${CUDA_VISIBLE_DEVICES:-" + "0}",
-        "worldfoundry/evaluation/" + "benchmark_zoo",
-        "worldfoundry/evaluation/" + "model_zoo",
-        "worldfoundry/evaluation/" + "pipeline_dispatch",
-        "<Folder name=\"" + "benchmark_zoo" + "\" defaultOpen>",
-        "<Folder name=\"" + "model_zoo" + "\" defaultOpen>",
+        "worldfoundry/evals/" + "benchmark_zoo",
+        "worldfoundry/evals/" + "model_zoo",
+        "worldfoundry/evals/" + "pipeline_dispatch",
+        '<Folder name="' + "benchmark_zoo" + '" defaultOpen>',
+        '<Folder name="' + "model_zoo" + '" defaultOpen>',
     )
     offenders: dict[str, list[str]] = {}
 
@@ -93,10 +91,7 @@ def test_benchmark_hub_ids_match_catalog_and_task_manifests() -> None:
     catalog_status = json.loads(BENCHMARK_CATALOG_STATUS.read_text(encoding="utf-8"))
     hub_ids = set(catalog_status)
 
-    task_ids = {
-        path.stem
-        for path in (REPO_ROOT / "worldfoundry/data/benchmarks/tasks/external").glob("*.yaml")
-    }
+    task_ids = {path.stem for path in (REPO_ROOT / "worldfoundry/data/benchmarks/tasks/external").glob("*.yaml")}
     formal_ids = set(formal_benchmark_ids())
 
     assert hub_ids <= task_ids
@@ -127,11 +122,12 @@ def test_public_benchmark_commands_use_installed_console_entrypoint() -> None:
     )
     forbidden = (
         "python -m worldfoundry.cli",
-        "python -m worldfoundry.evaluation.cli",
-        "PYTHONPATH=. worldfoundry-eval",
+        "python -m worldfoundry.evals.cli",
+        "PYTHONPATH=. wf",
+        "PYTHONPATH=. wf ",
         "worldfoundry-eval.local_open_eval",
         "- python\n- -m\n- worldfoundry.cli",
-        "- python\n- -m\n- worldfoundry.evaluation.cli",
+        "- python\n- -m\n- worldfoundry.evals.cli",
     )
     offenders: dict[str, list[str]] = {}
 

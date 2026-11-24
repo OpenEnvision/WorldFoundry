@@ -1,13 +1,19 @@
-"""WorldFoundry contract for the official LTX-2.5 DistilledPipeline."""
+"""WorldFoundry contract for the in-process native LTX-2.5 recipe."""
 
 from __future__ import annotations
 
 import json
+import time
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
+from worldfoundry.core.execution.deadline import check_deadline
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
-from worldfoundry.synthesis.visual_generation.ltx25 import LTX25DistilledRuntime
+from worldfoundry.synthesis.visual_generation.ltx25 import (
+    LTX25AccelerationConfig,
+    LTX25DistilledRuntime,
+)
 
 
 def _runtime_options(
@@ -37,16 +43,9 @@ def _pop_runner_metadata(options: dict[str, Any]) -> None:
         "runner",
         "runner_target",
         "install_profile",
+        "acquisition_root",
     ):
         options.pop(key, None)
-
-
-def _python_executable(options: dict[str, Any]) -> Any:
-    executable = options.pop("python_executable", None)
-    env_dir = options.pop("python_env_dir", options.pop("conda_dir", None))
-    if executable is None and env_dir is not None:
-        executable = Path(env_dir).expanduser() / "bin" / "python"
-    return executable
 
 
 def _output_paths(output_path: str | Path | None) -> tuple[Path, Path]:
@@ -68,7 +67,6 @@ def _output_paths(output_path: str | Path | None) -> tuple[Path, Path]:
 def _preflight_error(preflight: Mapping[str, Any]) -> str:
     missing = [
         *preflight.get("missing_checkpoint_files", []),
-        *preflight.get("missing_runtime_files", []),
         *preflight.get("missing_system_tools", []),
         *preflight.get("blocked_reasons", []),
     ]
@@ -77,7 +75,13 @@ def _preflight_error(preflight: Mapping[str, Any]) -> str:
 
 
 class LTX25Pipeline(PipelineABC):
-    """Text/image-to-audio-video adapter for official distilled LTX-2.5."""
+    """Text/image-to-audio-video adapter for the native distilled LTX-2.5 recipe.
+
+    Execution stays in-process in the active ``ltx-2.5`` environment.
+    ``timeout_seconds`` is a cooperative deadline checked between native
+    stages/steps and before artifact writes; it cannot preempt a running
+    CUDA kernel.
+    """
 
     MODEL_ID = "ltx-2.5"
 
@@ -94,16 +98,11 @@ class LTX25Pipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "LTX25Pipeline":
+    ) -> LTX25Pipeline:
         options = _runtime_options(model_path, required_components, kwargs)
         resolved_model_id = str(options.pop("model_id", model_id or cls.MODEL_ID))
         _pop_runner_metadata(options)
-        python_executable = _python_executable(options)
-        acquisition_root = options.pop("acquisition_root", None)
         hf_models_root = options.pop("hf_models_root", None)
-        source_root = options.pop("source_root", options.pop("repo_root", options.pop("runtime_root", None)))
-        if source_root is None and acquisition_root is not None:
-            source_root = Path(acquisition_root).expanduser() / "Lightricks--LTX-2"
         checkpoint_dir = options.pop(
             "checkpoint_dir",
             options.pop(
@@ -115,8 +114,6 @@ class LTX25Pipeline(PipelineABC):
             checkpoint_dir = Path(hf_models_root).expanduser() / "Lightricks--LTX-2.5"
         runtime = LTX25DistilledRuntime(
             checkpoint_dir=checkpoint_dir,
-            source_root=source_root,
-            python_executable=python_executable,
             transformer_path=options.pop("transformer_path", None),
             text_encoder_path=options.pop("text_encoder_path", None),
             video_vae_path=options.pop("video_vae_path", None),
@@ -128,11 +125,25 @@ class LTX25Pipeline(PipelineABC):
             quantization=options.pop("quantization", None),
             diffvae_optimization=str(options.pop("diffvae_optimization", "chunked_eager")),
             device=device,
+            model_variant=options.pop("model_variant", "distilled"),
+            video_vae_variant=options.pop("video_vae_variant", "auto"),
+            acceleration=options.pop("acceleration", None),
         )
         if options:
             unknown = ", ".join(sorted(options))
             raise TypeError(f"Unknown LTX-2.5 load options: {unknown}")
         return cls(runtime, model_id=resolved_model_id)
+
+    def configure_acceleration(
+        self,
+        acceleration: LTX25AccelerationConfig | Mapping[str, Any] | str | None,
+    ) -> LTX25AccelerationConfig | None:
+        """Configure SOL-Engine acceleration on the underlying LTX-2.5 runtime."""
+        return self.runtime.configure_acceleration(acceleration)
+
+    def acceleration_report(self) -> dict[str, Any]:
+        """Return auditable SOL-Engine receipts for the transformer and VideoVAE."""
+        return self.runtime.acceleration_report()
 
     def preflight(self) -> dict[str, Any]:
         return self.runtime.preflight()
@@ -171,6 +182,7 @@ class LTX25Pipeline(PipelineABC):
         del output_dir
         if not execute:
             raise RuntimeError("LTX-2.5 requires execute=True; dry-run artifacts are not emitted.")
+        deadline = time.monotonic() + timeout_seconds
         request = self.process(
             prompt=prompt,
             images=images,
@@ -184,7 +196,7 @@ class LTX25Pipeline(PipelineABC):
         if preflight["status"] != "ready":
             raise RuntimeError(_preflight_error(preflight))
         plan = self.runtime.build_plan(request=request, output_path=artifact_path)
-        run_result = self.runtime.run_plan(plan, timeout_seconds=timeout_seconds, log_dir=report_path.parent)
+        run_result = self.runtime.run_plan(plan, timeout_seconds=deadline - time.monotonic())
         generated_files = list(run_result.get("generated_files") or [])
         resolved_artifact = generated_files[0] if generated_files else str(artifact_path)
         result = {
@@ -194,8 +206,8 @@ class LTX25Pipeline(PipelineABC):
             "artifact_kind": "generated_video",
             "artifact_path": resolved_artifact,
             "artifact_files": generated_files,
-            "runtime": "ltx_2_5.official_external_runtime",
-            "backend_quality": "official_external_runtime",
+            "runtime": "worldfoundry.native_diffusion",
+            "backend_quality": "native",
             "request": request,
             "preflight": preflight,
             "runtime_result": run_result,
@@ -203,6 +215,7 @@ class LTX25Pipeline(PipelineABC):
         }
         if result["status"] != "success":
             result["error"] = run_result.get("error") or "LTX-2.5 execution failed."
+        check_deadline(deadline, stage="LTX-2.5 metadata artifact write")
         report_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
         self.history.append(result)
         if return_dict or result["status"] != "success":
@@ -210,7 +223,7 @@ class LTX25Pipeline(PipelineABC):
         return resolved_artifact
 
     def stream(self, *args: Any, **kwargs: Any) -> dict[str, Any] | str:
-        """Use the official batch entrypoint; upstream does not expose streaming."""
+        """Return one completed batch artifact through the native recipe."""
         return self(*args, **kwargs)
 
 

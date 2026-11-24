@@ -5,6 +5,7 @@ task_family: three_dimension
 groups: [3d, reconstruction, trajectory]
 source_repos:
 - url: https://github.com/Junyi42/LoGeR
+  revision: 7685b7a41949e62ed8a69309642465aee4cb89ba
 checkpoints:
 - repo_id: Junyi42/LoGeR
   role: reconstruction_checkpoint

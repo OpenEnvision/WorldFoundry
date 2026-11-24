@@ -10,25 +10,21 @@ This module provides utilities for computing per-pixel confidence scores based o
 multi-view depth projection consistency, as an alternative to learning-based confidence.
 """
 
-from typing import List, Optional
-
 import torch
 import torch.nn.functional as F
 from einops import einsum
 
-from mapanything.utils.geometry import (
+from worldfoundry.base_models.three_dimensions.general_3d.mapanything.mapanything.utils.geometry import (
     closed_form_pose_inverse,
     depthmap_to_camera_frame,
 )
-from mapanything.utils.wai.intersection_check import (
+from worldfoundry.base_models.three_dimensions.general_3d.mapanything.mapanything.utils.wai.intersection_check import (
     create_frustum_from_intrinsics,
     frustum_intersection_check,
 )
 
 
-def _in_image(
-    pts: torch.Tensor, height: int, width: int, min_depth: float = 0.0
-) -> torch.Tensor:
+def _in_image(pts: torch.Tensor, height: int, width: int, min_depth: float = 0.0) -> torch.Tensor:
     """
     Check if projected points are within image boundaries.
 
@@ -46,9 +42,7 @@ def _in_image(
     return valid
 
 
-def _project_pts3d_to_image_with_depth(
-    pts3d: torch.Tensor, intrinsics: torch.Tensor
-) -> torch.Tensor:
+def _project_pts3d_to_image_with_depth(pts3d: torch.Tensor, intrinsics: torch.Tensor) -> torch.Tensor:
     """
     Project 3D points to image plane, returning (x, y, depth).
 
@@ -68,9 +62,9 @@ def _project_pts3d_to_image_with_depth(
 
 
 def _compute_frustum_intersection_matrix(
-    intrinsics: List[torch.Tensor],
-    camera_poses: List[torch.Tensor],
-    depth_z: List[torch.Tensor],
+    intrinsics: list[torch.Tensor],
+    camera_poses: list[torch.Tensor],
+    depth_z: list[torch.Tensor],
     frustum_chunk_size: int,
     device: torch.device,
 ) -> torch.Tensor:
@@ -115,22 +109,20 @@ def _compute_frustum_intersection_matrix(
     frustums_world = frustums_world[:, :, :3]
 
     # Compute frustum intersection
-    frustum_intersection = frustum_intersection_check(
-        frustums_world, chunk_size=frustum_chunk_size, device=device
-    )
+    frustum_intersection = frustum_intersection_check(frustums_world, chunk_size=frustum_chunk_size, device=device)
 
     return frustum_intersection
 
 
 def compute_multiview_depth_confidence(
-    depth_z: List[torch.Tensor],
-    intrinsics: List[torch.Tensor],
-    camera_poses: List[torch.Tensor],
+    depth_z: list[torch.Tensor],
+    intrinsics: list[torch.Tensor],
+    camera_poses: list[torch.Tensor],
     depth_assoc_abs_thresh: float = 0.02,
     depth_assoc_rel_thresh: float = 0.02,
     frustum_chunk_size: int = 50,
-    depth_masks: Optional[List[torch.Tensor]] = None,
-) -> List[torch.Tensor]:
+    depth_masks: list[torch.Tensor] | None = None,
+) -> list[torch.Tensor]:
     """
     Compute multi-view depth consistency confidence for each view.
 
@@ -211,12 +203,8 @@ def compute_multiview_depth_confidence(
 
             # Transform source world points to target camera frame
             src_pts_world = pts3d_world[src_idx]  # (B, H, W, 3)
-            src_pts_homog = torch.cat(
-                [src_pts_world, torch.ones_like(src_pts_world[..., :1])], dim=-1
-            )
-            src_pts_tgt_cam = einsum(
-                world2cam[tgt_idx], src_pts_homog, "b i k, b h w k -> b h w i"
-            )
+            src_pts_homog = torch.cat([src_pts_world, torch.ones_like(src_pts_world[..., :1])], dim=-1)
+            src_pts_tgt_cam = einsum(world2cam[tgt_idx], src_pts_homog, "b i k, b h w k -> b h w i")
             src_pts_tgt_cam = src_pts_tgt_cam[..., :3]
 
             # Project to target image plane
@@ -225,18 +213,12 @@ def compute_multiview_depth_confidence(
             )  # (B, H, W, 3) with (x, y, expected_depth)
 
             # Check which points are valid (in image and positive depth)
-            valid_projection = (
-                _in_image(projected, height, width, min_depth=0.04) & valid_src_depth
-            )
+            valid_projection = _in_image(projected, height, width, min_depth=0.04) & valid_src_depth
 
             # Sample depth at projected locations
             # Normalize coordinates for grid_sample: [-1, 1]
             normalized_pts = (
-                2.0
-                * projected[..., :2]
-                / torch.tensor(
-                    [width - 1, height - 1], device=device, dtype=projected.dtype
-                )
+                2.0 * projected[..., :2] / torch.tensor([width - 1, height - 1], device=device, dtype=projected.dtype)
                 - 1.0
             )
             normalized_pts = normalized_pts.clamp(-1.0, 1.0)
@@ -256,9 +238,7 @@ def compute_multiview_depth_confidence(
             expected_depth = projected[..., 2]
 
             # Compute depth association threshold
-            depth_thresh = (
-                depth_assoc_abs_thresh + depth_assoc_rel_thresh * expected_depth
-            )
+            depth_thresh = depth_assoc_abs_thresh + depth_assoc_rel_thresh * expected_depth
 
             # Compute reprojection error
             reproj_error = torch.abs(expected_depth - sampled_depth)

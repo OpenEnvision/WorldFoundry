@@ -66,9 +66,7 @@ def load_cosmos3_audio_decoder(context: ComponentBuildContext) -> Cosmos3AVAEAud
             module_class=Cosmos3AVAEAudioDecoder,
             config_resolver=lambda checkpoint: checkpoint_json_config(checkpoint, "sound_tokenizer/config.json"),
             state_dict_converter=lambda state_dict: {
-                key: value
-                for key, value in state_dict.items()
-                if key.startswith("decoder.")
+                key: value for key, value in state_dict.items() if key.startswith("decoder.")
             },
             vram_module_map={
                 torch.nn.Conv1d: AutoWrappedModule,
@@ -149,7 +147,7 @@ def build_cosmos3_media_decoder(context: ComponentBuildContext) -> Cosmos3MediaD
 __all__ = [
     "Cosmos3MediaDecoder",
     "build_cosmos3_media_decoder",
+    "load_cosmos3_audio_decoder",
     "load_cosmos3_video_vae",
     "load_cosmos3_video_vae_checkpoint",
-    "load_cosmos3_audio_decoder",
 ]

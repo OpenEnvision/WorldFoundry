@@ -1,5 +1,4 @@
 # Inference-only Diffusion Policy source retained in-tree.
-from typing import Dict
 
 import torch
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
@@ -93,7 +92,7 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
 
         return trajectory
 
-    def predict_action(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def predict_action(self, obs_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         obs_dict: must include "obs" key
         result: must include "action" key

@@ -18,7 +18,7 @@ alpha_readiness:
   alpha_exclusion: false
   non_api_surface: videobench_official_in_tree
 requires:
-- In-tree Video-Bench runtime under worldfoundry/evaluation/tasks/execution/runners/videobench/runtime
+- In-tree Video-Bench runtime under worldfoundry/evals/tasks/execution/runners/videobench/runtime
 - Video-Bench/Video-Bench_human_annotation downloaded through Hugging Face cache or WORLDFOUNDRY_VIDEOBENCH_ANNOTATION_ROOT
 - WORLDFOUNDRY_VIDEOBENCH_GENERATED_VIDEO_DIR or WORLDFOUNDRY_VIDEOBENCH_MODEL_OUTPUT_DIR
 - WORLDFOUNDRY_VIDEOBENCH_GPT4O_API_KEY or OPENAI_API_KEY
@@ -145,16 +145,16 @@ metrics:
   output_unit: score
   primary: true
 runner:
-  official_script: worldfoundry/evaluation/tasks/execution/runners/videobench/run_videobench_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/videobench/run_videobench_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.videobench.run_videobench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.videobench.run_videobench_official_runner
     dimension_arg: --dimension
     supports_run_official: false
     supports_official_runtime: true
     accepts_generated_artifacts: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:video-bench
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -172,19 +172,19 @@ runner:
     kind: in_tree_official_source
     repo_url: https://github.com/Video-Bench/Video-Bench
     repo_revision: d40b917c4238011aea27d24f85b1e3bf996715bd
-    root: worldfoundry/evaluation/tasks/execution/runners/videobench/runtime
+    root: worldfoundry/evals/tasks/execution/runners/videobench/runtime
     optional_root_env: WORLDFOUNDRY_VIDEOBENCH_ROOT
     results_path_env: WORLDFOUNDRY_VIDEOBENCH_RESULTS_PATH
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
     official_entrypoints:
       normalize_existing_results: ${WORLDFOUNDRY_UNIFIED_PYTHON} 
-        worldfoundry/evaluation/tasks/execution/runners/videobench/run_videobench_official_runner.py 
+        worldfoundry/evals/tasks/execution/runners/videobench/run_videobench_official_runner.py 
         --official-results-path <evaluation_results_or_score_json> --output-dir <out> --json
       evaluate_generated_videos: ${WORLDFOUNDRY_UNIFIED_PYTHON} 
-        worldfoundry/evaluation/tasks/execution/runners/videobench/run_videobench_official_runner.py 
+        worldfoundry/evals/tasks/execution/runners/videobench/run_videobench_official_runner.py 
         --generated-video-dir <generated_video_tree> --annotation-root <Video-Bench_human_annotation> --output-dir <out>
         --json
-      manifest_validation: worldfoundry-eval zoo benchmark-run --benchmark-id video-bench --mode official-validation 
+      manifest_validation: wf zoo benchmark-run --benchmark-id video-bench --mode official-validation 
         --generated-artifact-dir <generated_video_tree> --official-results-path <official_results.json> --output-dir 
         <out> --env WORLDFOUNDRY_VIDEOBENCH_ANNOTATION_ROOT=<Video-Bench_human_annotation> --json
     dataset_env:
@@ -258,11 +258,11 @@ data_refs:
   - cache/worldfoundry/data/hfd_datasets/Video-Bench/Video-Bench_videos
   - cache/worldfoundry/data/hfd_datasets/Video-Bench__Video-Bench_videos
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/videobench/runtime
+  - worldfoundry/evals/tasks/execution/runners/videobench/runtime
   task_yaml: worldfoundry/data/benchmarks/tasks/external/video-bench.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:video-bench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
@@ -275,7 +275,7 @@ base_model_dependencies:
 optional_base_model_dependencies:
 - grounded_video_quality_stack
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -296,3 +296,16 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - generated_video_dir
+  - videobench_prompt_suite_json
+  - judge_api_config
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_scores
+  notes:
+  - Contract maps official Video-Bench GPT-4o/GPT-4o-mini judge outputs to WorldFoundry scorecard.
+  - Runtime execution requires explicit API credentials; offline normalization can be used for existing
+    official score JSON snapshots.

@@ -1,21 +1,21 @@
+from functools import reduce
+
 import torch
 import torch.nn as nn
-import time
-from torch.nn.functional import adaptive_avg_pool3d
-from functools import partial, reduce
-from .swin_backbone import SwinTransformer3D as VideoBackbone
-from .swin_backbone import swin_3d_tiny, swin_3d_small
-from .conv_backbone import convnext_3d_tiny, convnext_3d_small
-from .xclip_backbone import build_x_clip_model
+
+from .conv_backbone import convnext_3d_small, convnext_3d_tiny
+from .head import IQAHead, VARHead, VQAHead
 from .swin_backbone import SwinTransformer2D as ImageBackbone
-from .head import VQAHead, IQAHead, VARHead
+from .swin_backbone import SwinTransformer3D as VideoBackbone
+from .swin_backbone import swin_3d_small, swin_3d_tiny
+from .xclip_backbone import build_x_clip_model
 
 
 class BaseEvaluator(nn.Module):
     def __init__(
         self,
-        backbone=dict(),
-        vqa_head=dict(),
+        backbone={},  # noqa: B006 - Keeps the upstream default object and signature.
+        vqa_head={},  # noqa: B006 - Keeps the upstream default object and signature.
     ):
         super().__init__()
         self.backbone = VideoBackbone(**backbone)
@@ -42,17 +42,16 @@ class BaseEvaluator(nn.Module):
             return score, avg_attns
 
 
-
 class DiViDeAddEvaluator(nn.Module):
     def __init__(
         self,
         backbone_size="divided",
-        backbone_preserve_keys = 'fragments,resize',
+        backbone_preserve_keys="fragments,resize",
         multi=False,
         layer=-1,
-        backbone=dict(resize={"window_size": (4,4,4)}, fragments={"window_size": (4,4,4)}),
+        backbone={"resize": {"window_size": (4, 4, 4)}, "fragments": {"window_size": (4, 4, 4)}},  # noqa: B006 - Keeps the upstream default object and signature.
         divide_head=False,
-        vqa_head=dict(in_channels=768),
+        vqa_head={"in_channels": 768},  # noqa: B006 - Keeps the upstream default object and signature.
         var=False,
     ):
         self.backbone_preserve_keys = backbone_preserve_keys.split(",")
@@ -63,30 +62,27 @@ class DiViDeAddEvaluator(nn.Module):
             print(backbone_size)
             if key not in self.backbone_preserve_keys:
                 continue
-            if backbone_size=="divided":
-                t_backbone_size = hypers["type"]
-            else:
-                t_backbone_size = backbone_size
-            if t_backbone_size == 'swin_tiny':
+            t_backbone_size = hypers["type"] if backbone_size == "divided" else backbone_size
+            if t_backbone_size == "swin_tiny":
                 b = swin_3d_tiny(**backbone[key])
-            elif t_backbone_size == 'swin_tiny_grpb':
+            elif t_backbone_size == "swin_tiny_grpb":
                 # to reproduce fast-vqa
                 b = VideoBackbone()
-            elif t_backbone_size == 'swin_tiny_grpb_m':
+            elif t_backbone_size == "swin_tiny_grpb_m":
                 # to reproduce fast-vqa-m
-                b = VideoBackbone(window_size=(4,4,4), frag_biases=[0,0,0,0])
-            elif t_backbone_size == 'swin_small':
+                b = VideoBackbone(window_size=(4, 4, 4), frag_biases=[0, 0, 0, 0])
+            elif t_backbone_size == "swin_small":
                 b = swin_3d_small(**backbone[key])
-            elif t_backbone_size == 'conv_tiny':
+            elif t_backbone_size == "conv_tiny":
                 b = convnext_3d_tiny(pretrained=True)
-            elif t_backbone_size == 'conv_small':
+            elif t_backbone_size == "conv_small":
                 b = convnext_3d_small(pretrained=True)
-            elif t_backbone_size == 'xclip':
+            elif t_backbone_size == "xclip":
                 b = build_x_clip_model(**backbone[key])
             else:
                 raise NotImplementedError
-            print("Setting backbone:", key+"_backbone")
-            setattr(self, key+"_backbone", b)   
+            print("Setting backbone:", key + "_backbone")
+            setattr(self, key + "_backbone", b)
         if divide_head:
             print(divide_head)
             for key in backbone:
@@ -97,8 +93,8 @@ class DiViDeAddEvaluator(nn.Module):
                     print(b)
                 else:
                     b = VQAHead(**vqa_head)
-                print("Setting head:", key+"_head")
-                setattr(self, key+"_head", b) 
+                print("Setting head:", key + "_head")
+                setattr(self, key + "_head", b)
         else:
             if var:
                 self.vqa_head = VARHead(**vqa_head)
@@ -110,24 +106,22 @@ class DiViDeAddEvaluator(nn.Module):
         if inference:
             self.eval()
             with torch.no_grad():
-                
                 scores = []
                 feats = {}
                 for key in vclips:
-                    feat = getattr(self, key.split("_")[0]+"_backbone")(vclips[key], multi=self.multi, layer=self.layer, **kwargs)
-                    if hasattr(self, key.split("_")[0]+"_head"):
-                        scores += [getattr(self, key.split("_")[0]+"_head")(feat)]
+                    feat = getattr(self, key.split("_")[0] + "_backbone")(
+                        vclips[key], multi=self.multi, layer=self.layer, **kwargs
+                    )
+                    if hasattr(self, key.split("_")[0] + "_head"):
+                        scores += [getattr(self, key.split("_")[0] + "_head")(feat)]
                     else:
-                        scores += [getattr(self, "vqa_head")(feat)]
+                        scores += [self.vqa_head(feat)]
                     if return_pooled_feats:
-                        feats[key] = feat.mean((-3,-2,-1))
+                        feats[key] = feat.mean((-3, -2, -1))
                 if reduce_scores:
-                    if len(scores) > 1:
-                        scores = reduce(lambda x,y:x+y, scores)
-                    else:
-                        scores = scores[0]
+                    scores = reduce(lambda x, y: x + y, scores) if len(scores) > 1 else scores[0]
                     if pooled:
-                        scores = torch.mean(scores, (1,2,3,4))
+                        scores = torch.mean(scores, (1, 2, 3, 4))
             self.train()
             if return_pooled_feats:
                 return scores, feats
@@ -137,34 +131,32 @@ class DiViDeAddEvaluator(nn.Module):
             scores = []
             feats = {}
             for key in vclips:
-                feat = getattr(self, key.split("_")[0]+"_backbone")(vclips[key], multi=self.multi, layer=self.layer, **kwargs)
-                if hasattr(self, key.split("_")[0]+"_head"):
-                    scores += [getattr(self, key.split("_")[0]+"_head")(feat)]
+                feat = getattr(self, key.split("_")[0] + "_backbone")(
+                    vclips[key], multi=self.multi, layer=self.layer, **kwargs
+                )
+                if hasattr(self, key.split("_")[0] + "_head"):
+                    scores += [getattr(self, key.split("_")[0] + "_head")(feat)]
                 else:
-                    scores += [getattr(self, "vqa_head")(feat)]
+                    scores += [self.vqa_head(feat)]
                 if return_pooled_feats:
-                    feats[key] = feat.mean((-3,-2,-1))
+                    feats[key] = feat.mean((-3, -2, -1))
             if reduce_scores:
-                if len(scores) > 1:
-                    scores = reduce(lambda x,y:x+y, scores)
-                else:
-                    scores = scores[0]
+                scores = reduce(lambda x, y: x + y, scores) if len(scores) > 1 else scores[0]
                 if pooled:
                     print(scores.shape)
-                    scores = torch.mean(scores, (1,2,3,4))
+                    scores = torch.mean(scores, (1, 2, 3, 4))
                     print(scores.shape)
-            
+
             if return_pooled_feats:
                 return scores, feats
             return scores
 
 
-
 class BaseImageEvaluator(nn.Module):
     def __init__(
         self,
-        backbone=dict(),
-        iqa_head=dict(),
+        backbone={},  # noqa: B006 - Keeps the upstream default object and signature.
+        iqa_head={},  # noqa: B006 - Keeps the upstream default object and signature.
     ):
         super().__init__()
         self.backbone = ImageBackbone(**backbone)
@@ -190,26 +182,24 @@ class BaseImageEvaluator(nn.Module):
             score = self.iqa_head(feat)
             return score, avg_attns
 
+
 if __name__ == "__main__":
-    
     fusion_opt = {
         "anno_file": "./examplar_data_labels/KoNViD/labels.txt",
         "data_prefix": "../datasets/KoNViD",
-        "sample_types": {"fragments": dict(fragments_h=4,fragments_w=4),
-                         "resize": dict(size_h=128, size_w=128)},
+        "sample_types": {"fragments": {"fragments_h": 4, "fragments_w": 4}, "resize": {"size_h": 128, "size_w": 128}},
         "phase": "train",
         "clip_len": 16,
         "frame_interval": 2,
         "num_clips": 1,
-        "sampling_args": {}
+        "sampling_args": {},
     }
-    
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    
-    dataset = FusionDataset(fusion_opt)
-    
-    model = DiViDeEvaluator({"resize":dict(window_size=(4,4,4)), 
-                             "fragments":dict(window_size=(4,4,4))}).to(device)
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    dataset = FusionDataset(fusion_opt)  # noqa: F821 - Name is undefined in the upstream source.
+
+    model = DiViDeEvaluator({"resize": {"window_size": (4, 4, 4)}, "fragments": {"window_size": (4, 4, 4)}}).to(device)  # noqa: F821 - Name is undefined in the upstream source.
     data = dataset[0]
     video = {}
     for key in fusion_opt["sample_types"]:

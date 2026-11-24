@@ -1,9 +1,6 @@
 import imageio
 import numpy as np
-from tqdm import tqdm 
-from PIL import Image
-
-
+from tqdm import tqdm
 
 
 def save_video(frames, save_path, fps, quality=9, ffmpeg_params=None):
@@ -13,6 +10,6 @@ def save_video(frames, save_path, fps, quality=9, ffmpeg_params=None):
         writer.append_data(frame)
     writer.close()
 
+
 def save_image(image, save_path):
     image.save(save_path)
-

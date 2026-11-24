@@ -6,16 +6,21 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
 from worldfoundry.core.io import artifact_root_path
 
-from ..pipeline_utils import PipelineABC
 from ...operators.worldlabs_operator import WorldLabsOperator
 from ...synthesis.visual_generation.worldlabs.worldlabs_synthesis import WorldLabsSynthesis
 
+if TYPE_CHECKING:
+    from typing_extensions import Self
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
+from ..pipeline_utils import PipelineABC
 
 _DEFAULT_ENDPOINT = "https://api.worldlabs.ai"
 _API_KEY_ENV = ("WORLDLABS_API_KEY", "WLT_API_KEY")
@@ -29,7 +34,7 @@ def _default_output_dir(name: str = "worldlabs_assets") -> str:
     return str(artifact_root_path() / name)
 
 
-def _resolve_api_key(api_key: Optional[str]) -> str:
+def _resolve_api_key(api_key: str | None) -> str:
     """Resolve the World Labs API key from explicit input or environment variables.
 
     Args:
@@ -45,7 +50,7 @@ def _resolve_api_key(api_key: Optional[str]) -> str:
     raise ValueError("World Labs API key is required. Pass api_key or set WORLDLABS_API_KEY/WLT_API_KEY.")
 
 
-def _resolve_endpoint(endpoint: Optional[str]) -> str:
+def _resolve_endpoint(endpoint: str | None) -> str:
     """Resolve the World Labs API endpoint from explicit input, env, or default.
 
     Args:
@@ -67,8 +72,8 @@ class WorldLabsPipeline(PipelineABC):
 
     def __init__(
         self,
-        operator: Optional[WorldLabsOperator] = None,
-        synthesis_model: Optional[WorldLabsSynthesis] = None,
+        operator: WorldLabsOperator | None = None,
+        synthesis_model: WorldLabsSynthesis | None = None,
         endpoint: str = "https://api.worldlabs.ai",
         api_key: str = "your_api_key",
     ):
@@ -82,11 +87,11 @@ class WorldLabsPipeline(PipelineABC):
     def from_pretrained(
         cls,
         model_path: Any = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
-        model_id: Optional[str] = None,
+        model_id: str | None = None,
         **kwargs: Any,
-    ) -> "WorldLabsPipeline":
+    ) -> Self:
         """Build the API-only World Labs pipeline without loading a checkpoint.
 
         Args:
@@ -97,7 +102,7 @@ class WorldLabsPipeline(PipelineABC):
             **kwargs: Additional API adapter options.
         """
         del device, model_id
-        options: Dict[str, Any] = {}
+        options: dict[str, Any] = {}
         if isinstance(model_path, dict):
             options.update(model_path)
         elif model_path is not None:
@@ -111,13 +116,7 @@ class WorldLabsPipeline(PipelineABC):
         )
 
     @classmethod
-    def api_init(
-        cls,
-        endpoint: Optional[str] = None,
-        api_key: Optional[str] = None,
-        logger=None,
-        **kwargs
-    ) -> "WorldLabsPipeline":
+    def api_init(cls, endpoint: str | None = None, api_key: str | None = None, logger=None, **kwargs) -> Self:
         """Initialize API client credentials and runtime endpoints."""
         endpoint = _resolve_endpoint(endpoint)
         api_key = _resolve_api_key(api_key)
@@ -137,19 +136,19 @@ class WorldLabsPipeline(PipelineABC):
 
     def process(
         self,
-        prompt: Optional[str] = None,
-        images: Optional[Union[Image.Image, str, Dict[str, Any], List[Union[Image.Image, str, Dict[str, Any]]]]] = None,
-        video: Optional[Union[str, Dict[str, Any]]] = None,
+        prompt: str | None = None,
+        images: Image.Image | str | dict[str, Any] | list[Image.Image | str | dict[str, Any]] | None = None,
+        video: str | dict[str, Any] | None = None,
         prompt_type: str = "auto",
-        image_azimuths: Optional[List[float]] = None,
-        disable_recaption: Optional[bool] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        image_azimuths: list[float] | None = None,
+        disable_recaption: bool | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
         if self.operator is None:
             raise ValueError("Operator is not initialized")
 
-        processed_data: Dict[str, Any] = {}
+        processed_data: dict[str, Any] = {}
 
         self.operator.get_interaction(prompt or "")
         processed_interaction = self.operator.process_interaction()
@@ -172,10 +171,10 @@ class WorldLabsPipeline(PipelineABC):
 
     def _replace_local_content(
         self,
-        content: Dict[str, Any],
+        content: dict[str, Any],
         kind: str,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Replace local content for WorldLabsPipeline."""
         if self.synthesis_model is None:
             raise ValueError("Synthesis model is not initialized")
@@ -195,9 +194,9 @@ class WorldLabsPipeline(PipelineABC):
 
     def _materialize_world_prompt(
         self,
-        world_prompt: Dict[str, Any],
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        world_prompt: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Materialize world prompt for WorldLabsPipeline."""
         prompt_type = world_prompt["type"]
         materialized = dict(world_prompt)
@@ -231,20 +230,20 @@ class WorldLabsPipeline(PipelineABC):
 
         return materialized
 
-    def _extract_operation_id(self, response: Dict[str, Any]) -> Optional[str]:
+    def _extract_operation_id(self, response: dict[str, Any]) -> str | None:
         """Extract operation id for WorldLabsPipeline."""
         return response.get("operation_id")
 
-    def _extract_done(self, operation: Dict[str, Any]) -> bool:
+    def _extract_done(self, operation: dict[str, Any]) -> bool:
         """Extract done for WorldLabsPipeline."""
         return bool(operation.get("done"))
 
-    def _extract_world_object(self, operation: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _extract_world_object(self, operation: dict[str, Any]) -> dict[str, Any] | None:
         """Extract world object for WorldLabsPipeline."""
         response = operation.get("response")
         return response if isinstance(response, dict) else None
 
-    def _extract_world_id(self, world_or_operation_response: Dict[str, Any]) -> Optional[str]:
+    def _extract_world_id(self, world_or_operation_response: dict[str, Any]) -> str | None:
         """Extract world id for WorldLabsPipeline."""
         return world_or_operation_response.get("world_id")
 
@@ -253,7 +252,7 @@ class WorldLabsPipeline(PipelineABC):
         operation_id: str,
         poll_interval: int = 10,
         max_retries: int = 120,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Poll operation for WorldLabsPipeline."""
         if self.synthesis_model is None:
             raise ValueError("Synthesis model is not initialized")
@@ -266,9 +265,9 @@ class WorldLabsPipeline(PipelineABC):
             time.sleep(poll_interval)
         raise TimeoutError(f"World Labs operation {operation_id} polling timed out.")
 
-    def _collect_urls(self, payload: Any, prefix: str = "") -> List[Tuple[str, str]]:
+    def _collect_urls(self, payload: Any, prefix: str = "") -> list[tuple[str, str]]:
         """Collect urls for WorldLabsPipeline."""
-        collected: List[Tuple[str, str]] = []
+        collected: list[tuple[str, str]] = []
 
         if isinstance(payload, dict):
             for key, value in payload.items():
@@ -285,9 +284,9 @@ class WorldLabsPipeline(PipelineABC):
 
     def download_assets(
         self,
-        world: Dict[str, Any],
+        world: dict[str, Any],
         output_dir: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Download assets for WorldLabsPipeline."""
         if self.synthesis_model is None:
             raise ValueError("Synthesis model is not initialized")
@@ -295,7 +294,7 @@ class WorldLabsPipeline(PipelineABC):
         output_root = Path(output_dir)
         output_root.mkdir(parents=True, exist_ok=True)
 
-        saved_paths: List[str] = []
+        saved_paths: list[str] = []
         seen_urls = set()
         for key, url in self._collect_urls(world):
             if url in seen_urls:
@@ -310,24 +309,24 @@ class WorldLabsPipeline(PipelineABC):
 
     def __call__(
         self,
-        prompt: Optional[str] = None,
-        images: Optional[Union[Image.Image, str, Dict[str, Any], List[Union[Image.Image, str, Dict[str, Any]]]]] = None,
-        video: Optional[Union[str, Dict[str, Any]]] = None,
+        prompt: str | None = None,
+        images: Image.Image | str | dict[str, Any] | list[Image.Image | str | dict[str, Any]] | None = None,
+        video: str | dict[str, Any] | None = None,
         prompt_type: str = "auto",
-        image_azimuths: Optional[List[float]] = None,
-        disable_recaption: Optional[bool] = None,
+        image_azimuths: list[float] | None = None,
+        disable_recaption: bool | None = None,
         model: str = "marble-1.1",
-        display_name: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        display_name: str | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
         wait: bool = True,
         poll_interval: int = 10,
         max_retries: int = 120,
-        output_path: Optional[str] = None,
+        output_path: str | None = None,
         download_assets: bool = False,
-        assets_dir: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        assets_dir: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Execute the complete pipeline generation flow."""
         if self.synthesis_model is None:
             raise ValueError("Synthesis model is not initialized")
@@ -362,7 +361,7 @@ class WorldLabsPipeline(PipelineABC):
             **kwargs,
         )
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "response": response,
             "operation_id": self._extract_operation_id(response),
             "world_prompt": world_prompt,
@@ -405,10 +404,10 @@ class WorldLabsPipeline(PipelineABC):
 
         return result
 
-    def get_operator(self) -> Optional[WorldLabsOperator]:
+    def get_operator(self) -> WorldLabsOperator | None:
         """Get operator for WorldLabsPipeline."""
         return self.operator
 
-    def get_synthesis_model(self) -> Optional[WorldLabsSynthesis]:
+    def get_synthesis_model(self) -> WorldLabsSynthesis | None:
         """Get synthesis model for WorldLabsPipeline."""
         return self.synthesis_model

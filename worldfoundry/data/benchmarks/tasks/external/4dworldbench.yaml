@@ -54,10 +54,10 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: 4dworldbench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id 4dworldbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/4dworldbench --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:FourDWorldBenchContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
-  official_runner_command: worldfoundry-eval zoo benchmark-run
+  contract_validation_command: wf zoo benchmark-run --benchmark-id 4dworldbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/4dworldbench --json
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:4dworldbench
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
+  official_runner_command: wf zoo benchmark-run
   task_type: three_d_four_d_world_generation_evaluation
   status: integrated
   maturity: contract_ready
@@ -86,7 +86,7 @@ metadata:
   - per_sample_scores
   - dimension_result_json
   evaluation_requirements:
-  - Use the in-tree runner under worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench.
+  - Use the in-tree runner under worldfoundry/evals/tasks/execution/runners/four_d_worldbench.
   - Prepare official dataset_json files and generated video paths before running --run-official.
   - Stage only the assets required by the selected dimension.
   requires:
@@ -98,7 +98,7 @@ metadata:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/4dworldbench.yaml
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:FourDWorldBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:4dworldbench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
@@ -110,8 +110,8 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_official_runtime
-    root: worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench
-    runtime_root: worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/runtime/four_d_worldbench
+    root: worldfoundry/evals/tasks/execution/runners/four_d_worldbench
+    runtime_root: worldfoundry/evals/tasks/execution/runners/four_d_worldbench/runtime/four_d_worldbench
     root_env: WORLDFOUNDRY_4DWORLDBENCH_ROOT
     results_path_env: WORLDFOUNDRY_4DWORLDBENCH_RESULTS_PATH
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -138,7 +138,7 @@ metadata:
     - four_d_worldbench_average
     primary_metric: four_d_worldbench_average
   local_evaluator:
-    target: worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
+    target: worldfoundry/evals/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
     status: implemented
     protocol: official_4dworldbench_in_tree_runtime
     official_result_normalization:
@@ -151,7 +151,7 @@ metadata:
       provenance: normalizes 4DWorldBench dimension result JSON files when --run-official is not used
   runner:
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -167,7 +167,7 @@ metadata:
     - --json
   validation_command:
   - python
-  - worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
   - --run-official
   - --dataset-json
   - <dataset.json>
@@ -261,5 +261,5 @@ tasks:
       - physical_realism_score
       - four_d_consistency
       - four_d_worldbench_average
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:FourDWorldBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:4dworldbench
+      runner_script: worldfoundry/evals/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py

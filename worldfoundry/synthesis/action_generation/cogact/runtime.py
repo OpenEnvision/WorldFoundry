@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     completed_action_result,
@@ -12,7 +13,6 @@ from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     option_int,
     runtime_options_cache_key,
 )
-
 
 _RUNTIME_CACHE: dict[tuple[Any, ...], Any] = {}
 
@@ -37,9 +37,7 @@ def _checkpoint_location(location: str) -> str:
 def _runtime_for(location: str, device: str, options: Mapping[str, Any]) -> Any:
     location = _checkpoint_location(location)
     cache_options = {
-        key: value
-        for key, value in options.items()
-        if key not in {"hf_token", "huggingface_token", "token"}
+        key: value for key, value in options.items() if key not in {"hf_token", "huggingface_token", "token"}
     }
     key = (
         location,

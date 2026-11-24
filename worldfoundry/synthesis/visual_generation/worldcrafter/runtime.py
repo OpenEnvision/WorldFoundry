@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -15,10 +15,6 @@ from diffusers.models import AutoencoderKLWan
 from diffusers.utils import export_to_video, load_image
 from transformers import AutoTokenizer, UMT5EncoderModel
 
-from .output import sha256, save_chunk_state, assemble_resumed_video
-from worldfoundry.base_models.diffusion_model.runners.worldcrafter import WorldCrafterPipeline
-from worldfoundry.base_models.diffusion_model.schedulers.worldcrafter import WorldCrafterScheduler
-from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.transformer import WorldCrafterTransformer3DModel
 from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.kernels import (
     replace_all_norms_with_flash_norms,
     replace_rmsnorm_with_fp32,
@@ -29,12 +25,18 @@ from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.repen
     RepEncoderInferenceMemoryProvider,
     RepEncoderInferenceProviderConfig,
 )
+from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.transformer import (
+    WorldCrafterTransformer3DModel,
+)
 from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.ucpe.bridge import (
     enable_ucpe_inference_sdpa_attention,
     load_ucpe_camera_adapter_weights,
     patch_worldcrafter_transformer_ucpe,
 )
+from worldfoundry.base_models.diffusion_model.runners.worldcrafter import WorldCrafterPipeline
+from worldfoundry.base_models.diffusion_model.schedulers.worldcrafter import WorldCrafterScheduler
 
+from .output import assemble_resumed_video, save_chunk_state, sha256
 
 CAMERA_CHUNK_FRAMES = 33
 MODEL_HEIGHT = 384
@@ -55,9 +57,7 @@ def load_camera(path: Path, num_chunks: int | None = None) -> np.ndarray:
     if pose.ndim != 4 or pose.shape[-2:] not in ((3, 4), (4, 4)):
         raise ValueError(f"camera must be [B,T,3,4] or [B,T,4,4], got {pose.shape}")
     if pose.shape[0] != 1 or pose.shape[1] == 0 or pose.shape[1] % CAMERA_CHUNK_FRAMES:
-        raise ValueError(
-            "WorldCrafter requires one camera trajectory containing complete 33-frame chunks"
-        )
+        raise ValueError("WorldCrafter requires one camera trajectory containing complete 33-frame chunks")
     if not np.issubdtype(pose.dtype, np.floating) or not np.isfinite(pose).all():
         raise ValueError("camera must contain finite floating-point c2w matrices")
     if pose.shape[-2:] == (4, 4) and not np.allclose(pose[..., 3, :], [0, 0, 0, 1], atol=1e-6, rtol=0):
@@ -74,8 +74,7 @@ def load_camera(path: Path, num_chunks: int | None = None) -> np.ndarray:
         frames = int(num_chunks) * CAMERA_CHUNK_FRAMES
         if pose.shape[1] < frames:
             raise ValueError(
-                f"camera has {pose.shape[1] // CAMERA_CHUNK_FRAMES} chunks, "
-                f"but {num_chunks} were requested"
+                f"camera has {pose.shape[1] // CAMERA_CHUNK_FRAMES} chunks, but {num_chunks} were requested"
             )
         pose = pose[:, :frames]
     return np.ascontiguousarray(pose)
@@ -90,7 +89,10 @@ def validate_weights(model_path: Path, shared_model_path: Path | None = None) ->
         shared = Path(shared_model_path).expanduser().resolve()
     elif not (shared / "repencoder").is_dir():
         from worldfoundry.core.io.paths import resolve_local_hf_model_path
-        shared = Path(resolve_local_hf_model_path("TencentARC/WorldCrafter-Fast", required_files=("repencoder/config.json",)))
+
+        shared = Path(
+            resolve_local_hf_model_path("TencentARC/WorldCrafter-Fast", required_files=("repencoder/config.json",))
+        )
 
     required = {
         "root": root,
@@ -113,15 +115,13 @@ def validate_weights(model_path: Path, shared_model_path: Path | None = None) ->
         if not filename.is_file():
             missing.append(str(filename))
     if missing:
-        raise FileNotFoundError(
-            "WorldCrafter-Base is incomplete: " + ", ".join(missing)
-        )
+        raise FileNotFoundError("WorldCrafter-Base is incomplete: " + ", ".join(missing))
     return required
 
 
-def configure_attention(
-    transformer: WorldCrafterTransformer3DModel, backend: str
-) -> str:
+def configure_attention(transformer: WorldCrafterTransformer3DModel, backend: str) -> str:
+    if backend == "sdpa":
+        backend = "native"
     if backend != "auto":
         transformer.set_attention_backend(backend)
         return backend
@@ -134,9 +134,7 @@ def configure_attention(
     raise RuntimeError("no supported attention backend is available")
 
 
-def load_model_adapter(
-    pipe: WorldCrafterPipeline, adapter_path: Path
-) -> dict[str, object]:
+def load_model_adapter(pipe: WorldCrafterPipeline, adapter_path: Path) -> dict[str, object]:
     from diffusers.loaders.peft import _SET_ADAPTER_SCALE_FN_MAPPING
 
     _SET_ADAPTER_SCALE_FN_MAPPING.setdefault(
@@ -195,7 +193,7 @@ class WorldCrafter:
         attention_backend: str = "native",
         enable_compile: bool = False,
         shared_model_path: Path | None = None,
-    ) -> "WorldCrafter":
+    ) -> WorldCrafter:
         if model_type == "fast":
             from .model_loading import load_fast
 
@@ -220,6 +218,8 @@ class WorldCrafter:
             raise RuntimeError("WorldCrafter inference requires CUDA")
         if (height, width) != (MODEL_HEIGHT, MODEL_WIDTH):
             raise ValueError("WorldCrafter-Base is fixed to 384x640 inference")
+        if torch_device.index is None:
+            torch_device = torch.device("cuda", torch.cuda.current_device())
         torch.cuda.set_device(torch_device)
         paths = validate_weights(model_path, shared_model_path)
 
@@ -240,9 +240,7 @@ class WorldCrafter:
             ),
         )
 
-        transformer = WorldCrafterTransformer3DModel.from_pretrained(
-            paths["transformer"], torch_dtype=torch.bfloat16
-        )
+        transformer = WorldCrafterTransformer3DModel.from_pretrained(paths["transformer"], torch_dtype=torch.bfloat16)
         patch_worldcrafter_transformer_ucpe(
             transformer=transformer,
             method="relray_absmap",
@@ -252,15 +250,10 @@ class WorldCrafter:
             adaptation_method="parallel",
         )
         camera_adapter = load_ucpe_camera_adapter_weights(transformer, paths["adapter"])
-        if (
-            camera_adapter["loaded_tensor_keys"]
-            != camera_adapter["expected_tensor_keys"]
-        ):
+        if camera_adapter["loaded_tensor_keys"] != camera_adapter["expected_tensor_keys"]:
             raise RuntimeError(f"camera adapter load is incomplete: {camera_adapter}")
         adapter_dtypes = {
-            parameter.dtype
-            for block in transformer.blocks
-            for parameter in block.cam_self_attn.parameters()
+            parameter.dtype for block in transformer.blocks for parameter in block.cam_self_attn.parameters()
         }
         if adapter_dtypes != {torch.float32}:
             raise RuntimeError(f"camera adapter dtypes are invalid: {adapter_dtypes}")
@@ -272,26 +265,18 @@ class WorldCrafter:
         resolved_backend = configure_attention(transformer, attention_backend)
         pipeline = WorldCrafterPipeline(
             tokenizer=AutoTokenizer.from_pretrained(paths["tokenizer"]),
-            text_encoder=UMT5EncoderModel.from_pretrained(
-                paths["text_encoder"], torch_dtype=torch.bfloat16
-            ),
+            text_encoder=UMT5EncoderModel.from_pretrained(paths["text_encoder"], torch_dtype=torch.bfloat16),
             transformer=transformer,
-            vae=AutoencoderKLWan.from_pretrained(
-                paths["vae"], torch_dtype=torch.float32
-            ),
+            vae=AutoencoderKLWan.from_pretrained(paths["vae"], torch_dtype=torch.float32),
             scheduler=WorldCrafterScheduler.from_pretrained(paths["scheduler"]),
         )
         adapter_load = load_model_adapter(pipeline, paths["adapter"])
         pipeline = pipeline.to(torch_device)
         if enable_compile:
             torch.backends.cudnn.benchmark = True
-            pipeline.text_encoder.compile(
-                mode="max-autotune-no-cudagraphs", dynamic=False
-            )
+            pipeline.text_encoder.compile(mode="max-autotune-no-cudagraphs", dynamic=False)
             pipeline.vae.compile(mode="max-autotune-no-cudagraphs", dynamic=False)
-            pipeline.transformer.compile(
-                mode="max-autotune-no-cudagraphs", dynamic=False
-            )
+            pipeline.transformer.compile(mode="max-autotune-no-cudagraphs", dynamic=False)
         return cls(
             pipeline=pipeline,
             memory_provider=memory_provider,
@@ -337,9 +322,7 @@ class WorldCrafter:
             guidance_scale = 1.0 if is_fast else 5.0
         if is_fast:
             if guidance_scale != 1.0 or num_inference_steps != 6:
-                raise ValueError(
-                    "Fast requires CFG=1 and six regular steps; the first T2V chunk uses twelve steps"
-                )
+                raise ValueError("Fast requires CFG=1 and six regular steps; the first T2V chunk uses twelve steps")
             self.pipeline.resident_branches.switch("equal")
             self.pipeline.resident_branches.switches = 0
             self.pipeline.stage_model_trace.clear()
@@ -356,9 +339,7 @@ class WorldCrafter:
             image = load_image(str(image_path)).resize((self.width, self.height))
         else:
             if image_path is not None:
-                raise ValueError(
-                    "text-to-video inference does not accept an input image"
-                )
+                raise ValueError("text-to-video inference does not accept an input image")
             image = None
 
         camera_c2w = load_camera(camera_path, num_chunks=num_chunks)
@@ -366,16 +347,16 @@ class WorldCrafter:
         total_chunks = num_frames // CAMERA_CHUNK_FRAMES
         camera = {
             "c2w": camera_c2w,
-            "x_fov": torch.full(
-                (1,), camera_x_fov, device=self.device, dtype=torch.float32
-            ),
+            "x_fov": torch.full((1,), camera_x_fov, device=self.device, dtype=torch.float32),
             "xi": torch.full((1,), camera_xi, device=self.device, dtype=torch.float32),
         }
         if is_fast:
             if local_camera_path is not None:
                 local_c2w = load_camera(local_camera_path, num_chunks=total_chunks)
             else:
-                from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.ucpe.bridge import _relative_pose_chunk
+                from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.ucpe.bridge import (
+                    _relative_pose_chunk,
+                )
 
                 local_c2w = torch.cat(
                     [
@@ -389,18 +370,12 @@ class WorldCrafter:
                     ],
                     dim=1,
                 )
-            camera["pose"] = torch.as_tensor(
-                local_c2w, device=self.device, dtype=torch.float32
-            )
-            camera["c2w"] = torch.as_tensor(
-                camera_c2w, device=self.device, dtype=torch.float32
-            )
+            camera["pose"] = torch.as_tensor(local_c2w, device=self.device, dtype=torch.float32)
+            camera["c2w"] = torch.as_tensor(camera_c2w, device=self.device, dtype=torch.float32)
         if chunk_output_dir is not None:
             chunk_output_dir.mkdir(parents=True, exist_ok=True)
         if resume_from is not None and chunk_output_dir is None:
-            raise ValueError(
-                "resuming requires --chunk-output-dir with completed prefix chunks"
-            )
+            raise ValueError("resuming requires --chunk-output-dir with completed prefix chunks")
         if state_output_dir is not None:
             state_output_dir.mkdir(parents=True, exist_ok=True)
         final_chunk_index = total_chunks - 1
@@ -414,9 +389,7 @@ class WorldCrafter:
             "camera_sha256": sha256(camera_path),
             "image_sha256": sha256(image_path) if image_path is not None else None,
             "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
-            "negative_prompt_sha256": hashlib.sha256(
-                negative_prompt.encode("utf-8")
-            ).hexdigest(),
+            "negative_prompt_sha256": hashlib.sha256(negative_prompt.encode("utf-8")).hexdigest(),
             "num_chunks": total_chunks,
             "num_inference_steps": num_inference_steps,
             "guidance_scale": guidance_scale,
@@ -433,13 +406,9 @@ class WorldCrafter:
         if resume_from is not None:
             if not resume_from.is_file():
                 raise FileNotFoundError(resume_from)
-            resume_state = torch.load(
-                resume_from, map_location="cpu", weights_only=True
-            )
+            resume_state = torch.load(resume_from, map_location="cpu", weights_only=True)
             if resume_state.get("run_contract") != run_contract:
-                raise ValueError(
-                    "resume checkpoint does not match this inference run contract"
-                )
+                raise ValueError("resume checkpoint does not match this inference run contract")
             prior_history_selection = list(resume_state.get("history_selection", []))
             if final_chunk_index < int(resume_state["next_chunk_index"]):
                 raise ValueError("stop_after_chunk precedes the resume point")
@@ -447,9 +416,7 @@ class WorldCrafter:
         def save_chunk(chunk_index: int, current_video: torch.Tensor) -> None:
             if chunk_output_dir is None:
                 return
-            frames = self.pipeline.video_processor.postprocess_video(
-                current_video, output_type="np"
-            )[0]
+            frames = self.pipeline.video_processor.postprocess_video(current_video, output_type="np")[0]
             path = chunk_output_dir / f"chunk_{chunk_index:03d}_33f.mp4"
             export_to_video(frames, str(path), fps=fps)
             if on_chunk_saved is not None:
@@ -465,10 +432,7 @@ class WorldCrafter:
                     run_contract=run_contract,
                     history_selection=[
                         *prior_history_selection,
-                        *[
-                            record.to_jsonable()
-                            for record in self.memory_provider.render_records
-                        ],
+                        *[record.to_jsonable() for record in self.memory_provider.render_records],
                     ],
                 )
 
@@ -501,24 +465,17 @@ class WorldCrafter:
                 video_noise_sigma_max=0.135,
                 camera_trajectory=camera,
                 memory_provider=self.memory_provider,
-                callback_on_chunk_end=(
-                    save_chunk if chunk_output_dir is not None else None
-                ),
-                callback_on_chunk_state=(
-                    save_state if state_output_dir is not None else None
-                ),
+                callback_on_chunk_end=(save_chunk if chunk_output_dir is not None else None),
+                callback_on_chunk_state=(save_state if state_output_dir is not None else None),
                 resume_state=resume_state,
                 stop_after_chunk=final_chunk_index,
             ).frames[0]
 
-        start_chunk = (
-            int(resume_state["next_chunk_index"]) if resume_state is not None else 0
-        )
+        start_chunk = int(resume_state["next_chunk_index"]) if resume_state is not None else 0
         expected_records = max(0, final_chunk_index - max(1, start_chunk) + 1)
         if len(self.memory_provider.render_records) != expected_records:
             raise RuntimeError(
-                f"expected {expected_records} RepEncoder calls, "
-                f"got {len(self.memory_provider.render_records)}"
+                f"expected {expected_records} RepEncoder calls, got {len(self.memory_provider.render_records)}"
             )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         if is_fast and len(frames) != (final_chunk_index - start_chunk + 1) * CAMERA_CHUNK_FRAMES:
@@ -527,7 +484,10 @@ class WorldCrafter:
             export_to_video(frames, str(output_path), fps=fps)
         else:
             assemble_resumed_video(
-                output_path, chunk_output_dir, final_chunk_index, fps,
+                output_path,
+                chunk_output_dir,
+                final_chunk_index,
+                fps,
                 overlap_frames=0 if is_fast else 1,
             )
         history_selection = [
@@ -566,15 +526,11 @@ class WorldCrafter:
                 else (final_chunk_index - start_chunk + 1) * 6
             )
             if len(self.pipeline.stage_model_trace) != expected_calls:
-                raise RuntimeError(
-                    "Fast forward count differs from the mode-specific DMD contract"
-                )
+                raise RuntimeError("Fast forward count differs from the mode-specific DMD contract")
             summary.update(
                 model_type="fast",
                 local_camera_path=str(local_camera_path),
-                local_camera_sha256=(
-                    sha256(local_camera_path) if local_camera_path else None
-                ),
+                local_camera_sha256=(sha256(local_camera_path) if local_camera_path else None),
                 first_chunk_inference_steps=first_chunk_steps,
                 first_chunk_routing="4+8" if mode == "t2v" else "5+1",
                 subsequent_chunk_routing="2+4" if mode == "t2v" else "5+1",

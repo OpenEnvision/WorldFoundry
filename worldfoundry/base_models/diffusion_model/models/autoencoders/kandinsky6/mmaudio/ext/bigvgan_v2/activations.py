@@ -2,7 +2,7 @@
 # License text: THIRD-PARTY-NOTICES, BigVGAN Snake LICENSE_2.
 
 import torch
-from torch import nn, sin, pow
+from torch import nn, pow, sin
 from torch.nn import Parameter
 
 
@@ -23,9 +23,7 @@ class Snake(nn.Module):
         >>> x = a1(x)
     """
 
-    def __init__(
-        self, in_features, alpha=1.0, alpha_trainable=True, alpha_logscale=False
-    ):
+    def __init__(self, in_features, alpha=1.0, alpha_trainable=True, alpha_logscale=False):
         """
         Initialization.
         INPUT:
@@ -34,7 +32,7 @@ class Snake(nn.Module):
             alpha is initialized to 1 by default, higher values = higher-frequency.
             alpha will be trained along with the rest of your model.
         """
-        super(Snake, self).__init__()
+        super().__init__()
         self.in_features = in_features
 
         # Initialize alpha
@@ -80,9 +78,7 @@ class SnakeBeta(nn.Module):
         >>> x = a1(x)
     """
 
-    def __init__(
-        self, in_features, alpha=1.0, alpha_trainable=True, alpha_logscale=False
-    ):
+    def __init__(self, in_features, alpha=1.0, alpha_trainable=True, alpha_logscale=False):
         """
         Initialization.
         INPUT:
@@ -93,7 +89,7 @@ class SnakeBeta(nn.Module):
             beta is initialized to 1 by default, higher values = higher-magnitude.
             alpha will be trained along with the rest of your model.
         """
-        super(SnakeBeta, self).__init__()
+        super().__init__()
         self.in_features = in_features
 
         # Initialize alpha

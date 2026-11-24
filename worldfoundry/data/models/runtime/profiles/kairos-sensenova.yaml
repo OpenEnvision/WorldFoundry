@@ -7,6 +7,7 @@ groups:
 - embodied_world_model
 source_repos:
 - url: https://github.com/kairos-agi/kairos-sensenova
+  revision: 40d3fcb518c3ff894501bf4b080ccaa589363adc
 checkpoints:
 - role: kairos_sensenova_robot_4b_480p_distilled
   local_dir: ${WORLDFOUNDRY_KAIROS_MODELS_ROOT}/Kairos/models/robot/kairos-robot-4B-480P-16fps-distilled.safetensors

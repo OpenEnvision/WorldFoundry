@@ -119,9 +119,7 @@ def all_to_all_concat(
     if world_size == 1:
         return tensor
     if tensor.shape[scatter_dim] % world_size:
-        raise ValueError(
-            f"scatter dimension {tensor.shape[scatter_dim]} must be divisible by world size {world_size}"
-        )
+        raise ValueError(f"scatter dimension {tensor.shape[scatter_dim]} must be divisible by world size {world_size}")
 
     # Destination chunks occupy consecutive ranges on dimension zero, which is
     # the memory contract expected by all_to_all_single.

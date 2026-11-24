@@ -3,18 +3,18 @@ title: BEHAVIOR-1K
 description: "OmniGibson 中的 1000 项家务活动，用 BDDL 描述。WorldFoundry 导入官方结果导出；不跑 OmniGibson。"
 ---
 
-BEHAVIOR-1K 是斯坦福 Vision & Learning Lab 的人本具身评测：从人类时间使用调查里选出 **1000** 项日常活动（清洁、烹饪、整理），用 **BDDL** 谓词语言书写，在 **OmniGibson** 里仿真，带流体、物体状态和家居物理。成功是**逻辑目标是否满足**，不是像素分。**子目标**满足率是部分分。
+BEHAVIOR-1K 是斯坦福 Vision & Learning Lab 的人本具身评测：从人类时间使用调查里选出 **1000** 项日常活动（清洁、烹饪、整理），用 **BDDL** 谓词语言书写，在 **OmniGibson** 里仿真，带流体、物体状态和家居物理。成功取决于**逻辑目标是否满足**，而非像素分。**子目标**满足率用于部分评分。
 
-论文：[BEHAVIOR-1K](https://arxiv.org/abs/2403.09227)。项目：[behavior.stanford.edu](https://behavior.stanford.edu/)。模拟器 / 代码：[StanfordVL/OmniGibson](https://github.com/StanfordVL/OmniGibson)（本 catalog 记为 `upstream_terms`）。
+论文：[BEHAVIOR-1K](https://arxiv.org/abs/2403.09227)。项目：[behavior.stanford.edu](https://behavior.stanford.edu/)。模拟器 / 代码：[StanfordVL/OmniGibson](https://github.com/StanfordVL/OmniGibson)。
 
-WorldFoundry **导入**官方 OmniGibson 结果导出。它不内置 OmniGibson、那 1000 项活动定义或策略 checkpoint。那些遵循斯坦福文档。
+WorldFoundry **导入**官方 OmniGibson 结果导出。它不内置 OmniGibson、1000 项活动定义或策略 checkpoint；这些请按斯坦福文档自行准备。
 
 <BenchmarkPageSections id="behavior1k" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id behavior1k \
   --mode official-validation \
   --official-results-path <official_results.json> \

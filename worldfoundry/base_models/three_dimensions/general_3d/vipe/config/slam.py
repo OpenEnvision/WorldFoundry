@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> config -> slam.py functionality."""
-
 from __future__ import annotations
 
 from typing import Literal
@@ -105,14 +103,6 @@ class SLAMConfig(BaseConfigSchema):
     @field_validator("frontend_backend_iters")
     @classmethod
     def validate_frontend_backend_iters(cls, value: list[int]) -> list[int]:
-        """Validate frontend backend iters.
-
-        Args:
-            value: The value.
-
-        Returns:
-            The return value.
-        """
         if not value:
             raise ValueError("frontend_backend_iters must not be empty")
         if any(item < 1 for item in value):
@@ -122,14 +112,6 @@ class SLAMConfig(BaseConfigSchema):
     @field_validator("cross_view_idx")
     @classmethod
     def validate_cross_view_idx(cls, value: list[int] | None) -> list[int] | None:
-        """Validate cross view idx.
-
-        Args:
-            value: The value.
-
-        Returns:
-            The return value.
-        """
         if value is not None and any(item < 0 for item in value):
             raise ValueError("cross_view_idx must contain non-negative view indices")
         return value

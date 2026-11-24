@@ -17,9 +17,10 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -66,9 +67,7 @@ def _resolve_checkpoint(source: str | Path) -> Path:
     checkpoint = Path(source).expanduser().resolve()
     missing = [item for item in _REQUIRED_CHECKPOINT_PATHS if not (checkpoint / item).exists()]
     if missing:
-        raise FileNotFoundError(
-            f"Helios checkpoint is incomplete at {checkpoint}; missing: {', '.join(missing)}"
-        )
+        raise FileNotFoundError(f"Helios checkpoint is incomplete at {checkpoint}; missing: {', '.join(missing)}")
     try:
         model_index = json.loads((checkpoint / "model_index.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -112,9 +111,7 @@ def _distributed_device(context_parallel_backend: str = "ulysses") -> tuple[int,
         world_size = dist.get_world_size()
         local_rank = int(os.getenv("LOCAL_RANK", str(rank % torch.cuda.device_count())))
         if not 0 <= local_rank < torch.cuda.device_count():
-            raise ValueError(
-                f"LOCAL_RANK={local_rank} but only {torch.cuda.device_count()} CUDA devices are visible."
-            )
+            raise ValueError(f"LOCAL_RANK={local_rank} but only {torch.cuda.device_count()} CUDA devices are visible.")
         device = torch.device(f"cuda:{local_rank}")
     else:
         rank = 0
@@ -148,11 +145,7 @@ def _context_parallel_sequence_lengths(
     latent_width = int(width) // int(vae_scale_factor)
 
     short_frames = 1 + NATIVE_HISTORY_SIZES[-1]
-    short_tokens = (
-        (short_frames // p_t)
-        * (latent_height // p_h)
-        * (latent_width // p_w)
-    )
+    short_tokens = (short_frames // p_t) * (latent_height // p_h) * (latent_width // p_w)
     mid_tokens = (
         _ceil_div(NATIVE_HISTORY_SIZES[1], 2 * p_t)
         * _ceil_div(latent_height, 2 * p_h)
@@ -176,11 +169,7 @@ def _context_parallel_sequence_lengths(
         if stage_index:
             stage_height *= 2
             stage_width *= 2
-        current_tokens = (
-            (NATIVE_LATENT_FRAMES // p_t)
-            * (stage_height // p_h)
-            * (stage_width // p_w)
-        )
+        current_tokens = (NATIVE_LATENT_FRAMES // p_t) * (stage_height // p_h) * (stage_width // p_w)
         lengths.extend((current_tokens, history_tokens + current_tokens))
     return tuple(lengths)
 
@@ -198,9 +187,7 @@ def _equipartition_issues(
     issues: list[str] = []
     incompatible = tuple(length for length in sequence_lengths if length % world_size)
     if incompatible:
-        issues.append(
-            f"sequence lengths {incompatible} are not divisible by the {world_size}-GPU mesh"
-        )
+        issues.append(f"sequence lengths {incompatible} are not divisible by the {world_size}-GPU mesh")
 
     ulysses_degree = 1
     if backend == "ulysses":
@@ -210,9 +197,7 @@ def _equipartition_issues(
     if ulysses_degree == 0:
         issues.append("unified context parallelism requires an even GPU count")
     elif attention_heads % ulysses_degree:
-        issues.append(
-            f"{attention_heads} attention heads are not divisible by Ulysses degree {ulysses_degree}"
-        )
+        issues.append(f"{attention_heads} attention heads are not divisible by Ulysses degree {ulysses_degree}")
     return tuple(issues)
 
 
@@ -281,9 +266,7 @@ def _enable_context_parallelism(pipe: Any, backend: str, world_size: int) -> Non
     elif backend == "auto":
         raise ValueError("Helios context-parallel backend must be resolved before enabling it.")
     else:
-        raise ValueError(
-            "WORLDFOUNDRY_HELIOS_CP_BACKEND must be auto, ring, ulysses, unified, or ulysses_anything."
-        )
+        raise ValueError("WORLDFOUNDRY_HELIOS_CP_BACKEND must be auto, ring, ulysses, unified, or ulysses_anything.")
     pipe.transformer.enable_parallelism(config=config)
 
 
@@ -553,9 +536,9 @@ class HeliosRealtimeSession:
             .view(1, pipe.vae.config.z_dim, 1, 1, 1)
             .to(self.device, vae_dtype)
         )
-        latents_std = 1.0 / torch.tensor(pipe.vae.config.latents_std).view(
-            1, pipe.vae.config.z_dim, 1, 1, 1
-        ).to(self.device, vae_dtype)
+        latents_std = 1.0 / torch.tensor(pipe.vae.config.latents_std).view(1, pipe.vae.config.z_dim, 1, 1, 1).to(
+            self.device, vae_dtype
+        )
 
         image_latents = None
         fake_image_latents = None
@@ -564,9 +547,7 @@ class HeliosRealtimeSession:
             from diffusers.utils.torch_utils import randn_tensor
 
             image_started = time.perf_counter()
-            prepared = pipe.video_processor.preprocess(
-                image.convert("RGB"), height=height, width=width
-            )
+            prepared = pipe.video_processor.preprocess(image.convert("RGB"), height=height, width=width)
             image_latents, fake_image_latents = pipe.prepare_image_latents(
                 prepared,
                 latents_mean=latents_mean,
@@ -577,13 +558,15 @@ class HeliosRealtimeSession:
                 generator=generator,
             )
             image_sigma = torch.rand(1, device=self.device, generator=generator) * (0.135 - 0.111) + 0.111
-            image_latents = image_sigma * randn_tensor(
-                image_latents.shape, generator=generator, device=self.device
-            ) + (1 - image_sigma) * image_latents
+            image_latents = (
+                image_sigma * randn_tensor(image_latents.shape, generator=generator, device=self.device)
+                + (1 - image_sigma) * image_latents
+            )
             fake_sigma = torch.rand(1, device=self.device, generator=generator) * (0.135 - 0.111) + 0.111
-            fake_image_latents = fake_sigma * randn_tensor(
-                fake_image_latents.shape, generator=generator, device=self.device
-            ) + (1 - fake_sigma) * fake_image_latents
+            fake_image_latents = (
+                fake_sigma * randn_tensor(fake_image_latents.shape, generator=generator, device=self.device)
+                + (1 - fake_sigma) * fake_image_latents
+            )
             image_ms = (time.perf_counter() - image_started) * 1000.0
 
         channels = int(pipe.transformer.config.in_channels)
@@ -599,9 +582,7 @@ class HeliosRealtimeSession:
             dtype=torch.float32,
         )
         if fake_image_latents is not None:
-            history_latents = torch.cat(
-                [history_latents[:, :, :-1], fake_image_latents.to(dtype=torch.float32)], dim=2
-            )
+            history_latents = torch.cat([history_latents[:, :, :-1], fake_image_latents.to(dtype=torch.float32)], dim=2)
 
         indices = torch.arange(0, 1 + sum(NATIVE_HISTORY_SIZES) + NATIVE_LATENT_FRAMES)
         prefix, history_long, history_mid, history_1x, hidden = indices.split(
@@ -713,9 +694,7 @@ class HeliosRealtimeSession:
             # This is the released keep_first_frame anchor. It remains fixed
             # while the rolling history bands advance.
             state.image_latents = latents[:, :, :1]
-        state.history_latents = torch.cat([state.history_latents, latents], dim=2)[
-            :, :, -sum(NATIVE_HISTORY_SIZES) :
-        ]
+        state.history_latents = torch.cat([state.history_latents, latents], dim=2)[:, :, -sum(NATIVE_HISTORY_SIZES) :]
         decode_started = time.perf_counter()
         decode_latents = latents.to(pipe.vae.dtype) / state.latents_std + state.latents_mean
         decoded = pipe.vae.decode(decode_latents, return_dict=False)[0]
@@ -752,8 +731,8 @@ class HeliosRealtimeSession:
 
 __all__ = [
     "DISTILLED_PYRAMID_STEPS",
-    "HeliosRealtimeSession",
     "NATIVE_HISTORY_SIZES",
     "NATIVE_LATENT_FRAMES",
     "NATIVE_RGB_FRAMES",
+    "HeliosRealtimeSession",
 ]

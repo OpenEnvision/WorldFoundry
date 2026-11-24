@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
 from worldfoundry.runtime.in_tree_cli import execute_in_tree
 from worldfoundry.synthesis.base_synthesis import BaseSynthesis
@@ -48,7 +49,7 @@ class Uni3CSynthesis(BaseSynthesis):
         args: Any = None,
         device: str | None = None,
         **kwargs: Any,
-    ) -> "Uni3CSynthesis":
+    ) -> Uni3CSynthesis:
         del args
         options = dict(pretrained_model_path) if isinstance(pretrained_model_path, Mapping) else {}
         if pretrained_model_path is not None and not isinstance(pretrained_model_path, Mapping):
@@ -146,7 +147,6 @@ class Uni3CSynthesis(BaseSynthesis):
                 "TRANSFORMERS_OFFLINE": "1",
                 "TOKENIZERS_PARALLELISM": "false",
             },
-            python_paths=(runtime_root(),),
             preferred_names=(output.name, "result.mp4"),
         )
         return {
@@ -175,11 +175,15 @@ class Uni3CSynthesis(BaseSynthesis):
         options: Mapping[str, Any],
     ) -> list[str]:
         python = str(options.get("python_executable") or sys.executable)
-        entrypoint = runtime_root() / ("cam_control.py" if mode == "camera" else "uni3c_inference.py")
-        if num_gpus > 1:
-            command = [python, "-m", "torch.distributed.run", "--nproc_per_node", str(num_gpus), str(entrypoint)]
-        else:
-            command = [python, str(entrypoint)]
+        module = "worldfoundry.synthesis.visual_generation.uni3c.uni3c_runtime." + (
+            "cam_control" if mode == "camera" else "uni3c_inference"
+        )
+        command = package_module_command(
+            module,
+            python_executable=python,
+            nproc_per_node=num_gpus if num_gpus > 1 else None,
+            launcher_options=(),
+        )
         controller = Path(assets["controller_path"])
         command.extend(
             [
@@ -228,7 +232,11 @@ def _normalize_mode(value: Any) -> str:
 
 
 def _materialize_image(images: Any, run_dir: Path) -> str:
-    value = images[0] if isinstance(images, Sequence) and not isinstance(images, (str, bytes, bytearray)) and images else images
+    value = (
+        images[0]
+        if isinstance(images, Sequence) and not isinstance(images, (str, bytes, bytearray)) and images
+        else images
+    )
     if value is None:
         return ""
     if isinstance(value, (str, Path)):
@@ -286,7 +294,11 @@ def _input_errors(reference_image: str, render_path: str, *, mode: str, required
     if root is None or not root.is_dir():
         errors.append(f"Uni3C render bundle not found: {render_path or '<missing>'}")
     else:
-        errors.extend(f"Uni3C render bundle is missing {name}: {root / name}" for name in required_files if not (root / name).is_file())
+        errors.extend(
+            f"Uni3C render bundle is missing {name}: {root / name}"
+            for name in required_files
+            if not (root / name).is_file()
+        )
     return errors
 
 
@@ -297,7 +309,9 @@ def _output_path(value: str | Path | None, default: Path) -> Path:
     return (path / "uni3c.mp4" if not path.suffix else path).resolve()
 
 
-def _failed(plan_path: Path, output: Path, command: list[str], errors: list[str], plan: Mapping[str, Any]) -> dict[str, Any]:
+def _failed(
+    plan_path: Path, output: Path, command: list[str], errors: list[str], plan: Mapping[str, Any]
+) -> dict[str, Any]:
     return {
         "status": "failed",
         "model_id": "uni3c",

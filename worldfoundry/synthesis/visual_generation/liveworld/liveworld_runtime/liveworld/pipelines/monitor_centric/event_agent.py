@@ -8,6 +8,7 @@ The evolution logic is simple "continuation":
 - First iteration: use the detected entity's initial state/action
 - Subsequent iterations: continue from the last frame of the previous video
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ class EventPrompts:
 
     These prompts are shared across all EventAgents via EventPool.
     """
+
     # System prompt template for generating I2V prompts.
     # Available variables: {entity}, {entities}, {iteration}
     system_prompt: str

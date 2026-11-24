@@ -19,8 +19,9 @@ official_sources:
   paper: https://arxiv.org/abs/2605.15178
   github:
     url: https://github.com/NVlabs/Sana
+    revision: 00cb59836c297bd5fad401000ee65f9042f29d02
 runtime_profile: runtime-profile:sana-wm
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: sana-wm
 runner_entry_kind: runnable_runner
 integration_status: integrated
@@ -42,7 +43,7 @@ variants:
     license: apache-2.0
   runtime_profile: sana-wm-streaming
   pipeline_binding: sana-wm-streaming
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   integration:
     status: integrated
     notes: Native prefix recomputation, fixed four-step Stage-1 scheduler, LTX-2
@@ -58,22 +59,22 @@ docs:
   publisher: NVIDIA
   publisher_kind: company
   publisher_zh: 英伟达（NVIDIA）
-  overview: 'SANA-WM is a world model built on NVIDIA''s efficient Sana architecture: a two-stage design (interactive stage plus LTX-2 refiner) that generates camera-controlled world video with a resident multi-GPU pipeline. A real Workspace run partitioned the components across four A100s and generated eight finite, decodable 1280x704 frames from a nine-frame native window.'
-  overview_zh: SANA-WM 是基于英伟达高效 Sana 架构的世界模型：两阶段设计（交互阶段加 LTX-2 精修器），以常驻多卡 pipeline 生成相机可控的世界视频。真实 Workspace 运行把组件划分到四张 A100 上，从九帧原生窗口生成八帧有限、可解码的 1280x704 画面。
-  architecture: SANA-WM reuses the canonical Sana network, encoder, autoencoder, scheduler, and recipe roles — no modality-owned Sana runtime remains (paper arXiv 2605.15178, apache-2.0). The interactive pipeline keeps its two-stage model resident and advances with native 8k+1 temporal windows; the quality profile keeps the bidirectional stage and LTX-2 refiner enabled.
-  architecture_zh: SANA-WM 复用规范的 Sana 网络、编码器、自编码器、调度器与配方角色——不再保留模态自有的 Sana 运行时（论文 arXiv 2605.15178，apache-2.0）。交互 pipeline 保持两阶段模型常驻，以原生 8k+1 时间窗口推进；质量档案保持双向阶段与 LTX-2 精修器开启。
-  usage_notes: The validated four-A100 run is a four-stage smoke that confirms execution and coherent conditioning — it does not claim the default 60-step quality recipe. Component placement across GPUs is configurable.
-  usage_notes_zh: 已验证的四卡 A100 运行是四阶段冒烟测试，确认执行与条件连贯性——不代表默认 60 步质量配方。组件在多卡上的放置可配置。
+  overview: "SANA-WM is a world model built on NVIDIA's efficient Sana architecture: a two-stage design (interactive stage plus LTX-2 refiner) that generates camera-controlled world video with a resident multi-GPU pipeline. Validated on four A100 GPUs: a short run generates eight decodable 1280x704 frames from a nine-frame native window."
+  overview_zh: SANA-WM 是基于英伟达高效 Sana 架构的世界模型：两阶段设计（交互阶段加 LTX-2 精修器），以常驻多卡 pipeline 生成相机可控的世界视频。已在四张 A100 上验证：一次短运行从九帧原生窗口生成八帧可解码的 1280x704 画面。
+  architecture: SANA-WM reuses WorldFoundry's shared Sana network, encoder, autoencoder, scheduler, and recipe components (paper arXiv 2605.15178, apache-2.0). The interactive pipeline keeps its two-stage model resident and advances with native 8k+1 temporal windows; the quality profile keeps the bidirectional stage and LTX-2 refiner enabled.
+  architecture_zh: SANA-WM 复用 WorldFoundry 共享的 Sana 网络、编码器、自编码器、调度器与配方组件（论文 arXiv 2605.15178，apache-2.0）。交互 pipeline 保持两阶段模型常驻，以原生 8k+1 时间窗口推进；质量档案保持双向阶段与 LTX-2 精修器开启。
+  usage_notes: Component placement across GPUs is configurable. The default quality recipe uses 60 steps.
+  usage_notes_zh: 组件在多卡上的放置可配置。默认质量配方为 60 步。
   limitations:
-  - The validated run is a smoke test; 60-step quality parity is separate.
-  - Two-stage resident pipeline needs multiple high-memory GPUs.
+  - The four-A100 validation was a short four-stage smoke run; the default 60-step quality recipe has not been validated.
+  - The two-stage resident pipeline needs multiple high-memory GPUs.
   limitations_zh:
-  - 已验证运行为冒烟测试；60 步质量一致性是另一回事。
+  - 四卡 A100 验证是简短的四阶段冒烟运行；默认 60 步质量配方尚未验证。
   - 两阶段常驻 pipeline 需要多张大显存 GPU。
   recommended_benchmarks:
   - id: sana-wm-bench
-    reason: The dedicated SANA-WM benchmark recorded in this repository.
-    reason_zh: 本仓库记录的 SANA-WM 专用评测。
+    reason: The dedicated SANA-WM 80-scene benchmark.
+    reason_zh: SANA-WM 专用的 80 场景评测。
   - id: camerabench
     reason: Camera-control adherence of world rollouts.
     reason_zh: 世界滚动生成的相机控制贴合度。

@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> ply_export.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from pathlib import Path
 
 import numpy as np
@@ -12,14 +11,6 @@ from torch import Tensor
 
 
 def construct_list_of_attributes(num_rest: int) -> list[str]:
-    """Construct list of attributes.
-
-    Args:
-        num_rest: The num rest.
-
-    Returns:
-        The return value.
-    """
     attributes = ["x", "y", "z", "nx", "ny", "nz"]
     for i in range(3):
         attributes.append(f"f_dc_{i}")
@@ -42,17 +33,6 @@ def export_ply(
     opacities: Float[Tensor, " gaussian"],
     path: Path,
 ):
-    """Export ply.
-
-    Args:
-        extrinsics: The extrinsics.
-        means: The means.
-        scales: The scales.
-        rotations: The rotations.
-        harmonics: The harmonics.
-        opacities: The opacities.
-        path: The path.
-    """
     # Shift the scene so that the median Gaussian is at the origin.
     means = means - means.median(dim=0).values
 

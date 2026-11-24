@@ -9,15 +9,16 @@ Components include runtime management functions, path resolvers for Neoverse
 assets, the official Neoverse runtime class, and the Neoverse synthesis
 workflow class.
 """
+
 from worldfoundry.synthesis.visual_generation.neoverse.runtime_env import (
     DEFAULT_NEOVERSE_LORA_NAME,
     DEFAULT_NEOVERSE_REPO,
-    ensure_neoverse_runtime,
     resolve_neoverse_lora_path,
     resolve_neoverse_model_dir,
     resolve_neoverse_reconstructor_path,
 )
 from worldfoundry.synthesis.visual_generation.neoverse.worldfoundry_runtime import NeoVerseOfficialRuntime
+
 from .neoverse_synthesis import DEFAULT_PROMPT, NeoVerseSynthesis
 
 __all__ = [
@@ -26,7 +27,6 @@ __all__ = [
     "DEFAULT_PROMPT",
     "NeoVerseOfficialRuntime",
     "NeoVerseSynthesis",
-    "ensure_neoverse_runtime",
     "resolve_neoverse_lora_path",
     "resolve_neoverse_model_dir",
     "resolve_neoverse_reconstructor_path",

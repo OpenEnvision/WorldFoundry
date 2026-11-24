@@ -12,13 +12,12 @@ from typing import Any
 import torch
 
 from worldfoundry.core.attention import resolve_transformers_attention_implementation
-from worldfoundry.core.model_loading.checkpoints import assign_state_dict_strict
-from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 from worldfoundry.core.io.paths import resolve_local_hf_model_path, resolve_worldfoundry_path
+from worldfoundry.core.model_loading.checkpoints import assign_state_dict_strict
+from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
 from .action import ActionModel
 from .policy import CogACT
-
 
 _DEFAULT_TOKENIZER_REF = "openvla/openvla-7b"
 _MODEL_TYPES = {"DiT-S", "DiT-B", "DiT-L"}
@@ -76,9 +75,7 @@ def _map_vision_key(key: str) -> str:
         key = "vision_backbone.featurizer." + key.removeprefix("dino_featurizer.")
     elif key.startswith("siglip_featurizer."):
         key = "vision_backbone.fused_featurizer." + key.removeprefix("siglip_featurizer.")
-    return key.replace(".ls1.gamma", ".ls1.scale_factor").replace(
-        ".ls2.gamma", ".ls2.scale_factor"
-    )
+    return key.replace(".ls1.gamma", ".ls1.scale_factor").replace(".ls2.gamma", ".ls2.scale_factor")
 
 
 def _map_vlm_state_dict(groups: Mapping[str, Mapping[str, torch.Tensor]]) -> dict[str, torch.Tensor]:
@@ -218,9 +215,7 @@ def load_vla(
         else future_action_window_size
     )
     past_window = int(
-        run_config.get("past_action_window_size", 0)
-        if past_action_window_size is None
-        else past_action_window_size
+        run_config.get("past_action_window_size", 0) if past_action_window_size is None else past_action_window_size
     )
 
     resolved_device = resolve_inference_device(device)

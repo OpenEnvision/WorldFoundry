@@ -6,11 +6,6 @@ __all__ = ["WorldMirror", "models", "utils"]
 
 
 def __getattr__(name: str):
-    """Getattr.
-
-    Args:
-        name: The name.
-    """
     if name == "WorldMirror":
         from .models.models.worldmirror import WorldMirror
 

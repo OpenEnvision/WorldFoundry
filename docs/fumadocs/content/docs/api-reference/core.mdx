@@ -5,7 +5,7 @@ description: How to choose and compose WorldFoundry's shared attention, configur
 
 `worldfoundry.core` is the reusable layer below model integrations. It contains operations that many world models need but that do not belong to one model identity: attention dispatch, checkpoint loading, logical paths, media I/O, distributed collectives, transformer shape helpers, memory policies, and inference process setup.
 
-This reference documents 236 callable or class-level Core symbols. The top-level facade is discovered directly from `worldfoundry/core/__init__.py`; a smaller set of heavily reused package-level APIs, such as Lazy Config and context-parallel splitting, is included as well. Every signature, method, parameter default, return annotation, and source line is regenerated from Python source during the docs build.
+This reference documents the callable and class-level Core symbols. The top-level facade is discovered directly from `worldfoundry/core/__init__.py`; a smaller set of heavily reused package-level APIs, such as Lazy Config and context-parallel splitting, is included as well. Every signature, method, parameter default, return annotation, and source line is regenerated from Python source during the docs build.
 
 The documentation generator is import-free, but calling a Core API still requires the runtime dependencies for that subsystem. The minimal package install intentionally does not pull Torch, OmegaConf, Loguru, video codecs, or every model stack. Use the environment documented by the selected model; each category below calls out its important dependency boundary.
 

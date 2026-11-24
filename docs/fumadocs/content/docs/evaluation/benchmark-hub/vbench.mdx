@@ -1,6 +1,6 @@
 ---
 title: VBench
-description: "NTU / Shanghai AI Lab 16-dimension T2V quality suite. WorldFoundry ships the official runtime; it does not invent a board."
+description: "NTU / Shanghai AI Lab 16-dimension T2V quality suite. WorldFoundry ships the official runtime."
 ---
 
 VBench (S-Lab, NTU and Shanghai AI Laboratory) decomposes text-to-video quality into **16 dimensions**, each scored by a dedicated perception model rather than one embedding distance. Three groups:
@@ -13,17 +13,17 @@ The official total is a **4× quality + 1× semantic** mix (`overall_quality`). 
 
 Paper: [VBench](https://arxiv.org/abs/2311.17982). Project: [vchitect.github.io/VBench-project](https://vchitect.github.io/VBench-project/). Code: [Vchitect/VBench](https://github.com/Vchitect/VBench) (Apache-2.0). Prompt suite in tree: `worldfoundry/data/benchmarks/assets/vbench/VBench_full_info.json` (946 rows). [VBench-2.0](/docs/evaluation/benchmark-hub/vbench-2.0) is a later faithfulness suite; the two are **not interchangeable**.
 
-WorldFoundry **vendors the official runtime**. Two modes: `custom_input` (any video folder; text-dependent dims need `--prompt` / `--prompt-file`) and `vbench_standard` (official names `"{prompt}-{index}.mp4"`, five samples per prompt, `index` in `0..4`). Bounded GPU validation covers `aesthetic_quality` only.
+WorldFoundry **vendors the official runtime**. Two modes: `custom_input` (any video folder; text-dependent dims need `--prompt` / `--prompt-file`) and `vbench_standard` (official names `"{prompt}-{index}.mp4"`, five samples per prompt, `index` in `0..4`).
 
 <BenchmarkPageSections id="vbench" locale="en" />
 
 ## How to run
 
-Catalog-recorded bounded command:
+Quick single-dimension check:
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
+  worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
   --mode custom_input \
   --dimension aesthetic_quality
 ```
@@ -32,7 +32,7 @@ Score one dimension on a custom folder:
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
+  worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
   --mode custom_input \
   --dimension subject_consistency \
   --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
@@ -44,7 +44,7 @@ Import an upstream `full_json` directory instead of re-running evaluators:
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
+  worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
   --from-upstream-results /path/to/vbench_full_json_dir \
   --output-dir tmp/vbench/imported \
   --json
@@ -52,11 +52,11 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 `--load-ckpt-from-local` forces local checkpoint resolution. Env: `WORLDFOUNDRY_VBENCH_ROOT`, `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`, `WORLDFOUNDRY_VBENCH_CACHE_DIR`. Shared stack: `vbench_perception_metric_stack`.
 
-In-tree pointers:
+Manifest, vendored runtime, and prompt suite:
 
 ```text
 worldfoundry/data/benchmarks/tasks/external/vbench.yaml
-worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
+worldfoundry/evals/tasks/execution/runners/vbench/runtime
 worldfoundry/data/benchmarks/assets/vbench/VBench_full_info.json
 ```
 

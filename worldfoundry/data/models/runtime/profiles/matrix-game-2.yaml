@@ -5,6 +5,7 @@ task_family: world_model
 groups: [world, interactive, camera_control]
 source_repos:
 - url: https://github.com/SkyworkAI/Matrix-Game
+  revision: 5446525c80da2a4a2f87801addbbc7faa8d2486e
   in_tree_path: worldfoundry/synthesis/visual_generation/matrix_game/matrix_game_2_runtime
 checkpoints:
 - repo_id: Skywork/Matrix-Game-2.0

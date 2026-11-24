@@ -47,19 +47,28 @@ class WorldPlay2Denoiser:
         self.dtype = dtype
 
     def new_cache(self):
-        return {name: {branch: model.new_cache() for branch in ("positive", "negative")}
-                for name, model in self.models.items()}
+        return {
+            name: {branch: model.new_cache() for branch in ("positive", "negative")}
+            for name, model in self.models.items()
+        }
 
     def __call__(self, model_input):
         conditions = model_input.conditioning
         expert = str(conditions["expert"])
         model = self.models[expert]
-        with torch.autocast(device_type=model_input.latents.device.type, dtype=self.dtype,
-                            enabled=self.dtype in {torch.float16, torch.bfloat16}):
+        with torch.autocast(
+            device_type=model_input.latents.device.type,
+            dtype=self.dtype,
+            enabled=self.dtype in {torch.float16, torch.bfloat16},
+        ):
             output = model(
-                model_input.latents, model_input.timestep.reshape(1), conditions["context"],
-                y=conditions["condition_latents"], actions=conditions["actions"],
-                memory=conditions.get("memory"), cache=conditions.get("cache"),
+                model_input.latents,
+                model_input.timestep.reshape(1),
+                conditions["context"],
+                y=conditions["condition_latents"],
+                actions=conditions["actions"],
+                memory=conditions.get("memory"),
+                cache=conditions.get("cache"),
                 chunk_start=int(conditions["chunk_start"]),
                 **({"pdd_block_index": int(conditions["pdd_block_index"])} if self.mode == "few_step" else {}),
             )
@@ -71,14 +80,19 @@ class WorldPlay2Denoiser:
     def prepare_memory(self, *, memory_inputs, contexts, negative_context, caches):
         memories = {}
         for name, model in self.models.items():
-            with torch.autocast(device_type=memory_inputs["hr_input"].device.type, dtype=self.dtype,
-                                enabled=self.dtype in {torch.float16, torch.bfloat16}):
+            with torch.autocast(
+                device_type=memory_inputs["hr_input"].device.type,
+                dtype=self.dtype,
+                enabled=self.dtype in {torch.float16, torch.bfloat16},
+            ):
                 memory = model(operation="compress", **memory_inputs)
                 memories[name] = memory
                 if caches is not None:
                     model(operation="prefill", context=contexts, memory=memory, cache=caches[name]["positive"])
                     if negative_context is not None:
-                        model(operation="prefill", context=negative_context, memory=memory, cache=caches[name]["negative"])
+                        model(
+                            operation="prefill", context=negative_context, memory=memory, cache=caches[name]["negative"]
+                        )
         return memories
 
 
@@ -92,16 +106,24 @@ def build_worldplay2_denoiser(context):
     for expert in ("high", "low"):
         models[expert] = NativeModuleLoader().load(
             ModuleLoadSpec(
-                module_class=WorldPlay2Model, config=config,
+                module_class=WorldPlay2Model,
+                config=config,
                 state_dict_converter=lambda state, name=expert: convert_worldplay2_state_dict(
-                    state, expert=name, fixed_pdd=mode == "few_step",
+                    state,
+                    expert=name,
+                    fixed_pdd=mode == "few_step",
                 ),
-                vram_module_map={torch.nn.Linear: AutoWrappedLinear, torch.nn.Conv3d: AutoWrappedModule,
-                                 torch.nn.Conv2d: AutoWrappedModule, torch.nn.LayerNorm: AutoWrappedModule,
-                                 torch.nn.Embedding: AutoWrappedModule},
+                vram_module_map={
+                    torch.nn.Linear: AutoWrappedLinear,
+                    torch.nn.Conv3d: AutoWrappedModule,
+                    torch.nn.Conv2d: AutoWrappedModule,
+                    torch.nn.LayerNorm: AutoWrappedModule,
+                    torch.nn.Embedding: AutoWrappedModule,
+                },
                 layer_container="blocks",
             ),
-            context.require_checkpoint(expert), context.policy,
+            context.require_checkpoint(expert),
+            context.policy,
         )
     return WorldPlay2Denoiser(models["high"], models["low"], mode=mode, dtype=context.policy.dtype)
 

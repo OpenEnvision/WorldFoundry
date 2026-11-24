@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List
 
 import jax
 import jax.numpy as jnp
@@ -28,9 +27,7 @@ class KVCache:
         return children, aux_data
 
     def zeros_like(self):
-        return KVCache(
-            jnp.zeros_like(self.k), jnp.zeros_like(self.v), jnp.zeros_like(self.length)
-        )
+        return KVCache(jnp.zeros_like(self.k), jnp.zeros_like(self.v), jnp.zeros_like(self.length))
 
     @classmethod
     def tree_unflatten(cls, aux_data, children):
@@ -38,7 +35,6 @@ class KVCache:
         return cls(k, v, length)
 
     def update(self, k_blhd: jax.Array, v_blhd: jax.Array):
-
         kv_cache_size = self.k.shape[1]
         new_k = jax.lax.concatenate([self.k, k_blhd], dimension=1)
         new_v = jax.lax.concatenate([self.v, v_blhd], dimension=1)

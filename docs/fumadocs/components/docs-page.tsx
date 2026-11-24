@@ -1,20 +1,17 @@
 import { getPageMarkdownUrl, source } from '@/lib/source';
 import { SiteHeader } from '@/components/site-header';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { getMDXComponents } from '@/components/mdx';
-import { ModelPageFigure, ModelPageNoDemoVideo } from '@/components/docs-video';
 import { enrichApiReferenceToc, isApiReferenceDocsPage } from '@/lib/docs-api-toc';
 import { enrichBenchmarkToc } from '@/lib/docs-benchmark-toc';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
 import { getBenchmarkCatalogEntry } from '@/lib/benchmark-catalog';
 import { getModelRecipeIndexEntry } from '@/lib/model-recipe-index';
-import { BenchmarkBadge } from '@/components/benchmark-badge';
 import { BenchmarkIdentityMark } from '@/components/benchmark-identity-mark';
 import { ModelIdentityMark } from '@/components/model-identity-mark';
 import { ModelPaperThumb } from '@/components/model-paper-thumb';
 import { getModelPaperThumbSrc } from '@/lib/model-arch-diagrams';
 import { getDocsBreadcrumbs } from '@/lib/docs-breadcrumb';
-import { movedDocsDestination } from '@/lib/docs-moved';
 import { docsLabels } from '@/lib/docs-navigation';
 import { DocsBreadcrumb } from '@/components/docs-breadcrumb';
 import { DocsPagination } from '@/components/docs-pagination';
@@ -24,10 +21,8 @@ import { DocsMobileNavToggle } from '@/components/docs-mobile-nav';
 import { DocsPageActions } from '@/components/docs-page-actions';
 import { DocsReadingProgress } from '@/components/docs-reading-progress';
 import { DocsScrollBridge } from '@/components/docs-scroll-bridge';
-import { DocsSidebarApiTree } from '@/components/docs-sidebar-api-tree';
-import { DocsSidebarArchitectureTree } from '@/components/docs-sidebar-architecture-tree';
 import { DocsSidebarIcon } from '@/components/docs-sidebar-icon';
-import { DocsSidebarMetricsTree } from '@/components/docs-sidebar-metrics-tree';
+import { DocsSidebarNavTree } from '@/components/docs-sidebar-nav-tree';
 import { DocsTocRail } from '@/components/docs-toc-rail';
 import { MetricQuickNav } from '@/components/metric-quick-nav';
 import { DocsWelcomeHero } from '@/components/docs-welcome-hero';
@@ -67,16 +62,8 @@ function getNavGroups(locale: Locale) {
   return getDocsSidebarGroups(locale);
 }
 
-function redirectMovedDocsPage(slugs: string[] | undefined, locale: Locale) {
-  const destination = movedDocsDestination(slugs, locale);
-  if (destination) {
-    redirect(destination);
-  }
-}
-
 export async function DocsPage({ slug, locale }: { slug: string[] | undefined; locale: string }) {
   const normalized = normalizeLocale(locale);
-  redirectMovedDocsPage(slug, normalized);
   const page = source.getPage(slug, normalized);
   if (!page) notFound();
 
@@ -84,7 +71,7 @@ export async function DocsPage({ slug, locale }: { slug: string[] | undefined; l
   const MDX = page.data.body;
   const markdownUrl = getPageMarkdownUrl(page).url;
   const sidebarGroups = getNavGroups(normalized);
-  const githubUrl = getGithubContentUrls(page.path).blob;
+  const editUrl = getGithubContentUrls(page.path).edit;
   const docsHref = getPageUrl([], normalized);
   const apiHubPage = isApiReferenceDocsPage(page.slugs);
 
@@ -138,13 +125,7 @@ export async function DocsPage({ slug, locale }: { slug: string[] | undefined; l
       <DocsScrollBridge />
       <SiteHeader
         variant="solid"
-        active={
-          page.slugs[0] === 'guides' && page.slugs[1] === 'supported-models'
-            ? 'models'
-            : page.slugs[0] === 'evaluation' && page.slugs[1] === 'benchmark-hub'
-              ? 'benchmarks'
-              : 'docs'
-        }
+        active="docs"
         navAriaLabel={t.nav}
         docsHref={docsHref}
         docsLabel={t.docs}
@@ -186,11 +167,11 @@ export async function DocsPage({ slug, locale }: { slug: string[] | undefined; l
                   {group.items.map((item) => {
                     if (item.type === 'api-tree') {
                       return (
-                        <DocsSidebarApiTree
+                        <DocsSidebarNavTree
                           hub={item.hub}
                           items={item.items}
                           currentUrl={page.url}
-                          locale={normalized}
+                          panelId="api-sidebar-panel"
                           defaultOpen={isApiReferenceSidebarOpen(page.slugs)}
                           expandLabel={t.expandApiList}
                           collapseLabel={t.collapseApiList}
@@ -201,11 +182,11 @@ export async function DocsPage({ slug, locale }: { slug: string[] | undefined; l
 
                     if (item.type === 'metrics-tree') {
                       return (
-                        <DocsSidebarMetricsTree
+                        <DocsSidebarNavTree
                           hub={item.hub}
                           items={item.items}
                           currentUrl={page.url}
-                          locale={normalized}
+                          panelId="metrics-sidebar-panel"
                           defaultOpen={isMetricsSidebarOpen(page.slugs)}
                           expandLabel={t.expandMetricsList}
                           collapseLabel={t.collapseMetricsList}
@@ -216,11 +197,11 @@ export async function DocsPage({ slug, locale }: { slug: string[] | undefined; l
 
                     if (item.type === 'architecture-tree') {
                       return (
-                        <DocsSidebarArchitectureTree
+                        <DocsSidebarNavTree
                           hub={item.hub}
                           items={item.items}
                           currentUrl={page.url}
-                          locale={normalized}
+                          panelId="architecture-sidebar-panel"
                           defaultOpen={isArchitectureSidebarOpen(page.slugs)}
                           expandLabel={t.expandArchitectureList}
                           collapseLabel={t.collapseArchitectureList}
@@ -259,13 +240,6 @@ export async function DocsPage({ slug, locale }: { slug: string[] | undefined; l
                             <DocsSidebarIcon url={item.link.url} active={active} />
                           ) : null}
                           <span className="pi-doc-link-title">{item.link.label}</span>
-                          {item.badges.length > 0 ? (
-                            <span className="pi-doc-link-badges">
-                              {item.badges.map((badge) => (
-                                <BenchmarkBadge kind={badge.kind} locale={normalized} key={badge.kind} />
-                              ))}
-                            </span>
-                          ) : null}
                         </span>
                       </Link>
                     );
@@ -348,29 +322,21 @@ export async function DocsPage({ slug, locale }: { slug: string[] | undefined; l
                   copyMarkdownCopiedLabel={t.askAiCopied}
                   copyMarkdownLabel={t.askAiCopy}
                   editLabel={t.editPage}
-                  githubUrl={githubUrl}
+                  editUrl={editUrl}
                   lastUpdated={lastUpdated}
                   lastUpdatedLabel={t.lastUpdated}
                   markdownLabel={t.markdown}
                   markdownUrl={markdownUrl}
-                  pageTitle={page.data.title}
                 />
 
                 {showToc ? (
-                  <DocsInlineToc items={toc} pageKey={page.url} slugs={page.slugs} title={t.onThisPage} />
+                  <DocsInlineToc items={toc} pageKey={page.url} title={t.onThisPage} />
                 ) : null}
 
                 <div className="pi-doc-content">
                   <MDX
                     components={getMDXComponents({
                       a: createRelativeLink(source, page),
-                      ...(modelId
-                        ? {
-                            Video: ModelPageNoDemoVideo,
-                            video: ModelPageNoDemoVideo,
-                            figure: ModelPageFigure,
-                          }
-                        : {}),
                     })}
                   />
                 </div>
@@ -389,7 +355,7 @@ export async function DocsPage({ slug, locale }: { slug: string[] | undefined; l
         </div>
 
         {showRail ? (
-          <DocsTocRail key={page.url} items={toc} pageKey={page.url} slugs={page.slugs} title={t.onThisPage}>
+          <DocsTocRail key={page.url} items={toc} pageKey={page.url} title={t.onThisPage}>
             {metricQuickNav}
           </DocsTocRail>
         ) : null}

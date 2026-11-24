@@ -183,7 +183,7 @@ def test_failed_or_unwound_request_preserves_completed_state_and_reuses_weights(
         elif stage == "decode":
             patch.setattr(synthesis.pipe, "decode_video", fail)
         else:
-            patch.setattr("worldfoundry.core.io.write_video", fail)
+            patch.setattr("worldfoundry.core.media.codecs.video.write_video", fail)
         with pytest.raises(error, match="request stopped"):
             _call(pipeline, "B", seed=11, num_inference_steps=7, output_path=tmp_path / "result.mp4")
     assert pipeline.memory is memory and memory.history_latents is history

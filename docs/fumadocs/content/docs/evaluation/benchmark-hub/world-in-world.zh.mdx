@@ -1,9 +1,9 @@
 ---
 title: World-in-World
-description: "ICLR 2026 口头的闭环效用评测：世界模型是否帮智能体成功？WorldFoundry 导入任务摘要，不跑闭环。"
+description: "ICLR 2026 Oral 闭环效用评测：世界模型是否帮智能体成功？WorldFoundry 导入任务摘要，不跑闭环。"
 ---
 
-World-in-World（约翰霍普金斯，联合北大、普林斯顿、MIT 与哈佛；ICLR 2026 口头）在镜像智能体-环境交互的 **闭环** 里评生成式世界模型。**任务成功优先于视觉质量。** 统一在线规划器与标准化动作 API 覆盖四个环境：
+World-in-World（约翰霍普金斯，联合北大、普林斯顿、MIT 与哈佛；ICLR 2026 Oral）在复现智能体与环境交互的**闭环**中评估生成式世界模型。**任务成功优先于视觉质量。** 统一在线规划器与标准化动作 API 覆盖四个环境：
 
 - Active Recognition
 - Active Embodied QA
@@ -16,14 +16,14 @@ World-in-World（约翰霍普金斯，联合北大、普林斯顿、MIT 与哈�
 
 论文：[World-in-World](https://arxiv.org/abs/2510.18135)。项目：[world-in-world.github.io](https://world-in-world.github.io/)。代码：[World-In-World/world-in-world](https://github.com/World-In-World/world-in-world)。
 
-WorldFoundry 是 **结果导入器**。闭环环境、规划器、worker 与任务打分器在 **上游** 执行。捆绑资产只支持解析与覆盖检查。
+WorldFoundry 是**结果导入器**。闭环环境、规划器、worker 与任务打分器在**上游**执行。捆绑资产只支持解析与覆盖检查。
 
 <BenchmarkPageSections id="world-in-world" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id world-in-world \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -34,7 +34,7 @@ worldfoundry-eval zoo benchmark-run \
 
 可选 `--task` / `--exp-id` 限定导入范围。默认：`WORLDFOUNDRY_WORLD_IN_WORLD_RESULTS_PATH`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/world-in-world.yaml`，`worldfoundry/data/benchmarks/assets/world-in-world`，`worldfoundry/evaluation/tasks/execution/runners/world_in_world`。
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/world-in-world.yaml`、`worldfoundry/data/benchmarks/assets/world-in-world`、`worldfoundry/evals/tasks/execution/runners/world_in_world`。
 
 产物包括 `scorecard.json`（主键 `world_in_world_average`）。
 

@@ -2,23 +2,21 @@
 import copy
 import json
 import logging
-from typing import Callable, List, Union
+from collections.abc import Callable
 
-from mmengine.logging import print_log
 from mmengine.dataset.base_dataset import BaseDataset, Compose, force_full_init
+from mmengine.logging import print_log
 from mmyolo.registry import DATASETS
 
 
 @DATASETS.register_module()
 class MultiModalDataset:
-    """Multi-modal dataset."""
-
     def __init__(
         self,
-        dataset: Union[BaseDataset, dict],
-        class_text_path: str = None,
+        dataset: BaseDataset | dict,
+        class_text_path: str | None = None,
         test_mode: bool = True,
-        pipeline: List[Union[dict, Callable]] = [],
+        pipeline: list[dict | Callable] = [],  # noqa: B006 - Keeps the upstream default object and signature.
         lazy_init: bool = False,
     ) -> None:
         self.dataset: BaseDataset
@@ -27,12 +25,10 @@ class MultiModalDataset:
         elif isinstance(dataset, BaseDataset):
             self.dataset = dataset
         else:
-            raise TypeError(
-                f"dataset must be a dict or a BaseDataset, but got {dataset}"
-            )
+            raise TypeError(f"dataset must be a dict or a BaseDataset, but got {dataset}")
 
         if class_text_path is not None:
-            self.class_texts = json.load(open(class_text_path, "r"))
+            self.class_texts = json.load(open(class_text_path))  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
             # ori_classes = self.dataset.metainfo['classes']
             # assert len(ori_classes) == len(self.class_texts), \
             #     ('The number of classes in the dataset and the class text'
@@ -80,9 +76,7 @@ class MultiModalDataset:
 
         data_info = self.get_data_info(idx)
 
-        if hasattr(self.dataset, "test_mode") and not self.dataset.test_mode:
-            data_info["dataset"] = self
-        elif not self.test_mode:
+        if (hasattr(self.dataset, "test_mode") and not self.dataset.test_mode) or not self.test_mode:
             data_info["dataset"] = self
         return self.pipeline(data_info)
 
@@ -101,11 +95,11 @@ class MultiModalMixedDataset(MultiModalDataset):
 
     def __init__(
         self,
-        dataset: Union[BaseDataset, dict],
-        class_text_path: str = None,
+        dataset: BaseDataset | dict,
+        class_text_path: str | None = None,
         dataset_type: str = "detection",
         test_mode: bool = True,
-        pipeline: List[Union[dict, Callable]] = [],
+        pipeline: list[dict | Callable] = [],  # noqa: B006 - Keeps the upstream default object and signature.
         lazy_init: bool = False,
     ) -> None:
         self.dataset_type = dataset_type

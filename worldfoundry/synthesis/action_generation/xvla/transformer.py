@@ -136,9 +136,7 @@ class SoftPromptedTransformer(nn.Module):
 
         sequence_length = int(hidden_states.shape[1])
         if sequence_length > int(self.pos_emb.shape[1]):
-            raise ValueError(
-                f"X-VLA sequence length {sequence_length} exceeds max_len_seq={self.pos_emb.shape[1]}"
-            )
+            raise ValueError(f"X-VLA sequence length {sequence_length} exceeds max_len_seq={self.pos_emb.shape[1]}")
         hidden_states = hidden_states + self.pos_emb[:, :sequence_length]
         if self.len_soft_prompts > 0:
             soft_prompts = self.soft_prompt_hub(domain_id).view(

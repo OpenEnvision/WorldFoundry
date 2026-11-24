@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 aliases:
 - vlanext-libero
 - vla-next
@@ -21,6 +21,7 @@ official_sources:
   github:
     head_sha: f4162397af20
     url: https://github.com/DravenALG/VLANeXt
+    revision: f4162397af201bddbdb2ec17e836bde4743c1913
   huggingface:
   - repo_id: DravenALG/VLANeXt
     role: libero_checkpoint_collection
@@ -54,22 +55,22 @@ docs:
   publisher: Nanyang Technological University (S-Lab)
   publisher_kind: university
   publisher_zh: 南洋理工大学（S-Lab）
-  overview: VLANeXt is a next-generation VLA released under the S-Lab License 1.0 (source-available, research-oriented), with official LIBERO and LIBERO-plus checkpoints in the DravenALG/VLANeXt collection. WorldFoundry calls the official get_vla/get_processor/get_vla_action contract in-process from a vendored inference subset.
-  overview_zh: VLANeXt 是以 S-Lab License 1.0（源码可得、面向研究）发布的新一代 VLA，官方 LIBERO 与 LIBERO-plus checkpoint 收录于 DravenALG/VLANeXt 集合。WorldFoundry 从内置推理子集在进程内调用官方 get_vla/get_processor/get_vla_action 契约。
-  architecture: Public checkpoints cover the LIBERO suites (VLANeXt_libero_spatial.pt, _object.pt and more). Architecture internals beyond the official repository pointer are not recorded in this repository.
-  architecture_zh: 公开 checkpoint 覆盖 LIBERO 各套件（VLANeXt_libero_spatial.pt、_object.pt 等）。官方仓库指针之外的架构内部细节仓库未记录。
-  usage_notes: Resolver, runtime import, and compileall checks pass without an external checkout; checkpoint-backed action-chunk validation remains required before demo parity is claimed. Note the S-Lab-1.0 license restricts commercial use.
-  usage_notes_zh: 解析器、运行时导入与 compileall 检查无需外部 checkout 即通过；声称 demo parity 前仍需 checkpoint 驱动的动作块验证。注意 S-Lab-1.0 许可限制商业使用。
+  overview: VLANeXt is a next-generation VLA released under the S-Lab License 1.0 (source-available, research-oriented), with official LIBERO and LIBERO-plus checkpoints in the DravenALG/VLANeXt collection. WorldFoundry calls the official get_vla/get_processor/get_vla_action contract in-process from a bundled inference subset, so no external checkout is needed.
+  overview_zh: VLANeXt 是以 S-Lab License 1.0（源码可得、面向研究）发布的新一代 VLA，官方 LIBERO 与 LIBERO-plus checkpoint 收录于 DravenALG/VLANeXt 集合。WorldFoundry 从内置推理子集在进程内调用官方 get_vla/get_processor/get_vla_action 契约，无需外部 checkout。
+  architecture: Public checkpoints cover the LIBERO suites (VLANeXt_libero_spatial.pt, _object.pt and more).
+  architecture_zh: 公开 checkpoint 覆盖 LIBERO 各套件（VLANeXt_libero_spatial.pt、_object.pt 等）。
+  usage_notes: Download the LIBERO checkpoint for your suite from the DravenALG/VLANeXt collection before running. The S-Lab-1.0 license restricts commercial use.
+  usage_notes_zh: 运行前从 DravenALG/VLANeXt 集合下载对应套件的 LIBERO checkpoint。S-Lab-1.0 许可限制商业使用。
   limitations:
   - 'S-Lab-1.0 license: source-available with research-use restrictions.'
-  - Demo parity is not yet claimed; checkpoint-backed validation is pending.
+  - Action-chunk inference with the released checkpoints has not been validated; only runtime import and loading are checked.
   limitations_zh:
-  - S-Lab-1.0 许可：源码可得但限制研究用途。
-  - 尚未声称 demo parity；checkpoint 驱动验证待完成。
+  - S-Lab-1.0 许可：源码可得，但仅限研究用途。
+  - 尚未用发布的 checkpoint 验证动作块推理，目前只检查了运行时导入与加载。
   recommended_benchmarks:
   - id: libero
     reason: Official LIBERO checkpoint collection.
     reason_zh: 官方 LIBERO checkpoint 集合。
   - id: libero-plus
-    reason: LIBERO-plus contracts are recorded.
-    reason_zh: 记录了 LIBERO-plus 契约。
+    reason: Official LIBERO-plus checkpoints are available.
+    reason_zh: 提供官方 LIBERO-plus checkpoint。

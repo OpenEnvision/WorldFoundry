@@ -1,17 +1,13 @@
 # Adapted from https://github.com/showlab/Tune-A-Video/blob/main/tuneavideo/pipelines/pipeline_tuneavideo.py
-
 import inspect
-import torch
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import ClassVar
 
 import numpy as np
-
-from typing import Callable, List, Optional, Union
-from dataclasses import dataclass
-from diffusers.utils import is_accelerate_available
-from packaging import version
-from einops import rearrange
-from transformers import CLIPTextModel, CLIPTokenizer
+import torch
 from diffusers.configuration_utils import FrozenDict
+from diffusers.loaders import LoraLoaderMixin
 from diffusers.models import AutoencoderKL
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 from diffusers.schedulers import (
@@ -22,23 +18,24 @@ from diffusers.schedulers import (
     LMSDiscreteScheduler,
     PNDMScheduler,
 )
-from diffusers.loaders import LoraLoaderMixin
-from diffusers.utils import deprecate, logging, BaseOutput
+from diffusers.utils import BaseOutput, deprecate, is_accelerate_available, logging
+from einops import rearrange
+from packaging import version
+from transformers import CLIPTextModel, CLIPTokenizer
 
 from ..models.pose_adaptor import CameraPoseEncoder
 from ..models.unet import UNet3DConditionModel
-
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 @dataclass
 class AnimationPipelineOutput(BaseOutput):
-    videos: Union[torch.Tensor, np.ndarray]
+    videos: torch.Tensor | np.ndarray
 
 
 class AnimationPipeline(DiffusionPipeline, LoraLoaderMixin):
-    _optional_components = []
+    _optional_components: ClassVar[list] = []
 
     def __init__(
         self,
@@ -46,14 +43,12 @@ class AnimationPipeline(DiffusionPipeline, LoraLoaderMixin):
         text_encoder: CLIPTextModel,
         tokenizer: CLIPTokenizer,
         unet: UNet3DConditionModel,
-        scheduler: Union[
-            DDIMScheduler,
-            PNDMScheduler,
-            LMSDiscreteScheduler,
-            EulerDiscreteScheduler,
-            EulerAncestralDiscreteScheduler,
-            DPMSolverMultistepScheduler,
-        ],
+        scheduler: DDIMScheduler
+        | PNDMScheduler
+        | LMSDiscreteScheduler
+        | EulerDiscreteScheduler
+        | EulerAncestralDiscreteScheduler
+        | DPMSolverMultistepScheduler,
     ):
         super().__init__()
 
@@ -132,7 +127,6 @@ class AnimationPipeline(DiffusionPipeline, LoraLoaderMixin):
             if cpu_offloaded_model is not None:
                 cpu_offload(cpu_offloaded_model, device)
 
-
     @property
     def _execution_device(self):
         if self.device != torch.device("meta") or not hasattr(self.unet, "_hf_hook"):
@@ -184,7 +178,7 @@ class AnimationPipeline(DiffusionPipeline, LoraLoaderMixin):
 
         # get unconditional embeddings for classifier free guidance
         if do_classifier_free_guidance:
-            uncond_tokens: List[str]
+            uncond_tokens: list[str]
             if negative_prompt is None:
                 uncond_tokens = [""] * batch_size
             elif type(prompt) is not type(negative_prompt):
@@ -242,7 +236,7 @@ class AnimationPipeline(DiffusionPipeline, LoraLoaderMixin):
         # video = self.vae.decode(latents).sample
         video = []
         for frame_idx in range(latents.shape[0]):
-            video.append(self.vae.decode(latents[frame_idx:frame_idx+1]).sample)
+            video.append(self.vae.decode(latents[frame_idx : frame_idx + 1]).sample)
         video = torch.cat(video)
         video = rearrange(video, "(b f) c h w -> b c f h w", f=video_length)
         video = (video / 2 + 0.5).clamp(0, 1)
@@ -278,12 +272,19 @@ class AnimationPipeline(DiffusionPipeline, LoraLoaderMixin):
             callback_steps is not None and (not isinstance(callback_steps, int) or callback_steps <= 0)
         ):
             raise ValueError(
-                f"`callback_steps` has to be a positive integer but is {callback_steps} of type"
-                f" {type(callback_steps)}."
+                f"`callback_steps` has to be a positive integer but is {callback_steps} of type {type(callback_steps)}."
             )
 
-    def prepare_latents(self, batch_size, num_channels_latents, video_length, height, width, dtype, device, generator, latents=None):
-        shape = (batch_size, num_channels_latents, video_length, height // self.vae_scale_factor, width // self.vae_scale_factor)
+    def prepare_latents(
+        self, batch_size, num_channels_latents, video_length, height, width, dtype, device, generator, latents=None
+    ):
+        shape = (
+            batch_size,
+            num_channels_latents,
+            video_length,
+            height // self.vae_scale_factor,
+            width // self.vae_scale_factor,
+        )
         if isinstance(generator, list) and len(generator) != batch_size:
             raise ValueError(
                 f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
@@ -314,22 +315,21 @@ class AnimationPipeline(DiffusionPipeline, LoraLoaderMixin):
     @torch.no_grad()
     def __call__(
         self,
-        prompt: Union[str, List[str]],
-        video_length: Optional[int],
-        height: Optional[int] = None,
-        width: Optional[int] = None,
+        prompt: str | list[str],
+        video_length: int | None,
+        height: int | None = None,
+        width: int | None = None,
         num_inference_steps: int = 50,
         guidance_scale: float = 7.5,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
-        num_videos_per_prompt: Optional[int] = 1,
+        negative_prompt: str | list[str] | None = None,
+        num_videos_per_prompt: int | None = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.FloatTensor] = None,
-        output_type: Optional[str] = "tensor",
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.FloatTensor | None = None,
+        output_type: str | None = "tensor",
         return_dict: bool = True,
-        callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
-        callback_steps: Optional[int] = 1,
-
+        callback: Callable[[int, int, torch.FloatTensor], None] | None = None,
+        callback_steps: int | None = 1,
         multidiff_total_steps: int = 1,
         multidiff_overlaps: int = 12,
         **kwargs,
@@ -358,7 +358,7 @@ class AnimationPipeline(DiffusionPipeline, LoraLoaderMixin):
         # Encode input prompt
         prompt = prompt if isinstance(prompt, list) else [prompt] * batch_size
         if negative_prompt is not None:
-            negative_prompt = negative_prompt if isinstance(negative_prompt, list) else [negative_prompt] * batch_size 
+            negative_prompt = negative_prompt if isinstance(negative_prompt, list) else [negative_prompt] * batch_size
         text_embeddings = self._encode_prompt(
             prompt, device, num_videos_per_prompt, do_classifier_free_guidance, negative_prompt
         )
@@ -397,15 +397,19 @@ class AnimationPipeline(DiffusionPipeline, LoraLoaderMixin):
 
                 for multidiff_step in range(multidiff_total_steps):
                     start_idx = multidiff_step * (single_model_length - multidiff_overlaps)
-                    latent_partial = latents[:, :, start_idx: start_idx + single_model_length].contiguous()
-                    mask_full[:, :, start_idx: start_idx + single_model_length] += 1
+                    latent_partial = latents[:, :, start_idx : start_idx + single_model_length].contiguous()
+                    mask_full[:, :, start_idx : start_idx + single_model_length] += 1
 
                     # expand the latents if we are doing classifier free guidance
-                    latent_model_input = torch.cat([latent_partial] * 2) if do_classifier_free_guidance else latent_partial
+                    latent_model_input = (
+                        torch.cat([latent_partial] * 2) if do_classifier_free_guidance else latent_partial
+                    )
                     latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                     # predict the noise residual
-                    noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample.to(dtype=latents_dtype)
+                    noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample.to(
+                        dtype=latents_dtype
+                    )
 
                     # perform guidance
                     if do_classifier_free_guidance:
@@ -415,7 +419,9 @@ class AnimationPipeline(DiffusionPipeline, LoraLoaderMixin):
 
                 for pred_idx, noise_pred in enumerate(noise_preds):
                     start_idx = pred_idx * (single_model_length - multidiff_overlaps)
-                    noise_pred_full[:, :, start_idx: start_idx + single_model_length] += noise_pred / mask_full[:, :, start_idx: start_idx + single_model_length]
+                    noise_pred_full[:, :, start_idx : start_idx + single_model_length] += (
+                        noise_pred / mask_full[:, :, start_idx : start_idx + single_model_length]
+                    )
 
                 # compute the previous noisy sample x_t -> x_t-1
                 latents = self.scheduler.step(noise_pred_full, t, latents, **extra_step_kwargs).prev_sample
@@ -440,27 +446,25 @@ class AnimationPipeline(DiffusionPipeline, LoraLoaderMixin):
 
 
 class CameraCtrlPipeline(AnimationPipeline):
-    _optional_components = []
+    _optional_components: ClassVar[list] = []
 
-    def __init__(self,
-                 vae: AutoencoderKL,
-                 text_encoder: CLIPTextModel,
-                 tokenizer: CLIPTokenizer,
-                 unet: UNet3DConditionModel,
-                 scheduler: Union[
-                     DDIMScheduler,
-                     PNDMScheduler,
-                     LMSDiscreteScheduler,
-                     EulerDiscreteScheduler,
-                     EulerAncestralDiscreteScheduler,
-                     DPMSolverMultistepScheduler],
-                 pose_encoder: CameraPoseEncoder):
-
+    def __init__(
+        self,
+        vae: AutoencoderKL,
+        text_encoder: CLIPTextModel,
+        tokenizer: CLIPTokenizer,
+        unet: UNet3DConditionModel,
+        scheduler: DDIMScheduler
+        | PNDMScheduler
+        | LMSDiscreteScheduler
+        | EulerDiscreteScheduler
+        | EulerAncestralDiscreteScheduler
+        | DPMSolverMultistepScheduler,
+        pose_encoder: CameraPoseEncoder,
+    ):
         super().__init__(vae, text_encoder, tokenizer, unet, scheduler)
 
-        self.register_modules(
-            pose_encoder=pose_encoder
-        )
+        self.register_modules(pose_encoder=pose_encoder)
 
     def decode_latents(self, latents):
         video_length = latents.shape[2]
@@ -469,7 +473,7 @@ class CameraCtrlPipeline(AnimationPipeline):
         # video = self.vae.decode(latents).sample
         video = []
         for frame_idx in range(latents.shape[0]):
-            video.append(self.vae.decode(latents[frame_idx:frame_idx+1]).sample)
+            video.append(self.vae.decode(latents[frame_idx : frame_idx + 1]).sample)
         video = torch.cat(video)
         video = rearrange(video, "(b f) c h w -> b c f h w", f=video_length)
         video = (video / 2 + 0.5).clamp(0, 1)
@@ -515,7 +519,7 @@ class CameraCtrlPipeline(AnimationPipeline):
 
         # get unconditional embeddings for classifier free guidance
         if do_classifier_free_guidance:
-            uncond_tokens: List[str]
+            uncond_tokens: list[str]
             if negative_prompt is None:
                 uncond_tokens = [""] * batch_size
             elif type(prompt) is not type(negative_prompt):
@@ -569,22 +573,22 @@ class CameraCtrlPipeline(AnimationPipeline):
     @torch.no_grad()
     def __call__(
         self,
-        prompt: Union[str, List[str]],
+        prompt: str | list[str],
         pose_embedding: torch.FloatTensor,
-        video_length: Optional[int],
-        height: Optional[int] = None,
-        width: Optional[int] = None,
+        video_length: int | None,
+        height: int | None = None,
+        width: int | None = None,
         num_inference_steps: int = 50,
         guidance_scale: float = 7.5,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
-        num_videos_per_prompt: Optional[int] = 1,
+        negative_prompt: str | list[str] | None = None,
+        num_videos_per_prompt: int | None = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.FloatTensor] = None,
-        output_type: Optional[str] = "tensor",
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.FloatTensor | None = None,
+        output_type: str | None = "tensor",
         return_dict: bool = True,
-        callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
-        callback_steps: Optional[int] = 1,
+        callback: Callable[[int, int, torch.FloatTensor], None] | None = None,
+        callback_steps: int | None = 1,
         multidiff_total_steps: int = 1,
         multidiff_overlaps: int = 12,
         **kwargs,
@@ -616,7 +620,7 @@ class CameraCtrlPipeline(AnimationPipeline):
             negative_prompt = negative_prompt if isinstance(negative_prompt, list) else [negative_prompt] * batch_size
         text_embeddings = self._encode_prompt(
             prompt, device, num_videos_per_prompt, do_classifier_free_guidance, negative_prompt
-        )           # [2bf, l, c]
+        )  # [2bf, l, c]
 
         # Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -636,35 +640,44 @@ class CameraCtrlPipeline(AnimationPipeline):
             device,
             generator,
             latents,
-        )                   # b c f h w
+        )  # b c f h w
         latents_dtype = latents.dtype
 
         # Prepare extra step kwargs.
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
         if isinstance(pose_embedding, list):
-            assert all([x.ndim == 5 for x in pose_embedding])
+            assert all([x.ndim == 5 for x in pose_embedding])  # noqa: C419 - Evaluates every element before testing, as upstream.
             bs = pose_embedding[0].shape[0]
             pose_embedding_features = []
             for pe in pose_embedding:
                 pose_embedding_feature = self.pose_encoder(pe)
-                pose_embedding_feature = [rearrange(x, '(b f) c h w -> b c f h w', b=bs) for x in pose_embedding_feature]
+                pose_embedding_feature = [
+                    rearrange(x, "(b f) c h w -> b c f h w", b=bs) for x in pose_embedding_feature
+                ]
                 pose_embedding_features.append(pose_embedding_feature)
         else:
             bs = pose_embedding.shape[0]
             assert pose_embedding.ndim == 5
-            pose_embedding_features = self.pose_encoder(pose_embedding)       # bf, c, h, w
-            pose_embedding_features = [rearrange(x, '(b f) c h w -> b c f h w', b=bs)
-                                       for x in pose_embedding_features]
+            pose_embedding_features = self.pose_encoder(pose_embedding)  # bf, c, h, w
+            pose_embedding_features = [rearrange(x, "(b f) c h w -> b c f h w", b=bs) for x in pose_embedding_features]
 
         # Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         if isinstance(pose_embedding_features[0], list):
-            pose_embedding_features = [[torch.cat([x, x], dim=0) for x in pose_embedding_feature]
-                                       for pose_embedding_feature in pose_embedding_features] \
-                if do_classifier_free_guidance else pose_embedding_features
+            pose_embedding_features = (
+                [
+                    [torch.cat([x, x], dim=0) for x in pose_embedding_feature]
+                    for pose_embedding_feature in pose_embedding_features
+                ]
+                if do_classifier_free_guidance
+                else pose_embedding_features
+            )
         else:
-            pose_embedding_features = [torch.cat([x, x], dim=0) for x in pose_embedding_features] \
-                if do_classifier_free_guidance else pose_embedding_features  # [2b c f h w]
+            pose_embedding_features = (
+                [torch.cat([x, x], dim=0) for x in pose_embedding_features]
+                if do_classifier_free_guidance
+                else pose_embedding_features
+            )  # [2b c f h w]
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 noise_pred_full = torch.zeros_like(latents).to(latents.device)
@@ -672,22 +685,29 @@ class CameraCtrlPipeline(AnimationPipeline):
                 noise_preds = []
                 for multidiff_step in range(multidiff_total_steps):
                     start_idx = multidiff_step * (single_model_length - multidiff_overlaps)
-                    latent_partial = latents[:, :, start_idx: start_idx + single_model_length].contiguous()
-                    mask_full[:, :, start_idx: start_idx + single_model_length] += 1
+                    latent_partial = latents[:, :, start_idx : start_idx + single_model_length].contiguous()
+                    mask_full[:, :, start_idx : start_idx + single_model_length] += 1
 
                     if isinstance(pose_embedding, list):
                         pose_embedding_features_input = pose_embedding_features[multidiff_step]
                     else:
-                        pose_embedding_features_input = [x[:, :, start_idx: start_idx + single_model_length]
-                                                         for x in pose_embedding_features]
+                        pose_embedding_features_input = [
+                            x[:, :, start_idx : start_idx + single_model_length] for x in pose_embedding_features
+                        ]
 
                     # expand the latents if we are doing classifier free guidance
-                    latent_model_input = torch.cat([latent_partial] * 2) if do_classifier_free_guidance else latent_partial   # [2b c f h w]
+                    latent_model_input = (
+                        torch.cat([latent_partial] * 2) if do_classifier_free_guidance else latent_partial
+                    )  # [2b c f h w]
                     latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                     # predict the noise residual
-                    noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings,
-                                           pose_embedding_features=pose_embedding_features_input).sample.to(dtype=latents_dtype)
+                    noise_pred = self.unet(
+                        latent_model_input,
+                        t,
+                        encoder_hidden_states=text_embeddings,
+                        pose_embedding_features=pose_embedding_features_input,
+                    ).sample.to(dtype=latents_dtype)
                     # perform guidance
                     if do_classifier_free_guidance:
                         noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
@@ -695,7 +715,9 @@ class CameraCtrlPipeline(AnimationPipeline):
                     noise_preds.append(noise_pred)
                 for pred_idx, noise_pred in enumerate(noise_preds):
                     start_idx = pred_idx * (single_model_length - multidiff_overlaps)
-                    noise_pred_full[:, :, start_idx: start_idx + single_model_length] += noise_pred / mask_full[:, :, start_idx: start_idx + single_model_length]
+                    noise_pred_full[:, :, start_idx : start_idx + single_model_length] += (
+                        noise_pred / mask_full[:, :, start_idx : start_idx + single_model_length]
+                    )
 
                 # compute the previous noisy sample x_t -> x_t-1  b c f h w
                 latents = self.scheduler.step(noise_pred_full, t, latents, **extra_step_kwargs).prev_sample

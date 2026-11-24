@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> dataset -> dataset_re10k.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 import json
 from dataclasses import dataclass
 from functools import cached_property
@@ -25,6 +24,7 @@ from .view_sampler import ViewSampler
 @dataclass
 class DatasetRE10kCfg(DatasetCfgCommon):
     """Dataset k cfg implementation."""
+
     name: Literal["re10k"]
     roots: list[Path]
     baseline_epsilon: float
@@ -34,6 +34,7 @@ class DatasetRE10kCfg(DatasetCfgCommon):
 
 class DatasetRE10k(IterableDataset):
     """Dataset k implementation."""
+
     cfg: DatasetRE10kCfg
     stage: Stage
     view_sampler: ViewSampler
@@ -49,16 +50,6 @@ class DatasetRE10k(IterableDataset):
         stage: Stage,
         view_sampler: ViewSampler,
     ) -> None:
-        """Init.
-
-        Args:
-            cfg: The cfg.
-            stage: The stage.
-            view_sampler: The view sampler.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.cfg = cfg
         self.stage = stage
@@ -69,28 +60,17 @@ class DatasetRE10k(IterableDataset):
         self.chunks = []
         for root in cfg.roots:
             root = root / self.data_stage
-            root_chunks = sorted(
-                [path for path in root.iterdir() if path.suffix == ".torch"]
-            )
+            root_chunks = sorted([path for path in root.iterdir() if path.suffix == ".torch"])
             self.chunks.extend(root_chunks)
         if self.cfg.overfit_to_scene is not None:
             chunk_path = self.index[self.cfg.overfit_to_scene]
             self.chunks = [chunk_path] * len(self.chunks)
 
     def shuffle(self, lst: list) -> list:
-        """Shuffle.
-
-        Args:
-            lst: The lst.
-
-        Returns:
-            The return value.
-        """
         indices = torch.randperm(len(lst))
         return [lst[x] for x in indices]
 
     def __iter__(self):
-        """Iter."""
         # When testing, the data loaders alternate chunks.
         worker_info = torch.utils.data.get_worker_info()
         if self.stage == "test" and worker_info is not None:
@@ -129,13 +109,9 @@ class DatasetRE10k(IterableDataset):
 
                 # Load the images.
                 try:
-                    context_images = [
-                        example["images"][index.item()] for index in context_indices
-                    ]
+                    context_images = [example["images"][index.item()] for index in context_indices]
                     context_images = self.convert_images(context_images)
-                    target_images = [
-                        example["images"][index.item()] for index in target_indices
-                    ]
+                    target_images = [example["images"][index.item()] for index in target_indices]
                     target_images = self.convert_images(target_images)
                 except IndexError:
                     continue
@@ -157,10 +133,7 @@ class DatasetRE10k(IterableDataset):
                     a, b = context_extrinsics[:, :3, 3]
                     scale = (a - b).norm()
                     if scale < self.cfg.baseline_epsilon:
-                        print(
-                            f"Skipped {scene} because of insufficient baseline "
-                            f"{scale:.6f}"
-                        )
+                        print(f"Skipped {scene} because of insufficient baseline {scale:.6f}")
                         continue
                     extrinsics[:, :3, 3] /= scale
                 else:
@@ -194,14 +167,6 @@ class DatasetRE10k(IterableDataset):
         Float[Tensor, "batch 4 4"],  # extrinsics
         Float[Tensor, "batch 3 3"],  # intrinsics
     ]:
-        """Convert poses.
-
-        Args:
-            poses: The poses.
-
-        Returns:
-            The return value.
-        """
         b, _ = poses.shape
 
         # Convert the intrinsics to a 3x3 normalized K matrix.
@@ -222,14 +187,6 @@ class DatasetRE10k(IterableDataset):
         self,
         images: list[UInt8[Tensor, "..."]],
     ) -> Float[Tensor, "batch 3 height width"]:
-        """Convert images.
-
-        Args:
-            images: The images.
-
-        Returns:
-            The return value.
-        """
         torch_images = []
         for image in images:
             image = Image.open(BytesIO(image.numpy().tobytes()))
@@ -241,34 +198,15 @@ class DatasetRE10k(IterableDataset):
         bound: Literal["near", "far"],
         num_views: int,
     ) -> Float[Tensor, " view"]:
-        """Get bound.
-
-        Args:
-            bound: The bound.
-            num_views: The num views.
-
-        Returns:
-            The return value.
-        """
         value = torch.tensor(getattr(self, bound), dtype=torch.float32)
         return repeat(value, "-> v", v=num_views)
 
     @property
     def data_stage(self) -> Stage:
-        """Data stage.
-
-        Returns:
-            The return value.
-        """
         return "test"
 
     @cached_property
     def index(self) -> dict[str, Path]:
-        """Index.
-
-        Returns:
-            The return value.
-        """
         merged_index = {}
         for data_stage in (self.data_stage,):
             for root in self.cfg.roots:
@@ -285,9 +223,4 @@ class DatasetRE10k(IterableDataset):
         return merged_index
 
     def __len__(self) -> int:
-        """Len.
-
-        Returns:
-            The return value.
-        """
         return len(self.index.keys())

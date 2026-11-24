@@ -5,16 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.api import GenerationRequest, WorldModelConfig
-from worldfoundry.evaluation.models import (
-    ModelResolutionError,
-    resolve_model_zoo_runner,
-    resolve_world_model_runner,
-)
 from tests.eval_core.contract_fixture import (
     CONTRACT_FIXTURE_MODEL_ID,
     CONTRACT_FIXTURE_RUNNER_TARGET,
     ContractFixtureRunner,
+)
+from worldfoundry.evals.api import GenerationRequest, WorldModelConfig
+from worldfoundry.evals.models.runners.resolver import (
+    ModelResolutionError,
+    resolve_model_zoo_runner,
+    resolve_world_model_runner,
 )
 
 CONTRACT_RUNNER_TARGET = CONTRACT_FIXTURE_RUNNER_TARGET

@@ -25,11 +25,6 @@ from transformers import AutoTokenizer
 
 
 def fp16_clamp(x):
-    """Fp16 clamp.
-
-    Args:
-        x: The x.
-    """
     if x.dtype == torch.float16 and torch.isinf(x).any():
         clamp = torch.finfo(x.dtype).max - 1000
         x = torch.clamp(x, min=-clamp, max=clamp)
@@ -37,14 +32,7 @@ def fp16_clamp(x):
 
 
 class GELU(nn.Module):
-    """Gelu implementation."""
-
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         return 0.5 * x * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (x + 0.044715 * torch.pow(x, 3.0))))
 
 
@@ -52,23 +40,12 @@ class T5LayerNorm(nn.Module):
     """Layer norm implementation."""
 
     def __init__(self, dim, eps=1e-6):
-        """Init.
-
-        Args:
-            dim: The dim.
-            eps: The eps.
-        """
-        super(T5LayerNorm, self).__init__()
+        super().__init__()
         self.dim = dim
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(dim))
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         x = x * torch.rsqrt(x.float().pow(2).mean(dim=-1, keepdim=True) + self.eps)
         if self.weight.dtype in [torch.float16, torch.bfloat16]:
             x = x.type_as(self.weight)
@@ -79,16 +56,8 @@ class T5Attention(nn.Module):
     """Attention implementation."""
 
     def __init__(self, dim, dim_attn, num_heads, dropout=0.1):
-        """Init.
-
-        Args:
-            dim: The dim.
-            dim_attn: The dim attn.
-            num_heads: The num heads.
-            dropout: The dropout.
-        """
         assert dim_attn % num_heads == 0
-        super(T5Attention, self).__init__()
+        super().__init__()
         self.dim = dim
         self.dim_attn = dim_attn
         self.num_heads = num_heads
@@ -141,14 +110,7 @@ class T5FeedForward(nn.Module):
     """Feed forward implementation."""
 
     def __init__(self, dim, dim_ffn, dropout=0.1):
-        """Init.
-
-        Args:
-            dim: The dim.
-            dim_ffn: The dim ffn.
-            dropout: The dropout.
-        """
-        super(T5FeedForward, self).__init__()
+        super().__init__()
         self.dim = dim
         self.dim_ffn = dim_ffn
 
@@ -159,11 +121,6 @@ class T5FeedForward(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         x = self.fc1(x) * self.gate(x)
         x = self.dropout(x)
         x = self.fc2(x)
@@ -175,18 +132,7 @@ class T5SelfAttention(nn.Module):
     """Self attention implementation."""
 
     def __init__(self, dim, dim_attn, dim_ffn, num_heads, num_buckets, shared_pos=True, dropout=0.1):
-        """Init.
-
-        Args:
-            dim: The dim.
-            dim_attn: The dim attn.
-            dim_ffn: The dim ffn.
-            num_heads: The num heads.
-            num_buckets: The num buckets.
-            shared_pos: The shared pos.
-            dropout: The dropout.
-        """
-        super(T5SelfAttention, self).__init__()
+        super().__init__()
         self.dim = dim
         self.dim_attn = dim_attn
         self.dim_ffn = dim_ffn
@@ -202,13 +148,6 @@ class T5SelfAttention(nn.Module):
         self.pos_embedding = None if shared_pos else T5RelativeEmbedding(num_buckets, num_heads, bidirectional=True)
 
     def forward(self, x, mask=None, pos_bias=None):
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            pos_bias: The pos bias.
-        """
         e = pos_bias if self.shared_pos else self.pos_embedding(x.size(1), x.size(1))
         x = fp16_clamp(x + self.attn(self.norm1(x), mask=mask, pos_bias=e))
         x = fp16_clamp(x + self.ffn(self.norm2(x)))
@@ -219,15 +158,7 @@ class T5RelativeEmbedding(nn.Module):
     """Relative embedding implementation."""
 
     def __init__(self, num_buckets, num_heads, bidirectional, max_dist=128):
-        """Init.
-
-        Args:
-            num_buckets: The num buckets.
-            num_heads: The num heads.
-            bidirectional: The bidirectional.
-            max_dist: The max dist.
-        """
-        super(T5RelativeEmbedding, self).__init__()
+        super().__init__()
         self.num_buckets = num_buckets
         self.num_heads = num_heads
         self.bidirectional = bidirectional
@@ -237,12 +168,6 @@ class T5RelativeEmbedding(nn.Module):
         self.embedding = nn.Embedding(num_buckets, num_heads)
 
     def forward(self, lq, lk):
-        """Forward.
-
-        Args:
-            lq: The lq.
-            lk: The lk.
-        """
         device = self.embedding.weight.device
         # rel_pos = torch.arange(lk).unsqueeze(0).to(device) - \
         #     torch.arange(lq).unsqueeze(1).to(device)
@@ -253,11 +178,6 @@ class T5RelativeEmbedding(nn.Module):
         return rel_pos_embeds.contiguous()
 
     def _relative_position_bucket(self, rel_pos):
-        """Helper function to relative position bucket.
-
-        Args:
-            rel_pos: The rel pos.
-        """
         # preprocess
         if self.bidirectional:
             num_buckets = self.num_buckets // 2
@@ -282,11 +202,6 @@ class T5RelativeEmbedding(nn.Module):
 
 
 def init_weights(m):
-    """Init weights.
-
-    Args:
-        m: The m.
-    """
     if isinstance(m, T5LayerNorm):
         nn.init.ones_(m.weight)
     elif isinstance(m, T5FeedForward):
@@ -303,8 +218,6 @@ def init_weights(m):
 
 
 class WanTextEncoder(torch.nn.Module):
-    """Wan text encoder implementation."""
-
     def __init__(
         self,
         vocab=256384,
@@ -318,20 +231,7 @@ class WanTextEncoder(torch.nn.Module):
         dropout=0.1,
         text_encoder_pretrained_path: str | None = None,
     ):
-        """Init.
-
-        Args:
-            vocab: The vocab.
-            dim: The dim.
-            dim_attn: The dim attn.
-            dim_ffn: The dim ffn.
-            num_heads: The num heads.
-            num_layers: The num layers.
-            num_buckets: The num buckets.
-            shared_pos: The shared pos.
-            dropout: The dropout.
-        """
-        super(WanTextEncoder, self).__init__()
+        super().__init__()
         self.dim = dim
         self.dim_attn = dim_attn
         self.dim_ffn = dim_ffn
@@ -357,12 +257,6 @@ class WanTextEncoder(torch.nn.Module):
         self.apply(init_weights)
 
     def forward(self, ids, mask=None):
-        """Forward.
-
-        Args:
-            ids: The ids.
-            mask: The mask.
-        """
         x = self.token_embedding(ids)
         x = self.dropout(x)
         e = self.pos_embedding(x.size(1), x.size(1)) if self.shared_pos else None
@@ -389,34 +283,18 @@ class WanTextEncoderStateDictConverter:
 
 
 def basic_clean(text):
-    """Basic clean.
-
-    Args:
-        text: The text.
-    """
     text = ftfy.fix_text(text)
     text = html.unescape(html.unescape(text))
     return text.strip()
 
 
 def whitespace_clean(text):
-    """Whitespace clean.
-
-    Args:
-        text: The text.
-    """
     text = re.sub(r"\s+", " ", text)
     text = text.strip()
     return text
 
 
 def canonicalize(text, keep_punctuation_exact_string=None):
-    """Canonicalize.
-
-    Args:
-        text: The text.
-        keep_punctuation_exact_string: The keep punctuation exact string.
-    """
     text = text.replace("_", " ")
     if keep_punctuation_exact_string:
         text = keep_punctuation_exact_string.join(
@@ -431,16 +309,7 @@ def canonicalize(text, keep_punctuation_exact_string=None):
 
 
 class HuggingfaceTokenizer:
-    """Huggingface tokenizer implementation."""
-
     def __init__(self, name, seq_len=None, clean=None, **kwargs):
-        """Init.
-
-        Args:
-            name: The name.
-            seq_len: The seq len.
-            clean: The clean.
-        """
         assert clean in (None, "whitespace", "lower", "canonicalize")
         self.name = name
         self.seq_len = seq_len
@@ -451,11 +320,6 @@ class HuggingfaceTokenizer:
         self.vocab_size = self.tokenizer.vocab_size
 
     def __call__(self, sequence, **kwargs):
-        """Call.
-
-        Args:
-            sequence: The sequence.
-        """
         return_mask = kwargs.pop("return_mask", False)
 
         # arguments
@@ -478,11 +342,6 @@ class HuggingfaceTokenizer:
             return ids.input_ids
 
     def _clean(self, text):
-        """Helper function to clean.
-
-        Args:
-            text: The text.
-        """
         if self.clean == "whitespace":
             text = whitespace_clean(basic_clean(text))
         elif self.clean == "lower":

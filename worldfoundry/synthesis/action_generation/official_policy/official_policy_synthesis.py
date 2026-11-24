@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
 from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
 
 from ..base_action_synthesis import ActionModelSynthesis
 from .runtime import OfficialPolicyRuntime, OfficialPolicyRuntimeConfig, build_runtime_config
@@ -30,9 +31,7 @@ def _looks_like_hub_repo_id(value: str) -> bool:
     if not separator or not owner or not repository or "/" in repository:
         return False
     allowed = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
-    return all(character in allowed for character in owner) and all(
-        character in allowed for character in repository
-    )
+    return all(character in allowed for character in owner) and all(character in allowed for character in repository)
 
 
 class OfficialPolicySynthesis(ActionModelSynthesis):
@@ -84,7 +83,7 @@ class OfficialPolicySynthesis(ActionModelSynthesis):
         hf_models_root: str | Path | None = None,
         command_template: Sequence[str] | None = None,
         **kwargs: Any,
-    ) -> "OfficialPolicySynthesis":
+    ) -> OfficialPolicySynthesis:
         """
         Loads an `OfficialPolicySynthesis` instance from pretrained model configurations.
 
@@ -327,7 +326,9 @@ class OfficialPolicySynthesis(ActionModelSynthesis):
             },
         )
         # Write the plan payload to a JSON file.
-        plan_path.write_text(json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        plan_path.write_text(
+            json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
         # If only planning is requested, return the plan details.
         if plan_only:

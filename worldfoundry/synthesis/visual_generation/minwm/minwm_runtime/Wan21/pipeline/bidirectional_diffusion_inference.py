@@ -1,7 +1,7 @@
-from tqdm import tqdm
-from typing import List, Optional
 import time
+
 import torch
+from tqdm import tqdm
 
 from worldfoundry.base_models.diffusion_model.schedulers.flow_dpm import (
     FlowDPMSolverMultistepScheduler,
@@ -14,25 +14,21 @@ from ..wan_utils.wan_wrapper import WanDiffusionWrapper, WanTextEncoder, WanVAEW
 
 
 class BidirectionalDiffusionInferencePipeline(torch.nn.Module):
-    def __init__(
-            self,
-            args,
-            device,
-            generator=None,
-            text_encoder=None,
-            vae=None
-    ):
+    def __init__(self, args, device, generator=None, text_encoder=None, vae=None):
         super().__init__()
         # Step 1: Initialize all models
-        self.generator = WanDiffusionWrapper(
-            **getattr(args, "model_kwargs", {}), is_causal=False) if generator is None else generator
+        self.generator = (
+            WanDiffusionWrapper(**getattr(args, "model_kwargs", {}), is_causal=False)
+            if generator is None
+            else generator
+        )
         self.text_encoder = WanTextEncoder() if text_encoder is None else text_encoder
         self.vae = WanVAEWrapper() if vae is None else vae
 
         # Step 2: Initialize scheduler
         self.num_train_timesteps = args.num_train_timestep
         self.sampling_steps = 50
-        self.sample_solver = 'unipc'
+        self.sample_solver = "unipc"
         self.shift = 5.0
 
         self.args = args
@@ -43,11 +39,11 @@ class BidirectionalDiffusionInferencePipeline(torch.nn.Module):
     def inference(
         self,
         noise: torch.Tensor,
-        text_prompts: List[str],
+        text_prompts: list[str],
         return_latents=False,
-        initial_latent: Optional[torch.Tensor] = None,
-        viewmats: Optional[torch.Tensor] = None,
-        Ks: Optional[torch.Tensor] = None
+        initial_latent: torch.Tensor | None = None,
+        viewmats: torch.Tensor | None = None,
+        Ks: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Perform inference on the given noise and text prompts.
@@ -60,12 +56,8 @@ class BidirectionalDiffusionInferencePipeline(torch.nn.Module):
                 (batch_size, num_frames, num_channels, height, width). It is normalized to be in the range [0, 1].
         """
 
-        conditional_dict = self.text_encoder(
-            text_prompts=text_prompts
-        )
-        unconditional_dict = self.text_encoder(
-            text_prompts=[self.args.negative_prompt] * len(text_prompts)
-        )
+        conditional_dict = self.text_encoder(text_prompts=text_prompts)
+        unconditional_dict = self.text_encoder(text_prompts=[self.args.negative_prompt] * len(text_prompts))
 
         torch.cuda.synchronize()
         _chunk0_t0 = time.perf_counter()
@@ -79,16 +71,13 @@ class BidirectionalDiffusionInferencePipeline(torch.nn.Module):
             timestep = t * torch.ones([latents.shape[0], latents.shape[1]], device=noise.device, dtype=torch.float32)
 
             flow_pred_cond, _ = self.generator(latent_model_input, conditional_dict, timestep, viewmats=viewmats, Ks=Ks)
-            flow_pred_uncond, _ = self.generator(latent_model_input, unconditional_dict, timestep, viewmats=viewmats, Ks=Ks)
+            flow_pred_uncond, _ = self.generator(
+                latent_model_input, unconditional_dict, timestep, viewmats=viewmats, Ks=Ks
+            )
 
-            flow_pred = flow_pred_uncond + self.args.guidance_scale * (
-                flow_pred_cond - flow_pred_uncond)
+            flow_pred = flow_pred_uncond + self.args.guidance_scale * (flow_pred_cond - flow_pred_uncond)
 
-            temp_x0 = sample_scheduler.step(
-                flow_pred.unsqueeze(0),
-                t,
-                latents.unsqueeze(0),
-                return_dict=False)[0]
+            temp_x0 = sample_scheduler.step(flow_pred.unsqueeze(0), t, latents.unsqueeze(0), return_dict=False)[0]
             latents = temp_x0.squeeze(0)
 
         x0 = latents
@@ -109,24 +98,18 @@ class BidirectionalDiffusionInferencePipeline(torch.nn.Module):
             return video
 
     def _initialize_sample_scheduler(self, noise):
-        if self.sample_solver == 'unipc':
+        if self.sample_solver == "unipc":
             sample_scheduler = FlowUniPCMultistepScheduler(
-                num_train_timesteps=self.num_train_timesteps,
-                shift=1,
-                use_dynamic_shifting=False)
-            sample_scheduler.set_timesteps(
-                self.sampling_steps, device=noise.device, shift=self.shift)
+                num_train_timesteps=self.num_train_timesteps, shift=1, use_dynamic_shifting=False
+            )
+            sample_scheduler.set_timesteps(self.sampling_steps, device=noise.device, shift=self.shift)
             self.timesteps = sample_scheduler.timesteps
-        elif self.sample_solver == 'dpm++':
+        elif self.sample_solver == "dpm++":
             sample_scheduler = FlowDPMSolverMultistepScheduler(
-                num_train_timesteps=self.num_train_timesteps,
-                shift=1,
-                use_dynamic_shifting=False)
+                num_train_timesteps=self.num_train_timesteps, shift=1, use_dynamic_shifting=False
+            )
             sampling_sigmas = get_sampling_sigmas(self.sampling_steps, self.shift)
-            self.timesteps, _ = retrieve_timesteps(
-                sample_scheduler,
-                device=noise.device,
-                sigmas=sampling_sigmas)
+            self.timesteps, _ = retrieve_timesteps(sample_scheduler, device=noise.device, sigmas=sampling_sigmas)
         else:
             raise NotImplementedError("Unsupported solver.")
         return sample_scheduler

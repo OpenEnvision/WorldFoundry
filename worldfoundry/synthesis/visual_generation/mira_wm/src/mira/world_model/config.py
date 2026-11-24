@@ -10,8 +10,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from mira.ml.image_config import ImageConfig
-from mira.world_model.actions_config import ActionConfig
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.ml.image_config import ImageConfig
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.actions_config import ActionConfig
 
 
 class LatentWorldModelConfig(BaseModel):

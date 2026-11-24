@@ -1,5 +1,4 @@
 # Adapted from Tencent Hunyuan-GameCraft-1.0, under the Tencent Hunyuan Community License.
-from typing import List, Union
 
 import torch
 
@@ -12,9 +11,9 @@ def get_nd_rotary_pos_embed_new(
     *args,
     theta=10000.0,
     use_real=False,
-    theta_rescale_factor: Union[float, List[float]] = 1.0,
-    interpolation_factor: Union[float, List[float]] = 1.0,
-    concat_dict={},
+    theta_rescale_factor: float | list[float] = 1.0,
+    interpolation_factor: float | list[float] = 1.0,
+    concat_dict={},  # noqa: B006 - Keeps the upstream default object and signature.
 ):
     """
     Generates multi-dimensional Rotary Position Embeddings (RoPE).

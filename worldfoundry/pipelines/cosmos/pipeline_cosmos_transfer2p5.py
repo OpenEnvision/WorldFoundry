@@ -56,7 +56,7 @@ class CosmosTransfer2p5Pipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "CosmosTransfer2p5Pipeline":
+    ) -> CosmosTransfer2p5Pipeline:
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
         options.update(required_components or {})
         options.update(kwargs)

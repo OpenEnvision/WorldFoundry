@@ -17,7 +17,6 @@ from ...contracts import DenoiserInput, DenoiserOutput
 from ...loaders import ModuleLoadSpec, NativeModuleLoader
 from ..networks.vchitect import VchitectXLTransformerModel
 
-
 VCHITECT_2B_CONFIG = {
     "sample_size": 128,
     "patch_size": 2,
@@ -35,6 +34,7 @@ VCHITECT_2B_CONFIG = {
 
 class VchitectDenoiser:
     """Vchitect-XL transformer adapter for the standard runner loop."""
+
     def __init__(self, model: VchitectXLTransformerModel) -> None:
         self.model = model
 

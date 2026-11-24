@@ -1,6 +1,6 @@
 # copied from: https://raw.githubusercontent.com/rail-berkeley/bridge_data_v2/main/jaxrl_m/networks/diffusion_nets.py
 import logging
-from typing import Callable, Optional, Sequence
+from collections.abc import Callable, Sequence
 
 import flax.linen as nn
 import jax
@@ -37,10 +37,8 @@ class ScoreActor(nn.Module):
         t_ff = self.time_preprocess(time)
         cond_enc = self.cond_encoder(t_ff, train=train)
         if obs_enc.shape[:-1] != cond_enc.shape[:-1]:
-            new_shape = cond_enc.shape[:-1] + (obs_enc.shape[-1],)
-            logging.debug(
-                "Broadcasting obs_enc from %s to %s", obs_enc.shape, new_shape
-            )
+            new_shape = cond_enc.shape[:-1] + (obs_enc.shape[-1],)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+            logging.debug("Broadcasting obs_enc from %s to %s", obs_enc.shape, new_shape)
             obs_enc = jnp.broadcast_to(obs_enc, new_shape)
 
         reverse_input = jnp.concatenate([cond_enc, obs_enc, actions], axis=-1)
@@ -75,7 +73,7 @@ class MLP(nn.Module):
     activation: Callable = nn.swish
     activate_final: bool = False
     use_layer_norm: bool = False
-    dropout_rate: Optional[float] = None
+    dropout_rate: float | None = None
 
     @nn.compact
     def __call__(self, x: jax.Array, train: bool = False) -> jax.Array:

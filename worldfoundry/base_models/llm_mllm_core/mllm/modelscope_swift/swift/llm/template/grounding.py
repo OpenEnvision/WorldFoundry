@@ -2,14 +2,14 @@ import colorsys
 import itertools
 import os
 from copy import deepcopy
-from typing import Any, List, Literal
+from typing import Any, Literal
 
 import requests
 from modelscope.hub.utils.utils import get_cache_dir
 from PIL import Image, ImageDraw, ImageFont
 
 
-def _shuffle_colors(nums: List[Any]) -> List[Any]:
+def _shuffle_colors(nums: list[Any]) -> list[Any]:
     if len(nums) == 1:
         return nums
 
@@ -20,9 +20,9 @@ def _shuffle_colors(nums: List[Any]) -> List[Any]:
     left = _shuffle_colors(left)
     right = _shuffle_colors(right)
     new_nums = []
-    for x, y in zip(left, right):
+    for x, y in zip(left, right, strict=False):
         new_nums += [x, y]
-    new_nums += left[len(right):] or right[len(left):]
+    new_nums += left[len(right) :] or right[len(left) :]
     return new_nums
 
 
@@ -34,13 +34,13 @@ def generate_colors():
 
 
 def download_file(url: str) -> str:
-    url = url.rstrip('/')
-    file_name = url.rsplit('/', 1)[-1]
-    cache_dir = os.path.join(get_cache_dir(), 'files')
+    url = url.rstrip("/")
+    file_name = url.rsplit("/", 1)[-1]
+    cache_dir = os.path.join(get_cache_dir(), "files")
     os.makedirs(cache_dir, exist_ok=True)
     req = requests.get(url)
     file_path = os.path.join(cache_dir, file_name)
-    with open(file_path, 'wb') as f:
+    with open(file_path, "wb") as f:
         f.write(req.content)
     return file_path
 
@@ -49,25 +49,24 @@ colors = generate_colors()
 color_mapping = {}
 
 
-def _calculate_brightness(image, region: List[int]):
+def _calculate_brightness(image, region: list[int]):
     cropped_image = image.crop(region)
-    grayscale_image = cropped_image.convert('L')
+    grayscale_image = cropped_image.convert("L")
     pixels = list(grayscale_image.getdata())
     average_brightness = sum(pixels) / len(pixels)
     return average_brightness
 
 
-def draw_bbox(image: Image.Image,
-              ref: List[str],
-              bbox: List[List[int]],
-              norm_bbox: Literal['norm1000', 'none'] = 'norm1000'):
+def draw_bbox(
+    image: Image.Image, ref: list[str], bbox: list[list[int]], norm_bbox: Literal["norm1000", "none"] = "norm1000"
+):
     bbox = deepcopy(bbox)
-    font_path = 'https://modelscope.cn/models/Qwen/Qwen-VL-Chat/resolve/master/SimSun.ttf'
+    font_path = "https://modelscope.cn/models/Qwen/Qwen-VL-Chat/resolve/master/SimSun.ttf"
     # norm bbox
     for i, box in enumerate(bbox):
         for i in range(len(box)):
             box[i] = int(box[i])
-        if norm_bbox == 'norm1000':
+        if norm_bbox == "norm1000":
             box[0] = box[0] / 1000 * image.width
             box[2] = box[2] / 1000 * image.width
             box[1] = box[1] / 1000 * image.height
@@ -75,8 +74,8 @@ def draw_bbox(image: Image.Image,
 
     draw = ImageDraw.Draw(image)
     # draw bbox
-    assert len(ref) == len(bbox), f'len(refs): {len(ref)}, len(bboxes): {len(bbox)}'
-    for (left, top, right, bottom), box_ref in zip(bbox, ref):
+    assert len(ref) == len(bbox), f"len(refs): {len(ref)}, len(bboxes): {len(bbox)}"
+    for (left, top, right, bottom), box_ref in zip(bbox, ref, strict=False):
         if box_ref not in color_mapping:
             color_mapping[box_ref] = colors[len(color_mapping) % len(colors)]
         color = color_mapping[box_ref]
@@ -84,8 +83,8 @@ def draw_bbox(image: Image.Image,
     # draw text
     file_path = download_file(font_path)
     font = ImageFont.truetype(file_path, 20)
-    for (left, top, _, _), box_ref in zip(bbox, ref):
+    for (left, top, _, _), box_ref in zip(bbox, ref, strict=False):
         brightness = _calculate_brightness(
-            image, [left, top, min(left + 100, image.width),
-                    min(top + 20, image.height)])
-        draw.text((left, top), box_ref, fill='white' if brightness < 128 else 'black', font=font)
+            image, [left, top, min(left + 100, image.width), min(top + 20, image.height)]
+        )
+        draw.text((left, top), box_ref, fill="white" if brightness < 128 else "black", font=font)

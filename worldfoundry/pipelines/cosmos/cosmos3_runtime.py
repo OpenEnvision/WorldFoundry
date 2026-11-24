@@ -25,10 +25,7 @@ def resolve_cosmos3_runtime_options(
     if device_map is None and not explicit_device_map and model_id == "cosmos3-super" and visible_gpus > 1:
         device_map = "balanced"
     if device_map and visible_gpus < 2 and model_id == "cosmos3-super":
-        raise ValueError(
-            "Cosmos3-Super device_map=balanced needs at least 2 visible GPUs; "
-            f"got {visible_gpus}"
-        )
+        raise ValueError(f"Cosmos3-Super device_map=balanced needs at least 2 visible GPUs; got {visible_gpus}")
     offload_raw = options.get("offload_mode")
     if offload_raw is None:
         offload_mode = "none" if device_map else "block"

@@ -16,13 +16,20 @@ _IDENTITY = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*")
 _BASELINE_SHA256 = "b4aaf03f6698aa451c67d608b5d100b4373462f8e4259cb6f4de4c8449d5e146"
 
 # Planned retirements retain their frozen records, not their uncovered-gap exception.
-# See the validation guide's planned model retirements policy (2026-10-16).
+# See the validation guide's planned model retirements policy (2026-10-16) and the
+# removal of models whose runtime depended on code outside the repository.
 _RETIRED_NATIVE_VARIANTS = frozenset(
     {
         "biwm-wan21@biwm-wan21",
         "biwm-wan22@biwm-wan22",
+        "egowm@egowm",
+        "hunyuanworld-voyager@hunyuanworld-voyager",
+        "hyworld-worldgen@hyworld-worldgen",
         "irasim@irasim",
+        "open-dreamer@open-dreamer",
         "pandora@pandora",
+        "shotstream@shotstream",
+        "wilddet3d@wilddet3d",
     }
 )
 
@@ -159,6 +166,19 @@ def _load_impact_module() -> ModuleType:
     return module
 
 
+def declared_environment_variants(root: Path, rows: list[dict]) -> dict[str, list[str]]:
+    """Resolve exact manifest owners, including bindings outside the video inventory."""
+    manifest = root / "tests/manual/geometry_regression_dependencies.json"
+    if not manifest.is_file():
+        return {}
+    mappings = _load_impact_module().environment_variants(json.loads(manifest.read_text()))
+    known = {variant_key(row) for row in [*rows, *outside_bindings(root, rows)]}
+    for variants in mappings.values():
+        if unknown := set(variants) - known:
+            raise ValueError(f"Environment ownership names unknown variants: {sorted(unknown)}")
+    return mappings
+
+
 def runtime_dependencies(rows: list[dict], root: Path) -> dict[str, set[str]]:
     """Include runtime declarations and subprocess source roots in ownership.
 
@@ -212,14 +232,29 @@ def affected_variants(
             raise ValueError(f"Affected native model is absent from the inventory: {identity}")
         affected.update(variant_key(row) for row in matched)
     declared_dependencies = runtime_dependencies(rows, root) if changed_paths else {}
+    environments = declared_environment_variants(root, rows) if changed_paths else {}
+    native = {variant_key(row) for row in rows}
+    impact = _load_impact_module()
+    manifest = root / "tests/manual/geometry_regression_dependencies.json"
+    declarations = json.loads(manifest.read_text()) if changed_paths and manifest.is_file() else {}
+    ignored_paths = declarations.get("ignored_paths", [])
+    evaluation_paths = impact.evaluation_only_paths(declarations)
+    if not isinstance(ignored_paths, list):
+        raise ValueError("Ignored paths must be a list of repository patterns")
+    for pattern in ignored_paths:
+        impact.relative_path(pattern)
     source_changes = []
     for path in changed_paths:
         pure = Path(path)
         if pure.is_absolute() or ".." in pure.parts or pure.as_posix() != path:
             raise ValueError(f"Invalid changed repository path: {path}")
+        if impact.matches(path, ignored_paths):
+            continue
         direct = [row for row in rows if path in {row.get("catalog_path"), row.get("binding_path")}]
         if direct:
             affected.update(variant_key(row) for row in direct)
+        elif path in environments:
+            affected.update(set(environments[path]) & native)
         elif path.startswith(("worldfoundry/core/", "worldfoundry/runtime/")) or path in {
             "worldfoundry/pipelines/pipeline_utils.py",
             "worldfoundry/operators/base_operator.py",
@@ -237,7 +272,7 @@ def affected_variants(
         ):
             source_changes.append(path)
     if source_changes:
-        graph = _load_impact_module().ImportGraph(root)
+        graph = impact.ImportGraph(root)
         closures = {}
         for row in rows:
             target = row.get("target")
@@ -258,7 +293,7 @@ def affected_variants(
             )
             if matched:
                 affected.update(variant_key(row) for row in matched)
-            else:
+            elif path not in evaluation_paths:
                 unknown.append(path)
             # Incomplete static analysis cannot rule out a changed dependency.
             affected.update(variant_key(row) for row in rows if closures[row.get("target")] is None)

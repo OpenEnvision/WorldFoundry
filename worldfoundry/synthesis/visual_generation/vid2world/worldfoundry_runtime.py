@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.synthesis.visual_generation.vid2world.config_paths import (
     runtime_config_root,
 )
-
 
 RUNTIME_DIR = Path(__file__).resolve().parent
 OFFICIAL_ENTRYPOINT = RUNTIME_DIR / "main" / "inference.py"
@@ -19,11 +19,6 @@ BLOCKED_REASON = (
 
 def runtime_root() -> Path:
     return RUNTIME_DIR
-
-
-def pythonpath_entries(*, runtime_root, options, profile) -> list[str]:
-    del runtime_root, options, profile
-    return []
 
 
 def _option(options: dict, *names: str, default: str | None = None) -> str | None:
@@ -67,7 +62,9 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile):
                 }
             )
     if entrypoint is None or not Path(entrypoint).is_file():
-        missing.append({"kind": "entrypoint", "path": str(entrypoint or ""), "reason": "Vid2World main/inference.py is missing"})
+        missing.append(
+            {"kind": "entrypoint", "path": str(entrypoint or ""), "reason": "Vid2World main/inference.py is missing"}
+        )
     return missing
 
 
@@ -75,27 +72,21 @@ def build_command(context):
     options = dict(context.get("options") or {})
     devices = int(options.get("devices", options.get("num_gpus", 1)))
     master_port = str(options.get("master_port", 12869))
-    return [
-        context["python"],
-        "-m",
-        "torch.distributed.run",
-        "--nproc_per_node",
-        str(devices),
-        "--nnodes",
-        "1",
-        "--master_addr",
-        "127.0.0.1",
-        "--master_port",
-        master_port,
-        context["entrypoint"],
-        "--base",
-        str(_config_path(options)),
-        "--val",
-        "--name",
-        str(options.get("name", "worldfoundry_infer")),
-        "--logdir",
-        context["output_dir"],
-        "--devices",
-        str(devices),
-        "lightning.trainer.num_nodes=1",
-    ]
+    return package_module_command(
+        "worldfoundry.synthesis.visual_generation.vid2world.main.inference",
+        [
+            "--base",
+            str(_config_path(options)),
+            "--val",
+            "--name",
+            str(options.get("name", "worldfoundry_infer")),
+            "--logdir",
+            context["output_dir"],
+            "--devices",
+            str(devices),
+            "lightning.trainer.num_nodes=1",
+        ],
+        python_executable=context["python"],
+        nproc_per_node=devices,
+        launcher_options=("--nnodes", "1", "--master_addr", "127.0.0.1", "--master_port", master_port),
+    )

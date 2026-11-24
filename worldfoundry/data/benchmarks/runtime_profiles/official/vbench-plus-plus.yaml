@@ -22,20 +22,20 @@ base_model_dependency_preflight:
   - Full VBench++ parity still depends on upstream variant-specific official runtime assets.
   missing: []
 preflight_command: 
-  PYTHONPATH=worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime:worldfoundry/evaluation/tasks/execution/runners/vbench/runtime:.
-  ${WORLDFOUNDRY_UNIFIED_PYTHON} -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile 
+  PYTHONPATH=worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime:worldfoundry/evals/tasks/execution/runners/vbench/runtime:.
+  ${WORLDFOUNDRY_UNIFIED_PYTHON} -m worldfoundry.evals.tasks.execution.orchestration.runtime_preflight --profile 
   vbench-plus-plus --manifest worldfoundry/data/benchmarks/runtime_profiles/official/vbench-plus-plus.yaml --output-dir 
   tmp/worldfoundry_preflight/vbench-plus-plus --json
 python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
-- worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
-- worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
+- worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
+- worldfoundry/evals/tasks/execution/runners/vbench/runtime
 required_assets:
   generated_artifact_examples:
   - ${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}
   in_tree_source_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
-  - worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
+  - worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
+  - worldfoundry/evals/tasks/execution/runners/vbench/runtime
   task_yaml: worldfoundry/data/benchmarks/tasks/external/vbench-plus-plus.yaml
   scorecard_paths:
   - tmp/worldfoundry_audit/remaining_benchmarks/vbenchpp_long_temporal_flickering_unified_20260621_002/scorecard.json
@@ -67,13 +67,13 @@ optional_packages:
 - retinaface-py==0.0.2
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/vbench-plus-plus.yaml
 - id: in_tree_vbench_source
-  path: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
+  path: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
 - id: base_vbench_runtime_source
-  path: worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
+  path: worldfoundry/evals/tasks/execution/runners/vbench/runtime
 requires_cuda_visibility: true
 bounded_official_gpu_validation:
   status: verified
@@ -88,7 +88,7 @@ bounded_official_gpu_validation:
   full_suite_verified: false
   runtime_env: conda/envs/worldfoundry-unified-cu128
   python: ${WORLDFOUNDRY_UNIFIED_PYTHON}
-  vbench_root: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
+  vbench_root: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
   videos_path: ${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}
   verified: true
   scope: bounded_official_gpu_validation
@@ -96,7 +96,7 @@ bounded_official_gpu_validation:
     tmp/worldfoundry_audit/remaining_benchmarks/vbenchpp_long_temporal_flickering_unified_20260621_002/scorecard.json
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-- worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
 - --benchmark-id
 - vbench-plus-plus
 - --variant

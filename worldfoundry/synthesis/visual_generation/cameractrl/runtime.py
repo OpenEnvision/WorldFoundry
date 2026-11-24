@@ -10,21 +10,19 @@ and specialized CameraCtrl components.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from worldfoundry.evaluation.utils import worldfoundry_data_path
+from worldfoundry.core.io.paths import package_data_path
 from worldfoundry.runtime.env import resolve_hfd_root
 
-DEFAULT_CAMERACTRL_CONFIG = worldfoundry_data_path(
-    "models",
-    "runtime", "configs",
-    "camera_control",
-    "cameractrl_256_384.yaml",
+DEFAULT_CAMERACTRL_CONFIG = package_data_path(
+    "models", "runtime", "configs", "camera_control", "cameractrl_256_384.yaml"
 )
 DEFAULT_SHARED_HFD_ROOT = resolve_hfd_root()
 DEFAULT_SD15_ROOT = Path(
@@ -88,9 +86,7 @@ class CameraCtrlRuntime:
         self.pose_adaptor_ckpt = str(Path(pose_adaptor_ckpt).expanduser())
         self.model_config = str(Path(model_config).expanduser())
         self.motion_module_ckpt = None if motion_module_ckpt is None else str(Path(motion_module_ckpt).expanduser())
-        self.motion_adapter_ckpt = (
-            None if motion_adapter_ckpt is None else str(Path(motion_adapter_ckpt).expanduser())
-        )
+        self.motion_adapter_ckpt = None if motion_adapter_ckpt is None else str(Path(motion_adapter_ckpt).expanduser())
         self.image_lora_ckpt = None if image_lora_ckpt is None else str(Path(image_lora_ckpt).expanduser())
         self.image_lora_rank = int(image_lora_rank)
         self.unet_subfolder = unet_subfolder
@@ -107,7 +103,7 @@ class CameraCtrlRuntime:
         device: str | None = None,
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "CameraCtrlRuntime":
+    ) -> CameraCtrlRuntime:
         """
         Builds a lazy CameraCtrl runtime instance from pretrained model options.
 
@@ -176,7 +172,7 @@ class CameraCtrlRuntime:
             raise RuntimeError("CameraCtrl requires CUDA because the official inference path moves modules to CUDA.")
         model_configs = OmegaConf.load(self.model_config)
         unet_additional_kwargs = (
-            model_configs["unet_additional_kwargs"] if "unet_additional_kwargs" in model_configs else None
+            model_configs["unet_additional_kwargs"] if "unet_additional_kwargs" in model_configs else None  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
         )
         from .cameractrl_runtime.inference import get_pipeline
 

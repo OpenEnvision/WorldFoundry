@@ -13,11 +13,11 @@ After the [Quickstart](/docs/quickstart) environment is sourced, generate one in
 
 ```bash
 bash scripts/inference/prepare_model_infer.sh matrix-game-2 --download
-worldfoundry-eval run matrix-game-2-universal-action-validation \
+wf run matrix-game-2-universal-action-validation \
   --pipeline.task-profile official-universal-image
 ```
 
-That run justifies one claim: this configuration produced an inspectable artifact. It does not mean a benchmark completed. Everyday commands use `worldfoundry-eval run`. Layers and inventory are in [Design](/docs/overview/design).
+That run justifies one claim: this configuration produced an inspectable artifact. It does not mean a benchmark completed. Everyday commands use `wf run`. Layers and inventory are in [Design](/docs/overview/design).
 
 <h2 id="operational-definition">Operational definition</h2>
 

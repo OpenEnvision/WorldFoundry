@@ -22,8 +22,12 @@ adaptations of TorchAO. See the third-party notices for the pinned source.
 
 from __future__ import annotations
 
+from functools import lru_cache
+from typing import Any, cast
+
 import torch
 import torch.nn.functional as F
+import torch.version
 from torch import nn
 
 from worldfoundry.core.kernels.capabilities import kernel_device_profile
@@ -62,13 +66,9 @@ def _f32_to_floatx_unpacked(value: torch.Tensor, exponent_bits: int, mantissa_bi
     max_int = _n_ones(exponent_bits + mantissa_bits)
     sign_mask = 1 << (exponent_bits + mantissa_bits)
     magic_adder = _n_ones(fp32_mantissa_bits - mantissa_bits - 1)
-    max_normal = 2 ** (_n_ones(exponent_bits) - exponent_bias) * (
-        _n_ones(mantissa_bits + 1) / (2**mantissa_bits)
-    )
+    max_normal = 2 ** (_n_ones(exponent_bits) - exponent_bias) * (_n_ones(mantissa_bits + 1) / (2**mantissa_bits))
     min_normal = 2 ** (1 - exponent_bias)
-    denorm_exponent = (
-        fp32_exponent_bias - exponent_bias + fp32_mantissa_bits - mantissa_bits + 1
-    )
+    denorm_exponent = fp32_exponent_bias - exponent_bias + fp32_mantissa_bits - mantissa_bits + 1
     denorm_mask_int = denorm_exponent << fp32_mantissa_bits
     denorm_mask_float = torch.tensor(
         denorm_mask_int,
@@ -88,18 +88,14 @@ def _f32_to_floatx_unpacked(value: torch.Tensor, exponent_bits: int, mantissa_bi
 
     normal_value = magnitude.view(torch.int32)
     mantissa_odd = (normal_value >> (fp32_mantissa_bits - mantissa_bits)) & 1
-    normal_value = normal_value + (
-        ((exponent_bias - fp32_exponent_bias) << fp32_mantissa_bits) + magic_adder
-    )
+    normal_value = normal_value + (((exponent_bias - fp32_exponent_bias) << fp32_mantissa_bits) + magic_adder)
     normal_value = normal_value + mantissa_odd
     normal_value = (normal_value >> (fp32_mantissa_bits - mantissa_bits)).to(torch.uint8)
 
     encoded = torch.full_like(magnitude, max_int, dtype=torch.uint8)
     encoded = torch.where(denormal, denormal_value, encoded)
     encoded = torch.where(normal, normal_value, encoded)
-    encoded_sign = sign >> (
-        fp32_mantissa_bits + fp32_exponent_bits - mantissa_bits - exponent_bits
-    )
+    encoded_sign = sign >> (fp32_mantissa_bits + fp32_exponent_bits - mantissa_bits - exponent_bits)
     encoded_sign = encoded_sign.to(torch.uint8) & sign_mask
     return encoded | encoded_sign
 
@@ -245,6 +241,39 @@ def _nvfp4_hardware_eligible(device: torch.device) -> bool:
     return profile.compute_capability in _NVFP4_KNOWN_CAPABILITIES
 
 
+@lru_cache(maxsize=1)
+def ltx_nvfp4_kernels() -> Any:
+    """Resolve the optional high-nibble-first cuBLASLt provider on explicit use."""
+    try:
+        from ltx_kernels import nvfp4
+    except ImportError as error:
+        raise RuntimeError(
+            "nvfp4-cast and nvfp4-prequant require ltx-kernels with its NVFP4 extension; "
+            "install ltx-kernels for the current PyTorch/CUDA build (TORCH_CUDA_ARCH_LIST='10.0')"
+        ) from error
+    if reason := nvfp4.unavailable_reason():
+        raise RuntimeError(f"ltx-kernels NVFP4 is unavailable: {reason}")
+    return nvfp4
+
+
+def quantize_nvfp4_ltx(
+    weight: torch.Tensor,
+    *,
+    device: torch.device | str = "cuda",
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Pack BF16 weights using the LTX provider's high-first nibbles and tiled scales.
+
+    Adapted from Lightricks/LTX-2@a95ab856 (LTX-2.x Community License).
+    The provider's packing and BF16 rounding are distinct from the ATen path.
+    """
+    kernels = ltx_nvfp4_kernels()
+    source_device = weight.device
+    value = weight.detach().to(device=device, dtype=torch.bfloat16)
+    scale = kernels.per_tensor_decode_scale(value)
+    packed, block_scales = kernels.quantize_nvfp4(value, scale)
+    return packed.to(source_device), block_scales.to(source_device), scale.to(source_device)
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # NVFP4Linear — packed weights + optional dense copy; OOM never falls back
 # ──────────────────────────────────────────────────────────────────────────
@@ -252,6 +281,12 @@ def _nvfp4_hardware_eligible(device: torch.device) -> bool:
 
 class NVFP4Linear(nn.Module):
     """Dynamic-activation NVFP4 linear with a dense cross-GPU fallback."""
+
+    weight: torch.Tensor | None
+    bias: torch.Tensor | None
+    weight_fp4: torch.Tensor
+    weight_scale: torch.Tensor
+    weight_global_scale: torch.Tensor
 
     def __init__(
         self,
@@ -265,6 +300,8 @@ class NVFP4Linear(nn.Module):
         if weight.ndim != 2 or weight.shape[1] % 32 or weight.shape[0] % 16:
             raise ValueError("NVFP4Linear requires in_features % 32 == 0 and out_features % 16 == 0")
         packed, raw_scales, global_scale = quantize_nvfp4(weight)
+        self.provider = "aten"
+        self.register_buffer("input_scale", None)
         self.in_features = int(weight.shape[1])
         self.out_features = int(weight.shape[0])
         self.low_precision_enabled = True
@@ -292,9 +329,69 @@ class NVFP4Linear(nn.Module):
         self.last_fallback_reason = None
 
     @classmethod
-    def from_linear(cls, layer: nn.Linear, *, keep_dense_fallback: bool = True) -> "NVFP4Linear":
+    def from_linear(cls, layer: nn.Linear, *, keep_dense_fallback: bool = True) -> NVFP4Linear:
         """Copy weight/bias from a dense ``nn.Linear``; the source layer is not mutated."""
         return cls(layer.weight, layer.bias, keep_dense_fallback=keep_dense_fallback)
+
+    @classmethod
+    def from_ltx_packed(
+        cls,
+        weight: torch.Tensor,
+        block_scales: torch.Tensor,
+        global_scale: torch.Tensor,
+        bias: torch.Tensor | None = None,
+        *,
+        input_scale: torch.Tensor | None = None,
+    ) -> NVFP4Linear:
+        """Load high-first NVFP4 codes with fixed-1 or calibrated activation scale.
+
+        ``block_scales`` are raw E4M3 bytes in cuBLAS 128x4 tiled layout.
+        ``input_scale=None`` selects fixed-1 activation scaling. Calibrated
+        checkpoints supply their scalar scale. Neither variant recalibrates
+        weights or falls back to a numerically different provider.
+        """
+        if weight.dtype != torch.uint8 or weight.shape[1] * 2 % 16:
+            raise ValueError("LTX packed NVFP4 requires uint8 weights with in_features divisible by 16")
+        module = cls.__new__(cls)
+        nn.Module.__init__(module)
+        module.provider = "ltx_kernels"
+        module.in_features = int(weight.shape[1]) * 2
+        module.out_features = int(weight.shape[0])
+        module.low_precision_enabled = True
+        module.register_buffer("weight_fp4", weight)
+        module.register_buffer("weight_scale", block_scales.view(torch.uint8).contiguous())
+        module.register_buffer("weight_global_scale", global_scale.float().reshape(()))
+        module.register_buffer("input_scale", None if input_scale is None else input_scale.float().reshape(()))
+        module.register_buffer("weight", None)
+        module.register_buffer("bias", bias)
+        module._hardware_eligible = weight.device.type == "cuda"
+        module._worldfoundry_quantization_layer = True
+        module.low_precision_kernel_calls = 0
+        module.dense_fallback_calls = 0
+        module.request_low_precision_kernel_calls = 0
+        module.request_dense_fallback_calls = 0
+        module._request_window_active = False
+        module.last_fallback_reason = None
+        return module
+
+    def _forward_ltx(self, input: torch.Tensor) -> torch.Tensor:
+        """Run the released fixed/static-scale cuBLASLt NVFP4 computation."""
+        kernels = ltx_nvfp4_kernels()
+        flattened = input.reshape(-1, self.in_features)
+        if flattened.dtype not in (torch.bfloat16, torch.float16):
+            flattened = flattened.to(torch.bfloat16)
+        output = kernels.linear_nvfp4(
+            flattened,
+            self.weight_fp4,
+            self.weight_scale,
+            self.weight_global_scale,
+            bias=self.bias,
+            act_scale=self.input_scale,
+        )
+        if not _is_compiling():
+            self.low_precision_kernel_calls += 1
+            self.request_low_precision_kernel_calls += 1
+        return output.view(*input.shape[:-1], self.out_features)
 
     def _apply(self, fn, recurse: bool = True):
         """Move device with the tree but keep packed FP4/E4M3/FP32 scales off ``to(dtype=)``."""
@@ -304,20 +401,25 @@ class NVFP4Linear(nn.Module):
         weight_fp4 = self.weight_fp4
         weight_scale = self.weight_scale
         weight_global_scale = self.weight_global_scale
+        input_scale = self.input_scale
         result = super()._apply(fn, recurse=recurse)
         target_device = self.weight_fp4.device
         self.weight_fp4 = weight_fp4.to(device=target_device)
         self.weight_scale = weight_scale.to(device=target_device)
         self.weight_global_scale = weight_global_scale.to(device=target_device)
-        self._hardware_eligible = _nvfp4_hardware_eligible(self.weight_fp4.device)
+        if input_scale is not None:
+            self.input_scale = input_scale.to(device=target_device)
+        self._hardware_eligible = (
+            self.weight_fp4.device.type == "cuda"
+            if self.provider == "ltx_kernels"
+            else _nvfp4_hardware_eligible(self.weight_fp4.device)
+        )
         return result
 
     def _dense(self, input: torch.Tensor, reason: str) -> torch.Tensor:
         """Exact ``F.linear`` on the retained dense copy; fatal if that copy was dropped."""
         if self.weight is None:
-            raise RuntimeError(
-                "NVFP4 is unavailable and no dense fallback was retained: " + reason
-            )
+            raise RuntimeError("NVFP4 is unavailable and no dense fallback was retained: " + reason)
         if not _is_compiling():
             self.dense_fallback_calls += 1
             self.request_dense_fallback_calls += 1
@@ -345,6 +447,8 @@ class NVFP4Linear(nn.Module):
             raise ValueError(f"expected input width {self.in_features}, got {input.shape[-1]}")
         if input.numel() == 0:
             return input.new_empty((*input.shape[:-1], self.out_features))
+        if self.provider == "ltx_kernels":
+            return self._forward_ltx(input)
         eligible = (
             self.low_precision_enabled
             and self._hardware_eligible
@@ -371,7 +475,8 @@ class NVFP4Linear(nn.Module):
                 global_scale=input_global_scale,
             )
             input_scale = nvfp4_swizzle_scales(input_raw_scale).contiguous()
-        fp4_dtype = torch.float4_e2m1fn_x2
+        # Hardware eligibility requires a torch build exposing the NVFP4 storage dtype.
+        fp4_dtype = cast(Any, torch).float4_e2m1fn_x2
         try:
             # Call the ATen operator directly: PyTorch 2.10's public Python
             # ``F.scaled_mm`` wrapper is not Dynamo-allowlisted, while the
@@ -411,14 +516,10 @@ class NVFP4Linear(nn.Module):
     def runtime_report(self) -> dict[str, object]:
         """Request-window counters when active; lifetime totals otherwise."""
         low_precision_calls = int(
-            self.request_low_precision_kernel_calls
-            if self._request_window_active
-            else self.low_precision_kernel_calls
+            self.request_low_precision_kernel_calls if self._request_window_active else self.low_precision_kernel_calls
         )
         dense_calls = int(
-            self.request_dense_fallback_calls
-            if self._request_window_active
-            else self.dense_fallback_calls
+            self.request_dense_fallback_calls if self._request_window_active else self.dense_fallback_calls
         )
         if low_precision_calls and dense_calls:
             effective = "mixed-nvfp4-and-dense"
@@ -503,5 +604,6 @@ __all__ = [
     "nvfp4_swizzle_scales",
     "nvfp4_unswizzle_scales",
     "quantize_nvfp4",
+    "quantize_nvfp4_ltx",
     "replace_linear_with_nvfp4",
 ]

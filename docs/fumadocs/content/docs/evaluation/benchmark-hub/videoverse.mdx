@@ -1,20 +1,20 @@
 ---
 title: VideoVerse
-description: "OPPO 300-prompt world-model T2V bench: event-LCS plus binary QA. WorldFoundry runs Gemini / URL / local VLM judges; it does not invent a board."
+description: "OPPO 300-prompt world-model T2V bench: event-LCS plus binary QA. WorldFoundry runs Gemini / URL / local VLM judges."
 ---
 
 VideoVerse (OPPO Research Institute, with Sun Yat-sen and HK PolyU) asks how far a text-to-video generator is from a **world model**. Official size: **300 prompts**, each decomposed into ordered events with binary evaluation questions across **ten dimensions**. Families include QA accuracy, event coverage, temporal causality, world-knowledge consistency, and static / dynamic scene consistency. Judging combines **event-LCS** over detected event order with per-question verification.
 
 Paper: [VideoVerse](https://arxiv.org/abs/2510.08398). Project: [naptmn.cn/Homepage_of_VideoVerse](https://www.naptmn.cn/Homepage_of_VideoVerse/). Code: [Zeqing-Wang/VideoVerse](https://github.com/Zeqing-Wang/VideoVerse). License: Apache-2.0.
 
-WorldFoundry **runs the judge in tree** (Gemini default, URL, or local VLM) and normalizes `eval_res.json` through official event-LCS / verification logic. Prompt manifests are bundled. `--strict` enforces the canonical 300-prompt suite. Official path is integrated; a full credentialed suite is **not** release-verified.
+WorldFoundry **runs the judge in tree** (Gemini default, URL, or local VLM) and normalizes `eval_res.json` through official event-LCS / verification logic. Prompt manifests are bundled. `--strict` enforces the canonical 300-prompt suite.
 
 <BenchmarkPageSections id="videoverse" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id videoverse \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -25,7 +25,7 @@ worldfoundry-eval zoo benchmark-run \
 
 `--run-official` judges generated videos against bundled `prompts_of_VideoVerse.json` / decomposed variant (`GEMINI_API_KEY` or `WORLDFOUNDRY_VIDEOVERSE_GEMINI_API_KEY`). Use `--prompt-manifest` only for non-standard assets. Default import: `WORLDFOUNDRY_VIDEOVERSE_RESULTS_PATH`. Shared asset: `videoverse_dataset_assets`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/videoverse.yaml`, `worldfoundry/data/benchmarks/assets/videoverse/prompt/`.
+Manifest and prompt assets: `worldfoundry/data/benchmarks/tasks/external/videoverse.yaml`, `worldfoundry/data/benchmarks/assets/videoverse/prompt/`.
 
 Outputs include `scorecard.json` (primary `videoverse_average`), `eval_res.json`, and `judge_responses.jsonl`.
 

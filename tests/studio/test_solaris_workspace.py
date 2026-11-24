@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from worldfoundry.studio.inference.catalog import _solaris_default_load_kwargs, _solaris_default_ref
+from worldfoundry.studio.inference.catalog.models.world_models import _solaris_default_load_kwargs, _solaris_default_ref
 
 
 def test_solaris_workspace_uses_vendored_runtime_and_checkpoint_not_source_url() -> None:

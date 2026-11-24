@@ -1,10 +1,10 @@
 import os
-from typing import List, Optional
 
 import torch
 
-from worldfoundry.base_models.diffusion_model.schedulers import (
-    InferenceFlowMatchScheduler,
+from worldfoundry.base_models.diffusion_model.loaders.wan_variant import (
+    load_wan_config,
+    load_wan_transformer,
 )
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.resident import (
     WanVAEWrapper as _WanVAEWrapper,
@@ -14,17 +14,14 @@ from worldfoundry.base_models.diffusion_model.models.encoders.wan.resident impor
 )
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.moverse.causal import (
     CausalWanModel,
+    causal_rope_apply_shared_height,
+    parse_memrope_cfg,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.moverse.mmdit import (
     CausalMMDiTModel,
 )
-from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.moverse.causal import (
-    causal_rope_apply_shared_height,
-    parse_memrope_cfg,
-)
-from worldfoundry.base_models.diffusion_model.loaders.wan_variant import (
-    load_wan_config,
-    load_wan_transformer,
+from worldfoundry.base_models.diffusion_model.schedulers import (
+    InferenceFlowMatchScheduler,
 )
 
 
@@ -49,22 +46,22 @@ class WanVAEWrapper(_WanVAEWrapper):
 
 class WanDiffusionWrapper(torch.nn.Module):
     def __init__(
-            self,
-            model_name="Wan2.1-T2V-1.3B",
-            timestep_shift=8.0,
-            is_causal=False,
-            local_attn_size=-1,
-            sink_size=0,
-            token_concat_and_share_rope=False,
-            recam_concat=False,
-            skip_pretrained=False,
-            is_mmdit=False,
-            double_stream_layers=None,
-            cross_attn_norm=True,
-            fixed_timestep=-1,
-            online_rope_indexing=False,
-            memrope=None,
-            rope_precision="fp64",
+        self,
+        model_name="Wan2.1-T2V-1.3B",
+        timestep_shift=8.0,
+        is_causal=False,
+        local_attn_size=-1,
+        sink_size=0,
+        token_concat_and_share_rope=False,
+        recam_concat=False,
+        skip_pretrained=False,
+        is_mmdit=False,
+        double_stream_layers=None,
+        cross_attn_norm=True,
+        fixed_timestep=-1,
+        online_rope_indexing=False,
+        memrope=None,
+        rope_precision="fp64",
     ):
         """
         Args:
@@ -117,23 +114,32 @@ class WanDiffusionWrapper(torch.nn.Module):
             # Load architecture config only — no pretrained weights.
             # The caller is responsible for loading a checkpoint afterwards.
             if self.is_mmdit:
-                _double = double_stream_layers if double_stream_layers is not None else [0, 1, 4, 8, 12, 16, 20, 24, 28, 29]
+                _double = (
+                    double_stream_layers if double_stream_layers is not None else [0, 1, 4, 8, 12, 16, 20, 24, 28, 29]
+                )
                 self.model = CausalMMDiTModel(
-                    local_attn_size=local_attn_size, sink_size=sink_size,
-                    double_stream_layers=_double, cross_attn_norm=cross_attn_norm)
+                    local_attn_size=local_attn_size,
+                    sink_size=sink_size,
+                    double_stream_layers=_double,
+                    cross_attn_norm=cross_attn_norm,
+                )
             else:
                 cfg = load_wan_config(model_path)
-                self.model = CausalWanModel.from_config(
-                    cfg, local_attn_size=local_attn_size, sink_size=sink_size)
+                self.model = CausalWanModel.from_config(cfg, local_attn_size=local_attn_size, sink_size=sink_size)
             print(f"Initialised {model_name} architecture only (skip_pretrained=True).")
         else:
             if self.is_mmdit:
-                _double = double_stream_layers if double_stream_layers is not None else [0, 1, 4, 8, 12, 16, 20, 24, 28, 29]
+                _double = (
+                    double_stream_layers if double_stream_layers is not None else [0, 1, 4, 8, 12, 16, 20, 24, 28, 29]
+                )
                 # Build from pretrained CausalWanModel, then load weights via MMDiT loader
                 self.model = CausalMMDiTModel(
-                    local_attn_size=local_attn_size, sink_size=sink_size,
-                    double_stream_layers=_double, cross_attn_norm=cross_attn_norm)
-                print(f"CausalMMDiTModel initialised (weights must be loaded separately via load_causal_mmdit_weights).")
+                    local_attn_size=local_attn_size,
+                    sink_size=sink_size,
+                    double_stream_layers=_double,
+                    cross_attn_norm=cross_attn_norm,
+                )
+                print("CausalMMDiTModel initialised (weights must be loaded separately via load_causal_mmdit_weights).")
             else:
                 self.model = load_wan_transformer(
                     CausalWanModel,
@@ -147,9 +153,7 @@ class WanDiffusionWrapper(torch.nn.Module):
 
         self.fixed_timestep = fixed_timestep
 
-        self.scheduler = InferenceFlowMatchScheduler(
-            shift=timestep_shift, sigma_min=0.0, extra_one_step=True
-        )
+        self.scheduler = InferenceFlowMatchScheduler(shift=timestep_shift, sigma_min=0.0, extra_one_step=True)
         self.scheduler.set_timesteps(1000)
 
         # Default seq_len for [B, F=21, C=16, H=60, W=104]; recomputed dynamically
@@ -163,7 +167,7 @@ class WanDiffusionWrapper(torch.nn.Module):
         # recam_concat uses standard RoPE over the doubled frame sequence — no injection needed.
         if token_concat_and_share_rope and not recam_concat:
             self.model.set_rope_fn(causal_rope_fn=causal_rope_apply_shared_height)
-            print(f"Applied shared-height RoPE variant via set_rope_fn().")
+            print("Applied shared-height RoPE variant via set_rope_fn().")
         elif recam_concat:
             print("recam_concat=True: frame-dim concat, standard RoPE (no injection).")
 
@@ -178,23 +182,26 @@ class WanDiffusionWrapper(torch.nn.Module):
             else:
                 raise ValueError(
                     "online_rope_indexing=True requires is_causal=True and non-MMDiT model "
-                    f"(got is_causal={is_causal}, is_mmdit={self.is_mmdit}).")
+                    f"(got is_causal={is_causal}, is_mmdit={self.is_mmdit})."
+                )
 
         # MemRoPE Phase 2 — dual-EMA Memory Tokens with per-half (gen/cond) three-tier cache.
         # Requires height-concat conditioning (token_concat_and_share_rope). Supersedes the
         # online_rope_indexing path. See SUMMARY_MEMROPE.md.
         self.memrope_cfg = parse_memrope_cfg(memrope)
         if self.memrope_cfg is not None:
-            if not (not self.is_mmdit and token_concat_and_share_rope
-                    and hasattr(self.model, "set_memrope")):
+            if not (not self.is_mmdit and token_concat_and_share_rope and hasattr(self.model, "set_memrope")):
                 raise ValueError(
                     "memrope requires is_causal=True, non-MMDiT, and "
                     "token_concat_and_share_rope=True (height-concat conditioning). "
                     f"Got is_causal={is_causal}, is_mmdit={self.is_mmdit}, "
-                    f"token_concat_and_share_rope={token_concat_and_share_rope}.")
+                    f"token_concat_and_share_rope={token_concat_and_share_rope}."
+                )
             self.model.set_memrope(self.memrope_cfg)
-            print(f"Enabled MemRoPE (set_memrope): fused={self.memrope_cfg['fused']} "
-                  f"gen={self.memrope_cfg['gen']} cond={self.memrope_cfg['cond']}.")
+            print(
+                f"Enabled MemRoPE (set_memrope): fused={self.memrope_cfg['fused']} "
+                f"gen={self.memrope_cfg['gen']} cond={self.memrope_cfg['cond']}."
+            )
 
         # RoPE compute precision for the AR inference rope calls (online + memrope).
         # fp64 (default) = exact; fp32 ≈ 2x faster rope, tiny precision change.
@@ -203,8 +210,10 @@ class WanDiffusionWrapper(torch.nn.Module):
         if str(rope_precision).lower() not in ("fp64", "float64"):
             print(f"RoPE compute precision set to {rope_precision}.")
 
-        print(f"WanDiffusionWrapper for {model_name} initialised with is_causal={is_causal}, recam_concat={recam_concat}, token_concat_and_share_rope={token_concat_and_share_rope}, is_mmdit={self.is_mmdit}."
-              f" local_attn_size={local_attn_size}, sink_size={sink_size}, cross_attn_norm={cross_attn_norm}, fixed_timestep={fixed_timestep}, online_rope_indexing={online_rope_indexing}.")
+        print(
+            f"WanDiffusionWrapper for {model_name} initialised with is_causal={is_causal}, recam_concat={recam_concat}, token_concat_and_share_rope={token_concat_and_share_rope}, is_mmdit={self.is_mmdit}."
+            f" local_attn_size={local_attn_size}, sink_size={sink_size}, cross_attn_norm={cross_attn_norm}, fixed_timestep={fixed_timestep}, online_rope_indexing={online_rope_indexing}."
+        )
 
     def _compute_seq_len(self, model_input_c_first: torch.Tensor) -> int:
         """
@@ -221,11 +230,13 @@ class WanDiffusionWrapper(torch.nn.Module):
 
     def forward(
         self,
-        noisy_image_or_video: torch.Tensor, conditional_dict: dict,
-        timestep: torch.Tensor, kv_cache: Optional[List[dict]] = None,
-        crossattn_cache: Optional[List[dict]] = None,
-        current_start: Optional[int] = None,
-        cond_latent: Optional[torch.Tensor] = None,
+        noisy_image_or_video: torch.Tensor,
+        conditional_dict: dict,
+        timestep: torch.Tensor,
+        kv_cache: list[dict] | None = None,
+        crossattn_cache: list[dict] | None = None,
+        current_start: int | None = None,
+        cond_latent: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -242,7 +253,9 @@ class WanDiffusionWrapper(torch.nn.Module):
 
         # [B, F] -> [B]
         if self.fixed_timestep >= 0:
-            input_timestep = torch.full((timestep.shape[0],), self.fixed_timestep, device=timestep.device, dtype=timestep.dtype)
+            input_timestep = torch.full(
+                (timestep.shape[0],), self.fixed_timestep, device=timestep.device, dtype=timestep.dtype
+            )
         else:
             input_timestep = timestep
 

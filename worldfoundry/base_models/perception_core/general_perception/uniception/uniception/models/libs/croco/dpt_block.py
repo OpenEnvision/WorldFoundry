@@ -6,12 +6,14 @@
 # References:
 # https://github.com/isl-org/DPT
 # https://github.com/EPFL-VILAB/MultiMAE/blob/main/multimae/output_adapters.py
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange, repeat
+from einops import rearrange
+
+from worldfoundry.base_models.three_dimensions.depth.midas.fusion import Interpolate as Interpolate
 
 
 def pair(t):
@@ -25,7 +27,7 @@ def make_scratch(in_shape, out_shape, groups=1, expand=False):
     out_shape2 = out_shape
     out_shape3 = out_shape
     out_shape4 = out_shape
-    if expand == True:
+    if expand == True:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
         out_shape1 = out_shape
         out_shape2 = out_shape * 2
         out_shape3 = out_shape * 4
@@ -115,7 +117,7 @@ class ResidualConvUnit_custom(nn.Module):
     """Residual convolution module."""
 
     def __init__(self, features, activation, bn):
-        """Init.
+        """
         Args:
             features (int): number of features
         """
@@ -145,7 +147,7 @@ class ResidualConvUnit_custom(nn.Module):
             groups=self.groups,
         )
 
-        if self.bn == True:
+        if self.bn == True:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             self.bn1 = nn.BatchNorm2d(features)
             self.bn2 = nn.BatchNorm2d(features)
 
@@ -154,7 +156,7 @@ class ResidualConvUnit_custom(nn.Module):
         self.skip_add = nn.quantized.FloatFunctional()
 
     def forward(self, x):
-        """Forward pass.
+        """
         Args:
             x (tensor): input
         Returns:
@@ -163,12 +165,12 @@ class ResidualConvUnit_custom(nn.Module):
 
         out = self.activation(x)
         out = self.conv1(out)
-        if self.bn == True:
+        if self.bn == True:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             out = self.bn1(out)
 
         out = self.activation(out)
         out = self.conv2(out)
-        if self.bn == True:
+        if self.bn == True:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             out = self.bn2(out)
 
         if self.groups > 1:
@@ -190,11 +192,11 @@ class FeatureFusionBlock_custom(nn.Module):
         align_corners=True,
         width_ratio=1,
     ):
-        """Init.
+        """
         Args:
             features (int): number of features
         """
-        super(FeatureFusionBlock_custom, self).__init__()
+        super().__init__()
         self.width_ratio = width_ratio
 
         self.deconv = deconv
@@ -204,7 +206,7 @@ class FeatureFusionBlock_custom(nn.Module):
 
         self.expand = expand
         out_features = features
-        if self.expand == True:
+        if self.expand == True:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             out_features = features // 2
 
         self.out_conv = nn.Conv2d(
@@ -223,7 +225,7 @@ class FeatureFusionBlock_custom(nn.Module):
         self.skip_add = nn.quantized.FloatFunctional()
 
     def forward(self, *xs):
-        """Forward pass.
+        """
         Returns:
             tensor: output
         """
@@ -275,7 +277,6 @@ def make_nonlinearity(nonlinearity, dim=None, on_channels=False):
 
 
 def make_fusion_block(features, use_bn, width_ratio=1, nonlinearity="relu"):
-
     nonlinear_layer = make_nonlinearity(nonlinearity, features, on_channels=True)
 
     return FeatureFusionBlock_custom(
@@ -289,43 +290,8 @@ def make_fusion_block(features, use_bn, width_ratio=1, nonlinearity="relu"):
     )
 
 
-class Interpolate(nn.Module):
-    """Interpolation module."""
-
-    def __init__(self, scale_factor, mode, align_corners=False):
-        """Init.
-        Args:
-            scale_factor (float): scaling
-            mode (str): interpolation mode
-        """
-        super(Interpolate, self).__init__()
-
-        self.interp = nn.functional.interpolate
-        self.scale_factor = scale_factor
-        self.mode = mode
-        self.align_corners = align_corners
-
-    def forward(self, x):
-        """Forward pass.
-        Args:
-            x (tensor): input
-        Returns:
-            tensor: interpolated data
-        """
-
-        x = self.interp(
-            x,
-            scale_factor=self.scale_factor,
-            mode=self.mode,
-            align_corners=self.align_corners,
-        )
-
-        return x
-
-
 class DPTOutputAdapter(nn.Module):
-    """DPT output adapter.
-
+    """
     :param num_cahnnels: Number of output channels
     :param stride_level: tride level compared to the full-sized image.
         E.g. 4 for 1/4th the size of the image.
@@ -343,14 +309,14 @@ class DPTOutputAdapter(nn.Module):
         self,
         num_channels: int = 1,
         stride_level: int = 1,
-        patch_size: Union[int, Tuple[int, int]] = 16,
+        patch_size: int | tuple[int, int] = 16,
         main_tasks: Iterable[str] = ("rgb",),
-        hooks: List[int] = [2, 5, 8, 11],
-        layer_dims: List[int] = [96, 192, 384, 768],
+        hooks: list[int] = [2, 5, 8, 11],  # noqa: B006 - Keeps the upstream default object and signature.
+        layer_dims: list[int] = [96, 192, 384, 768],  # noqa: B006 - Keeps the upstream default object and signature.
         feature_dim: int = 256,
         last_dim: int = 32,
         use_bn: bool = False,
-        dim_tokens_enc: Optional[int] = None,
+        dim_tokens_enc: int | None = None,
         head_type: str = "regression",
         output_width_ratio=1,
         nonlinearity="relu",
@@ -496,7 +462,7 @@ class DPTOutputAdapter(nn.Module):
         x = torch.cat(x, dim=-1)
         return x
 
-    def forward(self, encoder_tokens: List[torch.Tensor], image_size):
+    def forward(self, encoder_tokens: list[torch.Tensor], image_size):
         # input_info: Dict):
         assert self.dim_tokens_enc is not None, "Need to call init(dim_tokens_enc) function first"
         H, W = image_size
@@ -509,14 +475,14 @@ class DPTOutputAdapter(nn.Module):
         layers = [encoder_tokens[hook] for hook in self.hooks]
 
         # Extract only task-relevant tokens and ignore global tokens.
-        layers = [self.adapt_tokens(l) for l in layers]
+        layers = [self.adapt_tokens(l) for l in layers]  # noqa: E741 - Ambiguous upstream name kept as written.
 
         # Reshape tokens to spatial representation
-        layers = [rearrange(l, "b (nh nw) c -> b c nh nw", nh=N_H, nw=N_W) for l in layers]
+        layers = [rearrange(l, "b (nh nw) c -> b c nh nw", nh=N_H, nw=N_W) for l in layers]  # noqa: E741 - Ambiguous upstream name kept as written.
 
-        layers = [self.act_postprocess[idx](l) for idx, l in enumerate(layers)]
+        layers = [self.act_postprocess[idx](l) for idx, l in enumerate(layers)]  # noqa: E741 - Ambiguous upstream name kept as written.
         # Project layers to chosen feature dim
-        layers = [self.scratch.layer_rn[idx](l) for idx, l in enumerate(layers)]
+        layers = [self.scratch.layer_rn[idx](l) for idx, l in enumerate(layers)]  # noqa: E741 - Ambiguous upstream name kept as written.
 
         # Fuse layers using refinement stages
         path_4 = self.scratch.refinenet4(layers[3])

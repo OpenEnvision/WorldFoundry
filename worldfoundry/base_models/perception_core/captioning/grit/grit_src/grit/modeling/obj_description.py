@@ -23,4 +23,4 @@ class ObjDescription:
         return len(self.data)
 
     def __repr__(self):
-        return "ObjDescription({})".format(self.data)
+        return f"ObjDescription({self.data})"

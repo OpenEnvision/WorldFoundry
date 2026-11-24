@@ -1,20 +1,20 @@
 ---
 title: VideoVerse
-description: "OPPO 的 300 prompt 世界模型 T2V 评测：事件 LCS 加二元 QA。WorldFoundry 可跑 Gemini / URL / 本地 VLM 裁判，不编造榜单。"
+description: "OPPO 的 300 prompt 世界模型 T2V 评测：事件 LCS 加二元 QA。WorldFoundry 可跑 Gemini / URL / 本地 VLM 裁判。"
 ---
 
-VideoVerse（OPPO 研究院，联合中山大学与香港理工）问的是文本生成视频离 **世界模型** 还有多远。官方规模：**300 条 prompt**，每条拆成有序事件，并带跨越 **十个维度** 的二元评测问题。分面包括 QA 准确率、事件覆盖、时间因果、世界知识一致性、静态 / 动态场景一致性。打分把检测到的事件顺序做 **事件 LCS**，再加逐题核验。
+VideoVerse（OPPO 研究院，联合中山大学与香港理工）问的是文本生成视频离**世界模型**还有多远。官方规模：**300 条 prompt**，每条拆成有序事件，并带跨越**十个维度**的二元评测问题。分面包括 QA 准确率、事件覆盖、时间因果、世界知识一致性、静态 / 动态场景一致性。评分时，对检测到的事件顺序计算**事件 LCS**，再逐题核验。
 
 论文：[VideoVerse](https://arxiv.org/abs/2510.08398)。项目：[naptmn.cn/Homepage_of_VideoVerse](https://www.naptmn.cn/Homepage_of_VideoVerse/)。代码：[Zeqing-Wang/VideoVerse](https://github.com/Zeqing-Wang/VideoVerse)。许可证：Apache-2.0。
 
-WorldFoundry **在仓内跑裁判**（默认 Gemini，或 URL / 本地 VLM），并用官方事件 LCS / 核验逻辑归一化 `eval_res.json`。Prompt 清单已捆绑。`--strict` 强制标准 300 prompt 套件。官方路径已接入；带凭证的完整套件 **未** 做发布级验证。
+WorldFoundry **在仓内跑裁判**（默认 Gemini，或 URL / 本地 VLM），并用官方事件 LCS / 核验逻辑归一化 `eval_res.json`。Prompt 清单已捆绑。`--strict` 强制标准 300 prompt 套件。
 
 <BenchmarkPageSections id="videoverse" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id videoverse \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -23,9 +23,9 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-`--run-official` 对照捆绑的 `prompts_of_VideoVerse.json` / 分解版给生成视频打分（`GEMINI_API_KEY` 或 `WORLDFOUNDRY_VIDEOVERSE_GEMINI_API_KEY`）。只有非标准资产才用 `--prompt-manifest`。默认导入：`WORLDFOUNDRY_VIDEOVERSE_RESULTS_PATH`。共享资源：`videoverse_dataset_assets`。
+`--run-official` 依据捆绑的 `prompts_of_VideoVerse.json` 或其分解版为生成视频打分（`GEMINI_API_KEY` 或 `WORLDFOUNDRY_VIDEOVERSE_GEMINI_API_KEY`）。只有非标准资产才用 `--prompt-manifest`。默认导入：`WORLDFOUNDRY_VIDEOVERSE_RESULTS_PATH`。共享资源：`videoverse_dataset_assets`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/videoverse.yaml`，`worldfoundry/data/benchmarks/assets/videoverse/prompt/`。
+清单与 prompt 资源：`worldfoundry/data/benchmarks/tasks/external/videoverse.yaml`、`worldfoundry/data/benchmarks/assets/videoverse/prompt/`。
 
 产物包括 `scorecard.json`（主键 `videoverse_average`）、`eval_res.json`、`judge_responses.jsonl`。
 

@@ -3,8 +3,6 @@ model_id: mmaudio
 runtime:
   kind: official_cli
   backend_quality: in_tree_official_runtime
-  repo_root_candidates:
-  - ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/synthesis/visual_generation/mmaudio
   checkpoint_candidates:
   - $WORLDFOUNDRY_HFD_ROOT/hkchengrex--MMAudio
   cwd: "{checkpoint_path}"
@@ -16,12 +14,8 @@ runtime:
   - "*.flac"
   - "*.wav"
   - "*.mp4"
-  command:
-  - "{python}"
-  - "-m"
-  - "worldfoundry.synthesis.visual_generation.mmaudio.run_official_demo"
-  - "--worldfoundry-demo-script"
-  - "{repo_root}/official_demo.py"
+  module: worldfoundry.synthesis.visual_generation.mmaudio.run_official_demo
+  args:
   - "--variant"
   - "{variant}"
   - "--video"

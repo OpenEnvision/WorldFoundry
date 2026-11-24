@@ -22,7 +22,6 @@ export type DocsNavGroup = {
 export type DocsChromeLabels = {
   docs: string;
   home: string;
-  kicker: string;
   language: string;
   markdown: string;
   nav: string;
@@ -33,12 +32,8 @@ export type DocsChromeLabels = {
   community: string;
   search: string;
   onThisPage: string;
-  askAi: string;
   askAiCopy: string;
   askAiCopied: string;
-  askAiOpenMarkdown: string;
-  askAiChatGpt: string;
-  askAiHint: string;
   previousPage: string;
   nextPage: string;
   relatedPages: string;
@@ -83,6 +78,7 @@ export const docsNavPageLabels: Record<Locale, DocsNavPageLabels> = {
     'reference/environments': 'Environment',
     'guides/inference': 'Run inference',
     'guides/inference-optimization': 'Inference optimization',
+    'guides/videogen-acceleration-benchmarks': 'Acceleration benchmarks',
     'guides/run-status': 'Run status',
     'guides/supported-models': 'Models',
     'guides/local-assets': 'Local assets',
@@ -93,10 +89,9 @@ export const docsNavPageLabels: Record<Locale, DocsNavPageLabels> = {
     'evaluation/benchmark-hub': 'Benchmark Hub',
     'evaluation/benchmark-hub/runtime-environments': 'Runtime environments',
     'evaluation/metrics': 'Metrics',
-    'evaluation/metrics/scorers': 'Scorers & quality',
+    'evaluation/metrics/scorers': 'Scorers',
     'evaluation/metrics/distribution': 'Distribution',
     'evaluation/metrics/perceptual': 'Perceptual',
-    'evaluation/metrics/editing': 'Editing',
     'evaluation/metrics/reference': 'Registry',
     'evaluation/embodied-official-runtime': 'Embodied setup',
     'maintainers/plan': 'Plan',
@@ -124,6 +119,7 @@ export const docsNavPageLabels: Record<Locale, DocsNavPageLabels> = {
     'reference/environments': '环境配置',
     'guides/inference': '运行推理',
     'guides/inference-optimization': '推理优化',
+    'guides/videogen-acceleration-benchmarks': '加速基准',
     'guides/run-status': '运行状态',
     'guides/supported-models': '模型',
     'guides/local-assets': '本地资产',
@@ -134,10 +130,9 @@ export const docsNavPageLabels: Record<Locale, DocsNavPageLabels> = {
     'evaluation/benchmark-hub': 'Benchmark Hub',
     'evaluation/benchmark-hub/runtime-environments': '运行环境矩阵',
     'evaluation/metrics': '指标',
-    'evaluation/metrics/scorers': 'Scorer 与质量',
+    'evaluation/metrics/scorers': 'Scorer',
     'evaluation/metrics/distribution': '分布指标',
-    'evaluation/metrics/perceptual': '感知成对',
-    'evaluation/metrics/editing': '编辑',
+    'evaluation/metrics/perceptual': '感知指标',
     'evaluation/metrics/reference': 'Registry',
     'evaluation/embodied-official-runtime': 'Embodied 环境',
     'maintainers/plan': '规划',
@@ -173,6 +168,7 @@ export const docsNavGroups = [
     slugs: [
       ['guides', 'inference'],
       ['guides', 'inference-optimization'],
+      ['guides', 'videogen-acceleration-benchmarks'],
       ['guides', 'supported-models'],
       ['guides', 'studio'],
     ],
@@ -238,7 +234,6 @@ export const docsLabels: Record<Locale, DocsChromeLabels> = {
   en: {
     docs: 'Docs',
     home: 'Home',
-    kicker: 'WorldFoundry docs',
     language: 'Language',
     markdown: 'Markdown',
     nav: 'Main navigation',
@@ -260,13 +255,8 @@ export const docsLabels: Record<Locale, DocsChromeLabels> = {
     community: 'Community',
     search: 'Search',
     onThisPage: 'On this page',
-    askAi: 'Ask AI',
     askAiCopy: 'Copy page markdown',
     askAiCopied: 'Copied',
-    askAiOpenMarkdown: 'Open markdown',
-    askAiChatGpt: 'Ask in ChatGPT',
-    askAiHint:
-      'Use this page as context for an AI assistant. No in-site chat backend is configured yet.',
     previousPage: 'Previous',
     nextPage: 'Next',
     relatedPages: 'Related',
@@ -286,7 +276,6 @@ export const docsLabels: Record<Locale, DocsChromeLabels> = {
   zh: {
     docs: '文档',
     home: '首页',
-    kicker: 'WorldFoundry 文档',
     language: '语言',
     markdown: 'Markdown',
     nav: '主导航',
@@ -308,12 +297,8 @@ export const docsLabels: Record<Locale, DocsChromeLabels> = {
     community: '社区',
     search: '搜索',
     onThisPage: '本页内容',
-    askAi: 'Ask AI',
     askAiCopy: '复制本页 Markdown',
     askAiCopied: '已复制',
-    askAiOpenMarkdown: '打开 Markdown',
-    askAiChatGpt: '在 ChatGPT 中提问',
-    askAiHint: '把本页当作 AI 上下文。站内对话后端尚未接入。',
     previousPage: '上一页',
     nextPage: '下一页',
     relatedPages: '相关页面',
@@ -331,26 +316,3 @@ export const docsLabels: Record<Locale, DocsChromeLabels> = {
     closeMenu: '关闭',
   },
 };
-
-const tableDenseDocsPages = new Set([
-  'evaluation/benchmark-hub',
-  'guides/supported-models',
-]);
-
-export function isTableDenseDocsPage(slugs: readonly string[]) {
-  return tableDenseDocsPages.has(slugs.join('/'));
-}
-
-export function isBenchmarkHubDocsPage(slugs: readonly string[]) {
-  return slugs[0] === 'evaluation' && slugs[1] === 'benchmark-hub';
-}
-
-export function isMetricsDocsPage(slugs: readonly string[]) {
-  return slugs[0] === 'evaluation' && slugs[1] === 'metrics';
-}
-
-export function isApiReferenceHubDocsPage(slugs: readonly string[]) {
-  return slugs[0] === 'api-reference' && slugs.length === 1;
-}
-
-export { getBenchmarkHubSectionLabel } from '@/lib/benchmark-catalog';

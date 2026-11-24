@@ -3,7 +3,7 @@
 import itertools
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import torch
 from torch import nn
@@ -26,7 +26,9 @@ from worldfoundry.base_models.llm_mllm_core.mllm.perceptionlm.core.transformer i
     cross_entropy,
 )
 from worldfoundry.base_models.llm_mllm_core.mllm.perceptionlm.core.utils import InitArgs
-from worldfoundry.base_models.llm_mllm_core.mllm.perceptionlm.core.vision_encoder.pe import VisionTransformer as PE_VisionTransformer
+from worldfoundry.base_models.llm_mllm_core.mllm.perceptionlm.core.vision_encoder.pe import (
+    VisionTransformer as PE_VisionTransformer,
+)
 from worldfoundry.base_models.llm_mllm_core.mllm.perceptionlm.core.vision_projector.mlp import MLPProjector
 
 logger = logging.getLogger(__name__)
@@ -34,9 +36,7 @@ logger = logging.getLogger(__name__)
 
 def create_causal_mask(seqlen, attn_impl, sliding_window):
     if sliding_window is not None and attn_impl == "xformers":
-        return fmha.attn_bias.LocalAttentionFromBottomRightMask(
-            window_left=sliding_window - 1, window_right=0
-        )
+        return fmha.attn_bias.LocalAttentionFromBottomRightMask(window_left=sliding_window - 1, window_right=0)
     elif attn_impl == "xformers":
         return fmha.attn_bias.LowerTriangularMask()
     elif attn_impl == "sdpa":
@@ -44,9 +44,7 @@ def create_causal_mask(seqlen, attn_impl, sliding_window):
     elif attn_impl == "flex_attention":
         return create_block_mask(causal_mask, None, None, seqlen, seqlen)
     else:
-        raise NotImplementedError(
-            f"Attention {attn_impl} with {sliding_window} sliding window not implemented"
-        )
+        raise NotImplementedError(f"Attention {attn_impl} with {sliding_window} sliding window not implemented")
 
 
 def attention_flops_per_token(n_layers, seq_len, dim, causal):
@@ -54,12 +52,8 @@ def attention_flops_per_token(n_layers, seq_len, dim, causal):
     return 3.5 * (4 * n_layers * seq_len * dim // (2 if causal else 1))
 
 
-def get_num_flop_per_token(
-    num_non_embed_params: int, n_layers: int, dim: int, seq_len: int
-) -> int:
-    return 6 * num_non_embed_params + attention_flops_per_token(
-        n_layers, seq_len, dim, True
-    )
+def get_num_flop_per_token(num_non_embed_params: int, n_layers: int, dim: int, seq_len: int) -> int:
+    return 6 * num_non_embed_params + attention_flops_per_token(n_layers, seq_len, dim, True)
 
 
 def causal_mask(b, h, q_idx, kv_idx):
@@ -68,18 +62,17 @@ def causal_mask(b, h, q_idx, kv_idx):
 
 @dataclass
 class LMTransformerArgs(BaseTransformerArgs):
-
     seed: int = 42
 
     vocab_size: int = -1
     weight_tying: bool = False
 
-    sliding_window: Optional[int] = None
+    sliding_window: int | None = None
 
-    freeze_language_model: Optional[bool] = False
-    freeze_vision_model: Optional[bool] = False
+    freeze_language_model: bool | None = False
+    freeze_vision_model: bool | None = False
 
-    vision_model: Optional[Dict[str, Any]] = None
+    vision_model: dict[str, Any] | None = None
 
     mlp_init: InitArgs = field(default_factory=InitArgs)
     pooling_ratio: int = 1
@@ -116,9 +109,7 @@ class LMTransformer(BaseTransformer):
             )
 
         if args.vision_model:
-            logger.info(
-                f"Initializing PE_VisionTransformer with args: {args.vision_model}"
-            )
+            logger.info(f"Initializing PE_VisionTransformer with args: {args.vision_model}")
             self.vision_model = PE_VisionTransformer(**args.vision_model, output_dim=None)
             self.vision_projector = MLPProjector(args)
 
@@ -139,15 +130,15 @@ class LMTransformer(BaseTransformer):
     def forward(
         self,
         token_values: torch.Tensor,
-        target: Optional[torch.Tensor] = None,
-        tok_idx: Optional[torch.Tensor] = None,
-        mask: Optional[Union[BlockMask, AttentionBias, torch.Tensor, str]] = None,
-        images: Optional[torch.Tensor] = None,
-        image_pos_index: Optional[torch.Tensor] = None,
-        loss_mask: Optional[torch.Tensor] = None,
-        aspect_ratios: Optional[torch.Tensor] = None,
-        num_chunks: List[int] = [1],
-        media_type: List[str] = ["multi_image"],
+        target: torch.Tensor | None = None,
+        tok_idx: torch.Tensor | None = None,
+        mask: BlockMask | AttentionBias | torch.Tensor | str | None = None,
+        images: torch.Tensor | None = None,
+        image_pos_index: torch.Tensor | None = None,
+        loss_mask: torch.Tensor | None = None,
+        aspect_ratios: torch.Tensor | None = None,
+        num_chunks: list[int] = [1],  # noqa: B006 - Keeps the upstream default object and signature.
+        media_type: list[str] = ["multi_image"],  # noqa: B006 - Keeps the upstream default object and signature.
         attn_impl: str = "sdpa",
     ):
         _, seqlen = token_values.shape
@@ -166,11 +157,7 @@ class LMTransformer(BaseTransformer):
                 media_type=media_type,
             )
 
-        mask = (
-            mask
-            if mask is not None
-            else create_causal_mask(seqlen, attn_impl, self.sliding_window)
-        )
+        mask = mask if mask is not None else create_causal_mask(seqlen, attn_impl, self.sliding_window)
 
         h = super().forward(h, tok_idx=tok_idx, mask=mask, attn_impl=attn_impl)
 
@@ -206,19 +193,17 @@ class LMTransformer(BaseTransformer):
     def stitch_images_into_text(
         self,
         h_tok: torch.Tensor,
-        h_img: List[torch.Tensor],
+        h_img: list[torch.Tensor],
         image_pos_index: torch.Tensor,
-        num_chunks: List[int],
-        media_type: List[str],
+        num_chunks: list[int],
+        media_type: list[str],
     ):
         # Generate cumulative indices for each sample
         cumulative_indices = list(itertools.accumulate(num_chunks, initial=0))
         # Get indices for non-text samples
         non_text_indices = [
             idx
-            for start, end, m_type in zip(
-                cumulative_indices[:-1], cumulative_indices[1:], media_type
-            )
+            for start, end, m_type in zip(cumulative_indices[:-1], cumulative_indices[1:], media_type, strict=False)
             if m_type != "text"
             for idx in range(start, end)
         ]
@@ -226,9 +211,7 @@ class LMTransformer(BaseTransformer):
         valid_index_filter = img_indices_L < h_tok.shape[1]
         img_indices_L = img_indices_L[valid_index_filter]
         img_indices_B = img_indices_B[valid_index_filter]
-        h_tok[img_indices_B, img_indices_L] = h_img[non_text_indices].flatten(0, 1)[
-            valid_index_filter
-        ]
+        h_tok[img_indices_B, img_indices_L] = h_img[non_text_indices].flatten(0, 1)[valid_index_filter]
         return h_tok
 
 
@@ -239,7 +222,7 @@ def get_no_recompute_ops():
 
 # Optional and only used for fully shard options (fsdp) is choose. Highly recommanded for large models
 def build_fsdp_grouping_plan(model_args: LMTransformerArgs):
-    group_plan: Tuple[int, bool] = []
+    group_plan: tuple[int, bool] = []
 
     # Grouping and output seperately
     group_plan.append(("tok_embeddings", False))
@@ -266,13 +249,9 @@ def tp_parallelize(model, tp_mesh, model_args: LMTransformerArgs, distributed_ar
 
     # Embedding layer tp
     main_plan = {}
-    main_plan["tok_embeddings"] = ColwiseParallel(
-        input_layouts=Replicate(), output_layouts=Shard(1)
-    )
+    main_plan["tok_embeddings"] = ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(1))
     main_plan["norm"] = SequenceParallel()
-    main_plan["output"] = ColwiseParallel(
-        input_layouts=Shard(1), output_layouts=Replicate()
-    )
+    main_plan["output"] = ColwiseParallel(input_layouts=Shard(1), output_layouts=Replicate())
 
     parallelize_module(
         model,

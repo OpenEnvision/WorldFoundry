@@ -24,7 +24,7 @@ assert local is x
 assert restored is x
 ```
 
-使用真实 CP group 时，`split_inputs_cp` 要求序列维长度能被 group size 整除。`cat_outputs_cp` 按 rank 顺序聚合等形状本地 tensor。`cat_outputs_cp_with_grad` 会在聚合后恢复本 rank 的 autograd 引用，只有梯度必须穿过本地 shard 时才使用。
+使用真实 CP group 时，`split_inputs_cp` 要求序列维长度能被 group size 整除。`cat_outputs_cp` 按 rank 顺序聚合形状相同的本地 tensor。`cat_outputs_cp_with_grad` 会在聚合后恢复本 rank 的 autograd 引用，仅在需要让梯度穿过本地 shard 时使用。
 
 ## 典型上下文并行顺序
 

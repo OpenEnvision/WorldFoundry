@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import json
+import os
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -44,7 +44,7 @@ def _configure_video_limits() -> None:
 
 def _load_adapter_infer_args(adapter_path: str) -> SimpleNamespace:
     args_path = os.path.join(adapter_path, "args.json")
-    with open(args_path, "r", encoding="utf-8") as f:
+    with open(args_path, encoding="utf-8") as f:
         args = json.load(f)
     missing = [key for key in ("model", "template") if not args.get(key)]
     if missing:

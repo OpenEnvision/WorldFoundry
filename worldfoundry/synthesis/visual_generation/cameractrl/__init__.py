@@ -5,6 +5,7 @@ This module serves as the primary entry point, providing access to core CameraCt
 functionality, including synthesis and runtime components, and defining default
 resource paths. It implements lazy loading for submodules to optimize startup performance.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -57,26 +58,28 @@ def __getattr__(name: str):
         # This allows for specific dependency management for synthesis components.
         if name == "CameraCtrlSynthesis":
             from .synthesis import CameraCtrlSynthesis
+
             return CameraCtrlSynthesis
-        
+
         # For all other recognized attributes, they are expected to be defined
         # within the 'runtime' submodule.
         from . import runtime
+
         # Retrieve the attribute from the runtime submodule using getattr.
         return getattr(runtime, name)
-    
+
     # If the requested attribute name is not in the predefined set,
     # it indicates an invalid access, so raise an AttributeError.
     raise AttributeError(name)
 
 
 __all__ = [
-    "CameraCtrlSynthesis",
-    "CameraCtrlRuntime",
     "DEFAULT_CAMERACTRL_CKPT",
     "DEFAULT_CAMERACTRL_CONFIG",
     "DEFAULT_CAMERACTRL_IMAGE_LORA",
     "DEFAULT_CAMERACTRL_MOTION_ADAPTER",
     "DEFAULT_SD15_ROOT",
+    "CameraCtrlRuntime",
+    "CameraCtrlSynthesis",
     "runtime_root",
 ]

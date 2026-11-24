@@ -1,17 +1,17 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import datetime
 import functools
 import os
 
+import timm.models as timm_hub
 import torch
 import torch.distributed as dist
-import timm.models as timm_hub
 
 
 def setup_for_distributed(is_master):
@@ -33,9 +33,7 @@ def setup_for_distributed(is_master):
 def is_dist_avail_and_initialized():
     if not dist.is_available():
         return False
-    if not dist.is_initialized():
-        return False
-    return True
+    return dist.is_initialized()
 
 
 def get_world_size():
@@ -72,9 +70,7 @@ def init_distributed_mode(args):
     torch.cuda.set_device(args.gpu)
     args.dist_backend = "nccl"
     print(
-        "| distributed init (rank {}, world {}): {}".format(
-            args.rank, args.world_size, args.dist_url
-        ),
+        f"| distributed init (rank {args.rank}, world {args.world_size}): {args.dist_url}",
         flush=True,
     )
     torch.distributed.init_process_group(
@@ -82,19 +78,14 @@ def init_distributed_mode(args):
         init_method=args.dist_url,
         world_size=args.world_size,
         rank=args.rank,
-        timeout=datetime.timedelta(
-            days=365
-        ),  # allow auto-downloading and de-compressing
+        timeout=datetime.timedelta(days=365),  # allow auto-downloading and de-compressing
     )
     torch.distributed.barrier()
     setup_for_distributed(args.rank == 0)
 
 
 def get_dist_info():
-    if torch.__version__ < "1.0":
-        initialized = dist._initialized
-    else:
-        initialized = dist.is_initialized()
+    initialized = dist._initialized if torch.__version__ < "1.0" else dist.is_initialized()
     if initialized:
         rank = dist.get_rank()
         world_size = dist.get_world_size()

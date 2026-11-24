@@ -4,11 +4,12 @@ This module provides the base structure for integrating action models into the e
 framework by inheriting from `RuntimeProfileSynthesis`. It establishes the model's
 identifier and sets the stage for defining its architecture, runtime, and inference path.
 """
+
 from __future__ import annotations
 
 from typing import Any
 
-from worldfoundry.evaluation.models.runtime.profiles import RuntimeProfileSynthesis
+from worldfoundry.zoo.runtime.profiles import RuntimeProfileSynthesis
 
 
 class ActionModelSynthesis(RuntimeProfileSynthesis):

@@ -1,59 +1,44 @@
-"""Module for base_models -> three_dimensions -> general_3d -> eastern_journalist -> utils3d -> numpy -> rasterization.py functionality."""
+# ruff: noqa: F405 - Names come from the upstream star import.
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 
-import os
-import time
-from typing import *
-from contextlib import contextmanager
 import threading
-import weakref
+from contextlib import contextmanager
+from typing import *  # noqa: F403 - Upstream star import kept as written.
 
+import moderngl
 import numpy as np
 from numpy import ndarray
-import moderngl
 
 from .transforms import extrinsics_to_view, intrinsics_to_perspective
 
 __all__ = [
-    'RastContext',
-    'rasterize_triangles',
-    'rasterize_triangles_peeling',
-    'rasterize_lines',
-    'rasterize_point_cloud',
-    'sample_texture',
-    'test_rasterization',
+    "RastContext",
+    "rasterize_lines",
+    "rasterize_point_cloud",
+    "rasterize_triangles",
+    "rasterize_triangles_peeling",
+    "sample_texture",
+    "test_rasterization",
 ]
 
 
 def map_np_dtype(dtype) -> str:
-    """Map np dtype.
-
-    Args:
-        dtype: The dtype.
-
-    Returns:
-        The return value.
-    """
-    if dtype == int:
-        return 'i4'
+    if dtype == int:  # noqa: E721 - numpy dtypes compare equal to the matching Python type.
+        return "i4"
     elif dtype == np.uint8:
-        return 'u1'
+        return "u1"
     elif dtype == np.uint32:
-        return 'u2'
+        return "u2"
     elif dtype == np.float16:
-        return 'f2'
+        return "f2"
     elif dtype == np.float32:
-        return 'f4'
-    
+        return "f4"
+
 
 def one_value(dtype):
-    """One value.
-
-    Args:
-        dtype: The dtype.
-    """
-    if dtype == 'u1':
+    if dtype == "u1":
         return 255
-    elif dtype == 'u2':
+    elif dtype == "u2":
         return 65535
     else:
         return 1
@@ -269,10 +254,10 @@ void main() {
 }
 """
 
+
 class RastContext:
-    """ Context for numpy-side rasterization. Based on moderngl.
-    """
-    
+    """Context for numpy-side rasterization. Based on moderngl."""
+
     _threading_local: threading.local = threading.local()
     "Thread-local static variable to store default context."
 
@@ -286,36 +271,41 @@ class RastContext:
             Leave empty to create context with default settings. Or refer to moderngl.create_context() for other parameters.
         """
         if len(args) == 0 and len(kwargs) == 0:
-            try:
+            try:  # noqa: SIM105 - The handler carries an explanatory comment.
                 # Default
-                self.mgl_ctx = moderngl.create_context()    
-            except:
+                self.mgl_ctx = moderngl.create_context()
+            except BaseException:
                 pass
-            if not hasattr(self, 'mgl_ctx'):
-                try:
+            if not hasattr(self, "mgl_ctx"):
+                try:  # noqa: SIM105 - The handler carries an explanatory comment.
                     # EGL
-                    self.mgl_ctx = moderngl.create_context(standalone=True, backend='egl',)     
-                except:
+                    self.mgl_ctx = moderngl.create_context(
+                        standalone=True,
+                        backend="egl",
+                    )
+                except BaseException:
                     pass
-            if not hasattr(self, 'mgl_ctx'):
-                try:
+            if not hasattr(self, "mgl_ctx"):
+                try:  # noqa: SIM105 - The handler carries an explanatory comment.
                     # Default standalone
-                    self.mgl_ctx = moderngl.create_context(standalone=True)     
-                except:
+                    self.mgl_ctx = moderngl.create_context(standalone=True)
+                except BaseException:
                     pass
-            if not hasattr(self, 'mgl_ctx'):
-                try:
+            if not hasattr(self, "mgl_ctx"):
+                try:  # noqa: SIM105 - The handler carries an explanatory comment.
                     # EGL with more specifications
-                    self.mgl_ctx = moderngl.create_context(standalone=True, backend='egl', libgl='libGL.so.1', libegl='libEGL.so.1')    
-                except:
+                    self.mgl_ctx = moderngl.create_context(
+                        standalone=True, backend="egl", libgl="libGL.so.1", libegl="libEGL.so.1"
+                    )
+                except BaseException:
                     pass
-            if not hasattr(self, 'mgl_ctx'):
+            if not hasattr(self, "mgl_ctx"):
                 raise RuntimeError(
-                    "Failed to create moderngl context with default settings. " 
+                    "Failed to create moderngl context with default settings. "
                     "Please specify context creation settings following https://moderngl.readthedocs.io/en/latest/topics/context.html. "
                     "If running on headless ubuntu server, please refer to https://moderngl.readthedocs.io/en/latest/techniques/headless_ubuntu_18_server.html"
                 )
-            
+
         elif len(args) == 1 and isinstance(args[0], moderngl.Context):
             self.mgl_ctx = args[0]
         else:
@@ -323,65 +313,45 @@ class RastContext:
         self.programs = {}
 
     def __enter__(self):
-        """Enter."""
         self.mgl_ctx.__enter__()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """Exit.
-
-        Args:
-            exc_type: The exc type.
-            exc_value: The exc value.
-            traceback: The traceback.
-        """
         self.mgl_ctx.__exit__(exc_type, exc_value, traceback)
 
     def __del__(self):
-        """Del."""
         try:
             self.mgl_ctx.release()
-            for prog_name, prog in self.programs.items():
+            for _prog_name, prog in self.programs.items():
                 prog.release()
-        except:
+        except BaseException:
             pass
 
     @staticmethod
     def get_default_context():
-        """ Get the default RastContext in current thread. Create one if not exists.
-        """
-        if not hasattr(RastContext._threading_local, 'default_context'):
+        """Get the default RastContext in current thread. Create one if not exists."""
+        if not hasattr(RastContext._threading_local, "default_context"):
             RastContext._threading_local.default_context = RastContext()
         return RastContext._threading_local.default_context
 
 
 def run_full_screen_program(
-    ctx: RastContext, 
-    prog: moderngl.Program, 
-    in_tex: Union[moderngl.Texture, List[moderngl.Texture]], 
-    out_tex_or_rbo: Union[Union[moderngl.Texture, moderngl.Renderbuffer], Sequence[Union[moderngl.Texture, moderngl.Renderbuffer]]] = None,
+    ctx: RastContext,
+    prog: moderngl.Program,
+    in_tex: Union[moderngl.Texture, List[moderngl.Texture]],
+    out_tex_or_rbo: Union[
+        Union[moderngl.Texture, moderngl.Renderbuffer], Sequence[Union[moderngl.Texture, moderngl.Renderbuffer]]
+    ] = None,
     out_depth: Optional[moderngl.Texture] = None,
-    **uniforms
+    **uniforms,
 ) -> moderngl.Texture:
-    """Run full screen program.
-
-    Args:
-        ctx: The ctx.
-        prog: The prog.
-        in_tex: The in tex.
-        out_tex_or_rbo: The out tex or rbo.
-        out_depth: The out depth.
-
-    Returns:
-        The return value.
-    """
     vao = ctx.mgl_ctx.vertex_array(prog, [])
     if isinstance(in_tex, list):
         for i, tex in enumerate(in_tex):
             tex.use(location=i)
     else:
         in_tex.use(location=0)
-    for k, v in uniforms.items():   
+    for k, v in uniforms.items():
         prog[k] = v
     if not isinstance(out_tex_or_rbo, list):
         out_tex_or_rbo = [out_tex_or_rbo] if out_tex_or_rbo is not None else []
@@ -396,73 +366,49 @@ def run_full_screen_program(
 
 
 def clear_texture(ctx: RastContext, tex: moderngl.Texture, value: Union[Tuple[float], Tuple[int], float, int]):
-    """Clear texture.
-
-    Args:
-        ctx: The ctx.
-        tex: The tex.
-        value: The value.
-    """
     if tex.depth:
         fbo = ctx.mgl_ctx.framebuffer(color_attachments=[], depth_attachment=tex)
         fbo.clear(depth=value)
         fbo.release()
-    elif tex.dtype.startswith('f'):
+    elif tex.dtype.startswith("f"):
         fbo = ctx.mgl_ctx.framebuffer(color_attachments=[tex])
         fbo.clear(color=value if isinstance(value, tuple) else (value,) * tex.components)
         fbo.release()
-    elif tex.dtype.startswith('i') or tex.dtype.startswith('u'):
+    elif tex.dtype.startswith("i") or tex.dtype.startswith("u"):
         fbo = ctx.mgl_ctx.framebuffer(color_attachments=[tex])
-        vec_type = tex.dtype[0] + 'vec4'
-        program_name = f'clear_texture_{tex.dtype}'
+        vec_type = tex.dtype[0] + "vec4"
+        program_name = f"clear_texture_{tex.dtype}"
         if prog := ctx.programs.get(program_name, None) is None:
             prog = ctx.mgl_ctx.program(
-                vertex_shader=FULL_SCREEN_VS,
-                fragment_shader=CLEAR_TEXTURE_FS.replace('{type}', vec_type)
+                vertex_shader=FULL_SCREEN_VS, fragment_shader=CLEAR_TEXTURE_FS.replace("{type}", vec_type)
             )
             ctx.programs[program_name] = prog
         vao = ctx.mgl_ctx.vertex_array(prog, [])
-        prog['uCleanColor'].value = value + (0,) * (4 - len(value))
+        prog["uCleanColor"].value = value + (0,) * (4 - len(value))
         fbo.use()
         vao.render(moderngl.TRIANGLES, vertices=3)
         fbo.release()
         vao.release()
 
 
-def depth_texture_buffer_to_linear(ctx: RastContext, buffer_depth_tex: moderngl.Texture, linear_depth_tex: moderngl.Texture):
-    """Depth texture buffer to linear.
-
-    Args:
-        ctx: The ctx.
-        buffer_depth_tex: The buffer depth tex.
-        linear_depth_tex: The linear depth tex.
-    """
-    program_name = f'depth_buffer_to_linear'
+def depth_texture_buffer_to_linear(
+    ctx: RastContext, buffer_depth_tex: moderngl.Texture, linear_depth_tex: moderngl.Texture
+):
+    program_name = "depth_buffer_to_linear"
     if (prog := ctx.programs.get(program_name, None)) is None:
-        prog = ctx.mgl_ctx.program(
-            vertex_shader=FULL_SCREEN_VS,
-            fragment_shader=DEPTH_BUFFER_TO_LINEAR_FS
-        )
-        prog['bufferDepthMap'] = 0
+        prog = ctx.mgl_ctx.program(vertex_shader=FULL_SCREEN_VS, fragment_shader=DEPTH_BUFFER_TO_LINEAR_FS)
+        prog["bufferDepthMap"] = 0
         ctx.programs[program_name] = prog
     run_full_screen_program(ctx, prog, buffer_depth_tex, out_tex_or_rbo=linear_depth_tex)
 
 
-def depth_texture_linear_to_buffer(ctx: RastContext, linear_depth_tex: moderngl.Texture, buffer_depth_tex: moderngl.Texture):
-    """Depth texture linear to buffer.
-
-    Args:
-        ctx: The ctx.
-        linear_depth_tex: The linear depth tex.
-        buffer_depth_tex: The buffer depth tex.
-    """
-    program_name = f'depth_linear_to_buffer'
+def depth_texture_linear_to_buffer(
+    ctx: RastContext, linear_depth_tex: moderngl.Texture, buffer_depth_tex: moderngl.Texture
+):
+    program_name = "depth_linear_to_buffer"
     if (prog := ctx.programs.get(program_name, None)) is None:
-        prog = ctx.mgl_ctx.program(
-            vertex_shader=FULL_SCREEN_VS,
-            fragment_shader=DEPTH_LINEAR_TO_BUFFER_FS
-        )
-        prog['linearDepthMap'] = 0
+        prog = ctx.mgl_ctx.program(vertex_shader=FULL_SCREEN_VS, fragment_shader=DEPTH_LINEAR_TO_BUFFER_FS)
+        prog["linearDepthMap"] = 0
         ctx.programs[program_name] = prog
     run_full_screen_program(ctx, prog, linear_depth_tex, out_depth=buffer_depth_tex)
 
@@ -472,14 +418,14 @@ def rasterize_triangles(
     *,
     vertices: ndarray,
     attributes: Optional[ndarray] = None,
-    attributes_domain: Optional[Literal['vertex', 'face']] = 'vertex',
+    attributes_domain: Optional[Literal["vertex", "face"]] = "vertex",
     faces: Optional[ndarray] = None,
     view: ndarray = None,
     projection: ndarray = None,
     extrinsics: ndarray = None,
     intrinsics: ndarray = None,
     near: float = 0.01,
-    far: float = float('inf'),
+    far: float = float("inf"),
     cull_backface: bool = False,
     return_depth: bool = False,
     return_interpolation: bool = False,
@@ -487,8 +433,6 @@ def rasterize_triangles(
     ctx: Optional[RastContext] = None,
 ) -> Dict[str, ndarray]:
     """
-    Rasterize triangles.
-
     Parameters
     ----
     - `size` (Tuple[int, int]): (height, width) of the output image
@@ -505,7 +449,7 @@ def rasterize_triangles(
     Returns
     ----
     A dictionary containing
-    
+
     - `mask` (ndarray): (H, W) bool mask of valid pixels
 
     if attributes is not None
@@ -523,51 +467,110 @@ def rasterize_triangles(
 
     height, width = size
     if faces is None:
-        assert vertices.ndim == 3 and vertices.shape[1] == vertices.shape[2] == 3, "If faces is None, vertices must be an array with shape (T, 3, 3)"
+        assert vertices.ndim == 3 and vertices.shape[1] == vertices.shape[2] == 3, (
+            "If faces is None, vertices must be an array with shape (T, 3, 3)"
+        )
     else:
-        assert faces.ndim == 2 and faces.shape[1] == 3, f"Faces should be a 2D array with shape (T, 3), but got {faces.shape}"
+        assert faces.ndim == 2 and faces.shape[1] == 3, (
+            f"Faces should be a 2D array with shape (T, 3), but got {faces.shape}"
+        )
         assert vertices.ndim == 2 and vertices.shape[1] == 3
 
     assert vertices.dtype == np.float32
 
     if attributes is not None:
         assert attributes.dtype == np.float32
-        if attributes_domain == 'vertex':
-            assert (attributes.shape[:-1] == vertices.shape[:-1]), f"Attribute shape {attributes.shape} does not match vertex shape {vertices.shape}"
-        elif attributes_domain == 'face':
+        if attributes_domain == "vertex":
+            assert attributes.shape[:-1] == vertices.shape[:-1], (
+                f"Attribute shape {attributes.shape} does not match vertex shape {vertices.shape}"
+            )
+        elif attributes_domain == "face":
             if faces is None:
-                assert attributes.shape[0] == vertices.shape[0], f"Attribute shape {attributes.shape} does not match vertex shape {vertices.shape}"
+                assert attributes.shape[0] == vertices.shape[0], (
+                    f"Attribute shape {attributes.shape} does not match vertex shape {vertices.shape}"
+                )
             else:
-                assert attributes.shape[0] == faces.shape[0], f"Attribute shape {attributes.shape} does not match face shape {faces.shape}"
+                assert attributes.shape[0] == faces.shape[0], (
+                    f"Attribute shape {attributes.shape} does not match face shape {faces.shape}"
+                )
         else:
             raise ValueError(f"Unknown attributes domain: {attributes_domain}")
 
-        assert attributes.shape[-1] in [1, 2, 3, 4], f'Vertex attribute only supports channels 1, 2, 3, 4, but got {attributes.shape[-1]}'
+        assert attributes.shape[-1] in [1, 2, 3, 4], (
+            f"Vertex attribute only supports channels 1, 2, 3, 4, but got {attributes.shape[-1]}"
+        )
 
-    assert intrinsics is None or (intrinsics.shape == (3, 3) and intrinsics.dtype == np.float32), f"Intrinsics should be a 3x3 float32 matrix, but got {intrinsics.shape} {intrinsics.dtype}"
-    assert extrinsics is None or (extrinsics.shape == (4, 4) and extrinsics.dtype == np.float32), f"Extrinsics should be a 4x4 float32 matrix, but got {extrinsics.shape} {extrinsics.dtype}"
-    assert view is None or (view.shape == (4, 4) and view.dtype == np.float32), f"View should be a 4x4 float32 matrix, but got {view.shape} {view.dtype}"
-    assert projection is None or (projection.shape == (4, 4) and projection.dtype == np.float32), f"Projection should be a 4x4 float32 matrix, but got {projection.shape} {projection.dtype}"
+    assert intrinsics is None or (intrinsics.shape == (3, 3) and intrinsics.dtype == np.float32), (
+        f"Intrinsics should be a 3x3 float32 matrix, but got {intrinsics.shape} {intrinsics.dtype}"
+    )
+    assert extrinsics is None or (extrinsics.shape == (4, 4) and extrinsics.dtype == np.float32), (
+        f"Extrinsics should be a 4x4 float32 matrix, but got {extrinsics.shape} {extrinsics.dtype}"
+    )
+    assert view is None or (view.shape == (4, 4) and view.dtype == np.float32), (
+        f"View should be a 4x4 float32 matrix, but got {view.shape} {view.dtype}"
+    )
+    assert projection is None or (projection.shape == (4, 4) and projection.dtype == np.float32), (
+        f"Projection should be a 4x4 float32 matrix, but got {projection.shape} {projection.dtype}"
+    )
 
-    background_image, background_mask, background_depth, background_interpolation_id, background_interpolation_uv = [background.get(k, None) if background is not None else None for k in ['image', 'mask', 'depth', 'interpolation_id', 'interpolation_uv']]
+    background_image, background_mask, background_depth, background_interpolation_id, background_interpolation_uv = [
+        background.get(k, None) if background is not None else None
+        for k in ["image", "mask", "depth", "interpolation_id", "interpolation_uv"]
+    ]
     if background_image is not None:
-        assert background_image.ndim == 3 and background_image.shape == (height, width, attributes.shape[-1]), f"Image should be a float32 array with shape (H, W, {attributes.shape[1]}), but got {background_image.shape} {background_image.dtype}"
+        assert background_image.ndim == 3 and background_image.shape == (height, width, attributes.shape[-1]), (
+            f"Image should be a float32 array with shape (H, W, {attributes.shape[1]}), but got {background_image.shape} {background_image.dtype}"
+        )
     if background_depth is not None:
-        assert background_depth.dtype == np.float32 and background_depth.ndim == 2 and background_depth.shape == (height, width), f"Depth should be a float32 array with shape (H, W), but got {background_depth.shape} {background_depth.dtype}"
+        assert (
+            background_depth.dtype == np.float32
+            and background_depth.ndim == 2
+            and background_depth.shape == (height, width)
+        ), (
+            f"Depth should be a float32 array with shape (H, W), but got {background_depth.shape} {background_depth.dtype}"
+        )
     if background_interpolation_id is not None:
-        assert background_interpolation_id.dtype == np.int32 and background_interpolation_id.ndim == 2 and background_interpolation_id.shape == (height, width), f"Interpolation ID should be a int32 array with shape (H, W), but got {background_interpolation_id.shape} {background_interpolation_id.dtype}"
+        assert (
+            background_interpolation_id.dtype == np.int32
+            and background_interpolation_id.ndim == 2
+            and background_interpolation_id.shape == (height, width)
+        ), (
+            f"Interpolation ID should be a int32 array with shape (H, W), but got {background_interpolation_id.shape} {background_interpolation_id.dtype}"
+        )
     if background_interpolation_uv is not None:
-        assert background_interpolation_uv.dtype == np.float32 and background_interpolation_uv.ndim == 3 and background_interpolation_uv.shape == (height, width, 2), f"Interpolation UV should be a float32 array with shape (H, W, 2), but got {background_interpolation_uv.shape} {background_interpolation_uv.dtype}"
+        assert (
+            background_interpolation_uv.dtype == np.float32
+            and background_interpolation_uv.ndim == 3
+            and background_interpolation_uv.shape == (height, width, 2)
+        ), (
+            f"Interpolation UV should be a float32 array with shape (H, W, 2), but got {background_interpolation_uv.shape} {background_interpolation_uv.dtype}"
+        )
 
     if faces is not None:
         vertices = vertices[faces]
     if attributes is not None:
         num_channels = attributes.shape[-1]
-        attributes = np.concatenate([attributes, np.zeros((*attributes.shape[:-1], 4 - num_channels,), dtype=attributes.dtype)], axis=-1) if num_channels < 4 else attributes
-        if attributes_domain == 'vertex':
+        attributes = (
+            np.concatenate(
+                [
+                    attributes,
+                    np.zeros(
+                        (
+                            *attributes.shape[:-1],
+                            4 - num_channels,
+                        ),
+                        dtype=attributes.dtype,
+                    ),
+                ],
+                axis=-1,
+            )
+            if num_channels < 4
+            else attributes
+        )
+        if attributes_domain == "vertex":
             if faces is not None:
                 attributes = attributes[faces]
-        elif attributes_domain == 'face':
+        elif attributes_domain == "face":
             attributes = attributes[:, None, :].repeat(3, axis=1)
 
     if intrinsics is not None:
@@ -579,48 +582,102 @@ def rasterize_triangles(
     if view is None:
         view = np.eye(4, dtype=np.float32)
     if projection is None:
-        projection = np.eye(4, dtype=np.float32) 
+        projection = np.eye(4, dtype=np.float32)
 
     if background_image is not None:
-        background_image = np.concatenate([background_image, np.ones((height, width, 4 - background_image.shape[-1]), dtype=background_image.dtype)], axis=-1) if background_image.shape[-1] < 4 else background_image
+        background_image = (
+            np.concatenate(
+                [
+                    background_image,
+                    np.ones((height, width, 4 - background_image.shape[-1]), dtype=background_image.dtype),
+                ],
+                axis=-1,
+            )
+            if background_image.shape[-1] < 4
+            else background_image
+        )
 
     # Get program
-    flat = attributes_domain == 'face'
-    program_name = f'rasterize_triangles(flat={flat}, return_interpolation={return_interpolation})'
-    if  (prog := ctx.programs.get(program_name, None)) is None:
+    flat = attributes_domain == "face"
+    program_name = f"rasterize_triangles(flat={flat}, return_interpolation={return_interpolation})"
+    if (prog := ctx.programs.get(program_name, None)) is None:
         prog = ctx.mgl_ctx.program(
-            vertex_shader=RASTERIZE_TRIANGLES_VS.replace('{flat}', 'flat' if flat else '').replace('{return_interpolation}', '' if return_interpolation else '//'),
-            fragment_shader=RASTERIZE_TRIANGLES_FS.replace('{flat}', 'flat' if flat else '').replace('{return_interpolation}', '' if return_interpolation else '//')
+            vertex_shader=RASTERIZE_TRIANGLES_VS.replace("{flat}", "flat" if flat else "").replace(
+                "{return_interpolation}", "" if return_interpolation else "//"
+            ),
+            fragment_shader=RASTERIZE_TRIANGLES_FS.replace("{flat}", "flat" if flat else "").replace(
+                "{return_interpolation}", "" if return_interpolation else "//"
+            ),
         )
         ctx.programs[program_name] = prog
 
     # Create buffers
-    vbo_vertices = ctx.mgl_ctx.buffer(np.ascontiguousarray(vertices, dtype='f4'))
+    vbo_vertices = ctx.mgl_ctx.buffer(np.ascontiguousarray(vertices, dtype="f4"))
     if attributes is not None:
-        vbo_attributes = ctx.mgl_ctx.buffer(np.ascontiguousarray(attributes, dtype='f4'))
+        vbo_attributes = ctx.mgl_ctx.buffer(np.ascontiguousarray(attributes, dtype="f4"))
     if return_interpolation:
-        vbo_uv = ctx.mgl_ctx.buffer(np.ascontiguousarray((np.array([[1., 0.], [0., 1.], [0., 0.]], dtype=np.float32).reshape(1, 3, 2).repeat(vertices.shape[0], axis=0))))
-    
+        vbo_uv = ctx.mgl_ctx.buffer(
+            np.ascontiguousarray(
+                np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]], dtype=np.float32)
+                .reshape(1, 3, 2)
+                .repeat(vertices.shape[0], axis=0)
+            )
+        )
+
     vao = ctx.mgl_ctx.vertex_array(
         prog,
-        list(filter(lambda x: x is not None, [
-            (vbo_vertices, '3f', 'inVert'),
-            (vbo_attributes, f'4f', 'inAttr') if attributes is not None else None,
-            (vbo_uv, '2f', 'inUV') if return_interpolation else None,
-        ])),
+        list(
+            filter(
+                lambda x: x is not None,
+                [
+                    (vbo_vertices, "3f", "inVert"),
+                    (vbo_attributes, "4f", "inAttr") if attributes is not None else None,
+                    (vbo_uv, "2f", "inUV") if return_interpolation else None,
+                ],
+            )
+        ),
         mode=moderngl.TRIANGLES,
     )
 
     # Create textures
-    image_tex = ctx.mgl_ctx.texture((width, height), 4, dtype='f4', data=np.ascontiguousarray(background_image[::-1, :, :]) if background_image is not None else None)
+    image_tex = ctx.mgl_ctx.texture(
+        (width, height),
+        4,
+        dtype="f4",
+        data=np.ascontiguousarray(background_image[::-1, :, :]) if background_image is not None else None,
+    )
     buffer_depth_tex = ctx.mgl_ctx.depth_texture((width, height))
-    mask_tex = ctx.mgl_ctx.texture((width, height), 1, dtype='f1', data=np.ascontiguousarray(background_mask[::-1, :]) if background_mask is not None else None)
+    mask_tex = ctx.mgl_ctx.texture(
+        (width, height),
+        1,
+        dtype="f1",
+        data=np.ascontiguousarray(background_mask[::-1, :]) if background_mask is not None else None,
+    )
     if return_depth:
-        linear_depth_tex = ctx.mgl_ctx.texture((width, height), 1, dtype='f4', data=np.ascontiguousarray(background_depth[::-1, :]) if background_depth is not None else None)
+        linear_depth_tex = ctx.mgl_ctx.texture(
+            (width, height),
+            1,
+            dtype="f4",
+            data=np.ascontiguousarray(background_depth[::-1, :]) if background_depth is not None else None,
+        )
     if return_interpolation:
-        interpolation_id_tex = ctx.mgl_ctx.texture((width, height), 1, dtype='i4', data=np.ascontiguousarray(background_interpolation_id[::-1, :]) if background_interpolation_id is not None else None)
-        interpolation_uv_tex = ctx.mgl_ctx.texture((width, height), 2, dtype='f4', data=np.ascontiguousarray(background_interpolation_uv[::-1, :, :]) if background_interpolation_uv is not None else None)
-    
+        interpolation_id_tex = ctx.mgl_ctx.texture(
+            (width, height),
+            1,
+            dtype="i4",
+            data=np.ascontiguousarray(background_interpolation_id[::-1, :])
+            if background_interpolation_id is not None
+            else None,
+        )
+        interpolation_uv_tex = ctx.mgl_ctx.texture(
+            (width, height),
+            2,
+            dtype="f4",
+            data=np.ascontiguousarray(background_interpolation_uv[::-1, :, :])
+            if background_interpolation_uv is not None
+            else None,
+        )
+
     # Clear textures
     if background_image is None:
         clear_texture(ctx, image_tex, value=(0.0, 0.0, 0.0, 1.0))
@@ -650,18 +707,18 @@ def rasterize_triangles(
     fbo.viewport = (0, 0, width, height)
 
     # Set uniforms
-    prog['uViewMat'].write(np.ascontiguousarray(view.transpose().astype('f4')))
-    prog['uProjectionMat'].write(np.ascontiguousarray(projection.transpose().astype('f4')))
+    prog["uViewMat"].write(np.ascontiguousarray(view.transpose().astype("f4")))
+    prog["uProjectionMat"].write(np.ascontiguousarray(projection.transpose().astype("f4")))
 
     # Set render states
-    ctx.mgl_ctx.depth_func = '<'
+    ctx.mgl_ctx.depth_func = "<"
     ctx.mgl_ctx.enable(ctx.mgl_ctx.DEPTH_TEST)
     if cull_backface:
         ctx.mgl_ctx.enable(ctx.mgl_ctx.CULL_FACE)
     else:
         ctx.mgl_ctx.disable(ctx.mgl_ctx.CULL_FACE)
     ctx.mgl_ctx.disable(ctx.mgl_ctx.BLEND)
-    
+
     # Render
     fbo.use()
     vao.render()
@@ -670,21 +727,21 @@ def rasterize_triangles(
     mask = np.frombuffer(mask_tex.read(), dtype=bool).reshape((height, width))
     mask = np.flip(mask, axis=0)
     if attributes is not None:
-        image = np.frombuffer(image_tex.read(), dtype='f4').reshape((height, width, 4))
+        image = np.frombuffer(image_tex.read(), dtype="f4").reshape((height, width, 4))
         image = np.flip(image, axis=0)
         image = image[:, :, :num_channels]
     else:
         image = None
     if return_depth:
         depth_texture_buffer_to_linear(ctx, buffer_depth_tex, linear_depth_tex)
-        depth = np.frombuffer(linear_depth_tex.read(), dtype='f4').reshape((height, width))
+        depth = np.frombuffer(linear_depth_tex.read(), dtype="f4").reshape((height, width))
         depth = np.flip(depth, axis=0)
     else:
         depth = None
     if return_interpolation:
-        interpolation_id = np.frombuffer(interpolation_id_tex.read(), dtype='i4').reshape((height, width))
+        interpolation_id = np.frombuffer(interpolation_id_tex.read(), dtype="i4").reshape((height, width))
         interpolation_id = np.flip(interpolation_id, axis=0)
-        interpolation_uv = np.frombuffer(interpolation_uv_tex.read(), dtype='f4').reshape((height, width, 2))
+        interpolation_uv = np.frombuffer(interpolation_uv_tex.read(), dtype="f4").reshape((height, width, 2))
         interpolation_uv = np.flip(interpolation_uv, axis=0)
     else:
         interpolation_id = None
@@ -712,7 +769,7 @@ def rasterize_triangles(
         "mask": mask,
         "depth": depth,
         "interpolation_id": interpolation_id,
-        "interpolation_uv": interpolation_uv
+        "interpolation_uv": interpolation_uv,
     }
 
     output = {k: v for k, v in output.items() if v is not None}
@@ -726,14 +783,14 @@ def rasterize_triangles_peeling(
     *,
     vertices: ndarray,
     attributes: ndarray,
-    attributes_domain: Literal['vertex', 'face'] = 'vertex',
+    attributes_domain: Literal["vertex", "face"] = "vertex",
     faces: Optional[ndarray] = None,
     view: ndarray = None,
     projection: ndarray = None,
     extrinsics: ndarray = None,
     intrinsics: ndarray = None,
     near: float = 0.01,
-    far: float = float('inf'),
+    far: float = float("inf"),
     cull_backface: bool = False,
     return_depth: bool = False,
     return_interpolation: bool = False,
@@ -759,7 +816,7 @@ def rasterize_triangles_peeling(
     Returns
     ----
     A generator that yields dictionaries for each peeling layer containing:
-    
+
     - `mask` (ndarray): (H, W) bool mask of valid pixels in this layer
 
     if attributes is not None
@@ -767,7 +824,7 @@ def rasterize_triangles_peeling(
 
     if return_depth is True
     - `depth` (ndarray): (H, W) float32 camera space linear depth. Empty pixels are filled with inf.
-    
+
     if return_interpolation is True
     - `interpolation_id` (ndarray): (H, W) int32 triangle ID map
     - `interpolation_uv` (ndarray): (H, W, 2) float32 triangle UV (first two channels of barycentric coordinates)
@@ -778,9 +835,9 @@ def rasterize_triangles_peeling(
     ----
     ```
     for i, layer_output in enumerate(rasterize_triangles_peeling(
-        (512, 512), 
-        vertices=vertices, 
-        faces=faces, 
+        (512, 512),
+        vertices=vertices,
+        faces=faces,
         attributes=attributes,
         view=view,
         projection=projection
@@ -797,43 +854,79 @@ def rasterize_triangles_peeling(
 
     height, width = size
     if faces is None:
-        assert vertices.ndim == 3 and vertices.shape[1] == vertices.shape[2] == 3, "If faces is None, vertices must be an array with shape (T, 3, 3)"
+        assert vertices.ndim == 3 and vertices.shape[1] == vertices.shape[2] == 3, (
+            "If faces is None, vertices must be an array with shape (T, 3, 3)"
+        )
     else:
-        assert faces.ndim == 2 and faces.shape[1] == 3, f"Faces should be a 2D array with shape (T, 3), but got {faces.shape}"
+        assert faces.ndim == 2 and faces.shape[1] == 3, (
+            f"Faces should be a 2D array with shape (T, 3), but got {faces.shape}"
+        )
         assert vertices.ndim == 2 and vertices.shape[1] == 3
 
     assert vertices.dtype == np.float32
 
     if attributes is not None:
         assert attributes.dtype == np.float32
-        if attributes_domain == 'vertex':
-            assert (attributes.shape[:-1] == vertices.shape[:-1]), f"Attribute shape {attributes.shape} does not match vertex shape {vertices.shape}"
-        elif attributes_domain == 'face':
+        if attributes_domain == "vertex":
+            assert attributes.shape[:-1] == vertices.shape[:-1], (
+                f"Attribute shape {attributes.shape} does not match vertex shape {vertices.shape}"
+            )
+        elif attributes_domain == "face":
             if faces is None:
-                assert attributes.shape[0] == vertices.shape[0], f"Attribute shape {attributes.shape} does not match vertex shape {vertices.shape}"
+                assert attributes.shape[0] == vertices.shape[0], (
+                    f"Attribute shape {attributes.shape} does not match vertex shape {vertices.shape}"
+                )
             else:
-                assert attributes.shape[0] == faces.shape[0], f"Attribute shape {attributes.shape} does not match face shape {faces.shape}"
+                assert attributes.shape[0] == faces.shape[0], (
+                    f"Attribute shape {attributes.shape} does not match face shape {faces.shape}"
+                )
         else:
             raise ValueError(f"Unknown attributes domain: {attributes_domain}")
 
-        assert attributes.shape[-1] in [1, 2, 3, 4], f'Vertex attribute only supports channels 1, 2, 3, 4, but got {attributes.shape[-1]}'
+        assert attributes.shape[-1] in [1, 2, 3, 4], (
+            f"Vertex attribute only supports channels 1, 2, 3, 4, but got {attributes.shape[-1]}"
+        )
 
-    assert intrinsics is None or (intrinsics.shape == (3, 3) and intrinsics.dtype == np.float32), f"Intrinsics should be a 3x3 float32 matrix, but got {intrinsics.shape} {intrinsics.dtype}"
-    assert extrinsics is None or (extrinsics.shape == (4, 4) and extrinsics.dtype == np.float32), f"Extrinsics should be a 4x4 float32 matrix, but got {extrinsics.shape} {extrinsics.dtype}"
-    assert view is None or (view.shape == (4, 4) and view.dtype == np.float32), f"View should be a 4x4 float32 matrix, but got {view.shape} {view.dtype}"
-    assert projection is None or (projection.shape == (4, 4) and projection.dtype == np.float32), f"Projection should be a 4x4 float32 matrix, but got {projection.shape} {projection.dtype}"
+    assert intrinsics is None or (intrinsics.shape == (3, 3) and intrinsics.dtype == np.float32), (
+        f"Intrinsics should be a 3x3 float32 matrix, but got {intrinsics.shape} {intrinsics.dtype}"
+    )
+    assert extrinsics is None or (extrinsics.shape == (4, 4) and extrinsics.dtype == np.float32), (
+        f"Extrinsics should be a 4x4 float32 matrix, but got {extrinsics.shape} {extrinsics.dtype}"
+    )
+    assert view is None or (view.shape == (4, 4) and view.dtype == np.float32), (
+        f"View should be a 4x4 float32 matrix, but got {view.shape} {view.dtype}"
+    )
+    assert projection is None or (projection.shape == (4, 4) and projection.dtype == np.float32), (
+        f"Projection should be a 4x4 float32 matrix, but got {projection.shape} {projection.dtype}"
+    )
 
     if faces is not None:
         vertices = vertices[faces]
     if attributes is not None:
         num_channels = attributes.shape[-1]
-        attributes = np.concatenate([attributes, np.zeros((*attributes.shape[:-1], 4 - num_channels,), dtype=attributes.dtype)], axis=-1) if num_channels < 4 else attributes
-        if attributes_domain == 'vertex':
+        attributes = (
+            np.concatenate(
+                [
+                    attributes,
+                    np.zeros(
+                        (
+                            *attributes.shape[:-1],
+                            4 - num_channels,
+                        ),
+                        dtype=attributes.dtype,
+                    ),
+                ],
+                axis=-1,
+            )
+            if num_channels < 4
+            else attributes
+        )
+        if attributes_domain == "vertex":
             if faces is not None:
                 attributes = attributes[faces]
-        elif attributes_domain == 'face':
+        elif attributes_domain == "face":
             attributes = attributes[:, None, :].repeat(3, axis=1)
-    
+
     if extrinsics is not None:
         assert view is None, "Cannot specify both extrinsics and view."
         view = extrinsics_to_view(extrinsics)
@@ -843,52 +936,64 @@ def rasterize_triangles_peeling(
     if view is None:
         view = np.eye(4, dtype=np.float32)
     if projection is None:
-        projection = np.eye(4, dtype=np.float32) 
-    
+        projection = np.eye(4, dtype=np.float32)
+
     # Get program
-    flat = attributes_domain == 'face'
-    program_name = f'rasterize_triangles_peeling(flat={flat}, return_interpolation={return_interpolation})'
+    flat = attributes_domain == "face"
+    program_name = f"rasterize_triangles_peeling(flat={flat}, return_interpolation={return_interpolation})"
     if (prog := ctx.programs.get(program_name, None)) is None:
         prog = ctx.mgl_ctx.program(
-            vertex_shader=RASTERIZE_TRIANGLES_VS.replace('{flat}', 'flat' if flat else '').replace('{return_interpolation}', '' if return_interpolation else '//'),
-            fragment_shader=RASTERIZE_TRIANGLES_PEELING_FS.replace('{flat}', 'flat' if flat else '').replace('{return_interpolation}', '' if return_interpolation else '//')
+            vertex_shader=RASTERIZE_TRIANGLES_VS.replace("{flat}", "flat" if flat else "").replace(
+                "{return_interpolation}", "" if return_interpolation else "//"
+            ),
+            fragment_shader=RASTERIZE_TRIANGLES_PEELING_FS.replace("{flat}", "flat" if flat else "").replace(
+                "{return_interpolation}", "" if return_interpolation else "//"
+            ),
         )
-        prog['prevBufferDepthMap'] = 0
+        prog["prevBufferDepthMap"] = 0
         ctx.programs[program_name] = prog
-    
+
     # Create buffers
-    vbo_vertices = ctx.mgl_ctx.buffer(np.ascontiguousarray(vertices, dtype='f4'))
+    vbo_vertices = ctx.mgl_ctx.buffer(np.ascontiguousarray(vertices, dtype="f4"))
     if attributes is not None:
-        vbo_attributes = ctx.mgl_ctx.buffer(np.ascontiguousarray(attributes, dtype='f4'))
+        vbo_attributes = ctx.mgl_ctx.buffer(np.ascontiguousarray(attributes, dtype="f4"))
     if return_interpolation:
-        vbo_uv = ctx.mgl_ctx.buffer(np.ascontiguousarray((np.array([[1., 0.], [0., 1.], [0., 0.]], dtype=np.float32).reshape(1, 3, 2).repeat(vertices.shape[0], axis=0))))
-    
+        vbo_uv = ctx.mgl_ctx.buffer(
+            np.ascontiguousarray(
+                np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]], dtype=np.float32)
+                .reshape(1, 3, 2)
+                .repeat(vertices.shape[0], axis=0)
+            )
+        )
+
     vao = ctx.mgl_ctx.vertex_array(
         prog,
-        list(filter(lambda x: x is not None, [
-            (vbo_vertices, '3f', 'inVert'),
-            (vbo_attributes, f'4f', 'inAttr') if attributes is not None else None,
-            (vbo_uv, '2f', 'inUV') if return_interpolation else None,
-        ])),
+        list(
+            filter(
+                lambda x: x is not None,
+                [
+                    (vbo_vertices, "3f", "inVert"),
+                    (vbo_attributes, "4f", "inAttr") if attributes is not None else None,
+                    (vbo_uv, "2f", "inUV") if return_interpolation else None,
+                ],
+            )
+        ),
         mode=moderngl.TRIANGLES,
     )
 
     # Create textures
-    image_tex = ctx.mgl_ctx.texture((width, height), 4, dtype='f4')
-    mask_tex = ctx.mgl_ctx.texture((width, height), 1, dtype='f1')
+    image_tex = ctx.mgl_ctx.texture((width, height), 4, dtype="f4")
+    mask_tex = ctx.mgl_ctx.texture((width, height), 1, dtype="f1")
     buffer_depth_tex_a = ctx.mgl_ctx.depth_texture((width, height))
     buffer_depth_tex_b = ctx.mgl_ctx.depth_texture((width, height))
     if return_depth:
-        linear_depth_tex = ctx.mgl_ctx.texture((width, height), 1, dtype='f4')
+        linear_depth_tex = ctx.mgl_ctx.texture((width, height), 1, dtype="f4")
     if return_interpolation:
-        interpolation_id_tex = ctx.mgl_ctx.texture((width, height), 1, dtype='i4')
-        interpolation_uv_tex = ctx.mgl_ctx.texture((width, height), 2, dtype='f4')
+        interpolation_id_tex = ctx.mgl_ctx.texture((width, height), 1, dtype="i4")
+        interpolation_uv_tex = ctx.mgl_ctx.texture((width, height), 2, dtype="f4")
 
     # Create frame buffers
-    if return_interpolation:
-        color_attachments=[image_tex, interpolation_id_tex, interpolation_uv_tex]
-    else:
-        color_attachments=[image_tex]
+    color_attachments = [image_tex, interpolation_id_tex, interpolation_uv_tex] if return_interpolation else [image_tex]
     fbo_curr = ctx.mgl_ctx.framebuffer(
         color_attachments=color_attachments,
         depth_attachment=buffer_depth_tex_a,
@@ -901,12 +1006,12 @@ def rasterize_triangles_peeling(
     fbo_prev.viewport = (0, 0, width, height)
 
     # Set uniforms
-    prog['uViewMat'].write(np.ascontiguousarray(view.transpose().astype('f4')))
-    prog['uProjectionMat'].write(np.ascontiguousarray(projection.transpose().astype('f4')))
-    prog['uScreenSize'].value = (width, height)
+    prog["uViewMat"].write(np.ascontiguousarray(view.transpose().astype("f4")))
+    prog["uProjectionMat"].write(np.ascontiguousarray(projection.transpose().astype("f4")))
+    prog["uScreenSize"].value = (width, height)
 
     # Rendering settings
-    ctx.mgl_ctx.depth_func = '<'
+    ctx.mgl_ctx.depth_func = "<"
     ctx.mgl_ctx.enable(ctx.mgl_ctx.DEPTH_TEST)
     if cull_backface:
         ctx.mgl_ctx.enable(ctx.mgl_ctx.CULL_FACE)
@@ -916,7 +1021,7 @@ def rasterize_triangles_peeling(
 
     # Initialize prev depth texture = 0
     clear_texture(ctx, fbo_prev.depth_attachment, value=0.0)
-    
+
     try:
         while True:
             # Clear
@@ -928,7 +1033,7 @@ def rasterize_triangles_peeling(
                 clear_texture(ctx, interpolation_uv_tex, value=(0.0, 0.0))
 
             # Render
-            fbo_prev.depth_attachment.use(location=0) 
+            fbo_prev.depth_attachment.use(location=0)
             fbo_curr.use()
             vao.render()
 
@@ -936,21 +1041,21 @@ def rasterize_triangles_peeling(
             mask = np.frombuffer(mask_tex.read(), dtype=bool).reshape((height, width))
             mask = np.flip(mask, axis=0)
             if attributes is not None:
-                image = np.frombuffer(image_tex.read(), dtype='f4').reshape((height, width, 4))
+                image = np.frombuffer(image_tex.read(), dtype="f4").reshape((height, width, 4))
                 image = np.flip(image, axis=0)
                 image = image[:, :, :num_channels]
             else:
                 image = None
             if return_depth:
                 depth_texture_buffer_to_linear(ctx, fbo_curr.depth_attachment, linear_depth_tex)
-                depth = np.frombuffer(linear_depth_tex.read(), dtype='f4').reshape((height, width))
+                depth = np.frombuffer(linear_depth_tex.read(), dtype="f4").reshape((height, width))
                 depth = np.flip(depth, axis=0)
             else:
                 depth = None
             if return_interpolation:
-                interpolation_id = np.frombuffer(interpolation_id_tex.read(), dtype='i4').reshape((height, width))
+                interpolation_id = np.frombuffer(interpolation_id_tex.read(), dtype="i4").reshape((height, width))
                 interpolation_id = np.flip(interpolation_id, axis=0)
-                interpolation_uv = np.frombuffer(interpolation_uv_tex.read(), dtype='f4').reshape((height, width, 2))
+                interpolation_uv = np.frombuffer(interpolation_uv_tex.read(), dtype="f4").reshape((height, width, 2))
                 interpolation_uv = np.flip(interpolation_uv, axis=0)
             else:
                 interpolation_id = None
@@ -962,7 +1067,7 @@ def rasterize_triangles_peeling(
                 "mask": mask,
                 "depth": depth,
                 "interpolation_id": interpolation_id,
-                "interpolation_uv": interpolation_uv
+                "interpolation_uv": interpolation_uv,
             }
             output = {k: v for k, v in output.items() if v is not None}
             yield output
@@ -997,13 +1102,13 @@ def rasterize_lines(
     vertices: ndarray,
     lines: ndarray,
     attributes: Optional[ndarray],
-    attributes_domain: Literal['vertex', 'line'] = 'vertex',
+    attributes_domain: Literal["vertex", "line"] = "vertex",
     view: Optional[ndarray] = None,
     projection: Optional[ndarray] = None,
     extrinsics: Optional[ndarray] = None,
     intrinsics: Optional[ndarray] = None,
     near: float = 0.01,
-    far: float = float('inf'),
+    far: float = float("inf"),
     line_width: float = 1.0,
     return_depth: bool = False,
     return_interpolation: bool = False,
@@ -1011,8 +1116,6 @@ def rasterize_lines(
     ctx: Optional[RastContext] = None,
 ) -> Tuple[ndarray, ...]:
     """
-    Rasterize lines.
-
     Parameters
     ----
     - `size` (Tuple[int, int]): (height, width) of the output image
@@ -1030,7 +1133,7 @@ def rasterize_lines(
     Returns
     ----
     A dictionary containing
-    
+
     - `mask` (ndarray): (H, W) bool mask of valid pixels
 
     if attributes is not None
@@ -1038,16 +1141,20 @@ def rasterize_lines(
 
     if return_depth is True
     - `depth` (ndarray): (H, W) float32 camera space linear depth, ranging from 0 to 1.
-    
+
     if return_interpolation is True
     - `interpolation_id` (ndarray): (H, W) int32 triangle ID map
     - `interpolation_uv` (ndarray): (H, W, 2) float32 triangle UV (first two channels of barycentric coordinates)
     """
     height, width = size
     if lines is None:
-        assert vertices.ndim == 3 and vertices.shape[1] == 2 and vertices.shape[2] == 3, "If lines is None, vertices must be an array with shape (T, 2, 3)"
+        assert vertices.ndim == 3 and vertices.shape[1] == 2 and vertices.shape[2] == 3, (
+            "If lines is None, vertices must be an array with shape (T, 2, 3)"
+        )
     else:
-        assert lines.ndim == 2 and lines.shape[1] == 2, f"Lines should be a int32 or uint32 array with shape (T, 2), but got {lines.shape} {lines.dtype}"
+        assert lines.ndim == 2 and lines.shape[1] == 2, (
+            f"Lines should be a int32 or uint32 array with shape (T, 2), but got {lines.shape} {lines.dtype}"
+        )
         assert lines.dtype == np.uint32 or lines.dtype == np.int32
         assert vertices.ndim == 2 and vertices.shape[1] == 3
 
@@ -1055,44 +1162,101 @@ def rasterize_lines(
 
     if attributes is not None:
         assert attributes.dtype == np.float32
-        if attributes_domain == 'vertex':
-            assert (attributes.shape[:-1] == vertices.shape[:-1]), f"Attribute shape {attributes.shape} does not match vertex shape {vertices.shape}"
-        elif attributes_domain == 'line':
+        if attributes_domain == "vertex":
+            assert attributes.shape[:-1] == vertices.shape[:-1], (
+                f"Attribute shape {attributes.shape} does not match vertex shape {vertices.shape}"
+            )
+        elif attributes_domain == "line":
             if lines is None:
-                assert attributes.shape[0] == vertices.shape[0], f"Attribute shape {attributes.shape} does not match vertex shape {vertices.shape}"
+                assert attributes.shape[0] == vertices.shape[0], (
+                    f"Attribute shape {attributes.shape} does not match vertex shape {vertices.shape}"
+                )
             else:
-                assert attributes.shape[0] == lines.shape[0], f"Attribute shape {attributes.shape} does not match line shape {lines.shape}"
+                assert attributes.shape[0] == lines.shape[0], (
+                    f"Attribute shape {attributes.shape} does not match line shape {lines.shape}"
+                )
         else:
             raise ValueError(f"Unknown attributes domain: {attributes_domain}")
 
-        assert attributes.shape[-1] in [1, 2, 3, 4], f'Vertex attribute only supports channels 1, 2, 3, 4, but got {attributes.shape[-1]}'
+        assert attributes.shape[-1] in [1, 2, 3, 4], (
+            f"Vertex attribute only supports channels 1, 2, 3, 4, but got {attributes.shape[-1]}"
+        )
 
-    assert intrinsics is None or (intrinsics.shape == (3, 3) and intrinsics.dtype == np.float32), f"Intrinsics should be a 3x3 float32 matrix, but got {intrinsics.shape} {intrinsics.dtype}"
-    assert extrinsics is None or (extrinsics.shape == (4, 4) and extrinsics.dtype == np.float32), f"Extrinsics should be a 4x4 float32 matrix, but got {extrinsics.shape} {extrinsics.dtype}"
-    assert view is None or (view.shape == (4, 4) and view.dtype == np.float32), f"View should be a 4x4 float32 matrix, but got {view.shape} {view.dtype}"
-    assert projection is None or (projection.shape == (4, 4) and projection.dtype == np.float32), f"Projection should be a 4x4 float32 matrix, but got {projection.shape} {projection.dtype}"
+    assert intrinsics is None or (intrinsics.shape == (3, 3) and intrinsics.dtype == np.float32), (
+        f"Intrinsics should be a 3x3 float32 matrix, but got {intrinsics.shape} {intrinsics.dtype}"
+    )
+    assert extrinsics is None or (extrinsics.shape == (4, 4) and extrinsics.dtype == np.float32), (
+        f"Extrinsics should be a 4x4 float32 matrix, but got {extrinsics.shape} {extrinsics.dtype}"
+    )
+    assert view is None or (view.shape == (4, 4) and view.dtype == np.float32), (
+        f"View should be a 4x4 float32 matrix, but got {view.shape} {view.dtype}"
+    )
+    assert projection is None or (projection.shape == (4, 4) and projection.dtype == np.float32), (
+        f"Projection should be a 4x4 float32 matrix, but got {projection.shape} {projection.dtype}"
+    )
 
-    background_image, background_mask, background_depth, background_interpolation_id, background_interpolation_uv = [background.get(k, None) if background is not None else None for k in ['image', 'mask', 'depth', 'interpolation_id', 'interpolation_uv']]
+    background_image, background_mask, background_depth, background_interpolation_id, background_interpolation_uv = [
+        background.get(k, None) if background is not None else None
+        for k in ["image", "mask", "depth", "interpolation_id", "interpolation_uv"]
+    ]
     if background_image is not None:
-        assert background_image.ndim == 3 and background_image.shape == (height, width, attributes.shape[-1]), f"Image should be a float32 array with shape (H, W, {attributes.shape[1]}), but got {background_image.shape} {background_image.dtype}"
+        assert background_image.ndim == 3 and background_image.shape == (height, width, attributes.shape[-1]), (
+            f"Image should be a float32 array with shape (H, W, {attributes.shape[1]}), but got {background_image.shape} {background_image.dtype}"
+        )
     if background_mask is not None:
-        assert background_mask.dtype == np.bool_ and background_mask.ndim == 2 and background_mask.shape == (height, width), f"Mask should be a bool array with shape (H, W), but got {background_mask.shape} {background_mask.dtype}"
+        assert (
+            background_mask.dtype == np.bool_ and background_mask.ndim == 2 and background_mask.shape == (height, width)
+        ), f"Mask should be a bool array with shape (H, W), but got {background_mask.shape} {background_mask.dtype}"
     if background_depth is not None:
-        assert background_depth.dtype == np.float32 and background_depth.ndim == 2 and background_depth.shape == (height, width), f"Depth should be a float32 array with shape (H, W), but got {background_depth.shape} {background_depth.dtype}"
+        assert (
+            background_depth.dtype == np.float32
+            and background_depth.ndim == 2
+            and background_depth.shape == (height, width)
+        ), (
+            f"Depth should be a float32 array with shape (H, W), but got {background_depth.shape} {background_depth.dtype}"
+        )
     if background_interpolation_id is not None:
-        assert background_interpolation_id.dtype == np.int32 and background_interpolation_id.ndim == 2 and background_interpolation_id.shape == (height, width), f"Interpolation ID should be a int32 array with shape (H, W), but got {background_interpolation_id.shape} {background_interpolation_id.dtype}"
+        assert (
+            background_interpolation_id.dtype == np.int32
+            and background_interpolation_id.ndim == 2
+            and background_interpolation_id.shape == (height, width)
+        ), (
+            f"Interpolation ID should be a int32 array with shape (H, W), but got {background_interpolation_id.shape} {background_interpolation_id.dtype}"
+        )
     if background_interpolation_uv is not None:
-        assert background_interpolation_uv.dtype == np.float32 and background_interpolation_uv.ndim == 3 and background_interpolation_uv.shape == (height, width, 2), f"Interpolation UV should be a float32 array with shape (H, W, 2), but got {background_interpolation_uv.shape} {background_interpolation_uv.dtype}"
+        assert (
+            background_interpolation_uv.dtype == np.float32
+            and background_interpolation_uv.ndim == 3
+            and background_interpolation_uv.shape == (height, width, 2)
+        ), (
+            f"Interpolation UV should be a float32 array with shape (H, W, 2), but got {background_interpolation_uv.shape} {background_interpolation_uv.dtype}"
+        )
 
     if lines is not None:
         vertices = vertices[lines]
     if attributes is not None:
         num_channels = attributes.shape[-1]
-        attributes = np.concatenate([attributes, np.zeros((*attributes.shape[:-1], 4 - num_channels,), dtype=attributes.dtype)], axis=-1) if num_channels < 4 else attributes
-        if attributes_domain == 'vertex':
+        attributes = (
+            np.concatenate(
+                [
+                    attributes,
+                    np.zeros(
+                        (
+                            *attributes.shape[:-1],
+                            4 - num_channels,
+                        ),
+                        dtype=attributes.dtype,
+                    ),
+                ],
+                axis=-1,
+            )
+            if num_channels < 4
+            else attributes
+        )
+        if attributes_domain == "vertex":
             if lines is not None:
                 attributes = attributes[lines]
-        elif attributes_domain == 'line':
+        elif attributes_domain == "line":
             attributes = attributes[:, None, :].repeat(2, axis=1)
 
     if extrinsics is not None:
@@ -1104,48 +1268,100 @@ def rasterize_lines(
     if view is None:
         view = np.eye(4, dtype=np.float32)
     if projection is None:
-        projection = np.eye(4, dtype=np.float32) 
+        projection = np.eye(4, dtype=np.float32)
     if background_image is not None:
-        background_image = np.concatenate([background_image, np.ones((height, width, 4 - background_image.shape[-1]), dtype=background_image.dtype)], axis=-1) if background_image.shape[-1] < 4 else background_image
+        background_image = (
+            np.concatenate(
+                [
+                    background_image,
+                    np.ones((height, width, 4 - background_image.shape[-1]), dtype=background_image.dtype),
+                ],
+                axis=-1,
+            )
+            if background_image.shape[-1] < 4
+            else background_image
+        )
 
     # Get program (shared with triangle rasterization)
-    flat = attributes_domain == 'line'
-    program_name = f'rasterize_triangles(flat={flat}, return_interpolation={return_interpolation})'
-    if  (prog := ctx.programs.get(program_name, None)) is None:
+    flat = attributes_domain == "line"
+    program_name = f"rasterize_triangles(flat={flat}, return_interpolation={return_interpolation})"
+    if (prog := ctx.programs.get(program_name, None)) is None:
         prog = ctx.mgl_ctx.program(
-            vertex_shader=RASTERIZE_TRIANGLES_VS.replace('{flat}', 'flat' if flat else '').replace('{return_interpolation}', '' if return_interpolation else '//'),
-            fragment_shader=RASTERIZE_TRIANGLES_FS.replace('{flat}', 'flat' if flat else '').replace('{return_interpolation}', '' if return_interpolation else '//')
+            vertex_shader=RASTERIZE_TRIANGLES_VS.replace("{flat}", "flat" if flat else "").replace(
+                "{return_interpolation}", "" if return_interpolation else "//"
+            ),
+            fragment_shader=RASTERIZE_TRIANGLES_FS.replace("{flat}", "flat" if flat else "").replace(
+                "{return_interpolation}", "" if return_interpolation else "//"
+            ),
         )
         ctx.programs[program_name] = prog
 
     # Create buffers
-    vbo_vertices = ctx.mgl_ctx.buffer(np.ascontiguousarray(vertices, dtype='f4'))
+    vbo_vertices = ctx.mgl_ctx.buffer(np.ascontiguousarray(vertices, dtype="f4"))
     if attributes is not None:
-        vbo_attributes = ctx.mgl_ctx.buffer(np.ascontiguousarray(attributes, dtype='f4'))
+        vbo_attributes = ctx.mgl_ctx.buffer(np.ascontiguousarray(attributes, dtype="f4"))
     if return_interpolation:
-        vbo_uv = ctx.mgl_ctx.buffer(np.ascontiguousarray((np.array([[1., 0.], [0., 1.]], dtype=np.float32).reshape(1, 2, 2).repeat(vertices.shape[0], axis=0))))
-    
+        vbo_uv = ctx.mgl_ctx.buffer(
+            np.ascontiguousarray(
+                np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32).reshape(1, 2, 2).repeat(vertices.shape[0], axis=0)
+            )
+        )
+
     vao = ctx.mgl_ctx.vertex_array(
         prog,
-        list(filter(lambda x: x is not None, [
-            (vbo_vertices, '3f', 'inVert'),
-            (vbo_attributes, f'4f', 'inAttr') if attributes is not None else None,
-            (vbo_uv, '2f', 'inUV') if return_interpolation else None,
-        ])),
+        list(
+            filter(
+                lambda x: x is not None,
+                [
+                    (vbo_vertices, "3f", "inVert"),
+                    (vbo_attributes, "4f", "inAttr") if attributes is not None else None,
+                    (vbo_uv, "2f", "inUV") if return_interpolation else None,
+                ],
+            )
+        ),
         mode=moderngl.LINES,
     )
 
     # Create textures
-    image_tex = ctx.mgl_ctx.texture((width, height), 4, dtype='f4', data=np.ascontiguousarray(background_image[::-1, :, :]) if background_image is not None else None)
-    mask_tex = ctx.mgl_ctx.texture((width, height), 1, dtype='f1', data=np.ascontiguousarray(background_mask[::-1, :]) if background_mask is not None else None)
+    image_tex = ctx.mgl_ctx.texture(
+        (width, height),
+        4,
+        dtype="f4",
+        data=np.ascontiguousarray(background_image[::-1, :, :]) if background_image is not None else None,
+    )
+    mask_tex = ctx.mgl_ctx.texture(
+        (width, height),
+        1,
+        dtype="f1",
+        data=np.ascontiguousarray(background_mask[::-1, :]) if background_mask is not None else None,
+    )
     buffer_depth_tex = ctx.mgl_ctx.depth_texture((width, height))
     if return_depth is not None:
-        linear_depth_tex = ctx.mgl_ctx.texture((width, height), 1, dtype='f4', data=np.ascontiguousarray(background_depth[::-1, :]) if background_depth is not None else None)
+        linear_depth_tex = ctx.mgl_ctx.texture(
+            (width, height),
+            1,
+            dtype="f4",
+            data=np.ascontiguousarray(background_depth[::-1, :]) if background_depth is not None else None,
+        )
 
     if return_interpolation:
-        interpolation_id_tex = ctx.mgl_ctx.texture((width, height), 1, dtype='i4', data=np.ascontiguousarray(background_interpolation_id[::-1, :]) if background_interpolation_id is not None else None)
-        interpolation_uv_tex = ctx.mgl_ctx.texture((width, height), 2, dtype='f4', data=np.ascontiguousarray(background_interpolation_uv[::-1, :, :]) if background_interpolation_uv is not None else None)
-    
+        interpolation_id_tex = ctx.mgl_ctx.texture(
+            (width, height),
+            1,
+            dtype="i4",
+            data=np.ascontiguousarray(background_interpolation_id[::-1, :])
+            if background_interpolation_id is not None
+            else None,
+        )
+        interpolation_uv_tex = ctx.mgl_ctx.texture(
+            (width, height),
+            2,
+            dtype="f4",
+            data=np.ascontiguousarray(background_interpolation_uv[::-1, :, :])
+            if background_interpolation_uv is not None
+            else None,
+        )
+
     if background_image is None:
         clear_texture(ctx, image_tex, value=(0.0, 0.0, 0.0, 1.0))
     if background_mask is None:
@@ -1174,11 +1390,11 @@ def rasterize_lines(
     fbo.viewport = (0, 0, width, height)
 
     # Set uniforms
-    prog['uViewMat'].write(np.ascontiguousarray(view.transpose().astype('f4')))
-    prog['uProjectionMat'].write(np.ascontiguousarray(projection.transpose().astype('f4')))
+    prog["uViewMat"].write(np.ascontiguousarray(view.transpose().astype("f4")))
+    prog["uProjectionMat"].write(np.ascontiguousarray(projection.transpose().astype("f4")))
 
     # Set render states
-    ctx.mgl_ctx.depth_func = '<'
+    ctx.mgl_ctx.depth_func = "<"
     ctx.mgl_ctx.enable(ctx.mgl_ctx.DEPTH_TEST)
     ctx.mgl_ctx.disable(ctx.mgl_ctx.BLEND)
     ctx.mgl_ctx.line_width = line_width
@@ -1191,21 +1407,21 @@ def rasterize_lines(
     mask = np.frombuffer(mask_tex.read(), dtype=bool).reshape((height, width))
     mask = np.flip(mask, axis=0)
     if attributes is not None:
-        image = np.frombuffer(image_tex.read(), dtype='f4').reshape((height, width, 4))
+        image = np.frombuffer(image_tex.read(), dtype="f4").reshape((height, width, 4))
         image = np.flip(image, axis=0)
         image = image[:, :, :num_channels]
     else:
         image = None
     if return_depth:
         depth_texture_buffer_to_linear(ctx, buffer_depth_tex, linear_depth_tex)
-        depth = np.frombuffer(linear_depth_tex.read(), dtype='f4').reshape((height, width))
+        depth = np.frombuffer(linear_depth_tex.read(), dtype="f4").reshape((height, width))
         depth = np.flip(depth, axis=0)
     else:
         depth = None
     if return_interpolation:
-        interpolation_id = np.frombuffer(interpolation_id_tex.read(), dtype='i4').reshape((height, width))
+        interpolation_id = np.frombuffer(interpolation_id_tex.read(), dtype="i4").reshape((height, width))
         interpolation_id = np.flip(interpolation_id, axis=0)
-        interpolation_uv = np.frombuffer(interpolation_uv_tex.read(), dtype='f4').reshape((height, width, 2))
+        interpolation_uv = np.frombuffer(interpolation_uv_tex.read(), dtype="f4").reshape((height, width, 2))
         interpolation_uv = np.flip(interpolation_uv, axis=0)
     else:
         interpolation_id = None
@@ -1233,7 +1449,7 @@ def rasterize_lines(
         "mask": mask,
         "depth": depth,
         "interpolation_id": interpolation_id,
-        "interpolation_uv": interpolation_uv
+        "interpolation_uv": interpolation_uv,
     }
 
     output = {k: v for k, v in output.items() if v is not None}
@@ -1246,23 +1462,21 @@ def rasterize_point_cloud(
     *,
     points: ndarray,
     point_sizes: Union[float, ndarray] = 10,
-    point_size_in: Literal['2d', '3d'] = '2d',
-    point_shape: Literal['triangle', 'square', 'pentagon', 'hexagon', 'circle'] = 'square',
+    point_size_in: Literal["2d", "3d"] = "2d",
+    point_shape: Literal["triangle", "square", "pentagon", "hexagon", "circle"] = "square",
     attributes: Optional[ndarray] = None,
     view: ndarray = None,
     projection: ndarray = None,
     extrinsics: ndarray = None,
     intrinsics: ndarray = None,
     near: float = 0.01,
-    far: float = float('inf'),
+    far: float = float("inf"),
     return_depth: bool = False,
     return_point_id: bool = False,
     background: Optional[Dict[str, ndarray]] = None,
     ctx: Optional[RastContext] = None,
 ) -> Dict[str, ndarray]:
     """
-    Rasterize point cloud.
-
     Parameters
     ----
     - `size` (Tuple[int, int]): (height, width) of the output image
@@ -1283,13 +1497,13 @@ def rasterize_point_cloud(
     Returns
     ----
     A dictionary containing
-    
+
     if attributes is not None
     - `image` (ndarray): (H, W, C) float32 rendered image corresponding to the input attributes
 
     if return_depth is True
     - `depth` (ndarray): (H, W) float32 camera space linear depth, ranging from 0 to 1.
-    
+
     if return_point_id is True
     - `point_id` (ndarray): (H, W) int32 point ID map
     """
@@ -1297,37 +1511,95 @@ def rasterize_point_cloud(
         ctx = RastContext.get_default_context()
 
     height, width = size
-    assert points.ndim == 2 and points.shape[1] == 3 and points.dtype == np.float32, f"Points should be a float32 array with shape (N, 3), but got {points.shape} {points.dtype}"
+    assert points.ndim == 2 and points.shape[1] == 3 and points.dtype == np.float32, (
+        f"Points should be a float32 array with shape (N, 3), but got {points.shape} {points.dtype}"
+    )
 
     if attributes is not None:
         assert attributes.dtype == np.float32
-        assert (attributes.shape[:-1] == points.shape[:-1]), f"Attribute shape {attributes.shape} does not match point shape {points.shape}"
-        assert attributes.shape[-1] in [1, 2, 3, 4], f'Vertex attribute only supports channels 1, 2, 3, 4, but got {attributes.shape[-1]}'
+        assert attributes.shape[:-1] == points.shape[:-1], (
+            f"Attribute shape {attributes.shape} does not match point shape {points.shape}"
+        )
+        assert attributes.shape[-1] in [1, 2, 3, 4], (
+            f"Vertex attribute only supports channels 1, 2, 3, 4, but got {attributes.shape[-1]}"
+        )
 
-    assert intrinsics is None or (intrinsics.shape == (3, 3) and intrinsics.dtype == np.float32), f"Intrinsics should be a 3x3 float32 matrix, but got {intrinsics.shape} {intrinsics.dtype}"
-    assert extrinsics is None or (extrinsics.shape == (4, 4) and extrinsics.dtype == np.float32), f"Extrinsics should be a 4x4 float32 matrix, but got {extrinsics.shape} {extrinsics.dtype}"
-    assert view is None or (view.shape == (4, 4) and view.dtype == np.float32), f"View should be a 4x4 float32 matrix, but got {view.shape} {view.dtype}"
-    assert projection is None or (projection.shape == (4, 4) and projection.dtype == np.float32), f"Projection should be a 4x4 float32 matrix, but got {projection.shape} {projection.dtype}"
+    assert intrinsics is None or (intrinsics.shape == (3, 3) and intrinsics.dtype == np.float32), (
+        f"Intrinsics should be a 3x3 float32 matrix, but got {intrinsics.shape} {intrinsics.dtype}"
+    )
+    assert extrinsics is None or (extrinsics.shape == (4, 4) and extrinsics.dtype == np.float32), (
+        f"Extrinsics should be a 4x4 float32 matrix, but got {extrinsics.shape} {extrinsics.dtype}"
+    )
+    assert view is None or (view.shape == (4, 4) and view.dtype == np.float32), (
+        f"View should be a 4x4 float32 matrix, but got {view.shape} {view.dtype}"
+    )
+    assert projection is None or (projection.shape == (4, 4) and projection.dtype == np.float32), (
+        f"Projection should be a 4x4 float32 matrix, but got {projection.shape} {projection.dtype}"
+    )
 
-    background_image, background_depth, background_mask, background_point_id = [background.get(k, None) if background is not None else None for k in ['image', 'depth', 'mask', 'point_id']]
+    background_image, background_depth, background_mask, background_point_id = [
+        background.get(k, None) if background is not None else None for k in ["image", "depth", "mask", "point_id"]
+    ]
     if background_image is not None:
-        assert background_image.ndim == 3 and background_image.shape == (height, width, attributes.shape[-1]), f"Image should be a float32 array with shape (H, W, {attributes.shape[1]}), but got {background_image.shape} {background_image.dtype}"
+        assert background_image.ndim == 3 and background_image.shape == (height, width, attributes.shape[-1]), (
+            f"Image should be a float32 array with shape (H, W, {attributes.shape[1]}), but got {background_image.shape} {background_image.dtype}"
+        )
     if background_depth is not None:
-        assert background_depth.dtype == np.float32 and background_depth.ndim == 2 and background_depth.shape == (height, width), f"Depth should be a float32 array with shape (H, W), but got {background_depth.shape} {background_depth.dtype}"
+        assert (
+            background_depth.dtype == np.float32
+            and background_depth.ndim == 2
+            and background_depth.shape == (height, width)
+        ), (
+            f"Depth should be a float32 array with shape (H, W), but got {background_depth.shape} {background_depth.dtype}"
+        )
     if background_mask is not None:
-        assert background_mask.dtype == np.bool_ and background_mask.ndim == 2 and background_mask.shape == (height, width), f"Mask should be a bool array with shape (H, W), but got {background_mask.shape} {background_mask.dtype}"
+        assert (
+            background_mask.dtype == np.bool_ and background_mask.ndim == 2 and background_mask.shape == (height, width)
+        ), f"Mask should be a bool array with shape (H, W), but got {background_mask.shape} {background_mask.dtype}"
     if background_point_id is not None:
-        assert background_point_id.dtype == np.int32 and background_point_id.ndim == 2 and background_point_id.shape == (height, width), f"Point ID should be a int32 array with shape (H, W), but got {background_point_id.shape} {background_point_id.dtype}"
+        assert (
+            background_point_id.dtype == np.int32
+            and background_point_id.ndim == 2
+            and background_point_id.shape == (height, width)
+        ), (
+            f"Point ID should be a int32 array with shape (H, W), but got {background_point_id.shape} {background_point_id.dtype}"
+        )
 
     if not isinstance(point_sizes, ndarray):
         point_sizes = np.full((points.shape[0],), point_sizes, dtype=np.float32)
 
     if attributes is not None:
         num_channels = attributes.shape[-1]
-        attributes = np.concatenate([attributes, np.zeros((*attributes.shape[:-1], 4 - num_channels,), dtype=attributes.dtype)], axis=-1) if num_channels < 4 else attributes
+        attributes = (
+            np.concatenate(
+                [
+                    attributes,
+                    np.zeros(
+                        (
+                            *attributes.shape[:-1],
+                            4 - num_channels,
+                        ),
+                        dtype=attributes.dtype,
+                    ),
+                ],
+                axis=-1,
+            )
+            if num_channels < 4
+            else attributes
+        )
     if background_image is not None:
-        background_image = np.concatenate([background_image, np.ones((height, width, 4 - background_image.shape[-1]), dtype=background_image.dtype)], axis=-1) if background_image.shape[-1] < 4 else background_image
-    
+        background_image = (
+            np.concatenate(
+                [
+                    background_image,
+                    np.ones((height, width, 4 - background_image.shape[-1]), dtype=background_image.dtype),
+                ],
+                axis=-1,
+            )
+            if background_image.shape[-1] < 4
+            else background_image
+        )
+
     if extrinsics is not None:
         assert view is None, "Cannot specify both extrinsics and view."
         view = extrinsics_to_view(extrinsics)
@@ -1337,49 +1609,72 @@ def rasterize_point_cloud(
     if view is None:
         view = np.eye(4, dtype=np.float32)
     if projection is None:
-        projection = np.eye(4, dtype=np.float32) 
+        projection = np.eye(4, dtype=np.float32)
 
     # Get program
-    program_name = f'rasterize_point_cloud(return_point_id={return_point_id}, point_shape={point_shape})'
-    num_point_shape_vertices = {'triangle': 3, 'square': 4, 'pentagon': 5, 'hexagon': 6, 'circle': 4}.get(point_shape)
+    program_name = f"rasterize_point_cloud(return_point_id={return_point_id}, point_shape={point_shape})"
+    num_point_shape_vertices = {"triangle": 3, "square": 4, "pentagon": 5, "hexagon": 6, "circle": 4}.get(point_shape)
     if (prog := ctx.programs.get(program_name, None)) is None:
         prog = ctx.mgl_ctx.program(
-            vertex_shader=RASTERIZE_POINT_CLOUD_VS.replace('{return_point_id}', '' if return_point_id else '//'),
-            geometry_shader=RASTERIZE_POINT_CLOUD_GS\
-                .replace('{return_point_id}', '' if return_point_id else '//')\
-                .replace('{point_shape}', point_shape)\
-                .replace('{num_point_shape_vertices}', str(num_point_shape_vertices)),
-            fragment_shader=RASTERIZE_POINT_CLOUD_FS\
-                .replace('{return_point_id}', '' if return_point_id else '//')\
-                .replace('{circle_begin}', '' if point_shape == 'circle' else '/*')\
-                .replace('{circle_end}', '' if point_shape == 'circle' else '*/')
+            vertex_shader=RASTERIZE_POINT_CLOUD_VS.replace("{return_point_id}", "" if return_point_id else "//"),
+            geometry_shader=RASTERIZE_POINT_CLOUD_GS.replace("{return_point_id}", "" if return_point_id else "//")
+            .replace("{point_shape}", point_shape)
+            .replace("{num_point_shape_vertices}", str(num_point_shape_vertices)),
+            fragment_shader=RASTERIZE_POINT_CLOUD_FS.replace("{return_point_id}", "" if return_point_id else "//")
+            .replace("{circle_begin}", "" if point_shape == "circle" else "/*")
+            .replace("{circle_end}", "" if point_shape == "circle" else "*/"),
         )
         ctx.programs[program_name] = prog
 
     # Create buffers
-    vbo_vertices = ctx.mgl_ctx.buffer(np.ascontiguousarray(points, dtype='f4'))
+    vbo_vertices = ctx.mgl_ctx.buffer(np.ascontiguousarray(points, dtype="f4"))
     if attributes is not None:
-        vbo_attributes = ctx.mgl_ctx.buffer(np.ascontiguousarray(attributes, dtype='f4'))
-    vbo_point_sizes = ctx.mgl_ctx.buffer(np.ascontiguousarray(point_sizes, dtype='f4'))
+        vbo_attributes = ctx.mgl_ctx.buffer(np.ascontiguousarray(attributes, dtype="f4"))
+    vbo_point_sizes = ctx.mgl_ctx.buffer(np.ascontiguousarray(point_sizes, dtype="f4"))
 
     vao = ctx.mgl_ctx.vertex_array(
         prog,
-        list(filter(lambda x: x is not None, [
-            (vbo_vertices, '3f', 'inVert'),
-            (vbo_attributes, f'4f', 'inAttr') if attributes is not None else None,
-            (vbo_point_sizes, '1f', 'inPointSize') if point_sizes is not None else None,
-        ]))
+        list(
+            filter(
+                lambda x: x is not None,
+                [
+                    (vbo_vertices, "3f", "inVert"),
+                    (vbo_attributes, "4f", "inAttr") if attributes is not None else None,
+                    (vbo_point_sizes, "1f", "inPointSize") if point_sizes is not None else None,
+                ],
+            )
+        ),
     )
 
     # Create textures
-    image_tex = ctx.mgl_ctx.texture((width, height), 4, dtype='f4', data=np.ascontiguousarray(background_image[::-1, :, :]) if background_image is not None else None)
-    mask_tex = ctx.mgl_ctx.texture((width, height), 1, dtype='f1', data=np.ascontiguousarray(background_mask[::-1, :]) if background_mask is not None else None)
+    image_tex = ctx.mgl_ctx.texture(
+        (width, height),
+        4,
+        dtype="f4",
+        data=np.ascontiguousarray(background_image[::-1, :, :]) if background_image is not None else None,
+    )
+    mask_tex = ctx.mgl_ctx.texture(
+        (width, height),
+        1,
+        dtype="f1",
+        data=np.ascontiguousarray(background_mask[::-1, :]) if background_mask is not None else None,
+    )
     buffer_depth_tex = ctx.mgl_ctx.depth_texture((width, height))
     if return_depth:
-        linear_depth_tex = ctx.mgl_ctx.texture((width, height), 1, dtype='f4', data=np.ascontiguousarray(background_depth[::-1, :]) if background_depth is not None else None)
+        linear_depth_tex = ctx.mgl_ctx.texture(
+            (width, height),
+            1,
+            dtype="f4",
+            data=np.ascontiguousarray(background_depth[::-1, :]) if background_depth is not None else None,
+        )
 
     if return_point_id:
-        point_id_tex = ctx.mgl_ctx.texture((width, height), 1, dtype='i4', data=np.ascontiguousarray(background_point_id[::-1, :]) if background_point_id is not None else None)
+        point_id_tex = ctx.mgl_ctx.texture(
+            (width, height),
+            1,
+            dtype="i4",
+            data=np.ascontiguousarray(background_point_id[::-1, :]) if background_point_id is not None else None,
+        )
 
     if background_image is None:
         clear_texture(ctx, image_tex, value=(0.0, 0.0, 0.0, 1.0))
@@ -1406,17 +1701,17 @@ def rasterize_point_cloud(
     fbo.viewport = (0, 0, width, height)
 
     # Set uniforms
-    prog['uViewMat'].write(np.ascontiguousarray(view.transpose().astype('f4')))
-    prog['uProjectionMat'].write(np.ascontiguousarray(projection.transpose().astype('f4')))
-    prog['uScreenSize'].value = (width, height)
-    prog['uIsPointSize3D'].value = point_size_in == '3d'
+    prog["uViewMat"].write(np.ascontiguousarray(view.transpose().astype("f4")))
+    prog["uProjectionMat"].write(np.ascontiguousarray(projection.transpose().astype("f4")))
+    prog["uScreenSize"].value = (width, height)
+    prog["uIsPointSize3D"].value = point_size_in == "3d"
 
     # Set render states
-    ctx.mgl_ctx.depth_func = '<'
+    ctx.mgl_ctx.depth_func = "<"
     ctx.mgl_ctx.enable(ctx.mgl_ctx.DEPTH_TEST)
     ctx.mgl_ctx.disable(ctx.mgl_ctx.CULL_FACE)
     ctx.mgl_ctx.disable(ctx.mgl_ctx.BLEND)
-    
+
     # Render
     fbo.use()
     vao.render(mode=moderngl.POINTS)
@@ -1425,19 +1720,19 @@ def rasterize_point_cloud(
     mask = np.frombuffer(mask_tex.read(), dtype=bool).reshape((height, width))
     mask = np.flip(mask, axis=0)
     if attributes is not None:
-        image = np.frombuffer(image_tex.read(), dtype='f4').reshape((height, width, 4))
+        image = np.frombuffer(image_tex.read(), dtype="f4").reshape((height, width, 4))
         image = np.flip(image, axis=0)
         image = image[:, :, :num_channels]
     else:
         image = None
     if return_depth:
         depth_texture_buffer_to_linear(ctx, buffer_depth_tex, linear_depth_tex)
-        depth = np.frombuffer(linear_depth_tex.read(), dtype='f4').reshape((height, width))
+        depth = np.frombuffer(linear_depth_tex.read(), dtype="f4").reshape((height, width))
         depth = np.flip(depth, axis=0)
     else:
         depth = None
     if return_point_id:
-        point_id = np.frombuffer(point_id_tex.read(), dtype='i4').reshape((height, width))
+        point_id = np.frombuffer(point_id_tex.read(), dtype="i4").reshape((height, width))
         point_id = np.flip(point_id, axis=0)
     else:
         point_id = None
@@ -1457,11 +1752,7 @@ def rasterize_point_cloud(
     if return_point_id:
         point_id_tex.release()
 
-    output = {
-        "image": image,
-        "depth": depth,
-        "point_id": point_id
-    }
+    output = {"image": image, "depth": depth, "point_id": point_id}
 
     output = {k: v for k, v in output.items() if v is not None}
 
@@ -1471,11 +1762,11 @@ def rasterize_point_cloud(
 def sample_texture(
     uv_map: ndarray,
     texture_map: ndarray,
-    interpolation: Literal['linear', 'nearest'] = 'linear',
+    interpolation: Literal["linear", "nearest"] = "linear",
     mipmap_level: Union[int, Tuple[int, int]] = 0,
     repeat: Union[bool, Tuple[bool, bool]] = False,
     anisotropic: float = 1.0,
-    ctx: Optional[RastContext] = None
+    ctx: Optional[RastContext] = None,
 ) -> ndarray:
     """
     Sample from a texture map with a UV map.
@@ -1489,7 +1780,12 @@ def sample_texture(
     texture_dtype = map_np_dtype(texture_map.dtype)
 
     # Create texture
-    texture_tex = ctx.mgl_ctx.texture((texture_map.shape[1], texture_map.shape[0]), texture_map.shape[2], dtype=texture_dtype, data=np.ascontiguousarray(texture_map))
+    texture_tex = ctx.mgl_ctx.texture(
+        (texture_map.shape[1], texture_map.shape[0]),
+        texture_map.shape[2],
+        dtype=texture_dtype,
+        data=np.ascontiguousarray(texture_map),
+    )
     if isinstance(mipmap_level, tuple):
         base_mipmap_level, max_mipmap_level = mipmap_level
     else:
@@ -1499,9 +1795,9 @@ def sample_texture(
         texture_tex.build_mipmaps(base_mipmap_level, max_mipmap_level)
     else:
         use_mipmap = False
-    if interpolation == 'linear':
+    if interpolation == "linear":
         texture_tex.filter = (moderngl.LINEAR_MIPMAP_LINEAR if use_mipmap else moderngl.LINEAR, moderngl.LINEAR)
-    elif interpolation == 'nearest':
+    elif interpolation == "nearest":
         texture_tex.filter = (moderngl.NEAREST_MIPMAP_NEAREST if use_mipmap else moderngl.NEAREST, moderngl.NEAREST)
     if isinstance(repeat, tuple):
         texture_tex.repeat_x, texture_tex.repeat_y = repeat
@@ -1509,21 +1805,20 @@ def sample_texture(
         texture_tex.repeat_x = texture_tex.repeat_y = repeat
     texture_tex.anisotropy = anisotropic
 
-    uv_tex = ctx.mgl_ctx.texture((width, height), 2, dtype='f4', data=np.ascontiguousarray(uv_map.astype('f4', copy=False)))
+    uv_tex = ctx.mgl_ctx.texture(
+        (width, height), 2, dtype="f4", data=np.ascontiguousarray(uv_map.astype("f4", copy=False))
+    )
     uv_tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
 
     # Create render buffer and frame buffer
     output_tex = ctx.mgl_ctx.texture((uv_map.shape[1], uv_map.shape[0]), texture_map.shape[2], dtype=texture_dtype)
 
     # Get program
-    program_name = 'sample_texture'
+    program_name = "sample_texture"
     if (prog := ctx.programs.get(program_name, None)) is None:
-        prog = ctx.mgl_ctx.program(
-            vertex_shader=FULL_SCREEN_VS,
-            fragment_shader=SAMPLE_TEXTURE_FS
-        )
-        prog['texMap'] = 0
-        prog['uvMap'] = 1
+        prog = ctx.mgl_ctx.program(vertex_shader=FULL_SCREEN_VS, fragment_shader=SAMPLE_TEXTURE_FS)
+        prog["texMap"] = 0
+        prog["uvMap"] = 1
         ctx.programs[program_name] = prog
 
     # Render
@@ -1572,7 +1867,7 @@ def sample_texture(
 #         intrinsics_tgt (ndarray, optional): intrinsics matrix of the target camera. Defaults to None (use the same as intrinsics_src).
 #         cull_backface (bool, optional): whether to cull backface. Defaults to True.
 #         ssaa (int, optional): super sampling anti-aliasing. Defaults to 1.
-    
+
 #     ## Returns
 #         tgt_image (ndarray): [H, W, C] warped image (or uv coordinates if image is None).
 #         tgt_depth (ndarray): [H, W] screen space depth, ranging from 0 to 1. If return_depth is False, it is None.
@@ -1591,12 +1886,12 @@ def sample_texture(
 #     extrinsics_tgt = np.eye(4) if extrinsics_tgt is None else extrinsics_tgt
 #     intrinsics_src = intrinsics_tgt if intrinsics_src is None else intrinsics_src
 #     intrinsics_tgt = intrinsics_src if intrinsics_tgt is None else intrinsics_tgt
-    
+
 #     assert all(x is not None for x in [extrinsics_src, extrinsics_tgt, intrinsics_src, intrinsics_tgt]), "Make sure you have provided all the necessary camera parameters."
 
 #     # check shapes
 #     assert extrinsics_src.shape == (4, 4) and extrinsics_tgt.shape == (4, 4)
-#     assert intrinsics_src.shape == (3, 3) and intrinsics_tgt.shape == (3, 3) 
+#     assert intrinsics_src.shape == (3, 3) and intrinsics_tgt.shape == (3, 3)
 
 #     # convert to view and perspective matrices
 #     view_tgt = transforms.extrinsics_to_view(extrinsics_tgt)
@@ -1632,7 +1927,6 @@ def sample_texture(
 #     return tgt_image, tgt_depth
 
 
-
 def test_rasterization(ctx: Optional[RastContext] = None):
     """
     Test if rasterization works. It will render a cube with random colors and save it as a CHECKME.png file.
@@ -1640,27 +1934,28 @@ def test_rasterization(ctx: Optional[RastContext] = None):
 
     from .mesh import create_cube_mesh
     from .transforms import perspective_from_fov, view_look_at
-        
+
     vertices, faces = create_cube_mesh(tri=True)
     attributes = np.random.rand(len(vertices), 3).astype(np.float32)
     projection = perspective_from_fov(fov_x=np.deg2rad(60), aspect_ratio=1, near=1e-8, far=100000)
     view = view_look_at([1, 2, 2], [0, 0, 0], [0, 1, 0])
     out = rasterize_triangles(
-        (512, 512), 
-        vertices=vertices, 
-        attributes=attributes, 
-        faces=faces, 
-        view=view, 
+        (512, 512),
+        vertices=vertices,
+        attributes=attributes,
+        faces=faces,
+        view=view,
         projection=projection,
         cull_backface=True,
         return_depth=True,
         return_interpolation=False,
         ctx=ctx,
     )
-    image, mask = out['image'], out['mask']
+    image, mask = out["image"], out["mask"]
     image = np.concatenate([image, mask[:, :, None].astype(np.float32)], axis=-1)
     import cv2
-    cv2.imwrite('CHECKME.png', cv2.cvtColor((image.clip(0, 1) * 255).astype(np.uint8), cv2.COLOR_RGBA2BGRA))
+
+    cv2.imwrite("CHECKME.png", cv2.cvtColor((image.clip(0, 1) * 255).astype(np.uint8), cv2.COLOR_RGBA2BGRA))
     print("An image has been saved as ./CHECKME.png")
 
 
@@ -1678,14 +1973,14 @@ def test_rasterization(ctx: Optional[RastContext] = None):
 #     for _ in range(20):
 #         with timeit():
 #             out = rasterize_point_cloud(
-#                 ctx, 
-#                 512, 512, 
-#                 points=vertices, 
+#                 ctx,
+#                 512, 512,
+#                 points=vertices,
 #                 point_sizes=1,
 #                 point_size_in='3d',
 #                 point_shape='circle',
-#                 attributes=attributes, 
-#                 view=view, 
+#                 attributes=attributes,
+#                 view=view,
 #                 projection=projection,
 #                 return_depth=True,
 #                 return_point_id=True,

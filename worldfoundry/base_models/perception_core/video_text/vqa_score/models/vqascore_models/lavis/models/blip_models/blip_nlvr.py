@@ -1,22 +1,32 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import os
+from typing import ClassVar
 
 import torch
 import torch.nn.functional as F
+
 from ...common.dist_utils import download_cached_file
 from ...common.registry import registry
 from ...common.utils import get_abs_path, is_url
 from ..base_model import MomentumDistilationMixin
+
+# isort: split
 from .blip import BlipBase
+
+# isort: split
 from .blip_outputs import BlipIntermediateOutput, BlipOutput
 from .nlvr_encoder import BertModel
+
+# isort: split
 from ..vit import VisionTransformerEncoder, interpolate_pos_embed
+
+# isort: split
 from torch import nn
 from transformers import BertConfig
 
@@ -35,7 +45,7 @@ class BlipNLVR(BlipBase, MomentumDistilationMixin):
         >>> model = load_model("blip_nlvr", "nlvr")
     """
 
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "nlvr": "configs/models/blip_nlvr.yaml",
     }
 
@@ -82,9 +92,7 @@ class BlipNLVR(BlipBase, MomentumDistilationMixin):
             odict_keys(['intermediate_output', 'loss'])
         """
         text = samples["text_input"]
-        text = self.tokenizer(text, padding="longest", return_tensors="pt").to(
-            self.device
-        )
+        text = self.tokenizer(text, padding="longest", return_tensors="pt").to(self.device)
         text.input_ids[:, 0] = self.tokenizer.enc_token_id
 
         targets = samples["label"]
@@ -94,9 +102,7 @@ class BlipNLVR(BlipBase, MomentumDistilationMixin):
         images = torch.cat([image0, image1], dim=0)
 
         image_embeds = self.visual_encoder.forward_features(images)
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            self.device
-        )
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(self.device)
         image0_embeds, image1_embeds = torch.split(image_embeds, targets.size(0))
 
         encoder_output = self.text_encoder(
@@ -139,9 +145,7 @@ class BlipNLVR(BlipBase, MomentumDistilationMixin):
 
         num_classes = cfg.get("num_classes", 3)
 
-        assert num_classes > 1, "Invalid number of classes provided, found {}".format(
-            num_classes
-        )
+        assert num_classes > 1, f"Invalid number of classes provided, found {num_classes}"
 
         model = cls(
             image_encoder=image_encoder,
@@ -155,9 +159,7 @@ class BlipNLVR(BlipBase, MomentumDistilationMixin):
 
     def load_from_pretrained(self, url_or_filename):
         if is_url(url_or_filename):
-            cached_file = download_cached_file(
-                url_or_filename, check_hash=False, progress=True
-            )
+            cached_file = download_cached_file(url_or_filename, check_hash=False, progress=True)
             checkpoint = torch.load(cached_file, map_location="cpu")
         elif os.path.isfile(url_or_filename):
             checkpoint = torch.load(url_or_filename, map_location="cpu")
@@ -182,6 +184,6 @@ class BlipNLVR(BlipBase, MomentumDistilationMixin):
                 state_dict[new_key1] = state_dict[key]
 
         msg = self.load_state_dict(state_dict, strict=False)
-        print("load checkpoint from %s" % url_or_filename)
+        print("load checkpoint from %s" % url_or_filename)  # noqa: UP031 - Keeps printf conversions that depend on argument types.
         print(f"missing keys {msg.missing_keys}")
         return msg

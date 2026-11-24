@@ -1,37 +1,37 @@
-"""Module for base_models -> three_dimensions -> general_3d -> eastern_journalist -> utils3d -> numpy -> mesh.py functionality."""
+# ruff: noqa: F405 - Names come from the upstream star import.
+from typing import *  # noqa: F403 - Upstream star import kept as written.
 
 import numpy as np
-from numpy import ndarray
 import scipy.sparse as sp
+from numpy import ndarray
 from scipy.sparse import csr_array
-from typing import *
 
-from .transforms import unproject_cv, angle_between
-from .utils import lookup, segment_roll, csr_matrix_from_dense_indices
+from .transforms import angle_between, unproject_cv
+from .utils import csr_matrix_from_dense_indices, lookup, segment_roll
 
 __all__ = [
-    'triangulate_mesh',
-    'compute_face_corner_angles',
-    'compute_face_corner_normals',
-    'compute_face_corner_tangents',
-    'compute_face_normals',
-    'compute_face_tangents',
-    'compute_vertex_normals',
-    'remove_corrupted_faces',
-    'merge_duplicate_vertices',
-    'remove_unused_vertices',
-    'subdivide_mesh',
-    'mesh_edges',
-    'mesh_half_edges',
-    'mesh_connected_components',
-    'graph_connected_components',
-    'mesh_adjacency_graph',
-    'flatten_mesh_indices',
-    'create_cube_mesh',
-    'create_icosahedron_mesh',
-    'create_square_mesh',
-    'create_camera_frustum_mesh',
-    'merge_meshes',
+    "compute_face_corner_angles",
+    "compute_face_corner_normals",
+    "compute_face_corner_tangents",
+    "compute_face_normals",
+    "compute_face_tangents",
+    "compute_vertex_normals",
+    "create_camera_frustum_mesh",
+    "create_cube_mesh",
+    "create_icosahedron_mesh",
+    "create_square_mesh",
+    "flatten_mesh_indices",
+    "graph_connected_components",
+    "merge_duplicate_vertices",
+    "merge_meshes",
+    "mesh_adjacency_graph",
+    "mesh_connected_components",
+    "mesh_edges",
+    "mesh_half_edges",
+    "remove_corrupted_faces",
+    "remove_unused_vertices",
+    "subdivide_mesh",
+    "triangulate_mesh",
     # 'calc_quad_candidates',
     # 'calc_quad_distortion',
     # 'calc_quad_direction',
@@ -43,9 +43,7 @@ __all__ = [
 
 
 def triangulate_mesh(
-    faces: ndarray,
-    vertices: ndarray = None,
-    method: Literal['fan', 'strip', 'diagonal'] = 'fan'
+    faces: ndarray, vertices: ndarray = None, method: Literal["fan", "strip", "diagonal"] = "fan"
 ) -> ndarray:
     """
     Triangulate a polygonal mesh.
@@ -64,29 +62,28 @@ def triangulate_mesh(
     if faces.shape[-1] == 3:
         return faces
     P = faces.shape[-1]
-    if method == 'fan':
+    if method == "fan":
         i = np.arange(P - 2, dtype=int)
         loop_indices = np.stack([np.zeros_like(i), i + 1, i + 2], axis=1)
         return faces[:, loop_indices].reshape((-1, 3))
-    elif method == 'strip':
+    elif method == "strip":
         i = np.arange(P - 2, dtype=int)
         j = i // 2
         loop_indices = np.where(
             (i % 2 == 0)[:, None],
             np.stack([(P - j) % P, j + 1, P - j - 1], axis=1),
-            np.stack([j + 1, j + 2, P - j - 1], axis=1)
+            np.stack([j + 1, j + 2, P - j - 1], axis=1),
         )
         return faces[:, loop_indices].reshape((-1, 3))
-    elif method == 'diagonal':
+    elif method == "diagonal":
         assert faces.shape[-1] == 4, "Diagonal-aware method is only supported for quad faces"
         assert vertices is not None, "Vertices must be provided for diagonal method"
-        backslash = np.linalg.norm(vertices[faces[:, 0]] - vertices[faces[:, 2]], axis=-1) < \
-                        np.linalg.norm(vertices[faces[:, 1]] - vertices[faces[:, 3]], axis=-1)
-        faces = np.where(
-            backslash[:, None],
-            faces[:, [0, 1, 2, 0, 2, 3]],
-            faces[:, [0, 1, 3, 3, 1, 2]]
-        ).reshape((-1, 3))
+        backslash = np.linalg.norm(vertices[faces[:, 0]] - vertices[faces[:, 2]], axis=-1) < np.linalg.norm(
+            vertices[faces[:, 1]] - vertices[faces[:, 3]], axis=-1
+        )
+        faces = np.where(backslash[:, None], faces[:, [0, 1, 2, 0, 2, 3]], faces[:, [0, 1, 3, 3, 1, 2]]).reshape(
+            (-1, 3)
+        )
         return faces
 
 
@@ -105,17 +102,13 @@ def compute_face_corner_angles(
     - `angles` (ndarray): `(..., F, P)` face corner angles
     """
     if faces is not None:
-        vertices = vertices[..., faces, :]              # (..., T, P, 3)
-    edges = np.roll(vertices, -1, axis=-2) - vertices   # (..., T, P, 3)
+        vertices = vertices[..., faces, :]  # (..., T, P, 3)
+    edges = np.roll(vertices, -1, axis=-2) - vertices  # (..., T, P, 3)
     angles = angle_between(-np.roll(edges, 1, axis=-2), edges)
     return angles
 
 
-def compute_face_corner_normals(
-    vertices: ndarray,
-    faces: Optional[ndarray] = None,
-    normalize: bool = True
-) -> ndarray:
+def compute_face_corner_normals(vertices: ndarray, faces: Optional[ndarray] = None, normalize: bool = True) -> ndarray:
     """
     Compute the face corner normals of a mesh
 
@@ -141,7 +134,7 @@ def compute_face_corner_tangents(
     uv: ndarray,
     faces_vertices: Optional[ndarray] = None,
     faces_uv: Optional[ndarray] = None,
-    normalize: bool = True
+    normalize: bool = True,
 ) -> ndarray:
     """
     Compute the face corner tangent (and bitangent) vectors of a mesh
@@ -154,19 +147,20 @@ def compute_face_corner_tangents(
     - `normalize` (bool): whether to normalize the tangents to unit vectors. If not, the tangents (dX/du, dX/dv) matches the UV parameterized manifold.
 
     ## Returns
-    - `tangents` (ndarray): `(..., F, P, 3, 2)` face corner tangents (and bitangents), 
+    - `tangents` (ndarray): `(..., F, P, 3, 2)` face corner tangents (and bitangents),
         where the last dimension represents the tangent and bitangent vectors.
     """
     if faces_vertices is not None:
         vertices = vertices[..., faces_vertices, :]
     if faces_uv is not None:
         uv = uv[..., faces_uv, :]
-    
+
     edge_xyz = np.roll(vertices, -1, axis=-2) - vertices  # (..., F, P, 3)
     edge_uv = np.roll(uv, -1, axis=-2) - uv  # (..., F, P, 2)
-    
-    tangents = np.stack([np.roll(edge_xyz, 1, axis=-2), edge_xyz], axis=-1) \
-        @ np.linalg.inv(np.stack([np.roll(edge_uv, 1, axis=-2), edge_uv], axis=-1))
+
+    tangents = np.stack([np.roll(edge_xyz, 1, axis=-2), edge_xyz], axis=-1) @ np.linalg.inv(
+        np.stack([np.roll(edge_uv, 1, axis=-2), edge_uv], axis=-1)
+    )
     if normalize:
         tangents /= np.linalg.norm(tangents, axis=-1, keepdims=True) + np.finfo(tangents.dtype).eps
     return tangents
@@ -189,10 +183,7 @@ def compute_face_normals(
     if faces is not None:
         vertices = vertices[..., faces, :]  # (..., F, P, 3)
     if vertices.shape[-2] == 3:
-        normals = np.cross(
-            vertices[..., 1, :] - vertices[..., 0, :],
-            vertices[..., 2, :] - vertices[..., 0, :]
-        )
+        normals = np.cross(vertices[..., 1, :] - vertices[..., 0, :], vertices[..., 2, :] - vertices[..., 0, :])
     else:
         normals = compute_face_corner_normals(vertices, normalize=False)
         normals = np.mean(normals, axis=-2)
@@ -205,7 +196,7 @@ def compute_face_tangents(
     uv: ndarray,
     faces_vertices: Optional[ndarray] = None,
     faces_uv: Optional[ndarray] = None,
-    normalize: bool = True
+    normalize: bool = True,
 ) -> ndarray:
     """
     Compute the face corner tangent (and bitangent) vectors of a mesh
@@ -217,7 +208,7 @@ def compute_face_tangents(
     - `faces_uv` (ndarray, optional): `(F, P)` face UV indices
 
     ## Returns
-    - `tangents` (ndarray): `(..., F, 3, 2)` face corner tangents (and bitangents), 
+    - `tangents` (ndarray): `(..., F, 3, 2)` face corner tangents (and bitangents),
         where the last dimension represents the tangent and bitangent vectors.
     """
     if faces_vertices is not None:
@@ -225,8 +216,9 @@ def compute_face_tangents(
     if faces_uv is not None:
         uv = uv[..., faces_uv, :]  # (..., F, P, 2)
     if vertices.shape[-2] == 3:
-        tangents = np.stack([vertices[..., 1, :] - vertices[..., 0, :], vertices[..., 2, :] - vertices[..., 0, :]], axis=-1) \
-            @ np.linalg.inv(np.stack([uv[..., 1, :] - uv[..., 0, :], uv[..., 2, :] - uv[..., 0, :]], axis=-1))
+        tangents = np.stack(
+            [vertices[..., 1, :] - vertices[..., 0, :], vertices[..., 2, :] - vertices[..., 0, :]], axis=-1
+        ) @ np.linalg.inv(np.stack([uv[..., 1, :] - uv[..., 0, :], uv[..., 2, :] - uv[..., 0, :]], axis=-1))
     else:
         tangents = compute_face_corner_tangents(vertices, uv, normalize=False)
         tangents = np.mean(tangents, axis=-2)
@@ -235,11 +227,8 @@ def compute_face_tangents(
     return tangents
 
 
-
 def compute_vertex_normals(
-    vertices: ndarray,
-    faces: ndarray,
-    weighted: Literal['uniform', 'area', 'angle'] = 'uniform'
+    vertices: ndarray, faces: ndarray, weighted: Literal["uniform", "area", "angle"] = "uniform"
 ) -> ndarray:
     """
     Compute vertex normals of a triangular mesh by averaging neighboring face normals
@@ -252,22 +241,19 @@ def compute_vertex_normals(
         normals (ndarray): [..., N, 3] vertex normals (already normalized to unit vectors)
     """
     face_corner_normals = compute_face_corner_normals(vertices, faces, normalize=False)
-    if weighted == 'uniform':
-        face_corner_normals /= np.linalg.norm(face_corner_normals, axis=-1, keepdims=True) + np.finfo(vertices.dtype).eps
-    elif weighted == 'area':
+    if weighted == "uniform":
+        face_corner_normals /= (
+            np.linalg.norm(face_corner_normals, axis=-1, keepdims=True) + np.finfo(vertices.dtype).eps
+        )
+    elif weighted == "area":
         pass
-    elif weighted == 'angle':
+    elif weighted == "angle":
         face_corner_angle = compute_face_corner_angles(vertices, faces)
         face_corner_normals *= face_corner_angle[..., None]
     vertex_normals = np.zeros_like(vertices, dtype=vertices.dtype)
-    np.add.at(
-        vertex_normals, 
-        (..., faces[..., None], np.arange(3)), 
-        face_corner_normals
-    )
+    np.add.at(vertex_normals, (..., faces[..., None], np.arange(3)), face_corner_normals)
     vertex_normals /= np.linalg.norm(vertex_normals, axis=-1, keepdims=True) + np.finfo(vertices.dtype).eps
     return vertex_normals
-
 
 
 def remove_corrupted_faces(faces: ndarray) -> ndarray:
@@ -284,13 +270,9 @@ def remove_corrupted_faces(faces: ndarray) -> ndarray:
     return faces[~corrupted]
 
 
-def merge_duplicate_vertices(
-    vertices: ndarray, 
-    faces: ndarray,
-    tol: float = 1e-6
-) -> Tuple[ndarray, ndarray]:
+def merge_duplicate_vertices(vertices: ndarray, faces: ndarray, tol: float = 1e-6) -> Tuple[ndarray, ndarray]:
     """
-    Merge duplicate vertices of a triangular mesh. 
+    Merge duplicate vertices of a triangular mesh.
     Duplicate vertices are merged by selecte one of them, and the face indices are updated accordingly.
 
     ## Parameters
@@ -309,13 +291,9 @@ def merge_duplicate_vertices(
     return vertices, faces
 
 
-def remove_unused_vertices(
-    faces: ndarray,
-    *vertice_attrs,
-    return_indices: bool = False
-) -> Tuple[ndarray, ...]:
+def remove_unused_vertices(faces: ndarray, *vertice_attrs, return_indices: bool = False) -> Tuple[ndarray, ...]:
     """
-    Remove unreferenced vertices of a mesh. 
+    Remove unreferenced vertices of a mesh.
     Unreferenced vertices are removed, and the face indices are updated accordingly.
 
     ## Parameters
@@ -338,15 +316,11 @@ def remove_unused_vertices(
     return tuple(ret)
 
 
-def subdivide_mesh(
-    vertices: ndarray,
-    faces: ndarray, 
-    level: int = 1
-) -> Tuple[ndarray, ndarray]:
+def subdivide_mesh(vertices: ndarray, faces: ndarray, level: int = 1) -> Tuple[ndarray, ndarray]:
     """
     Subdivide a triangular mesh by splitting each triangle into 4 smaller triangles.
     NOTE: All original vertices are kept, and new vertices are appended to the end of the vertex list.
-    
+
     ## Parameters
         vertices (ndarray): [N, 3] 3-dimensional vertices
         faces (ndarray): [T, 3] triangular face indices
@@ -365,17 +339,20 @@ def subdivide_mesh(
 
         n_vertices = vertices.shape[0]
         vertices = np.concatenate([vertices, midpoints], axis=0)
-        faces = np.concatenate([
-            np.stack([faces[:, 0], n_vertices + uni_inv[0], n_vertices + uni_inv[2]], axis=1),
-            np.stack([faces[:, 1], n_vertices + uni_inv[1], n_vertices + uni_inv[0]], axis=1),
-            np.stack([faces[:, 2], n_vertices + uni_inv[2], n_vertices + uni_inv[1]], axis=1),
-            np.stack([n_vertices + uni_inv[0], n_vertices + uni_inv[1], n_vertices + uni_inv[2]], axis=1),
-        ], axis=0)
+        faces = np.concatenate(
+            [
+                np.stack([faces[:, 0], n_vertices + uni_inv[0], n_vertices + uni_inv[2]], axis=1),
+                np.stack([faces[:, 1], n_vertices + uni_inv[1], n_vertices + uni_inv[0]], axis=1),
+                np.stack([faces[:, 2], n_vertices + uni_inv[2], n_vertices + uni_inv[1]], axis=1),
+                np.stack([n_vertices + uni_inv[0], n_vertices + uni_inv[1], n_vertices + uni_inv[2]], axis=1),
+            ],
+            axis=0,
+        )
     return vertices, faces
 
 
 @overload
-def flatten_mesh_indices(faces1: ndarray, attr1: ndarray, *more_faces_attrs_pairs: ndarray) -> Tuple[ndarray, ...]: 
+def flatten_mesh_indices(faces1: ndarray, attr1: ndarray, *more_faces_attrs_pairs: ndarray) -> Tuple[ndarray, ...]:
     """
     Rearrange the indices of a mesh to a flattened version. Vertices will be no longer shared.
 
@@ -394,25 +371,21 @@ def flatten_mesh_indices(faces1: ndarray, attr1: ndarray, *more_faces_attrs_pair
     - `attr2`: ...
     - ...
     """
-def flatten_mesh_indices(*args: ndarray) -> Tuple[ndarray, ...]:
-    """Flatten mesh indices.
 
-    Returns:
-        The return value.
-    """
+
+def flatten_mesh_indices(*args: ndarray) -> Tuple[ndarray, ...]:  # noqa: F811 - Later definition replaces the earlier one, as upstream.
     assert len(args) % 2 == 0, "The number of arguments must be even."
     T, P = args[0].shape
     assert all(arg.shape[0] == T and arg.shape[1] == P for arg in args[::2]), "The faces must have the same shape."
     attr_flat = []
-    for faces_, attr_ in zip(args[::2], args[1::2]):
+    for faces_, attr_ in zip(args[::2], args[1::2], strict=False):
         attr_flat_ = attr_[faces_].reshape(-1, *attr_.shape[1:])
         attr_flat.append(attr_flat_)
     faces_flat = np.arange(T * P, dtype=np.int32).reshape(T, P)
     return faces_flat, *attr_flat
 
 
-
-def create_square_mesh(tri: bool = False) -> Tuple[ndarray, ndarray]: 
+def create_square_mesh(tri: bool = False) -> Tuple[ndarray, ndarray]:
     """
     Create a square mesh of area 1 centered at origin in the xy-plane.
 
@@ -420,14 +393,17 @@ def create_square_mesh(tri: bool = False) -> Tuple[ndarray, ndarray]:
         vertices (ndarray): shape (4, 3)
         faces (ndarray): shape (1, 4)
     """
-    vertices = np.array([
-        [0.5, 0.5, 0],   [-0.5, 0.5, 0],   [-0.5, -0.5, 0],   [0.5, -0.5, 0] # v0-v1-v2-v3
-    ], dtype=np.float32)
-    if tri:
-        faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int32)
-    else:
-        faces = np.array([[0, 1, 2, 3]], dtype=np.int32)
-    return vertices, faces  
+    vertices = np.array(
+        [
+            [0.5, 0.5, 0],
+            [-0.5, 0.5, 0],
+            [-0.5, -0.5, 0],
+            [0.5, -0.5, 0],  # v0-v1-v2-v3
+        ],
+        dtype=np.float32,
+    )
+    faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int32) if tri else np.array([[0, 1, 2, 3]], dtype=np.int32)
+    return vertices, faces
 
 
 def create_cube_mesh(tri: bool = False) -> Tuple[ndarray, ndarray]:
@@ -438,22 +414,34 @@ def create_cube_mesh(tri: bool = False) -> Tuple[ndarray, ndarray]:
         tri (bool, optional): return triangulated mesh. Defaults to False, which returns quad mesh.
 
     ### Returns
-        vertices (ndarray): shape (8, 3) 
+        vertices (ndarray): shape (8, 3)
         faces (ndarray): shape (12, 3)
     """
-    vertices = np.array([
-        [0.5, 0.5, 0.5],   [-0.5, 0.5, 0.5],   [-0.5, -0.5, 0.5],   [0.5, -0.5, 0.5], # v0-v1-v2-v3
-        [0.5, 0.5, -0.5],  [-0.5, 0.5, -0.5],  [-0.5, -0.5, -0.5],  [0.5, -0.5, -0.5] # v4-v5-v6-v7
-    ], dtype=np.float32).reshape((-1, 3))
+    vertices = np.array(
+        [
+            [0.5, 0.5, 0.5],
+            [-0.5, 0.5, 0.5],
+            [-0.5, -0.5, 0.5],
+            [0.5, -0.5, 0.5],  # v0-v1-v2-v3
+            [0.5, 0.5, -0.5],
+            [-0.5, 0.5, -0.5],
+            [-0.5, -0.5, -0.5],
+            [0.5, -0.5, -0.5],  # v4-v5-v6-v7
+        ],
+        dtype=np.float32,
+    ).reshape((-1, 3))
 
-    faces = np.array([
-        [0, 1, 2, 3], #  (front)
-        [5, 4, 7, 6], #  (back)
-        [4, 5, 1, 0], #  (top)
-        [2, 6, 7, 3], #  (bottom)
-        [1, 5, 6, 2], #  (left)
-        [4, 0, 3, 7], #  (right)
-    ], dtype=np.int32)
+    faces = np.array(
+        [
+            [0, 1, 2, 3],  #  (front)
+            [5, 4, 7, 6],  #  (back)
+            [4, 5, 1, 0],  #  (top)
+            [2, 6, 7, 3],  #  (bottom)
+            [1, 5, 6, 2],  #  (left)
+            [4, 0, 3, 7],  #  (right)
+        ],
+        dtype=np.int32,
+    )
 
     if tri:
         faces = triangulate_mesh(faces, vertices=vertices)
@@ -461,29 +449,21 @@ def create_cube_mesh(tri: bool = False) -> Tuple[ndarray, ndarray]:
     return vertices, faces
 
 
-def create_camera_frustum_mesh(extrinsics: ndarray, intrinsics: ndarray, depth: float = 1.0) -> Tuple[ndarray, ndarray, ndarray]:
+def create_camera_frustum_mesh(
+    extrinsics: ndarray, intrinsics: ndarray, depth: float = 1.0
+) -> Tuple[ndarray, ndarray, ndarray]:
     """
     Create a triangle mesh of camera frustum.
     """
     assert extrinsics.shape == (4, 4) and intrinsics.shape == (3, 3)
     vertices = unproject_cv(
-        np.array([[0, 0], [0, 0], [0, 1], [1, 1], [1, 0]], dtype=np.float32), 
-        np.array([0] + [depth] * 4, dtype=np.float32), 
+        np.array([[0, 0], [0, 0], [0, 1], [1, 1], [1, 0]], dtype=np.float32),
+        np.array([0] + [depth] * 4, dtype=np.float32),
         intrinsics,
-        extrinsics
+        extrinsics,
     ).astype(np.float32)
-    edges = np.array([
-        [0, 1], [0, 2], [0, 3], [0, 4], 
-        [1, 2], [2, 3], [3, 4], [4, 1]
-    ], dtype=np.int32)
-    faces = np.array([
-        [0, 1, 2],
-        [0, 2, 3],
-        [0, 3, 4],
-        [0, 4, 1],
-        [1, 2, 3],
-        [1, 3, 4]
-    ], dtype=np.int32)
+    edges = np.array([[0, 1], [0, 2], [0, 3], [0, 4], [1, 2], [2, 3], [3, 4], [4, 1]], dtype=np.int32)
+    faces = np.array([[0, 1, 2], [0, 2, 3], [0, 3, 4], [0, 4, 1], [1, 2, 3], [1, 3, 4]], dtype=np.int32)
     return vertices, edges, faces
 
 
@@ -491,18 +471,49 @@ def create_icosahedron_mesh():
     """
     Create an icosahedron mesh of centered at origin.
     """
-    A = (1 + 5 ** 0.5) / 2
-    vertices = np.array([
-        [0, 1, A], [0, -1, A], [0, 1, -A], [0, -1, -A],
-        [1, A, 0], [-1, A, 0], [1, -A, 0], [-1, -A, 0],
-        [A, 0, 1], [A, 0, -1], [-A, 0, 1], [-A, 0, -1]
-    ], dtype=np.float32)
-    faces = np.array([
-        [0, 1, 8], [0, 8, 4], [0, 4, 5], [0, 5, 10], [0, 10, 1],
-        [3, 2, 9], [3, 9, 6], [3, 6, 7], [3, 7, 11], [3, 11, 2],
-        [1, 6, 8], [8, 9, 4], [4, 2, 5], [5, 11, 10], [10, 7, 1],
-        [2, 4, 9], [9, 8, 6], [6, 1, 7], [7, 10, 11], [11, 5, 2]
-    ], dtype=np.int32)
+    A = (1 + 5**0.5) / 2
+    vertices = np.array(
+        [
+            [0, 1, A],
+            [0, -1, A],
+            [0, 1, -A],
+            [0, -1, -A],
+            [1, A, 0],
+            [-1, A, 0],
+            [1, -A, 0],
+            [-1, -A, 0],
+            [A, 0, 1],
+            [A, 0, -1],
+            [-A, 0, 1],
+            [-A, 0, -1],
+        ],
+        dtype=np.float32,
+    )
+    faces = np.array(
+        [
+            [0, 1, 8],
+            [0, 8, 4],
+            [0, 4, 5],
+            [0, 5, 10],
+            [0, 10, 1],
+            [3, 2, 9],
+            [3, 9, 6],
+            [3, 6, 7],
+            [3, 7, 11],
+            [3, 11, 2],
+            [1, 6, 8],
+            [8, 9, 4],
+            [4, 2, 5],
+            [5, 11, 10],
+            [10, 7, 1],
+            [2, 4, 9],
+            [9, 8, 6],
+            [6, 1, 7],
+            [7, 10, 11],
+            [11, 5, 2],
+        ],
+        dtype=np.int32,
+    )
     return vertices, faces
 
 
@@ -523,7 +534,7 @@ def merge_meshes(meshes: List[Tuple[ndarray, ...]]) -> Tuple[ndarray, ...]:
     for f, *attrs in meshes:
         faces_merged.append(f + vertex_offset)
         vertex_offset += len(attrs[0])
-        for attr_merged, attr in zip(attrs_merged, attrs):
+        for attr_merged, attr in zip(attrs_merged, attrs, strict=False):
             attr_merged.append(attr)
     faces_merged = np.concatenate(faces_merged, axis=0)
     attrs_merged = [np.concatenate(attr_list, axis=0) for attr_list in attrs_merged]
@@ -531,10 +542,10 @@ def merge_meshes(meshes: List[Tuple[ndarray, ...]]) -> Tuple[ndarray, ...]:
 
 
 def mesh_edges(
-    faces: Union[ndarray, csr_array], 
-    return_face2edge: bool = False, 
-    return_edge2face: bool = False, 
-    return_counts: bool = False
+    faces: Union[ndarray, csr_array],
+    return_face2edge: bool = False,
+    return_edge2face: bool = False,
+    return_counts: bool = False,
 ) -> Tuple[ndarray, Union[ndarray, csr_array], csr_array, ndarray]:
     """Get undirected edges of a mesh. Optionally return additional mappings.
 
@@ -558,15 +569,20 @@ def mesh_edges(
     - `counts` (ndarray): `(E,)` counts of each edge
     """
     if isinstance(faces, csr_array):
-        edges = np.stack([faces.indices, segment_roll(faces.indices, faces.indptr, -1)], axis=-1) # (nzz, 2)
+        edges = np.stack([faces.indices, segment_roll(faces.indices, faces.indptr, -1)], axis=-1)  # (nzz, 2)
     else:
-        edges = np.stack([faces, np.roll(faces, -1, axis=-1)], axis=-1).reshape(-1, 2)    # (F * P, 2)
-    
+        edges = np.stack([faces, np.roll(faces, -1, axis=-1)], axis=-1).reshape(-1, 2)  # (F * P, 2)
+
     a, b = edges[:, 0], edges[:, 1]
     edges = np.stack([np.minimum(a, b), np.maximum(a, b)], axis=-1)
-    
-    unique = np.unique(edges, return_inverse=return_face2edge or return_edge2face, return_counts=return_counts or return_edge2face, axis=0)
-    
+
+    unique = np.unique(
+        edges,
+        return_inverse=return_face2edge or return_edge2face,
+        return_counts=return_counts or return_edge2face,
+        axis=0,
+    )
+
     edges: ndarray = unique[0] if isinstance(unique, tuple) else unique
     if return_face2edge or return_edge2face:
         inv_map: ndarray = unique[1]
@@ -576,25 +592,33 @@ def mesh_edges(
     ret = (edges,)
     if return_face2edge:
         if isinstance(faces, csr_array):
-            face2edge = csr_array((np.ones_like(inv_map, dtype=bool), inv_map, faces.indptr), shape=(faces.shape[0], edges.shape[0]))
+            face2edge = csr_array(
+                (np.ones_like(inv_map, dtype=bool), inv_map, faces.indptr), shape=(faces.shape[0], edges.shape[0])
+            )
         else:
             face2edge = inv_map.reshape(faces.shape)
         ret += (face2edge,)
     if return_edge2face:
         if isinstance(faces, csr_array):
             lengths = faces.indptr[1:] - faces.indptr[:-1]
-            edge2face = csr_array((
-                np.ones_like(inv_map, dtype=bool),
-                np.repeat(np.arange(faces.shape[0]), lengths)[np.argsort(inv_map)],
-                np.concatenate([np.array([0], dtype=counts.dtype), np.cumsum(counts)]),
-            ), shape=(edges.shape[0], faces.shape[0]))
+            edge2face = csr_array(
+                (
+                    np.ones_like(inv_map, dtype=bool),
+                    np.repeat(np.arange(faces.shape[0]), lengths)[np.argsort(inv_map)],
+                    np.concatenate([np.array([0], dtype=counts.dtype), np.cumsum(counts)]),
+                ),
+                shape=(edges.shape[0], faces.shape[0]),
+            )
             ret += (edge2face,)
         else:
-            edge2face = csr_array((
-                np.ones_like(inv_map, dtype=bool),
-                np.argsort(inv_map) // faces.shape[1],
-                np.concatenate([np.array([0], dtype=counts.dtype), np.cumsum(counts)]),
-            ), shape=(edges.shape[0], faces.shape[0]))
+            edge2face = csr_array(
+                (
+                    np.ones_like(inv_map, dtype=bool),
+                    np.argsort(inv_map) // faces.shape[1],
+                    np.concatenate([np.array([0], dtype=counts.dtype), np.cumsum(counts)]),
+                ),
+                shape=(edges.shape[0], faces.shape[0]),
+            )
             ret += (edge2face,)
     if return_counts:
         ret += (counts,)
@@ -602,13 +626,13 @@ def mesh_edges(
 
 
 def mesh_half_edges(
-    faces: Union[ndarray, csr_array], 
-    return_face2edge: bool = False, 
-    return_edge2face: bool = False, 
+    faces: Union[ndarray, csr_array],
+    return_face2edge: bool = False,
+    return_edge2face: bool = False,
     return_twin: bool = False,
     return_next: bool = False,
     return_prev: bool = False,
-    return_counts: bool = False
+    return_counts: bool = False,
 ) -> Tuple[ndarray, Union[ndarray, csr_array], csr_array, ndarray, ndarray, ndarray, ndarray]:
     """Get half edges of a mesh. Optionally return additional mappings.
 
@@ -632,7 +656,7 @@ def mesh_half_edges(
         - `(F, P)` if input `faces` is a dense array
         - `(F, E)` if input `faces` is a sparse csr array
     - `edge2face` (csr_array): `(E, F)` binary sparse CSR matrix of edge to face.
-    - `twin` (ndarray): `(E,)` mapping from edges to indices of opposite edges. -1 if not found. 
+    - `twin` (ndarray): `(E,)` mapping from edges to indices of opposite edges. -1 if not found.
     - `next` (ndarray): `(E,)` mapping from edges to indices of next edges in the face loop.
     - `prev` (ndarray): `(E,)` mapping from edges to indices of previous edges in the face loop.
     - `counts` (ndarray): `(E,)` counts of each half edge
@@ -640,10 +664,10 @@ def mesh_half_edges(
     NOTE: If the mesh is not manifold, `twin`, `next`, and `prev` can point to arbitrary one of the candidates.
     """
     if isinstance(faces, csr_array):
-        edges = np.stack([faces.indices, segment_roll(faces.indices, faces.indptr, -1)], axis=-1) # (nzz, 2)
+        edges = np.stack([faces.indices, segment_roll(faces.indices, faces.indptr, -1)], axis=-1)  # (nzz, 2)
     else:
-        edges = np.stack([faces, np.roll(faces, -1, axis=-1)], axis=-1).reshape(-1, 2)    # (F * P, 2)
-    
+        edges = np.stack([faces, np.roll(faces, -1, axis=-1)], axis=-1).reshape(-1, 2)  # (F * P, 2)
+
     requires_inv_map = return_face2edge or return_edge2face or return_next or return_prev
     requires_counts = return_counts or return_edge2face
 
@@ -658,7 +682,9 @@ def mesh_half_edges(
     ret = (edges,)
     if return_face2edge or return_next or return_prev:
         if isinstance(faces, csr_array):
-            face2edge = csr_array((np.ones_like(inv_map, dtype=bool), inv_map, faces.indptr), shape=(faces.shape[0], edges.shape[0]))
+            face2edge = csr_array(
+                (np.ones_like(inv_map, dtype=bool), inv_map, faces.indptr), shape=(faces.shape[0], edges.shape[0])
+            )
         else:
             face2edge = inv_map.reshape(faces.shape)
         if return_face2edge:
@@ -666,18 +692,24 @@ def mesh_half_edges(
     if return_edge2face:
         if isinstance(faces, csr_array):
             lengths = faces.indptr[1:] - faces.indptr[:-1]
-            edge2face = csr_array((
-                np.ones_like(inv_map, dtype=bool),
-                np.repeat(np.arange(faces.shape[0]), lengths)[np.argsort(inv_map)],
-                np.concatenate([np.array([0], dtype=counts.dtype), np.cumsum(counts, axis=0)]),
-            ), shape=(edges.shape[0], faces.shape[0]))
+            edge2face = csr_array(
+                (
+                    np.ones_like(inv_map, dtype=bool),
+                    np.repeat(np.arange(faces.shape[0]), lengths)[np.argsort(inv_map)],
+                    np.concatenate([np.array([0], dtype=counts.dtype), np.cumsum(counts, axis=0)]),
+                ),
+                shape=(edges.shape[0], faces.shape[0]),
+            )
             ret += (edge2face,)
         else:
-            edge2face = csr_array((
-                np.ones_like(inv_map, dtype=bool),
-                np.argsort(inv_map) // faces.shape[1],
-                np.concatenate([np.array([0], dtype=counts.dtype), np.cumsum(counts, axis=0)]),
-            ), shape=(edges.shape[0], faces.shape[0]))
+            edge2face = csr_array(
+                (
+                    np.ones_like(inv_map, dtype=bool),
+                    np.argsort(inv_map) // faces.shape[1],
+                    np.concatenate([np.array([0], dtype=counts.dtype), np.cumsum(counts, axis=0)]),
+                ),
+                shape=(edges.shape[0], faces.shape[0]),
+            )
             ret += (edge2face,)
     if return_twin:
         twin_edge = lookup(edges, np.flip(edges, -1))
@@ -703,8 +735,7 @@ def mesh_half_edges(
 
 
 def mesh_connected_components(
-    faces: Optional[ndarray] = None,
-    num_vertices: Optional[int] = None
+    faces: Optional[ndarray] = None, num_vertices: Optional[int] = None
 ) -> Union[ndarray, Tuple[ndarray, ndarray]]:
     """
     Compute connected faces of a mesh.
@@ -729,8 +760,7 @@ def mesh_connected_components(
 
 
 def graph_connected_components(
-    edges: ndarray, 
-    num_vertices: Optional[int] = None
+    edges: ndarray, num_vertices: Optional[int] = None
 ) -> Union[ndarray, Tuple[ndarray, ndarray]]:
     """
     Compute connected components of an undirected graph.
@@ -749,6 +779,7 @@ def graph_connected_components(
     - `labels` (ndarray): (N,) int32 component labels corresponding to `vertices_ids`
     """
     from scipy.sparse.csgraph import connected_components
+
     if num_vertices is None:
         # Re-index edges
         vertices_ids, edges = np.unique(edges.reshape(-1), return_inverse=True)
@@ -756,10 +787,10 @@ def graph_connected_components(
 
     num_connected_components, labels = connected_components(
         sp.coo_array(
-            (np.ones(edges.shape[0]), edges.T), 
-            shape=(num_vertices or len(vertices_ids), num_vertices or len(vertices_ids))
-        ), 
-        directed=False
+            (np.ones(edges.shape[0]), edges.T),
+            shape=(num_vertices or len(vertices_ids), num_vertices or len(vertices_ids)),
+        ),
+        directed=False,
     )
 
     if num_vertices is None:
@@ -770,18 +801,18 @@ def graph_connected_components(
 
 def mesh_adjacency_graph(
     adjacency: Literal[
-        'vertex2edge',
-        'vertex2face',
-        'edge2vertex',
-        'edge2face',
-        'face2edge',
-        'face2vertex',
-        'vertex2edge2vertex',
-        'vertex2face2vertex',
-        'edge2vertex2edge',
-        'edge2face2edge',
-        'face2edge2face',
-        'face2vertex2face',
+        "vertex2edge",
+        "vertex2face",
+        "edge2vertex",
+        "edge2face",
+        "face2edge",
+        "face2vertex",
+        "vertex2edge2vertex",
+        "vertex2face2vertex",
+        "edge2vertex2edge",
+        "edge2face2edge",
+        "face2edge2face",
+        "face2vertex2face",
     ],
     faces: Optional[Union[ndarray, csr_array]] = None,
     edges: Optional[ndarray] = None,
@@ -790,7 +821,7 @@ def mesh_adjacency_graph(
 ) -> csr_array:
     """
     Get adjacency graph of a mesh.
-    
+
     ## Parameters
     - `adjacency` (str): type of adjacency graph. Options:
         - `'vertex2edge'`: vertex to adjacent edges. Returns (V, E) csr
@@ -819,83 +850,88 @@ def mesh_adjacency_graph(
         if num_vertices is None:
             num_vertices = faces.shape[1]
         else:
-            assert num_vertices == faces.shape[1], f'num_vertices ({num_vertices}) does not match csr array faces.shape[1] ({faces.shape[1]})'
-    if adjacency == 'vertex2edge':
+            assert num_vertices == faces.shape[1], (
+                f"num_vertices ({num_vertices}) does not match csr array faces.shape[1] ({faces.shape[1]})"
+            )
+    if adjacency == "vertex2edge":
         assert edges is not None and num_vertices is not None
-        return mesh_adjacency_graph('edge2vertex', edges=edges, num_vertices=num_vertices).transpose().tocsr()
-    elif adjacency == 'vertex2face':
-        return mesh_adjacency_graph('face2vertex', faces=faces, num_vertices=num_vertices).transpose().tocsr()
-    elif adjacency == 'edge2vertex':
+        return mesh_adjacency_graph("edge2vertex", edges=edges, num_vertices=num_vertices).transpose().tocsr()
+    elif adjacency == "vertex2face":
+        return mesh_adjacency_graph("face2vertex", faces=faces, num_vertices=num_vertices).transpose().tocsr()
+    elif adjacency == "edge2vertex":
         assert edges is not None and num_vertices is not None
         return csr_matrix_from_dense_indices(edges, num_vertices)
-    elif adjacency == 'edge2face':
+    elif adjacency == "edge2face":
         assert edges is not None and faces is not None
-        return mesh_adjacency_graph('face2edge', faces=faces, edges=edges).transpose().tocsr() 
-    elif adjacency == 'face2edge':
+        return mesh_adjacency_graph("face2edge", faces=faces, edges=edges).transpose().tocsr()
+    elif adjacency == "face2edge":
         assert edges is not None and faces is not None
         if isinstance(faces, csr_array):
-            face_edges = np.stack([faces.indices, segment_roll(faces.indices, faces.indptr, -1)], axis=-1) # (nzz, 2)
+            face_edges = np.stack([faces.indices, segment_roll(faces.indices, faces.indptr, -1)], axis=-1)  # (nzz, 2)
         else:
-            face_edges = np.stack([faces, np.roll(faces, -1, axis=-1)], axis=-1).reshape(-1, 2)    # (F * P, 2)
+            face_edges = np.stack([faces, np.roll(faces, -1, axis=-1)], axis=-1).reshape(-1, 2)  # (F * P, 2)
         a, b = face_edges[:, 0], face_edges[:, 1]
         face_edges = np.stack([np.minimum(a, b), np.maximum(a, b)], axis=-1)
         indices = lookup(edges, face_edges)
-        return csr_array((
-            np.ones_like(indices, dtype=bool),
-            indices, 
-            faces.indptr if isinstance(faces, csr_array) else np.arange(0, faces.size + 1, faces.shape[1])
-        ), shape=(faces.shape[0], edges.shape[0])).tocsr()
-    elif adjacency == 'face2vertex':
+        return csr_array(
+            (
+                np.ones_like(indices, dtype=bool),
+                indices,
+                faces.indptr if isinstance(faces, csr_array) else np.arange(0, faces.size + 1, faces.shape[1]),
+            ),
+            shape=(faces.shape[0], edges.shape[0]),
+        ).tocsr()
+    elif adjacency == "face2vertex":
         assert faces is not None
         if isinstance(faces, csr_array):
             return faces
         else:
             assert num_vertices is not None
             return csr_matrix_from_dense_indices(faces, num_vertices)
-    elif adjacency == 'vertex2edge2vertex':
-        e2v = mesh_adjacency_graph('edge2vertex', edges=edges, num_vertices=num_vertices)
+    elif adjacency == "vertex2edge2vertex":
+        e2v = mesh_adjacency_graph("edge2vertex", edges=edges, num_vertices=num_vertices)
         v2e2v = (e2v.transpose() @ e2v).tocsr()
         if not self_loop:
             v2e2v.setdiag(0)
             v2e2v.eliminate_zeros()
         return v2e2v
-    elif adjacency == 'vertex2face2vertex':
-        f2v = mesh_adjacency_graph('face2vertex', faces=faces, num_vertices=num_vertices)
+    elif adjacency == "vertex2face2vertex":
+        f2v = mesh_adjacency_graph("face2vertex", faces=faces, num_vertices=num_vertices)
         v2f2v = (f2v.transpose() @ f2v).tocsr()
         if not self_loop:
             v2f2v.setdiag(0)
             v2f2v.eliminate_zeros()
         return v2f2v
-    elif adjacency == 'edge2vertex2edge':
+    elif adjacency == "edge2vertex2edge":
         # num_vertices is optional here
-        if num_vertices is None:    
+        if num_vertices is None:
             vertices_id, edges = np.unique(edges.reshape(-1), return_inverse=True)
             edges = edges.reshape(-1, 2)
             num_vertices = len(vertices_id)
-        e2v = mesh_adjacency_graph('edge2vertex', edges=edges, num_vertices=num_vertices)
+        e2v = mesh_adjacency_graph("edge2vertex", edges=edges, num_vertices=num_vertices)
         e2v2e = (e2v @ e2v.transpose()).tocsr()
         if not self_loop:
             e2v2e.setdiag(0)
             e2v2e.eliminate_zeros()
         return e2v2e
-    elif adjacency == 'edge2face2edge':
-        e2f = mesh_adjacency_graph('edge2face', faces=faces, edges=edges)
+    elif adjacency == "edge2face2edge":
+        e2f = mesh_adjacency_graph("edge2face", faces=faces, edges=edges)
         e2f2e = (e2f @ e2f.transpose()).tocsr()
         if not self_loop:
             e2f2e.setdiag(0)
             e2f2e.eliminate_zeros()
         return e2f2e
-    elif adjacency == 'face2edge2face':
+    elif adjacency == "face2edge2face":
         if edges is None:
             _, f2e = mesh_edges(faces, directed=False, return_face2edge=True)
         else:
-            f2e = mesh_adjacency_graph('face2edge', faces=faces, edges=edges)
+            f2e = mesh_adjacency_graph("face2edge", faces=faces, edges=edges)
         f2e2f = (f2e @ f2e.transpose()).tocsr()
         if not self_loop:
             f2e2f.setdiag(0)
             f2e2f.eliminate_zeros()
         return f2e2f
-    elif adjacency == 'face2vertex2face':
+    elif adjacency == "face2vertex2face":
         if isinstance(faces, csr_array):
             f2v = faces
         else:
@@ -908,9 +944,7 @@ def mesh_adjacency_graph(
             f2v2f.eliminate_zeros()
         return f2v2f
     else:
-        raise ValueError(f'Unknown adjacency type: {adjacency}')
-
-
+        raise ValueError(f"Unknown adjacency type: {adjacency}")
 
 
 # def calc_quad_candidates(
@@ -1163,7 +1197,7 @@ def mesh_adjacency_graph(
 #         np.stack([np.arange(T+C, T+2*C), quads_connection[:, 1], np.ones(C)], axis=1),  # [C, 3]
 #     ], axis=0)  # [3T+6C, 3]
 #     A_ub_triplet = A_ub_triplet[A_ub_triplet[:, 1] != -1]  # [3T', 3]
-#     A_ub = sp.coo_matrix((A_ub_triplet[:, 2], (A_ub_triplet[:, 0], A_ub_triplet[:, 1])), shape=[T+2*C, Q+2*C])  # [T, 
+#     A_ub = sp.coo_matrix((A_ub_triplet[:, 2], (A_ub_triplet[:, 0], A_ub_triplet[:, 1])), shape=[T+2*C, Q+2*C])  # [T,
 #     b_ub = np.concatenate([np.ones(T), -np.ones(C), np.ones(C)], axis=0)  # [T+2C]
 #     bound = np.stack([
 #         np.concatenate([np.zeros(Q), -np.ones(C), np.zeros(C)], axis=0),
@@ -1294,7 +1328,7 @@ def mesh_adjacency_graph(
 
 # def tri_to_quad(
 #     vertices: ndarray,
-#     faces: ndarray, 
+#     faces: ndarray,
 # ) -> Tuple[ndarray, ndarray]:
 #     """
 #     Convert a triangle mesh to a quad mesh.

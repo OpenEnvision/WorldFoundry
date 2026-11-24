@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from .worldfoundry_runtime import CogVideoX
-
 from ..runtime_video_synthesis import RuntimeVideoSynthesis
+from .worldfoundry_runtime import CogVideoX
 
 
 class CogVideoX5bT2VSynthesis(RuntimeVideoSynthesis):

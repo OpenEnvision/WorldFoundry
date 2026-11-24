@@ -1,11 +1,11 @@
 ---
 title: "pi0.5"
-description: "pi0.5 policy binding with checkpoint-backed pi05_libero action inference verified on synthetic inputs."
+description: "pi0.5: Physical Intelligence's open-world flow-matching VLA policy, run through the official OpenPI runtime with the `pi05_libero` checkpoint."
 modelId: "pi05"
 pageSource: authored
 ---
 
-pi0.5 is Physical Intelligence's open-world generalization upgrade of pi0: a PaliGemma-based VLA with a flow-matching action expert. The independent `pi05` binding reuses WorldFoundry's in-tree OpenPI runtime and has generated actions with the official `pi05_libero` checkpoint.
+pi0.5 is Physical Intelligence's open-world generalization upgrade of pi0: a PaliGemma-based VLA with a flow-matching action expert. WorldFoundry runs it through the official OpenPI runtime with the official `pi05_libero` checkpoint.
 
 <ModelPaperFigures modelId="pi05" locale="en" />
 
@@ -13,7 +13,7 @@ pi0.5 is Physical Intelligence's open-world generalization upgrade of pi0: a Pal
 
 ## What it is for
 
-Launch `worldfoundry-eval run pi05` with a staged `pi05_libero` checkpoint. A GPU run through this public binding produced finite 10×7 actions from synthetic dual-camera images and the checkpoint-mean state. This establishes action inference structure, not success on [LIBERO](/docs/evaluation/benchmark-hub/libero). Do not route this through LeRobot policy-zoo.
+Launch `wf run pi05` with a staged `pi05_libero` checkpoint. Validated on a GPU: the pipeline produces 10×7 action chunks from synthetic dual-camera images and the checkpoint-mean state; success on [LIBERO](/docs/evaluation/benchmark-hub/libero) tasks is not measured. Run it through the official OpenPI runtime, not the LeRobot policy zoo.
 
 ## Runtime contract
 
@@ -21,8 +21,8 @@ Required `image`, `instruction`, and `prompt`. `actions`: `robot_action`, `propr
 
 ## Running in WorldFoundry
 
-Use an OpenPI environment with JAX GPU support and the package dependencies in `requirements/worldfoundry-unified.txt`. Stage `gs://openpi-assets` with gsutil or pass an explicit checkpoint path. License is on the [OpenPI](/docs/guides/supported-models/openpi) card (Apache-2.0). Status: **checkpoint-backed inference verified** for the `pi05_libero` configuration; task performance and the `pi05_base`/`pi05_droid` checkpoints are untested.
+Use an OpenPI environment with JAX GPU support and the package dependencies in `requirements/worldfoundry-unified.txt`. Stage `gs://openpi-assets` with gsutil or pass an explicit checkpoint path. The license follows [OpenPI](/docs/guides/supported-models/openpi) (Apache-2.0). Task performance and the `pi05_base`/`pi05_droid` checkpoints are not validated.
 
-`pi05_libero` is the validated `get_action` reference. Import official LIBERO results with `worldfoundry-eval zoo benchmark-run --benchmark-id libero --mode official-validation` and read `success_rate`. Suite import is normalizer-only — not a leaderboard.
+Import official LIBERO results with `wf zoo benchmark-run --benchmark-id libero --mode official-validation` and read `success_rate`; the import only normalizes published results and is not a leaderboard.
 
 <ModelRelatedRecipes modelId="pi05" locale="en" />

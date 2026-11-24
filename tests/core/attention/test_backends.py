@@ -52,8 +52,11 @@ class AttentionProbeTests(unittest.TestCase):
         ):
             with self.subTest(child=child, supported=supported):
                 result = self.backends["_package_capability"](
-                    name="fixture", package=f"probe_fixture.{child}", usable_if=supported,
-                    unavailable_reason="missing package", unusable_reason="unsupported hardware",
+                    name="fixture",
+                    package=f"probe_fixture.{child}",
+                    usable_if=supported,
+                    unavailable_reason="missing package",
+                    unusable_reason="unsupported hardware",
                 )
                 self.assertEqual((result.available, result.usable), (available, usable))
         self.assertFalse((package / "imported").exists())

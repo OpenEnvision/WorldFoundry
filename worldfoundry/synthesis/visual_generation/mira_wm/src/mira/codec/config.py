@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from mira.ml import ImageConfig
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.ml import ImageConfig
 
 
 class StridedConvBottleneckConfig(BaseModel):

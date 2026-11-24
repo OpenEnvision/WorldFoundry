@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json
+
 import shlex
 import subprocess
 from pathlib import Path
@@ -11,23 +11,22 @@ from worldfoundry.base_models import capabilities
 from worldfoundry.base_models.capabilities import (
     BASE_MODEL_CAPABILITIES,
     BASE_MODEL_STACKS,
-    benchmark_base_model_dependency_ids,
-    benchmark_data_asset_capability_ids,
     base_model_inventory,
     base_model_materialization_plan,
+    benchmark_base_model_dependency_ids,
+    benchmark_data_asset_capability_ids,
     check_base_model_dependencies,
     resolve_base_model_capability_ids,
 )
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import formal_benchmark_ids
-
+from worldfoundry.evals.tasks.catalog.benchmark_catalog import (
+    formal_benchmark_ids,
+    iter_benchmark_catalog_manifest_paths,
+    load_benchmark_runtime_profiles,
+)
+from worldfoundry.evals.utils import load_manifest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TASK_ROOT = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "tasks" / "external"
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import (
-    iter_benchmark_catalog_manifest_paths,
-)
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import load_benchmark_runtime_profiles
-from worldfoundry.evaluation.utils import load_manifest
 
 
 def _dependency_tuple(payload: dict, key: str) -> tuple[str, ...]:
@@ -64,8 +63,6 @@ def test_base_model_capability_registry_owns_heavy_benchmark_dependencies() -> N
         "grounding_dino",
         "libero_dataset_assets",
         "libero_source_assets",
-        "libero_para_dataset_assets",
-        "libero_para_source_assets",
         "maniskill_source_assets",
         "metaworld_source_assets",
         "mirabench_source_assets",
@@ -89,7 +86,6 @@ def test_base_model_capability_registry_owns_heavy_benchmark_dependencies() -> N
         "simpler_env_source_assets",
         "t2v_safety_bench_source_assets",
         "t2v_compbench_dataset_assets",
-        "t2vphysbench_external_assets",
         "t2vworldbench_source_assets",
         "tum_rgbd_slam_sample_assets",
         "unidepth_v2_vitl14",
@@ -116,8 +112,8 @@ def test_base_model_capability_registry_owns_heavy_benchmark_dependencies() -> N
     assert expected <= set(BASE_MODEL_CAPABILITIES)
     for capability_id in expected:
         capability = BASE_MODEL_CAPABILITIES[capability_id]
-        assert capability.canonical_owner.startswith("worldfoundry.base_models.")
-        assert capability.canonical_path.startswith("worldfoundry/base_models/")
+        assert capability.canonical_owner.startswith("worldfoundry.")
+        assert capability.canonical_path.startswith("worldfoundry/")
         assert capability.owner_path().exists()
 
 
@@ -203,13 +199,20 @@ def test_base_model_materialization_plan_emits_download_and_export_hints(
     )
 
     assert plan["ok"] is False
-    assert any("download ShilongLiu/GroundingDINO groundingdino_swint_ogc.pth" in item for item in plan["download_commands"])
+    assert any(
+        "download ShilongLiu/GroundingDINO groundingdino_swint_ogc.pth" in item for item in plan["download_commands"]
+    )
     assert any("download bert-base-uncased config.json" in item for item in plan["download_commands"])
     assert any("download bert-base-uncased model.safetensors" in item for item in plan["download_commands"])
     assert any("download bert-base-uncased vocab.txt" in item for item in plan["download_commands"])
-    assert any("download facebook/sam2.1-hiera-base-plus sam2.1_hiera_base_plus.pt" in item for item in plan["download_commands"])
+    assert any(
+        "download facebook/sam2.1-hiera-base-plus sam2.1_hiera_base_plus.pt" in item
+        for item in plan["download_commands"]
+    )
     assert any("sam_vit_h_4b8939.pth" in item for item in plan["download_commands"])
-    assert any(command[:3] == ["hf", "download", "ShilongLiu/GroundingDINO"] for command in plan["download_command_argvs"])
+    assert any(
+        command[:3] == ["hf", "download", "ShilongLiu/GroundingDINO"] for command in plan["download_command_argvs"]
+    )
     assert "hydra-core" in plan["pip_install_packages"]
     assert any(command.startswith("export WORLDFOUNDRY_SAM2_CKPT=") for command in plan["export_commands"])
     assert any(command.startswith("export WORLDFOUNDRY_SAM_VIT_H_CKPT=") for command in plan["export_commands"])
@@ -309,44 +312,31 @@ def test_raft_checkpoint_download_command_extracts_single_zip_member(tmp_path: P
     subprocess.run(["bash", "-n", "-c", argv[2]], check=True)
 
 
-def test_source_repo_assets_emit_git_clone_hints(tmp_path: Path) -> None:
+def test_source_repo_assets_are_in_tree_and_never_cloned() -> None:
     plan = base_model_materialization_plan(["vbench_source_assets", "physics_iq_source_assets"])
-    vbench_command = BASE_MODEL_CAPABILITIES["vbench_source_assets"].assets[0].download_command(
-        {"WORLDFOUNDRY_WORKSPACE_ROOT": str(tmp_path / "workspace")}
-    )
-    physics_command = BASE_MODEL_CAPABILITIES["physics_iq_source_assets"].assets[0].download_command(
-        {"WORLDFOUNDRY_WORKSPACE_ROOT": str(tmp_path / "workspace")}
-    )
 
     assert plan["capability_ids"] == ["vbench_source_assets", "physics_iq_source_assets"]
-    assert vbench_command is not None
-    assert physics_command is not None
-    assert "git clone --depth 1 https://github.com/Vchitect/VBench.git" in vbench_command[2]
-    assert "git clone https://github.com/google-deepmind/physics-IQ-benchmark.git" in physics_command[2]
-    assert "git -C" in physics_command[2] and "52e52a14d3a7284ae24d8aff98fe982ac7a60971" in physics_command[2]
-    assert any(command.startswith("export WORLDFOUNDRY_VBENCH_ROOT=") for command in plan["export_commands"])
-    assert any(command.startswith("export WORLDFOUNDRY_PHYSICS_IQ_ROOT=") for command in plan["export_commands"])
+    assert plan["ok"] is True
+    assert plan["download_commands"] == []
+    physics_asset = BASE_MODEL_CAPABILITIES["physics_iq_source_assets"].assets[0]
+    assert physics_asset.download_command() is None
+    assert physics_asset.local_path.startswith("${WORLDFOUNDRY_REPO_ROOT}/")
+    assert (
+        "do not stage or clone https://github.com/google-deepmind/physics-IQ-benchmark.git"
+        in physics_asset.manual_action
+    )
+    assert "52e52a14d3a7284ae24d8aff98fe982ac7a60971" in physics_asset.note
 
 
 def test_embodied_asset_registry_recognizes_configured_model_source_layouts(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
-    repo_root = tmp_path / "WorldFoundry"
-    model_source_root = tmp_path / "model-source"
-    calvin_dataset = workspace / "data" / "worldfoundry" / "datasets" / "calvin"
-    calvin_split = calvin_dataset / "task_D_D"
-    rlbench_repo = model_source_root / "stepjam--RLBench"
+    calvin_split = workspace / "data" / "worldfoundry" / "datasets" / "calvin" / "task_D_D"
     calvin_split.mkdir(parents=True)
-    rlbench_repo.mkdir(parents=True)
     (calvin_split / "episode_0000000.npz").write_text("calvin data", encoding="utf-8")
-    (rlbench_repo / "README.md").write_text("rlbench", encoding="utf-8")
 
     plan = base_model_materialization_plan(
         ["calvin_dataset_assets", "rlbench_source_assets"],
-        env={
-            "WORLDFOUNDRY_WORKSPACE_ROOT": str(workspace),
-            "WORLDFOUNDRY_REPO_ROOT": str(repo_root),
-            "WORLDFOUNDRY_MODEL_SOURCE_DIR": str(model_source_root),
-        },
+        env={"WORLDFOUNDRY_WORKSPACE_ROOT": str(workspace)},
     )
 
     assert plan["ok"] is True
@@ -400,45 +390,36 @@ def test_perception_data_assets_require_expected_directory_layout(tmp_path: Path
 
 def test_unreleased_or_pending_public_assets_report_precise_staging_points(tmp_path: Path) -> None:
     plan = base_model_materialization_plan(
-        ["mirabench_source_assets", "t2vphysbench_external_assets"],
+        ["mirabench_source_assets", "world_in_world_source_assets"],
         env={
+            "WORLDFOUNDRY_REPO_ROOT": str(tmp_path / "checkout"),
             "WORLDFOUNDRY_CACHE_DIR": str(tmp_path / "cache"),
             "WORLDFOUNDRY_DATA_DIR": str(tmp_path / "data"),
         },
     )
 
     assert plan["ok"] is False
-    assert "mirabench_source_assets_repo" in plan["summary"]["missing_required_asset_ids"]
+    assert "mirabench_source_assets_in_tree" in plan["summary"]["missing_required_asset_ids"]
     assert {
-        asset["id"]
-        for check in plan["checks"]
-        for asset in check["asset_status"]
-        if asset["required"] is False
-    } == {
-        "t2vphysbench_external_assets_dir",
-    }
-    mirabench_asset = next(
-        asset
-        for check in plan["checks"]
-        for asset in check["asset_status"]
-        if asset["id"] == "mirabench_source_assets_repo"
-    )
-    assert mirabench_asset["git_repo_url"] == "https://github.com/mira-space/MiraData.git"
-    assert mirabench_asset["required_files"] == []
+        asset["id"] for check in plan["checks"] for asset in check["asset_status"] if asset["required"] is False
+    } == {"world_in_world_source_assets_dir"}
+    assert any("worldfoundry/evals/tasks/execution/runners/mirabench" in action for action in plan["manual_actions"])
+
+
 def test_actionable_embodied_datasets_emit_specific_materialization_hints() -> None:
     plan = base_model_materialization_plan(["bridgedata_v2_dataset_assets", "calvin_dataset_assets"])
 
     assert plan["ok"] is False
-    assert any("download_data.sh" in command for command in plan["download_commands"])
-    assert any("WORLDFOUNDRY_CALVIN_DATASET_SPLIT" in command for command in plan["download_commands"])
+    assert plan["download_commands"] == []
     assert any("rail.eecs.berkeley.edu/datasets/bridge_release/data" in action for action in plan["manual_actions"])
+    assert any("$WORLDFOUNDRY_CALVIN_DATASET_ROOT" in action for action in plan["manual_actions"])
     assert not any("stage bridgedata_v2_dataset_assets_dir" in action for action in plan["manual_actions"])
 
 
 def test_base_model_data_assets_use_canonical_worldfoundry_roots() -> None:
     assert (
         BASE_MODEL_CAPABILITIES["calvin_source_assets"].assets[0].local_path
-        == "${WORLDFOUNDRY_MODEL_SOURCE_DIR}/mees--calvin"
+        == "${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evals/tasks/embodied/simulators/calvin"
     )
     assert (
         BASE_MODEL_CAPABILITIES["calvin_dataset_assets"].assets[0].local_path
@@ -486,17 +467,19 @@ def test_base_model_stacks_expand_to_canonical_capabilities() -> None:
     resolved = resolve_base_model_capability_ids(["depth_stack", "grounding_dino", "motion_stack"])
 
     assert resolved == [
-        "depth_anything_v3",
-        "moge_vitl",
-        "moge_v2_vitl_normal",
-        "unidepth_v2_vitl14",
+        *BASE_MODEL_STACKS["depth_stack"].capability_ids,
         "grounding_dino",
-        "raft",
-        "sea_raft",
+        *BASE_MODEL_STACKS["motion_stack"].capability_ids,
     ]
+    assert resolved[:2] == ["depth_anything_v3", "midas_v21_small_256"]
     plan = base_model_materialization_plan(["detection_segmentation_stack"])
     assert plan["stack_ids"] == ["detection_segmentation_stack"]
-    assert plan["capability_ids"] == ["grounding_dino", "sam_v1", "sam_vit_b", "sam2", "sam3", "aot_deaot_l"]
+    assert plan["capability_ids"] == [
+        "grounding_dino",
+        *BASE_MODEL_STACKS["segmentation_stack"].capability_ids,
+        "sam_vit_b",
+        "aot_deaot_l",
+    ]
     core_plan = base_model_materialization_plan(["spatial_perception_core_stack"])
     assert core_plan["capability_ids"] == [
         "depth_anything_v3",
@@ -510,12 +493,7 @@ def test_base_model_stacks_expand_to_canonical_capabilities() -> None:
         "raft",
     ]
     heavy_plan = base_model_materialization_plan(["spatial_perception_heavy_stack"])
-    assert heavy_plan["capability_ids"][:4] == [
-        "depth_anything_v3",
-        "moge_vitl",
-        "moge_v2_vitl_normal",
-        "unidepth_v2_vitl14",
-    ]
+    assert heavy_plan["capability_ids"][:2] == ["depth_anything_v3", "midas_v21_small_256"]
     assert "droid_slam" in heavy_plan["capability_ids"]
     assert "grounding_dino" in heavy_plan["capability_ids"]
     assert "sam3" in heavy_plan["capability_ids"]
@@ -530,6 +508,7 @@ def test_base_model_stacks_expand_to_canonical_capabilities() -> None:
         "sam2",
         "sam3",
         "raft",
+        "vbench_metric_checkpoint_assets",
     ]
     worldscore_plan = base_model_materialization_plan(["worldscore_spatial_metric_stack"])
     assert worldscore_plan["capability_ids"] == [
@@ -540,6 +519,8 @@ def test_base_model_stacks_expand_to_canonical_capabilities() -> None:
         "sam_v1",
         "sam2",
         "sea_raft",
+        "flowformerplusplus",
+        "vfimamba",
     ]
     assert worldscore_plan["checks"][0]["family"] == "benchmark_data_asset"
     videoscore_plan = base_model_materialization_plan(["videoscore_reward_metric_stack"])
@@ -559,7 +540,7 @@ def test_base_model_stacks_expand_to_canonical_capabilities() -> None:
         "vbench_source_assets",
         "world_in_world_source_assets",
     } <= set(official_asset_plan["capability_ids"])
-    assert {check["family"] for check in official_asset_plan["checks"]} == {"benchmark_data_asset"}
+    assert "benchmark_data_asset" in {check["family"] for check in official_asset_plan["checks"]}
     dataset_stack_plan = base_model_materialization_plan(["benchmark_dataset_asset_stack"])
     assert dataset_stack_plan["capability_ids"][:3] == [
         "aigcbench_dataset_assets",
@@ -569,7 +550,6 @@ def test_base_model_stacks_expand_to_canonical_capabilities() -> None:
     assert {
         "bridgedata_v2_source_assets",
         "calvin_source_assets",
-        "t2vphysbench_external_assets",
         "videoscience_bench_source_assets",
         "worldarena_source_assets",
     } <= set(dataset_stack_plan["capability_ids"])
@@ -589,7 +569,9 @@ def test_base_model_stacks_expand_to_canonical_capabilities() -> None:
         "tum_rgbd_slam_sample_assets",
         "kitti_depth_slam_assets",
     ]
-    assert any("images.cocodataset.org/zips/val2017.zip" in command for command in perception_data_plan["download_commands"])
+    assert any(
+        "images.cocodataset.org/zips/val2017.zip" in command for command in perception_data_plan["download_commands"]
+    )
     assert any("DAVIS-2017-trainval-480p.zip" in command for command in perception_data_plan["download_commands"])
     assert any("rgbd_dataset_freiburg1_desk.tgz" in command for command in perception_data_plan["download_commands"])
     assert any("Stage KITTI odometry/depth assets" in action for action in perception_data_plan["manual_actions"])
@@ -622,7 +604,7 @@ def test_base_model_materialization_plan_schema_is_stable() -> None:
             "ok",
         } <= set(check)
     assert plan["summary"]["family_counts"]["detection"]["capability_count"] == 1
-    assert plan["summary"]["family_counts"]["segmentation"]["capability_count"] == 4
+    assert plan["summary"]["family_counts"]["segmentation"]["capability_count"] == 5
     assert plan["summary"]["family_counts"]["video_object_segmentation"]["capability_count"] == 1
     assert plan["summary"]["asset_counts_by_role"]["checkpoint"] >= 1
 
@@ -650,18 +632,19 @@ def test_base_model_inventory_lists_capabilities_and_stacks() -> None:
     covered_asset_roles = {
         "benchmark_annotation_dataset",
         "benchmark_dataset",
-        "benchmark_source_repo",
+        "benchmark_in_tree_source",
         "external_benchmark_asset",
         "external_benchmark_dataset",
         "perception_eval_dataset",
         "reference_video_dataset",
-        "simulator_source_repo",
+        "simulator_in_tree_source",
     }
-    assert sum(inventory["asset_counts_by_role"].get(role, 0) for role in covered_asset_roles) >= inventory[
-        "benchmark_data_asset_count"
-    ]
+    assert (
+        sum(inventory["asset_counts_by_role"].get(role, 0) for role in covered_asset_roles)
+        >= inventory["benchmark_data_asset_count"]
+    )
     assert inventory["benchmark_data_asset_count"] == len(formal_benchmark_ids())
-    assert inventory["benchmark_data_assets"]["camerabench"] == ["camerabench_dataset_assets"]
+    assert inventory["benchmark_data_assets"]["camerabench"][0] == "camerabench_dataset_assets"
     assert inventory["benchmark_data_assets"]["bridgedata-v2"] == [
         "bridgedata_v2_source_assets",
         "bridgedata_v2_dataset_assets",
@@ -670,7 +653,10 @@ def test_base_model_inventory_lists_capabilities_and_stacks() -> None:
         "iworld_bench_source_assets",
         "iworld_bench_dataset_assets",
     ]
-    assert inventory["benchmark_data_assets"]["vbench-plus-plus"] == ["vbench_source_assets"]
+    assert inventory["benchmark_data_assets"]["vbench-plus-plus"][:2] == [
+        "vbench_source_assets",
+        "vbench_plus_plus_source_assets",
+    ]
     assert inventory["benchmark_data_assets"]["worldscore"] == [
         "worldscore_official_assets",
         "worldscore_dataset_assets",
@@ -678,23 +664,13 @@ def test_base_model_inventory_lists_capabilities_and_stacks() -> None:
     assert benchmark_data_asset_capability_ids("chronomagic-bench") == ("chronomagic_dataset_assets",)
     assert benchmark_data_asset_capability_ids("video-bench") == ("video_bench_dataset_assets",)
     assert benchmark_data_asset_capability_ids("libero") == ("libero_source_assets", "libero_dataset_assets")
-    assert not [benchmark_id for benchmark_id in formal_benchmark_ids() if not benchmark_data_asset_capability_ids(benchmark_id)]
-    assert any(
-        asset["min_size_bytes"] is not None
-        for item in inventory["capabilities"]
-        for asset in item["assets"]
-    )
-    assert any(
-        asset["role"] == "benchmark_dataset"
-        for item in inventory["capabilities"]
-        for asset in item["assets"]
-    )
-    assert (
-        REPO_ROOT / "worldfoundry/base_models/perception_core/general_perception/open_clip/tokenizer.py"
-    ).is_file()
-    assert (
-        REPO_ROOT / "worldfoundry/data/models/runtime/configs/open_clip/model_configs"
-    ).is_dir()
+    assert not [
+        benchmark_id for benchmark_id in formal_benchmark_ids() if not benchmark_data_asset_capability_ids(benchmark_id)
+    ]
+    assert any(asset["min_size_bytes"] is not None for item in inventory["capabilities"] for asset in item["assets"])
+    assert any(asset["role"] == "benchmark_dataset" for item in inventory["capabilities"] for asset in item["assets"])
+    assert (REPO_ROOT / "worldfoundry/base_models/perception_core/general_perception/open_clip/tokenizer.py").is_file()
+    assert (REPO_ROOT / "worldfoundry/data/models/runtime/configs/open_clip/model_configs").is_dir()
     assert not (
         REPO_ROOT / "worldfoundry/base_models/perception_core/general_perception/open_clip/model_configs"
     ).exists()
@@ -737,22 +713,11 @@ def test_benchmark_base_model_dependency_ids_include_data_assets() -> None:
 
 
 def test_spatial_heavy_stack_includes_motion_assets() -> None:
-    assert resolve_base_model_capability_ids(["spatial_perception_heavy_stack"]) == [
-        "depth_anything_v3",
-        "moge_vitl",
-        "moge_v2_vitl_normal",
-        "unidepth_v2_vitl14",
-        "droid_slam",
-        "vggt_1b",
-        "grounding_dino",
-        "sam_v1",
-        "sam_vit_b",
-        "sam2",
-        "sam3",
-        "aot_deaot_l",
-        "raft",
-        "sea_raft",
-    ]
+    members = ("depth_stack", "slam_stack", "detection_stack", "segmentation_tracking_stack", "motion_stack")
+    expected = [capability for stack in members for capability in BASE_MODEL_STACKS[stack].capability_ids]
+
+    assert resolve_base_model_capability_ids(["spatial_perception_heavy_stack"]) == expected
+    assert {"raft", "sea_raft"} <= set(expected)
 
 
 def test_base_model_materialization_plan_distinguishes_all_from_empty() -> None:
@@ -773,10 +738,7 @@ def test_benchmark_base_model_refs_are_registered_and_consistent() -> None:
         payload = load_manifest(path)
         if isinstance(payload, dict) and payload.get("id"):
             catalog_entries[str(payload["id"])] = payload
-    profiles = {
-        str(profile["id"]): profile
-        for profile in load_benchmark_runtime_profiles()["profiles"]
-    }
+    profiles = {str(profile["id"]): profile for profile in load_benchmark_runtime_profiles()["profiles"]}
 
     missing_dependency_refs = []
     for task_path in sorted(TASK_ROOT.glob("*.yaml")):

@@ -25,14 +25,16 @@ Handles:
 
 from copy import deepcopy
 
+import numpy as np
+
+from .action_chunking import EndEffectorActionChunk, JointActionChunk
+from .pose import EndEffectorPose, JointPose
 from .types import (
     ActionFormat,
     ActionRepresentation,
     ActionType,
     ModalityConfig,
 )
-from .action_chunking import EndEffectorActionChunk, JointActionChunk
-from .pose import EndEffectorPose, JointPose
 from .utils import (
     apply_sin_cos_encoding,
     nested_dict_to_numpy,
@@ -42,7 +44,6 @@ from .utils import (
     unnormalize_values_meanstd,
     unnormalize_values_minmax,
 )
-import numpy as np
 
 
 class StateActionProcessor:
@@ -160,11 +161,8 @@ class StateActionProcessor:
                 action_configs = self.modality_configs[embodiment_tag]["action"].action_configs
 
                 if action_configs is not None:
-                    for key, action_config in zip(modality_keys, action_configs):
-                        if (
-                            action_config.rep == ActionRepresentation.RELATIVE
-                            and self.use_relative_action
-                        ):
+                    for key, action_config in zip(modality_keys, action_configs, strict=False):
+                        if action_config.rep == ActionRepresentation.RELATIVE and self.use_relative_action:
                             if "relative_action" not in self.statistics[embodiment_tag]:
                                 raise ValueError(
                                     f"Relative action statistics required for embodiment '{embodiment_tag}' "
@@ -211,9 +209,7 @@ class StateActionProcessor:
 
         for joint_group in self.modality_configs[embodiment_tag]["state"].modality_keys:
             if joint_group not in state:
-                raise KeyError(
-                    f"Joint group '{joint_group}' not found in state dict for embodiment '{embodiment_tag}'"
-                )
+                raise KeyError(f"Joint group '{joint_group}' not found in state dict for embodiment '{embodiment_tag}'")
 
             # Strategy 1: Sin/cos encoding (doubles dimension)
             if sin_cos_keys and joint_group in sin_cos_keys:
@@ -226,8 +222,7 @@ class StateActionProcessor:
                     "mean_std_embedding_keys",
                 )
                 and self.modality_configs[embodiment_tag]["state"].mean_std_embedding_keys
-                and joint_group
-                in self.modality_configs[embodiment_tag]["state"].mean_std_embedding_keys
+                and joint_group in self.modality_configs[embodiment_tag]["state"].mean_std_embedding_keys
             ):
                 params = self.norm_params[embodiment_tag]["state"][joint_group]
                 normalized = normalize_values_meanstd(state[joint_group], params)
@@ -274,9 +269,7 @@ class StateActionProcessor:
 
         for joint_group in self.modality_configs[embodiment_tag]["state"].modality_keys:
             if joint_group not in state:
-                raise KeyError(
-                    f"Joint group '{joint_group}' not found in state dict for embodiment '{embodiment_tag}'"
-                )
+                raise KeyError(f"Joint group '{joint_group}' not found in state dict for embodiment '{embodiment_tag}'")
 
             # Sin/cos encoding is not reversible
             if sin_cos_keys and joint_group in sin_cos_keys:
@@ -292,8 +285,7 @@ class StateActionProcessor:
                     "mean_std_embedding_keys",
                 )
                 and self.modality_configs[embodiment_tag]["state"].mean_std_embedding_keys
-                and joint_group
-                in self.modality_configs[embodiment_tag]["state"].mean_std_embedding_keys
+                and joint_group in self.modality_configs[embodiment_tag]["state"].mean_std_embedding_keys
             ):
                 params = self.norm_params[embodiment_tag]["state"][joint_group]
                 unnormalized = unnormalize_values_meanstd(state[joint_group], params)
@@ -302,9 +294,7 @@ class StateActionProcessor:
             # Reverse min/max normalization
             else:
                 params = self.norm_params[embodiment_tag]["state"][joint_group]
-                unnormalized_values[joint_group] = unnormalize_values_minmax(
-                    state[joint_group], params
-                )
+                unnormalized_values[joint_group] = unnormalize_values_minmax(state[joint_group], params)
 
         return unnormalized_values
 
@@ -343,7 +333,7 @@ class StateActionProcessor:
         action_configs = self.modality_configs[embodiment_tag]["action"].action_configs
 
         if action_configs is not None:
-            for key, action_config in zip(modality_keys, action_configs):
+            for key, action_config in zip(modality_keys, action_configs, strict=False):
                 if action_config.rep == ActionRepresentation.RELATIVE and self.use_relative_action:
                     if state is None:
                         raise ValueError(
@@ -382,8 +372,7 @@ class StateActionProcessor:
             params = self.norm_params[embodiment_tag]["action"][joint_group]
             if (
                 self.modality_configs[embodiment_tag]["action"].mean_std_embedding_keys is not None
-                and joint_group
-                in self.modality_configs[embodiment_tag]["action"].mean_std_embedding_keys
+                and joint_group in self.modality_configs[embodiment_tag]["action"].mean_std_embedding_keys
             ):
                 normalized = normalize_values_meanstd(action[joint_group], params)
             else:
@@ -439,8 +428,7 @@ class StateActionProcessor:
 
             if (
                 self.modality_configs[embodiment_tag]["action"].mean_std_embedding_keys is not None
-                and joint_group
-                in self.modality_configs[embodiment_tag]["action"].mean_std_embedding_keys
+                and joint_group in self.modality_configs[embodiment_tag]["action"].mean_std_embedding_keys
             ):
                 unnormalized = unnormalize_values_meanstd(group_values, params)
             else:
@@ -452,7 +440,7 @@ class StateActionProcessor:
         action_configs = self.modality_configs[embodiment_tag]["action"].action_configs
 
         if action_configs is not None:
-            for key, action_config in zip(modality_keys, action_configs):
+            for key, action_config in zip(modality_keys, action_configs, strict=False):
                 if action_config.rep == ActionRepresentation.RELATIVE and self.use_relative_action:
                     if state is None:
                         raise ValueError(
@@ -486,7 +474,7 @@ class StateActionProcessor:
 
                     # Convert batched relative actions to absolute
                     absolute_actions = []
-                    for s, a in zip(reference_state, relative_action):
+                    for s, a in zip(reference_state, relative_action, strict=False):
                         # Use last timestep of state as reference
                         absolute_action = self._convert_to_absolute_action(
                             action=a,
@@ -524,10 +512,7 @@ class StateActionProcessor:
             Tuple of (processed_state, processed_action)
         """
         processed_state = self.apply_state(state, embodiment_tag)
-        if action:
-            processed_action = self.apply_action(action, embodiment_tag, state=state)
-        else:
-            processed_action = {}
+        processed_action = self.apply_action(action, embodiment_tag, state=state) if action else {}
         return processed_state, processed_action
 
     def unapply(
@@ -555,9 +540,7 @@ class StateActionProcessor:
             unapplied_state = self.unapply_state(state, embodiment_tag)
         except ValueError as e:
             if "sin/cos encoding" in str(e) and raw_state is None:
-                raise ValueError(
-                    "Cannot unapply sin/cos encoded state. Please provide raw_state parameter."
-                ) from e
+                raise ValueError("Cannot unapply sin/cos encoded state. Please provide raw_state parameter.") from e
             raise
 
         # Use provided raw_state if available, otherwise use unapplied state
@@ -635,9 +618,7 @@ class StateActionProcessor:
         else:
             raise ValueError(f"Unknown ActionType: {action_type}")
 
-        relative_action_chunking = action_chunking.relative_chunking(
-            reference_frame=reference_frame
-        )
+        relative_action_chunking = action_chunking.relative_chunking(reference_frame=reference_frame)
         return relative_action_chunking.to(action_format)
 
     def _convert_to_absolute_action(

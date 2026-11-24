@@ -30,8 +30,8 @@ umt5_xxl = _shared_t5.umt5_xxl
 
 class T5EncoderModel(_shared_t5.T5EncoderModel):
     """Encoder model implementation."""
+
     def __init__(self, *args, **kwargs):
-        """Init."""
         kwargs.setdefault("load_with_mmap", True)
         kwargs.setdefault("return_full_context", True)
         super().__init__(*args, **kwargs)

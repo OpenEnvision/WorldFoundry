@@ -8,9 +8,9 @@ pageSource: authored
 
 Use model ID `inspatio-world-1p5`. The original `inspatio-world` entry keeps its existing checkpoint and video pipeline.
 
-The native implementation reuses WorldFoundry's causal Wan2.1 backbone, UMT5 encoder, Wan VAE, block sampler and DA3 base model. It does not need a separately installed InSpatio checkout. The released inference geometry is **832×480**, BF16, three latent frames per block and four denoising calls. This adapter produces completed video artifacts; it does not yet expose an interactive streaming session.
+The model runs on a causal Wan2.1 backbone with the UMT5 encoder, Wan VAE, block sampler and DA3 depth model, and does not need a separately installed InSpatio checkout. The released inference geometry is **832×480**, BF16, three latent frames per block and four denoising calls. It produces completed videos; interactive streaming sessions are not available.
 
-Stage `inspatio/world-1.5` and `Wan-AI/Wan2.1-T2V-1.3B` locally. Direct inputs also need `depth-anything/DA3NESTED-GIANT-LARGE-1.1`. Prepared scenes already contain depth and cameras and do not load DA3. Inference uses local checkpoints and leaves checkpoint directories unchanged.
+Stage `inspatio/world-1.5` and `Wan-AI/Wan2.1-T2V-1.3B` locally. Direct inputs also need `depth-anything/DA3NESTED-GIANT-LARGE-1.1`. Prepared scenes already contain depth and cameras and do not load DA3.
 
 ```python
 from worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15 import InspatioWorldV15Pipeline
@@ -35,11 +35,9 @@ For direct inputs, replace `scene_dir` with `videos="/data/input.mp4"` or `image
 
 `return_frames=True` additionally loads decoded frames into host memory. The default returns artifact paths. `compile_dit=True` is an optional loading setting; compilation is not needed for standard inference.
 
-Fast CPU contracts are in `tests/synthesis/test_inspatio_v15_catalog.py` and `tests/synthesis/test_inspatio_v15_tensors.py`. `tests/manual/inspatio_v15_regression.py` runs the same local checkpoints through this adapter and the pinned upstream implementation, then compares intermediate latents and decoded source, render, mask and prediction videos.
+Validated with the released weights: six short GPU cases (single-image, four-image and video prepared scenes, plus three direct RGB inputs; two causal blocks each) match the pinned upstream implementation exactly in BF16. Direct-input cases reuse the same DA3-estimated geometry on both sides, so DA3 reconstruction quality is not assessed separately.
 
-Six short GPU cases passed exact BF16/SDPA comparison: three prepared source types and three direct RGB inputs. Direct replay compares generation using the same DA3-estimated geometry; it does not independently assess DA3 reconstruction quality. Each case covers two causal blocks, including previous-block context.
-
-To reproduce, check out the upstream revision shown in the catalog and stage the component weights locally. Use a new output directory; the video example ships without depth, which `prepare-depth` computes with the shared DA3 model.
+To reproduce, check out upstream revision `dd3561f544053fe22d739b6b2f8461c9c97bf8cb` and stage the component weights locally. `tests/manual/inspatio_v15_regression.py` runs the same local checkpoints through WorldFoundry and the upstream implementation, then compares intermediate latents and decoded source, render, mask and prediction videos. Use a new output directory; the video example ships without depth, which `prepare-depth` computes with the shared DA3 model.
 
 ```bash
 # Set INSPATIO_GPU_ID to an available GPU index or UUID from nvidia-smi.
@@ -53,6 +51,6 @@ for mode in prepare prepare-depth native upstream compare; do
 done
 ```
 
-Repeat `native`, `upstream` and `compare` with `--direct` to exercise RGB staging and DA3. `--cases` selects individual cases for parallel runs on separate GPUs. The standard replay matrix includes `inspatio-world-1p5-{image,multiview,video}-short`; set `WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` to the validation directory's `fixtures` subdirectory. Comparisons record checkpoint and numerical-output hashes and refuse different release weights.
+Repeat `native`, `upstream` and `compare` with `--direct` to exercise RGB staging and DA3. `--cases` selects individual cases for parallel runs on separate GPUs. The standard replay matrix includes `inspatio-world-1p5-{image,multiview,video}-short`; set `WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` to the validation directory's `fixtures` subdirectory. Comparisons refuse mismatched release weights.
 
 Code attribution and the upstream Apache-2.0 text are centralized in `THIRD-PARTY-NOTICES`. Component weights keep their upstream terms.

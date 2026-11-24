@@ -5,6 +5,7 @@ task_family: three_dimension
 groups: [3d, depth, prior]
 source_repos:
 - url: https://github.com/LiheYoung/Depth-Anything
+  revision: 1d03336771fe09c5398ffdd211441e33941a97dc
 checkpoints:
 - repo_id: LiheYoung/depth-anything-large-hf
   role: depth_checkpoint

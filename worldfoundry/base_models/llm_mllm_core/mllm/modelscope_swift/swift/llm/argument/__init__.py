@@ -4,9 +4,9 @@ from typing import TYPE_CHECKING
 from worldfoundry.core.utils.python.lazy_module import _LazyModule
 
 if TYPE_CHECKING:
-    from .base_args import BaseArguments
-    from .deploy_args import DeployArguments
-    from .infer_args import InferArguments
+    from .base_args import BaseArguments as BaseArguments
+    from .deploy_args import DeployArguments as DeployArguments
+    from .infer_args import InferArguments as InferArguments
 else:
     _import_structure = {
         "base_args": ["BaseArguments"],

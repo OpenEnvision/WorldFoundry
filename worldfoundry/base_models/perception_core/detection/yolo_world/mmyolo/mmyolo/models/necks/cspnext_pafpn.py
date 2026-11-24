@@ -1,6 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import math
-from typing import Sequence
+from collections.abc import Sequence
 
 import torch.nn as nn
 from mmcv.cnn import ConvModule, DepthwiseSeparableConvModule
@@ -8,6 +8,7 @@ from mmdet.models.backbones.csp_darknet import CSPLayer
 from mmdet.utils import ConfigType, OptMultiConfig
 
 from mmyolo.registry import MODELS
+
 from .base_yolo_neck import BaseYOLONeck
 
 
@@ -50,40 +51,38 @@ class CSPNeXtPAFPN(BaseYOLONeck):
         freeze_all: bool = False,
         use_depthwise: bool = False,
         expand_ratio: float = 0.5,
-        upsample_cfg: ConfigType = dict(scale_factor=2, mode='nearest'),
-        conv_cfg: bool = None,
-        norm_cfg: ConfigType = dict(type='BN'),
-        act_cfg: ConfigType = dict(type='SiLU', inplace=True),
-        init_cfg: OptMultiConfig = dict(
-            type='Kaiming',
-            layer='Conv2d',
-            a=math.sqrt(5),
-            distribution='uniform',
-            mode='fan_in',
-            nonlinearity='leaky_relu')
+        upsample_cfg: ConfigType = {"scale_factor": 2, "mode": "nearest"},  # noqa: B006 - Keeps the upstream default object and signature.
+        conv_cfg: bool | None = None,
+        norm_cfg: ConfigType = {"type": "BN"},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "SiLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
+        init_cfg: OptMultiConfig = {  # noqa: B006 - Keeps the upstream default object and signature.
+            "type": "Kaiming",
+            "layer": "Conv2d",
+            "a": math.sqrt(5),  # noqa: B008 - Default evaluated once at definition, as upstream.
+            "distribution": "uniform",
+            "mode": "fan_in",
+            "nonlinearity": "leaky_relu",
+        },
     ) -> None:
         self.num_csp_blocks = round(num_csp_blocks * deepen_factor)
-        self.conv = DepthwiseSeparableConvModule \
-            if use_depthwise else ConvModule
+        self.conv = DepthwiseSeparableConvModule if use_depthwise else ConvModule
         self.upsample_cfg = upsample_cfg
         self.expand_ratio = expand_ratio
         self.conv_cfg = conv_cfg
 
         super().__init__(
-            in_channels=[
-                int(channel * widen_factor) for channel in in_channels
-            ],
+            in_channels=[int(channel * widen_factor) for channel in in_channels],
             out_channels=int(out_channels * widen_factor),
             deepen_factor=deepen_factor,
             widen_factor=widen_factor,
             freeze_all=freeze_all,
             norm_cfg=norm_cfg,
             act_cfg=act_cfg,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
 
     def build_reduce_layer(self, idx: int) -> nn.Module:
-        """build reduce layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -92,23 +91,18 @@ class CSPNeXtPAFPN(BaseYOLONeck):
         """
         if idx == len(self.in_channels) - 1:
             layer = self.conv(
-                self.in_channels[idx],
-                self.in_channels[idx - 1],
-                1,
-                norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg)
+                self.in_channels[idx], self.in_channels[idx - 1], 1, norm_cfg=self.norm_cfg, act_cfg=self.act_cfg
+            )
         else:
             layer = nn.Identity()
 
         return layer
 
     def build_upsample_layer(self, *args, **kwargs) -> nn.Module:
-        """build upsample layer."""
         return nn.Upsample(**self.upsample_cfg)
 
     def build_top_down_layer(self, idx: int) -> nn.Module:
-        """build top down layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -125,7 +119,8 @@ class CSPNeXtPAFPN(BaseYOLONeck):
                 expand_ratio=self.expand_ratio,
                 conv_cfg=self.conv_cfg,
                 norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg)
+                act_cfg=self.act_cfg,
+            )
         else:
             return nn.Sequential(
                 CSPLayer(
@@ -137,17 +132,19 @@ class CSPNeXtPAFPN(BaseYOLONeck):
                     expand_ratio=self.expand_ratio,
                     conv_cfg=self.conv_cfg,
                     norm_cfg=self.norm_cfg,
-                    act_cfg=self.act_cfg),
+                    act_cfg=self.act_cfg,
+                ),
                 self.conv(
                     self.in_channels[idx - 1],
                     self.in_channels[idx - 2],
                     kernel_size=1,
                     norm_cfg=self.norm_cfg,
-                    act_cfg=self.act_cfg))
+                    act_cfg=self.act_cfg,
+                ),
+            )
 
     def build_downsample_layer(self, idx: int) -> nn.Module:
-        """build downsample layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -161,11 +158,11 @@ class CSPNeXtPAFPN(BaseYOLONeck):
             stride=2,
             padding=1,
             norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
+            act_cfg=self.act_cfg,
+        )
 
     def build_bottom_up_layer(self, idx: int) -> nn.Module:
-        """build bottom up layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -181,11 +178,11 @@ class CSPNeXtPAFPN(BaseYOLONeck):
             expand_ratio=self.expand_ratio,
             conv_cfg=self.conv_cfg,
             norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
+            act_cfg=self.act_cfg,
+        )
 
     def build_out_layer(self, idx: int) -> nn.Module:
-        """build out layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -193,9 +190,5 @@ class CSPNeXtPAFPN(BaseYOLONeck):
             nn.Module: The out layer.
         """
         return self.conv(
-            self.in_channels[idx],
-            self.out_channels,
-            3,
-            padding=1,
-            norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
+            self.in_channels[idx], self.out_channels, 3, padding=1, norm_cfg=self.norm_cfg, act_cfg=self.act_cfg
+        )

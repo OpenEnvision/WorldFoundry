@@ -5,21 +5,21 @@ from __future__ import annotations
 import importlib
 import json
 import logging
-from pathlib import Path
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
-from hydra.utils import instantiate
 import numpy as np
-from omegaconf import DictConfig, ListConfig, OmegaConf
-from tianshou.data import Batch
 import torch
 import torch.distributed as dist
+from hydra.utils import instantiate
+from omegaconf import DictConfig, ListConfig, OmegaConf
+from tianshou.data import Batch
 from torch.distributed.device_mesh import DeviceMesh
 
 from ..preprocessing import ComposedModalityTransform, DatasetMetadata, EmbodimentTag
 from .targets import rewrite_targets, validate_inference_targets
-
 
 logger = logging.getLogger(__name__)
 
@@ -59,13 +59,7 @@ def _model_class_from_target(target: str):
 
 def _copy_observation(observation: dict[str, Any]) -> dict[str, Any]:
     return {
-        key: (
-            value.copy()
-            if isinstance(value, np.ndarray)
-            else value.clone()
-            if torch.is_tensor(value)
-            else value
-        )
+        key: (value.copy() if isinstance(value, np.ndarray) else value.clone() if torch.is_tensor(value) else value)
         for key, value in observation.items()
     }
 
@@ -106,9 +100,7 @@ class GrootSimPolicy:
             rewrite_targets(model_config_dict)
             merged = OmegaConf.create(model_config_dict)
             merged.merge_with_dotlist(model_config_overrides)
-            model_config = model_class.config_class.from_dict(
-                OmegaConf.to_container(merged, resolve=True)
-            )
+            model_config = model_class.config_class.from_dict(OmegaConf.to_container(merged, resolve=True))
 
         if bool(checkpoint_cfg.get("save_lora_only", False)):
             model = model_class.load_lora(model_path)
@@ -141,10 +133,7 @@ class GrootSimPolicy:
 
         with (experiment_dir / "metadata.json").open(encoding="utf-8") as handle:
             all_metadata = json.load(handle)
-        if (
-            "gr1_unified_offline_rl" in all_metadata
-            and self.embodiment_tag.value == "gr1_unified"
-        ):
+        if "gr1_unified_offline_rl" in all_metadata and self.embodiment_tag.value == "gr1_unified":
             self.embodiment_tag = EmbodimentTag.GR1_UNIFIED_OFFLINE_RL
         metadata = DatasetMetadata.model_validate(all_metadata[self.embodiment_tag.value])
 
@@ -156,9 +145,7 @@ class GrootSimPolicy:
                 video_metadata.resolution = (int(target_width), int(target_height))
 
         if self.embodiment_tag.value not in checkpoint_cfg.transforms:
-            raise KeyError(
-                f"No DreamZero transform for embodiment {self.embodiment_tag.value!r}"
-            )
+            raise KeyError(f"No DreamZero transform for embodiment {self.embodiment_tag.value!r}")
         transform_config = checkpoint_cfg.transforms[self.embodiment_tag.value]
         if skip_img_transform:
             self._remove_image_transforms(transform_config, metadata)
@@ -181,14 +168,10 @@ class GrootSimPolicy:
             modality_configs = modality_configs[self.embodiment_tag.value]
         validate_inference_targets(modality_configs, path="checkpoint.modality_configs")
         self.modality_configs = instantiate(modality_configs)
-        self._video_delta_indices = np.asarray(
-            self.modality_configs.video.eval_delta_indices
-        )
+        self._video_delta_indices = np.asarray(self.modality_configs.video.eval_delta_indices)
         self._video_horizon = len(self._video_delta_indices)
         if "state" in self.modality_configs:
-            self._state_delta_indices = np.asarray(
-                self.modality_configs.state.eval_delta_indices
-            )
+            self._state_delta_indices = np.asarray(self.modality_configs.state.eval_delta_indices)
             if not skip_assert_delta_indices:
                 self.assert_delta_indices(self._state_delta_indices)
             self._state_horizon = len(self._state_delta_indices)
@@ -215,9 +198,7 @@ class GrootSimPolicy:
                     )
         skipped = (".VideoCrop", ".VideoResize", ".VideoColorJitter")
         config.transforms = [
-            transform
-            for transform in config.transforms
-            if not str(transform._target_).endswith(skipped)
+            transform for transform in config.transforms if not str(transform._target_).endswith(skipped)
         ]
 
     @staticmethod
@@ -226,12 +207,10 @@ class GrootSimPolicy:
         for action_key, statistics in metadata.statistics.action.items():
             values = statistics.model_dump()
             q01 = values.get("q01")
-            if isinstance(q01, (list, np.ndarray)) and len(q01):
-                if isinstance(q01[0], (list, np.ndarray)):
-                    result[action_key] = {
-                        key: value.tolist() if isinstance(value, np.ndarray) else value
-                        for key, value in values.items()
-                    }
+            if isinstance(q01, (list, np.ndarray)) and len(q01) and isinstance(q01[0], (list, np.ndarray)):
+                result[action_key] = {
+                    key: value.tolist() if isinstance(value, np.ndarray) else value for key, value in values.items()
+                }
         return result
 
     def offload_to_cpu(self) -> None:
@@ -262,13 +241,9 @@ class GrootSimPolicy:
         return batch
 
     def unapply(self, batch: Batch, obs: dict | None = None) -> Batch:
-        action = self.eval_transform.unapply(
-            {"action": batch.normalized_action.cpu()}
-        )
+        action = self.eval_transform.unapply({"action": batch.normalized_action.cpu()})
         config = self.checkpoint_cfg
-        relative = bool(config.get("relative_action", False)) or bool(
-            config.get("relative_action_per_horizon", False)
-        )
+        relative = bool(config.get("relative_action", False)) or bool(config.get("relative_action_per_horizon", False))
         relative_keys = config.get("relative_action_keys", [])
         if relative and relative_keys and obs is not None:
             self._relative_to_absolute(action, obs, relative_keys)
@@ -289,11 +264,7 @@ class GrootSimPolicy:
             state = observation.get(state_key)
             if state is None:
                 state = next(
-                    (
-                        value
-                        for name, value in observation.items()
-                        if "state" in name and key in name
-                    ),
+                    (value for name, value in observation.items() if "state" in name and key in name),
                     None,
                 )
             if state is None and "state" in observation:
@@ -364,7 +335,7 @@ class GrootSimPolicy:
 
     @staticmethod
     def _check_state_is_batched(observation: dict[str, Any]) -> bool:
-        for key, value in observation.items():
+        for key, value in observation.items():  # noqa: SIM110 - Keeps the explicit loop.
             if "state" in key and len(value.shape) < 3:
                 return False
         return True

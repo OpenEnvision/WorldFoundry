@@ -5,11 +5,11 @@ modelId: "hunyuanworld-1"
 pageSource: generated
 ---
 
-HunyuanWorld 1.0 generates immersive, explorable 3D worlds from text or an image — the first generation of Tencent's open world-generation stack, exporting layered panoramas and mesh scenes. In this catalog the official source route is registered; checkpoints and third-party assets stay runtime-gated.
+HunyuanWorld 1.0 generates immersive, explorable 3D worlds from text or an image — the first generation of Tencent's open world-generation stack, exporting layered panoramas and mesh scenes. WorldFoundry runs the official source route; checkpoints and third-party assets must be staged before generation.
 
 <ModelPaperFigures modelId="hunyuanworld-1" locale="en" />
 
-The recorded paper is [arXiv 2507.21809](https://arxiv.org/abs/2507.21809).
+Paper: [arXiv 2507.21809](https://arxiv.org/abs/2507.21809).
 
 Project page: [3d.hunyuan.tencent.com](https://3d.hunyuan.tencent.com/). Code: [Tencent-Hunyuan/HunyuanWorld-1.0](https://github.com/Tencent-Hunyuan/HunyuanWorld-1.0).
 
@@ -17,13 +17,13 @@ Project page: [3d.hunyuan.tencent.com](https://3d.hunyuan.tencent.com/). Code: [
 
 ## What it is for
 
-Pick `hunyuanworld-1` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+`hunyuanworld-1` generates a 3D-consistent world rather than a single clip.
 
-Per the upstream release, generation goes panorama-first: a panoramic proxy is generated, semantically layered, and lifted to a 3D world representation. Architecture internals beyond this are not recorded in this repository. It is published by Tencent (Hunyuan).
+Per the upstream release, generation goes panorama-first: a panoramic proxy is generated, semantically layered, and lifted to a 3D world representation. It is published by Tencent (Hunyuan).
 
-Catalog tasks include world model.
+Tasks: world model.
 
-Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Standard scoring for generated explorable worlds).
+Suggested benchmarks: [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Standard scoring for generated explorable worlds).
 
 ## Runtime contract
 
@@ -33,18 +33,16 @@ CLI task profiles: `default`. WorldFoundry binds `HunyuanWorld1Pipeline`.
 
 Family status: **Runner parity pending**.
 
-Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. For the newer component-verified stack, see the hy-world-2.0 entry.
+Until the required checkpoints and assets are staged, a run returns a runtime plan that lists the missing assets instead of generating. For the newer stack, see hy-world-2.0.
 
-HunyuanWorld 1.0 official source route is registered; checkpoints and third-party assets are runtime-gated.
+Superseded by HY-World 2.0 for most world-generation use.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run hunyuanworld-1 --pipeline.task-profile default` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Generate a world with `wf run hunyuanworld-1 --pipeline.task-profile default`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `tencent/HunyuanWorld-1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh hunyuanworld-1`. Add `--download` to fetch missing public checkpoints.
-
-Status: **Runner parity pending**.
+Weights: `tencent/HunyuanWorld-1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh hunyuanworld-1`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="hunyuanworld-1" locale="en" />

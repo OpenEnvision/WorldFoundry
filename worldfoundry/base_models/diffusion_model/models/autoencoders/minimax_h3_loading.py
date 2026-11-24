@@ -14,8 +14,8 @@ audio VAE (1087 keys, 0 missing / 0 unexpected after remap).
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import torch
 

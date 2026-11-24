@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from importlib import import_module
 
-
 _ATTENTION_BLOCKS = {
     "GDN": ("sana_gdn_blocks", "GDN"),
     "BidirectionalGDN": ("sana_gdn_blocks", "BidirectionalGDN"),

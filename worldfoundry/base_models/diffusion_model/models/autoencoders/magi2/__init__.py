@@ -10,18 +10,18 @@ Exposes:
 from .audio_vae import AudioAutoencoder, create_model_from_config
 from .audio_vae import AudioAutoencoder as Magi2AudioVAE
 from .config import (
+    WAN22_LATENTS_MEAN,
+    WAN22_LATENTS_STD,
     AudioVAEConfig,
     TurboDecoderConfig,
     VideoVAEConfig,
-    WAN22_LATENTS_MEAN,
-    WAN22_LATENTS_STD,
 )
 from .turbo_decoder import TurboVAED, get_turbo_vaed
 from .turbo_decoder import TurboVAED as Magi2TurboDecoder
 from .video_vae import Wan2_2_VAE, get_vae2_2
 from .video_vae import Wan2_2_VAE as Magi2VideoVAE
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - Exports are grouped by component.
     # video encode VAE
     "Wan2_2_VAE",
     "Magi2VideoVAE",

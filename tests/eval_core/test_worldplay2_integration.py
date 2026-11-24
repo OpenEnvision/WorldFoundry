@@ -5,12 +5,12 @@ from pathlib import Path
 import pytest
 
 from worldfoundry.base_models.diffusion_model.recipes.registry import default_native_diffusion_registry
-from worldfoundry.evaluation.api import WorldModelConfig
-from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
-from worldfoundry.evaluation.models.pipelines.loading import build_pipeline_runner_spec, import_pipeline_target
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile_manifest
-from worldfoundry.evaluation.models.runtime.validate import validate_runtime_profile_references
+from worldfoundry.evals.api import WorldModelConfig
+from worldfoundry.evals.models.pipelines.loading import build_pipeline_runner_spec, import_pipeline_target
+from worldfoundry.evals.models.validate import validate_runtime_profile_references
 from worldfoundry.pipelines.native_diffusion import NativeVisualDiffusionPipeline
+from worldfoundry.zoo.catalog import load_model_zoo_registry
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile_manifest
 
 MODEL_DATA = Path(__file__).resolve().parents[2] / "worldfoundry" / "data" / "models"
 PIPELINE_TARGET = "worldfoundry.pipelines.worldplay2.pipeline_worldplay2:WorldPlay2Pipeline"

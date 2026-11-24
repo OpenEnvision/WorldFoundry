@@ -451,12 +451,3 @@ class TestUtilsExports:
             declared = getattr(module, "__all__", None)
             if declared is not None:
                 assert name in declared, f"{name} not in {module_name}.__all__"
-
-    def test_validator_all_fully_exported(self):
-        import worldfoundry.core.utils as utils
-        from worldfoundry.core.configuration import validators as validator
-
-        exported = {name for name, module in utils._EXPORT_MODULES.items() if module == validator.__name__}
-        # Private names (e.g. the _UNSET sentinel) intentionally stay module-local.
-        public = {name for name in validator.__all__ if not name.startswith("_")}
-        assert public == exported

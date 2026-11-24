@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,10 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Conversion script for the Stable Diffusion checkpoints."""
+"""Conversion script for the Stable Diffusion checkpoints."""
 
 import re
+
 from transformers import CLIPTextModel
+
 
 def shave_segments(path, n_shave_prefix_segments=1):
     """
@@ -137,7 +138,7 @@ def assign_to_checkpoint(
 
             num_heads = old_tensor.shape[0] // config["num_head_channels"] // 3
 
-            old_tensor = old_tensor.reshape((num_heads, 3 * channels // num_heads) + old_tensor.shape[1:])
+            old_tensor = old_tensor.reshape((num_heads, 3 * channels // num_heads) + old_tensor.shape[1:])  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             query, key, value = old_tensor.split(channels // num_heads, dim=1)
 
             checkpoint[path_map["query"]] = query.reshape(target_shape)
@@ -174,9 +175,8 @@ def conv_attn_to_linear(checkpoint):
         if ".".join(key.split(".")[-2:]) in attn_keys:
             if checkpoint[key].ndim > 2:
                 checkpoint[key] = checkpoint[key][:, :, 0, 0]
-        elif "proj_attn.weight" in key:
-            if checkpoint[key].ndim > 2:
-                checkpoint[key] = checkpoint[key][:, :, 0]
+        elif "proj_attn.weight" in key and checkpoint[key].ndim > 2:
+            checkpoint[key] = checkpoint[key][:, :, 0]
 
 
 def convert_ldm_unet_checkpoint(checkpoint, config, path=None, extract_ema=False, controlnet=False):
@@ -188,10 +188,7 @@ def convert_ldm_unet_checkpoint(checkpoint, config, path=None, extract_ema=False
     unet_state_dict = {}
     keys = list(checkpoint.keys())
 
-    if controlnet:
-        unet_key = "control_model."
-    else:
-        unet_key = "model.diffusion_model."
+    unet_key = "control_model." if controlnet else "model.diffusion_model."
 
     # at least a 100 parameters have to start with `model_ema` in order for the checkpoint to be EMA
     if sum(k.startswith("model_ema") for k in keys) > 100 and extract_ema:
@@ -282,9 +279,7 @@ def convert_ldm_unet_checkpoint(checkpoint, config, path=None, extract_ema=False
 
         paths = renew_resnet_paths(resnets)
         meta_path = {"old": f"input_blocks.{i}.0", "new": f"down_blocks.{block_id}.resnets.{layer_in_block_id}"}
-        assign_to_checkpoint(
-            paths, new_checkpoint, unet_state_dict, additional_replacements=[meta_path], config=config
-        )
+        assign_to_checkpoint(paths, new_checkpoint, unet_state_dict, additional_replacements=[meta_path], config=config)
 
         if len(attentions):
             paths = renew_attention_paths(attentions)

@@ -11,13 +11,19 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
+from worldfoundry.synthesis.action_generation.openvla.engine import (
+    OpenVLARuntime,
+    OpenVLARuntimeConfig,
+    select_openvla_checkpoint,
+)
 from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
+
 from ..base_action_synthesis import ActionModelSynthesis
-from worldfoundry.synthesis.action_generation.openvla.engine import OpenVLARuntime, OpenVLARuntimeConfig, select_openvla_checkpoint
 
 
 class OpenVLASynthesis(ActionModelSynthesis):
@@ -77,7 +83,7 @@ class OpenVLASynthesis(ActionModelSynthesis):
         hf_models_root: str | Path | None = None,
         command_template: Sequence[str] | None = None,
         **kwargs: Any,
-    ) -> "OpenVLASynthesis":
+    ) -> OpenVLASynthesis:
         """
         Loads a pretrained OpenVLA model.
 
@@ -129,7 +135,9 @@ class OpenVLASynthesis(ActionModelSynthesis):
             runtime_options=options,
         )
 
-    def _runtime_config(self, options: Mapping[str, Any], *, allow_missing_checkpoint: bool = False) -> OpenVLARuntimeConfig:
+    def _runtime_config(
+        self, options: Mapping[str, Any], *, allow_missing_checkpoint: bool = False
+    ) -> OpenVLARuntimeConfig:
         """
         Constructs an `OpenVLARuntimeConfig` object from internal and provided options.
 
@@ -331,7 +339,9 @@ class OpenVLASynthesis(ActionModelSynthesis):
             },
         }
         # Write the plan payload to the plan file
-        plan_path.write_text(json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        plan_path.write_text(
+            json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
         # If in plan-only mode, return the plan details without executing the model
         if plan_only:

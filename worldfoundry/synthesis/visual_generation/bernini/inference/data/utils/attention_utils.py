@@ -13,6 +13,7 @@
 # limitations under the License.
 import torch
 
+
 def build_custom_attention_mask(token_type, token_segment_ids):
     """
     Build a custom attention mask.
@@ -44,12 +45,12 @@ def build_custom_attention_mask(token_type, token_segment_ids):
     causal_mask = causal_mask.unsqueeze(0)
 
     # Key type checks.
-    k_is_ti = (k_type == 0) | (k_type == 2) # Key is t or i
-    k_is_p  = (k_type == 1)                 # Key is p
-    k_is_o  = (k_type == 3)                 # Key is o
+    k_is_ti = (k_type == 0) | (k_type == 2)  # Key is t or i
+    k_is_p = k_type == 1  # Key is p
+    k_is_o = k_type == 3  # Key is o
 
     # Whether ids match (used for bidirectional attention).
-    ids_match = (q_id == k_id)
+    ids_match = q_id == k_id
 
     # 3. Define the visibility rules.
     # Shared rule: any Query can see previous t/i tokens.
@@ -70,17 +71,17 @@ def build_custom_attention_mask(token_type, token_segment_ids):
     final_bool_mask = final_bool_mask | (q_is_ti & visible_base_ti)
 
     # Rule B: Query is p(1), so it can see visible_base_ti OR visible_p_bidirectional.
-    q_is_p = (q_type == 1)
+    q_is_p = q_type == 1
     final_bool_mask = final_bool_mask | (q_is_p & (visible_base_ti | visible_p_bidirectional))
 
     # Rule C: Query is o(3), so it can see visible_base_ti OR visible_o_bidirectional.
-    q_is_o = (q_type == 3)
+    q_is_o = q_type == 3
     final_bool_mask = final_bool_mask | (q_is_o & (visible_base_ti | visible_o_bidirectional))
 
     # 5. Convert to a float mask (0.0 / -inf).
     # The dtype here should usually follow the model precision
     # (float32 or float16/bfloat16).
     attention_mask = torch.zeros((B, L, L), device=device, dtype=torch.float32)
-    attention_mask.masked_fill_(~final_bool_mask, float('-inf'))
+    attention_mask.masked_fill_(~final_bool_mask, float("-inf"))
 
     return attention_mask

@@ -1,11 +1,13 @@
 """NeoVerse geometry, color, video, and camera-trajectory inference helpers."""
 
-import torch
-import numpy as np
 import json
 import os
-from PIL import Image
+from typing import ClassVar
+
+import numpy as np
+import torch
 from decord import VideoReader
+from PIL import Image
 from scipy.spatial.transform import Rotation, Slerp
 
 
@@ -13,7 +15,9 @@ def homo_matrix_inverse(homo_matrix):
     """
     Computes the inverse of a batch of 4x4 (or 3x4) homogeneous transformation matrices.
     """
-    assert homo_matrix.shape[-2:] == (4, 4) or homo_matrix.shape[-2:] == (3, 4), "Input must be a batch of 4x4 or 3x4 matrices"
+    assert homo_matrix.shape[-2:] == (4, 4) or homo_matrix.shape[-2:] == (3, 4), (
+        "Input must be a batch of 4x4 or 3x4 matrices"
+    )
 
     R, T = homo_matrix[..., :3, :3].reshape(-1, 3, 3), homo_matrix[..., :3, 3:4].reshape(-1, 3, 1)
 
@@ -29,12 +33,6 @@ def homo_matrix_inverse(homo_matrix):
 
 
 def average_filter(depth_map, kernel_size=5):
-    """Average filter.
-
-    Args:
-        depth_map: The depth map.
-        kernel_size: The kernel size.
-    """
     if kernel_size % 2 == 0:
         kernel_size += 1
 
@@ -83,11 +81,7 @@ def fast_perceptual_color_distance(color1, color2):
     weight_g = 4.0
     weight_b = 2.0 + (255.0 - r_bar) / 256.0
 
-    distance = torch.sqrt(
-        weight_r * delta_r**2 +
-        weight_g * delta_g**2 +
-        weight_b * delta_b**2
-    )
+    distance = torch.sqrt(weight_r * delta_r**2 + weight_g * delta_g**2 + weight_b * delta_b**2)
 
     return distance
 
@@ -162,12 +156,8 @@ def load_video(data, num_frames, resolution=(560, 336), resize_mode="center_crop
     Returns:
         List of PIL Images.
     """
-    def _process_frame(image):
-        """Helper function to process frame.
 
-        Args:
-            image: The image.
-        """
+    def _process_frame(image):
         if resize_mode == "resize":
             return image.resize(resolution, resample=Image.LANCZOS)
         return center_crop(image, resolution)
@@ -219,23 +209,23 @@ class CameraTrajectory:
         use_first_frame: Whether to use the first frame as reference
     """
 
-    VALID_TRAJECTORY_TYPES = {
-        "pan_left", "pan_right", "tilt_up", "tilt_down",
-        "move_left", "move_right", "push_in", "pull_out",
-        "boom_up", "boom_down", "orbit_left", "orbit_right",
+    VALID_TRAJECTORY_TYPES: ClassVar[set] = {
+        "pan_left",
+        "pan_right",
+        "tilt_up",
+        "tilt_down",
+        "move_left",
+        "move_right",
+        "push_in",
+        "pull_out",
+        "boom_up",
+        "boom_down",
+        "orbit_left",
+        "orbit_right",
         "static",
     }
 
     def __init__(self, c2w, mode="relative", name="trajectory", zoom_ratio=1.0, use_first_frame=False):
-        """Init.
-
-        Args:
-            c2w: The c2w.
-            mode: The mode.
-            name: The name.
-            zoom_ratio: The zoom ratio.
-            use_first_frame: The use first frame.
-        """
         if isinstance(c2w, np.ndarray):
             c2w = torch.from_numpy(c2w)
         assert c2w.ndim == 3 and c2w.shape[1:] == (4, 4), f"c2w must be [N, 4, 4], got {c2w.shape}"
@@ -247,8 +237,16 @@ class CameraTrajectory:
         self.use_first_frame = use_first_frame
 
     @classmethod
-    def from_predefined(cls, trajectory_type, num_frames=81, mode="relative",
-                        angle=None, distance=None, orbit_radius=None, zoom_ratio=1.0):
+    def from_predefined(
+        cls,
+        trajectory_type,
+        num_frames=81,
+        mode="relative",
+        angle=None,
+        distance=None,
+        orbit_radius=None,
+        zoom_ratio=1.0,
+    ):
         """Create from a predefined trajectory type."""
         default_params = {
             "pan_left": {"angle": 15},
@@ -266,8 +264,9 @@ class CameraTrajectory:
             "static": {},
         }
         if trajectory_type not in default_params:
-            raise ValueError(f"Unknown trajectory type: {trajectory_type}. "
-                             f"Must be one of: {sorted(default_params.keys())}")
+            raise ValueError(
+                f"Unknown trajectory type: {trajectory_type}. Must be one of: {sorted(default_params.keys())}"
+            )
 
         params = default_params[trajectory_type].copy()
         if angle is not None:
@@ -282,10 +281,14 @@ class CameraTrajectory:
             {num_frames - 1: [{trajectory_type: params}]},
         ]
         cameras = cls._compose_keyframes(keyframes, num_frames)
-        return cls(torch.from_numpy(cameras), mode=mode, name=trajectory_type, zoom_ratio=zoom_ratio, use_first_frame=True)
+        return cls(
+            torch.from_numpy(cameras), mode=mode, name=trajectory_type, zoom_ratio=zoom_ratio, use_first_frame=True
+        )
 
     @classmethod
-    def from_keyframes(cls, keyframes, num_frames=81, mode="relative", name="keyframes", zoom_ratio=1.0, use_first_frame=False):
+    def from_keyframes(
+        cls, keyframes, num_frames=81, mode="relative", name="keyframes", zoom_ratio=1.0, use_first_frame=False
+    ):
         """Create from programmatic keyframe list.
 
         Args:
@@ -298,7 +301,9 @@ class CameraTrajectory:
             use_first_frame: Whether to use the first frame as a reference.
         """
         cameras = cls._compose_keyframes(keyframes, num_frames)
-        return cls(torch.from_numpy(cameras), mode=mode, name=name, zoom_ratio=zoom_ratio, use_first_frame=use_first_frame)
+        return cls(
+            torch.from_numpy(cameras), mode=mode, name=name, zoom_ratio=zoom_ratio, use_first_frame=use_first_frame
+        )
 
     @classmethod
     def from_json(cls, filepath):
@@ -336,10 +341,11 @@ class CameraTrajectory:
                 frame_matrices = traj["frame_matrices"]
             cameras = cls._interpolate_sparse_matrices(frame_indices, frame_matrices, num_frames)
 
-        return cls(torch.from_numpy(cameras), mode=mode, name=name, zoom_ratio=zoom_ratio, use_first_frame=use_first_frame)
+        return cls(
+            torch.from_numpy(cameras), mode=mode, name=name, zoom_ratio=zoom_ratio, use_first_frame=use_first_frame
+        )
 
     def __len__(self):
-        """Len."""
         return self.c2w.shape[0]
 
     @staticmethod
@@ -348,10 +354,10 @@ class CameraTrajectory:
         if not os.path.exists(filepath):
             raise ValueError(f"Trajectory file not found: {filepath}")
         try:
-            with open(filepath, "r") as f:
+            with open(filepath) as f:
                 data = json.load(f)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON format: {e}")
+            raise ValueError(f"Invalid JSON format: {e}")  # noqa: B904 - Keeps the implicit exception context.
 
         mode = data.get("mode", "relative")
         if mode not in ("relative", "global"):
@@ -368,14 +374,6 @@ class CameraTrajectory:
 
     @staticmethod
     def _get_camera_matrix(trajectory_type, distance=0.1, orbit_radius=0.5, angle=30):
-        """Helper function to get camera matrix.
-
-        Args:
-            trajectory_type: The trajectory type.
-            distance: The distance.
-            orbit_radius: The orbit radius.
-            angle: The angle.
-        """
         angle_rad = np.deg2rad(angle)
         camera_pose = np.eye(4, dtype=np.float32)
 
@@ -452,8 +450,9 @@ class CameraTrajectory:
             num_frames: Number of output frames.
         """
         frame_indices = [next(iter(kf)) for kf in keyframes]
-        assert frame_indices == sorted(frame_indices), \
+        assert frame_indices == sorted(frame_indices), (
             f"Keyframe frame indices must be in ascending order, got {frame_indices}"
+        )
 
         keyframe_times = []
         keyframe_poses = []
@@ -468,8 +467,7 @@ class CameraTrajectory:
                 distance = params.get("distance", 0.1)
                 angle = params.get("angle", 30)
                 orbit_radius = params.get("orbit_radius", 0.5)
-                delta_pose = delta_pose @ CameraTrajectory._get_camera_matrix(
-                    traj_type, distance, orbit_radius, angle)
+                delta_pose = delta_pose @ CameraTrajectory._get_camera_matrix(traj_type, distance, orbit_radius, angle)
             accumulated_pose = accumulated_pose @ delta_pose
             keyframe_times.append(frame_idx / max_idx)
             keyframe_poses.append(accumulated_pose.copy())
@@ -480,10 +478,7 @@ class CameraTrajectory:
         slerp = Slerp(keyframe_times, keyframe_rotations)
         frame_times = np.linspace(0, 1, num_frames)
         rot_interp = slerp(frame_times)
-        pos_interp = np.array([
-            np.interp(frame_times, keyframe_times, keyframe_positions[:, i])
-            for i in range(3)
-        ]).T
+        pos_interp = np.array([np.interp(frame_times, keyframe_times, keyframe_positions[:, i]) for i in range(3)]).T
 
         cameras = np.tile(np.eye(4, dtype=np.float32), (num_frames, 1, 1))
         cameras[:, :3, :3] = rot_interp.as_matrix()
@@ -492,13 +487,6 @@ class CameraTrajectory:
 
     @staticmethod
     def _interpolate_sparse_matrices(indices, matrices, num_frames):
-        """Helper function to interpolate sparse matrices.
-
-        Args:
-            indices: The indices.
-            matrices: The matrices.
-            num_frames: The num frames.
-        """
         keyframe_indices = np.array(indices)
         keyframe_matrices = np.array(matrices, dtype=np.float32)
         if len(indices) == num_frames:
@@ -515,10 +503,7 @@ class CameraTrajectory:
         slerp = Slerp(keyframe_times, keyframe_rotations)
         frame_times = np.linspace(0, 1, num_frames)
         rot_interp = slerp(frame_times)
-        pos_interp = np.array([
-            np.interp(frame_times, keyframe_times, keyframe_positions[:, i])
-            for i in range(3)
-        ]).T
+        pos_interp = np.array([np.interp(frame_times, keyframe_times, keyframe_positions[:, i]) for i in range(3)]).T
 
         cameras = np.tile(np.eye(4, dtype=np.float32), (num_frames, 1, 1))
         cameras[:, :3, :3] = rot_interp.as_matrix()
@@ -527,11 +512,6 @@ class CameraTrajectory:
 
     @staticmethod
     def _validate_keyframe_format(data):
-        """Helper function to validate keyframe format.
-
-        Args:
-            data: The data.
-        """
         keyframes = data["keyframes"]
         num_frames = data.get("num_frames", 81)
         if not isinstance(keyframes, list) or len(keyframes) < 2:
@@ -545,7 +525,7 @@ class CameraTrajectory:
             try:
                 idx = int(key_str)
             except (TypeError, ValueError):
-                raise ValueError(f"Keyframe {i}: key must be an integer frame index, got '{key_str}'")
+                raise ValueError(f"Keyframe {i}: key must be an integer frame index, got '{key_str}'")  # noqa: B904 - Keeps the implicit exception context.
             if idx < 0 or idx >= num_frames:
                 raise ValueError(f"Keyframe {i}: frame index must be >= 0 and < {num_frames}, got {idx}")
             frame_indices.append(idx)
@@ -571,11 +551,6 @@ class CameraTrajectory:
 
     @staticmethod
     def _validate_matrix_format(data):
-        """Helper function to validate matrix format.
-
-        Args:
-            data: The data.
-        """
         trajectory = data["trajectory"]
         if not isinstance(trajectory, dict):
             raise ValueError("trajectory must be a dict")
@@ -597,8 +572,10 @@ class CameraTrajectory:
         if not isinstance(frame_indices, list) or len(frame_indices) < 2:
             raise ValueError("trajectory.frame_indices must be a list with at least 2 entries")
         if not isinstance(frame_matrices, list) or len(frame_matrices) != len(frame_indices):
-            raise ValueError(f"trajectory.frame_matrices length ({len(frame_matrices)}) "
-                             f"must match frame_indices length ({len(frame_indices)})")
+            raise ValueError(
+                f"trajectory.frame_matrices length ({len(frame_matrices)}) "
+                f"must match frame_indices length ({len(frame_indices)})"
+            )
 
         for i, frame in enumerate(frame_indices):
             if not isinstance(frame, int) or frame < 0:

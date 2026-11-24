@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> config -> vipe.py functionality."""
-
 from __future__ import annotations
 
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.config.base_schema import BaseConfigSchema, Field

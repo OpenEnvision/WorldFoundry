@@ -1,12 +1,11 @@
 import torch
 import triton
 import triton.language as tl
-
 from diffusers.models.normalization import FP32LayerNorm, LayerNorm, RMSNorm
 
-from .fp32_rmsnorm import FP32RMSNorm
-from .utils import calculate_settings, torch_gpu_device
+from worldfoundry.base_models.diffusion_model.models.networks.helios.normalization import FP32RMSNorm
 
+from .utils import calculate_settings, torch_gpu_device
 
 # Patch model norms with Triton flash implementations.
 
@@ -14,8 +13,8 @@ from .utils import calculate_settings, torch_gpu_device
 def replace_all_norms_with_flash_norms(model):
     patched_count = {"LayerNorm": 0, "RMSNorm": 0}
 
-    for name, module in model.named_modules():
-        if isinstance(module, (LayerNorm, FP32LayerNorm)):
+    for _name, module in model.named_modules():
+        if isinstance(module, (LayerNorm, FP32LayerNorm)):  # noqa: SIM102 - Statement form kept for readability.
             if hasattr(module, "elementwise_affine") and module.elementwise_affine:
                 module.forward = (lambda self, x: flash_layernorm(self, x)).__get__(module, module.__class__)
                 patched_count["LayerNorm"] += 1
@@ -271,10 +270,7 @@ def _rms_layernorm_backward(
     inv_var = tl.load(r).to(tl.float32)  # saved inverse std from forward
     normed = X_row * inv_var
 
-    if GEMMA:
-        dY_W = dY_row * (W_row + 1.0)
-    else:
-        dY_W = dY_row * W_row
+    dY_W = dY_row * (W_row + 1.0) if GEMMA else dY_row * W_row
 
     rowsum_dY_normed = tl.sum(dY_W * normed, axis=0)
     output = inv_var / n_cols * (n_cols * dY_W - normed * rowsum_dY_normed)

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -18,13 +19,15 @@ from worldfoundry.core.execution.inference import (
 )
 from worldfoundry.runtime.inference_catalog import (
     ASSET_GATED_WORLD_RUNTIME_MODEL_IDS,
+    generic_model_inference_spec,
+    get_model_inference_spec,
+    model_inference_spec,
+)
+from worldfoundry.runtime.inference_specs.lingbot_world import (
     LINGBOT_VARIANT_BASE_ACT_PREVIEW,
     LINGBOT_VARIANT_BASE_CAM,
     LINGBOT_VARIANT_FAST,
     LINGBOT_WORLD_MODEL_ID,
-    generic_model_inference_spec,
-    get_model_inference_spec,
-    model_inference_spec,
 )
 from worldfoundry.runtime.interactive_inference_catalog import interactive_task_for_variant
 from worldfoundry.studio.inference.catalog import (
@@ -309,7 +312,7 @@ def _entry_inference_spec(entry: CatalogEntry):
         workload_type=_entry_workload(entry),
         supported_call_params=supported_call_params,
     )
-    if entry.model_id in {"lagernvs", "stable-virtual-camera", "wonderjourney"}:
+    if entry.model_id in {"lagernvs", "wonderjourney"}:
         spec = replace(
             spec,
             tasks=tuple(
@@ -324,7 +327,7 @@ def _entry_inference_spec(entry: CatalogEntry):
                 for task in spec.tasks
             ),
         )
-    if entry.model_id in {"dvlt", "lingbot-map"}:
+    if entry.model_id == "lingbot-map":
         spec = replace(
             spec,
             tasks=tuple(
@@ -1039,14 +1042,16 @@ def _merge_common_params(
         if negative_key:
             call_kwargs.setdefault(negative_key, payload.negative_prompt)
 
-    attention_backend = param_value("attention_backend")
-    if _supports_attention_backend(entry) and attention_backend not in {"", None, "auto"}:
-        load_kwargs.setdefault("attention_backend", attention_backend)
-        call_kwargs.setdefault("attention_backend", attention_backend)
-    _apply_runtime_options(entry, params=params, load_kwargs=load_kwargs, call_kwargs=call_kwargs)
-
     call_names = {_param_key(name): name for name in (entry.call_params + entry.stream_params)}
     load_names = {_param_key(name): name for name in entry.load_params}
+    attention_backend = param_value("attention_backend")
+    if attention_backend not in {"", None, "auto"}:
+        if "attention_backend" in load_names:
+            load_kwargs.setdefault(load_names["attention_backend"], attention_backend)
+        if "attention_backend" in call_names:
+            call_kwargs.setdefault(call_names["attention_backend"], attention_backend)
+    _apply_runtime_options(entry, params=params, load_kwargs=load_kwargs, call_kwargs=call_kwargs)
+
     for key, value in params.items():
         if _is_missing_param_value(value):
             continue
@@ -1095,9 +1100,7 @@ def _should_use_task_default_input_path(
     if declared_task_type:
         return True
     workload = str(payload.workload_type or _entry_workload(entry) or "").strip().lower().replace("_", "-")
-    if workload in {"t2v", "text-video", "text-to-video"}:
-        return False
-    return True
+    return workload not in {"t2v", "text-video", "text-to-video"}
 
 
 def _validate_runtime_options(entry: CatalogEntry, params: dict[str, Any]) -> None:
@@ -1242,30 +1245,30 @@ def build_inference_run_kwargs(
     if entry.model_id == "matrix-game-1" and input_path:
         call_kwargs.setdefault("image_path", input_path)
     prompt = payload.prompt or str(_task_field_default(task, "prompt", target="prompt") or entry.default_prompt or "")
-    return entry, dict(
-        model_id=entry.model_id,
-        action="run",
-        prompt=prompt,
-        input_path=input_path,
-        image=None,
-        video=None,
-        last_frame=None,
-        reference_files=None,
-        interactions_text=json.dumps(interactions) if interactions is not None else "",
-        camera_view_text=json.dumps(params.get("camera_view")) if params.get("camera_view") is not None else "",
-        task_type=task_type,
-        intrinsics_text=json.dumps(params.get("intrinsics")) if params.get("intrinsics") is not None else "",
-        meta_path=str(params.get("meta_path") or ""),
-        panorama_path=str(params.get("panorama_path") or ""),
-        scene_name=str(params.get("scene_name") or ""),
-        fps=fps,
-        num_frames=num_frames,
-        call_kwargs_text=json.dumps(call_kwargs),
-        load_kwargs_text=json.dumps(load_kwargs),
-        model_ref=model_ref,
-        backend=payload.backend or entry.default_backend,
-        endpoint=payload.endpoint or entry.default_endpoint,
-        api_key=payload.api_key,
-        device=payload.device or str(defaults.get("device") or DEFAULT_SETTINGS["device"]),
-        infer_metadata=contract,
-    )
+    return entry, {
+        "model_id": entry.model_id,
+        "action": "run",
+        "prompt": prompt,
+        "input_path": input_path,
+        "image": None,
+        "video": None,
+        "last_frame": None,
+        "reference_files": None,
+        "interactions_text": json.dumps(interactions) if interactions is not None else "",
+        "camera_view_text": json.dumps(params.get("camera_view")) if params.get("camera_view") is not None else "",
+        "task_type": task_type,
+        "intrinsics_text": json.dumps(params.get("intrinsics")) if params.get("intrinsics") is not None else "",
+        "meta_path": str(params.get("meta_path") or ""),
+        "panorama_path": str(params.get("panorama_path") or ""),
+        "scene_name": str(params.get("scene_name") or ""),
+        "fps": fps,
+        "num_frames": num_frames,
+        "call_kwargs_text": json.dumps(call_kwargs),
+        "load_kwargs_text": json.dumps(load_kwargs),
+        "model_ref": model_ref,
+        "backend": payload.backend or entry.default_backend,
+        "endpoint": payload.endpoint or entry.default_endpoint,
+        "api_key": payload.api_key,
+        "device": payload.device or str(defaults.get("device") or DEFAULT_SETTINGS["device"]),
+        "infer_metadata": contract,
+    }

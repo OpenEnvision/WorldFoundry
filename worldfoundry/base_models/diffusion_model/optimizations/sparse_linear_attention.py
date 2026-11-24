@@ -82,9 +82,7 @@ def _positive_int(name: str, value: Any) -> int:
     try:
         normalized = operator.index(value)
     except TypeError as exc:
-        raise ValueError(
-            f"{name} must be a positive integer, got {value!r}"
-        ) from exc
+        raise ValueError(f"{name} must be a positive integer, got {value!r}") from exc
     if normalized <= 0:
         raise ValueError(f"{name} must be a positive integer, got {normalized}")
     return normalized
@@ -96,13 +94,9 @@ def _layer_index(value: Any) -> int:
     try:
         normalized = operator.index(value)
     except TypeError as exc:
-        raise ValueError(
-            f"layer_index must be a non-negative integer, got {value!r}"
-        ) from exc
+        raise ValueError(f"layer_index must be a non-negative integer, got {value!r}") from exc
     if normalized < 0:
-        raise ValueError(
-            f"layer_index must be a non-negative integer, got {normalized}"
-        )
+        raise ValueError(f"layer_index must be a non-negative integer, got {normalized}")
     return normalized
 
 
@@ -128,16 +122,11 @@ class FastVideoSLAConfig:
             ratio = 0.1 if kind == "fastvideo_sla" else 0.5
         ratio = float(ratio)
         if not math.isfinite(ratio) or not 0.0 < ratio <= 1.0:
-            raise ValueError(
-                f"topk_ratio must be finite and in (0, 1], got {ratio!r}"
-            )
+            raise ValueError(f"topk_ratio must be finite and in (0, 1], got {ratio!r}")
         object.__setattr__(self, "topk_ratio", ratio)
         feature_map = str(self.feature_map).strip().casefold()
         if feature_map not in {"softmax", "elu", "relu"}:
-            raise ValueError(
-                "feature_map must be one of ['elu', 'relu', 'softmax'], got "
-                f"{self.feature_map!r}"
-            )
+            raise ValueError(f"feature_map must be one of ['elu', 'relu', 'softmax'], got {self.feature_map!r}")
         object.__setattr__(self, "feature_map", feature_map)
 
 
@@ -156,18 +145,12 @@ class FastVideoSLALayerSpec:
         num_heads = _positive_int("num_heads", self.num_heads)
         head_size = _positive_int("head_size", self.head_size)
         if head_size not in {64, 128}:
-            raise ValueError(
-                "FastVideo SLA/SageSLA support head_size 64 or 128, got "
-                f"{head_size}"
-            )
+            raise ValueError(f"FastVideo SLA/SageSLA support head_size 64 or 128, got {head_size}")
         scale = self.softmax_scale
         if scale is not None:
             scale = float(scale)
             if not math.isfinite(scale) or scale <= 0.0:
-                raise ValueError(
-                    "softmax_scale must be positive and finite, got "
-                    f"{scale!r}"
-                )
+                raise ValueError(f"softmax_scale must be positive and finite, got {scale!r}")
         prefix = self.prefix
         if prefix is None:
             prefix = f"blocks.{layer_index}.attn1"
@@ -197,24 +180,14 @@ class FastVideoSLASourceIdentity:
     ) -> FastVideoSLASourceIdentity:
         return cls(
             commit=(
-                str(value["provider_source_commit"])
-                if isinstance(value.get("provider_source_commit"), str)
-                else None
+                str(value["provider_source_commit"]) if isinstance(value.get("provider_source_commit"), str) else None
             ),
             clean=(
-                value.get("provider_source_clean")
-                if isinstance(value.get("provider_source_clean"), bool)
-                else None
+                value.get("provider_source_clean") if isinstance(value.get("provider_source_clean"), bool) else None
             ),
-            root=(
-                str(value["provider_source_root"])
-                if isinstance(value.get("provider_source_root"), str)
-                else None
-            ),
+            root=(str(value["provider_source_root"]) if isinstance(value.get("provider_source_root"), str) else None),
             source_file=(
-                str(value["provider_source_file"])
-                if isinstance(value.get("provider_source_file"), str)
-                else None
+                str(value["provider_source_file"]) if isinstance(value.get("provider_source_file"), str) else None
             ),
         )
 
@@ -271,24 +244,17 @@ def _normalize_layer_specs(
     normalized: dict[int, FastVideoSLALayerSpec] = {}
     for spec in layer_specs:
         if not isinstance(spec, FastVideoSLALayerSpec):
-            raise TypeError(
-                "layer_specs must contain only FastVideoSLALayerSpec values"
-            )
+            raise TypeError("layer_specs must contain only FastVideoSLALayerSpec values")
         if spec.layer_index in normalized:
-            raise FastVideoSLAContractError(
-                f"duplicate FastVideo SLA layer spec for layer {spec.layer_index}"
-            )
+            raise FastVideoSLAContractError(f"duplicate FastVideo SLA layer spec for layer {spec.layer_index}")
         normalized[spec.layer_index] = spec
     if not normalized:
-        raise FastVideoSLAContractError(
-            "FastVideo SLA requires at least one Wan self-attention layer"
-        )
+        raise FastVideoSLAContractError("FastVideo SLA requires at least one Wan self-attention layer")
     expected = list(range(len(normalized)))
     actual = sorted(normalized)
     if actual != expected:
         raise FastVideoSLAContractError(
-            "FastVideo SLA layer specs must cover every zero-based Wan block: "
-            f"expected={expected}, actual={actual}"
+            f"FastVideo SLA layer specs must cover every zero-based Wan block: expected={expected}, actual={actual}"
         )
     return {index: normalized[index] for index in actual}
 
@@ -341,8 +307,7 @@ def resolve_fastvideo_sla_projection_weights(
     for raw_key, value in checkpoint_state_dict.items():
         if not isinstance(raw_key, str):
             raise FastVideoSLAContractError(
-                "FastVideo SLA checkpoint keys must be strings, got "
-                f"{type(raw_key).__name__}: {raw_key!r}"
+                f"FastVideo SLA checkpoint keys must be strings, got {type(raw_key).__name__}: {raw_key!r}"
             )
         match_record: tuple[str, re.Match[str]] | None = None
         for layout, pattern in _CHECKPOINT_PATTERNS:
@@ -359,22 +324,15 @@ def resolve_fastvideo_sla_projection_weights(
         parameter = match.group("parameter")
         role = (layer_index, parameter)
         if role in resolved:
-            duplicate_roles.append(
-                f"layer={layer_index} parameter={parameter}: "
-                f"{resolved[role][1]!r} and {raw_key!r}"
-            )
+            duplicate_roles.append(f"layer={layer_index} parameter={parameter}: {resolved[role][1]!r} and {raw_key!r}")
             continue
         resolved[role] = (layout, raw_key, value)
         layouts.add(layout)
     if unsupported_keys:
-        raise FastVideoSLAContractError(
-            "unsupported FastVideo SLA proj_l checkpoint keys: "
-            f"{sorted(unsupported_keys)}"
-        )
+        raise FastVideoSLAContractError(f"unsupported FastVideo SLA proj_l checkpoint keys: {sorted(unsupported_keys)}")
     if duplicate_roles:
         raise FastVideoSLAContractError(
-            "duplicate FastVideo SLA checkpoint mappings: "
-            + "; ".join(sorted(duplicate_roles))
+            "duplicate FastVideo SLA checkpoint mappings: " + "; ".join(sorted(duplicate_roles))
         )
     if len(layouts) > 1:
         raise FastVideoSLAContractError(
@@ -384,8 +342,7 @@ def resolve_fastvideo_sla_projection_weights(
     unexpected_layers = sorted({layer for layer, _ in resolved} - set(specs))
     if unexpected_layers:
         raise FastVideoSLAContractError(
-            "FastVideo SLA checkpoint contains unexpected projection layers: "
-            f"{unexpected_layers}"
+            f"FastVideo SLA checkpoint contains unexpected projection layers: {unexpected_layers}"
         )
     missing = [
         f"layer={layer_index} parameter={parameter}"
@@ -395,8 +352,7 @@ def resolve_fastvideo_sla_projection_weights(
     ]
     if missing:
         raise FastVideoSLAContractError(
-            "FastVideo SLA requires learned proj_l weight and bias for every "
-            f"Wan block; missing={missing}"
+            f"FastVideo SLA requires learned proj_l weight and bias for every Wan block; missing={missing}"
         )
     projections: dict[int, FastVideoSLAProjectionWeights] = {}
     for layer_index, spec in specs.items():
@@ -408,38 +364,31 @@ def resolve_fastvideo_sla_projection_weights(
         ):
             _, source_key, raw_tensor = resolved[(layer_index, parameter)]
             if not isinstance(raw_tensor, torch.Tensor):
-                raise FastVideoSLAContractError(
-                    f"{source_key!r} must be a Tensor, got "
-                    f"{type(raw_tensor).__name__}"
-                )
+                raise FastVideoSLAContractError(f"{source_key!r} must be a Tensor, got {type(raw_tensor).__name__}")
             if raw_tensor.layout is not torch.strided:
-                raise FastVideoSLAContractError(
-                    f"{source_key!r} must be a strided dense tensor"
-                )
+                raise FastVideoSLAContractError(f"{source_key!r} must be a strided dense tensor")
             if not raw_tensor.dtype.is_floating_point:
-                raise FastVideoSLAContractError(
-                    f"{source_key!r} must use a floating dtype, got "
-                    f"{raw_tensor.dtype}"
-                )
+                raise FastVideoSLAContractError(f"{source_key!r} must use a floating dtype, got {raw_tensor.dtype}")
             if tuple(raw_tensor.shape) != expected_shape:
                 raise FastVideoSLAContractError(
-                    f"{source_key!r} has shape {tuple(raw_tensor.shape)}, "
-                    f"expected {expected_shape}"
+                    f"{source_key!r} has shape {tuple(raw_tensor.shape)}, expected {expected_shape}"
                 )
-            normalized = raw_tensor.detach().to(
-                device="cpu",
-                dtype=torch.float32,
-            ).contiguous().clone()
+            normalized = (
+                raw_tensor.detach()
+                .to(
+                    device="cpu",
+                    dtype=torch.float32,
+                )
+                .contiguous()
+                .clone()
+            )
             if not bool(torch.isfinite(normalized).all().item()):
-                raise FastVideoSLAContractError(
-                    f"{source_key!r} contains non-finite learned weights"
-                )
+                raise FastVideoSLAContractError(f"{source_key!r} contains non-finite learned weights")
             tensors[parameter] = normalized
             source_keys[parameter] = source_key
         if not bool(torch.count_nonzero(tensors["weight"]).item()):
             raise FastVideoSLAContractError(
-                f"layer {layer_index} proj_l.weight is all zero; refusing "
-                "FastVideo's untrained default initialization"
+                f"layer {layer_index} proj_l.weight is all zero; refusing FastVideo's untrained default initialization"
             )
         fingerprint = _projection_fingerprint(
             layer_index,
@@ -492,8 +441,7 @@ def split_fastvideo_sla_projection_weights(
     for raw_key, value in checkpoint_state_dict.items():
         if not isinstance(raw_key, str):
             raise FastVideoSLAContractError(
-                "FastVideo SLA checkpoint keys must be strings, got "
-                f"{type(raw_key).__name__}: {raw_key!r}"
+                f"FastVideo SLA checkpoint keys must be strings, got {type(raw_key).__name__}: {raw_key!r}"
             )
         recognized = any(pattern.fullmatch(raw_key) for _, pattern in _CHECKPOINT_PATTERNS)
         if recognized:
@@ -503,10 +451,7 @@ def split_fastvideo_sla_projection_weights(
         else:
             model_state[raw_key] = value
     if unsupported:
-        raise FastVideoSLAContractError(
-            "unsupported FastVideo SLA proj_l checkpoint keys: "
-            f"{sorted(unsupported)}"
-        )
+        raise FastVideoSLAContractError(f"unsupported FastVideo SLA proj_l checkpoint keys: {sorted(unsupported)}")
     return model_state, projection_state
 
 
@@ -539,22 +484,14 @@ def _provider_source_identity(module: Any) -> FastVideoSLASourceIdentity:
         if cached is not None:
             return cached
         checkout_root = next(
-            (
-                parent
-                for parent in (source_path.parent, *source_path.parents)
-                if (parent / ".git").exists()
-            ),
+            (parent for parent in (source_path.parent, *source_path.parents) if (parent / ".git").exists()),
             None,
         )
         if checkout_root is None:
             identity = _unknown_source_identity(source_file=source_path)
             _SOURCE_IDENTITIES[cache_key] = identity
             return identity
-        scoped_paths = [
-            name
-            for name in ("fastvideo", "fastvideo-kernel")
-            if (checkout_root / name).exists()
-        ]
+        scoped_paths = [name for name in ("fastvideo", "fastvideo-kernel") if (checkout_root / name).exists()]
         if not scoped_paths:
             try:
                 scoped_paths = [source_path.relative_to(checkout_root).as_posix()]
@@ -623,16 +560,12 @@ def _load_upstream_bundle(kind: str) -> _UpstreamBundle:
     try:
         module = importlib.import_module(_UPSTREAM_MODULE)
     except Exception as exc:
-        raise FastVideoSLAUnavailableError(
-            f"cannot import FastVideo SLA provider module: {exc}"
-        ) from exc
+        raise FastVideoSLAUnavailableError(f"cannot import FastVideo SLA provider module: {exc}") from exc
     class_name = _PROVIDER_CLASS_NAMES[kind]
     provider_type = getattr(module, class_name, None)
     metadata_type = getattr(module, "SLAAttentionMetadata", None)
     if not isinstance(provider_type, type) or not issubclass(provider_type, nn.Module):
-        raise FastVideoSLAUnavailableError(
-            f"{_UPSTREAM_MODULE}.{class_name} is missing or is not an nn.Module"
-        )
+        raise FastVideoSLAUnavailableError(f"{_UPSTREAM_MODULE}.{class_name} is missing or is not an nn.Module")
     provider_path = f"{provider_type.__module__}.{provider_type.__name__}"
     if provider_path != _REFERENCE_PROVIDER_PATHS[kind]:
         raise FastVideoSLAUnavailableError(
@@ -640,9 +573,7 @@ def _load_upstream_bundle(kind: str) -> _UpstreamBundle:
             f"got {provider_path!r}, expected {_REFERENCE_PROVIDER_PATHS[kind]!r}"
         )
     if not isinstance(metadata_type, type):
-        raise FastVideoSLAUnavailableError(
-            f"{_UPSTREAM_MODULE}.SLAAttentionMetadata is missing"
-        )
+        raise FastVideoSLAUnavailableError(f"{_UPSTREAM_MODULE}.SLAAttentionMetadata is missing")
     source_identity = _provider_source_identity(module)
     return _UpstreamBundle(
         provider_type=provider_type,
@@ -662,9 +593,7 @@ def fastvideo_sla_runtime_expectation(
     """
 
     config = (
-        config_or_kind
-        if isinstance(config_or_kind, FastVideoSLAConfig)
-        else FastVideoSLAConfig(kind=config_or_kind)
+        config_or_kind if isinstance(config_or_kind, FastVideoSLAConfig) else FastVideoSLAConfig(kind=config_or_kind)
     )
     bundle = _load_upstream_bundle(config.kind)
     family = (
@@ -741,9 +670,7 @@ class FastVideoSLAAdapter(nn.Module):
         self._injected_test_provider = provider_factory is not None
         if provider_factory is None:
             if metadata_factory is not None or source_identity is not None:
-                raise ValueError(
-                    "metadata/source injection requires an injected provider_factory"
-                )
+                raise ValueError("metadata/source injection requires an injected provider_factory")
             bundle = _load_upstream_bundle(config.kind)
             identity = bundle.source_identity
 
@@ -773,6 +700,7 @@ class FastVideoSLAAdapter(nn.Module):
                     ) from exc
 
             selected_factory = production_factory
+
             def production_metadata_factory(timestep: int, ratio: float) -> Any:
                 return bundle.metadata_type(
                     current_timestep=timestep,
@@ -782,14 +710,9 @@ class FastVideoSLAAdapter(nn.Module):
             selected_metadata_factory: MetadataFactory = production_metadata_factory
         else:
             if not self._allow_non_cuda_for_tests:
-                raise ValueError(
-                    "provider_factory is a test-only seam and requires "
-                    "allow_non_cuda_for_tests=True"
-                )
+                raise ValueError("provider_factory is a test-only seam and requires allow_non_cuda_for_tests=True")
             if source_identity is None:
-                raise ValueError(
-                    "an injected provider requires explicit source_identity"
-                )
+                raise ValueError("an injected provider requires explicit source_identity")
             identity = (
                 source_identity
                 if isinstance(source_identity, FastVideoSLASourceIdentity)
@@ -798,10 +721,9 @@ class FastVideoSLAAdapter(nn.Module):
                 else None
             )
             if identity is None:
-                raise TypeError(
-                    "source_identity must be FastVideoSLASourceIdentity or a mapping"
-                )
+                raise TypeError("source_identity must be FastVideoSLASourceIdentity or a mapping")
             selected_factory = provider_factory
+
             def injected_metadata_factory(timestep: int, ratio: float) -> Any:
                 return FastVideoSLAMetadata(
                     current_timestep=timestep,
@@ -829,23 +751,16 @@ class FastVideoSLAAdapter(nn.Module):
                 ) from exc
             if not isinstance(provider, nn.Module):
                 raise FastVideoSLAContractError(
-                    f"layer {layer_index} provider must be an nn.Module, got "
-                    f"{type(provider).__name__}"
+                    f"layer {layer_index} provider must be an nn.Module, got {type(provider).__name__}"
                 )
             if id(provider) in provider_ids:
-                raise FastVideoSLAContractError(
-                    "FastVideo SLA provider_factory reused one module across layers"
-                )
+                raise FastVideoSLAContractError("FastVideo SLA provider_factory reused one module across layers")
             provider_ids.add(id(provider))
             projection = getattr(provider, "proj_l", None)
             if not isinstance(projection, nn.Linear):
-                raise FastVideoSLAContractError(
-                    f"layer {layer_index} provider has no nn.Linear proj_l"
-                )
+                raise FastVideoSLAContractError(f"layer {layer_index} provider has no nn.Linear proj_l")
             if id(projection) in projection_ids:
-                raise FastVideoSLAContractError(
-                    "FastVideo SLA providers share one proj_l module across layers"
-                )
+                raise FastVideoSLAContractError("FastVideo SLA providers share one proj_l module across layers")
             projection_ids.add(id(projection))
             expected_weight_shape = (spec.head_size, spec.head_size)
             expected_bias_shape = (spec.head_size,)
@@ -854,9 +769,7 @@ class FastVideoSLAAdapter(nn.Module):
                 or projection.bias is None
                 or tuple(projection.bias.shape) != expected_bias_shape
             ):
-                raise FastVideoSLAContractError(
-                    f"layer {layer_index} provider proj_l geometry is malformed"
-                )
+                raise FastVideoSLAContractError(f"layer {layer_index} provider proj_l geometry is malformed")
             learned = self._checkpoint.projections[layer_index]
             with torch.no_grad():
                 projection.weight.copy_(
@@ -873,8 +786,7 @@ class FastVideoSLAAdapter(nn.Module):
                 )
             if projection.weight.dtype is not torch.float32:
                 raise FastVideoSLAContractError(
-                    f"layer {layer_index} provider proj_l must remain float32, got "
-                    f"{projection.weight.dtype}"
+                    f"layer {layer_index} provider proj_l must remain float32, got {projection.weight.dtype}"
                 )
             actual_fingerprint = _projection_fingerprint(
                 layer_index,
@@ -882,17 +794,13 @@ class FastVideoSLAAdapter(nn.Module):
                 projection.bias,
             )
             if actual_fingerprint != learned.fingerprint:
-                raise FastVideoSLAContractError(
-                    f"layer {layer_index} learned proj_l changed during provider load"
-                )
+                raise FastVideoSLAContractError(f"layer {layer_index} learned proj_l changed during provider load")
             storage_key = (
                 projection.weight.untyped_storage().data_ptr(),
                 projection.bias.untyped_storage().data_ptr(),
             )
             if storage_key in parameter_storage:
-                raise FastVideoSLAContractError(
-                    "FastVideo SLA providers share projection parameter storage"
-                )
+                raise FastVideoSLAContractError("FastVideo SLA providers share projection parameter storage")
             parameter_storage.add(storage_key)
             provider.requires_grad_(False)
             provider.eval()
@@ -901,17 +809,9 @@ class FastVideoSLAAdapter(nn.Module):
             self._layer_weight_fingerprints[layer_index] = actual_fingerprint
         if not self._injected_test_provider:
             expected_path = _REFERENCE_PROVIDER_PATHS[config.kind]
-            wrong_paths = sorted(
-                {
-                    path
-                    for path in self._provider_paths.values()
-                    if path != expected_path
-                }
-            )
+            wrong_paths = sorted({path for path in self._provider_paths.values() if path != expected_path})
             if wrong_paths:
-                raise FastVideoSLAUnavailableError(
-                    f"constructed unexpected FastVideo provider classes: {wrong_paths}"
-                )
+                raise FastVideoSLAUnavailableError(f"constructed unexpected FastVideo provider classes: {wrong_paths}")
         provider_payload = {
             "kind": config.kind,
             "topk_ratio": config.topk_ratio,
@@ -938,9 +838,9 @@ class FastVideoSLAAdapter(nn.Module):
         self._attempts = 0
         self._calls = 0
         self._errors = 0
-        self._layer_attempts = {index: 0 for index in self._layer_specs}
-        self._layer_calls = {index: 0 for index in self._layer_specs}
-        self._layer_errors = {index: 0 for index in self._layer_specs}
+        self._layer_attempts = dict.fromkeys(self._layer_specs, 0)
+        self._layer_calls = dict.fromkeys(self._layer_specs, 0)
+        self._layer_errors = dict.fromkeys(self._layer_specs, 0)
         super().train(False)
 
     def _apply(self, fn: Callable[[torch.Tensor], torch.Tensor]) -> FastVideoSLAAdapter:
@@ -962,9 +862,7 @@ class FastVideoSLAAdapter(nn.Module):
         )
         transformed = fn(probe)
         target_device = transformed.device
-        for layer_index, provider in (
-            (int(name), value) for name, value in self.providers.items()
-        ):
+        for layer_index, provider in ((int(name), value) for name, value in self.providers.items()):
             provider.to(device=target_device)
             projection = provider.proj_l
             if (
@@ -972,9 +870,7 @@ class FastVideoSLAAdapter(nn.Module):
                 or projection.bias is None
                 or projection.bias.dtype is not torch.float32
             ):
-                raise FastVideoSLAContractError(
-                    f"layer {layer_index} proj_l changed dtype during placement"
-                )
+                raise FastVideoSLAContractError(f"layer {layer_index} proj_l changed dtype during placement")
             if (
                 _projection_fingerprint(
                     layer_index,
@@ -983,9 +879,7 @@ class FastVideoSLAAdapter(nn.Module):
                 )
                 != self._layer_weight_fingerprints[layer_index]
             ):
-                raise FastVideoSLAContractError(
-                    f"layer {layer_index} proj_l changed during placement"
-                )
+                raise FastVideoSLAContractError(f"layer {layer_index} proj_l changed during placement")
         return self
 
     def _validate_inputs(
@@ -996,19 +890,13 @@ class FastVideoSLAAdapter(nn.Module):
         v: torch.Tensor,
     ) -> FastVideoSLALayerSpec:
         if layer_index not in self._layer_specs:
-            raise FastVideoSLAContractError(
-                f"FastVideo SLA layer {layer_index} was not installed"
-            )
+            raise FastVideoSLAContractError(f"FastVideo SLA layer {layer_index} was not installed")
         values = {"q": q, "k": k, "v": v}
         if not all(isinstance(value, torch.Tensor) for value in values.values()):
             malformed = {
-                name: type(value).__name__
-                for name, value in values.items()
-                if not isinstance(value, torch.Tensor)
+                name: type(value).__name__ for name, value in values.items() if not isinstance(value, torch.Tensor)
             }
-            raise FastVideoSLAContractError(
-                f"FastVideo SLA q/k/v must be Tensors, got {malformed}"
-            )
+            raise FastVideoSLAContractError(f"FastVideo SLA q/k/v must be Tensors, got {malformed}")
         if any(value.ndim != 4 for value in values.values()):
             raise FastVideoSLAContractError(
                 "FastVideo SLA requires BSHD q/k/v tensors; shapes="
@@ -1021,22 +909,16 @@ class FastVideoSLAAdapter(nn.Module):
             )
         if q.device != k.device or q.device != v.device:
             raise FastVideoSLAContractError(
-                "FastVideo SLA q/k/v devices must match: "
-                f"q={q.device}, k={k.device}, v={v.device}"
+                f"FastVideo SLA q/k/v devices must match: q={q.device}, k={k.device}, v={v.device}"
             )
         if q.dtype != k.dtype or q.dtype != v.dtype:
             raise FastVideoSLAContractError(
-                "FastVideo SLA q/k/v dtypes must match: "
-                f"q={q.dtype}, k={k.dtype}, v={v.dtype}"
+                f"FastVideo SLA q/k/v dtypes must match: q={q.dtype}, k={k.dtype}, v={v.dtype}"
             )
         if not all(value.is_contiguous() for value in values.values()):
-            raise FastVideoSLAContractError(
-                "FastVideo SLA requires contiguous BSHD q/k/v tensors"
-            )
+            raise FastVideoSLAContractError("FastVideo SLA requires contiguous BSHD q/k/v tensors")
         if q.shape[0] <= 0 or q.shape[1] <= 0:
-            raise FastVideoSLAContractError(
-                "FastVideo SLA batch and sequence dimensions must be positive"
-            )
+            raise FastVideoSLAContractError("FastVideo SLA batch and sequence dimensions must be positive")
         spec = self._layer_specs[layer_index]
         if tuple(q.shape[2:]) != (spec.num_heads, spec.head_size):
             raise FastVideoSLAContractError(
@@ -1045,30 +927,19 @@ class FastVideoSLAAdapter(nn.Module):
             )
         if not self._allow_non_cuda_for_tests:
             if q.device.type != "cuda":
-                raise FastVideoSLAUnavailableError(
-                    f"FastVideo SLA requires CUDA tensors, got {q.device}"
-                )
+                raise FastVideoSLAUnavailableError(f"FastVideo SLA requires CUDA tensors, got {q.device}")
             if q.dtype is not torch.bfloat16:
-                raise FastVideoSLAContractError(
-                    f"FastVideo SLA requires bfloat16 tensors, got {q.dtype}"
-                )
+                raise FastVideoSLAContractError(f"FastVideo SLA requires bfloat16 tensors, got {q.dtype}")
         elif q.dtype not in {torch.float16, torch.bfloat16, torch.float32}:
-            raise FastVideoSLAContractError(
-                f"FastVideo SLA test seam requires a floating compute dtype, got {q.dtype}"
-            )
+            raise FastVideoSLAContractError(f"FastVideo SLA test seam requires a floating compute dtype, got {q.dtype}")
         projection = self.providers[str(layer_index)].proj_l
         if projection.weight.device != q.device or projection.bias.device != q.device:
             raise FastVideoSLAContractError(
                 f"layer {layer_index} proj_l is on {projection.weight.device}, "
                 f"but q/k/v are on {q.device}; move the adapter before inference"
             )
-        if (
-            projection.weight.dtype is not torch.float32
-            or projection.bias.dtype is not torch.float32
-        ):
-            raise FastVideoSLAContractError(
-                f"layer {layer_index} proj_l must remain float32 at runtime"
-            )
+        if projection.weight.dtype is not torch.float32 or projection.bias.dtype is not torch.float32:
+            raise FastVideoSLAContractError(f"layer {layer_index} proj_l must remain float32 at runtime")
         return spec
 
     def _record_attempt(self, layer_index: int) -> None:
@@ -1102,30 +973,20 @@ class FastVideoSLAAdapter(nn.Module):
         normalized_layer = _layer_index(layer_index)
         spec = self._validate_inputs(normalized_layer, q, k, v)
         if isinstance(current_timestep, bool):
-            raise FastVideoSLAContractError(
-                "current_timestep must be a non-negative integer"
-            )
+            raise FastVideoSLAContractError("current_timestep must be a non-negative integer")
         try:
             timestep = operator.index(current_timestep)
         except TypeError as exc:
-            raise FastVideoSLAContractError(
-                "current_timestep must be a non-negative integer"
-            ) from exc
+            raise FastVideoSLAContractError("current_timestep must be a non-negative integer") from exc
         if timestep < 0:
-            raise FastVideoSLAContractError(
-                "current_timestep must be a non-negative integer"
-            )
+            raise FastVideoSLAContractError("current_timestep must be a non-negative integer")
         metadata = self._metadata_factory(timestep, float(self.config.topk_ratio))
         provider = self.providers[str(normalized_layer)]
         self._record_attempt(normalized_layer)
         try:
             if on_provider_attempt is not None:
                 on_provider_attempt()
-            device_context = (
-                torch.cuda.device(q.device)
-                if q.device.type == "cuda"
-                else nullcontext()
-            )
+            device_context = torch.cuda.device(q.device) if q.device.type == "cuda" else nullcontext()
             with device_context:
                 output = provider(q, k, v, metadata)
         except Exception as exc:
@@ -1136,14 +997,10 @@ class FastVideoSLAAdapter(nn.Module):
             ) from exc
         try:
             if not isinstance(output, torch.Tensor):
-                raise FastVideoSLAContractError(
-                    f"FastVideo provider returned {type(output).__name__}, "
-                    "expected Tensor"
-                )
+                raise FastVideoSLAContractError(f"FastVideo provider returned {type(output).__name__}, expected Tensor")
             if output.shape != q.shape:
                 raise FastVideoSLAContractError(
-                    f"FastVideo provider returned shape {tuple(output.shape)}, "
-                    f"expected BSHD {tuple(q.shape)}"
+                    f"FastVideo provider returned shape {tuple(output.shape)}, expected BSHD {tuple(q.shape)}"
                 )
             if output.device != q.device or output.dtype != q.dtype:
                 raise FastVideoSLAContractError(
@@ -1224,16 +1081,13 @@ def fastvideo_sla_checkpoint_key_patterns() -> dict[str, str]:
     """Expose the two audited projection layouts for loader wiring/docs."""
 
     return {
-        "fastvideo_diffusers": (
-            "blocks.<layer>.attn1.attn_impl.proj_l.{weight,bias}"
-        ),
-        "turbodiffusion_original": (
-            "blocks.<layer>.self_attn.attn_op.local_attn.proj_l.{weight,bias}"
-        ),
+        "fastvideo_diffusers": ("blocks.<layer>.attn1.attn_impl.proj_l.{weight,bias}"),
+        "turbodiffusion_original": ("blocks.<layer>.self_attn.attn_op.local_attn.proj_l.{weight,bias}"),
     }
 
 
 __all__ = [
+    "PINNED_FASTVIDEO_COMMIT",
     "FastVideoSLAAdapter",
     "FastVideoSLAConfig",
     "FastVideoSLAContractError",
@@ -1244,7 +1098,6 @@ __all__ = [
     "FastVideoSLAResult",
     "FastVideoSLASourceIdentity",
     "FastVideoSLAUnavailableError",
-    "PINNED_FASTVIDEO_COMMIT",
     "fastvideo_sla_checkpoint_key_patterns",
     "fastvideo_sla_runtime_expectation",
     "resolve_fastvideo_sla_projection_weights",

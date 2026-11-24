@@ -8,16 +8,17 @@ from diffusers.models import AutoencoderKLWan
 from diffusers.schedulers import UniPCMultistepScheduler
 from diffusers.utils import export_to_video
 from omegaconf import OmegaConf
-from src.dataset import load_dataset
-from src.fsdp import shard_model
-from src.models.controlnet import WanAttnProcessorSP
-from src.models.pcd_controller import PCDController
-from src.pipelines.pipeline_pcd import PCDControllerPipeline
-from src.utils import create_logger, is_main_process
-from src.xfuser_compat import get_sequence_parallel_world_size, require_xfuser
 from transformers import AutoTokenizer, CLIPImageProcessor, CLIPVisionModel, UMT5EncoderModel
 
-if __name__ == '__main__':
+from .src.dataset import load_dataset
+from .src.fsdp import shard_model
+from .src.models.controlnet import WanAttnProcessorSP
+from .src.models.pcd_controller import PCDController
+from .src.pipelines.pipeline_pcd import PCDControllerPipeline
+from .src.utils import create_logger, is_main_process
+from .src.xfuser_compat import get_sequence_parallel_world_size, require_xfuser
+
+if __name__ == "__main__":
     torch.set_grad_enabled(False)
     # == parse configs ==
     parser = argparse.ArgumentParser()
@@ -27,8 +28,12 @@ if __name__ == '__main__':
     parser.add_argument("--nframe", default=81, type=int, help="Total number of frames")
     parser.add_argument("--fsdp", action="store_true", help="whether to use fsdp to save memory")
     parser.add_argument("--enable_sp", action="store_true", help="whether to use SP inference")
-    parser.add_argument("--prompt", default="This video describes a slow and stable camera movement with high quality and high definition.",
-                        type=str, help="Prompt of the reference image")
+    parser.add_argument(
+        "--prompt",
+        default="This video describes a slow and stable camera movement with high quality and high definition.",
+        type=str,
+        help="Prompt of the reference image",
+    )
     parser.add_argument("--max_area", default=480 * 768, type=int, help="Total pixel area of height * width")
     parser.add_argument("--seed", default=1024, type=int, help="random seed")
     parser.add_argument("--fps", default=16, type=int, help="output video frame rate")
@@ -48,17 +53,10 @@ if __name__ == '__main__':
     device = torch.device(f"cuda:{local_rank}")
     if world_size > 1:
         torch.cuda.set_device(local_rank)
-        dist.init_process_group(
-            backend="nccl",
-            init_method="env://",
-            rank=rank,
-            world_size=world_size
-        )
+        dist.init_process_group(backend="nccl", init_method="env://", rank=rank, world_size=world_size)
 
     if not args.config_path or not os.path.isfile(args.config_path):
-        raise FileNotFoundError(
-            "Uni3C requires a staged local --config_path; runtime downloads are disabled."
-        )
+        raise FileNotFoundError("Uni3C requires a staged local --config_path; runtime downloads are disabled.")
     config_path = args.config_path
     cfg = OmegaConf.load(config_path)
     # == init logger ==
@@ -84,7 +82,9 @@ if __name__ == '__main__':
     base_model_id = args.base_model_path
 
     logger.info("loading transformer...")
-    transformer = PCDController.from_pretrained(base_model_id, subfolder="transformer", controlnet_cfg=cfg.controlnet_cfg, torch_dtype=torch.bfloat16)
+    transformer = PCDController.from_pretrained(
+        base_model_id, subfolder="transformer", controlnet_cfg=cfg.controlnet_cfg, torch_dtype=torch.bfloat16
+    )
     logger.info("loading controlnet...")
     transformer.build_controlnet(model_path=args.controlnet_path, logger=logger)
     if args.enable_sp:  # replace attention_processor for DiT
@@ -131,7 +131,7 @@ if __name__ == '__main__':
         image_processor=CLIPImageProcessor.from_pretrained(base_model_id, subfolder="image_processor"),
         transformer=transformer,
         vae=vae,
-        scheduler=UniPCMultistepScheduler.from_pretrained(base_model_id, subfolder="scheduler")
+        scheduler=UniPCMultistepScheduler.from_pretrained(base_model_id, subfolder="scheduler"),
     )
 
     # replace this with pipe.to("cuda") if you have sufficient VRAM
@@ -148,7 +148,7 @@ if __name__ == '__main__':
         use_camera_embedding=cfg.get("camera_embedding", False),
         device=device,
         sp_degree=get_sequence_parallel_world_size() if args.enable_sp else 1,
-        logger=logger
+        logger=logger,
     )
 
     gen = torch.Generator(device=device)

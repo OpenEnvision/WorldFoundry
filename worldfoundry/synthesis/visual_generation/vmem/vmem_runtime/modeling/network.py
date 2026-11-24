@@ -3,8 +3,6 @@ from dataclasses import dataclass, field
 import torch
 import torch.nn as nn
 
-from typing import Union
-
 from worldfoundry.synthesis.visual_generation.vmem.vmem_runtime.modeling.modules.layers import (
     Downsample,
     GroupNorm32,
@@ -19,7 +17,7 @@ from worldfoundry.synthesis.visual_generation.vmem.vmem_runtime.modeling.modules
 
 
 @dataclass
-class VMemModelParams(object):
+class VMemModelParams:
     in_channels: int = 11
     model_channels: int = 320
     out_channels: int = 4
@@ -32,9 +30,7 @@ class VMemModelParams(object):
     context_dim: int = 1024
     dense_in_channels: int = 6
     dropout: float = 0.0
-    unflatten_names: list[str] = field(
-        default_factory=lambda: ["middle_ds8", "output_ds4", "output_ds2"]
-    )
+    unflatten_names: list[str] = field(default_factory=lambda: ["middle_ds8", "output_ds4", "output_ds2"])
 
     def __post_init__(self):
         assert len(self.channel_mult) == len(self.transformer_depth)
@@ -56,11 +52,7 @@ class VMemModel(nn.Module):
         )
 
         self.input_blocks = nn.ModuleList(
-            [
-                TimestepEmbedSequential(
-                    nn.Conv2d(params.in_channels, params.model_channels, 3, padding=1)
-                )
-            ]
+            [TimestepEmbedSequential(nn.Conv2d(params.in_channels, params.model_channels, 3, padding=1))]
         )
         self._feature_size = params.model_channels
         input_block_chans = [params.model_channels]
@@ -68,7 +60,7 @@ class VMemModel(nn.Module):
         ds = 1
         for level, mult in enumerate(params.channel_mult):
             for _ in range(params.num_res_blocks):
-                input_layers: list[Union[ResBlock, MultiviewTransformer, Downsample]] = [
+                input_layers: list[ResBlock | MultiviewTransformer | Downsample] = [
                     ResBlock(
                         channels=ch,
                         emb_channels=time_embed_dim,
@@ -98,9 +90,7 @@ class VMemModel(nn.Module):
             if level != len(params.channel_mult) - 1:
                 ds *= 2
                 out_ch = ch
-                self.input_blocks.append(
-                    TimestepEmbedSequential(Downsample(ch, out_channels=out_ch))
-                )
+                self.input_blocks.append(TimestepEmbedSequential(Downsample(ch, out_channels=out_ch)))
                 ch = out_ch
                 input_block_chans.append(ch)
                 self._feature_size += ch
@@ -139,7 +129,7 @@ class VMemModel(nn.Module):
         for level, mult in list(enumerate(params.channel_mult))[::-1]:
             for i in range(params.num_res_blocks + 1):
                 ich = input_block_chans.pop()
-                output_layers: list[Union[ResBlock, MultiviewTransformer, Upsample]] = [
+                output_layers: list[ResBlock | MultiviewTransformer | Upsample] = [
                     ResBlock(
                         channels=ch + ich,
                         emb_channels=time_embed_dim,
@@ -183,7 +173,7 @@ class VMemModel(nn.Module):
         t: torch.Tensor,
         y: torch.Tensor,
         dense_y: torch.Tensor,
-        num_frames: Union[int, None] = None,
+        num_frames: int | None = None,
     ) -> torch.Tensor:
         num_frames = num_frames or self.params.num_frames
         t_emb = timestep_embedding(t, self.model_channels)
@@ -225,9 +215,7 @@ class VMemWrapper(nn.Module):
         super().__init__()
         self.module = module
 
-    def forward(
-        self, x: torch.Tensor, t: torch.Tensor, c: dict, **kwargs
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, t: torch.Tensor, c: dict, **kwargs) -> torch.Tensor:
         x = torch.cat((x, c.get("concat", torch.Tensor([]).type_as(x))), dim=1)
         return self.module(
             x,

@@ -1,23 +1,22 @@
-from functools import partial
 import json
 import logging
+from enum import Enum
+from functools import partial
 from pathlib import Path
-from typing import Optional, Tuple
 
 import flax
-from flax import struct
 import jax
 import jax.numpy as jnp
-from jax.typing import ArrayLike
 import numpy as np
 import orbax.checkpoint
+from flax import struct
+from jax.typing import ArrayLike
 
-from enum import Enum
 from ..preprocessing.text import TextProcessor
-from .action_heads import ActionHead
-from .module import OctoModule
 from ..spec import ModuleSpec
 from ..types import Config, Data, Params, PRNGKey, Sequence
+from .action_heads import ActionHead
+from .module import OctoModule
 
 
 class NormalizationType(str, Enum):
@@ -54,11 +53,9 @@ class OctoModel:
     config: Config = struct.field(pytree_node=False)
     params: Params
     example_batch: Data
-    dataset_statistics: Optional[Data]
+    dataset_statistics: Data | None
 
-    def create_tasks(
-        self, goals: Optional[Data] = None, texts: Optional[Sequence[str]] = None
-    ):
+    def create_tasks(self, goals: Data | None = None, texts: Sequence[str] | None = None):
         """Creates tasks dict from goals and texts.
 
         Args:
@@ -72,9 +69,7 @@ class OctoModel:
         tasks = {"pad_mask_dict": {}}
         if goals is not None:
             tasks.update(goals)
-            tasks["pad_mask_dict"].update(
-                {k: np.ones(v.shape[:1], dtype=bool) for k, v in goals.items()}
-            )
+            tasks["pad_mask_dict"].update({k: np.ones(v.shape[:1], dtype=bool) for k, v in goals.items()})
         else:
             batch_size = len(texts)
             tasks.update(
@@ -84,31 +79,19 @@ class OctoModel:
                     if k not in ("pad_mask_dict", "language_instruction")
                 }
             )
-            tasks["pad_mask_dict"].update(
-                {
-                    k: np.zeros(batch_size, dtype=bool)
-                    for k in tasks.keys()
-                    if k != "pad_mask_dict"
-                }
-            )
+            tasks["pad_mask_dict"].update({k: np.zeros(batch_size, dtype=bool) for k in tasks if k != "pad_mask_dict"})
 
         if texts is not None:
             assert self.text_processor is not None
             tasks["language_instruction"] = texts
-            tasks["pad_mask_dict"]["language_instruction"] = np.ones(
-                len(texts), dtype=bool
-            )
+            tasks["pad_mask_dict"]["language_instruction"] = np.ones(len(texts), dtype=bool)
         else:
             batch_size = jax.tree_util.tree_leaves(goals)[0].shape[0]
             tasks["language_instruction"] = [""] * batch_size
-            tasks["pad_mask_dict"]["language_instruction"] = np.zeros(
-                batch_size, dtype=bool
-            )
+            tasks["pad_mask_dict"]["language_instruction"] = np.zeros(batch_size, dtype=bool)
 
         if self.text_processor is not None:
-            tasks["language_instruction"] = self.text_processor.encode(
-                tasks["language_instruction"]
-            )
+            tasks["language_instruction"] = self.text_processor.encode(tasks["language_instruction"])
         else:
             del tasks["language_instruction"]
 
@@ -156,12 +139,12 @@ class OctoModel:
         self,
         observations: Data,
         tasks: Data,
-        unnormalization_statistics: Optional[Data] = None,
+        unnormalization_statistics: Data | None = None,
         normalization_type: NormalizationType = NormalizationType.NORMAL,
-        timestep_pad_mask: Optional[ArrayLike] = None,
+        timestep_pad_mask: ArrayLike | None = None,
         argmax: bool = False,
-        sample_shape: Tuple[int, ...] = (),
-        rng: Optional[PRNGKey] = None,
+        sample_shape: tuple[int, ...] = (),
+        rng: PRNGKey | None = None,
         temperature: float = 1.0,
     ):
         """Samples actions from the model. See `action_heads.py` for more info.
@@ -181,9 +164,7 @@ class OctoModel:
             timestep_pad_mask = observations["timestep_pad_mask"]
 
         transformer_outputs = self.run_transformer(observations, tasks, timestep_pad_mask)
-        action_head: ActionHead = self.module.bind({"params": self.params}).heads[
-            "action"
-        ]
+        action_head: ActionHead = self.module.bind({"params": self.params}).heads["action"]
         action = action_head.predict_action(
             transformer_outputs,
             train=False,
@@ -204,8 +185,7 @@ class OctoModel:
                 action = action[..., : len(mask)]
                 action = jnp.where(
                     mask,
-                    (action * unnormalization_statistics["std"])
-                    + unnormalization_statistics["mean"],
+                    (action * unnormalization_statistics["std"]) + unnormalization_statistics["mean"],
                     action,
                 )
             elif normalization_type == NormalizationType.BOUNDS:
@@ -215,12 +195,7 @@ class OctoModel:
                 action = action[..., : len(mask)]
                 action = jnp.where(
                     mask,
-                    (action + 1)
-                    * (
-                        unnormalization_statistics["p99"]
-                        - unnormalization_statistics["p01"]
-                    )
-                    / 2
+                    (action + 1) * (unnormalization_statistics["p99"] - unnormalization_statistics["p01"]) / 2
                     + unnormalization_statistics["p01"],
                     action,
                 )
@@ -232,7 +207,7 @@ class OctoModel:
     def load_pretrained(
         cls,
         checkpoint_path: str,
-        step: Optional[int] = None,
+        step: int | None = None,
     ) -> "OctoModel":
         """Load an exported Octo checkpoint from a local directory.
 
@@ -248,9 +223,9 @@ class OctoModel:
 
         # shim to support old configs
         if "pred_horizon" in config["model"]["heads"]["action"]["kwargs"]:
-            config["model"]["heads"]["action"]["kwargs"]["action_horizon"] = config[
-                "model"
-            ]["heads"]["action"]["kwargs"].pop("pred_horizon")
+            config["model"]["heads"]["action"]["kwargs"]["action_horizon"] = config["model"]["heads"]["action"][
+                "kwargs"
+            ].pop("pred_horizon")
 
         with (checkpoint / "example_batch.msgpack").open("rb") as handle:
             example_batch = flax.serialization.msgpack_restore(handle.read())
@@ -260,18 +235,14 @@ class OctoModel:
 
         logging.debug(
             "Model was trained with observations: %s",
-            flax.core.pretty_repr(
-                jax.tree_util.tree_map(jnp.shape, example_batch["observation"])
-            ),
+            flax.core.pretty_repr(jax.tree_util.tree_map(jnp.shape, example_batch["observation"])),
         )
         logging.debug(
             "Model was trained with tasks: %s",
             flax.core.pretty_repr(jax.tree_util.tree_map(jnp.shape, example_batch["task"])),
         )
 
-        with (checkpoint / "dataset_statistics.json").open(
-            "r", encoding="utf-8"
-        ) as handle:
+        with (checkpoint / "dataset_statistics.json").open("r", encoding="utf-8") as handle:
             dataset_statistics = json.load(handle)
         dataset_statistics = jax.tree_util.tree_map(
             np.array, dataset_statistics, is_leaf=lambda x: not isinstance(x, dict)
@@ -283,22 +254,16 @@ class OctoModel:
 
         # shim for old checkpoints
         if "timestep_pad_mask" not in example_batch["observation"]:
-            example_batch["observation"]["timestep_pad_mask"] = example_batch[
-                "observation"
-            ]["pad_mask"]
+            example_batch["observation"]["timestep_pad_mask"] = example_batch["observation"]["pad_mask"]
 
         init_args = (
             example_batch["observation"],
             example_batch["task"],
             example_batch["observation"]["timestep_pad_mask"],
         )
-        params_shape = jax.eval_shape(
-            partial(module.init, train=False), jax.random.PRNGKey(0), *init_args
-        )["params"]
+        params_shape = jax.eval_shape(partial(module.init, train=False), jax.random.PRNGKey(0), *init_args)["params"]
         # restore params, checking to make sure the shape matches
-        checkpointer = orbax.checkpoint.CheckpointManager(
-            str(checkpoint), orbax.checkpoint.PyTreeCheckpointer()
-        )
+        checkpointer = orbax.checkpoint.CheckpointManager(str(checkpoint), orbax.checkpoint.PyTreeCheckpointer())
         step = step if step is not None else checkpointer.latest_step()
         params = checkpointer.restore(step, params_shape)
 
@@ -353,17 +318,14 @@ def _verify_shapes(
         k: f"{pytree_flat[k].shape} != {example_pytree_flat[k].shape}"
         for k in pytree_flat
         if k in example_pytree_flat
-        and pytree_flat[k].shape[starting_dim:]
-        != example_pytree_flat[k].shape[starting_dim:]
+        and pytree_flat[k].shape[starting_dim:] != example_pytree_flat[k].shape[starting_dim:]
     }
     if mismatched_keys:
         if not silent:
             logging.error(
                 "'%s' contains mismatched shapes compared to example_batch: %s",
                 name,
-                flax.core.pretty_repr(
-                    {"/".join(k): v for k, v in mismatched_keys.items()}
-                ),
+                flax.core.pretty_repr({"/".join(k): v for k, v in mismatched_keys.items()}),
             )
         fail = True
 

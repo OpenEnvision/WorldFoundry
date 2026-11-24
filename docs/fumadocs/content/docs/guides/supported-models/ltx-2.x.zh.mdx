@@ -1,54 +1,96 @@
 ---
 title: "LTX-2.x"
-description: "LTX-2.x（Lightricks）：文生视频、图生视频；已验证; 6 个 variant。"
+description: "原生 LTX-2 与 LTX-2.3 文生视频、图生视频和 IC-LoRA 控制视频生成。"
 modelId: "ltx-2.x"
 pageSource: authored
 ---
 
-LTX-2.x 是 Lightricks 当前一代视频模型在本 catalog 中的条目，原生集成了蒸馏版 LTX-2 与 LTX-2.3 的图生视频路径。原生路径在两段去噪之间使用官方空间上采样器。共记录六个 variant（2 与 2.3 各有 T2V/I2V/V2V），但目前只有两条 I2V 路径可运行——其余是上游能力档案。
+WorldFoundry 在进程内使用规范 LTX 组件运行 LTX-2 与 LTX-2.3 的 T2V、I2V 和
+IC-LoRA V2V。六个公开变体共用原生 diffusion assembler、Transformer、Gemma
+文本编码器、音视频编解码器、空间上采样器和联合多阶段 runner。
 
 <ModelPaperFigures modelId="ltx-2.x" locale="zh" />
 
-记录论文为[arXiv 2601.03233](https://arxiv.org/abs/2601.03233)。
-
-项目页：[ltx.video](https://ltx.video)。代码：[Lightricks/LTX-2](https://github.com/Lightricks/LTX-2)。代码：[Lightricks/LTX-Video](https://github.com/Lightricks/LTX-Video)。
+论文：[arXiv 2601.03233](https://arxiv.org/abs/2601.03233)。
+项目：[ltx.video](https://ltx.video)。
+源码：[Lightricks/LTX-2](https://github.com/Lightricks/LTX-2)。
+[LTX-2.5](/zh/docs/guides/supported-models/ltx-2.5) 与
+[LTX-Video 0.9.x](/zh/docs/guides/supported-models/ltx-video) 使用独立条目。
 
 <ModelCommandBuilder modelId="ltx-2.x" locale="zh" />
 
-## 用来做什么
-
-用 `ltx-2-i2v` 跑本系列联合 T2V/I2V 推理路径。本页记录了这两种任务 profile。
-
-I2V 路径为两段去噪，以官方 Spatial Upscaler 为分界，从 spatial_upsampler_path 自动加载（不是独立的 Studio 细化开关）。装配使用共享 NativeDiffusionPipeline、联合多段 runner 与优化策略——不使用 Diffusers pipeline 或复制的上游 pipeline。注意记录在案的调度差异：原生蒸馏调度为 8+3 步，而上游文档为 8+4 步，在差异调和并完成 checkpoint 验证前不得宣称与上游完全一致。
-
-catalog 记录的任务包括 文生视频、图生视频、视频到视频、音视频联合生成。模态上，它接受文本、图像、视频，输出视频。同系列还有 `ltx-2-t2v`、`ltx-2-v2v`、`ltx-2.3-t2v`。
-
-记录的评测入口包括[AIGCBench](/zh/docs/evaluation/benchmark-hub/aigcbench)（针对可运行 I2V 路径的图生视频评测）。
-
-LTX 2.3 系图生视频。不是 2.5 也不是原版 LTX-Video。
-
 ## 运行时契约
 
-产物 `ltx-2-t2v.mp4`。
+| 变体 | 输入 | 环境 |
+| --- | --- | --- |
+| `ltx-2-t2v`、`ltx-2.3-t2v` | 文本提示词 | `worldfoundry-unified-cu128` |
+| `ltx-2-i2v`、`ltx-2.3-i2v` | 提示词与参考图像 | `worldfoundry-unified-cu128` |
+| `ltx-2-v2v` | 提示词与**姿态控制视频** | `ltx-2.5` |
+| `ltx-2.3-v2v` | 提示词与 **Canny、深度或姿态控制视频** | `ltx-2.5` |
 
-CLI task profile：`default`、`interactive-video`、`control-video-to-video`。绑定的 pipeline 类是 `LTX23I2VPipeline`。
+V2V 必须显式指定 `control_type` 并使用版本匹配的 IC-LoRA。普通 RGB 视频不是
+控制视频；图像输入会被拒绝。公开绑定保持为 `LTX2V2VPipeline` 和
+`LTX23V2VPipeline`。
 
-起步 variant 是 `ltx-2-i2v`。catalog 登记了 6 个 variant（上方卡片）：`ltx-2-t2v`（`text-to-video`）：Runner 一致性待确认、`ltx-2-i2v`（`image-to-video`）：已验证、`ltx-2-v2v`（`video-to-video`）：Runner 一致性待确认、`ltx-2.3-t2v`（`text-to-video`）：Runner 一致性待确认、`ltx-2.3-i2v`（`image-to-video`）：已验证 等。系列状态：**已验证**。
+IC-LoRA 配方在第一阶段使用适配器权重和编码后的参考视频 token，执行八步去噪；
+随后上采样，并使用未融合适配器的基座权重执行三步细化。
+`skip_stage_2=True` 返回第一阶段的视频，高和宽均为请求值的一半。
+该流程对应 `a95ab856bf29407b6b066ede0abe1846050db56c` 的 IC-LoRA 推理路径。
 
-runner 状态为 已验证：LTX-2 与 LTX-2.3 的 I2V target 均产出了记录在案的非空 Studio demo 产物。 T2V/V2V 仍需专门封装与验证——不要指望选那些 variant 能出结果。 由于上游使用不同的 HF 仓库 id，本条目与 LTX-Video 0.9.x 分开跟踪。
-
-只有 I2V 路径可运行；T2V 与 V2V variant 是档案而非可运行路径。
+V2V 默认参数为 512×768、121 帧、24 fps、seed 171198，控制强度和 LoRA 强度
+均为 1.0。高和宽必须至少为 128 且能被 64 整除；帧数必须满足 `8n+1` 且至少为 9。
+`control_strength` 范围为 `[0, 1]`，`lora_strength` 必须为正数。
+卸载选项为 `none`、`cpu` 和 `disk`。推理使用 BF16 权重。
+共享媒体写入器输出 H.264 视频与 AAC 音频，并写入 `.ltx.log` 执行日志。
 
 ## 在 WorldFoundry 中运行
 
-catalog 启动命令是 `worldfoundry-eval run ltx-2-t2v --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+V2V 使用现有 `ltx-2.5` 环境：Python 3.11、CUDA 12.8、Torch 2.11 和
+Transformers 5.x。规范 split-Gemma 加载器需要新版 Transformers processor API。
+T2V/I2V 保持现有统一环境与 Gemma 加载路径。直接 Python 调用使用当前模型环境，
+CLI 和 Studio 使用声明的 runtime profile。
 
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+```bash
+bash scripts/inference/prepare_model_infer.sh ltx-2-v2v
+wf run ltx-2-v2v \
+  --pipeline.prompt "A dancer moves across the stage." \
+  --pipeline.input-path /path/to/pose-control.mp4 \
+  --pipeline.control-type pose \
+  --pipeline.height 256 --pipeline.width 256 \
+  --pipeline.num-frames 17 --pipeline.offload cpu \
+  --output-dir outputs/ltx-2-v2v
+```
 
-仓内 LTX 包**只放架构代码**。运行时装配、调度、加载、offload、量化和去噪循环仍在共享的 `diffusion_model` 基础设施里。transformer 改编自 [Lightricks/LTX-2](https://github.com/Lightricks/LTX-2) 的 `d6053703e00195bc668cbd1d5eda9dc0b2e7b74a`。checkpoint 与改编源码仍受上游 LTX 许可约束。AlayaWorld 的动作 / 历史模型从自己的 synthesis 包复用这套架构。
+使用 LTX-2.3 时选择 `ltx-2.3-v2v` 和对应的控制类型。推理前准备以下资产；
+接受相应条款后，可通过 `prepare_model_infer.sh --download` 获取声明的权重。
 
-记录的权重仓库包括 `Lightricks/LTX-2`、`Lightricks/LTX-2.3`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh ltx-2-t2v`；下载缺失的公开权重时加 `--download`。
+- LTX-2：`ltx-2-19b-distilled.safetensors`、
+  `ltx-2-spatial-upscaler-x2-1.0.safetensors` 和
+  `ltx-2-19b-ic-lora-pose-control.safetensors`。
+- LTX-2.3：`ltx-2.3-22b-distilled-1.1.safetensors`、
+  `ltx-2.3-spatial-upscaler-x2-1.1.safetensors` 和
+  `ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`。
+- 完整的本地 `google/gemma-3-12b-it-qat-q4_0-unquantized` 目录，包含权重、
+  配置、tokenizer 和 processor 文件。
 
-记录 license 为 other；状态：**已验证**。
+加载参数为 `checkpoint_path`、`spatial_upsampler_path`、`ic_lora_path` 和
+`gemma_root`。改编的 IC-LoRA 源码适用 `THIRD-PARTY-NOTICES` 中记录的
+LTX-2.x Community License；权重与 Gemma 的条款也同样适用。
+
+## 验证与限制
+
+LTX-2 与 LTX-2.3 的 I2V 路径已生成非空 demo 视频；已记录的 V2V 运行使用 256px 合成姿态/Canny 控制输入。T2V 变体尚未完成发布权重验证。I2V 的空间上采样器从 `spatial_upsampler_path` 自动加载，不是独立的 Studio 细化开关。
+
+发布权重 header 与原生推理组件之间的映射为双射，包括每个 IC-LoRA 的全部
+960 个键。在 `ltx-2.5` 环境中进行的小尺寸 FP32 对照中，适配器融合、参考条件、
+两个去噪阶段与音视频解码均与固定版本上游精确一致，覆盖启用和跳过细化两种情况。
+现有 T2V/I2V 与 LTX-2.5 的无回归对照也精确一致。
+
+发布权重 GPU/MPS 回放、加速器卸载行为、动态运动质量与默认分辨率 V2V 质量
+仍待验证。小尺寸随机权重一致性不等同于发布权重的质量验证。I2V 仍保留独立记录的
+8+3 与文档 8+4 调度差异，以及仅覆盖特定配置的 Studio demo 证据。
+
+[AIGCBench](/zh/docs/evaluation/benchmark-hub/aigcbench) 是记录的 I2V 评测入口，
+不是已摄入分数。
 
 <ModelRelatedRecipes modelId="ltx-2.x" locale="zh" />

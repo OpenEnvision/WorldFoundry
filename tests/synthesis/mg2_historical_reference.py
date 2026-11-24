@@ -15,32 +15,72 @@ from pathlib import Path
 REFERENCE_REVISION = "07686790f5421943362fda2523065841ee7a1e44"
 REFERENCE_SHA256 = "556b26ff8db503b00275c6492002d642d2e1cd82cd24cbc60707a22463030698"
 REFERENCE_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "docs/fumadocs/public/measurements/mg2-conditioned-trajectory-2026-10-03.json"
+    Path(__file__).resolve().parents[2] / "docs/fumadocs/public/measurements/mg2-conditioned-trajectory-2026-10-03.json"
 )
 
 _BACKEND_FIELDS = ("torch_version", "cuda_version", "gpu", "model_parameter_count")
 _CONTRACT_FIELDS = (
-    "action_layers", "ambient_autocast", "bitwise_required", "blocks_count", "compile",
-    "conditioning_weight_dtype", "context_noise", "continuous_rng_without_per_block_reseed",
-    "decoded_resolution", "geometry", "latent_frame_starts", "local_attention_window",
-    "model_layers", "overlap_vae_decode", "qkv_strategy", "quantization", "rgb_frames",
-    "rollovers", "schedule", "seed", "vae_decode_weight_dtype",
+    "action_layers",
+    "ambient_autocast",
+    "bitwise_required",
+    "blocks_count",
+    "compile",
+    "conditioning_weight_dtype",
+    "context_noise",
+    "continuous_rng_without_per_block_reseed",
+    "decoded_resolution",
+    "geometry",
+    "latent_frame_starts",
+    "local_attention_window",
+    "model_layers",
+    "overlap_vae_decode",
+    "qkv_strategy",
+    "quantization",
+    "rgb_frames",
+    "rollovers",
+    "schedule",
+    "seed",
+    "vae_decode_weight_dtype",
 )
 _PREREQUISITE_FIELDS = (
-    "bitwise_required", "canonical_condition_sha256", "canonical_latent_frames", "canonical_rgb_frames",
-    "future_reused_tail_error", "passed", "prefetch_blocks", "prefetch_latent_frames", "prefetch_rgb_frames",
-    "prefix_error", "resident_prefetch_sha256", "visual_context_error",
+    "bitwise_required",
+    "canonical_condition_sha256",
+    "canonical_latent_frames",
+    "canonical_rgb_frames",
+    "future_reused_tail_error",
+    "passed",
+    "prefetch_blocks",
+    "prefetch_latent_frames",
+    "prefetch_rgb_frames",
+    "prefix_error",
+    "resident_prefetch_sha256",
+    "visual_context_error",
 )
 _STAGE_FIELDS = (
-    "stage", "timestep", "condition_sha256", "cache_indices", "full_cache_sha256",
-    "baseline_output_sha256", "optimized_output_sha256", "metrics",
+    "stage",
+    "timestep",
+    "condition_sha256",
+    "cache_indices",
+    "full_cache_sha256",
+    "baseline_output_sha256",
+    "optimized_output_sha256",
+    "metrics",
 )
 _BLOCK_FIELDS = (
-    "latent_start", "controls", "baseline_latent_sha256", "optimized_latent_sha256",
-    "baseline_video_sha256", "optimized_video_sha256", "public_rgb8_shape", "public_rgb8_sha256",
-    "recurrent_vae_cache_error", "independent_initial_noise_sha256", "continuous_global_rng_sha256",
-    "latent_error", "pixel_error", "pixel_byte_error",
+    "latent_start",
+    "controls",
+    "baseline_latent_sha256",
+    "optimized_latent_sha256",
+    "baseline_video_sha256",
+    "optimized_video_sha256",
+    "public_rgb8_shape",
+    "public_rgb8_sha256",
+    "recurrent_vae_cache_error",
+    "independent_initial_noise_sha256",
+    "continuous_global_rng_sha256",
+    "latent_error",
+    "pixel_error",
+    "pixel_byte_error",
 )
 
 
@@ -90,8 +130,12 @@ class MG2HistoricalReference:
 
     @property
     def receipt(self):
-        return {"revision": REFERENCE_REVISION, "sha256": REFERENCE_SHA256,
-                "bitwise_required": True, "reference_updated_by_execution": False}
+        return {
+            "revision": REFERENCE_REVISION,
+            "sha256": REFERENCE_SHA256,
+            "bitwise_required": True,
+            "reference_updated_by_execution": False,
+        }
 
     @property
     def required_source_paths(self):
@@ -108,8 +152,12 @@ class MG2HistoricalReference:
     def assert_conditioning(self, evidence):
         self.assert_backend_and_weights(evidence)
         _fields(evidence, self._reference, ("input_image", "conditioning_weights", "acceptance"), "conditioning")
-        _fields(evidence.get("conditioning_prerequisite", {}), self._reference["conditioning_prerequisite"],
-                _PREREQUISITE_FIELDS, "conditioning_prerequisite")
+        _fields(
+            evidence.get("conditioning_prerequisite", {}),
+            self._reference["conditioning_prerequisite"],
+            _PREREQUISITE_FIELDS,
+            "conditioning_prerequisite",
+        )
 
     def assert_contract_identity(self, key, contract):
         if key not in self._reference["contracts"]:
@@ -162,7 +210,9 @@ class MG2HistoricalReference:
         }
         encoded_context = json.dumps(
             {"reference_sha256": REFERENCE_SHA256, **context},
-            sort_keys=True, separators=(",", ":"), allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
         ).encode("utf-8")
         signatures = {"conditioning": hashlib.sha256(encoded_context).hexdigest(), "contracts": {}}
         for name, contract in evidence["contracts"].items():
@@ -171,13 +221,15 @@ class MG2HistoricalReference:
                 "context": context,
                 "contract": {key: contract[key] for key in _CONTRACT_FIELDS},
                 "inter_step_noise": contract["inter_step_noise"],
-                "blocks": [{
-                    **{key: block[key] for key in _BLOCK_FIELDS},
-                    "denoise_and_refresh": [
-                        {key: stage[key] for key in _STAGE_FIELDS}
-                        for stage in block["denoise_and_refresh"]
-                    ],
-                } for block in contract["blocks"]],
+                "blocks": [
+                    {
+                        **{key: block[key] for key in _BLOCK_FIELDS},
+                        "denoise_and_refresh": [
+                            {key: stage[key] for key in _STAGE_FIELDS} for stage in block["denoise_and_refresh"]
+                        ],
+                    }
+                    for block in contract["blocks"]
+                ],
             }
             canonical = json.dumps(numeric, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
             signatures["contracts"][name] = hashlib.sha256(canonical).hexdigest()

@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
+from worldfoundry.evals.tasks.execution.framework.benchmark_assets import (
     first_existing_dir,
     first_existing_file,
 )
-from worldfoundry.evaluation.tasks.execution.framework.scoring_registry import (
+from worldfoundry.evals.tasks.execution.framework.io import coerce_unit_score
+from worldfoundry.evals.tasks.execution.framework.scoring_registry import (
     contract_evaluator_kind,
     get_in_tree_benchmark_config,
     has_benchmark_contract_evaluator,
@@ -21,12 +22,11 @@ from worldfoundry.evaluation.tasks.execution.framework.scoring_registry import (
     target_benchmark_metrics,
     write_benchmark_contract_evaluation,
 )
-from worldfoundry.evaluation.tasks.execution.framework.io import coerce_unit_score
-from worldfoundry.evaluation.tasks.execution.framework.video_quality_specs import (
+from worldfoundry.evals.tasks.execution.framework.video_quality_specs import (
     supported_video_quality_benchmark_ids,
     video_quality_spec,
 )
-from worldfoundry.evaluation.tasks.execution.orchestration.run_session import (
+from worldfoundry.evals.tasks.execution.orchestration.run_session import (
     artifact_report_paths,
     session_paths,
 )

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -13,9 +12,9 @@ SCAN_TARGETS = (
     REPO_ROOT / "docs" / "fumadocs" / "content",
     REPO_ROOT / "scripts" / "benchmark_zoo",
     REPO_ROOT / "scripts" / "inference",
-    REPO_ROOT / "worldfoundry" / "evaluation",
+    REPO_ROOT / "worldfoundry" / "evals",
     REPO_ROOT / "worldfoundry" / "model_zoo",
-    REPO_ROOT / "worldfoundry" / "evaluation" / "models" / "runtime" / "profiles.py",
+    REPO_ROOT / "worldfoundry" / "evals" / "models" / "runtime" / "profiles.py",
     REPO_ROOT / "test" / "eval_core",
     REPO_ROOT / "tools" / "vibe_code",
 )
@@ -97,7 +96,7 @@ def test_project_owned_surfaces_do_not_reintroduce_retired_names() -> None:
 
 def test_evaluation_tree_does_not_reintroduce_retired_compat_paths() -> None:
     roots = (
-        REPO_ROOT / "worldfoundry" / "evaluation",
+        REPO_ROOT / "worldfoundry" / "evals",
         REPO_ROOT / "scripts" / "benchmark_zoo",
         REPO_ROOT / "test" / "eval_core",
     )
@@ -118,7 +117,7 @@ def test_evaluation_tree_does_not_reintroduce_retired_compat_paths() -> None:
 
 
 def test_evaluation_modules_use_shared_io_helpers_directly() -> None:
-    evaluation_root = REPO_ROOT / "worldfoundry" / "evaluation"
+    evaluation_root = REPO_ROOT / "worldfoundry" / "evals"
     banned_snippets = (
         "def _write_json",
         "def _write_jsonl",

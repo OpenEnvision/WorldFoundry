@@ -1,9 +1,9 @@
 ---
 title: Benchmark Hub
-description: "Pick a benchmark by what it actually measures, then open its manifest-backed recipe — import, score, or closed-loop — without invented rankings."
+description: "Pick a benchmark by what it measures, then open its recipe: official import, in-tree scoring, or closed-loop."
 ---
 
-This hub is a **recipe index**, not a leaderboard site. Each card is generated from benchmark catalogs and task manifests: what the suite measures, which files it needs, and which WorldFoundry path is real (official import, in-tree scoring, or closed-loop). It does **not** invent ranks. Detail pages link a live author-maintained board when one exists, otherwise they cite the paper table or say so.
+This hub is a **recipe index**. Each card shows what the suite measures, which files it needs, and how WorldFoundry runs it (official import, in-tree scoring, or closed-loop). Detail pages link a live author-maintained board when one exists, otherwise they cite the paper table.
 
 <BenchmarkRecipeCatalog />
 
@@ -26,11 +26,11 @@ Before installing benchmark-specific packages, read the [runtime environment mat
 <RecipeRecords items={[
   {
     term: 'Dimensions',
-    detail: 'Tasks, axes, suites, tracks, or splits the catalog actually records — not marketing tags.',
+    detail: 'Tasks, axes, suites, tracks, or splits the benchmark defines.',
   },
   {
     term: 'Data composition',
-    detail: 'Prompt or task count, dataset sources, modalities, and license when those facts are recorded.',
+    detail: 'Prompt or task count, dataset sources, modalities, and license where available.',
   },
   {
     term: 'Metrics',
@@ -38,7 +38,7 @@ Before installing benchmark-specific packages, read the [runtime environment mat
   },
   {
     term: 'Leaderboard',
-    detail: 'Live author-maintained boards when they exist, otherwise cited paper tables. Catalog inclusion is not a WorldFoundry ranking.',
+    detail: 'Live author-maintained boards when they exist, otherwise cited paper tables. Listing a benchmark here is not a WorldFoundry ranking.',
   },
   {
     term: 'How to run',
@@ -55,7 +55,7 @@ Open the recipe first. Prompt files, generated-artifact layouts, checkpoint name
 Use this when the recipe says WorldFoundry **normalizes** an upstream export and does not run the simulator.
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --mode official-validation \
   --official-results-path <official-result-file-or-dir> \
@@ -69,7 +69,7 @@ worldfoundry-eval zoo benchmark-run \
 Use `official-run` only when the recipe says the in-tree runtime can recompute scores from generated artifacts and the required media or checkpoints are staged. Physics-IQ is the usual example.
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --mode official-run \
   --generated-artifact-dir <generated-artifact-dir> \
@@ -80,7 +80,7 @@ worldfoundry-eval zoo benchmark-run \
 To generate artifacts with a registered model before scoring:
 
 ```bash
-worldfoundry-eval run \
+wf run \
   --benchmark <benchmark-id> \
   --model <model-id> \
   --mode official-run \

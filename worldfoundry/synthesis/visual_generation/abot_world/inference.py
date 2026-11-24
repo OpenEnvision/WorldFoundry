@@ -15,22 +15,21 @@ import numpy as np
 import torch
 from PIL import Image, ImageOps
 
-from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.abot_world import (
-    ABotWorldModel,
-)
-from worldfoundry.base_models.diffusion_model.schedulers import (
-    InferenceFlowMatchScheduler,
-)
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.tae_22 import (
     TAEW22StreamingDecoder,
 )
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import (
     T5EncoderModel,
 )
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.abot_world import (
+    ABotWorldModel,
+)
+from worldfoundry.base_models.diffusion_model.schedulers import (
+    InferenceFlowMatchScheduler,
+)
 from worldfoundry.core.acceleration.quantization.linear import replace_linear_with_float8
 from worldfoundry.core.kernels.capabilities import kernel_device_profile
 from worldfoundry.core.media.processing.image_utils import load_pil_image
-
 
 ACTION_KEYS = ("W", "A", "S", "D", "I", "J", "K", "L")
 REFERENCE_SLOTS = ("head", "left", "right", "front", "back")
@@ -117,9 +116,7 @@ class ABotWorldInference:
             text_len=512,
             dtype=torch.bfloat16,
             device=torch.device("cpu"),
-            checkpoint_path=str(
-                self.checkpoint_dir / "models_t5_umt5-xxl-enc-bf16.pth"
-            ),
+            checkpoint_path=str(self.checkpoint_dir / "models_t5_umt5-xxl-enc-bf16.pth"),
             tokenizer_path=str(self.checkpoint_dir / "google" / "umt5-xxl"),
         )
         self.decoder = (
@@ -131,16 +128,20 @@ class ABotWorldInference:
         self.decoder_compute_dtype = torch.float16
 
         logging.info("Loading ABot-World causal DiT from %s", self.checkpoint_dir)
-        self.model = ABotWorldModel.from_pretrained(
-            str(self.checkpoint_dir),
-            torch_dtype=self.dtype,
-            model_type="ci2v",
-            local_attn_size=self.local_attn_size,
-            num_frame_per_block=self.num_frame_per_block,
-            use_relative_rope=self.use_relative_rope,
-            downscale_factor_control_adapter=16,
-            low_cpu_mem_usage=True,
-        ).eval().requires_grad_(False)
+        self.model = (
+            ABotWorldModel.from_pretrained(
+                str(self.checkpoint_dir),
+                torch_dtype=self.dtype,
+                model_type="ci2v",
+                local_attn_size=self.local_attn_size,
+                num_frame_per_block=self.num_frame_per_block,
+                use_relative_rope=self.use_relative_rope,
+                downscale_factor_control_adapter=16,
+                low_cpu_mem_usage=True,
+            )
+            .eval()
+            .requires_grad_(False)
+        )
         self.fp8_enabled = False
         if use_fp8:
             profile = kernel_device_profile(self.device)
@@ -165,9 +166,7 @@ class ABotWorldInference:
             extra_one_step=True,
         )
         self.scheduler.set_timesteps(1000)
-        warped = torch.cat(
-            (self.scheduler.timesteps.cpu(), torch.tensor([0.0], dtype=torch.float32))
-        )
+        warped = torch.cat((self.scheduler.timesteps.cpu(), torch.tensor([0.0], dtype=torch.float32)))
         indices = 1000 - torch.as_tensor(tuple(denoising_steps), dtype=torch.long)
         if (indices < 0).any() or (indices >= warped.numel()).any():
             raise ValueError("denoising_steps must be in the range [0, 1000]")
@@ -188,14 +187,10 @@ class ABotWorldInference:
         if not self.checkpoint_dir.is_dir():
             raise FileNotFoundError(f"ABot-World checkpoint directory not found: {self.checkpoint_dir}")
         missing = [
-            relative
-            for relative in self.required_checkpoint_paths
-            if not (self.checkpoint_dir / relative).is_file()
+            relative for relative in self.required_checkpoint_paths if not (self.checkpoint_dir / relative).is_file()
         ]
         if missing:
-            raise FileNotFoundError(
-                "ABot-World checkpoint is incomplete; missing: " + ", ".join(missing)
-            )
+            raise FileNotFoundError("ABot-World checkpoint is incomplete; missing: " + ", ".join(missing))
 
     @staticmethod
     def _empty_cuda_cache() -> None:
@@ -260,9 +255,7 @@ class ABotWorldInference:
             allowed = set(REFERENCE_SLOTS[: self.ref_num_slots])
             unknown = set(normalized).difference(allowed)
             if unknown:
-                raise ValueError(
-                    "Unknown ABot-World reference slots: " + ", ".join(sorted(unknown))
-                )
+                raise ValueError("Unknown ABot-World reference slots: " + ", ".join(sorted(unknown)))
             return {
                 index: load_pil_image(normalized[name], first_sequence_item=False)
                 for index, name in enumerate(REFERENCE_SLOTS[: self.ref_num_slots])
@@ -309,7 +302,7 @@ class ABotWorldInference:
                 device=self.device,
                 dtype=self.dtype,
             )
-            latent = encoder.encode(pixels)
+            latent = encoder.encode(pixels)  # noqa: F821 - Name is undefined in the upstream source.
             if not latent:
                 raise RuntimeError("Wan2.2 VAE did not produce an image latent")
             return latent[0].permute(1, 0, 2, 3).unsqueeze(0).to(self.dtype)
@@ -368,9 +361,7 @@ class ABotWorldInference:
             }
             for _ in range(self.model.num_layers)
         ]
-        self._cross_attention_cache = [
-            {"is_init": False} for _ in range(self.model.num_layers)
-        ]
+        self._cross_attention_cache = [{"is_init": False} for _ in range(self.model.num_layers)]
         self._frame_sequence_length = frame_sequence_length
 
     @torch.no_grad()
@@ -421,10 +412,9 @@ class ABotWorldInference:
                 raise ValueError("action tensor must contain 8 or 32 channels")
             expected = (1, self.num_frame_per_block, self.height, self.width)
             actual = (value.shape[0], value.shape[2], value.shape[3], value.shape[4])
-            if any(got not in {1, want} for got, want in zip(actual, expected)):
+            if any(got not in {1, want} for got, want in zip(actual, expected, strict=False)):
                 raise ValueError(
-                    "action tensor batch/time/height/width must be singleton or "
-                    f"match {expected}, got {actual}"
+                    f"action tensor batch/time/height/width must be singleton or match {expected}, got {actual}"
                 )
             if value.shape[1] == 8:
                 value = value.repeat_interleave(4, dim=1)
@@ -438,20 +428,13 @@ class ABotWorldInference:
         if action is None:
             active: set[str] = set()
         elif isinstance(action, Mapping):
-            active = {
-                str(key).strip().upper()
-                for key, enabled in action.items()
-                if enabled
-            }
+            active = {str(key).strip().upper() for key, enabled in action.items() if enabled}
         elif isinstance(action, str):
             normalized = action.strip().upper()
             for separator in (",", "+", "|", "/"):
                 normalized = normalized.replace(separator, " ")
             tokens = normalized.split()
-            if len(tokens) == 1 and set(tokens[0]).issubset(ACTION_KEYS):
-                active = set(tokens[0])
-            else:
-                active = set(tokens)
+            active = set(tokens[0]) if len(tokens) == 1 and set(tokens[0]).issubset(ACTION_KEYS) else set(tokens)
         else:
             active = {str(key).strip().upper() for key in action}
         unknown = active.difference(ACTION_KEYS)
@@ -583,8 +566,7 @@ class ABotWorldInference:
             and not isinstance(actions, (str, bytes, bytearray))
             and actions
             and any(
-                isinstance(item, (Mapping, Sequence, torch.Tensor))
-                and not isinstance(item, (str, bytes, bytearray))
+                isinstance(item, (Mapping, Sequence, torch.Tensor)) and not isinstance(item, (str, bytes, bytearray))
                 for item in actions
             )
         ):
@@ -618,10 +600,7 @@ class ABotWorldInference:
             reference_images=reference_images,
             seed=seed,
         )
-        blocks = [
-            self.step(self._action_for_block(actions, index))
-            for index in range(int(num_blocks))
-        ]
+        blocks = [self.step(self._action_for_block(actions, index)) for index in range(int(num_blocks))]
         video = torch.cat(blocks, dim=0)
         return video if num_frames is None else video[: int(num_frames)]
 
@@ -639,4 +618,4 @@ class ABotWorldInference:
         self._empty_cuda_cache()
 
 
-__all__ = ["ABotWorldInference", "ACTION_KEYS", "REFERENCE_SLOTS"]
+__all__ = ["ACTION_KEYS", "REFERENCE_SLOTS", "ABotWorldInference"]

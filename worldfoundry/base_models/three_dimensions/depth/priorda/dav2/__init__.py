@@ -2,10 +2,6 @@
 # https://github.com/SpatialVision/Prior-Depth-Anything
 # Licensed under the Apache-2.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> three_dimensions -> depth -> priorda -> dav2 -> __init__.py functionality."""
-
-import os
-
 import torch
 
 from .dpt import DepthAnythingV2
@@ -27,13 +23,6 @@ model_configs = {
 
 
 def build_backbone(depth_size="vitb", encoder_cond_dim=-1, model_path=None):
-    """Build backbone.
-
-    Args:
-        depth_size: The depth size.
-        encoder_cond_dim: The encoder cond dim.
-        model_path: The model path.
-    """
     core = DepthAnythingV2(**model_configs[depth_size], encoder_cond_dim=encoder_cond_dim)
 
     state_dict = torch.load(model_path, map_location="cpu")

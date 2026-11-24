@@ -6,12 +6,13 @@ Adapted from UniDepth 8d8cfe4c7ee15297099983607febf0d4f32eb3d6.
 
 from functools import partial
 from math import pi
-from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
+
+from worldfoundry.core.nn.blocks.layers import LayerScale as LayerScale
 
 from .utils.misc import default
 
@@ -176,7 +177,7 @@ class CvnxtBlock(nn.Module):
         self.pwconv1 = nn.Linear(dim, expansion * dim)
         self.act = nn.GELU()
         self.pwconv2 = nn.Linear(expansion * dim, dim)
-        self.gamma = nn.Parameter(layer_scale * torch.ones((dim))) if layer_scale > 0.0 else 1.0
+        self.gamma = nn.Parameter(layer_scale * torch.ones(dim)) if layer_scale > 0.0 else 1.0
 
     def forward(self, x):
         input = x
@@ -190,21 +191,6 @@ class CvnxtBlock(nn.Module):
         x = self.gamma * x
         x = input + x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
         return x
-
-
-class LayerScale(nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        init_values: float | torch.Tensor = 1e-5,
-        inplace: bool = False,
-    ) -> None:
-        super().__init__()
-        self.inplace = inplace
-        self.gamma = nn.Parameter(init_values * torch.ones(dim))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x.mul_(self.gamma) if self.inplace else x * self.gamma
 
 
 class MLP(nn.Module):
@@ -307,7 +293,7 @@ class PositionEmbeddingSine(nn.Module):
             scale = 2 * pi
         self.scale = scale
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
         if mask is None:
             mask = torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool)
         not_mask = ~mask
@@ -331,10 +317,10 @@ class PositionEmbeddingSine(nn.Module):
     def __repr__(self, _repr_indent=4):
         head = "Positional encoding " + self.__class__.__name__
         body = [
-            "num_pos_feats: {}".format(self.num_pos_feats),
-            "temperature: {}".format(self.temperature),
-            "normalize: {}".format(self.normalize),
-            "scale: {}".format(self.scale),
+            f"num_pos_feats: {self.num_pos_feats}",
+            f"temperature: {self.temperature}",
+            f"normalize: {self.normalize}",
+            f"scale: {self.scale}",
         ]
         # _repr_indent = 4
         lines = [head] + [" " * _repr_indent + line for line in body]

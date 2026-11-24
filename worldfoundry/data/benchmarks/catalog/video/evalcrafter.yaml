@@ -252,10 +252,10 @@ runner:
   normalization:
     artifact_official_run: true
     pass_generated_artifact_dir: true
-  official_script: worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
   pass_benchmark_id: false
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.evalcrafter.run_evalcrafter_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.evalcrafter.run_evalcrafter_official_runner
     prompt_manifest_arg: --prompt-manifest
     metric_arg: --metrics
     limit_arg: --limit
@@ -263,9 +263,9 @@ runner:
     accepts_generated_artifacts: true
     supports_fixture: true
     default_metrics: [clip_score, clip_temp_score, face_consistency_score]
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:EvalCrafterContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:evalcrafter
   run_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -282,7 +282,7 @@ runner:
   - tmp/evalcrafter-smoke
   - --json
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -331,9 +331,9 @@ integration:
     leaderboard_capable: false
     full_suite_verified: false
     scorecard_gate: scorecard.official_benchmark_verified && scorecard.eligibility.leaderboard_valid
-    official_run_command: worldfoundry-eval zoo benchmark-run --benchmark-id evalcrafter --mode official-run
+    official_run_command: wf zoo benchmark-run --benchmark-id evalcrafter --mode official-run
       --generated-artifact-dir <dir-with-numbered-mp4-files> --metrics clip_score --limit 1 --output-dir <out> --json
-    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id evalcrafter --mode
+    official_validation_command: wf zoo benchmark-run --benchmark-id evalcrafter --mode
       official-validation --official-results-path <final_result.txt> --generated-artifact-dir
       <dir-with-0000-to-0699-mp4> --output-dir <out> --json
 release_status: experimental
@@ -350,8 +350,8 @@ blockers:
 - The full suite still requires the isolated DOVER, OCR, action-recognition, BLIP2, SDXL, and celebrity-ID stack.
 data_refs:
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
-  - worldfoundry/evaluation/tasks/execution/runners/evalcrafter/evalcrafter_raw_metrics.py
+  - worldfoundry/evals/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/evalcrafter/evalcrafter_raw_metrics.py
   task_yaml: worldfoundry/data/benchmarks/tasks/external/evalcrafter.yaml
 runner_availability:
   available: true
@@ -361,7 +361,7 @@ runner_availability:
   - clip_score
   - clip_temp_score
   - face_consistency_score
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:EvalCrafterContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:evalcrafter
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
@@ -370,7 +370,7 @@ runner_availability:
   surface: bounded_official_clip_metrics_and_final_result_importer
   normalizer_verified: true
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -388,3 +388,21 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - generated_video_dir
+  - prompt700_txt
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_metrics
+  - benchmark_contract
+  notes:
+  - Contract maps EvalCrafter's 700-prompt T2V evaluation and 17 objective metrics to WorldFoundry scorecard.
+  - Official Docker/conda runtime and checkpoint-heavy metric execution remain a separate validation stage.
+generation:
+  request_provider: worldfoundry.evals.tasks.execution.runners.evalcrafter.evalcrafter_prompts:materialize_evalcrafter_generation_requests
+  artifact_materializer: worldfoundry.evals.tasks.execution.runners.evalcrafter.evalcrafter_prompts:copy_evalcrafter_generated_videos
+  split_parameter: split
+  missing_requests_hint: restore the bundled EvalCrafter prompt700.txt asset

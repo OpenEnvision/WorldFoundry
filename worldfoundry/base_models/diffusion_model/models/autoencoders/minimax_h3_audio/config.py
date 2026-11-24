@@ -37,9 +37,7 @@ class MiniMaxH3AudioVAEArchConfig:
 class MiniMaxH3AudioVAEConfig:
     """Model config for the MiniMax H3 audio VAE (single-GPU port)."""
 
-    arch_config: MiniMaxH3AudioVAEArchConfig = field(
-        default_factory=MiniMaxH3AudioVAEArchConfig
-    )
+    arch_config: MiniMaxH3AudioVAEArchConfig = field(default_factory=MiniMaxH3AudioVAEArchConfig)
     load_encoder: bool = True
     load_decoder: bool = True
 

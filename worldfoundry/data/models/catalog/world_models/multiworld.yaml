@@ -16,6 +16,7 @@ source:
 official_sources:
   github:
     url: https://github.com/CIntellifusion/MultiWorld
+    revision: 6e0a1c3414a97dd5528d94f67ba3c48cf6d36ab5
     head_sha: 6e0a1c3414a97dd5528d94f67ba3c48cf6d36ab5
 checkpoint_refs:
 - repo_id: Haoyuwu/MultiWorldCheckpoint
@@ -26,7 +27,7 @@ checkpoint_refs:
 - repo_id: facebook/VGGT-1B
   role: environment_encoder
 runtime_profile: runtime-profile:multiworld
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: multiworld
 integration:
   status: integrated
@@ -47,20 +48,18 @@ docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: 'MultiWorld ("It Takes Two") is a multi-agent interactive video generator: two players'' actions drive one shared generated game world. The in-tree ItTakesTwo wrapper has completed a checkpoint-backed 81-frame GPU inference run; game-domain action fidelity remains unverified.'
-  overview_zh: MultiWorld（「It Takes Two」）是多智能体交互视频生成器：两名玩家的动作驱动同一个共享生成游戏世界。树内 ItTakesTwo 封装已完成使用真实权重的 81 帧 GPU 推理；游戏场景中的动作遵循性仍未验证。
-  architecture: Architecture internals beyond the recorded tasks are not stored in this repository. The upstream license is custom and flagged for manual review.
-  architecture_zh: 除已记录任务外的架构内部细节仓库未存。上游许可为自定义条款，已标记需人工审查。
-  usage_notes: Supply an initial image and two-player discrete and continuous action tensors (or an action CSV). A local toydata checkpoint run produced 81 frames at 480x480 and 35 steps. Review the custom upstream license before redistribution.
-  usage_notes_zh: 提供首帧图像和双玩家离散、连续动作张量（或动作 CSV）。本地 toydata 权重已生成 480x480、35 步的 81 帧视频。再分发前请审查上游自定义许可。
+  overview: "MultiWorld (\"It Takes Two\") is a multi-agent interactive video generator: two players' actions drive one shared generated game world. WorldFoundry runs the ItTakesTwo variant in-tree with local checkpoints."
+  overview_zh: MultiWorld（「It Takes Two」）是多智能体交互视频生成器：两名玩家的动作驱动同一个共享生成游戏世界。WorldFoundry 在树内运行 ItTakesTwo 变体，使用本地权重。
+  architecture: MultiWorld builds on Wan2.2-TI2V-5B (base model and VAE) with an action encoder and VGGT-1B as the environment encoder; the ItTakesTwo weights are Haoyuwu/MultiWorldCheckpoint.
+  architecture_zh: MultiWorld 以 Wan2.2-TI2V-5B（基座与 VAE）为底座，配动作编码器，并以 VGGT-1B 作为环境编码器；ItTakesTwo 权重为 Haoyuwu/MultiWorldCheckpoint。
+  usage_notes: 'Supply an initial image and two-player discrete and continuous action tensors (or an action CSV). Validated with the released toydata checkpoint: the pipeline generates 81 frames at 480x480 with 35 steps.'
+  usage_notes_zh: 提供首帧图像和双玩家离散、连续动作张量（或动作 CSV）。已用发布的 toydata 权重验证：pipeline 以 35 步生成 480x480 的 81 帧视频。
   limitations:
-  - Custom upstream license flagged for manual review.
-  - The synthetic-action, out-of-domain image check does not establish game-domain action control or realistic world dynamics.
-  - The publishing institution is not recorded in this repository.
+  - The upstream license is custom; review it before redistribution.
+  - Validation used synthetic actions and a non-game image; it does not establish game-domain action control or realistic world dynamics.
   limitations_zh:
-  - 上游自定义许可需人工审查。
-  - 合成动作及非游戏图像检查不能证明游戏场景的动作控制能力或真实世界动态。
-  - 发表机构在本仓库中未记录。
+  - 上游许可为自定义条款，再分发前请审查。
+  - 验证使用合成动作和非游戏图像，不能证明游戏场景的动作控制能力或真实世界动态。
   recommended_benchmarks:
   - id: worldmodelbench
     reason: Multi-agent world-rollout quality.

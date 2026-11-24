@@ -7,7 +7,7 @@ Studio 是覆盖同一套 pipeline 与 artifact 契约的目录驱动 shell，�
 
 <ArchDiagram id="studio" locale="zh" />
 
-会话编排放在 `studio/inference/execution.py`，catalog 发现放在 `studio/inference/catalog.py`。模型输入语义与生成状态由公开 pipeline 及其 operator 持有。`studio/ui/launcher.py` 负责独立前端路由，启动参数由 `studio/ui/launch_config.py` 解析。页面、全屏与键盘交互位于 `studio/visualization/backends/world.py` 和 `world_realtime_client.py`。
+会话编排放在 `studio/inference/execution.py`，catalog 发现放在 `studio/inference/catalog/`。模型输入语义与生成状态由公开 pipeline 及其 operator 持有。`studio/visualization/launcher.py` 负责独立前端路由，启动参数由 `studio/visualization/launch_config.py` 解析。页面、全屏与键盘交互位于 `studio/visualization/backends/world.py` 和 `assets/web/world.js`。
 
 ## 文件
 
@@ -18,11 +18,11 @@ Studio 是覆盖同一套 pipeline 与 artifact 契约的目录驱动 shell，�
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>studio/inference/catalog.py</code>
+            <code>studio/inference/catalog/</code>
           </div>
         </div>
         <p>从 pipeline files、canonical runtime entries 和 overrides 发现模型条目。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>CatalogEntry</code>、<code>discover_catalog()</code>、<code>filter_catalog()</code>、<code>find_entry()</code>、<code>catalog_stats()</code>。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>CatalogEntry</code>、<code>discover_catalog()</code>、<code>find_entry()</code>。</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -36,10 +36,10 @@ Studio 是覆盖同一套 pipeline 与 artifact 契约的目录驱动 shell，�
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>studio/ui/launcher.py</code>
+            <code>studio/visualization/launcher.py</code>
           </div>
         </div>
-        <p>独立前端启动与路由；共享启动参数由 <code>ui/launch_config.py</code> 解析。</p>
+        <p>独立前端启动与路由；共享启动参数由 <code>visualization/launch_config.py</code> 解析。</p>
         <p className="pi-kv-read"><span>首读</span> <code>StudioLaunchConfig</code>、<code>parse_launch_config()</code>、<code>main()</code>。</p>
       </li>
       <li className="pi-kv-row">
@@ -49,7 +49,7 @@ Studio 是覆盖同一套 pipeline 与 artifact 契约的目录驱动 shell，�
           </div>
         </div>
         <p>实时交互页面的布局、样式、全屏入口与浏览器脚本。</p>
-        <p className="pi-kv-read"><span>首读</span> 浏览器脚本由 <code>world_realtime_client.py</code> 提供。</p>
+        <p className="pi-kv-read"><span>首读</span> 浏览器脚本由 <code>assets/web/world.js</code> 提供。</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -106,17 +106,18 @@ Catalog 构建刻意做成静态过程。`discover_catalog()` 用 AST helpers �
 
 单模型 `find_entry()` 与完整列表使用相同的 canonical runtime 默认值，包括别名、prompt/参考图配对、checkpoint 覆盖和 call/load 选项。查找先筛选 canonical 条目，再解析 checkpoint 路径，不探测无关模型的 checkpoint。Sana 和 CogVideoX 的 checkpoint 变体仍解析到各自的共享 Studio 卡片；具体执行使用 `find_runtime_entry()`。
 
+catalog 包按层组织，下层不导入上层：`entry.py`（数据模型）、`resolve.py`（checkpoint、本地路径与解释器解析）、`params.py`（跨家族共享的参数模板）、`models/<family>.py`（视频生成、世界模型、3D 场景、具身、远程 API 各家族的 curated override 与模型默认参数）、`discovery.py`（AST 扫描、构建条目与查找）。其他 catalog 模块以 `resolve.<name>(...)` 调用解析 helper，测试只需 patch 一次 `catalog.resolve` 即可影响所有调用方。
+
 真正的 import 发生在更晚：只有某次 run 需要具体类时，`StudioManager.import_pipeline_class()` 才按 `CatalogEntry` 的 `module_path` / `class_name` 加载。因此模型可以出现在 catalog 里，却在 LOAD 时因当前环境缺少 runtime import 或本地 checkpoint 而失败。
 
 - **找 project root** (`_project_root()` / `_project_root_candidates()`) — 允许 Studio 从 repo root 或 package context 运行。
 - **检查 pipelines**（`_AstPipelineInfo` 周边 AST helpers）— 不 import 重型模型依赖，直接读取 pipeline modules。
 - **归一化 ids** (`_normalize_model_id()`) — UI、CLI launch args 和 recent runs 共用的稳定 lookup key。
 - **构建 entries** (`discover_catalog()`) — 产出 `CatalogEntry[]`，包含 family、class path、category、backend、aliases、examples。
-- **过滤 entries** (`filter_catalog()`) — 对 UI 列表应用 search 和 category filters。
 
 ## Execution core
 
-`StudioManager` 是编排中枢。典型的 `run` / `stream` / `init` / `reset` 路径会准备 request、把输入落到 run 目录、按 `entry.runtime_kind` 选择 driver、加载 pipeline（LRU 缓存）、调用 driver，再物化为 `RunRecord`。Driver 存在是因为并非每个家族都是一次 `__call__`：two-stage 3DGS 先重建再 orbit，point-cloud nav 先重建再渲染视角。WorldFM 走 `BaseRuntimeDriver`；相机控制与标定由 operator 负责，场景重建与 streaming state 由 pipeline 持有。
+`StudioManager` 是编排中枢。典型的 `run` / `stream` / `init` / `reset` 路径会准备 request、把输入落到 run 目录、按 `entry.runtime_kind` 选择 driver、加载 pipeline（LRU 缓存）、调用 driver，再物化为 `RunRecord`。设置 Driver 是因为并非每个家族都只需调用一次 `__call__`：two-stage 3DGS 先重建再 orbit，point-cloud nav 先重建再渲染视角。WorldFM 走 `BaseRuntimeDriver`；相机控制与标定由 operator 负责，场景重建与 streaming state 由 pipeline 持有。
 
 `PreparedInputs` 是 staging 后的归一化载荷（prompt、图像、视频、interactions、runtime kwargs）。`PipelineContext` 保存已加载类、device、variant 与 output root。`RunRecord` 是 UI 可重载的持久单元：ids、inputs、outputs、artifact 路径、preview 选择、status 与 manifest JSON。Workspace 推理还可传入 `infer_metadata` 契约，让物化阶段校验必需的输出类型（video、image、splat 等）。
 
@@ -132,7 +133,7 @@ Catalog 构建刻意做成静态过程。`discover_catalog()` 用 AST helpers �
 
 提供 `stream_state_ready()` 的 pipeline 持有自己的交互状态。共享 driver 直接转发输入，不向其 memory 填入原始图像，也不以生成帧替换模型 context。可选的 `init_stream(...)` 沿 pipeline 的输入契约初始化状态，不生成 chunk。未提供这些方法、使用 frame memory 的 pipeline 仍走共享图像初始化路径。Native visual adapter 保存的是产物历史，不是可复用的 rollout 状态：`stream_state_ready()` 始终为 false，每次 stream 请求保留自己的显式 conditioning。内存 keyframe 使用与传输相同的声明 layout 和像素值域。
 
-普通 action、实时 fallback 与 torchrun 各 rank 共用 `BaseRuntimeDriver.initialize_stream()` 和 `continue_stream()`。实时与 worker 初始化不物化 preview；分布式产物导出由 rank zero 负责。原生实时 pipeline 保留 `prepare_realtime()` / `configure_realtime()` / `stream_realtime()`。会话 reset 和缓存模型 reset 都优先调用 `reset_realtime()`，其次 `reset_memory()`，最后才是 frame-memory reset。几何 driver 保留重建/渲染状态转换，无状态/API 调用不获得 streaming state。
+普通 action、实时 fallback 与 torchrun 各 rank 共用 `BaseRuntimeDriver.initialize_stream()` 和 `continue_stream()`。实时与 worker 初始化不物化 preview；分布式产物导出由 rank zero 负责。原生实时 pipeline 保留 `prepare_realtime()` / `configure_realtime()` / `stream_realtime()`。会话 reset 和缓存模型 reset 都优先调用 `reset_realtime()`，其次 `reset_memory()`，最后才是 frame-memory reset。几何 driver 保留重建/渲染状态转换，无状态/API 调用不会获得 streaming state。
 
 `WorldFMPipeline.init_stream()` 重建并记录场景，随后 `stream()` 复用它。重建失败时保留原场景；reset 清除当前实例的 scene memory。`WorldFMOperator` 接受显式 pose 或 navigation token，采用世界坐标平移与局部 Rx/Rz 旋转，并按显式 `K`、meta 文件 `K`、源图像默认值的顺序解析标定。Studio 负责 staging，不实现这些模型数学。
 
@@ -158,9 +159,9 @@ Preview 空白通常意味着 pipeline 把文件写到了预期 key 之外、返
 
 启动与展示通过独立浏览器前端提供。模型加载、输入归一化、runtime driver 与 artifact 契约由共享推理模块负责，页面与传输层调用 `StudioManager`。
 
-- **启动参数** — `ui/launch_config.py` 解析 CLI flags 与环境默认值，返回 `StudioLaunchConfig`。
-- **前端路由** — `ui/launcher.py` 与 `visualization/backends/frontends.py` 根据模型或 artifact 启动 `world`、Viser、Spark 等前端。
-- **浏览器交互** — `visualization/backends/world.py` 与 `world_realtime_client.py` 负责页面、全屏、键盘和摇杆。
+- **启动参数** — `visualization/launch_config.py` 解析 CLI flags 与环境默认值，返回 `StudioLaunchConfig`。
+- **前端路由** — `visualization/launcher.py` 与 `visualization/backends/frontends.py` 根据模型或 artifact 启动 `world`、Viser、Spark 等前端。
+- **浏览器交互** — `visualization/backends/world.py` 与 `assets/web/world.js` 负责页面、全屏、键盘和摇杆。
 - **实时传输** — `visualization/backends/world_realtime.py` 维护常驻会话，调用 `StudioManager.run_realtime()` 并通过 WebRTC/WebSocket 传输帧和控制。
 - **共享推理** — `inference/execution.py` 负责会话编排、pipeline 缓存租约和 driver 调用；模型执行与状态由 pipeline 持有。实时交互直接传输内存中的帧，每次按键无需导出 MP4。
 
@@ -170,16 +171,34 @@ Preview 空白通常意味着 pipeline 把文件写到了预期 key 之外、返
 
 <ArchDiagram id="studio-realtime" locale="zh" />
 
-模型通过 `RealtimeSpec` 拥有因果时序；transport 不应猜测 latent stride，也不能
-静默改变严格 segment 帧数。`latest-interactive` 会在有界 backpressure 后丢弃旧帧，
-保护控制延迟；`ordered-quality` 从不丢帧，凡是 `chunk_done` 帧数属于播放契约的
+模型通过 `RealtimeSpec` 拥有因果时序；transport 不应猜测 latent stride，也不能静默改变严格 segment 帧数。`latest-interactive` 会在有界 backpressure 后丢弃旧帧，保护控制延迟；`ordered-quality` 从不丢帧，凡是 `chunk_done` 帧数属于播放契约的
 prompt-scheduled 或 queued segment 都必须使用它。
+
+`RealtimeSpec.advance` 决定由谁启动每个 chunk。默认的 `on_input` 只在按住按键、轴采样、
+STEP 或 prompt 更新时生成。`continuous` 会话（例如原生 Self-Forcing）自动前进：每完成一个
+chunk，worker 立即启动下一个，直到当前 rollout 达到 `max_chunks` 个 chunk；帧队列使用
+`ordered-quality`，生成最多领先播放一个帧队列。`{"type": "pause"}` 与 `{"type": "resume"}`
+停止和恢复自动前进，分别以 `pause_ack` / `resume_ack` 确认。新 prompt 会重开模型 rollout
+并把 chunk 计数归零。rollout 已完成时，STEP 返回 `ok: false` 的 `step_ack`，其他继续生成的
+请求会被丢弃。continuous 会话的
+`ready`、`chunk_done` 和上述两种确认都带有 `advance`、`rollout_chunks`、`max_chunks` 与
+`paused`。
+
+模型同样在 `RealtimeSpec` 中声明输入绑定。`keys` 把每个按键映射到一个 action 和一个
+冲突分组 `group`，同组内后按者优先；默认值为 W/A/S/D 加 I/J/K/L 及方向键别名，不写入
+payload。`axes` 声明来自 `mouse_x`/`mouse_y` 或手柄摇杆的连续输入，按帧累加（`delta`）
+或按帧采样保持（`level`），并带 deadzone、scale 和单帧上限。客户端发送源级采样
+`{"type": "axis", "source": "mouse", "dx", "dy"}` 或
+`{"type": "axis", "source": "gamepad", "lx", "ly", "rx", "ry"}`，服务端映射到声明的轴，
+忽略未声明的源。客户端通过发送归零采样释放输入。`RealtimeControlResampler` 把按键边沿
+和轴采样放在同一条 chunk 时间线上，因此每个 chunk 向模型传入 `realtime_segments`，
+声明了轴时再传入 `realtime_axes={name: [逐帧值]}`。WebRTC 下由有序可靠的 `controls`
+DataChannel 持有会话；以 `ordered: false, maxRetransmits: 0` 打开的 `axes` 通道只把
+采样送入同一输入路径。WebSocket 回退接受相同的消息。
 
 Native visual 解码结果通过已有 core `VideoChunk` 携带 `video_chunk`：显式 layout、像素值域与由 layout 推导的帧数。图像输出使用长度为一的时间轴。Native 的 fresh/stream 调用在 `return_dict=True` 时保留这些语义，原始返回仍为 tensor 或产物路径。Studio 优先读取该 chunk，而非无类型别名，并复用 `core/media/codecs/video.py` 转换；即使 `[-1,1]` 输出片段全部为正值，也按声明的有符号像素处理。单视频传输要求 batch/view 轴长度为一；多视角由 sensor composition 合成。CUDA byte chunk 沿用设备快照与 event 传输。
 
-Postprocessor 位于解码 RGB 提取之后，持有隔离的会话状态，可以暂存一个 chunk，
-并按 chain 顺序 flush 尾帧。默认 identity processor 也走同一条生产边界但不改变
-输出，因此未来接 VSR、去噪或插帧时不需要侵入模型专属推理循环。RTX adapter
+Postprocessor 位于解码 RGB 提取之后，持有隔离的会话状态，可以暂存一个 chunk，并按 chain 顺序 flush 尾帧。默认 identity processor 也走同一条生产边界但不改变输出，因此未来接 VSR、去噪或插帧时不需要侵入模型专属推理循环。RTX adapter
 保持 layout/container/dtype/range，每条 stream 独占一个 VFX effect，复用前先 clone
 借用的 DLPack 输出，并由单独授权的 `rtx_postprocess` extra 控制。每个完成的 chunk
 都会记录归一化阶段 timing；用 `runtime/realtime_regression.py` 可以对 trace 中的
@@ -187,13 +206,13 @@ p50/p90、吞吐、队列深度和掉帧做门禁。
 
 ## 调试路径
 
-多数 Studio bug 来自 catalog、输入、runtime 或 artifact 契约错位。缺模型几乎总是 catalog discovery、aliases 或隐藏 id。device / variant 错通常来自 launch config 与 `PipelineContext` overrides。输入到不了模型，问题在 `prepare_inputs()` 或 driver kwargs 绑定。Streaming 失败常见于没有 memory state 就调用 `init`/`stream`，或 two-stage driver 尚无先验重建。Recent run 无法 reload，说明 `materialize_run()` 之后 manifest 或 artifact 路径漂移了。
+多数 Studio bug 来自 catalog、输入、runtime 或 artifact 契约错位。缺模型几乎总是 catalog discovery、aliases 或隐藏 id。device / variant 错通常来自 launch config 与 `PipelineContext` overrides。输入到不了模型，问题在 `prepare_inputs()` 或 driver kwargs 绑定。Streaming 失败常见于没有 memory state 就调用 `init`/`stream`，或 two-stage driver 尚未完成先验重建。Recent run 无法 reload，说明 `materialize_run()` 之后 manifest 或 artifact 路径漂移了。
 
 - **UI 里缺模型** — `discover_catalog()` output、`CatalogEntry.aliases`、category filter、pipeline file naming。
 - **Variant/device 错** — `StudioLaunchConfig`、`resolve_cli_variant_id()`、`PipelineContext`。
 - **输入没到模型** — `prepare_inputs()`、`PreparedInputs`、driver `run_fresh()` kwargs。
 - **Preview 空白** — `collect_artifact_paths()`、`pick_preview_assets()`、conversion helpers、generated file extension。
-- **Streaming 坏了** — `BaseRuntimeDriver.run_init()`、`BaseRuntimeDriver.run_continue()`、pipeline `stream()`、memory state。
+- **Streaming 失败** — `BaseRuntimeDriver.run_init()`、`BaseRuntimeDriver.run_continue()`、pipeline `stream()`、memory state。
 - **Recent run 无法 reload** — `RunRecord.to_manifest()`、`materialize_run()`、`load_run()`、artifact paths。
 
 面向用户的启动与 frontend 路由见 [Studio](/zh/docs/guides/studio)。Studio 作为使用界面如何把用户意图编译为与 CLI、MCP 相同的 request，见 [使用界面与编排](/zh/docs/maintainers/architecture/surfaces-orchestration)。Studio 所依赖的 pipeline / operator / `GenerationResult` 契约见 [模型运行时](/zh/docs/maintainers/architecture/model-runtime)。

@@ -1,9 +1,9 @@
 ---
 title: PhyFPS-Bench-Gen
-description: "100-prompt chronometric audit: does Meta FPS match the PhyFPS implied by motion? All metrics lower-is-better. Not a physics-law bench."
+description: "100-prompt chronometric audit: does Meta FPS match the PhyFPS implied by motion? All metrics lower-is-better."
 ---
 
-PhyFPS-Bench-Gen (TACO Group, Texas A&M) audits **chronometric hallucination**: whether a generator's declared container frame rate (**Meta FPS**) matches the physical speed implied by the motion (**PhyFPS**, from Visual Chronometer). It is **not** a law, grounding, education, or continuation bench.
+PhyFPS-Bench-Gen (TACO Group, Texas A&M) audits **chronometric hallucination**: whether a generator's declared container frame rate (**Meta FPS**) matches the physical speed implied by the motion (**PhyFPS**, from Visual Chronometer).
 
 The suite is **100 prompts**. Name outputs `0001.mp4` … `0100.mp4`. The predictor runs on sliding windows (`--stride`, `--clip-length`); the scorecard reports Meta-vs-PhyFPS error plus intra- and inter-video coefficients of variation. **Every metric is lower-is-better.**
 
@@ -18,7 +18,7 @@ WorldFoundry runs Visual Chronometer `predict.py` in tree and/or normalizes a ca
 Import an existing `results.csv`:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id phyfps-bench-gen \
   --mode official-validation \
   --official-results-path <results.csv> \
@@ -32,7 +32,7 @@ Predict PhyFPS in tree (needs the VC-Common checkpoint and Meta FPS for alignmen
 ```bash
 export WORLDFOUNDRY_PHYFPS_META_FPS=24
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --stride 4 \

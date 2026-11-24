@@ -12,4 +12,5 @@ def __getattr__(name: str) -> Any:
         return LingBotVLAV2Synthesis
     raise AttributeError(name)
 
+
 __all__ = ["LingBotVLAV2Synthesis"]

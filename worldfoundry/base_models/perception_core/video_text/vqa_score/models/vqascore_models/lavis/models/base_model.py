@@ -1,8 +1,8 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import logging
@@ -11,9 +11,10 @@ import os
 import numpy as np
 import torch
 import torch.nn as nn
+from omegaconf import OmegaConf
+
 from ..common.dist_utils import download_cached_file, is_dist_avail_and_initialized
 from ..common.utils import get_abs_path, is_url
-from omegaconf import OmegaConf
 
 
 class BaseModel(nn.Module):
@@ -24,7 +25,7 @@ class BaseModel(nn.Module):
 
     @property
     def device(self):
-        return list(self.parameters())[0].device
+        return list(self.parameters())[0].device  # noqa: RUF015 - Keeps eager list construction and IndexError.
 
     def load_checkpoint(self, url_or_filename):
         """
@@ -34,24 +35,19 @@ class BaseModel(nn.Module):
         """
 
         if is_url(url_or_filename):
-            cached_file = download_cached_file(
-                url_or_filename, check_hash=False, progress=True
-            )
+            cached_file = download_cached_file(url_or_filename, check_hash=False, progress=True)
             checkpoint = torch.load(cached_file, map_location="cpu")
         elif os.path.isfile(url_or_filename):
             checkpoint = torch.load(url_or_filename, map_location="cpu")
         else:
             raise RuntimeError("checkpoint url or path is invalid")
 
-        if "model" in checkpoint.keys():
-            state_dict = checkpoint["model"]
-        else:
-            state_dict = checkpoint
+        state_dict = checkpoint["model"] if "model" in checkpoint.keys() else checkpoint  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
 
         msg = self.load_state_dict(state_dict, strict=False)
 
-        logging.info("Missing keys {}".format(msg.missing_keys))
-        logging.info("load checkpoint from %s" % url_or_filename)
+        logging.info(f"Missing keys {msg.missing_keys}")
+        logging.info("load checkpoint from %s" % url_or_filename)  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
         return msg
 
@@ -73,9 +69,7 @@ class BaseModel(nn.Module):
 
     @classmethod
     def default_config_path(cls, model_type):
-        assert (
-            model_type in cls.PRETRAINED_MODEL_CONFIG_DICT
-        ), "Unknown model type {}".format(model_type)
+        assert model_type in cls.PRETRAINED_MODEL_CONFIG_DICT, f"Unknown model type {model_type}"
         return get_abs_path(cls.PRETRAINED_MODEL_CONFIG_DICT[model_type])
 
     def load_checkpoint_from_config(self, cfg, **kwargs):
@@ -89,9 +83,7 @@ class BaseModel(nn.Module):
         load_finetuned = cfg.get("load_finetuned", True)
         if load_finetuned:
             finetune_path = cfg.get("finetuned", None)
-            assert (
-                finetune_path is not None
-            ), "Found load_finetuned is True, but finetune_path is None."
+            assert finetune_path is not None, "Found load_finetuned is True, but finetune_path is None."
             self.load_checkpoint(url_or_filename=finetune_path)
         else:
             # load pre-trained weights
@@ -111,9 +103,9 @@ class BaseModel(nn.Module):
             tot += w
         if return_str:
             if tot >= 1e6:
-                return "{:.1f}M".format(tot / 1e6)
+                return f"{tot / 1e6:.1f}M"
             else:
-                return "{:.1f}K".format(tot / 1e3)
+                return f"{tot / 1e3:.1f}K"
         else:
             return tot
 
@@ -131,7 +123,7 @@ class BaseEncoder(nn.Module):
 
     @property
     def device(self):
-        return list(self.parameters())[0].device
+        return list(self.parameters())[0].device  # noqa: RUF015 - Keeps eager list construction and IndexError.
 
 
 class SharedQueueMixin:
@@ -162,21 +154,15 @@ class MomentumDistilationMixin:
     @torch.no_grad()
     def copy_params(self):
         for model_pair in self.model_pairs:
-            for param, param_m in zip(
-                model_pair[0].parameters(), model_pair[1].parameters()
-            ):
+            for param, param_m in zip(model_pair[0].parameters(), model_pair[1].parameters(), strict=False):
                 param_m.data.copy_(param.data)  # initialize
                 param_m.requires_grad = False  # not update by gradient
 
     @torch.no_grad()
     def _momentum_update(self):
         for model_pair in self.model_pairs:
-            for param, param_m in zip(
-                model_pair[0].parameters(), model_pair[1].parameters()
-            ):
-                param_m.data = param_m.data * self.momentum + param.data * (
-                    1.0 - self.momentum
-                )
+            for param, param_m in zip(model_pair[0].parameters(), model_pair[1].parameters(), strict=False):
+                param_m.data = param_m.data * self.momentum + param.data * (1.0 - self.momentum)
 
 
 class GatherLayer(torch.autograd.Function):
@@ -187,9 +173,7 @@ class GatherLayer(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, x):
-        output = [
-            torch.zeros_like(x) for _ in range(torch.distributed.get_world_size())
-        ]
+        output = [torch.zeros_like(x) for _ in range(torch.distributed.get_world_size())]
         torch.distributed.all_gather(output, x)
         return tuple(output)
 
@@ -227,9 +211,7 @@ def concat_all_gather(tensor):
     if not is_dist_avail_and_initialized():
         return tensor
 
-    tensors_gather = [
-        torch.ones_like(tensor) for _ in range(torch.distributed.get_world_size())
-    ]
+    tensors_gather = [torch.ones_like(tensor) for _ in range(torch.distributed.get_world_size())]
     torch.distributed.all_gather(tensors_gather, tensor, async_op=False)
 
     output = torch.cat(tensors_gather, dim=0)
@@ -241,7 +223,5 @@ def tile(x, dim, n_tile):
     repeat_idx = [1] * x.dim()
     repeat_idx[dim] = n_tile
     x = x.repeat(*(repeat_idx))
-    order_index = torch.LongTensor(
-        np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)])
-    )
+    order_index = torch.LongTensor(np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)]))
     return torch.index_select(x, dim, order_index.to(x.device))

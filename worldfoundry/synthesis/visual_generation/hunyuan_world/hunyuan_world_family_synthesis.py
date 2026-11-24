@@ -75,7 +75,7 @@ class HunyuanWorldPlanSynthesis(BaseSynthesis):
         args: Any = None,
         device: str | None = None,
         **kwargs: Any,
-    ) -> "HunyuanWorldPlanSynthesis":
+    ) -> HunyuanWorldPlanSynthesis:
         """Returns a plan-only synthesis instance without actual executable synthesis.
 
         This method is provided for API compatibility but ignores all input
@@ -151,9 +151,7 @@ class HunyuanWorldPlanSynthesis(BaseSynthesis):
         """
         # These parameters are intentionally ignored as API initialization is not supported.
         del api_key, endpoint
-        raise HunyuanWorldIntegrationError(
-            f"{self.status.model_id} has no in-tree API synthesis backend."
-        )
+        raise HunyuanWorldIntegrationError(f"{self.status.model_id} has no in-tree API synthesis backend.")
 
 
 class HunyuanWorld1Synthesis(HunyuanWorldPlanSynthesis):
@@ -224,7 +222,7 @@ class HunyuanWorldMirrorSynthesis(HunyuanWorldPlanSynthesis):
         args: Any = None,
         device: str | None = None,
         **kwargs: Any,
-    ) -> "HunyuanWorldMirrorSynthesis":
+    ) -> HunyuanWorldMirrorSynthesis:
         """Loads and initializes the HunyuanWorld-Mirror model pipeline.
 
         This method retrieves the HunyuanMirrorPipeline from `worldfoundry` and
@@ -279,7 +277,11 @@ class HunyuanWorldMirrorSynthesis(HunyuanWorldPlanSynthesis):
         run_dir = None
         if output_path:
             requested = Path(str(output_path)).expanduser()
-            run_dir = requested.with_suffix("") if requested.suffix.lower() in {".mp4", ".mov", ".webm", ".ply", ".zip"} else requested
+            run_dir = (
+                requested.with_suffix("")
+                if requested.suffix.lower() in {".mp4", ".mov", ".webm", ".ply", ".zip"}
+                else requested
+            )
             kwargs["output_path"] = str(run_dir)
 
         results = self.pipeline(*args, **kwargs)
@@ -311,7 +313,9 @@ class HunyuanWorldMirrorSynthesis(HunyuanWorldPlanSynthesis):
             "artifact_kind": "generated_3d_asset",
             "artifact_path": str(run_dir),
             "run_dir": str(run_dir),
-            "preview_video": preview_video if isinstance(preview_video, str) and Path(preview_video).is_file() else None,
+            "preview_video": preview_video
+            if isinstance(preview_video, str) and Path(preview_video).is_file()
+            else None,
             "preview_image": preview_image,
             "model_path": preview_model if isinstance(preview_model, str) and Path(preview_model).is_file() else None,
             "metadata": {
@@ -339,10 +343,9 @@ class HunyuanWorldMirrorSynthesis(HunyuanWorldPlanSynthesis):
 class HYWorld2Synthesis(HunyuanWorldPlanSynthesis):
     """Represents the component-only in-tree synthesis for HY-World 2.0.
 
-    This class extends `HunyuanWorldPlanSynthesis` to specifically detail the
-    integration status of HY-World 2.0, which has partial in-tree components
-    like HY-Pano 2.0 and WorldMirror 2.0. Official full world generation is
-    now released upstream, but its worldgen stages are not yet migrated here.
+    This class extends `HunyuanWorldPlanSynthesis` to record the integration
+    status of HY-World 2.0, whose WorldMirror 2.0 reconstruction component runs
+    in-tree. HY-Pano 2.0 and the multi-stage world generation are not integrated.
     """
 
     STATUS = HunyuanWorldIntegrationStatus(
@@ -351,136 +354,19 @@ class HYWorld2Synthesis(HunyuanWorldPlanSynthesis):
         status="partial-in-tree-component-only",
         source_repo="tencent/HY-World-2.0",
         evidence=(
-            "WorldFoundry currently wraps HY-Pano 2.0 panorama generation and WorldMirror 2.0 reconstruction.",
+            "WorldFoundry wraps WorldMirror 2.0 reconstruction.",
             "Official worldgen requires five separate runners: traj_generate.py, traj_render.py, video_gen.py, gen_gs_data.py, and world_gs_trainer.py.",
             "Official worldgen also requires custom gsplat_maskgaussian/navmesh native extensions, a vLLM VLM service, and distributed GPU orchestration.",
         ),
-        recommendation=(
-            "Expose only task='panorama' and task='worldrecon'. Keep task='worldgen' disabled "
-            "until WorldNav, WorldStereo 2.0, GS data preparation, and 3DGS training are "
-            "vendored with preflight checks and bounded launch configs."
-        ),
+        recommendation=("Use task='worldrecon'. HY-Pano 2.0 and world generation are not part of WorldFoundry."),
     )
 
 
-class HYWorld2PanoSynthesis(BaseSynthesis):
-    """Provides a synthesis wrapper for the in-tree HY-Pano 2.0 runtime.
-
-    This class enables direct interaction with the HY-Pano 2.0 panorama
-    generation pipeline, which is fully integrated as an in-tree backend.
-    """
-
-    IN_TREE_BACKEND = True
-    MODEL_ID = "hy-world-2.0"
-
-    def __init__(self, pipeline: Any) -> None:
-        """Initializes the HYWorld2PanoSynthesis with a HY-Pano 2.0 pipeline.
-
-        Args:
-            pipeline: An initialized HunyuanPanoPipeline object ready for inference.
-        """
-        super().__init__()
-        self.pipeline = pipeline
-        self.model_id = self.MODEL_ID
-        self.model_name = "HY-Pano 2.0"
-
-    @classmethod
-    def from_pretrained(
-        cls,
-        pretrained_model_path: str = "tencent/HY-World-2.0",
-        args: Any = None,
-        device: str | None = None,
-        **kwargs: Any,
-    ) -> "HYWorld2PanoSynthesis":
-        """Loads and initializes the HY-Pano 2.0 pipeline from its vendored runtime.
-
-        This method is responsible for setting up the `HunyuanPanoPipeline`
-        using external weight assets.
-
-        Args:
-            pretrained_model_path: Local model directory or Hugging Face repo ID for weights.
-                                   Defaults to "tencent/HY-World-2.0".
-            args: Ignored runtime namespace.
-            device: Ignored device string; the runtime internally manages device placement.
-            kwargs: Extra keyword arguments passed to `HunyuanPanoPipeline.from_pretrained`.
-
-        Returns:
-            An instance of HYWorld2PanoSynthesis with an initialized pipeline.
-        """
-        # These parameters are intentionally ignored as the runtime handles device placement.
-        del args, device
-        # Dynamically import the HunyuanPanoPipeline to avoid circular dependencies
-        # or unnecessary imports if this class is not used.
-        from worldfoundry.synthesis.visual_generation.hunyuan_world.hy_world_2p0_panogen_runtime.pipeline import (
-            HunyuanPanoPipeline,
-        )
-
-        # Initialize the HunyuanPanoPipeline from the specified path.
-        pipeline = HunyuanPanoPipeline.from_pretrained(pretrained_model_path, **kwargs)
-        return cls(pipeline)
-
-    def predict(self, *, data: dict[str, Any]) -> Any:
-        """Runs the HY-Pano 2.0 panorama generation pipeline.
-
-        Args:
-            data: A dictionary containing keyword arguments for the
-                  `HunyuanPanoPipeline`, including either 'image' (raw image)
-                  or 'image_path' (path to image file).
-
-        Returns:
-            The output from the HunyuanPanoPipeline's inference.
-
-        Raises:
-            ValueError: If neither 'image' nor 'image_path' is provided in `data`.
-        """
-        # Retrieve the image source from the 'data' dictionary, prioritizing 'image'.
-        image = data.get("image", data.get("image_path"))
-        if image is None:
-            raise ValueError("HYWorld2PanoSynthesis.predict requires data['image'] or data['image_path'].")
-        # Filter out 'image' and 'image_path' from data, passing remaining items as call_kwargs.
-        call_kwargs = {key: value for key, value in data.items() if key not in {"image", "image_path"}}
-        return self.pipeline(image, **call_kwargs)
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        """Forwards calls directly to the underlying in-tree HY-Pano 2.0 runtime pipeline.
-
-        This allows instances of `HYWorld2PanoSynthesis` to be called like the
-        pipeline itself, simplifying direct usage.
-
-        Args:
-            args: Positional arguments passed directly to the pipeline's call method.
-            kwargs: Keyword arguments passed directly to the pipeline's call method.
-
-        Returns:
-            The result of the pipeline's call method.
-        """
-        return self.pipeline(*args, **kwargs)
-
-    def api_init(self, api_key: str, endpoint: str) -> None:
-        """Rejects API initialization for the in-tree HY-Pano runtime.
-
-        This synthesis wrapper is for local in-tree execution only and does not
-        support external API interactions.
-
-        Args:
-            api_key: Ignored API credential.
-            endpoint: Ignored API endpoint.
-
-        Raises:
-            HunyuanWorldIntegrationError: Always raised, indicating that this is
-                                         a local-only integration.
-        """
-        # These parameters are intentionally ignored as API initialization is not supported.
-        del api_key, endpoint
-        raise HunyuanWorldIntegrationError("HYWorld2PanoSynthesis is local in-tree only, not an API wrapper.")
-
-
 __all__ = [
+    "HYWorld2Synthesis",
+    "HunyuanWorld1Synthesis",
     "HunyuanWorldIntegrationError",
     "HunyuanWorldIntegrationStatus",
-    "HunyuanWorldPlanSynthesis",
-    "HunyuanWorld1Synthesis",
     "HunyuanWorldMirrorSynthesis",
-    "HYWorld2Synthesis",
-    "HYWorld2PanoSynthesis",
+    "HunyuanWorldPlanSynthesis",
 ]

@@ -14,8 +14,8 @@ from collections.abc import Callable
 
 import torch
 
-from worldfoundry.core.attention.backends.probe import resolve_attention_backend
 from worldfoundry.core.attention.backends.native import scaled_dot_product_attention
+from worldfoundry.core.attention.backends.probe import resolve_attention_backend
 from worldfoundry.core.attention.sequence.varlen import flash_attention, varlen_scaled_dot_product_attention
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ def hybrid_provider_attention(
 
     if (cu_seqlens_q is None) != (cu_seqlens_k is None):
         raise ValueError("cu_seqlens_q and cu_seqlens_k must be supplied together")
-    if cu_seqlens_q is None:
+    if cu_seqlens_q is None or cu_seqlens_k is None:
         image_output = provider(
             None,
             query[:, :image_query_length],

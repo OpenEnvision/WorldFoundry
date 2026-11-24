@@ -6,10 +6,9 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-from .attention import Attention
-
-
 from worldfoundry.core.nn.blocks.layers import Mlp as _SharedMlp
+
+from .attention import Attention
 
 
 def Mlp(width: int = 768, ratio: int = 4):
@@ -30,16 +29,12 @@ class BidirectionalBlock(nn.Module):
         self.norm2_rec = nn.LayerNorm(width, bias=False)
         self.mlp_rec = Mlp(width)
 
-    def forward(
-        self, target: torch.Tensor, representation: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, target: torch.Tensor, representation: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         target = target + self.self_attn(self.norm1_x(target))
         target_norm = self.norm2_x(target)
         representation_norm = self.norm1_rec(representation)
         target = target + self.cross_attn_x(target_norm, kv=representation_norm)
-        representation = representation + self.cross_attn_rec(
-            representation_norm, kv=target_norm
-        )
+        representation = representation + self.cross_attn_rec(representation_norm, kv=target_norm)
         target = target + self.mlp_x(self.norm3_x(target))
         representation = representation + self.mlp_rec(self.norm2_rec(representation))
         return target, representation

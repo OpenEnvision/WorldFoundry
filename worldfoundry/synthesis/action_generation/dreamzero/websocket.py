@@ -5,16 +5,16 @@ Adapted from https://github.com/robo-arena/roboarena/
 
 """
 
-
 import asyncio
 import dataclasses
 import logging
 import traceback
 
-from .protocol import BasePolicy
-from . import protocol as msgpack_numpy
 import websockets.asyncio.server
 import websockets.frames
+
+from . import protocol as msgpack_numpy
+from .protocol import BasePolicy
 
 
 @dataclasses.dataclass
@@ -31,7 +31,9 @@ class PolicyServerConfig:
     # Whether or not the unique eval session id should be sent (e.g. for policies that want to keep track of history).
     needs_session_id: bool = False
     # Which action space to use.
-    action_space: str = "joint_position"  # can be in ["joint_position", "joint_velocity", "cartesian_position", "cartesian_velocity"]
+    action_space: str = (
+        "joint_position"  # can be in ["joint_position", "joint_velocity", "cartesian_position", "cartesian_velocity"]
+    )
 
 
 class WebsocketPolicyServer:

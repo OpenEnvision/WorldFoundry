@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from worldfoundry.pipelines.gen3c.pipeline_gen3c import Gen3CPipeline
 
@@ -58,7 +59,7 @@ class Gen3CRuntime:
         seed: int = 1,
         negative_prompt: str = DEFAULT_GEN3C_NEGATIVE_PROMPT,
         **kwargs: Any,
-    ) -> "Gen3CRuntime":
+    ) -> Gen3CRuntime:
         del args
         if moge_path is not None and str(moge_path).strip():
             raise ValueError("MoGe code is native; pass `moge_pretrained` for weights only.")
@@ -141,9 +142,7 @@ class Gen3CRuntime:
         selected_trajectory = trajectory or option("default_trajectory", "left")
         selected_rotation = camera_rotation or option("default_camera_rotation", "center_facing")
         selected_distance = (
-            movement_distance
-            if movement_distance is not None
-            else float(option("default_movement_distance", 0.3))
+            movement_distance if movement_distance is not None else float(option("default_movement_distance", 0.3))
         )
         fps = int(option("fps", 24))
         result = self.pipeline(

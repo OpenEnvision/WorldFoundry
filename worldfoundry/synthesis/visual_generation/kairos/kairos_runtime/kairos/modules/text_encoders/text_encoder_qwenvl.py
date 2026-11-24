@@ -1,37 +1,37 @@
-from typing import Any, Callable, Dict, List, Optional, Union
-
 import os
+from typing import Any
+
 import torch
 import torch.nn as nn
 import transformers.activations
-from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2Tokenizer, AutoProcessor
+from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration, Qwen2Tokenizer
 
 if not hasattr(transformers.activations, "PytorchGELUTanh"):
     transformers.activations.PytorchGELUTanh = transformers.activations.GELUActivation
 
+
 class QwenVLTextEncoder(nn.Module):
-    def __init__(self, dtype=torch.bfloat16, device='cuda', from_pretrained=''):
+    def __init__(self, dtype=torch.bfloat16, device="cuda", from_pretrained=""):
         super().__init__()
         self.tokenizer_max_length = 1024
         self.prompt_template_encode_start_idx = 97
         self.prompt_template_encode_post_len = 5
-        
+
         if from_pretrained:
-            print('Loading text_encoder from from_pretrained:', from_pretrained)
-            text_encoder_path = f'{from_pretrained}'
-            text_tokenizer_path = f'{from_pretrained}'
-            processor_path = f'{from_pretrained}'
+            print("Loading text_encoder from from_pretrained:", from_pretrained)
+            text_encoder_path = f"{from_pretrained}"
+            text_tokenizer_path = f"{from_pretrained}"
+            processor_path = f"{from_pretrained}"
         else:
-            KAIROS_HF_CHECKPOINTS_ROOT = os.environ.get('KAIROS_HF_CHECKPOINTS_ROOT','.')
-            text_encoder_path = f'{KAIROS_HF_CHECKPOINTS_ROOT}/Qwen/Qwen2.5-VL-7B-Instruct'
-            text_tokenizer_path = f'{KAIROS_HF_CHECKPOINTS_ROOT}/Qwen/Qwen2.5-VL-7B-Instruct'
-            processor_path = f'{KAIROS_HF_CHECKPOINTS_ROOT}/Qwen/Qwen2.5-VL-7B-Instruct'
-            print('Loading text_encoder from from_pretrained:', text_encoder_path)
+            KAIROS_HF_CHECKPOINTS_ROOT = os.environ.get("KAIROS_HF_CHECKPOINTS_ROOT", ".")
+            text_encoder_path = f"{KAIROS_HF_CHECKPOINTS_ROOT}/Qwen/Qwen2.5-VL-7B-Instruct"
+            text_tokenizer_path = f"{KAIROS_HF_CHECKPOINTS_ROOT}/Qwen/Qwen2.5-VL-7B-Instruct"
+            processor_path = f"{KAIROS_HF_CHECKPOINTS_ROOT}/Qwen/Qwen2.5-VL-7B-Instruct"
+            print("Loading text_encoder from from_pretrained:", text_encoder_path)
 
-
-        print('Loading text encoder (Qwen2_5_VLForConditionalGeneration)')
+        print("Loading text encoder (Qwen2_5_VLForConditionalGeneration)")
         self.text_encoder = Qwen2_5_VLForConditionalGeneration.from_pretrained(text_encoder_path, dtype=dtype)
-        print('Loading text tokenizer (Qwen2Tokenizer)')
+        print("Loading text tokenizer (Qwen2Tokenizer)")
         self.tokenizer = Qwen2Tokenizer.from_pretrained(text_tokenizer_path)
 
         self.is_awq = False
@@ -59,11 +59,11 @@ class QwenVLTextEncoder(nn.Module):
         if self.is_awq:
             for m in self.text_encoder.modules():
                 if "WQLinear" in m.__class__.__name__:
-                    if hasattr(m, 'scales') and m.scales is not None:
+                    if hasattr(m, "scales") and m.scales is not None:
                         m.scales.data = m.scales.data.to(torch.float16)
-                    if hasattr(m, 'bias') and m.bias is not None:
+                    if hasattr(m, "bias") and m.bias is not None:
                         m.bias.data = m.bias.data.to(torch.float16)
-                        
+
     def _update_model_if_need(self, device, dtype):
         current_device = self.text_encoder.device
         current_dtype = self.text_encoder.dtype
@@ -76,10 +76,10 @@ class QwenVLTextEncoder(nn.Module):
     @torch.no_grad()
     def _get_qwen_prompt_embeds(
         self,
-        prompt: Union[str, List[str]],
-        images: Optional[Union[Any, List[Any]]] = None,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        prompt: str | list[str],
+        images: Any | list[Any] | None = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         """
         Returns:
@@ -93,27 +93,19 @@ class QwenVLTextEncoder(nn.Module):
         self._update_dtype_for_awq()
 
         # Normalize batch
-        if isinstance(prompt, str):
-            prompt_list = [prompt]
-        else:
-            prompt_list = prompt
+        prompt_list = [prompt] if isinstance(prompt, str) else prompt
         bsz = len(prompt_list)
 
         # Normalize images
         if images is None:
             images_list = [None] * bsz
         else:
-            if isinstance(images, list):
-                images_list = images
-            else:
-                images_list = [images]
+            images_list = images if isinstance(images, list) else [images]
             if len(images_list) != bsz:
                 raise ValueError(f"len(images)={len(images_list)} must match len(prompt)={bsz}")
 
         chat_texts = []
-        pre_texts = []
-        post_texts = []
-        for p, img in zip(prompt_list, images_list):
+        for p, img in zip(prompt_list, images_list, strict=False):
             if img is not None:
                 user_content = [
                     {"type": "image"},
@@ -140,18 +132,20 @@ class QwenVLTextEncoder(nn.Module):
         # Encode multimodal inputs (processor will insert image tokens properly)
         model_inputs = self.processor(
             text=chat_texts,
-            images=[img for img in images_list if img is not None] if any(img is not None for img in images_list) else None,
+            images=[img for img in images_list if img is not None]
+            if any(img is not None for img in images_list)
+            else None,
             padding=True,
             truncation=True,
             max_length=self.tokenizer_max_length,
             return_tensors="pt",
-            images_kwargs=dict(max_pixels=448 * 448, do_resize=True),
+            images_kwargs={"max_pixels": 448 * 448, "do_resize": True},
         )
 
         model_inputs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in model_inputs.items()}
 
-        if 'pixel_values' in model_inputs:
-            model_inputs['pixel_values'] = model_inputs['pixel_values'].to(self.text_encoder.dtype)
+        if "pixel_values" in model_inputs:
+            model_inputs["pixel_values"] = model_inputs["pixel_values"].to(self.text_encoder.dtype)
 
         out = self.text_encoder(
             **model_inputs,
@@ -165,7 +159,7 @@ class QwenVLTextEncoder(nn.Module):
         prompt_m_list = []
         for i in range(bsz):
             valid_len = int(attn_mask[i].sum().item())
-            ids_i = input_ids[i, :valid_len].detach().cpu()
+            _ids_i = input_ids[i, :valid_len].detach().cpu()
 
             start = self.prompt_template_encode_start_idx
             end = valid_len
@@ -187,21 +181,17 @@ class QwenVLTextEncoder(nn.Module):
         prompt_embeds = hidden_states.new_zeros((bsz, max_L, D))
         encoder_attention_mask = torch.zeros((bsz, max_L), device=device, dtype=torch.bool)
 
-        for i, (h, m) in enumerate(zip(prompt_h_list, prompt_m_list)):
+        for i, (h, m) in enumerate(zip(prompt_h_list, prompt_m_list, strict=False)):
             L = h.shape[0]
             prompt_embeds[i, :L] = h
             encoder_attention_mask[i, :L] = m
 
         return prompt_embeds.to(dtype=dtype), encoder_attention_mask
 
-    def encode_prompt(self, prompt, images=None, positive=True, device='cuda'):
+    def encode_prompt(self, prompt, images=None, positive=True, device="cuda"):
         embeds, attention_mask = self._get_qwen_prompt_embeds(
-            prompt=prompt, 
-            images=images, 
-            device=device,
-            dtype=torch.bfloat16
+            prompt=prompt, images=images, device=device, dtype=torch.bfloat16
         )
         if embeds.shape[0] == 1:
             attention_mask = None
         return embeds, attention_mask
-

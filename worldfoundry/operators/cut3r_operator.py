@@ -1,11 +1,13 @@
 """Module for the CUT3R operator implementation."""
 
 import os
+from collections.abc import Iterable
+from pathlib import Path
+from typing import Any
+
 import cv2
 import numpy as np
 import torch
-from typing import List, Optional, Union, Dict, Any
-from pathlib import Path
 from PIL import Image
 
 from .base_operator import BaseOperator
@@ -13,7 +15,7 @@ from .base_operator import BaseOperator
 
 class CUT3ROperator(BaseOperator):
     """Operator for CUT3R pipeline utilities."""
-    
+
     def __init__(
         self,
         operation_types=None,
@@ -21,7 +23,7 @@ class CUT3ROperator(BaseOperator):
     ):
         """
         Initialize CUT3R operator.
-        
+
         Args:
             operation_types: List of operation types
             interaction_template: List of valid interaction types
@@ -36,31 +38,43 @@ class CUT3ROperator(BaseOperator):
             operation_types = ["visual_instruction"]
         if interaction_template is None:
             interaction_template = [
-                "forward", "backward", "left", "right",
-                "forward_left", "forward_right", "backward_left", "backward_right",
-                "camera_up", "camera_down",
-                "camera_l", "camera_r",
-                "camera_ul", "camera_ur", "camera_dl", "camera_dr",
-                "camera_zoom_in", "camera_zoom_out",
+                "forward",
+                "backward",
+                "left",
+                "right",
+                "forward_left",
+                "forward_right",
+                "backward_left",
+                "backward_right",
+                "camera_up",
+                "camera_down",
+                "camera_l",
+                "camera_r",
+                "camera_ul",
+                "camera_ur",
+                "camera_dl",
+                "camera_dr",
+                "camera_zoom_in",
+                "camera_zoom_out",
             ]
-        super(CUT3ROperator, self).__init__(operation_types=operation_types)
+        super().__init__(operation_types=operation_types)
         self.interaction_template = interaction_template
         self.interaction_template_init()
-    
-    def collect_paths(self, path: Union[str, Path]) -> List[str]:
+
+    def collect_paths(self, path: str | Path) -> list[str]:
         """
         Collect file paths from a file, directory, or txt list.
-        
+
         Args:
             path: File path, directory path, or txt file containing paths
-            
+
         Returns:
             List of file paths
         """
         path = str(path)
         if os.path.isfile(path):
             if path.lower().endswith(".txt"):
-                with open(path, "r", encoding="utf-8") as handle:
+                with open(path, encoding="utf-8") as handle:
                     files = [line.strip() for line in handle.readlines() if line.strip()]
             else:
                 files = [path]
@@ -68,19 +82,19 @@ class CUT3ROperator(BaseOperator):
             files = [
                 os.path.join(path, name)
                 for name in os.listdir(path)
-                if not name.startswith(".") and name.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))
+                if not name.startswith(".") and name.lower().endswith((".jpg", ".jpeg", ".png", ".bmp"))
             ]
             files.sort()
         return files
-    
+
     def process_perception(
         self,
-        input_signal: Union[str, np.ndarray, torch.Tensor, Image.Image, List[str], List[np.ndarray], List[Image.Image]]
-    ) -> Union[np.ndarray, List[np.ndarray]]:
+        input_signal: str | np.ndarray | torch.Tensor | Image.Image | list[str] | list[np.ndarray] | list[Image.Image],
+    ) -> np.ndarray | list[Any]:
         """
         Process visual signal (image/video) for real-time interactive updates.
         This function handles loading and preprocessing of images from various input types.
-        
+
         Args:
             input_signal: Visual input signal - can be:
                 - Image file path (str)
@@ -88,18 +102,18 @@ class CUT3ROperator(BaseOperator):
                 - Numpy array (H, W, 3) in RGB format
                 - List of numpy arrays
                 - Torch tensor (C, H, W) or (1, C, H, W) in CHW format
-                
+
         Returns:
             Preprocessed RGB image array(s) (normalized to [0, 1]) with shape (H, W, 3)
             or list of such arrays
-            
+
         Raises:
             ValueError: If image cannot be loaded or processed
         """
         # Handle list inputs (paths, numpy arrays, tensors, PIL Images)
         if isinstance(input_signal, list):
             return [self.process_perception(item) for item in input_signal]
-        
+
         # Handle single input
         if isinstance(input_signal, Image.Image):
             image_rgb = np.array(input_signal)
@@ -141,44 +155,46 @@ class CUT3ROperator(BaseOperator):
                 image_rgb = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB) / 255.0
             else:
                 raise ValueError(f"Unsupported input type for process_perception: {type(input_signal)}")
-        
+
         return image_rgb
-    
+
     def check_interaction(self, interaction):
         """
         Check if interaction is in the interaction template.
-        
+
         Args:
             interaction: Interaction string to check
-            
+
         Returns:
             True if interaction is valid
-            
+
         Raises:
             ValueError: If interaction is not in template
         """
         if interaction not in self.interaction_template:
-            raise ValueError(f"Interaction '{interaction}' not in interaction_template. "
-                           f"Available interactions: {self.interaction_template}")
+            raise ValueError(
+                f"Interaction '{interaction}' not in interaction_template. "
+                f"Available interactions: {self.interaction_template}"
+            )
         return True
-    
+
     def get_interaction(self, interaction):
         """
         Add interaction to current_interaction list after validation.
-        
+
         Args:
             interaction: Interaction string to add
         """
         self.check_interaction(interaction)
         self.current_interaction.append(interaction)
-    
-    def process_interaction(self, num_frames: Optional[int] = None) -> Dict[str, Any]:
+
+    def process_interaction(self, num_frames: int | None = None) -> dict[str, Any]:
         """
         Process current interactions and convert to features for representation/synthesis.
-        
+
         Args:
             num_frames: Number of frames (for video processing, optional)
-            
+
         Returns:
             Dictionary containing processed interaction features:
                 - data_type: "image" or "video"
@@ -187,39 +203,49 @@ class CUT3ROperator(BaseOperator):
         """
         if len(self.current_interaction) == 0:
             raise ValueError("No interaction to process. Use get_interaction() first.")
-        
+
         # Get the latest interaction
         latest_interaction = self.current_interaction[-1]
         self.interaction_history.append(latest_interaction)
-        
+
         # Process interaction based on type
         result = {
             "data_type": "image",
             "output_type": "all",  # point_cloud, depth_map, camera_pose, or all
-            "camera_control": None
+            "camera_control": None,
         }
-        
+
         # Camera control interactions (unified 3D schema)
         if latest_interaction in [
-            "forward", "backward", "left", "right",
-            "forward_left", "forward_right", "backward_left", "backward_right",
-            "camera_up", "camera_down",
-            "camera_l", "camera_r",
-            "camera_ul", "camera_ur", "camera_dl", "camera_dr",
-            "camera_zoom_in", "camera_zoom_out",
+            "forward",
+            "backward",
+            "left",
+            "right",
+            "forward_left",
+            "forward_right",
+            "backward_left",
+            "backward_right",
+            "camera_up",
+            "camera_down",
+            "camera_l",
+            "camera_r",
+            "camera_ul",
+            "camera_ur",
+            "camera_dl",
+            "camera_dr",
+            "camera_zoom_in",
+            "camera_zoom_out",
         ]:
             result["camera_control"] = {"interaction": latest_interaction}
-        
+
         # Add num_frames if provided (for video processing)
         if num_frames is not None:
             result["num_frames"] = num_frames
-        
+
         return result
-    
+
     @staticmethod
-    def normalize_interaction_sequence(
-        interaction: Optional[Union[str, List[str]]]
-    ) -> List[str]:
+    def normalize_interaction_sequence(interaction: str | Iterable[str] | None) -> list[str]:
         """
         Normalize interaction input to a flat list of strings.
         Supports None, single string, or list of strings.
@@ -232,13 +258,13 @@ class CUT3ROperator(BaseOperator):
 
     @staticmethod
     def apply_interaction_to_camera(
-        camera_cfg: Dict[str, Any],
+        camera_cfg: dict[str, Any],
         interaction: str,
-        camera_range: Dict[str, Any],
+        camera_range: dict[str, Any],
         yaw_step: float = 30.0,
         pitch_step: float = 20.0,
         zoom_factor: float = 0.6,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Update a simple (radius, yaw, pitch) camera configuration according to a
         high-level interaction signal, clamped by camera_range.

@@ -5,6 +5,7 @@ task_family: video_generation
 groups: [video, image_to_video]
 source_repos:
 - url: https://github.com/SandAI-org/MAGI-1
+  revision: 0fcefdef8ce2df37a3b8890979433c06eb003328
 checkpoints:
 - repo_id: sand-ai/MAGI-1
   role: i2v_checkpoint

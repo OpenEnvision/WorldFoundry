@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.execution.framework.io import (
+from worldfoundry.evals.tasks.execution.framework.io import (
     load_json,
     mean_numeric,
     normalize_unit_score,
@@ -23,13 +23,13 @@ from worldfoundry.evaluation.tasks.execution.framework.io import (
     write_json,
     write_jsonl,
 )
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import (
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_runner import (
     run_benchmark_execution,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNNERS_ROOT = REPO_ROOT / "worldfoundry" / "evaluation" / "tasks" / "execution" / "runners"
+RUNNERS_ROOT = REPO_ROOT / "worldfoundry" / "evals" / "tasks" / "execution" / "runners"
 REWARD_3D_SERVER = (
     RUNNERS_ROOT
     / "worldolympiad"
@@ -103,9 +103,9 @@ def test_script_zoo_official_runners_were_removed() -> None:
     assert leftover <= {"check_realtime_regression.py", "run_video_model_benchmark_suite.py"}
     assert not any(script_dir.glob("run_*_official_runner.py")) if script_dir.is_dir() else True
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("worldfoundry.evaluation.tasks.execution.framework.script_paths")
+        importlib.import_module("worldfoundry.evals.tasks.execution.framework.script_paths")
     for name in _REMOVED_AUDIT_SCRIPTS:
-        assert importlib.util.find_spec(f"worldfoundry.evaluation.tasks.execution.framework.{name}") is None
+        assert importlib.util.find_spec(f"worldfoundry.evals.tasks.execution.framework.{name}") is None
         assert not (script_dir / f"{name}.py").exists()
 
 
@@ -113,7 +113,7 @@ def test_official_runners_live_as_python_modules() -> None:
     runners = sorted(RUNNERS_ROOT.rglob("run_*_official_runner.py"))
     assert len(runners) >= 20
     module = importlib.import_module(
-        "worldfoundry.evaluation.tasks.execution.runners.iworldbench.run_iworldbench_official_runner"
+        "worldfoundry.evals.tasks.execution.runners.iworldbench.run_iworldbench_official_runner"
     )
     assert callable(getattr(module, "main", None))
     assert callable(getattr(module, "parse_args", None))
@@ -131,7 +131,7 @@ def test_run_benchmark_execution_is_the_orchestration_entrypoint() -> None:
 
 def test_create_tiny_video_lives_on_benchmark_data(tmp_path: Path) -> None:
     pytest.importorskip("PIL")
-    from worldfoundry.evaluation.tasks.execution.framework import benchmark_data
+    from worldfoundry.evals.tasks.execution.framework import benchmark_data
 
     output = tmp_path / "tiny.mp4"
     assert benchmark_data.main(["--output", str(output), "--frames", "4", "--size", "16"]) == 0

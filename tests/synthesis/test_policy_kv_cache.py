@@ -184,7 +184,9 @@ def test_retained_buffer_equals_the_policy_selection(policy, budget: int) -> Non
 
 def test_memory_stops_growing_once_the_budget_is_reached() -> None:
     torch.manual_seed(3)
-    cache = PolicyKVCache(MAX_LEN, frame_tokens=FRAME_TOKENS, policy=SlidingWindowPolicy(window_blocks=4, sink_blocks=1))
+    cache = PolicyKVCache(
+        MAX_LEN, frame_tokens=FRAME_TOKENS, policy=SlidingWindowPolicy(window_blocks=4, sink_blocks=1)
+    )
 
     lengths = []
     for _ in range(40):

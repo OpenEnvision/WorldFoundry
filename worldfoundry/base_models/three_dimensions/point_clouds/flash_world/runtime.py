@@ -1,13 +1,12 @@
 import os
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
 import einops
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from diffusers import FlowMatchEulerDiscreteScheduler
 from huggingface_hub import snapshot_download
 from PIL import Image
@@ -70,11 +69,11 @@ def _snapshot_candidates(cache_root: Path) -> list[Path]:
     return deduped
 
 
-def _has_required_files(directory: Path, required_files: Tuple[str, ...]) -> bool:
+def _has_required_files(directory: Path, required_files: tuple[str, ...]) -> bool:
     return all((directory / name).exists() for name in required_files)
 
 
-def _resolve_hf_snapshot_root(value: str, required_files: Tuple[str, ...] = ()) -> str:
+def _resolve_hf_snapshot_root(value: str, required_files: tuple[str, ...] = ()) -> str:
     """Resolve a repo id, HF cache repo root, or regular local directory."""
     path = Path(value).expanduser()
     if path.is_dir():
@@ -97,7 +96,7 @@ def _resolve_hf_snapshot_root(value: str, required_files: Tuple[str, ...] = ()) 
 def onload_model(model, device, onload=False):
     """Context manager for moving model to GPU and back to CPU."""
     if onload and device != "cpu":
-        model.to(device) 
+        model.to(device)
         try:
             yield model
         finally:
@@ -111,67 +110,68 @@ def onload_model(model, device, onload=False):
 
 class MyFlowMatchEulerDiscreteScheduler(FlowMatchEulerDiscreteScheduler):
     """Custom scheduler for FlashWorld."""
+
     def index_for_timestep(self, timestep, schedule_timesteps=None):
         if schedule_timesteps is None:
             schedule_timesteps = self.timesteps
-        return torch.argmin(
-            (timestep - schedule_timesteps.to(timestep.device)).abs(), dim=0).item()
+        return torch.argmin((timestep - schedule_timesteps.to(timestep.device)).abs(), dim=0).item()
 
 
 class FlashWorldRepresentation:
     """Representation for FlashWorld 3D scene generation."""
-    
-    def __init__(self, model: Optional[nn.Module] = None, device: Optional[str] = None):
+
+    def __init__(self, model: nn.Module | None = None, device: str | None = None):
         """
         Initialize FlashWorldRepresentation.
-        
+
         Args:
             model: Pre-loaded GenerationSystem model (optional)
             device: Device to run on ('cuda' or 'cpu')
         """
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model
-        
+
         if self.model is not None:
             self.model = self.model.to(self.device).eval()
-    
+
     @classmethod
     def from_pretrained(
-        cls,
-        pretrained_model_path: str,
-        device: Optional[str] = None,
-        **kwargs
-    ) -> 'FlashWorldRepresentation':
+        cls, pretrained_model_path: str, device: str | None = None, **kwargs
+    ) -> "FlashWorldRepresentation":
         """
         Create representation instance from pretrained model.
-        
+
         Args:
             pretrained_model_path: HuggingFace repo ID (e.g., "Wan-AI/FlashWorld")
             device: Device to run on
             **kwargs: Additional arguments
-            
+
         Returns:
             FlashWorldRepresentation instance
         """
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        
+
         model_root = _resolve_hf_snapshot_root(pretrained_model_path, required_files=("model.ckpt",))
         if model_root != pretrained_model_path:
             print(f"Resolved FlashWorld weights to: {model_root}")
-        
+
         # Load model
         model = cls._load_generation_system(model_root, device, **kwargs)
-        
+
         return cls(model=model, device=device)
-    
+
     @staticmethod
     def _load_generation_system(model_root: str, device: str, **kwargs) -> nn.Module:
         """Load GenerationSystem model."""
         # Find checkpoint file
-        ckpt_path = kwargs.get('ckpt_path', None)
+        ckpt_path = kwargs.get("ckpt_path")
         if ckpt_path is None:
             # Try to find checkpoint in model_root
-            ckpt_files = list(Path(model_root).glob("*.pt")) + list(Path(model_root).glob("*.pth")) + list(Path(model_root).glob("*.ckpt"))
+            ckpt_files = (
+                list(Path(model_root).glob("*.pt"))
+                + list(Path(model_root).glob("*.pth"))
+                + list(Path(model_root).glob("*.ckpt"))
+            )
             if ckpt_files:
                 ckpt_path = str(ckpt_files[0])
             else:
@@ -181,10 +181,10 @@ class FlashWorldRepresentation:
                     if os.path.exists(potential_path):
                         ckpt_path = potential_path
                         break
-        
-        offload_t5 = kwargs.get('offload_t5', False)
-        offload_vae = kwargs.get('offload_vae', False)
-        offload_transformer_during_vae = kwargs.get('offload_transformer_during_vae', False)
+
+        offload_t5 = kwargs.get("offload_t5", False)
+        offload_vae = kwargs.get("offload_vae", False)
+        offload_transformer_during_vae = kwargs.get("offload_transformer_during_vae", False)
         wan_model_path = kwargs.get("wan_model_path")
         if wan_model_path is None:
             raise ValueError(
@@ -205,14 +205,13 @@ class FlashWorldRepresentation:
             offload_vae=offload_vae,
             offload_transformer_during_vae=offload_transformer_during_vae,
         )
-        
+
         return generation_system
-    
-    
-    def get_representation(self, data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def get_representation(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Get 3D scene representation from input data.
-        
+
         Args:
             data: Dictionary containing:
                 - 'text_prompt': str, text description
@@ -223,7 +222,7 @@ class FlashWorldRepresentation:
                 - 'image_width': int, output image width (default: 704)
                 - 'num_frames': int, number of frames (default: 16)
                 - 'video_fps': int, fps for video rendering (default: 15)
-                
+
         Returns:
             Dictionary containing:
                 - 'scene_params': torch.Tensor, 3D Gaussian Splatting parameters
@@ -233,42 +232,36 @@ class FlashWorldRepresentation:
         """
         if self.model is None:
             raise RuntimeError("Model not loaded. Use from_pretrained() first.")
-        
-        text_prompt = data.get('text_prompt', "")
-        cameras = data['cameras']  # Required
-        image = data.get('image', None)
-        image_index = data.get('image_index', 0)
-        image_height = data.get('image_height', 480)
-        image_width = data.get('image_width', 704)
-        num_frames = data.get('num_frames', 16)
-        video_fps = data.get('video_fps', 15)
-        return_video = data.get('return_video', False)
-        
+
+        text_prompt = data.get("text_prompt", "")
+        cameras = data["cameras"]  # Required
+        image = data.get("image")
+        image_index = data.get("image_index", 0)
+        image_height = data.get("image_height", 480)
+        image_width = data.get("image_width", 704)
+        num_frames = data.get("num_frames", 16)
+        video_fps = data.get("video_fps", 15)
+        return_video = data.get("return_video", False)
+
         # Convert PIL Image to tensor if provided
         if image is not None:
             if isinstance(image, Image.Image):
                 # Resize and center crop image to match target dimensions (same as FlashWorld/cli.py)
-                image = image.convert('RGB')
+                image = image.convert("RGB")
                 w, h = image.size
-                
+
                 # Calculate scale factor to maintain aspect ratio
-                if image_height / h > image_width / w:
-                    scale = image_height / h
-                else:
-                    scale = image_width / w
-                
+                scale = image_height / h if image_height / h > image_width / w else image_width / w
+
                 # Calculate new dimensions for center crop
                 new_h = int(image_height / scale)
                 new_w = int(image_width / scale)
-                
+
                 # Center crop and resize to target dimensions
-                image = image.crop((
-                    (w - new_w) // 2, 
-                    (h - new_h) // 2, 
-                    new_w + (w - new_w) // 2, 
-                    new_h + (h - new_h) // 2
-                )).resize((image_width, image_height), Image.Resampling.BICUBIC)
-                
+                image = image.crop(
+                    ((w - new_w) // 2, (h - new_h) // 2, new_w + (w - new_w) // 2, new_h + (h - new_h) // 2)
+                ).resize((image_width, image_height), Image.Resampling.BICUBIC)
+
                 # Convert to tensor: (C, H, W) in range [-1, 1]
                 image_array = np.array(image)
                 image_tensor = torch.from_numpy(image_array).float().permute(2, 0, 1) / 255.0 * 2 - 1
@@ -276,13 +269,14 @@ class FlashWorldRepresentation:
                 image_tensor = image
         else:
             image_tensor = None
-        
+
         # Generate scene
         video_path = None
         if return_video:
             import tempfile
-            video_path = tempfile.mktemp(suffix='.mp4')
-        
+
+            video_path = tempfile.mktemp(suffix=".mp4")
+
         scene_params, ref_w2c, T_norm = self.model.generate(
             cameras=cameras,
             n_frame=num_frames,
@@ -294,30 +288,31 @@ class FlashWorldRepresentation:
             video_path=video_path,
             video_fps=video_fps,
         )
-        
+
         result = {
-            'scene_params': scene_params,
-            'ref_w2c': ref_w2c,
-            'T_norm': T_norm,
+            "scene_params": scene_params,
+            "ref_w2c": ref_w2c,
+            "T_norm": T_norm,
         }
-        
+
         # Load video frames if generated
         if return_video and video_path and os.path.exists(video_path):
             import imageio
+
             video_frames = []
             reader = imageio.get_reader(video_path)
             for frame in reader:
                 video_frames.append(Image.fromarray(frame))
             reader.close()
             os.remove(video_path)  # Clean up temp file
-            result['video_frames'] = video_frames
-        
+            result["video_frames"] = video_frames
+
         return result
 
 
 class GenerationSystem(nn.Module):
     """FlashWorld Generation System."""
-    
+
     def __init__(
         self,
         wan_model_path: str,
@@ -355,8 +350,9 @@ class GenerationSystem(nn.Module):
         from worldfoundry.base_models.three_dimensions.point_clouds.flash_world.autoencoder_kl_wan import (
             WanCausalConv3d,
         )
+
         with torch.no_grad():
-            for name, module in self.vae.named_modules():
+            for _name, module in self.vae.named_modules():
                 if isinstance(module, WanCausalConv3d):
                     time_pad = module._padding[4]
                     module.padding = (0, module._padding[2], module._padding[0])
@@ -365,31 +361,64 @@ class GenerationSystem(nn.Module):
 
         self.vae.requires_grad_(False)
 
-        self.register_buffer('latents_mean', torch.tensor(self.vae.config.latents_mean).float().view(1, self.vae.config.z_dim, 1, 1, 1).to(self.device))
-        self.register_buffer('latents_std', torch.tensor(self.vae.config.latents_std).float().view(1, self.vae.config.z_dim, 1, 1, 1).to(self.device))
+        self.register_buffer(
+            "latents_mean",
+            torch.tensor(self.vae.config.latents_mean).float().view(1, self.vae.config.z_dim, 1, 1, 1).to(self.device),
+        )
+        self.register_buffer(
+            "latents_std",
+            torch.tensor(self.vae.config.latents_std).float().view(1, self.vae.config.z_dim, 1, 1, 1).to(self.device),
+        )
 
         self.tokenizer = T5TokenizerFast.from_pretrained(wan_model_path, subfolder="tokenizer")
 
-        self.text_encoder = UMT5EncoderModel.from_pretrained(wan_model_path, subfolder="text_encoder", torch_dtype=torch.float32).eval().requires_grad_(False).to(self.device if not self.offload_t5 else "cpu")
+        self.text_encoder = (
+            UMT5EncoderModel.from_pretrained(wan_model_path, subfolder="text_encoder", torch_dtype=torch.float32)
+            .eval()
+            .requires_grad_(False)
+            .to(self.device if not self.offload_t5 else "cpu")
+        )
 
-        self.transformer = WanTransformer3DModel.from_pretrained(wan_model_path, subfolder="transformer", torch_dtype=torch.float32).train().requires_grad_(False)
-        
-        self.transformer.patch_embedding.weight = nn.Parameter(torch.nn.functional.pad(self.transformer.patch_embedding.weight, (0, 0, 0, 0, 0, 0, 0, 6 + self.latent_dim)))
-        
-        weight = self.transformer.proj_out.weight.reshape(self.latent_patch_size ** 2, self.latent_dim, self.transformer.proj_out.weight.shape[1])
-        bias = self.transformer.proj_out.bias.reshape(self.latent_patch_size ** 2, self.latent_dim)
+        self.transformer = (
+            WanTransformer3DModel.from_pretrained(wan_model_path, subfolder="transformer", torch_dtype=torch.float32)
+            .train()
+            .requires_grad_(False)
+        )
 
-        extra_weight = torch.randn(self.latent_patch_size ** 2, self.feat_dim, self.transformer.proj_out.weight.shape[1]) * 0.02
-        extra_bias = torch.zeros(self.latent_patch_size ** 2, self.feat_dim)
- 
-        self.transformer.proj_out.weight = nn.Parameter(torch.cat([weight, extra_weight], dim=1).flatten(0, 1).detach().clone())
-        self.transformer.proj_out.bias = nn.Parameter(torch.cat([bias, extra_bias], dim=1).flatten(0, 1).detach().clone())
+        self.transformer.patch_embedding.weight = nn.Parameter(
+            torch.nn.functional.pad(self.transformer.patch_embedding.weight, (0, 0, 0, 0, 0, 0, 0, 6 + self.latent_dim))
+        )
 
-        self.recon_decoder = WANDecoderPixelAligned3DGSReconstructionModel(self.vae, self.feat_dim, use_render_checkpointing=True, use_network_checkpointing=False).train().requires_grad_(False)
+        weight = self.transformer.proj_out.weight.reshape(
+            self.latent_patch_size**2, self.latent_dim, self.transformer.proj_out.weight.shape[1]
+        )
+        bias = self.transformer.proj_out.bias.reshape(self.latent_patch_size**2, self.latent_dim)
 
-        self.scheduler = MyFlowMatchEulerDiscreteScheduler.from_pretrained(wan_model_path, subfolder="scheduler", shift=3)
+        extra_weight = (
+            torch.randn(self.latent_patch_size**2, self.feat_dim, self.transformer.proj_out.weight.shape[1]) * 0.02
+        )
+        extra_bias = torch.zeros(self.latent_patch_size**2, self.feat_dim)
 
-        self.register_buffer('timesteps', self.scheduler.timesteps.clone().to(self.device))
+        self.transformer.proj_out.weight = nn.Parameter(
+            torch.cat([weight, extra_weight], dim=1).flatten(0, 1).detach().clone()
+        )
+        self.transformer.proj_out.bias = nn.Parameter(
+            torch.cat([bias, extra_bias], dim=1).flatten(0, 1).detach().clone()
+        )
+
+        self.recon_decoder = (
+            WANDecoderPixelAligned3DGSReconstructionModel(
+                self.vae, self.feat_dim, use_render_checkpointing=True, use_network_checkpointing=False
+            )
+            .train()
+            .requires_grad_(False)
+        )
+
+        self.scheduler = MyFlowMatchEulerDiscreteScheduler.from_pretrained(
+            wan_model_path, subfolder="scheduler", shift=3
+        )
+
+        self.register_buffer("timesteps", self.scheduler.timesteps.clone().to(self.device))
 
         self.transformer.disable_gradient_checkpointing()
         self.transformer.gradient_checkpointing = False
@@ -412,6 +441,7 @@ class GenerationSystem(nn.Module):
 
         try:
             from quant import FluxFp8GeMMProcessor
+
             FluxFp8GeMMProcessor(self.transformer)
         except (ImportError, ModuleNotFoundError):
             pass
@@ -430,8 +460,12 @@ class GenerationSystem(nn.Module):
 
     def add_feedback_for_transformer(self):
         self.use_feedback = True
-        self.transformer.patch_embedding.weight = nn.Parameter(torch.nn.functional.pad(self.transformer.patch_embedding.weight, (0, 0, 0, 0, 0, 0, 0, self.feat_dim + self.latent_dim)))
-    
+        self.transformer.patch_embedding.weight = nn.Parameter(
+            torch.nn.functional.pad(
+                self.transformer.patch_embedding.weight, (0, 0, 0, 0, 0, 0, 0, self.feat_dim + self.latent_dim)
+            )
+        )
+
     def encode_text(self, texts):
         max_sequence_length = 512
 
@@ -457,13 +491,25 @@ class GenerationSystem(nn.Module):
                 text_embeds = self.text_encoder(text_input_ids, mask).last_hidden_state.to(self.device)
         else:
             text_embeds = self.text_encoder(text_input_ids, mask).last_hidden_state
-        text_embeds = [u[:v] for u, v in zip(text_embeds, seq_lens)]
+        text_embeds = [u[:v] for u, v in zip(text_embeds, seq_lens, strict=False)]
         text_embeds = torch.stack(
             [torch.cat([u, u.new_zeros(max_sequence_length - u.size(0), u.size(1))]) for u in text_embeds], dim=0
         )
         return text_embeds.float()
 
-    def forward_generator(self, noisy_latents, raymaps, condition_latents, t, text_embeds, cameras, render_cameras, image_height, image_width, need_3d_mode=True):
+    def forward_generator(
+        self,
+        noisy_latents,
+        raymaps,
+        condition_latents,
+        t,
+        text_embeds,
+        cameras,
+        render_cameras,
+        image_height,
+        image_width,
+        need_3d_mode=True,
+    ):
         with onload_model(self.transformer, self.device, onload=self.offload_transformer_during_vae):
             out = self.transformer(
                 hidden_states=torch.cat([noisy_latents, raymaps, condition_latents], dim=1),
@@ -473,38 +519,75 @@ class GenerationSystem(nn.Module):
             )[0]
 
         v_pred, feats = out.split([self.latent_dim, self.feat_dim], dim=1)
-               
-        sigma = torch.stack([self.scheduler.sigmas[self.scheduler.index_for_timestep(_t)] for _t in t.unbind(0)], dim=0).to(self.device)
+
+        sigma = torch.stack(
+            [self.scheduler.sigmas[self.scheduler.index_for_timestep(_t)] for _t in t.unbind(0)], dim=0
+        ).to(self.device)
         latents_pred_2d = noisy_latents - sigma * v_pred
 
         if need_3d_mode:
-            scene_params = self.recon_decoder(
-                                einops.rearrange(feats, 'B C T H W -> (B T) C H W').unsqueeze(2).to(self.device if not self.offload_vae else "cpu").to(torch.bfloat16), 
-                                einops.rearrange(self.latent_unscale_fn(latents_pred_2d.detach()), 'B C T H W -> (B T) C H W').unsqueeze(2).to(self.device if not self.offload_vae else "cpu").to(torch.bfloat16), 
-                                cameras.to(self.device if not self.offload_vae else "cpu").float()
-                            ).flatten(1, -2).to(self.device).float()
+            scene_params = (
+                self.recon_decoder(
+                    einops.rearrange(feats, "B C T H W -> (B T) C H W")
+                    .unsqueeze(2)
+                    .to(self.device if not self.offload_vae else "cpu")
+                    .to(torch.bfloat16),
+                    einops.rearrange(self.latent_unscale_fn(latents_pred_2d.detach()), "B C T H W -> (B T) C H W")
+                    .unsqueeze(2)
+                    .to(self.device if not self.offload_vae else "cpu")
+                    .to(torch.bfloat16),
+                    cameras.to(self.device if not self.offload_vae else "cpu").float(),
+                )
+                .flatten(1, -2)
+                .to(self.device)
+                .float()
+            )
 
-            images_pred, _ = self.recon_decoder.render(scene_params.unbind(0), render_cameras, image_height, image_width, bg_mode="white")
+            images_pred, _ = self.recon_decoder.render(
+                scene_params.unbind(0), render_cameras, image_height, image_width, bg_mode="white"
+            )
 
-            latents_pred_3d = einops.rearrange(self.latent_scale_fn(self.vae.encode(
-                            einops.rearrange(images_pred, 'B T C H W -> (B T) C H W', T=images_pred.shape[1]).unsqueeze(2).to(self.device if not self.offload_vae else "cpu").to(torch.bfloat16), 
-                        ).latent_dist.sample().to(self.device)).squeeze(2), '(B T) C H W -> B C T H W', T=images_pred.shape[1]).to(noisy_latents.dtype)
+            latents_pred_3d = einops.rearrange(
+                self.latent_scale_fn(
+                    self.vae.encode(
+                        einops.rearrange(images_pred, "B T C H W -> (B T) C H W", T=images_pred.shape[1])
+                        .unsqueeze(2)
+                        .to(self.device if not self.offload_vae else "cpu")
+                        .to(torch.bfloat16),
+                    )
+                    .latent_dist.sample()
+                    .to(self.device)
+                ).squeeze(2),
+                "(B T) C H W -> B C T H W",
+                T=images_pred.shape[1],
+            ).to(noisy_latents.dtype)
 
         return {
-            '2d': latents_pred_2d,
-            '3d': latents_pred_3d if need_3d_mode else None,
-            'rgb_3d': images_pred if need_3d_mode else None,
-            'scene': scene_params if need_3d_mode else None,
-            'feat': feats
+            "2d": latents_pred_2d,
+            "3d": latents_pred_3d if need_3d_mode else None,
+            "rgb_3d": images_pred if need_3d_mode else None,
+            "scene": scene_params if need_3d_mode else None,
+            "feat": feats,
         }
 
     @torch.no_grad()
-    def generate(self, cameras, n_frame, image=None, text="", image_index=0, image_height=480, image_width=704, video_path=None, video_fps=15):  
+    def generate(
+        self,
+        cameras,
+        n_frame,
+        image=None,
+        text="",
+        image_index=0,
+        image_height=480,
+        image_width=704,
+        video_path=None,
+        video_fps=15,
+    ):
         # Use the device set during initialization, don't override it
-        if not hasattr(self, 'device') or self.device is None:
+        if not hasattr(self, "device") or self.device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
-            self.device = torch.device(self.device)  
+            self.device = torch.device(self.device)
         vae_device = self.device if not self.offload_vae else torch.device("cpu")
         self.vae.to(vae_device)
         self.text_encoder.to(self.device if not self.offload_t5 else "cpu")
@@ -516,20 +599,28 @@ class GenerationSystem(nn.Module):
 
         with torch.amp.autocast(dtype=torch.bfloat16, device_type="cuda"):
             batch_size = 1
-            
+
             cameras = cameras.to(self.device).unsqueeze(0)
 
             if cameras.shape[1] != n_frame:
-                cameras = sample_from_dense_cameras(cameras.squeeze(0), torch.linspace(0, 1, n_frame, device=self.device)).unsqueeze(0)
+                cameras = sample_from_dense_cameras(
+                    cameras.squeeze(0), torch.linspace(0, 1, n_frame, device=self.device)
+                ).unsqueeze(0)
 
             if video_path is not None:
-                render_cameras = sample_from_dense_cameras(cameras.squeeze(0), torch.linspace(0, 1, (n_frame - 1) * video_fps + 1, device=self.device)).unsqueeze(0)
+                render_cameras = sample_from_dense_cameras(
+                    cameras.squeeze(0), torch.linspace(0, 1, (n_frame - 1) * video_fps + 1, device=self.device)
+                ).unsqueeze(0)
             else:
                 render_cameras = None
-            
+
             cameras, ref_w2c, T_norm = normalize_cameras(cameras, return_meta=True, n_frame=None)
 
-            render_cameras = normalize_cameras(render_cameras, ref_w2c=ref_w2c, T_norm=T_norm, n_frame=None) if render_cameras is not None else None
+            render_cameras = (
+                normalize_cameras(render_cameras, ref_w2c=ref_w2c, T_norm=T_norm, n_frame=None)
+                if render_cameras is not None
+                else None
+            )
 
             text = "[Static] " + text
 
@@ -537,29 +628,66 @@ class GenerationSystem(nn.Module):
 
             masks = torch.zeros(batch_size, n_frame, device=self.device)
 
-            condition_latents = torch.zeros(batch_size, self.latent_dim, n_frame, image_height // self.spatial_downsample_factor, image_width // self.spatial_downsample_factor, device=self.device)
+            condition_latents = torch.zeros(
+                batch_size,
+                self.latent_dim,
+                n_frame,
+                image_height // self.spatial_downsample_factor,
+                image_width // self.spatial_downsample_factor,
+                device=self.device,
+            )
 
             if image is not None:
                 image = image.to(self.device)
 
-                latent = self.latent_scale_fn(self.vae.encode(
-                        image.unsqueeze(0).unsqueeze(2).to(self.device if not self.offload_vae else "cpu").to(torch.bfloat16)
-                    ).latent_dist.sample().to(self.device)).squeeze(2)
+                latent = self.latent_scale_fn(
+                    self.vae.encode(
+                        image.unsqueeze(0)
+                        .unsqueeze(2)
+                        .to(self.device if not self.offload_vae else "cpu")
+                        .to(torch.bfloat16)
+                    )
+                    .latent_dist.sample()
+                    .to(self.device)
+                ).squeeze(2)
 
                 masks[:, image_index] = 1
                 condition_latents[:, :, image_index] = latent
 
-            raymaps = create_raymaps(cameras, image_height // self.spatial_downsample_factor, image_width // self.spatial_downsample_factor)
-            raymaps = einops.rearrange(raymaps, 'B T H W C -> B C T H W', T=n_frame)
-            
-            noise = torch.randn(batch_size, self.latent_dim, n_frame, image_height // self.spatial_downsample_factor, image_width // self.spatial_downsample_factor, device=self.device)
+            raymaps = create_raymaps(
+                cameras, image_height // self.spatial_downsample_factor, image_width // self.spatial_downsample_factor
+            )
+            raymaps = einops.rearrange(raymaps, "B T H W C -> B C T H W", T=n_frame)
 
-            noisy_latents = noise 
+            noise = torch.randn(
+                batch_size,
+                self.latent_dim,
+                n_frame,
+                image_height // self.spatial_downsample_factor,
+                image_width // self.spatial_downsample_factor,
+                device=self.device,
+            )
+
+            noisy_latents = noise
 
             if self.use_feedback:
-                prev_latents_pred = torch.zeros(batch_size, self.latent_dim, n_frame, image_height // self.spatial_downsample_factor, image_width // self.spatial_downsample_factor, device=self.device)
+                prev_latents_pred = torch.zeros(
+                    batch_size,
+                    self.latent_dim,
+                    n_frame,
+                    image_height // self.spatial_downsample_factor,
+                    image_width // self.spatial_downsample_factor,
+                    device=self.device,
+                )
 
-                prev_feats = torch.zeros(batch_size, self.feat_dim, n_frame, image_height // self.spatial_downsample_factor, image_width // self.spatial_downsample_factor, device=self.device)
+                prev_feats = torch.zeros(
+                    batch_size,
+                    self.feat_dim,
+                    n_frame,
+                    image_height // self.spatial_downsample_factor,
+                    image_width // self.spatial_downsample_factor,
+                    device=self.device,
+                )
 
             for i in range(len(self.denoising_steps)):
                 t_ids = torch.full((noisy_latents.shape[0],), self.denoising_steps[i], device=self.device)
@@ -572,16 +700,33 @@ class GenerationSystem(nn.Module):
                     _condition_latents = condition_latents
 
                 if i < len(self.denoising_steps) - 1:
-                    out = self.forward_generator(noisy_latents, raymaps, _condition_latents, t, text_embeds, cameras, cameras, image_height, image_width, need_3d_mode=True)
+                    out = self.forward_generator(
+                        noisy_latents,
+                        raymaps,
+                        _condition_latents,
+                        t,
+                        text_embeds,
+                        cameras,
+                        cameras,
+                        image_height,
+                        image_width,
+                        need_3d_mode=True,
+                    )
 
                     latents_pred = out["3d"]
 
                     if self.use_feedback:
                         prev_latents_pred = latents_pred
-                        prev_feats = out['feat']
-                   
-                    noisy_latents = self.scheduler.scale_noise(latents_pred, self.timesteps[torch.full((noisy_latents.shape[0],), self.denoising_steps[i + 1], device=self.device)], torch.randn_like(noise))
-                    
+                        prev_feats = out["feat"]
+
+                    noisy_latents = self.scheduler.scale_noise(
+                        latents_pred,
+                        self.timesteps[
+                            torch.full((noisy_latents.shape[0],), self.denoising_steps[i + 1], device=self.device)
+                        ],
+                        torch.randn_like(noise),
+                    )
+
                 else:
                     with onload_model(self.transformer, self.device, onload=self.offload_transformer_during_vae):
                         out = self.transformer(
@@ -592,25 +737,45 @@ class GenerationSystem(nn.Module):
                         )[0]
 
                     v_pred, feats = out.split([self.latent_dim, self.feat_dim], dim=1)
-                        
-                    sigma = torch.stack([self.scheduler.sigmas[self.scheduler.index_for_timestep(_t)] for _t in t.unbind(0)], dim=0).to(self.device)
+
+                    sigma = torch.stack(
+                        [self.scheduler.sigmas[self.scheduler.index_for_timestep(_t)] for _t in t.unbind(0)], dim=0
+                    ).to(self.device)
                     latents_pred = noisy_latents - sigma * v_pred
 
-                    scene_params = self.recon_decoder(
-                                        einops.rearrange(feats, 'B C T H W -> (B T) C H W').unsqueeze(2).to(self.device if not self.offload_vae else "cpu").to(torch.bfloat16), 
-                                        einops.rearrange(self.latent_unscale_fn(latents_pred.detach()), 'B C T H W -> (B T) C H W').unsqueeze(2).to(self.device if not self.offload_vae else "cpu").to(torch.bfloat16), 
-                                        cameras.to(self.device if not self.offload_vae else "cpu").float()
-                                    ).flatten(1, -2).to(self.device).float()
+                    scene_params = (
+                        self.recon_decoder(
+                            einops.rearrange(feats, "B C T H W -> (B T) C H W")
+                            .unsqueeze(2)
+                            .to(self.device if not self.offload_vae else "cpu")
+                            .to(torch.bfloat16),
+                            einops.rearrange(self.latent_unscale_fn(latents_pred.detach()), "B C T H W -> (B T) C H W")
+                            .unsqueeze(2)
+                            .to(self.device if not self.offload_vae else "cpu")
+                            .to(torch.bfloat16),
+                            cameras.to(self.device if not self.offload_vae else "cpu").float(),
+                        )
+                        .flatten(1, -2)
+                        .to(self.device)
+                        .float()
+                    )
 
             if video_path is not None:
-                interpolated_images_pred, _ = self.recon_decoder.render(scene_params.unbind(0), render_cameras, image_height, image_width, bg_mode="white")
+                interpolated_images_pred, _ = self.recon_decoder.render(
+                    scene_params.unbind(0), render_cameras, image_height, image_width, bg_mode="white"
+                )
 
-                interpolated_images_pred = einops.rearrange(interpolated_images_pred[0].clamp(-1, 1).add(1).div(2), 'T C H W -> T H W C')
+                interpolated_images_pred = einops.rearrange(
+                    interpolated_images_pred[0].clamp(-1, 1).add(1).div(2), "T C H W -> T H W C"
+                )
 
-                interpolated_images_pred = [img.detach().cpu().mul(255).numpy().astype(np.uint8) for img in interpolated_images_pred.unbind(0)]
+                interpolated_images_pred = [
+                    img.detach().cpu().mul(255).numpy().astype(np.uint8) for img in interpolated_images_pred.unbind(0)
+                ]
 
                 import imageio
-                imageio.mimwrite(video_path, interpolated_images_pred, fps=video_fps, quality=8, macro_block_size=1) 
+
+                imageio.mimwrite(video_path, interpolated_images_pred, fps=video_fps, quality=8, macro_block_size=1)
 
         scene_params = scene_params[0]
 

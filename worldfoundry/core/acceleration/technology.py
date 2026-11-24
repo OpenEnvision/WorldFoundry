@@ -18,14 +18,15 @@ tied to a specific approximation.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
+from typing import cast
 
 import torch
 
 from worldfoundry.core.acceleration.quantization.nvfp4 import _nvfp4_hardware_eligible
 from worldfoundry.core.attention.sparse.piecewise import piecewise_attention_available
 from worldfoundry.core.kernels import kernel_device_profile, kernel_dispatch_report
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Report row — JSON-safe fields for logs and regression diffs
@@ -77,12 +78,8 @@ def acceleration_technology_report(
 
     resolved = _resolved_device(device)
     profile = kernel_device_profile(resolved)
-    kernels = kernel_dispatch_report().get("operators", {})
-    fp8_active = (
-        resolved.type == "cuda"
-        and profile.supports_fp8
-        and callable(getattr(torch, "_scaled_mm", None))
-    )
+    kernels = cast(Mapping[str, object], kernel_dispatch_report().get("operators", {}))
+    fp8_active = resolved.type == "cuda" and profile.supports_fp8 and callable(getattr(torch, "_scaled_mm", None))
     fp4_active = _nvfp4_hardware_eligible(resolved)
     pisa_active = piecewise_attention_available(resolved) if resolved.type == "cuda" else False
     fusion_names = ", ".join(sorted(str(name) for name in kernels))
@@ -118,9 +115,7 @@ def acceleration_technology_report(
             True,
             True,
             pisa_active,
-            "TMA kernel requires SM90 or data-center Blackwell; other GPUs use exact SDPA"
-            if not pisa_active
-            else "",
+            "TMA kernel requires SM90 or data-center Blackwell; other GPUs use exact SDPA" if not pisa_active else "",
         ),
         AccelerationTechnology(
             "quantization",
@@ -129,9 +124,7 @@ def acceleration_technology_report(
             True,
             True,
             fp8_active,
-            "native FP8 GEMM requires Ada/Hopper/Blackwell; dense fallback is retained"
-            if not fp8_active
-            else "",
+            "native FP8 GEMM requires Ada/Hopper/Blackwell; dense fallback is retained" if not fp8_active else "",
         ),
         AccelerationTechnology(
             "quantization",
@@ -155,7 +148,7 @@ def acceleration_technology_report(
         AccelerationTechnology(
             "compilation",
             "persistent Inductor/Triton cache",
-            "worldfoundry.core.execution.compile_cache",
+            "worldfoundry.core.platform.compile_cache",
             True,
             False,
             True,

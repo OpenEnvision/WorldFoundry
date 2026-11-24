@@ -5,7 +5,7 @@ modelId: "worldplay2"
 pageSource: authored
 ---
 
-WorldPlay2 从图像、导航动作及场景提示词生成世界视频。WorldFoundry 的原生 pipeline 复用 Wan2.2 transformer、UMT5 编码器、Wan2.1 VAE、权重加载器、注意力后端与媒体 IO。WorldPlay2 的 synthesis 扩展增加六通道动作条件、因果记忆压缩及按块上下文注意力。
+WorldPlay2 从图像、导航动作及场景提示词生成世界视频。它基于 Wan2.2 transformer、UMT5 文本编码器与 Wan2.1 VAE，并加入六通道动作条件、因果记忆压缩及按块上下文注意力。
 
 代码：[WorldPlay2/WorldPlay2](https://github.com/WorldPlay2/WorldPlay2)。论文：[arXiv 2609.35560](https://arxiv.org/abs/2609.35560)。权重：[Fast](https://huggingface.co/aejion/WorldPlay2-Fast)、[AR](https://huggingface.co/aejion/WorldPlay2-AR) 与 [BI](https://huggingface.co/aejion/WorldPlay2-BI)。
 
@@ -33,7 +33,7 @@ result = pipeline(
 
 `result["sample"]` 是取值为 [0, 1] 的 BCTHW 视频张量；`result["artifact_path"]` 指向导出的 MP4。默认请求以 `actions="w-32"` 生成 125 帧、832×448、16 FPS 视频。宽高都须为 64 的倍数。
 
-所选 WorldPlay2 仓库中的 `high_noise_model/diffusion_pytorch_model.safetensors` 与 `low_noise_model/diffusion_pytorch_model.safetensors` 须同时就位。[Wan2.2-I2V-A14B](https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B) 支持目录提供 `models_t5_umt5-xxl-enc-bf16.pth`、`google/umt5-xxl/`、`Wan2.1_VAE.pth` 及两个专家的 `config.json`。
+所选 WorldPlay2 仓库中的 `high_noise_model/diffusion_pytorch_model.safetensors` 与 `low_noise_model/diffusion_pytorch_model.safetensors` 须同时准备到位。[Wan2.2-I2V-A14B](https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B) 支持目录需提供 `models_t5_umt5-xxl-enc-bf16.pth`、`google/umt5-xxl/`、`Wan2.1_VAE.pth` 及两个专家的 `config.json`。
 
 ## 采样模式
 
@@ -43,7 +43,7 @@ result = pipeline(
 | `worldplay2-ar` | `ar` | 40 | 4 | 3.5 |
 | `worldplay2-bi` | `bi` | 40 | 32 | 3.5 |
 
-加载 AR 或 BI 专家目录时向 `from_pretrained` 传入 `mode="ar"` 或 `mode="bi"`。各模式使用各自公开的权重。AR 与 Fast 按每块四个 latent 帧向前滚动；BI 在 32 个 latent 帧的块内双向采样。
+加载 AR 或 BI 专家目录时，向 `from_pretrained` 传入 `mode="ar"` 或 `mode="bi"`。各模式使用各自公开的权重。AR 与 Fast 按每块四个 latent 帧向前滚动；BI 在 32 个 latent 帧的块内双向采样。
 
 动作采用逗号分隔的 `action-duration` 段。移动键为 `w`、`s`、`a`、`d`、`wa`、`wd`、`sa`、`sd`，视角旋转为 `left`、`right`、`up`、`down`；`space` 为特殊动作，`none` 为静止。不同类别可用 `+` 组合，例如 `w+right-4`。
 
@@ -70,17 +70,10 @@ pipeline(
 
 提示词事件时长须与动作总时长相等。使用 `The scene in the video is: ...` 描述场景，第三人称提示词还包含 `The character is: ...`。需要描述事件时加入 `The event is: ...`。
 
-小图 FP32 CPU transformer 检查与固定版本的官方实现误差均小于 1e-6，覆盖 BI、含缓存的 AR 及两个 Fast 专家。Fast 的三块完整采样在 12 个 latent 帧上也与官方实现误差小于 1e-6，包含记忆压缩与 KV cache 复用。
-
-固定参考张量 `tests/fixtures/worldplay2/upstream_cpu.json` 来自上游版本
-`c5d83e32099116ff3a1437a8a05c764d579f704b`。FP32 fixture 使用两层 transformer、
-四个头及 32 维隐藏层，按排序后的 checkpoint 键，以 seed 123（BI/AR）、456（高噪声专家）
-和 789（低噪声专家）生成参数。三块 Fast 回放执行官方
-`WorldPlay2Pipeline.generate_chunked`，使用确定性的文本及 codec 替身、12 个 latent 帧、
-45 个 RGB 帧、每块四次计算及 seed 42。复数 RoPE 项保留 float64 实部/虚部对。
+已在 CPU 上用缩小规模的 FP32 transformer 验证：BI、含缓存的 AR、两个 Fast 专家及三块 Fast 采样与官方实现的误差均小于 1e-6。
 
 ## 限制
 
 - WorldPlay2 代码与权重采用 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) 许可。
-- CPU 一致性检查使用小 transformer 及确定性的文本、codec fixture。checkpoint GPU 生成与完整模型输出一致性仍待验证。官方脚本默认八卡及 Ulysses 序列并行；本集成尚未测量硬件吞吐。
+- 仅验证了缩小规模的 CPU 检查；尚未用发布权重验证完整规模的 GPU 生成。官方脚本默认八卡及 Ulysses 序列并行；尚未测量吞吐。
 - WorldPlay2-TAE 权重尚未发布，pipeline 使用共享的 Wan2.1 VAE。

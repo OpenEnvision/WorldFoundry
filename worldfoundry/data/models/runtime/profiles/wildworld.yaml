@@ -1,15 +1,22 @@
-artifact_filename: wildworld_runtime_plan.json
-artifact_kind: evaluation_report
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: wildworld
 display_name: WildWorld
-id: wildworld
+task_family: world_model
 input_schema:
   actions:
   - evaluation_query
   image: true
   prompt: true
   video: true
-integration_status: runtime_ported
+artifact_kind: evaluation_report
+artifact_filename: wildworld_runtime_plan.json
+execution:
+  pipeline_binding: wildworld
+  backend_stage: worldfoundry_runtime_plan
+  runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - WildWorld official source route is registered; benchmark/dataset assets are runtime-gated.
 - Missing checkpoints/assets are reported by the runtime plan and are not catalog
@@ -19,9 +26,3 @@ notes:
 - Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/WildWorld at 23971043ae34d802b83661a964fe291f14d277f7.
 - Real benchmark/dataset execution remains blocked until license review, assets, and
   evaluator parity are staged.
-runtime_status: route_ready_assets_pending
-task_family: world_model
-execution:
-  pipeline_binding: wildworld
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending

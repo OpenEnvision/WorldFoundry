@@ -107,9 +107,7 @@ def _recipe(
                 allow_patterns=text_tokenizer_files,
             ),
         },
-        capabilities=frozenset(
-            {"image-to-world", "video-to-world", "classifier-free-guidance"}
-        ),
+        capabilities=frozenset({"image-to-world", "video-to-world", "classifier-free-guidance"}),
         options={"latent_channels": 16, "spatial_compression": 8, "temporal_compression": 4},
         metadata={
             "architecture": "cosmos-predict2-minimal-v1-lvg-dit",

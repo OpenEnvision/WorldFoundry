@@ -7,12 +7,12 @@ import torch
 
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants import camera_attention
 from worldfoundry.core.attention import flash_attention as core_flash_attention
+from worldfoundry.synthesis.visual_generation.magic_world.magic_world_runtime.utils.camera_pose import (
+    _ray_condition,
+)
 from worldfoundry.synthesis.visual_generation.magic_world.worldfoundry_runtime import (
     _resolve_depth_pro_checkpoint,
     _resolve_local_checkpoint_alias,
-)
-from worldfoundry.synthesis.visual_generation.magic_world.magic_world_runtime.utils.camera_pose import (
-    _ray_condition,
 )
 from worldfoundry.synthesis.visual_generation.video_x_fun.video_x_fun_runtime.videox_fun.utils.utils import (
     get_video_to_video_render_latent,
@@ -61,9 +61,7 @@ def test_magicworld_resolves_flat_checkpoint_mirror(monkeypatch, tmp_path) -> No
 
 
 def test_magicworld_ray_condition_broadcasts_multiple_frames() -> None:
-    intrinsics = torch.tensor(
-        [[[2.0, 2.0, 1.0, 1.0], [2.0, 2.0, 1.0, 1.0], [2.0, 2.0, 1.0, 1.0]]]
-    )
+    intrinsics = torch.tensor([[[2.0, 2.0, 1.0, 1.0], [2.0, 2.0, 1.0, 1.0], [2.0, 2.0, 1.0, 1.0]]])
     c2w = torch.eye(4).reshape(1, 1, 4, 4).expand(1, 3, -1, -1).clone()
 
     rays = _ray_condition(intrinsics, c2w, height=2, width=3, device="cpu")

@@ -18,7 +18,7 @@ from functools import cached_property
 
 from torch.distributed.device_mesh import init_device_mesh
 
-from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.observability.rank_logging import log
 
 
 @dataclass
@@ -53,7 +53,7 @@ class ParallelDims:
             log.info(f"dp_shard is set to {dp_shard}.")
         assert dp_shard >= 1
 
-        if not (dp_replicate * dp_shard * cp * tp * pp == self.world_size):
+        if not (dp_replicate * dp_shard * cp * tp * pp == self.world_size):  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             self.dp_replicate = self.world_size // (dp_shard * cp * tp * pp)
             log.warning(
                 f"Invalid parallel dims: dp_replicate({dp_replicate}) * dp_shard({dp_shard}) * "
@@ -66,6 +66,7 @@ class ParallelDims:
         for d, name in zip(
             [self.pp, self.dp_replicate, self.dp_shard, self.cp, self.tp],
             ["pp", "dp_replicate", "dp_shard", "cp", "tp"],
+            strict=False,
         ):
             if d > 1:
                 dims.append(d)

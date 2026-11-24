@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2026 Tencent.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,12 +29,14 @@ mlp}``, plus the MoT extensions ``input_layernorm_v`` /
 ``mlp_v`` for the modality-aware variant) can be dropped in.
 """
 
-from typing import List, Optional, Union
+from typing import ClassVar
 
 import torch
 from torch import nn
 from transformers import AutoConfig, PretrainedConfig, PreTrainedModel
 from transformers.cache_utils import Cache
+
+from worldfoundry.core.attention.rotary.embedding import apply_rotary_pos_emb
 
 from .modeling_hunyuan_vl_mot import (
     HunYuanVLMoTForConditionalGeneration,
@@ -72,15 +73,9 @@ def mask_apply(
     mask_flat = mask.reshape(B * S).bool()
 
     if out_dims is None:
-        out_flat = [
-            torch.zeros(B * S, D, device=flat.device, dtype=flat.dtype)
-            for _ in text_funcs
-        ]
+        out_flat = [torch.zeros(B * S, D, device=flat.device, dtype=flat.dtype) for _ in text_funcs]
     else:
-        out_flat = [
-            torch.zeros(B * S, od, device=flat.device, dtype=flat.dtype)
-            for od in out_dims
-        ]
+        out_flat = [torch.zeros(B * S, od, device=flat.device, dtype=flat.dtype) for od in out_dims]
 
     text_idx = ~mask_flat
     if text_idx.any():
@@ -97,34 +92,6 @@ def mask_apply(
     return [o.view(B, S, -1) for o in out_flat]
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2:]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Apply Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q: query tensor.
-        k: key tensor.
-        cos: cosine part of the rotary embedding.
-        sin: sine part of the rotary embedding.
-        position_ids: unused, kept for signature compatibility.
-        unsqueeze_dim: which axis to unsqueeze on for broadcasting.
-
-    Returns:
-        ``(q_rotated, k_rotated)``.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -136,7 +103,7 @@ class HyDualTowerConfig(PretrainedConfig):
     """
 
     model_type = "hy_dual_tower"
-    sub_configs = {"vlm_config": AutoConfig, "expert_config": AutoConfig}
+    sub_configs: ClassVar[dict] = {"vlm_config": AutoConfig, "expert_config": AutoConfig}
 
     def __init__(
         self,
@@ -153,7 +120,7 @@ class HyDualTowerConfig(PretrainedConfig):
         # Optional reference to the outer ``HyVLAConfig`` (used by
         # HyVLAFlowMatching to keep its proj_width in sync with the
         # expert tower's hidden_size).
-        self.config = kwargs.get("config", None)
+        self.config = kwargs.get("config")
 
         super().__init__(**kwargs)
 
@@ -293,9 +260,7 @@ class HyDualTower(PreTrainedModel):
             feat = self.vlm.visual(image)[0]
             return feat.view(B, -1, feat.shape[-1]).contiguous()
 
-        image_list = list(
-            image.unsqueeze(1) if image.dim() == 3 else image.split(1, dim=0)
-        )
+        image_list = list(image.unsqueeze(1) if image.dim() == 3 else image.split(1, dim=0))
         # image_list: list of (1, 3, h, w)
         image_features = self.vlm.visual(image_list)  # list of (num_tokens, 2048)
         image_features = torch.stack(image_features, dim=0)
@@ -310,13 +275,13 @@ class HyDualTower(PreTrainedModel):
     # ------------------------------------------------------------------
     def forward(
         self,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
-        inputs_embeds: List[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        fill_kv_cache: Optional[bool] = None,
-        modality_masks: List[torch.FloatTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | Cache | None = None,
+        inputs_embeds: list[torch.FloatTensor] | None = None,
+        use_cache: bool | None = None,
+        fill_kv_cache: bool | None = None,
+        modality_masks: list[torch.FloatTensor] | None = None,
     ):
         models = [self.vlm.language_model.model, self.expert.model]
         att_vis_output = []
@@ -353,8 +318,8 @@ class HyDualTower(PreTrainedModel):
                 hidden_states = mask_apply(
                     hidden_states,
                     modality_mask,
-                    [lambda x: layer.input_layernorm(x)],
-                    [lambda x: layer.input_layernorm_v(x)],
+                    [lambda x: layer.input_layernorm(x)],  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                    [lambda x: layer.input_layernorm_v(x)],  # noqa: B023 - Keeps the upstream late binding of the loop variable.
                 )[0]
 
                 input_shape = hidden_states.shape[:-1]
@@ -368,14 +333,14 @@ class HyDualTower(PreTrainedModel):
                     hidden_states,
                     modality_mask,
                     [
-                        lambda x: layer.self_attn.q_proj(x),
-                        lambda x: layer.self_attn.k_proj(x),
-                        lambda x: layer.self_attn.v_proj(x),
+                        lambda x: layer.self_attn.q_proj(x),  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                        lambda x: layer.self_attn.k_proj(x),  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                        lambda x: layer.self_attn.v_proj(x),  # noqa: B023 - Keeps the upstream late binding of the loop variable.
                     ],
                     [
-                        lambda x: layer.self_attn.q_proj_v(x),
-                        lambda x: layer.self_attn.k_proj_v(x),
-                        lambda x: layer.self_attn.v_proj_v(x),
+                        lambda x: layer.self_attn.q_proj_v(x),  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                        lambda x: layer.self_attn.k_proj_v(x),  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                        lambda x: layer.self_attn.v_proj_v(x),  # noqa: B023 - Keeps the upstream late binding of the loop variable.
                     ],
                     out_dims=[
                         self.config.vlm_config.num_attention_heads * layer.self_attn.head_dim,
@@ -399,9 +364,7 @@ class HyDualTower(PreTrainedModel):
             value_states = torch.cat(value_states, dim=2)
 
             cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(
-                query_states, key_states, cos, sin
-            )
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
             q_parts = query_states.split(seq_len_list, dim=2)
             k_parts = key_states.split(seq_len_list, dim=2)
@@ -409,7 +372,7 @@ class HyDualTower(PreTrainedModel):
             k_normed = []
 
             vlm_layer = models[0].layers[layer_idx]
-            for q_part, k_part in zip(q_parts, k_parts):
+            for q_part, k_part in zip(q_parts, k_parts, strict=False):
                 q_normed.append(vlm_layer.self_attn.query_layernorm(q_part))
                 k_normed.append(vlm_layer.self_attn.key_layernorm(k_part))
             query_states = torch.cat(q_normed, dim=2)
@@ -430,19 +393,19 @@ class HyDualTower(PreTrainedModel):
                         "value_states": value_states,
                     }
                 else:
-                    key_states = torch.cat(
-                        [past_key_values[layer_idx]["key_states"], key_states], dim=1
-                    )
-                    value_states = torch.cat(
-                        [past_key_values[layer_idx]["value_states"], value_states], dim=1
-                    )
+                    key_states = torch.cat([past_key_values[layer_idx]["key_states"], key_states], dim=1)
+                    value_states = torch.cat([past_key_values[layer_idx]["value_states"], value_states], dim=1)
                     past_key_values[layer_idx]["key_states"] = key_states
                     past_key_values[layer_idx]["value_states"] = value_states
 
             attention_interface = self.get_attention_interface()
             att_output, probs = attention_interface(
-                attention_mask, batch_size, layer.self_attn.head_dim,
-                query_states, key_states, value_states,
+                attention_mask,
+                batch_size,
+                layer.self_attn.head_dim,
+                query_states,
+                key_states,
+                value_states,
             )
 
             att_output = att_output.to(dtype=value_states.dtype)  # (b, seq_vlm, ...)
@@ -463,8 +426,8 @@ class HyDualTower(PreTrainedModel):
                     out_emb = mask_apply(
                         att_output[:, start:end],
                         modality_mask,
-                        [lambda x: layer.self_attn.o_proj(x)],
-                        [lambda x: layer.self_attn.o_proj_v(x)],
+                        [lambda x: layer.self_attn.o_proj(x)],  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                        [lambda x: layer.self_attn.o_proj_v(x)],  # noqa: B023 - Keeps the upstream late binding of the loop variable.
                         out_dims=[models[i].config.hidden_size],
                     )[0]
 
@@ -473,8 +436,8 @@ class HyDualTower(PreTrainedModel):
                     out_emb = mask_apply(
                         out_emb,
                         modality_mask,
-                        [lambda x: layer.mlp(layer.post_attention_layernorm(x))],
-                        [lambda x: layer.mlp_v(layer.post_attention_layernorm_v(x))],
+                        [lambda x: layer.mlp(layer.post_attention_layernorm(x))],  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                        [lambda x: layer.mlp_v(layer.post_attention_layernorm_v(x))],  # noqa: B023 - Keeps the upstream late binding of the loop variable.
                     )[0]
 
                     out_emb += after_first_residual
@@ -505,14 +468,10 @@ class HyDualTower(PreTrainedModel):
             return self.flash_attention_forward
         return self.eager_attention_forward
 
-    def flash_attention_forward(
-        self, attention_mask, batch_size, head_dim, query_states, key_states, value_states
-    ):
+    def flash_attention_forward(self, attention_mask, batch_size, head_dim, query_states, key_states, value_states):
         raise NotImplementedError("FA2 is not implemented (yet)")
 
-    def eager_attention_forward(
-        self, attention_mask, batch_size, head_dim, query_states, key_states, value_states
-    ):
+    def eager_attention_forward(self, attention_mask, batch_size, head_dim, query_states, key_states, value_states):
         num_att_heads = self.config.vlm_config.num_attention_heads
         num_key_value_heads = self.config.vlm_config.num_key_value_heads
         num_key_value_groups = num_att_heads // num_key_value_heads
@@ -541,23 +500,19 @@ class HyDualTower(PreTrainedModel):
         key_states = key_states.transpose(1, 2)
 
         att_weights = torch.matmul(query_states, key_states.transpose(2, 3))
-        att_weights *= head_dim ** -0.5
+        att_weights *= head_dim**-0.5
         big_neg = -2.3819763e38  # bf16 -inf approximation
 
-        masked_att_weights = torch.where(
-            attention_mask[:, None, :, :], att_weights, big_neg
-        )
+        masked_att_weights = torch.where(attention_mask[:, None, :, :], att_weights, big_neg)
 
         probs = nn.functional.softmax(masked_att_weights, dim=-1)
         probs = probs.to(dtype=value_states.dtype)
 
         att_output = torch.matmul(probs, value_states.permute(0, 2, 1, 3))
         att_output = att_output.permute(0, 2, 1, 3)
-        att_output = att_output.reshape(
-            batch_size, -1, num_key_value_heads * num_key_value_groups * head_dim
-        )
+        att_output = att_output.reshape(batch_size, -1, num_key_value_heads * num_key_value_groups * head_dim)
 
         return att_output, probs
 
 
-__all__ = ["HyDualTowerConfig", "HyDualTower"]
+__all__ = ["HyDualTower", "HyDualTowerConfig"]

@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 availability: open_source
 checkpoints:
 - MeiGen-AI/Infinite-World
@@ -25,6 +25,7 @@ official_sources:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
     url: https://github.com/MeiGen-AI/Infinite-World
+    revision: 1e8fc49ba7dc0f928c966c49c31fda9394c045d3
   huggingface:
   - confirmed_by: https://huggingface.co/api/models/MeiGen-AI/Infinite-World
     repo_id: MeiGen-AI/Infinite-World
@@ -52,12 +53,12 @@ docs:
   publisher: Meituan (MeiGen-AI)
   publisher_kind: company
   publisher_zh: 美团（MeiGen-AI）
-  overview: 'Infinite-World is MeiGen-AI''s long-horizon world video model: from one image it navigates and extends a world over long durations. In this catalog it is verified — real GPU inference produced a non-empty long-horizon world video artifact with preview metadata through the Studio workspace job path, using the official image-conditioned navigation demo settings.'
-  overview_zh: Infinite-World 是美团 MeiGen-AI 的长时程世界视频模型：从一张图出发，长时间地在世界中导航与扩展。本 catalog 中它已验证——真实 GPU 推理经 Studio workspace 任务路径、按官方图像条件导航 demo 设置，产出非空的长时程世界视频产物与预览元数据。
-  architecture: The in-tree runtime resolves local or Hugging Face checkpoint layouts without relying on an external repository at inference time. Architecture internals beyond the recorded structure are not stored in this repository.
-  architecture_zh: 树内运行时可解析本地或 Hugging Face checkpoint 布局，推理时不依赖外部仓库。除已记录结构外的架构内部细节仓库未存。
-  usage_notes: The profile matches the official local/Hugging Face checkpoint layout — start from the official image-conditioned demo settings that were verified.
-  usage_notes_zh: 档案匹配官方的本地/Hugging Face checkpoint 布局——请从已验证的官方图像条件 demo 设置出发。
+  overview: "Infinite-World is MeiGen-AI's long-horizon world video model: from one image it navigates and extends a world over long durations. Validated on GPU with the official image-conditioned navigation demo settings: the pipeline produces a long-horizon world video with preview metadata."
+  overview_zh: Infinite-World 是美团 MeiGen-AI 的长时程世界视频模型：从一张图出发，长时间地在世界中导航与扩展。已在 GPU 上按官方图像条件导航 demo 设置验证：pipeline 生成长时程世界视频及预览元数据。
+  architecture: WorldFoundry runs Infinite-World in-tree from either a local or a Hugging Face checkpoint layout; inference does not need an external source checkout.
+  architecture_zh: WorldFoundry 在树内运行 Infinite-World，可使用本地或 Hugging Face checkpoint 布局；推理不需要外部源码检出。
+  usage_notes: Stage the checkpoint in the official local/Hugging Face layout and start from the official image-conditioned navigation demo settings.
+  usage_notes_zh: 按官方本地/Hugging Face 布局就位 checkpoint，并从官方图像条件导航 demo 设置出发。
   limitations:
   - Long-horizon quality naturally drifts; validate outputs for your duration targets.
   limitations_zh:

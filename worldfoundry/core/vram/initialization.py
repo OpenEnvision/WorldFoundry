@@ -11,6 +11,7 @@ contexts across threads.
 """
 
 from contextlib import contextmanager
+from typing import Any, cast
 
 import torch
 
@@ -19,8 +20,11 @@ import torch
 # ──────────────────────────────────────────────────────────────────────────
 
 
+_META_DEVICE = torch.device("meta")
+
+
 @contextmanager
-def init_weights_on_device(device=torch.device("meta"), include_buffers: bool = False):
+def init_weights_on_device(device=_META_DEVICE, include_buffers: bool = False):
     """Temporarily redirect newly registered module weights to one device.
 
     Args:
@@ -38,7 +42,7 @@ def init_weights_on_device(device=torch.device("meta"), include_buffers: bool = 
         intended to overlap across threads.
     """
     old_register_parameter = torch.nn.Module.register_parameter
-    old_register_buffer = torch.nn.Module.register_buffer if include_buffers else None
+    old_register_buffer = torch.nn.Module.register_buffer
 
     def register_empty_parameter(module, name, param):
         """Register then move so the real initializer never allocates on the default device.
@@ -77,22 +81,24 @@ def init_weights_on_device(device=torch.device("meta"), include_buffers: bool = 
     if include_buffers:
         patched_constructors = {name: getattr(torch, name) for name in ("empty", "zeros", "ones", "full")}
 
+    # The replacements forward to the captured methods, so they keep nn.Module's calling convention.
+    module_class = cast(Any, torch.nn.Module)
     try:
-        torch.nn.Module.register_parameter = register_empty_parameter
+        module_class.register_parameter = register_empty_parameter
         if include_buffers:
-            torch.nn.Module.register_buffer = register_empty_buffer
+            module_class.register_buffer = register_empty_buffer
             for name in patched_constructors:
                 setattr(torch, name, patch_tensor_constructor(getattr(torch, name)))
         yield
     finally:
         torch.nn.Module.register_parameter = old_register_parameter
-        if include_buffers and old_register_buffer is not None:
+        if include_buffers:
             torch.nn.Module.register_buffer = old_register_buffer
             for name, old_fn in patched_constructors.items():
                 setattr(torch, name, old_fn)
 
 
-def skip_model_initialization(device=torch.device("meta")):
+def skip_model_initialization(device=_META_DEVICE):
     """Return an allocation-skipping context for constructing checkpoint-backed models."""
     return init_weights_on_device(device=device)
 

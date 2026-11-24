@@ -10,7 +10,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from importlib.metadata import entry_points
 
-from worldfoundry.base_models.diffusion_model.models.encoders.kandinsky6.beautifier.base import NullBeautifier, PromptBeautifier
+from worldfoundry.base_models.diffusion_model.models.encoders.kandinsky6.beautifier.base import (
+    NullBeautifier,
+    PromptBeautifier,
+)
 from worldfoundry.base_models.diffusion_model.models.encoders.kandinsky6.beautifier.qwen25 import Qwen25Beautifier
 
 __all__ = (

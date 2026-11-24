@@ -1,4 +1,3 @@
-schema_version: 2
 id: kandinsky6-lite-distill
 name: Kandinsky 6.0 lite-distill
 family: Kandinsky6
@@ -28,7 +27,7 @@ checkpoints:
     revision: e056a84f34d9617e86b3ae47c792fe626cbe53f8
 pipeline_binding: kandinsky6-lite-distill
 runtime_profile: runtime-profile:kandinsky6-lite-distill
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 integration:
   status: integrated
   runtime_profile: kandinsky6-lite-distill

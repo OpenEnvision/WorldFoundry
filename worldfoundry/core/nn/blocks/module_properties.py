@@ -10,18 +10,32 @@ Not this module:
 
 Public surface:
 
+- :func:`get_parameter_dtype` — first parameter/buffer dtype, or ``None``.
 - :class:`ModuleDeviceDtypeMixin` — ``.device`` / ``.dtype`` from the
   first parameter, else the first buffer.
 """
 
 from __future__ import annotations
 
-import torch
+from typing import cast
 
+import torch
+from torch import nn
 
 # ──────────────────────────────────────────────────────────────────────────
 # First-tensor probe — meta / DiskMap modules still expose a reference
 # ──────────────────────────────────────────────────────────────────────────
+
+
+def get_parameter_dtype(module: nn.Module) -> torch.dtype | None:
+    """Return the first parameter dtype, then first buffer dtype, or None for a tensor-free module."""
+    parameters = tuple(module.parameters())
+    if parameters:
+        return parameters[0].dtype
+    buffers = tuple(module.buffers())
+    if buffers:
+        return buffers[0].dtype
+    return None
 
 
 class ModuleDeviceDtypeMixin:
@@ -38,9 +52,10 @@ class ModuleDeviceDtypeMixin:
             RuntimeError: the mixed-in module owns neither (empty / fully offloaded).
         """
 
-        reference = next(getattr(self, "parameters")(), None)
+        module = cast(nn.Module, self)
+        reference = next(module.parameters(), None)
         if reference is None:
-            reference = next(getattr(self, "buffers")(), None)
+            reference = next(module.buffers(), None)
         if reference is None:
             raise RuntimeError(f"{type(self).__name__} does not own a parameter or buffer")
         return reference
@@ -58,4 +73,4 @@ class ModuleDeviceDtypeMixin:
         return self._reference_tensor().dtype
 
 
-__all__ = ["ModuleDeviceDtypeMixin"]
+__all__ = ["ModuleDeviceDtypeMixin", "get_parameter_dtype"]

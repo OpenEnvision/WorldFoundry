@@ -10,11 +10,11 @@ import torch
 import torch.nn as nn
 from timm.layers import trunc_normal_
 
-from mmaudio.ext.synchformer import vit_helper
+from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.ext.synchformer import vit_helper
 
 
 class VisionTransformer(nn.Module):
-    """ Vision Transformer with support for patch or hybrid CNN input stage """
+    """Vision Transformer with support for patch or hybrid CNN input stage"""
 
     def __init__(self, cfg):
         super().__init__()
@@ -43,20 +43,20 @@ class VisionTransformer(nn.Module):
         self.cfg = cfg
 
         # Patch Embedding
-        self.patch_embed = vit_helper.PatchEmbed(img_size=224,
-                                                 patch_size=self.patch_size,
-                                                 in_chans=self.in_chans,
-                                                 embed_dim=self.embed_dim)
+        self.patch_embed = vit_helper.PatchEmbed(
+            img_size=224, patch_size=self.patch_size, in_chans=self.in_chans, embed_dim=self.embed_dim
+        )
 
         # 3D Patch Embedding
-        self.patch_embed_3d = vit_helper.PatchEmbed3D(img_size=self.img_size,
-                                                      temporal_resolution=self.temporal_resolution,
-                                                      patch_size=self.patch_size,
-                                                      in_chans=self.in_chans,
-                                                      embed_dim=self.embed_dim,
-                                                      z_block_size=self.cfg.VIT.PATCH_SIZE_TEMP)
-        self.patch_embed_3d.proj.weight.data = torch.zeros_like(
-            self.patch_embed_3d.proj.weight.data)
+        self.patch_embed_3d = vit_helper.PatchEmbed3D(
+            img_size=self.img_size,
+            temporal_resolution=self.temporal_resolution,
+            patch_size=self.patch_size,
+            in_chans=self.in_chans,
+            embed_dim=self.embed_dim,
+            z_block_size=self.cfg.VIT.PATCH_SIZE_TEMP,
+        )
+        self.patch_embed_3d.proj.weight.data = torch.zeros_like(self.patch_embed_3d.proj.weight.data)
 
         # Number of patches
         if self.video_input:
@@ -67,87 +67,95 @@ class VisionTransformer(nn.Module):
 
         # CLS token
         self.cls_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
-        trunc_normal_(self.cls_token, std=.02)
+        trunc_normal_(self.cls_token, std=0.02)
 
         # Positional embedding
-        self.pos_embed = nn.Parameter(
-            torch.zeros(1, self.patch_embed.num_patches + 1, self.embed_dim))
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.patch_embed.num_patches + 1, self.embed_dim))
         self.pos_drop = nn.Dropout(p=cfg.VIT.POS_DROPOUT)
-        trunc_normal_(self.pos_embed, std=.02)
+        trunc_normal_(self.pos_embed, std=0.02)
 
         if self.cfg.VIT.POS_EMBED == "joint":
             self.st_embed = nn.Parameter(torch.zeros(1, num_patches + 1, self.embed_dim))
-            trunc_normal_(self.st_embed, std=.02)
+            trunc_normal_(self.st_embed, std=0.02)
         elif self.cfg.VIT.POS_EMBED == "separate":
             self.temp_embed = nn.Parameter(torch.zeros(1, self.temporal_resolution, self.embed_dim))
 
         # Layer Blocks
         dpr = [x.item() for x in torch.linspace(0, self.drop_path_rate, self.depth)]
         if self.cfg.VIT.ATTN_LAYER == "divided":
-            self.blocks = nn.ModuleList([
-                vit_helper.DividedSpaceTimeBlock(
-                    attn_type=cfg.VIT.ATTN_LAYER,
-                    dim=self.embed_dim,
-                    num_heads=self.num_heads,
-                    mlp_ratio=self.mlp_ratio,
-                    qkv_bias=self.qkv_bias,
-                    drop=self.drop_rate,
-                    attn_drop=self.attn_drop_rate,
-                    drop_path=dpr[i],
-                    norm_layer=norm_layer,
-                ) for i in range(self.depth)
-            ])
+            self.blocks = nn.ModuleList(
+                [
+                    vit_helper.DividedSpaceTimeBlock(
+                        attn_type=cfg.VIT.ATTN_LAYER,
+                        dim=self.embed_dim,
+                        num_heads=self.num_heads,
+                        mlp_ratio=self.mlp_ratio,
+                        qkv_bias=self.qkv_bias,
+                        drop=self.drop_rate,
+                        attn_drop=self.attn_drop_rate,
+                        drop_path=dpr[i],
+                        norm_layer=norm_layer,
+                    )
+                    for i in range(self.depth)
+                ]
+            )
         else:
-            self.blocks = nn.ModuleList([
-                vit_helper.Block(attn_type=cfg.VIT.ATTN_LAYER,
-                                 dim=self.embed_dim,
-                                 num_heads=self.num_heads,
-                                 mlp_ratio=self.mlp_ratio,
-                                 qkv_bias=self.qkv_bias,
-                                 drop=self.drop_rate,
-                                 attn_drop=self.attn_drop_rate,
-                                 drop_path=dpr[i],
-                                 norm_layer=norm_layer,
-                                 use_original_code=self.cfg.VIT.USE_ORIGINAL_TRAJ_ATTN_CODE)
-                for i in range(self.depth)
-            ])
+            self.blocks = nn.ModuleList(
+                [
+                    vit_helper.Block(
+                        attn_type=cfg.VIT.ATTN_LAYER,
+                        dim=self.embed_dim,
+                        num_heads=self.num_heads,
+                        mlp_ratio=self.mlp_ratio,
+                        qkv_bias=self.qkv_bias,
+                        drop=self.drop_rate,
+                        attn_drop=self.attn_drop_rate,
+                        drop_path=dpr[i],
+                        norm_layer=norm_layer,
+                        use_original_code=self.cfg.VIT.USE_ORIGINAL_TRAJ_ATTN_CODE,
+                    )
+                    for i in range(self.depth)
+                ]
+            )
         self.norm = norm_layer(self.embed_dim)
 
         # MLP head
         if self.use_mlp:
             hidden_dim = self.embed_dim
-            if self.head_act == 'tanh':
+            if self.head_act == "tanh":
                 # logging.info("Using TanH activation in MLP")
                 act = nn.Tanh()
-            elif self.head_act == 'gelu':
+            elif self.head_act == "gelu":
                 # logging.info("Using GELU activation in MLP")
                 act = nn.GELU()
             else:
                 # logging.info("Using ReLU activation in MLP")
                 act = nn.ReLU()
             self.pre_logits = nn.Sequential(
-                OrderedDict([
-                    ('fc', nn.Linear(self.embed_dim, hidden_dim)),
-                    ('act', act),
-                ]))
+                OrderedDict(
+                    [
+                        ("fc", nn.Linear(self.embed_dim, hidden_dim)),
+                        ("act", act),
+                    ]
+                )
+            )
         else:
             self.pre_logits = nn.Identity()
 
         # Classifier Head
         self.head_drop = nn.Dropout(p=self.head_dropout)
-        if isinstance(self.num_classes, (list, )) and len(self.num_classes) > 1:
+        if isinstance(self.num_classes, (list,)) and len(self.num_classes) > 1:
             for a, i in enumerate(range(len(self.num_classes))):
-                setattr(self, "head%d" % a, nn.Linear(self.embed_dim, self.num_classes[i]))
+                setattr(self, "head%d" % a, nn.Linear(self.embed_dim, self.num_classes[i]))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
         else:
-            self.head = nn.Linear(self.embed_dim,
-                                  self.num_classes) if self.num_classes > 0 else nn.Identity()
+            self.head = nn.Linear(self.embed_dim, self.num_classes) if self.num_classes > 0 else nn.Identity()
 
         # Initialize weights
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
@@ -157,16 +165,16 @@ class VisionTransformer(nn.Module):
     @torch.jit.ignore
     def no_weight_decay(self):
         if self.cfg.VIT.POS_EMBED == "joint":
-            return {'pos_embed', 'cls_token', 'st_embed'}
+            return {"pos_embed", "cls_token", "st_embed"}
         else:
-            return {'pos_embed', 'cls_token', 'temp_embed'}
+            return {"pos_embed", "cls_token", "temp_embed"}
 
     def get_classifier(self):
         return self.head
 
-    def reset_classifier(self, num_classes, global_pool=''):
+    def reset_classifier(self, num_classes, global_pool=""):
         self.num_classes = num_classes
-        self.head = (nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity())
+        self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
     def forward_features(self, x):
         # if self.video_input:
@@ -241,13 +249,15 @@ class VisionTransformer(nn.Module):
         x = self.pos_drop(x)
 
         # Encoding using transformer layers
-        for i, blk in enumerate(self.blocks):
-            x = blk(x,
-                    seq_len=npatch,
-                    num_frames=self.temporal_resolution,
-                    approx=self.cfg.VIT.APPROX_ATTN_TYPE,
-                    num_landmarks=self.cfg.VIT.APPROX_ATTN_DIM,
-                    tok_mask=tok_mask)
+        for _i, blk in enumerate(self.blocks):
+            x = blk(
+                x,
+                seq_len=npatch,
+                num_frames=self.temporal_resolution,
+                approx=self.cfg.VIT.APPROX_ATTN_TYPE,
+                num_landmarks=self.cfg.VIT.APPROX_ATTN_DIM,
+                tok_mask=tok_mask,
+            )
 
         ### v-iashin: I moved it to the forward pass
         # x = self.norm(x)[:, 0]

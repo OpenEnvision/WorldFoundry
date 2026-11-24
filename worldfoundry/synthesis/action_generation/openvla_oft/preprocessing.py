@@ -5,7 +5,7 @@ HuggingFace-style preprocessor definitions for Prismatic VLMs, inheriting from `
 specifies `siglip-224px+7b`.
 """
 
-from typing import Any, ClassVar, List, Optional, Tuple, TypedDict, Union
+from typing import Any, ClassVar, TypedDict
 
 import timm.data
 import torch
@@ -14,6 +14,7 @@ from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 from transformers import PreTrainedTokenizerBase
 from transformers.image_processing_utils import BatchFeature, ImageProcessingMixin
+
 try:
     from transformers.processing_utils import ImagesKwargs, ProcessorMixin
 except ImportError:  # Transformers < 5 does not expose ImagesKwargs.
@@ -21,6 +22,8 @@ except ImportError:  # Transformers < 5 does not expose ImagesKwargs.
 
     class ImagesKwargs(TypedDict, total=False):
         return_tensors: Any
+
+
 from transformers.tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -31,7 +34,7 @@ from transformers.utils import TensorType
 
 
 # === Image Processing ===
-def letterbox_pad_transform(image: Image.Image, padding_fill_value: Tuple[int, int, int]) -> Image.Image:
+def letterbox_pad_transform(image: Image.Image, padding_fill_value: tuple[int, int, int]) -> Image.Image:
     """Given a PIL.Image, pad to square by adding a symmetric border around the height/width."""
     (w, h), max_wh = image.size, max(image.size)
     horizontal_pad, vertical_pad = int((max_wh - w) / 2), int((max_wh - h) / 2)
@@ -41,7 +44,7 @@ def letterbox_pad_transform(image: Image.Image, padding_fill_value: Tuple[int, i
 
 
 class PrismaticImageProcessor(ImageProcessingMixin):
-    model_input_names: ClassVar[List[str]] = ["pixel_values"]
+    model_input_names: ClassVar[list[str]] = ["pixel_values"]
     # Transformers 5's ImageProcessingMixin.from_dict() requires this schema
     # to distinguish loader kwargs from serialized processor attributes.  The
     # attribute is ignored by Transformers 4, so keeping it here is backwards
@@ -52,10 +55,10 @@ class PrismaticImageProcessor(ImageProcessingMixin):
         self,
         use_fused_vision_backbone: bool = False,
         image_resize_strategy: str = "letterbox",
-        input_sizes: Optional[List[Tuple[int, int, int]]] = None,
-        interpolations: Optional[List[str]] = None,
-        means: Optional[List[Tuple[float, float, float]]] = None,
-        stds: Optional[List[Tuple[float, float, float]]] = None,
+        input_sizes: list[tuple[int, int, int]] | None = None,
+        interpolations: list[str] | None = None,
+        means: list[tuple[float, float, float]] | None = None,
+        stds: list[tuple[float, float, float]] | None = None,
         **kwargs: str,
     ) -> None:
         """
@@ -162,8 +165,8 @@ class PrismaticImageProcessor(ImageProcessingMixin):
 
     def preprocess(
         self,
-        images: Union[Image.Image, List[Image.Image]],
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        images: Image.Image | list[Image.Image],
+        return_tensors: str | TensorType | None = None,
         **_: str,
     ) -> BatchFeature:
         """
@@ -182,32 +185,32 @@ class PrismaticImageProcessor(ImageProcessingMixin):
         # Return BatchFeature =>> note that for compatibility, constructor expects Dict[str, np.ndarray], so we convert
         return BatchFeature(data={"pixel_values": pixel_values.float().numpy()}, tensor_type=return_tensors)
 
-    def __call__(self, images: Union[Image.Image, List[Image.Image]], **kwargs) -> BatchFeature:
+    def __call__(self, images: Image.Image | list[Image.Image], **kwargs) -> BatchFeature:
         return self.preprocess(images, **kwargs)
 
 
 # === PrismaticProcessor =>> Wraps both ImageProcessor and Tokenizer ===
 #   =>> https://github.com/huggingface/transformers/blob/main/src/transformers/models/llava/processing_llava.py
 class PrismaticProcessor(ProcessorMixin):
-    attributes: ClassVar[List[str]] = ["image_processor", "tokenizer"]
+    attributes: ClassVar[list[str]] = ["image_processor", "tokenizer"]
     image_processor_class: str = "AutoImageProcessor"
     tokenizer_class: str = "AutoTokenizer"
 
     def __init__(
         self,
-        image_processor: Optional[ImageProcessingMixin] = None,
-        tokenizer: Optional[PreTrainedTokenizerBase] = None,
+        image_processor: ImageProcessingMixin | None = None,
+        tokenizer: PreTrainedTokenizerBase | None = None,
     ) -> None:
         super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        images: Union[Image.Image, List[Image.Image]],
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
+        images: Image.Image | list[Image.Image],
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = TensorType.PYTORCH,
     ) -> BatchFeature:
         """
         Preprocess a given (batch) of text/images for a Prismatic VLM; forwards text to the underlying LLM's tokenizer,
@@ -234,11 +237,11 @@ class PrismaticProcessor(ProcessorMixin):
     # === Tokenizer Dispatch Utilities =>> check `PreTrainedTokenizerBase` for documentation ===
     def batch_decode(
         self,
-        sequences: Union[List[int], List[List[int]], torch.Tensor, Any],  # `Any` = np.ndarray | tf.Tensor
+        sequences: list[int] | list[list[int]] | torch.Tensor | Any,  # `Any` = np.ndarray | tf.Tensor
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         **kwargs: str,
-    ) -> List[str]:
+    ) -> list[str]:
         return self.tokenizer.batch_decode(
             sequences=sequences,
             skip_special_tokens=skip_special_tokens,
@@ -248,9 +251,9 @@ class PrismaticProcessor(ProcessorMixin):
 
     def decode(
         self,
-        token_ids: Union[int, List[int], torch.Tensor, Any],  # `Any` = np.ndarray | tf.Tensor
+        token_ids: int | list[int] | torch.Tensor | Any,  # `Any` = np.ndarray | tf.Tensor
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         **kwargs: str,
     ) -> str:
         return self.tokenizer.decode(
@@ -261,7 +264,7 @@ class PrismaticProcessor(ProcessorMixin):
         )
 
     @property
-    def model_input_names(self) -> List[str]:
+    def model_input_names(self) -> list[str]:
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
 

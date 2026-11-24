@@ -1,55 +1,50 @@
 """Legacy Qwen2.5-VL inference layers required by v2 checkpoint structure."""
 
+from collections.abc import Callable
+from typing import ClassVar
+
 import torch
-from torch import nn
 import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss
-from torch import Tensor, nn
-from typing import List, Optional, Tuple, Union, Callable, Dict, Any
-import math
+from torch import nn
 from transformers import (
     PreTrainedModel,
 )
-from dataclasses import dataclass
-from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLVisionConfig
-from transformers.cache_utils import Cache, SlidingWindowCache, StaticCache, DynamicCache
 from transformers.generation import GenerationMixin
-from transformers.modeling_outputs import (
-    BaseModelOutputWithPast,
+from transformers.modeling_flash_attention_utils import (
+    FlashAttentionKwargs,
+    is_flash_attn_available,
 )
-from transformers.modeling_utils import PreTrainedModel, ALL_ATTENTION_FUNCTIONS
 from transformers.modeling_layers import GradientCheckpointingLayer
+from transformers.modeling_utils import (  # noqa: F811 - Later import provides the binding, as upstream.
+    ALL_ATTENTION_FUNCTIONS,
+    PreTrainedModel,
+)
+from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLVisionConfig
+from transformers.processing_utils import Unpack
 from transformers.utils import (
-    ModelOutput,
     logging,
 )
-from transformers.activations import ACT2FN
-from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs, flash_attn_supports_top_left_mask, is_flash_attn_available
-from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from transformers.processing_utils import Unpack
-import torch.distributed._tensor as dt
 
 if is_flash_attn_available():
-    from flash_attn.layers.rotary import apply_rotary_emb
-    from flash_attn.flash_attn_interface import flash_attn_varlen_func
-    from transformers.modeling_flash_attention_utils import _flash_attention_forward
+    pass
 import transformers.models.qwen2_5_vl.modeling_qwen2_5_vl as hf_qwen25vl
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
-    Qwen2RMSNorm,
-    Qwen2_5_VLMLP,
-    Qwen2_5_VLAttention,
-    Qwen2MLP,
     Qwen2_5_VisionTransformerPretrainedModel,
+    Qwen2_5_VLAttention,
+    Qwen2_5_VLMLP,
     Qwen2_5_VLRotaryEmbedding,
+    Qwen2MLP,
+    Qwen2RMSNorm,
     apply_rotary_pos_emb_vision,
-    eager_attention_forward
+    eager_attention_forward,
 )
-
+from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
+    Qwen2_5_VLForConditionalGeneration as _Qwen2_5_VLForConditionalGeneration,
+)
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLTextModel as _Qwen2_5_VLTextModel,
-    Qwen2_5_VLForConditionalGeneration as _Qwen2_5_VLForConditionalGeneration
 )
+
 logger = logging.get_logger(__name__)
 
 
@@ -72,8 +67,8 @@ class Qwen2_5_VLVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        rotary_pos_emb: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -97,7 +92,11 @@ class Qwen2_5_VLVisionAttention(nn.Module):
             out_fp32_atten = False
             if key_states.dtype == torch.float32:
                 out_fp32_atten = True
-                query_states, key_states, value_states = query_states.to(torch.bfloat16), key_states.to(torch.bfloat16), value_states.to(torch.bfloat16)
+                query_states, key_states, value_states = (
+                    query_states.to(torch.bfloat16),
+                    key_states.to(torch.bfloat16),
+                    value_states.to(torch.bfloat16),
+                )
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -134,7 +133,7 @@ class Qwen2_5_VLVisionAttention(nn.Module):
                     is_causal=False,
                     **kwargs,
                 )[0]
-                for q, k, v in zip(*splits)
+                for q, k, v in zip(*splits, strict=False)
             ]
             attn_output = torch.cat(attn_outputs, dim=1)
 
@@ -155,8 +154,8 @@ class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        rotary_pos_emb: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
         hidden_states = hidden_states + self.attn(
@@ -174,7 +173,7 @@ class Qwen2_5_VLPreTrainedModel(PreTrainedModel):
     config_class = Qwen2_5_VLConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
+    _no_split_modules: ClassVar[list] = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -216,14 +215,14 @@ class Qwen2_5_VLDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        att_output: Optional[torch.Tensor] = None,
-        start: Optional[int] = 0,
-        end: Optional[int] = 0,
+        att_output: torch.Tensor | None = None,
+        start: int | None = 0,
+        end: int | None = 0,
         compute_kqv: bool = False,
         norm_qkv: bool = False,
         output_atten: bool = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -278,7 +277,9 @@ class Qwen2_5_VLDecoderLayer(GradientCheckpointingLayer):
             return out_emb
 
         else:
-            raise ValueError(f"Invaild Operation compute_kqv={compute_kqv} and output_atten={output_atten} with Qwen2_5_VLDecoderLayer in LingBot-VLA")
+            raise ValueError(
+                f"Invaild Operation compute_kqv={compute_kqv} and output_atten={output_atten} with Qwen2_5_VLDecoderLayer in LingBot-VLA"
+            )
 
 
 class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
@@ -306,9 +307,9 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
 
 
 class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys: ClassVar[list] = ["lm_head.weight"]
     config_class = Qwen2_5_VLConfig
-    _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
+    _no_split_modules: ClassVar[list] = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
     get_input_embeddings = _Qwen2_5_VLForConditionalGeneration.get_input_embeddings
     set_input_embeddings = _Qwen2_5_VLForConditionalGeneration.set_input_embeddings
     get_output_embeddings = _Qwen2_5_VLForConditionalGeneration.get_output_embeddings
@@ -317,6 +318,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
     set_decoder = _Qwen2_5_VLForConditionalGeneration.set_decoder
     forward = _Qwen2_5_VLForConditionalGeneration.forward
     prepare_inputs_for_generation = _Qwen2_5_VLForConditionalGeneration.prepare_inputs_for_generation
+
     def __init__(self, config):
         super().__init__(config)
         self.visual = Qwen2_5_VisionTransformerPretrainedModel._from_config(config.vision_config)
@@ -327,7 +329,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
 
         # Initialize weights and apply final processing
         self.post_init()
-
 
 
 def preprcess_grid_thw(self, grid_thw: torch.Tensor):
@@ -353,11 +354,11 @@ def forward_without_grid_thw(
     self,
     hidden_states: torch.Tensor,
     grid_thw: torch.Tensor = None,
-    rotary_pos_emb = None,
-    window_index = None,
-    cu_window_seqlens = None,
-    cu_seqlens = None,
-    **kwargs
+    rotary_pos_emb=None,
+    window_index=None,
+    cu_window_seqlens=None,
+    cu_seqlens=None,
+    **kwargs,
 ) -> torch.Tensor:
     hidden_states = self.patch_embed(hidden_states)
 
@@ -375,10 +376,7 @@ def forward_without_grid_thw(
     position_embeddings = (emb.cos(), emb.sin())
 
     for layer_num, blk in enumerate(self.blocks):
-        if layer_num in self.fullatt_block_indexes:
-            cu_seqlens_now = cu_seqlens
-        else:
-            cu_seqlens_now = cu_window_seqlens
+        cu_seqlens_now = cu_seqlens if layer_num in self.fullatt_block_indexes else cu_window_seqlens
 
         hidden_states = blk(
             hidden_states,

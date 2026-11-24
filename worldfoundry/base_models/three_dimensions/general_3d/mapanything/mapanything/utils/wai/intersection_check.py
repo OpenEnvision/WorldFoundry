@@ -137,14 +137,7 @@ def segment_triangle_intersection_check(
     t = f * (edge2 * q).sum(dim=1)
 
     # Check conditions
-    intersects = (
-        (u >= 0)
-        & (u <= 1)
-        & (v >= 0)
-        & (u + v <= 1)
-        & (t >= epsilon)
-        & (t <= max_lengths)
-    )
+    intersects = (u >= 0) & (u <= 1) & (v >= 0) & (u + v <= 1) & (t >= epsilon) & (t <= max_lengths)
 
     return intersects
 
@@ -165,14 +158,10 @@ def triangle_intersection_check(
     """
     n = triangles1.shape[1]
     start_points1 = rearrange(triangles1, "B N C -> (B N) C")
-    end_points1 = rearrange(
-        triangles1[:, torch.arange(1, n + 1) % n], "B N C -> (B N) C"
-    )
+    end_points1 = rearrange(triangles1[:, torch.arange(1, n + 1) % n], "B N C -> (B N) C")
 
     start_points2 = rearrange(triangles2, "B N C -> (B N) C")
-    end_points2 = rearrange(
-        triangles2[:, torch.arange(1, n + 1) % n], "B N C -> (B N) C"
-    )
+    end_points2 = rearrange(triangles2[:, torch.arange(1, n + 1) % n], "B N C -> (B N) C")
     intersection_1_2 = segment_triangle_intersection_check(
         start_points1, end_points1, repeat(triangles2, "B N C -> (B N2) N C", N2=3)
     )
@@ -219,9 +208,7 @@ def frustum_intersection_check(
 
     # Perform frustum in frustum check if required
     if check_inside:
-        frustum_intersection = frustums_in_frustum_check(
-            frustums=frustums, chunk_size=chunk_size, device=device
-        )
+        frustum_intersection = frustums_in_frustum_check(frustums=frustums, chunk_size=chunk_size, device=device)
     else:
         frustum_intersection = torch.zeros((B, B), dtype=torch.bool, device=device)
 
@@ -363,29 +350,21 @@ def points_in_frustum_check(
         # Split computation into chunks to avoid OOM errors for large batch sizes
         point_plane_direction = []
         for chunk_idx in range(0, frustums.shape[0], chunk_size):
-            chunk_frustum_planes = _frustum_to_planes(
-                frustums[chunk_idx : chunk_idx + chunk_size]
-            )
+            chunk_frustum_planes = _frustum_to_planes(frustums[chunk_idx : chunk_idx + chunk_size])
             # Bx8x4 tensor of plane parameters [a, b, c, d]
             chunk_points = points[chunk_idx : chunk_idx + chunk_size]
             chunk_point_plane_direction = torch.einsum(
                 "bij,bnj->bni", (chunk_frustum_planes[:, :, :-1], chunk_points)
-            ) + repeat(
-                chunk_frustum_planes[:, :, -1], "B P -> B N P", N=chunk_points.shape[1]
-            )  # BxMxN tensor
+            ) + repeat(chunk_frustum_planes[:, :, -1], "B P -> B N P", N=chunk_points.shape[1])  # BxMxN tensor
             point_plane_direction.append(chunk_point_plane_direction.to(device))
         point_plane_direction = torch.cat(point_plane_direction)
     else:
         # Convert frustums to planes
-        frustum_planes = _frustum_to_planes(
-            frustums
-        )  # Bx8x4 tensor of plane parameters [a, b, c, d]
+        frustum_planes = _frustum_to_planes(frustums)  # Bx8x4 tensor of plane parameters [a, b, c, d]
         # Compute dot product between each point and each plane
-        point_plane_direction = torch.einsum(
-            "bij,bnj->bni", (frustum_planes[:, :, :-1], points)
-        ) + repeat(frustum_planes[:, :, -1], "B P -> B N P", N=points.shape[1]).to(
-            device
-        )  # BxMxN tensor
+        point_plane_direction = torch.einsum("bij,bnj->bni", (frustum_planes[:, :, :-1], points)) + repeat(
+            frustum_planes[:, :, -1], "B P -> B N P", N=points.shape[1]
+        ).to(device)  # BxMxN tensor
 
     inside = (point_plane_direction >= 0).all(-1)
     return inside
@@ -430,17 +409,13 @@ def frustums_in_frustum_check(
 
                 # Process a chunk of frustums against another chunk
                 frustums_i = frustums[i:i_end]
-                frustums_j_vertices = frustums[
-                    j:j_end, :1
-                ]  # Just need one vertex to check containment
+                frustums_j_vertices = frustums[j:j_end, :1]  # Just need one vertex to check containment
 
                 # Perform points in frustum check
                 contained = rearrange(
                     points_in_frustum_check(
                         repeat(frustums_i, "B ... -> (B B2) ...", B2=chunk_j_size),
-                        repeat(
-                            frustums_j_vertices, "B ... -> (B2 B) ...", B2=chunk_i_size
-                        ),
+                        repeat(frustums_j_vertices, "B ... -> (B2 B) ...", B2=chunk_i_size),
                     )[:, 0],
                     "(B B2) -> B B2",
                     B=chunk_i_size,
@@ -448,9 +423,7 @@ def frustums_in_frustum_check(
 
                 # Map results back to the full matrix
                 frustum_contained[i:i_end, j:j_end] |= contained
-                frustum_contained[j:j_end, i:i_end] |= contained.transpose(
-                    0, 1
-                )  # Symmetric relation
+                frustum_contained[j:j_end, i:i_end] |= contained.transpose(0, 1)  # Symmetric relation
     else:
         # Perform points in frustum check with a single chunked loop
         frustum_contained = rearrange(

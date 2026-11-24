@@ -3,30 +3,18 @@
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> perception_core -> general_perception -> dinov2 -> utils -> utils.py functionality."""
-
 import logging
 import os
-import random
 import subprocess
 from urllib.parse import urlparse
 
 import numpy as np
 import torch
-from torch import nn
-
 
 logger = logging.getLogger("dinov2")
 
 
 def load_pretrained_weights(model, pretrained_weights, checkpoint_key):
-    """Load pretrained weights.
-
-    Args:
-        model: The model.
-        pretrained_weights: The pretrained weights.
-        checkpoint_key: The checkpoint key.
-    """
     if urlparse(pretrained_weights).scheme:  # If it looks like an URL
         state_dict = torch.hub.load_state_dict_from_url(pretrained_weights, map_location="cpu")
     else:
@@ -39,19 +27,13 @@ def load_pretrained_weights(model, pretrained_weights, checkpoint_key):
     # remove `backbone.` prefix induced by multicrop wrapper
     state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
     msg = model.load_state_dict(state_dict, strict=False)
-    logger.info("Pretrained weights found at {} and loaded with msg: {}".format(pretrained_weights, msg))
+    logger.info(f"Pretrained weights found at {pretrained_weights} and loaded with msg: {msg}")
 
 
 def get_sha():
-    """Get sha."""
     cwd = os.path.dirname(os.path.abspath(__file__))
 
     def _run(command):
-        """Helper function to run.
-
-        Args:
-            command: The command.
-        """
         return subprocess.check_output(command, cwd=cwd).decode("ascii").strip()
 
     sha = "N/A"
@@ -69,24 +51,13 @@ def get_sha():
     return message
 
 
-class CosineScheduler(object):
-    """Cosine scheduler implementation."""
+class CosineScheduler:
     def __init__(self, base_value, final_value, total_iters, warmup_iters=0, start_warmup_value=0, freeze_iters=0):
-        """Init.
-
-        Args:
-            base_value: The base value.
-            final_value: The final value.
-            total_iters: The total iters.
-            warmup_iters: The warmup iters.
-            start_warmup_value: The start warmup value.
-            freeze_iters: The freeze iters.
-        """
         super().__init__()
         self.final_value = final_value
         self.total_iters = total_iters
 
-        freeze_schedule = np.zeros((freeze_iters))
+        freeze_schedule = np.zeros(freeze_iters)
 
         warmup_schedule = np.linspace(start_warmup_value, base_value, warmup_iters)
 
@@ -97,13 +68,7 @@ class CosineScheduler(object):
         assert len(self.schedule) == self.total_iters
 
     def __getitem__(self, it):
-        """Getitem.
-
-        Args:
-            it: The it.
-        """
         if it >= self.total_iters:
             return self.final_value
         else:
             return self.schedule[it]
-

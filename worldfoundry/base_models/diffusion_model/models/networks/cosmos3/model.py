@@ -27,16 +27,21 @@ recipe.  Do not introduce runner logic here.
 """
 
 import math
+import weakref
 from types import SimpleNamespace
+from typing import Any, ClassVar
 
 import torch
 import torch.nn as nn
 
 from worldfoundry.core.attention import rotate_half as _rotate_half
 from worldfoundry.core.attention import scaled_dot_product_attention
+from worldfoundry.core.kernels import silu_and_mul, silu_mul
 from worldfoundry.core.nn import DomainAwareLinear
 from worldfoundry.core.nn.checkpointing.gradient import gradient_checkpoint_forward
 from worldfoundry.core.nn.diffusion.timestep import TimestepEmbedding, Timesteps
+
+from .fused_ops import cosmos3_fa3_attention, fused_residual_add_rmsnorm, fused_rmsnorm_rope_gqa
 
 
 def _module_param_device(module: nn.Module) -> torch.device | None:
@@ -72,65 +77,142 @@ class Cosmos3AttnProcessor:
 
     Projects, normalizes, applies rotary position embeddings, then runs separate causal (understanding) and full
     (generation) attention pathways. The generation pathway cross-attends to both und and gen keys/values.
+
+    Supports SOL-Engine optimizations:
+    - Exact lossless ``cached_und_kv`` reuse (skips 100% of und projections, norms, RoPE, causal attention, and output).
+    - Hopper ``flash_attention_3`` GQA dispatch (32Q/8KV & 64Q/8KV, zero transpose).
+    - Fused ``gen_qkv_proj`` and Triton ``fused_rmsnorm_rope_gqa``.
     """
+
+    def __init__(self, *, attention_backend: str = "torch", use_fused_ops: bool = False) -> None:
+        self.attention_backend = attention_backend
+        self.use_fused_ops = use_fused_ops
+        self.fa3_calls: int = 0
+        self.sdpa_calls: int = 0
+
+    def _run_attn(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        *,
+        causal: bool,
+    ) -> torch.Tensor:
+        if (
+            self.attention_backend == "flash_attention_3"
+            and not torch.is_grad_enabled()
+            and q.is_cuda
+            and q.dtype in {torch.bfloat16, torch.float16}
+            and k.dtype == q.dtype
+            and v.dtype == q.dtype
+        ):
+            if not torch.compiler.is_compiling():
+                self.fa3_calls += 1
+            return cosmos3_fa3_attention(q, k, v, causal=causal)
+        if not torch.compiler.is_compiling():
+            self.sdpa_calls += 1
+        out = scaled_dot_product_attention(
+            q.transpose(0, 1).unsqueeze(0),
+            k.transpose(0, 1).unsqueeze(0),
+            v.transpose(0, 1).unsqueeze(0),
+            is_causal=causal,
+            enable_gqa=True,
+        )
+        return out.squeeze(0).transpose(0, 1).flatten(-2, -1)
+
+    def _project_gen_qkv(
+        self,
+        attn: "Cosmos3PackedMoTAttention",
+        gen_seq: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        q_dim = attn.num_attention_heads * attn.head_dim
+        kv_dim = attn.num_key_value_heads * attn.head_dim
+        if attn.gen_qkv_proj is not None:
+            qkv = attn.gen_qkv_proj(gen_seq)
+            q_gen, k_gen, v_gen = torch.split(qkv, (q_dim, kv_dim, kv_dim), dim=-1)
+            return (
+                q_gen.view(-1, attn.num_attention_heads, attn.head_dim),
+                k_gen.view(-1, attn.num_key_value_heads, attn.head_dim),
+                v_gen.view(-1, attn.num_key_value_heads, attn.head_dim),
+            )
+        q_gen = attn.add_q_proj(gen_seq).view(-1, attn.num_attention_heads, attn.head_dim)
+        k_gen = attn.add_k_proj(gen_seq).view(-1, attn.num_key_value_heads, attn.head_dim)
+        v_gen = attn.add_v_proj(gen_seq).view(-1, attn.num_key_value_heads, attn.head_dim)
+        return q_gen, k_gen, v_gen
 
     def __call__(
         self,
         attn: "Cosmos3PackedMoTAttention",
-        und_seq: torch.Tensor,
+        und_seq: torch.Tensor | None,
         gen_seq: torch.Tensor,
         rotary_emb: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return ``(und_out, gen_out)`` for packed ``[S, C]`` und/gen streams."""
-        # Per-pathway projections
-        q_und = attn.to_q(und_seq).view(-1, attn.num_attention_heads, attn.head_dim)
-        k_und = attn.to_k(und_seq).view(-1, attn.num_key_value_heads, attn.head_dim)
-        v_und = attn.to_v(und_seq).view(-1, attn.num_key_value_heads, attn.head_dim)
-        q_gen = attn.add_q_proj(gen_seq).view(-1, attn.num_attention_heads, attn.head_dim)
-        k_gen = attn.add_k_proj(gen_seq).view(-1, attn.num_key_value_heads, attn.head_dim)
-        v_gen = attn.add_v_proj(gen_seq).view(-1, attn.num_key_value_heads, attn.head_dim)
-
-        q_und = attn.norm_q(q_und)
-        k_und = attn.norm_k(k_und)
-        q_gen = attn.norm_added_q(q_gen)
-        k_gen = attn.norm_added_k(k_gen)
-
-        # Apply rotary position embeddings per pathway
+        *,
+        cached_und_kv: tuple[torch.Tensor, torch.Tensor] | None = None,
+        return_und_kv: bool = False,
+    ) -> (
+        tuple[torch.Tensor | None, torch.Tensor]
+        | tuple[torch.Tensor | None, torch.Tensor, tuple[torch.Tensor, torch.Tensor]]
+    ):
+        """Return ``(und_out, gen_out)`` (plus optional ``(k_und, v_und)``) for packed ``[S, C]`` streams."""
         cos_und, sin_und, cos_gen, sin_gen = rotary_emb
-        cos_und = cos_und.unsqueeze(1)
-        sin_und = sin_und.unsqueeze(1)
-        q_und = q_und * cos_und + _rotate_half(q_und) * sin_und
-        k_und = k_und * cos_und + _rotate_half(k_und) * sin_und
-        cos_gen = cos_gen.unsqueeze(1)
-        sin_gen = sin_gen.unsqueeze(1)
-        q_gen = q_gen * cos_gen + _rotate_half(q_gen) * sin_gen
-        k_gen = k_gen * cos_gen + _rotate_half(k_gen) * sin_gen
 
-        # Causal pathway (understanding): und tokens self-attend with causal masking.
-        causal_out = scaled_dot_product_attention(
-            q_und.transpose(0, 1).unsqueeze(0),
-            k_und.transpose(0, 1).unsqueeze(0),
-            v_und.transpose(0, 1).unsqueeze(0),
-            is_causal=True,
-            enable_gqa=True,
-        )
-        causal_out = causal_out.squeeze(0).transpose(0, 1).flatten(-2, -1)
+        # Understanding pathway: skip completely when static und KV cache is supplied.
+        und_out: torch.Tensor | None
+        if cached_und_kv is not None:
+            k_und, v_und = cached_und_kv
+            und_out = None
+        else:
+            assert und_seq is not None
+            q_und = attn.to_q(und_seq).view(-1, attn.num_attention_heads, attn.head_dim)
+            k_und = attn.to_k(und_seq).view(-1, attn.num_key_value_heads, attn.head_dim)
+            v_und = attn.to_v(und_seq).view(-1, attn.num_key_value_heads, attn.head_dim)
+            if self.use_fused_ops and not torch.is_grad_enabled() and q_und.is_cuda:
+                q_und, k_und = fused_rmsnorm_rope_gqa(
+                    q_und,
+                    k_und,
+                    attn.norm_q.weight,
+                    attn.norm_k.weight,
+                    cos_und,
+                    sin_und,
+                    eps=float(attn.norm_q.eps or 1e-6),
+                )
+            else:
+                q_und = attn.norm_q(q_und)
+                k_und = attn.norm_k(k_und)
+                cos_u = cos_und.unsqueeze(1)
+                sin_u = sin_und.unsqueeze(1)
+                q_und = q_und * cos_u + _rotate_half(q_und) * sin_u
+                k_und = k_und * cos_u + _rotate_half(k_und) * sin_u
+            causal_out = self._run_attn(q_und, k_und, v_und, causal=True)
+            und_out = attn.to_out(causal_out)
 
-        # Full pathway (generation): gen tokens cross-attend to all (und + gen) keys/values.
+        # Generation pathway: project Q/K/V, QK-RMSNorm+RoPE, attend over [und, gen].
+        q_gen, k_gen, v_gen = self._project_gen_qkv(attn, gen_seq)
+        if self.use_fused_ops and not torch.is_grad_enabled() and q_gen.is_cuda:
+            q_gen, k_gen = fused_rmsnorm_rope_gqa(
+                q_gen,
+                k_gen,
+                attn.norm_added_q.weight,
+                attn.norm_added_k.weight,
+                cos_gen,
+                sin_gen,
+                eps=float(attn.norm_added_q.eps or 1e-6),
+            )
+        else:
+            q_gen = attn.norm_added_q(q_gen)
+            k_gen = attn.norm_added_k(k_gen)
+            cos_g = cos_gen.unsqueeze(1)
+            sin_g = sin_gen.unsqueeze(1)
+            q_gen = q_gen * cos_g + _rotate_half(q_gen) * sin_g
+            k_gen = k_gen * cos_g + _rotate_half(k_gen) * sin_g
+
         all_k = torch.cat([k_und, k_gen], dim=0)
         all_v = torch.cat([v_und, v_gen], dim=0)
-        full_out = scaled_dot_product_attention(
-            q_gen.transpose(0, 1).unsqueeze(0),
-            all_k.transpose(0, 1).unsqueeze(0),
-            all_v.transpose(0, 1).unsqueeze(0),
-            is_causal=False,
-            enable_gqa=True,
-        )
-        full_out = full_out.squeeze(0).transpose(0, 1).flatten(-2, -1)
-
-        # Per-pathway output projection
-        und_out = attn.to_out(causal_out)
+        full_out = self._run_attn(q_gen, all_k, all_v, causal=False)
         gen_out = attn.to_add_out(full_out)
+
+        if return_und_kv:
+            return und_out, gen_out, (k_und, v_und)
         return und_out, gen_out
 
 
@@ -177,13 +259,19 @@ class Cosmos3VLTextMLP(nn.Module):
 
     def __init__(self, hidden_size: int, intermediate_size: int):
         super().__init__()
-        self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
-        self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.gate_proj: nn.Module | None = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.up_proj: nn.Module | None = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
+        self.gate_up_proj: nn.Module | None = None
         self.act_fn = nn.SiLU()
 
     def forward(self, x):
         """``down(silu(gate(x)) * up(x))`` on ``[..., hidden]`` tokens."""
+        if self.gate_up_proj is not None:
+            return self.down_proj(silu_and_mul(self.gate_up_proj(x)))
+        assert self.gate_proj is not None and self.up_proj is not None
+        if not self.training and not torch.is_grad_enabled() and x.is_cuda:
+            return self.down_proj(silu_mul(self.gate_proj(x), self.up_proj(x)))
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
@@ -192,7 +280,7 @@ class Cosmos3PackedMoTAttention(nn.Module):
     understanding (causal) and generation (full) token streams."""
 
     _default_processor_cls = Cosmos3AttnProcessor
-    _available_processors = [Cosmos3AttnProcessor]
+    _available_processors: ClassVar[list] = [Cosmos3AttnProcessor]
 
     def __init__(
         self,
@@ -221,9 +309,10 @@ class Cosmos3PackedMoTAttention(nn.Module):
         self.norm_k = nn.RMSNorm(head_dim, eps=rms_norm_eps, elementwise_affine=True)
 
         # Generation pathway
-        self.add_q_proj = nn.Linear(hidden_size, num_attention_heads * head_dim, bias=attention_bias)
-        self.add_k_proj = nn.Linear(hidden_size, num_key_value_heads * head_dim, bias=attention_bias)
-        self.add_v_proj = nn.Linear(hidden_size, num_key_value_heads * head_dim, bias=attention_bias)
+        self.add_q_proj: nn.Module | None = nn.Linear(hidden_size, num_attention_heads * head_dim, bias=attention_bias)
+        self.add_k_proj: nn.Module | None = nn.Linear(hidden_size, num_key_value_heads * head_dim, bias=attention_bias)
+        self.add_v_proj: nn.Module | None = nn.Linear(hidden_size, num_key_value_heads * head_dim, bias=attention_bias)
+        self.gen_qkv_proj: nn.Module | None = None
         self.to_add_out = nn.Linear(num_attention_heads * head_dim, hidden_size, bias=attention_bias)
         self.norm_added_q = nn.RMSNorm(head_dim, eps=rms_norm_eps, elementwise_affine=True)
         self.norm_added_k = nn.RMSNorm(head_dim, eps=rms_norm_eps, elementwise_affine=True)
@@ -234,12 +323,22 @@ class Cosmos3PackedMoTAttention(nn.Module):
 
     def forward(
         self,
-        und_seq: torch.Tensor,
+        und_seq: torch.Tensor | None,
         gen_seq: torch.Tensor,
         rotary_emb: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        *,
+        cached_und_kv: tuple[torch.Tensor, torch.Tensor] | None = None,
+        return_und_kv: bool = False,
+    ):
         """Dispatch packed und/gen sequences to :class:`Cosmos3AttnProcessor`."""
-        return self.processor(self, und_seq, gen_seq, rotary_emb)
+        return self.processor(
+            self,
+            und_seq,
+            gen_seq,
+            rotary_emb,
+            cached_und_kv=cached_und_kv,
+            return_und_kv=return_und_kv,
+        )
 
 
 class Cosmos3VLTextMoTDecoderLayer(nn.Module):
@@ -278,31 +377,94 @@ class Cosmos3VLTextMoTDecoderLayer(nn.Module):
         self.input_layernorm_moe_gen = nn.RMSNorm(hidden_size, eps=rms_norm_eps, elementwise_affine=True)
         self.post_attention_layernorm = nn.RMSNorm(hidden_size, eps=rms_norm_eps, elementwise_affine=True)
         self.post_attention_layernorm_moe_gen = nn.RMSNorm(hidden_size, eps=rms_norm_eps, elementwise_affine=True)
+        self._use_fused_ops: bool = False
+
+    def forward_gen_with_cached_und_kv(
+        self,
+        gen_seq: torch.Tensor,
+        cos_gen: torch.Tensor,
+        sin_gen: torch.Tensor,
+        k_und: torch.Tensor,
+        v_und: torch.Tensor,
+    ) -> torch.Tensor:
+        """Execute ONLY the generation pathway reusing precomputed ``(k_und, v_und)``."""
+        gen_norm = self.input_layernorm_moe_gen(gen_seq)
+        _, gen_attn_out = self.self_attn(
+            None,
+            gen_norm,
+            (cos_gen, sin_gen, cos_gen, sin_gen),
+            cached_und_kv=(k_und, v_und),
+        )
+        if self._use_fused_ops and not torch.is_grad_enabled() and gen_seq.is_cuda:
+            residual_gen, post_norm_gen = fused_residual_add_rmsnorm(
+                gen_seq,
+                gen_attn_out,
+                self.post_attention_layernorm_moe_gen.weight,
+                eps=float(self.post_attention_layernorm_moe_gen.eps or 1e-6),
+            )
+            return residual_gen + self.mlp_moe_gen(post_norm_gen)
+        residual_gen = gen_seq + gen_attn_out
+        mlp_out_gen = self.mlp_moe_gen(self.post_attention_layernorm_moe_gen(residual_gen))
+        return residual_gen + mlp_out_gen
 
     def forward(
         self,
-        und_seq: torch.Tensor,
+        und_seq: torch.Tensor | None,
         gen_seq: torch.Tensor,
         rotary_emb: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        *,
+        cached_und_kv: tuple[torch.Tensor, torch.Tensor] | None = None,
+        return_und_kv: bool = False,
+    ):
         """Pre-norm dual residual: shared attention, then per-pathway SwiGLU MLPs."""
+        if cached_und_kv is not None:
+            _, _, cos_gen, sin_gen = rotary_emb
+            gen_out = self.forward_gen_with_cached_und_kv(gen_seq, cos_gen, sin_gen, cached_und_kv[0], cached_und_kv[1])
+            return None, gen_out
+
+        assert und_seq is not None
         und_norm = self.input_layernorm(und_seq)
         gen_norm = self.input_layernorm_moe_gen(gen_seq)
 
-        und_attn_out, gen_attn_out = self.self_attn(und_norm, gen_norm, rotary_emb)
-        residual_und = und_seq + und_attn_out
-        residual_gen = gen_seq + gen_attn_out
+        attn_res = self.self_attn(und_norm, gen_norm, rotary_emb, return_und_kv=return_und_kv)
+        if return_und_kv:
+            und_attn_out, gen_attn_out, und_kv = attn_res
+        else:
+            und_attn_out, gen_attn_out = attn_res
+            und_kv = None
 
-        mlp_out_und = self.mlp(self.post_attention_layernorm(residual_und))
-        mlp_out_gen = self.mlp_moe_gen(self.post_attention_layernorm_moe_gen(residual_gen))
+        if self._use_fused_ops and not torch.is_grad_enabled() and gen_seq.is_cuda:
+            residual_und, post_norm_und = fused_residual_add_rmsnorm(
+                und_seq,
+                und_attn_out,
+                self.post_attention_layernorm.weight,
+                eps=float(self.post_attention_layernorm.eps or 1e-6),
+            )
+            residual_gen, post_norm_gen = fused_residual_add_rmsnorm(
+                gen_seq,
+                gen_attn_out,
+                self.post_attention_layernorm_moe_gen.weight,
+                eps=float(self.post_attention_layernorm_moe_gen.eps or 1e-6),
+            )
+            und_next = residual_und + self.mlp(post_norm_und)
+            gen_next = residual_gen + self.mlp_moe_gen(post_norm_gen)
+        else:
+            residual_und = und_seq + und_attn_out
+            residual_gen = gen_seq + gen_attn_out
+            mlp_out_und = self.mlp(self.post_attention_layernorm(residual_und))
+            mlp_out_gen = self.mlp_moe_gen(self.post_attention_layernorm_moe_gen(residual_gen))
+            und_next = residual_und + mlp_out_und
+            gen_next = residual_gen + mlp_out_gen
 
-        return residual_und + mlp_out_und, residual_gen + mlp_out_gen
+        if return_und_kv:
+            return und_next, gen_next, und_kv
+        return und_next, gen_next
 
 
 class Cosmos3OmniTransformer(nn.Module):
     """Checkpoint-compatible Cosmos3 inference transformer on WorldFoundry primitives."""
 
-    _no_split_modules = ["Cosmos3VLTextMoTDecoderLayer"]
+    _no_split_modules: ClassVar[list] = ["Cosmos3VLTextMoTDecoderLayer"]
 
     def __init__(
         self,
@@ -404,6 +566,101 @@ class Cosmos3OmniTransformer(nn.Module):
             self.audio_proj_out = nn.Linear(hidden_size, sound_dim, bias=True)
             self.audio_modality_embed = nn.Parameter(torch.zeros(hidden_size))
 
+        # SOL-Engine runtime slots (all opt-in, disabled by default).
+        self._und_static_kv_cache: Any = None
+        self._cosmos3_gen_cache_spec: dict[str, Any] | None = None
+        self._cosmos3_gen_caches: dict[str, Any] = {}
+        self._cosmos3_step_quant_policy: dict[str, Any] | None = None
+        self._cosmos3_piecewise_graph: Any = None
+        self._cosmos3_fa3_replay_calls: int = 0
+        self._cosmos3_fp8_replay_calls: int = 0
+        self._cosmos3_nvfp4_replay_calls: int = 0
+        self._cosmos3_bf16_replay_calls: int = 0
+        self._rotary_cache: list[
+            tuple[
+                weakref.ref[torch.Tensor],
+                int,
+                torch.dtype,
+                torch.device,
+                int,
+                torch.Tensor,
+                torch.Tensor,
+                torch.Tensor,
+            ]
+        ] = []
+
+    def reset_sol_caches(self) -> None:
+        """Clear per-request static und KV, TeaCache/FirstBlock, and rotary caches."""
+        if self._und_static_kv_cache is not None:
+            self._und_static_kv_cache.reset()
+        for cache in self._cosmos3_gen_caches.values():
+            cache.reset()
+        self._cosmos3_gen_caches.clear()
+        self._rotary_cache.clear()
+
+    def _accumulate_gen_tail_replay_telemetry(
+        self,
+        *,
+        hidden_dtype: torch.dtype,
+        precision_tag: str,
+    ) -> None:
+        """Account for FA3 and step-selective quantized linear calls inside a replayed gen-tail CUDA Graph."""
+        from .acceleration import StepSelectiveFloat8Linear, StepSelectiveNVFP4Linear
+
+        low_prec_dtype = hidden_dtype in {torch.bfloat16, torch.float16}
+        fa3_delta = 0
+        fp8_delta = 0
+        nvfp4_delta = 0
+        bf16_delta = 0
+        for layer in self.layers[1:]:
+            attn = getattr(layer, "self_attn", None)
+            if attn is not None:
+                proc = getattr(attn, "processor", None)
+                if (
+                    proc is not None
+                    and getattr(proc, "attention_backend", "torch") == "flash_attention_3"
+                    and low_prec_dtype
+                ):
+                    fa3_delta += 1
+                gen_attn_mods = (
+                    (attn.gen_qkv_proj,)
+                    if getattr(attn, "gen_qkv_proj", None) is not None
+                    else (attn.add_q_proj, attn.add_k_proj, attn.add_v_proj)
+                ) + (attn.to_add_out,)
+                for mod in gen_attn_mods:
+                    if isinstance(mod, StepSelectiveFloat8Linear):
+                        if precision_tag == "fp8" and low_prec_dtype and mod._hardware_eligible:
+                            fp8_delta += 1
+                        else:
+                            bf16_delta += 1
+                    elif isinstance(mod, StepSelectiveNVFP4Linear):
+                        if precision_tag == "nvfp4" and low_prec_dtype and mod._hardware_eligible:
+                            nvfp4_delta += 1
+                        else:
+                            bf16_delta += 1
+            mlp_gen = getattr(layer, "mlp_moe_gen", None)
+            if mlp_gen is not None:
+                gen_mlp_mods = (
+                    (mlp_gen.gate_up_proj,)
+                    if getattr(mlp_gen, "gate_up_proj", None) is not None
+                    else (mlp_gen.gate_proj, mlp_gen.up_proj)
+                ) + (mlp_gen.down_proj,)
+                for mod in gen_mlp_mods:
+                    if isinstance(mod, StepSelectiveFloat8Linear):
+                        if precision_tag == "fp8" and low_prec_dtype and mod._hardware_eligible:
+                            fp8_delta += 1
+                        else:
+                            bf16_delta += 1
+                    elif isinstance(mod, StepSelectiveNVFP4Linear):
+                        if precision_tag == "nvfp4" and low_prec_dtype and mod._hardware_eligible:
+                            nvfp4_delta += 1
+                        else:
+                            bf16_delta += 1
+        self._cosmos3_fa3_replay_calls += fa3_delta
+        self._cosmos3_fp8_replay_calls += fp8_delta
+        self._cosmos3_nvfp4_replay_calls += nvfp4_delta
+        self._cosmos3_bf16_replay_calls += bf16_delta
+
     def set_gradient_checkpointing(self, enable: bool) -> None:
         """Checkpoint each native MoT decoder block during training."""
 
@@ -423,7 +680,7 @@ class Cosmos3OmniTransformer(nn.Module):
         """Scatter-add timestep embeddings onto noisy spatial (or temporal) tokens only."""
         start_noisy_index = 0
         flattened_noisy_frame_indexes: list[torch.Tensor] = []
-        for noisy_indexes_i, token_shape_i in zip(noisy_frame_indexes, token_shapes):
+        for noisy_indexes_i, token_shape_i in zip(noisy_frame_indexes, token_shapes, strict=False):
             spatial_numel_i = math.prod(token_shape_i[1:])
             spatial_indexes_i = torch.arange(spatial_numel_i, device=packed_tokens.device)
             # Broadcast [N, 1] + [spatial_numel_i] → [N, spatial_numel_i]
@@ -476,7 +733,7 @@ class Cosmos3OmniTransformer(nn.Module):
         unpatchified_latents: list[torch.Tensor] = []
         start_idx = 0
         for token_shape, noisy_frame_indexes, original_shape in zip(
-            token_shapes_vision, noisy_frame_indexes_vision, original_latent_shapes
+            token_shapes_vision, noisy_frame_indexes_vision, original_latent_shapes, strict=False
         ):
             t_c = token_shape[0]
             _, h_orig, w_orig = original_shape
@@ -510,7 +767,10 @@ class Cosmos3OmniTransformer(nn.Module):
     ) -> torch.Tensor:
         """List of ``[C, T]`` tensors → packed ``[total_T, C]`` tensor."""
         return torch.cat(
-            [sound[:, : shape[0]].permute(1, 0) for sound, shape in zip(tokens_sound, token_shapes_sound)],
+            [
+                sound[:, : shape[0]].permute(1, 0)
+                for sound, shape in zip(tokens_sound, token_shapes_sound, strict=False)
+            ],
             dim=0,
         )
 
@@ -524,7 +784,7 @@ class Cosmos3OmniTransformer(nn.Module):
         sound_dim = self.config.sound_dim
         unpacked: list[torch.Tensor] = []
         start_idx = 0
-        for shape, noisy_idxs in zip(token_shapes_sound, noisy_frame_indexes_sound):
+        for shape, noisy_idxs in zip(token_shapes_sound, noisy_frame_indexes_sound, strict=False):
             T = shape[0]
             output = torch.zeros((sound_dim, T), device=packed_preds.device, dtype=packed_preds.dtype)
             t_n = len(noisy_idxs)
@@ -543,7 +803,7 @@ class Cosmos3OmniTransformer(nn.Module):
         """List of ``[T, D]`` tensors → packed ``[total_T, D]`` plus per-token domain ids."""
         packed: list[torch.Tensor] = []
         domain_ids: list[torch.Tensor] = []
-        for action, shape, domain_id in zip(tokens_action, token_shapes_action, domain_ids_action):
+        for action, shape, domain_id in zip(tokens_action, token_shapes_action, domain_ids_action, strict=False):
             token_count = shape[0]
             packed.append(action[:token_count])
             domain_ids.append(domain_id.reshape(1).expand(token_count))
@@ -558,7 +818,7 @@ class Cosmos3OmniTransformer(nn.Module):
         """Packed ``[total_noisy_T, D]`` predictions → list of ``[T, D]`` tensors."""
         unpacked: list[torch.Tensor] = []
         start_idx = 0
-        for shape, noisy_idxs in zip(token_shapes_action, noisy_frame_indexes_action):
+        for shape, noisy_idxs in zip(token_shapes_action, noisy_frame_indexes_action, strict=False):
             T = shape[0]
             output = torch.zeros((T, self.action_dim), device=packed_preds.device, dtype=packed_preds.dtype)
             t_n = len(noisy_idxs)
@@ -599,6 +859,11 @@ class Cosmos3OmniTransformer(nn.Module):
         action_timesteps: torch.Tensor | None = None,
         action_noisy_frame_indexes: list[torch.Tensor] | None = None,
         action_domain_ids: list[torch.Tensor] | None = None,
+        *,
+        step_index: int | None = None,
+        total_steps: int | None = None,
+        cache_branch: str = "default",
+        gen_cache: Any = None,
     ) -> tuple[list[torch.Tensor], list[torch.Tensor] | None, list[torch.Tensor] | None]:
         """Run a full denoising-step forward pass.
 
@@ -691,37 +956,318 @@ class Cosmos3OmniTransformer(nn.Module):
                 )
             hidden_states[action_sequence_indexes] = packed_tokens_action
 
-        # Compute rotary embeddings once for the joint sequence, then slice into und/gen halves.
-        cos, sin = self.rotary_emb(
-            position_ids=position_ids.unsqueeze(0) if position_ids.ndim == 1 else position_ids.unsqueeze(1),
-            device=hidden_states.device,
-            dtype=hidden_states.dtype,
-        )
-        # cos, sin: [1, N, head_dim] (1-D pos_ids) or [3, 1, N, head_dim] (mrope pos_ids)
-        cos = cos.squeeze(0)
-        sin = sin.squeeze(0)
+        # Compute (or reuse cached) rotary embeddings once for the joint sequence.
+        cos_sin_hit: tuple[torch.Tensor, torch.Tensor] | None = None
+        if not self.training and not torch.is_grad_enabled():
+            is_inf = position_ids.is_inference()
+            pos_ver = -1 if is_inf else int(position_ids._version)
+            pos_ptr = int(position_ids.data_ptr())
+            for ref, saved_ptr, saved_dtype, saved_dev, saved_ver, pos_snap, saved_cos, saved_sin in self._rotary_cache:
+                if saved_dtype != hidden_states.dtype or saved_dev != hidden_states.device:
+                    continue
+                if (
+                    not is_inf
+                    and saved_ver >= 0
+                    and ref() is position_ids
+                    and saved_ptr == pos_ptr
+                    and saved_ver == pos_ver
+                    and pos_snap.shape == position_ids.shape
+                    and pos_snap.device == position_ids.device
+                ):
+                    cos_sin_hit = (saved_cos, saved_sin)
+                    break
+                if (
+                    pos_snap.shape == position_ids.shape
+                    and pos_snap.dtype == position_ids.dtype
+                    and pos_snap.device == position_ids.device
+                    and torch.equal(pos_snap, position_ids)
+                ):
+                    cos_sin_hit = (saved_cos, saved_sin)
+                    break
+        if cos_sin_hit is not None:
+            cos, sin = cos_sin_hit
+        else:
+            cos, sin = self.rotary_emb(
+                position_ids=position_ids.unsqueeze(0) if position_ids.ndim == 1 else position_ids.unsqueeze(1),
+                device=hidden_states.device,
+                dtype=hidden_states.dtype,
+            )
+            cos = cos.squeeze(0)
+            sin = sin.squeeze(0)
+            if not self.training and not torch.is_grad_enabled():
+                if len(self._rotary_cache) >= 4:
+                    self._rotary_cache.pop(0)
+                pos_ver = -1 if position_ids.is_inference() else int(position_ids._version)
+                self._rotary_cache.append(
+                    (
+                        weakref.ref(position_ids),
+                        int(position_ids.data_ptr()),
+                        hidden_states.dtype,
+                        hidden_states.device,
+                        pos_ver,
+                        position_ids.detach().clone(),
+                        cos.detach(),
+                        sin.detach(),
+                    )
+                )
+
+        # Step-selective quantization toggle (preserves sensitive early/late steps in BF16).
+        precision_tag = "bf16"
+        step_quant_policy = getattr(self, "_cosmos3_step_quant_policy", None)
+        if step_quant_policy is not None and not self.training:
+            from .acceleration import set_cosmos3_step_precision
+
+            start_step = int(step_quant_policy.get("start_step", 0))
+            dense_last = int(step_quant_policy.get("dense_last_steps", 0))
+            if step_index is None:
+                use_lp = True
+            else:
+                use_lp = int(step_index) >= start_step and (
+                    total_steps is None or int(step_index) < max(int(total_steps) - dense_last, 0)
+                )
+            set_cosmos3_step_precision(self, use_low_precision=use_lp)
+            precision_tag = str(step_quant_policy.get("mode", "fp8")) if use_lp else "bf16"
 
         und_seq = hidden_states[:und_len]
         gen_seq = hidden_states[und_len:]
-        rotary_emb = (cos[:und_len], sin[:und_len], cos[und_len:], sin[und_len:])
-        for decoder_layer in self.layers:
-            layer_device = _module_param_device(decoder_layer)
-            und_seq = _to_device(und_seq, layer_device)
-            gen_seq = _to_device(gen_seq, layer_device)
-            rotary_emb = _to_device(rotary_emb, layer_device)
-            und_seq, gen_seq = gradient_checkpoint_forward(
-                decoder_layer,
-                self._enable_gradient_checkpointing and self.training,
-                False,
-                und_seq,
-                gen_seq,
-                rotary_emb,
-            )
+        cos_und, sin_und, cos_gen, sin_gen = cos[:und_len], sin[:und_len], cos[und_len:], sin[und_len:]
+        rotary_emb = (cos_und, sin_und, cos_gen, sin_gen)
+
+        # Resolve per-branch gen-stream cache (TeaCache / FirstBlock) if configured.
+        active_gen_cache = gen_cache
+        if (
+            active_gen_cache is None
+            and self._cosmos3_gen_cache_spec is not None
+            and not self.training
+            and not torch.is_grad_enabled()
+        ):
+            active_gen_cache = self._cosmos3_gen_caches.get(cache_branch)
+            if active_gen_cache is None:
+                from .acceleration import Cosmos3GenStreamCache
+
+                spec = self._cosmos3_gen_cache_spec
+                active_gen_cache = Cosmos3GenStreamCache(
+                    algorithm=spec["algorithm"],
+                    threshold=spec["threshold"],
+                    total_steps=int(total_steps) if total_steps is not None else 35,
+                    warmup_steps=spec["warmup_steps"],
+                    dense_last=spec["dense_last"],
+                    max_consecutive_skips=spec["max_consecutive_skips"],
+                    coefficients=spec["coefficients"],
+                )
+                self._cosmos3_gen_caches[cache_branch] = active_gen_cache
+
+        und_cache = self._und_static_kv_cache if (not self.training and not torch.is_grad_enabled()) else None
+        und_entry = und_cache.lookup(cache_branch, und_seq, cos_und, sin_und) if und_cache is not None else None
         home_device = _module_param_device(self.norm)
-        und_seq = _to_device(und_seq, home_device)
-        gen_seq = _to_device(gen_seq, home_device)
-        und_out = self.norm(und_seq)
-        gen_out = self.norm_moe_gen(gen_seq)
+        piecewise_graph = getattr(self, "_cosmos3_piecewise_graph", None)
+        num_layers = len(self.layers)
+
+        if und_entry is not None:
+            # FAST PATH: 100% lossless static und_seq KV cache HIT — skip ALL und projections/FFN/norms!
+            layer0_device = _module_param_device(self.layers[0])
+            gen_in_0 = _to_device(gen_seq, layer0_device)
+            cos_gen_0 = _to_device(cos_gen, layer0_device)
+            sin_gen_0 = _to_device(sin_gen, layer0_device)
+            k0, v0 = _to_device(und_entry.layer_kv[0], layer0_device)
+            gen_after_0 = self.layers[0].forward_gen_with_cached_und_kv(gen_in_0, cos_gen_0, sin_gen_0, k0, v0)
+            first_block_residual = gen_after_0 - gen_in_0
+
+            if num_layers == 1:
+                gen_seq = gen_after_0
+            else:
+                same_cuda_device = (
+                    piecewise_graph is not None
+                    and gen_after_0.is_cuda
+                    and all(_module_param_device(layer) == layer0_device for layer in self.layers[1:])
+                )
+                seg_name = f"cosmos3_gen_tail:{precision_tag}"
+
+                def _run_gen_tail(hidden_after_0: torch.Tensor) -> torch.Tensor:
+                    if same_cuda_device:
+                        assert piecewise_graph is not None
+                        tail_k = (
+                            und_entry.tail_k
+                            if und_entry.tail_k is not None and und_entry.tail_k.device == layer0_device
+                            else torch.stack([und_entry.layer_kv[i][0] for i in range(1, num_layers)], dim=0).to(
+                                layer0_device
+                            )
+                        )
+                        tail_v = (
+                            und_entry.tail_v
+                            if und_entry.tail_v is not None and und_entry.tail_v.device == layer0_device
+                            else torch.stack([und_entry.layer_kv[i][1] for i in range(1, num_layers)], dim=0).to(
+                                layer0_device
+                            )
+                        )
+
+                        def _tail_segment(
+                            g_in: torch.Tensor,
+                            c_g: torch.Tensor,
+                            s_g: torch.Tensor,
+                            uk_stack: torch.Tensor,
+                            uv_stack: torch.Tensor,
+                        ) -> torch.Tensor:
+                            cur = g_in
+                            for rel_idx in range(num_layers - 1):
+                                cur = self.layers[rel_idx + 1].forward_gen_with_cached_und_kv(
+                                    cur, c_g, s_g, uk_stack[rel_idx], uv_stack[rel_idx]
+                                )
+                            return cur
+
+                        seg_runner = piecewise_graph.get_or_register_segment(seg_name, _tail_segment)
+                        prev_replays = int(seg_runner.stats.get("replay", 0))
+                        prev_captures = int(seg_runner.stats.get("capture", 0))
+                        out_tail = piecewise_graph.run_segment(
+                            seg_name, hidden_after_0, cos_gen_0, sin_gen_0, tail_k, tail_v
+                        )
+                        cur_replays = int(seg_runner.stats.get("replay", 0))
+                        cur_captures = int(seg_runner.stats.get("capture", 0))
+                        if (
+                            cur_replays > prev_replays
+                            and cur_captures == prev_captures
+                            and not torch.compiler.is_compiling()
+                        ):
+                            self._accumulate_gen_tail_replay_telemetry(
+                                hidden_dtype=hidden_after_0.dtype,
+                                precision_tag=precision_tag,
+                            )
+                        return out_tail
+                    cur = hidden_after_0
+                    cur_cg = cos_gen_0
+                    cur_sg = sin_gen_0
+                    for idx in range(1, num_layers):
+                        l_dev = _module_param_device(self.layers[idx])
+                        cur = _to_device(cur, l_dev)
+                        cur_cg = _to_device(cur_cg, l_dev)
+                        cur_sg = _to_device(cur_sg, l_dev)
+                        ki, vi = _to_device(und_entry.layer_kv[idx], l_dev)
+                        cur = self.layers[idx].forward_gen_with_cached_und_kv(cur, cur_cg, cur_sg, ki, vi)
+                    return cur
+
+                if active_gen_cache is not None and step_index is not None:
+                    gen_seq, hit = active_gen_cache.decide_and_run_tail(
+                        step=int(step_index),
+                        total_steps=total_steps,
+                        gen_after_0=gen_after_0,
+                        first_block_residual=first_block_residual,
+                        num_layers=num_layers,
+                        run_tail=_run_gen_tail,
+                    )
+                    if hit and same_cuda_device and piecewise_graph is not None:
+                        piecewise_graph.record_skip(seg_name)
+                else:
+                    gen_seq = _run_gen_tail(gen_after_0)
+
+            und_out = _to_device(und_entry.und_out, home_device)
+            gen_seq = _to_device(gen_seq, home_device)
+            gen_out = self.norm_moe_gen(gen_seq)
+        elif und_cache is not None:
+            # Step 0 / Cache MISS: run full dual-stream, capture exact (k_und, v_und) across all layers & und_out.
+            und_seq_input_ref = und_seq
+            collected_und_kv: list[tuple[torch.Tensor, torch.Tensor]] = []
+            gen_in_0_for_cache: torch.Tensor | None = None
+            gen_after_0_for_cache: torch.Tensor | None = None
+            for idx, decoder_layer in enumerate(self.layers):
+                layer_device = _module_param_device(decoder_layer)
+                und_seq = _to_device(und_seq, layer_device)
+                gen_seq = _to_device(gen_seq, layer_device)
+                rotary_emb = _to_device(rotary_emb, layer_device)
+                if idx == 0:
+                    gen_in_0_for_cache = gen_seq
+                und_seq, gen_seq, und_kv = decoder_layer(
+                    und_seq,
+                    gen_seq,
+                    rotary_emb,
+                    return_und_kv=True,
+                )
+                collected_und_kv.append((_to_device(und_kv[0], home_device), _to_device(und_kv[1], home_device)))
+                if idx == 0:
+                    gen_after_0_for_cache = gen_seq
+            und_seq = _to_device(und_seq, home_device)
+            gen_seq = _to_device(gen_seq, home_device)
+            und_out = self.norm(und_seq)
+            und_cache.store(cache_branch, und_seq_input_ref, cos_und, sin_und, collected_und_kv, und_out)
+            # Record this full dense pass in TeaCache/FirstBlock without ever skipping or keeping stale residuals.
+            if (
+                active_gen_cache is not None
+                and step_index is not None
+                and num_layers > 1
+                and gen_in_0_for_cache is not None
+                and gen_after_0_for_cache is not None
+            ):
+                r0 = gen_after_0_for_cache - gen_in_0_for_cache
+                final_gen_on_0 = _to_device(gen_seq, gen_after_0_for_cache.device)
+                active_gen_cache.record_dense_step(
+                    step=int(step_index),
+                    gen_after_0=gen_after_0_for_cache,
+                    first_block_residual=r0,
+                    gen_final=final_gen_on_0,
+                    num_layers=num_layers,
+                )
+            gen_out = self.norm_moe_gen(gen_seq)
+        elif (
+            active_gen_cache is not None
+            and step_index is not None
+            and num_layers > 1
+            and not self.training
+            and not torch.is_grad_enabled()
+        ):
+            # Dual-stream inference with TeaCache/FirstBlock even when und_static_kv_cache=False.
+            layer0_device = _module_param_device(self.layers[0])
+            und_0 = _to_device(und_seq, layer0_device)
+            gen_in_0 = _to_device(gen_seq, layer0_device)
+            rot_0 = _to_device(rotary_emb, layer0_device)
+            und_after_0, gen_after_0 = self.layers[0](und_0, gen_in_0, rot_0)
+            first_block_residual = gen_after_0 - gen_in_0
+            und_tail_final = und_after_0
+
+            def _run_dual_tail(hidden_after_0: torch.Tensor) -> torch.Tensor:
+                nonlocal und_tail_final
+                cur_u = und_after_0
+                cur_g = hidden_after_0
+                cur_rot = rot_0
+                for idx in range(1, num_layers):
+                    l_dev = _module_param_device(self.layers[idx])
+                    cur_u = _to_device(cur_u, l_dev)
+                    cur_g = _to_device(cur_g, l_dev)
+                    cur_rot = _to_device(cur_rot, l_dev)
+                    cur_u, cur_g = self.layers[idx](cur_u, cur_g, cur_rot)
+                und_tail_final = cur_u
+                return cur_g
+
+            gen_seq, _ = active_gen_cache.decide_and_run_tail(
+                step=int(step_index),
+                total_steps=total_steps,
+                gen_after_0=gen_after_0,
+                first_block_residual=first_block_residual,
+                num_layers=num_layers,
+                run_tail=_run_dual_tail,
+            )
+            und_seq = _to_device(und_tail_final, home_device)
+            gen_seq = _to_device(gen_seq, home_device)
+            und_out = self.norm(und_seq)
+            gen_out = self.norm_moe_gen(gen_seq)
+        else:
+            # Original dual-stream path (training / uncached).
+            for decoder_layer in self.layers:
+                layer_device = _module_param_device(decoder_layer)
+                und_seq = _to_device(und_seq, layer_device)
+                gen_seq = _to_device(gen_seq, layer_device)
+                rotary_emb = _to_device(rotary_emb, layer_device)
+                und_seq, gen_seq = gradient_checkpoint_forward(
+                    decoder_layer,
+                    self._enable_gradient_checkpointing and self.training,
+                    False,
+                    und_seq,
+                    gen_seq,
+                    rotary_emb,
+                )
+            und_seq = _to_device(und_seq, home_device)
+            gen_seq = _to_device(gen_seq, home_device)
+            und_out = self.norm(und_seq)
+            gen_out = self.norm_moe_gen(gen_seq)
+
         last_hidden_state = torch.cat([und_out, gen_out], dim=0)
 
         # Decode vision predictions from the joint hidden state.
@@ -742,7 +1288,7 @@ class Cosmos3OmniTransformer(nn.Module):
         if has_action:
             per_noisy_domain_ids = [
                 domain_id.reshape(1).expand(len(noisy_idxs))
-                for domain_id, noisy_idxs in zip(action_domain_ids, action_noisy_frame_indexes)
+                for domain_id, noisy_idxs in zip(action_domain_ids, action_noisy_frame_indexes, strict=False)
             ]
             per_noisy_domain_ids = torch.cat(per_noisy_domain_ids, dim=0).to(device=last_hidden_state.device)
             preds_action_packed = self.action_proj_out(last_hidden_state[action_mse_loss_indexes], per_noisy_domain_ids)

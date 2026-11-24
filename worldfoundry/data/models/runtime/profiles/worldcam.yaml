@@ -7,6 +7,7 @@ groups:
 - camera_control
 source_repos:
 - url: https://github.com/cvlab-kaist/WorldCam
+  revision: 8e31bf7d5ea2e51e0ba7e4da29f9d9fff8af6dbb
 checkpoints:
 - repo_id: worldcam/worldcam
   role: worldcam_checkpoint

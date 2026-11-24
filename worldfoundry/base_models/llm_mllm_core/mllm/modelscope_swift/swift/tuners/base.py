@@ -1,5 +1,6 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 # Copyright 2023-present the HuggingFace Inc. team.
+import json
 import os
 import re
 import shutil
@@ -9,9 +10,8 @@ from copy import copy
 from functools import partial
 from inspect import Parameter, Signature, signature
 from types import MethodType
-from typing import Dict, List, Literal, Optional, Union
+from typing import Literal, Union
 
-import json
 import torch
 from modelscope import snapshot_download
 from peft.utils import CONFIG_NAME
@@ -19,8 +19,12 @@ from peft.utils.other import SAFETENSORS_WEIGHTS_NAME, WEIGHTS_NAME
 from torch import nn
 from transformers import Trainer
 
-from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.utils.constants import DEFAULT_ADAPTER, SWIFT_TYPE_KEY
+from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.utils.constants import (
+    DEFAULT_ADAPTER,
+    SWIFT_TYPE_KEY,
+)
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.utils.logger import get_logger
+
 from ..utils.torch_utils import get_device_count
 from .mapping import SwiftTuners
 from .peft import PeftConfig, PeftModel, get_peft_model
@@ -40,14 +44,16 @@ class SwiftModel(nn.Module):
         inference_mode (bool, `optional`): Load model at inference mode, default False.
     """
 
-    EXTRA_STATE_DIR = 'extra_states'
+    EXTRA_STATE_DIR = "extra_states"
 
-    def __init__(self,
-                 model: Union[nn.Module, 'SwiftModel'],
-                 config: Union[SwiftConfig, Dict[str, SwiftConfig]],
-                 extra_state_keys: List[str] = None,
-                 inference_mode: bool = False,
-                 **kwargs):
+    def __init__(
+        self,
+        model: Union[nn.Module, "SwiftModel"],
+        config: SwiftConfig | dict[str, SwiftConfig],
+        extra_state_keys: list[str] | None = None,
+        inference_mode: bool = False,
+        **kwargs,
+    ):
         super().__init__()
         self.adapters = {}
         self.active_adapters = set()
@@ -70,9 +76,9 @@ class SwiftModel(nn.Module):
                 if self.adapters[DEFAULT_ADAPTER].model is not None:
                     self.base_model = self.adapters[DEFAULT_ADAPTER].model
             else:
-                logger.warn(f'Adapter {DEFAULT_ADAPTER} has been patched, skip.')
+                logger.warn(f"Adapter {DEFAULT_ADAPTER} has been patched, skip.")
         elif isinstance(config, dict):
-            assert (all(isinstance(c, SwiftConfig) for c in config.values()))
+            assert all(isinstance(c, SwiftConfig) for c in config.values())
             for adapter_name, _config in config.items():
                 if adapter_name not in self.adapters:
                     all_parts = self._deactivate_all_parts()
@@ -83,15 +89,15 @@ class SwiftModel(nn.Module):
                     if self.adapters[adapter_name].model is not None:
                         self.base_model = self.adapters[adapter_name].model
                 else:
-                    logger.warn(f'Adapter {adapter_name} has been patched, skip.')
+                    logger.warn(f"Adapter {adapter_name} has been patched, skip.")
 
         self.extra_state_keys = extra_state_keys or []
-        self.has_additional_modules = any([c.config.has_additional_modules for c in self.adapters.values()])
+        self.has_additional_modules = any([c.config.has_additional_modules for c in self.adapters.values()])  # noqa: C419 - Evaluates every element before testing, as upstream.
 
         def forward(self, *args, **kwargs):
             return self.base_model(*args, **kwargs)
 
-        _parameters = [Parameter('self', Parameter.POSITIONAL_ONLY)]
+        _parameters = [Parameter("self", Parameter.POSITIONAL_ONLY)]
         _parameters += list(signature(self.base_model.forward).parameters.values())
         forward.__signature__ = Signature(_parameters)
         self.forward = MethodType(forward, self)
@@ -122,34 +128,34 @@ class SwiftModel(nn.Module):
                 self.deactivate_adapter(adapter)
         return deactivated
 
-    def load_state_dict(self, state_dict, strict=True, adapter_name: str = None):
+    def load_state_dict(self, state_dict, strict=True, adapter_name: str | None = None):
         if adapter_name is not None:
             output: SwiftOutput = self.adapters[adapter_name]
-            if getattr(output.config, 'modules_to_save', None):
+            if getattr(output.config, "modules_to_save", None):
                 for key, value in copy(state_dict).items():
                     for module_name in output.config.modules_to_save:
                         if module_name in key:
                             state_dict.pop(key)
-                            key = key.replace(module_name, f'{module_name}.modules_to_save.{adapter_name}')
+                            key = key.replace(module_name, f"{module_name}.modules_to_save.{adapter_name}")
                             break
                     state_dict[key] = value
 
             for key, value in copy(state_dict).items():
-                if key.startswith('base_model.model.'):
+                if key.startswith("base_model.model."):
                     state_dict.pop(key, None)
-                    key = key[len('base_model.model.'):]
-                if f'lora_A.{adapter_name}.' not in key and 'lora_A' in key:
+                    key = key[len("base_model.model.") :]
+                if f"lora_A.{adapter_name}." not in key and "lora_A" in key:
                     state_dict.pop(key, None)
-                    key = key.replace('lora_A.', f'lora_A.{adapter_name}.')
-                if f'lora_B.{adapter_name}.' not in key and 'lora_B' in key:
+                    key = key.replace("lora_A.", f"lora_A.{adapter_name}.")
+                if f"lora_B.{adapter_name}." not in key and "lora_B" in key:
                     state_dict.pop(key, None)
-                    key = key.replace('lora_B.', f'lora_B.{adapter_name}.')
-                if f'lora_embedding_A.{adapter_name}.' not in key and 'lora_embedding_A' in key:
+                    key = key.replace("lora_B.", f"lora_B.{adapter_name}.")
+                if f"lora_embedding_A.{adapter_name}." not in key and "lora_embedding_A" in key:
                     state_dict.pop(key, None)
-                    key = key.replace('lora_embedding_A.', f'lora_embedding_A.{adapter_name}.')
-                if f'lora_embedding_B.{adapter_name}.' not in key and 'lora_embedding_B' in key:
+                    key = key.replace("lora_embedding_A.", f"lora_embedding_A.{adapter_name}.")
+                if f"lora_embedding_B.{adapter_name}." not in key and "lora_embedding_B" in key:
                     state_dict.pop(key, None)
-                    key = key.replace('lora_embedding_B.', f'lora_embedding_B.{adapter_name}.')
+                    key = key.replace("lora_embedding_B.", f"lora_embedding_B.{adapter_name}.")
                 state_dict[key] = value
 
             if output.load_state_dict_callback:
@@ -157,16 +163,18 @@ class SwiftModel(nn.Module):
 
         incompatible_keys = self.base_model.load_state_dict(state_dict, False)
         if incompatible_keys and len(incompatible_keys[1]) > 0:
-            logger.error(f'Load state dict with unexpected keys: {incompatible_keys[1]}')
+            logger.error(f"Load state dict with unexpected keys: {incompatible_keys[1]}")
 
-    def state_dict(self,
-                   *args,
-                   destination=None,
-                   prefix='',
-                   keep_vars=False,
-                   adapter_name: str = None,
-                   peft_format: bool = False,
-                   **kwargs):
+    def state_dict(
+        self,
+        *args,
+        destination=None,
+        prefix="",
+        keep_vars=False,
+        adapter_name: str | None = None,
+        peft_format: bool = False,
+        **kwargs,
+    ):
         """
         Args:
             destination (`dict`, `optional`): If provided, the state of module will
@@ -188,43 +196,46 @@ class SwiftModel(nn.Module):
         Returns:
             The state dict to be saved.
         """
-        state_dict = kwargs.get('state_dict')
+        state_dict = kwargs.get("state_dict")
         if state_dict is None:
             state_dict = self.base_model.state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars)
         state_dict = {
-            key[len('base_model.'):] if key.startswith('base_model.') else key: value
+            key[len("base_model.") :] if key.startswith("base_model.") else key: value
             for key, value in state_dict.items()
         }
         if not self.has_additional_modules:
             return state_dict
 
         state_dicts = {}
-        if kwargs.get('save_adapter', True):
+        if kwargs.get("save_adapter", True):
             for name, output in self.adapters.items():
-                if (adapter_name == name or adapter_name is None) and output.config.has_additional_modules:  # noqa
+                if (adapter_name == name or adapter_name is None) and output.config.has_additional_modules:
                     state_dicts.update(output.state_dict_callback(state_dict, name))
                     modules_to_save_names = [
-                        sub_name for sub_name, _ in self.base_model.named_parameters()
-                        if f'modules_to_save.{name}' in sub_name
+                        sub_name
+                        for sub_name, _ in self.base_model.named_parameters()
+                        if f"modules_to_save.{name}" in sub_name
                     ]
                     for module_name in modules_to_save_names:
-                        if f'modules_to_save.{name}' in module_name:
-                            state_dicts[module_name.replace(f'modules_to_save.{name}.', '')] = state_dict[module_name]
-        if kwargs.get('save_extra_states', True):
-            state_dicts.update({
-                k: v
-                for k, v in state_dict.items() if any(
-                    re.fullmatch(extra_key, k) for extra_key in self.extra_state_keys)
-            })
+                        if f"modules_to_save.{name}" in module_name:
+                            state_dicts[module_name.replace(f"modules_to_save.{name}.", "")] = state_dict[module_name]
+        if kwargs.get("save_extra_states", True):
+            state_dicts.update(
+                {
+                    k: v
+                    for k, v in state_dict.items()
+                    if any(re.fullmatch(extra_key, k) for extra_key in self.extra_state_keys)
+                }
+            )
         if peft_format:
             new_state_dict = {}
             for key, value in state_dicts.items():
-                if not key.startswith('base_model.model.'):
-                    key = 'base_model.model.' + key
-                key = key.replace(f'lora_A.{adapter_name}.', 'lora_A.')
-                key = key.replace(f'lora_B.{adapter_name}.', 'lora_B.')
-                key = key.replace(f'lora_embedding_A.{adapter_name}.', 'lora_embedding_A.')
-                key = key.replace(f'lora_embedding_B.{adapter_name}.', 'lora_embedding_B.')
+                if not key.startswith("base_model.model."):
+                    key = "base_model.model." + key
+                key = key.replace(f"lora_A.{adapter_name}.", "lora_A.")
+                key = key.replace(f"lora_B.{adapter_name}.", "lora_B.")
+                key = key.replace(f"lora_embedding_A.{adapter_name}.", "lora_embedding_A.")
+                key = key.replace(f"lora_embedding_B.{adapter_name}.", "lora_embedding_B.")
                 new_state_dict[key] = value
             state_dicts = new_state_dict
         return state_dicts
@@ -234,12 +245,12 @@ class SwiftModel(nn.Module):
         try:
             return super().__getattr__(key)
         except AttributeError:
-            if 'base_model' in dir(self):
+            if "base_model" in dir(self):
                 return getattr(self.base_model, key)
             raise
 
     @staticmethod
-    def load_state_file(path, device: Optional[str] = None):
+    def load_state_file(path, device: str | None = None):
         """Load a state dict file by the input path.
 
         Args:
@@ -249,10 +260,11 @@ class SwiftModel(nn.Module):
             The state dict.
         """
         if device is None:
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            device = "cuda" if torch.cuda.is_available() else "cpu"
         if os.path.exists(os.path.join(path, SAFETENSORS_WEIGHTS_NAME)):
             filename = os.path.join(path, SAFETENSORS_WEIGHTS_NAME)
             from safetensors.torch import load_file as safe_load_file
+
             return safe_load_file(filename, device=device)
         elif os.path.exists(os.path.join(path, WEIGHTS_NAME)):
             filename = os.path.join(path, WEIGHTS_NAME)
@@ -266,41 +278,45 @@ class SwiftModel(nn.Module):
             if output.optimizer_group_callback:
                 param_names, param_group = output.optimizer_group_callback(self.model, **defaults)
                 if param_names and all_param_names & param_names:
-                    raise ValueError('Cannot set one parameter to different param groups')
+                    raise ValueError("Cannot set one parameter to different param groups")
                 if param_names and param_group:
                     all_param_names.update(param_names)
                     param_groups.extend(param_group)
 
         decay_parameters = Trainer.get_decay_parameter_names(None, self.model)
-        param_groups.extend([
-            {
-                'params': [
-                    p for n, p in self.model.named_parameters()
-                    if (n in decay_parameters and n not in all_param_names and p.requires_grad)
-                ],
-                'weight_decay':
-                defaults['weight_decay'],
-            },
-            {
-                'params': [
-                    p for n, p in self.model.named_parameters()
-                    if (n not in decay_parameters and n not in all_param_names and p.requires_grad)
-                ],
-                'weight_decay':
-                0.0,
-            },
-        ])
+        param_groups.extend(
+            [
+                {
+                    "params": [
+                        p
+                        for n, p in self.model.named_parameters()
+                        if (n in decay_parameters and n not in all_param_names and p.requires_grad)
+                    ],
+                    "weight_decay": defaults["weight_decay"],
+                },
+                {
+                    "params": [
+                        p
+                        for n, p in self.model.named_parameters()
+                        if (n not in decay_parameters and n not in all_param_names and p.requires_grad)
+                    ],
+                    "weight_decay": 0.0,
+                },
+            ]
+        )
 
         return param_groups
 
     @classmethod
-    def from_pretrained(cls,
-                        model: Union[nn.Module, 'SwiftModel'],
-                        model_id: str = None,
-                        adapter_name: Union[str, List[str], Dict[str, str]] = None,
-                        inference_mode: bool = True,
-                        revision: str = None,
-                        **kwargs):
+    def from_pretrained(
+        cls,
+        model: Union[nn.Module, "SwiftModel"],
+        model_id: str | None = None,
+        adapter_name: str | list[str] | dict[str, str] | None = None,
+        inference_mode: bool = True,
+        revision: str | None = None,
+        **kwargs,
+    ):
         """Load a set of tuners and corresponding weights by a model_id.
 
         Args:
@@ -322,40 +338,49 @@ class SwiftModel(nn.Module):
         if not os.path.exists(model_dir):
             model_dir = snapshot_download(model_dir, revision=revision)
         if os.path.isfile(model_dir):
-            raise ValueError(f'Please pass in a local dir or a model id, not a local file: {model_dir}')
-        extra_state_keys = kwargs.pop('extra_state_keys', None)
+            raise ValueError(f"Please pass in a local dir or a model id, not a local file: {model_dir}")
+        extra_state_keys = kwargs.pop("extra_state_keys", None)
         if extra_state_keys is None and os.path.isfile(os.path.join(model_dir, cls.EXTRA_STATE_DIR, CONFIG_NAME)):
-            with open(os.path.join(model_dir, cls.EXTRA_STATE_DIR, CONFIG_NAME), 'r', encoding='utf-8') as file:
+            with open(os.path.join(model_dir, cls.EXTRA_STATE_DIR, CONFIG_NAME), encoding="utf-8") as file:
                 _json = json.load(file)
-                extra_state_keys = _json.get('extra_state_keys')
+                extra_state_keys = _json.get("extra_state_keys")
         if adapter_name is None:
             adapter_name = [
-                sub_dir for sub_dir in os.listdir(model_dir)
+                sub_dir
+                for sub_dir in os.listdir(model_dir)
                 if os.path.isfile(os.path.join(model_dir, sub_dir, CONFIG_NAME)) and sub_dir != cls.EXTRA_STATE_DIR
             ]
-        for _name in adapter_name if isinstance(adapter_name,
-                                                list) else [adapter_name] \
-                if isinstance(adapter_name, str) else adapter_name.keys():
+        for _name in (
+            adapter_name
+            if isinstance(adapter_name, list)
+            else [adapter_name]
+            if isinstance(adapter_name, str)
+            else adapter_name.keys()
+        ):
             sub_folder = os.path.join(model_dir, _name)
             config_file = os.path.join(sub_folder, CONFIG_NAME)
 
             if not os.path.isfile(config_file):
-                logger.warning(f'{_name} is not a valid tuner')
+                logger.warning(f"{_name} is not a valid tuner")
                 continue
 
-            with open(config_file, 'r', encoding='utf-8') as file:
+            with open(config_file, encoding="utf-8") as file:
                 json_object = json.load(file)
 
             if SWIFT_TYPE_KEY not in json_object:
-                raise ValueError('Mixed using with peft is not allowed now.')
+                raise ValueError("Mixed using with peft is not allowed now.")
             else:
                 key = _name if not isinstance(adapter_name, dict) else adapter_name[_name]
                 adapters[key] = SwiftConfig.from_pretrained(sub_folder)
 
         self = SwiftModel(model, adapters, extra_state_keys, inference_mode, **kwargs)
-        for _name in adapter_name if isinstance(adapter_name,
-                                                list) else [adapter_name] \
-                if isinstance(adapter_name, str) else adapter_name.keys():
+        for _name in (
+            adapter_name
+            if isinstance(adapter_name, list)
+            else [adapter_name]
+            if isinstance(adapter_name, str)
+            else adapter_name.keys()
+        ):
             _adapter = _name if not isinstance(adapter_name, dict) else adapter_name[_name]
             output: SwiftOutput = self.adapters[_adapter]
             sub_folder = os.path.join(model_dir, _name)
@@ -380,11 +405,11 @@ class SwiftModel(nn.Module):
         config: SwiftConfig,
         adapter_name: str,
     ):
-        assert (hasattr(config, SWIFT_TYPE_KEY))
+        assert hasattr(config, SWIFT_TYPE_KEY)
         from .mapping import SWIFT_MAPPING
 
         adapter_cls = SWIFT_MAPPING[config.swift_type][1]
-        if adapter_cls.has_additional_modules() and not getattr(model, 'model_frozen', False):
+        if adapter_cls.has_additional_modules() and not getattr(model, "model_frozen", False):
             for _, p in model.named_parameters():
                 p.requires_grad = False
             model.model_frozen = True
@@ -395,41 +420,42 @@ class SwiftModel(nn.Module):
         """
         Updates or create the model card.
         """
-        if not os.path.exists(os.path.join(output_dir, 'README.md')):
+        if not os.path.exists(os.path.join(output_dir, "README.md")):
             lines = []
         else:
-            with open(os.path.join(output_dir, 'README.md'), 'r', encoding='utf-8') as f:
+            with open(os.path.join(output_dir, "README.md"), encoding="utf-8") as f:
                 lines = f.readlines()
 
         quantization_config = None
-        if hasattr(self.base_model, 'config') and hasattr(self.base_model.config, 'quantization_config'):
-            if hasattr(self.base_model.config.quantization_config, 'to_dict'):
+        if hasattr(self.base_model, "config") and hasattr(self.base_model.config, "quantization_config"):  # noqa: SIM102 - Statement form kept for readability.
+            if hasattr(self.base_model.config.quantization_config, "to_dict"):
                 quantization_config = self.base_model.config.quantization_config.to_dict()
-        training_config_text = ''
+        training_config_text = ""
         # Adds quantization information if it was used
         if quantization_config is not None:
-            training_config_text += '\nThe following `bitsandbytes` quantization config was used during training:\n'
-            training_config_text += '\n'.join([f'- {name}: {value}' for name, value in quantization_config.items()])
-            training_config_text += '\n'
+            training_config_text += "\nThe following `bitsandbytes` quantization config was used during training:\n"
+            training_config_text += "\n".join([f"- {name}: {value}" for name, value in quantization_config.items()])
+            training_config_text += "\n"
 
-        training_procedure_heading = '## Training procedure\n'
+        training_procedure_heading = "## Training procedure\n"
         if training_procedure_heading in lines:
             lines.insert(lines.index(training_procedure_heading) + 2, training_config_text)
         else:
-            lines.append(f'{training_procedure_heading}\n{training_config_text}')
+            lines.append(f"{training_procedure_heading}\n{training_config_text}")
 
-        framework_block_heading = '### Framework versions\n'
+        framework_block_heading = "### Framework versions\n"
         from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.version import __version__
-        if framework_block_heading in lines:
-            lines.insert(lines.index(framework_block_heading) + 2, f'- SWIFT {__version__}\n')
-        else:
-            lines.append(f'{framework_block_heading}\n\n- SWIFT {__version__}\n')
 
-        base_model_heading = '### Base model information\n'
-        lines.append(f'{base_model_heading}\n\n- BaseModel Class {self.base_model.__class__.__name__}\n')
+        if framework_block_heading in lines:
+            lines.insert(lines.index(framework_block_heading) + 2, f"- SWIFT {__version__}\n")
+        else:
+            lines.append(f"{framework_block_heading}\n\n- SWIFT {__version__}\n")
+
+        base_model_heading = "### Base model information\n"
+        lines.append(f"{base_model_heading}\n\n- BaseModel Class {self.base_model.__class__.__name__}\n")
 
         # write the lines back to README.md
-        with open(os.path.join(output_dir, 'README.md'), 'w', encoding='utf-8') as f:
+        with open(os.path.join(output_dir, "README.md"), "w", encoding="utf-8") as f:
             f.writelines(lines)
 
     def add_weighted_adapter(
@@ -437,13 +463,13 @@ class SwiftModel(nn.Module):
         adapters,
         weights,
         adapter_name,
-        combination_type='svd',
+        combination_type="svd",
         svd_rank=None,
         svd_clamp=None,
         svd_full_matrices=True,
         svd_driver=None,
         density=None,
-        majority_sign_method: Literal['total', 'frequency'] = 'total',
+        majority_sign_method: Literal["total", "frequency"] = "total",
     ):
         """
         This method adds a new adapter by merging the given adapters with the given weights.
@@ -485,9 +511,11 @@ class SwiftModel(nn.Module):
                 Should be used with [`ties`, `ties_svd`, `dare_ties`, `dare_ties_svd`]
         """
         from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.tuners.lora import LoraModel
-        lora_model = LoraModel(self.model, None, '')
+
+        lora_model = LoraModel(self.model, None, "")
         lora_model.peft_config = {key: value.config for key, value in self.adapters.items()}
         from peft.tuners.lora import LoraLayer
+
         lora_model.targeted_module_names = [
             key for key, value in self.model.named_modules() if isinstance(value, LoraLayer)
         ]
@@ -506,11 +534,17 @@ class SwiftModel(nn.Module):
         )
 
         def state_dict_callback(state_dict, adapter_name, cfg):
-            from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.tuners.lora_layers import lora_state_dict
+            from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.tuners.lora_layers import (
+                lora_state_dict,
+            )
+
             return lora_state_dict(state_dict, adapter_name, cfg.bias)
 
         def mark_trainable_callback(model, cfg):
-            from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.tuners.lora_layers import mark_lora_as_trainable
+            from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.tuners.lora_layers import (
+                mark_lora_as_trainable,
+            )
+
             mark_lora_as_trainable(model, adapter_name, cfg.bias)
 
         cfg = lora_model.peft_config[adapter_name]
@@ -524,11 +558,13 @@ class SwiftModel(nn.Module):
 
         self.set_active_adapters(adapter_name)
 
-    def save_pretrained(self,
-                        save_directory: str,
-                        safe_serialization: bool = False,
-                        adapter_name: Union[str, List[str]] = None,
-                        **kwargs):
+    def save_pretrained(
+        self,
+        save_directory: str,
+        safe_serialization: bool = False,
+        adapter_name: str | list[str] | None = None,
+        **kwargs,
+    ):
         """Save the adapters to a local directory.
 
         Args:
@@ -536,12 +572,12 @@ class SwiftModel(nn.Module):
             safe_serialization (`bool`): Use safe tensors to save the weights, default False.
             adapter_name(`Union[str, List[str]]`): The adapters to be saved, default is `None` to save all.
         """
-        peft_format = kwargs.pop('peft_format', False)
+        peft_format = kwargs.pop("peft_format", False)
         if os.path.isfile(save_directory):
-            raise ValueError(f'Provided path ({save_directory}) should be a directory, not a file')
+            raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")
         os.makedirs(save_directory, exist_ok=True)
         if not self.has_additional_modules:
-            if hasattr(self.base_model, 'save_pretrained'):
+            if hasattr(self.base_model, "save_pretrained"):
                 self.base_model.save_pretrained(save_directory, safe_serialization=safe_serialization)
             else:
                 self._save_state_dict(self.base_model.state_dict(), save_directory, safe_serialization)
@@ -552,9 +588,9 @@ class SwiftModel(nn.Module):
         adapter_names = adapter_name if isinstance(adapter_name, list) or adapter_name is None else [adapter_name]
 
         state_dict_kwargs = {}
-        state_dict = kwargs.get('state_dict')
+        state_dict = kwargs.get("state_dict")
         if state_dict is not None:
-            state_dict_kwargs['state_dict'] = kwargs['state_dict']
+            state_dict_kwargs["state_dict"] = kwargs["state_dict"]
         for adapter_name, output in self.adapters.items():
             if adapter_names is not None and adapter_name not in adapter_names:
                 continue
@@ -562,10 +598,15 @@ class SwiftModel(nn.Module):
             save_to_peft = peft_format and output.config.swift_type == SwiftTuners.LORA
             save_to_peft = save_to_peft and output.config.can_be_saved_to_peft()
             if peft_format and not save_to_peft:
-                logger.error('You are using additional lora parameters, which is not compatible with peft,'
-                             'which is unable to save to peft format.')
-            output_dir = os.path.join(save_directory,
-                                      adapter_name) if adapter_name != 'default' or not save_to_peft else save_directory
+                logger.error(
+                    "You are using additional lora parameters, which is not compatible with peft,"
+                    "which is unable to save to peft format."
+                )
+            output_dir = (
+                os.path.join(save_directory, adapter_name)
+                if adapter_name != "default" or not save_to_peft
+                else save_directory
+            )
 
             if save_to_peft:
                 config = output.config.to_peft_config()
@@ -579,7 +620,8 @@ class SwiftModel(nn.Module):
 
             # save only the trainable weights
             output_state_dict = self.state_dict(
-                adapter_name=adapter_name, save_extra_states=False, peft_format=save_to_peft, **state_dict_kwargs)
+                adapter_name=adapter_name, save_extra_states=False, peft_format=save_to_peft, **state_dict_kwargs
+            )
             os.makedirs(output_dir, exist_ok=True)
             if output_state_dict and output.config.has_additional_modules:
                 self._save_state_dict(output_state_dict, output_dir, safe_serialization)
@@ -588,24 +630,28 @@ class SwiftModel(nn.Module):
         if len(output_state_dict) > 0:
             if self.has_additional_modules:
                 os.makedirs(os.path.join(save_directory, self.EXTRA_STATE_DIR), exist_ok=True)
-                self._save_state_dict(output_state_dict, os.path.join(save_directory, self.EXTRA_STATE_DIR),
-                                      safe_serialization)
+                self._save_state_dict(
+                    output_state_dict, os.path.join(save_directory, self.EXTRA_STATE_DIR), safe_serialization
+                )
                 with open(
-                        os.path.join(save_directory, self.EXTRA_STATE_DIR, CONFIG_NAME), 'w', encoding='utf-8') as file:
-                    json.dump({'extra_state_keys': self.extra_state_keys}, file)
+                    os.path.join(save_directory, self.EXTRA_STATE_DIR, CONFIG_NAME), "w", encoding="utf-8"
+                ) as file:
+                    json.dump({"extra_state_keys": self.extra_state_keys}, file)
             else:
-                logger.error('Full parameter training, save_extra_states will be ignored')
+                logger.error("Full parameter training, save_extra_states will be ignored")
 
-        if not os.path.exists(os.path.join(save_directory, 'configuration.json')):
-            with open(os.path.join(save_directory, 'configuration.json'), 'w', encoding='utf-8') as f:
-                f.write('{}')
+        if not os.path.exists(os.path.join(save_directory, "configuration.json")):
+            with open(os.path.join(save_directory, "configuration.json"), "w", encoding="utf-8") as f:
+                f.write("{}")
 
     @staticmethod
     def _save_state_dict(output_state_dict, save_directory, safe_serialization):
         if safe_serialization:
             from safetensors.torch import save_file as safe_save_file
+
             safe_save_file(
-                output_state_dict, os.path.join(save_directory, SAFETENSORS_WEIGHTS_NAME), metadata={'format': 'pt'})
+                output_state_dict, os.path.join(save_directory, SAFETENSORS_WEIGHTS_NAME), metadata={"format": "pt"}
+            )
         else:
             torch.save(output_state_dict, os.path.join(save_directory, WEIGHTS_NAME))
 
@@ -617,7 +663,7 @@ class SwiftModel(nn.Module):
         finally:
             self.set_active_adapters(adapter_names=self.adapters.keys())
 
-    def set_active_adapters(self, adapter_names: Union[List[str], str], offload: str = None):
+    def set_active_adapters(self, adapter_names: list[str] | str, offload: str | None = None):
         """Set activated adapters
 
         Args:
@@ -631,13 +677,13 @@ class SwiftModel(nn.Module):
             adapter_names = [adapter_names]
 
         adapter_names = set(adapter_names)
-        for adapter_name in (adapter_names & set(self.adapters.keys())):
+        for adapter_name in adapter_names & set(self.adapters.keys()):
             self.activate_adapter(adapter_name)
 
-        for adapter_name in (set(self.adapters.keys()) - adapter_names):
+        for adapter_name in set(self.adapters.keys()) - adapter_names:
             self.deactivate_adapter(adapter_name, offload)
 
-        self.active_adapters = (adapter_names & set(self.adapters.keys()))
+        self.active_adapters = adapter_names & set(self.adapters.keys())
 
     def activate_adapter(self, adapter_name: str):
         """Activate one adapter
@@ -646,15 +692,17 @@ class SwiftModel(nn.Module):
             adapter_name(`str`): The adapter needed to be activated
         """
         if adapter_name not in self.adapters:
-            logger.warning(f'{adapter_name} not in adapters: {self.adapters.keys()}')
+            logger.warning(f"{adapter_name} not in adapters: {self.adapters.keys()}")
             return
 
         from .mapping import SWIFT_MAPPING
-        SWIFT_MAPPING[self.adapters[adapter_name].config.swift_type][1]\
-            .activate_adapter(self.base_model, adapter_name, True)
+
+        SWIFT_MAPPING[self.adapters[adapter_name].config.swift_type][1].activate_adapter(
+            self.base_model, adapter_name, True
+        )
         self.active_adapters = self.active_adapters | {adapter_name}
 
-    def deactivate_adapter(self, adapter_name: str, offload: str = None):
+    def deactivate_adapter(self, adapter_name: str, offload: str | None = None):
         """Deactivate one adapter
 
         Args:
@@ -662,12 +710,14 @@ class SwiftModel(nn.Module):
             offload(`str`): Whether to offload to `cpu` or `meta` device
         """
         if adapter_name not in self.adapters:
-            logger.warning(f'{adapter_name} not in adapters: {self.adapters.keys()}')
+            logger.warning(f"{adapter_name} not in adapters: {self.adapters.keys()}")
             return
 
         from .mapping import SWIFT_MAPPING
-        SWIFT_MAPPING[self.adapters[adapter_name].config.swift_type][1]\
-            .activate_adapter(self.base_model, adapter_name, False, offload=offload)
+
+        SWIFT_MAPPING[self.adapters[adapter_name].config.swift_type][1].activate_adapter(
+            self.base_model, adapter_name, False, offload=offload
+        )
         self.active_adapters = self.active_adapters - {adapter_name}
 
     def get_trainable_parameters(self):
@@ -679,25 +729,28 @@ class SwiftModel(nn.Module):
         for _, param in self.base_model.named_parameters():
             num_params = param.numel()
             # if using DS Zero 3 and the weights are initialized empty
-            if num_params == 0 and hasattr(param, 'ds_numel'):
+            if num_params == 0 and hasattr(param, "ds_numel"):
                 num_params = param.ds_numel
 
             all_param += num_params
             if param.requires_grad:
                 trainable_params += num_params
-        return f'trainable params: {trainable_params:,d} || all params: {all_param:,d} ' \
-               f'|| trainable%: {100 * trainable_params / all_param:.4f}' \
-               '|| cuda memory: ' \
-               f'{sum([torch.cuda.memory_allocated(i) for i in range(get_device_count())])/1024/1024/1024:.2f}' \
-               'GiB.'
+        return (
+            f"trainable params: {trainable_params:,d} || all params: {all_param:,d} "
+            f"|| trainable%: {100 * trainable_params / all_param:.4f}"
+            "|| cuda memory: "
+            f"{sum([torch.cuda.memory_allocated(i) for i in range(get_device_count())]) / 1024 / 1024 / 1024:.2f}"
+            "GiB."
+        )
 
 
 class Swift:
     """The Wrapper to use both Peft and Swift tuners."""
 
     @staticmethod
-    def prepare_model(model: Union[nn.Module, SwiftModel], config: Union[SwiftConfig, PeftConfig,
-                                                                         Dict[str, SwiftConfig]], **kwargs):
+    def prepare_model(
+        model: nn.Module | SwiftModel, config: SwiftConfig | PeftConfig | dict[str, SwiftConfig], **kwargs
+    ):
         """Prepare a model by the input config.
 
         Args:
@@ -716,7 +769,7 @@ class Swift:
             return get_peft_model(model, config, **kwargs)
 
     @staticmethod
-    def merge_and_unload(model: Union[PeftModel, SwiftModel], **kwargs):
+    def merge_and_unload(model: PeftModel | SwiftModel, **kwargs):
         """Merge tuners into the base model and unload them.
 
         Args:
@@ -726,12 +779,14 @@ class Swift:
 
         """
         from peft import PeftModel as _PeftModel
+
         if isinstance(model, _PeftModel):
             model.merge_and_unload()
         elif isinstance(model, SwiftModel):
             from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift import LoRAConfig
             from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.tuners import LoRA
-            adapter_name = kwargs.get('adapter_name', None)
+
+            adapter_name = kwargs.get("adapter_name")
             if isinstance(adapter_name, str):
                 adapter_name = [adapter_name]
             for adapter, output in model.adapters.items():
@@ -740,21 +795,23 @@ class Swift:
 
     @staticmethod
     @contextmanager
-    def grpo_context(model: Union[SwiftModel, torch.nn.Module], processor):
+    def grpo_context(model: SwiftModel | torch.nn.Module, processor):
         # Save the model and temporarily modify model.model_dir.
         if not isinstance(model, SwiftModel):
             yield
             return
         else:
             assert len(model.adapters) == 1
-            adapter = list(model.adapters.values())[0]
+            adapter = list(model.adapters.values())[0]  # noqa: RUF015 - Keeps eager list construction and IndexError.
             if adapter.config.swift_type == SwiftTuners.LLAMAPRO:
                 from modelscope.hub.utils.utils import get_cache_dir
+
                 temp_dir = tempfile.mkdtemp(dir=get_cache_dir())
                 model_dir = model.model_dir
                 from transformers.integrations import is_deepspeed_zero3_enabled
+
                 if is_deepspeed_zero3_enabled():
-                    raise ValueError('DeepSpeed ZeRO3 not supported for LLaMAPro&GRPO currently.')
+                    raise ValueError("DeepSpeed ZeRO3 not supported for LLaMAPro&GRPO currently.")
                 model.base_model.save_pretrained(temp_dir)
                 processor.save_pretrained(temp_dir)
                 model.model_dir = temp_dir
@@ -764,25 +821,27 @@ class Swift:
                 shutil.rmtree(temp_dir)
 
     @staticmethod
-    def merge(model: Union[PeftModel, SwiftModel], **kwargs):
+    def merge(model: PeftModel | SwiftModel, **kwargs):
         """Merge tuners into the base model, will not unload them.
 
         Args:
             model(`Union[PeftModel, SwiftModel]`): The model instance with tuners
         """
-        from .lora_layers import LoraLayer, LoRALayer
+        from .lora_layers import LoRALayer, LoraLayer
+
         for sub_module in model.modules():
             if isinstance(sub_module, (LoraLayer, LoRALayer)):
                 sub_module.merge(**kwargs)
 
     @staticmethod
-    def unmerge(model: Union[PeftModel, SwiftModel], **kwargs):
+    def unmerge(model: PeftModel | SwiftModel, **kwargs):
         """Unmerge tuners from the base model
 
         Args:
             model(`Union[PeftModel, SwiftModel]`): The model instance with tuners
         """
-        from .lora_layers import LoraLayer, LoRALayer
+        from .lora_layers import LoRALayer, LoraLayer
+
         for sub_module in model.modules():
             if isinstance(sub_module, (LoraLayer, LoRALayer)):
                 sub_module.unmerge(**kwargs)
@@ -795,29 +854,31 @@ class Swift:
             ckpt_dir(`str`): Original swift output dir
             output_dir(`str`): Converted peft format dir
         """
-        assert ckpt_dir and output_dir, 'Please pass in valid ckpt_dir and output_dir.'
-        assert os.path.exists(ckpt_dir), f'ckpt_dir: {ckpt_dir} must exists in local disk.'
+        assert ckpt_dir and output_dir, "Please pass in valid ckpt_dir and output_dir."
+        assert os.path.exists(ckpt_dir), f"ckpt_dir: {ckpt_dir} must exists in local disk."
         if os.path.exists(os.path.join(ckpt_dir, SwiftModel.EXTRA_STATE_DIR)):
-            raise AssertionError('Cannot transfer to peft format, because you are additional state dicts.')
+            raise AssertionError("Cannot transfer to peft format, because you are additional state dicts.")
 
         adapter_names = [
             sub_dir for sub_dir in os.listdir(ckpt_dir) if os.path.isfile(os.path.join(ckpt_dir, sub_dir, CONFIG_NAME))
         ]
 
         def has_custom_content(_json):
-            if _json.get('swift_type', _json.get('peft_type')) != SwiftTuners.LORA:
-                logger.warn('Only LoRA can be converted to peft format')
+            if _json.get("swift_type", _json.get("peft_type")) != SwiftTuners.LORA:
+                logger.warn("Only LoRA can be converted to peft format")
                 return True
 
             from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift import LoRAConfig
+
             return not LoRAConfig(**_json).can_be_saved_to_peft()
 
         for adapter in adapter_names:
-            with open(os.path.join(ckpt_dir, adapter, CONFIG_NAME), encoding='utf-8') as f:
+            with open(os.path.join(ckpt_dir, adapter, CONFIG_NAME), encoding="utf-8") as f:
                 _json = json.load(f)
                 if has_custom_content(_json):
-                    raise AssertionError('Cannot transfer to peft format, '
-                                         'because you have special parameters or adapter types.')
+                    raise AssertionError(
+                        "Cannot transfer to peft format, because you have special parameters or adapter types."
+                    )
 
         os.makedirs(output_dir, exist_ok=True)
         if ckpt_dir != output_dir:
@@ -828,35 +889,38 @@ class Swift:
             state_dict = SwiftModel.load_state_file(os.path.join(output_dir, adapter))
             new_state_dict = {}
             for key, value in state_dict.items():
-                if not key.startswith('base_model.model.'):
-                    key = 'base_model.model.' + key
-                key = key.replace(f'lora_A.{adapter}.', 'lora_A.')
-                key = key.replace(f'lora_B.{adapter}.', 'lora_B.')
-                key = key.replace(f'lora_embedding_A.{adapter}.', 'lora_embedding_A.')
-                key = key.replace(f'lora_embedding_B.{adapter}.', 'lora_embedding_B.')
-                key = key.replace(f'lora_magnitude_vector.{adapter}', 'lora_magnitude_vector')
+                if not key.startswith("base_model.model."):
+                    key = "base_model.model." + key
+                key = key.replace(f"lora_A.{adapter}.", "lora_A.")
+                key = key.replace(f"lora_B.{adapter}.", "lora_B.")
+                key = key.replace(f"lora_embedding_A.{adapter}.", "lora_embedding_A.")
+                key = key.replace(f"lora_embedding_B.{adapter}.", "lora_embedding_B.")
+                key = key.replace(f"lora_magnitude_vector.{adapter}", "lora_magnitude_vector")
                 new_state_dict[key] = value
             state_dict = new_state_dict
             SwiftModel._save_state_dict(state_dict, os.path.join(output_dir, adapter), safe_serialization)
             from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift import LoRAConfig
-            with open(os.path.join(output_dir, adapter, CONFIG_NAME), encoding='utf-8') as f:
+
+            with open(os.path.join(output_dir, adapter, CONFIG_NAME), encoding="utf-8") as f:
                 _json = json.load(f)
                 peft_config = LoRAConfig(**_json).to_peft_config()
             peft_config.save_pretrained(os.path.join(output_dir, adapter))
 
-        if 'default' in adapter_names:
-            shutil.move(os.path.join(output_dir, 'default', CONFIG_NAME), os.path.join(output_dir, CONFIG_NAME))
-            state_dict = SwiftModel.load_state_file(os.path.join(output_dir, 'default'))
-            safe_serialization = os.path.isfile(os.path.join(output_dir, 'default', SAFETENSORS_WEIGHTS_NAME))
+        if "default" in adapter_names:
+            shutil.move(os.path.join(output_dir, "default", CONFIG_NAME), os.path.join(output_dir, CONFIG_NAME))
+            state_dict = SwiftModel.load_state_file(os.path.join(output_dir, "default"))
+            safe_serialization = os.path.isfile(os.path.join(output_dir, "default", SAFETENSORS_WEIGHTS_NAME))
             SwiftModel._save_state_dict(state_dict, output_dir, safe_serialization)
-            shutil.rmtree(os.path.join(output_dir, 'default'))
+            shutil.rmtree(os.path.join(output_dir, "default"))
 
     @staticmethod
-    def from_pretrained(model: Union[nn.Module, SwiftModel, PeftModel],
-                        model_id: str = None,
-                        adapter_name: Union[str, List[str], Dict[str, str]] = None,
-                        revision: str = None,
-                        **kwargs):
+    def from_pretrained(
+        model: nn.Module | SwiftModel | PeftModel,
+        model_id: str | None = None,
+        adapter_name: str | list[str] | dict[str, str] | None = None,
+        revision: str | None = None,
+        **kwargs,
+    ):
         """Prepare a model by a model_id in the ModelScope hub or a local dir.
 
         Args:
@@ -873,44 +937,55 @@ class Swift:
             model_id = snapshot_download(model_id, revision=revision)
         is_peft_model = False
         if os.path.exists(os.path.join(model_id, CONFIG_NAME)):
-            with open(os.path.join(model_id, CONFIG_NAME), 'r', encoding='utf-8') as f:
+            with open(os.path.join(model_id, CONFIG_NAME), encoding="utf-8") as f:
                 _json = json.load(f)
             is_peft_model = SWIFT_TYPE_KEY not in _json
 
-        _name = adapter_name if isinstance(
-            adapter_name, str) or adapter_name is None else adapter_name[0] \
-            if isinstance(adapter_name, list) else list(adapter_name.keys())[0]
-        _name = _name or ''
+        _name = (
+            adapter_name
+            if isinstance(adapter_name, str) or adapter_name is None
+            else adapter_name[0]
+            if isinstance(adapter_name, list)
+            else list(adapter_name.keys())[0]  # noqa: RUF015 - Keeps eager list construction and IndexError.
+        )
+        _name = _name or ""
         if os.path.exists(os.path.join(model_id, _name, CONFIG_NAME)):
-            with open(os.path.join(model_id, _name, CONFIG_NAME), 'r', encoding='utf-8') as f:
+            with open(os.path.join(model_id, _name, CONFIG_NAME), encoding="utf-8") as f:
                 _json = json.load(f)
-            is_peft_model = SWIFT_TYPE_KEY not in _json and 'extra_state_keys' not in _json
-        
+            is_peft_model = SWIFT_TYPE_KEY not in _json and "extra_state_keys" not in _json
+
         if is_peft_model:
 
             def load_peft_model(_model, _adapter_name, _new_name=None):
                 if not _new_name:
                     _new_name = _adapter_name
                 import peft
+
                 if not isinstance(_model, peft.PeftModel):
                     return PeftModel.from_pretrained(
                         _model,
-                        os.path.join(model_id, _adapter_name) if _adapter_name != 'default'
-                        and os.path.exists(os.path.join(model_id, _adapter_name)) else model_id,
+                        os.path.join(model_id, _adapter_name)
+                        if _adapter_name != "default" and os.path.exists(os.path.join(model_id, _adapter_name))
+                        else model_id,
                         revision=revision,
                         adapter_name=_new_name,
-                        **kwargs)
+                        **kwargs,
+                    )
                 else:
                     _model.load_adapter(
-                        os.path.join(model_id, _adapter_name) if _adapter_name != 'default'
-                        and os.path.exists(os.path.join(model_id, _adapter_name)) else model_id, _new_name)
+                        os.path.join(model_id, _adapter_name)
+                        if _adapter_name != "default" and os.path.exists(os.path.join(model_id, _adapter_name))
+                        else model_id,
+                        _new_name,
+                    )
                     return _model
 
             if not adapter_name:
-                peft_model = load_peft_model(model, 'default')
+                peft_model = load_peft_model(model, "default")
                 for _dir in os.listdir(model_id):
-                    if os.path.isdir(os.path.join(model_id, _dir)) and \
-                            os.path.exists(os.path.join(model_id, _dir, CONFIG_NAME)):
+                    if os.path.isdir(os.path.join(model_id, _dir)) and os.path.exists(
+                        os.path.join(model_id, _dir, CONFIG_NAME)
+                    ):
                         peft_model = load_peft_model(peft_model, _dir)
             elif isinstance(adapter_name, str):
                 return load_peft_model(model, adapter_name)

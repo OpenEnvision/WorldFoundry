@@ -8,14 +8,12 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 from worldfoundry.base_models.three_dimensions.point_clouds.worldfm.transforms_io import (
-    CameraFrame,
     load_camera_frames,
     load_camera_frames_from_dict,
     scale_K_for_resize,
@@ -24,10 +22,10 @@ from worldfoundry.base_models.three_dimensions.point_clouds.worldfm.transforms_i
 
 @dataclass(frozen=True)
 class ConditionDB:
-    cond_paths: List[str]     # len=V
-    P_views: torch.Tensor     # (V,3,4) float32 on device
+    cond_paths: list[str]  # len=V
+    P_views: torch.Tensor  # (V,3,4) float32 on device
     depth_views: torch.Tensor  # (V,H,W) float32 on device
-    C_views: torch.Tensor     # (V,3) float32 on device
+    C_views: torch.Tensor  # (V,3) float32 on device
     width: int
     height: int
 
@@ -53,6 +51,7 @@ def _P_from_K_c2w(K: np.ndarray, c2w: np.ndarray) -> np.ndarray:
 # build_condition_db: file-based variant (original interface)
 # ---------------------------------------------------------------------------
 
+
 @torch.inference_mode()
 def build_condition_db(
     *,
@@ -69,14 +68,14 @@ def build_condition_db(
     width = int(torch_renderer.width)
     height = int(torch_renderer.height)
 
-    cond_paths: List[str] = []
-    P_list: List[torch.Tensor] = []
-    depth_list: List[torch.Tensor] = []
-    C_list: List[torch.Tensor] = []
+    cond_paths: list[str] = []
+    P_list: list[torch.Tensor] = []
+    depth_list: list[torch.Tensor] = []
+    C_list: list[torch.Tensor] = []
     skipped = 0
 
     t0 = time.perf_counter()
-    with open(transforms_condition_json, "r", encoding="utf-8") as f:
+    with open(transforms_condition_json, encoding="utf-8") as f:
         raw_frames = json.load(f).get("frames", [])
 
     for idx, fr in enumerate(frames):
@@ -112,23 +111,25 @@ def build_condition_db(
 
     if profile:
         torch.cuda.synchronize(device=device)
-        print(f"[CondDB] views={len(cond_paths)} size=({height},{width}) "
-              f"build_ms={(time.perf_counter()-t0)*1000:.2f}")
+        print(
+            f"[CondDB] views={len(cond_paths)} size=({height},{width}) build_ms={(time.perf_counter() - t0) * 1000:.2f}"
+        )
 
-    return ConditionDB(cond_paths=cond_paths, P_views=P_views,
-                       depth_views=depth_views, C_views=C_views,
-                       width=width, height=height)
+    return ConditionDB(
+        cond_paths=cond_paths, P_views=P_views, depth_views=depth_views, C_views=C_views, width=width, height=height
+    )
 
 
 # ---------------------------------------------------------------------------
 # build_condition_db_in_memory: works with in-memory condition images + transforms
 # ---------------------------------------------------------------------------
 
+
 @torch.inference_mode()
 def build_condition_db_in_memory(
     *,
-    condition_images: List[np.ndarray],
-    transforms_dict: Dict,
+    condition_images: list[np.ndarray],
+    transforms_dict: dict,
     torch_renderer,
     device: torch.device,
 ) -> ConditionDB:
@@ -141,9 +142,9 @@ def build_condition_db_in_memory(
     width = int(torch_renderer.width)
     height = int(torch_renderer.height)
 
-    P_list: List[torch.Tensor] = []
-    depth_list: List[torch.Tensor] = []
-    C_list: List[torch.Tensor] = []
+    P_list: list[torch.Tensor] = []
+    depth_list: list[torch.Tensor] = []
+    C_list: list[torch.Tensor] = []
 
     for fr in frames:
         K_use = scale_K_for_resize(fr.K_3x3, src_wh=(fr.width, fr.height), dst_wh=(width, height))
@@ -157,7 +158,8 @@ def build_condition_db_in_memory(
         P_views=torch.stack(P_list),
         depth_views=torch.stack(depth_list),
         C_views=torch.stack(C_list),
-        width=width, height=height,
+        width=width,
+        height=height,
     )
 
 
@@ -165,12 +167,13 @@ def build_condition_db_in_memory(
 # select_best_condition_index
 # ---------------------------------------------------------------------------
 
+
 @torch.inference_mode()
 def select_best_condition_index(
     *,
     depth_cur: torch.Tensor,
-    K_cur: Union[np.ndarray, torch.Tensor],
-    c2w_cur: Union[np.ndarray, torch.Tensor],
+    K_cur: np.ndarray | torch.Tensor,
+    c2w_cur: np.ndarray | torch.Tensor,
     cond_db: ConditionDB,
     sample_grid: int = 10,
     center_grid: int = 15,
@@ -189,7 +192,7 @@ def select_best_condition_index(
 ) -> tuple:
     device = depth_cur.device
     H, W = int(depth_cur.shape[0]), int(depth_cur.shape[1])
-    assert H == cond_db.height and W == cond_db.width
+    assert cond_db.height == H and cond_db.width == W
 
     t0 = time.perf_counter()
 
@@ -274,7 +277,9 @@ def select_best_condition_index(
                 dn = torch.gather(depth_flat, 1, idn)
                 ok_n = dn > 0
                 diff_n = torch.where(ins_n & ok_n, torch.abs(dn - z), torch.full_like(dn, 1e9))
-                diffs.append(diff_n); insides.append(ins_n); oks.append(ok_n)
+                diffs.append(diff_n)
+                insides.append(ins_n)
+                oks.append(ok_n)
         min_abs_diff = torch.stack(diffs, dim=-1).min(dim=-1).values
         inside_any = torch.stack(insides, dim=-1).any(dim=-1)
         depth_ok_any = torch.stack(oks, dim=-1).any(dim=-1)
@@ -313,7 +318,9 @@ def select_best_condition_index(
 
     if profile:
         torch.cuda.synchronize(device=device)
-        print(f"[CondSelect] views={P.shape[0]} samples={samples} best={best} "
-              f"hits={best_hits} ms={(time.perf_counter()-t0)*1000:.2f}")
+        print(
+            f"[CondSelect] views={P.shape[0]} samples={samples} best={best} "
+            f"hits={best_hits} ms={(time.perf_counter() - t0) * 1000:.2f}"
+        )
 
     return best, best_hits, samples

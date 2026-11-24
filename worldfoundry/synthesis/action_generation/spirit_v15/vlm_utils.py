@@ -1,14 +1,14 @@
-# ruff: noqa
 # ==============================================================================
 # Attribution
 # ------------------------------------------------------------------------------
 # Released by Spirit AI Team. Modified by WorldFoundry for inference-only use.
 # ==============================================================================
 
-import torch
-from typing import Optional, Dict, Tuple
 
-SYSTEM_MESSAGE="You are a helpful assistant."
+import torch
+
+SYSTEM_MESSAGE = "You are a helpful assistant."
+
 
 def get_user_prompt(image_placeholders, robot_type, template):
     return template.format(image_placeholders=image_placeholders, robot_type=robot_type)
@@ -32,11 +32,12 @@ def _chat_template_token_ids(tokenizer, messages) -> list[int]:
         encoded = encoded[0]
     return [int(token_id) for token_id in encoded]
 
+
 def preprocess_qwen_visual(
     sources,
     tokenizer,
-    grid_thw_image: Optional[list] = None,
-) -> Dict:
+    grid_thw_image: list | None = None,
+) -> dict:
     grid_thw_image = grid_thw_image or []
     roles = {"human": "user", "gpt": "assistant"}
     visual_replicate_index_image = 0
@@ -60,41 +61,40 @@ def preprocess_qwen_visual(
                 role = conv["from"]
                 content = conv["value"]
             role = roles.get(role, role)
-            if role == "user":
-                if "<image>" in content:
-                    parts = content.split("<image>")
-                    new_parts = []
-                    for i in range(len(parts) - 1):
-                        new_parts.append(parts[i])
-                        if visual_replicate_index_image < len(grid_thw_image):
-                            replacement = (
-                                "<|vision_start|>"
-                                + "<|image_pad|>" * grid_thw_image[visual_replicate_index_image]
-                                + "<|vision_end|>"
-                            )
-                            new_parts.append(replacement)
-                            visual_replicate_index_image += 1
-                    new_parts.append(parts[-1])
-                    content = "".join(new_parts)
+            if role == "user" and "<image>" in content:
+                parts = content.split("<image>")
+                new_parts = []
+                for i in range(len(parts) - 1):
+                    new_parts.append(parts[i])
+                    if visual_replicate_index_image < len(grid_thw_image):
+                        replacement = (
+                            "<|vision_start|>"
+                            + "<|image_pad|>" * grid_thw_image[visual_replicate_index_image]
+                            + "<|vision_end|>"
+                        )
+                        new_parts.append(replacement)
+                        visual_replicate_index_image += 1
+                new_parts.append(parts[-1])
+                content = "".join(new_parts)
             conv = [{"role": role, "content": content}]
             encode_id = _chat_template_token_ids(tokenizer, conv)
             input_id += encode_id
         input_ids.append(input_id)
     input_ids = torch.tensor(input_ids, dtype=torch.long)
     input_ids = input_ids[:, : tokenizer.model_max_length]
-    return dict(input_ids=input_ids)
+    return {"input_ids": input_ids}
 
 
 def get_rope_index_3(
     spatial_merge_size: int = 2,
-    input_ids: Optional[torch.LongTensor] = None,
-    image_grid_thw: Optional[torch.LongTensor] = None,
-    video_grid_thw: Optional[torch.LongTensor] = None,
-    attention_mask: Optional[torch.Tensor] = None,
+    input_ids: torch.LongTensor | None = None,
+    image_grid_thw: torch.LongTensor | None = None,
+    video_grid_thw: torch.LongTensor | None = None,
+    attention_mask: torch.Tensor | None = None,
     image_token_id: int = 151655,
     video_token_id: int = 151656,
     vision_start_token_id: int = 151652,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     if video_grid_thw is not None:
         video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
         video_grid_thw[:, 0] = 1

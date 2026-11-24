@@ -4,8 +4,6 @@ Supported scales: 0.75 (3/4), 1.5 (3/2), 2.0 (2/1), 4.0 (4/1).
 Operates on H/W only; 5-D BCTHW inputs are processed per frame.
 """
 
-from typing import Tuple
-
 import torch
 from einops import rearrange
 
@@ -13,7 +11,7 @@ from worldfoundry.base_models.diffusion_model.models.upsamplers.ltx.blur_downsam
 from worldfoundry.base_models.diffusion_model.models.upsamplers.ltx.pixel_shuffle import PixelShuffleND
 
 
-def _rational_for_scale(scale: float) -> Tuple[int, int]:
+def _rational_for_scale(scale: float) -> tuple[int, int]:
     mapping = {0.75: (3, 4), 1.5: (3, 2), 2.0: (2, 1), 4.0: (4, 1)}
     if float(scale) not in mapping:
         raise ValueError(f"Unsupported scale {scale}. Choose from {list(mapping.keys())}")

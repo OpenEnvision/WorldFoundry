@@ -11,9 +11,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from worldfoundry.core.io.formats.serialization import iter_jsonl, write_jsonl
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
-from worldfoundry.evaluation.tasks.embodied.merge_results import merge_embodied_results
-from worldfoundry.evaluation.tasks.embodied.orchestrator import EmbodiedEvalOrchestrator
+from worldfoundry.evals.api import GenerationRequest, GenerationResult
+from worldfoundry.evals.tasks.embodied.merge_results import merge_embodied_results
+from worldfoundry.evals.tasks.embodied.orchestrator import EmbodiedEvalOrchestrator
 
 
 class EmbodiedExecutionTests(unittest.TestCase):
@@ -81,11 +81,11 @@ class EmbodiedExecutionTests(unittest.TestCase):
             )
             with (
                 patch(
-                    "worldfoundry.evaluation.tasks.embodied.orchestrator.materialize_embodied_rollout_requests",
+                    "worldfoundry.evals.tasks.embodied.orchestrator.materialize_embodied_rollout_requests",
                     return_value=self.requests,
                 ),
                 patch(
-                    "worldfoundry.evaluation.tasks.embodied.orchestrator.build_embodied_closed_loop_runner",
+                    "worldfoundry.evals.tasks.embodied.orchestrator.build_embodied_closed_loop_runner",
                     return_value=runner,
                 ),
             ):
@@ -131,11 +131,11 @@ class EmbodiedExecutionTests(unittest.TestCase):
                 )
                 with (
                     patch(
-                        "worldfoundry.evaluation.tasks.embodied.orchestrator.materialize_embodied_rollout_requests",
+                        "worldfoundry.evals.tasks.embodied.orchestrator.materialize_embodied_rollout_requests",
                         return_value=self.requests,
                     ),
                     patch(
-                        "worldfoundry.evaluation.tasks.embodied.orchestrator.build_embodied_closed_loop_runner",
+                        "worldfoundry.evals.tasks.embodied.orchestrator.build_embodied_closed_loop_runner",
                         return_value=runner,
                     ),
                     self.assertRaises(failure),
@@ -162,11 +162,11 @@ class EmbodiedExecutionTests(unittest.TestCase):
                 )
                 with (
                     patch(
-                        "worldfoundry.evaluation.tasks.embodied.orchestrator.materialize_embodied_rollout_requests",
+                        "worldfoundry.evals.tasks.embodied.orchestrator.materialize_embodied_rollout_requests",
                         return_value=self.requests,
                     ),
                     patch(
-                        "worldfoundry.evaluation.tasks.embodied.orchestrator.build_embodied_closed_loop_runner",
+                        "worldfoundry.evals.tasks.embodied.orchestrator.build_embodied_closed_loop_runner",
                         return_value=runner,
                     ),
                 ):

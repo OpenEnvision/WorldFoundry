@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
+from worldfoundry.core.io.paths import resolve_local_hf_model_path
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
 from worldfoundry.runtime.env import resolve_hfd_root
-from worldfoundry.core.io.paths import resolve_local_hf_model_path
 from worldfoundry.synthesis.visual_generation.lingbot_video import LingBotVideoRuntime
-
 
 _HFD_ROOT = resolve_hfd_root()
 
@@ -76,19 +76,13 @@ class LingBotVideoGenerationPipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "LingBotVideoGenerationPipeline":
+    ) -> LingBotVideoGenerationPipeline:
         options = _options_from(model_path, required_components, kwargs)
         resolved_model_id = str(options.pop("model_id", model_id or cls.MODEL_ID))
-        variant = str(
-            options.pop("variant", options.pop("variant_id", "dense"))
-        ).lower()
+        variant = str(options.pop("variant", options.pop("variant_id", "dense"))).lower()
         if variant not in _CHECKPOINTS:
-            raise ValueError(
-                f"Unsupported LingBot-Video variant {variant!r}; expected dense or moe."
-            )
-        checkpoint_dir = options.pop(
-            "checkpoint_dir", options.pop("model_dir", _CHECKPOINTS[variant])
-        )
+            raise ValueError(f"Unsupported LingBot-Video variant {variant!r}; expected dense or moe.")
+        checkpoint_dir = options.pop("checkpoint_dir", options.pop("model_dir", _CHECKPOINTS[variant]))
         python_executable = options.pop("python_executable", None)
         python_env_dir = options.pop("python_env_dir", options.pop("conda_dir", None))
         if python_executable is None and python_env_dir is not None:
@@ -97,7 +91,6 @@ class LingBotVideoGenerationPipeline(PipelineABC):
             checkpoint_dir=checkpoint_dir,
             device=device,
             python_executable=python_executable,
-            inference_root=options.pop("inference_root", None),
         )
         return cls(runtime, model_id=resolved_model_id, variant=variant)
 
@@ -149,28 +142,14 @@ class LingBotVideoGenerationPipeline(PipelineABC):
             **kwargs,
         )
         if not execute:
-            raise RuntimeError(
-                "LingBot-Video requires execute=True; request-plan artifacts are not emitted."
-            )
+            raise RuntimeError("LingBot-Video requires execute=True; request-plan artifacts are not emitted.")
 
         mode = str(request.get("mode") or "t2v").lower()
         media_suffix = ".png" if mode == "t2i" else ".mp4"
-        requested = (
-            Path(output_path).expanduser().resolve()
-            if output_path is not None
-            else None
-        )
-        if (
-            requested is not None
-            and mode == "t2i"
-            and requested.suffix.lower() not in {".png", ".jpg", ".jpeg"}
-        ):
+        requested = Path(output_path).expanduser().resolve() if output_path is not None else None
+        if requested is not None and mode == "t2i" and requested.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
             requested = requested.with_suffix(".png")
-        elif (
-            requested is not None
-            and mode != "t2i"
-            and requested.suffix.lower() not in {".mp4", ".webm", ".mov"}
-        ):
+        elif requested is not None and mode != "t2i" and requested.suffix.lower() not in {".mp4", ".webm", ".mov"}:
             requested = requested.with_suffix(".mp4")
         if requested is not None and requested.suffix.lower() in {
             ".png",
@@ -184,18 +163,12 @@ class LingBotVideoGenerationPipeline(PipelineABC):
             report_path = requested.with_suffix(".json")
         else:
             report_path = requested or (Path.cwd() / "lingbot_video_result.json")
-            artifact_root = (
-                Path(output_dir).expanduser().resolve()
-                if output_dir is not None
-                else report_path.parent
-            )
+            artifact_root = Path(output_dir).expanduser().resolve() if output_dir is not None else report_path.parent
             artifact_path = artifact_root / f"lingbot_video{media_suffix}"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         artifact_path.parent.mkdir(parents=True, exist_ok=True)
 
-        run_refiner = bool(
-            request.get("run_refiner") or request.get("refiner_model_dir")
-        )
+        run_refiner = bool(request.get("run_refiner") or request.get("refiner_model_dir"))
         preflight = self.preflight(
             run_refiner=run_refiner,
             refiner_model_dir=request.get("refiner_model_dir"),
@@ -205,14 +178,10 @@ class LingBotVideoGenerationPipeline(PipelineABC):
                 *preflight["missing_checkpoint_files"],
                 *preflight["missing_runtime_files"],
             ]
-            raise RuntimeError(
-                f"LingBot-Video preflight failed; missing: {', '.join(missing)}"
-            )
+            raise RuntimeError(f"LingBot-Video preflight failed; missing: {', '.join(missing)}")
 
         plan = self.runtime.build_plan(request=request, output_path=artifact_path)
-        run_result = self.runtime.run_plan(
-            plan, timeout_seconds=timeout_seconds, log_dir=report_path.parent
-        )
+        run_result = self.runtime.run_plan(plan, timeout_seconds=timeout_seconds, log_dir=report_path.parent)
         generated_files = list(run_result.get("generated_files") or [])
         resolved_artifact = (
             generated_files[-1]
@@ -225,9 +194,7 @@ class LingBotVideoGenerationPipeline(PipelineABC):
                 "ok": bool(run_result.get("ok")),
                 "model_id": self.model_id,
                 "variant": self.variant,
-                "artifact_kind": (
-                    "generated_image" if mode == "t2i" else "generated_video"
-                ),
+                "artifact_kind": ("generated_image" if mode == "t2i" else "generated_video"),
                 "artifact_path": resolved_artifact,
                 "artifact_files": generated_files,
                 "runtime": "worldfoundry.synthesis.visual_generation.lingbot_video.runner",

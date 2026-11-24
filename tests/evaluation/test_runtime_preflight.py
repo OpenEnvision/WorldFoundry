@@ -9,13 +9,13 @@ import yaml
 
 from worldfoundry.base_models.capabilities import _path_tokens as capability_path_tokens
 from worldfoundry.core.io.paths import hfd_dataset_root_path
-from worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight import (
+from worldfoundry.evals.tasks.execution.orchestration.runtime_preflight import (
     SCHEMA_VERSION,
     _redact_text,
     check_profile,
     run_preflight,
 )
-from worldfoundry.evaluation.utils import worldfoundry_hfd_dataset_root
+from worldfoundry.evals.utils import worldfoundry_hfd_dataset_root
 from worldfoundry.runtime.assets import worldfoundry_path_tokens as runtime_path_tokens
 
 

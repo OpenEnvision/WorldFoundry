@@ -82,7 +82,6 @@ add_default_world_repos() {
     "tencent/HY-WorldPlay=HY-WorldPlay"
     "tencent/Hunyuan-GameCraft-1.0=Hunyuan-GameCraft-1.0"
     "tencent/HunyuanVideo-1.5=HunyuanVideo-1.5"
-    "tencent/HunyuanWorld-Voyager=HunyuanWorld-Voyager"
     "tencent/HY-World-2.0=HY-World-2.0"
     "tencent/HunyuanWorld-1=HunyuanWorld-1"
     "tencent/HunyuanWorld-Mirror=HunyuanWorld-Mirror"
@@ -156,7 +155,6 @@ add_default_world_repos() {
     "robbyant/lingbot-va-base=lingbot-va-base"
     "robbyant/lingbot-va-posttrain-robotwin=lingbot-va-posttrain-robotwin"
     "robbyant/lingbot-va-posttrain-libero-long=lingbot-va-posttrain-libero-long"
-    "brandonsmart/splatt3r_v1.0=splatt3r_v1.0"
     "dylanebert/pixelSplat=pixelSplat"
   )
 }

@@ -1,8 +1,9 @@
-
 import numpy as np
 import torch
-from pytorch3d.transforms import matrix_to_quaternion
 from plyfile import PlyData, PlyElement
+
+from .rotation import matrix_to_quaternion
+
 
 class SplatFile:
     def __init__(
@@ -14,17 +15,17 @@ class SplatFile:
         rotations: np.ndarray,
         scales: np.ndarray,
     ):
-        self.centers = centers # (N, 3)
-        self.rgbs = rgbs # (N, 3)
-        self.opacities = opacities # (N, 1)
-        self.covariances = covariances # (N, 3, 3)
-        self.rotations = rotations # (N, 4) # quaternion wxyz
-        self.scales = scales # (N, 3)
+        self.centers = centers  # (N, 3)
+        self.rgbs = rgbs  # (N, 3)
+        self.opacities = opacities  # (N, 1)
+        self.covariances = covariances  # (N, 3, 3)
+        self.rotations = rotations  # (N, 4) # quaternion wxyz
+        self.scales = scales  # (N, 3)
 
     def save(self, path: str):
         xyz = self.centers
         normals = np.zeros_like(xyz)
-        f_dc = (self.rgbs - 0.5) / 0.28209479177387814 # convert to SH coefficients
+        f_dc = (self.rgbs - 0.5) / 0.28209479177387814  # convert to SH coefficients
         opacities = self.opacities
         # Equirectangular pixels at the poles have zero horizontal extent, and
         # sin(pi) can also become very slightly negative in float32.  Keep the
@@ -32,28 +33,25 @@ class SplatFile:
         scale = np.log(np.maximum(self.scales, np.finfo(np.float32).tiny))
         rotation = self.rotations
 
-        attribute_names = ['x', 'y', 'z', 'nx', 'ny', 'nz']
+        attribute_names = ["x", "y", "z", "nx", "ny", "nz"]
         for i in range(f_dc.shape[1]):
-            attribute_names.append('f_dc_{}'.format(i))
-        attribute_names.append('opacity')
+            attribute_names.append(f"f_dc_{i}")
+        attribute_names.append("opacity")
         for i in range(scale.shape[1]):
-            attribute_names.append('scale_{}'.format(i))
+            attribute_names.append(f"scale_{i}")
         for i in range(rotation.shape[1]):
-            attribute_names.append('rot_{}'.format(i))
+            attribute_names.append(f"rot_{i}")
 
-        dtype_full = [(name, 'f4') for name in attribute_names]
+        dtype_full = [(name, "f4") for name in attribute_names]
         elements = np.empty(xyz.shape[0], dtype=dtype_full)
-        attributes = np.concatenate(
-            (xyz, normals, f_dc, opacities, scale, rotation),
-            axis=1
-        )
+        attributes = np.concatenate((xyz, normals, f_dc, opacities, scale, rotation), axis=1)
         elements[:] = list(map(tuple, attributes))
 
-        el = PlyElement.describe(elements, 'vertex')
+        el = PlyElement.describe(elements, "vertex")
         PlyData([el]).write(path)
 
 
-def convert_rgbd_to_gs(rgb, distance, rays, dis_threshold=0., epsilon=1e-3, scale_factor=0.65) -> SplatFile:
+def convert_rgbd_to_gs(rgb, distance, rays, dis_threshold=0.0, epsilon=1e-3, scale_factor=0.65) -> SplatFile:
     """
     Given an equirectangular RGB-D image, back-project each pixel to a 3D point
     and compute the corresponding 3D Gaussian covariance so that the projection covers 1 pixel.
@@ -124,9 +122,10 @@ def convert_rgbd_to_gs(rgb, distance, rays, dis_threshold=0., epsilon=1e-3, scal
         scales=S.cpu().numpy(),
     )
 
+
 def mask_splat(splat: SplatFile, mask: np.ndarray) -> SplatFile:
     H, W = mask.shape
-    valid_mask = mask>0
+    valid_mask = mask > 0
     centers = splat.centers
     covariances = splat.covariances
     rgbs = splat.rgbs
@@ -147,9 +146,10 @@ def mask_splat(splat: SplatFile, mask: np.ndarray) -> SplatFile:
         "rgbs": rgbs,
         "opacities": opacity,
         "scales": scales,
-        "rotations": rotations
+        "rotations": rotations,
     }
     return SplatFile(**splat)
+
 
 def merge_splats(splat1: SplatFile, splat2: SplatFile) -> SplatFile:
     return SplatFile(
@@ -158,5 +158,5 @@ def merge_splats(splat1: SplatFile, splat2: SplatFile) -> SplatFile:
         rgbs=np.concatenate([splat1.rgbs, splat2.rgbs], axis=0),
         opacities=np.concatenate([splat1.opacities, splat2.opacities], axis=0),
         scales=np.concatenate([splat1.scales, splat2.scales], axis=0),
-        rotations=np.concatenate([splat1.rotations, splat2.rotations], axis=0)
+        rotations=np.concatenate([splat1.rotations, splat2.rotations], axis=0),
     )

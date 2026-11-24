@@ -35,15 +35,16 @@ import io
 import json
 import os
 import tempfile
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator, Union
+from typing import Any, cast
 from urllib.parse import urlparse
 
-import boto3
-from botocore.exceptions import ClientError
 from torch.distributed.checkpoint import FileSystemReader, FileSystemWriter
 from torch.distributed.checkpoint.filesystem import FileSystemBase
 
+boto3 = __import__("boto3")
+ClientError = __import__("botocore.exceptions", fromlist=["ClientError"]).ClientError
 
 # ──────────────────────────────────────────────────────────────────────────
 # DCP FileSystemBase — 64 MiB memory spool, then disk; not a general S3 client
@@ -69,12 +70,12 @@ class S3FileSystem(FileSystemBase):
     def __init__(self, credential_path: str) -> None:
         """Build a boto3 client from a Cosmos-style credentials JSON file."""
 
-        with open(credential_path, "r") as f:
+        with open(credential_path) as f:
             config = json.load(f)
         self.s3_client = boto3.client("s3", **config)
 
     @contextmanager
-    def create_stream(self, path: Union[str, os.PathLike], mode: str) -> Generator[io.IOBase, None, None]:
+    def create_stream(self, path: str | os.PathLike, mode: str) -> Generator[io.IOBase, None, None]:
         """Open an S3 object as a binary stream.
 
         For ``"rb"`` the object is downloaded into a seekable spooled file;
@@ -94,32 +95,27 @@ class S3FileSystem(FileSystemBase):
         bucket, key = self._parse_s3_uri(path_str)
 
         if mode == "rb":
-            stream = tempfile.SpooledTemporaryFile(max_size=S3_STREAM_SPOOL_MAX_SIZE, mode="w+b")
-            try:
+            with tempfile.SpooledTemporaryFile(max_size=S3_STREAM_SPOOL_MAX_SIZE, mode="w+b") as stream:
                 self.s3_client.download_fileobj(bucket, key, stream)
                 stream.seek(0)
-                yield stream
-            finally:
-                stream.close()
+                # SpooledTemporaryFile implements IOBase; its typing.IO stub is structural instead.
+                yield cast(io.IOBase, stream)
         elif mode == "wb":
-            stream = tempfile.SpooledTemporaryFile(max_size=S3_STREAM_SPOOL_MAX_SIZE, mode="w+b")
-            try:
-                yield stream
+            with tempfile.SpooledTemporaryFile(max_size=S3_STREAM_SPOOL_MAX_SIZE, mode="w+b") as stream:
+                yield cast(io.IOBase, stream)
                 stream.seek(0)
                 self.s3_client.upload_fileobj(stream, bucket, key)
-            finally:
-                stream.close()
         else:
             raise ValueError(f"Unsupported mode: {mode}")
 
-    def concat_path(self, path: Union[str, os.PathLike], suffix: str) -> Union[str, os.PathLike]:
+    def concat_path(self, path: str | os.PathLike, suffix: str) -> str | os.PathLike:
         """Concatenate S3 path with suffix."""
         path_str = str(path)
         if path_str.endswith("/"):
             return f"{path_str}{suffix}"
         return f"{path_str}/{suffix}"
 
-    def rename(self, path: Union[str, os.PathLike], new_path: Union[str, os.PathLike]) -> None:
+    def rename(self, path: str | os.PathLike, new_path: str | os.PathLike) -> None:
         """Move an S3 object via copy + delete (S3 has no rename primitive)."""
         src_bucket, src_key = self._parse_s3_uri(str(path))
         dst_bucket, dst_key = self._parse_s3_uri(str(new_path))
@@ -128,14 +124,14 @@ class S3FileSystem(FileSystemBase):
         self.s3_client.copy(copy_source, dst_bucket, dst_key)
         self.s3_client.delete_object(Bucket=src_bucket, Key=src_key)
 
-    def init_path(self, path: Union[str, os.PathLike]) -> Union[str, os.PathLike]:
+    def init_path(self, path: str | os.PathLike) -> str | os.PathLike:
         """Initialize and validate S3 path."""
         path_str = str(path)
         if not path_str.startswith("s3://"):
             raise ValueError(f"Invalid S3 URI: {path_str}. It must start with 's3://'")
         return path_str
 
-    def mkdir(self, path: Union[str, os.PathLike]) -> None:
+    def mkdir(self, path: str | os.PathLike) -> None:
         """Simulate a directory by writing an empty trailing-slash object."""
         path_str = str(path)
         if not path_str.endswith("/"):
@@ -146,7 +142,7 @@ class S3FileSystem(FileSystemBase):
             self.s3_client.put_object(Bucket=bucket, Key=key)
 
     @classmethod
-    def validate_checkpoint_id(cls, checkpoint_id: Union[str, os.PathLike]) -> bool:
+    def validate_checkpoint_id(cls, checkpoint_id: str | os.PathLike) -> bool:
         """Validate if the checkpoint_id is a valid S3 URI."""
         checkpoint_id_str = str(checkpoint_id)
         try:
@@ -157,7 +153,7 @@ class S3FileSystem(FileSystemBase):
         except Exception:
             return False
 
-    def exists(self, path: Union[str, os.PathLike]) -> bool:
+    def exists(self, path: str | os.PathLike) -> bool:
         """Return True if the S3 object exists."""
         bucket, key = self._parse_s3_uri(str(path))
         try:
@@ -169,7 +165,7 @@ class S3FileSystem(FileSystemBase):
                 return False
             raise
 
-    def rm_file(self, path: Union[str, os.PathLike]) -> None:
+    def rm_file(self, path: str | os.PathLike) -> None:
         """Remove a file from S3."""
         bucket, key = self._parse_s3_uri(str(path))
         self.s3_client.delete_object(Bucket=bucket, Key=key)
@@ -193,7 +189,7 @@ class S3FileSystem(FileSystemBase):
 
         return bucket, key
 
-    def list_files_recursive(self, s3_dir: Union[str, os.PathLike]) -> list[str]:
+    def list_files_recursive(self, s3_dir: str | os.PathLike) -> list[str]:
         """Return object key suffixes under *s3_dir*, skipping empty folder markers."""
         bucket, prefix = self._parse_s3_uri(str(s3_dir).removesuffix("/"))
         prefix = prefix.removesuffix("/")
@@ -210,14 +206,14 @@ class S3FileSystem(FileSystemBase):
                     out.append(suffix)
         return sorted(out)
 
-    def download_to_local(self, s3_uri: Union[str, os.PathLike], local_path: Union[str, os.PathLike]) -> None:
+    def download_to_local(self, s3_uri: str | os.PathLike, local_path: str | os.PathLike) -> None:
         """Download one object to *local_path*, creating parent directories."""
         bucket, key = self._parse_s3_uri(str(s3_uri))
         local_path_str = str(local_path)
         os.makedirs(os.path.dirname(local_path_str), exist_ok=True)
         self.s3_client.download_file(bucket, key, local_path_str)
 
-    def head_object(self, s3_uri: Union[str, os.PathLike], checksum_mode: bool = False) -> dict[str, Any]:
+    def head_object(self, s3_uri: str | os.PathLike, checksum_mode: bool = False) -> dict[str, Any]:
         """Return S3 object metadata; enable checksums when *checksum_mode* is set."""
         bucket, key = self._parse_s3_uri(str(s3_uri))
         kwargs: dict[str, Any] = {"Bucket": bucket, "Key": key}
@@ -245,7 +241,7 @@ class S3StorageWriter(FileSystemWriter):
         self.path = self.fs.init_path(path)
 
     @classmethod
-    def validate_checkpoint_id(cls, checkpoint_id: Union[str, os.PathLike]) -> bool:
+    def validate_checkpoint_id(cls, checkpoint_id: str | os.PathLike) -> bool:
         """True when *checkpoint_id* is an ``s3://`` URI DCP can hand to this writer."""
 
         return S3FileSystem.validate_checkpoint_id(checkpoint_id)
@@ -254,7 +250,7 @@ class S3StorageWriter(FileSystemWriter):
 class S3StorageReader(FileSystemReader):
     """S3-backed reader for ``torch.distributed.checkpoint``."""
 
-    def __init__(self, credential_path: str, path: Union[str, os.PathLike]) -> None:
+    def __init__(self, credential_path: str, path: str | os.PathLike) -> None:
         """
         Args:
             credential_path: Path to the AWS S3 credentials JSON.
@@ -266,7 +262,7 @@ class S3StorageReader(FileSystemReader):
         self.sync_files = False
 
     @classmethod
-    def validate_checkpoint_id(cls, checkpoint_id: Union[str, os.PathLike]) -> bool:
+    def validate_checkpoint_id(cls, checkpoint_id: str | os.PathLike) -> bool:
         """True when *checkpoint_id* is an ``s3://`` URI DCP can hand to this reader."""
 
         return S3FileSystem.validate_checkpoint_id(checkpoint_id)

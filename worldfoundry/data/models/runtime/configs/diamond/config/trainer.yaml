@@ -64,11 +64,11 @@ evaluation:
   every: 10
 
 world_model_env:
-  _target_: envs.WorldModelEnvConfig
+  _target_: worldfoundry.synthesis.visual_generation.diamond.envs.WorldModelEnvConfig
   horizon: 15
   num_batches_to_preload: 256
   diffusion_sampler:
-    _target_: models.diffusion.DiffusionSamplerConfig
+    _target_: worldfoundry.synthesis.visual_generation.diamond.models.diffusion.DiffusionSamplerConfig
     num_steps_denoising: 3
     sigma_min: 2e-3
     sigma_max: 5.0
@@ -95,7 +95,6 @@ denoiser:
     weight_decay: 1e-2
     eps: 1e-8
   sigma_distribution:
-    _target_: models.diffusion.SigmaDistributionConfig
     loc: -0.4
     scale: 1.2
     sigma_min: 2e-3
@@ -128,7 +127,6 @@ actor_critic:
     lr_warmup_steps: 100
     max_grad_norm: 100.0
   actor_critic_loss:
-    _target_: models.actor_critic.ActorCriticLossConfig
     backup_every: 15
     gamma: 0.985
     lambda_: 0.95

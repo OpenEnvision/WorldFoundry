@@ -17,7 +17,6 @@ import torch
 from torch import distributed as dist
 
 import worldfoundry.core.distributed.runtime.torch_process_group as _torch_process_group
-
 from worldfoundry.core.distributed.collectives.generic import get_collective_device, get_rank, get_world_size
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -95,8 +94,7 @@ def all_gather(value: Any) -> list[Any]:
 
     if original_shape is None:
         return [
-            pickle.loads(output.cpu().numpy().tobytes()[:size])
-            for size, output in zip(sizes, outputs)
+            pickle.loads(output.cpu().numpy().tobytes()[:size]) for size, output in zip(sizes, outputs, strict=False)
         ]
 
     trailing_shape = tuple(original_shape[1:])
@@ -106,12 +104,15 @@ def all_gather(value: Any) -> list[Any]:
             raise ValueError("cannot reconstruct gathered tensors with a zero-sized trailing dimension")
         return [output[:0].reshape((0, *trailing_shape)) for output in outputs]
     if not trailing_shape:
-        return [output[:size].reshape(()) if size == 1 else output[:size] for size, output in zip(sizes, outputs)]
+        return [
+            output[:size].reshape(()) if size == 1 else output[:size]
+            for size, output in zip(sizes, outputs, strict=False)
+        ]
     if any(size % trailing_size for size in sizes):
         raise ValueError("gathered tensors do not share compatible trailing dimensions")
     return [
         output[:size].reshape((size // trailing_size, *trailing_shape))
-        for size, output in zip(sizes, outputs)
+        for size, output in zip(sizes, outputs, strict=False)
     ]
 
 

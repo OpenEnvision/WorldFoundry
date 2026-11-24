@@ -1,16 +1,24 @@
-"""Module for base_models -> perception_core -> general_perception -> open_clip -> transform.py functionality."""
-
 import numbers
 import random
 import warnings
-from dataclasses import dataclass, asdict
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
+from typing import Any
 
 import numpy as np
 import torch
 import torchvision.transforms.functional as F
-from torchvision.transforms import Normalize, Compose, RandomResizedCrop, InterpolationMode, ToTensor, Resize, \
-    CenterCrop, ColorJitter, Grayscale
+from torchvision.transforms import (
+    CenterCrop,
+    ColorJitter,
+    Compose,
+    Grayscale,
+    InterpolationMode,
+    Normalize,
+    RandomResizedCrop,
+    Resize,
+    ToTensor,
+)
 
 from .constants import OPENAI_DATASET_MEAN, OPENAI_DATASET_STD
 from .utils import to_2tuple
@@ -18,37 +26,34 @@ from .utils import to_2tuple
 
 @dataclass
 class PreprocessCfg:
-    """Preprocess cfg implementation."""
-    size: Union[int, Tuple[int, int]] = 224
-    mode: str = 'RGB'
-    mean: Tuple[float, ...] = OPENAI_DATASET_MEAN
-    std: Tuple[float, ...] = OPENAI_DATASET_STD
-    interpolation: str = 'bicubic'
-    resize_mode: str = 'shortest'
+    size: int | tuple[int, int] = 224
+    mode: str = "RGB"
+    mean: tuple[float, ...] = OPENAI_DATASET_MEAN
+    std: tuple[float, ...] = OPENAI_DATASET_STD
+    interpolation: str = "bicubic"
+    resize_mode: str = "shortest"
     fill_color: int = 0
 
     def __post_init__(self):
-        """Post init."""
-        assert self.mode in ('RGB',)
+        assert self.mode in ("RGB",)
 
     @property
     def num_channels(self):
-        """Num channels."""
         return 3
 
     @property
     def input_size(self):
-        """Input size."""
-        return (self.num_channels,) + to_2tuple(self.size)
+        return (self.num_channels,) + to_2tuple(self.size)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+
 
 _PREPROCESS_KEYS = set(asdict(PreprocessCfg()).keys())
 
 
 def merge_preprocess_dict(
-        base: Union[PreprocessCfg, Dict],
-        overlay: Dict,
+    base: PreprocessCfg | dict,
+    overlay: dict,
 ):
-    """ Merge overlay key-value pairs on top of base preprocess cfg or dict.
+    """Merge overlay key-value pairs on top of base preprocess cfg or dict.
     Input dicts are filtered based on PreprocessCfg fields.
     """
     if isinstance(base, PreprocessCfg):
@@ -62,22 +67,16 @@ def merge_preprocess_dict(
 
 
 def merge_preprocess_kwargs(base: PreprocessCfg, **kwargs):
-    """Merge preprocess kwargs.
-
-    Args:
-        base: The base.
-    """
     return merge_preprocess_dict(base, kwargs)
 
 
 @dataclass
 class AugmentationCfg:
-    """Augmentation cfg implementation."""
-    scale: Tuple[float, float] = (0.9, 1.0)
-    ratio: Optional[Tuple[float, float]] = None
-    color_jitter: Optional[Union[float, Tuple[float, float, float], Tuple[float, float, float, float]]] = None
-    re_prob: Optional[float] = None
-    re_count: Optional[int] = None
+    scale: tuple[float, float] = (0.9, 1.0)
+    ratio: tuple[float, float] | None = None
+    color_jitter: float | tuple[float, float, float] | tuple[float, float, float, float] | None = None
+    re_prob: float | None = None
+    re_count: int | None = None
     naflex: bool = False
     use_timm: bool = False
 
@@ -87,25 +86,14 @@ class AugmentationCfg:
 
 
 class NaFlexTransformFactory:
-    """Na flex transform factory implementation."""
     is_naflex_transform_factory = True
 
     def __init__(self, **transform_kwargs) -> None:
-        """Init.
-
-        Returns:
-            The return value.
-        """
         self.transform_kwargs = transform_kwargs
 
     def __call__(self, max_seq_len, patch_size):
-        """Call.
-
-        Args:
-            max_seq_len: The max seq len.
-            patch_size: The patch size.
-        """
         from timm.data import create_transform  # timm can still be optional
+
         return create_transform(
             naflex=True,
             max_seq_len=max_seq_len,
@@ -115,25 +103,14 @@ class NaFlexTransformFactory:
 
 
 class NaFlexEvalTransformFactory:
-    """Na flex eval transform factory implementation."""
     is_naflex_eval_transform_factory = True
 
     def __init__(self, **transform_kwargs) -> None:
-        """Init.
-
-        Returns:
-            The return value.
-        """
         self.transform_kwargs = transform_kwargs
 
     def __call__(self, max_seq_len, patch_size):
-        """Call.
-
-        Args:
-            max_seq_len: The max seq len.
-            patch_size: The patch size.
-        """
         from timm.data import create_transform  # timm can still be optional
+
         return create_transform(
             is_training=False,
             naflex=True,
@@ -144,15 +121,7 @@ class NaFlexEvalTransformFactory:
         )
 
 
-def is_naflex_aug_cfg(aug_cfg: Optional[Union[Dict[str, Any], AugmentationCfg]]) -> bool:
-    """Is naflex aug cfg.
-
-    Args:
-        aug_cfg: The aug cfg.
-
-    Returns:
-        The return value.
-    """
+def is_naflex_aug_cfg(aug_cfg: dict[str, Any] | AugmentationCfg | None) -> bool:
     if isinstance(aug_cfg, dict):
         return bool(aug_cfg.get("naflex", False))
     if isinstance(aug_cfg, AugmentationCfg):
@@ -161,12 +130,6 @@ def is_naflex_aug_cfg(aug_cfg: Optional[Union[Dict[str, Any], AugmentationCfg]])
 
 
 def _setup_size(size, error_msg):
-    """Helper function to setup size.
-
-    Args:
-        size: The size.
-        error_msg: The error msg.
-    """
     if isinstance(size, numbers.Number):
         return int(size), int(size)
 
@@ -180,32 +143,21 @@ def _setup_size(size, error_msg):
 
 
 class ResizeKeepRatio:
-    """ Resize and Keep Ratio
+    """Resize and Keep Ratio
 
     Copy & paste from `timm`
     """
 
     def __init__(
-            self,
-            size,
-            longest=0.,
-            interpolation=InterpolationMode.BICUBIC,
-            random_scale_prob=0.,
-            random_scale_range=(0.85, 1.05),
-            random_aspect_prob=0.,
-            random_aspect_range=(0.9, 1.11)
+        self,
+        size,
+        longest=0.0,
+        interpolation=InterpolationMode.BICUBIC,
+        random_scale_prob=0.0,
+        random_scale_range=(0.85, 1.05),
+        random_aspect_prob=0.0,
+        random_aspect_range=(0.9, 1.11),
     ):
-        """Init.
-
-        Args:
-            size: The size.
-            longest: The longest.
-            interpolation: The interpolation.
-            random_scale_prob: The random scale prob.
-            random_scale_range: The random scale range.
-            random_aspect_prob: The random aspect prob.
-            random_aspect_range: The random aspect range.
-        """
         if isinstance(size, (list, tuple)):
             self.size = tuple(size)
         else:
@@ -219,31 +171,30 @@ class ResizeKeepRatio:
 
     @staticmethod
     def get_params(
-            img,
-            target_size,
-            longest,
-            random_scale_prob=0.,
-            random_scale_range=(0.85, 1.05),
-            random_aspect_prob=0.,
-            random_aspect_range=(0.9, 1.11)
+        img,
+        target_size,
+        longest,
+        random_scale_prob=0.0,
+        random_scale_range=(0.85, 1.05),
+        random_aspect_prob=0.0,
+        random_aspect_range=(0.9, 1.11),
     ):
-        """Get parameters
-        """
+        """Get parameters"""
         source_size = img.size[::-1]  # h, w
         h, w = source_size
         target_h, target_w = target_size
         ratio_h = h / target_h
         ratio_w = w / target_w
-        ratio = max(ratio_h, ratio_w) * longest + min(ratio_h, ratio_w) * (1. - longest)
+        ratio = max(ratio_h, ratio_w) * longest + min(ratio_h, ratio_w) * (1.0 - longest)
         if random_scale_prob > 0 and random.random() < random_scale_prob:
             ratio_factor = random.uniform(random_scale_range[0], random_scale_range[1])
             ratio_factor = (ratio_factor, ratio_factor)
         else:
-            ratio_factor = (1., 1.)
+            ratio_factor = (1.0, 1.0)
         if random_aspect_prob > 0 and random.random() < random_aspect_prob:
             aspect_factor = random.uniform(random_aspect_range[0], random_aspect_range[1])
             ratio_factor = (ratio_factor[0] / aspect_factor, ratio_factor[1] * aspect_factor)
-        size = [round(x * f / ratio) for x, f in zip(source_size, ratio_factor)]
+        size = [round(x * f / ratio) for x, f in zip(source_size, ratio_factor, strict=False)]
         return size
 
     def __call__(self, img):
@@ -255,22 +206,25 @@ class ResizeKeepRatio:
             PIL Image: Resized, padded to at least target size, possibly cropped to exactly target size
         """
         size = self.get_params(
-            img, self.size, self.longest,
-            self.random_scale_prob, self.random_scale_range,
-            self.random_aspect_prob, self.random_aspect_range
+            img,
+            self.size,
+            self.longest,
+            self.random_scale_prob,
+            self.random_scale_range,
+            self.random_aspect_prob,
+            self.random_aspect_range,
         )
         img = F.resize(img, size, self.interpolation)
         return img
 
     def __repr__(self):
-        """Repr."""
-        format_string = self.__class__.__name__ + '(size={0}'.format(self.size)
-        format_string += f', interpolation={self.interpolation})'
-        format_string += f', longest={self.longest:.3f})'
+        format_string = self.__class__.__name__ + f"(size={self.size}"
+        format_string += f", interpolation={self.interpolation})"
+        format_string += f", longest={self.longest:.3f})"
         return format_string
 
 
-def center_crop_or_pad(img: torch.Tensor, output_size: List[int], fill=0) -> torch.Tensor:
+def center_crop_or_pad(img: torch.Tensor, output_size: list[int], fill=0) -> torch.Tensor:
     """Center crops and/or pads the given image.
     If the image is torch Tensor, it is expected
     to have [..., H, W] shape, where ... means an arbitrary number of leading dimensions.
@@ -305,8 +259,8 @@ def center_crop_or_pad(img: torch.Tensor, output_size: List[int], fill=0) -> tor
         if crop_width == image_width and crop_height == image_height:
             return img
 
-    crop_top = int(round((image_height - crop_height) / 2.0))
-    crop_left = int(round((image_width - crop_width) / 2.0))
+    crop_top = int(round((image_height - crop_height) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+    crop_left = int(round((image_width - crop_width) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     return F.crop(img, crop_top, crop_left, crop_height, crop_width)
 
 
@@ -323,12 +277,6 @@ class CenterCropOrPad(torch.nn.Module):
     """
 
     def __init__(self, size, fill=0):
-        """Init.
-
-        Args:
-            size: The size.
-            fill: The fill.
-        """
         super().__init__()
         self.size = _setup_size(size, error_msg="Please provide only two dimensions (h, w) for size.")
         self.fill = fill
@@ -344,27 +292,13 @@ class CenterCropOrPad(torch.nn.Module):
         return center_crop_or_pad(img, self.size, fill=self.fill)
 
     def __repr__(self) -> str:
-        """Repr.
-
-        Returns:
-            The return value.
-        """
         return f"{self.__class__.__name__}(size={self.size})"
 
 
 class MaybeConvertMode:
-    """Perform PIL convert("RGB") iff PIL image.
-    """
+    """Perform PIL convert("RGB") iff PIL image."""
 
     def __init__(self, mode="RGB") -> None:
-        """Init.
-
-        Args:
-            mode: The mode.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.mode = mode
 
@@ -383,33 +317,17 @@ class MaybeConvertMode:
         return pic.convert(self.mode)
 
     def __repr__(self) -> str:
-        """Repr.
-
-        Returns:
-            The return value.
-        """
         return f"{self.__class__.__name__}()"
 
 
 def _convert_to_rgb(image):
-    """Helper function to convert to rgb.
-
-    Args:
-        image: The image.
-    """
-    return image.convert('RGB')
+    return image.convert("RGB")
 
 
 class MaybeToTensor(ToTensor):
-    """Convert a PIL Image or ndarray to tensor if it's not already one.
-    """
+    """Convert a PIL Image or ndarray to tensor if it's not already one."""
 
     def __init__(self) -> None:
-        """Init.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
     def __call__(self, pic) -> torch.Tensor:
@@ -425,64 +343,37 @@ class MaybeToTensor(ToTensor):
         return F.to_tensor(pic)
 
     def __repr__(self) -> str:
-        """Repr.
-
-        Returns:
-            The return value.
-        """
         return f"{self.__class__.__name__}()"
 
 
-class color_jitter(object):
+class color_jitter:
     """
     Apply Color Jitter to the PIL image with a specified probability.
     """
-    def __init__(self, brightness=0., contrast=0., saturation=0., hue=0., p=0.8):
-        """Init.
 
-        Args:
-            brightness: The brightness.
-            contrast: The contrast.
-            saturation: The saturation.
-            hue: The hue.
-            p: The p.
-        """
-        assert 0. <= p <= 1.
+    def __init__(self, brightness=0.0, contrast=0.0, saturation=0.0, hue=0.0, p=0.8):
+        assert 0.0 <= p <= 1.0
         self.p = p
         self.transf = ColorJitter(brightness=brightness, contrast=contrast, saturation=saturation, hue=hue)
 
     def __call__(self, img):
-        """Call.
-
-        Args:
-            img: The img.
-        """
         if random.random() < self.p:
             return self.transf(img)
         else:
             return img
 
 
-class gray_scale(object):
+class gray_scale:
     """
     Apply Gray Scale to the PIL image with a specified probability.
     """
-    def __init__(self, p=0.2):
-        """Init.
 
-        Args:
-            p: The p.
-        """
-        assert 0. <= p <= 1.
+    def __init__(self, p=0.2):
+        assert 0.0 <= p <= 1.0
         self.p = p
         self.transf = Grayscale(num_output_channels=3)
 
     def __call__(self, img):
-        """Call.
-
-        Args:
-            img: The img.
-        """
         if random.random() < self.p:
             return self.transf(img)
         else:
@@ -490,27 +381,15 @@ class gray_scale(object):
 
 
 def image_transform(
-        image_size: Union[int, Tuple[int, int]],
-        is_train: bool,
-        mean: Optional[Tuple[float, ...]] = None,
-        std: Optional[Tuple[float, ...]] = None,
-        resize_mode: Optional[str] = None,
-        interpolation: Optional[str] = None,
-        fill_color: int = 0,
-        aug_cfg: Optional[Union[Dict[str, Any], AugmentationCfg]] = None,
+    image_size: int | tuple[int, int],
+    is_train: bool,
+    mean: tuple[float, ...] | None = None,
+    std: tuple[float, ...] | None = None,
+    resize_mode: str | None = None,
+    interpolation: str | None = None,
+    fill_color: int = 0,
+    aug_cfg: dict[str, Any] | AugmentationCfg | None = None,
 ):
-    """Image transform.
-
-    Args:
-        image_size: The image size.
-        is_train: The is train.
-        mean: The mean.
-        std: The std.
-        resize_mode: The resize mode.
-        interpolation: The interpolation.
-        fill_color: The fill color.
-        aug_cfg: The aug cfg.
-    """
     mean = mean or OPENAI_DATASET_MEAN
     if not isinstance(mean, (list, tuple)):
         mean = (mean,) * 3
@@ -519,45 +398,43 @@ def image_transform(
     if not isinstance(std, (list, tuple)):
         std = (std,) * 3
 
-    interpolation = interpolation or 'bicubic'
-    assert interpolation in ['bicubic', 'bilinear', 'random']
+    interpolation = interpolation or "bicubic"
+    assert interpolation in ["bicubic", "bilinear", "random"]
     # NOTE random is ignored for interpolation_mode, so defaults to BICUBIC for inference if set
-    interpolation_mode = InterpolationMode.BILINEAR if interpolation == 'bilinear' else InterpolationMode.BICUBIC
+    interpolation_mode = InterpolationMode.BILINEAR if interpolation == "bilinear" else InterpolationMode.BICUBIC
 
-    resize_mode = resize_mode or 'shortest'
-    assert resize_mode in ('shortest', 'longest', 'squash')
+    resize_mode = resize_mode or "shortest"
+    assert resize_mode in ("shortest", "longest", "squash")
 
-    if isinstance(aug_cfg, dict):
-        aug_cfg = AugmentationCfg(**aug_cfg)
-    else:
-        aug_cfg = aug_cfg or AugmentationCfg()
+    aug_cfg = AugmentationCfg(**aug_cfg) if isinstance(aug_cfg, dict) else aug_cfg or AugmentationCfg()
 
     normalize = Normalize(mean=mean, std=std)
 
     if is_train:
         aug_cfg_dict = {k: v for k, v in asdict(aug_cfg).items() if v is not None}
-        use_timm = aug_cfg_dict.pop('use_timm', False)
-        use_naflex = aug_cfg_dict.pop('naflex', False)
+        use_timm = aug_cfg_dict.pop("use_timm", False)
+        use_naflex = aug_cfg_dict.pop("naflex", False)
         if use_timm:
             from timm.data import create_transform  # timm can still be optional
+
             if isinstance(image_size, (tuple, list)):
                 assert len(image_size) >= 2
-                input_size = (3,) + image_size[-2:]
+                input_size = (3,) + image_size[-2:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             else:
                 input_size = (3, image_size, image_size)
 
-            aug_cfg_dict.setdefault('color_jitter', None)  # disable by default
+            aug_cfg_dict.setdefault("color_jitter", None)  # disable by default
             # drop extra non-timm items
-            aug_cfg_dict.pop('color_jitter_prob', None)
-            aug_cfg_dict.pop('gray_scale_prob', None)
+            aug_cfg_dict.pop("color_jitter_prob", None)
+            aug_cfg_dict.pop("gray_scale_prob", None)
 
             timm_transform_kwargs = dict(
                 input_size=input_size,
                 is_training=True,
-                hflip=0.,
+                hflip=0.0,
                 mean=mean,
                 std=std,
-                re_mode='pixel',
+                re_mode="pixel",
                 interpolation=interpolation,
                 **aug_cfg_dict,
             )
@@ -571,76 +448,68 @@ def image_transform(
             train_transform = [
                 RandomResizedCrop(
                     image_size,
-                    scale=aug_cfg_dict.pop('scale'),
+                    scale=aug_cfg_dict.pop("scale"),
                     interpolation=InterpolationMode.BICUBIC,
                 ),
                 MaybeConvertMode(),
             ]
             if aug_cfg.color_jitter_prob:
                 assert aug_cfg.color_jitter is not None and len(aug_cfg.color_jitter) == 4
-                train_transform.extend([
-                    color_jitter(*aug_cfg.color_jitter, p=aug_cfg.color_jitter_prob)
-                ])
+                train_transform.extend([color_jitter(*aug_cfg.color_jitter, p=aug_cfg.color_jitter_prob)])
             if aug_cfg.gray_scale_prob:
-                train_transform.extend([
-                    gray_scale(aug_cfg.gray_scale_prob)
-                ])
-            train_transform.extend([
-                MaybeToTensor(),
-                normalize,
-            ])
+                train_transform.extend([gray_scale(aug_cfg.gray_scale_prob)])
+            train_transform.extend(
+                [
+                    MaybeToTensor(),
+                    normalize,
+                ]
+            )
             train_transform = Compose(train_transform)
             if aug_cfg_dict:
                 warnings.warn(
-                    f'Unused augmentation cfg items, specify `use_timm` to use ({list(aug_cfg_dict.keys())}).'
+                    f"Unused augmentation cfg items, specify `use_timm` to use ({list(aug_cfg_dict.keys())}).",
+                    stacklevel=1,
                 )
         return train_transform
     else:
-        if resize_mode == 'longest':
+        if resize_mode == "longest":
             transforms = [
                 ResizeKeepRatio(image_size, interpolation=interpolation_mode, longest=1),
-                CenterCropOrPad(image_size, fill=fill_color)
+                CenterCropOrPad(image_size, fill=fill_color),
             ]
-        elif resize_mode == 'squash':
+        elif resize_mode == "squash":
             if isinstance(image_size, int):
                 image_size = (image_size, image_size)
             transforms = [
                 Resize(image_size, interpolation=interpolation_mode),
             ]
         else:
-            assert resize_mode == 'shortest'
+            assert resize_mode == "shortest"
             if not isinstance(image_size, (tuple, list)):
                 image_size = (image_size, image_size)
             if image_size[0] == image_size[1]:
                 # simple case, use torchvision built-in Resize w/ shortest edge mode (scalar size arg)
-                transforms = [
-                    Resize(image_size[0], interpolation=interpolation_mode)
-                ]
+                transforms = [Resize(image_size[0], interpolation=interpolation_mode)]
             else:
                 # resize shortest edge to matching target dim for non-square target
                 transforms = [ResizeKeepRatio(image_size)]
             transforms += [CenterCrop(image_size)]
 
-        transforms.extend([
-            MaybeConvertMode(),
-            MaybeToTensor(),
-            normalize,
-        ])
+        transforms.extend(
+            [
+                MaybeConvertMode(),
+                MaybeToTensor(),
+                normalize,
+            ]
+        )
         return Compose(transforms)
 
 
 def image_transform_v2(
-        cfg: PreprocessCfg,
-        is_train: bool,
-        aug_cfg: Optional[Union[Dict[str, Any], AugmentationCfg]] = None,
+    cfg: PreprocessCfg,
+    is_train: bool,
+    aug_cfg: dict[str, Any] | AugmentationCfg | None = None,
 ):
-    """Image transform v2.
-
-    Args:
-        cfg: The cfg.
-        is_train: The is train.
-        aug_cfg: The aug cfg.
-    """
     return image_transform(
         image_size=cfg.size,
         is_train=is_train,
@@ -654,11 +523,6 @@ def image_transform_v2(
 
 
 def naflex_eval_transform_v2(cfg: PreprocessCfg):
-    """Naflex eval transform v2.
-
-    Args:
-        cfg: The cfg.
-    """
     return NaFlexEvalTransformFactory(
         input_size=cfg.input_size,
         mean=cfg.mean,

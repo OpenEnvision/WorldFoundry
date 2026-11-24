@@ -3,8 +3,8 @@ from typing import Any
 
 import yaml
 
-from worldfoundry.evaluation.tasks.catalog.schema import BenchmarkRunnerSpec, BenchmarkZooEntry
-from worldfoundry.evaluation.tasks.execution.orchestration.model_benchmark_suite import (
+from worldfoundry.evals.tasks.catalog.schema import BenchmarkRunnerSpec, BenchmarkZooEntry
+from worldfoundry.evals.tasks.execution.orchestration.suite_cells import (
     _benchmark_aware_provenance,
     _benchmark_unavailable_reason,
 )
@@ -48,7 +48,7 @@ def test_unintegrated_or_missing_runner_remains_unavailable() -> None:
 
 
 def test_result_importer_is_not_planned_as_generated_artifact_official_run() -> None:
-    from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
+    from worldfoundry.evals.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
 
     entry = load_benchmark_zoo_registry().get("aigcbench")
 

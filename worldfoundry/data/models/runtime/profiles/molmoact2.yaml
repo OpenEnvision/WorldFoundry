@@ -1,6 +1,7 @@
-artifact_filename: molmoact2_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: molmoact2
+display_name: MolmoAct2
+task_family: vla_policy
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/allenai--MolmoAct2-DROID
   repo_id: allenai/MolmoAct2-DROID
@@ -30,8 +31,6 @@ checkpoints:
   repo_id: allenai/MolmoAct2-Think-LIBERO
   role: libero_depth_reasoning_policy_checkpoint
   status: checkpoint_manifest_validated
-display_name: MolmoAct2
-id: molmoact2
 input_schema:
   actions:
   - action_chunk
@@ -48,16 +47,24 @@ input_schema:
   state: true
   state_dim: 8
   video: false
-integration_status: in_tree_checkpoint_runtime_gpu_validated
+artifact_kind: action_trace
+artifact_filename: molmoact2_action_trace.json
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_molmoact2_hf_predict_action_gpu_validated
+  integration_status: in_tree_checkpoint_runtime_gpu_validated
+integration:
+  status: in_tree_checkpoint_runtime_gpu_validated
 notes:
 - VLA policy profile for Ai2 MolmoAct2. The in-tree runtime is under worldfoundry/synthesis/action_generation/molmoact2
   and emits action_trace artifacts.
 - Direct execution uses the retained local MolmoAct2 model and processor classes;
-  checkpoint-hosted Python is disabled. Automatic precision selects BF16 on
-  Ampere/Hopper/Blackwell-class GPUs, FP16 on older CUDA GPUs, and FP32 on CPU.
-- DROID defaults use cameras [external_cam, external_cam_2, wrist_cam], state_dim=8, norm_tag=franka_droid; YAM defaults use cameras [top_cam,
-  left_cam, right_cam], state_dim=14, norm_tag=yam_dual_molmoact2.
-- Real A100 Workspace rollouts passed for DROID (15x8), LIBERO (10x7), and SO100/SO101 (30x6), all finite.
-- Base, Bimanual YAM, Think, and Think-LIBERO snapshots remain manifest-validated but were not numerically exercised in this pass.
-runtime_status: in_tree_molmoact2_hf_predict_action_gpu_validated
-task_family: vla_policy
+  checkpoint-hosted Python is disabled. Automatic precision selects BF16 on Ampere/Hopper/Blackwell-class
+  GPUs, FP16 on older CUDA GPUs, and FP32 on CPU.
+- DROID defaults use cameras [external_cam, external_cam_2, wrist_cam], state_dim=8,
+  norm_tag=franka_droid; YAM defaults use cameras [top_cam, left_cam, right_cam],
+  state_dim=14, norm_tag=yam_dual_molmoact2.
+- Real A100 Workspace rollouts passed for DROID (15x8), LIBERO (10x7), and SO100/SO101
+  (30x6), all finite.
+- Base, Bimanual YAM, Think, and Think-LIBERO snapshots remain manifest-validated
+  but were not numerically exercised in this pass.

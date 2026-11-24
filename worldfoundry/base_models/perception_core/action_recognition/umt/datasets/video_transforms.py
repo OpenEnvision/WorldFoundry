@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 import math
-import numpy as np
+import numbers
 import random
+
+import numpy as np
+import PIL
 import torch
+import torchvision
 import torchvision.transforms.functional as F
 from PIL import Image
 from torchvision import transforms
 
+from worldfoundry.base_models.perception_core.action_recognition.umt import functional as FF
+
 from .rand_augment import rand_augment_transform
 from .random_erasing import RandomErasing
-
-import numbers
-import PIL
-import torchvision
-
-from worldfoundry.base_models.perception_core.action_recognition.umt import functional as FF
 
 _pil_interpolation_to_str = {
     Image.NEAREST: "PIL.Image.NEAREST",
@@ -30,7 +30,7 @@ _RANDOM_INTERPOLATION = (Image.BILINEAR, Image.BICUBIC)
 
 
 def _pil_interp(method):
-    if method == "bicubic":
+    if method == "bicubic":  # noqa: SIM116 - Branch chain kept as upstream.
         return Image.BICUBIC
     elif method == "lanczos":
         return Image.LANCZOS
@@ -40,9 +40,7 @@ def _pil_interp(method):
         return Image.BILINEAR
 
 
-def random_short_side_scale_jitter(
-    images, min_size, max_size, boxes=None, inverse_uniform_sampling=False
-):
+def random_short_side_scale_jitter(images, min_size, max_size, boxes=None, inverse_uniform_sampling=False):
     """
     Perform a spatial short scale jittering on the given images and
     corresponding boxes.
@@ -63,26 +61,22 @@ def random_short_side_scale_jitter(
             `num boxes` x 4.
     """
     if inverse_uniform_sampling:
-        size = int(
-            round(1.0 / np.random.uniform(1.0 / max_size, 1.0 / min_size))
-        )
+        size = int(round(1.0 / np.random.uniform(1.0 / max_size, 1.0 / min_size)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     else:
-        size = int(round(np.random.uniform(min_size, max_size)))
+        size = int(round(np.random.uniform(min_size, max_size)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
     height = images.shape[2]
     width = images.shape[3]
-    if (width <= height and width == size) or (
-        height <= width and height == size
-    ):
+    if (width <= height and width == size) or (height <= width and height == size):
         return images, boxes
     new_width = size
     new_height = size
     if width < height:
-        new_height = int(math.floor((float(height) / width) * size))
+        new_height = int(math.floor((float(height) / width) * size))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         if boxes is not None:
             boxes = boxes * float(new_height) / height
     else:
-        new_width = int(math.floor((float(width) / height) * size))
+        new_width = int(math.floor((float(width) / height) * size))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         if boxes is not None:
             boxes = boxes * float(new_width) / width
 
@@ -141,13 +135,9 @@ def random_crop(images, size, boxes=None):
     x_offset = 0
     if width > size:
         x_offset = int(np.random.randint(0, width - size))
-    cropped = images[
-        :, :, y_offset : y_offset + size, x_offset : x_offset + size
-    ]
+    cropped = images[:, :, y_offset : y_offset + size, x_offset : x_offset + size]
 
-    cropped_boxes = (
-        crop_boxes(boxes, x_offset, y_offset) if boxes is not None else None
-    )
+    cropped_boxes = crop_boxes(boxes, x_offset, y_offset) if boxes is not None else None
 
     return cropped, cropped_boxes
 
@@ -167,13 +157,10 @@ def horizontal_flip(prob, images, boxes=None):
         flipped_boxes (ndarray or None): the flipped boxes with dimension of
             `num boxes` x 4.
     """
-    if boxes is None:
-        flipped_boxes = None
-    else:
-        flipped_boxes = boxes.copy()
+    flipped_boxes = None if boxes is None else boxes.copy()
 
     if np.random.uniform() < prob:
-        images = images.flip((-1))
+        images = images.flip(-1)
 
         if len(images.shape) == 3:
             width = images.shape[2]
@@ -226,8 +213,8 @@ def uniform_crop(images, size, spatial_idx, boxes=None, scale_size=None):
             align_corners=False,
         )
 
-    y_offset = int(math.ceil((height - size) / 2))
-    x_offset = int(math.ceil((width - size) / 2))
+    y_offset = int(math.ceil((height - size) / 2))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+    x_offset = int(math.ceil((width - size) / 2))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
     if height > width:
         if spatial_idx == 0:
@@ -239,12 +226,8 @@ def uniform_crop(images, size, spatial_idx, boxes=None, scale_size=None):
             x_offset = 0
         elif spatial_idx == 2:
             x_offset = width - size
-    cropped = images[
-        :, :, y_offset : y_offset + size, x_offset : x_offset + size
-    ]
-    cropped_boxes = (
-        crop_boxes(boxes, x_offset, y_offset) if boxes is not None else None
-    )
+    cropped = images[:, :, y_offset : y_offset + size, x_offset : x_offset + size]
+    cropped_boxes = crop_boxes(boxes, x_offset, y_offset) if boxes is not None else None
     if ndim == 3:
         cropped = cropped.squeeze(0)
     return cropped, cropped_boxes
@@ -263,12 +246,8 @@ def clip_boxes_to_image(boxes, height, width):
             `num boxes` x 4.
     """
     clipped_boxes = boxes.copy()
-    clipped_boxes[:, [0, 2]] = np.minimum(
-        width - 1.0, np.maximum(0.0, boxes[:, [0, 2]])
-    )
-    clipped_boxes[:, [1, 3]] = np.minimum(
-        height - 1.0, np.maximum(0.0, boxes[:, [1, 3]])
-    )
+    clipped_boxes[:, [0, 2]] = np.minimum(width - 1.0, np.maximum(0.0, boxes[:, [0, 2]]))
+    clipped_boxes[:, [1, 3]] = np.minimum(height - 1.0, np.maximum(0.0, boxes[:, [1, 3]]))
     return clipped_boxes
 
 
@@ -301,9 +280,7 @@ def grayscale(images):
     """
     # R -> 0.299, G -> 0.587, B -> 0.114.
     img_gray = torch.tensor(images)
-    gray_channel = (
-        0.299 * images[:, 2] + 0.587 * images[:, 1] + 0.114 * images[:, 0]
-    )
+    gray_channel = 0.299 * images[:, 2] + 0.587 * images[:, 1] + 0.114 * images[:, 0]
     img_gray[:, 0] = gray_channel
     img_gray[:, 1] = gray_channel
     img_gray[:, 2] = gray_channel
@@ -335,7 +312,7 @@ def color_jitter(images, img_brightness=0, img_contrast=0, img_saturation=0):
 
     if len(jitter) > 0:
         order = np.random.permutation(np.arange(len(jitter)))
-        for idx in range(0, len(jitter)):
+        for idx in range(len(jitter)):
             if jitter[order[idx]] == "brightness":
                 images = brightness_jitter(img_brightness, images)
             elif jitter[order[idx]] == "contrast":
@@ -444,9 +421,7 @@ def lighting_jitter(images, alphastd, eigval, eigvec):
         elif len(images.shape) == 4:
             out_images[:, idx] = images[:, idx] + rgb[2 - idx]
         else:
-            raise NotImplementedError(
-                f"Unsupported dimension {len(images.shape)}"
-            )
+            raise NotImplementedError(f"Unsupported dimension {len(images.shape)}")
 
     return out_images
 
@@ -465,19 +440,11 @@ def color_normalization(images, mean, stddev):
             `num frames` x `channel` x `height` x `width`.
     """
     if len(images.shape) == 3:
-        assert (
-            len(mean) == images.shape[0]
-        ), "channel mean not computed properly"
-        assert (
-            len(stddev) == images.shape[0]
-        ), "channel stddev not computed properly"
+        assert len(mean) == images.shape[0], "channel mean not computed properly"
+        assert len(stddev) == images.shape[0], "channel stddev not computed properly"
     elif len(images.shape) == 4:
-        assert (
-            len(mean) == images.shape[1]
-        ), "channel mean not computed properly"
-        assert (
-            len(stddev) == images.shape[1]
-        ), "channel stddev not computed properly"
+        assert len(mean) == images.shape[1], "channel mean not computed properly"
+        assert len(stddev) == images.shape[1], "channel stddev not computed properly"
     else:
         raise NotImplementedError(f"Unsupported dimension {len(images.shape)}")
 
@@ -489,15 +456,11 @@ def color_normalization(images, mean, stddev):
         elif len(images.shape) == 4:
             out_images[:, idx] = (images[:, idx] - mean[idx]) / stddev[idx]
         else:
-            raise NotImplementedError(
-                f"Unsupported dimension {len(images.shape)}"
-            )
+            raise NotImplementedError(f"Unsupported dimension {len(images.shape)}")
     return out_images
 
 
-def _get_param_spatial_crop(
-    scale, ratio, height, width, num_repeat=10, log_scale=True, switch_hw=False
-):
+def _get_param_spatial_crop(scale, ratio, height, width, num_repeat=10, log_scale=True, switch_hw=False):
     """
     Given scale, ratio, height and width, return sampled coordinates of the videos.
     """
@@ -510,8 +473,8 @@ def _get_param_spatial_crop(
         else:
             aspect_ratio = random.uniform(*ratio)
 
-        w = int(round(math.sqrt(target_area * aspect_ratio)))
-        h = int(round(math.sqrt(target_area / aspect_ratio)))
+        w = int(round(math.sqrt(target_area * aspect_ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        h = int(round(math.sqrt(target_area / aspect_ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
         if np.random.uniform() < 0.5 and switch_hw:
             w, h = h, w
@@ -525,10 +488,10 @@ def _get_param_spatial_crop(
     in_ratio = float(width) / float(height)
     if in_ratio < min(ratio):
         w = width
-        h = int(round(w / min(ratio)))
+        h = int(round(w / min(ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     elif in_ratio > max(ratio):
         h = height
-        w = int(round(h * max(ratio)))
+        w = int(round(h * max(ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     else:  # whole image
         w = width
         h = height
@@ -632,24 +595,16 @@ def create_random_augment(
             of operations to apply).
         interpolation: Interpolation method.
     """
-    if isinstance(input_size, tuple):
-        img_size = input_size[-2:]
-    else:
-        img_size = input_size
+    img_size = input_size[-2:] if isinstance(input_size, tuple) else input_size
 
     if auto_augment:
         assert isinstance(auto_augment, str)
-        if isinstance(img_size, tuple):
-            img_size_min = min(img_size)
-        else:
-            img_size_min = img_size
+        img_size_min = min(img_size) if isinstance(img_size, tuple) else img_size
         aa_params = {"translate_const": int(img_size_min * 0.45)}
         if interpolation and interpolation != "random":
             aa_params["interpolation"] = _pil_interp(interpolation)
         if auto_augment.startswith("rand"):
-            return transforms.Compose(
-                [rand_augment_transform(auto_augment, aa_params)]
-            )
+            return transforms.Compose([rand_augment_transform(auto_augment, aa_params)])
     raise NotImplementedError
 
 
@@ -663,9 +618,7 @@ def random_sized_crop_img(
     """
     Performs Inception-style cropping (used for training).
     """
-    assert (
-        len(im.shape) == 3
-    ), "Currently only support image for random_sized_crop"
+    assert len(im.shape) == 3, "Currently only support image for random_sized_crop"
     h, w = im.shape[1:3]
     i, j, h, w = _get_param_spatial_crop(
         scale=jitter_scale,
@@ -740,8 +693,8 @@ class RandomResizedCropAndInterpolation:
             log_ratio = (math.log(ratio[0]), math.log(ratio[1]))
             aspect_ratio = math.exp(random.uniform(*log_ratio))
 
-            w = int(round(math.sqrt(target_area * aspect_ratio)))
-            h = int(round(math.sqrt(target_area / aspect_ratio)))
+            w = int(round(math.sqrt(target_area * aspect_ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+            h = int(round(math.sqrt(target_area / aspect_ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
             if w <= img.size[0] and h <= img.size[1]:
                 i = random.randint(0, img.size[1] - h)
@@ -752,10 +705,10 @@ class RandomResizedCropAndInterpolation:
         in_ratio = img.size[0] / img.size[1]
         if in_ratio < min(ratio):
             w = img.size[0]
-            h = int(round(w / min(ratio)))
+            h = int(round(w / min(ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         elif in_ratio > max(ratio):
             h = img.size[1]
-            w = int(round(h * max(ratio)))
+            w = int(round(h * max(ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         else:  # whole image
             w = img.size[0]
             h = img.size[1]
@@ -779,19 +732,13 @@ class RandomResizedCropAndInterpolation:
 
     def __repr__(self):
         if isinstance(self.interpolation, (tuple, list)):
-            interpolate_str = " ".join(
-                [_pil_interpolation_to_str[x] for x in self.interpolation]
-            )
+            interpolate_str = " ".join([_pil_interpolation_to_str[x] for x in self.interpolation])
         else:
             interpolate_str = _pil_interpolation_to_str[self.interpolation]
-        format_string = self.__class__.__name__ + "(size={0}".format(self.size)
-        format_string += ", scale={0}".format(
-            tuple(round(s, 4) for s in self.scale)
-        )
-        format_string += ", ratio={0}".format(
-            tuple(round(r, 4) for r in self.ratio)
-        )
-        format_string += ", interpolation={0})".format(interpolate_str)
+        format_string = self.__class__.__name__ + f"(size={self.size}"
+        format_string += f", scale={tuple(round(s, 4) for s in self.scale)}"
+        format_string += f", ratio={tuple(round(r, 4) for r in self.ratio)}"
+        format_string += f", interpolation={interpolate_str})"
         return format_string
 
 
@@ -820,20 +767,11 @@ def transforms_imagenet_train(
      * a portion of the data through the secondary transform
      * normalizes and converts the branches above with the third, final transform
     """
-    if isinstance(img_size, tuple):
-        img_size = img_size[-2:]
-    else:
-        img_size = img_size
+    img_size = img_size[-2:] if isinstance(img_size, tuple) else img_size
 
     scale = tuple(scale or (0.08, 1.0))  # default imagenet scale range
-    ratio = tuple(
-        ratio or (3.0 / 4.0, 4.0 / 3.0)
-    )  # default imagenet ratio range
-    primary_tfl = [
-        RandomResizedCropAndInterpolation(
-            img_size, scale=scale, ratio=ratio, interpolation=interpolation
-        )
-    ]
+    ratio = tuple(ratio or (3.0 / 4.0, 4.0 / 3.0))  # default imagenet ratio range
+    primary_tfl = [RandomResizedCropAndInterpolation(img_size, scale=scale, ratio=ratio, interpolation=interpolation)]
     if hflip > 0.0:
         primary_tfl += [transforms.RandomHorizontalFlip(p=hflip)]
     if vflip > 0.0:
@@ -842,14 +780,11 @@ def transforms_imagenet_train(
     secondary_tfl = []
     if auto_augment:
         assert isinstance(auto_augment, str)
-        if isinstance(img_size, tuple):
-            img_size_min = min(img_size)
-        else:
-            img_size_min = img_size
-        aa_params = dict(
-            translate_const=int(img_size_min * 0.45),
-            img_mean=tuple([min(255, round(255 * x)) for x in mean]),
-        )
+        img_size_min = min(img_size) if isinstance(img_size, tuple) else img_size
+        aa_params = {
+            "translate_const": int(img_size_min * 0.45),
+            "img_mean": tuple([min(255, round(255 * x)) for x in mean]),
+        }
         if interpolation and interpolation != "random":
             aa_params["interpolation"] = _pil_interp(interpolation)
         if auto_augment.startswith("rand"):
@@ -895,10 +830,12 @@ def transforms_imagenet_train(
     else:
         return transforms.Compose(primary_tfl + secondary_tfl + final_tfl)
 
+
 ############################################################################################################
 ############################################################################################################
 
-class Compose(object):
+
+class Compose:
     """Composes several transforms
     Args:
     transforms (list of ``Transform`` objects): list of transforms
@@ -914,7 +851,7 @@ class Compose(object):
         return clip
 
 
-class RandomHorizontalFlip(object):
+class RandomHorizontalFlip:
     """Horizontally flip the list of given images randomly
     with a probability 0.5
     """
@@ -931,16 +868,13 @@ class RandomHorizontalFlip(object):
             if isinstance(clip[0], np.ndarray):
                 return [np.fliplr(img) for img in clip]
             elif isinstance(clip[0], PIL.Image.Image):
-                return [
-                    img.transpose(PIL.Image.FLIP_LEFT_RIGHT) for img in clip
-                ]
+                return [img.transpose(PIL.Image.FLIP_LEFT_RIGHT) for img in clip]
             else:
-                raise TypeError('Expected numpy.ndarray or PIL.Image' +
-                                ' but got list of {0}'.format(type(clip[0])))
+                raise TypeError("Expected numpy.ndarray or PIL.Image" + f" but got list of {type(clip[0])}")
         return clip
 
 
-class RandomResize(object):
+class RandomResize:
     """Resizes a list of (H x W x C) numpy.ndarray to the final size
     The larger the original image is, the more times it takes to
     interpolate
@@ -950,7 +884,7 @@ class RandomResize(object):
     size (tuple): (widht, height)
     """
 
-    def __init__(self, ratio=(3. / 4., 4. / 3.), interpolation='nearest'):
+    def __init__(self, ratio=(3.0 / 4.0, 4.0 / 3.0), interpolation="nearest"):
         self.ratio = ratio
         self.interpolation = interpolation
 
@@ -965,12 +899,11 @@ class RandomResize(object):
         new_w = int(im_w * scaling_factor)
         new_h = int(im_h * scaling_factor)
         new_size = (new_w, new_h)
-        resized = FF.resize_clip(
-            clip, new_size, interpolation=self.interpolation)
+        resized = FF.resize_clip(clip, new_size, interpolation=self.interpolation)
         return resized
 
 
-class Resize(object):
+class Resize:
     """Resizes a list of (H x W x C) numpy.ndarray to the final size
     The larger the original image is, the more times it takes to
     interpolate
@@ -980,17 +913,16 @@ class Resize(object):
     size (tuple): (widht, height)
     """
 
-    def __init__(self, size, interpolation='nearest'):
+    def __init__(self, size, interpolation="nearest"):
         self.size = size
         self.interpolation = interpolation
 
     def __call__(self, clip):
-        resized = FF.resize_clip(
-            clip, self.size, interpolation=self.interpolation)
+        resized = FF.resize_clip(clip, self.size, interpolation=self.interpolation)
         return resized
 
 
-class RandomCrop(object):
+class RandomCrop:
     """Extract random crop at the same location for a list of images
     Args:
     size (sequence or int): Desired output size for the
@@ -1017,14 +949,13 @@ class RandomCrop(object):
         elif isinstance(clip[0], PIL.Image.Image):
             im_w, im_h = clip[0].size
         else:
-            raise TypeError('Expected numpy.ndarray or PIL.Image' +
-                            'but got list of {0}'.format(type(clip[0])))
+            raise TypeError("Expected numpy.ndarray or PIL.Image" + f"but got list of {type(clip[0])}")
         if w > im_w or h > im_h:
             error_msg = (
-                'Initial image size should be larger then '
-                'cropped size but got cropped sizes : ({w}, {h}) while '
-                'initial image is ({im_w}, {im_h})'.format(
-                    im_w=im_w, im_h=im_h, w=w, h=h))
+                "Initial image size should be larger then "
+                f"cropped size but got cropped sizes : ({w}, {h}) while "
+                f"initial image is ({im_w}, {im_h})"
+            )
             raise ValueError(error_msg)
 
         x1 = random.randint(0, im_w - w)
@@ -1034,7 +965,7 @@ class RandomCrop(object):
         return cropped
 
 
-class ThreeCrop(object):
+class ThreeCrop:
     """Extract random crop at the same location for a list of images
     Args:
     size (sequence or int): Desired output size for the
@@ -1061,8 +992,7 @@ class ThreeCrop(object):
         elif isinstance(clip[0], PIL.Image.Image):
             im_w, im_h = clip[0].size
         else:
-            raise TypeError('Expected numpy.ndarray or PIL.Image' +
-                            'but got list of {0}'.format(type(clip[0])))
+            raise TypeError("Expected numpy.ndarray or PIL.Image" + f"but got list of {type(clip[0])}")
         if w != im_w and h != im_h:
             clip = FF.resize_clip(clip, self.size, interpolation="bilinear")
             im_h, im_w, im_c = clip[0].shape
@@ -1070,7 +1000,7 @@ class ThreeCrop(object):
         step = np.max((np.max((im_w, im_h)) - self.size[0]) // 2, 0)
         cropped = []
         for i in range(3):
-            if (im_h > self.size[0]):
+            if im_h > self.size[0]:
                 x1 = 0
                 y1 = i * step
                 cropped.extend(FF.crop_clip(clip, y1, x1, h, w))
@@ -1081,7 +1011,7 @@ class ThreeCrop(object):
         return cropped
 
 
-class RandomRotation(object):
+class RandomRotation:
     """Rotate entire clip randomly by a random angle within
     given bounds
     Args:
@@ -1093,13 +1023,11 @@ class RandomRotation(object):
     def __init__(self, degrees):
         if isinstance(degrees, numbers.Number):
             if degrees < 0:
-                raise ValueError('If degrees is a single number,'
-                                 'must be positive')
+                raise ValueError("If degrees is a single number,must be positive")
             degrees = (-degrees, degrees)
         else:
             if len(degrees) != 2:
-                raise ValueError('If degrees is a sequence,'
-                                 'it must be of len 2.')
+                raise ValueError("If degrees is a sequence,it must be of len 2.")
 
         self.degrees = degrees
 
@@ -1112,19 +1040,19 @@ class RandomRotation(object):
         PIL.Image or numpy.ndarray: Cropped list of images
         """
         import skimage
+
         angle = random.uniform(self.degrees[0], self.degrees[1])
         if isinstance(clip[0], np.ndarray):
             rotated = [skimage.transform.rotate(img, angle) for img in clip]
         elif isinstance(clip[0], PIL.Image.Image):
             rotated = [img.rotate(angle) for img in clip]
         else:
-            raise TypeError('Expected numpy.ndarray or PIL.Image' +
-                            'but got list of {0}'.format(type(clip[0])))
+            raise TypeError("Expected numpy.ndarray or PIL.Image" + f"but got list of {type(clip[0])}")
 
         return rotated
 
 
-class CenterCrop(object):
+class CenterCrop:
     """Extract center crop at the same location for a list of images
     Args:
     size (sequence or int): Desired output size for the
@@ -1151,24 +1079,23 @@ class CenterCrop(object):
         elif isinstance(clip[0], PIL.Image.Image):
             im_w, im_h = clip[0].size
         else:
-            raise TypeError('Expected numpy.ndarray or PIL.Image' +
-                            'but got list of {0}'.format(type(clip[0])))
+            raise TypeError("Expected numpy.ndarray or PIL.Image" + f"but got list of {type(clip[0])}")
         if w > im_w or h > im_h:
             error_msg = (
-                'Initial image size should be larger then '
-                'cropped size but got cropped sizes : ({w}, {h}) while '
-                'initial image is ({im_w}, {im_h})'.format(
-                    im_w=im_w, im_h=im_h, w=w, h=h))
+                "Initial image size should be larger then "
+                f"cropped size but got cropped sizes : ({w}, {h}) while "
+                f"initial image is ({im_w}, {im_h})"
+            )
             raise ValueError(error_msg)
 
-        x1 = int(round((im_w - w) / 2.))
-        y1 = int(round((im_h - h) / 2.))
+        x1 = int(round((im_w - w) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        y1 = int(round((im_h - h) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         cropped = FF.crop_clip(clip, y1, x1, h, w)
 
         return cropped
 
 
-class ColorJitter(object):
+class ColorJitter:
     """Randomly change the brightness, contrast and saturation and hue of the clip
     Args:
     brightness (float): How much to jitter brightness. brightness_factor
@@ -1188,28 +1115,13 @@ class ColorJitter(object):
         self.hue = hue
 
     def get_params(self, brightness, contrast, saturation, hue):
-        if brightness > 0:
-            brightness_factor = random.uniform(
-                max(0, 1 - brightness), 1 + brightness)
-        else:
-            brightness_factor = None
+        brightness_factor = random.uniform(max(0, 1 - brightness), 1 + brightness) if brightness > 0 else None
 
-        if contrast > 0:
-            contrast_factor = random.uniform(
-                max(0, 1 - contrast), 1 + contrast)
-        else:
-            contrast_factor = None
+        contrast_factor = random.uniform(max(0, 1 - contrast), 1 + contrast) if contrast > 0 else None
 
-        if saturation > 0:
-            saturation_factor = random.uniform(
-                max(0, 1 - saturation), 1 + saturation)
-        else:
-            saturation_factor = None
+        saturation_factor = random.uniform(max(0, 1 - saturation), 1 + saturation) if saturation > 0 else None
 
-        if hue > 0:
-            hue_factor = random.uniform(-hue, hue)
-        else:
-            hue_factor = None
+        hue_factor = random.uniform(-hue, hue) if hue > 0 else None
         return brightness_factor, contrast_factor, saturation_factor, hue_factor
 
     def __call__(self, clip):
@@ -1220,11 +1132,11 @@ class ColorJitter(object):
         list PIL.Image : list of transformed PIL.Image
         """
         if isinstance(clip[0], np.ndarray):
-            raise TypeError(
-                'Color jitter not yet implemented for numpy arrays')
+            raise TypeError("Color jitter not yet implemented for numpy arrays")
         elif isinstance(clip[0], PIL.Image.Image):
             brightness, contrast, saturation, hue = self.get_params(
-                self.brightness, self.contrast, self.saturation, self.hue)
+                self.brightness, self.contrast, self.saturation, self.hue
+            )
 
             # Create img transform function sequence
             img_transforms = []
@@ -1246,12 +1158,11 @@ class ColorJitter(object):
                 jittered_clip.append(jittered_img)
 
         else:
-            raise TypeError('Expected numpy.ndarray or PIL.Image' +
-                            'but got list of {0}'.format(type(clip[0])))
+            raise TypeError("Expected numpy.ndarray or PIL.Image" + f"but got list of {type(clip[0])}")
         return jittered_clip
 
 
-class Normalize(object):
+class Normalize:
     """Normalize a clip with mean and standard deviation.
     Given mean: ``(M1,...,Mn)`` and std: ``(S1,..,Sn)`` for ``n`` channels, this transform
     will normalize each channel of the input ``torch.*Tensor`` i.e.
@@ -1277,4 +1188,4 @@ class Normalize(object):
         return FF.normalize(clip, self.mean, self.std)
 
     def __repr__(self):
-        return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
+        return self.__class__.__name__ + f"(mean={self.mean}, std={self.std})"

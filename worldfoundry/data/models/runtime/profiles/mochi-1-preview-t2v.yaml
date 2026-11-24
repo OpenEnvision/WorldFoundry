@@ -6,6 +6,7 @@ groups:
 - video
 source_repos:
 - url: https://github.com/genmoai/models
+  revision: 0c86aebf386e6622deadfb47ff1996878cefc0ac
 checkpoints:
 - repo_id: genmo/mochi-1-preview
   revision: 14be5fcea23095ed330cb214647916a451e38b6e

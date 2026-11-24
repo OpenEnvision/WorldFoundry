@@ -3,16 +3,17 @@ Adapted from https://github.com/lucidrains/rotary-embedding-torch/blob/main/rota
 """
 
 from __future__ import annotations
-from math import pi, log
+
+from math import pi
+from typing import Literal
 
 import torch
-from torch.nn import Module, ModuleList
-from torch.amp import autocast
-from torch import nn, einsum, broadcast_tensors, Tensor
-
 from einops import rearrange, repeat
+from torch import Tensor, broadcast_tensors, einsum, nn
+from torch.amp import autocast
+from torch.nn import Module
 
-from typing import Literal
+from worldfoundry.core.attention.rotary.interleaved import apply_rotary_emb as apply_rotary_emb
 
 # helper functions
 
@@ -28,57 +29,10 @@ def default(val, d):
 # broadcat, as tortoise-tts was using it
 
 
-def broadcat(tensors, dim=-1):
-    broadcasted_tensors = broadcast_tensors(*tensors)
-    return torch.cat(broadcasted_tensors, dim=dim)
-
-
 # rotary embedding helper functions
 
 
-def rotate_half(x):
-    x = rearrange(x, "... (d r) -> ... d r", r=2)
-    x1, x2 = x.unbind(dim=-1)
-    x = torch.stack((-x2, x1), dim=-1)
-    return rearrange(x, "... d r -> ... (d r)")
-
-
-@autocast("cuda", enabled=False)
-def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
-    dtype = t.dtype
-
-    if t.ndim == 3:
-        seq_len = t.shape[seq_dim]
-        freqs = freqs[-seq_len:]
-
-    rot_dim = freqs.shape[-1]
-    end_index = start_index + rot_dim
-
-    assert rot_dim <= t.shape[-1], f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
-
-    # Split t into three parts: left, middle (to be transformed), and right
-    t_left = t[..., :start_index]
-    t_middle = t[..., start_index:end_index]
-    t_right = t[..., end_index:]
-
-    # Apply rotary embeddings without modifying t in place
-    t_transformed = (t_middle * freqs.cos() * scale) + (rotate_half(t_middle) * freqs.sin() * scale)
-
-    out = torch.cat((t_left, t_transformed, t_right), dim=-1)
-
-    return out.type(dtype)
-
-
 # learned rotation helpers
-
-
-def apply_learned_rotations(rotations, t, start_index=0, freq_ranges=None):
-    if exists(freq_ranges):
-        rotations = einsum("..., f -> ... f", rotations, freq_ranges)
-        rotations = rearrange(rotations, "... r f -> ... (r f)")
-
-    rotations = repeat(rotations, "... n -> ... (n r)", r=2)
-    return apply_rotary_emb(rotations, t, start_index=start_index)
 
 
 # classes
@@ -177,7 +131,9 @@ class RotaryEmbedding(Module):
     def rotate_queries_or_keys(self, t, freqs, seq_dim=None, offset=0, scale=None):
         seq_dim = default(seq_dim, self.default_seq_dim)
 
-        assert not self.use_xpos or exists(scale), "you must use `.rotate_queries_and_keys` method instead and pass in both queries and keys, for length extrapolatable rotary embeddings"
+        assert not self.use_xpos or exists(scale), (
+            "you must use `.rotate_queries_and_keys` method instead and pass in both queries and keys, for length extrapolatable rotary embeddings"
+        )
 
         device, dtype, seq_len = t.device, t.dtype, t.shape[seq_dim]
 
@@ -287,7 +243,13 @@ class RotaryEmbedding(Module):
 
     @autocast("cuda", enabled=False)
     def forward(self, t: Tensor, freqs: Tensor, seq_len=None, offset=0):
-        should_cache = self.cache_if_possible and not self.learned_freq and exists(seq_len) and self.freqs_for != "pixel" and (offset + seq_len) <= self.cache_max_seq_len
+        should_cache = (
+            self.cache_if_possible
+            and not self.learned_freq
+            and exists(seq_len)
+            and self.freqs_for != "pixel"
+            and (offset + seq_len) <= self.cache_max_seq_len
+        )
 
         if should_cache and exists(self.cached_freqs) and (offset + seq_len) <= self.cached_freqs_seq_len.item():
             return self.cached_freqs[offset : (offset + seq_len)].detach()

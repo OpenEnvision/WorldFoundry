@@ -1,9 +1,9 @@
-import attr
 import collections
-import numpy as np
-from typing import Dict, Union
 
-from utils import print0
+import attr
+import numpy as np
+
+from worldfoundry.synthesis.visual_generation.mineworld.utils import print0
 
 
 # https://github.com/openai/Video-Pre-Training/blob/main/lib/actions.py#L8 with some modifications
@@ -28,21 +28,16 @@ class Buttons:
     ALL = [
         USE,
         ATTACK,
-
-        
         FORWARD,
         BACK,
         LEFT,
         RIGHT,
-
         JUMP,
         SNEAK,
         SPRINT,
-        
         DROP,
         SWAPHANDS,
         PICKITEM,
-
         INVENTORY,
         ESC,
     ] + [f"hotbar.{i}" for i in range(1, 10)]
@@ -114,12 +109,13 @@ class CameraQuantizer:
 class MinecraftActionTokenizer:
     """Convert MineWorld action dictionaries into model action token ids."""
 
-    def __init__(self,
-                 action_length: int = 11,  # including bos and eos
-                 camera_binsize: int = 9,  # 2 in vpt
-                 camera_maxval: int = 90,  # 10 in vpt
-                 camera_mu: float = 11.4887,  # 10 in vpt
-                 quantization_scheme: str = "mu_law",
+    def __init__(
+        self,
+        action_length: int = 11,  # including bos and eos
+        camera_binsize: int = 9,  # 2 in vpt
+        camera_maxval: int = 90,  # 10 in vpt
+        camera_mu: float = 11.4887,  # 10 in vpt
+        quantization_scheme: str = "mu_law",
     ):
         self.action_length = action_length
         self.camera_quantizer = CameraQuantizer(
@@ -129,15 +125,12 @@ class MinecraftActionTokenizer:
             quantization_scheme=quantization_scheme,
         )
 
-    def make_action_vocab(self,
-                          num_cam_bins: int = 21,
-                          action_vocab_offset: int = 0,
-                          verbose: bool = False):
+    def make_action_vocab(self, num_cam_bins: int = 21, action_vocab_offset: int = 0, verbose: bool = False):
         action_vocab = collections.OrderedDict()
         # 14 actions and hotbar.1-9
         for i, action in enumerate(Buttons.ALL):
             action_vocab[action] = i
-        # camera 0 
+        # camera 0
         for i in range(num_cam_bins):
             action_vocab[f"cam_0_{i}"] = len(Buttons.ALL) + i
         # camera 1
@@ -156,12 +149,9 @@ class MinecraftActionTokenizer:
 
         self.action_vocab = action_vocab
 
-    def _handle_conflict_action_index(self,
-                                action_dict: Dict[str, Union[int, np.ndarray]],
-                                key1: str,
-                                key2: str,
-                                null_key: str,
-                                verbose: bool = False):
+    def _handle_conflict_action_index(
+        self, action_dict: dict[str, int | np.ndarray], key1: str, key2: str, null_key: str, verbose: bool = False
+    ):
         if action_dict[key1] == 1 and action_dict[key2] == 1:
             if verbose:
                 print0(f"[bold yellow][MineWorldActionTokenizer][/bold yellow] {key1} and {key2} are both pressed")
@@ -173,11 +163,9 @@ class MinecraftActionTokenizer:
         else:
             return self.action_vocab[null_key]
 
-    def get_action_index_from_actiondict(self,
-                                         action_dict: Dict[str, Union[int, np.ndarray]],
-                                         action_vocab_offset: int = 0,
-                                         verbose: bool = False):
-
+    def get_action_index_from_actiondict(
+        self, action_dict: dict[str, int | np.ndarray], action_vocab_offset: int = 0, verbose: bool = False
+    ):
         if not hasattr(self, "action_vocab"):
             self.make_action_vocab(action_vocab_offset=action_vocab_offset, verbose=verbose)
 
@@ -205,17 +193,23 @@ class MinecraftActionTokenizer:
                 break
 
         # 4 forward/back
-        action_list[4] = self._handle_conflict_action_index(action_dict, "forward", "back", "<null_act>", verbose=verbose)
+        action_list[4] = self._handle_conflict_action_index(
+            action_dict, "forward", "back", "<null_act>", verbose=verbose
+        )
         # 5 left/right
         action_list[5] = self._handle_conflict_action_index(action_dict, "left", "right", "<null_act>", verbose=verbose)
         # 6 sprint/sneak
-        action_list[6] = self._handle_conflict_action_index(action_dict, "sprint", "sneak", "<null_act>", verbose=verbose)
+        action_list[6] = self._handle_conflict_action_index(
+            action_dict, "sprint", "sneak", "<null_act>", verbose=verbose
+        )
         # 7 use/attack
         action_list[7] = self._handle_conflict_action_index(action_dict, "use", "attack", "<null_act>", verbose=verbose)
         # 8 jump
         action_list[8] = self.action_vocab["jump"] if action_dict["jump"] == 1 else self.action_vocab["<null_act>"]
         # 9 drop/pick
-        action_list[9] = self._handle_conflict_action_index(action_dict, "drop", "pickItem", "<null_act>", verbose=verbose)
+        action_list[9] = self._handle_conflict_action_index(
+            action_dict, "drop", "pickItem", "<null_act>", verbose=verbose
+        )
 
         if verbose:
             print0(f"[bold yellow][MineWorldActionTokenizer][/bold yellow] Action List: {action_list}")

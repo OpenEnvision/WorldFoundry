@@ -8,8 +8,8 @@ Projection and reuse follow the denoiser's placement and autocast policy.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 import torch
 from einops import rearrange
@@ -58,14 +58,24 @@ def camera_features(module, condition, *, encode: Callable | None = None):
 
 def _pad_tokens(camera, length):
     if length is not None and camera.shape[1] < length:
-        camera = torch.cat((camera, camera.new_zeros(camera.shape[0], length - camera.shape[1], camera.shape[2])), dim=1)
+        camera = torch.cat(
+            (camera, camera.new_zeros(camera.shape[0], length - camera.shape[1], camera.shape[2])), dim=1
+        )
     return camera
 
 
 def embed_wan_camera_condition(model, cameras, *, token_length=None, pad_before_embedding=False):
     """Canonical camera patch projection, including Action-22's raw-token padding."""
-    tokens = [rearrange(value, "1 c (f c1) (h c2) (w c3) -> 1 (f h w) (c c1 c2 c3)",
-                        c1=model.patch_size[0], c2=model.patch_size[1], c3=model.patch_size[2]) for value in cameras]
+    tokens = [
+        rearrange(
+            value,
+            "1 c (f c1) (h c2) (w c3) -> 1 (f h w) (c c1 c2 c3)",
+            c1=model.patch_size[0],
+            c2=model.patch_size[1],
+            c3=model.patch_size[2],
+        )
+        for value in cameras
+    ]
     camera = torch.cat(tokens, dim=1)
     if pad_before_embedding:
         camera = _pad_tokens(camera, token_length)
@@ -78,8 +88,9 @@ def prepare_wan_camera_condition(model, condition, *, token_length=None, pad_bef
     """Project camera tokens and per-block affine terms for one inference chunk."""
     if model.training or torch.is_grad_enabled():
         raise RuntimeError("camera preparation requires eval no-grad inference")
-    camera = embed_wan_camera_condition(model, condition["c2ws_plucker_emb"],
-                                       token_length=token_length, pad_before_embedding=pad_before_embedding)
+    camera = embed_wan_camera_condition(
+        model, condition["c2ws_plucker_emb"], token_length=token_length, pad_before_embedding=pad_before_embedding
+    )
     modulations = tuple(project_camera_modulation(block, camera) for block in model.blocks)
     return {**condition, "c2ws_plucker_emb": camera, "_camera_modulations": modulations}
 
@@ -90,8 +101,9 @@ def prepare_action22_camera_condition(model, plucker_emb, *, token_length):
         cameras = [value.unsqueeze(0) for value in plucker_emb]
     else:
         cameras = [value.unsqueeze(0) if value.ndim == 4 else value for value in plucker_emb]
-    return prepare_wan_camera_condition(model, {"c2ws_plucker_emb": cameras},
-                                       token_length=token_length, pad_before_embedding=True)
+    return prepare_wan_camera_condition(
+        model, {"c2ws_plucker_emb": cameras}, token_length=token_length, pad_before_embedding=True
+    )
 
 
 def project_camera_modulation(block, camera):

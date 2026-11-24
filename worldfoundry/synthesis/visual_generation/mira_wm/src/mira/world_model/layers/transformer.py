@@ -11,7 +11,11 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor, nn
 
-from mira.ml.attention import AdaptiveLayerNorm, SelfAttention, SelfAttentionConfig
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.ml.attention import (
+    AdaptiveLayerNorm,
+    SelfAttention,
+    SelfAttentionConfig,
+)
 
 
 class FeedForward(nn.Module):
@@ -62,9 +66,7 @@ class AdaSTBlock(nn.Module):
         self.time_attn_ln, self.time_attn = None, None
         if self.time_attention:
             self.time_attn_ln = (
-                AdaptiveLayerNorm(config.embed_dim, cond_dim)
-                if ada_attn_ln
-                else nn.LayerNorm(config.embed_dim)
+                AdaptiveLayerNorm(config.embed_dim, cond_dim) if ada_attn_ln else nn.LayerNorm(config.embed_dim)
             )
             self.time_attn = SelfAttention(config, causal=causal)
 

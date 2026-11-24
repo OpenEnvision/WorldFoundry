@@ -43,7 +43,6 @@ import shutil
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import numpy as np
 
@@ -52,7 +51,6 @@ from worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_3p5_runtim
 )
 
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = str(Path(__file__).resolve().parents[5])
 PYTHON_BIN = os.environ.get("WORLDFOUNDRY_MATRIX_GAME_3P5_PYTHON", sys.executable)
 MIN_POSES = 86  # dataset minimum: 84 generated + anchor + 1
 
@@ -159,11 +157,11 @@ def write_caption(ws, scene_name, args):
         return
     text = args.prompt
     if args.prompt_file:
-        text = open(args.prompt_file, encoding="utf-8").read().strip()
+        text = open(args.prompt_file, encoding="utf-8").read().strip()  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
     if not text:
         sys.exit("ERROR: provide --prompt, --prompt-file or --caption")
     payload = {"detailed": {"0": {"start": "", "dynamic": text}}}
-    json.dump(payload, open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    json.dump(payload, open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
 
 
 def write_refs(scene_dir, refs_dir):
@@ -247,7 +245,7 @@ def build_workspace(args):
     # Depth file must exist and parse; its values are never used for
     # generation (DA3 estimates depth at runtime).
     np.savez_compressed(os.path.join(scene, "depth", "video.npz"), frame_00000=np.full((h, w), 5.0, np.float32))
-    json.dump({"format": "npz_float"}, open(os.path.join(scene, "depth", "metadata.json"), "w"))
+    json.dump({"format": "npz_float"}, open(os.path.join(scene, "depth", "metadata.json"), "w"))  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
 
     write_caption(ws, "case", args)
     if args.person == "third" and args.refs:
@@ -404,7 +402,6 @@ def main():
         sys.exit("ERROR: --refs is only supported with --person third")
 
     env = dict(os.environ)
-    env["PYTHONPATH"] = PROJECT_ROOT + os.pathsep + env.get("PYTHONPATH", "")
     env["DA3_MODEL_PATH"] = resolve_weight("da3", args.da3_dir)
     env.setdefault("WORLDFOUNDRY_SKIP_MODEL_DOWNLOAD", "true")
 

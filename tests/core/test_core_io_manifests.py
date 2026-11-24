@@ -1,6 +1,6 @@
 """Behavior tests for worldfoundry.core.io.manifests (moved in SA-10).
 
-The implementation was moved verbatim from ``worldfoundry.evaluation.utils``;
+The implementation was moved verbatim from ``worldfoundry.evals.utils``;
 these tests pin the load semantics and the error-message contract (paths in
 YAML parse errors, EF-18) at the new canonical location.
 """

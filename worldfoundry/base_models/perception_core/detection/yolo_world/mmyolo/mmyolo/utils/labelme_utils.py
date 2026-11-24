@@ -18,8 +18,7 @@ class LabelmeFormat:
         super().__init__()
         self.classes = classes
 
-    def __call__(self, pred_instances: InstanceData, metainfo: dict,
-                 output_path: str, selected_classes: list):
+    def __call__(self, pred_instances: InstanceData, metainfo: dict, output_path: str, selected_classes: list):
         """Get image data field for labelme.
 
         Args:
@@ -58,35 +57,34 @@ class LabelmeFormat:
             }
         """
 
-        image_path = os.path.abspath(metainfo['img_path'])
+        image_path = os.path.abspath(metainfo["img_path"])
 
         json_info = {
-            'version': '5.1.1',
-            'flags': {},
-            'imagePath': image_path,
-            'imageData': None,
-            'imageHeight': metainfo['ori_shape'][0],
-            'imageWidth': metainfo['ori_shape'][1],
-            'shapes': []
+            "version": "5.1.1",
+            "flags": {},
+            "imagePath": image_path,
+            "imageData": None,
+            "imageHeight": metainfo["ori_shape"][0],
+            "imageWidth": metainfo["ori_shape"][1],
+            "shapes": [],
         }
 
         for pred_instance in pred_instances:
             pred_bbox = pred_instance.bboxes.cpu().numpy().tolist()[0]
             pred_label = self.classes[pred_instance.labels]
 
-            if selected_classes is not None and \
-                    pred_label not in selected_classes:
+            if selected_classes is not None and pred_label not in selected_classes:
                 # filter class name
                 continue
 
             sub_dict = {
-                'label': pred_label,
-                'points': [pred_bbox[:2], pred_bbox[2:]],
-                'group_id': None,
-                'shape_type': 'rectangle',
-                'flags': {}
+                "label": pred_label,
+                "points": [pred_bbox[:2], pred_bbox[2:]],
+                "group_id": None,
+                "shape_type": "rectangle",
+                "flags": {},
             }
-            json_info['shapes'].append(sub_dict)
+            json_info["shapes"].append(sub_dict)
 
-        with open(output_path, 'w', encoding='utf-8') as f_json:
+        with open(output_path, "w", encoding="utf-8") as f_json:
             json.dump(json_info, f_json, ensure_ascii=False, indent=2)

@@ -2,8 +2,6 @@
 # https://github.com/princeton-vl/lietorch
 # Licensed under the BSD-3 License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> ext -> lietorch -> group_ops.py functionality."""
-
 import torch
 
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext import lietorch_ext as lietorch_backends
@@ -14,12 +12,6 @@ class GroupOp(torch.autograd.Function):
 
     @classmethod
     def forward(cls, ctx, group_id, *inputs):
-        """Forward.
-
-        Args:
-            ctx: The ctx.
-            group_id: The group id.
-        """
         ctx.group_id = group_id
         ctx.save_for_backward(*inputs)
         out = cls.forward_op(ctx.group_id, *inputs)
@@ -27,19 +19,13 @@ class GroupOp(torch.autograd.Function):
 
     @classmethod
     def backward(cls, ctx, grad):
-        """Backward.
-
-        Args:
-            ctx: The ctx.
-            grad: The grad.
-        """
-        error_str = "Backward operation not implemented for {}".format(cls)
+        error_str = f"Backward operation not implemented for {cls}"
         assert cls.backward_op is not None, error_str
 
         inputs = ctx.saved_tensors
         grad = grad.contiguous()
         grad_inputs = cls.backward_op(ctx.group_id, grad, *inputs)
-        return (None,) + tuple(grad_inputs)
+        return (None,) + tuple(grad_inputs)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
 
 class Exp(GroupOp):
@@ -110,24 +96,12 @@ class FromVec(torch.autograd.Function):
 
     @classmethod
     def forward(cls, ctx, group_id, *inputs):
-        """Forward.
-
-        Args:
-            ctx: The ctx.
-            group_id: The group id.
-        """
         ctx.group_id = group_id
         ctx.save_for_backward(*inputs)
         return inputs[0]
 
     @classmethod
     def backward(cls, ctx, grad):
-        """Backward.
-
-        Args:
-            ctx: The ctx.
-            grad: The grad.
-        """
         inputs = ctx.saved_tensors
         J = lietorch_backends.projector(ctx.group_id, *inputs)
         return None, torch.matmul(grad.unsqueeze(-2), torch.linalg.pinv(J)).squeeze(-2)
@@ -138,24 +112,12 @@ class ToVec(torch.autograd.Function):
 
     @classmethod
     def forward(cls, ctx, group_id, *inputs):
-        """Forward.
-
-        Args:
-            ctx: The ctx.
-            group_id: The group id.
-        """
         ctx.group_id = group_id
         ctx.save_for_backward(*inputs)
         return inputs[0]
 
     @classmethod
     def backward(cls, ctx, grad):
-        """Backward.
-
-        Args:
-            ctx: The ctx.
-            grad: The grad.
-        """
         inputs = ctx.saved_tensors
         J = lietorch_backends.projector(ctx.group_id, *inputs)
         return None, torch.matmul(grad.unsqueeze(-2), J).squeeze(-2)

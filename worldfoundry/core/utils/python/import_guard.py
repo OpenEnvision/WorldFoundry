@@ -10,7 +10,7 @@ parallel.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from threading import RLock
 
@@ -18,7 +18,7 @@ _THIRD_PARTY_LAZY_IMPORT_LOCK = RLock()
 
 
 @contextmanager
-def third_party_lazy_import_guard() -> Iterator[None]:
+def third_party_lazy_import_guard() -> Generator[None, None, None]:
     """Serialize process-wide lazy export resolution and remain re-entrant."""
 
     with _THIRD_PARTY_LAZY_IMPORT_LOCK:

@@ -1,6 +1,6 @@
 ---
 title: FETV
-description: "NeurIPS 2023 fine-grained T2V bench: 619 prompts on content, attributes, and complexity. WorldFoundry ships CLIPScore plus an importer; no invented board."
+description: "NeurIPS 2023 fine-grained T2V bench: 619 prompts on content, attributes, and complexity. WorldFoundry ships CLIPScore plus an importer for FETV-EVAL results."
 ---
 
 FETV (Peking University and Huawei Noah's Ark Lab) is a **fine-grained** open-domain text-to-video bench. **619 prompts** sit on three orthogonal axes: **major content**, **attribute control** (color, count, style), and **prompt complexity** (simple vs compositional). Scoring mixes human ratings (static quality, temporal quality, overall / fine-grained alignment) with automatic metrics (CLIPScore, BLIPScore, FID, FVD). `fetv_average` is emitted only when every declared component is present.
@@ -16,7 +16,7 @@ WorldFoundry **vendors FETV-EVAL**, joins generated videos to the official promp
 Import a FETV-EVAL directory or official CSV:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id fetv \
   --mode official-validation \
   --official-results-path <official_results.csv-or-FETV-EVAL-dir> \
@@ -31,7 +31,7 @@ In-tree pointers:
 
 ```text
 worldfoundry/data/benchmarks/tasks/external/fetv.yaml
-worldfoundry/evaluation/tasks/execution/runners/fetv/runtime/fetv_eval
+worldfoundry/evals/tasks/execution/runners/fetv/runtime/fetv_eval
 worldfoundry/data/benchmarks/assets/fetv/fetv_data.json
 ```
 

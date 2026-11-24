@@ -42,10 +42,7 @@ class SanaNoiseInitializer:
             raise ValueError("Sana latent geometry must be positive")
 
     def latent_shape(self, request: DiffusionRequest) -> tuple[int, ...]:
-        needs_padding = bool(
-            request.height % self.spatial_compression
-            or request.width % self.spatial_compression
-        )
+        needs_padding = bool(request.height % self.spatial_compression or request.width % self.spatial_compression)
         if needs_padding and not self.allow_spatial_padding:
             raise ValueError(
                 "Sana height and width must be divisible by "
@@ -71,12 +68,15 @@ class SanaNoiseInitializer:
         device: torch.device,
         dtype: torch.dtype,
     ) -> torch.Tensor:
-        return torch.randn(
-            self.latent_shape(request),
-            generator=generator,
-            device=device,
-            dtype=torch.float32 if self.float32_noise else dtype,
-        ) * self.noise_scale
+        return (
+            torch.randn(
+                self.latent_shape(request),
+                generator=generator,
+                device=device,
+                dtype=torch.float32 if self.float32_noise else dtype,
+            )
+            * self.noise_scale
+        )
 
     def initialize(
         self,
@@ -122,12 +122,16 @@ class SanaControlNetInitializer(SanaNoiseInitializer):
         image = load_pil_image(value, first_sequence_item=False)
         array = np.asarray(image.convert("RGB"), dtype=np.float32).copy()
         pixels = torch.from_numpy(array).permute(2, 0, 1).unsqueeze(0)
-        pixels = functional.interpolate(
-            pixels,
-            size=(request.height, request.width),
-            mode="bilinear",
-            align_corners=False,
-        ).div(127.5).sub(1.0)
+        pixels = (
+            functional.interpolate(
+                pixels,
+                size=(request.height, request.width),
+                mode="bilinear",
+                align_corners=False,
+            )
+            .div(127.5)
+            .sub(1.0)
+        )
         if request.batch_size > 1:
             pixels = pixels.expand(request.batch_size, -1, -1, -1)
         # DC-AE encode the control image; the denoiser reads ``control_signal``.
@@ -135,8 +139,7 @@ class SanaControlNetInitializer(SanaNoiseInitializer):
         noise = self._noise(request, generator=generator, device=device, dtype=dtype)
         if control.shape != noise.shape:
             raise ValueError(
-                "Sana ControlNet codec returned incompatible geometry: "
-                f"{tuple(control.shape)} != {tuple(noise.shape)}"
+                f"Sana ControlNet codec returned incompatible geometry: {tuple(control.shape)} != {tuple(noise.shape)}"
             )
         return LatentInitialization(noise, {"control_signal": control.to(dtype=dtype)})
 
@@ -204,7 +207,8 @@ class SanaWorldInitializer(SanaNoiseInitializer):
     @staticmethod
     def _camera_conditions(request: DiffusionRequest) -> dict[str, torch.Tensor]:
         from worldfoundry.core.geometry.conditioning import pack_spatiotemporal_camera_conditioning
-        from worldfoundry.core.geometry.trajectory import rollout_sana_wm_camera_actions
+
+        from .sana_camera import rollout_sana_wm_camera_actions
 
         direct_camera = request.inputs.get("camera_conditions")
         direct_plucker = request.inputs.get("chunk_plucker")
@@ -299,13 +303,11 @@ class SanaWorldInitializer(SanaNoiseInitializer):
         noise = self._noise(request, generator=generator, device=device, dtype=dtype)
         if anchor.shape[:2] != noise.shape[:2] or anchor.shape[2] != 1 or anchor.shape[-2:] != noise.shape[-2:]:
             raise ValueError(
-                "SANA-WM anchor codec returned incompatible geometry: "
-                f"{tuple(anchor.shape)} for {tuple(noise.shape)}"
+                f"SANA-WM anchor codec returned incompatible geometry: {tuple(anchor.shape)} for {tuple(noise.shape)}"
             )
         noise[:, :, :1] = anchor.to(dtype=dtype)
         camera = {
-            name: value.to(device=device, dtype=dtype)
-            for name, value in self._camera_conditions(request).items()
+            name: value.to(device=device, dtype=dtype) for name, value in self._camera_conditions(request).items()
         }
         camera["condition_frame_info"] = {0: 0.0}
         return LatentInitialization(noise, camera, {"anchor_latent": anchor})

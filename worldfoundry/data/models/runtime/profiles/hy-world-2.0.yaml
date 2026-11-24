@@ -7,6 +7,7 @@ groups:
 - three_d
 source_repos:
 - url: https://github.com/Tencent-Hunyuan/HY-World-2.0
+  revision: 7f668e67c74338d50684e57be46a438459b6bbe1
 checkpoints:
 - repo_id: tencent/HY-World-2.0
   role: hy_world_2_checkpoint
@@ -21,15 +22,12 @@ artifact_kind: generated_world
 artifact_filename: hy-world-2.0.mp4
 execution:
   backend_stage: in_tree_worldmirror_runtime
-  runtime_status: component_verified_worldgen_migration_pending
+  runtime_status: component_verified
   integration_status: component_verified
   pipeline_binding: hy-world-2.0
 integration:
   status: component_verified
 notes:
-- HYWorld2Pipeline wraps the in-tree HY-Pano 2.0 and WorldMirror 2.0 components.
+- HYWorld2Pipeline wraps the in-tree WorldMirror 2.0 reconstruction component.
 - WorldMirror 2.0 reconstruction is verified through the Workspace infer path and exports point cloud,
   Gaussian splat, depth, normal, camera, COLMAP, and RRD scene artifacts.
-- Official HY-World 2.0 now ships full World Generation inference code; WorldFoundry
-  still needs to migrate WorldNav, WorldStereo 2.0, and World Composition before
-  exposing a full text/image-to-3D-world Studio path.

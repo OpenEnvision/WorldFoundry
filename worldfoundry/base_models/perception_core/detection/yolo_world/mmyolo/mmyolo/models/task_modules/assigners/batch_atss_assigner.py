@@ -1,5 +1,4 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import List, Tuple
 
 import torch
 import torch.nn as nn
@@ -8,12 +7,11 @@ from mmdet.utils import ConfigType
 from torch import Tensor
 
 from mmyolo.registry import TASK_UTILS
-from .utils import (select_candidates_in_gts, select_highest_overlaps,
-                    yolov6_iou_calculator)
+
+from .utils import select_candidates_in_gts, select_highest_overlaps, yolov6_iou_calculator
 
 
-def bbox_center_distance(bboxes: Tensor,
-                         priors: Tensor) -> Tuple[Tensor, Tensor]:
+def bbox_center_distance(bboxes: Tensor, priors: Tensor) -> tuple[Tensor, Tensor]:
     """Compute the center distance between bboxes and priors.
 
     Args:
@@ -34,8 +32,7 @@ def bbox_center_distance(bboxes: Tensor,
     priors_cy = (priors[:, 1] + priors[:, 3]) / 2.0
     priors_points = torch.stack((priors_cx, priors_cy), dim=1)
 
-    distances = (bbox_points[:, None, :] -
-                 priors_points[None, :, :]).pow(2).sum(-1).sqrt()
+    distances = (bbox_points[:, None, :] - priors_points[None, :, :]).pow(2).sum(-1).sqrt()
 
     return distances, priors_points
 
@@ -60,20 +57,22 @@ class BatchATSSAssigner(nn.Module):
         topk (int): number of priors selected in each level
     """
 
-    def __init__(
-            self,
-            num_classes: int,
-            iou_calculator: ConfigType = dict(type='mmdet.BboxOverlaps2D'),
-            topk: int = 9):
+    def __init__(self, num_classes: int, iou_calculator: ConfigType = {"type": "mmdet.BboxOverlaps2D"}, topk: int = 9):  # noqa: B006 - Keeps the upstream default object and signature.
         super().__init__()
         self.num_classes = num_classes
         self.iou_calculator = TASK_UTILS.build(iou_calculator)
         self.topk = topk
 
     @torch.no_grad()
-    def forward(self, pred_bboxes: Tensor, priors: Tensor,
-                num_level_priors: List, gt_labels: Tensor, gt_bboxes: Tensor,
-                pad_bbox_flag: Tensor) -> dict:
+    def forward(
+        self,
+        pred_bboxes: Tensor,
+        priors: Tensor,
+        num_level_priors: list,
+        gt_labels: Tensor,
+        gt_bboxes: Tensor,
+        pad_bbox_flag: Tensor,
+    ) -> dict:
         """Assign gt to priors.
 
         The assignment is done in following steps
@@ -120,14 +119,10 @@ class BatchATSSAssigner(nn.Module):
         num_gt, num_priors = gt_bboxes.size(1), priors.size(0)
 
         assigned_result = {
-            'assigned_labels':
-            gt_bboxes.new_full([batch_size, num_priors], self.num_classes),
-            'assigned_bboxes':
-            gt_bboxes.new_full([batch_size, num_priors, 4], 0),
-            'assigned_scores':
-            gt_bboxes.new_full([batch_size, num_priors, self.num_classes], 0),
-            'fg_mask_pre_prior':
-            gt_bboxes.new_full([batch_size, num_priors], 0)
+            "assigned_labels": gt_bboxes.new_full([batch_size, num_priors], self.num_classes),
+            "assigned_bboxes": gt_bboxes.new_full([batch_size, num_priors, 4], 0),
+            "assigned_scores": gt_bboxes.new_full([batch_size, num_priors, self.num_classes], 0),
+            "fg_mask_pre_prior": gt_bboxes.new_full([batch_size, num_priors], 0),
         }
 
         if num_gt == 0:
@@ -138,37 +133,36 @@ class BatchATSSAssigner(nn.Module):
         overlaps = overlaps.reshape([batch_size, -1, num_priors])
 
         # compute center distance between all prior and gt
-        distances, priors_points = bbox_center_distance(
-            gt_bboxes.reshape([-1, 4]), priors)
+        distances, priors_points = bbox_center_distance(gt_bboxes.reshape([-1, 4]), priors)
         distances = distances.reshape([batch_size, -1, num_priors])
 
         # Selecting candidates based on the center distance
-        is_in_candidate, candidate_idxs = self.select_topk_candidates(
-            distances, num_level_priors, pad_bbox_flag)
+        is_in_candidate, candidate_idxs = self.select_topk_candidates(distances, num_level_priors, pad_bbox_flag)
 
         # get corresponding iou for the these candidates, and compute the
         # mean and std, set mean + std as the iou threshold
         overlaps_thr_per_gt, iou_candidates = self.threshold_calculator(
-            is_in_candidate, candidate_idxs, overlaps, num_priors, batch_size,
-            num_gt)
+            is_in_candidate, candidate_idxs, overlaps, num_priors, batch_size, num_gt
+        )
 
         # select candidates iou >= threshold as positive
         is_pos = torch.where(
             iou_candidates > overlaps_thr_per_gt.repeat([1, 1, num_priors]),
-            is_in_candidate, torch.zeros_like(is_in_candidate))
+            is_in_candidate,
+            torch.zeros_like(is_in_candidate),
+        )
 
         is_in_gts = select_candidates_in_gts(priors_points, gt_bboxes)
         pos_mask = is_pos * is_in_gts * pad_bbox_flag
 
         # if an anchor box is assigned to multiple gts,
         # the one with the highest IoU will be selected.
-        gt_idx_pre_prior, fg_mask_pre_prior, pos_mask = \
-            select_highest_overlaps(pos_mask, overlaps, num_gt)
+        gt_idx_pre_prior, fg_mask_pre_prior, pos_mask = select_highest_overlaps(pos_mask, overlaps, num_gt)
 
         # assigned target
         assigned_labels, assigned_bboxes, assigned_scores = self.get_targets(
-            gt_labels, gt_bboxes, gt_idx_pre_prior, fg_mask_pre_prior,
-            num_priors, batch_size, num_gt)
+            gt_labels, gt_bboxes, gt_idx_pre_prior, fg_mask_pre_prior, num_priors, batch_size, num_gt
+        )
 
         # soft label with iou
         if pred_bboxes is not None:
@@ -176,15 +170,15 @@ class BatchATSSAssigner(nn.Module):
             ious = ious.max(axis=-2)[0].unsqueeze(-1)
             assigned_scores *= ious
 
-        assigned_result['assigned_labels'] = assigned_labels.long()
-        assigned_result['assigned_bboxes'] = assigned_bboxes
-        assigned_result['assigned_scores'] = assigned_scores
-        assigned_result['fg_mask_pre_prior'] = fg_mask_pre_prior.bool()
+        assigned_result["assigned_labels"] = assigned_labels.long()
+        assigned_result["assigned_bboxes"] = assigned_bboxes
+        assigned_result["assigned_scores"] = assigned_scores
+        assigned_result["fg_mask_pre_prior"] = fg_mask_pre_prior.bool()
         return assigned_result
 
-    def select_topk_candidates(self, distances: Tensor,
-                               num_level_priors: List[int],
-                               pad_bbox_flag: Tensor) -> Tuple[Tensor, Tensor]:
+    def select_topk_candidates(
+        self, distances: Tensor, num_level_priors: list[int], pad_bbox_flag: Tensor
+    ) -> tuple[Tensor, Tensor]:
         """Selecting candidates based on the center distance.
 
         Args:
@@ -209,26 +203,19 @@ class BatchATSSAssigner(nn.Module):
         distances = torch.split(distances, num_level_priors, dim=-1)
         pad_bbox_flag = pad_bbox_flag.repeat(1, 1, self.topk).bool()
 
-        for distances_per_level, priors_per_level in zip(
-                distances, num_level_priors):
+        for distances_per_level, priors_per_level in zip(distances, num_level_priors, strict=False):
             # on each pyramid level, for each gt,
             # select k bbox whose center are closest to the gt center
             end_index = start_idx + priors_per_level
             selected_k = min(self.topk, priors_per_level)
 
-            _, topk_idxs_per_level = distances_per_level.topk(
-                selected_k, dim=-1, largest=False)
+            _, topk_idxs_per_level = distances_per_level.topk(selected_k, dim=-1, largest=False)
             candidate_idxs.append(topk_idxs_per_level + start_idx)
 
-            topk_idxs_per_level = torch.where(
-                pad_bbox_flag, topk_idxs_per_level,
-                torch.zeros_like(topk_idxs_per_level))
+            topk_idxs_per_level = torch.where(pad_bbox_flag, topk_idxs_per_level, torch.zeros_like(topk_idxs_per_level))
 
-            is_in_candidate = F.one_hot(topk_idxs_per_level,
-                                        priors_per_level).sum(dim=-2)
-            is_in_candidate = torch.where(is_in_candidate > 1,
-                                          torch.zeros_like(is_in_candidate),
-                                          is_in_candidate)
+            is_in_candidate = F.one_hot(topk_idxs_per_level, priors_per_level).sum(dim=-2)
+            is_in_candidate = torch.where(is_in_candidate > 1, torch.zeros_like(is_in_candidate), is_in_candidate)
             is_in_candidate_list.append(is_in_candidate.to(distances_dtype))
 
             start_idx = end_index
@@ -239,10 +226,9 @@ class BatchATSSAssigner(nn.Module):
         return is_in_candidate_list, candidate_idxs
 
     @staticmethod
-    def threshold_calculator(is_in_candidate: List, candidate_idxs: Tensor,
-                             overlaps: Tensor, num_priors: int,
-                             batch_size: int,
-                             num_gt: int) -> Tuple[Tensor, Tensor]:
+    def threshold_calculator(
+        is_in_candidate: list, candidate_idxs: Tensor, overlaps: Tensor, num_priors: int, batch_size: int, num_gt: int
+    ) -> tuple[Tensor, Tensor]:
         """Get corresponding iou for the these candidates, and compute the mean
         and std, set mean + std as the iou threshold.
 
@@ -254,7 +240,6 @@ class BatchATSSAssigner(nn.Module):
             overlaps (Tensor): Overlaps area,
                 shape(batch_size, num_gt, num_priors).
             num_priors (int): Number of priors.
-            batch_size (int): Batch size.
             num_gt (int): Number of ground truth.
 
         Return:
@@ -265,32 +250,32 @@ class BatchATSSAssigner(nn.Module):
         """
 
         batch_size_num_gt = batch_size * num_gt
-        candidate_overlaps = torch.where(is_in_candidate > 0, overlaps,
-                                         torch.zeros_like(overlaps))
+        candidate_overlaps = torch.where(is_in_candidate > 0, overlaps, torch.zeros_like(overlaps))
         candidate_idxs = candidate_idxs.reshape([batch_size_num_gt, -1])
 
-        assist_indexes = num_priors * torch.arange(
-            batch_size_num_gt, device=candidate_idxs.device)
+        assist_indexes = num_priors * torch.arange(batch_size_num_gt, device=candidate_idxs.device)
         assist_indexes = assist_indexes[:, None]
         flatten_indexes = candidate_idxs + assist_indexes
 
-        candidate_overlaps_reshape = candidate_overlaps.reshape(
-            -1)[flatten_indexes]
-        candidate_overlaps_reshape = candidate_overlaps_reshape.reshape(
-            [batch_size, num_gt, -1])
+        candidate_overlaps_reshape = candidate_overlaps.reshape(-1)[flatten_indexes]
+        candidate_overlaps_reshape = candidate_overlaps_reshape.reshape([batch_size, num_gt, -1])
 
-        overlaps_mean_per_gt = candidate_overlaps_reshape.mean(
-            axis=-1, keepdim=True)
-        overlaps_std_per_gt = candidate_overlaps_reshape.std(
-            axis=-1, keepdim=True)
+        overlaps_mean_per_gt = candidate_overlaps_reshape.mean(axis=-1, keepdim=True)
+        overlaps_std_per_gt = candidate_overlaps_reshape.std(axis=-1, keepdim=True)
         overlaps_thr_per_gt = overlaps_mean_per_gt + overlaps_std_per_gt
 
         return overlaps_thr_per_gt, candidate_overlaps
 
-    def get_targets(self, gt_labels: Tensor, gt_bboxes: Tensor,
-                    assigned_gt_inds: Tensor, fg_mask_pre_prior: Tensor,
-                    num_priors: int, batch_size: int,
-                    num_gt: int) -> Tuple[Tensor, Tensor, Tensor]:
+    def get_targets(
+        self,
+        gt_labels: Tensor,
+        gt_bboxes: Tensor,
+        assigned_gt_inds: Tensor,
+        fg_mask_pre_prior: Tensor,
+        num_priors: int,
+        batch_size: int,
+        num_gt: int,
+    ) -> tuple[Tensor, Tensor, Tensor]:
         """Get target info.
 
         Args:
@@ -303,7 +288,6 @@ class BatchATSSAssigner(nn.Module):
             fg_mask_pre_prior (Tensor): Force ground truth matching mask,
                 shape(batch_size, num_priors)
             num_priors (int): Number of priors.
-            batch_size (int): Batch size.
             num_gt (int): Number of ground truth.
 
         Return:
@@ -316,24 +300,21 @@ class BatchATSSAssigner(nn.Module):
         """
 
         # assigned target labels
-        batch_index = torch.arange(
-            batch_size, dtype=gt_labels.dtype, device=gt_labels.device)
+        batch_index = torch.arange(batch_size, dtype=gt_labels.dtype, device=gt_labels.device)
         batch_index = batch_index[..., None]
         assigned_gt_inds = (assigned_gt_inds + batch_index * num_gt).long()
         assigned_labels = gt_labels.flatten()[assigned_gt_inds.flatten()]
         assigned_labels = assigned_labels.reshape([batch_size, num_priors])
         assigned_labels = torch.where(
-            fg_mask_pre_prior > 0, assigned_labels,
-            torch.full_like(assigned_labels, self.num_classes))
+            fg_mask_pre_prior > 0, assigned_labels, torch.full_like(assigned_labels, self.num_classes)
+        )
 
         # assigned target boxes
-        assigned_bboxes = gt_bboxes.reshape([-1,
-                                             4])[assigned_gt_inds.flatten()]
+        assigned_bboxes = gt_bboxes.reshape([-1, 4])[assigned_gt_inds.flatten()]
         assigned_bboxes = assigned_bboxes.reshape([batch_size, num_priors, 4])
 
         # assigned target scores
-        assigned_scores = F.one_hot(assigned_labels.long(),
-                                    self.num_classes + 1).float()
-        assigned_scores = assigned_scores[:, :, :self.num_classes]
+        assigned_scores = F.one_hot(assigned_labels.long(), self.num_classes + 1).float()
+        assigned_scores = assigned_scores[:, :, : self.num_classes]
 
         return assigned_labels, assigned_bboxes, assigned_scores

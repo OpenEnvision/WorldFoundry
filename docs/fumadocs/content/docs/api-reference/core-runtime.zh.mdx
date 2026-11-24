@@ -3,12 +3,12 @@ title: Core 推理 Runtime
 description: 模型推理 spec、task/variant 契约、进程策略、autocast、编译、torchrun 命令、device 与计时器。
 ---
 
-Core runtime 在加载模型实现之前，先把模型可运行表面明确描述出来。`ModelInferenceSpec` 记录模型家族身份、variant、checkpoint、task profile、字段、artifact、流式支持和可接受调用参数。进程 helper 再应用共享执行策略，而不会把某个模型的行为塞进 Core。
+Core runtime 在加载模型实现之前，先明确描述模型运行所需的接口。`ModelInferenceSpec` 记录模型家族身份、variant、checkpoint、task profile、字段、artifact、流式支持和可接受调用参数。进程 helper 再应用共享执行策略，而不会把某个模型的行为塞进 Core。
 
 ## 构造或获取 inference spec
 
 ```python
-from worldfoundry.core import model_inference_spec
+from worldfoundry.runtime.inference_catalog import model_inference_spec
 
 spec = model_inference_spec(
     model_family_id="my-world-model",
@@ -47,6 +47,8 @@ print(command)  # 这里只构造命令，不会启动进程
 ```
 
 只有当前进程确实应当负责启动并捕获一个单机 job 时，才使用 `run_torchrun_module`。即使子进程非零退出，它也会返回 `CompletedProcess`，调用方必须检查 `returncode` 与日志。
+
+模型运行时通过 `package_module_command` 启动 worker：它只接受 `worldfoundry.` 模块，返回 `python -m MODULE ARGS`；设置 `nproc_per_node` 时返回 torchrun 形式。子进程继承调用方的环境和导入路径，命令不会添加 `PYTHONPATH` 条目。
 
 ## 完整参考
 

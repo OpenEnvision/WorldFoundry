@@ -12,31 +12,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
-from dataclasses import dataclass
-from typing import Literal
+from typing import ClassVar, Literal
 
 import numpy as np
 import torch
-
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.schedulers.scheduling_utils import SchedulerMixin
-from diffusers.utils import BaseOutput, deprecate
+from diffusers.utils import deprecate
+
+from worldfoundry.base_models.diffusion_model.schedulers.helios import HeliosSchedulerOutput as EvokeSchedulerOutput
 
 from .flow_unipc import FlowUniPCMultistepScheduler
 
 
-@dataclass
-class EvokeSchedulerOutput(BaseOutput):
-    prev_sample: torch.FloatTensor
-    model_outputs: torch.FloatTensor | None = None
-    last_sample: torch.FloatTensor | None = None
-    this_order: int | None = None
-
-
 class EvokeScheduler(SchedulerMixin, ConfigMixin):
-    _compatibles = []
+    _compatibles: ClassVar[list] = []
     order = 1
 
     @register_to_config
@@ -45,7 +36,7 @@ class EvokeScheduler(SchedulerMixin, ConfigMixin):
         num_train_timesteps: int = 1000,
         shift: float = 1.0,  # Following Stable diffusion 3,
         stages: int = 3,
-        stage_range: list = [0, 1 / 3, 2 / 3, 1],
+        stage_range: list = [0, 1 / 3, 2 / 3, 1],  # noqa: B006 - Keeps the upstream default object and signature.
         gamma: float = 1 / 3,
         # For UniPC
         thresholding: bool = False,
@@ -54,7 +45,7 @@ class EvokeScheduler(SchedulerMixin, ConfigMixin):
         predict_x0: bool = True,
         solver_type: str = "bh2",
         lower_order_final: bool = True,
-        disable_corrector: list[int] = [],
+        disable_corrector: list[int] = [],  # noqa: B006 - Keeps the upstream default object and signature.
         solver_p: SchedulerMixin = None,
         use_flow_sigmas: bool = True,
         scheduler_type: str = "unipc",  # ["euler", "unipc", "dmd"]
@@ -144,14 +135,8 @@ class EvokeScheduler(SchedulerMixin, ConfigMixin):
         # Determine the ratio of each stage according to flow length
         tot_distance = sum(stage_distance)
         for i_s in range(stages):
-            if i_s == 0:
-                start_ratio = 0.0
-            else:
-                start_ratio = sum(stage_distance[:i_s]) / tot_distance
-            if i_s == stages - 1:
-                end_ratio = 0.9999999999999999
-            else:
-                end_ratio = sum(stage_distance[: i_s + 1]) / tot_distance
+            start_ratio = 0.0 if i_s == 0 else sum(stage_distance[:i_s]) / tot_distance
+            end_ratio = 0.9999999999999999 if i_s == stages - 1 else sum(stage_distance[: i_s + 1]) / tot_distance
 
             self.timestep_ratios[i_s] = (start_ratio, end_ratio)
 
@@ -208,10 +193,7 @@ class EvokeScheduler(SchedulerMixin, ConfigMixin):
         Setting the timesteps and sigmas for each stage
         """
         if self.config.scheduler_type == "dmd":
-            if is_amplify_first_chunk:
-                num_inference_steps = num_inference_steps * 2 + 1
-            else:
-                num_inference_steps = num_inference_steps + 1
+            num_inference_steps = num_inference_steps * 2 + 1 if is_amplify_first_chunk else num_inference_steps + 1
 
         self.num_inference_steps = num_inference_steps
         self.init_sigmas()
@@ -323,19 +305,14 @@ class EvokeScheduler(SchedulerMixin, ConfigMixin):
     ) -> EvokeSchedulerOutput | tuple:
         assert (sigma is None) == (sigma_next is None), "sigma and sigma_next must both be None or both be not None"
 
-        if sigma is None and sigma_next is None:
-            if (
-                isinstance(timestep, int)
-                or isinstance(timestep, torch.IntTensor)
-                or isinstance(timestep, torch.LongTensor)
-            ):
-                raise ValueError(
-                    (
-                        "Passing integer indices (e.g. from `enumerate(timesteps)`) as timesteps to"
-                        " `EulerDiscreteScheduler.step()` is not supported. Make sure to pass"
-                        " one of the `scheduler.timesteps` as a timestep."
-                    ),
-                )
+        if sigma is None and sigma_next is None and (isinstance(timestep, (int, torch.IntTensor, torch.LongTensor))):
+            raise ValueError(
+                (
+                    "Passing integer indices (e.g. from `enumerate(timesteps)`) as timesteps to"
+                    " `EulerDiscreteScheduler.step()` is not supported. Make sure to pass"
+                    " one of the `scheduler.timesteps` as a timestep."
+                ),
+            )
 
         if self.step_index is None:
             self._step_index = 0
@@ -421,10 +398,7 @@ class EvokeScheduler(SchedulerMixin, ConfigMixin):
             elif self.config.prediction_type == "v_prediction":
                 x0_pred = alpha_t * sample - sigma_t * model_output
             elif self.config.prediction_type == "flow_prediction":
-                if flag:
-                    sigma_t = self.sigmas[self.step_index]
-                else:
-                    sigma_t = sigma
+                sigma_t = self.sigmas[self.step_index] if flag else sigma
                 x0_pred = sample - sigma_t * model_output
             else:
                 raise ValueError(
@@ -461,14 +435,14 @@ class EvokeScheduler(SchedulerMixin, ConfigMixin):
         timestep: int | torch.Tensor = None,
         sample: torch.Tensor = None,
         return_dict: bool = True,
-        model_outputs: list = None,
-        timestep_list: list = None,
+        model_outputs: list | None = None,
+        timestep_list: list | None = None,
         sigma_before: torch.Tensor = None,
         sigma: torch.Tensor = None,
         sigma_next: torch.Tensor = None,
-        cus_step_index: int = None,
-        cus_lower_order_num: int = None,
-        cus_this_order: int = None,
+        cus_step_index: int | None = None,
+        cus_lower_order_num: int | None = None,
+        cus_this_order: int | None = None,
         cus_last_sample: torch.Tensor = None,
     ) -> EvokeSchedulerOutput | tuple:
         if self.num_inference_steps is None:
@@ -539,9 +513,8 @@ class EvokeScheduler(SchedulerMixin, ConfigMixin):
             sigma_next=sigma_next,
         )
 
-        if cus_lower_order_num is None:
-            if self.lower_order_nums < self.config.solver_order:
-                self.lower_order_nums += 1
+        if cus_lower_order_num is None and self.lower_order_nums < self.config.solver_order:
+            self.lower_order_nums += 1
 
         # upon completion increase step index by one
         if cus_step_index is None:

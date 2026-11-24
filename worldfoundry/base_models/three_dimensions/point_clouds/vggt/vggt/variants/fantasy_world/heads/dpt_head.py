@@ -1,15 +1,19 @@
 # Copyright Alibaba Inc. All Rights Reserved.
 # Inspired by https://github.com/DepthAnything/Depth-Anything-V2
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> variants -> fantasy_world -> heads -> dpt_head.py functionality."""
-
-from typing import List, Tuple, Union
 import torch
 import torch.nn as nn
-from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.head_act import activate_head
-from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.utils import create_uv_grid, position_grid_to_embed
-from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.geometry_bridge import WanVAE_
 from einops import rearrange
+
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.geometry_bridge import WanVAE_
+from worldfoundry.base_models.three_dimensions.depth.midas.fusion import custom_interpolate as custom_interpolate
+from worldfoundry.base_models.three_dimensions.depth.midas.fusion import make_grouped_fusion_block as _make_fusion_block
+from worldfoundry.base_models.three_dimensions.depth.midas.fusion import make_scratch as _make_scratch
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.head_act import activate_head
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.utils import (
+    create_uv_grid,
+    position_grid_to_embed,
+)
 
 
 class DPTHead_3D_Causal(nn.Module):
@@ -42,33 +46,14 @@ class DPTHead_3D_Causal(nn.Module):
         activation: str = "inv_log",
         conf_activation: str = "expp1",
         features: int = 256,
-        out_channels: List[int] = [256, 512, 1024, 1024],
-        intermediate_layer_idx: List[int] = [23, 17, 11, 7],
+        out_channels: list[int] = [256, 512, 1024, 1024],  # noqa: B006 - Keeps the upstream default object and signature.
+        intermediate_layer_idx: list[int] = [23, 17, 11, 7],  # noqa: B006 - Keeps the upstream default object and signature.
         pos_embed: bool = True,
         feature_only: bool = False,
         down_ratio: int = 1,
         temporal_scale: int = 4,
     ) -> None:
-        """Init.
-
-        Args:
-            dim_in: The dim in.
-            patch_size: The patch size.
-            output_dim: The output dim.
-            activation: The activation.
-            conf_activation: The conf activation.
-            features: The features.
-            out_channels: The out channels.
-            intermediate_layer_idx: The intermediate layer idx.
-            pos_embed: The pos embed.
-            feature_only: The feature only.
-            down_ratio: The down ratio.
-            temporal_scale: The temporal scale.
-
-        Returns:
-            The return value.
-        """
-        super(DPTHead_3D_Causal, self).__init__()
+        super().__init__()
         self.patch_size = patch_size
         self.activation = activation
         self.conf_activation = conf_activation
@@ -82,43 +67,32 @@ class DPTHead_3D_Causal(nn.Module):
 
         # Projection layers for each output channel from tokens.
         self.projects = nn.ModuleList(
-            [
-                nn.Conv2d(
-                    in_channels=dim_in,
-                    out_channels=oc,
-                    kernel_size=1,
-                    stride=1,
-                    padding=0) for oc in out_channels])
+            [nn.Conv2d(in_channels=dim_in, out_channels=oc, kernel_size=1, stride=1, padding=0) for oc in out_channels]
+        )
 
         # Resize layers for upsampling feature maps.
         self.resize_layers = nn.ModuleList(
             [
                 nn.ConvTranspose2d(
-                    in_channels=out_channels[0],
-                    out_channels=out_channels[0],
-                    kernel_size=4,
-                    stride=4,
-                    padding=0),
+                    in_channels=out_channels[0], out_channels=out_channels[0], kernel_size=4, stride=4, padding=0
+                ),
                 nn.ConvTranspose2d(
-                    in_channels=out_channels[1],
-                    out_channels=out_channels[1],
-                    kernel_size=2,
-                    stride=2,
-                    padding=0),
+                    in_channels=out_channels[1], out_channels=out_channels[1], kernel_size=2, stride=2, padding=0
+                ),
                 nn.Identity(),
                 nn.Conv2d(
-                    in_channels=out_channels[3],
-                    out_channels=out_channels[3],
-                    kernel_size=3,
-                    stride=2,
-                    padding=1),
-            ])
-        self.temporal_upsamplers = nn.ModuleList([
-            WanVAE_(z_dim=out_channels[0], location="DPT"),
-            WanVAE_(z_dim=out_channels[1], location="DPT"),
-            WanVAE_(z_dim=out_channels[2], location="DPT"),
-            WanVAE_(z_dim=out_channels[3], location="DPT"),
-        ])
+                    in_channels=out_channels[3], out_channels=out_channels[3], kernel_size=3, stride=2, padding=1
+                ),
+            ]
+        )
+        self.temporal_upsamplers = nn.ModuleList(
+            [
+                WanVAE_(z_dim=out_channels[0], location="DPT"),
+                WanVAE_(z_dim=out_channels[1], location="DPT"),
+                WanVAE_(z_dim=out_channels[2], location="DPT"),
+                WanVAE_(z_dim=out_channels[3], location="DPT"),
+            ]
+        )
 
         self.scratch = _make_scratch(out_channels, features, expand=False)
 
@@ -127,50 +101,33 @@ class DPTHead_3D_Causal(nn.Module):
         self.scratch.refinenet1 = _make_fusion_block(features)
         self.scratch.refinenet2 = _make_fusion_block(features)
         self.scratch.refinenet3 = _make_fusion_block(features)
-        self.scratch.refinenet4 = _make_fusion_block(
-            features, has_residual=False)
+        self.scratch.refinenet4 = _make_fusion_block(features, has_residual=False)
 
         head_features_1 = features
         head_features_2 = 32
 
         if feature_only:
-            self.scratch.output_conv1 = nn.Conv2d(
-                head_features_1, head_features_1, kernel_size=3, stride=1, padding=1)
+            self.scratch.output_conv1 = nn.Conv2d(head_features_1, head_features_1, kernel_size=3, stride=1, padding=1)
         else:
             self.scratch.output_conv1 = nn.Conv2d(
-                head_features_1,
-                head_features_1 // 2,
-                kernel_size=3,
-                stride=1,
-                padding=1)
+                head_features_1, head_features_1 // 2, kernel_size=3, stride=1, padding=1
+            )
             conv2_in_channels = head_features_1 // 2
 
             self.scratch.output_conv2 = nn.Sequential(
-                nn.Conv2d(
-                    conv2_in_channels, head_features_2, kernel_size=3, stride=1, padding=1), nn.ReLU(
-                    inplace=True), nn.Conv2d(
-                    head_features_2, output_dim, kernel_size=1, stride=1, padding=0), )
+                nn.Conv2d(conv2_in_channels, head_features_2, kernel_size=3, stride=1, padding=1),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(head_features_2, output_dim, kernel_size=1, stride=1, padding=0),
+            )
 
     def forward(
         self,
-        aggregated_tokens_list: List[torch.Tensor],
+        aggregated_tokens_list: list[torch.Tensor],
         images: torch.Tensor,
         patch_start_idx: int,
         frames_chunk_size_first: int = 4,
         frames_chunk_size_second: int = 16,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        """Forward.
-
-        Args:
-            aggregated_tokens_list: The aggregated tokens list.
-            images: The images.
-            patch_start_idx: The patch start idx.
-            frames_chunk_size_first: The frames chunk size first.
-            frames_chunk_size_second: The frames chunk size second.
-
-        Returns:
-            The return value.
-        """
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         B, S, _, H, W = images.shape
         all_preds = []
         all_conf = []
@@ -178,27 +135,12 @@ class DPTHead_3D_Causal(nn.Module):
         for frames_start_idx in range(0, S, frames_chunk_size_first):
             frames_end_idx = min(frames_start_idx + frames_chunk_size_first, S)
             feature_1, feature_2, feature_3, feature_4 = self._forward_impl_first_part(
-                aggregated_tokens_list, images, patch_start_idx, frames_start_idx, frames_end_idx)
-            feature_1_list.append(
-                rearrange(
-                    feature_1,
-                    "(B T) C H W -> B C T H W",
-                    B=B))
-            feature_2_list.append(
-                rearrange(
-                    feature_2,
-                    "(B T) C H W -> B C T H W",
-                    B=B))
-            feature_3_list.append(
-                rearrange(
-                    feature_3,
-                    "(B T) C H W -> B C T H W",
-                    B=B))
-            feature_4_list.append(
-                rearrange(
-                    feature_4,
-                    "(B T) C H W -> B C T H W",
-                    B=B))
+                aggregated_tokens_list, images, patch_start_idx, frames_start_idx, frames_end_idx
+            )
+            feature_1_list.append(rearrange(feature_1, "(B T) C H W -> B C T H W", B=B))
+            feature_2_list.append(rearrange(feature_2, "(B T) C H W -> B C T H W", B=B))
+            feature_3_list.append(rearrange(feature_3, "(B T) C H W -> B C T H W", B=B))
+            feature_4_list.append(rearrange(feature_4, "(B T) C H W -> B C T H W", B=B))
         feature_1_seq = torch.cat(feature_1_list, dim=2)
         feature_2_seq = torch.cat(feature_2_list, dim=2)
         feature_3_seq = torch.cat(feature_3_list, dim=2)
@@ -208,23 +150,20 @@ class DPTHead_3D_Causal(nn.Module):
         out_3 = self.temporal_upsamplers[2].decode(feature_3_seq)
         out_4 = self.temporal_upsamplers[3].decode(feature_4_seq)
         out = [out_1, out_2, out_3, out_4]
-        for frames_start_idx in range(
-                0, (S - 1) * 4 + 1, frames_chunk_size_second):
-            frames_end_idx = min(
-                frames_start_idx + frames_chunk_size_second,
-                (S - 1) * 4 + 1)
-            sub_out = [i[:, :, frames_start_idx:frames_end_idx, ...]
-                       for i in out]
-            sub_out = [rearrange(i, "B C T H W -> (B T) C H W")
-                       for i in sub_out]
+        for frames_start_idx in range(0, (S - 1) * 4 + 1, frames_chunk_size_second):
+            frames_end_idx = min(frames_start_idx + frames_chunk_size_second, (S - 1) * 4 + 1)
+            sub_out = [i[:, :, frames_start_idx:frames_end_idx, ...] for i in out]
+            sub_out = [rearrange(i, "B C T H W -> (B T) C H W") for i in sub_out]
             if self.feature_only:
                 chunk_output = self.__forward_impl_second_part(
-                    sub_out, images,
+                    sub_out,
+                    images,
                 )
                 all_preds.append(chunk_output)
             else:
                 chunk_preds, chunk_conf = self.__forward_impl_second_part(
-                    sub_out, images,
+                    sub_out,
+                    images,
                 )
                 all_preds.append(chunk_preds)
                 all_conf.append(chunk_conf)
@@ -236,24 +175,12 @@ class DPTHead_3D_Causal(nn.Module):
 
     def _forward_impl_first_part(
         self,
-        aggregated_tokens_list: List[torch.Tensor],
+        aggregated_tokens_list: list[torch.Tensor],
         images: torch.Tensor,
         patch_start_idx: int,
-        frames_start_idx: int = None,
-        frames_end_idx: int = None,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        """Helper function to forward impl first part.
-
-        Args:
-            aggregated_tokens_list: The aggregated tokens list.
-            images: The images.
-            patch_start_idx: The patch start idx.
-            frames_start_idx: The frames start idx.
-            frames_end_idx: The frames end idx.
-
-        Returns:
-            The return value.
-        """
+        frames_start_idx: int | None = None,
+        frames_end_idx: int | None = None,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         if frames_start_idx is not None and frames_end_idx is not None:
             images = images[:, frames_start_idx:frames_end_idx].contiguous()
 
@@ -270,40 +197,30 @@ class DPTHead_3D_Causal(nn.Module):
                 x = x[:, frames_start_idx:frames_end_idx]
             x = x.reshape(B * S, -1, x.shape[-1])
             x = self.norm(x)
-            x = x.permute(0, 2, 1).reshape(
-                (x.shape[0], x.shape[-1], patch_h, patch_w))
+            x = x.permute(0, 2, 1).reshape((x.shape[0], x.shape[-1], patch_h, patch_w))
             x = self.projects[dpt_idx](x)
             if self.pos_embed:
                 x = self._apply_pos_embed(x, W, H)
             x = self.resize_layers[dpt_idx](x)
             out.append(x)
-            dpt_idx += 1
+            dpt_idx += 1  # noqa: SIM113 - Keeps the explicit loop counter.
         return out
 
     def __forward_impl_second_part(
         self,
-        out: List[torch.Tensor],
+        out: list[torch.Tensor],
         images: torch.Tensor,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        """Helper function to forward impl second part.
-
-        Args:
-            out: The out.
-            images: The images.
-
-        Returns:
-            The return value.
-        """
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         B, S, spatial_H, spatial_W, C = images.shape
         H = spatial_H * self.patch_size
         W = spatial_W * self.patch_size
         out = self.scratch_forward(out)
-        out = custom_interpolate(out,
-                                 (int(spatial_H * self.patch_size / self.down_ratio),
-                                  int(spatial_W * self.patch_size / self.down_ratio)),
-                                 mode="bilinear",
-                                 align_corners=True,
-                                 )
+        out = custom_interpolate(
+            out,
+            (int(spatial_H * self.patch_size / self.down_ratio), int(spatial_W * self.patch_size / self.down_ratio)),
+            mode="bilinear",
+            align_corners=True,
+        )
         if self.pos_embed:
             out = self._apply_pos_embed(out, W, H)
 
@@ -311,38 +228,25 @@ class DPTHead_3D_Causal(nn.Module):
             return out.view(B, S, *out.shape[1:])
         out = self.scratch.output_conv2(out)
 
-        preds, conf = activate_head(
-            out, activation=self.activation, conf_activation=self.conf_activation)
+        preds, conf = activate_head(out, activation=self.activation, conf_activation=self.conf_activation)
         new_S = out.shape[0] // B
         preds = preds.view(B, new_S, *preds.shape[1:])
         conf = conf.view(B, new_S, *conf.shape[1:])
         return preds, conf
 
-    def _apply_pos_embed(
-            self,
-            x: torch.Tensor,
-            W: int,
-            H: int,
-            ratio: float = 0.1) -> torch.Tensor:
+    def _apply_pos_embed(self, x: torch.Tensor, W: int, H: int, ratio: float = 0.1) -> torch.Tensor:
         """
         Apply positional embedding to tensor x.
         """
         patch_w = x.shape[-1]
         patch_h = x.shape[-2]
-        pos_embed = create_uv_grid(
-            patch_w,
-            patch_h,
-            aspect_ratio=W / H,
-            dtype=x.dtype,
-            device=x.device)
+        pos_embed = create_uv_grid(patch_w, patch_h, aspect_ratio=W / H, dtype=x.dtype, device=x.device)
         pos_embed = position_grid_to_embed(pos_embed, x.shape[1])
         pos_embed = pos_embed * ratio
-        pos_embed = pos_embed.permute(
-            2, 0, 1)[None].expand(
-            x.shape[0], -1, -1, -1)
+        pos_embed = pos_embed.permute(2, 0, 1)[None].expand(x.shape[0], -1, -1, -1)
         return x + pos_embed
 
-    def scratch_forward(self, features: List[torch.Tensor]) -> torch.Tensor:
+    def scratch_forward(self, features: list[torch.Tensor]) -> torch.Tensor:
         """
         Forward pass through the fusion blocks.
 
@@ -361,282 +265,12 @@ class DPTHead_3D_Causal(nn.Module):
 
         out = self.scratch.refinenet4(layer_4_rn, size=layer_3_rn.shape[2:])
         del layer_4_rn, layer_4
-        out = self.scratch.refinenet3(
-            out, layer_3_rn, size=layer_2_rn.shape[2:])
+        out = self.scratch.refinenet3(out, layer_3_rn, size=layer_2_rn.shape[2:])
         del layer_3_rn, layer_3
-        out = self.scratch.refinenet2(
-            out, layer_2_rn, size=layer_1_rn.shape[2:])
+        out = self.scratch.refinenet2(out, layer_2_rn, size=layer_1_rn.shape[2:])
         del layer_2_rn, layer_2
         out = self.scratch.refinenet1(out, layer_1_rn)
         del layer_1_rn, layer_1
         out = self.scratch.output_conv1(out)
 
         return out
-
-
-def _make_fusion_block(
-        features: int,
-        size: int = None,
-        has_residual: bool = True,
-        groups: int = 1) -> nn.Module:
-    """Helper function to make fusion block.
-
-    Args:
-        features: The features.
-        size: The size.
-        has_residual: The has residual.
-        groups: The groups.
-
-    Returns:
-        The return value.
-    """
-    return FeatureFusionBlock(
-        features,
-        nn.ReLU(inplace=True),
-        deconv=False,
-        bn=False,
-        expand=False,
-        align_corners=True,
-        size=size,
-        has_residual=has_residual,
-        groups=groups,
-    )
-
-
-def _make_scratch(
-        in_shape: List[int],
-        out_shape: int,
-        groups: int = 1,
-        expand: bool = False) -> nn.Module:
-    """Helper function to make scratch.
-
-    Args:
-        in_shape: The in shape.
-        out_shape: The out shape.
-        groups: The groups.
-        expand: The expand.
-
-    Returns:
-        The return value.
-    """
-    scratch = nn.Module()
-    out_shape1 = out_shape
-    out_shape2 = out_shape
-    out_shape3 = out_shape
-    if len(in_shape) >= 4:
-        out_shape4 = out_shape
-
-    if expand:
-        out_shape1 = out_shape
-        out_shape2 = out_shape * 2
-        out_shape3 = out_shape * 4
-        if len(in_shape) >= 4:
-            out_shape4 = out_shape * 8
-
-    scratch.layer1_rn = nn.Conv2d(
-        in_shape[0],
-        out_shape1,
-        kernel_size=3,
-        stride=1,
-        padding=1,
-        bias=False,
-        groups=groups)
-    scratch.layer2_rn = nn.Conv2d(
-        in_shape[1],
-        out_shape2,
-        kernel_size=3,
-        stride=1,
-        padding=1,
-        bias=False,
-        groups=groups)
-    scratch.layer3_rn = nn.Conv2d(
-        in_shape[2],
-        out_shape3,
-        kernel_size=3,
-        stride=1,
-        padding=1,
-        bias=False,
-        groups=groups)
-    if len(in_shape) >= 4:
-        scratch.layer4_rn = nn.Conv2d(
-            in_shape[3],
-            out_shape4,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            bias=False,
-            groups=groups)
-    return scratch
-
-
-class ResidualConvUnit(nn.Module):
-    """Residual convolution module."""
-
-    def __init__(self, features, activation, bn, groups=1):
-        """Init.
-
-        Args:
-            features (int): number of features
-        """
-        super().__init__()
-
-        self.bn = bn
-        self.groups = groups
-        self.conv1 = nn.Conv2d(
-            features,
-            features,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            bias=True,
-            groups=self.groups)
-        self.conv2 = nn.Conv2d(
-            features,
-            features,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            bias=True,
-            groups=self.groups)
-
-        self.norm1 = None
-        self.norm2 = None
-
-        self.activation = activation
-        self.skip_add = nn.quantized.FloatFunctional()
-
-    def forward(self, x):
-        """Forward pass.
-
-        Args:
-            x (tensor): input
-
-        Returns:
-            tensor: output
-        """
-
-        out = self.activation(x)
-        out = self.conv1(out)
-        if self.norm1 is not None:
-            out = self.norm1(out)
-
-        out = self.activation(out)
-        out = self.conv2(out)
-        if self.norm2 is not None:
-            out = self.norm2(out)
-
-        return self.skip_add.add(out, x)
-
-
-class FeatureFusionBlock(nn.Module):
-    """Feature fusion block."""
-
-    def __init__(
-        self,
-        features,
-        activation,
-        deconv=False,
-        bn=False,
-        expand=False,
-        align_corners=True,
-        size=None,
-        has_residual=True,
-        groups=1,
-    ):
-        """Init.
-
-        Args:
-            features (int): number of features
-        """
-        super(FeatureFusionBlock, self).__init__()
-
-        self.deconv = deconv
-        self.align_corners = align_corners
-        self.groups = groups
-        self.expand = expand
-        out_features = features
-        if self.expand:
-            out_features = features // 2
-
-        self.out_conv = nn.Conv2d(
-            features,
-            out_features,
-            kernel_size=1,
-            stride=1,
-            padding=0,
-            bias=True,
-            groups=self.groups)
-
-        if has_residual:
-            self.resConfUnit1 = ResidualConvUnit(
-                features, activation, bn, groups=self.groups)
-
-        self.has_residual = has_residual
-        self.resConfUnit2 = ResidualConvUnit(
-            features, activation, bn, groups=self.groups)
-
-        self.skip_add = nn.quantized.FloatFunctional()
-        self.size = size
-
-    def forward(self, *xs, size=None):
-        """Forward pass.
-
-        Returns:
-            tensor: output
-        """
-        output = xs[0]
-
-        if self.has_residual:
-            res = self.resConfUnit1(xs[1])
-            output = self.skip_add.add(output, res)
-
-        output = self.resConfUnit2(output)
-
-        if (size is None) and (self.size is None):
-            modifier = {"scale_factor": 2}
-        elif size is None:
-            modifier = {"size": self.size}
-        else:
-            modifier = {"size": size}
-
-        output = custom_interpolate(
-            output,
-            **modifier,
-            mode="bilinear",
-            align_corners=self.align_corners)
-        output = self.out_conv(output)
-
-        return output
-
-
-def custom_interpolate(
-    x: torch.Tensor,
-    size: Tuple[int, int] = None,
-    scale_factor: float = None,
-    mode: str = "bilinear",
-    align_corners: bool = True,
-) -> torch.Tensor:
-    """
-    Custom interpolate to avoid INT_MAX issues in nn.functional.interpolate.
-    """
-    if size is None:
-        size = (int(x.shape[-2] * scale_factor),
-                int(x.shape[-1] * scale_factor))
-
-    INT_MAX = 1610612736
-
-    input_elements = size[0] * size[1] * x.shape[0] * x.shape[1]
-
-    if input_elements > INT_MAX:
-        chunks = torch.chunk(x, chunks=(input_elements // INT_MAX) + 1, dim=0)
-        interpolated_chunks = [
-            nn.functional.interpolate(
-                chunk,
-                size=size,
-                mode=mode,
-                align_corners=align_corners) for chunk in chunks]
-        x = torch.cat(interpolated_chunks, dim=0)
-        return x.contiguous()
-    else:
-        return nn.functional.interpolate(
-            x, size=size, mode=mode, align_corners=align_corners)

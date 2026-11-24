@@ -1,13 +1,12 @@
-artifact_filename: world.mp4
-artifact_kind: generated_world
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: matrix-game-1
+task_family: world_model
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Skywork--Matrix-Game
   repo_id: Skywork/Matrix-Game
   revision: 6de128116624c07e6ab3ca341978e3e582b67638
   role: official_matrix_game_1_checkpoint
   status: official_demo_parity_pending
-id: matrix-game-1
 input_schema:
   actions:
   - keyboard
@@ -15,12 +14,19 @@ input_schema:
   - navigation_token
   image: true
   prompt: true
-integration_status: integrated
+artifact_kind: generated_world
+artifact_filename: world.mp4
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: integrated
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - Matrix-Game-1 is registered as its own model id and never routes through Matrix-Game-2.
-- Local cache ${WORLDFOUNDRY_HFD_ROOT}/Skywork--Matrix-Game now contains the seven DiT
-  shards, four text_encoder_i2v shards, VAE weight, configs, and assets required by
-  the vendored runner.
+- Local cache ${WORLDFOUNDRY_HFD_ROOT}/Skywork--Matrix-Game now contains the seven
+  DiT shards, four text_encoder_i2v shards, VAE weight, configs, and assets required
+  by the vendored runner.
 - Matrix-Game-1 uses torch 2.5.1+cu124; prefer worldfoundry-unified-cu128 on modern
   NVIDIA hosts.
 - WorldFoundry vendors the minimal Matrix-Game-1 official Python runtime closure under
@@ -29,5 +35,3 @@ notes:
   worldfoundry/data/test_cases/matrix-game-1/official_initial_image. Do not promote
   Matrix-Game-1 to official demo parity until this input passes visual QA with the
   in-tree runner.
-runtime_status: integrated
-task_family: world_model

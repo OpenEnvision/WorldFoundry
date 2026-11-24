@@ -2,7 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.autoencoder.edm2_utils import MPConv1D, mp_silu, mp_sum, normalize
+from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.autoencoder.edm2_utils import (
+    MPConv1D,
+    mp_silu,
+    mp_sum,
+    normalize,
+)
 
 
 def nonlinearity(x):
@@ -11,7 +16,6 @@ def nonlinearity(x):
 
 
 class ResnetBlock1D(nn.Module):
-
     def __init__(self, *, in_dim, out_dim=None, conv_shortcut=False, kernel_size=3, use_norm=True):
         super().__init__()
         self.in_dim = in_dim
@@ -29,7 +33,6 @@ class ResnetBlock1D(nn.Module):
                 self.nin_shortcut = MPConv1D(in_dim, out_dim, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-
         # pixel norm
         if self.use_norm:
             x = normalize(x, dim=1)
@@ -42,16 +45,12 @@ class ResnetBlock1D(nn.Module):
         h = self.conv2(h)
 
         if self.in_dim != self.out_dim:
-            if self.use_conv_shortcut:
-                x = self.conv_shortcut(x)
-            else:
-                x = self.nin_shortcut(x)
+            x = self.conv_shortcut(x) if self.use_conv_shortcut else self.nin_shortcut(x)
 
         return mp_sum(x, h, t=0.3)
 
 
 class AttnBlock1D(nn.Module):
-
     def __init__(self, in_channels, num_heads=1):
         super().__init__()
         self.in_channels = in_channels
@@ -79,7 +78,6 @@ class AttnBlock1D(nn.Module):
 
 
 class Upsample1D(nn.Module):
-
     def __init__(self, in_channels, with_conv):
         super().__init__()
         self.with_conv = with_conv
@@ -87,14 +85,13 @@ class Upsample1D(nn.Module):
             self.conv = MPConv1D(in_channels, in_channels, kernel_size=3)
 
     def forward(self, x):
-        x = F.interpolate(x, scale_factor=2.0, mode='nearest-exact')  # support 3D tensor(B,C,T)
+        x = F.interpolate(x, scale_factor=2.0, mode="nearest-exact")  # support 3D tensor(B,C,T)
         if self.with_conv:
             x = self.conv(x)
         return x
 
 
 class Downsample1D(nn.Module):
-
     def __init__(self, in_channels, with_conv):
         super().__init__()
         self.with_conv = with_conv
@@ -104,7 +101,6 @@ class Downsample1D(nn.Module):
             self.conv2 = MPConv1D(in_channels, in_channels, kernel_size=1)
 
     def forward(self, x):
-
         if self.with_conv:
             x = self.conv1(x)
 

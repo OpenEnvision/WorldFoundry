@@ -1,5 +1,5 @@
 id: minwm-hy-action2v
-name: minWM
+name: minWM HY Action2V
 aliases:
 - minwm
 - minwm-hy-action2v
@@ -14,7 +14,7 @@ source:
   license: apache-2.0
 checkpoint: MIN-Lab/minWM
 runtime_profile: runtime-profile:minwm-hy-action2v
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: minwm-hy-action2v
 official_sources:
   paper: https://arxiv.org/abs/2605.30263
@@ -30,23 +30,18 @@ docs:
   publisher: Shengshu Technology
   publisher_kind: company
   publisher_zh: 生数科技（Shengshu AI）
-  overview: minWM HY Action2V generates camera-controlled video from a prompt, image and trajectory on a HunyuanVideo-1.5
-    base, using shared WorldFoundry model components.
-  overview_zh: minWM HY Action2V 基于 HunyuanVideo-1.5，复用 WorldFoundry 共享模型组件，从提示词、图像和轨迹生成相机可控视频。
-  architecture: The inference-only camera transformer preserves upstream PRoPE and autoregressive caches. Shared
-    layers, VAE and encoders avoid a dependency on the removed WorldPlay runtime.
-  architecture_zh: 仅推理的相机 Transformer 保留上游 PRoPE 和自回归缓存，复用基础层、VAE 与编码器，无需缺失的 WorldPlay 运行时。
-  usage_notes: Stage HY15/Action2V/dmd plus the HunyuanVideo-1.5 encoders and VAE. The public pipeline uses camera-conditioned
-    four-step autoregressive inference and spatially tiled VAE decoding.
-  usage_notes_zh: 就位 HY15/Action2V/dmd 及 HunyuanVideo-1.5 的编码器、VAE。公开入口使用相机条件四步自回归推理和 VAE 空间分块解码。
+  overview: minWM HY Action2V generates camera-controlled video from a prompt, image and trajectory on a HunyuanVideo-1.5 base.
+  overview_zh: minWM HY Action2V 基于 HunyuanVideo-1.5，从提示词、图像和轨迹生成相机可控视频。
+  architecture: The inference-only camera transformer keeps the upstream PRoPE and autoregressive caches and uses the HunyuanVideo-1.5 VAE and encoders.
+  architecture_zh: 仅推理的相机 Transformer 保留上游 PRoPE 和自回归缓存，使用 HunyuanVideo-1.5 的 VAE 与编码器。
+  usage_notes: 'Stage HY15/Action2V/dmd plus the HunyuanVideo-1.5 encoders and VAE; only this subset of the minWM repository is needed. The public pipeline uses camera-conditioned four-step autoregressive inference and spatially tiled VAE decoding. Validated on a single H100: 77 frames at 832×480 with four DMD steps and a camera trajectory.'
+  usage_notes_zh: 准备 HY15/Action2V/dmd 及 HunyuanVideo-1.5 的编码器、VAE；minWM 仓库只需这一子集。公开入口使用相机条件四步自回归推理和 VAE 空间分块解码。已在单张 H100 上验证：带相机轨迹、四步 DMD 生成 832×480 的 77 帧视频。
   limitations:
-  - GPU validated on one H100 with camera conditioning; non-camera modes are not supported by this public runtime.
+  - Only camera-conditioned generation is supported; non-camera modes are not available in this runtime.
   - HY15-derived files retain Tencent Hunyuan license terms; see the included licenses and provenance.
-  - Stage only the required checkpoint subset.
   limitations_zh:
-  - 已验证单张 H100 的相机条件推理；公开运行时不支持无相机条件模式。
+  - 仅支持相机条件生成；该运行时不提供无相机条件模式。
   - HY15 衍生文件保留腾讯混元许可条款，见附带许可与来源说明。
-  - 仅需就位必要权重子集。
   recommended_benchmarks:
   - id: camerabench
     reason: Camera/motion-trajectory adherence.

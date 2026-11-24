@@ -6,6 +6,7 @@ groups:
 - video
 source_repos:
 - url: https://github.com/Tencent-Hunyuan/HunyuanVideo-1.5
+  revision: 60783e704160023913bee78f0b47036d393d4dfa
 checkpoints:
 - repo_id: tencent/HunyuanVideo-1.5
   revision: 9b49404b3f5df2a8f0b31df27a0c7ab872e7b038

@@ -9,11 +9,11 @@ Provides:
 """
 
 import logging
+
 import torch
 import torch.nn as nn
-from typing import Optional, Tuple, List
 
-from ..layers.block import Block, FlashInferBlock, SDPABlock
+from ..layers.block import FlashInferBlock, SDPABlock
 from ..layers.rope import WanRotaryPosEmbed
 from .base import AggregatorBase, slice_expand_and_flatten
 
@@ -48,7 +48,7 @@ class AggregatorStream(AggregatorBase):
         kv_cache_include_scale_frames: bool = True,
         kv_cache_camera_only: bool = False,
         # Base class parameters via **kwargs
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize AggregatorStream.
@@ -83,10 +83,10 @@ class AggregatorStream(AggregatorBase):
         self.kv_cache_camera_only = kv_cache_camera_only
 
         # Pop kwargs that are passed but not needed by base class
-        kwargs.pop('enable_stream_inference', None)
-        use_flashinfer = kwargs.pop('use_flashinfer', True)
-        kwargs.pop('use_flexflash', None)
-        use_sdpa = kwargs.pop('use_sdpa', False)
+        kwargs.pop("enable_stream_inference", None)
+        _use_flashinfer = kwargs.pop("use_flashinfer", True)
+        kwargs.pop("use_flexflash", None)
+        use_sdpa = kwargs.pop("use_sdpa", False)
 
         # Backend selection: SDPA (no extra deps) or FlashInfer (paged KV cache)
         self.use_sdpa = use_sdpa
@@ -116,55 +116,48 @@ class AggregatorStream(AggregatorBase):
         qk_norm: bool,
     ):
         """Build frame and global blocks for streaming causal mode."""
-        block_params = dict(
-            dim=embed_dim,
-            num_heads=num_heads,
-            mlp_ratio=mlp_ratio,
-            qkv_bias=qkv_bias,
-            proj_bias=proj_bias,
-            ffn_bias=ffn_bias,
-            init_values=init_values,
-            qk_norm=qk_norm,
-        )
+        block_params = {
+            "dim": embed_dim,
+            "num_heads": num_heads,
+            "mlp_ratio": mlp_ratio,
+            "qkv_bias": qkv_bias,
+            "proj_bias": proj_bias,
+            "ffn_bias": ffn_bias,
+            "init_values": init_values,
+            "qk_norm": qk_norm,
+        }
 
         # Frame blocks: Standard Block + RoPE
-        self.frame_blocks = nn.ModuleList([
-            block_fn(**block_params, rope=self.rope)
-            for _ in range(depth)
-        ])
+        self.frame_blocks = nn.ModuleList([block_fn(**block_params, rope=self.rope) for _ in range(depth)])
 
         # Global blocks: FlashInferBlock (default) or SDPABlock (fallback)
         GlobalBlockCls = SDPABlock if self.use_sdpa else FlashInferBlock
-        self.global_blocks = nn.ModuleList([
-            GlobalBlockCls(
-                **block_params,
-                rope=self.rope if not self.disable_global_rope else None,
-                kv_cache_sliding_window=self.kv_cache_sliding_window,
-                kv_cache_scale_frames=self.kv_cache_scale_frames,
-                kv_cache_cross_frame_special=self.kv_cache_cross_frame_special,
-                kv_cache_include_scale_frames=self.kv_cache_include_scale_frames,
-                kv_cache_camera_only=self.kv_cache_camera_only,
-            )
-            for _ in range(depth)
-        ])
+        self.global_blocks = nn.ModuleList(
+            [
+                GlobalBlockCls(
+                    **block_params,
+                    rope=self.rope if not self.disable_global_rope else None,
+                    kv_cache_sliding_window=self.kv_cache_sliding_window,
+                    kv_cache_scale_frames=self.kv_cache_scale_frames,
+                    kv_cache_cross_frame_special=self.kv_cache_cross_frame_special,
+                    kv_cache_include_scale_frames=self.kv_cache_include_scale_frames,
+                    kv_cache_camera_only=self.kv_cache_camera_only,
+                )
+                for _ in range(depth)
+            ]
+        )
 
     def _setup_special_tokens(self):
         """Setup camera, register, and scale tokens for causal mode."""
         # Camera token
-        self.camera_token = nn.Parameter(
-            torch.randn(1, 2, 1, self.embed_dim)
-        )
+        self.camera_token = nn.Parameter(torch.randn(1, 2, 1, self.embed_dim))
 
         # Register tokens
         if self.num_register_tokens > 0:
-            self.register_token = nn.Parameter(
-                torch.randn(1, 2, self.num_register_tokens, self.embed_dim)
-            )
+            self.register_token = nn.Parameter(torch.randn(1, 2, self.num_register_tokens, self.embed_dim))
 
         # Scale token (causal mode specific)
-        self.scale_token = nn.Parameter(
-            torch.ones(1, 2, 1, self.embed_dim)
-        )
+        self.scale_token = nn.Parameter(torch.ones(1, 2, 1, self.embed_dim))
 
         # Initialize
         nn.init.normal_(self.camera_token, std=1e-6)
@@ -185,7 +178,7 @@ class AggregatorStream(AggregatorBase):
 
         if self.use_sdpa:
             # Dict-based KV cache for SDPA
-            if hasattr(self, 'depth'):
+            if hasattr(self, "depth"):
                 for i in range(self.depth):
                     self.kv_cache[f"k_{i}"] = None
                     self.kv_cache[f"v_{i}"] = None
@@ -206,6 +199,7 @@ class AggregatorStream(AggregatorBase):
         """
         if self.kv_cache_manager is None:
             from ..layers.flashinfer_cache import FlashInferKVCacheManager
+
             num_heads = self.embed_dim // 64  # head_dim = 64 for ViT-L
             head_dim = 64
             if tokens_per_frame is None:
@@ -224,8 +218,8 @@ class AggregatorStream(AggregatorBase):
                 scale_frames=self.kv_cache_scale_frames,
                 sliding_window=self.kv_cache_sliding_window,
                 max_total_frames=self.max_frame_num + 100,
-                force_fp32=getattr(self, 'kv_cache_force_fp32', False),
-                fa3=getattr(self, 'kv_cache_fa3', False),
+                force_fp32=getattr(self, "kv_cache_force_fp32", False),
+                fa3=getattr(self, "kv_cache_fa3", False),
             )
             logger.info(
                 f"FlashInfer KV cache manager initialized: {self.depth} blocks, "
@@ -290,7 +284,7 @@ class AggregatorStream(AggregatorBase):
             patch_start_idx=self.num_special_tokens,
             device=device,
             f_start=f_start,
-            f_end=f_end
+            f_end=f_end,
         )
         return pos3d
 
@@ -300,7 +294,7 @@ class AggregatorStream(AggregatorBase):
         S_local: int,
         S_global: int,
         C: int,
-        num_frame_for_scale: Optional[int] = None,
+        num_frame_for_scale: int | None = None,
     ) -> torch.Tensor:
         """
         Prepare camera, register, and scale tokens.
@@ -362,8 +356,7 @@ class AggregatorStream(AggregatorBase):
 
         # Verify shape
         expected_shape = (B * S_global, self.num_special_tokens, C)
-        assert special_tokens.shape == expected_shape, \
-            f"Expected {expected_shape}, got {special_tokens.shape}"
+        assert special_tokens.shape == expected_shape, f"Expected {expected_shape}, got {special_tokens.shape}"
 
         return special_tokens
 
@@ -376,13 +369,13 @@ class AggregatorStream(AggregatorBase):
         P: int,
         C: int,
         global_idx: int,
-        pos: Optional[torch.Tensor] = None,
+        pos: torch.Tensor | None = None,
         # Mode-specific parameters
-        num_frame_for_scale: Optional[int] = None,
-        sliding_window_size: Optional[int] = None,
+        num_frame_for_scale: int | None = None,
+        sliding_window_size: int | None = None,
         num_frame_per_block: int = 1,
         **kwargs,
-    ) -> Tuple[torch.Tensor, int, List[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, int, list[torch.Tensor]]:
         """
         Process causal global attention via FlashInfer streaming path.
 
@@ -403,13 +396,23 @@ class AggregatorStream(AggregatorBase):
             (tokens, global_idx, intermediates)
         """
         # Extract image dimensions from kwargs for 3D RoPE
-        image_height = kwargs.get('image_height', self.img_size)
-        image_width = kwargs.get('image_width', self.img_size)
+        image_height = kwargs.get("image_height", self.img_size)
+        image_width = kwargs.get("image_width", self.img_size)
 
         return self._process_causal_stream(
-            tokens, B, S_local, S_global, P, C, global_idx, pos,
-            num_frame_per_block, sliding_window_size, num_frame_for_scale,
-            image_height=image_height, image_width=image_width
+            tokens,
+            B,
+            S_local,
+            S_global,
+            P,
+            C,
+            global_idx,
+            pos,
+            num_frame_per_block,
+            sliding_window_size,
+            num_frame_for_scale,
+            image_height=image_height,
+            image_width=image_width,
         )
 
     def _process_causal_stream(
@@ -421,12 +424,12 @@ class AggregatorStream(AggregatorBase):
         P: int,
         C: int,
         global_idx: int,
-        pos: Optional[torch.Tensor] = None,
+        pos: torch.Tensor | None = None,
         num_frame_per_block: int = 1,
-        sliding_window_size: Optional[int] = None,
-        num_frame_for_scale: Optional[int] = None,
-        image_height: Optional[int] = None,
-        image_width: Optional[int] = None,
+        sliding_window_size: int | None = None,
+        num_frame_for_scale: int | None = None,
+        image_height: int | None = None,
+        image_width: int | None = None,
     ):
         """
         Causal attention for streaming inference using FlashInfer KV cache.
@@ -461,7 +464,7 @@ class AggregatorStream(AggregatorBase):
         num_patches = P - self.num_special_tokens
 
         # Check if this is the first block group
-        is_first_block_group = (global_idx < self.aa_block_size)
+        is_first_block_group = global_idx < self.aa_block_size
 
         if self.enable_3d_rope and self.rope3d is not None:
             if is_first_block_group:
@@ -470,9 +473,7 @@ class AggregatorStream(AggregatorBase):
 
                 H = image_height if image_height is not None else self.img_size
                 W = image_width if image_width is not None else self.img_size
-                pos3d = self._get_3d_positions_streaming(
-                    S_global, H, W, tokens.device, f_start, f_end
-                )
+                pos3d = self._get_3d_positions_streaming(S_global, H, W, tokens.device, f_start, f_end)
                 self._cached_pos3d = pos3d
             else:
                 pos3d = self._cached_pos3d

@@ -4,10 +4,10 @@ import json
 import mimetypes
 import os
 import re
+from collections.abc import Iterable
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Iterable
 
 _DEFAULT_CHUNK_SIZE = 1024 * 1024
 

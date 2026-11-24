@@ -8,12 +8,12 @@ one open across an ``await`` or a generator ``yield``.
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Iterator
 
 
 @contextmanager
-def nvtx_range(name: str) -> Iterator[None]:
+def nvtx_range(name: str) -> Generator[None, None, None]:
     """Annotate host submission of work; CPU-only installations are a no-op."""
 
     if os.environ.get("WORLDFOUNDRY_NVTX", "").strip().lower() not in {"1", "true", "yes", "on"}:

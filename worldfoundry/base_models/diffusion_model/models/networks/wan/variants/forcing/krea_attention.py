@@ -3,17 +3,19 @@
 
 Kernel adapter for Krea blocks.  SageAttention is :mod:`.krea_sage`.
 """
+
 import torch
+
 try:
     import flash_attn_interface
-    from flash_attn import flash_attn_func
+    from flash_attn import flash_attn_func  # noqa: F401 - Import checks optional dependency availability.
 
     def is_hopper_gpu():
-        """Is hopper gpu."""
         if not torch.cuda.is_available():
             return False
         device_name = torch.cuda.get_device_name(0).lower()
         return "h100" in device_name or "hopper" in device_name
+
     FLASH_ATTN_3_AVAILABLE = is_hopper_gpu()
 except ModuleNotFoundError:
     FLASH_ATTN_3_AVAILABLE = False
@@ -21,24 +23,26 @@ except ModuleNotFoundError:
 try:
     import flash_attn
     from flash_attn import flash_attn_func as flash_attn_2_func
+
     FLASH_ATTN_2_AVAILABLE = True
 except ModuleNotFoundError:
     flash_attn_2_func = None
     FLASH_ATTN_2_AVAILABLE = False
 
-from .krea_sage import sageattn_func, SAGEATTN_AVAILABLE
-
 import warnings
 
+from .krea_sage import SAGEATTN_AVAILABLE, sageattn_func
+
 __all__ = [
-    'flash_attention',
-    'attention',
-    'sageattn_func',
-    'SAGEATTN_AVAILABLE',
+    "SAGEATTN_AVAILABLE",
+    "attention",
+    "flash_attention",
+    "sageattn_func",
 ]
 
 print("flash attn 3 available", FLASH_ATTN_3_AVAILABLE)
 print("sage attn available", SAGEATTN_AVAILABLE)
+
 
 def flash_attention(
     q,
@@ -46,7 +50,7 @@ def flash_attention(
     v,
     q_lens=None,
     k_lens=None,
-    dropout_p=0.,
+    dropout_p=0.0,
     softmax_scale=None,
     q_scale=None,
     causal=False,
@@ -82,38 +86,29 @@ def flash_attention(
         )
     half_dtypes = (torch.float16, torch.bfloat16)
     assert dtype in half_dtypes
-    assert q.device.type == 'cuda' and q.size(-1) <= 256
+    assert q.device.type == "cuda" and q.size(-1) <= 256
 
     # params
     b, lq, lk, out_dtype = q.size(0), q.size(1), k.size(1), q.dtype
 
     def half(x):
-        """Half.
-
-        Args:
-            x: The x.
-        """
         return x if x.dtype in half_dtypes else x.to(dtype)
 
     # preprocess query
     if q_lens is None:
         q = half(q.flatten(0, 1))
-        q_lens = torch.tensor(
-            [lq] * b, dtype=torch.int32).to(
-                device=q.device, non_blocking=True)
+        q_lens = torch.tensor([lq] * b, dtype=torch.int32).to(device=q.device, non_blocking=True)
     else:
-        q = half(torch.cat([u[:v] for u, v in zip(q, q_lens)]))
+        q = half(torch.cat([u[:v] for u, v in zip(q, q_lens, strict=False)]))
 
     # preprocess key, value
     if k_lens is None:
         k = half(k.flatten(0, 1))
         v = half(v.flatten(0, 1))
-        k_lens = torch.tensor(
-            [lk] * b, dtype=torch.int32).to(
-                device=k.device, non_blocking=True)
+        k_lens = torch.tensor([lk] * b, dtype=torch.int32).to(device=k.device, non_blocking=True)
     else:
-        k = half(torch.cat([u[:v] for u, v in zip(k, k_lens)]))
-        v = half(torch.cat([u[:v] for u, v in zip(v, k_lens)]))
+        k = half(torch.cat([u[:v] for u, v in zip(k, k_lens, strict=False)]))
+        v = half(torch.cat([u[:v] for u, v in zip(v, k_lens, strict=False)]))
 
     q = q.to(v.dtype)
     k = k.to(v.dtype)
@@ -122,9 +117,7 @@ def flash_attention(
         q = q * q_scale
 
     if version is not None and version == 3 and not FLASH_ATTN_3_AVAILABLE:
-        warnings.warn(
-            'Flash attention 3 is not available, use flash attention 2 instead.'
-        )
+        warnings.warn("Flash attention 3 is not available, use flash attention 2 instead.", stacklevel=1)
 
     # apply attention
     if (version is None or version == 3) and FLASH_ATTN_3_AVAILABLE:
@@ -133,32 +126,38 @@ def flash_attention(
             q=q,
             k=k,
             v=v,
-            cu_seqlens_q=torch.cat([q_lens.new_zeros([1]), q_lens]).cumsum(
-                0, dtype=torch.int32).to(q.device, non_blocking=True),
-            cu_seqlens_k=torch.cat([k_lens.new_zeros([1]), k_lens]).cumsum(
-                0, dtype=torch.int32).to(q.device, non_blocking=True),
+            cu_seqlens_q=torch.cat([q_lens.new_zeros([1]), q_lens])
+            .cumsum(0, dtype=torch.int32)
+            .to(q.device, non_blocking=True),
+            cu_seqlens_k=torch.cat([k_lens.new_zeros([1]), k_lens])
+            .cumsum(0, dtype=torch.int32)
+            .to(q.device, non_blocking=True),
             max_seqlen_q=lq,
             max_seqlen_k=lk,
             softmax_scale=softmax_scale,
             causal=causal,
-            deterministic=deterministic).unflatten(0, (b, lq))
+            deterministic=deterministic,
+        ).unflatten(0, (b, lq))
     else:
         assert FLASH_ATTN_2_AVAILABLE
         x = flash_attn.flash_attn_varlen_func(
             q=q,
             k=k,
             v=v,
-            cu_seqlens_q=torch.cat([q_lens.new_zeros([1]), q_lens]).cumsum(
-                0, dtype=torch.int32).to(q.device, non_blocking=True),
-            cu_seqlens_k=torch.cat([k_lens.new_zeros([1]), k_lens]).cumsum(
-                0, dtype=torch.int32).to(q.device, non_blocking=True),
+            cu_seqlens_q=torch.cat([q_lens.new_zeros([1]), q_lens])
+            .cumsum(0, dtype=torch.int32)
+            .to(q.device, non_blocking=True),
+            cu_seqlens_k=torch.cat([k_lens.new_zeros([1]), k_lens])
+            .cumsum(0, dtype=torch.int32)
+            .to(q.device, non_blocking=True),
             max_seqlen_q=lq,
             max_seqlen_k=lk,
             dropout_p=dropout_p,
             softmax_scale=softmax_scale,
             causal=causal,
             window_size=window_size,
-            deterministic=deterministic).unflatten(0, (b, lq))
+            deterministic=deterministic,
+        ).unflatten(0, (b, lq))
 
     # output
     return x.type(out_dtype)
@@ -170,7 +169,7 @@ def attention(
     v: torch.Tensor,
     q_lens=None,
     k_lens=None,
-    dropout_p=0.,
+    dropout_p=0.0,
     softmax_scale=None,
     q_scale=None,
     causal=False,
@@ -180,23 +179,6 @@ def attention(
     fa_version=None,
     # og_dtype=torch.bfloat16,
 ):
-    """Attention.
-
-    Args:
-        q: The q.
-        k: The k.
-        v: The v.
-        q_lens: The q lens.
-        k_lens: The k lens.
-        dropout_p: The dropout p.
-        softmax_scale: The softmax scale.
-        q_scale: The q scale.
-        causal: The causal.
-        window_size: The window size.
-        deterministic: The deterministic.
-        dtype: The dtype.
-        fa_version: The fa version.
-    """
     if SAGEATTN_AVAILABLE:
         # print("Using sageattention")
         attn_mask = None
@@ -206,12 +188,11 @@ def attention(
         k = k.transpose(1, 2).to(dtype)
         v = v.transpose(1, 2).to(dtype)
 
-        out = sageattn_func(
-            q, k, v, attn_mask=attn_mask, is_causal=causal, dropout_p=dropout_p)
+        out = sageattn_func(q, k, v, attn_mask=attn_mask, is_causal=causal, dropout_p=dropout_p)
 
         out = out.transpose(1, 2).contiguous().to(og_dtype)
         return out
-    
+
     elif FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE:
         return flash_attention(
             q=q,
@@ -231,7 +212,8 @@ def attention(
     else:
         if q_lens is not None or k_lens is not None:
             warnings.warn(
-                'Padding mask is disabled when using scaled_dot_product_attention. It can have a significant impact on performance.'
+                "Padding mask is disabled when using scaled_dot_product_attention. It can have a significant impact on performance.",
+                stacklevel=1,
             )
         attn_mask = None
 
@@ -240,7 +222,8 @@ def attention(
         v = v.transpose(1, 2).to(dtype)
 
         out = torch.nn.functional.scaled_dot_product_attention(
-            q, k, v, attn_mask=attn_mask, is_causal=causal, dropout_p=dropout_p)
+            q, k, v, attn_mask=attn_mask, is_causal=causal, dropout_p=dropout_p
+        )
 
         out = out.transpose(1, 2).contiguous()
         return out

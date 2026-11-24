@@ -29,10 +29,10 @@ metadata:
   source_kind: benchmark_zoo
   benchmark_id: worldbench
   contract_validation_command: >-
-    worldfoundry-eval zoo benchmark-run --benchmark-id worldbench --mode contract
+    wf zoo benchmark-run --benchmark-id worldbench --mode contract
     --output-dir tmp/benchmark_zoo/benchmark_contract/worldbench --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:worldbench
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
   prompt_suite:
     hf_dataset_id: worldbenchmark/IntuitivePhysics
     split: standard
@@ -43,8 +43,8 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_model_backed_evaluator
-    root: worldfoundry/evaluation/tasks/execution/runners/worldbench
-    implementation: worldfoundry/evaluation/tasks/execution/runners/worldbench/runtime/worldbench
+    root: worldfoundry/evals/tasks/execution/runners/worldbench
+    implementation: worldfoundry/evals/tasks/execution/runners/worldbench/runtime/worldbench
     config: worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml
     dataset_root_env: WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -79,14 +79,14 @@ metadata:
     evaluator_config: worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:worldbench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
     surface: raw_generated_artifact_evaluator_and_result_normalizer
     normalizer_verified: true
   local_evaluator:
-    target: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
+    target: worldfoundry/evals/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
     status: implemented
     protocol: raw_artifact_evaluation_and_compatibility_result_normalization
     raw_artifact_evaluation:
@@ -102,7 +102,7 @@ metadata:
       formats: [json, jsonl, csv, tsv]
   runner:
     run_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -119,7 +119,7 @@ metadata:
     validation_command:
     - python
     - -m
-    - worldfoundry.evaluation.tasks.execution.runners.worldbench.run_worldbench_official_runner
+    - worldfoundry.evals.tasks.execution.runners.worldbench.run_worldbench_official_runner
     - --run-official
     - --dataset-root
     - <worldbench_dataset>
@@ -140,7 +140,7 @@ metadata:
   validation_command:
   - ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
   - -m
-  - worldfoundry.evaluation.tasks.execution.runners.worldbench.run_worldbench_official_runner
+  - worldfoundry.evals.tasks.execution.runners.worldbench.run_worldbench_official_runner
   - --run-official
   - --dataset-root
   - ${WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT}
@@ -199,12 +199,12 @@ tasks:
     evaluation_protocol:
     - name: in_tree_video_evaluator
       metric_ids: [foreground_miou, foreground_dice, background_rmse]
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:worldbench
+      runner_script: worldfoundry/evals/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
     - name: in_tree_text_evaluator
       metric_ids: [text_based_accuracy, multiple_choice_accuracy, binary_accuracy]
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:worldbench
+      runner_script: worldfoundry/evals/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
     - name: in_tree_official_runtime
       metric_ids:
       - foreground_miou
@@ -213,5 +213,5 @@ tasks:
       - text_based_accuracy
       - multiple_choice_accuracy
       - binary_accuracy
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:worldbench
+      runner_script: worldfoundry/evals/tasks/execution/runners/worldbench/run_worldbench_official_runner.py

@@ -4,26 +4,23 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> variants -> fantasy_world -> models -> aggregator.py functionality."""
-
 import logging
+
 import torch
 import torch.nn as nn
-from typing import Tuple, List
+from torch.utils.checkpoint import checkpoint
 
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.geometry import (
     rope_params,
-)
-from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.variants.fantasy_world.layers.block import (
-    Block,
-    CamTokenProjector,
 )
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.layers.rope import (
     PositionGetter,
     RotaryPositionEmbedding2D,
 )
-from torch.utils.checkpoint import checkpoint
-
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.variants.fantasy_world.layers.block import (
+    Block,
+    CamTokenProjector,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,38 +68,19 @@ class Aggregator(nn.Module):
         qkv_bias=True,
         proj_bias=True,
         ffn_bias=True,
-        aa_order=["frame","cross", "global",],
+        aa_order=[  # noqa: B006 - Keeps the upstream default object and signature.
+            "frame",
+            "cross",
+            "global",
+        ],
         aa_block_size=1,
         qk_norm=True,
         rope_freq=100,
         init_values=0.01,
-        cross_hidden_dim = 1024,
-        cross_num_heads = 16,
-        spatial_time = 21,
+        cross_hidden_dim=1024,
+        cross_num_heads=16,
+        spatial_time=21,
     ):
-        """Init.
-
-        Args:
-            img_size: The img size.
-            patch_size: The patch size.
-            embed_dim: The embed dim.
-            depth: The depth.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            num_register_tokens: The num register tokens.
-            block_fn: The block fn.
-            qkv_bias: The qkv bias.
-            proj_bias: The proj bias.
-            ffn_bias: The ffn bias.
-            aa_order: The aa order.
-            aa_block_size: The aa block size.
-            qk_norm: The qk norm.
-            rope_freq: The rope freq.
-            init_values: The init values.
-            cross_hidden_dim: The cross hidden dim.
-            cross_num_heads: The cross num heads.
-            spatial_time: The spatial time.
-        """
         super().__init__()
 
         self.spatial_time = spatial_time
@@ -150,12 +128,10 @@ class Aggregator(nn.Module):
         self.patch_size = patch_size
         self.aa_block_size = aa_block_size
         d = cross_hidden_dim // cross_num_heads
-        self.freqs = torch.cat([
-            rope_params(1024, d - 4 * (d // 6)),
-            rope_params(1024, 2 * (d // 6)),
-            rope_params(1024, 2 * (d // 6))
-        ],
-                               dim=1,)
+        self.freqs = torch.cat(
+            [rope_params(1024, d - 4 * (d // 6)), rope_params(1024, 2 * (d // 6)), rope_params(1024, 2 * (d // 6))],
+            dim=1,
+        )
         # Validate that depth is divisible by aa_block_size
         if self.depth % self.aa_block_size != 0:
             raise ValueError(f"depth ({depth}) must be divisible by aa_block_size ({aa_block_size})")
@@ -178,9 +154,11 @@ class Aggregator(nn.Module):
         for name, value in (("_resnet_mean", _RESNET_MEAN), ("_resnet_std", _RESNET_STD)):
             self.register_buffer(name, torch.FloatTensor(value).view(1, 1, 3, 1, 1), persistent=False)
 
-        self.use_reentrant = False # hardcoded to False
+        self.use_reentrant = False  # hardcoded to False
 
-    def forward(self, patch_tokens: torch.Tensor, camera_token: torch.Tensor = None, e0: torch.Tensor = None) -> Tuple[List[torch.Tensor], int]:
+    def forward(
+        self, patch_tokens: torch.Tensor, camera_token: torch.Tensor = None, e0: torch.Tensor = None
+    ) -> tuple[list[torch.Tensor], int]:
         """
         Args:
             images (torch.Tensor): Input images with shape [B, S, 3, H, W], in range [0, 1].
@@ -192,14 +170,12 @@ class Aggregator(nn.Module):
                 and the patch_start_idx indicating where patch tokens begin.
         """
 
-        
-        B, T ,spatial_H,spatial_W, C = patch_tokens.shape
-        patch_tokens = patch_tokens.reshape(B*T,-1,1024)
+        B, T, spatial_H, spatial_W, C = patch_tokens.shape
+        patch_tokens = patch_tokens.reshape(B * T, -1, 1024)
         S = T
 
-    
         # Expand camera and register tokens to match batch size and sequence length
-        if camera_token is not None: 
+        if camera_token is not None:
             camera_token = self.CamTokenProjector(camera_token)
 
         else:
@@ -214,7 +190,6 @@ class Aggregator(nn.Module):
             pos = self.position_getter(B * S, spatial_H, spatial_W, device=patch_tokens.device)
 
         if self.patch_start_idx > 0:
-
             pos = pos + 1
             pos_special = torch.zeros(B * S, self.patch_start_idx, 2).to(patch_tokens.device).to(pos.dtype)
             pos = torch.cat([pos_special, pos], dim=1)
@@ -230,11 +205,18 @@ class Aggregator(nn.Module):
             for attn_type in self.aa_order:
                 if attn_type == "frame":
                     tokens, frame_idx, frame_intermediates = self._process_frame_attention(
-                        tokens, B, S, P, C, frame_idx, pos=pos, e0 = e0,
+                        tokens,
+                        B,
+                        S,
+                        P,
+                        C,
+                        frame_idx,
+                        pos=pos,
+                        e0=e0,
                     )
                 elif attn_type == "global":
                     tokens, global_idx, global_intermediates = self._process_global_attention(
-                        tokens, B, S, P, C, global_idx, pos=pos, e0 = e0
+                        tokens, B, S, P, C, global_idx, pos=pos, e0=e0
                     )
             for i in range(len(frame_intermediates)):
                 # concat frame and global intermediates, [B x S x P x 2C]
@@ -245,7 +227,7 @@ class Aggregator(nn.Module):
         del global_intermediates
         return output_list, self.patch_start_idx
 
-    def _process_frame_attention(self, tokens, B, S, P, C, frame_idx, pos=None, e0 = None):
+    def _process_frame_attention(self, tokens, B, S, P, C, frame_idx, pos=None, e0=None):
         """
         Process frame attention blocks. We keep tokens in shape (B*S, P, C).
         """
@@ -261,15 +243,17 @@ class Aggregator(nn.Module):
         # by default, self.aa_block_size=1, which processes one block at a time
         for _ in range(self.aa_block_size):
             if self.training:
-                tokens = checkpoint(self.frame_blocks[frame_idx], tokens, pos = pos, use_reentrant=self.use_reentrant, e0 = e0)
+                tokens = checkpoint(
+                    self.frame_blocks[frame_idx], tokens, pos=pos, use_reentrant=self.use_reentrant, e0=e0
+                )
             else:
-                tokens = self.frame_blocks[frame_idx](tokens, pos=pos, e0= e0)
+                tokens = self.frame_blocks[frame_idx](tokens, pos=pos, e0=e0)
             frame_idx += 1
             intermediates.append(tokens.view(B, S, P, C))
 
         return tokens, frame_idx, intermediates
 
-    def _process_global_attention(self, tokens, B, S, P, C, global_idx, pos=None, e0 = None):
+    def _process_global_attention(self, tokens, B, S, P, C, global_idx, pos=None, e0=None):
         """
         Process global attention blocks. We keep tokens in shape (B, S*P, C).
         """
@@ -284,27 +268,23 @@ class Aggregator(nn.Module):
         # by default, self.aa_block_size=1, which processes one block at a time
         for _ in range(self.aa_block_size):
             if self.training:
-                tokens = checkpoint(self.global_blocks[global_idx], tokens, pos = pos, use_reentrant=self.use_reentrant, e0 = e0)
+                tokens = checkpoint(
+                    self.global_blocks[global_idx], tokens, pos=pos, use_reentrant=self.use_reentrant, e0=e0
+                )
             else:
-                tokens = self.global_blocks[global_idx](tokens, pos=pos, e0 = e0)
+                tokens = self.global_blocks[global_idx](tokens, pos=pos, e0=e0)
             global_idx += 1
-            intermediates.append(tokens.view(B, S, P, C)) # type: ignore
+            intermediates.append(tokens.view(B, S, P, C))  # type: ignore
 
         return tokens, global_idx, intermediates
-    def _process_aggregator_input(self, patch_tokens: torch.Tensor, camera_token: torch.Tensor = None) -> Tuple[List[torch.Tensor], int]:
-        """Helper function to process aggregator input.
 
-        Args:
-            patch_tokens: The patch tokens.
-            camera_token: The camera token.
-
-        Returns:
-            The return value.
-        """
-        B, T ,spatial_H,spatial_W, C = patch_tokens.shape
-        patch_tokens = patch_tokens.reshape(B*T,-1,1024)
+    def _process_aggregator_input(
+        self, patch_tokens: torch.Tensor, camera_token: torch.Tensor = None
+    ) -> tuple[list[torch.Tensor], int]:
+        B, T, spatial_H, spatial_W, C = patch_tokens.shape
+        patch_tokens = patch_tokens.reshape(B * T, -1, 1024)
         S = T
-        if camera_token is not None: 
+        if camera_token is not None:
             camera_token = self.CamTokenProjector(camera_token)
         else:
             camera_token = slice_expand_and_flatten(self.camera_token, B, S)
@@ -315,12 +295,13 @@ class Aggregator(nn.Module):
 
         pos = None
         if self.rope is not None:
-            pos = self.position_getter(B * S, spatial_H, spatial_W, device=patch_tokens.device) # type: ignore
+            pos = self.position_getter(B * S, spatial_H, spatial_W, device=patch_tokens.device)  # type: ignore
         if self.patch_start_idx > 0:
-            pos = pos + 1 # type: ignore
+            pos = pos + 1  # type: ignore
             pos_special = torch.zeros(B * S, self.patch_start_idx, 2).to(patch_tokens.device).to(pos.dtype)
             pos = torch.cat([pos_special, pos], dim=1)
-        return tokens, pos # type: ignore
+        return tokens, pos  # type: ignore
+
 
 def slice_expand_and_flatten(token_tensor, B, S):
     """

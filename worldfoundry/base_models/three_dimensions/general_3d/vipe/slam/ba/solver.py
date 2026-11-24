@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> ba -> solver.py functionality."""
-
 import logging
 from collections import defaultdict
 from typing import Any
@@ -31,14 +29,6 @@ logger = logging.getLogger(__name__)
 
 
 def solve_scipy(pi: torch.Tensor, pj: torch.Tensor, lhs: torch.Tensor, rhs: torch.Tensor):
-    """Solve scipy.
-
-    Args:
-        pi: The pi.
-        pj: The pj.
-        lhs: The lhs.
-        rhs: The rhs.
-    """
     from scipy.sparse import coo_matrix
     from scipy.sparse.linalg import spsolve
 
@@ -54,7 +44,6 @@ def solve_scipy(pi: torch.Tensor, pj: torch.Tensor, lhs: torch.Tensor, rhs: torc
 
 
 class Solver:
-    """Solver implementation."""
     def __init__(
         self,
         compute_energy: bool = False,
@@ -75,53 +64,24 @@ class Solver:
         self.group_marginalized: dict[str, bool] = defaultdict(lambda: False)
 
     def _warn_if_no_terms(self, group_name: str):
-        """Helper function to warn if no terms.
-
-        Args:
-            group_name: The group name.
-        """
         all_group_names = set.union(*[t.group_names() for t in self.terms])
         if group_name not in all_group_names:
             logger.warning(f"Group {group_name} is not used in any terms. This may be a mistake.")
 
     def add_term(self, term: SolverTerm, kernel: RobustKernel | None = None):
-        """Add term.
-
-        Args:
-            term: The term.
-            kernel: The kernel.
-        """
         self.terms.append(term)
         self.kernels.append(kernel)
 
     def set_fixed(self, group_name: str, fixed_inds: torch.Tensor | None = None):
-        """Set fixed.
-
-        Args:
-            group_name: The group name.
-            fixed_inds: The fixed inds.
-        """
         # None means everything is fixed
         self._warn_if_no_terms(group_name)
         self.group_fixed_inds[group_name] = fixed_inds
 
     def set_marginilized(self, group_name: str, marginalized: bool = True):
-        """Set marginilized.
-
-        Args:
-            group_name: The group name.
-            marginalized: The marginalized.
-        """
         self._warn_if_no_terms(group_name)
         self.group_marginalized[group_name] = marginalized
 
     def set_retractor(self, group_name: str, retractor: BaseRetractor):
-        """Set retractor.
-
-        Args:
-            group_name: The group name.
-            retractor: The retractor.
-        """
         self._warn_if_no_terms(group_name)
         self.group_retractor[group_name] = retractor
 
@@ -138,15 +98,6 @@ class Solver:
         self.group_ep[group_name] = ep
 
     def _solve(self, lhs: SparseMatrixSubview, rhs: SparseVectorSubview) -> SparseVectorSubview:
-        """Helper function to solve.
-
-        Args:
-            lhs: The lhs.
-            rhs: The rhs.
-
-        Returns:
-            The return value.
-        """
         assert lhs.row_group_names == lhs.col_group_names == rhs.group_names
 
         if lhs.has_inverse():
@@ -163,21 +114,13 @@ class Solver:
         return rhs.unravel(x_data, ravel_mappings)
 
     def run_inplace(self, variables: dict[str, Any]) -> float:
-        """Run inplace.
-
-        Args:
-            variables: The variables.
-
-        Returns:
-            The return value.
-        """
         lhs: SparseBlockMatrixDict = defaultdict(SparseNullMatrix)
         rhs: SparseVectorDict = defaultdict(SparseNullVector)
 
         fully_fixed_groups = {t for t, inds in self.group_fixed_inds.items() if inds is None}
 
         energy: torch.Tensor | None = None
-        for term, kernel in zip(self.terms, self.kernels):
+        for term, kernel in zip(self.terms, self.kernels, strict=False):
             # Compute the newest term formulation
             term.update(self)
             active_group_names = term.group_names().difference(fully_fixed_groups)

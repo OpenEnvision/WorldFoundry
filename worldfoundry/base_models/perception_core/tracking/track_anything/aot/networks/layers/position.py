@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot -> networks -> layers -> position.py functionality."""
-
 import math
 
 import torch
@@ -15,34 +13,19 @@ from ...utils.math import truncated_normal_
 
 class Downsample2D(nn.Module):
     """Downsample d implementation."""
-    def __init__(self, mode="nearest", scale=4):
-        """Init.
 
-        Args:
-            mode: The mode.
-            scale: The scale.
-        """
+    def __init__(self, mode="nearest", scale=4):
         super().__init__()
         self.mode = mode
         self.scale = scale
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         n, c, h, w = x.size()
         x = F.interpolate(x, size=(h // self.scale + 1, w // self.scale + 1), mode=self.mode)
         return x
 
 
 def generate_coord(x):
-    """Generate coord.
-
-    Args:
-        x: The x.
-    """
     _, _, h, w = x.size()
     device = x.device
     col = torch.arange(0, h, device=device)
@@ -52,16 +35,7 @@ def generate_coord(x):
 
 
 class PositionEmbeddingSine(nn.Module):
-    """Position embedding sine implementation."""
     def __init__(self, num_pos_feats=64, temperature=10000, normalize=False, scale=None):
-        """Init.
-
-        Args:
-            num_pos_feats: The num pos feats.
-            temperature: The temperature.
-            normalize: The normalize.
-            scale: The scale.
-        """
         super().__init__()
         self.num_pos_feats = num_pos_feats
         self.temperature = temperature
@@ -73,11 +47,6 @@ class PositionEmbeddingSine(nn.Module):
         self.scale = scale
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         grid_y, grid_x = generate_coord(x)
 
         y_embed = grid_y.unsqueeze(0).float()
@@ -100,26 +69,13 @@ class PositionEmbeddingSine(nn.Module):
 
 
 class PositionEmbeddingLearned(nn.Module):
-    """Position embedding learned implementation."""
     def __init__(self, num_pos_feats=64, H=30, W=30):
-        """Init.
-
-        Args:
-            num_pos_feats: The num pos feats.
-            H: The h.
-            W: The w.
-        """
         super().__init__()
         self.H = H
         self.W = W
         self.pos_emb = nn.Parameter(truncated_normal_(torch.zeros(1, num_pos_feats, H, W)))
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         bs, _, h, w = x.size()
         pos_emb = self.pos_emb
         if h != self.H or w != self.W:

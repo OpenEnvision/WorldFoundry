@@ -1,23 +1,23 @@
 # Adapted from https://github.com/showlab/Tune-A-Video/blob/main/tuneavideo/pipelines/pipeline_tuneavideo.py
-
 import inspect
-from typing import Callable, List, Optional, Union
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import ClassVar
 
 import numpy as np
 import torch
-from tqdm import tqdm
-
-from diffusers.utils import is_accelerate_available
-from packaging import version
-from transformers import CLIPTextModel, CLIPTokenizer
-
 from diffusers.configuration_utils import FrozenDict
 from diffusers.models import AutoencoderKL
+from diffusers.utils import is_accelerate_available
+from packaging import version
+from tqdm import tqdm
+from transformers import CLIPTextModel, CLIPTokenizer
+
 try:
     from diffusers.pipeline_utils import DiffusionPipeline
 except ImportError:  # diffusers >= 0.38
     from diffusers import DiffusionPipeline
+
 from diffusers.schedulers import (
     DDIMScheduler,
     DPMSolverMultistepScheduler,
@@ -26,24 +26,22 @@ from diffusers.schedulers import (
     LMSDiscreteScheduler,
     PNDMScheduler,
 )
-from diffusers.utils import deprecate, logging, BaseOutput
-
+from diffusers.utils import BaseOutput, deprecate, logging
 from einops import rearrange
 
-from ..models.unet import UNet3DConditionModel
 from ..models.sparse_controlnet import SparseControlNetModel
-import pdb
+from ..models.unet import UNet3DConditionModel
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 @dataclass
 class AnimationPipelineOutput(BaseOutput):
-    videos: Union[torch.Tensor, np.ndarray]
+    videos: torch.Tensor | np.ndarray
 
 
 class AnimationPipeline(DiffusionPipeline):
-    _optional_components = []
+    _optional_components: ClassVar[list] = []
 
     def __init__(
         self,
@@ -51,15 +49,13 @@ class AnimationPipeline(DiffusionPipeline):
         text_encoder: CLIPTextModel,
         tokenizer: CLIPTokenizer,
         unet: UNet3DConditionModel,
-        scheduler: Union[
-            DDIMScheduler,
-            PNDMScheduler,
-            LMSDiscreteScheduler,
-            EulerDiscreteScheduler,
-            EulerAncestralDiscreteScheduler,
-            DPMSolverMultistepScheduler,
-        ],
-        controlnet: Union[SparseControlNetModel, None] = None,
+        scheduler: DDIMScheduler
+        | PNDMScheduler
+        | LMSDiscreteScheduler
+        | EulerDiscreteScheduler
+        | EulerAncestralDiscreteScheduler
+        | DPMSolverMultistepScheduler,
+        controlnet: SparseControlNetModel | None = None,
     ):
         super().__init__()
 
@@ -139,7 +135,6 @@ class AnimationPipeline(DiffusionPipeline):
             if cpu_offloaded_model is not None:
                 cpu_offload(cpu_offloaded_model, device)
 
-
     @property
     def _execution_device(self):
         if self.device != torch.device("meta") or not hasattr(self.unet, "_hf_hook"):
@@ -191,7 +186,7 @@ class AnimationPipeline(DiffusionPipeline):
 
         # get unconditional embeddings for classifier free guidance
         if do_classifier_free_guidance:
-            uncond_tokens: List[str]
+            uncond_tokens: list[str]
             if negative_prompt is None:
                 uncond_tokens = [""] * batch_size
             elif type(prompt) is not type(negative_prompt):
@@ -249,7 +244,7 @@ class AnimationPipeline(DiffusionPipeline):
         # video = self.vae.decode(latents).sample
         video = []
         for frame_idx in tqdm(range(latents.shape[0])):
-            video.append(self.vae.decode(latents[frame_idx:frame_idx+1]).sample)
+            video.append(self.vae.decode(latents[frame_idx : frame_idx + 1]).sample)
         video = torch.cat(video)
         video = rearrange(video, "(b f) c h w -> b c f h w", f=video_length)
         video = (video / 2 + 0.5).clamp(0, 1)
@@ -285,12 +280,19 @@ class AnimationPipeline(DiffusionPipeline):
             callback_steps is not None and (not isinstance(callback_steps, int) or callback_steps <= 0)
         ):
             raise ValueError(
-                f"`callback_steps` has to be a positive integer but is {callback_steps} of type"
-                f" {type(callback_steps)}."
+                f"`callback_steps` has to be a positive integer but is {callback_steps} of type {type(callback_steps)}."
             )
 
-    def prepare_latents(self, batch_size, num_channels_latents, video_length, height, width, dtype, device, generator, latents=None):
-        shape = (batch_size, num_channels_latents, video_length, height // self.vae_scale_factor, width // self.vae_scale_factor)
+    def prepare_latents(
+        self, batch_size, num_channels_latents, video_length, height, width, dtype, device, generator, latents=None
+    ):
+        shape = (
+            batch_size,
+            num_channels_latents,
+            video_length,
+            height // self.vae_scale_factor,
+            width // self.vae_scale_factor,
+        )
         if isinstance(generator, list) and len(generator) != batch_size:
             raise ValueError(
                 f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
@@ -321,27 +323,25 @@ class AnimationPipeline(DiffusionPipeline):
     @torch.no_grad()
     def __call__(
         self,
-        prompt: Union[str, List[str]],
-        video_length: Optional[int],
-        height: Optional[int] = None,
-        width: Optional[int] = None,
+        prompt: str | list[str],
+        video_length: int | None,
+        height: int | None = None,
+        width: int | None = None,
         num_inference_steps: int = 50,
         guidance_scale: float = 7.5,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
-        num_videos_per_prompt: Optional[int] = 1,
+        negative_prompt: str | list[str] | None = None,
+        num_videos_per_prompt: int | None = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.FloatTensor] = None,
-        output_type: Optional[str] = "tensor",
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.FloatTensor | None = None,
+        output_type: str | None = "tensor",
         return_dict: bool = True,
-        callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
-        callback_steps: Optional[int] = 1,
-
+        callback: Callable[[int, int, torch.FloatTensor], None] | None = None,
+        callback_steps: int | None = 1,
         # support controlnet
         controlnet_images: torch.FloatTensor = None,
-        controlnet_image_index: list = [0],
-        controlnet_conditioning_scale: Union[float, List[float]] = 1.0,
-
+        controlnet_image_index: list = [0],  # noqa: B006 - Keeps the upstream default object and signature.
+        controlnet_conditioning_scale: float | list[float] = 1.0,
         **kwargs,
     ):
         # Default height and width to unet
@@ -368,7 +368,7 @@ class AnimationPipeline(DiffusionPipeline):
         # Encode input prompt
         prompt = prompt if isinstance(prompt, list) else [prompt] * batch_size
         if negative_prompt is not None:
-            negative_prompt = negative_prompt if isinstance(negative_prompt, list) else [negative_prompt] * batch_size 
+            negative_prompt = negative_prompt if isinstance(negative_prompt, list) else [negative_prompt] * batch_size
         text_embeddings = self._encode_prompt(
             prompt, device, num_videos_per_prompt, do_classifier_free_guidance, negative_prompt
         )
@@ -404,7 +404,7 @@ class AnimationPipeline(DiffusionPipeline):
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                 down_block_additional_residuals = mid_block_additional_residual = None
-                if (getattr(self, "controlnet", None) != None) and (controlnet_images != None):
+                if (getattr(self, "controlnet", None) != None) and (controlnet_images != None):  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
                     assert controlnet_images.dim() == 5
 
                     controlnet_noisy_latents = latent_model_input
@@ -412,33 +412,38 @@ class AnimationPipeline(DiffusionPipeline):
 
                     controlnet_images = controlnet_images.to(latents.device)
 
-                    controlnet_cond_shape    = list(controlnet_images.shape)
+                    controlnet_cond_shape = list(controlnet_images.shape)
                     controlnet_cond_shape[2] = video_length
                     controlnet_cond = torch.zeros(controlnet_cond_shape).to(latents.device)
 
-                    controlnet_conditioning_mask_shape    = list(controlnet_cond.shape)
+                    controlnet_conditioning_mask_shape = list(controlnet_cond.shape)
                     controlnet_conditioning_mask_shape[1] = 1
-                    controlnet_conditioning_mask          = torch.zeros(controlnet_conditioning_mask_shape).to(latents.device)
+                    controlnet_conditioning_mask = torch.zeros(controlnet_conditioning_mask_shape).to(latents.device)
 
                     assert controlnet_images.shape[2] >= len(controlnet_image_index)
-                    controlnet_cond[:,:,controlnet_image_index] = controlnet_images[:,:,:len(controlnet_image_index)]
-                    controlnet_conditioning_mask[:,:,controlnet_image_index] = 1
+                    controlnet_cond[:, :, controlnet_image_index] = controlnet_images[
+                        :, :, : len(controlnet_image_index)
+                    ]
+                    controlnet_conditioning_mask[:, :, controlnet_image_index] = 1
 
                     down_block_additional_residuals, mid_block_additional_residual = self.controlnet(
-                        controlnet_noisy_latents, t,
+                        controlnet_noisy_latents,
+                        t,
                         encoder_hidden_states=controlnet_prompt_embeds,
                         controlnet_cond=controlnet_cond,
                         conditioning_mask=controlnet_conditioning_mask,
                         conditioning_scale=controlnet_conditioning_scale,
-                        guess_mode=False, return_dict=False,
+                        guess_mode=False,
+                        return_dict=False,
                     )
 
                 # predict the noise residual
                 noise_pred = self.unet(
-                    latent_model_input, t, 
+                    latent_model_input,
+                    t,
                     encoder_hidden_states=text_embeddings,
-                    down_block_additional_residuals = down_block_additional_residuals,
-                    mid_block_additional_residual   = mid_block_additional_residual,
+                    down_block_additional_residuals=down_block_additional_residuals,
+                    mid_block_additional_residual=mid_block_additional_residual,
                 ).sample.to(dtype=latents_dtype)
 
                 # perform guidance

@@ -7,50 +7,36 @@
 MapAnything model class defined using UniCeption modules.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from functools import partial
-from typing import Any, Callable, Dict, List, Tuple, Type, Union
+from typing import Any
 
 import torch
 import torch.nn as nn
 from huggingface_hub import PyTorchModelHubMixin
-from mapanything.utils.device import (
-    empty_cache,
-    get_amp_dtype,
-    get_autocast_device_type,
-)
-from mapanything.utils.geometry import (
-    apply_log_to_norm,
-    convert_ray_dirs_depth_along_ray_pose_trans_quats_to_pointmap,
-    normalize_depth_using_non_zero_pixels,
-    normalize_pose_translations,
-    transform_pose_using_quats_and_trans_2_to_1,
-)
-from mapanything.utils.inference import (
-    postprocess_model_outputs_for_inference,
-    preprocess_input_views_for_inference,
-    validate_input_views_for_inference,
-)
-from uniception.models.encoders import (
+
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.encoders import (
     EncoderGlobalRepInput,
     ViTEncoderInput,
     ViTEncoderNonImageInput,
     encoder_factory,
 )
-from uniception.models.info_sharing.alternating_attention_transformer import (
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.info_sharing.alternating_attention_transformer import (
     MultiViewAlternatingAttentionTransformer,
     MultiViewAlternatingAttentionTransformerIFR,
 )
-from uniception.models.info_sharing.base import MultiViewTransformerInput
-from uniception.models.info_sharing.cross_attention_transformer import (
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.info_sharing.base import (
+    MultiViewTransformerInput,
+)
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.info_sharing.cross_attention_transformer import (
     MultiViewCrossAttentionTransformer,
     MultiViewCrossAttentionTransformerIFR,
 )
-from uniception.models.info_sharing.global_attention_transformer import (
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.info_sharing.global_attention_transformer import (
     MultiViewGlobalAttentionTransformer,
     MultiViewGlobalAttentionTransformerIFR,
 )
-from uniception.models.prediction_heads.adaptors import (
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.prediction_heads.adaptors import (
     CamTranslationPlusQuatsAdaptor,
     PointMapAdaptor,
     PointMapPlusRayDirectionsPlusDepthAdaptor,
@@ -70,22 +56,49 @@ from uniception.models.prediction_heads.adaptors import (
     RayMapPlusDepthWithMaskAdaptor,
     ScaleAdaptor,
 )
-from uniception.models.prediction_heads.base import (
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.prediction_heads.base import (
     AdaptorInput,
     PredictionHeadInput,
     PredictionHeadLayeredInput,
     PredictionHeadTokenInput,
 )
-from uniception.models.prediction_heads.dpt import DPTFeature, DPTRegressionProcessor
-from uniception.models.prediction_heads.linear import LinearFeature
-from uniception.models.prediction_heads.mlp_head import MLPHead
-from uniception.models.prediction_heads.pose_head import PoseHead
-from uniception.models.utils.transformer_blocks import Mlp, SwiGLUFFNFused
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.prediction_heads.dpt import (
+    DPTFeature,
+    DPTRegressionProcessor,
+)
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.prediction_heads.linear import (
+    LinearFeature,
+)
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.prediction_heads.mlp_head import (
+    MLPHead,
+)
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.prediction_heads.pose_head import (
+    PoseHead,
+)
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.utils.transformer_blocks import (
+    Mlp,
+)
+from worldfoundry.base_models.three_dimensions.general_3d.mapanything.mapanything.utils.device import (
+    empty_cache,
+    get_amp_dtype,
+    get_autocast_device_type,
+)
+from worldfoundry.base_models.three_dimensions.general_3d.mapanything.mapanything.utils.geometry import (
+    apply_log_to_norm,
+    convert_ray_dirs_depth_along_ray_pose_trans_quats_to_pointmap,
+    normalize_depth_using_non_zero_pixels,
+    normalize_pose_translations,
+    transform_pose_using_quats_and_trans_2_to_1,
+)
+from worldfoundry.base_models.three_dimensions.general_3d.mapanything.mapanything.utils.inference import (
+    postprocess_model_outputs_for_inference,
+    preprocess_input_views_for_inference,
+    validate_input_views_for_inference,
+)
+from worldfoundry.core.nn.blocks.layers import SwiGLUFFNFused
 
 # Enable TF32 precision if supported (for GPU >= Ampere and PyTorch >= 1.12)
-if hasattr(torch.backends.cuda, "matmul") and hasattr(
-    torch.backends.cuda.matmul, "allow_tf32"
-):
+if hasattr(torch.backends.cuda, "matmul") and hasattr(torch.backends.cuda.matmul, "allow_tf32"):
     torch.backends.cuda.matmul.allow_tf32 = True
 
 
@@ -95,16 +108,14 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
     def __init__(
         self,
         name: str,
-        encoder_config: Dict,
-        info_sharing_config: Dict,
-        pred_head_config: Dict,
-        geometric_input_config: Dict,
-        fusion_norm_layer: Union[Type[nn.Module], Callable[..., nn.Module]] = partial(
-            nn.LayerNorm, eps=1e-6
-        ),
-        pretrained_checkpoint_path: str = None,
+        encoder_config: dict,
+        info_sharing_config: dict,
+        pred_head_config: dict,
+        geometric_input_config: dict,
+        fusion_norm_layer: type[nn.Module] | Callable[..., nn.Module] = partial(nn.LayerNorm, eps=1e-6),  # noqa: B008 - Default evaluated once at definition, as upstream.
+        pretrained_checkpoint_path: str | None = None,
         load_specific_pretrained_submodules: bool = False,
-        specific_pretrained_submodules: list = None,
+        specific_pretrained_submodules: list | None = None,
         torch_hub_force_reload: bool = False,
         use_register_tokens_from_encoder: bool = False,
         info_sharing_mlp_layer_str: str = "mlp",
@@ -198,16 +209,12 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         self.cam_rot_encoder = encoder_factory(**cam_rot_encoder_config)
 
         # Initialize the encoder for camera translation (normalized across all provided camera translations)
-        cam_trans_encoder_config = self.geometric_input_config[
-            "cam_trans_encoder_config"
-        ]
+        cam_trans_encoder_config = self.geometric_input_config["cam_trans_encoder_config"]
         cam_trans_encoder_config["enc_embed_dim"] = self.encoder.enc_embed_dim
         self.cam_trans_encoder = encoder_factory(**cam_trans_encoder_config)
 
         # Initialize the encoder for log scale factor of camera translation
-        cam_trans_scale_encoder_config = self.geometric_input_config[
-            "scale_encoder_config"
-        ]
+        cam_trans_scale_encoder_config = self.geometric_input_config["scale_encoder_config"]
         cam_trans_scale_encoder_config["enc_embed_dim"] = self.encoder.enc_embed_dim
         self.cam_trans_scale_encoder = encoder_factory(**cam_trans_scale_encoder_config)
 
@@ -274,41 +281,27 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 print(
                     f"Using custom positional encoding for multi-view attention transformer: {custom_positional_encoding}"
                 )
-                raise ValueError(
-                    f"Invalid custom_positional_encoding: {custom_positional_encoding}. None implemented."
-                )
+                raise ValueError(f"Invalid custom_positional_encoding: {custom_positional_encoding}. None implemented.")
             elif isinstance(custom_positional_encoding, Callable):
-                print(
-                    "Using callable function as custom positional encoding for multi-view attention transformer."
-                )
+                print("Using callable function as custom positional encoding for multi-view attention transformer.")
                 self.custom_positional_encoding = custom_positional_encoding
         else:
             self.custom_positional_encoding = None
 
         # Add dependencies to info_sharing_config
-        info_sharing_config["module_args"]["input_embed_dim"] = (
-            self.encoder.enc_embed_dim
-        )
-        info_sharing_config["module_args"]["custom_positional_encoding"] = (
-            self.custom_positional_encoding
-        )
+        info_sharing_config["module_args"]["input_embed_dim"] = self.encoder.enc_embed_dim
+        info_sharing_config["module_args"]["custom_positional_encoding"] = self.custom_positional_encoding
 
         # Initialize Multi-View Transformer
         if self.info_sharing_return_type == "no_intermediate_features":
             # Returns only normalized last layer features
             # Initialize multi-view transformer based on type
             if self.info_sharing_type == "cross_attention":
-                self.info_sharing = MultiViewCrossAttentionTransformer(
-                    **info_sharing_config["module_args"]
-                )
+                self.info_sharing = MultiViewCrossAttentionTransformer(**info_sharing_config["module_args"])
             elif self.info_sharing_type == "global_attention":
-                self.info_sharing = MultiViewGlobalAttentionTransformer(
-                    **info_sharing_config["module_args"]
-                )
+                self.info_sharing = MultiViewGlobalAttentionTransformer(**info_sharing_config["module_args"])
             elif self.info_sharing_type == "alternating_attention":
-                self.info_sharing = MultiViewAlternatingAttentionTransformer(
-                    **info_sharing_config["module_args"]
-                )
+                self.info_sharing = MultiViewAlternatingAttentionTransformer(**info_sharing_config["module_args"])
             else:
                 raise ValueError(
                     f"Invalid info_sharing_type: {self.info_sharing_type}. Valid options: ['cross_attention', 'global_attention', 'alternating_attention']"
@@ -317,17 +310,11 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
             # Returns intermediate features and normalized last layer features
             # Initialize mulit-view transformer based on type
             if self.info_sharing_type == "cross_attention":
-                self.info_sharing = MultiViewCrossAttentionTransformerIFR(
-                    **info_sharing_config["module_args"]
-                )
+                self.info_sharing = MultiViewCrossAttentionTransformerIFR(**info_sharing_config["module_args"])
             elif self.info_sharing_type == "global_attention":
-                self.info_sharing = MultiViewGlobalAttentionTransformerIFR(
-                    **info_sharing_config["module_args"]
-                )
+                self.info_sharing = MultiViewGlobalAttentionTransformerIFR(**info_sharing_config["module_args"])
             elif self.info_sharing_type == "alternating_attention":
-                self.info_sharing = MultiViewAlternatingAttentionTransformerIFR(
-                    **info_sharing_config["module_args"]
-                )
+                self.info_sharing = MultiViewAlternatingAttentionTransformerIFR(**info_sharing_config["module_args"])
             else:
                 raise ValueError(
                     f"Invalid info_sharing_type: {self.info_sharing_type}. Valid options: ['cross_attention', 'global_attention', 'alternating_attention']"
@@ -366,28 +353,20 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         # Add dependencies to prediction head config
         pred_head_config["feature_head"]["patch_size"] = self.encoder.patch_size
         if self.pred_head_type == "linear":
-            pred_head_config["feature_head"]["input_feature_dim"] = (
-                self.info_sharing.dim
-            )
+            pred_head_config["feature_head"]["input_feature_dim"] = self.info_sharing.dim
         elif "dpt" in self.pred_head_type:
             # Add dependencies for DPT & Regressor head
             if self.use_encoder_features_for_dpt:
-                pred_head_config["feature_head"]["input_feature_dims"] = [
-                    self.encoder.enc_embed_dim
-                ] + [self.info_sharing.dim] * 3
-            else:
-                pred_head_config["feature_head"]["input_feature_dims"] = [
+                pred_head_config["feature_head"]["input_feature_dims"] = [self.encoder.enc_embed_dim] + [
                     self.info_sharing.dim
-                ] * 4
-            pred_head_config["regressor_head"]["input_feature_dim"] = pred_head_config[
-                "feature_head"
-            ]["feature_dim"]
+                ] * 3
+            else:
+                pred_head_config["feature_head"]["input_feature_dims"] = [self.info_sharing.dim] * 4
+            pred_head_config["regressor_head"]["input_feature_dim"] = pred_head_config["feature_head"]["feature_dim"]
             # Add dependencies for Pose head if required
             if "pose" in self.pred_head_type:
                 pred_head_config["pose_head"]["patch_size"] = self.encoder.patch_size
-                pred_head_config["pose_head"]["input_feature_dim"] = (
-                    self.info_sharing.dim
-                )
+                pred_head_config["pose_head"]["input_feature_dim"] = self.info_sharing.dim
         else:
             raise ValueError(
                 f"Invalid pred_head_type: {self.pred_head_type}. Valid options: ['linear', 'dpt', 'dpt+pose']"
@@ -401,12 +380,8 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         elif "dpt" in self.pred_head_type:
             # Initialize Dense Prediction Head for all views
             self.dpt_feature_head = DPTFeature(**pred_head_config["feature_head"])
-            self.dpt_regressor_head = DPTRegressionProcessor(
-                **pred_head_config["regressor_head"]
-            )
-            self.dense_head = nn.Sequential(
-                self.dpt_feature_head, self.dpt_regressor_head
-            )
+            self.dpt_regressor_head = DPTRegressionProcessor(**pred_head_config["regressor_head"])
+            self.dense_head = nn.Sequential(self.dpt_feature_head, self.dpt_regressor_head)
             # Initialize Pose Head for all views if required
             if "pose" in self.pred_head_type:
                 self.pose_head = PoseHead(**pred_head_config["pose_head"])
@@ -437,174 +412,113 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
             self.dense_adaptor = PointMapAdaptor(**pred_head_config["adaptor"])
             self.scene_rep_type = "pointmap"
         elif pred_head_config["adaptor_type"] == "pointmap+confidence":
-            self.dense_adaptor = PointMapWithConfidenceAdaptor(
-                **pred_head_config["adaptor"]
-            )
+            self.dense_adaptor = PointMapWithConfidenceAdaptor(**pred_head_config["adaptor"])
             self.scene_rep_type = "pointmap+confidence"
         elif pred_head_config["adaptor_type"] == "pointmap+mask":
             self.dense_adaptor = PointMapWithMaskAdaptor(**pred_head_config["adaptor"])
             self.scene_rep_type = "pointmap+mask"
         elif pred_head_config["adaptor_type"] == "pointmap+confidence+mask":
-            self.dense_adaptor = PointMapWithConfidenceAndMaskAdaptor(
-                **pred_head_config["adaptor"]
-            )
+            self.dense_adaptor = PointMapWithConfidenceAndMaskAdaptor(**pred_head_config["adaptor"])
             self.scene_rep_type = "pointmap+confidence+mask"
         elif pred_head_config["adaptor_type"] == "raymap+depth":
             self.dense_adaptor = RayMapPlusDepthAdaptor(**pred_head_config["adaptor"])
             self.scene_rep_type = "raymap+depth"
         elif pred_head_config["adaptor_type"] == "raymap+depth+confidence":
-            self.dense_adaptor = RayMapPlusDepthWithConfidenceAdaptor(
-                **pred_head_config["adaptor"]
-            )
+            self.dense_adaptor = RayMapPlusDepthWithConfidenceAdaptor(**pred_head_config["adaptor"])
             self.scene_rep_type = "raymap+depth+confidence"
         elif pred_head_config["adaptor_type"] == "raymap+depth+mask":
-            self.dense_adaptor = RayMapPlusDepthWithMaskAdaptor(
-                **pred_head_config["adaptor"]
-            )
+            self.dense_adaptor = RayMapPlusDepthWithMaskAdaptor(**pred_head_config["adaptor"])
             self.scene_rep_type = "raymap+depth+mask"
         elif pred_head_config["adaptor_type"] == "raymap+depth+confidence+mask":
-            self.dense_adaptor = RayMapPlusDepthWithConfidenceAndMaskAdaptor(
-                **pred_head_config["adaptor"]
-            )
+            self.dense_adaptor = RayMapPlusDepthWithConfidenceAndMaskAdaptor(**pred_head_config["adaptor"])
             self.scene_rep_type = "raymap+depth+confidence+mask"
         elif pred_head_config["adaptor_type"] == "raydirs+depth+pose":
             assert self.pred_head_type == "dpt+pose", (
                 "Ray directions + depth + pose can only be used as scene representation with dpt + pose head."
             )
-            self.dense_adaptor = RayDirectionsPlusDepthAdaptor(
-                **pred_head_config["dpt_adaptor"]
-            )
-            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(
-                **pred_head_config["pose_adaptor"]
-            )
+            self.dense_adaptor = RayDirectionsPlusDepthAdaptor(**pred_head_config["dpt_adaptor"])
+            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(**pred_head_config["pose_adaptor"])
             self.scene_rep_type = "raydirs+depth+pose"
         elif pred_head_config["adaptor_type"] == "raydirs+depth+pose+confidence":
             assert self.pred_head_type == "dpt+pose", (
                 "Ray directions + depth + pose can only be used as scene representation with dpt + pose head."
             )
-            self.dense_adaptor = RayDirectionsPlusDepthWithConfidenceAdaptor(
-                **pred_head_config["dpt_adaptor"]
-            )
-            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(
-                **pred_head_config["pose_adaptor"]
-            )
+            self.dense_adaptor = RayDirectionsPlusDepthWithConfidenceAdaptor(**pred_head_config["dpt_adaptor"])
+            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(**pred_head_config["pose_adaptor"])
             self.scene_rep_type = "raydirs+depth+pose+confidence"
         elif pred_head_config["adaptor_type"] == "raydirs+depth+pose+mask":
             assert self.pred_head_type == "dpt+pose", (
                 "Ray directions + depth + pose can only be used as scene representation with dpt + pose head."
             )
-            self.dense_adaptor = RayDirectionsPlusDepthWithMaskAdaptor(
-                **pred_head_config["dpt_adaptor"]
-            )
-            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(
-                **pred_head_config["pose_adaptor"]
-            )
+            self.dense_adaptor = RayDirectionsPlusDepthWithMaskAdaptor(**pred_head_config["dpt_adaptor"])
+            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(**pred_head_config["pose_adaptor"])
             self.scene_rep_type = "raydirs+depth+pose+mask"
         elif pred_head_config["adaptor_type"] == "raydirs+depth+pose+confidence+mask":
             assert self.pred_head_type == "dpt+pose", (
                 "Ray directions + depth + pose can only be used as scene representation with dpt + pose head."
             )
-            self.dense_adaptor = RayDirectionsPlusDepthWithConfidenceAndMaskAdaptor(
-                **pred_head_config["dpt_adaptor"]
-            )
-            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(
-                **pred_head_config["pose_adaptor"]
-            )
+            self.dense_adaptor = RayDirectionsPlusDepthWithConfidenceAndMaskAdaptor(**pred_head_config["dpt_adaptor"])
+            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(**pred_head_config["pose_adaptor"])
             self.scene_rep_type = "raydirs+depth+pose+confidence+mask"
         elif pred_head_config["adaptor_type"] == "campointmap+pose":
             assert self.pred_head_type == "dpt+pose", (
                 "Camera pointmap + pose can only be used as scene representation with dpt + pose head."
             )
             self.dense_adaptor = PointMapAdaptor(**pred_head_config["dpt_adaptor"])
-            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(
-                **pred_head_config["pose_adaptor"]
-            )
+            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(**pred_head_config["pose_adaptor"])
             self.scene_rep_type = "campointmap+pose"
         elif pred_head_config["adaptor_type"] == "campointmap+pose+confidence":
             assert self.pred_head_type == "dpt+pose", (
                 "Camera pointmap + pose can only be used as scene representation with dpt + pose head."
             )
-            self.dense_adaptor = PointMapWithConfidenceAdaptor(
-                **pred_head_config["dpt_adaptor"]
-            )
-            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(
-                **pred_head_config["pose_adaptor"]
-            )
+            self.dense_adaptor = PointMapWithConfidenceAdaptor(**pred_head_config["dpt_adaptor"])
+            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(**pred_head_config["pose_adaptor"])
             self.scene_rep_type = "campointmap+pose+confidence"
         elif pred_head_config["adaptor_type"] == "campointmap+pose+mask":
             assert self.pred_head_type == "dpt+pose", (
                 "Camera pointmap + pose can only be used as scene representation with dpt + pose head."
             )
-            self.dense_adaptor = PointMapWithMaskAdaptor(
-                **pred_head_config["dpt_adaptor"]
-            )
-            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(
-                **pred_head_config["pose_adaptor"]
-            )
+            self.dense_adaptor = PointMapWithMaskAdaptor(**pred_head_config["dpt_adaptor"])
+            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(**pred_head_config["pose_adaptor"])
             self.scene_rep_type = "campointmap+pose+mask"
         elif pred_head_config["adaptor_type"] == "campointmap+pose+confidence+mask":
             assert self.pred_head_type == "dpt+pose", (
                 "Camera pointmap + pose can only be used as scene representation with dpt + pose head."
             )
-            self.dense_adaptor = PointMapWithConfidenceAndMaskAdaptor(
-                **pred_head_config["dpt_adaptor"]
-            )
-            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(
-                **pred_head_config["pose_adaptor"]
-            )
+            self.dense_adaptor = PointMapWithConfidenceAndMaskAdaptor(**pred_head_config["dpt_adaptor"])
+            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(**pred_head_config["pose_adaptor"])
             self.scene_rep_type = "campointmap+pose+confidence+mask"
         elif pred_head_config["adaptor_type"] == "pointmap+raydirs+depth+pose":
             assert self.pred_head_type == "dpt+pose", (
                 "Pointmap + ray directions + depth + pose can only be used as scene representation with dpt + pose head."
             )
-            self.dense_adaptor = PointMapPlusRayDirectionsPlusDepthAdaptor(
-                **pred_head_config["dpt_adaptor"]
-            )
-            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(
-                **pred_head_config["pose_adaptor"]
-            )
+            self.dense_adaptor = PointMapPlusRayDirectionsPlusDepthAdaptor(**pred_head_config["dpt_adaptor"])
+            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(**pred_head_config["pose_adaptor"])
             self.scene_rep_type = "pointmap+raydirs+depth+pose"
-        elif (
-            pred_head_config["adaptor_type"] == "pointmap+raydirs+depth+pose+confidence"
-        ):
+        elif pred_head_config["adaptor_type"] == "pointmap+raydirs+depth+pose+confidence":
             assert self.pred_head_type == "dpt+pose", (
                 "Pointmap + ray directions + depth + pose can only be used as scene representation with dpt + pose head."
             )
-            self.dense_adaptor = (
-                PointMapPlusRayDirectionsPlusDepthWithConfidenceAdaptor(
-                    **pred_head_config["dpt_adaptor"]
-                )
+            self.dense_adaptor = PointMapPlusRayDirectionsPlusDepthWithConfidenceAdaptor(
+                **pred_head_config["dpt_adaptor"]
             )
-            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(
-                **pred_head_config["pose_adaptor"]
-            )
+            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(**pred_head_config["pose_adaptor"])
             self.scene_rep_type = "pointmap+raydirs+depth+pose+confidence"
         elif pred_head_config["adaptor_type"] == "pointmap+raydirs+depth+pose+mask":
             assert self.pred_head_type == "dpt+pose", (
                 "Pointmap + ray directions + depth + pose can only be used as scene representation with dpt + pose head."
             )
-            self.dense_adaptor = PointMapPlusRayDirectionsPlusDepthWithMaskAdaptor(
-                **pred_head_config["dpt_adaptor"]
-            )
-            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(
-                **pred_head_config["pose_adaptor"]
-            )
+            self.dense_adaptor = PointMapPlusRayDirectionsPlusDepthWithMaskAdaptor(**pred_head_config["dpt_adaptor"])
+            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(**pred_head_config["pose_adaptor"])
             self.scene_rep_type = "pointmap+raydirs+depth+pose+mask"
-        elif (
-            pred_head_config["adaptor_type"]
-            == "pointmap+raydirs+depth+pose+confidence+mask"
-        ):
+        elif pred_head_config["adaptor_type"] == "pointmap+raydirs+depth+pose+confidence+mask":
             assert self.pred_head_type == "dpt+pose", (
                 "Pointmap + ray directions + depth + pose can only be used as scene representation with dpt + pose head."
             )
-            self.dense_adaptor = (
-                PointMapPlusRayDirectionsPlusDepthWithConfidenceAndMaskAdaptor(
-                    **pred_head_config["dpt_adaptor"]
-                )
+            self.dense_adaptor = PointMapPlusRayDirectionsPlusDepthWithConfidenceAndMaskAdaptor(
+                **pred_head_config["dpt_adaptor"]
             )
-            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(
-                **pred_head_config["pose_adaptor"]
-            )
+            self.pose_adaptor = CamTranslationPlusQuatsAdaptor(**pred_head_config["pose_adaptor"])
             self.scene_rep_type = "pointmap+raydirs+depth+pose+confidence+mask"
         else:
             raise ValueError(
@@ -633,36 +547,23 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 weights_only=True,
             )
             if not isinstance(checkpoint, Mapping):
-                raise TypeError(
-                    "MapAnything checkpoint must be a mapping containing a 'model' state dict."
-                )
+                raise TypeError("MapAnything checkpoint must be a mapping containing a 'model' state dict.")
             model_state = checkpoint.get("model")
             if not isinstance(model_state, Mapping):
-                raise TypeError(
-                    "MapAnything checkpoint field 'model' must be a tensor mapping."
-                )
+                raise TypeError("MapAnything checkpoint field 'model' must be a tensor mapping.")
             invalid_entries = [
-                key
-                for key, value in model_state.items()
-                if not isinstance(key, str) or not torch.is_tensor(value)
+                key for key, value in model_state.items() if not isinstance(key, str) or not torch.is_tensor(value)
             ]
             if invalid_entries:
-                raise TypeError(
-                    "MapAnything checkpoint contains non-tensor state entries: "
-                    f"{invalid_entries[:5]}"
-                )
+                raise TypeError(f"MapAnything checkpoint contains non-tensor state entries: {invalid_entries[:5]}")
             if not self.load_specific_pretrained_submodules:
-                print(
-                    f"Loading pretrained MapAnything weights from {self.pretrained_checkpoint_path} ..."
-                )
+                print(f"Loading pretrained MapAnything weights from {self.pretrained_checkpoint_path} ...")
                 print(self.load_state_dict(model_state))
             else:
                 print(
                     f"Loading pretrained MapAnything weights from {self.pretrained_checkpoint_path} for specific submodules: {self.specific_pretrained_submodules} ..."
                 )
-                assert self.pred_head_type is not None, (
-                    "Specific submodules to load cannot be None."
-                )
+                assert self.pred_head_type is not None, "Specific submodules to load cannot be None."
                 filtered_ckpt = {}
                 for ckpt_key, ckpt_value in model_state.items():
                     for submodule in self.specific_pretrained_submodules:
@@ -687,21 +588,12 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         data_norm_type = views[0]["data_norm_type"][0]
         imgs_list = [view["img"] for view in views]
         all_imgs_across_views = torch.cat(imgs_list, dim=0)
-        encoder_input = ViTEncoderInput(
-            image=all_imgs_across_views, data_norm_type=data_norm_type
-        )
+        encoder_input = ViTEncoderInput(image=all_imgs_across_views, data_norm_type=data_norm_type)
         encoder_output = self.encoder(encoder_input)
-        all_encoder_features_across_views = encoder_output.features.chunk(
-            num_views, dim=0
-        )
+        all_encoder_features_across_views = encoder_output.features.chunk(num_views, dim=0)
         all_encoder_registers_across_views = None
-        if (
-            self.use_register_tokens_from_encoder
-            and encoder_output.registers is not None
-        ):
-            all_encoder_registers_across_views = encoder_output.registers.chunk(
-                num_views, dim=0
-            )
+        if self.use_register_tokens_from_encoder and encoder_output.registers is not None:
+            all_encoder_registers_across_views = encoder_output.registers.chunk(num_views, dim=0)
 
         return all_encoder_features_across_views, all_encoder_registers_across_views
 
@@ -745,38 +637,25 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 and per_sample_cam_input_mask_for_curr_view.any()
             ):
                 # Get the camera pose quats and trans for the current view
-                cam_pose_quats = views[view_idx]["camera_pose_quats"][
-                    per_sample_cam_input_mask_for_curr_view
-                ]
-                cam_pose_trans = views[view_idx]["camera_pose_trans"][
-                    per_sample_cam_input_mask_for_curr_view
-                ]
+                cam_pose_quats = views[view_idx]["camera_pose_quats"][per_sample_cam_input_mask_for_curr_view]
+                cam_pose_trans = views[view_idx]["camera_pose_trans"][per_sample_cam_input_mask_for_curr_view]
                 # Append to the list
                 pose_quats_non_ref_views.append(cam_pose_quats)
                 pose_trans_non_ref_views.append(cam_pose_trans)
                 # Get the camera pose quats and trans for the reference view 0
-                cam_pose_quats = views[0]["camera_pose_quats"][
-                    per_sample_cam_input_mask_for_curr_view
-                ]
-                cam_pose_trans = views[0]["camera_pose_trans"][
-                    per_sample_cam_input_mask_for_curr_view
-                ]
+                cam_pose_quats = views[0]["camera_pose_quats"][per_sample_cam_input_mask_for_curr_view]
+                cam_pose_trans = views[0]["camera_pose_trans"][per_sample_cam_input_mask_for_curr_view]
                 # Append to the list
                 pose_quats_ref_view_0.append(cam_pose_quats)
                 pose_trans_ref_view_0.append(cam_pose_trans)
             else:
-                per_sample_cam_input_mask[
-                    view_idx * batch_size_per_view : (view_idx + 1)
-                    * batch_size_per_view
-                ] = False
+                per_sample_cam_input_mask[view_idx * batch_size_per_view : (view_idx + 1) * batch_size_per_view] = False
 
         # Initialize the pose quats and trans for all views as identity
-        pose_quats_across_views = torch.tensor(
-            [0.0, 0.0, 0.0, 1.0], dtype=dtype, device=device
-        ).repeat(batch_size_per_view * num_views, 1)  # (q_x, q_y, q_z, q_w)
-        pose_trans_across_views = torch.zeros(
-            (batch_size_per_view * num_views, 3), dtype=dtype, device=device
-        )
+        pose_quats_across_views = torch.tensor([0.0, 0.0, 0.0, 1.0], dtype=dtype, device=device).repeat(
+            batch_size_per_view * num_views, 1
+        )  # (q_x, q_y, q_z, q_w)
+        pose_trans_across_views = torch.zeros((batch_size_per_view * num_views, 3), dtype=dtype, device=device)
 
         # Compute the pose quats and trans for all the non-reference views in the frame of the reference view 0
         if len(pose_quats_non_ref_views) > 0:
@@ -798,12 +677,8 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
             )
 
             # Update the pose quats and trans for all the non-reference views
-            pose_quats_across_views[per_sample_cam_input_mask] = (
-                pose_quats_non_ref_views_in_ref_view_0.to(dtype=dtype)
-            )
-            pose_trans_across_views[per_sample_cam_input_mask] = (
-                pose_trans_non_ref_views_in_ref_view_0.to(dtype=dtype)
-            )
+            pose_quats_across_views[per_sample_cam_input_mask] = pose_quats_non_ref_views_in_ref_view_0.to(dtype=dtype)
+            pose_trans_across_views[per_sample_cam_input_mask] = pose_trans_non_ref_views_in_ref_view_0.to(dtype=dtype)
 
         return (
             pose_quats_across_views,
@@ -825,7 +700,6 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         Args:
             views (List[dict]): List of dictionaries containing the input views' images and instance information.
             num_views (int): Number of views.
-            batch_size_per_view (int): Batch size per view.
             all_encoder_features_across_views (torch.Tensor): Tensor containing the encoded features for all N views.
             per_sample_ray_dirs_input_mask (torch.Tensor): Tensor containing the per sample ray direction input mask.
 
@@ -838,30 +712,21 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         # Get the ray directions for all the views where info is provided and the ray direction input mask is True
         ray_dirs_list = []
         for view_idx in range(num_views):
-            per_sample_ray_dirs_input_mask_for_curr_view = (
-                per_sample_ray_dirs_input_mask[
-                    view_idx * batch_size_per_view : (view_idx + 1)
-                    * batch_size_per_view
-                ]
-            )
+            per_sample_ray_dirs_input_mask_for_curr_view = per_sample_ray_dirs_input_mask[
+                view_idx * batch_size_per_view : (view_idx + 1) * batch_size_per_view
+            ]
             ray_dirs_for_curr_view = torch.zeros(
                 (batch_size_per_view, height, width, 3),
                 dtype=all_encoder_features_across_views.dtype,
                 device=all_encoder_features_across_views.device,
             )
-            if (
-                "ray_directions_cam" in views[view_idx]
-                and per_sample_ray_dirs_input_mask_for_curr_view.any()
-            ):
-                ray_dirs_for_curr_view[per_sample_ray_dirs_input_mask_for_curr_view] = (
-                    views[view_idx]["ray_directions_cam"][
-                        per_sample_ray_dirs_input_mask_for_curr_view
-                    ]
-                )
+            if "ray_directions_cam" in views[view_idx] and per_sample_ray_dirs_input_mask_for_curr_view.any():
+                ray_dirs_for_curr_view[per_sample_ray_dirs_input_mask_for_curr_view] = views[view_idx][
+                    "ray_directions_cam"
+                ][per_sample_ray_dirs_input_mask_for_curr_view]
             else:
                 per_sample_ray_dirs_input_mask[
-                    view_idx * batch_size_per_view : (view_idx + 1)
-                    * batch_size_per_view
+                    view_idx * batch_size_per_view : (view_idx + 1) * batch_size_per_view
                 ] = False
             ray_dirs_list.append(ray_dirs_for_curr_view)
 
@@ -870,18 +735,13 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         ray_dirs = ray_dirs.permute(0, 3, 1, 2).contiguous()  # (B * V, 3, H, W)
 
         # Encode the ray directions
-        ray_dirs_features_across_views = self.ray_dirs_encoder(
-            ViTEncoderNonImageInput(data=ray_dirs)
-        ).features
+        ray_dirs_features_across_views = self.ray_dirs_encoder(ViTEncoderNonImageInput(data=ray_dirs)).features
 
         # Fuse the ray direction features with the other encoder features (zero out the features where the ray direction input mask is False)
-        ray_dirs_features_across_views = (
-            ray_dirs_features_across_views
-            * per_sample_ray_dirs_input_mask.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-        )
-        all_encoder_features_across_views = (
-            all_encoder_features_across_views + ray_dirs_features_across_views
-        )
+        ray_dirs_features_across_views = ray_dirs_features_across_views * per_sample_ray_dirs_input_mask.unsqueeze(
+            -1
+        ).unsqueeze(-1).unsqueeze(-1)
+        all_encoder_features_across_views = all_encoder_features_across_views + ray_dirs_features_across_views
 
         return all_encoder_features_across_views
 
@@ -899,7 +759,6 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         Args:
             views (List[dict]): List of dictionaries containing the input views' images and instance information.
             num_views (int): Number of views.
-            batch_size_per_view (int): Batch size per view.
             all_encoder_features_across_views (torch.Tensor): Tensor containing the encoded features for all N views.
             per_sample_depth_input_mask (torch.Tensor): Tensor containing the per sample depth input mask.
 
@@ -911,10 +770,7 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         _, _, height, width = views[0]["img"].shape
 
         # Decide to use randomly sampled sparse depth or dense depth
-        if torch.rand(1) < self.geometric_input_config["sparse_depth_prob"]:
-            use_sparse_depth = True
-        else:
-            use_sparse_depth = False
+        use_sparse_depth = bool(torch.rand(1) < self.geometric_input_config["sparse_depth_prob"])
 
         # Get the depths for all the views
         depth_list = []
@@ -940,18 +796,14 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 dtype=torch.bool,
                 device=device,
             )
-            if (
-                "depth_along_ray" in views[view_idx]
-            ) and per_sample_depth_input_mask_for_curr_view.any():
+            if ("depth_along_ray" in views[view_idx]) and per_sample_depth_input_mask_for_curr_view.any():
                 # Get depth for current view
                 depth_for_curr_view_input = views[view_idx]["depth_along_ray"][
                     per_sample_depth_input_mask_for_curr_view
                 ]
                 # Get the metric scale mask
                 if "is_metric_scale" in views[view_idx]:
-                    metric_scale_mask = views[view_idx]["is_metric_scale"][
-                        per_sample_depth_input_mask_for_curr_view
-                    ]
+                    metric_scale_mask = views[view_idx]["is_metric_scale"][per_sample_depth_input_mask_for_curr_view]
                 else:
                     metric_scale_mask = torch.zeros(
                         depth_for_curr_view_input.shape[0],
@@ -960,30 +812,22 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                     )
                 # Turn off indication of metric scale samples based on the depth_scale_norm_all_prob
                 depth_scale_norm_all_mask = (
-                    torch.rand(metric_scale_mask.shape[0])
-                    < self.geometric_input_config["depth_scale_norm_all_prob"]
+                    torch.rand(metric_scale_mask.shape[0]) < self.geometric_input_config["depth_scale_norm_all_prob"]
                 )
                 if depth_scale_norm_all_mask.any():
                     metric_scale_mask[depth_scale_norm_all_mask] = False
                 # Assign the metric scale mask to the respective indices
-                metric_scale_mask_for_curr_view[
-                    per_sample_depth_input_mask_for_curr_view
-                ] = metric_scale_mask
+                metric_scale_mask_for_curr_view[per_sample_depth_input_mask_for_curr_view] = metric_scale_mask
                 # Sparsely sample the depth if required
                 if use_sparse_depth:
                     # Create a mask of ones
-                    sparsification_mask = torch.ones_like(
-                        depth_for_curr_view_input, device=device
-                    )
+                    sparsification_mask = torch.ones_like(depth_for_curr_view_input, device=device)
                     # Create a mask for valid pixels (depth > 0)
                     valid_pixel_mask = depth_for_curr_view_input > 0
                     # Calculate the number of valid pixels
                     num_valid_pixels = valid_pixel_mask.sum().item()
                     # Calculate the number of valid pixels to set to zero
-                    num_to_zero = int(
-                        num_valid_pixels
-                        * self.geometric_input_config["sparsification_removal_percent"]
-                    )
+                    num_to_zero = int(num_valid_pixels * self.geometric_input_config["sparsification_removal_percent"])
                     if num_to_zero > 0:
                         # Get the indices of valid pixels
                         valid_indices = valid_pixel_mask.nonzero(as_tuple=True)
@@ -997,27 +841,18 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                             valid_indices[3][indices_to_zero],
                         ] = 0
                     # Apply the mask on the depth
-                    depth_for_curr_view_input = (
-                        depth_for_curr_view_input * sparsification_mask
-                    )
+                    depth_for_curr_view_input = depth_for_curr_view_input * sparsification_mask
                 # Normalize the depth
-                scaled_depth_for_curr_view_input, depth_norm_factor = (
-                    normalize_depth_using_non_zero_pixels(
-                        depth_for_curr_view_input, return_norm_factor=True
-                    )
+                scaled_depth_for_curr_view_input, depth_norm_factor = normalize_depth_using_non_zero_pixels(
+                    depth_for_curr_view_input, return_norm_factor=True
                 )
                 # Assign the depth and depth norm factor to the respective indices
-                depth_for_curr_view[per_sample_depth_input_mask_for_curr_view] = (
-                    scaled_depth_for_curr_view_input
-                )
-                depth_norm_factor_for_curr_view[
-                    per_sample_depth_input_mask_for_curr_view
-                ] = depth_norm_factor
+                depth_for_curr_view[per_sample_depth_input_mask_for_curr_view] = scaled_depth_for_curr_view_input
+                depth_norm_factor_for_curr_view[per_sample_depth_input_mask_for_curr_view] = depth_norm_factor
             else:
-                per_sample_depth_input_mask[
-                    view_idx * batch_size_per_view : (view_idx + 1)
-                    * batch_size_per_view
-                ] = False
+                per_sample_depth_input_mask[view_idx * batch_size_per_view : (view_idx + 1) * batch_size_per_view] = (
+                    False
+                )
             # Append the depths, depth norm factor and metric scale mask for the current view
             depth_list.append(depth_for_curr_view)
             depth_norm_factors_list.append(depth_norm_factor_for_curr_view)
@@ -1025,19 +860,14 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
 
         # Stack the depths for all the views and permute to (B * V, C, H, W)
         depths = torch.cat(depth_list, dim=0)  # (B * V, H, W, 1)
-        depths = apply_log_to_norm(
-            depths
-        )  # Scale logarithimically (norm is computed along last dim)
+        depths = apply_log_to_norm(depths)  # Scale logarithimically (norm is computed along last dim)
         depths = depths.permute(0, 3, 1, 2).contiguous()  # (B * V, 1, H, W)
         # Encode the depths using the depth encoder
-        depth_features_across_views = self.depth_encoder(
-            ViTEncoderNonImageInput(data=depths)
-        ).features
+        depth_features_across_views = self.depth_encoder(ViTEncoderNonImageInput(data=depths)).features
         # Zero out the depth features where the depth input mask is False
-        depth_features_across_views = (
-            depth_features_across_views
-            * per_sample_depth_input_mask.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-        )
+        depth_features_across_views = depth_features_across_views * per_sample_depth_input_mask.unsqueeze(-1).unsqueeze(
+            -1
+        ).unsqueeze(-1)
 
         # Stack the depth norm factors for all the views
         depth_norm_factors = torch.cat(depth_norm_factors_list, dim=0)  # (B * V, )
@@ -1047,19 +877,14 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
             EncoderGlobalRepInput(data=log_depth_norm_factors.unsqueeze(-1))
         ).features
         # Zero out the depth scale features where the depth input mask is False
-        depth_scale_features_across_views = (
-            depth_scale_features_across_views
-            * per_sample_depth_input_mask.unsqueeze(-1)
+        depth_scale_features_across_views = depth_scale_features_across_views * per_sample_depth_input_mask.unsqueeze(
+            -1
         )
         # Stack the metric scale mask for all the views
-        metric_scale_depth_mask = torch.cat(
-            metric_scale_depth_mask_list, dim=0
-        )  # (B * V, )
+        metric_scale_depth_mask = torch.cat(metric_scale_depth_mask_list, dim=0)  # (B * V, )
         # Zero out the depth scale features where the metric scale mask is False
         # Scale encoding is only provided for metric scale samples
-        depth_scale_features_across_views = (
-            depth_scale_features_across_views * metric_scale_depth_mask.unsqueeze(-1)
-        )
+        depth_scale_features_across_views = depth_scale_features_across_views * metric_scale_depth_mask.unsqueeze(-1)
 
         # Fuse the depth features & depth scale features with the other encoder features
         all_encoder_features_across_views = (
@@ -1086,7 +911,6 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         Args:
             views (List[dict]): List of dictionaries containing the input views' images and instance information.
             num_views (int): Number of views.
-            batch_size_per_view (int): Batch size per view.
             all_encoder_features_across_views (torch.Tensor): Tensor containing the encoded features for all N views.
             pose_quats_across_views (torch.Tensor): Tensor containing the pose quats for all the views in the frame of the reference view 0. (batch_size_per_view * view, 4)
             pose_trans_across_views (torch.Tensor): Tensor containing the pose trans for all the views in the frame of the reference view 0. (batch_size_per_view * view, 3)
@@ -1100,31 +924,24 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
             EncoderGlobalRepInput(data=pose_quats_across_views)
         ).features
         # Zero out the pose quat features where the camera input mask is False
-        pose_quats_features_across_views = (
-            pose_quats_features_across_views * per_sample_cam_input_mask.unsqueeze(-1)
-        )
+        pose_quats_features_across_views = pose_quats_features_across_views * per_sample_cam_input_mask.unsqueeze(-1)
 
         # Get the metric scale mask for all samples
         device = all_encoder_features_across_views.device
-        metric_scale_pose_trans_mask = torch.zeros(
-            (batch_size_per_view * num_views), dtype=torch.bool, device=device
-        )
+        metric_scale_pose_trans_mask = torch.zeros((batch_size_per_view * num_views), dtype=torch.bool, device=device)
         for view_idx in range(num_views):
             if "is_metric_scale" in views[view_idx]:
                 # Get the metric scale mask for the input pose priors
                 metric_scale_mask = views[view_idx]["is_metric_scale"]
             else:
-                metric_scale_mask = torch.zeros(
-                    batch_size_per_view, dtype=torch.bool, device=device
-                )
-            metric_scale_pose_trans_mask[
-                view_idx * batch_size_per_view : (view_idx + 1) * batch_size_per_view
-            ] = metric_scale_mask
+                metric_scale_mask = torch.zeros(batch_size_per_view, dtype=torch.bool, device=device)
+            metric_scale_pose_trans_mask[view_idx * batch_size_per_view : (view_idx + 1) * batch_size_per_view] = (
+                metric_scale_mask
+            )
 
         # Turn off indication of metric scale samples based on the pose_scale_norm_all_prob
         pose_norm_all_mask = (
-            torch.rand(batch_size_per_view * num_views)
-            < self.geometric_input_config["pose_scale_norm_all_prob"]
+            torch.rand(batch_size_per_view * num_views) < self.geometric_input_config["pose_scale_norm_all_prob"]
         )
         if pose_norm_all_mask.any():
             metric_scale_pose_trans_mask[pose_norm_all_mask] = False
@@ -1136,10 +953,8 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         pose_trans_across_views = torch.stack(
             pose_trans_across_views, dim=1
         )  # Stack the views along a new dimension (batch_size_per_view, num_views, 3)
-        scaled_pose_trans_across_views, pose_trans_norm_factors = (
-            normalize_pose_translations(
-                pose_trans_across_views, return_norm_factor=True
-            )
+        scaled_pose_trans_across_views, pose_trans_norm_factors = normalize_pose_translations(
+            pose_trans_across_views, return_norm_factor=True
         )
 
         # Resize the pose translation back to (batch_size_per_view * num_views, 3) and extend the norm factor to (batch_size_per_view * num_views, 1)
@@ -1149,36 +964,30 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         scaled_pose_trans_across_views = torch.cat(
             scaled_pose_trans_across_views, dim=0
         )  # Concatenate back to (batch_size_per_view * num_views, 3)
-        pose_trans_norm_factors_across_views = pose_trans_norm_factors.unsqueeze(
-            -1
-        ).repeat(num_views, 1)  # (B, ) -> (B * V, 1)
+        pose_trans_norm_factors_across_views = pose_trans_norm_factors.unsqueeze(-1).repeat(
+            num_views, 1
+        )  # (B, ) -> (B * V, 1)
 
         # Encode the pose trans
         pose_trans_features_across_views = self.cam_trans_encoder(
             EncoderGlobalRepInput(data=scaled_pose_trans_across_views)
         ).features
         # Zero out the pose trans features where the camera input mask is False
-        pose_trans_features_across_views = (
-            pose_trans_features_across_views * per_sample_cam_input_mask.unsqueeze(-1)
-        )
+        pose_trans_features_across_views = pose_trans_features_across_views * per_sample_cam_input_mask.unsqueeze(-1)
 
         # Encode the pose translation norm factors using the log scale encoder for pose trans
-        log_pose_trans_norm_factors_across_views = torch.log(
-            pose_trans_norm_factors_across_views + 1e-8
-        )
+        log_pose_trans_norm_factors_across_views = torch.log(pose_trans_norm_factors_across_views + 1e-8)
         pose_trans_scale_features_across_views = self.cam_trans_scale_encoder(
             EncoderGlobalRepInput(data=log_pose_trans_norm_factors_across_views)
         ).features
         # Zero out the pose trans scale features where the camera input mask is False
         pose_trans_scale_features_across_views = (
-            pose_trans_scale_features_across_views
-            * per_sample_cam_input_mask.unsqueeze(-1)
+            pose_trans_scale_features_across_views * per_sample_cam_input_mask.unsqueeze(-1)
         )
         # Zero out the pose trans scale features where the metric scale mask is False
         # Scale encoding is only provided for metric scale samples
         pose_trans_scale_features_across_views = (
-            pose_trans_scale_features_across_views
-            * metric_scale_pose_trans_mask.unsqueeze(-1)
+            pose_trans_scale_features_across_views * metric_scale_pose_trans_mask.unsqueeze(-1)
         )
 
         # Fuse the pose quat features, pose trans features, pose trans scale features and pose trans type PE features with the other encoder features
@@ -1191,9 +1000,7 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
 
         return all_encoder_features_across_views
 
-    def _encode_and_fuse_optional_geometric_inputs(
-        self, views, all_encoder_features_across_views_list
-    ):
+    def _encode_and_fuse_optional_geometric_inputs(self, views, all_encoder_features_across_views_list):
         """
         Encode all the input optional geometric modalities and fuses it with the image encoder features in a single forward pass.
         Assumes all the input views have the same shape and batch size.
@@ -1209,57 +1016,41 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         batch_size_per_view, _, _, _ = views[0]["img"].shape
         device = all_encoder_features_across_views_list[0].device
         dtype = all_encoder_features_across_views_list[0].dtype
-        all_encoder_features_across_views = torch.cat(
-            all_encoder_features_across_views_list, dim=0
-        )
+        all_encoder_features_across_views = torch.cat(all_encoder_features_across_views_list, dim=0)
 
         # Get the overall input mask for all the views
         overall_geometric_input_mask = (
-            torch.rand(batch_size_per_view, device=device)
-            < self.geometric_input_config["overall_prob"]
+            torch.rand(batch_size_per_view, device=device) < self.geometric_input_config["overall_prob"]
         )
         overall_geometric_input_mask = overall_geometric_input_mask.repeat(num_views)
 
         # Get the per sample input mask after dropout
         # Per sample input mask is in view-major order so that index v*B + b in each mask corresponds to sample b of view v: (B * V)
-        per_sample_geometric_input_mask = torch.rand(
-            batch_size_per_view * num_views, device=device
-        ) < (1 - self.geometric_input_config["dropout_prob"])
-        per_sample_geometric_input_mask = (
-            per_sample_geometric_input_mask & overall_geometric_input_mask
+        per_sample_geometric_input_mask = torch.rand(batch_size_per_view * num_views, device=device) < (
+            1 - self.geometric_input_config["dropout_prob"]
         )
+        per_sample_geometric_input_mask = per_sample_geometric_input_mask & overall_geometric_input_mask
 
         # Get the ray direction input mask
         per_sample_ray_dirs_input_mask = (
-            torch.rand(batch_size_per_view, device=device)
-            < self.geometric_input_config["ray_dirs_prob"]
+            torch.rand(batch_size_per_view, device=device) < self.geometric_input_config["ray_dirs_prob"]
         )
-        per_sample_ray_dirs_input_mask = per_sample_ray_dirs_input_mask.repeat(
-            num_views
-        )
-        per_sample_ray_dirs_input_mask = (
-            per_sample_ray_dirs_input_mask & per_sample_geometric_input_mask
-        )
+        per_sample_ray_dirs_input_mask = per_sample_ray_dirs_input_mask.repeat(num_views)
+        per_sample_ray_dirs_input_mask = per_sample_ray_dirs_input_mask & per_sample_geometric_input_mask
 
         # Get the depth input mask
         per_sample_depth_input_mask = (
-            torch.rand(batch_size_per_view, device=device)
-            < self.geometric_input_config["depth_prob"]
+            torch.rand(batch_size_per_view, device=device) < self.geometric_input_config["depth_prob"]
         )
         per_sample_depth_input_mask = per_sample_depth_input_mask.repeat(num_views)
-        per_sample_depth_input_mask = (
-            per_sample_depth_input_mask & per_sample_geometric_input_mask
-        )
+        per_sample_depth_input_mask = per_sample_depth_input_mask & per_sample_geometric_input_mask
 
         # Get the camera input mask
         per_sample_cam_input_mask = (
-            torch.rand(batch_size_per_view, device=device)
-            < self.geometric_input_config["cam_prob"]
+            torch.rand(batch_size_per_view, device=device) < self.geometric_input_config["cam_prob"]
         )
         per_sample_cam_input_mask = per_sample_cam_input_mask.repeat(num_views)
-        per_sample_cam_input_mask = (
-            per_sample_cam_input_mask & per_sample_geometric_input_mask
-        )
+        per_sample_cam_input_mask = per_sample_cam_input_mask & per_sample_geometric_input_mask
 
         # Compute the pose quats and trans for all the non-reference views in the frame of the reference view 0
         # Returned pose quats and trans represent identity pose for views/samples where the camera input mask is False
@@ -1304,20 +1095,12 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         )
 
         # Normalize the fused features (permute -> normalize -> permute)
-        all_encoder_features_across_views = all_encoder_features_across_views.permute(
-            0, 2, 3, 1
-        ).contiguous()
-        all_encoder_features_across_views = self.fusion_norm_layer(
-            all_encoder_features_across_views
-        )
-        all_encoder_features_across_views = all_encoder_features_across_views.permute(
-            0, 3, 1, 2
-        ).contiguous()
+        all_encoder_features_across_views = all_encoder_features_across_views.permute(0, 2, 3, 1).contiguous()
+        all_encoder_features_across_views = self.fusion_norm_layer(all_encoder_features_across_views)
+        all_encoder_features_across_views = all_encoder_features_across_views.permute(0, 3, 1, 2).contiguous()
 
         # Split the batched views into individual views
-        fused_all_encoder_features_across_views = (
-            all_encoder_features_across_views.chunk(num_views, dim=0)
-        )
+        fused_all_encoder_features_across_views = all_encoder_features_across_views.chunk(num_views, dim=0)
 
         return fused_all_encoder_features_across_views
 
@@ -1340,9 +1123,7 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
             # Get available GPU memory
             empty_cache(device)
             available_memory = torch.cuda.mem_get_info()[0]  # Free memory in bytes
-            usable_memory = (
-                available_memory * memory_safety_factor
-            )  # Use safety factor to avoid OOM
+            usable_memory = available_memory * memory_safety_factor  # Use safety factor to avoid OOM
         else:
             # For non-CUDA devices, use conservative default
             print(
@@ -1362,16 +1143,14 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
 
     def downstream_dense_head(
         self,
-        dense_head_inputs: Union[torch.Tensor, List[torch.Tensor]],
-        img_shape: Tuple[int, int],
+        dense_head_inputs: torch.Tensor | list[torch.Tensor],
+        img_shape: tuple[int, int],
     ):
         """
         Run the downstream dense prediction head
         """
         if self.pred_head_type == "linear":
-            dense_head_outputs = self.dense_head(
-                PredictionHeadInput(last_feature=dense_head_inputs)
-            )
+            dense_head_outputs = self.dense_head(PredictionHeadInput(last_feature=dense_head_inputs))
             dense_final_outputs = self.dense_adaptor(
                 AdaptorInput(
                     adaptor_feature=dense_head_outputs.decoded_channels,
@@ -1400,11 +1179,11 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
 
     def downstream_head(
         self,
-        dense_head_inputs: Union[torch.Tensor, List[torch.Tensor]],
+        dense_head_inputs: torch.Tensor | list[torch.Tensor],
         scale_head_inputs: torch.Tensor,
-        img_shape: Tuple[int, int],
+        img_shape: tuple[int, int],
         memory_efficient_inference: bool = False,
-        minibatch_size: int = None,
+        minibatch_size: int | None = None,
     ):
         """
         Run Prediction Heads & Post-Process Outputs
@@ -1436,10 +1215,7 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
 
             # Compute the mini batch size and number of mini batches
             # Use provided minibatch_size if set, otherwise compute adaptively based on available memory
-            if minibatch_size is not None:
-                minibatch = minibatch_size
-            else:
-                minibatch = self._compute_adaptive_minibatch_size()
+            minibatch = minibatch_size if minibatch_size is not None else self._compute_adaptive_minibatch_size()
             num_batches = (batch_size + minibatch - 1) // minibatch
 
             # Run prediction for each mini-batch
@@ -1453,26 +1229,20 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 if self.pred_head_type == "linear":
                     dense_head_inputs_batch = dense_head_inputs[start_idx:end_idx]
                 elif self.pred_head_type in ["dpt", "dpt+pose"]:
-                    dense_head_inputs_batch = [
-                        x[start_idx:end_idx] for x in dense_head_inputs
-                    ]
+                    dense_head_inputs_batch = [x[start_idx:end_idx] for x in dense_head_inputs]
                 else:
                     raise ValueError(
                         f"Invalid pred_head_type: {self.pred_head_type}. Valid options: ['linear', 'dpt', 'dpt+pose']"
                     )
 
                 # Dense prediction (mini-batched)
-                dense_final_outputs_batch = self.downstream_dense_head(
-                    dense_head_inputs_batch, img_shape
-                )
+                dense_final_outputs_batch = self.downstream_dense_head(dense_head_inputs_batch, img_shape)
                 dense_final_outputs_list.append(dense_final_outputs_batch)
 
                 # Pose prediction (mini-batched)
                 if self.pred_head_type == "dpt+pose":
                     pose_head_inputs_batch = dense_head_inputs[-1][start_idx:end_idx]
-                    pose_head_outputs_batch = self.pose_head(
-                        PredictionHeadInput(last_feature=pose_head_inputs_batch)
-                    )
+                    pose_head_outputs_batch = self.pose_head(PredictionHeadInput(last_feature=pose_head_inputs_batch))
                     pose_final_outputs_batch = self.pose_adaptor(
                         AdaptorInput(
                             adaptor_feature=pose_head_outputs_batch.decoded_channels,
@@ -1484,14 +1254,10 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
             # Concatenate the dense prediction head outputs from all mini-batches
             available_keys = dense_final_outputs_batch.__dict__.keys()
             dense_pred_data_dict = {
-                key: torch.cat(
-                    [getattr(output, key) for output in dense_final_outputs_list], dim=0
-                )
+                key: torch.cat([getattr(output, key) for output in dense_final_outputs_list], dim=0)
                 for key in available_keys
             }
-            dense_final_outputs = dense_final_outputs_batch.__class__(
-                **dense_pred_data_dict
-            )
+            dense_final_outputs = dense_final_outputs_batch.__class__(**dense_pred_data_dict)
 
             # Concatenate the pose prediction head outputs from all mini-batches
             pose_final_outputs = None
@@ -1504,25 +1270,19 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                     )
                     for key in available_keys
                 }
-                pose_final_outputs = pose_final_outputs_batch.__class__(
-                    **pose_pred_data_dict
-                )
+                pose_final_outputs = pose_final_outputs_batch.__class__(**pose_pred_data_dict)
 
             # Clear device cache for better memory efficiency
             empty_cache(device)
         else:
             # Run prediction for all (batch_size * num_views) in one go
             # Dense prediction
-            dense_final_outputs = self.downstream_dense_head(
-                dense_head_inputs, img_shape
-            )
+            dense_final_outputs = self.downstream_dense_head(dense_head_inputs, img_shape)
 
             # Pose prediction
             pose_final_outputs = None
             if self.pred_head_type == "dpt+pose":
-                pose_head_outputs = self.pose_head(
-                    PredictionHeadInput(last_feature=dense_head_inputs[-1])
-                )
+                pose_head_outputs = self.pose_head(PredictionHeadInput(last_feature=dense_head_inputs[-1]))
                 pose_final_outputs = self.pose_adaptor(
                     AdaptorInput(
                         adaptor_feature=pose_head_outputs.decoded_channels,
@@ -1531,9 +1291,7 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 )
 
         # Scale prediction is lightweight, so we can run it in one go
-        scale_head_output = self.scale_head(
-            PredictionHeadTokenInput(last_feature=scale_head_inputs)
-        )
+        scale_head_output = self.scale_head(PredictionHeadTokenInput(last_feature=scale_head_inputs))
         scale_final_output = self.scale_adaptor(
             AdaptorInput(
                 adaptor_feature=scale_head_output.decoded_channels,
@@ -1584,25 +1342,17 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         num_views = len(views)
 
         # Run the image encoder on all the input views
-        all_encoder_features_across_views, all_encoder_registers_across_views = (
-            self._encode_n_views(views)
-        )
+        all_encoder_features_across_views, all_encoder_registers_across_views = self._encode_n_views(views)
 
         # Encode the optional geometric inputs and fuse with the encoded features from the N input views
         # Use high precision to prevent NaN values after layer norm in dense representation encoder (due to high variance in last dim of features)
         with torch.autocast(get_autocast_device_type(self.device), enabled=False):
-            all_encoder_features_across_views = (
-                self._encode_and_fuse_optional_geometric_inputs(
-                    views, all_encoder_features_across_views
-                )
+            all_encoder_features_across_views = self._encode_and_fuse_optional_geometric_inputs(
+                views, all_encoder_features_across_views
             )
 
         # Expand the scale token to match the batch size
-        input_scale_token = (
-            self.scale_token.unsqueeze(0)
-            .unsqueeze(-1)
-            .repeat(batch_size_per_view, 1, 1)
-        )  # (B, C, 1)
+        input_scale_token = self.scale_token.unsqueeze(0).unsqueeze(-1).repeat(batch_size_per_view, 1, 1)  # (B, C, 1)
 
         # Combine all images into view-centric representation
         # Output is a list containing the encoded features for all N views after information sharing.
@@ -1623,17 +1373,13 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
 
         if self.pred_head_type == "linear":
             # Stack the features for all views
-            dense_head_inputs = torch.cat(
-                final_info_sharing_multi_view_feat.features, dim=0
-            )
+            dense_head_inputs = torch.cat(final_info_sharing_multi_view_feat.features, dim=0)
         elif self.pred_head_type in ["dpt", "dpt+pose"]:
             # Get the list of features for all views
             dense_head_inputs_list = []
             if self.use_encoder_features_for_dpt:
                 # Stack all the image encoder features for all views
-                stacked_encoder_features = torch.cat(
-                    all_encoder_features_across_views, dim=0
-                )
+                stacked_encoder_features = torch.cat(all_encoder_features_across_views, dim=0)
                 dense_head_inputs_list.append(stacked_encoder_features)
                 # Stack the first intermediate features for all views
                 stacked_intermediate_features_1 = torch.cat(
@@ -1646,9 +1392,7 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 )
                 dense_head_inputs_list.append(stacked_intermediate_features_2)
                 # Stack the last layer features for all views
-                stacked_final_features = torch.cat(
-                    final_info_sharing_multi_view_feat.features, dim=0
-                )
+                stacked_final_features = torch.cat(final_info_sharing_multi_view_feat.features, dim=0)
                 dense_head_inputs_list.append(stacked_final_features)
             else:
                 # Stack the first intermediate features for all views
@@ -1667,9 +1411,7 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 )
                 dense_head_inputs_list.append(stacked_intermediate_features_3)
                 # Stack the last layer
-                stacked_final_features = torch.cat(
-                    final_info_sharing_multi_view_feat.features, dim=0
-                )
+                stacked_final_features = torch.cat(final_info_sharing_multi_view_feat.features, dim=0)
                 dense_head_inputs_list.append(stacked_final_features)
         else:
             raise ValueError(
@@ -1682,19 +1424,15 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 dense_head_inputs = dense_head_inputs
             elif self.pred_head_type in ["dpt", "dpt+pose"]:
                 dense_head_inputs = dense_head_inputs_list
-            scale_head_inputs = (
-                final_info_sharing_multi_view_feat.additional_token_features
-            )
+            scale_head_inputs = final_info_sharing_multi_view_feat.additional_token_features
 
             # Run the downstream heads
-            dense_final_outputs, pose_final_outputs, scale_final_output = (
-                self.downstream_head(
-                    dense_head_inputs=dense_head_inputs,
-                    scale_head_inputs=scale_head_inputs,
-                    img_shape=img_shape,
-                    memory_efficient_inference=memory_efficient_inference,
-                    minibatch_size=minibatch_size,
-                )
+            dense_final_outputs, pose_final_outputs, scale_final_output = self.downstream_head(
+                dense_head_inputs=dense_head_inputs,
+                scale_head_inputs=scale_head_inputs,
+                img_shape=img_shape,
+                memory_efficient_inference=memory_efficient_inference,
+                minibatch_size=minibatch_size,
             )
 
             # Prepare the final scene representation for all views
@@ -1714,8 +1452,7 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 for i in range(num_views):
                     res.append(
                         {
-                            "pts3d": output_pts3d_per_view[i]
-                            * scale_final_output.unsqueeze(-1).unsqueeze(-1),
+                            "pts3d": output_pts3d_per_view[i] * scale_final_output.unsqueeze(-1).unsqueeze(-1),
                             "metric_scaling_factor": scale_final_output,
                         }
                     )
@@ -1726,33 +1463,24 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 "raymap+depth+confidence+mask",
             ]:
                 # Reshape final scene representation to (B * V, H, W, C)
-                output_scene_rep = dense_final_outputs.value.permute(
-                    0, 2, 3, 1
-                ).contiguous()
+                output_scene_rep = dense_final_outputs.value.permute(0, 2, 3, 1).contiguous()
                 # Get the predicted ray origins, directions, and depths along rays
-                output_ray_origins, output_ray_directions, output_depth_along_ray = (
-                    output_scene_rep.split([3, 3, 1], dim=-1)
+                output_ray_origins, output_ray_directions, output_depth_along_ray = output_scene_rep.split(
+                    [3, 3, 1], dim=-1
                 )
                 # Get the predicted pointmaps
-                output_pts3d = (
-                    output_ray_origins + output_ray_directions * output_depth_along_ray
-                )
+                output_pts3d = output_ray_origins + output_ray_directions * output_depth_along_ray
                 # Split the predicted quantities back to their respective views
                 output_ray_origins_per_view = output_ray_origins.chunk(num_views, dim=0)
-                output_ray_directions_per_view = output_ray_directions.chunk(
-                    num_views, dim=0
-                )
-                output_depth_along_ray_per_view = output_depth_along_ray.chunk(
-                    num_views, dim=0
-                )
+                output_ray_directions_per_view = output_ray_directions.chunk(num_views, dim=0)
+                output_depth_along_ray_per_view = output_depth_along_ray.chunk(num_views, dim=0)
                 output_pts3d_per_view = output_pts3d.chunk(num_views, dim=0)
                 # Pack the output as a list of dictionaries
                 res = []
                 for i in range(num_views):
                     res.append(
                         {
-                            "pts3d": output_pts3d_per_view[i]
-                            * scale_final_output.unsqueeze(-1).unsqueeze(-1),
+                            "pts3d": output_pts3d_per_view[i] * scale_final_output.unsqueeze(-1).unsqueeze(-1),
                             "ray_origins": output_ray_origins_per_view[i]
                             * scale_final_output.unsqueeze(-1).unsqueeze(-1),
                             "ray_directions": output_ray_directions_per_view[i],
@@ -1768,37 +1496,23 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 "raydirs+depth+pose+confidence+mask",
             ]:
                 # Reshape output dense rep to (B * V, H, W, C)
-                output_dense_rep = dense_final_outputs.value.permute(
-                    0, 2, 3, 1
-                ).contiguous()
+                output_dense_rep = dense_final_outputs.value.permute(0, 2, 3, 1).contiguous()
                 # Get the predicted ray directions and depths along rays
-                output_ray_directions, output_depth_along_ray = output_dense_rep.split(
-                    [3, 1], dim=-1
-                )
+                output_ray_directions, output_depth_along_ray = output_dense_rep.split([3, 1], dim=-1)
                 # Get the predicted camera translations and quaternions
-                output_cam_translations, output_cam_quats = (
-                    pose_final_outputs.value.split([3, 4], dim=-1)
-                )
+                output_cam_translations, output_cam_quats = pose_final_outputs.value.split([3, 4], dim=-1)
                 # Get the predicted pointmaps in world frame and camera frame
-                output_pts3d = (
-                    convert_ray_dirs_depth_along_ray_pose_trans_quats_to_pointmap(
-                        output_ray_directions,
-                        output_depth_along_ray,
-                        output_cam_translations,
-                        output_cam_quats,
-                    )
+                output_pts3d = convert_ray_dirs_depth_along_ray_pose_trans_quats_to_pointmap(
+                    output_ray_directions,
+                    output_depth_along_ray,
+                    output_cam_translations,
+                    output_cam_quats,
                 )
                 output_pts3d_cam = output_ray_directions * output_depth_along_ray
                 # Split the predicted quantities back to their respective views
-                output_ray_directions_per_view = output_ray_directions.chunk(
-                    num_views, dim=0
-                )
-                output_depth_along_ray_per_view = output_depth_along_ray.chunk(
-                    num_views, dim=0
-                )
-                output_cam_translations_per_view = output_cam_translations.chunk(
-                    num_views, dim=0
-                )
+                output_ray_directions_per_view = output_ray_directions.chunk(num_views, dim=0)
+                output_depth_along_ray_per_view = output_depth_along_ray.chunk(num_views, dim=0)
+                output_cam_translations_per_view = output_cam_translations.chunk(num_views, dim=0)
                 output_cam_quats_per_view = output_cam_quats.chunk(num_views, dim=0)
                 output_pts3d_per_view = output_pts3d.chunk(num_views, dim=0)
                 output_pts3d_cam_per_view = output_pts3d_cam.chunk(num_views, dim=0)
@@ -1807,15 +1521,12 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 for i in range(num_views):
                     res.append(
                         {
-                            "pts3d": output_pts3d_per_view[i]
-                            * scale_final_output.unsqueeze(-1).unsqueeze(-1),
-                            "pts3d_cam": output_pts3d_cam_per_view[i]
-                            * scale_final_output.unsqueeze(-1).unsqueeze(-1),
+                            "pts3d": output_pts3d_per_view[i] * scale_final_output.unsqueeze(-1).unsqueeze(-1),
+                            "pts3d_cam": output_pts3d_cam_per_view[i] * scale_final_output.unsqueeze(-1).unsqueeze(-1),
                             "ray_directions": output_ray_directions_per_view[i],
                             "depth_along_ray": output_depth_along_ray_per_view[i]
                             * scale_final_output.unsqueeze(-1).unsqueeze(-1),
-                            "cam_trans": output_cam_translations_per_view[i]
-                            * scale_final_output,
+                            "cam_trans": output_cam_translations_per_view[i] * scale_final_output,
                             "cam_quats": output_cam_quats_per_view[i],
                             "metric_scaling_factor": scale_final_output,
                         }
@@ -1831,33 +1542,21 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 # Reshape final scene representation to (B * V, H, W, C)
                 output_pts3d_cam = output_pts3d_cam.permute(0, 2, 3, 1).contiguous()
                 # Get the predicted camera translations and quaternions
-                output_cam_translations, output_cam_quats = (
-                    pose_final_outputs.value.split([3, 4], dim=-1)
-                )
+                output_cam_translations, output_cam_quats = pose_final_outputs.value.split([3, 4], dim=-1)
                 # Get the ray directions and depths along rays
-                output_depth_along_ray = torch.norm(
-                    output_pts3d_cam, dim=-1, keepdim=True
-                )
+                output_depth_along_ray = torch.norm(output_pts3d_cam, dim=-1, keepdim=True)
                 output_ray_directions = output_pts3d_cam / output_depth_along_ray
                 # Get the predicted pointmaps in world frame
-                output_pts3d = (
-                    convert_ray_dirs_depth_along_ray_pose_trans_quats_to_pointmap(
-                        output_ray_directions,
-                        output_depth_along_ray,
-                        output_cam_translations,
-                        output_cam_quats,
-                    )
+                output_pts3d = convert_ray_dirs_depth_along_ray_pose_trans_quats_to_pointmap(
+                    output_ray_directions,
+                    output_depth_along_ray,
+                    output_cam_translations,
+                    output_cam_quats,
                 )
                 # Split the predicted quantities back to their respective views
-                output_ray_directions_per_view = output_ray_directions.chunk(
-                    num_views, dim=0
-                )
-                output_depth_along_ray_per_view = output_depth_along_ray.chunk(
-                    num_views, dim=0
-                )
-                output_cam_translations_per_view = output_cam_translations.chunk(
-                    num_views, dim=0
-                )
+                output_ray_directions_per_view = output_ray_directions.chunk(num_views, dim=0)
+                output_depth_along_ray_per_view = output_depth_along_ray.chunk(num_views, dim=0)
+                output_cam_translations_per_view = output_cam_translations.chunk(num_views, dim=0)
                 output_cam_quats_per_view = output_cam_quats.chunk(num_views, dim=0)
                 output_pts3d_per_view = output_pts3d.chunk(num_views, dim=0)
                 output_pts3d_cam_per_view = output_pts3d_cam.chunk(num_views, dim=0)
@@ -1866,15 +1565,12 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 for i in range(num_views):
                     res.append(
                         {
-                            "pts3d": output_pts3d_per_view[i]
-                            * scale_final_output.unsqueeze(-1).unsqueeze(-1),
-                            "pts3d_cam": output_pts3d_cam_per_view[i]
-                            * scale_final_output.unsqueeze(-1).unsqueeze(-1),
+                            "pts3d": output_pts3d_per_view[i] * scale_final_output.unsqueeze(-1).unsqueeze(-1),
+                            "pts3d_cam": output_pts3d_cam_per_view[i] * scale_final_output.unsqueeze(-1).unsqueeze(-1),
                             "ray_directions": output_ray_directions_per_view[i],
                             "depth_along_ray": output_depth_along_ray_per_view[i]
                             * scale_final_output.unsqueeze(-1).unsqueeze(-1),
-                            "cam_trans": output_cam_translations_per_view[i]
-                            * scale_final_output,
+                            "cam_trans": output_cam_translations_per_view[i] * scale_final_output,
                             "cam_quats": output_cam_quats_per_view[i],
                             "metric_scaling_factor": scale_final_output,
                         }
@@ -1886,41 +1582,25 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 "pointmap+raydirs+depth+pose+confidence+mask",
             ]:
                 # Reshape final scene representation to (B * V, H, W, C)
-                output_dense_rep = dense_final_outputs.value.permute(
-                    0, 2, 3, 1
-                ).contiguous()
+                output_dense_rep = dense_final_outputs.value.permute(0, 2, 3, 1).contiguous()
                 # Get the predicted pointmaps, ray directions and depths along rays
-                output_pts3d, output_ray_directions, output_depth_along_ray = (
-                    output_dense_rep.split([3, 3, 1], dim=-1)
-                )
+                output_pts3d, output_ray_directions, output_depth_along_ray = output_dense_rep.split([3, 3, 1], dim=-1)
                 # Get the predicted camera translations and quaternions
-                output_cam_translations, output_cam_quats = (
-                    pose_final_outputs.value.split([3, 4], dim=-1)
-                )
+                output_cam_translations, output_cam_quats = pose_final_outputs.value.split([3, 4], dim=-1)
                 # Get the predicted pointmaps in camera frame
                 output_pts3d_cam = output_ray_directions * output_depth_along_ray
                 # Replace the predicted world-frame pointmaps if required
-                if self.pred_head_config["adaptor_config"][
-                    "use_factored_predictions_for_global_pointmaps"
-                ]:
-                    output_pts3d = (
-                        convert_ray_dirs_depth_along_ray_pose_trans_quats_to_pointmap(
-                            output_ray_directions,
-                            output_depth_along_ray,
-                            output_cam_translations,
-                            output_cam_quats,
-                        )
+                if self.pred_head_config["adaptor_config"]["use_factored_predictions_for_global_pointmaps"]:
+                    output_pts3d = convert_ray_dirs_depth_along_ray_pose_trans_quats_to_pointmap(
+                        output_ray_directions,
+                        output_depth_along_ray,
+                        output_cam_translations,
+                        output_cam_quats,
                     )
                 # Split the predicted quantities back to their respective views
-                output_ray_directions_per_view = output_ray_directions.chunk(
-                    num_views, dim=0
-                )
-                output_depth_along_ray_per_view = output_depth_along_ray.chunk(
-                    num_views, dim=0
-                )
-                output_cam_translations_per_view = output_cam_translations.chunk(
-                    num_views, dim=0
-                )
+                output_ray_directions_per_view = output_ray_directions.chunk(num_views, dim=0)
+                output_depth_along_ray_per_view = output_depth_along_ray.chunk(num_views, dim=0)
+                output_cam_translations_per_view = output_cam_translations.chunk(num_views, dim=0)
                 output_cam_quats_per_view = output_cam_quats.chunk(num_views, dim=0)
                 output_pts3d_per_view = output_pts3d.chunk(num_views, dim=0)
                 output_pts3d_cam_per_view = output_pts3d_cam.chunk(num_views, dim=0)
@@ -1929,15 +1609,12 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 for i in range(num_views):
                     res.append(
                         {
-                            "pts3d": output_pts3d_per_view[i]
-                            * scale_final_output.unsqueeze(-1).unsqueeze(-1),
-                            "pts3d_cam": output_pts3d_cam_per_view[i]
-                            * scale_final_output.unsqueeze(-1).unsqueeze(-1),
+                            "pts3d": output_pts3d_per_view[i] * scale_final_output.unsqueeze(-1).unsqueeze(-1),
+                            "pts3d_cam": output_pts3d_cam_per_view[i] * scale_final_output.unsqueeze(-1).unsqueeze(-1),
                             "ray_directions": output_ray_directions_per_view[i],
                             "depth_along_ray": output_depth_along_ray_per_view[i]
                             * scale_final_output.unsqueeze(-1).unsqueeze(-1),
-                            "cam_trans": output_cam_translations_per_view[i]
-                            * scale_final_output,
+                            "cam_trans": output_cam_translations_per_view[i] * scale_final_output,
                             "cam_quats": output_cam_quats_per_view[i],
                             "metric_scaling_factor": scale_final_output,
                         }
@@ -1955,9 +1632,7 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
             if "confidence" in self.scene_rep_type:
                 output_confidences = dense_final_outputs.confidence
                 # Reshape confidences to (B * V, H, W)
-                output_confidences = (
-                    output_confidences.permute(0, 2, 3, 1).squeeze(-1).contiguous()
-                )
+                output_confidences = output_confidences.permute(0, 2, 3, 1).squeeze(-1).contiguous()
                 # Split the predicted confidences back to their respective views
                 output_confidences_per_view = output_confidences.chunk(num_views, dim=0)
                 # Add the confidences to the result
@@ -1977,9 +1652,7 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
                 # Get the output mask logits (for loss)
                 output_mask_logits = dense_final_outputs.logits
                 # Reshape mask logits to (B * V, H, W)
-                output_mask_logits = (
-                    output_mask_logits.permute(0, 2, 3, 1).squeeze(-1).contiguous()
-                )
+                output_mask_logits = output_mask_logits.permute(0, 2, 3, 1).squeeze(-1).contiguous()
                 # Split the predicted mask logits back to their respective views
                 output_mask_logits_per_view = output_mask_logits.chunk(num_views, dim=0)
                 # Add the masks and logits to the result
@@ -2044,9 +1717,9 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
     @torch.inference_mode()
     def infer(
         self,
-        views: List[Dict[str, Any]],
+        views: list[dict[str, Any]],
         memory_efficient_inference: bool = True,
-        minibatch_size: int = None,
+        minibatch_size: int | None = None,
         use_amp: bool = True,
         amp_dtype: str = "bf16",
         apply_mask: bool = True,
@@ -2063,7 +1736,7 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
         use_multiview_confidence: bool = False,
         multiview_conf_depth_abs_thresh: float = 0.02,
         multiview_conf_depth_rel_thresh: float = 0.02,
-    ) -> List[Dict[str, torch.Tensor]]:
+    ) -> list[dict[str, torch.Tensor]]:
         """
         User-friendly inference with strict input validation and automatic conversion.
 
@@ -2135,32 +1808,25 @@ class MapAnything(nn.Module, PyTorchModelHubMixin):
             ValueError: For invalid inputs, missing required keys, conflicting modalities, or constraint violations
         """
         # Determine the mixed precision floating point type
-        if use_amp:
-            amp_dtype = get_amp_dtype(self.device, amp_dtype)
-        else:
-            amp_dtype = torch.float32
+        amp_dtype = get_amp_dtype(self.device, amp_dtype) if use_amp else torch.float32
 
         # Validate the input views
         validated_views = validate_input_views_for_inference(views)
 
         # Transfer the views to the same device as the model
-        ignore_keys = set(
-            [
-                "instance",
-                "idx",
-                "true_shape",
-                "data_norm_type",
-            ]
-        )
+        ignore_keys = {
+            "instance",
+            "idx",
+            "true_shape",
+            "data_norm_type",
+        }
         for view in validated_views:
-            for name in view.keys():
+            for name in view.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 if name in ignore_keys:
                     continue
                 val = view[name]
                 if name == "camera_poses" and isinstance(val, tuple):
-                    view[name] = tuple(
-                        x.to(self.device, non_blocking=True) for x in val
-                    )
+                    view[name] = tuple(x.to(self.device, non_blocking=True) for x in val)
                 elif hasattr(val, "to"):
                     view[name] = val.to(self.device, non_blocking=True)
 

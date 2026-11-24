@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> encodings -> positional_encoding.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 import torch
 import torch.nn as nn
 from einops import einsum, rearrange, repeat
@@ -14,11 +13,6 @@ class PositionalEncoding(nn.Module):
     phases: Float[Tensor, "frequency phase"]
 
     def __init__(self, num_octaves: int):
-        """Init.
-
-        Args:
-            num_octaves: The num octaves.
-        """
         super().__init__()
         octaves = torch.arange(num_octaves).float()
 
@@ -36,21 +30,8 @@ class PositionalEncoding(nn.Module):
         self,
         samples: Float[Tensor, "*batch dim"],
     ) -> Float[Tensor, "*batch embedded_dim"]:
-        """Forward.
-
-        Args:
-            samples: The samples.
-
-        Returns:
-            The return value.
-        """
         samples = einsum(samples, self.frequencies, "... d, f p -> ... d f p")
         return rearrange(torch.sin(samples + self.phases), "... d f p -> ... (d f p)")
 
     def d_out(self, dimensionality: int):
-        """D out.
-
-        Args:
-            dimensionality: The dimensionality.
-        """
         return self.frequencies.numel() * dimensionality

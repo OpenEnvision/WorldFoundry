@@ -24,10 +24,10 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: camerabench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id camerabench --mode contract 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id camerabench --mode contract 
     --output-dir tmp/benchmark_zoo/benchmark_contract/camerabench --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:CameraBenchContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/camerabench/run_camerabench_official_runner.py
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:camerabench
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/camerabench/run_camerabench_official_runner.py
   prompt_suite:
     hf_dataset_id: syCen/CameraBench
     split: standard
@@ -37,7 +37,7 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_metric_aggregator
-    root: worldfoundry/evaluation/tasks/execution/runners/camerabench
+    root: worldfoundry/evals/tasks/execution/runners/camerabench
     root_env: WORLDFOUNDRY_CAMERABENCH_ROOT
     results_path_env: WORLDFOUNDRY_CAMERABENCH_RESULTS_PATH
   release_status: experimental
@@ -96,7 +96,7 @@ metadata:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/camerabench.yaml
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:CameraBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:camerabench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
@@ -105,7 +105,7 @@ metadata:
     surface: in_tree_score_normalizer
     normalizer_verified: true
   local_evaluator:
-    target: worldfoundry/evaluation/tasks/execution/runners/camerabench/run_camerabench_official_runner.py
+    target: worldfoundry/evals/tasks/execution/runners/camerabench/run_camerabench_official_runner.py
     status: implemented
     protocol: camerabench_official_result_normalization
     official_result_normalization:
@@ -119,10 +119,10 @@ metadata:
       - json
       provenance: normalizes official CameraBench outputs and aggregates prepared score_dir files with strict full-suite
         metric and dataset coverage
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   runner:
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -140,14 +140,14 @@ metadata:
       results_path_env: WORLDFOUNDRY_CAMERABENCH_RESULTS_PATH
       strict_env: WORLDFOUNDRY_CAMERABENCH_STRICT
       score_dir_env: WORLDFOUNDRY_CAMERABENCH_SCORE_DIR
-    official_validation_command: WORLDFOUNDRY_CAMERABENCH_STRICT=1 worldfoundry-eval zoo benchmark-run --benchmark-id 
+    official_validation_command: WORLDFOUNDRY_CAMERABENCH_STRICT=1 wf zoo benchmark-run --benchmark-id 
       camerabench --mode official-validation --official-results-path <official_results.json> --benchmark-data-root 
       <camerabench_data_root> --output-dir <out> --json
-    score_dir_metric_command: WORLDFOUNDRY_CAMERABENCH_STRICT=1 worldfoundry-eval zoo benchmark-run --benchmark-id 
+    score_dir_metric_command: WORLDFOUNDRY_CAMERABENCH_STRICT=1 wf zoo benchmark-run --benchmark-id 
       camerabench --mode official-validation --score-dir <score_dir> --benchmark-data-root <camerabench_data_root> 
       --output-dir <out> --json
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -220,8 +220,8 @@ tasks:
       - camera_retrieval_accuracy
       - camera_caption_score
       - camerabench_average
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:CameraBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/camerabench/run_camerabench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:camerabench
+      runner_script: worldfoundry/evals/tasks/execution/runners/camerabench/run_camerabench_official_runner.py
       required_inputs:
       - official_results_path or WORLDFOUNDRY_CAMERABENCH_RESULTS_PATH
       - benchmark_data_root or WORLDFOUNDRY_CAMERABENCH_DATA_ROOT

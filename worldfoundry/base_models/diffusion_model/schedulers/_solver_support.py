@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import inspect
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 import torch
 from torch import Tensor

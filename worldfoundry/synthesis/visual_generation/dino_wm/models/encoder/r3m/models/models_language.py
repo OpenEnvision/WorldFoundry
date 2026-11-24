@@ -2,8 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import numpy as np
-from numpy.core.numeric import full
+import contextlib
+
 import torch
 import torch.nn as nn
 from torch.nn.modules.activation import Sigmoid
@@ -14,7 +14,7 @@ epsilon = 1e-8
 class LangEncoder(nn.Module):
     def __init__(self, device, finetune=False, scratch=False):
         super().__init__()
-        from transformers import AutoTokenizer, AutoModel, AutoConfig
+        from transformers import AutoModel, AutoTokenizer
 
         self.device = device
         self.modelname = "distilbert-base-uncased"
@@ -23,18 +23,14 @@ class LangEncoder(nn.Module):
         self.lang_size = 768
 
     def forward(self, langs):
-        try:
+        with contextlib.suppress(BaseException):
             langs = langs.tolist()
-        except:
-            pass
 
         with torch.no_grad():
             encoded_input = self.tokenizer(langs, return_tensors="pt", padding=True)
             input_ids = encoded_input["input_ids"].to(self.device)
             attention_mask = encoded_input["attention_mask"].to(self.device)
-            lang_embedding = self.model(
-                input_ids, attention_mask=attention_mask
-            ).last_hidden_state
+            lang_embedding = self.model(input_ids, attention_mask=attention_mask).last_hidden_state
             lang_embedding = lang_embedding.mean(1)
         return lang_embedding
 

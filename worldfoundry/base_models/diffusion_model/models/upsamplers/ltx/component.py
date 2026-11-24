@@ -15,13 +15,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
+from functools import partial
 
 import torch
 
 from ....components import ComponentBuildContext
 from ....contracts import DiffusionRequest, ModalityState
 from ....loaders import ModuleLoadSpec, NativeModuleLoader, safetensors_json_metadata
-from ....optimizations import OffloadPolicy
+from ....optimizations import OffloadPolicy, QuantizationPolicy
 from ...autoencoders.ltx.video.ops import PerChannelStatistics
 from ...representations.ltx.patchifiers import AudioPatchifier, VideoLatentPatchifier
 from ...representations.ltx.types import AudioLatentShape, VideoLatentShape, VideoPixelShape
@@ -48,17 +49,25 @@ class LTXVideoLatentStatistics(torch.nn.Module):
         self.statistics = PerChannelStatistics(latent_channels=latent_channels)
 
 
-def convert_ltx_upsampler_state_dict(state_dict: Mapping[str, object]) -> Mapping[str, object]:
+def convert_ltx_upsampler_state_dict(
+    state_dict: Mapping[str, object],
+    *,
+    lazy: bool = False,
+) -> Mapping[str, object]:
     """Prefix official upsampler keys with ``upsampler.`` for the wrapper module."""
+    if lazy:
+        from worldfoundry.core.model_loading.checkpoints.transforms import TransformedStateDict
+
+        return TransformedStateDict(state_dict, {f"upsampler.{key}": key for key in state_dict})
     return {f"upsampler.{key}": value for key, value in state_dict.items()}
 
 
 def convert_ltx_video_statistics_state_dict(state_dict: Mapping[str, object]) -> Mapping[str, object]:
-    prefix = "vae.per_channel_statistics."
     return {
-        f"statistics.{key.removeprefix(prefix)}": value
-        for key, value in state_dict.items()
-        if key.startswith(prefix) and key.removeprefix(prefix) in {"mean-of-means", "std-of-means"}
+        f"statistics.{key.rsplit('.', 1)[-1]}": state_dict[key]
+        for key in state_dict
+        if key.startswith(("vae.per_channel_statistics.", "per_channel_statistics."))
+        and key.rsplit(".", 1)[-1] in {"mean-of-means", "std-of-means"}
     }
 
 
@@ -73,6 +82,8 @@ class LTXSpatialLatentProcessor:
         compute_dtype: torch.dtype,
         first_stage_scale: float | None = None,
         adain_factor: float = 0.0,
+        split_checkpoint: bool = False,
+        strip_reference_tokens: bool = False,
     ) -> None:
         self.upsampler = upsampler
         self.statistics = statistics
@@ -81,6 +92,8 @@ class LTXSpatialLatentProcessor:
             raise ValueError("LTX first-stage scale must be in (0, 1]")
         self.first_stage_scale = None if first_stage_scale is None else float(first_stage_scale)
         self.adain_factor = float(adain_factor)
+        self.split_checkpoint = split_checkpoint
+        self.strip_reference_tokens = strip_reference_tokens
 
     @staticmethod
     def _round_down_to_vae(value: int) -> int:
@@ -126,8 +139,13 @@ class LTXSpatialLatentProcessor:
             width=stage_width,
             fps=fps,
         )
-        video_shape = VideoLatentShape.from_pixel_shape(stage_one_pixels)
-        video = VideoLatentPatchifier(1).unpatchify(states["video"].latent, video_shape)
+        channels = self.statistics.statistics.get_buffer("mean-of-means").numel() if self.split_checkpoint else 128
+        video_shape = VideoLatentShape.from_pixel_shape(stage_one_pixels, latent_channels=channels)
+        patchifier = VideoLatentPatchifier(1)
+        latent = states["video"].latent
+        if self.split_checkpoint or self.strip_reference_tokens:
+            latent = latent[:, : patchifier.get_token_count(video_shape)]
+        video = patchifier.unpatchify(latent, video_shape)
         raw = self.statistics.statistics.un_normalize(video)
         # Scheduler arithmetic can promote the first-stage latent to fp32,
         # while the released spatial upsampler is loaded in bf16.  Upstream
@@ -136,7 +154,7 @@ class LTXSpatialLatentProcessor:
         with torch.autocast(
             device_type=raw.device.type,
             dtype=self.compute_dtype,
-            enabled=self.compute_dtype in {torch.float16, torch.bfloat16},
+            enabled=not self.split_checkpoint and self.compute_dtype in {torch.float16, torch.bfloat16},
         ):
             upsampled = self.upsampler(raw.to(dtype=self.compute_dtype))
         result = {
@@ -157,6 +175,18 @@ def build_ltx_spatial_latent_processor(
     """Load the spatial upsampler + VAE statistics and return the processor."""
     from worldfoundry.core.vram import AutoWrappedLinear, AutoWrappedModule
 
+    policy = replace(context.policy, quantization=QuantizationPolicy())
+    split = bool(context.component_options.get("split_checkpoint", False))
+    channels = 128
+    if split:
+        from ....loaders import NativeCheckpointResolver
+
+        config = safetensors_json_metadata(
+            NativeCheckpointResolver().materialize(context.require_checkpoint("statistics"))
+        )
+        vae = config["vae"]
+        channels = int(vae.get("encoder", {}).get("out_channels", vae.get("latent_channels", 128)))
+
     module_map = {
         torch.nn.Linear: AutoWrappedLinear,
         torch.nn.Conv2d: AutoWrappedModule,
@@ -167,20 +197,25 @@ def build_ltx_spatial_latent_processor(
         ModuleLoadSpec(
             module_class=LTXLatentUpsamplerModule,
             config_resolver=lambda checkpoint: {"checkpoint_config": safetensors_json_metadata(checkpoint)},
-            state_dict_converter=convert_ltx_upsampler_state_dict,
+            state_dict_converter=partial(convert_ltx_upsampler_state_dict, lazy=True)
+            if split
+            else convert_ltx_upsampler_state_dict,
             vram_module_map=module_map,
             layer_container="upsampler.res_blocks",
+            lazy_state_dict=split,
+            buffer_aware_offload=split,
         ),
         context.require_checkpoint("weights"),
-        context.policy,
+        policy,
     )
     statistics = NativeModuleLoader().load(
         ModuleLoadSpec(
             module_class=LTXVideoLatentStatistics,
+            config={"latent_channels": channels},
             state_dict_converter=convert_ltx_video_statistics_state_dict,
         ),
         context.require_checkpoint("statistics"),
-        replace(context.policy, offload=OffloadPolicy()),
+        replace(policy, offload=OffloadPolicy()),
     )
     if not isinstance(upsampler, LTXLatentUpsamplerModule):
         raise TypeError("LTX upsampler construction returned an unexpected module")
@@ -193,6 +228,8 @@ def build_ltx_spatial_latent_processor(
         compute_dtype=context.policy.dtype,
         first_stage_scale=None if raw_scale is None else float(raw_scale),
         adain_factor=float(context.component_options.get("adain_factor", 0.0)),
+        split_checkpoint=split,
+        strip_reference_tokens=bool(context.component_options.get("strip_reference_tokens", False)),
     )
 
 

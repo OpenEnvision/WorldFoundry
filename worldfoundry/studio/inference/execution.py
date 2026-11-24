@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import gc
 import hashlib
 import importlib
@@ -15,12 +16,12 @@ import time
 import traceback
 import warnings
 from collections import OrderedDict
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Sequence, TypeGuard, cast
+from typing import TYPE_CHECKING, Any, TypeGuard, cast
 
 import numpy as np
 from packaging.requirements import InvalidRequirement, Requirement
@@ -90,20 +91,9 @@ PREVIEW_VIDEO_VALIDATE_ENV = "WORLDFOUNDRY_STUDIO_VALIDATE_PREVIEW_VIDEO"
 VIDEO_PREVIEW_IMAGE_ENV = "WORLDFOUNDRY_STUDIO_EXTRACT_VIDEO_PREVIEW_IMAGE"
 RERUN_PREVIEW_ENV = "WORLDFOUNDRY_STUDIO_BUILD_RERUN_PREVIEW"
 PREVIEW_ASSET_EXTS = {*IMAGE_EXTS, *VIDEO_EXTS, *SPLAT_EXTS, *MODEL_EXTS, ".rrd"}
-VIEWPORT_ARTIFACT_EXTS = {
-    *PREVIEW_ASSET_EXTS,
-    ".json",
-    ".jsonl",
-    ".npz",
-    ".npy",
-    ".pkl",
-    ".yaml",
-    ".yml",
-    ".toml",
-}
 
 
-def _output_suffix_from_infer_metadata(entry: CatalogEntry, infer_metadata: Optional[Dict[str, Any]]) -> str:
+def _output_suffix_from_infer_metadata(entry: CatalogEntry, infer_metadata: dict[str, Any] | None) -> str:
     task = infer_metadata.get("task") if isinstance(infer_metadata, Mapping) else None
     outputs = task.get("outputs") if isinstance(task, Mapping) else None
     if isinstance(outputs, Sequence) and not isinstance(outputs, (str, bytes, bytearray)):
@@ -116,7 +106,7 @@ def _output_suffix_from_infer_metadata(entry: CatalogEntry, infer_metadata: Opti
             return ".png"
         if kinds & {"video", "generated_video"}:
             return ".mp4"
-        if entry.model_id in {"lagernvs", "stable-virtual-camera", "wonderjourney"}:
+        if entry.model_id in {"lagernvs", "wonderjourney"}:
             return ".mp4"
         if entry.model_id == "wonderworld":
             return ".splat"
@@ -377,7 +367,7 @@ def _runtime_dependency_error(entry: CatalogEntry, missing: Sequence[str]) -> Ru
     return RuntimeError(" ".join(details))
 
 
-def _request_model_ref(entry: CatalogEntry, request: "PreparedInputs") -> str:
+def _request_model_ref(entry: CatalogEntry, request: PreparedInputs) -> str:
     return (request.model_ref or entry.default_model_ref or "").strip()
 
 
@@ -478,7 +468,7 @@ def _torchrun_control_group() -> Any:
             publish = (
                 created_group is not None
                 and _TORCHRUN_CONTROL_GROUP_STATE == "open"
-                and _TORCHRUN_CONTROL_GROUP_GENERATION == generation
+                and generation == _TORCHRUN_CONTROL_GROUP_GENERATION
             )
             _TORCHRUN_CONTROL_GROUP_CONDITION.notify_all()
     return created_group if publish else None
@@ -525,7 +515,7 @@ def shutdown_torchrun_lingbot_fast_runtime() -> None:
             _TORCHRUN_CONTROL_GROUP_CONDITION.wait_for(
                 lambda: (
                     _TORCHRUN_CONTROL_GROUP_STATE != "closing"
-                    or _TORCHRUN_CONTROL_GROUP_GENERATION != closing_generation
+                    or closing_generation != _TORCHRUN_CONTROL_GROUP_GENERATION
                 )
             )
             return
@@ -540,14 +530,10 @@ def shutdown_torchrun_lingbot_fast_runtime() -> None:
         if dist is None or not dist.is_available() or not dist.is_initialized():
             return
         if control_group is not None:
-            try:
+            with contextlib.suppress(Exception):
                 dist.destroy_process_group(control_group)
-            except Exception:
-                pass
-        try:
+        with contextlib.suppress(Exception):
             dist.destroy_process_group()
-        except Exception:
-            pass
     finally:
         # Do not reopen creation until both the control and default groups have
         # finished destruction. A future ensure call may then initialize a new
@@ -618,7 +604,7 @@ def _interaction_tokens_summary(interactions: Any, *, max_tokens: int = 14) -> s
     if interactions is None:
         return "—"
     if isinstance(interactions, (list, tuple)):
-        flattened: List[str] = []
+        flattened: list[str] = []
         for item in interactions:
             if item is None:
                 continue
@@ -673,7 +659,7 @@ def _safe_json(value: Any) -> Any:
 def _redact_manifest_secrets(value: Any) -> Any:
     """Redact nested credentials without adding evaluation to Studio import time."""
 
-    from worldfoundry.evaluation.reporting.run_manifest import redact_secrets
+    from worldfoundry.evals.reporting.run_manifest import redact_secrets
 
     return redact_secrets(_safe_json(value))
 
@@ -696,7 +682,7 @@ def _slugify(text: str) -> str:
     return "".join(ch if ch.isalnum() else "-" for ch in text.lower()).strip("-")
 
 
-def _hash_payload(payload: Dict[str, Any]) -> str:
+def _hash_payload(payload: dict[str, Any]) -> str:
     serial = json.dumps(_safe_json(payload), sort_keys=True, ensure_ascii=True)
     return hashlib.sha1(serial.encode("utf-8")).hexdigest()[:12]
 
@@ -713,7 +699,7 @@ def _copy_file(src: str | Path, dst: Path) -> str:
     return str(dst)
 
 
-def _save_pil(image: Optional[Image.Image], dst: Path) -> Optional[str]:
+def _save_pil(image: Image.Image | None, dst: Path) -> str | None:
     if image is None:
         return None
     _ensure_dir(dst.parent)
@@ -721,7 +707,7 @@ def _save_pil(image: Optional[Image.Image], dst: Path) -> Optional[str]:
     return str(dst)
 
 
-def _extract_file_path(value: Any) -> Optional[str]:
+def _extract_file_path(value: Any) -> str | None:
     if value is None:
         return None
     if isinstance(value, str):
@@ -794,7 +780,7 @@ def _to_uint8_rgb(frame: Any) -> np.ndarray:
     return np.ascontiguousarray(arr[..., :3])
 
 
-def _normalize_frame_list(value: Any) -> Optional[list[np.ndarray]]:
+def _normalize_frame_list(value: Any) -> list[np.ndarray] | None:
     from worldfoundry.core.media.processing.postprocess import VideoChunk
 
     if value is None:
@@ -807,7 +793,7 @@ def _normalize_frame_list(value: Any) -> Optional[list[np.ndarray]]:
         return [_to_uint8_rgb(frame) for frame in video_chunk_to_uint8_frames(value)]
     if hasattr(value, "videos"):
         sr_videos = getattr(value, "sr_videos", None)
-        return _normalize_frame_list(sr_videos if sr_videos is not None else getattr(value, "videos"))
+        return _normalize_frame_list(sr_videos if sr_videos is not None else value.videos)
     if isinstance(value, (list, tuple)):
         if not value:
             return []
@@ -902,7 +888,7 @@ def _save_preview_image_sequence(
     return saved
 
 
-def _coerce_video_chunk(value: Any) -> Optional[np.ndarray]:
+def _coerce_video_chunk(value: Any) -> np.ndarray | None:
     if isinstance(value, np.ndarray) and value.ndim == 4:
         return value
     frames = _normalize_frame_list(value)
@@ -1022,7 +1008,7 @@ def _artifact_scan_mode() -> str:
 
 def _should_scan_artifacts(
     *,
-    request: "PreparedInputs",
+    request: PreparedInputs,
     saved_artifacts: Sequence[str],
     previews: Mapping[str, Any],
 ) -> bool:
@@ -1120,10 +1106,6 @@ def _ordered_artifacts_for_preview(artifacts: Sequence[str]) -> list[str]:
     return sorted(unique, key=_artifact_priority)
 
 
-def _viewport_artifact_paths(artifacts: Sequence[str]) -> list[str]:
-    return [path for path in artifacts if os.path.splitext(path)[1].lower() in VIEWPORT_ARTIFACT_EXTS]
-
-
 def _is_decodable_video(path: str) -> bool:
     video_path = Path(path)
     if not video_path.is_file() or video_path.stat().st_size <= 0:
@@ -1141,7 +1123,7 @@ def _is_decodable_video(path: str) -> bool:
         return False
 
 
-def pick_preview_assets(artifacts: Sequence[str], *, validate_videos: bool = True) -> Dict[str, Any]:
+def pick_preview_assets(artifacts: Sequence[str], *, validate_videos: bool = True) -> dict[str, Any]:
     preview_video = None
     preview_image = None
     preview_splat = None
@@ -1179,12 +1161,12 @@ def pick_preview_assets(artifacts: Sequence[str], *, validate_videos: bool = Tru
 
 
 def maybe_extract_video_preview_image(
-    video_path: Optional[str],
+    video_path: str | None,
     output_dir: str,
     *,
     frame_position: str = "first",
     output_name: str = "preview.png",
-) -> Optional[str]:
+) -> str | None:
     if not video_path:
         return None
     if imageio is None:
@@ -1197,7 +1179,8 @@ def maybe_extract_video_preview_image(
                 frame = None
                 frame_count = None
                 try:
-                    frame_count = int(getattr(reader, "count_frames")())
+                    # Only the FFmpeg reader counts frames; other readers fall back to get_length().
+                    frame_count = int(reader.count_frames())  # ty: ignore[unresolved-attribute]
                 except Exception:
                     try:
                         length = reader.get_length()
@@ -1304,11 +1287,11 @@ def bind_run_preview_image(record: RunRecord) -> str | None:
 class PreparedInputs:
     prompt: str
     input_path: str
-    image: Optional[Image.Image]
-    image_path: Optional[str]
-    video_path: Optional[str]
-    last_frame: Optional[Image.Image]
-    last_frame_path: Optional[str]
+    image: Image.Image | None
+    image_path: str | None
+    video_path: str | None
+    last_frame: Image.Image | None
+    last_frame_path: str | None
     reference_images: list[Image.Image]
     reference_image_paths: list[str]
     interactions: Any
@@ -1322,14 +1305,14 @@ class PreparedInputs:
     num_frames: int
     output_dir: str
     output_path: str
-    call_kwargs: Dict[str, Any]
-    load_kwargs: Dict[str, Any]
+    call_kwargs: dict[str, Any]
+    load_kwargs: dict[str, Any]
     model_ref: str
     backend: str
     endpoint: str
     api_key: str
     device: str
-    infer_metadata: Dict[str, Any] = field(default_factory=dict)
+    infer_metadata: dict[str, Any] = field(default_factory=dict)
     # None makes all supplied load options authoritative; staging records override names.
     explicit_load_params: tuple[str, ...] | None = None
 
@@ -1347,7 +1330,7 @@ def _entry_extra_variant_ids(entry: CatalogEntry) -> set[str]:
     return {str(raw_variant.get("variant_id") or "").strip() for raw_variant in entry.extra_variants}
 
 
-def _prepared_inputs_payload(request: PreparedInputs) -> Dict[str, Any]:
+def _prepared_inputs_payload(request: PreparedInputs) -> dict[str, Any]:
     return {
         "prompt": request.prompt,
         "input_path": request.input_path,
@@ -1380,7 +1363,7 @@ def _prepared_inputs_payload(request: PreparedInputs) -> Dict[str, Any]:
     }
 
 
-def _prepared_inputs_from_payload(payload: Dict[str, Any]) -> PreparedInputs:
+def _prepared_inputs_from_payload(payload: dict[str, Any]) -> PreparedInputs:
     return PreparedInputs(
         prompt=str(payload.get("prompt", "")),
         input_path=str(payload.get("input_path", "")),
@@ -1496,16 +1479,16 @@ class RunRecord:
     status: str
     output_dir: str
     manifest_path: str
-    preview_video: Optional[str] = None
-    preview_image: Optional[str] = None
-    preview_splat: Optional[str] = None
-    preview_model: Optional[str] = None
+    preview_video: str | None = None
+    preview_image: str | None = None
+    preview_splat: str | None = None
+    preview_model: str | None = None
     gallery: list[str] = field(default_factory=list)
-    rrd_path: Optional[str] = None
+    rrd_path: str | None = None
     artifacts: list[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_manifest(self) -> Dict[str, Any]:
+    def to_manifest(self) -> dict[str, Any]:
         return dict(
             _redact_manifest_secrets(
                 {
@@ -1600,9 +1583,9 @@ class PipelineContext:
     backend: str
     model_ref: str
     endpoint: str
-    load_kwargs: Dict[str, Any]
+    load_kwargs: dict[str, Any]
     device: str
-    state: Dict[str, Any] = field(default_factory=dict)
+    state: dict[str, Any] = field(default_factory=dict)
     lifecycle_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     active_leases: int = 0
     dispose_when_idle: bool = False
@@ -1611,7 +1594,7 @@ class PipelineContext:
 class _LeasedPipelineIterator:
     """Pin and serialize a pipeline for the lifetime of a lazy result."""
 
-    def __init__(self, manager: "StudioManager", context: PipelineContext, iterator: Iterator[Any]) -> None:
+    def __init__(self, manager: StudioManager, context: PipelineContext, iterator: Iterator[Any]) -> None:
         self._manager: StudioManager | None = manager
         self._context: PipelineContext | None = context
         self._iterator: Iterator[Any] = iterator
@@ -1620,7 +1603,7 @@ class _LeasedPipelineIterator:
         self._close_requested = False
         self._closed = False
 
-    def __iter__(self) -> "_LeasedPipelineIterator":
+    def __iter__(self) -> _LeasedPipelineIterator:
         return self
 
     def __next__(self) -> Any:
@@ -1699,10 +1682,8 @@ class _LeasedPipelineIterator:
             raise close_error
 
     def __del__(self) -> None:  # pragma: no cover - nondeterministic GC safety net
-        try:
+        with contextlib.suppress(Exception):
             self.close()
-        except Exception:
-            pass
 
 
 class BaseRuntimeDriver:
@@ -1710,10 +1691,10 @@ class BaseRuntimeDriver:
 
     def load_pipeline(
         self,
-        manager: "StudioManager",
+        manager: StudioManager,
         entry: CatalogEntry,
         request: PreparedInputs,
-        progress_callback: Optional[Callable[[float, str], None]] = None,
+        progress_callback: Callable[[float, str], None] | None = None,
     ) -> PipelineContext:
         backend = request.backend or entry.default_backend
         if backend == "auto":
@@ -1752,14 +1733,14 @@ class BaseRuntimeDriver:
         pipeline_class = manager.import_pipeline_class(entry)
 
         if backend == "api_init":
-            load_method = getattr(pipeline_class, "api_init")
+            load_method = pipeline_class.api_init
             call_payload = dict(request.load_kwargs)
             if request.endpoint:
                 call_payload.setdefault("endpoint", request.endpoint)
             if request.api_key:
                 call_payload.setdefault("api_key", request.api_key)
         else:
-            load_method = getattr(pipeline_class, "from_pretrained")
+            load_method = pipeline_class.from_pretrained
             call_payload = dict(request.load_kwargs)
             model_ref = request.model_ref or entry.default_model_ref
             if model_ref:
@@ -1804,12 +1785,12 @@ class BaseRuntimeDriver:
             manager._enforce_cache_limit()
         return context
 
-    def run_fresh(self, manager: "StudioManager", ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
+    def run_fresh(self, manager: StudioManager, ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
         result = self._invoke(ctx, request, mode="run")
         self._prime_memory_after_fresh(ctx, result)
         return manager.materialize_run(ctx, request, result=result, mode="run")
 
-    def run_init(self, manager: "StudioManager", ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
+    def run_init(self, manager: StudioManager, ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
         result = self.initialize_stream(ctx, request)
         return manager.materialize_run(ctx, request, result=result, mode="init")
 
@@ -1846,7 +1827,7 @@ class BaseRuntimeDriver:
             "message": f"Interactive state initialized for {ctx.entry.display_name}.",
         }
 
-    def run_continue(self, manager: "StudioManager", ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
+    def run_continue(self, manager: StudioManager, ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
         result = self.continue_stream(ctx, request)
         return manager.materialize_run(ctx, request, result=result, mode="stream")
 
@@ -1873,7 +1854,7 @@ class BaseRuntimeDriver:
             ctx.state["studio_stream_initialized"] = True
         return result
 
-    def reset(self, manager: "StudioManager", ctx: PipelineContext) -> str:
+    def reset(self, manager: StudioManager, ctx: PipelineContext) -> str:
         pipeline = ctx.pipeline
         reset_realtime = getattr(pipeline, "reset_realtime", None)
         reset_memory = getattr(pipeline, "reset_memory", None)
@@ -1898,7 +1879,7 @@ class BaseRuntimeDriver:
             )
         return _supports_memory_stream(ctx.pipeline) and self._resolve_init_image(request) is not None
 
-    def _resolve_init_image(self, request: PreparedInputs) -> Optional[Image.Image]:
+    def _resolve_init_image(self, request: PreparedInputs) -> Image.Image | None:
         if request.image is not None:
             return request.image
 
@@ -1922,7 +1903,7 @@ class BaseRuntimeDriver:
         request: PreparedInputs,
         *,
         force_reset: bool,
-    ) -> Optional[Image.Image]:
+    ) -> Image.Image | None:
         if not _supports_memory_stream(ctx.pipeline):
             return None
         if ctx.state.get("studio_stream_initialized") and not force_reset:
@@ -2112,7 +2093,7 @@ class BaseRuntimeDriver:
 class TwoStage3DGSRuntimeDriver(BaseRuntimeDriver):
     kind = "two_stage_3dgs"
 
-    def run_fresh(self, manager: "StudioManager", ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
+    def run_fresh(self, manager: StudioManager, ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
         pipeline = ctx.pipeline
         image_input = request.image_path or request.input_path
         if not image_input:
@@ -2158,7 +2139,7 @@ class TwoStage3DGSRuntimeDriver(BaseRuntimeDriver):
             extra_metadata=metadata,
         )
 
-    def run_continue(self, manager: "StudioManager", ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
+    def run_continue(self, manager: StudioManager, ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
         if "recon_info" not in ctx.state:
             raise RuntimeError(f"{ctx.entry.display_name} has no cached reconstruction yet.")
         frames = self._render_frames(ctx, request)
@@ -2227,7 +2208,7 @@ class TwoStage3DGSRuntimeDriver(BaseRuntimeDriver):
 class PointCloudNavRuntimeDriver(BaseRuntimeDriver):
     kind = "pointcloud_nav"
 
-    def run_fresh(self, manager: "StudioManager", ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
+    def run_fresh(self, manager: StudioManager, ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
         pipeline = ctx.pipeline
         data_input = request.input_path or request.image_path or request.video_path
         if not data_input:
@@ -2249,7 +2230,7 @@ class PointCloudNavRuntimeDriver(BaseRuntimeDriver):
         metadata = {"saved_paths": saved_paths, "camera_range": getattr(result, "camera_range", {})}
         return manager.materialize_run(ctx, request, result=result, mode="run", extra_metadata=metadata)
 
-    def run_continue(self, manager: "StudioManager", ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
+    def run_continue(self, manager: StudioManager, ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
         if not ctx.state.get("reconstructed"):
             raise RuntimeError(f"{ctx.entry.display_name} has no cached reconstruction yet.")
         pipeline = ctx.pipeline
@@ -2309,7 +2290,7 @@ def _accepts_var_kwargs(callable_obj: Any) -> bool:
     return any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())
 
 
-def _call_with_supported_kwargs(callable_obj: Any, kwargs: Dict[str, Any]) -> Any:
+def _call_with_supported_kwargs(callable_obj: Any, kwargs: dict[str, Any]) -> Any:
     import inspect
 
     try:
@@ -2321,16 +2302,14 @@ def _call_with_supported_kwargs(callable_obj: Any, kwargs: Dict[str, Any]) -> An
     if accepts_var_kw:
         cleaned = {}
         for key, value in kwargs.items():
-            if key in signature.parameters:
-                cleaned[key] = value
-            elif value is not None:
+            if key in signature.parameters or value is not None:
                 cleaned[key] = value
     else:
         cleaned = {key: value for key, value in kwargs.items() if key in signature.parameters}
     return callable_obj(**cleaned)
 
 
-RUNTIME_DRIVERS: Dict[str, BaseRuntimeDriver] = {
+RUNTIME_DRIVERS: dict[str, BaseRuntimeDriver] = {
     "default": BaseRuntimeDriver(),
     "two_stage_3dgs": TwoStage3DGSRuntimeDriver(),
     "pointcloud_nav": PointCloudNavRuntimeDriver(),
@@ -2351,7 +2330,7 @@ class StudioManager:
         resolved_root = Path(workspace_root) if workspace_root else studio_workspace_root()
         self.workspace_root = str(_ensure_dir(resolved_root))
         self.runs_root = str(_ensure_dir(Path(self.workspace_root) / "runs"))
-        self.pipeline_cache: "OrderedDict[str, PipelineContext]" = OrderedDict()
+        self.pipeline_cache: OrderedDict[str, PipelineContext] = OrderedDict()
         self.max_cached_pipelines = max(0, int(max_cached_pipelines))
         # Iterator finalizers may release a pipeline lease while manager code
         # already owns this lock in the same thread.
@@ -2476,7 +2455,7 @@ class StudioManager:
             pass
         return bool(request.load_kwargs.get("dit_fsdp") or request.load_kwargs.get("t5_fsdp"))
 
-    def _broadcast_torchrun_command(self, command: Dict[str, Any]) -> None:
+    def _broadcast_torchrun_command(self, command: dict[str, Any]) -> None:
         dist = self._torchrun_dist()
         if dist is None:
             return
@@ -2486,7 +2465,7 @@ class StudioManager:
         payload = [command]
         dist.broadcast_object_list(payload, src=0, group=control_group)
 
-    def _run_torchrun_command(self, command: Dict[str, Any]) -> Any:
+    def _run_torchrun_command(self, command: dict[str, Any]) -> Any:
         # Gloo/NCCL collectives must run in exactly the same order on every rank.
         # The standalone world frontend serves requests concurrently, so serialize
         # the full command transaction rather than only the local model execution.
@@ -2504,10 +2483,10 @@ class StudioManager:
         entry: CatalogEntry,
         action: str,
         request: PreparedInputs,
-        progress_callback: Optional[Callable[[float, str], None]] = None,
-        perf_segments: Optional[Dict[str, float]] = None,
+        progress_callback: Callable[[float, str], None] | None = None,
+        perf_segments: dict[str, float] | None = None,
         materialize: bool = True,
-    ) -> Optional[RunRecord]:
+    ) -> RunRecord | None:
         driver = self.runtime_driver_for(entry)
         with self.lock:
             if progress_callback is not None:
@@ -2684,38 +2663,7 @@ class StudioManager:
 
         return False, None
 
-    def _reset_cached_model_local(self, model_id: str) -> str:
-        with self.lock:
-            matching_contexts = [
-                context
-                for context in self.pipeline_cache.values()
-                if context.entry.model_id == model_id and not context.dispose_when_idle
-            ]
-            if not matching_contexts:
-                try:
-                    entry = find_entry(model_id)
-                    return f"No cached interactive state for {entry.display_name}."
-                except Exception:
-                    return f"No cached interactive state for {model_id}."
-            for context in matching_contexts:
-                self._pin_pipeline_context(context)
-
-        messages: list[str] = []
-        try:
-            for context in matching_contexts:
-                driver = self.runtime_driver_for(context.entry)
-                with context.lifecycle_lock:
-                    messages.append(driver.reset(self, context))
-        finally:
-            for context in matching_contexts:
-                self._release_pipeline_lease(context)
-
-        deduped_messages = list(dict.fromkeys(messages))
-        if len(deduped_messages) == 1:
-            return deduped_messages[0]
-        return " ".join(deduped_messages)
-
-    def _unload_local(self, model_id: Optional[str] = None) -> str:
+    def _unload_local(self, model_id: str | None = None) -> str:
         with self.lock:
             removed: list[str] = []
             scheduled: list[str] = []
@@ -2748,7 +2696,7 @@ class StudioManager:
                 self.pipeline_cache.pop(key, None)
                 self._dispose_pipeline_context(context)
 
-    def _execute_torchrun_command(self, command: Dict[str, Any]) -> Any:
+    def _execute_torchrun_command(self, command: dict[str, Any]) -> Any:
         dist = self._torchrun_dist()
         if dist is None:
             raise RuntimeError("Torchrun LingBot fast runtime is not initialized.")
@@ -2778,8 +2726,6 @@ class StudioManager:
                     materialize=False,
                     realtime=True,
                 )
-            elif kind == "reset_model":
-                local_result = self._reset_cached_model_local(str(command["model_id"]))
             elif kind == "unload_model":
                 model_id = command.get("model_id") or None
                 local_result = self._unload_local(str(model_id) if model_id else None)
@@ -2798,7 +2744,7 @@ class StudioManager:
             )
             local_error = f"{type(exc).__name__}: {exc}"
 
-        statuses: list[Dict[str, Any] | None] = [None] * _torchrun_world_size()
+        statuses: list[dict[str, Any] | None] = [None] * _torchrun_world_size()
         dist.all_gather_object(
             statuses,
             {"rank": rank, "error": local_error},
@@ -2938,22 +2884,12 @@ class StudioManager:
             del pipeline
             self._collect_device_memory()
 
-    def _dispose_pipeline(self, pipeline: Any) -> None:
-        """Compatibility helper for detached, caller-owned pipeline values."""
-
-        if pipeline is None:
-            return
-        del pipeline
-        self._collect_device_memory()
-
     def _collect_device_memory(self) -> None:
         gc.collect()
         torch = _torch_module()
         if torch is not None and torch.cuda.is_available():
-            try:
+            with contextlib.suppress(Exception):
                 torch.cuda.empty_cache()
-            except Exception:
-                pass
 
     def import_pipeline_class(self, entry: CatalogEntry) -> Any:
         # Pipeline modules frequently resolve Transformers/Diffusers lazy
@@ -2973,9 +2909,9 @@ class StudioManager:
         entry: CatalogEntry,
         prompt: str,
         input_path: str,
-        image: Optional[Image.Image],
+        image: Image.Image | None,
         video: Any,
-        last_frame: Optional[Image.Image],
+        last_frame: Image.Image | None,
         reference_files: Any,
         interactions_text: str,
         camera_view_text: str,
@@ -2993,7 +2929,7 @@ class StudioManager:
         endpoint: str,
         api_key: str,
         device: str,
-        infer_metadata: Optional[Dict[str, Any]] = None,
+        infer_metadata: dict[str, Any] | None = None,
     ) -> PreparedInputs:
         run_seed = f"{_timestamp()}-{_slugify(entry.model_id)}"
         output_dir = str(_ensure_dir(Path(self.runs_root) / run_seed))
@@ -3094,9 +3030,9 @@ class StudioManager:
         model_id: str,
         prompt: str,
         input_path: str,
-        image: Optional[Image.Image],
+        image: Image.Image | None,
         video: Any,
-        last_frame: Optional[Image.Image],
+        last_frame: Image.Image | None,
         reference_files: Any,
         interactions_text: str,
         camera_view_text: str,
@@ -3114,11 +3050,11 @@ class StudioManager:
         endpoint: str,
         api_key: str,
         device: str,
-        infer_metadata: Optional[Dict[str, Any]] = None,
-        progress_callback: Optional[Callable[[float, str], None]] = None,
-    ) -> tuple[CatalogEntry, PreparedInputs, Dict[str, float], float]:
+        infer_metadata: dict[str, Any] | None = None,
+        progress_callback: Callable[[float, str], None] | None = None,
+    ) -> tuple[CatalogEntry, PreparedInputs, dict[str, float], float]:
         entry = find_entry(model_id)
-        perf_segments: Dict[str, float] = {}
+        perf_segments: dict[str, float] = {}
         wall_t0 = time.perf_counter()
         if progress_callback is not None:
             progress_callback(0.08, "Normalizing inputs")
@@ -3159,9 +3095,9 @@ class StudioManager:
         action: str,
         prompt: str,
         input_path: str,
-        image: Optional[Image.Image],
+        image: Image.Image | None,
         video: Any,
-        last_frame: Optional[Image.Image],
+        last_frame: Image.Image | None,
         reference_files: Any,
         interactions_text: str,
         camera_view_text: str,
@@ -3179,10 +3115,10 @@ class StudioManager:
         endpoint: str,
         api_key: str,
         device: str,
-        infer_metadata: Optional[Dict[str, Any]] = None,
-        progress_callback: Optional[Callable[[float, str], None]] = None,
+        infer_metadata: dict[str, Any] | None = None,
+        progress_callback: Callable[[float, str], None] | None = None,
         materialize: bool = True,
-    ) -> Optional[RunRecord]:
+    ) -> RunRecord | None:
         entry, request, perf_segments, wall_t0 = self._prepare_run_request(
             model_id=model_id,
             prompt=prompt,
@@ -3280,7 +3216,9 @@ class StudioManager:
                 if len(results) != len(prepared):
                     raise RuntimeError("Studio batch must return one result per request")
                 records = []
-                for index, (result, (_, request, timings, wall_start)) in enumerate(zip(results, prepared)):
+                for index, (result, (_, request, timings, wall_start)) in enumerate(
+                    zip(results, prepared, strict=False)
+                ):
                     driver._prime_memory_after_fresh(ctx, result)
                     record = self.materialize_run(
                         ctx,
@@ -3399,7 +3337,7 @@ class StudioManager:
         *,
         mode: str = "message",
         status: str = "ok",
-        extra_metadata: Optional[Dict[str, Any]] = None,
+        extra_metadata: dict[str, Any] | None = None,
     ) -> RunRecord:
         output_dir = self._new_message_output_dir(entry.model_id)
         metadata = {"message": message}
@@ -3440,21 +3378,6 @@ class StudioManager:
             _ensure_dir(Path(request.output_dir))
         return record
 
-    def reset_cached_model(self, model_id: str) -> str:
-        if _torchrun_lingbot_fast_enabled() and model_id in {
-            LINGBOT_WORLD_MODEL_ID,
-            LINGBOT_WORLD_V2_MODEL_ID,
-            MATRIX_GAME3_MODEL_ID,
-            LONGVIE2_MODEL_ID,
-            HELIOS_MODEL_ID,
-            DREAMX_WORLD_MODEL_ID,
-            LINGBOT_WORLD_V2_SMALL_MODEL_ID,
-        }:
-            command = {"kind": "reset_model", "model_id": model_id}
-            result = self._run_torchrun_command(command)
-            return str(result or "")
-        return self._reset_cached_model_local(model_id)
-
     def materialize_run(
         self,
         ctx: PipelineContext,
@@ -3462,10 +3385,10 @@ class StudioManager:
         *,
         result: Any,
         mode: str,
-        extra_metadata: Optional[Dict[str, Any]] = None,
+        extra_metadata: dict[str, Any] | None = None,
     ) -> RunRecord:
         materialize_t0 = time.perf_counter()
-        materialize_timings: Dict[str, float] = {}
+        materialize_timings: dict[str, float] = {}
 
         def record_materialize_timing(key: str, start: float) -> None:
             materialize_timings[key] = (time.perf_counter() - start) * 1000.0
@@ -3487,10 +3410,8 @@ class StudioManager:
         saved_artifacts.append(result_metadata_path)
 
         if hasattr(result, "save") and not isinstance(result, (dict, str, bytes)):
-            try:
+            with contextlib.suppress(Exception):
                 saved_artifacts.extend(result.save(output_dir))
-            except Exception:
-                pass
 
         if isinstance(result, dict):
             if "scene_params" in result and hasattr(ctx.pipeline, "save_results"):
@@ -3612,7 +3533,7 @@ class StudioManager:
         saved_artifacts = _existing_artifact_paths(saved_artifacts)
         validate_preview_videos = _env_flag(PREVIEW_VIDEO_VALIDATE_ENV)
 
-        def select_previews() -> Dict[str, Any]:
+        def select_previews() -> dict[str, Any]:
             artifacts = (
                 saved_artifacts
                 if mode == "init"
@@ -3660,8 +3581,8 @@ class StudioManager:
                 previews = select_previews()
         record_materialize_timing("materialize_video_frame_extract_ms", t_video_frame)
 
-        # Inference persists model outputs. Viewer conversion and viewport
-        # manifests belong to the optional presentation adapter.
+        # Inference persists model outputs. Viewer conversion belongs to the
+        # optional presentation adapter.
         preview_model = previews["preview_model"]
         rrd_path = previews["rrd_path"]
         materialize_timings["materialize_preview_convert_ms"] = 0.0
@@ -3687,7 +3608,7 @@ class StudioManager:
                 f"{', '.join(missing_required)}."
             )
 
-        metadata_payload: Dict[str, Any] = {
+        metadata_payload: dict[str, Any] = {
             "entry": {
                 "model_id": ctx.entry.model_id,
                 "display_name": ctx.entry.display_name,
@@ -3719,7 +3640,6 @@ class StudioManager:
             }
 
         artifact_list = sorted(saved_artifacts)
-        materialize_timings["materialize_viewports_ms"] = 0.0
         materialize_timings["materialize_total_ms"] = (time.perf_counter() - materialize_t0) * 1000.0
         metadata_payload["studio_performance"] = {
             key: round(float(value), 3) for key, value in materialize_timings.items()
@@ -3859,7 +3779,7 @@ class StudioManager:
         except (OSError, TypeError, ValueError, json.JSONDecodeError):
             raise KeyError(f"Unknown Studio run id: {run_id}") from None
 
-    def unload(self, model_id: Optional[str] = None) -> str:
+    def unload(self, model_id: str | None = None) -> str:
         if _torchrun_lingbot_fast_enabled() and model_id in {
             None,
             LINGBOT_WORLD_MODEL_ID,
@@ -3875,18 +3795,3 @@ class StudioManager:
             return str(result or "")
         message = self._unload_local(model_id)
         return message
-
-
-def recent_runs_table(records: Sequence[RunRecord]) -> list[list[str]]:
-    rows = []
-    for record in records:
-        rows.append(
-            [
-                record.run_id,
-                record.display_name,
-                record.mode,
-                record.status,
-                Path(record.output_dir).name,
-            ]
-        )
-    return rows

@@ -9,12 +9,17 @@ import pytest
 import torch
 from PIL import Image
 
+from worldfoundry.core.execution.realtime.contracts import DEFAULT_REALTIME_KEYS, RealtimeAxis
+from worldfoundry.operators.matrix_game_2_operator import encode_actions
+from worldfoundry.pipelines.matrix_game.pipeline_matrix_game_2 import MatrixGame2Pipeline
 from worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_2_runtime import (
     realtime as realtime_module,
 )
 from worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_2_runtime.realtime import (
     MatrixGame2RealtimeSession,
 )
+
+_AXIS_NAMES = ("camera_pitch", "camera_yaw", "camera_pitch_stick", "camera_yaw_stick")
 
 
 class _FakeClip:
@@ -169,6 +174,26 @@ def test_realtime_session_keeps_causal_state_and_native_cadence(
         ],
         "transport": "in-memory-rgb",
         "stateful": True,
+        "axes": [
+            {
+                "name": "camera_pitch",
+                "source": "mouse_y",
+                "mode": "delta",
+                "scale": -0.0025,
+                "limit": 0.1,
+                "deadzone": 0.0,
+            },
+            {
+                "name": "camera_yaw",
+                "source": "mouse_x",
+                "mode": "delta",
+                "scale": 0.0025,
+                "limit": 0.1,
+                "deadzone": 0.0,
+            },
+            {"name": "camera_pitch_stick", "source": "gamepad_ry", "mode": "level", "scale": -0.1, "deadzone": 0.15},
+            {"name": "camera_yaw_stick", "source": "gamepad_rx", "mode": "level", "scale": 0.1, "deadzone": 0.15},
+        ],
     }
     assert set(configured["realtime_metrics"]) == {
         "perception_ms",
@@ -211,6 +236,7 @@ def test_realtime_session_keeps_causal_state_and_native_cadence(
     assert core.step_conditions[1]["mouse_cond"].shape == (1, 21, 2)
     assert core.step_conditions[0]["cond_concat"].shape == (1, 20, 3, 4, 5)
     assert core.step_conditions[1]["cond_concat"].shape == (1, 20, 3, 4, 5)
+    assert session._condition_concat is not None
     assert torch.equal(core.step_conditions[0]["cond_concat"], session._condition_concat[:, :, 0:3])
     assert torch.equal(core.step_conditions[1]["cond_concat"], session._condition_concat[:, :, 3:6])
     assert encoded_actions[:9] == [("forward", "camera_l")] * 9
@@ -229,3 +255,179 @@ def test_realtime_session_keeps_causal_state_and_native_cadence(
     assert session._mouse_history is None
     assert session._noise_generator is None
     assert session.next_output_frames() == 9
+
+
+def _condition_session(mode: str) -> MatrixGame2RealtimeSession:
+    """Session holding only the state that action encoding reads."""
+
+    session = object.__new__(MatrixGame2RealtimeSession)
+    session.runtime = SimpleNamespace(mode=mode)
+    session.device = torch.device("cpu")
+    session.dtype = torch.float32
+    session._keyboard_history = None
+    session._mouse_history = None
+    return session
+
+
+def _encode_frames(
+    session: MatrixGame2RealtimeSession,
+    frame_keys: list[list[str]],
+    realtime_axes: dict[str, list[float]] | None = None,
+) -> None:
+    """Append one chunk whose frame ``i`` holds ``frame_keys[i]``."""
+
+    segments = [{"duration": 1.0, "keys": keys} for keys in frame_keys]
+    num_frames = len(frame_keys)
+    session._append_actions(
+        session._actions_for_frames([], segments, num_frames=num_frames),
+        session._camera_offsets(realtime_axes, num_frames=num_frames),
+    )
+
+
+def test_universal_spec_keeps_default_keys_and_declares_camera_axes() -> None:
+    spec = _condition_session("universal").realtime_spec()
+
+    assert spec.keys == DEFAULT_REALTIME_KEYS
+    assert spec.axes == (
+        RealtimeAxis("camera_pitch", "mouse_y", "delta", scale=-0.0025, limit=0.1),
+        RealtimeAxis("camera_yaw", "mouse_x", "delta", scale=0.0025, limit=0.1),
+        RealtimeAxis("camera_pitch_stick", "gamepad_ry", "level", scale=-0.1, deadzone=0.15),
+        RealtimeAxis("camera_yaw_stick", "gamepad_rx", "level", scale=0.1, deadzone=0.15),
+    )
+
+
+def test_universal_keys_without_axis_input_encode_the_key_conditions() -> None:
+    frame_keys = [["j", "w"], ["i"], [], ["l", "s"], ["a", "k"]]
+    actions = [["camera_l", "forward"], ["camera_up"], [], ["camera_r", "back"], ["left", "camera_down"]]
+    expected = [encode_actions(frame_actions, "universal") for frame_actions in actions]
+    zero_axes = {name: [0.0] * len(frame_keys) for name in _AXIS_NAMES}
+
+    for realtime_axes in (None, zero_axes):
+        session = _condition_session("universal")
+        _encode_frames(session, frame_keys, realtime_axes)
+        expected_keyboard = torch.stack([keyboard for keyboard, _ in expected])
+        torch.testing.assert_close(session._keyboard_history, expected_keyboard, rtol=0, atol=0)
+        torch.testing.assert_close(
+            session._mouse_history, torch.stack([mouse for _, mouse in expected]), rtol=0, atol=0
+        )
+
+
+def test_universal_axes_add_to_key_camera_and_clamp_each_component() -> None:
+    session = _condition_session("universal")
+    _encode_frames(
+        session,
+        [["l"], ["l"], [], ["i"], ["k"]],
+        {
+            "camera_pitch": [0.0, 0.0, 0.0, -0.05, -0.08],
+            "camera_yaw": [0.05, -0.15, 0.03, 0.0, 0.0],
+            "camera_pitch_stick": [0.0, 0.0, 0.0, -0.02, -0.08],
+            "camera_yaw_stick": [0.0, 0.0, 0.04, 0.0, 0.0],
+        },
+    )
+
+    torch.testing.assert_close(
+        session._mouse_history,
+        torch.tensor([[0.0, 0.1], [0.0, -0.05], [0.0, 0.07], [0.03, 0.0], [-0.1, 0.0]]),
+    )
+
+
+def test_gta_drive_keys_match_the_official_keymap() -> None:
+    session = _condition_session("gta_drive")
+    spec = session.realtime_spec()
+    assert [(binding.key, binding.action) for binding in spec.keys] == [
+        ("w", "forward"),
+        ("s", "back"),
+        ("a", "camera_l"),
+        ("d", "camera_r"),
+    ]
+    assert spec.keys[0].group == spec.keys[1].group != spec.keys[2].group == spec.keys[3].group
+    assert [axis.name for axis in spec.axes] == ["camera_yaw_stick"]
+
+    _encode_frames(session, [["w"], ["a", "s"], ["d"], []], {"camera_yaw_stick": [0.0, 0.0, 0.0, 0.05]})
+
+    torch.testing.assert_close(
+        session._keyboard_history,
+        torch.tensor([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0], [0.0, 0.0]]),
+        rtol=0,
+        atol=0,
+    )
+    torch.testing.assert_close(
+        session._mouse_history,
+        torch.tensor([[0.0, 0.0], [0.0, -0.1], [0.0, 0.1], [0.0, 0.05]]),
+    )
+
+
+def test_templerun_keys_match_the_official_one_hot_and_idle_is_nomove() -> None:
+    session = _condition_session("templerun")
+    spec = session.realtime_spec()
+    assert [(binding.key, binding.action) for binding in spec.keys] == [
+        ("w", "jump"),
+        ("s", "slide"),
+        ("a", "leftside"),
+        ("d", "rightside"),
+        ("z", "turnleft"),
+        ("c", "turnright"),
+    ]
+    assert len({binding.group for binding in spec.keys}) == 1
+    assert spec.axes == ()
+
+    _encode_frames(session, [["w"], ["s"], ["a"], ["d"], ["z"], ["c"], []])
+
+    # Rows of the official ``get_current_action`` table for W, S, A, D, Z, C and Q.
+    torch.testing.assert_close(
+        session._keyboard_history,
+        torch.tensor(
+            [
+                [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            ]
+        ),
+        rtol=0,
+        atol=0,
+    )
+    assert session._mouse_history is None
+    assert torch.count_nonzero(encode_actions([], "templerun")[0]) == 0
+
+
+def test_realtime_session_applies_axes_and_rejects_axis_length_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(realtime_module, "set_seed", lambda _seed: None)
+    monkeypatch.delenv("WORLDFOUNDRY_MATRIX_REALTIME_CONDITION_BLOCKS", raising=False)
+    core = _FakeCausalCore()
+    session = MatrixGame2RealtimeSession(_FakeRuntime(core), _FakeOperator())
+    session.configure(Image.new("RGB", (8, 8)), seed=7)
+
+    with pytest.raises(ValueError, match="'camera_yaw' has 12 values; the chunk has 9 output frames"):
+        session.generate(interactions=[], realtime_axes={"camera_yaw": [0.01] * 12})
+    assert session._keyboard_history is None
+    assert core.step_conditions == []
+
+    session.generate(interactions=[], realtime_axes={"camera_yaw": [0.01] * 9})
+
+    torch.testing.assert_close(core.step_conditions[0]["mouse_cond"][0], torch.tensor([[0.0, 0.01]] * 9))
+
+
+def test_pipeline_stream_realtime_forwards_axes_to_the_session() -> None:
+    calls: list[dict[str, Any]] = []
+
+    class RecordingSession:
+        def generate(self, **kwargs: Any) -> dict[str, Any]:
+            calls.append(kwargs)
+            return {}
+
+    pipeline = MatrixGame2Pipeline(device="cpu", weight_dtype=torch.float32)
+    pipeline._realtime_session = RecordingSession()
+    segments = [{"duration": 0.75, "keys": ["w"]}]
+    axes = {"camera_yaw": [0.01] * 9}
+
+    pipeline.stream_realtime(["forward"], realtime_segments=segments, realtime_axes=axes, seed=3, prompt="")
+    pipeline.stream_realtime(["forward"], realtime_segments=segments)
+
+    assert calls == [
+        {"interactions": ["forward"], "control_segments": segments, "realtime_axes": axes},
+        {"interactions": ["forward"], "control_segments": segments, "realtime_axes": None},
+    ]

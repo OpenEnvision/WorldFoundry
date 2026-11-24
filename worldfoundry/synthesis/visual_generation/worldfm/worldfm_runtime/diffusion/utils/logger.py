@@ -1,17 +1,19 @@
 import logging
 import os
-import torch.distributed as dist
 from datetime import datetime
+
+import torch.distributed as dist
+
 from worldfoundry.core.distributed.collectives.generic import is_local_master
+
 try:
     from mmcv.utils.logging import logger_initialized
 except ModuleNotFoundError:
     logger_initialized = {}
 
 
-def get_root_logger(log_file=None, log_level=logging.INFO, name='WorldFM'):
-    """Get root logger.
-
+def get_root_logger(log_file=None, log_level=logging.INFO, name="WorldFM"):
+    """
     Args:
         log_file (str, optional): File path of log. Defaults to None.
         log_level (int, optional): The level of logger.
@@ -21,7 +23,7 @@ def get_root_logger(log_file=None, log_level=logging.INFO, name='WorldFM'):
         :obj:`logging.Logger`: The obtained logger
     """
     if log_file is None:
-        log_file = '/dev/null'
+        log_file = "/dev/null"
     logger = get_logger(name=name, log_file=log_file, log_level=log_level)
     return logger
 
@@ -61,18 +63,14 @@ def get_logger(name, log_file=None, log_level=logging.INFO):
     stream_handler = logging.StreamHandler()
     handlers = [stream_handler]
 
-    if dist.is_available() and dist.is_initialized():
-        rank = dist.get_rank()
-    else:
-        rank = 0
+    rank = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
 
     # only rank 0 will add a FileHandler
     if rank == 0 and log_file is not None:
-        file_handler = logging.FileHandler(log_file, 'w')
+        file_handler = logging.FileHandler(log_file, "w")
         handlers.append(file_handler)
 
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     for handler in handlers:
         handler.setFormatter(formatter)
         handler.setLevel(log_level)
@@ -86,17 +84,16 @@ def get_logger(name, log_file=None, log_level=logging.INFO):
 
     return logger
 
-def rename_file_with_creation_time(file_path):
-    # 获取文件的创建时间
-    creation_time = os.path.getctime(file_path)
-    creation_time_str = datetime.fromtimestamp(creation_time).strftime('%Y-%m-%d_%H-%M-%S')
 
-    # 构建新的文件名
+def rename_file_with_creation_time(file_path):
+    # Append the file's creation time to its name.
+    creation_time = os.path.getctime(file_path)
+    creation_time_str = datetime.fromtimestamp(creation_time).strftime("%Y-%m-%d_%H-%M-%S")
+
     dir_name, file_name = os.path.split(file_path)
     name, ext = os.path.splitext(file_name)
     new_file_name = f"{name}_{creation_time_str}{ext}"
     new_file_path = os.path.join(dir_name, new_file_name)
 
-    # 重命名文件
     os.rename(file_path, new_file_path)
     print(f"File renamed to: {new_file_path}")

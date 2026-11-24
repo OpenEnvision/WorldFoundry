@@ -8,6 +8,7 @@ groups:
 - camera_control
 source_repos:
 - url: https://github.com/imlixinyang/FlashWorld
+  revision: 424db4487de308a39e5137afbe85e7568a96193f
 checkpoints:
 - repo_id: imlixinyang/FlashWorld
   role: flashworld_checkpoint

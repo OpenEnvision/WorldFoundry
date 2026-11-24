@@ -1,7 +1,14 @@
+# ruff: noqa: F405 - Names come from the upstream star import.
+from typing import ClassVar
+
 from einops import repeat
 
-from vwm.modules.attention import *
-from vwm.modules.diffusionmodules.util import AlphaBlender, linear, timestep_embedding
+from worldfoundry.core.nn.diffusion.convolution import linear
+from worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.attention import *  # noqa: F403 - Upstream star import kept as written.
+from worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.diffusionmodules.util import (
+    AlphaBlender,
+    timestep_embedding,
+)
 
 
 class TimeMixSequential(nn.Sequential):
@@ -12,29 +19,29 @@ class TimeMixSequential(nn.Sequential):
 
 
 class VideoTransformerBlock(nn.Module):
-    ATTENTION_MODES = {
+    ATTENTION_MODES: ClassVar[dict] = {
         "softmax": CrossAttention,  # Vanilla attention
-        "softmax-xformers": MemoryEfficientCrossAttention  # Ampere
+        "softmax-xformers": MemoryEfficientCrossAttention,  # Ampere
     }
 
     def __init__(
-            self,
-            dim,
-            n_heads,
-            d_head,
-            dropout=0.0,
-            context_dim=None,
-            gated_ff=True,
-            use_checkpoint=False,
-            timesteps=None,
-            ff_in=False,
-            inner_dim=None,
-            attn_mode="softmax",
-            disable_self_attn=False,
-            disable_temporal_crossattention=False,
-            switch_temporal_ca_to_sa=False
+        self,
+        dim,
+        n_heads,
+        d_head,
+        dropout=0.0,
+        context_dim=None,
+        gated_ff=True,
+        use_checkpoint=False,
+        timesteps=None,
+        ff_in=False,
+        inner_dim=None,
+        attn_mode="softmax",
+        disable_self_attn=False,
+        disable_temporal_crossattention=False,
+        switch_temporal_ca_to_sa=False,
     ):
-        super(VideoTransformerBlock, self).__init__()
+        super().__init__()
         attn_cls = self.ATTENTION_MODES[attn_mode]
 
         self.ff_in = ff_in or inner_dim is not None
@@ -53,18 +60,11 @@ class VideoTransformerBlock(nn.Module):
         self.disable_self_attn = disable_self_attn
         if disable_self_attn:
             self.attn1 = attn_cls(
-                query_dim=inner_dim,
-                context_dim=context_dim,
-                heads=n_heads,
-                dim_head=d_head,
-                dropout=dropout
+                query_dim=inner_dim, context_dim=context_dim, heads=n_heads, dim_head=d_head, dropout=dropout
             )  # Is a cross-attn
         else:
             self.attn1 = attn_cls(
-                query_dim=inner_dim,
-                heads=n_heads,
-                dim_head=d_head,
-                dropout=dropout
+                query_dim=inner_dim, heads=n_heads, dim_head=d_head, dropout=dropout
             )  # Is a self-attn
 
         self.ff = FeedForward(inner_dim, dim_out=dim, dropout=dropout, glu=gated_ff)
@@ -73,18 +73,11 @@ class VideoTransformerBlock(nn.Module):
             self.norm2 = nn.LayerNorm(inner_dim)
             if switch_temporal_ca_to_sa:
                 self.attn2 = attn_cls(
-                    query_dim=inner_dim,
-                    heads=n_heads,
-                    dim_head=d_head,
-                    dropout=dropout
+                    query_dim=inner_dim, heads=n_heads, dim_head=d_head, dropout=dropout
                 )  # Is a self-attn
             else:
                 self.attn2 = attn_cls(
-                    query_dim=inner_dim,
-                    context_dim=context_dim,
-                    heads=n_heads,
-                    dim_head=d_head,
-                    dropout=dropout
+                    query_dim=inner_dim, context_dim=context_dim, heads=n_heads, dim_head=d_head, dropout=dropout
                 )  # Is self-attn if context is None
 
         self.norm1 = nn.LayerNorm(inner_dim)
@@ -93,7 +86,7 @@ class VideoTransformerBlock(nn.Module):
 
         del use_checkpoint
 
-    def forward(self, x: torch.Tensor, context: torch.Tensor = None, timesteps: int = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, context: torch.Tensor = None, timesteps: int | None = None) -> torch.Tensor:
         return self._forward(x, context, timesteps=timesteps)
 
     def _forward(self, x, context=None, timesteps=None):
@@ -134,28 +127,28 @@ class VideoTransformerBlock(nn.Module):
 
 class SpatialVideoTransformer(SpatialTransformer):
     def __init__(
-            self,
-            in_channels,
-            n_heads,
-            d_head,
-            depth=1,
-            dropout=0.0,
-            use_linear=False,
-            context_dim=None,
-            use_spatial_context=False,
-            timesteps=None,
-            merge_strategy: str = "fixed",
-            merge_factor: float = 0.5,
-            time_context_dim=None,
-            ff_in=False,
-            use_checkpoint=False,
-            time_depth=1,
-            attn_mode="softmax",
-            disable_self_attn=False,
-            disable_temporal_crossattention=False,
-            max_time_embed_period=10000
+        self,
+        in_channels,
+        n_heads,
+        d_head,
+        depth=1,
+        dropout=0.0,
+        use_linear=False,
+        context_dim=None,
+        use_spatial_context=False,
+        timesteps=None,
+        merge_strategy: str = "fixed",
+        merge_factor: float = 0.5,
+        time_context_dim=None,
+        ff_in=False,
+        use_checkpoint=False,
+        time_depth=1,
+        attn_mode="softmax",
+        disable_self_attn=False,
+        disable_temporal_crossattention=False,
+        max_time_embed_period=10000,
     ):
-        super(SpatialVideoTransformer, self).__init__(
+        super().__init__(
             in_channels,
             n_heads,
             d_head,
@@ -165,7 +158,7 @@ class SpatialVideoTransformer(SpatialTransformer):
             use_checkpoint=use_checkpoint,
             context_dim=context_dim,
             use_linear=use_linear,
-            disable_self_attn=disable_self_attn
+            disable_self_attn=disable_self_attn,
         )
         self.time_depth = time_depth
         self.depth = depth
@@ -194,7 +187,7 @@ class SpatialVideoTransformer(SpatialTransformer):
                     inner_dim=time_mix_inner_dim,
                     attn_mode=attn_mode,
                     disable_self_attn=disable_self_attn,
-                    disable_temporal_crossattention=disable_temporal_crossattention
+                    disable_temporal_crossattention=disable_temporal_crossattention,
                 )
                 for _ in range(self.depth)
             ]
@@ -207,23 +200,19 @@ class SpatialVideoTransformer(SpatialTransformer):
 
         time_embed_dim = in_channels * 4
         self.time_pos_embed = nn.Sequential(
-            linear(in_channels, time_embed_dim),
-            nn.SiLU(),
-            linear(time_embed_dim, in_channels)
+            linear(in_channels, time_embed_dim), nn.SiLU(), linear(time_embed_dim, in_channels)
         )
 
         self.time_mixer = AlphaBlender(
-            alpha=merge_factor,
-            merge_strategy=merge_strategy,
-            rearrange_pattern="b t -> (b t) 1 1"
+            alpha=merge_factor, merge_strategy=merge_strategy, rearrange_pattern="b t -> (b t) 1 1"
         )
 
     def forward(
-            self,
-            x: torch.Tensor,
-            context: Optional[torch.Tensor] = None,
-            time_context: Optional[torch.Tensor] = None,
-            timesteps: Optional[int] = None
+        self,
+        x: torch.Tensor,
+        context: Optional[torch.Tensor] = None,
+        time_context: Optional[torch.Tensor] = None,
+        timesteps: Optional[int] = None,
     ) -> torch.Tensor:
         _, _, h, w = x.shape
         x_in = x
@@ -252,15 +241,12 @@ class SpatialVideoTransformer(SpatialTransformer):
         num_frames = torch.arange(timesteps, device=x.device)
         num_frames = repeat(num_frames, "t -> (b t)", b=x.shape[0] // timesteps)
         t_emb = timestep_embedding(
-            num_frames,
-            self.in_channels,
-            repeat_only=False,
-            max_period=self.max_time_embed_period
+            num_frames, self.in_channels, repeat_only=False, max_period=self.max_time_embed_period
         )
         emb = self.time_pos_embed(t_emb)
         emb = emb[:, None]
 
-        for block, mix_block in zip(self.transformer_blocks, self.time_stack):
+        for block, mix_block in zip(self.transformer_blocks, self.time_stack, strict=False):
             x = block(x, context=spatial_context)
 
             x_mix = x

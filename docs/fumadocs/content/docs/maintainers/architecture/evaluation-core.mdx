@@ -7,7 +7,7 @@ description: How requests, runners, metrics, catalogs, and reporting connect ins
 
 This page is the evaluation package from the inside: which types stay stable, which function owns a run, and which files a reviewer can trust. Read [Workflow](/docs/maintainers/architecture/workflow) first if you only need the path from CLI to disk.
 
-The package flows in one direction: **public contracts** define JSON-safe shapes, **execution runners** produce side effects and artifacts, **catalog loaders** turn YAML into those contracts, and **reporting** turns metrics into scorecards. API modules should stay import-light; heavy runtime code should never leak backward into `evaluation/api/`.
+The package flows in one direction: **public contracts** define JSON-safe shapes, **execution runners** produce side effects and artifacts, **catalog loaders** turn YAML into those contracts, and **reporting** turns metrics into scorecards. API modules should stay import-light; heavy runtime code should never leak backward into `evals/api/`.
 
 For module-level lookup, use the [Codebase map](/docs/maintainers/architecture/file-index).
 
@@ -23,7 +23,7 @@ Prepared evaluations record orthogonal provenance for generation, data, evaluati
 
 ## Public contracts
 
-The `evaluation/api/` modules define the shapes shared by runners, CLI, tests, docs exports, and validation. Treat changes here as semver-sensitive: downstream code assumes `to_dict()` / `from_dict()` round-trips and stable field names on disk.
+The `evals/api/` modules define the shapes shared by runners, CLI, tests, docs exports, and validation. Treat changes here as semver-sensitive: downstream code assumes `to_dict()` / `from_dict()` round-trips and stable field names on disk.
 
 At the sample level, a **`GenerationRequest`** carries ids, task name, inputs, controls, and expected output schema; a matching **`GenerationResult`** carries artifacts, status, errors, timings, and metadata. At the model level, **`WorldModelRunner`** is the minimum interface every backend must implement: `from_config()`, `generate()`, and `cleanup()`. At the benchmark level, **`BenchmarkSpec`** groups tasks, metrics, splits, tags, and dataset metadata. Metrics implement the **`Metric`** interface with `compute_sample()` and `aggregate()`.
 
@@ -45,7 +45,7 @@ Online and offline paths share result conversion, preserving top-level score fie
 
 The `numeric` wildcard expands to the union of fields in successful aligned results before scoring batches begin. Each field then uses the same definition and missing-value handling as an explicit `numeric:<field>` selection. Expansion is scoped to the run, so the caller can reuse the metric object with another dataset.
 
-**`run_model_benchmark()`** (`model_benchmark.py:825`) chains generation with a benchmark-zoo runner. There is no `ModelBenchmarkRunner` class. It resolves the benchmark manifest, materializes requests from the task registry, runs the model, materializes artifacts for the external evaluator (`ManifestBenchmarkRunner` in `benchmark_runner.py:870`), and hands normalized metrics to reporting. Use it for end-to-end model-plus-benchmark runs.
+**`run_model_benchmark()`** (`model_benchmark.py`) chains generation with a benchmark-zoo runner. There is no `ModelBenchmarkRunner` class. It resolves the benchmark manifest, materializes requests from the task registry, runs the model, materializes artifacts for the external evaluator (`ManifestBenchmarkRunner` in `benchmark_runner.py`), and hands normalized metrics to reporting. Use it for end-to-end model-plus-benchmark runs.
 
 Both model mode and direct `ContractRunner` calls hand generated results to the same scoring runner. Python requests expose `metric_batch_size` (default 32) and `resume`. Each completed metric batch writes `metrics/checkpoint.jsonl`; resume compares requests, results, metric implementation, version, and declared `parameters` / `config`. New or changed metrics run independently of completed generation. Unversioned legacy callables still execute, but their scores are recomputed on resume. Runner parameters and config participate in generation reuse, and local output files must still exist. Samples that need generation also discard their old metric checkpoints.
 
@@ -59,19 +59,18 @@ Embodied closed-loop runs save all planned requests before generation and flush 
 
 Before generation starts, task-driven runs fix sample IDs, splits, and input keys through **`RunPlan`** in `plan.py`. The plan connects the task registry, optional dataset manifest, and evaluate facade: registry lookup → materialized requests → `EvaluateRunRequest`. Fingerprinting on the plan makes reruns and cache reuse deterministic across machines.
 
-Materialization in `materialize.py` turns dataset rows or task samples into `GenerationRequest` rows. Prove this step with `worldfoundry-eval task materialize` before spending GPU time—most "works locally, fails in CI" bugs trace to mismatched sample IDs here, not to model loading.
+Materialization in `materialize.py` turns dataset rows or task samples into `GenerationRequest` rows. Prove this step with `wf task materialize` before spending GPU time—most "works locally, fails in CI" bugs trace to mismatched sample IDs here, not to model loading.
 
 ## Model resolution
 
-Disk YAML becomes a runnable model through a single front door: `resolve_model_zoo_runner()` in `resolver.py` (`:386`). CLI `--model-id` flags, Python callers, and Studio previews should all converge here before any checkpoint path is interpreted.
+Disk YAML becomes a runnable model through a single front door: `resolve_model_zoo_runner()` in `resolver.py`. CLI `--model-id` flags, Python callers, and Studio previews should all converge here before any checkpoint path is interpreted.
 
 ```python
 # worldfoundry/data/models/catalog/*.yaml
-entry = parse_model_zoo_yaml(path)          # schema.py → ModelZooEntry
-entry = ModelZooRegistry().resolve(alias)   # alias lookup
-manifest = WorldModelManifest.from_entry(entry)
-runner = resolve_model_zoo_runner(manifest) # resolver.py
-# → WorldModelRunner instance
+registry = load_model_zoo_registry()        # zoo_registry.py → ModelZooRegistry
+entry = registry.get(alias)                 # alias or canonical id → ModelZooEntry
+resolved = resolve_model_zoo_runner(entry.model_id, manifest_dir=MODEL_ZOO_DIR)  # resolver.py
+runner = resolved.runner                    # → WorldModelRunner instance
 ```
 
 Built-in runners register through `builtins.py` and `registry.py`; custom targets resolve from catalog `runner_target` strings. Catalog metadata in `manifest.py` and `schema.py` is provenance and readiness—not a substitute for a runnable runner.
@@ -86,12 +85,11 @@ Benchmark metadata follows a parallel catalog path. Task YAML describes per-samp
 
 ```python
 # Benchmark-zoo YAML + task YAML registry
-entry = parse_benchmark_zoo_yaml(path)      # → BenchmarkZooEntry
-entry = BenchmarkZooRegistry().resolve(id)
-spec = BenchmarkSpec.from_catalog(entry, task_registry)
-raw = ManifestBenchmarkRunner(spec).run()   # external evaluator
-metrics = official_normalizers.normalize(raw)
-# → metrics/summary.json + scorecard.json
+registry = load_benchmark_zoo_registry()    # zoo_registry.py → BenchmarkZooRegistry
+entry = registry.get(benchmark_id)          # → BenchmarkZooEntry
+runner = ManifestBenchmarkRunner(entry)     # benchmark_runner.py
+result = runner.evaluate(output_dir=out, mode="official-validation")
+# prepare → run → collect → normalize → metrics/summary.json + scorecard.json
 ```
 
 External benchmarks stay behind the runner boundary: vendor evaluators produce raw output, normalizers convert it into stable metrics, and the shared reporting layer writes `metrics/summary.json` and `scorecard.json`.
@@ -109,16 +107,16 @@ scorecard = build_scorecard(summary)      # → scorecard.json
 write_report_md(scorecard)                # → report.md (derived, not authoritative)
 ```
 
-Validation scripts and docs generators import `reporting/validation.py` and expect stable scorecard fields. Field renames here break release gates. The concrete entry points: `build_scorecard` at `reporting/scorecard.py:136`, `write_scorecard` at `:270`, `build_run_summary` at `reporting/run_report.py:208`, and `_validate_scorecard` at `reporting/validation.py:207`.
+Validation scripts and docs generators import `reporting/validation.py` and expect stable scorecard fields. Field renames here break release gates. The concrete entry points: `build_scorecard` and `write_scorecard` in `reporting/scorecard.py`, `build_run_summary` in `reporting/run_report.py`, and `_validate_scorecard` in `reporting/validation.py`.
 
 For how CLI/TUI/MCP compile user intent into the `EvaluateRunRequest` / `ModelBenchmarkRunRequest` these runners consume, see [Surfaces and orchestration](/docs/maintainers/architecture/surfaces-orchestration).
 
 ## Change rules
 
-Use this table before opening a PR that touches evaluation internals. It lists the compatibility surfaces other teams and automation depend on; breaking them requires coordinated updates to validation, docs exports, and example scorecards.
+Use this list before opening a PR that touches evaluation internals. It lists the compatibility surfaces other teams and automation depend on; breaking them requires coordinated updates to validation, docs exports, and example scorecards.
 
 - `api/*` dataclasses — `to_dict()` / `from_dict()` JSON-safe payloads.
-- `evaluation/tasks/run_*` output writing — File names, JSONL row shape, `sample_id` alignment, final manifest status.
-- `models/resolver.py` — Error messages, runner resolution, model-zoo variant selection.
-- `evaluation/tasks/official/*` schema — Manifest parsing and alias lookup behavior.
-- `reporting*.py` and `scorecard.py` — Scorecard fields used by validation, docs, and release reports.
+- `evals/tasks/execution/orchestration/` output writing — File names, JSONL row shape, `sample_id` alignment, final manifest status.
+- `models/runners/resolver.py` — Error messages, runner resolution, model-zoo variant selection.
+- `evals/tasks/catalog/*` schema — Manifest parsing and alias lookup behavior.
+- `reporting/*.py`, including `scorecard.py` — Scorecard fields used by validation, docs, and release reports.

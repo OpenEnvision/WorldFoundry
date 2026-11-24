@@ -3,8 +3,8 @@ import logging
 
 """JAX sharding helpers required when restoring OpenPI inference weights."""
 
-import jax
-import numpy as np
+import jax  # noqa: E402 - Follows a module-level setup call, as upstream.
+import numpy as np  # noqa: E402 - Follows a module-level setup call, as upstream.
 
 BATCH_AXIS = "batch"
 FSDP_AXIS = "fsdp"

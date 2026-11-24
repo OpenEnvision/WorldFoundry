@@ -33,9 +33,12 @@ Public surface
 
 import hashlib
 import json
-from typing import Any, Callable, Dict, Optional, Tuple, TypeVar, Union
+from collections.abc import Callable
+from typing import Any, TypeVar, cast
 
 import torch
+
+from worldfoundry.core.observability.rank_logging import log
 
 try:
     # PyTorch has not yet promoted pytree to a stable public namespace on all
@@ -64,9 +67,16 @@ def _tree_unflatten(values, spec):
         raise RuntimeError("This PyTorch build does not provide pytree helpers required by CUDA Graph capture")
     return _torch_pytree.tree_unflatten(values, spec)
 
+
+# Transformer Engine is optional; the ImportError fallback also covers releases without these helpers.
 try:
-    from transformer_engine.pytorch.distributed import get_all_rng_states, graph_safe_rng_available
-    from transformer_engine.pytorch.module.base import TransformerEngineBaseModule
+    from transformer_engine.pytorch.distributed import (  # ty: ignore[import-not-found]  # Optional Transformer Engine dependency.
+        get_all_rng_states,
+        graph_safe_rng_available,
+    )
+    from transformer_engine.pytorch.module.base import (  # ty: ignore[import-not-found]  # Optional Transformer Engine dependency.
+        TransformerEngineBaseModule,
+    )
 except ImportError:
 
     class TransformerEngineBaseModule(torch.nn.Module):
@@ -81,15 +91,13 @@ except ImportError:
         return {}
 
 
-from worldfoundry.core.distributed.runtime.logging import log
-
 __all__ = ["create_cuda_graph"]
 
 
 _IS_GRAPH_CAPTURING = False
 
 _T = TypeVar("_T")
-SingleOrTuple = Union[_T, Tuple[_T, ...]]
+SingleOrTuple = _T | tuple[_T, ...]
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -122,8 +130,7 @@ def _tensor_tree_signature(value: Any) -> dict[str, Any]:
     for leaf in flat:
         if not isinstance(leaf, torch.Tensor):
             raise TypeError(
-                "create_cuda_graph only supports pytrees of torch.Tensor leaves; "
-                f"got leaf type {type(leaf)}"
+                f"create_cuda_graph only supports pytrees of torch.Tensor leaves; got leaf type {type(leaf)}"
             )
         tensors.append(_tensor_signature(leaf))
     return {"tree_spec": str(spec), "tensors": tensors}
@@ -164,8 +171,7 @@ def _cuda_graph_cache_key(
         "version": 2,
         "args": [_tensor_tree_signature(arg) for arg in tensor_args],
         "kwargs": [
-            {"name": name, "value": _tensor_tree_signature(tensor_kwargs[name])}
-            for name in sorted(tensor_kwargs)
+            {"name": name, "value": _tensor_tree_signature(tensor_kwargs[name])} for name in sorted(tensor_kwargs)
         ],
         "blocks": [
             {
@@ -232,10 +238,10 @@ def graph_pool_handle():
 
 def _make_graphed_callables(
     callables: SingleOrTuple[Callable],
-    sample_args: SingleOrTuple[Tuple[torch.Tensor, ...]],
+    sample_args: SingleOrTuple[tuple[torch.Tensor, ...]],
     num_warmup_iters: int = 3,
-    sample_kwargs: Optional[SingleOrTuple[Dict[str, Any]]] = None,
-    pool: Optional[Tuple[int, ...]] = None,
+    sample_kwargs: SingleOrTuple[dict[str, Any]] | None = None,
+    pool: tuple[int, ...] | None = None,
 ) -> SingleOrTuple[Callable]:
     """
     Helper method for `make_graphed_callables`
@@ -248,18 +254,19 @@ def _make_graphed_callables(
 
     # Default is to pass no kwargs to callables
     if sample_kwargs is None:
-        if isinstance(callables, tuple):
-            sample_kwargs = tuple({} for _ in range(len(sample_args)))
-        else:
-            sample_kwargs = {}
+        sample_kwargs = tuple({} for _ in range(len(sample_args))) if isinstance(callables, tuple) else {}
 
     # Canonicalize args as tuples
     just_one_callable = False
     if not isinstance(callables, tuple):
         just_one_callable = True
         callables = (callables,)
-        sample_args = (sample_args,)
-        sample_kwargs = (sample_kwargs,)
+        sample_args = (cast(tuple[torch.Tensor, ...], sample_args),)
+        sample_kwargs = (cast(dict[str, Any], sample_kwargs),)
+    else:
+        # A tuple of callables arrives with one positional and one keyword sample per callable.
+        sample_args = cast(tuple[tuple[torch.Tensor, ...], ...], sample_args)
+        sample_kwargs = cast(tuple[dict[str, Any], ...], sample_kwargs)
 
     # Check sizes of args
     assert len(sample_args) == len(callables)
@@ -282,7 +289,7 @@ def _make_graphed_callables(
     # Flatten callable arguments
     per_callable_kwargs_keys = [list(kwargs.keys()) for kwargs in sample_kwargs]
     flatten_sample_args = []
-    for args, kwargs, kwargs_keys in zip(sample_args, sample_kwargs, per_callable_kwargs_keys):
+    for args, kwargs, kwargs_keys in zip(sample_args, sample_kwargs, per_callable_kwargs_keys, strict=False):
         flatten_arg, _ = _tree_flatten(args)
         flatten_kwarg, _ = _tree_flatten([kwargs[key] for key in kwargs_keys])
         flatten_sample_args.append(tuple(flatten_arg + flatten_kwarg))
@@ -330,24 +337,19 @@ def _make_graphed_callables(
     visited_te_modules = set()
 
     def hook_fn(module, inputs, outputs):  # pylint: disable=unused-argument
-        """Hook fn.
-
-        Args:
-            module: The module.
-            inputs: The inputs.
-            outputs: The outputs.
-        """
         if isinstance(module, TransformerEngineBaseModule):
             visited_te_modules.add(module)
 
     # Run warmup and do the above filtering.
     with torch.cuda.stream(torch.cuda.Stream()):
-        for func_idx, func in zip(warmup_func_idx, warmup_func):
+        for func_idx, func in zip(warmup_func_idx, warmup_func, strict=False):
             args = sample_args[func_idx]
             kwargs = sample_kwargs[func_idx]
+            # Warmup hooks every submodule, so each graphed callable must be a module.
+            module_tree = cast(torch.nn.Module, func)
             for _ in range(num_warmup_iters):
                 hooks = []
-                for module in func.modules():
+                for module in module_tree.modules():
                     hook = module.register_forward_hook(hook_fn)
                     hooks.append(hook)
                 outputs, _ = _tree_flatten(func(*args, **kwargs))
@@ -356,9 +358,9 @@ def _make_graphed_callables(
                 del outputs
             # The following code is added specifically for MCore's special requirements,
             # aimed at preventing warmup from altering the control flow.
-            for module in func.modules():
+            for module in module_tree.modules():
                 if hasattr(module, "is_first_microbatch"):
-                    module.is_first_microbatch = True
+                    cast(Any, module).is_first_microbatch = True
     torch.cuda.synchronize()
 
     # All captures here share a mempool. To avoid replays corrupting each other's memory,
@@ -366,12 +368,13 @@ def _make_graphed_callables(
     # Capture forward graphs
     per_callable_static_outputs = []
     per_callable_output_unflatten_spec = []
-    graph_id = 0
-    for func, args, kwargs, fwd_graph in zip(callables, sample_args, sample_kwargs, fwd_graphs):
-        with torch.cuda.graph(fwd_graph, pool=mempool):
+    for graph_id, (func, args, kwargs, fwd_graph) in enumerate(
+        zip(callables, sample_args, sample_kwargs, fwd_graphs, strict=False)
+    ):
+        # Pool handles are opaque tokens from graph_pool_handle(); torch 2.9 stubs name them _POOL_HANDLE.
+        with torch.cuda.graph(fwd_graph, pool=cast(Any, mempool)):
             outputs = func(*args, **kwargs)
         graph_callables[graph_id] = func
-        graph_id += 1
 
         flatten_outputs, spec = _tree_flatten(outputs)
         per_callable_static_outputs.append(tuple(flatten_outputs))
@@ -386,28 +389,11 @@ def _make_graphed_callables(
         static_input_surface,
         static_outputs,
     ):
-        """Make graphed autograd function.
-
-        Args:
-            fwd_graph: The fwd graph.
-            module_params: The module params.
-            kwargs_keys: The kwargs keys.
-            len_user_args: The len user args.
-            output_unflatten_spec: The output unflatten spec.
-            static_input_surface: The static input surface.
-            static_outputs: The static outputs.
-        """
-
         class Graphed(torch.autograd.Function):
             """Autograd function for graph replay."""
 
             @staticmethod
             def forward(ctx, *inputs):
-                """Forward.
-
-                Args:
-                    ctx: The ctx.
-                """
                 # pylint: disable=missing-function-docstring
 
                 # Copy values from new tensors into static tensors
@@ -421,7 +407,6 @@ def _make_graphed_callables(
                 return tuple(o.detach() for o in static_outputs)
 
         def functionalized(*user_args, **user_kwargs):
-            """Functionalized."""
             # Check that required kwargs are provided
             for key in kwargs_keys:
                 if key not in user_kwargs:
@@ -458,17 +443,7 @@ def _make_graphed_callables(
         if isinstance(func, torch.nn.Module):
 
             def make_graphed_forward(func, graph_training_state, graphed, orig_fwd):
-                """Make graphed forward.
-
-                Args:
-                    func: The func.
-                    graph_training_state: The graph training state.
-                    graphed: The graphed.
-                    orig_fwd: The orig fwd.
-                """
-
                 def new_fwd(*user_args, **user_kwargs):
-                    """New fwd."""
                     # If the module's training-or-eval state matches what we graphed,
                     # run the graph, otherwise run the original forward method
                     if func.training == graph_training_state:
@@ -490,11 +465,11 @@ def _make_graphed_callables(
 
 def make_graphed_callables_forward(
     modules: SingleOrTuple[Callable],
-    sample_args: SingleOrTuple[Tuple[torch.Tensor, ...]],
+    sample_args: SingleOrTuple[tuple[torch.Tensor, ...]],
     num_warmup_iters: int = 3,
-    sample_kwargs: Optional[SingleOrTuple[Dict[str, Any]]] = None,
-    pool: Optional[Tuple[int, ...]] = None,
-) -> Union[Callable, Tuple[Callable, ...]]:
+    sample_kwargs: SingleOrTuple[dict[str, Any]] | None = None,
+    pool: tuple[int, ...] | None = None,
+) -> Callable | tuple[Callable, ...]:
     """
     Make CUDA graph version of Transformer Engine modules
     A variation of PyTorch's `make_graphed_callables` utility function.
@@ -527,10 +502,7 @@ def make_graphed_callables_forward(
             assert isinstance(module, torch.nn.Module), f"Graphing for {type(module)} is not supported."
             forward_funcs.append(module)
 
-        if just_one_callable:
-            forward_funcs = forward_funcs[0]
-        else:
-            forward_funcs = tuple(forward_funcs)
+        forward_funcs = forward_funcs[0] if just_one_callable else tuple(forward_funcs)
 
         # Save RNG state so graph warmup never changes subsequent sampling.
         graph_safe_rng = graph_safe_rng_available()
@@ -556,10 +528,11 @@ def make_graphed_callables_forward(
             # Ensures warmup does not affect numerics for ops such as dropout,
             # including when capture itself raises.
             if graph_safe_rng:
-                for generator, state in zip(generators, original_rng_states):
+                for generator, state in zip(generators, original_rng_states, strict=False):
                     generator.set_state(state)
             else:
-                torch.cuda.set_rng_state(original_rng_states)
+                # Without graph-safe generators only the default CUDA RNG state was saved.
+                torch.cuda.set_rng_state(cast(torch.Tensor, original_rng_states))
     finally:
         set_capture_end()
 
@@ -574,30 +547,21 @@ def create_cuda_graph(
     blocks: torch.nn.ModuleList,
     tensor_args: list[Any],
     tensor_kwargs: dict[str, Any],
-    extra_key: Optional[str] = None,
+    extra_key: str | None = None,
 ) -> str:
-    """Create cuda graph.
+    """Capture forward CUDA graphs for ``blocks`` once per input contract and return the cache key.
 
-    Args:
-        cuda_graphs_storage: The cuda graphs storage.
-        blocks: The blocks.
-        tensor_args: The tensor args.
-        tensor_kwargs: The tensor kwargs.
-        extra_key: The extra key.
+    Graphs are captured on dummy inputs with the shapes, strides and dtypes of ``tensor_args`` and
+    ``tensor_kwargs``; ``None`` keyword values are dropped. The captured callables, one per block, are
+    stored in ``cuda_graphs_storage`` under a key built from the block classes, the input layouts,
+    the grad, autocast, matmul-precision and distributed state, and ``extra_key``.
 
-    Returns:
-        The return value.
+    Raises:
+        TypeError: A positional argument is ``None``, an input leaf is not a tensor, or a tensor is
+            not strided or has named dimensions.
     """
 
     def _make_dummy_tensor_like(t: torch.Tensor) -> torch.Tensor:
-        """Helper function to make dummy tensor like.
-
-        Args:
-            t: The t.
-
-        Returns:
-            The return value.
-        """
         if t.layout != torch.strided:
             raise TypeError(f"create_cuda_graph only supports strided tensors; got {t.layout}")
         if any(name is not None for name in t.names):
@@ -628,14 +592,6 @@ def create_cuda_graph(
         return dummy.requires_grad_(t.requires_grad)
 
     def _make_dummy_tree(x: Any) -> Any:
-        """Helper function to make dummy tree.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         flat, spec = _tree_flatten(x)
         dummy_flat: list[torch.Tensor] = []
         for leaf in flat:
@@ -648,8 +604,7 @@ def create_cuda_graph(
 
     if any(arg is None for arg in tensor_args):
         raise TypeError(
-            "create_cuda_graph cannot omit positional arguments containing None; "
-            "pass optional tensor inputs by keyword"
+            "create_cuda_graph cannot omit positional arguments containing None; pass optional tensor inputs by keyword"
         )
     real_args = list(tensor_args)
     real_kwargs = {k: v for k, v in tensor_kwargs.items() if v is not None}

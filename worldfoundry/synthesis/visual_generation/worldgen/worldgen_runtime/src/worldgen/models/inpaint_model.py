@@ -1,6 +1,6 @@
 import os
+
 import numpy as np
-import cv2
 import torch
 
 LAMA_MODEL_URL = os.environ.get(
@@ -9,23 +9,27 @@ LAMA_MODEL_URL = os.environ.get(
 )
 LAMA_MODEL_MD5 = os.environ.get("LAMA_MODEL_MD5", "e3aa4aaa15225a33ec84f9f4bc47e500")
 
+
 class LaMa:
     @staticmethod
     def download():
         from iopaint.helper import download_model
+
         download_model(LAMA_MODEL_URL, LAMA_MODEL_MD5)
 
     def init_model(self, device, **kwargs):
         from iopaint.helper import load_jit_model
+
         self.model = load_jit_model(LAMA_MODEL_URL, device, LAMA_MODEL_MD5).eval()
 
-    def __init__(self, device: torch.device = 'cuda'):
+    def __init__(self, device: torch.device = "cuda"):
         self.device = device
         self.init_model(device)
 
     @staticmethod
     def is_downloaded() -> bool:
         from iopaint.helper import get_cache_path_by_url
+
         return os.path.exists(get_cache_path_by_url(LAMA_MODEL_URL))
 
     def infer(self, image, mask):
@@ -35,6 +39,7 @@ class LaMa:
         return: BGR IMAGE
         """
         from iopaint.helper import norm_img
+
         image = norm_img(image)
         mask = norm_img(mask)
 

@@ -1,11 +1,13 @@
 # Inference-only RoboFlamingo source retained in-tree.
+import copy
+
 import torch
 from einops import rearrange, repeat
 from torch import nn
-import copy
-from open_flamingo.src.helpers import PerceiverResampler
+
+from worldfoundry.base_models.llm_mllm_core.mllm.open_flamingo.src.helpers import PerceiverResampler
+
 from .action_head import DeterministicDecoder, DiffusionDecoder, FCDecoder, GPTDecoder
-from collections import namedtuple
 
 
 class MPTFlamingo(nn.Module):
@@ -21,7 +23,7 @@ class MPTFlamingo(nn.Module):
         # this is the window size sampled from the episode
         window_size: int = 8,
         use_gripper=False,
-        fusion_mode='',
+        fusion_mode="",
         sep_resampler=False,
         use_state=False,
         use_diff=False,
@@ -35,19 +37,19 @@ class MPTFlamingo(nn.Module):
         pad_length=-1,
         multi_step_action=1,
         sep_lm_head=False,
-        return_feature = False,
-        llm='llama',
-        pooling='max',
+        return_feature=False,
+        llm="llama",
+        pooling="max",
         residual=False,
         tcp_rel=False,
         replan=-1,
-        decoder_type='lstm',
+        decoder_type="lstm",
         hidden_size=None,
         fwd_pred=False,
         fwd_pred_hand=False,
         global_latent=10,
         no_image_patch=False,
-        refresh=-1
+        refresh=-1,
     ):
         """
         Args:
@@ -72,7 +74,7 @@ class MPTFlamingo(nn.Module):
         self.window_size = window_size
         self.tcp_rel = tcp_rel
         self.act_step = multi_step_action
-        print('window size: {}'.format(window_size))
+        print(f"window size: {window_size}")
         self.vision_encoder = vision_encoder
         self.perceiver = PerceiverResampler(dim=self.vis_dim)
         self.sep_resampler = sep_resampler
@@ -92,7 +94,7 @@ class MPTFlamingo(nn.Module):
         print(self.vis_dim, self.lang_dim)
         print(lang_encoder.config)
         if not debug:
-            if 'llama' in llm:
+            if "llama" in llm:
                 self.lang_encoder.init_flamingo(
                     media_token_id=media_token_id,
                     vis_hidden_size=self.vis_dim,
@@ -118,43 +120,63 @@ class MPTFlamingo(nn.Module):
             self.frame_embs = nn.Parameter(torch.randn(self.window_size, self.vis_dim))
         # To-do: nn archiecture for actor
         self.llm = llm
-        if llm=='llama':
-            in_features = lang_encoder.lm_head.in_features
-        else:
-            in_features = self.lang_dim
+        in_features = lang_encoder.lm_head.in_features if llm == "llama" else self.lang_dim
         self.use_diff = use_diff
         self.decoder_type = decoder_type
-        if decoder_type == 'lstm':
-            lm_head = DeterministicDecoder(in_features, self.window_size, 
-            use_diff=use_diff, last_action=last_action, fusion_mode=fusion_mode, use_state=use_state, return_feature=return_feature, multi_step_action=multi_step_action, pooling=pooling)
+        if decoder_type == "lstm":
+            lm_head = DeterministicDecoder(
+                in_features,
+                self.window_size,
+                use_diff=use_diff,
+                last_action=last_action,
+                fusion_mode=fusion_mode,
+                use_state=use_state,
+                return_feature=return_feature,
+                multi_step_action=multi_step_action,
+                pooling=pooling,
+            )
             self.lang_encoder.lm_head = lm_head
-        elif decoder_type == 'fc':
-            if use_hist:
-                self.lang_encoder.lm_head = self.action_head = FCDecoder(in_features, self.window_size, 
-                use_diff=use_diff, last_action=last_action, fusion_mode=fusion_mode, use_state=use_state, return_feature=return_feature, multi_step_action=multi_step_action)
-            elif 'vit_concat' in fusion_mode:
-                self.lang_encoder.lm_head = self.action_head = FCDecoder(in_features, self.window_size, 
-                use_diff=use_diff, last_action=last_action, fusion_mode=fusion_mode, use_state=use_state, return_feature=return_feature, multi_step_action=multi_step_action)
+        elif decoder_type == "fc":
+            if use_hist or "vit_concat" in fusion_mode:
+                self.lang_encoder.lm_head = self.action_head = FCDecoder(
+                    in_features,
+                    self.window_size,
+                    use_diff=use_diff,
+                    last_action=last_action,
+                    fusion_mode=fusion_mode,
+                    use_state=use_state,
+                    return_feature=return_feature,
+                    multi_step_action=multi_step_action,
+                )
             else:
                 raise NotImplementedError
-        elif decoder_type == 'diffusion':
+        elif decoder_type == "diffusion":
             if use_diff:
                 self.diffusion_model = DiffusionDecoder(
-                    self.action_head.hidden_size, 
+                    self.action_head.hidden_size,
                     self.window_size,
-                    input_dim=self.action_head.out_features+1,
+                    input_dim=self.action_head.out_features + 1,
                     n_timesteps=n_timesteps,
                     horizon=diff_horizon,
                     predict_epsilon=predict_epsilon,
                 )
             else:
                 raise NotImplementedError
-        elif decoder_type=='gpt':
-            lm_head = GPTDecoder(in_features, self.window_size, use_diff=use_diff, last_action=last_action, fusion_mode=fusion_mode, multi_step_action=multi_step_action, pooling=pooling, hidden_size=hidden_size)
+        elif decoder_type == "gpt":
+            lm_head = GPTDecoder(
+                in_features,
+                self.window_size,
+                use_diff=use_diff,
+                last_action=last_action,
+                fusion_mode=fusion_mode,
+                multi_step_action=multi_step_action,
+                pooling=pooling,
+                hidden_size=hidden_size,
+            )
             self.lang_encoder.lm_head = self.action_head = lm_head
         else:
             raise NotImplementedError
-        
+
         sep_lm_head = True
         self.sep_lm_head = sep_lm_head
         if sep_lm_head:
@@ -170,10 +192,10 @@ class MPTFlamingo(nn.Module):
         clear_conditioned_layers: bool = True,
         past_key_values=None,
         use_cache: bool = False,
-        vision_gripper = None,
-        state_tensor = None,
-        return_feature = False,
-        policy_mask=None
+        vision_gripper=None,
+        state_tensor=None,
+        return_feature=False,
+        policy_mask=None,
     ):
         """
         Forward pass of Flamingo.
@@ -194,18 +216,14 @@ class MPTFlamingo(nn.Module):
             use_cache: whether to use cached key values. See use_cache
                 documentation in Hugging Face CausalLM models.
         """
-        assert (
-            vision_x is not None
-        ) or use_cached_vision_x, (
+        assert (vision_x is not None) or use_cached_vision_x, (
             "Must provide either vision_x or use_cached_vision_x to True."
         )
 
         if use_cached_vision_x:
             # Case: use cached; vision_x should be cached and other
             # vision-related inputs should not be provided.
-            assert (
-                vision_x is None
-            ), "Expect vision_x to be None when use_cached_vision_x is True."
+            assert vision_x is None, "Expect vision_x to be None when use_cached_vision_x is True."
             assert self.lang_encoder.is_conditioned()
 
         else:
@@ -213,28 +231,28 @@ class MPTFlamingo(nn.Module):
             if self.use_hist:
                 self._encode_history_vision_post_fusion(vision_x, vision_gripper)
             else:
-                if not self.use_gripper or self.fusion_mode == 'two_way':
+                if not self.use_gripper or self.fusion_mode == "two_way":
                     vision_x = self._encode_vision_x(vision_x=vision_x)
                 else:
-                    if self.fusion_mode == 'pre':
+                    if self.fusion_mode == "pre":
                         self._encode_multi_vision_pre_fusion(vision_x, vision_gripper)
-                    elif self.fusion_mode == 'post':
+                    elif self.fusion_mode == "post":
                         self._encode_multi_vision_post_fusion(vision_x, vision_gripper)
-                    elif self.fusion_mode == 'vit_concat':
+                    elif self.fusion_mode == "vit_concat":
                         self._encode_history_vision_fc_post(vision_x, vision_gripper)
-        
+
         output = self.lang_encoder(
             input_ids=lang_x,
             attention_mask=attention_mask.bool(),
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_hidden_states=True
+            output_hidden_states=True,
         )
 
         output_hs = output.hidden_states[-1]
         output_hs = self.lm_head(output_hs, state_tensor=state_tensor, return_feature=return_feature)
         output.logits = output_hs
-        
+
         return output
 
     def _encode_vision_x(self, vision_x: torch.Tensor):
@@ -287,7 +305,9 @@ class MPTFlamingo(nn.Module):
         vision_x = rearrange(vision_x, "(b T F) v d -> b T F v d", b=b, T=T, F=F)
         return vision_x
 
-    def _encode_multi_vision_pre_fusion(self, vision_rgb: torch.Tensor, vision_gripper: torch.Tensor, state_tensor=None):
+    def _encode_multi_vision_pre_fusion(
+        self, vision_rgb: torch.Tensor, vision_gripper: torch.Tensor, state_tensor=None
+    ):
         """
         Compute media tokens from vision input by passing it through vision encoder and conditioning language model.
         Args:
@@ -311,7 +331,9 @@ class MPTFlamingo(nn.Module):
 
         return vision_x
 
-    def _encode_multi_vision_post_fusion(self, vision_rgb: torch.Tensor, vision_gripper: torch.Tensor, state_tensor=None):
+    def _encode_multi_vision_post_fusion(
+        self, vision_rgb: torch.Tensor, vision_gripper: torch.Tensor, state_tensor=None
+    ):
         """
         Compute media tokens from vision input by passing it through vision encoder and conditioning language model.
         Args:
@@ -371,7 +393,9 @@ class MPTFlamingo(nn.Module):
 
         return vision_x
 
-    def _encode_history_vision_post_fusion(self, vision_rgb: torch.Tensor, vision_gripper: torch.Tensor, state_tensor=None):
+    def _encode_history_vision_post_fusion(
+        self, vision_rgb: torch.Tensor, vision_gripper: torch.Tensor, state_tensor=None
+    ):
         """
         Compute media tokens from vision input by passing it through vision encoder and conditioning language model.
         Args:
@@ -389,16 +413,17 @@ class MPTFlamingo(nn.Module):
         bs = int(vision_rgb.shape[0] // self.window_size)
         vision_rgb = vision_rgb.view(bs, self.window_size, *vision_rgb.shape[1:])
         _, _, T, p, v_tok, dim = vision_rgb.shape[:6]
-        frame_embs = repeat(self.frame_embs, 'F d -> b F T p v d', b=bs, T=T, p=p, v=v_tok)
+        frame_embs = repeat(self.frame_embs, "F d -> b F T p v d", b=bs, T=T, p=p, v=v_tok)
         vision_rgb = vision_rgb + frame_embs
-        vision_rgb = rearrange(vision_rgb, 'b F T p v d -> (b F) T p v d')
+        vision_rgb = rearrange(vision_rgb, "b F T p v d -> (b F) T p v d")
         vision_rgb = self.perceiver(vision_rgb)
 
-        vision_gripper = vision_gripper.view(vision_gripper.shape[0] // self.window_size, self.window_size,
-                                             *vision_gripper.shape[1:])
-        frame_embs = repeat(self.frame_embs, 'F d -> b F T p v d', b=bs, T=T, p=p, v=v_tok)
+        vision_gripper = vision_gripper.view(
+            vision_gripper.shape[0] // self.window_size, self.window_size, *vision_gripper.shape[1:]
+        )
+        frame_embs = repeat(self.frame_embs, "F d -> b F T p v d", b=bs, T=T, p=p, v=v_tok)
         vision_gripper = vision_gripper + frame_embs
-        vision_gripper = rearrange(vision_gripper, 'b F T p v d -> (b F) T p v d')
+        vision_gripper = rearrange(vision_gripper, "b F T p v d -> (b F) T p v d")
         if self.sep_resampler:
             vision_gripper = self.perceiver_gripper(vision_gripper)
         else:
@@ -412,7 +437,7 @@ class MPTFlamingo(nn.Module):
             layer.condition_vis_x(vision_x)
 
         return vision_x
-    
+
     def _encode_history_vision_fc_post(self, vision_rgb: torch.Tensor, vision_gripper: torch.Tensor, state_tensor=None):
         """
         Compute media tokens from vision input by passing it through vision encoder and conditioning language model.
@@ -426,26 +451,26 @@ class MPTFlamingo(nn.Module):
 
         rearrange code based on https://github.com/dhansmair/flamingo-mini
         """
-        bs = int(vision_rgb.shape[0] // self.window_size)
+        _bs = int(vision_rgb.shape[0] // self.window_size)
         vision_rgb = self._encode_vision(vision_rgb)
-        vision_rgb = self.perceiver(vision_rgb) # BxL, T, n, d
-        vision_rgb = vision_rgb.view(-1, self.window_size, *vision_rgb.shape[1:]) # B, L, T, n, d
-        vision_rgb = rearrange(vision_rgb, 'b L T n d -> b T (n L) d')
+        vision_rgb = self.perceiver(vision_rgb)  # BxL, T, n, d
+        vision_rgb = vision_rgb.view(-1, self.window_size, *vision_rgb.shape[1:])  # B, L, T, n, d
+        vision_rgb = rearrange(vision_rgb, "b L T n d -> b T (n L) d")
 
         vision_gripper = self._encode_vision(vision_gripper)
         if self.sep_resampler:
             vision_gripper = self.perceiver_gripper(vision_gripper)
         else:
             vision_gripper = self.perceiver(vision_gripper)
-        vision_gripper = vision_gripper.view(-1, self.window_size, *vision_gripper.shape[1:]) # B, L, T, n, d
-        vision_gripper = rearrange(vision_gripper, 'b L T n d -> b T (n L) d')
+        vision_gripper = vision_gripper.view(-1, self.window_size, *vision_gripper.shape[1:])  # B, L, T, n, d
+        vision_gripper = rearrange(vision_gripper, "b L T n d -> b T (n L) d")
 
         vision_x = torch.cat([vision_rgb, vision_gripper], dim=2)
 
         if self.use_state and state_tensor is not None:
             state_tensor = self.state_fc(state_tensor)
             vision_x = torch.cat([vision_x, state_tensor], dim=2)  # reshapes to (b, T, 2*n+1, d)
-        
+
         for layer in self.lang_encoder._get_decoder_layers():
             layer.condition_vis_x(vision_x)
 

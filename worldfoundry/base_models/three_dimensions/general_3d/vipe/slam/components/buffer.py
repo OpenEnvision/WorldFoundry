@@ -18,8 +18,6 @@
 # Licensed under the MIT License.
 # -------------------------------------------------------------------------------------------------
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> components -> buffer.py functionality."""
-
 import logging
 
 import numpy as np
@@ -28,14 +26,20 @@ import torch
 from einops import rearrange
 from omegaconf.dictconfig import DictConfig
 
+# isort: split
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext import slam_ext
+
+# isort: split
+# isort: split
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext.lietorch import SE3
+
+# isort: split
 from worldfoundry.base_models.three_dimensions.depth import DepthEstimationInput, DepthEstimationModel
 from worldfoundry.base_models.three_dimensions.depth.base import DepthType
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.cameras import CameraType
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.logging import pbar
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.misc import unpack_optional
-from worldfoundry.studio.visualization.plugins.scene3d.projection import (
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.visualization import (
     POINTS_STENCIL,
     draw_lines_batch,
     draw_points_batch,
@@ -53,7 +57,6 @@ logger = logging.getLogger(__name__)
 
 
 class GraphBuffer:
-    """Graph buffer implementation."""
     def __init__(
         self,
         height: int,
@@ -65,22 +68,8 @@ class GraphBuffer:
         ba_config: DictConfig,
         sparse_tracks: SparseTracks,
         camera_type: CameraType,
-        device: torch.device = torch.device("cuda"),
+        device: torch.device = torch.device("cuda"),  # noqa: B008 - Default evaluated once at definition, as upstream.
     ):
-        """Init.
-
-        Args:
-            height: The height.
-            width: The width.
-            n_views: The n views.
-            buffer_size: The buffer size.
-            init_disp: The init disp.
-            cross_view_idx: The cross view idx.
-            ba_config: The ba config.
-            sparse_tracks: The sparse tracks.
-            camera_type: The camera type.
-            device: The device.
-        """
         if cross_view_idx is None:
             cross_view_idx = [(i + 1) % n_views for i in range(n_views)]
 
@@ -201,36 +190,26 @@ class GraphBuffer:
 
     @property
     def flattened_disps(self):
-        """Flattened disps."""
         return rearrange(self.disps, "n v h w -> (n v) h w")
 
     @property
     def flattened_disps_sens(self):
-        """Flattened disps sens."""
         return rearrange(self.disps_sens, "n v h w -> (n v) h w")
 
     @property
     def flattened_fmaps(self):
-        """Flattened fmaps."""
         return rearrange(self.fmaps, "n v c h w -> (n v) c h w")
 
     @property
     def flattened_nets(self):
-        """Flattened nets."""
         return rearrange(self.nets, "n v c h w -> (n v) c h w")
 
     @property
     def flattened_inps(self):
-        """Flattened inps."""
         return rearrange(self.inps, "n v c h w -> (n v) c h w")
 
     @property
     def K(self) -> np.ndarray:
-        """K.
-
-        Returns:
-            The return value.
-        """
         intr_np = self.camera_type.build_camera_model(self.intrinsics).pinhole().intrinsics.cpu().numpy()
         k_mat = np.eye(3)[None].repeat(self.n_views, axis=0)
         k_mat[:, 0, 0] = intr_np[:, 0]
@@ -241,22 +220,12 @@ class GraphBuffer:
 
     @property
     def K_dense_disp(self) -> np.ndarray:
-        """K dense disp.
-
-        Returns:
-            The return value.
-        """
         k_mat = self.K
         k_mat[:, 0] /= 8
         k_mat[:, 1] /= 8
         return k_mat
 
     def remove_second_newest(self, ix: int):
-        """Remove second newest.
-
-        Args:
-            ix: The ix.
-        """
         assert ix == self.n_frames - 2
         self.tstamp[ix] = self.tstamp[ix + 1]
         self.images[ix] = self.images[ix + 1]
@@ -272,12 +241,6 @@ class GraphBuffer:
         self.n_frames -= 1
 
     def update_disps_sens(self, depth_model: DepthEstimationModel | None, frame_idx: int | None):
-        """Update disps sens.
-
-        Args:
-            depth_model: The depth model.
-            frame_idx: The frame idx.
-        """
         if depth_model is None:
             return
 
@@ -428,39 +391,7 @@ class GraphBuffer:
         weight_tracks: float,
         verbose: bool,
     ) -> None:
-        """Helper function to fused ba.
-
-        Args:
-            target: The target.
-            weight: The weight.
-            disp_damping: The disp damping.
-            ii: The ii.
-            jj: The jj.
-            t0: The t0.
-            t1: The t1.
-            n_iters: The n iters.
-            pose_damping: The pose damping.
-            pose_ep: The pose ep.
-            motion_only: The motion only.
-            limited_disp: The limited disp.
-            optimize_intrinsics: The optimize intrinsics.
-            optimize_rig_rotation: The optimize rig rotation.
-            weight_dense_disp: The weight dense disp.
-            weight_tracks: The weight tracks.
-            verbose: The verbose.
-
-        Returns:
-            The return value.
-        """
         def fail(reason: str) -> None:
-            """Fail.
-
-            Args:
-                reason: The reason.
-
-            Returns:
-                The return value.
-            """
             raise RuntimeError(f"Fused BA is enabled, but {reason}. Set ba.fused=false to use the generic BA solver.")
 
         if self.n_views != 1 or self.camera_type != CameraType.PINHOLE:
@@ -568,12 +499,6 @@ class GraphBuffer:
             self.intrinsics[0, :4] = intrinsics / intrinsics_scale
 
     def expand_tracks_edges(self, ii: torch.Tensor, tracks_length: int):
-        """Expand tracks edges.
-
-        Args:
-            ii: The ii.
-            tracks_length: The tracks length.
-        """
         iis = [ii] * (tracks_length - 1)
         jjs = [ii - m - 1 for m in range(tracks_length - 1)]
         ii_cat, jj_cat = torch.cat(iis), torch.cat(jjs)
@@ -861,16 +786,6 @@ class GraphBuffer:
         t_range: torch.Tensor | None = None,
         is_local: bool = False,
     ) -> SLAMMap:
-        """Extract slam map.
-
-        Args:
-            filter_thresh: The filter thresh.
-            t_range: The t range.
-            is_local: The is local.
-
-        Returns:
-            The return value.
-        """
         if t_range is None:
             t_range = torch.arange(self.n_frames, device=self.device)
 
@@ -918,7 +833,6 @@ class GraphBuffer:
         )
 
     def log_tracks(self):
-        """Log tracks."""
         if not self.sparse_tracks.enabled:
             return
 
@@ -977,11 +891,6 @@ class GraphBuffer:
                 rr.log(f"world/tracks_v{v}", rr.Image(canvas).compress())  # type: ignore
 
     def log(self, vis_thresh: float):
-        """Log.
-
-        Args:
-            vis_thresh: The vis thresh.
-        """
         (dirty_index,) = torch.where(self.dirty)
         self.dirty[dirty_index] = False
 

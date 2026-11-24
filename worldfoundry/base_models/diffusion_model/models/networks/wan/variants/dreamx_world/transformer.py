@@ -4,41 +4,31 @@ Wan 2.x Fun-style stem with optional :class:`PropeSelfAttention`.
 Causal rollout is :mod:`.causal`.  Adds optional pose RoPE; no VACE.
 """
 
-import glob
-import json
 import math
-import os
 import types
-import warnings
-import logging
-from typing import Optional, Union
 
-import numpy as np
 import torch
 import torch.cuda.amp as amp
 import torch.nn as nn
-import torch.distributed as dist
-
-from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
-from worldfoundry.core.nn import ModuleDeviceDtypeMixin
 
 from worldfoundry.base_models.diffusion_model.models.networks.wan.mixins import (
     WanTransformerMethodsMixin,
 )
-from worldfoundry.core.distributed.sequence_parallel.runtime import (
-    get_sequence_parallel_rank,
-    get_sequence_parallel_world_size,
-    get_sp_group,
-)
-
-from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.camera_attention import attention
-from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.minwm.prope import prope_qkv
 from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_22 import (
     WanLayerNorm,
     WanRMSNorm,
     rope_params,
     sinusoidal_embedding_1d,
 )
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.camera_attention import attention
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.minwm.prope import prope_qkv
+from worldfoundry.core.distributed.sequence_parallel.runtime import (
+    get_sequence_parallel_rank,
+    get_sequence_parallel_world_size,
+    get_sp_group,
+)
+from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
+from worldfoundry.core.nn import ModuleDeviceDtypeMixin
 
 
 @amp.autocast(enabled=False)
@@ -55,14 +45,15 @@ def rope_apply(x, grid_sizes, freqs):
         seq_len = f * h * w
 
         # precompute multipliers
-        x_i = torch.view_as_complex(x[i, :seq_len].to(torch.float32).reshape(
-            seq_len, n, -1, 2))
-        freqs_i = torch.cat([
-            freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
-            freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
-            freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1)
-        ],
-                            dim=-1).reshape(seq_len, 1, -1)
+        x_i = torch.view_as_complex(x[i, :seq_len].to(torch.float32).reshape(seq_len, n, -1, 2))
+        freqs_i = torch.cat(
+            [
+                freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
+                freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
+                freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1),
+            ],
+            dim=-1,
+        ).reshape(seq_len, 1, -1)
 
         # apply rotary embedding
         x_i = torch.view_as_real(x_i * freqs_i).flatten(2)
@@ -80,13 +71,7 @@ def rope_apply_qk(q, k, grid_sizes, freqs):
 
 
 class WanSelfAttention(nn.Module):
-
-    def __init__(self,
-                 dim,
-                 num_heads,
-                 window_size=(-1, -1),
-                 qk_norm=True,
-                 eps=1e-6):
+    def __init__(self, dim, num_heads, window_size=(-1, -1), qk_norm=True, eps=1e-6):
         assert dim % num_heads == 0
         super().__init__()
         self.dim = dim
@@ -125,12 +110,7 @@ class WanSelfAttention(nn.Module):
 
         q, k = rope_apply_qk(q, k, grid_sizes, freqs)
 
-        x = attention(
-            q.to(dtype),
-            k.to(dtype),
-            v=v.to(dtype),
-            k_lens=seq_lens,
-            window_size=self.window_size)
+        x = attention(q.to(dtype), k.to(dtype), v=v.to(dtype), k_lens=seq_lens, window_size=self.window_size)
         x = x.to(dtype)
 
         # output
@@ -145,12 +125,7 @@ class PropeSelfAttention(nn.Module):
 
     """
 
-    def __init__(self,
-                 dim,
-                 attn_dim,
-                 num_heads,
-                 qk_norm=True,
-                 eps=1e-6):
+    def __init__(self, dim, attn_dim, num_heads, qk_norm=True, eps=1e-6):
         super().__init__()
         assert attn_dim % num_heads == 0
         self.dim = dim
@@ -185,7 +160,6 @@ class PropeSelfAttention(nn.Module):
         num_heads = self.num_heads
         head_dim = self.head_dim
 
-
         # q/k/v projections: [B, L, N, D]
         q = self.norm_q(self.q_proj(x)).view(batch_size, seq_len, num_heads, head_dim)
         k = self.norm_k(self.k_proj(x)).view(batch_size, seq_len, num_heads, head_dim)
@@ -198,9 +172,11 @@ class PropeSelfAttention(nn.Module):
 
         # apply PRoPE positional encoding
         q, k, v, apply_fn_o = prope_qkv(
-            q, k, v,
-            viewmats=cam_emb['viewmats'],
-            Ks=cam_emb['K'],
+            q,
+            k,
+            v,
+            viewmats=cam_emb["viewmats"],
+            Ks=cam_emb["K"],
         )
 
         # attention: expects [B, L, N, D]
@@ -218,11 +194,10 @@ class PropeSelfAttention(nn.Module):
         out = out.flatten(2)
         out = self.out_proj(out)
 
-
         return out
 
-class WanT2VCrossAttention(WanSelfAttention):
 
+class WanT2VCrossAttention(WanSelfAttention):
     def forward(self, x, context, context_lens, dtype=torch.bfloat16, t=0):
         r"""
         Args:
@@ -238,12 +213,7 @@ class WanT2VCrossAttention(WanSelfAttention):
         v = self.v(context.to(dtype)).view(b, -1, n, d)
 
         # compute attention
-        x = attention(
-            q.to(dtype),
-            k.to(dtype),
-            v.to(dtype),
-            k_lens=context_lens
-        )
+        x = attention(q.to(dtype), k.to(dtype), v.to(dtype), k_lens=context_lens)
         x = x.to(dtype)
 
         # output
@@ -253,13 +223,7 @@ class WanT2VCrossAttention(WanSelfAttention):
 
 
 class WanI2VCrossAttention(WanSelfAttention):
-
-    def __init__(self,
-                 dim,
-                 num_heads,
-                 window_size=(-1, -1),
-                 qk_norm=True,
-                 eps=1e-6):
+    def __init__(self, dim, num_heads, window_size=(-1, -1), qk_norm=True, eps=1e-6):
         super().__init__(dim, num_heads, window_size, qk_norm, eps)
 
         self.k_img = nn.Linear(dim, dim)
@@ -285,20 +249,10 @@ class WanI2VCrossAttention(WanSelfAttention):
         k_img = self.norm_k_img(self.k_img(context_img.to(dtype))).view(b, -1, n, d)
         v_img = self.v_img(context_img.to(dtype)).view(b, -1, n, d)
 
-        img_x = attention(
-            q.to(dtype),
-            k_img.to(dtype),
-            v_img.to(dtype),
-            k_lens=None
-        )
+        img_x = attention(q.to(dtype), k_img.to(dtype), v_img.to(dtype), k_lens=None)
         img_x = img_x.to(dtype)
         # compute attention
-        x = attention(
-            q.to(dtype),
-            k.to(dtype),
-            v.to(dtype),
-            k_lens=context_lens
-        )
+        x = attention(q.to(dtype), k.to(dtype), v.to(dtype), k_lens=context_lens)
         x = x.to(dtype)
 
         # output
@@ -331,24 +285,25 @@ class WanCrossAttention(WanSelfAttention):
 
 
 WAN_CROSSATTENTION_CLASSES = {
-    't2v_cross_attn': WanT2VCrossAttention,
-    'i2v_cross_attn': WanI2VCrossAttention,
-    'cross_attn': WanCrossAttention,
+    "t2v_cross_attn": WanT2VCrossAttention,
+    "i2v_cross_attn": WanI2VCrossAttention,
+    "cross_attn": WanCrossAttention,
 }
 
 
 class WanAttentionBlock(nn.Module):
-
-    def __init__(self,
-                 cross_attn_type,
-                 dim,
-                 ffn_dim,
-                 num_heads,
-                 window_size=(-1, -1),
-                 qk_norm=True,
-                 cross_attn_norm=False,
-                 eps=1e-6,
-                 **kwargs):
+    def __init__(
+        self,
+        cross_attn_type,
+        dim,
+        ffn_dim,
+        num_heads,
+        window_size=(-1, -1),
+        qk_norm=True,
+        cross_attn_norm=False,
+        eps=1e-6,
+        **kwargs,
+    ):
         super().__init__()
         self.dim = dim
         self.ffn_dim = ffn_dim
@@ -358,31 +313,22 @@ class WanAttentionBlock(nn.Module):
         self.cross_attn_norm = cross_attn_norm
         self.eps = eps
 
-        self.add_control_adapter = kwargs.get('add_control_adapter', False)
-        self.cam_method = kwargs.get('cam_method', None)
-        self.attn_compress = kwargs.get('attn_compress', 1)
-        self.layer_idx = kwargs.get('layer_idx', None)
-        cam_self_attn_layers = kwargs.get('cam_self_attn_layers', None)
+        self.add_control_adapter = kwargs.get("add_control_adapter", False)
+        self.cam_method = kwargs.get("cam_method")
+        self.attn_compress = kwargs.get("attn_compress", 1)
+        self.layer_idx = kwargs.get("layer_idx")
+        cam_self_attn_layers = kwargs.get("cam_self_attn_layers")
 
         # layers
         self.norm1 = WanLayerNorm(dim, eps)
-        self.self_attn = WanSelfAttention(dim, num_heads, window_size, qk_norm,
-                                          eps)
-        self.norm3 = WanLayerNorm(
-            dim, eps,
-            elementwise_affine=True) if cross_attn_norm else nn.Identity()
-        self.cross_attn = WAN_CROSSATTENTION_CLASSES[cross_attn_type](dim,
-                                                                      num_heads,
-                                                                      (-1, -1),
-                                                                      qk_norm,
-                                                                      eps)
+        self.self_attn = WanSelfAttention(dim, num_heads, window_size, qk_norm, eps)
+        self.norm3 = WanLayerNorm(dim, eps, elementwise_affine=True) if cross_attn_norm else nn.Identity()
+        self.cross_attn = WAN_CROSSATTENTION_CLASSES[cross_attn_type](dim, num_heads, (-1, -1), qk_norm, eps)
         self.norm2 = WanLayerNorm(dim, eps)
-        self.ffn = nn.Sequential(
-            nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'),
-            nn.Linear(ffn_dim, dim))
+        self.ffn = nn.Sequential(nn.Linear(dim, ffn_dim), nn.GELU(approximate="tanh"), nn.Linear(ffn_dim, dim))
 
         # parallel PRoPE self-attention branch
-        add_cam_attn = self.add_control_adapter and self.cam_method == 'prope'
+        add_cam_attn = self.add_control_adapter and self.cam_method == "prope"
         if add_cam_attn and cam_self_attn_layers is not None:
             add_cam_attn = self.layer_idx in cam_self_attn_layers
         if add_cam_attn:
@@ -432,7 +378,7 @@ class WanAttentionBlock(nn.Module):
         y = self.self_attn(temp_x, seq_lens, grid_sizes, freqs, dtype)
 
         # parallel PRoPE branch (v2 design)
-        if hasattr(self, 'cam_self_attn') and cam_emb is not None:
+        if hasattr(self, "cam_self_attn") and cam_emb is not None:
             # print(f'temp_x: {temp_x.shape}')
             # print(f'cam_emb["viewmats"]: {cam_emb["viewmats"].shape}')
             # print(f'cam_emb["K"]: {cam_emb["K"].shape}')
@@ -458,7 +404,6 @@ class WanAttentionBlock(nn.Module):
 
 
 class Head(nn.Module):
-
     def __init__(self, dim, out_dim, patch_size, eps=1e-6):
         super().__init__()
         self.dim = dim
@@ -486,24 +431,25 @@ class Head(nn.Module):
         else:
             e = (self.modulation + e.unsqueeze(1)).chunk(2, dim=1)
 
-        x = (self.head(self.norm(x) * (1 + e[1]) + e[0]))
+        x = self.head(self.norm(x) * (1 + e[1]) + e[0])
         return x
 
 
 class MLPProj(torch.nn.Module):
-
     def __init__(self, in_dim, out_dim):
         super().__init__()
 
         self.proj = torch.nn.Sequential(
-            torch.nn.LayerNorm(in_dim), torch.nn.Linear(in_dim, in_dim),
-            torch.nn.GELU(), torch.nn.Linear(in_dim, out_dim),
-            torch.nn.LayerNorm(out_dim))
+            torch.nn.LayerNorm(in_dim),
+            torch.nn.Linear(in_dim, in_dim),
+            torch.nn.GELU(),
+            torch.nn.Linear(in_dim, out_dim),
+            torch.nn.LayerNorm(out_dim),
+        )
 
     def forward(self, image_embeds):
         clip_extra_context_tokens = self.proj(image_embeds)
         return clip_extra_context_tokens
-
 
 
 class WanTransformer3DModel(
@@ -522,7 +468,7 @@ class WanTransformer3DModel(
     @register_to_config
     def __init__(
         self,
-        model_type='t2v',
+        model_type="t2v",
         patch_size=(1, 2, 2),
         text_len=512,
         in_dim=16,
@@ -541,7 +487,7 @@ class WanTransformer3DModel(
         hidden_size=2048,
         cross_attn_type=None,
         add_control_adapter=False,
-        cam_method='prope',
+        cam_method="prope",
         attn_compress=1,
         cam_self_attn_layers=None,
     ):
@@ -602,40 +548,43 @@ class WanTransformer3DModel(
         self.eps = eps
 
         # embeddings
-        self.patch_embedding = nn.Conv3d(
-            in_dim, dim, kernel_size=patch_size, stride=patch_size)
-        self.text_embedding = nn.Sequential(
-            nn.Linear(text_dim, dim), nn.GELU(approximate='tanh'),
-            nn.Linear(dim, dim))
+        self.patch_embedding = nn.Conv3d(in_dim, dim, kernel_size=patch_size, stride=patch_size)
+        self.text_embedding = nn.Sequential(nn.Linear(text_dim, dim), nn.GELU(approximate="tanh"), nn.Linear(dim, dim))
 
-        self.time_embedding = nn.Sequential(
-            nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
+        self.time_embedding = nn.Sequential(nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
         self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(dim, dim * 6))
 
         # blocks
         if cross_attn_type is None:
-            if model_type == "t2v":
-                cross_attn_type = 't2v_cross_attn'
-            else:
-                cross_attn_type = 'i2v_cross_attn'
+            cross_attn_type = "t2v_cross_attn" if model_type == "t2v" else "i2v_cross_attn"
             # else:
-                # cross_attn_type = "cross_attn"
+            # cross_attn_type = "cross_attn"
 
-        attn_class = WanAttentionBlock # by default use WanAttentionBlock
+        attn_class = WanAttentionBlock  # by default use WanAttentionBlock
 
         self.control_adapter = None
         self.camera_projection = None
 
-        self.blocks = nn.ModuleList([
-            attn_class(cross_attn_type, dim, ffn_dim, num_heads,
-                              window_size, qk_norm, cross_attn_norm, eps,
-                              add_control_adapter=add_control_adapter,
-                              cam_method=cam_method,
-                              attn_compress=attn_compress,
-                              layer_idx=layer_idx,
-                              cam_self_attn_layers=cam_self_attn_layers)
-            for layer_idx in range(num_layers)
-        ])
+        self.blocks = nn.ModuleList(
+            [
+                attn_class(
+                    cross_attn_type,
+                    dim,
+                    ffn_dim,
+                    num_heads,
+                    window_size,
+                    qk_norm,
+                    cross_attn_norm,
+                    eps,
+                    add_control_adapter=add_control_adapter,
+                    cam_method=cam_method,
+                    attn_compress=attn_compress,
+                    layer_idx=layer_idx,
+                    cam_self_attn_layers=cam_self_attn_layers,
+                )
+                for layer_idx in range(num_layers)
+            ]
+        )
         for layer_idx, block in enumerate(self.blocks):
             block.self_attn.layer_idx = layer_idx
             block.self_attn.num_layers = self.num_layers
@@ -649,19 +598,14 @@ class WanTransformer3DModel(
         self.d = d
         self.dim = dim
         self.freqs = torch.cat(
-            [
-                rope_params(1024, d - 4 * (d // 6)),
-                rope_params(1024, 2 * (d // 6)),
-                rope_params(1024, 2 * (d // 6))
-            ],
-            dim=1
+            [rope_params(1024, d - 4 * (d // 6)), rope_params(1024, 2 * (d // 6)), rope_params(1024, 2 * (d // 6))],
+            dim=1,
         )
 
-        if model_type == 'i2v':
+        if model_type == "i2v":
             self.img_emb = MLPProj(1280, dim)
 
         self.cam_method = cam_method
-
 
         self.sp_world_size = 1
         self.sp_world_rank = 0
@@ -673,28 +617,30 @@ class WanTransformer3DModel(
         self.init_weights()
 
         for blk in self.blocks:
-            if hasattr(blk, 'cam_self_attn'):
+            if hasattr(blk, "cam_self_attn"):
                 nn.init.zeros_(blk.cam_self_attn.out_proj.weight)
                 nn.init.zeros_(blk.cam_self_attn.out_proj.bias)
 
-
-    def enable_multi_gpus_inference(self,):
-        from worldfoundry.base_models.diffusion_model.models.networks.wan.parallel_adapter import sp_prope_forward, usp_attn_forward
+    def enable_multi_gpus_inference(
+        self,
+    ):
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.parallel_adapter import (
+            sp_prope_forward,
+            usp_attn_forward,
+        )
 
         self.sp_world_size = get_sequence_parallel_world_size()
         self.sp_world_rank = get_sequence_parallel_rank()
         self.all_gather = get_sp_group().all_gather
-        self.sp_group = None # None for inference
+        self.sp_group = None  # None for inference
 
         # For RoPE self-attention.
         for block in self.blocks:
-            block.self_attn.forward = types.MethodType(
-                usp_attn_forward, block.self_attn)
+            block.self_attn.forward = types.MethodType(usp_attn_forward, block.self_attn)
 
             # For PRoPE parallel branch (cam_self_attn).
-            if hasattr(block, 'cam_self_attn'):
-                block.cam_self_attn.forward = types.MethodType(
-                    sp_prope_forward, block.cam_self_attn)
+            if hasattr(block, "cam_self_attn"):
+                block.cam_self_attn.forward = types.MethodType(sp_prope_forward, block.cam_self_attn)
 
     # @cfg_skip()
     def forward(
@@ -736,25 +682,21 @@ class WanTransformer3DModel(
             self.freqs = self.freqs.to(device)
 
         if y is not None:
-            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y)]
+            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y, strict=False)]
 
         # embeddings
         x = [self.patch_embedding(u.unsqueeze(0)) for u in x]
         # add control adapter
 
-        grid_sizes = torch.stack(
-            [torch.tensor(u.shape[2:], dtype=torch.long, device=device) for u in x])
+        grid_sizes = torch.stack([torch.tensor(u.shape[2:], dtype=torch.long, device=device) for u in x])
 
         x = [u.flatten(2).transpose(1, 2) for u in x]
 
         seq_lens = torch.tensor([u.size(1) for u in x], dtype=torch.long, device=device)
         if self.sp_world_size > 1:
-            seq_len = int(math.ceil(seq_len / self.sp_world_size)) * self.sp_world_size
+            seq_len = int(math.ceil(seq_len / self.sp_world_size)) * self.sp_world_size  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         assert seq_lens.max() <= seq_len
-        x = torch.cat([
-            torch.cat([u, u.new_zeros(1, seq_len - u.size(1), u.size(2))],
-                      dim=1) for u in x
-        ])
+        x = torch.cat([torch.cat([u, u.new_zeros(1, seq_len - u.size(1), u.size(2))], dim=1) for u in x])
 
         # time embeddings
         # print(f"seq_len: {seq_len} t.shape: {t.shape}")
@@ -767,13 +709,10 @@ class WanTransformer3DModel(
                     t = torch.cat([t, padding], dim=1)
                 bt = t.size(0)
                 ft = t.flatten()
-                e = self.time_embedding(
-                    sinusoidal_embedding_1d(self.freq_dim,
-                                            ft).unflatten(0, (bt, seq_len)).float())
+                e = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, ft).unflatten(0, (bt, seq_len)).float())
                 e0 = self.time_projection(e).unflatten(2, (6, self.dim))
             else:
-                e = self.time_embedding(
-                    sinusoidal_embedding_1d(self.freq_dim, t).float())
+                e = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, t).float())
                 e0 = self.time_projection(e).unflatten(1, (6, self.dim))
 
             # assert e.dtype == torch.float32 and e0.dtype == torch.float32
@@ -783,11 +722,8 @@ class WanTransformer3DModel(
         # context
         context_lens = None
         context = self.text_embedding(
-            torch.stack([
-                torch.cat(
-                    [u, u.new_zeros(self.text_len - u.size(0), u.size(1))])
-                for u in context
-            ]))
+            torch.stack([torch.cat([u, u.new_zeros(self.text_len - u.size(0), u.size(1))]) for u in context])
+        )
 
         # if clip_fea is not None:
         #     context_clip = self.img_emb(clip_fea)  # bs x 257 x dim
@@ -795,42 +731,38 @@ class WanTransformer3DModel(
 
         # Context Parallel
         if self.sp_world_size > 1:
-
             x = torch.chunk(x, self.sp_world_size, dim=1)[self.sp_world_rank]
             if t.dim() != 1:
                 e0 = torch.chunk(e0, self.sp_world_size, dim=1)[self.sp_world_rank]
                 e = torch.chunk(e, self.sp_world_size, dim=1)[self.sp_world_rank]
 
-
         if y_camera is not None and isinstance(y_camera, dict):
-            cam_viewmats = y_camera['viewmats']
-            cam_K = y_camera['K']
+            cam_viewmats = y_camera["viewmats"]
+            cam_K = y_camera["K"]
         else:
             cam_viewmats = None
             cam_K = None
 
         cam_emb = None
         if cam_viewmats is not None:
-            cam_emb = {'viewmats': cam_viewmats, 'K': cam_K}
-        block_kwargs = dict(
-            e=e0,
-            seq_lens=seq_lens,
-            grid_sizes=grid_sizes,
-            freqs=self.freqs,
-            context=context,
-            context_lens=context_lens,
-            dtype=dtype,
-            t=t,
-            group=self.sp_group,
-            cam_emb=cam_emb,
-        )
+            cam_emb = {"viewmats": cam_viewmats, "K": cam_K}
+        block_kwargs = {
+            "e": e0,
+            "seq_lens": seq_lens,
+            "grid_sizes": grid_sizes,
+            "freqs": self.freqs,
+            "context": context,
+            "context_lens": context_lens,
+            "dtype": dtype,
+            "t": t,
+            "group": self.sp_group,
+            "cam_emb": cam_emb,
+        }
         for block in self.blocks:
             x = block(x, **block_kwargs)
 
         # head
         x = self.head(x, e)
-
-
 
         if self.sp_world_size > 1:
             x = self.all_gather(x, dim=1)
@@ -839,6 +771,7 @@ class WanTransformer3DModel(
         x = torch.stack(x)
 
         return x
+
 
 class Wan2_2Transformer3DModel(WanTransformer3DModel):
     r"""DreamX-World Wan 2.2 transformer subclass."""
@@ -849,7 +782,7 @@ class Wan2_2Transformer3DModel(WanTransformer3DModel):
     # _no_split_modules = ['WanAttentionBlock']
     def __init__(
         self,
-        model_type='t2v',
+        model_type="t2v",
         patch_size=(1, 2, 2),
         text_len=512,
         in_dim=16,
@@ -867,7 +800,7 @@ class Wan2_2Transformer3DModel(WanTransformer3DModel):
         in_channels=16,
         hidden_size=2048,
         add_control_adapter=False,
-        cam_method='prope',
+        cam_method="prope",
         attn_compress=1,
         cam_self_attn_layers=None,
     ):

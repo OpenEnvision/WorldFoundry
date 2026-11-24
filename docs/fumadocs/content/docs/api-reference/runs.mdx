@@ -5,7 +5,7 @@ description: Canonical in-process dispatch for existing artifacts, model inferen
 
 `run_worldfoundry` is the broad public entrypoint. It examines one typed request and dispatches to the narrow existing-results, model-generation, single model × benchmark, or suite runner. Use the narrower benchmark facade when the generated artifacts already exist and only an official evaluator or normalizer should run.
 
-Import the symbols on this page from `worldfoundry.evaluation.public`.
+Import the symbols on this page from `worldfoundry.evals.public`.
 
 ## A complete no-GPU run
 
@@ -14,8 +14,8 @@ This example creates one small trajectory artifact, writes request and result le
 ```python
 from pathlib import Path
 
-from worldfoundry.evaluation.api import ArtifactRef, GenerationRequest, GenerationResult
-from worldfoundry.evaluation.public import WorldFoundryRunRequest, run_worldfoundry
+from worldfoundry.evals.api import ArtifactRef, GenerationRequest, GenerationResult
+from worldfoundry.evals.public import WorldFoundryRunRequest, run_worldfoundry
 
 root = Path("tmp/python_api_example")
 trace_path = root / "artifacts" / "trajectory.json"
@@ -55,25 +55,25 @@ The output directory contains aligned ledgers, an execution plan, metric rows, `
 
 The request intentionally covers several modes. `results_path` selects existing-results evaluation. A model ID without benchmark IDs selects model execution. Model and benchmark IDs together select a benchmark cell; multiple selections or suite IDs select the matrix runner. `execute=False` plans compatible cells without spending compute.
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.WorldFoundryRunRequest" />
+<PythonApiReference symbol="worldfoundry.evals.public.WorldFoundryRunRequest" />
 
 ## `WorldFoundryRunResult`
 
 The wrapper exposes common status, exit code, output directory, and a mode-specific delegate. `to_dict()` lifts commonly needed manifest and scorecard paths from that delegate so automation does not need a branch for every run kind.
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.WorldFoundryRunResult" />
+<PythonApiReference symbol="worldfoundry.evals.public.WorldFoundryRunResult" />
 
 ## `run_worldfoundry`
 
 Pass either a typed request, a mapping, or keyword arguments. A typed request is preferred for editor support and for catching misspelled fields before execution.
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.run_worldfoundry" />
+<PythonApiReference symbol="worldfoundry.evals.public.run_worldfoundry" />
 
 ## `list_video_benchmarks`
 
 This discovery helper returns IDs from the checked-in video benchmark catalog. It does not claim that every returned benchmark is locally runnable; inspect readiness and assets separately.
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.list_video_benchmarks" />
+<PythonApiReference symbol="worldfoundry.evals.public.list_video_benchmarks" />
 
 ## `run_benchmark`
 
@@ -88,20 +88,20 @@ result = run_benchmark(
 )
 ```
 
-The call above is a real API shape, but it requires the assets, dependencies, generated prompt coverage, and environment reported by the current VBench manifest. Runner availability alone does not guarantee leaderboard readiness.
+This call requires the assets, dependencies, generated prompt coverage, and environment listed in the VBench benchmark manifest. Runner availability alone does not make a result leaderboard ready.
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.run_benchmark" />
+<PythonApiReference symbol="worldfoundry.evals.public.run_benchmark" />
 
 ## `normalize_upstream_results`
 
 Use this function when the upstream evaluator has already produced a result file. It creates WorldFoundry evidence around that file; it does not retroactively prove that WorldFoundry executed the official evaluator.
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.normalize_upstream_results" />
+<PythonApiReference symbol="worldfoundry.evals.public.normalize_upstream_results" />
 
 ## `benchmark_integration_spec`
 
 This lookup returns the registered in-tree integration specification when one exists. A catalog entry can exist without a corresponding integration spec, so `None` is a normal discovery result.
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.benchmark_integration_spec" />
+<PythonApiReference symbol="worldfoundry.evals.public.benchmark_integration_spec" />
 
 Use the [Benchmark Hub](/docs/evaluation/benchmark-hub) to understand protocol-specific inputs and blockers before calling an official runtime.

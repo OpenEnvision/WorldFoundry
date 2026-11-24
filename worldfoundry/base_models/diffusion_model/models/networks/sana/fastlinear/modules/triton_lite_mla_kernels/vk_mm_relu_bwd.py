@@ -28,7 +28,6 @@ from worldfoundry.core.kernels.triton_autotune import custom_autotune
 
 
 def get_cuda_autotune_config():
-    """Get cuda autotune config."""
     return [
         triton.Config({"BLOCK_SIZE_N": 256}, num_stages=3, num_warps=8),
         triton.Config({"BLOCK_SIZE_N": 256}, num_stages=4, num_warps=4),
@@ -42,7 +41,6 @@ def get_cuda_autotune_config():
 
 
 def get_autotune_config():
-    """Get autotune config."""
     return get_cuda_autotune_config()
 
 
@@ -131,7 +129,7 @@ def vk_mm_relu_bwd_kernel(
         + offs_c[None, :] * stride_grad_k_c
     )  # n, C
 
-    for n in range(0, tl.cdiv(N, BLOCK_SIZE_N)):
+    for n in range(tl.cdiv(N, BLOCK_SIZE_N)):
         n_mask = offs_n < N - n * BLOCK_SIZE_N
         nc_mask = n_mask[:, None] & c_mask[None, :]
 
@@ -171,8 +169,11 @@ def vk_mm_relu_bwd(
     assert k.stride() == v.stride() == k_relu_mask.stride()
 
     B, N, H, C = k.shape
+
     # 1D launch kernel where each block gets its own program.
-    grid = lambda META: (B * H,)
+    def grid(META):
+        return (B * H,)
+
     vk_mm_relu_bwd_kernel[grid](
         grad_vk,
         k,

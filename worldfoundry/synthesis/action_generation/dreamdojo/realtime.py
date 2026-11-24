@@ -13,8 +13,8 @@ import torch.nn.functional as functional
 from worldfoundry.base_models.diffusion_model.contracts import Conditioning, DiffusionRequest, SamplingConfig
 from worldfoundry.base_models.diffusion_model.models.encoders.dreamdojo import robot_actions
 from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
+from worldfoundry.core.media.processing.image_utils import load_pil_image
 from worldfoundry.core.media.processing.postprocess import VideoChunk
-from worldfoundry.core.utils import load_pil_image
 
 
 def student_sampling_options(

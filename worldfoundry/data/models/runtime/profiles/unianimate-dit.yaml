@@ -5,6 +5,7 @@ task_family: video_generation
 groups: [video, image_to_video, human_animation]
 source_repos:
 - url: https://github.com/ali-vilab/unianimate-dit
+  revision: 61d882c25385042f0cf5bcdaf6853238d9756d68
 checkpoints:
 - repo_id: ZheWang123/UniAnimate-DiT
   role: animation_checkpoint

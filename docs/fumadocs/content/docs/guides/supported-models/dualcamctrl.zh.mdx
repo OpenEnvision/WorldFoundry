@@ -1,23 +1,23 @@
 ---
 title: "DualCamCtrl"
-description: "港科大广州 EnVision：RGB + 深度 + 相机 .torch。官方 demo 已验证：320×480、61 帧、50 步。许可证 unknown。期望产物 seaside.mp4。"
+description: "港科大广州 EnVision：由 RGB + 深度 + 相机 .torch 轨迹控制的图生视频。已用官方 demo 验证：320×480、61 帧、50 步。许可证未知。"
 modelId: "dualcamctrl"
 pageSource: authored
 ---
 
-DualCamCtrl 用**相机轨迹加深度图**控制视频：RGB 和深度一起钉住几何，让相机运动落地。WorldFoundry 把推理放在 `worldfoundry/synthesis/visual_generation/dualcamctrl`，对外是 `DualCamCtrlPipeline`。Runner **和** demo 都按官方 RGB / 深度 / 相机契约**已验证**。
+DualCamCtrl 用**相机轨迹加深度图**控制视频：结合 RGB 与深度约束几何，使视频符合指定的相机运动。WorldFoundry 以 `DualCamCtrlPipeline` 运行它，输入与官方 RGB / 深度 / 相机 demo 一致。已用官方 seaside demo 验证：pipeline 以 50 步生成 320×480 的 61 帧视频。
 
 <ModelPaperFigures modelId="dualcamctrl" locale="zh" />
 
-论文：[arXiv 2511.23127](https://arxiv.org/abs/2511.23127)。项目页：[soyouthinkyoucantell.github.io/dualcamctrl-page](https://soyouthinkyoucantell.github.io/dualcamctrl-page/)。代码：[EnVision-Research/DualCamCtrl](https://github.com/EnVision-Research/DualCamCtrl)。发布方：港科大（广州）EnVision Lab。catalog 许可证：**unknown**。
+论文：[arXiv 2511.23127](https://arxiv.org/abs/2511.23127)。项目页：[soyouthinkyoucantell.github.io/dualcamctrl-page](https://soyouthinkyoucantell.github.io/dualcamctrl-page/)。代码：[EnVision-Research/DualCamCtrl](https://github.com/EnVision-Research/DualCamCtrl)。发布方：港科大（广州）EnVision Lab。许可证：**未知**。
 
 <ModelCommandBuilder modelId="dualcamctrl" locale="zh" />
 
 ## 用来做什么
 
-双相机控制，面向立体风格成对输入。
+相机可控的图生视频：提供起始图像、对应深度图与相机轨迹，生成沿相机路径运动的视频。
 
-启动 `worldfoundry-eval run dualcamctrl`。
+启动 `wf run dualcamctrl`。
 
 评测入口：[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（受控生成的相机轨迹贴合度）。
 
@@ -34,6 +34,6 @@ DualCamCtrl 用**相机轨迹加深度图**控制视频：RGB 和深度一起钉
 
 ## 在 WorldFoundry 中运行
 
-状态：**已验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `FayeHongfeiZhang/DualCamCtrl`、`alibaba-pai/Wan2.1-Fun-V1.1-1.3B-Control-Camera`、`Wan-AI/Wan2.1-T2V-1.3B` 等就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run dualcamctrl`。catalog 未记录 VRAM。
+统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。权重来自 `FayeHongfeiZhang/DualCamCtrl`、`alibaba-pai/Wan2.1-Fun-V1.1-1.3B-Control-Camera`、`Wan-AI/Wan2.1-T2V-1.3B` 与 `Wan-AI/Wan2.1-I2V-14B-480P`，默认通过 Hugging Face 缓存加载；已就位的本地资产可通过 `checkpoint_path`、`base_model_path` 或 `WORLDFOUNDRY_MODEL_DIR` 传入。在该环境执行 `wf run dualcamctrl`。
 
 <ModelRelatedRecipes modelId="dualcamctrl" locale="zh" />

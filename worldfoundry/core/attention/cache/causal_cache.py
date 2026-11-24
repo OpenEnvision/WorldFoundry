@@ -12,19 +12,20 @@ from __future__ import annotations
 from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from operator import index as integer_index
+from typing import Any
 
 import torch
 from torch import Tensor
 
-from worldfoundry.core.attention.sparse.block_pattern import BlockPattern
 from worldfoundry.core.attention.cache.kv_cache_policy import CachedBlock, CacheState
+from worldfoundry.core.attention.sparse.block_pattern import BlockPattern
 
 # ──────────────────────────────────────────────────────────────────────────
 # Geometry — validate the raw ABI so graphs cannot drift from BlockPattern
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def _integer(value: object, *, name: str) -> int:
+def _integer(value: Any, *, name: str) -> int:
     """Coerce ``value`` to an integer index, rejecting bools.
 
     ``bool`` is a subclass of ``int``; accepting it would silently treat
@@ -125,7 +126,7 @@ def allocate_causal_video_cache(
     *,
     device: str | torch.device,
     dtype: torch.dtype,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Allocate the raw per-layer ABI and its block lifecycle state."""
 
     if not isinstance(geometry, CausalVideoCacheGeometry):
@@ -176,7 +177,7 @@ def allocate_causal_video_cache(
     }
 
 
-def causal_video_cache_geometry(cache: Mapping[str, object]) -> CausalVideoCacheGeometry:
+def causal_video_cache_geometry(cache: Mapping[str, Any]) -> CausalVideoCacheGeometry:
     """Recover and validate geometry stored in a raw cache payload."""
 
     if not isinstance(cache, Mapping):
@@ -298,7 +299,7 @@ def _validate_block_span(
 
 
 def begin_causal_video_cache_block(
-    cache: MutableMapping[str, object],
+    cache: MutableMapping[str, Any],
     *,
     block_index: int,
     start_frame: int,
@@ -324,7 +325,7 @@ def begin_causal_video_cache_block(
 
 
 def finish_causal_video_cache_call(
-    cache: Mapping[str, object],
+    cache: Mapping[str, Any],
     *,
     start_frame: int,
     frame_count: int,
@@ -360,7 +361,7 @@ def finish_causal_video_cache_call(
 
 
 def commit_causal_video_cache_block(
-    cache: MutableMapping[str, object],
+    cache: MutableMapping[str, Any],
     *,
     block_index: int,
     start_frame: int,
@@ -392,7 +393,7 @@ def commit_causal_video_cache_block(
 
 
 def causal_video_cache_state(
-    cache: Mapping[str, object],
+    cache: Mapping[str, Any],
     *,
     geometry: CausalVideoCacheGeometry | None = None,
 ) -> CacheState:

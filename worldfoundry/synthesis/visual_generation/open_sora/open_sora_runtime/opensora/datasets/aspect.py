@@ -44,7 +44,7 @@ ASPECT_RATIO_MAP = {
 }
 
 
-AR = [get_ar(ratio) for ratio in ASPECT_RATIO_MAP.keys()]
+AR = [get_ar(ratio) for ratio in ASPECT_RATIO_MAP]
 
 # computed from above code
 # S = 8294400

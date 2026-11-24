@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import torch
 from tqdm import tqdm
 
 from worldfoundry.core.model_loading import load_state_dict
 
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.networks.wan import WanModel
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.runners import TeaCache, WanStagedPipeline
 from worldfoundry.core.nn import sinusoidal_embedding_1d
 
@@ -34,7 +36,7 @@ class HyDRAPipeline(WanStagedPipeline):
         tokenizer_path: str,
         torch_dtype: torch.dtype,
         device: str | torch.device,
-    ) -> "HyDRAPipeline":
+    ) -> HyDRAPipeline:
         """Create a HyDRA pipeline from explicitly loaded native components."""
 
         pipe = cls(device=device, torch_dtype=torch_dtype, tokenizer_path=tokenizer_path)
@@ -49,7 +51,7 @@ class HyDRAPipeline(WanStagedPipeline):
         *,
         enabled: bool = True,
         config: HyDRAAttentionConfig | None = None,
-    ) -> "HyDRAPipeline":
+    ) -> HyDRAPipeline:
         """Attach HyDRA modules to the loaded shared Wan DiT."""
 
         if self.dit is None:
@@ -64,7 +66,7 @@ class HyDRAPipeline(WanStagedPipeline):
         *,
         enabled: bool = True,
         config: HyDRAAttentionConfig | None = None,
-    ) -> "HyDRAPipeline":
+    ) -> HyDRAPipeline:
         """Configure the shared Wan DiT and strictly load a HyDRA checkpoint."""
 
         self.configure_hydra(enabled=enabled, config=config)
@@ -232,8 +234,8 @@ def model_fn_hydra(
     cam_emb_tgt: torch.Tensor,
     cam_emb_con: torch.Tensor,
     context: torch.Tensor,
-    clip_feature: Optional[torch.Tensor] = None,
-    y: Optional[torch.Tensor] = None,
+    clip_feature: torch.Tensor | None = None,
+    y: torch.Tensor | None = None,
     tea_cache: TeaCache | None = None,
     **kwargs,
 ) -> torch.Tensor:
@@ -253,14 +255,18 @@ def model_fn_hydra(
     expected_grid = (config.num_frames, config.frame_height, config.frame_width)
     if actual_grid != expected_grid:
         raise ValueError(f"HyDRA checkpoint expects token grid {expected_grid}, got {actual_grid}")
-    freqs = torch.cat(
-        [
-            dit.freqs[0][:frames].view(frames, 1, 1, -1).expand(frames, height, width, -1),
-            dit.freqs[1][:height].view(1, height, 1, -1).expand(frames, height, width, -1),
-            dit.freqs[2][:width].view(1, 1, width, -1).expand(frames, height, width, -1),
-        ],
-        dim=-1,
-    ).reshape(frames * height * width, 1, -1).to(x.device)
+    freqs = (
+        torch.cat(
+            [
+                dit.freqs[0][:frames].view(frames, 1, 1, -1).expand(frames, height, width, -1),
+                dit.freqs[1][:height].view(1, height, 1, -1).expand(frames, height, width, -1),
+                dit.freqs[2][:width].view(1, 1, width, -1).expand(frames, height, width, -1),
+            ],
+            dim=-1,
+        )
+        .reshape(frames * height * width, 1, -1)
+        .to(x.device)
+    )
 
     tea_cache_update = tea_cache.check(dit, x, t_mod) if tea_cache is not None else False
     if tea_cache_update:

@@ -5,7 +5,9 @@
 import numpy as np
 import torch
 
-from uniception.models.encoders.image_normalizations import IMAGE_NORMALIZATION_DICT
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.encoders.image_normalizations import (
+    IMAGE_NORMALIZATION_DICT,
+)
 
 
 def rgb(ftensor, norm_type, true_shape=None):

@@ -19,14 +19,10 @@ class DownSampleBlock(nn.Module):
     def flat_square(self, x):
         n, w, h, c = x.size()
         if w % 2 == 1:
-            x = torch.concat(
-                [x, torch.zeros((n, 1, h, c), dtype=x.dtype).to(x.device)], dim=1
-            ).contiguous()
+            x = torch.concat([x, torch.zeros((n, 1, h, c), dtype=x.dtype).to(x.device)], dim=1).contiguous()
             n, w, h, c = x.size()
         if h % 2 == 1:
-            x = torch.concat(
-                [x, torch.zeros((n, w, 1, c), dtype=x.dtype).to(x.device)], dim=2
-            ).contiguous()
+            x = torch.concat([x, torch.zeros((n, w, 1, c), dtype=x.dtype).to(x.device)], dim=2).contiguous()
             n, w, h, c = x.size()
         x = x.view(n, w, int(h / 2), int(c * 2))
         x = x.permute(0, 2, 1, 3).contiguous()
@@ -44,9 +40,9 @@ def build_vision_projector(config):
         - mm_hidden_size: the hidden size of the vision tower
         - hidden_size: the hidden size of the language model
     """
-    projector_type = getattr(config, 'mm_projector_type', 'mlp2x_gelu')
+    projector_type = getattr(config, "mm_projector_type", "mlp2x_gelu")
 
-    if projector_type == 'linear':
+    if projector_type == "linear":
         return nn.Linear(config.mm_hidden_size, config.hidden_size)
 
     elif projector_type.startswith("linear"):
@@ -79,4 +75,4 @@ def build_vision_projector(config):
                 modules.append(nn.Linear(config.hidden_size, config.hidden_size))
             return nn.Sequential(*modules)
 
-    raise ValueError(f'Unknown projector type: {projector_type}')
+    raise ValueError(f"Unknown projector type: {projector_type}")

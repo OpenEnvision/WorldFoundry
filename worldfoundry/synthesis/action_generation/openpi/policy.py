@@ -1,18 +1,18 @@
-from collections.abc import Sequence
 import time
+from collections.abc import Sequence
 from typing import Any, TypeAlias
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-from . import policy_base as _base_policy
 import torch
 from typing_extensions import override
 
-from . import transforms as _transforms
-from .modeling import model as _model
 from . import array_typing as at
 from . import nnx_utils
+from . import policy_base as _base_policy
+from . import transforms as _transforms
+from .modeling import model as _model
 
 BasePolicy: TypeAlias = _base_policy.BasePolicy
 

@@ -35,7 +35,6 @@ conditioning.  Register this graph with ``profile="wm"``.
 """
 
 import os
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -78,6 +77,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.linea
 from worldfoundry.core.distributed.collectives.generic import get_rank
 from worldfoundry.core.model_loading.checkpoints import load_weights_only, require_tensor
 from worldfoundry.core.nn.blocks.layers import DropPath
+from worldfoundry.core.nn.blocks.layers import InputFP32LayerNorm as FP32LayerNorm
 
 from .sana_camctrl_blocks import (
     _maybe_drop_cam_branch,
@@ -96,20 +96,13 @@ from .sana_gdn_camctrl_blocks import (
 # ``MultiHeadCrossAttention`` expects xFormers sequence-length lists.
 _xformers_available = os.environ.get("DISABLE_XFORMERS", "0") != "1" and is_xformers_available()
 if _xformers_available:
-    import xformers.ops
+    pass
 
 
 class DeltaActionEmbedder(nn.Module):
     """MLP that embeds per-step action deltas into the adaLN timestep stream."""
 
     def __init__(self, input_dim, hidden_size, act_layer=nn.GELU):
-        """Init.
-
-        Args:
-            input_dim: The input dim.
-            hidden_size: The hidden size.
-            act_layer: The act layer.
-        """
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(input_dim, hidden_size),
@@ -118,44 +111,17 @@ class DeltaActionEmbedder(nn.Module):
         )
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         return self.mlp(x)
-
-
-class FP32LayerNorm(nn.LayerNorm):
-    """Layer norm implementation."""
-
-    def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        return super().forward(x.float()).type_as(x)
 
 
 class FP32NormProxy(nn.Module):
     """Norm proxy implementation."""
 
     def __init__(self, norm_module):
-        """Init.
-
-        Args:
-            norm_module: The norm module.
-        """
         super().__init__()
         self.norm = norm_module
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         return self.norm(x.float()).type_as(x)
 
 
@@ -190,32 +156,6 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
         use_chunk_plucker_post_attn=False,
         **block_kwargs,
     ):
-        """Init.
-
-        Args:
-            hidden_size: The hidden size.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            drop_path: The drop path.
-            qk_norm: The qk norm.
-            attn_type: The attn type.
-            ffn_type: The ffn type.
-            mlp_acts: The mlp acts.
-            linear_head_dim: The linear head dim.
-            cross_norm: The cross norm.
-            cross_attn_image_embeds: The cross attn image embeds.
-            t_kernel_size: The t kernel size.
-            additional_flash_attn: The additional flash attn.
-            flash_attn_window_count: The flash attn window count.
-            camctrl_type: The camctrl type.
-            patch_size: The patch size.
-            cam_attn_compress: The cam attn compress.
-            fp32_norm: The fp32 norm.
-            chunk_size: The chunk size.
-            chunk_split_strategy: The chunk split strategy.
-            use_delta_pose_additive: The use delta pose additive.
-            use_chunk_plucker_post_attn: The use chunk plucker post attn.
-        """
         super().__init__()
         self.hidden_size = hidden_size
         self.chunk_size = chunk_size
@@ -341,7 +281,10 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
                 t_kernel_size=t_kernel_size,
             )
         elif ffn_type == "mlp":
-            approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+            def approx_gelu():
+                return nn.GELU(approximate="tanh")
+
             self.mlp = Mlp(
                 in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0
             )
@@ -361,18 +304,18 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
 
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
-        self.block_hook: Optional[BlockHook] = None
+        self.block_hook: BlockHook | None = None
 
     @staticmethod
     def _build_frame_token_mask(
-        frame_valid_mask: Optional[torch.Tensor],
+        frame_valid_mask: torch.Tensor | None,
         *,
         B: int,
         T: int,
         N: int,
         device: torch.device,
         dtype: torch.dtype,
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         """Convert frame-valid mask to token mask shaped ``(B, N, 1)``."""
         if frame_valid_mask is None:
             return None
@@ -399,21 +342,9 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
     def forward_frame_aware(
         self, x, y, t, mask=None, THW=None, rotary_emb=None, block_mask=None, chunk_index=None, **kwargs
     ):
-        """Forward frame aware.
-
-        Args:
-            x: The x.
-            y: The y.
-            t: The t.
-            mask: The mask.
-            THW: The thw.
-            rotary_emb: The rotary emb.
-            block_mask: The block mask.
-            chunk_index: The chunk index.
-        """
         B, N, C = x.shape
         num_frames = t.shape[2]
-        frame_valid_mask = kwargs.get("frame_valid_mask", None)
+        frame_valid_mask = kwargs.get("frame_valid_mask")
         frame_token_mask = self._build_frame_token_mask(
             frame_valid_mask,
             B=B,
@@ -434,17 +365,17 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
             "HW": THW,
             "rotary_emb": rotary_emb,
             "block_mask": block_mask,
-            "camera_conditions": kwargs.get("camera_conditions", None),
-            "prope_fns": kwargs.get("prope_fns", None),
-            "camera_embedding": kwargs.get("camera_embedding", None),
+            "camera_conditions": kwargs.get("camera_conditions"),
+            "prope_fns": kwargs.get("prope_fns"),
+            "camera_embedding": kwargs.get("camera_embedding"),
             "frame_valid_mask": frame_valid_mask,
         }
-        cam_branch_drop_prob = kwargs.get("cam_branch_drop_prob", None)
+        cam_branch_drop_prob = kwargs.get("cam_branch_drop_prob")
         if cam_branch_drop_prob is not None:
             self_attn_kwargs["cam_branch_drop_prob"] = cam_branch_drop_prob
         if chunk_index is not None:
             self_attn_kwargs["chunk_index"] = chunk_index[:]  # NOTE: important, copy the list
-        if kwargs.get("chunk_index_global", None) is not None:
+        if kwargs.get("chunk_index_global") is not None:
             self_attn_kwargs["chunk_index_global"] = kwargs.get("chunk_index_global")
         chunk_split_strategy = kwargs.get("chunk_split_strategy", getattr(self, "chunk_split_strategy", "uniform"))
         if chunk_split_strategy is not None:
@@ -467,13 +398,13 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
         if frame_token_mask is not None:
             x = x * frame_token_mask
 
-        delta_pose_emb = kwargs.get("delta_pose_emb", None)
+        delta_pose_emb = kwargs.get("delta_pose_emb")
         if delta_pose_emb is not None and hasattr(self, "delta_pose_proj"):
             S = N // num_frames
             dpe = delta_pose_emb.unsqueeze(2).expand(-1, -1, S, -1).reshape(B, N, C)
             x = x + self.delta_pose_proj(dpe)
 
-        plucker_emb = kwargs.get("plucker_emb", None)
+        plucker_emb = kwargs.get("plucker_emb")
         if plucker_emb is not None and hasattr(self, "plucker_proj"):
             x = x + self.plucker_proj(plucker_emb)
 
@@ -483,7 +414,7 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
                 x = x * frame_token_mask
 
         if self.cross_attn_image_embeds:
-            x = x + self.cross_attn(x, y, mask=mask, image_embeds=kwargs.get("image_embeds", None))
+            x = x + self.cross_attn(x, y, mask=mask, image_embeds=kwargs.get("image_embeds"))
         else:
             x = x + self.cross_attn(x, y, mask=mask)
         if frame_token_mask is not None:
@@ -495,7 +426,7 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
         }
         if chunk_index is not None:
             mlp_kwargs["chunk_index"] = chunk_index[:]  # NOTE: important, copy the list
-        if kwargs.get("chunk_index_global", None) is not None:
+        if kwargs.get("chunk_index_global") is not None:
             mlp_kwargs["chunk_index_global"] = kwargs.get("chunk_index_global")
         if chunk_split_strategy is not None:
             mlp_kwargs["chunk_split_strategy"] = chunk_split_strategy
@@ -520,18 +451,6 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
         return x
 
     def forward(self, x, y, t, mask=None, THW=None, rotary_emb=None, block_mask=None, chunk_index=None, **kwargs):
-        """Forward.
-
-        Args:
-            x: The x.
-            y: The y.
-            t: The t.
-            mask: The mask.
-            THW: The thw.
-            rotary_emb: The rotary emb.
-            block_mask: The block mask.
-            chunk_index: The chunk index.
-        """
         if len(t.shape) > 2:
             return self.forward_frame_aware(
                 x,
@@ -551,7 +470,7 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
             "x_ffn": None,
         }
         B, N, C = x.shape
-        frame_valid_mask = kwargs.get("frame_valid_mask", None)
+        frame_valid_mask = kwargs.get("frame_valid_mask")
         frame_token_mask = (
             self._build_frame_token_mask(
                 frame_valid_mask,
@@ -576,16 +495,16 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
             "HW": THW,
             "rotary_emb": rotary_emb,
             "block_mask": block_mask,
-            "camera_conditions": kwargs.get("camera_conditions", None),
-            "prope_fns": kwargs.get("prope_fns", None),
+            "camera_conditions": kwargs.get("camera_conditions"),
+            "prope_fns": kwargs.get("prope_fns"),
             "frame_valid_mask": frame_valid_mask,
         }
-        cam_branch_drop_prob = kwargs.get("cam_branch_drop_prob", None)
+        cam_branch_drop_prob = kwargs.get("cam_branch_drop_prob")
         if cam_branch_drop_prob is not None:
             self_attn_kwargs["cam_branch_drop_prob"] = cam_branch_drop_prob
         if chunk_index is not None:
             self_attn_kwargs["chunk_index"] = chunk_index[:]  # NOTE: important, copy the list
-        if kwargs.get("chunk_index_global", None) is not None:
+        if kwargs.get("chunk_index_global") is not None:
             self_attn_kwargs["chunk_index_global"] = kwargs.get("chunk_index_global")
         chunk_split_strategy = kwargs.get("chunk_split_strategy", getattr(self, "chunk_split_strategy", "uniform"))
         if chunk_split_strategy is not None:
@@ -610,19 +529,19 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
         if frame_token_mask is not None:
             x = x * frame_token_mask
 
-        delta_pose_emb = kwargs.get("delta_pose_emb", None)
+        delta_pose_emb = kwargs.get("delta_pose_emb")
         if delta_pose_emb is not None and hasattr(self, "delta_pose_proj"):
             T_dp = delta_pose_emb.shape[1]
             S_dp = N // T_dp
             dpe = delta_pose_emb.unsqueeze(2).expand(-1, -1, S_dp, -1).reshape(B, N, C)
             x = x + self.delta_pose_proj(dpe)
 
-        plucker_emb = kwargs.get("plucker_emb", None)
+        plucker_emb = kwargs.get("plucker_emb")
         if plucker_emb is not None and hasattr(self, "plucker_proj"):
             x = x + self.plucker_proj(plucker_emb)
 
         if self.cross_attn_image_embeds:
-            x = x + self.cross_attn(x, y, mask=mask, image_embeds=kwargs.get("image_embeds", None))
+            x = x + self.cross_attn(x, y, mask=mask, image_embeds=kwargs.get("image_embeds"))
         else:
             x = x + self.cross_attn(x, y, mask=mask)
         if frame_token_mask is not None:
@@ -636,7 +555,7 @@ class SanaVideoMSCamCtrlBlock(nn.Module):
         }
         if chunk_index is not None:
             mlp_kwargs["chunk_index"] = chunk_index[:]  # NOTE: important, copy the list
-        if kwargs.get("chunk_index_global", None) is not None:
+        if kwargs.get("chunk_index_global") is not None:
             mlp_kwargs["chunk_index_global"] = kwargs.get("chunk_index_global")
         if chunk_split_strategy is not None:
             mlp_kwargs["chunk_split_strategy"] = chunk_split_strategy
@@ -731,7 +650,7 @@ class SanaMSVideoCamCtrl(Sana):
         flash_attn_window_count=None,
         pack_latents=False,
         camctrl_type: str = "PluckerPatchifyAdd",
-        camctrl_layers_num: int = None,
+        camctrl_layers_num: int | None = None,
         cam_attn_compress: int = 2,
         init_cam_from_base: bool = False,
         use_delta_actions: bool = False,
@@ -752,66 +671,6 @@ class SanaMSVideoCamCtrl(Sana):
         use_autograd_kernel: bool = False,
         **kwargs,
     ):
-        """Init.
-
-        Args:
-            input_size: The input size.
-            patch_size: The patch size.
-            in_channels: The in channels.
-            hidden_size: The hidden size.
-            depth: The depth.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            class_dropout_prob: The class dropout prob.
-            learn_sigma: The learn sigma.
-            pred_sigma: The pred sigma.
-            drop_path: The drop path.
-            caption_channels: The caption channels.
-            pe_interpolation: The pe interpolation.
-            config: The config.
-            model_max_length: The model max length.
-            qk_norm: The qk norm.
-            y_norm: The y norm.
-            norm_eps: The norm eps.
-            attn_type: The attn type.
-            ffn_type: The ffn type.
-            use_pe: The use pe.
-            y_norm_scale_factor: The y norm scale factor.
-            patch_embed_kernel: The patch embed kernel.
-            mlp_acts: The mlp acts.
-            linear_head_dim: The linear head dim.
-            cross_norm: The cross norm.
-            cross_attn_type: The cross attn type.
-            cross_attn_image_embeds: The cross attn image embeds.
-            image_embed_channels: The image embed channels.
-            pos_embed_type: The pos embed type.
-            rope_fhw_dim: The rope fhw dim.
-            t_kernel_size: The t kernel size.
-            flash_attn_layer_idx: The flash attn layer idx.
-            flash_attn_layer_type: The flash attn layer type.
-            flash_attn_window_count: The flash attn window count.
-            pack_latents: The pack latents.
-            camctrl_type: The camctrl type.
-            camctrl_layers_num: The camctrl layers num.
-            cam_attn_compress: The cam attn compress.
-            init_cam_from_base: The init cam from base.
-            use_delta_actions: The use delta actions.
-            delta_action_dim: The delta action dim.
-            use_delta_translation: The use delta translation.
-            fp32_norm: The fp32 norm.
-            chunk_size: The chunk size.
-            chunk_split_strategy: The chunk split strategy.
-            conv_kernel_size: The conv kernel size.
-            k_conv_only: The k conv only.
-            softmax_every_n: The softmax every n.
-            use_delta_pose_additive: The use delta pose additive.
-            delta_pose_additive_dim: The delta pose additive dim.
-            use_chunk_plucker_input: The use chunk plucker input.
-            use_chunk_plucker_post_attn: The use chunk plucker post attn.
-            chunk_plucker_channels: The chunk plucker channels.
-            chunk_plucker_post_attn_blocks: The chunk plucker post attn blocks.
-            use_autograd_kernel: The use autograd kernel.
-        """
         super().__init__(
             input_size=input_size,
             patch_size=patch_size,
@@ -847,7 +706,10 @@ class SanaMSVideoCamCtrl(Sana):
         self.chunk_split_strategy = chunk_split_strategy
         self.patch_size = patch_size
         self.h = self.w = 0
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
         self.t_block = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 6 * hidden_size, bias=True))
         self.pos_embed_ms = None
         self.pack_latents = pack_latents
@@ -1031,16 +893,6 @@ class SanaMSVideoCamCtrl(Sana):
 
     @staticmethod
     def _pack_latents(latents, batch_size, num_channels_latents, height, width, frame):
-        """Helper function to pack latents.
-
-        Args:
-            latents: The latents.
-            batch_size: The batch size.
-            num_channels_latents: The num channels latents.
-            height: The height.
-            width: The width.
-            frame: The frame.
-        """
         latents = latents.view(batch_size, num_channels_latents, frame, height // 2, 2, width // 2, 2)
         latents = latents.permute(0, 1, 4, 6, 2, 3, 5)
         latents = latents.reshape(batch_size, num_channels_latents * 4, frame, height // 2, width // 2)
@@ -1049,14 +901,6 @@ class SanaMSVideoCamCtrl(Sana):
 
     @staticmethod
     def _unpack_latents(latents, height, width, frame):
-        """Helper function to unpack latents.
-
-        Args:
-            latents: The latents.
-            height: The height.
-            width: The width.
-            frame: The frame.
-        """
         batch_size, channels, frame, H, W = latents.shape
 
         assert height % 2 == 0 and width % 2 == 0
@@ -1105,7 +949,7 @@ class SanaMSVideoCamCtrl(Sana):
         if self.save_block_output:
             self.inference_timestep = int(timestep[0].item())
 
-        cam_embeds = kwargs.get("camera_conditions", None)
+        cam_embeds = kwargs.get("camera_conditions")
         cam_branch_drop_prob = kwargs.get("cam_branch_drop_prob", 0.0)
         if cam_embeds is not None and cam_branch_drop_prob:
             # Keep drop-path semantics consistent: when camera branch is dropped,
@@ -1136,7 +980,7 @@ class SanaMSVideoCamCtrl(Sana):
             # Both surviving camctrl variants are UCPE-style: build raymats + 3-channel
             # absmap (up_map + lat_map) from the raw (B,F,20) camera conditions.
             raw_cam_conditions = cam_embeds
-            cam_pos_embeds = kwargs.get("cam_pos_embeds", None)
+            cam_pos_embeds = kwargs.get("cam_pos_embeds")
             if cam_pos_embeds is not None and "absmap" in cam_pos_embeds:
                 cam_embeds = cam_pos_embeds["absmap"]
                 if "P" in cam_pos_embeds:
@@ -1165,7 +1009,7 @@ class SanaMSVideoCamCtrl(Sana):
             plucker_input = kwargs["chunk_plucker"].to(self.dtype)
             kwargs["plucker_emb"] = self.plucker_embedder(plucker_input)
 
-        image_pos_embed = kwargs.get("pos_embeds", None)
+        image_pos_embed = kwargs.get("pos_embeds")
         if self.use_pe and image_pos_embed is None:
             if self.pos_embed_type == "sincos":
                 if self.pos_embed_ms is None or self.pos_embed_ms.shape[1:] != x.shape[1:]:
@@ -1261,14 +1105,6 @@ class SanaMSVideoCamCtrl(Sana):
             # self.diagonal_mask = torch.ones_like(self.diagonal_mask).bool().to(x.device)
 
             def mask_mod(b, h, q_idx, kv_idx):
-                """Mask mod.
-
-                Args:
-                    b: The b.
-                    h: The h.
-                    q_idx: The q idx.
-                    kv_idx: The kv idx.
-                """
                 return self.diagonal_mask[q_idx, kv_idx].bool()
 
             block_mask = create_block_mask_cached(
@@ -1285,7 +1121,7 @@ class SanaMSVideoCamCtrl(Sana):
             else:
                 head_dim = self.linear_head_dim
 
-            cam_pos_embeds = kwargs.get("cam_pos_embeds", None)
+            cam_pos_embeds = kwargs.get("cam_pos_embeds")
             if cam_pos_embeds is not None:
                 for k, v in cam_pos_embeds.items():
                     if isinstance(v, torch.Tensor):
@@ -1394,7 +1230,6 @@ class SanaMSVideoCamCtrl(Sana):
         )
 
     def __call__(self, *args, **kwargs):
-        """Call."""
         return self.forward(*args, **kwargs)
 
     def forward_with_dpmsolver(self, x, timestep, y, data_info, **kwargs):
@@ -1422,15 +1257,6 @@ class SanaMSVideoCamCtrl(Sana):
         return imgs
 
     def create_diagonal_mask(self, N_pad, N, num_frames, block_size=1, mask_type="nlogn"):
-        """Create diagonal mask.
-
-        Args:
-            N_pad: The n pad.
-            N: The n.
-            num_frames: The num frames.
-            block_size: The block size.
-            mask_type: The mask type.
-        """
         from tools.attn_mask.gen_nlogn_mask import (
             gen_linear_mask_shrinked,
             gen_log_mask_shrinked,
@@ -1464,21 +1290,6 @@ class SanaMSVideoCamCtrl(Sana):
         diag_width=1,
         multiplier=2,
     ):
-        """Prepare flexattention.
-
-        Args:
-            cfg_size: The cfg size.
-            num_head: The num head.
-            head_dim: The head dim.
-            dtype: The dtype.
-            device: The device.
-            context_length: The context length.
-            prompt_length: The prompt length.
-            num_frame: The num frame.
-            frame_size: The frame size.
-            diag_width: The diag width.
-            multiplier: The multiplier.
-        """
         from torch.nn.attention.flex_attention import flex_attention
 
         assert diag_width == multiplier, f"{diag_width} is not equivalent to {multiplier}"
@@ -1491,13 +1302,12 @@ class SanaMSVideoCamCtrl(Sana):
         mask_mod = generate_temporal_head_mask_mod(context_length, prompt_length, num_frame, frame_size, mul=multiplier)
         block_mask = create_block_mask_cached(mask_mod, None, None, seq_len, seq_len, device=device, _compile=True)
 
-        hidden_states = flex_attention(query, key, value, block_mask=block_mask)
+        _hidden_states = flex_attention(query, key, value, block_mask=block_mask)
 
         return block_mask
 
     def load_diagonal_mask(self, *args, **kwargs):
-        """Load diagonal mask."""
-        path = kwargs.get("path", None)
+        path = kwargs.get("path")
         if path is None:
             self.diagonal_mask = self.prepare_flexattention(*args, **kwargs)
         else:
@@ -1507,16 +1317,10 @@ class SanaMSVideoCamCtrl(Sana):
             )
 
     def initialize(self):
-        """Initialize."""
         super().initialize_weights()
 
         # Initialize transformer layers:
         def _basic_init(module):
-            """Helper function to basic init.
-
-            Args:
-                module: The module.
-            """
             if isinstance(module, nn.Linear):
                 torch.nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
@@ -1618,13 +1422,7 @@ class SanaMSVideoCamCtrl(Sana):
                     new_param[2 * new_hidden_size : 2 * new_hidden_size + old_hidden_size] = checkpoint_param[
                         2 * old_hidden_size :
                     ]
-                elif "q_norm.weight" in key:
-                    new_param[: checkpoint_param.shape[0]] = checkpoint_param
-                elif "q_norm.bias" in key:
-                    new_param[: checkpoint_param.shape[0]] = checkpoint_param
-                elif "k_norm.weight" in key:
-                    new_param[: checkpoint_param.shape[0]] = checkpoint_param
-                elif "k_norm.bias" in key:
+                elif "q_norm.weight" in key or "q_norm.bias" in key or "k_norm.weight" in key or "k_norm.bias" in key:
                     new_param[: checkpoint_param.shape[0]] = checkpoint_param
                 elif "cross_attn.q_linear.weight" in key:
                     new_param[: checkpoint_param.shape[0], : checkpoint_param.shape[1]] = checkpoint_param
@@ -1646,11 +1444,11 @@ class SanaMSVideoCamCtrl(Sana):
                     new_param[:, :old_hidden_size] = checkpoint_param
                 elif "final_layer.linear.weight" in key:
                     new_param[:, : checkpoint_param.shape[1]] = checkpoint_param
-                elif "final_layer.linear.bias" in key:
-                    new_param[: checkpoint_param.shape[0]] = checkpoint_param
-                elif "t_embedder.mlp.0.weight" in key:
-                    new_param[: checkpoint_param.shape[0]] = checkpoint_param
-                elif "t_embedder.mlp.0.bias" in key:
+                elif (
+                    "final_layer.linear.bias" in key
+                    or "t_embedder.mlp.0.weight" in key
+                    or "t_embedder.mlp.0.bias" in key
+                ):
                     new_param[: checkpoint_param.shape[0]] = checkpoint_param
                 elif "t_embedder.mlp.2.weight" in key:
                     new_param[: checkpoint_param.shape[0], : checkpoint_param.shape[1]] = checkpoint_param
@@ -1680,9 +1478,7 @@ class SanaMSVideoCamCtrl(Sana):
                         ]
                 elif "t_block.2.weight" in key:
                     new_param[: checkpoint_param.shape[0], : checkpoint_param.shape[1]] = checkpoint_param
-                elif "y_embedder.y_proj.fc1.weight" in key:
-                    new_param[: checkpoint_param.shape[0]] = checkpoint_param
-                elif "y_embedder.y_proj.fc1.bias" in key:
+                elif "y_embedder.y_proj.fc1.weight" in key or "y_embedder.y_proj.fc1.bias" in key:
                     new_param[: checkpoint_param.shape[0]] = checkpoint_param
                 elif "y_embedder.y_proj.fc2.weight" in key:
                     new_param[: checkpoint_param.shape[0], : checkpoint_param.shape[1]] = checkpoint_param
@@ -1764,20 +1560,11 @@ class SanaMSVideoCamCtrl(Sana):
         return result
 
     def register_block_hook(self, layers=None, device="cpu", detach=True, score_only=True):
-        """Register block hook.
-
-        Args:
-            layers: The layers.
-            device: The device.
-            detach: The detach.
-            score_only: The score only.
-        """
         for i, block in enumerate(self.blocks):
             if layers is None or i in layers:
                 block.block_hook = BlockHook(device, detach, score_only)
 
     def get_block_output(self):
-        """Get block output."""
         block_outputs = {}
         for i, block in enumerate(self.blocks):
             if block.block_hook is not None:
@@ -1786,8 +1573,7 @@ class SanaMSVideoCamCtrl(Sana):
         return block_outputs
 
     def init_cam_branch_from_base(self):
-        """Init cam branch from base."""
-        for i, block in enumerate(self.blocks):
+        for _i, block in enumerate(self.blocks):
             if hasattr(block.attn, "init_cam_branch_weights"):
                 block.attn.init_cam_branch_weights()
 
@@ -1798,6 +1584,5 @@ class SanaMSVideoCamCtrl(Sana):
 
 
 def SanaMSVideoCamCtrl_1600M_P1_D20(**kwargs):
-    """Sanamsvideocamctrl 1600m p1 d20."""
     # 20 layers, 1648.48M
     return SanaMSVideoCamCtrl(depth=20, hidden_size=2240, patch_size=(1, 1, 1), num_heads=20, **kwargs)

@@ -7,6 +7,7 @@ groups:
 - video
 source_repos:
 - url: https://github.com/CIntellifusion/MultiWorld
+  revision: 6e0a1c3414a97dd5528d94f67ba3c48cf6d36ab5
 checkpoints:
 - role: multiworld_checkpoint
   repo_id: Haoyuwu/MultiWorldCheckpoint

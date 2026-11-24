@@ -1,12 +1,6 @@
-import pdb
-from dataclasses import dataclass, field
-from typing import Optional, List, Union
 import numpy as np
-import pandas as pd
 import torch
 from hpsv3.dataset.utils import process_vision_info
-from torch.utils.data import Dataset
-import torchvision.transforms.functional as F
 
 INSTRUCTION = """
 You are tasked with evaluating a generated image based on Visual Quality and Text Alignment and give a overall score to estimate the human preference. Please provide a rating from 0 to 10, with 0 being the worst and 10 being the best. 
@@ -74,7 +68,7 @@ class QWen2VLDataCollator:
         remove unnecessary keys from message(very very necessary)
         """
         message_list = []
-        for text, image in zip(texts, images):
+        for text, image in zip(texts, images, strict=False):
             out_message = [
                 {
                     "role": "user",
@@ -88,8 +82,7 @@ class QWen2VLDataCollator:
                         {
                             "type": "text",
                             "text": (
-                                INSTRUCTION.format(text_prompt=text)
-                                + prompt_with_special_token
+                                INSTRUCTION.format(text_prompt=text) + prompt_with_special_token
                                 if use_special_tokens
                                 else prompt_without_special_token
                             ),
@@ -116,9 +109,7 @@ class QWen2VLDataCollator:
         sequences_padded = torch.nn.functional.pad(
             sequences, padding, "constant", self.processor.tokenizer.pad_token_id
         )
-        attention_mask_padded = torch.nn.functional.pad(
-            attention_mask, padding, "constant", 0
-        )
+        attention_mask_padded = torch.nn.functional.pad(attention_mask, padding, "constant", 0)
 
         return sequences_padded, attention_mask_padded
 
@@ -128,7 +119,7 @@ class QWen2VLDataCollator:
         """
         images_1, images_2, texts_1, texts_2 = [], [], [], []
 
-        for idx, batch in enumerate(inputs):
+        for _idx, batch in enumerate(inputs):
             texts_1.append(batch["text_1"])
             texts_2.append(batch["text_2"])
             images_1.append(batch["image_1"])
@@ -153,18 +144,12 @@ class QWen2VLDataCollator:
         # import pdb; pdb.set_trace()
         image_inputs_1, _ = process_vision_info(messages_batch_1)
         image_inputs_2, _ = process_vision_info(messages_batch_2)
-        image_inputs_1 = [
-            np.array(image_inputs_1[i]) / 255.0 for i in range(len(image_inputs_1))
-        ]
-        image_inputs_2 = [
-            np.array(image_inputs_2[i]) / 255.0 for i in range(len(image_inputs_2))
-        ]
+        image_inputs_1 = [np.array(image_inputs_1[i]) / 255.0 for i in range(len(image_inputs_1))]
+        image_inputs_2 = [np.array(image_inputs_2[i]) / 255.0 for i in range(len(image_inputs_2))]
         do_rescale = False
 
         batch_1 = self.processor(
-            text=self.processor.apply_chat_template(
-                messages_batch_1, tokenize=False, add_generation_prompt=True
-            ),
+            text=self.processor.apply_chat_template(messages_batch_1, tokenize=False, add_generation_prompt=True),
             images=image_inputs_1,
             videos=None,
             padding=True,
@@ -172,9 +157,7 @@ class QWen2VLDataCollator:
             images_kwargs={"do_rescale": do_rescale},
         )
         batch_2 = self.processor(
-            text=self.processor.apply_chat_template(
-                messages_batch_2, tokenize=False, add_generation_prompt=True
-            ),
+            text=self.processor.apply_chat_template(messages_batch_2, tokenize=False, add_generation_prompt=True),
             images=image_inputs_2,
             videos=None,
             padding=True,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from worldfoundry.studio.inference.catalog import find_entry
-from worldfoundry.studio.ui.launch_config import CLI_FRONTEND_CHOICES, StudioLaunchConfig
+from worldfoundry.studio.visualization.artifacts import StudioVisualizationArtifact, infer_visualization_artifact
 from worldfoundry.studio.visualization.backends.frontends import (
     DEFAULT_FRONTEND_PORTS,
     MEDIA_FRONTEND,
@@ -16,16 +16,15 @@ from worldfoundry.studio.visualization.backends.frontends import (
     media_viewer_html,
     resolve_frontend_mode,
 )
-from worldfoundry.studio.visualization.core.registry import (
+from worldfoundry.studio.visualization.launch_config import CLI_FRONTEND_CHOICES, StudioLaunchConfig
+from worldfoundry.studio.visualization.registry import (
     ARTIFACT_DOMAIN_ACTION,
     ARTIFACT_DOMAIN_GAUSSIAN_SPLAT,
     ARTIFACT_DOMAIN_GEOMETRY,
     ARTIFACT_DOMAIN_MEDIA,
     ARTIFACT_DOMAIN_WORLD,
-    StudioVisualizationArtifact,
     StudioVisualizationBackend,
     StudioVisualizationRegistry,
-    infer_visualization_artifact,
     model_visualization_profile,
 )
 

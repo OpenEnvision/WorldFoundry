@@ -2,19 +2,26 @@ from typing import Any
 
 import torch
 
-from .preprocessing import AbsoluteActions, ImageTransform, Normalize, PadStatesAndActions, PromptTokenizerTransform, Unnormalize
 from .modeling import GigaBrain0Policy
+from .preprocessing import (
+    AbsoluteActions,
+    ImageTransform,
+    Normalize,
+    PadStatesAndActions,
+    PromptTokenizerTransform,
+    Unnormalize,
+)
 
 
 def _pad_stats_to_dim(stats: dict, target_dim: int) -> dict:
     padded = dict(stats)
     fill_values = {
-        'mean': 0.0,
-        'std': 1.0,
-        'q01': 0.0,
-        'q99': 1.0,
-        'min': 0.0,
-        'max': 1.0,
+        "mean": 0.0,
+        "std": 1.0,
+        "q01": 0.0,
+        "q99": 1.0,
+        "min": 0.0,
+        "max": 1.0,
     }
     for key, fill_value in fill_values.items():
         if key not in padded:
@@ -73,7 +80,7 @@ class GigaBrain0Pipeline:
         self.policy.requires_grad_(False)
         self.policy.eval()
         self.embodiment_id = embodiment_id
-        self.device = 'cpu'
+        self.device = "cpu"
         self.resize_imgs_with_padding = (224, 224)
 
         self.enable_depth_img = self.policy.vision_in_channels == 4
@@ -164,8 +171,8 @@ class GigaBrain0Pipeline:
 
         images, img_masks, image_transform_params = self.image_transform(images)
         state = self.state_normalize_transform(state, embodiment_id=self.embodiment_id)
-        lang_tokens, lang_masks = self.prompt_tokenizer_transform({'task': task, 'observation.state': state})
-        state = self.pad_states_and_actions_transform({'observation.state': state})['observation.state']
+        lang_tokens, lang_masks = self.prompt_tokenizer_transform({"task": task, "observation.state": state})
+        state = self.pad_states_and_actions_transform({"observation.state": state})["observation.state"]
         emb_ids = torch.tensor(self.embodiment_id, dtype=torch.long, device=self.device)
         emb_ids = emb_ids[None, ...]
         for i in range(len(images)):
@@ -175,23 +182,29 @@ class GigaBrain0Pipeline:
         lang_masks = lang_masks[None, ...]
 
         # Inference
-        outputs = self.policy.sample_actions(images, img_masks, lang_tokens, lang_masks, emb_ids, enable_2d_traj_output=enable_2d_traj_output)
+        outputs = self.policy.sample_actions(
+            images, img_masks, lang_tokens, lang_masks, emb_ids, enable_2d_traj_output=enable_2d_traj_output
+        )
         if enable_2d_traj_output:
             pred_action, traj_pred = outputs
         else:
             pred_action = outputs
 
         # Output transforms
-        output_dict = {'action': pred_action[0], 'observation.state': state, 'embodiment_id': self.embodiment_id}
-        output_dict['observation.state'] = self.state_unnormalize_transform(output_dict['observation.state'], embodiment_id=self.embodiment_id)
-        output_dict['action'] = self.action_unnormalize_transform(output_dict['action'], embodiment_id=self.embodiment_id)
+        output_dict = {"action": pred_action[0], "observation.state": state, "embodiment_id": self.embodiment_id}
+        output_dict["observation.state"] = self.state_unnormalize_transform(
+            output_dict["observation.state"], embodiment_id=self.embodiment_id
+        )
+        output_dict["action"] = self.action_unnormalize_transform(
+            output_dict["action"], embodiment_id=self.embodiment_id
+        )
         output_dict = self.absolute_actions_transform(output_dict)
-        pred_action = output_dict['action'][:, : self.original_action_dim].to(ori_device)
+        pred_action = output_dict["action"][:, : self.original_action_dim].to(ori_device)
         if enable_2d_traj_output:
             traj_pred = traj_pred[0]
-            if 'resize_with_pad' in image_transform_params:
-                ratio = image_transform_params['resize_with_pad']['ratio']
-                pad_x, pad_y = image_transform_params['resize_with_pad']['padding']
+            if "resize_with_pad" in image_transform_params:
+                ratio = image_transform_params["resize_with_pad"]["ratio"]
+                pad_x, pad_y = image_transform_params["resize_with_pad"]["padding"]
                 traj_pred[:, ::2] = (traj_pred[:, ::2] * self.resize_imgs_with_padding[0] - pad_x) * ratio
                 traj_pred[:, 1::2] = (traj_pred[:, 1::2] * self.resize_imgs_with_padding[1] - pad_y) * ratio
             traj_pred = traj_pred.to(ori_device)
@@ -217,7 +230,7 @@ class GigaBrain0Pipeline:
             images[key] = images[key].to(self.device)
 
         images, img_masks, _ = self.image_transform(images)
-        lang_tokens, lang_masks = self.prompt_tokenizer_transform({'task': task})
+        lang_tokens, lang_masks = self.prompt_tokenizer_transform({"task": task})
 
         generated = self.generate_autoregressive_tokens(images, img_masks, lang_tokens, lang_masks)
         decoded = tokenizer.batch_decode(generated, skip_special_tokens=True)
@@ -249,17 +262,25 @@ class GigaBrain0Pipeline:
 
         images, img_masks, _ = self.image_transform(images)
         state = self.state_normalize_transform(state, embodiment_id=self.embodiment_id)
-        lang_tokens, lang_masks = self.prompt_tokenizer_transform({'task': task, 'observation.state': state})
+        lang_tokens, lang_masks = self.prompt_tokenizer_transform({"task": task, "observation.state": state})
 
-        generated = self.generate_autoregressive_tokens(images, img_masks, lang_tokens, lang_masks, max_new_tokens=max_new_tokens)
+        generated = self.generate_autoregressive_tokens(
+            images, img_masks, lang_tokens, lang_masks, max_new_tokens=max_new_tokens
+        )
 
-        pred_action = self.prompt_tokenizer_transform.extract_actions(generated, self.policy.n_action_steps, self.original_action_dim)
+        pred_action = self.prompt_tokenizer_transform.extract_actions(
+            generated, self.policy.n_action_steps, self.original_action_dim
+        )
         pred_action = pred_action.to(self.device)
-        output_dict = {'action': pred_action[0], 'observation.state': state, 'embodiment_id': self.embodiment_id}
-        output_dict['observation.state'] = self.state_unnormalize_transform(output_dict['observation.state'], embodiment_id=self.embodiment_id)
-        output_dict['action'] = self.action_unnormalize_transform(output_dict['action'], embodiment_id=self.embodiment_id)
+        output_dict = {"action": pred_action[0], "observation.state": state, "embodiment_id": self.embodiment_id}
+        output_dict["observation.state"] = self.state_unnormalize_transform(
+            output_dict["observation.state"], embodiment_id=self.embodiment_id
+        )
+        output_dict["action"] = self.action_unnormalize_transform(
+            output_dict["action"], embodiment_id=self.embodiment_id
+        )
         output_dict = self.absolute_actions_transform(output_dict)
-        pred_action = output_dict['action'].to(ori_device)
+        pred_action = output_dict["action"].to(ori_device)
         return pred_action
 
     @torch.no_grad()

@@ -36,8 +36,14 @@ _EXPORTS = {
         "worldfoundry.base_models.diffusion_model.models.encoders.wan.model",
         "HuggingfaceTokenizer",
     ),
-    "compute_relative_poses": (__name__ + ".cam_utils", "compute_relative_poses"),
-    "interpolate_camera_poses": (__name__ + ".cam_utils", "interpolate_camera_poses"),
+    "compute_relative_poses": (
+        "worldfoundry.base_models.diffusion_model.models.networks.wan.camera_geometry",
+        "compute_relative_poses",
+    ),
+    "interpolate_camera_poses": (
+        "worldfoundry.base_models.diffusion_model.models.networks.wan.camera_geometry",
+        "interpolate_camera_poses",
+    ),
     "get_plucker_embeddings": (__name__ + ".cam_utils", "get_plucker_embeddings"),
 }
 

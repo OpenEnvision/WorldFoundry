@@ -1,4 +1,4 @@
-"""Astronex causal and bidirectional inference through the official sampler."""
+"""Astronex causal and bidirectional inference through the vendored official sampler."""
 
 from worldfoundry.pipelines.official_world import OfficialWorldPipeline
 from worldfoundry.synthesis.visual_generation.astronex_world import AstronexWorldRuntime

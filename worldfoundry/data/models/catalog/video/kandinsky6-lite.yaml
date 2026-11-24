@@ -1,4 +1,3 @@
-schema_version: 2
 id: kandinsky6-lite
 name: Kandinsky 6.0 lite
 family: Kandinsky6
@@ -28,7 +27,7 @@ checkpoints:
     revision: 50029a58a512c694d5995bdde9f5cae955e4655b
 pipeline_binding: kandinsky6-lite
 runtime_profile: runtime-profile:kandinsky6-lite
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 integration:
   status: integrated
   runtime_profile: kandinsky6-lite

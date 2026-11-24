@@ -15,60 +15,11 @@
 
 import hashlib
 import os
-from contextlib import contextmanager
 
 import torch
 from safetensors.torch import load as safetensors_torch_load
 
 from worldfoundry.core.io.assets.easy_io import easy_io
-
-
-@contextmanager
-def init_weights_on_device(device=torch.device("meta"), include_buffers: bool = False):  # noqa: B008
-    old_register_parameter = torch.nn.Module.register_parameter
-    if include_buffers:
-        old_register_buffer = torch.nn.Module.register_buffer
-
-    def register_empty_parameter(module, name, param):
-        old_register_parameter(module, name, param)
-        if param is not None:
-            param_cls = type(module._parameters[name])
-            kwargs = module._parameters[name].__dict__
-            kwargs["requires_grad"] = param.requires_grad
-            module._parameters[name] = param_cls(module._parameters[name].to(device), **kwargs)
-
-    def register_empty_buffer(module, name, buffer, persistent=True):
-        old_register_buffer(module, name, buffer, persistent=persistent)
-        if buffer is not None:
-            module._buffers[name] = module._buffers[name].to(device)
-
-    def patch_tensor_constructor(fn):
-        def wrapper(*args, **kwargs):
-            kwargs["device"] = device
-            return fn(*args, **kwargs)
-
-        return wrapper
-
-    if include_buffers:
-        tensor_constructors_to_patch = {
-            torch_function_name: getattr(torch, torch_function_name) for torch_function_name in ["empty", "zeros", "ones", "full"]
-        }
-    else:
-        tensor_constructors_to_patch = {}
-
-    try:
-        torch.nn.Module.register_parameter = register_empty_parameter
-        if include_buffers:
-            torch.nn.Module.register_buffer = register_empty_buffer
-        for torch_function_name in tensor_constructors_to_patch.keys():
-            setattr(torch, torch_function_name, patch_tensor_constructor(getattr(torch, torch_function_name)))
-        yield
-    finally:
-        torch.nn.Module.register_parameter = old_register_parameter
-        if include_buffers:
-            torch.nn.Module.register_buffer = old_register_buffer
-        for torch_function_name, old_torch_function in tensor_constructors_to_patch.items():
-            setattr(torch, torch_function_name, old_torch_function)
 
 
 def load_state_dict_from_folder(file_path, torch_dtype=None):
@@ -96,7 +47,9 @@ def load_state_dict_from_safetensors(file_path, torch_dtype=None):
 
 def load_state_dict_from_bin(file_path, torch_dtype=None):
     backend_args = None
-    state_dict = easy_io.load(file_path, backend_args=backend_args, file_format="pt", map_location="cpu", weights_only=False)
+    state_dict = easy_io.load(
+        file_path, backend_args=backend_args, file_format="pt", map_location="cpu", weights_only=False
+    )
     if torch_dtype is not None:
         for i in state_dict:
             if isinstance(state_dict[i], torch.Tensor):
@@ -158,7 +111,9 @@ def build_rename_dict(source_state_dict, target_state_dict, split_qkv=False):
                 length = source_state_dict[name].shape[0] // 3
                 rename = []
                 for i in range(3):
-                    rename.append(search_parameter(source_state_dict[name][i * length : i * length + length], target_state_dict))
+                    rename.append(
+                        search_parameter(source_state_dict[name][i * length : i * length + length], target_state_dict)
+                    )
                 if None not in rename:
                     print(f'"{name}": {rename},')
                     for rename_ in rename:
@@ -206,7 +161,7 @@ def split_state_dict_with_prefix(state_dict):
             prefix_dict[prefix] = []
         prefix_dict[prefix].append(key)
     state_dicts = []
-    for prefix, keys in prefix_dict.items():  # noqa: B007
+    for prefix, keys in prefix_dict.items():  # noqa: B007 - Loop target name kept as upstream.
         sub_state_dict = {key: state_dict[key] for key in keys}
         state_dicts.append(sub_state_dict)
     return state_dicts

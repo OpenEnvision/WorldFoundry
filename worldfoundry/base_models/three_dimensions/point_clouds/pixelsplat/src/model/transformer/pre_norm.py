@@ -22,28 +22,14 @@
 
 # This file comes from https://github.com/stelzner/srt
 
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> transformer -> pre_norm.py functionality."""
-
 from torch import nn
 
 
 class PreNorm(nn.Module):
-    """Pre norm implementation."""
     def __init__(self, dim, fn):
-        """Init.
-
-        Args:
-            dim: The dim.
-            fn: The fn.
-        """
         super().__init__()
         self.norm = nn.LayerNorm(dim)
         self.fn = fn
 
     def forward(self, x, **kwargs):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         return self.fn(self.norm(x), **kwargs)

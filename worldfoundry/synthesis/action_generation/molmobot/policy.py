@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
 import logging
+from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -26,12 +26,12 @@ class SynthManipMolmoInferenceWrapper:
         self,
         checkpoint_path: str,
         device: str = "cuda",
-        num_flow_steps: Optional[int] = None,
-        max_seq_len: Optional[int] = None,
+        num_flow_steps: int | None = None,
+        max_seq_len: int | None = None,
         norm_repo_id: str = "synthmanip",
         use_bfloat16: bool = True,
         compile_model: bool = False,
-        states_mode: Optional[str] = None,
+        states_mode: str | None = None,
     ):
         """
         Initialize the agent with a trained checkpoint.
@@ -117,9 +117,11 @@ class SynthManipMolmoInferenceWrapper:
             self.model_config.states_mode = self.states_mode
         selected_states_mode = self.model_config.states_mode
 
-        log.info(f"Model config: action_horizon={self.action_horizon}, "
-                 f"action_dim={self.action_dim}, n_obs_steps={self.n_obs_steps}, "
-                 f"flow_steps={self.num_flow_steps}, States mode: {selected_states_mode}")
+        log.info(
+            f"Model config: action_horizon={self.action_horizon}, "
+            f"action_dim={self.action_dim}, n_obs_steps={self.n_obs_steps}, "
+            f"flow_steps={self.num_flow_steps}, States mode: {selected_states_mode}"
+        )
 
         # Build model
         log.info("Building MolmoBot model on the meta device")
@@ -171,7 +173,7 @@ class SynthManipMolmoInferenceWrapper:
         robot_post = getattr(self.model_config, "robot_postprocessor", None)
         if robot_post is not None:
             self.action_postprocessor = robot_post.build_postprocessor()
-            log.info(f"Built action postprocessor from checkpoint config")
+            log.info("Built action postprocessor from checkpoint config")
             log.info(f"  action_key: {robot_post.action_key}")
             log.info(f"  action_norm_mode: {robot_post.action_norm_mode}")
             log.info(f"  repos with stats: {list(robot_post.stats_by_repo.keys())}")
@@ -179,7 +181,7 @@ class SynthManipMolmoInferenceWrapper:
                 for key, feature_stats in stats.items():
                     if isinstance(feature_stats, dict):
                         for stat_name, stat_val in feature_stats.items():
-                            if hasattr(stat_val, '__len__'):
+                            if hasattr(stat_val, "__len__"):
                                 log.info(f"    {repo_id}/{key}/{stat_name}: len={len(stat_val)}")
         else:
             log.warning("No robot_postprocessor in config - actions will not be unnormalized!")
@@ -191,9 +193,7 @@ class SynthManipMolmoInferenceWrapper:
         try:
             return self.state_preprocessor.normalize_state(state, self.norm_repo_id)
         except Exception as exc:
-            raise RuntimeError(
-                f"State normalization failed for norm_repo_id={self.norm_repo_id!r}."
-            ) from exc
+            raise RuntimeError(f"State normalization failed for norm_repo_id={self.norm_repo_id!r}.") from exc
 
     def _unnormalize_action(self, actions: np.ndarray) -> np.ndarray:
         """Unnormalize actions using checkpoint's normalization stats."""
@@ -202,19 +202,16 @@ class SynthManipMolmoInferenceWrapper:
             return actions
         try:
             unnormed = self.action_postprocessor.unnormalize_action(actions, self.norm_repo_id)
-            log.debug(f"Unnormalized actions: shape={actions.shape}, "
-                     f"input_range=[{actions.min():.3f}, {actions.max():.3f}], "
-                     f"output_range=[{unnormed.min():.3f}, {unnormed.max():.3f}]")
+            log.debug(
+                f"Unnormalized actions: shape={actions.shape}, "
+                f"input_range=[{actions.min():.3f}, {actions.max():.3f}], "
+                f"output_range=[{unnormed.min():.3f}, {unnormed.max():.3f}]"
+            )
             return unnormed
         except Exception as exc:
-            raise RuntimeError(
-                f"Action unnormalization failed for norm_repo_id={self.norm_repo_id!r}."
-            ) from exc
+            raise RuntimeError(f"Action unnormalization failed for norm_repo_id={self.norm_repo_id!r}.") from exc
 
-    def _prepare_images(
-        self,
-        images: Union[List[np.ndarray], List[str], np.ndarray, str]
-    ) -> List[np.ndarray]:
+    def _prepare_images(self, images: list[np.ndarray] | list[str] | np.ndarray | str) -> list[np.ndarray]:
         """Convert various image formats to list of numpy arrays."""
         if isinstance(images, (str, Path)):
             images = [images]
@@ -239,9 +236,9 @@ class SynthManipMolmoInferenceWrapper:
                 if img.dtype != np.uint8:
                     image_min = float(img.min())
                     image_max = float(img.max())
-                    if 0.0 <= image_min and image_max <= 1.0:
+                    if image_min >= 0.0 and image_max <= 1.0:
                         img = np.rint(img * 255.0)
-                    elif -1.0 <= image_min and image_max <= 1.0:
+                    elif image_min >= -1.0 and image_max <= 1.0:
                         img = np.rint((img + 1.0) * 127.5)
                     img = np.clip(img, 0, 255).astype(np.uint8)
                 result.append(img)
@@ -252,7 +249,7 @@ class SynthManipMolmoInferenceWrapper:
             raise ValueError("MolmoBot requires at least one camera image.")
         return result
 
-    def _prepare_state(self, state: Optional[np.ndarray]) -> Optional[np.ndarray]:
+    def _prepare_state(self, state: np.ndarray | None) -> np.ndarray | None:
         """Prepare and normalize state for model input."""
         if state is None:
             return None
@@ -269,10 +266,10 @@ class SynthManipMolmoInferenceWrapper:
 
     def get_action_chunk(
         self,
-        images: Union[List[np.ndarray], List[str], np.ndarray],
+        images: list[np.ndarray] | list[str] | np.ndarray,
         task_description: str = "",
-        state: Optional[np.ndarray] = None,
-        generator: Optional[torch.Generator] = None,
+        state: np.ndarray | None = None,
+        generator: torch.Generator | None = None,
     ) -> np.ndarray:
         """
         Generate an action chunk from observations.
@@ -343,7 +340,7 @@ class SynthManipMolmoInferenceWrapper:
         return actions_np[0]
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         """Return agent configuration as a dictionary."""
         return {
             "checkpoint_path": self.checkpoint_path,

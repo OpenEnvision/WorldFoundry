@@ -56,7 +56,6 @@ class InputProcessor:
     PATCH_SIZE = 14
 
     def __init__(self):
-        """Init."""
         pass
 
     # -----------------------------
@@ -100,14 +99,10 @@ class InputProcessor:
 
         batch_tensor = self._stack_batch(proc_imgs)
         out_exts = (
-            torch.from_numpy(np.asarray(out_exts)).float()
-            if out_exts is not None and out_exts[0] is not None
-            else None
+            torch.from_numpy(np.asarray(out_exts)).float() if out_exts is not None and out_exts[0] is not None else None
         )
         out_ixts = (
-            torch.from_numpy(np.asarray(out_ixts)).float()
-            if out_ixts is not None and out_ixts[0] is not None
-            else None
+            torch.from_numpy(np.asarray(out_ixts)).float() if out_ixts is not None and out_ixts[0] is not None else None
         )
         return (batch_tensor, out_exts, out_ixts)
 
@@ -115,15 +110,6 @@ class InputProcessor:
     # __call__ helpers
     # -----------------------------
     def _resolve_sequential(self, sequential: bool | None, num_workers: int) -> bool:
-        """Helper function to resolve sequential.
-
-        Args:
-            sequential: The sequential.
-            num_workers: The num workers.
-
-        Returns:
-            The return value.
-        """
         return (num_workers <= 1) if sequential is None else sequential
 
     def _validate_and_pack_meta(
@@ -132,22 +118,12 @@ class InputProcessor:
         extrinsics: np.ndarray | None,
         intrinsics: np.ndarray | None,
     ) -> tuple[list[np.ndarray | None] | None, list[np.ndarray | None] | None]:
-        """Helper function to validate and pack meta.
-
-        Args:
-            images: The images.
-            extrinsics: The extrinsics.
-            intrinsics: The intrinsics.
-
-        Returns:
-            The return value.
-        """
         if extrinsics is not None and len(extrinsics) != len(images):
             raise ValueError("Length of extrinsics must match images when provided.")
         if intrinsics is not None and len(intrinsics) != len(images):
             raise ValueError("Length of intrinsics must match images when provided.")
-        exts_list = [e for e in extrinsics] if extrinsics is not None else None
-        ixts_list = [k for k in intrinsics] if intrinsics is not None else None
+        exts_list = list(extrinsics) if extrinsics is not None else None
+        ixts_list = list(intrinsics) if intrinsics is not None else None
         return exts_list, ixts_list
 
     def _run_parallel(
@@ -163,7 +139,6 @@ class InputProcessor:
         sequential: bool,
         desc: str | None,
     ):
-        """Helper function to run parallel."""
         results = parallel_execution(
             image,
             exts_list,
@@ -177,9 +152,7 @@ class InputProcessor:
             process_res_method=process_res_method,
         )
         if not results:
-            raise RuntimeError(
-                "No preprocessing results returned. Check inputs and parallel_execution."
-            )
+            raise RuntimeError("No preprocessing results returned. Check inputs and parallel_execution.")
         return results
 
     def _unpack_results(self, results):
@@ -188,11 +161,10 @@ class InputProcessor:
         -> processed_images, out_sizes, out_intrinsics, out_extrinsics
         """
         try:
-            processed_images, out_sizes, out_intrinsics, out_extrinsics = zip(*results)
+            processed_images, out_sizes, out_intrinsics, out_extrinsics = zip(*results, strict=False)
         except Exception as e:
             raise RuntimeError(
-                "Unexpected results structure from parallel_execution: "
-                f"{type(results)} / sample: {results[0]}"
+                f"Unexpected results structure from parallel_execution: {type(results)} / sample: {results[0]}"
             ) from e
 
         return list(processed_images), list(out_sizes), list(out_intrinsics), list(out_extrinsics)
@@ -210,13 +182,12 @@ class InputProcessor:
         min_h = min(h for h, _ in out_sizes)
         min_w = min(w for _, w in out_sizes)
         logger.warn(
-            f"Images in batch have different sizes {out_sizes}; "
-            f"center-cropping all to smallest ({min_h},{min_w})"
+            f"Images in batch have different sizes {out_sizes}; center-cropping all to smallest ({min_h},{min_w})"
         )
 
         center_crop = T.CenterCrop((min_h, min_w))
         new_imgs, new_sizes, new_ixts = [], [], []
-        for img_t, (H, W), K in zip(processed_images, out_sizes, out_intrinsics):
+        for img_t, (H, W), K in zip(processed_images, out_sizes, out_intrinsics, strict=False):
             crop_top = max(0, (H - min_h) // 2)
             crop_left = max(0, (W - min_w) // 2)
             new_imgs.append(center_crop(img_t))
@@ -231,14 +202,6 @@ class InputProcessor:
         return new_imgs, new_sizes, new_ixts
 
     def _stack_batch(self, processed_images: list[torch.Tensor]) -> torch.Tensor:
-        """Helper function to stack batch.
-
-        Args:
-            processed_images: The processed images.
-
-        Returns:
-            The return value.
-        """
         return torch.stack(processed_images)
 
     # -----------------------------
@@ -253,16 +216,6 @@ class InputProcessor:
         process_res: int,
         process_res_method: str,
     ) -> tuple[torch.Tensor, tuple[int, int], np.ndarray | None, np.ndarray | None]:
-        """Helper function to process one.
-
-        Args:
-            img: The img.
-            extrinsic: The extrinsic.
-            intrinsic: The intrinsic.
-
-        Returns:
-            The return value.
-        """
         # Load & remember original size
         pil_img = self._load_image(img)
         orig_w, orig_h = pil_img.size
@@ -289,7 +242,7 @@ class InputProcessor:
         # Convert to tensor & normalize
         img_tensor = self._normalize_image(pil_img)
         _, H, W = img_tensor.shape
-        assert (W, H) == (w, h), "Tensor size mismatch with PIL image size after processing."
+        assert (w, h) == (W, H), "Tensor size mismatch with PIL image size after processing."
 
         # Return: (img_tensor, (H, W), intrinsic, extrinsic)
         return img_tensor, (H, W), intrinsic, extrinsic
@@ -305,18 +258,6 @@ class InputProcessor:
         w: int,
         h: int,
     ) -> np.ndarray | None:
-        """Helper function to resize ixt.
-
-        Args:
-            intrinsic: The intrinsic.
-            orig_w: The orig w.
-            orig_h: The orig h.
-            w: The w.
-            h: The h.
-
-        Returns:
-            The return value.
-        """
         if intrinsic is None:
             return None
         K = intrinsic.copy()
@@ -333,18 +274,6 @@ class InputProcessor:
         w: int,
         h: int,
     ) -> np.ndarray | None:
-        """Helper function to crop ixt.
-
-        Args:
-            intrinsic: The intrinsic.
-            orig_w: The orig w.
-            orig_h: The orig h.
-            w: The w.
-            h: The h.
-
-        Returns:
-            The return value.
-        """
         if intrinsic is None:
             return None
         K = intrinsic.copy()
@@ -358,14 +287,6 @@ class InputProcessor:
     # I/O & normalization
     # -----------------------------
     def _load_image(self, img: np.ndarray | Image.Image | str) -> Image.Image:
-        """Helper function to load image.
-
-        Args:
-            img: The img.
-
-        Returns:
-            The return value.
-        """
         if isinstance(img, str):
             return Image.open(img).convert("RGB")
         elif isinstance(img, np.ndarray):
@@ -377,14 +298,6 @@ class InputProcessor:
             raise ValueError(f"Unsupported image type: {type(img)}")
 
     def _normalize_image(self, img: Image.Image) -> torch.Tensor:
-        """Helper function to normalize image.
-
-        Args:
-            img: The img.
-
-        Returns:
-            The return value.
-        """
         img_tensor = T.ToTensor()(img)
         return self.NORMALIZE(img_tensor)
 
@@ -392,16 +305,6 @@ class InputProcessor:
     # Boundary resizing
     # -----------------------------
     def _resize_image(self, img: Image.Image, target_size: int, method: str) -> Image.Image:
-        """Helper function to resize image.
-
-        Args:
-            img: The img.
-            target_size: The target size.
-            method: The method.
-
-        Returns:
-            The return value.
-        """
         if method in ("upper_bound_resize", "upper_bound_crop"):
             return self._resize_longest_side(img, target_size)
         elif method in ("lower_bound_resize", "lower_bound_crop"):
@@ -410,43 +313,25 @@ class InputProcessor:
             raise ValueError(f"Unsupported resize method: {method}")
 
     def _resize_longest_side(self, img: Image.Image, target_size: int) -> Image.Image:
-        """Helper function to resize longest side.
-
-        Args:
-            img: The img.
-            target_size: The target size.
-
-        Returns:
-            The return value.
-        """
         w, h = img.size
         longest = max(w, h)
         if longest == target_size:
             return img
         scale = target_size / float(longest)
-        new_w = max(1, int(round(w * scale)))
-        new_h = max(1, int(round(h * scale)))
+        new_w = max(1, int(round(w * scale)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        new_h = max(1, int(round(h * scale)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         interpolation = cv2.INTER_CUBIC if scale > 1.0 else cv2.INTER_AREA
         arr = cv2.resize(np.asarray(img), (new_w, new_h), interpolation=interpolation)
         return Image.fromarray(arr)
 
     def _resize_shortest_side(self, img: Image.Image, target_size: int) -> Image.Image:
-        """Helper function to resize shortest side.
-
-        Args:
-            img: The img.
-            target_size: The target size.
-
-        Returns:
-            The return value.
-        """
         w, h = img.size
         shortest = min(w, h)
         if shortest == target_size:
             return img
         scale = target_size / float(shortest)
-        new_w = max(1, int(round(w * scale)))
-        new_h = max(1, int(round(h * scale)))
+        new_w = max(1, int(round(w * scale)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        new_h = max(1, int(round(h * scale)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         interpolation = cv2.INTER_CUBIC if scale > 1.0 else cv2.INTER_AREA
         arr = cv2.resize(np.asarray(img), (new_w, new_h), interpolation=interpolation)
         return Image.fromarray(arr)
@@ -475,15 +360,6 @@ class InputProcessor:
         w, h = img.size
 
         def nearest_multiple(x: int, p: int) -> int:
-            """Nearest multiple.
-
-            Args:
-                x: The x.
-                p: The p.
-
-            Returns:
-                The return value.
-            """
             down = (x // p) * p
             up = down + p
             return up if abs(up - x) <= abs(x - down) else down

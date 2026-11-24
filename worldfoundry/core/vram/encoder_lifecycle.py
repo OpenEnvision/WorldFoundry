@@ -31,7 +31,6 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from typing import Any
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Construct / reload — config owns the encoder type; this only places it
 # ──────────────────────────────────────────────────────────────────────────

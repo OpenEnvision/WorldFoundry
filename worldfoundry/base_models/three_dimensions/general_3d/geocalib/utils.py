@@ -7,7 +7,7 @@
 import collections.abc as collections
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Dict, Optional, Tuple
+from typing import ClassVar
 
 import cv2
 import kornia
@@ -54,7 +54,7 @@ def fit_to_multiple(x: torch.Tensor, multiple: int, mode: str = "center", crop: 
 
 def fit_features_to_multiple(
     features: torch.Tensor, multiple: int = 32, crop: bool = False
-) -> Tuple[torch.Tensor, Tuple[int, int]]:
+) -> tuple[torch.Tensor, tuple[int, int]]:
     """Pad or crop image to a multiple of the given number.
 
     Args:
@@ -72,7 +72,7 @@ def fit_features_to_multiple(
 class ImagePreprocessor:
     """Preprocess images for calibration."""
 
-    default_conf = {
+    default_conf: ClassVar[dict] = {
         "resize": 320,  # target edge length, None for no resizing
         "edge_divisible_by": None,
         "side": "short",
@@ -89,7 +89,7 @@ class ImagePreprocessor:
         self.conf = {**self.default_conf, **conf}
         self.conf = SimpleNamespace(**self.conf)
 
-    def __call__(self, img: torch.Tensor, interpolation: Optional[str] = None) -> dict:
+    def __call__(self, img: torch.Tensor, interpolation: str | None = None) -> dict:
         """Resize and preprocess an image, return image and resize scale."""
         h, w = img.shape[-2:]
         size = h, w
@@ -127,7 +127,7 @@ class ImagePreprocessor:
         data["image"] = img
         return data
 
-    def resize(self, img: torch.Tensor, size: Tuple[int, int], interpolation: str) -> torch.Tensor:
+    def resize(self, img: torch.Tensor, size: tuple[int, int], interpolation: str) -> torch.Tensor:
         """Resize an image using the specified backend."""
         if self.conf.resize_backend == "kornia":
             return kornia.geometry.transform.resize(
@@ -147,7 +147,7 @@ class ImagePreprocessor:
         """Load an image from a path and preprocess it."""
         return self(load_image(image_path))
 
-    def get_new_image_size(self, h: int, w: int) -> Tuple[int, int]:
+    def get_new_image_size(self, h: int, w: int) -> tuple[int, int]:
         """Get the new image size after resizing."""
         side = self.conf.side
         if isinstance(self.conf.resize, collections.Iterable):
@@ -193,7 +193,7 @@ def read_image(path: Path, grayscale: bool = False) -> np.ndarray:
     mode = cv2.IMREAD_GRAYSCALE if grayscale else cv2.IMREAD_COLOR
     image = cv2.imread(str(path), mode)
     if image is None:
-        raise IOError(f"Could not read image at {path}.")
+        raise OSError(f"Could not read image at {path}.")
     if not grayscale:
         image = image[..., ::-1]
     return image
@@ -229,10 +229,10 @@ def skew_symmetric(v: torch.Tensor) -> torch.Tensor:
     return torch.stack(
         [z, -v[..., 2], v[..., 1], v[..., 2], z, -v[..., 0], -v[..., 1], v[..., 0], z],
         dim=-1,
-    ).reshape(v.shape[:-1] + (3, 3))
+    ).reshape(v.shape[:-1] + (3, 3))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
 
-def rad2rotmat(roll: torch.Tensor, pitch: torch.Tensor, yaw: Optional[torch.Tensor] = None) -> torch.Tensor:
+def rad2rotmat(roll: torch.Tensor, pitch: torch.Tensor, yaw: torch.Tensor | None = None) -> torch.Tensor:
     """Convert (batched) roll, pitch, yaw angles (in radians) to rotation matrix.
 
     Args:
@@ -246,21 +246,21 @@ def rad2rotmat(roll: torch.Tensor, pitch: torch.Tensor, yaw: Optional[torch.Tens
     if yaw is None:
         yaw = roll.new_zeros(roll.shape)
 
-    Rx = pitch.new_zeros(pitch.shape + (3, 3))
+    Rx = pitch.new_zeros(pitch.shape + (3, 3))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     Rx[..., 0, 0] = 1
     Rx[..., 1, 1] = torch.cos(pitch)
     Rx[..., 1, 2] = torch.sin(pitch)
     Rx[..., 2, 1] = -torch.sin(pitch)
     Rx[..., 2, 2] = torch.cos(pitch)
 
-    Ry = yaw.new_zeros(yaw.shape + (3, 3))
+    Ry = yaw.new_zeros(yaw.shape + (3, 3))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     Ry[..., 0, 0] = torch.cos(yaw)
     Ry[..., 0, 2] = -torch.sin(yaw)
     Ry[..., 1, 1] = 1
     Ry[..., 2, 0] = torch.sin(yaw)
     Ry[..., 2, 2] = torch.cos(yaw)
 
-    Rz = roll.new_zeros(roll.shape + (3, 3))
+    Rz = roll.new_zeros(roll.shape + (3, 3))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     Rz[..., 0, 0] = torch.cos(roll)
     Rz[..., 0, 1] = torch.sin(roll)
     Rz[..., 1, 0] = -torch.sin(roll)
@@ -310,7 +310,7 @@ def get_device() -> str:
     return device
 
 
-def print_calibration(results: Dict[str, torch.Tensor]) -> None:
+def print_calibration(results: dict[str, torch.Tensor]) -> None:
     """Print the calibration results."""
     camera, gravity = results["camera"], results["gravity"]
     vfov = rad2deg(camera.vfov)

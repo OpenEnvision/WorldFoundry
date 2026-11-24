@@ -26,10 +26,13 @@ from pydantic import BaseModel, ConfigDict
 from torch import Tensor
 from tqdm import tqdm
 
-from mira.data.batch import VideoActionBatch
-from mira.world_model.actions_config import ActionTensors
-from mira.world_model.config import LatentWorldModelConfig, WorldModelInferenceConfig
-from mira.world_model.latent_world_model import (
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.data.batch import VideoActionBatch
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.actions_config import ActionTensors
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.config import (
+    LatentWorldModelConfig,
+    WorldModelInferenceConfig,
+)
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.latent_world_model import (
     InferenceOutputs,
     LatentWorldModel,
     _config_dict_from_yaml,
@@ -133,9 +136,7 @@ class MultiWrapperWorldModel(nn.Module):
         swm.codec.preprocess_batch(batch)
 
         with torch.no_grad():
-            z_flat = swm.encode_video(
-                batch.slice_time(0, swm.config.video.timesteps, fps=swm.config.video.fps)
-            )
+            z_flat = swm.encode_video(batch.slice_time(0, swm.config.video.timesteps, fps=swm.config.video.fps))
 
         # (b*p, t, h, w, c) per-player latents -> tiled frame (b, t, p*h, w, c), stacked along height.
         z = rearrange(z_flat, "(b p) t h w c -> b t (p h) w c", p=self.n_players)
@@ -174,7 +175,7 @@ class MultiWrapperWorldModel(nn.Module):
         streaming_kv_caches = None
 
         for start in tqdm(
-            range(0, z.shape[1] - window_size + 1),
+            range(z.shape[1] - window_size + 1),
             desc="Diffusion inference",
             disable=not progress_bar,
         ):
@@ -278,7 +279,7 @@ class MultiWrapperWorldModel(nn.Module):
             ``{"viz_video": ..., "pred_video": ...}`` uint8 tensors of shape ``(B, T, C, P*H, W)``.
         """
         # Imported here (not at module load) to keep the model independent of the training package.
-        from mira.inference_support.visualization import (  # noqa: PLC0415
+        from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.inference_support.visualization import (
             add_prediction_border,
             video_to_uint8,
             visualize_batch,
@@ -287,18 +288,14 @@ class MultiWrapperWorldModel(nn.Module):
         swm = self.single_world_model
         preprocessed_batch = outputs.preprocessed_batch
 
-        output_video_per_player = rearrange(
-            outputs.output_video, "b t c (p h) w -> (b p) t c h w", p=self.n_players
-        )
+        output_video_per_player = rearrange(outputs.output_video, "b t c (p h) w -> (b p) t c h w", p=self.n_players)
         pred_video_per_player = visualize_batch(
             output_video_per_player, preprocessed_batch.actions, swm.actions_per_video_frame
         )
         pred_video = rearrange(pred_video_per_player, "(b p) t c h w -> b t c (p h) w", p=self.n_players)
         output_video_viz = add_prediction_border(pred_video, swm.n_context_frames)
 
-        gt_video_split = rearrange(
-            preprocessed_batch.video, "(b p) t c h w -> b t c (p h) w", p=self.n_players
-        )
+        gt_video_split = rearrange(preprocessed_batch.video, "(b p) t c h w -> b t c (p h) w", p=self.n_players)
         viz_video = torch.cat(
             [
                 output_video_viz,  # Prediction first so it's visible if the clip is cropped vertically.
@@ -334,9 +331,7 @@ class MultiWrapperWorldModel(nn.Module):
         state_dict = dict(state_dict)
         reinitialised = []
         for k, v in self.state_dict().items():
-            if k.startswith(self._WARMSTART_EXEMPT) and (
-                k not in state_dict or state_dict[k].shape != v.shape
-            ):
+            if k.startswith(self._WARMSTART_EXEMPT) and (k not in state_dict or state_dict[k].shape != v.shape):
                 state_dict[k] = v  # keep our init; makes the load a no-op for this param
                 reinitialised.append(k)
         if reinitialised:
@@ -374,7 +369,7 @@ class MultiWrapperWorldModel(nn.Module):
 
         checkpoint = {"state_dict": self.state_dict()}
         if extra_data is not None:
-            for key in extra_data.keys():
+            for key in extra_data.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 if key in checkpoint:
                     raise ValueError(f"Key {key} already exists in checkpoint, cannot overwrite")
             checkpoint.update(extra_data)
@@ -385,7 +380,7 @@ class MultiWrapperWorldModel(nn.Module):
     def load_from_checkpoint(
         cls, checkpoint_path: str | Path, device: str | torch.device | None = None, **kwargs
     ) -> MultiWrapperWorldModel:
-        from omegaconf import OmegaConf  # noqa: PLC0415 -- optional dep, used only here
+        from omegaconf import OmegaConf  # optional dep, used only here
 
         # We reuse the same config filename as the single-player model.
         config_path = LatentWorldModel._find_config(checkpoint_path)

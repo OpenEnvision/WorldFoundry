@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> misc -> image_io.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from pathlib import Path
 from typing import Union
 
@@ -11,7 +10,7 @@ from jaxtyping import Float, UInt8
 from PIL import Image
 from torch import Tensor
 
-FloatImage = Union[
+FloatImage = Union[  # noqa: UP007 - Runtime type alias kept as typing.Union.
     Float[Tensor, "height width"],
     Float[Tensor, "channel height width"],
     Float[Tensor, "batch channel height width"],
@@ -19,14 +18,6 @@ FloatImage = Union[
 
 
 def prep_image(image: FloatImage) -> UInt8[np.ndarray, "height width channel"]:
-    """Prep image.
-
-    Args:
-        image: The image.
-
-    Returns:
-        The return value.
-    """
     # Handle batched images.
     if image.ndim == 4:
         image = rearrange(image, "b c h w -> c h (b w)")
@@ -47,7 +38,7 @@ def prep_image(image: FloatImage) -> UInt8[np.ndarray, "height width channel"]:
 
 def save_image(
     image: FloatImage,
-    path: Union[Path, str],
+    path: Path | str,
 ) -> None:
     """Save an image. Assumed to be in range 0-1."""
 
@@ -60,14 +51,6 @@ def save_image(
 
 
 def load_image(
-    path: Union[Path, str],
+    path: Path | str,
 ) -> Float[Tensor, "3 height width"]:
-    """Load image.
-
-    Args:
-        path: The path.
-
-    Returns:
-        The return value.
-    """
     return tf.ToTensor()(Image.open(path))[:3]

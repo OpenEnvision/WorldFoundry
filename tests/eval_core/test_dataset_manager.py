@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.catalog.schema import BenchmarkDatasetRef, BenchmarkZooEntry
-from worldfoundry.evaluation.tasks.datasets import (
+from worldfoundry.evals.tasks.catalog.schema import BenchmarkDatasetRef, BenchmarkZooEntry
+from worldfoundry.evals.tasks.datasets import (
     DATASET_MANIFEST_SCHEMA_VERSION,
     DatasetManager,
     DatasetRef,
@@ -15,8 +15,8 @@ from worldfoundry.evaluation.tasks.datasets import (
     check_local_dataset,
     classify_dataset_access,
     dataset_location_env_var,
-    load_dataset_manifest,
     hf_cache_dataset_dir,
+    load_dataset_manifest,
     locate_local_dataset,
     normalize_hf_dataset_id,
     parse_dataset_refs,
@@ -375,7 +375,7 @@ def test_local_dataset_check_accepts_complete_direct_hfd_sibling_list_past_count
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import worldfoundry.evaluation.tasks.datasets.manager as dataset_manager
+    import worldfoundry.evals.tasks.datasets.local_status as dataset_manager
 
     cache_dir = tmp_path / "hfd_datasets"
     dataset_dir = cache_dir / "org__dataset"
@@ -404,7 +404,7 @@ def test_local_dataset_check_bounds_direct_hfd_download_metadata_scan(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import worldfoundry.evaluation.tasks.datasets.manager as dataset_manager
+    import worldfoundry.evals.tasks.datasets.local_status as dataset_manager
 
     cache_dir = tmp_path / "hfd_datasets"
     dataset_dir = cache_dir / "org__dataset"
@@ -425,7 +425,7 @@ def test_local_dataset_check_bounds_direct_hfd_download_metadata_scan(
 
 
 def test_download_plan_dedupes_top_level_dataset_when_revision_ref_exists(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.tasks.datasets import DatasetManager
+    from worldfoundry.evals.tasks.datasets import DatasetManager
 
     manager = DatasetManager(tmp_path / "hfd")
     plan = manager.build_download_plan(
@@ -579,8 +579,7 @@ def test_normalize_hf_dataset_id_and_cache_dir() -> None:
 def test_dataset_manifest_builds_stable_sample_contract(tmp_path: Path) -> None:
     samples_path = tmp_path / "samples.jsonl"
     samples_path.write_text(
-        '{"sample_id": "sample-a", "prompt": "look left"}\n'
-        '{"sample_id": "sample-b", "prompt": "look right"}\n',
+        '{"sample_id": "sample-a", "prompt": "look left"}\n{"sample_id": "sample-b", "prompt": "look right"}\n',
         encoding="utf-8",
     )
 
@@ -640,16 +639,14 @@ def test_dataset_manifest_validation_warns_for_generated_sample_ids(tmp_path: Pa
 def test_dataset_manifest_validation_reports_drift_and_duplicate_ids(tmp_path: Path) -> None:
     samples_path = tmp_path / "samples.jsonl"
     samples_path.write_text(
-        '{"sample_id": "sample-a", "prompt": "first"}\n'
-        '{"sample_id": "sample-b", "prompt": "second"}\n',
+        '{"sample_id": "sample-a", "prompt": "first"}\n{"sample_id": "sample-b", "prompt": "second"}\n',
         encoding="utf-8",
     )
     manifest = build_dataset_manifest(samples_path=samples_path, root=tmp_path, dataset_id="drift")
     manifest_path = tmp_path / "dataset_manifest.json"
     write_dataset_manifest(manifest, manifest_path)
     samples_path.write_text(
-        '{"sample_id": "sample-a", "prompt": "changed"}\n'
-        '{"sample_id": "sample-a", "prompt": "duplicate"}\n',
+        '{"sample_id": "sample-a", "prompt": "changed"}\n{"sample_id": "sample-a", "prompt": "duplicate"}\n',
         encoding="utf-8",
     )
 

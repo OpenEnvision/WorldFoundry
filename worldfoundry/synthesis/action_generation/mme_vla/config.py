@@ -17,7 +17,6 @@ from .adapters import RoboMMEInputs, RoboMMEOutputs
 from .history_config import get_history_config
 from .modeling.model import HistoryPi0Config
 
-
 AssetsConfig = _openpi_config.AssetsConfig
 DataConfig = _openpi_config.DataConfig
 RuntimeConfig = _openpi_config.RuntimeConfig

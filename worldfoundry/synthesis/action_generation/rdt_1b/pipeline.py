@@ -9,9 +9,7 @@ class RDT1BPipeline(ComponentPipeline):
     MODEL_ID = "rdt-1b"
     OPERATOR_TARGET = "worldfoundry.operators.official_policy_operator:OfficialPolicyOperator"
     MEMORY_TARGET = "worldfoundry.synthesis.action_generation.memory:ActionTraceMemory"
-    SYNTHESIS_TARGET = (
-        "worldfoundry.synthesis.action_generation.rdt_1b.rdt_1b_synthesis:RDT1BSynthesis"
-    )
+    SYNTHESIS_TARGET = "worldfoundry.synthesis.action_generation.rdt_1b.rdt_1b_synthesis:RDT1BSynthesis"
     generation_type = "diffusion_transformer_policy"
 
 

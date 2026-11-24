@@ -1,21 +1,38 @@
+import inspect
 import math
 import os
-import inspect
-from typing import Optional, Tuple
+import weakref
+from typing import Any, ClassVar
 
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.distributed as dist
-
 from diffusers.configuration_utils import ConfigMixin, register_to_config
-from diffusers.models.attention_dispatch import dispatch_attention_fn
 from diffusers.models._modeling_parallel import ContextParallelInput, ContextParallelOutput
+from diffusers.models.attention_dispatch import dispatch_attention_fn
 from diffusers.models.embeddings import TimestepEmbedding, Timesteps
 from diffusers.models.modeling_outputs import Transformer2DModelOutput
 from diffusers.models.modeling_utils import ModelMixin
 
-from worldfoundry.core.kernels import silu_mul
+from worldfoundry.core.kernels import layer_norm_scale_shift, residual_gate_add, silu_and_mul, silu_mul
+
+from .acceleration import (
+    LingBotEasyCache,
+    fused_lingbot_qk_rmsnorm_rope,
+    lingbot_fa3_attention,
+    lingbot_pisa_attention,
+)
+from .moe_pack_kernels import reorder_tokens_triton_pack
+from .moe_restore_kernels import restore_tokens_triton
+from .sglang_moe_shim import (
+    LightSglangMoeRunnerConfig,
+    LightSglangStandardTopKOutput,
+    ensure_sglang_moe_ready,
+    fp8_scale_from_amax,
+    quantize_to_fp8_e4m3fn,
+    sglang_fused_experts,
+)
 
 try:
     from flash_attn_interface import flash_attn_varlen_func as flash_attn_varlen_func_v3
@@ -37,29 +54,6 @@ def _flash_attn_varlen_v3_compat(**kwargs):
     if "seqused_k" in parameters:
         kwargs.setdefault("seqused_k", None)
     return flash_attn_varlen_func_v3(**kwargs)
-
-try:
-    from .moe_pack_kernels import reorder_tokens_triton_pack
-    from .moe_restore_kernels import restore_tokens_triton
-    from .sglang_moe_shim import (
-        LightSglangMoeRunnerConfig,
-        LightSglangStandardTopKOutput,
-        ensure_sglang_moe_ready,
-        fp8_scale_from_amax,
-        quantize_to_fp8_e4m3fn,
-        sglang_fused_experts,
-    )
-except ImportError:  # pragma: no cover - allows direct file loading in diagnostics.
-    from moe_pack_kernels import reorder_tokens_triton_pack
-    from moe_restore_kernels import restore_tokens_triton
-    from sglang_moe_shim import (
-        LightSglangMoeRunnerConfig,
-        LightSglangStandardTopKOutput,
-        ensure_sglang_moe_ready,
-        fp8_scale_from_amax,
-        quantize_to_fp8_e4m3fn,
-        sglang_fused_experts,
-    )
 
 
 LINGBOT_VIDEO_FP32_MODULES = (
@@ -106,10 +100,7 @@ def _all_to_all_split_cat(
     group: dist.ProcessGroup,
 ) -> torch.Tensor:
     world_size = dist.get_world_size(group)
-    input_list = [
-        tensor.contiguous()
-        for tensor in torch.tensor_split(local_input, world_size, scatter_dim)
-    ]
+    input_list = [tensor.contiguous() for tensor in torch.tensor_split(local_input, world_size, scatter_dim)]
     output_list = [torch.empty_like(input_list[0]) for _ in range(world_size)]
     dist.all_to_all(output_list, input_list, group=group)
     return torch.cat(output_list, dim=gather_dim).contiguous()
@@ -142,7 +133,7 @@ def apply_rotary_emb(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
 class LingBotVideoRotaryEmbedding(nn.Module):
     """Complex64 RoPE table indexed by position ids."""
 
-    def __init__(self, axes_dims: Tuple[int, ...], axes_lens: Tuple[int, ...], theta: float):
+    def __init__(self, axes_dims: tuple[int, ...], axes_lens: tuple[int, ...], theta: float):
         super().__init__()
         self.axes_dims = tuple(axes_dims)
         self.axes_lens = list(axes_lens)
@@ -150,12 +141,10 @@ class LingBotVideoRotaryEmbedding(nn.Module):
         self.freqs_cis = None
 
     @staticmethod
-    def precompute_freqs_cis(dim: Tuple[int, ...], end: Tuple[int, ...], theta: float):
+    def precompute_freqs_cis(dim: tuple[int, ...], end: tuple[int, ...], theta: float):
         freqs_cis = []
-        for d, e in zip(dim, end):
-            freqs = 1.0 / (
-                theta ** (torch.arange(0, d, 2, dtype=torch.float64, device="cpu") / d)
-            )
+        for d, e in zip(dim, end, strict=False):
+            freqs = 1.0 / (theta ** (torch.arange(0, d, 2, dtype=torch.float64, device="cpu") / d))
             timestep = torch.arange(e, device=freqs.device, dtype=torch.float64)
             freqs = torch.outer(timestep, freqs).float()
             freqs_cis.append(torch.polar(torch.ones_like(freqs), freqs).to(torch.complex64))
@@ -165,14 +154,12 @@ class LingBotVideoRotaryEmbedding(nn.Module):
         # position_ids: (S, 3) int → (S, head_dim/2) complex64
         device = position_ids.device
         max_vals = position_ids.max(dim=0).values.tolist()
-        needs_rebuild = self.freqs_cis is None or any(m >= l for m, l in zip(max_vals, self.axes_lens))
+        needs_rebuild = self.freqs_cis is None or any(m >= l for m, l in zip(max_vals, self.axes_lens, strict=False))  # noqa: E741 - Ambiguous upstream name kept as written.
         if needs_rebuild:
             for i in range(len(self.axes_lens)):
                 if max_vals[i] >= self.axes_lens[i]:
                     self.axes_lens[i] = int(max_vals[i] * 1.5) + 1
-            self.freqs_cis = self.precompute_freqs_cis(
-                self.axes_dims, tuple(self.axes_lens), theta=self.theta
-            )
+            self.freqs_cis = self.precompute_freqs_cis(self.axes_dims, tuple(self.axes_lens), theta=self.theta)
             self.freqs_cis = [freqs_cis.to(device) for freqs_cis in self.freqs_cis]
         elif self.freqs_cis[0].device != device:
             self.freqs_cis = [freqs_cis.to(device) for freqs_cis in self.freqs_cis]
@@ -180,9 +167,7 @@ class LingBotVideoRotaryEmbedding(nn.Module):
         return torch.cat([self.freqs_cis[i][position_ids[:, i]] for i in range(len(self.axes_dims))], dim=-1)
 
 
-def make_joint_position_ids(
-    text_len: int, grid_t: int, grid_h: int, grid_w: int, device: torch.device
-) -> torch.Tensor:
+def make_joint_position_ids(text_len: int, grid_t: int, grid_h: int, grid_w: int, device: torch.device) -> torch.Tensor:
     """3D positions in [video; text] order. Text t-axis is 1..text_len; video t-axis starts at text_len+1.
 
     Matches patchify_and_embed: cap start (1,0,0); vision start (cap_len+1,0,0);
@@ -193,9 +178,7 @@ def make_joint_position_ids(
     ww = torch.arange(grid_w, device=device, dtype=torch.int32)
     grid = torch.stack(torch.meshgrid(tt, hh, ww, indexing="ij"), dim=-1).flatten(0, 2)
     text_t = torch.arange(text_len, device=device, dtype=torch.int32) + 1
-    text_pos = torch.stack(
-        [text_t, torch.zeros_like(text_t), torch.zeros_like(text_t)], dim=-1
-    )
+    text_pos = torch.stack([text_t, torch.zeros_like(text_t), torch.zeros_like(text_t)], dim=-1)
     return torch.cat([grid, text_pos], dim=0)  # (Nx + L, 3)
 
 
@@ -208,7 +191,7 @@ def _cat_interleave(
     a_split = torch.split(a, len_a, dim=1)
     b_split = torch.split(b, len_b, dim=1)
     blocks: list[torch.Tensor] = []
-    for x_part, text_part in zip(a_split, b_split):
+    for x_part, text_part in zip(a_split, b_split, strict=False):
         blocks.extend([x_part, text_part])
     return torch.cat(blocks, dim=1)
 
@@ -235,20 +218,36 @@ class LingBotVideoAttention(nn.Module):
         self.to_q = nn.Linear(hidden_size, hidden_size, bias=qkv_bias)
         self.to_k = nn.Linear(hidden_size, hidden_size, bias=qkv_bias)
         self.to_v = nn.Linear(hidden_size, hidden_size, bias=qkv_bias)
+        self.qkv_proj: nn.Linear | None = None
         self.norm_q = LingBotVideoRMSNorm(self.head_dim, norm_eps)
         self.norm_k = LingBotVideoRMSNorm(self.head_dim, norm_eps)
         self.to_out = nn.Linear(hidden_size, hidden_size, bias=out_bias)
+        self._attention_backend: str = "torch"
+        self._use_fused_kernels: bool = False
+        self._pisa_block_eligible: bool = False
+        self._pisa_density: float = 0.25
+        self._pisa_block_size: int = 64
+        self._pisa_min_sequence_length: int = 1024
+        self._pisa_strict: bool = False
+        self._fa3_calls: int = 0
+        self._pisa_calls: int = 0
+        self._sdpa_calls: int = 0
 
     def forward(
         self,
         x,
         rotary_emb,
         attention_mask=None,
-        packed_indices: Optional[dict[str, torch.Tensor]] = None,
+        packed_indices: dict[str, torch.Tensor] | None = None,
         parallel_config=None,
+        *,
+        use_pisa: bool = False,
     ):
         B, S, _ = x.shape
-        if os.environ.get("LINGBOT_FUSED_QKV_LINEAR") == "1":
+        if self.qkv_proj is not None and not self.training and not torch.is_grad_enabled():
+            qkv = self.qkv_proj(x)
+            q, k, v = qkv.view(B, S, 3, self.num_heads, self.head_dim).unbind(2)
+        elif os.environ.get("LINGBOT_FUSED_QKV_LINEAR") == "1":
             weight = torch.cat(
                 (self.to_q.weight, self.to_k.weight, self.to_v.weight),
                 dim=0,
@@ -265,17 +264,67 @@ class LingBotVideoAttention(nn.Module):
             q = self.to_q(x).unflatten(2, (self.num_heads, self.head_dim))
             k = self.to_k(x).unflatten(2, (self.num_heads, self.head_dim))
             v = self.to_v(x).unflatten(2, (self.num_heads, self.head_dim))
-        q = apply_rotary_emb(self.norm_q(q), rotary_emb)
-        k = apply_rotary_emb(self.norm_k(k), rotary_emb)
-        # dispatch_attention_fn expects (B, S, H, D) in and out (same as the diffusers Wan processor)
-        if packed_indices is None:
-            out = dispatch_attention_fn(
+
+        can_fast_attn = (
+            packed_indices is None
+            and attention_mask is None
+            and parallel_config is None
+            and not self.training
+            and not torch.is_grad_enabled()
+            and q.is_cuda
+            and q.dtype in {torch.bfloat16, torch.float16}
+            and k.dtype == q.dtype
+            and v.dtype == q.dtype
+        )
+        run_pisa = bool(
+            can_fast_attn and use_pisa and self._pisa_block_eligible and self._pisa_min_sequence_length <= S
+        )
+
+        if self._use_fused_kernels and not self.training and not torch.is_grad_enabled():
+            q, k = fused_lingbot_qk_rmsnorm_rope(
                 q,
                 k,
-                v,
-                attn_mask=attention_mask,
-                parallel_config=parallel_config,
+                self.norm_q.weight,
+                self.norm_k.weight,
+                rotary_emb,
+                eps=float(self.norm_q.variance_epsilon),
+                output_bhsd=run_pisa,
             )
+            q_k_bhsd = run_pisa
+        else:
+            q = apply_rotary_emb(self.norm_q(q), rotary_emb)
+            k = apply_rotary_emb(self.norm_k(k), rotary_emb)
+            q_k_bhsd = False
+
+        # dispatch_attention_fn expects (B, S, H, D) in and out (same as the diffusers Wan processor)
+        if packed_indices is None:
+            if run_pisa:
+                out = lingbot_pisa_attention(
+                    q,
+                    k,
+                    v,
+                    density=self._pisa_density,
+                    block_size=self._pisa_block_size,
+                    min_sequence_length=self._pisa_min_sequence_length,
+                    strict=self._pisa_strict,
+                    q_k_bhsd=q_k_bhsd,
+                )
+                if not torch.compiler.is_compiling():
+                    self._pisa_calls += 1
+            elif can_fast_attn and self._attention_backend == "flash_attention_3":
+                out = lingbot_fa3_attention(q, k, v)
+                if not torch.compiler.is_compiling():
+                    self._fa3_calls += 1
+            else:
+                out = dispatch_attention_fn(
+                    q,
+                    k,
+                    v,
+                    attn_mask=attention_mask,
+                    parallel_config=parallel_config,
+                )
+                if not torch.compiler.is_compiling():
+                    self._sdpa_calls += 1
         else:
             if parallel_config is None:
                 result = _flash_attn_varlen_v3_compat(
@@ -290,6 +339,8 @@ class LingBotVideoAttention(nn.Module):
                 )
                 out = result[0] if isinstance(result, tuple) else result
                 out = out.reshape(B, S, self.num_heads, self.head_dim)
+                if not torch.compiler.is_compiling():
+                    self._fa3_calls += 1
             else:
                 group = parallel_config.context_parallel_config._ulysses_mesh.get_group()
                 world_size = dist.get_world_size(group)
@@ -342,8 +393,11 @@ class LingBotVideoMLP(nn.Module):
         self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
+        self.gate_up_proj: nn.Linear | None = None
 
     def forward(self, x):
+        if self.gate_up_proj is not None and not self.training and not torch.is_grad_enabled():
+            return self.down_proj(silu_and_mul(self.gate_up_proj(x)))
         return self.down_proj(silu_mul(self.gate_proj(x), self.up_proj(x)))
 
 
@@ -354,8 +408,7 @@ class LingBotVideoRouter(nn.Module):
     weights gather the bias-free score.
     """
 
-    def __init__(self, hidden_size, num_experts, top_k, score_func, norm_topk_prob,
-                 n_group, topk_group, route_scale):
+    def __init__(self, hidden_size, num_experts, top_k, score_func, norm_topk_prob, n_group, topk_group, route_scale):
         super().__init__()
         self.num_experts = num_experts
         self.top_k = top_k
@@ -375,21 +428,14 @@ class LingBotVideoRouter(nn.Module):
         group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)
         group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(seq_len, self.n_group, experts_per_group)
-            .reshape(seq_len, -1)
-        )
+        score_mask = group_mask.unsqueeze(-1).expand(seq_len, self.n_group, experts_per_group).reshape(seq_len, -1)
         masked = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
         return torch.topk(masked, k=self.top_k, dim=-1, sorted=False)[1]
 
     def forward(self, tokens: torch.Tensor):
         with torch.amp.autocast(tokens.device.type, enabled=False):
             logits = F.linear(tokens.float(), self.weight.float())
-        if self.score_func == "softmax":
-            scores = F.softmax(logits, dim=-1)
-        else:
-            scores = logits.sigmoid()
+        scores = F.softmax(logits, dim=-1) if self.score_func == "softmax" else logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias.unsqueeze(0)
         if self.n_group is not None and self.n_group > 1:
             top_indices = self._group_limited_topk(scores_for_choice)
@@ -418,26 +464,41 @@ def _round_up_to_multiple(value: int, multiple: int) -> int:
 
 
 class LingBotVideoSparseMoeBlock(nn.Module):
-    def __init__(self, hidden_size, intermediate_size, num_experts, top_k,
-                 moe_intermediate_size, score_func, norm_topk_prob, n_group, topk_group,
-                 routed_scaling_factor, n_shared_experts):
+    def __init__(
+        self,
+        hidden_size,
+        intermediate_size,
+        num_experts,
+        top_k,
+        moe_intermediate_size,
+        score_func,
+        norm_topk_prob,
+        n_group,
+        topk_group,
+        routed_scaling_factor,
+        n_shared_experts,
+    ):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_experts = num_experts
         self.router = LingBotVideoRouter(
-            hidden_size, num_experts, top_k, score_func, norm_topk_prob,
-            n_group, topk_group, routed_scaling_factor,
+            hidden_size,
+            num_experts,
+            top_k,
+            score_func,
+            norm_topk_prob,
+            n_group,
+            topk_group,
+            routed_scaling_factor,
         )
         self.experts = LingBotVideoGroupedExperts(num_experts, hidden_size, moe_intermediate_size)
-        self._sglang_w13_cache: Optional[torch.Tensor] = None
+        self._sglang_w13_cache: torch.Tensor | None = None
         self._sglang_w13_cache_key = None
         self._sglang_fp8_cache = None
         self._sglang_fp8_cache_key = None
         self.shared_experts = None
         if n_shared_experts is not None and n_shared_experts > 0:
-            self.shared_experts = LingBotVideoMLP(
-                hidden_size, moe_intermediate_size * n_shared_experts
-            )
+            self.shared_experts = LingBotVideoMLP(hidden_size, moe_intermediate_size * n_shared_experts)
 
     @staticmethod
     def _reorder_tokens(tokens: torch.Tensor, top_scores: torch.Tensor, top_indices: torch.Tensor, num_experts: int):
@@ -445,10 +506,7 @@ class LingBotVideoSparseMoeBlock(nn.Module):
         if backend in {"triton_pack", "pack", "triton"}:
             return reorder_tokens_triton_pack(tokens, top_scores, top_indices, num_experts)
         if backend not in {"sort", "argsort", "default"}:
-            raise ValueError(
-                f"Unsupported LINGBOT_MOE_REORDER_BACKEND={backend!r}; "
-                "expected sort or triton_pack"
-            )
+            raise ValueError(f"Unsupported LINGBOT_MOE_REORDER_BACKEND={backend!r}; expected sort or triton_pack")
         num_tokens = tokens.shape[0]
         top_k = top_indices.shape[1]
         flat_scores = top_scores.reshape(-1)
@@ -473,23 +531,19 @@ class LingBotVideoSparseMoeBlock(nn.Module):
         max_len = _round_up_to_multiple(num_tokens + num_experts * align, align)
         counts_i64 = counts.to(torch.int64)
         total_per_expert = torch.clamp_min(counts_i64, align)
-        aligned_counts = (
-            (total_per_expert + align - 1) // align * align
-        ).to(torch.int32)
+        aligned_counts = ((total_per_expert + align - 1) // align * align).to(torch.int32)
         write_offsets = torch.cumsum(aligned_counts, dim=0) - aligned_counts
         start_indices = torch.cumsum(counts_i64, dim=0) - counts_i64
 
         fill_value = num_tokens
-        permuted_indices = torch.full(
-            (max_len,), fill_value, dtype=torch.int64, device=tokens.device
-        )
+        permuted_indices = torch.full((max_len,), fill_value, dtype=torch.int64, device=tokens.device)
         for expert_idx in range(num_experts):
             length = int(counts_i64[expert_idx].item())
             if length == 0:
                 continue
             write_start = int(write_offsets[expert_idx].item())
             start = int(start_indices[expert_idx].item())
-            permuted_indices[write_start:write_start + length] = torch.arange(
+            permuted_indices[write_start : write_start + length] = torch.arange(
                 start, start + length, device=tokens.device, dtype=torch.int64
             )
 
@@ -535,9 +589,7 @@ class LingBotVideoSparseMoeBlock(nn.Module):
             return LingBotVideoSparseMoeBlock._pad_grouped_tokens_loop(tokens, counts, align)
         if backend in {"vectorized", "torch"}:
             return LingBotVideoSparseMoeBlock._pad_grouped_tokens_vectorized(tokens, counts, align)
-        raise ValueError(
-            f"Unsupported LINGBOT_MOE_PAD_BACKEND={backend!r}; expected loop or vectorized"
-        )
+        raise ValueError(f"Unsupported LINGBOT_MOE_PAD_BACKEND={backend!r}; expected loop or vectorized")
 
     @staticmethod
     def _unpad_grouped_tokens(output: torch.Tensor, input_shape: torch.Size, permuted_indices: torch.Tensor):
@@ -600,13 +652,13 @@ class LingBotVideoSparseMoeBlock(nn.Module):
         return self._sglang_w13_cache
 
     @staticmethod
-    def _quantize_fp8_weight_per_expert(weight: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _quantize_fp8_weight_per_expert(weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         weight_float = weight.float()
         scale = fp8_scale_from_amax(weight_float.abs().amax(dim=(1, 2)))
         quantized = quantize_to_fp8_e4m3fn(weight_float, scale[:, None, None]).contiguous()
         return quantized, scale.contiguous()
 
-    def _get_sglang_fp8_weights(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _get_sglang_fp8_weights(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         key = (
             self.experts.w1.data_ptr(),
             self.experts.w2.data_ptr(),
@@ -811,9 +863,7 @@ class LingBotVideoSparseMoeBlock(nn.Module):
             )
             unsorted[sorted_positions] = expert_output[:, start:end]
             unsorted = unsorted.reshape(num_tokens, top_k, end - start)
-            output[:, start:end] = (unsorted.float() * scores_unsorted).sum(dim=1).to(
-                expert_output.dtype
-            )
+            output[:, start:end] = (unsorted.float() * scores_unsorted).sum(dim=1).to(expert_output.dtype)
         return output
 
     @staticmethod
@@ -867,7 +917,7 @@ class LingBotVideoSparseMoeBlock(nn.Module):
         out.index_add_(0, token_indices, weighted)
         return out.to(expert_output.dtype)
 
-    def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.Tensor] = None):
+    def forward(self, hidden_states: torch.Tensor, padding_mask: torch.Tensor | None = None):
         # hidden_states: (B, S, H); padding_mask: (B*S,) with 1=valid (only needed when B>1)
         B = hidden_states.shape[0]
         tokens = hidden_states.view(-1, self.hidden_size)
@@ -915,24 +965,28 @@ class LingBotVideoBlock(nn.Module):
         h = hidden_size
         self.scale_shift_table = nn.Parameter(torch.zeros(1, 6 * h))
         self.norm1 = LingBotVideoRMSNorm(h, norm_eps)
-        self.attn = LingBotVideoAttention(
-            h, num_attention_heads, norm_eps, qkv_bias, out_bias
-        )
+        self.attn = LingBotVideoAttention(h, num_attention_heads, norm_eps, qkv_bias, out_bias)
         self.norm_post_attn = LingBotVideoRMSNorm(h, norm_eps)
         self.norm2 = LingBotVideoRMSNorm(h, norm_eps)
         # Sparsity decision matches MoEBlock: mlp_only_layers + decoder_sparse_step + num_experts
-        if layer_idx not in mlp_only_layers and (
-            num_experts > 0 and (layer_idx + 1) % decoder_sparse_step == 0
-        ):
+        if layer_idx not in mlp_only_layers and (num_experts > 0 and (layer_idx + 1) % decoder_sparse_step == 0):
             self.ffn = LingBotVideoSparseMoeBlock(
-                h, intermediate_size, num_experts, num_experts_per_tok,
-                moe_intermediate_size, score_func, norm_topk_prob,
-                n_group, topk_group, routed_scaling_factor,
+                h,
+                intermediate_size,
+                num_experts,
+                num_experts_per_tok,
+                moe_intermediate_size,
+                score_func,
+                norm_topk_prob,
+                n_group,
+                topk_group,
+                routed_scaling_factor,
                 n_shared_experts,
             )
         else:
             self.ffn = LingBotVideoMLP(h, intermediate_size)
         self.norm_post_ffn = LingBotVideoRMSNorm(h, norm_eps)
+        self._use_fused_kernels: bool = False
 
     def forward(
         self,
@@ -941,25 +995,27 @@ class LingBotVideoBlock(nn.Module):
         rotary_emb,
         attention_mask=None,
         moe_padding_mask=None,
-        packed_indices: Optional[dict[str, torch.Tensor]] = None,
+        packed_indices: dict[str, torch.Tensor] | None = None,
         parallel_config=None,
+        *,
+        use_pisa: bool = False,
     ):
         expected_tokens = x.shape[0] * x.shape[1]
-        if temb6.ndim != 2 or temb6.shape[0] != expected_tokens:
+        if temb6.ndim == 3 and temb6.shape[0] == x.shape[0] and temb6.shape[1] == 1:
+            mod = temb6 + self.scale_shift_table.unsqueeze(0)
+        elif temb6.ndim == 2 and temb6.shape[0] == x.shape[0] and x.shape[1] > 1:
+            mod = temb6.unsqueeze(1) + self.scale_shift_table.unsqueeze(0)
+        elif temb6.ndim == 2 and temb6.shape[0] == expected_tokens:
+            mod = temb6.view(x.shape[0], x.shape[1], -1) + self.scale_shift_table.unsqueeze(0)
+        else:
             raise ValueError(
-                "LingBotVideoBlock expects token-level temb6 with shape "
-                f"(B*S, 6D); got {tuple(temb6.shape)} for hidden states {tuple(x.shape)}."
+                "LingBotVideoBlock expects broadcast (B, 1, 6D) or token-level (B*S, 6D) temb6; "
+                f"got {tuple(temb6.shape)} for hidden states {tuple(x.shape)}."
             )
-        # AdaLN mod: dense and MoE both keep scale_shift_table fp32 (master
-        # moe/models.py:80 dropped the accidental `.to(dtype=c.dtype)` cast).
-        mod = temb6.view(x.shape[0], x.shape[1], -1) + self.scale_shift_table.unsqueeze(0)
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = mod.chunk(6, dim=-1)
         gate_msa, gate_mlp = gate_msa.tanh(), gate_mlp.tanh()
         scale_msa, scale_mlp = 1.0 + scale_msa, 1.0 + scale_mlp
 
-        # AdaLN modulation / norms run in fp32 (sensitive path); cast to the bulk
-        # compute dtype only at the bf16 Linear boundary. This replaces the old
-        # ambient autocast, which rounded Linear inputs to bf16 at the same point.
         bulk_dtype = self.attn.to_q.weight.dtype
         attn_in = (self.norm1(x) * scale_msa + shift_msa).to(bulk_dtype)
         attn_out = self.attn(
@@ -968,8 +1024,14 @@ class LingBotVideoBlock(nn.Module):
             attention_mask,
             packed_indices=packed_indices,
             parallel_config=parallel_config,
+            use_pisa=use_pisa,
         )
-        x = x + (gate_msa * self.norm_post_attn(attn_out)).to(x.dtype)
+        attn_normed = self.norm_post_attn(attn_out)
+        use_fused = self._use_fused_kernels and not self.training and not torch.is_grad_enabled() and x.is_cuda
+        if use_fused:
+            x = residual_gate_add(x, attn_normed.to(x.dtype), gate_msa.to(x.dtype))
+        else:
+            x = x + (gate_msa * attn_normed).to(x.dtype)
 
         ffn_in = (self.norm2(x) * scale_mlp + shift_mlp).to(bulk_dtype)
         if isinstance(self.ffn, LingBotVideoSparseMoeBlock):
@@ -977,14 +1039,17 @@ class LingBotVideoBlock(nn.Module):
         else:
             ffn_out = self.ffn(ffn_in)
         ffn_normed = self.norm_post_ffn(ffn_out)
-        x = x + (gate_mlp * ffn_normed).to(x.dtype)
+        if use_fused:
+            x = residual_gate_add(x, ffn_normed.to(x.dtype), gate_mlp.to(x.dtype))
+        else:
+            x = x + (gate_mlp * ffn_normed).to(x.dtype)
         return x
 
 
 class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
     _supports_gradient_checkpointing = False
-    _no_split_modules = ["LingBotVideoBlock"]
-    _keep_in_fp32_modules = list(LINGBOT_VIDEO_FP32_MODULES)
+    _no_split_modules: ClassVar[list] = ["LingBotVideoBlock"]
+    _keep_in_fp32_modules: ClassVar[list] = list(LINGBOT_VIDEO_FP32_MODULES)
 
     def to(self, *args, **kwargs):
         device, dtype, non_blocking, _ = torch._C._nn._parse_to(*args, **kwargs)
@@ -1017,7 +1082,7 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
     @register_to_config
     def __init__(
         self,
-        patch_size: Tuple[int, int, int] = (1, 2, 2),
+        patch_size: tuple[int, int, int] = (1, 2, 2),
         in_channels: int = 16,
         out_channels: int = 16,
         hidden_size: int = 2048,
@@ -1028,8 +1093,8 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
         freq_dim: int = 256,
         norm_eps: float = 1e-6,
         rope_theta: float = 256.0,
-        axes_dims: Tuple[int, int, int] = (32, 48, 48),
-        axes_lens: Tuple[int, int, int] = (8192, 1024, 1024),
+        axes_dims: tuple[int, int, int] = (32, 48, 48),
+        axes_lens: tuple[int, int, int] = (8192, 1024, 1024),
         qkv_bias: bool = False,
         out_bias: bool = True,
         patch_embed_bias: bool = True,
@@ -1038,12 +1103,12 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
         num_experts_per_tok: int = 8,
         moe_intermediate_size: int = 512,
         decoder_sparse_step: int = 1,
-        mlp_only_layers: Tuple[int, ...] = (),
-        n_shared_experts: Optional[int] = None,
+        mlp_only_layers: tuple[int, ...] = (),
+        n_shared_experts: int | None = None,
         score_func: str = "sigmoid",
         norm_topk_prob: bool = True,
-        n_group: Optional[int] = None,
-        topk_group: Optional[int] = None,
+        n_group: int | None = None,
+        topk_group: int | None = None,
         routed_scaling_factor: float = 1.0,
     ):
         super().__init__()
@@ -1051,13 +1116,9 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
         assert head_dim == sum(axes_dims), f"head_dim {head_dim} != sum(axes_dims) {sum(axes_dims)}"
         mlp_only_layers = tuple(mlp_only_layers)
 
-        self.patch_embedder = nn.Linear(
-            in_channels * math.prod(patch_size), hidden_size, bias=patch_embed_bias
-        )
+        self.patch_embedder = nn.Linear(in_channels * math.prod(patch_size), hidden_size, bias=patch_embed_bias)
         self.time_proj = Timesteps(freq_dim, flip_sin_to_cos=True, downscale_freq_shift=0)
-        self.time_embedder = TimestepEmbedding(
-            freq_dim, hidden_size, act_fn="silu", sample_proj_bias=timestep_mlp_bias
-        )
+        self.time_embedder = TimestepEmbedding(freq_dim, hidden_size, act_fn="silu", sample_proj_bias=timestep_mlp_bias)
         self.time_modulation = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 6 * hidden_size))
         self.text_embedder = LingBotVideoTextEmbedder(text_dim, hidden_size)
         self.rope = LingBotVideoRotaryEmbedding(axes_dims, axes_lens, rope_theta)
@@ -1109,14 +1170,60 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
             },
             "cp_out": ContextParallelOutput(gather_dim=1, expected_dims=3),
         }
+        # SOL-Engine runtime slots (opt-in, off by default).
+        self._lingbot_has_moe: bool = any(
+            isinstance(getattr(b, "ffn", None), LingBotVideoSparseMoeBlock) for b in self.blocks
+        )
+        self._lingbot_compact_adaln: bool = False
+        self._lingbot_fused_kernels: bool = False
+        self._lingbot_pisa_policy: dict[str, Any] | None = None
+        self._lingbot_easycache_spec: dict[str, Any] | None = None
+        self._lingbot_easycaches: dict[str, LingBotEasyCache] = {}
+        self._lingbot_piecewise_graph: Any = None
+        self._lingbot_rope_cache: dict[tuple[int, int, int, int, str], tuple[torch.Tensor, torch.Tensor]] = {}
+        self._lingbot_mask_all_valid_cache: list[tuple[weakref.ref[torch.Tensor], int, int, torch.Tensor, bool]] = []
+
+    def reset_sol_caches(self) -> None:
+        """Reset per-request EasyCache state and cached rotary/mask metadata."""
+        for cache in self._lingbot_easycaches.values():
+            cache.reset()
+        self._lingbot_easycaches.clear()
+        self._lingbot_mask_all_valid_cache.clear()
+        piecewise = getattr(self, "_lingbot_piecewise_graph", None)
+        if piecewise is not None:
+            piecewise.begin_request_window()
+
+    def _cached_real_rope(
+        self,
+        text_len: int,
+        gt: int,
+        gh: int,
+        gw: int,
+        device: torch.device,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        key = (int(text_len), int(gt), int(gh), int(gw), str(device))
+        cached = self._lingbot_rope_cache.get(key)
+        if cached is not None:
+            return cached
+        freqs = self.rope(make_joint_position_ids(text_len, gt, gh, gw, device)).unsqueeze(0)
+        cos = freqs.real.float().contiguous()
+        sin = freqs.imag.float().contiguous()
+        if len(self._lingbot_rope_cache) >= 8:
+            self._lingbot_rope_cache.clear()
+        self._lingbot_rope_cache[key] = (cos, sin)
+        return cos, sin
 
     def forward(
         self,
-        hidden_states: torch.Tensor,             # (B, C, T, H, W)
-        timestep: torch.Tensor,                  # (B,) ∈ [0, 1000](= sigma*1000)
-        encoder_hidden_states: torch.Tensor,     # (B, L, text_dim)
-        encoder_attention_mask: Optional[torch.Tensor] = None,  # (B, L) 1=valid
+        hidden_states: torch.Tensor,  # (B, C, T, H, W)
+        timestep: torch.Tensor,  # (B,) ∈ [0, 1000](= sigma*1000)
+        encoder_hidden_states: torch.Tensor,  # (B, L, text_dim)
+        encoder_attention_mask: torch.Tensor | None = None,  # (B, L) 1=valid
         return_dict: bool = True,
+        *,
+        step_index: int | None = None,
+        total_steps: int | None = None,
+        cache_branch: str = "default",
     ):
         B, C, T, H, W = hidden_states.shape
         pF, pH, pW = self.config.patch_size
@@ -1124,12 +1231,65 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
         n_video = gt * gh * gw
         L = encoder_hidden_states.shape[1]
         device = hidden_states.device
-        if encoder_attention_mask is not None:
-            text_lens = encoder_attention_mask.sum(dim=-1).long()
-        else:
-            text_lens = torch.full((B,), L, dtype=torch.long, device=device)
-        text_lens_list = [int(v) for v in text_lens.detach().cpu().tolist()]
         packed_batch = B > 1
+        parallel_config = getattr(self, "_parallel_config", None)
+        use_packed_attention = parallel_config is not None
+
+        # Fast unpadded B=1 path avoids 3 per-step CPU-GPU syncs (.tolist/.any).
+        fast_unpadded_b1 = False
+        if not packed_batch and not use_packed_attention and self._lingbot_fused_kernels and not self.training:
+            if encoder_attention_mask is None:
+                fast_unpadded_b1 = True
+            else:
+                is_inf = encoder_attention_mask.is_inference()
+                m_ver = -1 if is_inf else int(encoder_attention_mask._version)
+                m_ptr = int(encoder_attention_mask.data_ptr())
+                cached_valid: bool | None = None
+                for ref, saved_ptr, saved_ver, snapshot, valid in self._lingbot_mask_all_valid_cache:
+                    if (
+                        not is_inf
+                        and saved_ver >= 0
+                        and ref() is encoder_attention_mask
+                        and saved_ptr == m_ptr
+                        and saved_ver == m_ver
+                        and snapshot.shape == encoder_attention_mask.shape
+                        and snapshot.device == encoder_attention_mask.device
+                    ):
+                        cached_valid = valid
+                        break
+                    if (
+                        snapshot.shape == encoder_attention_mask.shape
+                        and snapshot.dtype == encoder_attention_mask.dtype
+                        and snapshot.device == encoder_attention_mask.device
+                        and torch.equal(snapshot, encoder_attention_mask)
+                    ):
+                        cached_valid = valid
+                        break
+                if cached_valid is None:
+                    cached_valid = bool((encoder_attention_mask != 0).all().item())
+                    if len(self._lingbot_mask_all_valid_cache) >= 8:
+                        self._lingbot_mask_all_valid_cache.pop(0)
+                    self._lingbot_mask_all_valid_cache.append(
+                        (
+                            weakref.ref(encoder_attention_mask),
+                            m_ptr,
+                            m_ver,
+                            encoder_attention_mask.detach().clone(),
+                            cached_valid,
+                        )
+                    )
+                fast_unpadded_b1 = cached_valid
+
+        if fast_unpadded_b1:
+            text_lens_list = [L]
+            has_padding = False
+        else:
+            if encoder_attention_mask is not None:
+                text_lens = encoder_attention_mask.sum(dim=-1).long()
+            else:
+                text_lens = torch.full((B,), L, dtype=torch.long, device=device)
+            text_lens_list = [int(v) for v in text_lens.detach().cpu().tolist()]
+            has_padding = encoder_attention_mask is not None and bool((text_lens < L).any())
 
         # patchify: token order (f h w), feature order (pf ph pw c) -- matches patchify_and_embed
         patch_tokens = hidden_states.reshape(B, C, gt, pF, gh, pH, gw, pW)
@@ -1139,7 +1299,7 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
             pF * pH * pW * C,
         )
         if packed_batch:
-            packed_patch_tokens = patch_tokens.reshape(1, B * n_video, -1)
+            _packed_patch_tokens = patch_tokens.reshape(1, B * n_video, -1)
             x = torch.cat(
                 [self.patch_embedder(patch_tokens[i : i + 1]) for i in range(B)],
                 dim=1,
@@ -1149,8 +1309,7 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
 
         if packed_batch:
             text_parts = [
-                self.text_embedder(encoder_hidden_states[i : i + 1, : text_lens_list[i], :])
-                for i in range(B)
+                self.text_embedder(encoder_hidden_states[i : i + 1, : text_lens_list[i], :]) for i in range(B)
             ]
             text = torch.cat(text_parts, dim=1)
             joint = _cat_interleave(
@@ -1164,23 +1323,20 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
             joint = torch.cat([x, text], dim=1)  # [video; text]
         joint_seq_len = joint.shape[1]
 
-        # Per-sample RoPE: video t-axis start = real text length of this sample + 1
-        rotary_parts = [
-            self.rope(make_joint_position_ids(text_lens_list[i], gt, gh, gw, device))
-            for i in range(B)
-        ]
-        if packed_batch:
-            rotary = torch.cat(rotary_parts, dim=0).unsqueeze(0)
+        # Per-sample RoPE: cache real (cos, sin) on fast B=1 unpadded path.
+        rotary: torch.Tensor | tuple[torch.Tensor, torch.Tensor]
+        if fast_unpadded_b1:
+            rotary = self._cached_real_rope(L, gt, gh, gw, device)
         else:
-            rotary = torch.stack(rotary_parts, dim=0)  # (B, S, head_dim/2) complex64
-
-        parallel_config = getattr(self, "_parallel_config", None)
-        use_packed_attention = parallel_config is not None
+            rotary_parts = [self.rope(make_joint_position_ids(text_lens_list[i], gt, gh, gw, device)) for i in range(B)]
+            if packed_batch:  # noqa: SIM108 - Branches carry per-case comments.
+                rotary = torch.cat(rotary_parts, dim=0).unsqueeze(0)
+            else:
+                rotary = torch.stack(rotary_parts, dim=0)  # (B, S, head_dim/2) complex64
 
         attention_mask = None
         moe_padding_mask = None
         packed_indices = None
-        has_padding = encoder_attention_mask is not None and bool((text_lens < L).any())
         if packed_batch or use_packed_attention:
             sample_seq_lens = [n_video + text_len for text_len in text_lens_list]
             cu_seqlens = torch.zeros(B + 1, device=device, dtype=torch.int32)
@@ -1193,17 +1349,17 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
                 "max_seqlen_in_batch_kv": max(sample_seq_lens),
             }
             has_padding = False
-        if has_padding:
+        if has_padding and encoder_attention_mask is not None:
             key_mask = torch.cat(
-                [torch.ones(B, n_video, dtype=torch.bool, device=device),
-                 encoder_attention_mask.bool()],
+                [torch.ones(B, n_video, dtype=torch.bool, device=device), encoder_attention_mask.bool()],
                 dim=1,
             )
-            attention_mask = key_mask[:, None, None, :]      # (B,1,1,S) → SDPA broadcast
+            attention_mask = key_mask[:, None, None, :]  # (B,1,1,S) → SDPA broadcast
             moe_padding_mask = key_mask.reshape(-1).float()  # (B*S,)
         packed_cp = packed_indices is not None and parallel_config is not None
         padding_size = 0
         if packed_cp:
+            assert isinstance(rotary, torch.Tensor)
             cp_config = parallel_config.context_parallel_config
             cp_world_size = int(getattr(cp_config, "ulysses_degree", getattr(cp_config, "_world_size", 1)))
             padding_size = (cp_world_size - (joint_seq_len % cp_world_size)) % cp_world_size
@@ -1251,13 +1407,16 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
 
         timestep_for_embed = timestep.float()
         timestep_proj = self.time_proj(timestep_for_embed)
-        t_emb = self.time_embedder(timestep_proj)                            # (B, D)
-        if packed_batch:
+        t_emb = self.time_embedder(timestep_proj)  # (B, D)
+        compact_adaln = bool(
+            self._lingbot_compact_adaln and not packed_batch and not packed_cp and parallel_config is None
+        )
+        if compact_adaln:
+            temb_input = t_emb.unsqueeze(1)  # (B, 1, D)
+            temb6 = self.time_modulation(t_emb).unsqueeze(1)  # (B, 1, 6D)
+        elif packed_batch:
             temb_input = torch.cat(
-                [
-                    t_emb[i : i + 1].unsqueeze(1).expand(1, n_video + text_lens_list[i], -1)
-                    for i in range(B)
-                ],
+                [t_emb[i : i + 1].unsqueeze(1).expand(1, n_video + text_lens_list[i], -1) for i in range(B)],
                 dim=1,
             )
             if padding_size:
@@ -1276,34 +1435,158 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
                 )
             temb6 = self.time_modulation(temb_input.reshape(joint_seq_len, -1))
             temb6 = temb6.reshape(1, joint_seq_len, -1)
+            temb6 = self.cp_temb6(temb6)
+            temb6 = temb6.reshape(temb6.shape[0] * temb6.shape[1], -1)
         else:
-            temb_input = t_emb.unsqueeze(1).expand(B, joint_seq_len, -1)       # (B, S, D)
+            temb_input = t_emb.unsqueeze(1).expand(B, joint_seq_len, -1)  # (B, S, D)
             temb6 = self.time_modulation(temb_input.reshape(B * joint_seq_len, -1))
-            temb6 = temb6.reshape(B, joint_seq_len, -1)                        # (B, S, 6D)
+            temb6 = temb6.reshape(B, joint_seq_len, -1)  # (B, S, 6D)
+            temb6 = self.cp_temb6(temb6)
+            temb6 = temb6.reshape(temb6.shape[0] * temb6.shape[1], -1)
 
-        joint = self.cp_joint(joint)
-        rotary = self.cp_rotary(rotary)
-        if packed_cp:
-            temb_input = self.cp_temb_input(temb_input)
-        temb6 = self.cp_temb6(temb6)
-        temb6 = temb6.reshape(temb6.shape[0] * temb6.shape[1], -1)
+        if not compact_adaln:
+            joint = self.cp_joint(joint)
+            if isinstance(rotary, torch.Tensor):
+                rotary = self.cp_rotary(rotary)
+            if packed_cp:
+                temb_input = self.cp_temb_input(temb_input)
 
-        for block in self.blocks:
-            joint = block(
-                joint,
-                temb6,
-                rotary,
-                attention_mask,
-                moe_padding_mask,
-                packed_indices=packed_indices,
-                parallel_config=parallel_config,
+        # Determine whether PISA sparse attention is active for this step (warmup/tail stay dense).
+        use_pisa_step = False
+        pisa_policy = self._lingbot_pisa_policy
+        if pisa_policy is not None and bool(pisa_policy.get("enabled")):
+            if step_index is None:
+                use_pisa_step = True
+            else:
+                dense_first = int(pisa_policy.get("dense_steps", 0))
+                dense_last = int(pisa_policy.get("dense_last_steps", 0))
+                in_warmup = int(step_index) < dense_first
+                in_tail = total_steps is not None and int(step_index) >= max(int(total_steps) - dense_last, 0)
+                use_pisa_step = not in_warmup and not in_tail
+
+        # Execute block stack with optional EasyCache + Piecewise CUDA Graph.
+        piecewise_graph = getattr(self, "_lingbot_piecewise_graph", None)
+        can_piecewise_graph = (
+            piecewise_graph is not None
+            and not getattr(self, "_lingbot_has_moe", False)
+            and not self.training
+            and not torch.is_grad_enabled()
+            and joint.is_cuda
+            and attention_mask is None
+            and moe_padding_mask is None
+            and packed_indices is None
+            and parallel_config is None
+            and isinstance(rotary, tuple)
+        )
+        seg_name = "lingbot_blocks_pisa" if use_pisa_step else "lingbot_blocks_dense"
+
+        def _run_block_stack(hidden_in: torch.Tensor) -> torch.Tensor:
+            if can_piecewise_graph:
+                assert piecewise_graph is not None and isinstance(rotary, tuple)
+                cos_r, sin_r = rotary
+
+                def _seg(h: torch.Tensor, t6: torch.Tensor, c_r: torch.Tensor, s_r: torch.Tensor) -> torch.Tensor:
+                    cur = h
+                    rot_pair = (c_r, s_r)
+                    for block in self.blocks:
+                        cur = block(cur, t6, rot_pair, use_pisa=use_pisa_step)
+                    return cur
+
+                seg_runner = piecewise_graph.get_or_register_segment(seg_name, _seg)
+                prev_replays = int(seg_runner.stats.get("replay", 0))
+                prev_captures = int(seg_runner.stats.get("capture", 0))
+                out_seg = piecewise_graph.run_segment(seg_name, hidden_in, temb6, cos_r, sin_r)
+                cur_replays = int(seg_runner.stats.get("replay", 0))
+                cur_captures = int(seg_runner.stats.get("capture", 0))
+                if (
+                    cur_replays > prev_replays
+                    and cur_captures == prev_captures
+                    and not torch.compiler.is_compiling()
+                    and hidden_in.is_cuda
+                ):
+                    pisa_blocks = 0
+                    fa3_blocks = 0
+                    seq_len = int(hidden_in.shape[1])
+                    for block in self.blocks:
+                        attn = getattr(block, "attn", None)
+                        if attn is None:
+                            continue
+                        bulk_dtype = attn.to_q.weight.dtype
+                        if bulk_dtype not in {torch.bfloat16, torch.float16}:
+                            continue
+                        if (
+                            use_pisa_step
+                            and getattr(attn, "_pisa_block_eligible", False)
+                            and int(getattr(attn, "_pisa_min_sequence_length", 1024)) <= seq_len
+                        ):
+                            pisa_blocks += 1
+                        elif getattr(attn, "_attention_backend", "torch") == "flash_attention_3":
+                            fa3_blocks += 1
+                    self._lingbot_pisa_replay_calls = int(getattr(self, "_lingbot_pisa_replay_calls", 0)) + pisa_blocks
+                    self._lingbot_fa3_replay_calls = int(getattr(self, "_lingbot_fa3_replay_calls", 0)) + fa3_blocks
+                return out_seg
+            cur = hidden_in
+            for block in self.blocks:
+                cur = block(
+                    cur,
+                    temb6,
+                    rotary,
+                    attention_mask,
+                    moe_padding_mask,
+                    packed_indices=packed_indices,
+                    parallel_config=parallel_config,
+                    use_pisa=use_pisa_step,
+                )
+            return cur
+
+        if (
+            self._lingbot_easycache_spec is not None
+            and step_index is not None
+            and not self.training
+            and not torch.is_grad_enabled()
+        ):
+            cache = self._lingbot_easycaches.get(cache_branch)
+            if cache is None:
+                spec = self._lingbot_easycache_spec
+                cache = LingBotEasyCache(
+                    threshold=spec["threshold"],
+                    total_steps=int(total_steps) if total_steps is not None else 40,
+                    warmup_steps=spec["warmup_steps"],
+                    dense_last=spec["dense_last"],
+                    max_skip_steps=spec["max_skip_steps"],
+                    subsample_stride=spec["subsample_stride"],
+                )
+                self._lingbot_easycaches[cache_branch] = cache
+            joint, hit = cache.run_stack(
+                step=int(step_index),
+                total_steps=total_steps,
+                value=joint,
+                block_count=len(self.blocks),
+                run_stack_fn=_run_block_stack,
             )
-        if not packed_cp:
+            if hit and can_piecewise_graph and piecewise_graph is not None:
+                piecewise_graph.record_skip(seg_name)
+        else:
+            joint = _run_block_stack(joint)
+
+        if not packed_cp and not compact_adaln:
             joint = self.cp_out(joint)
 
-        final_mod = self.norm_out_modulation(temb_input.reshape(joint.shape[0] * joint.shape[1], -1))
-        shift, scale = final_mod.reshape(joint.shape[0], joint.shape[1], -1).chunk(2, dim=-1)
-        final_hidden = self.norm_out(joint) * (1.0 + scale) + shift
+        if compact_adaln:
+            final_mod = self.norm_out_modulation(t_emb).unsqueeze(1)
+            shift, scale = final_mod.chunk(2, dim=-1)
+        else:
+            final_mod = self.norm_out_modulation(temb_input.reshape(joint.shape[0] * joint.shape[1], -1))
+            shift, scale = final_mod.reshape(joint.shape[0], joint.shape[1], -1).chunk(2, dim=-1)
+        if self._lingbot_fused_kernels and not self.training and not torch.is_grad_enabled() and joint.is_cuda:
+            final_hidden = layer_norm_scale_shift(
+                joint.to(scale.dtype),
+                scale,
+                shift,
+                eps=float(self.norm_out.eps),
+            )
+        else:
+            final_hidden = self.norm_out(joint) * (1.0 + scale) + shift
         projected = self.proj_out(final_hidden.to(self.proj_out.weight.dtype))
         if packed_cp:
             projected = self.cp_out(projected)

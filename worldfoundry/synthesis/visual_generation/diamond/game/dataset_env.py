@@ -1,13 +1,13 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import torch
 from torch import Tensor
 
-from eval_inputs import Dataset
+from worldfoundry.synthesis.visual_generation.diamond.eval_inputs import Dataset
 
 
 class DatasetEnv:
-    def __init__(self, datasets: List[Dataset], action_names: List[str]) -> None:
+    def __init__(self, datasets: list[Dataset], action_names: list[str]) -> None:
         self.datasets = [d for d in datasets if len(d) > 0]
         assert len(self.datasets) > 0
         self.action_names = action_names
@@ -76,7 +76,7 @@ class DatasetEnv:
         return self.obs, None
 
     @torch.no_grad()
-    def step(self, act: int) -> Tuple[Tensor, Tensor, bool, bool, Dict[str, Any]]:
+    def step(self, act: int) -> tuple[Tensor, Tensor, bool, bool, dict[str, Any]]:
         match act:
             case 1:
                 self.set_timestep(self.t - 1)
@@ -104,8 +104,8 @@ class DatasetEnv:
                 f"Done  : {bool(self.end)}",
                 f"Reward: {self.rew.item():.2f}",
                 "-------",
-                f"To here: {self.episode.rew[:self.t + 1].sum().item():.2f}",
-                f"To go  : {self.episode.rew[self.t + 1:].sum().item():.2f}",
+                f"To here: {self.episode.rew[: self.t + 1].sum().item():.2f}",
+                f"To go  : {self.episode.rew[self.t + 1 :].sum().item():.2f}",
             ],
             [
                 f"Timestep: {self.t:{n_digits}d}",

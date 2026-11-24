@@ -6,7 +6,7 @@ import pytest
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.api import (
     _model_name_from_repo_id,
 )
-from worldfoundry.evaluation.utils import worldfoundry_data_path
+from worldfoundry.evals.utils import worldfoundry_data_path
 from worldfoundry.studio.inference import catalog as studio_catalog
 from worldfoundry.synthesis.visual_generation.inspatio_world.worldfoundry_runtime import (
     InspatioWorldRuntime,
@@ -61,8 +61,8 @@ def test_inspatio_world_workspace_defaults_use_official_repo_ids(monkeypatch, tm
     monkeypatch.setenv("HF_HOME", str(tmp_path / "hf-home"))
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hf-hub"))
 
-    assert studio_catalog._inspatio_world_default_ref() == "inspatio/world"
-    assert studio_catalog._depth_anything_v3_default_ref() == "depth-anything/DA3NESTED-GIANT-LARGE-1.1"
+    assert studio_catalog.models.scene_3d._inspatio_world_default_ref() == "inspatio/world"
+    assert studio_catalog.models.scene_3d._depth_anything_v3_default_ref() == "depth-anything/DA3NESTED-GIANT-LARGE-1.1"
 
 
 def test_inspatio_world_workspace_defaults_resolve_complete_local_exports(monkeypatch, tmp_path):
@@ -79,8 +79,8 @@ def test_inspatio_world_workspace_defaults_resolve_complete_local_exports(monkey
     monkeypatch.setenv("HF_HOME", str(tmp_path / "hf-home"))
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hf-hub"))
 
-    assert studio_catalog._inspatio_world_default_ref() == str(main_root.resolve())
-    assert studio_catalog._depth_anything_v3_default_ref() == str(da3_root.resolve())
+    assert studio_catalog.models.scene_3d._inspatio_world_default_ref() == str(main_root.resolve())
+    assert studio_catalog.models.scene_3d._depth_anything_v3_default_ref() == str(da3_root.resolve())
 
 
 def test_inspatio_world_gpu_integration(tmp_path):

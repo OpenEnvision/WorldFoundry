@@ -9,10 +9,10 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
-from worldfoundry.studio.serving import workspace as workspace_app
 from worldfoundry.studio.inference.execution import RunRecord, StudioManager
-from worldfoundry.studio.serving.jobs import StudioJob, StudioJobStore
-from worldfoundry.studio.serving.workspace import create_app
+from worldfoundry.studio.workspace import app as workspace_app
+from worldfoundry.studio.workspace.app import create_app
+from worldfoundry.studio.workspace.jobs import StudioJob, StudioJobStore
 
 
 def _write_run(runs_root: Path, run_id: str) -> Path:

@@ -7,37 +7,25 @@
 #   https://github.com/facebookresearch/dino/blob/master/vision_transformer.py
 #   https://github.com/rwightman/pytorch-image-models/tree/master/timm/models/vision_transformer.py
 
-"""Module for base_models -> three_dimensions -> point_clouds -> lingbot_map -> lingbot_map -> layers -> attention.py functionality."""
-
-import logging
-import os
-import math
-import warnings
 import torch
-
-from torch import Tensor
-from torch import nn
-import torch.nn.functional as F
+from torch import Tensor, nn
 
 from .rope import apply_rotary_emb
 
-from einops import rearrange
-
 # FlashInfer imports (optional - for paged attention)
 try:
-    import flashinfer
+    import flashinfer  # noqa: F401 - Import checks optional dependency availability.
+
     FLASHINFER_AVAILABLE = True
 except ImportError:
     FLASHINFER_AVAILABLE = False
     print("flashinfer not available")
 
-from typing_extensions import List
-from typing import Optional, Tuple
+
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
 
 class Attention(nn.Module):
-    """Attention implementation."""
     def __init__(
         self,
         dim: int,
@@ -51,23 +39,6 @@ class Attention(nn.Module):
         fused_attn: bool = True,  # use _worldfoundry_scaled_dot_product_attention or not
         rope=None,
     ) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            qkv_bias: The qkv bias.
-            proj_bias: The proj bias.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-            norm_layer: The norm layer.
-            qk_norm: The qk norm.
-            fused_attn: The fused attn.
-            rope: The rope.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
         self.num_heads = num_heads
@@ -83,20 +54,9 @@ class Attention(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
         self.rope = rope
 
-    def forward(self, x: Tensor, pos=None, num_patches=None, num_special=None, num_frames=None, enable_3d_rope=False) -> Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            pos: The pos.
-            num_patches: The num patches.
-            num_special: The num special.
-            num_frames: The num frames.
-            enable_3d_rope: The enable 3d rope.
-
-        Returns:
-            The return value.
-        """
+    def forward(
+        self, x: Tensor, pos=None, num_patches=None, num_special=None, num_frames=None, enable_3d_rope=False
+    ) -> Tensor:
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
         q, k, v = qkv.unbind(0)
@@ -107,7 +67,9 @@ class Attention(nn.Module):
             k = self.rope(k, pos)
 
         if self.fused_attn:
-            x = _worldfoundry_scaled_dot_product_attention(q, k, v, dropout_p=self.attn_drop.p if self.training else 0.0)
+            x = _worldfoundry_scaled_dot_product_attention(
+                q, k, v, dropout_p=self.attn_drop.p if self.training else 0.0
+            )
         else:
             q = q * self.scale
             attn = q @ k.transpose(-2, -1)
@@ -126,6 +88,7 @@ class CausalAttention(nn.Module):
     Causal self-attention module with KV cache support for streaming inference.
     Used by CasualBlockCamera in camera_head.py.
     """
+
     def __init__(
         self,
         dim: int,
@@ -140,35 +103,12 @@ class CausalAttention(nn.Module):
         rope=None,
         elementwise_attn_output_gate=False,
         # KV cache eviction parameters (matching build_attn_mask)
-        kv_cache_sliding_window: int =64,
+        kv_cache_sliding_window: int = 64,
         kv_cache_scale_frames: int = 8,
         kv_cache_cross_frame_special: bool = True,
         kv_cache_include_scale_frames: bool = True,
         kv_cache_camera_only: bool = False,  # If True, only cache camera token (no scale token)
     ) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            qkv_bias: The qkv bias.
-            proj_bias: The proj bias.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-            norm_layer: The norm layer.
-            qk_norm: The qk norm.
-            fused_attn: The fused attn.
-            rope: The rope.
-            elementwise_attn_output_gate: The elementwise attn output gate.
-            kv_cache_sliding_window: The kv cache sliding window.
-            kv_cache_scale_frames: The kv cache scale frames.
-            kv_cache_cross_frame_special: The kv cache cross frame special.
-            kv_cache_include_scale_frames: The kv cache include scale frames.
-            kv_cache_camera_only: The kv cache camera only.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
         self.num_heads = num_heads
@@ -193,33 +133,28 @@ class CausalAttention(nn.Module):
         self.kv_cache_include_scale_frames = kv_cache_include_scale_frames
         self.kv_cache_camera_only = kv_cache_camera_only
 
-    def forward(self, x: Tensor, block_mask=None, pos=None, pos_kv=None, frame_seqlen=None, video_mask=None, kv_cache=None, current_start=0, current_end=0, global_idx=0, num_frame_per_block=1, num_frame_for_scale=-1, enable_3d_rope=False, sliding_window_size=-1, attend_to_scale_frames=False, num_random_frames=0, attend_to_special_tokens=False, num_register_tokens=4, is_scale_frames=False) -> Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            block_mask: The block mask.
-            pos: The pos.
-            pos_kv: The pos kv.
-            frame_seqlen: The frame seqlen.
-            video_mask: The video mask.
-            kv_cache: The kv cache.
-            current_start: The current start.
-            current_end: The current end.
-            global_idx: The global idx.
-            num_frame_per_block: The num frame per block.
-            num_frame_for_scale: The num frame for scale.
-            enable_3d_rope: The enable 3d rope.
-            sliding_window_size: The sliding window size.
-            attend_to_scale_frames: The attend to scale frames.
-            num_random_frames: The num random frames.
-            attend_to_special_tokens: The attend to special tokens.
-            num_register_tokens: The num register tokens.
-            is_scale_frames: The is scale frames.
-
-        Returns:
-            The return value.
-        """
+    def forward(
+        self,
+        x: Tensor,
+        block_mask=None,
+        pos=None,
+        pos_kv=None,
+        frame_seqlen=None,
+        video_mask=None,
+        kv_cache=None,
+        current_start=0,
+        current_end=0,
+        global_idx=0,
+        num_frame_per_block=1,
+        num_frame_for_scale=-1,
+        enable_3d_rope=False,
+        sliding_window_size=-1,
+        attend_to_scale_frames=False,
+        num_random_frames=0,
+        attend_to_special_tokens=False,
+        num_register_tokens=4,
+        is_scale_frames=False,
+    ) -> Tensor:
         B, N, C = x.shape
 
         # Calculate special token indices
@@ -242,12 +177,16 @@ class CausalAttention(nn.Module):
                 k = apply_rotary_emb(k, pos)
 
             with torch.no_grad():
-                block_mask = block_mask.squeeze()[:q.shape[2], :k.shape[2]]
+                block_mask = block_mask.squeeze()[: q.shape[2], : k.shape[2]]
                 if block_mask.dim() == 2:
                     block_mask = block_mask.unsqueeze(0).unsqueeze(0)  # [1, 1, N, N]
                 block_mask = block_mask.expand(B, 1, block_mask.shape[-2], block_mask.shape[-1])
 
-                video_mask = video_mask.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)  if  video_mask is not None else torch.ones_like(block_mask, device=block_mask.device) # [1, 1, N, N]
+                video_mask = (
+                    video_mask.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+                    if video_mask is not None
+                    else torch.ones_like(block_mask, device=block_mask.device)
+                )  # [1, 1, N, N]
                 video_mask = video_mask.expand(B, 1, block_mask.shape[-2], block_mask.shape[-1])
 
                 mask = block_mask | ~video_mask
@@ -279,19 +218,15 @@ class CausalAttention(nn.Module):
                             q_start = i * frame_seqlen
                             q_end = (i + 1) * frame_seqlen
                             # Allow attending to first num_frame_for_scale frames (directly set to True, not depending on block_mask)
-                            mask[:, :, q_start:q_end, :num_frame_for_scale * frame_seqlen] = True
+                            mask[:, :, q_start:q_end, : num_frame_for_scale * frame_seqlen] = True
 
             ## global attention for the first num_frame_for_scale frames
             if num_frame_for_scale > 0:
-                mask[:, :, :num_frame_for_scale * frame_seqlen, :num_frame_for_scale * frame_seqlen] = True
+                mask[:, :, : num_frame_for_scale * frame_seqlen, : num_frame_for_scale * frame_seqlen] = True
 
             if self.fused_attn:
                 x = _worldfoundry_scaled_dot_product_attention(
-                    q,
-                    k,
-                    v,
-                    dropout_p=self.attn_drop.p if self.training else 0.0,
-                    attn_mask=mask
+                    q, k, v, dropout_p=self.attn_drop.p if self.training else 0.0, attn_mask=mask
                 )
         else:
             # Apply RoPE to current k before caching
@@ -339,8 +274,8 @@ class CausalAttention(nn.Module):
                     v = v_reshaped
             a, b, c, d, e = k.shape
 
-            k = k.reshape(a, b, c*d, e)
-            v = v.reshape(a, b, c*d, e)
+            k = k.reshape(a, b, c * d, e)
+            v = v.reshape(a, b, c * d, e)
 
             # Prepend special tokens (camera + scale) from evicted frames if they exist
             if f"k_{global_idx}_special" in kv_cache and kv_cache[f"k_{global_idx}_special"] is not None:
@@ -401,32 +336,40 @@ class CausalAttention(nn.Module):
                     if self.kv_cache_cross_frame_special:
                         if self.kv_cache_camera_only:
                             # Only keep camera token
-                            new_special_k = evicted_k[:, :, :, camera_token_idx:camera_token_idx+1, :].clone()
-                            new_special_v = evicted_v[:, :, :, camera_token_idx:camera_token_idx+1, :].clone()
+                            new_special_k = evicted_k[:, :, :, camera_token_idx : camera_token_idx + 1, :].clone()
+                            new_special_v = evicted_v[:, :, :, camera_token_idx : camera_token_idx + 1, :].clone()
                         else:
                             # Keep ALL special tokens (camera + register + scale) to match attention_mask behavior
                             # Special tokens are in range [camera_token_idx, scale_token_idx+1)
-                            new_special_k = evicted_k[:, :, :, camera_token_idx:scale_token_idx+1, :].clone()
-                            new_special_v = evicted_v[:, :, :, camera_token_idx:scale_token_idx+1, :].clone()
+                            new_special_k = evicted_k[:, :, :, camera_token_idx : scale_token_idx + 1, :].clone()
+                            new_special_v = evicted_v[:, :, :, camera_token_idx : scale_token_idx + 1, :].clone()
 
                         if f"k_{global_idx}_special" not in kv_cache or kv_cache[f"k_{global_idx}_special"] is None:
                             kv_cache[f"k_{global_idx}_special"] = new_special_k
                             kv_cache[f"v_{global_idx}_special"] = new_special_v
                         else:
                             kv_cache[f"k_{global_idx}_special"] = torch.cat(
-                                [kv_cache[f"k_{global_idx}_special"], new_special_k], dim=2)
+                                [kv_cache[f"k_{global_idx}_special"], new_special_k], dim=2
+                            )
                             kv_cache[f"v_{global_idx}_special"] = torch.cat(
-                                [kv_cache[f"v_{global_idx}_special"], new_special_v], dim=2)
+                                [kv_cache[f"v_{global_idx}_special"], new_special_v], dim=2
+                            )
 
                     if self.kv_cache_include_scale_frames:
-                        kv_cache[f"k_{global_idx}"] = torch.cat([
-                            kv_cache[f"k_{global_idx}"][:, :, :scale_frames, :, :],
-                            kv_cache[f"k_{global_idx}"][:, :, -sliding_window_frames:, :, :]
-                        ], dim=2)
-                        kv_cache[f"v_{global_idx}"] = torch.cat([
-                            kv_cache[f"v_{global_idx}"][:, :, :scale_frames, :, :],
-                            kv_cache[f"v_{global_idx}"][:, :, -sliding_window_frames:, :, :]
-                        ], dim=2)
+                        kv_cache[f"k_{global_idx}"] = torch.cat(
+                            [
+                                kv_cache[f"k_{global_idx}"][:, :, :scale_frames, :, :],
+                                kv_cache[f"k_{global_idx}"][:, :, -sliding_window_frames:, :, :],
+                            ],
+                            dim=2,
+                        )
+                        kv_cache[f"v_{global_idx}"] = torch.cat(
+                            [
+                                kv_cache[f"v_{global_idx}"][:, :, :scale_frames, :, :],
+                                kv_cache[f"v_{global_idx}"][:, :, -sliding_window_frames:, :, :],
+                            ],
+                            dim=2,
+                        )
                     else:
                         kv_cache[f"k_{global_idx}"] = kv_cache[f"k_{global_idx}"][:, :, -sliding_window_frames:, :, :]
                         kv_cache[f"v_{global_idx}"] = kv_cache[f"v_{global_idx}"][:, :, -sliding_window_frames:, :, :]
@@ -459,28 +402,6 @@ class FlashInferAttention(Attention):
         kv_cache_include_scale_frames: bool = True,
         kv_cache_camera_only: bool = False,
     ) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            qkv_bias: The qkv bias.
-            proj_bias: The proj bias.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-            norm_layer: The norm layer.
-            qk_norm: The qk norm.
-            fused_attn: The fused attn.
-            rope: The rope.
-            kv_cache_sliding_window: The kv cache sliding window.
-            kv_cache_scale_frames: The kv cache scale frames.
-            kv_cache_cross_frame_special: The kv cache cross frame special.
-            kv_cache_include_scale_frames: The kv cache include scale frames.
-            kv_cache_camera_only: The kv cache camera only.
-
-        Returns:
-            The return value.
-        """
         if not FLASHINFER_AVAILABLE:
             raise RuntimeError("FlashInfer is not available. Please install flashinfer.")
 
@@ -530,11 +451,21 @@ class FlashInferAttention(Attention):
         v_nhd = v.squeeze(0).permute(1, 0, 2).contiguous()
         return q_nhd, k_nhd, v_nhd
 
-    def forward(self, x: Tensor, pos=None,
-                num_patches=None, num_special=None, num_frames=None, enable_3d_rope=False,
-                # KV cache parameters (kv_cache is a FlashInferKVCacheManager or None)
-                kv_cache=None, global_idx=0, num_frame_per_block=1,
-                num_frame_for_scale=-1, num_register_tokens=4) -> Tensor:
+    def forward(
+        self,
+        x: Tensor,
+        pos=None,
+        num_patches=None,
+        num_special=None,
+        num_frames=None,
+        enable_3d_rope=False,
+        # KV cache parameters (kv_cache is a FlashInferKVCacheManager or None)
+        kv_cache=None,
+        global_idx=0,
+        num_frame_per_block=1,
+        num_frame_for_scale=-1,
+        num_register_tokens=4,
+    ) -> Tensor:
         """
         Forward pass with FlashInfer paged KV cache and attention.
 
@@ -563,7 +494,9 @@ class FlashInferAttention(Attention):
 
             # Batch mode: use SDPA for numerical consistency with SDPA variant
             x = _worldfoundry_scaled_dot_product_attention(
-                q, k, v,
+                q,
+                k,
+                v,
                 dropout_p=self.attn_drop.p if self.training else 0.0,
             )
 
@@ -575,7 +508,7 @@ class FlashInferAttention(Attention):
 
             # Phase 1 (scale frames): num_frames > 1 — multi-frame batch
             # Phase 2 (streaming):    num_frames == 1 — single frame
-            is_multi_frame = (num_frames is not None and num_frames > 1)
+            is_multi_frame = num_frames is not None and num_frames > 1
 
             if is_multi_frame:
                 # Phase 1: compute full self-attention via SDPA (all frames attend to each other),
@@ -593,7 +526,9 @@ class FlashInferAttention(Attention):
                     k = apply_rotary_emb(k, pos)
 
                 x = _worldfoundry_scaled_dot_product_attention(
-                    q, k, v,
+                    q,
+                    k,
+                    v,
                     dropout_p=self.attn_drop.p if self.training else 0.0,
                 )
                 x = x.transpose(1, 2).reshape(B, N, self.num_heads * self.head_dim)
@@ -604,7 +539,7 @@ class FlashInferAttention(Attention):
                 v_all = v.squeeze(0).permute(1, 0, 2)
                 for f_idx in range(num_frames):
                     s = f_idx * tpf
-                    manager.append_frame(global_idx, k_all[s:s+tpf].contiguous(), v_all[s:s+tpf].contiguous())
+                    manager.append_frame(global_idx, k_all[s : s + tpf].contiguous(), v_all[s : s + tpf].contiguous())
                     manager.evict_frames(
                         block_idx=global_idx,
                         scale_frames=self.kv_cache_scale_frames,
@@ -623,7 +558,7 @@ class FlashInferAttention(Attention):
                 # temporarily append (with eviction deferred so it stays clean),
                 # attend, and then roll back the append.  Mirrors the
                 # ``skip_append`` behavior of the SDPA path.
-                skip_append = getattr(manager, '_skip_append', False)
+                skip_append = getattr(manager, "_skip_append", False)
                 if skip_append:
                     # Defensive fallback: the hot path for FlashInfer streaming
                     # is `FlashInferBlock.forward` which inlines this logic.
@@ -686,32 +621,17 @@ class SDPAAttention(Attention):
         kv_cache_include_scale_frames: bool = True,
         kv_cache_camera_only: bool = False,
     ) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            qkv_bias: The qkv bias.
-            proj_bias: The proj bias.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-            norm_layer: The norm layer.
-            qk_norm: The qk norm.
-            fused_attn: The fused attn.
-            rope: The rope.
-            kv_cache_sliding_window: The kv cache sliding window.
-            kv_cache_scale_frames: The kv cache scale frames.
-            kv_cache_cross_frame_special: The kv cache cross frame special.
-            kv_cache_include_scale_frames: The kv cache include scale frames.
-            kv_cache_camera_only: The kv cache camera only.
-
-        Returns:
-            The return value.
-        """
         super().__init__(
-            dim=dim, num_heads=num_heads, qkv_bias=qkv_bias, proj_bias=proj_bias,
-            attn_drop=attn_drop, proj_drop=proj_drop, norm_layer=norm_layer,
-            qk_norm=qk_norm, fused_attn=fused_attn, rope=rope,
+            dim=dim,
+            num_heads=num_heads,
+            qkv_bias=qkv_bias,
+            proj_bias=proj_bias,
+            attn_drop=attn_drop,
+            proj_drop=proj_drop,
+            norm_layer=norm_layer,
+            qk_norm=qk_norm,
+            fused_attn=fused_attn,
+            rope=rope,
         )
         self.kv_cache_sliding_window = kv_cache_sliding_window
         self.kv_cache_scale_frames = kv_cache_scale_frames
@@ -719,28 +639,20 @@ class SDPAAttention(Attention):
         self.kv_cache_include_scale_frames = kv_cache_include_scale_frames
         self.kv_cache_camera_only = kv_cache_camera_only
 
-    def forward(self, x: Tensor, pos=None,
-                num_patches=None, num_special=None, num_frames=None, enable_3d_rope=False,
-                kv_cache=None, global_idx=0, num_frame_per_block=1,
-                num_frame_for_scale=-1, num_register_tokens=4) -> Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            pos: The pos.
-            num_patches: The num patches.
-            num_special: The num special.
-            num_frames: The num frames.
-            enable_3d_rope: The enable 3d rope.
-            kv_cache: The kv cache.
-            global_idx: The global idx.
-            num_frame_per_block: The num frame per block.
-            num_frame_for_scale: The num frame for scale.
-            num_register_tokens: The num register tokens.
-
-        Returns:
-            The return value.
-        """
+    def forward(
+        self,
+        x: Tensor,
+        pos=None,
+        num_patches=None,
+        num_special=None,
+        num_frames=None,
+        enable_3d_rope=False,
+        kv_cache=None,
+        global_idx=0,
+        num_frame_per_block=1,
+        num_frame_for_scale=-1,
+        num_register_tokens=4,
+    ) -> Tensor:
         B, N, C = x.shape
 
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
@@ -757,7 +669,9 @@ class SDPAAttention(Attention):
                 k = apply_rotary_emb(k, pos)
 
             x = _worldfoundry_scaled_dot_product_attention(
-                q, k, v,
+                q,
+                k,
+                v,
                 dropout_p=self.attn_drop.p if self.training else 0.0,
             )
             x = x.transpose(1, 2).reshape(B, N, self.num_heads * self.head_dim)
@@ -775,24 +689,30 @@ class SDPAAttention(Attention):
             scale_token_idx = camera_token_idx + num_register_tokens + 1
 
             if kv_cache[f"k_{global_idx}"] is None:
-                kv_cache[f"k_{global_idx}"] = k.view(B, self.num_heads, num_frame_per_block,
-                                                     N // num_frame_per_block, self.head_dim)
-                kv_cache[f"v_{global_idx}"] = v.view(B, self.num_heads, num_frame_per_block,
-                                                     N // num_frame_per_block, self.head_dim)
+                kv_cache[f"k_{global_idx}"] = k.view(
+                    B, self.num_heads, num_frame_per_block, N // num_frame_per_block, self.head_dim
+                )
+                kv_cache[f"v_{global_idx}"] = v.view(
+                    B, self.num_heads, num_frame_per_block, N // num_frame_per_block, self.head_dim
+                )
             else:
                 num_frame_per_block = k.shape[2] // kv_cache[f"k_{global_idx}"].shape[3]
-                kv_cache[f"k_{global_idx}"] = torch.cat((
-                    kv_cache[f"k_{global_idx}"],
-                    k.view(B, self.num_heads, num_frame_per_block, N // num_frame_per_block, self.head_dim)
-                ), dim=2)
-                kv_cache[f"v_{global_idx}"] = torch.cat((
-                    kv_cache[f"v_{global_idx}"],
-                    v.view(B, self.num_heads, num_frame_per_block, N // num_frame_per_block, self.head_dim)
-                ), dim=2)
+                kv_cache[f"k_{global_idx}"] = torch.cat(
+                    (
+                        kv_cache[f"k_{global_idx}"],
+                        k.view(B, self.num_heads, num_frame_per_block, N // num_frame_per_block, self.head_dim),
+                    ),
+                    dim=2,
+                )
+                kv_cache[f"v_{global_idx}"] = torch.cat(
+                    (
+                        kv_cache[f"v_{global_idx}"],
+                        v.view(B, self.num_heads, num_frame_per_block, N // num_frame_per_block, self.head_dim),
+                    ),
+                    dim=2,
+                )
 
-            self._apply_kv_cache_eviction(
-                kv_cache, global_idx, camera_token_idx, scale_token_idx, num_register_tokens
-            )
+            self._apply_kv_cache_eviction(kv_cache, global_idx, camera_token_idx, scale_token_idx, num_register_tokens)
 
             k_cached = kv_cache[f"k_{global_idx}"].clone()
             v_cached = kv_cache[f"v_{global_idx}"].clone()
@@ -809,7 +729,9 @@ class SDPAAttention(Attention):
 
             q_seq_len = q.shape[2]
             x = _worldfoundry_scaled_dot_product_attention(
-                q, k_full, v_full,
+                q,
+                k_full,
+                v_full,
                 dropout_p=self.attn_drop.p if self.training else 0.0,
             )
             x = x.transpose(1, 2).reshape(B, q_seq_len, self.num_heads * self.head_dim)
@@ -834,30 +756,38 @@ class SDPAAttention(Attention):
 
                     if self.kv_cache_cross_frame_special:
                         if self.kv_cache_camera_only:
-                            new_special_k = evicted_k[:, :, :, camera_token_idx:camera_token_idx+1, :].clone()
-                            new_special_v = evicted_v[:, :, :, camera_token_idx:camera_token_idx+1, :].clone()
+                            new_special_k = evicted_k[:, :, :, camera_token_idx : camera_token_idx + 1, :].clone()
+                            new_special_v = evicted_v[:, :, :, camera_token_idx : camera_token_idx + 1, :].clone()
                         else:
-                            new_special_k = evicted_k[:, :, :, camera_token_idx:scale_token_idx+1, :].clone()
-                            new_special_v = evicted_v[:, :, :, camera_token_idx:scale_token_idx+1, :].clone()
+                            new_special_k = evicted_k[:, :, :, camera_token_idx : scale_token_idx + 1, :].clone()
+                            new_special_v = evicted_v[:, :, :, camera_token_idx : scale_token_idx + 1, :].clone()
 
                         if f"k_{global_idx}_special" not in kv_cache or kv_cache[f"k_{global_idx}_special"] is None:
                             kv_cache[f"k_{global_idx}_special"] = new_special_k
                             kv_cache[f"v_{global_idx}_special"] = new_special_v
                         else:
                             kv_cache[f"k_{global_idx}_special"] = torch.cat(
-                                [kv_cache[f"k_{global_idx}_special"], new_special_k], dim=2)
+                                [kv_cache[f"k_{global_idx}_special"], new_special_k], dim=2
+                            )
                             kv_cache[f"v_{global_idx}_special"] = torch.cat(
-                                [kv_cache[f"v_{global_idx}_special"], new_special_v], dim=2)
+                                [kv_cache[f"v_{global_idx}_special"], new_special_v], dim=2
+                            )
 
                     if self.kv_cache_include_scale_frames:
-                        kv_cache[f"k_{global_idx}"] = torch.cat([
-                            kv_cache[f"k_{global_idx}"][:, :, :scale_frames, :, :],
-                            kv_cache[f"k_{global_idx}"][:, :, -sliding_window_frames:, :, :]
-                        ], dim=2)
-                        kv_cache[f"v_{global_idx}"] = torch.cat([
-                            kv_cache[f"v_{global_idx}"][:, :, :scale_frames, :, :],
-                            kv_cache[f"v_{global_idx}"][:, :, -sliding_window_frames:, :, :]
-                        ], dim=2)
+                        kv_cache[f"k_{global_idx}"] = torch.cat(
+                            [
+                                kv_cache[f"k_{global_idx}"][:, :, :scale_frames, :, :],
+                                kv_cache[f"k_{global_idx}"][:, :, -sliding_window_frames:, :, :],
+                            ],
+                            dim=2,
+                        )
+                        kv_cache[f"v_{global_idx}"] = torch.cat(
+                            [
+                                kv_cache[f"v_{global_idx}"][:, :, :scale_frames, :, :],
+                                kv_cache[f"v_{global_idx}"][:, :, -sliding_window_frames:, :, :],
+                            ],
+                            dim=2,
+                        )
                     else:
                         kv_cache[f"k_{global_idx}"] = kv_cache[f"k_{global_idx}"][:, :, -sliding_window_frames:, :, :]
                         kv_cache[f"v_{global_idx}"] = kv_cache[f"v_{global_idx}"][:, :, -sliding_window_frames:, :, :]

@@ -23,9 +23,9 @@ from .model import MiniMaxH3VideoVAE
 
 __all__ = [
     "AutoencoderKLLegacy",
+    "MiniMaxH3VAEContractError",
     "MiniMaxH3VideoVAE",
     "MiniMaxH3VideoVAEArchConfig",
     "MiniMaxH3VideoVAEConfig",
-    "MiniMaxH3VAEContractError",
     "validate_minimax_h3_vae_latent_stats",
 ]

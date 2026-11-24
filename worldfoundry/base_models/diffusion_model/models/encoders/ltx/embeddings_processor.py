@@ -22,6 +22,7 @@ from worldfoundry.base_models.diffusion_model.models.encoders.ltx.embeddings_con
 
 class EmbeddingsProcessorOutput(NamedTuple):
     """Packed Gemma video/audio context tensors and masks."""
+
     video_encoding: torch.Tensor
     audio_encoding: torch.Tensor | None
     attention_mask: torch.Tensor

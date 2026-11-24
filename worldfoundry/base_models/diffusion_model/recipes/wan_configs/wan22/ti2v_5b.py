@@ -13,17 +13,17 @@ from easydict import EasyDict
 
 from .shared import wan_shared_cfg
 
-#------------------------ Wan TI2V 5B ------------------------#
+# ------------------------ Wan TI2V 5B ------------------------#
 
-ti2v_5B = EasyDict(__name__='Config: Wan TI2V 5B')
+ti2v_5B = EasyDict(__name__="Config: Wan TI2V 5B")
 ti2v_5B.update(wan_shared_cfg)
 
 # t5
-ti2v_5B.t5_checkpoint = 'models_t5_umt5-xxl-enc-bf16.pth'
-ti2v_5B.t5_tokenizer = 'google/umt5-xxl'
+ti2v_5B.t5_checkpoint = "models_t5_umt5-xxl-enc-bf16.pth"
+ti2v_5B.t5_tokenizer = "google/umt5-xxl"
 
 # vae
-ti2v_5B.vae_checkpoint = 'Wan2.2_VAE.pth'
+ti2v_5B.vae_checkpoint = "Wan2.2_VAE.pth"
 ti2v_5B.vae_stride = (4, 16, 16)
 
 # transformer

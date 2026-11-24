@@ -11,28 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 #  Changes were made to this source code by Yuwei Guo.
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import torch
+from diffusers.configuration_utils import ConfigMixin, register_to_config
+from diffusers.models.embeddings import TimestepEmbedding, Timesteps
+from diffusers.utils import BaseOutput, logging
 from torch import nn
 from torch.nn import functional as F
 
-from diffusers.configuration_utils import ConfigMixin, register_to_config
-from diffusers.utils import BaseOutput, logging
-from diffusers.models.embeddings import TimestepEmbedding, Timesteps
-
+from worldfoundry.base_models.diffusion_model.models.networks.animatediff.resnet import InflatedConv3d
+from worldfoundry.core.nn.diffusion.convolution import zero_module as zero_module
 
 from .unet_blocks import (
-    CrossAttnDownBlock3D,
-    DownBlock3D,
     UNetMidBlock3DCrossAttn,
     get_down_block,
 )
-from einops import repeat, rearrange
-from .resnet import InflatedConv3d
 
 try:
     from diffusers.models.unet_2d_condition import UNet2DConditionModel
@@ -45,7 +42,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 @dataclass
 class SparseControlNetOutput(BaseOutput):
-    down_block_res_samples: Tuple[torch.Tensor]
+    down_block_res_samples: tuple[torch.Tensor]
     mid_block_res_sample: torch.Tensor
 
 
@@ -54,7 +51,7 @@ class SparseControlNetConditioningEmbedding(nn.Module):
         self,
         conditioning_embedding_channels: int,
         conditioning_channels: int = 3,
-        block_out_channels: Tuple[int] = (16, 32, 96, 256),
+        block_out_channels: tuple[int] = (16, 32, 96, 256),
     ):
         super().__init__()
 
@@ -95,38 +92,37 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
         conditioning_channels: int = 3,
         flip_sin_to_cos: bool = True,
         freq_shift: int = 0,
-        down_block_types: Tuple[str] = (
+        down_block_types: tuple[str] = (
             "CrossAttnDownBlock2D",
             "CrossAttnDownBlock2D",
             "CrossAttnDownBlock2D",
             "DownBlock2D",
         ),
-        only_cross_attention: Union[bool, Tuple[bool]] = False,
-        block_out_channels: Tuple[int] = (320, 640, 1280, 1280),
+        only_cross_attention: bool | tuple[bool] = False,
+        block_out_channels: tuple[int] = (320, 640, 1280, 1280),
         layers_per_block: int = 2,
         downsample_padding: int = 1,
         mid_block_scale_factor: float = 1,
         act_fn: str = "silu",
-        norm_num_groups: Optional[int] = 32,
+        norm_num_groups: int | None = 32,
         norm_eps: float = 1e-5,
         cross_attention_dim: int = 1280,
-        attention_head_dim: Union[int, Tuple[int]] = 8,
-        num_attention_heads: Optional[Union[int, Tuple[int]]] = None,
+        attention_head_dim: int | tuple[int] = 8,
+        num_attention_heads: int | tuple[int] | None = None,
         use_linear_projection: bool = False,
-        class_embed_type: Optional[str] = None,
-        num_class_embeds: Optional[int] = None,
+        class_embed_type: str | None = None,
+        num_class_embeds: int | None = None,
         upcast_attention: bool = False,
         resnet_time_scale_shift: str = "default",
-        projection_class_embeddings_input_dim: Optional[int] = None,
+        projection_class_embeddings_input_dim: int | None = None,
         controlnet_conditioning_channel_order: str = "rgb",
-        conditioning_embedding_out_channels: Optional[Tuple[int]] = (16, 32, 96, 256),
+        conditioning_embedding_out_channels: tuple[int] | None = (16, 32, 96, 256),
         global_pool_conditions: bool = False,
-
-        use_motion_module         = True,
-        motion_module_resolutions = ( 1,2,4,8 ),
-        motion_module_mid_block   = False,
-        motion_module_type        = "Vanilla",
-        motion_module_kwargs      = {
+        use_motion_module=True,
+        motion_module_resolutions=(1, 2, 4, 8),
+        motion_module_mid_block=False,
+        motion_module_type="Vanilla",
+        motion_module_kwargs={  # noqa: B006 - Keeps the upstream default object and signature.
             "num_attention_heads": 8,
             "num_transformer_block": 1,
             "attention_block_types": ["Temporal_Self"],
@@ -135,10 +131,8 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
             "temporal_attention_dim_div": 1,
             "causal_temporal_attention": False,
         },
-
         concate_conditioning_mask: bool = True,
-        use_simplified_condition_embedding:  bool = False,
-
+        use_simplified_condition_embedding: bool = False,
         set_noisy_sample_input_to_zero: bool = False,
     ):
         super().__init__()
@@ -168,7 +162,7 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
             )
 
         # input
-        self.set_noisy_sample_input_to_zero  = set_noisy_sample_input_to_zero
+        self.set_noisy_sample_input_to_zero = set_noisy_sample_input_to_zero
 
         conv_in_kernel = 3
         conv_in_padding = (conv_in_kernel - 1) // 2
@@ -183,7 +177,9 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
         # control net conditioning embedding
         if use_simplified_condition_embedding:
             self.controlnet_cond_embedding = zero_module(
-                InflatedConv3d(conditioning_channels, block_out_channels[0], kernel_size=conv_in_kernel, padding=conv_in_padding)
+                InflatedConv3d(
+                    conditioning_channels, block_out_channels[0], kernel_size=conv_in_kernel, padding=conv_in_padding
+                )
             )
         else:
             self.controlnet_cond_embedding = SparseControlNetConditioningEmbedding(
@@ -228,7 +224,6 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
         else:
             self.class_embedding = None
 
-
         self.down_blocks = nn.ModuleList([])
         self.controlnet_down_blocks = nn.ModuleList([])
 
@@ -249,7 +244,7 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
         self.controlnet_down_blocks.append(controlnet_block)
 
         for i, down_block_type in enumerate(down_block_types):
-            res = 2 ** i
+            res = 2**i
             input_channel = output_channel
             output_channel = block_out_channels[i]
             is_final_block = i == len(block_out_channels) - 1
@@ -271,9 +266,7 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
                 only_cross_attention=only_cross_attention[i],
                 upcast_attention=upcast_attention,
                 resnet_time_scale_shift=resnet_time_scale_shift,
-
                 use_inflated_groupnorm=True,
-
                 use_motion_module=use_motion_module and (res in motion_module_resolutions),
                 motion_module_type=motion_module_type,
                 motion_module_kwargs=motion_module_kwargs,
@@ -309,7 +302,6 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
             resnet_groups=norm_num_groups,
             use_linear_projection=use_linear_projection,
             upcast_attention=upcast_attention,
-
             use_inflated_groupnorm=True,
             use_motion_module=use_motion_module and motion_module_mid_block,
             motion_module_type=motion_module_type,
@@ -321,10 +313,9 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
         cls,
         unet: UNet2DConditionModel,
         controlnet_conditioning_channel_order: str = "rgb",
-        conditioning_embedding_out_channels: Optional[Tuple[int]] = (16, 32, 96, 256),
+        conditioning_embedding_out_channels: tuple[int] | None = (16, 32, 96, 256),
         load_weights_from_unet: bool = True,
-
-        controlnet_additional_kwargs: dict = {},
+        controlnet_additional_kwargs: dict = {},  # noqa: B006 - Keeps the upstream default object and signature.
     ):
         controlnet = cls(
             in_channels=unet.config.in_channels,
@@ -350,24 +341,33 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
             projection_class_embeddings_input_dim=unet.config.projection_class_embeddings_input_dim,
             controlnet_conditioning_channel_order=controlnet_conditioning_channel_order,
             conditioning_embedding_out_channels=conditioning_embedding_out_channels,
-
             **controlnet_additional_kwargs,
         )
 
         if load_weights_from_unet:
             m, u = controlnet.conv_in.load_state_dict(cls.image_layer_filter(unet.conv_in.state_dict()), strict=False)
             assert len(u) == 0
-            m, u = controlnet.time_proj.load_state_dict(cls.image_layer_filter(unet.time_proj.state_dict()), strict=False)
+            m, u = controlnet.time_proj.load_state_dict(
+                cls.image_layer_filter(unet.time_proj.state_dict()), strict=False
+            )
             assert len(u) == 0
-            m, u = controlnet.time_embedding.load_state_dict(cls.image_layer_filter(unet.time_embedding.state_dict()), strict=False)
+            m, u = controlnet.time_embedding.load_state_dict(
+                cls.image_layer_filter(unet.time_embedding.state_dict()), strict=False
+            )
             assert len(u) == 0
 
             if controlnet.class_embedding:
-                m, u = controlnet.class_embedding.load_state_dict(cls.image_layer_filter(unet.class_embedding.state_dict()), strict=False)
+                m, u = controlnet.class_embedding.load_state_dict(
+                    cls.image_layer_filter(unet.class_embedding.state_dict()), strict=False
+                )
                 assert len(u) == 0
-            m, u = controlnet.down_blocks.load_state_dict(cls.image_layer_filter(unet.down_blocks.state_dict()), strict=False)
+            m, u = controlnet.down_blocks.load_state_dict(
+                cls.image_layer_filter(unet.down_blocks.state_dict()), strict=False
+            )
             assert len(u) == 0
-            m, u = controlnet.mid_block.load_state_dict(cls.image_layer_filter(unet.mid_block.state_dict()), strict=False)
+            m, u = controlnet.mid_block.load_state_dict(
+                cls.image_layer_filter(unet.mid_block.state_dict()), strict=False
+            )
             assert len(u) == 0
 
         return controlnet
@@ -376,7 +376,8 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
     def image_layer_filter(state_dict):
         new_state_dict = {}
         for name, param in state_dict.items():
-            if "motion_modules." in name or "lora" in name: continue
+            if "motion_modules." in name or "lora" in name:
+                continue
             new_state_dict[name] = param
         return new_state_dict
 
@@ -435,7 +436,7 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
         # Recursively walk through all the children.
         # Any children which exposes the set_attention_slice method
         # gets the message
-        def fn_recursive_set_attention_slice(module: torch.nn.Module, slice_size: List[int]):
+        def fn_recursive_set_attention_slice(module: torch.nn.Module, slice_size: list[int]):
             if hasattr(module, "set_attention_slice"):
                 module.set_attention_slice(slice_size.pop())
 
@@ -447,26 +448,23 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
             fn_recursive_set_attention_slice(module, reversed_slice_size)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (CrossAttnDownBlock2D, DownBlock2D)):
+        if isinstance(module, (CrossAttnDownBlock2D, DownBlock2D)):  # noqa: F821 - Name is undefined in the upstream source.
             module.gradient_checkpointing = value
 
     def forward(
         self,
         sample: torch.FloatTensor,
-        timestep: Union[torch.Tensor, float, int],
+        timestep: torch.Tensor | float | int,
         encoder_hidden_states: torch.Tensor,
-
         controlnet_cond: torch.FloatTensor,
-        conditioning_mask: Optional[torch.FloatTensor] = None,
-
+        conditioning_mask: torch.FloatTensor | None = None,
         conditioning_scale: float = 1.0,
-        class_labels: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        cross_attention_kwargs: Optional[Dict[str, Any]] = None,
+        class_labels: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        cross_attention_kwargs: dict[str, Any] | None = None,
         guess_mode: bool = False,
         return_dict: bool = True,
-    ) -> Union[SparseControlNetOutput, Tuple]:
-
+    ) -> SparseControlNetOutput | tuple:
         # set input noise to zero
         if self.set_noisy_sample_input_to_zero:
             sample = torch.zeros_like(sample).to(sample.device)
@@ -490,7 +488,7 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
         elif len(timesteps.shape) == 0:
             timesteps = timesteps[None].to(sample.device)
 
-        timesteps             = timesteps.repeat(sample.shape[0] // timesteps.shape[0])
+        timesteps = timesteps.repeat(sample.shape[0] // timesteps.shape[0])
         encoder_hidden_states = encoder_hidden_states.repeat(sample.shape[0] // encoder_hidden_states.shape[0], 1, 1)
 
         # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
@@ -516,11 +514,11 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
 
         # 2. pre-process
         sample = self.conv_in(sample)
-        
+
         if self.concate_conditioning_mask:
             controlnet_cond = torch.cat([controlnet_cond, conditioning_mask], dim=1)
         controlnet_cond = self.controlnet_cond_embedding(controlnet_cond)
-        
+
         sample = sample + controlnet_cond
 
         # 3. down
@@ -534,7 +532,8 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
                     attention_mask=attention_mask,
                     # cross_attention_kwargs=cross_attention_kwargs,
                 )
-            else: sample, res_samples = downsample_block(hidden_states=sample, temb=emb)
+            else:
+                sample, res_samples = downsample_block(hidden_states=sample, temb=emb)
 
             down_block_res_samples += res_samples
 
@@ -551,9 +550,11 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
         # 5. controlnet blocks
         controlnet_down_block_res_samples = ()
 
-        for down_block_res_sample, controlnet_block in zip(down_block_res_samples, self.controlnet_down_blocks):
+        for down_block_res_sample, controlnet_block in zip(
+            down_block_res_samples, self.controlnet_down_blocks, strict=False
+        ):
             down_block_res_sample = controlnet_block(down_block_res_sample)
-            controlnet_down_block_res_samples = controlnet_down_block_res_samples + (down_block_res_sample,)
+            controlnet_down_block_res_samples = controlnet_down_block_res_samples + (down_block_res_sample,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         down_block_res_samples = controlnet_down_block_res_samples
 
@@ -564,16 +565,16 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
             scales = torch.logspace(-1, 0, len(down_block_res_samples) + 1, device=sample.device)  # 0.1 to 1.0
 
             scales = scales * conditioning_scale
-            down_block_res_samples = [sample * scale for sample, scale in zip(down_block_res_samples, scales)]
+            down_block_res_samples = [
+                sample * scale for sample, scale in zip(down_block_res_samples, scales, strict=False)
+            ]
             mid_block_res_sample = mid_block_res_sample * scales[-1]  # last one
         else:
             down_block_res_samples = [sample * conditioning_scale for sample in down_block_res_samples]
             mid_block_res_sample = mid_block_res_sample * conditioning_scale
 
         if self.config.global_pool_conditions:
-            down_block_res_samples = [
-                torch.mean(sample, dim=(2, 3), keepdim=True) for sample in down_block_res_samples
-            ]
+            down_block_res_samples = [torch.mean(sample, dim=(2, 3), keepdim=True) for sample in down_block_res_samples]
             mid_block_res_sample = torch.mean(mid_block_res_sample, dim=(2, 3), keepdim=True)
 
         if not return_dict:
@@ -582,9 +583,3 @@ class SparseControlNetModel(ModelMixin, ConfigMixin):
         return SparseControlNetOutput(
             down_block_res_samples=down_block_res_samples, mid_block_res_sample=mid_block_res_sample
         )
-
-
-def zero_module(module):
-    for p in module.parameters():
-        nn.init.zeros_(p)
-    return module

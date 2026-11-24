@@ -1,30 +1,48 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import warnings
 from copy import deepcopy
+from typing import ClassVar
 
 import torch
 import torch.nn.functional as F
+
 from ...common.registry import registry
+
+# isort: split
 from ...models.albef_models import AlbefBase
+
+# isort: split
+# isort: split
 from ...models.albef_models.albef_outputs import (
     AlbefIntermediateOutput,
     AlbefOutputWithLogits,
 )
+
+# isort: split
+# isort: split
 from ...models.base_model import MomentumDistilationMixin
+
+# isort: split
+# isort: split
 from ...models.med import XBertEncoder
+
+# isort: split
+# isort: split
 from ...models.vit import VisionTransformerEncoder
+
+# isort: split
 from torch import nn
 
 
 @registry.register_model("albef_classification")
 class AlbefClassification(AlbefBase, MomentumDistilationMixin):
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "ve": "configs/models/albef_classification_ve.yaml",
     }
 
@@ -57,9 +75,7 @@ class AlbefClassification(AlbefBase, MomentumDistilationMixin):
                 nn.Linear(hidden_size, num_classes),
             )
         else:
-            warnings.warn(
-                f"Found num_classes=0, initializing {type(self)} without classifier."
-            )
+            warnings.warn(f"Found num_classes=0, initializing {type(self)} without classifier.", stacklevel=1)
 
         if self.use_distill:
             self.visual_encoder_m = deepcopy(self.visual_encoder)
@@ -94,9 +110,7 @@ class AlbefClassification(AlbefBase, MomentumDistilationMixin):
         targets = samples["label"]
 
         image_embeds = self.visual_encoder.forward_features(samples["image"])
-        encoder_output = self.text_encoder.forward_automask(
-            samples["tokenized_text"], image_embeds
-        )
+        encoder_output = self.text_encoder.forward_automask(samples["tokenized_text"], image_embeds)
 
         prediction = self.cls_head(encoder_output.last_hidden_state[:, 0, :])
 
@@ -106,13 +120,9 @@ class AlbefClassification(AlbefBase, MomentumDistilationMixin):
                     self._momentum_update()
 
                     image_embeds_m = self.visual_encoder_m(samples["image"])
-                    encoder_output_m = self.text_encoder_m.forward_automask(
-                        samples["tokenized_text"], image_embeds_m
-                    )
+                    encoder_output_m = self.text_encoder_m.forward_automask(samples["tokenized_text"], image_embeds_m)
 
-                    prediction_m = self.cls_head_m(
-                        encoder_output_m.last_hidden_state[:, 0, :]
-                    )
+                    prediction_m = self.cls_head_m(encoder_output_m.last_hidden_state[:, 0, :])
 
                 alpha = self.alpha * self._rampup_factor(
                     epoch=samples["epoch"],
@@ -120,9 +130,7 @@ class AlbefClassification(AlbefBase, MomentumDistilationMixin):
                     num_iters_per_epoch=samples["num_iters_per_epoch"],
                 )
 
-                loss = (1 - alpha) * F.cross_entropy(
-                    prediction, targets
-                ) - alpha * torch.sum(
+                loss = (1 - alpha) * F.cross_entropy(prediction, targets) - alpha * torch.sum(
                     F.log_softmax(prediction, dim=1) * F.softmax(prediction_m, dim=1),
                     dim=1,
                 ).mean()
@@ -163,9 +171,7 @@ class AlbefClassification(AlbefBase, MomentumDistilationMixin):
         num_classes = cfg.get("num_classes", -1)
         max_txt_len = cfg.get("max_txt_len", 40)
 
-        assert num_classes > 1, "Invalid number of classes provided, found {}".format(
-            num_classes
-        )
+        assert num_classes > 1, f"Invalid number of classes provided, found {num_classes}"
 
         model = cls(
             image_encoder=image_encoder,

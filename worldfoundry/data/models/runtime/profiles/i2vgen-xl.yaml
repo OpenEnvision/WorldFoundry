@@ -6,7 +6,8 @@ groups:
 - video
 - image_to_video
 source_repos:
-- url: https://github.com/ali-vilab/i2vgen-xl
+- url: https://github.com/ali-vilab/VGen
+  revision: 4014d1fae4ac4a35e8e8442123611e913001399e
 checkpoints:
 - repo_id: ali-vilab/i2vgen-xl
   role: i2v_checkpoint

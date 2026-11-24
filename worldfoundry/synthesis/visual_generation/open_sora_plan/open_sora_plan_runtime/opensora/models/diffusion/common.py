@@ -1,21 +1,37 @@
 import torch
-from einops import rearrange, repeat
-from typing import Any, Dict, Optional, Tuple
-import torch
-import torch.nn.functional as F
+from einops import rearrange
 from torch import nn
-from diffusers.models.attention_processor import Attention as Attention_
+
 try:
     import torch_npu
-    from opensora.npu_config import npu_config, set_run_dtype
-    from opensora.acceleration.parallel_states import get_sequence_parallel_state, hccl_info as xccl_info
-    from opensora.acceleration.communications import all_to_all_SBH
-except:
+
+    from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.acceleration.communications import (
+        all_to_all_SBH,
+    )
+    from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.acceleration.parallel_states import (
+        get_sequence_parallel_state,
+    )
+    from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.acceleration.parallel_states import (
+        hccl_info as xccl_info,
+    )
+    from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.npu_config import (
+        npu_config,
+        set_run_dtype,
+    )
+except BaseException:
     torch_npu = None
     npu_config = None
     set_run_dtype = None
-    from opensora.utils.parallel_states import get_sequence_parallel_state, nccl_info as xccl_info
-    from opensora.utils.communications import all_to_all_SBH
+    from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.utils.communications import (  # noqa: F401 - Fallback import mirrors the guarded NPU import, as upstream.
+        all_to_all_SBH,
+    )
+    from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.utils.parallel_states import (  # noqa: F401 - Fallback import mirrors the guarded NPU import, as upstream.
+        get_sequence_parallel_state,
+    )
+    from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.utils.parallel_states import (  # noqa: F401 - Fallback import mirrors the guarded NPU import, as upstream.
+        nccl_info as xccl_info,
+    )
+
 
 class PatchEmbed2D(nn.Module):
     """2D Image to Patch Embedding but with video"""
@@ -29,26 +45,27 @@ class PatchEmbed2D(nn.Module):
     ):
         super().__init__()
         self.proj = nn.Conv2d(
-            in_channels, embed_dim, 
-            kernel_size=(patch_size, patch_size), stride=(patch_size, patch_size), bias=bias
+            in_channels, embed_dim, kernel_size=(patch_size, patch_size), stride=(patch_size, patch_size), bias=bias
         )
 
     def forward(self, latent):
         b, _, _, _, _ = latent.shape
-        latent = rearrange(latent, 'b c t h w -> (b t) c h w')
+        latent = rearrange(latent, "b c t h w -> (b t) c h w")
         latent = self.proj(latent)
-        latent = rearrange(latent, '(b t) c h w -> b (t h w) c', b=b)
+        latent = rearrange(latent, "(b t) c h w -> b (t h w) c", b=b)
         return latent
 
 
-class PositionGetter3D(object):
-    """ return positions of patches """
+class PositionGetter3D:
+    """return positions of patches"""
 
-    def __init__(self, ):
+    def __init__(
+        self,
+    ):
         self.cache_positions = {}
-        
+
     def __call__(self, b, t, h, w, device):
-        if not (b,t,h,w) in self.cache_positions:
+        if (b, t, h, w) not in self.cache_positions:
             x = torch.arange(w, device=device)
             y = torch.arange(h, device=device)
             z = torch.arange(t, device=device)
@@ -62,9 +79,9 @@ class PositionGetter3D(object):
         pos = self.cache_positions[b, t, h, w]
 
         return pos
-    
-class RoPE3D(torch.nn.Module):
 
+
+class RoPE3D(torch.nn.Module):
     def __init__(self, freq=10000.0, F0=1.0, interpolation_scale_thw=(1, 1, 1)):
         super().__init__()
         self.base = freq
@@ -87,7 +104,7 @@ class RoPE3D(torch.nn.Module):
 
     @staticmethod
     def rotate_half(x):
-        x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2:]
+        x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
         return torch.cat((-x2, x1), dim=-1)
 
     def apply_rope1d(self, tokens, pos1d, cos, sin):
@@ -109,7 +126,7 @@ class RoPE3D(torch.nn.Module):
         assert tokens.size(3) % 3 == 0, "number of dimensions should be a multiple of three"
         D = tokens.size(3) // 3
         poses, max_poses = positions
-        assert len(poses) == 3 and poses[0].ndim == 2# Batch, Seq, 3
+        assert len(poses) == 3 and poses[0].ndim == 2  # Batch, Seq, 3
         cos_t, sin_t = self.get_cos_sin(D, max_poses[0] + 1, tokens.device, tokens.dtype, self.interpolation_scale_t)
         cos_y, sin_y = self.get_cos_sin(D, max_poses[1] + 1, tokens.device, tokens.dtype, self.interpolation_scale_h)
         cos_x, sin_x = self.get_cos_sin(D, max_poses[2] + 1, tokens.device, tokens.dtype, self.interpolation_scale_w)

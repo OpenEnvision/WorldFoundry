@@ -1,10 +1,12 @@
 """
- Copyright (c) 2023, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2023, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
+
 import logging
+from typing import ClassVar
 
 import torch
 import torch.distributed as dist
@@ -14,11 +16,15 @@ from torch.nn import functional as F
 
 from ...common.registry import registry
 from ..base_model import all_gather_with_grad, concat_all_gather
+
+# isort: split
 from .blip2 import (
     Blip2Base,
     compute_sim_matrix,
     disabled_train,
 )
+
+# isort: split
 from ..blip_models.blip_outputs import BlipOutput, BlipOutputFeatures
 
 
@@ -36,7 +42,7 @@ class Blip2Qformer(Blip2Base):
         >>> model = load_model("blip2", "pretrain")
     """
 
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "pretrain": "configs/models/blip2/blip2_pretrain.yaml",
         "pretrain_vitL": "configs/models/blip2/blip2_pretrain_vitL.yaml",
         "coco": "configs/models/blip2/blip2_coco.yaml",
@@ -63,7 +69,7 @@ class Blip2Qformer(Blip2Base):
             vit_model, img_size, drop_path_rate, use_grad_checkpoint, vit_precision
         )
         if freeze_vit:
-            for name, param in self.visual_encoder.named_parameters():
+            for name, param in self.visual_encoder.named_parameters():  # noqa: B007 - The loop variable is read outside the loop.
                 param.requires_grad = False
             self.visual_encoder = self.visual_encoder.eval()
             self.visual_encoder.train = disabled_train
@@ -92,9 +98,7 @@ class Blip2Qformer(Blip2Base):
         text = samples["text_input"]
 
         image_embeds = self.ln_vision(self.visual_encoder(image))
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
 
@@ -106,9 +110,7 @@ class Blip2Qformer(Blip2Base):
             return_dict=True,
         )
 
-        image_feats = F.normalize(
-            self.vision_proj(query_output.last_hidden_state), dim=-1
-        )
+        image_feats = F.normalize(self.vision_proj(query_output.last_hidden_state), dim=-1)
 
         text_tokens = self.tokenizer(
             text,
@@ -122,19 +124,13 @@ class Blip2Qformer(Blip2Base):
             attention_mask=text_tokens.attention_mask,
             return_dict=True,
         )
-        text_feat = F.normalize(
-            self.text_proj(text_output.last_hidden_state[:, 0, :]), dim=-1
-        )
+        text_feat = F.normalize(self.text_proj(text_output.last_hidden_state[:, 0, :]), dim=-1)
 
         ###============== Image-text Contrastive ===================###
-        image_feats_all = concat_all_gather(
-            image_feats
-        )  # [batch_size*num_gpu, num_query_tokens, embed_dim]
+        image_feats_all = concat_all_gather(image_feats)  # [batch_size*num_gpu, num_query_tokens, embed_dim]
         text_feat_all = concat_all_gather(text_feat)  # [batch_size*num_gpu, embed_dim]
 
-        sim_q2t = torch.matmul(
-            image_feats.unsqueeze(1), text_feat_all.unsqueeze(-1)
-        ).squeeze()
+        sim_q2t = torch.matmul(image_feats.unsqueeze(1), text_feat_all.unsqueeze(-1)).squeeze()
         # [batch_size, batch_size*num_gpu, num_query_tokens]
 
         # image-text similarity: aggregate across all query tokens
@@ -142,9 +138,7 @@ class Blip2Qformer(Blip2Base):
         sim_i2t = sim_i2t / self.temp
 
         # text-query similarity: [batch_size, batch_size*num_gpu, num_query_tokens]
-        sim_t2q = torch.matmul(
-            text_feat.unsqueeze(1).unsqueeze(1), image_feats_all.permute(0, 2, 1)
-        ).squeeze()
+        sim_t2q = torch.matmul(text_feat.unsqueeze(1).unsqueeze(1), image_feats_all.permute(0, 2, 1)).squeeze()
 
         # text-image similarity: aggregate across all query tokens
         sim_t2i, _ = sim_t2q.max(-1)
@@ -152,9 +146,7 @@ class Blip2Qformer(Blip2Base):
 
         rank = dist.get_rank()
         bs = image.size(0)
-        targets = torch.linspace(rank * bs, rank * bs + bs - 1, bs, dtype=int).to(
-            image.device
-        )
+        targets = torch.linspace(rank * bs, rank * bs + bs - 1, bs, dtype=int).to(image.device)
 
         loss_itc = (
             F.cross_entropy(sim_i2t, targets, label_smoothing=0.1)
@@ -189,26 +181,18 @@ class Blip2Qformer(Blip2Base):
         text_ids_neg = torch.stack(text_ids_neg, dim=0)
         text_atts_neg = torch.stack(text_atts_neg, dim=0)
 
-        text_ids_all = torch.cat(
-            [text_tokens.input_ids, text_tokens.input_ids, text_ids_neg], dim=0
-        )  # pos, pos, neg
+        text_ids_all = torch.cat([text_tokens.input_ids, text_tokens.input_ids, text_ids_neg], dim=0)  # pos, pos, neg
         text_atts_all = torch.cat(
             [text_tokens.attention_mask, text_tokens.attention_mask, text_atts_neg],
             dim=0,
         )
 
         query_tokens_itm = self.query_tokens.expand(text_ids_all.shape[0], -1, -1)
-        query_atts_itm = torch.ones(query_tokens_itm.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
+        query_atts_itm = torch.ones(query_tokens_itm.size()[:-1], dtype=torch.long).to(image.device)
         attention_mask_all = torch.cat([query_atts_itm, text_atts_all], dim=1)
 
-        image_embeds_all = torch.cat(
-            [image_embeds, image_embeds_neg, image_embeds], dim=0
-        )  # pos, neg, pos
-        image_atts_all = torch.ones(image_embeds_all.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
+        image_embeds_all = torch.cat([image_embeds, image_embeds_neg, image_embeds], dim=0)  # pos, neg, pos
+        image_atts_all = torch.ones(image_embeds_all.size()[:-1], dtype=torch.long).to(image.device)
 
         output_itm = self.Qformer.bert(
             text_ids_all,
@@ -232,13 +216,9 @@ class Blip2Qformer(Blip2Base):
         ##================= Image Captioning ========================##
         decoder_input_ids = text_tokens.input_ids.clone()
         decoder_input_ids[:, 0] = self.tokenizer.bos_token_id
-        labels = decoder_input_ids.masked_fill(
-            decoder_input_ids == self.tokenizer.pad_token_id, -100
-        )
+        labels = decoder_input_ids.masked_fill(decoder_input_ids == self.tokenizer.pad_token_id, -100)
 
-        query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
+        query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
         attention_mask = torch.cat([query_atts, text_tokens.attention_mask], dim=1)
         lm_output = self.Qformer(
             decoder_input_ids,
@@ -289,20 +269,14 @@ class Blip2Qformer(Blip2Base):
             image_embeds = image_embeds.repeat_interleave(num_beams, dim=0)
         else:
             num_beams = 1
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
         model_kwargs = {
             "encoder_hidden_states": image_embeds,
             "encoder_attention_mask": image_atts,
         }
 
-        input_ids = (
-            torch.LongTensor(image.size(0), 1)
-            .fill_(self.tokenizer.bos_token_id)
-            .to(image.device)
-        )
+        input_ids = torch.LongTensor(image.size(0), 1).fill_(self.tokenizer.bos_token_id).to(image.device)
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
 
         outputs = self.Qformer.generate(
@@ -315,16 +289,14 @@ class Blip2Qformer(Blip2Base):
             top_p=top_p,
             eos_token_id=self.tokenizer.sep_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
-            **model_kwargs
+            **model_kwargs,
         )
         captions = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
         return captions
 
     def forward_image(self, image):
         image_embeds = self.ln_vision(self.visual_encoder(image))
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
 
@@ -345,13 +317,9 @@ class Blip2Qformer(Blip2Base):
         return text_output.last_hidden_state[:, 0, :]
 
     def compute_itm(self, image_inputs, text_ids, text_atts):
-        image_atts = torch.ones(image_inputs.size()[:-1], dtype=torch.long).to(
-            image_inputs.device
-        )
+        image_atts = torch.ones(image_inputs.size()[:-1], dtype=torch.long).to(image_inputs.device)
         query_tokens = self.query_tokens.expand(image_inputs.shape[0], -1, -1)
-        query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(
-            image_inputs.device
-        )
+        query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image_inputs.device)
         attention_mask = torch.cat([query_atts, text_atts], dim=1)
         output_itm = self.Qformer.bert(
             text_ids,
@@ -399,19 +367,13 @@ class Blip2Qformer(Blip2Base):
         image_features, text_features = None, None
 
         if mode == "image":
-            assert (
-                image is not None
-            ), "Image is not provided for mode 'image' or 'multimodal'"
+            assert image is not None, "Image is not provided for mode 'image' or 'multimodal'"
             # return query features
             with self.maybe_autocast():
                 image_embeds_frozen = self.ln_vision(self.visual_encoder(image))
             image_embeds_frozen = image_embeds_frozen.float()
-            image_atts = torch.ones(
-                image_embeds_frozen.size()[:-1], dtype=torch.long
-            ).to(self.device)
-            query_tokens = self.query_tokens.expand(
-                image_embeds_frozen.shape[0], -1, -1
-            )
+            image_atts = torch.ones(image_embeds_frozen.size()[:-1], dtype=torch.long).to(self.device)
+            query_tokens = self.query_tokens.expand(image_embeds_frozen.shape[0], -1, -1)
 
             query_output = self.Qformer.bert(
                 query_embeds=query_tokens,
@@ -423,14 +385,10 @@ class Blip2Qformer(Blip2Base):
             image_features = F.normalize(self.vision_proj(image_embeds), dim=-1)
 
         elif mode == "text":
-            assert (
-                caption is not None
-            ), "text input is None for mode 'text' or 'multimodal'"
+            assert caption is not None, "text input is None for mode 'text' or 'multimodal'"
 
             # return text features
-            text = self.tokenizer(caption, return_tensors="pt", padding=True).to(
-                self.device
-            )
+            text = self.tokenizer(caption, return_tensors="pt", padding=True).to(self.device)
 
             text_output = self.Qformer.bert(
                 text.input_ids,
@@ -446,19 +404,11 @@ class Blip2Qformer(Blip2Base):
             with self.maybe_autocast():
                 image_embeds_frozen = self.ln_vision(self.visual_encoder(image))
             image_embeds_frozen = image_embeds_frozen.float()
-            image_atts = torch.ones(
-                image_embeds_frozen.size()[:-1], dtype=torch.long
-            ).to(self.device)
-            query_tokens = self.query_tokens.expand(
-                image_embeds_frozen.shape[0], -1, -1
-            )
-            query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(
-                self.device
-            )
+            image_atts = torch.ones(image_embeds_frozen.size()[:-1], dtype=torch.long).to(self.device)
+            query_tokens = self.query_tokens.expand(image_embeds_frozen.shape[0], -1, -1)
+            query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(self.device)
 
-            text = self.tokenizer(caption, return_tensors="pt", padding=True).to(
-                self.device
-            )
+            text = self.tokenizer(caption, return_tensors="pt", padding=True).to(self.device)
             attention_mask = torch.cat([query_atts, text.attention_mask], dim=1)
 
             output = self.Qformer.bert(

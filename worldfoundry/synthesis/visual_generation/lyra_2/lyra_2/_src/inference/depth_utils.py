@@ -19,12 +19,11 @@ import importlib
 import os
 import re
 import sys
-from typing import Tuple
 
 import cv2
 import torch
 
-from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.observability.rank_logging import log
 
 DA3_CANONICAL_PACKAGE = "worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3"
 
@@ -48,7 +47,7 @@ def load_moge_model(device: torch.device):
     try:
         from worldfoundry.base_models.three_dimensions.depth.moge.model.v1 import MoGeModel
     except Exception as e:
-        raise ImportError("WorldFoundry canonical MoGe is required for --input_image_path flow. Error: " + str(e))
+        raise ImportError("WorldFoundry canonical MoGe is required for --input_image_path flow. Error: " + str(e))  # noqa: B904 - Keeps the implicit exception context.
 
     for _name, _mod in sys.modules.items():
         if "moge" in _name and hasattr(_mod, "XFORMERS_ENABLED"):
@@ -62,9 +61,9 @@ def load_moge_model(device: torch.device):
 def moge_infer_depth_intrinsics(
     moge_model,
     img_rgb_uint8: torch.Tensor,
-    depth_pred_hw: Tuple[int, int] = (720, 1280),
-    target_hw: Tuple[int, int] = (704, 1280),
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    depth_pred_hw: tuple[int, int] = (720, 1280),
+    target_hw: tuple[int, int] = (704, 1280),
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Args:
         img_rgb_uint8: [H,W,3] uint8 on CPU
@@ -199,7 +198,7 @@ def load_da3_from_custom_checkpoint(
 
 def load_da3_model(
     da3_model_name: str,
-    da3_model_path_custom: str = None,
+    da3_model_path_custom: str | None = None,
     device: str = "cuda",
 ):
     """Load a DepthAnything3 model, optionally from a custom checkpoint."""

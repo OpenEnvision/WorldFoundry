@@ -22,6 +22,10 @@ from typing import Any
 
 import torch
 
+from worldfoundry.core.attention.cache.causal_cache import (
+    CausalVideoCacheGeometry,
+    allocate_causal_video_cache,
+)
 from worldfoundry.core.model_loading import hash_state_dict_keys
 
 from ...components import BuildPurpose, ComponentBuildContext, ComponentKey, ComponentKind
@@ -38,82 +42,33 @@ from ...optimizations.wan.feature_cache import (
     WanFeatureCacheConfig,
     resolve_wan_feature_cache,
 )
+from ...schedulers.wan import InferenceFlowMatchScheduler
 from ..initializers.wan.component import WAN_DENOISE_MASK_IS_ALL_ONES
 from ..networks.wan.model import RMSNorm, WanModel
 from .graph_wrapped import (
     FeatureCacheDenoiserMixin,
     GraphWrappedDenoiserMixin,
     acceleration_runtime_call,
+    resolve_cuda_graph_mode,
     resolve_cuda_graph_option,
     validate_cuda_graph_options,
 )
-
-WAN21_T2V_1P3B_CONFIG = {
-    "has_image_input": False,
-    "patch_size": (1, 2, 2),
-    "in_dim": 16,
-    "dim": 1536,
-    "ffn_dim": 8960,
-    "freq_dim": 256,
-    "text_dim": 4096,
-    "out_dim": 16,
-    "num_heads": 12,
-    "num_layers": 30,
-    "eps": 1e-6,
-}
-
-WAN21_T2V_14B_CONFIG = {
-    **WAN21_T2V_1P3B_CONFIG,
-    "dim": 5120,
-    "ffn_dim": 13824,
-    "num_heads": 40,
-    "num_layers": 40,
-}
-
-WAN22_T2V_A14B_CONFIG = dict(WAN21_T2V_14B_CONFIG)
-
-WAN21_I2V_14B_CONFIG = {
-    **WAN21_T2V_14B_CONFIG,
-    "has_image_input": True,
-    "in_dim": 36,
-}
-
-# Some Wan2.1 research checkpoints (for example WoW 1.3B) train the
-# first-frame VAE condition without adding the CLIP cross-attention branch.
-# This is still the canonical Wan graph: only its explicit conditioning roles
-# differ from the released 14B I2V checkpoint.
-WAN21_VAE_I2V_1P3B_CONFIG = {
-    **WAN21_T2V_1P3B_CONFIG,
-    "in_dim": 36,
-    "require_vae_embedding": True,
-    "require_clip_embedding": False,
-}
-
-# Wan2.2 A14B I2V conditions the latent stream with the VAE mask/latent
-# tensor but does not own the Wan2.1 CLIP image branch.  Keeping that split in
-# one canonical graph is required by Fun-Control and FantasyWorld releases.
-WAN22_I2V_A14B_CONFIG = {
-    **WAN21_T2V_14B_CONFIG,
-    "has_image_input": False,
-    "in_dim": 36,
-    "require_vae_embedding": True,
-    "require_clip_embedding": False,
-}
-
-WAN22_TI2V_5B_CONFIG = {
-    "has_image_input": False,
-    "patch_size": (1, 2, 2),
-    "in_dim": 48,
-    "dim": 3072,
-    "ffn_dim": 14336,
-    "freq_dim": 256,
-    "text_dim": 4096,
-    "out_dim": 48,
-    "num_heads": 24,
-    "num_layers": 30,
-    "eps": 1e-6,
-    "per_token_timestep": True,
-}
+from .wan_configs import (
+    SELF_FORCING_LONG_ROLLOUT_KV_WINDOW,
+    SELF_FORCING_LONG_ROLLOUT_SINK_FRAMES,
+    SELF_FORCING_LONG_ROLLOUT_WINDOW_FRAMES,
+    SELF_FORCING_WAN21_T2V_1P3B_CONFIG,
+    SKYREELS_V2_DF_1P3B_CONFIG,
+    SKYREELS_V3_R2V_14B_CONFIG,
+    WAN21_I2V_14B_CONFIG,
+    WAN21_T2V_1P3B_CONFIG,
+    WAN21_T2V_14B_CONFIG,
+    WAN21_VAE_I2V_1P3B_CONFIG,
+    WAN22_I2V_A14B_CONFIG,
+    WAN22_T2V_A14B_CONFIG,
+    WAN22_TI2V_5B_CONFIG,
+    WAN_CIVITAI_CONFIGS_BY_HASH,
+)
 
 _WAN_DENOISER_OPTION_KEYS = frozenset(
     {
@@ -133,6 +88,7 @@ _WAN_DENOISER_OPTION_KEYS = frozenset(
         "dynamicblock",
         "feature_cache",
         "firstblock",
+        "fused_adaln",
         "fused_rope",
         "inplace_residual",
         "magcache",
@@ -183,7 +139,9 @@ def _validated_wan_peft_adapter(
 
 
 def _merge_wan_peft_adapter(model: torch.nn.Module, adapter_path: Path) -> None:
-    from worldfoundry.core.model_loading.peft import audit_wan_lora_targets, merge_peft_adapter
+    from worldfoundry.core.model_loading.peft import merge_peft_adapter
+
+    from ..networks.wan.lora import audit_wan_lora_targets
 
     config = _read_wan_peft_config(adapter_path)
     target_modules = config.get("target_modules")
@@ -209,77 +167,6 @@ def _merge_wan_peft_adapter(model: torch.nn.Module, adapter_path: Path) -> None:
     merged = merge_peft_adapter(loaded)
     if merged is not model:
         raise RuntimeError("PEFT merge did not return the loaded Wan base model")
-
-SKYREELS_V2_DF_1P3B_CONFIG = {
-    **WAN21_T2V_1P3B_CONFIG,
-    "inject_sample_info": True,
-}
-
-SKYREELS_V3_R2V_14B_CONFIG = {
-    "has_image_input": False,
-    "patch_size": (1, 2, 2),
-    "in_dim": 16,
-    "dim": 5120,
-    "ffn_dim": 13824,
-    "freq_dim": 256,
-    "text_dim": 4096,
-    "out_dim": 16,
-    "num_heads": 40,
-    "num_layers": 40,
-    "eps": 1e-6,
-}
-
-
-WAN_CIVITAI_CONFIGS_BY_HASH = {
-    "9269f8db9040a9d860eaca435be61814": WAN21_T2V_1P3B_CONFIG,
-    "aafcfd9672c3a2456dc46e1cb6e52c70": WAN21_T2V_14B_CONFIG,
-    "6bfcfb3b342cb286ce886889d519a77e": WAN21_I2V_14B_CONFIG,
-    "6d6ccde6845b95ad9114ab993d917893": {
-        **WAN21_T2V_1P3B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 36,
-    },
-    "349723183fc063b2bfc10bb2835cf677": {
-        **WAN21_T2V_1P3B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 48,
-    },
-    "efa44cddf936c70abd0ea28b6cbe946c": {
-        **WAN21_T2V_14B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 48,
-    },
-    "3ef3b1f8e1dab83d5b71fd7b617f859f": {
-        **WAN21_I2V_14B_CONFIG,
-        "has_image_pos_emb": True,
-    },
-    "70ddad9d3a133785da5ea371aae09504": {
-        **WAN21_T2V_1P3B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 48,
-        "has_ref_conv": True,
-    },
-    "26bde73488a92e64cc20b0a7485b9e5b": {
-        **WAN21_T2V_14B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 48,
-        "has_ref_conv": True,
-    },
-    "ac6a5aa74f4a0aab6f64eb9a72f19901": {
-        **WAN21_T2V_1P3B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 32,
-        "add_control_adapter": True,
-        "in_dim_control_adapter": 24,
-    },
-    "b61c605c2adbd23124d152ed28e049ae": {
-        **WAN21_T2V_14B_CONFIG,
-        "has_image_input": True,
-        "in_dim": 32,
-        "add_control_adapter": True,
-        "in_dim_control_adapter": 24,
-    },
-}
 
 
 def infer_native_wan_transformer_config(
@@ -322,17 +209,12 @@ def infer_native_wan_transformer_config(
     patch_size = tuple(int(size) for size in patch.shape[2:])
     patch_volume = math.prod(patch_size)
     if head.shape[0] % patch_volume:
-        raise ValueError(
-            f"Wan output projection {tuple(head.shape)} is incompatible with patch size {patch_size}"
-        )
+        raise ValueError(f"Wan output projection {tuple(head.shape)} is incompatible with patch size {patch_size}")
     dim = int(patch.shape[0])
     if dim % 128:
         raise ValueError(f"Wan hidden dimension {dim} is not divisible by the canonical head width 128")
 
-    has_image_input = any(
-        name.startswith("img_emb.") or ".cross_attn.k_img." in name
-        for name in state_dict
-    )
+    has_image_input = any(name.startswith("img_emb.") or ".cross_attn.k_img." in name for name in state_dict)
     has_control_adapter = any(name.startswith("control_adapter.") for name in state_dict)
     config: dict[str, object] = {
         "has_image_input": has_image_input,
@@ -416,9 +298,7 @@ def convert_diffusers_wan_transformer_state_dict(
     converted: dict[str, object] = {}
     for source, value in state_dict.items():
         gate_target = canonical_wan_vsa_gate_key(source)
-        target = gate_target or (
-            source if source.startswith(native_roots) else roots.get(source)
-        )
+        target = gate_target or (source if source.startswith(native_roots) else roots.get(source))
         if target is None:
             for prefix, replacement in roots.items():
                 if source.startswith(prefix):
@@ -443,8 +323,7 @@ class WanModelStateDictConverter:
         converted = convert_diffusers_wan_transformer_state_dict(state_dict)
         config = (
             WAN21_T2V_14B_CONFIG
-            if hash_state_dict_keys(state_dict)
-            == "cb104773c6c2cb6df4f9529ad5c60d0b"
+            if hash_state_dict_keys(state_dict) == "cb104773c6c2cb6df4f9529ad5c60d0b"
             else infer_native_wan_transformer_config(converted)
         )
         config = dict(config)
@@ -464,10 +343,15 @@ class WanModelStateDictConverter:
             if not name.startswith("vace")
             and not (name.startswith("control") and not name.startswith("control_adapter"))
         }
-        checkpoint_hash = raw_hash if raw_hash in {
-            "ac6a5aa74f4a0aab6f64eb9a72f19901",
-            "b61c605c2adbd23124d152ed28e049ae",
-        } else hash_state_dict_keys(filtered)
+        checkpoint_hash = (
+            raw_hash
+            if raw_hash
+            in {
+                "ac6a5aa74f4a0aab6f64eb9a72f19901",
+                "b61c605c2adbd23124d152ed28e049ae",
+            }
+            else hash_state_dict_keys(filtered)
+        )
         converted = convert_wan_vsa_gate_state_dict(filtered)
         config = WAN_CIVITAI_CONFIGS_BY_HASH.get(checkpoint_hash)
         if config is None:
@@ -499,10 +383,26 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         channel_condition_key: str | None = None,
         manage_autocast: bool = True,
         inplace_residual: bool = False,
-        enable_cuda_graph: bool = False,
+        enable_cuda_graph: bool | str = False,
         teacache_threshold: float | None = None,
         feature_cache_config: WanFeatureCacheConfig | None = None,
     ) -> None:
+        if isinstance(enable_cuda_graph, str):
+            normalized_graph_mode = enable_cuda_graph.strip().casefold()
+            if normalized_graph_mode in {"off", "none", "false", "disabled"}:
+                graph_runner_mode: bool | str = False
+            elif normalized_graph_mode in {"whole", "full", "true"}:
+                graph_runner_mode = True
+            elif normalized_graph_mode == "piecewise":
+                graph_runner_mode = "piecewise"
+            else:
+                raise ValueError(
+                    f"unsupported Wan enable_cuda_graph {enable_cuda_graph!r}; "
+                    "expected bool, 'off', 'whole', or 'piecewise'"
+                )
+        else:
+            graph_runner_mode = bool(enable_cuda_graph)
+        graph_enabled = graph_runner_mode is not False
         if not isinstance(manage_autocast, bool):
             raise TypeError("Wan manage_autocast must be a bool")
         if not isinstance(inplace_residual, bool):
@@ -518,10 +418,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         self.model = model
         self._prepare_cross_kv = bool(
             getattr(model, "_worldfoundry_static_cross_kv", None) is not None
-            and (
-                enable_cuda_graph
-                or getattr(model, "_worldfoundry_compile_config", {}).get("scope") == "regional"
-            )
+            and (graph_enabled or getattr(model, "_worldfoundry_compile_config", {}).get("scope") == "regional")
         )
         if self._prepare_cross_kv:
             from ...optimizations.static_cross_kv import StaticCrossKVProcessor
@@ -536,7 +433,10 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
                 raise ValueError("prepared cross-KV requires resident unsharded weights")
             for block in model.blocks:
                 processor = block.cross_attn.get_processor()
-                if not isinstance(processor, StaticCrossKVProcessor) or type(processor._inner) is not CrossAttentionProcessor:
+                if (
+                    not isinstance(processor, StaticCrossKVProcessor)
+                    or type(processor._inner) is not CrossAttentionProcessor
+                ):
                     raise ValueError("prepared cross-KV requires the canonical Wan cross-attention processor")
         self.compute_dtype = compute_dtype
         self.reference_condition_key = reference_condition_key
@@ -544,11 +444,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         self.manage_autocast = manage_autocast
         self.inplace_residual = inplace_residual
         parameter_source = getattr(model, "parameters", None)
-        parameter = (
-            next(parameter_source(), None)
-            if callable(parameter_source)
-            else None
-        )
+        parameter = next(parameter_source(), None) if callable(parameter_source) else None
         # A managed autocast context is useful when FP32-resident weights are
         # intentionally executed in BF16/FP16.  It is pure dispatcher/cache
         # overhead once both the resident DiT and its inputs already use the
@@ -587,9 +483,14 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         }
         self._feature_cache_epoch_counter = 0
         self._optimization_request_windows: dict[str, dict[str, object]] = {}
+        sol_sched = getattr(model, "_worldfoundry_sol_schedule", None)
+        if graph_runner_mode is True and isinstance(sol_sched, dict) and int(sol_sched.get("dense_steps", 0)) > 0:
+            # Step-scheduled Sol-Attn switches between dense warmup steps and sparse steps;
+            # piecewise graph mode captures and replays a dedicated graph for each phase.
+            graph_runner_mode = "piecewise"
         self._init_graph_runner(
             model,
-            enabled=enable_cuda_graph,
+            enabled=graph_runner_mode,
             extra_key=f"wan:{type(model).__module__}.{type(model).__qualname__}",
         )
 
@@ -751,6 +652,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         acceleration_session = getattr(self.model, "_worldfoundry_accelerations", None)
         if acceleration_session is not None:
             acceleration_session.reset_request_window()
+
     def _begin_request_optimization_state(self, model_input: DenoiserInput) -> None:
         """Open one explicit request window exactly once, regardless of CFG order."""
 
@@ -795,9 +697,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
                 window["complete"] = True
             if len(windows) > 64:
                 completed_ids = [
-                    key
-                    for key, value in windows.items()
-                    if bool(value.get("complete")) and key != request_id
+                    key for key, value in windows.items() if bool(value.get("complete")) and key != request_id
                 ]
                 for key in completed_ids[: max(len(windows) - 32, 0)]:
                     windows.pop(key, None)
@@ -926,10 +826,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             add_note = getattr(primary, "add_note", None)
             if callable(add_note):
                 for extra in cleanup_errors[1:]:
-                    add_note(
-                        "additional Wan request cleanup failed: "
-                        f"{type(extra).__name__}: {extra}"
-                    )
+                    add_note(f"additional Wan request cleanup failed: {type(extra).__name__}: {extra}")
             raise primary
 
     @acceleration_runtime_call
@@ -943,10 +840,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             raise TypeError("Wan 'context' conditioning must be a tensor")
 
         latents = model_input.latents
-        resident_compute = bool(
-            self.manage_autocast
-            and getattr(self, "_managed_autocast_is_redundant", False)
-        )
+        resident_compute = bool(self.manage_autocast and getattr(self, "_managed_autocast_is_redundant", False))
         network_dtype = self.compute_dtype if resident_compute else latents.dtype
         model_latents = latents.to(dtype=network_dtype)
         if resident_compute:
@@ -965,9 +859,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
                 False,
             )
             if not isinstance(all_ones_semantics, bool):
-                raise TypeError(
-                    f"{WAN_DENOISE_MASK_IS_ALL_ONES} must be a bool when provided"
-                )
+                raise TypeError(f"{WAN_DENOISE_MASK_IS_ALL_ONES} must be a bool when provided")
             denoise_mask = model_input.conditioning.get("denoise_mask")
             if not isinstance(denoise_mask, torch.Tensor):
                 raise TypeError("per-token Wan denoising requires a tensor denoise_mask")
@@ -979,9 +871,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
                     dtype=latents.dtype,
                 )
                 patch_height, patch_width = self.model.patch_size[1:]
-                token_mask = denoise_mask[
-                    :, 0, :, ::patch_height, ::patch_width
-                ].flatten(1)
+                token_mask = denoise_mask[:, 0, :, ::patch_height, ::patch_width].flatten(1)
                 timestep = timestep[:, None] * token_mask
         else:
             all_ones_semantics = False
@@ -989,21 +879,18 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         timestep_state["request_id"] = model_input.request_id
         timestep_state["calls"] = int(timestep_state["calls"]) + 1
         if timestep.ndim == 1:
-            timestep_state["global_calls"] = int(
-                timestep_state["global_calls"]
-            ) + 1
+            timestep_state["global_calls"] = int(timestep_state["global_calls"]) + 1
             if all_ones_semantics:
-                timestep_state["explicit_all_ones_calls"] = int(
-                    timestep_state["explicit_all_ones_calls"]
-                ) + 1
+                timestep_state["explicit_all_ones_calls"] = int(timestep_state["explicit_all_ones_calls"]) + 1
         else:
-            timestep_state["per_token_calls"] = int(
-                timestep_state["per_token_calls"]
-            ) + 1
+            timestep_state["per_token_calls"] = int(timestep_state["per_token_calls"]) + 1
         model_kwargs = {}
         if model_input.request_batch_sizes:
             self.validate_request_batching()
-            if any(size <= 0 for size in model_input.request_batch_sizes) or sum(model_input.request_batch_sizes) != latents.shape[0]:
+            if (
+                any(size <= 0 for size in model_input.request_batch_sizes)
+                or sum(model_input.request_batch_sizes) != latents.shape[0]
+            ):
                 raise ValueError("Wan request batch sizes must partition the latent batch")
             model_kwargs["request_batch_sizes"] = model_input.request_batch_sizes
         use_gradient_checkpointing = model_input.conditioning.get(
@@ -1035,17 +922,12 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         if channel_condition_key is not None:
             channel_condition = model_input.conditioning.get(channel_condition_key)
             if not isinstance(channel_condition, torch.Tensor):
-                raise TypeError(
-                    f"Wan channel conditioning {channel_condition_key!r} must be a tensor"
-                )
+                raise TypeError(f"Wan channel conditioning {channel_condition_key!r} must be a tensor")
             channel_condition = channel_condition.to(
                 device=latents.device,
                 dtype=network_dtype,
             )
-            if (
-                channel_condition.shape[0] != latents.shape[0]
-                or channel_condition.shape[2:] != latents.shape[2:]
-            ):
+            if channel_condition.shape[0] != latents.shape[0] or channel_condition.shape[2:] != latents.shape[2:]:
                 raise ValueError(
                     "Wan channel conditioning must match latent batch and spatiotemporal geometry: "
                     f"{tuple(channel_condition.shape)} vs {tuple(latents.shape)}"
@@ -1055,9 +937,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         if reference_condition_key is not None:
             reference = model_input.conditioning.get(reference_condition_key)
             if not isinstance(reference, torch.Tensor):
-                raise TypeError(
-                    f"Wan reference conditioning {reference_condition_key!r} must be a tensor"
-                )
+                raise TypeError(f"Wan reference conditioning {reference_condition_key!r} must be a tensor")
             reference = reference.to(device=latents.device, dtype=network_dtype)
             if bool(model_input.conditioning.get("drop_secondary_condition", False)):
                 reference = torch.zeros_like(reference)
@@ -1085,9 +965,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         inplace_runtime = self._inplace_residual_state()
         inplace_runtime["request_id"] = model_input.request_id
         inplace_runtime["calls"] = int(inplace_runtime["calls"]) + 1
-        inplace_residual_requested = bool(
-            getattr(self, "inplace_residual", False)
-        )
+        inplace_residual_requested = bool(getattr(self, "inplace_residual", False))
         if inplace_residual_requested:
             autograd_active = torch.is_grad_enabled()
             feature_cache_active = feature_cache_kwargs.get("feature_cache") is not None
@@ -1096,25 +974,17 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
                 # variant hooks and cache controllers see the canonical
                 # functional block contract.
                 model_kwargs["_worldfoundry_inplace_residual"] = True
-                inplace_runtime["inplace_calls"] = (
-                    int(inplace_runtime["inplace_calls"]) + 1
-                )
+                inplace_runtime["inplace_calls"] = int(inplace_runtime["inplace_calls"]) + 1
             else:
-                inplace_runtime["functional_calls"] = (
-                    int(inplace_runtime["functional_calls"]) + 1
-                )
+                inplace_runtime["functional_calls"] = int(inplace_runtime["functional_calls"]) + 1
                 if autograd_active:
-                    inplace_runtime["autograd_fallback_calls"] = (
-                        int(inplace_runtime["autograd_fallback_calls"]) + 1
-                    )
+                    inplace_runtime["autograd_fallback_calls"] = int(inplace_runtime["autograd_fallback_calls"]) + 1
                 if feature_cache_active:
                     inplace_runtime["feature_cache_fallback_calls"] = (
                         int(inplace_runtime["feature_cache_fallback_calls"]) + 1
                     )
         else:
-            inplace_runtime["functional_calls"] = (
-                int(inplace_runtime["functional_calls"]) + 1
-            )
+            inplace_runtime["functional_calls"] = int(inplace_runtime["functional_calls"]) + 1
         approximate_state = getattr(
             self.model,
             "_worldfoundry_approximate_attention",
@@ -1150,9 +1020,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
                 )
 
         autocast_enabled = bool(
-            self.manage_autocast
-            and self.compute_dtype in {torch.float16, torch.bfloat16}
-            and not resident_compute
+            self.manage_autocast and self.compute_dtype in {torch.float16, torch.bfloat16} and not resident_compute
         )
         autocast_context = (
             torch.autocast(
@@ -1171,9 +1039,19 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
                     context_kwargs["request_batch_sizes"] = model_input.request_batch_sizes
                 context = self.model.prepare_condition_context(context, **context_kwargs)
                 model_kwargs["cross_attention_kv"] = tuple(
-                    block.cross_attn.get_processor().prepare(block.cross_attn, context)
-                    for block in self.model.blocks
+                    block.cross_attn.get_processor().prepare(block.cross_attn, context) for block in self.model.blocks
                 )
+            if getattr(self, "_piecewise_graph", None) is not None:
+                model_kwargs["_worldfoundry_piecewise_graph"] = self._piecewise_graph
+            if getattr(self.model, "_worldfoundry_token_pruning_config", None) is not None:
+                model_kwargs["_worldfoundry_token_pruning_step"] = (
+                    int(model_input.step_index),
+                    None if model_input.total_steps is None else int(model_input.total_steps),
+                    str(model_input.request_id or ""),
+                    str(model_input.branch or "positive"),
+                )
+            if getattr(self.model, "_worldfoundry_sol_schedule", None) is not None:
+                model_kwargs["_worldfoundry_sol_step_index"] = int(model_input.step_index)
             sample = self._run_network(
                 x=model_latents,
                 timestep=timestep,
@@ -1214,45 +1092,29 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             ):
                 quality_tier = "approximate"
 
-        autocast_requested = bool(
-            self.manage_autocast
-            and self.compute_dtype in {torch.float16, torch.bfloat16}
-        )
-        autocast_elided = bool(
-            autocast_requested
-            and getattr(self, "_managed_autocast_is_redundant", False)
-        )
-        requested["denoiser_autocast"] = (
-            str(self.compute_dtype) if autocast_requested else False
-        )
+        autocast_requested = bool(self.manage_autocast and self.compute_dtype in {torch.float16, torch.bfloat16})
+        autocast_elided = bool(autocast_requested and getattr(self, "_managed_autocast_is_redundant", False))
+        requested["denoiser_autocast"] = str(self.compute_dtype) if autocast_requested else False
         effective["denoiser_compute_dtype"] = str(self.compute_dtype)
         effective["denoiser_autocast_context"] = (
-            "elided-resident-dtype"
-            if autocast_elided
-            else ("enabled" if autocast_requested else "disabled")
+            "elided-resident-dtype" if autocast_elided else ("enabled" if autocast_requested else "disabled")
         )
 
         selected_inplace_request_id = request_id
         if selected_inplace_request_id is None:
             selected_inplace_request_id = self._feature_cache_context_var().get()
         encoded_inplace = (
-            self.__dict__.get("_inplace_residual_receipt_snapshots", {}).get(
-                selected_inplace_request_id
-            )
+            self.__dict__.get("_inplace_residual_receipt_snapshots", {}).get(selected_inplace_request_id)
             if isinstance(selected_inplace_request_id, str)
             else None
         )
         if isinstance(encoded_inplace, str):
             inplace_runtime = json.loads(encoded_inplace)
             if not isinstance(inplace_runtime, dict):
-                raise TypeError(
-                    "Wan in-place residual receipt must decode to an object"
-                )
+                raise TypeError("Wan in-place residual receipt must decode to an object")
         else:
             inplace_runtime = dict(self._inplace_residual_state())
-        inplace_residual_requested = bool(
-            getattr(self, "inplace_residual", False)
-        )
+        inplace_residual_requested = bool(getattr(self, "inplace_residual", False))
         requested["inplace_residual"] = inplace_residual_requested
         inplace_calls = int(inplace_runtime["inplace_calls"])
         functional_calls = int(inplace_runtime["functional_calls"])
@@ -1281,9 +1143,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         if selected_timestep_request_id is None:
             selected_timestep_request_id = self._feature_cache_context_var().get()
         encoded_timestep = (
-            self.__dict__.get("_timestep_receipt_snapshots", {}).get(
-                selected_timestep_request_id
-            )
+            self.__dict__.get("_timestep_receipt_snapshots", {}).get(selected_timestep_request_id)
             if isinstance(selected_timestep_request_id, str)
             else None
         )
@@ -1311,15 +1171,8 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             graph_eager = int(graph["eager"])
             graph_failures = int(graph["capture_failed"])
             if graph_eager > 0 or graph_failures > 0:
-                graph_effective = (
-                    "partial-eager"
-                    if graph_replays > 0
-                    else "eager"
-                )
-                fallbacks.append(
-                    "cuda_graph: current request used eager execution or had a "
-                    "capture failure"
-                )
+                graph_effective = "partial-eager" if graph_replays > 0 else "eager"
+                fallbacks.append("cuda_graph: current request used eager execution or had a capture failure")
             elif graph_captures > 0 and graph_replays > 0:
                 graph_effective = "captured-and-replayed"
             elif graph_replays > 0:
@@ -1330,9 +1183,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             effective["cuda_graph_report"] = dict(graph)
 
         feature_cache = self.feature_cache_report(request_id)
-        requested["feature_cache"] = (
-            feature_cache["algorithm"] if feature_cache["enabled"] else False
-        )
+        requested["feature_cache"] = feature_cache["algorithm"] if feature_cache["enabled"] else False
         if feature_cache["enabled"]:
             effective["feature_cache"] = feature_cache["effective"]
             effective["feature_cache_report"] = feature_cache
@@ -1345,15 +1196,9 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         compile_runtime = getattr(self.model, "_worldfoundry_compile_runtime", None)
         if isinstance(compile_runtime, Mapping):
             runtime_compile = dict(compile_runtime)
-            runtime_compile["lifetime_calls"] = int(
-                compile_runtime.get("calls", 0)
-            )
-            runtime_compile["lifetime_failures"] = int(
-                compile_runtime.get("failures", 0)
-            )
-            runtime_compile["lifetime_last_error"] = compile_runtime.get(
-                "last_error"
-            )
+            runtime_compile["lifetime_calls"] = int(compile_runtime.get("calls", 0))
+            runtime_compile["lifetime_failures"] = int(compile_runtime.get("failures", 0))
+            runtime_compile["lifetime_last_error"] = compile_runtime.get("last_error")
             runtime_compile["calls"] = int(
                 compile_runtime.get(
                     "request_calls",
@@ -1424,9 +1269,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             if isinstance(encoded_cross_kv, str):
                 decoded_cross_kv = json.loads(encoded_cross_kv)
                 if not isinstance(decoded_cross_kv, dict):
-                    raise TypeError(
-                        "static cross-KV receipt snapshot must decode to an object"
-                    )
+                    raise TypeError("static cross-KV receipt snapshot must decode to an object")
                 cross_kv = decoded_cross_kv
             else:
                 cross_kv = cross_kv_cache.report()
@@ -1435,15 +1278,12 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             effective["static_cross_kv_runtime"] = cross_kv_effective
             if int(cross_kv["bypasses"]) > 0:
                 fallback = (
-                    "static_cross_kv: request used dense processor bypasses "
-                    f"for kwargs={cross_kv['bypass_kwargs']}"
+                    f"static_cross_kv: request used dense processor bypasses for kwargs={cross_kv['bypass_kwargs']}"
                 )
                 if fallback not in fallbacks:
                     fallbacks.append(fallback)
             elif int(cross_kv["misses"]) > 0 and int(cross_kv["hits"]) <= 0:
-                fallback = (
-                    "static_cross_kv: request projected K/V but recorded no cache hit"
-                )
+                fallback = "static_cross_kv: request projected K/V but recorded no cache hit"
                 if fallback not in fallbacks:
                     fallbacks.append(fallback)
 
@@ -1452,24 +1292,24 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         qkv_fusion = qkv_fusion_report(self.model)
         if qkv_fusion is not None:
             effective["fuse_qkv_runtime"] = qkv_fusion["execution"]
-            compile_request_calls = (
-                int(runtime_compile.get("calls", 0))
-                if isinstance(compile_runtime, Mapping)
-                else 0
-            )
+            compile_request_calls = int(runtime_compile.get("calls", 0)) if isinstance(compile_runtime, Mapping) else 0
             compiled_qkv_executed = (
-                int(qkv_fusion.get("lifetime_compiled_graph_traces", 0)) > 0
-                and compile_request_calls > 0
+                int(qkv_fusion.get("lifetime_compiled_graph_traces", 0)) > 0 and compile_request_calls > 0
             )
+            graph_replayed = graph is not None and int(graph.get("replay", 0)) > 0
+            graph_qkv_executed = graph_replayed and (
+                int(qkv_fusion.get("lifetime_eager_projection_calls", 0)) > 0
+                or int(qkv_fusion.get("lifetime_compiled_graph_traces", 0)) > 0
+            )
+            if graph_qkv_executed and int(qkv_fusion["eager_projection_calls"]) <= 0:
+                effective["fuse_qkv_runtime"] = "cuda-graph-replayed"
             if (
                 int(qkv_fusion["fused_blocks"]) > 0
                 and int(qkv_fusion["eager_projection_calls"]) <= 0
                 and not compiled_qkv_executed
+                and not graph_qkv_executed
             ):
-                fallback = (
-                    "fuse_qkv: merged projections were installed but no forward "
-                    "execution receipt was recorded"
-                )
+                fallback = "fuse_qkv: merged projections were installed but no forward execution receipt was recorded"
                 if fallback not in fallbacks:
                     fallbacks.append(fallback)
 
@@ -1484,6 +1324,13 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
 
             fused_rope = fused_rope_runtime_report(fused_rope_state)
             effective["fused_rope_runtime"] = fused_rope["effective"]
+            if (
+                graph is not None
+                and int(graph.get("replay", 0)) > 0
+                and int(fused_rope["eager_calls"]) <= 0
+                and int(getattr(fused_rope_state, "lifetime_provider_calls", 0)) > 0
+            ):
+                effective["fused_rope_runtime"] = "cuda-graph-replayed"
             eager_failures = sum(
                 int(fused_rope[name])
                 for name in (
@@ -1520,17 +1367,12 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             quantization_effective = str(quantization["effective"])
             effective["quantization"] = quantization_effective
             effective["quantization_runtime"] = quantization
-            fallback_compute_calls = int(
-                quantization.get("packed_weight_calls") or 0
-            ) + int(quantization.get("dense_fallback_calls") or 0)
+            fallback_compute_calls = int(quantization.get("packed_weight_calls") or 0) + int(
+                quantization.get("dense_fallback_calls") or 0
+            )
             if fallback_compute_calls > 0:
-                reasons = "; ".join(
-                    str(reason) for reason in quantization["fallback_reasons"]
-                )
-                fallback = (
-                    "quantization: runtime used dequantize/dense fallback"
-                    + (f" ({reasons})" if reasons else "")
-                )
+                reasons = "; ".join(str(reason) for reason in quantization["fallback_reasons"])
+                fallback = "quantization: runtime used dequantize/dense fallback" + (f" ({reasons})" if reasons else "")
                 if fallback not in fallbacks:
                     fallbacks.append(fallback)
 
@@ -1543,20 +1385,14 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         offload = offload_reporter() if callable(offload_reporter) else None
         if isinstance(offload, Mapping):
             offload = dict(offload)
-            offload_used = int(
-                dict(offload.get("request") or {}).get("forward_calls", 0)
-            ) > 0
+            offload_used = int(dict(offload.get("request") or {}).get("forward_calls", 0)) > 0
             if bool(offload.get("effective")):
                 effective["offload"] = "async-double-buffer-executed"
             elif offload_used:
                 effective["offload"] = "block-offload-not-overlapped"
-                issues = "; ".join(
-                    str(issue) for issue in offload.get("issues", ())
-                )
-                fallback = (
-                    "offload block: asynchronous double-buffer execution was "
-                    "not proven"
-                    + (f" ({issues})" if issues else "")
+                issues = "; ".join(str(issue) for issue in offload.get("issues", ()))
+                fallback = "offload block: asynchronous double-buffer execution was not proven" + (
+                    f" ({issues})" if issues else ""
                 )
                 if fallback not in fallbacks:
                     fallbacks.append(fallback)
@@ -1582,9 +1418,7 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
                 "sequence_parallel": sequence_parallel,
                 "quantization": quantization,
                 "offload": offload,
-                "denoiser_autocast_context": effective[
-                    "denoiser_autocast_context"
-                ],
+                "denoiser_autocast_context": effective["denoiser_autocast_context"],
                 "inplace_residual": inplace_runtime,
                 "wan_timestep": timestep_runtime,
                 "attention_dispatch": attention_dispatch_report(),
@@ -1699,7 +1533,9 @@ class Wan22DualExpertDenoiser:
                     )
                 )
             ):
-                raise ValueError("dual-expert EasyCache requires resident eager experts without Graph/SP or other caches")
+                raise ValueError(
+                    "dual-expert EasyCache requires resident eager experts without Graph/SP or other caches"
+                )
 
     def validate_request_execution(self, *, cfg_parallel_degree: int, cfg_gate_step: float) -> None:
         if self._easycache_enabled() and (cfg_parallel_degree != 1 or cfg_gate_step != 1.0):
@@ -1889,9 +1725,7 @@ class Wan22DualExpertDenoiser:
                     False,
                 )
             )
-            if model_input.step_index == 0 and (
-                model_input.branch == "positive" or cfg_parallel_request
-            ):
+            if model_input.step_index == 0 and (model_input.branch == "positive" or cfg_parallel_request):
                 self._route_calls = {"high-noise": 0, "low-noise": 0}
                 self._last_expert = None
             self._route_calls[expert] += 1
@@ -1900,7 +1734,9 @@ class Wan22DualExpertDenoiser:
         routed_conditioning["_worldfoundry_approximate_routed_steps"] = True
         routed_input = model_input.with_updates(conditioning=routed_conditioning)
         if local_step is not None:
-            routed_input = routed_input.with_updates(step_index=local_step.local_index, total_steps=local_step.local_count)
+            routed_input = routed_input.with_updates(
+                step_index=local_step.local_index, total_steps=local_step.local_count
+            )
         output = denoiser(routed_input)
         return output.with_updates(extras={**dict(output.extras), "expert": expert})
 
@@ -1962,10 +1798,7 @@ class Wan22DualExpertDenoiser:
             add_note = getattr(primary, "add_note", None)
             if callable(add_note):
                 for extra in cleanup_errors[1:]:
-                    add_note(
-                        "additional expert cleanup failed: "
-                        f"{type(extra).__name__}: {extra}"
-                    )
+                    add_note(f"additional expert cleanup failed: {type(extra).__name__}: {extra}")
             raise primary
 
     def runtime_optimization_report(self) -> dict[str, object]:
@@ -1981,22 +1814,14 @@ class Wan22DualExpertDenoiser:
             reporter = getattr(denoiser, "runtime_optimization_report", None)
             if callable(reporter):
                 if isinstance(denoiser, WanDenoiser):
-                    reports[name] = dict(
-                        reporter(
-                            request_id=request_id
-                            if isinstance(request_id, str)
-                            else None
-                        )
-                    )
+                    reports[name] = dict(reporter(request_id=request_id if isinstance(request_id, str) else None))
                 else:
                     reports[name] = dict(reporter())
             else:
                 reports[name] = {
                     "requested": {},
                     "effective": {},
-                    "fallbacks": [
-                        f"{type(denoiser).__name__} exposes no runtime optimization report"
-                    ],
+                    "fallbacks": [f"{type(denoiser).__name__} exposes no runtime optimization report"],
                     "quality_tier": "unknown",
                     "runtime": {},
                 }
@@ -2009,9 +1834,7 @@ class Wan22DualExpertDenoiser:
                 high_value = high.get(key)
                 low_value = low.get(key)
                 merged[key] = (
-                    high_value
-                    if high_value == low_value
-                    else {"high-noise": high_value, "low-noise": low_value}
+                    high_value if high_value == low_value else {"high-noise": high_value, "low-noise": low_value}
                 )
             return merged
 
@@ -2026,9 +1849,7 @@ class Wan22DualExpertDenoiser:
             key=lambda value: quality_order.get(value, 3),
         )
         fallbacks = [
-            f"{expert}: {fallback}"
-            for expert, report in reports.items()
-            for fallback in report.get("fallbacks", [])
+            f"{expert}: {fallback}" for expert, report in reports.items() for fallback in report.get("fallbacks", [])
         ]
         effective = merged_mapping("effective")
         last_expert = route_receipt.get("last_expert")
@@ -2113,9 +1934,9 @@ class FastVideoCausalWanDenoiser:
 
     @staticmethod
     def _model_geometry(model: torch.nn.Module) -> tuple[int, int, int]:
-        layers = int(getattr(model, "num_layers"))
-        heads = int(getattr(model, "num_heads"))
-        dim = int(getattr(model, "dim"))
+        layers = int(model.num_layers)
+        heads = int(model.num_heads)
+        dim = int(model.dim)
         if min(layers, heads, dim) <= 0 or dim % heads:
             raise ValueError("CausalWan expert exposes invalid layer/head geometry")
         return layers, heads, dim // heads
@@ -2242,12 +2063,7 @@ class FastVideoCausalWanDenoiser:
         current_start = int(model_input.conditioning.get("current_start", 0))
         cache_start = int(model_input.conditioning.get("cache_start", current_start))
         latents = model_input.latents
-        sequence_length = int(
-            latents.shape[2]
-            * latents.shape[-2]
-            * latents.shape[-1]
-            // 4
-        )
+        sequence_length = int(latents.shape[2] * latents.shape[-2] * latents.shape[-1] // 4)
         autocast_enabled = self.compute_dtype in {torch.float16, torch.bfloat16}
         with torch.autocast(
             device_type=latents.device.type,
@@ -2370,6 +2186,390 @@ def build_fastvideo_causal_wan22_denoiser(
     )
 
 
+def convert_self_forcing_generator_state_dict(
+    state_dict: Mapping[str, object],
+) -> dict[str, object]:
+    """Select the released Self-Forcing generator and strip its training wrappers.
+
+    Released checkpoints store the generator under ``generator_ema`` and/or
+    ``generator``; the EMA weights are preferred. Parameter names carry the
+    ``model.`` prefix of the official ``WanDiffusionWrapper`` and, for FSDP
+    exports, ``_fsdp_wrapped_module.`` segments.
+
+    Raises:
+        KeyError: Neither generator state dict is present.
+    """
+
+    for role in ("generator_ema", "generator"):
+        generator = state_dict.get(role)
+        if isinstance(generator, Mapping):
+            break
+    else:
+        raise KeyError("Self-Forcing checkpoint must contain a 'generator_ema' or 'generator' state dict")
+    return {
+        str(name).replace("_fsdp_wrapped_module.", "").removeprefix("model."): value
+        for name, value in generator.items()
+    }
+
+
+class SelfForcingWanDenoiser:
+    """Self-Forcing causal Wan2.1 generator with framework-owned cache state.
+
+    Each call runs the causal DiT on one latent block and returns its x0
+    prediction, converted from the flow prediction exactly as the official
+    ``WanDiffusionWrapper`` does: nearest sigma on the 1000-step training
+    calendar, float64 arithmetic, result in the network dtype. Cache commits
+    use the same call; the network appends the block keys and values to the
+    KV cache.
+
+    With ``kv_window="sink5-window7-rerope"`` the cache is a static sink of
+    five latent frames plus a rolling window of seven, and the network must be
+    built with the matching ``local_attn_size``, ``sink_size`` and
+    ``kv_cache_relative_rope``. Rollouts are then unbounded and approximate:
+    they match the global cache until the window first rolls.
+    """
+
+    variant = "self-forcing-wan2.1"
+
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        *,
+        block_size: int = 3,
+        cache_frames: int = 21,
+        timestep_shift: float = 5.0,
+        compute_dtype: torch.dtype = torch.bfloat16,
+        kv_window: str | None = None,
+        enable_cuda_graph: bool = False,
+    ) -> None:
+        """Wrap ``model`` with ``block_size``-frame blocks over a ``cache_frames``-frame global cache.
+
+        ``kv_window`` selects the rolling long-rollout cache instead; ``cache_frames``
+        then does not apply. When ``enable_cuda_graph`` is True, a resident KV buffer
+        pool preserves static device pointers across rollouts so chunk-slot CUDA Graphs
+        captured through :class:`PiecewiseBlockGraphRunner` replay without recapture.
+        """
+        if min(int(block_size), int(cache_frames)) <= 0:
+            raise ValueError("Self-Forcing block_size and cache_frames must be positive")
+        if int(cache_frames) % int(block_size):
+            raise ValueError("Self-Forcing cache_frames must be divisible by block_size")
+        if kv_window not in (None, SELF_FORCING_LONG_ROLLOUT_KV_WINDOW):
+            raise ValueError(
+                f"unsupported Self-Forcing kv_window {kv_window!r}; expected {SELF_FORCING_LONG_ROLLOUT_KV_WINDOW!r}"
+            )
+        self.model = model
+        self.block_size = int(block_size)
+        self.cache_frames = int(cache_frames)
+        self.kv_window = kv_window
+        self.compute_dtype = compute_dtype
+        self.enable_cuda_graph = bool(enable_cuda_graph)
+        self._graph_kv_pool: dict[tuple[Any, ...], dict[str, Any]] = {}
+        self._piecewise_graph: Any = None
+        if self.enable_cuda_graph:
+            from worldfoundry.core.execution.graphs.piecewise_graph import PiecewiseBlockGraphRunner
+
+            self._piecewise_graph = PiecewiseBlockGraphRunner(warmup=1, max_graphs_per_segment=8, clone_outputs=True)
+        self.training_schedule = InferenceFlowMatchScheduler(
+            num_inference_steps=1000,
+            shift=float(timestep_shift),
+            sigma_min=0.0,
+            extra_one_step=True,
+        )
+
+    def create_kv_cache(
+        self,
+        *,
+        batch_size: int,
+        n_views: int,
+        latent_frames_per_view: int,
+        frame_sequence_length: int,
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> dict[str, Any]:
+        """Allocate the official global-attention cache of ``cache_frames`` latent frames.
+
+        The long-rollout ``kv_window`` allocates its sink-plus-window cache instead,
+        whatever the rollout length.
+        """
+
+        if int(n_views) != 1:
+            raise ValueError("Self-Forcing supports one temporal view per rollout")
+        if self.kv_window is None and int(latent_frames_per_view) > self.cache_frames:
+            raise ValueError(
+                f"Self-Forcing attends globally over at most {self.cache_frames} latent frames; "
+                f"got {latent_frames_per_view}. Longer rollouts need "
+                f"kv_window={SELF_FORCING_LONG_ROLLOUT_KV_WINDOW!r}"
+            )
+        num_heads = int(self.model.num_heads)
+        if self.kv_window is None:
+            cache_frames = self.cache_frames
+            window = {}
+        else:
+            # The rolling cache bounds memory, not the rollout: its logical
+            # length is its capacity.
+            cache_frames = SELF_FORCING_LONG_ROLLOUT_SINK_FRAMES + SELF_FORCING_LONG_ROLLOUT_WINDOW_FRAMES
+            window = {
+                "local_attention_frames": cache_frames,
+                "sink_frames": SELF_FORCING_LONG_ROLLOUT_SINK_FRAMES,
+            }
+        geometry = CausalVideoCacheGeometry(
+            batch_size=batch_size,
+            total_frames=cache_frames,
+            frame_tokens=frame_sequence_length,
+            frames_per_block=self.block_size,
+            num_layers=int(self.model.num_layers),
+            num_heads=num_heads,
+            head_dim=int(self.model.dim) // num_heads,
+            **window,
+        )
+        reset_host = getattr(self.model, "reset_causal_host_cache", None)
+        if callable(reset_host):
+            reset_host()
+        if self.enable_cuda_graph and torch.device(device).type == "cuda":
+            pool_key = (
+                geometry,
+                str(torch.device(device)),
+                dtype,
+            )
+            pooled = self._graph_kv_pool.get(pool_key)
+            if pooled is None:
+                pooled = allocate_causal_video_cache(geometry, device=device, dtype=dtype)
+                self._graph_kv_pool[pool_key] = pooled
+            else:
+                for layer in pooled["kv_cache"]:
+                    layer["k"].zero_()
+                    layer["v"].zero_()
+                    layer["global_end_index"].zero_()
+                    layer["local_end_index"].zero_()
+                for layer in pooled["crossattn_cache"]:
+                    layer["is_init"] = False
+                    if "k" in layer:
+                        layer["k"].zero_()
+                    if "v" in layer:
+                        layer["v"].zero_()
+                pooled["active_block"] = -1
+                pooled["committed_blocks"] = 0
+                pooled["committed_frames"] = 0
+            return pooled
+        return allocate_causal_video_cache(
+            geometry,
+            device=device,
+            dtype=dtype,
+        )
+
+    def runtime_optimization_report(self) -> dict[str, Any]:
+        """Expose piecewise chunk CUDA Graph, quantization, and fusion telemetry."""
+        from worldfoundry.core.acceleration.quantization.linear import quantization_runtime_report
+
+        from ...optimizations.qkv_fusion import qkv_fusion_report
+
+        quant = quantization_runtime_report(self.model)
+        qkv = qkv_fusion_report(self.model)
+        return {
+            "requested": {
+                "cuda_graph": self.enable_cuda_graph,
+                "rope_precision": getattr(self.model, "_worldfoundry_rope_precision", "fp64"),
+            },
+            "effective": {
+                "cuda_graph": "piecewise-chunk-graph" if self._piecewise_graph is not None else "disabled",
+                "quantization": None if quant is None else quant.get("effective"),
+                "fuse_qkv": None if qkv is None else qkv.get("execution"),
+            },
+            "runtime": {
+                "cuda_graph": self._piecewise_graph.report() if self._piecewise_graph is not None else None,
+                "quantization": quant,
+                "qkv_fusion": qkv,
+            },
+        }
+
+    def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
+        """Denoise one latent block, or commit it to the cache, and return its x0 prediction."""
+        conditioning = model_input.conditioning
+        cache = conditioning.get("kv_cache")
+        if not isinstance(cache, Mapping):
+            raise TypeError("Self-Forcing requires the cache created by create_kv_cache")
+        context = conditioning.get("context")
+        if not isinstance(context, torch.Tensor):
+            raise TypeError("Self-Forcing requires tensor 'context' conditioning")
+        timestep = model_input.timestep.reshape(-1)
+        if timestep.numel() != 1:
+            raise ValueError("Self-Forcing applies one timestep to every frame of a block")
+        noisy = model_input.latents.to(dtype=self.compute_dtype).contiguous()
+        batch, _, frames, height, width = noisy.shape
+        frame_timesteps = timestep.to(device=noisy.device, dtype=torch.float32).expand(batch, frames).contiguous()
+        current_start = int(conditioning.get("current_start", 0))
+        seq_len = frames * height * width // 4
+        kv_cache = cache["kv_cache"]
+        crossattn_cache = cache["crossattn_cache"]
+        cross_ready = bool(crossattn_cache) and all(bool(entry.get("is_init")) for entry in crossattn_cache)
+
+        # Graph capture runs on steady cross-cache-ready passes (34 of 35 passes per rollout).
+        # Step 0 initializes crossattn_cache eagerly (allocating static K/V buffers reused thereafter).
+        if (
+            self._piecewise_graph is not None
+            and cross_ready
+            and noisy.device.type == "cuda"
+            and not torch.is_grad_enabled()
+        ):
+            # Capture/replay each chunk slot's exact static KV-write + KV-read slice.
+            layer0 = kv_cache[0]
+            kv_cap = int(layer0["k"].shape[1])
+            frame_seqlen = height * width // 4
+            num_new_tokens = frames * frame_seqlen
+            current_end = current_start + num_new_tokens
+            mirror = getattr(self.model, "_worldfoundry_kv_host_mirror", {})
+            mirror_key = (id(kv_cache), layer0["k"].data_ptr())
+            prev_global_end, prev_local_end = mirror.get(mirror_key, (0, 0))
+            self_attn0 = self.model.blocks[0].self_attn
+            local_attn = int(self_attn0.local_attn_size)
+            sink_tokens = int(self_attn0.sink_size) * frame_seqlen
+            relative_rope = bool(getattr(self_attn0, "kv_cache_relative_rope", False))
+            if local_attn != -1 and current_end > prev_global_end and num_new_tokens + prev_local_end > kv_cap:
+                num_evicted = num_new_tokens + prev_local_end - kv_cap
+                num_rolled = prev_local_end - num_evicted - sink_tokens
+                next_local_end = prev_local_end + current_end - prev_global_end - num_evicted
+            else:
+                num_evicted = 0
+                num_rolled = 0
+                next_local_end = prev_local_end + current_end - prev_global_end
+            local_start_index = next_local_end - num_new_tokens
+            if relative_rope:
+                # Cache-relative RoPE depends only on local KV window geometry, keeping
+                # graph count O(1) across arbitrarily long streaming rollouts.
+                seg_name = f"rel_ls{local_start_index}_le{next_local_end}_ev{num_evicted}_rl{num_rolled}_q{seq_len}"
+            else:
+                # Absolute RoPE depends on chunk start frame + local KV slice; step 0 and
+                # subsequent denoise/commit steps of the same chunk share one segment.
+                start_f = current_start // frame_seqlen if frame_seqlen > 0 else current_start
+                seg_name = (
+                    f"abs_f{start_f}_ls{local_start_index}_le{next_local_end}_ev{num_evicted}_rl{num_rolled}_q{seq_len}"
+                )
+
+            def _make_segment_fn(
+                slot_start: int,
+                slot_seq_len: int,
+                slot_prev_global: int,
+                slot_prev_local: int,
+            ):
+                def _run_slot(x_in: torch.Tensor, t_in: torch.Tensor, ctx_in: torch.Tensor) -> torch.Tensor:
+                    # Restore pre-call host mirror inside capture/warmup so replay matches the slot.
+                    self.model.__dict__.setdefault("_worldfoundry_kv_host_mirror", {})[mirror_key] = (
+                        slot_prev_global,
+                        slot_prev_local,
+                    )
+                    return self.model(
+                        x_in,
+                        t=t_in,
+                        context=ctx_in,
+                        seq_len=slot_seq_len,
+                        kv_cache=kv_cache,
+                        crossattn_cache=crossattn_cache,
+                        current_start=slot_start,
+                        cache_start=slot_start,
+                    )
+
+                return _run_slot
+
+            self._piecewise_graph.get_or_register_segment(
+                seg_name,
+                _make_segment_fn(current_start, seq_len, prev_global_end, prev_local_end),
+                extra_key=f"sf:{seg_name}:{layer0['k'].data_ptr()}:{crossattn_cache[0]['k'].data_ptr()}",
+            )
+            flow = self._piecewise_graph.run_segment(seg_name, noisy, frame_timesteps, context)
+            # Advance host mirror after graph replay (matches non-graphed semantics).
+            self.model.__dict__.setdefault("_worldfoundry_kv_host_mirror", {})[mirror_key] = (
+                current_end,
+                next_local_end,
+            )
+        else:
+            flow = self.model(
+                noisy,
+                t=frame_timesteps,
+                context=context,
+                seq_len=seq_len,
+                kv_cache=kv_cache,
+                crossattn_cache=crossattn_cache,
+                current_start=current_start,
+                cache_start=current_start,
+            )
+        if not isinstance(flow, torch.Tensor):
+            raise TypeError("Self-Forcing network must return a tensor")
+        x0 = self.training_schedule.flow_to_x0(
+            flow.transpose(1, 2).flatten(0, 1),
+            noisy.transpose(1, 2).flatten(0, 1),
+            frame_timesteps.flatten(),
+        )
+        x0 = x0.unflatten(0, (batch, frames)).transpose(1, 2)
+        return DenoiserOutput(sample=x0.to(dtype=model_input.latents.dtype))
+
+
+def build_self_forcing_wan21_denoiser(
+    context: ComponentBuildContext,
+) -> SelfForcingWanDenoiser:
+    """Load a released Self-Forcing generator checkpoint strictly onto the causal Wan graph.
+
+    The ``kv_window`` runtime option ``"sink5-window7-rerope"`` builds the graph
+    with the rolling sink-plus-window cache and cache-relative RoPE; only the
+    Self-Forcing recipe accepts it.
+    """
+
+    from ..networks.wan.variants.forcing.self_forcing import CausalWanModel
+
+    options = context.component_options
+    unknown = sorted(set(options) - {"block_size", "cache_frames", "timestep_shift", "cuda_graph", "rope_precision"})
+    if unknown:
+        raise ValueError(f"unsupported Self-Forcing denoiser options: {unknown}")
+    block_size = int(options.get("block_size", 3))
+    kv_window = context.policy.options.get("kv_window")
+    if kv_window is not None:
+        from ...recipes.wan import SELF_FORCING_MODEL_ID
+
+        if context.model_id != SELF_FORCING_MODEL_ID:
+            raise ValueError(
+                f"kv_window is the Self-Forcing long-rollout preset; {context.model_id} runs its trained "
+                "21-frame KV cache"
+            )
+    config = dict(SELF_FORCING_WAN21_T2V_1P3B_CONFIG)
+    if kv_window == SELF_FORCING_LONG_ROLLOUT_KV_WINDOW:
+        config.update(
+            local_attn_size=SELF_FORCING_LONG_ROLLOUT_SINK_FRAMES + SELF_FORCING_LONG_ROLLOUT_WINDOW_FRAMES,
+            sink_size=SELF_FORCING_LONG_ROLLOUT_SINK_FRAMES,
+            kv_cache_relative_rope=True,
+        )
+    elif kv_window is not None:
+        raise ValueError(
+            f"unsupported Self-Forcing kv_window {kv_window!r}; expected {SELF_FORCING_LONG_ROLLOUT_KV_WINDOW!r}"
+        )
+    enable_cuda_graph = resolve_cuda_graph_option(context)
+    rope_precision = (
+        str(options.get("rope_precision", context.policy.options.get("rope_precision", "fp64"))).strip().casefold()
+    )
+    if rope_precision not in {"fp32", "fp64"}:
+        raise ValueError("Self-Forcing rope_precision must be 'fp32' or 'fp64'")
+    model = NativeModuleLoader().load(
+        ModuleLoadSpec(
+            module_class=CausalWanModel,
+            config=config,
+            state_dict_converter=convert_self_forcing_generator_state_dict,
+            layer_container="blocks",
+            compile_regions=("blocks",),
+        ),
+        context.require_checkpoint(),
+        context.policy,
+    )
+    model.num_frame_per_block = block_size
+    model._worldfoundry_rope_precision = rope_precision
+    return SelfForcingWanDenoiser(
+        model,
+        block_size=block_size,
+        cache_frames=int(options.get("cache_frames", 21)),
+        timestep_shift=float(options.get("timestep_shift", 5.0)),
+        compute_dtype=context.policy.dtype,
+        kv_window=kv_window,
+        enable_cuda_graph=enable_cuda_graph,
+    )
+
+
 def _build_wan22_dual_expert_denoiser(
     context: ComponentBuildContext,
     *,
@@ -2417,9 +2617,7 @@ def _build_wan22_dual_expert_denoiser(
         if incompatible:
             raise ValueError(f"dual-expert EasyCache conflicts with unvalidated options: {incompatible}")
     expert_options = {
-        key: value
-        for key, value in context.component_options.items()
-        if key in _WAN_DENOISER_OPTION_KEYS
+        key: value for key, value in context.component_options.items() if key in _WAN_DENOISER_OPTION_KEYS
     }
 
     def build(name: str, checkpoint_name: str) -> WanDenoiser:
@@ -2519,6 +2717,12 @@ def _build_wan_denoiser(
             context.policy.options.get("fused_rope", False),
         )
     )
+    fused_adaln = bool(
+        context.component_options.get(
+            "fused_adaln",
+            context.policy.options.get("fused_adaln", fused_rope),
+        )
+    )
     inplace_residual_value = context.component_options.get(
         "inplace_residual",
         context.policy.options.get("inplace_residual", False),
@@ -2526,38 +2730,37 @@ def _build_wan_denoiser(
     if not isinstance(inplace_residual_value, bool):
         raise TypeError("Wan inplace_residual must be a bool")
     inplace_residual = inplace_residual_value
-    rope_precision = str(
-        context.component_options.get(
-            "rope_precision",
-            context.policy.options.get("rope_precision", "fp32"),
+    rope_precision = (
+        str(
+            context.component_options.get(
+                "rope_precision",
+                context.policy.options.get("rope_precision", "fp32"),
+            )
         )
-    ).strip().lower()
+        .strip()
+        .lower()
+    )
     if rope_precision not in {"fp32", "fp64"}:
         raise ValueError("Wan rope_precision must be 'fp32' or 'fp64'")
-    rms_norm_precision = str(
-        context.component_options.get(
-            "rms_norm_precision",
-            context.policy.options.get("rms_norm_precision", "fp32"),
+    rms_norm_precision = (
+        str(
+            context.component_options.get(
+                "rms_norm_precision",
+                context.policy.options.get("rms_norm_precision", "fp32"),
+            )
         )
-    ).strip().casefold()
+        .strip()
+        .casefold()
+    )
     if rms_norm_precision not in {"fp32", "input"}:
         raise ValueError("Wan rms_norm_precision must be 'fp32' or 'input'")
-    if fused_rope and rope_precision != "fp32":
-        raise ValueError(
-            "Wan fused_rope currently supports rope_precision='fp32' only; "
-            "use fused_rope=False for the exact fp64 RoPE path"
-        )
     if fused_rope and rms_norm_precision == "input":
         raise ValueError(
             "Wan fused_rope currently requires rms_norm_precision='fp32'; "
             "use the non-fused complex RoPE path for LightX2V input-dtype RMS parity"
         )
     adapter_value = context.component_options.get("peft_adapter_path")
-    adapter_path = (
-        None
-        if adapter_value is None
-        else _validated_wan_peft_adapter(context, adapter_value)
-    )
+    adapter_path = None if adapter_value is None else _validated_wan_peft_adapter(context, adapter_value)
 
     def merge_training_adapter(model: torch.nn.Module) -> None:
         if adapter_path is None:
@@ -2589,34 +2792,35 @@ def _build_wan_denoiser(
             split_fastvideo_sla_projection_weights,
         )
 
-        model_checkpoint_state, projection_state = (
-            split_fastvideo_sla_projection_weights(checkpoint_state)
-        )
+        model_checkpoint_state, projection_state = split_fastvideo_sla_projection_weights(checkpoint_state)
         fastvideo_sla_projection_state.clear()
         fastvideo_sla_projection_state.update(projection_state)
         if state_dict_converter is not None:
             converted = state_dict_converter(model_checkpoint_state)
-        elif any(
-            ".attn1." in name or name.startswith("condition_embedder.")
-            for name in model_checkpoint_state
-        ):
+        elif any(".attn1." in name or name.startswith("condition_embedder.") for name in model_checkpoint_state):
             # FastVideo publishes its VSA-QAT transformer in Diffusers layout,
             # while the ordinary Wan recipes use native keys.  Detect from the
             # tensor namespace so a local QAT checkpoint override remains
             # strict without changing dense official checkpoints.
-            converted = convert_diffusers_wan_transformer_state_dict(
-                model_checkpoint_state
-            )
+            converted = convert_diffusers_wan_transformer_state_dict(model_checkpoint_state)
         else:
             converted = model_checkpoint_state
         return convert_wan_vsa_gate_state_dict(converted)
 
     load_policy = acceleration_policy(context)
     execution_options = dict(load_policy.options)
-    execution_options["cuda_graph"] = resolve_cuda_graph_option(context)
+    resolved_cuda_graph_mode = resolve_cuda_graph_mode(context)
+    execution_options["cuda_graph"] = (
+        "piecewise" if resolved_cuda_graph_mode == "piecewise" else (resolved_cuda_graph_mode == "whole")
+    )
     for name in (
-        "static_cross_kv", "compile_scope", "compile_backend", "compile_mode",
-        "compile_fullgraph", "compile_dynamic", "compile_options",
+        "static_cross_kv",
+        "compile_scope",
+        "compile_backend",
+        "compile_mode",
+        "compile_fullgraph",
+        "compile_dynamic",
+        "compile_options",
     ):
         if name in context.component_options:
             execution_options[name] = context.component_options[name]
@@ -2627,9 +2831,7 @@ def _build_wan_denoiser(
             config=config,
             config_resolver=resolve_checkpoint_architecture,
             state_dict_converter=convert_checkpoint_state_dict,
-            approximate_attention_state_resolver=(
-                resolve_approximate_attention_state
-            ),
+            approximate_attention_state_resolver=(resolve_approximate_attention_state),
             supports_approximate_attention=True,
             supports_acceleration_plugins=True,
             vram_module_map={
@@ -2650,6 +2852,7 @@ def _build_wan_denoiser(
     if not isinstance(model, WanModel):
         raise TypeError(f"expected WanModel, got {type(model).__name__}")
     model._worldfoundry_dit_weight_dtype = weight_dtype
+    model._worldfoundry_fused_adaln = fused_adaln
     model._worldfoundry_fused_rope = fused_rope
     model._worldfoundry_rope_precision = rope_precision
     model._worldfoundry_inplace_residual = inplace_residual
@@ -2662,9 +2865,7 @@ def _build_wan_denoiser(
     if applied is not None:
         applied.requested["rope_precision"] = rope_precision
         applied.effective["rope_precision"] = (
-            f"complex-{rope_precision}"
-            if not fused_rope
-            else f"fused-{rope_precision}"
+            f"complex-{rope_precision}" if not fused_rope else f"fused-{rope_precision}"
         )
         applied.requested["rms_norm_precision"] = rms_norm_precision
         applied.effective["rms_norm_precision"] = {
@@ -2674,11 +2875,7 @@ def _build_wan_denoiser(
         applied.record_model_kernel(
             "fused_rope",
             requested=fused_rope,
-            effective=(
-                f"hidden_qk_rmsnorm_rope_3d:{rope_precision}"
-                if fused_rope
-                else "complex_rope"
-            ),
+            effective=(f"hidden_qk_rmsnorm_rope_3d:{rope_precision}" if fused_rope else "complex_rope"),
             approximate=fused_rope and rope_precision == "fp32",
         )
         applied.record_model_kernel(
@@ -2693,38 +2890,42 @@ def _build_wan_denoiser(
         channel_condition_key=channel_condition_key,
         manage_autocast=context.purpose is not BuildPurpose.TRAINING,
         inplace_residual=inplace_residual,
-        enable_cuda_graph=resolve_cuda_graph_option(context),
+        enable_cuda_graph=resolve_cuda_graph_mode(context),
         feature_cache_config=feature_cache_config,
     )
 
 
 __all__ = [
-    "CausalWanCacheBundle",
-    "CausalWanExpertCache",
-    "FastVideoCausalWanDenoiser",
+    "SELF_FORCING_WAN21_T2V_1P3B_CONFIG",
     "SKYREELS_V2_DF_1P3B_CONFIG",
     "SKYREELS_V3_R2V_14B_CONFIG",
     "WAN21_I2V_14B_CONFIG",
-    "WAN21_VAE_I2V_1P3B_CONFIG",
-    "WAN22_I2V_A14B_CONFIG",
     "WAN21_T2V_1P3B_CONFIG",
     "WAN21_T2V_14B_CONFIG",
+    "WAN21_VAE_I2V_1P3B_CONFIG",
+    "WAN22_I2V_A14B_CONFIG",
     "WAN22_T2V_A14B_CONFIG",
     "WAN22_TI2V_5B_CONFIG",
-    "WanDenoiser",
-    "Wan22DualExpertDenoiser",
-    "WanModelStateDictConverter",
     "WAN_CIVITAI_CONFIGS_BY_HASH",
-    "infer_native_wan_transformer_config",
+    "CausalWanCacheBundle",
+    "CausalWanExpertCache",
+    "FastVideoCausalWanDenoiser",
+    "SelfForcingWanDenoiser",
+    "Wan22DualExpertDenoiser",
+    "WanDenoiser",
+    "WanModelStateDictConverter",
     "build_fastvideo_causal_wan22_denoiser",
+    "build_self_forcing_wan21_denoiser",
     "build_skyreels_v2_denoiser",
     "build_skyreels_v3_denoiser",
     "build_wan21_i2v_14b_denoiser",
-    "convert_diffusers_wan_transformer_state_dict",
+    "build_wan21_t2v_1p3b_denoiser",
     "build_wan21_t2v_14b_denoiser",
+    "build_wan22_i2v_a14b_dual_denoiser",
     "build_wan22_t2v_a14b_denoiser",
     "build_wan22_t2v_a14b_dual_denoiser",
-    "build_wan22_i2v_a14b_dual_denoiser",
-    "build_wan21_t2v_1p3b_denoiser",
     "build_wan22_ti2v_5b_denoiser",
+    "convert_diffusers_wan_transformer_state_dict",
+    "convert_self_forcing_generator_state_dict",
+    "infer_native_wan_transformer_config",
 ]

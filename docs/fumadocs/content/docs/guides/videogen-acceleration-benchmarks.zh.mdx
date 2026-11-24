@@ -1,0 +1,196 @@
+---
+title: 视频生成与世界模型加速基准
+description: 15 个基础模型在独占 NVIDIA H200 上的 100% 零并发客观加速基准、质量回执与跨框架坦诚对比。
+---
+
+<Callout type="info" title="证据契约：100% 独占 H200 + 零静默回退">
+本文全部 15 个模型的耗时与加速比均在**独占空闲裸机 NVIDIA H200 SXM**（`external_gpu_contention = false`）上实测获得，每一档位均附带可审计零回退回执（`fallbacks: []`、`capture_failed: 0`、`dense_fallback_calls: 0`）、4 帧 RGB 人工视觉抽检，并通过 **335/335 全量统一 GPU+CPU 回归**与 **222/222 无卡 CPU CI 回归**。
+</Callout>
+
+WorldFoundry 在同一套开源推理栈中统一覆盖 **15 个基础模型**——包括 **11 个旗舰视频生成模型**与 **4 个实时流式/交互世界模型**。具体开关契约与互斥规则见[推理优化](/zh/docs/guides/inference-optimization)与[可插拔 diffusion 加速](/zh/docs/guides/diffusion-acceleration)。
+
+## 核心亮点
+
+<KvCatalog heading="独占 NVIDIA H200 SXM 核心实测摘要" rows={[
+  {
+    name: "旗舰视频生成（11 个模型）",
+    hintLabel: "端到端加速",
+    hint: "2.25× – 53.22×",
+    description: "全部 11 个旗舰视频生成模型均在单卡或多卡（Ulysses SP / CFG 并行）上跑出可复现的零回退加速，覆盖 1.3B 至 64B 全尺寸架构。",
+    reads: [
+      { label: "单卡代表成绩", value: "MiniMax-H3 超级加速 53.22×（10s 768p：1,054.84s → 19.82s）、HunyuanVideo-13B 5.19×（71.66s）、Wan2.1-14B 4.33×（71.99s）" },
+      { label: "多卡代表成绩", value: "Wan2.1-14B 4× 480p 13.86× vs 1×（22.50s）、HunyuanVideo-13B 2× SP=2 8.85× vs 1×（42.00s）、MiniMax-H3 2× SP=2 7.42×（41.88s）、LTX-2.5 2× CFG=2 5.56×（5.99s）" }
+    ]
+  },
+  {
+    name: "实时流式世界模型（4 个模型）",
+    hintLabel: "流式帧率",
+    hint: "20.8 – 67.55 FPS",
+    description: "无损 BF16 CUDA Graph + FlashAttention-3 + 重叠 VAE 流水线实现高帧率实时交互生成，图段数量恒定 O(1)，Prompt 切换零失效。",
+    reads: [
+      { label: "实测吞吐", value: "Matrix-Game-2.0 最高 67.55 FPS（无损 BF16 57.72–60.52 FPS）、LongLive-1.3B 30.16 FPS、Self-Forcing 1.3B 28.16 FPS（首帧 TTFT 313 ms）、HY-WorldPlay AR 20.84 FPS / Bi 4.73×" },
+      { label: "Graph 稳定性", value: "capture=1、eager=0、recompiles=0，恒定 O(1) 4–5 个图段" }
+    ]
+  },
+  {
+    name: "显存与数值精度工程",
+    hintLabel: "显存 / 精度",
+    hint: "-56.2 GiB · 全 FP32 累加",
+    description: "Cosmos3-Super 比特级精确 und 静态 KV 缓存将峰值显存从 122.8 GiB 降至 66.6 GiB（直降 56.2 GiB）；深层 DiT FP8 默认强制 use_fast_accum=False（全 FP32 WGMMA 累加）并采用 FP64 寄存器驻留 Triton RoPE（13.63×）。",
+    reads: [
+      { label: "画质护栏", value: "主动拦截并否决 LTX-2.3 蒸馏阶段（< 6 步）Token 剪枝与 HunyuanVideo tau=1.25 等存在色斑或主体漂移的激进档位" }
+    ]
+  },
+  {
+    name: "全仓回归与开源卫生",
+    hintLabel: "验证门禁",
+    hint: "335 GPU + 222 CPU 全过",
+    description: "全部 211 个变更 Python 模块通过 Ruff lint、Ruff format、ty 类型检查、DCO 签名及路径/凭据安全扫描，0 错误。",
+    reads: [
+      { label: "完整复现文档", value: "逐模型复现命令与详细数据维护在 benchmarks/videogen/BENCHMARK_REPORT.md" }
+    ]
+  }
+]} />
+
+## 评测方法论与硬件声明
+
+<Callout type="warn" title="跨架构精度差异披露（Hopper H200 FP8 vs Blackwell B200 NVFP4）">
+NVIDIA SOL Engine 的部分公开数据基于 **Blackwell B200 SM100 原生 NVFP4**；WorldFoundry 当前实测基于裸机 **Hopper NVIDIA H200 SXM（141 GiB HBM3e，SM90，NVSwitch）**上的 **行级 FP8 W8A8（`use_fast_accum=False`，全 FP32 WGMMA 累加）**。SM100 NVFP4 权重打包与分发已在仓内实现并通过单测，待物理 B200 实卡补齐实测。
+</Callout>
+
+<KvCatalog heading="测试环境与准入门槛" vars rows={[
+  { name: "硬件与互联", hint: "8× NVIDIA H200 SXM", description: "单卡 141 GiB HBM3e，Hopper SM90，NVSwitch。全部计时均在独占空闲卡、零外部竞争进程（external_gpu_contention = false）下完成。" },
+  { name: "软件与算子栈", hint: "PyTorch 2.11 + CUDA 12.8", description: "PyTorch 2.11.0+cu128、Triton 3.6.0、Hopper FlashAttention-3 3.0.1、SM90 CUTLASS sol_attn 与内置 Hopper TMA PISA。" },
+  { name: "画质与回执门禁", hint: "回执 + 视觉双检", description: "不以裸耗时论英雄：每条汇报档位均需满足 fallbacks: []、capture_failed: 0、dense_fallback_calls: 0，以及定量 PSNR/SSIM 和 4 帧 RGB 人工视觉抽检。" }
+]} />
+
+## 旗舰视频生成模型基准（11 个模型）
+
+以下均为相同几何配置下的热态独占 H200 实测数据。参考加速比列仅用于提供架构级参照（硬件与低比特精度差异见上方披露）。
+
+| # | 模型 | 测试几何 | 独占 H200 耗时（基线 → 优化） | 实测加速比（参考） | 核心技术栈与画质回执 |
+| ---: | --- | --- | --- | --- | --- |
+| 1 | **Cosmos3-Super (64B)** | `704×1280×33f`, 35 步 | 1× `77.94s` → **`33.02s`** | **`2.36×`**（ref `~2.27×`） | 比特级精确 `und` 静态 KV（**显存直降 `56.2 GiB`**，`122.8→66.6 GiB`）+ 步选择 FP8 + FA3 GQA + TeaCache + Piecewise Graph · `20.35 dB / 0.9286`（`fp8_und_kv`），`16.42 dB / 0.8255`（`sol_balanced`），`fallbacks=[]` |
+| 2 | **LTX-2.3 (22B 音视频)** | `768×1280×65f`, 8+3 步 | 1× `4.648s` → **`1.974s`**（默认）/ **`1.782s`**（TeaCache） | **`2.35×`** / **`2.61×`**（DiT `2.86×`；ref `~2.38×`） | FP8 + PISA（`90/90`）+ FBCache 推荐默认（`audio_rms=0.839`，I2V `39.19 dB`）；TeaCache 档位不启用剪枝（`1.782s`）· `fallbacks=[]` |
+| 3 | **SANA-Video (2B)** | `480×832×81f`, 50 步 | 1× `55.76s` → `27.19s`（无损）→ **`19.66s`** | **`2.84×`**（无损 `2.05×`；ref `~2.77×`） | EasyCache（`0.08`）+ 编译态 FA3（`80/80` 实测验证）· **`27.43 dB / SSIM 0.9891`**（无损 `27.99 dB`），`fallbacks=[]` |
+| 4 | **Wan2.2-TI2V-5B** | `704×1280×121f`, 50 步 | 1× `112.06s` → **`38.50s`**（BF16）/ **`37.48s`**（FP8） | **`2.91×`** BF16 / **`2.99×`** FP8（DiT `3.03×`；ref `~2.89×`） | EasyCache + PISA + 编译 VideoVAE38（无 PISA FP8 `compile_fullgraph`：`40.25s / 2.78×`）· 真实 TI2V I2V（`per-token`）通过，`fallbacks=[]` |
+| 5 | **Wan2.2-T2V-A14B (28B)** | `480×832×81f`, 40 步 | 1× `253.33s` → **`112.47s`**；2× `CFG=2` `130.19s` → **`59.00s`** | **`2.25×`** 1× / **`4.29×`** 2× vs 1×（`2.21×` vs 2×；ref `~2.17×`） | 双专家融合 + EasyCache + PISA（`wan22_a14b_sol`）· `SSIM 0.711`，专家切换 `1` 次干净重置、零串扰，`fallbacks=[]` |
+| 6 | **LingBot-Video (1.3B)** | `480×832×121f`, 40 步 | 1× `114.59s` → `67.33s`（PISA）→ **`37.03s`** | **`3.10×`** E2E / **`3.22×`** DiT（ref `~2.60×`） | 算子融合 + Refiner PISA + EasyCache · `19.39 dB / SSIM 0.9207`，`fallbacks=[]` |
+| 7 | **HunyuanVideo-13B** | `720×1280×65f`, 50 步 | 1× `371.69s` → `85.49s`（均衡）→ **`71.66s`**；2× `SP=2` **`42.00s`** | **`5.19×`** 1× DiT / **`8.85×`** 2× SP=2（ref `~5.03×`） | Sol-Attn（`tau=1.0`，`dense_single=(0,-2,-1)`）+ TeaCache + FP8 + Ulysses SP（`27.13 GiB/卡`，`sp-sync` 跨卡共识）· **`22.51 dB / 0.9097`**（均衡档 `25.98 dB`），BF16 VAE `1.29×`，`fallbacks=[]` |
+| 8 | **Wan2.1-T2V-14B** | `480p` & `720p`, 81 帧 50 步 | 1× 480p `311.81s` → **`71.99s`**；4× 480p **`22.50s`**；4× 720p `316.90s` → **`71.59s`** | **`4.33×`** 1× / **`13.86×`** 4× 480p / **`4.43×`** 4× 720p（ref `~3.48×`） | FP64 Triton RoPE（`13.63×`）+ EasyCache + Sol-Attn + FP8（`use_fast_accum=False`）+ 2×2 并行 VAE（`3.26s`）· 单卡 `31.53 GiB`，720p `20.40 dB`，`fallbacks=[]` |
+| 9 | **LTX-2.5 (22B)** | `768×1280×65f`, 24 步 CFG=3 / 8+3 | 1× `dev` `30.38s` → **`13.34s`**；2× `CFG=2` `33.26s` → **`5.99s`** | **`2.28×`** 1× / **`5.56×`** 2× E2E（DiT `5.55×`；ref `~4.68×`） | 双卡 CFG=2 + FBCache + 融合（`distilled` 单卡：`3.68s → 2.29s / 1.61×`，`39.29 GiB/卡`）· **`26.26 dB / SSIM 0.9907`**，`zero_fallbacks_verified=True` |
+| 10 | **MiniMax-H3 (31B)** | `512p 4s` & `768p 5s` | 1× 768p 20s **`38.64s`**；2× `SP=2` 768p 20s **`20.97s`**、50s **`41.88s`**、512p **`14.36s`** | **`3.22×`** 1× / **`5.93×`–`7.42×`** 2× 768p / **`4.20×`** 512p（ref `~3.95×`） | 36L VAE **`10.97×`**（`58.36 dB`），`kv_splits=4`，Sol-Attn + FBCache + SP=2 · Rank0/Rank1 最大误差 **`0.0`**，关键帧 `fl2va` `25.53 dB`，`fallbacks=[]` |
+| 11 | **MiniMax-H3 超级加速** | `5s` & `10s` `768p` | 1× **5s** `361.41s` → **`8.92s`**；**10s** `1,054.84s` → **`19.82s`** | **`40.54×`**（5s）/ **`53.22×`**（10s）（ref `22.2×` / `27.7×`） | 4 步 H3 草稿 + 3 步 LTX-2.5 精修 + 双声道立体声 MP4 封装 + 阶段卸载（`57.14 GiB`，`cos=1.000000`）· 稳态 E2E 复用缓存文本编码；5s 基线跑满 50 步 |
+
+## 实时流式世界模型基准（4 个模型）
+
+4 个交互世界模型均在独占 H200 上验证无损 BF16 默认档（`O(1)` 恒定图段、零重编译）以及可选 FlashAttention-3 / 多卡 SP 加速档。
+
+| 模型 | 负载 | 官方 / 同类参考 | 独占 H200 实测 | 吞吐 / 加速比 | 画质与 Graph 回执 |
+| --- | --- | --- | --- | --- | --- |
+| **Matrix-Game-2.0** | `universal` (69f) / `templerun` (117f) | ~25 FPS (H100) | 无损 BF16：**`57.72–60.52 FPS`**；FA3：**`67.55 FPS`** | 最高 **`67.55 FPS`** | `65.9–67.0 dB`（latent `PSNR=inf`），`capture=1, eager=0, recompiles=0, fallbacks=[]` |
+| **LongLive-1.3B** | 81f / 153f / 3-Prompt 切换 | 24.8 FPS（FP8） | 无损 BF16：**`27.17 FPS`**；FA3：**`30.09–30.16 FPS`** | 最高 **`30.16 FPS`** | eager `PSNR=inf` / 编译 `55.84 dB`，**`O(1)` 恒定 4 图段**，Prompt 切换零失效 |
+| **Self-Forcing 1.3B** | 81f / 153f 流式 | ~17 FPS 官方；~20–24 FPS 同类 | 无损 BF16 + FA3 + 重叠流水：81f **`27.90 FPS`**，153f **`28.16 FPS`** | **`28.16 FPS`**（`TTFT 313 ms`） | **`O(1)` 恒定 5 图段**，重叠 VAE 与串行比特级一致 |
+| **HY-WorldPlay (34 GB)** | Bi 12-lat (45f) & AR 8ctx | Eager `2,853 ms` Bi / `701 ms` AR | Bi 2× SP=2 Full FP8：**`603.4 ms`**；AR 2× SP=2：**`191.9 ms`** | **`4.73×`** Bi / **`20.84 FPS`**（`3.65×`）AR | RGB VAE 实测验证（BF16+FA3 `54.9 dB`，Full FP8 `37.1 dB`） |
+
+## 画质拦截与主动否决记录
+
+<Callout type="idea" title="画质优先：存在视觉瑕疵的更快档位一律拦截">
+即使原始耗时更低，只要在 4 帧 RGB 人工抽检中发现色斑或时序漂移，WorldFoundry 也会在代码中主动旁路或否决该档位。
+</Callout>
+
+<KvCatalog heading="已实施的画质护栏与修复" rows={[
+  {
+    name: "LTX-2.3 蒸馏 Stage-2 Token Pruning",
+    hintLabel: "状态",
+    hint: "已自动旁路（< 6 步）",
+    description: "在 3 步蒸馏阶段剪枝 20–25% Token 虽可跑到 1.60s（2.91×），但 PSNR 跌至 15.4 dB 且天空与树冠出现明显彩虹色斑。",
+    reads: [{ label: "默认安全替代", value: "total_steps < 6 时默认自动旁路；PISA + FBCache（1.974s / 2.35×）与 PISA + TeaCache（1.782s / 2.61×）均无色斑" }]
+  },
+  {
+    name: "HunyuanVideo-13B 激进稀疏阈值（tau=1.25）",
+    hintLabel: "状态",
+    hint: "已主动否决",
+    description: "将 Sol-Attn 阈值放宽至 tau=1.25 会使 PSNR 降至 20.80 dB，并导致尾帧主体动作偏移。",
+    reads: [{ label: "默认安全替代", value: "采用 tau=1.0 + dense_single=(0,-2,-1)：单卡 71.66s（5.19×）、双卡 SP=2 42.00s（8.85×），稳定保持 22.51 dB" }]
+  },
+  {
+    name: "Hopper FP22 累加漂移与 FP32 RoPE 漂移",
+    hintLabel: "状态",
+    hint: "已全局修复",
+    description: "快速累加 FP8 WGMMA（内部 FP22 累加）与 FP32 复数 RoPE 在 30–60 层深 DiT 中会积累肉眼可见的细节漂移。",
+    reads: [{ label: "默认安全替代", value: "深层 DiT FP8 默认强制 use_fast_accum=False（额外开销低于 3%），并采用寄存器驻留 FP64 Triton RoPE（比 PyTorch complex128 快 13.63×）" }]
+  }
+]} />
+
+## 与同类框架的客观对比
+
+<KvCatalog heading="优势与当前公开差距" rows={[
+  {
+    name: "WorldFoundry 当前优势",
+    hint: "覆盖广度 · 流式无损 · 可审计",
+    description: "单一开源栈覆盖全部 15 个模型；自回归世界模型在无损 BF16 下达到 28–67.55 FPS 且图段/显存恒定 O(1)；全链路零回退 JSON 回执、全 FP32 累加 FP8、FP64 Triton RoPE 与强制 RGB 视觉把关。"
+  },
+  {
+    name: "NVIDIA SOL Engine",
+    hint: "物理 B200 NVFP4",
+    description: "已发布物理 Blackwell B200 SM100 NVFP4 实卡结果。WorldFoundry 已实现 SM100 NVFP4 打包与分发单测，但当前实卡评测基于 Hopper H200 FP8。"
+  },
+  {
+    name: "SGLang-Diffusion",
+    hint: "多租户在线服务平面",
+    description: "在多租户连续批处理（continuous batching）、请求队列调度与 OpenAI 兼容 HTTP 服务平面方面更成熟。"
+  },
+  {
+    name: "隐空间级联适配器",
+    hint: "后续优化方向",
+    description: "MiniMax-H3 超级加速当前通过解码上采样 + LTX VAE 重编码完成阶段衔接（5s 耗时 1.72s），后续训练专用隐空间桥梁可进一步压缩衔接开销。"
+  }
+]} />
+
+## 验证与复现
+
+完整逐模型脚本、多卡启动参数与原始回执说明维护在 `benchmarks/videogen/BENCHMARK_REPORT.md`。
+
+<Tabs items={['回执校验', '回归门禁', '完整报告']}>
+  <Tab>
+
+在任意一次加速 forward 后读取运行回执，确认无静默回退：
+
+```python
+dit_report = pipe.native_pipeline.components.denoiser.runtime_optimization_report()
+vae_report = pipe.native_pipeline.components.decoder.runtime_optimization_report()
+assert dit_report["fallbacks"] == []
+assert vae_report["fallbacks"] == []
+print(dit_report["effective"])
+```
+
+  </Tab>
+  <Tab>
+
+在仓库根目录执行无卡 CPU 契约回归与 PR 门禁检查：
+
+```bash
+# 无卡 CPU 回归（222 项测试）
+CUDA_VISIBLE_DEVICES="" pytest -q tests/core/acceleration/
+
+# 静态检查、格式、类型与 DCO 门禁
+make pr-check BASE_REF=HEAD~1
+```
+
+  </Tab>
+  <Tab>
+
+完整 15 个模型的复现命令、多卡 `torchrun` 启动参数与逐项数据拆解见仓库报告 `benchmarks/videogen/BENCHMARK_REPORT.md`。
+
+  </Tab>
+</Tabs>
+
+## 下一步
+
+<Cards>
+  <Card title="推理优化" description="所有已接入的加载开关、拒绝组合与回执核对方法。" href="/zh/docs/guides/inference-optimization" />
+  <Card title="可插拔 diffusion 加速" description="原生 SANA/Wan 插件、生命周期护栏与校准算子。" href="/zh/docs/guides/diffusion-acceleration" />
+  <Card title="模型" description="挑选 model ID、默认 profile 与权重就绪状态。" href="/zh/docs/guides/supported-models" />
+  <Card title="评测" description="官方 benchmark 协议、指标体系与 scorecard。" href="/zh/docs/evaluation" />
+</Cards>

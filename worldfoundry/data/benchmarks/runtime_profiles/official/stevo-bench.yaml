@@ -19,11 +19,11 @@ notes:
 python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
 - .
-- worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench
+- worldfoundry/evals/tasks/execution/runners/stevo_bench/runtime/stevo_bench
 required_assets:
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/stevo_bench
-  - worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench
+  - worldfoundry/evals/tasks/execution/runners/stevo_bench
+  - worldfoundry/evals/tasks/execution/runners/stevo_bench/runtime/stevo_bench
   pip_requirements:
   - worldfoundry/data/benchmarks/requirements/stevo-bench.txt
   - worldfoundry/data/benchmarks/requirements/stevo-bench-eval-se.txt
@@ -45,11 +45,11 @@ optional_env:
 - HF_ENDPOINT
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py
 - id: metrics_runtime
-  path: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/stevo_bench_metrics.py
+  path: worldfoundry/evals/tasks/execution/runners/stevo_bench/stevo_bench_metrics.py
 - id: vendored_official_evaluator
-  path: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench/eval/eval_cli.py
+  path: worldfoundry/evals/tasks/execution/runners/stevo_bench/runtime/stevo_bench/eval/eval_cli.py
 - id: pip_requirements
   path: worldfoundry/data/benchmarks/requirements/stevo-bench.txt
 - id: pip_requirements_eval_se
@@ -61,5 +61,5 @@ optional_imports:
 - yaml
 - google.genai
 - openai
-validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id stevo-bench --mode official-validation
+validation_command: wf zoo benchmark-run --benchmark-id stevo-bench --mode official-validation
   --official-results-path <stevo_bench_run_dir_or_summary_json> --output-dir <out> --json

@@ -5,14 +5,16 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+
+from worldfoundry.core.execution.process import package_module_command
 
 from .infer import _load_json, _normalize_actions, _resolve_checkpoint
 
 RUNTIME_DIR = Path(__file__).resolve().parent
 OFFICIAL_ENTRYPOINT = RUNTIME_DIR / "infer.py"
-RUNTIME_SRC = RUNTIME_DIR / "src"
 BLOCKED_REASON = ""
 
 
@@ -67,9 +69,7 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile):
     missing: list[dict[str, str]] = []
 
     if entrypoint is None or not Path(entrypoint).is_file():
-        missing.append(
-            {"kind": "entrypoint", "path": str(entrypoint or ""), "reason": "MIRA infer.py is missing"}
-        )
+        missing.append({"kind": "entrypoint", "path": str(entrypoint or ""), "reason": "MIRA infer.py is missing"})
 
     checkpoint = _option(options, "checkpoint", "checkpoint_path", "checkpoint_dir", "model_path")
     if not checkpoint:
@@ -128,13 +128,13 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile):
         try:
             importlib.import_module("torchcodec")
             decoder_available = True
-        except Exception as exc:  # noqa: BLE001 - native-loader errors must be surfaced in the plan.
+        except Exception as exc:  # native-loader errors must be surfaced in the plan.
             torchcodec_error = str(exc).splitlines()[0] or type(exc).__name__
     if not decoder_available and importlib.util.find_spec("av") is not None:
         try:
             importlib.import_module("av")
             decoder_available = True
-        except Exception:  # noqa: BLE001 - report both decoder routes together below.
+        except Exception:  # report both decoder routes together below.
             pass
     if not decoder_available:
         missing.append(
@@ -150,7 +150,7 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile):
         try:
             torch = importlib.import_module("torch")
             cuda_available = bool(torch.cuda.is_available())
-        except Exception:  # noqa: BLE001 - the import failure is reported as an unavailable device.
+        except Exception:  # the import failure is reported as an unavailable device.
             cuda_available = False
         if not cuda_available:
             missing.append(
@@ -164,16 +164,14 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile):
 
 
 def build_command(context):
-    """Build the standalone ``infer.py`` command used by Workspace."""
+    """Build the in-tree inference command used by Workspace."""
     options = dict(context.get("options") or {})
     checkpoint = _option(options, "checkpoint", "checkpoint_path", "checkpoint_dir", "model_path")
     dataset = _option(options, "dataset", "dataset_path", "data_path")
     if not checkpoint or not dataset:
         raise ValueError("MIRA Workspace execution requires checkpoint_path and dataset_path")
 
-    command = [
-        str(context["python"]),
-        str(context["entrypoint"]),
+    arguments = [
         "--checkpoint",
         str(checkpoint),
         "--dataset",
@@ -199,27 +197,22 @@ def build_command(context):
     ]
     actions_path = _actions_path(options, Path(str(context["output_dir"])))
     if actions_path is not None:
-        command.extend(["--actions-file", str(actions_path)])
+        arguments.extend(["--actions-file", str(actions_path)])
     if _as_bool(options.get("compile")):
-        command.append("--compile")
+        arguments.append("--compile")
     if not _as_bool(options.get("overlay_actions"), default=True):
-        command.append("--no-overlay-actions")
+        arguments.append("--no-overlay-actions")
     if _as_bool(options.get("generated_only")):
-        command.append("--generated-only")
-    return command
-
-
-def pythonpath_entries(*, runtime_root, options, profile):
-    del runtime_root, options, profile
-    return (RUNTIME_SRC,)
+        arguments.append("--generated-only")
+    return package_module_command(
+        "worldfoundry.synthesis.visual_generation.mira_wm.infer", arguments, python_executable=context["python"]
+    )
 
 
 __all__ = [
     "BLOCKED_REASON",
     "OFFICIAL_ENTRYPOINT",
     "RUNTIME_DIR",
-    "RUNTIME_SRC",
     "build_command",
     "missing_requirements",
-    "pythonpath_entries",
 ]

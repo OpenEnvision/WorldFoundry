@@ -1,7 +1,6 @@
 # Copyright (c) Tencent Inc. All rights reserved.
 import json
 import random
-from typing import Tuple
 
 import numpy as np
 from mmyolo.registry import TRANSFORMS
@@ -11,9 +10,9 @@ from mmyolo.registry import TRANSFORMS
 class RandomLoadText:
     def __init__(
         self,
-        text_path: str = None,
+        text_path: str | None = None,
         prompt_format: str = "{}",
-        num_neg_samples: Tuple[int, int] = (80, 80),
+        num_neg_samples: tuple[int, int] = (80, 80),
         max_num_samples: int = 80,
         padding_to_max: bool = False,
         padding_value: str = "",
@@ -24,13 +23,11 @@ class RandomLoadText:
         self.padding_to_max = padding_to_max
         self.padding_value = padding_value
         if text_path is not None:
-            with open(text_path, "r") as f:
+            with open(text_path) as f:
                 self.class_texts = json.load(f)
 
     def __call__(self, results: dict) -> dict:
-        assert "texts" in results or hasattr(self, "class_texts"), (
-            "No texts found in results."
-        )
+        assert "texts" in results or hasattr(self, "class_texts"), "No texts found in results."
         class_texts = results.get("texts", getattr(self, "class_texts", None))
 
         num_classes = len(class_texts)
@@ -43,9 +40,7 @@ class RandomLoadText:
         positive_labels = set(results[gt_label_tag])
 
         if len(positive_labels) > self.max_num_samples:
-            positive_labels = set(
-                random.sample(list(positive_labels), k=self.max_num_samples)
-            )
+            positive_labels = set(random.sample(list(positive_labels), k=self.max_num_samples))
 
         num_neg_samples = min(
             min(num_classes, self.max_num_samples) - len(positive_labels),
@@ -72,7 +67,7 @@ class RandomLoadText:
 
         if "instances" in results:
             retaged_instances = []
-            for idx, inst in enumerate(results["instances"]):
+            for idx, inst in enumerate(results["instances"]):  # noqa: B007 - The loop variable is read outside the loop.
                 label = inst["bbox_label"]
                 if label in label2ids:
                     inst["bbox_label"] = label2ids[label]
@@ -102,24 +97,22 @@ class RandomLoadText:
 class LoadText:
     def __init__(
         self,
-        text_path: str = None,
+        text_path: str | None = None,
         prompt_format: str = "{}",
         multi_prompt_flag: str = "/",
     ) -> None:
         self.prompt_format = prompt_format
         self.multi_prompt_flag = multi_prompt_flag
         if text_path is not None:
-            with open(text_path, "r") as f:
+            with open(text_path) as f:
                 self.class_texts = json.load(f)
 
     def __call__(self, results: dict) -> dict:
-        assert "texts" in results or hasattr(self, "class_texts"), (
-            "No texts found in results."
-        )
+        assert "texts" in results or hasattr(self, "class_texts"), "No texts found in results."
         class_texts = results.get("texts", getattr(self, "class_texts", None))
 
         texts = []
-        for idx, cls_caps in enumerate(class_texts):
+        for _idx, cls_caps in enumerate(class_texts):
             assert len(cls_caps) > 0
             sel_cls_cap = cls_caps[0]
             sel_cls_cap = self.prompt_format.format(sel_cls_cap)

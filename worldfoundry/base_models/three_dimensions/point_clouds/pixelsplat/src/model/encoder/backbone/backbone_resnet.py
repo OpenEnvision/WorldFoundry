@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> encoder -> backbone -> backbone_resnet.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 import functools
 from dataclasses import dataclass
 from typing import Literal
@@ -20,30 +19,17 @@ from .backbone import Backbone
 
 @dataclass
 class BackboneResnetCfg:
-    """Backbone resnet cfg implementation."""
     name: Literal["resnet"]
-    model: Literal[
-        "resnet18", "resnet34", "resnet50", "resnet101", "resnet152", "dino_resnet50"
-    ]
+    model: Literal["resnet18", "resnet34", "resnet50", "resnet101", "resnet152", "dino_resnet50"]
     num_layers: int
     use_first_pool: bool
     d_out: int
 
 
 class BackboneResnet(Backbone[BackboneResnetCfg]):
-    """Backbone resnet implementation."""
     model: ResNet
 
     def __init__(self, cfg: BackboneResnetCfg, d_in: int) -> None:
-        """Init.
-
-        Args:
-            cfg: The cfg.
-            d_in: The d in.
-
-        Returns:
-            The return value.
-        """
         super().__init__(cfg)
 
         assert d_in == 3
@@ -74,22 +60,12 @@ class BackboneResnet(Backbone[BackboneResnetCfg]):
             self.projections[key] = nn.Conv2d(d_layer_out, cfg.d_out, 1)
 
         # Add a projection for the first layer.
-        self.projections["layer0"] = nn.Conv2d(
-            self.model.conv1.out_channels, cfg.d_out, 1
-        )
+        self.projections["layer0"] = nn.Conv2d(self.model.conv1.out_channels, cfg.d_out, 1)
 
     def forward(
         self,
         context: BatchedViews,
     ) -> Float[Tensor, "batch view d_out height width"]:
-        """Forward.
-
-        Args:
-            context: The context.
-
-        Returns:
-            The return value.
-        """
         # Merge the batch dimensions.
         b, v, _, h, w = context["image"].shape
         x = rearrange(context["image"], "b v c h w -> (b v) c h w")
@@ -109,10 +85,7 @@ class BackboneResnet(Backbone[BackboneResnetCfg]):
             features.append(self.projections[key](x))
 
         # Upscale the features.
-        features = [
-            F.interpolate(f, (h, w), mode="bilinear", align_corners=True)
-            for f in features
-        ]
+        features = [F.interpolate(f, (h, w), mode="bilinear", align_corners=True) for f in features]
         features = torch.stack(features).sum(dim=0)
 
         # Separate batch dimensions.
@@ -120,9 +93,4 @@ class BackboneResnet(Backbone[BackboneResnetCfg]):
 
     @property
     def d_out(self) -> int:
-        """D out.
-
-        Returns:
-            The return value.
-        """
         return self.cfg.d_out

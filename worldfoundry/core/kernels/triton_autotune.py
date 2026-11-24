@@ -30,7 +30,6 @@ import torch.distributed as dist
 import triton.language as tl
 from triton.runtime.autotuner import Autotuner
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Dtype map — only the three floating types the in-tree GEMM kernels launch
 # ──────────────────────────────────────────────────────────────────────────
@@ -54,15 +53,16 @@ def get_tl_dtype_from_torch_dtype(dtype: torch.dtype) -> tl.dtype:
 
 
 class CustomAutotuner(Autotuner):
-    """Custom autotuner implementation."""
+    """Triton autotuner that persists the best config per tuning key across processes.
+
+    Winners are pickled to ``~/.triton/best_config_cache/<device name>/<kernel name>.pkl``, and the
+    dtypes of tensor arguments are added to the tuning key.
+    """
+
     def __init__(self, *args, **kwargs):
-        """Init."""
         super().__init__(*args, **kwargs)
         # Use device name if CUDA is available, otherwise use a default name
-        if torch.cuda.is_available():
-            device_name = torch.cuda.get_device_name(0).replace(" ", "_")
-        else:
-            device_name = "cpu"
+        device_name = torch.cuda.get_device_name(0).replace(" ", "_") if torch.cuda.is_available() else "cpu"
 
         self.best_config_cache_path = os.path.expanduser(
             os.path.join(
@@ -78,8 +78,8 @@ class CustomAutotuner(Autotuner):
                 self.cache = pickle.load(f)
 
     def run(self, *args, **kwargs):
-        """Run."""
-        self.nargs = dict(zip(self.arg_names, args))
+        """Launch the kernel with the best config for this call's key, benchmarking and caching the configs when the key is new."""
+        self.nargs = dict(zip(self.arg_names, args, strict=False))
         used_cached_result = True
         if len(self.configs) > 1:
             all_args = {**self.nargs, **kwargs}
@@ -102,7 +102,7 @@ class CustomAutotuner(Autotuner):
                 timings = {config: self._bench(*args, config=config, **kwargs) for config in pruned_configs}
                 bench_end = time.time()
                 self.bench_time = bench_end - bench_start
-                self.cache[key] = builtins.min(timings, key=timings.get)
+                self.cache[key] = builtins.min(timings, key=timings.__getitem__)
                 self.pre_hook(args, reset_only=True)
                 self.configs_timings = timings
                 if not dist.is_initialized() or dist.get_rank() == 0:
@@ -148,26 +148,9 @@ def custom_autotune(
     rep=100,
     use_cuda_graph=False,
 ):
-    """Custom autotune.
+    """Decorator like ``triton.autotune`` that wraps the kernel in a :class:`CustomAutotuner`."""
 
-    Args:
-        configs: The configs.
-        key: The key.
-        prune_configs_by: The prune configs by.
-        reset_to_zero: The reset to zero.
-        restore_value: The restore value.
-        pre_hook: The pre hook.
-        post_hook: The post hook.
-        warmup: The warmup.
-        rep: The rep.
-        use_cuda_graph: The use cuda graph.
-    """
     def decorator(fn):
-        """Decorator.
-
-        Args:
-            fn: The fn.
-        """
         return CustomAutotuner(
             fn,
             fn.arg_names,

@@ -23,24 +23,29 @@ def test_existing_results_scorecard_public_fields_are_stable(tmp_path: Path) -> 
         encoding="utf-8",
     )
 
-    assert main([
-        "evaluate",
-        "--results-path",
-        str(results_path),
-        "--output-dir",
-        str(output_dir),
-        "--benchmark-id",
-        "scorecard-snapshot-benchmark",
-        "--model-id",
-        "scorecard-snapshot-model",
-        "--dataset-id",
-        "scorecard-snapshot-dataset",
-        "--metric",
-        "artifact_count",
-        "--run-id",
-        "scorecard-snapshot-run",
-        "--json",
-    ]) == 0
+    assert (
+        main(
+            [
+                "evaluate",
+                "--results-path",
+                str(results_path),
+                "--output-dir",
+                str(output_dir),
+                "--benchmark-id",
+                "scorecard-snapshot-benchmark",
+                "--model-id",
+                "scorecard-snapshot-model",
+                "--dataset-id",
+                "scorecard-snapshot-dataset",
+                "--metric",
+                "artifact_count",
+                "--run-id",
+                "scorecard-snapshot-run",
+                "--json",
+            ]
+        )
+        == 0
+    )
 
     scorecard = json.loads((output_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert scorecard["schema_version"] == "worldfoundry-scorecard"

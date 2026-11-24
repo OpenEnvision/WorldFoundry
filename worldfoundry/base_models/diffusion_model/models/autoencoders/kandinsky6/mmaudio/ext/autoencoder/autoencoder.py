@@ -6,11 +6,17 @@ import torch
 from safetensors.torch import load_file
 from torch import nn
 
-from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.bigvgan_v2.bigvgan import BigVGAN as BigVGANv2
-from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.bigvgan_v2.bigvgan import load_hparams_from_json
-from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.bigvgan_v2.env import AttrDict
-from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.autoencoder.distributions import DiagonalGaussianDistribution
+from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.autoencoder.distributions import (
+    DiagonalGaussianDistribution,
+)
 from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.autoencoder.vae import VAE
+from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.bigvgan_v2.bigvgan import (
+    BigVGAN as BigVGANv2,
+)
+from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.bigvgan_v2.bigvgan import (
+    load_hparams_from_json,
+)
+from worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6.mmaudio.ext.bigvgan_v2.env import AttrDict
 
 _DIFFUSERS_WEIGHTS = "diffusion_pytorch_model.safetensors"
 _BUNDLED_VOCODER_CONFIG = Path(__file__).resolve().parents[1] / "bigvgan_v2" / "config.json"

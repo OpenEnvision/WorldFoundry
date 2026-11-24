@@ -5,7 +5,7 @@ modelId: "matrix-game-1"
 pageSource: authored
 ---
 
-Matrix-Game 1.0 is the first generation of Skywork's interactive game world model: from an image and keyboard/mouse-style actions it generates playable game-world video. In this catalog it is registered as its own model id and never routes through Matrix-Game-2; the minimal official Python runtime closure is vendored in-tree.
+Matrix-Game 1.0 is the first generation of Skywork's interactive game world model: from an image and keyboard/mouse-style actions it generates playable game-world video. It has its own model id and runs the official Matrix-Game 1 runtime, not the Matrix-Game 2 one.
 
 <ModelPaperFigures modelId="matrix-game-1" locale="en" />
 
@@ -13,9 +13,9 @@ Matrix-Game 1.0 is the first generation of Skywork's interactive game world mode
 
 ## What it is for
 
-Drive Matrix-Game 1 with keyboard/mouse tokens. Not the 2.0 or 3.x runtimes.
+Use it to generate game-world video from an image, a prompt, and keyboard/mouse actions with the first-generation model. For Matrix-Game 2.0 or 3.x, use their own model ids.
 
-Launch `worldfoundry-eval run matrix-game-1`.
+Launch `wf run matrix-game-1`.
 
 Score on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — action-conditioned game-world rollout quality.
 
@@ -23,10 +23,8 @@ Score on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — a
 
 Required: `image` and `prompt`; `actions`: keyboard, mouse, navigation_token; artifacts: `world.mp4`.
 
-WorldFoundry vendors the minimal Matrix-Game-1 official Python runtime closure under worldfoundry/synthesis/visual_generation/matrix_game/matrix_game_1_runtime.
+## Running in WorldFoundry
 
-## Run in WorldFoundry
-
-Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Skywork/Matrix-Game` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run matrix-game-1`. Catalog VRAM is unset.
+Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Skywork/Matrix-Game` locally, then run `wf run matrix-game-1`.
 
 <ModelRelatedRecipes modelId="matrix-game-1" locale="en" />

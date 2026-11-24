@@ -6,7 +6,6 @@ from pathlib import Path
 
 from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path
 
-
 DFN5B_MODEL_ID = "apple/DFN5B-CLIP-ViT-H-14-384"
 DFN5B_REQUIRED_FILES = (
     "open_clip_config.json",
@@ -47,9 +46,7 @@ def _resolve_checkpoint(
                 return candidate.resolve()
 
     rendered = "\n  - ".join(str(path) for path in checked)
-    raise FileNotFoundError(
-        f"MMAudio requires the official {description}; checked:\n  - {rendered}"
-    )
+    raise FileNotFoundError(f"MMAudio requires the official {description}; checked:\n  - {rendered}")
 
 
 def resolve_dfn5b_checkpoint() -> Path:

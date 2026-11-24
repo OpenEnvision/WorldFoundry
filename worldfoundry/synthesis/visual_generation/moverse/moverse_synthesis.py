@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import resolve_data_path, resolve_local_hf_model_path
 from worldfoundry.runtime.in_tree_cli import execute_in_tree
 from worldfoundry.synthesis.base_synthesis import BaseSynthesis
@@ -61,7 +62,7 @@ class MoVerseSynthesis(BaseSynthesis):
         args: Any = None,
         device: str | None = None,
         **kwargs: Any,
-    ) -> "MoVerseSynthesis":
+    ) -> MoVerseSynthesis:
         del args
         options = dict(pretrained_model_path) if isinstance(pretrained_model_path, Mapping) else {}
         if pretrained_model_path is not None and not isinstance(pretrained_model_path, Mapping):
@@ -105,13 +106,9 @@ class MoVerseSynthesis(BaseSynthesis):
         config_path = resolve_data_path(
             "models", "runtime", "configs", "moverse", "inference", "cond_inference_multi.yaml"
         )
-        default_config_path = resolve_data_path(
-            "models", "runtime", "configs", "moverse", "default_config.yaml"
-        )
+        default_config_path = resolve_data_path("models", "runtime", "configs", "moverse", "default_config.yaml")
         moverse_root = Path(resolved_assets["moverse_path"])
-        command = [
-            python_executable,
-            str(runtime_root() / "scripts" / "infer.py"),
+        arguments = [
             "--image",
             image,
             "--prompt",
@@ -142,80 +139,22 @@ class MoVerseSynthesis(BaseSynthesis):
             python_executable,
         ]
         if back_prompt:
-            command.extend(["--back_prompt", back_prompt])
+            arguments.extend(["--back_prompt", back_prompt])
         if trajectory:
-            command.extend(["--traj", trajectory])
+            arguments.extend(["--traj", trajectory])
+        seed = options.get("seed")
+        if seed is not None:
+            arguments.extend(["--seed", str(int(seed))])
 
-        input_errors = _input_errors(image, prompt, trajectory, required=not plan_only)
-        package_root = Path(__file__).resolve().parents[3]
-        required_runtime_files = (
-            runtime_root() / "scripts" / "infer.py",
-            config_path,
-            default_config_path,
-            package_root
-            / "base_models"
-            / "three_dimensions"
-            / "depth"
-            / "depth_anything"
-            / "depth_anything_v3"
-            / "api.py",
-            package_root
-            / "base_models"
-            / "three_dimensions"
-            / "point_clouds"
-            / "sharp"
-            / "__init__.py",
-            package_root
-            / "base_models"
-            / "three_dimensions"
-            / "general_3d"
-            / "geocalib"
-            / "autolevel.py",
-            package_root
-            / "base_models"
-            / "diffusion_model"
-            / "schedulers"
-            / "__init__.py",
-            package_root
-            / "base_models"
-            / "diffusion_model"
-            / "models"
-            / "autoencoders"
-            / "wan"
-            / "resident.py",
-            package_root
-            / "base_models"
-            / "diffusion_model"
-            / "models"
-            / "encoders"
-            / "wan"
-            / "resident.py",
-            package_root
-            / "base_models"
-            / "diffusion_model"
-            / "models"
-            / "networks"
-            / "wan"
-            / "variants"
-            / "moverse"
-            / "__init__.py",
-            package_root
-            / "base_models"
-            / "diffusion_model"
-            / "loaders"
-            / "wan_variant.py",
-            package_root
-            / "base_models"
-            / "diffusion_model"
-            / "models"
-            / "autoencoders"
-            / "wan"
-            / "variants"
-            / "taehv.py",
+        command = package_module_command(
+            "worldfoundry.synthesis.visual_generation.moverse.moverse_runtime.scripts.infer",
+            arguments,
+            python_executable=python_executable,
         )
-        runtime_errors = [
-            f"in-tree MoVerse runtime dependency is missing: {path}"
-            for path in required_runtime_files
+        input_errors = _input_errors(image, prompt, trajectory, required=not plan_only)
+        config_errors = [
+            f"MoVerse runtime config is missing: {path}"
+            for path in (config_path, default_config_path)
             if not path.is_file()
         ]
         plan_path = run_dir / "moverse_runtime_plan.json"
@@ -236,7 +175,7 @@ class MoVerseSynthesis(BaseSynthesis):
             "stage_dir": str(stage_dir),
             "assets": unresolved_assets,
             "resolved_assets": resolved_assets,
-            "missing_requirements": [*input_errors, *asset_errors, *runtime_errors],
+            "missing_requirements": [*input_errors, *asset_errors, *config_errors],
         }
         plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True), encoding="utf-8")
         if plan_only:
@@ -251,7 +190,7 @@ class MoVerseSynthesis(BaseSynthesis):
                 "metadata": plan,
             }
 
-        errors = [*input_errors, *asset_errors, *runtime_errors]
+        errors = [*input_errors, *asset_errors, *config_errors]
         if errors:
             return {
                 "status": "failed",
@@ -278,7 +217,6 @@ class MoVerseSynthesis(BaseSynthesis):
             output_path=output,
             search_roots=(stage_dir,),
             env=env,
-            python_paths=(runtime_root(), Path(__file__).resolve().parents[4]),
             preferred_names=("video.mp4", output.name),
         )
         side_by_side = stage_dir / "video_side_by_side.mp4"
@@ -296,7 +234,11 @@ class MoVerseSynthesis(BaseSynthesis):
 
 
 def _materialize_image(images: Any, run_dir: Path) -> str:
-    value = images[0] if isinstance(images, Sequence) and not isinstance(images, (str, bytes, bytearray)) and images else images
+    value = (
+        images[0]
+        if isinstance(images, Sequence) and not isinstance(images, (str, bytes, bytearray)) and images
+        else images
+    )
     if value is None:
         return ""
     if isinstance(value, (str, Path)):
@@ -329,9 +271,7 @@ def _resolve_assets(values: Mapping[str, str], *, required: bool) -> tuple[dict[
     errors: list[str] = []
     for role, value in values.items():
         try:
-            resolved[role] = str(
-                resolve_local_hf_model_path(value, required_files=REQUIRED_ASSET_FILES.get(role, ()))
-            )
+            resolved[role] = str(resolve_local_hf_model_path(value, required_files=REQUIRED_ASSET_FILES.get(role, ())))
         except FileNotFoundError as exc:
             if required:
                 errors.append(str(exc).splitlines()[0])
@@ -363,8 +303,8 @@ __all__ = [
     "DEFAULT_FLUX_REPO",
     "DEFAULT_MOVERSE_REPO",
     "DEFAULT_WAN_REPO",
-    "MoVerseSynthesis",
     "OFFICIAL_SOURCE_REPO",
     "UPSTREAM_REVISION",
+    "MoVerseSynthesis",
     "runtime_root",
 ]

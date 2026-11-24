@@ -1,52 +1,50 @@
 ---
 title: "NVIDIA DreamZero"
-description: "NVIDIA DreamZero from NVIDIA (GEAR Lab): wam and world action model; Runner parity pending; 2 variants."
+description: "NVIDIA DreamZero from NVIDIA (GEAR Lab): WAM, world action model, and 3 more tasks; Runner parity pending; 2 variants."
 modelId: "dreamzero"
 pageSource: authored
 ---
 
-NVIDIA DreamZero is a world-action model (WAM) that couples video prediction with robot control: DROID and AgiBot checkpoints are released under Apache-2.0 (GEAR-Dreams org). WorldFoundry keeps the inference-only model, preprocessing, distributed server, WebSocket client, and a pickle-free NumPy msgpack protocol in-tree; both checkpoints passed GPU probes on a CUDA 12.9 runtime.
+NVIDIA DreamZero is a world-action model (WAM) that couples video prediction with robot control: DROID and AgiBot checkpoints are released under Apache-2.0 (GEAR-Dreams org). WorldFoundry serves the inference model through a distributed server and a WebSocket client that exchange data over a pickle-free NumPy msgpack protocol. Both checkpoints have been validated with GPU probes under CUDA 12.9.
 
 <ModelPaperFigures modelId="dreamzero" locale="en" />
 
-The recorded paper is [arXiv 2602.15922](https://arxiv.org/abs/2602.15922).
+Paper: [arXiv 2602.15922](https://arxiv.org/abs/2602.15922).
 
 Project page: [dreamzero0.github.io](https://dreamzero0.github.io/). Code: [dreamzero0/dreamzero](https://github.com/dreamzero0/dreamzero).
-
-Both checkpoints passed **GPU probes** on CUDA 12.9. Full rollout parity is **not** recorded. Default **14B** server uses **two CUDA ranks**; the Wan2.2 **5B** entrypoint can run on one.
 
 <ModelCommandBuilder modelId="dreamzero" locale="en" />
 
 ## What it is for
 
-Pick `dreamzero-droid` for world-action modeling: world-conditioned observations in, predicted actions out. Use it when the catalog marks a WAM route rather than a pure VLA or video model.
+`dreamzero-droid` is a world-action model: it predicts actions conditioned on world observations.
 
-The default 14B server uses two CUDA ranks while the Wan2.2 5B entrypoint can run on one. Checkpoint-controlled Hydra targets are rewritten to and allowlisted within in-tree inference modules, so checkpoint Python is never executed. It is published by NVIDIA (GEAR Lab).
+The 14B model builds on Wan2.1-I2V-14B-480P with the UMT5-XXL text encoder. The default 14B server uses two CUDA ranks while the Wan2.2 5B entrypoint can run on one. Checkpoint-controlled Hydra targets are rewritten to and allowlisted within in-tree inference modules, so checkpoint Python is never executed. It is published by NVIDIA (GEAR Lab).
 
-Catalog tasks include wam, world action model, wam world action modeling, and robot policy. Catalog aliases include `dreamzero-droid`, `dreamzero-agibot`, and `DreamZero-DROID`. Also recorded: `dreamzero-agibot`.
+Tasks: WAM, world action model, WAM world action modeling, and robot policy. Aliases: `dreamzero-droid`, `dreamzero-agibot`, and `DreamZero-DROID`. Other variants: `dreamzero-agibot`.
 
-Recorded evaluation entry points include [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) (World-action modeling quality for embodied control).
+Suggested benchmarks: [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) (World-action modeling quality for embodied control).
 
 ## Runtime contract
 
-Optional `prompt`, `input_path`, `interactions`, `fps`, and `checkpoint_dir`; artifacts `dreamzero_action_trace.json`.
+Inputs `prompt` and `input-path` (bundled samples are used when omitted); options `variant`, `dreamzero-server-port`, `plan-only`, `num-chunks`, and `use-zero-images`; artifacts `dreamzero_action_trace.json`.
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `DreamZeroPipeline`.
 
-Start on `dreamzero-droid`. The family registers 2 catalog variants (cards above): `dreamzero-droid` (`wam.world_action_modeling`) — Runner parity pending; `dreamzero-agibot` (`wam.post_training_base`) — Runner parity pending. Family status: **Runner parity pending**.
+Start with `dreamzero-droid`. The family has 2 variants, selectable in the command builder above: `dreamzero-droid` (`wam.world_action_modeling`) — Runner parity pending; `dreamzero-agibot` (`wam.post_training_base`) — Runner parity pending. Family status: **Runner parity pending**.
 
 Stage DreamZero-DROID or DreamZero-AgiBot under WORLDFOUNDRY_HFD_ROOT; a CUDA 12.9 runtime is required. Choose DROID for real-robot arm data distribution and AgiBot for the AgiBot embodiment.
 
-DreamZero DROID and AgiBot checkpoints are staged under $\{WORLDFOUNDRY_HFD_ROOT\}; the default 14B server uses two CUDA ranks, while the Wan2.2 5B entrypoint can use one.
+Requires CUDA 12.9; the 14B default needs two GPU ranks.
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run dreamzero-droid --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Run `wf run dreamzero-droid --pipeline.task-profile interactive-video` to predict actions.
 
 It runs in the dedicated environment `worldfoundry-dreamzero-cu129` (Python 3.11, CUDA 12.9, torch==2.8.0).
 
-Recorded weight repositories include `GEAR-Dreams/DreamZero-DROID`, `GEAR-Dreams/DreamZero-AgiBot`, and `GEAR-Dreams/DreamZero-DROID` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh dreamzero-droid`. Add `--download` to fetch missing public checkpoints.
+Weights: `GEAR-Dreams/DreamZero-DROID`, `GEAR-Dreams/DreamZero-AgiBot`, and `GEAR-Dreams/DreamZero-DROID` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh dreamzero-droid`. Add `--download` to fetch missing public checkpoints.
 
-Recorded licenses include apache-2.0; status: **Runner parity pending**.
+License: Apache-2.0.
 
 <ModelRelatedRecipes modelId="dreamzero" locale="en" />

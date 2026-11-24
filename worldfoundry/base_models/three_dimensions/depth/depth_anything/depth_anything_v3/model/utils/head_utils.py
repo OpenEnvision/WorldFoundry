@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> model -> utils -> head_utils.py functionality."""
-
-from typing import Tuple, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -85,136 +82,17 @@ def activate_head_gs(out, activation="norm_exp", conf_activation="expp1", conf_d
 class Permute(nn.Module):
     """nn.Module wrapper around Tensor.permute for cleaner nn.Sequential usage."""
 
-    dims: Tuple[int, ...]
+    dims: tuple[int, ...]
 
-    def __init__(self, dims: Tuple[int, ...]) -> None:
-        """Init.
-
-        Args:
-            dims: The dims.
-
-        Returns:
-            The return value.
-        """
+    def __init__(self, dims: tuple[int, ...]) -> None:
         super().__init__()
         self.dims = dims
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         return x.permute(*self.dims)
 
 
-def position_grid_to_embed(
-    pos_grid: torch.Tensor, embed_dim: int, omega_0: float = 100
-) -> torch.Tensor:
-    """
-    Convert 2D position grid (HxWx2) to sinusoidal embeddings (HxWxC)
-
-    Args:
-        pos_grid: Tensor of shape (H, W, 2) containing 2D coordinates
-        embed_dim: Output channel dimension for embeddings
-
-    Returns:
-        Tensor of shape (H, W, embed_dim) with positional embeddings
-    """
-    H, W, grid_dim = pos_grid.shape
-    assert grid_dim == 2
-    pos_flat = pos_grid.reshape(-1, grid_dim)  # Flatten to (H*W, 2)
-
-    # Process x and y coordinates separately
-    emb_x = make_sincos_pos_embed(embed_dim // 2, pos_flat[:, 0], omega_0=omega_0)  # [1, H*W, D/2]
-    emb_y = make_sincos_pos_embed(embed_dim // 2, pos_flat[:, 1], omega_0=omega_0)  # [1, H*W, D/2]
-
-    # Combine and reshape
-    emb = torch.cat([emb_x, emb_y], dim=-1)  # [1, H*W, D]
-
-    return emb.view(H, W, embed_dim)  # [H, W, D]
-
-
-def make_sincos_pos_embed(embed_dim: int, pos: torch.Tensor, omega_0: float = 100) -> torch.Tensor:
-    """
-    This function generates a 1D positional embedding from a given grid using sine and cosine functions. # noqa
-
-    Args:
-    - embed_dim: The embedding dimension.
-    - pos: The position to generate the embedding from.
-
-    Returns:
-    - emb: The generated 1D positional embedding.
-    """
-    assert embed_dim % 2 == 0
-    omega = torch.arange(embed_dim // 2, dtype=torch.float32, device=pos.device)
-    omega /= embed_dim / 2.0
-    omega = 1.0 / omega_0**omega  # (D/2,)
-
-    pos = pos.reshape(-1)  # (M,)
-    out = torch.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
-
-    emb_sin = torch.sin(out)  # (M, D/2)
-    emb_cos = torch.cos(out)  # (M, D/2)
-
-    emb = torch.cat([emb_sin, emb_cos], dim=1)  # (M, D)
-    return emb.float()
-
-
 # Inspired by https://github.com/microsoft/moge
-
-
-def create_uv_grid(
-    width: int,
-    height: int,
-    aspect_ratio: float = None,
-    dtype: torch.dtype = None,
-    device: torch.device = None,
-) -> torch.Tensor:
-    """
-    Create a normalized UV grid of shape (width, height, 2).
-
-    The grid spans horizontally and vertically according to an aspect ratio,
-    ensuring the top-left corner is at (-x_span, -y_span) and the bottom-right
-    corner is at (x_span, y_span), normalized by the diagonal of the plane.
-
-    Args:
-        width (int): Number of points horizontally.
-        height (int): Number of points vertically.
-        aspect_ratio (float, optional): Width-to-height ratio. Defaults to width/height.
-        dtype (torch.dtype, optional): Data type of the resulting tensor.
-        device (torch.device, optional): Device on which the tensor is created.
-
-    Returns:
-        torch.Tensor: A (width, height, 2) tensor of UV coordinates.
-    """
-    # Derive aspect ratio if not explicitly provided
-    if aspect_ratio is None:
-        aspect_ratio = float(width) / float(height)
-
-    # Compute normalized spans for X and Y
-    diag_factor = (aspect_ratio**2 + 1.0) ** 0.5
-    span_x = aspect_ratio / diag_factor
-    span_y = 1.0 / diag_factor
-
-    # Establish the linspace boundaries
-    left_x = -span_x * (width - 1) / width
-    right_x = span_x * (width - 1) / width
-    top_y = -span_y * (height - 1) / height
-    bottom_y = span_y * (height - 1) / height
-
-    # Generate 1D coordinates
-    x_coords = torch.linspace(left_x, right_x, steps=width, dtype=dtype, device=device)
-    y_coords = torch.linspace(top_y, bottom_y, steps=height, dtype=dtype, device=device)
-
-    # Create 2D meshgrid (width x height) and stack into UV
-    uu, vv = torch.meshgrid(x_coords, y_coords, indexing="xy")
-    uv_grid = torch.stack((uu, vv), dim=-1)
-
-    return uv_grid
 
 
 # -----------------------------------------------------------------------------
@@ -222,8 +100,8 @@ def create_uv_grid(
 # -----------------------------------------------------------------------------
 def custom_interpolate(
     x: torch.Tensor,
-    size: Union[Tuple[int, int], None] = None,
-    scale_factor: Union[float, None] = None,
+    size: tuple[int, int] | None = None,
+    scale_factor: float | None = None,
     mode: str = "bilinear",
     align_corners: bool = True,
 ) -> torch.Tensor:
@@ -239,10 +117,7 @@ def custom_interpolate(
 
     if total > INT_MAX:
         chunks = torch.chunk(x, chunks=(total // INT_MAX) + 1, dim=0)
-        outs = [
-            nn.functional.interpolate(c, size=size, mode=mode, align_corners=align_corners)
-            for c in chunks
-        ]
+        outs = [nn.functional.interpolate(c, size=size, mode=mode, align_corners=align_corners) for c in chunks]
         return torch.cat(outs, dim=0).contiguous()
 
     return nn.functional.interpolate(x, size=size, mode=mode, align_corners=align_corners)

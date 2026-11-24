@@ -7,7 +7,6 @@ import time
 from collections.abc import Callable
 from typing import TypeVar
 
-
 ResponseT = TypeVar("ResponseT")
 
 

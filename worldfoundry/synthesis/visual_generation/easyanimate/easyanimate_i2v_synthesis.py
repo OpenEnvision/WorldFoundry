@@ -22,6 +22,8 @@ class EasyAnimateI2VSynthesis(RuntimeVideoSynthesis):
     MODEL_NAME = "easyanimate_i2v"  # Identifier for the EasyAnimate I2V model.
     GENERATION_TYPE = "i2v"  # Specifies the type of generation, in this case, Image-to-Video.
     RUNTIME_CLS = EasyAnimate  # The underlying EasyAnimate runtime class used for synthesis.
-    PRIMARY_PATH_KEY = "model_path"  # The key in the runtime configuration pointing to the primary model checkpoint path.
+    PRIMARY_PATH_KEY = (
+        "model_path"  # The key in the runtime configuration pointing to the primary model checkpoint path.
+    )
     RUNTIME_CONFIG_PATH = "models/runtime/configs/easyanimate/runtime_defaults.yaml"  # Default path to the runtime configuration YAML file.
     RUNTIME_CONFIG_KEY = MODEL_NAME  # The specific key within the runtime configuration to load for this model.

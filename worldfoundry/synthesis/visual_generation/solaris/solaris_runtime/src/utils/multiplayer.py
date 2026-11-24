@@ -65,9 +65,7 @@ def handle_multiplayer_input(
     # (actions, visual_context) dimensions.
     if multiplayer_method == "concat_c":
         # Concatenate players along channel dimension for video/cond.
-        cond_concat_BPFHWC = rearrange(
-            cond_concat_BPFHWC, "b p f h w c -> b 1 f h w (p c)"
-        )
+        cond_concat_BPFHWC = rearrange(cond_concat_BPFHWC, "b p f h w c -> b 1 f h w (p c)")
         if video_BPFHWC is not None:
             video_BPFHWC = rearrange(video_BPFHWC, "b p f h w c -> b 1 f h w (p c)")
 
@@ -102,9 +100,7 @@ def handle_multiplayer_output(
     """
     if multiplayer_method == "concat_c":
         # Split concatenated channels back into player dimension
-        video_BPFHWC = rearrange(
-            video_BPFHWC, "b 1 f h w (p c) -> b p f h w c", p=num_players
-        )
+        video_BPFHWC = rearrange(video_BPFHWC, "b 1 f h w (p c) -> b p f h w c", p=num_players)
 
     # For multiplayer_method == "multiplayer_attn", return unchanged
     return video_BPFHWC

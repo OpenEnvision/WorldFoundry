@@ -1,34 +1,22 @@
 # SPDX-License-Identifier: MIT
 # Derived from FastWAM official source revision 45d8e1458921d83f8ad6cf9ce993d371208dabd0.
+import logging
 import os
+from typing import Any
+
 import torch
 import torch.nn as nn
-from typing import Any, Dict, Optional
 
-import logging
+from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.multiagent_rope import (
+    precompute_freqs_cis,
+    sinusoidal_embedding_1d,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.wam import WamDiTBlock
 
 from .gradient import gradient_checkpoint_forward
-from .wan_video_dit import (
-    DiTBlock,
-    sinusoidal_embedding_1d,
-    precompute_freqs_cis,
-)
+from .wan_video_dit import flash_attention, rope_apply
 
 logger = logging.getLogger(__name__)
-
-
-class ActionHead(nn.Module):
-    def __init__(self, hidden_dim: int, out_dim: int, eps: float):
-        super().__init__()
-        self.norm = nn.LayerNorm(hidden_dim, eps=eps, elementwise_affine=False)
-        self.proj = nn.Linear(hidden_dim, out_dim)
-        self.modulation = nn.Parameter(torch.randn(1, 2, hidden_dim) / hidden_dim**0.5)
-
-    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        shift, scale = (self.modulation.to(dtype=t.dtype, device=t.device) + t.unsqueeze(1)).chunk(2, dim=1)
-        shift = shift.squeeze(1)
-        scale = scale.squeeze(1)
-        return self.proj(self.norm(x) * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1))
 
 
 class ActionDiT(nn.Module):
@@ -87,12 +75,14 @@ class ActionDiT(nn.Module):
         self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(hidden_dim, hidden_dim * 6))
         self.blocks = nn.ModuleList(
             [
-                DiTBlock(
+                WamDiTBlock(
                     hidden_dim=hidden_dim,
                     attn_head_dim=attn_head_dim,
                     num_heads=num_heads,
                     ffn_dim=ffn_dim,
                     eps=eps,
+                    attention_fn=flash_attention,
+                    rope_fn=rope_apply,
                 )
                 for _ in range(num_layers)
             ]
@@ -104,11 +94,7 @@ class ActionDiT(nn.Module):
 
     @classmethod
     def backbone_key_set(cls, keys) -> set[str]:
-        return {
-            key
-            for key in keys
-            if not any(key.startswith(prefix) for prefix in cls.ACTION_BACKBONE_SKIP_PREFIXES)
-        }
+        return {key for key in keys if not any(key.startswith(prefix) for prefix in cls.ACTION_BACKBONE_SKIP_PREFIXES)}
 
     @classmethod
     def from_pretrained(
@@ -131,14 +117,13 @@ class ActionDiT(nn.Module):
             logger.info("No `action_dit_pretrained_path` provided, initializing ActionDiT with random weights.")
             return cls(**action_dit_config).to(device=device, dtype=torch_dtype)
         from pathlib import Path
+
         p = Path(action_dit_pretrained_path)
         if not p.is_absolute():
             p = Path(__file__).resolve().parents[4] / p
         action_dit_pretrained_path = str(p)
         if not os.path.isfile(action_dit_pretrained_path):
-            raise FileNotFoundError(
-                f"`action_dit_pretrained_path` does not exist: {action_dit_pretrained_path}"
-            )
+            raise FileNotFoundError(f"`action_dit_pretrained_path` does not exist: {action_dit_pretrained_path}")
 
         action_cfg = dict(action_dit_config)
         action_expert = cls(**action_cfg).to(device=device, dtype=torch_dtype)
@@ -153,9 +138,7 @@ class ActionDiT(nn.Module):
             weights_only=True,
         )
         if not isinstance(payload, dict):
-            raise ValueError(
-                f"Invalid action backbone payload type from {action_dit_pretrained_path}: {type(payload)}"
-            )
+            raise ValueError(f"Invalid action backbone payload type from {action_dit_pretrained_path}: {type(payload)}")
 
         policy = payload.get("policy", {})
         if policy:
@@ -185,15 +168,13 @@ class ActionDiT(nn.Module):
                     )
             elif int(got_value) != int(expected_value):
                 raise ValueError(
-                    f"`meta.{key}` mismatch in {action_dit_pretrained_path}: "
-                    f"expected {expected_value}, got {got_value}"
+                    f"`meta.{key}` mismatch in {action_dit_pretrained_path}: expected {expected_value}, got {got_value}"
                 )
 
         backbone_state_dict = payload.get("backbone_state_dict")
         if not isinstance(backbone_state_dict, dict):
             raise ValueError(
-                f"`backbone_state_dict` must be a dict in {action_dit_pretrained_path}, "
-                f"got {type(backbone_state_dict)}"
+                f"`backbone_state_dict` must be a dict in {action_dit_pretrained_path}, got {type(backbone_state_dict)}"
             )
 
         provided_keys = set(backbone_state_dict.keys())
@@ -236,22 +217,16 @@ class ActionDiT(nn.Module):
         action_tokens: torch.Tensor,
         timestep: torch.Tensor,
         context: torch.Tensor,
-        context_mask: Optional[torch.Tensor] = None,
-    ) -> Dict[str, Any]:
+        context_mask: torch.Tensor | None = None,
+    ) -> dict[str, Any]:
         if action_tokens.ndim != 3:
-            raise ValueError(
-                f"`action_tokens` must be 3D [B, T, action_dim], got shape {tuple(action_tokens.shape)}"
-            )
+            raise ValueError(f"`action_tokens` must be 3D [B, T, action_dim], got shape {tuple(action_tokens.shape)}")
         if action_tokens.shape[2] != self.action_dim:
-            raise ValueError(
-                f"`action_tokens` last dim must be {self.action_dim}, got {action_tokens.shape[2]}"
-            )
+            raise ValueError(f"`action_tokens` last dim must be {self.action_dim}, got {action_tokens.shape[2]}")
         if timestep.ndim != 1:
             raise ValueError(f"`timestep` must be 1D [B] or [1], got shape {tuple(timestep.shape)}")
         if context.ndim != 3:
-            raise ValueError(
-                f"`context` must be 3D [B, L, D], got shape {tuple(context.shape)}"
-            )
+            raise ValueError(f"`context` must be 3D [B, L, D], got shape {tuple(context.shape)}")
 
         batch_size = action_tokens.shape[0]
         if context.shape[0] != batch_size:
@@ -259,18 +234,14 @@ class ActionDiT(nn.Module):
                 f"Batch mismatch between action tokens and text context: {batch_size} vs {context.shape[0]}"
             )
         if timestep.shape[0] not in (1, batch_size):
-            raise ValueError(
-                f"`timestep` length must be 1 or batch_size({batch_size}), got {timestep.shape[0]}"
-            )
+            raise ValueError(f"`timestep` length must be 1 or batch_size({batch_size}), got {timestep.shape[0]}")
         if timestep.shape[0] == 1 and batch_size > 1:
             if self.training:
                 raise ValueError("During training, action timestep length must match batch_size.")
             timestep = timestep.expand(batch_size)
 
         if context_mask is None:
-            context_mask = torch.ones(
-                (batch_size, context.shape[1]), dtype=torch.bool, device=context.device
-            )
+            context_mask = torch.ones((batch_size, context.shape[1]), dtype=torch.bool, device=context.device)
         else:
             if context_mask.ndim != 2:
                 raise ValueError(f"`context_mask` must be 2D [B, L], got shape {tuple(context_mask.shape)}")
@@ -281,9 +252,7 @@ class ActionDiT(nn.Module):
 
         seq_len = action_tokens.shape[1]
         if seq_len > self.freqs.shape[0]:
-            raise ValueError(
-                f"Action token length {seq_len} exceeds RoPE cache {self.freqs.shape[0]}."
-            )
+            raise ValueError(f"Action token length {seq_len} exceeds RoPE cache {self.freqs.shape[0]}.")
 
         t = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, timestep))
         t_mod = self.time_projection(t).unflatten(1, (6, self.hidden_dim))
@@ -306,7 +275,7 @@ class ActionDiT(nn.Module):
             },
         }
 
-    def post_dit(self, tokens: torch.Tensor, pre_state: Dict[str, Any]) -> torch.Tensor:
+    def post_dit(self, tokens: torch.Tensor, pre_state: dict[str, Any]) -> torch.Tensor:
         return self.head(tokens)
 
     def forward(
@@ -314,7 +283,7 @@ class ActionDiT(nn.Module):
         action_tokens: torch.Tensor,
         timestep: torch.Tensor,
         context: torch.Tensor,
-        context_mask: Optional[torch.Tensor] = None,
+        context_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         pre_state = self.pre_dit(
             action_tokens=action_tokens,

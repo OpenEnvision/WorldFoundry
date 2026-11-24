@@ -3,18 +3,18 @@ title: SimplerEnv
 description: "真机策略的 real-to-sim 评测（SIMPLER）。Google Robot 与 WidowX/Bridge 场景；WorldFoundry 导入官方 rollout。"
 ---
 
-SimplerEnv（SIMPLER — Simulated Manipulation Policy Evaluation for Real Robot Setups）是加州大学圣迭戈分校与 Google DeepMind（联合斯坦福、伯克利）的 **real-to-sim** 评测。ManiSkill2 / SAPIEN 场景经过标定，让 **RT-1**、**RT-1-X**、**Octo** 等策略在仿真里的排序，尽量对上对应的 **Google Robot** 与 **WidowX / Bridge** 真机排序。套件的要点是那份相关性，不是又一套厨房资产。
+SimplerEnv（SIMPLER — Simulated Manipulation Policy Evaluation for Real Robot Setups）是加州大学圣迭戈分校与 Google DeepMind（联合斯坦福、伯克利）的 **real-to-sim** 评测。ManiSkill2 / SAPIEN 场景经过标定，让 **RT-1**、**RT-1-X**、**Octo** 等策略在仿真里的排序，尽量对上对应的 **Google Robot** 与 **WidowX / Bridge** 真机排序。
 
 论文：[OpenReview](https://openreview.net/forum?id=LZh48DTg71)。项目：[simpler-env.github.io](https://simpler-env.github.io/)。代码：[simpler-env/SimplerEnv](https://github.com/simpler-env/SimplerEnv)（MIT）。
 
-WorldFoundry **不跑**这些场景。它把官方 rollout 导出归一进 scorecard。上游 rollout 仍需要 ManiSkill2/SAPIEN 栈和本体资产。仓库镜像：`cache/vla_va_wam/repos/simpler-env--SimplerEnv`。
+WorldFoundry **不跑**这些场景。它将官方 rollout 导出归一化后写入 scorecard。上游 rollout 需要 ManiSkill2/SAPIEN 栈和本体资产。
 
 <BenchmarkPageSections id="simpler-env" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id simpler-env \
   --mode official-validation \
   --official-results-path <official_results.json> \

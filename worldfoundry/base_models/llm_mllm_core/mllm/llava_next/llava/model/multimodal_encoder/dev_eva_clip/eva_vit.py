@@ -6,18 +6,18 @@
 # https://github.com/facebookresearch/dino
 # --------------------------------------------------------'
 # not tested yet
-import math
-from transformers import CLIPImageProcessor
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.utils.checkpoint as checkpoint
-from timm.models.layers import drop_path, to_2tuple, trunc_normal_
+from transformers import CLIPImageProcessor
+
+# isort: split
 from .eva_clip import create_model_and_transforms, get_model_config
-import torch
-import torchvision
+
+# isort: split
 import time
+
+import torchvision
 
 from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.utils import rank0_print
 
@@ -43,17 +43,21 @@ class EvaViTWrapper(nn.Module):
             self.load_model()
         elif getattr(args, "unfreeze_mm_vision_tower", False):
             # TODO: better detector is needed.
-            rank0_print(f"The checkpoint seems to contain `vision_tower` weights: `unfreeze_mm_vision_tower`: True.")
+            rank0_print("The checkpoint seems to contain `vision_tower` weights: `unfreeze_mm_vision_tower`: True.")
             self.load_model()
         elif hasattr(args, "mm_tunable_parts") and "mm_vision_tower" in args.mm_tunable_parts:
-            rank0_print(f"The checkpoint seems to contain `vision_tower` weights: `mm_tunable_parts` contains `mm_vision_tower`.")
+            rank0_print(
+                "The checkpoint seems to contain `vision_tower` weights: `mm_tunable_parts` contains `mm_vision_tower`."
+            )
             self.load_model()
 
     def load_model(self):
         rank0_print(f"Loading: {self.vision_tower_name}")
         rank0_print(f"Pretrained: {self.pretrained}")
         time_start = time.time()
-        model, _, image_processor = create_model_and_transforms(self.vision_tower_name, self.pretrained, force_custom_clip=True, precision="fp16")
+        model, _, image_processor = create_model_and_transforms(
+            self.vision_tower_name, self.pretrained, force_custom_clip=True, precision="fp16"
+        )
         time_end = time.time()
         rank0_print(f"Loaded: {self.vision_tower_name} in {time_end - time_start:.2f}s")
         self.device = next(model.parameters()).device
@@ -61,8 +65,10 @@ class EvaViTWrapper(nn.Module):
         if self.device.type != "meta":
             model = model.to("cuda")
         self.vision_tower = model.visual
-        resize_transform = [t for t in image_processor.transforms if isinstance(t, torchvision.transforms.Resize)][0]
-        normalize_transform = [t for t in image_processor.transforms if isinstance(t, torchvision.transforms.Normalize)][0]
+        resize_transform = [t for t in image_processor.transforms if isinstance(t, torchvision.transforms.Resize)][0]  # noqa: RUF015 - Keeps eager list construction and IndexError.
+        normalize_transform = [  # noqa: RUF015 - Keeps eager list construction and IndexError.
+            t for t in image_processor.transforms if isinstance(t, torchvision.transforms.Normalize)
+        ][0]
         self.resize_transform_size = resize_transform.size
         self.image_processor = CLIPImageProcessor.from_pretrained(
             "openai/clip-vit-large-patch14",

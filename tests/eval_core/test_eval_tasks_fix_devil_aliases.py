@@ -11,8 +11,8 @@ official DEVIL result keys.
 
 from __future__ import annotations
 
-from worldfoundry.evaluation.tasks.execution.framework import official_runner as ors
-from worldfoundry.evaluation.tasks.execution.runners.devil_dynamics.run_devil_dynamics_official_runner import (
+from worldfoundry.evals.tasks.execution.framework import official_runner as ors
+from worldfoundry.evals.tasks.execution.runners.devil_dynamics.run_devil_dynamics_official_runner import (
     CONFIG,
     DEVIL_KEY_TO_METRIC,
 )

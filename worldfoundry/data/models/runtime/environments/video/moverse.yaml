@@ -48,8 +48,6 @@ pip_packages:
 - uvicorn>=0.30.0
 - python-multipart
 - termcolor
-pythonpath_dirs:
-- worldfoundry/synthesis/visual_generation/moverse/moverse_runtime
 validation_imports:
 - torch
 - torchvision

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from worldfoundry.core.execution.process import package_module_command
+
 RUNTIME_DIR = Path(__file__).resolve().parent
 OFFICIAL_ENTRYPOINT = RUNTIME_DIR / "isolated_nwm_infer.py"
 BLOCKED_REASON = (
@@ -25,15 +27,15 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile):
         if not _option(options, key):
             missing.append({"kind": "option", "path": key, "reason": f"required NWM option `{key}` is not set"})
     if entrypoint is None or not Path(entrypoint).is_file():
-        missing.append({"kind": "entrypoint", "path": str(entrypoint or ""), "reason": "NWM isolated_nwm_infer.py is missing"})
+        missing.append(
+            {"kind": "entrypoint", "path": str(entrypoint or ""), "reason": "NWM isolated_nwm_infer.py is missing"}
+        )
     return missing
 
 
 def build_command(context):
     options = dict(context.get("options") or {})
-    return [
-        context["python"],
-        context["entrypoint"],
+    args = [
         "--output_dir",
         context["output_dir"],
         "--exp",
@@ -57,6 +59,14 @@ def build_command(context):
         "--gt",
         str(options.get("gt", 0)),
     ]
+    vae_path = _option(options, "vae_path", "sd_vae")
+    if vae_path is not None:
+        args.extend(["--vae_path", vae_path])
+    if options.get("seed") is not None:
+        args.extend(["--seed", str(options["seed"])])
+    return package_module_command(
+        "worldfoundry.synthesis.visual_generation.nwm.isolated_nwm_infer", args, python_executable=context["python"]
+    )
 
 
 __all__ = ["BLOCKED_REASON", "OFFICIAL_ENTRYPOINT", "RUNTIME_DIR", "build_command", "missing_requirements"]

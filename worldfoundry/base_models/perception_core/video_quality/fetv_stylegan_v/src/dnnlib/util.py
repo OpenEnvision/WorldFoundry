@@ -1,4 +1,4 @@
-﻿# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
 #
 # NVIDIA CORPORATION and its licensors retain all intellectual property
 # and proprietary rights in and to this software, related documentation
@@ -10,28 +10,27 @@
 
 import ctypes
 import fnmatch
+import glob
+import hashlib
+import html
 import importlib
 import inspect
-import numpy as np
-import os
-import shutil
-import sys
-import types
 import io
+import os
 import pickle
 import re
-import requests
-import html
-import hashlib
-import glob
+import shutil
+import sys
 import tempfile
+import types
 import urllib
 import urllib.request
 import uuid
-
 from distutils.util import strtobool
-from typing import Any, List, Tuple, Union, Dict
+from typing import Any
 
+import numpy as np
+import requests
 
 # Util classes
 # ------------------------------------------------------------------------------------------
@@ -44,7 +43,7 @@ class EasyDict(dict):
         try:
             return self[name]
         except KeyError:
-            raise AttributeError(name)
+            raise AttributeError(name)  # noqa: B904 - Keeps the implicit exception context.
 
     def __setattr__(self, name: str, value: Any) -> None:
         self[name] = value
@@ -52,18 +51,18 @@ class EasyDict(dict):
     def __delattr__(self, name: str) -> None:
         del self[name]
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {k: (v.to_dict() if isinstance(v, EasyDict) else v) for (k, v) in self.items()}
 
 
-class Logger(object):
+class Logger:
     """Redirect stderr to stdout, optionally print stdout to a file, and optionally force flushing on both stdout and the file."""
 
-    def __init__(self, file_name: str = None, file_mode: str = "w", should_flush: bool = True):
+    def __init__(self, file_name: str | None = None, file_mode: str = "w", should_flush: bool = True):
         self.file = None
 
         if file_name is not None:
-            self.file = open(file_name, file_mode)
+            self.file = open(file_name, file_mode)  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
 
         self.should_flush = should_flush
         self.stdout = sys.stdout
@@ -78,11 +77,11 @@ class Logger(object):
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         self.close()
 
-    def write(self, text: Union[str, bytes]) -> None:
+    def write(self, text: str | bytes) -> None:
         """Write text to stdout (and a file) and optionally flush."""
         if isinstance(text, bytes):
             text = text.decode()
-        if len(text) == 0: # workaround for a bug in VSCode debugger: sys.stdout.write(''); sys.stdout.flush() => crash
+        if len(text) == 0:  # workaround for a bug in VSCode debugger: sys.stdout.write(''); sys.stdout.flush() => crash
             return
 
         if self.file is not None:
@@ -120,50 +119,53 @@ class Logger(object):
 
 _dnnlib_cache_dir = None
 
+
 def set_cache_dir(path: str) -> None:
     global _dnnlib_cache_dir
     _dnnlib_cache_dir = path
 
+
 def make_cache_dir_path(*paths: str) -> str:
     if _dnnlib_cache_dir is not None:
         return os.path.join(_dnnlib_cache_dir, *paths)
-    if 'DNNLIB_CACHE_DIR' in os.environ:
-        return os.path.join(os.environ['DNNLIB_CACHE_DIR'], *paths)
-    if 'HOME' in os.environ:
-        return os.path.join(os.environ['HOME'], '.cache', 'dnnlib', *paths)
-    if 'USERPROFILE' in os.environ:
-        return os.path.join(os.environ['USERPROFILE'], '.cache', 'dnnlib', *paths)
-    return os.path.join(tempfile.gettempdir(), '.cache', 'dnnlib', *paths)
+    if "DNNLIB_CACHE_DIR" in os.environ:
+        return os.path.join(os.environ["DNNLIB_CACHE_DIR"], *paths)
+    if "HOME" in os.environ:
+        return os.path.join(os.environ["HOME"], ".cache", "dnnlib", *paths)
+    if "USERPROFILE" in os.environ:
+        return os.path.join(os.environ["USERPROFILE"], ".cache", "dnnlib", *paths)
+    return os.path.join(tempfile.gettempdir(), ".cache", "dnnlib", *paths)
+
 
 # Small util functions
 # ------------------------------------------------------------------------------------------
 
 
-def format_time(seconds: Union[int, float]) -> str:
+def format_time(seconds: int | float) -> str:
     """Convert the seconds to human readable string with days, hours, minutes and seconds."""
     s = int(np.rint(seconds))
 
     if s < 60:
-        return "{0}s".format(s)
+        return f"{s}s"
     elif s < 60 * 60:
-        return "{0}m {1:02}s".format(s // 60, s % 60)
+        return f"{s // 60}m {s % 60:02}s"
     elif s < 24 * 60 * 60:
-        return "{0}h {1:02}m {2:02}s".format(s // (60 * 60), (s // 60) % 60, s % 60)
+        return f"{s // (60 * 60)}h {(s // 60) % 60:02}m {s % 60:02}s"
     else:
-        return "{0}d {1:02}h {2:02}m".format(s // (24 * 60 * 60), (s // (60 * 60)) % 24, (s // 60) % 60)
+        return f"{s // (24 * 60 * 60)}d {(s // (60 * 60)) % 24:02}h {(s // 60) % 60:02}m"
 
 
 def ask_yes_no(question: str) -> bool:
     """Ask the user the question until the user inputs a valid answer."""
     while True:
         try:
-            print("{0} [y/n]".format(question))
+            print(f"{question} [y/n]")
             return strtobool(input().lower())
         except ValueError:
             pass
 
 
-def tuple_product(t: Tuple) -> Any:
+def tuple_product(t: tuple) -> Any:
     """Calculate the product of the tuple elements."""
     result = 1
 
@@ -183,11 +185,11 @@ _str_to_ctype = {
     "int32": ctypes.c_int32,
     "int64": ctypes.c_int64,
     "float32": ctypes.c_float,
-    "float64": ctypes.c_double
+    "float64": ctypes.c_double,
 }
 
 
-def get_dtype_and_ctype(type_obj: Any) -> Tuple[np.dtype, Any]:
+def get_dtype_and_ctype(type_obj: Any) -> tuple[np.dtype, Any]:
     """Given a type name string (or an object having a __name__ attribute), return matching Numpy and ctypes types that have the same size in bytes."""
     type_str = None
 
@@ -200,7 +202,7 @@ def get_dtype_and_ctype(type_obj: Any) -> Tuple[np.dtype, Any]:
     else:
         raise RuntimeError("Cannot infer type name from input")
 
-    assert type_str in _str_to_ctype.keys()
+    assert type_str in _str_to_ctype
 
     my_dtype = np.dtype(type_str)
     my_ctype = _str_to_ctype[type_str]
@@ -215,14 +217,15 @@ def is_pickleable(obj: Any) -> bool:
         with io.BytesIO() as stream:
             pickle.dump(obj, stream)
         return True
-    except:
+    except BaseException:
         return False
 
 
 # Functionality to import modules/objects by name, and call functions by name
 # ------------------------------------------------------------------------------------------
 
-def get_module_from_obj_name(obj_name: str) -> Tuple[types.ModuleType, str]:
+
+def get_module_from_obj_name(obj_name: str) -> tuple[types.ModuleType, str]:
     """Searches for the underlying module behind the name to some python object.
     Returns the module and the object name (original name with module part removed)."""
 
@@ -237,16 +240,16 @@ def get_module_from_obj_name(obj_name: str) -> Tuple[types.ModuleType, str]:
     # try each alternative in turn
     for module_name, local_obj_name in name_pairs:
         try:
-            module = importlib.import_module(module_name) # may raise ImportError
-            get_obj_from_module(module, local_obj_name) # may raise AttributeError
+            module = importlib.import_module(module_name)  # may raise ImportError
+            get_obj_from_module(module, local_obj_name)  # may raise AttributeError
             return module, local_obj_name
-        except:
+        except BaseException:
             pass
 
     # maybe some of the modules themselves contain errors?
     for module_name, _local_obj_name in name_pairs:
         try:
-            importlib.import_module(module_name) # may raise ImportError
+            importlib.import_module(module_name)  # may raise ImportError
         except ImportError:
             if not str(sys.exc_info()[1]).startswith("No module named '" + module_name + "'"):
                 raise
@@ -254,8 +257,8 @@ def get_module_from_obj_name(obj_name: str) -> Tuple[types.ModuleType, str]:
     # maybe the requested attribute is missing?
     for module_name, local_obj_name in name_pairs:
         try:
-            module = importlib.import_module(module_name) # may raise ImportError
-            get_obj_from_module(module, local_obj_name) # may raise AttributeError
+            module = importlib.import_module(module_name)  # may raise ImportError
+            get_obj_from_module(module, local_obj_name)  # may raise AttributeError
         except ImportError:
             pass
 
@@ -265,7 +268,7 @@ def get_module_from_obj_name(obj_name: str) -> Tuple[types.ModuleType, str]:
 
 def get_obj_from_module(module: types.ModuleType, obj_name: str) -> Any:
     """Traverses the object name and returns the last (rightmost) python object."""
-    if obj_name == '':
+    if obj_name == "":
         return module
     obj = module
     for part in obj_name.split("."):
@@ -279,7 +282,7 @@ def get_obj_by_name(name: str) -> Any:
     return get_obj_from_module(module, obj_name)
 
 
-def call_func_by_name(*args, func_name: str = None, **kwargs) -> Any:
+def call_func_by_name(*args, func_name: str | None = None, **kwargs) -> Any:
     """Finds the python object with the given name and calls it as a function."""
     assert func_name is not None
     func_obj = get_obj_by_name(func_name)
@@ -287,7 +290,7 @@ def call_func_by_name(*args, func_name: str = None, **kwargs) -> Any:
     return func_obj(*args, **kwargs)
 
 
-def construct_class_by_name(*args, class_name: str = None, **kwargs) -> Any:
+def construct_class_by_name(*args, class_name: str | None = None, **kwargs) -> Any:
     """Finds the python class with the given name and constructs it with the given arguments."""
     return call_func_by_name(*args, func_name=class_name, **kwargs)
 
@@ -307,7 +310,7 @@ def get_top_level_function_name(obj: Any) -> str:
     """Return the fully-qualified name of a top-level function."""
     assert is_top_level_function(obj)
     module = obj.__module__
-    if module == '__main__':
+    if module == "__main__":
         module = os.path.splitext(os.path.basename(sys.modules[module].__file__))[0]
     return module + "." + obj.__name__
 
@@ -315,7 +318,10 @@ def get_top_level_function_name(obj: Any) -> str:
 # File system helpers
 # ------------------------------------------------------------------------------------------
 
-def list_dir_recursively_with_ignore(dir_path: str, ignores: List[str] = None, add_base_to_relative: bool = False) -> List[Tuple[str, str]]:
+
+def list_dir_recursively_with_ignore(
+    dir_path: str, ignores: list[str] | None = None, add_base_to_relative: bool = False
+) -> list[tuple[str, str]]:
     """List all files recursively in a given directory while ignoring given file and directory names.
     Returns list of tuples containing both absolute and relative paths."""
     assert os.path.isdir(dir_path)
@@ -343,12 +349,12 @@ def list_dir_recursively_with_ignore(dir_path: str, ignores: List[str] = None, a
             relative_paths = [os.path.join(base_name, p) for p in relative_paths]
 
         assert len(absolute_paths) == len(relative_paths)
-        result += zip(absolute_paths, relative_paths)
+        result += zip(absolute_paths, relative_paths, strict=False)
 
     return result
 
 
-def copy_files_and_create_dirs(files: List[Tuple[str, str]]) -> None:
+def copy_files_and_create_dirs(files: list[tuple[str, str]]) -> None:
     """Takes in a list of tuples of (src, dst) paths and copies files.
     Will create all necessary directories."""
     for file in files:
@@ -364,31 +370,39 @@ def copy_files_and_create_dirs(files: List[Tuple[str, str]]) -> None:
 # URL helpers
 # ------------------------------------------------------------------------------------------
 
+
 def is_url(obj: Any, allow_file_urls: bool = False) -> bool:
     """Determine whether the given object is a valid URL string."""
-    if not isinstance(obj, str) or not "://" in obj:
+    if not isinstance(obj, str) or "://" not in obj:
         return False
-    if allow_file_urls and obj.startswith('file://'):
+    if allow_file_urls and obj.startswith("file://"):
         return True
     try:
         res = requests.compat.urlparse(obj)
-        if not res.scheme or not res.netloc or not "." in res.netloc:
+        if not res.scheme or not res.netloc or "." not in res.netloc:
             return False
         res = requests.compat.urlparse(requests.compat.urljoin(obj, "/"))
-        if not res.scheme or not res.netloc or not "." in res.netloc:
+        if not res.scheme or not res.netloc or "." not in res.netloc:
             return False
-    except:
+    except BaseException:
         return False
     return True
 
 
-def open_url(url: str, cache_dir: str = None, num_attempts: int = 10, verbose: bool = True, return_filename: bool = False, cache: bool = True) -> Any:
+def open_url(
+    url: str,
+    cache_dir: str | None = None,
+    num_attempts: int = 10,
+    verbose: bool = True,
+    return_filename: bool = False,
+    cache: bool = True,
+) -> Any:
     """Download the given URL and return a binary-mode file object to access the data."""
     assert num_attempts >= 1
     assert not (return_filename and (not cache))
 
     # Doesn't look like an URL scheme so interpret it as a local filename.
-    if not re.match('^[a-z]+://', url):
+    if not re.match("^[a-z]+://", url):
         return url if return_filename else open(url, "rb")
 
     # Handle file URLs.  This code handles unusual file:// patterns that
@@ -405,9 +419,9 @@ def open_url(url: str, cache_dir: str = None, num_attempts: int = 10, verbose: b
     # Some internet resources suggest using urllib.request.url2pathname() but
     # but that converts forward slashes to backslashes and this causes
     # its own set of problems.
-    if url.startswith('file://'):
+    if url.startswith("file://"):
         filename = urllib.parse.urlparse(url).path
-        if re.match(r'^/[a-zA-Z]:', filename):
+        if re.match(r"^/[a-zA-Z]:", filename):
             filename = filename[1:]
         return filename if return_filename else open(filename, "rb")
 
@@ -415,7 +429,7 @@ def open_url(url: str, cache_dir: str = None, num_attempts: int = 10, verbose: b
 
     # Lookup from cache.
     if cache_dir is None:
-        cache_dir = make_cache_dir_path('downloads')
+        cache_dir = make_cache_dir_path("downloads")
 
     url_md5 = hashlib.md5(url.encode("utf-8")).hexdigest()
     if cache:
@@ -429,23 +443,25 @@ def open_url(url: str, cache_dir: str = None, num_attempts: int = 10, verbose: b
     url_data = None
     with requests.Session() as session:
         if verbose:
-            print("Downloading %s ..." % url, end="", flush=True)
+            print("Downloading %s ..." % url, end="", flush=True)  # noqa: UP031 - Keeps printf conversions that depend on argument types.
         for attempts_left in reversed(range(num_attempts)):
             try:
                 with session.get(url) as res:
                     res.raise_for_status()
                     if len(res.content) == 0:
-                        raise IOError("No data received")
+                        raise OSError("No data received")
 
                     if len(res.content) < 8192:
                         content_str = res.content.decode("utf-8")
                         if "download_warning" in res.headers.get("Set-Cookie", ""):
-                            links = [html.unescape(link) for link in content_str.split('"') if "export=download" in link]
+                            links = [
+                                html.unescape(link) for link in content_str.split('"') if "export=download" in link
+                            ]
                             if len(links) == 1:
                                 url = requests.compat.urljoin(url, links[0])
-                                raise IOError("Google Drive virus checker nag")
+                                raise OSError("Google Drive virus checker nag")
                         if "Google Drive - Quota exceeded" in content_str:
-                            raise IOError("Google Drive download quota exceeded -- please try again later")
+                            raise OSError("Google Drive download quota exceeded -- please try again later")
 
                     match = re.search(r'filename="([^"]*)"', res.headers.get("Content-Disposition", ""))
                     url_name = match[1] if match else url
@@ -455,7 +471,7 @@ def open_url(url: str, cache_dir: str = None, num_attempts: int = 10, verbose: b
                     break
             except KeyboardInterrupt:
                 raise
-            except:
+            except BaseException:
                 if not attempts_left:
                     if verbose:
                         print(" failed")
@@ -471,7 +487,7 @@ def open_url(url: str, cache_dir: str = None, num_attempts: int = 10, verbose: b
         os.makedirs(cache_dir, exist_ok=True)
         with open(temp_file, "wb") as f:
             f.write(url_data)
-        os.replace(temp_file, cache_file) # atomic
+        os.replace(temp_file, cache_file)  # atomic
         if return_filename:
             return cache_file
 

@@ -46,13 +46,13 @@ class Vchitect2T2VPipeline(PipelineABC):
         self.model_name = self.MODEL_ID
 
     @classmethod
-    def from_pretrained(  # ty: ignore[invalid-method-override]
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: str | Mapping[str, Any] | None = None,
         required_components: Mapping[str, Any] | None = None,
         device: str = "cuda",
         **kwargs: Any,
-    ) -> "Vchitect2T2VPipeline":
+    ) -> Vchitect2T2VPipeline:
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
         options.update(required_components or {})
         options.update(kwargs)
@@ -63,7 +63,7 @@ class Vchitect2T2VPipeline(PipelineABC):
         if isinstance(source, (str, Path)):
             value = str(source)
             root = value if "://" in value else str(Path(value).expanduser())
-            overrides = {name: root for name in ("transformer", "vae", "resources")}
+            overrides = dict.fromkeys(("transformer", "vae", "resources"), root)
         native = NativeDiffusionPipeline.from_pretrained(
             cls.MODEL_ID,
             policy=RuntimePolicy(

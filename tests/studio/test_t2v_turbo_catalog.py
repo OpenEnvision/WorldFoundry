@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import worldfoundry.studio.inference.catalog as catalog
-from worldfoundry.studio.inference.catalog import (
+from worldfoundry.studio.inference.catalog.params import (
     _t2v_turbo_base_ref,
     _t2v_turbo_default_load_kwargs,
     _t2v_turbo_lora_ref,
@@ -29,7 +29,7 @@ def test_t2v_turbo_catalog_resolves_both_owner_prefixed_checkpoints(tmp_path, mo
 def test_t2v_turbo_catalog_uses_public_hub_fallbacks(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path / "ckpt"))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
-    monkeypatch.setattr(catalog, "_cache_candidates", lambda *names: [])
+    monkeypatch.setattr(catalog.resolve, "_cache_candidates", lambda *names: [])
 
     assert _t2v_turbo_base_ref() == "VideoCrafter/VideoCrafter2"
     assert _t2v_turbo_lora_ref() == "jiachenli-ucsb/T2V-Turbo-VC2"

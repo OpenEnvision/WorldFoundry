@@ -4,78 +4,16 @@
 # --------------------------------------------------------
 # modified from DUSt3R
 
-"""Module for base_models -> three_dimensions -> point_clouds -> cut3r -> blocks.py functionality."""
-
-import collections.abc
 from functools import partial
-from itertools import repeat
 
 import torch
 import torch.nn as nn
+from timm.layers import DropPath as DropPath
 
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
-
-
-def _ntuple(n):
-    """Helper function to ntuple.
-
-    Args:
-        n: The n.
-    """
-
-    def parse(x):
-        """Parse.
-
-        Args:
-            x: The x.
-        """
-        if isinstance(x, collections.abc.Iterable) and not isinstance(x, str):
-            return x
-        return tuple(repeat(x, n))
-
-    return parse
-
+from worldfoundry.core.nn.blocks.tuples import ntuple as _ntuple
 
 to_2tuple = _ntuple(2)
-
-
-def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-    if drop_prob == 0.0 or not training:
-        return x
-    keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
-    if keep_prob > 0.0 and scale_by_keep:
-        random_tensor.div_(keep_prob)
-    return x * random_tensor
-
-
-class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float = 0.0, scale_by_keep: bool = True):
-        """Init.
-
-        Args:
-            drop_prob: The drop prob.
-            scale_by_keep: The scale by keep.
-        """
-        super(DropPath, self).__init__()
-        self.drop_prob = drop_prob
-        self.scale_by_keep = scale_by_keep
-
-    def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        return drop_path(x, self.drop_prob, self.training, self.scale_by_keep)
-
-    def extra_repr(self):
-        """Extra repr."""
-        return f"drop_prob={round(self.drop_prob, 3):0.3f}"
 
 
 class Mlp(nn.Module):
@@ -90,16 +28,6 @@ class Mlp(nn.Module):
         bias=True,
         drop=0.0,
     ):
-        """Init.
-
-        Args:
-            in_features: The in features.
-            hidden_features: The hidden features.
-            out_features: The out features.
-            act_layer: The act layer.
-            bias: The bias.
-            drop: The drop.
-        """
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -113,28 +41,11 @@ class Mlp(nn.Module):
         self.drop2 = nn.Dropout(drop_probs[1])
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         return self.drop2(self.fc2(self.drop1(self.act(self.fc1(x)))))
 
 
 class Attention(nn.Module):
-    """Attention implementation."""
-
     def __init__(self, dim, rope=None, num_heads=8, qkv_bias=False, attn_drop=0.0, proj_drop=0.0):
-        """Init.
-
-        Args:
-            dim: The dim.
-            rope: The rope.
-            num_heads: The num heads.
-            qkv_bias: The qkv bias.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-        """
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
@@ -146,12 +57,6 @@ class Attention(nn.Module):
         self.rope = rope.float() if rope is not None else None
 
     def forward(self, x, xpos):
-        """Forward.
-
-        Args:
-            x: The x.
-            xpos: The xpos.
-        """
         B, N, C = x.shape
 
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).transpose(1, 3)
@@ -182,8 +87,6 @@ class Attention(nn.Module):
 
 
 class Block(nn.Module):
-    """Block implementation."""
-
     def __init__(
         self,
         dim,
@@ -197,20 +100,6 @@ class Block(nn.Module):
         norm_layer=nn.LayerNorm,
         rope=None,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            qkv_bias: The qkv bias.
-            drop: The drop.
-            attn_drop: The attn drop.
-            drop_path: The drop path.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            rope: The rope.
-        """
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
@@ -233,31 +122,13 @@ class Block(nn.Module):
         )
 
     def forward(self, x, xpos):
-        """Forward.
-
-        Args:
-            x: The x.
-            xpos: The xpos.
-        """
         x = x + self.drop_path(self.attn(self.norm1(x), xpos))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
 
 
 class CrossAttention(nn.Module):
-    """Cross attention implementation."""
-
     def __init__(self, dim, rope=None, num_heads=8, qkv_bias=False, attn_drop=0.0, proj_drop=0.0):
-        """Init.
-
-        Args:
-            dim: The dim.
-            rope: The rope.
-            num_heads: The num heads.
-            qkv_bias: The qkv bias.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-        """
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
@@ -273,15 +144,6 @@ class CrossAttention(nn.Module):
         self.rope = rope.float() if rope is not None else None
 
     def forward(self, query, key, value, qpos, kpos):
-        """Forward.
-
-        Args:
-            query: The query.
-            key: The key.
-            value: The value.
-            qpos: The qpos.
-            kpos: The kpos.
-        """
         B, Nq, C = query.shape
         Nk = key.shape[1]
         Nv = value.shape[1]
@@ -319,8 +181,6 @@ class CrossAttention(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    """Decoder block implementation."""
-
     def __init__(
         self,
         dim,
@@ -335,21 +195,6 @@ class DecoderBlock(nn.Module):
         norm_mem=True,
         rope=None,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            qkv_bias: The qkv bias.
-            drop: The drop.
-            attn_drop: The attn drop.
-            drop_path: The drop path.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            norm_mem: The norm mem.
-            rope: The rope.
-        """
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
@@ -381,14 +226,6 @@ class DecoderBlock(nn.Module):
         self.norm_y = norm_layer(dim) if norm_mem else nn.Identity()
 
     def forward(self, x, y, xpos, ypos):
-        """Forward.
-
-        Args:
-            x: The x.
-            y: The y.
-            xpos: The xpos.
-            ypos: The ypos.
-        """
         x = x + self.drop_path(self.attn(self.norm1(x), xpos))
         y_ = self.norm_y(y)
         x = x + self.drop_path(self.cross_attn(self.norm2(x), y_, y_, xpos, ypos))
@@ -397,8 +234,6 @@ class DecoderBlock(nn.Module):
 
 
 class CustomDecoderBlock(nn.Module):
-    """Custom decoder block implementation."""
-
     def __init__(
         self,
         dim,
@@ -413,21 +248,6 @@ class CustomDecoderBlock(nn.Module):
         norm_mem=True,
         rope=None,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            qkv_bias: The qkv bias.
-            drop: The drop.
-            attn_drop: The attn drop.
-            drop_path: The drop path.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            norm_mem: The norm mem.
-            rope: The rope.
-        """
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
@@ -460,15 +280,6 @@ class CustomDecoderBlock(nn.Module):
         self.norm_z = norm_layer(dim) if norm_mem else nn.Identity()
 
     def forward(self, x, y, z, xpos, ypos):
-        """Forward.
-
-        Args:
-            x: The x.
-            y: The y.
-            z: The z.
-            xpos: The xpos.
-            ypos: The ypos.
-        """
         x = x + self.drop_path(self.attn(self.norm1(x), xpos))
         y_ = self.norm_y(y)
         z_ = self.norm_z(z)
@@ -486,13 +297,6 @@ class ModLN(nn.Module):
     """
 
     def __init__(self, inner_dim: int, mod_dim: int, eps: float):
-        """Init.
-
-        Args:
-            inner_dim: The inner dim.
-            mod_dim: The mod dim.
-            eps: The eps.
-        """
         super().__init__()
         self.norm = nn.LayerNorm(inner_dim, eps=eps)
         self.mlp = nn.Sequential(
@@ -502,33 +306,14 @@ class ModLN(nn.Module):
 
     @staticmethod
     def modulate(x, shift, scale):
-        """Modulate.
-
-        Args:
-            x: The x.
-            shift: The shift.
-            scale: The scale.
-        """
-
         return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
     def forward(self, x: torch.Tensor, mod: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            mod: The mod.
-
-        Returns:
-            The return value.
-        """
         shift, scale = self.mlp(mod).chunk(2, dim=-1)  # [N, D]
         return self.modulate(self.norm(x), shift, scale)  # [N, L, D]
 
 
 class ConditionModulationBlock(nn.Module):
-    """Condition modulation block implementation."""
-
     def __init__(
         self,
         dim,
@@ -539,23 +324,9 @@ class ConditionModulationBlock(nn.Module):
         attn_drop=0.0,
         drop_path=0.0,
         act_layer=nn.GELU,
-        norm_layer=partial(ModLN, eps=1e-6),
+        norm_layer=partial(ModLN, eps=1e-6),  # noqa: B008 - Default evaluated once at definition, as upstream.
         rope=None,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            qkv_bias: The qkv bias.
-            drop: The drop.
-            attn_drop: The attn drop.
-            drop_path: The drop path.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            rope: The rope.
-        """
         super().__init__()
         self.norm1 = norm_layer(dim, dim)
         self.attn = Attention(
@@ -577,34 +348,18 @@ class ConditionModulationBlock(nn.Module):
         )
 
     def forward(self, x, mod, xpos):
-        """Forward.
-
-        Args:
-            x: The x.
-            mod: The mod.
-            xpos: The xpos.
-        """
         x = x + self.drop_path(self.attn(self.norm1(x, mod), xpos))
         x = x + self.drop_path(self.mlp(self.norm2(x, mod)))
         return x
 
 
-class PositionGetter(object):
+class PositionGetter:
     """return positions of patches"""
 
     def __init__(self):
-        """Init."""
         self.cache_positions = {}
 
     def __call__(self, b, h, w, device):
-        """Call.
-
-        Args:
-            b: The b.
-            h: The h.
-            w: The w.
-            device: The device.
-        """
         if (h, w) not in self.cache_positions:
             x = torch.arange(w, device=device)
             y = torch.arange(h, device=device)
@@ -625,16 +380,6 @@ class PatchEmbed(nn.Module):
         norm_layer=None,
         flatten=True,
     ):
-        """Init.
-
-        Args:
-            img_size: The img size.
-            patch_size: The patch size.
-            in_chans: The in chans.
-            embed_dim: The embed dim.
-            norm_layer: The norm layer.
-            flatten: The flatten.
-        """
         super().__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
@@ -650,18 +395,13 @@ class PatchEmbed(nn.Module):
         self.position_getter = PositionGetter()
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         B, C, H, W = x.shape
         torch._assert(
-            H == self.img_size[0],
+            self.img_size[0] == H,
             f"Input image height ({H}) doesn't match model ({self.img_size[0]}).",
         )
         torch._assert(
-            W == self.img_size[1],
+            self.img_size[1] == W,
             f"Input image width ({W}) doesn't match model ({self.img_size[1]}).",
         )
         x = self.proj(x)
@@ -672,6 +412,5 @@ class PatchEmbed(nn.Module):
         return x, pos
 
     def _init_weights(self):
-        """Helper function to init weights."""
         w = self.proj.weight.data
         torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))

@@ -8,9 +8,9 @@ import torch
 from einops import rearrange
 from torch import Tensor, nn
 
-from mira.codec.config import RAEEncoderConfig
-from mira.codec.dino import DINO_DIM, DinoModel
-from mira.ml import init_weights
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.codec.config import RAEEncoderConfig
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.codec.dino import DINO_DIM, DinoModel
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.ml import init_weights
 
 
 @dataclass

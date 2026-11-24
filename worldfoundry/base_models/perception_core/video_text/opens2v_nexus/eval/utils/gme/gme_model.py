@@ -5,7 +5,6 @@ import logging
 import math
 import os
 from io import BytesIO
-from typing import Dict, List, Optional
 
 import requests
 import torch
@@ -19,7 +18,7 @@ class GmeQwen2VL:
     def __init__(
         self,
         model_name: str = "gme-Qwen2-VL-7B-Instruct",
-        model_path: Optional[str] = None,
+        model_path: str | None = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         min_image_tokens=256,
         max_image_tokens=1280,
@@ -52,25 +51,23 @@ class GmeQwen2VL:
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        pixel_values: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         # pixel_values_videos: Optional[torch.FloatTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
+        image_grid_thw: torch.LongTensor | None = None,
         # video_grid_thw: Optional[torch.LongTensor] = None,
-        pooling_mask: Optional[torch.LongTensor] = None,
+        pooling_mask: torch.LongTensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         if inputs_embeds is None:
             inputs_embeds = self.base.model.embed_tokens(input_ids)
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.base.visual.get_dtype())
-                image_embeds = self.base.visual(
-                    pixel_values, grid_thw=image_grid_thw
-                ).to(inputs_embeds.device)
+                image_embeds = self.base.visual(pixel_values, grid_thw=image_grid_thw).to(inputs_embeds.device)
                 image_mask = input_ids == self.base.config.image_token_id
                 inputs_embeds[image_mask] = image_embeds
             # if pixel_values_videos is not None:
@@ -115,7 +112,7 @@ class GmeQwen2VL:
         self.base.to(self.device)
         # Inputs must be batched
         input_texts, input_images = [], []
-        for t, i in zip(texts, images):
+        for t, i in zip(texts, images, strict=False):
             if not is_query or instruction is None:
                 instruction = self.defualt_instruction
             input_str = ""
@@ -144,15 +141,13 @@ class GmeQwen2VL:
         return embeddings
 
     def encode(self, sentences: list[str], *, prompt_name=None, **kwargs):
-        return self.get_fused_embeddings(
-            texts=sentences, prompt_name=prompt_name, **kwargs
-        )
+        return self.get_fused_embeddings(texts=sentences, prompt_name=prompt_name, **kwargs)
 
-    def encode_queries(self, queries: List[str], **kwargs):
+    def encode_queries(self, queries: list[str], **kwargs):
         embeddings = self.encode(queries, **kwargs)
         return embeddings
 
-    def encode_corpus(self, corpus: List[Dict[str, str]], **kwargs):
+    def encode_corpus(self, corpus: list[dict[str, str]], **kwargs):
         if type(corpus) is dict:
             sentences = [
                 (corpus["title"][i] + self.sep + corpus["text"][i]).strip()
@@ -162,9 +157,7 @@ class GmeQwen2VL:
             ]
         else:
             sentences = [
-                (doc["title"] + self.sep + doc["text"]).strip()
-                if "title" in doc
-                else doc["text"].strip()
+                (doc["title"] + self.sep + doc["text"]).strip() if "title" in doc else doc["text"].strip()
                 for doc in corpus
             ]
         embeddings = self.encode(sentences, is_query=False, **kwargs)
@@ -178,7 +171,7 @@ class GmeQwen2VL:
 
     def get_fused_embeddings(
         self,
-        texts: list[str] = None,
+        texts: list[str] | None = None,
         images: list[Image.Image] | DataLoader = None,
         **kwargs,
     ):
@@ -216,9 +209,7 @@ class GmeQwen2VL:
             miniters=10,
             desc="encode",
         )
-        for n, img_batch in zip(
-            range(0, n_batch * batch_size, batch_size), image_loader
-        ):
+        for n, img_batch in zip(range(0, n_batch * batch_size, batch_size), image_loader, strict=False):
             text_batch = none_batch if texts is None else texts[n : n + batch_size]
             img_batch = none_batch if img_batch is None else img_batch
             embeddings = self.embed(texts=text_batch, images=img_batch, **kwargs)
@@ -292,13 +283,11 @@ def smart_resize(
     return h_bar, w_bar
 
 
-def fetch_image(
-    image: str | Image.Image, size_factor: int = IMAGE_FACTOR
-) -> Image.Image:
+def fetch_image(image: str | Image.Image, size_factor: int = IMAGE_FACTOR) -> Image.Image:
     image_obj = None
     if isinstance(image, Image.Image):
         image_obj = image
-    elif image.startswith("http://") or image.startswith("https://"):
+    elif image.startswith(("http://", "https://")):
         image_obj = Image.open(requests.get(image, stream=True).raw)
     elif image.startswith("file://"):
         image_obj = Image.open(image[7:])
@@ -310,9 +299,7 @@ def fetch_image(
     else:
         image_obj = Image.open(image)
     if image_obj is None:
-        raise ValueError(
-            f"Unrecognized image input, support local path, http url, base64 and PIL.Image, got {image}"
-        )
+        raise ValueError(f"Unrecognized image input, support local path, http url, base64 and PIL.Image, got {image}")
     image = image_obj.convert("RGB")
     ## resize
     # if "resized_height" in ele and "resized_width" in ele:

@@ -19,6 +19,7 @@ accessors, gather/split/reduce helpers, and :func:`dynamic_switch`.
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import torch
 import torch.distributed as dist
@@ -176,7 +177,7 @@ def get_cp_rank_list():
 
     global cp_ranks
     if cp_ranks is None:
-        cp_ranks = torch.distributed.get_process_group_ranks(cp_group)
+        cp_ranks = torch.distributed.get_process_group_ranks(cast(dist.ProcessGroup, cp_group))
     return cp_ranks
 
 
@@ -285,8 +286,9 @@ class GatherFunction(torch.autograd.Function):
 
         return rearrange(output_tensor, "B T S C -> B (T S) C", T=frames)
 
+    # Autograd supplies one gradient for this forward's single tensor output.
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output):  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
         """Split the gathered grad and undo the forward mean-scale."""
 
         with torch.no_grad():
@@ -314,8 +316,9 @@ class SplitFunction(torch.autograd.Function):
         ctx.cp_size = get_cp_size()
         return split_tensor_in_cp(input, ctx.seq_dim)
 
+    # Autograd supplies one gradient for this forward's single tensor output.
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output):  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
         """All-gather local grads and undo the forward mean-scale."""
 
         with torch.no_grad():
@@ -367,8 +370,9 @@ class GatherFunction2D(torch.autograd.Function):
 
         return rearrange(output_tensor, "B T H W C -> B (T H W) C")
 
+    # Autograd supplies one gradient for this forward's single tensor output.
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output):  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
         """Split the full spatial grad back to this rank's 2-D tile."""
 
         t, h, w = ctx.shape
@@ -394,8 +398,9 @@ class SplitFunction2D(torch.autograd.Function):
         ctx.cp_size = get_cp_size()
         return split_tensor_in_cp_2d(input, ctx.seq_dim_hw, split_hw)
 
+    # Autograd supplies one gradient for this forward's single tensor output.
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output):  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
         """All-gather 2-D tiles and stitch them in the same row-major order."""
 
         with torch.no_grad():
@@ -460,8 +465,9 @@ class ReduceFunction(torch.autograd.Function):
         dist.all_reduce(output, group=ctx.cp_group)
         return output
 
+    # Autograd supplies one gradient for this forward's single tensor output.
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output):  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
         """Pass the grad through: the forward sum already owned the full value."""
 
         return grad_output.detach().clone(), None
@@ -477,8 +483,9 @@ class ReplicateFunction(torch.autograd.Function):
         ctx.cp_group = process_group
         return input.detach().clone()
 
+    # Autograd supplies one gradient for this forward's single tensor output.
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output):  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
         """Sum grads across CP so every rank sees the same mean/var gradient."""
 
         grad_input = grad_output.detach().clone()

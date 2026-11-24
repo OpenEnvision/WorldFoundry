@@ -4,20 +4,20 @@ import json
 from pathlib import Path
 
 from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_RUNNER_TARGET, ContractFixtureRunner
-from worldfoundry.evaluation.api import GenerationRequest
-from worldfoundry.evaluation.models import (
+from worldfoundry.evals.api import GenerationRequest
+from worldfoundry.evals.models.runners.pipeline import WorldFoundryPipelineRunner
+from worldfoundry.evals.models.runners.resolver import (
     ModelResolutionError,
-    WorldFoundryPipelineRunner,
     resolve_model_zoo_runner,
     resolve_world_model_runner,
 )
-from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
-from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
-from worldfoundry.evaluation.tasks.embodied import (
+from worldfoundry.evals.tasks.contracts.external import get_external_benchmark_contract
+from worldfoundry.evals.tasks.embodied import (
     EmbodiedGenerationSpec,
     run_vla_va_wam,
 )
 from worldfoundry.pipelines.component_pipelines import OpenVLAPipeline
+from worldfoundry.zoo.catalog import load_model_zoo_registry
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -154,7 +154,7 @@ def test_vla_va_wam_rejects_external_subprocess_runner(tmp_path: Path) -> None:
 
 
 def test_embodied_benchmark_zoo_manifest_is_discoverable_as_tasks() -> None:
-    from worldfoundry.evaluation.tasks.catalog.specs import get_benchmark_zoo_cli_task, list_benchmark_zoo_cli_tasks
+    from worldfoundry.evals.tasks.catalog.specs import get_benchmark_zoo_cli_task, list_benchmark_zoo_cli_tasks
 
     expected = {
         "libero",
@@ -214,7 +214,7 @@ def test_vla_va_wam_model_zoo_manifest_records_current_runtime_readiness() -> No
     openvla = registry.get("openvla")
     assert openvla.integration_status == "integrated"
     assert openvla.runner_entry_kind == "runnable_runner"
-    assert openvla.runner_target == "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner"
+    assert openvla.runner_target == "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner"
     assert openvla.pipeline_target == "worldfoundry.pipelines.component_pipelines:OpenVLAPipeline"
     assert manifests["openvla"].metadata["runnable_runner"] is True
     assert manifests["openvla"].metadata["default_runner_target"] == openvla.runner_target

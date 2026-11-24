@@ -7,11 +7,11 @@ import torch.nn.functional as F
 from einops import rearrange
 from huggingface_hub import hf_hub_download
 
-from .conv_head import ConvHead
-from .layers.dinov2 import DINOv2
 from .camera_head import CameraHead
+from .conv_head import ConvHead
+from .layers import PositionGetter, RotaryPositionEmbedding2D
+from .layers.dinov2 import DINOv2
 from .transformer_decoder import TransformerDecoder
-from .layers import RotaryPositionEmbedding2D, PositionGetter
 from .utils import depth_to_pointmap, pose_encoding_to_extri, recover_focal_from_xy
 
 
@@ -37,11 +37,17 @@ class ViGeo(nn.Module):
             rope=rope,
         )
 
-        conv_kwargs = dict(
-            projects=nn.Identity(), dim_proj=1024, dim_upsample=[256, 128, 64],
-            dim_times_res_block_hidden=2, num_res_blocks=2,
-            last_res_blocks=0, last_conv_channels=32, last_conv_size=1, using_uv=True
-        )
+        conv_kwargs = {
+            "projects": nn.Identity(),
+            "dim_proj": 1024,
+            "dim_upsample": [256, 128, 64],
+            "dim_times_res_block_hidden": 2,
+            "num_res_blocks": 2,
+            "last_res_blocks": 0,
+            "last_conv_channels": 32,
+            "last_conv_size": 1,
+            "using_uv": True,
+        }
 
         self.point_head = ConvHead(dim_out=3, **conv_kwargs)
         # Kept so released checkpoints with ray_head weights load strictly.
@@ -82,9 +88,7 @@ class ViGeo(nn.Module):
         state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
         if isinstance(state_dict, dict):
             state_dict = state_dict.get("state_dict", state_dict.get("model", state_dict))
-        state_dict = {
-            key.removeprefix("model."): value for key, value in state_dict.items()
-        }
+        state_dict = {key.removeprefix("model."): value for key, value in state_dict.items()}
         model = cls(
             encoder=encoder,
             with_mask_head=any(key.startswith("mask_head.") for key in state_dict),
@@ -130,9 +134,9 @@ class ViGeo(nn.Module):
     ):
         B, curr_step, C, orig_H, orig_W = image_chunk.shape
         H, W, patch_h, patch_w = self._resolve_model_size(orig_H, orig_W, num_tokens)
-        if H != orig_H or W != orig_W:
+        if orig_H != H or orig_W != W:
             image_chunk = F.interpolate(
-                image_chunk.flatten(0, 1), size=(H, W), mode='bilinear', align_corners=False
+                image_chunk.flatten(0, 1), size=(H, W), mode="bilinear", align_corners=False
             ).view(B, curr_step, C, H, W)
 
         x = (image_chunk - self.image_mean) / self.image_std
@@ -158,14 +162,13 @@ class ViGeo(nn.Module):
             mask = self.mask_head(hidden, patch_h, patch_w) if self.mask_head is not None else None
 
             if resize_output:
+
                 def resize_back(tensor: torch.Tensor | None):
                     if tensor is None:
                         return None
                     if tensor.shape[-2:] == (orig_H, orig_W):
                         return tensor
-                    return F.interpolate(
-                        tensor, size=(orig_H, orig_W), mode='bilinear', align_corners=False
-                    )
+                    return F.interpolate(tensor, size=(orig_H, orig_W), mode="bilinear", align_corners=False)
 
                 point_logits = resize_back(point_logits)
                 normal = resize_back(normal)
@@ -181,14 +184,14 @@ class ViGeo(nn.Module):
                 return t.reshape(B, curr_step, -1, out_H, out_W)
 
         return {
-            'point_logits': format_pred(point_logits),
-            'points': format_pred(points),
-            'depth': format_pred(depth),
-            'pose': pose,
-            'normal': format_pred(normal),
-            'conf': format_pred(conf),
-            'mask': format_pred(mask),
-            'new_kv_caches': new_kv_caches,
+            "point_logits": format_pred(point_logits),
+            "points": format_pred(points),
+            "depth": format_pred(depth),
+            "pose": pose,
+            "normal": format_pred(normal),
+            "conf": format_pred(conf),
+            "mask": format_pred(mask),
+            "new_kv_caches": new_kv_caches,
         }
 
     @torch.no_grad()
@@ -240,19 +243,19 @@ class ViGeo(nn.Module):
                 num_tokens=num_tokens,
                 resize_output=resize_output,
             )
-            kv_caches = output['new_kv_caches']
+            kv_caches = output["new_kv_caches"]
 
             if not resize_output:
-                all_points.append(output['points'].cpu())
-            all_depths.append(output['depth'].cpu())
-            all_point_logits.append(output['point_logits'].cpu())
-            all_poses.append(output['pose'].cpu())
-            if output['normal'] is not None:
-                all_normals.append(output['normal'].cpu())
-            if output['conf'] is not None:
-                all_confs.append(output['conf'].cpu())
-            if output['mask'] is not None:
-                all_masks.append(output['mask'].cpu())
+                all_points.append(output["points"].cpu())
+            all_depths.append(output["depth"].cpu())
+            all_point_logits.append(output["point_logits"].cpu())
+            all_poses.append(output["pose"].cpu())
+            if output["normal"] is not None:
+                all_normals.append(output["normal"].cpu())
+            if output["conf"] is not None:
+                all_confs.append(output["conf"].cpu())
+            if output["mask"] is not None:
+                all_masks.append(output["mask"].cpu())
 
         depth_pred = torch.cat(all_depths, dim=1)
         point_logits_pred = torch.cat(all_point_logits, dim=1)
@@ -269,20 +272,17 @@ class ViGeo(nn.Module):
             points_pred = points_chw.permute(0, 1, 3, 4, 2)
 
         out_dict = {
-            'points_pred': points_pred,
-            'depth_pred': depth_pred,
-            'pose_pred': pose_encoding_to_extri(pose_pred),
-            'normal_pred': normal_pred.permute(0, 1, 3, 4, 2) if normal_pred is not None else None,
-            'conf_pred': conf_pred,
-            'mask_pred': mask_pred,
-            'kv_caches': kv_caches,
+            "points_pred": points_pred,
+            "depth_pred": depth_pred,
+            "pose_pred": pose_encoding_to_extri(pose_pred),
+            "normal_pred": normal_pred.permute(0, 1, 3, 4, 2) if normal_pred is not None else None,
+            "conf_pred": conf_pred,
+            "mask_pred": mask_pred,
+            "kv_caches": kv_caches,
         }
 
         if is_unbatched:
-            out_dict = {
-                k: v.squeeze(0) if isinstance(v, torch.Tensor) else v
-                for k, v in out_dict.items()
-            }
+            out_dict = {k: v.squeeze(0) if isinstance(v, torch.Tensor) else v for k, v in out_dict.items()}
         return out_dict
 
     @property

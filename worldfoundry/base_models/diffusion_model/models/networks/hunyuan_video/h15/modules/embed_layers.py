@@ -86,10 +86,7 @@ class PatchEmbed(nn.Module):
         # Only support concat mode (multitask mask training)
         orig_in_chans = in_chans
         if concat_condition:
-            if is_reshape_temporal_channels:
-                in_chans = in_chans + in_chans//2 + 1
-            else:
-                in_chans = in_chans * 2 + 1
+            in_chans = in_chans + in_chans // 2 + 1 if is_reshape_temporal_channels else in_chans * 2 + 1
 
         self.proj = nn.Conv3d(
             in_chans,
@@ -100,7 +97,9 @@ class PatchEmbed(nn.Module):
             **factory_kwargs,
         )
 
-        nn.init.xavier_uniform_(self.proj.weight[:, :orig_in_chans].view(self.proj.weight[:, :orig_in_chans].size(0), -1))
+        nn.init.xavier_uniform_(
+            self.proj.weight[:, :orig_in_chans].view(self.proj.weight[:, :orig_in_chans].size(0), -1)
+        )
         # Special initialization for concat mode
         nn.init.zeros_(self.proj.weight[:, orig_in_chans:].view(self.proj.weight[:, orig_in_chans:].size(0), -1))
 
@@ -125,17 +124,17 @@ class VisionProjection(torch.nn.Module):
         super().__init__()
 
         self.proj = torch.nn.Sequential(
-            torch.nn.LayerNorm(input_dim), 
+            torch.nn.LayerNorm(input_dim),
             torch.nn.Linear(input_dim, input_dim),
-            torch.nn.GELU(), 
+            torch.nn.GELU(),
             torch.nn.Linear(input_dim, output_dim),
-            torch.nn.LayerNorm(output_dim)
+            torch.nn.LayerNorm(output_dim),
         )
-        
 
     def forward(self, vision_embeds):
         """Project ``B L C_vis`` vision tokens to ``B L C_dit``."""
         return self.proj(vision_embeds)
+
 
 class ClipVisionProjection(nn.Module):
     """Zero-init down-projection of CLIP vision features into DiT width."""

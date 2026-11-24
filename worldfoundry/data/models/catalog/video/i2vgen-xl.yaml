@@ -1,18 +1,16 @@
 id: i2vgen-xl
 name: I2VGen-XL
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 runtime_profile: runtime-profile:i2vgen-xl
 tasks:
 - image-to-video
-- text-to-video
 source_status:
   status: confirmed_official_github
   github:
-    url: https://github.com/ali-vilab/i2vgen-xl
-    verified_by: git ls-remote --symref https://github.com/ali-vilab/i2vgen-xl.git
-      HEAD
+    url: https://github.com/ali-vilab/VGen
+    verified_by: git ls-remote --symref https://github.com/ali-vilab/VGen.git HEAD
     default_branch: main
-    head_sha: 1e77740b6e3f4e61410dd2d6cec75e4b2077d360
+    head_sha: 4014d1fae4ac4a35e8e8442123611e913001399e
 checkpoint:
   status: confirmed_public_hf
   verified_by: GET https://huggingface.co/api/models/<repo_id>
@@ -52,18 +50,22 @@ docs:
   publisher: Alibaba (Tongyi Lab)
   publisher_kind: company
   publisher_zh: 阿里巴巴（通义实验室）
-  overview: I2VGen-XL is Alibaba ali-vilab's cascaded image-to-video model, one of the earlier high-resolution open I2V releases. It turns a still image (with optional text) into a short video through a two-stage generate-then-refine cascade. The WorldFoundry route is complete and reports missing checkpoint assets at runtime.
-  overview_zh: I2VGen-XL 是阿里 ali-vilab 的级联式图生视频模型，属较早的高分辨率开源 I2V 发布。它通过「先生成、再细化」的两级级联，把静态图（可附文本）变成短视频。WorldFoundry 路径已完备，checkpoint 缺失时会在运行时报告。
-  architecture: Per the upstream publication, I2VGen-XL uses a base stage for semantic coherence and a refinement stage for detail/resolution, both latent diffusion models. This repository records the prompt+image contract and environment/checkpoint assumptions in the runtime profile; run readiness is kept in release run manifests, not here.
-  architecture_zh: 按上游论文，I2VGen-XL 由保证语义连贯的基础级与提升细节/分辨率的细化级组成，均为潜空间扩散模型。本仓库在 runtime profile 中记录 prompt+image 契约与环境/checkpoint 假设；运行就绪状态保存在发布 run manifest 中，不在此处。
-  usage_notes: Integration is complete; no runner parity record exists yet in this manifest. Both the official GitHub and ali-vilab HF repos are confirmed reachable. Treat it as a legacy-quality baseline next to newer DiT-based I2V models in this catalog.
-  usage_notes_zh: 集成已完成；本 manifest 中还没有 runner parity 记录。官方 GitHub 与 ali-vilab 的 HF 仓库均确认可达。相对 catalog 中较新的 DiT 系 I2V 模型，它更适合作为老一代质量基线。
+  modalities:
+    inputs:
+    - image
+    - text
+    outputs:
+    - video
+  overview: I2VGen-XL is Alibaba's cascaded image-to-video model, one of the earlier high-resolution open I2V releases. It turns a still image and a text prompt into a short video through a two-stage generate-then-refine cascade.
+  overview_zh: I2VGen-XL 是阿里巴巴的级联式图生视频模型，属较早的高分辨率开源 I2V 发布。它通过「先生成、再细化」的两级级联，把一张静态图和一段文本提示词生成为短视频。
+  architecture: I2VGen-XL has two latent diffusion stages. The base stage keeps the semantics and content of the input image coherent through two hierarchical encoders; the refinement stage adds detail guided by a brief text prompt and raises the resolution to 1280×720.
+  architecture_zh: I2VGen-XL 由两级潜空间扩散模型组成：基础级通过两个层级编码器保持输入图像的语义与内容连贯；细化级在一段简短文本的引导下补充细节，并把分辨率提升到 1280×720。
+  usage_notes: WorldFoundry runs the Hugging Face diffusers I2VGenXLPipeline with the official ali-vilab weights in float16. The pipeline needs both an image and a prompt; `wf run` falls back to its bundled sample image and prompt when either is omitted.
+  usage_notes_zh: WorldFoundry 以 float16 加载 ali-vilab 官方权重，运行 Hugging Face diffusers 的 I2VGenXLPipeline。该 pipeline 同时需要图像和提示词；任一项未提供时，`wf run` 使用内置的示例图像和提示词。
   limitations:
-  - No runner-parity evidence is recorded — treat end-to-end GPU validation as not yet done.
-  - As an older cascade, fidelity trails current DiT-based I2V models.
+  - It is a 2023 UNet cascade, older than the DiT-based image-to-video models in the catalog.
   limitations_zh:
-  - 没有 runner parity 证据记录——应视为尚未完成端到端 GPU 验证。
-  - 作为较早的级联方案，保真度落后于当前 DiT 系图生视频模型。
+  - 它是 2023 年的 UNet 级联模型，早于目录中基于 DiT 的图生视频模型。
   recommended_benchmarks:
   - id: aigcbench
     reason: I2V-focused benchmark suite.

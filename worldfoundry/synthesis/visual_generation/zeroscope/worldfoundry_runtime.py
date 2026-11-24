@@ -8,8 +8,9 @@ based on text prompts.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 
 class ZeroScopeRuntime:
@@ -42,7 +43,7 @@ class ZeroScopeRuntime:
         self._pipe = None  # Stores the loaded diffusers pipeline instance.
 
     @classmethod
-    def from_synthesis(cls, synthesis: Any) -> "ZeroScopeRuntime":
+    def from_synthesis(cls, synthesis: Any) -> ZeroScopeRuntime:
         """Creates a ZeroScopeRuntime instance from a synthesis object.
 
         This class method is a convenient constructor that extracts required parameters
@@ -60,7 +61,6 @@ class ZeroScopeRuntime:
             device=synthesis.device,
             model_path=synthesis.model_path,
         )
-
 
     def ensure_pipe(self):
         """Ensures the Diffusers pipeline is loaded and returns it.
@@ -160,7 +160,6 @@ class ZeroScopeRuntime:
 
         # Export the generated frames to a video file.
         export_to_video(frames, str(target), fps=fps or int(kwargs.get("fps", 8)))
-
 
         return {
             "status": "success",

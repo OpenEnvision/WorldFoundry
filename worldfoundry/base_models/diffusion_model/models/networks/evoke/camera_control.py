@@ -7,13 +7,12 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-
 
 # Substring tokens that identify camera-control parameters by name.
 CAM_PARAM_TOKENS = (
@@ -86,7 +85,7 @@ def compute_plucker_embedding_from_Ks(
     directions = directions / directions.norm(dim=-1, keepdim=True)
 
     rays_d = directions @ cam_c2w[:, :3, :3].transpose(-1, -2)  # [F, H*W, 3] world-space directions
-    rays_o = cam_c2w[:, :3, 3].unsqueeze(1).expand_as(rays_d)   # [F, H*W, 3] camera origins
+    rays_o = cam_c2w[:, :3, 3].unsqueeze(1).expand_as(rays_d)  # [F, H*W, 3] camera origins
 
     plucker = torch.cat([rays_o, rays_d], dim=-1).view(F_frames, height, width, 6)
     return plucker
@@ -102,32 +101,39 @@ def prepare_plucker_for_model(
     plucker = rearrange(
         plucker,
         "f (h c1) (w c2) c -> 1 (c c1 c2) f h w",
-        c1=vae_stride_h, c2=vae_stride_w,
+        c1=vae_stride_h,
+        c2=vae_stride_w,
     )
     return plucker
 
 
 def _to_latent_rate_relative(
-    c2ws_F_abs: torch.Tensor, vae_stride_t: int = 4,
+    c2ws_F_abs: torch.Tensor,
+    vae_stride_t: int = 4,
 ) -> torch.Tensor:
     """Convert absolute pixel-rate c2ws to latent-rate framewise relative poses with translation max-norm."""
     from .geometry import compute_relative_poses_lingbot
+
     F_pix = c2ws_F_abs.shape[0]
     F_lat = (F_pix - 1) // vae_stride_t + 1
     lat_indices = torch.arange(F_lat, device=c2ws_F_abs.device) * vae_stride_t
     lat_indices = lat_indices.clamp(max=F_pix - 1)
     c2ws_lat_abs = c2ws_F_abs[lat_indices]  # [F_lat, 4, 4]
     c2ws_lat_rel = compute_relative_poses_lingbot(
-        c2ws_lat_abs.float(), framewise=True, normalize_trans=True,
+        c2ws_lat_abs.float(),
+        framewise=True,
+        normalize_trans=True,
     )
     return c2ws_lat_rel
 
 
 def _build_plucker_one_sample(
-    c2ws_F: torch.Tensor,        # [F_pix, 4, 4] absolute pixel-rate c2w
-    Ks_4: torch.Tensor,           # [4] base-resolution intrinsics [fx, fy, cx, cy]
-    H_pix: int, W_pix: int,
-    base_h_pix: int, base_w_pix: int,
+    c2ws_F: torch.Tensor,  # [F_pix, 4, 4] absolute pixel-rate c2w
+    Ks_4: torch.Tensor,  # [4] base-resolution intrinsics [fx, fy, cx, cy]
+    H_pix: int,
+    W_pix: int,
+    base_h_pix: int,
+    base_w_pix: int,
     strategy: str = "scale_ks",
     vae_stride_t: int = 4,
 ) -> torch.Tensor:
@@ -146,7 +152,9 @@ def _build_plucker_one_sample(
         full = compute_plucker_embedding_from_Ks(c2ws_lat, Ks_base_F, base_h_pix, base_w_pix)
         small = F.interpolate(
             full.permute(0, 3, 1, 2),
-            size=(H_pix, W_pix), mode="bilinear", align_corners=False,
+            size=(H_pix, W_pix),
+            mode="bilinear",
+            align_corners=False,
         )
         return small.permute(0, 2, 3, 1).contiguous()
     raise ValueError(f"unknown pc_resolution_strategy: {strategy!r} (expect 'scale_ks' or 'resample')")
@@ -155,8 +163,10 @@ def _build_plucker_one_sample(
 def prepare_cam_plucker_emb(
     Ks: torch.Tensor,
     c2ws_window: torch.Tensor,
-    H_pix: int, W_pix: int,
-    base_h_pix: int, base_w_pix: int,
+    H_pix: int,
+    W_pix: int,
+    base_h_pix: int,
+    base_w_pix: int,
     vae_stride_t: int = 4,
     vae_stride_h: int = 8,
     vae_stride_w: int = 8,
@@ -171,13 +181,16 @@ def prepare_cam_plucker_emb(
     per_sample = []
     for b in range(B):
         plucker = _build_plucker_one_sample(
-            c2ws_window[b], Ks[b],
-            H_pix, W_pix, base_h_pix, base_w_pix, strategy,
+            c2ws_window[b],
+            Ks[b],
+            H_pix,
+            W_pix,
+            base_h_pix,
+            base_w_pix,
+            strategy,
             vae_stride_t=vae_stride_t,
         )
-        per_sample.append(
-            prepare_plucker_for_model(plucker, vae_stride_t, vae_stride_h, vae_stride_w)
-        )
+        per_sample.append(prepare_plucker_for_model(plucker, vae_stride_t, vae_stride_h, vae_stride_w))
     return torch.cat(per_sample, dim=0)
 
 
@@ -201,19 +214,24 @@ def prepare_cam_plucker_for_list(
         per_sample = []
         for b in range(B):
             plucker = _build_plucker_one_sample(
-                lingbot_c2ws_window[b], lingbot_Ks[b],
-                H_pix, W_pix, base_height_pix, base_width_pix, strategy,
+                lingbot_c2ws_window[b],
+                lingbot_Ks[b],
+                H_pix,
+                W_pix,
+                base_height_pix,
+                base_width_pix,
+                strategy,
                 vae_stride_t=vae_stride_t,
             )
-            per_sample.append(
-                prepare_plucker_for_model(plucker, vae_stride_t, vae_stride_h, vae_stride_w)
-            )
+            per_sample.append(prepare_plucker_for_model(plucker, vae_stride_t, vae_stride_h, vae_stride_w))
         cam_emb_list.append(torch.cat(per_sample, dim=0))
     return cam_emb_list
 
 
 def build_camera_plucker_encoder_submodules(
-    parent: nn.Module, dim: int, plucker_input_dim: int,
+    parent: nn.Module,
+    dim: int,
+    plucker_input_dim: int,
 ):
     """Register the global Plucker encoder submodules on parent with lingbot-matching attribute names."""
     parent.patch_embedding_wancamctrl = nn.Linear(plucker_input_dim, dim)
@@ -228,25 +246,31 @@ def build_camera_plucker_encoder_submodules(
 
 
 def build_camera_modulation_lowrank_submodules(
-    block: nn.Module, dim: int, cam_rank: int = 128,
+    block: nn.Module,
+    dim: int,
+    cam_rank: int = 128,
 ):
     """Register lingbot-style LoRA per-block cam modulation submodules on block. All zero-initialized."""
     # Injector MLP (LoRA-ized): inj1 -> silu -> inj2 -> residual.
     block.cam_inj1_down_proj = nn.Linear(dim, cam_rank, bias=False)
-    block.cam_inj1_up_proj   = nn.Linear(cam_rank, dim, bias=True)
+    block.cam_inj1_up_proj = nn.Linear(cam_rank, dim, bias=True)
     block.cam_inj2_down_proj = nn.Linear(dim, cam_rank, bias=False)
-    block.cam_inj2_up_proj   = nn.Linear(cam_rank, dim, bias=True)
+    block.cam_inj2_up_proj = nn.Linear(cam_rank, dim, bias=True)
     # AdaLN-zero scale/shift LoRA pairs.
     block.cam_scale_down_proj = nn.Linear(dim, cam_rank, bias=False)
-    block.cam_scale_up_proj   = nn.Linear(cam_rank, dim, bias=True)
+    block.cam_scale_up_proj = nn.Linear(cam_rank, dim, bias=True)
     block.cam_shift_down_proj = nn.Linear(dim, cam_rank, bias=False)
-    block.cam_shift_up_proj   = nn.Linear(cam_rank, dim, bias=True)
+    block.cam_shift_up_proj = nn.Linear(cam_rank, dim, bias=True)
     # Zero-init all; reinit_cam_modules() switches to Xavier / ckpt.
     for proj in (
-        block.cam_inj1_down_proj, block.cam_inj1_up_proj,
-        block.cam_inj2_down_proj, block.cam_inj2_up_proj,
-        block.cam_scale_down_proj, block.cam_scale_up_proj,
-        block.cam_shift_down_proj, block.cam_shift_up_proj,
+        block.cam_inj1_down_proj,
+        block.cam_inj1_up_proj,
+        block.cam_inj2_down_proj,
+        block.cam_inj2_up_proj,
+        block.cam_scale_down_proj,
+        block.cam_scale_up_proj,
+        block.cam_shift_down_proj,
+        block.cam_shift_up_proj,
     ):
         nn.init.zeros_(proj.weight)
         if proj.bias is not None:
@@ -265,7 +289,9 @@ def process_cam_plucker_to_tokens(
     processed = rearrange(
         cam_plucker_emb,
         "b c (f pt) (h ph) (w pw) -> b (f h w) (c pt ph pw)",
-        pt=pt, ph=ph, pw=pw,
+        pt=pt,
+        ph=ph,
+        pw=pw,
     )
     processed = patch_embedding_wancamctrl(processed)
     hidden = c2ws_hidden_states_layer2(F.silu(c2ws_hidden_states_layer1(processed)))
@@ -298,8 +324,7 @@ def apply_cam_modulation(
 
     total_noise = sum(e - s for s, e in slots)
     assert cam_token_seq.shape[1] == total_noise, (
-        f"cam_token_seq len {cam_token_seq.shape[1]} != sum(noise_slots lens) {total_noise}; "
-        f"slots={slots}"
+        f"cam_token_seq len {cam_token_seq.shape[1]} != sum(noise_slots lens) {total_noise}; slots={slots}"
     )
 
     # 1) Injector MLP refinement: down -> silu -> up, with residual.
@@ -326,7 +351,7 @@ def apply_cam_modulation(
 
 def iter_cam_state_dict_keys(
     num_layers: int,
-    cam_ctrl_layers: Optional[Iterable[int]] = None,
+    cam_ctrl_layers: Iterable[int] | None = None,
 ):
     """Yield all expected cam state_dict keys: 6 global + 12 per active layer."""
     yield "patch_embedding_wancamctrl.weight"
@@ -380,7 +405,7 @@ def load_camera_ctrl_weights(
     model: nn.Module,
     ckpt_path: str,
     num_layers: int,
-    cam_ctrl_layers: Optional[Iterable[int]] = None,
+    cam_ctrl_layers: Iterable[int] | None = None,
     strict: bool = True,
 ) -> dict:
     """Load cam weights from ckpt into model.
@@ -413,17 +438,11 @@ def load_camera_ctrl_weights(
     if strict:
         errs = []
         if missing:
-            errs.append(
-                f"{len(missing)} cam key(s) missing from ckpt; first 5: {missing[:5]}"
-            )
+            errs.append(f"{len(missing)} cam key(s) missing from ckpt; first 5: {missing[:5]}")
         if shape_mismatch:
-            errs.append(
-                f"{len(shape_mismatch)} shape mismatch(es); first 3: {shape_mismatch[:3]}"
-            )
+            errs.append(f"{len(shape_mismatch)} shape mismatch(es); first 3: {shape_mismatch[:3]}")
         if errs:
-            raise ValueError(
-                f"[CamCtrl] strict load failed for {ckpt_path}:\n  " + "\n  ".join(errs)
-            )
+            raise ValueError(f"[CamCtrl] strict load failed for {ckpt_path}:\n  " + "\n  ".join(errs))
     else:
         if missing:
             print(f"[CamCtrl] load (non-strict): {len(missing)} missing, skip. first 5: {missing[:5]}")
@@ -436,10 +455,7 @@ def load_camera_ctrl_weights(
 
     if extras:
         print(f"[CamCtrl] {len(extras)} extra non-expected cam-named key(s) ignored. first 3: {extras[:3]}")
-    print(
-        f"[CamCtrl] Loaded {len(load_sd)}/{len(expected)} cam keys from {ckpt_path} "
-        f"(strict={strict})"
-    )
+    print(f"[CamCtrl] Loaded {len(load_sd)}/{len(expected)} cam keys from {ckpt_path} (strict={strict})")
     return {
         "expected": len(expected),
         "loaded": len(load_sd),
@@ -460,11 +476,7 @@ def save_camera_ctrl_weights(model: nn.Module, save_path: str):
         os.makedirs(save_path, exist_ok=True)
         target = os.path.join(save_path, "camera_ctrl.safetensors")
 
-    cam_sd = {
-        k: v.detach().contiguous().cpu()
-        for k, v in model.state_dict().items()
-        if is_cam_param_name(k)
-    }
+    cam_sd = {k: v.detach().contiguous().cpu() for k, v in model.state_dict().items() if is_cam_param_name(k)}
     if not cam_sd:
         print(f"[CamCtrl] WARNING: no cam params on model, skip save to {target}")
         return None
@@ -488,8 +500,8 @@ def _has_cam_loaded_sentinel(model: nn.Module) -> bool:
 def reinit_cam_modules(
     model: nn.Module,
     num_layers: int,
-    cam_weight_path: Optional[str] = None,
-    cam_ctrl_layers: Optional[Iterable[int]] = None,
+    cam_weight_path: str | None = None,
+    cam_ctrl_layers: Iterable[int] | None = None,
     strict: bool = True,
 ):
     """Initialize cam weights: (1) load from path, (2) keep if sentinel positive, (3) Xavier fallback."""
@@ -502,7 +514,9 @@ def reinit_cam_modules(
         print("[CamCtrl] reinit: sentinel positive (down_proj non-zero), keep existing cam params.")
         return
 
-    print("[CamCtrl] reinit: Xavier fallback (down=xavier, up=0, patch_emb=xavier, layer1=normal-std0.02, layer2=zeros)")
+    print(
+        "[CamCtrl] reinit: Xavier fallback (down=xavier, up=0, patch_emb=xavier, layer1=normal-std0.02, layer2=zeros)"
+    )
     if hasattr(model, "patch_embedding_wancamctrl"):
         nn.init.xavier_uniform_(model.patch_embedding_wancamctrl.weight)
         nn.init.zeros_(model.patch_embedding_wancamctrl.bias)
@@ -551,9 +565,8 @@ def set_camera_only_trainable(model: nn.Module, verbose: bool = True) -> int:
             p.requires_grad_(False)
 
     trainable = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
-    assert set(n for n, _ in trainable) == cam_names, (
-        "camera-only freeze: trainable set != cam-name set; "
-        f"diff: {set(n for n, _ in trainable) ^ cam_names}"
+    assert {n for n, _ in trainable} == cam_names, (
+        f"camera-only freeze: trainable set != cam-name set; diff: { {n for n, _ in trainable} ^ cam_names }"
     )
     if verbose:
         total = sum(p.numel() for _, p in trainable)

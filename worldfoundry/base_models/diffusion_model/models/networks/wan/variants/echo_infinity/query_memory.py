@@ -24,7 +24,7 @@ class MemoryCrossAttentionLayer(nn.Module):
         self.norm_q = WanRMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
         self.norm1 = WanRMSNorm(dim, eps=eps)
         self.norm2 = WanRMSNorm(dim, eps=eps)
-        self.ffn = nn.Sequential(nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'), nn.Linear(ffn_dim, dim))
+        self.ffn = nn.Sequential(nn.Linear(dim, ffn_dim), nn.GELU(approximate="tanh"), nn.Linear(ffn_dim, dim))
 
     def forward(self, query_state, cached_k, cached_v):
         """Update learned queries by cross-attending to a cached memory bank."""
@@ -42,20 +42,21 @@ class MemoryCrossAttentionLayer(nn.Module):
         query_state = residual + self.ffn(self.norm2(query_state))
         return query_state
 
+
 class QueryMemoryEncoder(nn.Module):
     """Compress cached K/V into learned query tokens for later Infinity chunks."""
 
     def __init__(self, config):
         super().__init__()
-        Q_frames = getattr(config, 'Q_frames', 3)
-        tokens_per_frame = getattr(config, 'tokens_per_frame', 1560)
-        n_encoder_layers = getattr(config, 'n_encoder_layers', 2)
-        hidden_dim = getattr(config, 'hidden_dim', 1536)
-        num_heads = getattr(config, 'num_heads', 12)
-        head_dim = getattr(config, 'head_dim', 128)
+        Q_frames = getattr(config, "Q_frames", 3)
+        tokens_per_frame = getattr(config, "tokens_per_frame", 1560)
+        n_encoder_layers = getattr(config, "n_encoder_layers", 2)
+        hidden_dim = getattr(config, "hidden_dim", 1536)
+        num_heads = getattr(config, "num_heads", 12)
+        head_dim = getattr(config, "head_dim", 128)
         ffn_dim = hidden_dim * 4
-        gate_init_bias = getattr(config, 'gate_init_bias', 2.0)
-        qk_norm = getattr(config, 'qk_norm', True)
+        gate_init_bias = getattr(config, "gate_init_bias", 2.0)
+        qk_norm = getattr(config, "qk_norm", True)
         eps = 1e-06
         self.M = Q_frames * tokens_per_frame
         self.hidden_dim = hidden_dim
@@ -63,35 +64,65 @@ class QueryMemoryEncoder(nn.Module):
         self.head_dim = head_dim
         self.Q_frames = Q_frames
         self.tokens_per_frame = tokens_per_frame
-        self.use_batch_update = getattr(config, 'use_batch_update', False)
-        self.batch_update_interval = getattr(config, 'batch_update_interval', 1)
-        self.use_sink_anchor = getattr(config, 'use_sink_anchor', False)
-        self.use_vib = getattr(config, 'use_vib', False)
-        self.bptt_clips = getattr(config, 'bptt_clips', 1)
-        self.encoder_lr_multiplier = getattr(config, 'encoder_lr_multiplier', 5.0)
-        self.normalize_memory_k = getattr(config, 'normalize_memory_k', False)
-        self.use_residual_update = getattr(config, 'use_residual_update', False)
-        self.use_post_norm = getattr(config, 'use_post_norm', False)
-        self.memory_recache = getattr(config, 'memory_recache', False)
-        self.num_query_groups = getattr(config, 'num_query_groups', 1)
-        initializer_range = getattr(config, 'initializer_range', 0.014)
-        self.layers = nn.ModuleList([MemoryCrossAttentionLayer(hidden_dim, num_heads, ffn_dim, qk_norm, eps) for _ in range(n_encoder_layers)])
+        self.use_batch_update = getattr(config, "use_batch_update", False)
+        self.batch_update_interval = getattr(config, "batch_update_interval", 1)
+        self.use_sink_anchor = getattr(config, "use_sink_anchor", False)
+        self.use_vib = getattr(config, "use_vib", False)
+        self.bptt_clips = getattr(config, "bptt_clips", 1)
+        self.encoder_lr_multiplier = getattr(config, "encoder_lr_multiplier", 5.0)
+        self.normalize_memory_k = getattr(config, "normalize_memory_k", False)
+        self.use_residual_update = getattr(config, "use_residual_update", False)
+        self.use_post_norm = getattr(config, "use_post_norm", False)
+        self.memory_recache = getattr(config, "memory_recache", False)
+        self.num_query_groups = getattr(config, "num_query_groups", 1)
+        initializer_range = getattr(config, "initializer_range", 0.014)
+        self.layers = nn.ModuleList(
+            [MemoryCrossAttentionLayer(hidden_dim, num_heads, ffn_dim, qk_norm, eps) for _ in range(n_encoder_layers)]
+        )
         if self.use_post_norm:
             self.post_norm = WanRMSNorm(hidden_dim, eps=eps)
         if self.num_query_groups > 1:
-            self.query_inits = nn.ParameterList([nn.Parameter(torch.randn(1, self.M, hidden_dim) * initializer_range) for _ in range(self.num_query_groups)])
-            self.to_k_groups = nn.ModuleList([nn.Linear(hidden_dim, num_heads * head_dim) for _ in range(self.num_query_groups)])
-            self.to_v_groups = nn.ModuleList([nn.Linear(hidden_dim, num_heads * head_dim) for _ in range(self.num_query_groups)])
+            self.query_inits = nn.ParameterList(
+                [
+                    nn.Parameter(torch.randn(1, self.M, hidden_dim) * initializer_range)
+                    for _ in range(self.num_query_groups)
+                ]
+            )
+            self.to_k_groups = nn.ModuleList(
+                [nn.Linear(hidden_dim, num_heads * head_dim) for _ in range(self.num_query_groups)]
+            )
+            self.to_v_groups = nn.ModuleList(
+                [nn.Linear(hidden_dim, num_heads * head_dim) for _ in range(self.num_query_groups)]
+            )
             if self.normalize_memory_k:
-                self.norm_k_out_groups = nn.ModuleList([WanRMSNorm(num_heads * head_dim, eps=eps) for _ in range(self.num_query_groups)])
-            self.connector_projs = nn.ModuleList([nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.GELU(approximate='tanh'), nn.Linear(hidden_dim, hidden_dim), WanRMSNorm(hidden_dim, eps=eps)) for _ in range(self.num_query_groups)])
-            self.gate_linears = nn.ModuleList([nn.Linear(hidden_dim * 2, hidden_dim) for _ in range(self.num_query_groups)])
+                self.norm_k_out_groups = nn.ModuleList(
+                    [WanRMSNorm(num_heads * head_dim, eps=eps) for _ in range(self.num_query_groups)]
+                )
+            self.connector_projs = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Linear(hidden_dim, hidden_dim),
+                        nn.GELU(approximate="tanh"),
+                        nn.Linear(hidden_dim, hidden_dim),
+                        WanRMSNorm(hidden_dim, eps=eps),
+                    )
+                    for _ in range(self.num_query_groups)
+                ]
+            )
+            self.gate_linears = nn.ModuleList(
+                [nn.Linear(hidden_dim * 2, hidden_dim) for _ in range(self.num_query_groups)]
+            )
             for gl in self.gate_linears:
                 with torch.no_grad():
                     gl.bias.fill_(gate_init_bias)
         else:
             self.query_init = nn.Parameter(torch.randn(1, self.M, hidden_dim) * initializer_range)
-            self.connector_proj = nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.GELU(approximate='tanh'), nn.Linear(hidden_dim, hidden_dim), WanRMSNorm(hidden_dim, eps=eps))
+            self.connector_proj = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.GELU(approximate="tanh"),
+                nn.Linear(hidden_dim, hidden_dim),
+                WanRMSNorm(hidden_dim, eps=eps),
+            )
             self.gate_linear = nn.Linear(hidden_dim * 2, hidden_dim)
             with torch.no_grad():
                 self.gate_linear.bias.fill_(gate_init_bias)
@@ -107,19 +138,21 @@ class QueryMemoryEncoder(nn.Module):
         self.query_state = None
         self.has_history = False
         self._update_count = 0
-        total_params = sum((p.numel() for p in self.parameters()))
+        _total_params = sum(p.numel() for p in self.parameters())
 
     def reset(self, batch_size=1, device=None, dtype=None):
-
         def _expand_init(init):
             if init.dim() != 3 or init.shape[1] != self.M:
-                raise RuntimeError(f'query_init has unexpected shape {list(init.shape)} (expected [1, {self.M}, {self.hidden_dim}]). This usually means the encoder was placed inside FSDP, which flattens parameters. The encoder must remain outside FSDP (attached via object.__setattr__).')
+                raise RuntimeError(
+                    f"query_init has unexpected shape {list(init.shape)} (expected [1, {self.M}, {self.hidden_dim}]). This usually means the encoder was placed inside FSDP, which flattens parameters. The encoder must remain outside FSDP (attached via object.__setattr__)."
+                )
             state = init.expand(batch_size, -1, -1).clone()
             if device is not None:
                 state = state.to(device=device)
             if dtype is not None:
                 state = state.to(dtype=dtype)
             return state
+
         if self.num_query_groups > 1:
             self.query_states = [_expand_init(init) for init in self.query_inits]
             self.query_state = self.query_states[0]
@@ -129,11 +162,15 @@ class QueryMemoryEncoder(nn.Module):
         self._update_count = 0
         self._evicted_k_buffer = []
         self._evicted_v_buffer = []
-        shape = list(self.query_states[0].shape) if self.num_query_groups > 1 else list(self.query_state.shape)
+        _shape = list(self.query_states[0].shape) if self.num_query_groups > 1 else list(self.query_state.shape)
 
     def update(self, evicted_k, evicted_v, sink_k=None, sink_v=None):
         if self.query_state is None:
-            self.reset(batch_size=evicted_k.shape[0], device=evicted_k.device, dtype=evicted_k.dtype if evicted_k.dtype.is_floating_point else torch.bfloat16)
+            self.reset(
+                batch_size=evicted_k.shape[0],
+                device=evicted_k.device,
+                dtype=evicted_k.dtype if evicted_k.dtype.is_floating_point else torch.bfloat16,
+            )
         query_state = self.query_state
         if self.use_batch_update:
             self._evicted_k_buffer.append(evicted_k)
@@ -166,25 +203,28 @@ class QueryMemoryEncoder(nn.Module):
             if self.use_post_norm:
                 new_state = self.post_norm(new_state)
             return (new_state, gate_mean)
+
         kl_loss = 0.0
         if self.num_query_groups > 1:
             gate_means = []
             for g in range(self.num_query_groups):
-                new_state, gm = _update_single_group(self.query_states[g], self.connector_projs[g], self.gate_linears[g])
+                new_state, gm = _update_single_group(
+                    self.query_states[g], self.connector_projs[g], self.gate_linears[g]
+                )
                 if self.use_vib:
                     new_state = self.mu_proj(new_state)
                 self.query_states[g] = new_state
                 gate_means.append(gm)
             self.query_state = self.query_states[0]
-            gate_str = ', '.join((f"g{i}={('res' if gm is None else f'{gm:.3f}')}" for i, gm in enumerate(gate_means)))
-            norm_str = ', '.join((f'g{i}={self.query_states[i].norm().item():.1f}' for i in range(self.num_query_groups)))
+            gate_str = ", ".join((f"g{i}={('res' if gm is None else f'{gm:.3f}')}" for i, gm in enumerate(gate_means)))  # noqa: F841 - Kept as upstream; an underscore name already exists.
+            norm_str = ", ".join(f"g{i}={self.query_states[i].norm().item():.1f}" for i in range(self.num_query_groups))  # noqa: F841 - Kept as upstream; an underscore name already exists.
         else:
             new_state, gate_mean = _update_single_group(query_state, self.connector_proj, self.gate_linear)
             if self.use_vib:
                 new_state = self.mu_proj(new_state)
             self.query_state = new_state
-            gate_str = f"{('residual_update' if gate_mean is None else f'gate_mean={gate_mean:.3f}')}"
-            norm_str = f'{new_state.norm().item():.1f}'
+            _gate_str = f"{('residual_update' if gate_mean is None else f'gate_mean={gate_mean:.3f}')}"
+            _norm_str = f"{new_state.norm().item():.1f}"
         self.has_history = True
         self._update_count += 1
         return kl_loss

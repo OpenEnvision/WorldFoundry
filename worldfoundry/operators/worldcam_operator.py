@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -10,8 +11,7 @@ from PIL import Image
 
 from .base_operator import BaseOperator
 
-
-_RESAMPLE_BICUBIC = getattr(Image, "Resampling", Image).BICUBIC
+_RESAMPLE_BICUBIC = Image.Resampling.BICUBIC
 
 _ACTION_ALIASES = {
     "forward": "forward",
@@ -37,7 +37,6 @@ _INTRINSICS_1920X1080 = np.array([722.91626, 722.6145, 960.0, 540.0], dtype=np.f
 
 
 def _normalize_action(action: str) -> str:
-    """Normalize action implementation."""
     key = action.strip().lower().replace("-", "_").replace(" ", "_")
     if key not in _ACTION_ALIASES:
         raise ValueError(f"Unsupported WorldCam interaction: {action}")
@@ -45,14 +44,10 @@ def _normalize_action(action: str) -> str:
 
 
 def _to_uint8_image(array: np.ndarray) -> np.ndarray:
-    """To uint8 image implementation."""
     data = np.asarray(array)
     if data.dtype in (np.float16, np.float32, np.float64):
         if data.min() >= -1.0 and data.max() <= 1.0:
-            if data.min() < 0.0:
-                data = (data + 1.0) * 127.5
-            else:
-                data = data * 255.0
+            data = (data + 1.0) * 127.5 if data.min() < 0.0 else data * 255.0
         data = np.clip(data, 0.0, 255.0).astype(np.uint8)
     elif data.dtype != np.uint8:
         data = np.clip(data, 0, 255).astype(np.uint8)
@@ -60,7 +55,6 @@ def _to_uint8_image(array: np.ndarray) -> np.ndarray:
 
 
 def _to_pil_image(data: Any) -> Image.Image:
-    """To pil image implementation."""
     if isinstance(data, Image.Image):
         return data.convert("RGB")
     if isinstance(data, str):
@@ -104,8 +98,7 @@ class WorldCamOperator(BaseOperator):
     ):
         """Initialize the operator with specific configurations."""
         super().__init__(
-            operation_types=operation_types
-            or ["textual_instruction", "action_instruction", "visual_instruction"]
+            operation_types=operation_types or ["textual_instruction", "action_instruction", "visual_instruction"]
         )
         self.interaction_template = interaction_template or [
             "forward",
@@ -162,14 +155,14 @@ class WorldCamOperator(BaseOperator):
             "conditioning_frames": self.conditioning_frames,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         if len(self.current_interaction) == 0:
             raise ValueError("No interaction registered. Use get_interaction() first.")
 
         actions = list(self.current_interaction[-1])
         self.interaction_history.extend(actions)
-        expanded_actions: List[str] = []
+        expanded_actions: list[str] = []
         for action in actions:
             expanded_actions.extend([action] * self.latent_steps_per_action)
 
@@ -185,8 +178,7 @@ class WorldCamOperator(BaseOperator):
             "extrinsics": torch.from_numpy(np.stack(poses, axis=0)).unsqueeze(0),
         }
 
-    def _build_pose_sequence(self, expanded_actions: Sequence[str]) -> List[np.ndarray]:
-        """Build pose sequence implementation."""
+    def _build_pose_sequence(self, expanded_actions: Sequence[str]) -> list[np.ndarray]:
         position = np.zeros(3, dtype=np.float32)
         yaw = 0.0
         pitch = 0.0
@@ -218,7 +210,6 @@ class WorldCamOperator(BaseOperator):
         pitch: float,
         action: str,
     ) -> tuple[np.ndarray, float, float]:
-        """Apply action end state implementation."""
         end_position = position.copy()
         end_yaw = float(yaw)
         end_pitch = float(pitch)
@@ -265,7 +256,6 @@ class WorldCamOperator(BaseOperator):
 
     @staticmethod
     def _compose_c2w(position: np.ndarray, yaw: float, pitch: float) -> np.ndarray:
-        """Compose c2w implementation."""
         forward, right, up = WorldCamOperator._camera_axes(yaw, pitch)
         c2w = np.eye(4, dtype=np.float32)
         c2w[:3, :3] = np.stack([right, up, forward], axis=1)
@@ -274,7 +264,6 @@ class WorldCamOperator(BaseOperator):
 
     @staticmethod
     def _camera_axes(yaw: float, pitch: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Camera axes implementation."""
         forward = np.array(
             [
                 np.sin(yaw) * np.cos(pitch),

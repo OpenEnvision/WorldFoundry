@@ -1,6 +1,6 @@
 ---
 title: VideoPhy
-description: "UCLA / Google T2V physical-commonsense bench: VideoCon-Physics judges SA, PC, and Joint. WorldFoundry ships the judge path; it does not invent a board."
+description: "UCLA / Google T2V physical-commonsense bench: VideoCon-Physics judges SA, PC, and Joint. WorldFoundry ships the judge path."
 ---
 
 VideoPhy (UCLA and Google Research) tests whether text-to-video models obey **physical commonsense** in material interactions (solid-solid, solid-fluid, fluid-fluid). Each prompt describes a physical interaction. The official judge is **VideoCon-Physics**, a fine-tuned video-language model. Three scores:
@@ -9,7 +9,7 @@ VideoPhy (UCLA and Google Research) tests whether text-to-video models obey **ph
 - **Physical Commonsense** — does the motion obey physics?
 - **Joint Score** — both together.
 
-`videophy_average` is the WorldFoundry mean over available families. The official scoring path is in tree; **full 688-prompt reproduction is pending**.
+`videophy_average` is the WorldFoundry mean over available families. A full 688-prompt reproduction has not been validated in WorldFoundry.
 
 Paper: [VideoPhy](https://arxiv.org/abs/2406.03520). Project: [videophy.github.io](https://videophy.github.io/). Code: [Hritikbansal/videophy](https://github.com/Hritikbansal/videophy).
 
@@ -20,7 +20,7 @@ WorldFoundry **bundles the prompt list** and can run the in-tree VideoCon-Physic
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id videophy \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -31,7 +31,7 @@ worldfoundry-eval zoo benchmark-run \
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/videophy/run_videophy_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/videophy/run_videophy_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --videocon-checkpoint /path/to/videocon_physics \
@@ -41,7 +41,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 Env: `WORLDFOUNDRY_VIDEOPHY_RESULTS_PATH`, `WORLDFOUNDRY_VIDEOPHY_JUDGE_BACKEND`. Prompt list: `worldfoundry/data/benchmarks/assets/videophy/prompts.json`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/videophy.yaml`, `worldfoundry/evaluation/tasks/execution/runners/videophy`.
+Manifest and runner: `worldfoundry/data/benchmarks/tasks/external/videophy.yaml`, `worldfoundry/evals/tasks/execution/runners/videophy`.
 
 Outputs include `scorecard.json` (primary `videophy_average`).
 

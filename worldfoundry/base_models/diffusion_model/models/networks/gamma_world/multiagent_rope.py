@@ -28,7 +28,6 @@ def sinusoidal_embedding_1d(dim, position):
 
 
 def precompute_freqs_cis_3d(dim: int, end: int = 1024, theta: float = 10000.0):
-
     f_freqs_cis = precompute_freqs_cis(dim - 2 * (dim // 3), end, theta)
     h_freqs_cis = precompute_freqs_cis(dim // 3, end, theta)
     w_freqs_cis = precompute_freqs_cis(dim // 3, end, theta)
@@ -40,7 +39,6 @@ def compute_simplex_agent_freqs(
     dim_agent: int,
     scale: float = 1.0,
 ) -> torch.Tensor:
-
     assert num_agents >= 1, f"num_agents must be >= 1, got {num_agents}"
     assert dim_agent % 2 == 0, f"dim_agent must be even, got {dim_agent}"
     assert scale > 0, f"scale must be positive, got {scale}"
@@ -77,7 +75,6 @@ def precompute_freqs_cis_4d(
     num_agents: int | None = None,
     agent_scale: float = 1.0,
 ):
-
     dim_spatial = dim // 3
     dim_temporal = dim - 2 * dim_spatial
     dim_th = (dim_temporal // 2 // 2) * 2
@@ -105,7 +102,6 @@ def precompute_freqs_cis_4d(
 
 
 def precompute_freqs_cis(dim: int, end: int = 1024, theta: float = 10000.0):
-
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].double() / dim))
     freqs = torch.outer(torch.arange(end, device=freqs.device), freqs)
     freqs_cis = torch.polar(torch.ones_like(freqs), freqs)
@@ -120,7 +116,6 @@ def build_multi_agent_freqs(
     num_agents: int | None = None,
     agent_pool_indices: list[int] | None = None,
 ):
-
     layout = getattr(dit_or_freqs, "multi_agent_token_layout", "spatial")
     if num_agents is None:
         num_agents = getattr(dit_or_freqs, "num_agents", 1)
@@ -149,10 +144,7 @@ def build_multi_agent_freqs(
 
         all_freqs = []
         for agent_id in range(num_agents):
-            if agent_encoding == "simplex":
-                agent_idx = agent_pool_indices[agent_id]
-            else:
-                agent_idx = agent_id + agent_id_offset
+            agent_idx = agent_pool_indices[agent_id] if agent_encoding == "simplex" else agent_id + agent_id_offset
 
             agent_freqs = torch.cat(
                 [

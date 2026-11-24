@@ -37,8 +37,8 @@ tracks:
     - seg_recall
     - lpips_diversity
 shared_base_models:
-  vbench: worldfoundry.evaluation.tasks.execution.runners.vbench.runtime
-  vbench_i2v: worldfoundry.evaluation.tasks.execution.runners.vbench_plus_plus.runtime
+  vbench: worldfoundry.evals.tasks.execution.runners.vbench.runtime
+  vbench_i2v: worldfoundry.evals.tasks.execution.runners.vbench_plus_plus.runtime
   qwen_vl: worldfoundry.base_models.llm_mllm_core.mllm.qwen
   dover: worldfoundry.base_models.perception_core.video_quality.dover
   lpips: worldfoundry.base_models.perception_core.video_quality.lpips

@@ -1,12 +1,7 @@
-id: xiaomi-robotics-0
+schema_version: 2
+model_id: xiaomi-robotics-0
 display_name: Xiaomi-Robotics-0
 task_family: vla_policy
-artifact_kind: action_trace
-artifact_filename: xiaomi_robotics_0_action_trace.json
-backend_stage: in_tree_checkpoint_runtime
-integration_status: all_released_checkpoints_gpu_validated
-runtime_status: all_released_checkpoints_gpu_validated
-verification_status: all_released_checkpoints_gpu_validated
 checkpoints:
 - repo_id: XiaomiRobotics/Xiaomi-Robotics-0-LIBERO
   revision: fc04bbdcc53e498695cfad95d1199091396ef55b
@@ -51,23 +46,31 @@ input_schema:
   variants:
     libero:
       robot_type: libero_all
-      camera_keys: [base, wrist_left]
+      camera_keys:
+      - base
+      - wrist_left
       action_horizon: 10
     calvin-abcd:
       robot_type: calvin_abcd_orig
-      camera_keys: [base, wrist_left]
+      camera_keys:
+      - base
+      - wrist_left
       action_horizon: 10
     calvin-abc:
       robot_type: calvin_abc_orig
-      camera_keys: [base, wrist_left]
+      camera_keys:
+      - base
+      - wrist_left
       action_horizon: 10
     simplerenv-google:
       robot_type: fractal_delta
-      camera_keys: [base]
+      camera_keys:
+      - base
       action_horizon: 4
     simplerenv-widowx:
       robot_type: bridge_delta
-      camera_keys: [base]
+      camera_keys:
+      - base
       action_horizon: 4
     pretrain:
       action_horizons:
@@ -75,14 +78,28 @@ input_schema:
         droid_pt: 15
         midata_mix_ann_pt_v1: 30
         molmoact_pt: 15
+artifact_kind: action_trace
+artifact_filename: xiaomi_robotics_0_action_trace.json
 execution:
   environment: xiaomi-robotics-0
   pipeline_binding: xiaomi-robotics-0
+  backend_stage: in_tree_checkpoint_runtime
+  runtime_status: all_released_checkpoints_gpu_validated
+  integration_status: all_released_checkpoints_gpu_validated
+integration:
+  status: all_released_checkpoints_gpu_validated
+verification_status: all_released_checkpoints_gpu_validated
 notes:
 - Default variant is LIBERO; select other official checkpoints with variant/variant_id.
-- The base pretrain variant requires explicit robot_type, camera_keys, and view_labels because it has no universal embodiment/view contract.
+- The base pretrain variant requires explicit robot_type, camera_keys, and view_labels
+  because it has no universal embodiment/view contract.
 - Model and processor classes are loaded from the in-tree package, never with trust_remote_code.
-- SimplerEnv variants apply their released resize and 0.95 center-crop transform before checkpoint preprocessing.
-- All six pinned snapshots pass exact-size, sharded-index, and safetensors-header validation with no partial markers.
-- All six released checkpoints passed strict restoration and real A100 Workspace inference with finite variant-specific action chunks; the pretrain checkpoint was validated with the explicit DROID contract.
-- Checkpoint weights are not bundled; runtime resolves only explicitly staged local snapshots and never downloads implicitly.
+- SimplerEnv variants apply their released resize and 0.95 center-crop transform before
+  checkpoint preprocessing.
+- All six pinned snapshots pass exact-size, sharded-index, and safetensors-header
+  validation with no partial markers.
+- All six released checkpoints passed strict restoration and real A100 Workspace inference
+  with finite variant-specific action chunks; the pretrain checkpoint was validated
+  with the explicit DROID contract.
+- Checkpoint weights are not bundled; runtime resolves only explicitly staged local
+  snapshots and never downloads implicitly.

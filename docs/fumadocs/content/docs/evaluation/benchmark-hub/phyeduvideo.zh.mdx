@@ -3,9 +3,9 @@ title: PhyEduVideo
 description: "WACV 2026 物理教育 T2V：60 个概念、205 条教学点 prompt。WorldFoundry 导入 judge 文件并校验覆盖——不跑 InternVL。"
 ---
 
-PhyEduVideo（IIIT Hyderabad、Adobe、IISER Thiruvananthapuram；WACV 2026）问的是 T2V 模型能不能**画出一个教学点**，不是它是否遵守某套定律分类。捆绑的 `Prompts/Prompts.json` 有 **6 类 60 个概念**（力学、振动与波动、流体、热力学、电磁学、光学），拆成 **205** 条视觉描述型教学点 prompt。
+PhyEduVideo（IIIT Hyderabad、Adobe、IISER Thiruvananthapuram；WACV 2026）评估 T2V 模型能否**呈现一个教学点**，而非是否遵守某套定律分类。随附的 `Prompts/Prompts.json` 包含 **6 类 60 个概念**（力学、振动与波动、流体、热力学、电磁学、光学），拆成 **205** 条视觉描述型教学点 prompt。
 
-这是**教育**，不是 [PhyGenBench](/zh/docs/evaluation/benchmark-hub/phygenbench)（27 条定律常识生成），不是 [PhyGround](/zh/docs/evaluation/benchmark-hub/phyground)（TI2V 上 13 条定律准则），也不是 [PhyFPS-Bench-Gen](/zh/docs/evaluation/benchmark-hub/phyfps-bench-gen)（帧率审计）。
+该套件面向**教育**场景，不是 [PhyGenBench](/zh/docs/evaluation/benchmark-hub/phygenbench)（27 条定律常识生成），不是 [PhyGround](/zh/docs/evaluation/benchmark-hub/phyground)（TI2V 上 13 条定律准则），也不是 [PhyFPS-Bench-Gen](/zh/docs/evaluation/benchmark-hub/phyfps-bench-gen)（帧率审计）。
 
 论文：[PhyEduVideo](https://arxiv.org/abs/2601.00943)。项目：[meghamariamkm.github.io/phyeduvideo26](https://meghamariamkm.github.io/phyeduvideo26/)。代码：[meghamariamkm/PhyEduVideo](https://github.com/meghamariamkm/PhyEduVideo)。
 
@@ -16,7 +16,7 @@ WorldFoundry **导入**调用方提供的结果文件（JSON / JSONL / CSV），
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id phyeduvideo \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -25,6 +25,6 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-专用 runner 上的 `--run-official` 对 WorldFoundry 生成产物走同一条导入路径。产物包括 `scorecard.json`（主键 `phyeduvideo_average`）、`results_summary.csv`，以及文件提供时的逐样本行。
+专用 runner 的 `--run-official` 对 WorldFoundry 生成产物使用同一条导入路径。产物包括 `scorecard.json`（主键 `phyeduvideo_average`）、`results_summary.csv`，以及文件提供时的逐样本行。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

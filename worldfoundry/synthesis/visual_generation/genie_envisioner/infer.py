@@ -4,35 +4,9 @@ from __future__ import annotations
 
 import argparse
 import gc
-import sys
 from pathlib import Path
 
-
 NUM_VIEWS = 3
-
-
-def _clear_conflicting_namespace(name: str, runtime_root: Path) -> None:
-    package = sys.modules.get(name)
-    package_file = getattr(package, "__file__", None) if package is not None else None
-    if package_file is not None:
-        try:
-            belongs_to_runtime = Path(package_file).resolve().is_relative_to(runtime_root)
-        except OSError:
-            belongs_to_runtime = False
-        if belongs_to_runtime:
-            return
-    for module_name in tuple(sys.modules):
-        if module_name == name or module_name.startswith(f"{name}."):
-            sys.modules.pop(module_name, None)
-
-
-def _ensure_vendored_runtime_importable() -> None:
-    runtime_root = (Path(__file__).resolve().parent / "genie_envisioner_runtime").resolve()
-    for namespace in ("models", "utils"):
-        _clear_conflicting_namespace(namespace, runtime_root)
-    runtime_entry = str(runtime_root)
-    sys.path[:] = [entry for entry in sys.path if entry != runtime_entry]
-    sys.path.insert(0, runtime_entry)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -211,7 +185,6 @@ def _transformer_config() -> dict[str, object]:
 def run(args: argparse.Namespace) -> Path:
     """Generate a three-view GE-base rollout with released local checkpoints."""
     _validate_args(args)
-    _ensure_vendored_runtime_importable()
 
     import numpy as np
     import torch
@@ -220,41 +193,46 @@ def run(args: argparse.Namespace) -> Path:
     from safetensors.torch import load_file
     from transformers import T5EncoderModel, T5Tokenizer
 
-    from models.ltx_models.autoencoder_kl_ltx import AutoencoderKLLTXVideo
-    from models.ltx_models.transformer_ltx_multiview import LTXVideoTransformer3DModel
-    from models.pipeline.custom_pipeline import CustomPipeline
     from worldfoundry.core.media.codecs.video import save_video_h264
+
+    from .genie_envisioner_runtime.models.ltx_models.autoencoder_kl_ltx import AutoencoderKLLTXVideo
+    from .genie_envisioner_runtime.models.ltx_models.transformer_ltx_multiview import LTXVideoTransformer3DModel
+    from .genie_envisioner_runtime.models.pipeline.custom_pipeline import CustomPipeline
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is unavailable; Genie Envisioner inference cannot run")
-    dtype = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}[
-        args.mixed_precision
-    ]
+    dtype = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}[args.mixed_precision]
     device = torch.device(args.device)
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
     base_model_dir = args.base_model_dir.expanduser().resolve()
     print("Loading local LTX tokenizer and text encoder...")
-    tokenizer = T5Tokenizer.from_pretrained(
-        base_model_dir, subfolder="tokenizer", local_files_only=True
+    tokenizer = T5Tokenizer.from_pretrained(base_model_dir, subfolder="tokenizer", local_files_only=True)
+    text_encoder = (
+        T5EncoderModel.from_pretrained(
+            base_model_dir,
+            subfolder="text_encoder",
+            dtype=dtype,
+            local_files_only=True,
+            low_cpu_mem_usage=True,
+        )
+        .to(device=device, dtype=dtype)
+        .eval()
     )
-    text_encoder = T5EncoderModel.from_pretrained(
-        base_model_dir,
-        subfolder="text_encoder",
-        dtype=dtype,
-        local_files_only=True,
-        low_cpu_mem_usage=True,
-    ).to(device=device, dtype=dtype).eval()
 
     print("Loading local LTX VAE...")
-    vae = AutoencoderKLLTXVideo.from_pretrained(
-        base_model_dir,
-        subfolder="vae",
-        torch_dtype=dtype,
-        local_files_only=True,
-        low_cpu_mem_usage=True,
-    ).to(device=device, dtype=dtype).eval()
+    vae = (
+        AutoencoderKLLTXVideo.from_pretrained(
+            base_model_dir,
+            subfolder="vae",
+            torch_dtype=dtype,
+            local_files_only=True,
+            low_cpu_mem_usage=True,
+        )
+        .to(device=device, dtype=dtype)
+        .eval()
+    )
     vae.enable_slicing()
     vae.enable_tiling()
 

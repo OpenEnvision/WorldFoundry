@@ -1,30 +1,30 @@
 ---
 title: "YUME"
-description: "Interactive first-person world video from an image (and text on 1.5), driven by keyboard-style motion. Two in-tree variants, both runner-verified."
+description: "Interactive first-person world video from an image (and text on 1.5), driven by keyboard-style motion. Two variants: 540P image-conditioned YUME and 720P YUME-1.5."
 modelId: "yume"
 pageSource: authored
 ---
 
-YUME generates **explorable first-person world video**. An image (and on YUME-1.5, text and optional video) goes in; a clip that **follows keyboard-style motion** comes out. It is not a prompt-only cinematic T2V model, not a 3D splat generator, and not a Cosmos world-foundation card.
+YUME generates **explorable first-person world video**. An image (and on YUME-1.5, text and optional video) goes in; a clip that **follows keyboard-style motion** comes out.
 
 <ModelPaperFigures modelId="yume" locale="en" />
 
-WorldFoundry keeps two **vendored** in-tree adapters under Apache-2.0. Both runner paths are **verified**:
+WorldFoundry provides two variants under Apache-2.0:
 
 - `yume` — official `stdstu123/Yume-I2V-540P`. Image-first. Sizes **544×960** or **960×544**. Artifact `yume.mp4`.
 - `yume-1p5` — official `stdstu123/Yume-5B-720P`. Prompt + image + video. Default size **704×1280** (also **1280×704**). Artifact `yume-1p5.mp4`.
 
-The paper / project write-up is [Yume1.5](https://arxiv.org/abs/2512.22096) ([project page](https://stdstu12.github.io/YUME-Project/), [github.com/stdstu12/YUME](https://github.com/stdstu12/YUME)). Title-page thumb stays beside the heading.
+The paper / project write-up is [Yume1.5](https://arxiv.org/abs/2512.22096) ([project page](https://stdstu12.github.io/YUME-Project/), [github.com/stdstu12/YUME](https://github.com/stdstu12/YUME)).
 
 <ModelCommandBuilder modelId="yume" locale="en" />
 
 ## What it is for
 
-Walk a still scene. Recorded inputs: `prompt`, `image`, `video`, plus `navigation_actions` and `camera_actions`. The pipeline **requires at least one interaction** — a WASD-style move or an arrow-key camera action. No interaction list means the run fails before sampling.
+Walk a still scene. Inputs: `prompt`, `image`, `video`, plus `navigation_actions` and `camera_actions`. The pipeline **requires at least one interaction** — a WASD-style move or an arrow-key camera action. No interaction list means the run fails before sampling.
 
-Use `yume` for the lighter 540P image-conditioned route. Use `yume-1p5` when text guidance and 720P matter. Do not send this card a text prompt expecting a general T2V clip (that is ZeroScope / a DiT card). Do not expect a `.ply` world (that is WorldGen).
+Use `yume` for the lighter 540P image-conditioned route. Use `yume-1p5` when text guidance and 720P matter. For a general text-to-video clip, use a T2V model such as ZeroScope; for a `.ply` 3D world, use WorldGen.
 
-Score interactive first-person rollouts on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench). Per-run visual QA stays outside the catalog.
+Score interactive first-person rollouts on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench).
 
 ## Running in WorldFoundry
 

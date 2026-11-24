@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import os
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 import torch.nn.functional as F
@@ -115,7 +115,7 @@ class AdaptiveAntiDrifting:
     def apply_frame_aware_corruption(
         history_latents: torch.Tensor,
         corruption_strength: float = 0.1,
-        generator: Optional[torch.Generator] = None,
+        generator: torch.Generator | None = None,
     ) -> torch.Tensor:
         noise = torch.randn_like(history_latents, generator=generator, device=history_latents.device)
         return history_latents + corruption_strength * noise
@@ -217,7 +217,9 @@ def load_extra_components(args, model, checkpoint_path) -> None:
     if camera_config is not None and getattr(camera_config, "enabled", False):
         camera_path = os.path.join(os.path.dirname(os.fspath(checkpoint_path)), "camera_ctrl.safetensors")
         if os.path.exists(camera_path):
-            from worldfoundry.base_models.diffusion_model.models.networks.evoke.camera_control import load_camera_ctrl_weights
+            from worldfoundry.base_models.diffusion_model.models.networks.evoke.camera_control import (
+                load_camera_ctrl_weights,
+            )
 
             load_camera_ctrl_weights(
                 model,

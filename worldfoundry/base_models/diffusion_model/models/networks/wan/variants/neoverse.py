@@ -8,11 +8,17 @@ Adds camera + geometric control hints.  No action, causal, or linear attn.
 """
 
 import math
+
 import torch
 import torch.nn.functional as F
+
+# isort: split
 from ..model import DiTBlock
+
+# isort: split
 from worldfoundry.core.model_loading import hash_state_dict_keys
 from worldfoundry.core.nn import zero_module
+
 
 class AttentionBlock(DiTBlock):
     """NeoVerse condition block that stacks skip hints for the host DiT."""
@@ -61,10 +67,9 @@ class NeoVerseControlBranch(torch.nn.Module):
         self.control_layers_mapping = {i: n for n, i in enumerate(self.control_layers)}
 
         # control blocks
-        self.control_blocks = torch.nn.ModuleList([
-            AttentionBlock(has_image_input, dim, num_heads, ffn_dim, eps, block_id=i)
-            for i in self.control_layers
-        ])
+        self.control_blocks = torch.nn.ModuleList(
+            [AttentionBlock(has_image_input, dim, num_heads, ffn_dim, eps, block_id=i) for i in self.control_layers]
+        )
 
         self.control_mask_padding = [0, 0, 0, 0, 3, 0]
         mask_cam_in_dim = 7
@@ -95,10 +100,10 @@ class NeoVerseControlBranch(torch.nn.Module):
     def forward(
         self,
         x,
-        target_rgb_latents,     # [B, C, T, H, W]
-        target_depth_latents,   # [B, C, T, H, W]
-        target_cams,            # [B, T, C, H, W]
-        target_masks,           # [B, T, C, H, W]
+        target_rgb_latents,  # [B, C, T, H, W]
+        target_depth_latents,  # [B, C, T, H, W]
+        target_cams,  # [B, T, C, H, W]
+        target_masks,  # [B, T, C, H, W]
         context,
         t_mod,
         freqs,
@@ -107,7 +112,7 @@ class NeoVerseControlBranch(torch.nn.Module):
     ):
         """Pack RGB+depth+mask/camera, run the condition trunk, return hint tensors."""
         target_latents = torch.cat((target_rgb_latents, target_depth_latents), dim=1)
-        target_mask_cams = torch.cat((target_masks, target_cams), dim=2).permute(0, 2, 1, 3, 4) # [B, C, T, H, W]
+        target_mask_cams = torch.cat((target_masks, target_cams), dim=2).permute(0, 2, 1, 3, 4)  # [B, C, T, H, W]
         target_mask_cams = F.pad(target_mask_cams, self.control_mask_padding, mode="constant", value=0)
         target_mask_cams = self.control_mask_cam_embedding(target_mask_cams)
         c = self.control_patch_embedding(torch.cat((target_latents, target_mask_cams), dim=1))
@@ -119,6 +124,7 @@ class NeoVerseControlBranch(torch.nn.Module):
 
             def custom_forward(*inputs):
                 return module(*inputs)
+
             return custom_forward
 
         for block in self.control_blocks:
@@ -126,13 +132,21 @@ class NeoVerseControlBranch(torch.nn.Module):
                 with torch.autograd.graph.save_on_cpu():
                     c = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(block),
-                        c, x, context, t_mod, freqs,
+                        c,
+                        x,
+                        context,
+                        t_mod,
+                        freqs,
                         use_reentrant=False,
                     )
             elif use_gradient_checkpointing:
                 c = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
-                    c, x, context, t_mod, freqs,
+                    c,
+                    x,
+                    context,
+                    t_mod,
+                    freqs,
                     use_reentrant=False,
                 )
             else:

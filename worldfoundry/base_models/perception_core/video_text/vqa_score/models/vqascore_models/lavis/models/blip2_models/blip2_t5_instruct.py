@@ -1,13 +1,14 @@
 """
- Copyright (c) 2023, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2023, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
+
 import logging
-import string
 import random
-import copy
+import string
+from typing import ClassVar
 
 import torch
 import torch.nn as nn
@@ -15,8 +16,15 @@ from torch.cuda.amp import autocast as autocast
 from transformers import T5TokenizerFast
 
 from ...common.registry import registry
+
+# isort: split
 from .blip2 import Blip2Base, disabled_train
+
+# isort: split
+# isort: split
 from .modeling_t5 import T5Config, T5ForConditionalGeneration
+
+# isort: split
 from transformers.modeling_outputs import BaseModelOutput
 
 
@@ -32,7 +40,7 @@ class Blip2T5Instruct(Blip2Base):
         >>> model = load_model("blip2_t5_instruct", "flant5xl")
     """
 
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "flant5xl": "configs/models/blip2/blip2_instruct_flant5xl.yaml",
         "flant5xxl": "configs/models/blip2/blip2_instruct_flant5xxl.yaml",
     }
@@ -66,15 +74,13 @@ class Blip2T5Instruct(Blip2Base):
             vit_model, img_size, drop_path_rate, use_grad_checkpoint, vit_precision
         )
         if freeze_vit:
-            for name, param in self.visual_encoder.named_parameters():
+            for _name, param in self.visual_encoder.named_parameters():
                 param.requires_grad = False
             self.visual_encoder = self.visual_encoder.eval()
             self.visual_encoder.train = disabled_train
             logging.info("freeze vision encoder")
 
-        self.Qformer, self.query_tokens = self.init_Qformer(
-            num_query_token, self.visual_encoder.num_features
-        )
+        self.Qformer, self.query_tokens = self.init_Qformer(num_query_token, self.visual_encoder.num_features)
 
         if not qformer_text_input:
             self.Qformer.bert.embeddings.word_embeddings = None
@@ -86,22 +92,18 @@ class Blip2T5Instruct(Blip2Base):
             self.Qformer.resize_token_embeddings(len(self.tokenizer))
         self.Qformer.cls = None
 
-        self.t5_tokenizer = T5TokenizerFast.from_pretrained(t5_model, truncation_side='left')
-        self.t5_output_tokenizer = T5TokenizerFast.from_pretrained(t5_model, truncation_side='right')
+        self.t5_tokenizer = T5TokenizerFast.from_pretrained(t5_model, truncation_side="left")
+        self.t5_output_tokenizer = T5TokenizerFast.from_pretrained(t5_model, truncation_side="right")
 
         t5_config = T5Config.from_pretrained(t5_model)
         t5_config.dense_act_fn = "gelu"
-        self.t5_model = T5ForConditionalGeneration.from_pretrained(
-            t5_model, config=t5_config
-        )
+        self.t5_model = T5ForConditionalGeneration.from_pretrained(t5_model, config=t5_config)
 
-        for name, param in self.t5_model.named_parameters():
+        for _name, param in self.t5_model.named_parameters():
             param.requires_grad = False
             param.data = param.data.bfloat16()
 
-        self.t5_proj = nn.Linear(
-            self.Qformer.config.hidden_size, self.t5_model.config.hidden_size
-        )
+        self.t5_proj = nn.Linear(self.Qformer.config.hidden_size, self.t5_model.config.hidden_size)
 
         self.max_txt_len = max_txt_len
         self.max_output_txt_len = max_output_txt_len
@@ -130,13 +132,13 @@ class Blip2T5Instruct(Blip2Base):
         if self.qformer_text_input:
             text_Qformer = self.tokenizer(
                 samples["text_input"],
-                padding='longest',
+                padding="longest",
                 truncation=True,
                 max_length=self.max_txt_len,
                 return_tensors="pt",
             ).to(image.device)
             query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
-            Qformer_atts = torch.cat([query_atts,text_Qformer.attention_mask],dim=1)
+            Qformer_atts = torch.cat([query_atts, text_Qformer.attention_mask], dim=1)
 
             query_output = self.Qformer.bert(
                 text_Qformer.input_ids,
@@ -154,12 +156,12 @@ class Blip2T5Instruct(Blip2Base):
                 return_dict=True,
             )
 
-        inputs_t5 = self.t5_proj(query_output.last_hidden_state[:,:query_tokens.size(1),:])
+        inputs_t5 = self.t5_proj(query_output.last_hidden_state[:, : query_tokens.size(1), :])
         atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
 
         fs_embeds, fs_atts = None, None
-        if self.few_shot_prob > 0 and "few_shot_samples" in samples.keys():
-            fs_embeds, fs_atts = self.prepare_few_shot_embeds(samples['few_shot_samples'])
+        if self.few_shot_prob > 0 and "few_shot_samples" in samples.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+            fs_embeds, fs_atts = self.prepare_few_shot_embeds(samples["few_shot_samples"])
 
         with self.maybe_autocast(dtype=torch.bfloat16):
             input_tokens = self.t5_tokenizer(
@@ -204,7 +206,8 @@ class Blip2T5Instruct(Blip2Base):
     def prepare_few_shot_embeds(self, samples):
         this_n_fs = random.choices(
             list(range(self.num_few_shot_examples + 1)),
-            weights=[1 - self.few_shot_prob] + [self.few_shot_prob / self.num_few_shot_examples] * self.num_few_shot_examples
+            weights=[1 - self.few_shot_prob]
+            + [self.few_shot_prob / self.num_few_shot_examples] * self.num_few_shot_examples,
         )[0]
 
         if this_n_fs == 0:
@@ -214,32 +217,30 @@ class Blip2T5Instruct(Blip2Base):
         text_input = []
         for sample in samples:
             for n in range(this_n_fs):
-                images.append(sample['image'][n])
-                text_input.append(sample['text_input'][n])
+                images.append(sample["image"][n])
+                text_input.append(sample["text_input"][n])
         images = torch.stack(images, dim=0)
 
         image = images
 
         with self.maybe_autocast():
             image_embeds = self.ln_vision(self.visual_encoder(image))
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
         if self.qformer_text_input:
             text_Qformer = self.tokenizer(
                 text_input,
-                padding='longest',
+                padding="longest",
                 truncation=True,
                 max_length=self.max_txt_len,
                 return_tensors="pt",
             ).to(image.device)
             query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
-            Qformer_atts = torch.cat([query_atts,text_Qformer.attention_mask],dim=1)
+            Qformer_atts = torch.cat([query_atts, text_Qformer.attention_mask], dim=1)
             query_output = self.Qformer.bert(
                 text_Qformer.input_ids,
-                attention_mask = Qformer_atts,
+                attention_mask=Qformer_atts,
                 query_embeds=query_tokens,
                 encoder_hidden_states=image_embeds,
                 encoder_attention_mask=image_atts,
@@ -253,7 +254,7 @@ class Blip2T5Instruct(Blip2Base):
                 return_dict=True,
             )
 
-        inputs_t5 = self.t5_proj(query_output.last_hidden_state[:,:query_tokens.size(1),:])
+        inputs_t5 = self.t5_proj(query_output.last_hidden_state[:, : query_tokens.size(1), :])
         atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
 
         with self.maybe_autocast(dtype=torch.bfloat16):
@@ -272,7 +273,9 @@ class Blip2T5Instruct(Blip2Base):
 
         if this_n_fs > 1:
             encoder_atts = encoder_atts.reshape(encoder_atts.size(0) // this_n_fs, encoder_atts.size(1) * this_n_fs)
-            inputs_embeds = inputs_embeds.reshape(inputs_embeds.size(0) // this_n_fs, inputs_embeds.size(1) * this_n_fs, inputs_embeds.size(2))
+            inputs_embeds = inputs_embeds.reshape(
+                inputs_embeds.size(0) // this_n_fs, inputs_embeds.size(1) * this_n_fs, inputs_embeds.size(2)
+            )
 
         return inputs_embeds, encoder_atts
 
@@ -290,10 +293,7 @@ class Blip2T5Instruct(Blip2Base):
         num_captions=1,
         temperature=1,
     ):
-        if "prompt" in samples.keys():
-            prompt = samples["prompt"]
-        else:
-            prompt = self.prompt
+        prompt = samples["prompt"] if "prompt" in samples.keys() else self.prompt  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
 
         image = samples["image"]
 
@@ -305,8 +305,8 @@ class Blip2T5Instruct(Blip2Base):
             assert len(prompt) == bs, "The number of prompts must be equal to the batch size."
 
         # For TextCaps
-        if "ocr_tokens" in samples.keys() and "{}" in prompt[0]:
-            prompt = [p.format(', '.join(samples['ocr_tokens'][i][:30])) for i, p in enumerate(prompt)]
+        if "ocr_tokens" in samples.keys() and "{}" in prompt[0]:  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+            prompt = [p.format(", ".join(samples["ocr_tokens"][i][:30])) for i, p in enumerate(prompt)]
 
         query_tokens = self.query_tokens.expand(bs, -1, -1)
         if self.qformer_text_input:
@@ -316,19 +316,19 @@ class Blip2T5Instruct(Blip2Base):
 
             text_Qformer = self.tokenizer(
                 prompt,
-                padding='longest',
+                padding="longest",
                 truncation=True,
                 max_length=self.max_txt_len,
                 return_tensors="pt",
             ).to(image.device)
             query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
-            Qformer_atts = torch.cat([query_atts,text_Qformer.attention_mask],dim=1)
+            Qformer_atts = torch.cat([query_atts, text_Qformer.attention_mask], dim=1)
 
         # For video data
         if image.dim() == 5:
             inputs_t5, atts_t5 = [], []
             for j in range(image.size(2)):
-                this_frame = image[:,:,j,:,:]
+                this_frame = image[:, :, j, :, :]
                 with self.maybe_autocast():
                     frame_embeds = self.ln_vision(self.visual_encoder(this_frame))
                     frame_atts = torch.ones(frame_embeds.size()[:-1], dtype=torch.long).to(image.device)
@@ -336,7 +336,7 @@ class Blip2T5Instruct(Blip2Base):
                 if self.qformer_text_input:
                     frame_query_output = self.Qformer.bert(
                         text_Qformer.input_ids,
-                        attention_mask = Qformer_atts,
+                        attention_mask=Qformer_atts,
                         query_embeds=query_tokens,
                         encoder_hidden_states=frame_embeds,
                         encoder_attention_mask=frame_atts,
@@ -350,7 +350,7 @@ class Blip2T5Instruct(Blip2Base):
                         return_dict=True,
                     )
 
-                frame_inputs_t5 = self.t5_proj(frame_query_output.last_hidden_state[:,:query_tokens.size(1),:])
+                frame_inputs_t5 = self.t5_proj(frame_query_output.last_hidden_state[:, : query_tokens.size(1), :])
                 frame_atts_t5 = torch.ones(frame_inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
                 inputs_t5.append(frame_inputs_t5)
                 atts_t5.append(frame_atts_t5)
@@ -378,14 +378,10 @@ class Blip2T5Instruct(Blip2Base):
                     return_dict=True,
                 )
 
-            inputs_t5 = self.t5_proj(query_output.last_hidden_state[:,:query_tokens.size(1),:])
+            inputs_t5 = self.t5_proj(query_output.last_hidden_state[:, : query_tokens.size(1), :])
             atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
 
-        input_tokens = self.t5_tokenizer(
-            prompt,
-            padding="longest",
-            return_tensors="pt"
-        ).to(image.device)
+        input_tokens = self.t5_tokenizer(prompt, padding="longest", return_tensors="pt").to(image.device)
 
         encoder_atts = torch.cat([atts_t5, input_tokens.attention_mask], dim=1)
 
@@ -406,9 +402,7 @@ class Blip2T5Instruct(Blip2Base):
                 length_penalty=length_penalty,
                 num_return_sequences=num_captions,
             )
-            output_text = self.t5_tokenizer.batch_decode(
-                outputs, skip_special_tokens=True
-            )
+            output_text = self.t5_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         return output_text
 
@@ -423,21 +417,24 @@ class Blip2T5Instruct(Blip2Base):
         answer_list=None,
         prompt="",
         length_penalty=-1,
-        **kwargs
+        **kwargs,
     ):
         if isinstance(samples["text_input"], str):
             samples["text_input"] = [samples["text_input"]]
 
         if prompt:
             if prompt.count("{}") == 2:
-                if 'ocr_tokens' in samples:
+                if "ocr_tokens" in samples:
                     text_input = [
-                        prompt.format(', '.join(samples['ocr_tokens'][i][:30]), samples["text_input"][i])
-                    for i in range(len(samples["text_input"]))]
-                elif 'choices' in samples:
+                        prompt.format(", ".join(samples["ocr_tokens"][i][:30]), samples["text_input"][i])
+                        for i in range(len(samples["text_input"]))
+                    ]
+                elif "choices" in samples:
                     text_input = []
                     for i in range(len(samples["text_input"])):
-                        this_choices = [f"({string.ascii_lowercase[j]}) {ch}" for j, ch in enumerate(samples["choices"][i])]
+                        this_choices = [
+                            f"({string.ascii_lowercase[j]}) {ch}" for j, ch in enumerate(samples["choices"][i])
+                        ]
                         this_choices = " ".join(this_choices)
                         text_input.append(prompt.format(samples["text_input"][i], this_choices))
             else:
@@ -448,14 +445,10 @@ class Blip2T5Instruct(Blip2Base):
         samples["prompt"] = text_input
 
         output_text = self.generate(
-            samples,
-            num_beams=num_beams,
-            max_length=max_len,
-            min_length=min_len,
-            length_penalty=length_penalty
+            samples, num_beams=num_beams, max_length=max_len, min_length=min_len, length_penalty=length_penalty
         )
 
-        if self._apply_lemmatizer or ("apply_lemmatizer" in samples.keys() and samples["apply_lemmatizer"]):
+        if self._apply_lemmatizer or ("apply_lemmatizer" in samples.keys() and samples["apply_lemmatizer"]):  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             output_text = self._lemmatize(output_text)
 
         return output_text
@@ -467,7 +460,7 @@ class Blip2T5Instruct(Blip2Base):
         n_segments=1,
     ):
         # If candidates is a list of lists, each sample has its candidates, then we need to iterate one by one
-        if type(candidates[0]) == list:
+        if type(candidates[0]) is list:
             results = []
 
             for i in range(samples["image"].size(0)):
@@ -476,24 +469,24 @@ class Blip2T5Instruct(Blip2Base):
                     "prompt": samples["prompt"],
                 }
 
-                if "text_input" in samples.keys():
+                if "text_input" in samples.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                     this_sample["text_input"] = [samples["text_input"][i]]
 
-                if 'context' in samples.keys():
-                    this_sample['context'] = [samples["context"][i]]
+                if "context" in samples.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+                    this_sample["context"] = [samples["context"][i]]
 
-                if 'history' in samples.keys():
-                    this_sample['history'] = [samples["history"][i]]
+                if "history" in samples.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+                    this_sample["history"] = [samples["history"][i]]
 
-                if 'caption' in samples.keys():
-                    this_sample['caption'] = [samples["caption"][i]]
+                if "caption" in samples.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+                    this_sample["caption"] = [samples["caption"][i]]
 
                 this_result = self._predict_class(this_sample, candidates[i], n_segments)
                 results.append(this_result)
 
             try:
                 results = torch.cat(results, dim=0)
-            except:
+            except BaseException:
                 results = [res.tolist()[0] for res in results]
 
             return results
@@ -529,39 +522,35 @@ class Blip2T5Instruct(Blip2Base):
         else:
             assert len(prompt) == bs, "The number of prompts must be equal to the batch size."
 
-        if "text_input" in samples.keys():
-            if type(samples["text_input"][0]) == list:
+        if "text_input" in samples.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+            if type(samples["text_input"][0]) is list:
                 prompt = [prompt[i].format(*samples["text_input"][i]) for i in range(len(prompt))]
             else:
                 prompt = [prompt[i].format(samples["text_input"][i]) for i in range(len(prompt))]
 
         # scienceqa
-        if 'context' in samples.keys() and samples['context'] != '':
-            prompt = [f'context: {samples["context"][i]}. {prompt[i]}' for i in range(len(prompt))]
+        if "context" in samples.keys() and samples["context"] != "":  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+            prompt = [f"context: {samples['context'][i]}. {prompt[i]}" for i in range(len(prompt))]
 
         # visual dialog
-        if 'history' in samples.keys() and samples['history'][0] != '':
-            prompt = [f'dialog history: {samples["history"][i]}\n{prompt[i]}' for i in range(len(prompt))]
+        if "history" in samples.keys() and samples["history"][0] != "":  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+            prompt = [f"dialog history: {samples['history'][i]}\n{prompt[i]}" for i in range(len(prompt))]
 
-        if 'caption' in samples.keys() and samples['caption'][0] != '':
+        if "caption" in samples.keys() and samples["caption"][0] != "":  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             prompt = [f'This image has the caption "{samples["caption"][i]}". {prompt[i]}' for i in range(len(prompt))]
 
         query_tokens = self.query_tokens.expand(bs, -1, -1)
         if self.qformer_text_input:
             text_Qformer = self.tokenizer(
-                prompt,
-                padding='longest',
-                truncation=True,
-                max_length=self.max_txt_len,
-                return_tensors="pt"
+                prompt, padding="longest", truncation=True, max_length=self.max_txt_len, return_tensors="pt"
             ).to(image.device)
             query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
-            Qformer_atts = torch.cat([query_atts,text_Qformer.attention_mask], dim=1)
+            Qformer_atts = torch.cat([query_atts, text_Qformer.attention_mask], dim=1)
 
         if image.dim() == 5:
             inputs_t5, atts_t5 = [], []
             for j in range(image.size(2)):
-                this_frame = image[:,:,j,:,:]
+                this_frame = image[:, :, j, :, :]
                 with self.maybe_autocast():
                     frame_embeds = self.ln_vision(self.visual_encoder(this_frame))
                     frame_atts = torch.ones(frame_embeds.size()[:-1], dtype=torch.long).to(image.device)
@@ -583,7 +572,7 @@ class Blip2T5Instruct(Blip2Base):
                         return_dict=True,
                     )
 
-                frame_inputs_t5 = self.t5_proj(frame_query_output.last_hidden_state[:,:query_tokens.size(1),:])
+                frame_inputs_t5 = self.t5_proj(frame_query_output.last_hidden_state[:, : query_tokens.size(1), :])
                 frame_atts_t5 = torch.ones(frame_inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
                 inputs_t5.append(frame_inputs_t5)
                 atts_t5.append(frame_atts_t5)
@@ -611,15 +600,11 @@ class Blip2T5Instruct(Blip2Base):
                     return_dict=True,
                 )
 
-            inputs_t5 = self.t5_proj(query_output.last_hidden_state[:,:query_tokens.size(1),:])
+            inputs_t5 = self.t5_proj(query_output.last_hidden_state[:, : query_tokens.size(1), :])
             atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
 
-        input_tokens = self.t5_tokenizer(
-            prompt, padding="longest", return_tensors="pt"
-        ).to(image.device)
-        output_tokens = self.t5_tokenizer(
-            candidates, padding="longest", return_tensors="pt"
-        ).to(image.device)
+        input_tokens = self.t5_tokenizer(prompt, padding="longest", return_tensors="pt").to(image.device)
+        output_tokens = self.t5_tokenizer(candidates, padding="longest", return_tensors="pt").to(image.device)
 
         encoder_atts = torch.cat([atts_t5, input_tokens.attention_mask], dim=1)
 
@@ -645,7 +630,7 @@ class Blip2T5Instruct(Blip2Base):
                     last_hidden_state=encoder_outputs[0].clone(),
                 )
 
-                this_encoder_outputs['last_hidden_state'] = this_encoder_outputs[0].repeat_interleave(seg_len, dim=0)
+                this_encoder_outputs["last_hidden_state"] = this_encoder_outputs[0].repeat_interleave(seg_len, dim=0)
                 this_encoder_atts = encoder_atts.repeat_interleave(seg_len, dim=0)
 
                 start_i = n * (n_cands // n_segments)
@@ -653,7 +638,9 @@ class Blip2T5Instruct(Blip2Base):
                 this_output_tokens_ids = output_tokens.input_ids[start_i:end_i].repeat(bs, 1)
                 this_output_tokens_atts = output_tokens.attention_mask[start_i:end_i].repeat(bs, 1)
 
-                this_targets = this_output_tokens_ids.masked_fill(this_output_tokens_ids == self.t5_tokenizer.pad_token_id, -100)
+                this_targets = this_output_tokens_ids.masked_fill(
+                    this_output_tokens_ids == self.t5_tokenizer.pad_token_id, -100
+                )
 
                 outputs = self.t5_model(
                     encoder_outputs=this_encoder_outputs,

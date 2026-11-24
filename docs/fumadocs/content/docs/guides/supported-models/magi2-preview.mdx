@@ -1,6 +1,6 @@
 ---
 title: "MAGI-2 Preview"
-description: "Integrated MAGI-2 text-to-video with joint audio and optional video refinement."
+description: "MAGI-2 text-to-video with joint audio and optional video refinement."
 modelId: "magi2-preview"
 pageSource: authored
 ---
@@ -11,7 +11,7 @@ MAGI-2 generates video and audio jointly from text. WorldFoundry integrates the 
 
 ## Runtime contract
 
-Integration status: **Integrated**. The public pipeline supports ten-second text-to-video clips. Preview output is 12.5 fps; optional refinement increases temporal resolution and exports at 25 fps while preserving Preview audio.
+The pipeline supports ten-second text-to-video clips. Preview output is 12.5 fps; optional refinement increases temporal resolution and exports at 25 fps while preserving Preview audio.
 
 The Refiner packs video in 8×4×4 latent blocks and uses the released radius-two local-attention window. Exact range-union attention preserves allowed keys without a quadratic dense mask. Sampling uses zero-SNR renoising, five UniPC steps, shift 5, and guidance 2 by default.
 
@@ -19,10 +19,16 @@ The Refiner packs video in 8×4×4 latent blocks and uses the released radius-tw
 
 Prepare the `sand-ai/MAGI-2-preview` checkpoint layout: `preview/`, `refiner/`, `turbo_vae/`, `stable-audio-open-1.0/`, and `text_encoder/`. Components load lazily; Preview layers use sequential GPU residency.
 
+The Qwen3.5 text-encoding worker uses the `magi2-preview` environment declared in `worldfoundry/data/models/runtime/environments/video/magi2-preview.yaml` (Transformers 5.5). Install WorldFoundry in that environment too. Studio selects its Python automatically; direct pipeline calls set `python_executable` as below. The parent pipeline can stay in the unified environment.
+
 ```python
 from worldfoundry.pipelines.magi2 import NativeMagi2Pipeline
 
-pipeline = NativeMagi2Pipeline.from_pretrained("/weights/MAGI-2-preview", device="cuda")
+pipeline = NativeMagi2Pipeline.from_pretrained(
+    "/weights/MAGI-2-preview",
+    device="cuda",
+    python_executable="/envs/magi2-preview/bin/python",
+)
 pipeline(
     prompt="A cinematic camera move through a sunlit forest.",
     use_refiner=True,
@@ -38,14 +44,14 @@ pipeline(
 
 <ModelCommandBuilder modelId="magi2-preview" locale="en" />
 
-## Executed evidence
+## Validation
 
-A checkpoint-backed Refiner-stage replay on H100 used a saved real Preview latent and real Qwen3.5, Refiner, and Turbo weights. Five steps with seed 42 exported 249 frames at 128×128 and 25 fps, retaining the original stereo 44.1 kHz Preview audio. The replay command is `python tests/manual/magi2_refinement.py --help`.
+Validated on an H100 with the released Qwen3.5, Refiner, and Turbo weights: the Refiner stage refines a saved Preview latent in five steps (seed 42) into 249 frames at 128×128 and 25 fps, keeping the stereo 44.1 kHz Preview audio. See `python tests/manual/magi2_refinement.py --help` to replay it.
 
 ## Limitations
 
 - Image conditioning is unsupported.
-- Default-resolution 1920×1088 replay and official numerical/visual parity remain pending.
+- Refinement at the default 1920×1088 resolution and numerical/visual parity with the official release are not validated.
 - The 114B Preview requires substantial host RAM and sequential offloading; upstream targets eight Hopper GPUs.
 
 <ModelRelatedRecipes modelId="magi2-preview" locale="en" />

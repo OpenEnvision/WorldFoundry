@@ -3,8 +3,6 @@ model_id: krea-realtime-video
 runtime:
   kind: official_cli
   backend_quality: in_tree_official_runtime
-  repo_root_candidates:
-  - worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_CKPT_DIR/krea-realtime-video
   - $WORLDFOUNDRY_CKPT_DIR/krea--krea-realtime-video
@@ -15,12 +13,8 @@ runtime:
     width: 832
     fps: 16
     seed: 42
-  command:
-  - "{python}"
-  - "-m"
-  - "worldfoundry.synthesis.visual_generation.krea_realtime.worldfoundry_runner"
-  - "--repo-root"
-  - "{repo_root}"
+  module: worldfoundry.synthesis.visual_generation.krea_realtime.worldfoundry_runner
+  args:
   - "--checkpoint-path"
   - "{checkpoint_path}/krea-realtime-video-14b.safetensors"
   - "--model-folder"

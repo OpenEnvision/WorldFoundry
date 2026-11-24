@@ -3,6 +3,7 @@
 
 Used by :mod:`.linear`.  Kernel adapter only (flash, block-sparse, SDPA).
 """
+
 import torch
 
 try:
@@ -25,11 +26,12 @@ except ModuleNotFoundError:
     block_sparse_attn_func = None
 
 import warnings
+
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
 __all__ = [
-    "flash_attention",
     "attention",
+    "flash_attention",
 ]
 
 
@@ -69,11 +71,6 @@ def flash_attention(
     b, lq, lk, out_dtype = q.size(0), q.size(1), k.size(1), q.dtype
 
     def half(x):
-        """Half.
-
-        Args:
-            x: The x.
-        """
         return x if x.dtype in half_dtypes else x.to(dtype)
 
     # preprocess query
@@ -81,7 +78,7 @@ def flash_attention(
         q = half(q.flatten(0, 1))
         q_lens = torch.tensor([lq] * b, dtype=torch.int32).to(device=q.device, non_blocking=True)
     else:
-        q = half(torch.cat([u[:v] for u, v in zip(q, q_lens)]))
+        q = half(torch.cat([u[:v] for u, v in zip(q, q_lens, strict=False)]))
 
     # preprocess key, value
     if k_lens is None:
@@ -89,8 +86,8 @@ def flash_attention(
         v = half(v.flatten(0, 1))
         k_lens = torch.tensor([lk] * b, dtype=torch.int32).to(device=k.device, non_blocking=True)
     else:
-        k = half(torch.cat([u[:v] for u, v in zip(k, k_lens)]))
-        v = half(torch.cat([u[:v] for u, v in zip(v, k_lens)]))
+        k = half(torch.cat([u[:v] for u, v in zip(k, k_lens, strict=False)]))
+        v = half(torch.cat([u[:v] for u, v in zip(v, k_lens, strict=False)]))
 
     q = q.to(v.dtype)
     k = k.to(v.dtype)
@@ -99,7 +96,7 @@ def flash_attention(
         q = q * q_scale
 
     if version is not None and version == 3 and not FLASH_ATTN_3_AVAILABLE:
-        warnings.warn("Flash attention 3 is not available, use flash attention 2 instead.")
+        warnings.warn("Flash attention 3 is not available, use flash attention 2 instead.", stacklevel=1)
 
     # apply attention
     if (version is None or version == 3) and FLASH_ATTN_3_AVAILABLE:
@@ -121,7 +118,10 @@ def flash_attention(
             softmax_scale=softmax_scale,
             causal=causal,
             deterministic=deterministic,
-        )[0].unflatten(0, (b, lq))
+        )
+        if isinstance(x, tuple):
+            x = x[0]
+        x = x.unflatten(0, (b, lq))
     else:
         assert FLASH_ATTN_2_AVAILABLE
         x = flash_attn.flash_attn_varlen_func(
@@ -185,11 +185,6 @@ def block_sparse_attention(
     num_heads = q.size(2)
 
     def half(x):
-        """Half.
-
-        Args:
-            x: The x.
-        """
         return x if x.dtype in half_dtypes else x.to(dtype)
 
     # preprocess query
@@ -197,7 +192,7 @@ def block_sparse_attention(
         q = half(q.flatten(0, 1))
         q_lens = torch.tensor([lq] * b, dtype=torch.int32).to(device=q.device, non_blocking=True)
     else:
-        q = half(torch.cat([u[:v] for u, v in zip(q, q_lens)]))
+        q = half(torch.cat([u[:v] for u, v in zip(q, q_lens, strict=False)]))
 
     # preprocess key, value
     if k_lens is None:
@@ -205,8 +200,8 @@ def block_sparse_attention(
         v = half(v.flatten(0, 1))
         k_lens = torch.tensor([lk] * b, dtype=torch.int32).to(device=k.device, non_blocking=True)
     else:
-        k = half(torch.cat([u[:v] for u, v in zip(k, k_lens)]))
-        v = half(torch.cat([u[:v] for u, v in zip(v, k_lens)]))
+        k = half(torch.cat([u[:v] for u, v in zip(k, k_lens, strict=False)]))
+        v = half(torch.cat([u[:v] for u, v in zip(v, k_lens, strict=False)]))
 
     q = q.to(v.dtype)
     k = k.to(v.dtype)
@@ -264,23 +259,6 @@ def attention(
     dtype=torch.bfloat16,
     fa_version=None,
 ):
-    """Attention.
-
-    Args:
-        q: The q.
-        k: The k.
-        v: The v.
-        q_lens: The q lens.
-        k_lens: The k lens.
-        dropout_p: The dropout p.
-        softmax_scale: The softmax scale.
-        q_scale: The q scale.
-        causal: The causal.
-        window_size: The window size.
-        deterministic: The deterministic.
-        dtype: The dtype.
-        fa_version: The fa version.
-    """
     if FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE:
         return flash_attention(
             q=q,
@@ -300,7 +278,8 @@ def attention(
     else:
         if q_lens is not None or k_lens is not None:
             warnings.warn(
-                "Padding mask is disabled when using scaled_dot_product_attention. It can have a significant impact on performance."
+                "Padding mask is disabled when using scaled_dot_product_attention. It can have a significant impact on performance.",
+                stacklevel=1,
             )
         attn_mask = None
 

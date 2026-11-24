@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from PIL import Image
 
@@ -29,7 +30,7 @@ class LingBotWorldV2Pipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "LingBotWorldV2Pipeline":
+    ) -> LingBotWorldV2Pipeline:
         from ...synthesis.visual_generation.lingbot_world_v2 import LingBotWorldV2Synthesis
 
         options = cls._runtime_options(model_path, required_components, kwargs)
@@ -234,6 +235,7 @@ class LingBotWorldV2Pipeline(PipelineABC):
         seed: int = 42,
         **_: Any,
     ) -> dict[str, Any] | None:
+        """Return a causal chunk whose CUDA RGB frames materialize only at the consumer."""
         session = self._ensure_realtime_session()
         if prompt is not None:
             session.update_prompt(prompt)
@@ -241,6 +243,7 @@ class LingBotWorldV2Pipeline(PipelineABC):
             interactions=list(interactions or ()),
             control_segments=realtime_segments,
             seed=seed,
+            defer_frame_materialization=True,
         )
 
     def realtime_next_output_frames(self) -> int:

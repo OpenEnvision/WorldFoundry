@@ -63,9 +63,7 @@ class Cosmos2Denoiser:
         """Evaluate one CFG branch and return clean-x0 style ``sample``."""
         values = model_input.conditioning
         context = values.get("context")
-        conditions = tuple(
-            values.get(name) for name in ("condition_latents", "condition_mask", "condition_indicator")
-        )
+        conditions = tuple(values.get(name) for name in ("condition_latents", "condition_mask", "condition_indicator"))
         if not isinstance(context, torch.Tensor) or not all(isinstance(value, torch.Tensor) for value in conditions):
             raise TypeError("Cosmos Predict2 Video2World conditioning is incomplete")
         latents = model_input.latents

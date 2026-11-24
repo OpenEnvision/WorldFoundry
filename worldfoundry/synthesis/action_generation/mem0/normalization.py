@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
 import numpy as np
 
 
 def load_stats(path: str | Path) -> dict[str, np.ndarray | None]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    result: dict[str, np.ndarray | None] = {
-        key: None
-        for key in (
+    result: dict[str, np.ndarray | None] = dict.fromkeys(
+        (
             "state_mean",
             "state_std",
             "action_mean",
@@ -27,7 +26,7 @@ def load_stats(path: str | Path) -> dict[str, np.ndarray | None]:
             "action_q01",
             "action_q99",
         )
-    }
+    )
     for key in tuple(result):
         if key in data:
             result[key] = np.asarray(data[key], dtype=np.float32)
@@ -50,9 +49,7 @@ def _stat(stats: Mapping[str, np.ndarray | None], key: str, dimensions: int) -> 
         raise KeyError(f"Mem-0 normalization statistics are missing {key!r}")
     value = np.asarray(value, dtype=np.float32).reshape(-1)
     if value.size < dimensions:
-        raise ValueError(
-            f"Mem-0 statistic {key!r} has {value.size} values; expected at least {dimensions}"
-        )
+        raise ValueError(f"Mem-0 statistic {key!r} has {value.size} values; expected at least {dimensions}")
     return value[:dimensions]
 
 

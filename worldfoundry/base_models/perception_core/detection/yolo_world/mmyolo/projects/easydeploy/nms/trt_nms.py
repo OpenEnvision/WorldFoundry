@@ -2,13 +2,12 @@
 import torch
 from torch import Tensor
 
-_XYWH2XYXY = torch.tensor([[1.0, 0.0, 1.0, 0.0], [0.0, 1.0, 0.0, 1.0],
-                           [-0.5, 0.0, 0.5, 0.0], [0.0, -0.5, 0.0, 0.5]],
-                          dtype=torch.float32)
+_XYWH2XYXY = torch.tensor(
+    [[1.0, 0.0, 1.0, 0.0], [0.0, 1.0, 0.0, 1.0], [-0.5, 0.0, 0.5, 0.0], [0.0, -0.5, 0.0, 0.5]], dtype=torch.float32
+)
 
 
 class TRTEfficientNMSop(torch.autograd.Function):
-
     @staticmethod
     def forward(
         ctx,
@@ -18,32 +17,32 @@ class TRTEfficientNMSop(torch.autograd.Function):
         box_coding: int = 0,
         iou_threshold: float = 0.45,
         max_output_boxes: int = 100,
-        plugin_version: str = '1',
+        plugin_version: str = "1",
         score_activation: int = 0,
         score_threshold: float = 0.25,
     ):
         batch_size, _, num_classes = scores.shape
-        num_det = torch.randint(
-            0, max_output_boxes, (batch_size, 1), dtype=torch.int32)
+        num_det = torch.randint(0, max_output_boxes, (batch_size, 1), dtype=torch.int32)
         det_boxes = torch.randn(batch_size, max_output_boxes, 4)
         det_scores = torch.randn(batch_size, max_output_boxes)
-        det_classes = torch.randint(
-            0, num_classes, (batch_size, max_output_boxes), dtype=torch.int32)
+        det_classes = torch.randint(0, num_classes, (batch_size, max_output_boxes), dtype=torch.int32)
         return num_det, det_boxes, det_scores, det_classes
 
     @staticmethod
-    def symbolic(g,
-                 boxes: Tensor,
-                 scores: Tensor,
-                 background_class: int = -1,
-                 box_coding: int = 0,
-                 iou_threshold: float = 0.45,
-                 max_output_boxes: int = 100,
-                 plugin_version: str = '1',
-                 score_activation: int = 0,
-                 score_threshold: float = 0.25):
+    def symbolic(
+        g,
+        boxes: Tensor,
+        scores: Tensor,
+        background_class: int = -1,
+        box_coding: int = 0,
+        iou_threshold: float = 0.45,
+        max_output_boxes: int = 100,
+        plugin_version: str = "1",
+        score_activation: int = 0,
+        score_threshold: float = 0.25,
+    ):
         out = g.op(
-            'TRT::EfficientNMS_TRT',
+            "TRT::EfficientNMS_TRT",
             boxes,
             scores,
             background_class_i=background_class,
@@ -53,7 +52,8 @@ class TRTEfficientNMSop(torch.autograd.Function):
             plugin_version_s=plugin_version,
             score_activation_i=score_activation,
             score_threshold_f=score_threshold,
-            outputs=4)
+            outputs=4,
+        )
         num_det, det_boxes, det_scores, det_classes = out
         return num_det, det_boxes, det_scores, det_classes
 
@@ -66,7 +66,7 @@ class TRTbatchedNMSop(torch.autograd.Function):
         ctx,
         boxes: Tensor,
         scores: Tensor,
-        plugin_version: str = '1',
+        plugin_version: str = "1",
         shareLocation: int = 1,
         backgroundLabelId: int = -1,
         numClasses: int = 80,
@@ -80,12 +80,10 @@ class TRTbatchedNMSop(torch.autograd.Function):
         caffeSemantics: int = 1,
     ):
         batch_size, _, numClasses = scores.shape
-        num_det = torch.randint(
-            0, keepTopK, (batch_size, 1), dtype=torch.int32)
+        num_det = torch.randint(0, keepTopK, (batch_size, 1), dtype=torch.int32)
         det_boxes = torch.randn(batch_size, keepTopK, 4)
         det_scores = torch.randn(batch_size, keepTopK)
-        det_classes = torch.randint(0, numClasses,
-                                    (batch_size, keepTopK)).float()
+        det_classes = torch.randint(0, numClasses, (batch_size, keepTopK)).float()
         return num_det, det_boxes, det_scores, det_classes
 
     @staticmethod
@@ -93,7 +91,7 @@ class TRTbatchedNMSop(torch.autograd.Function):
         g,
         boxes: Tensor,
         scores: Tensor,
-        plugin_version: str = '1',
+        plugin_version: str = "1",
         shareLocation: int = 1,
         backgroundLabelId: int = -1,
         numClasses: int = 80,
@@ -107,7 +105,7 @@ class TRTbatchedNMSop(torch.autograd.Function):
         caffeSemantics: int = 1,
     ):
         out = g.op(
-            'TRT::BatchedNMSDynamic_TRT',
+            "TRT::BatchedNMSDynamic_TRT",
             boxes,
             scores,
             shareLocation_i=shareLocation,
@@ -122,7 +120,8 @@ class TRTbatchedNMSop(torch.autograd.Function):
             clipBoxes_i=clipBoxes,
             scoreBits_i=scoreBits,
             caffeSemantics_i=caffeSemantics,
-            outputs=4)
+            outputs=4,
+        )
         num_det, det_boxes, det_scores, det_classes = out
         return num_det, det_boxes, det_scores, det_classes
 
@@ -163,8 +162,8 @@ def _efficient_nms(
         `det_classes` of shape [N, num_det]
     """
     num_det, det_boxes, det_scores, det_classes = TRTEfficientNMSop.apply(
-        boxes, scores, -1, box_coding, iou_threshold, keep_top_k, '1', 0,
-        score_threshold)
+        boxes, scores, -1, box_coding, iou_threshold, keep_top_k, "1", 0, score_threshold
+    )
     return num_det, det_boxes, det_scores, det_classes
 
 
@@ -209,8 +208,21 @@ def _batched_nms(
     _, _, numClasses = scores.shape
 
     num_det, det_boxes, det_scores, det_classes = TRTbatchedNMSop.apply(
-        boxes, scores, '1', 1, -1, int(numClasses), min(pre_top_k, 4096),
-        keep_top_k, score_threshold, iou_threshold, 0, 0, 16, 1)
+        boxes,
+        scores,
+        "1",
+        1,
+        -1,
+        int(numClasses),
+        min(pre_top_k, 4096),
+        keep_top_k,
+        score_threshold,
+        iou_threshold,
+        0,
+        0,
+        16,
+        1,
+    )
 
     det_classes = det_classes.int()
     return num_det, det_boxes, det_scores, det_classes

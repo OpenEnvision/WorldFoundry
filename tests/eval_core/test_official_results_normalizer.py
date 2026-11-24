@@ -3,16 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import yaml
-
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import load_benchmark_catalog_shard_entries
-from worldfoundry.evaluation.tasks.catalog.schema import BenchmarkMetricSpec, BenchmarkZooEntry
-from worldfoundry.evaluation.tasks.execution.framework.result_normalizer import (
+from worldfoundry.evals.tasks.catalog.benchmark_catalog import load_benchmark_catalog_shard_entries
+from worldfoundry.evals.tasks.catalog.schema import BenchmarkZooEntry
+from worldfoundry.evals.tasks.execution.framework.result_normalizer import (
     OfficialMetricMapping,
     OfficialResultsNormalizer,
     build_official_metric_mappings,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NEW_VIDEO_WORLD_CONTRACT_IDS = (

@@ -37,7 +37,6 @@ from typing import Any
 import torch.distributed as dist
 from filelock import FileLock
 
-from worldfoundry.core.distributed import get_global_rank, is_distributed_initialized
 from worldfoundry.core.io.filesystem.disk import (
     CACHE_MIN_FREE_ENV,
     DiskSpaceError,
@@ -67,7 +66,9 @@ def _hub_cache_dir(cache_dir: str | os.PathLike[str] | None) -> Path:
 
     if cache_dir is not None:
         return Path(cache_dir).expanduser()
-    from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
+    HUGGINGFACE_HUB_CACHE = __import__(
+        "huggingface_hub.constants", fromlist=["HUGGINGFACE_HUB_CACHE"]
+    ).HUGGINGFACE_HUB_CACHE
 
     return Path(HUGGINGFACE_HUB_CACHE).expanduser()
 
@@ -75,7 +76,7 @@ def _hub_cache_dir(cache_dir: str | os.PathLike[str] | None) -> Path:
 def _snapshot_download(*args, **kwargs) -> str:
     """Lazy-import Hub snapshot so CPU-only processes do not pay the import."""
 
-    from huggingface_hub import snapshot_download
+    snapshot_download = __import__("huggingface_hub", fromlist=["snapshot_download"]).snapshot_download
 
     return snapshot_download(*args, **kwargs)
 
@@ -306,7 +307,8 @@ def maybe_download_hf_repo_on_rank0(
     ):
         return
 
-    rank = get_global_rank()
+    distributed = dist.is_available() and dist.is_initialized()
+    rank = dist.get_rank() if distributed else 0
     payload: list[dict[str, str | None]]
     if rank == 0:
         try:
@@ -326,7 +328,7 @@ def maybe_download_hf_repo_on_rank0(
     else:
         payload = [{"error": None}]
 
-    if is_distributed_initialized():
+    if distributed:
         dist.broadcast_object_list(payload, src=0)
 
     error = payload[0]["error"]

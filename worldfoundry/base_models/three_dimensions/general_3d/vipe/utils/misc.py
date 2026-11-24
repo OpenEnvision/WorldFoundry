@@ -13,14 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> utils -> misc.py functionality."""
-
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 T = TypeVar("T")
 
 
-def unpack_optional(maybe_value: Optional[T]) -> T:
+def unpack_optional(maybe_value: T | None) -> T:
     """Unpacks the value of an optional, raising if value is missing"""
     if maybe_value is None:
         raise ValueError("Can't unpack empty optional")

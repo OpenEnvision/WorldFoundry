@@ -18,8 +18,6 @@
 # Licensed under the MIT License.
 # -------------------------------------------------------------------------------------------------
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> components -> inner_filler.py functionality."""
-
 from dataclasses import dataclass
 
 import torch
@@ -35,16 +33,10 @@ from .factor_graph import FactorGraph
 
 @dataclass
 class FilledReturn:
-    """Filled return implementation."""
     poses: SE3  # Inverse of c2w
     dense_disps: torch.Tensor | None = None
 
     def scale(self, factor: float):
-        """Scale.
-
-        Args:
-            factor: The factor.
-        """
         self.poses.data[..., :3] *= factor
         if self.dense_disps is not None:
             self.dense_disps /= factor
@@ -54,14 +46,6 @@ class InnerFiller:
     """This class is used to fill in non-keyframe poses"""
 
     def __init__(self, net: DroidNet, video: GraphBuffer, args: DictConfig, device: torch.device):
-        """Init.
-
-        Args:
-            net: The net.
-            video: The video.
-            args: The args.
-            device: The device.
-        """
         self.video = video
         self.net = net
         self.device = device
@@ -72,24 +56,13 @@ class InnerFiller:
         self.filled_dense_disps: list[torch.Tensor] = []
 
     def set_start_idx(self, start_idx: int):
-        """Set start idx.
-
-        Args:
-            start_idx: The start idx.
-        """
         self.start_idx = start_idx
 
     def check(self) -> bool:
-        """Check.
-
-        Returns:
-            The return value.
-        """
         assert self.start_idx >= 0
         return self.video.n_frames - self.start_idx >= self.args.infill_chunk_size
 
     def compute(self):
-        """Compute."""
         total_frames = self.video.n_frames
 
         # Setup initial value (for pose and disp)
@@ -158,11 +131,6 @@ class InnerFiller:
         self.video.n_frames = self.start_idx
 
     def get_result(self) -> FilledReturn:
-        """Get result.
-
-        Returns:
-            The return value.
-        """
         return FilledReturn(
             poses=lt.cat(self.filled_poses, dim=0),
             dense_disps=(torch.cat(self.filled_dense_disps, dim=0) if self.filled_dense_disps else None),

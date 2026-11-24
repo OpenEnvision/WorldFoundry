@@ -20,16 +20,16 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>面向用户的命令：TUI、evaluate、embodied、run、validate、zoo、preflight、reporting。调度到编排层，不承载模型推理或打分。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>cli/main.py:1888</code> <code>main()</code>；子命令树在 <code>cli/main.py:1088</code></p>
+        <p className="pi-kv-read"><span>首读</span> <code>cli/main.py:304</code> <code>main()</code>；子命令树在 <code>cli/main.py:183</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>worldfoundry/cli/tui*.py</code>
+            <code>worldfoundry/cli/tui</code>
           </div>
         </div>
-        <p>引导式发现 TUI（discovery、brand、app）。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>cli/tui.py</code>、<code>cli/tui_app.py</code></p>
+        <p>引导式发现 TUI 包（launcher、Textual app、表单控件、brand）。与 MCP 共用的 catalog 行、推理变体与命令构建在 <code>cli/catalog.py</code>、<code>cli/inference_variants.py</code>、<code>cli/command_builders.py</code>。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>cli/tui/launcher.py</code>、<code>cli/tui/app.py</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -38,7 +38,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>MCP server 与工具（discovery、metrics、readiness、context），复用同一 catalog/runtime 契约。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>{"mcp/__init__.py:30"}</code> <code>main()</code>；<code>mcp/server.py:38</code> <code>create_mcp_server</code>；<code>mcp/tools/registration.py:55</code> <code>register_tools</code></p>
+        <p className="pi-kv-read"><span>首读</span> <code>{"mcp/__init__.py:43"}</code> <code>main()</code>；<code>mcp/server.py:43</code> <code>create_mcp_server</code>；<code>mcp/tools/spec.py:64</code> <code>mcp_tool</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -65,7 +65,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>共享推理基础设施：加载、attention、分布式、VRAM、kernel、memory、配置、IO、安全。offload/distributed/kernel/quantization 的唯一归属。</p>
-        <p className="pi-kv-read"><span>首读</span> <a href="/zh/docs/maintainers/architecture/core-infrastructure">核心基础设施</a></p>
+        <p className="pi-kv-read"><span>首读</span> <Link href="/zh/docs/maintainers/architecture/core-infrastructure">核心基础设施</Link></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -74,7 +74,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>仅推理的模型包：<code>diffusion_model</code>（唯一的 canonical 扩散内核）、<code>llm_mllm_core</code>、<code>perception_core</code>、<code>three_dimensions</code>。不含训练、数据集或实验脚本。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>{"base_models/diffusion_model/__init__.py"}</code>；<a href="/zh/docs/maintainers/architecture/native-diffusion">原生扩散</a></p>
+        <p className="pi-kv-read"><span>首读</span> <code>{"base_models/diffusion_model/__init__.py"}</code>；<Link href="/zh/docs/maintainers/architecture/native-diffusion">原生扩散</Link></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -83,7 +83,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>每个 model family 一个薄 public wrapper：<code>from_pretrained</code>、<code>process</code>/<code>{"__call__"}</code>、可选 <code>stream</code>。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>pipelines/pipeline_utils.py:11</code> <code>PipelineABC</code>；<code>pipelines/</code> 下 88 个 family 目录</p>
+        <p className="pi-kv-read"><span>首读</span> <code>pipelines/pipeline_utils.py:11</code> <code>PipelineABC</code>；<code>pipelines/</code> 下 107 个 family 目录</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -92,7 +92,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>可运行 pipeline 的输入侧伙伴：校验、媒体加载、camera/action 解析、interaction 整形、perception 预处理。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>operators/base_operator.py:4</code> <code>BaseOperator</code></p>
+        <p className="pi-kv-read"><span>首读</span> <code>operators/base_operator.py:6</code> <code>BaseOperator</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -101,16 +101,16 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>树内 runtime 执行：hosted API wrapper、native runtime bridge、各 family 的 <code>synthesis.py</code>、动作面、memory 模块。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>synthesis/base_synthesis.py:38</code> <code>BaseSynthesis</code>；<a href="/zh/docs/maintainers/architecture/runtime-assembly">Runtime 组装</a></p>
+        <p className="pi-kv-read"><span>首读</span> <code>synthesis/base_synthesis.py:31</code> <code>BaseSynthesis</code>；<Link href="/zh/docs/maintainers/architecture/runtime-assembly">Runtime 组装</Link></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
           <div className="pi-kv-names">
-            <code>worldfoundry/evaluation</code>
+            <code>worldfoundry/evals</code>
           </div>
         </div>
         <p>公共契约、执行 runner、catalog 加载、metric、reporting、scorecard。artifact 边界上 benchmark 一侧。</p>
-        <p className="pi-kv-read"><span>首读</span> <a href="/zh/docs/maintainers/architecture/evaluation-core">评测核心</a></p>
+        <p className="pi-kv-read"><span>首读</span> <Link href="/zh/docs/maintainers/architecture/evaluation-core">评测核心</Link></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -119,16 +119,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
           </div>
         </div>
         <p>复用同一 catalog/runtime 契约的交互式预览壳。仅展示层胶水。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>studio/cli.py:78</code> <code>main()</code>；<code>studio/inference/execution.py</code>、<code>studio/inference/catalog.py</code>；<a href="/zh/docs/maintainers/architecture/studio-internals">Studio 内部</a></p>
-      </li>
-      <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>worldfoundry/training</code>
-          </div>
-        </div>
-        <p>训练与后训练 recipe（SFT、蒸馏、RL）。不在 evaluate/scorecard 这条路上。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>training/recipes/spec.py</code></p>
+        <p className="pi-kv-read"><span>首读</span> <code>studio/cli.py:21</code> <code>main()</code>；<code>studio/inference/execution.py</code>、<code>studio/inference/catalog/discovery.py</code>；<Link href="/zh/docs/maintainers/architecture/studio-internals">Studio 内部</Link></p>
       </li>
     </ul>
   </section>
@@ -136,7 +127,7 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
 
 ## 各条如何衔接
 
-一次 run 是顺着这份清单向下流动，而不是随机横向引用。用户输入经 `cli` 或 `mcp` 进入；`runtime` 与 `data` 准备环境并声明可运行项；`core` 与 `base_models` 提供共享推理原语；`pipelines` 加 `operators` 加 `synthesis` 把归一化 request 变成 `GenerationResult`；需要时 `base_models/three_dimensions` 运行几何模型并产出几何 artifact；`evaluation` 消费 artifact 产出 scorecard；`studio` 通过 UI 壳预览同一 artifact。`training` 在这条脊线旁边：它产出 checkpoint，不给 checkpoint 打分。
+一次 run 是顺着这份清单向下流动，而不是随机横向引用。用户输入经 `cli` 或 `mcp` 进入；`runtime` 与 `data` 准备环境并声明可运行项；`core` 与 `base_models` 提供共享推理原语；`pipelines` 加 `operators` 加 `synthesis` 把归一化 request 变成 `GenerationResult`；需要时 `base_models/three_dimensions` 运行几何模型并产出几何 artifact；`evals` 消费 artifact 产出 scorecard；`studio` 通过 UI 壳预览同一 artifact。`training` 在这条脊线旁边：它产出 checkpoint，不给 checkpoint 打分。
 
 <Callout type="info">
   一个文件所在的包应当在你读代码之前就回答“这一类改动归谁”。如果不确定某修复属于哪一层，从 [架构](/zh/docs/maintainers/architecture) 起步，选择与你要改的层匹配的子页。
@@ -145,6 +136,6 @@ description: WorldFoundry 各包的“源码目录 → 职责”速查表，含�
 ## 下一步
 
 - **新增模型** — 从 `pipelines/` 和 `operators/` 起步，再到 `synthesis/`。见 [模型运行时](/zh/docs/maintainers/architecture/model-runtime) 与 [Runtime 组装](/zh/docs/maintainers/architecture/runtime-assembly)。
-- **新增 benchmark** — 从 `data/benchmarks/` 和 `evaluation/tasks/` 起步。见 [Benchmark 与数据](/zh/docs/maintainers/architecture/benchmarks-data) 与 [评测核心](/zh/docs/maintainers/architecture/evaluation-core)。
-- **追踪一次 run** — 从 `cli/main.py` → `evaluation/tasks/execution/orchestration/`。见 [工作流](/zh/docs/maintainers/architecture/workflow) 与 [使用界面与编排](/zh/docs/maintainers/architecture/surfaces-orchestration)。
+- **新增 benchmark** — 从 `data/benchmarks/` 和 `evals/tasks/` 起步。见 [Benchmark 与数据](/zh/docs/maintainers/architecture/benchmarks-data) 与 [评测核心](/zh/docs/maintainers/architecture/evaluation-core)。
+- **追踪一次 run** — 从 `cli/main.py` → `evals/tasks/execution/orchestration/`。见 [工作流](/zh/docs/maintainers/architecture/workflow) 与 [使用界面与编排](/zh/docs/maintainers/architecture/surfaces-orchestration)。
 - **共享原语** — 任何可跨 family 复用的能力都属于 `worldfoundry/core`。见 [核心基础设施](/zh/docs/maintainers/architecture/core-infrastructure)。

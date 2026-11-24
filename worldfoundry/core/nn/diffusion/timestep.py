@@ -28,9 +28,9 @@ Public surface:
 """
 
 import math
+from typing import cast
 
 import torch
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # DDPM sinusoid — fractional t, optional cos-first, odd-dim zero pad
@@ -153,8 +153,10 @@ class TimestepEmbedding(torch.nn.Module):
         """
 
         if condition is not None:
-            condition = condition.to(dtype=self._linear_dtype(self.cond_proj))
-            sample = sample + self.cond_proj(condition)
+            # A condition is only supplied to embeddings constructed with ``cond_proj_dim``.
+            cond_proj = cast(torch.nn.Linear, self.cond_proj)
+            condition = condition.to(dtype=self._linear_dtype(cond_proj))
+            sample = sample + cond_proj(condition)
         sample = self.linear_1(sample.to(dtype=self._linear_dtype(self.linear_1)))
 
         if self.act is not None:

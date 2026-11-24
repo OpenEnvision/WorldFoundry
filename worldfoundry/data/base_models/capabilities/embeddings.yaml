@@ -1,0 +1,133 @@
+# Image and vision-language embedding models.
+# Schema and templates: see the module docstring of worldfoundry/base_models/capabilities.py.
+
+clip_vit_b32:
+  family: vision_language_embedding
+  canonical_path: worldfoundry/base_models/perception_core/general_perception/open_clip
+  package_imports: [torch, numpy, ftfy, regex, tqdm, huggingface_hub, transformers]
+  install_packages: [torch>=2.6, numpy, ftfy, regex, tqdm, huggingface-hub, transformers]
+  assets:
+    - id: clip_vit_b32_model_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_CLIP_VIT_B32_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/openai--clip-vit-base-patch32
+      alternate_paths:
+        - ${WORLDFOUNDRY_BENCH_ROOT}/ckpt/hfd/openai--clip-vit-base-patch32
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/openai--clip-vit-base-patch32
+      hf_repo_id: openai/clip-vit-base-patch32
+      min_file_count: 1
+      required_files: [config.json, pytorch_model.bin]
+      note: CLIP ViT-B/32 model directory shared by text-video alignment and temporal CLIP metrics.
+
+dino_vitb16:
+  family: visual_embedding
+  canonical_path: worldfoundry/base_models/perception_core/general_perception/dino_embeddings.py
+  package_imports: [torch, torchvision, numpy, transformers]
+  assets:
+    - id: dino_vitb16_model_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_DINO_VITB16_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/facebook--dino-vitb16
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/dino-vitb16
+        - ${WORLDFOUNDRY_BENCH_ROOT}/ckpt/dino-vitb16
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/dino-vitb16
+      hf_repo_id: facebook/dino-vitb16
+      min_file_count: 1
+      required_files: [config.json, pytorch_model.bin]
+      note: DINO ViT-B/16 visual embedding model used by temporal DINO consistency metrics.
+
+dinov2_base:
+  family: visual_embedding
+  canonical_path: worldfoundry/base_models/perception_core/general_perception/dinov2
+  package_imports: [torch, torchvision, numpy, transformers]
+  assets:
+    - id: dinov2_base_model_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_DINOV2_BASE_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/facebook--dinov2-base
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/dinov2-base
+        - ${WORLDFOUNDRY_BENCH_ROOT}/ckpt/hfd/facebook--dinov2-base
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/facebook--dinov2-base
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/dinov2-base
+      hf_repo_id: facebook/dinov2-base
+      min_file_count: 1
+      required_files: [config.json, model.safetensors]
+      note: DINOv2 base visual embedding model used by DINO-style temporal consistency metrics.
+
+dinov3_base:
+  family: visual_embedding
+  canonical_path: worldfoundry/base_models/perception_core/general_perception/dinov3
+  package_imports: [torch, torchvision, numpy, transformers]
+  assets:
+    - id: dinov3_base_model_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_DINOV3_BASE_MODEL_DIR, WORLDFOUNDRY_MIND_DINO_PATH]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/facebook--dinov3-vitb16-pretrain-lvd1689m
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/mind/dinov3_vitb16
+        - ${WORLDFOUNDRY_BENCH_ROOT}/ckpt/hfd/facebook--dinov3-vitb16-pretrain-lvd1689m
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/facebook--dinov3-vitb16-pretrain-lvd1689m
+      hf_repo_id: facebook/dinov3-vitb16-pretrain-lvd1689m
+      min_file_count: 1
+      required_files: [config.json, model.safetensors]
+      note: DINOv3 ViT-B/16 base visual embedding model. Weights require gated access — request via https://ai.meta.com/resources/models-and-libraries/dinov3-downloads/
+        before downloading.
+
+siglip_so400m:
+  family: vision_language_embedding
+  canonical_path: worldfoundry/base_models/perception_core/general_perception/open_clip
+  package_imports: [torch, numpy, timm, ftfy, regex, tqdm, huggingface_hub]
+  install_packages: [torch, numpy, timm, ftfy, regex, tqdm, huggingface-hub]
+  assets:
+    - id: siglip_so400m_model_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_SIGLIP_SO400M_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/google--siglip-so400m-patch14-384
+      alternate_paths:
+        - ${WORLDFOUNDRY_BENCH_ROOT}/ckpt/hfd/google--siglip-so400m-patch14-384
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/google--siglip-so400m-patch14-384
+      hf_repo_id: google/siglip-so400m-patch14-384
+      min_file_count: 1
+      note: SigLIP SO400M image encoder reused by image-conditioned video and preference metrics.
+
+wbench_dreamsim:
+  family: visual_embedding
+  canonical_path: worldfoundry/base_models/perception_core/video_quality/dreamsim.py
+  package_imports: [torch, torchvision, peft, timm, open_clip]
+  install_packages: [torch, torchvision, peft, timm, open-clip-torch]
+  assets:
+    - id: wbench_dreamsim_cache_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_WBENCH_DREAMSIM_CACHE_DIR]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/models/wbench/dreamsim
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/dreamsim
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/dreamsim
+      hf_repo_id: meituan-longcat/WBench-weights
+      min_file_count: 1
+      required_any_paths: [ensemble_lora/adapter_model.safetensors, dino_vitb16_pretrain.pth]
+      note: DreamSim local cache used by WBench spatial_consistency.
+
+openai_clip_vit_b32:
+  family: vision_language_embedding
+  canonical_path: worldfoundry/base_models/perception_core/general_perception/openai_clip_runtime
+  package_imports: [torch, torchvision, ftfy, regex]
+  assets:
+    - id: openai_clip_vit_b32_checkpoint
+      kind: file
+      role: checkpoint
+      env: []
+      local_path: ${WORLDFOUNDRY_CKPT_DIR}/clip/ViT-B-32.pt
+      download_url: https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt
+      min_size_bytes: 300000000
+      note: >-
+        OpenAI CLIP ViT-B/32 (`clip.load("ViT-B/32")`), the WorldOlympiad interaction CLIP score model; the
+        WorldOlympiad runner sets CLIP_DOWNLOAD_ROOT to this directory.

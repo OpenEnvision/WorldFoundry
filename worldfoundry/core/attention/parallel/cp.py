@@ -22,8 +22,9 @@ causal video windows stay aligned with RoPE CP splits in
 :mod:`worldfoundry.core.attention.rotary.rope`.
 """
 
-from contextlib import nullcontext
-from typing import Any, Callable, ContextManager, Literal, cast
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
+from typing import Any, Literal, cast
 
 import torch
 import torch.distributed._functional_collectives as funcol
@@ -156,7 +157,7 @@ class ContextParallelAttention(NativeAttention):
             if lse is None:
                 raise AssertionError("LSE is None")
 
-            precision_context: ContextManager[None]
+            precision_context: AbstractContextManager[None]
             if self.convert_to_fp32:
                 precision_context = torch.autocast(device_type="cuda", enabled=False)
             else:

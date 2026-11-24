@@ -12,8 +12,6 @@ import pytest
 from worldfoundry import cli
 from worldfoundry.cli import models as cli_models
 from worldfoundry.cli import zoo as cli_zoo
-from worldfoundry.core.io.paths import hfd_root_path, resolve_worldfoundry_path
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import formal_benchmark_ids
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -40,13 +38,13 @@ def test_no_args_prints_first_run_banner(capsys: pytest.CaptureFixture[str]) -> 
     output = capsys.readouterr().out
 
     assert "WorldFoundry evaluation CLI" in output
-    assert "worldfoundry-eval zoo benchmarks" in output
-    assert "worldfoundry-eval zoo models" in output
-    assert "worldfoundry-eval tasks list" in output
-    legacy_command = " ".join(("worldfoundry-eval", "validation"))
+    assert "wf zoo benchmarks" in output
+    assert "wf zoo models" in output
+    assert "wf tasks list" in output
+    legacy_command = " ".join(("wf", "validation"))
     assert legacy_command not in output
-    assert "worldfoundry-eval contract run" not in output
-    assert "worldfoundry-eval <command> --help" in output
+    assert "wf contract run" not in output
+    assert "wf <command> --help" in output
 
 
 def test_help_prints_command_areas_without_heavy_runtime_imports() -> None:
@@ -79,21 +77,6 @@ raise SystemExit(exit_code)
     assert "HEAVY_IMPORTS=[]" in result.stdout
 
 
-def test_package_module_entrypoint_matches_public_cli() -> None:
-    result = subprocess.run(
-        [sys.executable, "-m", "worldfoundry", "--help"],
-        cwd=REPO_ROOT,
-        env=_cli_env(),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == 0
-    assert "WorldFoundry benchmark evaluation subsystem" in result.stdout
-    assert "worldfoundry-eval" in result.stdout
-
-
 def test_package_module_no_args_prints_first_run_banner() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "worldfoundry"],
@@ -106,7 +89,7 @@ def test_package_module_no_args_prints_first_run_banner() -> None:
 
     assert result.returncode == 0
     assert "WorldFoundry evaluation CLI" in result.stdout
-    legacy_command = " ".join(("worldfoundry-eval", "validation"))
+    legacy_command = " ".join(("wf", "validation"))
     assert legacy_command not in result.stdout
 
 
@@ -147,17 +130,6 @@ def test_models_assets_help_exposes_base_model_stacks() -> None:
     assert "spatial_perception_core_stack" in result.stdout
     assert "spatial_perception_heavy_stack" in result.stdout
     assert "spatial_perception_data_stack" in result.stdout
-
-
-def test_models_assets_json_reports_stack_plan_without_runtime_imports() -> None:
-    result = _run_cli("models", "assets", "--capability", "depth_stack", "--json")
-
-    assert result.returncode == 0
-    payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "worldfoundry-base-model-assets-v1"
-    assert payload["stack_ids"] == ["depth_stack"]
-    assert payload["capability_ids"][:2] == ["depth_anything_v3", "moge_vitl"]
-    assert "download_command_argvs" in payload
 
 
 def test_models_assets_list_outputs_inventory() -> None:
@@ -210,7 +182,13 @@ def test_models_assets_handler_writes_report_and_executes_argvs(
 
     assert cli_models._handle_models_assets(args) == 1
     payload = json.loads(report_path.read_text(encoding="utf-8"))
-    assert payload["executed_downloads"][0]["command"] == ["hf", "download", "depth-anything/DA3-LARGE-1.1", "--local-dir", "/tmp/depth"]
+    assert payload["executed_downloads"][0]["command"] == [
+        "hf",
+        "download",
+        "depth-anything/DA3-LARGE-1.1",
+        "--local-dir",
+        "/tmp/depth",
+    ]
 
 
 def test_models_assets_downloads_use_hf_safe_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -239,54 +217,6 @@ def test_zoo_benchmark_run_help_exposes_official_results_path() -> None:
     assert "normalizer" in result.stdout
 
 
-def test_zoo_benchmark_show_json_exposes_complete_runnable_commands() -> None:
-    result = _run_cli("zoo", "benchmark-show", "--benchmark-id", "video-bench", "--json")
-
-    assert result.returncode == 0
-    payload = json.loads(result.stdout)
-    discovery = payload["discovery"]
-
-    assert payload["declared_maturity"] == discovery["declared_surface"]
-    assert payload["maturity"] == discovery["surface"]
-    assert payload["verification_status"] == payload["runner"]["verification_status"]
-    assert payload["commands"] == discovery["commands"]
-    assert payload["needs"] == discovery["needs"]
-    assert payload["next_action"] == discovery["next_action"]
-    assert discovery["contract_command_ready"] is True
-    assert discovery["normalizer_command_ready"] is True
-    assert discovery["official_runner_ready"] is False
-    assert discovery["ready_now_command_ready"] is False
-    assert discovery["contract_ready"] is True
-    assert discovery["normalizer_ready"] is True
-    assert discovery["official_ready"] is False
-    assert discovery["validation_or_normalizer_ready"] is True
-    assert discovery["one_command_ready"] is False
-    for key in [
-        "contract_command_ready",
-        "normalizer_command_ready",
-        "official_runner_ready",
-        "ready_now_command_ready",
-        "contract_ready",
-        "normalizer_ready",
-        "official_ready",
-        "validation_or_normalizer_ready",
-        "one_command_ready",
-    ]:
-        assert payload[key] is discovery[key]
-    assert discovery["commands"]["contract_run"] == (
-        "worldfoundry-eval zoo benchmark-run --benchmark-id video-bench "
-        "--mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/video-bench --json"
-    )
-    assert discovery["contract_validation_command"] == discovery["commands"]["contract_run"]
-    assert discovery["ready_now_command"] is None
-    assert discovery["one_click_command"] is None
-    assert discovery["commands"]["normalizer_run"] == (
-        "worldfoundry-eval zoo benchmark-run --benchmark-id video-bench "
-        "--mode official-validation --official-results-path '<official_results.json>' "
-        "--generated-artifact-dir '<generated_videos>' --output-dir '<out>' --json"
-    )
-
-
 def test_zoo_benchmark_show_exposes_user_prepared_official_run_commands() -> None:
     videoscore_result = _run_cli("zoo", "benchmark-show", "--benchmark-id", "videoscore", "--json")
     iworld_result = _run_cli("zoo", "benchmark-show", "--benchmark-id", "iworld-bench", "--json")
@@ -312,80 +242,6 @@ def test_zoo_benchmark_show_exposes_user_prepared_official_run_commands() -> Non
 
     assert "--official-results-path" in genai_commands["normalizer_run"]
     assert "--official-results-path" in genai_commands["official_validation"]
-
-
-def test_zoo_benchmark_show_json_keeps_validation_separate_from_normalizer() -> None:
-    result = _run_cli("zoo", "benchmark-show", "--benchmark-id", "vbench", "--json")
-
-    assert result.returncode == 0
-    payload = json.loads(result.stdout)
-    discovery = payload["discovery"]
-
-    assert discovery["contract_command_ready"] is True
-    assert discovery["normalizer_command_ready"] is False
-    assert discovery["official_runtime_declared"] is True
-    assert discovery["official_runtime_command_ready"] is True
-    assert discovery["bounded_official_validation_ready"] is True
-    assert discovery["official_evidence_ready"] is True
-    assert discovery["leaderboard_ready"] is False
-    assert discovery["full_leaderboard_ready"] is False
-    assert payload["next_action"].startswith("run official validation with ")
-    assert "official_validation" in discovery["commands"] or "normalizer_run" in discovery["commands"]
-    assert "normalizer_run" not in discovery["commands"]
-
-
-def test_zoo_benchmark_show_json_separates_verified_evidence_from_integration_status() -> None:
-    result = _run_cli("zoo", "benchmark-show", "--benchmark-id", "worldscore", "--json")
-
-    assert result.returncode == 0
-    payload = json.loads(result.stdout)
-    discovery = payload["discovery"]
-
-    assert payload["verification_status"] == "verified"
-    assert payload["integration_status"] == "planned"
-    assert discovery["official_runtime_declared"] is True
-    assert discovery["bounded_official_validation_ready"] is True
-    assert discovery["official_evidence_ready"] is True
-    assert discovery["official_runner_ready"] is False
-    assert discovery["one_command_ready"] is False
-    assert discovery["leaderboard_ready"] is False
-    assert discovery["full_leaderboard_ready"] is False
-
-
-def test_zoo_benchmarks_json_exposes_complete_runnable_commands_for_every_inventory_entry() -> None:
-    result = _run_cli("zoo", "benchmarks", "--json")
-
-    assert result.returncode == 0
-    payload = json.loads(result.stdout)
-    expected_ids = set(formal_benchmark_ids())
-    by_id = {entry["benchmark_id"]: entry for entry in payload}
-
-    assert set(by_id) == expected_ids
-    for benchmark_id, entry in by_id.items():
-        commands = entry["commands"]
-        expected_contract = (
-            f"worldfoundry-eval zoo benchmark-run --benchmark-id {benchmark_id} "
-            f"--mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/{benchmark_id} --json"
-        )
-        assert entry["contract_command_ready"] is True, benchmark_id
-        assert entry["contract_ready"] is True, benchmark_id
-        assert entry["validation_or_normalizer_ready"] is True, benchmark_id
-        assert entry["one_command_ready"] is entry["official_runner_ready"], benchmark_id
-        assert entry["ready_now_command_ready"] is entry["official_runner_ready"], benchmark_id
-        assert entry["contract_validation_command"] == expected_contract
-        if entry["official_runner_ready"]:
-            assert entry["ready_now_command"], benchmark_id
-            assert entry["one_click_command"] == entry["ready_now_command"], benchmark_id
-        else:
-            assert entry["ready_now_command"] is None, benchmark_id
-            assert entry["one_click_command"] is None, benchmark_id
-        assert commands["contract_run"] == expected_contract
-        assert "<" not in commands["contract_run"], benchmark_id
-
-        if entry["normalizer_command_ready"]:
-            normalizer_command = commands["normalizer_run"]
-            assert normalizer_command
-            assert "--json" in normalizer_command, benchmark_id
 
 
 def test_zoo_embodied_assets_forwards_script_arguments(

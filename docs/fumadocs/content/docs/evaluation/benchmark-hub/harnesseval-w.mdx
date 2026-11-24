@@ -22,7 +22,7 @@ preserves the original comparison cohort.
 The synthetic fixture checks schemas and aggregation without data downloads or models:
 
 ```bash
-python -m worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.run_harnesseval_w \
+python -m worldfoundry.evals.tasks.execution.runners.harnesseval_w.run_harnesseval_w \
   --run-fixture --strict --output-dir tmp/harnesseval-fixture --json
 ```
 
@@ -30,7 +30,7 @@ Import an official `harnesseval.report` JSON, a case-score JSON/list, or an eval
 directory containing `rollout_scores/<model>/<family>/*.scores.json`:
 
 ```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id harnesseval-w \
+wf zoo benchmark-run --benchmark-id harnesseval-w \
   --mode official-validation --official-results-path /path/to/evaluation \
   --result-model-id my-model --output-dir tmp/harnesseval-import --json
 ```
@@ -60,7 +60,7 @@ source tree. HPSv3 uses registered WorldFoundry HPSv3 assets; AMT/RAFT/CLIP/aest
 weights reuse staged base-model assets when absent from the configured directory.
 
 ```bash
-python -m worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.run_harnesseval_w \
+python -m worldfoundry.evals.tasks.execution.runners.harnesseval_w.run_harnesseval_w \
   --run-official --generated-artifact-dir /path/to/generation \
   --manifest /path/to/manifest.json --plan-root /path/to/plans \
   --assets-root /path/to/dataset --model-id my-model \
@@ -77,17 +77,14 @@ Each skill, including each staged drift component, runs in a bounded Python proc
 
 Full inference needs CUDA, ffmpeg/ffprobe, model dependencies, compatible weights and
 a VLM judge. CLIP, RAFT, AMT, HPSv3, Depth Anything v1, DINOv2, MegaSAM and UniDepth reuse
-`worldfoundry/base_models`. UniDepth uses the existing geometry-prior loader and registered
-`WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR` (containing `config.json` and `model.safetensors`).
-MegaSAM tracking and UniDepth inference sources are included in their canonical base-model locations.
-UniDepth uses the upstream compatibility decoder matching the pinned HF snapshot; strict loading
-and GPU depth/points/intrinsics inference have been verified. Its Nyström attention requires
-`xformers.components.attention` (tested with `xformers==0.0.28.post3`).
+`worldfoundry/base_models`. UniDepth loads weights from
+`WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR` (containing `config.json` and `model.safetensors`)
+and is validated for GPU depth, point and intrinsics inference with the pinned HF snapshot.
+Its Nyström attention requires `xformers.components.attention` (tested with `xformers==0.0.28.post3`).
 Build MegaSAM's two CUDA extensions from
 `worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base` with
 `python -m pip install --no-build-isolation -e .` using a compiler compatible with PyTorch.
-Both WBench and HarnessEval-W call the same resident Python pipeline. No shell launchers or generator copies
-are included. The full 100-case GPU/API evaluation and model parity remain unverified.
+The full 100-case GPU/API evaluation has not been checked against official model scores.
 
 For the unified `official-run` entrypoint, supply the extra inputs through
 `WORLDFOUNDRY_HARNESSEVAL_MANIFEST`, `WORLDFOUNDRY_HARNESSEVAL_PLAN_ROOT`,

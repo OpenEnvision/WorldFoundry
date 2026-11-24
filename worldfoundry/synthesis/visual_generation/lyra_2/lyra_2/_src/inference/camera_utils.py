@@ -320,10 +320,7 @@ def create_horizontal_trajectory(
 
     for pos in translation_positions:
         camera_pos = initial_camera_pos + pos
-        if outwards:
-            _look_at = look_at + pos * 2
-        else:
-            _look_at = look_at
+        _look_at = look_at + pos * 2 if outwards else look_at
         view_matrix = look_at_matrix(camera_pos, _look_at)
         trajectory.append(view_matrix)
     trajectory = torch.stack(trajectory)
@@ -398,10 +395,7 @@ def create_horizontal_with_noise_trajectory(
 
     for pos in translation_positions:
         camera_pos = initial_camera_pos + pos
-        if outwards:
-            _look_at = look_at + pos * 2
-        else:
-            _look_at = look_at
+        _look_at = look_at + pos * 2 if outwards else look_at
         view_matrix = look_at_matrix(camera_pos, _look_at)
         trajectory.append(view_matrix)
 
@@ -500,10 +494,7 @@ def create_horizontal_zoom_with_bend_trajectory(
 
     for pos in translation_positions:
         camera_pos = initial_camera_pos + pos
-        if outwards:
-            _look_at = look_at + pos * 2
-        else:
-            _look_at = look_at
+        _look_at = look_at + pos * 2 if outwards else look_at
         view_matrix = look_at_matrix(camera_pos, _look_at)
         trajectory.append(view_matrix)
 
@@ -611,10 +602,7 @@ def create_horizontal_zoom_with_noise_and_bend_trajectory(
 
     for pos in translation_positions:
         camera_pos = initial_camera_pos + pos
-        if outwards:
-            _look_at = look_at + pos * 2
-        else:
-            _look_at = look_at
+        _look_at = look_at + pos * 2 if outwards else look_at
         view_matrix = look_at_matrix(camera_pos, _look_at)
         trajectory.append(view_matrix)
 

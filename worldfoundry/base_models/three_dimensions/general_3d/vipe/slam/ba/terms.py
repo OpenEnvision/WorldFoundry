@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> ba -> terms.py functionality."""
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
@@ -32,7 +30,6 @@ from .kernel import RobustKernel
 
 
 class TermEvalReturn(ABC):
-    """Term eval return implementation."""
     @abstractmethod
     def jtwj(self, group_name_row: str, group_name_col: str) -> SparseBlockMatrix: ...
 
@@ -46,17 +43,11 @@ class TermEvalReturn(ABC):
     def residual(self) -> torch.Tensor: ...
 
     def apply_robust_kernel(self, kernel: RobustKernel):
-        """Apply robust kernel.
-
-        Args:
-            kernel: The kernel.
-        """
         raise NotImplementedError
 
 
 @dataclass(kw_only=True)
 class ConcreteTermEvalReturn(TermEvalReturn):
-    """Concrete term eval return implementation."""
     J: dict[str, SparseBlockMatrix]  # group_name -> (n_occ, res_dim, manifold_dim)
     w: torch.Tensor  # (n_terms, res_dim, )
     r: torch.Tensor  # (n_terms, res_dim, )
@@ -65,15 +56,6 @@ class ConcreteTermEvalReturn(TermEvalReturn):
     # i.e. the number of blocks in the sparse Jacobian matrix with size n_terms x n_vars
 
     def jtwj(self, group_name_row: str, group_name_col: str) -> SparseBlockMatrix:
-        """Jtwj.
-
-        Args:
-            group_name_row: The group name row.
-            group_name_col: The group name col.
-
-        Returns:
-            The return value.
-        """
         wJ = self.J[group_name_col].scale_w_left(self.w)
         try:
             return self.J[group_name_row].tmult_mat(wJ).coalesce()
@@ -81,47 +63,22 @@ class ConcreteTermEvalReturn(TermEvalReturn):
             return wJ.tmult_mat(self.J[group_name_row]).transpose().coalesce()
 
     def nwjtr(self, group_name: str) -> SparseBlockVector:
-        """Nwjtr.
-
-        Args:
-            group_name: The group name.
-
-        Returns:
-            The return value.
-        """
         return self.J[group_name].tmult_vec(-self.w * self.r).coalesce()
 
     def remove_jcol_inds(self, group_name: str, col_inds: torch.Tensor):
-        """Remove jcol inds.
-
-        Args:
-            group_name: The group name.
-            col_inds: The col inds.
-        """
         j_group = self.J[group_name]
         keep_mask = torch.isin(j_group.j_inds, col_inds, invert=True)
         self.J[group_name] = j_group.subset(keep_mask)
 
     def apply_robust_kernel(self, kernel: RobustKernel):
-        """Apply robust kernel.
-
-        Args:
-            kernel: The kernel.
-        """
         robust_weight = kernel.apply(self.r)
         self.w = self.w * robust_weight
 
     def residual(self) -> torch.Tensor:
-        """Residual.
-
-        Returns:
-            The return value.
-        """
         return torch.sum(self.r * self.r * self.w, dim=1)
 
 
 class SolverTerm(ABC):
-    """Solver term implementation."""
     @abstractmethod
     def forward(
         self,
@@ -133,14 +90,9 @@ class SolverTerm(ABC):
     @abstractmethod
     def group_names(self) -> set[str]: ...
 
-    def update(self, solver):
-        """Update.
-
-        Args:
-            solver: The solver.
-        """
-        # Default implementation do nothing.
+    def update(self, solver):  # noqa: B027 - Optional hook with a no-op default.
         pass
+        # Default implementation do nothing.
 
 
 class DenseDepthFlowTerm(SolverTerm):
@@ -169,25 +121,6 @@ class DenseDepthFlowTerm(SolverTerm):
         image_size: tuple[int, int],
         camera_type: CameraType,
     ) -> None:
-        """Init.
-
-        Args:
-            pose_i_inds: The pose i inds.
-            pose_j_inds: The pose j inds.
-            rig_i_inds: The rig i inds.
-            rig_j_inds: The rig j inds.
-            dense_disp_i_inds: The dense disp i inds.
-            target: The target.
-            weight: The weight.
-            intrinsics: The intrinsics.
-            intrinsics_factor: The intrinsics factor.
-            rig: The rig.
-            image_size: The image size.
-            camera_type: The camera type.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         self.n_terms = pose_i_inds.shape[0]
@@ -214,11 +147,6 @@ class DenseDepthFlowTerm(SolverTerm):
         self.rig = rig
 
     def group_names(self) -> set[str]:
-        """Group names.
-
-        Returns:
-            The return value.
-        """
         names = {"pose", "dense_disp"}
         if self.intrinsics is None:
             names.add("intrinsics")
@@ -244,15 +172,9 @@ class DenseDepthFlowTerm(SolverTerm):
         if active_group_names is None:
             active_group_names = self.group_names()
 
-        if self.intrinsics is None:
-            intrinsics = variables["intrinsics"]
-        else:
-            intrinsics = self.intrinsics
+        intrinsics = variables["intrinsics"] if self.intrinsics is None else self.intrinsics
         optimize_intrinsics = self.intrinsics is None and "intrinsics" in active_group_names
-        if self.rig is None:
-            rig = variables["rig"]
-        else:
-            rig = self.rig
+        rig = variables["rig"] if self.rig is None else self.rig
         optimize_rig = self.rig is None and "rig" in active_group_names
         optimize_pose_disp = "pose" in active_group_names or "dense_disp" in active_group_names
 
@@ -342,21 +264,11 @@ class DispSensRegularizationTerm(SolverTerm):
 
     @dataclass(kw_only=True)
     class ThisTermEvalReturn(TermEvalReturn):
-        """This term eval return implementation."""
         alpha: float
         i_inds: torch.Tensor
         disps_sens_res: torch.Tensor
 
         def jtwj(self, group_name_row: str, group_name_col: str) -> SparseBlockMatrix:
-            """Jtwj.
-
-            Args:
-                group_name_row: The group name row.
-                group_name_col: The group name col.
-
-            Returns:
-                The return value.
-            """
             assert group_name_row == group_name_col == "dense_disp"
             return SparseMDiagonalBlockMatrix(
                 i_inds=self.i_inds,
@@ -365,48 +277,19 @@ class DispSensRegularizationTerm(SolverTerm):
             )
 
         def nwjtr(self, group_name: str) -> SparseBlockVector:
-            """Nwjtr.
-
-            Args:
-                group_name: The group name.
-
-            Returns:
-                The return value.
-            """
             assert group_name == "dense_disp"
             return SparseBlockVector(inds=self.i_inds, data=-self.alpha * self.disps_sens_res)
 
         def remove_jcol_inds(self, group_name: str, col_inds: torch.Tensor):
-            """Remove jcol inds.
-
-            Args:
-                group_name: The group name.
-                col_inds: The col inds.
-            """
             assert group_name == "dense_disp"
             keep_mask = torch.isin(self.i_inds, col_inds, invert=True)
             self.i_inds = self.i_inds[keep_mask]
             self.disps_sens_res = self.disps_sens_res[keep_mask]
 
         def residual(self) -> torch.Tensor:
-            """Residual.
-
-            Returns:
-                The return value.
-            """
             return self.alpha * (self.disps_sens_res**2).sum(dim=1)
 
     def __init__(self, i_inds: torch.Tensor, alpha: float, disps_sens: torch.Tensor) -> None:
-        """Init.
-
-        Args:
-            i_inds: The i inds.
-            alpha: The alpha.
-            disps_sens: The disps sens.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         self.i_inds = i_inds
@@ -414,11 +297,6 @@ class DispSensRegularizationTerm(SolverTerm):
         self.disps_sens = disps_sens
 
     def group_names(self) -> set[str]:
-        """Group names.
-
-        Returns:
-            The return value.
-        """
         return {"dense_disp"}
 
     def forward(
@@ -468,24 +346,6 @@ class TracksFlowTerm(SolverTerm):
         rig: SE3,
         camera_type: CameraType,
     ) -> None:
-        """Init.
-
-        Args:
-            pose_i_inds: The pose i inds.
-            pose_j_inds: The pose j inds.
-            rig_i_inds: The rig i inds.
-            rig_j_inds: The rig j inds.
-            tracks_i_inds: The tracks i inds.
-            target: The target.
-            weight: The weight.
-            tracks_uv: The tracks uv.
-            intrinsics: The intrinsics.
-            rig: The rig.
-            camera_type: The camera type.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         self.n_terms = pose_i_inds.shape[0]
@@ -515,11 +375,6 @@ class TracksFlowTerm(SolverTerm):
         self.rig = rig
 
     def group_names(self) -> set[str]:
-        """Group names.
-
-        Returns:
-            The return value.
-        """
         names = {"pose", "tracks_disp"}
         if self.intrinsics is None:
             names.add("intrinsics")
@@ -541,10 +396,7 @@ class TracksFlowTerm(SolverTerm):
         if active_group_names is None:
             active_group_names = self.group_names()
 
-        if self.intrinsics is None:
-            intrinsics = variables["intrinsics"]
-        else:
-            intrinsics = self.intrinsics
+        intrinsics = variables["intrinsics"] if self.intrinsics is None else self.intrinsics
         optimize_intrinsics = self.intrinsics is None and "intrinsics" in active_group_names
         optimize_pose_disp = "pose" in active_group_names or "tracks_disp" in active_group_names
 

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, cast
 
 import torch
 
@@ -26,12 +27,12 @@ class WorldFMPipeline(PipelineABC):
 
     def __init__(
         self,
-        operator: Optional[WorldFMOperator] = None,
-        representation_model: Optional[WorldFMRepresentation] = None,
-        synthesis_model: Optional[WorldFMSynthesis] = None,
-        memory_module: Optional[Any] = None,
+        operator: WorldFMOperator | None = None,
+        representation_model: WorldFMRepresentation | None = None,
+        synthesis_model: WorldFMSynthesis | None = None,
+        memory_module: Any | None = None,
         device: str = "cuda",
-        weight_dtype: Optional[torch.dtype] = None,
+        weight_dtype: torch.dtype | None = None,
     ) -> None:
         """Initialize the pipeline and configure runtime components."""
         self.operator = operator or WorldFMOperator()
@@ -42,14 +43,14 @@ class WorldFMPipeline(PipelineABC):
         self.weight_dtype = weight_dtype
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: str = DEFAULT_WORLDFM_REPO,
-        required_components: Optional[Dict[str, Any]] = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
-        weight_dtype: Optional[torch.dtype] = None,
+        weight_dtype: torch.dtype | None = None,
         **kwargs,
-    ) -> "WorldFMPipeline":
+    ) -> WorldFMPipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         required_components = required_components or {}
 
@@ -121,7 +122,7 @@ class WorldFMPipeline(PipelineABC):
         panorama_path: str | None = None,
         output_dir: str | None = None,
         reset_memory: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Prepare scene state without generating frames; preserve prior state if preparation fails."""
         if self.representation_model is None:
             raise RuntimeError("WorldFM representation model is not loaded. Use from_pretrained() first.")
@@ -183,7 +184,7 @@ class WorldFMPipeline(PipelineABC):
             panorama_image=panorama_image,
             panorama_path=panorama_path,
         )
-        scene_context = self.representation_model.build_scene_context(
+        scene_context = cast(WorldFMRepresentation, self.representation_model).build_scene_context(
             images=perception["images"],
             image_path=perception["image_path"],
             panorama_image=perception["panorama_image"],
@@ -197,15 +198,15 @@ class WorldFMPipeline(PipelineABC):
     def process(
         self,
         images=None,
-        interactions: Optional[Sequence] = None,
+        interactions: Sequence | None = None,
         K=None,
         prompt: str = "",
         meta_path=None,
-        scene_name: Optional[str] = None,
+        scene_name: str | None = None,
         panorama_image=None,
         panorama_path=None,
-        output_dir: Optional[str] = None,
-        scene_context: Optional[Dict[str, Any]] = None,
+        output_dir: str | None = None,
+        scene_context: dict[str, Any] | None = None,
     ):
         """Process and normalize input arguments and conditions for inference."""
         if self.representation_model is None or self.synthesis_model is None:
@@ -241,18 +242,18 @@ class WorldFMPipeline(PipelineABC):
     def __call__(
         self,
         images=None,
-        interactions: Optional[Sequence] = None,
+        interactions: Sequence | None = None,
         K=None,
         prompt: str = "",
         meta_path=None,
-        scene_name: Optional[str] = None,
+        scene_name: str | None = None,
         panorama_image=None,
         panorama_path=None,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         save_mode: str = "video",
         fps: int = 30,
         return_dict: bool = False,
-        scene_context: Optional[Dict[str, Any]] = None,
+        scene_context: dict[str, Any] | None = None,
         **kwargs,
     ):
         """Execute the complete pipeline generation flow."""
@@ -291,14 +292,14 @@ class WorldFMPipeline(PipelineABC):
     def stream(
         self,
         images=None,
-        interactions: Optional[Sequence] = None,
+        interactions: Sequence | None = None,
         K=None,
         prompt: str = "",
         meta_path=None,
-        scene_name: Optional[str] = None,
+        scene_name: str | None = None,
         panorama_image=None,
         panorama_path=None,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         save_mode: str = "video",
         fps: int = 30,
         reset_memory: bool = False,

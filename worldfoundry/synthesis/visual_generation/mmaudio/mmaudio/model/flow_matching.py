@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import torch
 
@@ -13,8 +13,7 @@ log = logging.getLogger()
 
 # Partially from https://github.com/gle-bellier/flow-matching
 class FlowMatching:
-
-    def __init__(self, min_sigma: float = 0.0, inference_mode='euler', num_steps: int = 25):
+    def __init__(self, min_sigma: float = 0.0, inference_mode="euler", num_steps: int = 25):
         # inference_mode: 'euler' or 'adaptive'
         # num_steps: number of steps in the euler inference mode
         super().__init__()
@@ -24,12 +23,11 @@ class FlowMatching:
 
         # self.fm = ExactOptimalTransportConditionalFlowMatcher(sigma=min_sigma)
 
-        assert self.inference_mode in ['euler', 'adaptive']
-        if self.inference_mode == 'adaptive' and num_steps > 0:
-            log.info('The number of steps is ignored in adaptive inference mode ')
+        assert self.inference_mode in ["euler", "adaptive"]
+        if self.inference_mode == "adaptive" and num_steps > 0:
+            log.info("The number of steps is ignored in adaptive inference mode ")
 
-    def get_conditional_flow(self, x0: torch.Tensor, x1: torch.Tensor,
-                             t: torch.Tensor) -> torch.Tensor:
+    def get_conditional_flow(self, x0: torch.Tensor, x1: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         # which is psi_t(x), eq 22 in flow matching for generative models
         t = t[:, None, None].expand_as(x0)
         return (1 - (1 - self.min_sigma) * t) * x0 + t * x1
@@ -41,11 +39,7 @@ class FlowMatching:
         return (predicted_v - target_v).pow(2).mean(dim=reduce_dim)
 
     def get_x0_xt_c(
-        self,
-        x1: torch.Tensor,
-        t: torch.Tensor,
-        Cs: list[torch.Tensor],
-        generator: Optional[torch.Generator] = None
+        self, x1: torch.Tensor, t: torch.Tensor, Cs: list[torch.Tensor], generator: torch.Generator | None = None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         x0 = torch.empty_like(x1).normal_(generator=generator)
 
@@ -61,13 +55,11 @@ class FlowMatching:
     def run_t0_to_t1(self, fn: Callable, x0: torch.Tensor, t0: float, t1: float) -> torch.Tensor:
         # fn: a function that takes (t, x) and returns the direction x0->x1
 
-        if self.inference_mode == 'adaptive':
+        if self.inference_mode == "adaptive":
             if odeint is None:
-                raise RuntimeError(
-                    "MMAudio adaptive flow matching requires the optional torchdiffeq package."
-                )
+                raise RuntimeError("MMAudio adaptive flow matching requires the optional torchdiffeq package.")
             return odeint(fn, x0, torch.tensor([t0, t1], device=x0.device, dtype=x0.dtype))
-        elif self.inference_mode == 'euler':
+        elif self.inference_mode == "euler":
             x = x0
             steps = torch.linspace(t0, t1 - self.min_sigma, self.num_steps + 1)
             for ti, t in enumerate(steps[:-1]):

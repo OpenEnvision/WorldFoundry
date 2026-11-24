@@ -25,7 +25,7 @@ from worldfoundry.core.geometry.warp import Sparse3DCache
 def test_device_import_has_no_availability_or_npu_configuration_side_effect(monkeypatch):
     import importlib
 
-    import worldfoundry.core.execution.device as device
+    import worldfoundry.core.platform.device as device
 
     calls = {"cuda": 0, "npu": 0}
 
@@ -44,7 +44,7 @@ def test_device_import_has_no_availability_or_npu_configuration_side_effect(monk
 
 
 def test_deprecated_device_availability_constant_is_lazy(monkeypatch):
-    import worldfoundry.core.execution.device as device
+    import worldfoundry.core.platform.device as device
 
     calls = 0
 

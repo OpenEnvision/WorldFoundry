@@ -1,12 +1,9 @@
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v1 -> adapter.py functionality."""
-
 import torch
 import torch.nn.functional as F
-from typing import Dict
+from torchvision.transforms import Compose
 
 from .dpt import DepthAnything
-from .util.transform import Resize, NormalizeImage, PrepareForNet
-from torchvision.transforms import Compose
+from .util.transform import NormalizeImage, PrepareForNet, Resize
 
 
 class DepthAnythingAdapter:
@@ -38,7 +35,7 @@ class DepthAnythingAdapter:
             ]
         )
 
-    def infer(self, image_tensor: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def infer(self, image_tensor: torch.Tensor) -> dict[str, torch.Tensor]:
         """
         Inference method compatible with MoGeModel interface.
 
@@ -67,7 +64,7 @@ class DepthAnythingAdapter:
 
         # Ensure RGB format (DepthAnything expects RGB)
         # Check if it's BGR by comparing first and last channel means
-        if image_np.shape[2] == 3:
+        if image_np.shape[2] == 3:  # noqa: SIM102 - Branches carry per-case comments.
             # Simple heuristic: if first channel mean > last channel mean, likely BGR
             if image_np[..., 0].mean() > image_np[..., 2].mean():
                 image_np = image_np[..., ::-1]  # BGR to RGB
@@ -81,9 +78,7 @@ class DepthAnythingAdapter:
             depth = self.model(tensor)
 
         # Interpolate to original size
-        depth = F.interpolate(
-            depth[None], (original_h, original_w), mode="bilinear", align_corners=False
-        )[0, 0]
+        depth = F.interpolate(depth[None], (original_h, original_w), mode="bilinear", align_corners=False)[0, 0]
 
         # DepthAnything outputs relative depth values (larger = closer to camera)
         # For point cloud generation, we typically want absolute depth where larger = farther

@@ -28,7 +28,6 @@ class VideoTokenizerInterface(ABC):
         """
         Reset the dtype of the model to the dtype its weights were trained with or quantized to.
         """
-        pass
 
     @abstractmethod
     def encode(self, state: torch.Tensor) -> torch.Tensor:

@@ -11,8 +11,8 @@ from __future__ import annotations
 import torch
 
 from worldfoundry.base_models.diffusion_model.models.networks.magi2.config import (
-    MHCConfig,
     Magi2PreviewConfig,
+    MHCConfig,
     MoEConfig,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.magi2.preview_dit import Transformer
@@ -85,8 +85,13 @@ def test_preview_model_forward_seam() -> None:
     dit = _tiny_preview().to(device)
     pipe = NativeMagi2Pipeline(preview_transformer=dit, text_encoder=_StubEncoder(64), device=device)
     pipe._plan = lambda **kw: {
-        "height": 64, "width": 64, "frames": 9, "video_latent_t": 2,
-        "latent_h": 4, "latent_w": 4, "audio_latent_t": 6,
+        "height": 64,
+        "width": 64,
+        "frames": 9,
+        "video_latent_t": 2,
+        "latent_h": 4,
+        "latent_w": 4,
+        "audio_latent_t": 6,
     }
     res = pipe.generate(prompt="a cat", num_inference_steps=3, seed=0, return_latents=True)
     vl, al = res["video_latent"], res["audio_latent"]
@@ -96,3 +101,75 @@ def test_preview_model_forward_seam() -> None:
     # real trained weights are validated via the exact checkpoint key-diffs.
     assert vl.shape[1] == 48 and vl.shape[2:] == (2, 4, 4)
     assert al.shape[-1] == 64 and al.shape[1] == 6
+
+
+def test_preview_layer_offload_reuses_cpu_weights_without_d2h() -> None:
+    import pytest
+
+    from worldfoundry.base_models.diffusion_model.models.networks.magi2 import ops
+
+    probe = torch.empty(1, 2, 16, dtype=torch.bfloat16, device="cuda") if torch.cuda.is_available() else None
+    use_cuda = probe is not None and not ops.can_use_fused_attn_sink(probe, probe, probe)
+    device = torch.device("cuda" if use_cuda else "cpu")
+    fixed_plan = {
+        "height": 64,
+        "width": 64,
+        "frames": 9,
+        "video_latent_t": 2,
+        "latent_h": 4,
+        "latent_w": 4,
+        "audio_latent_t": 6,
+    }
+    dit = _tiny_preview()
+    dit.pre_adapter.to(device)
+    dit.post_adapter.to(device)
+    dit.block.layer_offload_device = device
+
+    pipe = NativeMagi2Pipeline(preview_transformer=dit, text_encoder=_StubEncoder(64), device=str(device))
+    pipe._plan = lambda **kw: fixed_plan
+
+    res_first = pipe.generate(prompt="a cat", num_inference_steps=2, seed=0, return_latents=True)
+    first_param_ptrs = [p.data_ptr() for p in dit.block.parameters()]
+    first_buf_ptrs = [b.data_ptr() for b in dit.block.buffers()]
+    assert all(p.device.type == "cpu" for p in dit.block.parameters())
+    assert all(b.device.type == "cpu" for b in dit.block.buffers())
+
+    res_second = pipe.generate(prompt="a cat", num_inference_steps=2, seed=0, return_latents=True)
+    assert [p.data_ptr() for p in dit.block.parameters()] == first_param_ptrs
+    assert [b.data_ptr() for b in dit.block.buffers()] == first_buf_ptrs
+    torch.testing.assert_close(
+        res_first["video_latent"], res_second["video_latent"], rtol=0.0, atol=0.0, equal_nan=True
+    )
+    torch.testing.assert_close(
+        res_first["audio_latent"], res_second["audio_latent"], rtol=0.0, atol=0.0, equal_nan=True
+    )
+
+    dit.block.layer_offload_device = None
+    dit.block.to(device)
+    res_resident = pipe.generate(prompt="a cat", num_inference_steps=2, seed=0, return_latents=True)
+    torch.testing.assert_close(
+        res_first["video_latent"], res_resident["video_latent"], rtol=0.0, atol=0.0, equal_nan=True
+    )
+    torch.testing.assert_close(
+        res_first["audio_latent"], res_resident["audio_latent"], rtol=0.0, atol=0.0, equal_nan=True
+    )
+
+    # Exception inside a layer must still restore all parameters and buffers back to CPU.
+    dit.block.to("cpu")
+    dit.block._offload_cpu_cache.clear()
+    dit.block.layer_offload_device = device
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("injected layer failure")
+
+    original_layer = dit.block.layers[0]
+    original_layer_forward = original_layer.forward
+    original_layer.forward = _boom  # type: ignore[method-assign]
+    try:
+        with pytest.raises(RuntimeError, match="injected layer failure"):
+            pipe.generate(prompt="a cat", num_inference_steps=1, seed=0, return_latents=True)
+    finally:
+        original_layer.forward = original_layer_forward  # type: ignore[method-assign]
+
+    assert all(p.device.type == "cpu" for p in dit.block.parameters())
+    assert all(b.device.type == "cpu" for b in dit.block.buffers())

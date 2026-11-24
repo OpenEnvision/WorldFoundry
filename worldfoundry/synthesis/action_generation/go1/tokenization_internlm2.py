@@ -15,9 +15,10 @@
 # limitations under the License.
 
 """Tokenization classes for InternLM."""
+
 import os
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, ClassVar
 
 import sentencepiece as spm
 from transformers.tokenization_utils import PreTrainedTokenizer
@@ -42,7 +43,7 @@ class InternLM2Tokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    model_input_names = ["input_ids", "attention_mask"]
+    model_input_names: ClassVar[list] = ["input_ids", "attention_mask"]
     _auto_class = "AutoTokenizer"
 
     def __init__(
@@ -52,7 +53,7 @@ class InternLM2Tokenizer(PreTrainedTokenizer):
         bos_token="<s>",
         eos_token="</s>",
         pad_token="</s>",
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
         add_bos_token=True,
         add_eos_token=False,
         decode_with_prefix_space=False,
@@ -109,11 +110,11 @@ class InternLM2Tokenizer(PreTrainedTokenizer):
         return self.sp_model.get_piece_size()
 
     @property
-    def bos_token_id(self) -> Optional[int]:
+    def bos_token_id(self) -> int | None:
         return self.sp_model.bos_id()
 
     @property
-    def eos_token_id(self) -> Optional[int]:
+    def eos_token_id(self) -> int | None:
         return self.sp_model.eos_id()
 
     def get_vocab(self):
@@ -162,7 +163,7 @@ class InternLM2Tokenizer(PreTrainedTokenizer):
         out_string = self._maybe_add_prefix_space(tokens=tokens, decoded=out_string)
         return out_string[1:]
 
-    def save_vocabulary(self, save_directory, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory, filename_prefix: str | None = None) -> tuple[str]:
         """
         Save the vocabulary and special tokens file to a directory.
 
@@ -190,10 +191,7 @@ class InternLM2Tokenizer(PreTrainedTokenizer):
         return (out_vocab_file,)
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        if self.add_bos_token:
-            bos_token_ids = [self.bos_token_id]
-        else:
-            bos_token_ids = []
+        bos_token_ids = [self.bos_token_id] if self.add_bos_token else []
 
         output = bos_token_ids + token_ids_0
 
@@ -201,13 +199,13 @@ class InternLM2Tokenizer(PreTrainedTokenizer):
             output = output + token_ids_1
 
         if self.add_eos_token:
-            output = output + [self.eos_token_id]
+            output = output + [self.eos_token_id]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         return output
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
@@ -233,8 +231,8 @@ class InternLM2Tokenizer(PreTrainedTokenizer):
         return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. T5 does not make
         use of token type ids, therefore a list of zeros is returned.

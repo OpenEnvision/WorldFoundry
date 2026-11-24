@@ -1,7 +1,6 @@
 /* Visual polish layer — defers tokens to app/styles/tokens.css. */
 
 /* ---------- Shared chrome (docs + home header tools) ---------- */
-.pi-doc-header-tools,
 .wf-home-site-header-tools {
   align-items: center;
   display: flex;
@@ -168,6 +167,7 @@
 .dark .pi-doc-link-active:hover {
   background: transparent;
   color: var(--pi-brand-accent);
+  font-weight: 600;
 }
 
 .dark .pi-doc-link-icon.is-active,
@@ -232,6 +232,11 @@
   font-weight: 400;
 }
 
+.dark .pi-doc-toc-links a[data-branch-active='true']:not([data-active='true']) {
+  border-left-color: color-mix(in srgb, var(--pi-brand-accent-soft) 78%, var(--pi-line));
+  color: var(--pi-ink);
+}
+
 .pi-doc-toc-links a[data-active='true'] {
   background: transparent;
   border-left-color: var(--pi-brand-accent);
@@ -244,27 +249,23 @@
   background: transparent;
   border: 0;
   box-shadow: none;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin-top: 1rem;
-  padding: 0.35rem 0 0;
 }
 
-.pi-doc-action-chip,
 .pi-doc-action-link {
-  background: transparent;
   border: 0;
   border-radius: 0;
   font-size: inherit;
-  font-weight: 400;
   padding: 0;
   transition: color 150ms ease, transform 160ms ease-out;
 }
 
-.pi-doc-action-chip:hover,
 .pi-doc-action-link:hover {
   background: transparent;
   border-color: transparent;
+}
+
+.pi-doc-action-link[data-copied='true'] {
+  color: var(--pi-brand-accent);
 }
 
 .pi-doc-content {
@@ -294,7 +295,7 @@
   font-size: var(--pi-doc-body-size);
   line-height: var(--pi-doc-body-leading);
   margin: 0 0 var(--pi-doc-paragraph-gap);
-  text-indent: 0 !important;
+  text-indent: 0;
 }
 
 .pi-doc-content li {
@@ -398,8 +399,8 @@
 }
 
 .pi-doc-content figure.shiki {
-  border: 1px solid var(--color-fd-border) !important;
-  box-shadow: none !important;
+  border: 1px solid var(--color-fd-border);
+  box-shadow: none;
 }
 
 .pi-doc-content .grid.gap-3.my-4 > a.rounded-lg.border.bg-fd-card {
@@ -439,7 +440,6 @@
   transform: none;
 }
 
-.pi-doc-welcome-quicklink,
 .pi-doc-welcome-badge {
   border-radius: var(--pi-radius-xl);
   box-shadow: none;
@@ -450,10 +450,6 @@
 .wf-home-main .wf-home-resource-card,
 .wf-home-main .wf-home-community-panel,
 .wf-home-main .wf-home-configurator {
-  border-radius: var(--pi-radius-xl);
-}
-
-.wf-home-main .wf-home-ecosystem-chips a {
   border-radius: var(--pi-radius-xl);
 }
 
@@ -882,7 +878,11 @@
   box-shadow: var(--pi-shadow-soft);
 }
 
-.dark .pi-doc-content .wf-docs-tabs [role='tablist'],
+.dark .pi-doc-content .wf-docs-tabs [role='tablist'] {
+  --wf-tablist-bg: color-mix(in srgb, var(--pi-paper) 62%, var(--pi-elevated));
+  border-bottom-color: var(--pi-line);
+}
+
 .dark .pi-doc-content .my-4.flex.flex-col.overflow-hidden.rounded-xl.border.bg-fd-secondary .px-4 {
   background: color-mix(in srgb, var(--pi-paper) 62%, var(--pi-elevated)) !important;
   border-bottom-color: var(--pi-line);
@@ -934,19 +934,37 @@
   background: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated));
 }
 
-.dark .pi-doc-content table {
+.dark .pi-doc-content table:not(.wf-benchmark-board-table) {
   background: var(--pi-elevated) !important;
   border-color: var(--pi-line) !important;
 }
 
-.dark .pi-doc-content th {
+.dark .pi-doc-content table:not(.wf-benchmark-board-table) th {
   background: color-mix(in srgb, var(--pi-paper) 82%, var(--pi-elevated)) !important;
   color: var(--pi-ink) !important;
 }
 
-.dark .pi-doc-content td {
+.dark .pi-doc-content table:not(.wf-benchmark-board-table) td {
   background: color-mix(in srgb, var(--pi-paper) 94%, var(--pi-elevated)) !important;
   color: color-mix(in srgb, var(--pi-ink) 94%, var(--pi-muted)) !important;
+}
+
+.dark .pi-doc-content .wf-benchmark-board-table thead th {
+  background: transparent !important;
+  color: var(--pi-muted) !important;
+}
+
+.dark .pi-doc-content .wf-benchmark-board-table tbody th,
+.dark .pi-doc-content .wf-benchmark-board-table tbody td {
+  background: transparent !important;
+  color: color-mix(in srgb, var(--pi-ink) 94%, var(--pi-muted)) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dark .pi-doc-content .wf-benchmark-board-table tbody tr:hover th,
+  .dark .pi-doc-content .wf-benchmark-board-table tbody tr:hover td {
+    background: color-mix(in srgb, var(--pi-elevated) 78%, transparent) !important;
+  }
 }
 
 .dark .pi-doc-content :where(td, th) {
@@ -959,19 +977,6 @@
 
 .dark .pi-doc-content table a {
   color: var(--pi-brand-accent) !important;
-}
-
-.dark .pi-doc-hub-hero {
-  background: var(--pi-elevated);
-  border-color: var(--pi-line);
-  box-shadow: none;
-}
-
-.dark .pi-doc-hub-actions a:first-child,
-.dark .pi-doc-hub-actions a:hover {
-  background: var(--pi-brand-accent);
-  border-color: var(--pi-brand-accent);
-  color: var(--pi-paper);
 }
 
 .dark .pi-doc-content :where([class*='prose-no-margin'][class*='overflow-auto']) {
@@ -1040,8 +1045,6 @@
 }
 
 .dark .pi-doc-content .wf-recipe-family-tabs button {
-  background: transparent;
-  border-color: transparent;
   color: var(--pi-muted);
 }
 
@@ -1049,36 +1052,6 @@
   background: transparent;
   border-color: transparent;
   color: var(--pi-ink);
-}
-
-.dark .pi-doc-content .wf-recipe-family-tabs button.is-active {
-  background: transparent;
-  border-color: transparent;
-  border-bottom-color: var(--pi-brand-accent);
-  color: var(--pi-ink);
-}
-
-.dark .pi-doc-content .wf-recipe-family-tabs button.is-active span {
-  background: transparent;
-  color: var(--pi-muted);
-}
-
-.dark .pi-doc-content .wf-recipe-status-verified,
-.dark .pi-doc-content .wf-recipe-status-integrated {
-  background: color-mix(in srgb, var(--pi-brand-accent) 14%, var(--pi-elevated));
-  border-color: color-mix(in srgb, var(--pi-brand-accent) 40%, var(--pi-line));
-  color: var(--pi-ink);
-}
-
-.dark .pi-doc-content .wf-recipe-task-chip {
-  background: color-mix(in srgb, var(--pi-elevated) 82%, var(--pi-paper));
-  border-color: var(--pi-line);
-  color: var(--pi-ink);
-}
-
-.dark .pi-doc-content .wf-recipe-task-chip.is-more {
-  background: color-mix(in srgb, var(--pi-brand-accent) 16%, var(--pi-elevated));
-  border-color: color-mix(in srgb, var(--pi-brand-accent) 40%, var(--pi-line));
 }
 
 .dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder {
@@ -1179,23 +1152,6 @@
   color: var(--pi-ink);
 }
 
-.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-profile-chip {
-  background: transparent;
-  border-color: transparent;
-}
-
-.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contracts .wf-command-builder-disclosure code {
-  background: transparent !important;
-  border-color: transparent;
-  color: var(--pi-ink);
-}
-
-.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-profile-chip code {
-  background: transparent !important;
-  border-color: transparent;
-  color: var(--pi-ink);
-}
-
 .dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contracts-counts,
 .dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-field-label,
 .dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-field-note,
@@ -1234,8 +1190,7 @@
   color: var(--pi-ink);
 }
 
-.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-choices span,
-.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-task-list span {
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-choices span {
   background: transparent;
   border-color: transparent;
   color: var(--pi-ink);
@@ -1254,11 +1209,13 @@
   color: var(--pi-ink);
 }
 
-.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-value button {
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-value button,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-more-toggle {
   color: color-mix(in srgb, var(--pi-ink) 74%, var(--pi-muted));
 }
 
-.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-value button:hover {
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-value button:hover,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-more-toggle:hover {
   background: transparent;
   color: var(--pi-ink);
 }
@@ -1286,7 +1243,6 @@
   color: var(--pi-ink);
 }
 
-.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-command,
 .dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-code {
   background: color-mix(in srgb, var(--pi-elevated) 94%, var(--pi-paper));
   color: var(--pi-ink);
@@ -1323,8 +1279,7 @@
   border-color: var(--pi-line);
 }
 
-.dark .pi-doc-content .pi-studio-viz-overview,
-.dark .pi-doc-content .pi-studio-viz-card {
+.dark .pi-doc-content .pi-studio-viz-overview {
   background: color-mix(in srgb, var(--pi-paper) 86%, var(--pi-elevated));
   border-color: var(--pi-line);
 }
@@ -1343,21 +1298,6 @@
   background: color-mix(in srgb, var(--pi-ink) 8%, var(--pi-paper));
   border-color: color-mix(in srgb, var(--pi-ink) 18%, var(--pi-line));
   color: var(--pi-ink);
-}
-
-.dark .pi-doc-content .pi-studio-viz-card-status {
-  background: color-mix(in srgb, var(--pi-brand-accent) 12%, transparent);
-  border-color: color-mix(in srgb, var(--pi-brand-accent) 28%, var(--pi-line));
-  color: var(--pi-brand-accent);
-}
-
-.dark .pi-doc-content .pi-studio-viz-card-cmd code {
-  background: color-mix(in srgb, var(--pi-paper) 72%, var(--pi-elevated));
-  color: var(--pi-ink);
-}
-
-.dark .pi-doc-content .pi-studio-viz-card-planned .pi-studio-viz-card-image {
-  opacity: 0.58;
 }
 
 .dark .wf-home-main .wf-home-capability-card,
@@ -1403,25 +1343,16 @@
   color: var(--pi-brand-accent);
 }
 
-.dark .wf-home-main .wf-home-ecosystem-chips a {
-  background: color-mix(in srgb, var(--pi-paper) 86%, var(--pi-elevated));
-  border-color: var(--pi-line);
-}
-
-.dark .wf-home-main .wf-home-ecosystem-chips a:hover {
-  background: var(--pi-elevated);
-  border-color: var(--pi-soft-line);
-}
-
 .dark .pi-open-logo {
-  background: var(--pi-elevated);
+  background: transparent;
   border-color: var(--pi-line);
   box-shadow: none;
+  filter: invert(1) hue-rotate(180deg);
 }
 
-/* Keep publisher marks full-color on a neutral plate in dark mode. */
+/* Publisher marks are drawn for light backgrounds; keep a light plate in dark mode. */
 .dark .wf-model-mark.has-logo {
-  background: color-mix(in srgb, var(--pi-paper) 70%, #f3efe6);
+  background: color-mix(in srgb, var(--pi-paper) 12%, #f3efe6);
   border-color: var(--pi-line);
 }
 
@@ -1479,11 +1410,6 @@
   color: var(--pi-brand-accent) !important;
 }
 
-.dark .pi-doc-welcome-workflow-caption {
-  border-top-color: var(--pi-line) !important;
-  color: var(--pi-muted) !important;
-}
-
 .dark .pi-doc-welcome-badge {
   background: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated)) !important;
   border-color: var(--pi-line) !important;
@@ -1496,21 +1422,6 @@
 }
 
 .dark .pi-doc-welcome-badge-count {
-  color: var(--pi-muted) !important;
-}
-
-.dark .pi-doc-welcome-quicklink {
-  background: color-mix(in srgb, var(--pi-paper) 90%, var(--pi-elevated)) !important;
-  border-color: var(--pi-line) !important;
-  color: var(--pi-ink) !important;
-}
-
-.dark .pi-doc-welcome-quicklink:hover {
-  background: var(--pi-elevated) !important;
-  border-color: var(--pi-soft-line) !important;
-}
-
-.dark .pi-doc-welcome-quicklink-description {
   color: var(--pi-muted) !important;
 }
 
@@ -1570,7 +1481,8 @@
   border-left-color: color-mix(in srgb, var(--pi-brand-accent) 35%, var(--pi-line)) !important;
 }
 
-.dark .pi-doc-content .my-4.rounded-xl.border.bg-fd-card:not(figure.shiki) {
+.dark .pi-doc-content .my-4.rounded-xl.border.bg-fd-card:not(figure.shiki),
+.dark .pi-doc-content .my-4.rounded-xl.border.bg-fd-card:not(figure.shiki):has([class*='fill-(--callout-color)']) {
   background: color-mix(in srgb, var(--pi-paper) 90%, var(--pi-elevated)) !important;
   border-color: var(--pi-line) !important;
   box-shadow: none !important;
@@ -1634,14 +1546,12 @@
   background: transparent !important;
 }
 
-.dark .pi-doc-action-chip,
 .dark .pi-doc-action-link {
   background: transparent !important;
   border-color: transparent !important;
   color: inherit;
 }
 
-.dark .pi-doc-action-chip:hover,
 .dark .pi-doc-action-link:hover {
   color: var(--pi-ink);
 }
@@ -1686,12 +1596,6 @@
   color: var(--pi-brand-accent) !important;
 }
 
-.dark .pi-doc-welcome-quicklink-icon {
-  background: color-mix(in srgb, var(--pi-brand-accent) 14%, var(--pi-elevated)) !important;
-  border-color: color-mix(in srgb, var(--pi-brand-accent) 22%, var(--pi-line)) !important;
-  color: var(--pi-brand-accent) !important;
-}
-
 /* ---------- Home hero: RoboDojo-scale overlapping media carousel ---------- */
 .wf-home-hero-carousel {
   margin: 0 auto;
@@ -1702,7 +1606,7 @@
 .wf-home-hero-carousel-viewport {
   align-items: center;
   display: flex;
-  height: clamp(32rem, 49vw, 57.1875rem);
+  height: clamp(20rem, 46.125vw, 62.65rem);
   justify-content: center;
   overflow: visible;
   perspective: 1800px;
@@ -1726,29 +1630,33 @@
   top: 50%;
   transform: translate(-50%, -50%) scale(0.86);
   transition:
-    box-shadow 280ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 280ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
-  width: min(92%, 111.375rem);
-  will-change: transform, opacity;
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  width: min(82vw, 111.375rem);
+  will-change: transform, opacity, box-shadow;
   z-index: 1;
 }
 
 .wf-home-hero-card.is-active {
+  filter: blur(0px);
   opacity: 1;
   pointer-events: auto;
   transform: translate(-50%, -50%) scale(1);
-  width: min(96vw, 111.375rem);
+  width: min(82vw, 111.375rem);
   z-index: 3;
 }
 
 .wf-home-hero-card.is-prev {
-  transform: translate(calc(-50% - 38%), -50%) scale(0.84);
+  filter: blur(1.5px);
+  transform: translate(calc(-50% - 38%), -50%) scale(0.96);
   z-index: 2;
 }
 
 .wf-home-hero-card.is-next {
-  transform: translate(calc(-50% + 38%), -50%) scale(0.84);
+  filter: blur(1.5px);
+  transform: translate(calc(-50% + 38%), -50%) scale(0.96);
   z-index: 2;
 }
 
@@ -1761,7 +1669,7 @@
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  transition: box-shadow 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .wf-home-hero-card.is-active .wf-home-hero-card-frame {
@@ -1776,17 +1684,16 @@
 }
 
 .wf-home-hero-card-media {
-  aspect-ratio: 1784 / 915;
-  background: color-mix(in srgb, var(--pi-ink) 6%, var(--pi-paper));
-  min-height: clamp(32rem, 49vw, 57.1875rem);
+  aspect-ratio: 16 / 9;
+  background: #0a0c10;
+  min-height: 0;
   overflow: hidden;
   position: relative;
   width: 100%;
 }
 
 .wf-home-hero-card-poster,
-.wf-home-hero-card-video,
-.wf-home-hero-card-image {
+.wf-home-hero-card-video {
   display: block;
   height: 100%;
   inset: 0;
@@ -1794,55 +1701,6 @@
   object-position: center center;
   position: absolute;
   width: 100%;
-}
-
-/* Title/lead/CTA sit directly on the active video, RoboDojo-style. */
-.wf-home-hero-card-overlay {
-  align-items: flex-end;
-  display: flex;
-  inset: 0;
-  padding: clamp(1.5rem, 4vw, 3.25rem);
-  pointer-events: none;
-  position: absolute;
-  z-index: 2;
-}
-
-.wf-home-hero-card-overlay::before {
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    transparent 30%,
-    rgba(10, 9, 7, 0.58) 78%,
-    rgba(10, 9, 7, 0.72) 100%
-  );
-  content: '';
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
-}
-
-.wf-home-hero-carousel-caption {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  margin: 1.125rem auto 0;
-  max-width: min(96vw, 111.375rem);
-  min-height: 2.75rem;
-  text-align: center;
-  width: 100%;
-}
-
-.wf-home-hero-carousel-caption strong {
-  color: var(--pi-ink);
-  font-size: 0.875rem;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-}
-
-.wf-home-hero-carousel-caption span {
-  color: var(--pi-muted);
-  font-size: 0.8125rem;
-  line-height: 1.5;
 }
 
 .wf-home-hero-carousel-controls {
@@ -1867,7 +1725,8 @@
   transition:
     background 160ms ease,
     border-color 160ms ease,
-    color 160ms ease;
+    color 160ms ease,
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
   width: 2rem;
 }
 
@@ -1875,6 +1734,10 @@
   background: var(--pi-paper-hover);
   border-color: var(--pi-soft-line);
   color: var(--pi-brand-accent);
+}
+
+.wf-home-hero-carousel-nav:active {
+  transform: scale(0.97);
 }
 
 .wf-home-hero-carousel-dots {
@@ -1924,10 +1787,6 @@
     transform: translate(-50%, 0) scale(1);
     width: 100%;
   }
-
-  .wf-home-hero-card-overlay {
-    padding: 1.25rem;
-  }
 }
 
 @media (max-width: 640px) {
@@ -1953,18 +1812,17 @@
 /* ---------- Home hero: Fumadocs-style kicker ---------- */
 .wf-home-hero-kicker {
   animation: wf-hero-copy-enter 760ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
-  color: #e7d3b3;
+  color: var(--pi-brand-accent);
   font-family:
     'Noto Sans SC', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
     sans-serif;
   font-size: 0.8125rem;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.08em;
   line-height: 1.45;
-  margin: 0 0 0.75rem;
+  margin: 0 auto 0.75rem;
   max-width: 34em;
-  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
-  text-transform: none;
+  text-transform: uppercase;
   text-wrap: balance;
 }
 
@@ -2008,56 +1866,21 @@
   object-fit: contain;
 }
 
-.pi-doc-content .wf-docs-banner {
-  margin-bottom: 1rem;
-}
-
 .pi-doc-content :is([data-inline-toc], .not-prose.rounded-lg.border) {
   margin: 1.25rem 0;
-}
-
-@keyframes wf-docs-pulse {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
 }
 
 /* ---------- Quiet leftover shouty labels (source copy is already sentence case) ---------- */
 .pi-label,
 .pi-metric-quick-nav-group-title,
 .pi-metric-quick-nav.is-rail .pi-metric-quick-nav-group-title,
-.pi-doc-content .wf-model-recipe-identity p,
-.wf-model-recipe-facts dt span,
 .wf-recipe-records dt,
-.wf-recipe-facts dt,
-.wf-recipe-version-matrix dt,
-.wf-recipe-runtime-matrix dt,
-.wf-recipe-evidence-grid dt,
-.wf-recipe-contracts th,
-.wf-recipe-narrative-origin,
-.wf-recipe-highlights > span,
-.wf-recipe-hardware dt,
-.wf-recipe-what-is-meta dt,
-.wf-recipe-reference-meta dt,
-.wf-recipe-reference-peers > span,
-.wf-recipe-usage-workflow > h3,
-.wf-recipe-upstream-label,
 .wf-model-arch-diagram__label,
 .wf-cg-kicker,
 .wf-cg-lane,
 .wf-arch-kind,
-.wf-arch-lane,
-.wf-recipe-catalog-kicker,
-.wf-recipe-eyebrow,
-.wf-recipe-sidebar-identity > div > span,
-.wf-recipe-paper-quote span,
-.wf-recipe-source-links .wf-recipe-source-kind,
 .pi-env-entry-command span,
 .pi-doc-content .pi-env-catalog .pi-env-entry-body > p strong,
-.pi-studio-viz-card-status,
 .wf-home-main .wf-catalog-pane-kicker,
 .wf-home-main .wf-home-configurator-controls span,
 .wf-home-main .wf-home-configurator-terminal-head > span {
@@ -2068,7 +1891,6 @@
 .pi-doc-shell[lang='zh'] .pi-label,
 .pi-doc-shell[lang='zh'] .pi-doc-actions,
 .pi-doc-shell[lang='zh'] .wf-recipe-records dt,
-.pi-doc-shell[lang='zh'] .wf-recipe-facts dt,
 .pi-doc-shell[lang='zh'] .wf-command-builder-controls span {
   letter-spacing: 0;
 }
@@ -2080,12 +1902,19 @@
   outline-offset: 2px;
 }
 
-.pi-doc-action-chip:active,
 .pi-doc-action-link:active,
 .pi-doc-welcome-badge:active,
-.pi-doc-welcome-quicklink:active,
 .wf-recipe-show-more:active,
 .wf-recipe-family-tabs button:active,
+.wf-command-builder-tabs button:active,
+.wf-command-builder-disclosure:active,
+.wf-command-builder-more-toggle:active,
+.pi-doc-content .wf-docs-tabs-trigger:active,
+.pi-doc-content figure.shiki > div:has(> button[type='button']) button:active,
+.pi-doc-pagination-link:active,
+.pi-doc-related-link:active,
+.pi-doc-menu-button:active,
+.pi-doc-benchmark-tree-toggle:active,
 .pi-doc-header .pi-nav a:active,
 .pi-language-switch a:active,
 .pi-github-link:active,
@@ -2112,18 +1941,7 @@
 }
 
 /* ---------- Dark: leftover light surfaces ---------- */
-.dark .pi-doc-hub-card {
-  background: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated));
-  border-color: var(--pi-line);
-}
 
-.dark .pi-doc-hub-card:hover {
-  background: var(--pi-elevated);
-  border-color: color-mix(in srgb, var(--pi-brand-accent) 28%, var(--pi-line));
-  box-shadow: var(--pi-shadow-soft);
-}
-
-.dark .pi-doc-hub-card-strong,
 .dark .wf-api-catalog-card.is-guide {
   background: color-mix(in srgb, var(--pi-paper) 82%, var(--pi-elevated));
   border-color: color-mix(in srgb, var(--pi-ink) 18%, var(--pi-line));
@@ -2138,10 +1956,57 @@
   border-color: var(--pi-line);
 }
 
+.dark .wf-model-mark:not(.has-logo),
+.dark .wf-benchmark-mark:not(.has-logo) {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--pi-elevated) 90%, var(--pi-brand-accent)),
+      color-mix(in srgb, var(--pi-paper) 84%, var(--pi-brand-accent))
+    ),
+    var(--pi-elevated) !important;
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 26%, var(--pi-line)) !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark .wf-model-mark:not(.has-logo)[data-family='Embodied Action'],
+.dark .wf-benchmark-mark:not(.has-logo)[data-category='Embodied AI'] {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 7px,
+      color-mix(in srgb, var(--pi-brand-accent) 12%, transparent) 7px 8px
+    ),
+    color-mix(in srgb, var(--pi-elevated) 92%, var(--pi-brand-accent)) !important;
+}
+
+.dark .wf-model-mark:not(.has-logo)[data-family='World Rollout'],
+.dark .wf-benchmark-mark:not(.has-logo)[data-category='World Models'] {
+  background:
+    radial-gradient(
+      circle at 70% 28%,
+      color-mix(in srgb, var(--pi-brand-accent) 26%, transparent) 0 11%,
+      transparent 12%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--pi-elevated) 90%, var(--pi-brand-accent)),
+      color-mix(in srgb, var(--pi-paper) 84%, var(--pi-brand-accent))
+    ) !important;
+}
+
+.dark .wf-model-mark:not(.has-logo)[data-family='3D / 4D Scene'] {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--pi-elevated) 90%, var(--pi-brand-accent)) 0 56%,
+      color-mix(in srgb, var(--pi-paper) 78%, var(--pi-brand-accent)) 56% 100%
+    ),
+    var(--pi-elevated) !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .pi-doc-action-chip:active,
   .pi-doc-welcome-badge:active,
-  .pi-doc-welcome-quicklink:active,
   .wf-recipe-show-more:active {
     transform: none;
   }
@@ -2153,7 +2018,7 @@
   }
 }
 
-/* ---------- Wave-1 polish: quieter chrome, one rhythm, fewer boxes ---------- */
+/* ---------- Quieter chrome: one rhythm, fewer boxes ---------- */
 .pi-doc-header .pi-site-search-trigger {
   background: color-mix(in srgb, var(--pi-paper) 62%, var(--pi-elevated)) !important;
   border: 1px solid var(--pi-line) !important;
@@ -2191,14 +2056,44 @@
   width: 1.15rem;
 }
 
+/* One header row on phones: icon-only search and a single language toggle. */
 @media (max-width: 720px) {
   .pi-doc-header .pi-nav {
     display: none;
   }
 
+  .pi-doc-header .wf-home-site-header-tools {
+    flex: 0 1 auto;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-left: auto;
+  }
+
   .pi-doc-header .pi-site-search-trigger {
-    min-width: 2.25rem;
-    padding-inline: 0.5rem;
+    font-size: 0 !important;
+    justify-content: center;
+    padding-inline: 0 !important;
+    width: 2.25rem;
+  }
+
+  .pi-doc-header .pi-language-switch a[aria-current='true'] {
+    display: none;
+  }
+}
+
+@media (max-width: 400px) {
+  .pi-doc-header .pi-doc-header-brand {
+    gap: 8px;
+  }
+
+  .pi-doc-header .pi-brand-display-compact {
+    font-size: 1.125rem;
+  }
+}
+
+@media (max-width: 340px) {
+  .pi-doc-header .pi-doc-header-inner {
+    flex-wrap: wrap !important;
   }
 }
 
@@ -2242,6 +2137,41 @@
   gap: 8px;
   min-height: 0;
   padding: 8px 4px 0;
+}
+
+/* Phones: one compact row per stage instead of a tall stacked card. */
+@media (max-width: 640px) {
+  .pi-doc-welcome-workflow {
+    --pi-workflow-icon-size: 40px;
+  }
+
+  .pi-doc-welcome-workflow-track {
+    gap: 4px;
+  }
+
+  .pi-doc-welcome-workflow-card {
+    align-items: center;
+    column-gap: 14px;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    justify-items: start;
+    padding: 6px 4px;
+    row-gap: 2px;
+    text-align: left;
+  }
+
+  .pi-doc-welcome-workflow-marker {
+    grid-row: 1 / span 2;
+    height: auto;
+    width: auto;
+  }
+
+  .pi-doc-welcome-workflow-title {
+    justify-content: flex-start;
+    max-width: none;
+    min-height: 0;
+    text-align: left;
+  }
 }
 
 .pi-doc-welcome-workflow-stage:hover .pi-doc-welcome-workflow-card,
@@ -2307,24 +2237,17 @@
   padding: 0.35rem 0 0;
 }
 
-.pi-doc-action-chip,
 .pi-doc-action-link {
   background: transparent;
   box-shadow: none;
   font-weight: 400;
 }
 
-.pi-doc-hub-hero,
 .pi-doc-content > p:has(> img[src*='teaser']) img,
 .pi-doc-content img[src*='teaser'],
 .pi-open-logo {
   box-shadow: none;
   border-color: var(--pi-line);
-}
-
-.pi-doc-hub-actions a {
-  font-size: 0.8125rem;
-  font-weight: 600;
 }
 
 .wf-recipe-search {
@@ -2401,8 +2324,6 @@
   transform: scale(0.97);
 }
 
-.pi-doc-badge,
-.pi-studio-viz-card-status,
 .pi-metric-quick-nav-group-title,
 .pi-metric-quick-nav.is-rail .pi-metric-quick-nav-group-title {
   letter-spacing: 0.01em;

@@ -32,9 +32,7 @@ def _translation_step(
 ) -> np.ndarray:
     pitch, yaw = np.radians(rotation[:2])
     if action in {"forward", "backward"}:
-        direction = np.asarray(
-            [-math.sin(yaw) * math.cos(pitch), math.sin(pitch), math.cos(yaw) * math.cos(pitch)]
-        )
+        direction = np.asarray([-math.sin(yaw) * math.cos(pitch), math.sin(pitch), math.cos(yaw) * math.cos(pitch)])
         return direction * amount * (1 if action == "forward" else -1) / duration
     if action in {"left", "right"}:
         direction = np.asarray([math.cos(yaw), 0.0, math.sin(yaw)])
@@ -86,7 +84,7 @@ def camera_condition_from_actions(
     position = np.zeros(3)
     rotation = np.zeros(3)
     w2cs = [np.eye(4)]
-    for action_id, speed in zip(action_ids, speeds):
+    for action_id, speed in zip(action_ids, speeds, strict=False):
         actions = [_ACTIONS[key] for key in action_id]
         translation = sum(
             (_translation_step(action, rotation, speed, duration) for action in actions),
@@ -100,24 +98,18 @@ def camera_condition_from_actions(
             step_position = position + translation * step
             step_rotation = rotation + rotation_delta * step
             matrix = np.eye(4)
-            matrix[:3, :3] = euler_angles_to_rotation_matrix_zyx(
-                np.radians(step_rotation)
-            )
+            matrix[:3, :3] = euler_angles_to_rotation_matrix_zyx(np.radians(step_rotation))
             matrix[:3, 3] = -matrix[:3, :3] @ step_position
             w2cs.append(matrix)
         position += translation * duration
         rotation += rotation_delta * duration
     if len(w2cs) != target_length:
-        raise ValueError(
-            f"DreamX camera trajectory has {len(w2cs)} frames; expected {target_length}."
-        )
+        raise ValueError(f"DreamX camera trajectory has {len(w2cs)} frames; expected {target_length}.")
 
     latent_count = 1 + (target_length - 1) // 4
     w2cs = _interpolate_w2c(np.asarray(w2cs), latent_count)
     relative_c2w = np.stack([w2cs[0] @ np.linalg.inv(matrix) for matrix in w2cs])
-    viewmats = torch.as_tensor(
-        np.linalg.inv(relative_c2w), dtype=dtype, device=device
-    )
+    viewmats = torch.as_tensor(np.linalg.inv(relative_c2w), dtype=dtype, device=device)
     intrinsics = torch.zeros((latent_count, 3, 3), dtype=dtype, device=device)
     intrinsics[:, 0, 0] = 969.6969696969696 / 1920.0
     intrinsics[:, 1, 1] = 969.6969696969696 / 1080.0

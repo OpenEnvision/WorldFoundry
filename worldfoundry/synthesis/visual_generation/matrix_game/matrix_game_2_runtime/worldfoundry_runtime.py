@@ -10,12 +10,11 @@ from einops import rearrange
 from omegaconf import OmegaConf
 from safetensors.torch import load_file
 
-from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path
+from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path, package_data_path
 from worldfoundry.core.media.artifacts import process_game_control_video as process_video
 from worldfoundry.core.utils.tensors.torch import set_seed_everywhere as set_seed
-from worldfoundry.evaluation.utils import worldfoundry_data_path
 
-MATRIX_GAME_2_CONFIG_ROOT = worldfoundry_data_path("models", "runtime", "configs", "matrix_game_2")
+MATRIX_GAME_2_CONFIG_ROOT = package_data_path("models", "runtime", "configs", "matrix_game_2")
 MODE_CHECKPOINTS = {
     "universal": ("base_distilled_model", "base_distill.safetensors"),
     "gta_drive": ("gta_distilled_model", "gta_keyboard2dim.safetensors"),
@@ -90,19 +89,62 @@ def _enable_torch_compile() -> bool:
 
 
 _MATRIX_GAME2_OPTIMIZATION_KEYS = {
-    "fuse_qkv", "qkv_strategy", "qkv_split_threshold", "quantization", "compile",
-    "compile_backend", "compile_mode", "compile_dynamic", "compile_fullgraph", "compile_options",
-    "attention", "attention_backend", "offload", "offload_mode",
-    "vae_channels_last", "vae_channels_last_3d", "overlap_vae_decode",
+    "fuse_qkv",
+    "qkv_strategy",
+    "qkv_split_threshold",
+    "quantization",
+    "compile",
+    "compile_backend",
+    "compile_mode",
+    "compile_dynamic",
+    "compile_fullgraph",
+    "compile_options",
+    "attention",
+    "attention_backend",
+    "offload",
+    "offload_mode",
+    "vae_channels_last",
+    "vae_channels_last_3d",
+    "overlap_vae_decode",
+    "block_cuda_graph",
+    "vae_cuda_graph",
+    "vae_compile",
 }
 _MATRIX_GAME2_UNSUPPORTED_OPTIONS = {
-    "adacache", "approximate_attention", "blocktaylorseer", "cfg_gate_fraction", "cfg_gate_step",
-    "cfg_parallel", "cfg_parallel_degree", "cuda_graph", "custom", "device_map", "dit_weight_dtype",
-    "feature_cache", "fused_residual_adaln", "fused_rope", "inplace_residual", "magcache",
-    "rope_precision", "rms_norm_precision", "sequence_parallel", "sp_degree", "static_cross_kv",
-    "taylorseer", "teacache", "teacache_thresh", "vae_decode_autocast",
-    "vae_parallel", "vae_parallel_degree", "vae_preview_decoder_path", "vae_spatial_tiling",
-    "vae_temporal_chunk_size", "vae_tile_size", "vae_tile_stride", "vae_tiled_decode", "vae_weight_dtype",
+    "adacache",
+    "approximate_attention",
+    "blocktaylorseer",
+    "cfg_gate_fraction",
+    "cfg_gate_step",
+    "cfg_parallel",
+    "cfg_parallel_degree",
+    "cuda_graph",
+    "custom",
+    "device_map",
+    "dit_weight_dtype",
+    "feature_cache",
+    "fused_residual_adaln",
+    "fused_rope",
+    "inplace_residual",
+    "magcache",
+    "rope_precision",
+    "rms_norm_precision",
+    "sequence_parallel",
+    "sp_degree",
+    "static_cross_kv",
+    "taylorseer",
+    "teacache",
+    "teacache_thresh",
+    "vae_decode_autocast",
+    "vae_parallel",
+    "vae_parallel_degree",
+    "vae_preview_decoder_path",
+    "vae_spatial_tiling",
+    "vae_temporal_chunk_size",
+    "vae_tile_size",
+    "vae_tile_stride",
+    "vae_tiled_decode",
+    "vae_weight_dtype",
 }
 
 
@@ -138,10 +180,21 @@ def _matrix_game2_runtime_policy(kwargs, *, device, dtype):
         if not disabled:
             raise ValueError(f"Matrix-Game-2 does not support requested optimization {key!r}")
 
-    for key in ("fuse_qkv", "compile", "vae_channels_last", "vae_channels_last_3d", "overlap_vae_decode"):
+    for key in (
+        "fuse_qkv",
+        "compile",
+        "vae_channels_last",
+        "vae_channels_last_3d",
+        "overlap_vae_decode",
+        "block_cuda_graph",
+        "vae_cuda_graph",
+        "vae_compile",
+    ):
         value = options.get(key, False)
         if not isinstance(value, bool):
             raise TypeError(f"Matrix-Game-2 {key} must be a bool")
+    if options.get("vae_compile", False) and options.get("vae_cuda_graph", False):
+        raise ValueError("Matrix-Game-2 vae_compile and vae_cuda_graph are mutually exclusive")
     strategy = str(options.get("qkv_strategy", "packed")).strip().lower()
     if strategy not in {"auto", "packed", "split"}:
         raise ValueError("Matrix-Game-2 qkv_strategy must be 'auto', 'packed', or 'split'")
@@ -150,18 +203,33 @@ def _matrix_game2_runtime_policy(kwargs, *, device, dtype):
         raise ValueError("Matrix-Game-2 qkv_split_threshold must be a positive integer")
     options.update(qkv_strategy=strategy, qkv_split_threshold=threshold)
 
+    _supported_attn = {
+        AttentionBackend.AUTO,
+        AttentionBackend.TORCH,
+        AttentionBackend.SDPA,
+        AttentionBackend.FLASH_ATTENTION_3,
+    }
+    resolved_attn = AttentionBackend.AUTO
     for key in ("attention", "attention_backend"):
-        if key in options and parse_attention_backend(options[key], owner="Matrix-Game-2") is not AttentionBackend.AUTO:
-            raise ValueError(f"Matrix-Game-2 does not support requested {key}; its causal attention owns the provider")
+        if key in options:
+            parsed = parse_attention_backend(options[key], owner="Matrix-Game-2")
+            if parsed not in _supported_attn:
+                raise ValueError(
+                    f"Matrix-Game-2 does not support requested {key}; its causal attention owns the provider"
+                )
+            resolved_attn = parsed
+    options["_resolved_attention_backend"] = resolved_attn.value
     for key in ("offload", "offload_mode"):
         if key in options and options[key] is not None:
             offload = parse_offload_policy(options[key], owner="Matrix-Game-2")
             if offload.mode is not OffloadMode.NONE:
                 raise ValueError(f"Matrix-Game-2 does not support requested {key}")
     policy = RuntimePolicy(
-        device=device or "cpu", dtype=dtype,
+        device=device or "cpu",
+        dtype=dtype,
         quantization=parse_quantization_policy(options.get("quantization"), owner="Matrix-Game-2"),
-        compile=options.get("compile", False), options=options,
+        compile=options.get("compile", False),
+        options=options,
     )
     # Validate backend/mode/options even before lazy compiler installation.
     _compile_policy_from_runtime(policy)
@@ -173,8 +241,8 @@ def _apply_matrix_game2_optimizations(model, policy):
     from worldfoundry.base_models.diffusion_model.loaders.module import _compile_policy_from_runtime
     from worldfoundry.base_models.diffusion_model.optimizations.qkv_fusion import fuse_qkv_projections
     from worldfoundry.core.attention.backends.dispatch import attention_compile_receipt_scope
-    from worldfoundry.core.execution.compile_cache import compile_callable_cached
     from worldfoundry.core.model_loading.optimize import AppliedOptimizations, apply_quantization_policy
+    from worldfoundry.core.platform.compile_cache import compile_callable_cached
 
     applied = AppliedOptimizations()
     model._worldfoundry_applied_optimizations = applied
@@ -189,15 +257,24 @@ def _apply_matrix_game2_optimizations(model, policy):
         compile_policy, compile_options = _compile_policy_from_runtime(policy)
         eager_forward = model.forward
         compiled_forward = compile_callable_cached(
-            eager_forward, policy=compile_policy, options=compile_options, namespace="matrix-game-2-dit-forward",
+            eager_forward,
+            policy=compile_policy,
+            options=compile_options,
+            namespace="matrix-game-2-dit-forward",
         )
         installed = compiled_forward is not eager_forward
         compile_runtime = {
-            "wrapper_installed": installed, "calls": 0, "failures": 0, "last_error": None,
-            "request_calls": 0, "request_failures": 0, "request_last_error": None,
+            "wrapper_installed": installed,
+            "calls": 0,
+            "failures": 0,
+            "last_error": None,
+            "request_calls": 0,
+            "request_failures": 0,
+            "request_last_error": None,
             "attention_provider_graph_traces": {},
         }
         if installed:
+
             def audited_compiled_forward(*args, **kwargs):
                 try:
                     with attention_compile_receipt_scope(compile_runtime["attention_provider_graph_traces"]):
@@ -215,8 +292,11 @@ def _apply_matrix_game2_optimizations(model, policy):
             model.forward = audited_compiled_forward
         model._worldfoundry_compile_runtime = compile_runtime
         model._worldfoundry_compile_config = {
-            "backend": compile_policy.backend, "mode": compile_policy.mode,
-            "fullgraph": compile_policy.fullgraph, "dynamic": compile_policy.dynamic, "options": compile_options,
+            "backend": compile_policy.backend,
+            "mode": compile_policy.mode,
+            "fullgraph": compile_policy.fullgraph,
+            "dynamic": compile_policy.dynamic,
+            "options": compile_options,
         }
         applied.record_compile(requested=True, compiled=installed, details=model._worldfoundry_compile_config)
     return applied
@@ -248,7 +328,7 @@ class MatrixGame2Runtime:
         device=None,
         weight_dtype: torch.dtype | None = None,
         **kwargs,
-    ) -> "MatrixGame2Runtime":
+    ) -> MatrixGame2Runtime:
         checkpoint_path = kwargs.pop("checkpoint_path", None)
         if mode not in ["universal", "gta_drive", "templerun"]:
             raise NotImplementedError("mode should be one of ['universal', 'gta_drive', 'templerun']")
@@ -303,18 +383,37 @@ class MatrixGame2Runtime:
         current_vae_decoder.to(device, torch.float16)
         current_vae_decoder.requires_grad_(False)
         current_vae_decoder.eval()
+        use_vae_compile = _enable_torch_compile() or runtime_policy.options.get("vae_compile", False)
+        use_cl2d = runtime_policy.options.get("vae_channels_last", False)
+        use_cl3d = runtime_policy.options.get("vae_channels_last_3d", False)
+        if use_vae_compile and runtime_policy.device.type == "cuda":
+            if "vae_channels_last_3d" not in kwargs and "vae_channels_last_3d" not in (
+                kwargs.get("runtime_options") or {}
+            ):
+                use_cl3d = True
+            if "vae_channels_last" not in kwargs and "vae_channels_last" not in (kwargs.get("runtime_options") or {}):
+                use_cl2d = True
         vae_layout = None
-        if runtime_policy.options.get("vae_channels_last", False) or runtime_policy.options.get("vae_channels_last_3d", False):
+        if use_cl2d or use_cl3d:
             from worldfoundry.core.acceleration.convolution_layout import convert_convolution_weight_layouts
 
             vae_layout = convert_convolution_weight_layouts(
                 current_vae_decoder,
-                conv2d=runtime_policy.options.get("vae_channels_last", False),
-                conv3d=runtime_policy.options.get("vae_channels_last_3d", False),
+                conv2d=use_cl2d,
+                conv3d=use_cl3d,
             )
             current_vae_decoder._worldfoundry_convolution_layout = vae_layout
-        if _enable_torch_compile():
-            current_vae_decoder.compile(mode="max-autotune-no-cudagraphs")
+        if use_vae_compile:
+            if hasattr(current_vae_decoder, "enable_steady_compile") and runtime_policy.device.type == "cuda":
+                current_vae_decoder.enable_steady_compile(mode="default")
+            else:
+                current_vae_decoder.compile(mode="default")
+        elif (
+            runtime_policy.options.get("vae_cuda_graph", False)
+            and runtime_policy.device.type == "cuda"
+            and hasattr(current_vae_decoder, "enable_cuda_graph")
+        ):
+            current_vae_decoder.enable_cuda_graph(warmup=1)
         pipeline = CausalInferencePipeline(config, generator=generator, vae_decoder=current_vae_decoder)
 
         resolved_checkpoint_path = cls._resolve_checkpoint_path(
@@ -331,6 +430,33 @@ class MatrixGame2Runtime:
         pipeline = pipeline.to(device=device)
         pipeline.generator.to(dtype=weight_dtype)
         applied = _apply_matrix_game2_optimizations(pipeline.generator.model, runtime_policy)
+        block_cuda_graph = runtime_policy.options.get("block_cuda_graph", False)
+        requested_attn = runtime_policy.options.get("_resolved_attention_backend", "auto")
+        if hasattr(pipeline.generator, "set_attention_backend"):
+            pipeline.generator.set_attention_backend(requested_attn)
+        applied.requested["attention_backend"] = requested_attn
+        applied.requested["block_cuda_graph"] = block_cuda_graph
+        if block_cuda_graph:
+            if runtime_policy.device.type == "cuda" and hasattr(pipeline.generator, "enable_block_cuda_graph"):
+                pipeline.generator.enable_block_cuda_graph(warmup=1)
+                pipeline.reuse_session_caches = True
+                applied.effective["block_cuda_graph"] = "virtual-window-block-graph-enabled"
+            else:
+                applied.effective["block_cuda_graph"] = "eager (non-CUDA fallback)"
+                applied.fallbacks.append("block_cuda_graph: CUDA tensors are required; effective=eager")
+        applied.requested["vae_cuda_graph"] = runtime_policy.options.get("vae_cuda_graph", False)
+        if applied.requested["vae_cuda_graph"]:
+            if getattr(current_vae_decoder, "_cuda_graph_enabled", False):
+                applied.effective["vae_cuda_graph"] = "steady-vae-graph-enabled"
+            elif runtime_policy.device.type != "cuda":
+                applied.effective["vae_cuda_graph"] = "eager (non-CUDA fallback)"
+                applied.fallbacks.append("vae_cuda_graph: CUDA tensors are required; effective=eager")
+            else:
+                applied.effective["vae_cuda_graph"] = "disabled (superseded by torch.compile)"
+                applied.fallbacks.append("vae_cuda_graph: superseded by WORLDFOUNDRY_ENABLE_TORCH_COMPILE")
+        applied.requested["vae_compile"] = runtime_policy.options.get("vae_compile", False)
+        if applied.requested["vae_compile"]:
+            applied.effective["vae_compile"] = "compiled (default)"
         pipeline.generator._worldfoundry_applied_optimizations = applied
         pipeline._worldfoundry_applied_optimizations = applied
         pipeline.overlap_vae_decode = runtime_policy.options.get("overlap_vae_decode", False)
@@ -398,16 +524,24 @@ class MatrixGame2Runtime:
             "visual_context": visual_context.to(device=self.device, dtype=self.weight_dtype),
         }
         if "mouse_condition" in operator_condition:
-            mouse_condition = operator_condition["mouse_condition"].unsqueeze(0).to(
-                device=self.device,
-                dtype=self.weight_dtype,
+            mouse_condition = (
+                operator_condition["mouse_condition"]
+                .unsqueeze(0)
+                .to(
+                    device=self.device,
+                    dtype=self.weight_dtype,
+                )
             )
             conditional_dict["mouse_cond"] = mouse_condition
         if "keyboard_condition" not in operator_condition:
             raise ValueError("keyboard_condition must be provided in operator_condition")
-        keyboard_condition = operator_condition["keyboard_condition"].unsqueeze(0).to(
-            device=self.device,
-            dtype=self.weight_dtype,
+        keyboard_condition = (
+            operator_condition["keyboard_condition"]
+            .unsqueeze(0)
+            .to(
+                device=self.device,
+                dtype=self.weight_dtype,
+            )
         )
         conditional_dict["keyboard_cond"] = keyboard_condition
 

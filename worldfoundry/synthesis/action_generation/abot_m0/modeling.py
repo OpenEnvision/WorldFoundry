@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from contextlib import nullcontext
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import torch
 from torch import nn
@@ -54,8 +55,7 @@ def resize_images(images: Sequence[Sequence[Any]], size: Sequence[int] | int) ->
             raise ValueError(f"image_size must have two values, got {size!r}")
         height, width = int(size[0]), int(size[1])
     return [
-        [_as_rgb_pil(image).resize((width, height), Image.Resampling.BICUBIC) for image in sample]
-        for sample in images
+        [_as_rgb_pil(image).resize((width, height), Image.Resampling.BICUBIC) for image in sample] for sample in images
     ]
 
 
@@ -72,6 +72,7 @@ class Qwen3VLInterface(nn.Module):
     ) -> None:
         super().__init__()
         from transformers import AutoConfig, AutoProcessor, Qwen3VLForConditionalGeneration
+
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
 
         attention = resolve_transformers_attention_implementation(attention_backend)
@@ -287,7 +288,9 @@ class ABotM0Model(nn.Module):
                 assert self.fuser is not None
                 spatial_device = next(self.spatial_model.parameters()).device
                 spatial_dtype = next(self.spatial_model.parameters()).dtype
-                spatial_input = preprocess_spatial_images(resized, int(image_size[0] if not isinstance(image_size, int) else image_size))
+                spatial_input = preprocess_spatial_images(
+                    resized, int(image_size[0] if not isinstance(image_size, int) else image_size)
+                )
                 spatial_input = spatial_input.to(device=spatial_device, dtype=spatial_dtype)
                 tokens, patch_start = self.spatial_model.aggregator(spatial_input)
                 spatial = tokens[-1][:, 0, patch_start:, :]

@@ -1,9 +1,12 @@
-import torch
+from collections.abc import Callable
+from pathlib import Path
+
 import decord
 import numpy as np
-from pathlib import Path
-from typing import Callable, Optional
-from .traj_dset import TrajDataset, get_train_val_sliced, TrajSlicerDataset
+import torch
+
+from .traj_dset import TrajDataset, TrajSlicerDataset, get_train_val_sliced
+
 decord.bridge.set_bridge("torch")
 
 # precomputed dataset stats
@@ -12,12 +15,13 @@ ACTION_STD = torch.tensor([0.4395, 0.4684])
 STATE_MEAN = torch.tensor([0.7518, 0.9239, -3.9702e-05, 3.1550e-04])
 STATE_STD = torch.tensor([1.0964, 1.2390, 1.3819, 1.5407])
 
+
 class WallDataset(TrajDataset):
     def __init__(
         self,
         data_path: str = "data/wall_single",
-        n_rollout: Optional[int] = None,
-        transform: Optional[Callable] = None,
+        n_rollout: int | None = None,
+        transform: Callable | None = None,
         normalize_action: bool = False,
         action_scale=1.0,
     ):
@@ -90,8 +94,8 @@ class WallDataset(TrajDataset):
         image = image[frames] / 255
         if self.transform:
             image = self.transform(image)
-        obs = {"visual": image,"proprio": proprio}
-        return obs, act, state, {'fix_door_location': door_location[0], 'fix_wall_location': wall_location[0]}
+        obs = {"visual": image, "proprio": proprio}
+        return obs, act, state, {"fix_door_location": door_location[0], "fix_wall_location": wall_location[0]}
 
     def __getitem__(self, idx):
         return self.get_frames(idx, range(self.get_seq_length(idx)))
@@ -105,10 +109,11 @@ class WallDataset(TrajDataset):
         elif isinstance(imgs, torch.Tensor):
             return imgs
 
+
 def load_wall_slice_train_val(
     transform,
     n_rollout=50,
-    data_path='data/wall_single',
+    data_path="data/wall_single",
     normalize_action=False,
     split_ratio=0.8,
     split_mode="random",
@@ -124,10 +129,7 @@ def load_wall_slice_train_val(
             normalize_action=normalize_action,
         )
         dset_train, dset_val, train_slices, val_slices = get_train_val_sliced(
-            traj_dataset=dset,
-            train_fraction=split_ratio,
-            num_frames=num_hist + num_pred,
-            frameskip=frameskip
+            traj_dataset=dset, train_fraction=split_ratio, num_frames=num_hist + num_pred, frameskip=frameskip
         )
     elif split_mode == "folder":
         dset_train = WallDataset(
@@ -147,9 +149,9 @@ def load_wall_slice_train_val(
         val_slices = TrajSlicerDataset(dset_val, num_frames, frameskip)
 
     datasets = {}
-    datasets['train'] = train_slices
-    datasets['valid'] = val_slices
+    datasets["train"] = train_slices
+    datasets["valid"] = val_slices
     traj_dset = {}
-    traj_dset['train'] = dset_train
-    traj_dset['valid'] = dset_val
+    traj_dset["train"] = dset_train
+    traj_dset["valid"] = dset_val
     return datasets, traj_dset

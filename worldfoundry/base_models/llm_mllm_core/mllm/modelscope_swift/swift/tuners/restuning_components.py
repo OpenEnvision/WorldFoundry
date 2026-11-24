@@ -12,8 +12,7 @@ logger = get_logger()
 
 
 class ResTuner(nn.Module):
-
-    def __init__(self, dim=None, layer_num=-1, depth=-1, zero_init_last=False, stage='', tuner_cfg={}, **kwargs):
+    def __init__(self, dim=None, layer_num=-1, depth=-1, zero_init_last=False, stage="", tuner_cfg={}, **kwargs):  # noqa: B006 - Keeps the upstream default object and signature.
         super().__init__()
         self.dim = dim
         self.layer_num = layer_num
@@ -21,9 +20,10 @@ class ResTuner(nn.Module):
         self.stage = stage
         self.tuner_cfg = tuner_cfg
 
-        if (isinstance(tuner_cfg, str) and tuner_cfg == 'res_adapter') or \
-                (isinstance(tuner_cfg, dict) and 'res_adapter' in tuner_cfg):
-            tuner_cfg = tuner_cfg['res_adapter'] if isinstance(tuner_cfg, dict) else tuner_cfg
+        if (isinstance(tuner_cfg, str) and tuner_cfg == "res_adapter") or (
+            isinstance(tuner_cfg, dict) and "res_adapter" in tuner_cfg
+        ):
+            tuner_cfg = tuner_cfg["res_adapter"] if isinstance(tuner_cfg, dict) else tuner_cfg
             self.tuner = ResAdapter(
                 dim=dim,
                 layer_num=layer_num,
@@ -31,10 +31,12 @@ class ResTuner(nn.Module):
                 zero_init_last=zero_init_last,
                 stage=stage,
                 tuner_cfg=tuner_cfg,
-                **kwargs)
-        elif (isinstance(tuner_cfg, str) and tuner_cfg == 'res_group_adapter') or \
-                (isinstance(tuner_cfg, dict) and 'res_group_adapter' in tuner_cfg):
-            tuner_cfg = tuner_cfg['res_group_adapter'] if isinstance(tuner_cfg, dict) else tuner_cfg
+                **kwargs,
+            )
+        elif (isinstance(tuner_cfg, str) and tuner_cfg == "res_group_adapter") or (
+            isinstance(tuner_cfg, dict) and "res_group_adapter" in tuner_cfg
+        ):
+            tuner_cfg = tuner_cfg["res_group_adapter"] if isinstance(tuner_cfg, dict) else tuner_cfg
             self.tuner = ResGroupAdapter(
                 dim=dim,
                 layer_num=layer_num,
@@ -42,53 +44,48 @@ class ResTuner(nn.Module):
                 zero_init_last=zero_init_last,
                 stage=stage,
                 tuner_cfg=tuner_cfg,
-                **kwargs)
-        elif (isinstance(tuner_cfg, str) and tuner_cfg == 'upsample') or \
-                (isinstance(tuner_cfg, dict) and 'upsample' in tuner_cfg):
-            tuner_cfg = tuner_cfg['upsample'] if isinstance(tuner_cfg, dict) else tuner_cfg
-            if 'upsample_out_channels' in kwargs:
-                out_channels = kwargs['upsample_out_channels']
-                use_conv = True if out_channels else False
+                **kwargs,
+            )
+        elif (isinstance(tuner_cfg, str) and tuner_cfg == "upsample") or (
+            isinstance(tuner_cfg, dict) and "upsample" in tuner_cfg
+        ):
+            tuner_cfg = tuner_cfg["upsample"] if isinstance(tuner_cfg, dict) else tuner_cfg
+            if "upsample_out_channels" in kwargs:
+                out_channels = kwargs["upsample_out_channels"]
+                use_conv = bool(out_channels)
             else:
                 out_channels = dim
                 use_conv = False
             self.tuner = Upsample(
-                channels=dim, use_conv=use_conv, out_channels=out_channels, tuner_cfg=tuner_cfg, **kwargs)
+                channels=dim, use_conv=use_conv, out_channels=out_channels, tuner_cfg=tuner_cfg, **kwargs
+            )
         else:
             self.tuner = Identity()
 
     def forward(self, x, *args, **kwargs):
-        if self.tuner_cfg == 'zero' or 'zero' in self.tuner_cfg:
-            x_out = 0.0
-        else:
-            x_out = self.tuner(x, *args, **kwargs)
+        x_out = 0.0 if self.tuner_cfg == "zero" or "zero" in self.tuner_cfg else self.tuner(x, *args, **kwargs)
         return x_out
 
 
 class ResAdapter(nn.Module):
-
-    def __init__(self,
-                 dim,
-                 layer_num=-1,
-                 depth=-1,
-                 zero_init_last=False,
-                 stage='',
-                 tuner_cfg=None,
-                 act_layer=nn.GELU,
-                 **kwargs):
-        super(ResAdapter, self).__init__()
+    def __init__(
+        self, dim, layer_num=-1, depth=-1, zero_init_last=False, stage="", tuner_cfg=None, act_layer=nn.GELU, **kwargs
+    ):
+        super().__init__()
         self.dim = dim
         self.layer_num = layer_num
         self.depth = depth
 
-        self.adapter_length = tuner_cfg['adapter_length'] if 'adapter_length' in tuner_cfg else 32
-        self.adapter_type = tuner_cfg['adapter_type'] if 'adapter_type' in tuner_cfg else None
-        self.adapter_weight = tuner_cfg['adapter_weight'] if 'adapter_weight' in tuner_cfg else None
+        self.adapter_length = tuner_cfg["adapter_length"] if "adapter_length" in tuner_cfg else 32  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
+        self.adapter_type = tuner_cfg["adapter_type"] if "adapter_type" in tuner_cfg else None  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
+        self.adapter_weight = tuner_cfg["adapter_weight"] if "adapter_weight" in tuner_cfg else None  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
 
-        self.adapter_length = self.adapter_length[self.layer_num] if isinstance(self.adapter_length,
-                                                                                list) else self.adapter_length
-        assert isinstance(self.adapter_length, int) or (isinstance(self.adapter_length, tuple)
-                                                        and len(self.adapter_length) == 3)
+        self.adapter_length = (
+            self.adapter_length[self.layer_num] if isinstance(self.adapter_length, list) else self.adapter_length
+        )
+        assert isinstance(self.adapter_length, int) or (
+            isinstance(self.adapter_length, tuple) and len(self.adapter_length) == 3
+        )
         if isinstance(self.adapter_length, int):
             self.ln1 = nn.Linear(dim, self.adapter_length)
         else:
@@ -144,38 +141,30 @@ class ResAdapter(nn.Module):
             x_adapter = apply_data_weight(x_adapter, self.scaling, self.adapter_weight)
 
         if len(x_shortcut.size()) == 4:
-            x_adapter = x_adapter.permute(0, 2, 1).view(x_shortcut.size()[0],
-                                                        x_adapter.size()[-1],
-                                                        x_shortcut.size()[2],
-                                                        x_shortcut.size()[3])
+            x_adapter = x_adapter.permute(0, 2, 1).view(
+                x_shortcut.size()[0], x_adapter.size()[-1], x_shortcut.size()[2], x_shortcut.size()[3]
+            )
         x_out = x_shortcut + x_adapter
         return x_out.to(x_dtype)
 
 
 class ResGroupAdapter(nn.Module):
-
-    def __init__(self,
-                 dim,
-                 layer_num=-1,
-                 depth=-1,
-                 zero_init_last=False,
-                 stage='',
-                 tuner_cfg=None,
-                 act_layer=nn.GELU,
-                 **kwargs):
-        super(ResGroupAdapter, self).__init__()
+    def __init__(
+        self, dim, layer_num=-1, depth=-1, zero_init_last=False, stage="", tuner_cfg=None, act_layer=nn.GELU, **kwargs
+    ):
+        super().__init__()
         self.dim = dim
         self.layer_num = layer_num
         self.depth = depth
 
-        self.adapter_type = tuner_cfg['adapter_type'] if 'adapter_type' in tuner_cfg else None
-        self.adapter_weight = tuner_cfg['adapter_weight'] if 'adapter_weight' in tuner_cfg else None
+        self.adapter_type = tuner_cfg["adapter_type"] if "adapter_type" in tuner_cfg else None  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
+        self.adapter_weight = tuner_cfg["adapter_weight"] if "adapter_weight" in tuner_cfg else None  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
 
-        self.adapter_dim = tuner_cfg['dim'] if 'dim' in tuner_cfg else dim
-        self.adapter_head = tuner_cfg['head'] if 'head' in tuner_cfg else 4
-        self.adapter_scale_factor = tuner_cfg['scale_factor'] if 'scale_factor' in tuner_cfg else 2
+        self.adapter_dim = tuner_cfg["dim"] if "dim" in tuner_cfg else dim  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
+        self.adapter_head = tuner_cfg["head"] if "head" in tuner_cfg else 4  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
+        self.adapter_scale_factor = tuner_cfg["scale_factor"] if "scale_factor" in tuner_cfg else 2  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
 
-        assert self.adapter_dim % self.adapter_head == 0, 'adapter dim should be divisible by adapter head'
+        assert self.adapter_dim % self.adapter_head == 0, "adapter dim should be divisible by adapter head"
         self.dim_mlp = self.adapter_dim // self.adapter_head
 
         self.ln1 = nn.Linear(self.dim_mlp, self.dim_mlp * self.adapter_scale_factor)
@@ -220,9 +209,9 @@ class ResGroupAdapter(nn.Module):
 
         x_adapter = x.permute(0, 2, 3, 1).reshape(batch, height * width, inner_dim)
 
-        x_adapter = rearrange(x_adapter, 'b n (c h) -> (b h) n c', h=self.adapter_head)
+        x_adapter = rearrange(x_adapter, "b n (c h) -> (b h) n c", h=self.adapter_head)
         x_adapter = self.ln2(self.activate(self.ln1(x_adapter)))
-        x_adapter = rearrange(x_adapter, '(b h) n c -> b n (c h)', h=self.adapter_head)
+        x_adapter = rearrange(x_adapter, "(b h) n c -> b n (c h)", h=self.adapter_head)
 
         if self.adapter_weight:
             x_adapter = apply_data_weight(x_adapter, self.scaling, self.adapter_weight)
@@ -234,7 +223,6 @@ class ResGroupAdapter(nn.Module):
 
 
 class Identity(nn.Module):
-
     def __init__(self):
         super().__init__()
 
@@ -261,7 +249,6 @@ class Upsample(nn.Module):
         self.init_weights()
 
     def init_weights(self):
-
         def _init_weights(m):
             if isinstance(m, nn.Conv2d):
                 nn.init.zeros_(m.weight)
@@ -272,9 +259,9 @@ class Upsample(nn.Module):
     def forward(self, x, target_size=None, *args, **kwargs):
         assert x.shape[1] == self.channels
         if target_size is None:
-            x = F.interpolate(x.float(), scale_factor=2, mode='nearest').type_as(x)
+            x = F.interpolate(x.float(), scale_factor=2, mode="nearest").type_as(x)
         else:
-            x = F.interpolate(x.float(), target_size, mode='nearest').type_as(x)
+            x = F.interpolate(x.float(), target_size, mode="nearest").type_as(x)
         if self.use_conv:
             x = self.conv(x)
         return x
@@ -283,37 +270,37 @@ class Upsample(nn.Module):
 def init_weight_type(dim, weight_type):
     if weight_type is None:
         scaling = None
-    elif weight_type == 'gate':
+    elif weight_type == "gate":
         scaling = nn.Linear(dim, 1)
-    elif weight_type == 'scale':
+    elif weight_type == "scale":
         scaling = nn.Parameter(torch.Tensor(1))
         scaling.data.fill_(1)
-    elif weight_type == 'scale_kv':
+    elif weight_type == "scale_kv":
         scaling_k = nn.Parameter(torch.Tensor(1))
         scaling_k.data.fill_(1)
         scaling_v = nn.Parameter(torch.Tensor(1))
         scaling_v.data.fill_(1)
         scaling = (scaling_k, scaling_v)
-    elif weight_type == 'scale_channel':
+    elif weight_type == "scale_channel":
         scaling = nn.Parameter(torch.Tensor(dim))
         scaling.data.fill_(1)
-    elif weight_type == 'scale_kv_channel':
+    elif weight_type == "scale_kv_channel":
         scaling_k = nn.Parameter(torch.Tensor(dim))
         scaling_k.data.fill_(1)
         scaling_v = nn.Parameter(torch.Tensor(dim))
         scaling_v.data.fill_(1)
         scaling = (scaling_k, scaling_v)
-    elif weight_type and weight_type.startswith('scalar'):
-        scaling = float(weight_type.split('_')[-1])
+    elif weight_type and weight_type.startswith("scalar"):
+        scaling = float(weight_type.split("_")[-1])
     else:
         scaling = None
     return scaling
 
 
 def apply_data_weight(data, scaling, weight_type):
-    if weight_type in ['gate']:
+    if weight_type in ["gate"]:
         scaling = torch.mean(torch.sigmoid(scaling(data)), dim=1).view(-1, 1, 1)
-    elif weight_type in ['scale', 'scale_channel'] or weight_type.startswith('scalar'):
+    elif weight_type in ["scale", "scale_channel"] or weight_type.startswith("scalar"):
         scaling = scaling
     else:
         scaling = None
@@ -341,11 +328,11 @@ def probe_tensors(module, feats, name):
 
 def probe_input_pre_hook(self, args):
     input = args[0]
-    probe_tensors(self, input, 'probe_input_data')
+    probe_tensors(self, input, "probe_input_data")
     return args
 
 
 def probe_output_hook(self, args, result):
     output = result
-    probe_tensors(self, output, 'probe_output_data')
+    probe_tensors(self, output, "probe_output_data")
     return output

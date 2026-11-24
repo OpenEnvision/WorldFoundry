@@ -1,12 +1,8 @@
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot -> config.py functionality."""
-
 import os
 
 
 class DefaultModelConfig:
-    """Default model config implementation."""
     def __init__(self):
-        """Init."""
         self.MODEL_NAME = "AOTDefault"
 
         self.MODEL_VOS = "aot"
@@ -35,9 +31,7 @@ class DefaultModelConfig:
 
 
 class DeAOTModelConfig(DefaultModelConfig):
-    """De aot model config implementation."""
     def __init__(self):
-        """Init."""
         super().__init__()
         self.MODEL_NAME = "DeAOTDefault"
 
@@ -53,9 +47,7 @@ class DeAOTModelConfig(DefaultModelConfig):
 
 
 class MyModelConfig(DeAOTModelConfig):
-    """My model config implementation."""
     def __init__(self):
-        """Init."""
         super().__init__()
         self.MODEL_NAME = "R50_DeAOTL"
 
@@ -70,14 +62,7 @@ class MyModelConfig(DeAOTModelConfig):
 
 
 class DefaultEngineConfig:
-    """Default engine config implementation."""
     def __init__(self, exp_name="default"):
-        """Init.
-
-        Args:
-            exp_name: The exp name.
-        """
-
         model_cfg = MyModelConfig()
 
         self.__dict__.update(model_cfg.__dict__)  # add model config
@@ -97,12 +82,8 @@ class DefaultEngineConfig:
         self.DATA_RANDOM_REVERSE_SEQ = True
         self.DATA_SEQ_LEN = 5
         self.DATA_DAVIS_REPEAT = 5
-        self.DATA_RANDOM_GAP_DAVIS = (
-            12  # max frame interval between two sampled frames for DAVIS (24fps)
-        )
-        self.DATA_RANDOM_GAP_YTB = (
-            3  # max frame interval between two sampled frames for YouTube-VOS (6fps)
-        )
+        self.DATA_RANDOM_GAP_DAVIS = 12  # max frame interval between two sampled frames for DAVIS (24fps)
+        self.DATA_RANDOM_GAP_YTB = 3  # max frame interval between two sampled frames for YouTube-VOS (6fps)
         self.DATA_DYNAMIC_MERGE_PROB = 0.3
 
         self.PRETRAIN = True
@@ -185,7 +166,6 @@ class DefaultEngineConfig:
         self.DIST_START_GPU = 0
 
     def init_dir(self):
-        """Init dir."""
         self.DIR_DATA = "../VOS02/datasets"  #'./datasets'
         self.DIR_DAVIS = os.path.join(self.DIR_DATA, "DAVIS")
         self.DIR_YTB = os.path.join(self.DIR_DATA, "YTB")
@@ -193,9 +173,7 @@ class DefaultEngineConfig:
 
         self.DIR_ROOT = "./"  #'./data_wd/youtube_vos_jobs'
 
-        self.DIR_RESULT = os.path.join(
-            self.DIR_ROOT, "result", self.EXP_NAME, self.STAGE_NAME
-        )
+        self.DIR_RESULT = os.path.join(self.DIR_ROOT, "result", self.EXP_NAME, self.STAGE_NAME)
         self.DIR_CKPT = os.path.join(self.DIR_RESULT, "ckpt")
         self.DIR_EMA_CKPT = os.path.join(self.DIR_RESULT, "ema_ckpt")
         self.DIR_LOG = os.path.join(self.DIR_RESULT, "log")
@@ -205,13 +183,7 @@ class DefaultEngineConfig:
 
 
 class EngineConfig(DefaultEngineConfig):
-    """Engine config implementation."""
     def __init__(self, exp_name):
-        """Init.
-
-        Args:
-            exp_name: The exp name.
-        """
         super().__init__(exp_name)
         self.STAGE_NAME = "PRE_YTB_DAV"
 

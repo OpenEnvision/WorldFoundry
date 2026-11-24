@@ -2,23 +2,27 @@
 
 Stores static scene point clouds and dynamic event point clouds.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from liveworld.geometry_utils import transform_points
-from .event_types import EventPointCloud, EventID
+from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.geometry_utils import (
+    transform_points,
+)
+
+from .event_types import EventID, EventPointCloud
 
 
 @dataclass
 class WorldState:
     """Container for global static and dynamic geometry."""
-    static_points: Optional[np.ndarray] = None
-    static_colors: Optional[np.ndarray] = None
-    event_pointclouds: Dict[EventID, EventPointCloud] = field(default_factory=dict)
+
+    static_points: np.ndarray | None = None
+    static_colors: np.ndarray | None = None
+    event_pointclouds: dict[EventID, EventPointCloud] = field(default_factory=dict)
 
     def update_static(self, points: np.ndarray, colors: np.ndarray) -> None:
         """Replace the global static point cloud."""
@@ -33,15 +37,15 @@ class WorldState:
             raise ValueError("event_pc cannot be None")
         self.event_pointclouds[event_pc.event_id] = event_pc
 
-    def list_event_pointclouds(self) -> List[EventPointCloud]:
+    def list_event_pointclouds(self) -> list[EventPointCloud]:
         """Return all event point clouds."""
         return list(self.event_pointclouds.values())
 
-    def get_static(self) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    def get_static(self) -> tuple[np.ndarray | None, np.ndarray | None]:
         """Return the current static point cloud (points, colors)."""
         return self.static_points, self.static_colors
 
-    def get_union_event_points_world(self) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    def get_union_event_points_world(self) -> tuple[np.ndarray | None, np.ndarray | None]:
         """Return the union of all event point clouds transformed to world space.
 
         Each event's points are stored in anchor-camera space. This method
@@ -50,8 +54,8 @@ class WorldState:
         Returns:
             (union_points, union_colors) or (None, None) if no events.
         """
-        all_pts: List[np.ndarray] = []
-        all_cols: List[np.ndarray] = []
+        all_pts: list[np.ndarray] = []
+        all_cols: list[np.ndarray] = []
         for epc in self.event_pointclouds.values():
             if epc.points is None or len(epc.points) == 0:
                 continue
@@ -59,11 +63,7 @@ class WorldState:
             # otherwise fall back to merged points.
             if epc.per_frame_points and len(epc.per_frame_points) > 0:
                 pts_local = epc.per_frame_points[-1]
-                cols_local = (
-                    epc.per_frame_colors[-1]
-                    if epc.per_frame_colors
-                    else epc.colors
-                )
+                cols_local = epc.per_frame_colors[-1] if epc.per_frame_colors else epc.colors
             else:
                 pts_local = epc.points
                 cols_local = epc.colors

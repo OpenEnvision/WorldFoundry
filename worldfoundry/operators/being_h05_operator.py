@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,7 +16,7 @@ class BeingH05Operator(EmbodiedActionOperator):
     POLICY_FAMILY = "beingh05_cross_embodiment_vla_policy"
     ACTION_REPRESENTATION = "unified_200d_action_space_with_robot_specific_slices"
     OBSERVATION_LAYOUT = "multi_view_rgb_state_language"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "instruction": True,
         "image": True,
@@ -24,9 +25,13 @@ class BeingH05Operator(EmbodiedActionOperator):
         "actions": ["robot_action", "action_unified", "eef_delta", "gripper", "base_velocity"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
-        instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "instruction", "task_instruction", "language_instruction")
+        instruction = (
+            prompt
+            if prompt not in (None, "")
+            else _first_present(kwargs, "instruction", "task_instruction", "language_instruction")
+        )
         instruction = "" if instruction is None else str(instruction)
         instruction_template = str(
             _first_present(kwargs, "instruction_template", "prompt_template")
@@ -49,7 +54,7 @@ class BeingH05Operator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         del video
         top_view = _first_present(kwargs, "video.top_view", "top_view", "image_top", "rgb_top", "rgb")
@@ -96,7 +101,7 @@ class BeingH05Operator(EmbodiedActionOperator):
             "observation": observations,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "action_unified", "robot_action", "eef_delta", "gripper", "base_velocity")

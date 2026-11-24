@@ -15,7 +15,7 @@ class LiveWorldSynthesis(BaseSynthesis):
         self.runtime = runtime
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> "LiveWorldSynthesis":
+    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> LiveWorldSynthesis:
         return cls(LiveWorldRuntime.from_pretrained(pretrained_model_path, **kwargs))
 
     def predict(self, **kwargs: Any) -> Any:

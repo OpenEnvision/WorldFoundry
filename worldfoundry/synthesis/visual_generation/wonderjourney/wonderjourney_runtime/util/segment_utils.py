@@ -7,12 +7,12 @@ from .checkpoints import require_existing_checkpoint
 def save_sam_anns(anns, save_path="saved_image.png"):
     if len(anns) == 0:
         return
-    sorted_anns = sorted(anns, key=(lambda x: x['area']), reverse=True)
+    sorted_anns = sorted(anns, key=(lambda x: x["area"]), reverse=True)
 
-    img = np.ones((sorted_anns[0]['segmentation'].shape[0], sorted_anns[0]['segmentation'].shape[1], 4))
-    img[:,:,3] = 0
+    img = np.ones((sorted_anns[0]["segmentation"].shape[0], sorted_anns[0]["segmentation"].shape[1], 4))
+    img[:, :, 3] = 0
     for ann in sorted_anns:
-        m = ann['segmentation']
+        m = ann["segmentation"]
         color_mask = np.concatenate([np.random.random(3), [0.8]])
         img[m] = color_mask
 
@@ -23,7 +23,7 @@ def save_sam_anns(anns, save_path="saved_image.png"):
     pil_img.save(save_path)
 
 
-def refine_disp_with_segments(disparity, segments, keep_threshold=7*0.3):
+def refine_disp_with_segments(disparity, segments, keep_threshold=7 * 0.3):
     """
     Refine disparity values based on provided segmentations.
 
@@ -40,11 +40,11 @@ def refine_disp_with_segments(disparity, segments, keep_threshold=7*0.3):
 
     # Iterate over each segmentation
     for segment in segments:
-        mask = segment['segmentation']  # Extracting the mask
+        mask = segment["segmentation"]  # Extracting the mask
 
         # 3.a. Query the values from refined_disparity using the mask
         disp_pixels = refined_disparity[mask]
-        
+
         p70 = np.percentile(disparity[mask], 70)  # 20 for garden to reserve flag
         p30 = np.percentile(disparity[mask], 30)
         disparity_range = p70 - p30
@@ -72,11 +72,10 @@ def create_mask_generator():
         from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
     except ImportError as exc:
         raise ImportError(
-            "segment_anything is required after a local WonderJourney SAM "
-            "checkpoint has been staged"
+            "segment_anything is required after a local WonderJourney SAM checkpoint has been staged"
         ) from exc
     sam = sam_model_registry["vit_h"](checkpoint=sam_checkpoint)
-    sam.to(device='cuda')
+    sam.to(device="cuda")
     mask_generator = SamAutomaticMaskGenerator(
         model=sam,
         points_per_side=32,

@@ -2,21 +2,10 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot -> utils -> ema.py functionality."""
-
-from __future__ import division, unicode_literals
-
 import torch
 
 
-def get_param_buffer_for_ema(model, update_buffer=False, required_buffers=["running_mean", "running_var"]):
-    """Get param buffer for ema.
-
-    Args:
-        model: The model.
-        update_buffer: The update buffer.
-        required_buffers: The required buffers.
-    """
+def get_param_buffer_for_ema(model, update_buffer=False, required_buffers=["running_mean", "running_var"]):  # noqa: B006 - Keeps the upstream default object and signature.
     params = model.parameters()
     all_param_buffer = [p for p in params if p.requires_grad]
     if update_buffer:
@@ -65,7 +54,7 @@ class ExponentialMovingAverage:
             decay = min(decay, (1 + self.num_updates) / (10 + self.num_updates))
         one_minus_decay = 1.0 - decay
         with torch.no_grad():
-            for s_param, param in zip(self.shadow_params, parameters):
+            for s_param, param in zip(self.shadow_params, parameters, strict=False):
                 s_param.sub_(one_minus_decay * (s_param - param))
 
     def copy_to(self, parameters):
@@ -75,7 +64,7 @@ class ExponentialMovingAverage:
           parameters: Iterable of `torch.nn.Parameter`; the parameters to be
             updated with the stored moving averages.
         """
-        for s_param, param in zip(self.shadow_params, parameters):
+        for s_param, param in zip(self.shadow_params, parameters, strict=False):
             param.data.copy_(s_param.data)
 
     def store(self, parameters):
@@ -98,6 +87,6 @@ class ExponentialMovingAverage:
           parameters: Iterable of `torch.nn.Parameter`; the parameters to be
             updated with the stored parameters.
         """
-        for c_param, param in zip(self.collected_params, parameters):
+        for c_param, param in zip(self.collected_params, parameters, strict=False):
             param.data.copy_(c_param.data)
         del self.collected_params

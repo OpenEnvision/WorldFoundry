@@ -3,7 +3,6 @@ from types import SimpleNamespace
 
 import pytest
 
-
 SAMPLER_MODULES = (
     "worldfoundry.base_models.diffusion_model.schedulers.lvdm.ddim",
     "worldfoundry.base_models.diffusion_model.schedulers.lvdm.ddim_multiplecond",

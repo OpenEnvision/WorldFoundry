@@ -190,7 +190,7 @@ class CosmosPredict2Pipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "CosmosPredict2Pipeline":
+    ) -> CosmosPredict2Pipeline:
         options = cls._options(model_path, required_components, kwargs)
         source = options.get("checkpoint_path", options.get("transformer_model_path", model_path))
         resolved_model_id = _model_id(str(options.get("variant_id") or model_id or ""), source)

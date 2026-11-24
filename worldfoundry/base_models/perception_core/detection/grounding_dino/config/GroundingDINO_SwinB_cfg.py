@@ -1,5 +1,3 @@
-"""Module for base_models -> perception_core -> detection -> grounding_dino -> config -> GroundingDINO_SwinB_cfg.py functionality."""
-
 batch_size = 1
 modelname = "groundingdino"
 backbone = "swin_B_384_22k"

@@ -90,9 +90,7 @@ def _mh_moe_fwd_kernel(
     if tile_id >= total_tiles:
         return
 
-    expert_id = _binary_search_expert_id(
-        cu_expert_tile_counts_ptr, tile_id, NUM_EXPERTS, LOG2_NUM_EXPERTS
-    )
+    expert_id = _binary_search_expert_id(cu_expert_tile_counts_ptr, tile_id, NUM_EXPERTS, LOG2_NUM_EXPERTS)
     expert_id_i64 = expert_id.to(tl.int64)
     head_id = expert_id // (NUM_EXPERTS // NUM_HEADS)
 
@@ -109,9 +107,7 @@ def _mh_moe_fwd_kernel(
     block_token_offs = token_start + block_t_offs
     block_token_mask = block_t_offs < n
 
-    gather_ids = tl.load(
-        gather_ids_ptr + block_token_offs, mask=block_token_mask, other=0
-    )
+    gather_ids = tl.load(gather_ids_ptr + block_token_offs, mask=block_token_mask, other=0)
     probs = tl.load(probs_ptr + block_token_offs, mask=block_token_mask, other=0.0)
     x_offs = gather_ids * stride_x_s + head_id * stride_x_h
 
@@ -160,11 +156,7 @@ def _mh_moe_fwd_kernel(
 
     if DETERMINISTIC:
         # Store to flat (T, D_HEAD) buffer; host scatter_back accumulates deterministically.
-        y_ptrs = (
-            y_ptr
-            + block_token_offs[:, None] * stride_y_s
-            + dh_offs[None, :] * stride_y_dh
-        )
+        y_ptrs = y_ptr + block_token_offs[:, None] * stride_y_s + dh_offs[None, :] * stride_y_dh
         tl.store(
             y_ptrs,
             y_acc.to(y_ptr.dtype.element_ty),
@@ -204,13 +196,9 @@ def _scatter_back(
     head_id_values = torch.arange(num_flatten_experts, device=gather_ids.device) // num_experts_per_head
     head_ids = torch.repeat_interleave(head_id_values, expert_seqlens)
 
-    if num_heads == 1:
-        scatter_idx = gather_ids.long()
-    else:
-        scatter_idx = gather_ids.long() * num_heads + head_ids.long()
+    scatter_idx = gather_ids.long() if num_heads == 1 else gather_ids.long() * num_heads + head_ids.long()
 
-    scatter_idx = scatter_idx.unsqueeze(-1).expand_as(y_sorted)
-    y.scatter_add_(0, scatter_idx, y_sorted.to(y.dtype))
+    y.index_add_(0, scatter_idx, y_sorted.to(y.dtype))
 
     return y.view_as(ref_y)
 
@@ -264,20 +252,19 @@ def mh_moe_fwd_func(
     assert d_head % BLOCK_DH == 0, f"d_head={d_head} must be divisible by {BLOCK_DH}"
     assert d_expert % BLOCK_DE == 0, f"d_expert={d_expert} must be divisible by {BLOCK_DE}"
 
-    if deterministic:
-        y = torch.empty(T, 1, d_head, device=x.device, dtype=x.dtype)
-    else:
-        y = torch.zeros_like(x)
+    y = torch.empty(T, 1, d_head, device=x.device, dtype=x.dtype) if deterministic else torch.zeros_like(x)
 
     num_flatten_experts = expert_offsets.size(0) - 1
     num_flatten_experts_log2 = max(1, math.ceil(math.log2(max(num_flatten_experts, 1) + 1)))
 
     expert_token_counts = expert_offsets.diff()
     expert_tile_counts = (expert_token_counts + BLOCK_T - 1) // BLOCK_T
-    cu_expert_tile_counts = torch.cat([
-        torch.zeros(1, dtype=torch.int32, device=expert_offsets.device),
-        torch.cumsum(expert_tile_counts, dim=0, dtype=torch.int32),
-    ])
+    cu_expert_tile_counts = torch.cat(
+        [
+            torch.zeros(1, dtype=torch.int32, device=expert_offsets.device),
+            torch.cumsum(expert_tile_counts, dim=0, dtype=torch.int32),
+        ]
+    )
 
     grid_size = (T + BLOCK_T - 1) // BLOCK_T + num_flatten_experts
 

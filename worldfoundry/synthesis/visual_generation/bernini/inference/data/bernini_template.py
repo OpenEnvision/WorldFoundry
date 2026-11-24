@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from typing import Dict, List, Optional, Sequence
+from collections.abc import Sequence
 
-import os
-import torch
 import numpy as np
+import torch
 from diffusers.pipelines.wan.pipeline_wan import prompt_clean
+
 try:
     from veomni.utils.constants import IGNORE_INDEX
 except ModuleNotFoundError:
     IGNORE_INDEX = -100
 from veomni.utils import logging
+
 from .utils.attention_utils import build_custom_attention_mask
 
 logger = logging.get_logger(__name__)
@@ -32,9 +33,7 @@ class T5TextTokenizer:
     def __init__(self, t5_tokenizer):
         self.t5_tokenizer = t5_tokenizer
 
-    def extract_text_prompt(
-        self, conversations: Sequence[Dict], drop_text: int = 0
-    ) -> str:
+    def extract_text_prompt(self, conversations: Sequence[dict], drop_text: int = 0) -> str:
         if drop_text:
             return ""
         text_parts = []
@@ -47,17 +46,14 @@ class T5TextTokenizer:
 
     def tokenize(
         self,
-        conversations: Sequence[Dict],
+        conversations: Sequence[dict],
         drop_text: int = 0,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         preprocess_fn=None,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         text_prompt = self.extract_text_prompt(conversations, drop_text)
 
-        if preprocess_fn is not None:
-            text_prompt = preprocess_fn(text_prompt)
-        else:
-            text_prompt = prompt_clean(text_prompt)
+        text_prompt = preprocess_fn(text_prompt) if preprocess_fn is not None else prompt_clean(text_prompt)
 
         tokenizer_kwargs = {
             "add_special_tokens": True,
@@ -97,13 +93,14 @@ class Qwen2VLTemplate:
         self.image_end_id = self.tokenizer.convert_tokens_to_ids("<|vision_end|>")
         self.eos = self.tokenizer.encode("<|im_end|>\n", add_special_tokens=False)
         self.bos = self.tokenizer.encode("<|im_start|>", add_special_tokens=False)
-        self.cfg_ratio = kwargs.get("cfg_ratio", None)
+        self.cfg_ratio = kwargs.get("cfg_ratio")
 
     def image_pattern(self, token_num):
         return "<|vision_start|>" + self.image_pad * token_num + "<|vision_end|>"
 
     def video_pattern(self, token_num):
         return "<|vision_start|>" + self.video_pad * token_num + "<|vision_end|>"
+
 
 SYSTEM_PROMPT = {
     "default": "You are a helpful assistant.",
@@ -115,8 +112,10 @@ SYSTEM_PROMPT = {
     "rv2v": "You are a helpful assistant specialized in video editing with reference.",
 }
 
+
 class BerniniTemplate(Qwen2VLTemplate):
     system_prompt = SYSTEM_PROMPT
+
     def __init__(self, tokenizer, t5_tokenizer=None, **kwargs) -> None:
         super().__init__(tokenizer, **kwargs)
         self.t5_text_tokenizer = T5TextTokenizer(t5_tokenizer) if t5_tokenizer else None
@@ -126,10 +125,14 @@ class BerniniTemplate(Qwen2VLTemplate):
         add_special_tokens = kwargs.get("add_special_tokens", [])
         self.max_image_or_video_inter_num = kwargs.get("max_image_or_video_inter_num", 64)
         # Image/Video INPUT vit tokens with item id
-        self.visual_input_token_pads = [f"<|visual_input_token_pad_{i}|>" for i in range(self.max_image_or_video_inter_num)]
+        self.visual_input_token_pads = [
+            f"<|visual_input_token_pad_{i}|>" for i in range(self.max_image_or_video_inter_num)
+        ]
         add_special_tokens.extend(self.visual_input_token_pads)
         # Image/Video OUTPUT vit tokens with item id
-        self.visual_output_token_pads = [f"<|visual_output_token_pad_{i}|>" for i in range(self.max_image_or_video_inter_num)]
+        self.visual_output_token_pads = [
+            f"<|visual_output_token_pad_{i}|>" for i in range(self.max_image_or_video_inter_num)
+        ]
         add_special_tokens.extend(self.visual_output_token_pads)
 
         self.tokenizer.add_special_tokens({"additional_special_tokens": add_special_tokens})
@@ -155,23 +158,23 @@ class BerniniTemplate(Qwen2VLTemplate):
 
     def format_message(self, content, has_loss):
         return {
-            "role": 'user' if has_loss == 0 else 'assistant',
+            "role": "user" if has_loss == 0 else "assistant",
             "content": content,
             "loss_mask": 0 if has_loss == 0 else 1,
         }
 
     def encode_messages(
         self,
-        conversations: Sequence[Dict[str, str]],
-        num_tokens: Dict[str, List[int]] = defaultdict(list),
+        conversations: Sequence[dict[str, str]],
+        num_tokens: dict[str, list[int]] = defaultdict(list),  # noqa: B006 - Keeps the upstream default object and signature.
         task_name: str = "",
         drop_text: int = 0,
         drop_video: int = 0,
         drop_img: int = 0,
         vit_mask_ratio: float = 1.0,
-        neg_prompt: Optional[str] = '',
-        **kwargs
-    ) -> Dict[str, List[int]]:
+        neg_prompt: str | None = "",
+        **kwargs,
+    ) -> dict[str, list[int]]:
         sys_msg = self._get_system_mesage(task_name)
         messages = [] if sys_msg is None else [sys_msg]
         image_token_num_list = iter(num_tokens.get("image", []))
@@ -180,91 +183,95 @@ class BerniniTemplate(Qwen2VLTemplate):
         content = ""
         text_content = ""
         pre_has_loss = 0
-        visual_id_to_type = dict({})
+        visual_id_to_type = {}
         visual_id, img_id, vid_id = 0, 0, 0
         indicator_id = 2
         visual_indicator_maps = {}
         image_target_mask, video_target_mask = [], []
-        vae_type_list, vit_type_list = [], [] # 0 for image, 1 for video
+        vae_type_list, vit_type_list = [], []  # 0 for image, 1 for video
         vit_img_and_vid_id_list = []
         for message in conversations:
-            if message['type'] == 'special_token':
+            if message["type"] == "special_token":
                 continue
 
-            if message['type'] == 'cot_text':
-                assert 'has_loss' in message
-                message['has_loss'] = 0
+            if message["type"] == "cot_text":
+                assert "has_loss" in message
+                message["has_loss"] = 0
 
-            if 'has_loss' not in message:
-                if message['type'] == 'video_gen':
-                    message['has_loss'] = 1
+            if "has_loss" not in message:
+                if message["type"] == "video_gen":
+                    message["has_loss"] = 1
                 else:
-                    message['has_loss'] = 0
+                    message["has_loss"] = 0
 
-            if pre_has_loss != message['has_loss']:
+            if pre_has_loss != message["has_loss"]:
                 messages.append(self.format_message(content, pre_has_loss))
                 content = ""
-                pre_has_loss = message['has_loss']
+                pre_has_loss = message["has_loss"]
 
-            if message['type'] in ['text', 'cot_text']:
+            if message["type"] in ["text", "cot_text"]:
                 if len(neg_prompt) > 1:
                     text_content += neg_prompt
                     content += neg_prompt
 
                 elif not drop_text:
-                    text_content += message['text']
-                    content += message['text']
+                    text_content += message["text"]
+                    content += message["text"]
 
-            elif message['type'] in ['image', 'image_gen']:
+            elif message["type"] in ["image", "image_gen"]:
                 token_num = next(image_token_num_list)
-                if message['has_loss'] == 1: # image_gen
-
+                if message["has_loss"] == 1:  # image_gen
                     content += self.visual_output_token_pattern(token_num, visual_id)
                     vit_img_and_vid_id_list.append(img_id)
                     vit_type_list.append(0)
                     indicator_id += 1
-                    visual_indicator_maps[self.tokenizer.convert_tokens_to_ids(self.visual_output_token_pads[visual_id])] = indicator_id
-                elif message['has_loss'] == 0:  # image
+                    visual_indicator_maps[
+                        self.tokenizer.convert_tokens_to_ids(self.visual_output_token_pads[visual_id])
+                    ] = indicator_id
+                elif message["has_loss"] == 0:  # image
                     if not drop_img:
-
                         content += self.visual_input_token_pattern(token_num, visual_id)
                         vit_img_and_vid_id_list.append(img_id)
                         vit_type_list.append(0)
-                        visual_indicator_maps[self.tokenizer.convert_tokens_to_ids(self.visual_input_token_pads[visual_id])] = indicator_id
+                        visual_indicator_maps[
+                            self.tokenizer.convert_tokens_to_ids(self.visual_input_token_pads[visual_id])
+                        ] = indicator_id
 
                 visual_id_to_type[visual_id] = 0
                 img_id += 1
                 visual_id += 1
                 indicator_id += 1
 
-                image_target_mask.extend([message['has_loss']])
-                if not drop_img or message['has_loss'] == 1:
+                image_target_mask.extend([message["has_loss"]])
+                if not drop_img or message["has_loss"] == 1:
                     vae_type_list.append(0)
 
-            elif message['type'] in ['video', 'frame_gen', 'video_gen']:
+            elif message["type"] in ["video", "frame_gen", "video_gen"]:
                 token_num = next(video_token_num_list)
-                if message['has_loss'] == 1:  # frame_gen or video_gen
-
+                if message["has_loss"] == 1:  # frame_gen or video_gen
                     content += self.visual_output_token_pattern(token_num, visual_id)
                     vit_img_and_vid_id_list.append(vid_id)
                     vit_type_list.append(1)
                     indicator_id += 1
-                    visual_indicator_maps[self.tokenizer.convert_tokens_to_ids(self.visual_output_token_pads[visual_id])] = indicator_id
-                elif message['has_loss'] == 0:  # video
+                    visual_indicator_maps[
+                        self.tokenizer.convert_tokens_to_ids(self.visual_output_token_pads[visual_id])
+                    ] = indicator_id
+                elif message["has_loss"] == 0:  # video
                     if not drop_video:
-
                         content += self.visual_input_token_pattern(token_num, visual_id)
                         vit_img_and_vid_id_list.append(vid_id)
                         vit_type_list.append(1)
-                        visual_indicator_maps[self.tokenizer.convert_tokens_to_ids(self.visual_input_token_pads[visual_id])] = indicator_id
+                        visual_indicator_maps[
+                            self.tokenizer.convert_tokens_to_ids(self.visual_input_token_pads[visual_id])
+                        ] = indicator_id
 
                 visual_id_to_type[visual_id] = 1
                 vid_id += 1
                 visual_id += 1
                 indicator_id += 1
 
-                video_target_mask.extend([message['has_loss']])
-                if not drop_video or message['has_loss'] == 1:
+                video_target_mask.extend([message["has_loss"]])
+                if not drop_video or message["has_loss"] == 1:
                     vae_type_list.append(1)
             else:
                 raise ValueError(f"Unknown value type: {message['type']}")
@@ -272,7 +279,7 @@ class BerniniTemplate(Qwen2VLTemplate):
         messages.append(self.format_message(content, pre_has_loss))
 
         input_ids, attention_mask, labels = [], [], []
-        for i, message in enumerate(messages):
+        for _i, message in enumerate(messages):
             content_str = message["content"].strip()
             if not content_str:
                 continue
@@ -301,9 +308,8 @@ class BerniniTemplate(Qwen2VLTemplate):
             "video_target_mask": video_target_mask,
             "vae_type_list": vae_type_list,
         }
-        tokenized_example = {k: torch.tensor(v)
-                             for k, v in tokenized_example.items()}
-        tokenized_example['text_content'] = text_content
+        tokenized_example = {k: torch.tensor(v) for k, v in tokenized_example.items()}
+        tokenized_example["text_content"] = text_content
 
         vision_start_indices = []
         token_types = torch.zeros_like(tokenized_example["labels"], dtype=torch.int)
@@ -324,7 +330,6 @@ class BerniniTemplate(Qwen2VLTemplate):
                 mllm_visual_pad = self.image_pad_id if visual_id_to_type[visual_id] == 0 else self.video_pad_id
                 tokenized_example["input_ids"][input_vit_mask] = mllm_visual_pad
 
-
         for visual_id, output_vit_id in enumerate(self.visual_output_token_pad_ids):
             output_vit_mask = tokenized_example["input_ids"] == output_vit_id
             if output_vit_mask.sum() > 0:
@@ -337,7 +342,6 @@ class BerniniTemplate(Qwen2VLTemplate):
                 mllm_visual_pad = self.image_pad_id if visual_id_to_type[visual_id] == 0 else self.video_pad_id
                 tokenized_example["input_ids"][output_vit_mask] = mllm_visual_pad
 
-
         tokenized_example["vision_start_indices"] = sorted(vision_start_indices)
         tokenized_example["visual_input_token_mask"] = visual_input_token_mask
         tokenized_example["visual_output_token_mask"] = visual_output_token_mask
@@ -348,7 +352,7 @@ class BerniniTemplate(Qwen2VLTemplate):
 
         # Some tasks should not calculate MLLM text loss
         labels = tokenized_example["labels"]
-        if task_name in ['t2i', 't2v', 'i2i', 'v2v', 'v2v_trans', 'i2v_trans', 'i2v', 'iv2v', 'rv2v', 'r2v']:
+        if task_name in ["t2i", "t2v", "i2i", "v2v", "v2v_trans", "i2v_trans", "i2v", "iv2v", "rv2v", "r2v"]:
             labels[labels != IGNORE_INDEX] = IGNORE_INDEX
             tokenized_example["labels"] = labels
 
@@ -371,10 +375,7 @@ class BerniniTemplate(Qwen2VLTemplate):
         tokenized_example["attention_mask_4d"] = mllm_attn_mask
         # shift labels for causal LM
         labels = tokenized_example["labels"]
-        labels = torch.cat(
-            [labels[1:], labels.new_full((1,), IGNORE_INDEX)],
-            dim=0
-        )
+        labels = torch.cat([labels[1:], labels.new_full((1,), IGNORE_INDEX)], dim=0)
         tokenized_example["labels"] = labels
         tokenized_example["flex_token_types"] = flex_token_types
 

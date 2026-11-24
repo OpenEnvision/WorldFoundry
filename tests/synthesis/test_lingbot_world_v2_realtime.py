@@ -84,6 +84,7 @@ def test_lingbot_world_v2_pipeline_updates_prompt_before_chunk() -> None:
                 "interactions": ["forward"],
                 "control_segments": [{"duration": 0.5, "keys": ["w"]}],
                 "seed": 17,
+                "defer_frame_materialization": True,
             },
         ),
     ]

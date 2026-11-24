@@ -1,16 +1,16 @@
 ---
 title: CameraBench
-description: "CMU 镜头运动评测：二分类、VQA、检索与描述。WorldFoundry 聚合官方分数，不编造榜单。"
+description: "CMU 镜头运动评测：二分类、VQA、检索与描述。WorldFoundry 聚合官方分数。"
 ---
 
 CameraBench（卡内基梅隆）问的是视频模型会不会**理解镜头运动**——推、摇、移以及一套与摄影师共同设计、再经专家标注的分类法。四个指标族：
 
-- **二分类** — `camera_motion_average_precision` 与 `camera_motion_roc_auc`。
-- **VQA** — 关于镜头的是 / 否与问题准确率。
-- **检索** — 按文本、图像与组检索匹配的运动。
-- **描述** — caption 质量。GPT 评判为可选（`OPENAI_API_KEY`，`--no-gpt` 关闭）。
+- **二分类**：`camera_motion_average_precision` 与 `camera_motion_roc_auc`。
+- **VQA**：镜头相关是 / 否问题的准确率，以及问题准确率。
+- **检索**：按文本、图像与组检索匹配的运动。
+- **描述**：caption 质量。GPT 评判为可选（`OPENAI_API_KEY`，`--no-gpt` 关闭）。
 
-`camerabench_average` 是可用官方指标族的均值。在 WorldFoundry 里，同一套标签也可给镜头控制生成当种子；那是下游用法，不是隐藏榜单。
+`camerabench_average` 是可用官方指标族的均值。在 WorldFoundry 里，同一套标签也可作为镜头控制生成的 prompt 种子。
 
 论文：[CameraBench](https://arxiv.org/abs/2504.15376)。项目：[linzhiqiu.github.io/papers/camerabench](https://linzhiqiu.github.io/papers/camerabench/)。代码：[sy77777en/CameraBench](https://github.com/sy77777en/CameraBench)，打分栈 [linzhiqiu/t2v_metrics](https://github.com/linzhiqiu/t2v_metrics)。数据：[`syCen/CameraBench`](https://huggingface.co/datasets/syCen/CameraBench)（CC-BY-4.0）。
 
@@ -23,7 +23,7 @@ WorldFoundry **聚合已准备的 `score_dir` 文件**或导入官方 JSON。VLM
 导入官方 JSON（严格覆盖）：
 
 ```bash
-WORLDFOUNDRY_CAMERABENCH_STRICT=1 worldfoundry-eval zoo benchmark-run \
+WORLDFOUNDRY_CAMERABENCH_STRICT=1 wf zoo benchmark-run \
   --benchmark-id camerabench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -35,7 +35,7 @@ WORLDFOUNDRY_CAMERABENCH_STRICT=1 worldfoundry-eval zoo benchmark-run \
 聚合已准备的分数目录：
 
 ```bash
-WORLDFOUNDRY_CAMERABENCH_STRICT=1 worldfoundry-eval zoo benchmark-run \
+WORLDFOUNDRY_CAMERABENCH_STRICT=1 wf zoo benchmark-run \
   --benchmark-id camerabench \
   --mode official-validation \
   --score-dir <score_dir> \
@@ -51,13 +51,13 @@ hf download syCen/CameraBench --repo-type dataset \
 
 `--task` 可限制到一个指标族。环境变量：`WORLDFOUNDRY_CAMERABENCH_DATA_ROOT`、`WORLDFOUNDRY_CAMERABENCH_RESULTS_PATH`、`WORLDFOUNDRY_CAMERABENCH_SCORE_DIR`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/camerabench.yaml`。
+清单：`worldfoundry/data/benchmarks/tasks/external/camerabench.yaml`。
 
-产物包括 `scorecard.json`（主键 `camerabench_average`）、存在时的 `camera_predictions.jsonl`、以及 `raw_metric_table.jsonl`。
+产物包括 `scorecard.json`（主键 `camerabench_average`）、`camera_predictions.jsonl`（如存在）以及 `raw_metric_table.jsonl`。
 
 ## 官方两阶段协议
 
-CameraBench 把**方法相关打分**和**方法无关指标**拆开。WorldFoundry 是第二阶段：聚合已准备的 `score_dir` 或导入官方 JSON。第一阶段（Qwen-2.5-VL、MegaSAM 或自研方法）仍在上游。只替换第一阶段，下面的 JSON 合同保持不变。
+CameraBench 把**方法相关打分**和**方法无关指标**拆开。WorldFoundry 是第二阶段：聚合已准备的 `score_dir` 或导入官方 JSON。第一阶段（Qwen-2.5-VL、MegaSAM 或自研方法）仍在上游。只替换第一阶段，下面的 JSON 契约保持不变。
 
 官方脚本用的视频来自 [`syCen/Videos4CameraBnech`](https://huggingface.co/datasets/syCen/Videos4CameraBnech)（上游拼写如此）。典型数据根：
 
@@ -170,6 +170,6 @@ CameraBench 把**方法相关打分**和**方法无关指标**拆开。WorldFoun
 }
 ```
 
-第一阶段失败应捕获并写成 `error` 字符串。样本计数（总数 / 成功 / 失败）由文件推导，不要手写。唯一 id 由 `model_name`、`checkpoint`、`split_name` 生成。
+应捕获第一阶段的失败，并将其写为 `error` 字符串。样本计数（总数 / 成功 / 失败）由文件推导，不要手写。唯一 id 由 `model_name`、`checkpoint`、`split_name` 生成。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -1,21 +1,26 @@
 import csv
 import importlib
 import pkgutil
+import sys
 from pathlib import Path
+from typing import cast
+
+import pytest
 
 import worldfoundry.pipelines.warp_as_history as wah_pipelines
-from worldfoundry.base_models.three_dimensions.point_clouds.pi3_source import SOURCE_ROOT as PI3_SOURCE_ROOT
-from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
+from worldfoundry.base_models.three_dimensions.point_clouds import pi3_inference
 from worldfoundry.pipelines.warp_as_history.pipeline_warp_as_history import WarpAsHistoryPipeline
-from worldfoundry.studio.inference.catalog import (
+from worldfoundry.studio.inference.catalog import discover_catalog
+from worldfoundry.studio.inference.catalog.models.video_generation import (
     _warp_as_history_default_load_kwargs,
     _warp_as_history_default_ref,
-    discover_catalog,
 )
 from worldfoundry.synthesis.visual_generation.warp_as_history.variants import (
     get_warp_as_history_variant,
     runtime_root,
 )
+from worldfoundry.synthesis.visual_generation.warp_as_history.warp_as_history_synthesis import WarpAsHistorySynthesis
+from worldfoundry.zoo.catalog import load_model_zoo_registry
 
 
 def test_warp_as_history_runtime_uses_shared_base_models():
@@ -26,7 +31,7 @@ def test_warp_as_history_runtime_uses_shared_base_models():
     assert (root / "helios" / "diffusers_version" / "pipeline_helios_diffusers.py").is_file()
     assert not (root / "third_party" / "Pi3").exists()
     assert not (root / "data" / "demo").exists()
-    assert (PI3_SOURCE_ROOT / "pi3" / "models" / "pi3x.py").is_file()
+    assert (Path(pi3_inference.__file__).parent / "models" / "pi3x.py").is_file()
 
 
 def test_warp_as_history_runtime_logic_lives_under_synthesis():
@@ -137,8 +142,9 @@ def test_warp_as_history_catalog_resolves_all_local_checkpoint_roles(tmp_path, m
 
 
 def test_warp_as_history_local_lora_file_sets_explicit_weight_name(tmp_path, monkeypatch):
-    monkeypatch.syspath_prepend(str(runtime_root()))
-    from warp_as_history.pipeline import _diffusers_lora_source
+    from worldfoundry.synthesis.visual_generation.warp_as_history.warp_as_history_runtime.warp_as_history.pipeline import (
+        _diffusers_lora_source,
+    )
 
     lora_path = tmp_path / "visible_lora_state_step1000.safetensors"
     lora_path.write_bytes(b"lora")
@@ -150,9 +156,11 @@ def test_warp_as_history_local_lora_file_sets_explicit_weight_name(tmp_path, mon
 
 
 def test_warp_as_history_ignores_only_incompatible_optional_torchao(monkeypatch):
-    monkeypatch.syspath_prepend(str(runtime_root()))
     from peft.tuners.lora import torchao as peft_torchao
-    from warp_as_history.pipeline import _ignore_incompatible_optional_torchao
+
+    from worldfoundry.synthesis.visual_generation.warp_as_history.warp_as_history_runtime.warp_as_history.pipeline import (
+        _ignore_incompatible_optional_torchao,
+    )
 
     def incompatible():
         raise ImportError("unsupported torchao")
@@ -174,7 +182,7 @@ def test_warp_as_history_filters_evaluator_metadata(tmp_path):
             return {"artifact_path": str(tmp_path / "warp.mp4")}
 
     synthesis = Synthesis()
-    pipeline = WarpAsHistoryPipeline(synthesis_model=synthesis)
+    pipeline = WarpAsHistoryPipeline(synthesis_model=cast(WarpAsHistorySynthesis, synthesis))
     pipeline(
         prompt="test",
         images="input.png",
@@ -185,6 +193,25 @@ def test_warp_as_history_filters_evaluator_metadata(tmp_path):
         return_dict=True,
     )
 
+    assert synthesis.kwargs is not None
     assert "ref_image_path" not in synthesis.kwargs
     assert "sample_id" not in synthesis.kwargs
     assert "task_name" not in synthesis.kwargs
+
+
+def test_camera_warp_imports_canonical_pi3(monkeypatch: pytest.MonkeyPatch) -> None:
+    from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.models.pi3x import Pi3X
+    from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.utils.geometry import (
+        recover_intrinsic_from_rays_d,
+    )
+    from worldfoundry.synthesis.visual_generation.warp_as_history.worldfoundry_runtime import WarpAsHistoryRuntime
+
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    WarpAsHistoryRuntime(device="cpu")._configure_runtime_environment()
+    from worldfoundry.synthesis.visual_generation.warp_as_history.warp_as_history_runtime.warp_as_history.camera_warp import (
+        _import_pi3,
+    )
+
+    paths = list(sys.path)
+    assert _import_pi3() == (Pi3X, recover_intrinsic_from_rays_d)
+    assert sys.path == paths

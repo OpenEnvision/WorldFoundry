@@ -9,7 +9,7 @@ synthesis operations like `predict`.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from worldfoundry.synthesis.visual_generation.solaris.worldfoundry_runtime import (
     SolarisRuntime,
@@ -30,15 +30,15 @@ class SolarisSynthesis(BaseSynthesis):
 
     def __init__(
         self,
-        runtime_root: Optional[str] = None,
-        pretrained_model_dir: Optional[str] = None,
-        eval_data_dir: Optional[str] = None,
-        output_dir: Optional[str] = None,
-        checkpoint_dir: Optional[str] = None,
-        jax_cache_dir: Optional[str] = None,
-        model_weights_path: Optional[str] = None,
+        runtime_root: str | None = None,
+        pretrained_model_dir: str | None = None,
+        eval_data_dir: str | None = None,
+        output_dir: str | None = None,
+        checkpoint_dir: str | None = None,
+        jax_cache_dir: str | None = None,
+        model_weights_path: str | None = None,
         *,
-        runtime: Optional[SolarisRuntime] = None,
+        runtime: SolarisRuntime | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -50,7 +50,7 @@ class SolarisSynthesis(BaseSynthesis):
         necessary components for `SolarisRuntime` instantiation are present.
 
         Args:
-            runtime_root: The root directory for the Solaris runtime. Required if `runtime` is not provided.
+            runtime_root: Data/work base for relative asset paths. Required if `runtime` is not provided.
             pretrained_model_dir: Directory containing pretrained model components. Required if `runtime` is not provided.
             eval_data_dir: Directory for evaluation data. Required if `runtime` is not provided.
             output_dir: Directory for model outputs. Required if `runtime` is not provided.
@@ -81,9 +81,7 @@ class SolarisSynthesis(BaseSynthesis):
             missing = [name for name, value in required.items() if value is None]
             if missing:
                 # Raise an error if any required arguments are not provided when instantiating runtime.
-                raise ValueError(
-                    "Missing Solaris runtime components: " + ", ".join(missing)
-                )
+                raise ValueError("Missing Solaris runtime components: " + ", ".join(missing))
             # All required arguments are present, instantiate SolarisRuntime.
             runtime = SolarisRuntime(
                 runtime_root=str(runtime_root),
@@ -121,7 +119,7 @@ class SolarisSynthesis(BaseSynthesis):
         return getattr(self.runtime, name)
 
     @classmethod
-    def from_pretrained(cls, *args: Any, **kwargs: Any) -> "SolarisSynthesis":
+    def from_pretrained(cls, *args: Any, **kwargs: Any) -> SolarisSynthesis:
         """
         Creates a `SolarisSynthesis` instance by loading a pretrained `SolarisRuntime`.
 

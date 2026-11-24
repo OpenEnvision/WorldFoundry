@@ -19,11 +19,11 @@ notes:
 python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
 - .
-- worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+- worldfoundry/evals/tasks/execution/runners/worldolympiad/runtime/worldolympiad
 required_assets:
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/worldolympiad
-  - worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+  - worldfoundry/evals/tasks/execution/runners/worldolympiad
+  - worldfoundry/evals/tasks/execution/runners/worldolympiad/runtime/worldolympiad
   pip_requirements:
   - worldfoundry/data/benchmarks/requirements/worldolympiad.txt
   task_yaml: worldfoundry/data/benchmarks/tasks/external/worldolympiad.yaml
@@ -48,15 +48,15 @@ optional_env:
 - HF_ENDPOINT
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
 - id: metrics_runtime
-  path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/worldolympiad_metrics.py
+  path: worldfoundry/evals/tasks/execution/runners/worldolympiad/worldolympiad_metrics.py
 - id: runtime_root
-  path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+  path: worldfoundry/evals/tasks/execution/runners/worldolympiad/runtime/worldolympiad
 - id: runtime_entrypoint
-  path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad/batch_test/evaluate_pipelines.py
+  path: worldfoundry/evals/tasks/execution/runners/worldolympiad/runtime/worldolympiad/batch_test/evaluate_pipelines.py
 - id: runtime_scorer
-  path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad/scripts/score_video_physical_3d.py
+  path: worldfoundry/evals/tasks/execution/runners/worldolympiad/runtime/worldolympiad/scripts/score_video_physical_3d.py
 - id: fixture
   path: worldfoundry/data/benchmarks/assets/worldolympiad
 - id: pip_requirements
@@ -65,20 +65,20 @@ required_paths:
   path: worldfoundry/data/benchmarks/tasks/external/worldolympiad.yaml
 requires_cuda_visibility: false
 optional_base_model_dependencies:
-- depth_anything_3
+- depth_anything_v3_nested_giant_large
 - sam3
-- qwenvl_openai_compatible_judge
-- clip
+- qwen3_vl_8b_instruct
+- openai_clip_vit_b32
 validation_command:
 - python
-- worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
 - --run-fixture
 - --output-dir
 - <out>
 - --json
 plan_command:
 - python
-- worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
 - --run-official
 - --dry-run
 - --generated-artifact-dir
@@ -88,7 +88,7 @@ plan_command:
 - --output-dir
 - <out>
 normalization_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -102,7 +102,7 @@ normalization_command:
 - --json
 full_runtime_command:
 - python
-- worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
 - --run-official
 - --generated-artifact-dir
 - <case_root>

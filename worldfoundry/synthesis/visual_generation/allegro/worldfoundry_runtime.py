@@ -76,19 +76,11 @@ def preprocess_images(first_frame, last_frame, height, width, device, dtype, com
 
     # Load images, convert to RGB, and then to PyTorch tensors.
     conditional_images = [Image.open(image).convert("RGB") for image in images]
-    conditional_images = [
-        torch.from_numpy(np.copy(np.array(image))) for image in conditional_images
-    ]
+    conditional_images = [torch.from_numpy(np.copy(np.array(image))) for image in conditional_images]
     # Rearrange dimensions from HWC to CHW and add a batch dimension.
-    conditional_images = [
-        rearrange(image, "h w c -> c h w").unsqueeze(0)
-        for image in conditional_images
-    ]
+    conditional_images = [rearrange(image, "h w c -> c h w").unsqueeze(0) for image in conditional_images]
     # Apply the defined transformations and move to the target device/dtype.
-    conditional_images = [
-        transform(image).to(device=device, dtype=dtype)
-        for image in conditional_images
-    ]
+    conditional_images = [transform(image).to(device=device, dtype=dtype) for image in conditional_images]
 
     return {
         "conditional_images": conditional_images,
@@ -170,7 +162,7 @@ class Allegro:
         with third_party_lazy_import_guard():
             import transformers
 
-            getattr(transformers, "AutoImageProcessor")
+            transformers.AutoImageProcessor  # noqa: B018 - Attribute access resolves the lazy import, as upstream.
             components = load_allegro_components()
             import torch
             from diffusers.schedulers import EulerAncestralDiscreteScheduler
@@ -179,11 +171,7 @@ class Allegro:
         self.device = torch.device(self.device_spec)
         if self.device.type == "cuda" and self.device.index is None:
             self.device = torch.device(f"cuda:{torch.cuda.current_device()}")
-        device_context = (
-            torch.cuda.device(self.device)
-            if self.device.type == "cuda"
-            else nullcontext()
-        )
+        device_context = torch.cuda.device(self.device) if self.device.type == "cuda" else nullcontext()
         model_path = Path(self.model_path)
         # Keep the selected CUDA context active for upstream helpers that use
         # generic ``cuda`` while moving every owned component explicitly.
@@ -251,11 +239,7 @@ class Allegro:
         """
         import torch
 
-        device_context = (
-            torch.cuda.device(self.device)
-            if self.device.type == "cuda"
-            else nullcontext()
-        )
+        device_context = torch.cuda.device(self.device) if self.device.type == "cuda" else nullcontext()
         with device_context:
             pre_results = preprocess_images(
                 image_path,

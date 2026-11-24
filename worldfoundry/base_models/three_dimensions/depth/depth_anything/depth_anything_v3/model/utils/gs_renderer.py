@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> model -> utils -> gs_renderer.py functionality."""
-
 import math
 from math import isqrt
-from typing import Literal, Optional
+from typing import Literal
+
 import torch
 from einops import rearrange, repeat
 from tqdm import tqdm
@@ -30,7 +29,11 @@ from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anythi
     render_wander_path,
     render_wobble_inter_path,
 )
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import affine_inverse, as_homogeneous, get_fov
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import (
+    affine_inverse,
+    as_homogeneous,
+    get_fov,
+)
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.logger import logger
 
 try:
@@ -47,7 +50,7 @@ def render_3dgs(
     intrinsics: torch.Tensor,  # "batch_views 3 3", normalized
     image_shape: tuple[int, int],
     gaussian: Gaussians,
-    background_color: Optional[torch.Tensor] = None,  # "batch_views 3"
+    background_color: torch.Tensor | None = None,  # "batch_views 3"
     use_sh: bool = True,
     num_view: int = 1,
     color_mode: Literal["RGB+D", "RGB+ED"] = "RGB+D",
@@ -56,21 +59,6 @@ def render_3dgs(
     torch.Tensor,  # "batch_views 3 height width"
     torch.Tensor,  # "batch_views height width"
 ]:
-    """Render 3dgs.
-
-    Args:
-        extrinsics: The extrinsics.
-        intrinsics: The intrinsics.
-        image_shape: The image shape.
-        gaussian: The gaussian.
-        background_color: The background color.
-        use_sh: The use sh.
-        num_view: The num view.
-        color_mode: The color mode.
-
-    Returns:
-        The return value.
-    """
     # extract gaussian params
     gaussian_means = gaussian.means
     gaussian_scales = gaussian.scales
@@ -80,18 +68,14 @@ def render_3dgs(
     b, _, _ = extrinsics.shape
 
     if background_color is None:
-        background_color = repeat(torch.tensor([0.0, 0.0, 0.0]), "c -> b c", b=b).to(
-            gaussian_sh_coefficients
-        )
+        background_color = repeat(torch.tensor([0.0, 0.0, 0.0]), "c -> b c", b=b).to(gaussian_sh_coefficients)
 
     if use_sh:
         _, _, _, n = gaussian_sh_coefficients.shape
         degree = isqrt(n) - 1
         shs = rearrange(gaussian_sh_coefficients, "b g xyz n -> b g n xyz").contiguous()
     else:  # use color
-        shs = (
-            gaussian_sh_coefficients.squeeze(-1).sigmoid().contiguous()
-        )  # (b, g, c), normed to (0, 1)
+        shs = gaussian_sh_coefficients.squeeze(-1).sigmoid().contiguous()  # (b, g, c), normed to (0, 1)
 
     h, w = image_shape
 
@@ -111,12 +95,6 @@ def render_3dgs(
     batch_scene = b // num_view
 
     def index_i_gs_attr(full_attr, idx):
-        """Index i gs attr.
-
-        Args:
-            full_attr: The full attr.
-            idx: The idx.
-        """
         # return rearrange(full_attr, "(b v) ... -> b v ...", v=num_view)[idx, 0]
         return full_attr[idx]
 
@@ -141,9 +119,7 @@ def render_3dgs(
         i_opacities = index_i_gs_attr(gaussian_opacities, i)  # [N,]
         i_colors = index_i_gs_attr(shs, i)  # [N, K, 3]
         i_viewmats = rearrange(view_matrix, "(b v) ... -> b v ...", v=num_view)[i]  # [v, 4, 4]
-        i_backgrounds = rearrange(background_color, "(b v) ... -> b v ...", v=num_view)[
-            i
-        ]  # [v, 3]
+        i_backgrounds = rearrange(background_color, "(b v) ... -> b v ...", v=num_view)[i]  # [v, 3]
 
         render_colors, render_alphas, info = rasterization(
             means=i_means,
@@ -164,7 +140,7 @@ def render_3dgs(
 
         image = rearrange(render_colors[..., :3], "v h w c -> v c h w").unbind(dim=0)
         radii = info["radii"].unbind(dim=0)
-        try:
+        try:  # noqa: SIM105 - The handler carries an explanatory comment.
             info["means2d"].retain_grad()  # [1, N, 2]
         except Exception:
             pass
@@ -180,7 +156,7 @@ def run_renderer_in_chunk_w_trj_mode(
     extrinsics: torch.Tensor,  # world2cam, "batch view 4 4" | "batch view 3 4"
     intrinsics: torch.Tensor,  # unnormed intrinsics, "batch view 3 3"
     image_shape: tuple[int, int],
-    chunk_size: Optional[int] = 8,
+    chunk_size: int | None = 8,
     trj_mode: Literal[
         "original",
         "smooth",
@@ -191,28 +167,13 @@ def run_renderer_in_chunk_w_trj_mode(
         "extend",
         "wobble_inter",
     ] = "smooth",
-    input_shape: Optional[tuple[int, int]] = None,
-    enable_tqdm: Optional[bool] = False,
+    input_shape: tuple[int, int] | None = None,
+    enable_tqdm: bool | None = False,
     **kwargs,
 ) -> tuple[
     torch.Tensor,  # color, "batch view 3 height width"
     torch.Tensor,  # depth, "batch view height width"
 ]:
-    """Run renderer in chunk w trj mode.
-
-    Args:
-        gaussians: The gaussians.
-        extrinsics: The extrinsics.
-        intrinsics: The intrinsics.
-        image_shape: The image shape.
-        chunk_size: The chunk size.
-        trj_mode: The trj mode.
-        input_shape: The input shape.
-        enable_tqdm: The enable tqdm.
-
-    Returns:
-        The return value.
-    """
     cam2world = affine_inverse(as_homogeneous(extrinsics))
     if input_shape is not None:
         in_h, in_w = input_shape
@@ -228,12 +189,6 @@ def run_renderer_in_chunk_w_trj_mode(
         ], "Please set trj_mode to 'wander' or 'dolly_zoom' when n_views=1"
 
     def _smooth_trj_fn_batch(raw_c2ws, k_size=50):
-        """Helper function to smooth trj fn batch.
-
-        Args:
-            raw_c2ws: The raw c2ws.
-            k_size: The k size.
-        """
         try:
             smooth_c2ws = torch.stack(
                 [render_stabilization_path(c2w_i, k_size) for c2w_i in raw_c2ws],
@@ -269,14 +224,14 @@ def run_renderer_in_chunk_w_trj_mode(
                 tgt_intr = []
                 for cur_idx in range(cam2world.shape[1] - 1):
                     tgt_c2w.append(
-                        interpolate_extrinsics(
-                            cam2world[b_idx, cur_idx], cam2world[b_idx, cur_idx + 1], t
-                        )[(0 if cur_idx == 0 else 1) :]
+                        interpolate_extrinsics(cam2world[b_idx, cur_idx], cam2world[b_idx, cur_idx + 1], t)[
+                            (0 if cur_idx == 0 else 1) :
+                        ]
                     )
                     tgt_intr.append(
-                        interpolate_intrinsics(
-                            intr_normed[b_idx, cur_idx], intr_normed[b_idx, cur_idx + 1], t
-                        )[(0 if cur_idx == 0 else 1) :]
+                        interpolate_intrinsics(intr_normed[b_idx, cur_idx], intr_normed[b_idx, cur_idx + 1], t)[
+                            (0 if cur_idx == 0 else 1) :
+                        ]
                     )
                 tgt_c2w_b.append(torch.cat(tgt_c2w))
                 tgt_intr_b.append(torch.cat(tgt_intr))
@@ -334,9 +289,7 @@ def run_renderer_in_chunk_w_trj_mode(
         tgt_c2w = []
         tgt_intr = []
         for b_idx in range(cam2world.shape[0]):
-            c2w_i, intr_i = render_fn(
-                cam2world[b_idx, 0], intr_normed[b_idx, 0], h=in_h, w=in_w, **extra_kwargs
-            )
+            c2w_i, intr_i = render_fn(cam2world[b_idx, 0], intr_normed[b_idx, 0], h=in_h, w=in_w, **extra_kwargs)
             tgt_c2w.append(c2w_i)
             tgt_intr.append(intr_i)
         tgt_c2w = torch.stack(tgt_c2w)

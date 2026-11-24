@@ -7,6 +7,7 @@ groups:
 - navigation
 source_repos:
 - url: https://github.com/facebookresearch/nwm
+  revision: 3f6cd8e70d6f2d1e2b9684acff510710135f0f41
 checkpoints:
 - repo_id: facebook/nwm
   role: nwm_checkpoint

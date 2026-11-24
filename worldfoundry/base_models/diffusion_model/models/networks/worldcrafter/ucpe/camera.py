@@ -4,11 +4,13 @@
 from functools import lru_cache
 
 import torch
-from torch import nn
-from .prope import PropeDotProductAttention
-from worldfoundry.core.attention import packed_sequence_attention as flash_attention
-from einops import rearrange, repeat, einsum
 import torch.nn.functional as F
+from einops import einsum, rearrange, repeat
+from torch import nn
+
+from worldfoundry.core.attention import packed_sequence_attention as flash_attention
+
+from .prope import PropeDotProductAttention
 
 
 def compute_fx_from_fov_xi(
@@ -19,20 +21,19 @@ def compute_fx_from_fov_xi(
     dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """
-    根据水平视场角 (x_fov) 和 UCM 参数 (xi) 计算相机焦距 fx。
+    Compute the horizontal focal length for the unified camera model (UCM).
 
     Args:
-        x_fov: float 或 [B] Tensor，水平视场角（单位：度）
-        xi: float 或 [B] Tensor，UCM 镜面参数
-        width: 图像宽度（像素）
+        x_fov: Scalar or [B] tensor of horizontal fields of view in degrees.
+        xi: Scalar or [B] tensor of UCM mirror parameters.
+        width: Image width in pixels.
         device: torch.device
         dtype: torch.dtype
 
     Returns:
-        fx: [B] Tensor，焦距（像素单位）
+        fx: [B] tensor of focal lengths in pixels; scalar inputs give B = 1.
     """
 
-    # --- 转为 Tensor ---
     def to_tensor_1d(x):
         if torch.is_tensor(x):
             return x.to(device=device, dtype=dtype).reshape(-1)
@@ -41,12 +42,11 @@ def compute_fx_from_fov_xi(
     x_fov = to_tensor_1d(x_fov)
     xi = to_tensor_1d(xi)
 
-    # --- 自动广播 ---
+    # Broadcast singleton parameters to the batch size.
     B = max(x_fov.shape[0], xi.shape[0])
     x_fov = x_fov.view(-1).expand(B)
     xi = xi.view(-1).expand(B)
 
-    # --- 计算 fx ---
     theta = torch.deg2rad(0.5 * x_fov)
     eps = torch.finfo(dtype).eps
     denom = torch.sin(theta).clamp_min(eps)
@@ -111,7 +111,7 @@ def _ucm_unproject_grid(
     cy: float | torch.Tensor,
     xi: float | torch.Tensor,
     dtype: torch.dtype = torch.float32,
-    device: torch.device = torch.device("cpu"),
+    device: torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
     y_down: bool = True,
 ) -> torch.Tensor:
     scalar_input = all(not torch.is_tensor(value) for value in (fx, fy, cx, cy, xi))
@@ -122,20 +122,14 @@ def _ucm_unproject_grid(
         return torch.tensor([value], device=device, dtype=dtype)
 
     fx, fy, cx, cy, xi = map(tensor_1d, (fx, fy, cx, cy, xi))
-    xs = torch.linspace(0, width - 1, width, dtype=dtype, device=device)
-    ys = torch.linspace(0, height - 1, height, dtype=dtype, device=device)
-    ys, xs = torch.meshgrid([ys, xs], indexing="ij")
-    grid = torch.stack((xs, ys, torch.ones_like(xs)), dim=2)
-    grid = repeat(grid, "... -> b ...", b=fx.shape[0])
+    grid = _pixel_grid(height=height, width=width, batch=fx.shape[0], dtype=dtype, device=device)
 
     x = (grid[..., 0] - cx[:, None, None]) / fx[:, None, None]
     y = (grid[..., 1] - cy[:, None, None]) / fy[:, None, None]
     if not y_down:
         y = -y
     r2 = x * x + y * y
-    alpha = xi[:, None, None] + torch.sqrt(
-        1 + (1 - xi[:, None, None] * xi[:, None, None]) * r2
-    )
+    alpha = xi[:, None, None] + torch.sqrt(1 + (1 - xi[:, None, None] * xi[:, None, None]) * r2)
     gamma = alpha / (1 + r2)
     directions = torch.stack((gamma * x, gamma * y, gamma - xi[:, None, None]), dim=-1)
     return directions[0] if scalar_input else directions
@@ -150,19 +144,18 @@ def ucm_unproject_grid_fov(
     dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """
-    计算每个样本的相机方向向量 (UCM model, 用视场角定义)。
-    支持 float 或 [B] Tensor 的混合输入。
-    - 若全为 float → 返回 [H, W, 3]
-    - 若任意为 [B] → 返回 [B, H, W, 3]
+    Unproject pixel directions using horizontal field of view in degrees and UCM xi.
+
+    Inputs may be scalars or [B] tensors. Return [B, H, W, 3] when either
+    input tensor has more than one element; otherwise return [H, W, 3].
+    Directions use x right, y down, and z forward, with the requested dtype/device.
     """
     if isinstance(device, str):
         device = torch.device(device)
 
-    is_batched = any(
-        torch.is_tensor(p) and p.reshape(-1).numel() > 1 for p in [x_fov, xi]
-    )
+    is_batched = any(torch.is_tensor(p) and p.reshape(-1).numel() > 1 for p in [x_fov, xi])
 
-    # --- 计算 fx, fy ---
+    # Use equal horizontal and vertical focal lengths.
     fx = compute_fx_from_fov_xi(x_fov, xi, width, device, dtype)
     fy = fx
     xi_grid = (
@@ -184,7 +177,6 @@ def ucm_unproject_grid_fov(
         y_down=True,
     )
 
-    # --- 输出 shape 控制 ---
     if not is_batched:
         d_cam = d_cam[0]  # [H, W, 3]
 
@@ -193,11 +185,10 @@ def ucm_unproject_grid_fov(
 
 def d_cam_to_angles(d_cam: torch.Tensor) -> torch.Tensor:
     """
-    将方向向量 [x, y, z] 转换为 [azimuth, elevation]。
-    坐标系：z前，x右，y下（符合 UCM 投影输出）
+    Convert directions [..., 3] to azimuth and elevation [..., 2] in radians.
 
-    输入: d_cam: [B, H, W, 3]
-    输出: angles: [B, H, W, 2] — azimuth, elevation （单位: 弧度）
+    The UCM camera frame has z forward, x right, and y down. Directions are
+    normalized before computing azimuth about y and elevation above the xz-plane.
     """
     d_unit = F.normalize(d_cam, dim=-1)  # [B, H, W, 3]
 
@@ -209,7 +200,7 @@ def d_cam_to_angles(d_cam: torch.Tensor) -> torch.Tensor:
     azimuth = torch.atan2(x, z)  # ∈ [-π, π]
 
     # pitch / elevation: angle above xz-plane
-    elevation = -torch.asin(y)  # y 向下 → elevation = -asin(y)
+    elevation = -torch.asin(y)  # Negate y because the camera y-axis points down.
 
     return torch.stack([azimuth, elevation], dim=-1)  # [B, H, W, 2]
 
@@ -219,12 +210,12 @@ def world_to_ray_mats(
     c2w: torch.Tensor,  # [B, T, 4, 4]
 ) -> torch.Tensor:
     """
-    构造每条 ray 的世界到 ray 局部坐标系的变换矩阵 world2ray。
-    坐标系定义：
+    Build world-to-ray transforms with the camera center as the local origin.
+    Ray-local axes:
         - z: ray direction
         - x: cam_y × ray_dir
         - y: z × x
-    返回:
+    Returns:
         raymats: [B, T, H, W, 4, 4]
     """
     if d_cam.ndim == 3:
@@ -232,21 +223,15 @@ def world_to_ray_mats(
     if c2w.ndim == 3:
         c2w = c2w.unsqueeze(0)
     if d_cam.ndim != 4 or d_cam.shape[-1] != 3:
-        raise ValueError(
-            f"d_cam must have shape [H,W,3] or [B,H,W,3], got {tuple(d_cam.shape)}"
-        )
+        raise ValueError(f"d_cam must have shape [H,W,3] or [B,H,W,3], got {tuple(d_cam.shape)}")
     if c2w.ndim != 4 or c2w.shape[-2:] != (4, 4):
-        raise ValueError(
-            f"c2w must have shape [T,4,4] or [B,T,4,4], got {tuple(c2w.shape)}"
-        )
+        raise ValueError(f"c2w must have shape [T,4,4] or [B,T,4,4], got {tuple(c2w.shape)}")
     if d_cam.shape[0] == 1 and c2w.shape[0] != 1:
         d_cam = d_cam.expand(c2w.shape[0], -1, -1, -1)
     elif c2w.shape[0] == 1 and d_cam.shape[0] != 1:
         c2w = c2w.expand(d_cam.shape[0], -1, -1, -1)
     elif d_cam.shape[0] != c2w.shape[0]:
-        raise ValueError(
-            f"d_cam and c2w batch mismatch: {d_cam.shape[0]} vs {c2w.shape[0]}"
-        )
+        raise ValueError(f"d_cam and c2w batch mismatch: {d_cam.shape[0]} vs {c2w.shape[0]}")
 
     B, H, W, _ = d_cam.shape
     T = c2w.shape[1]
@@ -306,29 +291,30 @@ def compute_up_lat_map(
     xi: torch.Tensor,
     height: int,
     width: int,
-    device: torch.device = torch.device("cpu"),
+    device: torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
     delta: float = 0.1,
 ):
     """
-    计算 up_map 和 lat_map。
+    Compute projected upward directions and world latitude for each pixel ray.
 
     Args:
-        R: [B, T, 3, 3] 相机 c2w 旋转矩阵
-        x_fov: [B] 或 [B,T] 水平视场角（度）
-        xi:   [B] 或 [B,T] UCM 参数
-        height: int，图像/patch 高度
-        width:  int，图像/patch 宽度
+        R: [B, T, 3, 3] camera-to-world rotation matrices.
+        x_fov: [B] tensor of horizontal fields of view in degrees, shared across T.
+        xi: [B] tensor of UCM parameters, shared across T.
+        height: Image or patch-grid height in pixels.
+        width: Image or patch-grid width in pixels.
         device: torch.device
-        delta: float，小旋转角度（弧度）
+        delta: Small rotation angle in radians.
     Returns:
-        up_map: [B, T, H, W, 2] 单位向量 map
-        lat_map: [B, T, H, W, 1] 纬度 map
+        up_map: [B, T, H, W, 2] normalized image-plane displacement toward world up.
+        lat_map: [B, T, H, W, 1] latitude in radians. Both maps use R.dtype;
+            intermediate geometry is float32. Invalid unprojected rays are zeroed.
     """
     B, T, _, _ = R.shape
     dtype = R.dtype
     R = R.float()
 
-    # Step1：生成每像素射线方向（相机坐标系）
+    # Unproject each pixel ray into camera coordinates.
     d_cam = ucm_unproject_grid_fov(
         x_fov=x_fov,
         xi=xi,
@@ -341,35 +327,26 @@ def compute_up_lat_map(
         d_cam = d_cam.unsqueeze(0)  # [B, H, W, 3]
     mask = d_cam.isnan().any(dim=-1, keepdim=True)  # [B, H, W, 1]
 
-    # Step2：从相机系旋转到世界系
+    # Rotate from camera coordinates into world coordinates.
     d_cam_exp = repeat(d_cam, "B H W C -> B T H W C", T=T)  # [B, T, H, W, 3]
     d_world = torch.einsum("btij,bthwj->bthwi", R, d_cam_exp)
     d_world = d_world / torch.clamp_min(d_world.norm(dim=-1, keepdim=True), 1e-8)
 
-    # Step3：计算纬度 map
+    # Latitude is positive above the world xz-plane.
     Xw, Yw, Zw = d_world[..., 0], d_world[..., 1], d_world[..., 2]
-    lat_map = torch.atan2(-Yw, torch.sqrt(Xw**2 + Zw**2)).unsqueeze(
-        -1
-    )  # [B, T, H, W, 1]
+    lat_map = torch.atan2(-Yw, torch.sqrt(Xw**2 + Zw**2)).unsqueeze(-1)  # [B, T, H, W, 1]
 
-    # Step4：计算 up_map
-    v = d_world  # 已归一化
-    up_world = torch.tensor(
-        [0, -1, 0], device=device, dtype=torch.float32
-    )  # 世界上方方向（+Y 向下设定）
-    k = torch.cross(
-        v, up_world.unsqueeze(0).unsqueeze(0).unsqueeze(0).expand_as(v), dim=-1
-    )
+    v = d_world  # Unit directions
+    up_world = torch.tensor([0, -1, 0], device=device, dtype=torch.float32)  # World up is -Y.
+    k = torch.cross(v, up_world.unsqueeze(0).unsqueeze(0).unsqueeze(0).expand_as(v), dim=-1)
     k = k / torch.clamp_min(k.norm(dim=-1, keepdim=True), 1e-8)
 
     delta = torch.tensor(delta, device=device, dtype=torch.float32)
     cos_eps = torch.cos(delta)
     sin_eps = torch.sin(delta)
-    # Rodrigues 公式旋转 v → v_rot
+    # Apply the axis-angle update to the world directions.
     v_rot = (
-        v * cos_eps
-        + torch.cross(k, v, dim=-1) * sin_eps
-        + k * (k * (v * 1).sum(dim=-1, keepdim=True)) * (1 - cos_eps)
+        v * cos_eps + torch.cross(k, v, dim=-1) * sin_eps + k * (k * (v * 1).sum(dim=-1, keepdim=True)) * (1 - cos_eps)
     )
 
     dirs_cam = torch.einsum("btij,bthwj->bthwi", R.transpose(-1, -2), v_rot)
@@ -400,7 +377,7 @@ def compute_up_lat_map(
     up_map = up_map.to(dtype=dtype)
     lat_map = lat_map.to(dtype=dtype)
 
-    # 扩 mask 到同 shape
+    # Broadcast the invalid-ray mask across frames.
     mask_exp2 = mask.unsqueeze(1).expand(B, T, height, width, 1)
     up_map = up_map.masked_fill(mask_exp2, 0.0)
     lat_map = lat_map.masked_fill(mask_exp2, 0.0)
@@ -448,7 +425,6 @@ class UcpeSelfAttention(nn.Module):
         nn.init.zeros_(self.out_proj.weight)
         nn.init.zeros_(self.out_proj.bias)
 
-        # 初始化 PRoPE attention 模块（带 precomputed coeffs）
         self.prope_attn = PropeDotProductAttention(
             head_dim=self.head_dim,
             patches_x=patches_x,
@@ -471,9 +447,7 @@ class UcpeSelfAttention(nn.Module):
         B, T, D = x.shape
         N = control_camera_dit_input["viewmats"].shape[1]  # number of cameras
         H, W = self.patches_y, self.patches_x
-        assert (
-            T == N * H * W or T == N
-        ), f"Expected token shape ({N}×{H}×{W} or {N}), got {T}"
+        assert T == N * H * W or T == N, f"Expected token shape ({N}×{H}×{W} or {N}), got {T}"
 
         # Camera geometry intentionally stays fp32, while WorldCrafter hidden states
         # and the UCPE adapter may independently be bf16/fp16 or fp32.  Keep
@@ -484,9 +458,7 @@ class UcpeSelfAttention(nn.Module):
         projected_x = x.to(dtype=projection_dtype)
 
         if hasattr(self, "cam_encoder") and "cam_emb" in control_camera_dit_input:
-            cam_emb = control_camera_dit_input["cam_emb"].to(
-                dtype=self.cam_encoder.weight.dtype
-            )
+            cam_emb = control_camera_dit_input["cam_emb"].to(dtype=self.cam_encoder.weight.dtype)
             y = self.cam_encoder(cam_emb)
             if y.shape[1] != T:
                 hw = T // cam_emb.shape[1]
@@ -494,28 +466,16 @@ class UcpeSelfAttention(nn.Module):
             projected_x = projected_x + y.to(dtype=projection_dtype)
 
         # Project Q, K, V
-        q = (
-            self.q_proj(projected_x)
-            .view(B, T, self.num_heads, self.head_dim)
-            .transpose(1, 2)
-        )  # [B, H, T, D_head]
-        k = (
-            self.k_proj(projected_x)
-            .view(B, T, self.num_heads, self.head_dim)
-            .transpose(1, 2)
-        )
-        v = (
-            self.v_proj(projected_x)
-            .view(B, T, self.num_heads, self.head_dim)
-            .transpose(1, 2)
-        )
+        q = self.q_proj(projected_x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)  # [B, H, T, D_head]
+        k = self.k_proj(projected_x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.v_proj(projected_x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
 
         # Precompute camera-specific functions (only once per batch)
         self.prope_attn._precompute_and_cache_apply_fns(
             viewmats=control_camera_dit_input["viewmats"],
-            Ks=control_camera_dit_input.get("K", None),
-            coeffs_x=control_camera_dit_input.get("coeffs_x", None),
-            coeffs_y=control_camera_dit_input.get("coeffs_y", None),
+            Ks=control_camera_dit_input.get("K"),
+            coeffs_x=control_camera_dit_input.get("coeffs_x"),
+            coeffs_y=control_camera_dit_input.get("coeffs_y"),
         )
 
         # PRoPE matrices and coefficients are deliberately built in the FP32

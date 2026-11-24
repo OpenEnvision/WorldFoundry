@@ -1,9 +1,10 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
-from typing import Any, Dict
+from typing import Any
 
 from transformers import AutoTokenizer
 
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm import TemplateType
+
 from ..constant import LLMModelType
 from ..model_arch import ModelArch
 from ..register import Model, ModelGroup, ModelMeta, get_model_tokenizer_with_flash_attn, register_model
@@ -13,40 +14,47 @@ from .qwen import get_model_tokenizer_qwen
 
 register_model(
     ModelMeta(
-        LLMModelType.codefuse_qwen, [
-            ModelGroup([
-                Model('codefuse-ai/CodeFuse-QWen-14B', 'codefuse-ai/CodeFuse-QWen-14B'),
-            ]),
+        LLMModelType.codefuse_qwen,
+        [
+            ModelGroup(
+                [
+                    Model("codefuse-ai/CodeFuse-QWen-14B", "codefuse-ai/CodeFuse-QWen-14B"),
+                ]
+            ),
         ],
         TemplateType.codefuse,
         get_model_tokenizer_qwen,
-        architectures=['QWenLMHeadModel'],
+        architectures=["QWenLMHeadModel"],
         model_arch=ModelArch.qwen,
-        tags=['coding']))
+        tags=["coding"],
+    )
+)
 
 register_model(
     ModelMeta(
         LLMModelType.codefuse_codegeex2,
         [
-            ModelGroup([Model('codefuse-ai/CodeFuse-CodeGeeX2-6B', 'codefuse-ai/CodeFuse-CodeGeeX2-6B')], ),
+            ModelGroup(
+                [Model("codefuse-ai/CodeFuse-CodeGeeX2-6B", "codefuse-ai/CodeFuse-CodeGeeX2-6B")],
+            ),
         ],
         TemplateType.codefuse,
         get_model_tokenizer_chatglm,
-        architectures=['ChatGLMModel', 'ChatGLMForConditionalGeneration'],
+        architectures=["ChatGLMModel", "ChatGLMForConditionalGeneration"],
         model_arch=ModelArch.chatglm,
-        tags=['coding'],
-        requires=['transformers<4.34'],
-    ))
+        tags=["coding"],
+        requires=["transformers<4.34"],
+    )
+)
 
 
-def get_model_tokenizer_codellama(model_dir: str,
-                                  model_info: ModelInfo,
-                                  model_kwargs: Dict[str, Any],
-                                  load_model: bool = True,
-                                  **kwargs):
+def get_model_tokenizer_codellama(
+    model_dir: str, model_info: ModelInfo, model_kwargs: dict[str, Any], load_model: bool = True, **kwargs
+):
     tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True, use_fast=False, legacy=False)
     return get_model_tokenizer_with_flash_attn(
-        model_dir, model_info, model_kwargs, load_model, tokenizer=tokenizer, **kwargs)
+        model_dir, model_info, model_kwargs, load_model, tokenizer=tokenizer, **kwargs
+    )
 
 
 register_model(
@@ -55,13 +63,14 @@ register_model(
         [
             ModelGroup(
                 [
-                    Model('codefuse-ai/CodeFuse-CodeLlama-34B', 'codefuse-ai/CodeFuse-CodeLlama-34B'),
+                    Model("codefuse-ai/CodeFuse-CodeLlama-34B", "codefuse-ai/CodeFuse-CodeLlama-34B"),
                 ],
-                tags=['coding'],
+                tags=["coding"],
             ),
         ],
         TemplateType.codefuse_codellama,
         get_model_tokenizer_codellama,
         model_arch=ModelArch.llama,
-        architectures=['LlamaForCausalLM'],
-    ))
+        architectures=["LlamaForCausalLM"],
+    )
+)

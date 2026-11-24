@@ -5,21 +5,34 @@
 # Modified from PixArt-Sigma's repos:
 #   https://github.com/PixArt-alpha/PixArt-sigma/blob/master/diffusion/model/nets/PixArt.py
 # --------------------------------------------------------
-import math
-import torch
-import torch.nn as nn
 import os
 import traceback
-import numpy as np
-from timm.models.layers import DropPath
-from timm.models.vision_transformer import PatchEmbed, Mlp
 
+import numpy as np
+import torch
+import torch.nn as nn
+from timm.models.layers import DropPath
+from timm.models.vision_transformer import Mlp, PatchEmbed
+
+from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_blocks import TimestepEmbedder
+
+from ...utils.logger import get_root_logger
 from ..builder import MODELS
 from ..utils import auto_grad_checkpoint, to_2tuple
-from .PixArtWorldFM_blocks import t2i_modulate, CaptionEmbedder, AttentionKVCompress, MultiHeadCrossAttention, T2IFinalLayer, TimestepEmbedder, LabelEmbedder, FinalLayer
-from ...utils.logger import get_root_logger
+from .PixArtWorldFM_blocks import (
+    AttentionKVCompress,
+    CaptionEmbedder,
+    MultiHeadCrossAttention,
+    T2IFinalLayer,
+    t2i_modulate,
+)
 from .plucker import compute_plucker_rays
-from .prope import get_rope_coeffs_2d, prepare_prope_apply_fns, reorder_tokens_to_camera_major, reorder_tokens_from_camera_major
+from .prope import (
+    get_rope_coeffs_2d,
+    prepare_prope_apply_fns,
+    reorder_tokens_from_camera_major,
+    reorder_tokens_to_camera_major,
+)
 
 
 class PixArtWorldFMBlock(nn.Module):
@@ -27,28 +40,50 @@ class PixArtWorldFMBlock(nn.Module):
     A PixArtWorldFM block with adaptive layer norm (adaLN-single) conditioning.
     """
 
-    def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, drop_path=0, input_size=None,
-                 sampling=None, sr_ratio=1, qk_norm=False, **block_kwargs):
+    def __init__(
+        self,
+        hidden_size,
+        num_heads,
+        mlp_ratio=4.0,
+        drop_path=0,
+        input_size=None,
+        sampling=None,
+        sr_ratio=1,
+        qk_norm=False,
+        **block_kwargs,
+    ):
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.attn = AttentionKVCompress(
-            hidden_size, num_heads=num_heads, qkv_bias=True, sampling=sampling, sr_ratio=sr_ratio,
-            qk_norm=qk_norm, **block_kwargs
+            hidden_size,
+            num_heads=num_heads,
+            qkv_bias=True,
+            sampling=sampling,
+            sr_ratio=sr_ratio,
+            qk_norm=qk_norm,
+            **block_kwargs,
         )
         self.cross_attn = MultiHeadCrossAttention(hidden_size, num_heads, **block_kwargs)
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+
         # to be compatible with lower version pytorch
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
-        self.mlp = Mlp(in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0)
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size ** 0.5)
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
+        self.mlp = Mlp(
+            in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0
+        )
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
         self.sampling = sampling
         self.sr_ratio = sr_ratio
 
     def forward(self, x, y, t, mask=None, HW=None, block_id=None, **kwargs):
         B, N, C = x.shape
 
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (self.scale_shift_table[None] + t.reshape(B, 6, -1)).chunk(6, dim=1)
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
+            self.scale_shift_table[None] + t.reshape(B, 6, -1)
+        ).chunk(6, dim=1)
         x = x + self.drop_path(
             gate_msa
             * self.attn(
@@ -56,10 +91,10 @@ class PixArtWorldFMBlock(nn.Module):
                 HW=HW,
                 block_id=block_id,
                 use_prope=bool(kwargs.get("use_prope", False)),
-                prope_viewmats=kwargs.get("prope_viewmats", None),
-                prope_Ks=kwargs.get("prope_Ks", None),
-                prope_image_hw=kwargs.get("prope_image_hw", None),
-                prope_cache=kwargs.get("prope_cache", None),
+                prope_viewmats=kwargs.get("prope_viewmats"),
+                prope_Ks=kwargs.get("prope_Ks"),
+                prope_image_hw=kwargs.get("prope_image_hw"),
+                prope_cache=kwargs.get("prope_cache"),
             ).reshape(B, N, C)
         )
         x = x + self.cross_attn(x, y, mask)
@@ -78,24 +113,24 @@ class PixArtWorldFM(nn.Module):
     """
 
     def __init__(
-            self,
-            input_size=32,
-            patch_size=2,
-            in_channels=4,
-            hidden_size=1152,
-            depth=28,
-            num_heads=16,
-            mlp_ratio=4.0,
-            class_dropout_prob=0.1,
-            pred_sigma=True,
-            drop_path: float = 0.,
-            caption_channels=4096,
-            pe_interpolation=1.0,
-            config=None,
-            model_max_length=120,
-            qk_norm=False,
-            kv_compress_config=None,
-            **kwargs,
+        self,
+        input_size=32,
+        patch_size=2,
+        in_channels=4,
+        hidden_size=1152,
+        depth=28,
+        num_heads=16,
+        mlp_ratio=4.0,
+        class_dropout_prob=0.1,
+        pred_sigma=True,
+        drop_path: float = 0.0,
+        caption_channels=4096,
+        pe_interpolation=1.0,
+        config=None,
+        model_max_length=120,
+        qk_norm=False,
+        kv_compress_config=None,
+        **kwargs,
     ):
         super().__init__()
         self.pred_sigma = pred_sigma
@@ -113,34 +148,42 @@ class PixArtWorldFM(nn.Module):
         # Will use fixed sin-cos embedding:
         self.register_buffer("pos_embed", torch.zeros(1, num_patches, hidden_size))
 
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
-        self.t_block = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(hidden_size, 6 * hidden_size, bias=True)
-        )
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
+        self.t_block = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 6 * hidden_size, bias=True))
         self.y_embedder = CaptionEmbedder(
-            in_channels=caption_channels, hidden_size=hidden_size, uncond_prob=class_dropout_prob,
-            act_layer=approx_gelu, token_num=model_max_length)
+            in_channels=caption_channels,
+            hidden_size=hidden_size,
+            uncond_prob=class_dropout_prob,
+            act_layer=approx_gelu,
+            token_num=model_max_length,
+        )
         drop_path = [x.item() for x in torch.linspace(0, drop_path, depth)]  # stochastic depth decay rule
         self.kv_compress_config = kv_compress_config
         if kv_compress_config is None:
             self.kv_compress_config = {
-                'sampling': None,
-                'scale_factor': 1,
-                'kv_compress_layer': [],
+                "sampling": None,
+                "scale_factor": 1,
+                "kv_compress_layer": [],
             }
-        self.blocks = nn.ModuleList([
-            PixArtWorldFMBlock(
-                hidden_size, num_heads, mlp_ratio=mlp_ratio, drop_path=drop_path[i],
-                input_size=(input_size // patch_size, input_size // patch_size),
-                sampling=self.kv_compress_config['sampling'],
-                sr_ratio=int(
-                    self.kv_compress_config['scale_factor']
-                ) if i in self.kv_compress_config['kv_compress_layer'] else 1,
-                qk_norm=qk_norm,
-            )
-            for i in range(depth)
-        ])
+        self.blocks = nn.ModuleList(
+            [
+                PixArtWorldFMBlock(
+                    hidden_size,
+                    num_heads,
+                    mlp_ratio=mlp_ratio,
+                    drop_path=drop_path[i],
+                    input_size=(input_size // patch_size, input_size // patch_size),
+                    sampling=self.kv_compress_config["sampling"],
+                    sr_ratio=int(self.kv_compress_config["scale_factor"])
+                    if i in self.kv_compress_config["kv_compress_layer"]
+                    else 1,
+                    qk_norm=qk_norm,
+                )
+                for i in range(depth)
+            ]
+        )
         self.final_layer = T2IFinalLayer(hidden_size, patch_size, self.out_channels)
         # Optional pose injection (Plücker) projector: 6-dim -> hidden_size
         self.plucker_proj = nn.Sequential(
@@ -157,13 +200,12 @@ class PixArtWorldFM(nn.Module):
         self.initialize_weights()
 
         if config:
-            logger = get_root_logger(os.path.join(config.work_dir, 'train_log.log'))
+            logger = get_root_logger(os.path.join(config.work_dir, "train_log.log"))
             logger.warning(f"position embed interpolation: {self.pe_interpolation}, base size: {self.base_size}")
             logger.warning(f"kv compress config: {self.kv_compress_config}")
         else:
-            print(f'Warning: position embed interpolation: {self.pe_interpolation}, base size: {self.base_size}')
+            print(f"Warning: position embed interpolation: {self.pe_interpolation}, base size: {self.base_size}")
             print(f"kv compress config: {self.kv_compress_config}")
-
 
     def forward(self, x, timestep, y, mask=None, data_info=None, **kwargs):
         """
@@ -176,20 +218,20 @@ class PixArtWorldFM(nn.Module):
         timestep = timestep.to(self.dtype)
         y = y.to(self.dtype)
         pos_embed = self.pos_embed.to(self.dtype)
-        self.h, self.w = x.shape[-2]//self.patch_size, x.shape[-1]//self.patch_size
+        self.h, self.w = x.shape[-2] // self.patch_size, x.shape[-1] // self.patch_size
         x = self.x_embedder(x) + pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
 
         # === PRoPE precompute/cache (shared across blocks within this forward) ===
         if (
             kwargs.get("use_prope", False)
             and ("prope_viewmats" in kwargs)
-            and (kwargs.get("prope_viewmats", None) is not None)
+            and (kwargs.get("prope_viewmats") is not None)
             and bool(kwargs.get("use_prope_cache", True))
         ):
             try:
-                vm_in = kwargs.get("prope_viewmats", None)
-                Ks_in = kwargs.get("prope_Ks", None)
-                ihw_in = kwargs.get("prope_image_hw", None)
+                vm_in = kwargs.get("prope_viewmats")
+                Ks_in = kwargs.get("prope_Ks")
+                ihw_in = kwargs.get("prope_image_hw")
                 if ihw_in is None and data_info is not None and ("img_hw" in data_info):
                     ihw_in = data_info["img_hw"]
 
@@ -239,7 +281,9 @@ class PixArtWorldFM(nn.Module):
                         coeffs_x, coeffs_y = self._prope_coeff_cache[coeff_key]
 
                         if ihw_in is None:
-                            ihw_in = torch.tensor([[patches_y, patches_x]], device=x.device, dtype=torch.float32).repeat(x.shape[0], 1)
+                            ihw_in = torch.tensor(
+                                [[patches_y, patches_x]], device=x.device, dtype=torch.float32
+                            ).repeat(x.shape[0], 1)
 
                         apply_fn_q, apply_fn_kv, apply_fn_o = prepare_prope_apply_fns(
                             head_dim=head_dim,
@@ -285,12 +329,16 @@ class PixArtWorldFM(nn.Module):
                 if os.environ.get("PROPE_CACHE_DEBUG", "0") == "1":
                     try:
                         import torch.distributed as dist
+
                         rank0 = (not dist.is_available()) or (not dist.is_initialized()) or (dist.get_rank() == 0)
                     except Exception:
                         rank0 = True
                     if rank0:
                         logger = get_root_logger()
-                        logger.info("[PRoPE][cache][error] PixArtWorldFM.forward failed to prepare shared prope_cache; will fall back to per-layer compute.\n" + traceback.format_exc())
+                        logger.info(
+                            "[PRoPE][cache][error] PixArtWorldFM.forward failed to prepare shared prope_cache; will fall back to per-layer compute.\n"
+                            + traceback.format_exc()
+                        )
         else:
             kwargs["prope_cache"] = None
 
@@ -304,14 +352,18 @@ class PixArtWorldFM(nn.Module):
                 raise ValueError("use_plucker=True but plucker_viewmats/plucker_Ks not provided.")
             if plucker_image_hw is None:
                 if data_info is None or ("img_hw" not in data_info):
-                    raise ValueError("use_plucker=True but plucker_image_hw not provided and data_info['img_hw'] missing.")
+                    raise ValueError(
+                        "use_plucker=True but plucker_image_hw not provided and data_info['img_hw'] missing."
+                    )
                 plucker_image_hw = data_info["img_hw"]
             B = x.shape[0]
             V = int(plucker_viewmats.shape[1])
             h_tokens = int(self.h)
             w_tokens_total = int(self.w)
             if w_tokens_total % V != 0:
-                raise ValueError(f"Plücker expects merged-width tokens divisible by views. w_tokens_total={w_tokens_total}, V={V}")
+                raise ValueError(
+                    f"Plücker expects merged-width tokens divisible by views. w_tokens_total={w_tokens_total}, V={V}"
+                )
             w_tokens_per_view = w_tokens_total // V
             plucker = compute_plucker_rays(
                 w2c=plucker_viewmats,
@@ -336,7 +388,9 @@ class PixArtWorldFM(nn.Module):
             y_lens = [y.shape[2]] * y.shape[0]
             y = y.squeeze(1).view(1, -1, x.shape[-1])
         for i, block in enumerate(self.blocks):
-            x = auto_grad_checkpoint(block, x, y, t0, y_lens, (self.h, self.w), block_id=i, **kwargs)  # (N, T, D) #support grad checkpoint
+            x = auto_grad_checkpoint(
+                block, x, y, t0, y_lens, (self.h, self.w), block_id=i, **kwargs
+            )  # (N, T, D) #support grad checkpoint
         x = self.final_layer(x, t)  # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)  # (N, out_channels, H, W)
         return x
@@ -357,7 +411,7 @@ class PixArtWorldFM(nn.Module):
         half = x[: len(x) // 2]
         combined = torch.cat([half, half], dim=0)
         model_out = self.forward(combined, timestep, y, mask, kwargs)
-        model_out = model_out['x'] if isinstance(model_out, dict) else model_out
+        model_out = model_out["x"] if isinstance(model_out, dict) else model_out
         eps, rest = model_out[:, :3], model_out[:, 3:]
         cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
@@ -375,7 +429,7 @@ class PixArtWorldFM(nn.Module):
         assert h * w == x.shape[1]
 
         x = x.reshape(shape=(x.shape[0], h, w, p, p, c))
-        x = torch.einsum('nhwpqc->nchpwq', x)
+        x = torch.einsum("nhwpqc->nchpwq", x)
         imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
         return imgs
 
@@ -391,8 +445,10 @@ class PixArtWorldFM(nn.Module):
 
         # Initialize (and freeze) pos_embed by sin-cos embedding:
         pos_embed = get_2d_sincos_pos_embed(
-            self.pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5),
-            pe_interpolation=self.pe_interpolation, base_size=self.base_size
+            self.pos_embed.shape[-1],
+            int(self.x_embedder.num_patches**0.5),
+            pe_interpolation=self.pe_interpolation,
+            base_size=self.base_size,
         )
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
@@ -431,8 +487,8 @@ def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False, extra_tokens=
     """
     if isinstance(grid_size, int):
         grid_size = to_2tuple(grid_size)
-    grid_h = np.arange(grid_size[0], dtype=np.float32) / (grid_size[0]/base_size) / pe_interpolation
-    grid_w = np.arange(grid_size[1], dtype=np.float32) / (grid_size[1]/base_size) / pe_interpolation
+    grid_h = np.arange(grid_size[0], dtype=np.float32) / (grid_size[0] / base_size) / pe_interpolation
+    grid_w = np.arange(grid_size[1], dtype=np.float32) / (grid_size[1] / base_size) / pe_interpolation
     grid = np.meshgrid(grid_w, grid_h)  # here w goes first
     grid = np.stack(grid, axis=0)
     grid = grid.reshape([2, 1, grid_size[1], grid_size[0]])
@@ -462,11 +518,11 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     """
     assert embed_dim % 2 == 0
     omega = np.arange(embed_dim // 2, dtype=np.float64)
-    omega /= embed_dim / 2.
-    omega = 1. / 10000 ** omega  # (D/2,)
+    omega /= embed_dim / 2.0
+    omega = 1.0 / 10000**omega  # (D/2,)
 
     pos = pos.reshape(-1)  # (M,)
-    out = np.einsum('m,d->md', pos, omega)  # (M, D/2), outer product
+    out = np.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
 
     emb_sin = np.sin(out)  # (M, D/2)
     emb_cos = np.cos(out)  # (M, D/2)

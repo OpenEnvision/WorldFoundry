@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,7 +16,7 @@ class OpenPIOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "flow_matching_vision_language_action_policy"
     ACTION_REPRESENTATION = "continuous_action_chunk"
     OBSERVATION_LAYOUT = "multi_view_rgb_language_proprio"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": False,
@@ -23,7 +24,7 @@ class OpenPIOperator(EmbodiedActionOperator):
         "actions": ["action_chunk", "proprio"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
         instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "instruction", "task_instruction")
         instruction = "" if instruction is None else str(instruction)
@@ -42,7 +43,7 @@ class OpenPIOperator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         observation = _compact_dict(
             {
@@ -67,7 +68,7 @@ class OpenPIOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "action_chunk", "trajectory")

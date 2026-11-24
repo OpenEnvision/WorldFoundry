@@ -1,18 +1,22 @@
-artifact_filename: motionctrl.mp4
-artifact_kind: generated_video
-backend_stage: in_tree_runtime
-id: motionctrl
+schema_version: 2
+model_id: motionctrl
 input_schema:
   actions:
   - camera_motion
   - object_motion
   image: true
   prompt: true
-integration_status: integrated
+artifact_kind: generated_video
+artifact_filename: motionctrl.mp4
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_motionctrl_runtime_ported
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
-- WorldFoundry vendors the MotionCtrl LVDM model stack, control modules, sampler, default
-  inference config, and camera/object motion fixtures under worldfoundry/synthesis/visual_generation/motionctrl/motionctrl_runtime.
-- The upstream CLI is retained as provenance only; the WorldFoundry runtime loads the
-  vendored architecture in-process and consumes local MotionCtrl checkpoint and condition
-  assets.
-runtime_status: in_tree_motionctrl_runtime_ported
+- WorldFoundry vendors the MotionCtrl LVDM model stack, control modules, sampler,
+  default inference config, and camera/object motion fixtures under worldfoundry/synthesis/visual_generation/motionctrl/motionctrl_runtime.
+- The upstream CLI is retained as provenance only; the WorldFoundry runtime loads
+  the vendored architecture in-process and consumes local MotionCtrl checkpoint and
+  condition assets.

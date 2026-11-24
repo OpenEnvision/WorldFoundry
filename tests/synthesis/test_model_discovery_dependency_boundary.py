@@ -11,7 +11,7 @@ import pytest
 
 @pytest.mark.parametrize("asset_gates", ["0", "1"])
 def test_catalog_discovery_does_not_attempt_torch_or_diffusers_imports(asset_gates):
-    script = '''
+    script = """
 import builtins, importlib, json, sys
 attempts = []
 original_import, original_module = builtins.__import__, importlib.import_module
@@ -32,9 +32,11 @@ assert specs and get_model_inference_spec(specs[0].model_family_id) is specs[0]
 assert not attempts, attempts
 assert "torch" not in sys.modules and "diffusers" not in sys.modules
 print(json.dumps({"model_count": len(specs), "blocked_import_attempts": attempts}))
-'''
+"""
     result = subprocess.run(
-        [sys.executable, "-c", script], capture_output=True, text=True,
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
         env={**os.environ, "WORLDFOUNDRY_INFERENCE_LOAD_RUNTIME_ASSET_GATES": asset_gates},
     )
     assert result.returncode == 0, result.stdout + result.stderr

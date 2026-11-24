@@ -11,20 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Module for base_models -> three_dimensions -> depth -> videodepthanything -> util.py functionality."""
-
 import numpy as np
 
 
 def compute_scale_and_shift(prediction, target, mask, scale_only=False):
-    """Compute scale and shift.
-
-    Args:
-        prediction: The prediction.
-        target: The target.
-        mask: The mask.
-        scale_only: The scale only.
-    """
     if scale_only:
         return compute_scale(prediction, target, mask), 0
     else:
@@ -32,13 +22,6 @@ def compute_scale_and_shift(prediction, target, mask, scale_only=False):
 
 
 def compute_scale(prediction, target, mask):
-    """Compute scale.
-
-    Args:
-        prediction: The prediction.
-        target: The target.
-        mask: The mask.
-    """
     # system matrix: A = [[a_00, a_01], [a_10, a_11]]
     prediction = prediction.astype(np.float32)
     target = target.astype(np.float32)
@@ -57,13 +40,6 @@ def compute_scale(prediction, target, mask):
 
 
 def compute_scale_and_shift_full(prediction, target, mask):
-    """Compute scale and shift full.
-
-    Args:
-        prediction: The prediction.
-        target: The target.
-        mask: The mask.
-    """
     # system matrix: A = [[a_00, a_01], [a_10, a_11]]
     prediction = prediction.astype(np.float32)
     target = target.astype(np.float32)
@@ -89,12 +65,6 @@ def compute_scale_and_shift_full(prediction, target, mask):
 
 
 def get_interpolate_frames(frame_list_pre, frame_list_post):
-    """Get interpolate frames.
-
-    Args:
-        frame_list_pre: The frame list pre.
-        frame_list_post: The frame list post.
-    """
     assert len(frame_list_pre) == len(frame_list_post)
     min_w = 0.0
     max_w = 1.0

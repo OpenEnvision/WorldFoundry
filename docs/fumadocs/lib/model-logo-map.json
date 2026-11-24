@@ -123,9 +123,6 @@
     "dreamx-world-5b-cam": "amap",
     "dreamzero": "nvidia",
     "dualcamctrl": "hkust",
-    "dust3r": "naver",
-    "dust3r-base-model": "naver",
-    "dvlt": "nvidia",
     "dynamicrafter": "tencent",
     "easyanimate": "alibaba",
     "echo-infinity": "jd",
@@ -140,7 +137,6 @@
     "echo-memory-ssm-ctx5-every1-hint21": "jd",
     "echo-memory-ssm-ctx5-every4-hint81": "jd",
     "echo-memory-videossm-hybrid": "jd",
-    "egowm": "cmu",
     "emu3.5": "baai",
     "eventvla": "shanghai-ai-lab",
     "evoke": "alayalab",
@@ -172,12 +168,10 @@
     "hunyuanvideo-1.5": "tencent-hunyuan",
     "hunyuanworld-1": "tencent-hunyuan",
     "hunyuanworld-mirror": "tencent-hunyuan",
-    "hunyuanworld-voyager": "tencent-hunyuan",
     "hy-embodied-vla": "tencent-hunyuan",
     "hy-world-2.0": "tencent-hunyuan",
     "hy-worldplay": "tencent-hunyuan",
     "hydra": "hust",
-    "hyworld-worldgen": "tencent-hunyuan",
     "i2vgen-xl": "alibaba",
     "infinite-vggt": "berkeley",
     "infinite-world": "meigen",
@@ -234,7 +228,6 @@
     "modelscope-t2v": "alibaba",
     "molmoact2": "ai2",
     "molmobot": "ai2",
-    "monst3r": "google-deepmind",
     "mosaicmem": "starkware",
     "motionbricks": "nvidia",
     "motionctrl": "tencent",
@@ -247,7 +240,6 @@
     "octo": "berkeley",
     "omniforcing": "omniforcing",
     "omnivinci": "nvidia",
-    "open-dreamer": "reactor",
     "open-magvit2": "tencent",
     "open-sora": "hpcaitech",
     "open-sora-plan": "pku",
@@ -279,7 +271,6 @@
     "scope": "ucas",
     "self-forcing": "adobe",
     "shape-of-motion": "berkeley",
-    "shotstream": "kuaishou",
     "show-o": "nus",
     "simworld": "simworld",
     "skyreels-v2": "skywork",
@@ -293,9 +284,7 @@
     "spatial-ladder": "zju",
     "spatial-reasoner": "jhu",
     "spirit-v1.5": "spirit-ai",
-    "splatt3r": "oxford",
     "stable-video-infinity": "epfl",
-    "stable-virtual-camera": "stability",
     "starvla": "starvla",
     "starwm": "cas",
     "step-video-t2v": "stepfun",
@@ -307,7 +296,6 @@
     "uni3c": "alibaba",
     "unianimate-dit": "alibaba",
     "unidepth-v2-prior": "eth",
-    "unik3d-prior": "eth",
     "uwm": "uwash",
     "vchitect-2-t2v": "shanghai-ai-lab",
     "veo3": "google-deepmind",
@@ -334,7 +322,6 @@
     "wan22-fun-5b-cam": "wan",
     "wan22-fun-a14b-cam": "wan",
     "warp-as-history": "sjtu",
-    "wilddet3d": "ai2",
     "wildworld": "shanda",
     "wonderjourney": "stanford",
     "wonderworld": "stanford",
@@ -382,6 +369,7 @@
       "abbr": "AI2",
       "key": "ai2",
       "license": "Public domain (text logo)",
+      "markSrc": "/org-logos/ai2-mark.svg",
       "name": "Allen Institute for AI (Ai2)",
       "source": "https://commons.wikimedia.org/wiki/File:Allen_Institute_for_Artificial_Intelligence.svg",
       "src": "/org-logos/ai2.svg"
@@ -408,7 +396,8 @@
       "license": "Public domain (text logo)",
       "name": "Alibaba",
       "source": "https://commons.wikimedia.org/wiki/File:Alibaba_en_logo.svg",
-      "src": "/org-logos/alibaba.svg"
+      "src": "/org-logos/alibaba.svg",
+      "wordmark": true
     },
     "amap": {
       "abbr": "AM",
@@ -416,7 +405,8 @@
       "license": "Public domain (text logo)",
       "name": "Amap (Alibaba)",
       "source": "https://commons.wikimedia.org/wiki/File:Alibaba_en_logo.svg",
-      "src": "/org-logos/alibaba.svg"
+      "src": "/org-logos/alibaba.svg",
+      "wordmark": true
     },
     "antgroup": {
       "abbr": "AG",
@@ -498,14 +488,6 @@
       "source": "Official CAS seal from the UCAS brand mark (www.ucas.ac.cn), crest cropped and restored to CAS navy #004B87",
       "src": "/org-logos/cas.png"
     },
-    "cau": {
-      "abbr": "CAU",
-      "key": "cau",
-      "license": "Public domain (simple seal rendition)",
-      "name": "Chung-Ang University (HAI Lab)",
-      "source": "Original simple circular-seal rendition of the CAU monogram",
-      "src": "/org-logos/cau.svg"
-    },
     "cityu": {
       "abbr": "CityU",
       "key": "cityu",
@@ -520,7 +502,8 @@
       "license": "Public domain (text logo)",
       "name": "Carnegie Mellon University",
       "source": "https://commons.wikimedia.org/wiki/File:Carnegie_Mellon_wordmark.svg",
-      "src": "/org-logos/cmu.svg"
+      "src": "/org-logos/cmu.svg",
+      "wordmark": true
     },
     "createai": {
       "abbr": "CR",
@@ -592,15 +575,8 @@
       "license": "Public domain (text logo)",
       "name": "ETH Zurich",
       "source": "https://commons.wikimedia.org/wiki/File:ETH_Zürich_Logo_black.svg",
-      "src": "/org-logos/eth.svg"
-    },
-    "exla": {
-      "abbr": "EX",
-      "key": "exla",
-      "license": "Organization brand mark",
-      "name": "Exla AI",
-      "source": "GitHub organization brand avatar (github.com/exla-ai), pre-existing repo asset",
-      "src": "/org-logos/exla.png"
+      "src": "/org-logos/eth.svg",
+      "wordmark": true
     },
     "farama": {
       "abbr": "FR",
@@ -616,7 +592,8 @@
       "license": "CC BY-SA 4.0",
       "name": "University of Freiburg",
       "source": "https://commons.wikimedia.org/wiki/File:Wortmarke-grundform-universitaet_freiburg_blau_rgb.png",
-      "src": "/org-logos/freiburg.png"
+      "src": "/org-logos/freiburg.png",
+      "wordmark": true
     },
     "fudan": {
       "abbr": "FDU",
@@ -678,6 +655,7 @@
       "abbr": "GDM",
       "key": "google-deepmind",
       "license": "Public domain (simple geometry)",
+      "markSrc": "/org-logos/google-deepmind-mark.svg",
       "name": "Google DeepMind",
       "source": "https://commons.wikimedia.org/wiki/File:Google_DeepMind_logo.svg",
       "src": "/org-logos/google-deepmind.svg"
@@ -784,7 +762,8 @@
       "license": "Public domain (text logo)",
       "name": "Johns Hopkins University",
       "source": "https://commons.wikimedia.org/wiki/File:Johns_Hopkins_University_logo.png",
-      "src": "/org-logos/jhu.png"
+      "src": "/org-logos/jhu.png",
+      "wordmark": true
     },
     "kaist": {
       "abbr": "KAIST",
@@ -798,6 +777,7 @@
       "abbr": "KU",
       "key": "koc",
       "license": "Public domain",
+      "markSrc": "/org-logos/koc-mark.svg",
       "name": "Koç University",
       "source": "https://commons.wikimedia.org/wiki/File:Koç_University_logo.svg",
       "src": "/org-logos/koc.svg"
@@ -922,14 +902,6 @@
       "source": "GitHub organization brand avatar (github.com/modelscope)",
       "src": "/org-logos/modelscope.png"
     },
-    "naver": {
-      "abbr": "NA",
-      "key": "naver",
-      "license": "CC0-1.0",
-      "name": "NAVER",
-      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #03C75A",
-      "src": "/org-logos/naver.svg"
-    },
     "ntu": {
       "abbr": "NTU",
       "key": "ntu",
@@ -986,14 +958,6 @@
       "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #412991",
       "src": "/org-logos/openai.svg"
     },
-    "openenvision": {
-      "abbr": "OE",
-      "key": "openenvision",
-      "license": "Project brand mark",
-      "name": "OpenEnvision",
-      "source": "WorldFoundry / OpenEnvision site mark (docs/fumadocs/public/logo.svg)",
-      "src": "/org-logos/openenvision.svg"
-    },
     "openhelix": {
       "abbr": "OH",
       "key": "openhelix",
@@ -1034,14 +998,6 @@
       "source": "https://commons.wikimedia.org/wiki/File:Peking_University_seal.svg",
       "src": "/org-logos/pku.svg"
     },
-    "reactor": {
-      "abbr": "RC",
-      "key": "reactor",
-      "license": "Organization brand mark",
-      "name": "Reactor",
-      "source": "GitHub organization brand avatar (github.com/reactor-team)",
-      "src": "/org-logos/reactor.jpg"
-    },
     "rhymes": {
       "abbr": "RA",
       "key": "rhymes",
@@ -1078,6 +1034,7 @@
       "abbr": "ST",
       "key": "sensetime",
       "license": "CC BY-SA 4.0",
+      "markSrc": "/org-logos/sensetime-mark.png",
       "name": "SenseTime",
       "source": "https://commons.wikimedia.org/wiki/File:SenseTime_logo.png",
       "src": "/org-logos/sensetime.png"
@@ -1086,6 +1043,7 @@
       "abbr": "SFU",
       "key": "sfu",
       "license": "Public domain (text logo)",
+      "markSrc": "/org-logos/sfu-mark.png",
       "name": "Simon Fraser University",
       "source": "https://commons.wikimedia.org/wiki/File:SFU_logo.png",
       "src": "/org-logos/sfu.png"
@@ -1128,7 +1086,8 @@
       "license": "Public domain",
       "name": "San José State University",
       "source": "https://commons.wikimedia.org/wiki/File:San_Jose_State_University_logo.svg",
-      "src": "/org-logos/sjsu.svg"
+      "src": "/org-logos/sjsu.svg",
+      "wordmark": true
     },
     "sjtu": {
       "abbr": "SJTU",
@@ -1153,14 +1112,6 @@
       "name": "Snap Inc.",
       "source": "Simple Icons (https://simpleicons.org), CC0-1.0 (Snapchat mark); official brand hex #FFFC00",
       "src": "/org-logos/snap.svg"
-    },
-    "snu": {
-      "abbr": "SNU",
-      "key": "snu",
-      "license": "Public domain (simple shield rendition)",
-      "name": "Seoul National University",
-      "source": "https://commons.wikimedia.org/wiki/File:서울대학교.svg",
-      "src": "/org-logos/snu.svg"
     },
     "sony": {
       "abbr": "SO",
@@ -1232,12 +1183,14 @@
       "license": "Public domain (text logo)",
       "name": "Tencent",
       "source": "https://commons.wikimedia.org/wiki/File:Tencent_Logo.svg",
-      "src": "/org-logos/tencent.svg"
+      "src": "/org-logos/tencent.svg",
+      "wordmark": true
     },
     "tencent-hunyuan": {
       "abbr": "HY",
       "key": "tencent-hunyuan",
       "license": "Organization brand mark",
+      "markSrc": "/org-logos/tencent-hunyuan-mark.png",
       "name": "Tencent Hunyuan",
       "source": "Official Hunyuan header mark from hunyuan.tencent.com (https://hunyuan-blog-web-prod-1258344703.cos.ap-guangzhou.myqcloud.com/assets/hy-blog-logo-zh-DxX4P937.png)",
       "src": "/org-logos/tencent-hunyuan.png"
@@ -1286,6 +1239,7 @@
       "abbr": "UM",
       "key": "umich",
       "license": "Public domain (simple geometry)",
+      "markSrc": "/org-logos/umich-mark.svg",
       "name": "University of Michigan",
       "source": "https://commons.wikimedia.org/wiki/File:University_of_Michigan_logo.svg",
       "src": "/org-logos/umich.svg"
@@ -1294,6 +1248,7 @@
       "abbr": "UNIGE",
       "key": "unige",
       "license": "Public domain",
+      "markSrc": "/org-logos/unige-mark.svg",
       "name": "University of Geneva",
       "source": "https://commons.wikimedia.org/wiki/File:Uni_GE_logo.svg",
       "src": "/org-logos/unige.svg"
@@ -1370,14 +1325,6 @@
       "source": "Original simple shield rendition of the University of Waterloo coat of arms",
       "src": "/org-logos/waterloo.svg"
     },
-    "worldfoundry": {
-      "abbr": "WF",
-      "key": "worldfoundry",
-      "license": "Project brand mark",
-      "name": "WorldFoundry",
-      "source": "WorldFoundry site mark (docs/fumadocs/public/logo.svg)",
-      "src": "/org-logos/worldfoundry.svg"
-    },
     "worldlabs": {
       "abbr": "WL",
       "key": "worldlabs",
@@ -1394,14 +1341,6 @@
       "source": "Original simple X monogram for the identity mark",
       "src": "/org-logos/x-humanoid.svg"
     },
-    "x-square": {
-      "abbr": "XS",
-      "key": "x-square",
-      "license": "Organization brand mark",
-      "name": "X Square Robot",
-      "source": "GitHub organization brand avatar (github.com/X-Square-Robot), pre-existing repo asset",
-      "src": "/org-logos/x-square.png"
-    },
     "xiaomi": {
       "abbr": "MI",
       "key": "xiaomi",
@@ -1414,6 +1353,7 @@
       "abbr": "ZP",
       "key": "zhipu",
       "license": "Public domain (text logo)",
+      "markSrc": "/org-logos/zhipu-mark.png",
       "name": "Zhipu AI",
       "source": "https://commons.wikimedia.org/wiki/File:Zhipu_AI.png",
       "src": "/org-logos/zhipu.png"

@@ -16,6 +16,65 @@ Copyright and SPDX notices in source files remain applicable and are retained.
 Separately installed upstream checkouts and downloaded artifacts retain their
 own license bundles and terms. This file is included in wheels and sdists.
 
+HyperFlow canonical MiniMax-H3 inference
+---------------------------------------
+Source: https://github.com/Video-Rebirth/hyperflow
+Source revision: 1dd2f342aba5ab51da02b62885939655e8e268da
+H3 conversion and inference reference: https://github.com/huggingface/diffusers
+Reference revision: d035dcd7cc7c88e0a154609b62887d50bba9fdc2 (v0.40.0)
+Copyright: 2026 The HyperFlow authors; 2025-2026 The MiniMax authors and
+           The HuggingFace Team.
+License: Apache License 2.0; the complete license text is retained below.
+Files: worldfoundry/base_models/diffusion_model/models/networks/minimax_h3/variants/hyperflow/,
+       worldfoundry/base_models/diffusion_model/models/denoisers/hyperflow.py,
+       worldfoundry/base_models/diffusion_model/models/autoencoders/minimax_h3_hyperflow.py,
+       worldfoundry/base_models/diffusion_model/schedulers/hyperflow.py,
+       worldfoundry/synthesis/visual_generation/hyperflow/.
+
+HyperFlow's two-time conditioning, unmerged LoRA, eight-step grid and Sol-Attn
+policy reuse WorldFoundry's canonical MiniMax-H3 transformer, Qwen3-VL feature
+encoder and video/audio VAEs. The two-time formulation follows AnyFlow
+(https://github.com/NVlabs/AnyFlow; Gu et al., 2026). The optional Sol-Attn kernel
+is separately installed from NVlabs/Sana, revision
+9bfca5c4bf35774a1d44c27b0c3c91041fb8dad0, under Apache-2.0.
+The H3 base and HyperFlow adapter weights are separate downloads governed by
+the MiniMax H3 Community License Agreement, not the source-code license.
+
+OmniVinci multimodal inference components
+----------------------------------------
+Source: https://huggingface.co/nvidia/omnivinci
+Source revision: 7b3777b1c1f7c4e85f7bdef7b765dee1e76c1b7f
+Copyright: 2024-2025 NVIDIA CORPORATION & AFFILIATES.
+License: Apache License 2.0; the complete license text is retained below.
+Files: worldfoundry/base_models/llm_mllm_core/mllm/omnivinci/,
+       worldfoundry/synthesis/visual_generation/omnivinci/.
+
+The inference implementation includes OmniVinci's vision/audio projectors,
+dynamic-resolution image processing, temporal media embeddings, and multimodal
+processor. SigLIP, Qwen2 and Qwen2Audio backbones use the native Transformers
+implementations. Image tiling retains the upstream InternVL attribution.
+Released weights are separate assets under NVIDIA's OneWay Noncommercial
+License and are not included in the source distribution.
+
+Hy-Nomas native inference components
+------------------------------------
+Source: https://github.com/Tencent-Hunyuan/Hy-Nomas
+Source revision: 911cea6458a89c2663513ff7099561ec190dd491
+Component conversion reference: https://github.com/jiaxiangc/diffusers
+Component reference revision: 12722ef11acf8e335f96cfd4faea17de78cd8909
+Copyright: 2026 The Hy-Nomas Team and The HuggingFace Team.
+License: Apache License 2.0; the complete license text is retained in this bundle.
+Files: worldfoundry/base_models/diffusion_model/models/networks/hy_nomas.py,
+       worldfoundry/base_models/diffusion_model/models/autoencoders/pixelumm.py,
+       worldfoundry/base_models/diffusion_model/models/encoders/hy_nomas.py,
+       worldfoundry/operators/hy_nomas_operator.py.
+
+WorldFoundry adapts the released segment-causal transformer, camera conditioning,
+structured-action token windows, and distilled PixelUMM inference decoder.
+Shared attention, normalization, modulation, MLP, scheduling, Qwen2.5-VL loading,
+weight quantization, and KV storage remain canonical WorldFoundry components.
+Model assets retain their separately distributed licenses.
+
 Matrix-Game 4 native inference and optional game source
 -----------------------------------------------------
 Source: https://github.com/SkyworkAI/Matrix-Game
@@ -47,6 +106,20 @@ retained upstream terms, and gsplat (Apache-2.0). Separately acquired SD2
 Inpainting weights retain CreativeML Open RAIL++-M terms. Component weights
 are not part of the source distribution; their downloaded license bundles
 remain applicable.
+
+MiDaS Next-ViT inference backbone
+--------------------------------
+Source: https://github.com/isl-org/Next-ViT
+Source revision: 45dbdf740e856fa792c7f293f9a0a73203327933
+Original source: https://github.com/bytedance/Next-ViT
+Copyright: ByteDance Inc. All rights reserved.
+License: Apache License 2.0; the complete license text is retained below.
+Files: worldfoundry/base_models/three_dimensions/depth/midas/backbones/next_vit_model.py.
+
+WorldFoundry retains the inference network and MiDaS-compatible checkpoint
+names, reusing timm's DropPath, initialization and channel-rounding primitives.
+The flat features sequence matches MiDaS v3.1's released Next-ViT checkpoint;
+timm's stage-based Next-ViT layout is not checkpoint-interchangeable.
 
 Retained license-text index
 --------------------------
@@ -321,17 +394,6 @@ AlayaLab Evoke
   Apache-2.0 ViGeo implementation under
   ``worldfoundry/base_models/three_dimensions/depth/vigeo``.
 
-NVIDIA AnyFlow
-  Copyright 2026 NVIDIA CORPORATION & AFFILIATES
-  License: Apache License 2.0
-  Source: https://github.com/NVlabs/AnyFlow
-  Source revision: d2acf7373a45173082ec47eb16553a373b10f856
-
-  ``worldfoundry/base_models/diffusion_model/models/networks/wan/variants/anyflow.py``
-  contains a modified copy of the AnyFlow FlowMap/FAR Wan transformer.  The
-  local file retains the NVIDIA copyright, Apache-2.0 license notice, and SPDX
-  identifier.
-
 SenseFlow
   License: Apache License 2.0
   Source: https://github.com/XingtongGe/SenseFlow
@@ -452,6 +514,20 @@ Hugging Face Finetrainers
 MIT-licensed source adaptations
 -------------------------------
 
+InternViT vision transformer
+  License: MIT
+  Copyright: 2024 OpenGVLab
+  Sources: https://github.com/OpenGVLab/InternVL,
+           https://github.com/BeingBeyond/Being-H
+  Being-H source revision: 66b959e05db225fd816f8a517d94a9c0585cfc3e
+  Files: worldfoundry/base_models/llm_mllm_core/mllm/intern_vit/
+
+FastWAM shared Wan/action blocks
+  License: MIT
+  Source: https://github.com/yuantianyuan01/FastWAM
+  Source revision: 45d8e1458921d83f8ad6cf9ce993d371208dabd0
+  Files: worldfoundry/base_models/diffusion_model/models/networks/wan/variants/wam.py
+
 Latent Consistency Models
   License: MIT
   Source: https://github.com/luosiallen/latent-consistency-model
@@ -529,7 +605,7 @@ PAWBench
 
   The official evaluator, metric implementation, and PAWEval rubrics are
   vendored under
-  ``worldfoundry/evaluation/tasks/execution/runners/pawbench/runtime``. The
+  ``worldfoundry/evals/tasks/execution/runners/pawbench/runtime``. The
   complete Apache-2.0 license is retained in this notice; benchmark data, generated rollouts, and credentials are omitted.
 
 Runtime-provisioned Studio browser assets
@@ -630,6 +706,14 @@ NVIDIA FlashDreams
   67f91af7e7744d0b208574581e0648a4c1a0d3dd:
     flashdreams/flashdreams/accelerated/multi_head_attention/triton/scaled_fp8_attention.py
 
+  The Self-Forcing long-rollout KV window (static sink of five latent frames,
+  rolling window of seven, KV-cache-relative RoPE) follows the
+  sink5-window7-rerope pipeline of revision
+  57917ebc1910e5388a63a79fbabed423341dd6df:
+    integrations_v2/self_forcing/config.py
+    flashdreams/flashdreams/core/attention/kvcache.py
+    flashdreams/flashdreams/core/attention/rope.py
+
 LingBot World and LingBot World V2
   Source: https://github.com/Robbyant/lingbot-world
           https://github.com/Robbyant/lingbot-world-v2
@@ -658,7 +742,7 @@ Revision: ed4ccc6486b8271723ee8baea60d89b32d0a7518
 License: Apache-2.0 as declared in the upstream README; no standalone LICENSE file
 is present at this revision.
 Adapted evaluation source is under
-worldfoundry/evaluation/tasks/execution/runners/harnesseval_w/runtime/.
+worldfoundry/evals/tasks/execution/runners/harnesseval_w/runtime/.
 The reusable resident MegaSAM adapter is under
 worldfoundry/base_models/three_dimensions/slam/megasam_resident.py.
 See the evaluator's WORLDFOUNDRY_PROVENANCE.md for retained source and modifications.
@@ -727,6 +811,100 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 - The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+Pika H3 Flex inference adapter
+------------------------------
+Source: https://github.com/Pika-Labs/Pika-H3-Flex
+Source revision: 0ddf55ad7067ca1e76812253bd7b4600df87f759
+Source license: Apache-2.0
+Model license: MiniMax H3 Community License Agreement
+
+WorldFoundry adapts the released Pika H3 Flex LoRA loading and six-step
+inference contract onto the canonical MiniMax-H3 components. The adapter
+weights and MiniMax-H3 base weights remain separate model assets.
+
+
+H3-World action-conditioned world model
+---------------------------------------
+Copyright 2026 Danze Chen
+Source: https://github.com/Danzer1xxxxChan/H3-World
+Source revision: f0c7be2acbbde8256b2473f6e7b088f58272acae
+Source license: Apache-2.0
+Model license: MiniMax H3 Community License Agreement
+
+WorldFoundry adapts H3-World's per-latent action-to-language rule table,
+rank-32 LoRA loading, mirrored temporal RoPE placement, segmented token
+refinement, and directed attention routing (including modifications derived
+from DiffSynth-Studio, Apache-2.0) onto the canonical MiniMax-H3 components.
+The H3-World LoRA checkpoint (DANNY621/H3-World) and MiniMax-H3 base weights
+remain separate model assets subject to the MiniMax H3 Community License Agreement.
+
+
+H3-Tiny structured-pruned MiniMax-H3 inference
+----------------------------------------------
+Copyright 2026 Haoshuai Fu and Bin Chen
+Source: https://github.com/fuyi25/H3-Tiny
+Source revision: a3f17f0ef85e9af5d07b2007c4b2dbd6d035e69c
+Source license: Apache-2.0
+Model license: MiniMax H3 Community License Agreement
+
+WorldFoundry adapts H3-Tiny's pruned-depth/width MiniMax-H3 transformer
+configuration, low-rank AdaLN projections, MeanFlow interval time embedder,
+and shifted two-time schedule onto the canonical MiniMax-H3 components.
+Released H3-Tiny checkpoints (H3-Tiny/MiniMax-H3-Tiny-*) and MiniMax-H3 base
+weights remain separate model assets subject to the MiniMax H3 Community
+License Agreement.
+
+
+pi-H3 few-step and DWD MiniMax-H3 inference (LakonLab)
+------------------------------------------------------
+Copyright 2026 Hansheng Chen
+Source: https://github.com/Lakonik/LakonLab
+Source revision: 2ee2b334374ec91b7cee371a85a524bf4ba644d3
+Source license: Apache-2.0
+Model license: MiniMax H3 Community License Agreement
+
+WorldFoundry adapts LakonLab's pi-H3 pruned rank-8 AdaLN time-table embedder,
+FlowEulerODEScheduler, LoRA/override adapter loader, RGBColorEncoder, and
+SolH3DWDHead (adapted from the Apache-2.0 Sol-H3-VAE reference decoder) onto
+the canonical MiniMax-H3 components. Released pi-H3 adapters (Lakonik/pi-H3)
+and MiniMax-H3-Pruned weights remain separate model assets subject to the
+MiniMax H3 Community License Agreement.
+
+
+FastFrames interactive-latency autoregressive video diffusion
+-------------------------------------------------------------
+Copyright (C) 2026 Apple Inc. All Rights Reserved.
+Portions adapted from Alibaba Wan2.1 (Apache-2.0) and Self-Forcing / Causal Forcing (Apache-2.0).
+Source: https://github.com/apple-aiml-research/ml-fastframes
+Source revision: a65c59240e01cf1de86197fa771ca09b38cf592a
+Source license: Apple Sample Code License / Apache-2.0
+Model license: Apple Machine Learning Research Model License (apple-amlr)
+
+WorldFoundry adapts FastFrames' inference-only frame-wise causal Wan2.1 forward,
+FastOps, KVRefinementNetwork, PixelDecoder / BridgedPixelDecoder, and
+FlowMatchScheduler while reusing WorldFoundry's canonical Wan2.1 norms, RoPE,
+and UMT5-XXL prompt encoder. Released checkpoints (apple/FastFrames-S,
+apple/FastFrames-L, zhuhz22/Causal-Forcing, Wan-AI/Wan2.1-*) remain separate
+model assets under their respective upstream licenses.
+
+
+Pi4 4D scene geometry and dense motion inference
+------------------------------------------------
+Copyright 2026 Physical Intelligence Team, Shanghai Artificial Intelligence Laboratory
+Source: https://github.com/yyfz/Pi4
+Source revision: 32dfbea9ce6268ea17446208a804710df9475c32
+Source license: CC BY-NC 4.0 (non-commercial)
+Model license: CC BY-NC 4.0 (non-commercial)
+
+WorldFoundry ports Pi4's inference-only 4D geometry, camera pose, metric scale,
+sparse depth refiner, dense tracking, and moving-object mask architecture under
+worldfoundry/base_models/three_dimensions/point_clouds/pi4_inference. Third-party
+components referenced upstream (including DINOv3, SAM2, MoGe, Depth Anything V2,
+CoTracker/CowTracker, and Pi3) retain their respective upstream licenses. The
+released yyfz233/Pi4 model weights remain separate model assets subject to
+CC BY-NC 4.0 (non-commercial use only).
 
 
 Dependencies and Licenses:
@@ -1237,6 +1415,467 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+
+GR00T-N1 inference runtime
+--------------------------
+Source: https://github.com/NVIDIA/Isaac-GR00T/tree/755876a9afdb41ca6eb6383b36f4a0adb085c73f
+Copyright: NVIDIA CORPORATION & AFFILIATES.
+License: Apache License 2.0; the complete license text is retained in this bundle.
+Files: worldfoundry/synthesis/action_generation/gr00t/legacy_n1_runtime/**,
+       worldfoundry/base_models/llm_mllm_core/action/gr00t/**,
+       worldfoundry/data/models/runtime/configs/gr00t-n1/**
+Every Python file in the runtime directory was modified by WorldFoundry; its PROVENANCE.md lists
+the changes.
+
+UniWorld-View inference runtime
+-------------------------------
+Source: https://github.com/PKU-YuanGroup/UniWorld-View/tree/660212c48bff7c91a2ea5c7d5f3785af581100e2
+Files: worldfoundry/synthesis/visual_generation/uniworld_view/uniworld_view_runtime/**,
+       worldfoundry/base_models/diffusion_model/models/networks/wan/variants/image_embedding.py
+License: Apache License 2.0; the complete license text is retained in this bundle. The runtime
+uses canonical base_models implementations of SAM 2 (facebookresearch/sam2, Copyright
+(c) Meta Platforms, Inc. and affiliates, Apache License 2.0), MoGe (microsoft/MoGe, MIT License,
+reproduced below) and DINOv2 (facebookresearch/dinov2, Copyright (c) Meta Platforms, Inc. and
+affiliates, Apache License 2.0). The MoGe variant under
+worldfoundry/base_models/three_dimensions/depth/moge/variants/uniworld_view.py retains the
+pinned revision's token-grid convention. Every retained upstream file was modified by
+WorldFoundry; the runtime's PROVENANCE.md describes the integration.
+
+Original-File: microsoft/MoGe/LICENSE (MIT part)
+MIT License
+
+Copyright (c) Microsoft Corporation.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE
+
+STream3R model port
+-------------------
+Source: https://github.com/NIRVANALAN/STream3R
+Files: worldfoundry/base_models/three_dimensions/point_clouds/stream3r/**
+The model modules match revision 7bdca8cf7ec206ff8b08c0941ad8286d72087d4f, except that
+freeze_all_params is defined in models/stream3r.py instead of being imported from
+stream3r.dust3r. License: S-Lab License 1.0, reproduced below; it permits redistribution and use
+for non-commercial purposes only, and the repository's general license does not replace it.
+
+Original-File: NIRVANALAN/STream3R/LICENSE
+S-Lab License 1.0
+Copyright 2025 S-Lab
+
+Redistribution and use for non-commercial purpose in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+In the event that redistribution and/or use for commercial purpose in source or binary forms, with or without modification is required, please contact the contributor(s) of the work.
+
+JoyAI-Echo inference runtimes
+-----------------------------
+Source: https://github.com/jd-opensource/JoyAI-Echo/tree/a08f1274573d7cd6ec66719f204951f4227a5173 (echo_wm)
+        https://github.com/jd-opensource/JoyAI-Echo/tree/0b931fd42f5ef51410019ae41b261eb3b8936410 (echo_longvideo)
+Files: worldfoundry/synthesis/visual_generation/joyai_echo/echo_wm_runtime/**,
+       worldfoundry/synthesis/visual_generation/joyai_echo/echo_longvideo_runtime/**,
+       worldfoundry/data/models/runtime/configs/joyai-echo-longvideo/**,
+       worldfoundry/data/models/runtime/configs/joyai-echo-wm/**
+License: LTX-2 Community License Agreement; the complete license text is retained in the
+HelixWorld block of this bundle. Every file in the runtime directories was modified by
+WorldFoundry; each runtime's PROVENANCE.md lists the changes. The upstream notice follows.
+
+Original-File: jd-opensource/JoyAI-Echo/THIRD_PARTY_NOTICES.md
+Based on LTX-2 by Lightricks Ltd.
+Modified by JD.com for academic and research purposes only.
+Not for commercial use. For commercial use, please contact Lightricks Ltd.
+Original copyright, license, and attribution notices are retained.
+
+Canonical LTX-2.5 components and native inference
+------------------------------------------------
+Source: https://github.com/Lightricks/LTX-2/tree/a95ab856bf29407b6b066ede0abe1846050db56c
+Files: worldfoundry/base_models/diffusion_model/models/autoencoders/ltx/video/diffusion_tiling.py,
+       worldfoundry/base_models/diffusion_model/models/autoencoders/ltx/video/diffusion_video_decoder.py,
+       worldfoundry/base_models/diffusion_model/models/autoencoders/ltx/video/keyframes.py,
+       worldfoundry/base_models/diffusion_model/models/autoencoders/ltx/video/transformer/**,
+       worldfoundry/base_models/diffusion_model/models/encoders/ltx/gemma.py,
+       worldfoundry/base_models/diffusion_model/models/encoders/ltx/prompts/**,
+       worldfoundry/base_models/diffusion_model/models/networks/ltx/duration_head.py,
+       worldfoundry/base_models/diffusion_model/models/autoencoders/ltx/video/state_dict.py,
+       worldfoundry/base_models/diffusion_model/models/representations/ltx/conditioning.py,
+       worldfoundry/base_models/diffusion_model/optimizations/ltx/**,
+       worldfoundry/core/acceleration/quantization/cast_linear.py,
+       worldfoundry/core/media/processing/image_conditioning.py,
+       worldfoundry/core/media/processing/color.py,
+       worldfoundry/core/media/codecs/pyav.py, and the LTX-2.5 extensions
+       of the canonical LTX transformer, connector, tokenizer, video and audio VAE, upsampler,
+       initializer and scheduler modules under worldfoundry/base_models/diffusion_model/.
+       In mixed first-party core files, this notice covers only Float8Linear.from_prequantized
+       and its calibrated execution path in core/acceleration/quantization/linear.py,
+       and ltx_nvfp4_kernels, quantize_nvfp4_ltx, NVFP4Linear.from_ltx_packed and its
+       LTX-provider execution path in core/acceleration/quantization/nvfp4.py.
+License: SPDX identifier LicenseRef-LTX-2.x-Community refers to the LTX-2.x Community License
+Agreement (August 11, 2026), whose full text is reproduced in the SolarWM inference runtime
+block below, including the use-based restrictions of Section 4 and Attachment A. The files and
+portions listed above are Derivatives of LTX-2.x under that agreement. WorldFoundry adapts them
+to canonical components, lazy split-checkpoint loading, native multistage sampling, shared
+quantization/offload and SDR media encoding. Other portions of mixed first-party core files
+retain their existing Apache-2.0 license. The neighborhood-attention
+fallbacks in models/autoencoders/ltx/video/transformer/fallback_na/eager.py and triton_na.py were
+vendored by LTX-2 from comfy-kitchen (Copyright (c) 2025 Comfy Org, Apache-2.0) and retain their
+SPDX headers.
+
+
+Canonical LTX IC-LoRA control-video inference
+--------------------------------------------
+Source: https://github.com/Lightricks/LTX-2/tree/a95ab856bf29407b6b066ede0abe1846050db56c
+Upstream: packages/ltx-pipelines/src/ltx_pipelines/ic_lora.py,
+          packages/ltx-core/src/ltx_core/loader/fuse_loras.py,
+          packages/ltx-core/src/ltx_core/conditioning/types/reference_video_cond.py,
+          and the IC-LoRA video conditioning helpers in ltx_pipelines/utils.
+Files: worldfoundry/base_models/diffusion_model/models/denoisers/ltx_lora.py;
+       the reference-video additions to models/initializers/ltx.py and
+       models/representations/ltx/conditioning.py, and the IC-LoRA recipe additions
+       to recipes/ltx.py under worldfoundry/base_models/diffusion_model/.
+License: LTX-2.x Community License Agreement (August 11, 2026), reproduced below
+in the SolarWM block with Section 4 and Attachment A. SPDX identifier:
+LicenseRef-LTX-2.x-Community. These inference portions are adapted by WorldFoundry
+to canonical checkpoint transforms, reference-token conditioning and the shared
+multi-stage runner. The public pipeline adapter and standard framework primitives
+retain their existing first-party license.
+
+SolarWM inference runtime
+-------------------------
+Source: https://github.com/Junchao-cs/SolarWM/tree/2fe1ea9aca072f787bbba07ee9380b0e1ea7563b
+LTX packages: https://github.com/Lightricks/LTX-2/tree/v1.2.0 (d151147788a9284cca791edc6ce898007e727fe6)
+Files: worldfoundry/synthesis/visual_generation/solarwm/solarwm_runtime/**,
+       worldfoundry/data/models/runtime/configs/solarwm/examples/**
+License: the solarwm package and configurations are under the Apache License 2.0, whose complete
+text is retained in this bundle. ltx_core, ltx_pipelines and ltx_trainer are Derivatives of LTX-2.x
+and are distributed under the LTX-2.x Community License Agreement reproduced below, including the
+use-based restrictions of Section 4 and Attachment A. Every file in the runtime directory was
+modified by WorldFoundry; its PROVENANCE.md lists the changes. The upstream notice and the LTX-2.x
+license follow.
+
+Original-File: Junchao-cs/SolarWM/NOTICE
+SolarWM
+Copyright 2026 SolarWM Contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+--------------------------------------------------------------------------------
+Third-party source included in this repository
+--------------------------------------------------------------------------------
+
+  Wan 2.2 (Alibaba Wan Team), Apache-2.0
+    Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
+    Vendored under src/solarwm/backends/wan22/runtime/modeling/:
+      model.py, vae.py, t5.py, attention.py, tokenizers.py
+    causal_model.py is a MODIFIED derivative of the above, extending the Wan
+    architecture with causal attention and camera conditioning.
+    The Chinese negative prompts in the Wan example configs are Wan defaults.
+
+  PRoPE: Projective Positional Encoding for Multiview Transformers, MIT
+    Copyright (c) the PRoPE authors.
+    Vendored as src/solarwm/backends/wan22/runtime/modeling/camera_prope.py
+    (dual-licensed Apache-2.0 AND MIT) and adapted in the LTX and H3 backends
+    as torch_prope.py.
+
+Each vendored file keeps its upstream copyright header. Files modified by this
+project state so in their header.
+
+--------------------------------------------------------------------------------
+Backbones and weights
+--------------------------------------------------------------------------------
+
+Model weights and backbone packages are NOT distributed here and carry their own
+terms, several of which are not Apache-2.0. Obtain each from its publisher and
+check its licence before redistributing anything you produce:
+
+  Wan 2.2 TI2V-5B / I2V-A14B          LTX-2.5 (incl. the ltx-core packages)
+  MiniMax-H3                          the text encoders each backbone requires
+
+--------------------------------------------------------------------------------
+Data
+--------------------------------------------------------------------------------
+
+The corpus is produced by the SolarWM Data Engine and annotates public source
+datasets that are not redistributed here; each keeps its own terms, several of
+which are non-commercial. See the licence and citation registry distributed
+with SolarWM-Data.
+
+Original-File: Lightricks/LTX-2/LICENSE.md (v1.2.0)
+# LTX-2.x Community License Agreement
+
+*License date: August 11, 2026*
+
+**By downloading, using, accessing or distributing any portion or element of LTX-2.x, you agree that you have read and accepted to be bound by this Agreement.**
+
+**1. Definitions.**
+
+> **1.1** **“Agreement”** means the terms and conditions for this LTX-2.x Community License Agreement and the exhibits, attachments, and Complementary Materials, as specified in this document.
+
+> **1.2** **“Complementary Materials”** means the accompanying documentation, tutorials, examples, configuration files and other materials made available by Licensor together with the LTX-2.x model weights and parameters, in each case as distributed by Licensor.
+
+> **1.3** **“Control”** means the direct or indirect ownership of more than fifty percent (50%) of the voting securities or other ownership interests, or the power to direct the management and policies of such Entity through voting rights, contract, or otherwise.
+
+> **1.4** **“Data”** means a collection of information and/or content extracted from the dataset used with LTX-2.x, including to train, pretrain, or otherwise evaluate LTX-2.x. The Data is not licensed under this Agreement.
+
+> **1.5** **“Derivatives of LTX-2.x”** means all modifications to LTX-2.x, works based on LTX-2.x, or any other model which is created or initialized by transfer of patterns of the weights, parameters, activations or output of LTX-2.x, to the other model, in order to cause the other model to perform similarly to LTX-2.x, including – but not limited to - distillation methods entailing the use of intermediate data representations or methods based on the generation of synthetic data by LTX-2.x for training the other model. For clarity, Derivatives of LTX-2.x include: (i) any fine-tuned or adapted weights, parameters, or checkpoints derived from LTX-2.x; (ii) derivative model architectures that incorporate or are based upon LTX-2.x’s architecture; and (iii) any modified or extended versions of the Complementary Materials.
+
+> **1.6** **“Entity”** means any individual, corporation, partnership, limited liability company, or other legal entity. For purposes of this Agreement, an Entity shall be deemed to include, on an aggregative basis, all subsidiaries, affiliates, and other companies under common Control with such Entity. When determining whether an Entity meets any threshold under this Agreement (including revenue thresholds in Section 2.1), all subsidiaries, affiliates, and companies under common Control shall be considered collectively.
+
+> **1.7** **“Harm”** includes but is not limited to physical, mental, psychological, financial and reputational damage, pain, or loss.
+
+> **1.8** **“Licensor”** or **“LTX”** means the owner that is granting the license under this Agreement. For the purposes of this Agreement, the Licensor is Lightricks Ltd.
+
+> **1.9** **“LTX-2.x”** means the large generative models, text/image/video/audio/3D generation models, and multimodal large language models and their software and algorithms, including trained model weights, parameters (including optimizer states), machine-learning model code, inference-enabling code, training-enabling code, fine-tuning enabling code, accompanying source code, scripts, and all other elements of the foregoing distributed and made publicly available by LTX (including, for example, at [https://github.com/Lightricks/LTX-2](https://github.com/Lightricks/LTX-2)). This license is applicable to all LTX-2.5 versions released since August 11, 2026, and all future releases of LTX-2.x under this license.
+
+> **1.10** **“Output”** means the results of operating LTX-2.x as embodied in informational content resulting therefrom.
+
+> **1.11** **“you”** (or **“your”**) means an individual or legal Entity licensing LTX-2.x in accordance with this Agreement and/or otherwise downloading, accessing, distributing or using LTX-2.x for whichever purpose and in any field of use, including usage of LTX-2.x in an end-use application - e.g. chatbot, translator, image generator.
+
+**2. Grant of License.**
+
+> **2.1** Subject to your compliance with the terms and conditions of this Agreement, you are granted a non-exclusive, worldwide, non-transferable and royalty-free limited license under Licensor’s intellectual property or other rights owned by Licensor embodied in LTX-2.x to use, reproduce, prepare, distribute, publicly display, publicly perform, sublicense, copy, create derivative works of, and make modifications to LTX-2.x, for any purpose, subject to the restrictions set forth in Attachment A; **provided however, that Entities with annual revenues of at least $10,000,000 (the “Commercial Entities”) are required to obtain a paid license for any use (excluding use solely for a Non-Commercial Purpose as set forth in Section 2.2) of LTX-2.x and Derivatives of LTX-2.x (such paid license referred to herein as a “Commercial Use Agreement”), as will be provided by the Licensor. Commercial Entities interested in such a commercial license are required to [contact Licensor](mailto:ltxv-licensing@lightricks.com). Any use of LTX-2.x or Derivatives of LTX-2.x by Commercial Entities not in accordance with this Agreement and/or the Commercial Use Agreement is strictly prohibited and shall be deemed a material breach of this Agreement. In the event of such material breach, and without limiting Licensor’s right to terminate the Agreement or to pursue any other remedies available at law or in equity, you shall pay Licensor the license fees owed for the period such Commercial Entity used LTX-2.x (calculated at Licensor’s standard commercial license fees, in effect during the relevant period or, absent published standard fees, a reasonable market rate for a comparable license), within thirty (30) days of Licensor’s written demand.**
+
+> **2.2** Notwithstanding the foregoing or anything to the contrary in this Agreement, a Commercial Entity may download and use LTX-2.x and Derivatives of LTX-2.x without obtaining the Commercial Use Agreement solely for a Non-Commercial Purpose. **“Non-Commercial Purpose”** means any of the following uses, but only so far as such Commercial Entity does not receive any direct or indirect payment arising from the use of LTX-2.x or Derivatives of LTX-2.x: (i) use by an individual acting in a personal capacity for research, experimentation, learning, private study, hobby or recreational projects, or personal entertainment, in each case where such use is not connected, directly or indirectly, to any commercial activity, business operation, or the performance of duties for an employer or any other Entity; and (ii) use by a Commercial Entity for testing, evaluation, or non-commercial research and development in a non-production or development environment. For clarity, use (a) for revenue-generating activity in any manner, whether direct or indirect, (b) in direct interactions with or that has impact on end users, or (c) to train, fine-tune, or distill any model (including any Derivative of LTX-2.x) for commercial use, in each case, is not a Non-Commercial Purpose and requires all Commercial Entities to obtain a paid license under the Commercial Use Agreement prior to such use. For the avoidance of doubt, the permission granted under this Section 2.2 is a limited right of use only and does not convey or transfer any ownership right, title, or interest in or to LTX-2.x or any Derivatives of LTX-2.x, and all Derivatives of LTX-2.x created or used pursuant to this Section 2.2 remain subject to the terms of this Agreement, including Section 1.5.
+
+**3. Distribution and Redistribution.** You may host for third parties remote access purposes (e.g. software-as-a-service), reproduce and distribute copies of LTX-2.x or Derivatives of LTX-2.x thereof in any medium, with or without modifications, provided that you meet the following conditions:
+
+> **3.1** Use-based restrictions as referenced in Section 4 and all provisions of Attachment A MUST be included as an enforceable provision by you in any type of legal agreement (e.g. a license) governing the use and/or distribution of LTX-2.x or Derivatives of LTX-2.x, and you shall give notice to subsequent users you distribute to, that LTX-2.x or Derivatives of LTX-2.x are subject to Section 4 and Attachment A in their entirety, including all use restrictions and acceptable use policies;
+
+> **3.2** You must provide any third-party recipients of LTX-2.x or Derivatives of LTX-2.x a copy of this Agreement, including all attachments and use policies. Any Derivative of LTX-2.x (as defined in Section 1.5, including but not limited to fine-tuned weights, modified training code, models trained on Outputs, or any other derivative) must be distributed exclusively under the terms of this Agreement, subject to Section 3.6, with a complete copy of this Agreement included;
+
+> **3.3** You must cause any modified files to carry prominent notices stating that you changed the files;
+
+> **3.4** You must retain all copyright, patent, trademark, and attribution notices excluding those notices that do not pertain to any part of LTX-2.x, Derivatives of LTX-2.x.
+
+> **3.5** Transfer of Derivatives. No transfer of any Derivative of LTX-2.x (including any fine-tuned weights, LoRA adapters, or similar adaptations) to a third party shall grant such third party any right, title, license, or authorization to access, use, reproduce, distribute, or exploit LTX-2.x, or any Derivative of LTX-2.x beyond the rights granted under this Agreement. If the transferee is a Commercial Entity (as defined in Section 2), it must obtain a paid license from Licensor prior to any use of any Derivative of LTX-2.x, regardless of who created such Derivative. Prior to or at the time of any such transfer, you shall notify the transferee in writing that (i) use of such Derivative of LTX-2.x is subject to the terms of this Agreement, and (ii) if the transferee is a Commercial Entity, it must obtain a separate paid license to LTX-2.x from Licensor. You shall not transfer any Derivative of LTX-2.x to a Commercial Entity unless such Commercial Entity has obtained the required paid license from Licensor prior to any use, and unless the proposed transferee has been so informed. You and the transferee shall each be responsible for ensuring the transferee obtains the required license from Licensor prior to any use of LTX-2.x or Derivative of LTX-2.x. Nothing in this Section 3.5 shall require a Commercial Entity to obtain a paid license for use solely for a Non-Commercial Purpose as permitted under Section 2.2.
+
+> **3.6** You may add your own copyright statement to your modifications and may provide additional license terms and conditions - **respecting Section 3.1** - for use, reproduction, or distribution of your modifications, or for any such Derivatives of LTX-2.x as a whole, provided your use, reproduction, and distribution of LTX-2.x otherwise complies with the conditions stated in this Agreement, and you provide a complete copy of this Agreement with any such use, reproduction and distribution of LTX-2.x and any Derivatives thereof; provided that any such additional terms shall be additive only and shall not derogate from, conflict with, waive, or purport to modify any term of this Agreement, and this Agreement shall govern in the event of any conflict.
+
+**4. Use-based restrictions.** The restrictions set forth in Attachment A are considered Use-based restrictions. Therefore, you cannot use LTX-2.x and the Derivatives of LTX-2.x in violation of the specified restricted uses. You may use LTX-2.x subject to this Agreement, only for lawful purposes and in accordance with the Agreement. **“Use”** may include creating any content with, fine-tuning, updating, running, training, evaluating and/or re-parametrizing LTX-2.x. You shall require all of your users who use LTX-2.x or a Derivative of LTX-2.x to comply with the terms of this Section 4.
+
+**5. The Output You Generate.** Except as set forth herein, Licensor claims no rights in the Output you generate using LTX-2.x. You are accountable for input you insert into LTX-2.x, the Output you generate and its subsequent uses. No use of the Output can contravene any provision as stated in the Agreement.
+
+**6. Updates and Runtime Restrictions; AI Regulations.** To the maximum extent permitted by law, Licensor reserves the right to restrict (remotely or otherwise) usage of LTX-2.x in violation of this Agreement, update LTX-2.x through electronic means, or modify the Output of LTX-2.x based on updates. You shall undertake reasonable efforts to use the latest version of LTX-2.x. Any use of the non-current version of LTX-2.x is done solely at your risk. To the extent applicable to you, you shall comply with all laws and regulations governing artificial intelligence that apply to your use, deployment, or distribution of LTX-2.x, Derivatives of LTX-2.x, or Outputs, including Regulation (EU) 2024/1689 (the “EU AI Act”) and the California AI Transparency Act (Cal. Bus. & Prof. Code § 22757 et seq.), each as amended from time to time and any other applicable laws, regulations, or binding guidance relating to artificial intelligence, transparency, content provenance, or synthetic media, together with any documentation made available by Licensor regarding compliance with the same (collectively, “AI Regulations”). You shall maintain (including within any application or service through which LTX-2.x, any Derivative of LTX-2.x, or any Output is made available), and shall not remove, disable, alter, or circumvent, any safety or security measures, disclosures, metadata, watermarking, content provenance, latent disclosure, or other transparency features or functionalities included or embedded within LTX-2.x or any Derivative of LTX-2.x, or applied to any Output, in furtherance of AI Regulations, including any capability of LTX-2.x to include latent disclosures in Outputs, and you shall include equivalent obligations in any agreement governing your distribution of LTX-2.x or any Derivative of LTX-2.x. You are solely responsible for any transparency, disclosure, marking, or labeling obligations applicable to you under AI Regulations as a provider or deployer of LTX-2.x, any Derivative of LTX-2.x, or any system incorporating any of the foregoing, including any obligation to disclose that content is artificially generated or manipulated. If Licensor knows or reasonably believes that you have modified LTX-2.x or any Derivative of LTX-2.x such that it is no longer capable of including any disclosure required by AI Regulations in Outputs, or that you have otherwise removed, disabled, or circumvented any feature or functionality described in this Section, Licensor may in its sole discretion revoke the license granted under this Agreement effective immediately upon notice to you, and upon such revocation you shall immediately cease all use of LTX-2.x and Derivatives of LTX-2.x. Licensor makes no representation or warranty that LTX-2.x, any Derivative of LTX-2.x, or any Output complies with any AI Regulations applicable to your specific use case or deployment, and you are solely responsible for determining the applicability of, and ensuring your compliance with, all AI Regulations. You shall indemnify, defend, and hold harmless Licensor and its affiliates from and against any and all claims, liabilities, losses, damages, costs, and expenses (including reasonable attorneys’ fees) arising out of or relating to your use, deployment, distribution, or modification of LTX-2.x, any Derivative of LTX-2.x, or any Output in violation of, or your other failure to comply with, any AI Regulations.
+
+> For purposes of the EU AI Act, Licensor makes LTX-2.x openly available under this community license and intends that LTX-2.x be treated as a free and open-source general purpose AI model within the meaning of Article 53(2) of the EU AI Act. You acknowledge and agree that (a) to the extent the free and open source derogations under Article 53(2) of the EU AI Act apply, Licensor’s obligations under the EU AI Act with respect to LTX-2.x are limited to those applicable to providers of free and open source general purpose AI models (it being acknowledged that such derogations do not extend to the obligations under Article 53(1)(c) and (d)), (b) you acknowledge that LTX-2.x is not intended to be integrated into a high risk AI system, and shall be fully and solely responsible for any obligation resulting from such integration, (c) if you integrate LTX-2.x or any Derivative of LTX-2.x into a high-risk AI system you shall be solely responsible for all provider obligations that would otherwise apply to Licensor under the EU AI Act, and (d) you shall not take any action, or omit to take any action, that would cause Licensor to lose the benefit of the free and open source derogations under the EU AI Act, and you shall indemnify and hold Licensor harmless from any liability, costs, or expenses arising from your breach of this Section.
+
+**7. Export Controls and Sanctions Compliance.** You acknowledge that LTX-2.x, Derivatives of LTX-2.x may be subject to export control laws and regulations, including but not limited to the U.S. Export Administration Regulations and sanctions programs administered by the Office of Foreign Assets Control (OFAC). You represent and warrant that you and any users of LTX-2.x are not (i) located in, organized under the laws of, or ordinarily resident in any country or territory subject to comprehensive sanctions; (ii) identified on any U.S. government restricted party list, including the Specially Designated Nationals and Blocked Persons List; or (iii) otherwise prohibited from receiving LTX-2.x under applicable law. You shall not export, re-export, or transfer LTX-2.x, directly or indirectly, in violation of any applicable export control or sanctions laws or regulations. You agree to comply with all applicable trade control laws and shall indemnify and hold Licensor harmless from any claims arising from your failure to comply with such laws.
+
+**8. Trademarks; Reservation of Rights.** Nothing in this Agreement permits you to make use of Licensor’s trademarks, trade names, logos or to otherwise suggest endorsement or misrepresent the relationship between the parties; and any rights not expressly granted herein are reserved by the Licensor. Except as expressly set forth in this Agreement, Licensor does not grant, directly or by implication, estoppel, statute or otherwise, any right or license in its, or its affiliates’, intellectual property rights or other proprietary rights. For avoidance of doubt, all intellectual property rights in Derivatives of LTX-2.x shall be subject to the terms of this Agreement, and you acquire no right, title, or interest in or to LTX-2.x itself, which is and remains the exclusive property of Licensor. You shall not assert any ownership or other right in LTX-2.x or any Derivative of LTX-2.x in any manner that restricts, encumbers, or is inconsistent with the rights retained by Licensor or granted to other licensees under this Agreement.
+
+**9. Disclaimer of Warranty.** Unless required by applicable law or agreed to in writing, Licensor provides LTX-2.x on an “AS IS” BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are solely responsible for determining the appropriateness of using or redistributing LTX-2.x and Derivatives of LTX-2.x and assume any risks associated with your exercise of permissions under this Agreement.
+
+**10. Limitation of Liability.** To the fullest extent permitted by applicable law, in no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall Licensor be liable to you or any other individual or Entity for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this Agreement or out of the use of, or inability to use LTX-2.x or any Derivative of LTX-2.x (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if Licensor has been advised of the possibility of such damages.
+
+**11. Accepting Warranty or Additional Liability.** While redistributing LTX-2.x and Derivatives of LTX-2.x, you may, provided you do not violate the terms of this Agreement, choose to offer and charge a fee for, acceptance of support, warranty, indemnity, or other liability obligations. However, in accepting such obligations, you may act only on your own behalf and on your sole responsibility, not on behalf of Licensor, and only if you agree to indemnify, defend, and hold Licensor harmless for any liability incurred by, or claims asserted against Licensor, by reason of your accepting any such warranty or additional liability.
+
+**12. Governing Law.** This Agreement and all relations, disputes, claims and other matters arising hereunder (including non-contractual disputes or claims) will be governed exclusively by, and construed exclusively in accordance with, the laws of the State of New York and applicable U.S. federal law. To the extent permitted by law, choice of laws rules and the United Nations Convention on Contracts for the International Sale of Goods will not apply. The prevailing party in any claim or dispute between the parties under this Agreement will be entitled to reimbursement of its reasonable attorneys’ fees and costs.
+
+**13. Term and Termination.** This Agreement is effective upon your acceptance and continues until terminated. Licensor may terminate this Agreement immediately upon written notice to you if you breach any provision of this Agreement, including but not limited to violations of the use restrictions in Attachment A or unauthorized commercial use. This Agreement also terminates immediately and automatically, without notice, upon any material breach of this Agreement, including any use in violation of applicable AI Regulations or any unauthorized commercial use of LTX-2.x or Derivatives of LTX-2.x by a Commercial Entity. Upon termination: (a) all rights granted to you under this Agreement will immediately cease; (b) you must immediately cease all use of LTX-2.x and Derivatives of LTX-2.x; (c) you must delete or destroy all copies of LTX-2.x and Derivatives of LTX-2.x in your possession or control; and (d) you must notify any third parties to whom you distributed LTX-2.x or Derivatives of LTX-2.x of the termination. Sections 2, 3, 4, 6-16 and Attachment A shall survive termination of this Agreement. Termination does not relieve you of any obligations incurred prior to termination, including payment obligations under Section 2 and adhering to the restrictions under Section 3. In addition, if You commence a lawsuit or other proceedings (including a cross-claim or counterclaim in a lawsuit) against Licensor or any person or entity alleging that LTX-2.x or any Output, or any portion of any of the foregoing, infringe any intellectual property or other right owned or licensable by you, then all licenses granted to you under this Agreement shall terminate as of the date such lawsuit or other proceeding is filed.
+
+**14. Disputes and Arbitration; Waiver of Jury Trial; Class Action Waiver.** **IF YOU ARE NOT ACTING AS A CONSUMER UNDER APPLICABLE LAW, YOU HEREBY WAIVE THE RIGHT TO A TRIAL BY JURY, TO PARTICIPATE IN A CLASS OR REPRESENTATIVE ACTION (INCLUDING IN ARBITRATION), OR TO COMBINE INDIVIDUAL PROCEEDINGS IN COURT OR IN ARBITRATION WITHOUT THE CONSENT OF ALL PARTIES.** All disputes arising in connection with this Agreement shall be finally settled by arbitration under the Rules of Arbitration of the International Chamber of Commerce (“ICC Rules”), by one (1) arbitrator appointed in accordance with the ICC Rules. The seat of arbitration shall be New York, NY, USA, and the proceedings shall be conducted in English. The arbitrator shall be empowered to grant any relief that a court could grant. Judgment on the arbitration award may be entered by any court having jurisdiction thereof. Notwithstanding the foregoing, either party may seek injunctive or other equitable relief in respect of any actual or threatened breach of the license restrictions under this Agreement (including Attachment A and the Acceptable Use Policy) or any actual or threatened infringement, misappropriation, or violation of Licensor’s intellectual property rights, in the state or federal courts located in the County of New York, State of New York, and each party irrevocably consents to the jurisdiction of, and venue in, such courts for that limited purpose. The foregoing waivers do not apply to, and are not enforceable against, any licensee acting as a consumer under the mandatory consumer-protection laws of its jurisdiction of residence (including, without limitation, the European Union, the United Kingdom, and the State of California), and nothing in this Agreement limits any rights under such laws that cannot be waived or limited by contract. If any waiver in this Section is held invalid or unenforceable as to a particular licensee or dispute, such waiver shall be severed to that extent only and shall not affect the validity or enforceability of the remainder of this Section.
+
+**15.** In the event of any exception to the application of binding arbitration, all disputes, claims, and other matters arising hereunder shall be brought exclusively in the state or federal courts located in the County of New York, State of New York. You waive all defenses of lack of personal jurisdiction and forum non conveniens with respect to venue and jurisdiction in such courts, and consent to their exclusive jurisdiction and venue.
+
+**16. Severability.** If any provision of this Agreement is held to be invalid, illegal or unenforceable, the remaining provisions shall be unaffected thereby and remain valid as if such provision had not been set forth herein.
+
+**END OF TERMS AND CONDITIONS**
+
+# Attachment A
+
+*Use Restrictions*
+
+When using the Outputs, LTX-2.x and any Derivatives thereof, you agree to comply with the [Acceptable Use Policy](https://static.lightricks.com/legal/ltx-acceptable-use-policy.pdf) which is hereby incorporated into and made part of this Agreement by reference. Licensor may update it from time to time, and the version in effect at the time of your use governs; continued use after an update constitutes acceptance. Licensor shall post each version of the Acceptable Use Policy with its effective date, and no update shall apply retroactively to use occurring before that effective date. In addition, you agree not to use the Outputs, LTX-2.x or its Derivatives in any of the following ways:
+
+> **1)** In any way that violates any applicable national, federal, state, local or international law or regulation;
+
+> **2)** For the purpose of exploiting, Harming or attempting to exploit or Harm minors in any way;
+
+> **3)** Knowingly generate or disseminate verifiably false information and/or content with the intent to deceive, defraud, or otherwise unlawfully Harm others;
+
+> **4)** To generate or disseminate personal identifiable information that can be used to Harm an individual;
+
+> **5)** To generate or disseminate information and/or content (e.g. images, code, posts, articles), and place the information and/or content in any context (e.g. bot generating tweets) without expressly and intelligibly disclaiming that the information and/or content is machine generated;
+
+> **6)** To defame others, or to engage in the unlawful harassment of others;
+
+> **7)** To impersonate or attempt to impersonate (e.g. deepfakes) others without their consent;
+
+> **8)** For fully automated decision making that adversely impacts an individual’s legal rights or otherwise creates or modifies a binding, enforceable obligation;
+
+> **9)** For any use intended to or which has the effect of discriminating against or Harming individuals or groups based on online or offline social behavior or known or predicted personal or personality characteristics;
+
+> **10)** To exploit any of the vulnerabilities of a specific group of persons based on their age, social, physical or mental characteristics, in order to materially distort the behavior of a person pertaining to that group in a manner that causes or is likely to cause that person or another person physical or psychological Harm;
+
+> **11)** For any use intended to or which has the effect of discriminating against individuals or groups based on legally protected characteristics or categories;
+
+> **12)** To provide medical advice and medical results interpretation;
+
+> **13)** To generate or disseminate information for the purpose to be used for administration of justice, law enforcement, immigration or asylum processes, such as predicting an individual will commit fraud/crime commitment (e.g. by text profiling, drawing causal relationships between assertions made in documents, indiscriminate and arbitrarily-targeted use);
+
+> **14)** To generate and/or disseminate malware (including – but not limited to – ransomware) or any other content to be used for the purpose of harming electronic systems;
+
+> **15)** To engage in, promote, incite, or facilitate discrimination or other unlawful or harmful conduct in the provision of employment, employment benefits, credit, housing, or other essential goods and services;
+
+> **16)** To engage in, promote, incite, or facilitate the harassment, abuse, threatening, or bullying of individuals or groups of individuals;
+
+> **17)** For military, warfare, nuclear industries or applications, weapons development, or any use in connection with activities that may cause death, personal injury, or severe physical or environmental damage;
+
+> **18)** For commercial use only: To train, improve, or fine-tune any other machine learning model, artificial intelligence system, or competing model, except for Derivatives of LTX-2.x as expressly permitted under this Agreement;
+
+> **19)** To circumvent, disable, or interfere with any technical limitations, safety features, content filters, watermarking, content provenance or latent disclosure functionalities, or use restrictions implemented in LTX-2.x by Licensor;
+
+> **20)** To use LTX-2.x or Derivatives of LTX-2.x in any product, service, or application that directly competes with Licensor’s commercial products or services, or is designed to replace or substitute Licensor’s offerings in the market, without obtaining a separate commercial license from Licensor.
+
+Astronex-World inference runtime
+--------------------------------
+Source: https://github.com/Astronex-Robotics/Astronex-World/tree/27584bf1a89da01ef35a03b48d83bc818d2adf2b
+Copyright: 2026 Astronex Robotics.
+License: Apache License 2.0; the complete license text is retained in this bundle.
+Files: worldfoundry/synthesis/visual_generation/astronex_world/astronex_world_runtime/**,
+       worldfoundry/base_models/diffusion_model/models/networks/wan/variants/astronex/**
+The causal and bidirectional samplers, the camera trajectory and action-token encoders and
+the Astronex network (PRoPE camera branch, action embedder, sink + sliding-window causal
+attention) are adapted for inference; the runtime's PROVENANCE.md lists the modifications.
+
+AlayaWorld v1.1 inference runtime
+---------------------------------
+Source: https://github.com/AlayaLab/AlayaWorld/tree/ea03cfbb2e4c4e9102ed8ea8562e0b5370ca9b79
+Files: worldfoundry/synthesis/visual_generation/alayaworld_v11/alayaworld_v11_runtime/**,
+       worldfoundry/synthesis/visual_generation/alayaworld_v11/rollout.py
+License: LTX-2 Community License Agreement; the complete license text is retained in the
+HelixWorld block of this bundle. The modified files are described in the runtime's
+PROVENANCE.md. The upstream notice follows.
+
+Original-File: AlayaLab/AlayaWorld/NOTICE
+AlayaWorld
+Copyright 2025-2026 Alaya Lab, Shanda AI Research Tokyo
+
+------------------------------------------------------------------------------
+License
+------------------------------------------------------------------------------
+This project is based on LTX-2 by Lightricks Ltd. Portions of the original LTX-2
+codebase (see flash_alaya/ltx2/) have been modified by Alaya Lab (Shanda AI
+Research Tokyo) for academic and research purposes only. The released weights
+(merged_infer.safetensors) are fine-tuned from the LTX-2.3-22B base and are a
+derivative of LTX-2.3.
+
+Accordingly, the entire project — code and weights — is released under the
+**LTX-2 Community License Agreement** (see the LICENSE file; upstream:
+https://github.com/Lightricks/LTX-2/blob/main/LICENSE). All original copyright,
+license, patent, trademark, and attribution notices from LTX-2 are retained.
+
+This project is for academic research and non-commercial use only. For
+commercial use of LTX-2 or its derivatives, contact Lightricks Ltd.
+(ltxv-licensing@lightricks.com); entities with >= $10M annual revenue require a
+commercial license from Lightricks.
+
+------------------------------------------------------------------------------
+Acknowledgements / third-party components (see THIRD_PARTY_LICENSES.md)
+------------------------------------------------------------------------------
+* LTX-2.3 (Lightricks) — base video generator; LTX-2 Community License.
+* Wan / Wan2.1 (Alibaba) — VAE and "WAN-style" module conventions; Apache 2.0.
+* TAEHV (madebyollin/taehv) — optional tiny decoder; MIT (notice kept in source).
+* Depth-Anything-3 (ByteDance-Seed) — spatial-memory depth; Apache 2.0 code.
+
+Third-party model weights NOT redistributed by this project (users obtain them
+from the original sources under those sources' licenses):
+* google/gemma-3-12b-it-qat-q4_0-unquantized — Gemma Terms of Use (text encoder)
+* depth-anything/DA3NESTED-GIANT-LARGE-1.1  — Depth-Anything-3 model license
+
+Emu3.5 inference runtime
+------------------------
+Source: https://github.com/baaivision/Emu3.5/tree/8fcf1da48f9c5252fe0a0b8dc842e07b6efcd745
+Vision tokenizer source: https://huggingface.co/BAAI/Emu3.5-VisionTokenizer
+Copyright: 2025 BAAI, the Emu team and The HuggingFace Inc. team.
+License: Apache License 2.0; the complete license text is retained in this bundle.
+Files: worldfoundry/synthesis/visual_generation/emu35/emu35_runtime/**
+The Emu3 model (adapted from https://github.com/baaivision/Emu3), tokenizer, CFG logits
+processor, generation and image utilities, protobuf writer, example task configurations and
+the Emu3.5 vision tokenizer model are kept for interleaved text/image inference. The model
+derives from GenerationMixin and reads cache lengths through module helpers for current
+Transformers releases.
+
+HMA inference runtime
+---------------------
+Source: https://github.com/liruiw/HMA/tree/e3c89088fa82f2c208af6796485b4ec65ab318c5
+Files: worldfoundry/synthesis/visual_generation/hma/hma_runtime/**
+License: Apache License 2.0; the complete license text is retained in this bundle.
+The STMAR and STMaskGIT model and sampling code, the IDDPM diffusion utilities and the
+MAGVIT2 tokenizer are kept for inference. HMA builds on 1xGPT
+(https://github.com/1x-technologies/1xgpt, Apache License 2.0), and its MAGVIT2 tokenizer
+modifies Open-MAGVIT2 (https://github.com/TencentARC/Open-MAGVIT2, Apache License 2.0).
+The diffusion head and the IDDPM utilities, which MAR adopted from DiT and OpenAI's diffusion
+repositories, come from MAR (https://github.com/LTH14/mar), distributed under:
+
+MIT License
+
+Copyright (c) 2024 Tianhong Li
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+LaST-R1 policy inference
+------------------------
+Source: https://github.com/CHEN-H01/LaST-R1/tree/ba4e939632427e066f734bf9f7abfa11cc4911f6
+Files: worldfoundry/synthesis/action_generation/last_r1/modeling.py
+The value head, the causal attention mode with a bidirectional action-token block and the action-token decoding are adapted to the installed Transformers Qwen3-VL implementation.
+
+MIT License
+
+Copyright (c) 2025 PRIME-RL
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 XGEN-JING Flash v1 inference extensions
 ---------------------------------------
@@ -6331,3 +6970,427 @@ Wan2.2 support assets retain their Apache-2.0 license.
 
 Original-File: WorldPlay2/WorldPlay2/LICENSE.txt
 license: cc-by-nc-4.0
+
+
+WorldMemBench evaluation protocols
+---------------------------------
+Source: https://github.com/ZJU-REAL/WorldMemBench
+Source revision: 1b79840143a98e017891e893b5d3ef75b93078a3
+License: MIT
+Files: worldfoundry/evals/tasks/execution/runners/worldmembench/runtime/
+
+WorldFoundry retains the official sampling, revisit, alignment, aggregation,
+VLM judging and result protocols. CLIP, LAION aesthetic heads and DINO model
+loading use shared WorldFoundry components. Human and object masked DINO
+features share one implementation. Model weights are distributed separately.
+
+MIT License
+
+Copyright (c) 2026 WorldMemBench
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+MosaicGPT language backbone
+--------------------------
+Source: https://huggingface.co/anas-awadalla/mpt-1b-redpajama-200b-dolly
+Source revision: f0a13e41fcee2217cd701219ffa1eaef7fe955ea
+License: Apache-2.0 (source code)
+Copyright 2022 MosaicML Examples authors
+Files: worldfoundry/base_models/llm_mllm_core/mllm/mosaic_gpt/
+
+WorldFoundry retains the inference configuration, attention, decoder,
+initialization and generation interfaces used by the released RoboFlamingo
+language backbone. The model weights are distributed separately under
+CC-BY-SA-3.0; no weights are included here.
+
+LPLayerNorm and its autocast helper are from the Apache-2.0 implementation at:
+https://github.com/mosaicml/llm-foundry/blob/c4f8c7540df49dbbe481b6fbf61bd1701d5c50e6/llmfoundry/models/layers/norm.py
+Copyright 2022 MosaicML LLM Foundry authors
+The complete Apache-2.0 license text is retained above.
+
+
+AnimateDiff spatial video components
+-----------------------------------
+Source: https://github.com/guoyww/AnimateDiff
+License: Apache-2.0
+Files: worldfoundry/base_models/diffusion_model/models/networks/animatediff/resnet.py
+
+The frame-wise Conv2d, GroupNorm and spatial resampling layers are shared by
+AnimateDiff and CameraCtrl. They retain the Diffusers resnet attribution from
+the packaged AnimateDiff source. Checkpoint parameters remain two-dimensional
+convolution weights; model weights are distributed separately.
+The complete Apache-2.0 license text is retained above.
+
+
+EasyAnimate image-to-video conditioning
+--------------------------------------
+Source: https://github.com/aigc-apps/EasyAnimate/tree/c2a70d17daa1549a22129d0cd0e02053ecccd75c
+License: Apache-2.0
+Files: worldfoundry/base_models/diffusion_model/models/initializers/easyanimate_conditioning.py
+
+The image-to-video pixel and inpaint-mask preparation routine is shared with
+VideoX-Fun and VerseCrafter. Model weights are distributed separately.
+The complete Apache-2.0 license text is retained above.
+
+Open-Sora / Open-Oasis CPU-frequency conditioning
+------------------------------------------------
+Sources: https://github.com/hpcaitech/Open-Sora (Apache-2.0),
+         https://github.com/etched-ai/open-oasis (MIT),
+         https://github.com/openai/glide-text2im (MIT)
+File: worldfoundry/base_models/diffusion_model/models/networks/sana/variants/cpu_frequency.py
+The CPU-frequency variant shares the canonical Sana projection graph and retains
+the source runtimes' FP32 CPU frequency construction and explicit dtype behavior.
+The upstream license texts are retained in this bundle.
+
+Open-MAGVIT2 depth-to-space upsampler
+-----------------------------------
+Source: https://github.com/TencentARC/Open-MAGVIT2 (Apache License 2.0)
+File: worldfoundry/base_models/diffusion_model/models/autoencoders/magvit2/upsampling.py
+The shared inference block retains Open-MAGVIT2's convolution keys and DCR channel ordering.
+The upstream license text is retained in this bundle.
+
+Wan camera geometry
+-------------------
+Source: https://github.com/SkyworkAI/Matrix-Game (Apache License 2.0)
+File: worldfoundry/base_models/diffusion_model/models/networks/wan/camera_geometry.py
+The common origin/direction camera embeddings and world_ray_directions helper use
+Matrix-Game's Apache-licensed implementation, also shared by the LingBot operator.
+The upstream Apache license text is retained in this bundle.
+
+LingBot direction-only camera adapter
+-------------------------------------
+Source: https://github.com/Robbyant/lingbot-world (CC-BY-NC-SA-4.0)
+File: worldfoundry/synthesis/visual_generation/lingbot_world/lingbot_world_runtime/utils/cam_utils.py
+The optional direction-only branch retains LingBot's license locally and reuses
+the Apache camera geometry helpers for the common ray computation.
+
+Device-coefficient flow UniPC
+----------------------------
+Source: https://github.com/huggingface/diffusers/blob/v0.31.0/src/diffusers/schedulers/scheduling_unipc_multistep.py
+        https://github.com/Wan-Video/Wan2.1 (Apache License 2.0)
+Files: worldfoundry/base_models/diffusion_model/schedulers/flow_unipc_device.py
+       worldfoundry/base_models/diffusion_model/schedulers/flow_unipc_compat.py
+The device-coefficient variant reuses the native flow_unipc solver math. Its
+Diffusers adapter preserves scheduler-config serialization and SchedulerOutput.
+The original UniPC/Wan attribution and Apache license are retained in this bundle.
+Shared Qwen/VLA transformer leaves
+---------------------------------
+The checkpoint-stable text components in
+worldfoundry/base_models/llm_mllm_core/mllm/qwen/{layers,rotary,vision}.py and the query/key
+rotation in worldfoundry/core/attention/rotary/embedding.py reuse the in-tree
+Qwen and Hugging Face Transformers implementations (Apache-2.0; Copyright
+2024 The Qwen Team and The HuggingFace Inc. team). Qwen2, Qwen2.5-VL,
+Qwen3-VL, InternLM2 and VLA model wrappers retain their released checkpoint
+parameter names. Their RMS arithmetic delegates to the shared DiT reference.
+
+Shared VLA conditioning and LingBot-VLA components
+------------------------------------------------
+worldfoundry/base_models/llm_mllm_core/action/tensor_ops.py and action/lingbot/
+reuse inference components from Robbyant/lingbot-vla at
+4eb34b7693a0565c67433f8fac9c59a2e67eb60b, Robbyant/lingbot-vla-v2 at
+69729b4ef24c63ec25e750915491635f4753be1d, Physical-Intelligence/openpi and
+Tencent-Hunyuan/HY-Embodied. These sources are Apache-2.0. The task-token
+resampler uses the existing canonical LVDM/IP-Adapter Perceiver attention
+and OpenFlamingo-derived FFN, retaining their upstream attribution.
+
+Shared Diffusion Policy and CogACT inference components
+-----------------------------------------------------
+worldfoundry/base_models/llm_mllm_core/action/diffusion_policy.py retains the
+MIT-licensed action convolution and normalizer components from Cheng Chi's
+Diffusion Policy (real-stanford/diffusion_policy,
+5ba07ac6661db573af695b419a7947ecb704690f), also used by RoboFlamingo and TinyVLA.
+action/cogact.py and action/cogact_diffusion.py retain the CogACT/DiT and
+OpenAI GLIDE/guided-diffusion/improved-diffusion attribution and MIT terms.
+CogACT and DB-CogACT reuse their checkpoint-compatible inference leaves and
+sampling process. Meta Platforms' DiT copyright is retained in the source.
+
+Shared Molmo, ACT and token-denoising leaves
+------------------------------------------
+worldfoundry/base_models/llm_mllm_core/mllm/molmo/preprocessing.py retains the
+Apache-2.0 pixel/patch and pooling-index conventions from Allen Institute for
+AI's MolmoAct2 and MolmoBot. action/transformer.py retains ACT's DETR-derived
+encoder/decoder containers (Copyright Facebook, Inc. and its affiliates;
+Apache-2.0). action/rdt.py reuses SANA's embedding graph for the RDT-1B/Go1
+fixed-dtype timestep variant; model-weight licenses are unchanged.
+
+worldfoundry/base_models/diffusion_model/models/networks/dit/token.py retains
+the MIT-licensed MAR/DiT token output layer (Copyright 2024 Tianhong Li;
+Copyright Meta Platforms, Inc. and affiliates). Its 2-D modulation and
+initialization remain checkpoint-compatible with Bernini and HMA.
+
+worldfoundry/base_models/llm_mllm_core/mllm/sampling.py retains the generic
+batched logits filter from Hugging Face Transformers' Thomas Wolf example
+(https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317; Apache-2.0).
+The first-tensor dtype helper in core/nn/blocks/module_properties.py retains
+the Diffusers (Apache-2.0) first-parameter/first-buffer selection convention.
+The complete Apache-2.0 and MIT license texts are retained above.
+
+Shared perception camera transforms
+-----------------------------------
+The WXYZ quaternion conversion in worldfoundry/core/geometry/transforms.py is
+adapted from the PyTorch3D-derived CUT3R helpers (Meta Platforms, Inc., BSD-3-Clause).
+The batched SE3 inversion is adapted from VGGT's utils/geometry.py (Meta Platforms,
+Inc., Apache-2.0 source license). Trace-branch quaternion conversion, normalize-first
+rotation products and spherical interpolation are shared from Tencent
+HunyuanWorld-Mirror's utils/scene_render.py; the HunyuanWorld-Mirror terms reproduced
+above continue to apply to these routines. Checkpoint and model licenses are unchanged.
+
+Shared DPT fusion components
+----------------------------
+worldfoundry/base_models/three_dimensions/depth/midas/fusion.py shares the MiDaS
+residual/interpolation blocks (Intel ISL, MIT), Depth Anything fusion blocks
+(Depth Anything authors, Apache-2.0 source), and VGGT grouped residual/fusion blocks
+(Meta Platforms, Inc. and affiliates, Apache-2.0 source). The existing source and
+checkpoint terms for MiDaS, Depth Anything, VGGT and their variants remain unchanged.
+
+VGGT-Omega DINOv3 components
+----------------------------
+VGGT-Omega's identical DINOv3 attention, feed-forward, normalization and rotary
+components reuse worldfoundry/base_models/perception_core/general_perception/dinov3.
+Its query/key-normalized attention bindings live in dinov3/variants/vggt_omega.py.
+Copyright Meta Platforms, Inc. and affiliates; the DINOv3 License Agreement
+continues to apply. No checkpoint license terms are changed.
+
+Shared SAM components and spatial helpers
+-----------------------------------------
+worldfoundry/base_models/perception_core/segment/sam_components/ shares the SAM
+and SAM2 prompt, mask, memory and two-way transformer components (Meta Platforms,
+Inc. and affiliates; Apache-2.0). Generation-specific bindings preserve the
+original SAM1 attention arithmetic, SAM2 MLP names and SAM3 FA3/empty-mask behavior.
+SAM3's model and accelerated implementations retain their original terms.
+
+worldfoundry/core/attention/window.py shares the padded SAM2 window helpers and
+the unpadded Swin Transformer helpers used by GroundingDINO (Copyright 2021
+Microsoft; MIT). core/attention/rotary/broadcast.py shares SAM2's rotary shape
+helper, and core/geometry/boxes.py shares the GroundingDINO/DETR box conversions
+(Copyright Facebook, Inc. and its affiliates; Apache-2.0). The complete Apache-2.0
+and MIT license texts are retained above. Model and checkpoint terms are unchanged.
+
+Shared VGGT reconstruction blocks
+----------------------------------
+Mirror, HY-World-2.0, STream3R, InfiniteVGGT and FantasyWorld reuse the VGGT
+projection/block shells in worldfoundry/base_models/three_dimensions/point_clouds/
+vggt/vggt/layers (Meta Platforms, Inc. and affiliates; Apache-2.0 source).
+Their attention-backend, KV-cache and conditioning variants remain in their
+respective model modules, under their existing source and checkpoint terms.
+worldfoundry/core/attention/rotary/indexed_2d.py retains STream3R/Vigeo's
+Meta-attributed positive-index rotation and shape-only grid cache conventions.
+
+Shared geometry projections and reconstruction head helpers
+-----------------------------------------------------------
+worldfoundry/core/geometry/projection.py implements standard matrix transforms,
+XY pixel grids, depth/focal unprojection and matrix inversion as first-party
+OpenEnvision code under Apache-2.0. The prior in-family copies were distributed
+in CUT3R's DUSt3R-derived utilities (Naver Corporation; CC BY-NC-SA 4.0),
+MapAnything and Pi3. Their remaining vendored implementations retain their
+existing notices and terms.
+
+Reconstruction families share VGGT's activation, camera-pose, image-preprocessing
+and head-position helpers (Meta Platforms, Inc. and affiliates; Apache-2.0 source).
+The normalized view-plane grid retains its MoGe attribution (Microsoft; MIT).
+Depth Anything 3 binds FP32 frequencies; VGGT retains its device-specific defaults.
+Shared homogeneous-coordinate, image-grid and camera-ray composition helpers
+remain in Depth Anything 3's utils/geometry.py (Copyright 2025 ByteDance Ltd.
+and/or its affiliates; Apache-2.0). PixelSplat retains its native inverse and
+coordinate-dtype bindings. Model and checkpoint license terms are unchanged.
+
+Shared cross-family tensor and video helpers
+--------------------------------------------
+core/attention/rotary/interleaved.py and the broadcast-and-concatenate helper in
+core/attention/rotary/broadcast.py share rotary-embedding-torch's adjacent-pair
+operations (Phil Wang; MIT), as used by SAM3, AdaWorld and Open-Oasis.
+core/media/processing/video_transforms.py shares Latte/Open-Sora's tensor video
+operations (Copyright 2024 Vchitect/Latte; Apache-2.0). Image/PIL conversion retains
+the Diffusers-derived rounding and grayscale conventions.
+
+core/nn/diffusion/utils.py shares the OpenAI improved-diffusion/GLIDE NumPy schedule
+extraction used by HMA, NWM, WorldFM and CogACT (MIT). Its appended-zero operation
+retains the k-diffusion-derived schedule contract. The detector inverse-sigmoid
+in core/nn/blocks/layers.py is shared from GroundingDINO/DETR (Apache-2.0); its
+Mish implementation retains the explicit Diffusers/AnimateDiff decomposition.
+The checkpoint-attribute setter in core/nn/checkpointing/gradient.py is shared
+from Open-Sora (Apache-2.0). core/utils/tensors/torch.py shares DIAMOND's episode
+field concatenation (Copyright 2024 Eloi Alonso; MIT) and Open-MAGVIT2's leading-axis
+multiplication (Apache-2.0). Existing core sampling, token-head, RDT, DCR-upsample
+and module-dtype owners are reused without checkpoint-key changes.
+The complete MIT and Apache-2.0 texts are retained above; model and weight terms
+are unchanged.
+
+Shared Wan codec and CLIP leaves
+--------------------------------
+The matching causal convolutions, RMS normalization, resampling and patch helpers
+reuse autoencoders/wan/model.py and reference_22.py (Copyright 2024-2025 The Alibaba
+Wan Team Authors; Apache-2.0). Kairos and Worldcam share the Wan codec constructors
+while retaining their own tiling and device orchestration. Wan CLIP variants reuse
+encoders/wan/clip.py's text head, positional interpolation and SwiGLU.
+FlashWorld's image projection binds its native-precision normalization to the
+shared Wan image-conditioning graph (The Wan Team and The HuggingFace Team;
+Apache-2.0). LiveWorld reuses the device-coefficient UniPC adapter described above.
+
+The QuickGELU activation in core/nn/blocks/layers.py retains OpenAI CLIP's explicit
+sigmoid approximation (Copyright 2021 OpenAI; MIT), also used by OpenCLIP and Wan.
+The complete MIT and Apache-2.0 texts are retained above. Source and checkpoint
+license terms for the consuming models are unchanged.
+
+Wan CLIP shared tower bindings
+-----------------------------
+encoders/wan/clip.py owns the common attention, pooling, visual/text tower and
+parameter-group implementations. Its action, linear and LiveWorld bindings
+retain their respective normalization, direct-embedding placement and attention
+kernel policies. LiveWorld's binding is in encoders/wan/variants/liveworld_clip.py;
+its image preprocessing and checkpoint orchestration stay in the runtime.
+These components retain the Wan, OpenAI CLIP and OpenCLIP attributions and the
+Apache-2.0/MIT source terms reproduced above.
+
+Shared Diffusers-layout Wan VAE blocks
+-------------------------------------
+autoencoders/wan/diffusers_blocks.py shares the Wan residual, attention, resample,
+mid and up blocks with Diffusers-style parameter names (Copyright 2025 The Wan
+Team and The HuggingFace Team; Apache-2.0), used by LongCat-Video and FlashWorld.
+FlashWorld retains its spatial kernel slicing, scaled-gamma normalization,
+in-place residuals, single-frame shortcuts and family-local cache defaults.
+Checkpoint names and the existing model/weight licenses are unchanged.
+
+Shared temporal depth components
+--------------------------------
+base_models/three_dimensions/depth/temporal shares Video Depth Anything's temporal
+transformer, position, feed-forward and manual/SDPA attention components with its
+LongVie variant. Attribution: AnimateDiff, ByteDance Ltd. and/or its affiliates,
+and The HuggingFace Team (Apache-2.0). LongVie retains its optional native xFormers
+policy; the independent prior retains its existing SDPA tensor layout. The shared
+owners do not initialize either model family or ViPE's configuration resolvers.
+Checkpoint parameter names, positional buffers and model licenses are unchanged.
+
+Shared LTX coordinate and latent helpers
+---------------------------------------
+representations/ltx/patchifiers.py retains the LTX tuple-axis coordinate contract;
+representations/ltx/conditioning.py owns the masked-latent blend used by Echo and
+SolarWM. These bindings retain Lightricks' LTX-2.x Community License terms
+(LicenseRef-LTX-2.x-Community), reproduced above. Echo and AlayaWorld retain their
+native scale-factor types, and all source and checkpoint licenses are unchanged.
+
+The generic matching-linear constructor in core/acceleration/quantization/checkpoint.py
+and tensor-only PyTorch RMS entry point in core/nn/blocks/normalization.py are
+first-party OpenEnvision code under Apache-2.0. Family FP8 storage, calibration and
+kernel implementations retain their existing terms and checkpoint layouts.
+
+Shared RAFT feature extraction
+------------------------------
+Source: https://github.com/princeton-vl/RAFT
+Revision: 2888e15a51fa41140771d3f498ed8023cff098d1
+License: BSD-3-Clause
+File: worldfoundry/base_models/perception_core/optical_flow/raft_features.py
+
+AMT, FlowFormer++ and ViPE reuse the RAFT residual/bottleneck blocks and matching
+small feature encoder. Their full-encoder widths and frame layouts remain local.
+The shared owner is outside the evaluation-only RAFT runtime; that runtime retains
+its BasicEncoder and imports the same shared leaves. Original parameter names,
+normalization buffers and source/model terms are unchanged.
+
+BSD 3-Clause License
+
+Copyright (c) 2020, princeton-vl
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the copyright holder nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Shared MoGe convolutional residuals
+----------------------------------
+Pi3X convolutional heads reuse ResidualConvBlock from depth/moge/model/v1.py
+(Microsoft; MIT). The MoGe owner and its existing users are unchanged. Native
+parameter names, group/layer normalization and model license terms are retained;
+the MIT license text is reproduced above.
+
+Shared Helios history and normalization components
+--------------------------------------------------
+The Helios pad/average-pool helpers in core/nn/blocks/volume.py and guidance
+projection in core/nn/diffusion/utils.py retain their Apache-2.0 provenance from
+PKU-YuanGroup/Helios (8f2a2faab3298c8a7630a2c73aea37c01b5bab01; The Helios Team
+and The HuggingFace Team). Evoke and Warp-as-History reuse canonical Helios
+output/attention/conditioning components. FramePack reuses only the dependency-light
+volume helpers. Helios FP32 RMS normalization lives outside its Triton kernel
+initializer in models/networks/helios/normalization.py. Shared history visibility
+helpers retain AlayaLab/Evoke attribution (74d268516d95c8fceadd2378f91a73f9f187042b;
+The Evoke Team; Apache-2.0). Existing family model and checkpoint licenses remain
+unchanged; the Apache-2.0 license text is reproduced above.
+
+Shared native rotary and camera tensor helpers
+---------------------------------------------
+Sana and LingBot-Map reuse get_1d_rotary_pos_embed_linear in core/attention/rotary/rope_nd.py
+(NVIDIA Sana/Hugging Face Diffusers, Apache-2.0). The separately scaled native policy
+retains its direct NTK multiplier, linear divisor and real/complex frequency modes.
+Core rotary embedding also owns the MiniMax H3 chunk-based half rotation (SGLang,
+Apache-2.0). Existing canonical rotary contracts remain unchanged.
+
+Sana and MinWM reuse the unchanged MIT PRoPE block-diagonal/SE3 helpers in Pi3;
+the PRoPE authors' MIT notice remains in that owner. ReCamMaster reuses Gamma-World's
+unchanged complex RoPE helpers (NVIDIA, Apache-2.0). HY-World reuses HunyuanWorld-Mirror
+special-token expansion and image padding under their existing model terms. These
+imports do not change family model/checkpoint licenses.
+
+Shared Prismatic and audio filter components
+-------------------------------------------
+base_models/llm_mllm_core/mllm/prismatic.py retains the OpenVLA/Prismatic MIT
+projector and LayerScale parameter binding. Sources: openvla/openvla at
+c8f03f48af692657d3060c19588038c7220e9af9 and moojink/openvla-oft at
+e4287e94541f459edc4feabc4e181f537cd569a8. Checkpoint/model licenses remain unchanged.
+
+base_models/diffusion_model/models/autoencoders/alias_free.py owns the shared
+Kaiser-sinc, low-pass and downsample leaves from junjun3518/alias-free-torch
+(Apache-2.0), including attributed Julius sinc/low-pass code (MIT). The complete
+BigVGAN alias-free-torch LICENSE_3 and Julius LICENSE_5 notices above apply.
+Kandinsky/MMAudio and MiniMax H3 retain their native upsample/activation policies.
+
+GR00T conditioning and LVDM GEGLU/resampler components retain their existing
+owners and licenses. The core NN pre-norm/ReLU/input-FP32 variants and CroCo
+constructor binding preserve native parameter names, signatures and precision;
+existing canonical core implementations remain unchanged.
+
+Wan varlen cross-attention forwards
+----------------------------------
+networks/wan/varlen_cross_attention.py shares the matching Forcing/MinWM/
+Echo-Infinity text-cache and image/text forwards and the Linear/Geometry text
+forward from the existing Apache-2.0 Wan implementations. Native constructors,
+RMSNorm identities, attention providers and self-attention ancestry remain
+family-owned, including MinWM's PRoPE selection and Linear's image-projection
+initialization. No checkpoint remap is introduced.

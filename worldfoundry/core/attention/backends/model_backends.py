@@ -122,7 +122,7 @@ class PytorchAttention(AttentionCallable):
         return f"SDPA[{'>'.join(b.name for b in self._priority)}]"
 
     def __call__(
-        self,         q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, heads: int, mask: torch.Tensor | None = None
+        self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, heads: int, mask: torch.Tensor | None = None
     ) -> torch.Tensor:
         """Serve both unmasked and masked protocols with the pinned SDPA order."""
         return flattened_multihead_attention(
@@ -156,7 +156,9 @@ class XFormersAttention(AttentionCallable):
     ) -> torch.Tensor:
         """Run xFormers attention; bool masks become additive so they actually mask."""
         try:
-            from xformers.ops import memory_efficient_attention
+            memory_efficient_attention = __import__(
+                "xformers.ops", fromlist=["memory_efficient_attention"]
+            ).memory_efficient_attention
         except (ImportError, OSError) as exc:
             raise RuntimeError("XFormersAttention was selected but `xformers` is unavailable.") from exc
 
@@ -218,8 +220,10 @@ class FlashAttention3(AttentionCallable):
         heads: int,
     ) -> torch.Tensor:
         """Run Hopper FA3; there is no mask kernel on this path."""
+        if q.device.type != "cuda" or v.dtype not in {torch.float16, torch.bfloat16}:
+            return PytorchAttention()(q, k, v, heads)
         try:
-            import flash_attn_interface
+            flash_attn_interface = __import__("flash_attn_interface")
         except (ImportError, OSError) as exc:
             raise RuntimeError("FlashAttention3 was selected but `FlashAttention3` is unavailable.") from exc
 
@@ -229,6 +233,8 @@ class FlashAttention3(AttentionCallable):
         q, k, v = (t.view(b, -1, heads, dim_head) for t in (q, k, v))
 
         out = flash_attn_interface.flash_attn_func(q.to(v.dtype), k.to(v.dtype), v)
+        if isinstance(out, tuple):
+            out = out[0]
         out = out.reshape(b, -1, heads * dim_head)
         return out
 
@@ -246,6 +252,8 @@ class FlashAttention4(AttentionCallable):
         heads: int,
     ) -> torch.Tensor:
         """Run CuTeDSL FA4; there is no mask kernel on this path."""
+        if q.device.type != "cuda" or v.dtype not in {torch.float16, torch.bfloat16}:
+            return PytorchAttention()(q, k, v, heads)
         try:
             from flash_attn.cute import flash_attn_func as flash_attn_4_func
         except (ImportError, OSError) as exc:
@@ -409,13 +417,13 @@ class _DeviceAwarePytorchAttention(AttentionCallable):
         return implementation(q, k, v, heads, mask)
 
 
-def _select_primary_attention() -> AttentionCallable:
+def _select_primary_attention() -> _DeviceAwarePytorchAttention:
     """Use bundled device-aware exact SDPA; optional packages remain explicit."""
 
     return _DeviceAwarePytorchAttention(with_mask=False)
 
 
-def _select_masked_attention() -> MaskedAttentionCallable:
+def _select_masked_attention() -> _DeviceAwarePytorchAttention:
     """Use bundled mask-aware SDPA with cuDNN preference on modern CUDA."""
 
     return _DeviceAwarePytorchAttention(with_mask=True)
@@ -481,7 +489,7 @@ class AttentionFunction(Enum):
     # :func:`automatic_attention`. Default for :class:`AttentionOps`.
     AUTOMATIC = "automatic"
 
-    def to_callable(self) -> AttentionCallable:  # noqa: PLR0911
+    def to_callable(self) -> AttentionCallable:
         """Resolve to a concrete callable. Use this at module init time so that
         torch.compile can trace through the attention call without graph breaks.
         Every non-AUTOMATIC variant raises :class:`RuntimeError` when the backend

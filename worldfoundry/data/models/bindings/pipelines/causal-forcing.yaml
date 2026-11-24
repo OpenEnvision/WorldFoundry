@@ -3,7 +3,7 @@ binding_id: causal-forcing
 model_id: causal-forcing
 runner: worldfoundry.pipeline
 pipeline:
-  target: worldfoundry.pipelines.forcing.pipeline_forcing:CausalForcingPipeline
+  target: worldfoundry.pipelines.forcing.pipeline_native_forcing:NativeCausalForcingPipeline
   loading:
     method: from_pretrained
     signature: unified

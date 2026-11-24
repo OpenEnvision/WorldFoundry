@@ -66,8 +66,7 @@ def convert_wan_vsa_gate_state_dict(
         if target in converted:
             previous = sources[target]
             raise KeyError(
-                "Wan VSA gate conversion produced duplicate parameter "
-                f"{target!r} from {previous!r} and {source!r}"
+                f"Wan VSA gate conversion produced duplicate parameter {target!r} from {previous!r} and {source!r}"
             )
         converted[target] = value
         sources[target] = source
@@ -77,16 +76,12 @@ def convert_wan_vsa_gate_state_dict(
 def _tensor_shape(name: str, value: object) -> tuple[int, ...]:
     if isinstance(value, torch.Tensor):
         return tuple(int(size) for size in value.shape)
-    if isinstance(value, (tuple, list)) and all(
-        isinstance(size, int) and not isinstance(size, bool) for size in value
-    ):
+    if isinstance(value, (tuple, list)) and all(isinstance(size, int) and not isinstance(size, bool) for size in value):
         return tuple(int(size) for size in value)
     get_shape = getattr(value, "get_shape", None)
     if callable(get_shape):
         return tuple(int(size) for size in get_shape())
-    raise TypeError(
-        f"Wan VSA gate parameter {name!r} has no inspectable tensor shape"
-    )
+    raise TypeError(f"Wan VSA gate parameter {name!r} has no inspectable tensor shape")
 
 
 def validate_wan_vsa_gate_shapes(
@@ -118,8 +113,7 @@ def validate_wan_vsa_gate_shapes(
             continue
         if target in gate_values:
             raise KeyError(
-                "Wan VSA gate checkpoint maps multiple parameters to "
-                f"{target!r}: {gate_sources[target]!r}, {source!r}"
+                f"Wan VSA gate checkpoint maps multiple parameters to {target!r}: {gate_sources[target]!r}, {source!r}"
             )
         gate_values[target] = value
         gate_sources[target] = source
@@ -145,13 +139,9 @@ def validate_wan_vsa_gate_shapes(
         expected_shape = (dim, dim) if name.endswith(".weight") else (dim,)
         actual_shape = _tensor_shape(gate_sources[name], value)
         if actual_shape != expected_shape:
-            mismatches.append(
-                f"{gate_sources[name]}: expected {expected_shape}, got {actual_shape}"
-            )
+            mismatches.append(f"{gate_sources[name]}: expected {expected_shape}, got {actual_shape}")
     if mismatches:
-        raise ValueError(
-            "Wan VSA-QAT gate tensor shape mismatch: " + "; ".join(mismatches)
-        )
+        raise ValueError("Wan VSA-QAT gate tensor shape mismatch: " + "; ".join(mismatches))
     return True
 
 
@@ -207,13 +197,11 @@ def _checkpoint_gate_shapes(
             try:
                 from safetensors import safe_open
             except ImportError as error:
-                raise RuntimeError(
-                    "Wan VSA checkpoint detection requires the safetensors package"
-                ) from error
+                raise RuntimeError("Wan VSA checkpoint detection requires the safetensors package") from error
             with safe_open(path, framework="pt", device="cpu") as handle:
                 entries: dict[str, Any] = {
                     name: handle.get_slice(name).get_shape()
-                    for name in handle.keys()
+                    for name in handle.keys()  # noqa: SIM118 - safetensors handles list tensor names through keys().
                     if "gate_compress" in name
                 }
         else:
@@ -224,16 +212,10 @@ def _checkpoint_gate_shapes(
             from worldfoundry.core.model_loading import load_keys_dict
 
             loaded = load_keys_dict(str(path))
-            entries = {
-                name: value
-                for name, value in loaded.items()
-                if "gate_compress" in name
-            }
+            entries = {name: value for name, value in loaded.items() if "gate_compress" in name}
         for name, value in entries.items():
             if name in shapes:
-                raise ValueError(
-                    f"Wan VSA gate tensor {name!r} occurs in multiple checkpoint shards"
-                )
+                raise ValueError(f"Wan VSA gate tensor {name!r} occurs in multiple checkpoint shards")
             shapes[name] = _tensor_shape(name, value)
     return shapes
 

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -17,8 +20,14 @@ _ROOT = Path(__file__).resolve().parents[2]
 _RETIRED_VARIANTS = (
     "biwm-wan21@biwm-wan21",
     "biwm-wan22@biwm-wan22",
+    "egowm@egowm",
+    "hunyuanworld-voyager@hunyuanworld-voyager",
+    "hyworld-worldgen@hyworld-worldgen",
     "irasim@irasim",
+    "open-dreamer@open-dreamer",
     "pandora@pandora",
+    "shotstream@shotstream",
+    "wilddet3d@wilddet3d",
 )
 
 
@@ -86,6 +95,95 @@ def test_historical_gap_stays_visible_and_does_not_fail_unaffected_changes(proje
     assert result["accepted_reference_verified"] is result["gpu_inference_verified"] is False
 
 
+@pytest.mark.parametrize(
+    "checkout",
+    ["committed", "stale_head", "draft_docs", "dirty_policy", "staged_matrix", "untracked_binding", "ignored_binding"],
+)
+def test_commit_diff_coverage_requires_committed_inputs(
+    project: tuple, monkeypatch: pytest.MonkeyPatch, checkout: str
+) -> None:
+    root, matrix, _, _, baseline = project
+    dependencies = root / "tests/manual/geometry_regression_dependencies.json"
+    dependencies.parent.mkdir(parents=True)
+    dependencies.write_text('{"ignored_paths":[]}')
+    (root / "docs").mkdir()
+    guide = root / "docs/guide.md"
+    guide.write_text("Guide\n")
+    git = ["git", "-C", str(root)]
+    for command in (
+        ["init", "-q"],
+        ["config", "user.name", "Regression test"],
+        ["config", "user.email", "test@example.invalid"],
+        ["add", "."],
+        ["commit", "-qm", "baseline"],
+    ):
+        subprocess.run([*git, *command], check=True)
+    base = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+    baseline["source_revision"] = base
+    helper = root / "worldfoundry/operators/helper.py"
+    helper.write_text("class Operation: changed = True\n")
+    subprocess.run([*git, "commit", "-qam", "change shared operator"], check=True)
+    head = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+    if checkout == "draft_docs":
+        guide.write_text("Draft guide\n")
+        cache = root / "worldfoundry/operators/__pycache__/helper.cpython-311.pyc"
+        cache.parent.mkdir()
+        cache.write_bytes(b"local bytecode")
+        (root / "docs/draft.yaml").write_text("draft: true\n")
+        (root / ".git/info/exclude").write_text("__pycache__/\n/docs/draft.yaml\n")
+    elif checkout == "dirty_policy":
+        dependencies.write_text('{"ignored_paths":["worldfoundry/operators/helper.py"]}')
+    elif checkout == "staged_matrix":
+        cases = json.loads(matrix.read_text())
+        cases["large-short"] = _recipe("large")
+        matrix.write_text(json.dumps(cases))
+        subprocess.run([*git, "add", str(matrix)], check=True)
+    elif checkout in {"untracked_binding", "ignored_binding"}:
+        added = root / "worldfoundry/data/models/bindings/pipelines/new.yaml"
+        added.write_text(yaml.safe_dump({"model_id": "new", "pipeline": {"target": _recipe()["target"]}}))
+        if checkout == "ignored_binding":
+            relative = added.relative_to(root).as_posix()
+            (root / ".git/info/exclude").write_text("/" + relative + "\n")
+            subprocess.run([*git, "check-ignore", "--quiet", relative], check=True)
+
+    baseline_path = root / "frozen.json"
+    baseline_path.write_text(json.dumps(baseline))
+    monkeypatch.setattr(policy, "_BASELINE_SHA256", hashlib.sha256(baseline_path.read_bytes()).hexdigest())
+    monkeypatch.setattr(inventory, "_coverage_policy", lambda: policy)
+    report_path = root / "coverage.json"
+    arguments = {
+        "source-root": root,
+        "matrix": matrix,
+        "baseline": baseline_path,
+        "base": base,
+        "head": base if checkout == "stale_head" else "HEAD",
+        "output": report_path,
+    }
+    argv = ["coverage"]
+    for option, value in arguments.items():
+        argv.extend(("--" + option, str(value)))
+    monkeypatch.setattr(sys, "argv", argv)
+    status = inventory.main()
+    report = json.loads(report_path.read_text())
+    if checkout == "stale_head":
+        assert status == 1, report
+        assert "must match the inspected checkout" in report["error"]
+    elif checkout in {"dirty_policy", "staged_matrix", "untracked_binding", "ignored_binding"}:
+        assert status == 1, report
+        assert "committed inputs" in report["error"]
+    else:
+        assert status == 2
+        assert report["source_revision"] == head and report["base_revision"] == base
+        assert report["source_tree"] == subprocess.check_output([*git, "rev-parse", "HEAD^{tree}"], text=True).strip()
+        violation = {"variant": "large@large", "reason": "affected_native_variant_without_replay_recipe"}
+        assert violation in report["policy"]["violations"]
+    if checkout == "dirty_policy":
+        offset = argv.index("--base")
+        monkeypatch.setattr(sys, "argv", [*argv[:offset], *argv[offset + 2 :]])
+        assert inventory.main() == 0
+        assert json.loads(report_path.read_text())["policy"]["change_scope"] == "inventory_only"
+
+
 @pytest.mark.parametrize("mutation", ["remove", "identity_only", "wrong_variant", "missing_checkpoint", "no_outputs"])
 def test_existing_coverage_cannot_regress_to_a_placeholder(project, mutation):
     root, _, cases, report, baseline = project
@@ -139,6 +237,85 @@ def test_unknown_inference_dependency_expands_conservatively(project):
     result = policy.evaluate_policy(report, cases, baseline, root, [path])
     assert result["unknown_inference_paths"] == [path]
     assert result["status"] == "failed"
+
+
+def test_evaluation_dependencies_only_exempt_files_without_an_inference_owner(project):
+    root, _, cases, report, baseline = project
+    path = "worldfoundry/base_models/scorer.py"
+    source = root / path
+    source.parent.mkdir()
+    source.write_text("class Scorer: pass\n")
+    manifest = root / "tests/manual/geometry_regression_dependencies.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"evaluation_only_paths": [path]}))
+
+    evaluation = policy.evaluate_policy(report, cases, baseline, root, [path])
+    assert evaluation["affected_variants"] == []
+    assert evaluation["unknown_inference_paths"] == []
+    assert evaluation["status"] == "passed"
+
+    (root / "worldfoundry/pipelines/example.py").write_text(
+        "from worldfoundry.base_models.scorer import Scorer\nclass Pipeline: pass\n"
+    )
+    inference = policy.evaluate_policy(report, cases, baseline, root, [path])
+    assert inference["affected_variants"] == ["large@large", "small@small"]
+    assert inference["status"] == "failed"
+
+
+@pytest.fixture
+def project_with_ignored_paths(
+    project: tuple[Path, Path, dict, dict, dict],
+) -> tuple[Path, Path, dict, dict, dict]:
+    root, _, _, _, _ = project
+    declarations = json.loads((_ROOT / "tests/manual/geometry_regression_dependencies.json").read_text())
+    manifest = root / "tests/manual/geometry_regression_dependencies.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"ignored_paths": declarations["ignored_paths"]}))
+    return project
+
+
+@pytest.mark.parametrize(
+    "path", ["worldfoundry/base_models/README.md", "worldfoundry/base_models/three_dimensions/README.md"]
+)
+def test_declared_source_guides_do_not_affect_native_variants(
+    project_with_ignored_paths: tuple[Path, Path, dict, dict, dict], path: str
+) -> None:
+    root, _, cases, report, baseline = project_with_ignored_paths
+    result = policy.evaluate_policy(report, cases, baseline, root, [path])
+    assert result["status"] == "passed"
+    assert result["affected_variants"] == []
+    assert result["unknown_inference_paths"] == []
+    assert result["existing_uncovered_variants"] == ["large@large"]
+    assert result["accepted_reference_verified"] is result["gpu_inference_verified"] is False
+
+
+def test_ignored_guides_do_not_hide_unknown_model_code(
+    project_with_ignored_paths: tuple[Path, Path, dict, dict, dict],
+) -> None:
+    root, _, cases, report, baseline = project_with_ignored_paths
+    unknown = "worldfoundry/base_models/unclassified_runtime.py"
+    result = policy.evaluate_policy(
+        report,
+        cases,
+        baseline,
+        root,
+        ["worldfoundry/base_models/README.md", "worldfoundry/base_models/three_dimensions/README.md", unknown],
+    )
+    assert result["unknown_inference_paths"] == [unknown]
+    assert result["affected_variants"] == ["large@large", "small@small"]
+    assert result["status"] == "failed"
+    assert result["violations"] == [
+        {"variant": "large@large", "reason": "affected_native_variant_without_replay_recipe"}
+    ]
+
+
+def test_ignored_path_patterns_cannot_be_a_string(project: tuple[Path, Path, dict, dict, dict]) -> None:
+    root, _, cases, report, baseline = project
+    manifest = root / "tests/manual/geometry_regression_dependencies.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"ignored_paths": "docs/**"}))
+    with pytest.raises(ValueError, match="Ignored paths"):
+        policy.evaluate_policy(report, cases, baseline, root, ["worldfoundry/operators/helper.py"])
 
 
 def test_explicit_affected_model_without_case_fails_and_unknown_identity_is_rejected(project):
@@ -261,6 +438,8 @@ def test_committed_baseline_preserves_real_repository_gaps():
         ("lingbot-world-v2-1.3b", "lingbot-world-v2-1p3b-causal-short"),
         ("matrix-game-4-egypt", "matrix-game4-egypt-video-short"),
         ("wonderworld", "wonderworld-scene-short"),
+        ("fastframes", "fastframes-s-t2v-checkpoint-replay"),
+        ("fastframes", "fastframes-l-t2v-checkpoint-replay"),
     ],
 )
 def test_new_variant_has_its_own_checkpoint_and_numerical_replay(model_id: str, case_id: str) -> None:
@@ -286,6 +465,13 @@ def test_new_variant_has_its_own_checkpoint_and_numerical_replay(model_id: str, 
         assert case["call"]["sample_audio"] is False
         assert "artifact.video.mp4.frames" in case["required_outputs"]
         assert case["array_contracts"]["artifact.video.mp4.fps"]["values"] == [24, 1]
+    elif model_id == "fastframes":
+        assert case_id == f"{case['load']['variant']}-t2v-checkpoint-replay"
+        assert case["call"]["seed"] == case["seed"] == 0
+        assert case["asset_sha256"].keys() == case["assets"].keys()
+        assert case["required_outputs"] == ["artifact.video.mp4.frames", "artifact.video.mp4.fps"]
+        assert case["array_contracts"]["artifact.video.mp4.frames"]["shape"] == [81, 480, 832, 3]
+        assert case["array_contracts"]["artifact.video.mp4.fps"]["values"] == [16, 1]
     else:
         a, b, repeat = case["sequence"]
         assert (a["name"], b["name"], repeat["name"]) == ("a", "b", "repeat")
@@ -390,3 +576,44 @@ def test_runtime_source_ownership_rejects_symlink_escapes(project, tmp_path):
     vendor.symlink_to(external, target_is_directory=True)
     with pytest.raises(ValueError, match="escapes"):
         policy.evaluate_policy(report, cases, baseline, root, ["worldfoundry/synthesis/subprocess_model/inference.py"])
+
+
+def _environment_ownership(root: Path, variants: list[str]) -> str:
+    path = "worldfoundry/data/models/runtime/environments/video/example.yaml"
+    manifest = root / "tests/manual/geometry_regression_dependencies.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(json.dumps({"environment_variants": {path: variants}}))
+    return path
+
+
+def test_exact_environment_ownership_selects_only_declared_variant(
+    project: tuple[Path, Path, dict, dict, dict],
+) -> None:
+    root, _, cases, report, baseline = project
+    path = _environment_ownership(root, ["small@small"])
+    result = policy.evaluate_policy(report, cases, baseline, root, [path])
+    assert result["status"] == "passed"
+    assert result["affected_variants"] == ["small@small"]
+    assert result["unknown_inference_paths"] == []
+
+
+def test_environment_ownership_does_not_hide_unknown_manifests_or_shared_core(
+    project: tuple[Path, Path, dict, dict, dict],
+) -> None:
+    root, _, cases, report, baseline = project
+    path = _environment_ownership(root, ["small@small"])
+    unknown = path.replace("example.yaml", "other.yaml")
+    result = policy.evaluate_policy(report, cases, baseline, root, [unknown])
+    assert result["status"] == "failed"
+    assert result["affected_variants"] == ["large@large", "small@small"]
+    assert result["unknown_inference_paths"] == [unknown]
+    result = policy.evaluate_policy(report, cases, baseline, root, [path, "worldfoundry/core/nn/blocks/layers.py"])
+    assert result["status"] == "failed"
+    assert result["affected_variants"] == ["large@large", "small@small"]
+
+
+def test_environment_ownership_rejects_unknown_variant(project: tuple[Path, Path, dict, dict, dict]) -> None:
+    root, _, cases, report, baseline = project
+    path = _environment_ownership(root, ["absent@absent"])
+    with pytest.raises(ValueError, match="unknown variants"):
+        policy.evaluate_policy(report, cases, baseline, root, [path])

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import contextlib
 import importlib
 import json
 import os
 from argparse import Namespace
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any
 
 from worldfoundry.core.io.paths import checkpoint_root_candidates
 from worldfoundry.synthesis.visual_generation.lyra_2 import (
@@ -100,10 +102,10 @@ class Lyra2Runtime:
         args: Any = None,
         device: str | None = None,
         weight_dtype: Any = DEFAULT_WEIGHT_DTYPE,
-        checkpoint_dir: Optional[str] = None,
-        negative_prompt_path: Optional[str] = None,
+        checkpoint_dir: str | None = None,
+        negative_prompt_path: str | None = None,
         da3_model_name: str = DEFAULT_DA3_MODEL_NAME,
-        da3_model_path_custom: Optional[str] = None,
+        da3_model_path_custom: str | None = None,
         experiment: str = "lyra2",
         context_parallel_size: int = 1,
         guidance: float = 5.0,
@@ -115,7 +117,7 @@ class Lyra2Runtime:
         load_runtime: bool = False,
         strict: bool = True,
         **kwargs: Any,
-    ) -> "Lyra2Runtime":
+    ) -> Lyra2Runtime:
         """
         Build a lazy Lyra-2 wrapper or explicitly load the vendored runtime.
 
@@ -240,10 +242,8 @@ class Lyra2Runtime:
         if not source_checkpoint_dir.is_dir():
             return
         if not runtime_checkpoint_dir.exists() and not runtime_checkpoint_dir.is_symlink():
-            try:
+            with contextlib.suppress(FileExistsError):
                 runtime_checkpoint_dir.symlink_to(source_checkpoint_dir, target_is_directory=True)
-            except FileExistsError:
-                pass
 
         shared_root = checkpoint_root.parent
         tokenizer_roots = tuple(dict.fromkeys((shared_root, *checkpoint_root_candidates())))
@@ -275,11 +275,7 @@ class Lyra2Runtime:
             None,
         )
         xlm_tokenizer = next(
-            (
-                candidate
-                for candidate in xlm_candidates
-                if (candidate / "tokenizer_config.json").is_file()
-            ),
+            (candidate for candidate in xlm_candidates if (candidate / "tokenizer_config.json").is_file()),
             None,
         )
         for env_name, candidate in {
@@ -304,10 +300,8 @@ class Lyra2Runtime:
             for attr in dir(megatron_compat.parallel_state):
                 if attr.startswith("__"):
                     continue
-                try:
+                with contextlib.suppress(Exception):
                     setattr(parallel_state_module, attr, getattr(megatron_compat.parallel_state, attr))
-                except Exception:
-                    pass
             sys.modules["megatron.core.parallel_state"] = parallel_state_module
 
         megatron_module = sys.modules.setdefault("megatron", types.ModuleType("megatron"))
@@ -343,7 +337,7 @@ class Lyra2Runtime:
 
         install_da3_legacy_aliases()
 
-    def load_runtime(self, strict: bool = True) -> "Lyra2Runtime":
+    def load_runtime(self, strict: bool = True) -> Lyra2Runtime:
         """
         Load Lyra-2 model, DA3 model, and negative prompt embeddings.
 
@@ -437,10 +431,10 @@ class Lyra2Runtime:
         *,
         num_frames: int,
         seed: int,
-        guidance: Optional[float],
-        shift: Optional[float],
-        num_sampling_step: Optional[int],
-        offload: Optional[bool],
+        guidance: float | None,
+        shift: float | None,
+        num_sampling_step: int | None,
+        offload: bool | None,
     ) -> Namespace:
         """
         Build Lyra-2 runtime argument namespace.
@@ -510,7 +504,7 @@ class Lyra2Runtime:
     def _build_prompt_batch(
         self,
         prompt: str,
-        chunk_captions: Optional[dict[str, str]],
+        chunk_captions: dict[str, str] | None,
         num_frames: int,
         offload_when_prompt: bool,
     ) -> dict[str, Any]:
@@ -529,7 +523,7 @@ class Lyra2Runtime:
         desired_dtype = self.model.tensor_kwargs.get("dtype", self.weight_dtype)
         neg_t5 = self.negative_prompt_data["t5_text_embeddings"].to(device=desired_device, dtype=desired_dtype)
         chunk_keys_int = (
-            sorted(int(key) for key in chunk_captions.keys() if int(key) < num_frames) if chunk_captions else []
+            sorted(int(key) for key in chunk_captions.keys() if int(key) < num_frames) if chunk_captions else []  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
         )
 
         if len(chunk_keys_int) > 1:
@@ -623,16 +617,16 @@ class Lyra2Runtime:
         input_image: Any = None,
         camera_w2c: Any = None,
         prompt: str = "",
-        chunk_captions: Optional[dict[str, str]] = None,
+        chunk_captions: dict[str, str] | None = None,
         zoom_factors: Any = None,
         fps: int = 16,
         seed: int = 1,
         resolution: Sequence[int] = (480, 832),
-        guidance: Optional[float] = None,
-        shift: Optional[float] = None,
-        num_sampling_step: Optional[int] = None,
-        offload: Optional[bool] = None,
-        offload_when_prompt: Optional[bool] = None,
+        guidance: float | None = None,
+        shift: float | None = None,
+        num_sampling_step: int | None = None,
+        offload: bool | None = None,
+        offload_when_prompt: bool | None = None,
         show_progress: bool = True,
         execute: bool = False,
         output_path: str | Path | None = None,
@@ -688,8 +682,8 @@ class Lyra2Runtime:
         import numpy as np
         import torch
 
-        from worldfoundry.core.io import video_tensor_to_uint8_frames
         from worldfoundry.core.media.codecs.image import load_pil_image
+        from worldfoundry.core.media.codecs.video import video_tensor_to_uint8_frames
         from worldfoundry.core.media.processing.postprocess import VideoChunk
 
         self._install_runtime_aliases()
@@ -789,16 +783,16 @@ class Lyra2Runtime:
         input_image: Any,
         camera_w2c: Any,
         prompt: str,
-        chunk_captions: Optional[dict[str, str]],
+        chunk_captions: dict[str, str] | None,
         zoom_factors: Any,
         fps: int,
         seed: int,
         resolution: Sequence[int],
-        guidance: Optional[float],
-        shift: Optional[float],
-        num_sampling_step: Optional[int],
-        offload: Optional[bool],
-        offload_when_prompt: Optional[bool],
+        guidance: float | None,
+        shift: float | None,
+        num_sampling_step: int | None,
+        offload: bool | None,
+        offload_when_prompt: bool | None,
         extra: dict[str, Any],
     ) -> dict[str, Any]:
         """

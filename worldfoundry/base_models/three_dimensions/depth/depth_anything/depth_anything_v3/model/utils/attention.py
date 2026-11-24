@@ -12,19 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Modified from: https://github.com/huggingface/pytorch-image-models/blob/main/timm/models/vision_transformer.py#L103-L110 # noqa
+# Modified from: https://github.com/huggingface/pytorch-image-models/blob/main/timm/models/vision_transformer.py#L103-L110
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> model -> utils -> attention.py functionality."""
 
-from typing import Callable, Optional, Union
-import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
+
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
 
 class Attention(nn.Module):
-    """Attention implementation."""
     def __init__(
         self,
         dim: int,
@@ -37,22 +33,6 @@ class Attention(nn.Module):
         qk_norm: bool = False,
         rope=None,
     ) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            qkv_bias: The qkv bias.
-            proj_bias: The proj bias.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-            norm_layer: The norm layer.
-            qk_norm: The qk norm.
-            rope: The rope.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
         self.num_heads = num_heads
@@ -67,16 +47,6 @@ class Attention(nn.Module):
         self.rope = rope
 
     def forward(self, x: Tensor, pos=None, attn_mask=None) -> Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            pos: The pos.
-            attn_mask: The attn mask.
-
-        Returns:
-            The return value.
-        """
         # Debug breakpoint removed for production
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
@@ -94,87 +64,4 @@ class Attention(nn.Module):
         x = x.transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
-        return x
-
-
-class LayerScale(nn.Module):
-    """Layer scale implementation."""
-    def __init__(
-        self,
-        dim: int,
-        init_values: Union[float, Tensor] = 1e-5,
-        inplace: bool = False,
-    ) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            init_values: The init values.
-            inplace: The inplace.
-
-        Returns:
-            The return value.
-        """
-        super().__init__()
-        self.inplace = inplace
-        self.gamma = nn.Parameter(init_values * torch.ones(dim))
-
-    def forward(self, x: Tensor) -> Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
-        return x.mul_(self.gamma) if self.inplace else x * self.gamma
-
-
-class Mlp(nn.Module):
-    """Mlp implementation."""
-    def __init__(
-        self,
-        in_features: int,
-        hidden_features: Optional[int] = None,
-        out_features: Optional[int] = None,
-        act_layer: Callable[..., nn.Module] = nn.GELU,
-        drop: float = 0.0,
-        bias: bool = True,
-    ) -> None:
-        """Init.
-
-        Args:
-            in_features: The in features.
-            hidden_features: The hidden features.
-            out_features: The out features.
-            act_layer: The act layer.
-            drop: The drop.
-            bias: The bias.
-
-        Returns:
-            The return value.
-        """
-        super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=bias)
-        self.act = act_layer()
-        self.fc2 = nn.Linear(hidden_features, out_features, bias=bias)
-        self.drop = nn.Dropout(drop)
-
-    def forward(self, x: Tensor) -> Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
         return x

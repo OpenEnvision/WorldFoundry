@@ -6,11 +6,11 @@ full-batch mask. Training only; inference is a no-op add.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any, cast
 
 import torch
-from torch import Tensor
-
+from torch import Tensor, nn
 
 # ──────────────────────────────────────────────────────────────────────────
 # Subset-batch residual — cheaper than a full-batch DropPath mask at high p
@@ -21,7 +21,7 @@ def drop_add_residual_stochastic_depth(
     x: Tensor,
     residual_func: Callable[..., Tensor],
     sample_drop_ratio: float = 0.0,
-    pos: Optional[Tensor] = None,
+    pos: Tensor | None = None,
     **residual_kwargs: Any,
 ) -> Tensor:
     """Apply a residual branch on a random batch subset and scale back to full batch size."""
@@ -69,7 +69,7 @@ def add_residual(
     brange: Tensor,
     residual: Tensor,
     residual_scale_factor: float,
-    scaling_vector: Optional[Tensor] = None,
+    scaling_vector: Tensor | None = None,
 ) -> Tensor:
     """Scatter-add a residual onto selected batch rows, optionally with layer-scale."""
 
@@ -78,7 +78,7 @@ def add_residual(
         residual = residual.flatten(1)
         return torch.index_add(x_flat, 0, brange, residual.to(dtype=x.dtype), alpha=residual_scale_factor)
 
-    from xformers.ops import scaled_index_add
+    scaled_index_add = __import__("xformers.ops", fromlist=["scaled_index_add"]).scaled_index_add
 
     return scaled_index_add(
         x,
@@ -89,8 +89,34 @@ def add_residual(
     )
 
 
+# Adapted from facebookresearch/dino (Apache-2.0), Copyright Meta Platforms, Inc.
+def drop_path_uniform(x: Tensor, drop_prob: float = 0.0, training: bool = False) -> Tensor:
+    """DINO uniform-threshold masks; divide activations before multiplying the mask."""
+    if drop_prob == 0.0 or not training:
+        return x
+    keep_prob = 1 - drop_prob
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    random_tensor.floor_()  # binarize
+    output = x.div(keep_prob) * random_tensor
+    return output
+
+
+class UniformDropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: float | None = None) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x: Tensor) -> Tensor:
+        return drop_path_uniform(x, cast(float, self.drop_prob), self.training)
+
+
 __all__ = [
+    "UniformDropPath",
     "add_residual",
     "drop_add_residual_stochastic_depth",
+    "drop_path_uniform",
     "get_branges_scales",
 ]

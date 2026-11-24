@@ -23,13 +23,14 @@ start indices and detects uniform vs first-frame / first-plus-one patterns
 so the scan can stay vectorized.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+import itertools
+from typing import Any
 
 
 def is_chunk_causal_request(
-    chunk_size: Optional[int],
+    chunk_size: int | None,
     T_effective: int,
-    chunk_index: Optional[List[int]] = None,
+    chunk_index: list[int] | None = None,
 ) -> bool:
     """Decide whether a layer should run in chunk-causal (vs. fully bidirectional) mode.
 
@@ -66,16 +67,14 @@ def is_chunk_causal_request(
     """
     if chunk_size is not None and chunk_size < T_effective:
         return True
-    if chunk_index is not None:
-        return True
-    return False
+    return chunk_index is not None
 
 
 def chunk_index_from_chunk_size(
     T: int,
     chunk_size: int,
     strategy: str = "uniform",
-) -> List[int]:
+) -> list[int]:
     """Convert chunk_size to chunk_index list with a split strategy.
 
     Args:
@@ -115,15 +114,15 @@ def chunk_index_from_chunk_size(
     if strategy in ("first_frame", "first_frame_alone", "first_frame_only"):
         if T <= 1:
             return [0]
-        indices = [0] + list(range(1, T, chunk_size))
+        indices = [0] + list(range(1, T, chunk_size))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         if len(indices) > 2 and (T - indices[-1]) < chunk_size:
             indices.pop()
         return indices
 
     if strategy in ("first_plus_one", "first_chunk_plus_one"):
-        if T <= chunk_size + 1:
+        if chunk_size + 1 >= T:
             return [0]
-        indices = [0] + list(range(chunk_size + 1, T, chunk_size))
+        indices = [0] + list(range(chunk_size + 1, T, chunk_size))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         # Absorb small remainder into last chunk to avoid degenerate chunks
         # (e.g., T_latent=41 with chunk_size=3 → last chunk would be 1 frame,
         # which crashes causal_conv1d). Merge it into the previous chunk instead.
@@ -134,7 +133,7 @@ def chunk_index_from_chunk_size(
     raise ValueError(f"Unknown chunk_split_strategy '{strategy}'. Supported: uniform, first_frame, first_plus_one.")
 
 
-def get_chunk_index_from_config(config: Any, num_frames: Optional[int] = None) -> Optional[List[int]]:
+def get_chunk_index_from_config(config: Any, num_frames: int | None = None) -> list[int] | None:
     """Resolve chunk_index from a config, supporting chunk_size and strategy.
 
     Priority:
@@ -157,15 +156,6 @@ def get_chunk_index_from_config(config: Any, num_frames: Optional[int] = None) -
         return None
 
     def _get_model_attr(name: str, default: Any) -> Any:
-        """Helper function to get model attr.
-
-        Args:
-            name: The name.
-            default: The default.
-
-        Returns:
-            The return value.
-        """
         if hasattr(model, "get"):
             return model.get(name, default)
         if isinstance(model, dict):
@@ -189,7 +179,7 @@ def get_chunk_index_from_config(config: Any, num_frames: Optional[int] = None) -
     return None
 
 
-def compute_chunk_sizes(chunk_index: List[int], T: int) -> List[int]:
+def compute_chunk_sizes(chunk_index: list[int], T: int) -> list[int]:
     """Compute actual chunk sizes from chunk_index.
 
     Args:
@@ -215,14 +205,14 @@ def compute_chunk_sizes(chunk_index: List[int], T: int) -> List[int]:
 
     # Add T as the final boundary if not present
     if chunk_index[-1] != T:
-        chunk_index = chunk_index + [T]
+        chunk_index = chunk_index + [T]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     # Compute sizes
     sizes = [chunk_index[i + 1] - chunk_index[i] for i in range(len(chunk_index) - 1)]
     return sizes
 
 
-def size1_chunk_position_indices(chunk_index: List[int]) -> List[int]:
+def size1_chunk_position_indices(chunk_index: list[int]) -> list[int]:
     """Return frame-time positions belonging to size-1 (singleton) chunks.
 
     A size-1 chunk has no intra-chunk lookahead, so the anti-causal
@@ -247,11 +237,11 @@ def size1_chunk_position_indices(chunk_index: List[int]) -> List[int]:
         >>> size1_chunk_position_indices([0, 1, 2, 3, 4, 7])  # frame_causal, K=4, G=3
         [0, 1, 2, 3]
     """
-    return [s for s, e in zip(chunk_index[:-1], chunk_index[1:]) if e - s == 1]
+    return [s for s, e in itertools.pairwise(chunk_index) if e - s == 1]
 
 
 def is_uniform_chunking(
-    chunk_index: List[int],
+    chunk_index: list[int],
     T: int,
     chunk_size: int,
 ) -> bool:
@@ -303,10 +293,10 @@ def is_uniform_chunking(
 
 
 def analyze_chunk_pattern(
-    chunk_index: List[int],
+    chunk_index: list[int],
     T: int,
     chunk_size: int,
-) -> Tuple[str, Dict[str, Any]]:
+) -> tuple[str, dict[str, Any]]:
     """Analyze chunk pattern and return vectorization strategy.
 
     Detects special patterns that allow hybrid vectorization:
@@ -388,11 +378,11 @@ def analyze_chunk_pattern(
 
 
 def normalize_chunk_index(
-    chunk_index: Optional[List[int]],
+    chunk_index: list[int] | None,
     T: int,
-    chunk_size: Optional[int] = None,
+    chunk_size: int | None = None,
     chunk_split_strategy: str = "uniform",
-) -> Tuple[List[int], bool]:
+) -> tuple[list[int], bool]:
     """Normalize chunk_index and detect if uniform.
 
     This function handles all the complex logic for:
@@ -425,10 +415,10 @@ def normalize_chunk_index(
         if not normalized_chunk_index:
             normalized_chunk_index = [0]
         if normalized_chunk_index[-1] != T:
-            normalized_chunk_index = normalized_chunk_index + [T]
+            normalized_chunk_index = normalized_chunk_index + [T]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         # Check if uniform (requires chunk_size for comparison)
-        if chunk_size is None:
+        if chunk_size is None:  # noqa: SIM108 - Branches carry per-case comments.
             # Can't verify uniformity without chunk_size, assume non-uniform (safe)
             is_uniform = False
         else:
@@ -453,7 +443,7 @@ def normalize_chunk_index(
     if not chunk_index_gen:
         chunk_index_gen = [0]
     if chunk_index_gen[-1] != T:
-        chunk_index_gen = chunk_index_gen + [T]
+        chunk_index_gen = chunk_index_gen + [T]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     # Check if uniform
     is_uniform = is_uniform_chunking(chunk_index_gen, T, chunk_size)

@@ -6,15 +6,15 @@ Covers EF-35 (redact_secrets word-boundary matching) and EF-04
 
 from __future__ import annotations
 
-from worldfoundry.evaluation.api import (
+from worldfoundry.evals.api import (
     GENERATION_UNKNOWN_STATUS,
     GenerationResult,
     is_generation_result_successful,
     is_generation_status_successful,
     normalize_generation_status,
 )
-from worldfoundry.evaluation.models.pipelines.results import pipeline_result_status
-from worldfoundry.evaluation.reporting.run_manifest import redact_secrets
+from worldfoundry.evals.models.pipelines.results import pipeline_result_status
+from worldfoundry.evals.reporting.run_manifest import redact_secrets
 
 # ── EF-35: redact_secrets ───────────────────────────────────────────────
 

@@ -8,8 +8,9 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, cast
 
 import cv2
 import matplotlib
@@ -17,6 +18,7 @@ import numpy as np
 import torch
 import trimesh
 from scipy.spatial.transform import Rotation
+from trimesh.visual import ColorVisuals
 
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.models.vggt import VGGT
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.utils.geometry import (
@@ -29,28 +31,27 @@ from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.utils.pose
     pose_encoding_to_extri_intri,
 )
 
-
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 
 
-def _is_image_path(path: Union[str, Path]) -> bool:
+def _is_image_path(path: str | Path) -> bool:
     """Check if the given value represents a valid image file path."""
     return Path(path).suffix.lower() in IMAGE_EXTENSIONS
 
 
-def _is_video_path(path: Union[str, Path]) -> bool:
+def _is_video_path(path: str | Path) -> bool:
     """Check if the given value represents a valid video file path."""
     return Path(path).suffix.lower() in VIDEO_EXTENSIONS
 
 
-def collect_input_images(input_source: Union[str, Path, Sequence[Union[str, Path]]]) -> List[str]:
+def collect_input_images(input_source: str | Path | Sequence[str | Path]) -> list[str]:
     """Gather and filter input conditioning images."""
     if isinstance(input_source, (list, tuple)):
         paths = [str(Path(p)) for p in input_source]
         return sorted(paths)
 
-    source = Path(input_source)
+    source = Path(cast("str | Path", input_source))
     if source.is_dir():
         image_dir = source / "images" if (source / "images").is_dir() else source
         return sorted(str(p) for p in image_dir.iterdir() if p.is_file() and _is_image_path(p))
@@ -63,9 +64,9 @@ def collect_input_images(input_source: Union[str, Path, Sequence[Union[str, Path
 
 
 def prepare_target_images(
-    input_source: Union[str, Path, Sequence[Union[str, Path]]],
-    target_dir: Union[str, Path],
-) -> List[str]:
+    input_source: str | Path | Sequence[str | Path],
+    target_dir: str | Path,
+) -> list[str]:
     """Normalize and scale target images for the runtime."""
     target_dir = Path(target_dir)
     images_dir = target_dir / "images"
@@ -75,7 +76,7 @@ def prepare_target_images(
     images_dir.mkdir(parents=True, exist_ok=True)
 
     source_paths = collect_input_images(input_source)
-    copied_paths: List[str] = []
+    copied_paths: list[str] = []
     for source_path in source_paths:
         source = Path(source_path)
         if _is_image_path(source):
@@ -95,7 +96,7 @@ def prepare_target_images(
     return copied_paths
 
 
-def _extract_video_frames(video_path: Path, images_dir: Path) -> List[str]:
+def _extract_video_frames(video_path: Path, images_dir: Path) -> list[str]:
     """Extract individual frames from a video file."""
     # Initialize video capture stream to extract frame data and FPS properties
     capture = cv2.VideoCapture(str(video_path))
@@ -104,7 +105,7 @@ def _extract_video_frames(video_path: Path, images_dir: Path) -> List[str]:
 
     fps = capture.get(cv2.CAP_PROP_FPS)
     frame_interval = max(int(fps * 1), 1)
-    image_paths: List[str] = []
+    image_paths: list[str] = []
     count = 0
     frame_index = 0
     while True:
@@ -123,13 +124,21 @@ def _extract_video_frames(video_path: Path, images_dir: Path) -> List[str]:
 
 
 def run_model(
-    image_paths: Sequence[Union[str, Path]],
+    image_paths: Sequence[str | Path],
     model: VGGT,
     *,
-    device: Optional[str] = None,
+    device: str | None = None,
     preprocess_mode: str = "crop",
-) -> Dict[str, Any]:
-    """Run model helper function."""
+) -> dict[str, Any]:
+    """Run VGGT on the images, sorted by path, and return NumPy predictions without the batch dimension.
+
+    The predictions include ``extrinsic`` and ``intrinsic`` from the pose encoding and
+    ``world_points_from_depth`` unprojected from the depth map. CUDA runs under bfloat16 autocast on
+    compute capability 8.0 and newer, float16 otherwise.
+
+    Raises:
+        ValueError: CUDA is requested but unavailable, or no image is given.
+    """
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     device_type = torch.device(device).type
     if device_type == "cuda" and not torch.cuda.is_available():
@@ -147,15 +156,14 @@ def run_model(
     else:
         dtype = torch.float32
 
-    with torch.no_grad():
-        with torch.amp.autocast(device_type=device_type, dtype=dtype, enabled=(device_type == "cuda")):
-            predictions = model(images)
+    with torch.no_grad(), torch.amp.autocast(device_type=device_type, dtype=dtype, enabled=(device_type == "cuda")):
+        predictions = model(images)
 
     extrinsic, intrinsic = pose_encoding_to_extri_intri(predictions["pose_enc"], images.shape[-2:])
     predictions["extrinsic"] = extrinsic
     predictions["intrinsic"] = intrinsic
 
-    numpy_predictions: Dict[str, Any] = {}
+    numpy_predictions: dict[str, Any] = {}
     for key, value in predictions.items():
         if isinstance(value, torch.Tensor):
             numpy_predictions[key] = value.detach().cpu().numpy().squeeze(0)
@@ -177,7 +185,7 @@ def run_model(
 
 
 def predictions_to_glb(
-    predictions: Dict[str, Any],
+    predictions: dict[str, Any],
     *,
     conf_thres: float = 50.0,
     filter_by_frames: str = "all",
@@ -186,7 +194,16 @@ def predictions_to_glb(
     show_cam: bool = True,
     prediction_mode: str = "Predicted Pointmap",
 ) -> trimesh.Scene:
-    """Predictions to glb helper function."""
+    """Build a ``trimesh`` scene of the predicted point cloud and, optionally, camera frustums.
+
+    Points come from ``world_points`` in a pointmap ``prediction_mode`` when present, otherwise from
+    ``world_points_from_depth``. Points below the ``conf_thres`` confidence percentile, and optionally
+    near-black or near-white points, are dropped; ``filter_by_frames`` such as ``"3: name"`` keeps one
+    frame. The scene is aligned to the first camera.
+
+    Raises:
+        ValueError: ``predictions`` is not a dict.
+    """
     if not isinstance(predictions, dict):
         raise ValueError("predictions must be a dictionary")
     if conf_thres is None:
@@ -196,14 +213,10 @@ def predictions_to_glb(
     if "Pointmap" in prediction_mode:
         if "world_points" in predictions:
             pred_world_points = predictions["world_points"]
-            pred_world_points_conf = predictions.get(
-                "world_points_conf", np.ones_like(pred_world_points[..., 0])
-            )
+            pred_world_points_conf = predictions.get("world_points_conf", np.ones_like(pred_world_points[..., 0]))
         else:
             pred_world_points = predictions["world_points_from_depth"]
-            pred_world_points_conf = predictions.get(
-                "depth_conf", np.ones_like(pred_world_points[..., 0])
-            )
+            pred_world_points_conf = predictions.get("depth_conf", np.ones_like(pred_world_points[..., 0]))
     else:
         pred_world_points = predictions["world_points_from_depth"]
         pred_world_points_conf = predictions.get("depth_conf", np.ones_like(pred_world_points[..., 0]))
@@ -263,8 +276,7 @@ def predictions_to_glb(
     return apply_scene_alignment(scene_3d, extrinsics_matrices)
 
 
-def _parse_frame_filter(filter_by_frames: str) -> Optional[int]:
-    """Parse frame filter helper function."""
+def _parse_frame_filter(filter_by_frames: str) -> int | None:
     if filter_by_frames in {"all", "All"}:
         return None
     try:
@@ -276,10 +288,10 @@ def _parse_frame_filter(filter_by_frames: str) -> Optional[int]:
 def integrate_camera_into_scene(
     scene: trimesh.Scene,
     transform: np.ndarray,
-    face_colors: Tuple[int, int, int],
+    face_colors: tuple[int, ...],
     scene_scale: float,
 ) -> None:
-    """Integrate camera into scene helper function."""
+    """Add a frustum mesh for the camera pose ``transform``, sized by ``scene_scale``, to ``scene``."""
     cam_width = scene_scale * 0.05
     cam_height = scene_scale * 0.1
 
@@ -302,12 +314,15 @@ def integrate_camera_into_scene(
     vertices_transformed = transform_points(complete_transform, vertices_combined)
     mesh_faces = compute_camera_faces(camera_cone_shape)
     camera_mesh = trimesh.Trimesh(vertices=vertices_transformed, faces=mesh_faces)
-    camera_mesh.visual.face_colors[:, :3] = face_colors
+    cast(ColorVisuals, camera_mesh.visual).face_colors[:, :3] = face_colors
     scene.add_geometry(camera_mesh)
 
 
 def apply_scene_alignment(scene_3d: trimesh.Scene, extrinsics_matrices: np.ndarray) -> trimesh.Scene:
-    """Apply scene alignment helper function."""
+    """Apply a y-axis half-turn, flip y/z, then apply the first camera-to-world transform.
+
+    ``extrinsics_matrices`` contains world-to-camera matrices. Mutates and returns ``scene_3d``.
+    """
     align_rotation = np.eye(4)
     align_rotation[:3, :3] = Rotation.from_euler("y", 180, degrees=True).as_matrix()
     initial_transformation = np.linalg.inv(extrinsics_matrices[0]) @ get_opengl_conversion_matrix() @ align_rotation
@@ -316,15 +331,15 @@ def apply_scene_alignment(scene_3d: trimesh.Scene, extrinsics_matrices: np.ndarr
 
 
 def get_opengl_conversion_matrix() -> np.ndarray:
-    """Get opengl conversion matrix helper function."""
+    """Return the 4x4 matrix that flips the y and z axes between OpenCV and OpenGL camera frames."""
     matrix = np.identity(4)
     matrix[1, 1] = -1
     matrix[2, 2] = -1
     return matrix
 
 
-def transform_points(transformation: np.ndarray, points: np.ndarray, dim: Optional[int] = None) -> np.ndarray:
-    """Transform points helper function."""
+def transform_points(transformation: np.ndarray, points: np.ndarray, dim: int | None = None) -> np.ndarray:
+    """Apply a homogeneous ``transformation`` to ``points`` of shape ``[..., D]`` and keep the first ``dim`` coordinates."""
     points = np.asarray(points)
     initial_shape = points.shape[:-1]
     dim = dim or points.shape[-1]
@@ -334,7 +349,7 @@ def transform_points(transformation: np.ndarray, points: np.ndarray, dim: Option
 
 
 def compute_camera_faces(cone_shape: trimesh.Trimesh) -> np.ndarray:
-    """Compute camera faces helper function."""
+    """Return the triangle faces of a camera frustum built from three stacked copies of ``cone_shape``'s vertices."""
     faces_list = []
     num_vertices_cone = len(cone_shape.vertices)
     for face in cone_shape.faces:
@@ -358,11 +373,11 @@ def compute_camera_faces(cone_shape: trimesh.Trimesh) -> np.ndarray:
 
 
 def run_official_scene_export(
-    input_source: Union[str, Path, Sequence[Union[str, Path]]],
+    input_source: str | Path | Sequence[str | Path],
     model: VGGT,
     *,
-    output_dir: Union[str, Path],
-    device: Optional[str] = None,
+    output_dir: str | Path,
+    device: str | None = None,
     preprocess_mode: str = "crop",
     conf_thres: float = 3.0,
     frame_filter: str = "All",
@@ -370,9 +385,13 @@ def run_official_scene_export(
     mask_white_bg: bool = False,
     show_cam: bool = True,
     prediction_mode: str = "Pointmap Regression",
-    output_name: Optional[str] = None,
-) -> Dict[str, str]:
-    """Run official scene export helper function."""
+    output_name: str | None = None,
+) -> dict[str, str]:
+    """Run VGGT on an input source and export ``predictions.npz`` and a GLB scene to ``output_dir``.
+
+    Returns:
+        Dict with ``glb_path``, ``prediction_path`` and ``image_dir``.
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     image_paths = prepare_target_images(input_source, output_dir)
@@ -418,8 +437,8 @@ def run_official_scene_export(
 
 __all__ = [
     "collect_input_images",
-    "prepare_target_images",
     "predictions_to_glb",
+    "prepare_target_images",
     "run_model",
     "run_official_scene_export",
 ]

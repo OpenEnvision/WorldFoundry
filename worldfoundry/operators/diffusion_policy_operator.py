@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,7 +16,7 @@ class DiffusionPolicyOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "visuomotor_diffusion_policy"
     ACTION_REPRESENTATION = "denoised_action_trajectory"
     OBSERVATION_LAYOUT = "image_or_low_dim_history"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": False,
         "image": True,
         "video": True,
@@ -23,7 +24,7 @@ class DiffusionPolicyOperator(EmbodiedActionOperator):
         "actions": ["trajectory", "action_sequence"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
         task_label = prompt if prompt not in (None, "") else _first_present(kwargs, "task", "task_name")
         task_label = "" if task_label is None else str(task_label)
@@ -42,13 +43,14 @@ class DiffusionPolicyOperator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         observation = _compact_dict(
             {
                 "image_history": video or images,
                 "low_dim": _first_present(kwargs, "low_dim", "state", "proprio"),
-                "observation_horizon": kwargs.get("observation_horizon") or self.input_schema.get("observation_horizon"),
+                "observation_horizon": kwargs.get("observation_horizon")
+                or self.input_schema.get("observation_horizon"),
             }
         )
         return {
@@ -67,7 +69,7 @@ class DiffusionPolicyOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         trajectory = _extract_action_signal(raw, "trajectory", "action_sequence", "actions")

@@ -1,3 +1,0 @@
-DomainTable = {
-    'agibotworld': 11
-}

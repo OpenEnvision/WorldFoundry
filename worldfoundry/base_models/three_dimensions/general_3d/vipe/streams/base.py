@@ -13,13 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> streams -> base.py functionality."""
-
 import copy
 import logging
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Iterable, Iterator, Protocol, cast
+from typing import Any, Protocol, cast
 
 import numpy as np
 import torch
@@ -36,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 
 class FrameAttribute(Enum):
-    """Frame attribute implementation."""
     POSE = "pose"
     INTRINSICS = "intrinsics"
     CAMERA_TYPE = "camera_type"
@@ -77,28 +75,13 @@ class VideoFrame:
     information: str = ""
 
     def size(self) -> tuple[int, int]:
-        """Size.
-
-        Returns:
-            The return value.
-        """
         return (self.rgb.shape[0], self.rgb.shape[1])
 
     @property
     def device(self) -> torch.device:
-        """Device.
-
-        Returns:
-            The return value.
-        """
         return self.rgb.device
 
     def attributes(self) -> set[FrameAttribute]:
-        """Attributes.
-
-        Returns:
-            The return value.
-        """
         attributes = set()
         if self.pose is not None:
             attributes.add(FrameAttribute.POSE)
@@ -116,14 +99,6 @@ class VideoFrame:
         return attributes
 
     def get_attribute(self, attribute: FrameAttribute) -> Any:
-        """Get attribute.
-
-        Args:
-            attribute: The attribute.
-
-        Returns:
-            The return value.
-        """
         if attribute == FrameAttribute.POSE:
             return self.pose
         if attribute == FrameAttribute.INTRINSICS:
@@ -139,15 +114,6 @@ class VideoFrame:
         raise ValueError(f"Attribute {attribute} is not available in the frame.")
 
     def set_attribute(self, attribute: FrameAttribute, value: Any) -> None:
-        """Set attribute.
-
-        Args:
-            attribute: The attribute.
-            value: The value.
-
-        Returns:
-            The return value.
-        """
         if attribute == FrameAttribute.POSE:
             self.pose = value
         elif attribute == FrameAttribute.INTRINSICS:
@@ -164,17 +130,7 @@ class VideoFrame:
             raise ValueError(f"Attribute {attribute} is not available in the frame.")
 
     def cpu(self) -> "VideoFrame":
-        """Cpu.
-
-        Returns:
-            The return value.
-        """
         def map_cpu(x):
-            """Map cpu.
-
-            Args:
-                x: The x.
-            """
             return x.cpu() if x is not None else None
 
         return VideoFrame(
@@ -191,17 +147,7 @@ class VideoFrame:
         )
 
     def cuda(self) -> "VideoFrame":
-        """Cuda.
-
-        Returns:
-            The return value.
-        """
         def map_cuda(x):
-            """Map cuda.
-
-            Args:
-                x: The x.
-            """
             return x.cuda() if x is not None else None
 
         return VideoFrame(
@@ -311,20 +257,14 @@ class VideoFrame:
 
     @property
     def sky_mask(self):
-        """Sky mask."""
         sky_mask = torch.zeros(self.size(), dtype=torch.bool, device=self.device)
         if self.instance is not None and self.instance_phrases is not None:
             for instance_id, phrase in self.instance_phrases.items():
-                if self.SKY_PROMPT == phrase:
+                if phrase == self.SKY_PROMPT:
                     sky_mask |= self.instance == instance_id
         return sky_mask
 
     def dav3_conditions(self) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
-        """Dav3 conditions.
-
-        Returns:
-            The return value.
-        """
         dav3_rgb = (self.rgb.cpu().numpy() * 255).astype(np.uint8)
         dav3_ext = None
         if self.pose is not None:
@@ -349,68 +289,27 @@ class VideoStream(IterableDataset[VideoFrame]):
     """
 
     def frame_size(self) -> tuple[int, int]:
-        """Frame size.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def name(self) -> str:
-        """Name.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def fps(self) -> float:
-        """Fps.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def __len__(self) -> int:
-        """Len.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def attributes(self) -> set[FrameAttribute]:
-        """Attributes.
-
-        Returns:
-            The return value.
-        """
         return set()
 
     def get_stream_attribute(self, attribute: FrameAttribute) -> list[Any]:
-        """Get stream attribute.
-
-        Args:
-            attribute: The attribute.
-
-        Returns:
-            The return value.
-        """
         stream_attribute = []
         for frame in self:
             stream_attribute.append(frame.get_attribute(attribute))
         return stream_attribute
 
     def get_gt_stream_attribute(self, attribute: FrameAttribute) -> list[Any]:
-        """Get gt stream attribute.
-
-        Args:
-            attribute: The attribute.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError(f"{type(self).__name__} does not provide ground-truth {attribute.value} data.")
 
 
@@ -420,16 +319,6 @@ class MultiviewVideoList(Iterable[VideoStream]):
     """
 
     def __init__(self, name: str, video_streams: list[VideoStream], rig: SE3) -> None:
-        """Init.
-
-        Args:
-            name: The name.
-            video_streams: The video streams.
-            rig: The rig.
-
-        Returns:
-            The return value.
-        """
         if len(rig.shape) == 0:
             rig = rig[None]
         self._name = name
@@ -442,51 +331,22 @@ class MultiviewVideoList(Iterable[VideoStream]):
         assert self._rig.shape[0] == len(video_streams)
 
     def __len__(self) -> int:
-        """Len.
-
-        Returns:
-            The return value.
-        """
         return len(self._video_streams)
 
     def __iter__(self):
-        """Iter."""
         for idx in range(len(self)):
             yield self[idx]
 
     def name(self) -> str:
-        """Name.
-
-        Returns:
-            The return value.
-        """
         return self._name
 
     def rig(self) -> SE3:
-        """Rig.
-
-        Returns:
-            The return value.
-        """
         return self._rig.cuda()
 
     def num_frames(self) -> int:
-        """Num frames.
-
-        Returns:
-            The return value.
-        """
         return self._len
 
     def __getitem__(self, idx: int) -> VideoStream:
-        """Getitem.
-
-        Args:
-            idx: The idx.
-
-        Returns:
-            The return value.
-        """
         return self._video_streams[idx]
 
 
@@ -498,15 +358,6 @@ class CachedVideoStream(VideoStream):
     DISPLAY_THRESH = 20
 
     def __init__(self, video_stream: VideoStream, desc: str = "Caching") -> None:
-        """Init.
-
-        Args:
-            video_stream: The video stream.
-            desc: The desc.
-
-        Returns:
-            The return value.
-        """
         self._frame_size = video_stream.frame_size()
         self._fps = video_stream.fps()
         self._name = video_stream.name()
@@ -517,46 +368,18 @@ class CachedVideoStream(VideoStream):
         self.desc = desc
 
     def fps(self) -> float:
-        """Fps.
-
-        Returns:
-            The return value.
-        """
         return self._fps
 
     def frame_size(self) -> tuple[int, int]:
-        """Frame size.
-
-        Returns:
-            The return value.
-        """
         return self._frame_size
 
     def name(self) -> str:
-        """Name.
-
-        Returns:
-            The return value.
-        """
         return self._name
 
     def __len__(self) -> int:
-        """Len.
-
-        Returns:
-            The return value.
-        """
         return self._len
 
     def __getitem__(self, index) -> VideoFrame:
-        """Getitem.
-
-        Args:
-            index: The index.
-
-        Returns:
-            The return value.
-        """
         assert index < len(self)
         n_iters_needed = index - len(self.data) + 1
         if n_iters_needed <= 0:
@@ -588,7 +411,6 @@ class CachedVideoStream(VideoStream):
         return self.data[index].cuda()
 
     def __iter__(self):
-        """Iter."""
         for idx in range(len(self)):
             # Since len(self) might change during iteration, we check again here:
             if idx >= len(self):
@@ -597,11 +419,6 @@ class CachedVideoStream(VideoStream):
             yield self[idx]
 
     def attributes(self) -> set[FrameAttribute]:
-        """Attributes.
-
-        Returns:
-            The return value.
-        """
         return self._attributes
 
 
@@ -613,45 +430,15 @@ class StreamProcessor(Protocol):
     n_passes_required: int = 1
 
     def update_fps(self, previous_fps: float) -> float:
-        """Update fps.
-
-        Args:
-            previous_fps: The previous fps.
-
-        Returns:
-            The return value.
-        """
         return previous_fps
 
     def update_frame_size(self, previous_frame_size: tuple[int, int]):
-        """Update frame size.
-
-        Args:
-            previous_frame_size: The previous frame size.
-        """
         return previous_frame_size
 
     def update_attributes(self, previous_attributes: set[FrameAttribute]) -> set[FrameAttribute]:
-        """Update attributes.
-
-        Args:
-            previous_attributes: The previous attributes.
-
-        Returns:
-            The return value.
-        """
         return previous_attributes
 
     def update_iterator(self, previous_iterator: Iterator[VideoFrame], pass_idx: int) -> Iterator[VideoFrame]:
-        """Update iterator.
-
-        Args:
-            previous_iterator: The previous iterator.
-            pass_idx: The pass idx.
-
-        Returns:
-            The return value.
-        """
         for frame_idx, frame in enumerate(previous_iterator):
             yield self(frame_idx, frame)
 
@@ -659,36 +446,13 @@ class StreamProcessor(Protocol):
 
 
 class AssignAttributesProcessor(StreamProcessor):
-    """Assign attributes processor implementation."""
     def __init__(self, stream_attributes: dict[FrameAttribute, list[Any]]):
-        """Init.
-
-        Args:
-            stream_attributes: The stream attributes.
-        """
         self.stream_attributes = stream_attributes
 
     def update_attributes(self, previous_attributes: set[FrameAttribute]) -> set[FrameAttribute]:
-        """Update attributes.
-
-        Args:
-            previous_attributes: The previous attributes.
-
-        Returns:
-            The return value.
-        """
         return previous_attributes.union(self.stream_attributes.keys())
 
     def __call__(self, frame_idx: int, frame: VideoFrame) -> VideoFrame:
-        """Call.
-
-        Args:
-            frame_idx: The frame idx.
-            frame: The frame.
-
-        Returns:
-            The return value.
-        """
         for attribute, attribute_values in self.stream_attributes.items():
             frame.set_attribute(attribute, attribute_values[frame_idx])
         return frame
@@ -700,71 +464,33 @@ class ProcessedVideoStream(VideoStream):
     """
 
     def __init__(self, stream: VideoStream, processors: list[StreamProcessor]) -> None:
-        """Init.
-
-        Args:
-            stream: The stream.
-            processors: The processors.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.stream = stream
         self.processors = processors
         self.n_passes_required = max(processor.n_passes_required for processor in processors) if processors else 1
 
     def frame_size(self) -> tuple[int, int]:
-        """Frame size.
-
-        Returns:
-            The return value.
-        """
         frame_size = self.stream.frame_size()
         for processor in self.processors:
             frame_size = processor.update_frame_size(frame_size)
         return frame_size
 
     def fps(self) -> float:
-        """Fps.
-
-        Returns:
-            The return value.
-        """
         fps = self.stream.fps()
         for processor in self.processors:
             fps = processor.update_fps(fps)
         return fps
 
     def attributes(self) -> set[FrameAttribute]:
-        """Attributes.
-
-        Returns:
-            The return value.
-        """
         attributes = self.stream.attributes()
         for processor in self.processors:
             attributes = processor.update_attributes(attributes)
         return attributes
 
     def name(self) -> str:
-        """Name.
-
-        Returns:
-            The return value.
-        """
         return self.stream.name()
 
     def cache(self, desc: str = "Caching", online: bool = False) -> CachedVideoStream:
-        """Cache.
-
-        Args:
-            desc: The desc.
-            online: The online.
-
-        Returns:
-            The return value.
-        """
         vs = CachedVideoStream(self, desc)
 
         # If not online, we trigger __getitem__ of the last element to force storing all frames.
@@ -774,29 +500,15 @@ class ProcessedVideoStream(VideoStream):
         return vs
 
     def _build_iterator(self, pass_idx: int) -> Iterator[VideoFrame]:
-        """Helper function to build iterator.
-
-        Args:
-            pass_idx: The pass idx.
-
-        Returns:
-            The return value.
-        """
         iterator = iter(self.stream)
         for processor in self.processors:
             iterator = processor.update_iterator(iterator, pass_idx)
         return iterator
 
     def __len__(self) -> int:
-        """Len.
-
-        Returns:
-            The return value.
-        """
         return len(self.stream)
 
     def __iter__(self):
-        """Iter."""
         for pass_idx in range(self.n_passes_required):
             iterator = self._build_iterator(pass_idx)
             # Iterate through the processors to update internal state.
@@ -807,17 +519,8 @@ class ProcessedVideoStream(VideoStream):
 
 
 class StreamList:
-    """Stream list implementation."""
     @staticmethod
     def make(config: DictConfig | BaseConfigSchema) -> "StreamList":
-        """Make.
-
-        Args:
-            config: The config.
-
-        Returns:
-            The return value.
-        """
         if isinstance(config, BaseConfigSchema):
             config = config.to_dictconfig()
         module_path, class_name = config.instance.rsplit(".", 1)
@@ -827,32 +530,11 @@ class StreamList:
         return getattr(module, class_name)(**cast(dict[str, Any], config))
 
     def __len__(self) -> int:
-        """Len.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def __getitem__(self, index) -> VideoStream:
-        """Getitem.
-
-        Args:
-            index: The index.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def stream_name(self, index: int) -> str:
-        """Stream name.
-
-        Args:
-            index: The index.
-
-        Returns:
-            The return value.
-        """
         # This can be overriden by subclasses to avoid instantiating the stream.
         return self[index].name()

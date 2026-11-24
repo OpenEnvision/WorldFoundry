@@ -1,15 +1,13 @@
 # Inference-only DB-CogACT source retained in-tree.
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
-import torch
+
+from ..preprocessing import conversation as conversation_lib
 from ..preprocessing.constants import DEFAULT_IMAGE_TOKEN, IMAGE_TOKEN_INDEX
+from ..preprocessing.tokenization import tokenizer_image_token
 from .policy_base import BasePolicy
 from .types import ActionOutput, SamplingConfig
-from ..preprocessing import conversation as conversation_lib
-from ..preprocessing.tokenization import tokenizer_image_token
 
 
 class CogACTPolicy(BasePolicy):
@@ -30,19 +28,16 @@ class CogACTPolicy(BasePolicy):
     def select_action(
         self,
         observation: dict,
-        sampling_config: Optional[SamplingConfig] = None,
+        sampling_config: SamplingConfig | None = None,
     ) -> list[ActionOutput]:
         batch_size = self._infer_batch_size(observation)
         obs = self._normalize_obs(observation, batch_size)
-        return [
-            self._infer_single({k: v[i] for k, v in obs.items()}, sampling_config)
-            for i in range(batch_size)
-        ]
+        return [self._infer_single({k: v[i] for k, v in obs.items()}, sampling_config) for i in range(batch_size)]
 
     def _infer_single(
         self,
         obs_single: dict,
-        sampling_config: Optional[SamplingConfig],
+        sampling_config: SamplingConfig | None,
     ) -> ActionOutput:
         text = obs_single["prompt"]
 
@@ -54,18 +49,14 @@ class CogACTPolicy(BasePolicy):
 
         image_tensor = self._images_to_tensor(pil_images)
 
-        conv = conversation_lib.conv_templates[
-            self.model.config.chat_template
-        ].copy()
+        conv = conversation_lib.conv_templates[self.model.config.chat_template].copy()
         conv.append_message(conv.roles[0], DEFAULT_IMAGE_TOKEN + "\n" + text)
         conv.append_message(conv.roles[1], " ")
         prompt = conv.get_prompt()
 
         execution_device = getattr(self.model, "_worldfoundry_execution_device", self.model.device)
         input_ids = (
-            tokenizer_image_token(
-                prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt"
-            )
+            tokenizer_image_token(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt")
             .unsqueeze(0)
             .to(execution_device)
         )

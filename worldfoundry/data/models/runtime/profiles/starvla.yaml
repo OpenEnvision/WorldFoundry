@@ -1,6 +1,6 @@
-artifact_filename: starvla_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_checkpoint_runtime
+schema_version: 2
+model_id: starvla
+task_family: embodied_action
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/StarVLA--Qwen3-VL-OFT-LIBERO-4in1
   repo_id: StarVLA/Qwen3-VL-OFT-LIBERO-4in1
@@ -22,28 +22,6 @@ checkpoints:
   revision: b8fff7315c768468a5333511427288870b2e9635
   role: base_world_model
   status: local_base_checkpoint_staged_checkpoint_gpu_probe_ready
-gpu_readiness:
-  artifact_kind: action_trace
-  base_vlm: ${WORLDFOUNDRY_HFD_ROOT}/Qwen--Qwen3-VL-4B-Instruct
-  gpu_device: NVIDIA A100-SXM4-80GB
-  public_api_construct_seconds: 9.346
-  cold_public_predict_seconds: 206.579
-  model_inference_seconds: 0.743
-  attention_implementation: sdpa
-  max_memory_allocated_bytes: 9237307392
-  max_memory_reserved_bytes: 9279897600
-  output_shape: [1, 8, 7]
-  output_finite: true
-  unnormalization_reference_max_abs: 0.0
-  deterministic_repeat_max_abs: 0.0
-  cleanup_allocated_bytes: 9568256
-  cleanup_reserved_bytes: 16777216
-  scope: public_api_checkpoint_backed_qwen3_vl_oft_libero_predict_action_and_unnormalization
-  status: ready
-  torch_cuda: '12.8'
-  torch_version: 2.11.0+cu128
-  verification_date: '2026-07-15'
-id: starvla
 input_schema:
   actions:
   - robot_action
@@ -54,12 +32,46 @@ input_schema:
   instruction: true
   prompt: true
   video: true
-integration_status: integrated
+artifact_kind: action_trace
+artifact_filename: starvla_action_trace.json
+execution:
+  backend_stage: in_tree_checkpoint_runtime
+  runtime_status: in_tree_qwen3_vl_oft_libero_predict_action_gpu_ready
+  integration_status: integrated
+integration:
+  status: integrated
+gpu_readiness:
+  artifact_kind: action_trace
+  base_vlm: ${WORLDFOUNDRY_HFD_ROOT}/Qwen--Qwen3-VL-4B-Instruct
+  gpu_device: NVIDIA A100-SXM4-80GB
+  public_api_construct_seconds: 9.346
+  cold_public_predict_seconds: 206.579
+  model_inference_seconds: 0.743
+  attention_implementation: sdpa
+  max_memory_allocated_bytes: 9237307392
+  max_memory_reserved_bytes: 9279897600
+  output_shape:
+  - 1
+  - 8
+  - 7
+  output_finite: true
+  unnormalization_reference_max_abs: 0.0
+  deterministic_repeat_max_abs: 0.0
+  cleanup_allocated_bytes: 9568256
+  cleanup_reserved_bytes: 16777216
+  scope: public_api_checkpoint_backed_qwen3_vl_oft_libero_predict_action_and_unnormalization
+  status: ready
+  torch_cuda: '12.8'
+  torch_version: 2.11.0+cu128
+  verification_date: '2026-07-15'
 notes:
-- WorldFoundry provides flat, inference-only QwenOFT and WanOFT model code in-tree; no external StarVLA checkout or import bridge is used.
-- Public inference stores both environment-space `actions` and the original `normalized_actions`; action unnormalization is driven by checkpoint statistics.
-- Cold startup on CPFS is storage-bound; steady-state model inference is reported separately.
-- All four pinned snapshots pass exact-size validation with no partial markers; policy files pass weights-only tensor-mapping checks and safetensors backbones pass header/index checks.
-runtime_status: in_tree_qwen3_vl_oft_libero_predict_action_gpu_ready
-task_family: embodied_action
+- WorldFoundry provides flat, inference-only QwenOFT and WanOFT model code in-tree;
+  no external StarVLA checkout or import bridge is used.
+- Public inference stores both environment-space `actions` and the original `normalized_actions`;
+  action unnormalization is driven by checkpoint statistics.
+- Cold startup on CPFS is storage-bound; steady-state model inference is reported
+  separately.
+- All four pinned snapshots pass exact-size validation with no partial markers; policy
+  files pass weights-only tensor-mapping checks and safetensors backbones pass header/index
+  checks.
 verification_status: checkpoint_backed_in_tree_predict_action_gpu_ready

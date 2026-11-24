@@ -3,22 +3,20 @@ Encoder class for Dense Representation Encoder
 """
 
 import math
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, List, Optional, Tuple, Type, Union
 
 import numpy as np
 import torch
-
-from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 import torch.nn as nn
-from torch.nn.init import trunc_normal_
 
-from uniception.models.encoders.base import (
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.encoders.base import (
     UniCeptionViTEncoderBase,
     ViTEncoderInput,
     ViTEncoderNonImageInput,
     ViTEncoderOutput,
 )
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 
 def make_2tuple(x):
@@ -33,8 +31,8 @@ def make_2tuple(x):
 class ResidualBlock(nn.Module):
     "Redidual block for Dense Representation Encoder"
 
-    def __init__(self, in_channels: int, out_channels: int, act_layer: Type[nn.Module] = nn.GELU):
-        super(ResidualBlock, self).__init__()
+    def __init__(self, in_channels: int, out_channels: int, act_layer: type[nn.Module] = nn.GELU):
+        super().__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
         self.act = act_layer()
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
@@ -63,16 +61,16 @@ class DenseRepresentationEncoder(UniCeptionViTEncoderBase):
         in_chans: int = 3,
         enc_embed_dim: int = 1024,
         apply_pe: bool = True,
-        input_size_for_pe: Union[int, Tuple[int, int]] = 518,
+        input_size_for_pe: int | tuple[int, int] = 518,
         patch_size: int = 14,
-        intermediate_dims: List[int] = [588, 768, 1024],
+        intermediate_dims: list[int] = [588, 768, 1024],  # noqa: B006 - Keeps the upstream default object and signature.
         data_norm_type: str = "dense_rep_encoder",
-        act_layer: Type[nn.Module] = nn.GELU,
-        norm_layer: Optional[Callable] = partial(nn.LayerNorm, eps=1e-6),
-        post_pe_norm_layer: Optional[Callable] = partial(nn.LayerNorm, eps=1e-6),
+        act_layer: type[nn.Module] = nn.GELU,
+        norm_layer: Callable | None = partial(nn.LayerNorm, eps=1e-6),  # noqa: B008 - Default evaluated once at definition, as upstream.
+        post_pe_norm_layer: Callable | None = partial(nn.LayerNorm, eps=1e-6),  # noqa: B008 - Default evaluated once at definition, as upstream.
         interpolate_antialias: bool = False,
         interpolate_offset: float = 0.1,
-        pretrained_checkpoint_path: str = None,
+        pretrained_checkpoint_path: str | None = None,
         *args,
         **kwargs,
     ):
@@ -101,7 +99,7 @@ class DenseRepresentationEncoder(UniCeptionViTEncoderBase):
             name=name,
             data_norm_type=data_norm_type,
             patch_size=patch_size,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
 
@@ -233,7 +231,7 @@ class DenseRepresentationEncoder(UniCeptionViTEncoderBase):
 
         return patch_pos_embed.to(previous_dtype)
 
-    def forward(self, encoder_input: Union[ViTEncoderInput, ViTEncoderNonImageInput]) -> ViTEncoderOutput:
+    def forward(self, encoder_input: ViTEncoderInput | ViTEncoderNonImageInput) -> ViTEncoderOutput:
         """
         Dense Representation Encoder Forward Pass
 
@@ -259,9 +257,9 @@ class DenseRepresentationEncoder(UniCeptionViTEncoderBase):
         assert input_data.ndim == 4, "Input must be of shape (B, C, H, W)"
         assert input_data.shape[1] == self.in_chans, f"Input channels must be {self.in_chans}"
         batch_size, channels, height, width = input_data.shape
-        assert (
-            height % self.patch_size == 0 and width % self.patch_size == 0
-        ), f"Input shape must be divisible by patch size: {self.patch_size}"
+        assert height % self.patch_size == 0 and width % self.patch_size == 0, (
+            f"Input shape must be divisible by patch size: {self.patch_size}"
+        )
 
         # Encode the dense representation
         features = self.unshuffle(input_data)

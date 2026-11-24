@@ -1,38 +1,38 @@
 ---
 title: VBench
-description: "南洋理工 / 上海 AI Lab 的 16 维 T2V 质量套件。WorldFoundry 内置官方 runtime，不编造榜单。"
+description: "南洋理工 / 上海 AI Lab 的 16 维 T2V 质量套件。WorldFoundry 内置官方 runtime。"
 ---
 
-VBench（南洋理工 S-Lab 与上海人工智能实验室）把文生视频质量拆成 **16 个维度**，每维由专用感知模型打分，而不是单一 embedding 距离。三组：
+VBench（南洋理工 S-Lab 与上海人工智能实验室）把文生视频质量拆成 **16 个维度**，每维由专用感知模型打分，而不是单一 embedding 距离。共分为三组：
 
-- **时序** — 主体 / 背景一致性、闪烁、运动平滑、动态程度。
-- **帧质量** — 美学质量、成像质量。
-- **语义 / 文本对齐** — 物体类别、多物体、人体动作、颜色、空间关系、场景、外观风格、时序风格、整体一致性。
+- **时序**：主体 / 背景一致性、闪烁、运动平滑、动态程度。
+- **帧质量**：美学质量、成像质量。
+- **语义 / 文本对齐**：物体类别、多物体、人体动作、颜色、空间关系、场景、外观风格、时序风格、整体一致性。
 
 官方总分是 **4× 质量 + 1× 语义**（`overall_quality`）。WorldFoundry 还会写出 `temporal_quality`、`frame_quality`、`text_alignment` 聚合。
 
 论文：[VBench](https://arxiv.org/abs/2311.17982)。项目：[vchitect.github.io/VBench-project](https://vchitect.github.io/VBench-project/)。代码：[Vchitect/VBench](https://github.com/Vchitect/VBench)（Apache-2.0）。仓内 prompt 套件：`worldfoundry/data/benchmarks/assets/vbench/VBench_full_info.json`（946 行）。[VBench-2.0](/zh/docs/evaluation/benchmark-hub/vbench-2.0) 是后续忠实性套件；两者**不可互换**。
 
-WorldFoundry **内置官方 runtime**。两种模式：`custom_input`（任意视频目录；依赖文本的维度需要 `--prompt` / `--prompt-file`）和 `vbench_standard`（官方命名 `"{prompt}-{index}.mp4"`，每条 prompt 5 个样本，`index` 为 `0..4`）。有界 GPU 验证只覆盖 `aesthetic_quality`。
+WorldFoundry **内置官方 runtime**。两种模式：`custom_input`（任意视频目录；依赖文本的维度需要 `--prompt` / `--prompt-file`）和 `vbench_standard`（官方命名 `"{prompt}-{index}.mp4"`，每条 prompt 5 个样本，`index` 为 `0..4`）。
 
 <BenchmarkPageSections id="vbench" locale="zh" />
 
 ## 如何运行
 
-目录记录的有界命令：
+单维度快速检查：
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
+  worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
   --mode custom_input \
   --dimension aesthetic_quality
 ```
 
-对自定义目录打一个维度：
+对自定义目录进行单维度评分：
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
+  worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
   --mode custom_input \
   --dimension subject_consistency \
   --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
@@ -44,7 +44,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
+  worldfoundry/evals/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
   --from-upstream-results /path/to/vbench_full_json_dir \
   --output-dir tmp/vbench/imported \
   --json
@@ -52,11 +52,11 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 `--load-ckpt-from-local` 强制走本地权重。环境变量：`WORLDFOUNDRY_VBENCH_ROOT`、`WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`、`WORLDFOUNDRY_VBENCH_CACHE_DIR`。共享栈：`vbench_perception_metric_stack`。
 
-仓内指针：
+清单、内置 runtime 与 prompt 套件：
 
 ```text
 worldfoundry/data/benchmarks/tasks/external/vbench.yaml
-worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
+worldfoundry/evals/tasks/execution/runners/vbench/runtime
 worldfoundry/data/benchmarks/assets/vbench/VBench_full_info.json
 ```
 

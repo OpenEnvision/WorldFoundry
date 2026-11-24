@@ -3,18 +3,18 @@ title: RLBench
 description: "CoppeliaSim / PyRep 上 100 个手工视觉引导任务。WorldFoundry 导入官方 rollout——不跑模拟器。"
 ---
 
-RLBench（IEEE RA-L / ICRA 2020）是帝国理工学院 Dyson 机器人实验室的评测：**100** 个独特手工操作任务，给 **CoppeliaSim**（经 **PyRep**）里的 **Franka Panda** 用。每个任务有程序化变体（物体位姿、目标）。运动规划器可以吐出**无限**演示，因此同一套件支持模仿学习、强化学习与**少样本**协议。观测是多相机视觉加状态 / 语言。
+RLBench（IEEE RA-L / ICRA 2020）是帝国理工学院 Dyson 机器人实验室推出的评测，包含 **100** 个独特的手工操作任务，面向 **CoppeliaSim**（经 **PyRep**）中的 **Franka Panda**。每个任务有程序化变体（物体位姿、目标）。运动规划器可以生成**无限**演示，因此同一套件支持模仿学习、强化学习与**少样本**协议。观测是多相机视觉加状态 / 语言。
 
-论文：[RLBench: The Robot Learning Benchmark & Learning Environment](https://arxiv.org/abs/1909.12271)。项目：[sites.google.com/view/rlbench](https://sites.google.com/view/rlbench)。代码：[stepjam/RLBench](https://github.com/stepjam/RLBench)。本目录里 GitHub 许可证元数据是 `other:noassertion_github_api`——复用前先看上游条款。
+论文：[RLBench: The Robot Learning Benchmark & Learning Environment](https://arxiv.org/abs/1909.12271)。项目：[sites.google.com/view/rlbench](https://sites.google.com/view/rlbench)。代码：[stepjam/RLBench](https://github.com/stepjam/RLBench)。GitHub API 未给出许可证声明（NOASSERTION）；复用前先看上游条款。
 
-WorldFoundry **只导入官方结果**。你在上游跑 CoppeliaSim / PyRep / 官方任务资产，再经 `official-validation` 归一化 JSON/CSV。仓内无模拟器。导出须声明任务列表与协议（少样本 vs 模仿 vs RL）。
+WorldFoundry **只导入官方结果**：先在上游跑 CoppeliaSim / PyRep / 官方任务资产，再用 `official-validation` 归一化 JSON/CSV 导出。导出须声明任务列表与协议（少样本 vs 模仿 vs RL）。
 
 <BenchmarkPageSections id="rlbench" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id rlbench \
   --mode official-validation \
   --official-results-path <official_results.json> \

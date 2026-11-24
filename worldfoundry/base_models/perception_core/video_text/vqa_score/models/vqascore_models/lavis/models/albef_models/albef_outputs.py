@@ -1,12 +1,11 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from transformers.modeling_outputs import (
@@ -21,49 +20,49 @@ class AlbefSimilarity(ModelOutput):
     sim_i2t: torch.FloatTensor = None
     sim_t2i: torch.FloatTensor = None
 
-    sim_i2t_m: Optional[torch.FloatTensor] = None
-    sim_t2i_m: Optional[torch.FloatTensor] = None
+    sim_i2t_m: torch.FloatTensor | None = None
+    sim_t2i_m: torch.FloatTensor | None = None
 
-    sim_i2t_targets: Optional[torch.FloatTensor] = None
-    sim_t2i_targets: Optional[torch.FloatTensor] = None
+    sim_i2t_targets: torch.FloatTensor | None = None
+    sim_t2i_targets: torch.FloatTensor | None = None
 
 
 @dataclass
 class AlbefIntermediateOutput(ModelOutput):
     # uni-modal features
     image_embeds: torch.FloatTensor = None
-    text_embeds: Optional[torch.FloatTensor] = None
+    text_embeds: torch.FloatTensor | None = None
 
-    image_embeds_m: Optional[torch.FloatTensor] = None
-    text_embeds_m: Optional[torch.FloatTensor] = None
+    image_embeds_m: torch.FloatTensor | None = None
+    text_embeds_m: torch.FloatTensor | None = None
 
     # intermediate outputs of multimodal encoder
-    encoder_output: Optional[BaseModelOutputWithPoolingAndCrossAttentions] = None
-    encoder_output_m: Optional[BaseModelOutputWithPoolingAndCrossAttentions] = None
-    encoder_output_neg: Optional[BaseModelOutputWithPoolingAndCrossAttentions] = None
+    encoder_output: BaseModelOutputWithPoolingAndCrossAttentions | None = None
+    encoder_output_m: BaseModelOutputWithPoolingAndCrossAttentions | None = None
+    encoder_output_neg: BaseModelOutputWithPoolingAndCrossAttentions | None = None
 
-    itm_logits: Optional[torch.FloatTensor] = None
-    itm_labels: Optional[torch.LongTensor] = None
+    itm_logits: torch.FloatTensor | None = None
+    itm_labels: torch.LongTensor | None = None
 
     # intermediate outputs of multimodal decoder
-    decoder_output: Optional[CausalLMOutputWithCrossAttentions] = None
-    decoder_labels: Optional[torch.LongTensor] = None
+    decoder_output: CausalLMOutputWithCrossAttentions | None = None
+    decoder_labels: torch.LongTensor | None = None
 
 
 @dataclass
 class AlbefOutput(ModelOutput):
     # some finetuned models (e.g. BlipVQA) do not compute similarity, thus optional.
-    sims: Optional[AlbefSimilarity] = None
+    sims: AlbefSimilarity | None = None
 
     intermediate_output: AlbefIntermediateOutput = None
 
-    loss: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
 
-    loss_itc: Optional[torch.FloatTensor] = None
+    loss_itc: torch.FloatTensor | None = None
 
-    loss_itm: Optional[torch.FloatTensor] = None
+    loss_itm: torch.FloatTensor | None = None
 
-    loss_mlm: Optional[torch.FloatTensor] = None
+    loss_mlm: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -88,10 +87,10 @@ class AlbefOutputFeatures(ModelOutput):
         Features are obtained by projecting the corresponding embedding into a normalized low-dimensional space.
     """
 
-    image_embeds: Optional[torch.FloatTensor] = None
-    image_embeds_proj: Optional[torch.FloatTensor] = None
+    image_embeds: torch.FloatTensor | None = None
+    image_embeds_proj: torch.FloatTensor | None = None
 
-    text_embeds: Optional[torch.FloatTensor] = None
-    text_embeds_proj: Optional[torch.FloatTensor] = None
+    text_embeds: torch.FloatTensor | None = None
+    text_embeds_proj: torch.FloatTensor | None = None
 
-    multimodal_embeds: Optional[torch.FloatTensor] = None
+    multimodal_embeds: torch.FloatTensor | None = None

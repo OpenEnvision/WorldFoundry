@@ -4,27 +4,30 @@ The pool owns event lifecycle and manages shared model instances
 across all EventAgent objects. It also holds the shared prompts
 (system prompt and evolution template) for all agents.
 """
+
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 import cv2
 import numpy as np
 import torch
 
-from .event_agent import EventAgent, EventPrompts
-from .event_types import EventObservation, EventState, EventID, make_event_id
 from .entity_matcher import EntityMatcher
+from .event_agent import EventAgent, EventPrompts
+from .event_types import EventID, EventObservation, EventState, make_event_id
 from .logger import logger
 
 
 @dataclass
 class EventPoolConfig:
     """Configuration for the event pool."""
+
     max_events: int
     # System prompt template for I2V prompt generation.
     # Variables: {entity}, {entities}, {iteration}
@@ -37,7 +40,7 @@ class EventPoolConfig:
     scene_entity_similarity_threshold: float = 0.45
     # Preset storyline: when provided, skip Qwen and use these I2V prompts.
     # Dict with "scene_text" (str) and "steps" (Dict[str, str] of fg_text per step).
-    preset_storyline: Optional[Dict[str, Any]] = None
+    preset_storyline: dict[str, Any] | None = None
 
 
 class EventPool:
@@ -66,7 +69,7 @@ class EventPool:
         default_horizon: int,
         default_fps: int,
         qwen_provider=None,
-        entity_matcher: Optional[EntityMatcher] = None,
+        entity_matcher: EntityMatcher | None = None,
     ) -> None:
         if config.max_events <= 0:
             raise ValueError("max_events must be positive")
@@ -84,7 +87,7 @@ class EventPool:
         # Preset storyline (skip Qwen when provided).
         self._preset_storyline = config.preset_storyline
         # Cached scene_text for Qwen runtime path (generated once, reused).
-        self._cached_scene_text: Optional[str] = None
+        self._cached_scene_text: str | None = None
 
         # Build shared prompts from config.
         self.prompts = EventPrompts(
@@ -95,15 +98,15 @@ class EventPool:
         self._dedup_enabled = config.dedup_enabled
         self._dedup_model_path = config.dedup_model_path
         self._dedup_similarity_threshold = config.dedup_similarity_threshold
-        self.entity_matcher: Optional[EntityMatcher] = entity_matcher
+        self.entity_matcher: EntityMatcher | None = entity_matcher
 
         # Main storage: event_id -> EventAgent
-        self._agents: Dict[EventID, EventAgent] = {}
+        self._agents: dict[EventID, EventAgent] = {}
 
     @staticmethod
-    def _normalize_entities(entities: List[str]) -> List[str]:
-        uniq: Set[str] = set()
-        normalized: List[str] = []
+    def _normalize_entities(entities: list[str]) -> list[str]:
+        uniq: set[str] = set()
+        normalized: list[str] = []
         for ent in entities or []:
             ent_n = (ent or "").strip().lower()
             if not ent_n or ent_n in uniq:
@@ -115,19 +118,18 @@ class EventPool:
     def _compute_scene_entity_features(
         self,
         detections,
-        matcher: Optional[EntityMatcher],
-    ) -> Tuple[List[torch.Tensor], List[np.ndarray], List[np.ndarray], List[str]]:
+        matcher: EntityMatcher | None,
+    ) -> tuple[list[torch.Tensor], list[np.ndarray], list[np.ndarray], list[str]]:
         if matcher is None or not detections:
             return [], [], [], []
-        embeddings: List[torch.Tensor] = []
-        crops: List[np.ndarray] = []
-        masks: List[np.ndarray] = []
-        labels: List[str] = []
+        embeddings: list[torch.Tensor] = []
+        crops: list[np.ndarray] = []
+        masks: list[np.ndarray] = []
+        labels: list[str] = []
         for det in detections:
             if det.cropped_mask is None:
                 raise RuntimeError(
-                    f"Detection '{det.name}' is missing cropped_mask; "
-                    "SAM mask is required for DINO similarity."
+                    f"Detection '{det.name}' is missing cropped_mask; SAM mask is required for DINO similarity."
                 )
             emb = matcher.compute_embedding(
                 det.cropped_image,
@@ -135,8 +137,7 @@ class EventPool:
             )
             if emb is None:
                 raise RuntimeError(
-                    f"Failed to compute DINO embedding for '{det.name}' with SAM mask. "
-                    "Check instance mask quality."
+                    f"Failed to compute DINO embedding for '{det.name}' with SAM mask. Check instance mask quality."
                 )
             embeddings.append(emb)
             crops.append(det.cropped_image)
@@ -146,12 +147,12 @@ class EventPool:
 
     def _scene_embedding_similarity(
         self,
-        obs_embeddings: List[torch.Tensor],
-        ref_embeddings: List[torch.Tensor],
-        matcher: Optional[EntityMatcher],
+        obs_embeddings: list[torch.Tensor],
+        ref_embeddings: list[torch.Tensor],
+        matcher: EntityMatcher | None,
         *,
         log_label: str = "",
-    ) -> tuple[float, float, Optional[Tuple[int, int]]]:
+    ) -> tuple[float, float, tuple[int, int] | None]:
         """Compute instance-level embedding similarity.
 
         Returns:
@@ -183,16 +184,16 @@ class EventPool:
 
     def _merge_scene_features(
         self,
-        old_embeddings: List[torch.Tensor],
-        old_crops: List[np.ndarray],
-        old_masks: List[np.ndarray],
-        old_labels: List[str],
-        new_embeddings: List[torch.Tensor],
-        new_crops: List[np.ndarray],
-        new_masks: List[np.ndarray],
-        new_labels: List[str],
-        matcher: Optional[EntityMatcher],
-    ) -> Tuple[List[torch.Tensor], List[np.ndarray], List[np.ndarray], List[str]]:
+        old_embeddings: list[torch.Tensor],
+        old_crops: list[np.ndarray],
+        old_masks: list[np.ndarray],
+        old_labels: list[str],
+        new_embeddings: list[torch.Tensor],
+        new_crops: list[np.ndarray],
+        new_masks: list[np.ndarray],
+        new_labels: list[str],
+        matcher: EntityMatcher | None,
+    ) -> tuple[list[torch.Tensor], list[np.ndarray], list[np.ndarray], list[str]]:
         if not old_embeddings:
             return (
                 list(new_embeddings),
@@ -200,10 +201,10 @@ class EventPool:
                 list(new_masks),
                 list(new_labels),
             )
-        merged: List[torch.Tensor] = list(old_embeddings)
-        merged_crops: List[np.ndarray] = list(old_crops)
-        merged_masks: List[np.ndarray] = list(old_masks)
-        merged_labels: List[str] = list(old_labels)
+        merged: list[torch.Tensor] = list(old_embeddings)
+        merged_crops: list[np.ndarray] = list(old_crops)
+        merged_masks: list[np.ndarray] = list(old_masks)
+        merged_labels: list[str] = list(old_labels)
         if matcher is None:
             merged.extend(new_embeddings)
             merged_crops.extend(new_crops)
@@ -211,7 +212,7 @@ class EventPool:
             merged_labels.extend(new_labels)
             return merged, merged_crops, merged_masks, merged_labels
         for emb_new, crop_new, mask_new, label_new in zip(
-            new_embeddings, new_crops, new_masks, new_labels
+            new_embeddings, new_crops, new_masks, new_labels, strict=False
         ):
             best = 0.0
             for emb_old in merged:
@@ -225,24 +226,21 @@ class EventPool:
 
     @staticmethod
     def _save_match_debug_pair(
-        debug_dir: Optional[Path],
+        debug_dir: Path | None,
         compared_event_id: str,
         max_pair_sim: float,
         obs_idx: int,
         ref_idx: int,
-        obs_rgb: Optional[np.ndarray],
-        obs_mask: Optional[np.ndarray],
-        ref_rgb: Optional[np.ndarray],
-        ref_mask: Optional[np.ndarray],
+        obs_rgb: np.ndarray | None,
+        obs_mask: np.ndarray | None,
+        ref_rgb: np.ndarray | None,
+        ref_mask: np.ndarray | None,
     ) -> None:
         if debug_dir is None:
             return
         debug_dir.mkdir(parents=True, exist_ok=True)
 
-        prefix = (
-            f"vs_{compared_event_id[:12]}_sim{max_pair_sim:.3f}"
-            f"_obs{obs_idx:02d}_ref{ref_idx:02d}"
-        )
+        prefix = f"vs_{compared_event_id[:12]}_sim{max_pair_sim:.3f}_obs{obs_idx:02d}_ref{ref_idx:02d}"
         if obs_rgb is not None:
             cv2.imwrite(
                 str(debug_dir / f"{prefix}_obs_rgb.png"),
@@ -280,7 +278,7 @@ class EventPool:
                 cv2.cvtColor(ref_overlay, cv2.COLOR_RGB2BGR),
             )
 
-    def _ensure_entity_matcher(self) -> Optional[EntityMatcher]:
+    def _ensure_entity_matcher(self) -> EntityMatcher | None:
         """Lazy-load the DINOv3 entity matcher on first use."""
         if self.entity_matcher is None and self._dedup_enabled:
             logger.info("Lazy-loading DINOv3 entity matcher...")
@@ -294,9 +292,9 @@ class EventPool:
     def generate_i2v_prompt(
         self,
         anchor_frame: np.ndarray,
-        entities: List[str],
+        entities: list[str],
         iteration: int,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """Generate scene_text and fg_text for event I2V generation.
 
         Returns (scene_text, fg_text) to be composed via _compose_prompt()
@@ -336,7 +334,7 @@ class EventPool:
         qwen = self._qwen_provider()
 
         # Save anchor frame to a temporary file for Qwen input.
-        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
         tmp_path = tmp.name
         tmp.close()
         try:
@@ -356,7 +354,7 @@ class EventPool:
                     "Output the description string only, no JSON wrapping."
                 )
                 scene_text = qwen.generate_text(tmp_path, scene_prompt).strip()
-                if scene_text.startswith("{") or scene_text.startswith('"'):
+                if scene_text.startswith(("{", '"')):
                     scene_text = scene_text.strip('"{}').strip()
                 self._cached_scene_text = scene_text
 
@@ -374,18 +372,16 @@ class EventPool:
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
         finally:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(tmp_path)
-            except OSError:
-                pass
 
         return self._cached_scene_text, fg_text.strip()
 
     def register_event(
         self,
         observation: EventObservation,
-        debug_dir: Optional[str] = None,
-    ) -> Optional[EventAgent]:
+        debug_dir: str | None = None,
+    ) -> EventAgent | None:
         """Register or reuse events from one observation frame (instance-level).
 
         Each detected instance is independently matched against existing events.
@@ -410,10 +406,8 @@ class EventPool:
         if self.cpu_offload_dinov3 and matcher is not None:
             matcher.to_device()
         try:
-            obs_embeddings, obs_crops, obs_masks, obs_labels = (
-                self._compute_scene_entity_features(detections, matcher)
-            )
-            debug_path = Path(debug_dir) if debug_dir else None
+            obs_embeddings, obs_crops, obs_masks, obs_labels = self._compute_scene_entity_features(detections, matcher)
+            _debug_path = Path(debug_dir) if debug_dir else None
             logger.info(
                 f"  Instance matching: {len(detections)} detections, "
                 f"{len(obs_embeddings)} embeddings, "
@@ -427,9 +421,7 @@ class EventPool:
 
             # Per-instance matching: for each obs instance, find best matching event.
             # matched_instances[i] = (agent, best_sim) or None
-            matched_instances: List[Optional[Tuple[EventAgent, float]]] = [
-                None for _ in range(len(obs_embeddings))
-            ]
+            matched_instances: list[tuple[EventAgent, float] | None] = [None for _ in range(len(obs_embeddings))]
 
             for agent in active_agents:
                 state = agent.state
@@ -457,8 +449,8 @@ class EventPool:
                     )
 
             # Group matched instances by their target agent.
-            agent_to_indices: Dict[str, List[int]] = {}
-            unmatched_indices: List[int] = []
+            agent_to_indices: dict[str, list[int]] = {}
+            unmatched_indices: list[int] = []
             for i, match in enumerate(matched_instances):
                 if match is not None:
                     agent, sim = match
@@ -466,23 +458,19 @@ class EventPool:
                 else:
                     unmatched_indices.append(i)
 
-            first_result: Optional[EventAgent] = None
+            first_result: EventAgent | None = None
 
             # Merge matched instances into their respective events.
             for eid, indices in agent_to_indices.items():
                 agent = self._agents[eid]
                 state = agent.state
-                matched_entities = self._normalize_entities(
-                    [obs_labels[i] for i in indices]
-                )
+                matched_entities = self._normalize_entities([obs_labels[i] for i in indices])
                 matched_embs = [obs_embeddings[i] for i in indices]
                 matched_crops = [obs_crops[i] for i in indices]
                 matched_masks = [obs_masks[i] for i in indices]
                 matched_labels = [obs_labels[i] for i in indices]
 
-                state.entities = self._normalize_entities(
-                    (state.entities or []) + matched_entities
-                )
+                state.entities = self._normalize_entities((state.entities or []) + matched_entities)
                 (
                     state.scene_entity_embeddings,
                     state.scene_entity_crops,
@@ -502,32 +490,25 @@ class EventPool:
                 if state.entity_embedding is None and state.scene_entity_embeddings:
                     state.entity_embedding = state.scene_entity_embeddings[0]
                 sims = [matched_instances[i][1] for i in indices]
-                logger.info(
-                    f"  Reuse event {eid[:12]} <- {matched_entities} "
-                    f"(sims={[f'{s:.3f}' for s in sims]})"
-                )
+                logger.info(f"  Reuse event {eid[:12]} <- {matched_entities} (sims={[f'{s:.3f}' for s in sims]})")
                 if first_result is None:
                     first_result = agent
 
             # Create new event for unmatched instances.
             if unmatched_indices:
-                new_entities = self._normalize_entities(
-                    [obs_labels[i] for i in unmatched_indices]
-                )
+                new_entities = self._normalize_entities([obs_labels[i] for i in unmatched_indices])
                 if not new_entities:
-                    new_entities = self._normalize_entities(
-                        [entities[i] for i in unmatched_indices if i < len(entities)]
-                    ) or entities
+                    new_entities = (
+                        self._normalize_entities([entities[i] for i in unmatched_indices if i < len(entities)])
+                        or entities
+                    )
                 new_embs = [obs_embeddings[i] for i in unmatched_indices]
                 new_crops = [obs_crops[i] for i in unmatched_indices]
                 new_masks = [obs_masks[i] for i in unmatched_indices]
                 new_labels = [obs_labels[i] for i in unmatched_indices]
 
                 if len(self._agents) >= self.config.max_events:
-                    logger.warning(
-                        f"  Event capacity reached; skip new event for: "
-                        f"{', '.join(new_entities)}"
-                    )
+                    logger.warning(f"  Event capacity reached; skip new event for: {', '.join(new_entities)}")
                 else:
                     # Use caller-provided event_id when all instances are unmatched
                     # (first registration); generate new id for partial unmatched.
@@ -559,9 +540,7 @@ class EventPool:
                             default_fps=self.default_fps,
                         )
                         self._agents[event_id] = agent
-                        logger.info(
-                            f"  Register new event {event_id[:12]} <- {new_entities}"
-                        )
+                        logger.info(f"  Register new event {event_id[:12]} <- {new_entities}")
                     if first_result is None:
                         first_result = agent
 
@@ -570,7 +549,7 @@ class EventPool:
             if self.cpu_offload_dinov3 and matcher is not None:
                 matcher.offload_to_cpu()
 
-    def list_active(self) -> List[EventAgent]:
+    def list_active(self) -> list[EventAgent]:
         """Return all active event agents."""
         return [agent for agent in self._agents.values() if agent.state.status == "active"]
 

@@ -10,12 +10,12 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
 
 # ====================== data structures ======================================
+
 
 @dataclass(frozen=True)
 class Intrinsics:
@@ -31,21 +31,22 @@ class Intrinsics:
 class PostProcessResult:
     """In-memory result of panorama post-processing (Step 2 output)."""
 
-    pano_bgr: np.ndarray          # (H,W,3) uint8
-    depth: np.ndarray              # (H,W) float32, same resolution as pano_bgr
-    ply_xyz: np.ndarray            # (N,3) float32  OpenCV coords
-    ply_rgb: np.ndarray            # (N,3) uint8
-    condition_images: List[np.ndarray]  # list of (cH,cW,3) uint8 RGB
-    transforms: Dict               # {"frames": [...]}
+    pano_bgr: np.ndarray  # (H,W,3) uint8
+    depth: np.ndarray  # (H,W) float32, same resolution as pano_bgr
+    ply_xyz: np.ndarray  # (N,3) float32  OpenCV coords
+    ply_rgb: np.ndarray  # (N,3) uint8
+    condition_images: list[np.ndarray]  # list of (cH,cW,3) uint8 RGB
+    transforms: dict  # {"frames": [...]}
 
 
 # ====================== helpers ==============================================
 
-def fit_within(w: int, h: int, max_w: int, max_h: int) -> Tuple[int, int]:
+
+def fit_within(w: int, h: int, max_w: int, max_h: int) -> tuple[int, int]:
     sw = max_w / max(1, w)
     sh = max_h / max(1, h)
     s = min(1.0, sw, sh)
-    return max(1, int(round(w * s))), max(1, int(round(h * s)))
+    return max(1, int(round(w * s))), max(1, int(round(h * s)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
 
 def resize_panorama(img_bgr_u8: np.ndarray, max_w: int, max_h: int) -> np.ndarray:
@@ -119,10 +120,11 @@ def prepare_depth(
 
 # ====================== PLY generation =======================================
 
+
 def compute_ply_arrays(
     pano_bgr_u8: np.ndarray,
     depth: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Return (xyz, rgb) arrays in OpenCV coords, same as _write_ply_opencv."""
     H, W = depth.shape
     assert pano_bgr_u8.shape[:2] == (H, W)
@@ -164,10 +166,16 @@ def write_ply(
         "end_header\n"
     ).encode("ascii")
 
-    vtx_dtype = np.dtype([
-        ("x", "<f4"), ("y", "<f4"), ("z", "<f4"),
-        ("red", "u1"), ("green", "u1"), ("blue", "u1"),
-    ])
+    vtx_dtype = np.dtype(
+        [
+            ("x", "<f4"),
+            ("y", "<f4"),
+            ("z", "<f4"),
+            ("red", "u1"),
+            ("green", "u1"),
+            ("blue", "u1"),
+        ]
+    )
     verts = np.empty(count, dtype=vtx_dtype)
     verts["x"] = xyz[:, 0]
     verts["y"] = xyz[:, 1]
@@ -185,13 +193,20 @@ def write_ply(
 
 # ====================== Condition generation =================================
 
-def _views_yaw_pitch() -> List[Tuple[float, float]]:
+
+def _views_yaw_pitch() -> list[tuple[float, float]]:
     yaws = [
-        0.0, math.pi / 4, math.pi / 2, 3 * math.pi / 4,
-        math.pi, -3 * math.pi / 4, -math.pi / 2, -math.pi / 4,
+        0.0,
+        math.pi / 4,
+        math.pi / 2,
+        3 * math.pi / 4,
+        math.pi,
+        -3 * math.pi / 4,
+        -math.pi / 2,
+        -math.pi / 4,
     ]
     pitches = [0.0, math.pi / 4, -math.pi / 4, math.pi / 6, -math.pi / 6]
-    views: List[Tuple[float, float]] = []
+    views: list[tuple[float, float]] = []
     for pitch in pitches:
         for yaw in yaws:
             views.append((yaw, pitch))
@@ -256,7 +271,7 @@ def _generate_condition_image(
     xCam = (U - float(intr.cx)) / float(intr.fx)
     yCam = -((V - float(intr.cy)) / float(intr.fy))
     zCam = np.ones_like(xCam, dtype=np.float32)
-    inv_len = 1.0 / np.sqrt(xCam ** 2 + yCam ** 2 + zCam ** 2)
+    inv_len = 1.0 / np.sqrt(xCam**2 + yCam**2 + zCam**2)
     dx, dy, dz = xCam * inv_len, yCam * inv_len, zCam * inv_len
     wx = rX * dx + uX * dy + fX * dz
     wy = rY * dx + uY * dy + fY * dz
@@ -271,7 +286,7 @@ def _generate_condition_image(
     return samp.reshape(H, W, 3)
 
 
-def _c2w_opencv_rows(yaw: float, pitch: float) -> List[List[float]]:
+def _c2w_opencv_rows(yaw: float, pitch: float) -> list[list[float]]:
     r, u, f = _basis_from_yaw_pitch(yaw, pitch)
     z = (-f).astype(np.float32)
     M = np.eye(4, dtype=np.float32)
@@ -285,8 +300,8 @@ def generate_conditions(
     pano_bgr_u8: np.ndarray,
     intr: Intrinsics,
     *,
-    save_dir: Optional[Path] = None,
-) -> Tuple[List[np.ndarray], Dict]:
+    save_dir: Path | None = None,
+) -> tuple[list[np.ndarray], dict]:
     """Generate condition images and transforms dict.
 
     Returns (condition_images_rgb, transforms_dict).
@@ -294,8 +309,8 @@ def generate_conditions(
     """
     pano_rgb = pano_bgr_u8[:, :, ::-1].copy()
     views = _views_yaw_pitch()
-    frames: List[Dict] = []
-    images: List[np.ndarray] = []
+    frames: list[dict] = []
+    images: list[np.ndarray] = []
 
     if save_dir is not None:
         cond_dir = save_dir / "conditions"
@@ -310,22 +325,24 @@ def generate_conditions(
             cv2.imwrite(str(save_dir / "conditions" / filename), img_rgb[:, :, ::-1])
 
         c2w = _c2w_opencv_rows(yaw, pitch)
-        frames.append({
-            "id": idx + 1,
-            "path": f"conditions/{filename}",
-            "width": int(intr.width),
-            "height": int(intr.height),
-            "fx": float(intr.fx),
-            "fy": float(intr.fy),
-            "cx": float(intr.cx),
-            "cy": float(intr.cy),
-            "K": [
-                [float(intr.fx), 0, float(intr.cx)],
-                [0, float(intr.fy), float(intr.cy)],
-                [0, 0, 1],
-            ],
-            "c2w": c2w,
-        })
+        frames.append(
+            {
+                "id": idx + 1,
+                "path": f"conditions/{filename}",
+                "width": int(intr.width),
+                "height": int(intr.height),
+                "fx": float(intr.fx),
+                "fy": float(intr.fy),
+                "cx": float(intr.cx),
+                "cy": float(intr.cy),
+                "K": [
+                    [float(intr.fx), 0, float(intr.cx)],
+                    [0, float(intr.fy), float(intr.cy)],
+                    [0, 0, 1],
+                ],
+                "c2w": c2w,
+            }
+        )
 
     frames.sort(key=lambda x: str(x["path"]))
     for i, fr in enumerate(frames):
@@ -334,13 +351,15 @@ def generate_conditions(
     transforms = {"frames": frames}
     if save_dir is not None:
         (save_dir / "transforms_condition.json").write_text(
-            json.dumps(transforms, ensure_ascii=False, indent=2), encoding="utf-8",
+            json.dumps(transforms, ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
 
     return images, transforms
 
 
 # ====================== High-level API =======================================
+
 
 def postprocess_panorama(
     pano_bgr_u8: np.ndarray,
@@ -352,7 +371,7 @@ def postprocess_panorama(
     cond_size: int = 504,
     cond_fx: float = 320.0,
     cond_fy: float = 320.0,
-    save_dir: Optional[Path] = None,
+    save_dir: Path | None = None,
 ) -> PostProcessResult:
     """Full post-processing: panorama + depth -> PLY arrays + conditions.
 
@@ -367,9 +386,12 @@ def postprocess_panorama(
         write_ply(save_dir / "pointcloud.ply", xyz, rgb)
 
     intr = Intrinsics(
-        width=cond_size, height=cond_size,
-        fx=cond_fx, fy=cond_fy,
-        cx=cond_size / 2.0, cy=cond_size / 2.0,
+        width=cond_size,
+        height=cond_size,
+        fx=cond_fx,
+        fy=cond_fy,
+        cx=cond_size / 2.0,
+        cy=cond_size / 2.0,
     )
     cond_images, transforms = generate_conditions(pano, intr, save_dir=save_dir)
 

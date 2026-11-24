@@ -1,5 +1,3 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> dataset -> view_sampler -> __init__.py functionality."""
-
 from typing import Any
 
 from ..types import Stage
@@ -19,17 +17,6 @@ def get_view_sampler(
     overfit: bool,
     cameras_are_circular: bool,
 ) -> ViewSampler[Any]:
-    """Get view sampler.
-
-    Args:
-        cfg: The cfg.
-        stage: The stage.
-        overfit: The overfit.
-        cameras_are_circular: The cameras are circular.
-
-    Returns:
-        The return value.
-    """
     return VIEW_SAMPLERS[cfg.name](
         cfg,
         stage,

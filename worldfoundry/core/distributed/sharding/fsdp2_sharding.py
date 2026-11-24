@@ -12,12 +12,14 @@ training.
 
 import gc
 import os
+from typing import Any
 
 import torch
 
 try:
-    from torch.distributed.fsdp import MixedPrecisionPolicy, fully_shard
-except ImportError:  # Torch < 2.9 lacks the FSDP2 helper used upstream.
+    _fsdp_api = __import__("torch.distributed.fsdp", fromlist=["MixedPrecisionPolicy", "fully_shard"])
+    MixedPrecisionPolicy, fully_shard = _fsdp_api.MixedPrecisionPolicy, _fsdp_api.fully_shard
+except (ImportError, AttributeError):  # Torch < 2.9 lacks the FSDP2 helper used upstream.
     MixedPrecisionPolicy = None
     fully_shard = None
 
@@ -56,7 +58,7 @@ def shard_model(model, param_dtype=torch.bfloat16, reduce_dtype=torch.float32):
         reduce_dtype=reduce_dtype,
         cast_forward_inputs=False,
     )
-    fsdp_config = {"mp_policy": mp_policy, "reshard_after_forward": True}
+    fsdp_config: dict[str, Any] = {"mp_policy": mp_policy, "reshard_after_forward": True}
 
     for block in model.blocks:
         fully_shard(block.attn1, **fsdp_config)
@@ -70,7 +72,7 @@ def shard_model(model, param_dtype=torch.bfloat16, reduce_dtype=torch.float32):
         "no",
         "off",
     }:
-        for block, next_block in zip(model.blocks, model.blocks[1:]):
+        for block, next_block in zip(model.blocks, model.blocks[1:], strict=False):
             set_prefetch = getattr(block, "set_modules_to_forward_prefetch", None)
             if callable(set_prefetch):
                 set_prefetch([next_block])

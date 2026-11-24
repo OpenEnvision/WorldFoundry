@@ -7,6 +7,7 @@ groups:
 - prior
 source_repos:
 - url: https://github.com/cvg/GeoCalib
+  revision: fbd383d6953959a5b1af3cfc6b7f348bcc667bf8
 checkpoints:
 - uri: https://github.com/cvg/GeoCalib/releases/download/v1.0/geocalib-pinhole.tar
   filename: geocalib-pinhole.tar
@@ -30,6 +31,3 @@ notes:
 - Independent base-model profile for the GeoCalib camera-calibration prior under worldfoundry.base_models.three_dimensions.general_3d.geocalib.
 - WorldFoundry exposes this prior through the shared geometry-prior pipeline/operator
   contract.
-backend_stage: in_tree_geometry_prior_runtime
-runtime_status: in_tree_runtime_wired
-integration_status: integrated

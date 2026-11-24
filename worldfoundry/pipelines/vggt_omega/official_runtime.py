@@ -8,8 +8,9 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, cast
 
 import cv2
 import numpy as np
@@ -17,28 +18,28 @@ import torch
 import trimesh
 from matplotlib import colormaps
 from scipy.spatial.transform import Rotation
-
+from trimesh.visual import ColorVisuals
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 
 
-def _is_image_path(path: Union[str, Path]) -> bool:
+def _is_image_path(path: str | Path) -> bool:
     """Check if the given value represents a valid image file path."""
     return Path(path).suffix.lower() in IMAGE_EXTENSIONS
 
 
-def _is_video_path(path: Union[str, Path]) -> bool:
+def _is_video_path(path: str | Path) -> bool:
     """Check if the given value represents a valid video file path."""
     return Path(path).suffix.lower() in VIDEO_EXTENSIONS
 
 
-def collect_input_images(input_source: Union[str, Path, Sequence[Union[str, Path]]]) -> List[str]:
+def collect_input_images(input_source: str | Path | Sequence[str | Path]) -> list[str]:
     """Gather and filter input conditioning images."""
     if isinstance(input_source, (list, tuple)):
         return sorted(str(Path(p)) for p in input_source)
 
-    source = Path(input_source)
+    source = Path(cast("str | Path", input_source))
     if source.is_dir():
         image_dir = source / "images" if (source / "images").is_dir() else source
         return sorted(str(p) for p in image_dir.iterdir() if p.is_file() and _is_image_path(p))
@@ -51,11 +52,11 @@ def collect_input_images(input_source: Union[str, Path, Sequence[Union[str, Path
 
 
 def prepare_target_images(
-    input_source: Union[str, Path, Sequence[Union[str, Path]]],
-    target_dir: Union[str, Path],
+    input_source: str | Path | Sequence[str | Path],
+    target_dir: str | Path,
     *,
     video_sample_fps: float = 1.0,
-) -> List[str]:
+) -> list[str]:
     """Normalize and scale target images for the runtime."""
     target_dir = Path(target_dir)
     images_dir = target_dir / "images"
@@ -64,7 +65,7 @@ def prepare_target_images(
         shutil.rmtree(images_dir)
     images_dir.mkdir(parents=True, exist_ok=True)
 
-    image_paths: List[str] = []
+    image_paths: list[str] = []
     for source_path in collect_input_images(input_source):
         source = Path(source_path)
         if _is_image_path(source):
@@ -84,7 +85,7 @@ def prepare_target_images(
     return image_paths
 
 
-def _extract_video_frames(video_path: Path, images_dir: Path, *, video_sample_fps: float = 1.0) -> List[str]:
+def _extract_video_frames(video_path: Path, images_dir: Path, *, video_sample_fps: float = 1.0) -> list[str]:
     """Extract individual frames from a video file."""
     # Initialize video capture stream to extract frame data and FPS properties
     video = cv2.VideoCapture(str(video_path))
@@ -93,9 +94,9 @@ def _extract_video_frames(video_path: Path, images_dir: Path, *, video_sample_fp
 
     fps = video.get(cv2.CAP_PROP_FPS)
     video_sample_fps = max(float(video_sample_fps), 0.1)
-    frame_interval = max(int(round((fps if fps and fps > 0 else 1) / video_sample_fps)), 1)
+    frame_interval = max(round((fps if fps and fps > 0 else 1) / video_sample_fps), 1)
 
-    image_paths: List[str] = []
+    image_paths: list[str] = []
     frame_idx = 0
     saved_idx = 0
     while True:
@@ -113,15 +114,23 @@ def _extract_video_frames(video_path: Path, images_dir: Path, *, video_sample_fp
 
 
 def run_model(
-    image_paths: Sequence[Union[str, Path]],
+    image_paths: Sequence[str | Path],
     model: Any,
     *,
-    device: Optional[str] = None,
+    device: str | None = None,
     image_resolution: int = 512,
     preprocess_mode: str = "balanced",
     patch_size: int = 16,
-) -> Dict[str, Any]:
-    """Run model helper function."""
+) -> dict[str, Any]:
+    """Run VGGT-Omega on the images, sorted by path, and return NumPy predictions.
+
+    Model tensors and decoded camera matrices are converted to float32, with a leading dimension
+    of size 1 removed. The predictions include ``extrinsic`` and ``intrinsic`` from the pose encoding
+    and float64 ``world_points_from_depth`` unprojected from the depth map.
+
+    Raises:
+        ValueError: CUDA is requested but unavailable, or ``preprocess_mode`` is unsupported.
+    """
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     device_type = torch.device(device).type
     if device_type == "cuda" and not torch.cuda.is_available():
@@ -153,7 +162,7 @@ def run_model(
     predictions["extrinsic"] = extrinsic
     predictions["intrinsic"] = intrinsic
 
-    predictions_np: Dict[str, Any] = {}
+    predictions_np: dict[str, Any] = {}
     for key, value in predictions.items():
         if isinstance(value, torch.Tensor):
             value = value.detach().float().cpu().numpy()
@@ -173,7 +182,6 @@ def run_model(
 
 
 def _normalize_preprocess_mode(preprocess_mode: str) -> str:
-    """Normalize preprocess mode helper function."""
     if preprocess_mode in {"balanced", "max_size"}:
         return preprocess_mode
     if preprocess_mode in {"crop", "pad", "square"}:
@@ -182,7 +190,16 @@ def _normalize_preprocess_mode(preprocess_mode: str) -> str:
 
 
 def unproject_depth_map_to_point_map(depth_map: np.ndarray, extrinsic: np.ndarray, intrinsic: np.ndarray) -> np.ndarray:
-    """Unproject depth map to point map helper function."""
+    """Unproject depth maps to world points.
+
+    Args:
+        depth_map: Depth of shape ``[S, H, W, 1]``.
+        extrinsic: World-to-camera matrices of shape ``[S, 3, 4]``.
+        intrinsic: Pinhole intrinsics of shape ``[S, 3, 3]``.
+
+    Returns:
+        World points of shape ``[S, H, W, 3]``.
+    """
     depth = np.asarray(depth_map)[..., 0]
     num_frames, height, width = depth.shape
 
@@ -214,7 +231,7 @@ def unproject_depth_map_to_point_map(depth_map: np.ndarray, extrinsic: np.ndarra
 
 
 def predictions_to_glb(
-    predictions: Dict[str, Any],
+    predictions: dict[str, Any],
     *,
     conf_thres: float = 20.0,
     mask_black_bg: bool = False,
@@ -224,7 +241,15 @@ def predictions_to_glb(
     filter_depth_edges: bool = True,
     depth_edge_rtol: float = 0.03,
 ) -> trimesh.Scene:
-    """Predictions to glb helper function."""
+    """Build a ``trimesh`` scene of the depth-based point cloud and, optionally, camera frustums.
+
+    Points at depth edges (when ``filter_depth_edges``), below the ``conf_thres`` confidence percentile
+    (at least 2), and optionally near-black or near-white points are dropped; at most ``max_points``
+    evenly spaced points are kept. The scene is aligned to the first camera.
+
+    Raises:
+        ValueError: ``predictions`` is not a dict.
+    """
     if not isinstance(predictions, dict):
         raise ValueError("predictions must be a dictionary")
 
@@ -286,14 +311,12 @@ def predictions_to_glb(
 
 
 def _images_to_rgb(images: np.ndarray) -> np.ndarray:
-    """Images to rgb helper function."""
     if images.ndim == 4 and images.shape[1] == 3:
         return np.transpose(images, (0, 2, 3, 1))
     return images
 
 
-def _limit_points(vertices: np.ndarray, colors: np.ndarray, max_points: int) -> Tuple[np.ndarray, np.ndarray]:
-    """Limit points helper function."""
+def _limit_points(vertices: np.ndarray, colors: np.ndarray, max_points: int) -> tuple[np.ndarray, np.ndarray]:
     if max_points <= 0 or len(vertices) <= max_points:
         return vertices, colors
     indices = np.linspace(0, len(vertices) - 1, max_points).astype(np.int64)
@@ -301,7 +324,7 @@ def _limit_points(vertices: np.ndarray, colors: np.ndarray, max_points: int) -> 
 
 
 def depth_edge(depth: np.ndarray, rtol: float = 0.03, kernel_size: int = 3) -> np.ndarray:
-    """Depth edge helper function."""
+    """Mark pixels whose ``kernel_size`` neighborhood depth range exceeds ``rtol`` times their depth."""
     depth = np.asarray(depth)
     original_shape = depth.shape
     depth = depth.reshape(-1, *original_shape[-2:])
@@ -324,10 +347,10 @@ def depth_edge(depth: np.ndarray, rtol: float = 0.03, kernel_size: int = 3) -> n
 def integrate_camera_into_scene(
     scene: trimesh.Scene,
     transform: np.ndarray,
-    face_colors: Tuple[int, int, int],
+    face_colors: tuple[int, ...],
     scene_scale: float,
 ) -> None:
-    """Integrate camera into scene helper function."""
+    """Add a frustum mesh for the camera pose ``transform``, sized by ``scene_scale``, to ``scene``."""
     cam_width = scene_scale * 0.05
     cam_height = scene_scale * 0.1
 
@@ -350,26 +373,29 @@ def integrate_camera_into_scene(
     vertices = transform_points(complete_transform, vertices)
 
     camera_mesh = trimesh.Trimesh(vertices=vertices, faces=compute_camera_faces(camera_cone_shape))
-    camera_mesh.visual.face_colors[:, :3] = face_colors
+    cast(ColorVisuals, camera_mesh.visual).face_colors[:, :3] = face_colors
     scene.add_geometry(camera_mesh)
 
 
 def apply_scene_alignment(scene: trimesh.Scene, extrinsics: np.ndarray) -> trimesh.Scene:
-    """Apply scene alignment helper function."""
+    """Flip y/z, then apply the first camera-to-world transform to ``scene`` in place.
+
+    ``extrinsics`` contains world-to-camera matrices. Returns the same scene.
+    """
     scene.apply_transform(np.linalg.inv(extrinsics[0]) @ get_opengl_conversion_matrix())
     return scene
 
 
 def get_opengl_conversion_matrix() -> np.ndarray:
-    """Get opengl conversion matrix helper function."""
+    """Return the 4x4 matrix that flips the y and z axes between OpenCV and OpenGL camera frames."""
     matrix = np.identity(4)
     matrix[1, 1] = -1
     matrix[2, 2] = -1
     return matrix
 
 
-def transform_points(transformation: np.ndarray, points: np.ndarray, dim: Optional[int] = None) -> np.ndarray:
-    """Transform points helper function."""
+def transform_points(transformation: np.ndarray, points: np.ndarray, dim: int | None = None) -> np.ndarray:
+    """Apply a homogeneous ``transformation`` to ``points`` of shape ``[..., D]`` and keep the first ``dim`` coordinates."""
     points = np.asarray(points)
     initial_shape = points.shape[:-1]
     dim = dim or points.shape[-1]
@@ -379,7 +405,7 @@ def transform_points(transformation: np.ndarray, points: np.ndarray, dim: Option
 
 
 def compute_camera_faces(cone_shape: trimesh.Trimesh) -> np.ndarray:
-    """Compute camera faces helper function."""
+    """Return the triangle faces of a camera frustum built from three stacked copies of ``cone_shape``'s vertices."""
     faces = []
     num_vertices = len(cone_shape.vertices)
     for face in cone_shape.faces:
@@ -403,14 +429,14 @@ def compute_camera_faces(cone_shape: trimesh.Trimesh) -> np.ndarray:
 
 
 def glb_path(
-    target_dir: Union[str, Path],
+    target_dir: str | Path,
     conf_thres: float,
     mask_black_bg: bool,
     mask_white_bg: bool,
     show_cam: bool,
     max_points_k: int,
 ) -> str:
-    """Glb path helper function."""
+    """Return the GLB file path in ``target_dir`` that encodes the export settings."""
     return str(
         Path(target_dir)
         / (
@@ -421,11 +447,11 @@ def glb_path(
 
 
 def run_official_scene_export(
-    input_source: Union[str, Path, Sequence[Union[str, Path]]],
+    input_source: str | Path | Sequence[str | Path],
     model: Any,
     *,
-    output_dir: Union[str, Path],
-    device: Optional[str] = None,
+    output_dir: str | Path,
+    device: str | None = None,
     image_resolution: int = 512,
     preprocess_mode: str = "balanced",
     patch_size: int = 16,
@@ -435,9 +461,13 @@ def run_official_scene_export(
     mask_white_bg: bool = False,
     show_cam: bool = True,
     max_points_k: int = 1000,
-    output_name: Optional[str] = None,
-) -> Dict[str, str]:
-    """Run official scene export helper function."""
+    output_name: str | None = None,
+) -> dict[str, str]:
+    """Run VGGT-Omega on an input source and export ``predictions.npz`` and a GLB scene to ``output_dir``.
+
+    Returns:
+        Dict with ``glb_path``, ``prediction_path`` and ``image_dir``.
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     image_paths = prepare_target_images(input_source, output_dir, video_sample_fps=video_sample_fps)
@@ -481,8 +511,8 @@ def run_official_scene_export(
 
 __all__ = [
     "collect_input_images",
-    "prepare_target_images",
     "predictions_to_glb",
+    "prepare_target_images",
     "run_model",
     "run_official_scene_export",
 ]

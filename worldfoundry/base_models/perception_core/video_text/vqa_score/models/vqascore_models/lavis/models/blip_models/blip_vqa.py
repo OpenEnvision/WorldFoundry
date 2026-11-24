@@ -1,20 +1,32 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
+
+from typing import ClassVar
 
 import torch
 import torch.nn.functional as F
+
 from ...common.registry import registry
 from ..base_model import tile
+
+# isort: split
 from .blip import BlipBase
+
+# isort: split
 from .blip_outputs import (
-    BlipOutput,
     BlipIntermediateOutput,
+    BlipOutput,
 )
+
+# isort: split
 from ..med import XBertEncoder, XBertLMHeadDecoder
+
+# isort: split
+# isort: split
 from ..vit import VisionTransformerEncoder
 
 
@@ -34,7 +46,7 @@ class BlipVQA(BlipBase):
         >>> model = load_model("blip_vqa", "aokvqa")
     """
 
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "vqav2": "configs/models/blip_vqav2.yaml",
         "okvqa": "configs/models/blip_vqa_okvqa.yaml",
         "aokvqa": "configs/models/blip_vqa_aokvqa.yaml",
@@ -87,9 +99,7 @@ class BlipVQA(BlipBase):
         ```
         """
         encoder_output, image_embeds = self.forward_encoder(samples)
-        loss, decoder_output, decoder_targets = self.forward_decoder(
-            samples=samples, encoder_out=encoder_output
-        )
+        loss, decoder_output, decoder_targets = self.forward_decoder(samples=samples, encoder_out=encoder_output)
 
         return BlipOutput(
             loss=loss,
@@ -121,13 +131,9 @@ class BlipVQA(BlipBase):
         return encoder_output, image_embeds
 
     def forward_decoder(self, samples, encoder_out, **kwargs):
-        answers = self.tokenizer(
-            samples["answer"], padding="longest", return_tensors="pt"
-        ).to(self.device)
+        answers = self.tokenizer(samples["answer"], padding="longest", return_tensors="pt").to(self.device)
         answers.input_ids[:, 0] = self.tokenizer.bos_token_id
-        answer_targets = answers.input_ids.masked_fill(
-            answers.input_ids == self.tokenizer.pad_token_id, -100
-        )
+        answer_targets = answers.input_ids.masked_fill(answers.input_ids == self.tokenizer.pad_token_id, -100)
 
         question_states = []
         question_atts = []
@@ -168,7 +174,7 @@ class BlipVQA(BlipBase):
         min_len=1,
         num_ans_candidates=128,
         answer_list=None,
-        **kwargs
+        **kwargs,
     ):
         """
         Args:
@@ -210,41 +216,31 @@ class BlipVQA(BlipBase):
         assert inference_method in [
             "rank",
             "generate",
-        ], "Inference method must be one of 'rank' or 'generate', got {}.".format(
-            inference_method
-        )
+        ], f"Inference method must be one of 'rank' or 'generate', got {inference_method}."
 
         if isinstance(samples["text_input"], str):
             samples["text_input"] = [samples["text_input"]]
 
-        assert len(samples["text_input"]) == samples["image"].size(
-            0
-        ), "The number of questions must be equal to the batch size."
+        assert len(samples["text_input"]) == samples["image"].size(0), (
+            "The number of questions must be equal to the batch size."
+        )
 
         if inference_method == "generate":
-            return self._generate_answers(
-                samples, num_beams=num_beams, max_length=max_len, min_length=min_len
-            )
+            return self._generate_answers(samples, num_beams=num_beams, max_length=max_len, min_length=min_len)
         elif inference_method == "rank":
             assert answer_list is not None, "answer_list must be provided for ranking"
 
             num_ans_candidates = min(num_ans_candidates, len(answer_list))
 
-            return self._rank_answers(
-                samples, answer_list=answer_list, num_ans_candidates=num_ans_candidates
-            )
+            return self._rank_answers(samples, answer_list=answer_list, num_ans_candidates=num_ans_candidates)
 
     def _generate_answers(self, samples, num_beams=3, max_length=10, min_length=1):
         encoder_out, _ = self.forward_encoder(samples)
 
         question_output = encoder_out
 
-        question_states = question_output.last_hidden_state.repeat_interleave(
-            num_beams, dim=0
-        )
-        question_atts = torch.ones(question_states.size()[:-1], dtype=torch.long).to(
-            self.device
-        )
+        question_states = question_output.last_hidden_state.repeat_interleave(num_beams, dim=0)
+        question_atts = torch.ones(question_states.size()[:-1], dtype=torch.long).to(self.device)
 
         model_kwargs = {
             "encoder_hidden_states": question_states,
@@ -252,9 +248,7 @@ class BlipVQA(BlipBase):
         }
 
         bsz = samples["image"].size(0)
-        bos_ids = torch.full(
-            (bsz, 1), fill_value=self.tokenizer.bos_token_id, device=self.device
-        )
+        bos_ids = torch.full((bsz, 1), fill_value=self.tokenizer.bos_token_id, device=self.device)
 
         outputs = self.text_decoder.generate(
             input_ids=bos_ids,
@@ -263,7 +257,7 @@ class BlipVQA(BlipBase):
             num_beams=num_beams,
             eos_token_id=self.tokenizer.sep_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
-            **model_kwargs
+            **model_kwargs,
         )
 
         # collect answers
@@ -282,9 +276,7 @@ class BlipVQA(BlipBase):
         Return the answers that minimize the losses as result.
 
         """
-        answer_candidates = self.tokenizer(
-            answer_list, padding="longest", return_tensors="pt"
-        ).to(self.device)
+        answer_candidates = self.tokenizer(answer_list, padding="longest", return_tensors="pt").to(self.device)
         answer_candidates.input_ids[:, 0] = self.tokenizer.bos_token_id
 
         answer_ids = answer_candidates.input_ids
@@ -311,23 +303,19 @@ class BlipVQA(BlipBase):
         # topk_probs: top-k probability
         # topk_ids: [num_question, k]
         answer_first_token = answer_ids[:, 1]
-        prob_first_token = F.softmax(logits, dim=1).index_select(
-            dim=1, index=answer_first_token
-        )
+        prob_first_token = F.softmax(logits, dim=1).index_select(dim=1, index=answer_first_token)
         topk_probs, topk_ids = prob_first_token.topk(num_ans_candidates, dim=1)
 
         # answer input: [num_question*k, answer_len]
         input_ids = []
         input_atts = []
-        for b, topk_id in enumerate(topk_ids):
+        for _b, topk_id in enumerate(topk_ids):
             input_ids.append(answer_ids.index_select(dim=0, index=topk_id))
             input_atts.append(answer_atts.index_select(dim=0, index=topk_id))
         input_ids = torch.cat(input_ids, dim=0)
         input_atts = torch.cat(input_atts, dim=0)
 
-        targets_ids = input_ids.masked_fill(
-            input_ids == self.tokenizer.pad_token_id, -100
-        )
+        targets_ids = input_ids.masked_fill(input_ids == self.tokenizer.pad_token_id, -100)
 
         # repeat encoder's output for top-k answers
         question_states = tile(question_states, 0, num_ans_candidates)

@@ -2,78 +2,38 @@ from __future__ import annotations
 
 import json
 import os
-import runpy
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
 
-from worldfoundry.evaluation.models import discover_model_registry
-from worldfoundry.operators.forcing_operator import CausalForcingOperator, SelfForcingOperator
-from worldfoundry.pipelines.forcing.pipeline_forcing import CausalForcingPipeline
+from worldfoundry.operators.forcing_operator import RollingForcingOperator
 from worldfoundry.synthesis.visual_generation.forcing import runtime as runtime_module
-from worldfoundry.synthesis.visual_generation.forcing.runtime import RollingForcingRuntime, SelfForcingRuntime
+from worldfoundry.synthesis.visual_generation.forcing.runtime import RollingForcingRuntime
+from worldfoundry.zoo.catalog.registry import discover_model_registry
 
 
-def test_self_forcing_operator_accepts_prompt_and_optional_image() -> None:
-    operator = SelfForcingOperator()
-    operator.get_interaction(123)
-
-    interaction = operator.process_interaction()
-    perception = operator.process_perception(images="/tmp/input.png")
-    prompt = operator.process_prompt("A detailed cinematic scene.")
-
-    assert interaction["seed"] == 123
-    assert perception["images"] == "/tmp/input.png"
-    assert prompt["prompt"] == "A detailed cinematic scene."
-
-
-def test_causal_forcing_operator_accepts_prompt_and_optional_image() -> None:
-    operator = CausalForcingOperator()
+def test_rolling_forcing_operator_accepts_prompt_and_rejects_images() -> None:
+    operator = RollingForcingOperator()
     operator.get_interaction(7)
 
-    interaction = operator.process_interaction()
-    perception = operator.process_perception(images="/tmp/input.png")
-    prompt = operator.process_prompt("A detailed causal scene.")
-
-    assert interaction["seed"] == 7
-    assert perception["images"] == "/tmp/input.png"
-    assert prompt["prompt"] == "A detailed causal scene."
-
-
-def test_causal_forcing_pipeline_forwards_model_specific_runtime_options() -> None:
-    pipe = CausalForcingPipeline.from_pretrained(
-        model_path={
-            "runtime_root": "/tmp/Causal-Forcing",
-            "checkpoint_path": "/tmp/causal.pt",
-            "config_path": "/tmp/config.yaml",
-            "wan_models_root": "/tmp/wan",
-        },
-        model_id="causal-forcing",
-        device="cuda:2",
-    )
-
-    runtime = pipe.synthesis_model.runtime
-    assert runtime.model_id == "causal-forcing"
-    assert runtime.runtime_root == "/tmp/Causal-Forcing"
-    assert runtime.checkpoint_path == "/tmp/causal.pt"
-    assert runtime.config_path == "/tmp/config.yaml"
-    assert runtime.wan_models_root == "/tmp/wan"
-    assert runtime.device == "cuda:2"
+    assert operator.process_interaction()["seed"] == 7
+    assert operator.process_prompt("A long scene.")["prompt"] == "A long scene."
+    with pytest.raises(ValueError, match="text only"):
+        operator.process_perception(images="/tmp/input.png")
 
 
 def test_forcing_runtime_builds_official_command(monkeypatch, tmp_path: Path) -> None:
-    runtime_root = tmp_path / "Self-Forcing"
     wan_root = tmp_path / "ckpt"
-    checkpoint = tmp_path / "self_forcing_dmd.pt"
-    config = runtime_root / "configs" / "self_forcing_dmd.yaml"
-    (runtime_root / "configs").mkdir(parents=True)
+    checkpoint = tmp_path / "rolling_forcing_dmd.pt"
+    config = tmp_path / "configs" / "rolling_forcing_dmd.yaml"
+    config.parent.mkdir(parents=True)
     (wan_root / "Wan2.1-T2V-1.3B").mkdir(parents=True)
-    (wan_root / "Wan2.1-T2V-14B").mkdir(parents=True)
-    (runtime_root / "inference.py").write_text("print('stub')\n", encoding="utf-8")
-    config.write_text("generator_ckpt: checkpoints/ode_init.pt\n", encoding="utf-8")
+    config.write_text("num_frame_per_block: 3\n", encoding="utf-8")
     checkpoint.write_bytes(b"stub")
 
     captured = {}
@@ -94,8 +54,7 @@ def test_forcing_runtime_builds_official_command(monkeypatch, tmp_path: Path) ->
         lambda _: np.zeros((2, 8, 8, 3), dtype=np.uint8),
     )
 
-    model = SelfForcingRuntime(
-        runtime_root=runtime_root,
+    model = RollingForcingRuntime(
         checkpoint_path=checkpoint,
         config_path=config,
         wan_models_root=wan_root,
@@ -104,17 +63,18 @@ def test_forcing_runtime_builds_official_command(monkeypatch, tmp_path: Path) ->
     result = model.predict(
         prompt="demo prompt",
         output_path=tmp_path / "result.mp4",
-        num_output_frames=3,
+        num_output_frames=6,
         show_progress=False,
     )
 
     command = captured["command"]
-    assert command[:2] == ["/tmp/python", str((runtime_root / "inference.py").resolve())]
+    assert command[:3] == ["/tmp/python", "-m", "worldfoundry.synthesis.visual_generation.rolling_forcing.inference"]
     assert command[command.index("--config_path") + 1] == str(config.resolve())
     assert command[command.index("--checkpoint_path") + 1] == str(checkpoint.resolve())
-    assert command[command.index("--num_output_frames") + 1] == "3"
-    assert "--save_with_index" in command
+    assert command[command.index("--num_output_frames") + 1] == "6"
+    assert command[command.index("--wan_models_root") + 1] == str(wan_root.resolve())
     assert "--use_ema" in command
+    assert "--save_with_index" not in command
     assert Path(captured["cwd"]).name == "runtime_cwd"
     assert result["artifact_path"] == str((tmp_path / "result.mp4").resolve())
     assert result["video"].shape == (2, 8, 8, 3)
@@ -125,7 +85,7 @@ def test_forcing_runtime_resolves_flat_hfd_wan_layout(tmp_path: Path) -> None:
     hfd_model = wan_root / "Wan-AI--Wan2.1-T2V-1.3B"
     hfd_model.mkdir(parents=True)
 
-    runtime = SelfForcingRuntime(wan_models_root=wan_root)
+    runtime = RollingForcingRuntime(wan_models_root=wan_root)
     plan = runtime.runtime_plan()
     runtime_cwd = runtime._runtime_cwd(tmp_path / "run")
 
@@ -185,45 +145,96 @@ def test_rolling_forcing_inference_contract_honors_hfd_root(tmp_path: Path) -> N
     assert "golden retriever" in payload["prompt"].lower()
 
 
-def test_forcing_runtime_rejects_invalid_latent_frame_geometry_before_launch(monkeypatch, tmp_path: Path) -> None:
-    model = SelfForcingRuntime()
-    launched = False
-
-    def fake_run(*args, **kwargs):
-        nonlocal launched
-        launched = True
-        raise AssertionError("subprocess must not launch")
-
-    monkeypatch.setattr(runtime_module.subprocess, "run", fake_run)
-
-    with pytest.raises(ValueError, match="must follow 3k"):
-        model.predict(prompt="demo", output_path=tmp_path / "invalid.mp4", num_output_frames=5)
-    assert launched is False
-
-
-def test_forcing_video_compat_replaces_present_torchvision_writer() -> None:
+@pytest.mark.unit
+def test_rolling_forcing_inference_preserves_video_encoding_options(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import torch
     import torchvision.io as tv_io
 
-    original = tv_io.write_video
-    try:
-        runpy.run_path(str(runtime_module.TORCHVISION_VIDEO_COMPAT_DIR / "sitecustomize.py"))
-        assert tv_io.write_video is not original
-    finally:
-        tv_io.write_video = original
+    from worldfoundry.core.media.codecs import video as video_io
+    from worldfoundry.core.model_loading import checkpoints
+    from worldfoundry.synthesis.visual_generation.rolling_forcing import inference
+
+    original_writer = getattr(tv_io, "write_video", None)
+    config = tmp_path / "config.yaml"
+    config.write_text("num_frame_per_block: 3\n", encoding="utf-8")
+    config.with_name("default_config.yaml").write_text("{}\n", encoding="utf-8")
+    prompts = tmp_path / "prompts.txt"
+    prompts.write_text("camera move\n", encoding="utf-8")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rolling-forcing",
+            "--config_path",
+            str(config),
+            "--checkpoint_path",
+            str(tmp_path / "model.pt"),
+            "--data_path",
+            str(prompts),
+            "--output_folder",
+            str(tmp_path),
+            "--num_output_frames",
+            "3",
+            "--use_ema",
+        ],
+    )
+    monkeypatch.setattr(inference, "_distributed_device", lambda _seed: (torch.device("cpu"), 0, 1))
+    checkpoint = {"generator_ema": {"weight": torch.zeros(1)}}
+    monkeypatch.setattr(checkpoints, "load_weights_only", lambda *_args, **_kwargs: checkpoint)
+    video = torch.linspace(-0.1, 1.1, 2 * 3 * 16 * 32).reshape(1, 2, 3, 16, 32)
+
+    def sample(**kwargs: Any) -> tuple[torch.Tensor, None]:
+        assert kwargs["noise"].shape == (1, 3, 16, 60, 104)
+        assert kwargs["noise"].dtype == torch.bfloat16
+        assert kwargs["text_prompts"] == ["camera move"]
+        return video.clone(), None
+
+    pipeline = SimpleNamespace(
+        generator=SimpleNamespace(load_state_dict=lambda *_args, **_kwargs: None),
+        vae=SimpleNamespace(model=SimpleNamespace(clear_cache=lambda: None)),
+        inference_rolling_forcing=sample,
+    )
+    pipeline.to = lambda **_kwargs: pipeline
+    pipeline.eval = lambda: pipeline
+    module_name = (
+        "worldfoundry.synthesis.visual_generation.forcing.causal_forcing_runtime.long_video.pipeline."
+        "rolling_forcing_inference"
+    )
+    module = ModuleType(module_name)
+    monkeypatch.setattr(module, "CausalInferencePipeline", lambda *_args, **_kwargs: pipeline, raising=False)
+    monkeypatch.setitem(sys.modules, module_name, module)
+    captured: dict[str, Any] = {}
+
+    def write_video(frames: torch.Tensor, path: Path, **kwargs: Any) -> None:
+        captured.update(frames=frames, path=path, options=kwargs)
+
+    monkeypatch.setattr(video_io, "write_video", write_video)
+    with torch.enable_grad():
+        inference.main()
+
+    expected = (255.0 * video[0].permute(0, 2, 3, 1)).clamp(0, 255).to(torch.uint8)
+    torch.testing.assert_close(captured["frames"], expected, rtol=0, atol=0)
+    assert captured["path"] == tmp_path / "camera_move-0.mp4"
+    assert captured["options"] == {"fps": 16, "codec": "libx264", "macro_block_size": 16}
+    assert getattr(tv_io, "write_video", None) is original_writer
 
 
-def test_model_registry_contains_forcing_models() -> None:
-    registry = discover_model_registry()
-    self_model = registry.get("self-forcing")
-    causal_model = registry.get("causal-forcing")
-    rolling_model = registry.get("rolling-forcing")
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "model_id, pipeline_name",
+    [("self-forcing", "NativeSelfForcingPipeline"), ("causal-forcing", "NativeCausalForcingPipeline")],
+)
+def test_native_forcing_routes_do_not_use_subprocess_bridge(model_id: str, pipeline_name: str) -> None:
+    model = discover_model_registry().get(model_id)
 
-    assert self_model.has_loader is True
-    assert self_model.has_infer is True
-    assert self_model.pipeline_target == "worldfoundry.pipelines.forcing.pipeline_forcing:SelfForcingPipeline"
-    assert causal_model.has_loader is True
-    assert causal_model.has_infer is True
-    assert causal_model.pipeline_target == "worldfoundry.pipelines.forcing.pipeline_forcing:CausalForcingPipeline"
+    assert model.pipeline_target == f"worldfoundry.pipelines.forcing.pipeline_native_forcing:{pipeline_name}"
+
+
+def test_model_registry_contains_rolling_forcing() -> None:
+    rolling_model = discover_model_registry().get("rolling-forcing")
+
     assert rolling_model.has_loader is True
     assert rolling_model.has_infer is True
     assert rolling_model.pipeline_target == ("worldfoundry.pipelines.forcing.pipeline_forcing:RollingForcingPipeline")

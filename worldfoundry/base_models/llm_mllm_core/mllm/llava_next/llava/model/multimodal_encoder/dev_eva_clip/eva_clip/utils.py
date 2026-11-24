@@ -1,13 +1,13 @@
-from itertools import repeat
 import collections.abc
 import logging
 import math
-import numpy as np
+from itertools import repeat
 
+import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn as nn
 from torchvision.ops.misc import FrozenBatchNorm2d
-import torch.nn.functional as F
 
 
 # open CLIP
@@ -37,10 +37,7 @@ def resize_clip_pos_embed(state_dict, model, interpolation: str = "bicubic", seq
         align_corners=True,
     )
     pos_emb_img = pos_emb_img.permute(0, 2, 3, 1).reshape(1, grid_size[0] * grid_size[1], -1)[0]
-    if pos_emb_tok is not None:
-        new_pos_embed = torch.cat([pos_emb_tok, pos_emb_img], dim=0)
-    else:
-        new_pos_embed = pos_emb_img
+    new_pos_embed = torch.cat([pos_emb_tok, pos_emb_img], dim=0) if pos_emb_tok is not None else pos_emb_img
     state_dict["visual.positional_embedding"] = new_pos_embed
 
 
@@ -70,15 +67,12 @@ def resize_visual_pos_embed(state_dict, model, interpolation: str = "bicubic", s
         align_corners=True,
     )
     pos_emb_img = pos_emb_img.permute(0, 2, 3, 1).reshape(1, grid_size[0] * grid_size[1], -1)[0]
-    if pos_emb_tok is not None:
-        new_pos_embed = torch.cat([pos_emb_tok, pos_emb_img], dim=0)
-    else:
-        new_pos_embed = pos_emb_img
+    new_pos_embed = torch.cat([pos_emb_tok, pos_emb_img], dim=0) if pos_emb_tok is not None else pos_emb_img
     state_dict["positional_embedding"] = new_pos_embed
 
 
 def resize_evaclip_pos_embed(state_dict, model, interpolation: str = "bicubic", seq_dim=1):
-    all_keys = list(state_dict.keys())
+    _all_keys = list(state_dict.keys())
     # interpolate position embedding
     if "visual.pos_embed" in state_dict:
         pos_embed_checkpoint = state_dict["visual.pos_embed"]
@@ -92,23 +86,27 @@ def resize_evaclip_pos_embed(state_dict, model, interpolation: str = "bicubic", 
         new_size = int(num_patches**0.5)
         # class_token and dist_token are kept unchanged
         if orig_size != new_size:
-            print("Position interpolate from %dx%d to %dx%d" % (orig_size, orig_size, new_size, new_size))
+            print("Position interpolate from %dx%d to %dx%d" % (orig_size, orig_size, new_size, new_size))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             extra_tokens = pos_embed_checkpoint[:, :num_extra_tokens]
             # only the position tokens are interpolated
             pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
             pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
-            pos_tokens = torch.nn.functional.interpolate(pos_tokens, size=(new_size, new_size), mode="bicubic", align_corners=False)
+            pos_tokens = torch.nn.functional.interpolate(
+                pos_tokens, size=(new_size, new_size), mode="bicubic", align_corners=False
+            )
             pos_tokens = pos_tokens.permute(0, 2, 3, 1).flatten(1, 2)
             new_pos_embed = torch.cat((extra_tokens, pos_tokens), dim=1)
             state_dict["visual.pos_embed"] = new_pos_embed
 
             patch_embed_proj = state_dict["visual.patch_embed.proj.weight"]
             patch_size = model.visual.patch_embed.patch_size
-            state_dict["visual.patch_embed.proj.weight"] = torch.nn.functional.interpolate(patch_embed_proj.float(), size=patch_size, mode="bicubic", align_corners=False)
+            state_dict["visual.patch_embed.proj.weight"] = torch.nn.functional.interpolate(
+                patch_embed_proj.float(), size=patch_size, mode="bicubic", align_corners=False
+            )
 
 
 def resize_eva_pos_embed(state_dict, model, interpolation: str = "bicubic", seq_dim=1):
-    all_keys = list(state_dict.keys())
+    _all_keys = list(state_dict.keys())
     # interpolate position embedding
     if "pos_embed" in state_dict:
         pos_embed_checkpoint = state_dict["pos_embed"]
@@ -122,19 +120,23 @@ def resize_eva_pos_embed(state_dict, model, interpolation: str = "bicubic", seq_
         new_size = int(num_patches**0.5)
         # class_token and dist_token are kept unchanged
         if orig_size != new_size:
-            print("Position interpolate from %dx%d to %dx%d" % (orig_size, orig_size, new_size, new_size))
+            print("Position interpolate from %dx%d to %dx%d" % (orig_size, orig_size, new_size, new_size))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             extra_tokens = pos_embed_checkpoint[:, :num_extra_tokens]
             # only the position tokens are interpolated
             pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
             pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
-            pos_tokens = torch.nn.functional.interpolate(pos_tokens, size=(new_size, new_size), mode="bicubic", align_corners=False)
+            pos_tokens = torch.nn.functional.interpolate(
+                pos_tokens, size=(new_size, new_size), mode="bicubic", align_corners=False
+            )
             pos_tokens = pos_tokens.permute(0, 2, 3, 1).flatten(1, 2)
             new_pos_embed = torch.cat((extra_tokens, pos_tokens), dim=1)
             state_dict["pos_embed"] = new_pos_embed
 
             patch_embed_proj = state_dict["patch_embed.proj.weight"]
             patch_size = model.visual.patch_embed.patch_size
-            state_dict["patch_embed.proj.weight"] = torch.nn.functional.interpolate(patch_embed_proj.float(), size=patch_size, mode="bicubic", align_corners=False)
+            state_dict["patch_embed.proj.weight"] = torch.nn.functional.interpolate(
+                patch_embed_proj.float(), size=patch_size, mode="bicubic", align_corners=False
+            )
 
 
 def resize_rel_pos_embed(state_dict, model, interpolation: str = "bicubic", seq_dim=1):
@@ -154,7 +156,7 @@ def resize_rel_pos_embed(state_dict, model, interpolation: str = "bicubic", seq_
             src_size = int((src_num_pos - num_extra_tokens) ** 0.5)
             dst_size = int((dst_num_pos - num_extra_tokens) ** 0.5)
             if src_size != dst_size:
-                print("Position interpolate for %s from %dx%d to %dx%d" % (key, src_size, src_size, dst_size, dst_size))
+                print("Position interpolate for %s from %dx%d to %dx%d" % (key, src_size, src_size, dst_size, dst_size))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
                 extra_tokens = rel_pos_bias[-num_extra_tokens:, :]
                 rel_pos_bias = rel_pos_bias[:-num_extra_tokens, :]
 
@@ -181,15 +183,15 @@ def resize_rel_pos_embed(state_dict, model, interpolation: str = "bicubic", seq_
 
                 r_ids = [-_ for _ in reversed(dis)]
 
-                x = r_ids + [0] + dis
-                y = r_ids + [0] + dis
+                x = r_ids + [0] + dis  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+                y = r_ids + [0] + dis  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
                 t = dst_size // 2.0
                 dx = np.arange(-t, t + 0.1, 1.0)
                 dy = np.arange(-t, t + 0.1, 1.0)
 
-                print("Original positions = %s" % str(x))
-                print("Target positions = %s" % str(dx))
+                print("Original positions = %s" % str(x))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
+                print("Target positions = %s" % str(dx))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
                 all_rel_pos_bias = []
 
@@ -215,22 +217,26 @@ def resize_rel_pos_embed(state_dict, model, interpolation: str = "bicubic", seq_
         new_size = int(num_patches**0.5)
         # class_token and dist_token are kept unchanged
         if orig_size != new_size:
-            print("Position interpolate from %dx%d to %dx%d" % (orig_size, orig_size, new_size, new_size))
+            print("Position interpolate from %dx%d to %dx%d" % (orig_size, orig_size, new_size, new_size))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             extra_tokens = pos_embed_checkpoint[:, :num_extra_tokens]
             # only the position tokens are interpolated
             pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
             pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
-            pos_tokens = torch.nn.functional.interpolate(pos_tokens, size=(new_size, new_size), mode="bicubic", align_corners=False)
+            pos_tokens = torch.nn.functional.interpolate(
+                pos_tokens, size=(new_size, new_size), mode="bicubic", align_corners=False
+            )
             pos_tokens = pos_tokens.permute(0, 2, 3, 1).flatten(1, 2)
             new_pos_embed = torch.cat((extra_tokens, pos_tokens), dim=1)
             state_dict["pos_embed"] = new_pos_embed
 
             patch_embed_proj = state_dict["patch_embed.proj.weight"]
             patch_size = model.visual.patch_embed.patch_size
-            state_dict["patch_embed.proj.weight"] = torch.nn.functional.interpolate(patch_embed_proj.float(), size=patch_size, mode="bicubic", align_corners=False)
+            state_dict["patch_embed.proj.weight"] = torch.nn.functional.interpolate(
+                patch_embed_proj.float(), size=patch_size, mode="bicubic", align_corners=False
+            )
 
 
-def freeze_batch_norm_2d(module, module_match={}, name=""):
+def freeze_batch_norm_2d(module, module_match={}, name=""):  # noqa: B006 - Keeps the upstream default object and signature.
     """
     Converts all `BatchNorm2d` and `SyncBatchNorm` layers of provided module into `FrozenBatchNorm2d`. If `module` is
     itself an instance of either `BatchNorm2d` or `SyncBatchNorm`, it is converted into `FrozenBatchNorm2d` and
@@ -283,7 +289,10 @@ to_1tuple = _ntuple(1)
 to_2tuple = _ntuple(2)
 to_3tuple = _ntuple(3)
 to_4tuple = _ntuple(4)
-to_ntuple = lambda n, x: _ntuple(n)(x)
+
+
+def to_ntuple(n, x):
+    return _ntuple(n)(x)
 
 
 def is_logging(args):

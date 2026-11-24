@@ -79,9 +79,7 @@ def distributed_worker(local_rank, fn, world_size, n_gpu_per_machine, machine_ra
     global_rank = machine_rank * n_gpu_per_machine + local_rank
 
     if n_gpu_per_machine > torch.cuda.device_count():
-        raise ValueError(
-            f"specified n_gpu_per_machine is larger than available devices ({torch.cuda.device_count()})"
-        )
+        raise ValueError(f"specified n_gpu_per_machine is larger than available devices ({torch.cuda.device_count()})")
     # Bind the CUDA device before any NCCL collective: a barrier issued while
     # every local process still points at cuda:0 makes NCCL build multiple
     # communicators on one GPU ("Duplicate GPU detected" or a hang, CC-20).

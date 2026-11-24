@@ -63,26 +63,26 @@ class Attention(nn.Module):
     def __init__(
         self,
         query_dim: int,
-        cross_attention_dim: int = None,
+        cross_attention_dim: int | None = None,
         nheads: int = 8,
         head_dim: int = 64,
         dropout: float = 0.0,
         bias: bool = False,
         upcast_attention: bool = False,
         upcast_softmax: bool = False,
-        cross_attention_norm = None,
+        cross_attention_norm=None,
         cross_attention_norm_num_groups: int = 32,
-        added_kv_proj_dim = None,
-        norm_num_groups = None,
-        spatial_norm_dim = None,
+        added_kv_proj_dim=None,
+        norm_num_groups=None,
+        spatial_norm_dim=None,
         out_bias: bool = True,
         scale_qk: bool = True,
         only_cross_attention: bool = False,
         eps: float = 1e-5,
         rescale_output_factor: float = 1.0,
         residual_connection: bool = False,
-        processor = None,
-        out_dim: int = None,
+        processor=None,
+        out_dim: int | None = None,
     ):
         super().__init__()
 
@@ -103,7 +103,7 @@ class Attention(nn.Module):
             )
 
         self.scale_qk = scale_qk
-        self.scale = head_dim ** -0.5 if scale_qk else 1.0
+        self.scale = head_dim**-0.5 if scale_qk else 1.0
 
         self.rescale_output_factor = rescale_output_factor
         self.residual_connection = residual_connection
@@ -158,9 +158,7 @@ class Attention(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         if processor is None:
-            processor = (
-                AttnProcessor2_0() if hasattr(F, "scaled_dot_product_attention") else AttnProcessor()
-            )
+            processor = AttnProcessor2_0() if hasattr(F, "scaled_dot_product_attention") else AttnProcessor()
         self.set_processor(processor)
 
     def set_processor(self, processor: AttnProcessor) -> None:
@@ -301,7 +299,7 @@ class Attention(nn.Module):
             encoder_hidden_states = self.norm_cross(encoder_hidden_states)
             encoder_hidden_states = encoder_hidden_states.transpose(1, 2)
         else:
-            assert False
+            assert False  # noqa: B011 - Keeps the assertion semantics under -O.
 
         return encoder_hidden_states
 
@@ -372,7 +370,7 @@ class Attention(nn.Module):
         # here we simply pass along all tensors to the selected processor class
         # For standard processors that are defined here, `**cross_attention_kwargs` is empty
 
-        unused_kwargs = [k for k, _ in cross_attention_kwargs.items() if k not in self._attn_parameters]
+        _unused_kwargs = [k for k, _ in cross_attention_kwargs.items() if k not in self._attn_parameters]
         # if len(unused_kwargs) > 0:
         #     logger.warning(
         #         f"cross_attention_kwargs {unused_kwargs} are not expected by {self.processor.__class__.__name__} and will be ignored."

@@ -4,36 +4,19 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> dependency -> distortion.py functionality."""
-
-import torch
-import numpy as np
 from typing import Union
 
-ArrayLike = Union[np.ndarray, torch.Tensor]
+import numpy as np
+import torch
+
+ArrayLike = Union[np.ndarray, torch.Tensor]  # noqa: UP007 - Runtime type alias kept as typing.Union.
 
 
 def _is_numpy(x: ArrayLike) -> bool:
-    """Helper function to is numpy.
-
-    Args:
-        x: The x.
-
-    Returns:
-        The return value.
-    """
     return isinstance(x, np.ndarray)
 
 
 def _is_torch(x: ArrayLike) -> bool:
-    """Helper function to is torch.
-
-    Args:
-        x: The x.
-
-    Returns:
-        The return value.
-    """
     return isinstance(x, torch.Tensor)
 
 
@@ -88,7 +71,7 @@ def iterative_undistortion(params, tracks_normalized, max_iterations=100, max_st
     original_u, original_v = u.clone(), v.clone()
 
     eps = torch.finfo(u.dtype).eps
-    for idx in range(max_iterations):
+    for _idx in range(max_iterations):
         u_undist, v_undist = apply_distortion(params, u, v)
         dx = original_u - u_undist
         dy = original_v - v_undist
@@ -173,10 +156,11 @@ def apply_distortion(extra_params, u, v):
 
 if __name__ == "__main__":
     import random
+
     import pycolmap
 
     max_diff = 0
-    for i in range(1000):
+    for i in range(1000):  # noqa: B007 - Loop target name kept as upstream.
         # Define distortion parameters (assuming 1 parameter for simplicity)
         B = random.randint(1, 500)
         track_num = random.randint(100, 1000)

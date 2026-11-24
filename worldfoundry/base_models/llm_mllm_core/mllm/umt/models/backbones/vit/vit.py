@@ -1,42 +1,46 @@
 import logging
+from functools import partial
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
-from functools import partial
-
 from timm.models.layers import drop_path, to_2tuple, trunc_normal_
 
 logger = logging.getLogger(__name__)
 
 
-def _cfg(url='', **kwargs):
+def _cfg(url="", **kwargs):
     return {
-        'url': url,
-        'num_classes': 400, 'input_size': (3, 224, 224), 'pool_size': None,
-        'crop_pct': .9, 'interpolation': 'bicubic',
-        'mean': (0.5, 0.5, 0.5), 'std': (0.5, 0.5, 0.5),
-        **kwargs
+        "url": url,
+        "num_classes": 400,
+        "input_size": (3, 224, 224),
+        "pool_size": None,
+        "crop_pct": 0.9,
+        "interpolation": "bicubic",
+        "mean": (0.5, 0.5, 0.5),
+        "std": (0.5, 0.5, 0.5),
+        **kwargs,
     }
 
 
 class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
-    """
+    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
+
     def __init__(self, drop_prob=None):
-        super(DropPath, self).__init__()
+        super().__init__()
         self.drop_prob = drop_prob
 
     def forward(self, x):
         return drop_path(x, self.drop_prob, self.training)
-    
+
     def extra_repr(self) -> str:
-        return 'p={}'.format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class Mlp(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -56,15 +60,15 @@ class Mlp(nn.Module):
 
 class Attention(nn.Module):
     def __init__(
-            self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.,
-            proj_drop=0., attn_head_dim=None):
+        self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.0, proj_drop=0.0, attn_head_dim=None
+    ):
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
         if attn_head_dim is not None:
             head_dim = attn_head_dim
         all_head_dim = head_dim * self.num_heads
-        self.scale = qk_scale or head_dim ** -0.5
+        self.scale = qk_scale or head_dim**-0.5
 
         self.qkv = nn.Linear(dim, all_head_dim * 3, bias=False)
         if qkv_bias:
@@ -86,11 +90,11 @@ class Attention(nn.Module):
         # qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         qkv = F.linear(input=x, weight=self.qkv.weight, bias=qkv_bias)
         qkv = qkv.reshape(B, N, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
+        q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
 
         q = q * self.scale
-        attn = (q @ k.transpose(-2, -1))
-        
+        attn = q @ k.transpose(-2, -1)
+
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
 
@@ -101,23 +105,41 @@ class Attention(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., init_values=None, act_layer=nn.GELU, norm_layer=nn.LayerNorm,
-                 attn_head_dim=None):
+    def __init__(
+        self,
+        dim,
+        num_heads,
+        mlp_ratio=4.0,
+        qkv_bias=False,
+        qk_scale=None,
+        drop=0.0,
+        attn_drop=0.0,
+        drop_path=0.0,
+        init_values=None,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        attn_head_dim=None,
+    ):
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
-            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
-            attn_drop=attn_drop, proj_drop=drop, attn_head_dim=attn_head_dim)
+            dim,
+            num_heads=num_heads,
+            qkv_bias=qkv_bias,
+            qk_scale=qk_scale,
+            attn_drop=attn_drop,
+            proj_drop=drop,
+            attn_head_dim=attn_head_dim,
+        )
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
         if init_values > 0:
-            self.gamma_1 = nn.Parameter(init_values * torch.ones((dim)),requires_grad=True)
-            self.gamma_2 = nn.Parameter(init_values * torch.ones((dim)),requires_grad=True)
+            self.gamma_1 = nn.Parameter(init_values * torch.ones(dim), requires_grad=True)
+            self.gamma_2 = nn.Parameter(init_values * torch.ones(dim), requires_grad=True)
         else:
             self.gamma_1, self.gamma_2 = None, None
 
@@ -132,81 +154,111 @@ class Block(nn.Module):
 
 
 class PatchEmbed(nn.Module):
-    """ Image to Patch Embedding
-    """
+    """Image to Patch Embedding"""
+
     def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, num_frames=16, tubelet_size=2):
         super().__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
         self.tubelet_size = int(tubelet_size)
-        num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0]) * (num_frames // self.tubelet_size)
+        num_patches = (
+            (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0]) * (num_frames // self.tubelet_size)
+        )
         self.img_size = img_size
         self.patch_size = patch_size
         self.num_patches = num_patches
         self.proj = nn.Conv3d(
-            in_channels=in_chans, out_channels=embed_dim, 
-            kernel_size=(self.tubelet_size, patch_size[0], patch_size[1]), 
-            stride=(self.tubelet_size, patch_size[0], patch_size[1])
+            in_channels=in_chans,
+            out_channels=embed_dim,
+            kernel_size=(self.tubelet_size, patch_size[0], patch_size[1]),
+            stride=(self.tubelet_size, patch_size[0], patch_size[1]),
         )
-        logger.info(f'Num of patches: {num_patches}')
+        logger.info(f"Num of patches: {num_patches}")
 
     def forward(self, x, **kwargs):
         B, C, T, H, W = x.shape
         # FIXME look at relaxing size constraints
-        assert H == self.img_size[0] and W == self.img_size[1], \
+        assert self.img_size[0] == H and self.img_size[1] == W, (
             f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+        )
         x = self.proj(x).flatten(2).transpose(1, 2)
         return x
-    
+
+
 # sin-cos position encoding
 # https://github.com/jadore801120/attention-is-all-you-need-pytorch/blob/master/transformer/Models.py#L31
-def get_sinusoid_encoding_table(n_position, d_hid, ckpt_num_frame=-1, cur_frame=12): 
-    ''' Sinusoid position encoding table ''' 
-    # TODO: make it with torch instead of numpy 
-    def get_position_angle_vec(position): 
-        return [position / np.power(10000, 2 * (hid_j // 2) / d_hid) for hid_j in range(d_hid)] 
-    
+def get_sinusoid_encoding_table(n_position, d_hid, ckpt_num_frame=-1, cur_frame=12):
+    """Sinusoid position encoding table"""
+
+    # TODO: make it with torch instead of numpy
+    def get_position_angle_vec(position):
+        return [position / np.power(10000, 2 * (hid_j // 2) / d_hid) for hid_j in range(d_hid)]
+
     if ckpt_num_frame != -1 and ckpt_num_frame != cur_frame:
-        logger.info(f"Interpolate position embedding")
+        logger.info("Interpolate position embedding")
         logger.info(f"Testing frame: {cur_frame}")
         logger.info(f"Checkpoint frame: {ckpt_num_frame}")
 
-        T = ckpt_num_frame # checkpoint frame
-        new_T = cur_frame # testing frame
-        n_position = n_position // new_T * T # generate checkpoint position embedding
-        sinusoid_table = np.array([get_position_angle_vec(pos_i) for pos_i in range(n_position)]) 
-        sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2]) # dim 2i 
-        sinusoid_table[:, 1::2] = np.cos(sinusoid_table[:, 1::2]) # dim 2i+1 
+        T = ckpt_num_frame  # checkpoint frame
+        new_T = cur_frame  # testing frame
+        n_position = n_position // new_T * T  # generate checkpoint position embedding
+        sinusoid_table = np.array([get_position_angle_vec(pos_i) for pos_i in range(n_position)])
+        sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2])  # dim 2i
+        sinusoid_table[:, 1::2] = np.cos(sinusoid_table[:, 1::2])  # dim 2i+1
         sinusoid_table = torch.tensor(sinusoid_table, dtype=torch.float, requires_grad=False).unsqueeze(0)
         # interpolate
         P = int((n_position // T) ** 0.5)
         C = d_hid
         sinusoid_table = sinusoid_table.reshape(-1, T, P, P, C)
         sinusoid_table = sinusoid_table.permute(0, 2, 3, 4, 1).reshape(-1, C, T)  # BHW, C, T
-        sinusoid_table = torch.nn.functional.interpolate(sinusoid_table, size=new_T, mode='linear')
-        sinusoid_table = sinusoid_table.reshape(1, P, P, C, new_T).permute(0, 4, 1, 2, 3) # B, T, H, W, C
+        sinusoid_table = torch.nn.functional.interpolate(sinusoid_table, size=new_T, mode="linear")
+        sinusoid_table = sinusoid_table.reshape(1, P, P, C, new_T).permute(0, 4, 1, 2, 3)  # B, T, H, W, C
         sinusoid_table = sinusoid_table.flatten(1, 3)
         return sinusoid_table
     else:
-        sinusoid_table = np.array([get_position_angle_vec(pos_i) for pos_i in range(n_position)]) 
-        sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2]) # dim 2i 
-        sinusoid_table[:, 1::2] = np.cos(sinusoid_table[:, 1::2]) # dim 2i+1 
-        return torch.tensor(sinusoid_table, dtype=torch.float, requires_grad=False).unsqueeze(0) 
+        sinusoid_table = np.array([get_position_angle_vec(pos_i) for pos_i in range(n_position)])
+        sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2])  # dim 2i
+        sinusoid_table[:, 1::2] = np.cos(sinusoid_table[:, 1::2])  # dim 2i+1
+        return torch.tensor(sinusoid_table, dtype=torch.float, requires_grad=False).unsqueeze(0)
 
 
 class PretrainVisionTransformerEncoder(nn.Module):
-    """ Vision Transformer with support for patch or hybrid CNN input stage
-    """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, depth=12,
-                 num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
-                 drop_path_rate=0., norm_layer=nn.LayerNorm, init_values=None, num_frames=8, tubelet_size=1,
-                 use_learnable_pos_emb=False, clip_return_layer=1, clip_student_return_interval=1,
-                 use_checkpoint=False, checkpoint_num=0, ckpt_num_frame=-1):
+    """Vision Transformer with support for patch or hybrid CNN input stage"""
+
+    def __init__(
+        self,
+        img_size=224,
+        patch_size=16,
+        in_chans=3,
+        embed_dim=768,
+        depth=12,
+        num_heads=12,
+        mlp_ratio=4.0,
+        qkv_bias=False,
+        qk_scale=None,
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
+        drop_path_rate=0.0,
+        norm_layer=nn.LayerNorm,
+        init_values=None,
+        num_frames=8,
+        tubelet_size=1,
+        use_learnable_pos_emb=False,
+        clip_return_layer=1,
+        clip_student_return_interval=1,
+        use_checkpoint=False,
+        checkpoint_num=0,
+        ckpt_num_frame=-1,
+    ):
         super().__init__()
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.patch_embed = PatchEmbed(
-            img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim, 
-            num_frames=num_frames, tubelet_size=tubelet_size
+            img_size=img_size,
+            patch_size=patch_size,
+            in_chans=in_chans,
+            embed_dim=embed_dim,
+            num_frames=num_frames,
+            tubelet_size=tubelet_size,
         )
         num_patches = self.patch_embed.num_patches
         self.use_checkpoint = use_checkpoint
@@ -221,39 +273,54 @@ class PretrainVisionTransformerEncoder(nn.Module):
         # TODO: Add the cls token
         if use_learnable_pos_emb:
             self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim))
-            self.img_pos_embed = nn.Parameter(torch.zeros(1, num_patches//(num_frames//tubelet_size) + 1, embed_dim))
+            self.img_pos_embed = nn.Parameter(
+                torch.zeros(1, num_patches // (num_frames // tubelet_size) + 1, embed_dim)
+            )
         else:
-            # sine-cosine positional embeddings 
-            self.pos_embed = get_sinusoid_encoding_table(num_patches, embed_dim, ckpt_num_frame=ckpt_num_frame, cur_frame=num_frames//tubelet_size)
-            self.img_pos_embed = get_sinusoid_encoding_table(num_patches//(num_frames//tubelet_size), embed_dim)
+            # sine-cosine positional embeddings
+            self.pos_embed = get_sinusoid_encoding_table(
+                num_patches, embed_dim, ckpt_num_frame=ckpt_num_frame, cur_frame=num_frames // tubelet_size
+            )
+            self.img_pos_embed = get_sinusoid_encoding_table(num_patches // (num_frames // tubelet_size), embed_dim)
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
-        self.blocks = nn.ModuleList([
-            Block(
-                dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
-                init_values=init_values)
-            for i in range(depth)])
+        self.blocks = nn.ModuleList(
+            [
+                Block(
+                    dim=embed_dim,
+                    num_heads=num_heads,
+                    mlp_ratio=mlp_ratio,
+                    qkv_bias=qkv_bias,
+                    qk_scale=qk_scale,
+                    drop=drop_rate,
+                    attn_drop=attn_drop_rate,
+                    drop_path=dpr[i],
+                    norm_layer=norm_layer,
+                    init_values=init_values,
+                )
+                for i in range(depth)
+            ]
+        )
         self.norm = norm_layer(embed_dim)
 
         if use_learnable_pos_emb:
-            trunc_normal_(self.pos_embed, std=.02)
+            trunc_normal_(self.pos_embed, std=0.02)
 
     @torch.jit.ignore
     def no_weight_decay(self):
-        return {'pos_embed', 'cls_token'}
+        return {"pos_embed", "cls_token"}
 
     def forward_features(self, x, mask=None, use_image=False):
         x = self.patch_embed(x)
-        
+
         if use_image:
             x = x + self.img_pos_embed.type_as(x).to(x.device).clone().detach()
         else:
             x = x + self.pos_embed.type_as(x).to(x.device).clone().detach()
 
         B, _, C = x.shape
-        if mask is not None:
-            x_vis = x[~mask].reshape(B, -1, C) # ~mask means visible
+        if mask is not None:  # noqa: SIM108 - Branches carry per-case comments.
+            x_vis = x[~mask].reshape(B, -1, C)  # ~mask means visible
         else:
             x_vis = x
 
@@ -289,52 +356,53 @@ class Linear_Decoder(nn.Module):
 
 
 class PretrainVisionTransformer(nn.Module):
-    """ Vision Transformer with support for patch or hybrid CNN input stage
-    """
-    def __init__(self,
-                 img_size=224, 
-                 patch_size=16, 
-                 encoder_in_chans=3, 
-                 encoder_embed_dim=768, 
-                 encoder_depth=12,
-                 encoder_num_heads=12, 
-                 mlp_ratio=4., 
-                 qkv_bias=True, 
-                 qk_scale=None, 
-                 drop_rate=0., 
-                 attn_drop_rate=0.,
-                 drop_path_rate=0., 
-                 norm_layer=partial(nn.LayerNorm, eps=1e-6), 
-                 init_values=0.,
-                 use_learnable_pos_emb=False,
-                 num_frames=8,
-                 tubelet_size=1,
-                 use_checkpoint=False,
-                 checkpoint_num=0,
-                 # clip,
-                 clip_decoder_embed_dim=768,
-                 clip_output_dim=512,
-                 clip_return_layer=6,
-                 clip_student_return_interval=1,
-                 add_pool_norm=True,
-                 ckpt_num_frame=-1
-                ):
+    """Vision Transformer with support for patch or hybrid CNN input stage"""
+
+    def __init__(
+        self,
+        img_size=224,
+        patch_size=16,
+        encoder_in_chans=3,
+        encoder_embed_dim=768,
+        encoder_depth=12,
+        encoder_num_heads=12,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        qk_scale=None,
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
+        drop_path_rate=0.0,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),  # noqa: B008 - Default evaluated once at definition, as upstream.
+        init_values=0.0,
+        use_learnable_pos_emb=False,
+        num_frames=8,
+        tubelet_size=1,
+        use_checkpoint=False,
+        checkpoint_num=0,
+        # clip,
+        clip_decoder_embed_dim=768,
+        clip_output_dim=512,
+        clip_return_layer=6,
+        clip_student_return_interval=1,
+        add_pool_norm=True,
+        ckpt_num_frame=-1,
+    ):
         super().__init__()
 
         self.encoder = PretrainVisionTransformerEncoder(
-            img_size=img_size, 
-            patch_size=patch_size, 
-            in_chans=encoder_in_chans, 
-            embed_dim=encoder_embed_dim, 
+            img_size=img_size,
+            patch_size=patch_size,
+            in_chans=encoder_in_chans,
+            embed_dim=encoder_embed_dim,
             depth=encoder_depth,
-            num_heads=encoder_num_heads, 
-            mlp_ratio=mlp_ratio, 
-            qkv_bias=qkv_bias, 
-            qk_scale=qk_scale, 
-            drop_rate=drop_rate, 
+            num_heads=encoder_num_heads,
+            mlp_ratio=mlp_ratio,
+            qkv_bias=qkv_bias,
+            qk_scale=qk_scale,
+            drop_rate=drop_rate,
             attn_drop_rate=attn_drop_rate,
-            drop_path_rate=drop_path_rate, 
-            norm_layer=norm_layer, 
+            drop_path_rate=drop_path_rate,
+            norm_layer=norm_layer,
             init_values=init_values,
             num_frames=num_frames,
             tubelet_size=tubelet_size,
@@ -347,24 +415,26 @@ class PretrainVisionTransformer(nn.Module):
         )
 
         # CLIP decoder
-        self.clip_decoder = nn.ModuleList([
-            Linear_Decoder(
-                output_dim=clip_output_dim, 
-                embed_dim=clip_decoder_embed_dim, 
-            ) for _ in range(clip_return_layer)
-        ])
+        self.clip_decoder = nn.ModuleList(
+            [
+                Linear_Decoder(
+                    output_dim=clip_output_dim,
+                    embed_dim=clip_decoder_embed_dim,
+                )
+                for _ in range(clip_return_layer)
+            ]
+        )
 
         self.clip_pos_embed = get_sinusoid_encoding_table(
-            self.encoder.patch_embed.num_patches, 
+            self.encoder.patch_embed.num_patches,
             clip_decoder_embed_dim,
-            ckpt_num_frame=ckpt_num_frame, 
-            cur_frame=num_frames//tubelet_size
+            ckpt_num_frame=ckpt_num_frame,
+            cur_frame=num_frames // tubelet_size,
         )
         self.clip_img_pos_embed = get_sinusoid_encoding_table(
-            self.encoder.patch_embed.num_patches // (num_frames // tubelet_size), 
-            clip_decoder_embed_dim
+            self.encoder.patch_embed.num_patches // (num_frames // tubelet_size), clip_decoder_embed_dim
         )
-        
+
         self.add_pool_norm = add_pool_norm
         if add_pool_norm:
             self.pool_norm = norm_layer(encoder_embed_dim)
@@ -382,12 +452,12 @@ class PretrainVisionTransformer(nn.Module):
 
     @torch.jit.ignore
     def no_weight_decay(self):
-        return {'pos_embed', 'cls_token', 'clip_pos_embed'}
+        return {"pos_embed", "cls_token", "clip_pos_embed"}
 
     def forward(self, x, mask=None, use_image=False, keep_temporal=False):
         T = x.shape[2]
-        x_vis, x_clip_vis = self.encoder(x, mask, use_image) # [B, N_vis, C_e]
-     
+        x_vis, x_clip_vis = self.encoder(x, mask, use_image)  # [B, N_vis, C_e]
+
         if mask is not None and len(x_clip_vis) > 0:
             # align CLIP
             K, B, _, C_CLIP = x_clip_vis.shape
@@ -396,12 +466,12 @@ class PretrainVisionTransformer(nn.Module):
             else:
                 expand_clip_pos_embed = self.clip_pos_embed.repeat(B, 1, 1).type_as(x).to(x.device).clone().detach()
             clip_pos_emd_vis = expand_clip_pos_embed[~mask].view(B, -1, C_CLIP).unsqueeze(0).repeat(K, 1, 1, 1)
-            x_clip_full = x_clip_vis + clip_pos_emd_vis # [K, B, N, C_d_clip]
+            x_clip_full = x_clip_vis + clip_pos_emd_vis  # [K, B, N, C_d_clip]
 
             x_clip = []
             for idx, clip_decoder in enumerate(self.clip_decoder):
                 x_clip.append(clip_decoder(x_clip_full[idx]))
-            x_clip = torch.stack(x_clip) # align and normalize
+            x_clip = torch.stack(x_clip)  # align and normalize
         else:
             x_clip = None
 
@@ -411,7 +481,7 @@ class PretrainVisionTransformer(nn.Module):
                 x_pool_vis = self.pool_norm(x_vis.view(B, T, -1, C_CLIP).mean(2))
             else:
                 x_pool_vis = self.pool_norm(x_vis.mean(1, keepdim=True))
-            
+
             return x_vis, x_pool_vis, x_clip
         else:
             return x_vis, x_clip
@@ -419,12 +489,12 @@ class PretrainVisionTransformer(nn.Module):
 
 def build_vit(config, add_pool_norm=True):
     model = PretrainVisionTransformer(
-        img_size=config.vision_encoder.img_size, 
-        patch_size=config.vision_encoder.patch_size, 
-        encoder_embed_dim=config.vision_encoder.encoder_embed_dim, 
+        img_size=config.vision_encoder.img_size,
+        patch_size=config.vision_encoder.patch_size,
+        encoder_embed_dim=config.vision_encoder.encoder_embed_dim,
         encoder_depth=config.vision_encoder.encoder_depth,
-        encoder_num_heads=config.vision_encoder.encoder_num_heads, 
-        drop_path_rate=config.vision_encoder.drop_path_rate, 
+        encoder_num_heads=config.vision_encoder.encoder_num_heads,
+        drop_path_rate=config.vision_encoder.drop_path_rate,
         num_frames=config.vision_encoder.num_frames,
         tubelet_size=config.vision_encoder.tubelet_size,
         use_checkpoint=config.vision_encoder.use_checkpoint,
@@ -434,14 +504,13 @@ def build_vit(config, add_pool_norm=True):
         clip_return_layer=config.vision_encoder.clip_return_layer,
         clip_student_return_interval=config.vision_encoder.clip_student_return_interval,
         add_pool_norm=add_pool_norm,
-        ckpt_num_frame=config.vision_encoder.get('ckpt_num_frame', -1)
+        ckpt_num_frame=config.vision_encoder.get("ckpt_num_frame", -1),
     )
     model.default_cfg = _cfg()
     if config.vision_encoder.pretrained is not None:
         logger.info(f"Loading pretrained weights from {config.vision_encoder.pretrained}")
-        state_dict = torch.load(config.vision_encoder.pretrained, map_location='cpu')
+        state_dict = torch.load(config.vision_encoder.pretrained, map_location="cpu")
         model.load_state_dict(state_dict, strict=False)
     else:
         logger.info("No pretrained weights!!!")
     return model
- 

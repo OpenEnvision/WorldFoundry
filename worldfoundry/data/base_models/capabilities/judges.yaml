@@ -1,0 +1,243 @@
+# Multimodal LLM judges and video reward models.
+# Schema and templates: see the module docstring of worldfoundry/base_models/capabilities.py.
+
+keye_vl:
+  family: multimodal_judge
+  canonical_path: worldfoundry/base_models/llm_mllm_core/mllm/keye_vl
+  package_imports: [torch, transformers]
+  manual_install_actions:
+    - Install `keye-vl-utils` and `qwen-vl-utils` in the active benchmark environment when running 4DWorldBench
+      Keye-VL judge dimensions.
+  assets:
+    - id: keye_vl_1_5_8b_model_dir
+      kind: dir
+      role: model_dir
+      env:
+        - WORLDFOUNDRY_KEYE_VL_MODEL
+        - WORLDFOUNDRY_4DWORLDBENCH_KEYE_MODEL
+        - KEYE_MODEL_PATH
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/Kwai-Keye--Keye-VL-1_5-8B
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/hfd/Kwai-Keye--Keye-VL-1_5-8B
+        - ${WORLDFOUNDRY_CKPT_DIR}/Kwai-Keye--Keye-VL-1_5-8B
+        - ${WORLDFOUNDRY_CKPT_DIR}/Keye-VL-1_5-8B
+      hf_repo_id: Kwai-Keye/Keye-VL-1_5-8B
+      min_file_count: 3
+      required_files: [config.json]
+      required_any_paths: [model.safetensors, pytorch_model.bin, model-00001-of-00004.safetensors]
+      note: Keye-VL judge model used by 4DWorldBench alignment, motion-QA, and caption-helper dimensions.
+
+qwen3_vl_8b_instruct:
+  family: multimodal_judge
+  canonical_path: worldfoundry/base_models/llm_mllm_core/mllm/qwen
+  package_imports: [torch, transformers]
+  assets:
+    - id: qwen3_vl_8b_instruct_model_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_QWEN3_VL_MODEL_DIR, QWENVL_MODEL_PATH]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/Qwen--Qwen3-VL-8B-Instruct
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/hfd/Qwen--Qwen3-VL-8B-Instruct
+        - ${WORLDFOUNDRY_CKPT_DIR}/Qwen3-VL-8B-Instruct
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/Qwen--Qwen3-VL-8B-Instruct
+      hf_repo_id: Qwen/Qwen3-VL-8B-Instruct
+      min_file_count: 3
+      required_files: [config.json]
+      required_any_paths: [model.safetensors, pytorch_model.bin, model-00001-of-00005.safetensors]
+      note: Qwen3-VL-8B-Instruct VLM judge used by the WorldOlympiad physical, interaction, and geometry tracks;
+        reused in place of an ad-hoc --weights-dir/QwenVL checkout.
+
+videoscore_reward_model_v1_1:
+  family: video_reward_model
+  package_imports: [torch, transformers, accelerate, decord, PIL, numpy, huggingface_hub]
+  install_packages:
+    - torch
+    - transformers
+    - accelerate
+    - decord
+    - Pillow
+    - numpy
+    - huggingface-hub
+  assets:
+    - id: videoscore_v1_1_model_dir
+      kind: dir
+      role: reward_model_dir
+      env: [WORLDFOUNDRY_VIDEOSCORE_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/TIGER-Lab--VideoScore-v1.1
+      alternate_paths:
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/TIGER-Lab--VideoScore-v1.1
+        - ${WORLDFOUNDRY_BENCH_ROOT}/ckpt/hfd/TIGER-Lab--VideoScore-v1.1
+        - ${WORLDFOUNDRY_HFD_ROOT}/TIGER-Lab--VideoScore
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/TIGER-Lab--VideoScore
+      hf_repo_id: TIGER-Lab/VideoScore-v1.1
+      min_file_count: 8
+      required_files: [config.json, processor_config.json, model.safetensors.index.json]
+      note: VideoScore v1.1 reward model used by the bounded official scorer validation and VideoScore-Bench metrics.
+
+wbench_hpsv3:
+  family: video_reward_model
+  canonical_path: worldfoundry/base_models/perception_core/video_quality/hpsv3.py
+  package_imports: [torch, transformers, safetensors, peft, trl, yaml]
+  install_packages: [torch, transformers, safetensors, peft, trl, PyYAML]
+  asset_env_policy: all
+  assets:
+    - id: wbench_hpsv3_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_WBENCH_HPSV3_CKPT]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/models/wbench/HPSv3/HPSv3.safetensors
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/HPSv3/HPSv3.safetensors
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/HPSv3/HPSv3.safetensors
+      hf_repo_id: meituan-longcat/WBench-weights
+      hf_filename: HPSv3/HPSv3.safetensors
+      min_size_bytes: 100000000
+      note: HPSv3 reward checkpoint used by WBench hpsv3_quality.
+    - id: wbench_hpsv3_config
+      kind: file
+      role: config
+      env: [WORLDFOUNDRY_WBENCH_HPSV3_CONFIG]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/models/wbench/HPSv3/HPSv3_7B_local.yaml
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/HPSv3/HPSv3_7B_local.yaml
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/HPSv3/HPSv3_7B_local.yaml
+      hf_repo_id: meituan-longcat/WBench-weights
+      hf_filename: HPSv3/HPSv3_7B_local.yaml
+      min_size_bytes: 100
+      note: HPSv3 local inference config used by WBench.
+    - id: wbench_hpsv3_qwen2_vl_model
+      kind: dir
+      role: text_encoder_model_dir
+      env: [WORLDFOUNDRY_WBENCH_HPSV3_QWEN2_VL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/Qwen--Qwen2-VL-7B-Instruct
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_ROOT}/Qwen/Qwen2-VL-7B-Instruct
+        - ${WORLDFOUNDRY_CKPT_DIR}/hfd/Qwen--Qwen2-VL-7B-Instruct
+        - ${WORLDFOUNDRY_CKPT_DIR}/Qwen2-VL-7B-Instruct
+      hf_repo_id: Qwen/Qwen2-VL-7B-Instruct
+      min_file_count: 1
+      required_any_paths: [config.json]
+      note: Qwen2-VL-7B base model referenced by HPSv3.
+
+wbench_pavrm_qwen3vl:
+  family: video_reward_model
+  canonical_path: worldfoundry/base_models/llm_mllm_core/mllm/qwen/wbench_visual_plausibility.py
+  package_imports: [torch, transformers]
+  assets:
+    - id: wbench_pavrm_qwen3vl_model
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_WBENCH_PAVRM_MODEL_DIR, PAVRM_MODEL_PATH]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/models/wbench/qwen3vl-a3b-visual-plausibility
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_ROOT}/qwen3vl-a3b-visual-plausibility
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/qwen3vl-a3b-visual-plausibility
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/qwen3vl-a3b-visual-plausibility
+      manual_action: Stage the WBench PAVRM Qwen3-VL visual plausibility model directory and set WORLDFOUNDRY_WBENCH_PAVRM_MODEL_DIR
+        or PAVRM_MODEL_PATH.
+      min_file_count: 1
+      required_any_paths: [config.json, model.safetensors]
+      note: PAVRM Qwen3-VL reward model used by WBench visual_plausibility.
+
+videophy2_autoeval_model:
+  family: mllm
+  canonical_path: worldfoundry/base_models/llm_mllm_core/mllm/videophy2_autoeval
+  package_imports: [torch, transformers, peft, pandas, numpy, decord, PIL, einops]
+  install_packages: [torch, transformers, peft, pandas, numpy, decord, Pillow, einops]
+  assets:
+    - id: videophy2_autoeval_checkpoint_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_VIDEOPHY2_AUTOEVAL_CKPT]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/videophysics--videophy_2_auto
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_ROOT}/hbXNov--videophy_2_auto
+        - ${WORLDFOUNDRY_CKPT_DIR}/hfd/hbXNov--videophy_2_auto
+        - ${WORLDFOUNDRY_CKPT_DIR}/VideoPhy2/videophy_2_auto
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/hbXNov--videophy_2_auto
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/VideoPhy2/videophy_2_auto
+      hf_repo_id: videophysics/videophy_2_auto
+      min_file_count: 3
+      required_files: [config.json]
+      note: VideoPhy2 AutoEval Mplug-Owl checkpoint used by the in-tree SA/PC/rule judge.
+
+videocon_physics_model:
+  family: mllm
+  canonical_path: worldfoundry/base_models/llm_mllm_core/mllm/videocon_physics
+  package_imports: [torch, transformers, pandas, numpy, decord, PIL, einops]
+  install_packages: [torch, transformers, pandas, numpy, decord, Pillow, einops]
+  assets:
+    - id: videocon_physics_checkpoint_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_VIDEOPHY_VIDEOCON_CKPT]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/videophysics--videocon_physics
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_ROOT}/videophysics/videocon_physics
+        - ${WORLDFOUNDRY_CKPT_DIR}/hfd/videophysics--videocon_physics
+        - ${WORLDFOUNDRY_CKPT_DIR}/VideoPhy/videocon_physics
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/videophysics--videocon_physics
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/VideoPhy/videocon_physics
+      hf_repo_id: videophysics/videocon_physics
+      min_file_count: 3
+      required_files: [config.json]
+      note: VideoCon-Physics checkpoint used by the in-tree VideoPhy SA/PC AutoEvaluator.
+
+worldmodelbench_vila_judge_model:
+  family: mllm
+  canonical_path: worldfoundry/base_models/llm_mllm_core/mllm/vila
+  package_imports: [torch, transformers, huggingface_hub, PIL, cv2]
+  install_packages: [torch, transformers, huggingface_hub, Pillow, opencv-python]
+  assets:
+    - id: worldmodelbench_vila_judge_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_WORLDMODELBENCH_JUDGE]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/models/worldmodelbench/Efficient-Large-Model/vila-ewm-qwen2-1.5b
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_ROOT}/Efficient-Large-Model--vila-ewm-qwen2-1.5b
+        - ${WORLDFOUNDRY_CKPT_DIR}/hfd/Efficient-Large-Model--vila-ewm-qwen2-1.5b
+        - ${WORLDFOUNDRY_CKPT_DIR}/Efficient-Large-Model__vila-ewm-qwen2-1.5b
+      hf_repo_id: Efficient-Large-Model/vila-ewm-qwen2-1.5b
+      min_file_count: 1
+      required_files: [config.json]
+      required: false
+      note: Official WorldModelBench VILA judge checkpoint loaded through the in-tree VILA runtime.
+
+qwen2_5_vl_72b_instruct:
+  family: multimodal_judge
+  canonical_path: worldfoundry/base_models/llm_mllm_core/mllm/qwen
+  package_imports: [torch, transformers]
+  assets:
+    - id: qwen2_5_vl_72b_instruct_model_dir
+      kind: dir
+      role: model_dir
+      env: []
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/Qwen--Qwen2.5-VL-72B-Instruct
+      hf_repo_id: Qwen/Qwen2.5-VL-72B-Instruct
+      min_file_count: 38
+      required_files: [config.json]
+      note: >-
+        Qwen2.5-VL-72B-Instruct, the official PAI-Bench-G VQA judge (pass it as --judge-model with
+        --judge-backend local-qwen, or serve it behind an OpenAI-compatible endpoint).
+
+gemini_api_judge:
+  family: hosted_judge_api
+  canonical_path: worldfoundry/evals/tasks/execution/runners/memobench/runtime/memobench/evaluation/vqa
+  package_imports: [google.genai]
+  install_packages: [google-genai]
+  asset_env: [GEMINI_API_KEY]
+  gpu_required: false
+
+stevo_bench_vlm_judge_api:
+  family: hosted_judge_api
+  canonical_path: worldfoundry/evals/tasks/execution/runners/stevo_bench/runtime/stevo_bench/eval
+  asset_env: [GOOGLE_API_KEY, OPENAI_API_KEY]
+  gpu_required: false
+
+openai_compatible_judge_endpoint:
+  family: hosted_judge_api
+  canonical_path: worldfoundry/evals/tasks/execution/runners/worldreasonbench
+  asset_env: [OPENAI_BASE_URL]
+  gpu_required: false

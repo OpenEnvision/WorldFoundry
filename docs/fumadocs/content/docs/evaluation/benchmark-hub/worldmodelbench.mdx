@@ -1,6 +1,6 @@
 ---
 title: WorldModelBench
-description: "NeurIPS 2025 world-model judging suite: 350 instances, VILA judge. WorldFoundry checks in evaluation.py; full judge execution is not verified."
+description: "NeurIPS 2025 world-model judging suite: 350 instances, VILA judge. WorldFoundry ships the official evaluation.py and imports results."
 ---
 
 WorldModelBench (NVIDIA, UC Berkeley, UC San Diego, MIT; NeurIPS 2025) judges video generators as world models across **7 application domains / 56 subdomains**. Official size: **350 instances**, calibrated against **67K crowd-sourced human labels**. Three families:
@@ -13,7 +13,7 @@ The official judge is a fine-tuned **2B VILA-family** multimodal model that the 
 
 Paper: [WorldModelBench](https://arxiv.org/abs/2502.20694). Project: [worldmodelbench-team.github.io](https://worldmodelbench-team.github.io/). Code: [WorldModelBench-Team/WorldModelBench](https://github.com/WorldModelBench-Team/WorldModelBench). Data: [`Efficient-Large-Model/worldmodelbench`](https://huggingface.co/datasets/Efficient-Large-Model/worldmodelbench).
 
-WorldFoundry **checks in upstream `evaluation.py` and the 350-instance manifest**. Result import and manifest coverage checks are verified; **full judge-checkpoint execution is not**. Leaderboard answers are withheld upstream.
+WorldFoundry **checks in upstream `evaluation.py` and the 350-instance manifest**. Result import and manifest coverage checks are validated. Leaderboard answers are withheld upstream.
 
 <BenchmarkPageSections id="worldmodelbench" locale="en" />
 
@@ -23,7 +23,7 @@ WorldFoundry **checks in upstream `evaluation.py` and the 350-instance manifest*
 hf download Efficient-Large-Model/worldmodelbench --repo-type dataset \
   --local-dir cache/worldfoundry/data/hfd_datasets/Efficient-Large-Model/worldmodelbench
 
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id worldmodelbench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -35,7 +35,7 @@ worldfoundry-eval zoo benchmark-run \
 
 Official-run drives `evaluation.py` with `WORLDFOUNDRY_WORLDMODELBENCH_JUDGE` (VILA checkpoint or HF model id). The wrapper validates accs/preds shapes against N, 2N, and 5N category lengths and records 350-instance video coverage. Env: `WORLDFOUNDRY_WORLDMODELBENCH_RESULTS_PATH`, `WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT`. Shared asset: `worldmodelbench_dataset_assets`. Manifest: `worldfoundry/data/benchmarks/assets/worldmodelbench/worldmodelbench.json`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/worldmodelbench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/runtime/evaluation.py`.
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/worldmodelbench.yaml`, `worldfoundry/evals/tasks/execution/runners/worldmodelbench/runtime/evaluation.py`.
 
 Outputs include `scorecard.json` (primary `world_model_average`) and `judge_responses.jsonl`.
 

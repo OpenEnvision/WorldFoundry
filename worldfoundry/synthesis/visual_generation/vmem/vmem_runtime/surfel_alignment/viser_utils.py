@@ -1,60 +1,27 @@
-import torch
+import dataclasses
 import os
-from matplotlib.figure import Figure
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_agg import FigureCanvasAgg
-import matplotlib as mpl
+import time
+
 import cv2
-import numpy as np
+import matplotlib as mpl
 import matplotlib.cm as cm
+import numpy as np
+import torch
+import trimesh
 import viser
 import viser.transforms as tf
-import time
-import trimesh
-import dataclasses
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
 from scipy.spatial.transform import Rotation
+
+from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.utils.device import to_numpy
 from worldfoundry.synthesis.visual_generation.vmem.vmem_runtime.surfel_alignment.viz import (
-    add_scene_cam,
     CAM_COLORS,
     OPENGL,
-    pts3d_to_trimesh,
+    add_scene_cam,
     cat_meshes,
+    pts3d_to_trimesh,
 )
-
-
-def todevice(batch, device, callback=None, non_blocking=False):
-    """Transfer some variables to another device (i.e. GPU, CPU:torch, CPU:numpy).
-
-    batch: list, tuple, dict of tensors or other things
-    device: pytorch device or 'numpy'
-    callback: function that would be called on every sub-elements.
-    """
-    if callback:
-        batch = callback(batch)
-
-    if isinstance(batch, dict):
-        return {k: todevice(v, device) for k, v in batch.items()}
-
-    if isinstance(batch, (tuple, list)):
-        return type(batch)(todevice(x, device) for x in batch)
-
-    x = batch
-    if device == "numpy":
-        if isinstance(x, torch.Tensor):
-            x = x.detach().cpu().numpy()
-    elif x is not None:
-        if isinstance(x, np.ndarray):
-            x = torch.from_numpy(x)
-        if torch.is_tensor(x):
-            x = x.to(device, non_blocking=non_blocking)
-    return x
-
-
-to_device = todevice  # alias
-
-
-def to_numpy(x):
-    return todevice(x, "numpy")
 
 
 def segment_sky(image):
@@ -82,9 +49,7 @@ def segment_sky(image):
     mask2 = ndimage.binary_opening(mask, structure=kernel)
 
     # keep only largest CC
-    _, labels, stats, _ = cv2.connectedComponentsWithStats(
-        mask2.view(np.uint8), connectivity=8
-    )
+    _, labels, stats, _ = cv2.connectedComponentsWithStats(mask2.view(np.uint8), connectivity=8)
     cc_sizes = stats[1:, cv2.CC_STAT_AREA]
     order = cc_sizes.argsort()[::-1]  # bigger first
     i = 0
@@ -123,8 +88,8 @@ def convert_scene_output_to_glb(
 
     # full pointcloud
     if as_pointcloud:
-        pts = np.concatenate([p[m] for p, m in zip(pts3d, mask)])
-        col = np.concatenate([p[m] for p, m in zip(imgs, mask)])
+        pts = np.concatenate([p[m] for p, m in zip(pts3d, mask, strict=False)])
+        col = np.concatenate([p[m] for p, m in zip(imgs, mask, strict=False)])
         pct = trimesh.PointCloud(pts.reshape(-1, 3), colors=col.reshape(-1, 3))
         scene.add_geometry(pct)
     else:
@@ -164,7 +129,7 @@ def convert_scene_output_to_glb(
 
 
 @dataclasses.dataclass
-class CameraState(object):
+class CameraState:
     fov: float
     aspect: float
     c2w: np.ndarray
@@ -202,9 +167,7 @@ def get_vertical_colorbar(h, vmin, vmax, cmap_name="jet", label=None, cbar_preci
 
     tick_cnt = 6
     tick_loc = np.linspace(vmin, vmax, tick_cnt)
-    cb1 = mpl.colorbar.ColorbarBase(
-        ax, cmap=cmap, norm=norm, ticks=tick_loc, orientation="vertical"
-    )
+    cb1 = mpl.colorbar.ColorbarBase(ax, cmap=cmap, norm=norm, ticks=tick_loc, orientation="vertical")
 
     tick_label = [str(np.round(x, cbar_precision)) for x in tick_loc]
     if cbar_precision == 0:
@@ -251,7 +214,6 @@ def colorize_np(
     if range is not None:
         vmin, vmax = range
     elif mask is not None:
-
         vmin = np.min(x[mask][np.nonzero(x[mask])])
         vmax = np.max(x[mask])
 
@@ -283,17 +245,13 @@ def colorize_np(
         if cbar_in_image:
             x_new[:, -cbar.shape[1] :, :] = cbar
         else:
-            x_new = np.concatenate(
-                (x_new, np.zeros_like(x_new[:, :5, :]), cbar), axis=1
-            )
+            x_new = np.concatenate((x_new, np.zeros_like(x_new[:, :5, :]), cbar), axis=1)
         return x_new
     else:
         return x_new
 
 
-def colorize(
-    x, cmap_name="jet", mask=None, range=None, append_cbar=False, cbar_in_image=False
-):
+def colorize(x, cmap_name="jet", mask=None, range=None, append_cbar=False, cbar_in_image=False):
     """
     turn a grayscale image into a color image
     :param x: torch.Tensor, grayscale image, [H, W] or [B, H, W]
@@ -337,10 +295,10 @@ class PointCloudViewer:
         port=8080,
         show_camera=True,
         vis_threshold=1,
-        size=512
+        size=512,
     ):
         self.model = model
-        self.size=size
+        self.size = size
         self.state_args = state_args
         self.server = viser.ViserServer(port=port)
         self.server.set_up_direction("-y")
@@ -348,9 +306,7 @@ class PointCloudViewer:
         self.conf_list = conf_list
         self.vis_threshold = vis_threshold
         self.tt = lambda x: torch.from_numpy(x).float().to(device)
-        self.pcs, self.all_steps = self.read_data(
-            pc_list, color_list, conf_list, edge_color_list
-        )
+        self.pcs, self.all_steps = self.read_data(pc_list, color_list, conf_list, edge_color_list)
         self.cam_dict = cam_dict
         self.num_frames = len(self.all_steps)
         self.image_mask = image_mask
@@ -370,9 +326,7 @@ class PointCloudViewer:
         def _(event: viser.GuiEvent) -> None:
             client = event.client
             assert client is not None
-            client.camera.up_direction = tf.SO3(client.camera.wxyz) @ np.array(
-                [0.0, -1.0, 0.0]
-            )
+            client.camera.up_direction = tf.SO3(client.camera.wxyz) @ np.array([0.0, -1.0, 0.0])
 
         button3 = self.server.gui.add_button("4D (Only Show Current Frame)")
         button4 = self.server.gui.add_button("3D (Show All Frames)")
@@ -430,9 +384,7 @@ class PointCloudViewer:
         camera = client.camera
         c2w = np.concatenate(
             [
-                np.concatenate(
-                    [tf.SO3(camera.wxyz).as_matrix(), camera.position[:, None]], 1
-                ),
+                np.concatenate([tf.SO3(camera.wxyz).as_matrix(), camera.position[:, None]], 1),
                 [[0, 0, 0, 1]],
             ],
             0,
@@ -446,9 +398,7 @@ class PointCloudViewer:
     @staticmethod
     def generate_pseudo_intrinsics(h, w):
         focal = (h**2 + w**2) ** 0.5
-        return np.array([[focal, 0, w // 2], [0, focal, h // 2], [0, 0, 1]]).astype(
-            np.float32
-        )
+        return np.array([[focal, 0, w // 2], [0, focal, h // 2], [0, 0, 1]]).astype(np.float32)
 
     def get_ray_map(self, c2w, h, w, intrinsics=None):
         if intrinsics is None:
@@ -468,7 +418,7 @@ class PointCloudViewer:
         pose: 4x4 matrix
         K: 3x3 matrix
         """
-        fx, fy = K[0, 0], K[1, 1]
+        fx, fy = K[0, 0], K[1, 1]  # noqa: F841 - Upstream assignment kept.
         cx, cy = K[0, 2], K[1, 2]
         aspect = float(cx) / float(cy)
         fov = 2 * np.arctan(2 * cx / fx)
@@ -482,13 +432,11 @@ class PointCloudViewer:
 
     def _connect_client(self, client: viser.ClientHandle):
         from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.inference import inference_step
-        from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.utils.geometry import geotrf
+        from worldfoundry.core.geometry.projection import transform_points as geotrf
 
         wxyz_panel = client.gui.add_text("wxyz:", f"{client.camera.wxyz}")
         position_panel = client.gui.add_text("position:", f"{client.camera.position}")
-        fov_panel = client.gui.add_text(
-            "fov:", f"{2 * np.arctan(self.size/self.focal_slider.value) * 180 / np.pi}"
-        )
+        fov_panel = client.gui.add_text("fov:", f"{2 * np.arctan(self.size / self.focal_slider.value) * 180 / np.pi}")
         aspect_panel = client.gui.add_text("aspect:", "1.0")
 
         @client.camera.on_update
@@ -496,65 +444,54 @@ class PointCloudViewer:
             with self.server.atomic():
                 wxyz_panel.value = f"{client.camera.wxyz}"
                 position_panel.value = f"{client.camera.position}"
-                fov_panel.value = (
-                    f"{2 * np.arctan(self.size/self.focal_slider.value) * 180 / np.pi}"
-                )
+                fov_panel.value = f"{2 * np.arctan(self.size / self.focal_slider.value) * 180 / np.pi}"
                 aspect_panel.value = "1.0"
 
-        gui_set_current_camera = client.gui.add_button(
-            "Set Current Camera to Infer Raymap"
-        )
+        gui_set_current_camera = client.gui.add_button("Set Current Camera to Infer Raymap")
 
         @gui_set_current_camera.on_click
         def _(_) -> None:
             try:
                 cam = self.get_camera_state(client)
                 cam.fov = 2 * np.arctan(self.size / self.focal_slider.value)
-                cam.aspect = (512 / 384) if self.size==512 else 1.0
+                cam.aspect = (512 / 384) if self.size == 512 else 1.0
                 pose = cam.c2w
                 if self.size == 512:
                     intrins = self.generate_pseudo_intrinsics(384, 512)
-                    raymap = torch.from_numpy(self.get_ray_map(pose, 384, 512, intrins))[
-                        None
-                    ].float()
+                    raymap = torch.from_numpy(self.get_ray_map(pose, 384, 512, intrins))[None].float()
                 else:
                     intrins = self.generate_pseudo_intrinsics(224, 224)
-                    raymap = torch.from_numpy(self.get_ray_map(pose, 224, 224, intrins))[
-                        None
-                    ].float()
-                
-                
+                    raymap = torch.from_numpy(self.get_ray_map(pose, 224, 224, intrins))[None].float()
+
                 view = {
-                    "img": torch.full((1, 3, 384, 512), torch.nan) if self.size==512 else torch.full((1, 3, 224, 224), torch.nan),
+                    "img": torch.full((1, 3, 384, 512), torch.nan)
+                    if self.size == 512
+                    else torch.full((1, 3, 224, 224), torch.nan),
                     "ray_map": raymap,
                     "true_shape": torch.from_numpy(np.int32([raymap.shape[1:-1]])),
                     "idx": self.num_frames + 1,
                     "instance": str(self.num_frames + 1),
-                    "camera_pose": torch.from_numpy(np.eye(4).astype(np.float32)).unsqueeze(
-                        0
-                    ),
+                    "camera_pose": torch.from_numpy(np.eye(4).astype(np.float32)).unsqueeze(0),
                     "img_mask": torch.tensor(False).unsqueeze(0),
                     "ray_mask": torch.tensor(True).unsqueeze(0),
                     "update": torch.tensor(False).unsqueeze(0),
                     "reset": torch.tensor(False).unsqueeze(0),
                 }
                 print("Start Inference Raymap")
-                output = inference_step(
-                    view, self.state_args[-1], self.model, device=self.device
-                )
+                output = inference_step(view, self.state_args[-1], self.model, device=self.device)
                 print("Finish Inference Raymap")
                 pts3ds = output["pred"]["pts3d_in_self_view"].cpu().numpy()
                 pts3ds = geotrf(pose[None], pts3ds)
                 colors = 0.5 * (output["pred"]["rgb"].cpu().numpy() + 1.0)
                 depthmap = output["pred"]["pts3d_in_self_view"].cpu().numpy()[0][..., -1]
                 conf = output["pred"]["conf"].cpu().numpy()
-                disp = 1.0 / depthmap
+                _disp = 1.0 / depthmap
                 pts3ds, colors = self.parse_pc_data(pts3ds, colors, set_border_color=True)
                 mask = (conf > 1.0).reshape(-1)
                 self.num_frames += 1
                 self.pc_handles.append(
                     self.server.add_point_cloud(
-                        name=f"/frames/{self.num_frames-1}/pred_pts",
+                        name=f"/frames/{self.num_frames - 1}/pred_pts",
                         points=pts3ds[mask],
                         colors=colors[mask],
                         point_size=0.005,
@@ -562,7 +499,7 @@ class PointCloudViewer:
                 )
 
                 self.server.add_camera_frustum(
-                    name=f"/frames/{self.num_frames-1}/camera",
+                    name=f"/frames/{self.num_frames - 1}/camera",
                     fov=cam.fov,
                     aspect=cam.aspect,
                     wxyz=client.camera.wxyz,
@@ -575,8 +512,7 @@ class PointCloudViewer:
                 print(e)
 
     @staticmethod
-    def set_color_border(image, border_width=5, color=[1, 0, 0]):
-
+    def set_color_border(image, border_width=5, color=[1, 0, 0]):  # noqa: B006 - Keeps the upstream default object and signature.
         image[:border_width, :, 0] = color[0]  # Red channel
         image[:border_width, :, 1] = color[1]  # Green channel
         image[:border_width, :, 2] = color[2]  # Blue channel
@@ -604,17 +540,12 @@ class PointCloudViewer:
                         "pc": pc,
                         "color": color_list[i],
                         "conf": conf_list[i],
-                        "edge_color": (
-                            None if edge_color_list[i] is None else edge_color_list[i]
-                        ),
+                        "edge_color": (None if edge_color_list[i] is None else edge_color_list[i]),
                     }
                 }
             )
             step_list.append(step)
-        normalized_indices = (
-            np.array(list(range(len(pc_list))))
-            / np.array(list(range(len(pc_list)))).max()
-        )
+        normalized_indices = np.array(list(range(len(pc_list)))) / np.array(list(range(len(pc_list)))).max()
         cmap = cm.viridis
         self.camera_colors = cmap(normalized_indices)
         return pcs, step_list
@@ -624,16 +555,14 @@ class PointCloudViewer:
         pc,
         color,
         conf=None,
-        edge_color=[0.251, 0.702, 0.902],
+        edge_color=[0.251, 0.702, 0.902],  # noqa: B006 - Keeps the upstream default object and signature.
         set_border_color=False,
     ):
-
         pred_pts = pc.reshape(-1, 3)  # [N, 3]
 
         if set_border_color and edge_color is not None:
             color = self.set_color_border(color[0], color=edge_color)
         if np.isnan(color).any():
-
             color = np.zeros((pred_pts.shape[0], 3))
             color[:, 2] = 1
         else:
@@ -650,9 +579,7 @@ class PointCloudViewer:
         conf = self.pcs[step]["conf"]
         edge_color = self.pcs[step].get("edge_color", None)
 
-        pred_pts, color = self.parse_pc_data(
-            pc, color, conf, edge_color, set_border_color=True
-        )
+        pred_pts, color = self.parse_pc_data(pc, color, conf, edge_color, set_border_color=True)
 
         self.vis_pts_list.append(pred_pts)
         self.pc_handles.append(
@@ -700,12 +627,8 @@ class PointCloudViewer:
             gui_next_frame = self.server.add_gui_button("Next Step", disabled=False)
             gui_prev_frame = self.server.add_gui_button("Prev Step", disabled=False)
             gui_playing = self.server.add_gui_checkbox("Playing", False)
-            gui_framerate = self.server.add_gui_slider(
-                "FPS", min=1, max=60, step=0.1, initial_value=1
-            )
-            gui_framerate_options = self.server.add_gui_button_group(
-                "FPS options", ("10", "20", "30", "60")
-            )
+            gui_framerate = self.server.add_gui_slider("FPS", min=1, max=60, step=0.1, initial_value=1)
+            gui_framerate_options = self.server.add_gui_button_group("FPS options", ("10", "20", "30", "60"))
 
         @gui_next_frame.on_click
         def _(_) -> None:
@@ -763,11 +686,7 @@ class PointCloudViewer:
                     gui_timestep.value = (gui_timestep.value + 1) % self.num_frames
 
                 for i, frame_node in enumerate(self.frame_nodes):
-                    frame_node.visible = (
-                        i <= gui_timestep.value
-                        if not self.fourd
-                        else i == gui_timestep.value
-                    )
+                    frame_node.visible = i <= gui_timestep.value if not self.fourd else i == gui_timestep.value
 
             time.sleep(1.0 / gui_framerate.value)
 

@@ -14,6 +14,7 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
     OffloadMode,
     OffloadPolicy,
     RuntimePolicy,
+    parse_quantization_policy,
 )
 
 
@@ -95,8 +96,7 @@ class LTX2Video:
             raise ValueError("LTX image conditioning currently targets the first frame")
         if enhance_prompt:
             raise ValueError("prompt enhancement is separate from native diffusion inference")
-        if quantization and str(quantization).lower() not in {"none", "false", "0"}:
-            raise NotImplementedError("LTX quantization requires a shared core quantization pass")
+        quantization_policy = parse_quantization_policy(quantization, owner="LTX")
         if int(height) % 64 or int(width) % 64:
             raise ValueError("two-stage LTX height and width must be divisible by 64")
 
@@ -129,6 +129,7 @@ class LTX2Video:
                 device=self.device,
                 dtype=dtype,
                 offload=_offload_policy(offload_mode, cpu_offload),
+                quantization=quantization_policy,
             ),
             checkpoint_overrides={
                 "model": CheckpointSpec(source=str(main)),

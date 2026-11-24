@@ -5,20 +5,21 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from worldfoundry.core.action_normalization import (
     select_modality_statistics,
     unnormalize_action_values,
 )
+from worldfoundry.core.io.formats.serialization import jsonable
 from worldfoundry.core.io.paths import (
     project_root,
     resolve_local_hf_model_path,
     resolve_worldfoundry_path,
 )
-from worldfoundry.core.io.formats.serialization import jsonable
 
 RUNTIME_ROOT = Path(__file__).resolve().parent
 
@@ -64,7 +65,9 @@ def _select_checkpoint_by_needles(
     checkpoints: tuple[Mapping[str, Any], ...], needles: tuple[str, ...]
 ) -> Mapping[str, Any] | None:
     for item in checkpoints:
-        blob = " ".join(str(item.get(key) or "") for key in ("repo_id", "local_dir", "role", "variant_id", "id")).lower()
+        blob = " ".join(
+            str(item.get(key) or "") for key in ("repo_id", "local_dir", "role", "variant_id", "id")
+        ).lower()
         if any(needle in blob for needle in needles):
             return item
     return None
@@ -77,9 +80,7 @@ def _resolve_checkpoint_record(record: Mapping[str, Any]) -> Path:
         if not value:
             continue
         try:
-            return resolve_local_hf_model_path(
-                str(value), required_files=("config.yaml", "dataset_statistics.json")
-            )
+            return resolve_local_hf_model_path(str(value), required_files=("config.yaml", "dataset_statistics.json"))
         except FileNotFoundError as exc:
             errors.append(str(exc))
     detail = "\n".join(errors)
@@ -105,14 +106,10 @@ def select_starvla_checkpoint(
         return _resolve_checkpoint_record(selected)
     if candidate is None:
         raise ValueError("StarVLA requires a checkpoint directory.")
-    return resolve_local_hf_model_path(
-        candidate, required_files=("config.yaml", "dataset_statistics.json")
-    )
+    return resolve_local_hf_model_path(candidate, required_files=("config.yaml", "dataset_statistics.json"))
 
 
-def select_starvla_base_vlm(
-    *, base_vlm: str | Path | None, checkpoints: tuple[Mapping[str, Any], ...]
-) -> str:
+def select_starvla_base_vlm(*, base_vlm: str | Path | None, checkpoints: tuple[Mapping[str, Any], ...]) -> str:
     if base_vlm:
         return _path_or_model_id(base_vlm, required_files=("config.json",))
     record = _select_checkpoint_by_needles(checkpoints, ("base_vlm", "base_vl", "qwen--qwen3"))
@@ -142,9 +139,7 @@ def select_starvla_base_world_model(
     for field in ("local_dir", "repo_id"):
         if record.get(field):
             try:
-                return _path_or_model_id(
-                    record[field], required_files=("model_index.json",)
-                )
+                return _path_or_model_id(record[field], required_files=("model_index.json",))
             except FileNotFoundError:
                 continue
     return None
@@ -155,6 +150,7 @@ def _checkpoint_weight_file(checkpoint_dir: Path) -> Path:
     candidates.extend(sorted((checkpoint_dir / "checkpoints").glob("*.safetensors")))
     if not candidates:
         raise FileNotFoundError(f"StarVLA policy weights were not found in {checkpoint_dir / 'checkpoints'}.")
+
     def checkpoint_rank(path: Path) -> tuple[int, str]:
         matches = re.findall(r"(?:step|steps)[_-]?(\d+)", path.stem, flags=re.IGNORECASE)
         return (int(matches[-1]) if matches else -1, path.name)
@@ -184,9 +180,7 @@ def build_starvla_plan_payload(
     action_model = framework.get("action_model") if isinstance(framework.get("action_model"), Mapping) else {}
     framework_name = str(framework.get("name") or "QwenOFT")
     declared_action_model_type = str(action_model.get("action_model_type") or config.action_model_type)
-    effective_action_model_type = (
-        "MLP" if framework_name in {"QwenOFT", "WanOFT"} else declared_action_model_type
-    )
+    effective_action_model_type = "MLP" if framework_name in {"QwenOFT", "WanOFT"} else declared_action_model_type
     return {
         "schema_version": "worldfoundry-runtime-profile-starvla-plan",
         "profile": profile,
@@ -248,7 +242,9 @@ class StarVLAPlanRuntime:
         )
         target = Path(plan_path).expanduser().resolve()
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(jsonable(payload), ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        target.write_text(
+            json.dumps(jsonable(payload), ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         return payload
 
     def predict_action(
@@ -300,17 +296,19 @@ class StarVLAPlanRuntime:
             "actions": actions.tolist(),
             "normalized_actions": normalized_actions.tolist(),
             "duration_seconds": round(time.monotonic() - started, 3),
-            "metadata": jsonable({
-                "checkpoint_dir": self.config.checkpoint_dir,
-                "checkpoint_file": _checkpoint_weight_file(self.config.checkpoint_dir),
-                "base_vlm": self.config.base_vlm,
-                "base_world_model": self.config.base_world_model,
-                "attention_implementation": attention,
-                "unnorm_key": selected_unnorm_key,
-                "action_normalization": self.config.action_normalization,
-                "track": self.config.track,
-                **dict(extra_metadata or {}),
-            }),
+            "metadata": jsonable(
+                {
+                    "checkpoint_dir": self.config.checkpoint_dir,
+                    "checkpoint_file": _checkpoint_weight_file(self.config.checkpoint_dir),
+                    "base_vlm": self.config.base_vlm,
+                    "base_world_model": self.config.base_world_model,
+                    "attention_implementation": attention,
+                    "unnorm_key": selected_unnorm_key,
+                    "action_normalization": self.config.action_normalization,
+                    "track": self.config.track,
+                    **dict(extra_metadata or {}),
+                }
+            ),
         }
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return {
@@ -329,7 +327,7 @@ class StarVLAPlanRuntime:
             return self._loaded
         import torch
 
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .modeling.base import load_starvla_model
 

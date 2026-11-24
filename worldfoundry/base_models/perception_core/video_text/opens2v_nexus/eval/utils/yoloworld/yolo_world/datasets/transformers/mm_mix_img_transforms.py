@@ -2,7 +2,7 @@
 import collections
 import copy
 from abc import ABCMeta, abstractmethod
-from typing import Optional, Sequence, Tuple, Union
+from collections.abc import Sequence
 
 import mmcv
 import numpy as np
@@ -10,8 +10,8 @@ from mmcv.transforms import BaseTransform
 from mmdet.structures.bbox import autocast_box_type
 from mmengine.dataset import BaseDataset
 from mmengine.dataset.base_dataset import Compose
-from numpy import random
 from mmyolo.registry import TRANSFORMS
+from numpy import random
 
 
 class BaseMultiModalMixImageTransform(BaseTransform, metaclass=ABCMeta):
@@ -43,7 +43,7 @@ class BaseMultiModalMixImageTransform(BaseTransform, metaclass=ABCMeta):
 
     def __init__(
         self,
-        pre_transform: Optional[Sequence[str]] = None,
+        pre_transform: Sequence[str] | None = None,
         prob: float = 1.0,
         use_cached: bool = False,
         max_cached_images: int = 40,
@@ -64,7 +64,7 @@ class BaseMultiModalMixImageTransform(BaseTransform, metaclass=ABCMeta):
             self.pre_transform = Compose(pre_transform)
 
     @abstractmethod
-    def get_indexes(self, dataset: Union[BaseDataset, list]) -> Union[list, int]:
+    def get_indexes(self, dataset: BaseDataset | list) -> list | int:
         """Call function to collect indexes.
 
         Args:
@@ -73,7 +73,6 @@ class BaseMultiModalMixImageTransform(BaseTransform, metaclass=ABCMeta):
         Returns:
             list or int: indexes.
         """
-        pass
 
     @abstractmethod
     def mix_img_transform(self, results: dict) -> dict:
@@ -85,16 +84,12 @@ class BaseMultiModalMixImageTransform(BaseTransform, metaclass=ABCMeta):
         Returns:
             results (dict): Updated result dict.
         """
-        pass
 
     def _update_label_text(self, results: dict) -> dict:
-        """Update label text."""
         if "texts" not in results:
             return results
 
-        mix_texts = sum(
-            [results["texts"]] + [x["texts"] for x in results["mix_results"]], []
-        )
+        mix_texts = sum([results["texts"]] + [x["texts"] for x in results["mix_results"]], [])  # noqa: RUF017 - Keeps the upstream sum() list concatenation.
         mix_texts = list({tuple(x) for x in mix_texts})
         text2id = {text: i for i, text in enumerate(mix_texts)}
 
@@ -135,10 +130,7 @@ class BaseMultiModalMixImageTransform(BaseTransform, metaclass=ABCMeta):
             dataset = results.pop("dataset", None)
             self.results_cache.append(copy.deepcopy(results))
             if len(self.results_cache) > self.max_cached_images:
-                if self.random_pop:
-                    index = random.randint(0, len(self.results_cache) - 1)
-                else:
-                    index = 0
+                index = random.randint(0, len(self.results_cache) - 1) if self.random_pop else 0
                 self.results_cache.pop(index)
 
             if len(self.results_cache) <= 4:
@@ -151,10 +143,7 @@ class BaseMultiModalMixImageTransform(BaseTransform, metaclass=ABCMeta):
 
         for _ in range(self.max_refetch):
             # get index of one or three other images
-            if self.use_cached:
-                indexes = self.get_indexes(self.results_cache)
-            else:
-                indexes = self.get_indexes(dataset)
+            indexes = self.get_indexes(self.results_cache) if self.use_cached else self.get_indexes(dataset)
 
             if not isinstance(indexes, collections.abc.Sequence):
                 indexes = [indexes]
@@ -163,9 +152,7 @@ class BaseMultiModalMixImageTransform(BaseTransform, metaclass=ABCMeta):
                 mix_results = [copy.deepcopy(self.results_cache[i]) for i in indexes]
             else:
                 # get images information will be used for Mosaic or MixUp
-                mix_results = [
-                    copy.deepcopy(dataset.get_data_info(index)) for index in indexes
-                ]
+                mix_results = [copy.deepcopy(dataset.get_data_info(index)) for index in indexes]
 
             if self.pre_transform is not None:
                 for i, data in enumerate(mix_results):
@@ -282,11 +269,11 @@ class MultiModalMosaic(BaseMultiModalMixImageTransform):
 
     def __init__(
         self,
-        img_scale: Tuple[int, int] = (640, 640),
-        center_ratio_range: Tuple[float, float] = (0.5, 1.5),
+        img_scale: tuple[int, int] = (640, 640),
+        center_ratio_range: tuple[float, float] = (0.5, 1.5),
         bbox_clip_border: bool = True,
         pad_val: float = 114.0,
-        pre_transform: Sequence[dict] = None,
+        pre_transform: Sequence[dict] | None = None,
         prob: float = 1.0,
         use_cached: bool = False,
         max_cached_images: int = 40,
@@ -294,13 +281,9 @@ class MultiModalMosaic(BaseMultiModalMixImageTransform):
         max_refetch: int = 15,
     ):
         assert isinstance(img_scale, tuple)
-        assert 0 <= prob <= 1.0, (
-            f"The probability should be in range [0,1]. got {prob}."
-        )
+        assert 0 <= prob <= 1.0, f"The probability should be in range [0,1]. got {prob}."
         if use_cached:
-            assert max_cached_images >= 4, (
-                f"The length of cache must >= 4, but got {max_cached_images}."
-            )
+            assert max_cached_images >= 4, f"The length of cache must >= 4, but got {max_cached_images}."
 
         super().__init__(
             pre_transform=pre_transform,
@@ -316,7 +299,7 @@ class MultiModalMosaic(BaseMultiModalMixImageTransform):
         self.bbox_clip_border = bbox_clip_border
         self.pad_val = pad_val
 
-    def get_indexes(self, dataset: Union[BaseDataset, list]) -> list:
+    def get_indexes(self, dataset: BaseDataset | list) -> list:
         """Call function to collect indexes.
 
         Args:
@@ -343,7 +326,7 @@ class MultiModalMosaic(BaseMultiModalMixImageTransform):
         mosaic_bboxes_labels = []
         mosaic_ignore_flags = []
         mosaic_masks = []
-        with_mask = True if "gt_masks" in results else False
+        with_mask = "gt_masks" in results
         # print("with_mask: ", with_mask)
         # self.img_scale is wh format
         img_scale_w, img_scale_h = self.img_scale
@@ -368,23 +351,16 @@ class MultiModalMosaic(BaseMultiModalMixImageTransform):
 
         loc_strs = ("top_left", "top_right", "bottom_left", "bottom_right")
         for i, loc in enumerate(loc_strs):
-            if loc == "top_left":
-                results_patch = results
-            else:
-                results_patch = results["mix_results"][i - 1]
+            results_patch = results if loc == "top_left" else results["mix_results"][i - 1]
 
             img_i = results_patch["img"]
             h_i, w_i = img_i.shape[:2]
             # keep_ratio resize
             scale_ratio_i = min(img_scale_h / h_i, img_scale_w / w_i)
-            img_i = mmcv.imresize(
-                img_i, (int(w_i * scale_ratio_i), int(h_i * scale_ratio_i))
-            )
+            img_i = mmcv.imresize(img_i, (int(w_i * scale_ratio_i), int(h_i * scale_ratio_i)))
 
             # compute the combine parameters
-            paste_coord, crop_coord = self._mosaic_combine(
-                loc, center_position, img_i.shape[:2][::-1]
-            )
+            paste_coord, crop_coord = self._mosaic_combine(loc, center_position, img_i.shape[:2][::-1])
             x1_p, y1_p, x2_p, y2_p = paste_coord
             x1_c, y1_c, x2_c, y2_c = crop_coord
 
@@ -429,9 +405,7 @@ class MultiModalMosaic(BaseMultiModalMixImageTransform):
                 results["gt_masks"] = mosaic_masks
         else:
             # remove outside bboxes
-            inside_inds = mosaic_bboxes.is_inside(
-                [2 * img_scale_h, 2 * img_scale_w]
-            ).numpy()
+            inside_inds = mosaic_bboxes.is_inside([2 * img_scale_h, 2 * img_scale_w]).numpy()
             mosaic_bboxes = mosaic_bboxes[inside_inds]
             mosaic_bboxes_labels = mosaic_bboxes_labels[inside_inds]
             mosaic_ignore_flags = mosaic_ignore_flags[inside_inds]
@@ -449,7 +423,7 @@ class MultiModalMosaic(BaseMultiModalMixImageTransform):
 
     def _mosaic_combine(
         self, loc: str, center_position_xy: Sequence[float], img_shape_wh: Sequence[int]
-    ) -> Tuple[Tuple[int], Tuple[int]]:
+    ) -> tuple[tuple[int], tuple[int]]:
         """Calculate global coordinate of mosaic image and local coordinate of
         cropped sub-image.
 
@@ -620,10 +594,10 @@ class MultiModalMosaic9(BaseMultiModalMixImageTransform):
 
     def __init__(
         self,
-        img_scale: Tuple[int, int] = (640, 640),
+        img_scale: tuple[int, int] = (640, 640),
         bbox_clip_border: bool = True,
-        pad_val: Union[float, int] = 114.0,
-        pre_transform: Sequence[dict] = None,
+        pad_val: float | int = 114.0,
+        pre_transform: Sequence[dict] | None = None,
         prob: float = 1.0,
         use_cached: bool = False,
         max_cached_images: int = 50,
@@ -631,13 +605,9 @@ class MultiModalMosaic9(BaseMultiModalMixImageTransform):
         max_refetch: int = 15,
     ):
         assert isinstance(img_scale, tuple)
-        assert 0 <= prob <= 1.0, (
-            f"The probability should be in range [0,1]. got {prob}."
-        )
+        assert 0 <= prob <= 1.0, f"The probability should be in range [0,1]. got {prob}."
         if use_cached:
-            assert max_cached_images >= 9, (
-                f"The length of cache must >= 9, but got {max_cached_images}."
-            )
+            assert max_cached_images >= 9, f"The length of cache must >= 9, but got {max_cached_images}."
 
         super().__init__(
             pre_transform=pre_transform,
@@ -657,7 +627,7 @@ class MultiModalMosaic9(BaseMultiModalMixImageTransform):
         self._center_img_shape = [0, 0]
         self._previous_img_shape = [0, 0]
 
-    def get_indexes(self, dataset: Union[BaseDataset, list]) -> list:
+    def get_indexes(self, dataset: BaseDataset | list) -> list:
         """Call function to collect indexes.
 
         Args:
@@ -719,9 +689,7 @@ class MultiModalMosaic9(BaseMultiModalMixImageTransform):
             # keep_ratio resize
             img_i_h, img_i_w = img_i.shape[:2]
             scale_ratio_i = min(img_scale_h / img_i_h, img_scale_w / img_i_w)
-            img_i = mmcv.imresize(
-                img_i, (int(img_i_w * scale_ratio_i), int(img_i_h * scale_ratio_i))
-            )
+            img_i = mmcv.imresize(img_i, (int(img_i_w * scale_ratio_i), int(img_i_h * scale_ratio_i)))
 
             paste_coord = self._mosaic_combine(loc_strs[index], img_i.shape[:2])
 
@@ -742,9 +710,7 @@ class MultiModalMosaic9(BaseMultiModalMixImageTransform):
         # Offset
         offset_x = int(random.uniform(0, img_scale_w))
         offset_y = int(random.uniform(0, img_scale_h))
-        mosaic_img = mosaic_img[
-            offset_y : offset_y + 2 * img_scale_h, offset_x : offset_x + 2 * img_scale_w
-        ]
+        mosaic_img = mosaic_img[offset_y : offset_y + 2 * img_scale_h, offset_x : offset_x + 2 * img_scale_w]
 
         mosaic_bboxes = mosaic_bboxes[0].cat(mosaic_bboxes, 0)
         mosaic_bboxes.translate_([-offset_x, -offset_y])
@@ -755,9 +721,7 @@ class MultiModalMosaic9(BaseMultiModalMixImageTransform):
             mosaic_bboxes.clip_([2 * img_scale_h, 2 * img_scale_w])
         else:
             # remove outside bboxes
-            inside_inds = mosaic_bboxes.is_inside(
-                [2 * img_scale_h, 2 * img_scale_w]
-            ).numpy()
+            inside_inds = mosaic_bboxes.is_inside([2 * img_scale_h, 2 * img_scale_w]).numpy()
             mosaic_bboxes = mosaic_bboxes[inside_inds]
             mosaic_bboxes_labels = mosaic_bboxes_labels[inside_inds]
             mosaic_ignore_flags = mosaic_ignore_flags[inside_inds]
@@ -769,9 +733,7 @@ class MultiModalMosaic9(BaseMultiModalMixImageTransform):
         results["gt_ignore_flags"] = mosaic_ignore_flags
         return results
 
-    def _mosaic_combine(
-        self, loc: str, img_shape_hw: Tuple[int, int]
-    ) -> Tuple[int, ...]:
+    def _mosaic_combine(self, loc: str, img_shape_hw: tuple[int, int]) -> tuple[int, ...]:
         """Calculate global coordinate of mosaic image.
 
         Args:
@@ -935,7 +897,7 @@ class YOLOv5MultiModalMixUp(BaseMultiModalMixImageTransform):
         self,
         alpha: float = 32.0,
         beta: float = 32.0,
-        pre_transform: Sequence[dict] = None,
+        pre_transform: Sequence[dict] | None = None,
         prob: float = 1.0,
         use_cached: bool = False,
         max_cached_images: int = 20,
@@ -943,9 +905,7 @@ class YOLOv5MultiModalMixUp(BaseMultiModalMixImageTransform):
         max_refetch: int = 15,
     ):
         if use_cached:
-            assert max_cached_images >= 2, (
-                f"The length of cache must >= 2, but got {max_cached_images}."
-            )
+            assert max_cached_images >= 2, f"The length of cache must >= 2, but got {max_cached_images}."
         super().__init__(
             pre_transform=pre_transform,
             prob=prob,
@@ -957,7 +917,7 @@ class YOLOv5MultiModalMixUp(BaseMultiModalMixImageTransform):
         self.alpha = alpha
         self.beta = beta
 
-    def get_indexes(self, dataset: Union[BaseDataset, list]) -> int:
+    def get_indexes(self, dataset: BaseDataset | list) -> int:
         """Call function to collect indexes.
 
         Args:
@@ -993,20 +953,12 @@ class YOLOv5MultiModalMixUp(BaseMultiModalMixImageTransform):
         retrieve_gt_bboxes_labels = retrieve_results["gt_bboxes_labels"]
         retrieve_gt_ignore_flags = retrieve_results["gt_ignore_flags"]
 
-        mixup_gt_bboxes = retrieve_gt_bboxes.cat(
-            (results["gt_bboxes"], retrieve_gt_bboxes), dim=0
-        )
-        mixup_gt_bboxes_labels = np.concatenate(
-            (results["gt_bboxes_labels"], retrieve_gt_bboxes_labels), axis=0
-        )
-        mixup_gt_ignore_flags = np.concatenate(
-            (results["gt_ignore_flags"], retrieve_gt_ignore_flags), axis=0
-        )
+        mixup_gt_bboxes = retrieve_gt_bboxes.cat((results["gt_bboxes"], retrieve_gt_bboxes), dim=0)
+        mixup_gt_bboxes_labels = np.concatenate((results["gt_bboxes_labels"], retrieve_gt_bboxes_labels), axis=0)
+        mixup_gt_ignore_flags = np.concatenate((results["gt_ignore_flags"], retrieve_gt_ignore_flags), axis=0)
         if "gt_masks" in results:
             assert "gt_masks" in retrieve_results
-            mixup_gt_masks = results["gt_masks"].cat(
-                [results["gt_masks"], retrieve_results["gt_masks"]]
-            )
+            mixup_gt_masks = results["gt_masks"].cat([results["gt_masks"], retrieve_results["gt_masks"]])
             results["gt_masks"] = mixup_gt_masks
 
         results["img"] = mixup_img.astype(np.uint8)
@@ -1094,12 +1046,12 @@ class YOLOXMultiModalMixUp(BaseMultiModalMixImageTransform):
 
     def __init__(
         self,
-        img_scale: Tuple[int, int] = (640, 640),
-        ratio_range: Tuple[float, float] = (0.5, 1.5),
+        img_scale: tuple[int, int] = (640, 640),
+        ratio_range: tuple[float, float] = (0.5, 1.5),
         flip_ratio: float = 0.5,
         pad_val: float = 114.0,
         bbox_clip_border: bool = True,
-        pre_transform: Sequence[dict] = None,
+        pre_transform: Sequence[dict] | None = None,
         prob: float = 1.0,
         use_cached: bool = False,
         max_cached_images: int = 20,
@@ -1108,9 +1060,7 @@ class YOLOXMultiModalMixUp(BaseMultiModalMixImageTransform):
     ):
         assert isinstance(img_scale, tuple)
         if use_cached:
-            assert max_cached_images >= 2, (
-                f"The length of cache must >= 2, but got {max_cached_images}."
-            )
+            assert max_cached_images >= 2, f"The length of cache must >= 2, but got {max_cached_images}."
         super().__init__(
             pre_transform=pre_transform,
             prob=prob,
@@ -1125,7 +1075,7 @@ class YOLOXMultiModalMixUp(BaseMultiModalMixImageTransform):
         self.pad_val = pad_val
         self.bbox_clip_border = bbox_clip_border
 
-    def get_indexes(self, dataset: Union[BaseDataset, list]) -> int:
+    def get_indexes(self, dataset: BaseDataset | list) -> int:
         """Call function to collect indexes.
 
         Args:
@@ -1159,16 +1109,9 @@ class YOLOXMultiModalMixUp(BaseMultiModalMixImageTransform):
         is_filp = random.uniform(0, 1) > self.flip_ratio
 
         if len(retrieve_img.shape) == 3:
-            out_img = (
-                np.ones(
-                    (self.img_scale[1], self.img_scale[0], 3), dtype=retrieve_img.dtype
-                )
-                * self.pad_val
-            )
+            out_img = np.ones((self.img_scale[1], self.img_scale[0], 3), dtype=retrieve_img.dtype) * self.pad_val
         else:
-            out_img = (
-                np.ones(self.img_scale[::-1], dtype=retrieve_img.dtype) * self.pad_val
-            )
+            out_img = np.ones(self.img_scale[::-1], dtype=retrieve_img.dtype) * self.pad_val
 
         # 1. keep_ratio resize
         scale_ratio = min(
@@ -1201,10 +1144,7 @@ class YOLOXMultiModalMixUp(BaseMultiModalMixImageTransform):
         ori_img = results["img"]
         origin_h, origin_w = out_img.shape[:2]
         target_h, target_w = ori_img.shape[:2]
-        padded_img = (
-            np.ones((max(origin_h, target_h), max(origin_w, target_w), 3))
-            * self.pad_val
-        )
+        padded_img = np.ones((max(origin_h, target_h), max(origin_w, target_w), 3)) * self.pad_val
         padded_img = padded_img.astype(np.uint8)
         padded_img[:origin_h, :origin_w] = out_img
 
@@ -1213,9 +1153,7 @@ class YOLOXMultiModalMixUp(BaseMultiModalMixImageTransform):
             y_offset = random.randint(0, padded_img.shape[0] - target_h)
         if padded_img.shape[1] > target_w:
             x_offset = random.randint(0, padded_img.shape[1] - target_w)
-        padded_cropped_img = padded_img[
-            y_offset : y_offset + target_h, x_offset : x_offset + target_w
-        ]
+        padded_cropped_img = padded_img[y_offset : y_offset + target_h, x_offset : x_offset + target_w]
 
         # 6. adjust bbox
         retrieve_gt_bboxes = retrieve_results["gt_bboxes"]
@@ -1238,15 +1176,9 @@ class YOLOXMultiModalMixUp(BaseMultiModalMixImageTransform):
         retrieve_gt_bboxes_labels = retrieve_results["gt_bboxes_labels"]
         retrieve_gt_ignore_flags = retrieve_results["gt_ignore_flags"]
 
-        mixup_gt_bboxes = cp_retrieve_gt_bboxes.cat(
-            (results["gt_bboxes"], cp_retrieve_gt_bboxes), dim=0
-        )
-        mixup_gt_bboxes_labels = np.concatenate(
-            (results["gt_bboxes_labels"], retrieve_gt_bboxes_labels), axis=0
-        )
-        mixup_gt_ignore_flags = np.concatenate(
-            (results["gt_ignore_flags"], retrieve_gt_ignore_flags), axis=0
-        )
+        mixup_gt_bboxes = cp_retrieve_gt_bboxes.cat((results["gt_bboxes"], cp_retrieve_gt_bboxes), dim=0)
+        mixup_gt_bboxes_labels = np.concatenate((results["gt_bboxes_labels"], retrieve_gt_bboxes_labels), axis=0)
+        mixup_gt_ignore_flags = np.concatenate((results["gt_ignore_flags"], retrieve_gt_ignore_flags), axis=0)
 
         if not self.bbox_clip_border:
             # remove outside bbox

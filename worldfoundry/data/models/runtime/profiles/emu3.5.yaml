@@ -5,6 +5,8 @@ task_family: multimodal_generation
 groups: [multimodal, image]
 source_repos:
 - url: https://github.com/baaivision/Emu3.5
+  revision: 8fcf1da48f9c5252fe0a0b8dc842e07b6efcd745
+  in_tree_path: worldfoundry/synthesis/visual_generation/emu35/emu35_runtime
 - url: https://huggingface.co/BAAI/Emu3.5
 checkpoints:
 - repo_id: BAAI/Emu3.5
@@ -17,13 +19,13 @@ input_schema:
 artifact_kind: model_response
 artifact_filename: emu3.5.pb
 execution:
-  backend_stage: official_checkout_eager_runtime
+  backend_stage: official_in_tree_runtime
   runtime_status: verified_interleaved_inference
   integration_status: integrated
   pipeline_binding: emu3.5
 integration:
   status: integrated
 notes:
-- The pinned official checkout and both checkpoints are required; no weights are downloaded at runtime.
+- Both checkpoints are required; no weights are downloaded at runtime. The tokenizer vocabulary is read from the BAAI/Emu3.5 checkpoint.
 - Official Emu3.5 generates interleaved text and images. This route emits the official protobuf response, not video.
 - The checkpoint-backed GPU howto response was parsed with text and two decoded 384x384 PNG images.

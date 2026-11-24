@@ -19,7 +19,7 @@ Kandinsky 6.0 generates synchronized video and 44.1 kHz audio from text, optiona
 
 ## Run
 
-Prepare the dedicated Python 3.10 / CUDA 12.6 environment described by `worldfoundry/data/models/runtime/environments/video/kandinsky6.yaml`. Its pinned dependencies match the checkpoint-backed GPU validation. Install WorldFoundry into that environment and download a complete official Diffusers snapshot, including both text encoders, tokenizers, both VAEs, and the vocoder.
+Prepare the dedicated Python 3.10 / CUDA 12.6 environment described by `worldfoundry/data/models/runtime/environments/video/kandinsky6.yaml`. Install WorldFoundry into that environment and download a complete official Diffusers snapshot, including both text encoders, tokenizers, both VAEs, and the vocoder.
 
 ```python
 from worldfoundry.pipelines.kandinsky6 import Kandinsky6Pipeline
@@ -46,18 +46,18 @@ Non-distilled snapshots support `sample_audio=False`. Distilled snapshots requir
 
 ## Architecture
 
-The canonical transformer and PiFlow head live in `base_models/diffusion_model/models/networks/kandinsky6`. Prompt encoders and video/audio codecs have separate role owners. The framework owns checkpoint materialization, flow schedules, joint sampling, and MP4 muxing. No external source checkout or upstream CLI is required at inference time.
+The transformer and PiFlow head, the prompt encoders, and the video/audio codecs run natively in WorldFoundry, which also handles checkpoint loading, flow schedules, joint audio-video sampling, and MP4 muxing. Inference needs no upstream source checkout or CLI.
 
 Official source: [kandinskylab/kandinsky-6](https://github.com/kandinskylab/kandinsky-6), revision `b224b77cb458c2f9241a5a245bedc4fd43817b11`. Source licensing is MIT; bundled audio components retain their license notices.
 
-## CUDA validation
+## Validation
 
-The pinned `kandinsky6-pro-distill` snapshot passed text-to-video generation on one NVIDIA H100 80GB with SDPA, component offload, 10 steps, and seed 42. The output contains 121 frames at 864×480 and 24 fps, plus 44.1 kHz audio. Weight loading took 85.2 seconds and generation took 140.4 seconds. PyAV checks verified both streams, geometry, frame count, sample rate, and finite audio; first, middle, and last frames show the prompted orange cat walking through a garden.
+Validated on one NVIDIA H100 80GB: the `kandinsky6-pro-distill` snapshot generates a text-to-video clip of 121 frames at 864×480 and 24 fps with 44.1 kHz audio that follows the prompt (10 steps, SDPA, component offload, about 140 seconds of generation).
 
-The validated environment uses Python 3.10.16, PyTorch 2.9.0+cu126, Diffusers 0.40.0, Transformers 5.14.1, Safetensors 0.8.0, and PyAV 16.0.1. The video VAE accounts for convolution workspace when choosing spatial tiles and preserves partial edge tiles.
+The validated environment uses Python 3.10.16, PyTorch 2.9.0+cu126, Diffusers 0.40.0, Transformers 5.14.1, Safetensors 0.8.0, and PyAV 16.0.1.
 
 ```bash
-python scripts/inference/check_kandinsky6.py \
+python tests/manual/kandinsky6_inference.py \
   --checkpoint-dir ../ckpt/kandinskylab--Kandinsky-6.0-Pro-distill-5s-Diffusers \
   --output-dir outputs/kandinsky6-pro-distill-validation \
   --offload-mode component --attention-backend sdpa
@@ -67,4 +67,4 @@ This writes `output.mp4`, `cuda-validation.json`, and three preview frames. The 
 
 ## Limitations
 
-GPU evidence covers Pro-distill text-to-video. Image-to-video, the other five snapshots, and parity with the official demo remain unvalidated; those five catalog entries retain `planned` status. CPU tests cover ordinary and PiFlow native runners, request normalization, local checkpoint errors, spatial tile edge coverage, and MP4 video/audio streams. The separate Kandinsky super-resolution model is not part of this integration.
+Only Pro-distill text-to-video is validated on GPU. Image-to-video, the other five snapshots, and parity with the official demo are not validated; those five snapshots are listed as Planned. The separate Kandinsky super-resolution model is not supported.

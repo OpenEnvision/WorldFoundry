@@ -4,18 +4,15 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 
-"""Module for base_models -> perception_core -> general_perception -> dinov2 -> utils -> dtype.py functionality."""
-
-from typing import Dict, Union
+from typing import Union
 
 import numpy as np
 import torch
 
+TypeSpec = Union[str, np.dtype, torch.dtype]  # noqa: UP007 - Runtime type alias kept as typing.Union.
 
-TypeSpec = Union[str, np.dtype, torch.dtype]
 
-
-_NUMPY_TO_TORCH_DTYPE: Dict[np.dtype, torch.dtype] = {
+_NUMPY_TO_TORCH_DTYPE: dict[np.dtype, torch.dtype] = {
     np.dtype("bool"): torch.bool,
     np.dtype("uint8"): torch.uint8,
     np.dtype("int8"): torch.int8,
@@ -31,14 +28,6 @@ _NUMPY_TO_TORCH_DTYPE: Dict[np.dtype, torch.dtype] = {
 
 
 def as_torch_dtype(dtype: TypeSpec) -> torch.dtype:
-    """As torch dtype.
-
-    Args:
-        dtype: The dtype.
-
-    Returns:
-        The return value.
-    """
     if isinstance(dtype, torch.dtype):
         return dtype
     if isinstance(dtype, str):

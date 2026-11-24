@@ -21,8 +21,8 @@ __all__ = [
     "BerniniModel",
     "BerniniRendererConfig",
     "BerniniRendererModel",
-    "WanTransformer3DModel",
     "GEN_Wanx22",
+    "WanTransformer3DModel",
 ]
 
 

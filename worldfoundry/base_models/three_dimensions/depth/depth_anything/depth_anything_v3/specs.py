@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> specs.py functionality."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
+
 import numpy as np
 import torch
 
@@ -35,7 +34,6 @@ class Gaussians:
 
 @dataclass
 class Prediction:
-    """Prediction implementation."""
     depth: np.ndarray  # N, H, W
     is_metric: int
     sky: np.ndarray | None = None  # N, H, W
@@ -45,4 +43,4 @@ class Prediction:
     processed_images: np.ndarray | None = None  # N, H, W, 3 - processed images for visualization
     gaussians: Gaussians | None = None  # 3D gaussians
     aux: dict[str, Any] = None  #
-    scale_factor: Optional[float] = None  # metric scale
+    scale_factor: float | None = None  # metric scale

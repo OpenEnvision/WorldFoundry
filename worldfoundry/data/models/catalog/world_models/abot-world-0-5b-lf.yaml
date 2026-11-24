@@ -1,0 +1,68 @@
+id: abot-world-0-5b-lf
+name: ABot-World-0-5B-LF
+aliases:
+- abot-world
+- abot
+tasks:
+- image-to-world-video
+- action-conditioned-video
+- interactive-world-model
+provider: official_repo
+source:
+  status: source_available
+  official_repo_url: https://github.com/amap-cvlab/ABot-World
+  notes:
+  - The public causal student checkpoint and inference source are available.
+official_sources:
+  paper: https://arxiv.org/abs/2607.19191
+  project_page: https://amap-cvlab.github.io/ABot-World/
+  github:
+    url: https://github.com/amap-cvlab/ABot-World
+    revision: e2a406a176195d994bcaf5ebb92b2047edcd3c2b
+  huggingface:
+  - repo_id: acvlab/ABot-World-0-5B-LF
+    revision: d05a3ecf68f6144e4bc6ac7e49b7d9a531af723e
+    status: public_checkpoint
+checkpoint_refs:
+- repo_id: acvlab/ABot-World-0-5B-LF
+  revision: d05a3ecf68f6144e4bc6ac7e49b7d9a531af723e
+  role: causal_student_checkpoint
+availability:
+  status: source_and_weights_available
+  code: public
+  weights: public_huggingface
+integration:
+  kind: native_pipeline
+  status: checkpoint_gpu_validated
+  notes:
+  - Only causal inference and resident interactive rollout are integrated.
+  - Wan attention, T5, Wan2.2 VAE, scheduler, media I/O and FP8 support are reused in-tree.
+  - Training, Gradio, benchmark, Helios and experimental quantizer sources are excluded.
+  - Real A100 Workspace inference produced a fully decodable 1280x704 nine-frame H.264 artifact.
+runtime_profile: runtime-profile:abot-world-0-5b-lf
+pipeline_binding: abot-world-0-5b-lf
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+output_artifacts:
+- generated_world_video
+catalog_category: world_models
+catalog_scope: World-model catalog entries with in-tree inference runtimes.
+docs:
+  publisher: Alibaba (Amap)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（高德地图 AMAP-CVLab）
+  overview: "ABot-World-0-5B-LF is Amap's interactive world model: give it an image plus actions and it rolls out world video block by block, keeping causal KV state resident between action blocks. Validated with the public 0.5B-LF checkpoint on an A100: one action block at the official 1280×704 resolution produces a decodable nine-frame H.264 clip."
+  overview_zh: ABot-World-0-5B-LF 是高德的交互式世界模型：输入一张图加动作序列，它逐块滚动生成世界视频，并在动作块之间保持因果 KV 状态常驻。已在 A100 上用公开的 0.5B-LF checkpoint 验证：在官方 1280×704 分辨率下，一个动作块生成可正常解码的九帧 H.264 视频。
+  architecture: The causal student uses Wan attention, a T5 text encoder, the Wan2.2 VAE, and its scheduler, with optional FP8. WorldFoundry supports causal inference and resident interactive rollout; training and the Gradio demo are not included. The checkpoint is acvlab/ABot-World-0-5B-LF (causal student).
+  architecture_zh: 该因果学生模型使用 Wan 注意力、T5 文本编码器、Wan2.2 VAE 及其调度器，支持可选 FP8。WorldFoundry 支持因果推理与常驻交互滚动；不包含训练与 Gradio demo。checkpoint 为 acvlab/ABot-World-0-5B-LF（causal student）。
+  usage_notes: Stage the checkpoint in a local directory before running; the runtime works offline. The resident API keeps causal KV state between action blocks; the first block returns 9 RGB frames and subsequent blocks return 12 — plan client-side buffering accordingly.
+  usage_notes_zh: 运行前需把 checkpoint 放到本地目录；运行时离线工作。常驻 API 在动作块之间保持因果 KV 状态；首个块返回 9 帧 RGB，后续块返回 12 帧——客户端缓冲请按此规划。
+  limitations:
+  - The 0.5B-LF checkpoint is a small causal student — quality trails larger world models.
+  - Validation covers a single action block; long-horizon rollouts have not been scored.
+  limitations_zh:
+  - 0.5B-LF 是小型 causal student checkpoint——质量弱于更大的世界模型。
+  - 验证只覆盖单个动作块；长时程滚动尚未评分。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: General world-model rollout quality evaluation.
+    reason_zh: 世界模型滚动生成质量的通用评测。

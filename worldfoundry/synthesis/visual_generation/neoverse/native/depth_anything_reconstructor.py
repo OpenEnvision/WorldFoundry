@@ -1,19 +1,26 @@
 """Depth Anything 3 Gaussian reconstructor used by NeoVerse inference."""
 
+from typing import ClassVar
+
 import torch.nn as nn
-import torch.nn.functional as F
+
 from worldfoundry.core.model_loading import hash_state_dict_keys
 
+# isort: split
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.api import (
     DepthAnything3,
 )
+
+# isort: split
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import (
     affine_inverse,
     as_homogeneous,
 )
+from worldfoundry.base_models.three_dimensions.point_clouds.hunyuan_mirror.models.utils.geometry import (
+    depth_to_world_coords_points,
+)
 from worldfoundry.base_models.three_dimensions.point_clouds.hunyuan_mirror.models.utils.sh_utils import RGB2SH
 
-from .geometry import depth_to_world_coords_points
 from .rasterization import Gaussians, Rasterizer
 
 
@@ -21,7 +28,6 @@ class DA3GaussianRenderer:
     """Matching pipe.reconstructor.gs_renderer.rasterizer."""
 
     def __init__(self):
-        """Init."""
         self.rasterizer = Rasterizer()
 
 
@@ -33,38 +39,20 @@ class DepthAnything3Reconstructor(nn.Module):
     Splatting representations compatible with the existing pipeline.
     """
 
-    IMAGENET_MEAN = [0.485, 0.456, 0.406]
-    IMAGENET_STD = [0.229, 0.224, 0.225]
+    IMAGENET_MEAN: ClassVar[list] = [0.485, 0.456, 0.406]
+    IMAGENET_STD: ClassVar[list] = [0.229, 0.224, 0.225]
     PATCH_SIZE = 14
 
     def __init__(self, model_name="da3-giant", gaussian_scale=0.0001, **kwargs):
-        """Init.
-
-        Args:
-            model_name: The model name.
-            gaussian_scale: The gaussian scale.
-        """
         super().__init__()
         self.da3 = DepthAnything3(model_name=model_name)
         self.gs_renderer = DA3GaussianRenderer()
         self.gaussian_scale = gaussian_scale
 
     def load_state_dict(self, state_dict, strict=True, assign=False):
-        """Load state dict.
-
-        Args:
-            state_dict: The state dict.
-            strict: The strict.
-            assign: The assign.
-        """
         return self.da3.load_state_dict(state_dict, strict=strict, assign=assign)
 
     def forward(self, views, **kwargs):
-        """Forward.
-
-        Args:
-            views: The views.
-        """
         imgs = views["img"]  # [B, S, 3, H, W]
         timestamps = views["timestamp"]  # [B, S]
         B, S, C, H, W = imgs.shape
@@ -140,22 +128,15 @@ class DepthAnything3Reconstructor(nn.Module):
 
     @staticmethod
     def state_dict_converter():
-        """State dict converter."""
         return ModelDictConverter()
 
+
 class ModelDictConverter:
-    """Model dict converter implementation."""
     def __init__(self):
-        """Init."""
         pass
 
     def from_civitai(self, state_dict):
-        """From civitai.
-
-        Args:
-            state_dict: The state dict.
-        """
-        if hash_state_dict_keys(state_dict) == '252f1c3923a62665aee9b32f1b18afb5':
+        if hash_state_dict_keys(state_dict) == "252f1c3923a62665aee9b32f1b18afb5":
             config = {
                 "model_name": "da3-giant",
                 "gaussian_scale": 0.001,

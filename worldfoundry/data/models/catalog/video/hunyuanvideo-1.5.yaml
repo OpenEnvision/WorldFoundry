@@ -1,6 +1,6 @@
 id: hunyuanvideo-1.5
 name: HunyuanVideo 1.5
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: hunyuanvideo-1.5
 runtime_profile: runtime-profile:hunyuanvideo-1.5-t2v
 tasks:
@@ -46,7 +46,7 @@ variants:
     private: false
     gated: false
   runtime_profile: hunyuanvideo-1.5-t2v
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: hunyuanvideo-1.5-t2v
   integration:
     status: integrated
@@ -73,7 +73,7 @@ variants:
     private: false
     gated: auto
   runtime_profile: hunyuanvideo-1.5-i2v
-  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: hunyuanvideo-1.5-i2v
   integration:
     status: integrated
@@ -139,18 +139,16 @@ docs:
   publisher: Tencent (Hunyuan)
   publisher_kind: company
   publisher_zh: 腾讯（混元）
-  overview: 'HunyuanVideo 1.5 is the newer revision of Tencent''s open video family, again recorded with independent T2V and I2V recipes on one shared native infrastructure. The notable difference from the original: the I2V conditioner declares FLUX.1-Redux-dev as an independent gated vision checkpoint instead of inferring a sibling path.'
-  overview_zh: HunyuanVideo 1.5 是腾讯开源视频系列的较新版本，同样以独立的 T2V 与 I2V 配方共享一套原生基础设施。与初代的显著差异：I2V 条件器将 FLUX.1-Redux-dev 声明为独立的 gated 视觉 checkpoint，而不是推断同级路径。
-  architecture: 'Same shared-native-runner design as the hunyuanvideo entry: HunyuanVideo 1.5 owns only model-specific network, codec, and conditioning behavior, while assembly, loading, and scheduling come from the shared diffusion infrastructure. generate.py is not retained as a second inference architecture.'
-  architecture_zh: 与 hunyuanvideo 条目相同的共享原生 runner 设计：HunyuanVideo 1.5 只拥有模型特有的网络、编解码与条件行为，装配、加载与调度均来自共享扩散基础设施。generate.py 没有被保留为第二套推理架构。
-  usage_notes: 'Registry resolution is verified; native checkpoint-backed CUDA parity is pending. Two gates to clear before running I2V: the main checkpoints carry ''other'' HF license metadata, and FLUX.1-Redux-dev is gated with a non-commercial license that the manifest says needs review — accept its terms on Hugging Face first.'
-  usage_notes_zh: 注册表解析已验证；原生 checkpoint 加载的 CUDA 一致性仍在等待。运行 I2V 前有两道门槛：主 checkpoint 的 HF 许可元数据为“other”；FLUX.1-Redux-dev 为 gated 且许可为非商用（manifest 要求审阅）——请先在 Hugging Face 接受其条款。
+  overview: HunyuanVideo 1.5 is the newer revision of Tencent's open video family, with separate text-to-video and image-to-video variants. Unlike the original, the I2V variant needs the gated FLUX.1-Redux-dev vision checkpoint staged as its own download.
+  overview_zh: HunyuanVideo 1.5 是腾讯开源视频系列的较新版本，提供独立的文生视频与图生视频变体。与初代不同，I2V 变体需要单独就位 gated 的 FLUX.1-Redux-dev 视觉 checkpoint。
+  architecture: A latent video diffusion pipeline built from a conditioner, latent initializer, scheduler, denoiser, latent encoder, and decoder; the I2V conditioner adds SigLIP image features from FLUX.1-Redux-dev. The transformer, VAE, and SigLIP checkpoints load with no missing or mismatched keys.
+  architecture_zh: 潜空间视频扩散 pipeline，由条件器、潜变量初始化、调度器、去噪器、潜空间编码器与解码器组成；I2V 条件器额外使用 FLUX.1-Redux-dev 的 SigLIP 图像特征。transformer、VAE 与 SigLIP checkpoint 加载时无缺失或不匹配的键。
+  usage_notes: Start with hunyuanvideo-1.5-t2v. Before running hunyuanvideo-1.5-i2v, accept the FLUX.1-Redux-dev terms on Hugging Face.
+  usage_notes_zh: 从 hunyuanvideo-1.5-t2v 开始。运行 hunyuanvideo-1.5-i2v 前，请先在 Hugging Face 接受 FLUX.1-Redux-dev 的条款。
   limitations:
-  - Native CUDA artifact parity is pending.
   - I2V depends on the gated, non-commercial FLUX.1-Redux-dev vision checkpoint.
   - Main checkpoint license metadata is 'other'; review before commercial use.
   limitations_zh:
-  - 原生 CUDA 产物一致性仍在等待。
   - I2V 依赖 gated 且非商用许可的 FLUX.1-Redux-dev 视觉 checkpoint。
   - 主 checkpoint 许可元数据为“other”，商用前需审阅。
   recommended_benchmarks:

@@ -1,17 +1,25 @@
-import os
 import torch
+
 try:
     import torch_npu
-    from opensora.npu_config import npu_config
-except:
+
+    from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.npu_config import (
+        npu_config,
+    )
+except BaseException:
     torch_npu = None
     npu_config = None
-    pass
-from opensora.utils.sample_utils import (
-    init_gpu_env, init_npu_env, prepare_pipeline, get_args, 
-    run_model_and_save_samples, run_model_and_save_samples_npu
+from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.sample.caption_refiner import (
+    OpenSoraCaptionRefiner,
 )
-from opensora.sample.caption_refiner import OpenSoraCaptionRefiner
+from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.utils.sample_utils import (
+    get_args,
+    init_gpu_env,
+    init_npu_env,
+    prepare_pipeline,
+    run_model_and_save_samples,
+    run_model_and_save_samples_npu,
+)
 
 if __name__ == "__main__":
     args = get_args()
@@ -26,15 +34,11 @@ if __name__ == "__main__":
 
     device = torch.cuda.current_device()
     if args.num_frames != 1 and args.enhance_video is not None:
-        from opensora.sample.VEnhancer.enhance_a_video import VEnhancer
-        enhance_video_model = VEnhancer(model_path=args.enhance_video, version='v2', device=device)
+        raise NotImplementedError("Video enhancement is not available in this in-tree build; the shipped route is v1.3")
     else:
         enhance_video_model = None
     pipeline = prepare_pipeline(args, dtype, device)
-    if args.caption_refiner is not None:
-        caption_refiner_model = OpenSoraCaptionRefiner(args, dtype, device)
-    else:
-        caption_refiner_model = None
+    caption_refiner_model = OpenSoraCaptionRefiner(args, dtype, device) if args.caption_refiner is not None else None
 
     if npu_config is not None and npu_config.on_npu and npu_config.profiling:
         run_model_and_save_samples_npu(args, pipeline, caption_refiner_model, enhance_video_model)

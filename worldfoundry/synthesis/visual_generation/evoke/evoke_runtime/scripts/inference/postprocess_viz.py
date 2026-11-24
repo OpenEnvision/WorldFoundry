@@ -8,8 +8,10 @@ AFTER the GPU is done. Two modes:
               overlaps this sample's encode (batch overlap). See infer_single.py
               --bg_postprocess.
 """
+
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -20,10 +22,6 @@ from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image
-
-REPO_ROOT = Path(__file__).resolve().parents[2]   # scripts/inference/<this> -> repo root
-if str(REPO_ROOT) not in sys.path:                # so `import evoke` works when run directly
-    sys.path.insert(0, str(REPO_ROOT))
 
 
 def _apply_joystick_hud(video_np: np.ndarray, p: dict) -> np.ndarray:
@@ -37,7 +35,8 @@ def _apply_joystick_hud(video_np: np.ndarray, p: dict) -> np.ndarray:
     if not npy or not Path(npy).is_file():
         return video_np
     try:
-        from evoke.utils.ev_validation import add_joystick_overlay_from_c2ws
+        from ...evoke.utils.ev_validation import add_joystick_overlay_from_c2ws
+
         c2ws = np.load(npy)
         # pred frame 0 == first frame after the ref prefix (ref_pix = 0 for i2v/t2v)
         s = int(p.get("joystick_ref_pix", 0))
@@ -46,9 +45,12 @@ def _apply_joystick_hud(video_np: np.ndarray, p: dict) -> np.ndarray:
             return video_np
         n = e - s
         out = add_joystick_overlay_from_c2ws(
-            list(video_np[:n]), c2ws[s:e],
-            move_scale=p.get("joystick_move_scale"), rot_scale=p.get("joystick_rot_scale"),
-            label_left="Move", label_right="Rot",
+            list(video_np[:n]),
+            c2ws[s:e],
+            move_scale=p.get("joystick_move_scale"),
+            rot_scale=p.get("joystick_rot_scale"),
+            label_left="Move",
+            label_right="Rot",
         )
         # a pose shorter than the video (replayed/extended tail) leaves a plain remainder
         merged = np.stack(list(out) + list(video_np[n:])) if n < video_np.shape[0] else np.stack(list(out))
@@ -59,7 +61,7 @@ def _apply_joystick_hud(video_np: np.ndarray, p: dict) -> np.ndarray:
         return video_np
 
 
-def _write_pred_outputs(output_dir: Path, video_np: np.ndarray, fps: int = 24, params: dict = None) -> None:
+def _write_pred_outputs(output_dir: Path, video_np: np.ndarray, fps: int = 24, params: dict | None = None) -> None:
     """Write geo_pred.mp4 + 5 sample frames (mirrors the legacy inline block)."""
     # EVOKE_DUMP_PRED_PNG=1 -> also dump every pred frame as lossless png. Off by default; this is for
     #   pixel-level benchmarks (IQA / optical flow / reprojection all read the frames back), where the
@@ -154,14 +156,13 @@ def _append_warp_mask_columns(output_dir: Path, combined: list) -> list:
         if vis:
             parts.append(_fit(vis, i))
         out.append(np.concatenate(parts, axis=1))
-    print(f"[postproc] appended warp/mask cols: warp={len(warp)}f vis={len(vis)}f "
-          f"-> {len(parts)} panels", flush=True)
+    print(f"[postproc] appended warp/mask cols: warp={len(warp)}f vis={len(vis)}f -> {len(parts)} panels", flush=True)
     return out
 
 
 def _write_combined(output_dir: Path, video_np: np.ndarray, p: dict) -> None:
     """Build + write the GT|Pred|Warp|WarpMask side-by-side joystick-HUD video."""
-    from evoke.utils.ev_validation import combine_gt_pred_with_cam_viz   # REPO_ROOT: module top
+    from ...evoke.utils.ev_validation import combine_gt_pred_with_cam_viz
 
     _t_combine = time.time()
     print("[postproc] combining GT|Pred + joystick HUD ...", flush=True)
@@ -169,15 +170,22 @@ def _write_combined(output_dir: Path, video_np: np.ndarray, p: dict) -> None:
         pred_video=video_np,
         gt_video_path=str(p["ref_video_for_viz"]),
         pose_path=str(p["lingbot_pose_path"]),
-        height=int(p["height"]), width=int(p["width"]),
+        height=int(p["height"]),
+        width=int(p["width"]),
         num_frames=int(p["num_frames"]),
-        ref_seconds=float(p["ref_seconds"]), start_seconds=float(p["start_seconds"]),
-        latent_window_size=9, vae_stride_t=4,
-        target_fps=24, source_fps=int(p["lingbot_pose_source_fps"]),
+        ref_seconds=float(p["ref_seconds"]),
+        start_seconds=float(p["start_seconds"]),
+        latent_window_size=9,
+        vae_stride_t=4,
+        target_fps=24,
+        source_fps=int(p["lingbot_pose_source_fps"]),
         source_resolution=tuple(p["lingbot_pose_source_resolution"]),
         pose_type=p["lingbot_pose_type"],
-        fallback_default_intrinsic=bool(p.get("lingbot_fallback_default_intrinsic", False)),   # game npz has no intrinsics -> fall back to defaults
-        panel_label_gt="GT", panel_label_pred="Pred(GEO)" if p["use_geometric_state"] else "Pred",
+        fallback_default_intrinsic=bool(
+            p.get("lingbot_fallback_default_intrinsic", False)
+        ),  # game npz has no intrinsics -> fall back to defaults
+        panel_label_gt="GT",
+        panel_label_pred="Pred(GEO)" if p["use_geometric_state"] else "Pred",
     )
     # Append Warp | WarpMask columns (4-way, mirrors the per-chunk segment viz).
     combined = _append_warp_mask_columns(output_dir, combined)
@@ -188,18 +196,36 @@ def _write_combined(output_dir: Path, video_np: np.ndarray, p: dict) -> None:
     for f_rgb in combined:
         w2.write(cv2.cvtColor(f_rgb, cv2.COLOR_RGB2BGR))
     w2.release()
-    print(f"[postproc] GT|Pred mp4 saved: {sbs_mp4} ({len(combined)} frames, {H_out}x{W_out}) | "
-          f"combine {_t_write - _t_combine:.1f}s + write {time.time() - _t_write:.1f}s = "
-          f"{time.time() - _t_combine:.1f}s total", flush=True)
+    print(
+        f"[postproc] GT|Pred mp4 saved: {sbs_mp4} ({len(combined)} frames, {H_out}x{W_out}) | "
+        f"combine {_t_write - _t_combine:.1f}s + write {time.time() - _t_write:.1f}s = "
+        f"{time.time() - _t_combine:.1f}s total",
+        flush=True,
+    )
 
 
 def _ffmpeg_concat(seg_paths: list, out_mp4: Path, list_txt: Path) -> bool:
     """ffmpeg concat demuxer + stream copy: joins segments that share encoder settings in constant
     memory. Returns True on success."""
     import subprocess
+
     list_txt.write_text("".join(f"file '{p.resolve()}'\n" for p in seg_paths))
-    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-           "-f", "concat", "-safe", "0", "-i", str(list_txt), "-c", "copy", str(out_mp4)]
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(list_txt),
+        "-c",
+        "copy",
+        str(out_mp4),
+    ]
     try:
         rc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).returncode
     except FileNotFoundError:
@@ -224,8 +250,7 @@ def _cv2_concat(seg_paths: list, out_mp4: Path, fps: int) -> bool:
                 break
             if writer is None:
                 h, w = bf.shape[:2]
-                writer = cv2.VideoWriter(str(out_mp4), cv2.VideoWriter_fourcc(*"mp4v"),
-                                         float(fps), (int(w), int(h)))
+                writer = cv2.VideoWriter(str(out_mp4), cv2.VideoWriter_fourcc(*"mp4v"), float(fps), (int(w), int(h)))
             writer.write(bf)
             n_written += 1
         cap.release()
@@ -275,8 +300,7 @@ def assemble_from_segments(output_dir, fps: int = 24, sample_n: int = 8) -> dict
                 found.append((int(m.group(1)), p))
         return [p for _, p in sorted(found, key=lambda t: t[0])]
 
-    jobs = [("pred", "pred", output_dir / "geo_pred.mp4"),
-            ("sbs", "gt_vs_pred", output_dir / "gt_vs_pred_cam_viz.mp4")]
+    jobs = [("pred", "pred", output_dir / "geo_pred.mp4"), ("sbs", "gt_vs_pred", output_dir / "gt_vs_pred_cam_viz.mp4")]
     for key, kind, out_mp4 in jobs:
         segs = _segments(kind)
         result[f"n_{key}_seg"] = len(segs)
@@ -291,8 +315,11 @@ def assemble_from_segments(output_dir, fps: int = 24, sample_n: int = 8) -> dict
             n = _mp4_frame_count(out_mp4)
             size_mb = out_mp4.stat().st_size / 1024**2
             result[key] = out_mp4
-            print(f"[assemble] {out_mp4.name}: {len(segs)} segments -> {n} frames "
-                  f"({n / max(fps, 1) / 60.0:.1f} min, {size_mb:.0f} MB, {time.time() - t0:.1f}s)", flush=True)
+            print(
+                f"[assemble] {out_mp4.name}: {len(segs)} segments -> {n} frames "
+                f"({n / max(fps, 1) / 60.0:.1f} min, {size_mb:.0f} MB, {time.time() - t0:.1f}s)",
+                flush=True,
+            )
         else:
             print(f"[assemble] [WARN] {out_mp4.name} stitching failed", flush=True)
 
@@ -308,8 +335,7 @@ def assemble_from_segments(output_dir, fps: int = 24, sample_n: int = 8) -> dict
             ret, bf = cap.read()
             cap.release()
             if ret:
-                Image.fromarray(cv2.cvtColor(bf, cv2.COLOR_BGR2RGB)).save(
-                    sf_dir / f"pred_{seg.stem.split('_')[1]}.png")
+                Image.fromarray(cv2.cvtColor(bf, cv2.COLOR_BGR2RGB)).save(sf_dir / f"pred_{seg.stem.split('_')[1]}.png")
     return result
 
 
@@ -321,8 +347,9 @@ def run_postprocess(output_dir, video_np, params: dict) -> None:
         try:
             _write_combined(output_dir, video_np, params)
         except Exception as e:  # combine is best-effort; never lose the pred mp4 over it
-            print(f"[postproc] [WARN] combine_gt_pred_with_cam_viz failed: "
-                  f"{type(e).__name__}: {str(e)[:200]}", flush=True)
+            print(
+                f"[postproc] [WARN] combine_gt_pred_with_cam_viz failed: {type(e).__name__}: {str(e)[:200]}", flush=True
+            )
 
 
 def _main_cli() -> None:
@@ -337,16 +364,12 @@ def _main_cli() -> None:
     finally:
         # drop the heavy intermediates + release the concurrency-guard marker
         for f in (npy, out_dir / ".postproc_params.json"):
-            try:
+            with contextlib.suppress(OSError):
                 f.unlink()
-            except OSError:
-                pass
         marker = params.get("_worker_marker")
         if marker:
-            try:
+            with contextlib.suppress(OSError):
                 Path(marker).unlink()
-            except OSError:
-                pass
     print("[postproc] DONE.", flush=True)
 
 

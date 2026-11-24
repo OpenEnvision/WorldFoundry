@@ -1,6 +1,6 @@
 ---
 title: "MAGI-2 Preview"
-description: "已集成 MAGI-2 文生视频、联合音频与可选视频 Refiner。"
+description: "MAGI-2 文生视频，联合生成音频，可选视频 Refiner。"
 modelId: "magi2-preview"
 pageSource: authored
 ---
@@ -11,18 +11,24 @@ MAGI-2 从文本联合生成视频与音频。WorldFoundry 已接入 [SandAI-org
 
 ## 运行时契约
 
-集成状态：**已集成**。公共 pipeline 支持十秒文生视频。Preview 输出为 12.5 fps；可选 Refiner 增加时间分辨率，以 25 fps 导出并保留 Preview 音频。
+pipeline 支持十秒文生视频。Preview 输出为 12.5 fps；可选 Refiner 增加时间分辨率，以 25 fps 导出并保留 Preview 音频。
 
 Refiner 按 8×4×4 潜变量块打包视频，使用发布配置中的半径二局部注意力窗口。精确范围并集注意力保留所有允许的 key，不创建二次大小的稠密 mask。采样默认使用零 SNR 重加噪、五步 UniPC、shift 5 与 guidance 2。
 
 ## 在 WorldFoundry 中运行
 
-准备 `sand-ai/MAGI-2-preview` 的权重布局：`preview/`、`refiner/`、`turbo_vae/`、`stable-audio-open-1.0/` 与 `text_encoder/`。组件按需加载；Preview 层使用顺序 GPU 驻留。
+准备 `sand-ai/MAGI-2-preview` 的权重布局：`preview/`、`refiner/`、`turbo_vae/`、`stable-audio-open-1.0/` 与 `text_encoder/`。组件按需加载；Preview 层按顺序驻留 GPU。
+
+Qwen3.5 文本编码 worker 使用 `worldfoundry/data/models/runtime/environments/video/magi2-preview.yaml` 声明的 `magi2-preview` 环境（Transformers 5.5）。该环境也须安装 WorldFoundry。Studio 自动选择对应 Python；直接调用 pipeline 时按下例设置 `python_executable`。父 pipeline 可继续使用统一环境。
 
 ```python
 from worldfoundry.pipelines.magi2 import NativeMagi2Pipeline
 
-pipeline = NativeMagi2Pipeline.from_pretrained("/weights/MAGI-2-preview", device="cuda")
+pipeline = NativeMagi2Pipeline.from_pretrained(
+    "/weights/MAGI-2-preview",
+    device="cuda",
+    python_executable="/envs/magi2-preview/bin/python",
+)
 pipeline(
     prompt="A cinematic camera move through a sunlit forest.",
     use_refiner=True,
@@ -38,14 +44,14 @@ pipeline(
 
 <ModelCommandBuilder modelId="magi2-preview" locale="zh" />
 
-## 已执行证据
+## 验证
 
-H100 上的 Refiner 阶段真实权重回放使用已保存的真实 Preview 潜变量与真实 Qwen3.5、Refiner、Turbo 权重。五步采样与 seed 42 导出 128×128、25 fps 的 249 帧视频，并保留原始立体声 44.1 kHz Preview 音频。回放命令见 `python tests/manual/magi2_refinement.py --help`。
+已在 H100 上使用公开发布的 Qwen3.5、Refiner 与 Turbo 权重验证：Refiner 阶段以五步采样（seed 42）细化已保存的 Preview 潜变量，输出 128×128、25 fps 的 249 帧视频，并保留立体声 44.1 kHz Preview 音频。回放命令见 `python tests/manual/magi2_refinement.py --help`。
 
 ## 限制
 
 - 不支持图像条件。
-- 默认 1920×1088 分辨率回放与官方数值、视觉一致性尚待验证。
+- 默认 1920×1088 分辨率下的细化，以及与官方的数值、视觉一致性尚未验证。
 - 114B Preview 需要较大的主机内存与顺序 offload；上游面向八张 Hopper GPU。
 
 <ModelRelatedRecipes modelId="magi2-preview" locale="zh" />

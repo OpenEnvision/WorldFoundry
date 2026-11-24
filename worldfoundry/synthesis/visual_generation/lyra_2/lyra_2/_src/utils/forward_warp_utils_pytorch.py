@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Tuple, Union
 
 import torch
 from einops import rearrange
@@ -60,18 +59,18 @@ def reliable_depth_mask_range_batch(depth, window_size=5, ratio_thresh=0.05, eps
 
 def forward_warp_multiframes(
     frame1: torch.Tensor,
-    mask1: Optional[torch.Tensor],
-    depth1: Optional[torch.Tensor],
-    transformation1: Optional[torch.Tensor],
+    mask1: torch.Tensor | None,
+    depth1: torch.Tensor | None,
+    transformation1: torch.Tensor | None,
     transformation2: torch.Tensor,
-    intrinsic1: Optional[torch.Tensor],
-    intrinsic2: Optional[torch.Tensor],
+    intrinsic1: torch.Tensor | None,
+    intrinsic2: torch.Tensor | None,
     is_image=True,
     render_depth=False,
     world_points1=None,
     clean_points: bool = False,
     clean_points_continuity: bool = False,  # clean points based on depth continuity
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     :param frame1: (b, v, 3, h, w). If frame1 is not in the range [-1, 1], either set is_image=False when calling
                     bilinear_splatting on frame within this function, or modify clipping in bilinear_splatting()
@@ -160,9 +159,9 @@ def unproject_points(
     intrinsic: torch.Tensor,
     is_depth: bool = True,
     is_ftheta: bool = False,
-    mask: Optional[torch.Tensor] = None,
+    mask: torch.Tensor | None = None,
     return_sparse: bool = False,
-) -> Union[torch.Tensor, List[torch.Tensor]]:
+) -> torch.Tensor | list[torch.Tensor]:
     """
     Unprojects depth values into 3D world points.
 
@@ -305,14 +304,14 @@ def project_points(world_points: torch.Tensor, w2c: torch.Tensor, intrinsic: tor
 
 def bilinear_splatting(
     frame1: torch.Tensor,
-    mask1: Optional[torch.Tensor],
+    mask1: torch.Tensor | None,
     depth1: torch.Tensor,
     flow12: torch.Tensor,
-    flow12_mask: Optional[torch.Tensor],
+    flow12_mask: torch.Tensor | None,
     is_image: bool = False,
     n_views=1,
     depth_weight_scale=50,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Bilinear splatting
     :param frame1: (b,c,h,w)

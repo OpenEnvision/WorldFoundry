@@ -1,2 +1,2 @@
-_target_: models.encoder.r3m.load_r3m
+_target_: worldfoundry.synthesis.visual_generation.dino_wm.models.encoder.r3m.load_r3m
 modelid: resnet18

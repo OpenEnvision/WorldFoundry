@@ -13,7 +13,8 @@ import math
 import os
 import time
 from bisect import bisect_right
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -72,13 +73,15 @@ class MatrixGame3RealtimeSession:
 
     @staticmethod
     def _load_helpers() -> dict[str, Any]:
-        cam_utils = importlib.import_module("utils.cam_utils")
-        runtime_utils = importlib.import_module("utils.utils")
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.camera_geometry import compute_relative_poses
+
+        cam_utils = importlib.import_module(".utils.cam_utils", __package__)
+        runtime_utils = importlib.import_module(".utils.utils", __package__)
         return {
             "build_plucker_from_c2ws": runtime_utils.build_plucker_from_c2ws,
             "build_plucker_from_pose": runtime_utils.build_plucker_from_pose,
             "compute_all_poses_from_actions": runtime_utils.compute_all_poses_from_actions,
-            "compute_relative_poses": cam_utils.compute_relative_poses,
+            "compute_relative_poses": compute_relative_poses,
             "get_extrinsics": runtime_utils.get_extrinsics,
             "get_intrinsics": cam_utils.get_intrinsics,
             "interpolate_poses": cam_utils._interpolate_camera_poses_handedness,
@@ -164,9 +167,7 @@ class MatrixGame3RealtimeSession:
             result.append(segments[segment_index][1])
         return result
 
-    def _encode_frame_actions(
-        self, frame_actions: Sequence[Sequence[str]]
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _encode_frame_actions(self, frame_actions: Sequence[Sequence[str]]) -> tuple[torch.Tensor, torch.Tensor]:
         keyboard_rows: list[torch.Tensor] = []
         mouse_rows: list[torch.Tensor] = []
         for actions in frame_actions:
@@ -211,18 +212,10 @@ class MatrixGame3RealtimeSession:
         keyboard = keyboard_cpu.unsqueeze(0).to(device=self.device, dtype=self.dtype)
         mouse = mouse_cpu.unsqueeze(0).to(device=self.device, dtype=self.dtype)
         self._keyboard_history = (
-            keyboard
-            if self._keyboard_history is None
-            else torch.cat((self._keyboard_history, keyboard), dim=1)
+            keyboard if self._keyboard_history is None else torch.cat((self._keyboard_history, keyboard), dim=1)
         )
-        self._mouse_history = (
-            mouse if self._mouse_history is None else torch.cat((self._mouse_history, mouse), dim=1)
-        )
-        self._extrinsics = (
-            extrinsics
-            if self._extrinsics is None
-            else torch.cat((self._extrinsics, extrinsics), dim=0)
-        )
+        self._mouse_history = mouse if self._mouse_history is None else torch.cat((self._mouse_history, mouse), dim=1)
+        self._extrinsics = extrinsics if self._extrinsics is None else torch.cat((self._extrinsics, extrinsics), dim=0)
         return keyboard, mouse
 
     @torch.inference_mode()
@@ -249,28 +242,18 @@ class MatrixGame3RealtimeSession:
         self.fps = max(int(fps), 1)
         defaults = self.runtime.defaults
         self._num_inference_steps = max(
-            int(
-                num_inference_steps
-                if num_inference_steps is not None
-                else defaults.get("num_inference_steps", 3)
-            ),
+            int(num_inference_steps if num_inference_steps is not None else defaults.get("num_inference_steps", 3)),
             1,
         )
         self._shift = float(
-            sample_shift
-            if sample_shift is not None
-            else defaults.get("sample_shift", self.core.config.sample_shift)
+            sample_shift if sample_shift is not None else defaults.get("sample_shift", self.core.config.sample_shift)
         )
         self._guide_scale = float(
             sample_guide_scale
             if sample_guide_scale is not None
             else defaults.get("sample_guide_scale", self.core.config.sample_guide_scale)
         )
-        self._use_base_model = bool(
-            defaults.get("use_base_model", False)
-            if use_base_model is None
-            else use_base_model
-        )
+        self._use_base_model = bool(defaults.get("use_base_model", False) if use_base_model is None else use_base_model)
         self._generator = torch.Generator(device=self.device).manual_seed(int(seed))
 
         image_started = time.perf_counter()
@@ -282,9 +265,13 @@ class MatrixGame3RealtimeSession:
             mode="bicubic",
             align_corners=False,
         )
-        current_image = input_image.transpose(0, 1).unsqueeze(0).to(
-            device=self.device,
-            dtype=self.dtype,
+        current_image = (
+            input_image.transpose(0, 1)
+            .unsqueeze(0)
+            .to(
+                device=self.device,
+                dtype=self.dtype,
+            )
         )
         image_ms = (time.perf_counter() - image_started) * 1000.0
 
@@ -319,10 +306,15 @@ class MatrixGame3RealtimeSession:
 
         vae_started = time.perf_counter()
         if self.rank == 0:
-            self._image_condition = self.core.vae.encode([current_image[0]])[0].unsqueeze(0).to(
-                device=self.device,
-                dtype=self.dtype,
-            ).contiguous()
+            self._image_condition = (
+                self.core.vae.encode([current_image[0]])[0]
+                .unsqueeze(0)
+                .to(
+                    device=self.device,
+                    dtype=self.dtype,
+                )
+                .contiguous()
+            )
         else:
             self._image_condition = torch.zeros(
                 (1, 48, 1, lat_h, lat_w),
@@ -335,16 +327,9 @@ class MatrixGame3RealtimeSession:
 
         max_latent_frames = (self.first_output_frames - 1) // self.core.vae_stride[0] + 1
         max_total_frames = max_latent_frames + self.memory_frames
-        self._max_seq_len = (
-            max_total_frames
-            * lat_h
-            * lat_w
-            // (self.core.patch_size[1] * self.core.patch_size[2])
-        )
+        self._max_seq_len = max_total_frames * lat_h * lat_w // (self.core.patch_size[1] * self.core.patch_size[2])
         if self.world_size > 1:
-            self._max_seq_len = int(
-                math.ceil(self._max_seq_len / self.world_size) * self.world_size
-            )
+            self._max_seq_len = int(math.ceil(self._max_seq_len / self.world_size) * self.world_size)
         self._configured = True
         self._configure_metrics = {
             "image_ms": image_ms,
@@ -397,9 +382,7 @@ class MatrixGame3RealtimeSession:
             current_end - 1,
             self.first_output_frames if first_clip else self.clip_frames,
         )
-        target_length = (
-            (self.first_output_frames - 1) // 4 + 1 if first_clip else self.clip_frames // 4
-        )
+        target_length = (self.first_output_frames - 1) // 4 + 1 if first_clip else self.clip_frames // 4
         target_indices = np.linspace(
             0 if first_clip else current_start + 3,
             current_end - 1,
@@ -437,7 +420,7 @@ class MatrixGame3RealtimeSession:
         selected[-1] = 4
         memory_pluckers: list[torch.Tensor] = []
         latent_indices: list[int] = []
-        for memory_index, reference_index in zip(selected, selected_base):
+        for memory_index, reference_index in zip(selected, selected_base, strict=False):
             latent_indices.append(self._latent_index(memory_index))
             aligned_index = self._align_frame_to_block(memory_index)
             memory_block = self._extrinsics[aligned_index : aligned_index + 4]
@@ -506,9 +489,7 @@ class MatrixGame3RealtimeSession:
                 )
             block_index = bisect_right(self._latent_offsets, value) - 1
             local_index = value - self._latent_offsets[block_index]
-            frames.append(
-                self._latent_history[block_index][:, :, local_index : local_index + 1]
-            )
+            frames.append(self._latent_history[block_index][:, :, local_index : local_index + 1])
         return torch.cat(frames, dim=2)
 
     def _append_latents(self, latents: torch.Tensor) -> None:
@@ -537,9 +518,7 @@ class MatrixGame3RealtimeSession:
         )
         assert self._keyboard_history is not None
         assert self._mouse_history is not None
-        current_end = self.first_output_frames + self._clip_index * (
-            self.clip_frames - self.overlap_frames
-        )
+        current_end = self.first_output_frames + self._clip_index * (self.clip_frames - self.overlap_frames)
         current_start = 0 if first_clip else current_end - self.clip_frames
         (
             plucker,
@@ -621,13 +600,9 @@ class MatrixGame3RealtimeSession:
             and not isinstance(self.core.model, FullyShardedDataParallel)
             and prepare_camera is not None
         ):
-            conditions_full["plucker_emb"] = prepare_camera(
-                plucker, token_length=self._max_seq_len
-            )
+            conditions_full["plucker_emb"] = prepare_camera(plucker, token_length=self._max_seq_len)
             if self._use_base_model:
-                conditions_null["plucker_emb"] = prepare_camera(
-                    plucker_without_memory, token_length=self._max_seq_len
-                )
+                conditions_null["plucker_emb"] = prepare_camera(plucker_without_memory, token_length=self._max_seq_len)
 
         for timestep_value in timesteps:
             timestep = latents.new_full(
@@ -651,9 +626,7 @@ class MatrixGame3RealtimeSession:
                 }
                 prediction_full = self.core.model(**model_kwargs)
                 prediction_null = self.core.model(**model_kwargs_null)
-                prediction = prediction_null + self._guide_scale * (
-                    prediction_full - prediction_null
-                )
+                prediction = prediction_null + self._guide_scale * (prediction_full - prediction_null)
             else:
                 prediction = self.core.model(**model_kwargs)
             latents = scheduler.step(
@@ -683,14 +656,10 @@ class MatrixGame3RealtimeSession:
                 self._vae_cache,
                 first_chunk=first_clip,
                 segment_size=int(os.getenv("WAN_VAE_SEGMENT_SIZE", "4")),
-                compile_decoder=(
-                    bool(self.runtime.defaults.get("compile_vae", True)) and not first_clip
-                ),
+                compile_decoder=(bool(self.runtime.defaults.get("compile_vae", True)) and not first_clip),
             )
             if video is None:
-                raise RuntimeError(
-                    "Matrix-Game 3 streaming VAE failed to decode the rollout block."
-                )
+                raise RuntimeError("Matrix-Game 3 streaming VAE failed to decode the rollout block.")
             if self.device.type == "cuda":
                 torch.cuda.synchronize(self.device)
             decode_ms = (time.perf_counter() - decode_started) * 1000.0

@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> encoder -> epipolar -> epipolar_sampler.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from dataclasses import dataclass
 
 import torch
@@ -8,8 +7,12 @@ from einops import rearrange, repeat
 from jaxtyping import Bool, Float, Shaped
 from torch import Tensor, nn
 
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import (
+    sample_image_grid,
+)
+
 from ....geometry.epipolar_lines import project_rays
-from ....geometry.projection import get_world_rays, sample_image_grid
+from ....geometry.projection import get_world_rays
 from ....misc.heterogeneous_pairings import (
     Index,
     generate_heterogeneous_index,
@@ -19,7 +22,6 @@ from ....misc.heterogeneous_pairings import (
 
 @dataclass
 class EpipolarSampling:
-    """Epipolar sampling implementation."""
     features: Float[Tensor, "batch view other_view ray sample channel"]
     valid: Bool[Tensor, "batch view other_view ray"]
     xy_ray: Float[Tensor, "batch view ray 2"]
@@ -31,7 +33,6 @@ class EpipolarSampling:
 
 
 class EpipolarSampler(nn.Module):
-    """Epipolar sampler implementation."""
     num_samples: int
     index_v: Index
     transpose_v: Index
@@ -42,15 +43,6 @@ class EpipolarSampler(nn.Module):
         num_views: int,
         num_samples: int,
     ) -> None:
-        """Init.
-
-        Args:
-            num_views: The num views.
-            num_samples: The num samples.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.num_samples = num_samples
 
@@ -69,25 +61,11 @@ class EpipolarSampler(nn.Module):
         near: Float[Tensor, "batch view"],
         far: Float[Tensor, "batch view"],
     ) -> EpipolarSampling:
-        """Forward.
-
-        Args:
-            images: The images.
-            extrinsics: The extrinsics.
-            intrinsics: The intrinsics.
-            near: The near.
-            far: The far.
-
-        Returns:
-            The return value.
-        """
         device = images.device
         b, v, _, _, _ = images.shape
 
         # Generate the rays that are projected onto other views.
-        xy_ray, origins, directions = self.generate_image_rays(
-            images, extrinsics, intrinsics
-        )
+        xy_ray, origins, directions = self.generate_image_rays(images, extrinsics, intrinsics)
 
         # Select the camera extrinsics and intrinsics to project onto. For each context
         # view, this means all other context views in the batch.
@@ -127,9 +105,7 @@ class EpipolarSampler(nn.Module):
             padding_mode="zeros",
             align_corners=False,
         )
-        samples = rearrange(
-            samples, "(b v) c (ov r s) () -> b v ov r s c", b=b, v=v, ov=v - 1, s=s
-        )
+        samples = rearrange(samples, "(b v) c (ov r s) () -> b v ov r s c", b=b, v=v, ov=v - 1, s=s)
         samples = self.transpose(samples)
 
         # Zero out invalid samples.
@@ -173,14 +149,6 @@ class EpipolarSampler(nn.Module):
         self,
         x: Shaped[Tensor, "batch view other_view *rest"],
     ) -> Shaped[Tensor, "batch view other_view *rest"]:
-        """Transpose.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         b, v, ov, *_ = x.shape
         t_b = torch.arange(b, device=x.device)
         t_b = repeat(t_b, "b -> b v ov", v=v, ov=ov)
@@ -192,14 +160,6 @@ class EpipolarSampler(nn.Module):
         self,
         target: Shaped[Tensor, "batch view ..."],
     ) -> Shaped[Tensor, "batch view view-1 ..."]:
-        """Collect.
-
-        Args:
-            target: The target.
-
-        Returns:
-            The return value.
-        """
         b, v, *_ = target.shape
         index_b = torch.arange(b, device=target.device)
         index_b = repeat(index_b, "b -> b v ov", v=v, ov=v - 1)

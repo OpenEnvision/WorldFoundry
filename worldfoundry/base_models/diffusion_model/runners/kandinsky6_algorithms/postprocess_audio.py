@@ -37,10 +37,7 @@ def postprocess_audio(
     audio_scaled = audio_scaled + getattr(audio_vae, "mean_value", 0.0)
 
     segments = [
-        audio_scaled[i]
-        if audio_scaled.ndim == 3
-        else audio_scaled[cu[i].item() : cu[i + 1].item()]
-        for i in range(bs)
+        audio_scaled[i] if audio_scaled.ndim == 3 else audio_scaled[cu[i].item() : cu[i + 1].item()] for i in range(bs)
     ]  # (A, audio_dim) per sample
 
     # Native generation keeps equal-length samples in the batch. The VAE
@@ -55,12 +52,7 @@ def postprocess_audio(
     else:
         # Preserve support for legacy packed bundles with variable lengths.
         waveforms = [
-            waveform_from(segment.transpose(1, 0).unsqueeze(0))
-            .squeeze()
-            .cpu()
-            .float()
-            .numpy()
-            for segment in segments
+            waveform_from(segment.transpose(1, 0).unsqueeze(0)).squeeze().cpu().float().numpy() for segment in segments
         ]
 
     result: list[np.ndarray] = []

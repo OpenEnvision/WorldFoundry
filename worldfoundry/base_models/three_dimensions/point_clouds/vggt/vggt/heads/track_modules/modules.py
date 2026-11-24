@@ -5,54 +5,19 @@
 # LICENSE file in the root directory of this source tree.
 
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> heads -> track_modules -> modules.py functionality."""
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from collections.abc import Callable
 from functools import partial
-from typing import Callable
-import collections
-from torch import Tensor
-from itertools import repeat
+
+import torch.nn as nn
+from timm.layers import to_ntuple as _ntuple
 
 
 # From PyTorch internals
-def _ntuple(n):
-    """Helper function to ntuple.
-
-    Args:
-        n: The n.
-    """
-    def parse(x):
-        """Parse.
-
-        Args:
-            x: The x.
-        """
-        if isinstance(x, collections.abc.Iterable) and not isinstance(x, str):
-            return tuple(x)
-        return tuple(repeat(x, n))
-
-    return parse
-
-
 def exists(val):
-    """Exists.
-
-    Args:
-        val: The val.
-    """
     return val is not None
 
 
 def default(val, d):
-    """Default.
-
-    Args:
-        val: The val.
-        d: The d.
-    """
     return val if exists(val) else d
 
 
@@ -65,16 +30,7 @@ class ResidualBlock(nn.Module):
     """
 
     def __init__(self, in_planes, planes, norm_fn="group", stride=1, kernel_size=3):
-        """Init.
-
-        Args:
-            in_planes: The in planes.
-            planes: The planes.
-            norm_fn: The norm fn.
-            stride: The stride.
-            kernel_size: The kernel size.
-        """
-        super(ResidualBlock, self).__init__()
+        super().__init__()
 
         self.conv1 = nn.Conv2d(
             in_planes, planes, kernel_size=kernel_size, padding=1, stride=stride, padding_mode="zeros"
@@ -87,25 +43,25 @@ class ResidualBlock(nn.Module):
         if norm_fn == "group":
             self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
             self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
-            if not stride == 1:
+            if not stride == 1:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 self.norm3 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
 
         elif norm_fn == "batch":
             self.norm1 = nn.BatchNorm2d(planes)
             self.norm2 = nn.BatchNorm2d(planes)
-            if not stride == 1:
+            if not stride == 1:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 self.norm3 = nn.BatchNorm2d(planes)
 
         elif norm_fn == "instance":
             self.norm1 = nn.InstanceNorm2d(planes)
             self.norm2 = nn.InstanceNorm2d(planes)
-            if not stride == 1:
+            if not stride == 1:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 self.norm3 = nn.InstanceNorm2d(planes)
 
         elif norm_fn == "none":
             self.norm1 = nn.Sequential()
             self.norm2 = nn.Sequential()
-            if not stride == 1:
+            if not stride == 1:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 self.norm3 = nn.Sequential()
         else:
             raise NotImplementedError
@@ -116,11 +72,6 @@ class ResidualBlock(nn.Module):
             self.downsample = nn.Sequential(nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride), self.norm3)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         y = x
         y = self.relu(self.norm1(self.conv1(y)))
         y = self.relu(self.norm2(self.conv2(y)))
@@ -145,18 +96,6 @@ class Mlp(nn.Module):
         drop=0.0,
         use_conv=False,
     ):
-        """Init.
-
-        Args:
-            in_features: The in features.
-            hidden_features: The hidden features.
-            out_features: The out features.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            bias: The bias.
-            drop: The drop.
-            use_conv: The use conv.
-        """
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -171,11 +110,6 @@ class Mlp(nn.Module):
         self.drop2 = nn.Dropout(drop_probs[1])
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         x = self.fc1(x)
         x = self.act(x)
         x = self.drop1(x)
@@ -185,7 +119,6 @@ class Mlp(nn.Module):
 
 
 class AttnBlock(nn.Module):
-    """Attn block implementation."""
     def __init__(
         self,
         hidden_size,
@@ -209,12 +142,6 @@ class AttnBlock(nn.Module):
         self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, drop=0)
 
     def forward(self, x, mask=None):
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-        """
         # Prepare the mask for PyTorch's attention (it expects a different format)
         # attn_mask = mask if mask is not None else None
         # Normalize before attention
@@ -232,7 +159,6 @@ class AttnBlock(nn.Module):
 
 
 class CrossAttnBlock(nn.Module):
-    """Cross attn block implementation."""
     def __init__(self, hidden_size, context_dim, num_heads=1, mlp_ratio=4.0, **block_kwargs):
         """
         Cross attention block
@@ -252,13 +178,6 @@ class CrossAttnBlock(nn.Module):
         self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, drop=0)
 
     def forward(self, x, context, mask=None):
-        """Forward.
-
-        Args:
-            x: The x.
-            context: The context.
-            mask: The mask.
-        """
         # Normalize inputs
         x = self.norm1(x)
         context = self.norm_context(context)

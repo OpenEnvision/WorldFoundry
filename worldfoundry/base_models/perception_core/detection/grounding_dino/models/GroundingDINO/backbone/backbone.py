@@ -16,15 +16,16 @@
 Backbone modules.
 """
 
-from typing import Dict, List
-
 import torch
 import torch.nn.functional as F
 import torchvision
 from torch import nn
 from torchvision.models._utils import IntermediateLayerGetter
 
-from worldfoundry.base_models.perception_core.detection.grounding_dino.util.misc import NestedTensor, clean_state_dict, is_main_process
+from worldfoundry.base_models.perception_core.detection.grounding_dino.util.misc import (
+    NestedTensor,
+    is_main_process,
+)
 
 from .position_encoding import build_position_encoding
 from .swin_transformer import build_swin_transformer
@@ -40,12 +41,7 @@ class FrozenBatchNorm2d(torch.nn.Module):
     """
 
     def __init__(self, n):
-        """Init.
-
-        Args:
-            n: The n.
-        """
-        super(FrozenBatchNorm2d, self).__init__()
+        super().__init__()
         self.register_buffer("weight", torch.ones(n))
         self.register_buffer("bias", torch.zeros(n))
         self.register_buffer("running_mean", torch.zeros(n))
@@ -54,31 +50,15 @@ class FrozenBatchNorm2d(torch.nn.Module):
     def _load_from_state_dict(
         self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
     ):
-        """Helper function to load from state dict.
-
-        Args:
-            state_dict: The state dict.
-            prefix: The prefix.
-            local_metadata: The local metadata.
-            strict: The strict.
-            missing_keys: The missing keys.
-            unexpected_keys: The unexpected keys.
-            error_msgs: The error msgs.
-        """
         num_batches_tracked_key = prefix + "num_batches_tracked"
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
 
-        super(FrozenBatchNorm2d, self)._load_from_state_dict(
+        super()._load_from_state_dict(
             state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         # move reshapes to the beginning
         # to make it fuser-friendly
         w = self.weight.reshape(1, -1, 1, 1)
@@ -92,7 +72,6 @@ class FrozenBatchNorm2d(torch.nn.Module):
 
 
 class BackboneBase(nn.Module):
-    """Backbone base implementation."""
     def __init__(
         self,
         backbone: nn.Module,
@@ -100,29 +79,14 @@ class BackboneBase(nn.Module):
         num_channels: int,
         return_interm_indices: list,
     ):
-        """Init.
-
-        Args:
-            backbone: The backbone.
-            train_backbone: The train backbone.
-            num_channels: The num channels.
-            return_interm_indices: The return interm indices.
-        """
         super().__init__()
         for name, parameter in backbone.named_parameters():
-            if (
-                not train_backbone
-                or "layer2" not in name
-                and "layer3" not in name
-                and "layer4" not in name
-            ):
+            if not train_backbone or ("layer2" not in name and "layer3" not in name and "layer4" not in name):
                 parameter.requires_grad_(False)
 
         return_layers = {}
         for idx, layer_index in enumerate(return_interm_indices):
-            return_layers.update(
-                {"layer{}".format(5 - len(return_interm_indices) + idx): "{}".format(layer_index)}
-            )
+            return_layers.update({f"layer{5 - len(return_interm_indices) + idx}": f"{layer_index}"})
 
         # if len:
         #     if use_stage1_feature:
@@ -135,13 +99,8 @@ class BackboneBase(nn.Module):
         self.num_channels = num_channels
 
     def forward(self, tensor_list: NestedTensor):
-        """Forward.
-
-        Args:
-            tensor_list: The tensor list.
-        """
         xs = self.body(tensor_list.tensors)
-        out: Dict[str, NestedTensor] = {}
+        out: dict[str, NestedTensor] = {}
         for name, x in xs.items():
             m = tensor_list.mask
             assert m is not None
@@ -162,15 +121,6 @@ class Backbone(BackboneBase):
         return_interm_indices: list,
         batch_norm=FrozenBatchNorm2d,
     ):
-        """Init.
-
-        Args:
-            name: The name.
-            train_backbone: The train backbone.
-            dilation: The dilation.
-            return_interm_indices: The return interm indices.
-            batch_norm: The batch norm.
-        """
         if name in ["resnet18", "resnet34", "resnet50", "resnet101"]:
             backbone = getattr(torchvision.models, name)(
                 replace_stride_with_dilation=[False, False, dilation],
@@ -178,7 +128,7 @@ class Backbone(BackboneBase):
                 norm_layer=batch_norm,
             )
         else:
-            raise NotImplementedError("Why you can get here with name {}".format(name))
+            raise NotImplementedError(f"Why you can get here with name {name}")
         # num_channels = 512 if name in ('resnet18', 'resnet34') else 2048
         assert name not in ("resnet18", "resnet34"), "Only resnet50 and resnet101 are available."
         assert return_interm_indices in [[0, 1, 2, 3], [1, 2, 3], [3]]
@@ -188,26 +138,14 @@ class Backbone(BackboneBase):
 
 
 class Joiner(nn.Sequential):
-    """Joiner implementation."""
     def __init__(self, backbone, position_embedding):
-        """Init.
-
-        Args:
-            backbone: The backbone.
-            position_embedding: The position embedding.
-        """
         super().__init__(backbone, position_embedding)
 
     def forward(self, tensor_list: NestedTensor):
-        """Forward.
-
-        Args:
-            tensor_list: The tensor list.
-        """
         xs = self[0](tensor_list)
-        out: List[NestedTensor] = []
+        out: list[NestedTensor] = []
         pos = []
-        for name, x in xs.items():
+        for _name, x in xs.items():
             out.append(x)
             # position encoding
             pos.append(self[1](x).to(x.tensors.dtype))
@@ -232,7 +170,7 @@ def build_backbone(args):
         raise ValueError("Please set lr_backbone > 0")
     return_interm_indices = args.return_interm_indices
     assert return_interm_indices in [[0, 1, 2, 3], [1, 2, 3], [3]]
-    args.backbone_freeze_keywords
+    args.backbone_freeze_keywords  # noqa: B018 - Fails early when the config lacks this attribute, as upstream.
     use_checkpoint = getattr(args, "use_checkpoint", False)
 
     if args.backbone in ["resnet50", "resnet101"]:
@@ -262,16 +200,14 @@ def build_backbone(args):
 
         bb_num_channels = backbone.num_features[4 - len(return_interm_indices) :]
     else:
-        raise NotImplementedError("Unknown backbone {}".format(args.backbone))
+        raise NotImplementedError(f"Unknown backbone {args.backbone}")
 
-    assert len(bb_num_channels) == len(
-        return_interm_indices
-    ), f"len(bb_num_channels) {len(bb_num_channels)} != len(return_interm_indices) {len(return_interm_indices)}"
+    assert len(bb_num_channels) == len(return_interm_indices), (
+        f"len(bb_num_channels) {len(bb_num_channels)} != len(return_interm_indices) {len(return_interm_indices)}"
+    )
 
     model = Joiner(backbone, position_embedding)
     model.num_channels = bb_num_channels
-    assert isinstance(
-        bb_num_channels, List
-    ), "bb_num_channels is expected to be a List but {}".format(type(bb_num_channels))
+    assert isinstance(bb_num_channels, list), f"bb_num_channels is expected to be a List but {type(bb_num_channels)}"
     # import ipdb; ipdb.set_trace()
     return model

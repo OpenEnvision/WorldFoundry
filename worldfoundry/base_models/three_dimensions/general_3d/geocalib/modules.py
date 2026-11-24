@@ -1,4 +1,4 @@
-"""Implementation of MSCAN from SegNeXt: Rethinking Convolutional Attention Design for Semantic 
+"""Implementation of MSCAN from SegNeXt: Rethinking Convolutional Attention Design for Semantic
 Segmentation (NeurIPS 2022) adapted from
 
 https://github.com/Visual-Attention-Network/SegNeXt/blob/main/mmseg/models/backbones/mscan.py
@@ -9,14 +9,11 @@ Light Hamburger Decoder adapted from:
 https://github.com/Visual-Attention-Network/SegNeXt/blob/main/mmseg/models/decode_heads/ham_head.py
 """
 
-from typing import Dict, Tuple
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.utils import _pair as to_2tuple
 
-# flake8: noqa: E266
 # mypy: ignore-errors
 
 
@@ -37,20 +34,16 @@ class ConvModule(nn.Module):
         Args:
             in_channels (int): Input channels.
             out_channels (int): Output channels.
-            kernel_size (int): Kernel size.
             padding (int, optional): Padding. Defaults to 0.
             use_norm (bool, optional): Whether to use normalization. Defaults to False.
             bias (bool, optional): Whether to use bias. Defaults to True.
         """
         super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels, out_channels, kernel_size, padding=padding, bias=bias
-        )
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, padding=padding, bias=bias)
         self.bn = nn.BatchNorm2d(out_channels) if use_norm else nn.Identity()
         self.activate = nn.ReLU(inplace=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass."""
         x = self.conv(x)
         x = self.bn(x)
         return self.activate(x)
@@ -67,17 +60,12 @@ class ResidualConvUnit(nn.Module):
         """
         super().__init__()
 
-        self.conv1 = nn.Conv2d(
-            features, features, kernel_size=3, stride=1, padding=1, bias=True
-        )
-        self.conv2 = nn.Conv2d(
-            features, features, kernel_size=3, stride=1, padding=1, bias=True
-        )
+        self.conv1 = nn.Conv2d(features, features, kernel_size=3, stride=1, padding=1, bias=True)
+        self.conv2 = nn.Conv2d(features, features, kernel_size=3, stride=1, padding=1, bias=True)
 
         self.relu = torch.nn.ReLU(inplace=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass."""
         out = self.relu(x)
         out = self.conv1(out)
         out = self.relu(out)
@@ -86,8 +74,6 @@ class ResidualConvUnit(nn.Module):
 
 
 class FeatureFusionBlock(nn.Module):
-    """Feature fusion block."""
-
     def __init__(self, features: int, unit2only=False, upsample=True):
         """Feature fusion block.
 
@@ -104,7 +90,6 @@ class FeatureFusionBlock(nn.Module):
         self.resConfUnit2 = ResidualConvUnit(features)
 
     def forward(self, *xs: torch.Tensor) -> torch.Tensor:
-        """Forward pass."""
         output = xs[0]
 
         if len(xs) == 2:
@@ -113,9 +98,7 @@ class FeatureFusionBlock(nn.Module):
         output = self.resConfUnit2(output)
 
         if self.upsample:
-            output = F.interpolate(
-                output, scale_factor=2, mode="bilinear", align_corners=False
-            )
+            output = F.interpolate(output, scale_factor=2, mode="bilinear", align_corners=False)
 
         return output
 
@@ -136,27 +119,11 @@ class NMF2D(nn.Module):
         self.eval_steps = 7
         self.inv_t = 1
 
-    def _build_bases(
-        self, B: int, S: int, D: int, R: int, device: str = "cpu"
-    ) -> torch.Tensor:
-        """Helper function to build bases.
-
-        Args:
-            B: The b.
-            S: The s.
-            D: The d.
-            R: The r.
-            device: The device.
-
-        Returns:
-            The return value.
-        """
+    def _build_bases(self, B: int, S: int, D: int, R: int, device: str = "cpu") -> torch.Tensor:
         bases = torch.rand((B * S, D, R)).to(device)
         return F.normalize(bases, dim=1)
 
-    def local_step(
-        self, x: torch.Tensor, bases: torch.Tensor, coef: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def local_step(self, x: torch.Tensor, bases: torch.Tensor, coef: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Update bases and coefficient."""
         # (B * S, D, N)^T @ (B * S, D, R) -> (B * S, N, R)
         numerator = torch.bmm(x.transpose(1, 2), bases)
@@ -172,9 +139,7 @@ class NMF2D(nn.Module):
         bases = bases * numerator / (denominator + 1e-6)
         return bases, coef
 
-    def compute_coef(
-        self, x: torch.Tensor, bases: torch.Tensor, coef: torch.Tensor
-    ) -> torch.Tensor:
+    def compute_coef(self, x: torch.Tensor, bases: torch.Tensor, coef: torch.Tensor) -> torch.Tensor:
         """Compute coefficient."""
         # (B * S, D, N)^T @ (B * S, D, R) -> (B * S, N, R)
         numerator = torch.bmm(x.transpose(1, 2), bases)
@@ -183,10 +148,7 @@ class NMF2D(nn.Module):
         # multiplication update
         return coef * numerator / (denominator + 1e-6)
 
-    def local_inference(
-        self, x: torch.Tensor, bases: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Local inference."""
+    def local_inference(self, x: torch.Tensor, bases: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # (B * S, D, N)^T @ (B * S, D, R) -> (B * S, N, R)
         coef = torch.bmm(x.transpose(1, 2), bases)
         coef = F.softmax(self.inv_t * coef, dim=-1)
@@ -198,7 +160,6 @@ class NMF2D(nn.Module):
         return bases, coef
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass."""
         B, C, H, W = x.shape
 
         # (B, C, H, W) -> (B * S, D, N)
@@ -237,7 +198,6 @@ class Hamburger(nn.Module):
         self.ham_out = ConvModule(ham_channels, ham_channels, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass."""
         enjoy = self.ham_in(x)
         enjoy = F.relu(enjoy, inplace=False)
         enjoy = self.ham(enjoy)
@@ -278,15 +238,10 @@ class LightHamHead(nn.Module):
             nn.Conv2d(in_channels=self.out_channels, out_channels=1, kernel_size=1),
         )
 
-        self.out_conv = ConvModule(
-            self.out_channels, self.out_channels, 3, padding=1, bias=False
-        )
+        self.out_conv = ConvModule(self.out_channels, self.out_channels, 3, padding=1, bias=False)
         self.ll_fusion = FeatureFusionBlock(self.out_channels, upsample=False)
 
-    def forward(
-        self, features: Dict[str, torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Forward pass."""
+    def forward(self, features: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         inputs = [features["hl"][i] for i in self.in_index]
 
         inputs = [
@@ -307,13 +262,9 @@ class LightHamHead(nn.Module):
         feats = self.align(x)
 
         assert "ll" in features, "Low-level features are required for this model"
-        feats = F.interpolate(
-            feats, scale_factor=2, mode="bilinear", align_corners=False
-        )
+        feats = F.interpolate(feats, scale_factor=2, mode="bilinear", align_corners=False)
         feats = self.out_conv(feats)
-        feats = F.interpolate(
-            feats, scale_factor=2, mode="bilinear", align_corners=False
-        )
+        feats = F.interpolate(feats, scale_factor=2, mode="bilinear", align_corners=False)
         feats = self.ll_fusion(feats, features["ll"].clone())
 
         uncertainty = self.linear_pred_uncertainty(feats).squeeze(1)
@@ -339,7 +290,6 @@ class DWConv(nn.Module):
         self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass."""
         return self.dwconv(x)
 
 
@@ -365,7 +315,6 @@ class Mlp(nn.Module):
         self.drop = nn.Dropout(drop)
 
     def forward(self, x):
-        """Forward pass."""
         x = self.fc1(x)
 
         x = self.dwconv(x)
@@ -410,7 +359,6 @@ class StemConv(nn.Module):
         )
 
     def forward(self, x):
-        """Forward pass."""
         x = self.proj(x)
         _, _, H, W = x.size()
         x = x.flatten(2).transpose(1, 2)
@@ -418,8 +366,6 @@ class StemConv(nn.Module):
 
 
 class AttentionModule(nn.Module):
-    """Attention module."""
-
     def __init__(self, dim: int):
         """Attention module.
 
@@ -439,7 +385,6 @@ class AttentionModule(nn.Module):
         self.conv3 = nn.Conv2d(dim, dim, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass."""
         u = x.clone()
         attn = self.conv0(x)
 
@@ -474,7 +419,6 @@ class SpatialAttention(nn.Module):
         self.proj_2 = nn.Conv2d(dim, dim, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass."""
         shorcut = x.clone()
         x = self.proj_1(x)
         x = self.activation(x)
@@ -515,23 +459,14 @@ class Block(nn.Module):
             drop=drop,
         )
         layer_scale_init_value = 1e-2
-        self.layer_scale_1 = nn.Parameter(
-            layer_scale_init_value * torch.ones((dim)), requires_grad=True
-        )
-        self.layer_scale_2 = nn.Parameter(
-            layer_scale_init_value * torch.ones((dim)), requires_grad=True
-        )
+        self.layer_scale_1 = nn.Parameter(layer_scale_init_value * torch.ones(dim), requires_grad=True)
+        self.layer_scale_2 = nn.Parameter(layer_scale_init_value * torch.ones(dim), requires_grad=True)
 
     def forward(self, x: torch.Tensor, H: int, W: int) -> torch.Tensor:
-        """Forward pass."""
         B, N, C = x.shape
         x = x.permute(0, 2, 1).view(B, C, H, W)
-        x = x + self.drop_path(
-            self.layer_scale_1[..., None, None] * self.attn(self.norm1(x))
-        )
-        x = x + self.drop_path(
-            self.layer_scale_2[..., None, None] * self.mlp(self.norm2(x))
-        )
+        x = x + self.drop_path(self.layer_scale_1[..., None, None] * self.attn(self.norm1(x)))
+        x = x + self.drop_path(self.layer_scale_2[..., None, None] * self.mlp(self.norm2(x)))
         return x.view(B, C, N).permute(0, 2, 1)
 
 
@@ -565,8 +500,7 @@ class OverlapPatchEmbed(nn.Module):
         )
         self.norm = nn.BatchNorm2d(embed_dim)
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, int, int]:
-        """Forward pass."""
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, int, int]:
         x = self.proj(x)
         _, _, H, W = x.shape
         x = self.norm(x)
@@ -616,7 +550,6 @@ class MSCAN(nn.Module):
             setattr(self, f"norm{i + 1}", norm)
 
     def forward(self, data):
-        """Forward pass."""
         # rgb -> bgr and from [0, 1] to [0, 255]
         x = data["image"][:, [2, 1, 0], :, :] * 255.0
         B = x.shape[0]

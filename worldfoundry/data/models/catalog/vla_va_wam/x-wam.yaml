@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 aliases:
 - x_wam
 - xwam
@@ -25,6 +25,7 @@ official_sources:
   github:
     head_sha: 72cfb86b33fc5060963ef63412f16439fcfa472f
     url: https://github.com/sharinka0715/X-WAM
+    revision: 72cfb86b33fc5060963ef63412f16439fcfa472f
   huggingface:
   - repo_id: sharinka0715/X-WAM-checkpoints
     revision: bb6fd1643cfa8bdc751612a7ace0bd8062a8917a
@@ -91,12 +92,12 @@ docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: 'X-WAM is a GPU-validated world-action model: one Wan 2.2 joint flow process predicts future RGB/depth, proprioception, and robot actions together. RoboCasa-SFT passed checkpoint-backed action and future-RGB inference; RoboTwin-SFT additionally matched the pinned official runner on one paired in-domain episode (Apache-2.0).'
-  overview_zh: X-WAM 是 GPU 已验证的世界-动作模型：单个 Wan 2.2 联合 flow 过程同时预测未来 RGB/深度、本体感知与机器人动作。RoboCasa-SFT 通过权重实载的动作及未来 RGB 推理；RoboTwin-SFT 在一条配对的域内样本上还与固定版本官方 Runner 接近一致（Apache-2.0）。
-  architecture: 'Built on Wan2.2-TI2V-5B: a joint flow model over visual futures and action streams. The official deployed policy uses asynchronous early stopping after 10 action steps and returns a 32-step action chunk; optional full world decoding continues to 50 steps. Both Hub repos are revision-pinned.'
-  architecture_zh: 构建于 Wan2.2-TI2V-5B：对视觉未来与动作流的联合 flow 模型。官方部署策略在 10 个动作步后异步提前停止并返回 32 步动作块；可选的完整世界解码持续到 50 步。两个 Hub 仓库均锁定 revision。
-  usage_notes: Stage the X-WAM checkpoint states plus the Wan2.2-TI2V-5B base. The runtime is self-contained in-tree and never imports an external X-WAM checkout; training, simulators, ZeroMQ services, Lightning, and DeepSpeed orchestration are excluded.
-  usage_notes_zh: 需就位 X-WAM checkpoint 状态与 Wan2.2-TI2V-5B 基座。运行时树内自足，绝不导入外部 X-WAM checkout；训练、模拟器、ZeroMQ 服务、Lightning 与 DeepSpeed 编排均被排除。
+  overview: 'X-WAM is a world-action model: one Wan 2.2 joint flow process predicts future RGB/depth, proprioception, and robot actions together (Apache-2.0). Validated on GPU with the released checkpoints: RoboCasa-SFT produces actions and future RGB frames, and RoboTwin-SFT closely matches the pinned official runner on a paired in-domain episode.'
+  overview_zh: X-WAM 是世界-动作模型：单个 Wan 2.2 联合 flow 过程同时预测未来 RGB/深度、本体感知与机器人动作（Apache-2.0）。已使用发布权重在 GPU 上验证：RoboCasa-SFT 可输出动作与未来 RGB 帧，RoboTwin-SFT 在一条配对的域内样本上与固定版本官方 Runner 接近一致。
+  architecture: 'Built on Wan2.2-TI2V-5B: a joint flow model over visual futures and action streams. The official deployed policy uses asynchronous early stopping after 10 action steps and returns a 32-step action chunk; optional full world decoding continues to 50 steps.'
+  architecture_zh: 构建于 Wan2.2-TI2V-5B：对视觉未来与动作流的联合 flow 模型。官方部署策略在 10 个动作步后异步提前停止并返回 32 步动作块；可选的完整世界解码持续到 50 步。
+  usage_notes: Stage the X-WAM checkpoint states plus the Wan2.2-TI2V-5B base. The runtime does not need an external X-WAM checkout; training, simulators, ZeroMQ services, Lightning, and DeepSpeed orchestration are not included.
+  usage_notes_zh: 需准备 X-WAM checkpoint 状态与 Wan2.2-TI2V-5B 基座。运行无需外部 X-WAM 源码；不包含训练、模拟器、ZeroMQ 服务、Lightning 与 DeepSpeed 编排。
   limitations:
   - Optional depth decoding remains unvalidated.
   - The 38.9 GB checkpoint requires substantial local storage.
@@ -105,11 +106,11 @@ docs:
   - 38.9 GB checkpoint 需要可观的本地存储。
   recommended_benchmarks:
   - id: robocasa
-    reason: The RoboCasa-SFT checkpoint passed GPU inference; no closed-loop benchmark was run.
-    reason_zh: RoboCasa-SFT 权重已通过 GPU 推理，尚未运行闭环评测。
+    reason: The RoboCasa-SFT checkpoint targets RoboCasa; closed-loop scores have not been measured.
+    reason_zh: RoboCasa-SFT 权重面向 RoboCasa；尚未测量闭环分数。
   - id: robotwin
-    reason: The RoboTwin-SFT checkpoint matched the pinned official runner on one paired episode; no closed-loop benchmark was run.
-    reason_zh: RoboTwin-SFT 权重在一条配对样本上与固定版本官方 Runner 接近一致，尚未运行闭环评测。
+    reason: The RoboTwin-SFT checkpoint targets RoboTwin; closed-loop scores have not been measured.
+    reason_zh: RoboTwin-SFT 权重面向 RoboTwin；尚未测量闭环分数。
   - id: ewmbench
     reason: Joint world-action prediction quality.
     reason_zh: 联合世界-动作预测质量。

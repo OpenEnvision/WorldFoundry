@@ -1,4 +1,3 @@
-
 import jax
 import jax.numpy as jnp
 
@@ -103,10 +102,7 @@ def reshape_for_broadcast(
                 x.shape[-2],
                 x.shape[-1],
             ), f"freqs_cis shape {freqs_cis[0].shape} does not match x shape {x.shape}"
-            shape = [
-                d if i == ndim - 2 or i == ndim - 1 else 1
-                for i, d in enumerate(x.shape)
-            ]
+            shape = [d if i == ndim - 2 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
         else:
             shape = [1, freqs_cis[0].shape[0], 1, freqs_cis[0].shape[1]]
         return freqs_cis[0].reshape(*shape), freqs_cis[1].reshape(*shape)
@@ -117,10 +113,7 @@ def reshape_for_broadcast(
                 x.shape[-2],
                 x.shape[-1],
             ), f"freqs_cis shape {freqs_cis.shape} does not match x shape {x.shape}"
-            shape = [
-                d if i == ndim - 2 or i == ndim - 1 else 1
-                for i, d in enumerate(x.shape)
-            ]
+            shape = [d if i == ndim - 2 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
         else:
             assert freqs_cis.shape == (
                 x.shape[1],
@@ -169,13 +162,11 @@ def apply_rotary_emb(
     xk_float = xk.astype(jnp.float32)
     xq_out = (
         xq_float * jax.lax.dynamic_slice_in_dim(cos, start_offset, xq.shape[1], axis=1)
-        + rotate_half(xq_float)
-        * jax.lax.dynamic_slice_in_dim(sin, start_offset, xq.shape[1], axis=1)
+        + rotate_half(xq_float) * jax.lax.dynamic_slice_in_dim(sin, start_offset, xq.shape[1], axis=1)
     ).astype(xq.dtype)
     xk_out = (
         xk_float * jax.lax.dynamic_slice_in_dim(cos, start_offset, xk.shape[1], axis=1)
-        + rotate_half(xk_float)
-        * jax.lax.dynamic_slice_in_dim(sin, start_offset, xk.shape[1], axis=1)
+        + rotate_half(xk_float) * jax.lax.dynamic_slice_in_dim(sin, start_offset, xk.shape[1], axis=1)
     ).astype(xk.dtype)
 
     return xq_out, xk_out
@@ -209,25 +200,23 @@ def get_nd_rotary_pos_embed(
         pos_embed (torch.Tensor): [HW, D/2]
     """
 
-    grid = get_meshgrid_nd(
-        start, *args, dim=len(rope_dim_list)
-    )  # [3, W, H, D] / [2, W, H]
+    grid = get_meshgrid_nd(start, *args, dim=len(rope_dim_list))  # [3, W, H, D] / [2, W, H]
 
-    if isinstance(theta_rescale_factor, int) or isinstance(theta_rescale_factor, float):
+    if isinstance(theta_rescale_factor, (int, float)):
         theta_rescale_factor = [theta_rescale_factor] * len(rope_dim_list)
     elif isinstance(theta_rescale_factor, list) and len(theta_rescale_factor) == 1:
         theta_rescale_factor = [theta_rescale_factor[0]] * len(rope_dim_list)
-    assert len(theta_rescale_factor) == len(
-        rope_dim_list
-    ), "len(theta_rescale_factor) should equal to len(rope_dim_list)"
+    assert len(theta_rescale_factor) == len(rope_dim_list), (
+        "len(theta_rescale_factor) should equal to len(rope_dim_list)"
+    )
 
-    if isinstance(interpolation_factor, int) or isinstance(interpolation_factor, float):
+    if isinstance(interpolation_factor, (int, float)):
         interpolation_factor = [interpolation_factor] * len(rope_dim_list)
     elif isinstance(interpolation_factor, list) and len(interpolation_factor) == 1:
         interpolation_factor = [interpolation_factor[0]] * len(rope_dim_list)
-    assert len(interpolation_factor) == len(
-        rope_dim_list
-    ), "len(interpolation_factor) should equal to len(rope_dim_list)"
+    assert len(interpolation_factor) == len(rope_dim_list), (
+        "len(interpolation_factor) should equal to len(rope_dim_list)"
+    )
 
     # use 1/ndim of dimensions to encode grid_axis
     embs = []
@@ -287,9 +276,7 @@ def get_1d_rotary_pos_embed(
     if theta_rescale_factor != 1.0:
         theta *= theta_rescale_factor ** (dim / (dim - 2))
 
-    freqs = 1.0 / (
-        theta ** (jnp.arange(0, dim, 2, dtype=jnp.float32)[: (dim // 2)] / dim)
-    )  # [D/2]
+    freqs = 1.0 / (theta ** (jnp.arange(0, dim, 2, dtype=jnp.float32)[: (dim // 2)] / dim))  # [D/2]
     # assert interpolation_factor == 1.0, f"interpolation_factor: {interpolation_factor}"
     freqs = jnp.outer(pos * interpolation_factor, freqs)  # [S, D/2]
     if use_real:

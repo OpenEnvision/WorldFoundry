@@ -1,19 +1,19 @@
 ---
 title: VBench++
-description: "VBench extensions: I2V, long-video, trustworthiness. WorldFoundry vendors the runtime; it does not invent a board. Distinct from VBench and VBench-2.0."
+description: "VBench extensions: I2V, long-video, trustworthiness. WorldFoundry bundles the runtime. Distinct from VBench and VBench-2.0."
 ---
 
 VBench++ (S-Lab, NTU and Shanghai AI Laboratory) extends [VBench](/docs/evaluation/benchmark-hub/vbench) with three tracks. It is **not** [VBench-2.0](/docs/evaluation/benchmark-hub/vbench-2.0). Same upstream repo: [Vchitect/VBench](https://github.com/Vchitect/VBench) (Apache-2.0).
 
 - **Image-to-video** — I2V subject / background consistency and camera motion on the official crop-ready image suite.
-- **Long-video** — temporal-window scoring; the catalog-bounded command uses `temporal_flickering` / `long_custom_input`.
+- **Long-video** — temporal-window scoring; the command below runs `temporal_flickering` in `long_custom_input` mode.
 - **Trustworthiness** — fairness, bias, safety probes (some need extra face / attribute models).
 
 `--variant` selects `i2v`, `long`, or `trustworthiness`. Per-variant averages plus `vbench_plus_plus_average` (WorldFoundry mean over available dims).
 
 Paper: [VBench++](https://arxiv.org/abs/2411.13503). Project: [vchitect.github.io/VBench-project](https://vchitect.github.io/VBench-project/).
 
-WorldFoundry **vendors the VBench++ runtime**. A bounded long-video component is verified; the complete suite is not.
+WorldFoundry **bundles the VBench++ runtime**. The long-video `temporal_flickering` dimension (`long_custom_input` mode) is validated; the full suite has not been validated.
 
 <BenchmarkPageSections id="vbench-plus-plus" locale="en" />
 
@@ -21,7 +21,7 @@ WorldFoundry **vendors the VBench++ runtime**. A bounded long-video component is
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py \
   --benchmark-id vbench-plus-plus \
   --variant long \
   --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
@@ -34,7 +34,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 I2V uses official image-suite naming. Optional checkout override: `WORLDFOUNDRY_VBENCH_PLUS_PLUS_ROOT`. Shared stack: `vbench_perception_metric_stack`. Prompt / image suites live in the public VBench repo.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/vbench-plus-plus.yaml`, `worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime`.
+Manifest: `worldfoundry/data/benchmarks/tasks/external/vbench-plus-plus.yaml`.
 
 Outputs include `scorecard.json` (primary `vbench_plus_plus_average`) and `dimension_scores.json`.
 

@@ -1,13 +1,13 @@
 import { withBasePath } from '@/lib/site-path';
 
-import { resolveBenchmarkOrg } from '@/lib/model-org-identity';
+import { type IdentityMarkSize, orgMarkSrc, resolveBenchmarkOrg } from '@/lib/model-org-identity';
 
 type BenchmarkIdentityMarkProps = {
   id: string;
   name: string;
   category: string;
   logoKey?: string;
-  size?: 'small' | 'medium' | 'large';
+  size?: IdentityMarkSize;
 };
 
 function initials(name: string) {
@@ -39,7 +39,8 @@ export function BenchmarkIdentityMark({
   size = 'medium',
 }: BenchmarkIdentityMarkProps) {
   const org = resolveBenchmarkOrg(id, logoKey);
-  const hasLogo = Boolean(org?.src);
+  const src = orgMarkSrc(org, size);
+  const hasLogo = Boolean(src);
 
   return (
     <span
@@ -49,10 +50,10 @@ export function BenchmarkIdentityMark({
       title={org?.name ?? name}
       aria-hidden="true"
     >
-      {org?.src ? (
+      {src ? (
         <img
           className="wf-model-mark-image"
-          src={withBasePath(org.src)}
+          src={withBasePath(src)}
           alt=""
           width={200}
           height={200}

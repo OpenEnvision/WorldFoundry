@@ -14,9 +14,9 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional
+from typing import Any
 
-from src.models.eval_inputs.datafield import DataField
+from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.eval_inputs.datafield import DataField
 
 
 class BaseDataset(ABC):
@@ -26,15 +26,14 @@ class BaseDataset(ABC):
     subclassed / included in another dataset class.
     """
 
-    def __init__(self):
+    def __init__(self):  # noqa: B027 - Optional hook with a no-op default.
         pass
 
     @abstractmethod
-    def available_data_fields(self) -> List[DataField]:
+    def available_data_fields(self) -> list[DataField]:
         """
         Return a list of available data fields in the dataset.
         """
-        pass
 
     @abstractmethod
     def num_videos(self) -> int:
@@ -42,7 +41,6 @@ class BaseDataset(ABC):
         Returns:
             Number of videos in the dataset.
         """
-        pass
 
     @abstractmethod
     def num_views(self, video_idx: int) -> int:
@@ -53,7 +51,6 @@ class BaseDataset(ABC):
         Returns:
             Number of views in the video.
         """
-        pass
 
     @abstractmethod
     def num_frames(self, video_idx: int, view_idx: int = 0) -> int:
@@ -65,7 +62,6 @@ class BaseDataset(ABC):
         Returns:
             Number of frames in the given view.
         """
-        pass
 
     def read_video_metadata(self, video_idx: int) -> dict[str, Any]:
         """
@@ -95,9 +91,9 @@ class BaseDataset(ABC):
     def read(
         self,
         video_idx: int,
-        frame_idxs: Optional[List[int]] = None,
-        view_idxs: Optional[List[int]] = None,
-        data_fields: Optional[List[DataField]] = None,
+        frame_idxs: list[int] | None = None,
+        view_idxs: list[int] | None = None,
+        data_fields: list[DataField] | None = None,
     ) -> dict[DataField, Any]:
         """
         Read data from the dataset.
@@ -122,10 +118,7 @@ class BaseDataset(ABC):
 
         if frame_idxs is None:
             # Frame not provided, default read all frames.
-            if view_idxs is None:
-                view_iterator = range(self.num_views(video_idx))
-            else:
-                view_iterator = view_idxs
+            view_iterator = range(self.num_views(video_idx)) if view_idxs is None else view_idxs
 
             new_frame_idxs, new_view_idxs = [], []
             for view_idx in view_iterator:
@@ -140,9 +133,7 @@ class BaseDataset(ABC):
 
         else:
             # Both frame_idxs and view_idxs provided, do sanity check.
-            assert len(frame_idxs) == len(view_idxs), (
-                "Frame and view indices must match."
-            )
+            assert len(frame_idxs) == len(view_idxs), "Frame and view indices must match."
 
         return self._read_data(
             video_idx=video_idx,
@@ -155,8 +146,8 @@ class BaseDataset(ABC):
     def _read_data(
         self,
         video_idx: int,
-        frame_idxs: List[int],
-        view_idxs: List[int],
-        data_fields: List[DataField],
+        frame_idxs: list[int],
+        view_idxs: list[int],
+        data_fields: list[DataField],
     ) -> dict[DataField, Any]:
         pass

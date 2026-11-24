@@ -28,14 +28,11 @@ Sana DC-AE family only — not Wan residual 3-D blocks.
 """
 
 import math
-from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..nn.act import build_act
-from ..nn.norm import build_norm
 from worldfoundry.core.nn import (
     ceil_to_divisible,
     chunked_interpolate,
@@ -46,6 +43,9 @@ from worldfoundry.core.nn import (
     val2list,
     val2tuple,
 )
+
+from ..nn.act import build_act
+from ..nn.norm import build_norm
 
 
 def resize(
@@ -69,24 +69,25 @@ def resize(
         return F.interpolate(value, size=size, scale_factor=scale_factor, mode=mode)
     raise NotImplementedError(f"resize(mode={mode}) not implemented")
 
+
 __all__ = [
-    "ConvLayer",
-    "UpSampleLayer",
-    "ConvPixelUnshuffleDownSampleLayer",
-    "PixelUnshuffleChannelAveragingDownSampleLayer",
-    "ConvPixelShuffleUpSampleLayer",
     "ChannelDuplicatingPixelUnshuffleUpSampleLayer",
-    "LinearLayer",
-    "IdentityLayer",
-    "DSConv",
-    "MBConv",
-    "FusedMBConv",
-    "ResBlock",
-    "LiteMLA",
-    "EfficientViTBlock",
-    "ResidualBlock",
+    "ConvLayer",
+    "ConvPixelShuffleUpSampleLayer",
+    "ConvPixelUnshuffleDownSampleLayer",
     "DAGBlock",
+    "DSConv",
+    "EfficientViTBlock",
+    "FusedMBConv",
+    "IdentityLayer",
+    "LinearLayer",
+    "LiteMLA",
+    "MBConv",
     "OpSequential",
+    "PixelUnshuffleChannelAveragingDownSampleLayer",
+    "ResBlock",
+    "ResidualBlock",
+    "UpSampleLayer",
 ]
 
 
@@ -96,7 +97,6 @@ __all__ = [
 
 
 class ConvLayer(nn.Module):
-    """Conv layer implementation."""
     def __init__(
         self,
         in_channels: int,
@@ -112,22 +112,6 @@ class ConvLayer(nn.Module):
         is_video=False,
         pad_mode_3d="constant",
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            stride: The stride.
-            dilation: The dilation.
-            groups: The groups.
-            use_bias: The use bias.
-            dropout: The dropout.
-            norm: The norm.
-            act_func: The act func.
-            is_video: The is video.
-            pad_mode_3d: The pad mode 3d.
-        """
         super().__init__()
         self.is_video = is_video
 
@@ -175,14 +159,6 @@ class ConvLayer(nn.Module):
         self.pad = F.pad
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         if self.dropout is not None:
             x = self.dropout(x)
         if self.is_video:  # custom padding for 3d conv
@@ -196,22 +172,13 @@ class ConvLayer(nn.Module):
 
 
 class UpSampleLayer(nn.Module):
-    """Up sample layer implementation."""
     def __init__(
         self,
         mode="bicubic",
-        size: Optional[int | tuple[int, int] | list[int]] = None,
+        size: int | tuple[int, int] | list[int] | None = None,
         factor=2,
         align_corners=False,
     ):
-        """Init.
-
-        Args:
-            mode: The mode.
-            size: The size.
-            factor: The factor.
-            align_corners: The align corners.
-        """
         super().__init__()
         self.mode = mode
         self.size = val2list(size, 2) if size is not None else None
@@ -220,14 +187,6 @@ class UpSampleLayer(nn.Module):
 
     @torch.autocast(device_type="cuda", enabled=False)
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         if (self.size is not None and tuple(x.shape[-2:]) == self.size) or self.factor == 1:
             return x
         if x.dtype in [torch.float16, torch.bfloat16]:
@@ -236,7 +195,6 @@ class UpSampleLayer(nn.Module):
 
 
 class ConvPixelUnshuffleDownSampleLayer(nn.Module):
-    """Conv pixel unshuffle down sample layer implementation."""
     def __init__(
         self,
         in_channels: int,
@@ -244,14 +202,6 @@ class ConvPixelUnshuffleDownSampleLayer(nn.Module):
         kernel_size: int,
         factor: int,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            factor: The factor.
-        """
         super().__init__()
         self.factor = factor
         out_ratio = factor**2
@@ -266,21 +216,12 @@ class ConvPixelUnshuffleDownSampleLayer(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         x = self.conv(x)
         x = F.pixel_unshuffle(x, self.factor)
         return x
 
 
 class PixelUnshuffleChannelAveragingDownSampleLayer(nn.Module):
-    """Pixel unshuffle channel averaging down sample layer implementation."""
     def __init__(
         self,
         in_channels: int,
@@ -288,14 +229,6 @@ class PixelUnshuffleChannelAveragingDownSampleLayer(nn.Module):
         factor: int,
         temporal_downsample: bool = False,  # temporal downsample for 5d input tensor
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            factor: The factor.
-            temporal_downsample: The temporal downsample.
-        """
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -305,14 +238,6 @@ class PixelUnshuffleChannelAveragingDownSampleLayer(nn.Module):
         self.group_size = in_channels * factor**2 // out_channels
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         if x.dim() == 5:  # [B, C, T, H, W]
             _, _, T, _, _ = x.shape
             # todo: remove T != 1?
@@ -338,7 +263,6 @@ class PixelUnshuffleChannelAveragingDownSampleLayer(nn.Module):
 
 
 class ConvPixelShuffleUpSampleLayer(nn.Module):
-    """Conv pixel shuffle up sample layer implementation."""
     def __init__(
         self,
         in_channels: int,
@@ -346,14 +270,6 @@ class ConvPixelShuffleUpSampleLayer(nn.Module):
         kernel_size: int,
         factor: int,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            factor: The factor.
-        """
         super().__init__()
         self.factor = factor
         out_ratio = factor**2
@@ -367,21 +283,12 @@ class ConvPixelShuffleUpSampleLayer(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         x = self.conv(x)
         x = F.pixel_shuffle(x, self.factor)
         return x
 
 
 class InterpolateConvUpSampleLayer(nn.Module):
-    """Interpolate conv up sample layer implementation."""
     def __init__(
         self,
         in_channels: int,
@@ -392,20 +299,6 @@ class InterpolateConvUpSampleLayer(nn.Module):
         is_video: bool = False,
         temporal_upsample: bool = False,
     ) -> None:
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            factor: The factor.
-            mode: The mode.
-            is_video: The is video.
-            temporal_upsample: The temporal upsample.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.factor = factor
         self.mode = mode
@@ -421,14 +314,6 @@ class InterpolateConvUpSampleLayer(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         if x.dim() == 4:
             x = torch.nn.functional.interpolate(x, scale_factor=self.factor, mode=self.mode)
         elif x.dim() == 5:
@@ -442,7 +327,6 @@ class InterpolateConvUpSampleLayer(nn.Module):
 
 
 class ChannelDuplicatingPixelUnshuffleUpSampleLayer(nn.Module):
-    """Channel duplicating pixel unshuffle up sample layer implementation."""
     def __init__(
         self,
         in_channels: int,
@@ -450,14 +334,6 @@ class ChannelDuplicatingPixelUnshuffleUpSampleLayer(nn.Module):
         factor: int,
         temporal_upsample: bool = False,  # upsample on the temporal dimension as well
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            factor: The factor.
-            temporal_upsample: The temporal upsample.
-        """
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -467,17 +343,9 @@ class ChannelDuplicatingPixelUnshuffleUpSampleLayer(nn.Module):
         self.repeats = out_channels * factor**2 // in_channels
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         if x.dim() == 5:
             B, C, T, H, W = x.shape
-            assert C == self.in_channels
+            assert self.in_channels == C
             # todo: remove T != 1
             if self.temporal_upsample and T != 1:  # video input
                 repeats = self.out_channels * self.factor**3 // self.in_channels
@@ -496,7 +364,6 @@ class ChannelDuplicatingPixelUnshuffleUpSampleLayer(nn.Module):
 
 
 class LinearLayer(nn.Module):
-    """Linear layer implementation."""
     def __init__(
         self,
         in_features: int,
@@ -506,16 +373,6 @@ class LinearLayer(nn.Module):
         norm=None,
         act_func=None,
     ):
-        """Init.
-
-        Args:
-            in_features: The in features.
-            out_features: The out features.
-            use_bias: The use bias.
-            dropout: The dropout.
-            norm: The norm.
-            act_func: The act func.
-        """
         super().__init__()
 
         self.dropout = nn.Dropout(dropout, inplace=False) if dropout > 0 else None
@@ -524,27 +381,11 @@ class LinearLayer(nn.Module):
         self.act = build_act(act_func)
 
     def _try_squeeze(self, x: torch.Tensor) -> torch.Tensor:
-        """Helper function to try squeeze.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         if x.dim() > 2:
             x = torch.flatten(x, start_dim=1)
         return x
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         x = self._try_squeeze(x)
         if self.dropout:
             x = self.dropout(x)
@@ -557,16 +398,7 @@ class LinearLayer(nn.Module):
 
 
 class IdentityLayer(nn.Module):
-    """Identity layer implementation."""
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         return x
 
 
@@ -576,7 +408,6 @@ class IdentityLayer(nn.Module):
 
 
 class DSConv(nn.Module):
-    """Ds conv implementation."""
     def __init__(
         self,
         in_channels: int,
@@ -587,17 +418,6 @@ class DSConv(nn.Module):
         norm=("bn2d", "bn2d"),
         act_func=("relu6", None),
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            stride: The stride.
-            use_bias: The use bias.
-            norm: The norm.
-            act_func: The act func.
-        """
         super().__init__()
 
         use_bias = val2tuple(use_bias, 2)
@@ -624,21 +444,12 @@ class DSConv(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         x = self.depth_conv(x)
         x = self.point_conv(x)
         return x
 
 
 class MBConv(nn.Module):
-    """Mb conv implementation."""
     def __init__(
         self,
         in_channels: int,
@@ -651,19 +462,6 @@ class MBConv(nn.Module):
         norm=("bn2d", "bn2d", "bn2d"),
         act_func=("relu6", "relu6", None),
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            stride: The stride.
-            mid_channels: The mid channels.
-            expand_ratio: The expand ratio.
-            use_bias: The use bias.
-            norm: The norm.
-            act_func: The act func.
-        """
         super().__init__()
 
         use_bias = val2tuple(use_bias, 3)
@@ -700,14 +498,6 @@ class MBConv(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         x = self.inverted_conv(x)
         x = self.depth_conv(x)
         x = self.point_conv(x)
@@ -715,7 +505,6 @@ class MBConv(nn.Module):
 
 
 class FusedMBConv(nn.Module):
-    """Fused mb conv implementation."""
     def __init__(
         self,
         in_channels: int,
@@ -729,20 +518,6 @@ class FusedMBConv(nn.Module):
         norm=("bn2d", "bn2d"),
         act_func=("relu6", None),
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            stride: The stride.
-            mid_channels: The mid channels.
-            expand_ratio: The expand ratio.
-            groups: The groups.
-            use_bias: The use bias.
-            norm: The norm.
-            act_func: The act func.
-        """
         super().__init__()
         use_bias = val2tuple(use_bias, 2)
         norm = val2tuple(norm, 2)
@@ -770,21 +545,12 @@ class FusedMBConv(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         x = self.spatial_conv(x)
         x = self.point_conv(x)
         return x
 
 
 class GLUMBConv(nn.Module):
-    """Glumb conv implementation."""
     def __init__(
         self,
         in_channels: int,
@@ -798,20 +564,6 @@ class GLUMBConv(nn.Module):
         act_func=("silu", "silu", None),
         is_video=False,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            stride: The stride.
-            mid_channels: The mid channels.
-            expand_ratio: The expand ratio.
-            use_bias: The use bias.
-            norm: The norm.
-            act_func: The act func.
-            is_video: The is video.
-        """
         super().__init__()
         use_bias = val2tuple(use_bias, 3)
         norm = val2tuple(norm, 3)
@@ -851,14 +603,6 @@ class GLUMBConv(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         x = self.inverted_conv(x)
         x = self.depth_conv(x)
 
@@ -871,7 +615,6 @@ class GLUMBConv(nn.Module):
 
 
 class ResBlock(nn.Module):
-    """Res block implementation."""
     def __init__(
         self,
         in_channels: int,
@@ -885,20 +628,6 @@ class ResBlock(nn.Module):
         act_func=("relu6", None),
         is_video=False,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            stride: The stride.
-            mid_channels: The mid channels.
-            expand_ratio: The expand ratio.
-            use_bias: The use bias.
-            norm: The norm.
-            act_func: The act func.
-            is_video: The is video.
-        """
         super().__init__()
         use_bias = val2tuple(use_bias, 2)
         norm = val2tuple(norm, 2)
@@ -928,14 +657,6 @@ class ResBlock(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         x = self.conv1(x)
         x = self.conv2(x)
         return x
@@ -943,17 +664,10 @@ class ResBlock(nn.Module):
 
 class ChannelChunkConv3d(nn.Conv3d):
     """Channel chunk conv d implementation."""
+
     CONV3D_NUMEL_LIMIT = 2**31
 
     def _get_output_numel(self, input_shape: torch.Size) -> int:
-        """Helper function to get output numel.
-
-        Args:
-            input_shape: The input shape.
-
-        Returns:
-            The return value.
-        """
         numel = self.out_channels
         if len(input_shape) == 5:
             numel *= input_shape[0]
@@ -965,25 +679,11 @@ class ChannelChunkConv3d(nn.Conv3d):
         return numel
 
     def _get_n_chunks(self, numel: int, n_channels: int):
-        """Helper function to get n chunks.
-
-        Args:
-            numel: The numel.
-            n_channels: The n channels.
-        """
         n_chunks = math.ceil(numel / ChannelChunkConv3d.CONV3D_NUMEL_LIMIT)
         n_chunks = ceil_to_divisible(n_chunks, n_channels)
         return n_chunks
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            input: The input.
-
-        Returns:
-            The return value.
-        """
         if input.numel() // input.size(0) < ChannelChunkConv3d.CONV3D_NUMEL_LIMIT:
             return super().forward(input)
         n_in_chunks = self._get_n_chunks(input.numel(), self.in_channels)
@@ -992,10 +692,10 @@ class ChannelChunkConv3d(nn.Conv3d):
             return super().forward(input)
         outputs = []
         input_shards = input.chunk(n_in_chunks, dim=1)
-        for weight, bias in zip(self.weight.chunk(n_out_chunks), self.bias.chunk(n_out_chunks)):
+        for weight, bias in zip(self.weight.chunk(n_out_chunks), self.bias.chunk(n_out_chunks), strict=False):
             weight_shards = weight.chunk(n_in_chunks, dim=1)
             o = None
-            for x, w in zip(input_shards, weight_shards):
+            for x, w in zip(input_shards, weight_shards, strict=False):
                 if o is None:
                     o = F.conv3d(x, w, bias, self.stride, self.padding, self.dilation, self.groups)
                 else:
@@ -1011,7 +711,7 @@ class LiteMLA(nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        heads: Optional[int] = None,
+        heads: int | None = None,
         heads_ratio: float = 1.0,
         dim=8,
         use_bias=False,
@@ -1022,22 +722,6 @@ class LiteMLA(nn.Module):
         eps=1.0e-15,
         is_video=False,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            heads: The heads.
-            heads_ratio: The heads ratio.
-            dim: The dim.
-            use_bias: The use bias.
-            norm: The norm.
-            act_func: The act func.
-            kernel_func: The kernel func.
-            scales: The scales.
-            eps: The eps.
-            is_video: The is video.
-        """
         super().__init__()
         self.eps = eps
         heads = int(in_channels // dim * heads_ratio) if heads is None else heads
@@ -1089,14 +773,6 @@ class LiteMLA(nn.Module):
 
     @torch.autocast(device_type="cuda", enabled=False)
     def relu_linear_att(self, qkv: torch.Tensor) -> torch.Tensor:
-        """Relu linear att.
-
-        Args:
-            qkv: The qkv.
-
-        Returns:
-            The return value.
-        """
         if qkv.ndim == 5:
             B, _, T, H, W = list(qkv.size())
             is_video = True
@@ -1147,22 +823,11 @@ class LiteMLA(nn.Module):
             out = out.float()
         out = out[:, :, :-1] / (out[:, :, -1:] + self.eps)
 
-        if not is_video:
-            out = torch.reshape(out, (B, -1, H, W))
-        else:
-            out = torch.reshape(out, (B, -1, T, H, W))
+        out = torch.reshape(out, (B, -1, H, W)) if not is_video else torch.reshape(out, (B, -1, T, H, W))
         return out
 
     @torch.autocast(device_type="cuda", enabled=False)
     def relu_quadratic_att(self, qkv: torch.Tensor) -> torch.Tensor:
-        """Relu quadratic att.
-
-        Args:
-            qkv: The qkv.
-
-        Returns:
-            The return value.
-        """
         B, _, H, W = list(qkv.size())
 
         qkv = torch.reshape(
@@ -1195,14 +860,6 @@ class LiteMLA(nn.Module):
         return out
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         # generate multi-scale q, k, v
         qkv = self.qkv(x)
         multi_scale_qkv = [qkv]
@@ -1213,10 +870,7 @@ class LiteMLA(nn.Module):
         if qkv.ndim == 4:
             H, W = list(qkv.size())[-2:]
             # num_tokens = H * W
-            if H * W > self.dim:
-                out = self.relu_linear_att(qkv).to(qkv.dtype)
-            else:
-                out = self.relu_quadratic_att(qkv)
+            out = self.relu_linear_att(qkv).to(qkv.dtype) if self.dim < H * W else self.relu_quadratic_att(qkv)
         elif qkv.ndim == 5:
             _, _, T, H, W = list(qkv.size())
             # num_tokens = H * W * T
@@ -1227,7 +881,6 @@ class LiteMLA(nn.Module):
 
 
 class EfficientViTBlock(nn.Module):
-    """Efficient vi t block implementation."""
     def __init__(
         self,
         in_channels: int,
@@ -1241,20 +894,6 @@ class EfficientViTBlock(nn.Module):
         local_module: str = "MBConv",
         is_video: bool = False,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            heads_ratio: The heads ratio.
-            dim: The dim.
-            expand_ratio: The expand ratio.
-            scales: The scales.
-            norm: The norm.
-            act_func: The act func.
-            context_module: The context module.
-            local_module: The local module.
-            is_video: The is video.
-        """
         super().__init__()
         if context_module == "LiteMLA":
             self.context_module = ResidualBlock(
@@ -1301,14 +940,6 @@ class EfficientViTBlock(nn.Module):
             raise NotImplementedError(f"local_module {local_module} is not supported")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         x = self.context_module(x)
         x = self.local_module(x)
         return x
@@ -1320,22 +951,13 @@ class EfficientViTBlock(nn.Module):
 
 
 class ResidualBlock(nn.Module):
-    """Residual block implementation."""
     def __init__(
         self,
-        main: Optional[nn.Module],
-        shortcut: Optional[nn.Module],
+        main: nn.Module | None,
+        shortcut: nn.Module | None,
         post_act=None,
-        pre_norm: Optional[nn.Module] = None,
+        pre_norm: nn.Module | None = None,
     ):
-        """Init.
-
-        Args:
-            main: The main.
-            shortcut: The shortcut.
-            post_act: The post act.
-            pre_norm: The pre norm.
-        """
         super().__init__()
 
         self.pre_norm = pre_norm
@@ -1344,28 +966,12 @@ class ResidualBlock(nn.Module):
         self.post_act = build_act(post_act)
 
     def forward_main(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward main.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         if self.pre_norm is None:
             return self.main(x)
         else:
             return self.main(self.pre_norm(x))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         if self.main is None:
             res = x
         elif self.shortcut is None:
@@ -1378,24 +984,14 @@ class ResidualBlock(nn.Module):
 
 
 class DAGBlock(nn.Module):
-    """Dag block implementation."""
     def __init__(
         self,
         inputs: dict[str, nn.Module],
         merge: str,
-        post_input: Optional[nn.Module],
+        post_input: nn.Module | None,
         middle: nn.Module,
         outputs: dict[str, nn.Module],
     ):
-        """Init.
-
-        Args:
-            inputs: The inputs.
-            merge: The merge.
-            post_input: The post input.
-            middle: The middle.
-            outputs: The outputs.
-        """
         super().__init__()
 
         self.input_keys = list(inputs.keys())
@@ -1409,15 +1005,7 @@ class DAGBlock(nn.Module):
         self.output_ops = nn.ModuleList(list(outputs.values()))
 
     def forward(self, feature_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-        """Forward.
-
-        Args:
-            feature_dict: The feature dict.
-
-        Returns:
-            The return value.
-        """
-        feat = [op(feature_dict[key]) for key, op in zip(self.input_keys, self.input_ops)]
+        feat = [op(feature_dict[key]) for key, op in zip(self.input_keys, self.input_ops, strict=False)]
         if self.merge == "add":
             feat = list_sum(feat)
         elif self.merge == "cat":
@@ -1427,19 +1015,13 @@ class DAGBlock(nn.Module):
         if self.post_input is not None:
             feat = self.post_input(feat)
         feat = self.middle(feat)
-        for key, op in zip(self.output_keys, self.output_ops):
+        for key, op in zip(self.output_keys, self.output_ops, strict=False):
             feature_dict[key] = op(feat)
         return feature_dict
 
 
 class OpSequential(nn.Module):
-    """Op sequential implementation."""
-    def __init__(self, op_list: list[Optional[nn.Module]]):
-        """Init.
-
-        Args:
-            op_list: The op list.
-        """
+    def __init__(self, op_list: list[nn.Module | None]):
         super().__init__()
         valid_op_list = []
         for op in op_list:
@@ -1448,14 +1030,6 @@ class OpSequential(nn.Module):
         self.op_list = nn.ModuleList(valid_op_list)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         for op in self.op_list:
             x = op(x)
         return x

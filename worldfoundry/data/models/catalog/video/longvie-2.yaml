@@ -20,6 +20,7 @@ official_sources:
   project_page: https://vchitect.github.io/LongVie2-project/
   github:
     url: https://github.com/Vchitect/LongVie
+    revision: 8740d2ee07245556750735193e0149dcd4d989f0
   huggingface:
   - repo_id: Vchitect/LongVie2
     status: confirmed
@@ -58,7 +59,7 @@ runner_parity:
   - A separate 2026-09-23 single-GPU smoke run with local control, DiT, and Wan
     weights produced nine decodable 640x352 frames at four denoising steps.
 runtime_profile: runtime-profile:longvie-2
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: longvie-2
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries
@@ -68,20 +69,20 @@ docs:
   publisher: Shanghai AI Laboratory (Vchitect)
   publisher_kind: lab
   publisher_zh: 上海人工智能实验室（Vchitect 团队）
-  overview: 'LongVie 2 is the second-generation controllable long-video framework from the Vchitect team, and the verified member of the pair in this catalog: Studio''s default four-GPU torchrun USP route completed a checkpoint-backed run on 2026-07-28, decoding all 81 frames at 640x352. It generates queued 81-frame control-video segments where each continuation reuses the prior final frame, an eight-frame history, and the noise state.'
-  overview_zh: LongVie 2 是 Vchitect 团队第二代可控长视频框架，也是本 catalog 中这对条目里已验证的一个： Studio 默认的四卡 torchrun USP 路径已于 2026-07-28 完成 checkpoint 加载运行，81 帧全部按 640x352 解码。它以排队的 81 帧控制视频分段生成，每次续写复用上一段末帧、八帧历史与噪声状态。
-  architecture: 'Built over canonical Wan roles (base: Wan2.1-I2V-14B-480P) plus LongVie-specific weights: the adapter loads both control.safetensors and dit.safetensors — the latter is the LongVie 2 DiT attention override that distinguishes it from LongVie-1. Official USP ring/ulysses distributed inference is supported when execute=True.'
-  architecture_zh: 构建在规范化 Wan 角色之上（基座：Wan2.1-I2V-14B-480P），叠加 LongVie 专属权重：适配器同时加载 control.safetensors 与 dit.safetensors——后者即区别于 LongVie-1 的 LongVie 2 DiT 注意力覆盖。 execute=True 时支持官方 USP ring/ulysses 分布式推理。
-  usage_notes: 'Each queued segment needs a non-empty prompt plus dense depth and sparse pointmap/track control videos; the first segment also needs an image. Quality defaults: 81 frames at 16 FPS, 50 steps. The Studio profile uses four-rank USP with the complete model resident on each supported 80GB rank, and only rank zero materializes the artifact. This is queued segment generation, not keyboard realtime.'
-  usage_notes_zh: 每个排队分段都需要非空提示词加稠密深度与稀疏点图/轨迹控制视频；首段还需要一张图像。质量默认值： 81 帧、16 FPS、50 步。Studio profile 使用四 rank USP，只有 rank 0 落盘产物。这是排队式分段生成，不是键盘实时交互。
+  overview: 'LongVie 2 is the second-generation controllable long-video framework from the Vchitect team. It generates queued 81-frame control-video segments where each continuation reuses the prior final frame, an eight-frame history, and the noise state. Validated with the released checkpoints: the default four-GPU Studio route generates and decodes all 81 frames at 640x352.'
+  overview_zh: LongVie 2 是 Vchitect 团队第二代可控长视频框架。它以排队的 81 帧控制视频分段生成，每次续写复用上一段末帧、八帧历史与噪声状态。已使用发布权重验证：Studio 默认的四卡路径可生成并解码全部 81 帧（640x352）。
+  architecture: 'Built on Wan2.1-I2V-14B-480P plus LongVie-specific weights: the adapter loads both control.safetensors and dit.safetensors, the latter being the LongVie 2 DiT attention override that distinguishes it from LongVie-1. Official USP ring/ulysses distributed inference is supported when execute=True.'
+  architecture_zh: 基于 Wan2.1-I2V-14B-480P，叠加 LongVie 专属权重：适配器同时加载 control.safetensors 与 dit.safetensors，后者即区别于 LongVie-1 的 LongVie 2 DiT 注意力覆盖。execute=True 时支持官方 USP ring/ulysses 分布式推理。
+  usage_notes: 'Each queued segment needs a non-empty prompt plus dense depth and sparse pointmap/track control videos; the first segment also needs an image. Quality defaults: 81 frames at 16 FPS, 50 steps. The Studio profile uses four-rank USP with the complete model resident on each 80GB GPU, and only rank zero writes the artifact.'
+  usage_notes_zh: 每个排队分段都需要非空提示词加稠密深度与稀疏点图/轨迹控制视频；首段还需要一张图像。质量默认值：81 帧、16 FPS、50 步。Studio profile 使用四 rank USP，每张 80GB GPU 常驻完整模型，只有 rank 0 写出产物。
   limitations:
-  - Requires prepared depth + pointmap/track control videos for every segment — significant input preparation.
-  - Single-GPU short inference is verified, but the 81-frame/50-step single-GPU route and control quality remain unmeasured.
-  - Queued segments only — no realtime keyboard interaction.
+  - Every segment needs prepared depth and pointmap/track control videos, which is significant input preparation.
+  - On a single GPU only short inference is validated; the full 81-frame, 50-step single-GPU route and control quality are not measured.
+  - Queued segments only; no realtime keyboard interaction.
   limitations_zh:
-  - 每个分段都需要预先准备深度与点图/轨迹控制视频——输入准备成本高。
-  - 已验证单卡短片推理，但单卡 81 帧、50 步路径及控制质量尚未测量。
-  - 仅支持排队分段——没有实时键盘交互。
+  - 每个分段都需要预先准备深度与点图/轨迹控制视频，输入准备成本高。
+  - 单卡仅验证了短片推理；单卡 81 帧、50 步路径及控制质量尚未测量。
+  - 仅支持排队分段生成，没有实时键盘交互。
   recommended_benchmarks:
   - id: chronomagic-bench
     reason: Long-horizon generation suite.

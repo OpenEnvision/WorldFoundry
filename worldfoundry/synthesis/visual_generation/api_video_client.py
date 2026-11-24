@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, ClassVar, Dict, Mapping, Optional
+from typing import Any, ClassVar
 
 from ..base_synthesis import BaseSynthesis
 
@@ -53,7 +54,7 @@ class CredentialedSynthesis(BaseSynthesis):
 
     def __init__(
         self,
-        endpoint: Optional[str] = None,
+        endpoint: str | None = None,
         api_key: str = "your_api_key",
         logger=None,
     ) -> None:
@@ -76,9 +77,7 @@ class CredentialedSynthesis(BaseSynthesis):
         factory: it returns a new configured instance.
         """
         accepted = inspect.signature(cls).parameters
-        takes_var_kwargs = any(
-            parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in accepted.values()
-        )
+        takes_var_kwargs = any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in accepted.values())
         if takes_var_kwargs:
             return cls(*args, **kwargs)
         return cls(*args, **{key: value for key, value in kwargs.items() if key in accepted})
@@ -97,7 +96,7 @@ class ApiVideoSynthesis(CredentialedSynthesis):
 
     def __init__(
         self,
-        endpoint: Optional[str] = None,
+        endpoint: str | None = None,
         api_key: str = "your_api_key",
         logger=None,
     ) -> None:
@@ -112,11 +111,11 @@ class ApiVideoSynthesis(CredentialedSynthesis):
 
         return requests
 
-    def _auth_headers(self) -> Dict[str, str]:
+    def _auth_headers(self) -> dict[str, str]:
         """Return the credential header alone, for routes that take no body."""
         return {self.AUTH_HEADER: self.AUTH_VALUE.format(api_key=self.api_key)}
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         """Return the auth and content-type headers for a JSON request."""
         return {**self._auth_headers(), "Content-Type": "application/json"}
 
@@ -124,7 +123,7 @@ class ApiVideoSynthesis(CredentialedSynthesis):
         """Join ``route`` onto the endpoint without doubling the separator."""
         return f"{self.endpoint}/{route.lstrip('/')}"
 
-    def _post(self, route: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _post(self, route: str, payload: dict[str, Any]) -> dict[str, Any]:
         """POST ``payload`` as JSON and return the decoded response."""
         response = self._requests().post(
             self._url(route),
@@ -138,9 +137,9 @@ class ApiVideoSynthesis(CredentialedSynthesis):
     def _get(
         self,
         route: str,
-        params: Optional[Mapping[str, Any]] = None,
-        headers: Optional[Mapping[str, str]] = None,
-    ) -> Dict[str, Any]:
+        params: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> dict[str, Any]:
         """GET ``route`` and return the decoded response.
 
         Args:
@@ -179,7 +178,7 @@ class ApiVideoSynthesis(CredentialedSynthesis):
 class OpenAiVideoSynthesis(CredentialedSynthesis):
     """Client for a video backend reached through an OpenAI-compatible SDK."""
 
-    def __init__(self, endpoint: Optional[str] = None, api_key: str = "your_api_key", logger=None) -> None:
+    def __init__(self, endpoint: str | None = None, api_key: str = "your_api_key", logger=None) -> None:
         """Open the SDK client against ``endpoint``, defaulting the logger by module."""
         super().__init__(endpoint=endpoint, api_key=api_key, logger=logger)
         if self.logger is None:

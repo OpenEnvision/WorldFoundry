@@ -26,7 +26,6 @@ export type CatalogBenchmarkGroup = {
 };
 
 export type CatalogCoverageData = {
-  modelsTotal: number;
   modelsListed?: number;
   benchmarksTotal: number;
   modelFamilies: CatalogFamily[];
@@ -36,4 +35,4 @@ export type CatalogCoverageData = {
 export const catalogCoverage: CatalogCoverageData = catalogCoverageData as CatalogCoverageData;
 
 /** Benchmark Hub pages currently missing from docs (catalog still lists them). */
-export const benchmarkHubMissingIds = new Set(['worldreasonbench', 'wrbench']);
+export const benchmarkHubMissingIds = new Set<string>();

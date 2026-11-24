@@ -1,4 +1,4 @@
-### Pairwise perceptual metrics
+### Pairwise & image quality metrics
 
 ### `lpips / ssim / ms_ssim / psnr` (mixed)
 #### `lpips`
@@ -48,7 +48,7 @@ Higher values indicate lower pixel-level error. PSNR is fast and standard for co
 ```python
 import numpy as np
 from PIL import Image
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_lpips,
     compute_ssim,
     compute_ms_ssim,
@@ -108,7 +108,7 @@ Higher values indicate stronger representation-level similarity. Because DINO fe
 ```python
 import numpy as np
 from PIL import Image
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_dino_similarity,
     compute_dreamsim,
     compute_fsim,
@@ -125,6 +125,31 @@ print("cpbd", compute_cpbd(gen))  # single image, no reference
 ```
 
 **Returns**: Float scores; DreamSim lower = more similar.
+
+### `irs` (↑)
+
+**When**: Image Realism Score calibrated against real-image statistics.
+
+**Reference:** Image Realism Score: pentagon area over five calibrated image statistics. Paper: [arXiv:2309.14756](https://arxiv.org/abs/2309.14756) Repo: WorldFoundry (paper reimplementation)
+
+**Assets:** No model checkpoint — image statistics computed from inputs.
+
+```python
+from PIL import Image
+from worldfoundry.evals.tasks.metrics import compute_irs_with_reference
+
+real_paths = ["real/1.jpg", "real/2.jpg"]
+test_paths = ["gen/1.jpg", "gen/2.jpg"]
+real_images = [Image.open(p) for p in real_paths]
+test_images = [Image.open(p) for p in test_paths]
+
+out = compute_irs_with_reference(test_images, real_images)
+print(out["irs_mean"], out["irs_scores"])
+```
+
+**Returns**: Dict with per-image IRS and fitted reference means.
+
+### Masks, detection & layout metrics
 
 ### `mask_accuracy` (↑)
 **Principle:** `mask_accuracy` compares predicted masks against reference masks. Pixel accuracy computes the fraction of correctly matched mask pixels, while mask IoU computes overlap divided by union:
@@ -145,7 +170,7 @@ Higher values indicate better mask agreement. The benchmark protocol should spec
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import compute_mask_accuracy, compute_mask_iou
+from worldfoundry.evals.tasks.metrics import compute_mask_accuracy, compute_mask_iou
 
 pred = np.load("pred_mask.npy")  # HxW binary or label map
 gt = np.load("gt_mask.npy")
@@ -172,7 +197,7 @@ Higher values indicate better object presence or localization. The result depend
 **Assets:** No model checkpoint — phrase/box inputs per WorldScore-style protocol.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_object_detection_success_rate
+from worldfoundry.evals.tasks.metrics import compute_object_detection_success_rate
 
 result = compute_object_detection_success_rate(
     generated_dir="/data/generated",
@@ -181,7 +206,7 @@ result = compute_object_detection_success_rate(
 print(result)
 ```
 
-**Returns**: Success rate dict; see `object_detection/` wrapper for input schema.
+**Returns**: Success rate dict; see `perceptual/object_detection/` wrapper for input schema.
 
 ### `lqs` (↑)
 **Principle:** Layout Quality Score evaluates generated layouts against ground-truth or expected layouts. The original layout-to-image formulation considers both absolute bounding-box distribution errors and mutual spatial relationships between boxes. Higher values in WorldFoundry should indicate better layout agreement if the wrapper exposes a quality score rather than an error score. The protocol must define the layout schema, coordinate system, object matching rule, and handling of missing or extra boxes.
@@ -194,7 +219,7 @@ print(result)
 **Assets:** No model checkpoint — predicted and ground-truth layout boxes only.
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_lqs
+from worldfoundry.evals.tasks.metrics import compute_lqs
 
 gt_layout = [{"label": "person", "bbox": [10, 20, 110, 220]}]
 pred_layout = [{"label": "person", "bbox": [12, 18, 108, 218]}]
@@ -203,4 +228,21 @@ print(compute_lqs(gt_layout, pred_layout))
 
 **Returns**: Dict with LR/LP/LC/AC components and combined LQS.
 
+### `object_wise_consistency` (↑)
 
+**When**: Location-aware T2I: match guidance boxes to detector outputs.
+
+**Reference:** Object-wise consistency: max IoU + success rate R_suc vs guidance boxes (IoU>0.5). Paper: [arXiv:2304.13427](https://arxiv.org/abs/2304.13427) Repo: WorldFoundry (paper reimplementation)
+
+**Assets:** No model checkpoint — guidance boxes and detector outputs only.
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_object_wise_consistency
+
+guidance = [([10, 20, 100, 200], "cat"), ([120, 30, 220, 180], "dog")]
+detections = [([12, 22, 98, 198], "cat"), ([125, 35, 215, 175], "dog")]
+
+print(compute_object_wise_consistency(guidance, detections, iou_threshold=0.5))
+```
+
+**Returns**: Dict with mean IoU and success rate `object_wise_success_rate`.

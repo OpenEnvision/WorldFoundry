@@ -28,13 +28,15 @@ import os
 
 import torch
 
-from worldfoundry.core.execution.compile_cache import configure_persistent_compile_cache
+from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
 
 configure_persistent_compile_cache(namespace="pisa-triton")
 
-import triton  # noqa: E402
-import triton.language as tl  # noqa: E402
-from triton.tools.tensor_descriptor import TensorDescriptor  # noqa: E402
+import triton  # noqa: E402 - Follows the Triton compile-cache configuration.
+import triton.language as tl  # noqa: E402 - Follows the Triton compile-cache configuration.
+from triton.tools.tensor_descriptor import (  # noqa: E402 - Follows the Triton compile-cache configuration.
+    TensorDescriptor,
+)
 
 _COMPILED_TAYLOR_ERROR_BLOCK_INDICES = None
 
@@ -78,7 +80,7 @@ def chunk_reduce_kv_kernel(
     v,
     kc,
     vc,
-    k_var,   # [B*H, N]
+    k_var,  # [B*H, N]
     T,
     N: tl.constexpr,
     K: tl.constexpr,
@@ -124,7 +126,7 @@ def chunk_reduce_kv_kernel(
 def chunk_reduce_k_kernel(
     k,
     kc,
-    k_var,   # [B*H, N]
+    k_var,  # [B*H, N]
     T,
     N: tl.constexpr,
     K: tl.constexpr,
@@ -200,11 +202,7 @@ def chunk_reduce_qkv(
 
     qc = torch.empty(B, H, N_Q, K, device=q.device, dtype=q.dtype)
     kc = torch.empty(B, H, N_KV, K, device=k.device, dtype=k.dtype)
-    vc = (
-        torch.empty(B, H, N_KV, V, device=v.device, dtype=v.dtype)
-        if include_v_centroid
-        else None
-    )
+    vc = torch.empty(B, H, N_KV, V, device=v.device, dtype=v.dtype) if include_v_centroid else None
 
     # scalar variance proxy per KV block
     k_var = torch.empty(B, H, N_KV, device=k.device, dtype=k.dtype)
@@ -317,7 +315,7 @@ def piecewise_attn_fwd_kernel(
         b_s = tl.dot(b_q, b_k.T) * sm_scale
         b_s += tl.where((kv_start + token_offsets)[None, :] < T_KV, 0, float("-inf"))
 
-        new_m = tl.maximum(m_i, tl.max(b_s,  axis=1))
+        new_m = tl.maximum(m_i, tl.max(b_s, axis=1))
         alpha = tl.math.exp2(m_i - new_m)
         score = tl.math.exp2(b_s - new_m[:, None])
 
@@ -836,12 +834,12 @@ def piecewise_attn_bwd(
 
     # BNC = 64
     # grid = (triton.cdiv(V, BV), triton.cdiv(NT_KV, BNC), B * H)
-    def grid(meta):
+    def approx_dkdv_grid(meta):
         """Autotune grid: ``BN`` is chosen by the kernel config, not the caller."""
 
         return (triton.cdiv(V, BV), triton.cdiv(NT_KV, meta["BN"]), B * H)
 
-    piecewise_attn_bwd_approx_dkdv_kernel[grid](
+    piecewise_attn_bwd_approx_dkdv_kernel[approx_dkdv_grid](
         do_desc,
         q_desc,
         kc,
@@ -898,9 +896,9 @@ def piecewise_attn_bwd(
 
 @torch.no_grad()
 def taylor_error_block_indices(
-    qc: torch.Tensor,       # [B, H, NT_Q, K]
-    kc: torch.Tensor,       # [B, H, NT_KV, K]
-    k_var: torch.Tensor,    # [B, H, NT_KV]
+    qc: torch.Tensor,  # [B, H, NT_Q, K]
+    kc: torch.Tensor,  # [B, H, NT_KV, K]
+    k_var: torch.Tensor,  # [B, H, NT_KV]
     density: float,
     scale: float,
     eps: float = 1e-8,
@@ -990,14 +988,7 @@ class PiecewiseAttentionFunction(torch.autograd.Function):
                 scale=scale,
             )
             o, lse = piecewise_attn_fwd(
-                q=q,
-                k=k,
-                v=v,
-                kc=kc,
-                vc=vc,
-                block_indices=block_indices,
-                block_size=block_size,
-                scale=scale
+                q=q, k=k, v=v, kc=kc, vc=vc, block_indices=block_indices, block_size=block_size, scale=scale
             )
 
         ctx.save_for_backward(q, k, v, kc, vc, o, lse, block_indices)
@@ -1005,8 +996,9 @@ class PiecewiseAttentionFunction(torch.autograd.Function):
         ctx.block_size = block_size
         return o
 
+    # Autograd supplies one gradient for this forward's single tensor output.
     @staticmethod
-    def backward(ctx, do):
+    def backward(ctx, do):  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
         """Rebind the TMA allocator, then return ``dQ, dK, dV`` only."""
 
         q, k, v, kc, vc, o, lse, block_indices = ctx.saved_tensors

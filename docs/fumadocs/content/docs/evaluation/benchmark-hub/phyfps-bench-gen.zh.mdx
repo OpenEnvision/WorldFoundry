@@ -1,9 +1,9 @@
 ---
 title: PhyFPS-Bench-Gen
-description: "100 条 prompt 的时间刻度审计：Meta FPS 是否与运动隐含的 PhyFPS 一致？全部指标越低越好。不是物理定律评测。"
+description: "100 条 prompt 的时间刻度审计：Meta FPS 是否与运动隐含的 PhyFPS 一致？全部指标越低越好。"
 ---
 
-PhyFPS-Bench-Gen（TACO Group，德州农工大学）审计**时间刻度幻觉**：生成器声明的容器帧率（**Meta FPS**）是否与运动隐含的物理速度（**PhyFPS**，由 Visual Chronometer 预测）一致。它**不是**定律、锚定、教育或续写评测。
+PhyFPS-Bench-Gen（TACO Group，德州农工大学）审计**时间刻度幻觉**：生成器声明的容器帧率（**Meta FPS**）是否与运动隐含的物理速度（**PhyFPS**，由 Visual Chronometer 预测）一致。
 
 套件是 **100 条 prompt**。输出命名为 `0001.mp4` … `0100.mp4`。预测器在滑动窗口上运行（`--stride`、`--clip-length`）；scorecard 报告 Meta 与 PhyFPS 的误差，以及视频内 / 视频间变异系数。**全部指标越低越好。**
 
@@ -18,7 +18,7 @@ WorldFoundry 在仓内运行 Visual Chronometer `predict.py`，和/或归一化�
 导入已有的 `results.csv`：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id phyfps-bench-gen \
   --mode official-validation \
   --official-results-path <results.csv> \
@@ -32,7 +32,7 @@ worldfoundry-eval zoo benchmark-run \
 ```bash
 export WORLDFOUNDRY_PHYFPS_META_FPS=24
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --stride 4 \

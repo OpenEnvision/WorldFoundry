@@ -1,10 +1,17 @@
-import math
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import torch
 import torch.nn as nn
 from einops import rearrange
 
+from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.multiagent_rope import (
+    precompute_freqs_cis_3d,
+    sinusoidal_embedding_1d,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.wam import (
+    NativeDtypeHead,
+    WamDiTBlock,
+)
 from worldfoundry.core.attention import scaled_dot_product_attention
 
 
@@ -13,7 +20,7 @@ def flash_attention(
     k: torch.Tensor,
     v: torch.Tensor,
     num_heads: int,
-    ctx_mask: Optional[torch.Tensor] = None,
+    ctx_mask: torch.Tensor | None = None,
     compatibility_mode=True,
 ):
     if compatibility_mode:
@@ -32,35 +39,6 @@ def flash_attention(
         raise NotImplementedError(
             "Only compatibility mode is implemented for flash attention. Please set compatibility_mode=True."
         )
-
-
-def modulate(x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor):
-    return x * (1 + scale) + shift
-
-
-def sinusoidal_embedding_1d(dim, position):
-    sinusoid = torch.outer(
-        position.type(torch.float64),
-        torch.pow(10000, -torch.arange(dim // 2, dtype=torch.float64, device=position.device).div(dim // 2)),
-    )
-    x = torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1)
-    return x.to(position.dtype)
-
-
-def precompute_freqs_cis_3d(dim: int, end: int = 1024, theta: float = 10000.0):
-    # 3d rope precompute
-    f_freqs_cis = precompute_freqs_cis(dim - 2 * (dim // 3), end, theta)
-    h_freqs_cis = precompute_freqs_cis(dim // 3, end, theta)
-    w_freqs_cis = precompute_freqs_cis(dim // 3, end, theta)
-    return f_freqs_cis, h_freqs_cis, w_freqs_cis
-
-
-def precompute_freqs_cis(dim: int, end: int = 1024, theta: float = 10000.0):
-    # 1d rope precompute
-    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].double() / dim))
-    freqs = torch.outer(torch.arange(end, device=freqs.device), freqs)
-    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
-    return freqs_cis
 
 
 def _rope_apply_real(x, cos_f, sin_f, num_heads):
@@ -83,268 +61,6 @@ def rope_apply(x, freqs, num_heads):
     return _rope_apply_real(x, freqs.real, freqs.imag, num_heads)
 
 
-def create_group_causal_attn_mask(
-    num_temporal_groups: int, num_query_per_group: int, num_key_per_group: int, mode: str = "causal"
-) -> torch.Tensor:
-    """
-    Creates a group-based attention mask for scaled dot-product attention with two modes:
-    'causal' and 'group_diagonal'.
-
-    Parameters:
-    - num_temporal_groups (int): The number of temporal groups (e.g., frames in a video sequence).
-    - num_query_per_group (int): The number of query tokens per temporal group. (e.g., latent tokens in a frame, H x W).
-    - num_key_per_group (int): The number of key tokens per temporal group. (e.g., action tokens per frame).
-    - mode (str): The mode of the attention mask. Options are:
-        - 'causal': Query tokens can attend to key tokens from the same or previous temporal groups.
-        - 'group_diagonal': Query tokens can attend only to key tokens from the same temporal group.
-
-    Returns:
-    - attn_mask (torch.Tensor): A boolean tensor of shape (L, S), where:
-        - L = num_temporal_groups * num_query_per_group (total number of query tokens)
-        - S = num_temporal_groups * num_key_per_group (total number of key tokens)
-      The mask indicates where attention is allowed (True) and disallowed (False).
-
-    Example:
-    Input:
-        num_temporal_groups = 3
-        num_query_per_group = 4
-        num_key_per_group = 2
-    Output:
-        Causal Mask Shape: torch.Size([12, 6])
-        Group Diagonal Mask Shape: torch.Size([12, 6])
-        if mode='causal':
-        tensor([[ True,  True, False, False, False, False],
-                [ True,  True, False, False, False, False],
-                [ True,  True, False, False, False, False],
-                [ True,  True, False, False, False, False],
-                [ True,  True,  True,  True, False, False],
-                [ True,  True,  True,  True, False, False],
-                [ True,  True,  True,  True, False, False],
-                [ True,  True,  True,  True, False, False],
-                [ True,  True,  True,  True,  True,  True],
-                [ True,  True,  True,  True,  True,  True],
-                [ True,  True,  True,  True,  True,  True],
-                [ True,  True,  True,  True,  True,  True]])
-
-        if mode='group_diagonal':
-        tensor([[ True,  True, False, False, False, False],
-                [ True,  True, False, False, False, False],
-                [ True,  True, False, False, False, False],
-                [ True,  True, False, False, False, False],
-                [False, False,  True,  True, False, False],
-                [False, False,  True,  True, False, False],
-                [False, False,  True,  True, False, False],
-                [False, False,  True,  True, False, False],
-                [False, False, False, False,  True,  True],
-                [False, False, False, False,  True,  True],
-                [False, False, False, False,  True,  True],
-                [False, False, False, False,  True,  True]])
-
-    """
-    assert mode in ["causal", "group_diagonal"], f"Mode {mode} must be 'causal' or 'group_diagonal'"
-
-    # Total number of query and key tokens
-    total_num_query_tokens = num_temporal_groups * num_query_per_group  # Total number of query tokens (L)
-    total_num_key_tokens = num_temporal_groups * num_key_per_group  # Total number of key tokens (S)
-
-    # Generate time indices for query and key tokens (shape: [L] and [S])
-    query_time_indices = torch.arange(num_temporal_groups).repeat_interleave(num_query_per_group)  # Shape: [L]
-    key_time_indices = torch.arange(num_temporal_groups).repeat_interleave(num_key_per_group)  # Shape: [S]
-
-    # Expand dimensions to compute outer comparison
-    query_time_indices = query_time_indices.unsqueeze(1)  # Shape: [L, 1]
-    key_time_indices = key_time_indices.unsqueeze(0)  # Shape: [1, S]
-
-    if mode == "causal":
-        # Causal Mode: Query can attend to keys where key_time <= query_time
-        attn_mask = query_time_indices >= key_time_indices  # Shape: [L, S]
-    elif mode == "group_diagonal":
-        # Group Diagonal Mode: Query can attend only to keys where key_time == query_time
-        attn_mask = query_time_indices == key_time_indices  # Shape: [L, S]
-
-    assert attn_mask.shape == (total_num_query_tokens, total_num_key_tokens), "Attention mask shape mismatch"
-    return attn_mask
-
-
-class RMSNorm(nn.Module):
-    def __init__(self, dim, eps=1e-5):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
-
-    def norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
-        dtype = x.dtype
-        return self.norm(x.float()).to(dtype) * self.weight
-
-
-class AttentionModule(nn.Module):
-    def __init__(self, num_heads):
-        super().__init__()
-        self.num_heads = num_heads
-
-    def forward(self, q, k, v, ctx_mask=None):
-        x = flash_attention(q=q, k=k, v=v, num_heads=self.num_heads, ctx_mask=ctx_mask)
-        return x
-
-
-class SelfAttention(nn.Module):
-    def __init__(self, hidden_dim: int, attn_head_dim: int, num_heads: int, eps: float = 1e-6):
-        super().__init__()
-        self.hidden_dim = hidden_dim
-        self.num_heads = num_heads
-        self.attn_head_dim = attn_head_dim
-        self.attn_hidden_dim = self.num_heads * self.attn_head_dim
-
-        self.q = nn.Linear(hidden_dim, self.attn_hidden_dim)
-        self.k = nn.Linear(hidden_dim, self.attn_hidden_dim)
-        self.v = nn.Linear(hidden_dim, self.attn_hidden_dim)
-        self.o = nn.Linear(self.attn_hidden_dim, hidden_dim)
-        self.norm_q = RMSNorm(self.attn_hidden_dim, eps=eps)
-        self.norm_k = RMSNorm(self.attn_hidden_dim, eps=eps)
-
-        # self.attn = AttentionModule(self.num_heads)
-
-    def forward(self, x, freqs, self_attn_mask: Optional[torch.Tensor] = None):
-        q = self.norm_q(self.q(x))
-        k = self.norm_k(self.k(x))
-        v = self.v(x)
-        q = rope_apply(q, freqs, self.num_heads)
-        k = rope_apply(k, freqs, self.num_heads)
-        x = flash_attention(q=q, k=k, v=v, num_heads=self.num_heads, ctx_mask=self_attn_mask)
-        return self.o(x)
-
-
-class CrossAttention(nn.Module):
-    def __init__(
-        self,
-        hidden_dim: int,
-        attn_head_dim: int,
-        num_heads: int,
-        eps: float = 1e-6,
-    ):
-        super().__init__()
-        self.hidden_dim = hidden_dim
-        self.num_heads = num_heads
-        self.attn_head_dim = attn_head_dim
-        self.attn_hidden_dim = self.num_heads * self.attn_head_dim
-
-        self.q = nn.Linear(hidden_dim, self.attn_hidden_dim)
-        self.k = nn.Linear(hidden_dim, self.attn_hidden_dim)
-        self.v = nn.Linear(hidden_dim, self.attn_hidden_dim)
-        self.o = nn.Linear(self.attn_hidden_dim, hidden_dim)
-        self.norm_q = RMSNorm(self.attn_hidden_dim, eps=eps)
-        self.norm_k = RMSNorm(self.attn_hidden_dim, eps=eps)
-
-        # self.attn = AttentionModule(self.num_heads)
-
-    def forward(self, x: torch.Tensor, ctx: torch.Tensor, ctx_mask: Optional[torch.Tensor] = None):
-        q = self.norm_q(self.q(x))
-        k = self.norm_k(self.k(ctx))
-        v = self.v(ctx)
-        x = flash_attention(q=q, k=k, v=v, num_heads=self.num_heads, ctx_mask=ctx_mask)
-        return self.o(x)
-
-
-class GateModule(nn.Module):
-    def __init__(
-        self,
-    ):
-        super().__init__()
-
-    def forward(self, x, gate, residual):
-        return x + gate * residual
-
-
-class DiTBlock(nn.Module):
-    def __init__(self, hidden_dim: int, attn_head_dim: int, num_heads: int, ffn_dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.hidden_dim = hidden_dim
-        self.attn_head_dim = attn_head_dim
-        self.num_heads = num_heads
-        self.ffn_dim = ffn_dim
-
-        self.self_attn = SelfAttention(hidden_dim, attn_head_dim, num_heads, eps)
-        self.cross_attn = CrossAttention(hidden_dim, attn_head_dim, num_heads, eps)
-        self.norm1 = nn.LayerNorm(hidden_dim, eps=eps, elementwise_affine=False)
-        self.norm2 = nn.LayerNorm(hidden_dim, eps=eps, elementwise_affine=False)
-        self.norm3 = nn.LayerNorm(hidden_dim, eps=eps)
-        self.ffn = nn.Sequential(
-            nn.Linear(hidden_dim, ffn_dim), nn.GELU(approximate="tanh"), nn.Linear(ffn_dim, hidden_dim)
-        )
-        self.modulation = nn.Parameter(torch.randn(1, 6, hidden_dim) / hidden_dim**0.5)
-        self.gate = GateModule()
-
-    def forward(self, x, context, t_mod, freqs, context_mask=None, self_attn_mask: Optional[torch.Tensor] = None):
-        if context_mask is not None and context_mask.dim() == 3:
-            context_mask = context_mask.unsqueeze(1)  # (B, 1, seq_len, context_len), 1 for heads
-        has_seq = len(t_mod.shape) == 4
-        chunk_dim = 2 if has_seq else 1
-        # msa: multi-head self-attention  mlp: multi-layer perceptron
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-            self.modulation.to(dtype=t_mod.dtype, device=t_mod.device) + t_mod
-        ).chunk(6, dim=chunk_dim)
-        if has_seq:
-            # means t_mod has separate modulation for each token, otherwise same modulation for all tokens in the block
-            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-                shift_msa.squeeze(2),
-                scale_msa.squeeze(2),
-                gate_msa.squeeze(2),
-                shift_mlp.squeeze(2),
-                scale_mlp.squeeze(2),
-                gate_mlp.squeeze(2),
-            )
-        input_x = modulate(self.norm1(x), shift_msa, scale_msa)
-        x = self.gate(x, gate_msa, self.self_attn(input_x, freqs, self_attn_mask=self_attn_mask))
-        x = x + self.cross_attn(self.norm3(x), context, ctx_mask=context_mask)
-        input_x = modulate(self.norm2(x), shift_mlp, scale_mlp)
-        x = self.gate(x, gate_mlp, self.ffn(input_x))
-        return x
-
-
-class MLP(torch.nn.Module):
-    def __init__(self, in_dim, out_dim, has_pos_emb=False):
-        super().__init__()
-        self.proj = torch.nn.Sequential(
-            nn.LayerNorm(in_dim),
-            nn.Linear(in_dim, in_dim),
-            nn.GELU(),
-            nn.Linear(in_dim, out_dim),
-            nn.LayerNorm(out_dim),
-        )
-        self.has_pos_emb = has_pos_emb
-        if has_pos_emb:
-            self.emb_pos = torch.nn.Parameter(torch.zeros((1, 514, 1280)))
-
-    def forward(self, x):
-        if self.has_pos_emb:
-            x = x + self.emb_pos.to(dtype=x.dtype, device=x.device)
-        return self.proj(x)
-
-
-class Head(nn.Module):
-    def __init__(self, dim: int, out_dim: int, patch_size: Tuple[int, int, int], eps: float):
-        super().__init__()
-        self.dim = dim
-        self.patch_size = patch_size
-        self.norm = nn.LayerNorm(dim, eps=eps, elementwise_affine=False)
-        self.head = nn.Linear(dim, out_dim * math.prod(patch_size))
-        self.modulation = nn.Parameter(torch.randn(1, 2, dim) / dim**0.5)
-
-    def forward(self, x, t_mod):
-        if len(t_mod.shape) == 3:
-            shift, scale = (
-                self.modulation.unsqueeze(0).to(dtype=t_mod.dtype, device=t_mod.device) + t_mod.unsqueeze(2)
-            ).chunk(2, dim=2)
-            x = self.head(self.norm(x) * (1 + scale.squeeze(2)) + shift.squeeze(2))
-        else:
-            shift, scale = (self.modulation.to(dtype=t_mod.dtype, device=t_mod.device) + t_mod).chunk(2, dim=1)
-            x = self.head(self.norm(x) * (1 + scale) + shift)
-        return x
-
-
 class WanVideoDiT(torch.nn.Module):
     def __init__(
         self,
@@ -355,7 +71,7 @@ class WanVideoDiT(torch.nn.Module):
         text_dim: int,
         freq_dim: int,
         eps: float,
-        patch_size: Tuple[int, int, int],
+        patch_size: tuple[int, int, int],
         num_heads: int,
         attn_head_dim: int,
         num_layers: int,
@@ -413,9 +129,14 @@ class WanVideoDiT(torch.nn.Module):
         )
         self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(hidden_dim, hidden_dim * 6))
         self.blocks = nn.ModuleList(
-            [DiTBlock(hidden_dim, attn_head_dim, num_heads, ffn_dim, eps) for _ in range(num_layers)]
+            [
+                WamDiTBlock(
+                    hidden_dim, attn_head_dim, num_heads, ffn_dim, eps, attention_fn=flash_attention, rope_fn=rope_apply
+                )
+                for _ in range(num_layers)
+            ]
         )
-        self.head = Head(hidden_dim, out_dim, patch_size, eps)
+        self.head = NativeDtypeHead(hidden_dim, out_dim, patch_size, eps)
         self.freqs = precompute_freqs_cis_3d(
             attn_head_dim,
             end=self.rope_max_length,
@@ -431,11 +152,11 @@ class WanVideoDiT(torch.nn.Module):
             self.action_embedding = nn.Linear(action_dim, hidden_dim)
             self.action_group_causal_mask_mode = action_group_causal_mask_mode
 
-    def patchify(self, x: torch.Tensor, control_camera_latents_input: Optional[torch.Tensor] = None):
+    def patchify(self, x: torch.Tensor, control_camera_latents_input: torch.Tensor | None = None):
         x = self.patch_embedding(x)
         if self.control_adapter is not None and control_camera_latents_input is not None:
             y_camera = self.control_adapter(control_camera_latents_input)
-            x = [u + v for u, v in zip(x, y_camera)]
+            x = [u + v for u, v in zip(x, y_camera, strict=False)]
             x = x[0].unsqueeze(0)
         return x
 
@@ -456,8 +177,8 @@ class WanVideoDiT(torch.nn.Module):
         x: torch.Tensor,
         timestep: torch.Tensor,
         context: torch.Tensor,
-        context_mask: Optional[torch.Tensor],
-        action: Optional[torch.Tensor],
+        context_mask: torch.Tensor | None,
+        action: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if x.ndim != 5:
             raise ValueError(f"`latents` must be 5D [B, C, T, H, W], got shape {tuple(x.shape)}")
@@ -545,14 +266,14 @@ class WanVideoDiT(torch.nn.Module):
         x: torch.Tensor,
         timestep: torch.Tensor,
         context: torch.Tensor,
-        context_mask: Optional[torch.Tensor] = None,
-        action: Optional[torch.Tensor] = None,
+        context_mask: torch.Tensor | None = None,
+        action: torch.Tensor | None = None,
         temporal_position_offset: int = 0,
-        temporal_position_ids: Optional[torch.Tensor] = None,
+        temporal_position_ids: torch.Tensor | None = None,
         fuse_vae_embedding_in_latents: bool = False,
-        control_camera_latents_input: Optional[torch.Tensor] = None,
+        control_camera_latents_input: torch.Tensor | None = None,
         clean_prefix_frames: int = 1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         x, timestep, context_mask = self._validate_forward_inputs(
             x=x,
             timestep=timestep,
@@ -612,14 +333,18 @@ class WanVideoDiT(torch.nn.Module):
         f_rope = f_freqs[frame_positions.long()].view(num_frames, 1, 1, -1)
         h_rope = h_freqs[:grid_h].view(1, grid_h, 1, -1)
         w_rope = w_freqs[:grid_w].view(1, 1, grid_w, -1)
-        freqs = torch.cat(
-            (
-                f_rope.expand(-1, grid_h, grid_w, -1),
-                h_rope.expand(num_frames, -1, grid_w, -1),
-                w_rope.expand(num_frames, grid_h, -1, -1),
-            ),
-            dim=-1,
-        ).reshape(num_frames * grid_h * grid_w, 1, -1).to(x.device)
+        freqs = (
+            torch.cat(
+                (
+                    f_rope.expand(-1, grid_h, grid_w, -1),
+                    h_rope.expand(num_frames, -1, grid_w, -1),
+                    w_rope.expand(num_frames, grid_h, -1, -1),
+                ),
+                dim=-1,
+            )
+            .reshape(num_frames * grid_h * grid_w, 1, -1)
+            .to(x.device)
+        )
         tokens = rearrange(x, "b c f h w -> b (f h w) c")
         return {
             "tokens": tokens,
@@ -634,7 +359,7 @@ class WanVideoDiT(torch.nn.Module):
             },
         }
 
-    def post_dit(self, x_tokens: torch.Tensor, pre_state: Dict[str, Any]) -> torch.Tensor:
+    def post_dit(self, x_tokens: torch.Tensor, pre_state: dict[str, Any]) -> torch.Tensor:
         f, h, w = pre_state["meta"]["grid_size"]
         x = self.head(x_tokens, pre_state["t"])
         x = self.unpatchify(x, (f, h, w))
@@ -645,8 +370,8 @@ class WanVideoDiT(torch.nn.Module):
         x: torch.Tensor,
         timestep: torch.Tensor,
         context: torch.Tensor,
-        context_mask: Optional[torch.Tensor] = None,
-        action: Optional[torch.Tensor] = None,
+        context_mask: torch.Tensor | None = None,
+        action: torch.Tensor | None = None,
         fuse_vae_embedding_in_latents: bool = False,
     ):
         pre_state = self.pre_dit(

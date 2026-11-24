@@ -1,9 +1,9 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 availability: open_source
-checkpoints:
-- local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Causal-Forcing/chunkwise/causal_forcing.pt
-  role: causal_forcing_chunkwise
 checkpoint_refs:
+- role: causal_forcing_chunkwise
+  repo_id: zhuhz22/Causal-Forcing
+  filename: chunkwise/causal_forcing.pt
 - role: causal_forcing_framewise
   repo_id: zhuhz22/Causal-Forcing
   filename: framewise/causal_forcing.pt
@@ -16,8 +16,6 @@ checkpoint_refs:
 base_model_refs:
 - role: wan2_1_t2v_1_3b
   repo_id: Wan-AI/Wan2.1-T2V-1.3B
-- role: wan2_1_t2v_14b
-  repo_id: Wan-AI/Wan2.1-T2V-14B
 family: Autoregressive Video Diffusion
 id: causal-forcing
 aliases:
@@ -31,11 +29,11 @@ tasks:
 - autoregressive-video-generation
 integration:
   notes:
-  - WorldFoundry vendors the official infer-only Causal-Forcing runtime under
-    worldfoundry/synthesis/visual_generation/forcing/causal_forcing_runtime; the runner owns prompt/i2v data
-    materialization, Wan weight symlinks, command construction, output loading, and pipeline/catalog exposure in-tree.
-  - The local workspace currently has the chunk-wise checkpoint staged under ${WORLDFOUNDRY_CKPT_DIR}/Causal-Forcing.
-    Override config_path/checkpoint_path for frame-wise or Causal-Forcing++ variants.
+  - NativeCausalForcingPipeline runs every released Causal-Forcing generator as a native diffusion recipe on the
+    autoregressive-window runner, offline and as a resident realtime session.
+  - The public causal-forcing ID loads the chunk-wise student; variant (or model_id) selects causal-forcing-framewise,
+    causal-forcing-framewise-1step or causal-forcing-framewise-2step. Each variant reads its own file from
+    zhuhz22/Causal-Forcing, and the Wan2.1 text encoder, tokenizer and VAE resolve from Wan-AI/Wan2.1-T2V-1.3B.
   status: integrated
 license: unknown
 modalities:
@@ -49,6 +47,7 @@ official_sources:
   paper_plus_plus: https://arxiv.org/abs/2605.15141
   github:
     url: https://github.com/thu-ml/Causal-Forcing
+    revision: a67b81351d6dd50c1a1215f5958ee5a7c95eb135
   huggingface:
   - repo_id: zhuhz22/Causal-Forcing
     type: model
@@ -58,10 +57,12 @@ runtime_profile: runtime-profile:causal-forcing
 starred: true
 runner_parity:
   notes:
-  - The adapter executes the vendored official inference.py path. Full parity requires local Wan2.1 weights and the
-    selected Causal-Forcing checkpoint/config pair.
+  - All four text-to-video variants and frame-wise image-to-video are bitwise equal to recorded runs of the official
+    inference script for one request each (first MovieGenVideoBench prompt, seed 42, 480x832, 21 latent frames, bf16,
+    H100), given the recorded initial noise and re-noise draws, at every stage from strict checkpoint loading to the
+    decoded video.
   - Per-run visual QA and artifact checks are tracked outside the model catalog.
-  status: pending
+  status: verified
 catalog_category: world_models
 catalog_scope: world-model/interactive starred models
 catalog_policy:
@@ -72,18 +73,18 @@ docs:
   publisher: Tsinghua University (thu-ml)
   publisher_kind: university
   publisher_zh: 清华大学（thu-ml）
-  overview: Causal-Forcing distills bidirectional video diffusion into a causal, autoregressive generator — including Causal-Forcing++ few-step variants — so video can be generated chunk by chunk or frame by frame. In this catalog the official infer-only runtime is vendored in-tree, with the chunk-wise checkpoint staged as the local default and frame-wise/++ variants selectable by config override.
-  overview_zh: Causal-Forcing 把双向视频扩散蒸馏为因果自回归生成器——包括 Causal-Forcing++ 少步 variant——使视频可以逐 chunk 或逐帧生成。本 catalog 中官方仅推理运行时已内置树内，chunk-wise checkpoint 为本地默认，frame-wise 与 ++ variant 可通过配置覆盖选择。
+  overview: Causal-Forcing distills bidirectional video diffusion into a causal, autoregressive generator — including Causal-Forcing++ few-step variants — so video can be generated chunk by chunk or frame by frame. WorldFoundry serves every released student as a native diffusion recipe, with the chunk-wise student as the default and the frame-wise and ++ students selected by variant.
+  overview_zh: Causal-Forcing 把双向视频扩散蒸馏为因果自回归生成器——包括 Causal-Forcing++ 少步 variant——使视频可以逐 chunk 或逐帧生成。WorldFoundry 以原生扩散 recipe 提供全部已发布的学生模型，默认是 chunk-wise 学生，frame-wise 与 ++ 学生通过 variant 选择。
   architecture: Per the paper (arXiv 2602.02214), a Wan2.1-based teacher is distilled into causal students with chunk-wise or frame-wise attention; the ++ variants push to 1-2 step sampling. Recorded checkpoints include chunk-wise plus frame-wise and two ++ few-step variants under zhuhz22/Causal-Forcing.
   architecture_zh: 按论文（arXiv 2602.02214），基于 Wan2.1 的教师被蒸馏为 chunk-wise 或 frame-wise 注意力的因果学生；++ variant 进一步压缩到 1-2 步采样。记录的 checkpoint 包括 chunk-wise，以及 zhuhz22/Causal-Forcing 下的 frame-wise 与两个 ++ 少步 variant。
-  usage_notes: The adapter executes the vendored official inference.py path; full parity requires local Wan2.1 weights plus the selected Causal-Forcing checkpoint/config pair. Supply benchmark prompt lists separately through your local input configuration.
-  usage_notes_zh: 适配器执行内置的官方 inference.py 路径；完整一致性需要本地 Wan2.1 权重与所选 Causal-Forcing checkpoint/config 配对。benchmark 提示词列表需自行准备，并通过本地输入配置提供。
+  usage_notes: Defaults follow the official CLI (480x832, 81 frames, guidance 1.0, 16 fps) with each variant's released step count. Only the frame-wise student accepts an input image, which becomes the first latent frame.
+  usage_notes_zh: 默认值沿用官方 CLI（480x832、81 帧、guidance 1.0、16 fps），步数取各 variant 发布的步数。只有 frame-wise 学生接受输入图像，图像成为第一个潜帧。
   limitations:
-  - Runner parity is pending staged Wan2.1 weights and the chosen checkpoint/config pair.
   - Distilled causal students trade some quality for autoregressive speed versus the bidirectional teacher.
+  - Image-to-video is available on the frame-wise student only.
   limitations_zh:
-  - runner parity 待 Wan2.1 权重与所选 checkpoint/config 配对就位。
   - 蒸馏的因果学生以部分质量换取自回归速度，弱于双向教师。
+  - 只有 frame-wise 学生支持图生视频。
   recommended_benchmarks:
   - id: vbench
     reason: Standard multi-dimension quality suite for text/image-to-video.

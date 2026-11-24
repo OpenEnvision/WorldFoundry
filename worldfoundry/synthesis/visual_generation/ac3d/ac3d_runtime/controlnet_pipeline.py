@@ -1,33 +1,34 @@
 import inspect
 import math
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from collections.abc import Callable
+from typing import ClassVar
 
-import torch
 import numpy as np
-from PIL import Image
-from torchvision import transforms
-from einops import rearrange, repeat
-from transformers import T5EncoderModel, T5Tokenizer
-from diffusers.video_processor import VideoProcessor
-from diffusers.utils.torch_utils import randn_tensor
-from diffusers.models.embeddings import get_3d_rotary_pos_embed
-from diffusers.pipelines.pipeline_utils import DiffusionPipeline
-from diffusers.models import AutoencoderKLCogVideoX, CogVideoXTransformer3DModel
+import torch
 from diffusers import CogVideoXDDIMScheduler, CogVideoXDPMScheduler
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
-from diffusers.pipelines.cogvideo.pipeline_cogvideox import CogVideoXPipelineOutput, CogVideoXLoraLoaderMixin
+from diffusers.models import AutoencoderKLCogVideoX, CogVideoXTransformer3DModel
+from diffusers.models.embeddings import get_3d_rotary_pos_embed
+from diffusers.pipelines.cogvideo.pipeline_cogvideox import CogVideoXLoraLoaderMixin, CogVideoXPipelineOutput
+from diffusers.pipelines.pipeline_utils import DiffusionPipeline
+from diffusers.utils import logging
+from diffusers.utils.torch_utils import randn_tensor
+from diffusers.video_processor import VideoProcessor
+from PIL import Image
+from torchvision import transforms
+from transformers import T5EncoderModel, T5Tokenizer
 
-from cogvideo_controlnet import CogVideoXControlnet
+from .cogvideo_controlnet import CogVideoXControlnet
+
+logger = logging.get_logger(__name__)
 
 
 def resize_for_crop(image, crop_h, crop_w):
     img_h, img_w = image.shape[-2:]
-    if img_h >= crop_h and img_w >= crop_w:
-        coef = max(crop_h / img_h, crop_w / img_w)
-    elif img_h <= crop_h and img_w <= crop_w:
+    if (img_h >= crop_h and img_w >= crop_w) or (img_h <= crop_h and img_w <= crop_w):
         coef = max(crop_h / img_h, crop_w / img_w)
     else:
-        coef = crop_h / img_h if crop_h > img_h else crop_w / img_w 
+        coef = crop_h / img_h if crop_h > img_h else crop_w / img_w
     out_h, out_w = int(img_h * coef), int(img_w * coef)
     resized_image = transforms.functional.resize(image, (out_h, out_w), antialias=True)
     return resized_image
@@ -42,7 +43,7 @@ def prepare_frames(input_images, video_size, do_resize=True, do_crop=True):
         images_tensor = [transforms.functional.center_crop(x, video_size) for x in images_tensor]
     if isinstance(images_tensor, list):
         images_tensor = torch.stack(images_tensor)
-    return images_tensor.unsqueeze(0) 
+    return images_tensor.unsqueeze(0)
 
 
 def get_resize_crop_region_for_grid(src, tgt_width, tgt_height):
@@ -52,13 +53,13 @@ def get_resize_crop_region_for_grid(src, tgt_width, tgt_height):
     r = h / w
     if r > (th / tw):
         resize_height = th
-        resize_width = int(round(th / h * w))
+        resize_width = int(round(th / h * w))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     else:
         resize_width = tw
-        resize_height = int(round(tw / w * h))
+        resize_height = int(round(tw / w * h))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
-    crop_top = int(round((th - resize_height) / 2.0))
-    crop_left = int(round((tw - resize_width) / 2.0))
+    crop_top = int(round((th - resize_height) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+    crop_left = int(round((tw - resize_width) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
     return (crop_top, crop_left), (crop_top + resize_height, crop_left + resize_width)
 
@@ -66,10 +67,10 @@ def get_resize_crop_region_for_grid(src, tgt_width, tgt_height):
 # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
 def retrieve_timesteps(
     scheduler,
-    num_inference_steps: Optional[int] = None,
-    device: Optional[Union[str, torch.device]] = None,
-    timesteps: Optional[List[int]] = None,
-    sigmas: Optional[List[float]] = None,
+    num_inference_steps: int | None = None,
+    device: str | torch.device | None = None,
+    timesteps: list[int] | None = None,
+    sigmas: list[float] | None = None,
     **kwargs,
 ):
     """
@@ -121,31 +122,36 @@ def retrieve_timesteps(
         scheduler.set_timesteps(num_inference_steps, device=device, **kwargs)
         timesteps = scheduler.timesteps
     return timesteps, num_inference_steps
-    
+
 
 class ControlnetCogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
-    _optional_components = []
+    _optional_components: ClassVar[list] = []
     model_cpu_offload_seq = "text_encoder->transformer->vae"
 
-    _callback_tensor_inputs = [
+    _callback_tensor_inputs: ClassVar[list] = [
         "latents",
         "prompt_embeds",
         "negative_prompt_embeds",
     ]
-    
+
     def __init__(
         self,
         tokenizer: T5Tokenizer,
         text_encoder: T5EncoderModel,
         vae: AutoencoderKLCogVideoX,
         transformer: CogVideoXTransformer3DModel,
-        scheduler: Union[CogVideoXDDIMScheduler, CogVideoXDPMScheduler],
+        scheduler: CogVideoXDDIMScheduler | CogVideoXDPMScheduler,
         controlnet: CogVideoXControlnet,
     ):
         super().__init__()
 
         self.register_modules(
-            tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, controlnet=controlnet, scheduler=scheduler
+            tokenizer=tokenizer,
+            text_encoder=text_encoder,
+            vae=vae,
+            transformer=transformer,
+            controlnet=controlnet,
+            scheduler=scheduler,
         )
         self.vae_scale_factor_spatial = (
             2 ** (len(self.vae.config.block_out_channels) - 1) if hasattr(self, "vae") and self.vae is not None else 8
@@ -155,20 +161,22 @@ class ControlnetCogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
         )
 
         self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor_spatial)
-    
+
     def prepare_controlnet_frames(self, controlnet_frames, height, width, do_classifier_free_guidance):
         prepared_frames = prepare_frames(controlnet_frames, (height, width))
-        controlnet_encoded_frames = prepared_frames.to(dtype=self.vae.dtype, device='cuda')
-        controlnet_encoded_frames = torch.cat([controlnet_encoded_frames] * 2) if do_classifier_free_guidance else controlnet_encoded_frames
+        controlnet_encoded_frames = prepared_frames.to(dtype=self.vae.dtype, device="cuda")
+        controlnet_encoded_frames = (
+            torch.cat([controlnet_encoded_frames] * 2) if do_classifier_free_guidance else controlnet_encoded_frames
+        )
         return controlnet_encoded_frames.contiguous()
 
     def _get_t5_prompt_embeds(
         self,
-        prompt: Union[str, List[str]] = None,
+        prompt: str | list[str] | None = None,
         num_videos_per_prompt: int = 1,
         max_sequence_length: int = 226,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         device = device or self._execution_device
         dtype = dtype or self.text_encoder.dtype
@@ -206,15 +214,15 @@ class ControlnetCogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
 
     def encode_prompt(
         self,
-        prompt: Union[str, List[str]],
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        prompt: str | list[str],
+        negative_prompt: str | list[str] | None = None,
         do_classifier_free_guidance: bool = True,
         num_videos_per_prompt: int = 1,
-        prompt_embeds: Optional[torch.Tensor] = None,
-        negative_prompt_embeds: Optional[torch.Tensor] = None,
+        prompt_embeds: torch.Tensor | None = None,
+        negative_prompt_embeds: torch.Tensor | None = None,
         max_sequence_length: int = 226,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         r"""
         Encodes the prompt into text encoder hidden states.
@@ -245,10 +253,7 @@ class ControlnetCogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
         device = device or self._execution_device
 
         prompt = [prompt] if isinstance(prompt, str) else prompt
-        if prompt is not None:
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
+        batch_size = len(prompt) if prompt is not None else prompt_embeds.shape[0]
 
         if prompt_embeds is None:
             prompt_embeds = self._get_t5_prompt_embeds(
@@ -381,7 +386,7 @@ class ControlnetCogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
                 f" {negative_prompt_embeds}. Please make sure to only forward one of the two."
             )
 
-        if prompt_embeds is not None and negative_prompt_embeds is not None:
+        if prompt_embeds is not None and negative_prompt_embeds is not None:  # noqa: SIM102 - Statement form kept for readability.
             if prompt_embeds.shape != negative_prompt_embeds.shape:
                 raise ValueError(
                     "`prompt_embeds` and `negative_prompt_embeds` must have the same shape when passed directly, but"
@@ -390,7 +395,7 @@ class ControlnetCogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
                 )
         if controlnet_frames is not None and controlnet_latents is not None:
             raise ValueError("Only one of `controlnet_frames` or `controlnet_latents` should be provided")
-            
+
     def fuse_qkv_projections(self) -> None:
         r"""Enables fused QKV projections."""
         self.fusing_transformer = True
@@ -410,7 +415,7 @@ class ControlnetCogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
         width: int,
         num_frames: int,
         device: torch.device,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         grid_height = height // (self.vae_scale_factor_spatial * self.transformer.config.patch_size)
         grid_width = width // (self.vae_scale_factor_spatial * self.transformer.config.patch_size)
         base_size_width = 720 // (self.vae_scale_factor_spatial * self.transformer.config.patch_size)
@@ -445,38 +450,39 @@ class ControlnetCogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
     @property
     def interrupt(self):
         return self._interrupt
-        
+
     @torch.no_grad()
     def __call__(
         self,
-        controlnet_frames: List[Image.Image] = None,
-        prompt: Optional[Union[str, List[str]]] = None,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        controlnet_frames: list[Image.Image] | None = None,
+        prompt: str | list[str] | None = None,
+        negative_prompt: str | list[str] | None = None,
         height: int = 480,
         width: int = 720,
         num_frames: int = 49,
         num_inference_steps: int = 50,
-        timesteps: Optional[List[int]] = None,
+        timesteps: list[int] | None = None,
         guidance_scale: float = 6,
         use_dynamic_cfg: bool = False,
         num_videos_per_prompt: int = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        latents: Optional[torch.FloatTensor] = None,
-        controlnet_latents: Optional[torch.FloatTensor] = None,
-        prompt_embeds: Optional[torch.FloatTensor] = None,
-        negative_prompt_embeds: Optional[torch.FloatTensor] = None,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        latents: torch.FloatTensor | None = None,
+        controlnet_latents: torch.FloatTensor | None = None,
+        prompt_embeds: torch.FloatTensor | None = None,
+        negative_prompt_embeds: torch.FloatTensor | None = None,
         output_type: str = "pil",
         return_dict: bool = True,
-        callback_on_step_end: Optional[
-            Union[Callable[[int, int, Dict], None], PipelineCallback, MultiPipelineCallbacks]
-        ] = None,
-        callback_on_step_end_tensor_inputs: List[str] = ["latents"],
+        callback_on_step_end: Callable[[int, int, dict], None]
+        | PipelineCallback
+        | MultiPipelineCallbacks
+        | None = None,
+        callback_on_step_end_tensor_inputs: list[str] = ["latents"],  # noqa: B006 - Keeps the upstream default object and signature.
         max_sequence_length: int = 226,
-        controlnet_weights: Optional[Union[float, list, np.ndarray, torch.FloatTensor]] = 1.0,
+        controlnet_weights: float | list | np.ndarray | torch.FloatTensor | None = 1.0,
         controlnet_guidance_start: float = 0.0,
         controlnet_guidance_end: float = 1.0,
-    ) -> Union[CogVideoXPipelineOutput, Tuple]:
+    ) -> CogVideoXPipelineOutput | tuple:
         if num_frames > 49:
             raise ValueError(
                 "The number of frames must be less than 49 for now due to static positional embeddings. This will be updated in the future to remove this limitation."
@@ -536,9 +542,9 @@ class ControlnetCogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
         # 4. Prepare timesteps
         timesteps, num_inference_steps = retrieve_timesteps(self.scheduler, num_inference_steps, device, timesteps)
         self._num_timesteps = len(timesteps)
-        
+
         # 5. Prepare latents.
-        latent_channels = 16 #self.transformer.config.in_channels
+        latent_channels = 16  # self.transformer.config.in_channels
         latents = self.prepare_latents(
             batch_size * num_videos_per_prompt,
             latent_channels,
@@ -567,17 +573,19 @@ class ControlnetCogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
 
             # If controlnet frames count greater than num_frames parameter
             controlnet_frames = controlnet_frames[:num_frames]
-            
+
             controlnet_latents = self.prepare_controlnet_frames(
                 controlnet_frames,
-                height, 
-                width, 
+                height,
+                width,
                 do_classifier_free_guidance,
             )
         else:
             controlnet_latents = controlnet_latents.to(latents.dtype)
-            controlnet_latents = torch.cat([controlnet_latents] * 2) if do_classifier_free_guidance else controlnet_latents       
-        
+            controlnet_latents = (
+                torch.cat([controlnet_latents] * 2) if do_classifier_free_guidance else controlnet_latents
+            )
+
         # 7. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
@@ -590,26 +598,26 @@ class ControlnetCogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
 
         # 9. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
-        
+
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             # for DPM-solver++
             old_pred_original_sample = None
             for i, t in enumerate(timesteps):
                 if self.interrupt:
                     continue
-                
+
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-                
+
                 timestep = t.expand(latent_model_input.shape[0])
 
                 current_sampling_percent = i / len(timesteps)
 
                 latent_model_input = latent_model_input.to(dtype=self.transformer.dtype)
                 prompt_embeds = prompt_embeds.to(dtype=self.transformer.dtype)
-                
+
                 controlnet_states = None
-                if (controlnet_guidance_start <= current_sampling_percent <= controlnet_guidance_end):
+                if controlnet_guidance_start <= current_sampling_percent <= controlnet_guidance_end:
                     # extract controlnet hidden state
                     controlnet_states = self.controlnet(
                         hidden_states=latent_model_input,
@@ -674,7 +682,7 @@ class ControlnetCogVideoXPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
                 if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
                     progress_bar.update()
 
-        if not output_type == "latent":
+        if not output_type == "latent":  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
             video = self.decode_latents(latents)
             video = self.video_processor.postprocess_video(video=video, output_type=output_type)
         else:

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
@@ -90,7 +91,7 @@ def add_discretized_state_to_instruction(
         raise ValueError("StarVLA instructions and states must have equal batch size.")
     return [
         f"{instruction} [STATE] {state_to_token_string(state, num_bins=num_bins)} [ACTION]"
-        for instruction, state in zip(instructions, states)
+        for instruction, state in zip(instructions, states, strict=False)
     ]
 
 

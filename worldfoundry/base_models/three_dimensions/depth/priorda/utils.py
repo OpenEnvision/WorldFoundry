@@ -2,8 +2,6 @@
 # https://github.com/SpatialVision/Prior-Depth-Anything
 # Licensed under the Apache-2.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> three_dimensions -> depth -> priorda -> utils.py functionality."""
-
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -12,7 +10,6 @@ import torch
 
 @dataclass
 class Arguments:
-    """Arguments implementation."""
     K: int = field(default=5, metadata={"help": "K value of KNN"})
     conditioned_model_size: str = field(default="vitb", metadata={"help": "Size of conditioned model."})
     frozen_model_size: str = field(default="vitb", metadata={"help": "Size of frozen model."})
@@ -34,12 +31,6 @@ class Arguments:
 # ******************** disparity space ********************
 # Adapted from Marigold, available at https://github.com/prs-eth/Marigold
 def depth2disparity(depth, return_mask=False):
-    """Depth2disparity.
-
-    Args:
-        depth: The depth.
-        return_mask: The return mask.
-    """
     if isinstance(depth, torch.Tensor):
         disparity = torch.zeros_like(depth)
     elif isinstance(depth, np.ndarray):
@@ -53,11 +44,6 @@ def depth2disparity(depth, return_mask=False):
 
 
 def disparity2depth(disparity, **kwargs):
-    """Disparity2depth.
-
-    Args:
-        disparity: The disparity.
-    """
     return depth2disparity(disparity, **kwargs)
 
 
@@ -65,12 +51,7 @@ def disparity2depth(disparity, **kwargs):
 
 
 def chw2hwc(chw):
-    """Chw2hwc.
-
-    Args:
-        chw: The chw.
-    """
-    assert 3 == len(chw.shape)
+    assert len(chw.shape) == 3
     if isinstance(chw, torch.Tensor):
         hwc = torch.permute(chw, (1, 2, 0))
     elif isinstance(chw, np.ndarray):

@@ -8,49 +8,53 @@
 
 _backend_args = None
 
-tta_model = dict(
-    type='mmdet.DetTTAModel',
-    tta_cfg=dict(nms=dict(type='nms', iou_threshold=0.65), max_per_img=300))
+tta_model = {
+    "type": "mmdet.DetTTAModel",
+    "tta_cfg": {"nms": {"type": "nms", "iou_threshold": 0.65}, "max_per_img": 300},
+}
 
 img_scales = [(640, 640), (320, 320), (960, 960)]
 
 #                                LoadImageFromFile
 #              /                        |                          \
-#          Resize                     Resize                       Resize  # noqa
+#          Resize                     Resize                       Resize
 #        /      \                    /      \                    /        \
-#  RandomFlip RandomFlip      RandomFlip RandomFlip        RandomFlip RandomFlip # noqa
+#  RandomFlip RandomFlip      RandomFlip RandomFlip        RandomFlip RandomFlip
 #      |          |                |         |                  |         |
 #  LoadAnn    LoadAnn           LoadAnn    LoadAnn           LoadAnn    LoadAnn
 #      |          |                |         |                  |         |
-#  PackDetIn  PackDetIn         PackDetIn  PackDetIn        PackDetIn  PackDetIn # noqa
+#  PackDetIn  PackDetIn         PackDetIn  PackDetIn        PackDetIn  PackDetIn
 
 tta_pipeline = [
-    dict(type='LoadImageFromFile', backend_args=_backend_args),
-    dict(
-        type='TestTimeAug',
-        transforms=[
-            [
-                dict(type='mmdet.Resize', scale=s, keep_ratio=True)
-                for s in img_scales
-            ],
+    {"type": "LoadImageFromFile", "backend_args": _backend_args},
+    {
+        "type": "TestTimeAug",
+        "transforms": [
+            [{"type": "mmdet.Resize", "scale": s, "keep_ratio": True} for s in img_scales],
             [
                 # ``RandomFlip`` must be placed before ``Pad``, otherwise
                 # bounding box coordinates after flipping cannot be
                 # recovered correctly.
-                dict(type='mmdet.RandomFlip', prob=1.),
-                dict(type='mmdet.RandomFlip', prob=0.)
+                {"type": "mmdet.RandomFlip", "prob": 1.0},
+                {"type": "mmdet.RandomFlip", "prob": 0.0},
             ],
             [
-                dict(
-                    type='mmdet.Pad',
-                    pad_to_square=True,
-                    pad_val=dict(img=(114.0, 114.0, 114.0))),
+                {"type": "mmdet.Pad", "pad_to_square": True, "pad_val": {"img": (114.0, 114.0, 114.0)}},
             ],
             [
-                dict(
-                    type='mmdet.PackDetInputs',
-                    meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
-                               'scale_factor', 'flip', 'flip_direction'))
-            ]
-        ])
+                {
+                    "type": "mmdet.PackDetInputs",
+                    "meta_keys": (
+                        "img_id",
+                        "img_path",
+                        "ori_shape",
+                        "img_shape",
+                        "scale_factor",
+                        "flip",
+                        "flip_direction",
+                    ),
+                }
+            ],
+        ],
+    },
 ]

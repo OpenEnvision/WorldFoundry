@@ -11,10 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 from dataclasses import dataclass
-from typing import Literal
+from typing import ClassVar, Literal
 
 import numpy as np
 import torch
@@ -32,7 +31,7 @@ class HeliosSchedulerOutput(BaseOutput):
 
 
 class HeliosScheduler(SchedulerMixin, ConfigMixin):
-    _compatibles = []
+    _compatibles: ClassVar[list] = []
     order = 1
 
     @register_to_config
@@ -41,7 +40,7 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
         num_train_timesteps: int = 1000,
         shift: float = 1.0,  # Following Stable diffusion 3,
         stages: int = 3,
-        stage_range: list = [0, 1 / 3, 2 / 3, 1],
+        stage_range: list = [0, 1 / 3, 2 / 3, 1],  # noqa: B006 - Keeps the upstream default object and signature.
         gamma: float = 1 / 3,
         # For UniPC
         thresholding: bool = False,
@@ -50,7 +49,7 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
         predict_x0: bool = True,
         solver_type: str = "bh2",
         lower_order_final: bool = True,
-        disable_corrector: list[int] = [],
+        disable_corrector: list[int] = [],  # noqa: B006 - Keeps the upstream default object and signature.
         solver_p: SchedulerMixin = None,
         use_flow_sigmas: bool = True,
         scheduler_type: str = "unipc",  # ["euler", "unipc", "dmd"]
@@ -140,14 +139,8 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
         # Determine the ratio of each stage according to flow length
         tot_distance = sum(stage_distance)
         for i_s in range(stages):
-            if i_s == 0:
-                start_ratio = 0.0
-            else:
-                start_ratio = sum(stage_distance[:i_s]) / tot_distance
-            if i_s == stages - 1:
-                end_ratio = 0.9999999999999999
-            else:
-                end_ratio = sum(stage_distance[: i_s + 1]) / tot_distance
+            start_ratio = 0.0 if i_s == 0 else sum(stage_distance[:i_s]) / tot_distance
+            end_ratio = 0.9999999999999999 if i_s == stages - 1 else sum(stage_distance[: i_s + 1]) / tot_distance
 
             self.timestep_ratios[i_s] = (start_ratio, end_ratio)
 
@@ -204,10 +197,7 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
         Setting the timesteps and sigmas for each stage
         """
         if self.config.scheduler_type == "dmd":
-            if is_amplify_first_chunk:
-                num_inference_steps = num_inference_steps * 2 + 1
-            else:
-                num_inference_steps = num_inference_steps + 1
+            num_inference_steps = num_inference_steps * 2 + 1 if is_amplify_first_chunk else num_inference_steps + 1
 
         self.num_inference_steps = num_inference_steps
         self.init_sigmas()
@@ -319,19 +309,14 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
     ) -> HeliosSchedulerOutput | tuple:
         assert (sigma is None) == (sigma_next is None), "sigma and sigma_next must both be None or both be not None"
 
-        if sigma is None and sigma_next is None:
-            if (
-                isinstance(timestep, int)
-                or isinstance(timestep, torch.IntTensor)
-                or isinstance(timestep, torch.LongTensor)
-            ):
-                raise ValueError(
-                    (
-                        "Passing integer indices (e.g. from `enumerate(timesteps)`) as timesteps to"
-                        " `EulerDiscreteScheduler.step()` is not supported. Make sure to pass"
-                        " one of the `scheduler.timesteps` as a timestep."
-                    ),
-                )
+        if sigma is None and sigma_next is None and (isinstance(timestep, (int, torch.IntTensor, torch.LongTensor))):
+            raise ValueError(
+                (
+                    "Passing integer indices (e.g. from `enumerate(timesteps)`) as timesteps to"
+                    " `EulerDiscreteScheduler.step()` is not supported. Make sure to pass"
+                    " one of the `scheduler.timesteps` as a timestep."
+                ),
+            )
 
         if self.step_index is None:
             self._step_index = 0
@@ -417,10 +402,7 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
             elif self.config.prediction_type == "v_prediction":
                 x0_pred = alpha_t * sample - sigma_t * model_output
             elif self.config.prediction_type == "flow_prediction":
-                if flag:
-                    sigma_t = self.sigmas[self.step_index]
-                else:
-                    sigma_t = sigma
+                sigma_t = self.sigmas[self.step_index] if flag else sigma
                 x0_pred = sample - sigma_t * model_output
             else:
                 raise ValueError(
@@ -452,7 +434,7 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
         model_output: torch.Tensor,
         *args,
         sample: torch.Tensor = None,
-        order: int = None,
+        order: int | None = None,
         sigma: torch.Tensor = None,
         sigma_next: torch.Tensor = None,
         **kwargs,
@@ -565,17 +547,11 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
 
         if self.predict_x0:
             x_t_ = sigma_t / sigma_s0 * x - alpha_t * h_phi_1 * m0
-            if D1s is not None:
-                pred_res = torch.einsum("k,bkc...->bc...", rhos_p, D1s)
-            else:
-                pred_res = 0
+            pred_res = torch.einsum("k,bkc...->bc...", rhos_p, D1s) if D1s is not None else 0
             x_t = x_t_ - alpha_t * B_h * pred_res
         else:
             x_t_ = alpha_t / alpha_s0 * x - sigma_t * h_phi_1 * m0
-            if D1s is not None:
-                pred_res = torch.einsum("k,bkc...->bc...", rhos_p, D1s)
-            else:
-                pred_res = 0
+            pred_res = torch.einsum("k,bkc...->bc...", rhos_p, D1s) if D1s is not None else 0
             x_t = x_t_ - sigma_t * B_h * pred_res
 
         x_t = x_t.to(x.dtype)
@@ -587,7 +563,7 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
         *args,
         last_sample: torch.Tensor = None,
         this_sample: torch.Tensor = None,
-        order: int = None,
+        order: int | None = None,
         sigma_before: torch.Tensor = None,
         sigma: torch.Tensor = None,
         **kwargs,
@@ -693,10 +669,7 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
         R = torch.stack(R)
         b = torch.tensor(b, device=device)
 
-        if len(D1s) > 0:
-            D1s = torch.stack(D1s, dim=1)
-        else:
-            D1s = None
+        D1s = torch.stack(D1s, dim=1) if len(D1s) > 0 else None
 
         # for order 1, we use a simplified version
         if order == 1:
@@ -706,18 +679,12 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
 
         if self.predict_x0:
             x_t_ = sigma_t / sigma_s0 * x - alpha_t * h_phi_1 * m0
-            if D1s is not None:
-                corr_res = torch.einsum("k,bkc...->bc...", rhos_c[:-1], D1s)
-            else:
-                corr_res = 0
+            corr_res = torch.einsum("k,bkc...->bc...", rhos_c[:-1], D1s) if D1s is not None else 0
             D1_t = model_t - m0
             x_t = x_t_ - alpha_t * B_h * (corr_res + rhos_c[-1] * D1_t)
         else:
             x_t_ = alpha_t / alpha_s0 * x - sigma_t * h_phi_1 * m0
-            if D1s is not None:
-                corr_res = torch.einsum("k,bkc...->bc...", rhos_c[:-1], D1s)
-            else:
-                corr_res = 0
+            corr_res = torch.einsum("k,bkc...->bc...", rhos_c[:-1], D1s) if D1s is not None else 0
             D1_t = model_t - m0
             x_t = x_t_ - sigma_t * B_h * (corr_res + rhos_c[-1] * D1_t)
         x_t = x_t.to(x.dtype)
@@ -729,14 +696,14 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
         timestep: int | torch.Tensor = None,
         sample: torch.Tensor = None,
         return_dict: bool = True,
-        model_outputs: list = None,
-        timestep_list: list = None,
+        model_outputs: list | None = None,
+        timestep_list: list | None = None,
         sigma_before: torch.Tensor = None,
         sigma: torch.Tensor = None,
         sigma_next: torch.Tensor = None,
-        cus_step_index: int = None,
-        cus_lower_order_num: int = None,
-        cus_this_order: int = None,
+        cus_step_index: int | None = None,
+        cus_lower_order_num: int | None = None,
+        cus_this_order: int | None = None,
         cus_last_sample: torch.Tensor = None,
     ) -> HeliosSchedulerOutput | tuple:
         if self.num_inference_steps is None:
@@ -807,9 +774,8 @@ class HeliosScheduler(SchedulerMixin, ConfigMixin):
             sigma_next=sigma_next,
         )
 
-        if cus_lower_order_num is None:
-            if self.lower_order_nums < self.config.solver_order:
-                self.lower_order_nums += 1
+        if cus_lower_order_num is None and self.lower_order_nums < self.config.solver_order:
+            self.lower_order_nums += 1
 
         # upon completion increase step index by one
         if cus_step_index is None:

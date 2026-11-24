@@ -18,12 +18,7 @@ def test_ltx_gemma_converter_removes_qat_vision_model_wrapper() -> None:
         }
     )
 
-    assert (
-        converted[
-            "model.model.vision_tower.vision_model.embeddings.patch_embedding.weight"
-        ]
-        is patch_weight
-    )
+    assert converted["model.model.vision_tower.vision_model.embeddings.patch_embedding.weight"] is patch_weight
     assert "model.model.vision_tower.embeddings.patch_embedding.weight" not in converted
     assert converted["model.model.language_model.embed_tokens.weight"] is language_weight
     assert converted["model.lm_head.weight"] is language_weight
@@ -33,13 +28,6 @@ def test_ltx_gemma_converter_removes_qat_vision_model_wrapper() -> None:
 def test_ltx_gemma_converter_preserves_unwrapped_vision_keys() -> None:
     weight = object()
 
-    converted = convert_ltx_gemma_state_dict(
-        {"vision_tower.embeddings.position_embedding.weight": weight}
-    )
+    converted = convert_ltx_gemma_state_dict({"vision_tower.embeddings.position_embedding.weight": weight})
 
-    assert (
-        converted[
-            "model.model.vision_tower.vision_model.embeddings.position_embedding.weight"
-        ]
-        is weight
-    )
+    assert converted["model.model.vision_tower.vision_model.embeddings.position_embedding.weight"] is weight

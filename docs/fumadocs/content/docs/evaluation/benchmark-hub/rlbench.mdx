@@ -5,16 +5,16 @@ description: "100 hand-designed vision-guided tasks on CoppeliaSim / PyRep. Worl
 
 RLBench (IEEE RA-L / ICRA 2020) is Imperial College London's Dyson Robotics Lab benchmark: **100** unique, hand-designed manipulation tasks for a **Franka Panda** in **CoppeliaSim** (via **PyRep**). Each task has procedural variations (object poses, goals). A motion planner can emit **unlimited** demonstrations, so the same suite supports imitation learning, RL, and a **few-shot** protocol. Observations are multi-camera vision plus state / language.
 
-Paper: [RLBench: The Robot Learning Benchmark & Learning Environment](https://arxiv.org/abs/1909.12271). Project: [sites.google.com/view/rlbench](https://sites.google.com/view/rlbench). Code: [stepjam/RLBench](https://github.com/stepjam/RLBench). GitHub license metadata in this catalog is `other:noassertion_github_api` — read the upstream terms before reuse.
+Paper: [RLBench: The Robot Learning Benchmark & Learning Environment](https://arxiv.org/abs/1909.12271). Project: [sites.google.com/view/rlbench](https://sites.google.com/view/rlbench). Code: [stepjam/RLBench](https://github.com/stepjam/RLBench). The GitHub API reports no license assertion (NOASSERTION); read the upstream terms before reuse.
 
-WorldFoundry is **official-results only**. You run CoppeliaSim / PyRep / the official task assets upstream, then `official-validation` normalizes JSON/CSV. No in-tree simulator. Declare the task list and the protocol (few-shot vs IL vs RL) with the export.
+WorldFoundry **imports official results** only: run CoppeliaSim / PyRep / the official task assets upstream, then `official-validation` normalizes the JSON/CSV export. Declare the task list and the protocol (few-shot vs IL vs RL) with the export.
 
 <BenchmarkPageSections id="rlbench" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id rlbench \
   --mode official-validation \
   --official-results-path <official_results.json> \

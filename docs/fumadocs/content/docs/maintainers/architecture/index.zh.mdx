@@ -3,7 +3,7 @@ title: 架构
 description: 一次运行如何从命令走到产物、分数和证据，以及每一步由哪一层负责。
 ---
 
-WorldFoundry 把 **模型执行** 和 **benchmark 评分** 拆开，再用进程退出后仍能打开的文件把两边接住。
+WorldFoundry 把 **模型执行** 和 **benchmark 评分** 拆开，再用进程退出后仍能打开的文件连接二者。
 
 模型写出归一化 artifact。Benchmark 只评这些文件，不碰 checkpoint。Runner 记录实际发生了什么。所以视频模型和视觉-语言-动作（VLA）策略可以共用同一套 `GenerationResult` 行和 `scorecard.json`，哪怕推理完全不在同一个 runtime。也因此你可以先生成、先目检，再另开一次评分，而不必重新加载模型。
 
@@ -17,7 +17,7 @@ WorldFoundry 把 **模型执行** 和 **benchmark 评分** 拆开，再用进程
 
 ## 谁负责什么
 
-层与层只通过可序列化契约说话：`GenerationRequest`、`GenerationResult`、`BenchmarkSpec` 和 scorecard 字段。不要共享全局状态，也不要把机器本地路径当成接口。若改动属于模型运行时，就不要把打分逻辑塞进 runner；若属于 reporting，就不要假设某种 checkpoint 布局。
+层与层只通过可序列化契约交互：`GenerationRequest`、`GenerationResult`、`BenchmarkSpec` 和 scorecard 字段。不要共享全局状态，也不要把机器本地路径当成接口。若改动属于模型运行时，就不要把打分逻辑塞进 runner；若属于 reporting，就不要假设某种 checkpoint 布局。
 
 - **使用界面与编排** — 命令、运行模式、resume、输出位置。不管模型内部怎么推理。
 - **模型运行时** — pipeline、operator、本地 runtime、托管 API，以及归一化生成结果。不管 benchmark 怎么打分。
@@ -33,7 +33,7 @@ WorldFoundry 把 **模型执行** 和 **benchmark 评分** 拆开，再用进程
 
 - **统一的公开 runner 契约** — 每条模型路径最终都落到同一种结果形态，benchmark 不必关心文件是哪个 runtime 写的。
 - **Operator 加 pipeline** — 可运行方法两边都要有，输入才明确、才可复现。
-- **证据先于声明** — Catalog 可以描述意图；支持状态必须对得上真正能跑的东西。
+- **证据先于声明** — Catalog 可以描述意图；支持状态必须与实际可运行的能力一致。
 - **外部代码先当出处** — 官方仓库和 checkpoint 要记录。本机 checkout 路径不是 runtime 依赖。
 - **只有一份原生 diffusion 内核** — 上游树是实现参考，不是 backend。可复用的采样算法在仓库里只留一份。
 - **Official validation 不是 benchmark 对齐** — 导入官方文件只证明结果链路通。Benchmark-ready 还要有真实数据、指标和 scorecard。
@@ -70,7 +70,7 @@ WorldFoundry 把 **模型执行** 和 **benchmark 评分** 拆开，再用进程
 如果是带着具体任务进来的：
 
 - **跑一次评测** — [快速开始](/zh/docs/quickstart)，再看 [评测](/zh/docs/evaluation) 和 [CLI 参考](/zh/docs/reference/cli)。
-- **选模型** — [支持的模型](/zh/docs/guides/supported-models)，然后 `worldfoundry-eval zoo model-show` 和 `preflight runtime --profile <benchmark-id>`。
+- **选模型** — [支持的模型](/zh/docs/guides/supported-models)，然后 `wf zoo model-show --model-id <model-id>` 和 `wf preflight runtime --profile <benchmark-id> --output-dir <dir>`。
 - **加模型** — [添加模型](/zh/docs/guides/add-model)，再看 [模型运行时](/zh/docs/maintainers/architecture/model-runtime)。
 - **加 benchmark** — [添加基准](/zh/docs/guides/add-benchmark)，再看 [基准和数据](/zh/docs/maintainers/architecture/benchmarks-data)。
 - **读一次运行留下的文件** — [评测核心](/zh/docs/maintainers/architecture/evaluation-core)，再打开真实输出目录里的 `report.md`、`scorecard.json` 和 metrics summary。

@@ -15,31 +15,27 @@ from pathlib import Path
 
 import numpy as np
 
-from worldfoundry.evaluation.models import discover_model_registry
 from worldfoundry.operators.kairos_operator import KairosOperator
 from worldfoundry.pipelines.kairos.pipeline_kairos import KairosPipeline
 from worldfoundry.studio.inference import catalog as studio_catalog
 from worldfoundry.synthesis.visual_generation.kairos import runtime as runtime_module
 from worldfoundry.synthesis.visual_generation.kairos.runtime import KairosRuntime
+from worldfoundry.zoo.catalog.registry import discover_model_registry
 
 
-def test_kairos_dit_import_and_pytorch_attention_fallback() -> None:
-    runtime_root = (
-        Path(__file__).resolve().parents[2] / "worldfoundry/synthesis/visual_generation/kairos/kairos_runtime"
-    )
+def test_kairos_dit_import_and_pytorch_attention_fallback(tmp_path: Path) -> None:
     env = dict(os.environ)
     env["CUDA_VISIBLE_DEVICES"] = ""
     env["OMP_NUM_THREADS"] = "1"
     env["MKL_NUM_THREADS"] = "1"
     env["NUMEXPR_MAX_THREADS"] = "64"
     env["NUMEXPR_NUM_THREADS"] = "64"
-    env["PYTHONPATH"] = os.pathsep.join(part for part in (str(runtime_root), env.get("PYTHONPATH", "")) if part)
     code = textwrap.dedent(
         """
         import math
         import torch
         import torch.nn.functional as F
-        from kairos.modules.dits import kairos_dit as module
+        from worldfoundry.synthesis.visual_generation.kairos.kairos_runtime.kairos.modules.dits import kairos_dit as module
 
         norm = module.FusedRMSNorm(8, eps=1e-6)
         assert norm(torch.ones(2, 8)).shape == (2, 8)
@@ -99,7 +95,7 @@ def test_kairos_dit_import_and_pytorch_attention_fallback() -> None:
         [sys.executable, "-c", code],
         check=True,
         env=env,
-        cwd=runtime_root,
+        cwd=tmp_path,
     )
 
 
@@ -120,7 +116,6 @@ def test_kairos_workspace_defaults_use_available_official_components(monkeypatch
 
     assert entry.default_model_ref == str(model_root)
     assert entry.default_load_kwargs == {
-        "runtime_root": "",
         "models_root": str(model_root),
         "variant": "pretrained",
         "pretrained_dit": str(dit_path),
@@ -142,7 +137,6 @@ def test_kairos_operator_accepts_prompt_and_image() -> None:
 def test_kairos_pipeline_forwards_runtime_options() -> None:
     pipe = KairosPipeline.from_pretrained(
         model_path={
-            "runtime_root": "/tmp/kairos",
             "models_root": "/tmp/models",
             "config_path": "/tmp/config.py",
             "variant": "720p",
@@ -151,79 +145,59 @@ def test_kairos_pipeline_forwards_runtime_options() -> None:
     )
 
     runtime = pipe.synthesis_model.runtime
-    assert runtime.runtime_root == "/tmp/kairos"
     assert runtime.models_root == "/tmp/models"
     assert runtime.config_path == "/tmp/config.py"
     assert runtime.variant == "720p"
     assert runtime.device == "cuda:1"
 
 
-def test_kairos_runtime_builds_torchrun_command(monkeypatch, tmp_path: Path) -> None:
-    runtime_root = tmp_path / "kairos-sensenova"
+def test_kairos_runtime_builds_torchrun_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import json
+
     models_root = tmp_path / "models"
-    config = runtime_root / "kairos" / "configs" / "kairos_4b_config_DMD.py"
-    (runtime_root / "examples").mkdir(parents=True)
-    (runtime_root / "kairos" / "third_party").mkdir(parents=True)
-    config.parent.mkdir(parents=True)
-    (runtime_root / "examples" / "inference.py").write_text("print('stub')\n", encoding="utf-8")
-    (runtime_root / "kairos" / "third_party" / "manage_libs.py").write_text("print('libs')\n", encoding="utf-8")
+    config = tmp_path / "config.py"
     config.write_text(
         "KAIROS_MODEL_DIR = 'models'\npipeline = {'pipeline_args': {'vae_path': 'old', 'text_encoder_path': 'old'}}\n",
         encoding="utf-8",
     )
-
     calls = []
-
-    def fake_run(command, check, cwd, env, stdout=None, stderr=None, text=None):
-        del check, env, stdout, stderr, text
-        calls.append((command, cwd))
-        return subprocess.CompletedProcess(command, 0, stdout="")
+    monkeypatch.setenv("PYTHONPATH", "/operator/package-path")
 
     class FakePopen:
         def __init__(self, command, cwd, env, stdout=None, stderr=None, text=None, bufsize=None):
-            del env, stdout, stderr, text, bufsize
-            calls.append((command, cwd))
-            output_dir = Path(command[command.index("--input_file") + 1]).read_text(encoding="utf-8")
-            marker = '"output_dir": "'
-            target = output_dir.split(marker, 1)[1].split('"', 1)[0]
-            Path(target).mkdir(parents=True, exist_ok=True)
-            (Path(target) / "output.mp4").write_bytes(b"video")
+            del stdout, stderr, text, bufsize
+            input_file = Path(command[command.index("--input_file") + 1])
+            config_file = Path(command[command.index("--config_file") + 1])
+            payload = json.loads(input_file.read_text())
+            calls.append((command, cwd, env, payload, json.loads(config_file.read_text())))
+            target = Path(payload["output_dir"])
+            target.mkdir(parents=True, exist_ok=True)
+            (target / "output.mp4").write_bytes(b"video")
             self.stdout = iter(())
 
         @staticmethod
         def wait() -> int:
             return 0
 
-    monkeypatch.setattr(runtime_module.subprocess, "run", fake_run)
     monkeypatch.setattr(runtime_module.subprocess, "Popen", FakePopen)
-    monkeypatch.setattr(
-        runtime_module,
-        "_load_video_frames",
-        lambda _: np.zeros((2, 8, 8, 3), dtype=np.uint8),
-    )
+    monkeypatch.setattr(runtime_module, "_load_video_frames", lambda _: np.zeros((2, 8, 8, 3), dtype=np.uint8))
+    model = KairosRuntime(models_root=models_root, config_path=config, python_executable="/tmp/python")
+    result = model.predict(prompt="demo", output_path=tmp_path / "result.mp4", num_frames=2)
 
-    model = KairosRuntime(
-        runtime_root=runtime_root,
-        models_root=models_root,
-        config_path=config,
-        python_executable="/tmp/python",
-        defaults={"run_manage_libs": True},
-    )
-    subprocess_env = model._subprocess_env({})
-    assert subprocess_env["NUMEXPR_MAX_THREADS"] == "64"
-    assert subprocess_env["NUMEXPR_NUM_THREADS"] == "64"
-    result = model.predict(
-        prompt="demo",
-        output_path=tmp_path / "result.mp4",
-        num_frames=2,
-        run_manage_libs=True,
-    )
-
-    assert calls[0][0][:2] == ["/tmp/python", str(runtime_root / "kairos" / "third_party" / "manage_libs.py")]
-    command = calls[1][0]
+    assert len(calls) == 1
+    command, cwd, env, payload, config_data = calls[0]
+    assert env["NUMEXPR_MAX_THREADS"] == "64"
+    assert env["NUMEXPR_NUM_THREADS"] == "64"
+    assert env["PYTHONPATH"] == "/operator/package-path"
+    assert "WORLDFOUNDRY_THIRDPARTY_ROOT" not in env
     assert command[:3] == ["/tmp/python", "-m", "torch.distributed.run"]
-    assert command[command.index("--nproc-per-node") + 1] == "1"
-    assert command[command.index("--config_file") + 1].endswith("kairos_config.py")
+    assert command[command.index("--nproc_per_node") + 1] == "1"
+    assert command[command.index("--master_port") + 1] == "29556"
+    assert command[command.index("--config_file") + 1].endswith("kairos_config.json")
+    assert command[8:10] == ["-m", "worldfoundry.synthesis.visual_generation.kairos.kairos_runtime.examples.inference"]
+    assert cwd == str(Path(runtime_module.__file__).parent / "kairos_runtime")
+    assert config_data["KAIROS_MODEL_DIR"] == str(models_root)
+    assert "runtime_root" not in result["runtime_plan"]
     assert result["artifact_path"] == str((tmp_path / "result.mp4").resolve())
     assert result["video"].shape == (2, 8, 8, 3)
 

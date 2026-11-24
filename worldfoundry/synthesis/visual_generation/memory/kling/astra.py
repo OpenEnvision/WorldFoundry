@@ -22,7 +22,7 @@ class AstraMemory(BaseMemory):
         self.total_latent_frames = 0
         self.reset_records()
 
-    def record(self, new_latents_squeezed: torch.Tensor, **kwargs: Any) -> None:  # ty: ignore[invalid-method-override]
+    def record(self, new_latents_squeezed: torch.Tensor, **kwargs: Any) -> None:  # ty: ignore[invalid-method-override]  # Astra records latents rather than BaseMemory's generic data.
         """Append [C, T_new, H, W] latents and advance the absolute frame count."""
         if self.history_latents is None:
             self.history_latents = new_latents_squeezed
@@ -40,7 +40,7 @@ class AstraMemory(BaseMemory):
             recent_start = self.history_latents.shape[1] - self.capacity + 1
             self.history_latents = torch.cat([first_frame, self.history_latents[:, recent_start:]], dim=1)
 
-    def select(  # ty: ignore[invalid-method-override]
+    def select(  # ty: ignore[invalid-method-override]  # Astra selects by frame index rather than BaseMemory's context query.
         self,
         target_frames_to_generate: int,
         camera_embedding_full: torch.Tensor,
@@ -105,7 +105,7 @@ class AstraMemory(BaseMemory):
                 current_length - available_frames, current_length, device=camera_embedding_full.device
             )
             # A short retained window includes the pinned first frame.
-            if T < current_length and available_frames == T:
+            if current_length > T and available_frames == T:
                 history_positions[0] = 0
             combined_camera[start_pos:19] = camera_embedding_full[history_positions]
         combined_camera[19 : 19 + target_frames_to_generate] = camera_embedding_full[

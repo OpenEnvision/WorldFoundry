@@ -1,0 +1,49 @@
+id: luma-ray2
+name: Luma Ray2
+tasks:
+- text-to-video
+- image-to-video
+- hosted-api
+provider: api
+source:
+  status: api
+  official_repo_url: https://lumalabs.ai/
+official_sources:
+  project_page: https://lumalabs.ai/
+integration:
+  status: integrated
+  notes:
+  - Hosted API Studio pipeline is available; users must provide their own provider
+    API key.
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: luma-ray2
+runner_parity:
+  status: not_applicable
+demo_parity:
+  status: not_applicable
+docs:
+  publisher: Luma AI
+  publisher_kind: company
+  publisher_zh: Luma AI
+  overview: Luma Ray2 is Luma AI's hosted video generation model for text-to-video and image-to-video. WorldFoundry's Studio pipeline wraps the Luma API so a prompt or a start frame turns into a downloadable clip inside the normal WorldFoundry result layout. The model runs on Luma's servers, not locally.
+  overview_zh: Luma Ray2 是 Luma AI 的托管视频生成模型，支持文生视频与图生视频。WorldFoundry 的 Studio pipeline 封装了 Luma API：一条提示词或一帧起始图，最终以标准 WorldFoundry 结果目录中的可下载视频呈现。模型在 Luma 的服务器上运行，不在本地运行。
+  architecture: Luma Ray2 is a hosted, provider-operated model; Luma has not published its architecture, parameter count, or training recipe. The Studio pipeline submits requests to the Luma API endpoint and collects the returned video.
+  architecture_zh: Luma Ray2 是由服务方托管运行的模型；Luma 未公开其架构、参数规模或训练细节。Studio pipeline 向 Luma API 端点提交请求并回收生成的视频。
+  usage_notes: Supply your own Luma account and API key through LUMA_API_KEY (or LUMALABS_API_KEY); keys are issued through Luma's developer platform (lumalabs.ai). No weights are downloaded and no local GPU is needed — generation happens on the provider side, so cost, quota, and content policy follow your provider account.
+  usage_notes_zh: 需自备 Luma 账号与 API key，通过 LUMA_API_KEY（或 LUMALABS_API_KEY）提供；API key 通过 Luma 开发者平台（lumalabs.ai）签发。本地不会下载任何权重，也不需要 GPU——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。
+  limitations:
+  - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+  - The provider controls model versioning, so outputs can change over time.
+  - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+  limitations_zh:
+  - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+  - 模型版本由服务方控制，输出可能随时间变化。
+  - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video
+      outputs.
+    reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+  - id: physics-iq
+    reason: Probes whether provider-side video models respect basic physical plausibility.
+    reason_zh: 检验服务方视频模型是否遵循基本物理合理性。

@@ -16,7 +16,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: chronomagic-bench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id chronomagic-bench --mode contract 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id chronomagic-bench --mode contract 
     --output-dir tmp/benchmark_zoo/benchmark_contract/chronomagic-bench --json
   open_source_status: experimental
   official_benchmark_verified: false
@@ -34,7 +34,7 @@ metadata:
     non_api_surface: official_chscore_validation
     official_runtime_start_ready: true
   requires:
-  - In-tree ChronoMagic-Bench runtime under worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench
+  - In-tree ChronoMagic-Bench runtime under worldfoundry/evals/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench
   - WORLDFOUNDRY_CHRONOMAGIC_ROOT optional override for the bundled ChronoMagic-Bench runtime
   - WORLDFOUNDRY_CHRONOMAGIC_INPUT_FOLDER or generated ChronoMagic video directory
   - WORLDFOUNDRY_CHRONOMAGIC_DATASET_ROOT BestWishYsh/ChronoMagic-Bench local dataset root for discovery evidence
@@ -59,9 +59,9 @@ metadata:
     leaderboard_valid: false
     leaderboard_reason: UMT-FVD, UMTScore, full prompt coverage, and official submission protocol are required before 
       leaderboard parity can be claimed.
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:ChronoMagicBenchContract
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:chronomagic-bench
   official_runner_script: 
-    worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py
+    worldfoundry/evals/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py
   prompt_suite:
     hf_dataset_id: BestWishYsh/ChronoMagic-Bench
     hf_config: default
@@ -75,7 +75,7 @@ metadata:
     kind: in_tree_official_source
     repo_url: https://github.com/PKU-YuanGroup/ChronoMagic-Bench.git
     revision: e6b75ffc53c20dfea9c1704024d5167845534b63
-    root: worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench
+    root: worldfoundry/evals/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench
     root_env: WORLDFOUNDRY_CHRONOMAGIC_ROOT
     optional_root_env: WORLDFOUNDRY_CHRONOMAGIC_ROOT
   release_status: experimental
@@ -89,13 +89,13 @@ metadata:
     - cache/worldfoundry/data/hfd_datasets/BestWishYsh__ChronoMagic-Pro
     - cache/worldfoundry/data/hfd_datasets/BestWishYsh/ChronoMagic-ProH
     in_tree_runtime_paths:
-    - worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench
+    - worldfoundry/evals/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench
     generated_artifact_examples:
     - ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/ChronoMagic-Bench/toy_video/test_close
     task_yaml: worldfoundry/data/benchmarks/tasks/external/chronomagic-bench.yaml
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:ChronoMagicBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:chronomagic-bench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
@@ -129,9 +129,9 @@ metadata:
     verified: true
   validation_command:
   - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-  - worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py
   - --chronomagic-root
-  - worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench
+  - worldfoundry/evals/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench
   - --components
   - chscore
   - --generated-video-dir
@@ -188,7 +188,7 @@ tasks:
       split: test
       expected_rows: 1799
     runtime_requirements:
-      in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench
+      in_tree_runtime: worldfoundry/evals/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench
       optional_root_env: WORLDFOUNDRY_CHRONOMAGIC_ROOT
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
       dataset_root_env: WORLDFOUNDRY_CHRONOMAGIC_DATASET_ROOT
@@ -202,11 +202,11 @@ tasks:
       metric_ids:
       - chronomagic_score
       - temporal_transformation
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:ChronoMagicBenchContract
+      runner_target: worldfoundry.evals.tasks.contracts.external:chronomagic-bench
       runner_script: 
-        worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py
+        worldfoundry/evals/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py
       official_validation_command: ${WORLDFOUNDRY_UNIFIED_PYTHON} 
-        worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py 
-        --chronomagic-root worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench --components chscore --generated-video-dir 
+        worldfoundry/evals/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py 
+        --chronomagic-root worldfoundry/evals/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench --components chscore --generated-video-dir 
         ${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR} --model-name worldfoundry --eval-type close --model-pth-chscore 
         ${WORLDFOUNDRY_CHRONOMAGIC_CHSCORE_CKPT} --output-dir <out> --python ${WORLDFOUNDRY_UNIFIED_PYTHON} --json

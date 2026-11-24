@@ -23,7 +23,7 @@ class SwinTransformerForSimMIM(SwinTransformer):
         assert self.num_classes == 0
 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
-        trunc_normal_(self.mask_token, mean=0., std=.02)
+        trunc_normal_(self.mask_token, mean=0.0, std=0.02)
 
     def forward(self, x, mask):
         x = self.patch_embed(x)
@@ -33,7 +33,7 @@ class SwinTransformerForSimMIM(SwinTransformer):
 
         mask_tokens = self.mask_token.expand(B, L, -1)
         w = mask.flatten(1).unsqueeze(-1).type_as(mask_tokens)
-        x = x * (1. - w) + mask_tokens * w
+        x = x * (1.0 - w) + mask_tokens * w
 
         if self.ape:
             x = x + self.absolute_pos_embed
@@ -45,13 +45,13 @@ class SwinTransformerForSimMIM(SwinTransformer):
 
         x = x.transpose(1, 2)
         B, C, L = x.shape
-        H = W = int(L ** 0.5)
+        H = W = int(L**0.5)
         x = x.reshape(B, C, H, W)
         return x
 
     @torch.jit.ignore
     def no_weight_decay(self):
-        return super().no_weight_decay() | {'mask_token'}
+        return super().no_weight_decay() | {"mask_token"}
 
 
 class VisionTransformerForSimMIM(VisionTransformer):
@@ -61,9 +61,9 @@ class VisionTransformerForSimMIM(VisionTransformer):
         assert self.num_classes == 0
 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
-        self._trunc_normal_(self.mask_token, std=.02)
+        self._trunc_normal_(self.mask_token, std=0.02)
 
-    def _trunc_normal_(self, tensor, mean=0., std=1.):
+    def _trunc_normal_(self, tensor, mean=0.0, std=1.0):
         trunc_normal_(tensor, mean=mean, std=std, a=-std, b=std)
 
     def forward(self, x, mask):
@@ -90,7 +90,7 @@ class VisionTransformerForSimMIM(VisionTransformer):
 
         x = x[:, 1:]
         B, L, C = x.shape
-        H = W = int(L ** 0.5)
+        H = W = int(L**0.5)
         x = x.permute(0, 2, 1).reshape(B, C, H, W)
         return x
 
@@ -102,9 +102,7 @@ class SimMIM(nn.Module):
         self.encoder_stride = encoder_stride
 
         self.decoder = nn.Sequential(
-            nn.Conv2d(
-                in_channels=self.encoder.num_features,
-                out_channels=self.encoder_stride ** 2 * 3, kernel_size=1),
+            nn.Conv2d(in_channels=self.encoder.num_features, out_channels=self.encoder_stride**2 * 3, kernel_size=1),
             nn.PixelShuffle(self.encoder_stride),
         )
 
@@ -115,27 +113,29 @@ class SimMIM(nn.Module):
         z = self.encoder(x, mask)
         x_rec = self.decoder(z)
 
-        mask = mask.repeat_interleave(self.patch_size, 1).repeat_interleave(self.patch_size, 2).unsqueeze(1).contiguous()
-        loss_recon = F.l1_loss(x, x_rec, reduction='none')
+        mask = (
+            mask.repeat_interleave(self.patch_size, 1).repeat_interleave(self.patch_size, 2).unsqueeze(1).contiguous()
+        )
+        loss_recon = F.l1_loss(x, x_rec, reduction="none")
         loss = (loss_recon * mask).sum() / (mask.sum() + 1e-5) / self.in_chans
         return loss
 
     @torch.jit.ignore
     def no_weight_decay(self):
-        if hasattr(self.encoder, 'no_weight_decay'):
-            return {'encoder.' + i for i in self.encoder.no_weight_decay()}
+        if hasattr(self.encoder, "no_weight_decay"):
+            return {"encoder." + i for i in self.encoder.no_weight_decay()}
         return {}
 
     @torch.jit.ignore
     def no_weight_decay_keywords(self):
-        if hasattr(self.encoder, 'no_weight_decay_keywords'):
-            return {'encoder.' + i for i in self.encoder.no_weight_decay_keywords()}
+        if hasattr(self.encoder, "no_weight_decay_keywords"):
+            return {"encoder." + i for i in self.encoder.no_weight_decay_keywords()}
         return {}
 
 
 def build_simmim(config):
     model_type = config.MODEL.TYPE
-    if model_type == 'swin':
+    if model_type == "swin":
         encoder = SwinTransformerForSimMIM(
             img_size=config.DATA.IMG_SIZE,
             patch_size=config.MODEL.SWIN.PATCH_SIZE,
@@ -152,9 +152,10 @@ def build_simmim(config):
             drop_path_rate=config.MODEL.DROP_PATH_RATE,
             ape=config.MODEL.SWIN.APE,
             patch_norm=config.MODEL.SWIN.PATCH_NORM,
-            use_checkpoint=config.TRAIN.USE_CHECKPOINT)
+            use_checkpoint=config.TRAIN.USE_CHECKPOINT,
+        )
         encoder_stride = 32
-    elif model_type == 'vit':
+    elif model_type == "vit":
         encoder = VisionTransformerForSimMIM(
             img_size=config.DATA.IMG_SIZE,
             patch_size=config.MODEL.VIT.PATCH_SIZE,
@@ -172,7 +173,8 @@ def build_simmim(config):
             use_abs_pos_emb=config.MODEL.VIT.USE_APE,
             use_rel_pos_bias=config.MODEL.VIT.USE_RPB,
             use_shared_rel_pos_bias=config.MODEL.VIT.USE_SHARED_RPB,
-            use_mean_pooling=config.MODEL.VIT.USE_MEAN_POOLING)
+            use_mean_pooling=config.MODEL.VIT.USE_MEAN_POOLING,
+        )
         encoder_stride = 16
     else:
         raise NotImplementedError(f"Unknown pre-train model: {model_type}")

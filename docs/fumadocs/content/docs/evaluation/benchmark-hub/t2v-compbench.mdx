@@ -1,6 +1,6 @@
 ---
 title: T2V-CompBench
-description: "CVPR 2025 compositional T2V bench: 1,400 prompts over seven binding axes. WorldFoundry ships the runtime; it does not invent a board."
+description: "CVPR 2025 compositional T2V bench: 1,400 prompts over seven binding axes. WorldFoundry ships the official runtime."
 ---
 
 T2V-CompBench (HKU, with CUHK and Huawei Noah's Ark Lab) asks whether a text-to-video model **binds the right attributes, actions, and motions to the right objects**. It is a composition test, not a single aesthetic score. The official suite has **1,400 prompts** (200 × 7):
@@ -9,7 +9,7 @@ T2V-CompBench (HKU, with CUHK and Huawei Noah's Ark Lab) asks whether a text-to-
 - **Spatial relationships** — 2D / 3D layout (detection + depth / SAM).
 - **Motion binding** — foreground vs background motion (DOT tracking).
 - **Action binding** and **object interactions** — MLLM (LLaVA-style) judges.
-- **Generative numeracy** — object counts via GroundingDINO. This is the bounded official component WorldFoundry has executed on a real MP4.
+- **Generative numeracy** — object counts via GroundingDINO. WorldFoundry has validated this category on a real MP4.
 
 Paper: [T2V-CompBench](https://arxiv.org/abs/2407.14505). Project: [t2v-compbench-2025.github.io](https://t2v-compbench-2025.github.io/). Code: [KaiyueSun98/T2V-CompBench](https://github.com/KaiyueSun98/T2V-CompBench). Reference videos: [`Kaiyue/T2V-CompBench-Videos`](https://huggingface.co/datasets/Kaiyue/T2V-CompBench-Videos) (25,200 rows).
 
@@ -22,7 +22,7 @@ WorldFoundry **vendors the official runtime** and a strict manifest bridge that 
 Import official category scores:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id t2v-compbench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -35,7 +35,7 @@ Recompute a category from staged videos (numeracy needs GroundingDINO + a BERT-c
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
   --generated-video-dir <generated_videos_with_t2v_compbench_generation_manifest.jsonl> \
   --category generative_numeracy \
   --output-dir tmp/t2v-compbench/numeracy \
@@ -48,7 +48,7 @@ In-tree pointers:
 
 ```text
 worldfoundry/data/benchmarks/tasks/external/t2v-compbench.yaml
-worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
+worldfoundry/evals/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
 ```
 
 Outputs include `scorecard.json` (primary `t2v_compbench_average` when complete), `raw_metric_table.jsonl`, and per-sample rows when the source exposes them.

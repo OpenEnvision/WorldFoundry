@@ -5,7 +5,7 @@ task_family: vla_policy
 groups: [vla, robot_policy, action_chunk, bimanual, batched_inference]
 source_repos:
 - url: https://github.com/Robbyant/lingbot-vla-v2
-  revision: 69729b4ef24c
+  revision: 69729b4ef24c63ec25e750915491635f4753be1d
 checkpoints:
 - repo_id: robbyant/lingbot-vla-v2-6b
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/robbyant--lingbot-vla-v2-6b

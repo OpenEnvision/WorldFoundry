@@ -1,11 +1,11 @@
 ---
 title: "LTX-2.5 Distilled"
-description: "LTX-2.5 Distilled（Lightricks）：文生视频、图生视频；Runner 一致性待确认; 独立环境 `ltx-2.5`。"
+description: "LTX-2.5 Distilled（Lightricks）：文生视频、图生视频等 3 项任务；Runner 一致性待确认；独立环境 `ltx-2.5`。"
 modelId: "ltx-2.5"
 pageSource: authored
 ---
 
-LTX-2.5 是一个 22B 联合音视频模型。本次仅推理集成开放官方快速两阶段 DistilledPipeline，支持文生视频、图生视频与同步音频生成。
+LTX-2.5 是一个 22B 联合音视频模型。WorldFoundry 通过原生快速两阶段蒸馏配方支持文生视频、图生视频与同步音频生成。
 
 <ModelPaperFigures modelId="ltx-2.5" locale="zh" />
 
@@ -15,34 +15,38 @@ LTX-2.5 是一个 22B 联合音视频模型。本次仅推理集成开放官方�
 
 ## 用来做什么
 
-`ltx-2.5` 是记录的文本/图像到视频线。需要同一张卡片上同时有 prompt 与静帧条件时用它。
+用 `ltx-2.5` 同时完成文生视频和图生视频。
 
-官方蒸馏路径使用内嵌投影的 Gemma 4 12B 文本编码器，在半分辨率下联合去噪视频和音频，经 LTX-2.5 潜空间上采样后进行短程第二阶段细化，最后由独立音频与视频 VAE 解码。WorldFoundry 直接调用该官方源码，不复用不兼容的 LTX-2.3 单体权重加载器。该模型由Lightricks发布。
+官方蒸馏路径使用内嵌投影的 Gemma 4 12B 文本编码器，在半分辨率下联合去噪视频和音频，经 LTX-2.5 潜空间上采样后进行短程第二阶段细化，最后由独立音频与视频 VAE 解码。`NativeDiffusionPipeline` 在进程内运行 `ltx-2.5` joint-multistage 配方，使用规范的 Gemma 4、Transformer、扩散视频解码器与时长预测头。加载、量化、卸载和 BT.709 H.264/AAC 编码均使用共享核心组件。定义对应 Lightricks/LTX-2 的 `a95ab856` 版本。
 
-catalog 记录的任务包括 文生视频、图生视频、音视频联合生成。别名包括 `ltx2.5`、`ltx25`、`ltx-2.5-distilled`。模态上，它接受文本、图像，输出视频。
+任务：文生视频、图生视频、音视频联合生成。别名：`ltx2.5`、`ltx25`、`ltx-2.5-distilled`。模态上，它接受文本、图像，输出视频。
 
-记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（基础文生/图生视频质量与运动评测）。
+推荐评测：[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（基础文生/图生视频质量与运动评测）。
 
 ## 运行时契约
 
-可选 `prompt`、`frames`、`fps`、`height`、`width`；产物 `generated_video`、`ltx-2.5.mp4`。
+输入 `prompt`（不传时使用内置示例）；参数 `frames`、`fps`、`height`、`width`、`seed`、`execute` 等 8 项；产物 `generated_video`、`ltx-2.5.mp4` 及同目录 JSON 元数据。
 
 CLI task profile：`interactive-video`。绑定的 pipeline 类是 `LTX25Pipeline`。
 
 系列状态：**Runner 一致性待确认**。
 
-请先接受 Hugging Face 模型条款，按仓库目录结构下载五个必需拆分组件，检出记录的源码 revision，并在独立环境中安装 ltx-core 与 ltx-pipelines 依赖；执行时显式传入 execute=True。 可选 duration head 可启用基于提示词的自动时长预测。
+请先接受 Hugging Face 模型条款，按仓库目录结构下载五个必需拆分组件，并创建独立的 ltx-2.5 环境；执行时显式传入 execute=True。 可选 duration head 可启用基于提示词的自动时长预测。
 
-Command construction and official split-component mapping are validated without importing upstream CUDA code.
+执行使用当前激活的 `ltx-2.5` 环境。`timeout_seconds` 默认 `7200`；协作式检查在阶段、采样步骤之间及产物写入前执行，不能抢占正在运行的 CUDA 内核。
 
-必填 `prompt`；可选 `image`、`video`；`actions`：seed, height, width, num_frames, fps, offload_mode, quantization；产物 `generated_video`、`ltx-2.5.mp4`。
+`offload_mode` 支持 `none`、`cpu`、`disk`。量化保留各自独立的 `fp8-cast`、`fp8-scaled-mm`、`nvfp4-cast`、`nvfp4-prequant` 实现。NVFP4 模式需要可选的 `ltx-kernels` 包。自动时长、生成关键帧、使用本地 Gemma 权重的提示词增强及 DiffVAE 优化均可使用。
+
+## 验证与限制
+
+缩小随机拆分权重的 CPU 回放在文生视频、图生视频、自动时长和生成关键帧用例中，阶段潜变量及解码张量均与固定版本上游完全一致，包含磁盘加载路径。这些夹具不代表发布权重的质量验证。发布权重的 GPU/MPS、量化、卸载与完整编码产物一致性仍待验证。
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run ltx-2.5 --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+用 `wf run ltx-2.5 --pipeline.task-profile interactive-video` 生成视频。
 
-记录的权重仓库包括 `Lightricks/LTX-2.5`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh ltx-2.5`；下载缺失的公开权重时加 `--download`。
+运行环境：独立环境 `ltx-2.5`（Python 3.11，CUDA 12.8，torch==2.11.0+cu128）。
 
-状态：**Runner 一致性待确认**。
+权重仓库：`Lightricks/LTX-2.5`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh ltx-2.5`；下载缺失的公开权重时加 `--download`。
 
 <ModelRelatedRecipes modelId="ltx-2.5" locale="zh" />

@@ -3,7 +3,7 @@ import json
 import warnings
 from collections import OrderedDict
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 import torch
@@ -35,14 +35,12 @@ def clean_state_dict(state_dict):
     return new_state_dict
 
 
-def renorm(
-    img: torch.FloatTensor, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-) -> torch.FloatTensor:
+def renorm(img: torch.FloatTensor, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) -> torch.FloatTensor:  # noqa: B006 - Keeps the upstream default object and signature.
     # img: tensor(3,H,W) or tensor(B,3,H,W)
     # return: same as img
-    assert img.dim() == 3 or img.dim() == 4, "img.dim() should be 3 or 4 but %d" % img.dim()
+    assert img.dim() == 3 or img.dim() == 4, "img.dim() should be 3 or 4 but %d" % img.dim()  # noqa: UP031 - Keeps printf conversions that depend on argument types.
     if img.dim() == 3:
-        assert img.size(0) == 3, 'img.size(0) shoule be 3 but "%d". (%s)' % (
+        assert img.size(0) == 3, 'img.size(0) shoule be 3 but "%d". (%s)' % (  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             img.size(0),
             str(img.size()),
         )
@@ -52,7 +50,7 @@ def renorm(
         img_res = img_perm * std + mean
         return img_res.permute(2, 0, 1)
     else:  # img.dim() == 4
-        assert img.size(1) == 3, 'img.size(1) shoule be 3 but "%d". (%s)' % (
+        assert img.size(1) == 3, 'img.size(1) shoule be 3 but "%d". (%s)' % (  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             img.size(1),
             str(img.size()),
         )
@@ -165,9 +163,7 @@ def to_device(item, device):
     elif isinstance(item, dict):
         return {k: to_device(v, device) for k, v in item.items()}
     else:
-        raise NotImplementedError(
-            "Call Shilong if you use other containers! type: {}".format(type(item))
-        )
+        raise NotImplementedError(f"Call Shilong if you use other containers! type: {type(item)}")
 
 
 #
@@ -184,10 +180,7 @@ def get_gaussian_mean(x, axis, other_axis, softmax=True):
     """
     mat2line = torch.sum(x, axis=other_axis)
     # mat2line = mat2line / mat2line.mean() * 10
-    if softmax:
-        u = torch.softmax(mat2line, axis=2)
-    else:
-        u = mat2line / (mat2line.sum(2, keepdim=True) + 1e-6)
+    u = torch.softmax(mat2line, axis=2) if softmax else mat2line / (mat2line.sum(2, keepdim=True) + 1e-06)
     size = x.shape[axis]
     ind = torch.linspace(0, 1, size).to(x.device)
     batch = x.shape[0]
@@ -268,7 +261,10 @@ def get_embedder(multires, i=0):
     }
 
     embedder_obj = Embedder(**embed_kwargs)
-    embed = lambda x, eo=embedder_obj: eo.embed(x)
+
+    def embed(x, eo=embedder_obj):
+        return eo.embed(x)
+
     return embed, embedder_obj.out_dim
 
 
@@ -297,13 +293,6 @@ class APOPMeter:
         self.tn += fn
 
 
-def inverse_sigmoid(x, eps=1e-5):
-    x = x.clamp(min=0, max=1)
-    x1 = x.clamp(min=eps)
-    x2 = (1 - x).clamp(min=eps)
-    return torch.log(x1 / x2)
-
-
 def get_raw_dict(args):
     """
     return the dicf contained in args.
@@ -319,7 +308,7 @@ def get_raw_dict(args):
     elif isinstance(args, SLConfig):
         return args._cfg_dict
     else:
-        raise NotImplementedError("Unknown type {}".format(type(args)))
+        raise NotImplementedError(f"Unknown type {type(args)}")
 
 
 def stat_tensors(tensor):
@@ -388,7 +377,7 @@ class NiceRepr:
             classname = self.__class__.__name__
             return f"<{classname}({nice}) at {hex(id(self))}>"
         except NotImplementedError as ex:
-            warnings.warn(str(ex), category=RuntimeWarning)
+            warnings.warn(str(ex), category=RuntimeWarning, stacklevel=1)
             return object.__repr__(self)
 
     def __str__(self):
@@ -398,7 +387,7 @@ class NiceRepr:
             nice = self.__nice__()
             return f"<{classname}({nice})>"
         except NotImplementedError as ex:
-            warnings.warn(str(ex), category=RuntimeWarning)
+            warnings.warn(str(ex), category=RuntimeWarning, stacklevel=1)
             return object.__repr__(self)
 
 
@@ -472,7 +461,7 @@ def random_boxes(num=1, scale=1, rng=None):
 
 class ModelEma(torch.nn.Module):
     def __init__(self, model, decay=0.9997, device=None):
-        super(ModelEma, self).__init__()
+        super().__init__()
         # make a copy of the model for accumulating moving average of weights
         self.module = deepcopy(model)
         self.module.eval()
@@ -486,9 +475,7 @@ class ModelEma(torch.nn.Module):
 
     def _update(self, model, update_fn):
         with torch.no_grad():
-            for ema_v, model_v in zip(
-                self.module.state_dict().values(), model.state_dict().values()
-            ):
+            for ema_v, model_v in zip(self.module.state_dict().values(), model.state_dict().values(), strict=False):
                 if self.device is not None:
                     model_v = model_v.to(device=self.device)
                 ema_v.copy_(update_fn(ema_v, model_v))
@@ -523,7 +510,7 @@ class BestMetricSingle:
         return False
 
     def __str__(self) -> str:
-        return "best_res: {}\t best_ep: {}".format(self.best_res, self.best_ep)
+        return f"best_res: {self.best_res}\t best_ep: {self.best_ep}"
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -574,7 +561,7 @@ class BestMetricHolder:
         return self.__repr__()
 
 
-def targets_to(targets: List[Dict[str, Any]], device):
+def targets_to(targets: list[dict[str, Any]], device):
     """Moves the target dicts to the given device."""
     excluded_keys = [
         "questionId",
@@ -591,14 +578,10 @@ def targets_to(targets: List[Dict[str, Any]], device):
         "caption",
         "dataset_type",
     ]
-    return [
-        {k: v.to(device) if k not in excluded_keys else v for k, v in t.items()} for t in targets
-    ]
+    return [{k: v.to(device) if k not in excluded_keys else v for k, v in t.items()} for t in targets]
 
 
-def get_phrases_from_posmap(
-    posmap: torch.BoolTensor, tokenized: Dict, tokenizer: AutoTokenizer
-):
+def get_phrases_from_posmap(posmap: torch.BoolTensor, tokenized: dict, tokenizer: AutoTokenizer):
     assert isinstance(posmap, torch.Tensor), "posmap must be torch.Tensor"
     if posmap.dim() == 1:
         non_zero_idx = posmap.nonzero(as_tuple=True)[0].tolist()

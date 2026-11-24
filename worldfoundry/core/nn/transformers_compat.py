@@ -6,8 +6,9 @@ a utility. Do not add new model logic here.
 
 from __future__ import annotations
 
-import torch
+from typing import cast
 
+import torch
 
 # ──────────────────────────────────────────────────────────────────────────
 # Head mask / prune indices — keep older from_pretrained graphs loading
@@ -23,9 +24,7 @@ def prepare_head_mask(
     if head_mask is None:
         return [None] * num_hidden_layers
     if head_mask.dim() == 1:
-        head_mask = head_mask[None, None, :, None, None].expand(
-            num_hidden_layers, -1, -1, -1, -1
-        )
+        head_mask = head_mask[None, None, :, None, None].expand(num_hidden_layers, -1, -1, -1, -1)
     elif head_mask.dim() == 2:
         head_mask = head_mask[:, None, :, None, None]
     else:
@@ -49,4 +48,4 @@ def find_pruneable_heads_and_indices(
         mask[shifted_head] = 0
     keep = mask.view(-1).contiguous().eq(1)
     indices = torch.arange(keep.numel(), dtype=torch.long)[keep]
-    return requested, indices
+    return requested, cast(torch.LongTensor, indices)

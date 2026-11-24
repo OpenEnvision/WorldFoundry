@@ -4,6 +4,7 @@ the `HunyuanGameCraftRuntime` to integrate with the `BaseSynthesis` interface.
 It also re-exports various components and utilities from the `hunyuan_game_craft.runtime`
 module for direct access.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -51,7 +52,7 @@ class HunyuanGameCraftSynthesis(BaseSynthesis):
         self.runtime = runtime
 
     @classmethod
-    def from_pretrained(cls, *args: Any, **kwargs: Any) -> "HunyuanGameCraftSynthesis":
+    def from_pretrained(cls, *args: Any, **kwargs: Any) -> HunyuanGameCraftSynthesis:
         """
         Creates a `HunyuanGameCraftSynthesis` instance by loading a `HunyuanGameCraftRuntime`
         from pretrained weights.

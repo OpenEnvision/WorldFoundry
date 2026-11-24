@@ -2,6 +2,7 @@
 
 Provides structured, stage-based logging that makes pipeline progress clear at a glance.
 """
+
 from __future__ import annotations
 
 import logging
@@ -10,7 +11,6 @@ import sys
 import time
 import warnings
 from contextlib import contextmanager
-from typing import List, Optional
 
 # --------------------------------------------------------------------------
 # Set env vars BEFORE any SAM3 / third-party imports evaluate them at module
@@ -25,9 +25,9 @@ os.environ.setdefault("LOG_LEVEL", "WARNING")
 def suppress_verbose_logs():
     """Suppress verbose logs from SAM3, Stream3R, and other noisy modules."""
     logging.getLogger("sam3").setLevel(logging.WARNING)
-    logging.getLogger(
-        "worldfoundry.base_models.perception_core.segment.sam3.model.sam3_video_predictor"
-    ).setLevel(logging.WARNING)
+    logging.getLogger("worldfoundry.base_models.perception_core.segment.sam3.model.sam3_video_predictor").setLevel(
+        logging.WARNING
+    )
     logging.getLogger("stream3r").setLevel(logging.WARNING)
     logging.getLogger("transformers").setLevel(logging.WARNING)
     logging.getLogger("diffusers").setLevel(logging.WARNING)
@@ -64,7 +64,7 @@ class PipelineLogger:
 
     def __init__(self, use_color: bool = True):
         self.use_color = use_color and sys.stdout.isatty()
-        self._round_start: Optional[float] = None
+        self._round_start: float | None = None
         self._current_round: int = 0
 
     def _c(self, color: str, text: str) -> str:
@@ -177,10 +177,14 @@ class PipelineLogger:
     # --- Convenience (kept for compatibility) ---
 
     def stage(self, stage_name: str, description: str = ""):
-        msg = self._clean_text(stage_name) if not description else f"{self._clean_text(stage_name)}: {self._clean_text(description)}"
+        msg = (
+            self._clean_text(stage_name)
+            if not description
+            else f"{self._clean_text(stage_name)}: {self._clean_text(description)}"
+        )
         self._emit("STAGE", msg, color=self.BOLD + self.CYAN, blank_before=True)
 
-    def detection(self, entities: List[str]):
+    def detection(self, entities: list[str]):
         if not entities:
             self._emit("DET", "entities=(none)")
             return

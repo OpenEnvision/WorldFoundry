@@ -1,23 +1,24 @@
-artifact_filename: worldmem_runtime_plan.json
-artifact_kind: generated_video
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: worldmem
 display_name: WorldMem
-id: worldmem
+task_family: world_model
 input_schema:
   actions:
   - action
   image: true
   prompt: true
   video: true
-integration_status: runtime_ported
+artifact_kind: generated_video
+artifact_filename: worldmem_runtime_plan.json
+execution:
+  pipeline_binding: worldmem
+  backend_stage: worldfoundry_runtime_plan
+  runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - WorldMem route is registered; upstream inference model/data assets are runtime-gated.
 - Missing checkpoints/assets are reported by the runtime plan and are not catalog
   blockers.
 - WorldFoundry tracks WorldMem source metadata only; no runnable pipeline is registered.
-runtime_status: route_ready_assets_pending
-task_family: world_model
-execution:
-  pipeline_binding: worldmem
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending

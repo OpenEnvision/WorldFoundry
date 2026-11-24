@@ -5,8 +5,8 @@ these helpers report the extra is installed.  Image inference can stay on
 the PyTorch LiteLA path without pulling the fused kernels.
 """
 
-import importlib.util
 import importlib.metadata
+import importlib.util
 
 _xformers_available = importlib.util.find_spec("xformers") is not None
 try:
@@ -49,12 +49,10 @@ def is_flash_attn_available():
 
 
 def is_xformers_available():
-    """Is xformers available."""
     return _xformers_available
 
 
 def is_triton_module_available():
-    """Is triton module available."""
     return _triton_modules_available
 
 

@@ -18,9 +18,10 @@ the production denoiser factory uses the converter + native loader.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from ..networks.echo_memory.architecture import (
     EchoArchitectureError,
@@ -72,7 +73,9 @@ def _architecture_from_shapes(shapes: Mapping[str, tuple[int, ...]]) -> EchoChec
     raw_keys = tuple(shapes)
     keys, _ = _strip_common_prefix(raw_keys)
     keys = tuple(key[len("memory_adapter.") :] if key.startswith("memory_adapter.") else key for key in keys)
-    normalized_shapes = {normalized: tuple(shapes[original]) for original, normalized in zip(raw_keys, keys)}
+    normalized_shapes = {
+        normalized: tuple(shapes[original]) for original, normalized in zip(raw_keys, keys, strict=False)
+    }
 
     block_sets: dict[str, set[int]] = {name: set() for name in _BLOCK_PATTERNS}
     for key in keys:
@@ -160,12 +163,10 @@ def normalize_echo_state_dict(state_dict: Mapping[str, Any]) -> dict[str, Any]:
     keys = tuple(state_dict)
     normalized_keys, prefix = _strip_common_prefix(keys)
     result: dict[str, Any] = {}
-    for original, key in zip(keys, normalized_keys):
+    for original, key in zip(keys, normalized_keys, strict=False):
         if key == "spatial_memory_module.mix":
             key = "memory_adapter.spatial_memory_module.spatial_to_tokens"
-        elif key.startswith("spatial_memory_module."):
-            key = "memory_adapter." + key
-        elif key.startswith("spatial_memory_readout_module."):
+        elif key.startswith(("spatial_memory_module.", "spatial_memory_readout_module.")):
             key = "memory_adapter." + key
         if key in result:
             raise EchoCheckpointError(

@@ -6,13 +6,13 @@ import pytest
 from PIL import Image
 
 from worldfoundry.core.io.formats.serialization import read_jsonl_objects, write_jsonl
-from worldfoundry.evaluation.tasks.execution.runners.fetv import fetv_official_runtime
-from worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_official_runtime import (
+from worldfoundry.evals.tasks.execution.runners.fetv import fetv_official_runtime
+from worldfoundry.evals.tasks.execution.runners.fetv.fetv_official_runtime import (
     materialize_bounded_fetv_prompt_file,
     run_official_fetv_runtime,
     validate_fetv_clip_frame_layout,
 )
-from worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_prompts import (
+from worldfoundry.evals.tasks.execution.runners.fetv.fetv_prompts import (
     FETV_GENERATION_MANIFEST_NAME,
 )
 

@@ -84,6 +84,8 @@ both_prompt_camerapose_traj = {
 
 assert len(cmcm_prompt_camerapose["prompts"]) == len(cmcm_prompt_camerapose["camera_poses"])
 assert len(omom_prompt_traj["prompts"]) == len(omom_prompt_traj["trajs"])
-assert len(both_prompt_camerapose_traj["prompts"]) == len(both_prompt_camerapose_traj["camera_poses"]) == len(
-    both_prompt_camerapose_traj["trajs"]
+assert (
+    len(both_prompt_camerapose_traj["prompts"])
+    == len(both_prompt_camerapose_traj["camera_poses"])
+    == len(both_prompt_camerapose_traj["trajs"])
 )

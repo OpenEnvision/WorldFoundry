@@ -13,6 +13,7 @@ Usage:
         c2ws=c2ws_old, ref_pix=240, frames_per_chunk=33, max_deg=17.0
     )
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -66,11 +67,14 @@ def _rotmat_to_quat(R: np.ndarray) -> np.ndarray:
 def _quat_to_rotmat(q: np.ndarray) -> np.ndarray:
     """Unit quaternion [w,x,y,z] → 3x3 rotation matrix."""
     w, x, y, z = q
-    return np.array([
-        [1 - 2*(y*y + z*z), 2*(x*y - z*w),     2*(x*z + y*w)],
-        [2*(x*y + z*w),     1 - 2*(x*x + z*z), 2*(y*z - x*w)],
-        [2*(x*z - y*w),     2*(y*z + x*w),     1 - 2*(x*x + y*y)],
-    ], dtype=np.float64)
+    return np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ],
+        dtype=np.float64,
+    )
 
 
 def _quat_slerp_seq(quats: np.ndarray, t_orig: np.ndarray, t_new: np.ndarray) -> np.ndarray:
@@ -177,8 +181,7 @@ def _resample_c2w_path(c2w_path: np.ndarray, n_new: int, by_arc_length: bool = T
     return out.astype(c2w_path.dtype if c2w_path.dtype != np.float64 else np.float32)
 
 
-def chunk_bounds(n: int, frames_per_chunk: int = 33,
-                 first_chunk_frames: int | None = None) -> list[tuple[int, int]]:
+def chunk_bounds(n: int, frames_per_chunk: int = 33, first_chunk_frames: int | None = None) -> list[tuple[int, int]]:
     """[(start, end)) per chunk over `n` target frames.
 
     `first_chunk_frames` exists because the engine's chunks are NOT uniform: with latent_window_size=9
@@ -201,8 +204,9 @@ def chunk_bounds(n: int, frames_per_chunk: int = 33,
     return out
 
 
-def analyze_per_chunk(c2w: np.ndarray, frames_per_chunk: int = 33,
-                      first_chunk_frames: int | None = None) -> dict[str, Any]:
+def analyze_per_chunk(
+    c2w: np.ndarray, frames_per_chunk: int = 33, first_chunk_frames: int | None = None
+) -> dict[str, Any]:
     """Per-chunk start->end rotation angle + translation magnitude, returned as a dict."""
     c2w = np.asarray(c2w, dtype=np.float32)
     n = len(c2w)
@@ -452,10 +456,7 @@ def clamp_target_per_chunk_motion(
         rot_alpha = min(1.0, max_deg / angle) if (max_deg > 0 and angle > 0) else 1.0
         trans_alpha = min(1.0, max_trans / trans) if (max_trans > 0 and trans > 0) else 1.0
 
-        was_clamped = (
-            (max_deg > 0 and angle > max_deg + 1e-6)
-            or (max_trans > 0 and trans > max_trans + 1e-6)
-        )
+        was_clamped = (max_deg > 0 and angle > max_deg + 1e-6) or (max_trans > 0 and trans > max_trans + 1e-6)
         if was_clamped:
             n_clamped += 1
 
@@ -489,9 +490,9 @@ def clamp_target_per_chunk_motion(
             if was_clamped:
                 tags = []
                 if max_deg > 0 and angle > max_deg + 1e-6:
-                    tags.append(f"rot ×{rot_alpha:.2f} → {angle*rot_alpha:.1f}°")
+                    tags.append(f"rot ×{rot_alpha:.2f} → {angle * rot_alpha:.1f}°")
                 if max_trans > 0 and trans > max_trans + 1e-6:
-                    tags.append(f"trans ×{trans_alpha:.2f} → {trans*trans_alpha:.2f}")
+                    tags.append(f"trans ×{trans_alpha:.2f} → {trans * trans_alpha:.2f}")
                 line += f" → CLAMPED ({', '.join(tags)})"
             else:
                 line += " ✓"
@@ -570,7 +571,7 @@ def smooth_c2w_trajectory(
         return c2ws, {"win": int(win or 0), "skipped": True}
     win = int(win)
     if win % 2 == 0:
-        win += 1                                                  # force odd so the window is centered
+        win += 1  # force odd so the window is centered
 
     if isinstance(c2ws, torch.Tensor):
         c2w_np = c2ws.detach().cpu().numpy().astype(np.float64)
@@ -596,23 +597,23 @@ def smooth_c2w_trajectory(
     kern = np.exp(-0.5 * (np.arange(-r, r + 1) / sig) ** 2)
     kern /= kern.sum()
 
-    t = c2w_np[:, :3, 3].copy()                                   # [N,3] camera centers
+    t = c2w_np[:, :3, 3].copy()  # [N,3] camera centers
     q = np.stack([_rotmat_to_quat(c2w_np[i, :3, :3]) for i in range(N)])  # [N,4] (w,x,y,z)
-    for i in range(1, N):                                         # sign alignment (quaternion double cover)
+    for i in range(1, N):  # sign alignment (quaternion double cover)
         if float(np.dot(q[i], q[i - 1])) < 0:
             q[i] = -q[i]
 
     out = c2w_np.copy()
     n_smoothed = 0
     for i in range(N):
-        if i < ref_pix:                                           # ref segment kept verbatim
+        if i < ref_pix:  # ref segment kept verbatim
             continue
-        lo, hi = max(0, i - r), min(N, i + r + 1)                 # full-trajectory context
-        kk = kern[(lo - (i - r)):(win - ((i + r + 1) - hi))]
+        lo, hi = max(0, i - r), min(N, i + r + 1)  # full-trajectory context
+        kk = kern[(lo - (i - r)) : (win - ((i + r + 1) - hi))]
         kk = kk / kk.sum()
         ts = (t[lo:hi] * kk[:, None]).sum(0)
         qs = (q[lo:hi] * kk[:, None]).sum(0)
-        qs /= (np.linalg.norm(qs) + 1e-12)
+        qs /= np.linalg.norm(qs) + 1e-12
         out[i, :3, :3] = _quat_to_rotmat(qs)
         out[i, :3, 3] = ts
         n_smoothed += 1
@@ -620,8 +621,11 @@ def smooth_c2w_trajectory(
     # mean displacement (diagnostic: smaller = less change to the true trajectory)
     disp = float(np.linalg.norm(out[ref_pix:, :3, 3] - c2w_np[ref_pix:, :3, 3], axis=1).mean())
     if verbose:
-        print(f"[pose-smooth] win={win} smoothed {n_smoothed} target frames ({ref_pix} ref frames kept); "
-              f"mean camera-center displacement={disp:.4f}", flush=True)
+        print(
+            f"[pose-smooth] win={win} smoothed {n_smoothed} target frames ({ref_pix} ref frames kept); "
+            f"mean camera-center displacement={disp:.4f}",
+            flush=True,
+        )
 
     if squeeze_batch:
         out = out[None]

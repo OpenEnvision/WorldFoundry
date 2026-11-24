@@ -1,28 +1,23 @@
-"""Module for base_models -> perception_core -> general_perception -> open_clip -> transformer.py functionality."""
-
-from collections import OrderedDict
 import math
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
+from collections import OrderedDict
+from collections.abc import Callable, Sequence
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
-from .utils import to_2tuple, feature_take_indices
-from .pos_embed import get_2d_sincos_pos_embed
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+from worldfoundry.core.nn.blocks.layers import LayerScale as LayerScale
+
+from .pos_embed import get_2d_sincos_pos_embed
+from .utils import feature_take_indices, to_2tuple
 
 
 class LayerNormFp32(nn.LayerNorm):
     """Subclass torch's LayerNorm to handle fp16 (by casting to float32 and back)."""
 
     def forward(self, x: torch.Tensor):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         orig_type = x.dtype
         x = F.layer_norm(x.to(torch.float32), self.normalized_shape, self.weight, self.bias, self.eps)
         return x.to(orig_type)
@@ -32,49 +27,9 @@ class LayerNorm(nn.LayerNorm):
     """Subclass torch's LayerNorm (with cast back to input dtype)."""
 
     def forward(self, x: torch.Tensor):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         orig_type = x.dtype
         x = F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         return x.to(orig_type)
-
-
-class QuickGELU(nn.Module):
-    """Quick gelu implementation."""
-    # NOTE This is slower than nn.GELU or nn.SiLU and uses more GPU memory
-    def forward(self, x: torch.Tensor):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        return x * torch.sigmoid(1.702 * x)
-
-
-class LayerScale(nn.Module):
-    """Layer scale implementation."""
-    def __init__(self, dim, init_values=1e-5, inplace=False):
-        """Init.
-
-        Args:
-            dim: The dim.
-            init_values: The init values.
-            inplace: The inplace.
-        """
-        super().__init__()
-        self.inplace = inplace
-        self.gamma = nn.Parameter(init_values * torch.ones(dim))
-
-    def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        return x.mul_(self.gamma) if self.inplace else x * self.gamma
 
 
 class PatchDropout(nn.Module):
@@ -82,29 +37,14 @@ class PatchDropout(nn.Module):
     https://arxiv.org/abs/2212.00794
     """
 
-    def __init__(
-            self,
-            prob: float = 0.5,
-            exclude_first_token: bool = True
-    ):
-        """Init.
-
-        Args:
-            prob: The prob.
-            exclude_first_token: The exclude first token.
-        """
+    def __init__(self, prob: float = 0.5, exclude_first_token: bool = True):
         super().__init__()
-        assert 0 <= prob < 1.
+        assert 0 <= prob < 1.0
         self.prob = prob
         self.exclude_first_token = exclude_first_token  # exclude CLS token
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        if not self.training or self.prob == 0.:
+        if not self.training or self.prob == 0.0:
             return x
 
         if self.exclude_first_token:
@@ -133,50 +73,31 @@ class PatchDropout(nn.Module):
 
 
 class Attention(nn.Module):
-    """Attention implementation."""
     def __init__(
-            self,
-            dim: int,
-            num_heads: int = 8,
-            kdim: Optional[int] = None,
-            vdim: Optional[int] = None,
-            qkv_bias: bool = True,
-            qk_norm: bool = False,
-            scaled_cosine: bool = False,
-            scale_heads: bool = False,
-            inner_norm: bool = False,
-            logit_scale_max: float = math.log(1. / 0.01),
-            norm_layer: Type[nn.Module] = LayerNormFp32,
-            attn_drop: float = 0.,
-            proj_drop: float = 0.,
-            use_sdpa: bool = True,
+        self,
+        dim: int,
+        num_heads: int = 8,
+        kdim: int | None = None,
+        vdim: int | None = None,
+        qkv_bias: bool = True,
+        qk_norm: bool = False,
+        scaled_cosine: bool = False,
+        scale_heads: bool = False,
+        inner_norm: bool = False,
+        logit_scale_max: float = math.log(1.0 / 0.01),
+        norm_layer: type[nn.Module] = LayerNormFp32,
+        attn_drop: float = 0.0,
+        proj_drop: float = 0.0,
+        use_sdpa: bool = True,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            kdim: The kdim.
-            vdim: The vdim.
-            qkv_bias: The qkv bias.
-            qk_norm: The qk norm.
-            scaled_cosine: The scaled cosine.
-            scale_heads: The scale heads.
-            inner_norm: The inner norm.
-            logit_scale_max: The logit scale max.
-            norm_layer: The norm layer.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-            use_sdpa: The use sdpa.
-        """
         super().__init__()
         assert not (scaled_cosine and qk_norm), "Cannot activate both scaled cosine and QK normalization"
         self.scaled_cosine = scaled_cosine
         self.scale_heads = scale_heads
-        assert dim % num_heads == 0, 'dim should be divisible by num_heads'
+        assert dim % num_heads == 0, "dim should be divisible by num_heads"
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.logit_scale_max = logit_scale_max
         self.use_sdpa = use_sdpa
 
@@ -236,7 +157,6 @@ class Attention(nn.Module):
         self._reset_parameters()
 
     def _reset_parameters(self):
-        """Helper function to reset parameters."""
         # Match nn.MultiheadAttention init
         if self.in_proj_weight is not None:
             nn.init.xavier_uniform_(self.in_proj_weight)
@@ -245,24 +165,16 @@ class Attention(nn.Module):
             nn.init.xavier_uniform_(self.k_proj_weight)
             nn.init.xavier_uniform_(self.v_proj_weight)
         if self.in_proj_bias is not None:
-            nn.init.constant_(self.in_proj_bias, 0.)
-        nn.init.constant_(self.out_proj.bias, 0.)
+            nn.init.constant_(self.in_proj_bias, 0.0)
+        nn.init.constant_(self.out_proj.bias, 0.0)
 
     def forward(
-            self,
-            x: torch.Tensor,
-            k_x: Optional[torch.Tensor] = None,
-            v_x: Optional[torch.Tensor] = None,
-            attn_mask: Optional[torch.Tensor] = None,
+        self,
+        x: torch.Tensor,
+        k_x: torch.Tensor | None = None,
+        v_x: torch.Tensor | None = None,
+        attn_mask: torch.Tensor | None = None,
     ):
-        """Forward.
-
-        Args:
-            x: The x.
-            k_x: The k x.
-            v_x: The v x.
-            attn_mask: The attn mask.
-        """
         N, L, C = x.shape
 
         if k_x is None and v_x is None:
@@ -271,8 +183,7 @@ class Attention(nn.Module):
                 q, k, v = F.linear(x, self.in_proj_weight, self.in_proj_bias).chunk(3, dim=-1)
             else:
                 bias_q, bias_k, bias_v = (
-                    self.in_proj_bias.chunk(3) if self.in_proj_bias is not None
-                    else (None, None, None)
+                    self.in_proj_bias.chunk(3) if self.in_proj_bias is not None else (None, None, None)
                 )
                 q = F.linear(x, self.q_proj_weight, bias_q)
                 k = F.linear(x, self.k_proj_weight, bias_k)
@@ -284,10 +195,7 @@ class Attention(nn.Module):
             if v_x is None:
                 v_x = x
 
-            bias_q, bias_k, bias_v = (
-                self.in_proj_bias.chunk(3) if self.in_proj_bias is not None
-                else (None, None, None)
-            )
+            bias_q, bias_k, bias_v = self.in_proj_bias.chunk(3) if self.in_proj_bias is not None else (None, None, None)
             if self.in_proj_weight is not None:
                 # Same-dim case: split combined weight into 3 chunks
                 w_q, w_k, w_v = self.in_proj_weight.chunk(3, dim=0)
@@ -323,9 +231,11 @@ class Attention(nn.Module):
             k = self.ln_k(k)
             if self.use_sdpa:
                 x = _worldfoundry_scaled_dot_product_attention(
-                    q, k, v,
+                    q,
+                    k,
+                    v,
                     attn_mask=attn_mask,
-                    dropout_p=self.attn_drop.p if self.training else 0.,
+                    dropout_p=self.attn_drop.p if self.training else 0.0,
                     scale=self.scale,
                 )
             else:
@@ -351,24 +261,14 @@ class Attention(nn.Module):
 
 
 class AttentionalPooler(nn.Module):
-    """Attentional pooler implementation."""
     def __init__(
-            self,
-            d_model: int,
-            context_dim: int,
-            n_head: int = 8,
-            n_queries: int = 256,
-            norm_layer: Callable = LayerNorm,
+        self,
+        d_model: int,
+        context_dim: int,
+        n_head: int = 8,
+        n_queries: int = 256,
+        norm_layer: Callable = LayerNorm,
     ):
-        """Init.
-
-        Args:
-            d_model: The d model.
-            context_dim: The context dim.
-            n_head: The n head.
-            n_queries: The n queries.
-            norm_layer: The norm layer.
-        """
         super().__init__()
         self.query = nn.Parameter(torch.randn(n_queries, d_model))
         self.attn = Attention(d_model, num_heads=n_head, kdim=context_dim, vdim=context_dim, qkv_bias=True)
@@ -376,11 +276,6 @@ class AttentionalPooler(nn.Module):
         self.ln_k = norm_layer(context_dim)
 
     def forward(self, x: torch.Tensor):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         N = x.shape[0]
         x = self.ln_k(x)
         q = self.ln_q(self.query)
@@ -389,28 +284,16 @@ class AttentionalPooler(nn.Module):
 
 
 class ResidualAttentionBlock(nn.Module):
-    """Residual attention block implementation."""
     def __init__(
-            self,
-            d_model: int,
-            n_head: int,
-            mlp_ratio: float = 4.0,
-            ls_init_value: float = None,
-            act_layer: Callable = nn.GELU,
-            norm_layer: Callable = LayerNorm,
-            is_cross_attention: bool = False,
+        self,
+        d_model: int,
+        n_head: int,
+        mlp_ratio: float = 4.0,
+        ls_init_value: float | None = None,
+        act_layer: Callable = nn.GELU,
+        norm_layer: Callable = LayerNorm,
+        is_cross_attention: bool = False,
     ):
-        """Init.
-
-        Args:
-            d_model: The d model.
-            n_head: The n head.
-            mlp_ratio: The mlp ratio.
-            ls_init_value: The ls init value.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            is_cross_attention: The is cross attention.
-        """
         super().__init__()
 
         self.ln_1 = norm_layer(d_model)
@@ -421,58 +304,41 @@ class ResidualAttentionBlock(nn.Module):
 
         self.ln_2 = norm_layer(d_model)
         mlp_width = int(d_model * mlp_ratio)
-        self.mlp = nn.Sequential(OrderedDict([
-            ("c_fc", nn.Linear(d_model, mlp_width)),
-            ("gelu", act_layer()),
-            ("c_proj", nn.Linear(mlp_width, d_model))
-        ]))
+        self.mlp = nn.Sequential(
+            OrderedDict(
+                [
+                    ("c_fc", nn.Linear(d_model, mlp_width)),
+                    ("gelu", act_layer()),
+                    ("c_proj", nn.Linear(mlp_width, d_model)),
+                ]
+            )
+        )
         self.ls_2 = LayerScale(d_model, ls_init_value) if ls_init_value is not None else nn.Identity()
 
     def get_weight_dtype(self) -> torch.dtype:
-        """Get weight dtype.
-
-        Returns:
-            The return value.
-        """
-        if hasattr(self.mlp.c_fc, 'int8_original_dtype'):
+        if hasattr(self.mlp.c_fc, "int8_original_dtype"):
             return self.mlp.c_fc.int8_original_dtype
         return self.mlp.c_fc.weight.dtype
 
     def attention(
-            self,
-            q_x: torch.Tensor,
-            k_x: Optional[torch.Tensor] = None,
-            v_x: Optional[torch.Tensor] = None,
-            attn_mask: Optional[torch.Tensor] = None,
+        self,
+        q_x: torch.Tensor,
+        k_x: torch.Tensor | None = None,
+        v_x: torch.Tensor | None = None,
+        attn_mask: torch.Tensor | None = None,
     ):
-        """Attention.
-
-        Args:
-            q_x: The q x.
-            k_x: The k x.
-            v_x: The v x.
-            attn_mask: The attn mask.
-        """
         k_x = k_x if k_x is not None else q_x
         v_x = v_x if v_x is not None else q_x
         attn_mask = attn_mask.to(q_x.dtype) if attn_mask is not None else None
         return self.attn(q_x, k_x=k_x, v_x=v_x, attn_mask=attn_mask)
 
     def forward(
-            self,
-            q_x: torch.Tensor,
-            k_x: Optional[torch.Tensor] = None,
-            v_x: Optional[torch.Tensor] = None,
-            attn_mask: Optional[torch.Tensor] = None,
+        self,
+        q_x: torch.Tensor,
+        k_x: torch.Tensor | None = None,
+        v_x: torch.Tensor | None = None,
+        attn_mask: torch.Tensor | None = None,
     ):
-        """Forward.
-
-        Args:
-            q_x: The q x.
-            k_x: The k x.
-            v_x: The v x.
-            attn_mask: The attn mask.
-        """
         k_x = self.ln_1_kv(k_x) if hasattr(self, "ln_1_kv") and k_x is not None else None
         v_x = self.ln_1_kv(v_x) if hasattr(self, "ln_1_kv") and v_x is not None else None
         x = q_x + self.ls_1(self.attention(q_x=self.ln_1(q_x), k_x=k_x, v_x=v_x, attn_mask=attn_mask))
@@ -481,38 +347,21 @@ class ResidualAttentionBlock(nn.Module):
 
 
 class CustomResidualAttentionBlock(nn.Module):
-    """Custom residual attention block implementation."""
     def __init__(
-            self,
-            d_model: int,
-            n_head: int,
-            mlp_ratio: float = 4.0,
-            ls_init_value: float = None,
-            act_layer: Type[nn.Module] = nn.GELU,
-            norm_layer: Type[nn.Module] = LayerNorm,
-            qk_norm: bool = False,
-            scale_cosine_attn: bool = False,
-            scale_heads: bool = False,
-            scale_attn_inner: bool = False,
-            scale_attn: bool = False,
-            scale_fc: bool = False,
+        self,
+        d_model: int,
+        n_head: int,
+        mlp_ratio: float = 4.0,
+        ls_init_value: float | None = None,
+        act_layer: type[nn.Module] = nn.GELU,
+        norm_layer: type[nn.Module] = LayerNorm,
+        qk_norm: bool = False,
+        scale_cosine_attn: bool = False,
+        scale_heads: bool = False,
+        scale_attn_inner: bool = False,
+        scale_attn: bool = False,
+        scale_fc: bool = False,
     ):
-        """Init.
-
-        Args:
-            d_model: The d model.
-            n_head: The n head.
-            mlp_ratio: The mlp ratio.
-            ls_init_value: The ls init value.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            qk_norm: The qk norm.
-            scale_cosine_attn: The scale cosine attn.
-            scale_heads: The scale heads.
-            scale_attn_inner: The scale attn inner.
-            scale_attn: The scale attn.
-            scale_fc: The scale fc.
-        """
         super().__init__()
 
         self.ln_1 = norm_layer(d_model)
@@ -530,61 +379,46 @@ class CustomResidualAttentionBlock(nn.Module):
 
         self.ln_2 = norm_layer(d_model)
         mlp_width = int(d_model * mlp_ratio)
-        self.mlp = nn.Sequential(OrderedDict([
-            ("c_fc", nn.Linear(d_model, mlp_width)),
-            ("gelu", act_layer()),
-            ('ln', norm_layer(mlp_width) if scale_fc else nn.Identity()),  # from NormFormer / Foundation Transformers
-            ("c_proj", nn.Linear(mlp_width, d_model))
-        ]))
+        self.mlp = nn.Sequential(
+            OrderedDict(
+                [
+                    ("c_fc", nn.Linear(d_model, mlp_width)),
+                    ("gelu", act_layer()),
+                    (
+                        "ln",
+                        norm_layer(mlp_width) if scale_fc else nn.Identity(),
+                    ),  # from NormFormer / Foundation Transformers
+                    ("c_proj", nn.Linear(mlp_width, d_model)),
+                ]
+            )
+        )
         self.ls_2 = LayerScale(d_model, ls_init_value) if ls_init_value is not None else nn.Identity()
 
     def get_weight_dtype(self) -> torch.dtype:
-        """Get weight dtype.
-
-        Returns:
-            The return value.
-        """
-        if hasattr(self.mlp.c_fc, 'int8_original_dtype'):
+        if hasattr(self.mlp.c_fc, "int8_original_dtype"):
             return self.mlp.c_fc.int8_original_dtype
         return self.mlp.c_fc.weight.dtype
 
-    def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
-        """Forward.
-
-        Args:
-            x: The x.
-            attn_mask: The attn mask.
-        """
+    def forward(self, x: torch.Tensor, attn_mask: torch.Tensor | None = None):
         x = x + self.ls_1(self.ln_attn(self.attn(self.ln_1(x), attn_mask=attn_mask)))
         x = x + self.ls_2(self.mlp(self.ln_2(x)))
         return x
 
 
 class CustomTransformer(nn.Module):
-    """ A custom transformer that can use different block types. """
-    def __init__(
-            self,
-            width: int,
-            layers: int,
-            heads: int,
-            mlp_ratio: float = 4.0,
-            ls_init_value: float = None,
-            act_layer: Type[nn.Module] = nn.GELU,
-            norm_layer: Type[nn.Module] = LayerNorm,
-            block_types: Union[str, List[str]] = 'CustomResidualAttentionBlock',
-    ):
-        """Init.
+    """A custom transformer that can use different block types."""
 
-        Args:
-            width: The width.
-            layers: The layers.
-            heads: The heads.
-            mlp_ratio: The mlp ratio.
-            ls_init_value: The ls init value.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            block_types: The block types.
-        """
+    def __init__(
+        self,
+        width: int,
+        layers: int,
+        heads: int,
+        mlp_ratio: float = 4.0,
+        ls_init_value: float | None = None,
+        act_layer: type[nn.Module] = nn.GELU,
+        norm_layer: type[nn.Module] = LayerNorm,
+        block_types: str | list[str] = "CustomResidualAttentionBlock",
+    ):
         super().__init__()
         self.width = width
         self.layers = layers
@@ -595,12 +429,7 @@ class CustomTransformer(nn.Module):
         assert len(block_types) == layers
 
         def _create_block(bt: str):
-            """Helper function to create block.
-
-            Args:
-                bt: The bt.
-            """
-            if bt == 'CustomResidualAttentionBlock':
+            if bt == "CustomResidualAttentionBlock":
                 return CustomResidualAttentionBlock(
                     width,
                     heads,
@@ -610,40 +439,24 @@ class CustomTransformer(nn.Module):
                     norm_layer=norm_layer,
                 )
             else:
-                assert False
+                assert False  # noqa: B011 - Keeps the assertion semantics under -O.
 
-        self.resblocks = nn.ModuleList([
-            _create_block(bt)
-            for bt in block_types
-        ])
+        self.resblocks = nn.ModuleList([_create_block(bt) for bt in block_types])
 
     def get_cast_dtype(self) -> torch.dtype:
-        """Get cast dtype.
-
-        Returns:
-            The return value.
-        """
         return self.resblocks[0].get_weight_dtype()
 
     def forward_intermediates(
-            self,
-            x: torch.Tensor,
-            attn_mask: Optional[torch.Tensor] = None,
-            indices: Optional[Union[int, List[int]]] = None,
-            stop_early: bool = False,
+        self,
+        x: torch.Tensor,
+        attn_mask: torch.Tensor | None = None,
+        indices: int | list[int] | None = None,
+        stop_early: bool = False,
     ):
-        """Forward intermediates.
-
-        Args:
-            x: The x.
-            attn_mask: The attn mask.
-            indices: The indices.
-            stop_early: The stop early.
-        """
         take_indices, max_index = feature_take_indices(len(self.resblocks), indices)
 
         intermediates = []
-        blocks = self.resblocks if not stop_early else self.resblocks[:max_index + 1]
+        blocks = self.resblocks if not stop_early else self.resblocks[: max_index + 1]
         for i, blk in enumerate(blocks):
             if self.grad_checkpointing:
                 x = checkpoint(blk, x, None, None, attn_mask, use_reentrant=False)
@@ -655,34 +468,22 @@ class CustomTransformer(nn.Module):
 
         return x, intermediates
 
-    def prune_intermediate_layers(self, indices: Union[int, List[int]] = 1):
-        """ Prune layers not required for specified intermediates.
-        """
+    def prune_intermediate_layers(self, indices: int | list[int] = 1):
+        """Prune layers not required for specified intermediates."""
         take_indices, max_index = feature_take_indices(len(self.resblocks), indices)
-        self.resblocks = self.resblocks[:max_index + 1]  # truncate blocks
+        self.resblocks = self.resblocks[: max_index + 1]  # truncate blocks
         return take_indices
 
-    def set_grad_checkpointing(self, enable: bool = True, impl: str = 'inline'):
-        """Set grad checkpointing.
-
-        Args:
-            enable: The enable.
-            impl: The impl.
-        """
-        if impl == 'composable' and enable:
+    def set_grad_checkpointing(self, enable: bool = True, impl: str = "inline"):
+        if impl == "composable" and enable:
             from torch.distributed._composable import checkpoint as composable_checkpoint
+
             for r in self.resblocks:
                 composable_checkpoint(r)
         else:
             self.grad_checkpointing = enable
 
-    def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
-        """Forward.
-
-        Args:
-            x: The x.
-            attn_mask: The attn mask.
-        """
+    def forward(self, x: torch.Tensor, attn_mask: torch.Tensor | None = None):
         for r in self.resblocks:
             if self.grad_checkpointing:
                 # TODO: handle kwargs https://github.com/pytorch/pytorch/issues/79887#issuecomment-1161758372
@@ -694,42 +495,23 @@ class CustomTransformer(nn.Module):
 
 
 class Transformer(nn.Module):
-    """Transformer implementation."""
     def __init__(
-            self,
-            width: int,
-            layers: int,
-            heads: int,
-            mlp_ratio: float = 4.0,
-            ls_init_value: float = None,
-            act_layer: Type[nn.Module] = nn.GELU,
-            norm_layer: Type[nn.Module] = LayerNorm,
-            block_type: Optional[str] = None,
-            qk_norm: bool = False,
-            scaled_cosine_attn: bool = False,
-            scale_heads: bool = False,
-            scale_attn_inner: bool = False,
-            scale_attn: bool = False,
-            scale_fc: bool = False,
+        self,
+        width: int,
+        layers: int,
+        heads: int,
+        mlp_ratio: float = 4.0,
+        ls_init_value: float | None = None,
+        act_layer: type[nn.Module] = nn.GELU,
+        norm_layer: type[nn.Module] = LayerNorm,
+        block_type: str | None = None,
+        qk_norm: bool = False,
+        scaled_cosine_attn: bool = False,
+        scale_heads: bool = False,
+        scale_attn_inner: bool = False,
+        scale_attn: bool = False,
+        scale_fc: bool = False,
     ):
-        """Init.
-
-        Args:
-            width: The width.
-            layers: The layers.
-            heads: The heads.
-            mlp_ratio: The mlp ratio.
-            ls_init_value: The ls init value.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            block_type: The block type.
-            qk_norm: The qk norm.
-            scaled_cosine_attn: The scaled cosine attn.
-            scale_heads: The scale heads.
-            scale_attn_inner: The scale attn inner.
-            scale_attn: The scale attn.
-            scale_fc: The scale fc.
-        """
         super().__init__()
         self.width = width
         self.layers = layers
@@ -738,82 +520,68 @@ class Transformer(nn.Module):
         # Auto-select custom block if any custom features are enabled
         if block_type is None:
             if any([qk_norm, scaled_cosine_attn, scale_heads, scale_attn_inner, scale_attn, scale_fc]):
-                block_type = 'custom'
+                block_type = "custom"
             else:
-                block_type = 'default'
+                block_type = "default"
 
-        if block_type == 'custom':
-            self.resblocks = nn.ModuleList([
-                CustomResidualAttentionBlock(
-                    width,
-                    heads,
-                    mlp_ratio,
-                    ls_init_value=ls_init_value,
-                    act_layer=act_layer,
-                    norm_layer=norm_layer,
-                    qk_norm=qk_norm,
-                    scale_cosine_attn=scaled_cosine_attn,
-                    scale_heads=scale_heads,
-                    scale_attn_inner=scale_attn_inner,
-                    scale_attn=scale_attn,
-                    scale_fc=scale_fc,
-                )
-                for _ in range(layers)
-            ])
+        if block_type == "custom":
+            self.resblocks = nn.ModuleList(
+                [
+                    CustomResidualAttentionBlock(
+                        width,
+                        heads,
+                        mlp_ratio,
+                        ls_init_value=ls_init_value,
+                        act_layer=act_layer,
+                        norm_layer=norm_layer,
+                        qk_norm=qk_norm,
+                        scale_cosine_attn=scaled_cosine_attn,
+                        scale_heads=scale_heads,
+                        scale_attn_inner=scale_attn_inner,
+                        scale_attn=scale_attn,
+                        scale_fc=scale_fc,
+                    )
+                    for _ in range(layers)
+                ]
+            )
         else:
-            self.resblocks = nn.ModuleList([
-                ResidualAttentionBlock(
-                    width,
-                    heads,
-                    mlp_ratio,
-                    ls_init_value=ls_init_value,
-                    act_layer=act_layer,
-                    norm_layer=norm_layer,
-                )
-                for _ in range(layers)
-            ])
+            self.resblocks = nn.ModuleList(
+                [
+                    ResidualAttentionBlock(
+                        width,
+                        heads,
+                        mlp_ratio,
+                        ls_init_value=ls_init_value,
+                        act_layer=act_layer,
+                        norm_layer=norm_layer,
+                    )
+                    for _ in range(layers)
+                ]
+            )
 
     def get_cast_dtype(self) -> torch.dtype:
-        """Get cast dtype.
-
-        Returns:
-            The return value.
-        """
         return self.resblocks[0].get_weight_dtype()
 
-    def set_grad_checkpointing(self, enable: bool = True, impl: str = 'inline'):
-        """Set grad checkpointing.
-
-        Args:
-            enable: The enable.
-            impl: The impl.
-        """
-        if impl == 'composable' and enable:
+    def set_grad_checkpointing(self, enable: bool = True, impl: str = "inline"):
+        if impl == "composable" and enable:
             from torch.distributed._composable import checkpoint as composable_checkpoint
+
             for r in self.resblocks:
                 composable_checkpoint(r)
         else:
             self.grad_checkpointing = enable
 
     def forward_intermediates(
-            self,
-            x: torch.Tensor,
-            attn_mask: Optional[torch.Tensor] = None,
-            indices: Optional[Union[int, List[int]]] = None,
-            stop_early: bool = False,
+        self,
+        x: torch.Tensor,
+        attn_mask: torch.Tensor | None = None,
+        indices: int | list[int] | None = None,
+        stop_early: bool = False,
     ):
-        """Forward intermediates.
-
-        Args:
-            x: The x.
-            attn_mask: The attn mask.
-            indices: The indices.
-            stop_early: The stop early.
-        """
         take_indices, max_index = feature_take_indices(len(self.resblocks), indices)
 
         intermediates = []
-        blocks = self.resblocks if not stop_early else self.resblocks[:max_index + 1]
+        blocks = self.resblocks if not stop_early else self.resblocks[: max_index + 1]
         for i, blk in enumerate(blocks):
             if self.grad_checkpointing:
                 x = checkpoint(blk, x, None, None, attn_mask, use_reentrant=False)
@@ -825,20 +593,13 @@ class Transformer(nn.Module):
 
         return x, intermediates
 
-    def prune_intermediate_layers(self, indices: Union[int, List[int]] = 1):
-        """ Prune layers not required for specified intermediates.
-        """
+    def prune_intermediate_layers(self, indices: int | list[int] = 1):
+        """Prune layers not required for specified intermediates."""
         take_indices, max_index = feature_take_indices(len(self.resblocks), indices)
-        self.resblocks = self.resblocks[:max_index + 1]  # truncate blocks
+        self.resblocks = self.resblocks[: max_index + 1]  # truncate blocks
         return take_indices
 
-    def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
-        """Forward.
-
-        Args:
-            x: The x.
-            attn_mask: The attn mask.
-        """
+    def forward(self, x: torch.Tensor, attn_mask: torch.Tensor | None = None):
         for r in self.resblocks:
             if self.grad_checkpointing:
                 # TODO: handle kwargs https://github.com/pytorch/pytorch/issues/79887#issuecomment-1161758372
@@ -850,79 +611,41 @@ class Transformer(nn.Module):
 
 
 def _expand_token(token, batch_size: int):
-    """Helper function to expand token.
-
-    Args:
-        token: The token.
-        batch_size: The batch size.
-    """
     return token.view(1, 1, -1).expand(batch_size, -1, -1)
 
 
 class VisionTransformer(nn.Module):
-    """Vision transformer implementation."""
-
     def __init__(
-            self,
-            image_size: int,
-            patch_size: int,
-            width: int,
-            layers: int,
-            heads: int,
-            mlp_ratio: float,
-            ls_init_value: float = None,
-            attentional_pool: bool = False,
-            attn_pooler_queries: int = 256,
-            attn_pooler_heads: int = 8,
-            output_dim: int = 512,
-            patch_dropout: float = 0.,
-            no_ln_pre: bool = False,
-            pos_embed_type: str = 'learnable',
-            pool_type: str = 'tok',
-            final_ln_after_pool: bool = False,
-            act_layer: Callable = nn.GELU,
-            norm_layer: Callable = LayerNorm,
-            output_tokens: bool = False,
-            block_type: Optional[str] = None,
-            qk_norm: bool = False,
-            scaled_cosine_attn: bool = False,
-            scale_heads: bool = False,
-            scale_attn_inner: bool = False,
-            scale_attn: bool = False,
-            scale_fc: bool = False,
+        self,
+        image_size: int,
+        patch_size: int,
+        width: int,
+        layers: int,
+        heads: int,
+        mlp_ratio: float,
+        ls_init_value: float | None = None,
+        attentional_pool: bool = False,
+        attn_pooler_queries: int = 256,
+        attn_pooler_heads: int = 8,
+        output_dim: int = 512,
+        patch_dropout: float = 0.0,
+        no_ln_pre: bool = False,
+        pos_embed_type: str = "learnable",
+        pool_type: str = "tok",
+        final_ln_after_pool: bool = False,
+        act_layer: Callable = nn.GELU,
+        norm_layer: Callable = LayerNorm,
+        output_tokens: bool = False,
+        block_type: str | None = None,
+        qk_norm: bool = False,
+        scaled_cosine_attn: bool = False,
+        scale_heads: bool = False,
+        scale_attn_inner: bool = False,
+        scale_attn: bool = False,
+        scale_fc: bool = False,
     ):
-        """Init.
-
-        Args:
-            image_size: The image size.
-            patch_size: The patch size.
-            width: The width.
-            layers: The layers.
-            heads: The heads.
-            mlp_ratio: The mlp ratio.
-            ls_init_value: The ls init value.
-            attentional_pool: The attentional pool.
-            attn_pooler_queries: The attn pooler queries.
-            attn_pooler_heads: The attn pooler heads.
-            output_dim: The output dim.
-            patch_dropout: The patch dropout.
-            no_ln_pre: The no ln pre.
-            pos_embed_type: The pos embed type.
-            pool_type: The pool type.
-            final_ln_after_pool: The final ln after pool.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            output_tokens: The output tokens.
-            block_type: The block type.
-            qk_norm: The qk norm.
-            scaled_cosine_attn: The scaled cosine attn.
-            scale_heads: The scale heads.
-            scale_attn_inner: The scale attn inner.
-            scale_attn: The scale attn.
-            scale_fc: The scale fc.
-        """
         super().__init__()
-        assert pool_type in ('tok', 'avg', 'none')
+        assert pool_type in ("tok", "avg", "none")
         self.output_tokens = output_tokens
         image_height, image_width = self.image_size = to_2tuple(image_size)
         patch_height, patch_width = self.patch_size = to_2tuple(patch_size)
@@ -939,24 +662,27 @@ class VisionTransformer(nn.Module):
         )
 
         # class embeddings and positional embeddings
-        scale = width ** -0.5
+        scale = width**-0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
-        if pos_embed_type == 'learnable':
+        if pos_embed_type == "learnable":
             self.positional_embedding = nn.Parameter(
-                scale * torch.randn(self.grid_size[0] * self.grid_size[1] + 1, width))
-        elif pos_embed_type == 'sin_cos_2d':
+                scale * torch.randn(self.grid_size[0] * self.grid_size[1] + 1, width)
+            )
+        elif pos_embed_type == "sin_cos_2d":
             # fixed sin-cos embedding
-            assert self.grid_size[0] == self.grid_size[1],\
-                'currently sin cos 2d pos embedding only supports square input'
+            assert self.grid_size[0] == self.grid_size[1], (
+                "currently sin cos 2d pos embedding only supports square input"
+            )
             self.positional_embedding = nn.Parameter(
-                torch.zeros(self.grid_size[0] * self.grid_size[1] + 1, width), requires_grad=False)
+                torch.zeros(self.grid_size[0] * self.grid_size[1] + 1, width), requires_grad=False
+            )
             pos_embed_type = get_2d_sincos_pos_embed(width, self.grid_size[0], cls_token=True)
             self.positional_embedding.data.copy_(torch.from_numpy(pos_embed_type).float())
         else:
             raise ValueError
 
         # setting a patch_dropout of 0. would mean it is disabled and this function would be the identity fn
-        self.patch_dropout = PatchDropout(patch_dropout) if patch_dropout > 0. else nn.Identity()
+        self.patch_dropout = PatchDropout(patch_dropout) if patch_dropout > 0.0 else nn.Identity()
 
         self.ln_pre = nn.Identity() if no_ln_pre else norm_layer(width)
         self.transformer = Transformer(
@@ -979,8 +705,8 @@ class VisionTransformer(nn.Module):
         if attentional_pool:
             if isinstance(attentional_pool, str):
                 self.attn_pool_type = attentional_pool
-                self.pool_type = 'none'
-                if attentional_pool in ('parallel', 'cascade'):
+                self.pool_type = "none"
+                if attentional_pool in ("parallel", "cascade"):
                     self.attn_pool = AttentionalPooler(
                         output_dim,
                         width,
@@ -994,9 +720,9 @@ class VisionTransformer(nn.Module):
                         n_queries=1,
                     )
                 else:
-                    assert False
+                    assert False  # noqa: B011 - Keeps the assertion semantics under -O.
             else:
-                self.attn_pool_type = ''
+                self.attn_pool_type = ""
                 self.pool_type = pool_type
                 self.attn_pool = AttentionalPooler(
                     output_dim,
@@ -1017,12 +743,6 @@ class VisionTransformer(nn.Module):
         self.init_parameters()
 
     def lock(self, unlocked_groups: int = 0, freeze_bn_stats: bool = False):
-        """Lock.
-
-        Args:
-            unlocked_groups: The unlocked groups.
-            freeze_bn_stats: The freeze bn stats.
-        """
         for param in self.parameters():
             param.requires_grad = False
 
@@ -1043,11 +763,6 @@ class VisionTransformer(nn.Module):
             ]
 
             def _unlock(x):
-                """Helper function to unlock.
-
-                Args:
-                    x: The x.
-                """
                 if isinstance(x, Sequence):
                     for g in x:
                         _unlock(g)
@@ -1061,7 +776,7 @@ class VisionTransformer(nn.Module):
             _unlock(groups[-unlocked_groups:])
 
     def init_parameters(self):
-        """Init parameters."""
+        pass
         # FIXME OpenAI CLIP did not define an init for the VisualTransformer
         # TODO experiment if default PyTorch init, below, or alternate init is best.
 
@@ -1079,50 +794,26 @@ class VisionTransformer(nn.Module):
         #
         # if self.text_projection is not None:
         #     nn.init.normal_(self.text_projection, std=self.scale)
-        pass
 
-    def set_grad_checkpointing(self, enable: bool = True, impl: str = 'inline'):
-        """Set grad checkpointing.
-
-        Args:
-            enable: The enable.
-            impl: The impl.
-        """
+    def set_grad_checkpointing(self, enable: bool = True, impl: str = "inline"):
         self.transformer.set_grad_checkpointing(enable, impl=impl)
 
     def no_weight_decay(self):
-        """No weight decay."""
         # for timm optimizers, 1d params like logit_scale, logit_bias, ln/bn scale, biases are excluded by default
-        no_wd = {'positional_embedding', 'class_embedding'}
+        no_wd = {"positional_embedding", "class_embedding"}
         return no_wd
 
-    def _global_pool(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Helper function to global pool.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
-        if self.pool_type == 'avg':
+    def _global_pool(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.pool_type == "avg":
             pooled, tokens = x[:, 1:].mean(dim=1), x[:, 1:]
-        elif self.pool_type == 'tok':
+        elif self.pool_type == "tok":
             pooled, tokens = x[:, 0], x[:, 1:]
         else:
             pooled = tokens = x
 
         return pooled, tokens
 
-    def _embeds(self, x:torch.Tensor) -> torch.Tensor:
-        """Helper function to embeds.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
+    def _embeds(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv1(x)  # shape = [*, dim, grid, grid]
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
@@ -1139,24 +830,16 @@ class VisionTransformer(nn.Module):
         x = self.ln_pre(x)
         return x
 
-    def _pool(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Helper function to pool.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
+    def _pool(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if self.attn_pool is not None:
             if self.attn_pool_contrastive is not None:
                 # This is untested, WIP pooling that should match paper
                 x = self.ln_post(x)  # TBD LN first or separate one after each pool?
                 tokens = self.attn_pool(x)
-                if self.attn_pool_type == 'parallel':
+                if self.attn_pool_type == "parallel":
                     pooled = self.attn_pool_contrastive(x)
                 else:
-                    assert self.attn_pool_type == 'cascade'
+                    assert self.attn_pool_type == "cascade"
                     pooled = self.attn_pool_contrastive(tokens)
             else:
                 # this is the original OpenCLIP CoCa setup, does not match paper
@@ -1173,16 +856,16 @@ class VisionTransformer(nn.Module):
         return pooled, tokens
 
     def forward_intermediates(
-            self,
-            x: torch.Tensor,
-            indices: Optional[Union[int, List[int]]] = None,
-            stop_early: bool = False,
-            normalize_intermediates: bool = False,
-            intermediates_only: bool = False,
-            output_fmt: str = 'NCHW',
-            output_extra_tokens: bool = False,
-    ) -> Dict[str, Union[torch.Tensor, List[torch.Tensor]]]:
-        """ Forward features that returns intermediates.
+        self,
+        x: torch.Tensor,
+        indices: int | list[int] | None = None,
+        stop_early: bool = False,
+        normalize_intermediates: bool = False,
+        intermediates_only: bool = False,
+        output_fmt: str = "NCHW",
+        output_extra_tokens: bool = False,
+    ) -> dict[str, torch.Tensor | list[torch.Tensor]]:
+        """Forward features that returns intermediates.
 
         Args:
             x: Input image tensor
@@ -1195,8 +878,8 @@ class VisionTransformer(nn.Module):
         Returns:
 
         """
-        assert output_fmt in ('NCHW', 'NLC'), 'Output format must be one of NCHW or NLC.'
-        reshape = output_fmt == 'NCHW'
+        assert output_fmt in ("NCHW", "NLC"), "Output format must be one of NCHW or NLC."
+        reshape = output_fmt == "NCHW"
 
         # forward pass
         B, _, height, width = x.shape
@@ -1223,9 +906,9 @@ class VisionTransformer(nn.Module):
             H, W = height // self.patch_size[0], width // self.patch_size[1]
             intermediates = [y.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous() for y in intermediates]
 
-        output = {'image_intermediates': intermediates}
+        output = {"image_intermediates": intermediates}
         if prefix_tokens is not None and output_extra_tokens:
-            output['image_intermediates_prefix'] = prefix_tokens
+            output["image_intermediates_prefix"] = prefix_tokens
 
         if intermediates_only:
             return output
@@ -1235,18 +918,17 @@ class VisionTransformer(nn.Module):
         if self.proj is not None:
             pooled = pooled @ self.proj
 
-        output['image_features'] = pooled
+        output["image_features"] = pooled
 
         return output
 
     def prune_intermediate_layers(
-            self,
-            indices: Union[int, List[int]] = 1,
-            prune_norm: bool = False,
-            prune_head: bool = True,
+        self,
+        indices: int | list[int] = 1,
+        prune_norm: bool = False,
+        prune_head: bool = True,
     ):
-        """ Prune layers not required for specified intermediates.
-        """
+        """Prune layers not required for specified intermediates."""
         take_indices = self.transformer.prune_intermediate_layers(indices)
         if prune_norm:
             self.ln_post = nn.Identity()
@@ -1255,11 +937,6 @@ class VisionTransformer(nn.Module):
         return take_indices
 
     def forward(self, x: torch.Tensor):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         x = self._embeds(x)
         x = self.transformer(x)
         pooled, tokens = self._pool(x)
@@ -1269,36 +946,25 @@ class VisionTransformer(nn.Module):
 
         if self.output_tokens:
             return pooled, tokens
-        
+
         return pooled
 
 
 def text_global_pool(
-        x: torch.Tensor,
-        text: Optional[torch.Tensor] = None,
-        pool_type: str = 'argmax',
-        eos_token_id: Optional[int] = None,
+    x: torch.Tensor,
+    text: torch.Tensor | None = None,
+    pool_type: str = "argmax",
+    eos_token_id: int | None = None,
 ) -> torch.Tensor:
-    """Text global pool.
-
-    Args:
-        x: The x.
-        text: The text.
-        pool_type: The pool type.
-        eos_token_id: The eos token id.
-
-    Returns:
-        The return value.
-    """
-    if pool_type == 'first':
+    if pool_type == "first":
         pooled = x[:, 0]
-    elif pool_type == 'last':
+    elif pool_type == "last":
         pooled = x[:, -1]
-    elif pool_type == 'argmax':
+    elif pool_type == "argmax":
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         assert text is not None
         pooled = x[torch.arange(x.shape[0], device=x.device), text.argmax(dim=-1)]
-    elif pool_type == 'eos':
+    elif pool_type == "eos":
         # take features from tokenizer specific eos
         assert text is not None
         assert eos_token_id is not None
@@ -1311,71 +977,38 @@ def text_global_pool(
 
 
 class TextTransformer(nn.Module):
-    """Text transformer implementation."""
-
     def __init__(
-            self,
-            context_length: int = 77,
-            vocab_size: int = 49408,
-            width: int = 512,
-            heads: int = 8,
-            layers: int = 12,
-            mlp_ratio: float = 4.0,
-            ls_init_value: float = None,
-            output_dim: Optional[int] = 512,
-            embed_cls: bool = False,
-            no_causal_mask: bool = False,
-            use_pad_mask: bool = False,
-            correct_cls_mask: bool = False,
-            pad_id: int = 0,
-            eos_id: int = 2,
-            pool_type: str = 'argmax',
-            proj_type: str = 'linear',
-            proj_bias: bool = False,
-            act_layer: Type[nn.Module] = nn.GELU,
-            norm_layer: Type[nn.Module] = LayerNorm,
-            output_tokens: bool = False,
-            block_type: Optional[str] = None,
-            qk_norm: bool = False,
-            scaled_cosine_attn: bool = False,
-            scale_heads: bool = False,
-            scale_attn_inner: bool = False,
-            scale_attn: bool = False,
-            scale_fc: bool = False,
+        self,
+        context_length: int = 77,
+        vocab_size: int = 49408,
+        width: int = 512,
+        heads: int = 8,
+        layers: int = 12,
+        mlp_ratio: float = 4.0,
+        ls_init_value: float | None = None,
+        output_dim: int | None = 512,
+        embed_cls: bool = False,
+        no_causal_mask: bool = False,
+        use_pad_mask: bool = False,
+        correct_cls_mask: bool = False,
+        pad_id: int = 0,
+        eos_id: int = 2,
+        pool_type: str = "argmax",
+        proj_type: str = "linear",
+        proj_bias: bool = False,
+        act_layer: type[nn.Module] = nn.GELU,
+        norm_layer: type[nn.Module] = LayerNorm,
+        output_tokens: bool = False,
+        block_type: str | None = None,
+        qk_norm: bool = False,
+        scaled_cosine_attn: bool = False,
+        scale_heads: bool = False,
+        scale_attn_inner: bool = False,
+        scale_attn: bool = False,
+        scale_fc: bool = False,
     ):
-        """Init.
-
-        Args:
-            context_length: The context length.
-            vocab_size: The vocab size.
-            width: The width.
-            heads: The heads.
-            layers: The layers.
-            mlp_ratio: The mlp ratio.
-            ls_init_value: The ls init value.
-            output_dim: The output dim.
-            embed_cls: The embed cls.
-            no_causal_mask: The no causal mask.
-            use_pad_mask: The use pad mask.
-            correct_cls_mask: The correct cls mask.
-            pad_id: The pad id.
-            eos_id: The eos id.
-            pool_type: The pool type.
-            proj_type: The proj type.
-            proj_bias: The proj bias.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            output_tokens: The output tokens.
-            block_type: The block type.
-            qk_norm: The qk norm.
-            scaled_cosine_attn: The scaled cosine attn.
-            scale_heads: The scale heads.
-            scale_attn_inner: The scale attn inner.
-            scale_attn: The scale attn.
-            scale_fc: The scale fc.
-        """
         super().__init__()
-        assert pool_type in ('first', 'last', 'argmax', 'eos', 'none')
+        assert pool_type in ("first", "last", "argmax", "eos", "none")
         self.output_tokens = output_tokens
         self.num_pos = self.context_length = context_length
         self.vocab_size = vocab_size
@@ -1416,9 +1049,9 @@ class TextTransformer(nn.Module):
         if no_causal_mask:
             self.attn_mask = None  # bi‑directional
         else:
-            self.register_buffer('attn_mask', self.build_causal_mask(), persistent=False)
+            self.register_buffer("attn_mask", self.build_causal_mask(), persistent=False)
 
-        if proj_type == 'none' or not output_dim:
+        if proj_type == "none" or not output_dim:
             self.text_projection = None
         else:
             if proj_bias:
@@ -1429,14 +1062,13 @@ class TextTransformer(nn.Module):
         self.init_parameters()
 
     def init_parameters(self):
-        """Init parameters."""
         nn.init.normal_(self.token_embedding.weight, std=0.02)
         nn.init.normal_(self.positional_embedding, std=0.01)
         if self.cls_emb is not None:
             nn.init.normal_(self.cls_emb, std=0.01)
 
-        proj_std = (self.transformer.width ** -0.5) * ((2 * self.transformer.layers) ** -0.5)
-        attn_std = self.transformer.width ** -0.5
+        proj_std = (self.transformer.width**-0.5) * ((2 * self.transformer.layers) ** -0.5)
+        attn_std = self.transformer.width**-0.5
         fc_std = (2 * self.transformer.width) ** -0.5
         for block in self.transformer.resblocks:
             nn.init.normal_(block.attn.in_proj_weight, std=attn_std)
@@ -1446,19 +1078,13 @@ class TextTransformer(nn.Module):
 
         if self.text_projection is not None:
             if isinstance(self.text_projection, nn.Linear):
-                nn.init.normal_(self.text_projection.weight, std=self.transformer.width ** -0.5)
+                nn.init.normal_(self.text_projection.weight, std=self.transformer.width**-0.5)
                 if self.text_projection.bias is not None:
                     nn.init.zeros_(self.text_projection.bias)
             else:
-                nn.init.normal_(self.text_projection, std=self.transformer.width ** -0.5)
+                nn.init.normal_(self.text_projection, std=self.transformer.width**-0.5)
 
-    def set_grad_checkpointing(self, enable: bool = True, impl: str = 'inline'):
-        """Set grad checkpointing.
-
-        Args:
-            enable: The enable.
-            impl: The impl.
-        """
+    def set_grad_checkpointing(self, enable: bool = True, impl: str = "inline"):
         self.transformer.set_grad_checkpointing(enable, impl=impl)
 
     def lock(self, unlocked_layers: int = 0, freeze_layer_norm: bool = True):
@@ -1469,19 +1095,17 @@ class TextTransformer(nn.Module):
             unlocked_layers: Number of layers to leave unlocked (from the end).
             freeze_layer_norm: LayerNorm freeze (only for API compatibility, not functional)
         """
-        assert freeze_layer_norm, 'Unfreezing LayerNorm is not supported. LayerNorm treated like other weights.'
+        assert freeze_layer_norm, "Unfreezing LayerNorm is not supported. LayerNorm treated like other weights."
         lock_text_tower(self, unlocked_layers)
 
     def no_weight_decay(self):
-        """No weight decay."""
         # for timm optimizers, 1d params like logit_scale, logit_bias, ln/bn scale, biases are excluded by default
-        no_wd = {'positional_embedding'}
+        no_wd = {"positional_embedding"}
         if self.cls_emb is not None:
-            no_wd.add('cls_emb')
+            no_wd.add("cls_emb")
         return no_wd
 
     def build_causal_mask(self):
-        """Build causal mask."""
         # lazily create causal attention mask, with full attention between the tokens
         # pytorch uses additive attention mask; fill with -inf
         mask = torch.empty(self.num_pos, self.num_pos)
@@ -1502,7 +1126,7 @@ class TextTransformer(nn.Module):
         valid = text != self.pad_id  # [B, L] (True = keep)
 
         if self.cls_emb is not None:
-            cls_valid = valid.new_ones(valid.size(0), 1) # [B, 1]
+            cls_valid = valid.new_ones(valid.size(0), 1)  # [B, 1]
             # cls mask pos at end if correct or front for incorrect legacy mode in existing CoCa weights
             valid = torch.cat([valid, cls_valid] if self.correct_cls_mask else [cls_valid, valid], 1)
 
@@ -1513,15 +1137,7 @@ class TextTransformer(nn.Module):
         additive = additive.repeat_interleave(self.heads, 0)  # [B*H, Q, K]
         return additive
 
-    def _embeds(self, text) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Helper function to embeds.
-
-        Args:
-            text: The text.
-
-        Returns:
-            The return value.
-        """
+    def _embeds(self, text) -> tuple[torch.Tensor, torch.Tensor | None]:
         cast_dtype = self.transformer.get_cast_dtype()
         B, seq_len = text.shape
 
@@ -1536,8 +1152,8 @@ class TextTransformer(nn.Module):
 
         # Class + padding additive mask
         if self.use_pad_mask or self.cls_emb is not None:
-            add_mask  = self._build_additive_mask(text, seq_len, x.dtype)
-            if attn_mask is not None:
+            add_mask = self._build_additive_mask(text, seq_len, x.dtype)
+            if attn_mask is not None:  # noqa: SIM108 - Branches carry per-case comments.
                 # Slice the causal mask to match current sequence length
                 attn_mask = attn_mask[:seq_len, :seq_len].unsqueeze(0) + add_mask
             else:
@@ -1547,16 +1163,16 @@ class TextTransformer(nn.Module):
         return x, attn_mask
 
     def forward_intermediates(
-            self,
-            text: torch.Tensor,
-            indices: Optional[Union[int, List[int]]] = None,
-            stop_early: bool = False,
-            normalize_intermediates: bool = False,
-            intermediates_only: bool = False,
-            output_fmt: str = 'NLC',
-            output_extra_tokens: bool = False,
-    ) -> Dict[str, Union[torch.Tensor, List[torch.Tensor]]]:
-        """ Forward features that returns intermediates.
+        self,
+        text: torch.Tensor,
+        indices: int | list[int] | None = None,
+        stop_early: bool = False,
+        normalize_intermediates: bool = False,
+        intermediates_only: bool = False,
+        output_fmt: str = "NLC",
+        output_extra_tokens: bool = False,
+    ) -> dict[str, torch.Tensor | list[torch.Tensor]]:
+        """Forward features that returns intermediates.
 
         Args:
             text: Input text ids
@@ -1569,7 +1185,7 @@ class TextTransformer(nn.Module):
         Returns:
 
         """
-        assert output_fmt in ('NLC',), 'Output format must be NLC.'
+        assert output_fmt in ("NLC",), "Output format must be NLC."
         # forward pass
         x, attn_mask = self._embeds(text)
         x, intermediates = self.transformer.forward_intermediates(
@@ -1591,16 +1207,16 @@ class TextTransformer(nn.Module):
             if output_extra_tokens:
                 # return suffix class tokens separately
                 cls_intermediates = [xi[:, -1:] for xi in intermediates]
-                output['text_intermediates_suffix'] = cls_intermediates
+                output["text_intermediates_suffix"] = cls_intermediates
             intermediates = seq_intermediates
-        output['text_intermediates'] = intermediates
+        output["text_intermediates"] = intermediates
 
         if intermediates_only:
             return output
 
         if self.cls_emb is not None:
             # presence of appended cls embed (CoCa) overrides pool_type, always take last token
-            pooled = text_global_pool(x, pool_type='last')
+            pooled = text_global_pool(x, pool_type="last")
             pooled = self.ln_final(pooled)  # final LN applied after pooling in this case
         else:
             x = self.ln_final(x)
@@ -1612,18 +1228,17 @@ class TextTransformer(nn.Module):
             else:
                 pooled = pooled @ self.text_projection
 
-        output['text_features'] = pooled
+        output["text_features"] = pooled
 
         return output
 
     def prune_intermediate_layers(
-            self,
-            indices: Union[int, List[int]] = 1,
-            prune_norm: bool = False,
-            prune_head: bool = True,
+        self,
+        indices: int | list[int] = 1,
+        prune_norm: bool = False,
+        prune_head: bool = True,
     ):
-        """ Prune layers not required for specified intermediates.
-        """
+        """Prune layers not required for specified intermediates."""
         take_indices = self.transformer.prune_intermediate_layers(indices)
         if prune_norm:
             self.ln_final = nn.Identity()
@@ -1632,11 +1247,6 @@ class TextTransformer(nn.Module):
         return take_indices
 
     def forward(self, text):
-        """Forward.
-
-        Args:
-            text: The text.
-        """
         x, attn_mask = self._embeds(text)
 
         x = self.transformer(x, attn_mask=attn_mask)
@@ -1644,7 +1254,7 @@ class TextTransformer(nn.Module):
         # x.shape = [batch_size, n_ctx, transformer.width]
         if self.cls_emb is not None:
             # presence of appended cls embed (CoCa) overrides pool_type, always take last token
-            pooled = text_global_pool(x, pool_type='last')
+            pooled = text_global_pool(x, pool_type="last")
             pooled = self.ln_final(pooled)  # final LN applied after pooling in this case
             tokens = x[:, :-1]
         else:
@@ -1665,32 +1275,18 @@ class TextTransformer(nn.Module):
 
 
 class MultimodalTransformer(Transformer):
-    """Multimodal transformer implementation."""
     def __init__(
-            self,
-            width: int,
-            layers: int,
-            heads: int,
-            context_length: int = 77,
-            mlp_ratio: float = 4.0,
-            ls_init_value: float = None,
-            act_layer: Type[nn.Module] = nn.GELU,
-            norm_layer: Type[nn.Module] = LayerNorm,
-            output_dim: int = 512,
+        self,
+        width: int,
+        layers: int,
+        heads: int,
+        context_length: int = 77,
+        mlp_ratio: float = 4.0,
+        ls_init_value: float | None = None,
+        act_layer: type[nn.Module] = nn.GELU,
+        norm_layer: type[nn.Module] = LayerNorm,
+        output_dim: int = 512,
     ):
-        """Init.
-
-        Args:
-            width: The width.
-            layers: The layers.
-            heads: The heads.
-            context_length: The context length.
-            mlp_ratio: The mlp ratio.
-            ls_init_value: The ls init value.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            output_dim: The output dim.
-        """
         super().__init__(
             width=width,
             layers=layers,
@@ -1701,28 +1297,29 @@ class MultimodalTransformer(Transformer):
             norm_layer=norm_layer,
         )
         self.context_length = context_length
-        self.cross_attn = nn.ModuleList([
-            ResidualAttentionBlock(
-                width,
-                heads,
-                mlp_ratio,
-                ls_init_value=ls_init_value,
-                act_layer=act_layer,
-                norm_layer=norm_layer,
-                is_cross_attention=True,
-            )
-            for _ in range(layers)
-        ])
+        self.cross_attn = nn.ModuleList(
+            [
+                ResidualAttentionBlock(
+                    width,
+                    heads,
+                    mlp_ratio,
+                    ls_init_value=ls_init_value,
+                    act_layer=act_layer,
+                    norm_layer=norm_layer,
+                    is_cross_attention=True,
+                )
+                for _ in range(layers)
+            ]
+        )
 
-        self.register_buffer('attn_mask', self.build_attention_mask(), persistent=False)
+        self.register_buffer("attn_mask", self.build_attention_mask(), persistent=False)
 
         self.ln_final = norm_layer(width)
         self.text_projection = nn.Parameter(torch.empty(width, output_dim))
 
     def init_parameters(self):
-        """Init parameters."""
-        proj_std = (self.transformer.width ** -0.5) * ((2 * self.transformer.layers) ** -0.5)
-        attn_std = self.transformer.width ** -0.5
+        proj_std = (self.transformer.width**-0.5) * ((2 * self.transformer.layers) ** -0.5)
+        attn_std = self.transformer.width**-0.5
         fc_std = (2 * self.transformer.width) ** -0.5
         for block in self.transformer.resblocks:
             nn.init.normal_(block.attn.in_proj_weight, std=attn_std)
@@ -1736,10 +1333,9 @@ class MultimodalTransformer(Transformer):
             nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
 
         if self.text_projection is not None:
-            nn.init.normal_(self.text_projection, std=self.transformer.width ** -0.5)
+            nn.init.normal_(self.text_projection, std=self.transformer.width**-0.5)
 
     def build_attention_mask(self):
-        """Build attention mask."""
         # lazily create causal attention mask, with full attention between the tokens
         # pytorch uses additive attention mask; fill with -inf
         mask = torch.empty(self.context_length, self.context_length)
@@ -1748,29 +1344,15 @@ class MultimodalTransformer(Transformer):
         return mask
 
     def forward_intermediates(
-            self,
-            x: torch.Tensor,
-            attn_mask: Optional[torch.Tensor] = None,
-            indices: Optional[Union[int, List[int]]] = None,
-            stop_early: bool = False,
+        self,
+        x: torch.Tensor,
+        attn_mask: torch.Tensor | None = None,
+        indices: int | list[int] | None = None,
+        stop_early: bool = False,
     ):
-        """Forward intermediates.
-
-        Args:
-            x: The x.
-            attn_mask: The attn mask.
-            indices: The indices.
-            stop_early: The stop early.
-        """
-        assert False, "Not currently implemented for MultimodalTransformer w/ xattn"
+        assert False, "Not currently implemented for MultimodalTransformer w/ xattn"  # noqa: B011 - Keeps the assertion semantics under -O.
 
     def forward(self, image_embs, text_embs):
-        """Forward.
-
-        Args:
-            image_embs: The image embs.
-            text_embs: The text embs.
-        """
         # TODO(kv-cache): Accept past_key_values (list of (K, V) per layer)
         # and cache_position. When past_key_values is not None, only process
         # new positions for self-attention (concatenate past K/V).
@@ -1778,13 +1360,13 @@ class MultimodalTransformer(Transformer):
         # can be cached once.
         seq_len = text_embs.shape[1]
 
-        for resblock, cross_attn in zip(self.resblocks, self.cross_attn):
+        for resblock, cross_attn in zip(self.resblocks, self.cross_attn, strict=False):
             if self.grad_checkpointing:
                 # TODO: handle kwargs https://github.com/pytorch/pytorch/issues/79887#issuecomment-1161758372
                 text_embs = checkpoint(
-                    resblock, text_embs, None, None, self.attn_mask[:seq_len, :seq_len], use_reentrant=False)
-                text_embs = checkpoint(
-                    cross_attn, text_embs, image_embs, image_embs, None, use_reentrant=False)
+                    resblock, text_embs, None, None, self.attn_mask[:seq_len, :seq_len], use_reentrant=False
+                )
+                text_embs = checkpoint(cross_attn, text_embs, image_embs, image_embs, None, use_reentrant=False)
             else:
                 text_embs = resblock(text_embs, attn_mask=self.attn_mask[:seq_len, :seq_len])
                 text_embs = cross_attn(text_embs, k_x=image_embs, v_x=image_embs)
@@ -1795,15 +1377,10 @@ class MultimodalTransformer(Transformer):
 
         return out
 
-    def set_grad_checkpointing(self, enable: bool = True, impl: str = 'inline'):
-        """Set grad checkpointing.
-
-        Args:
-            enable: The enable.
-            impl: The impl.
-        """
-        if impl == 'composable' and enable:
+    def set_grad_checkpointing(self, enable: bool = True, impl: str = "inline"):
+        if impl == "composable" and enable:
             from torch.distributed._composable import checkpoint as composable_checkpoint
+
             for resblock in self.resblocks:
                 composable_checkpoint(resblock)
             for cross_attn in self.cross_attn:
@@ -1828,7 +1405,7 @@ def lock_text_tower(
         unlocked_layers: Number of layers to leave unlocked (from the end)
     """
     # Determine where to look for text components
-    if hasattr(model, 'text'):
+    if hasattr(model, "text"):  # noqa: SIM108 - Branches carry per-case comments.
         # CustomTextCLIP or already a TextTransformer with nested structure
         text_module = model.text
     else:
@@ -1837,12 +1414,12 @@ def lock_text_tower(
 
     # Collect text components
     text_params = {}
-    text_params['token_embedding'] = getattr(text_module, 'token_embedding', None)
-    text_params['positional_embedding'] = getattr(text_module, 'positional_embedding', None)
-    text_params['cls_emb'] = getattr(text_module, 'cls_emb', None)
-    text_params['transformer'] = getattr(text_module, 'transformer', None)
-    text_params['ln_final'] = getattr(text_module, 'ln_final', None)
-    text_params['text_projection'] = getattr(text_module, 'text_projection', None)
+    text_params["token_embedding"] = getattr(text_module, "token_embedding", None)
+    text_params["positional_embedding"] = getattr(text_module, "positional_embedding", None)
+    text_params["cls_emb"] = getattr(text_module, "cls_emb", None)
+    text_params["transformer"] = getattr(text_module, "transformer", None)
+    text_params["ln_final"] = getattr(text_module, "ln_final", None)
+    text_params["text_projection"] = getattr(text_module, "text_projection", None)
 
     # Filter out None values
     text_params = {k: v for k, v in text_params.items() if v is not None}
@@ -1859,8 +1436,8 @@ def lock_text_tower(
         return
 
     # Check if we have transformer blocks to work with
-    transformer = text_params['transformer']
-    if not transformer or not hasattr(transformer, 'resblocks'):
+    transformer = text_params["transformer"]
+    if not transformer or not hasattr(transformer, "resblocks"):
         return
 
     total_layers = len(transformer.resblocks)
@@ -1872,7 +1449,7 @@ def lock_text_tower(
 
     # Group 1: Embeddings
     embedding_group = []
-    for key in ['token_embedding', 'positional_embedding', 'cls_emb']:
+    for key in ["token_embedding", "positional_embedding", "cls_emb"]:
         if key in text_params:
             embedding_group.append(text_params[key])
     if embedding_group:
@@ -1885,28 +1462,23 @@ def lock_text_tower(
 
     # Combine last transformer block + final ln as the penultimate group
     last_block = [transformer.resblocks[-1]]
-    if 'ln_final' in text_params:
-        last_block.append(text_params['ln_final'])
+    if "ln_final" in text_params:
+        last_block.append(text_params["ln_final"])
     groups.append(last_block)
 
     # The final group is the projection only
-    if 'text_projection' in text_params:
-        groups.append([text_params['text_projection']])
+    if "text_projection" in text_params:
+        groups.append([text_params["text_projection"]])
 
     # Helper function to unlock parameters
     def _unlock(module):
-        """Helper function to unlock.
-
-        Args:
-            module: The module.
-        """
         if isinstance(module, Sequence):
             for m in module:
                 _unlock(m)
         elif isinstance(module, nn.Parameter):
             module.requires_grad = True
         elif isinstance(module, nn.Module):
-            for name, param in module.named_parameters():
+            for _name, param in module.named_parameters():
                 param.requires_grad = True
 
     # Unlock the specified number of layer groups from the end

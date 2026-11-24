@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import NamedTuple, Sequence
+from typing import NamedTuple
 
 import numpy as np
 
@@ -157,12 +158,7 @@ def read_ply_vertex(path: str | Path) -> np.ndarray:
                     raise ValueError("List-valued PLY vertex properties are unsupported.")
                 raise ValueError("List-valued elements before vertex are unsupported.")
             endian = ">" if format_name == "binary_big_endian" else "<"
-            dtype = np.dtype(
-                [
-                    (name, endian + _PLY_TO_DTYPE[type_name])
-                    for name, type_name in properties
-                ]
-            )
+            dtype = np.dtype([(name, endian + _PLY_TO_DTYPE[type_name]) for name, type_name in properties])
             if format_name == "ascii":
                 rows = [handle.readline().decode("ascii").split() for _ in range(count)]
                 values = np.empty(count, dtype=dtype)

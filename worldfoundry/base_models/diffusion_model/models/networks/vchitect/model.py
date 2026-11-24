@@ -78,11 +78,15 @@ class TimestepEmbedding(nn.Module):
 def timestep_projection(timesteps: torch.Tensor, dim: int = 256) -> torch.Tensor:
     """Sinusoidal Fourier features of shape ``[B, dim]`` from scalar timesteps."""
     half = dim // 2
-    exponent = -torch.log(torch.tensor(10000.0, device=timesteps.device)) * torch.arange(
-        half,
-        device=timesteps.device,
-        dtype=torch.float32,
-    ) / half
+    exponent = (
+        -torch.log(torch.tensor(10000.0, device=timesteps.device))
+        * torch.arange(
+            half,
+            device=timesteps.device,
+            dtype=torch.float32,
+        )
+        / half
+    )
     values = timesteps.float().reshape(-1, 1) * exponent.exp().reshape(1, -1)
     return torch.cat((values.cos(), values.sin()), dim=-1)
 
@@ -162,9 +166,7 @@ class VchitectXLTransformerModel(nn.Module):
     def _frequencies(self, frames: int, device: torch.device) -> torch.Tensor:
         """Complex 1D RoPE frequencies over the temporal axis (used inside attention)."""
         dim = self.config.attention_head_dim
-        frequency = 1.0 / (
-            1e6 ** (torch.arange(0, dim, 2, device=device, dtype=torch.float32) / dim)
-        )
+        frequency = 1.0 / (1e6 ** (torch.arange(0, dim, 2, device=device, dtype=torch.float32) / dim))
         positions = torch.arange(frames, device=device, dtype=torch.float32) / self.rope_scaling_factor
         angles = torch.outer(positions, frequency)
         return torch.polar(torch.ones_like(angles), angles)

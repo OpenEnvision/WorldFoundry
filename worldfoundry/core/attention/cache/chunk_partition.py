@@ -78,9 +78,7 @@ class TemporalChunkPartition:
             raise TypeError("chunk_count must be an integer")
         count = int(chunk_count)
         if not self.full_chunk_limit <= count <= self.chunk_count:
-            raise ValueError(
-                "sampled chunk_count must include full_chunk_limit chunks and not exceed the partition"
-            )
+            raise ValueError("sampled chunk_count must include full_chunk_limit chunks and not exceed the partition")
         return self.chunks[:count]
 
     def spans(self, chunk_count: int | None = None) -> tuple[tuple[int, int], ...]:
@@ -123,10 +121,7 @@ class TemporalChunkPartition:
         selected = self.chunks if chunk_count is None else self.prefix(chunk_count)
         maximum = max(selected)
         full_per_frame = (height // self.patch_size[1]) * (width // self.patch_size[2])
-        compressed_per_frame = (
-            (height // self.compressed_patch_size[1])
-            * (width // self.compressed_patch_size[2])
-        )
+        compressed_per_frame = (height // self.compressed_patch_size[1]) * (width // self.compressed_patch_size[2])
         # AnyFlow deliberately over-allocates each slot to max(chunk_partition)
         # so every chunk can reuse the same cache views.
         full_capacity = self.full_chunk_limit * maximum * full_per_frame

@@ -9,9 +9,10 @@ on provided conditions.
 from __future__ import annotations
 
 import random
+from collections.abc import Mapping, Sequence
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Any, Dict, Mapping, Sequence
+from typing import Any
 
 import imageio.v2 as imageio
 import numpy as np
@@ -47,7 +48,7 @@ def load_worldfm_runtime(
     version: str = "sigma",
     cfg_scale: float = 4.5,
     weight_dtype: torch.dtype | None = None,
-) -> "WorldFMRuntime":
+) -> WorldFMRuntime:
     """
     Loads an in-process WorldFM runtime instance directly from local assets.
 
@@ -191,7 +192,7 @@ class WorldFMRuntime:
         version: str = "sigma",
         cfg_scale: float = 4.5,
         weight_dtype: torch.dtype | None = None,
-    ) -> "WorldFMRuntime":
+    ) -> WorldFMRuntime:
         """
         Factory method to load WorldFM from local assets, resolving paths as needed.
 
@@ -250,7 +251,7 @@ class WorldFMRuntime:
         version: str = "sigma",
         cfg_scale: float = 4.5,
         weight_dtype: torch.dtype | None = None,
-    ) -> "WorldFMRuntime":
+    ) -> WorldFMRuntime:
         """
         Factory method to load the in-process WorldFM service from already resolved checkpoint paths.
 
@@ -394,7 +395,7 @@ class WorldFMRuntime:
         scene_name: str,
         save_mode: str,
         fps: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Saves a sequence of generated frames either as a video or individual images.
 
@@ -444,7 +445,7 @@ class WorldFMRuntime:
     @torch.inference_mode()
     def predict(
         self,
-        frame_conditions: Sequence[Dict[str, Any]],
+        frame_conditions: Sequence[dict[str, Any]],
         output_dir: str | Path | None = None,
         scene_name: str = "worldfm_scene",
         save_mode: str = "video",
@@ -495,10 +496,7 @@ class WorldFMRuntime:
             self._set_seed(int(seed))
 
         # Generate each frame by decoding the render with its corresponding condition
-        frames = [
-            self._decode_render(item["render_rgb_u8"], item["cond_nearest_rgb"])
-            for item in frame_conditions
-        ]
+        frames = [self._decode_render(item["render_rgb_u8"], item["cond_nearest_rgb"]) for item in frame_conditions]
 
         # Save the generated frames to disk based on the specified output options
         saved_outputs = self._save_outputs(

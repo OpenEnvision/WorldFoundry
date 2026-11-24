@@ -1,20 +1,17 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import logging
-from typing import List
 
 from torch import nn
 
 
-def tie_encoder_decoder_weights(
-    encoder: nn.Module, decoder: nn.Module, base_model_prefix: str, skip_key: str
-):
-    uninitialized_encoder_weights: List[str] = []
+def tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str, skip_key: str):
+    uninitialized_encoder_weights: list[str] = []
     if decoder.__class__ != encoder.__class__:
         logging.info(
             f"{decoder.__class__} and {encoder.__class__} are not equal. In this case make sure that all encoder weights are correctly initialized."
@@ -24,13 +21,13 @@ def tie_encoder_decoder_weights(
         decoder_pointer: nn.Module,
         encoder_pointer: nn.Module,
         module_name: str,
-        uninitialized_encoder_weights: List[str],
+        uninitialized_encoder_weights: list[str],
         skip_key: str,
         depth=0,
     ):
-        assert isinstance(decoder_pointer, nn.Module) and isinstance(
-            encoder_pointer, nn.Module
-        ), f"{decoder_pointer} and {encoder_pointer} have to be of type torch.nn.Module"
+        assert isinstance(decoder_pointer, nn.Module) and isinstance(encoder_pointer, nn.Module), (
+            f"{decoder_pointer} and {encoder_pointer} have to be of type torch.nn.Module"
+        )
         if hasattr(decoder_pointer, "weight") and skip_key not in module_name:
             assert hasattr(encoder_pointer, "weight")
             encoder_pointer.weight = decoder_pointer.weight
@@ -43,15 +40,13 @@ def tie_encoder_decoder_weights(
         encoder_modules = encoder_pointer._modules
         decoder_modules = decoder_pointer._modules
         if len(decoder_modules) > 0:
-            assert (
-                len(encoder_modules) > 0
-            ), f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
-
-            all_encoder_weights = set(
-                [module_name + "/" + sub_name for sub_name in encoder_modules.keys()]
+            assert len(encoder_modules) > 0, (
+                f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
             )
+
+            all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             encoder_layer_pos = 0
-            for name, module in decoder_modules.items():
+            for name, _module in decoder_modules.items():
                 if name.isdigit():
                     encoder_name = str(int(name) + encoder_layer_pos)
                     decoder_name = name
@@ -85,6 +80,4 @@ def tie_encoder_decoder_weights(
             uninitialized_encoder_weights += list(all_encoder_weights)
 
     # tie weights recursively
-    tie_encoder_to_decoder_recursively(
-        decoder, encoder, base_model_prefix, uninitialized_encoder_weights, skip_key
-    )
+    tie_encoder_to_decoder_recursively(decoder, encoder, base_model_prefix, uninitialized_encoder_weights, skip_key)

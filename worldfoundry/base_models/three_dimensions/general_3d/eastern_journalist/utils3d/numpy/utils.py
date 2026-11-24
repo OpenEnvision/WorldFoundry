@@ -1,40 +1,36 @@
-"""Module for base_models -> three_dimensions -> general_3d -> eastern_journalist -> utils3d -> numpy -> utils.py functionality."""
+# ruff: noqa: F405 - Names come from the upstream star import.
+from numbers import Integral, Number
+from typing import *  # noqa: F403 - Upstream star import kept as written.
 
 import numpy as np
 from numpy import ndarray
-import scipy.sparse as sp
 from scipy.sparse import csr_array
-from typing import *
-from numbers import Number, Integral
-import warnings
-import functools
-
 
 __all__ = [
-    'sliding_window',
-    'pooling',
-    'max_pool_2d',
-    'lookup',
-    'lookup_get',
-    'lookup_set',
-    'segment_roll',
-    'segment_take',
-    'segment_concatenate',
-    'csr_matrix_from_dense_indices',
-    'group',
-    'group_as_segments'
+    "csr_matrix_from_dense_indices",
+    "group",
+    "group_as_segments",
+    "lookup",
+    "lookup_get",
+    "lookup_set",
+    "max_pool_2d",
+    "pooling",
+    "segment_concatenate",
+    "segment_roll",
+    "segment_take",
+    "sliding_window",
 ]
 
 
 def sliding_window(
-    x: ndarray, 
-    window_size: Union[int, Tuple[int, ...]], 
-    stride: Optional[Union[int, Tuple[int, ...]]] = None, 
+    x: ndarray,
+    window_size: Union[int, Tuple[int, ...]],
+    stride: Optional[Union[int, Tuple[int, ...]]] = None,
     dilation: Optional[Union[int, Tuple[int, ...]]] = None,
-    pad_size: Optional[Union[int, Tuple[int, int], Tuple[Tuple[int, int]]]] = None, 
-    pad_mode: str = 'constant',
+    pad_size: Optional[Union[int, Tuple[int, int], Tuple[Tuple[int, int]]]] = None,
+    pad_mode: str = "constant",
     pad_value: Number = 0,
-    axis: Optional[Tuple[int,...]] = None
+    axis: Optional[Tuple[int, ...]] = None,
 ) -> ndarray:
     """
     Get a sliding window of the input array. Window axis(axes) will be appended as the last dimension(s).
@@ -51,7 +47,7 @@ def sliding_window(
     - `pad_size` (Optional[Union[int, Tuple[int, int], Tuple[Tuple[int, int]]]]): Size of padding to apply before sliding window.
         Corresponding to `axis`.
         - General format is `((before_1, after_1), (before_2, after_2), ...)`.
-        - Shortcut formats: 
+        - Shortcut formats:
             - `int` -> same padding before and after for all axes;
             - `(int, int)` -> same padding before and after for each axis;
             - `((int,), (int,) ...)` -> specify padding for each axis, same before and after.
@@ -61,7 +57,7 @@ def sliding_window(
     - `axis` (Optional[Tuple[int,...]]): Axes to apply the sliding window. If None, all axes are used.
 
     ## Returns
-    - (ndarray): Sliding window of the input array. 
+    - (ndarray): Sliding window of the input array.
         - If no padding, the output is a view of the input array with zero copy.
         - Otherwise, the output is no longer a view but a copy of the padded array.
     """
@@ -73,12 +69,10 @@ def sliding_window(
     axis = [axis[i] % x.ndim for i in range(len(axis))]
     if isinstance(window_size, Integral):
         window_size = (window_size,) * len(axis)
-    if dilation is not None:
-        if isinstance(dilation, Integral):
-            dilation = (dilation,) * len(axis)
-    if stride is not None:
-        if isinstance(stride, Integral):
-            stride = (stride,) * len(axis)
+    if dilation is not None and isinstance(dilation, Integral):
+        dilation = (dilation,) * len(axis)
+    if stride is not None and isinstance(stride, Integral):
+        stride = (stride,) * len(axis)
 
     # Pad the input array if needed
     if pad_size is not None:
@@ -94,11 +88,11 @@ def sliding_window(
         else:
             raise ValueError(f"Invalid pad_size {pad_size}")
         full_pad = [(0, 0) if i not in axis else pad_size[axis.index(i)] for i in range(x.ndim)]
-        if pad_mode == 'constant':
+        if pad_mode == "constant":
             x = np.pad(x, full_pad, mode=pad_mode, constant_values=pad_value)
         else:
             x = np.pad(x, full_pad, mode=pad_mode)
-    
+
     # Apply sliding window
     if dilation is None:
         x = np.lib.stride_tricks.sliding_window_view(x, window_size, axis=axis)
@@ -108,9 +102,12 @@ def sliding_window(
 
     # Apply stride if needed
     if stride is not None:
-        stride_slice = tuple(slice(None) if i not in axis else slice(None, None, stride[axis.index(i)]) for i in range(x.ndim - len(axis)))
+        stride_slice = tuple(
+            slice(None) if i not in axis else slice(None, None, stride[axis.index(i)])
+            for i in range(x.ndim - len(axis))
+        )
         x = x[stride_slice]
-    
+
     # Apply dilation if needed
     if dilation is not None:
         dilation_slice = tuple(slice(None, None, dilation[i]) for i in range(len(axis)))
@@ -120,14 +117,14 @@ def sliding_window(
 
 
 def pooling(
-    x: ndarray, 
-    kernel_size: Union[int, Tuple[int, ...]], 
-    stride: Optional[Union[int, Tuple[int, ...]]] = None, 
-    padding: Optional[Union[int, Tuple[int, int], Tuple[Tuple[int, int]]]] = None, 
+    x: ndarray,
+    kernel_size: Union[int, Tuple[int, ...]],
+    stride: Optional[Union[int, Tuple[int, ...]]] = None,
+    padding: Optional[Union[int, Tuple[int, int], Tuple[Tuple[int, int]]]] = None,
     axis: Optional[Union[int, Tuple[int, ...]]] = None,
-    mode: Literal['min', 'max', 'sum', 'mean'] = 'max'
+    mode: Literal["min", "max", "sum", "mean"] = "max",
 ) -> ndarray:
-    """Compute the pooling of the input array. 
+    """Compute the pooling of the input array.
     NOTE: NaNs will be ignored.
 
     ## Parameters
@@ -138,7 +135,7 @@ def pooling(
         - `padding` (Optional[Union[int, Tuple[int, int], Tuple[Tuple[int, int]]]]): Size of padding to apply before pooling.
             Corresponding to `axis`.
             - General format is `((before_1, after_1), (before_2, after_2), ...)`.
-            - Shortcut formats: 
+            - Shortcut formats:
                 - `int` -> same padding before and after for all axes;
                 - `(int, int)` -> same padding before and after for each axis;
                 - `((int,), (int,) ...)` -> specify padding for each axis, same before and after.
@@ -172,48 +169,45 @@ def pooling(
     else:
         padding = ((0, 0),) * len(axis)
 
-    if mode == 'max':
-        pad_mode = 'constant'
-        pad_value = -np.inf if x.dtype.kind == 'f' else np.iinfo(x.dtype).min
+    if mode == "max":
+        pad_mode = "constant"
+        pad_value = -np.inf if x.dtype.kind == "f" else np.iinfo(x.dtype).min
         pool_fn = np.nanmax
-    elif mode == 'min':
-        pad_mode = 'constant'
-        pad_value = np.inf if x.dtype.kind == 'f' else np.iinfo(x.dtype).max
+    elif mode == "min":
+        pad_mode = "constant"
+        pad_value = np.inf if x.dtype.kind == "f" else np.iinfo(x.dtype).max
         pool_fn = np.nanmin
-    elif mode == 'sum':
-        pad_mode = 'constant'
+    elif mode == "sum":
+        pad_mode = "constant"
         pad_value = 0
         pool_fn = np.sum
         x = np.where(np.isnan(x), 0, x)
-    elif mode == 'mean':
+    elif mode == "mean":
         mask = ~np.isnan(x)
         full_pad = [(0, 0) if i not in axis else padding[axis.index(i)] for i in range(x.ndim)]
-        x = pooling(np.pad(x, full_pad, mode='edge'), kernel_size, stride, axis=axis, mode='sum')
-        x /= pooling(np.pad(mask, full_pad, mode='edge'), kernel_size, stride, axis=axis, mode='sum')
+        x = pooling(np.pad(x, full_pad, mode="edge"), kernel_size, stride, axis=axis, mode="sum")
+        x /= pooling(np.pad(mask, full_pad, mode="edge"), kernel_size, stride, axis=axis, mode="sum")
         return x
     else:
         raise ValueError(f"Invalid pooling mode {mode}. Supported modes are 'min', 'max', 'sum', 'mean'.")
 
     for i in range(len(axis)):
         x = pool_fn(
-            sliding_window(x, kernel_size[i], stride[i], 
-                           pad_size=padding[i], pad_mode=pad_mode, pad_value=pad_value, 
-                           axis=axis[i]), 
-            axis=-1
+            sliding_window(
+                x, kernel_size[i], stride[i], pad_size=padding[i], pad_mode=pad_mode, pad_value=pad_value, axis=axis[i]
+            ),
+            axis=-1,
         )
     return x
 
 
-def max_pool_2d(x: ndarray, kernel_size: Union[int, Tuple[int, int]], stride: Union[int, Tuple[int, int]], padding: Union[int, Tuple[int, int]], axis: Tuple[int, int] = (-2, -1)):
-    """Max pool 2d.
-
-    Args:
-        x: The x.
-        kernel_size: The kernel size.
-        stride: The stride.
-        padding: The padding.
-        axis: The axis.
-    """
+def max_pool_2d(
+    x: ndarray,
+    kernel_size: Union[int, Tuple[int, int]],
+    stride: Union[int, Tuple[int, int]],
+    padding: Union[int, Tuple[int, int]],
+    axis: Tuple[int, int] = (-2, -1),
+):
     if isinstance(kernel_size, Number):
         kernel_size = (kernel_size, kernel_size)
     if isinstance(stride, Number):
@@ -221,7 +215,7 @@ def max_pool_2d(x: ndarray, kernel_size: Union[int, Tuple[int, int]], stride: Un
     if isinstance(padding, Number):
         padding = (padding, padding)
     axis = tuple(axis)
-    return pooling(x, kernel_size, stride, padding, axis, 'max')
+    return pooling(x, kernel_size, stride, padding, axis, "max")
 
 
 def lookup(key: ndarray, query: ndarray) -> ndarray:
@@ -237,13 +231,8 @@ def lookup(key: ndarray, query: ndarray) -> ndarray:
     ## NOTE
     `O((Q + K) * log(Q + K))` complexity.
     """
-    _, index, inverse = np.unique(
-        np.concatenate([key, query], axis=0),
-        axis=0,
-        return_index=True,
-        return_inverse=True
-    )
-    result = index[inverse[key.shape[0]:]]
+    _, index, inverse = np.unique(np.concatenate([key, query], axis=0), axis=0, return_index=True, return_inverse=True)
+    result = index[inverse[key.shape[0] :]]
     return np.where(result < key.shape[0], result, -1)
 
 
@@ -260,13 +249,15 @@ def lookup_get(key: ndarray, value: ndarray, get_key: ndarray, default_value: Un
     """
     indices = lookup(key, get_key)
     return np.where(
-        (indices >= 0)[(slice(None), *((None,) * (value.ndim - 1)))], 
-        value[indices.clip(0, key.shape[0] - 1)], 
-        default_value
+        (indices >= 0)[(slice(None), *((None,) * (value.ndim - 1)))],
+        value[indices.clip(0, key.shape[0] - 1)],
+        default_value,
     )
 
 
-def lookup_set(key: ndarray, value: ndarray, set_key: ndarray, set_value: ndarray, append: bool = False, inplace: bool = False) -> Tuple[ndarray, ndarray]:
+def lookup_set(
+    key: ndarray, value: ndarray, set_key: ndarray, set_value: ndarray, append: bool = False, inplace: bool = False
+) -> Tuple[ndarray, ndarray]:
     """Dictionary-like set for arrays.
 
     ## Parameters
@@ -279,7 +270,7 @@ def lookup_set(key: ndarray, value: ndarray, set_key: ndarray, set_value: ndarra
 
     ## Returns
     - `result_key` (ndarray): shape `(N_new, *value_shape)`. N_new = N + number of new keys added if append is True, else N.
-    - `result_value (ndarray): shape `(N_new, *value_shape)` 
+    - `result_value (ndarray): shape `(N_new, *value_shape)`
     """
     set_indices = lookup(key, set_key)
     if inplace:
@@ -296,8 +287,7 @@ def lookup_set(key: ndarray, value: ndarray, set_key: ndarray, set_value: ndarra
 
 
 def segment_roll(data: ndarray, offsets: ndarray, shift: int) -> ndarray:
-    """Roll the data within each segment.
-    """
+    """Roll the data within each segment."""
     lengths = offsets[1:] - offsets[:-1]
     start = np.repeat(offsets[:-1], lengths)
     elem_indices = start + (np.arange(data.shape[0], dtype=offsets.dtype) - start - shift) % np.repeat(lengths, lengths)
@@ -359,11 +349,10 @@ def csr_matrix_from_dense_indices(indices: ndarray, n_cols: int) -> csr_array:
     ## Returns
         Tensor: shape `(N, n_cols)` sparse CSR adjacency matrix
     """
-    return csr_array((
-        np.ones_like(indices, dtype=bool).ravel(), 
-        indices.ravel(),
-        np.arange(0, indices.size + 1, indices.shape[1])
-    ), shape=(indices.shape[0], n_cols))
+    return csr_array(
+        (np.ones_like(indices, dtype=bool).ravel(), indices.ravel(), np.arange(0, indices.size + 1, indices.shape[1])),
+        shape=(indices.shape[0], n_cols),
+    )
 
 
 def group(labels: ndarray, data: Optional[np.ndarray] = None) -> List[Tuple[ndarray, ndarray]]:
@@ -386,7 +375,7 @@ def group(labels: ndarray, data: Optional[np.ndarray] = None) -> List[Tuple[ndar
         data = np.arange(labels.shape[0])
     sections = np.cumsum(counts, axis=0)[:-1]
     data_groups = np.split(data[np.argsort(inv)], sections)
-    return list(zip(group_labels, data_groups))
+    return list(zip(group_labels, data_groups, strict=False))
 
 
 def group_as_segments(labels: ndarray, data: Optional[np.ndarray] = None) -> Tuple[ndarray, ndarray, ndarray]:
@@ -404,15 +393,12 @@ def group_as_segments(labels: ndarray, data: Optional[np.ndarray] = None) -> Tup
     - `segment_labels`: `(ndarray)` shape `(M, *label_dims)` labels of of each segment
     - `data`: `(ndarray)` shape `(N,)` or `(N, *data_dims)` the rearranged data (or indices) where the same labels are grouped as a continous segment.
     - `offsets`: `(ndarray)` shape `(M + 1,)`
-    
+
     `data[offsets[i]:offsets[i + 1]]` corresponding to the i-th segment whose label is `segment_labels[i]`
     """
     group_labels, inv, counts = np.unique(labels, return_inverse=True, return_counts=True, axis=0)
     offsets = np.concatenate([[0], np.cumsum(counts, axis=0)])
-    if data is None:
-        data = np.argsort(inv)
-    else:
-        data = data[np.argsort(inv)]
+    data = np.argsort(inv) if data is None else data[np.argsort(inv)]
     return group_labels, data, offsets
 
 
@@ -422,26 +408,24 @@ def take_view(a: ndarray, i: Union[int, slice], axis: int = 0) -> ndarray:
 
 
 def lite_sum(a: ndarray, axis: int = -1) -> ndarray:
-    """Compute the sum of the input array along the specified small axis.
-    """
+    """Compute the sum of the input array along the specified small axis."""
     result_dtype = np.result_type(a.dtype, 0)
     if a.shape[axis] == 0:
-        return np.zeros(a.shape[:axis] + a.shape[axis + 1:], dtype=result_dtype)
-    elif a.shape[axis] <= 4:    # Sweet point for python loop vs einsum
+        return np.zeros(a.shape[:axis] + a.shape[axis + 1 :], dtype=result_dtype)
+    elif a.shape[axis] <= 4:  # Sweet point for python loop vs einsum
         s = take_view(a, 0, axis=axis).astype(result_dtype, copy=True)
         for i in range(1, a.shape[axis]):
             s += take_view(a, i, axis=axis)
         return s
-    else:   # Einsum is faster than np.sum in most cases
-        return np.einsum('...i->...', np.moveaxis(a, axis, -1))
+    else:  # Einsum is faster than np.sum in most cases
+        return np.einsum("...i->...", np.moveaxis(a, axis, -1))
 
 
 def lite_prod(a: ndarray, axis: int = -1) -> ndarray:
-    """Compute the product of the input array along the specified small axis.
-    """
+    """Compute the product of the input array along the specified small axis."""
     result_dtype = np.result_type(a.dtype, 1)
     if a.shape[axis] == 0:
-        return np.ones(a.shape[:axis] + a.shape[axis + 1:], dtype=result_dtype)
+        return np.ones(a.shape[:axis] + a.shape[axis + 1 :], dtype=result_dtype)
     elif a.shape[axis] <= 8:
         p = take_view(a, 0, axis=axis).astype(result_dtype, copy=True)
         for i in range(1, a.shape[axis]):
@@ -452,19 +436,17 @@ def lite_prod(a: ndarray, axis: int = -1) -> ndarray:
 
 
 def lite_dot(a: ndarray, b: ndarray, axis: int = -1) -> ndarray:
-    """Compute the dot product of two input arrays along the specified small axis.
-    """
+    """Compute the dot product of two input arrays along the specified small axis."""
     if a.shape[axis] == 0:
-        return np.zeros(a.shape[:axis] + a.shape[axis + 1:], dtype=np.result_type(a.dtype, b.dtype))
+        return np.zeros(a.shape[:axis] + a.shape[axis + 1 :], dtype=np.result_type(a.dtype, b.dtype))
     elif a.shape[axis] <= 3:
         return lite_sum(a * b, axis=axis)
     else:
-        return np.einsum('...i,...i->...', np.moveaxis(a, axis, -1), np.moveaxis(b, axis, -1))
+        return np.einsum("...i,...i->...", np.moveaxis(a, axis, -1), np.moveaxis(b, axis, -1))
 
 
 def lite_norm(a: ndarray, ord: int = 2, axis: int = -1) -> ndarray:
-    """Compute the norm of the input array along the specified small axis.
-    """
+    """Compute the norm of the input array along the specified small axis."""
     if ord == 1:
         return lite_sum(np.abs(a), axis=axis)
     elif ord == 2:

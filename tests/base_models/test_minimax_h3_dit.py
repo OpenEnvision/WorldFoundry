@@ -88,22 +88,27 @@ def _build_packed_inputs(cfg: MiniMaxH3DiTArchConfig, device: torch.device):
     packed = {"cu_seqlens_q": torch.tensor([0, seq_len], dtype=torch.int32, device=device), "max_seqlen_q": seq_len}
     refiner = {"cu_seqlens_q": torch.tensor([0, text_len], dtype=torch.int32, device=device), "max_seqlen_q": text_len}
 
-    return dict(
-        x=x,
-        audio_x=audio_x,
-        img_position_ids=img_position_ids,
-        unique_timesteps=unique_timesteps,
-        inverse_indices=inverse_indices,
-        update_mask=update_mask,
-        token_tags=token_tags,
-        prompt_embeds=prompt_embeds,
-        img_pos_info={"position_ids": img_pos},
-        audio_pos_info={"position_ids": audio_pos},
-        text_pos_info={"position_ids": text_pos},
-        img_pos_for_infer_output_info={"position_ids": img_pos},
-        packed_seq_params=packed,
-        refiner_packed_seq_params=refiner,
-    ), video_len, audio_len, video_row
+    return (
+        dict(
+            x=x,
+            audio_x=audio_x,
+            img_position_ids=img_position_ids,
+            unique_timesteps=unique_timesteps,
+            inverse_indices=inverse_indices,
+            update_mask=update_mask,
+            token_tags=token_tags,
+            prompt_embeds=prompt_embeds,
+            img_pos_info={"position_ids": img_pos},
+            audio_pos_info={"position_ids": audio_pos},
+            text_pos_info={"position_ids": text_pos},
+            img_pos_for_infer_output_info={"position_ids": img_pos},
+            packed_seq_params=packed,
+            refiner_packed_seq_params=refiner,
+        ),
+        video_len,
+        audio_len,
+        video_row,
+    )
 
 
 def test_forward_rejects_unexpected_kwargs() -> None:
@@ -133,3 +138,47 @@ def test_forward_shapes() -> None:
     assert audio_logits.dtype == torch.float32
     assert torch.isfinite(video_logits).all()
     assert torch.isfinite(audio_logits).all()
+
+
+@pytest.mark.unit
+def test_fp32_packed_forward_preserves_block_precision() -> None:
+    torch.manual_seed(12)
+    model = MiniMaxH3DiTModel(_tiny_config()).float().eval()
+    model.rope.inv_freq.fill_(0.1)
+    inputs, *_ = _build_packed_inputs(model.arch, torch.device("cpu"))
+    inputs["prompt_embeds"] = inputs["prompt_embeds"].float()
+    with torch.no_grad():
+        video, audio = model(**inputs)
+    assert video.dtype == audio.dtype == torch.float32
+    assert torch.isfinite(video).all() and torch.isfinite(audio).all()
+
+
+@pytest.mark.unit
+def test_attention_callable_is_instance_local() -> None:
+    from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.dit import MiniMaxH3Attention
+
+    torch.manual_seed(13)
+    first = MiniMaxH3Attention(_tiny_config()).float()
+    second = MiniMaxH3Attention(_tiny_config()).float()
+    second.load_state_dict(first.state_dict())
+    calls = []
+    original = first.attention_fn
+
+    def attend(
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        *,
+        cu_seqlens: torch.Tensor,
+        softmax_scale: float,
+    ) -> torch.Tensor:
+        calls.append(q.shape)
+        return original(q, k, v, cu_seqlens=cu_seqlens, softmax_scale=softmax_scale)
+
+    first.attention_fn = attend
+    x = torch.randn(5, first.qkv_proj.in_features)
+    kwargs = {"rope_cache": None, "cu_seqlens": torch.tensor([0, 5], dtype=torch.int32)}
+    with torch.no_grad():
+        assert torch.equal(first(x, **kwargs), second(x, **kwargs))
+    assert calls == [torch.Size([5, 2, 128])]
+    assert second.attention_fn is original

@@ -1,11 +1,11 @@
 ---
 title: "Kandinsky 6.0 lite"
-description: "Kandinsky 6.0 lite（Kandinsky6）：文生视频、图生视频；Runner 一致性待确认。"
+description: "Kandinsky 6.0 lite（kandinskylab）：文生视频、图生视频等 3 项任务；Runner 一致性待确认；独立环境 `worldfoundry-kandinsky6-cu126`。"
 modelId: "kandinsky6-lite"
 pageSource: generated
 ---
 
-Kandinsky 6.0 lite 是来自 Kandinsky6 的视频生成模型。Catalog 将它记录为文生视频、图生视频、音视频联合生成任务。
+Kandinsky 6.0 lite 是来自 kandinskylab 的视频生成模型，支持文生视频、图生视频、音视频联合生成。
 
 <ModelPaperFigures modelId="kandinsky6-lite" locale="zh" />
 
@@ -15,13 +15,13 @@ Kandinsky 6.0 lite 是来自 Kandinsky6 的视频生成模型。Catalog 将它�
 
 ## 用来做什么
 
-`kandinsky6-lite` 是记录的文本/图像到视频线。需要同一张卡片上同时有 prompt 与静帧条件时用它。
+用 `kandinsky6-lite` 同时完成文生视频和图生视频。
 
-catalog 记录的任务包括 文生视频、图生视频、音视频联合生成。模态上，它接受文本、图像，输出视频。
+任务：文生视频、图生视频、音视频联合生成。模态上，它接受文本、图像，输出视频。
 
 ## 运行时契约
 
-可选 `prompt`、`image`、`seed`、`frames`、`fps`；产物 `generated_video`、`kandinsky6-lite.mp4`。
+输入 `prompt`、`image`；产物 `generated_video`、`kandinsky6-lite.mp4`。
 
 CLI task profile：`text-to-video`、`image-to-video`、`audio-video-generation`、`video_generation`。绑定的 pipeline 类是 `Kandinsky6Pipeline`。
 
@@ -29,12 +29,10 @@ CLI task profile：`text-to-video`、`image-to-video`、`audio-video-generation`
 
 ## 在 WorldFoundry 中运行
 
-catalog 启动命令是 `worldfoundry-eval run kandinsky6-lite --pipeline.task-profile text-to-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+运行 `wf run kandinsky6-lite --pipeline.task-profile text-to-video` 生成视频。在上方命令构建器中切换任务，即可改变 `--pipeline.task-profile`。
 
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+运行环境：独立环境 `worldfoundry-kandinsky6-cu126`（Python 3.10，CUDA 12.6，torch==2.9.0+cu126）。
 
-记录的权重仓库包括 `kandinskylab/Kandinsky-6.0-Lite-5s-Diffusers`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh kandinsky6-lite`；下载缺失的公开权重时加 `--download`。
-
-状态：**Runner 一致性待确认**。
+权重仓库：`kandinskylab/Kandinsky-6.0-Lite-5s-Diffusers`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh kandinsky6-lite`；下载缺失的公开权重时加 `--download`。
 
 <ModelRelatedRecipes modelId="kandinsky6-lite" locale="zh" />

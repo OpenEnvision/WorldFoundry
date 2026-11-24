@@ -163,12 +163,16 @@ class WanUMT5PromptEncoder:
         self.text_length = int(text_length)
         self.dtype = dtype
         self.device = torch.device(device)
-        self.model = load_model(
-            WanTextEncoder,
-            checkpoint_path,
-            torch_dtype=dtype,
-            device=self.device,
-        ).eval().requires_grad_(False)
+        self.model = (
+            load_model(
+                WanTextEncoder,
+                checkpoint_path,
+                torch_dtype=dtype,
+                device=self.device,
+            )
+            .eval()
+            .requires_grad_(False)
+        )
         self.tokenizer = HuggingfaceTokenizer(
             name=tokenizer_path,
             seq_len=self.text_length,
@@ -237,11 +241,7 @@ def convert_wan_clip_vision_state_dict(
 ) -> Mapping[str, object]:
     """Keep only the visual tower from Wan's combined CLIP checkpoint."""
 
-    converted = {
-        key.removeprefix("visual."): value
-        for key, value in state_dict.items()
-        if key.startswith("visual.")
-    }
+    converted = {key.removeprefix("visual."): value for key, value in state_dict.items() if key.startswith("visual.")}
     if not converted:
         raise KeyError("Wan CLIP checkpoint does not contain a visual tower")
     return converted
@@ -360,12 +360,12 @@ def build_wan_image_text_conditioner(context: ComponentBuildContext) -> WanImage
 
 
 __all__ = [
-    "WanTextConditioner",
     "WanImageTextConditioner",
+    "WanTextConditioner",
     "WanUMT5PromptEncoder",
     "build_diffusers_wan_text_conditioner",
-    "build_wan_text_conditioner",
     "build_wan_image_text_conditioner",
+    "build_wan_text_conditioner",
     "convert_diffusers_umt5_encoder_state_dict",
     "convert_wan_clip_vision_state_dict",
 ]

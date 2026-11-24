@@ -27,21 +27,23 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
+import torch.version
 
-from worldfoundry.core.execution.compile_numerics import (
-    compiled_layer_norm_scale_shift,
-    compiled_residual_gate,
-    compiled_residual_gate_inplace,
-)
 from worldfoundry.core.kernels.capabilities import (
     QUALIFIED_TRITON_CAPABILITIES,
     default_kernel_thresholds,
     detected_kernel_device_profiles,
     kernel_device_profile,
     triton_tensor_eligible,
+)
+from worldfoundry.core.kernels.compiled_ops import (
+    compiled_layer_norm_scale_shift,
+    compiled_residual_gate,
+    compiled_residual_gate_inplace,
 )
 from worldfoundry.core.kernels.registry import (
     KERNEL_REGISTRY,
@@ -271,7 +273,7 @@ def _configure_triton_cache_once() -> None:
     """Configure the persistent cache before the first eager Triton import."""
 
     try:
-        from worldfoundry.core.execution.compile_cache import configure_persistent_compile_cache
+        from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
 
         configure_persistent_compile_cache(namespace="in-tree-kernels")
     except (ImportError, OSError):
@@ -315,7 +317,8 @@ def _storage_overlaps(first: torch.Tensor, second: torch.Tensor) -> bool:
     """Conservatively detect aliasing before an opaque mutating launch."""
 
     try:
-        return bool(torch._C._overlaps(first, second))
+        # Private ATen helper; torch's stubs do not declare it.
+        return bool(cast(Any, torch._C)._overlaps(first, second))
     except (AttributeError, RuntimeError, TypeError):
         # An unknown overlap relation is unsafe for a fail-closed mutation.
         return True
@@ -991,10 +994,11 @@ def rms_norm_scale_shift(
     eps: float = 1e-6,
     *,
     weight: torch.Tensor | None = None,
+    backend: str | None = None,
 ) -> torch.Tensor:
     """Fuse RMSNorm with broadcast scale/shift modulation."""
 
-    requested = _requested_kernel_backend()
+    requested = _requested_kernel_backend() if backend is None else backend
     if (
         torch.compiler.is_compiling()
         or requested in _TORCH_BACKENDS
@@ -1015,6 +1019,7 @@ def rms_norm_scale_shift(
         shift,
         eps,
         signature=_workload_signature(*tensors, extra=(float(eps), weight is not None)),
+        backend=backend,
     )
 
 
@@ -1218,10 +1223,16 @@ def _eligible_hidden_qk_rmsnorm_rope_3d(
     hidden_size = q.shape[-1] if q.ndim == 3 else 0
     head_dim = hidden_size // int(num_heads) if num_heads else 0
     frames, height, width = (int(value) for value in grid_size)
+    freqs_ok = (
+        freqs.dtype in {torch.float32, torch.float64}
+        and freqs.ndim == 3
+        and freqs.shape[-1] == 2
+        and freqs.shape[1] == head_dim // 2
+    ) or (freqs.dtype == torch.complex128 and freqs.ndim == 2 and freqs.shape[1] == head_dim // 2)
     return (
         _inference_only(q, k, q_weight, k_weight, freqs)
         and _same_cuda_device(q, k, q_weight, k_weight, freqs)
-        and all(_triton_device_supported(tensor) for tensor in (q, k, q_weight, k_weight, freqs))
+        and all(_triton_device_supported(tensor) for tensor in (q, k, q_weight, k_weight))
         and q.dtype in _FLOAT_DTYPES
         and k.dtype == q.dtype
         and q_weight.dtype == q.dtype
@@ -1229,27 +1240,22 @@ def _eligible_hidden_qk_rmsnorm_rope_3d(
         and q.ndim == 3
         and k.shape == q.shape
         and q.numel() > 0
-        and _regular_contiguous(q)
-        and _regular_contiguous(k)
-        and hidden_size <= 4096
+        and q.stride(-1) == 1
+        and k.stride(-1) == 1
+        and q_weight.is_contiguous()
+        and k_weight.is_contiguous()
+        and hidden_size <= 8192
         and hidden_size % int(num_heads) == 0
         and head_dim >= 6
         and head_dim % 2 == 0
         and q_weight.shape == k_weight.shape == (hidden_size,)
-        # Triton consumes an explicit float32 cosine/sine table.  Complex
-        # tensors are deliberately excluded because the shared capability
-        # gate does not support complex dtypes; fp64 remains on the exact
-        # portable path instead of being silently truncated in the kernel.
-        and freqs.dtype == torch.float32
-        and freqs.ndim == 3
-        and freqs.shape[-1] == 2
-        and freqs.shape[1] == head_dim // 2
+        and freqs_ok
         and frames > 0
         and height > 0
         and width > 0
         and int(start_frame) + frames <= freqs.shape[0]
         and max(height, width) <= freqs.shape[0]
-        and 0 <= int(sequence_offset)
+        and int(sequence_offset) >= 0
         and 0 <= int(valid_tokens) <= frames * height * width
         and 0 <= int(head_start) < int(head_end) <= int(num_heads)
     )
@@ -1325,7 +1331,7 @@ def hidden_qk_rmsnorm_rope_3d(
         k_weight,
         freqs,
         int(num_heads),
-        tuple(int(value) for value in grid_size),
+        cast(tuple[int, int, int], tuple(int(value) for value in grid_size)),
         float(eps),
         int(sequence_offset),
         int(start_frame),
@@ -1534,16 +1540,430 @@ def _register_kernels() -> None:
 
 _register_kernels()
 
+
+@torch.library.custom_op("worldfoundry::apply_real_rope_bshd", mutates_args=(), device_types="cuda")
+def _apply_real_rope_bshd_op(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    from worldfoundry.core.kernels.triton_diffusion import apply_real_rope_bshd as _triton_apply_real_rope
+
+    return _triton_apply_real_rope(x, cos, sin)
+
+
+@_apply_real_rope_bshd_op.register_fake
+def _apply_real_rope_bshd_fake(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    del cos, sin
+    return torch.empty_like(x)
+
+
+def apply_real_rope_bshd(
+    x: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> torch.Tensor:
+    """Apply real-valued ``(cos, sin)`` RoPE to ``[B, S, H, D]`` with Triton fast path.
+
+    Keeps FP64/FP32 rotary arithmetic in registers on CUDA to eliminate global-memory
+    FP64 intermediates while remaining compile- and CUDA-Graph-safe via a registered
+    ``torch.library.custom_op``.
+    """
+    seq_len = int(cos.shape[1])
+    target = x[:, :seq_len]
+    if target.numel() == 0:
+        return x.clone()
+    if (
+        target.device.type == "cuda"
+        and cos.device == target.device
+        and sin.device == target.device
+        and cos.ndim == 4
+        and sin.shape == cos.shape
+        and cos.shape[0] == 1
+        and cos.shape[2] == 1
+        and cos.shape[3] == target.shape[-1] // 2
+        and target.stride(-1) == 1
+        and target.ndim == 4
+        and target.shape[-1] % 2 == 0
+        and _inference_only(target)
+        and _triton_device_supported(target)
+    ):
+        rotated = _apply_real_rope_bshd_op(target, cos, sin)
+    else:
+        x_pairs = target.to(cos.dtype).reshape(target.shape[0], seq_len, target.shape[2], target.shape[3] // 2, 2)
+        x0, x1 = x_pairs.unbind(-1)
+        rotated = torch.stack((x0 * cos - x1 * sin, x0 * sin + x1 * cos), dim=-1).flatten(-2).to(x.dtype)
+    if seq_len == x.shape[1]:
+        return rotated
+    return torch.cat((rotated, x[:, seq_len:]), dim=1)
+
+
+def fused_layer_norm_scale_shift(
+    x: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float = 1e-6,
+    *,
+    backend: str | None = None,
+) -> torch.Tensor:
+    """Single-pass Triton affine-free LayerNorm + AdaLN scale/shift with IEEE BF16/FP16 rounding."""
+
+    requested = _requested_kernel_backend() if backend is None else (backend.strip().casefold() or "auto")
+    if (
+        torch.compiler.is_compiling()
+        or requested in _TORCH_BACKENDS
+        or requested not in {"auto", "triton"}
+        or (
+            requested == "auto"
+            and not kernel_autotune_enabled()
+            and x.numel() < _kernel_threshold(x, "layer_norm_scale_shift")
+        )
+        or not _eligible_layer_norm_scale_shift(x, scale, shift, eps, False)
+    ):
+        return layer_norm_scale_shift(x, scale, shift, eps=eps, backend=backend)
+    try:
+        from worldfoundry.core.kernels.triton_diffusion import (
+            fused_layer_norm_scale_shift as implementation,
+        )
+    except (ImportError, OSError):
+        return layer_norm_scale_shift(x, scale, shift, eps=eps, backend=backend)
+    with torch.cuda.device(x.device):
+        result = implementation(x, scale, shift, float(eps))
+    _publish_dispatch_receipt(
+        op="fused_layer_norm_scale_shift",
+        implementation="triton_fused_layer_norm_scale_shift",
+        backend="triton",
+        accelerated=True,
+        fallback=False,
+        cache_hit=False,
+        failures=[],
+        quarantined=[],
+    )
+    return result
+
+
+def residual_gate_layer_norm(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    gate: torch.Tensor,
+    weight: torch.Tensor | None = None,
+    bias: torch.Tensor | None = None,
+    eps: float = 1e-6,
+    *,
+    inplace: bool = False,
+    backend: str | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Fuse ``x = residual + update * gate`` with ``LayerNorm(x, weight, bias, eps)``."""
+
+    def _fallback() -> tuple[torch.Tensor, torch.Tensor]:
+        if inplace and not torch.is_grad_enabled():
+            res_dtype = torch.promote_types(residual.dtype, torch.promote_types(update.dtype, gate.dtype))
+            if res_dtype == residual.dtype:
+                x_out = residual_gate_add_(residual, update, gate)
+            else:
+                x_out = residual_gate_add(residual, update, gate, backend=backend)
+        else:
+            x_out = residual_gate_add(residual, update, gate, backend=backend)
+        return x_out, F.layer_norm(x_out, (x_out.shape[-1],), weight=weight, bias=bias, eps=eps)
+
+    requested = _requested_kernel_backend() if backend is None else (backend.strip().casefold() or "auto")
+    if (
+        torch.compiler.is_compiling()
+        or requested in _TORCH_BACKENDS
+        or requested not in {"auto", "triton"}
+        or (
+            requested == "auto"
+            and not kernel_autotune_enabled()
+            and residual.numel() < _kernel_threshold(residual, "layer_norm_scale_shift")
+        )
+        or not _eligible_residual_gate(residual, update, gate)
+    ):
+        return _fallback()
+
+    features = int(residual.shape[-1])
+    x_out_dtype = torch.promote_types(residual.dtype, torch.promote_types(update.dtype, gate.dtype))
+    if weight is not None and (
+        not _inference_only(weight)
+        or weight.device != residual.device
+        or weight.dtype != x_out_dtype
+        or not weight.is_contiguous()
+        or weight.shape != (features,)
+    ):
+        return _fallback()
+    if bias is not None and (
+        not _inference_only(bias)
+        or bias.device != residual.device
+        or bias.dtype != x_out_dtype
+        or not bias.is_contiguous()
+        or bias.shape != (features,)
+    ):
+        return _fallback()
+
+    use_inplace = bool(
+        inplace
+        and not torch.is_grad_enabled()
+        and x_out_dtype == residual.dtype
+        and not _storage_overlaps(residual, update)
+        and not _storage_overlaps(residual, gate)
+        and (weight is None or not _storage_overlaps(residual, weight))
+        and (bias is None or not _storage_overlaps(residual, bias))
+    )
+    try:
+        from worldfoundry.core.kernels import triton_diffusion
+    except (ImportError, OSError):
+        return _fallback()
+
+    with torch.cuda.device(residual.device):
+        if use_inplace:
+            result = triton_diffusion.residual_gate_layer_norm_inplace(residual, update, gate, weight, bias, float(eps))
+            impl_name = "triton_residual_gate_layer_norm_inplace"
+        else:
+            result = triton_diffusion.residual_gate_layer_norm(residual, update, gate, weight, bias, float(eps))
+            impl_name = "triton_residual_gate_layer_norm"
+    _publish_dispatch_receipt(
+        op="residual_gate_layer_norm",
+        implementation=impl_name,
+        backend="triton",
+        accelerated=True,
+        fallback=False,
+        cache_hit=False,
+        failures=[],
+        quarantined=[],
+    )
+    return result
+
+
+def residual_add_layer_norm_scale_shift(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float = 1e-6,
+    *,
+    inplace: bool = False,
+    backend: str | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Fuse ``x = residual + update`` with ``LayerNorm(x, eps) * (1 + scale) + shift``."""
+
+    def _fallback() -> tuple[torch.Tensor, torch.Tensor]:
+        if (
+            inplace
+            and not torch.is_grad_enabled()
+            and torch.promote_types(residual.dtype, update.dtype) == residual.dtype
+        ):
+            x_out = residual.add_(update)
+        else:
+            x_out = residual + update
+        return x_out, layer_norm_scale_shift(x_out, scale, shift, eps=eps, backend=backend)
+
+    requested = _requested_kernel_backend() if backend is None else (backend.strip().casefold() or "auto")
+    if (
+        torch.compiler.is_compiling()
+        or requested in _TORCH_BACKENDS
+        or requested not in {"auto", "triton"}
+        or (
+            requested == "auto"
+            and not kernel_autotune_enabled()
+            and residual.numel() < _kernel_threshold(residual, "layer_norm_scale_shift")
+        )
+        or not (
+            _inference_only(residual, update, scale, shift)
+            and _same_cuda_device(residual, update, scale, shift)
+            and all(_triton_device_supported(tensor) for tensor in (residual, update, scale, shift))
+            and all(tensor.dtype in _FLOAT_DTYPES for tensor in (residual, update, scale, shift))
+            and 2 <= residual.ndim <= 5
+            and residual.numel() > 0
+            and residual.shape == update.shape
+            and 0 < residual.shape[-1] <= 8192
+            and _regular_contiguous(residual)
+            and _regular_contiguous(update)
+            and _broadcastable_to(scale, residual)
+            and _broadcastable_to(shift, residual)
+        )
+    ):
+        return _fallback()
+
+    x_out_dtype = torch.promote_types(residual.dtype, update.dtype)
+    use_inplace = bool(
+        inplace
+        and not torch.is_grad_enabled()
+        and x_out_dtype == residual.dtype
+        and not _storage_overlaps(residual, update)
+        and not _storage_overlaps(residual, scale)
+        and not _storage_overlaps(residual, shift)
+    )
+    try:
+        from worldfoundry.core.kernels import triton_diffusion
+    except (ImportError, OSError):
+        return _fallback()
+
+    with torch.cuda.device(residual.device):
+        if use_inplace:
+            result = triton_diffusion.residual_add_layer_norm_scale_shift_inplace(
+                residual, update, scale, shift, float(eps)
+            )
+            impl_name = "triton_residual_add_layer_norm_scale_shift_inplace"
+        else:
+            result = triton_diffusion.residual_add_layer_norm_scale_shift(residual, update, scale, shift, float(eps))
+            impl_name = "triton_residual_add_layer_norm_scale_shift"
+    _publish_dispatch_receipt(
+        op="residual_add_layer_norm_scale_shift",
+        implementation=impl_name,
+        backend="triton",
+        accelerated=True,
+        fallback=False,
+        cache_hit=False,
+        failures=[],
+        quarantined=[],
+    )
+    return result
+
+
+def hidden_qk_rmsnorm_rope_freqs(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    q_weight: torch.Tensor,
+    k_weight: torch.Tensor,
+    freqs: torch.Tensor,
+    *,
+    num_heads: int,
+    eps: float = 1e-6,
+    precision: str | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Fuse full-hidden Q/K RMSNorm and pre-indexed per-token interleaved RoPE.
+
+    Accepts pre-indexed complex ``[S, 1, head_dim//2]`` / ``[S, head_dim//2]`` or real
+    ``[S, head_dim//2, 2]`` tables (e.g. after 3D tile permutation or token pruning) and
+    executes FP64/FP32 rotary arithmetic in Triton registers without HBM temporaries.
+    """
+
+    normalized_precision: str | None = None
+    if precision is not None:
+        normalized_precision = precision.strip().casefold()
+        if normalized_precision not in {"fp32", "fp64"}:
+            raise ValueError(f"unsupported RoPE precision: {precision!r}")
+
+    def _fallback() -> tuple[torch.Tensor, torch.Tensor]:
+        def _norm(value: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+            vf = value.float()
+            return (vf * torch.rsqrt(vf.square().mean(dim=-1, keepdim=True) + float(eps))).to(value.dtype) * weight
+
+        qn = _norm(q, q_weight)
+        kn = _norm(k, k_weight)
+        seq = q.shape[1]
+        if freqs.is_complex():
+            f_use = freqs[:seq]
+            if f_use.ndim == 2:
+                f_use = f_use.unsqueeze(1)
+            cos_t, sin_t = f_use.real, f_use.imag
+            inferred_rdtype = torch.float64 if freqs.dtype == torch.complex128 else torch.float32
+        else:
+            f_use = freqs[:seq]
+            if f_use.ndim == 3:
+                f_use = f_use.unsqueeze(1)
+            cos_t, sin_t = f_use[..., 0], f_use[..., 1]
+            inferred_rdtype = torch.float64 if freqs.dtype == torch.float64 else torch.float32
+        if normalized_precision is not None:
+            rdtype = torch.float64 if normalized_precision == "fp64" else torch.float32
+        else:
+            rdtype = inferred_rdtype
+        cos_t = cos_t.unsqueeze(0).to(rdtype)
+        sin_t = sin_t.unsqueeze(0).to(rdtype)
+
+        def _rot(val: torch.Tensor) -> torch.Tensor:
+            b, s, c = val.shape
+            pairs = val.view(b, s, int(num_heads), c // int(num_heads) // 2, 2)
+            ev, od = pairs[..., 0].to(rdtype), pairs[..., 1].to(rdtype)
+            return (
+                torch.stack((ev * cos_t - od * sin_t, od * cos_t + ev * sin_t), dim=-1).reshape(b, s, c).to(val.dtype)
+            )
+
+        return _rot(qn), _rot(kn)
+
+    hidden_size = int(q.shape[-1]) if q.ndim == 3 else 0
+    head_dim = hidden_size // int(num_heads) if num_heads else 0
+    pairs = head_dim // 2
+    freqs_ok = (
+        (
+            freqs.dtype in {torch.complex64, torch.complex128}
+            and (
+                (freqs.ndim == 3 and freqs.shape[1] == 1 and freqs.shape[2] == pairs)
+                or (freqs.ndim == 2 and freqs.shape[1] == pairs)
+            )
+        )
+        or (
+            freqs.dtype in {torch.float32, torch.float64}
+            and (
+                (freqs.ndim == 4 and freqs.shape[1] == 1 and freqs.shape[2] == pairs and freqs.shape[3] == 2)
+                or (freqs.ndim == 3 and freqs.shape[1] == pairs and freqs.shape[2] == 2)
+            )
+        )
+    ) and freqs.shape[0] >= (int(q.shape[1]) if q.ndim == 3 else 0)
+    eligible = (
+        not torch.compiler.is_compiling()
+        and _requested_kernel_backend() not in _TORCH_BACKENDS
+        and _inference_only(q, k, q_weight, k_weight, freqs)
+        and _same_cuda_device(q, k, q_weight, k_weight, freqs)
+        and all(_triton_device_supported(t) for t in (q, k, q_weight, k_weight))
+        and q.dtype in _FLOAT_DTYPES
+        and k.dtype == q.dtype
+        and q_weight.dtype == q.dtype
+        and k_weight.dtype == q.dtype
+        and q.ndim == 3
+        and k.shape == q.shape
+        and q.numel() > 0
+        and q.stride(-1) == 1
+        and k.stride(-1) == 1
+        and q_weight.is_contiguous()
+        and k_weight.is_contiguous()
+        and 0 < hidden_size <= 8192
+        and hidden_size % int(num_heads) == 0
+        and head_dim >= 2
+        and head_dim % 2 == 0
+        and q_weight.shape == k_weight.shape == (hidden_size,)
+        and freqs_ok
+    )
+    if not eligible:
+        return _fallback()
+    try:
+        from worldfoundry.core.kernels.triton_diffusion import hidden_qk_rmsnorm_rope_freqs as implementation
+    except (ImportError, OSError):
+        return _fallback()
+    with torch.cuda.device(q.device):
+        result = implementation(
+            q,
+            k,
+            q_weight,
+            k_weight,
+            freqs,
+            num_heads=int(num_heads),
+            eps=float(eps),
+            precision=normalized_precision,
+        )
+    _publish_dispatch_receipt(
+        op="hidden_qk_rmsnorm_rope_freqs",
+        implementation="triton_hidden_qk_rmsnorm_rope_freqs",
+        backend="triton",
+        accelerated=True,
+        fallback=False,
+        cache_hit=False,
+        failures=[],
+        quarantined=[],
+    )
+    return result
+
+
 __all__ = [
+    "apply_real_rope_bshd",
     "clear_kernel_dispatch_cache",
+    "fused_layer_norm_scale_shift",
     "group_norm_silu",
     "hidden_qk_rmsnorm_rope_3d",
+    "hidden_qk_rmsnorm_rope_freqs",
     "kernel_dispatch_report",
     "layer_norm_scale_shift",
     "qk_rmsnorm_rope",
-    "rms_norm_scale_shift",
+    "residual_add_layer_norm_scale_shift",
     "residual_gate_add",
     "residual_gate_add_",
+    "residual_gate_layer_norm",
+    "rms_norm_scale_shift",
     "silu_and_mul",
     "silu_mul",
 ]

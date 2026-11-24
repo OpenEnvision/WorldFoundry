@@ -1,6 +1,6 @@
 ---
 title: T2V-CompBench
-description: "CVPR 2025 组合式 T2V 评测：1,400 条 prompt、七个绑定轴。WorldFoundry 内置 runtime，不编造榜单。"
+description: "CVPR 2025 组合式 T2V 评测：1,400 条 prompt、七个绑定轴。WorldFoundry 内置官方 runtime。"
 ---
 
 T2V-CompBench（港大，联合港中文与华为诺亚）问的是文生视频模型会不会把**正确的属性、动作和运动绑到正确的物体上**。这是组合能力，不是单一美学分。官方套件 **1,400 条 prompt**（7 × 200）：
@@ -8,12 +8,12 @@ T2V-CompBench（港大，联合港中文与华为诺亚）问的是文生视频�
 - **一致 / 动态属性绑定** — 先测静态属性，再测时变属性，是否落在正确物体上。
 - **空间关系** — 二维 / 三维布局（检测 + 深度 / SAM）。
 - **运动绑定** — 前景 vs 背景运动（DOT 跟踪）。
-- **动作绑定** 与 **物体交互** — MLLM（LLaVA 风格）评判。
-- **生成计数** — GroundingDINO 数物体。这是 WorldFoundry 已在真实 MP4 上跑过的有界官方分量。
+- **动作绑定**与**物体交互** — MLLM（LLaVA 风格）评判。
+- **生成计数** — GroundingDINO 数物体。WorldFoundry 已在真实 MP4 上验证该类别。
 
 论文：[T2V-CompBench](https://arxiv.org/abs/2407.14505)。项目：[t2v-compbench-2025.github.io](https://t2v-compbench-2025.github.io/)。代码：[KaiyueSun98/T2V-CompBench](https://github.com/KaiyueSun98/T2V-CompBench)。参考视频：[`Kaiyue/T2V-CompBench-Videos`](https://huggingface.co/datasets/Kaiyue/T2V-CompBench-Videos)（25,200 行）。
 
-WorldFoundry **内置官方 runtime**，并用严格的 manifest 桥把生成视频排成 `category/NNNN.mp4`。可导入官方 CSV / JSON，或在度量资源就位后跑单个类别。只有七个类别分齐备时才写出 `t2v_compbench_average`。
+WorldFoundry **内置官方 runtime**，并用严格的 manifest 桥把生成视频排成 `category/NNNN.mp4`。可导入官方 CSV / JSON，或在度量资源就位后跑单个类别。只有七个类别的分数齐备时才写出 `t2v_compbench_average`。
 
 <BenchmarkPageSections id="t2v-compbench" locale="zh" />
 
@@ -22,7 +22,7 @@ WorldFoundry **内置官方 runtime**，并用严格的 manifest 桥把生成视
 导入官方类别分：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id t2v-compbench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -35,7 +35,7 @@ worldfoundry-eval zoo benchmark-run \
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
   --generated-video-dir <generated_videos_with_t2v_compbench_generation_manifest.jsonl> \
   --category generative_numeracy \
   --output-dir tmp/t2v-compbench/numeracy \
@@ -48,7 +48,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 ```text
 worldfoundry/data/benchmarks/tasks/external/t2v-compbench.yaml
-worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
+worldfoundry/evals/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
 ```
 
 产物包括 `scorecard.json`（齐备时主键 `t2v_compbench_average`）、`raw_metric_table.jsonl`，以及来源提供时的逐样本行。

@@ -1,21 +1,11 @@
-"""Module for base_models -> perception_core -> general_perception -> open_clip -> naflex_config.py functionality."""
-
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Optional, Sequence, Tuple, Union
+from typing import Union
+
+PatchSize = Union[int, tuple[int, int]]  # noqa: UP007 - Runtime type alias kept as typing.Union.
 
 
-PatchSize = Union[int, Tuple[int, int]]
-
-
-def to_2tuple(value: PatchSize) -> Tuple[int, int]:
-    """To 2tuple.
-
-    Args:
-        value: The value.
-
-    Returns:
-        The return value.
-    """
+def to_2tuple(value: PatchSize) -> tuple[int, int]:
     if isinstance(value, tuple):
         if len(value) != 2:
             raise ValueError("Patch size tuples must have exactly two values.")
@@ -25,43 +15,27 @@ def to_2tuple(value: PatchSize) -> Tuple[int, int]:
 
 @dataclass(frozen=True)
 class NaFlexDataConfig:
-    """Na flex data config implementation."""
-    train_patch_sizes: Tuple[Tuple[int, int], ...] = ((16, 16),)
-    train_patch_size_probs: Optional[Tuple[float, ...]] = None
-    train_seq_lens: Tuple[int, ...] = (128, 256, 576, 784, 1024)
-    train_num_image_tokens: Optional[int] = None
+    train_patch_sizes: tuple[tuple[int, int], ...] = ((16, 16),)
+    train_patch_size_probs: tuple[float, ...] | None = None
+    train_seq_lens: tuple[int, ...] = (128, 256, 576, 784, 1024)
+    train_num_image_tokens: int | None = None
     max_tokens_per_batch: int = 4096 * 4
     batch_divisor: int = 8
-    eval_patch_size: Tuple[int, int] = (16, 16)
+    eval_patch_size: tuple[int, int] = (16, 16)
     eval_seq_len: int = 1024
 
     @classmethod
     def resolve(
-            cls,
-            patch_sizes: Optional[Sequence[PatchSize]] = None,
-            patch_size_probs: Optional[Sequence[float]] = None,
-            seq_lens: Optional[Sequence[int]] = None,
-            train_num_image_tokens: Optional[int] = None,
-            max_tokens_per_batch: int = 4096 * 4,
-            batch_divisor: int = 8,
-            eval_patch_size: Optional[PatchSize] = None,
-            eval_seq_len: Optional[int] = None,
-    ) -> 'NaFlexDataConfig':
-        """Resolve.
-
-        Args:
-            patch_sizes: The patch sizes.
-            patch_size_probs: The patch size probs.
-            seq_lens: The seq lens.
-            train_num_image_tokens: The train num image tokens.
-            max_tokens_per_batch: The max tokens per batch.
-            batch_divisor: The batch divisor.
-            eval_patch_size: The eval patch size.
-            eval_seq_len: The eval seq len.
-
-        Returns:
-            The return value.
-        """
+        cls,
+        patch_sizes: Sequence[PatchSize] | None = None,
+        patch_size_probs: Sequence[float] | None = None,
+        seq_lens: Sequence[int] | None = None,
+        train_num_image_tokens: int | None = None,
+        max_tokens_per_batch: int = 4096 * 4,
+        batch_divisor: int = 8,
+        eval_patch_size: PatchSize | None = None,
+        eval_seq_len: int | None = None,
+    ) -> "NaFlexDataConfig":
         patch_sizes = (16,) if patch_sizes is None else patch_sizes
         train_patch_sizes = tuple(to_2tuple(size) for size in patch_sizes)
         if not train_patch_sizes:
@@ -87,9 +61,7 @@ class NaFlexDataConfig:
                 raise ValueError("NaFlex patch size probabilities must sum to a positive value.")
             train_patch_size_probs = tuple(float(prob) / prob_sum for prob in patch_size_probs)
 
-        train_num_image_tokens = (
-            int(train_num_image_tokens) if train_num_image_tokens is not None else None
-        )
+        train_num_image_tokens = int(train_num_image_tokens) if train_num_image_tokens is not None else None
         if train_num_image_tokens is not None and train_num_image_tokens <= 0:
             raise ValueError("NaFlex train image token count must be positive.")
 
@@ -122,18 +94,8 @@ class NaFlexDataConfig:
 
     @property
     def variable_patch_size(self) -> bool:
-        """Variable patch size.
-
-        Returns:
-            The return value.
-        """
         return len(self.train_patch_sizes) > 1
 
     @property
-    def eval_config(self) -> Tuple[Tuple[int, int], int]:
-        """Eval config.
-
-        Returns:
-            The return value.
-        """
+    def eval_config(self) -> tuple[tuple[int, int], int]:
         return self.eval_patch_size, self.eval_seq_len

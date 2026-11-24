@@ -56,7 +56,7 @@ class KeyVocab:
         object.__setattr__(self, "_index", {k: i for i, k in enumerate(self.keys)})
 
     @classmethod
-    def default_rl(cls, on_unknown: Literal["warn", "ignore", "error"] = "warn") -> "KeyVocab":
+    def default_rl(cls, on_unknown: Literal["warn", "ignore", "error"] = "warn") -> KeyVocab:
         return cls(DEFAULT_RL_KEYS, on_unknown=on_unknown)
 
     def __len__(self) -> int:

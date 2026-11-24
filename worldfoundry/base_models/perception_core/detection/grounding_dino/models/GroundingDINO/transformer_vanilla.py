@@ -14,34 +14,18 @@ Copy-paste from torch.nn.Transformer with modifications:
     * extra LN at the end of encoder is removed
     * decoder returns a stack of activations from all decoding layers
 """
-from typing import Optional
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from .utils import (
-    MLP,
     _get_activation_fn,
     _get_clones,
-    gen_encoder_output_proposals,
-    gen_sineembed_for_position,
-    sigmoid_focal_loss,
 )
 
 
 class TextTransformer(nn.Module):
-    """Text transformer implementation."""
     def __init__(self, num_layers, d_model=256, nheads=8, dim_feedforward=2048, dropout=0.1):
-        """Init.
-
-        Args:
-            num_layers: The num layers.
-            d_model: The d model.
-            nheads: The nheads.
-            dim_feedforward: The dim feedforward.
-            dropout: The dropout.
-        """
         super().__init__()
         self.num_layers = num_layers
         self.d_model = d_model
@@ -56,13 +40,9 @@ class TextTransformer(nn.Module):
 
     def forward(self, memory_text: torch.Tensor, text_attention_mask: torch.Tensor):
         """
-
         Args:
             text_attention_mask: bs, num_token
             memory_text: bs, num_token, d_model
-
-        Raises:
-            RuntimeError: _description_
 
         Returns:
             output: bs, num_token, d_model
@@ -80,7 +60,6 @@ class TextTransformer(nn.Module):
 
 
 class TransformerEncoderLayer(nn.Module):
-    """Transformer encoder layer implementation."""
     def __init__(
         self,
         d_model,
@@ -90,16 +69,6 @@ class TransformerEncoderLayer(nn.Module):
         activation="relu",
         normalize_before=False,
     ):
-        """Init.
-
-        Args:
-            d_model: The d model.
-            nhead: The nhead.
-            dim_feedforward: The dim feedforward.
-            dropout: The dropout.
-            activation: The activation.
-            normalize_before: The normalize before.
-        """
         super().__init__()
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
         # Implementation of Feedforward model
@@ -116,30 +85,16 @@ class TransformerEncoderLayer(nn.Module):
         self.normalize_before = normalize_before
         self.nhead = nhead
 
-    def with_pos_embed(self, tensor, pos: Optional[Tensor]):
-        """With pos embed.
-
-        Args:
-            tensor: The tensor.
-            pos: The pos.
-        """
+    def with_pos_embed(self, tensor, pos: Tensor | None):
         return tensor if pos is None else tensor + pos
 
     def forward(
         self,
         src,
-        src_mask: Optional[Tensor] = None,
-        src_key_padding_mask: Optional[Tensor] = None,
-        pos: Optional[Tensor] = None,
+        src_mask: Tensor | None = None,
+        src_key_padding_mask: Tensor | None = None,
+        pos: Tensor | None = None,
     ):
-        """Forward.
-
-        Args:
-            src: The src.
-            src_mask: The src mask.
-            src_key_padding_mask: The src key padding mask.
-            pos: The pos.
-        """
         # repeat attn mask
         if src_mask.dim() == 3 and src_mask.shape[0] == src.shape[1]:
             # bs, num_q, num_k

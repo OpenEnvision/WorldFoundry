@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from typing import Union
 
 from transformers import GPTNeoXConfig, PretrainedConfig
 from transformers.utils import logging
@@ -55,9 +54,7 @@ class LlavaPythiaVisionConfig(PretrainedConfig):
         self.concat = concat
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> "PretrainedConfig":
+    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs) -> PretrainedConfig:
         cls._set_token_in_kwargs(kwargs)
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if config_dict.get("model_type") == "llava_pythia":
@@ -81,9 +78,7 @@ class ProjectorConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> "PretrainedConfig":
+    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs) -> PretrainedConfig:
         cls._set_token_in_kwargs(kwargs)
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if config_dict.get("model_type") == "llava_pythia":

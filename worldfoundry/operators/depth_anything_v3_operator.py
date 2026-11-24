@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any
 
 import cv2
 import numpy as np
@@ -12,7 +12,6 @@ import torch
 from PIL import Image
 
 from .base_operator import BaseOperator
-
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".gif"}
@@ -44,11 +43,11 @@ class DepthAnything3Operator(BaseOperator):
                 "point_cloud_generation",
                 "gaussian_estimation",
             ]
-        super(DepthAnything3Operator, self).__init__(operation_types=operation_types)
+        super().__init__(operation_types=operation_types)
         self.interaction_template = interaction_template
         self.interaction_template_init()
 
-    def collect_paths(self, path: Union[str, Path]) -> List[str]:
+    def collect_paths(self, path: str | Path) -> list[str]:
         """Crawls a directory, file list, or text manifest to yield absolute image asset paths."""
         path = Path(path).expanduser()
         if path.is_file():
@@ -81,7 +80,7 @@ class DepthAnything3Operator(BaseOperator):
         self.check_interaction(interaction)
         self.current_interaction.append(interaction)
 
-    def process_interaction(self, num_frames: Optional[int] = None) -> Dict[str, Any]:
+    def process_interaction(self, num_frames: int | None = None) -> dict[str, Any]:
         """Translates the registered interaction state into physical model pipeline flags.
 
         Converts high-level prompts (e.g., 'gaussian_estimation') into boolean switches
@@ -100,9 +99,7 @@ class DepthAnything3Operator(BaseOperator):
             "return_point_cloud": True,
         }
 
-        if latest_interaction == "single_view_depth":
-            result["data_type"] = "image_sequence"
-        elif latest_interaction == "multi_view_depth":
+        if latest_interaction == "single_view_depth" or latest_interaction == "multi_view_depth":
             result["data_type"] = "image_sequence"
         elif latest_interaction == "video_depth":
             result["data_type"] = "video"
@@ -118,9 +115,7 @@ class DepthAnything3Operator(BaseOperator):
         return result
 
     @staticmethod
-    def normalize_interaction_sequence(
-        interactions: Optional[Union[str, Sequence[str]]]
-    ) -> List[str]:
+    def normalize_interaction_sequence(interactions: str | Sequence[str] | None) -> list[str]:
         """Normalize interaction coordinates and sequences."""
         if interactions is None:
             return []
@@ -129,13 +124,12 @@ class DepthAnything3Operator(BaseOperator):
         return [str(item) for item in interactions if str(item).strip()]
 
     @staticmethod
-    def is_video_path(path: Union[str, Path]) -> bool:
+    def is_video_path(path: str | Path) -> bool:
         """Verify if a given path points to a valid video format."""
         return Path(path).suffix.lower() in VIDEO_EXTENSIONS
 
     @staticmethod
     def _to_uint8_rgb(image: Any) -> np.ndarray:
-        """To uint8 rgb implementation."""
         if isinstance(image, Image.Image):
             array = np.asarray(image.convert("RGB"))
         elif isinstance(image, torch.Tensor):
@@ -159,10 +153,7 @@ class DepthAnything3Operator(BaseOperator):
 
         if np.issubdtype(array.dtype, np.floating):
             if array.min() >= -1.0 and array.max() <= 1.0:
-                if array.min() < 0.0:
-                    array = (array + 1.0) * 127.5
-                else:
-                    array = array * 255.0
+                array = (array + 1.0) * 127.5 if array.min() < 0.0 else array * 255.0
             array = np.clip(array, 0.0, 255.0)
         else:
             array = np.clip(array, 0, 255)
@@ -171,8 +162,7 @@ class DepthAnything3Operator(BaseOperator):
         # Array inputs are expected in RGB channel order; no BGR guessing.
         return array
 
-    def _coerce_single_image(self, input_signal: Any) -> Union[str, np.ndarray]:
-        """Coerce single image implementation."""
+    def _coerce_single_image(self, input_signal: Any) -> str | np.ndarray:
         if isinstance(input_signal, (str, Path)):
             input_path = Path(input_signal).expanduser()
             if input_path.is_dir():
@@ -182,8 +172,7 @@ class DepthAnything3Operator(BaseOperator):
                 )
             if self.is_video_path(input_path):
                 raise ValueError(
-                    f"Expected image input but got video path: {input_path}. "
-                    "Use load_video_frames() for video input."
+                    f"Expected image input but got video path: {input_path}. Use load_video_frames() for video input."
                 )
             return str(input_path.resolve())
 
@@ -191,37 +180,33 @@ class DepthAnything3Operator(BaseOperator):
 
     def process_perception(
         self,
-        input_signal: Union[
-            str,
-            Path,
-            np.ndarray,
-            torch.Tensor,
-            Image.Image,
-            Sequence[str],
-            Sequence[np.ndarray],
-            Sequence[Image.Image],
-        ],
-    ) -> List[Union[str, np.ndarray]]:
+        input_signal: str
+        | Path
+        | np.ndarray
+        | torch.Tensor
+        | Image.Image
+        | Sequence[str]
+        | Sequence[np.ndarray]
+        | Sequence[Image.Image],
+    ) -> list[str | np.ndarray]:
         """Process perception inputs like images, videos, and reference frames."""
         if isinstance(input_signal, (str, Path)):
             input_path = Path(input_signal).expanduser()
             if input_path.is_dir() or input_path.suffix.lower() == ".txt":
-                return self.collect_paths(input_path)
+                return list(self.collect_paths(input_path))
             return [self._coerce_single_image(input_path)]
 
-        if isinstance(input_signal, Sequence) and not isinstance(
-            input_signal, (np.ndarray, torch.Tensor, Image.Image)
-        ):
+        if isinstance(input_signal, Sequence) and not isinstance(input_signal, (np.ndarray, torch.Tensor, Image.Image)):
             return [self._coerce_single_image(item) for item in input_signal]
 
         return [self._coerce_single_image(input_signal)]
 
     def load_video_frames(
         self,
-        video_path: Union[str, Path],
-        max_frames: Optional[int] = None,
+        video_path: str | Path,
+        max_frames: int | None = None,
         frame_stride: int = 1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Load video frames from a video path."""
         video_path = Path(video_path).expanduser().resolve()
         if not video_path.exists():
@@ -235,7 +220,7 @@ class DepthAnything3Operator(BaseOperator):
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
 
-        frames: List[np.ndarray] = []
+        frames: list[np.ndarray] = []
         frame_index = 0
         kept_frames = 0
         while True:

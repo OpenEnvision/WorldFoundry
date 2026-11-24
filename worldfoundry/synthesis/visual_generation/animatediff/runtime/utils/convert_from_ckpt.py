@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,42 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Conversion script for the Stable Diffusion checkpoints."""
+"""Conversion script for the Stable Diffusion checkpoints."""
 
 import re
-from io import BytesIO
-from typing import Optional
 
-import requests
 import torch
+from diffusers.schedulers import (
+    DDIMScheduler,
+    DDPMScheduler,
+)
 from transformers import (
-    AutoFeatureExtractor,
-    BertTokenizerFast,
     CLIPImageProcessor,
     CLIPTextModel,
-    CLIPTextModelWithProjection,
-    CLIPTokenizer,
     CLIPVisionConfig,
     CLIPVisionModelWithProjection,
 )
 
-from diffusers.models import (
-    AutoencoderKL,
-    PriorTransformer,
-    UNet2DConditionModel,
-)
-from diffusers.schedulers import (
-    DDIMScheduler,
-    DDPMScheduler,
-    DPMSolverMultistepScheduler,
-    EulerAncestralDiscreteScheduler,
-    EulerDiscreteScheduler,
-    HeunDiscreteScheduler,
-    LMSDiscreteScheduler,
-    PNDMScheduler,
-    UnCLIPScheduler,
-)
-from diffusers.utils.import_utils import BACKENDS_MAPPING
 from worldfoundry.core.io.paths import checkpoint_root_path
 
 
@@ -56,13 +35,11 @@ def _local_clip_text_model_path():
     for name in ("openai--clip-vit-large-patch14", "clip-vit-large-patch14"):
         candidate = root / name
         if (candidate / "config.json").is_file() and any(
-            (candidate / filename).is_file()
-            for filename in ("model.safetensors", "pytorch_model.bin")
+            (candidate / filename).is_file() for filename in ("model.safetensors", "pytorch_model.bin")
         ):
             return candidate.resolve()
     raise FileNotFoundError(
-        "AnimateDiff requires openai/clip-vit-large-patch14 under "
-        "$WORLDFOUNDRY_CKPT_DIR/openai--clip-vit-large-patch14"
+        "AnimateDiff requires openai/clip-vit-large-patch14 under $WORLDFOUNDRY_CKPT_DIR/openai--clip-vit-large-patch14"
     )
 
 
@@ -186,7 +163,7 @@ def assign_to_checkpoint(
 
             num_heads = old_tensor.shape[0] // config["num_head_channels"] // 3
 
-            old_tensor = old_tensor.reshape((num_heads, 3 * channels // num_heads) + old_tensor.shape[1:])
+            old_tensor = old_tensor.reshape((num_heads, 3 * channels // num_heads) + old_tensor.shape[1:])  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             query, key, value = old_tensor.split(channels // num_heads, dim=1)
 
             checkpoint[path_map["query"]] = query.reshape(target_shape)
@@ -223,9 +200,8 @@ def conv_attn_to_linear(checkpoint):
         if ".".join(key.split(".")[-2:]) in attn_keys:
             if checkpoint[key].ndim > 2:
                 checkpoint[key] = checkpoint[key][:, :, 0, 0]
-        elif "proj_attn.weight" in key:
-            if checkpoint[key].ndim > 2:
-                checkpoint[key] = checkpoint[key][:, :, 0]
+        elif "proj_attn.weight" in key and checkpoint[key].ndim > 2:
+            checkpoint[key] = checkpoint[key][:, :, 0]
 
 
 def create_unet_diffusers_config(original_config, image_size: int, controlnet=False):
@@ -250,7 +226,7 @@ def create_unet_diffusers_config(original_config, image_size: int, controlnet=Fa
             resolution *= 2
 
     up_block_types = []
-    for i in range(len(block_out_channels)):
+    for i in range(len(block_out_channels)):  # noqa: B007 - The loop variable is read outside the loop.
         block_type = "CrossAttnUpBlock2D" if resolution in unet_params.attention_resolutions else "UpBlock2D"
         up_block_types.append(block_type)
         resolution //= 2
@@ -261,7 +237,7 @@ def create_unet_diffusers_config(original_config, image_size: int, controlnet=Fa
     use_linear_projection = (
         unet_params.use_linear_in_transformer if "use_linear_in_transformer" in unet_params else False
     )
-    if use_linear_projection:
+    if use_linear_projection:  # noqa: SIM102 - Branches carry per-case comments.
         # stable diffusion 2-base-512 and 2-768
         if head_dim is None:
             head_dim = [5, 10, 20, 20]
@@ -333,7 +309,7 @@ def create_diffusers_schedular(original_config):
 
 def create_ldm_bert_config(original_config):
     bert_params = original_config.model.parms.cond_stage_config.params
-    config = LDMBertConfig(
+    config = LDMBertConfig(  # noqa: F821 - Name is undefined in the upstream source.
         d_model=bert_params.n_embed,
         encoder_layers=bert_params.n_layer,
         encoder_ffn_dim=bert_params.n_embed * 4,
@@ -350,10 +326,7 @@ def convert_ldm_unet_checkpoint(checkpoint, config, path=None, extract_ema=False
     unet_state_dict = {}
     keys = list(checkpoint.keys())
 
-    if controlnet:
-        unet_key = "control_model."
-    else:
-        unet_key = "model.diffusion_model."
+    unet_key = "control_model." if controlnet else "model.diffusion_model."
 
     # at least a 100 parameters have to start with `model_ema` in order for the checkpoint to be EMA
     if sum(k.startswith("model_ema") for k in keys) > 100 and extract_ema:
@@ -444,9 +417,7 @@ def convert_ldm_unet_checkpoint(checkpoint, config, path=None, extract_ema=False
 
         paths = renew_resnet_paths(resnets)
         meta_path = {"old": f"input_blocks.{i}.0", "new": f"down_blocks.{block_id}.resnets.{layer_in_block_id}"}
-        assign_to_checkpoint(
-            paths, new_checkpoint, unet_state_dict, additional_replacements=[meta_path], config=config
-        )
+        assign_to_checkpoint(paths, new_checkpoint, unet_state_dict, additional_replacements=[meta_path], config=config)
 
         if len(attentions):
             paths = renew_attention_paths(attentions)
@@ -712,7 +683,7 @@ def convert_ldm_bert_checkpoint(checkpoint, config):
             pt_layer = pt_layers[i : i + 2]
             _copy_layer(hf_layer, pt_layer)
 
-    hf_model = LDMBertModel(config).eval()
+    hf_model = LDMBertModel(config).eval()  # noqa: F821 - Name is undefined in the upstream source.
 
     # copy  embeds
     hf_model.model.embed_tokens.weight = checkpoint.transformer.token_emb.weight
@@ -771,7 +742,7 @@ textenc_pattern = re.compile("|".join(protected.keys()))
 
 def convert_paint_by_example_checkpoint(checkpoint):
     config = CLIPVisionConfig.from_pretrained("openai/clip-vit-large-patch14")
-    model = PaintByExampleImageEncoder(config)
+    model = PaintByExampleImageEncoder(config)  # noqa: F821 - Name is undefined in the upstream source.
 
     keys = list(checkpoint.keys())
 
@@ -913,7 +884,7 @@ def stable_unclip_image_encoder(original_config):
 
 
 def stable_unclip_image_noising_components(
-    original_config, clip_stats_path: Optional[str] = None, device: Optional[str] = None
+    original_config, clip_stats_path: str | None = None, device: str | None = None
 ):
     """
     Returns the noising components for the img2img and txt2img unclip pipelines.
@@ -934,7 +905,7 @@ def stable_unclip_image_noising_components(
         max_noise_level = noise_aug_config.noise_schedule_config.timesteps
         beta_schedule = noise_aug_config.noise_schedule_config.beta_schedule
 
-        image_normalizer = StableUnCLIPImageNormalizer(embedding_dim=embedding_dim)
+        image_normalizer = StableUnCLIPImageNormalizer(embedding_dim=embedding_dim)  # noqa: F821 - Name is undefined in the upstream source.
         image_noising_scheduler = DDPMScheduler(num_train_timesteps=max_noise_level, beta_schedule=beta_schedule)
 
         if "clip_stats_path" in noise_aug_config:
@@ -965,7 +936,7 @@ def convert_controlnet_checkpoint(
 
     ctrlnet_config.pop("sample_size")
 
-    controlnet_model = ControlNetModel(**ctrlnet_config)
+    controlnet_model = ControlNetModel(**ctrlnet_config)  # noqa: F821 - Name is undefined in the upstream source.
 
     converted_ctrl_checkpoint = convert_ldm_unet_checkpoint(
         checkpoint, ctrlnet_config, path=checkpoint_path, extract_ema=extract_ema, controlnet=True

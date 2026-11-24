@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+
 import numpy as np
 import torch
 from scipy.interpolate import CubicSpline
@@ -38,7 +39,7 @@ def load_trajectory(file_path: str) -> tuple:
         (theta_seq, phi_seq, r_seq) as numpy float64 arrays
     """
     sequences = []
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#"):
@@ -48,18 +49,12 @@ def load_trajectory(file_path: str) -> tuple:
                 sequences.append(np.array(values, dtype=np.float64))
 
     if len(sequences) < 3:
-        raise ValueError(
-            f"Trajectory file must have 3 sequences (theta, phi, r), "
-            f"got {len(sequences)}"
-        )
+        raise ValueError(f"Trajectory file must have 3 sequences (theta, phi, r), got {len(sequences)}")
 
     theta_seq, phi_seq, r_seq = sequences[0], sequences[1], sequences[2]
 
     if not (len(theta_seq) == len(phi_seq) == len(r_seq)):
-        raise ValueError(
-            f"Sequence length mismatch: theta={len(theta_seq)}, "
-            f"phi={len(phi_seq)}, r={len(r_seq)}"
-        )
+        raise ValueError(f"Sequence length mismatch: theta={len(theta_seq)}, phi={len(phi_seq)}, r={len(r_seq)}")
 
     return theta_seq, phi_seq, r_seq
 
@@ -103,9 +98,9 @@ def trajectory_to_w2cs(
     # Convert to w2c matrices
     w2c_list = []
     for i in range(num_frames):
-        theta_deg = float(theta_interp[i])   # positive = up
-        phi_deg = float(phi_interp[i])        # positive = right
-        r = float(r_interp[i]) * radius       # forward distance (world units)
+        theta_deg = float(theta_interp[i])  # positive = up
+        phi_deg = float(phi_interp[i])  # positive = right
+        r = float(r_interp[i]) * radius  # forward distance (world units)
 
         # Yaw is positive right; pitch is positive down, so negate theta.
         theta_yaw = np.radians(phi_deg)
@@ -115,11 +110,14 @@ def trajectory_to_w2cs(
         cp, sp = np.cos(theta_pitch), np.sin(theta_pitch)
 
         # R = R_pitch @ R_yaw
-        R = np.array([
-            [ cy,      0.0,  -sy     ],
-            [-sp * sy,  cp,  -sp * cy],
-            [ cp * sy,  sp,   cp * cy],
-        ], dtype=np.float64)
+        R = np.array(
+            [
+                [cy, 0.0, -sy],
+                [-sp * sy, cp, -sp * cy],
+                [cp * sy, sp, cp * cy],
+            ],
+            dtype=np.float64,
+        )
 
         # Camera world position: C = R^T @ [0, 0, r]
         # (move forward by r in camera's local +Z direction)
@@ -136,9 +134,7 @@ def trajectory_to_w2cs(
 
 
 def main():
-    p = argparse.ArgumentParser(
-        description="Convert trajectory file to w2c extrinsic matrices"
-    )
+    p = argparse.ArgumentParser(description="Convert trajectory file to w2c extrinsic matrices")
     p.add_argument("--traj", type=str, required=True, help="Trajectory file path")
     p.add_argument("--num_frames", type=int, default=80, help="Number of output frames")
     p.add_argument("--radius", type=float, default=1.0, help="Scene radius (world units)")

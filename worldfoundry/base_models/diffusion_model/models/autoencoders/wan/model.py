@@ -9,6 +9,7 @@ do not comment every conv.  Runner recipes use
 """
 
 import contextlib
+import itertools
 
 import torch
 import torch.nn as nn
@@ -22,26 +23,12 @@ CACHE_T = 2
 
 
 def check_is_instance(model, module_class):
-    """Check is instance.
-
-    Args:
-        model: The model.
-        module_class: The module class.
-    """
     if isinstance(model, module_class):
         return True
-    if hasattr(model, "module") and isinstance(model.module, module_class):
-        return True
-    return False
+    return bool(hasattr(model, "module") and isinstance(model.module, module_class))
 
 
 def block_causal_mask(x, block_size):
-    """Block causal mask.
-
-    Args:
-        x: The x.
-        block_size: The block size.
-    """
     # params
     b, n, s, _, device = *x.size(), x.device
     assert s % block_size == 0
@@ -60,18 +47,11 @@ class CausalConv3d(nn.Conv3d):
     """
 
     def __init__(self, *args, **kwargs):
-        """Init."""
         super().__init__(*args, **kwargs)
         self._padding = (self.padding[2], self.padding[2], self.padding[1], self.padding[1], 2 * self.padding[0], 0)
         self.padding = (0, 0, 0)
 
     def forward(self, x, cache_x=None):
-        """Forward.
-
-        Args:
-            x: The x.
-            cache_x: The cache x.
-        """
         padding = list(self._padding)
         if cache_x is not None and self._padding[4] > 0:
             cache_x = cache_x.to(x.device)
@@ -86,14 +66,6 @@ class RMS_norm(nn.Module):
     """Norm implementation."""
 
     def __init__(self, dim, channel_first=True, images=True, bias=False):
-        """Init.
-
-        Args:
-            dim: The dim.
-            channel_first: The channel first.
-            images: The images.
-            bias: The bias.
-        """
         super().__init__()
         broadcastable_dims = (1, 1, 1) if not images else (1, 1)
         shape = (dim, *broadcastable_dims) if channel_first else (dim,)
@@ -104,17 +76,10 @@ class RMS_norm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(shape)) if bias else 0.0
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         return F.normalize(x, dim=(1 if self.channel_first else -1)) * self.scale * self.gamma + self.bias
 
 
 class Upsample(nn.Upsample):
-    """Upsample implementation."""
-
     def forward(self, x):
         """
         Fix bfloat16 support for nearest neighbor interpolation.
@@ -123,15 +88,7 @@ class Upsample(nn.Upsample):
 
 
 class Resample(nn.Module):
-    """Resample implementation."""
-
     def __init__(self, dim, mode):
-        """Init.
-
-        Args:
-            dim: The dim.
-            mode: The mode.
-        """
         assert mode in ("none", "upsample2d", "upsample3d", "downsample2d", "downsample3d")
         super().__init__()
         self.dim = dim
@@ -157,64 +114,47 @@ class Resample(nn.Module):
         else:
             self.resample = nn.Identity()
 
-    def forward(self, x, feat_cache=None, feat_idx=[0]):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-        """
+    def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         b, c, t, h, w = x.size()
-        if self.mode == "upsample3d":
-            if feat_cache is not None:
-                idx = feat_idx[0]
-                if feat_cache[idx] is None:
-                    feat_cache[idx] = "Rep"
-                    feat_idx[0] += 1
-                else:
-                    cache_x = x[:, :, -CACHE_T:, :, :].clone()
-                    if cache_x.shape[2] < 2 and feat_cache[idx] is not None and not isinstance(feat_cache[idx], str):
-                        # cache last frame of last two chunk
-                        cache_x = torch.cat(
-                            [feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2
-                        )
-                    if cache_x.shape[2] < 2 and isinstance(feat_cache[idx], str):
-                        cache_x = torch.cat([torch.zeros_like(cache_x).to(cache_x.device), cache_x], dim=2)
-                    if isinstance(feat_cache[idx], str):
-                        x = self.time_conv(x)
-                    else:
-                        x = self.time_conv(x, feat_cache[idx])
-                    feat_cache[idx] = cache_x
-                    feat_idx[0] += 1
+        if self.mode == "upsample3d" and feat_cache is not None:
+            idx = feat_idx[0]
+            if feat_cache[idx] is None:
+                feat_cache[idx] = "Rep"
+                feat_idx[0] += 1
+            else:
+                cache_x = x[:, :, -CACHE_T:, :, :].clone()
+                if cache_x.shape[2] < 2 and feat_cache[idx] is not None and not isinstance(feat_cache[idx], str):
+                    # cache last frame of last two chunk
+                    cache_x = torch.cat(
+                        [feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2
+                    )
+                if cache_x.shape[2] < 2 and isinstance(feat_cache[idx], str):
+                    cache_x = torch.cat([torch.zeros_like(cache_x).to(cache_x.device), cache_x], dim=2)
+                x = self.time_conv(x) if isinstance(feat_cache[idx], str) else self.time_conv(x, feat_cache[idx])
+                feat_cache[idx] = cache_x
+                feat_idx[0] += 1
 
-                    x = x.reshape(b, 2, c, t, h, w)
-                    x = torch.stack((x[:, 0, :, :, :, :], x[:, 1, :, :, :, :]), 3)
-                    x = x.reshape(b, c, t * 2, h, w)
+                x = x.reshape(b, 2, c, t, h, w)
+                x = torch.stack((x[:, 0, :, :, :, :], x[:, 1, :, :, :, :]), 3)
+                x = x.reshape(b, c, t * 2, h, w)
         t = x.shape[2]
         x = rearrange(x, "b c t h w -> (b t) c h w")
         x = self.resample(x)
         x = rearrange(x, "(b t) c h w -> b c t h w", t=t)
 
-        if self.mode == "downsample3d":
-            if feat_cache is not None:
-                idx = feat_idx[0]
-                if feat_cache[idx] is None:
-                    feat_cache[idx] = x.clone()
-                    feat_idx[0] += 1
-                else:
-                    cache_x = x[:, :, -1:, :, :].clone()
-                    x = self.time_conv(torch.cat([feat_cache[idx][:, :, -1:, :, :], x], 2))
-                    feat_cache[idx] = cache_x
-                    feat_idx[0] += 1
+        if self.mode == "downsample3d" and feat_cache is not None:
+            idx = feat_idx[0]
+            if feat_cache[idx] is None:
+                feat_cache[idx] = x.clone()
+                feat_idx[0] += 1
+            else:
+                cache_x = x[:, :, -1:, :, :].clone()
+                x = self.time_conv(torch.cat([feat_cache[idx][:, :, -1:, :, :], x], 2))
+                feat_cache[idx] = cache_x
+                feat_idx[0] += 1
         return x, feat_cache, feat_idx
 
     def init_weight(self, conv):
-        """Init weight.
-
-        Args:
-            conv: The conv.
-        """
         conv_weight = conv.weight
         nn.init.zeros_(conv_weight)
         c1, c2, t, h, w = conv_weight.size()
@@ -226,11 +166,6 @@ class Resample(nn.Module):
         nn.init.zeros_(conv.bias.data)
 
     def init_weight2(self, conv):
-        """Init weight2.
-
-        Args:
-            conv: The conv.
-        """
         conv_weight = conv.weight.data
         nn.init.zeros_(conv_weight)
         c1, c2, t, h, w = conv_weight.size()
@@ -242,12 +177,6 @@ class Resample(nn.Module):
 
 
 def patchify(x, patch_size):
-    """Patchify.
-
-    Args:
-        x: The x.
-        patch_size: The patch size.
-    """
     if patch_size == 1:
         return x
     if x.dim() == 4:
@@ -260,12 +189,6 @@ def patchify(x, patch_size):
 
 
 def unpatchify(x, patch_size):
-    """Unpatchify.
-
-    Args:
-        x: The x.
-        patch_size: The patch size.
-    """
     if patch_size == 1:
         return x
     if x.dim() == 4:
@@ -279,12 +202,6 @@ class Resample38(Resample):
     """Resample implementation."""
 
     def __init__(self, dim, mode):
-        """Init.
-
-        Args:
-            dim: The dim.
-            mode: The mode.
-        """
         assert mode in (
             "none",
             "upsample2d",
@@ -318,16 +235,7 @@ class Resample38(Resample):
 
 
 class ResidualBlock(nn.Module):
-    """Residual block implementation."""
-
     def __init__(self, in_dim, out_dim, dropout=0.0):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            dropout: The dropout.
-        """
         super().__init__()
         self.in_dim = in_dim
         self.out_dim = out_dim
@@ -344,14 +252,7 @@ class ResidualBlock(nn.Module):
         )
         self.shortcut = CausalConv3d(in_dim, out_dim, 1) if in_dim != out_dim else nn.Identity()
 
-    def forward(self, x, feat_cache=None, feat_idx=[0]):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-        """
+    def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         h = self.shortcut(x)
         for layer in self.residual:
             if check_is_instance(layer, CausalConv3d) and feat_cache is not None:
@@ -376,11 +277,6 @@ class AttentionBlock(nn.Module):
     """
 
     def __init__(self, dim):
-        """Init.
-
-        Args:
-            dim: The dim.
-        """
         super().__init__()
         self.dim = dim
 
@@ -393,11 +289,6 @@ class AttentionBlock(nn.Module):
         nn.init.zeros_(self.proj.weight)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         identity = x
         b, c, t, h, w = x.size()
         x = rearrange(x, "b c t h w -> (b t) c h w")
@@ -430,14 +321,6 @@ class AvgDown3D(nn.Module):
         factor_t,
         factor_s=1,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            factor_t: The factor t.
-            factor_s: The factor s.
-        """
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -449,14 +332,6 @@ class AvgDown3D(nn.Module):
         self.group_size = in_channels * self.factor // out_channels
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         pad_t = (self.factor_t - x.shape[2] % self.factor_t) % self.factor_t
         pad = (0, 0, 0, 0, pad_t, 0)
         x = F.pad(x, pad)
@@ -501,14 +376,6 @@ class DupUp3D(nn.Module):
         factor_t,
         factor_s=1,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            factor_t: The factor t.
-            factor_s: The factor s.
-        """
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -521,15 +388,6 @@ class DupUp3D(nn.Module):
         self.repeats = out_channels * self.factor // in_channels
 
     def forward(self, x: torch.Tensor, first_chunk=False) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            first_chunk: The first chunk.
-
-        Returns:
-            The return value.
-        """
         x = x.repeat_interleave(self.repeats, dim=1)
         x = x.view(
             x.size(0),
@@ -555,19 +413,7 @@ class DupUp3D(nn.Module):
 
 
 class Down_ResidualBlock(nn.Module):
-    """Down residual block implementation."""
-
     def __init__(self, in_dim, out_dim, dropout, mult, temperal_downsample=False, down_flag=False):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            dropout: The dropout.
-            mult: The mult.
-            temperal_downsample: The temperal downsample.
-            down_flag: The down flag.
-        """
         super().__init__()
 
         # Shortcut path with downsample
@@ -591,14 +437,7 @@ class Down_ResidualBlock(nn.Module):
 
         self.downsamples = nn.Sequential(*downsamples)
 
-    def forward(self, x, feat_cache=None, feat_idx=[0]):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-        """
+    def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         x_copy = x.clone()
         for module in self.downsamples:
             x, feat_cache, feat_idx = module(x, feat_cache, feat_idx)
@@ -607,19 +446,7 @@ class Down_ResidualBlock(nn.Module):
 
 
 class Up_ResidualBlock(nn.Module):
-    """Up residual block implementation."""
-
     def __init__(self, in_dim, out_dim, dropout, mult, temperal_upsample=False, up_flag=False):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            dropout: The dropout.
-            mult: The mult.
-            temperal_upsample: The temperal upsample.
-            up_flag: The up flag.
-        """
         super().__init__()
         # Shortcut path with upsample
         if up_flag:
@@ -645,15 +472,7 @@ class Up_ResidualBlock(nn.Module):
 
         self.upsamples = nn.Sequential(*upsamples)
 
-    def forward(self, x, feat_cache=None, feat_idx=[0], first_chunk=False):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-            first_chunk: The first chunk.
-        """
+    def forward(self, x, feat_cache=None, feat_idx=[0], first_chunk=False):  # noqa: B006 - Keeps the upstream default object and signature.
         x_main = x.clone()
         for module in self.upsamples:
             x_main, feat_cache, feat_idx = module(x_main, feat_cache, feat_idx)
@@ -671,23 +490,12 @@ class Encoder3d(nn.Module):
         self,
         dim=128,
         z_dim=4,
-        dim_mult=[1, 2, 4, 4],
+        dim_mult=[1, 2, 4, 4],  # noqa: B006 - Keeps the upstream default object and signature.
         num_res_blocks=2,
-        attn_scales=[],
-        temperal_downsample=[True, True, False],
+        attn_scales=[],  # noqa: B006 - Keeps the upstream default object and signature.
+        temperal_downsample=[True, True, False],  # noqa: B006 - Keeps the upstream default object and signature.
         dropout=0.0,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            z_dim: The z dim.
-            dim_mult: The dim mult.
-            num_res_blocks: The num res blocks.
-            attn_scales: The attn scales.
-            temperal_downsample: The temperal downsample.
-            dropout: The dropout.
-        """
         super().__init__()
         self.dim = dim
         self.z_dim = z_dim
@@ -697,7 +505,7 @@ class Encoder3d(nn.Module):
         self.temperal_downsample = temperal_downsample
 
         # dimensions
-        dims = [dim * u for u in [1] + dim_mult]
+        dims = [dim * u for u in [1] + dim_mult]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         scale = 1.0
 
         # init block
@@ -705,7 +513,7 @@ class Encoder3d(nn.Module):
 
         # downsample blocks
         downsamples = []
-        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
+        for i, (in_dim, out_dim) in enumerate(itertools.pairwise(dims)):
             # residual (+attention) blocks
             for _ in range(num_res_blocks):
                 downsamples.append(ResidualBlock(in_dim, out_dim, dropout))
@@ -730,14 +538,7 @@ class Encoder3d(nn.Module):
             RMS_norm(out_dim, images=False), nn.SiLU(), CausalConv3d(out_dim, z_dim, 3, padding=1)
         )
 
-    def forward(self, x, feat_cache=None, feat_idx=[0]):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-        """
+    def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         if feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :].clone()
@@ -789,23 +590,12 @@ class Encoder3d_38(nn.Module):
         self,
         dim=128,
         z_dim=4,
-        dim_mult=[1, 2, 4, 4],
+        dim_mult=[1, 2, 4, 4],  # noqa: B006 - Keeps the upstream default object and signature.
         num_res_blocks=2,
-        attn_scales=[],
-        temperal_downsample=[False, True, True],
+        attn_scales=[],  # noqa: B006 - Keeps the upstream default object and signature.
+        temperal_downsample=[False, True, True],  # noqa: B006 - Keeps the upstream default object and signature.
         dropout=0.0,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            z_dim: The z dim.
-            dim_mult: The dim mult.
-            num_res_blocks: The num res blocks.
-            attn_scales: The attn scales.
-            temperal_downsample: The temperal downsample.
-            dropout: The dropout.
-        """
         super().__init__()
         self.dim = dim
         self.z_dim = z_dim
@@ -815,7 +605,7 @@ class Encoder3d_38(nn.Module):
         self.temperal_downsample = temperal_downsample
 
         # dimensions
-        dims = [dim * u for u in [1] + dim_mult]
+        dims = [dim * u for u in [1] + dim_mult]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         scale = 1.0
 
         # init block
@@ -823,7 +613,7 @@ class Encoder3d_38(nn.Module):
 
         # downsample blocks
         downsamples = []
-        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
+        for i, (in_dim, out_dim) in enumerate(itertools.pairwise(dims)):
             t_down_flag = temperal_downsample[i] if i < len(temperal_downsample) else False
             downsamples.append(
                 Down_ResidualBlock(
@@ -852,15 +642,7 @@ class Encoder3d_38(nn.Module):
             CausalConv3d(out_dim, z_dim, 3, padding=1),
         )
 
-    def forward(self, x, feat_cache=None, feat_idx=[0]):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-        """
-
+    def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         if feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :].clone()
@@ -921,23 +703,12 @@ class Decoder3d(nn.Module):
         self,
         dim=128,
         z_dim=4,
-        dim_mult=[1, 2, 4, 4],
+        dim_mult=[1, 2, 4, 4],  # noqa: B006 - Keeps the upstream default object and signature.
         num_res_blocks=2,
-        attn_scales=[],
-        temperal_upsample=[False, True, True],
+        attn_scales=[],  # noqa: B006 - Keeps the upstream default object and signature.
+        temperal_upsample=[False, True, True],  # noqa: B006 - Keeps the upstream default object and signature.
         dropout=0.0,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            z_dim: The z dim.
-            dim_mult: The dim mult.
-            num_res_blocks: The num res blocks.
-            attn_scales: The attn scales.
-            temperal_upsample: The temperal upsample.
-            dropout: The dropout.
-        """
         super().__init__()
         self.dim = dim
         self.z_dim = z_dim
@@ -947,7 +718,7 @@ class Decoder3d(nn.Module):
         self.temperal_upsample = temperal_upsample
 
         # dimensions
-        dims = [dim * u for u in [dim_mult[-1]] + dim_mult[::-1]]
+        dims = [dim * u for u in [dim_mult[-1]] + dim_mult[::-1]]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         scale = 1.0 / 2 ** (len(dim_mult) - 2)
 
         # init block
@@ -960,7 +731,7 @@ class Decoder3d(nn.Module):
 
         # upsample blocks
         upsamples = []
-        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
+        for i, (in_dim, out_dim) in enumerate(itertools.pairwise(dims)):
             # residual (+attention) blocks
             if i == 1 or i == 2 or i == 3:
                 in_dim = in_dim // 2
@@ -980,14 +751,7 @@ class Decoder3d(nn.Module):
         # output blocks
         self.head = nn.Sequential(RMS_norm(out_dim, images=False), nn.SiLU(), CausalConv3d(out_dim, 3, 3, padding=1))
 
-    def forward(self, x, feat_cache=None, feat_idx=[0]):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-        """
+    def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         ## conv1
         if feat_cache is not None:
             idx = feat_idx[0]
@@ -1040,23 +804,12 @@ class Decoder3d_38(nn.Module):
         self,
         dim=128,
         z_dim=4,
-        dim_mult=[1, 2, 4, 4],
+        dim_mult=[1, 2, 4, 4],  # noqa: B006 - Keeps the upstream default object and signature.
         num_res_blocks=2,
-        attn_scales=[],
-        temperal_upsample=[False, True, True],
+        attn_scales=[],  # noqa: B006 - Keeps the upstream default object and signature.
+        temperal_upsample=[False, True, True],  # noqa: B006 - Keeps the upstream default object and signature.
         dropout=0.0,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            z_dim: The z dim.
-            dim_mult: The dim mult.
-            num_res_blocks: The num res blocks.
-            attn_scales: The attn scales.
-            temperal_upsample: The temperal upsample.
-            dropout: The dropout.
-        """
         super().__init__()
         self.dim = dim
         self.z_dim = z_dim
@@ -1066,7 +819,7 @@ class Decoder3d_38(nn.Module):
         self.temperal_upsample = temperal_upsample
 
         # dimensions
-        dims = [dim * u for u in [dim_mult[-1]] + dim_mult[::-1]]
+        dims = [dim * u for u in [dim_mult[-1]] + dim_mult[::-1]]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         # init block
         self.conv1 = CausalConv3d(z_dim, dims[0], 3, padding=1)
 
@@ -1077,7 +830,7 @@ class Decoder3d_38(nn.Module):
 
         # upsample blocks
         upsamples = []
-        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
+        for i, (in_dim, out_dim) in enumerate(itertools.pairwise(dims)):
             t_up_flag = temperal_upsample[i] if i < len(temperal_upsample) else False
             upsamples.append(
                 Up_ResidualBlock(
@@ -1094,15 +847,7 @@ class Decoder3d_38(nn.Module):
         # output blocks
         self.head = nn.Sequential(RMS_norm(out_dim, images=False), nn.SiLU(), CausalConv3d(out_dim, 12, 3, padding=1))
 
-    def forward(self, x, feat_cache=None, feat_idx=[0], first_chunk=False):
-        """Forward.
-
-        Args:
-            x: The x.
-            feat_cache: The feat cache.
-            feat_idx: The feat idx.
-            first_chunk: The first chunk.
-        """
+    def forward(self, x, feat_cache=None, feat_idx=[0], first_chunk=False):  # noqa: B006 - Keeps the upstream default object and signature.
         if feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :].clone()
@@ -1155,11 +900,6 @@ class Decoder3d_38(nn.Module):
 
 
 def count_conv3d(model):
-    """Count conv3d.
-
-    Args:
-        model: The model.
-    """
     count = 0
     for m in model.modules():
         if isinstance(m, CausalConv3d):
@@ -1174,23 +914,12 @@ class VideoVAE_(nn.Module):
         self,
         dim=96,
         z_dim=16,
-        dim_mult=[1, 2, 4, 4],
+        dim_mult=[1, 2, 4, 4],  # noqa: B006 - Keeps the upstream default object and signature.
         num_res_blocks=2,
-        attn_scales=[],
-        temperal_downsample=[False, True, True],
+        attn_scales=[],  # noqa: B006 - Keeps the upstream default object and signature.
+        temperal_downsample=[False, True, True],  # noqa: B006 - Keeps the upstream default object and signature.
         dropout=0.0,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            z_dim: The z dim.
-            dim_mult: The dim mult.
-            num_res_blocks: The num res blocks.
-            attn_scales: The attn scales.
-            temperal_downsample: The temperal downsample.
-            dropout: The dropout.
-        """
         super().__init__()
         self.dim = dim
         self.z_dim = z_dim
@@ -1209,23 +938,12 @@ class VideoVAE_(nn.Module):
         self.decoder = Decoder3d(dim, z_dim, dim_mult, num_res_blocks, attn_scales, self.temperal_upsample, dropout)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         mu, log_var = self.encode(x)
         z = self.reparameterize(mu, log_var)
         x_recon = self.decode(z)
         return x_recon, mu, log_var
 
     def encode(self, x, scale):
-        """Encode.
-
-        Args:
-            x: The x.
-            scale: The scale.
-        """
         self.clear_cache()
         ## cache
         t = x.shape[2]
@@ -1254,12 +972,6 @@ class VideoVAE_(nn.Module):
         return mu
 
     def decode(self, z, scale):
-        """Decode.
-
-        Args:
-            z: The z.
-            scale: The scale.
-        """
         self.clear_cache()
         # z: [b,c,t,h,w]
         if isinstance(scale[0], torch.Tensor):
@@ -1284,23 +996,11 @@ class VideoVAE_(nn.Module):
         return out
 
     def reparameterize(self, mu, log_var):
-        """Reparameterize.
-
-        Args:
-            mu: The mu.
-            log_var: The log var.
-        """
         std = torch.exp(0.5 * log_var)
         eps = torch.randn_like(std)
         return eps * std + mu
 
     def sample(self, imgs, deterministic=False):
-        """Sample.
-
-        Args:
-            imgs: The imgs.
-            deterministic: The deterministic.
-        """
         mu, log_var = self.encode(imgs)
         if deterministic:
             return mu
@@ -1308,7 +1008,6 @@ class VideoVAE_(nn.Module):
         return mu + std * torch.randn_like(std)
 
     def clear_cache(self):
-        """Clear cache."""
         self._conv_num = count_conv3d(self.decoder)
         self._conv_idx = [0]
         self._feat_map = [None] * self._conv_num
@@ -1319,14 +1018,7 @@ class VideoVAE_(nn.Module):
 
 
 class WanVideoVAE(nn.Module):
-    """Wan video vae implementation."""
-
     def __init__(self, z_dim=16, vae_pretrained_path: str | None = None, *, base_dim: int = 96):
-        """Init.
-
-        Args:
-            z_dim: The z dim.
-        """
         super().__init__()
 
         mean = [
@@ -1406,14 +1098,6 @@ class WanVideoVAE(nn.Module):
         return torch.autocast(device_type="cuda", dtype=dtype)
 
     def build_1d_mask(self, length, left_bound, right_bound, border_width):
-        """Build 1d mask.
-
-        Args:
-            length: The length.
-            left_bound: The left bound.
-            right_bound: The right bound.
-            border_width: The border width.
-        """
         x = torch.ones((length,))
         if not left_bound:
             x[:border_width] = (torch.arange(border_width) + 1) / border_width
@@ -1422,13 +1106,6 @@ class WanVideoVAE(nn.Module):
         return x
 
     def build_mask(self, data, is_bound, border_width):
-        """Build mask.
-
-        Args:
-            data: The data.
-            is_bound: The is bound.
-            border_width: The border width.
-        """
         _, _, _, H, W = data.shape
         h = self.build_1d_mask(H, is_bound[0], is_bound[1], border_width[0])
         w = self.build_1d_mask(W, is_bound[2], is_bound[3], border_width[1])
@@ -1491,9 +1168,7 @@ class WanVideoVAE(nn.Module):
             device=data_device,
         )
         if len(decoded_tiles) != len(tasks):
-            raise RuntimeError(
-                f"decoded {len(decoded_tiles)} VAE tiles for {len(tasks)} spatial tasks"
-            )
+            raise RuntimeError(f"decoded {len(decoded_tiles)} VAE tiles for {len(tasks)} spatial tasks")
         for index, (h, h_, w, w_) in enumerate(tasks):
             hidden_states_batch = decoded_tiles[index].to(
                 device=data_device,
@@ -1544,22 +1219,12 @@ class WanVideoVAE(nn.Module):
         tile_stride,
         temporal_chunk_size=0,
     ):
-        """Tiled decode.
-
-        Args:
-            hidden_states: The hidden states.
-            device: The device.
-            tile_size: The tile size.
-            tile_stride: The tile stride.
-        """
         _, _, T, H, W = hidden_states.shape
         tasks = self._spatial_tile_tasks(H, W, tile_size, tile_stride)
         decoded_tiles = []
         for h, h_, w, w_ in tqdm(tasks, desc="VAE decoding"):
             tile = hidden_states[:, :, :, h:h_, w:w_].to(device)
-            decoded_tiles.append(
-                self._decode_tile(tile, device, temporal_chunk_size).to("cpu")
-            )
+            decoded_tiles.append(self._decode_tile(tile, device, temporal_chunk_size).to("cpu"))
         return self._merge_spatial_decode_tiles(
             decoded_tiles,
             tasks,
@@ -1619,10 +1284,7 @@ class WanVideoVAE(nn.Module):
 
         metadata_by_rank = [None] * world_size
         dist.all_gather_object(metadata_by_rank, local_metadata, group=group)
-        rank_sizes = [
-            sum(int(item[2]) for item in (metadata or []))
-            for metadata in metadata_by_rank
-        ]
+        rank_sizes = [sum(int(item[2]) for item in (metadata or [])) for metadata in metadata_by_rank]
         max_size = max(rank_sizes, default=0)
         if max_size == 0:
             raise RuntimeError("parallel Wan VAE decode produced no tile payloads")
@@ -1637,9 +1299,9 @@ class WanVideoVAE(nn.Module):
         for rank_index, metadata in enumerate(metadata_by_rank):
             offset = 0
             for task_index, shape, numel in metadata or []:
-                decoded_tiles[int(task_index)] = gathered_payloads[rank_index][
-                    offset : offset + int(numel)
-                ].reshape(tuple(shape)).to("cpu")
+                decoded_tiles[int(task_index)] = (
+                    gathered_payloads[rank_index][offset : offset + int(numel)].reshape(tuple(shape)).to("cpu")
+                )
                 offset += int(numel)
         if any(tile is None for tile in decoded_tiles):
             raise RuntimeError("parallel Wan VAE gather did not return every spatial tile")
@@ -1700,14 +1362,6 @@ class WanVideoVAE(nn.Module):
             model.clear_cache()
 
     def tiled_encode(self, video, device, tile_size, tile_stride):
-        """Tiled encode.
-
-        Args:
-            video: The video.
-            device: The device.
-            tile_size: The tile size.
-            tile_stride: The tile stride.
-        """
         _, _, T, H, W = video.shape
         size_h, size_w = tile_size
         stride_h, stride_w = tile_stride
@@ -1771,37 +1425,16 @@ class WanVideoVAE(nn.Module):
         return values
 
     def single_encode(self, video, device):
-        """Single encode.
-
-        Args:
-            video: The video.
-            device: The device.
-        """
         video = video.to(device)
         x = self.model.encode(video, self.scale)
         return x
 
     def single_decode(self, hidden_state, device):
-        """Single decode.
-
-        Args:
-            hidden_state: The hidden state.
-            device: The device.
-        """
         hidden_state = hidden_state.to(device)
         video = self.model.decode(hidden_state, self.scale)
         return video.clamp_(-1, 1)
 
     def encode(self, videos, device, tiled=False, tile_size=(34, 34), tile_stride=(18, 16)):
-        """Encode.
-
-        Args:
-            videos: The videos.
-            device: The device.
-            tiled: The tiled.
-            tile_size: The tile size.
-            tile_stride: The tile stride.
-        """
         # Spatial tiling deliberately stages the source on CPU and transfers
         # one tile at a time.  The resident dense path must keep an already
         # materialized CUDA tensor in place; forcing it through CPU here adds
@@ -1832,15 +1465,6 @@ class WanVideoVAE(nn.Module):
         tile_stride=(18, 16),
         temporal_chunk_size=0,
     ):
-        """Decode.
-
-        Args:
-            hidden_states: The hidden states.
-            device: The device.
-            tiled: The tiled.
-            tile_size: The tile size.
-            tile_stride: The tile stride.
-        """
         with self._decode_autocast(hidden_states.dtype):
             return self._decode(
                 hidden_states,
@@ -1900,23 +1524,14 @@ class WanVideoVAE(nn.Module):
 
     @staticmethod
     def state_dict_converter():
-        """State dict converter."""
         return WanVideoVAEStateDictConverter()
 
 
 class WanVideoVAEStateDictConverter:
-    """Wan video vae state dict converter implementation."""
-
     def __init__(self):
-        """Init."""
         pass
 
     def from_civitai(self, state_dict):
-        """From civitai.
-
-        Args:
-            state_dict: The state dict.
-        """
         state_dict_ = {}
         if "model_state" in state_dict:
             state_dict = state_dict["model_state"]
@@ -1933,24 +1548,12 @@ class VideoVAE38_(VideoVAE_):
         dim=160,
         z_dim=48,
         dec_dim=256,
-        dim_mult=[1, 2, 4, 4],
+        dim_mult=[1, 2, 4, 4],  # noqa: B006 - Keeps the upstream default object and signature.
         num_res_blocks=2,
-        attn_scales=[],
-        temperal_downsample=[False, True, True],
+        attn_scales=[],  # noqa: B006 - Keeps the upstream default object and signature.
+        temperal_downsample=[False, True, True],  # noqa: B006 - Keeps the upstream default object and signature.
         dropout=0.0,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            z_dim: The z dim.
-            dec_dim: The dec dim.
-            dim_mult: The dim mult.
-            num_res_blocks: The num res blocks.
-            attn_scales: The attn scales.
-            temperal_downsample: The temperal downsample.
-            dropout: The dropout.
-        """
         super(VideoVAE_, self).__init__()
         self.dim = dim
         self.z_dim = z_dim
@@ -1971,12 +1574,6 @@ class VideoVAE38_(VideoVAE_):
         )
 
     def encode(self, x, scale):
-        """Encode.
-
-        Args:
-            x: The x.
-            scale: The scale.
-        """
         self.clear_cache()
         x = patchify(x, patch_size=2)
         t = x.shape[2]
@@ -2005,12 +1602,6 @@ class VideoVAE38_(VideoVAE_):
         return mu
 
     def decode(self, z, scale):
-        """Decode.
-
-        Args:
-            z: The z.
-            scale: The scale.
-        """
         self.clear_cache()
         if isinstance(scale[0], torch.Tensor):
             scale = [s.to(dtype=z.dtype, device=z.device) for s in scale]
@@ -2040,12 +1631,6 @@ class WanVideoVAE38(WanVideoVAE):
     """Wan video implementation."""
 
     def __init__(self, z_dim=48, dim=160, vae_pretrained_path: str | None = None):
-        """Init.
-
-        Args:
-            z_dim: The z dim.
-            dim: The dim.
-        """
         super(WanVideoVAE, self).__init__()
 
         mean = [

@@ -7,6 +7,7 @@ groups:
 - prior
 source_repos:
 - url: https://github.com/SpatialVision/Prior-Depth-Anything
+  revision: 5295e34954bf2e318752ed31aee0d6f995d0d5af
 checkpoints:
 - repo_id: Rain729/Prior-Depth-Anything
   revision: 25b3bfcf85209fb015e3b15259f4df8b6f13bb16
@@ -36,6 +37,3 @@ notes:
   under worldfoundry.base_models.three_dimensions.depth.priorda.
 - WorldFoundry exposes this prior through the shared geometry-prior pipeline/operator
   contract.
-backend_stage: in_tree_geometry_prior_runtime
-runtime_status: in_tree_runtime_wired
-integration_status: integrated

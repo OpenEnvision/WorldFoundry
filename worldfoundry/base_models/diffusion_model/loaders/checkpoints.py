@@ -12,9 +12,10 @@ a frozen ``MappingProxyType`` view.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Mapping, Sequence, cast
+from typing import cast
 
 
 @dataclass(frozen=True, slots=True)

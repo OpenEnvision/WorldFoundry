@@ -15,7 +15,7 @@ import sys
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import torch
 
@@ -34,10 +34,6 @@ _DEFAULT_FPS = 12.5  # 10s preview -> 32 latent frames -> 125 decoded frames
 
 def _floor_to_multiple(value: int, multiple: int) -> int:
     return max(multiple, int(value) // multiple * multiple)
-
-
-def _is_module(value: Any) -> bool:
-    return isinstance(value, torch.nn.Module)
 
 
 def _resolve_ffmpeg() -> str | None:
@@ -71,6 +67,7 @@ class NativeMagi2Pipeline(PipelineABC):
     DEFAULT_SHIFT = 7.0
     DEFAULT_VIDEO_GUIDANCE = 5.0
     DEFAULT_AUDIO_GUIDANCE = 7.0
+    _checkpoint_root: Path | None = None
 
     def __init__(
         self,
@@ -83,7 +80,6 @@ class NativeMagi2Pipeline(PipelineABC):
         text_encoder: Any = None,
         data_proxy: Any = None,
         python_executable: str | None = None,
-        transformers_overlay: str | Path | None = None,
         device: str = "cuda",
         model_id: str | None = None,
     ) -> None:
@@ -95,12 +91,11 @@ class NativeMagi2Pipeline(PipelineABC):
         self.preview_transformer = preview_transformer
         self.refiner_transformer = refiner_transformer
         self.video_vae = video_vae
-        self.turbo_decoder = turbo_decoder
+        self.turbo_decoder: Any = turbo_decoder
         self.audio_vae = audio_vae
         self.text_encoder = text_encoder
         self.data_proxy = data_proxy
         self.python_executable = python_executable or sys.executable
-        self.transformers_overlay = transformers_overlay
 
     # ------------------------------------------------------------------ #
     # Loading (sequential residency; components built lazily).
@@ -113,7 +108,7 @@ class NativeMagi2Pipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "NativeMagi2Pipeline":
+    ) -> NativeMagi2Pipeline:
         """Wire the pipeline from a MAGI-2-preview checkpoint root.
 
         ``model_path`` points at the HF ``sand-ai/MAGI-2-preview`` layout with
@@ -140,7 +135,6 @@ class NativeMagi2Pipeline(PipelineABC):
             text_encoder=options.get("text_encoder"),
             data_proxy=options.get("data_proxy"),
             python_executable=options.get("python_executable"),
-            transformers_overlay=options.get("transformers_overlay"),
             device=device,
             model_id=resolved_model_id,
         )
@@ -160,7 +154,7 @@ class NativeMagi2Pipeline(PipelineABC):
         offload; the small VAEs/encoder are loaded resident on the device.
         """
 
-        root = getattr(self, "_checkpoint_root", None)
+        root = self._checkpoint_root
         if root is None:
             return
         device = torch.device(self.device)
@@ -209,11 +203,8 @@ class NativeMagi2Pipeline(PipelineABC):
             ckpt = next(iter(_glob.glob(str(root / "turbo_vae" / "*.ckpt"))), None)
             if cfg_files and ckpt:
                 turbo_cfg = __import__("json").loads(Path(cfg_files[0]).read_text())
-                turbo = (
-                    Magi2TurboDecoder.from_config(turbo_cfg)
-                    if hasattr(Magi2TurboDecoder, "from_config")
-                    else Magi2TurboDecoder(**turbo_cfg)
-                )
+                # Typed as a Module: ModelMixin.to is wrapped with functools.wraps, which type checkers cannot bind.
+                turbo = cast(torch.nn.Module, Magi2TurboDecoder.from_config(turbo_cfg))
                 load_magi2_turbo_weights(turbo, ckpt)
                 self.turbo_decoder = turbo.to(device).eval()
 
@@ -244,7 +235,6 @@ class NativeMagi2Pipeline(PipelineABC):
                 device=self.device,
                 skip_layer=2,
                 python_executable=self.python_executable,
-                transformers_overlay=self.transformers_overlay,
             )
 
     # ------------------------------------------------------------------ #
@@ -260,9 +250,9 @@ class NativeMagi2Pipeline(PipelineABC):
             raise ValueError("MAGI-2 duration_seconds must be positive and finite")
         aw, ah = ratios[aspect_ratio]
         if aw >= ah:
-            height, width = short_edge, int(round(short_edge * aw / ah))
+            height, width = short_edge, round(short_edge * aw / ah)
         else:
-            width, height = short_edge, int(round(short_edge * ah / aw))
+            width, height = short_edge, round(short_edge * ah / aw)
         unit = _VAE_STRIDE[1]  # spatial 16
         # Match the released 896x512 preview preset for the default 16:9 shape.
         height, width = _floor_to_multiple(height, unit), _floor_to_multiple(width, unit)
@@ -340,7 +330,7 @@ class NativeMagi2Pipeline(PipelineABC):
         # Denoising is the peak-memory stage. Keep the video/audio decoders on
         # CPU until the preview DiT has finished streaming all of its layers.
         for decoder in (self.turbo_decoder, self.video_vae, self.audio_vae):
-            if _is_module(decoder):
+            if isinstance(decoder, torch.nn.Module):
                 decoder.to("cpu")
         self._ensure_components(load_decoders=False)
         if self.preview_transformer is None:
@@ -360,7 +350,7 @@ class NativeMagi2Pipeline(PipelineABC):
         if negative_prompt is None:
             negative_prompt = DEFAULT_NEGATIVE_PROMPT
         null_context = self._encode_prompt(negative_prompt) if negative_prompt else torch.zeros_like(context[:, :0])
-        if _is_module(self.preview_transformer):
+        if isinstance(self.preview_transformer, torch.nn.Module):
             # A previous call offloaded these after denoising.
             self.preview_transformer.pre_adapter.to(device)
             self.preview_transformer.post_adapter.to(device)
@@ -411,7 +401,7 @@ class NativeMagi2Pipeline(PipelineABC):
 
         # Every streamed MoE layer is back on CPU after ``sample``. Move the
         # small resident adapters as well, then materialize only the decoders.
-        if _is_module(self.preview_transformer):
+        if isinstance(self.preview_transformer, torch.nn.Module):
             self.preview_transformer.pre_adapter.to("cpu")
             self.preview_transformer.post_adapter.to("cpu")
         torch.cuda.empty_cache()
@@ -444,13 +434,13 @@ class NativeMagi2Pipeline(PipelineABC):
 
         self._ensure_components(load_preview=False, load_decoders=True)
         for decoder in (self.turbo_decoder, self.video_vae, self.audio_vae):
-            if _is_module(decoder):
+            if isinstance(decoder, torch.nn.Module):
                 decoder.to(device)
-        if _is_module(self.turbo_decoder):
+        if isinstance(self.turbo_decoder, torch.nn.Module):
             result["video"] = self.turbo_decoder.decode(video_latent)
-        elif _is_module(self.video_vae) and hasattr(self.video_vae, "decode"):
+        elif isinstance(self.video_vae, torch.nn.Module) and hasattr(self.video_vae, "decode"):
             result["video"] = self.video_vae.decode(video_latent)
-        if _is_module(self.audio_vae):
+        if isinstance(self.audio_vae, torch.nn.Module):
             from scipy.signal import resample
 
             # audio latent [1, L, 64] -> [1, 64, L] for the VAE decode contract.
@@ -480,7 +470,7 @@ class NativeMagi2Pipeline(PipelineABC):
             # cat([cond, uncond]) plus ref features); the data proxy wants the
             # text tensor as `context` with ref fields as separate kwargs.
             ctx = context or {}
-            txt_feat = ctx.get("txt_feat")
+            txt_feat = cast(torch.Tensor, ctx.get("txt_feat"))
             inputs = proxy.build_model_inputs(
                 latent=x_t,
                 audio_latent=audio_x_t,

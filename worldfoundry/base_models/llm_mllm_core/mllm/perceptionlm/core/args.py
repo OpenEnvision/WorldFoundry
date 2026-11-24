@@ -1,7 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import logging
-from typing import Type, TypeVar
+from typing import TypeVar
 
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
@@ -16,7 +16,7 @@ def set_struct_recursively(cfg, strict: bool = True):
 
     # Traverse through nested dictionaries and lists
     if isinstance(cfg, DictConfig):
-        for key, value in cfg.items():
+        for _key, value in cfg.items():
             if isinstance(value, (DictConfig, ListConfig)):
                 set_struct_recursively(value, strict)
     elif isinstance(cfg, ListConfig):
@@ -36,7 +36,7 @@ def flatten_dict(d, parent_key="", sep="_"):
     return dict(items)
 
 
-def dataclass_from_dict(cls: Type[T], data: dict, strict: bool = True) -> T:
+def dataclass_from_dict(cls: type[T], data: dict, strict: bool = True) -> T:
     """
     Converts a dictionary to a dataclass instance, recursively for nested structures.
     """
@@ -53,12 +53,10 @@ def dataclass_to_dict(dataclass_instance: T) -> dict:
     if isinstance(dataclass_instance, dict):
         return dataclass_instance
 
-    return OmegaConf.to_container(
-        OmegaConf.structured(dataclass_instance), resolve=True
-    )
+    return OmegaConf.to_container(OmegaConf.structured(dataclass_instance), resolve=True)
 
 
-def load_config_file(config_file, dataclass_cls: Type[T]) -> T:
+def load_config_file(config_file, dataclass_cls: type[T]) -> T:
     config = OmegaConf.to_container(OmegaConf.load(config_file), resolve=True)
     return dataclass_from_dict(dataclass_cls, config)
 

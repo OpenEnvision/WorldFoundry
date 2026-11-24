@@ -1,20 +1,19 @@
 """Module for the Yume1p5 operator implementation."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional, List
+from typing import Any
 
-from PIL import Image
+import numpy as np
 import torch
 import torch.nn.functional as F
+from PIL import Image
 from torchvision import transforms
-import numpy as np
 
-from .base_operator import BaseOperator
 from ..base_models.diffusion_model.recipes.wan_configs.wan22 import SIZE_CONFIGS, SUPPORTED_SIZES
+from .base_operator import BaseOperator
 
 
 def _to_rgb_array(image: Any) -> np.ndarray:
-    """To rgb array implementation."""
     if isinstance(image, (list, tuple)):
         if len(image) != 1:
             raise ValueError(
@@ -62,17 +61,25 @@ class Yume1p5Operator(BaseOperator):
         """Initialize the operator with specific configurations."""
         if operation_types is None:
             operation_types = []
-        super(Yume1p5Operator, self).__init__(operation_types=operation_types)
-        self.interaction_template = ["forward", "left", "right", "backward", 
-                                     "camera_l", "camera_r", "camera_up", "camera_down"]
+        super().__init__(operation_types=operation_types)
+        self.interaction_template = [
+            "forward",
+            "left",
+            "right",
+            "backward",
+            "camera_l",
+            "camera_r",
+            "camera_up",
+            "camera_down",
+        ]
         self.interaction_template_init()
-    
+
     def check_interaction(self, interaction):
         """Validate the given interaction sequence or parameters."""
         if interaction not in self.interaction_template:
             raise ValueError(f"{interaction} not in template")
         return True
-    
+
     def get_interaction(self, interactions):
         """Process and append the interaction to the current sequence."""
         if not isinstance(interactions, list):
@@ -81,21 +88,20 @@ class Yume1p5Operator(BaseOperator):
             self.check_interaction(interaction)
         self.current_interaction.append(interactions)
 
-    def process_interaction(self, **kwargs) -> Dict[str, Any]:
+    def process_interaction(self, **kwargs) -> list[str]:
         """Process the recorded interactions and return the generated actions."""
         INTERACTION_2_CAPTION_DICT = {
-                                        # movement
-                                        "forward": "The camera pushes forward (W).", 
-                                        "backward": "The camera pulls back (S).", 
-                                        "left": "Camera turns left (←).",
-                                        "right": "Camera turns right (→).",
-                                        # rotation
-                                        "camera_up": "Camera tilts up (↑).", 
-                                        "camera_down": "Camera tilts down (↓).",
-                                        "camera_l": "The camera pans to the left (←).",
-                                        "camera_r": "The camera pans to the right (→).",
-                                    }
-        
+            # movement
+            "forward": "The camera pushes forward (W).",
+            "backward": "The camera pulls back (S).",
+            "left": "Camera turns left (←).",
+            "right": "Camera turns right (→).",
+            # rotation
+            "camera_up": "Camera tilts up (↑).",
+            "camera_down": "Camera tilts down (↓).",
+            "camera_l": "The camera pans to the left (←).",
+            "camera_r": "The camera pans to the right (→).",
+        }
 
         if len(self.current_interaction) == 0:
             raise ValueError("No interaction to process")
@@ -105,26 +111,24 @@ class Yume1p5Operator(BaseOperator):
 
     def process_perception(
         self,
-        size: Optional[str] = None,
-        images: Optional[Image.Image] = None, # None or one PIL image
-        videos: Optional[List[Image.Image]] = None # None or list of PIL images from one video
-    ) -> Dict[str, Any]:
-        
+        size: str | None = None,
+        images: Image.Image | None = None,  # None or one PIL image
+        videos: list[Image.Image] | None = None,  # None or list of PIL images from one video
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
-        assert size in SUPPORTED_SIZES['ti2v-5B'], f"Unsupported size: {size}. Supported sizes for ti2v-5B are: {SUPPORTED_SIZES['ti2v-5B']}"
-        size = SIZE_CONFIGS[size]
+        assert size in SUPPORTED_SIZES["ti2v-5B"], (
+            f"Unsupported size: {size}. Supported sizes for ti2v-5B are: {SUPPORTED_SIZES['ti2v-5B']}"
+        )
+        target_size = SIZE_CONFIGS[size]
 
         if images is not None:
-            images = _to_rgb_array(images)
-            
-            images_tensor = torch.from_numpy(images).permute(2, 0, 1).float() / 255.0
+            image_array = _to_rgb_array(images)
+
+            images_tensor = torch.from_numpy(image_array).permute(2, 0, 1).float() / 255.0
             resized_images = F.interpolate(
-                images_tensor.unsqueeze(0),
-                size=size,
-                mode='bilinear',
-                align_corners=False
+                images_tensor.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
             )[0]
-        
+
         if videos:
             video_transform = transforms.ToTensor()
             normalized_frames = []
@@ -133,9 +137,13 @@ class Yume1p5Operator(BaseOperator):
                     frame = frame.convert("RGB")
                 normalized_frames.append(video_transform(frame))
             video_pixel_values = torch.stack(normalized_frames, dim=0)
-            video_pixel_values = (torch.nn.functional.interpolate(video_pixel_values.sub_(0.5).div_(0.5), size=size, mode='bicubic')).clamp_(-1, 1)
-        
+            video_pixel_values = (
+                torch.nn.functional.interpolate(
+                    video_pixel_values.sub_(0.5).div_(0.5), size=target_size, mode="bicubic"
+                )
+            ).clamp_(-1, 1)
+
         return {
-            "ref_images": resized_images if images is not None else None, 
-            "ref_videos": video_pixel_values if videos is not None else None
+            "ref_images": resized_images if images is not None else None,
+            "ref_videos": video_pixel_values if videos is not None else None,
         }

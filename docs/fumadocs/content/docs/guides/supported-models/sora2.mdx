@@ -1,11 +1,11 @@
 ---
 title: "Sora2"
-description: "Sora2 from OpenAI: text-to-video and image-to-video; Runner parity pending."
+description: "Sora2 from OpenAI: text-to-video, image-to-video, and 1 more task."
 modelId: "sora2"
 pageSource: authored
 ---
 
-Sora2 is the catalog entry for OpenAI's Sora 2 hosted video model, recorded for text-to-video and image-to-video. Prompts are submitted to OpenAI's API and the generated clips are stored as standard WorldFoundry artifacts, letting Sora 2 output be evaluated with the same tooling as any local model in this repository. WorldFoundry does not, and cannot, run Sora locally — the entry records only the hosted integration.
+Sora2 runs OpenAI's Sora 2 hosted video model for text-to-video and image-to-video. Prompts are submitted to OpenAI's API and the generated clips are stored as standard WorldFoundry artifacts, so Sora 2 output can be evaluated with the same tooling as local models. Sora cannot run locally; only the hosted API is supported.
 
 <ModelPaperFigures modelId="sora2" locale="en" />
 
@@ -15,36 +15,32 @@ Project page: [openai.com/sora](https://openai.com/sora/).
 
 ## What it is for
 
-`sora2` is the hosted inference line. Start here when no local checkpoint is recorded on the card.
+Use `sora2` to call the hosted model through WorldFoundry.
 
-OpenAI has publicly described the original Sora as a diffusion transformer operating on spacetime patches of video latents; beyond that public statement, no architecture, scale, or training details for Sora 2 are disclosed, and this repository records none.
+OpenAI has publicly described the original Sora as a diffusion transformer operating on spacetime patches of video latents; beyond that public statement, no architecture, scale, or training details for Sora 2 are disclosed.
 
-Catalog tasks include text-to-video, image-to-video, and hosted-api. Documented modalities: text and image in, video out.
+Tasks: text-to-video, image-to-video, and hosted api. Modalities: text and image in, video out.
 
-Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs), [Physics-IQ Original](/docs/evaluation/benchmark-hub/physics-iq) (Probes whether provider-side video models respect basic physical plausibility).
+Suggested benchmarks: [VBench](/docs/evaluation/benchmark-hub/vbench) (Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs), [Physics-IQ Original](/docs/evaluation/benchmark-hub/physics-iq) (Probes whether provider-side video models respect basic physical plausibility).
 
 ## Runtime contract
 
-Optional `prompt`, `input_path`, `size`, `duration`, and `task_type`.
+Inputs `prompt` and `input-path` (bundled samples are used when omitted).
 
 CLI task profiles: `default`. WorldFoundry binds `Sora2Pipeline`.
 
-Family status: **Runner parity pending**.
+The hosted-API Studio pipeline needs your own provider account and API key: pass api_key or set SORA2_API_KEY, SORA_API_KEY, or OPENAI_API_KEY. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Access requires an OpenAI account with Sora API availability in your region and tier.
 
-The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Access requires an OpenAI account with Sora API availability in your region and tier.
+Requires a paid provider account and API key; WorldFoundry does not ship credentials.
 
-Hosted API Studio pipeline is available; users must provide their own provider API key.
-
-Hosted T2V/I2V. No local frames/steps table. Status: **Runner parity pending** (hosted; runner is not applicable locally).
+The provider controls model versioning, so outputs can change over time without any change in WorldFoundry.
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run sora2 --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Run `wf run sora2 --pipeline.task-profile default` to call the provider API.
 
-The environment profile is not recorded.
+No runtime environment is recorded for this model.
 
 Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh sora2`. Add `--download` to fetch missing public checkpoints.
-
-Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="sora2" locale="en" />

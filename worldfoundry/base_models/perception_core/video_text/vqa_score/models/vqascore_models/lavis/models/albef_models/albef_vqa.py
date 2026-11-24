@@ -1,23 +1,41 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import logging
 import os
 from copy import deepcopy
+from typing import ClassVar
 
 import torch
 import torch.nn.functional as F
+
 from ...common.registry import registry
 from ...common.utils import get_abs_path, is_url
+
+# isort: split
 from ...models.albef_models import AlbefBase
+
+# isort: split
+# isort: split
 from ...models.albef_models.albef_outputs import AlbefIntermediateOutput, AlbefOutput
+
+# isort: split
+# isort: split
 from ...models.base_model import MomentumDistilationMixin, tile
+
+# isort: split
+# isort: split
 from ...models.med import BertConfig, BertLMHeadModel, XBertEncoder
+
+# isort: split
+# isort: split
 from ...models.vit import VisionTransformerEncoder, interpolate_pos_embed
+
+# isort: split
 from ...common.dist_utils import download_cached_file
 
 
@@ -35,7 +53,7 @@ class AlbefVQA(AlbefBase, MomentumDistilationMixin):
         >>> model = load_model("albef_vqa", "vqav2")
     """
 
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "vqav2": "configs/models/albef_vqav2.yaml",
     }
 
@@ -165,12 +183,8 @@ class AlbefVQA(AlbefBase, MomentumDistilationMixin):
         return encoder_output, encoder_output_m, image_embeds, image_embeds_m
 
     def forward_decoder(self, samples, encoder_out, **kwargs):
-        answers = self.tokenizer(
-            samples["answer"], padding="longest", return_tensors="pt"
-        ).to(self.device)
-        answer_targets = answers.input_ids.masked_fill(
-            answers.input_ids == self.tokenizer.pad_token_id, -100
-        )
+        answers = self.tokenizer(samples["answer"], padding="longest", return_tensors="pt").to(self.device)
+        answer_targets = answers.input_ids.masked_fill(answers.input_ids == self.tokenizer.pad_token_id, -100)
 
         question_states = []
         question_atts = []
@@ -256,15 +270,13 @@ class AlbefVQA(AlbefBase, MomentumDistilationMixin):
         if isinstance(samples["text_input"], str):
             samples["text_input"] = [samples["text_input"]]
 
-        assert len(samples["text_input"]) == samples["image"].size(
-            0
-        ), "The number of questions must be equal to the batch size."
+        assert len(samples["text_input"]) == samples["image"].size(0), (
+            "The number of questions must be equal to the batch size."
+        )
 
         num_ans_candidates = min(num_ans_candidates, len(answer_list))
 
-        return self.rank_answers(
-            samples, answer_list=answer_list, num_ans_candidates=num_ans_candidates
-        )
+        return self.rank_answers(samples, answer_list=answer_list, num_ans_candidates=num_ans_candidates)
 
     def rank_answers(self, samples, answer_list, num_ans_candidates):
         """
@@ -274,9 +286,7 @@ class AlbefVQA(AlbefBase, MomentumDistilationMixin):
         Return the answers that minimize the losses as result.
 
         """
-        answer_candidates = self.tokenizer(
-            answer_list, padding="longest", return_tensors="pt"
-        ).to(self.device)
+        answer_candidates = self.tokenizer(answer_list, padding="longest", return_tensors="pt").to(self.device)
         # answer_candidates.input_ids[:, 0] = self.tokenizer.bos_token_id
 
         answer_ids = answer_candidates.input_ids
@@ -303,23 +313,19 @@ class AlbefVQA(AlbefBase, MomentumDistilationMixin):
         # topk_probs: top-k probability
         # topk_ids: [num_question, k]
         answer_first_token = answer_ids[:, 1]
-        prob_first_token = F.softmax(logits, dim=1).index_select(
-            dim=1, index=answer_first_token
-        )
+        prob_first_token = F.softmax(logits, dim=1).index_select(dim=1, index=answer_first_token)
         topk_probs, topk_ids = prob_first_token.topk(num_ans_candidates, dim=1)
 
         # answer input: [num_question*k, answer_len]
         input_ids = []
         input_atts = []
-        for b, topk_id in enumerate(topk_ids):
+        for _b, topk_id in enumerate(topk_ids):
             input_ids.append(answer_ids.index_select(dim=0, index=topk_id))
             input_atts.append(answer_atts.index_select(dim=0, index=topk_id))
         input_ids = torch.cat(input_ids, dim=0)
         input_atts = torch.cat(input_atts, dim=0)
 
-        targets_ids = input_ids.masked_fill(
-            input_ids == self.tokenizer.pad_token_id, -100
-        )
+        targets_ids = input_ids.masked_fill(input_ids == self.tokenizer.pad_token_id, -100)
 
         # repeat encoder's output for top-k answers
         question_states = tile(question_states, 0, num_ans_candidates)
@@ -354,9 +360,7 @@ class AlbefVQA(AlbefBase, MomentumDistilationMixin):
         config_decoder = BertConfig.from_json_file(get_abs_path(cfg["med_config_path"]))
         config_decoder.fusion_layer = 0
         config_decoder.num_hidden_layers = 6
-        text_decoder = BertLMHeadModel.from_pretrained(
-            "bert-base-uncased", config=config_decoder
-        )
+        text_decoder = BertLMHeadModel.from_pretrained("bert-base-uncased", config=config_decoder)
 
         alpha = cfg.get("alpha", 0.4)
         momentum = cfg.get("momentum", 0.995)
@@ -380,29 +384,20 @@ class AlbefVQA(AlbefBase, MomentumDistilationMixin):
 
     def load_from_pretrained(self, url_or_filename):
         if is_url(url_or_filename):
-            cached_file = download_cached_file(
-                url_or_filename, check_hash=False, progress=True
-            )
+            cached_file = download_cached_file(url_or_filename, check_hash=False, progress=True)
             checkpoint = torch.load(cached_file, map_location="cpu")
         elif os.path.isfile(url_or_filename):
             checkpoint = torch.load(url_or_filename, map_location="cpu")
         else:
             raise RuntimeError("checkpoint url or path is invalid")
 
-        if "model" in checkpoint:
-            state_dict = checkpoint["model"]
-        else:
-            state_dict = checkpoint
+        state_dict = checkpoint["model"] if "model" in checkpoint else checkpoint  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
 
         # reshape positional embedding to accomodate for image resolution change
-        pos_embed_reshaped = interpolate_pos_embed(
-            state_dict["visual_encoder.pos_embed"], self.visual_encoder
-        )
+        pos_embed_reshaped = interpolate_pos_embed(state_dict["visual_encoder.pos_embed"], self.visual_encoder)
         state_dict["visual_encoder.pos_embed"] = pos_embed_reshaped
 
-        m_pos_embed_reshaped = interpolate_pos_embed(
-            state_dict["visual_encoder_m.pos_embed"], self.visual_encoder_m
-        )
+        m_pos_embed_reshaped = interpolate_pos_embed(state_dict["visual_encoder_m.pos_embed"], self.visual_encoder_m)
         state_dict["visual_encoder_m.pos_embed"] = m_pos_embed_reshaped
 
         for key in list(state_dict.keys()):
@@ -430,13 +425,12 @@ class AlbefVQA(AlbefBase, MomentumDistilationMixin):
 
                 del state_dict[key]
 
-        for key in self.state_dict().keys():
-            if key in state_dict.keys():
-                if state_dict[key].shape != self.state_dict()[key].shape:
-                    del state_dict[key]
+        for key in self.state_dict().keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+            if key in state_dict.keys() and state_dict[key].shape != self.state_dict()[key].shape:  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+                del state_dict[key]
 
         msg = self.load_state_dict(state_dict, strict=False)
-        logging.info("load checkpoint from %s" % url_or_filename)
+        logging.info("load checkpoint from %s" % url_or_filename)  # noqa: UP031 - Keeps printf conversions that depend on argument types.
         logging.info(f"missing keys: {msg.missing_keys}")
 
         return msg

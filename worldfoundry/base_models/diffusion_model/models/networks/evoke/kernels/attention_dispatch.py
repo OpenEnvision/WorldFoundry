@@ -13,7 +13,7 @@ def create_navit_attention_masks(
     device: torch.device,
     restrict_self_attn: bool = False,
     guidance_cross_attn: bool = False,
-    warp_len_list: list = None,
+    warp_len_list: list | None = None,
 ):
     # Per-stage synchronized warp tokens; layout per stage = [shared_history | warp_s | noise_s].
     # warp_len_list is in the SAME order as original_context_length_list (caller passes both reversed).
@@ -23,7 +23,9 @@ def create_navit_attention_masks(
         f"warp_len_list len {len(_wl)} != original_context_length_list len {len(original_context_length_list)}"
     )
     # Self-attn KV span per stage = noise + shared_history + warp_s.
-    _self_kv = [length + history_context_length + w for length, w in zip(original_context_length_list, _wl)]
+    _self_kv = [
+        length + history_context_length + w for length, w in zip(original_context_length_list, _wl, strict=False)
+    ]
 
     # Build navit_hidden_attention_mask.
     if restrict_self_attn:
@@ -56,7 +58,7 @@ def create_navit_attention_masks(
     if restrict_self_attn:
         cu_seqlens_kv = [0]
         for _ in range(batch_size):
-            for length in original_context_length_list:
+            for length in original_context_length_list:  # noqa: B007 - The loop variable is read outside the loop.
                 cu_seqlens_kv.append(cu_seqlens_kv[-1] + history_context_length)
         cu_seqlens_kv = torch.tensor(cu_seqlens_kv, device=device, dtype=torch.int32)
         max_seqlen_kv = history_context_length
@@ -83,7 +85,7 @@ def create_navit_attention_masks(
 
     cu_seqlens_kv = [0]
     for _ in range(batch_size):
-        for length in original_context_length_list:
+        for length in original_context_length_list:  # noqa: B007 - The loop variable is read outside the loop.
             cu_seqlens_kv.append(cu_seqlens_kv[-1] + encoder_hidden_states_seq_len)
     cu_seqlens_kv = torch.tensor(cu_seqlens_kv, device=device, dtype=torch.int32)
     max_seqlen_kv = encoder_hidden_states_seq_len

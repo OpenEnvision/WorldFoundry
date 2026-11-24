@@ -1,20 +1,20 @@
 ---
 title: MiKASA-Robo
-description: "ICLR 2026 桌面记忆套件：32 个 RL 任务，后续 90 个语言条件 VLA 任务。WorldFoundry 导入官方结果；不跑 ManiSkill。"
+description: "ICLR 2026 桌面记忆套件：32 个 RL 任务，后续 90 个语言条件 VLA 任务。WorldFoundry 导入官方结果。"
 ---
 
-MiKASA-Robo 是 **MIKASA**（面向智能体的记忆密集技能评估套件）的桌面部分，来自 AIRI、MIPT 与 HSE。ICLR 2026 论文是 **32** 个 ManiSkill RL 任务、**12** 组、四类记忆：**物体**、**空间**、**顺序**、**容量**（遮挡回忆、先前布局、长动作顺序）。后续 **MIKASA-Robo-VLA** 扩展为 **90** 个语言条件任务（**10** 类记忆）、短 / 中 / 长时程（25–2160 步），以及 **22500** 条 oracle 轨迹。这两次发布**不可互换**。
+MiKASA-Robo 是 **MIKASA**（面向智能体的记忆密集技能评估套件）的桌面部分，来自 AIRI、MIPT 与 HSE。ICLR 2026 论文包含 **32** 个 ManiSkill RL 任务，分为 **12** 组，覆盖四类记忆：**物体**、**空间**、**顺序**、**容量**（遮挡回忆、先前布局、长动作顺序）。后续 **MIKASA-Robo-VLA** 扩展为 **90** 个语言条件任务（**10** 类记忆）、短 / 中 / 长时程（25–2160 步），以及 **22500** 条 oracle 轨迹。这两次发布**不可互换**。
 
 论文：[Memory, Benchmark & Robots](https://arxiv.org/abs/2502.10550)（[OpenReview](https://openreview.net/forum?id=9cLPurIZMj)）。VLA 文档：[mikasarobo.github.io](https://mikasarobo.github.io/)。代码：[CognitiveAISystems/MIKASA-Robo](https://github.com/CognitiveAISystems/MIKASA-Robo)。
 
-WorldFoundry **导入**官方结果导出。它**不跑** ManiSkill、不采集 PPO/oracle 轨迹，也不替你选定 RL 还是 VLA——请在导出上声明。
+WorldFoundry **导入**官方结果导出。它**不跑** ManiSkill，也不采集 PPO/oracle 轨迹。请在导出中声明 RL 还是 VLA。
 
 <BenchmarkPageSections id="mikasa" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id mikasa \
   --mode official-validation \
   --official-results-path <official_results.json> \

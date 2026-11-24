@@ -57,9 +57,7 @@ def test_records_no_compile_when_not_requested() -> None:
 
 def test_records_approximate_attention_downgrades_quality_tier() -> None:
     applied = AppliedOptimizations()
-    applied.record_approximate_attention(
-        requested=True, kind="vsa", wrapped_blocks=30, effective_kernel="vsa"
-    )
+    applied.record_approximate_attention(requested=True, kind="vsa", wrapped_blocks=30, effective_kernel="vsa")
     snap = applied.to_optimization_snapshot()
     assert snap.quality_tier == "approximate"
     assert snap.requested["approximate_attention"] == "vsa"
@@ -89,10 +87,7 @@ def test_records_installed_approximate_attention_as_runtime_pending() -> None:
 
     snap = applied.to_optimization_snapshot()
 
-    assert (
-        snap.effective["approximate_attention_kernel"]
-        == "vsa-wrapper-installed (runtime-pending)"
-    )
+    assert snap.effective["approximate_attention_kernel"] == "vsa-wrapper-installed (runtime-pending)"
     assert snap.fallbacks == ()
 
 
@@ -114,9 +109,7 @@ def test_pending_kernel_without_installed_blocks_is_still_a_fallback() -> None:
 
 def test_approximate_attention_not_requested_keeps_exact() -> None:
     applied = AppliedOptimizations()
-    applied.record_approximate_attention(
-        requested=False, kind="vsa", wrapped_blocks=0, effective_kernel="pending"
-    )
+    applied.record_approximate_attention(requested=False, kind="vsa", wrapped_blocks=0, effective_kernel="pending")
     snap = applied.to_optimization_snapshot()
     assert snap.quality_tier == "exact"
     assert snap.requested["approximate_attention"] is False

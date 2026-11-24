@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from collections import deque
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     collect_images,
@@ -64,9 +65,7 @@ class InternVLAA1Runtime:
 
     def __init__(self, config: InternVLAA1RuntimeConfig) -> None:
         if not config.local_files_only:
-            raise ValueError(
-                "InternVLA-A1 requires local_files_only=true; runtime downloads are disabled"
-            )
+            raise ValueError("InternVLA-A1 requires local_files_only=true; runtime downloads are disabled")
         if len(config.camera_keys) != 3:
             raise ValueError("InternVLA-A1 requires exactly three ordered camera keys")
         if config.normalization not in {"mean_std", "identity"}:
@@ -82,10 +81,7 @@ class InternVLAA1Runtime:
         self._policy_config: Any = None
         self._statistics: Mapping[str, Any] | None = None
         self._action_dim: int | None = None
-        self._histories = [
-            deque(maxlen=max(2, int(config.image_history_interval) + 1))
-            for _ in range(3)
-        ]
+        self._histories = [deque(maxlen=max(2, int(config.image_history_interval) + 1)) for _ in range(3)]
 
     @staticmethod
     def _existing_path(value: str | None) -> Path | None:
@@ -130,8 +126,7 @@ class InternVLAA1Runtime:
         path = self._existing_path(self.config.cosmos_encoder_path)
         if path is None or not path.is_file():
             raise FileNotFoundError(
-                f"InternVLA-A1 Cosmos encoder must be staged before inference: "
-                f"{self.config.cosmos_encoder_path}"
+                f"InternVLA-A1 Cosmos encoder must be staged before inference: {self.config.cosmos_encoder_path}"
             )
         return path
 
@@ -139,8 +134,7 @@ class InternVLAA1Runtime:
         path = self._existing_path(self.config.cosmos_decoder_path)
         if path is None or not path.is_file():
             raise FileNotFoundError(
-                f"InternVLA-A1 Cosmos decoder must be staged before inference: "
-                f"{self.config.cosmos_decoder_path}"
+                f"InternVLA-A1 Cosmos decoder must be staged before inference: {self.config.cosmos_decoder_path}"
             )
         return path
 
@@ -166,10 +160,10 @@ class InternVLAA1Runtime:
         if self._model is not None:
             return self._model
         import torch
-        from torch import nn
         from safetensors.torch import load_model as load_safetensors_model
+        from torch import nn
 
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .configuration import InternVLAA1Config
         from .cosmos import CosmosImageTokenizer
@@ -222,9 +216,7 @@ class InternVLAA1Runtime:
             device="cpu",
         )
         if missing or unexpected:
-            raise RuntimeError(
-                f"InternVLA-A1 checkpoint key mismatch: missing={missing}, unexpected={unexpected}"
-            )
+            raise RuntimeError(f"InternVLA-A1 checkpoint key mismatch: missing={missing}, unexpected={unexpected}")
         model = model.to(device=device, dtype=dtype).eval()
         model.cosmos = model.cosmos.to(device=device, dtype=dtype).eval()
         # ``dtype`` is an execution hint used by the TorchScript wrapper and
@@ -285,9 +277,7 @@ class InternVLAA1Runtime:
         mean = np.asarray(stats["mean"], dtype=np.float32)
         std = np.asarray(stats["std"], dtype=np.float32)
         if state.shape != mean.shape:
-            raise ValueError(
-                f"InternVLA-A1 state shape {state.shape} does not match statistics {mean.shape}"
-            )
+            raise ValueError(f"InternVLA-A1 state shape {state.shape} does not match statistics {mean.shape}")
         return (state - mean) / (std + 1.0e-6)
 
     def _denormalize_action(self, values: Any) -> Any:
@@ -345,8 +335,7 @@ class InternVLAA1Runtime:
         values = collect_images(observation, image, tuple(self.config.camera_keys))
         if len(values) != 3:
             raise ValueError(
-                f"InternVLA-A1 requires three camera views {tuple(self.config.camera_keys)}, "
-                f"got {len(values)}"
+                f"InternVLA-A1 requires three camera views {tuple(self.config.camera_keys)}, got {len(values)}"
             )
         return values
 
@@ -362,7 +351,7 @@ class InternVLAA1Runtime:
             for value in self._camera_values(observation, image)
         ]
         pairs = []
-        for history, frame in zip(self._histories, current):
+        for history, frame in zip(self._histories, current, strict=False):
             history.append(frame)
             past_index = max(len(history) - int(self.config.image_history_interval) - 1, 0)
             pair = np.stack([history[past_index], history[-1]], axis=0)
@@ -491,9 +480,7 @@ _RUNTIME_CACHE: dict[tuple[str, str], InternVLAA1Runtime] = {}
 def _required(options: Mapping[str, Any], key: str) -> Any:
     value = options.get(key)
     if value in (None, ""):
-        raise ValueError(
-            f"InternVLA-A1 runtime option {key!r} is required; load its data runtime config"
-        )
+        raise ValueError(f"InternVLA-A1 runtime option {key!r} is required; load its data runtime config")
     return value
 
 
@@ -527,16 +514,12 @@ def predict_action(
         local_files_only=option_bool(options.get("local_files_only"), True),
         cache_dir=str(options["cache_dir"]) if options.get("cache_dir") else None,
         revision=str(options["revision"]) if options.get("revision") else None,
-        processor_revision=(
-            str(options["processor_revision"]) if options.get("processor_revision") else None
-        ),
+        processor_revision=(str(options["processor_revision"]) if options.get("processor_revision") else None),
         image_size=option_int(options.get("image_size"), 224),
         tokenizer_max_length=option_int(options.get("tokenizer_max_length"), 48),
         image_history_interval=option_int(options.get("image_history_interval"), 15),
         action_horizon=(
-            option_int(options.get("action_horizon"), 30)
-            if options.get("action_horizon") is not None
-            else None
+            option_int(options.get("action_horizon"), 30) if options.get("action_horizon") is not None else None
         ),
         num_inference_steps=(
             option_int(options.get("num_inference_steps"), 10)
@@ -544,12 +527,8 @@ def predict_action(
             else None
         ),
         seed=option_int(options.get("seed"), 0),
-        statistics_path=(
-            str(options["statistics_path"]) if options.get("statistics_path") else None
-        ),
-        statistics_key=(
-            str(options["statistics_key"]) if options.get("statistics_key") else None
-        ),
+        statistics_path=(str(options["statistics_path"]) if options.get("statistics_path") else None),
+        statistics_key=(str(options["statistics_key"]) if options.get("statistics_key") else None),
         normalization=str(options.get("normalization") or "mean_std"),
         action_mode=str(options.get("action_mode") or "absolute"),
         delta_zero_state_indices=tuple(options.get("delta_zero_state_indices") or ()),

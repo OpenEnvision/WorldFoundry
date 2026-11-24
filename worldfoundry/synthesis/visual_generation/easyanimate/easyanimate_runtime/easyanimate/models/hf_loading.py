@@ -31,7 +31,5 @@ def resolve_pretrained_subfolder(pretrained_model_path: str, subfolder: str | No
     snapshot_path = resolve_local_hf_model_path(model_path)
     resolved = snapshot_path / subfolder if subfolder else snapshot_path
     if not resolved.is_dir():
-        raise FileNotFoundError(
-            f"EasyAnimate local checkpoint is missing subfolder {subfolder!r}: {resolved}"
-        )
+        raise FileNotFoundError(f"EasyAnimate local checkpoint is missing subfolder {subfolder!r}: {resolved}")
     return str(resolved)

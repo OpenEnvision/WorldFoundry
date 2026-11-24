@@ -4,8 +4,17 @@
 
 docs/fumadocs/node_modules/
 docs/fumadocs/.next/
+docs/fumadocs/.source/
+docs/fumadocs/generated/
+docs/fumadocs/out/
 docs/fumadocs/tmp/
 tmp/
+outputs/
+runs/
+benchmark_results/
+wf-goal/
+.pi/
+.pi-traces/
 .git/
 **/.pytest_cache/
 **/.mypy_cache/

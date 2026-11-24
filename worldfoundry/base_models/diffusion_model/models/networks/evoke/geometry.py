@@ -5,8 +5,8 @@ import torch
 
 def SE3_inverse_torch(T):
     """Batched SE3 inverse in torch. Args: T [B,4,4]. Returns T_inv [B,4,4]."""
-    Rot = T[:, :3, :3]       # [B, 3, 3]
-    trans = T[:, :3, 3:]     # [B, 3, 1]
+    Rot = T[:, :3, :3]  # [B, 3, 3]
+    trans = T[:, :3, 3:]  # [B, 3, 1]
     R_inv = Rot.transpose(-1, -2)
     t_inv = -torch.bmm(R_inv, trans)
     T_inv = torch.eye(4, device=T.device, dtype=T.dtype).unsqueeze(0).expand(T.shape[0], -1, -1).clone()
@@ -24,8 +24,7 @@ def compute_relative_poses_lingbot(c2ws_mat, framewise=True, normalize_trans=Tru
 
     # step 2: convert to per-frame relative poses
     if framewise:
-        relative_poses_framewise = torch.bmm(
-            SE3_inverse_torch(relative_poses[:-1]), relative_poses[1:])
+        relative_poses_framewise = torch.bmm(SE3_inverse_torch(relative_poses[:-1]), relative_poses[1:])
         relative_poses[1:] = relative_poses_framewise
 
     # step 3: normalize translations to max-norm 1

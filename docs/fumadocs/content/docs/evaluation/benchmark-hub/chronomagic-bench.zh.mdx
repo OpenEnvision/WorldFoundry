@@ -1,29 +1,29 @@
 ---
 title: ChronoMagic-Bench
-description: "NeurIPS 2024 D&B 延时 T2V 评测：1,649 条闭集 prompt，CHScore 连贯与 MTScore 变化幅度。WorldFoundry 内置 runtime，不编造榜单。"
+description: "NeurIPS 2024 D&B 延时 T2V 评测：1,649 条闭集 prompt，CHScore 连贯与 MTScore 变化幅度。WorldFoundry 内置官方 runtime。"
 ---
 
-ChronoMagic-Bench（北大 Yuan Group，联合罗切斯特大学）问的是文生视频模型会不会做**形态变化延时摄影**：大幅物理、生物或化学状态变化（冰融化、花开、施工），同时保持时序连贯。官方 **close** 划分有 **1,649 条 prompt**。两个核心分族：
+ChronoMagic-Bench（北大 Yuan Group，联合罗切斯特大学）问的是文生视频模型会不会做**形态变化延时摄影**：大幅物理、生物或化学状态变化（冰融化、花开、施工），同时保持时序连贯。官方 **close** 划分有 **1,649 条 prompt**。两类核心指标：
 
 - **CHScore** — 用 CoTracker 看跟踪点是否连贯。
 - **MTScore / GPT-4o-MTScore** — 形态变化幅度（InternVideo2 或 GPT-4o）。
 
-Hugging Face 发现表记录 **1,799** 行。上游还列出 ChronoMagic / Pro / ProH 训练数据。榜单对齐另外需要 **UMT-FVD** 与 **UMTScore**，WorldFoundry 不把它们当成已经齐备。
+Hugging Face 数据集共 **1,799** 行。上游还列出 ChronoMagic / Pro / ProH 训练数据。要得到可与榜单对比的结果，还需要 **UMT-FVD** 与 **UMTScore**，WorldFoundry 的分量脚本不计算这两项。
 
 论文：[ChronoMagic-Bench](https://arxiv.org/abs/2406.18522)。项目：[pku-yuangroup.github.io/ChronoMagic-Bench](https://pku-yuangroup.github.io/ChronoMagic-Bench/)。代码：[PKU-YuanGroup/ChronoMagic-Bench](https://github.com/PKU-YuanGroup/ChronoMagic-Bench)。数据：[`BestWishYsh/ChronoMagic-Bench`](https://huggingface.co/datasets/BestWishYsh/ChronoMagic-Bench)（CC-BY-4.0）。
 
-WorldFoundry **内置官方 runtime**，按所选分量脚本执行（`chscore`、`mtscore`、`gpt4o_mtscore`），再做官方 JSON 归一化。CHScore 是仓内已验证的有界官方分量。主键：`chronomagic_score`。
+WorldFoundry **内置官方 runtime**，按所选分量脚本执行（`chscore`、`mtscore`、`gpt4o_mtscore`），再做官方 JSON 归一化。CHScore 是已验证的分量。主键：`chronomagic_score`。
 
 <BenchmarkPageSections id="chronomagic-bench" locale="zh" />
 
 ## 如何运行
 
-对 close 划分生成视频跑 CHScore：
+对为 close 划分生成的视频运行 CHScore：
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py \
-  --chronomagic-root worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench \
+  worldfoundry/evals/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py \
+  --chronomagic-root worldfoundry/evals/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench \
   --components chscore \
   --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --model-name worldfoundry \
@@ -41,7 +41,7 @@ hf download BestWishYsh/ChronoMagic-Bench --repo-type dataset \
   --local-dir cache/worldfoundry/data/hfd_datasets/BestWishYsh/ChronoMagic-Bench
 ```
 
-仓内指针：`worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench`。
+仓内指针：`worldfoundry/evals/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench`。
 
 产物包括 `scorecard.json`（主键 `chronomagic_score`）、`raw_metric_table.jsonl`，以及打分器运行时捕获的上游日志。
 

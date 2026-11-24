@@ -19,7 +19,7 @@ official_sources:
   project_page: https://huggingface.co/cerspense/zeroscope_v2_576w
 integration:
   status: integrated
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 runtime_profile: runtime-profile:zeroscope
 runner_parity:
   status: verified
@@ -40,12 +40,12 @@ docs:
   publisher: Open-source community (cerspense)
   publisher_kind: lab
   publisher_zh: 开源社区（cerspense，机构未记录）
-  overview: 'ZeroScope is a community fine-tune of ModelScopeT2V optimized for watermark-free 16:9 video, released in 576w and XL upscale checkpoints by the creator cerspense. In this catalog it is a verified legacy route: WorldFoundry output matched the official Diffusers route for the selected configuration.'
-  overview_zh: ZeroScope 是社区作者 cerspense 对 ModelScopeT2V 的微调版，面向无水印 16:9 视频优化，发布了 576w 与 XL 放大两个 checkpoint。在本 catalog 中它是已验证的旧代路径：WorldFoundry 输出与所选配置下的官方 Diffusers 路径一致。
-  architecture: A legacy U-Net latent video diffusion model (the ModelScopeT2V architecture) fine-tuned on watermark-free data; the 576w checkpoint generates at 576x320 and zeroscope_v2_XL upscales. The task list marks it legacy-unet-diffusion.
-  architecture_zh: 旧式 U-Net 潜空间视频扩散模型（即 ModelScopeT2V 架构），在无水印数据上微调；576w checkpoint 以 576x320 生成，zeroscope_v2_XL 负责放大。任务列表标注 legacy-unet-diffusion。
-  usage_notes: 'Runner parity is verified and the Studio/API route uses the unified environment — an easy, reliable smoke-test model. Mind the license: CC-BY-NC-4.0 requires benchmark policy review before commercial or automated benchmark use (recorded twice in the manifest).'
-  usage_notes_zh: Runner parity 已验证，Studio/API 路径使用统一环境——是简单可靠的冒烟测试模型。注意许可： CC-BY-NC-4.0 要求在商用或自动化评测前先做政策审阅（manifest 中记录了两次）。
+  overview: 'ZeroScope is a community fine-tune of ModelScopeT2V optimized for watermark-free 16:9 video, released in 576w and XL upscale checkpoints by the creator cerspense. Validated: for the selected configuration, WorldFoundry output matches the official Diffusers route.'
+  overview_zh: ZeroScope 是社区作者 cerspense 对 ModelScopeT2V 的微调版，面向无水印 16:9 视频优化，发布了 576w 与 XL 放大两个 checkpoint。已验证：在所选配置下，WorldFoundry 输出与官方 Diffusers 路径一致。
+  architecture: A legacy U-Net latent video diffusion model (the ModelScopeT2V architecture) fine-tuned on watermark-free data; the 576w checkpoint generates at 576x320 and zeroscope_v2_XL upscales.
+  architecture_zh: 旧式 U-Net 潜空间视频扩散模型（即 ModelScopeT2V 架构），在无水印数据上微调；576w checkpoint 以 576x320 生成，zeroscope_v2_XL 负责放大。
+  usage_notes: 'The Studio/API route uses the unified environment, which makes ZeroScope a quick, reliable model for smoke-testing a pipeline. Mind the license: CC-BY-NC-4.0 requires benchmark policy review before commercial or automated benchmark use.'
+  usage_notes_zh: Studio/API 路径使用统一环境，因此 ZeroScope 适合快速、可靠地冒烟测试管线。注意许可：CC-BY-NC-4.0 要求在商用或自动化评测前先做政策审阅。
   limitations:
   - 'CC-BY-NC-4.0 license: non-commercial; benchmark policy review required.'
   - Legacy quality — use it for pipeline validation, not final content.

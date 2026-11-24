@@ -6,7 +6,6 @@ sys.path.append("..")
 
 from worldfoundry.pipelines.vggt_omega.pipeline_vggt_omega import VGGTOmegaPipeline
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CKPT_ROOT = os.environ.get("WORLDFOUNDRY_CKPT_DIR", str(REPO_ROOT / "cache" / "checkpoints"))
 DATA_PATH = os.environ.get(

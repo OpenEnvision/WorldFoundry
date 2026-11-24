@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 import os
+from datetime import timedelta
 
 import torch
 import torch.distributed as dist

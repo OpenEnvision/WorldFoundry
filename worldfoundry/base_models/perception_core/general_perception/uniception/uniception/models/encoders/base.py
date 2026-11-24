@@ -3,7 +3,6 @@ Base Encoder Class for UniCeption
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 import torch.nn as nn
 from torch import Tensor
@@ -21,8 +20,6 @@ class EncoderInput:
 @dataclass
 class EncoderOutput:
     "Data class for Encoder Output"
-
-    pass
 
 
 @dataclass
@@ -46,7 +43,7 @@ class UniCeptionEncoderBase(nn.Module):
         self,
         name: str,
         data_norm_type: str,
-        size: Optional[str] = None,
+        size: str | None = None,
         *args,
         **kwargs,
     ):
@@ -56,7 +53,7 @@ class UniCeptionEncoderBase(nn.Module):
         super().__init__(*args, **kwargs)
 
         self.name: str = name
-        self.size: Optional[str] = size
+        self.size: str | None = size
 
         self.data_norm_type: str = data_norm_type
 
@@ -90,9 +87,9 @@ class UniCeptionEncoderBase(nn.Module):
             AssertionError: If the data normalization type does not match the encoder's expected input data normalization type.
         """
 
-        assert (
-            data_norm_type == self.data_norm_type
-        ), f"Input normalization type {data_norm_type} does not match the encoder's normalization type {self.data_norm_type}."
+        assert data_norm_type == self.data_norm_type, (
+            f"Input normalization type {data_norm_type} does not match the encoder's normalization type {self.data_norm_type}."
+        )
 
 
 @dataclass
@@ -114,7 +111,7 @@ class ViTEncoderOutput(EncoderOutput):
     "Data class for Vision Transformer Encoder Output"
 
     features: Tensor
-    registers: Optional[Tensor] = None
+    registers: Tensor | None = None
 
 
 class UniCeptionViTEncoderBase(UniCeptionEncoderBase):

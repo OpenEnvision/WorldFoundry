@@ -26,6 +26,7 @@ import math
 from contextvars import copy_context
 
 import torch
+import torch.version
 import triton
 import triton.language as tl
 from torch import Tensor

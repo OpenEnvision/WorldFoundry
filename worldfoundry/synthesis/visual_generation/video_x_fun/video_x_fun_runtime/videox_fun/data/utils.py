@@ -22,10 +22,7 @@ def _relative_poses(cameras: list[_Camera]) -> np.ndarray:
     target = np.eye(4, dtype=np.float32)
     absolute_to_relative = target @ cameras[0].world_to_camera
     poses = [target]
-    poses.extend(
-        absolute_to_relative @ camera.camera_to_world
-        for camera in cameras[1:]
-    )
+    poses.extend(absolute_to_relative @ camera.camera_to_world for camera in cameras[1:])
     return np.asarray(poses, dtype=np.float32)
 
 
@@ -63,12 +60,8 @@ def _plucker_rays(
     z = z.expand_as(y_direction)
     directions = torch.stack((x_direction, y_direction, z), dim=-1)
     directions = directions / directions.norm(dim=-1, keepdim=True)
-    ray_directions = (
-        directions @ camera_to_world[..., :3, :3].transpose(-1, -2)
-    )
-    ray_origins = camera_to_world[..., :3, 3].unsqueeze(-2).expand_as(
-        ray_directions
-    )
+    ray_directions = directions @ camera_to_world[..., :3, :3].transpose(-1, -2)
+    ray_origins = camera_to_world[..., :3, 3].unsqueeze(-2).expand_as(ray_directions)
     rays = torch.cat(
         (torch.cross(ray_origins, ray_directions, dim=-1), ray_directions),
         dim=-1,
@@ -126,13 +119,17 @@ def process_pose_file(
         dtype=torch.float32,
         device=device,
     ).unsqueeze(0)
-    rays = _plucker_rays(
-        intrinsics,
-        camera_to_world,
-        height,
-        width,
-        device,
-    )[0].permute(0, 3, 1, 2).contiguous()
+    rays = (
+        _plucker_rays(
+            intrinsics,
+            camera_to_world,
+            height,
+            width,
+            device,
+        )[0]
+        .permute(0, 3, 1, 2)
+        .contiguous()
+    )
     return rearrange(rays.unsqueeze(0), "b f c h w -> b f h w c")[0]
 
 

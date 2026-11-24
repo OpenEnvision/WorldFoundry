@@ -6,8 +6,6 @@
 
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-"""Module for base_models -> three_dimensions -> depth -> videodepthanything -> video_depth.py functionality."""
-
 import gc
 
 import cv2
@@ -25,7 +23,11 @@ from torchvision.transforms import Compose
 from tqdm import tqdm
 
 from worldfoundry.base_models.perception_core.general_perception.dinov2.variants.vipe_dav2.model import DINOv2
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v2.util.transform import NormalizeImage, PrepareForNet, Resize
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v2.util.transform import (
+    NormalizeImage,
+    PrepareForNet,
+    Resize,
+)
 
 from .dpt_temporal import DPTHeadTemporal
 from .util import compute_scale_and_shift, get_interpolate_frames
@@ -38,29 +40,17 @@ INTERP_LEN = 8
 
 
 class VideoDepthAnything(nn.Module):
-    """Video depth anything implementation."""
     def __init__(
         self,
         encoder="vitl",
         features=256,
-        out_channels=[256, 512, 1024, 1024],
+        out_channels=[256, 512, 1024, 1024],  # noqa: B006 - Keeps the upstream default object and signature.
         use_bn=False,
         use_clstoken=False,
         num_frames=32,
         pe="ape",
     ):
-        """Init.
-
-        Args:
-            encoder: The encoder.
-            features: The features.
-            out_channels: The out channels.
-            use_bn: The use bn.
-            use_clstoken: The use clstoken.
-            num_frames: The num frames.
-            pe: The pe.
-        """
-        super(VideoDepthAnything, self).__init__()
+        super().__init__()
 
         self.intermediate_layer_idx = {"vits": [2, 5, 8, 11], "vitl": [4, 11, 17, 23]}
 
@@ -78,11 +68,6 @@ class VideoDepthAnything(nn.Module):
         )
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         B, T, C, H, W = x.shape
         patch_h, patch_w = H // 14, W // 14
         features = self.pretrained.get_intermediate_layers(
@@ -98,17 +83,6 @@ class VideoDepthAnything(nn.Module):
     def infer_video_depth(
         self, frame_list: list[np.ndarray], input_size: int = 518, device="cuda", fp32=True
     ) -> np.ndarray:
-        """Infer video depth.
-
-        Args:
-            frame_list: The frame list.
-            input_size: The input size.
-            device: The device.
-            fp32: The fp32.
-
-        Returns:
-            The return value.
-        """
         frame_height, frame_width = frame_list[0].shape[:2]
         ratio = max(frame_height, frame_width) / min(frame_height, frame_width)
         if ratio > 1.78:  # we recommend to process video with ratio smaller than 16:9 due to memory limitation
@@ -151,9 +125,8 @@ class VideoDepthAnything(nn.Module):
             if pre_input is not None:
                 cur_input[:, :OVERLAP, ...] = pre_input[:, KEYFRAMES, ...]
 
-            with torch.no_grad():
-                with torch.autocast(device_type=device, enabled=(not fp32)):
-                    depth = self.forward(cur_input)  # depth shape: [1, T, H, W]
+            with torch.no_grad(), torch.autocast(device_type=device, enabled=(not fp32)):
+                depth = self.forward(cur_input)  # depth shape: [1, T, H, W]
 
             depth = F.interpolate(
                 depth.flatten(0, 1).unsqueeze(1),

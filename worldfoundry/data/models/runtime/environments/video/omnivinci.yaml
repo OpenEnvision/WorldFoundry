@@ -1,0 +1,33 @@
+model_id: omnivinci
+env_name: worldfoundry-unified-cu128
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+conda_packages:
+- python
+- pip
+- ffmpeg
+pip_packages:
+- torch
+- torchvision
+- transformers
+- huggingface_hub
+- accelerate
+- safetensors
+- einops
+- numpy
+- pillow
+- opencv-python
+- librosa
+- openai-whisper
+- decord
+- flash-attn
+validation_imports:
+- worldfoundry.base_models.llm_mllm_core.mllm.omnivinci.modeling_vila
+- worldfoundry.synthesis.visual_generation.omnivinci.omnivinci_runtime.auto_processor
+- flash_attn
+- whisper
+- decord
+notes:
+- OmniVinci inference uses in-tree multimodal components and native Transformers backbones.
+- The released SigLIP and Qwen2Audio loaders use FlashAttention 2; audio extraction uses Decord and Whisper.

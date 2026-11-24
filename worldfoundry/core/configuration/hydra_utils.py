@@ -3,7 +3,7 @@
 LEGACY (vendored jimfan-utils lineage): frozen API kept for existing callers.
 This is the ``cls``/``class`` instantiation vocabulary; do not adopt it in new
 code -- use ``worldfoundry.core.configuration.lazy_config.instantiate``
-(``_target_``) or ``worldfoundry.core.model_loading.factory`` instead, and
+(``_target_``) or ``worldfoundry.core.configuration.factory`` instead, and
 ``worldfoundry.core.registry.TypedRegistry`` for new registries.
 """
 
@@ -12,13 +12,15 @@ import os
 import sys
 from copy import deepcopy
 from threading import RLock
+from typing import Any
 
-import hydra
-import tree
 from omegaconf import DictConfig, OmegaConf
 
-from worldfoundry.core.utils.python.functional_utils import call_once, is_mapping, is_sequence, meta_decorator
 from worldfoundry.core.observability.formatting import to_scientific_str
+from worldfoundry.core.utils.python.functional_utils import call_once, is_mapping, is_sequence, meta_decorator
+
+hydra = __import__("hydra")
+tree = __import__("tree")
 
 # ──────────────────────────────────────────────────────────────────────────
 # Hydra / OmegaConf — resolvers and run-context queries
@@ -176,7 +178,7 @@ def register_class(cls, alias=None):
 
 def omegaconf_to_dict(cfg, resolve: bool = True, enum_to_str: bool = False):
     """Convert nested OmegaConf containers to plain Python dicts and lists."""
-    kw = dict(resolve=resolve, enum_to_str=enum_to_str)
+    kw: dict[str, Any] = {"resolve": resolve, "enum_to_str": enum_to_str}
     if OmegaConf.is_config(cfg):
         return OmegaConf.to_container(cfg, **kw)
     elif is_sequence(cfg):
@@ -208,8 +210,8 @@ def get_class(path):
         mod = import_module(module_path)
         try:
             class_type = getattr(mod, class_name)
-        except AttributeError:
-            raise ImportError("Class {} is not in module {}".format(class_name, module_path))
+        except AttributeError as exc:
+            raise ImportError(f"Class {class_name} is not in module {module_path}") from exc
         return class_type
     except ValueError as e:
         print("Error initializing class " + path, file=sys.stderr)

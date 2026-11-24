@@ -1,9 +1,9 @@
 ---
 title: VBench-2.0
-description: "NTU / 上海 AI Lab 的忠实度套件：五柱 18 项能力。WorldFoundry 内置 runtime，不编造榜单。与 VBench 不可互换。"
+description: "NTU / 上海 AI Lab 的忠实度套件：五柱 18 项能力。WorldFoundry 内置官方 runtime。与 VBench 不可互换。"
 ---
 
-VBench-2.0（S-Lab、南洋理工与上海人工智能实验室）是 [VBench](/zh/docs/evaluation/benchmark-hub/vbench) 的 **内在忠实度** 后继。它与 16 维质量套件 **不可互换**。**18 项细粒度能力** 归入五柱，再平均成 `vbench2_total`：
+VBench-2.0（S-Lab、南洋理工与上海人工智能实验室）是 [VBench](/zh/docs/evaluation/benchmark-hub/vbench) 的**内在忠实度**后继。它与 16 维质量套件**不可互换**。**18 项细粒度能力**归入五大支柱，再平均为 `vbench2_total`：
 
 - **创造性** — 构图、多样性。
 - **常识** — 实例保持、运动合理性。
@@ -13,7 +13,7 @@ VBench-2.0（S-Lab、南洋理工与上海人工智能实验室）是 [VBench](/
 
 论文：[VBench-2.0](https://arxiv.org/abs/2503.21755)。项目：[vchitect.github.io/VBench-2.0-project](https://vchitect.github.io/VBench-2.0-project/)。代码：[Vchitect/VBench](https://github.com/Vchitect/VBench)。快照：`Vchitect/VBench-2.0_sampled_videos`、`_human_annotation`、`_human_anomaly`。
 
-WorldFoundry **仓内内置 VBench-2.0 runtime**。调度评测器前会检查 prompt 套件覆盖（`vbench2_dataset_manifest.json`、`vbench2_video_coverage.json`）。有界 **diversity** 组件已验证；全套未验证。部分维度需要 RetinaFace 或其他重量级裁判。
+WorldFoundry **仓内内置 VBench-2.0 runtime**。调度评测器前会检查 prompt 套件覆盖（`vbench2_dataset_manifest.json`、`vbench2_video_coverage.json`）。**diversity** 维度已验证。部分维度需要 RetinaFace 或其他重量级裁判。
 
 <BenchmarkPageSections id="vbench-2.0" locale="zh" />
 
@@ -21,7 +21,7 @@ WorldFoundry **仓内内置 VBench-2.0 runtime**。调度评测器前会检查 p
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py \
   --benchmark-id vbench-2.0 \
   --variant vbench2 \
   --dimension Motion_Order_Understanding \
@@ -33,7 +33,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 环境变量：`WORLDFOUNDRY_VBENCH2_DATASET_ROOT`、`WORLDFOUNDRY_VBENCH2_RESULTS_PATH`、`WORLDFOUNDRY_VBENCH2_ROOT`、`WORLDFOUNDRY_HF_CACHE_DIR`。共享栈：`vbench_perception_metric_stack`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/vbench-2.0.yaml`，`worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime`。
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/vbench-2.0.yaml`、`worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime`。
 
 产物包括 `scorecard.json`（主键 `vbench2_total`）、`dimension_scores.json` 与覆盖清单。
 

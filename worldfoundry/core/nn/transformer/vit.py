@@ -19,14 +19,14 @@ Public surface:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from torch import Tensor, nn
 
-from worldfoundry.core.attention import QKVSelfAttention
 from worldfoundry.core.nn.blocks.layers import DropPath, LayerScale, Mlp
 from worldfoundry.core.nn.blocks.stochastic_depth import drop_add_residual_stochastic_depth
-
+from worldfoundry.core.nn.transformer.vit_qkv import QKVSelfAttention
 
 # ──────────────────────────────────────────────────────────────────────────
 # Residual schedule — full-batch DropPath vs subset-batch stochastic depth
@@ -42,8 +42,8 @@ def apply_prenorm_transformer_residuals(
     drop_path1: nn.Module,
     drop_path2: nn.Module | None = None,
     training: bool = False,
-    stochastic_depth_pos: Optional[Tensor] = None,
-    attn_residual_kwargs: Optional[dict[str, Any]] = None,
+    stochastic_depth_pos: Tensor | None = None,
+    attn_residual_kwargs: dict[str, Any] | None = None,
 ) -> Tensor:
     """Run attention and FFN sub-blocks with drop-path / stochastic-depth scheduling."""
 
@@ -106,7 +106,7 @@ class PreNormTransformerBlock(nn.Module):
         ffn_layer: Callable[..., nn.Module] = Mlp,
         *,
         norm_eps: float | None = None,
-        attn_kwargs: Optional[dict[str, Any]] = None,
+        attn_kwargs: dict[str, Any] | None = None,
     ) -> None:
         """Wire LayerScale only when ``init_values`` is set (CaiT-style residuals).
 

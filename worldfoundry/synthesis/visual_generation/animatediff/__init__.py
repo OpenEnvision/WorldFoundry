@@ -5,6 +5,7 @@ This module primarily serves as an entry point or re-exporter for the core
 `AnimateDiffSynthesis` component, making it easily importable from the
 package root.
 """
+
 from .animatediff_synthesis import AnimateDiffSynthesis
 
 __all__ = ["AnimateDiffSynthesis"]

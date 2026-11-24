@@ -10,11 +10,18 @@ This is construction only; encode/decode tiling and latent
 normalization live on the VAE / processor side.
 """
 
+from typing import Any
+
 from worldfoundry.base_models.diffusion_model.models.upsamplers.ltx.model import LatentUpsampler
 
 
 class LatentUpsamplerConfigurator:
     """Build :class:`LatentUpsampler` from official safetensors JSON metadata."""
+
+    @classmethod
+    def from_metadata(cls, metadata: dict[str, Any]) -> LatentUpsampler:
+        """Build from split-checkpoint safetensors metadata."""
+        return cls.from_config(metadata.get("config", {}))
 
     @classmethod
     def from_config(cls: type[LatentUpsampler], config: dict) -> LatentUpsampler:

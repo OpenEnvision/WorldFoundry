@@ -1,4 +1,3 @@
-schema_version: 2
 id: xgen-jing
 name: XGEN-JING Flash v1
 provider: XGEN Labs
@@ -10,7 +9,7 @@ source:
   license: minimax-h3-community
 checkpoint: XGENlabs/XGEN-JING
 runtime_profile: runtime-profile:xgen-jing
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: xgen-jing
 integration:
   status: integrated

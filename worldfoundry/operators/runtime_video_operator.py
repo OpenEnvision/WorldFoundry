@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from .base_operator import BaseOperator
 
@@ -28,7 +28,7 @@ class RuntimeVideoOperator(BaseOperator):
             raise TypeError(f"Prompt must be a string, got {type(interaction)}")
         return True
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         if len(self.current_interaction) == 0:
             raise ValueError("No prompt to process")
@@ -36,7 +36,7 @@ class RuntimeVideoOperator(BaseOperator):
         self.interaction_history.append(prompt)
         return {"processed_prompt": prompt}
 
-    def process_perception(self, images=None, **kwargs) -> Dict[str, Any]:
+    def process_perception(self, images=None, **kwargs) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         del kwargs
         if self.generation_type == "t2v":

@@ -9,8 +9,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from ..openpi import checkpoints
-from ..openpi import transforms
+from ..openpi import checkpoints, transforms
 from ..openpi.modeling import model as _model
 from . import config as _config
 from .policy import MMEVLAPolicy

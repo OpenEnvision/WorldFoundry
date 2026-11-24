@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.reporting import (
+from worldfoundry.evals.reporting import (
     RUN_COMPARISON_SCHEMA_VERSION,
     build_comparison_identity,
     build_markdown_comparison,

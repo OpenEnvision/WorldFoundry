@@ -9,20 +9,20 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
-from worldfoundry.evaluation.api import AggregateResult, ArtifactRef, GenerationRequest, GenerationResult, MetricResult
-from worldfoundry.evaluation.api.metrics import aggregate_mean
-from worldfoundry.evaluation.models.runners.registry import ModelRunnerRegistry
-from worldfoundry.evaluation.models.runners.resolver import ResolvedWorldModel
-from worldfoundry.evaluation.reporting.run_comparison import build_run_comparison
-from worldfoundry.evaluation.reporting.run_index import build_run_index
-from worldfoundry.evaluation.reporting.scorecard import build_scorecard
-from worldfoundry.evaluation.reporting.validation import validate_contract_file
-from worldfoundry.evaluation.tasks.embodied.merge_results import merge_embodied_results
-from worldfoundry.evaluation.tasks.embodied.metrics import ResultFieldMetric, metric_suite
-from worldfoundry.evaluation.tasks.execution.orchestration.contract import run_contract
-from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import run_evaluate
-from worldfoundry.evaluation.tasks.execution.orchestration.existing_results import run_existing_results
-from worldfoundry.evaluation.tasks.metrics.registry import BuiltinExistingResultsMetric
+from worldfoundry.evals.api import AggregateResult, ArtifactRef, GenerationRequest, GenerationResult, MetricResult
+from worldfoundry.evals.api.metrics import aggregate_mean
+from worldfoundry.evals.models.runners.registry import ModelRunnerRegistry
+from worldfoundry.evals.models.runners.resolver import ResolvedWorldModel
+from worldfoundry.evals.reporting.run_comparison import build_run_comparison
+from worldfoundry.evals.reporting.run_index import build_run_index
+from worldfoundry.evals.reporting.scorecard import build_scorecard
+from worldfoundry.evals.reporting.validation import validate_contract_file
+from worldfoundry.evals.tasks.embodied.merge_results import merge_embodied_results
+from worldfoundry.evals.tasks.embodied.metrics import ResultFieldMetric, metric_suite
+from worldfoundry.evals.tasks.execution.orchestration.contract import run_contract
+from worldfoundry.evals.tasks.execution.orchestration.evaluate import run_evaluate
+from worldfoundry.evals.tasks.execution.orchestration.existing_results import run_existing_results
+from worldfoundry.evals.tasks.metrics.registry import BuiltinExistingResultsMetric
 
 
 class WeightedError:
@@ -445,7 +445,7 @@ class ScoringTests(unittest.TestCase):
                 output_dir=self.root / "invalid",
                 requests=self.requests,
                 runner=runner,
-                metrics=["cmmd"],
+                metrics=["kid"],
             )
         self.assertEqual(runner.calls, [])
 
@@ -561,7 +561,7 @@ class ScoringTests(unittest.TestCase):
             self.assertEqual(build_run_index(root)["runs"][0]["status"], "interrupted")
 
     def test_reporting_failure_does_not_leave_a_successful_report(self):
-        with patch("worldfoundry.evaluation.tasks.execution.orchestration.existing_results.write_run_report_artifacts",
+        with patch("worldfoundry.evals.tasks.execution.orchestration.existing_results.write_run_report_artifacts",
                    side_effect=OSError("report unavailable")):
             with self.assertRaises(OSError):
                 self.offline("report_failure", [WeightedError()])
@@ -605,7 +605,7 @@ class ScoringTests(unittest.TestCase):
             self.assertTrue(active)
             return ResolvedWorldModel(runner.model_id, runner, "runner_target")
 
-        with patch("worldfoundry.evaluation.models.resolve_world_model_runner",
+        with patch("worldfoundry.evals.models.runners.resolver.resolve_world_model_runner",
                    side_effect=create_runner) as resolve, patch(
                        "worldfoundry.core.worldfoundry_inference_context", side_effect=inference_context,
                    ) as runtime:

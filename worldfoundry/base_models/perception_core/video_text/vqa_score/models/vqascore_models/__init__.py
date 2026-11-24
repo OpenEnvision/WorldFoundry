@@ -27,13 +27,33 @@ _MODEL_SPECS: tuple[_ModelSpec, ...] = (
         "CLIPT5Model",
         ("clip-flant5-xxl", "clip-flant5-xl", "clip-flant5-xxl-no-system", "clip-flant5-xxl-no-system-no-user"),
     ),
-    _ModelSpec("llava_model", "LLAVA_MODELS", "LLaVAModel", ("llava-v1.5-13b", "llava-v1.5-7b", "sharegpt4v-7b", "sharegpt4v-13b")),
+    _ModelSpec(
+        "llava_model",
+        "LLAVA_MODELS",
+        "LLaVAModel",
+        ("llava-v1.5-13b", "llava-v1.5-7b", "sharegpt4v-7b", "sharegpt4v-13b"),
+    ),
     _ModelSpec("llava16_model", "LLAVA16_MODELS", "LLaVA16Model", ("llava-v1.6-13b",)),
-    _ModelSpec("instructblip_model", "InstructBLIP_MODELS", "InstructBLIPModel", ("instructblip-flant5-xxl", "instructblip-flant5-xl")),
+    _ModelSpec(
+        "instructblip_model",
+        "InstructBLIP_MODELS",
+        "InstructBLIPModel",
+        ("instructblip-flant5-xxl", "instructblip-flant5-xl"),
+    ),
     _ModelSpec("gpt4v_model", "GPT4V_MODELS", "GPT4VModel", ("gpt-4-turbo", "gpt-4o", "gpt-4.1")),
-    _ModelSpec("llavaov_model", "LLAVA_OV_MODELS", "LLaVAOneVisionModel", ("llava-onevision-qwen2-7b-si", "llava-onevision-qwen2-7b-ov")),
+    _ModelSpec(
+        "llavaov_model",
+        "LLAVA_OV_MODELS",
+        "LLaVAOneVisionModel",
+        ("llava-onevision-qwen2-7b-si", "llava-onevision-qwen2-7b-ov"),
+    ),
     _ModelSpec("mplug_model", "MPLUG_OWL3_MODELS", "mPLUGOwl3Model", ("mplug-owl3-7b",)),
-    _ModelSpec("paligemma_model", "PALIGEMMA_MODELS", "PaliGemmaModel", ("paligemma-3b-mix-224", "paligemma-3b-mix-448", "paligemma-3b-mix-896")),
+    _ModelSpec(
+        "paligemma_model",
+        "PALIGEMMA_MODELS",
+        "PaliGemmaModel",
+        ("paligemma-3b-mix-224", "paligemma-3b-mix-448", "paligemma-3b-mix-896"),
+    ),
     _ModelSpec(
         "internvl_model",
         "INTERNVL2_MODELS",
@@ -58,7 +78,12 @@ _MODEL_SPECS: tuple[_ModelSpec, ...] = (
             "internvl3-78b",
         ),
     ),
-    _ModelSpec("internvideo_model", "INTERNVIDEO2_MODELS", "InternVideo2Model", ("internvideo2-chat-8b", "internvideo2-chat-8b-hd", "internvideo2-chat-8b-internlm")),
+    _ModelSpec(
+        "internvideo_model",
+        "INTERNVIDEO2_MODELS",
+        "InternVideo2Model",
+        ("internvideo2-chat-8b", "internvideo2-chat-8b-hd", "internvideo2-chat-8b-internlm"),
+    ),
     _ModelSpec("internlm_model", "INTERNLMXCOMPOSER25_MODELS", "InternLMXComposer25Model", ("internlmxcomposer25-7b",)),
     _ModelSpec(
         "llama32_model",
@@ -77,12 +102,40 @@ _MODEL_SPECS: tuple[_ModelSpec, ...] = (
             "llama-guard-3-11b-vision",
         ),
     ),
-    _ModelSpec("molmo_model", "MOLMO_MODELS", "MOLMOVisionModel", ("molmo-72b-0924", "molmo-7b-d-0924", "molmo-7b-o-0924", "molmoe-1b-0924")),
-    _ModelSpec("gemini_model", "GEMINI_MODELS", "GeminiModel", ("gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.5-flash", "gemini-2.5-pro")),
-    _ModelSpec("qwen2vl_model", "QWEN2_VL_MODELS", "Qwen2VLModel", ("qwen2-vl-2b", "qwen2-vl-7b", "qwen2-vl-72b", "qwen2.5-vl-3b", "qwen2.5-vl-7b", "qwen2.5-vl-32b", "qwen2.5-vl-72b")),
+    _ModelSpec(
+        "molmo_model",
+        "MOLMO_MODELS",
+        "MOLMOVisionModel",
+        ("molmo-72b-0924", "molmo-7b-d-0924", "molmo-7b-o-0924", "molmoe-1b-0924"),
+    ),
+    _ModelSpec(
+        "gemini_model",
+        "GEMINI_MODELS",
+        "GeminiModel",
+        ("gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.5-flash", "gemini-2.5-pro"),
+    ),
+    _ModelSpec(
+        "qwen2vl_model",
+        "QWEN2_VL_MODELS",
+        "Qwen2VLModel",
+        (
+            "qwen2-vl-2b",
+            "qwen2-vl-7b",
+            "qwen2-vl-72b",
+            "qwen2.5-vl-3b",
+            "qwen2.5-vl-7b",
+            "qwen2.5-vl-32b",
+            "qwen2.5-vl-72b",
+        ),
+    ),
     _ModelSpec("llavavideo_model", "LLAVA_VIDEO_MODELS", "LLaVAVideoModel", ("llava-video-7b", "llava-video-72B")),
     _ModelSpec("tarsier_model", "TARSIER_MODELS", "TarsierModel", ("tarsier-recap-7b", "tarsier2-7b")),
-    _ModelSpec("perceptionlm_model", "PERCEPTION_LM_MODELS", "PerceptionLMModel", ("perception-lm-1b", "perception-lm-3b", "perception-lm-8b")),
+    _ModelSpec(
+        "perceptionlm_model",
+        "PERCEPTION_LM_MODELS",
+        "PerceptionLMModel",
+        ("perception-lm-1b", "perception-lm-3b", "perception-lm-8b"),
+    ),
 )
 
 _MODEL_BY_NAME = {name: spec for spec in _MODEL_SPECS for name in spec.names}
@@ -97,7 +150,7 @@ def list_all_vqascore_models():
     return [name for spec in _MODEL_SPECS for name in spec.names]
 
 
-def get_vqascore_model(model_name, device='cuda', cache_dir=HF_CACHE_DIR, **kwargs):
+def get_vqascore_model(model_name, device="cuda", cache_dir=HF_CACHE_DIR, **kwargs):
     try:
         spec = _MODEL_BY_NAME[model_name]
     except KeyError as exc:

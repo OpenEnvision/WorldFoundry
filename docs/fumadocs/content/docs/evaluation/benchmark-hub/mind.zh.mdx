@@ -1,13 +1,13 @@
 ---
 title: MIND
-description: "交互式世界模型的闭环回访评测：250 段 1080p / 24 FPS 视频。WorldFoundry 对视频打分，不生成视频；mind_average 也不是官方综合分。"
+description: "交互式世界模型的闭环回访评测：250 段 1080p / 24 FPS 视频。WorldFoundry 对生成视频打分；mind_average 是 WorldFoundry 聚合值。"
 ---
 
 MIND（中南大学 CSU-JPG）是开放域**闭环回访**评测：模型在相机 / 动作指令下 rollout，离开某区域后再返回。官方 **MIND-Data** 是 **250** 段虚幻引擎 5 视频，**1080p / 24 FPS**，覆盖八类场景（40+ 环境）。**200** 段共享同一动作空间（第一 / 第三人称各 100）；**50** 段使用变化的速度与旋转角（各 25）。打分包括长上下文记忆（PSNR / SSIM / LPIPS / MSE + DINOv3 patch MSE）、视觉质量（MUSIQ-SPAQ、LAION 美学）、动作控制（ViPE 相对位姿误差），以及考察通用场景一致性的**镜像测试**。布局：`<model>/{1st,3rd}_data/<test_type>/<name>/video.mp4`。项目把公开 leaderboard 标为**即将开放**。
 
 论文：[MIND](https://arxiv.org/abs/2602.08025)。项目：[csu-jpg.github.io/MIND.github.io](https://csu-jpg.github.io/MIND.github.io/)。代码：[CSU-JPG/MIND](https://github.com/CSU-JPG/MIND)（MIT）。数据集：[CSU-JPG/MIND](https://huggingface.co/datasets/CSU-JPG/MIND)。
 
-WorldFoundry **内置指标 runtime**（`run_mind_official_runner.py`）。`--run-official` 对就位的真值与生成视频打分；`--official-results-path` **导入**已完成的 MIND JSON；`--run-fixture` 是无 GPU 的归一化检查。本页**不跑**世界模型推理。`mind_average`（以及四个能力组得分）是 **WorldFoundry 派生值**——MIND 官方不发布综合分。
+WorldFoundry **内置指标 runtime**（`run_mind_official_runner.py`）。`--run-official` 对就位的真值与生成视频打分；`--official-results-path` **导入**已完成的 MIND JSON；`--run-fixture` 是无 GPU 的归一化检查。视频需事先生成，runner 不运行世界模型推理。`mind_average`（以及四个能力组得分）是 **WorldFoundry 派生值**——MIND 官方不发布综合分。
 
 <BenchmarkPageSections id="mind" locale="zh" />
 
@@ -16,17 +16,17 @@ WorldFoundry **内置指标 runtime**（`run_mind_official_runner.py`）。`--ru
 无 GPU 的 fixture：
 
 ```bash
-python worldfoundry/evaluation/tasks/execution/runners/mind/run_mind_official_runner.py \
+python worldfoundry/evals/tasks/execution/runners/mind/run_mind_official_runner.py \
   --run-fixture \
   --output-dir tmp/mind/fixture \
   --json
 ```
 
-对已就位真值与模型输出打分（DINOv3 用 `--dino-path`；需要动作指标时用 `--vipe-repo`）：
+对已准备好的真值与模型输出打分（DINOv3 用 `--dino-path`；需要动作指标时用 `--vipe-repo`）：
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/mind/run_mind_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/mind/run_mind_official_runner.py \
   --run-official \
   --gt-root /path/to/MIND-Data \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
@@ -38,7 +38,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 导入已完成的 MIND 结果 JSON：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id mind \
   --mode official-validation \
   --official-results-path <mind_result.json> \
@@ -46,15 +46,15 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-`--metrics` 是逗号列表（`lcm,visual,dino,action,gsc`；默认全开）。`--video-max-time` 限制除动作外所有指标的帧数。DINOv3 权重默认 `./dinov3_vitb16`，也可用 `--dino-path` / `WORLDFOUNDRY_MIND_DINO_PATH`。指标栈额外 pip 钉在 `worldfoundry/data/benchmarks/requirements/mind.txt`。动作打分还要 ViPE checkout（`--vipe-repo`）。
+`--metrics` 是逗号列表（`lcm,visual,dino,action,gsc`；默认全开）。`--video-max-time` 限制除动作外所有指标的帧数。DINOv3 权重默认 `./dinov3_vitb16`，也可用 `--dino-path` / `WORLDFOUNDRY_MIND_DINO_PATH`。指标栈所需的额外 pip 版本约束见 `worldfoundry/data/benchmarks/requirements/mind.txt`。动作打分还要 ViPE checkout（`--vipe-repo`）。
 
-仓内 `src/process.py` 可按 GPU 分发：视频进队列，空闲 GPU 取任务，失败回队，每完成一条就重写结果 JSON，便于读中间结果。支持的入口是 WorldFoundry `--run-official`，不要把 `src/process.py` 当成第二套公开 CLI。
+仓内 `src/process.py` 可按 GPU 分发：视频进入队列后，由空闲 GPU 获取任务；失败任务重新入队。每完成一条视频就重写结果 JSON，便于读取中间结果。应使用 WorldFoundry `--run-official` 入口，不要将 `src/process.py` 当作第二套公开 CLI。
 
 可变状态（工作目录、`MIND_CACHE_DIR`、日志）都写在 `--output-dir` 下。环境变量：`WORLDFOUNDRY_MIND_ROOT`、`WORLDFOUNDRY_MIND_RESULTS_PATH`、`WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`。清单：`worldfoundry/data/benchmarks/tasks/external/mind.yaml`。产物：`scorecard.json`（主键 `mind_average`）、`raw_metric_table.jsonl`、`per_sample_scores.jsonl`、`benchmark_contract.json`。
 
 ## 生成视频与真值布局
 
-`--generated-artifact-dir` 必须对齐视角与测试类型。`{corresponding data name}` 是真值文件夹名。镜像测试是十条 path 视频，不是单个 `video.mp4`：
+`--generated-artifact-dir` 必须与视角和测试类型对应。`{corresponding data name}` 是真值文件夹名。镜像测试是十条 path 视频，不是单个 `video.mp4`：
 
 ```text
 {model_name}/
@@ -98,6 +98,6 @@ MIND-Data/
 - `action` — 滤异常后的 ViPE RPE：`__overall__`、`translation`、`rotation`、`other`，以及 `act:<name>`（`rpe_trans_mean` / `median`、`rpe_rot_mean_deg` / `median_deg`、`count`）。
 - `video_results[*].gsc` — 镜像测试的通用场景一致性（同样四个像素指标；`sample_frames` 应为 `2 × mark_time`）。
 
-仓内 fixture `worldfoundry/data/benchmarks/assets/mind/fixtures/mind_result_fixture.json` 只复现该 schema，数字是编的。里面**没有**上游 MIND 记录——样本 id、帧数和分数都是为了在没有 GPU、ViPE 或官方数据集时跑归一化、聚合和 scorecard 不变量。不能当 MIND 成绩发表。
+仓内 fixture `worldfoundry/data/benchmarks/assets/mind/fixtures/mind_result_fixture.json` 按该 schema 填入合成数字，用于在没有 GPU、ViPE 或官方数据集时检查归一化、聚合和 scorecard。它不是 MIND 成绩。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

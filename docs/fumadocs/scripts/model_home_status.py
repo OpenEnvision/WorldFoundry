@@ -220,7 +220,9 @@ def classify_token(value: str | None) -> str:
 
 
 def recipe_status_key(recipe: dict[str, Any]) -> str:
-    status = recipe.get("status") if isinstance(recipe.get("status"), dict) else {}
+    status = recipe.get("status")
+    if not isinstance(status, dict):
+        status = {}
     runner = str(status.get("runner") or "")
     integration = str(status.get("integration") or "")
     group = str(status.get("group") or "")

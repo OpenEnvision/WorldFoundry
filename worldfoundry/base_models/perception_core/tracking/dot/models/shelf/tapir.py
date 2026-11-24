@@ -1,15 +1,16 @@
-from torch import nn
 import torch.nn.functional as F
 from einops import rearrange
+from torch import nn
 
 from .tapir_utils.tapir_model import TAPIR
+
 
 class Tapir(nn.Module):
     def __init__(self, args):
         super().__init__()
-        self.model = TAPIR(pyramid_level=args.pyramid_level,
-                           softmax_temperature=args.softmax_temperature,
-                           extra_convs=args.extra_convs)
+        self.model = TAPIR(
+            pyramid_level=args.pyramid_level, softmax_temperature=args.softmax_temperature, extra_convs=args.extra_convs
+        )
 
     def forward(self, video, queries, backward_tracking, cache_features=False):
         # Preprocess video
@@ -21,7 +22,7 @@ class Tapir(nn.Module):
 
         # Inference
         outputs = self.model(video, queries, cache_features=cache_features)
-        tracks, occlusions, expected_dist = outputs['tracks'], outputs['occlusion'], outputs['expected_dist']
+        tracks, occlusions, expected_dist = outputs["tracks"], outputs["occlusion"], outputs["expected_dist"]
 
         # Postprocess tracks
         tracks = rearrange(tracks, "b s t c -> b t s c")

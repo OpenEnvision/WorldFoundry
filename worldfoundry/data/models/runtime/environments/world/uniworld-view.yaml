@@ -43,5 +43,5 @@ validation_imports:
 - imageio
 notes:
 - Install the full pinned official requirements.txt in this dedicated environment; these listed packages are the critical ABI pins, not a replacement for upstream requirements.
-- Install carvekit with --no-deps and build PyTorch3D from upstream's extern/install_pytorch3d.sh for the default hybrid/mesh renderer.
-- Upstream inference requires its STream3R, SAM2, MoGe and renderer source trees under extern; point UNIWORLD_VIEW_REPO and UNIWORLD_VIEW_PYTHON to the local checkout and environment.
+- Install carvekit with --no-deps and build PyTorch3D 0.7.8 from source for the default hybrid/mesh renderer.
+- The inference code, including its SAM2 and MoGe copies, is vendored in WorldFoundry; point UNIWORLD_VIEW_PYTHON to this environment when it is outside the default conda path.

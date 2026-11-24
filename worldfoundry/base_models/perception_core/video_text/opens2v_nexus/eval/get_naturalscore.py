@@ -1,13 +1,13 @@
-import os
-import cv2
-import json
-import base64
 import argparse
-from openai import OpenAI
+import base64
+import json
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm import tqdm
-from tenacity import retry, wait_exponential, stop_after_attempt
 
+import cv2
+from openai import OpenAI
+from tenacity import retry, stop_after_attempt, wait_exponential
+from tqdm import tqdm
 
 prompt = """
 Your task is to determine how realistic the given video clip appears, based on 16 extracted frames. Consider the following aspects in your evaluation:
@@ -112,9 +112,7 @@ def process_video(video_path, api_key, model_name=None, base_url=None):
         return video_prefix, "error"
 
 
-def process_video_threaded(
-    file_path, result_dict, api_key, model_name=None, base_url=None
-):
+def process_video_threaded(file_path, result_dict, api_key, model_name=None, base_url=None):
     video_key, score = process_video(file_path, api_key, model_name, base_url)
     result_dict[video_key] = score
 
@@ -134,9 +132,7 @@ def process_folder(
     result_dict = {}
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = []
-        for f in tqdm(
-            video_files, desc=f"Processing {os.path.basename(input_video_folder)}"
-        ):
+        for f in tqdm(video_files, desc=f"Processing {os.path.basename(input_video_folder)}"):
             full_path = os.path.join(input_video_folder, f)
             futures.append(
                 executor.submit(

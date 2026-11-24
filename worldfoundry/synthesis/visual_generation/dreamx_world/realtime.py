@@ -12,8 +12,9 @@ from __future__ import annotations
 import inspect
 import os
 import time
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -40,9 +41,7 @@ DEFAULT_NEGATIVE_PROMPT = (
     "整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，形态畸形的肢体"
 )
 
-_CONFIG_PATH = resolve_data_path(
-    "models", "runtime", "configs", "dreamx_world", "wan_ti2v_5b.yaml"
-)
+_CONFIG_PATH = resolve_data_path("models", "runtime", "configs", "dreamx_world", "wan_ti2v_5b.yaml")
 _DREAMX_REQUIRED = (
     "config.json",
     "diffusion_pytorch_model.safetensors.index.json",
@@ -81,6 +80,8 @@ def _env_flag(name: str, default: bool) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _distributed_device() -> tuple[int, int, torch.device]:
     if not torch.cuda.is_available() or torch.cuda.device_count() < 1:
         raise RuntimeError("DreamX-World realtime inference requires CUDA.")
@@ -91,9 +92,7 @@ def _distributed_device() -> tuple[int, int, torch.device]:
 
     local_rank = int(os.getenv("LOCAL_RANK", "0"))
     if not 0 <= local_rank < torch.cuda.device_count():
-        raise ValueError(
-            f"LOCAL_RANK={local_rank} but only {torch.cuda.device_count()} CUDA devices are visible."
-        )
+        raise ValueError(f"LOCAL_RANK={local_rank} but only {torch.cuda.device_count()} CUDA devices are visible.")
     device = torch.device(f"cuda:{local_rank}")
     torch.cuda.set_device(device)
     if not dist.is_available():
@@ -135,9 +134,7 @@ def _frame_keys(
     fps: int,
 ) -> list[frozenset[str]]:
     fallback = frozenset(
-        _TOKEN_TO_KEY[token]
-        for item in interactions
-        if (token := str(item).strip().lower()) in _TOKEN_TO_KEY
+        _TOKEN_TO_KEY[token] for item in interactions if (token := str(item).strip().lower()) in _TOKEN_TO_KEY
     )
     if not segments:
         return [fallback] * frame_count
@@ -183,9 +180,7 @@ def _normalize_decoded_video(value: Any, *, expected_frames: int) -> np.ndarray:
     elif video.shape[-1] != 3:
         raise RuntimeError(f"DreamX-World returned an invalid channel layout: {video.shape}")
     if len(video) != expected_frames:
-        raise RuntimeError(
-            f"DreamX-World returned {len(video)} frames; expected {expected_frames}."
-        )
+        raise RuntimeError(f"DreamX-World returned {len(video)} frames; expected {expected_frames}.")
     if video.dtype != np.uint8:
         maximum = float(video.max(initial=0.0))
         if maximum <= 1.0001:
@@ -251,15 +246,9 @@ class DreamXWorldRealtimeSession:
         )
         self.height = DEFAULT_HEIGHT
         self.width = DEFAULT_WIDTH
-        self.num_inference_steps = max(
-            int(os.getenv("WORLDFOUNDRY_DREAMX_STEPS", str(DEFAULT_STEPS))), 1
-        )
-        self.guidance_scale = float(
-            os.getenv("WORLDFOUNDRY_DREAMX_GUIDANCE_SCALE", str(DEFAULT_GUIDANCE_SCALE))
-        )
-        self.negative_prompt = os.getenv(
-            "WORLDFOUNDRY_DREAMX_NEGATIVE_PROMPT", DEFAULT_NEGATIVE_PROMPT
-        )
+        self.num_inference_steps = max(int(os.getenv("WORLDFOUNDRY_DREAMX_STEPS", str(DEFAULT_STEPS))), 1)
+        self.guidance_scale = float(os.getenv("WORLDFOUNDRY_DREAMX_GUIDANCE_SCALE", str(DEFAULT_GUIDANCE_SCALE)))
+        self.negative_prompt = os.getenv("WORLDFOUNDRY_DREAMX_NEGATIVE_PROMPT", DEFAULT_NEGATIVE_PROMPT)
         self._prompt_cache: dict[str, tuple[list[torch.Tensor], list[torch.Tensor]]] = {}
         self._image: Image.Image | None = None
         self._prompt = ""
@@ -300,9 +289,7 @@ class DreamXWorldRealtimeSession:
             torch.cuda.set_device(self.device)
 
         config = OmegaConf.load(_CONFIG_PATH)
-        transformer_kwargs = OmegaConf.to_container(
-            config["transformer_additional_kwargs"], resolve=True
-        )
+        transformer_kwargs = OmegaConf.to_container(config["transformer_additional_kwargs"], resolve=True)
         transformer_kwargs["cam_method"] = "prope"
         transformer_kwargs["add_control_adapter"] = True
         transformer = load_wan_transformer(
@@ -324,22 +311,14 @@ class DreamXWorldRealtimeSession:
         )
         text_encoder = WanT5EncoderModel.from_pretrained(
             str(self.wan_model_path / str(config["text_encoder_kwargs"]["text_encoder_subpath"])),
-            additional_kwargs=OmegaConf.to_container(
-                config["text_encoder_kwargs"], resolve=True
-            ),
+            additional_kwargs=OmegaConf.to_container(config["text_encoder_kwargs"], resolve=True),
             low_cpu_mem_usage=True,
             torch_dtype=self.weight_dtype,
         )
         scheduler_kwargs = OmegaConf.to_container(config["scheduler_kwargs"], resolve=True)
-        scheduler_parameters = set(
-            inspect.signature(FlowMatchEulerDiscreteScheduler.__init__).parameters
-        )
+        scheduler_parameters = set(inspect.signature(FlowMatchEulerDiscreteScheduler.__init__).parameters)
         scheduler = FlowMatchEulerDiscreteScheduler(
-            **{
-                key: value
-                for key, value in scheduler_kwargs.items()
-                if key in scheduler_parameters
-            }
+            **{key: value for key, value in scheduler_kwargs.items() if key in scheduler_parameters}
         )
         pipe = Wan2_2_CameraPipeline(
             transformer=transformer,
@@ -449,9 +428,7 @@ class DreamXWorldRealtimeSession:
         finally:
             self.reset()
         self._prewarmed = True
-        self.last_metrics = {
-            "compile_warmup_ms": (time.perf_counter() - started) * 1000.0
-        }
+        self.last_metrics = {"compile_warmup_ms": (time.perf_counter() - started) * 1000.0}
         return {
             "realtime_spec": self.realtime_spec().to_payload(),
             "realtime_metrics": dict(self.last_metrics),
@@ -536,9 +513,7 @@ class DreamXWorldRealtimeSession:
             assert frame is not None
             tensor = torch.from_numpy(np.ascontiguousarray(frame)).to(self.device)
         else:
-            tensor = torch.empty(
-                self.height, self.width, 3, dtype=torch.uint8, device=self.device
-            )
+            tensor = torch.empty(self.height, self.width, 3, dtype=torch.uint8, device=self.device)
         dist.broadcast(tensor, src=0)
         return Image.fromarray(tensor.cpu().numpy(), mode="RGB")
 

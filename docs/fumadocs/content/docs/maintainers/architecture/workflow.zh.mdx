@@ -9,7 +9,7 @@ description: 从 CLI 输入到 artifacts、metrics、scorecard 和 report 的端
 
 ## 入口
 
-控制台入口是 `worldfoundry/cli/main.py:1888` `main()`。多数 evaluate 与仅模型运行接着进入 `evaluation/tasks/execution/orchestration/evaluate.py` 的 `run_evaluate()`（`:1071`）。**model-plus-benchmark 不走这个 facade**：编排调用 `execute_prepared_evaluation()` → `model_benchmark.py` 里的 `run_model_benchmark()`。CLI 会分发到以下四种形态之一：
+控制台入口是 `worldfoundry/cli/main.py:304` `main()`。多数 evaluate 与仅模型运行接着进入 `evals/tasks/execution/orchestration/evaluate.py` 的 `run_evaluate()`（`:808`）。**model-plus-benchmark 不走这个 facade**：编排调用 `execute_prepared_evaluation()` → `model_benchmark.py` 里的 `run_model_benchmark()`。CLI 会分发到以下四种形态之一：
 
 - **evaluate** — 归一化输入、选择 run mode，返回一个 `EvaluateRunResult`。
 - **existing outputs** — 通过 `existing_results.py` 评分磁盘上已有 artifact，不加载模型。
@@ -22,10 +22,10 @@ description: 从 CLI 输入到 artifacts、metrics、scorecard 和 report 的端
 
 主流程如下：一个 `EvaluateRunRequest` 进入 facade，选定 mode，从 task registry 加载或物化输入，再由 delegate runner 写出标准 artifact bundle。若输出目录缺文件，沿此流程查应由哪个 runner 阶段产出。
 
-<CallChainDiagram locale="zh" />
+<ArchDiagram id="workflow" locale="zh" />
 
 ```python
-# worldfoundry/cli/main.py → evaluation/tasks/execution/orchestration/evaluate.py
+# worldfoundry/cli/main.py → evals/tasks/execution/orchestration/evaluate.py
 result = run_evaluate(EvaluateRunRequest(...))
 
 mode = _mode(request)
@@ -57,12 +57,11 @@ Facade 本身很小。`run_evaluate()` 只做请求校验、模式选择和 runn
 
 ```python
 results = runner.generate(requests)
-results = _align_model_results(requests, results)
+results = align_generation_results(requests, results, model_id=model_id)
 return ExistingResultsRunner().run(
     output_dir=output_dir, requests=requests, results=results, metrics=resolved_metrics,
 )
 ```
-
 
 ## Contract Runner 细节
 

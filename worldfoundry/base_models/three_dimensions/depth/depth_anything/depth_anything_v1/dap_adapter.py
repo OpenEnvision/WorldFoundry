@@ -60,16 +60,6 @@ class DAPModel(DepthEstimationModel):
         input_size: int = 518,
         weights_path: str | None = None,
     ) -> None:
-        """Init.
-
-        Args:
-            midas_model_type: The midas model type.
-            input_size: The input size.
-            weights_path: The weights path.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         if weights_path is None:
             try:
@@ -89,7 +79,7 @@ class DAPModel(DepthEstimationModel):
 
         state = torch.load(weights_path, map_location="cpu")
         # Strip DataParallel "module." prefix if present.
-        if any(k.startswith("module.") for k in state.keys()):
+        if any(k.startswith("module.") for k in state.keys()):  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             state = {k[len("module.") :]: v for k, v in state.items()}
         m_state = model.state_dict()
         missing, unexpected = model.load_state_dict({k: v for k, v in state.items() if k in m_state}, strict=False)
@@ -104,31 +94,13 @@ class DAPModel(DepthEstimationModel):
 
     @property
     def depth_type(self) -> DepthType:
-        """Depth type.
-
-        Returns:
-            The return value.
-        """
         return DepthType.MODEL_METRIC_DISTANCE
 
     @property
     def supported_camera_types(self) -> list[CameraType]:
-        """Supported camera types.
-
-        Returns:
-            The return value.
-        """
         return [CameraType.PANORAMA]
 
     def estimate(self, src: DepthEstimationInput) -> DepthEstimationResult:
-        """Estimate.
-
-        Args:
-            src: The src.
-
-        Returns:
-            The return value.
-        """
         rgb: torch.Tensor = unpack_optional(src.rgb)
         assert rgb.dtype == torch.float32, "Input image should be float32"
         assert src.intrinsics is None, "This is only intended for 360 panoramas"
@@ -145,8 +117,8 @@ class DAPModel(DepthEstimationModel):
         # keep aspect ratio, round to a multiple of patch_size.
         target_h, target_w = self.input_size, self.input_size * 2
         scale = max(target_h / H, target_w / W)
-        new_h = max(self._patch_size, int(round(H * scale / self._patch_size)) * self._patch_size)
-        new_w = max(self._patch_size, int(round(W * scale / self._patch_size)) * self._patch_size)
+        new_h = max(self._patch_size, int(round(H * scale / self._patch_size)) * self._patch_size)  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        new_w = max(self._patch_size, int(round(W * scale / self._patch_size)) * self._patch_size)  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
         x = rgb.moveaxis(-1, 1)  # (B, 3, H, W)
         x = F.interpolate(x, size=(new_h, new_w), mode="bicubic", align_corners=False)

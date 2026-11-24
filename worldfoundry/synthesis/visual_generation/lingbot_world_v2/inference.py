@@ -41,18 +41,18 @@ from worldfoundry.base_models.diffusion_model.recipes.wan_configs.lingbot_world_
 from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import (
     FlowUniPCMultistepScheduler,
 )
-from worldfoundry.core.attention.parallel.causal_rope_sequence_parallel import (
-    sp_attn_forward_causal_chunked,
-    sp_dit_forward_causal_chunked,
-)
-from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
 from worldfoundry.core.distributed.sequence_parallel.ops import get_world_size
-from worldfoundry.core.geometry.transforms import ray_condition
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
 from worldfoundry.core.execution.realtime.flow_sampling import reference_flow_schedule, reference_flow_to_clean
+from worldfoundry.core.geometry.transforms import ray_condition
 from worldfoundry.operators.lingbot_world_operator import (
     compute_relative_poses,
     get_Ks_transformed,
     interpolate_camera_poses,
+)
+from worldfoundry.synthesis.visual_generation.lingbot_world.lingbot_world_runtime.sequence_parallel import (
+    sp_attn_forward_causal_chunked,
+    sp_dit_forward_causal_chunked,
 )
 
 
@@ -85,9 +85,7 @@ class LingBotWorldV2Inference:
             return
         root_config = checkpoint_dir / "config.json"
         if not root_config.is_file():
-            raise FileNotFoundError(
-                f"LingBot-World-V2 transformer config is missing: {root_config}"
-            )
+            raise FileNotFoundError(f"LingBot-World-V2 transformer config is missing: {root_config}")
         with tempfile.TemporaryDirectory(prefix="worldfoundry_lingbot_v2_model_") as raw:
             load_root = Path(raw)
             (load_root / "config.json").symlink_to(root_config)
@@ -162,14 +160,35 @@ class LingBotWorldV2Inference:
         if self.reference_sampling:
             from worldfoundry.core.model_loading.model import load_model
 
-            architecture = {name: self.config[name] for name in (
-                "patch_size", "text_len", "dim", "ffn_dim", "freq_dim", "num_heads",
-                "num_layers", "qk_norm", "cross_attn_norm", "eps",
-            )}
-            architecture.update(model_type="i2v", in_dim=36, out_dim=16, text_dim=4096,
-                                local_attn_size=local_attn_size, sink_size=sink_size)
-            model = load_model(LingBotWorldV2Model, checkpoint_dir / "model.safetensors.index.json",
-                               config=architecture, torch_dtype=self.param_dtype)
+            architecture = {
+                name: self.config[name]
+                for name in (
+                    "patch_size",
+                    "text_len",
+                    "dim",
+                    "ffn_dim",
+                    "freq_dim",
+                    "num_heads",
+                    "num_layers",
+                    "qk_norm",
+                    "cross_attn_norm",
+                    "eps",
+                )
+            }
+            architecture.update(
+                model_type="i2v",
+                in_dim=36,
+                out_dim=16,
+                text_dim=4096,
+                local_attn_size=local_attn_size,
+                sink_size=sink_size,
+            )
+            model = load_model(
+                LingBotWorldV2Model,
+                checkpoint_dir / "model.safetensors.index.json",
+                config=architecture,
+                torch_dtype=self.param_dtype,
+            )
         else:
             with self._transformer_load_root(checkpoint_dir, self.config.fast_checkpoint) as load_root:
                 model = LingBotWorldV2Model.from_pretrained(
@@ -403,7 +422,9 @@ class LingBotWorldV2Inference:
         )
         noise = torch.randn(
             16,
-            max(latent_frames, chunk_size * self.config.reference_noise_chunks) if self.reference_sampling else latent_frames,
+            max(latent_frames, chunk_size * self.config.reference_noise_chunks)
+            if self.reference_sampling
+            else latent_frames,
             latent_height,
             latent_width,
             dtype=torch.float32,
@@ -476,6 +497,7 @@ class LingBotWorldV2Inference:
                         noise[:, :latent_frames].split(chunk_size, dim=1),
                         condition.split(chunk_size, dim=1),
                         camera.split(chunk_size, dim=2),
+                        strict=False,
                     ),
                     total=latent_frames // chunk_size,
                 )
@@ -493,7 +515,8 @@ class LingBotWorldV2Inference:
                 }
                 if self.sp_size == 1 and not _is_fsdp_module(self.model):
                     model_kwargs["dit_cond_dict"] = self.model.prepare_camera_condition(
-                        model_kwargs["dit_cond_dict"], token_length=max_seq_len,
+                        model_kwargs["dit_cond_dict"],
+                        token_length=max_seq_len,
                     )
                 for timestep_index, timestep in enumerate(timesteps):
                     noise_prediction = self.model(
@@ -504,7 +527,9 @@ class LingBotWorldV2Inference:
                     )[0]
                     self._cross_attention_initialized = True
                     if self.reference_sampling:
-                        x0 = reference_flow_to_clean(latent, noise_prediction.to(self.param_dtype), sigmas[timestep_index])
+                        x0 = reference_flow_to_clean(
+                            latent, noise_prediction.to(self.param_dtype), sigmas[timestep_index]
+                        )
                     else:
                         x0 = self._flow_to_x0(noise_prediction, latent, timestep, self.scheduler)
                     if timestep_index + 1 < len(timesteps):

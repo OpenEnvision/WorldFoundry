@@ -1,14 +1,7 @@
-"""Module for base_models -> three_dimensions -> slam -> droid_slam -> align.py functionality."""
-
 from lietorch import SE3
 
-def align_pose_fragements(pose0, pose1):
-    """Align pose fragements.
 
-    Args:
-        pose0: The pose0.
-        pose1: The pose1.
-    """
+def align_pose_fragements(pose0, pose1):
     P0 = SE3(pose0.clone())
     P1 = SE3(pose1.clone())
 

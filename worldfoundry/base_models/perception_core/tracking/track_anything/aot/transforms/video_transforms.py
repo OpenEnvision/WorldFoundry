@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot -> transforms -> video_transforms.py functionality."""
-
 import random
 
 import cv2
@@ -15,7 +13,7 @@ from PIL import Image
 from . import image_transforms as IT
 
 
-class Resize(object):
+class Resize:
     """Rescale the image in a sample to a given size.
 
     Args:
@@ -25,12 +23,6 @@ class Resize(object):
     """
 
     def __init__(self, output_size, use_padding=False):
-        """Init.
-
-        Args:
-            output_size: The output size.
-            use_padding: The use padding.
-        """
         assert isinstance(output_size, (int, tuple))
         if isinstance(output_size, int):
             self.output_size = (output_size, output_size)
@@ -39,19 +31,9 @@ class Resize(object):
         self.use_padding = use_padding
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         return self.padding(sample) if self.use_padding else self.rescale(sample)
 
     def rescale(self, sample):
-        """Rescale.
-
-        Args:
-            sample: The sample.
-        """
         prev_img = sample["prev_img"]
         h, w = prev_img.shape[:2]
         if self.output_size == (h, w):
@@ -59,7 +41,7 @@ class Resize(object):
         else:
             new_h, new_w = self.output_size
 
-        for elem in sample.keys():
+        for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if "meta" in elem:
                 continue
             tmp = sample[elem]
@@ -84,11 +66,6 @@ class Resize(object):
         return sample
 
     def padding(self, sample):
-        """Padding.
-
-        Args:
-            sample: The sample.
-        """
         prev_img = sample["prev_img"]
         h, w = prev_img.shape[:2]
         if self.output_size == (h, w):
@@ -97,11 +74,6 @@ class Resize(object):
             new_h, new_w = self.output_size
 
         def sep_pad(x):
-            """Sep pad.
-
-            Args:
-                x: The x.
-            """
             x0 = np.random.randint(0, x + 1)
             x1 = x - x0
             return x0, x1
@@ -109,15 +81,12 @@ class Resize(object):
         top_pad, bottom_pad = sep_pad(new_h - h)
         left_pad, right_pad = sep_pad(new_w - w)
 
-        for elem in sample.keys():
+        for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if "meta" in elem:
                 continue
             tmp = sample[elem]
 
-            if elem == "prev_img" or elem == "curr_img" or elem == "ref_img":
-                pad_value = (124, 116, 104)
-            else:
-                pad_value = 0
+            pad_value = (124, 116, 104) if elem == "prev_img" or elem == "curr_img" or elem == "ref_img" else 0
 
             if elem == "curr_img" or elem == "curr_label":
                 new_tmp = []
@@ -150,7 +119,7 @@ class Resize(object):
         return sample
 
 
-class BalancedRandomCrop(object):
+class BalancedRandomCrop:
     """Crop randomly the image in a sample.
 
     Args:
@@ -159,14 +128,6 @@ class BalancedRandomCrop(object):
     """
 
     def __init__(self, output_size, max_step=5, max_obj_num=5, min_obj_pixel_num=100):
-        """Init.
-
-        Args:
-            output_size: The output size.
-            max_step: The max step.
-            max_obj_num: The max obj num.
-            min_obj_pixel_num: The min obj pixel num.
-        """
         assert isinstance(output_size, (int, tuple))
         if isinstance(output_size, int):
             self.output_size = (output_size, output_size)
@@ -178,11 +139,6 @@ class BalancedRandomCrop(object):
         self.min_obj_pixel_num = min_obj_pixel_num
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         image = sample["prev_img"]
         h, w = image.shape[:2]
         new_h, new_w = self.output_size
@@ -200,7 +156,7 @@ class BalancedRandomCrop(object):
             left = np.random.randint(0, w - new_w + 1)
             after_crop = []
             contains = []
-            for elem in [ref_label, prev_label] + curr_label:
+            for elem in [ref_label, prev_label] + curr_label:  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                 tmp = elem[top : top + new_h, left : left + new_w]
                 contains.append(np.unique(tmp))
                 after_crop.append(tmp)
@@ -221,16 +177,13 @@ class BalancedRandomCrop(object):
                 if after_crop_pixels > self.min_obj_pixel_num:
                     new_all_obj.append(obj_id)
 
-            if len(new_all_obj) == 0:
-                is_contain_obj = False
-            else:
-                is_contain_obj = True
+            is_contain_obj = not len(new_all_obj) == 0  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
 
             if len(new_all_obj) > self.max_obj_num:
                 random.shuffle(new_all_obj)
                 new_all_obj = new_all_obj[: self.max_obj_num]
 
-            all_obj = [0] + new_all_obj
+            all_obj = [0] + new_all_obj  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
         post_process = []
         for elem in after_crop:
@@ -251,7 +204,7 @@ class BalancedRandomCrop(object):
         for idx in range(curr_len):
             sample["curr_label"].append(post_process[idx + 2])
 
-        for elem in sample.keys():
+        for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if "meta" in elem or "label" in elem:
                 continue
             if elem == "curr_img":
@@ -272,30 +225,18 @@ class BalancedRandomCrop(object):
         return sample
 
 
-class RandomScale(object):
+class RandomScale:
     """Randomly resize the image and the ground truth to specified scales.
     Args:
         scales (list): the list of scales
     """
 
     def __init__(self, min_scale=1.0, max_scale=1.3, short_edge=None):
-        """Init.
-
-        Args:
-            min_scale: The min scale.
-            max_scale: The max scale.
-            short_edge: The short edge.
-        """
         self.min_scale = min_scale
         self.max_scale = max_scale
         self.short_edge = short_edge
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         # Fixed range of scales
         sc = np.random.uniform(self.min_scale, self.max_scale)
         # Align short edge
@@ -307,7 +248,7 @@ class RandomScale(object):
             else:
                 sc *= float(self.short_edge) / h
 
-        for elem in sample.keys():
+        for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if "meta" in elem:
                 continue
             tmp = sample[elem]
@@ -331,7 +272,7 @@ class RandomScale(object):
         return sample
 
 
-class RandomScaleV2(object):
+class RandomScaleV2:
     """Randomly resize the image and the ground truth to specified scales.
     Args:
         scales (list): the list of scales
@@ -342,27 +283,14 @@ class RandomScaleV2(object):
         min_scale=0.36,
         max_scale=1.0,
         short_edge=None,
-        ratio=[3.0 / 4.0, 4.0 / 3.0],
+        ratio=[3.0 / 4.0, 4.0 / 3.0],  # noqa: B006 - Keeps the upstream default object and signature.
     ):
-        """Init.
-
-        Args:
-            min_scale: The min scale.
-            max_scale: The max scale.
-            short_edge: The short edge.
-            ratio: The ratio.
-        """
         self.min_scale = min_scale
         self.max_scale = max_scale
         self.short_edge = short_edge
         self.ratio = ratio
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         image = sample["prev_img"]
         h, w = image.shape[:2]
 
@@ -380,7 +308,7 @@ class RandomScaleV2(object):
                 sc_x *= float(self.short_edge) / h
                 sc_y *= float(self.short_edge) / h
 
-        for elem in sample.keys():
+        for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if "meta" in elem:
                 continue
             tmp = sample[elem]
@@ -404,12 +332,6 @@ class RandomScaleV2(object):
         return sample
 
     def get_params(self, height, width):
-        """Get params.
-
-        Args:
-            height: The height.
-            width: The width.
-        """
         area = height * width
 
         log_ratio = [np.log(item) for item in self.ratio]
@@ -417,8 +339,8 @@ class RandomScaleV2(object):
             target_area = area * np.random.uniform(self.min_scale**2, self.max_scale**2)
             aspect_ratio = np.exp(np.random.uniform(log_ratio[0], log_ratio[1]))
 
-            w = int(round(np.sqrt(target_area * aspect_ratio)))
-            h = int(round(np.sqrt(target_area / aspect_ratio)))
+            w = int(round(np.sqrt(target_area * aspect_ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+            h = int(round(np.sqrt(target_area / aspect_ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
             if 0 < w <= width and 0 < h <= height:
                 return h, w
@@ -427,10 +349,10 @@ class RandomScaleV2(object):
         in_ratio = float(width) / float(height)
         if in_ratio < min(self.ratio):
             w = width
-            h = int(round(w / min(self.ratio)))
+            h = int(round(w / min(self.ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         elif in_ratio > max(self.ratio):
             h = height
-            w = int(round(h * max(self.ratio)))
+            w = int(round(h * max(self.ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         else:  # whole image
             w = width
             h = height
@@ -438,46 +360,29 @@ class RandomScaleV2(object):
         return h, w
 
 
-class RestrictSize(object):
+class RestrictSize:
     """Randomly resize the image and the ground truth to specified scales.
     Args:
         scales (list): the list of scales
     """
 
     def __init__(self, max_short_edge=None, max_long_edge=800 * 1.3):
-        """Init.
-
-        Args:
-            max_short_edge: The max short edge.
-            max_long_edge: The max long edge.
-        """
         self.max_short_edge = max_short_edge
         self.max_long_edge = max_long_edge
         assert (max_short_edge is None) or (max_long_edge is None)
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         # Fixed range of scales
         sc = None
         image = sample["ref_img"]
         h, w = image.shape[:2]
         # Align short edge
         if self.max_short_edge is not None:
-            if h > w:
-                short_edge = w
-            else:
-                short_edge = h
+            short_edge = w if h > w else h
             if short_edge < self.max_short_edge:
                 sc = float(self.max_short_edge) / short_edge
         else:
-            if h > w:
-                long_edge = h
-            else:
-                long_edge = w
+            long_edge = h if h > w else w
             if long_edge > self.max_long_edge:
                 sc = float(self.max_long_edge) / long_edge
 
@@ -492,15 +397,12 @@ class RestrictSize(object):
         if new_h == h and new_w == w:
             return sample
 
-        for elem in sample.keys():
+        for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if "meta" in elem:
                 continue
             tmp = sample[elem]
 
-            if "label" in elem:
-                flagval = cv2.INTER_NEAREST
-            else:
-                flagval = cv2.INTER_CUBIC
+            flagval = cv2.INTER_NEAREST if "label" in elem else cv2.INTER_CUBIC
 
             tmp = cv2.resize(tmp, dsize=(new_w, new_h), interpolation=flagval)
 
@@ -509,25 +411,15 @@ class RestrictSize(object):
         return sample
 
 
-class RandomHorizontalFlip(object):
+class RandomHorizontalFlip:
     """Horizontally flip the given image and ground truth randomly with a probability of 0.5."""
 
     def __init__(self, prob):
-        """Init.
-
-        Args:
-            prob: The prob.
-        """
         self.p = prob
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         if random.random() < self.p:
-            for elem in sample.keys():
+            for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 if "meta" in elem:
                     continue
                 if elem == "curr_img" or elem == "curr_label":
@@ -544,25 +436,15 @@ class RandomHorizontalFlip(object):
         return sample
 
 
-class RandomVerticalFlip(object):
+class RandomVerticalFlip:
     """Vertically flip the given image and ground truth randomly with a probability of 0.5."""
 
     def __init__(self, prob=0.3):
-        """Init.
-
-        Args:
-            prob: The prob.
-        """
         self.p = prob
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         if random.random() < self.p:
-            for elem in sample.keys():
+            for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 if "meta" in elem:
                     continue
                 if elem == "curr_img" or elem == "curr_label":
@@ -579,24 +461,12 @@ class RandomVerticalFlip(object):
         return sample
 
 
-class RandomGaussianBlur(object):
-    """Random gaussian blur implementation."""
-    def __init__(self, prob=0.3, sigma=[0.1, 2.0]):
-        """Init.
-
-        Args:
-            prob: The prob.
-            sigma: The sigma.
-        """
+class RandomGaussianBlur:
+    def __init__(self, prob=0.3, sigma=[0.1, 2.0]):  # noqa: B006 - Keeps the upstream default object and signature.
         self.aug = TF.RandomApply([IT.GaussianBlur(sigma)], p=prob)
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
-        for elem in sample.keys():
+        for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if "meta" in elem or "label" in elem:
                 continue
 
@@ -613,11 +483,6 @@ class RandomGaussianBlur(object):
         return sample
 
     def apply_augmentation(self, x):
-        """Apply augmentation.
-
-        Args:
-            x: The x.
-        """
         x = Image.fromarray(np.uint8(x))
         x = self.aug(x)
         x = np.array(x, dtype=np.float32)
@@ -625,50 +490,22 @@ class RandomGaussianBlur(object):
 
 
 class RandomGrayScale(RandomGaussianBlur):
-    """Random gray scale implementation."""
     def __init__(self, prob=0.2):
-        """Init.
-
-        Args:
-            prob: The prob.
-        """
         self.aug = TF.RandomGrayscale(p=prob)
 
 
 class RandomColorJitter(RandomGaussianBlur):
-    """Random color jitter implementation."""
     def __init__(self, prob=0.8, brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1):
-        """Init.
-
-        Args:
-            prob: The prob.
-            brightness: The brightness.
-            contrast: The contrast.
-            saturation: The saturation.
-            hue: The hue.
-        """
         self.aug = TF.RandomApply([TF.ColorJitter(brightness, contrast, saturation, hue)], p=prob)
 
 
-class SubtractMeanImage(object):
-    """Subtract mean image implementation."""
+class SubtractMeanImage:
     def __init__(self, mean, change_channels=False):
-        """Init.
-
-        Args:
-            mean: The mean.
-            change_channels: The change channels.
-        """
         self.mean = mean
         self.change_channels = change_channels
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
-        for elem in sample.keys():
+        for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if "image" in elem:
                 if self.change_channels:
                     sample[elem] = sample[elem][:, :, [2, 1, 0]]
@@ -676,20 +513,14 @@ class SubtractMeanImage(object):
         return sample
 
     def __str__(self):
-        """Str."""
         return "SubtractMeanImage" + str(self.mean)
 
 
-class ToTensor(object):
+class ToTensor:
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
-        for elem in sample.keys():
+        for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if "meta" in elem:
                 continue
             tmp = sample[elem]
@@ -724,27 +555,16 @@ class ToTensor(object):
         return sample
 
 
-class MultiRestrictSize(object):
-    """Multi restrict size implementation."""
+class MultiRestrictSize:
     def __init__(
         self,
         max_short_edge=None,
         max_long_edge=800,
         flip=False,
-        multi_scale=[1.3],
+        multi_scale=[1.3],  # noqa: B006 - Keeps the upstream default object and signature.
         align_corners=True,
         max_stride=16,
     ):
-        """Init.
-
-        Args:
-            max_short_edge: The max short edge.
-            max_long_edge: The max long edge.
-            flip: The flip.
-            multi_scale: The multi scale.
-            align_corners: The align corners.
-            max_stride: The max stride.
-        """
         self.max_short_edge = max_short_edge
         self.max_long_edge = max_long_edge
         self.multi_scale = multi_scale
@@ -753,11 +573,6 @@ class MultiRestrictSize(object):
         self.max_stride = max_stride
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         samples = []
         image = sample["current_img"]
         h, w = image.shape[:2]
@@ -765,10 +580,7 @@ class MultiRestrictSize(object):
             # restrict short edge
             sc = 1.0
             if self.max_short_edge is not None:
-                if h > w:
-                    short_edge = w
-                else:
-                    short_edge = h
+                short_edge = w if h > w else h
                 if short_edge > self.max_short_edge:
                     sc *= float(self.max_short_edge) / short_edge
             new_h, new_w = sc * h, sc * w
@@ -776,10 +588,7 @@ class MultiRestrictSize(object):
             # restrict long edge
             sc = 1.0
             if self.max_long_edge is not None:
-                if new_h > new_w:
-                    long_edge = new_h
-                else:
-                    long_edge = new_w
+                long_edge = new_h if new_h > new_w else new_w
                 if long_edge > self.max_long_edge:
                     sc *= float(self.max_long_edge) / long_edge
 
@@ -803,7 +612,7 @@ class MultiRestrictSize(object):
                 samples.append(sample)
             else:
                 new_sample = {}
-                for elem in sample.keys():
+                for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                     if "meta" in elem:
                         new_sample[elem] = sample[elem]
                         continue
@@ -820,7 +629,7 @@ class MultiRestrictSize(object):
             if self.flip:
                 now_sample = samples[-1]
                 new_sample = {}
-                for elem in now_sample.keys():
+                for elem in now_sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                     if "meta" in elem:
                         new_sample[elem] = now_sample[elem].copy()
                         new_sample[elem]["flip"] = True
@@ -833,17 +642,11 @@ class MultiRestrictSize(object):
         return samples
 
 
-class MultiToTensor(object):
-    """Multi to tensor implementation."""
+class MultiToTensor:
     def __call__(self, samples):
-        """Call.
-
-        Args:
-            samples: The samples.
-        """
         for idx in range(len(samples)):
             sample = samples[idx]
-            for elem in sample.keys():
+            for elem in sample.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 if "meta" in elem:
                     continue
                 tmp = sample[elem]

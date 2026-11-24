@@ -1,26 +1,26 @@
 ---
 title: DEVIL Dynamics
-description: "NeurIPS 2024 的动力学导向 T2V 评测：动态范围、可控性、动态条件质量。WorldFoundry 导入官方行或 artifact 分数，不编造榜单。"
+description: "NeurIPS 2024 的动力学导向 T2V 评测：动态范围、可控性、动态条件质量。WorldFoundry 导入官方行或 artifact 分数。"
 ---
 
-DEVIL（国科大与百度；NeurIPS 2024）评的是文本生成视频的 **动力学**，不是好看不好看。Prompt 按动力学等级分层；多个时间粒度的分数汇总成三个协议指标，论文报告与人类评分 **>90% 相关**：
+DEVIL（国科大与百度；NeurIPS 2024）评测文本生成视频的**动力学**，而非画面美观。Prompt 按动力学等级分层；多个时间粒度的分数汇总成三个协议指标，论文报告其与人类评分的相关性 **>90%**：
 
-- **动态范围** — 模型能产生多少内容变化。
-- **动态可控性** — 是否遵守所提示的动力学等级。
-- **动态质量** — 在该动力学等级下的质量。
+- **动态范围**：模型能产生多少内容变化。
+- **动态可控性**：是否遵守所提示的动力学等级。
+- **动态质量**：在该动力学等级下的质量。
 
 `devil_dynamics_average` 是这三项的均值。
 
 论文：[DEVIL](https://arxiv.org/abs/2407.01094)。代码：[MingXiangL/DEVIL](https://github.com/MingXiangL/DEVIL)。
 
-WorldFoundry **从已就位的 artifact 分数物化指标行**（`WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR`），或 **导入官方 JSON**。完整重算仍需上游权重（RAFT、CLIP ViT-L/14 与 ViT-B/32、ViCLIP、DINOv2、AMT、动力学回归）。Gemini 自然度组件不在本地重算范围内。
+WorldFoundry **根据已放置的 artifact 分数生成指标行**（`WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR`），或**导入官方 JSON**。完整重算需要上游权重（RAFT、CLIP ViT-L/14 与 ViT-B/32、ViCLIP、DINOv2、AMT、动力学回归）。Gemini 自然度组件不在本地重算范围内。
 
 <BenchmarkPageSections id="devil-dynamics" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id devil-dynamics \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -29,9 +29,9 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-每个官方 DEVIL prompt 生成一条视频；等级分层来自官方 prompt 元数据。默认导入：`WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH`。运行时分数：`WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR`。
+每个官方 DEVIL prompt 生成一条视频；等级分层来自官方 prompt 元数据。默认导入路径：`WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH`。运行时分数：`WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/devil-dynamics.yaml`，`worldfoundry/evaluation/tasks/execution/runners/devil_dynamics`。
+清单：`worldfoundry/data/benchmarks/tasks/external/devil-dynamics.yaml`。
 
 产物包括 `scorecard.json`（主键 `devil_dynamics_average`）与 `raw_metric_table.jsonl`。
 

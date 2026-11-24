@@ -1,11 +1,8 @@
-"""Module for base_models -> perception_core -> general_perception -> open_clip -> audio -> config.py functionality."""
-
 from dataclasses import dataclass
 
 
 @dataclass
 class CLIPAudioCfg:
-    """Clip audio cfg implementation."""
     model_type: str = "HTSAT"
     model_name: str = "tiny"
     audio_length: int = 1024

@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v2 -> adapter.py functionality."""
-
 import numpy as np
 import torch
 
@@ -30,16 +28,6 @@ class DepthAnythingDepthModel(DepthEstimationModel):
     """
 
     def __init__(self, model: str = "vitl", ckpt: str = "default", weights_path: str | None = None) -> None:
-        """Init.
-
-        Args:
-            model: The model.
-            ckpt: The ckpt.
-            weights_path: The weights path.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         self.model_config = {
@@ -95,22 +83,9 @@ class DepthAnythingDepthModel(DepthEstimationModel):
 
     @property
     def depth_type(self) -> DepthType:
-        """Depth type.
-
-        Returns:
-            The return value.
-        """
         return DepthType.METRIC_DEPTH if self.is_metric else DepthType.AFFINE_DISP
 
     def estimate(self, src: DepthEstimationInput) -> DepthEstimationResult:
-        """Estimate.
-
-        Args:
-            src: The src.
-
-        Returns:
-            The return value.
-        """
         rgb: torch.Tensor = unpack_optional(src.rgb)
         assert rgb.dtype == torch.float32, "Input image should be float32"
 

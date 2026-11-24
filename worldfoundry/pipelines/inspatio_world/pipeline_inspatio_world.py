@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from ..pipeline_utils import PipelineABC
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
@@ -14,6 +13,7 @@ from ...synthesis.visual_generation.inspatio_world.inspatio_world_synthesis impo
     DEFAULT_WAN_MODEL_REPO,
     InspatioWorldSynthesis,
 )
+from ..pipeline_utils import PipelineABC
 
 
 class InspatioWorldPipeline(PipelineABC):
@@ -21,7 +21,7 @@ class InspatioWorldPipeline(PipelineABC):
 
     def __init__(
         self,
-        synthesis_model: Optional[Any] = None,
+        synthesis_model: Any | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype=torch.bfloat16,
@@ -32,15 +32,15 @@ class InspatioWorldPipeline(PipelineABC):
         self.weight_dtype = weight_dtype
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: str = DEFAULT_CHECKPOINT_REPO,
-        required_components: Optional[Dict[str, Any]] = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype=torch.bfloat16,
         **kwargs,
-    ) -> "InspatioWorldPipeline":
+    ) -> InspatioWorldPipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         required_components = dict(required_components or {})
         wan_model_path = kwargs.pop(
@@ -85,9 +85,9 @@ class InspatioWorldPipeline(PipelineABC):
     def process(
         self,
         videos=None,
-        traj_txt_path: Optional[str] = None,
+        traj_txt_path: str | None = None,
         prompt: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
         if videos is None:
             raise ValueError("InSpatio-World requires `videos` as input.")
@@ -100,12 +100,12 @@ class InspatioWorldPipeline(PipelineABC):
     def __call__(
         self,
         videos=None,
-        traj_txt_path: Optional[str] = None,
+        traj_txt_path: str | None = None,
         prompt: str = "",
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         return_dict: bool = False,
-        seed: Optional[int] = None,
-        deterministic: Optional[bool] = None,
+        seed: int | None = None,
+        deterministic: bool | None = None,
         **kwargs,
     ):
         """Execute the complete pipeline generation flow."""

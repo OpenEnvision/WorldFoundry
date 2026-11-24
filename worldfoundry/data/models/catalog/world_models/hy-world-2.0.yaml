@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 availability: open_source
 checkpoints:
 - tencent/HY-World-2.0
@@ -13,28 +13,20 @@ aliases:
 - hyworld2p0
 integration:
   notes:
-  - WorldFoundry wraps HY-Pano 2.0 panorama generation and WorldMirror 2.0 reconstruction in-tree.
+  - WorldFoundry runs the WorldMirror 2.0 reconstruction component in-tree.
   - The WorldMirror 2.0 reconstruction path is verified through the Workspace infer path and exports depth, normals,
     point cloud, Gaussian splat, camera parameters, COLMAP sparse files, and RRD scene metadata.
-  - Full text/image-to-3D world generation is open upstream but remains gated in WorldFoundry until the five-stage
-    WorldNav, WorldStereo 2.0, GS data, and 3DGS composition runtime is fully migrated and verified.
+  - HY-Pano 2.0 panorama generation and the multi-stage world generation are not part of WorldFoundry.
   status: component_verified
 license: other:tencent-hunyuanworld-community
 modalities:
-- text-to-3d-world
-- image-to-3d-world
-- video-to-3d-world
-- simulation
+- 3d-reconstruction
+- image-to-3d
+- video-to-3d
 tasks:
-- id: panorama
-  status: supported_in_tree
-  notes: HY-Pano 2.0 image/panorama component.
 - id: worldrecon
   status: verified
   notes: WorldMirror 2.0 reconstruction component.
-- id: worldgen
-  status: migration_pending
-  notes: Full text/image-to-3D-world generation requires the distributed WorldNav/WorldStereo/3DGS stages and a VLM endpoint.
 name: HY-World 2.0
 official_sources:
   project_page: https://3d-models.hunyuan.tencent.com/world/
@@ -43,6 +35,7 @@ official_sources:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
     url: https://github.com/Tencent-Hunyuan/HY-World-2.0
+    revision: 7f668e67c74338d50684e57be46a438459b6bbe1
   huggingface:
   - confirmed_by: https://huggingface.co/api/models/tencent/HY-World-2.0
     repo_id: tencent/HY-World-2.0
@@ -55,9 +48,7 @@ starred: true
 runner_parity:
   notes:
   - In-tree HY-World 2.0 pipeline target is registered and verified for WorldMirror 2.0 reconstruction.
-  - Full world-generation parity still requires in-tree orchestration of traj_generate.py, traj_render.py, video_gen.py,
-    gen_gs_data.py, and world_gs_trainer.py with the required native extensions and VLM endpoint.
-  status: component_verified_worldgen_pending
+  status: component_verified
 catalog_category: world_models
 catalog_scope: world-model/interactive starred models
 catalog_policy:
@@ -72,18 +63,22 @@ docs:
   publisher: Tencent (Hunyuan)
   publisher_kind: company
   publisher_zh: 腾讯（混元）
-  overview: 'HY-World 2.0 is Tencent''s second-generation world stack, recorded here as components: HY-Pano 2.0 panorama generation (supported in-tree), WorldMirror 2.0 reconstruction (verified through the Workspace infer path), and full text/image-to-3D-world generation (open upstream, migration pending in WorldFoundry). The verified reconstruction path exports depth, normals, point cloud, Gaussian splat, cameras, COLMAP files, and RRD scene metadata.'
-  overview_zh: HY-World 2.0 是腾讯第二代世界生成栈，此处按组件记录：HY-Pano 2.0 全景生成（树内支持）、 WorldMirror 2.0 重建（已通过 Workspace 推理路径验证），以及完整文/图到 3D 世界生成（上游已开源， WorldFoundry 侧迁移待完成）。已验证的重建路径导出深度、法线、点云、高斯泼溅、相机参数、COLMAP 文件与 RRD 场景元数据。
-  architecture: The upstream five-stage world generation chains WorldNav trajectory generation, trajectory rendering, video generation, GS data preparation, and 3DGS composition (traj_generate.py through world_gs_trainer.py) plus a VLM endpoint. WorldFoundry wraps HY-Pano 2.0 and WorldMirror 2.0 in-tree; the remaining stages are not yet migrated.
-  architecture_zh: 上游的五阶段世界生成串联 WorldNav 轨迹生成、轨迹渲染、视频生成、GS 数据准备与 3DGS 组合（traj_generate.py 到 world_gs_trainer.py），另需 VLM 端点。WorldFoundry 已树内封装 HY-Pano 2.0 与 WorldMirror 2.0；其余阶段尚未迁移。
-  usage_notes: Use the verified WorldMirror 2.0 reconstruction path today; treat full world generation as upstream-only until the five-stage runtime is migrated and verified. The trajectory-render stage is separately cataloged as hyworld-worldgen.
-  usage_notes_zh: 当下请使用已验证的 WorldMirror 2.0 重建路径；在五阶段运行时迁移并验证之前，完整世界生成请视为仅上游可用。轨迹渲染阶段单独记录为 hyworld-worldgen 条目。
+  overview: HY-World 2.0 is Tencent's second-generation world stack. WorldFoundry runs its WorldMirror 2.0 reconstruction
+    component, verified through the Workspace infer path; it exports depth, normals, point cloud, Gaussian splat,
+    cameras, COLMAP files, and RRD scene metadata.
+  overview_zh: HY-World 2.0 是腾讯第二代世界生成栈。WorldFoundry 运行其中的 WorldMirror 2.0 重建组件，已通过 Workspace 推理路径验证，可导出深度、法线、点云、高斯泼溅、相机参数、COLMAP
+    文件与 RRD 场景元数据。
+  architecture: WorldMirror 2.0 is a feed-forward reconstruction network that predicts depth, normals, cameras,
+    point clouds and Gaussian splats from images or video. The upstream HY-Pano 2.0 panorama generator and five-stage
+    world generation are not part of WorldFoundry.
+  architecture_zh: WorldMirror 2.0 是前馈式重建网络，从图像或视频预测深度、法线、相机、点云与高斯泼溅。上游的 HY-Pano 2.0 全景生成与五阶段世界生成不在 WorldFoundry
+    中。
+  usage_notes: Run task worldrecon for WorldMirror 2.0 reconstruction from an image directory or video.
+  usage_notes_zh: 使用 worldrecon 任务，从图像目录或视频运行 WorldMirror 2.0 重建。
   limitations:
-  - Full text/image-to-3D-world generation is migration-pending in WorldFoundry.
-  - The worldgen stages need native extensions and a VLM endpoint.
+  - Only the WorldMirror 2.0 reconstruction component is available; panorama and world generation are not.
   limitations_zh:
-  - 完整文/图到 3D 世界生成在 WorldFoundry 侧待迁移。
-  - worldgen 各阶段需要原生扩展与 VLM 端点。
+  - 仅提供 WorldMirror 2.0 重建组件；全景生成与世界生成不可用。
   recommended_benchmarks:
   - id: worldscore
     reason: Standard scoring for generated explorable worlds.

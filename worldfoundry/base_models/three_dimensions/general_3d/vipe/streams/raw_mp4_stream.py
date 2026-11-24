@@ -13,14 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> streams -> raw_mp4_stream.py functionality."""
-
 from pathlib import Path
 
 import cv2
 import torch
 
-from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base import ProcessedVideoStream, StreamList, VideoFrame, VideoStream
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base import (
+    ProcessedVideoStream,
+    StreamList,
+    VideoFrame,
+    VideoStream,
+)
 
 
 class RawMp4Stream(VideoStream):
@@ -30,16 +33,6 @@ class RawMp4Stream(VideoStream):
     """
 
     def __init__(self, path: Path, seek_range: range | None = None, name: str | None = None) -> None:
-        """Init.
-
-        Args:
-            path: The path.
-            seek_range: The seek range.
-            name: The name.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         if seek_range is None:
             seek_range = range(-1)
@@ -62,49 +55,23 @@ class RawMp4Stream(VideoStream):
         self._fps = _fps / self.step
 
     def frame_size(self) -> tuple[int, int]:
-        """Frame size.
-
-        Returns:
-            The return value.
-        """
         return (self._height, self._width)
 
     def fps(self) -> float:
-        """Fps.
-
-        Returns:
-            The return value.
-        """
         return self._fps
 
     def name(self) -> str:
-        """Name.
-
-        Returns:
-            The return value.
-        """
         return self._name
 
     def __len__(self) -> int:
-        """Len.
-
-        Returns:
-            The return value.
-        """
         return len(range(self.start, self.end, self.step))
 
     def __iter__(self):
-        """Iter."""
         self.vcap = cv2.VideoCapture(self.path)
         self.current_frame_idx = -1
         return self
 
     def __next__(self) -> VideoFrame:
-        """Next.
-
-        Returns:
-            The return value.
-        """
         while True:
             ret, frame = self.vcap.read()
             self.current_frame_idx += 1
@@ -132,57 +99,25 @@ class RawMp4Stream(VideoStream):
 
 class RawMP4StreamList(StreamList):
     """Raw stream list implementation."""
+
     def __init__(self, base_path: str, frame_start: int, frame_end: int, frame_skip: int, cached: bool = False) -> None:
-        """Init.
-
-        Args:
-            base_path: The base path.
-            frame_start: The frame start.
-            frame_end: The frame end.
-            frame_skip: The frame skip.
-            cached: The cached.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         if Path(base_path).is_file():
             self.mp4_sequences = [Path(base_path)]
             assert self.mp4_sequences[0].suffix == ".mp4", "Only mp4 files are accepted."
         else:
-            self.mp4_sequences = sorted(list(Path(base_path).glob("*.mp4")))
+            self.mp4_sequences = sorted(Path(base_path).glob("*.mp4"))
         self.frame_range = range(frame_start, frame_end, frame_skip)
         self.cached = cached
 
     def __len__(self) -> int:
-        """Len.
-
-        Returns:
-            The return value.
-        """
         return len(self.mp4_sequences)
 
     def __getitem__(self, index: int) -> VideoStream:
-        """Getitem.
-
-        Args:
-            index: The index.
-
-        Returns:
-            The return value.
-        """
         stream: VideoStream = RawMp4Stream(self.mp4_sequences[index], seek_range=self.frame_range)
         if self.cached:
             stream = ProcessedVideoStream(stream, []).cache(desc="Loading video", online=False)
         return stream
 
     def stream_name(self, index: int) -> str:
-        """Stream name.
-
-        Args:
-            index: The index.
-
-        Returns:
-            The return value.
-        """
         return self.mp4_sequences[index].stem

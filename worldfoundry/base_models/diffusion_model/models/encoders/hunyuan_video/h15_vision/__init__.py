@@ -28,24 +28,19 @@ License header above is Tencent Hunyuan; keep it intact.
 """
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+
+import numpy as np
 import torch
 import torch.nn as nn
 from transformers import SiglipImageProcessor, SiglipVisionModel
 from transformers.utils import ModelOutput
-import numpy as np
+
 from ..constants import PRECISION_TO_TYPE
 
 VISION_ENCODER_PATH = {}
 
 
 def use_default(value, default):
-    """Use default.
-
-    Args:
-        value: The value.
-        default: The default.
-    """
     return value if value is not None else default
 
 
@@ -56,23 +51,11 @@ def load_vision_encoder(
     logger=None,
     device=None,
 ):
-    """Load vision encoder.
-
-    Args:
-        vision_encoder_type: The vision encoder type.
-        vision_encoder_precision: The vision encoder precision.
-        vision_encoder_path: The vision encoder path.
-        logger: The logger.
-        device: The device.
-    """
     if vision_encoder_path is None:
         vision_encoder_path = VISION_ENCODER_PATH[vision_encoder_type]
 
     if vision_encoder_type == "siglip":
-        vision_encoder = SiglipVisionModel.from_pretrained(
-            vision_encoder_path, 
-            subfolder='image_encoder'
-        )
+        vision_encoder = SiglipVisionModel.from_pretrained(vision_encoder_path, subfolder="image_encoder")
     else:
         raise ValueError(f"Unsupported vision encoder type: {vision_encoder_type}")
 
@@ -88,26 +71,12 @@ def load_vision_encoder(
     return vision_encoder, vision_encoder_path
 
 
-def load_image_processor(
-    processor_type, 
-    processor_path=None, 
-    logger=None
-):
-    """Load image processor.
-
-    Args:
-        processor_type: The processor type.
-        processor_path: The processor path.
-        logger: The logger.
-    """
+def load_image_processor(processor_type, processor_path=None, logger=None):
     if processor_path is None:
         processor_path = VISION_ENCODER_PATH[processor_type]
 
     if processor_type == "siglip":
-        processor = SiglipImageProcessor.from_pretrained(
-            processor_path, 
-            subfolder='feature_extractor'
-        )
+        processor = SiglipImageProcessor.from_pretrained(processor_path, subfolder="feature_extractor")
     else:
         raise ValueError(f"Unsupported processor type: {processor_type}")
 
@@ -132,45 +101,28 @@ class VisionEncoderModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
 class VisionEncoder(nn.Module):
-    """Vision encoder implementation."""
     def __init__(
         self,
         vision_encoder_type: str,
-        vision_encoder_precision: Optional[str] = None,
-        vision_encoder_path: Optional[str] = None,
-        processor_type: Optional[str] = None,
-        processor_path: Optional[str] = None,
-        output_key: Optional[str] = None,
+        vision_encoder_precision: str | None = None,
+        vision_encoder_path: str | None = None,
+        processor_type: str | None = None,
+        processor_path: str | None = None,
+        output_key: str | None = None,
         logger=None,
         device=None,
     ):
-        """Init.
-
-        Args:
-            vision_encoder_type: The vision encoder type.
-            vision_encoder_precision: The vision encoder precision.
-            vision_encoder_path: The vision encoder path.
-            processor_type: The processor type.
-            processor_path: The processor path.
-            output_key: The output key.
-            logger: The logger.
-            device: The device.
-        """
         super().__init__()
         self.vision_encoder_type = vision_encoder_type
         self.precision = vision_encoder_precision
         self.model_path = vision_encoder_path
-        self.processor_type = (
-            processor_type if processor_type is not None else vision_encoder_type
-        )
-        self.processor_path = (
-            processor_path if processor_path is not None else vision_encoder_path
-        )
+        self.processor_type = processor_type if processor_type is not None else vision_encoder_type
+        self.processor_path = processor_path if processor_path is not None else vision_encoder_path
         self.logger = logger
 
         if "siglip" in vision_encoder_type:
@@ -195,13 +147,12 @@ class VisionEncoder(nn.Module):
         )
 
     def __repr__(self):
-        """Repr."""
         return f"{self.vision_encoder_type} ({self.precision} - {self.model_path})"
 
     def encode_latents_to_images(self, latents, vae, reorg_token=False):
         """
         Convert latents to images using VAE decoder.
-        
+
         Args:
             latents: Input latents tensor
             vae: VAE model for decoding
@@ -228,57 +179,58 @@ class VisionEncoder(nn.Module):
     def encode_images(self, images):
         """
         Encode images using the vision encoder.
-        
+
         Args:
             images: Input images (numpy array or preprocessed tensor)
-            
+
         Returns:
             VisionEncoderModelOutput with encoded features
         """
         if isinstance(images, np.ndarray):
             # Preprocess images if they're numpy arrays
             preprocessed = self.processor.preprocess(images=images, return_tensors="pt").to(
-                device=self.model.device, dtype=self.model.dtype)
+                device=self.model.device, dtype=self.model.dtype
+            )
         else:
             # Assume already preprocessed
             preprocessed = images
 
         outputs = self.model(**preprocessed)
-        
+
         return VisionEncoderModelOutput(
             last_hidden_state=outputs.last_hidden_state,
-            pooler_output=outputs.pooler_output if hasattr(outputs, 'pooler_output') else None,
-            hidden_states=outputs.hidden_states if hasattr(outputs, 'hidden_states') else None
+            pooler_output=outputs.pooler_output if hasattr(outputs, "pooler_output") else None,
+            hidden_states=outputs.hidden_states if hasattr(outputs, "hidden_states") else None,
         )
 
     def encode_latents(self, latents, vae, reorg_token=False):
         """
         Encode latents by first converting to images, then encoding.
         This is the main function that replaces sigclip_vision_encode.
-        
+
         Args:
             latents: Input latent tensors
             vae: VAE model for decoding latents to images
-            
+
         Returns:
             Encoded image features
         """
         # Convert latents to images
         images = self.encode_latents_to_images(latents, vae, reorg_token)
-        
+
         # Encode images
         outputs = self.encode_images(images)
-        
+
         return outputs.last_hidden_state
 
     def forward(self, images):
         """
         Forward pass for direct image encoding.
-        
+
         Args:
             images: Input images
-            
+
         Returns:
             VisionEncoderModelOutput with encoded features
         """
-        return self.encode_images(images) 
+        return self.encode_images(images)

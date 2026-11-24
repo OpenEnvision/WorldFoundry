@@ -13,43 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> utils -> cameras.py functionality."""
-
 from enum import Enum
 
 import torch
 
 
 class CameraType(Enum):
-    """Camera type implementation."""
     PINHOLE = "pinhole"
     PANORAMA = "panorama"
     SIMPLE_DIVISIONAL = "simple_divisional"
     MEI = "mei"
 
     def build_camera_model(self, intrinsics: torch.Tensor):
-        """Build camera model.
-
-        Args:
-            intrinsics: The intrinsics.
-        """
         cls = self.camera_model_cls()
         return cls(intrinsics)
 
     def intrinsics_dim(self) -> int:
-        """Intrinsics dim.
-
-        Returns:
-            The return value.
-        """
         return self.camera_model_cls().intrinsics_dim()
 
     def camera_model_cls(self) -> type["BaseCameraModel"]:
-        """Camera model cls.
-
-        Returns:
-            The return value.
-        """
         if self == CameraType.PINHOLE:
             return PinholeCameraModel
         elif self == CameraType.MEI:
@@ -67,19 +49,9 @@ class BaseCameraModel:
 
     @classmethod
     def intrinsics_dim(cls) -> int:
-        """Intrinsics dim.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
     def __init__(self, intrinsics: torch.Tensor):
-        """Init.
-
-        Args:
-            intrinsics: The intrinsics.
-        """
         self.intrinsics = intrinsics
         assert self.intrinsics.shape[-1] == self.intrinsics_dim(), (
             f"Intrinsics should have shape (..., {self.intrinsics_dim()})"
@@ -145,35 +117,15 @@ class BaseCameraModel:
 
     @classmethod
     def J_scale(cls, scale: float, J: torch.Tensor) -> torch.Tensor:
-        """J scale.
-
-        Args:
-            scale: The scale.
-            J: The j.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError
 
 
 class PinholeCameraModel(BaseCameraModel):
-    """Pinhole camera model implementation."""
     def __init__(self, intrinsics: torch.Tensor):
-        """Init.
-
-        Args:
-            intrinsics: The intrinsics.
-        """
         super().__init__(intrinsics)
 
     @classmethod
     def intrinsics_dim(self) -> int:
-        """Intrinsics dim.
-
-        Returns:
-            The return value.
-        """
         return 4
 
     def iproj_disp(
@@ -184,15 +136,6 @@ class PinholeCameraModel(BaseCameraModel):
         compute_jz: bool = False,
         compute_jf: bool = False,
     ):
-        """Iproj disp.
-
-        Args:
-            disps: The disps.
-            disps_u: The disps u.
-            disps_v: The disps v.
-            compute_jz: The compute jz.
-            compute_jf: The compute jf.
-        """
         # Expand intrinsics.
         intrinsics = self.intrinsics.view((-1,) + (1,) * (disps.dim() - 1) + (4,))
         fx, fy, cx, cy = intrinsics.unbind(dim=-1)
@@ -222,14 +165,6 @@ class PinholeCameraModel(BaseCameraModel):
         compute_jf: bool = False,
         limit_min_depth: bool = True,
     ):
-        """Proj points.
-
-        Args:
-            ps: The ps.
-            compute_jp: The compute jp.
-            compute_jf: The compute jf.
-            limit_min_depth: The limit min depth.
-        """
         extra_dim_shapes = ps.shape[1:-1]
         n_extra_dim = len(extra_dim_shapes)  # Dim of "..."
 
@@ -272,51 +207,22 @@ class PinholeCameraModel(BaseCameraModel):
         return coords, Jp, Jf
 
     def pinhole(self):
-        """Pinhole."""
         return self
 
     def scaled(self, scale: float) -> "PinholeCameraModel":
-        """Scaled.
-
-        Args:
-            scale: The scale.
-
-        Returns:
-            The return value.
-        """
         return PinholeCameraModel(self.intrinsics * scale)
 
     @classmethod
     def J_scale(cls, scale: float, J: torch.Tensor) -> torch.Tensor:
-        """J scale.
-
-        Args:
-            scale: The scale.
-            J: The j.
-
-        Returns:
-            The return value.
-        """
         return J * scale
 
 
 class MeiCameraModel(BaseCameraModel):
-    """Mei camera model implementation."""
     def __init__(self, intrinsics: torch.Tensor):
-        """Init.
-
-        Args:
-            intrinsics: The intrinsics.
-        """
         super().__init__(intrinsics)
 
     @classmethod
     def intrinsics_dim(self) -> int:
-        """Intrinsics dim.
-
-        Returns:
-            The return value.
-        """
         return 5
 
     def iproj_disp(
@@ -327,15 +233,6 @@ class MeiCameraModel(BaseCameraModel):
         compute_jz: bool = False,
         compute_jf: bool = False,
     ):
-        """Iproj disp.
-
-        Args:
-            disps: The disps.
-            disps_u: The disps u.
-            disps_v: The disps v.
-            compute_jz: The compute jz.
-            compute_jf: The compute jf.
-        """
         # Expand intrinsics.
         intrinsics = self.intrinsics.view((-1,) + (1,) * (disps.dim() - 1) + (5,))
         fx, fy, cx, cy, k1 = intrinsics.unbind(dim=-1)
@@ -360,7 +257,7 @@ class MeiCameraModel(BaseCameraModel):
         Jf = None
         if compute_jf:
             # (..., 4, 1 [focal] + 1 [distortion])
-            Jf = pts.new_zeros(pts.shape + (1 + 1,))
+            Jf = pts.new_zeros(pts.shape + (1 + 1,))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             # Note that fx and fy are assumed to be equivalent for the derivation.
             f_num = (
                 -(k1**3) * r2**2
@@ -390,14 +287,6 @@ class MeiCameraModel(BaseCameraModel):
         compute_jf: bool = False,
         limit_min_depth: bool = True,
     ):
-        """Proj points.
-
-        Args:
-            ps: The ps.
-            compute_jp: The compute jp.
-            compute_jf: The compute jf.
-            limit_min_depth: The limit min depth.
-        """
         extra_dim_shapes = ps.shape[1:-1]
         n_extra_dim = len(extra_dim_shapes)  # Dim of "..."
 
@@ -438,7 +327,7 @@ class MeiCameraModel(BaseCameraModel):
         Jf = None
         if compute_jf:
             # (..., 2, 1 [focal] + 1 [distortion])
-            Jf = coords.new_zeros(coords.shape + (1 + 1,))
+            Jf = coords.new_zeros(coords.shape + (1 + 1,))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             Jf[..., 0, 0] = X * d
             Jf[..., 1, 0] = Y * d
             Jf[..., 0, 1] = -fx * r * X * d**2
@@ -447,11 +336,6 @@ class MeiCameraModel(BaseCameraModel):
         return coords, Jp, Jf
 
     def pinhole(self) -> PinholeCameraModel:
-        """Pinhole.
-
-        Returns:
-            The return value.
-        """
         # Make sure at least at the center point the scale slope is 1.
         k1 = self.intrinsics[..., -1:]
         pinhole_intrinsics = self.intrinsics[..., :-1].clone()
@@ -459,52 +343,24 @@ class MeiCameraModel(BaseCameraModel):
         return PinholeCameraModel(pinhole_intrinsics)
 
     def scaled(self, scale: float) -> "MeiCameraModel":
-        """Scaled.
-
-        Args:
-            scale: The scale.
-
-        Returns:
-            The return value.
-        """
         scaled_intrinsics = self.intrinsics.clone()
         scaled_intrinsics[..., :-1] *= scale
         return MeiCameraModel(scaled_intrinsics)
 
     @classmethod
     def J_scale(cls, scale: float, J: torch.Tensor) -> torch.Tensor:
-        """J scale.
-
-        Args:
-            scale: The scale.
-            J: The j.
-
-        Returns:
-            The return value.
-        """
         scale_factor = J.new_ones(5)
         scale_factor[:-1] = scale
         return J * scale
 
 
 class PanoramaCameraModel(BaseCameraModel):
-    """Panorama camera model implementation."""
     def __init__(self, intrinsics: torch.Tensor):
-        """Init.
-
-        Args:
-            intrinsics: The intrinsics.
-        """
         super().__init__(intrinsics)
         assert torch.all(intrinsics == 0)
 
     @classmethod
     def intrinsics_dim(cls) -> int:
-        """Intrinsics dim.
-
-        Returns:
-            The return value.
-        """
         return 4
 
     def iproj_disp(
@@ -515,15 +371,6 @@ class PanoramaCameraModel(BaseCameraModel):
         compute_jz: bool = False,
         compute_jf: bool = False,
     ):
-        """Iproj disp.
-
-        Args:
-            disps: The disps.
-            disps_u: The disps u.
-            disps_v: The disps v.
-            compute_jz: The compute jz.
-            compute_jf: The compute jf.
-        """
         assert not compute_jf and not compute_jz
 
         # Note that due to the special nature of this camera model, we require disps_u and v to be
@@ -546,41 +393,15 @@ class PanoramaCameraModel(BaseCameraModel):
         compute_jf: bool = False,
         limit_min_depth: bool = True,
     ):
-        """Proj points.
-
-        Args:
-            ps: The ps.
-            compute_jp: The compute jp.
-            compute_jf: The compute jf.
-            limit_min_depth: The limit min depth.
-        """
         raise NotImplementedError
 
     def pinhole(self):
-        """Pinhole."""
         # 512x256 camera with 90 horizontal FOV.
         return PinholeCameraModel(torch.tensor([256.0, 256.0, 256.0, 128.0]).to(self.intrinsics.device))
 
     def scaled(self, scale: float) -> "PanoramaCameraModel":
-        """Scaled.
-
-        Args:
-            scale: The scale.
-
-        Returns:
-            The return value.
-        """
         return self
 
     @classmethod
     def J_scale(cls, scale: float, J: torch.Tensor) -> torch.Tensor:
-        """J scale.
-
-        Args:
-            scale: The scale.
-            J: The j.
-
-        Returns:
-            The return value.
-        """
         raise NotImplementedError

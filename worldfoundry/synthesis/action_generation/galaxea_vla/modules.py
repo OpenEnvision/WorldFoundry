@@ -1,5 +1,4 @@
 import math
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -40,7 +39,7 @@ class ActionEncoder(nn.Module):
     def forward(
         self,
         action: torch.FloatTensor,
-        time_emb: Optional[torch.FloatTensor] = None,
+        time_emb: torch.FloatTensor | None = None,
     ) -> torch.FloatTensor:
         # [Batch_Size, Seq_Len, Width]
         emb = self.linear_1(action)
@@ -53,15 +52,13 @@ class ActionEncoder(nn.Module):
         emb = self.linear_3(emb)
         return emb
 
+
 class ActionDecoder(nn.Module):
-    def __init__(self, action_hidden_size: int, action_dim: int, num_layers: int=2):
+    def __init__(self, action_hidden_size: int, action_dim: int, num_layers: int = 2):
         super().__init__()
 
         proj = nn.ModuleList(
-            [nn.Sequential(
-                nn.Linear(action_hidden_size, action_hidden_size),
-                nn.SiLU()
-            ) for _ in range(num_layers - 1)]
+            [nn.Sequential(nn.Linear(action_hidden_size, action_hidden_size), nn.SiLU()) for _ in range(num_layers - 1)]
         )
         proj.append(nn.Linear(action_hidden_size, action_dim))
         self.proj = nn.Sequential(*proj)

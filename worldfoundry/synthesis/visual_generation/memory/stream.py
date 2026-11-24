@@ -8,8 +8,9 @@ for models interacting with visual environments.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from PIL import Image
 
@@ -54,7 +55,9 @@ class VisualFrameMemory(BaseMemory):
         self.all_frames: list[Any] = []  # Stores all recorded frames if `record_frames` is true.
         self.pose_history: list[Any] = []  # Stores a history of poses, if provided.
 
-    def record(self, data: Any, metadata: Mapping[str, Any] | None = None, *, record_frames: bool = True, **kwargs: Any):
+    def record(
+        self, data: Any, metadata: Mapping[str, Any] | None = None, *, record_frames: bool = True, **kwargs: Any
+    ):
         """
         Records new data into the memory.
 
@@ -186,7 +189,9 @@ class VisualFrameMemory(BaseMemory):
         self.current_state = data
         return data, "other"
 
-    def _normalize_mapping(self, data: Mapping[str, Any], *, metadata: Mapping[str, Any], record_frames: bool) -> tuple[Any, str]:
+    def _normalize_mapping(
+        self, data: Mapping[str, Any], *, metadata: Mapping[str, Any], record_frames: bool
+    ) -> tuple[Any, str]:
         """
         Normalizes dictionary-based input data, looking for specific keys.
 
@@ -347,8 +352,10 @@ class VisualContextMemory(VisualFrameMemory):
         keys = self.REQUIRED_CONTEXT_KEYS or self.CONTEXT_KEYS
         # If REQUIRED_CONTEXT_KEYS are specified, all of them must be present.
         # Otherwise, any of CONTEXT_KEYS being present is sufficient.
-        return all(getattr(self, key, None) is not None for key in keys) if self.REQUIRED_CONTEXT_KEYS else any(
-            getattr(self, key, None) is not None for key in keys
+        return (
+            all(getattr(self, key, None) is not None for key in keys)
+            if self.REQUIRED_CONTEXT_KEYS
+            else any(getattr(self, key, None) is not None for key in keys)
         )
 
     def record(
@@ -379,7 +386,9 @@ class VisualContextMemory(VisualFrameMemory):
         # Add generated segments count to metadata.
         metadata = {"n_generated_segments": self.n_generated_segments, **dict(metadata or {})}
         # Filter out context-related kwargs before passing to super().record.
-        record_kwargs = {key: value for key, value in kwargs.items() if key != "visual_context" and key not in self.CONTEXT_KEYS}
+        record_kwargs = {
+            key: value for key, value in kwargs.items() if key != "visual_context" and key not in self.CONTEXT_KEYS
+        }
         super().record(data, metadata=metadata, record_frames=record_frames, **record_kwargs)
 
     def select_context(self) -> dict[str, Any] | None:
@@ -459,7 +468,9 @@ class SceneStateMemory(VisualFrameMemory):
         super().__init__(capacity=capacity, model_id=model_id, **kwargs)
         self.current_scene_context: Any = None  # Stores the latest scene context object.
 
-    def record(self, data: Any, metadata: Mapping[str, Any] | None = None, *, record_frames: bool = True, **kwargs: Any):
+    def record(
+        self, data: Any, metadata: Mapping[str, Any] | None = None, *, record_frames: bool = True, **kwargs: Any
+    ):
         """
         Records new data, preserving `current_scene_context` if new data primarily contains frames.
 

@@ -16,13 +16,17 @@ import subprocess
 import sys
 import tempfile
 from collections import deque
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import imageio.v3 as iio
 import numpy as np
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import checkpoint_root_path, package_data_path
+
+from .config import load_kairos_config
 
 DEFAULT_NEGATIVE_PROMPT = (
     "bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, "
@@ -62,19 +66,6 @@ def _first_existing(paths: Sequence[Path]) -> Path | None:
     return None
 
 
-def _repo_candidates() -> tuple[Path, ...]:
-    """
-    Generates potential candidate paths for the Kairos Sensenova repository root.
-
-    Returns:
-        A tuple of `Path` objects representing possible repository locations.
-    """
-    return _path_values(
-        os.environ.get("WORLDFOUNDRY_KAIROS_REPO_ROOT"),
-        str(Path(__file__).resolve().parent / "kairos_runtime"),
-    )
-
-
 def _models_root_candidates() -> tuple[Path, ...]:
     """
     Generates potential candidate paths for the Kairos Sensenova models root directory.
@@ -92,27 +83,6 @@ def _models_root_candidates() -> tuple[Path, ...]:
     return _path_values(*values)
 
 
-def _default_repo_root() -> str:
-    """
-    Determines the default Kairos repository root path.
-
-    It tries to find an existing repository from candidates; if none exist,
-    it defaults to the first candidate.
-
-    Returns:
-        The string representation of the default Kairos repository root path.
-    """
-    candidates = _repo_candidates()
-    existing = _first_existing(candidates)
-    if existing is not None:
-        return str(existing)
-    raise FileNotFoundError(
-        "Kairos Sensenova in-tree runtime was not found. Expected "
-        "worldfoundry/synthesis/visual_generation/kairos/kairos_runtime, "
-        "or provide WORLDFOUNDRY_KAIROS_REPO_ROOT/runtime_root."
-    )
-
-
 def _default_models_root() -> str:
     """
     Determines the default Kairos models root path.
@@ -127,36 +97,14 @@ def _default_models_root() -> str:
     return str(_first_existing(candidates) or candidates[0])
 
 
-def _project_root() -> Path:
-    env_root = os.environ.get("WORLDFOUNDRY_REPO_ROOT")
-    if env_root:
-        return Path(env_root).expanduser().resolve()
-    for parent in Path(__file__).resolve().parents:
-        if (parent / "pyproject.toml").is_file():
-            return parent
-    return Path(__file__).resolve().parents[4]
-
-
-def _default_config_path(runtime_root: str | Path, variant: str) -> str:
-    """
-    Determines the default Kairos configuration file path based on the runtime root and model variant.
-
-    Args:
-        runtime_root: The root directory of the Kairos runtime.
-        variant: The specific model variant being used (e.g., "720p", "robot-480p-distilled").
-
-    Returns:
-        The string representation of the default configuration file path.
-    """
-    name = "kairos_4b_config.py" if str(variant).lower() in {"720p", "4b-720p", "pretrained"} else "kairos_4b_config_DMD.py"
-    root = Path(runtime_root).expanduser()
-    candidates = (
-        root / "kairos" / "configs" / name,
-        root / "Kairos" / "configs" / name,
-        root / "configs" / name,
+def _default_config_path(variant: str) -> str:
+    """Return the packaged Kairos recipe for the selected checkpoint variant."""
+    name = (
+        "kairos_4b_config.py"
+        if str(variant).lower() in {"720p", "4b-720p", "pretrained"}
+        else "kairos_4b_config_DMD.py"
     )
-    existing = _first_existing(candidates)
-    return str(existing or package_data_path('models', 'runtime', 'configs', 'kairos') / name)
+    return str(package_data_path("models", "runtime", "configs", "kairos", name))
 
 
 def _load_video_frames(video_path: str | Path) -> np.ndarray:
@@ -233,7 +181,6 @@ class KairosRuntime:
         self,
         *,
         model_id: str = MODEL_ID,
-        runtime_root: str | Path | None = None,
         models_root: str | Path | None = None,
         config_path: str | Path | None = None,
         variant: str = "robot-480p-distilled",
@@ -247,12 +194,10 @@ class KairosRuntime:
 
         Args:
             model_id: The identifier for the model. Defaults to "kairos-sensenova".
-            runtime_root: The root directory of the Kairos Sensenova repository.
-                          If None, it tries to find a default.
             models_root: The directory where Kairos model checkpoints are stored.
                          If None, it tries to find a default.
             config_path: The path to the Kairos configuration file. If None, it determines a default
-                         based on `runtime_root` and `variant`.
+                         based on `variant`.
             variant: The specific model variant to use (e.g., "robot-480p-distilled", "720p").
             device: The compute device to use (e.g., "cuda", "cuda:0").
             python_executable: The path to the Python executable to use for subprocesses.
@@ -268,10 +213,8 @@ class KairosRuntime:
         self.model_name = self.DISPLAY_NAME
         self.generation_type = "text_or_image_to_video"
         self.variant = str(variant)
-        # Resolve and store paths for the Kairos runtime and model directories
-        self.runtime_root = str(Path(runtime_root or _default_repo_root()).expanduser())
         self.models_root = str(Path(models_root or _default_models_root()).expanduser())
-        self.config_path = str(config_path or _default_config_path(self.runtime_root, self.variant))
+        self.config_path = str(config_path or _default_config_path(self.variant))
         self.device = device
         self.python_executable = python_executable or sys.executable
         self.torchrun_executable = str(torchrun_executable) if torchrun_executable else None
@@ -288,7 +231,6 @@ class KairosRuntime:
             "save_fps": 16,
             "nproc_per_node": 1,
             "master_port": 29556,
-            "run_manage_libs": False,
             "warmup": False,
             "enable_torch_compile": False,
         }
@@ -303,7 +245,7 @@ class KairosRuntime:
         device: str | None = None,
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "KairosRuntime":
+    ) -> KairosRuntime:
         """
         Alternative constructor to create a KairosRuntime instance from pretrained model information.
 
@@ -342,7 +284,6 @@ class KairosRuntime:
                 "save_fps",
                 "nproc_per_node",
                 "master_port",
-                "run_manage_libs",
                 "warmup",
                 "enable_torch_compile",
                 "pretrained_dit",
@@ -353,10 +294,6 @@ class KairosRuntime:
         }
         return cls(
             model_id=str(options.get("model_id") or options.get("profile_id") or model_id or cls.MODEL_ID),
-            # Explicit runtime paths are part of the public loading contract and
-            # must not be replaced merely because they are staged after pipeline
-            # construction (or represented by a test/dry-run path).
-            runtime_root=options.get("runtime_root") or options.get("repo_root"),
             models_root=options.get("models_root") or options.get("checkpoint_dir"),
             config_path=options.get("config_path"),
             variant=str(options.get("variant") or "robot-480p-distilled"),
@@ -390,8 +327,6 @@ class KairosRuntime:
             "backend_quality": "official_in_tree_runtime",
             "model_id": self.model_id,
             "variant": self.variant,
-            "runtime_root": self.runtime_root,
-            "runtime_root_exists": Path(self.runtime_root).is_dir(),
             "models_root": self.models_root,
             "models_root_exists": models_root.is_dir(),
             "config_path": self.config_path,
@@ -410,18 +345,13 @@ class KairosRuntime:
         """
         Prepares the environment variables for the Kairos subprocess.
 
-        This includes setting `PYTHONPATH`, `TOKENIZERS_PARALLELISM`, `PYTHONUNBUFFERED`,
+        This includes setting `TOKENIZERS_PARALLELISM`, `PYTHONUNBUFFERED`,
         and `CUDA_VISIBLE_DEVICES` based on the instance configuration.
 
         Returns:
             A dictionary of environment variables to be used by the subprocess.
         """
         env = os.environ.copy()
-        thirdparty_root = _project_root() / "thirdparty"
-        env["WORLDFOUNDRY_THIRDPARTY_ROOT"] = str(thirdparty_root)
-        # Add Kairos and WorldFoundry thirdparty roots to PYTHONPATH for in-tree runtime imports.
-        pythonpath = [self.runtime_root, str(thirdparty_root), env.get("PYTHONPATH", "")]
-        env["PYTHONPATH"] = os.pathsep.join(item for item in pythonpath if item)
         # Suppress tokenizers parallelism warnings and ensure unbuffered Python output
         env.setdefault("TOKENIZERS_PARALLELISM", "false")
         env.setdefault("PYTHONUNBUFFERED", "1")
@@ -468,46 +398,26 @@ class KairosRuntime:
         image.save(image_path)
         return str(image_path)
 
-    def _patched_config_path(self, temp_dir: Path, options: Mapping[str, Any]) -> Path:
-        """
-        Creates a patched version of the Kairos configuration file.
-
-        This method reads the original configuration file, replaces the `KAIROS_MODEL_DIR`
-        with the actual `models_root`, and appends additional configuration overrides
-        from the `options` mapping. The patched config is saved to a temporary file.
-
-        Args:
-            temp_dir: The temporary directory where the patched configuration file will be saved.
-            options: A mapping of generation options, potentially containing paths to
-                     pretrained DIT, text encoder, VAE, or prompt rewriter models.
-
-        Returns:
-            The `Path` to the patched configuration file.
-        """
-        source = Path(self.config_path).expanduser().resolve()
-        text = source.read_text(encoding="utf-8")
-        models_root = str(Path(self.models_root).expanduser().resolve())
-
-        # Replace the placeholder KAIROS_MODEL_DIR in the original config with the actual models_root
-        text = text.replace("KAIROS_MODEL_DIR = 'models'", f"KAIROS_MODEL_DIR = {models_root!r}")
-        text = text.replace('KAIROS_MODEL_DIR = "models"', f"KAIROS_MODEL_DIR = {models_root!r}")
-
-        overrides: list[str] = ["", "# WorldFoundry runtime overrides"]
-        # Append pipeline and model path overrides if provided in options
+    def _write_config_json(self, temp_dir: Path, options: Mapping[str, Any]) -> Path:
+        """Resolve recipe data and checkpoint overrides for the inference worker."""
+        config = load_kairos_config(
+            Path(self.config_path).expanduser().resolve(),
+            models_root=str(Path(self.models_root).expanduser().resolve()),
+        )
         if options.get("pretrained_dit"):
-            overrides.append(f"pipeline['pretrained_dit'] = {str(options['pretrained_dit'])!r}")
-        if options.get("text_encoder_path"):
-            overrides.append(f"pipeline['pipeline_args']['text_encoder_path'] = {str(options['text_encoder_path'])!r}")
-        if options.get("vae_path"):
-            overrides.append(f"pipeline['pipeline_args']['vae_path'] = {str(options['vae_path'])!r}")
+            config["pipeline"]["pretrained_dit"] = str(options["pretrained_dit"])
+        for name in ("text_encoder_path", "vae_path"):
+            if options.get(name):
+                config["pipeline"]["pipeline_args"][name] = str(options[name])
         if options.get("prompt_rewriter_path"):
-            overrides.append(f"prompt_rewriter_path = {str(options['prompt_rewriter_path'])!r}")
+            config["prompt_rewriter_path"] = str(options["prompt_rewriter_path"])
+        path = temp_dir / "kairos_config.json"
+        path.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+        return path
 
-        patched = temp_dir / "kairos_config.py"
-        patched.write_text(text + "\n".join(overrides) + "\n", encoding="utf-8")
-        return patched
-
-    def _write_input_json(self, temp_dir: Path, prompt: str, images: Any, output_dir: Path, options: Mapping[str, Any]) -> Path:
+    def _write_input_json(
+        self, temp_dir: Path, prompt: str, images: Any, output_dir: Path, options: Mapping[str, Any]
+    ) -> Path:
         """
         Writes the input parameters for Kairos inference to a JSON file.
 
@@ -546,31 +456,6 @@ class KairosRuntime:
         path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         return path
 
-    def _run_manage_libs(self, env: dict[str, str]) -> None:
-        """
-        Executes the Kairos `manage_libs.py` script to handle third-party library dependencies.
-
-        This is typically run once before inference to ensure all necessary
-        sub-modules and libraries are correctly set up.
-
-        Args:
-            env: The environment variables to pass to the subprocess.
-        """
-        candidates = (
-            Path(self.runtime_root) / "kairos" / "manage_libs.py",
-            Path(self.runtime_root) / "kairos" / "third_party" / "manage_libs.py",
-        )
-        manage_libs = next((path for path in candidates if path.is_file()), None)
-        if manage_libs is None:
-            searched = ", ".join(str(path) for path in candidates)
-            raise FileNotFoundError(f"Kairos manage_libs.py not found; searched: {searched}")
-        subprocess.run(
-            [self.python_executable, str(manage_libs)],
-            check=True,
-            cwd=self.runtime_root,
-            env=env,
-        )
-
     def _command(self, input_json: Path, config_path: Path, options: Mapping[str, Any]) -> list[str]:
         """
         Constructs the `torchrun` command to launch the Kairos inference script.
@@ -583,24 +468,14 @@ class KairosRuntime:
         Returns:
             A list of strings representing the `torchrun` command and its arguments.
         """
-        launcher = (
-            [self.torchrun_executable]
-            if self.torchrun_executable
-            else [self.python_executable, "-m", "torch.distributed.run"]
+        return package_module_command(
+            "worldfoundry.synthesis.visual_generation.kairos.kairos_runtime.examples.inference",
+            ["--input_file", str(input_json), "--config_file", str(config_path)],
+            python_executable=self.python_executable,
+            nproc_per_node=int(options.get("nproc_per_node", 1)),
+            launcher_options=("--nnodes=1", "--master_port", str(int(options.get("master_port", 29556)))),
+            launcher=[self.torchrun_executable] if self.torchrun_executable else None,
         )
-        return [
-            *launcher,
-            "--nnodes=1",
-            "--master_port",
-            str(int(options.get("master_port", 29556))),
-            "--nproc-per-node",
-            str(int(options.get("nproc_per_node", 1))),
-            str((Path(self.runtime_root) / "examples" / "inference.py").resolve()),
-            "--input_file",
-            str(input_json),
-            "--config_file",
-            str(config_path),
-        ]
 
     def predict(
         self,
@@ -653,7 +528,7 @@ class KairosRuntime:
 
         # Handle `interactions` for setting the seed if not explicitly provided in kwargs
         if interactions and "seed" not in kwargs:
-            first = list(interactions)[0]
+            first = list(interactions)[0]  # noqa: RUF015 - Keeps eager list construction and IndexError.
             if isinstance(first, int):
                 options["seed"] = first
 
@@ -670,12 +545,8 @@ class KairosRuntime:
 
             # Prepare input files and environment for the Kairos subprocess
             input_json = self._write_input_json(temp_dir, prompt, images, output_dir, options)
-            config_path = self._patched_config_path(temp_dir, options)
+            config_path = self._write_config_json(temp_dir, options)
             env = self._subprocess_env(options)
-
-            # Run `manage_libs.py` if enabled in options to ensure dependencies are set up
-            if _as_bool(options.get("run_manage_libs", True)):
-                self._run_manage_libs(env)
 
             # Construct the full command for `torchrun`
             command = self._command(input_json, config_path, options)
@@ -683,7 +554,7 @@ class KairosRuntime:
             # Execute the Kairos inference script as a subprocess
             process = subprocess.Popen(
                 command,
-                cwd=str(self.runtime_root),
+                cwd=str(Path(__file__).resolve().parent / "kairos_runtime"),
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,  # Merge stderr into stdout for easier logging

@@ -25,21 +25,23 @@ Generates causal masking for the mixtures
 Potentially customized to add/remove mixtures, e.g., remove proprio or add another vision module
 
 """
-import logging
-from pathlib import Path
-from typing import Optional, Tuple
-from safetensors import safe_open
+import logging  # noqa: E402 - Follows a module-level setup call, as upstream.
+from pathlib import Path  # noqa: E402 - Follows a module-level setup call, as upstream.
 
-import torch
-from torch import nn
+import torch  # noqa: E402 - Follows a module-level setup call, as upstream.
+from safetensors import safe_open  # noqa: E402 - Follows a module-level setup call, as upstream.
+from torch import nn  # noqa: E402 - Follows a module-level setup call, as upstream.
 
-from .modules import (
-    ActionEncoder,
+from .joint_model import JointModel  # noqa: E402 - Follows a module-level setup call, as upstream.
+from .modules import (  # noqa: E402 - Follows a module-level setup call, as upstream.
     ActionDecoder,
+    ActionEncoder,
     SinusoidalPosEmb,
 )
-from .joint_model import JointModel
-from .siglip import PaliGemmaMultiModalProjector, SiglipVisionModel
+from .siglip import (  # noqa: E402 - Follows a module-level setup call, as upstream.
+    PaliGemmaMultiModalProjector,
+    SiglipVisionModel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +59,7 @@ class GalaxeaZero(nn.Module):
         self.cond_steps = cfg.cond_steps
         self.num_proprio_tokens = cfg.cond_steps
         self.num_action_tokens = cfg.horizon_steps
-        self.total_num_tokens = (
-            self.max_image_text_tokens
-            + self.num_proprio_tokens
-            + self.num_action_tokens
-        )
+        self.total_num_tokens = self.max_image_text_tokens + self.num_proprio_tokens + self.num_action_tokens
         self.num_input_images = cfg.num_input_images
 
         self.image_text_hidden_size = cfg.joint.mixture.vlm.hidden_size
@@ -132,7 +130,7 @@ class GalaxeaZero(nn.Module):
         tensors = {}
         for safetensors_file in safetensors_files:
             with safe_open(str(safetensors_file), framework="pt", device="cpu") as f:
-                for key in f.keys():
+                for key in f.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                     tensors[key] = f.get_tensor(key)
 
         # load embed tokens
@@ -159,17 +157,13 @@ class GalaxeaZero(nn.Module):
             if self.multi_modal_projector_key_prefix in k:
                 new_key = k.replace(f"{self.multi_modal_projector_key_prefix}.", "")
                 multi_modal_projector_state_dict[new_key] = v
-        self.multi_modal_projector.load_state_dict(
-            multi_modal_projector_state_dict, strict=True
-        )
+        self.multi_modal_projector.load_state_dict(multi_modal_projector_state_dict, strict=True)
         logger.info("Loaded pre-trained weights for projector")
 
         # load lm --- do not change any lora weights
         joint_model_state_dict = self.joint_model.state_dict()
         lora_keys = []
-        for key in (
-            joint_model_state_dict.keys()
-        ):  # avoid RuntimeError: OrderedDict mutated during iteration
+        for key in joint_model_state_dict.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.  # avoid RuntimeError: OrderedDict mutated during iteration
             if "lora_" in key:
                 lora_keys.append(key)
         for key in lora_keys:
@@ -193,7 +187,7 @@ class GalaxeaZero(nn.Module):
 
     def build_causal_mask_and_position_ids(
         self, attention_mask: torch.Tensor, dtype: torch.dtype
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         block attention --- padding for unused text tokens
 
@@ -215,31 +209,22 @@ class GalaxeaZero(nn.Module):
         causal_mask = torch.full(
             (bsz, self.total_num_tokens, self.total_num_tokens),
             torch.finfo(dtype).min,
-            dtype=dtype, device=device,
+            dtype=dtype,
+            device=device,
         )  # smallest value, avoid using inf for softmax nan issues with padding
         for idx, cnt in enumerate(image_text_token_cnts):
             causal_mask[idx, :cnt, :cnt] = 0  # image/text attend to itself
-            causal_mask[idx, proprio_start:, :cnt] = (
-                0  # proprio/action attend to image/text
-            )
-        causal_mask[:, proprio_start:proprio_end, proprio_start:proprio_end] = (
-            0  # proprio attend to itself
-        )
-        causal_mask[:, action_start:, proprio_start:] = (
-            0  # action attend to itself and proprio
-        )
+            causal_mask[idx, proprio_start:, :cnt] = 0  # proprio/action attend to image/text
+        causal_mask[:, proprio_start:proprio_end, proprio_start:proprio_end] = 0  # proprio attend to itself
+        causal_mask[:, action_start:, proprio_start:] = 0  # action attend to itself and proprio
 
         # add the head dimension
         # [Batch_Size, Q_Len, KV_Len] -> [Batch_Size, Num_Heads_Q, Q_Len, KV_Len]
         causal_mask = causal_mask.unsqueeze(1)
 
         # position ids for each blocks --- start at 1
-        vlm_position_ids = torch.arange(1, self.max_image_text_tokens + 1, device=device).repeat(
-            bsz, 1
-        )
-        proprio_position_ids = torch.arange(1, self.num_proprio_tokens + 1, device=device).repeat(
-            bsz, 1
-        )
+        vlm_position_ids = torch.arange(1, self.max_image_text_tokens + 1, device=device).repeat(bsz, 1)
+        proprio_position_ids = torch.arange(1, self.num_proprio_tokens + 1, device=device).repeat(bsz, 1)
         action_position_ids = torch.arange(
             self.num_proprio_tokens + 1,
             self.num_proprio_tokens + self.num_action_tokens + 1,
@@ -250,7 +235,7 @@ class GalaxeaZero(nn.Module):
 
     def split_full_mask_into_submasks(
         self, causal_mask: torch.FloatTensor
-    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         """split into ones for paligemma and action"""
         image_text_proprio_mask = causal_mask[
             ...,
@@ -279,9 +264,7 @@ class GalaxeaZero(nn.Module):
         # [Batch_Size*T, Channels, Height, Width] -> [Batch_Size*T, Num_Patches, Embed_Dim]
         selected_image_feature = self.vision_tower(pixel_values)
         # [Batch_Size*T, Num_Patches, Embed_Dim] -> [Batch_Size, T*Num_Patches, Embed_Dim]
-        selected_image_feature = selected_image_feature.reshape(
-            bsz, -1, selected_image_feature.shape[-1]
-        )
+        selected_image_feature = selected_image_feature.reshape(bsz, -1, selected_image_feature.shape[-1])
         # [Batch_Size, T*Num_Patches, Embed_Dim] -> [Batch_Size, T*Num_Patches, Hidden_Size]
         image_features = self.multi_modal_projector(selected_image_feature)
 
@@ -295,14 +278,16 @@ class GalaxeaZero(nn.Module):
             (bsz, seq_len, embed_dim),
             self.pad_token_id,
             dtype=scaled_image_features.dtype,  # Use image features dtype for consistency
-            device=device
+            device=device,
         )
 
         # [Batch_Size, Seq_Len]
-        image_mask = input_ids == self.image_token_index # [Batch_Size, Seq_Len]
-        if self.fill_padded_with_token: # In the final embedding, the padded ones are filled with the token of pad_token_id
+        image_mask = input_ids == self.image_token_index  # [Batch_Size, Seq_Len]
+        if (  # noqa: SIM108 - Branches carry per-case comments.
+            self.fill_padded_with_token
+        ):  # In the final embedding, the padded ones are filled with the token of pad_token_id
             text_mask = ~image_mask
-        else: # Or with pad_token_id itself
+        else:  # Or with pad_token_id itself
             text_mask = ~image_mask & (input_ids != self.pad_token_id)
 
         # Ensure dtype consistency when assigning
@@ -310,9 +295,7 @@ class GalaxeaZero(nn.Module):
         for i in range(bsz):
             image_indices = image_mask[i].nonzero(as_tuple=True)[0]
             num_image_tokens = len(image_indices)
-            final_embedding[i, image_indices] = scaled_image_features[
-                i, :num_image_tokens
-            ]
+            final_embedding[i, image_indices] = scaled_image_features[i, :num_image_tokens]
         return final_embedding
 
     def infer_action(
@@ -335,8 +318,7 @@ class GalaxeaZero(nn.Module):
         causal_mask, vlm_position_ids, proprio_position_ids, action_position_ids = (
             self.build_causal_mask_and_position_ids(attention_mask, dtype=dtype)
         )
-        image_text_proprio_mask, action_mask = (
-            self.split_full_mask_into_submasks(causal_mask))
+        image_text_proprio_mask, action_mask = self.split_full_mask_into_submasks(causal_mask)
 
         kv_caches = self.joint_model.init_mixture_caches()
 
@@ -358,14 +340,12 @@ class GalaxeaZero(nn.Module):
         )
 
         # sample pure action noise
-        action = torch.randn(
-            (bsz, self.horizon_steps, self.action_dim), device=device, dtype=dtype
-        )
+        action = torch.randn((bsz, self.horizon_steps, self.action_dim), device=device, dtype=dtype)
 
         # forward euler integration --- using kv caches of vlm and proprio
         delta_t = 1.0 / self.num_inference_steps
         t = torch.zeros(bsz, device=device, dtype=dtype)
-        for i in range(self.num_inference_steps):
+        for _i in range(self.num_inference_steps):
             # encode action and time into embedding
             time_cond = self.time_embedding(t)
             # [Batch_Size, Horizon_Steps, Embed_Dim]

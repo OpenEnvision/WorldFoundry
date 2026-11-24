@@ -1,9 +1,8 @@
+import imageio
 import kornia
 import numpy as np
 import torch
 from matplotlib import cm
-from torchvision.io import write_video
-import imageio
 
 
 def tensor2im(input_image, imtype=np.uint8):
@@ -73,5 +72,5 @@ def save_video(video, path, fps=10, save_gif=True):
     imageio.mimsave(str(path), video_np, fps=fps, codec="libx264", quality=8)
     if not save_gif:
         return
-    gif_path = str(path).replace('.mp4', '.gif')
-    imageio.mimsave(gif_path, video_np, duration=1000/fps, loop=0)
+    gif_path = str(path).replace(".mp4", ".gif")
+    imageio.mimsave(gif_path, video_np, duration=1000 / fps, loop=0)

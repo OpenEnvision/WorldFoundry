@@ -9,7 +9,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CORE_ROOT = REPO_ROOT / "worldfoundry" / "core"
 RUNTIME_COMPILE_CACHE = REPO_ROOT / "worldfoundry" / "runtime" / "compile_cache.py"
-CORE_COMPILE_CACHE = REPO_ROOT / "worldfoundry" / "core" / "execution" / "compile_cache.py"
+CORE_COMPILE_CACHE = REPO_ROOT / "worldfoundry" / "core" / "platform" / "compile_cache.py"
 
 PUBLIC_NAMES = frozenset(
     {
@@ -62,7 +62,7 @@ def test_runtime_compile_cache_reexports_public_names() -> None:
     reexported: set[str] = set()
     imported_from_core = False
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "worldfoundry.core.execution.compile_cache":
+        if isinstance(node, ast.ImportFrom) and node.module == "worldfoundry.core.platform.compile_cache":
             imported_from_core = True
             reexported.update(alias.name for alias in node.names)
         if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("worldfoundry.runtime."):
@@ -74,7 +74,7 @@ def test_runtime_compile_cache_reexports_public_names() -> None:
     }
     assert not (defined & PUBLIC_NAMES)
 
-    core_mod = importlib.import_module("worldfoundry.core.execution.compile_cache")
+    core_mod = importlib.import_module("worldfoundry.core.platform.compile_cache")
     runtime_mod = importlib.import_module("worldfoundry.runtime.compile_cache")
     assert PUBLIC_NAMES <= set(core_mod.__all__)
     assert PUBLIC_NAMES <= set(runtime_mod.__all__)

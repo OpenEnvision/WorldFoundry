@@ -8,6 +8,7 @@ groups:
 - camera_control
 source_repos:
 - url: https://github.com/yyfz/Warp-as-History
+  revision: a22c4ed499cda4af4fea4f1b3d8bd20687216ab4
 checkpoints:
 - repo_id: BestWishYsh/Helios-Distilled
   role: base_video_diffusion_checkpoint
@@ -38,6 +39,6 @@ notes:
 - WorldFoundry vendors the official Warp-as-History runtime under worldfoundry/synthesis/visual_generation/warp_as_history/warp_as_history_runtime.
 - This model intentionally uses the dedicated warp-as-history conda profile because
   its official stack pins Python 3.10 and torch 2.5.0+cu121.
-- Camera-pose inference additionally needs an external Pi3 source checkout; set
-  WORLDFOUNDRY_PI3_SOURCE_ROOT to the directory containing pi3/models/pi3x.py.
-  Precomputed warp-video inference does not require Pi3 source.
+- Camera-pose inference reuses the in-tree Pi3X model and geometry helpers from
+  worldfoundry/base_models/three_dimensions/point_clouds/pi3_inference.
+  Stage the Pi3X checkpoint for camera poses; precomputed warp videos do not need it.

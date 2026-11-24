@@ -3,10 +3,11 @@
 
 """Qwen2 model configuration"""
 
+from typing import ClassVar
+
 from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_rope_utils import rope_config_validation
 from transformers.utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -116,7 +117,7 @@ class Qwen2Config(PretrainedConfig):
     ```"""
 
     model_type = "qwen2"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference: ClassVar[list] = ["past_key_values"]
 
     def __init__(
         self,
@@ -142,30 +143,6 @@ class Qwen2Config(PretrainedConfig):
         _attn_implementation="flash_attention_2",
         **kwargs,
     ):
-        """Init.
-
-        Args:
-            vocab_size: The vocab size.
-            hidden_size: The hidden size.
-            intermediate_size: The intermediate size.
-            num_hidden_layers: The num hidden layers.
-            num_attention_heads: The num attention heads.
-            num_key_value_heads: The num key value heads.
-            hidden_act: The hidden act.
-            max_position_embeddings: The max position embeddings.
-            initializer_range: The initializer range.
-            rms_norm_eps: The rms norm eps.
-            use_cache: The use cache.
-            tie_word_embeddings: The tie word embeddings.
-            rope_theta: The rope theta.
-            rope_scaling: The rope scaling.
-            use_sliding_window: The use sliding window.
-            sliding_window: The sliding window.
-            max_window_layers: The max window layers.
-            attention_dropout: The attention dropout.
-            is_causal: The is causal.
-            _attn_implementation: The attn implementation.
-        """
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

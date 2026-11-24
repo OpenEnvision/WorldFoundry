@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
-import re
 import shutil
 import subprocess
-import sys
 import time
 from pathlib import Path
 
-from worldfoundry.core.io.paths import package_module_root as package_root
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import resolve_data_path
 
 
@@ -47,53 +44,8 @@ def _as_bool(value: str | bool | int | None) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def _rewrite_demo_script(
-    source: str,
-    *,
-    max_frames: int,
-    steps: int,
-    height: int,
-    width: int,
-    seed: int,
-    use_usp: bool,
-    prompt: str = "a person is dancing",
-    reference_image: str = DEFAULT_REF_IMAGE,
-) -> str:
-    text = source
-    case = f'[1, {json.dumps(reference_image)}, {json.dumps(DEFAULT_POSE_DIR)}]'
-    text = re.sub(r"^height\s*=\s*\d+", f"height = {height}", text, flags=re.MULTILINE)
-    text = re.sub(r"^width\s*=\s*\d+", f"width = {width}", text, flags=re.MULTILINE)
-    text = re.sub(r"^seed\s*=\s*\d+", f"seed = {seed}", text, flags=re.MULTILINE)
-    text = re.sub(r"^max_frames\s*=\s*\d+", f"max_frames = {max_frames}", text, flags=re.MULTILINE)
-    text = re.sub(
-        r"test_list_path\s*=\s*\[.*?\]\s*\n\nmisc_size",
-        f"test_list_path = [\n    {case},\n]\n\nmisc_size",
-        text,
-        flags=re.DOTALL,
-    )
-    text = re.sub(r"num_inference_steps\s*=\s*50", f"num_inference_steps={steps}", text)
-    text = text.replace('prompt="a person is dancing",', f"prompt={prompt!r},", 1)
-    text = re.sub(
-        r"start_frame\s*=\s*random\.randint\(0,\s*_total_frame_num-cover_frame_num-1\)",
-        "start_frame = 0 # random.randint(0, _total_frame_num-cover_frame_num-1)",
-        text,
-    )
-    if "num_frames=max_frames" not in text:
-        text = text.replace(
-            "        input_image=ref_frame,\n",
-            "        input_image=ref_frame,\n        num_frames=max_frames,\n",
-            1,
-        )
-    del use_usp
-    return text
-
-
 def _newest_mp4(root: Path, *, since: float) -> Path | None:
-    candidates = [
-        path
-        for path in root.rglob("*.mp4")
-        if path.is_file() and path.stat().st_mtime >= since
-    ]
+    candidates = [path for path in root.rglob("*.mp4") if path.is_file() and path.stat().st_mtime >= since]
     if not candidates:
         return None
     return max(candidates, key=lambda path: path.stat().st_mtime)
@@ -149,36 +101,32 @@ def _extract_generated_panel(source_path: Path, output_path: Path) -> bool:
     return True
 
 
-def _ensure_demo_assets(repo_root: Path) -> None:
-    _ensure_link(repo_root / "data", _demo_asset_root())
+def _ensure_demo_assets(workspace_root: Path) -> None:
+    _ensure_link(workspace_root / "data", _demo_asset_root())
 
 
-def _ensure_demo_pose(workspace_root: Path, source_repo_root: Path, reference_image: str) -> None:
+def _ensure_demo_pose(workspace_root: Path, reference_image: str) -> None:
     pose_dir = workspace_root / DEFAULT_POSE_DIR
     if (pose_dir / "pose.jpg").is_file() and any(
-        path.name != "pose.jpg" and path.suffix.lower() in {".jpg", ".png"}
-        for path in pose_dir.iterdir()
+        path.name != "pose.jpg" and path.suffix.lower() in {".jpg", ".png"} for path in pose_dir.iterdir()
     ):
         return
-    align_script = source_repo_root / "run_align_pose.py"
-    if not align_script.is_file():
-        raise FileNotFoundError(f"UniAnimate pose alignment script not found: {align_script}")
     pose_dir.mkdir(parents=True, exist_ok=True)
     completed = subprocess.run(
-        [
-            sys.executable,
-            str(align_script),
-            "--ref_name",
-            reference_image,
-            "--source_video_paths",
-            DEFAULT_SOURCE_VIDEO,
-            "--saved_pose_dir",
-            DEFAULT_POSE_DIR,
-        ],
+        package_module_command(
+            "worldfoundry.synthesis.visual_generation.unianimate_dit.unianimate_dit_runtime.run_align_pose",
+            [
+                "--ref_name",
+                reference_image,
+                "--source_video_paths",
+                DEFAULT_SOURCE_VIDEO,
+                "--saved_pose_dir",
+                DEFAULT_POSE_DIR,
+            ],
+        ),
         cwd=str(workspace_root),
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     if completed.returncode != 0:
@@ -192,7 +140,6 @@ def _ensure_demo_pose(workspace_root: Path, source_repo_root: Path, reference_im
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="WorldFoundry UniAnimate-DiT official-demo runner")
-    parser.add_argument("--repo-root", required=True)
     parser.add_argument("--checkpoint-dir", required=True)
     parser.add_argument("--wan-root", required=True)
     parser.add_argument("--prompt", default="")
@@ -210,12 +157,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    repo_root = Path(args.repo_root).expanduser().resolve()
     output_path = Path(args.output_path).expanduser().resolve()
-    source_script = repo_root / "examples" / "unianimate_wan" / "inference_unianimate_wan_480p.py"
-    if not source_script.is_file():
-        raise FileNotFoundError(f"UniAnimate official script not found: {source_script}")
-
     output_path.parent.mkdir(parents=True, exist_ok=True)
     workspace_root = output_path.parent / "unianimate_dit_workspace"
     workspace_root.mkdir(parents=True, exist_ok=True)
@@ -225,48 +167,39 @@ def main() -> None:
     reference_image = str(Path(args.image_path).expanduser().resolve()) if args.image_path else DEFAULT_REF_IMAGE
     if args.image_path and not Path(reference_image).is_file():
         raise FileNotFoundError(f"UniAnimate reference image not found: {reference_image}")
-    _ensure_demo_pose(workspace_root, repo_root, reference_image)
+    _ensure_demo_pose(workspace_root, reference_image)
 
-    run_script = output_path.parent / "unianimate_dit_official_demo.py"
-    run_script.write_text(
-        _rewrite_demo_script(
-            source_script.read_text(encoding="utf-8"),
-            prompt=args.prompt or "a person is dancing",
-            reference_image=reference_image,
-            max_frames=args.max_frames,
-            steps=args.num_inference_steps,
-            height=args.height,
-            width=args.width,
-            seed=args.seed,
-            use_usp=_as_bool(args.use_usp),
-        ),
-        encoding="utf-8",
-    )
     before = time.time()
     env = os.environ.copy()
-    worldfoundry_parent = package_root("worldfoundry").parent
-    env["PYTHONPATH"] = os.pathsep.join(
-        item for item in (str(worldfoundry_parent), str(repo_root), str(workspace_root), env.get("PYTHONPATH", "")) if item
+    use_usp = _as_bool(args.use_usp)
+    env["WORLDFOUNDRY_UNIANIMATE_USE_USP"] = "1" if use_usp else "0"
+    command = package_module_command(
+        "worldfoundry.synthesis.visual_generation.unianimate_dit.unianimate_dit_runtime.examples."
+        "unianimate_wan.inference_unianimate_wan_480p",
+        [
+            "--prompt",
+            args.prompt or "a person is dancing",
+            "--image-path",
+            reference_image,
+            "--max-frames",
+            args.max_frames,
+            "--num-inference-steps",
+            args.num_inference_steps,
+            "--height",
+            args.height,
+            "--width",
+            args.width,
+            "--seed",
+            args.seed,
+        ],
+        nproc_per_node=max(int(args.nproc_per_node), 1) if use_usp else None,
     )
-    env["WORLDFOUNDRY_UNIANIMATE_USE_USP"] = "1" if _as_bool(args.use_usp) else "0"
-    if _as_bool(args.use_usp):
-        command = [
-            sys.executable,
-            "-m",
-            "torch.distributed.run",
-            "--standalone",
-            f"--nproc_per_node={max(int(args.nproc_per_node), 1)}",
-            str(run_script),
-        ]
-    else:
-        command = [sys.executable, str(run_script)]
     completed = subprocess.run(
         command,
         cwd=str(workspace_root),
         env=env,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     if completed.returncode != 0:

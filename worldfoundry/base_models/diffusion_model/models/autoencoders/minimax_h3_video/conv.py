@@ -17,6 +17,7 @@ import torch.nn.functional as F
 
 class BaseConv3d(nn.Conv3d):
     """Padded 3-D convolution primitive for the causal H3 video encoder."""
+
     def __init__(
         self,
         in_channels,

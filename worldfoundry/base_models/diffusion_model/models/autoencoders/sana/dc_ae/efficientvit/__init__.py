@@ -11,5 +11,5 @@ Public encode/decode live on :class:`~.dc_ae.DCAE` and
 Primitives (norm, act, MBConv) are in :mod:`~..nn`.
 """
 
-from .dc_ae import *
-from .dc_ae_with_temporal import *
+from .dc_ae import *  # noqa: F403 - Upstream star import kept as written.
+from .dc_ae_with_temporal import *  # noqa: F403 - Upstream star import kept as written.

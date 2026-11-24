@@ -11,7 +11,7 @@ import os
 import numpy as np
 import torch
 
-from worldfoundry.core.io import save_video_h264
+from worldfoundry.core.media.codecs.video import save_video_h264
 
 from .cleanup import _rank_local_cuda_device, _release_cached_memory, _set_rank_local_cuda_device
 from .config import _intrinsics_mode_arg, _normalize_mosaic_fuse_mode

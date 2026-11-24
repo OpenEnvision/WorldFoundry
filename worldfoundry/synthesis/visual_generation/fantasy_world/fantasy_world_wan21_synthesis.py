@@ -9,8 +9,6 @@ parameter setup, video generation, and artifact saving.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import torch
 
 from ...base_synthesis import BaseSynthesis
@@ -66,10 +64,10 @@ class FantasyWorldWan21Synthesis(BaseSynthesis):
         cls,
         pretrained_model_path: str = DEFAULT_FANTASY_WORLD_WAN21_REPO,
         args=None,
-        device: Optional[str] = None,
-        wan_model_path: Optional[str] = None,
-        moge_path: Optional[str] = None,
-        moge_pretrained: Optional[str] = None,
+        device: str | None = None,
+        wan_model_path: str | None = None,
+        moge_path: str | None = None,
+        moge_pretrained: str | None = None,
         sample_steps: int = 50,
         sample_guide_scale: float = 5.0,
         frames: int = 81,
@@ -79,7 +77,7 @@ class FantasyWorldWan21Synthesis(BaseSynthesis):
         start_index: int = 16,
         weight_dtype: torch.dtype = torch.bfloat16,
         **kwargs,
-    ) -> "FantasyWorldWan21Synthesis":
+    ) -> FantasyWorldWan21Synthesis:
         """Factory method to create a FantasyWorldWan21Synthesis instance from a pretrained model.
 
         This method handles resolving model paths and initializing the
@@ -147,9 +145,9 @@ class FantasyWorldWan21Synthesis(BaseSynthesis):
         prompt: str,
         camera_source,
         K=None,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         scene_name: str = "fantasyworld_wan21_scene",
-        neg_prompt: Optional[str] = None,
+        neg_prompt: str | None = None,
         fps: int = 16,
         seed: int = 1024,
         using_scale: bool = True,

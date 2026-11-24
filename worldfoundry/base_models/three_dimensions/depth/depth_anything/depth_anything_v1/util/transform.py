@@ -1,21 +1,15 @@
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v1 -> util -> transform.py functionality."""
-
-import random
-from PIL import Image, ImageOps, ImageFilter
-import torch
-from torchvision import transforms
-import torch.nn.functional as F
-
-import numpy as np
-import cv2
 import math
+
+import cv2
+import numpy as np
+import torch
+import torch.nn.functional as F
 
 
 def apply_min_size(sample, size, image_interpolation_method=cv2.INTER_AREA):
     """Rezise the sample to ensure the given size. Keeps aspect ratio.
 
     Args:
-        sample (dict): sample
         size (tuple): image size
 
     Returns:
@@ -36,13 +30,9 @@ def apply_min_size(sample, size, image_interpolation_method=cv2.INTER_AREA):
     shape[1] = math.ceil(scale * shape[1])
 
     # resize
-    sample["image"] = cv2.resize(
-        sample["image"], tuple(shape[::-1]), interpolation=image_interpolation_method
-    )
+    sample["image"] = cv2.resize(sample["image"], tuple(shape[::-1]), interpolation=image_interpolation_method)
 
-    sample["disparity"] = cv2.resize(
-        sample["disparity"], tuple(shape[::-1]), interpolation=cv2.INTER_NEAREST
-    )
+    sample["disparity"] = cv2.resize(sample["disparity"], tuple(shape[::-1]), interpolation=cv2.INTER_NEAREST)
     sample["mask"] = cv2.resize(
         sample["mask"].astype(np.float32),
         tuple(shape[::-1]),
@@ -53,9 +43,8 @@ def apply_min_size(sample, size, image_interpolation_method=cv2.INTER_AREA):
     return tuple(shape)
 
 
-class Resize(object):
-    """Resize sample to given size (width, height).
-    """
+class Resize:
+    """Resize sample to given size (width, height)."""
 
     def __init__(
         self,
@@ -67,8 +56,7 @@ class Resize(object):
         resize_method="lower_bound",
         image_interpolation_method=cv2.INTER_AREA,
     ):
-        """Init.
-
+        """
         Args:
             width (int): desired output width
             height (int): desired output height
@@ -100,13 +88,6 @@ class Resize(object):
         self.__image_interpolation_method = image_interpolation_method
 
     def constrain_to_multiple_of(self, x, min_val=0, max_val=None):
-        """Constrain to multiple of.
-
-        Args:
-            x: The x.
-            min_val: The min val.
-            max_val: The max val.
-        """
         y = (np.round(x / self.__multiple_of) * self.__multiple_of).astype(int)
 
         if max_val is not None and y > max_val:
@@ -118,12 +99,6 @@ class Resize(object):
         return y
 
     def get_size(self, width, height):
-        """Get size.
-
-        Args:
-            width: The width.
-            height: The height.
-        """
         # determine new height and width
         scale_height = self.__height / height
         scale_width = self.__width / width
@@ -154,24 +129,14 @@ class Resize(object):
                     # fit height
                     scale_width = scale_height
             else:
-                raise ValueError(
-                    f"resize_method {self.__resize_method} not implemented"
-                )
+                raise ValueError(f"resize_method {self.__resize_method} not implemented")
 
         if self.__resize_method == "lower_bound":
-            new_height = self.constrain_to_multiple_of(
-                scale_height * height, min_val=self.__height
-            )
-            new_width = self.constrain_to_multiple_of(
-                scale_width * width, min_val=self.__width
-            )
+            new_height = self.constrain_to_multiple_of(scale_height * height, min_val=self.__height)
+            new_width = self.constrain_to_multiple_of(scale_width * width, min_val=self.__width)
         elif self.__resize_method == "upper_bound":
-            new_height = self.constrain_to_multiple_of(
-                scale_height * height, max_val=self.__height
-            )
-            new_width = self.constrain_to_multiple_of(
-                scale_width * width, max_val=self.__width
-            )
+            new_height = self.constrain_to_multiple_of(scale_height * height, max_val=self.__height)
+            new_width = self.constrain_to_multiple_of(scale_width * width, max_val=self.__width)
         elif self.__resize_method == "minimal":
             new_height = self.constrain_to_multiple_of(scale_height * height)
             new_width = self.constrain_to_multiple_of(scale_width * width)
@@ -181,14 +146,7 @@ class Resize(object):
         return (new_width, new_height)
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
-        width, height = self.get_size(
-            sample["image"].shape[1], sample["image"].shape[0]
-        )
+        width, height = self.get_size(sample["image"].shape[1], sample["image"].shape[0])
 
         # resize sample
         sample["image"] = cv2.resize(
@@ -206,16 +164,16 @@ class Resize(object):
                 )
 
             if "depth" in sample:
-                sample["depth"] = cv2.resize(
-                    sample["depth"], (width, height), interpolation=cv2.INTER_NEAREST
-                )
+                sample["depth"] = cv2.resize(sample["depth"], (width, height), interpolation=cv2.INTER_NEAREST)
 
             if "semseg_mask" in sample:
                 # sample["semseg_mask"] = cv2.resize(
                 #     sample["semseg_mask"], (width, height), interpolation=cv2.INTER_NEAREST
                 # )
-                sample["semseg_mask"] = F.interpolate(torch.from_numpy(sample["semseg_mask"]).float()[None, None, ...], (height, width), mode='nearest').numpy()[0, 0]
-                
+                sample["semseg_mask"] = F.interpolate(
+                    torch.from_numpy(sample["semseg_mask"]).float()[None, None, ...], (height, width), mode="nearest"
+                ).numpy()[0, 0]
+
             if "mask" in sample:
                 sample["mask"] = cv2.resize(
                     sample["mask"].astype(np.float32),
@@ -228,56 +186,37 @@ class Resize(object):
         return sample
 
 
-class NormalizeImage(object):
-    """Normlize image by given mean and std.
-    """
+class NormalizeImage:
+    """Normlize image by given mean and std."""
 
     def __init__(self, mean, std):
-        """Init.
-
-        Args:
-            mean: The mean.
-            std: The std.
-        """
         self.__mean = mean
         self.__std = std
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         sample["image"] = (sample["image"] - self.__mean) / self.__std
 
         return sample
 
 
-class PrepareForNet(object):
-    """Prepare sample for usage as network input.
-    """
+class PrepareForNet:
+    """Prepare sample for usage as network input."""
 
     def __init__(self):
-        """Init."""
         pass
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         image = np.transpose(sample["image"], (2, 0, 1))
         sample["image"] = np.ascontiguousarray(image).astype(np.float32)
 
         if "mask" in sample:
             sample["mask"] = sample["mask"].astype(np.float32)
             sample["mask"] = np.ascontiguousarray(sample["mask"])
-        
+
         if "depth" in sample:
             depth = sample["depth"].astype(np.float32)
             sample["depth"] = np.ascontiguousarray(depth)
-            
+
         if "semseg_mask" in sample:
             sample["semseg_mask"] = sample["semseg_mask"].astype(np.float32)
             sample["semseg_mask"] = np.ascontiguousarray(sample["semseg_mask"])

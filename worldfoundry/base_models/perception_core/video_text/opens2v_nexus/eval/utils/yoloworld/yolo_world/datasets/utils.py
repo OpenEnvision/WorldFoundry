@@ -1,5 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import Sequence
+from collections.abc import Sequence
 
 import torch
 from mmengine.dataset import COLLATE_FUNCTIONS
@@ -24,17 +24,13 @@ def yolow_collate(data_batch: Sequence, use_ms_training: bool = False) -> dict:
         gt_bboxes = datasamples.gt_instances.bboxes.tensor
         gt_labels = datasamples.gt_instances.labels
         if "masks" in datasamples.gt_instances:
-            masks = datasamples.gt_instances.masks.to(
-                dtype=torch.bool, device=gt_bboxes.device
-            )
+            masks = datasamples.gt_instances.masks.to(dtype=torch.bool, device=gt_bboxes.device)
             batch_masks.append(masks)
         batch_idx = gt_labels.new_full((len(gt_labels), 1), i)
         bboxes_labels = torch.cat((batch_idx, gt_labels[:, None], gt_bboxes), dim=1)
         batch_bboxes_labels.append(bboxes_labels)
 
-    collated_results = {
-        "data_samples": {"bboxes_labels": torch.cat(batch_bboxes_labels, 0)}
-    }
+    collated_results = {"data_samples": {"bboxes_labels": torch.cat(batch_bboxes_labels, 0)}}
     if len(batch_masks) > 0:
         collated_results["data_samples"]["masks"] = torch.cat(batch_masks, 0)
 

@@ -393,11 +393,11 @@ def test_warmup_rejects_unsupported_runner_before_execution() -> None:
 @torch.no_grad()
 def test_cuda_regional_compile_preserves_bfloat16_pointwise_rounding(operation: str) -> None:
     from worldfoundry.base_models.diffusion_model.loaders.module import _compile_policy_from_runtime
-    from worldfoundry.core.execution.compile_cache import compile_callable_cached
     from worldfoundry.core.execution.compile_numerics import preserve_normalization_reductions
     from worldfoundry.core.execution.graphs.inference_graph import InferenceCUDAGraphRunner
     from worldfoundry.core.kernels.diffusion import layer_norm_scale_shift, residual_gate_add, residual_gate_add_
     from worldfoundry.core.nn.transformer.dit import RMSNorm
+    from worldfoundry.core.platform.compile_cache import compile_callable_cached
 
     torch.manual_seed(42)
     if operation in {"rmsnorm", "layernorm", "linear-rmsnorm", "linear-gelu"}:

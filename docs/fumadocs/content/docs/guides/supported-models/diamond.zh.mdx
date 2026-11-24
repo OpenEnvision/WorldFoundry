@@ -36,14 +36,14 @@ csgo(execute=True, spawn_id=0, action="forward", headless_steps=24,
 
 也可使用 `DIAMONDPipeline.from_pretrained(variant="csgo", ...)`。`diamond-csgo` binding 直接选择 `DIAMONDCsgoPipeline`。无需传入 `prompt`、`image`、`video`：Atari 从真实环境采集初始化观测，CS:GO 从指定 spawn 的历史帧开始。
 
-CS:GO 支持 `idle`、`forward`、`backward`、`left`、`right`、`jump`、`turn-left`、`turn-right`。也可用 `actions_path` 传入形状为 `[headless_steps, 51]` 的 JSON/NPY 动作数组，按官方多热编码排列：11 个键盘位、2 个鼠标点击位、23 个水平鼠标分箱、15 个垂直鼠标分箱。每个鼠标轴必须恰有一个有效分箱。提供动作文件时优先采用文件；`spawn_dir` 优先于 `spawn_id`。
+CS:GO 支持 `idle`、`forward`、`backward`、`left`、`right`、`jump`、`turn-left`、`turn-right`。也可用 `actions_path` 传入形状为 `[headless_steps, 51]` 的 JSON/NPY 动作数组，按官方多热编码排列：11 个键盘位、2 个鼠标点击位、23 个水平鼠标分箱、15 个垂直鼠标分箱。每个鼠标轴必须恰有一个有效分箱。提供动作文件时，优先使用文件中的动作；`spawn_dir` 优先于 `spawn_id`。
 
 官方 `higher_quality` 预设每帧运行 3 步去噪、10 步超分辨率；`fast` 各运行 1 步。两者均按指定播放帧率写出 H.264。N 步滚动输出 N+1 帧，包含初始观测。Atari 在 horizon=50 或预测终止时重置，因此视频可能包含上下文重启；CS:GO 执行连续的有限步滚动。
 
-## 验证范围
+## 验证
 
-26 个官方 Atari 权重均完成本地 H100 推理、严格加载、裁剪前有限值检查、完整视频解码及实际画面审核。共享采样器调整后，针对这些权重的 52 组 Euler/Heun 对照与调整前实现逐值一致。另有相同观测和随机种子的 Pong 相反动作测试，确认球拍响应方向相反。
+已在本地验证：26 个官方 Atari 权重均能生成完整的滚动视频；CS:GO 从 spawn 0 出发的 `higher_quality` 与 `fast` 滚动，其低分辨率与超分辨率输出均与官方实现一致。
 
-CS:GO 从 spawn 0 进行 `higher_quality` 前进、后退各 24 步滚动，低分辨率预测与超分辨率输出均和官方实现逐值一致，裁剪前输出均有限。快速预设另有前进、后退各 6 步的两条对照，同样逐值一致。短程验证不能代表长程物理、奖励准确率或游戏通关效果。许可与来源集中在根 `THIRD-PARTY-NOTICES`。
+验证仅覆盖短程滚动；长程物理、奖励准确率和游戏通关效果尚未验证。许可与来源见 `THIRD-PARTY-NOTICES`。
 
 <ModelRelatedRecipes modelId="diamond" locale="zh" />

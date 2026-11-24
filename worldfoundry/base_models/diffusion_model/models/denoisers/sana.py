@@ -18,7 +18,13 @@ from ...components import ComponentBuildContext
 from ...contracts import DenoiserInput, DenoiserOutput
 from ...loaders import ModuleLoadSpec, NativeModuleLoader
 from ..networks.sana.normalization import RMSNorm
-from .graph_wrapped import FeatureCacheDenoiserMixin, acceleration_runtime_call
+from .graph_wrapped import (
+    FeatureCacheDenoiserMixin,
+    GraphWrappedDenoiserMixin,
+    acceleration_runtime_call,
+    resolve_cuda_graph_mode,
+    validate_cuda_graph_options,
+)
 
 
 def _base_image_config(
@@ -159,9 +165,7 @@ def sana_streaming_config(*, autoregressive: bool) -> dict[str, object]:
         additional_inchannels=128,
         attn_type=("V2VStateCachedBiGDNAttention" if autoregressive else "V2VBiGDNAttention"),
         softmax_ratio=0.25,
-        softmax_attn_type=(
-            "V2VAfterRoPEGatedSoftmaxAttention" if autoregressive else "V2VGatedSoftmaxAttention"
-        ),
+        softmax_attn_type=("V2VAfterRoPEGatedSoftmaxAttention" if autoregressive else "V2VGatedSoftmaxAttention"),
         ffn_type=("CachedGLUMBConvTemp" if autoregressive else "GLUMBConvTemp"),
         pos_embed_type=("casual_wan_rope" if autoregressive else "wan_rope"),
     )
@@ -289,8 +293,13 @@ def _sana_streaming_state_dict_converter(
     return streaming_convert
 
 
-class SanaDenoiser(FeatureCacheDenoiserMixin):
-    """Adapt one Sana checkpoint graph to the framework denoiser contract."""
+class SanaDenoiser(GraphWrappedDenoiserMixin, FeatureCacheDenoiserMixin):
+    """Adapt one Sana checkpoint graph to the framework denoiser contract.
+
+    Supports both whole-network and piecewise block-stack CUDA Graphs via
+    :class:`GraphWrappedDenoiserMixin`, plus per-request/per-branch EasyCache
+    via :class:`FeatureCacheDenoiserMixin`.
+    """
 
     _DATA_INFO_KEYS = frozenset(
         {
@@ -304,10 +313,150 @@ class SanaDenoiser(FeatureCacheDenoiserMixin):
         }
     )
 
-    def __init__(self, model: nn.Module, *, output_scale: float = 1.0) -> None:
+    def __init__(
+        self,
+        model: nn.Module,
+        *,
+        output_scale: float = 1.0,
+        cuda_graph: bool | str = False,
+        extra_key: str = "sana",
+    ) -> None:
         self.model = model
         self.output_scale = float(output_scale)
+        self._extra_key = extra_key
         self._feature_cache_config = getattr(model, "_worldfoundry_easycache_config", None)
+        self._cuda_graph_mode = (
+            "piecewise"
+            if isinstance(cuda_graph, str) and cuda_graph.strip().casefold() == "piecewise"
+            else (
+                "whole"
+                if bool(cuda_graph) and str(cuda_graph).strip().casefold() not in {"off", "none", "false"}
+                else "off"
+            )
+        )
+        existing_piecewise = getattr(model, "_sana_piecewise_graph", None)
+        if self._cuda_graph_mode == "off" and existing_piecewise is not None:
+            self._cuda_graph_mode = "piecewise"
+        if self._cuda_graph_mode == "piecewise" and existing_piecewise is not None:
+            self._init_graph_runner(model, enabled=False, extra_key=extra_key)
+            self._piecewise_graph = existing_piecewise
+            self._piecewise_graph_extra_key = extra_key
+        else:
+            self._init_graph_runner(
+                model,
+                enabled=self._cuda_graph_mode if self._cuda_graph_mode != "off" else False,
+                extra_key=extra_key,
+            )
+        if self._piecewise_graph is not None:
+            blocks = getattr(model, "blocks", None)
+            if isinstance(blocks, nn.ModuleList):
+                blocks._worldfoundry_piecewise_graph = self._piecewise_graph
+            model._sana_piecewise_graph = self._piecewise_graph
+        self._default_data_info_cache: dict[
+            tuple[int, int, int, torch.device, torch.dtype], dict[str, torch.Tensor]
+        ] = {}
+
+    def apply_sol_engine(
+        self,
+        config: Any = "sol_balanced",
+        *,
+        vae: nn.Module | None = None,
+    ) -> dict[str, Any]:
+        """Install the SANA SOL-Engine stack and synchronize denoiser cache/graph state."""
+        from ..networks.sana.acceleration import accelerate_sana_video
+
+        receipt = accelerate_sana_video(self.model, config, vae=vae)
+        self._feature_cache_config = getattr(self.model, "_worldfoundry_easycache_config", None)
+        graph_mode = str(receipt.get("cuda_graph", {}).get("mode", "off")).strip().casefold()
+        if graph_mode == "piecewise":
+            self._graph_runner = None
+            self._piecewise_graph = getattr(self.model, "_sana_piecewise_graph", None)
+            self._cuda_graph_mode = "piecewise"
+        elif graph_mode == "whole":
+            self._init_graph_runner(self.model, enabled="whole", extra_key=self._extra_key)
+            self._cuda_graph_mode = "whole"
+        else:
+            self._graph_runner = None
+            self._piecewise_graph = None
+            self._cuda_graph_mode = "off"
+        return receipt
+
+    def feature_cache_kwargs(self, model_input: Any) -> dict[str, Any]:
+        spec = getattr(self.model, "_sana_easycache_spec", None)
+        zero_sync_steps = spec.get("zero_sync_skip_steps") if isinstance(spec, Mapping) else None
+        if zero_sync_steps is None or getattr(self, "_feature_cache_config", None) is None:
+            return super().feature_cache_kwargs(model_input)
+        from ..networks.sana.acceleration import SanaEasyCache
+
+        if getattr(self.model, "training", False):
+            raise RuntimeError("EasyCache requires model.eval()")
+        if getattr(self, "_graph_runner", None) is not None or getattr(self, "inplace_residual", False):
+            raise RuntimeError("EasyCache has not been validated with CUDA Graph or inplace residual")
+        request_id = self._explicit_request_id(model_input)
+        self._feature_cache_context_var().set(request_id)
+        state = self._feature_request_state(request_id, create=True)
+        assert state is not None
+        branch = str(model_input.branch)
+        step = int(model_input.step_index)
+        if step < 0:
+            raise ValueError("feature-cache step must be non-negative")
+        with self._feature_cache_lock():
+            caches = state["caches"]
+            cache = caches.get(branch)
+            if cache is None:
+                if step != 0:
+                    raise ValueError("a request-local feature-cache branch must begin at step 0")
+                cache = SanaEasyCache(
+                    threshold=float(spec["threshold"]),
+                    total_steps=int(model_input.total_steps),
+                    warmup_steps=int(spec["warmup_steps"]),
+                    dense_last=int(spec["dense_last"]),
+                    max_skip_steps=int(spec["max_skip_steps"]),
+                    subsample_stride=int(spec["subsample_stride"]),
+                    zero_sync_skip_steps=tuple(int(s) for s in zero_sync_steps),
+                )
+                cache.branch = branch
+                cache.request_id = request_id
+                cache.request_epoch = int(state["request_epoch"])
+                caches[branch] = cache
+            else:
+                previous_step = state["branch_steps"].get(branch)
+                if step == 0 or previous_step is None or step != int(previous_step) + 1:
+                    raise ValueError("EasyCache branch steps must be unique and contiguous")
+            state["branch_steps"][branch] = step
+            if step >= int(model_input.total_steps) - 1:
+                state["complete"] = True
+        return {
+            "feature_cache": cache,
+            "feature_cache_step": model_input.step_index,
+            "feature_cache_total_steps": model_input.total_steps,
+        }
+
+    def _cached_default_data_info(self, latents: torch.Tensor) -> dict[str, torch.Tensor]:
+        key = (int(latents.shape[0]), int(latents.shape[-2]), int(latents.shape[-1]), latents.device, latents.dtype)
+        cached = self._default_data_info_cache.get(key)
+        if cached is not None:
+            return cached
+        defaults = {
+            "img_hw": torch.tensor(
+                [[latents.shape[-2], latents.shape[-1]]],
+                device=latents.device,
+                dtype=latents.dtype,
+            )
+            .expand(latents.shape[0], -1)
+            .contiguous(),
+            "aspect_ratio": torch.full(
+                (latents.shape[0], 1),
+                float(latents.shape[-2]) / float(latents.shape[-1]),
+                device=latents.device,
+                dtype=latents.dtype,
+            ),
+            "cfg_scale": torch.ones(latents.shape[0], device=latents.device, dtype=latents.dtype),
+        }
+        if len(self._default_data_info_cache) >= 8:
+            self._default_data_info_cache.clear()
+        self._default_data_info_cache[key] = defaults
+        return defaults
 
     def end_request(self, request_id: str, *, error: BaseException | None = None) -> None:
         from worldfoundry.core.acceleration.plugins import end_acceleration_request
@@ -315,13 +464,26 @@ class SanaDenoiser(FeatureCacheDenoiserMixin):
         try:
             self.end_feature_cache_request(request_id, error=error)
         finally:
+            reset_sol = getattr(self.model, "reset_sol_caches", None)
+            if callable(reset_sol):
+                reset_sol()
             end_acceleration_request(self.model, self, request_id)
 
     def runtime_optimization_report(self, request_id: str | None = None) -> dict[str, object]:
+        from ..networks.sana.acceleration import sana_runtime_receipt
+
         session = getattr(self.model, "_worldfoundry_accelerations", None)
+        sol_receipt = sana_runtime_receipt(self.model)
+        fallbacks: list[str] = list(sol_receipt.get("fallbacks", []))
+        graph = self.graph_report()
+        if graph is not None and int(graph.get("capture_failed", 0)) > 0:
+            fallbacks.append(f"cuda_graph:capture_failed={graph['capture_failed']}")
         return {
             "accelerations": session.report() if session is not None else {"installed": []},
             "feature_cache": self.feature_cache_report(request_id),
+            "cuda_graph": graph,
+            "sana_sol_engine": sol_receipt,
+            "fallbacks": fallbacks,
         }
 
     def streaming_cache_layout(self) -> tuple[bool, ...]:
@@ -331,8 +493,7 @@ class SanaDenoiser(FeatureCacheDenoiserMixin):
         if not isinstance(blocks, nn.ModuleList):
             raise TypeError("Sana streaming graph must expose a ModuleList named 'blocks'")
         return tuple(
-            getattr(getattr(block, "attn", None), "fixed_rope_cache_type", None) == "state"
-            for block in blocks
+            getattr(getattr(block, "attn", None), "fixed_rope_cache_type", None) == "state" for block in blocks
         )
 
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
@@ -383,9 +544,7 @@ class SanaDenoiser(FeatureCacheDenoiserMixin):
             if not isinstance(frame_info, Mapping):
                 raise TypeError("Sana condition_frame_info must map frame indices to timestep weights")
             frame_timestep = (
-                timestep
-                if timestep.ndim == 3
-                else timestep[:, None, None].expand(-1, 1, latents.shape[2]).clone()
+                timestep if timestep.ndim == 3 else timestep[:, None, None].expand(-1, 1, latents.shape[2]).clone()
             )
             for raw_index, raw_weight in frame_info.items():
                 index = int(raw_index)
@@ -395,28 +554,11 @@ class SanaDenoiser(FeatureCacheDenoiserMixin):
             timestep = frame_timestep
 
         values = model_input.conditioning
+        defaults = self._cached_default_data_info(latents)
         data_info = {key: values[key] for key in self._DATA_INFO_KEYS if key in values}
-        data_info.setdefault(
-            "img_hw",
-            torch.tensor(
-                [[latents.shape[-2], latents.shape[-1]]],
-                device=latents.device,
-                dtype=latents.dtype,
-            ).expand(latents.shape[0], -1),
-        )
-        data_info.setdefault(
-            "aspect_ratio",
-            torch.full(
-                (latents.shape[0], 1),
-                float(latents.shape[-2]) / float(latents.shape[-1]),
-                device=latents.device,
-                dtype=latents.dtype,
-            ),
-        )
-        data_info.setdefault(
-            "cfg_scale",
-            torch.ones(latents.shape[0], device=latents.device, dtype=latents.dtype),
-        )
+        data_info.setdefault("img_hw", defaults["img_hw"])
+        data_info.setdefault("aspect_ratio", defaults["aspect_ratio"])
+        data_info.setdefault("cfg_scale", defaults["cfg_scale"])
         data_info = {
             key: item.to(device=latents.device) if isinstance(item, torch.Tensor) else item
             for key, item in data_info.items()
@@ -430,8 +572,10 @@ class SanaDenoiser(FeatureCacheDenoiserMixin):
         }
         if return_log_variance:
             kwargs["return_logvar"] = True
+        if int(getattr(model_input, "step_index", 0)) == 0 and getattr(model_input, "branch", "positive") == "positive":
+            self._begin_graph_request_window()
         kwargs.update(self.feature_cache_kwargs(model_input))
-        sample = self.model(
+        sample = self._run_network(
             latents,
             timestep,
             context.to(device=latents.device, dtype=latents.dtype),
@@ -523,12 +667,28 @@ def _build(
         context.require_checkpoint("weights"),
         acceleration_policy(context),
     )
+    validate_cuda_graph_options(context)
+    graph_mode = resolve_cuda_graph_mode(context)
     _prepare_sana_execution_tensors(
         model,
         device=context.policy.device,
         dtype=context.policy.dtype,
     )
-    return SanaDenoiser(model, output_scale=output_scale)
+    sol_profile = context.component_options.get("sol_profile", context.policy.options.get("sol_profile"))
+    if sol_profile is not None:
+        from ..networks.sana.acceleration import accelerate_sana_video
+
+        accelerate_sana_video(model, sol_profile)
+        if graph_mode == "off":
+            receipt = getattr(model, "_sana_acceleration_receipt", None)
+            if isinstance(receipt, Mapping):
+                graph_mode = str(receipt.get("cuda_graph", {}).get("mode", "off"))
+    return SanaDenoiser(
+        model,
+        output_scale=output_scale,
+        cuda_graph=graph_mode if graph_mode != "off" else False,
+        extra_key=f"sana:{module_class.__name__}",
+    )
 
 
 def build_sana_image_denoiser(context: ComponentBuildContext) -> SanaDenoiser:
@@ -592,9 +752,7 @@ def build_sana_video_denoiser(context: ComponentBuildContext) -> SanaDenoiser:
 def build_sana_streaming_denoiser(context: ComponentBuildContext) -> SanaDenoiser:
     from ..networks.sana.sana_multi_scale_video_v2v import SanaMSVideoV2V
 
-    config = sana_streaming_config(
-        autoregressive=bool(context.component_options.get("autoregressive", False))
-    )
+    config = sana_streaming_config(autoregressive=bool(context.component_options.get("autoregressive", False)))
     return _build(context, module_class=SanaMSVideoV2V, config=config)
 
 

@@ -115,11 +115,11 @@ MAGI2_MODALITY_TEXT = 2
 
 
 __all__ = [
-    "AttentionGatingConfig",
-    "AttentionSinksConfig",
     "MAGI2_MODALITY_AUDIO",
     "MAGI2_MODALITY_TEXT",
     "MAGI2_MODALITY_VIDEO",
+    "AttentionGatingConfig",
+    "AttentionSinksConfig",
     "MHCConfig",
     "Magi2PreviewConfig",
     "Magi2RefinerConfig",

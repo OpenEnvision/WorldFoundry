@@ -26,25 +26,13 @@ _ordered_datatypes = [torch.int8, torch.float16, torch.bfloat16, torch.float32]
 
 @jit
 def gelu(x):
-    """Gelu.
-
-    Args:
-        x: The x.
-    """
+    """Approximate GELU as ``x * sigmoid(1.702 * x)`` inside Triton kernels."""
     return x * tl.sigmoid(x * 1.702)
 
 
 @jit
 def int8_quantize_kernel(X, OUT, SCALES, HDIM, BLOCK_SIZE: tl.constexpr):
-    """Int8 quantize kernel.
-
-    Args:
-        X: The x.
-        OUT: The out.
-        SCALES: The scales.
-        HDIM: The hdim.
-        BLOCK_SIZE: The block size.
-    """
+    """Quantize one row of ``X`` to symmetric INT8 and store its dequantization scale ``absmax / 127``."""
     row_idx = tl.program_id(0)
     x_ptr = X + row_idx * HDIM
     out_ptr = OUT + row_idx * HDIM
@@ -59,10 +47,11 @@ def int8_quantize_kernel(X, OUT, SCALES, HDIM, BLOCK_SIZE: tl.constexpr):
 
 
 def int8_quantize_triton(x):
-    """Int8 quantize triton.
+    """Quantize ``x`` row-wise over its last dimension to symmetric INT8 with a CUDA Triton kernel.
 
-    Args:
-        x: The x.
+    Returns:
+        ``(q, scales)``: an INT8 tensor shaped like ``x`` and float32 scales of shape ``x.shape[:-1]``
+        with ``x ~= q * scales[..., None]``.
     """
     x_shape_orig = x.shape
     x = x.view(-1, x_shape_orig[-1])
@@ -76,16 +65,7 @@ def int8_quantize_triton(x):
 
 @jit
 def fp8_quantize_kernel(X, OUT, SCALES, HDIM, BLOCK_SIZE: tl.constexpr, FP8_MAX_VAL: tl.constexpr):
-    """Fp8 quantize kernel.
-
-    Args:
-        X: The x.
-        OUT: The out.
-        SCALES: The scales.
-        HDIM: The hdim.
-        BLOCK_SIZE: The block size.
-        FP8_MAX_VAL: The fp8 max val.
-    """
+    """Scale one row of ``X`` into ``[-FP8_MAX_VAL, FP8_MAX_VAL]`` and store the scale ``absmax / FP8_MAX_VAL``."""
     row_idx = tl.program_id(0)
     x_ptr = X + row_idx * HDIM
     out_ptr = OUT + row_idx * HDIM
@@ -103,10 +83,11 @@ def fp8_quantize_kernel(X, OUT, SCALES, HDIM, BLOCK_SIZE: tl.constexpr, FP8_MAX_
 
 
 def fp8_quantize_triton(x):
-    """Fp8 quantize triton.
+    """Quantize ``x`` row-wise over its last dimension to FP8 E4M3 with a CUDA Triton kernel.
 
-    Args:
-        x: The x.
+    Returns:
+        ``(q, scales)``: a ``float8_e4m3fn`` tensor shaped like ``x`` and bfloat16 scales of shape
+        ``x.shape[:-1]`` with ``x ~= q * scales[..., None]``.
     """
     x_shape_orig = x.shape
     x = x.view(-1, x_shape_orig[-1])
@@ -126,22 +107,19 @@ def fp8_quantize_triton(x):
 
 
 def upcast_if_fp8(a):
-    """Upcast if fp8.
-
-    Args:
-        a: The a.
-    """
+    """Map a dtype whose string form contains ``"fp8"`` (Triton FP8 types) to ``torch.float16``; return others unchanged."""
     if "fp8" in str(a):
         return torch.float16
     return a
 
 
 def get_higher_dtype(a, b):
-    """Get higher dtype.
+    """Return the wider of two dtypes in the order int8 < float16 < bfloat16 < float32.
 
-    Args:
-        a: The a.
-        b: The b.
+    FP8 types count as float16 (see :func:`upcast_if_fp8`).
+
+    Raises:
+        AssertionError: The two dtypes differ and one of them is outside that order.
     """
     a = upcast_if_fp8(a)
     b = upcast_if_fp8(b)
@@ -199,34 +177,7 @@ def int8_gemm_bias_kernel(
     EVEN_K: tl.constexpr,
     AB_DTYPE: tl.constexpr,  #
 ):
-    """Int8 gemm bias kernel.
-
-    Args:
-        A: The a.
-        B: The b.
-        BIAS: The bias.
-        A_SCALES: The a scales.
-        B_SCALES: The b scales.
-        C: The c.
-        M: The m.
-        N: The n.
-        K: The k.
-        stride_am: The stride am.
-        stride_ak: The stride ak.
-        stride_bk: The stride bk.
-        stride_bn: The stride bn.
-        stride_cm: The stride cm.
-        stride_cn: The stride cn.
-        acc_dtype: The acc dtype.
-        fuse_gelu: The fuse gelu.
-        BLOCK_M: The block m.
-        BLOCK_N: The block n.
-        BLOCK_K: The block k.
-        GROUP_M: The group m.
-        SPLIT_K: The split k.
-        EVEN_K: The even k.
-        AB_DTYPE: The ab dtype.
-    """
+    """Compute one output tile of ``(A @ B) * a_scales[:, None] * b_scales[None, :] + bias``, optionally followed by GELU."""
     # matrix multiplication
     pid = tl.program_id(0)
     pid_z = tl.program_id(1)
@@ -248,7 +199,7 @@ def int8_gemm_bias_kernel(
     A = A + (ram[:, None] * stride_am + rk[None, :] * stride_ak)
     B = B + (rk[:, None] * stride_bk + rbn[None, :] * stride_bn)
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=acc_dtype)
-    for k in range(0, tl.cdiv(K, BLOCK_K * SPLIT_K)):
+    for k in range(tl.cdiv(K, BLOCK_K * SPLIT_K)):
         if EVEN_K:
             a = tl.load(A)
             b = tl.load(B)
@@ -295,16 +246,22 @@ def int8_gemm_bias_kernel(
 
 # @torch.compiler.disable()
 def int8_gemm_bias_triton(a, b, bias, a_scales, b_scales, fuse_gelu=False, output_dtype=None):
-    """Int8 gemm bias triton.
+    """Compute the dequantized INT8 linear layer ``(a @ b.T) * a_scales[:, None] * b_scales + bias`` on CUDA.
 
     Args:
-        a: The a.
-        b: The b.
-        bias: The bias.
-        a_scales: The a scales.
-        b_scales: The b scales.
-        fuse_gelu: The fuse gelu.
-        output_dtype: The output dtype.
+        a: Quantized activations of shape ``[..., K]``.
+        b: Quantized weight of shape ``[N, K]``.
+        bias: Bias of shape ``[N]``.
+        a_scales: Per-row scales of ``a``, one per flattened row.
+        b_scales: Per-output-channel scales of ``b``, shape ``[N]``.
+        fuse_gelu: Apply :func:`gelu` to the result.
+        output_dtype: Output dtype; defaults to the common dtype of ``a`` and ``b``.
+
+    Returns:
+        Tensor of shape ``[..., N]``.
+
+    Raises:
+        AssertionError: The inner dimensions of ``a`` and ``b`` differ.
     """
     device = a.device
     # handle non-contiguous inputs if necessary
@@ -320,7 +277,7 @@ def int8_gemm_bias_triton(a, b, bias, a_scales, b_scales, fuse_gelu=False, outpu
     assert a.shape[1] == b.shape[0], f"incompatible dimensions {a.shape} and {b.shape}"
     M, K = a.shape
     _, N = b.shape
-    out_shape = a_orig_shape[:-1] + (N,)
+    out_shape = (*a_orig_shape[:-1], N)
     # common type between a and b
     ab_dtype = get_higher_dtype(a.dtype, b.dtype)
 
@@ -341,11 +298,6 @@ def int8_gemm_bias_triton(a, b, bias, a_scales, b_scales, fuse_gelu=False, outpu
     acc_dtype = supported_acc_dtypes[ab_dtype][0]
 
     def to_tl_type(ty):
-        """To tl type.
-
-        Args:
-            ty: The ty.
-        """
         return getattr(tl, str(ty).split(".")[-1])
 
     acc_dtype = to_tl_type(acc_dtype)
@@ -359,10 +311,10 @@ def int8_gemm_bias_triton(a, b, bias, a_scales, b_scales, fuse_gelu=False, outpu
     ]:
         ab_dtype = None
     # launch kernel
-    grid = lambda META: (  # noqa E731
+    grid = lambda META: (  # noqa: E731 - Triton launch grid kept as a lambda.
         cdiv(M, META["BLOCK_M"]) * cdiv(N, META["BLOCK_N"]),
         META["SPLIT_K"],
-    )  # noqa E731
+    )
     int8_gemm_bias_kernel[grid](
         a,
         b,
@@ -428,33 +380,7 @@ def int8_gemm_kernel(
     EVEN_K: tl.constexpr,
     AB_DTYPE: tl.constexpr,  #
 ):
-    """Int8 gemm kernel.
-
-    Args:
-        A: The a.
-        B: The b.
-        A_SCALES: The a scales.
-        B_SCALES: The b scales.
-        C: The c.
-        M: The m.
-        N: The n.
-        K: The k.
-        stride_am: The stride am.
-        stride_ak: The stride ak.
-        stride_bk: The stride bk.
-        stride_bn: The stride bn.
-        stride_cm: The stride cm.
-        stride_cn: The stride cn.
-        acc_dtype: The acc dtype.
-        fuse_gelu: The fuse gelu.
-        BLOCK_M: The block m.
-        BLOCK_N: The block n.
-        BLOCK_K: The block k.
-        GROUP_M: The group m.
-        SPLIT_K: The split k.
-        EVEN_K: The even k.
-        AB_DTYPE: The ab dtype.
-    """
+    """Compute one output tile of ``(A @ B) * a_scales[:, None] * b_scales[None, :]``, optionally followed by GELU."""
     # matrix multiplication
     pid = tl.program_id(0)
     pid_z = tl.program_id(1)
@@ -476,7 +402,7 @@ def int8_gemm_kernel(
     A = A + (ram[:, None] * stride_am + rk[None, :] * stride_ak)
     B = B + (rk[:, None] * stride_bk + rbn[None, :] * stride_bn)
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=acc_dtype)
-    for k in range(0, tl.cdiv(K, BLOCK_K * SPLIT_K)):
+    for k in range(tl.cdiv(K, BLOCK_K * SPLIT_K)):
         if EVEN_K:
             a = tl.load(A)
             b = tl.load(B)
@@ -520,15 +446,21 @@ def int8_gemm_kernel(
 
 # @torch.compiler.disable()
 def int8_gemm_triton(a, b, a_scales, b_scales, fuse_gelu=False, output_dtype=None):
-    """Int8 gemm triton.
+    """Compute the dequantized INT8 linear layer ``(a @ b.T) * a_scales[:, None] * b_scales`` on CUDA.
 
     Args:
-        a: The a.
-        b: The b.
-        a_scales: The a scales.
-        b_scales: The b scales.
-        fuse_gelu: The fuse gelu.
-        output_dtype: The output dtype.
+        a: Quantized activations of shape ``[..., K]``.
+        b: Quantized weight of shape ``[N, K]``.
+        a_scales: Per-row scales of ``a``, one per flattened row.
+        b_scales: Per-output-channel scales of ``b``, shape ``[N]``.
+        fuse_gelu: Apply :func:`gelu` to the result.
+        output_dtype: Output dtype; defaults to the common dtype of ``a`` and ``b``.
+
+    Returns:
+        Tensor of shape ``[..., N]``.
+
+    Raises:
+        AssertionError: The inner dimensions of ``a`` and ``b`` differ.
     """
     device = a.device
     # handle non-contiguous inputs if necessary
@@ -545,7 +477,7 @@ def int8_gemm_triton(a, b, a_scales, b_scales, fuse_gelu=False, output_dtype=Non
     assert a.shape[1] == b.shape[0], f"incompatible dimensions {a.shape} and {b.shape}"
     M, K = a.shape
     _, N = b.shape
-    out_shape = a_orig_shape[:-1] + (N,)
+    out_shape = (*a_orig_shape[:-1], N)
     # common type between a and b
     ab_dtype = get_higher_dtype(a.dtype, b.dtype)
 
@@ -566,11 +498,6 @@ def int8_gemm_triton(a, b, a_scales, b_scales, fuse_gelu=False, output_dtype=Non
     acc_dtype = supported_acc_dtypes[ab_dtype][0]
 
     def to_tl_type(ty):
-        """To tl type.
-
-        Args:
-            ty: The ty.
-        """
         return getattr(tl, str(ty).split(".")[-1])
 
     acc_dtype = to_tl_type(acc_dtype)
@@ -584,10 +511,10 @@ def int8_gemm_triton(a, b, a_scales, b_scales, fuse_gelu=False, output_dtype=Non
     ]:
         ab_dtype = None
     # launch kernel
-    grid = lambda META: (  # noqa E731
+    grid = lambda META: (  # noqa: E731 - Triton launch grid kept as a lambda.
         cdiv(M, META["BLOCK_M"]) * cdiv(N, META["BLOCK_N"]),
         META["SPLIT_K"],
-    )  # noqa E731
+    )
     int8_gemm_kernel[grid](
         a,
         b,
@@ -651,32 +578,7 @@ def fp8_gemm_bias_kernel(
     SPLIT_K: tl.constexpr,
     EVEN_K: tl.constexpr,
 ):
-    """Fp8 gemm bias kernel.
-
-    Args:
-        A: The a.
-        B: The b.
-        BIAS: The bias.
-        A_SCALES: The a scales.
-        B_SCALES: The b scales.
-        C: The c.
-        M: The m.
-        N: The n.
-        K: The k.
-        stride_am: The stride am.
-        stride_ak: The stride ak.
-        stride_bk: The stride bk.
-        stride_bn: The stride bn.
-        stride_cm: The stride cm.
-        stride_cn: The stride cn.
-        fuse_gelu: The fuse gelu.
-        BLOCK_M: The block m.
-        BLOCK_N: The block n.
-        BLOCK_K: The block k.
-        GROUP_M: The group m.
-        SPLIT_K: The split k.
-        EVEN_K: The even k.
-    """
+    """Compute one FP8 output tile of ``(A @ B) * a_scales[:, None] * b_scales[None, :] + bias`` in float32, optionally followed by GELU."""
     pid = tl.program_id(0)
     pid_z = tl.program_id(1)
 
@@ -701,7 +603,7 @@ def fp8_gemm_bias_kernel(
 
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
-    for k in range(0, tl.cdiv(K, BLOCK_K * SPLIT_K)):
+    for k in range(tl.cdiv(K, BLOCK_K * SPLIT_K)):
         if EVEN_K:
             a = tl.load(A_ptr)
             b = tl.load(B_ptr)
@@ -741,20 +643,30 @@ def fp8_gemm_bias_kernel(
 
 
 def fp8_gemm_bias_triton(a, b, bias, a_scales, b_scales, fuse_gelu=False, output_dtype=None):
-    """Fp8 gemm bias triton.
+    """Compute the dequantized FP8 E4M3 linear layer ``(a @ b.T) * a_scales[:, None] * b_scales + bias`` on CUDA.
 
     Args:
-        a: The a.
-        b: The b.
-        bias: The bias.
-        a_scales: The a scales.
-        b_scales: The b scales.
-        fuse_gelu: The fuse gelu.
-        output_dtype: The output dtype.
+        a: FP8 E4M3 activations of shape ``[..., K]``.
+        b: FP8 E4M3 weight of shape ``[N, K]``.
+        bias: Bias of shape ``[N]``.
+        a_scales: Per-row scales of ``a``, one per flattened row.
+        b_scales: Per-output-channel scales of ``b``, shape ``[N]``.
+        fuse_gelu: Apply :func:`gelu` to the result.
+        output_dtype: Output dtype; defaults to ``torch.float16``.
+
+    Returns:
+        Tensor of shape ``[..., N]``.
+
+    Raises:
+        AssertionError: An input is not on CUDA or is not FP8 E4M3.
     """
     assert a.is_cuda and b.is_cuda, "This kernel is for CUDA"
-    assert a.dtype in (getattr(torch, "float8_e4m3fn", None), getattr(torch, "float8_e4m3fnuz", None)), f"a.dtype={a.dtype} is not FP8 E4M3"
-    assert b.dtype in (getattr(torch, "float8_e4m3fn", None), getattr(torch, "float8_e4m3fnuz", None)), f"b.dtype={b.dtype} is not FP8 E4M3"
+    assert a.dtype in (getattr(torch, "float8_e4m3fn", None), getattr(torch, "float8_e4m3fnuz", None)), (
+        f"a.dtype={a.dtype} is not FP8 E4M3"
+    )
+    assert b.dtype in (getattr(torch, "float8_e4m3fn", None), getattr(torch, "float8_e4m3fnuz", None)), (
+        f"b.dtype={b.dtype} is not FP8 E4M3"
+    )
 
     a_orig_shape = a.shape
     a2 = a.view(-1, a.shape[-1])
@@ -767,14 +679,14 @@ def fp8_gemm_bias_triton(a, b, bias, a_scales, b_scales, fuse_gelu=False, output
 
     M, K = a2.shape
     _, N = b2.shape
-    out_shape = a_orig_shape[:-1] + (N,)
+    out_shape = (*a_orig_shape[:-1], N)
 
     if output_dtype is None:
         output_dtype = torch.float16
 
     c = torch.empty((M, N), device=a.device, dtype=output_dtype)
 
-    grid = lambda META: (cdiv(M, META["BLOCK_M"]) * cdiv(N, META["BLOCK_N"]), META["SPLIT_K"])  # noqa E731
+    grid = lambda META: (cdiv(M, META["BLOCK_M"]) * cdiv(N, META["BLOCK_N"]), META["SPLIT_K"])  # noqa: E731 - Triton launch grid kept as a lambda.
     even_k = K % 128 == 0
 
     fp8_gemm_bias_kernel[grid](
@@ -838,31 +750,7 @@ def fp8_gemm_kernel(
     SPLIT_K: tl.constexpr,
     EVEN_K: tl.constexpr,
 ):
-    """Fp8 gemm kernel.
-
-    Args:
-        A: The a.
-        B: The b.
-        A_SCALES: The a scales.
-        B_SCALES: The b scales.
-        C: The c.
-        M: The m.
-        N: The n.
-        K: The k.
-        stride_am: The stride am.
-        stride_ak: The stride ak.
-        stride_bk: The stride bk.
-        stride_bn: The stride bn.
-        stride_cm: The stride cm.
-        stride_cn: The stride cn.
-        fuse_gelu: The fuse gelu.
-        BLOCK_M: The block m.
-        BLOCK_N: The block n.
-        BLOCK_K: The block k.
-        GROUP_M: The group m.
-        SPLIT_K: The split k.
-        EVEN_K: The even k.
-    """
+    """Compute one FP8 output tile of ``(A @ B) * a_scales[:, None] * b_scales[None, :]`` in float32, optionally followed by GELU."""
     pid = tl.program_id(0)
     pid_z = tl.program_id(1)
 
@@ -888,7 +776,7 @@ def fp8_gemm_kernel(
 
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
-    for k in range(0, tl.cdiv(K, BLOCK_K * SPLIT_K)):
+    for k in range(tl.cdiv(K, BLOCK_K * SPLIT_K)):
         if EVEN_K:
             a = tl.load(A_ptr)
             b = tl.load(B_ptr)
@@ -925,15 +813,21 @@ def fp8_gemm_kernel(
 
 
 def fp8_gemm_triton(a, b, a_scales, b_scales, fuse_gelu=False, output_dtype=None):
-    """Fp8 gemm triton.
+    """Compute the dequantized FP8 E4M3 linear layer ``(a @ b.T) * a_scales[:, None] * b_scales`` on CUDA.
 
     Args:
-        a: The a.
-        b: The b.
-        a_scales: The a scales.
-        b_scales: The b scales.
-        fuse_gelu: The fuse gelu.
-        output_dtype: The output dtype.
+        a: FP8 E4M3 activations of shape ``[..., K]``.
+        b: FP8 E4M3 weight of shape ``[N, K]``.
+        a_scales: Per-row scales of ``a``, one per flattened row.
+        b_scales: Per-output-channel scales of ``b``, shape ``[N]``.
+        fuse_gelu: Apply :func:`gelu` to the result.
+        output_dtype: Output dtype; defaults to ``torch.float16``.
+
+    Returns:
+        Tensor of shape ``[..., N]``.
+
+    Raises:
+        AssertionError: An input is not on CUDA or is not FP8 E4M3.
     """
     assert a.is_cuda and b.is_cuda
     e4m3_ok = []
@@ -957,17 +851,17 @@ def fp8_gemm_triton(a, b, a_scales, b_scales, fuse_gelu=False, output_dtype=None
 
     M, K = a2.shape
     _, N = b2.shape
-    out_shape = a_orig_shape[:-1] + (N,)
+    out_shape = (*a_orig_shape[:-1], N)
 
     if output_dtype is None:
         output_dtype = torch.float16
 
     c = torch.empty((M, N), device=a.device, dtype=output_dtype)
 
-    grid = lambda META: (  # noqa E731
+    grid = lambda META: (  # noqa: E731 - Triton launch grid kept as a lambda.
         cdiv(M, META["BLOCK_M"]) * cdiv(N, META["BLOCK_N"]),
         META["SPLIT_K"],
-    )  # noqa E731
+    )
     even_k = K % 128 == 0
 
     fp8_gemm_kernel[grid](

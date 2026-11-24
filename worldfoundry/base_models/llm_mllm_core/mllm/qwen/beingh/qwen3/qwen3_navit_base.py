@@ -1,28 +1,20 @@
-"""Module for base_models -> llm_mllm_core -> mllm -> qwen -> beingh -> qwen3 -> qwen3_navit_base.py functionality."""
-
 import torch
 import torch.nn as nn
-import logging
-from typing import Optional, Tuple
-from transformers.processing_utils import Unpack
 from transformers.cache_utils import Cache
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
+from transformers.processing_utils import Unpack
+
 from .modeling_qwen3 import (
     Qwen3Attention,
-    Qwen3MLP, 
-    Qwen3RMSNorm, 
+    Qwen3MLP,
+    Qwen3RMSNorm,
 )
 
 
 class Qwen3DecoderLayer(nn.Module):
     """Qwen decoder layer implementation."""
-    def __init__(self, config, layer_idx: int):
-        """Init.
 
-        Args:
-            config: The config.
-            layer_idx: The layer idx.
-        """
+    def __init__(self, config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Qwen3Attention(config=config, layer_idx=layer_idx)
@@ -32,7 +24,7 @@ class Qwen3DecoderLayer(nn.Module):
         if (
             config.sliding_window and config._attn_implementation != "flash_attention_2"
         ):  # diff with Llama is this warning
-            logger.warning_once(
+            logger.warning_once(  # noqa: F821 - Name is undefined in the upstream source.
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."
             )
@@ -40,30 +32,15 @@ class Qwen3DecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_value: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """Forward.
-
-        Args:
-            hidden_states: The hidden states.
-            attention_mask: The attention mask.
-            position_ids: The position ids.
-            past_key_value: The past key value.
-            output_attentions: The output attentions.
-            use_cache: The use cache.
-            cache_position: The cache position.
-            position_embeddings: The position embeddings.
-
-        Returns:
-            The return value.
-        """
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -93,4 +70,3 @@ class Qwen3DecoderLayer(nn.Module):
             outputs += (self_attn_weights,)
 
         return outputs
-    

@@ -1,12 +1,16 @@
 # Inference-only preprocessing adapted from the official DreamZero source.
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
-from pydantic import Field, PrivateAttr
 import torch
+from pydantic import Field, PrivateAttr
 
-from .schema import DatasetMetadata, StateActionMetadata
-from .transform_base import InvertibleModalityTransform, ModalityTransform
+from worldfoundry.base_models.llm_mllm_core.action.gr00t.preprocessing.base import (
+    InvertibleModalityTransform,
+    ModalityTransform,
+)
+from worldfoundry.base_models.llm_mllm_core.action.gr00t.preprocessing.schema import StateActionMetadata
+from worldfoundry.synthesis.action_generation.dreamzero.preprocessing.schema import DatasetMetadata
 
 
 class ConcatTransform(InvertibleModalityTransform):
@@ -15,23 +19,19 @@ class ConcatTransform(InvertibleModalityTransform):
     """
 
     # -- We inherit from ModalityTransform, so we keep apply_to as well --
-    apply_to: list[str] = Field(
-        default_factory=list, description="Not used in this transform, kept for compatibility."
-    )
+    apply_to: list[str] = Field(default_factory=list, description="Not used in this transform, kept for compatibility.")
 
     video_concat_order: list[str] = Field(
         ...,
-        description="Concatenation order for each video modality. "
-        "Format: ['video.ego_view_pad_res224_freq20', ...]",
+        description="Concatenation order for each video modality. Format: ['video.ego_view_pad_res224_freq20', ...]",
     )
 
-    state_concat_order: Optional[list[str]] = Field(
+    state_concat_order: list[str] | None = Field(
         default=None,
-        description="Concatenation order for each state modality. "
-        "Format: ['state.position', 'state.velocity', ...].",
+        description="Concatenation order for each state modality. Format: ['state.position', 'state.velocity', ...].",
     )
 
-    action_concat_order: Optional[list[str]] = Field(
+    action_concat_order: list[str] | None = Field(
         default=None,
         description="Concatenation order for each action modality. "
         "Format: ['action.position', 'action.velocity', ...].",
@@ -55,7 +55,7 @@ class ConcatTransform(InvertibleModalityTransform):
         description="The new dimensions of the state keys after transform is applied.",
     )
     # Store the transform pipeline to examine for dimension changes
-    _transform_pipeline: List[ModalityTransform] = PrivateAttr(default_factory=list)
+    _transform_pipeline: list[ModalityTransform] = PrivateAttr(default_factory=list)
 
     def model_dump(self, *args, **kwargs):
         if kwargs.get("mode", "python") == "json":
@@ -70,11 +70,11 @@ class ConcatTransform(InvertibleModalityTransform):
 
         return super().model_dump(*args, include=include, **kwargs)
 
-    def set_transform_pipeline(self, transforms: List[ModalityTransform]):
+    def set_transform_pipeline(self, transforms: list[ModalityTransform]):
         """Set the transform pipeline so this transform can examine it for dimension changes."""
         self._transform_pipeline = transforms
 
-    def _get_target_rotations_from_pipeline(self) -> Dict[str, str]:
+    def _get_target_rotations_from_pipeline(self) -> dict[str, str]:
         """Extract target_rotations from StateActionTransform instances in the pipeline."""
         target_rotations = {}
         for transform in self._transform_pipeline:
@@ -84,17 +84,14 @@ class ConcatTransform(InvertibleModalityTransform):
                     target_rotations.update(transform_target_rotations)
         return target_rotations
 
-    def apply(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def apply(self, data: dict[str, Any]) -> dict[str, Any]:
         grouped_keys = {}
-        for key in data.keys():
+        for key in data.keys():  # noqa: SIM118 - tianshou.data.Batch.__iter__ yields Batch slices, not keys.
             try:
                 modality, _ = key.split(".")
-            except:  # noqa: E722
+            except:  # noqa: E722 - Also catches BaseException, as upstream.
                 ### Handle language annotation special case
-                if "annotation" in key:
-                    modality = "language"
-                else:
-                    modality = "others"
+                modality = "language" if "annotation" in key else "others"
             if modality not in grouped_keys:
                 grouped_keys[modality] = []
             grouped_keys[modality].append(key)
@@ -104,17 +101,15 @@ class ConcatTransform(InvertibleModalityTransform):
             # ineed contained in the data. If not, then the keys are misspecified
             video_keys = grouped_keys["video"]
             assert self.video_concat_order is not None, f"{self.video_concat_order=}, {video_keys=}"
-            assert all(
-                item in video_keys for item in self.video_concat_order
-            ), f"keys in video_concat_order are misspecified, \n{video_keys=}, \n{self.video_concat_order=}"
+            assert all(item in video_keys for item in self.video_concat_order), (
+                f"keys in video_concat_order are misspecified, \n{video_keys=}, \n{self.video_concat_order=}"
+            )
 
             # Process each video view
             unsqueezed_videos = []
             for video_key in self.video_concat_order:
                 video_data = data.pop(video_key)
-                unsqueezed_video = np.expand_dims(
-                    video_data, axis=-4
-                )  # [..., H, W, C] -> [..., 1, H, W, C]
+                unsqueezed_video = np.expand_dims(video_data, axis=-4)  # [..., H, W, C] -> [..., 1, H, W, C]
                 unsqueezed_videos.append(unsqueezed_video)
             # Concatenate along the new axis
             unsqueezed_video = np.concatenate(unsqueezed_videos, axis=-4)  # [..., V, H, W, C]
@@ -126,48 +121,40 @@ class ConcatTransform(InvertibleModalityTransform):
         if "state" in grouped_keys:
             state_keys = grouped_keys["state"]
             assert self.state_concat_order is not None, f"{self.state_concat_order=}"
-            assert all(
-                item in state_keys for item in self.state_concat_order
-            ), f"keys in state_concat_order are misspecified, \n{state_keys=}, \n{self.state_concat_order=}"
+            assert all(item in state_keys for item in self.state_concat_order), (
+                f"keys in state_concat_order are misspecified, \n{state_keys=}, \n{self.state_concat_order=}"
+            )
             # Check the state dims
             for key in self.state_concat_order:
                 target_shapes = [self.state_dims[key]]
                 if self.is_rotation_key(key):
-                    target_shapes.extend(
-                        [3, 4, 6]
-                    )  # 3 -> axis_angle, 4 -> quaternion, 6 -> rotation_6d
+                    target_shapes.extend([3, 4, 6])  # 3 -> axis_angle, 4 -> quaternion, 6 -> rotation_6d
                 target_shapes.append(self.state_dims[key] * 2)  # Allow for sin-cos transform
-                assert (
-                    data[key].shape[-1] in target_shapes
-                ), f"State dim mismatch for {key=}, {data[key].shape[-1]=}, {target_shapes=}"
+                assert data[key].shape[-1] in target_shapes, (
+                    f"State dim mismatch for {key=}, {data[key].shape[-1]=}, {target_shapes=}"
+                )
             # Concatenate the state keys
             # We'll have StateActionToTensor before this transform, so here we use torch.cat
-            data["state"] = torch.cat(
-                [data.pop(key) for key in self.state_concat_order], dim=-1
-            )  # [T, D_state]
+            data["state"] = torch.cat([data.pop(key) for key in self.state_concat_order], dim=-1)  # [T, D_state]
 
         if "action" in grouped_keys:
             action_keys = grouped_keys["action"]
             assert self.action_concat_order is not None, f"{self.action_concat_order=}"
             # Check if all keys in concat_order are present
-            assert set(self.action_concat_order) == set(
-                action_keys
-            ), f"{set(self.action_concat_order)=}, {set(action_keys)=}"
+            assert set(self.action_concat_order) == set(action_keys), (
+                f"{set(self.action_concat_order)=}, {set(action_keys)=}"
+            )
             # Record the action dims
             for key in self.action_concat_order:
                 target_shapes = [self.action_dims[key]]
                 if self.is_rotation_key(key):
-                    target_shapes.extend(
-                        [3, 4, 6]
-                    )  # 3 -> axis_angle, 4 -> quaternion, 6 -> rotation_6d
-                assert (
-                    data[key].shape[-1] in target_shapes
-                ), f"Action dim mismatch for {key=}, {data[key].shape[-1]=}, {target_shapes=}"
+                    target_shapes.extend([3, 4, 6])  # 3 -> axis_angle, 4 -> quaternion, 6 -> rotation_6d
+                assert data[key].shape[-1] in target_shapes, (
+                    f"Action dim mismatch for {key=}, {data[key].shape[-1]=}, {target_shapes=}"
+                )
             # Concatenate the action keys
             # We'll have StateActionToTensor before this transform, so here we use torch.cat
-            data["action"] = torch.cat(
-                [data.pop(key) for key in self.action_concat_order], dim=-1
-            )  # [T, D_action]
+            data["action"] = torch.cat([data.pop(key) for key in self.action_concat_order], dim=-1)  # [T, D_action]
 
         return data
 
@@ -201,9 +188,9 @@ class ConcatTransform(InvertibleModalityTransform):
         assert self.dataset_metadata is not None, "Metadata not set"
         modality_config = getattr(self.dataset_metadata.modalities, modality)
         assert subkey in modality_config, f"{subkey=} not found in {modality_config=}"
-        assert isinstance(
-            modality_config[subkey], StateActionMetadata
-        ), f"Expected {StateActionMetadata} for {subkey=}, got {type(modality_config[subkey])=}"
+        assert isinstance(modality_config[subkey], StateActionMetadata), (
+            f"Expected {StateActionMetadata} for {subkey=}, got {type(modality_config[subkey])=}"
+        )
         return modality_config[subkey]
 
     def get_state_action_dims(self, key: str) -> int:

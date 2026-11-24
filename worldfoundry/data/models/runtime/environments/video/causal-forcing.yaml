@@ -8,9 +8,8 @@ env_name: worldfoundry-unified-cu128
 env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
 model_id: causal-forcing
 notes:
-- Causal-Forcing upstream uses the same environment family as Self-Forcing. WorldFoundry uses the
-  in-tree infer-only runtime under worldfoundry/synthesis/visual_generation/forcing/causal_forcing_runtime
-  and launches it through the active Python executable unless python_executable is provided.
+- Causal-Forcing runs as native diffusion recipes (NativeCausalForcingPipeline) in the active
+  WorldFoundry process, in the same environment as Self-Forcing.
 pip_packages:
 - torch
 - torchvision

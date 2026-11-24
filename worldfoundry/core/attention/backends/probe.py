@@ -28,13 +28,15 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib import metadata
 from importlib.machinery import PathFinder
-from typing import Mapping
+from typing import Any, cast
 
 import torch
+import torch.version
 from packaging.version import InvalidVersion, Version
 
 logger = logging.getLogger(__name__)
@@ -475,7 +477,7 @@ def _probe_attention_backends_cached(
 
 # Preserve the cache invalidation hook exposed by the previous cached public
 # function; tests and long-running plugin hosts use it after environment changes.
-setattr(probe_attention_backends, "cache_clear", _probe_attention_backends_cached.cache_clear)
+cast(Any, probe_attention_backends).cache_clear = _probe_attention_backends_cached.cache_clear
 
 
 _EXPLICIT_FALLBACK_WARNED: set[tuple[str, str, str]] = set()

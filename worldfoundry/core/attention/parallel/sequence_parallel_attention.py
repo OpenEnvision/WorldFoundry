@@ -18,6 +18,9 @@ Public surface:
   slot.
 """
 
+from collections.abc import Callable
+from typing import cast
+
 import torch
 
 try:
@@ -34,7 +37,6 @@ from worldfoundry.core.distributed.sequence_parallel.runtime import (
     get_sequence_parallel_state,
     nccl_info,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Dual-stream SP — image tokens exchange; encoder heads are rank-narrowed
@@ -98,7 +100,7 @@ def parallel_attention(
     use_sage = bool(use_sage and capabilities["sage_attention"].usable)
     if use_sage:
         try:
-            from sageattention import sageattn
+            sageattn = __import__("sageattention", fromlist=["sageattn"]).sageattn
         except ImportError:
             use_sage = False
         else:
@@ -126,7 +128,7 @@ def parallel_attention(
         hidden_states = torch.stack(outputs, dim=0)
     elif not use_sage:
         query, key, value = [x.view(x.shape[0] * x.shape[1], *x.shape[2:]) for x in [query, key, value]]
-        hidden_states = flash_attn_varlen_func(
+        hidden_states = cast(Callable[..., torch.Tensor], flash_attn_varlen_func)(
             query,
             key,
             value,

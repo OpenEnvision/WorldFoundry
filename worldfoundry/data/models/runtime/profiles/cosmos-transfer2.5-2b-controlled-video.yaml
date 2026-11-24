@@ -8,6 +8,7 @@ groups:
 - control
 source_repos:
 - url: https://github.com/nvidia-cosmos/cosmos-transfer2.5
+  revision: 2ff49d0717af02057ae79bc75c00fbff9da1b4e7
 checkpoints:
 - repo_id: nvidia/Cosmos-Transfer2.5-2B
   revision: bd963eabcfc2d61dc4ea365cacf41d45ac480aa5

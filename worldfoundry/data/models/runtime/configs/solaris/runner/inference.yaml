@@ -3,6 +3,6 @@ defaults:
   - _self_
 num_frames_eval: 257
 
-target: src.runners.inference.Inference
+target: worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.runners.inference.Inference
 params:
   model_weights_path: ${device.pretrained_model_dir}/solaris.pt

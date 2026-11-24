@@ -5,7 +5,7 @@ runtime:
   backend_quality: official_hf_transformers_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_HFD_ROOT/nvidia--omnivinci
-  trust_remote_code: true
   torch_dtype: float16
 notes:
-- Official source is tracked as the Hugging Face model repo; no separate GitHub inference repo is known in-tree.
+- OmniVinci processor and multimodal inference glue run in-tree from the pinned nvidia/omnivinci release.
+- SigLIP, Qwen2 and Qwen2Audio use native Transformers classes and local checkpoint components.

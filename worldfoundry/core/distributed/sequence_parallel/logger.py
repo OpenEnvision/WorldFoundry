@@ -25,6 +25,7 @@ from types import MethodType
 from typing import Any, cast
 
 import worldfoundry.core.distributed.sequence_parallel.envs as envs
+
 from .logging_utils import NewLineFormatter
 
 TRAINER_CONFIGURE_LOGGING = envs.TRAINER_CONFIGURE_LOGGING
@@ -48,7 +49,7 @@ _DATE_FORMAT = "%m-%d %H:%M:%S"
 # ──────────────────────────────────────────────────────────────────────────
 
 
-DEFAULT_LOGGING_CONFIG = {
+DEFAULT_LOGGING_CONFIG: dict[str, Any] = {
     "formatters": {
         "trainer": {
             "()": NewLineFormatter,
@@ -208,7 +209,7 @@ def _configure_trainer_root_logger() -> None:
     a custom file is stripped so we do not hijack the application logger.
     Missing / non-dict JSON raises :class:`RuntimeError` / :class:`ValueError`.
     """
-    logging_config = dict[str, Any]()
+    logging_config: dict[str, Any] = {}
 
     if not TRAINER_CONFIGURE_LOGGING and TRAINER_LOGGING_CONFIG_PATH:
         raise RuntimeError(

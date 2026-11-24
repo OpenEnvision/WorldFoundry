@@ -11,16 +11,14 @@ import numpy as np
 import torch
 from PIL import Image
 
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_distribution_metrics,
     compute_fid,
     compute_inception_score,
     compute_kid,
-    compute_mind,
-    compute_precision_recall,
 )
-from worldfoundry.evaluation.tasks.metrics._shared.vendor.torch_fidelity import metrics as backend
-from worldfoundry.evaluation.tasks.metrics._shared.vendor.torch_fidelity.feature_extractor_base import (
+from worldfoundry.evals.tasks.metrics._shared.vendor.torch_fidelity import metrics as backend
+from worldfoundry.evals.tasks.metrics._shared.vendor.torch_fidelity.feature_extractor_base import (
     FeatureExtractorBase,
 )
 
@@ -30,8 +28,8 @@ class PixelFeatures(FeatureExtractorBase):
     def get_provided_features_list():
         return ("2048", "logits_unbiased")
 
-    def forward(self, images):
-        features = images.float().mean((2, 3))[:, :2] / 255
+    def forward(self, input):
+        features = input.float().mean((2, 3))[:, :2] / 255
         return tuple(features for _ in self.features_list)
 
 
@@ -55,8 +53,6 @@ class DistributionInputTests(unittest.TestCase):
         cases = (
             (compute_fid, {}),
             (compute_kid, {"kid_subsets": 2, "kid_subset_size": 3}),
-            (compute_precision_recall, {"prc_neighborhood": 1}),
-            (compute_mind, {"mind_num_projections": 8}),
             (compute_distribution_metrics, {"metrics": ("fid", "kid"), "kid_subsets": 2, "kid_subset_size": 3}),
             (compute_inception_score, {"splits": 2}),
         )
@@ -78,7 +74,7 @@ class DistributionInputTests(unittest.TestCase):
                     self.assertEqual(actual, expected)
 
     def test_swav_lists_match_directory_statistics(self):
-        from worldfoundry.evaluation.tasks.metrics.fid.swav import _swav_fid_module
+        from worldfoundry.evals.tasks.metrics.distribution.fid.swav import _swav_fid_module
 
         module = _swav_fid_module()
         native_statistics = module.calculate_activation_statistics
@@ -114,13 +110,8 @@ class DistributionInputTests(unittest.TestCase):
             "create_feature_extractor",
             side_effect=lambda name, layers, **kwargs: PixelFeatures(name, layers),
         ):
-            for compute, extra in (
-                (compute_precision_recall, {}),
-                (compute_distribution_metrics, {"metrics": ("prc",)}),
-            ):
-                with self.subTest(metric=compute.__name__):
-                    result = compute(self.reference, self.generated, **options, **extra)
-                    self.assertEqual(result, {"precision": 1.0, "recall": 0.25, "f_score": 0.4})
+            result = compute_distribution_metrics(self.reference, self.generated, metrics=("prc",), **options)
+            self.assertEqual(result, {"precision": 1.0, "recall": 0.25, "f_score": 0.4})
 
     def test_bundled_inception_score_uses_generated_images(self):
         for directory, colors in (

@@ -1,69 +1,47 @@
-"""Module for base_models -> perception_core -> optical_flow -> sea_raft -> core -> utils -> utils.py functionality."""
-
+import numpy as np
 import torch
 import torch.nn.functional as F
-import numpy as np
 from scipy import interpolate
 
+
 def load_ckpt(model, path):
-    """ Load checkpoint """
-    state_dict = torch.load(path, map_location=torch.device('cpu'))
+    """Load checkpoint"""
+    state_dict = torch.load(path, map_location=torch.device("cpu"))
     model.load_state_dict(state_dict, strict=False)
 
-def resize_data(img1, img2, flow, factor=1.0):
-    """Resize data.
 
-    Args:
-        img1: The img1.
-        img2: The img2.
-        flow: The flow.
-        factor: The factor.
-    """
+def resize_data(img1, img2, flow, factor=1.0):
     _, _, h, w = img1.shape
     h = int(h * factor)
     w = int(w * factor)
-    img1 = F.interpolate(img1, (h, w), mode='area')
-    img2 = F.interpolate(img2, (h, w), mode='area')
-    flow = F.interpolate(flow, (h, w), mode='area') * factor
+    img1 = F.interpolate(img1, (h, w), mode="area")
+    img2 = F.interpolate(img2, (h, w), mode="area")
+    flow = F.interpolate(flow, (h, w), mode="area") * factor
     return img1, img2, flow
 
-class InputPadder:
-    """ Pads images such that dimensions are divisible by 8 """
-    def __init__(self, dims, mode='sintel'):
-        """Init.
 
-        Args:
-            dims: The dims.
-            mode: The mode.
-        """
+class InputPadder:
+    """Pads images such that dimensions are divisible by 8"""
+
+    def __init__(self, dims, mode="sintel"):
         self.ht, self.wd = dims[-2:]
         pad_ht = (((self.ht // 8) + 1) * 8 - self.ht) % 8
         pad_wd = (((self.wd // 8) + 1) * 8 - self.wd) % 8
-        if mode == 'sintel':
-            self._pad = [pad_wd//2, pad_wd - pad_wd//2, pad_ht//2, pad_ht - pad_ht//2]
+        if mode == "sintel":
+            self._pad = [pad_wd // 2, pad_wd - pad_wd // 2, pad_ht // 2, pad_ht - pad_ht // 2]
         else:
-            self._pad = [pad_wd//2, pad_wd - pad_wd//2, 0, pad_ht]
+            self._pad = [pad_wd // 2, pad_wd - pad_wd // 2, 0, pad_ht]
 
     def pad(self, *inputs):
-        """Pad."""
-        return [F.pad(x, self._pad, mode='replicate') for x in inputs]
+        return [F.pad(x, self._pad, mode="replicate") for x in inputs]
 
     def unpad(self, x):
-        """Unpad.
-
-        Args:
-            x: The x.
-        """
         ht, wd = x.shape[-2:]
-        c = [self._pad[2], ht-self._pad[3], self._pad[0], wd-self._pad[1]]
-        return x[..., c[0]:c[1], c[2]:c[3]]
+        c = [self._pad[2], ht - self._pad[3], self._pad[0], wd - self._pad[1]]
+        return x[..., c[0] : c[1], c[2] : c[3]]
+
 
 def forward_interpolate(flow):
-    """Forward interpolate.
-
-    Args:
-        flow: The flow.
-    """
     flow = flow.detach().cpu().numpy()
     dx, dy = flow[0], flow[1]
 
@@ -72,7 +50,7 @@ def forward_interpolate(flow):
 
     x1 = x0 + dx
     y1 = y0 + dy
-    
+
     x1 = x1.reshape(-1)
     y1 = y1.reshape(-1)
     dx = dx.reshape(-1)
@@ -84,22 +62,20 @@ def forward_interpolate(flow):
     dx = dx[valid]
     dy = dy[valid]
 
-    flow_x = interpolate.griddata(
-        (x1, y1), dx, (x0, y0), method='nearest', fill_value=0)
+    flow_x = interpolate.griddata((x1, y1), dx, (x0, y0), method="nearest", fill_value=0)
 
-    flow_y = interpolate.griddata(
-        (x1, y1), dy, (x0, y0), method='nearest', fill_value=0)
+    flow_y = interpolate.griddata((x1, y1), dy, (x0, y0), method="nearest", fill_value=0)
 
     flow = np.stack([flow_x, flow_y], axis=0)
     return torch.from_numpy(flow).float()
 
 
-def bilinear_sampler(img, coords, mode='bilinear', mask=False):
-    """ Wrapper for grid_sample, uses pixel coordinates """
+def bilinear_sampler(img, coords, mode="bilinear", mask=False):
+    """Wrapper for grid_sample, uses pixel coordinates"""
     H, W = img.shape[-2:]
-    xgrid, ygrid = coords.split([1,1], dim=-1)
-    xgrid = 2*xgrid/(W-1) - 1
-    ygrid = 2*ygrid/(H-1) - 1
+    xgrid, ygrid = coords.split([1, 1], dim=-1)
+    xgrid = 2 * xgrid / (W - 1) - 1
+    ygrid = 2 * ygrid / (H - 1) - 1
 
     grid = torch.cat([xgrid, ygrid], dim=-1)
     img = F.grid_sample(img, grid, align_corners=True)
@@ -110,95 +86,54 @@ def bilinear_sampler(img, coords, mode='bilinear', mask=False):
 
     return img
 
-def coords_grid(batch, ht, wd, device):
-    """Coords grid.
 
-    Args:
-        batch: The batch.
-        ht: The ht.
-        wd: The wd.
-        device: The device.
-    """
+def coords_grid(batch, ht, wd, device):
     coords = torch.meshgrid(torch.arange(ht, device=device), torch.arange(wd, device=device), indexing="ij")
     coords = torch.stack(coords[::-1], dim=0).float()
     return coords[None].repeat(batch, 1, 1, 1)
 
 
-def upflow8(flow, mode='bilinear'):
-    """Upflow8.
-
-    Args:
-        flow: The flow.
-        mode: The mode.
-    """
+def upflow8(flow, mode="bilinear"):
     new_size = (8 * flow.shape[2], 8 * flow.shape[3])
-    return  8 * F.interpolate(flow, size=new_size, mode=mode, align_corners=True)
+    return 8 * F.interpolate(flow, size=new_size, mode=mode, align_corners=True)
+
 
 def transform(T, p):
-    """Transform.
+    assert T.shape == (4, 4)
+    return np.einsum("H W j, i j -> H W i", p, T[:3, :3]) + T[:3, 3]
 
-    Args:
-        T: The t.
-        p: The p.
-    """
-    assert T.shape == (4,4)
-    return np.einsum('H W j, i j -> H W i', p, T[:3,:3]) + T[:3, 3]
 
 def from_homog(x):
-    """From homog.
+    return x[..., :-1] / x[..., [-1]]
 
-    Args:
-        x: The x.
-    """
-    return x[...,:-1] / x[...,[-1]]
 
 def reproject(depth1, pose1, pose2, K1, K2):
-    """Reproject.
-
-    Args:
-        depth1: The depth1.
-        pose1: The pose1.
-        pose2: The pose2.
-        K1: The k1.
-        K2: The k2.
-    """
     H, W = depth1.shape
-    x, y = np.meshgrid(np.arange(W), np.arange(H), indexing='xy')
+    x, y = np.meshgrid(np.arange(W), np.arange(H), indexing="xy")
     img_1_coords = np.stack((x, y, np.ones_like(x)), axis=-1).astype(np.float64)
-    cam1_coords = np.einsum('H W, H W j, i j -> H W i', depth1, img_1_coords, np.linalg.inv(K1))
+    cam1_coords = np.einsum("H W, H W j, i j -> H W i", depth1, img_1_coords, np.linalg.inv(K1))
     rel_pose = np.linalg.inv(pose2) @ pose1
     cam2_coords = transform(rel_pose, cam1_coords)
-    return from_homog(np.einsum('H W j, i j -> H W i', cam2_coords, K2))
+    return from_homog(np.einsum("H W j, i j -> H W i", cam2_coords, K2))
+
 
 def induced_flow(depth0, depth1, data):
-    """Induced flow.
-
-    Args:
-        depth0: The depth0.
-        depth1: The depth1.
-        data: The data.
-    """
     H, W = depth0.shape
-    coords1 = reproject(depth0, data['T0'], data['T1'], data['K0'], data['K1'])
-    x, y = np.meshgrid(np.arange(W), np.arange(H), indexing='xy')
+    coords1 = reproject(depth0, data["T0"], data["T1"], data["K0"], data["K1"])
+    x, y = np.meshgrid(np.arange(W), np.arange(H), indexing="xy")
     coords0 = np.stack([x, y], axis=-1)
     flow_01 = coords1 - coords0
 
     H, W = depth1.shape
-    coords1 = reproject(depth1, data['T1'], data['T0'], data['K1'], data['K0'])
-    x, y = np.meshgrid(np.arange(W), np.arange(H), indexing='xy')
+    coords1 = reproject(depth1, data["T1"], data["T0"], data["K1"], data["K0"])
+    x, y = np.meshgrid(np.arange(W), np.arange(H), indexing="xy")
     coords0 = np.stack([x, y], axis=-1)
     flow_10 = coords1 - coords0
-    
+
     return flow_01, flow_10
 
-def check_cycle_consistency(flow_01, flow_10):
-    """Check cycle consistency.
 
-    Args:
-        flow_01: The flow 01.
-        flow_10: The flow 10.
-    """
+def check_cycle_consistency(flow_01, flow_10):
     flow_01 = torch.from_numpy(flow_01).permute(2, 0, 1)[None]
     flow_10 = torch.from_numpy(flow_10).permute(2, 0, 1)[None]
     H, W = flow_01.shape[-2:]

@@ -1,13 +1,12 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import Optional, Union
+from typing import Union
 
 import torch
 from mmdet.models.data_preprocessors import DetDataPreprocessor
 from mmengine.structures import BaseDataElement
-
 from mmyolo.registry import MODELS
 
-CastData = Union[tuple, dict, BaseDataElement, torch.Tensor, list, bytes, str, None]
+CastData = Union[tuple, dict, BaseDataElement, torch.Tensor, list, bytes, str, None]  # noqa: UP007 - Runtime type alias kept as typing.Union.
 
 
 @MODELS.register_module()
@@ -17,7 +16,7 @@ class YOLOWDetDataPreprocessor(DetDataPreprocessor):
     Note: It must be used together with `mmyolo.datasets.utils.yolow_collate`
     """
 
-    def __init__(self, *args, non_blocking: Optional[bool] = True, **kwargs):
+    def __init__(self, *args, non_blocking: bool | None = True, **kwargs):
         super().__init__(*args, non_blocking=non_blocking, **kwargs)
 
     def forward(self, data: dict, training: bool = False) -> dict:

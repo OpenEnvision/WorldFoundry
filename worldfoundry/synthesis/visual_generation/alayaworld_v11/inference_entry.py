@@ -1,10 +1,10 @@
 """Run v1.1 generation without trainer setup, optimizers, critics or training data.
 
-The inference-only ViGeo rollout is extracted from the pinned upstream.
-No trainer class, setup method, optimizer or training dataloader is imported. Shared
-WorldFoundry loaders, history encoder, LTX VAE, text encoding and LoRA merger
-own the common components. This is an external-runtime bridge, not a claim of
-checkpoint-backed parity for a fully native v1.1 port.
+The inference-only ViGeo rollout, configuration schema and LTX-2.3 transformer come
+from the vendored AlayaWorld release in ``alayaworld_v11_runtime``. No trainer class,
+setup method, optimizer or training dataloader is imported. Shared WorldFoundry
+loaders, history encoder, LTX VAE, text encoding, ViGeo and LoRA merger own the
+common components.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from __future__ import annotations
 import inspect
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,7 +21,7 @@ import yaml
 
 
 def build_config(request):
-    from alaya.config import schema
+    from .alayaworld_v11_runtime.alaya.config import schema
 
     # Only inference sections are instantiated; no TrainConfig or optimization defaults.
     sections = {
@@ -48,9 +47,7 @@ def build_config(request):
         "vae": request["base_checkpoint"],
         "gemma": request["gemma_path"],
     }
-    raw["spatial_memory"].update(
-        vigeo_checkpoint=request["vigeo_checkpoint"], vigeo_repo_path=request["vigeo_source_root"]
-    )
+    raw["spatial_memory"].update(vigeo_checkpoint=request["vigeo_checkpoint"])
     raw["runtime"].update(
         fsdp=False, gradient_checkpointing=False, text_embed_cache_dir=None, vae_latent_cache_dir=None
     )
@@ -70,9 +67,9 @@ def build_config(request):
 
 
 def _prepare_input(request):
-    command = [
-        sys.executable,
-        str(Path(request["source_root"]) / "scripts/infer/prepare_i2v_inputs.py"),
+    from .alayaworld_v11_runtime.prepare_i2v_inputs import main as prepare_inputs
+
+    argv = [
         "--image",
         request["image"],
         "--prompt",
@@ -89,10 +86,10 @@ def _prepare_input(request):
         ("pitch", "--pitch"),
     ):
         if key in request:
-            command.extend((flag, str(request[key])))
+            argv.extend((flag, str(request[key])))
     if "intrinsic" in request:
-        command.extend(("--intrinsic", *(str(value) for value in request["intrinsic"])))
-    subprocess.run(command, check=True, cwd=request["source_root"])
+        argv.extend(("--intrinsic", *(str(value) for value in request["intrinsic"])))
+    prepare_inputs(argv)
 
 
 # Inference configuration adapters from the pinned Alaya loader.
@@ -107,8 +104,9 @@ def _read_transformer_config(checkpoint_path) -> dict:
 
 
 def _runtime_transformer_overrides(cfg) -> dict:
-    from ltx2.modules.attention import AttentionFunction
-    from ltx2.modules.rope import LTXRopeType
+    from worldfoundry.base_models.diffusion_model.models.networks.ltx.rope import LTXRopeType
+
+    from .alayaworld_v11_runtime.ltx2.modules.attention import AttentionFunction
 
     attention_map = {
         "flash_attention_3": AttentionFunction.FLASH_ATTENTION_3,
@@ -139,7 +137,6 @@ def _configure_control_env(cfg) -> None:
 
 
 def run(request):
-    from ltx2.modules.model_ltx_2_3 import LTX23Model
     from safetensors.torch import load_file
 
     from worldfoundry.base_models.diffusion_model.loaders import CheckpointSpec, ModuleLoadSpec, NativeModuleLoader
@@ -152,6 +149,8 @@ def run(request):
     from worldfoundry.synthesis.visual_generation.alayaworld.history_encoder import AlayaHistoryEncoder
     from worldfoundry.synthesis.visual_generation.alayaworld.runtime import AlayaWorldRuntime
     from worldfoundry.synthesis.visual_generation.alayaworld_v11.rollout import AlayaV11Rollout
+
+    from .alayaworld_v11_runtime.ltx2.modules.model_ltx_2_3 import LTX23Model
 
     if not torch.cuda.is_available():
         raise RuntimeError("AlayaWorld v1.1 requires CUDA")

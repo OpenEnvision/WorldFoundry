@@ -1,6 +1,7 @@
-artifact_filename: dreamx-world-5b.mp4
-artifact_kind: generated_world
-backend_stage: in_tree_resident_runtime
+schema_version: 2
+model_id: dreamx-world-5b
+display_name: DreamX-World 5B AR
+task_family: world_model
 checkpoints:
 - repo_id: GD-ML/DreamX-World-5B
   revision: 67487c4a61466bb7166d30b7187dd465e0ac9f6c
@@ -18,30 +19,30 @@ checkpoints:
   - models_t5_umt5-xxl-enc-bf16.pth
   - google/umt5-xxl/tokenizer_config.json
   - google/umt5-xxl/spiece.model
-display_name: DreamX-World 5B AR
-id: dreamx-world-5b
 input_schema:
   actions:
   - camera_navigation
   image: true
   prompt: true
   video: false
-integration_status: in_tree_runtime_workspace_validated
-notes:
-- Causal three-latent blocks use the distilled four-step schedule.
-- Attention KV, cross-attention, latent and causal VAE state stay resident across controls.
-- Decoded RGB is output-only and is never reused as model conditioning.
-- A real single-A100 Workspace run loaded both pinned checkpoints and generated nine finite,
-  decodable 1280x704 frames from the official DreamX example image. This short two-control
-  rollout validates the resident AR path and is not a long-horizon quality-parity claim.
-- The directly runnable Workspace default was revalidated on 2026-07-28 with its staged
-  DreamX fixture, non-empty demo prompt, native four-step distilled schedule, and one native
-  nine-frame 1280x704 AR block. The MP4 SHA256 is
-  7a65a12d96154c7ce1034d1e938d40c2bdaa8b2ef2939ed56cc03d196f91c3a4.
-runtime_status: native_checkpoint_runtime_a100_workspace_validated
-task_family: world_model
+artifact_kind: generated_world
+artifact_filename: dreamx-world-5b.mp4
 execution:
   pipeline_binding: dreamx-world-5b
   backend_stage: in_tree_resident_runtime
   runtime_status: native_checkpoint_runtime_a100_workspace_validated
   integration_status: in_tree_runtime_workspace_validated
+integration:
+  status: in_tree_runtime_workspace_validated
+notes:
+- Causal three-latent blocks use the distilled four-step schedule.
+- Attention KV, cross-attention, latent and causal VAE state stay resident across
+  controls.
+- Decoded RGB is output-only and is never reused as model conditioning.
+- A real single-A100 Workspace run loaded both pinned checkpoints and generated nine
+  finite, decodable 1280x704 frames from the official DreamX example image. This short
+  two-control rollout validates the resident AR path and is not a long-horizon quality-parity
+  claim.
+- The directly runnable Workspace default was revalidated on 2026-07-28 with its staged
+  DreamX fixture, non-empty demo prompt, native four-step distilled schedule, and
+  one native nine-frame 1280x704 AR block. The MP4 SHA256 is 7a65a12d96154c7ce1034d1e938d40c2bdaa8b2ef2939ed56cc03d196f91c3a4.

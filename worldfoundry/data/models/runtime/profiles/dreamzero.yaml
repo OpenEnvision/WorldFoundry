@@ -1,6 +1,7 @@
-artifact_filename: dreamzero_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_official_server_client
+schema_version: 2
+model_id: dreamzero
+display_name: NVIDIA DreamZero
+task_family: world_action_model
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/GEAR-Dreams--DreamZero-DROID
   repo_id: GEAR-Dreams/DreamZero-DROID
@@ -22,8 +23,6 @@ checkpoints:
   revision: 66cb9e7e85526fe440a945569e42c72fb6cbc0ad
   role: instruction_tokenizer
   status: local_checkpoint_staged
-display_name: NVIDIA DreamZero
-id: dreamzero
 input_schema:
   actions:
   - world_action
@@ -37,7 +36,14 @@ input_schema:
   prompt: true
   video: true
   world_state: true
-integration_status: integrated
+artifact_kind: action_trace
+artifact_filename: dreamzero_action_trace.json
+execution:
+  backend_stage: in_tree_official_server_client
+  runtime_status: in_tree_official_server_client_checkpoint_gpu_probe_ready_cuda129_multigpu_required
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - 'DreamZero is routed as an embodied world-action model: WorldFoundry emits action_trace
   artifacts and preserves the server-side predicted-video contract in metadata.'
@@ -48,9 +54,14 @@ notes:
   against an already running DreamZero server via dreamzero_server_host/server_host
   and dreamzero_server_port/server_port; it does not use the shared OfficialRuntime
   pipeline.
-- WorldFoundry keeps the inference-only DreamZero server/model implementation directly in worldfoundry/synthesis/action_generation/dreamzero. The wrapper builds an in-tree torch.distributed server command and the live client invokes its WebSocket inference protocol.
-- The BasePolicy contract, NumPy msgpack codec, and distributed observation serialization are local and pickle-free; no openpi-client, editable checkout, PYTHONPATH injection, or runtime asset download is used.
-- Checkpoint-backed GPU execution requires a staged DROID/AgiBot checkpoint and a compatible CUDA 12.9 topology; this hardware boundary is separate from the verified import/protocol/runtime contracts.
-runtime_status: in_tree_official_server_client_checkpoint_gpu_probe_ready_cuda129_multigpu_required
-task_family: world_action_model
+- WorldFoundry keeps the inference-only DreamZero server/model implementation directly
+  in worldfoundry/synthesis/action_generation/dreamzero. The wrapper builds an in-tree
+  torch.distributed server command and the live client invokes its WebSocket inference
+  protocol.
+- The BasePolicy contract, NumPy msgpack codec, and distributed observation serialization
+  are local and pickle-free; no openpi-client, editable checkout, PYTHONPATH injection,
+  or runtime asset download is used.
+- Checkpoint-backed GPU execution requires a staged DROID/AgiBot checkpoint and a
+  compatible CUDA 12.9 topology; this hardware boundary is separate from the verified
+  import/protocol/runtime contracts.
 verification_status: static_import_protocol_verified_checkpoint_gpu_runtime_required

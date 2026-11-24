@@ -3,18 +3,18 @@ title: 交互式世界模型推理
 description: Zing、Astronex-World、SolarWM、AlayaWorld v1.1 和 Echo-WM 的纯推理入口。
 ---
 
-这些入口使用本地权重生成视频。目录查询与配置检查可在 CPU 上运行，实际生成需要 CUDA。推理不会自动下载权重。新增路线已做 CPU 契约检查，真实 checkpoint 加载、GPU 显存和视频产物仍待验证。
+这些入口使用本地权重生成视频。目录查询与配置检查可在 CPU 上运行，实际生成需要 CUDA。推理不会自动下载权重。这些路线已通过 CPU 契约检查；真实 checkpoint 加载、GPU 显存和视频产物尚未验证。
 
 | 模型 ID | 推理实现 | 外部依赖 |
 | --- | --- | --- |
 | `zing`（别名 `zing-0.5`） | 复用原生 Wan2.2、UMT5、VAE38，增加键盘控制与因果缓存 | 无外部模型仓库 |
-| `astronex-world` | 官方 causal / bidirectional 采样入口 | Astronex-World 源码与环境 |
-| `solarwm` | 官方 `solarwm infer`，读取索引中的图像、描述和相机轨迹 | SolarWM 源码及对应后端环境 |
-| `alayaworld` | 保留已有原生 LTX-2.3 + DA3 合并权重路线 | 无外部模型仓库 |
-| `alayaworld-v1.1` | 提取纯推理 ViGeo rollout，复用共享加载器、VAE、历史和文本编码器 | Alaya Transformer 扩展及 ViGeo1.1 |
-| `joyai-echo-wm` | 官方 Base / Flash 音视频推理 | JoyAI-Echo 源码与环境 |
+| `astronex-world` | 官方 causal / bidirectional 采样入口，已 vendor 进 WorldFoundry | 无（需独立环境） |
+| `solarwm` | 官方 `solarwm infer`，已 vendor 进 WorldFoundry；读取索引中的图像、描述和相机轨迹 | 对应后端环境 |
+| `alayaworld` | 原生 LTX-2.3 + DA3 合并权重路线 | 无外部模型仓库 |
+| `alayaworld-v1.1` | 树内纯推理 ViGeo rollout 与 Alaya LTX-2.3 变体，复用共享 LTX、加载器、VAE、历史、文本编码器和 ViGeo | 无 |
+| `joyai-echo-wm` | 官方 Base / Flash 音视频推理，已 vendor 进 WorldFoundry | 无（需独立环境） |
 
-配置统一位于 `worldfoundry/data/models/runtime/configs/`。本次集成不包含训练循环、优化器、损失函数或训练数据准备流程。外部源码放在 WorldFoundry 仓库外；SolarWM 仅引用上游推理 recipe，不复制其混合训练配置目录。
+配置统一位于 `worldfoundry/data/models/runtime/configs/`。本次集成不包含训练循环、优化器、损失函数或训练数据准备流程。SolarWM 官方发布的推理配置位于 `configs/solarwm/examples/`。
 
 ## Workspace、TUI 与 CLI
 
@@ -23,15 +23,15 @@ description: Zing、Astronex-World、SolarWM、AlayaWorld v1.1 和 Echo-WM 的�
 以下命令只查看参数或配置，不加载权重：
 
 ```bash
-worldfoundry run zing --help
-worldfoundry run solarwm --model-variant h3-ar --model-status
-worldfoundry run joyai-echo-wm --model-variant flash --help
+wf run zing --help
+wf run solarwm --model-variant h3-ar --model-status
+wf run joyai-echo-wm --model-variant flash --help
 ```
 
 直接推理时，加载参数使用 `--pipeline.load.*`，生成参数使用 `--pipeline.*`：
 
 ```bash
-worldfoundry run zing \
+wf run zing \
   --pipeline.load.checkpoint-dir /path/to/zing-0.5 \
   --pipeline.prompt "A walk through a quiet garden." \
   --pipeline.num-frames 81 \
@@ -68,13 +68,12 @@ pipe.close()
 
 ## Astronex-World
 
-源码固定版本为 `27584bf1a89da01ef35a03b48d83bc818d2adf2b`，权重为 `Astronex-Lab/Astronex-World`。
+因果与双向采样器改编自源码版本 `27584bf1a89da01ef35a03b48d83bc818d2adf2b`；网络为 WorldFoundry 的 Wan 变体，将发布的去噪器、UMT5 文本编码器和 Wan2.2 VAE 加载到共享模块上。权重为 `Astronex-Lab/Astronex-World`。
 
 ```python
 from worldfoundry.pipelines.astronex_world import AstronexWorldPipeline
 
 pipe = AstronexWorldPipeline.from_pretrained(
-    source_root="/path/to/Astronex-World-source",
     checkpoint_dir="/path/to/Astronex-World-weights",
     python_executable="/path/to/astronex-env/bin/python",
     mode="causal",
@@ -95,13 +94,12 @@ result = pipe(
 
 ## SolarWM
 
-源码固定版本为 `2fe1ea9aca072f787bbba07ee9380b0e1ea7563b`。输入来自上游索引，不能直接传自由文本或图像路径。
+`solarwm` 包 vendor 自源码版本 `2fe1ea9aca072f787bbba07ee9380b0e1ea7563b`，LTX 路线使用的 LTX-2 v1.2.0 包也一并 vendor。输入来自上游索引，不能直接传自由文本或图像路径。
 
 ```python
 from worldfoundry.pipelines.solarwm import SolarWMPipeline
 
 pipe = SolarWMPipeline.from_pretrained(
-    source_root="/path/to/SolarWM",
     python_executable="/path/to/solar-wan-env/bin/python",
     variant="wan-5b-dmd",
     base_path="/path/to/SolarWM-models/SolarWM-5B-base",
@@ -116,7 +114,7 @@ result = pipe(output_dir="tmp/solarwm", execute=True, return_dict=True)
 
 `wan-5b-dmd-237f` 路线会依据索引中的源片段长度生成。验证 237 帧 rollout 时，应提供至少 237 帧的视频及匹配的相机位姿；仅选择该变体，输入仍为 81 帧时，输出也只有 81 帧。
 
-Wan、LTX、H3 使用各自的环境，仓库中的 `solarwm` 环境清单只描述默认 Wan 路线。LTX/H3 按固定版本的上游文档安装，并传入对应解释器。LTX 的 `assets` 需要 `model.codec.video_vae_path`、`inference.negative_caption_cache`；H3 需要 `data.silence_latents_path`、`data.encoder_contract_path`。`h3-dmd-long` 还需 `inference.plan`、`inference.dataset_root`。这些资产须提前准备，集成不会执行预编码。
+Wan、LTX、H3 使用各自的环境，仓库中的 `solarwm` 环境清单只描述默认 Wan 路线。LTX 需要 Python 3.12、PyTorch 2.9.1（CUDA 12.8）和 Transformers 5.14.1；H3 需要 PyTorch 2.6.0、Diffusers 0.40.0、Transformers 5.12.1、PEFT 0.20.0 和 FlashAttention 2.8.3。需显式传入解释器。LTX 的 `assets` 需要 `model.codec.video_vae_path`、`inference.negative_caption_cache`；H3 需要 `data.silence_latents_path`、`data.encoder_contract_path`。`h3-dmd-long` 还需 `inference.plan`、`inference.dataset_root`。这些资产须提前准备，集成不会执行预编码。
 
 Wan 可用 `overrides={"data.test_index": "...", "validation.sample_count": 1}` 选择样本；LTX 使用 `data.index`、`inference.sample_count`。未知覆盖项及训练命令会被拒绝。每次运行使用独立目录，必须同时找到视频和完成标记才能返回成功。
 
@@ -124,20 +122,18 @@ SolarWM 代码为 Apache-2.0；LTX/H3 权重分别遵守其社区许可，H3 还
 
 ## AlayaWorld v1.1
 
-原版 `alayaworld` 的合并权重入口保持独立。v1.1 需要 stage2b Transformer/历史编码器、LTX-2.3 基座、未量化 Gemma 和 ViGeo1.1；DMD 额外需要 stage3 LoRA。AlayaWorld 源码版本为 `ea03cfbb2e4c4e9102ed8ea8562e0b5370ca9b79`。
+原版 `alayaworld` 的合并权重入口保持独立。v1.1 需要 stage2b Transformer/历史编码器、LTX-2.3 基座、未量化 Gemma 和 ViGeo1.1；DMD 额外需要 stage3 LoRA。rollout、配置 schema 和 LTX-2.3 Transformer vendor 自 AlayaWorld 版本 `ea03cfbb2e4c4e9102ed8ea8562e0b5370ca9b79`；ViGeo 使用 WorldFoundry 的共享实现。
 
 ```python
 from worldfoundry.pipelines.alayaworld_v11 import AlayaWorldV11Pipeline
 
 pipe = AlayaWorldV11Pipeline.from_pretrained(
-    source_root="/path/to/AlayaWorld",
     python_executable="/path/to/alaya-env/bin/python",
     checkpoint_dir="/path/to/AlayaWorld-v1.1-stage2b",
     student_dir="/path/to/AlayaWorld-v1.1-stage3",
     base_checkpoint="/path/to/ltx-2.3-22b-dev.safetensors",
     gemma_path="/path/to/gemma-3-12b-it-qat-q4_0-unquantized",
     vigeo_checkpoint="/path/to/ViGeo1.1",
-    vigeo_source_root="/path/to/ViGeo",
     variant="dmd",
 )
 result = pipe(
@@ -152,17 +148,16 @@ result = pipe(
 
 `variant="ar"` 为 30 步采样，不需要 student LoRA。可传 `camera_path`（C2W `[F,4,4]`，`.npy`、`.npz` 或 `.txt`）；不传则生成默认前进轨迹，支持 `forward`、`yaw`、`pitch` 及归一化 `intrinsic=[fx, fy, cx, cy]`。提供的相机轨迹须足够长。
 
-该入口不实例化 trainer 或训练配置，不运行优化流程。复用 WorldFoundry 的 LTX VAE、文本和历史编码器、checkpoint/LoRA 加载器。Alaya Transformer 扩展及 ViGeo 几何实现仍依赖外部源码。原生 VAE 整窗编码的峰值显存可能高于上游流式编码，需 GPU 验证。
+该入口不实例化 trainer 或训练配置，不运行优化流程。复用 WorldFoundry 的 LTX VAE、文本和历史编码器、checkpoint/LoRA 加载器。原生 VAE 整窗编码的峰值显存可能高于上游流式编码，需 GPU 验证。
 
 ## Echo-WM
 
-`JoyAIEchoWMPipeline` 提供 `variant="base"` 与 `variant="flash"`。源码版本为 `a08f1274573d7cd6ec66719f204951f4227a5173`，使用 `Echo-Team/Echo-WM` 权重。
+`JoyAIEchoWMPipeline` 提供 `variant="base"` 与 `variant="flash"`。两个入口均 vendor 自源码版本 `a08f1274573d7cd6ec66719f204951f4227a5173`，使用 `Echo-Team/Echo-WM` 权重。
 
 ```python
 from worldfoundry.pipelines.joyai_echo.pipeline_joyai_echo import JoyAIEchoWMPipeline
 
 pipe = JoyAIEchoWMPipeline.from_pretrained(
-    source_root="/path/to/JoyAI-Echo",
     checkpoint_dir="/path/to/Echo-WM",
     gemma_path="/path/to/gemma-3-12b-it-qat-q4_0-unquantized",
     python_executable="/path/to/echo-wm-env/bin/python",
@@ -179,4 +174,4 @@ result = pipe(
 )
 ```
 
-Base 提示词按上游六字段组织：Environment、Character、Style、Perspective、Sounds、Speech。Base 帧数为 `1 + 8*N`；Flash 为 `1 + 8*video_chunk_size*N`（默认 chunk size 为 3）。宽高为 32 的倍数。默认带音频，`no_audio=True` 只生成视频。目录中的注册状态不代表所有权重可下载或 GPU 产物已验证。
+Base 提示词按上游六字段组织：Environment、Character、Style、Perspective、Sounds、Speech。Base 帧数为 `1 + 8*N`；Flash 为 `1 + 8*video_chunk_size*N`（默认 chunk size 为 3）。宽高为 32 的倍数。默认带音频，`no_audio=True` 只生成视频。长时程 checkpoint 的可用性与 GPU 一致性尚未确认。

@@ -5,10 +5,9 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
-from typing import Optional
 
 from worldfoundry.core.io.paths import project_root
-from worldfoundry.pipelines.gen3c.constants import DEFAULT_GEN3C_NEGATIVE_PROMPT
+from worldfoundry.pipelines.gen3c.constants import DEFAULT_GEN3C_NEGATIVE_PROMPT as DEFAULT_GEN3C_NEGATIVE_PROMPT
 
 DEFAULT_GEN3C_ALIAS = "gen3c"
 DEFAULT_GEN3C_MOGE1_REPO = "Ruicheng/moge-vitl"
@@ -17,15 +16,9 @@ _GEN3C_CHECKPOINT_COMPONENT_REPOS = {
     "Cosmos-Tokenize1-CV8x8x8-720p": "nvidia/Cosmos-Tokenize1-CV8x8x8-720p",
     os.path.join("google-t5", "t5-11b"): "google-t5/t5-11b",
 }
+
+
 def _env_truthy(key: str) -> bool:
-    """Helper function to env truthy.
-
-    Args:
-        key: The key.
-
-    Returns:
-        The return value.
-    """
     return os.environ.get(key, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -50,14 +43,6 @@ def _snapshot_download_repo(repo_id: str) -> Path:
 
 
 def _checkpoint_layout_complete(root: Path) -> bool:
-    """Helper function to checkpoint layout complete.
-
-    Args:
-        root: The root.
-
-    Returns:
-        The return value.
-    """
     required_files = [
         root / "Gen3C-Cosmos-7B" / "model.pt",
         root / "Cosmos-Tokenize1-CV8x8x8-720p" / "mean_std.pt",
@@ -96,15 +81,6 @@ def _component_required_file(layout_name: str) -> Path:
 
 
 def _component_dir_candidates(repo_id: str, root: Path) -> list[Path]:
-    """Helper function to component dir candidates.
-
-    Args:
-        repo_id: The repo id.
-        root: The root.
-
-    Returns:
-        The return value.
-    """
     raw_name = repo_id.split("/")[-1]
     sanitized_name = repo_id.replace("/", "--")
     google_nested = root / repo_id
@@ -121,23 +97,14 @@ def _component_dir_candidates(repo_id: str, root: Path) -> list[Path]:
     return deduped
 
 
-def _find_component_dir(repo_id: str, root: Path) -> Optional[Path]:
-    """Helper function to find component dir.
-
-    Args:
-        repo_id: The repo id.
-        root: The root.
-
-    Returns:
-        The return value.
-    """
+def _find_component_dir(repo_id: str, root: Path) -> Path | None:
     for candidate in _component_dir_candidates(repo_id, root):
         if candidate.exists():
             return candidate.resolve()
     return None
 
 
-def _find_component_dir_with_file(layout_name: str, repo_id: str, root: Path) -> Optional[Path]:
+def _find_component_dir_with_file(layout_name: str, repo_id: str, root: Path) -> Path | None:
     required = _component_required_file(layout_name)
     for candidate in _component_dir_candidates(repo_id, root):
         if (candidate / required).is_file():
@@ -145,7 +112,7 @@ def _find_component_dir_with_file(layout_name: str, repo_id: str, root: Path) ->
     return None
 
 
-def _direct_layout_component_sources(root: Path) -> Optional[dict[str, Path]]:
+def _direct_layout_component_sources(root: Path) -> dict[str, Path] | None:
     """Find GEN3C components in a direct local checkpoint root."""
     component_sources: dict[str, Path] = {}
     alias_names = {
@@ -181,14 +148,6 @@ def _direct_layout_component_sources(root: Path) -> Optional[dict[str, Path]]:
 
 
 def _reset_dir(path: Path) -> None:
-    """Helper function to reset dir.
-
-    Args:
-        path: The path.
-
-    Returns:
-        The return value.
-    """
     if path.is_symlink() or path.is_file():
         path.unlink()
     elif path.is_dir():
@@ -196,30 +155,13 @@ def _reset_dir(path: Path) -> None:
 
 
 def _link_or_copy(src: Path, dst: Path) -> None:
-    """Helper function to link or copy.
-
-    Args:
-        src: The src.
-        dst: The dst.
-
-    Returns:
-        The return value.
-    """
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists() or dst.is_symlink():
         _reset_dir(dst)
     dst.symlink_to(src, target_is_directory=src.is_dir())
 
 
-def _iter_hfd_roots(path_value: Optional[Path]) -> list[Path]:
-    """Helper function to iter hfd roots.
-
-    Args:
-        path_value: The path value.
-
-    Returns:
-        The return value.
-    """
+def _iter_hfd_roots(path_value: Path | None) -> list[Path]:
     roots = []
     if path_value is not None:
         for current in (path_value, *path_value.parents):
@@ -254,11 +196,6 @@ def _iter_hfd_roots(path_value: Optional[Path]) -> list[Path]:
 
 
 def _iter_direct_checkpoint_roots() -> list[Path]:
-    """Helper function to iter direct checkpoint roots.
-
-    Returns:
-        The return value.
-    """
     roots = []
     env_value = os.environ.get("WORLDFOUNDRY_GEN3C_CHECKPOINT_DIR")
     if env_value:
@@ -273,15 +210,7 @@ def _iter_direct_checkpoint_roots() -> list[Path]:
     return deduped
 
 
-def _stage_hfd_checkpoints(hfd_root: Path) -> Optional[Path]:
-    """Helper function to stage hfd checkpoints.
-
-    Args:
-        hfd_root: The hfd root.
-
-    Returns:
-        The return value.
-    """
+def _stage_hfd_checkpoints(hfd_root: Path) -> Path | None:
     component_sources = {}
     for layout_name, repo_id in _GEN3C_CHECKPOINT_COMPONENT_REPOS.items():
         component_dir = _find_component_dir_with_file(layout_name, repo_id, hfd_root)
@@ -304,7 +233,7 @@ def _stage_component_sources(component_sources: dict[str, Path]) -> Path:
     return stage_root.resolve()
 
 
-def _stage_hf_snapshot_checkpoints() -> Optional[Path]:
+def _stage_hf_snapshot_checkpoints() -> Path | None:
     """Build GEN3C's official checkpoint_dir layout from HF snapshots."""
     component_sources: dict[str, Path] = {}
     try:
@@ -318,15 +247,7 @@ def _stage_hf_snapshot_checkpoints() -> Optional[Path]:
     return _stage_component_sources(component_sources)
 
 
-def prepare_gen3c_checkpoint_root(checkpoint_dir: Optional[str]) -> str:
-    """Prepare gen3c checkpoint root.
-
-    Args:
-        checkpoint_dir: The checkpoint dir.
-
-    Returns:
-        The return value.
-    """
+def prepare_gen3c_checkpoint_root(checkpoint_dir: str | None) -> str:
     candidates = []
     if checkpoint_dir is not None:
         candidates.append(Path(checkpoint_dir).expanduser())

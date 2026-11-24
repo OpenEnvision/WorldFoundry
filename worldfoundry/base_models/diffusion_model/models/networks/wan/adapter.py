@@ -89,7 +89,7 @@ class SimpleAdapter(nn.Module):
     ) -> torch.Tensor:
         """Build camera-control Plücker features through shared core geometry."""
 
-        from worldfoundry.core.geometry.trajectory import (
+        from .camera import (
             generate_planar_camera_coordinates,
             wan_camera_coordinates_to_plucker,
         )

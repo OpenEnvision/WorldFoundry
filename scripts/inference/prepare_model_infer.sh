@@ -172,9 +172,6 @@ case "$MODEL_ID" in
   matrixgame|matrixgame1|matrix-game1|matrix_game_1)
     MODEL_ID="matrix-game-1"
     ;;
-  svc|seva)
-    MODEL_ID="stable-virtual-camera"
-    ;;
   pusa|pusa-v1|pusa_v1|pusa-wan2.2-v1|pusa-wan22-v1)
     MODEL_ID="pusa-vidgen"
     ;;
@@ -463,7 +460,7 @@ HunyuanVideo-1.5 checkpoint layout expected by the native recipes:
   ${target_root}
     text_encoder/llm              # Qwen/Qwen2.5-VL-7B-Instruct
     text_encoder/byt5-small       # google/byt5-small
-    text_encoder/Glyph-SDXL-v2    # AI-ModelScope/Glyph-SDXL-v2
+    text_encoder/Glyph-SDXL-v2    # multimodalart/glyph-sdxl-v2-byt5-small
     vision_encoder/siglip         # black-forest-labs/FLUX.1-Redux-dev
 EOF
 }
@@ -963,20 +960,6 @@ Wan2.2 TI2V 5B checkpoint layout:
 
 EOF
       ;;
-    stable-virtual-camera)
-      if [[ "$DOWNLOAD" == "1" ]]; then
-        hf download stabilityai/stable-virtual-camera --cache-dir "$CACHE_DIR"
-      fi
-      cat <<EOF
-
-Stable Virtual Camera checkpoint layout:
-  Hugging Face repo stabilityai/stable-virtual-camera is gated. Users must accept
-  the model terms and provide HF authentication before --download can succeed.
-  The in-tree adapter expects or can be pointed at:
-    ${WORLDFOUNDRY_CKPT_DIR}/stable-virtual-camera/modelv1.1.safetensors
-
-EOF
-      ;;
     skyreels-v2)
       if [[ "$DOWNLOAD" == "1" ]]; then
         hf download Skywork/SkyReels-V2-DF-1.3B-540P --cache-dir "$CACHE_DIR"
@@ -1209,14 +1192,12 @@ EOF
       cat <<EOF
 
 Self-Forcing checkpoint layout:
-  Runtime: in-tree infer-only runtime under
-    worldfoundry/synthesis/visual_generation/forcing/self_forcing_runtime
+  Runtime: native diffusion recipe (NativeSelfForcingPipeline).
   Native Hugging Face cache is supported for gdhe17/Self-Forcing.
-  Wan2.1 base weights are resolved from native HF cache or local aliases under:
-    ${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-1.3B
-    ${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-14B
-  Local official checkpoint alias:
-    ${WORLDFOUNDRY_CKPT_DIR}/Self-Forcing/checkpoints/self_forcing_dmd.pt
+  Generator checkpoint under:
+    ${WORLDFOUNDRY_CKPT_DIR}/gdhe17--Self-Forcing/checkpoints/self_forcing_dmd.pt
+  Wan2.1 text encoder, tokenizer and VAE under:
+    ${WORLDFOUNDRY_CKPT_DIR}/Wan-AI--Wan2.1-T2V-1.3B
 
 EOF
       ;;
@@ -1228,14 +1209,15 @@ EOF
       cat <<EOF
 
 Causal-Forcing checkpoint layout:
-  Runtime: in-tree infer-only runtime under
-    worldfoundry/synthesis/visual_generation/forcing/causal_forcing_runtime
+  Runtime: native diffusion recipes (NativeCausalForcingPipeline).
   Native Hugging Face cache is supported for zhuhz22/Causal-Forcing.
-  Wan2.1 base weights are resolved from native HF cache or local aliases under:
-    ${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-1.3B
-    ${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-14B
-  Local chunk-wise checkpoint alias:
-    ${WORLDFOUNDRY_CKPT_DIR}/Causal-Forcing/chunkwise/causal_forcing.pt
+  Generator checkpoints under ${WORLDFOUNDRY_CKPT_DIR}/zhuhz22--Causal-Forcing:
+    chunkwise/causal_forcing.pt (default)
+    framewise/causal_forcing.pt
+    causal-forcing++/framewise-1step.pt
+    causal-forcing++/framewise-2step.pt
+  Wan2.1 text encoder, tokenizer and VAE under:
+    ${WORLDFOUNDRY_CKPT_DIR}/Wan-AI--Wan2.1-T2V-1.3B
 
 EOF
       ;;
@@ -1404,7 +1386,7 @@ case "$MODEL_ID" in
   cogvideox|cogvideox-2b-t2v|cogvideox-5b-t2v|cogvideox-5b-i2v)
     prepare_cogvideox_layout
     ;;
-  i2vgen-xl|dynamicrafter-512-i2v|dynamicrafter-1024-i2v|allegro-ti2v|wan2.2-ti2v-5b|wan2.2-ti2v-5b-1280x704-121f|stable-virtual-camera|skyreels-v2|zeroscope|modelscope-t2v|animatediff|krea-realtime-video|framepack|motionctrl|easyanimate-i2v|hunyuan-worldplay|longcat-video|helios|gamma-world|lingbot-video|self-forcing|causal-forcing|rolling-forcing|worldgen|pusa-vidgen|dualcamctrl)
+  i2vgen-xl|dynamicrafter-512-i2v|dynamicrafter-1024-i2v|allegro-ti2v|wan2.2-ti2v-5b|wan2.2-ti2v-5b-1280x704-121f|skyreels-v2|zeroscope|modelscope-t2v|animatediff|krea-realtime-video|framepack|motionctrl|easyanimate-i2v|hunyuan-worldplay|longcat-video|helios|gamma-world|lingbot-video|self-forcing|causal-forcing|rolling-forcing|worldgen|pusa-vidgen|dualcamctrl)
     prepare_recent_video_layout
     ;;
 esac

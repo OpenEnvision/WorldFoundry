@@ -4,19 +4,17 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> models -> aggregator.py functionality."""
-
 import logging
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
-from typing import Optional, Tuple, Union, List, Dict, Any
 
 from worldfoundry.core.nn.blocks.layers import PatchEmbed
+
 from ..layers.block import Block
-from ..layers.rope import RotaryPositionEmbedding2D, PositionGetter
-from ..layers.vision_transformer import vit_small, vit_base, vit_large, vit_giant2
+from ..layers.rope import PositionGetter, RotaryPositionEmbedding2D
+from ..layers.vision_transformer import vit_base, vit_giant2, vit_large, vit_small
 
 logger = logging.getLogger(__name__)
 
@@ -66,34 +64,12 @@ class Aggregator(nn.Module):
         ffn_bias=True,
         patch_embed="dinov2_vitl14_reg",
         pretrained_patch_embed=False,
-        aa_order=["frame", "global"],
+        aa_order=["frame", "global"],  # noqa: B006 - Keeps the upstream default object and signature.
         aa_block_size=1,
         qk_norm=True,
         rope_freq=100,
         init_values=0.01,
     ):
-        """Init.
-
-        Args:
-            img_size: The img size.
-            patch_size: The patch size.
-            embed_dim: The embed dim.
-            depth: The depth.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            num_register_tokens: The num register tokens.
-            block_fn: The block fn.
-            qkv_bias: The qkv bias.
-            proj_bias: The proj bias.
-            ffn_bias: The ffn bias.
-            patch_embed: The patch embed.
-            pretrained_patch_embed: The pretrained patch embed.
-            aa_order: The aa order.
-            aa_block_size: The aa block size.
-            qk_norm: The qk norm.
-            rope_freq: The rope freq.
-            init_values: The init values.
-        """
         super().__init__()
 
         self.__build_patch_embed__(patch_embed, img_size, patch_size, num_register_tokens, embed_dim=embed_dim)
@@ -163,7 +139,7 @@ class Aggregator(nn.Module):
         for name, value in (("_resnet_mean", _RESNET_MEAN), ("_resnet_std", _RESNET_STD)):
             self.register_buffer(name, torch.FloatTensor(value).view(1, 1, 3, 1, 1), persistent=False)
 
-        self.use_reentrant = False # hardcoded to False
+        self.use_reentrant = False  # hardcoded to False
 
     def __build_patch_embed__(
         self,
@@ -224,7 +200,7 @@ class Aggregator(nn.Module):
             if hasattr(self.patch_embed, "mask_token"):
                 self.patch_embed.mask_token.requires_grad_(False)
 
-    def forward(self, images: torch.Tensor, cameras_possibly_zero=None) -> Tuple[List[torch.Tensor], int]:
+    def forward(self, images: torch.Tensor, cameras_possibly_zero=None) -> tuple[list[torch.Tensor], int]:
         """
         Args:
             images (torch.Tensor): Input images with shape [B, S, 3, H, W], in range [0, 1].

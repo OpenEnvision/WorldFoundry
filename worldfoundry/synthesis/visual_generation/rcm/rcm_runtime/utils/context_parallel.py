@@ -85,7 +85,7 @@ def cat_outputs_cp(x: Tensor, seq_dim: int, cp_group: ProcessGroup) -> Tensor:
     try:
         all_gather(gathered_tensors, x, group=cp_group)
     except RuntimeError as e:
-        raise RuntimeError(f"Failed to gather tensors: {e}")  # noqa: B904
+        raise RuntimeError(f"Failed to gather tensors: {e}")  # noqa: B904 - Keeps the implicit exception context.
 
     # Concatenate the gathered tensors along the specified dimension
     return torch.cat(gathered_tensors, dim=seq_dim)
@@ -122,7 +122,7 @@ def cat_outputs_cp_with_grad(x: Tensor, seq_dim: int, cp_group: ProcessGroup) ->
     try:
         all_gather(gathered_tensors, x, group=cp_group)
     except RuntimeError as e:
-        raise RuntimeError(f"Failed to gather tensors: {e}")  # noqa: B904
+        raise RuntimeError(f"Failed to gather tensors: {e}")  # noqa: B904 - Keeps the implicit exception context.
 
     rank = cp_group.rank()
     gathered_tensors[rank] = x

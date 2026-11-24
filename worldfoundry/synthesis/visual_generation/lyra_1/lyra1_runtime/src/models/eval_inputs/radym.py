@@ -13,31 +13,69 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import codecs
 import json
 import os
 import zipfile
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 import cv2
 import numpy as np
-import OpenEXR
 import torch
 import torch.utils.data
 from decord import VideoReader
-from lru import LRU
 
-from src.models.eval_inputs.base import BaseDataset
-from src.models.eval_inputs.datafield import DataField
+from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.eval_inputs.base import BaseDataset
+from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.eval_inputs.datafield import DataField
+
+
+def _safe_numpy_latent_globals() -> list[Any]:
+    """Return inert NumPy/codecs globals needed to load legacy array latents with weights_only=True."""
+    safe_globals: list[Any] = [
+        np.ndarray,
+        np.dtype,
+        codecs.encode,
+        type(np.dtype(np.float32)),
+        type(np.dtype(np.float16)),
+        type(np.dtype(np.float64)),
+    ]
+    for module_name in ("core", "_core"):
+        submod = getattr(np, module_name, None)
+        multiarray = getattr(submod, "multiarray", None) if submod is not None else None
+        reconstruct = getattr(multiarray, "_reconstruct", None) if multiarray is not None else None
+        if reconstruct is not None:
+            safe_globals.append(reconstruct)
+    return safe_globals
+
+
+def _load_rgb_latents(rgb_latents_path: Path) -> torch.Tensor:
+    with torch.serialization.safe_globals(_safe_numpy_latent_globals()):
+        rgb_latents_data = torch.load(
+            rgb_latents_path,
+            map_location="cpu",
+            weights_only=True,
+        )
+    if isinstance(rgb_latents_data, np.ndarray):
+        rgb_latents_data = torch.from_numpy(rgb_latents_data)
+    return rgb_latents_data
+
 
 class Radym(BaseDataset):
     MAX_ZIP_DESCRIPTORS = 10
     MAX_MP4_READERS = 2
 
     def __init__(
-        self, root_path, filter_list_path: Optional[str] = None, num_views: int = -1, depth_folder: str = "depth", 
-        custom_folders: Optional[List[str]] = None, custom_fields: Optional[List[str]] = None, start_view_idx: int = 0,
-        depth_path: Optional[List[str]] = None, camera_path: Optional[List[str]] = None,
+        self,
+        root_path,
+        filter_list_path: str | None = None,
+        num_views: int = -1,
+        depth_folder: str = "depth",
+        custom_folders: list[str] | None = None,
+        custom_fields: list[str] | None = None,
+        start_view_idx: int = 0,
+        depth_path: list[str] | None = None,
+        camera_path: list[str] | None = None,
     ):
         # For multi-view datasets, root_path is the path to camera idx 0.
         self.root_path = root_path
@@ -47,10 +85,12 @@ class Radym(BaseDataset):
         if filter_list_path is None:
             self.filter_set = None
         else:
-            self.filter_list_path = filter_list_path if os.path.isabs(filter_list_path) else os.path.join(root_path, filter_list_path)
-            with open(self.filter_list_path, "r") as f:
+            self.filter_list_path = (
+                filter_list_path if os.path.isabs(filter_list_path) else os.path.join(root_path, filter_list_path)
+            )
+            with open(self.filter_list_path) as f:
                 self.filter_set = [line.strip() for line in f.readlines()]
-            self.filter_set = set([x.split(".")[0] for x in self.filter_set])
+            self.filter_set = {x.split(".")[0] for x in self.filter_set}
         self.n_views = num_views
 
         # Recursively grab all mp4 files in subfolders with name 'rgb'.
@@ -64,10 +104,10 @@ class Radym(BaseDataset):
                     self.mp4_file_paths.append(mp4_file)
         self.mp4_file_paths = sorted(self.mp4_file_paths)
         # Process-dependent LRU cache for file handles of the tar files.
+        from lru import LRU
+
         self.worker_id = None
-        self.zip_descriptors = LRU(
-            self.MAX_ZIP_DESCRIPTORS, callback=self._evict_zip_handle
-        )
+        self.zip_descriptors = LRU(self.MAX_ZIP_DESCRIPTORS, callback=self._evict_zip_handle)
         # self.mp4_readers = LRU(self.MAX_MP4_READERS, callback=self._evict_mp4_reader)
         self.depth_folder = depth_folder
         self.custom_folders = custom_folders
@@ -98,13 +138,10 @@ class Radym(BaseDataset):
             else:
                 self.worker_id = worker_info.id
 
-    def _get_zip_handle(self, idx, attr, view_idx, attr_path = None):
+    def _get_zip_handle(self, idx, attr, view_idx, attr_path=None):
         self._check_worker_id()
 
-        if self.n_views != -1:
-            dict_key = f"{idx}_{view_idx}_{attr}"
-        else:
-            dict_key = f"{idx}_{attr}"
+        dict_key = f"{idx}_{view_idx}_{attr}" if self.n_views != -1 else f"{idx}_{attr}"
         if dict_key in self.zip_descriptors:
             return self.zip_descriptors[dict_key]
 
@@ -125,14 +162,14 @@ class Radym(BaseDataset):
 
     def _get_mp4_reader(self, idx, attr, view_idx):
         # self._check_worker_id()
- 
+
         # if self.n_views != -1:
         #     dict_key = f"{idx}_{view_idx}_{attr}"
         # else:
         #     dict_key = f"{idx}_{attr}"
         # if dict_key in self.mp4_readers:
         #     return self.mp4_readers[dict_key]
-        
+
         rgb_path = self.mp4_file_paths[idx]
         if self.n_views != -1:
             root_path, mp4_name = rgb_path.parent.parent.parent, rgb_path.name
@@ -164,7 +201,7 @@ class Radym(BaseDataset):
     def num_views(self, video_idx: int) -> int:
         return 1 if self.n_views == -1 else self.n_views
 
-    def num_frames(self, video_idx: int, view_idx: int = None) -> int:
+    def num_frames(self, video_idx: int, view_idx: int | None = None) -> int:
         if view_idx is None:
             view_idx = self.start_view_idx
         return len(self._get_mp4_reader(video_idx, "rgb", view_idx))
@@ -172,26 +209,20 @@ class Radym(BaseDataset):
     def _read_data(
         self,
         video_idx: int,
-        frame_idxs: List[int],
-        view_idxs: List[int],
-        data_fields: List[DataField],
+        frame_idxs: list[int],
+        view_idxs: list[int],
+        data_fields: list[DataField],
     ):
         frame_indices = np.asarray(frame_idxs).astype(np.int64)
         rgb_path = self.mp4_file_paths[video_idx]
         data_base_path, data_key = rgb_path.parent.parent, rgb_path.stem
-        if self.camera_path is not None:
-            camera_path = self.camera_path
-        else:
-            camera_path = data_base_path
+        camera_path = self.camera_path if self.camera_path is not None else data_base_path
         if self.n_views != -1:
             # Currently support only load at most one camera.
             assert len(set(view_idxs)) == 1, "Currently support only one view"
             view_idx = view_idxs[0]
             data_base_path = data_base_path.parent / str(view_idx)
-            if self.camera_path is None:
-                camera_path = data_base_path
-            else:
-                camera_path = camera_path / str(view_idx)
+            camera_path = data_base_path if self.camera_path is None else camera_path / str(view_idx)
         else:
             view_idx = self.start_view_idx
         output_dict: dict[str | DataField, Any] = {"__key__": data_key}
@@ -210,17 +241,11 @@ class Radym(BaseDataset):
 
                 rgb_reader.seek(0)  # set video reader point back to 0 to clean up cache
                 del rgb_reader
-            
+
             elif data_field == DataField.LATENT_RGB:
                 # Load rgb latent
                 rgb_latents_path = data_base_path / "latent" / f"{data_key}.pkl"
-                rgb_latents_data = torch.load(
-                    rgb_latents_path,
-                    map_location="cpu",
-                    weights_only=True,
-                )
-                if isinstance(rgb_latents_data, np.ndarray):
-                    rgb_latents_data = torch.from_numpy(rgb_latents_data)
+                rgb_latents_data = _load_rgb_latents(rgb_latents_path)
                 # Remove batch index
                 rgb_latents_data = rgb_latents_data[0]
                 output_dict[data_field] = rgb_latents_data
@@ -229,26 +254,22 @@ class Radym(BaseDataset):
             elif data_field == DataField.CAMERA_C2W_TRANSFORM:
                 c2w_data = np.load(camera_path / "pose" / f"{data_key}.npz")
                 f_idx = np.searchsorted(c2w_data["inds"], frame_indices)
-                assert np.all(
-                    c2w_data["inds"][f_idx] == frame_indices
-                ), "Pose not found"
+                assert np.all(c2w_data["inds"][f_idx] == frame_indices), "Pose not found"
                 c2w_np = c2w_data["data"][f_idx].astype(np.float32)
                 c2w_torch = torch.from_numpy(c2w_np).contiguous()
                 output_dict[data_field] = c2w_torch
 
             elif data_field == DataField.CAMERA_INTRINSICS:
-                intrinsics_data = np.load(
-                    camera_path / "intrinsics" / f"{data_key}.npz"
-                )
+                intrinsics_data = np.load(camera_path / "intrinsics" / f"{data_key}.npz")
                 f_idx = np.searchsorted(intrinsics_data["inds"], frame_indices)
-                assert np.all(
-                    intrinsics_data["inds"][f_idx] == frame_indices
-                ), "Intrinsics not found"
+                assert np.all(intrinsics_data["inds"][f_idx] == frame_indices), "Intrinsics not found"
                 intrinsics_np = intrinsics_data["data"][f_idx].astype(np.float32)
                 intrinsics_torch = torch.from_numpy(intrinsics_np).contiguous()
                 output_dict[data_field] = intrinsics_torch
 
             elif data_field == DataField.METRIC_DEPTH:
+                import OpenEXR
+
                 depth_zip_handle = self._get_zip_handle(video_idx, self.depth_folder, view_idx, self.depth_path)
                 depth_np = []
                 for frame_idx in frame_indices:
@@ -267,9 +288,7 @@ class Radym(BaseDataset):
                 output_dict[data_field] = depth_torch
 
             elif data_field == DataField.OBJECT_BBOX:
-                bbox_zip_handle = self._get_zip_handle(
-                    video_idx, "object_info", view_idx
-                )
+                bbox_zip_handle = self._get_zip_handle(video_idx, "object_info", view_idx)
                 bbox_list = []
                 for frame_idx in frame_indices:
                     frame_name = f"{frame_idx:05d}.json"
@@ -284,16 +303,14 @@ class Radym(BaseDataset):
                 for frame_idx in frame_indices:
                     frame_name = f"{frame_idx:05d}.png"
                     with mask_zip_handle.open(frame_name, "r") as f:
-                        mask_np.append(
-                            cv2.imdecode(
-                                np.frombuffer(f.read(), np.uint8), cv2.IMREAD_UNCHANGED
-                            )
-                        )
+                        mask_np.append(cv2.imdecode(np.frombuffer(f.read(), np.uint8), cv2.IMREAD_UNCHANGED))
                 mask_np = np.stack(mask_np, axis=0).astype(np.uint8)
                 mask_torch = torch.from_numpy(mask_np).contiguous()
                 output_dict[data_field] = mask_torch
 
             elif data_field == DataField.BACKWARD_FLOW:
+                import OpenEXR
+
                 flow_zip_handle = self._get_zip_handle(video_idx, "flow", view_idx)
                 flow_np = []
                 for frame_idx in frame_indices:
@@ -307,12 +324,7 @@ class Radym(BaseDataset):
                         )
                         flow_np.append(
                             np.stack(
-                                [
-                                    np.frombuffer(
-                                        exr_file.channel(f"{channel}"), np.float16
-                                    )
-                                    for channel in ["U", "V"]
-                                ],
+                                [np.frombuffer(exr_file.channel(f"{channel}"), np.float16) for channel in ["U", "V"]],
                                 axis=-1,
                             ).reshape(height, width, 2)
                         )
@@ -322,22 +334,20 @@ class Radym(BaseDataset):
 
             elif data_field == DataField.CAPTION:
                 caption_path = data_base_path / "caption" / f"{data_key}.txt"
-                with open(caption_path, "r") as f:
+                with open(caption_path) as f:
                     caption = f.read()
                 output_dict[data_field] = caption
             elif data_field == "custom":
                 if self.custom_folders is not None:
                     output_dict[data_field] = {}
-                    assert len(self.custom_folders) == len(self.custom_fields), "Custom folders and types must have the same length"
-                    for custom_folder, custom_fields in zip(self.custom_folders, self.custom_fields):
+                    assert len(self.custom_folders) == len(self.custom_fields), (
+                        "Custom folders and types must have the same length"
+                    )
+                    for custom_folder, custom_fields in zip(self.custom_folders, self.custom_fields, strict=False):
                         if custom_fields == "ftheta_intrinsic":
-                            intrinsics_data = np.load(
-                                data_base_path / custom_folder / f"{data_key}.npz"
-                            )
+                            intrinsics_data = np.load(data_base_path / custom_folder / f"{data_key}.npz")
                             f_idx = np.searchsorted(intrinsics_data["inds"], frame_indices)
-                            assert np.all(
-                                intrinsics_data["inds"][f_idx] == frame_indices
-                            ), "Intrinsics not found"
+                            assert np.all(intrinsics_data["inds"][f_idx] == frame_indices), "Intrinsics not found"
                             intrinsics_np = intrinsics_data["data"][f_idx].astype(np.float32)
                             intrinsics_torch = torch.from_numpy(intrinsics_np).contiguous()
                             output_dict[data_field][custom_fields] = intrinsics_torch

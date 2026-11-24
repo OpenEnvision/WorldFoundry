@@ -33,7 +33,9 @@ while preserving failures that expose supported integration defects.
 
 ## Maintain the Published Surfaces
 
-- Keep `README.md` at the repository root. Human operational documentation
+- Keep `README.md` at the repository root plus the package-map READMEs for
+  `worldfoundry/`, each top-level package, and each `base_models` subpackage
+  (see CONTRIBUTING.md); everything deeper stays README-free. Human operational documentation
   belongs in paired English/Chinese Fumadocs pages; task-specific agent
   workflows belong in `skills/<name>/SKILL.md`.
 - Organize tests by owning module under `tests/`. Use behavioral names and the

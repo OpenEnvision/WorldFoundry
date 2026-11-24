@@ -147,7 +147,7 @@ class GigaWorldPolicyRuntime:
         if self._policy is not None:
             return self._policy
 
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .runtime_upstream import get_policy
 
@@ -194,9 +194,7 @@ class GigaWorldPolicyRuntime:
         policy = self._load()
         views = collect_images(observation, image, self.config.camera_keys)
         if len(views) < 3:
-            raise ValueError(
-                "GigaWorld-Policy requires three RGB views ordered as head, left wrist, and right wrist"
-            )
+            raise ValueError("GigaWorld-Policy requires three RGB views ordered as head, left wrist, and right wrist")
         state_value = first_present(
             observation,
             "state",

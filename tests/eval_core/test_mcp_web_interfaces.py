@@ -12,6 +12,7 @@ from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_MODEL_ID
 from worldfoundry.mcp.client import MCPClient, convert_result_to_openai_format
 from worldfoundry.mcp.tools import (
     MCPToolContext,
+    ToolNotFoundError,
     cancel_run_payload,
     check_benchmark_datasets_payload,
     get_run_result_payload,
@@ -24,6 +25,7 @@ from worldfoundry.mcp.tools import (
     run_evaluation_payload,
     server_info_payload,
 )
+from worldfoundry.mcp.tools.server_info import DOCS_BASE_URL
 from worldfoundry.runtime.jobs import AsyncCommandJobStore, python_module_command
 
 
@@ -31,16 +33,16 @@ def test_mcp_server_info_documentation_routes_exist(tmp_path: Path) -> None:
     docs_root = Path(__file__).resolve().parents[2] / "docs" / "fumadocs" / "content" / "docs"
     context = MCPToolContext(output_root=tmp_path, job_store=AsyncCommandJobStore())
 
-    for route in server_info_payload(context=context)["docs"].values():
-        relative = route.removeprefix("/docs/")
-        assert route.startswith("/docs/")
+    for url in server_info_payload(context=context)["docs"].values():
+        assert url.startswith(f"{DOCS_BASE_URL}/")
+        relative = url.removeprefix(f"{DOCS_BASE_URL}/")
         assert (docs_root / f"{relative}.mdx").is_file() or (docs_root / relative / "index.mdx").is_file()
 
 
 def test_python_module_command_rewrites_console_entrypoint() -> None:
-    command = python_module_command(("worldfoundry-eval", "run", "--json"), python_executable="/usr/bin/python")
+    command = python_module_command(("wf", "run", "--json"), python_executable="/usr/bin/python")
 
-    assert command == ("/usr/bin/python", "-m", "worldfoundry.evaluation", "run", "--json")
+    assert command == ("/usr/bin/python", "-m", "worldfoundry.cli", "run", "--json")
 
 
 def test_command_job_store_captures_json_result() -> None:
@@ -68,10 +70,8 @@ def test_mcp_discovery_and_preview_are_available_without_mcp_dependency(tmp_path
     benchmarks = list_benchmarks_payload(query="robotwin", context=context)
     preview = preview_run_payload(
         model=CONTRACT_FIXTURE_MODEL_ID,
-        benchmark="robotwin",
+        benchmarks=["robotwin"],
         output_dir=tmp_path / "run",
-        prepare=True,
-        data_root=tmp_path / "datasets",
         generation_cache_dir=tmp_path / "generation-cache",
         generation_cache_mode="read-write",
         context=context,
@@ -81,8 +81,6 @@ def test_mcp_discovery_and_preview_are_available_without_mcp_dependency(tmp_path
     assert preview["command"][:4] == [sys.executable, "-m", "worldfoundry.cli", "run"]
     assert preview["run_command"][:4] == [sys.executable, "-m", "worldfoundry.cli", "run"]
     assert "--json" in preview["command"]
-    assert "--prepare" in preview["command"]
-    assert preview["command"][preview["command"].index("--data-root") + 1] == str(tmp_path / "datasets")
     assert preview["command"][preview["command"].index("--generation-cache-dir") + 1] == str(
         tmp_path / "generation-cache"
     )
@@ -102,7 +100,8 @@ def test_mcp_default_run_output_is_scoped_by_job_id(tmp_path) -> None:
             output_dir = str(kwargs["output_dir"])
             return SimpleNamespace(
                 job_id=job_id,
-                to_summary=lambda: {
+                status="running",
+                to_summary=lambda log_tail=40: {
                     "job_id": job_id,
                     "status": "running",
                     "output_dir": output_dir,
@@ -116,7 +115,7 @@ def test_mcp_default_run_output_is_scoped_by_job_id(tmp_path) -> None:
 
         submitted = await run_evaluation_payload(
             model=CONTRACT_FIXTURE_MODEL_ID,
-            benchmark="robotwin",
+            benchmarks=["robotwin"],
             wait="async",
             context=context,
         )
@@ -306,7 +305,7 @@ def test_mcp_run_lifecycle_exposes_history_status_results_and_logs(tmp_path: Pat
             payload = get_run_result_payload("run-a", include_logs=True, context=context)
 
             assert history["total"] == 1
-            assert history["runs"][0]["job_id"] == "run-a"
+            assert history["runs"][0]["run_id"] == "run-a"
             assert history["runs"][0]["metadata"]["benchmarks"] == ["robotwin"]
             assert status["status"] == "completed"
             assert status["returncode"] == 0
@@ -346,11 +345,14 @@ def test_mcp_cancel_run_reports_terminal_status(tmp_path: Path) -> None:
             await asyncio.wait_for(wait_until_ready(), timeout=10)
             assert get_run_status_payload("running", context=context)["status"] == "running"
             payload = await cancel_run_payload("running", context=context)
-            assert payload == {"success": True, "run_id": "running", "message": "cancelled"}
+            assert payload["cancelled"] is True
+            assert (payload["run_id"], payload["status"], payload["message"]) == ("running", "cancelled", "cancelled")
             assert get_run_result_payload("running", context=context)["status"] == "cancelled"
             assert task.done()
             assert list_runs_payload(status="cancelled", context=context)["total"] == 1
-            assert (await cancel_run_payload("running", context=context))["success"] is False
+            assert (await cancel_run_payload("running", context=context))["cancelled"] is False
+            with pytest.raises(ToolNotFoundError):
+                await cancel_run_payload("missing", context=context)
         finally:
             if not job.terminal:
                 await cancel_run_payload("running", context=context)

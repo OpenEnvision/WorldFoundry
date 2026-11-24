@@ -15,9 +15,9 @@ from worldfoundry.base_models.diffusion_model.models.upsamplers.ltx.model_config
 )
 
 __all__ = [
+    "LTXSpatialLatentProcessor",
     "LatentUpsampler",
     "LatentUpsamplerConfigurator",
-    "LTXSpatialLatentProcessor",
     "build_ltx_spatial_latent_processor",
     "upsample_video",
 ]

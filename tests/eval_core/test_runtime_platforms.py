@@ -82,9 +82,7 @@ def test_preferred_platform_is_detected_and_returned_first() -> None:
 
 
 def test_cpu_is_fallback_when_no_accelerator_is_detected() -> None:
-    devices = detect_accelerators(
-        providers=[FakeProvider(PlatformKind.CUDA, [])]
-    )
+    devices = detect_accelerators(providers=[FakeProvider(PlatformKind.CUDA, [])])
 
     assert len(devices) == 1
     assert devices[0].platform is PlatformKind.CPU

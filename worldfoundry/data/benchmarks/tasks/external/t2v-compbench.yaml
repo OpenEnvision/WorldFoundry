@@ -31,7 +31,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: t2v-compbench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id t2v-compbench --mode contract 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id t2v-compbench --mode contract 
     --output-dir tmp/benchmark_zoo/benchmark_contract/t2v-compbench --json
   open_source_status: in_tree_runtime_bounded_official_component_verified
   official_benchmark_verified: false
@@ -73,13 +73,13 @@ metadata:
       WORLDFOUNDRY_GROUNDING_DINO_CKPT: ${WORLDFOUNDRY_T2V_COMPBENCH_GROUNDINGDINO_CKPT}
     runtime_env:
       WORLDFOUNDRY_T2V_COMPBENCH_ROOT: 
-        worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
+        worldfoundry/evals/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
     profile_blockers:
     - Full suite requires 1,400 generated videos and the LLaVA, depth/SAM, and DOT evaluator assets.
     missing: []
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:T2VCompBenchContract
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:t2v-compbench
   official_runner_script: 
-    worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py
+    worldfoundry/evals/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py
   prompt_suite:
     mode: t2v_compbench_v2
     hf_dataset_id: Kaiyue/T2V-CompBench-Videos
@@ -96,7 +96,7 @@ metadata:
     kind: in_tree_official_source
     repo_url: https://github.com/KaiyueSun98/T2V-CompBench.git
     revision: dd5eff7b93af0550b9efa2bdabbb21b3b017ceda
-    root: worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
+    root: worldfoundry/evals/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
     root_env: WORLDFOUNDRY_T2V_COMPBENCH_ROOT
     results_path_env: WORLDFOUNDRY_T2V_COMPBENCH_RESULTS_PATH
   release_status: experimental
@@ -106,19 +106,19 @@ metadata:
     - cache/worldfoundry/data/hfd_datasets/Kaiyue/T2V-CompBench-Videos
     - cache/worldfoundry/data/hfd_datasets/Kaiyue__T2V-CompBench-Videos
     in_tree_runtime_paths:
-    - worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
+    - worldfoundry/evals/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
     task_yaml: worldfoundry/data/benchmarks/tasks/external/t2v-compbench.yaml
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:T2VCompBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:t2v-compbench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
     surface: strict_video_manifest_bridge_and_bounded_official_generative_numeracy
     normalizer_verified: true
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   local_evaluator:
-    target: worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py
+    target: worldfoundry/evals/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py
     status: implemented
     protocol: in_tree_official_runtime_and_result_normalization
     official_execution:
@@ -136,7 +136,7 @@ metadata:
       - csv
       provenance: normalizes caller-provided official outputs; category execution uses the in-tree official runtime
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -194,7 +194,7 @@ tasks:
       split: train
       expected_rows: 25200
     runtime_requirements:
-      in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
+      in_tree_runtime: worldfoundry/evals/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
       optional_root_env: WORLDFOUNDRY_T2V_COMPBENCH_ROOT
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
       dataset_root_env: WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT
@@ -215,9 +215,9 @@ tasks:
       - object_interactions
       - generative_numeracy
       - t2v_compbench_average
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:T2VCompBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:t2v-compbench
+      runner_script: worldfoundry/evals/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py
       official_validation_command: ${WORLDFOUNDRY_UNIFIED_PYTHON} 
-        worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py
+        worldfoundry/evals/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py
         --generated-video-dir <generated_videos_with_t2v_compbench_generation_manifest.jsonl> --category
         generative_numeracy --output-dir <out> --json

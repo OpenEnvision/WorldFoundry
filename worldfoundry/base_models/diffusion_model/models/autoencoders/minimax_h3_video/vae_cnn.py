@@ -34,6 +34,7 @@ def norm_silu(x, norm, cond=None):
 
 class Downsample3D(nn.Module):
     """Strided causal 3-D downsample for the H3 video encoder."""
+
     def __init__(
         self,
         in_channels,
@@ -73,6 +74,7 @@ class Downsample3D(nn.Module):
 
 class ResnetBlock3D(nn.Module):
     """3-D residual block used by :class:`EncoderFCN3D`."""
+
     def __init__(
         self,
         in_channels,
@@ -88,17 +90,11 @@ class ResnetBlock3D(nn.Module):
         out_channels = in_channels if out_channels is None else out_channels
         self.out_channels = out_channels
 
-        self.use_fused_norm = (
-            os.environ.get("MINIMAX_H3_USE_FUSED_NORM", "false").lower() == "true"
-        )
+        self.use_fused_norm = os.environ.get("MINIMAX_H3_USE_FUSED_NORM", "false").lower() == "true"
 
         if zq_ch is None:
-            self.norm1 = get_group_norm_3d(
-                in_channels, use_t_isolated_gn=use_t_isolated_gn
-            )
-            self.norm2 = get_group_norm_3d(
-                out_channels, use_t_isolated_gn=use_t_isolated_gn
-            )
+            self.norm1 = get_group_norm_3d(in_channels, use_t_isolated_gn=use_t_isolated_gn)
+            self.norm2 = get_group_norm_3d(out_channels, use_t_isolated_gn=use_t_isolated_gn)
         else:
             self.norm1 = get_spatial_norm_3d(
                 in_channels,
@@ -150,17 +146,11 @@ class ResnetBlock3D(nn.Module):
     def forward(self, x, zq=None):
         h = x
 
-        if self.use_fused_norm:
-            h = self.norm1(h, zq)
-        else:
-            h = norm_silu(h, self.norm1, zq)
+        h = self.norm1(h, zq) if self.use_fused_norm else norm_silu(h, self.norm1, zq)
 
         h = self.conv1(h)
 
-        if self.use_fused_norm:
-            h = self.norm2(h, zq)
-        else:
-            h = norm_silu(h, self.norm2, zq)
+        h = self.norm2(h, zq) if self.use_fused_norm else norm_silu(h, self.norm2, zq)
 
         h = self.conv2(h)
 
@@ -172,6 +162,7 @@ class ResnetBlock3D(nn.Module):
 
 class EncoderFCN3D(nn.Module):
     """Causal 3-D CNN encoder that produces MiniMax H3 video latents."""
+
     def __init__(
         self,
         ch,
@@ -201,23 +192,19 @@ class EncoderFCN3D(nn.Module):
         self.time_down_factors = time_down
         self.in_channels = in_channels
 
-        self.use_fused_norm = (
-            os.environ.get("MINIMAX_H3_USE_FUSED_NORM", "false").lower() == "true"
-        )
+        self.use_fused_norm = os.environ.get("MINIMAX_H3_USE_FUSED_NORM", "false").lower() == "true"
 
         block_mid = [ch * ch_mult[i] for i in range(self.num_levels)]
-        block_in = [block_mid[0]] + block_mid[:-1]
+        block_in = [block_mid[0]] + block_mid[:-1]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         block_out = block_mid
 
-        conv_kwargs = dict(
-            padding_mode=padding_mode,
-            padding_mode_t=padding_mode_t,
-            causal=causal,
-        )
+        conv_kwargs = {
+            "padding_mode": padding_mode,
+            "padding_mode_t": padding_mode_t,
+            "causal": causal,
+        }
 
-        self.conv_in = BaseConv3d(
-            in_channels, block_in[0], kernel_size=3, padding=1, **conv_kwargs
-        )
+        self.conv_in = BaseConv3d(in_channels, block_in[0], kernel_size=3, padding=1, **conv_kwargs)
 
         self.down = nn.ModuleList()
         for i_level in range(self.num_levels):
@@ -255,9 +242,7 @@ class EncoderFCN3D(nn.Module):
             self.down.append(down)
 
         if zq_ch is None:
-            self.norm_out = get_group_norm_3d(
-                block_out[-1], use_t_isolated_gn=use_t_isolated_gn
-            )
+            self.norm_out = get_group_norm_3d(block_out[-1], use_t_isolated_gn=use_t_isolated_gn)
         else:
             self.norm_out = get_spatial_norm_3d(
                 block_out[-1],
@@ -282,10 +267,7 @@ class EncoderFCN3D(nn.Module):
             if hasattr(self.down[i_level], "downsample"):
                 h = self.down[i_level].downsample(h)
 
-        if self.use_fused_norm:
-            h = self.norm_out(h, zq)
-        else:
-            h = norm_silu(h, self.norm_out, zq)
+        h = self.norm_out(h, zq) if self.use_fused_norm else norm_silu(h, self.norm_out, zq)
 
         h = self.conv_out(h)
         return h

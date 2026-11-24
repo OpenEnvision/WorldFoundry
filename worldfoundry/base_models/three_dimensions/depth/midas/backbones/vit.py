@@ -1,37 +1,29 @@
-"""Module for base_models -> three_dimensions -> depth -> midas -> backbones -> vit.py functionality."""
+import math
+import types
 
+import timm
 import torch
 import torch.nn as nn
-import timm
-import types
-import math
 import torch.nn.functional as F
 
-from .utils import (activations, forward_adapted_unflatten, get_activation, get_readout_oper,
-                    make_backbone_default, Transpose)
+from .utils import (
+    Transpose,
+    activations,
+    forward_adapted_unflatten,
+    get_activation,
+    get_readout_oper,
+    make_backbone_default,
+)
 
 
 def forward_vit(pretrained, x):
-    """Forward vit.
-
-    Args:
-        pretrained: The pretrained.
-        x: The x.
-    """
     return forward_adapted_unflatten(pretrained, x, "forward_flex")
 
 
 def _resize_pos_embed(self, posemb, gs_h, gs_w):
-    """Helper function to resize pos embed.
-
-    Args:
-        posemb: The posemb.
-        gs_h: The gs h.
-        gs_w: The gs w.
-    """
     posemb_tok, posemb_grid = (
         posemb[:, : self.start_index],
-        posemb[0, self.start_index:],
+        posemb[0, self.start_index :],
     )
 
     gs_old = int(math.sqrt(len(posemb_grid)))
@@ -46,16 +38,9 @@ def _resize_pos_embed(self, posemb, gs_h, gs_w):
 
 
 def forward_flex(self, x):
-    """Forward flex.
-
-    Args:
-        x: The x.
-    """
     b, c, h, w = x.shape
 
-    pos_embed = self._resize_pos_embed(
-        self.pos_embed, h // self.patch_size[1], w // self.patch_size[0]
-    )
+    pos_embed = self._resize_pos_embed(self.pos_embed, h // self.patch_size[1], w // self.patch_size[0])
 
     B = x.shape[0]
 
@@ -67,17 +52,13 @@ def forward_flex(self, x):
     x = self.patch_embed.proj(x).flatten(2).transpose(1, 2)
 
     if getattr(self, "dist_token", None) is not None:
-        cls_tokens = self.cls_token.expand(
-            B, -1, -1
-        )  # stole cls_tokens impl from Phil Wang, thanks
+        cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         dist_token = self.dist_token.expand(B, -1, -1)
         x = torch.cat((cls_tokens, dist_token, x), dim=1)
     else:
         if self.no_embed_class:
             x = x + pos_embed
-        cls_tokens = self.cls_token.expand(
-            B, -1, -1
-        )  # stole cls_tokens impl from Phil Wang, thanks
+        cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         x = torch.cat((cls_tokens, x), dim=1)
 
     if not self.no_embed_class:
@@ -94,50 +75,30 @@ def forward_flex(self, x):
 
 def _make_vit_b16_backbone(
     model,
-    features=[96, 192, 384, 768],
-    size=[384, 384],
-    hooks=[2, 5, 8, 11],
+    features=[96, 192, 384, 768],  # noqa: B006 - Keeps the upstream default object and signature.
+    size=[384, 384],  # noqa: B006 - Keeps the upstream default object and signature.
+    hooks=[2, 5, 8, 11],  # noqa: B006 - Keeps the upstream default object and signature.
     vit_features=768,
     use_readout="ignore",
     start_index=1,
     start_index_readout=1,
 ):
-    """Helper function to make vit b16 backbone.
-
-    Args:
-        model: The model.
-        features: The features.
-        size: The size.
-        hooks: The hooks.
-        vit_features: The vit features.
-        use_readout: The use readout.
-        start_index: The start index.
-        start_index_readout: The start index readout.
-    """
-    pretrained = make_backbone_default(model, features, size, hooks, vit_features, use_readout, start_index,
-                                       start_index_readout)
+    pretrained = make_backbone_default(
+        model, features, size, hooks, vit_features, use_readout, start_index, start_index_readout
+    )
 
     # We inject this function into the VisionTransformer instances so that
     # we can use it with interpolated position embeddings without modifying the library source.
     pretrained.model.forward_flex = types.MethodType(forward_flex, pretrained.model)
-    pretrained.model._resize_pos_embed = types.MethodType(
-        _resize_pos_embed, pretrained.model
-    )
+    pretrained.model._resize_pos_embed = types.MethodType(_resize_pos_embed, pretrained.model)
 
     return pretrained
 
 
 def _make_pretrained_vitl16_384(pretrained, use_readout="ignore", hooks=None):
-    """Helper function to make pretrained vitl16 384.
-
-    Args:
-        pretrained: The pretrained.
-        use_readout: The use readout.
-        hooks: The hooks.
-    """
     model = timm.create_model("vit_large_patch16_384", pretrained=pretrained)
 
-    hooks = [5, 11, 17, 23] if hooks == None else hooks
+    hooks = [5, 11, 17, 23] if hooks == None else hooks  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
     return _make_vit_b16_backbone(
         model,
         features=[256, 512, 1024, 1024],
@@ -148,56 +109,31 @@ def _make_pretrained_vitl16_384(pretrained, use_readout="ignore", hooks=None):
 
 
 def _make_pretrained_vitb16_384(pretrained, use_readout="ignore", hooks=None):
-    """Helper function to make pretrained vitb16 384.
-
-    Args:
-        pretrained: The pretrained.
-        use_readout: The use readout.
-        hooks: The hooks.
-    """
     model = timm.create_model("vit_base_patch16_384", pretrained=pretrained)
 
-    hooks = [2, 5, 8, 11] if hooks == None else hooks
-    return _make_vit_b16_backbone(
-        model, features=[96, 192, 384, 768], hooks=hooks, use_readout=use_readout
-    )
+    hooks = [2, 5, 8, 11] if hooks == None else hooks  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
+    return _make_vit_b16_backbone(model, features=[96, 192, 384, 768], hooks=hooks, use_readout=use_readout)
 
 
 def _make_vit_b_rn50_backbone(
     model,
-    features=[256, 512, 768, 768],
-    size=[384, 384],
-    hooks=[0, 1, 8, 11],
+    features=[256, 512, 768, 768],  # noqa: B006 - Keeps the upstream default object and signature.
+    size=[384, 384],  # noqa: B006 - Keeps the upstream default object and signature.
+    hooks=[0, 1, 8, 11],  # noqa: B006 - Keeps the upstream default object and signature.
     vit_features=768,
-    patch_size=[16, 16],
+    patch_size=[16, 16],  # noqa: B006 - Keeps the upstream default object and signature.
     number_stages=2,
     use_vit_only=False,
     use_readout="ignore",
     start_index=1,
 ):
-    """Helper function to make vit b rn50 backbone.
-
-    Args:
-        model: The model.
-        features: The features.
-        size: The size.
-        hooks: The hooks.
-        vit_features: The vit features.
-        patch_size: The patch size.
-        number_stages: The number stages.
-        use_vit_only: The use vit only.
-        use_readout: The use readout.
-        start_index: The start index.
-    """
     pretrained = nn.Module()
 
     pretrained.model = model
 
     used_number_stages = 0 if use_vit_only else number_stages
     for s in range(used_number_stages):
-        pretrained.model.patch_embed.backbone.stages[s].register_forward_hook(
-            get_activation(str(s + 1))
-        )
+        pretrained.model.patch_embed.backbone.stages[s].register_forward_hook(get_activation(str(s + 1)))
     for s in range(used_number_stages, 4):
         pretrained.model.blocks[hooks[s]].register_forward_hook(get_activation(str(s + 1)))
 
@@ -213,8 +149,8 @@ def _make_vit_b_rn50_backbone(
             final_layer = nn.ConvTranspose2d(
                 in_channels=features[s],
                 out_channels=features[s],
-                kernel_size=4 // (2 ** s),
-                stride=4 // (2 ** s),
+                kernel_size=4 // (2**s),
+                stride=4 // (2**s),
                 padding=0,
                 bias=True,
                 dilation=1,
@@ -246,7 +182,7 @@ def _make_vit_b_rn50_backbone(
         if final_layer is not None:
             layers.append(final_layer)
 
-        value = nn.Sequential(*layers)
+        value = nn.Sequential(*layers)  # noqa: F841 - The local is visible through locals().
         exec(f"pretrained.act_postprocess{s + 1}=value")
 
     pretrained.model.start_index = start_index
@@ -258,27 +194,15 @@ def _make_vit_b_rn50_backbone(
 
     # We inject this function into the VisionTransformer instances so that
     # we can use it with interpolated position embeddings without modifying the library source.
-    pretrained.model._resize_pos_embed = types.MethodType(
-        _resize_pos_embed, pretrained.model
-    )
+    pretrained.model._resize_pos_embed = types.MethodType(_resize_pos_embed, pretrained.model)
 
     return pretrained
 
 
-def _make_pretrained_vitb_rn50_384(
-    pretrained, use_readout="ignore", hooks=None, use_vit_only=False
-):
-    """Helper function to make pretrained vitb rn50 384.
-
-    Args:
-        pretrained: The pretrained.
-        use_readout: The use readout.
-        hooks: The hooks.
-        use_vit_only: The use vit only.
-    """
+def _make_pretrained_vitb_rn50_384(pretrained, use_readout="ignore", hooks=None, use_vit_only=False):
     model = timm.create_model("vit_base_resnet50_384", pretrained=pretrained)
 
-    hooks = [0, 1, 8, 11] if hooks == None else hooks
+    hooks = [0, 1, 8, 11] if hooks == None else hooks  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
     return _make_vit_b_rn50_backbone(
         model,
         features=[256, 512, 768, 768],

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -60,7 +61,7 @@ class OpenVLAOFTOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "openvla_oft_action_chunk_policy"
     ACTION_REPRESENTATION = "continuous_libero_action_chunk"
     OBSERVATION_LAYOUT = "libero_full_and_wrist_rgb_state_language"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": False,
@@ -69,12 +70,22 @@ class OpenVLAOFTOperator(EmbodiedActionOperator):
         "actions": ["action_chunk", "actions", "robot_action"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
-        instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "task_description", "instruction", "task_instruction")
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
+        instruction = (
+            prompt
+            if prompt not in (None, "")
+            else _first_present(kwargs, "task_description", "instruction", "task_instruction")
+        )
         instruction = "" if instruction is None else str(instruction)
-        return {"prompt": instruction, "task_instruction": instruction, "prompt_channels": {"task_description": instruction}}
+        return {
+            "prompt": instruction,
+            "task_instruction": instruction,
+            "prompt_channels": {"task_description": instruction},
+        }
 
-    def process_perception(self, images: Any = None, video: Any = None, ref_image_path: str | Path | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_perception(
+        self, images: Any = None, video: Any = None, ref_image_path: str | Path | None = None, **kwargs: Any
+    ) -> dict[str, Any]:
         del video
         camera_keys = list(kwargs.get("camera_keys") or self.input_schema.get("camera_keys") or [])
         cameras = _camera_map(camera_keys, images, kwargs)
@@ -96,12 +107,17 @@ class OpenVLAOFTOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "action_chunk", "actions", "robot_action")
         self.interaction_history.append(actions)
         return {
-            **self.action_payload(actions, action_contract="8x7_libero_action_chunk", control_mode="libero_delta_eef_action_chunk", action_horizon=8),
+            **self.action_payload(
+                actions,
+                action_contract="8x7_libero_action_chunk",
+                control_mode="libero_delta_eef_action_chunk",
+                action_horizon=8,
+            ),
             "action_space": {"kind": "continuous_chunk", "dimensions": 7},
             "policy_controls": {"normalization": "dataset_statistics", "uses_wrist_image": True},
         }
@@ -114,14 +130,24 @@ class CogACTOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "cogact_dit_action_chunk_policy"
     ACTION_REPRESENTATION = "16x7_continuous_action_chunk"
     OBSERVATION_LAYOUT = "single_rgb_language"
-    DEFAULT_INPUT_SCHEMA = {"prompt": True, "image": True, "video": False, "state": False, "actions": ["action_chunk", "actions"]}
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
+        "prompt": True,
+        "image": True,
+        "video": False,
+        "state": False,
+        "actions": ["action_chunk", "actions"],
+    }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
-        instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "instruction", "task_instruction", "task")
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
+        instruction = (
+            prompt if prompt not in (None, "") else _first_present(kwargs, "instruction", "task_instruction", "task")
+        )
         instruction = "" if instruction is None else str(instruction)
         return {"prompt": instruction, "task_instruction": instruction, "prompt_channels": {"instruction": instruction}}
 
-    def process_perception(self, images: Any = None, video: Any = None, ref_image_path: str | Path | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_perception(
+        self, images: Any = None, video: Any = None, ref_image_path: str | Path | None = None, **kwargs: Any
+    ) -> dict[str, Any]:
         del video
         image = _first_present(kwargs, "image", "full_image")
         if image is None:
@@ -143,12 +169,17 @@ class CogACTOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "action_chunk", "actions")
         self.interaction_history.append(actions)
         return {
-            **self.action_payload(actions, action_contract="16x7_continuous_action_chunk", control_mode="dit_denoised_action_chunk", action_horizon=16),
+            **self.action_payload(
+                actions,
+                action_contract="16x7_continuous_action_chunk",
+                control_mode="dit_denoised_action_chunk",
+                action_horizon=16,
+            ),
             "action_space": {"kind": "continuous_chunk", "dimensions": 7},
             "policy_controls": {"sampler": "ddpm_or_ddim", "normalization": "dataset_statistics"},
         }
@@ -161,7 +192,7 @@ class DBCogACTOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "dexbotic_cogact_policy"
     ACTION_REPRESENTATION = "model_declared_relative_or_absolute_action_chunk"
     OBSERVATION_LAYOUT = "dexbotic_numbered_camera_slots_language_optional_state"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": False,
@@ -170,12 +201,16 @@ class DBCogACTOperator(EmbodiedActionOperator):
         "actions": ["actions", "action_chunk"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
-        instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "prompt", "instruction", "task_instruction")
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
+        instruction = (
+            prompt if prompt not in (None, "") else _first_present(kwargs, "prompt", "instruction", "task_instruction")
+        )
         instruction = "" if instruction is None else str(instruction)
         return {"prompt": instruction, "task_instruction": instruction, "prompt_channels": {"prompt": instruction}}
 
-    def process_perception(self, images: Any = None, video: Any = None, ref_image_path: str | Path | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_perception(
+        self, images: Any = None, video: Any = None, ref_image_path: str | Path | None = None, **kwargs: Any
+    ) -> dict[str, Any]:
         del video
         slots = list(kwargs.get("image_slots") or self.input_schema.get("image_slots") or [])
         input_images = images if images is not None else kwargs.get("images")
@@ -194,12 +229,14 @@ class DBCogACTOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "actions", "action_chunk")
         self.interaction_history.append(actions)
         return {
-            **self.action_payload(actions, action_contract="dexbotic_action_output", control_mode="dexbotic_policy_action"),
+            **self.action_payload(
+                actions, action_contract="dexbotic_action_output", control_mode="dexbotic_policy_action"
+            ),
             "action_space": {"kind": "continuous_chunk", "mode": "relative_or_absolute"},
             "policy_controls": {"api_contract": "direct_select_action", "normalization": "norm_stats_json"},
         }
@@ -212,7 +249,7 @@ class VLANeXtOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "vlanext_libero_action_chunk_policy"
     ACTION_REPRESENTATION = "normalized_libero_action_chunk"
     OBSERVATION_LAYOUT = "libero_rgb_wrist_history_state_action_language"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": True,
@@ -220,12 +257,18 @@ class VLANeXtOperator(EmbodiedActionOperator):
         "actions": ["actions", "action_chunk"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
-        instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "task_label", "task_description", "instruction")
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
+        instruction = (
+            prompt
+            if prompt not in (None, "")
+            else _first_present(kwargs, "task_label", "task_description", "instruction")
+        )
         instruction = "" if instruction is None else str(instruction)
         return {"prompt": instruction, "task_instruction": instruction, "prompt_channels": {"task_label": instruction}}
 
-    def process_perception(self, images: Any = None, video: Any = None, ref_image_path: str | Path | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_perception(
+        self, images: Any = None, video: Any = None, ref_image_path: str | Path | None = None, **kwargs: Any
+    ) -> dict[str, Any]:
         del video
         image_map = images if isinstance(images, Mapping) else {}
         full_image = _first_present(kwargs, "full_image", "image")
@@ -255,12 +298,14 @@ class VLANeXtOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "actions", "action_chunk")
         self.interaction_history.append(actions)
         return {
-            **self.action_payload(actions, action_contract="normalized_libero_action_chunk", control_mode="vlanext_policy_action"),
+            **self.action_payload(
+                actions, action_contract="normalized_libero_action_chunk", control_mode="vlanext_policy_action"
+            ),
             "action_space": {"kind": "continuous_chunk", "dimensions": 7},
             "policy_controls": {"uses_history": True, "sampler": "diffusion_or_regression"},
         }
@@ -273,7 +318,7 @@ class MolmoBotOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "molmobot_action_chunk_policy"
     ACTION_REPRESENTATION = "robot_specific_action_chunk"
     OBSERVATION_LAYOUT = "camera_list_language_optional_qpos"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": False,
@@ -282,12 +327,14 @@ class MolmoBotOperator(EmbodiedActionOperator):
         "actions": ["actions", "action_chunk"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         task = prompt if prompt not in (None, "") else _first_present(kwargs, "task", "task_description", "instruction")
         task = "" if task is None else str(task)
         return {"prompt": task, "task_instruction": task, "prompt_channels": {"task": task}}
 
-    def process_perception(self, images: Any = None, video: Any = None, ref_image_path: str | Path | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_perception(
+        self, images: Any = None, video: Any = None, ref_image_path: str | Path | None = None, **kwargs: Any
+    ) -> dict[str, Any]:
         del video
         camera_keys = list(kwargs.get("camera_keys") or self.input_schema.get("camera_keys") or [])
         cameras = _camera_map(camera_keys, images, kwargs)
@@ -309,12 +356,14 @@ class MolmoBotOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "actions", "action_chunk")
         self.interaction_history.append(actions)
         return {
-            **self.action_payload(actions, action_contract="robot_specific_action_chunk", control_mode="molmobot_policy_action"),
+            **self.action_payload(
+                actions, action_contract="robot_specific_action_chunk", control_mode="molmobot_policy_action"
+            ),
             "action_space": {"kind": "continuous_chunk", "dimensions": "robot_specific"},
             "policy_controls": {"normalization": "checkpoint_robot_postprocessor", "supports_pi0_variant": True},
         }
@@ -327,7 +376,7 @@ class MMEVLAOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "mme_vla_memory_augmented_openpi_policy"
     ACTION_REPRESENTATION = "8d_robomme_joint_action_chunk"
     OBSERVATION_LAYOUT = "robomme_rgb_wrist_state_optional_memory_language"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": False,
@@ -335,12 +384,16 @@ class MMEVLAOperator(EmbodiedActionOperator):
         "actions": ["actions", "action_chunk"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
-        instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "prompt", "instruction", "task_instruction")
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
+        instruction = (
+            prompt if prompt not in (None, "") else _first_present(kwargs, "prompt", "instruction", "task_instruction")
+        )
         instruction = "" if instruction is None else str(instruction)
         return {"prompt": instruction, "task_instruction": instruction, "prompt_channels": {"prompt": instruction}}
 
-    def process_perception(self, images: Any = None, video: Any = None, ref_image_path: str | Path | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_perception(
+        self, images: Any = None, video: Any = None, ref_image_path: str | Path | None = None, **kwargs: Any
+    ) -> dict[str, Any]:
         del video
         image_map = images if isinstance(images, Mapping) else {}
         base_image = _first_present(kwargs, "observation/image", "image", "base_image")
@@ -376,12 +429,14 @@ class MMEVLAOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "actions", "action_chunk")
         self.interaction_history.append(actions)
         return {
-            **self.action_payload(actions, action_contract="8d_robomme_joint_action_chunk", control_mode="robomme_policy_action"),
+            **self.action_payload(
+                actions, action_contract="8d_robomme_joint_action_chunk", control_mode="robomme_policy_action"
+            ),
             "action_space": {"kind": "continuous_chunk", "dimensions": 8},
             "policy_controls": {"uses_memory": True, "backend": "openpi_jax_policy"},
         }

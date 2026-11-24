@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 
-class DiagonalGaussianDistribution(object):
+class DiagonalGaussianDistribution:
     def __init__(self, parameters, deterministic=False):
         self.parameters = parameters
         self.mean, self.logvar = torch.chunk(parameters, 2, dim=1)
@@ -22,24 +22,23 @@ class DiagonalGaussianDistribution(object):
             return torch.Tensor([0.0])
         else:
             if other is None:
-                return 0.5 * torch.sum(
-                    torch.pow(self.mean, 2) + self.var - 1.0 - self.logvar,
-                    dim=[1, 2, 3]
-                )
+                return 0.5 * torch.sum(torch.pow(self.mean, 2) + self.var - 1.0 - self.logvar, dim=[1, 2, 3])
             else:
                 return 0.5 * torch.sum(
-                    torch.pow(self.mean - other.mean,
-                              2) / other.var + self.var / other.var - 1.0 - self.logvar + other.logvar,
-                    dim=[1, 2, 3]
+                    torch.pow(self.mean - other.mean, 2) / other.var
+                    + self.var / other.var
+                    - 1.0
+                    - self.logvar
+                    + other.logvar,
+                    dim=[1, 2, 3],
                 )
 
-    def nll(self, sample, dims=[1, 2, 3]):
+    def nll(self, sample, dims=[1, 2, 3]):  # noqa: B006 - Keeps the upstream default object and signature.
         if self.deterministic:
             return torch.Tensor([0.0])
         else:
             return 0.5 * torch.sum(
-                np.log(2.0 * np.pi) + self.logvar + torch.pow(sample - self.mean, 2) / self.var,
-                dim=dims
+                np.log(2.0 * np.pi) + self.logvar + torch.pow(sample - self.mean, 2) / self.var, dim=dims
             )
 
     def mode(self):

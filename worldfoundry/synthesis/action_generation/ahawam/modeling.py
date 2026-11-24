@@ -10,11 +10,17 @@ from typing import Any
 import torch
 import torch.nn as nn
 
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import WanTextEncoder
+from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.multiagent_rope import (
+    precompute_freqs_cis,
+    precompute_freqs_cis_3d,
+)
+
 from .action_dit import ActionDiT
 from .ahawam import AHAWAM
 from .mot import MoT
-from .wan_video_dit import WanVideoDiT, precompute_freqs_cis, precompute_freqs_cis_3d
-from .wan_video_text_encoder import HuggingfaceTokenizer, WanTextEncoder
+from .wan_video_dit import WanVideoDiT
+from .wan_video_text_encoder import HuggingfaceTokenizer
 from .wan_video_vae import WanVideoVAE38
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+import contextlib
 
 import torch
 from torch import nn
@@ -115,15 +115,15 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         past_key_values=None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         labels=None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        images: Optional[torch.FloatTensor] = None,
-        return_dict: Optional[bool] = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        images: torch.FloatTensor | None = None,
+        return_dict: bool | None = None,
         actions=None,
         states=None,
         images_r=None,
@@ -139,18 +139,16 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        input_ids, attention_mask, past_key_values, model_embeds, labels = (
-            self.prepare_inputs_labels_for_multimodal(
-                input_ids,
-                attention_mask,
-                past_key_values,
-                labels,
-                images,
-                images_r=images_r,
-                images_top=images_top,
-                visual_concat=self.visual_concat,
-                states=states,
-            )
+        input_ids, attention_mask, past_key_values, model_embeds, labels = self.prepare_inputs_labels_for_multimodal(
+            input_ids,
+            attention_mask,
+            past_key_values,
+            labels,
+            images,
+            images_r=images_r,
+            images_top=images_top,
+            visual_concat=self.visual_concat,
+            states=states,
         )
         outputs = self.get_model()(
             input_ids=input_ids,
@@ -190,14 +188,10 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
         return action
 
 
-try:
+with contextlib.suppress(ValueError):
     AutoConfig.register(LlavaPythiaConfig.model_type, LlavaPythiaConfig)
-except ValueError:
-    pass
-try:
+with contextlib.suppress(ValueError):
     AutoModelForCausalLM.register(LlavaPythiaConfig, LlavaPythiaForCausalLM)
-except ValueError:
-    pass
 
 
 __all__ = ["LLavaPythiaModel", "LlavaPythiaForCausalLM"]

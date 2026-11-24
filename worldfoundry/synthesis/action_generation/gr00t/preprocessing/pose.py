@@ -16,13 +16,13 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional, TypeVar, Union
+from typing import TypeVar
 
-from .types import ActionFormat
 import numpy as np
 from numpy.typing import NDArray
 from scipy.spatial.transform import Rotation
 
+from .types import ActionFormat
 
 # TypeVar for self-type preservation in Pose operations
 PoseT = TypeVar("PoseT", bound="Pose")
@@ -55,9 +55,7 @@ def invert_transformation(T: NDArray[np.float64]) -> NDArray[np.float64]:
     return T_inv
 
 
-def relative_transformation(
-    T0: NDArray[np.float64], Tt: NDArray[np.float64]
-) -> NDArray[np.float64]:
+def relative_transformation(T0: NDArray[np.float64], Tt: NDArray[np.float64]) -> NDArray[np.float64]:
     """
     Compute the relative transformation between two poses.
 
@@ -210,8 +208,8 @@ class JointPose(Pose):
 
     def __init__(
         self,
-        joints: Union[list, np.ndarray],
-        joint_names: Optional[list] = None,
+        joints: list | np.ndarray,
+        joint_names: list | None = None,
     ):
         """
         Initialize a joint pose.
@@ -230,8 +228,7 @@ class JointPose(Pose):
         else:
             if len(joint_names) != len(self.joints):
                 raise ValueError(
-                    f"Number of joint names ({len(joint_names)}) must match "
-                    f"number of joints ({len(self.joints)})"
+                    f"Number of joint names ({len(joint_names)}) must match number of joints ({len(self.joints)})"
                 )
             self.joint_names = joint_names
 
@@ -252,7 +249,7 @@ class JointPose(Pose):
         Returns:
             Dictionary mapping joint names to joint values
         """
-        return dict(zip(self.joint_names, self.joints))
+        return dict(zip(self.joint_names, self.joints, strict=False))
 
     def _compute_relative(self, other):  # type: ignore[override]
         """
@@ -292,9 +289,7 @@ class JointPose(Pose):
         if len(self.joints) <= 6:
             joints_str = np.array2string(self.joints, precision=4, suppress_small=True)
         else:
-            joints_str = (
-                f"[{self.joints[0]:.4f}, ..., {self.joints[-1]:.4f}] ({len(self.joints)} joints)"
-            )
+            joints_str = f"[{self.joints[0]:.4f}, ..., {self.joints[-1]:.4f}] ({len(self.joints)} joints)"
 
         return f"JointPose(joints={joints_str})"
 
@@ -303,7 +298,7 @@ class JointPose(Pose):
             return False
         return np.allclose(self.joints, other.joints) and self.joint_names == other.joint_names
 
-    def __getitem__(self, index) -> Union[float, NDArray[np.float64]]:
+    def __getitem__(self, index) -> float | NDArray[np.float64]:
         """Allow indexing: joint_pose[0] returns first joint value"""
         return self.joints[index]
 
@@ -368,11 +363,11 @@ class EndEffectorPose(Pose):
 
     def __init__(
         self,
-        translation: Optional[Union[list, np.ndarray]] = None,
-        rotation: Optional[Union[list, np.ndarray]] = None,
-        rotation_type: Optional[str] = None,
-        rotation_order: Optional[str] = None,
-        homogeneous: Optional[np.ndarray] = None,
+        translation: list | np.ndarray | None = None,
+        rotation: list | np.ndarray | None = None,
+        rotation_type: str | None = None,
+        rotation_order: str | None = None,
+        homogeneous: np.ndarray | None = None,
         degrees: bool = True,
     ):
         """
@@ -390,7 +385,7 @@ class EndEffectorPose(Pose):
         super().__init__()
 
         # Cache for homogeneous matrix
-        self._homogeneous_cache: Optional[NDArray[np.float64]] = None
+        self._homogeneous_cache: NDArray[np.float64] | None = None
         self._cache_valid = False
 
         # Handle homogeneous matrix input
@@ -469,9 +464,9 @@ class EndEffectorPose(Pose):
 
     def _set_rotation(
         self,
-        rotation: Union[list, np.ndarray],
+        rotation: list | np.ndarray,
         rotation_type: str,
-        rotation_order: Optional[str] = None,
+        rotation_order: str | None = None,
         degrees: bool = True,
     ):
         """Internal method to set rotation from various representations"""
@@ -581,7 +576,7 @@ class EndEffectorPose(Pose):
     def to_rotation(
         self,
         rotation_type: str,
-        rotation_order: Optional[str] = None,
+        rotation_order: str | None = None,
         degrees: bool = True,
     ) -> np.ndarray:
         """
@@ -638,9 +633,9 @@ class EndEffectorPose(Pose):
 
     def set_rotation(
         self,
-        rotation: Union[list, np.ndarray],
+        rotation: list | np.ndarray,
         rotation_type: str,
-        rotation_order: Optional[str] = None,
+        rotation_order: str | None = None,
         degrees: bool = True,
     ):
         """

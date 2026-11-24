@@ -6,7 +6,6 @@ from typing import Any
 
 import yaml
 
-
 _CONFIG_RESOURCE = "models/runtime/configs/infinite_world/buckets.yaml"
 
 

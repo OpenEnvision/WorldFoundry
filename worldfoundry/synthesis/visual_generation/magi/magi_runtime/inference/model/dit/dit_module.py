@@ -14,8 +14,8 @@
 
 import math
 import numbers
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, List, Optional, Tuple
 
 import flashinfer
 import torch
@@ -33,16 +33,16 @@ try:
     from magi_attention.functional import flex_flash_attn_func
 
     flex_attention = flex_flash_attn_func
-except:
+except BaseException:
     flex_attention = None
 
 from torch import Tensor
 from torch.nn import Parameter
 
-from inference.common.config import EngineConfig, ModelConfig
 from worldfoundry.core import InferenceParams, ModelMetaArgs, PackedCrossAttnParams, divide
 from worldfoundry.core.attention import CSOHelper, UlyssesScheduler, cso_communication
 from worldfoundry.core.distributed.model_parallel import groups as parallel_state
+from worldfoundry.synthesis.visual_generation.magi.magi_runtime.inference.common.config import EngineConfig, ModelConfig
 
 
 ##########################################################
@@ -63,7 +63,9 @@ class TimestepEmbedder(nn.Module):
             nn.Linear(frequency_embedding_size, int(hidden_size * model_config.cond_hidden_ratio), bias=True),
             nn.SiLU(),
             nn.Linear(
-                int(hidden_size * model_config.cond_hidden_ratio), int(hidden_size * model_config.cond_hidden_ratio), bias=True
+                int(hidden_size * model_config.cond_hidden_ratio),
+                int(hidden_size * model_config.cond_hidden_ratio),
+                bias=True,
             ),
         )
         self.frequency_embedding_size = frequency_embedding_size
@@ -120,7 +122,9 @@ class CaptionEmbedder(nn.Module):
             nn.Linear(in_channels, int(hidden_size * model_config.xattn_cond_hidden_ratio), bias=True), nn.SiLU()
         )
 
-        self.y_proj_adaln = nn.Sequential(nn.Linear(in_channels, int(hidden_size * model_config.cond_hidden_ratio), bias=True))
+        self.y_proj_adaln = nn.Sequential(
+            nn.Linear(in_channels, int(hidden_size * model_config.cond_hidden_ratio), bias=True)
+        )
 
         self.null_caption_embedding = Parameter(torch.empty(caption_max_length, in_channels))
 
@@ -322,7 +326,6 @@ def make_viewless_tensor(inp, requires_grad):
 
 
 class FusedLayerNorm(torch.nn.Module):
-
     """
     Layer Norm, fused into a single CUDA kernel.
     Borrow from: https://github.com/NVIDIA/Megatron-LM/blob/6501752396e9cc360ce894cda4b2217a58c1c09d/megatron/core/fusions/fused_layer_norm.py#L30
@@ -399,14 +402,22 @@ class CustomLayerNormLinear(torch.nn.Module):
         engine_config: EngineConfig,
     ):
         super().__init__()
-        self.layer_norm = torch.nn.LayerNorm(input_size, eps=model_config.layernorm_epsilon, dtype=model_config.params_dtype)
+        self.layer_norm = torch.nn.LayerNorm(
+            input_size, eps=model_config.layernorm_epsilon, dtype=model_config.params_dtype
+        )
 
         self.layer_number = layer_number
         layers = {"q": output_size_q, "qx": output_size_q, "k": output_size_kv, "v": output_size_kv}
 
         for name, output_size in layers.items():
-            if not engine_config.fp8_quant or self.layer_number == 0 or self.layer_number == model_config.num_layers - 1:
-                setattr(self, name, torch.nn.Linear(input_size, output_size, bias=False, dtype=model_config.params_dtype))
+            if (
+                not engine_config.fp8_quant
+                or self.layer_number == 0
+                or self.layer_number == model_config.num_layers - 1
+            ):
+                setattr(
+                    self, name, torch.nn.Linear(input_size, output_size, bias=False, dtype=model_config.params_dtype)
+                )
             else:
                 setattr(self, name, PerTensorQuantizedFp8Linear(input_size, output_size))
 
@@ -454,7 +465,7 @@ class PerTensorQuantizedFp8Linear(torch.nn.Module):
             self.input_scale,
             self.weight_scale,
             dtype=self.output_dtype,
-        ).reshape(prefix_shape + (self.out_features,))
+        ).reshape(prefix_shape + (self.out_features,))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
 
 ##########################################################
@@ -485,7 +496,7 @@ class PerChannelQuantizedFp8Linear(torch.nn.Module):
             self.input_scale,
             self.weight_scale,
             dtype=self.output_dtype,
-        ).reshape(prefix_shape + (self.out_features,))
+        ).reshape(prefix_shape + (self.out_features,))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
 
 ##########################################################
@@ -507,14 +518,16 @@ class CustomMLP(torch.nn.Module):
      s: sequence length
     """
 
-    def __init__(self, model_config: ModelConfig, engine_config: EngineConfig, layer_number: int, input_size: int = None):
+    def __init__(
+        self, model_config: ModelConfig, engine_config: EngineConfig, layer_number: int, input_size: int | None = None
+    ):
         super().__init__()
 
         self.model_config: ModelConfig = model_config
         self.engine_config: EngineConfig = engine_config
         self.layer_number = layer_number
 
-        self.input_size = input_size if input_size != None else self.model_config.hidden_size
+        self.input_size = input_size if input_size != None else self.model_config.hidden_size  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
         self.layer_norm = torch.nn.LayerNorm(
             self.input_size, eps=self.model_config.layernorm_epsilon, dtype=self.model_config.params_dtype
         )
@@ -537,7 +550,10 @@ class CustomMLP(torch.nn.Module):
             submodules_linear_fc2 = PerChannelQuantizedFp8Linear
 
         self.linear_fc2 = submodules_linear_fc2(
-            self.model_config.ffn_hidden_size, self.model_config.hidden_size, bias=False, dtype=self.model_config.params_dtype
+            self.model_config.ffn_hidden_size,
+            self.model_config.hidden_size,
+            bias=False,
+            dtype=self.model_config.params_dtype,
         )
 
     def forward(self, hidden_states):
@@ -555,7 +571,7 @@ class CustomMLP(torch.nn.Module):
 ##########################################################
 # LearnableRotaryEmbeddingCat
 ##########################################################
-def ndgrid(*tensors) -> Tuple[torch.Tensor, ...]:
+def ndgrid(*tensors) -> tuple[torch.Tensor, ...]:
     """generate N-D grid in dimension order.
 
     The ndgrid function is like meshgrid except that the order of the first two input arguments are switched.
@@ -580,7 +596,7 @@ def ndgrid(*tensors) -> Tuple[torch.Tensor, ...]:
 
 
 def pixel_freq_bands(
-    num_bands: int, max_freq: float = 224.0, linear_bands: bool = True, device: Optional[torch.device] = None
+    num_bands: int, max_freq: float = 224.0, linear_bands: bool = True, device: torch.device | None = None
 ):
     if linear_bands:
         bands = torch.linspace(1.0, max_freq / 2, num_bands, dtype=torch.float32, device=device)
@@ -590,7 +606,7 @@ def pixel_freq_bands(
 
 
 def freq_bands(
-    num_bands: int, temperature: float = 10000.0, step: int = 2, device: Optional[torch.device] = None
+    num_bands: int, temperature: float = 10000.0, step: int = 2, device: torch.device | None = None
 ) -> torch.Tensor:
     exp = torch.arange(0, num_bands, step, dtype=torch.int64, device=device).to(torch.float32) / num_bands
     bands = 1.0 / (temperature**exp)
@@ -598,18 +614,18 @@ def freq_bands(
 
 
 def build_fourier_pos_embed(
-    feat_shape: List[int],
-    bands: Optional[torch.Tensor] = None,
+    feat_shape: list[int],
+    bands: torch.Tensor | None = None,
     num_bands: int = 64,
     max_res: int = 224,
     temperature: float = 10000.0,
     linear_bands: bool = False,
     include_grid: bool = False,
     in_pixels: bool = True,
-    ref_feat_shape: Optional[List[int]] = None,
+    ref_feat_shape: list[int] | None = None,
     dtype: torch.dtype = torch.float32,
-    device: Optional[torch.device] = None,
-) -> List[torch.Tensor]:
+    device: torch.device | None = None,
+) -> list[torch.Tensor]:
     """
 
     Args:
@@ -650,7 +666,7 @@ def build_fourier_pos_embed(
         # eva's scheme for resizing rope embeddings (ref shape = pretrain)
         # aligning to the endpoint e.g [0,1,2] -> [0, 0.4, 0.8, 1.2, 1.6, 2]
         t_rescaled = []
-        for x, f, r in zip(t, feat_shape, ref_feat_shape):
+        for x, f, r in zip(t, feat_shape, ref_feat_shape, strict=False):
             # deal with image input
             if f == 1:
                 assert r == 1, "ref_feat_shape must be 1 when feat_shape is 1"
@@ -669,16 +685,16 @@ def build_fourier_pos_embed(
 
 
 def build_rotary_pos_embed(
-    feat_shape: List[int],
-    bands: Optional[torch.Tensor] = None,
+    feat_shape: list[int],
+    bands: torch.Tensor | None = None,
     dim: int = 64,
     max_res: int = 224,
     temperature: float = 10000.0,
     linear_bands: bool = False,
     in_pixels: bool = True,
-    ref_feat_shape: Optional[List[int]] = None,
+    ref_feat_shape: list[int] | None = None,
     dtype: torch.dtype = torch.float32,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
 ):
     """
 
@@ -733,8 +749,8 @@ class LearnableRotaryEmbeddingCat(nn.Module):
         temperature=10000,
         in_pixels=True,
         linear_bands: bool = False,
-        feat_shape: Optional[List[int]] = None,
-        ref_feat_shape: Optional[List[int]] = None,
+        feat_shape: list[int] | None = None,
+        ref_feat_shape: list[int] | None = None,
     ):
         super().__init__()
         self.dim = dim
@@ -755,7 +771,7 @@ class LearnableRotaryEmbeddingCat(nn.Module):
             bands = freq_bands(self.dim // 8, temperature=self.temperature, step=1, device=torch.cuda.current_device())
         return bands
 
-    def get_embed(self, shape: Optional[List[int]], ref_feat_shape: Optional[List[int]] = None):
+    def get_embed(self, shape: list[int] | None, ref_feat_shape: list[int] | None = None):
         # rebuild bands and embeddings every call, use if target shape changes
         embeds = build_rotary_pos_embed(
             feat_shape=shape,
@@ -825,7 +841,7 @@ class Attention(torch.nn.Module):
 ##########################################################
 def split_tensor_along_last_dim(
     tensor: torch.Tensor, num_partitions: int, contiguous_split_chunks: bool = False
-) -> List[torch.Tensor]:
+) -> list[torch.Tensor]:
     """Split a tensor along its last dimension.
 
     Args:
@@ -877,14 +893,21 @@ class FullyParallelAttention(Attention):
         )
         submodules_linear_proj = PerChannelQuantizedFp8Linear if self.adapt_linear_quant else torch.nn.Linear
         self.linear_proj = submodules_linear_proj(
-            2 * self.query_projection_size, self.model_config.hidden_size, dtype=self.model_config.params_dtype, bias=False
+            2 * self.query_projection_size,
+            self.model_config.hidden_size,
+            dtype=self.model_config.params_dtype,
+            bias=False,
         )
 
-        self.q_layernorm = FusedLayerNorm(model_config=self.model_config, hidden_size=self.hidden_size_per_attention_head)
+        self.q_layernorm = FusedLayerNorm(
+            model_config=self.model_config, hidden_size=self.hidden_size_per_attention_head
+        )
         self.q_layernorm_xattn = FusedLayerNorm(
             model_config=self.model_config, hidden_size=self.hidden_size_per_attention_head
         )
-        self.k_layernorm = FusedLayerNorm(model_config=self.model_config, hidden_size=self.hidden_size_per_attention_head)
+        self.k_layernorm = FusedLayerNorm(
+            model_config=self.model_config, hidden_size=self.hidden_size_per_attention_head
+        )
         self.k_layernorm_xattn = FusedLayerNorm(
             model_config=self.model_config, hidden_size=self.hidden_size_per_attention_head
         )
@@ -1021,7 +1044,9 @@ class FullyParallelAttention(Attention):
         key_xattn = self.k_layernorm_xattn(key_xattn)
         return query_xattn, key_xattn, value_xattn
 
-    def core_attention(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, bs: int, meta_args: ModelMetaArgs):
+    def core_attention(
+        self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, bs: int, meta_args: ModelMetaArgs
+    ):
         # (sq b) hn hd -> b sq hn hd
         query = query.reshape(-1, bs, query.shape[1], query.shape[2]).transpose(0, 1).contiguous()
         # (sq b) hn hd -> b sq hn hd
@@ -1066,7 +1091,9 @@ class FullyParallelAttention(Attention):
             core_attn_out = torch.cat(core_attn_outs, dim=0)
         return core_attn_out
 
-    def full_attention(self, bs: int, meta_args: ModelMetaArgs, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, i: int):
+    def full_attention(
+        self, bs: int, meta_args: ModelMetaArgs, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, i: int
+    ):
         # NOTE(lml): full_attention is used under cp_shuffle_overlap strategy. We further limit it to the case of bs=1, so that we do not need to pay attention to the arrangement of sq and bs dimensions.
         assert bs == 1
         if torch.cuda.get_device_capability()[0] >= 9 and flex_attention is not None:
@@ -1148,7 +1175,9 @@ class FullyParallelAttention(Attention):
         sin_emb, cos_emb = rotary_pos_emb.tensor_split(2, -1)
         batch_size = hidden_states.shape[1]
         # All comminications operate on dimensions shaped as (cp * sq * b)
-        batch_cp_split_sizes = None if meta_args.cp_split_sizes is None else [x * batch_size for x in meta_args.cp_split_sizes]
+        batch_cp_split_sizes = (
+            None if meta_args.cp_split_sizes is None else [x * batch_size for x in meta_args.cp_split_sizes]
+        )
 
         # Attention heads [sq, b, h] --> [sq, b, q + qx + k + v]
         mixed_qqkv = self.linear_qkv.forward_ln(hidden_states)
@@ -1186,7 +1215,9 @@ class FullyParallelAttention(Attention):
                     get_qkv_func,
                     kv_cache_func,
                     partial(self.core_attention, bs=batch_size, meta_args=meta_args),
-                    partial(self.cross_attention, mixed_qqkv, key_value_states, meta_args.cross_attn_params, get_xqkv_func),
+                    partial(
+                        self.cross_attention, mixed_qqkv, key_value_states, meta_args.cross_attn_params, get_xqkv_func
+                    ),
                     self.engine_config.ulysses_overlap_degree,
                     batch_size,
                     self.engine_config.cp_size,
@@ -1198,7 +1229,9 @@ class FullyParallelAttention(Attention):
                     get_kv_func,
                     kv_cache_func,
                     partial(self.core_attention, bs=batch_size, meta_args=meta_args),
-                    partial(self.cross_attention, mixed_qqkv, key_value_states, meta_args.cross_attn_params, get_xqkv_func),
+                    partial(
+                        self.cross_attention, mixed_qqkv, key_value_states, meta_args.cross_attn_params, get_xqkv_func
+                    ),
                     self.engine_config.ulysses_overlap_degree,
                     batch_size,
                     self.engine_config.cp_size,
@@ -1207,7 +1240,9 @@ class FullyParallelAttention(Attention):
 
         elif self.engine_config.cp_strategy == "cp_shuffle_overlap":
             key_and_value = self.get_kv(mixed_qqkv, cos_emb, sin_emb)
-            key_and_value, handle_kv = cso_communication(key_and_value, self.engine_config.cp_size, batch_cp_split_sizes, "kv")
+            key_and_value, handle_kv = cso_communication(
+                key_and_value, self.engine_config.cp_size, batch_cp_split_sizes, "kv"
+            )
 
             query = get_q_func(mixed_qqkv, cos_emb, sin_emb)
             cso_helper = CSOHelper(meta_args.denoising_range_num, self.engine_config.cp_size, batch_cp_split_sizes)
@@ -1271,10 +1306,14 @@ class TransformerLayer(torch.nn.Module):
         )
 
         ## [Module 3: SelfAttention PostNorm]
-        self.self_attn_post_norm = FusedLayerNorm(model_config=self.model_config, hidden_size=self.model_config.hidden_size)
+        self.self_attn_post_norm = FusedLayerNorm(
+            model_config=self.model_config, hidden_size=self.model_config.hidden_size
+        )
 
         ## [Module 4: MLP block]
-        self.mlp = CustomMLP(model_config=self.model_config, engine_config=self.engine_config, layer_number=self.layer_number)
+        self.mlp = CustomMLP(
+            model_config=self.model_config, engine_config=self.engine_config, layer_number=self.layer_number
+        )
 
         ## [Module 5: MLP PostNorm]
         self.mlp_post_norm = FusedLayerNorm(model_config=self.model_config, hidden_size=self.model_config.hidden_size)
@@ -1285,10 +1324,7 @@ class TransformerLayer(torch.nn.Module):
         num_layers_per_pipeline_rank = self.model_config.num_layers // parallel_state.get_pp_world_size()
 
         # Each stage gets a contiguous set of layers.
-        if parallel_state.get_pp_world_size() > 1:
-            offset = pipeline_rank * num_layers_per_pipeline_rank
-        else:
-            offset = 0
+        offset = pipeline_rank * num_layers_per_pipeline_rank if parallel_state.get_pp_world_size() > 1 else 0
 
         return offset
 
@@ -1355,9 +1391,9 @@ class TransformerLayer(torch.nn.Module):
         gate_msa, gate_mlp = gate_output.chunk(2, dim=-1)
 
         # Residual connection for self-attention.
-        hidden_states = bias_modulate_add(hidden_states, residual, condition_map, gate_msa, self.self_attn_post_norm).to(
-            self.model_config.params_dtype
-        )
+        hidden_states = bias_modulate_add(
+            hidden_states, residual, condition_map, gate_msa, self.self_attn_post_norm
+        ).to(self.model_config.params_dtype)
 
         residual = hidden_states
         hidden_states = self.mlp(hidden_states)
@@ -1375,7 +1411,11 @@ class TransformerBlock(torch.nn.Module):
     """Transformer class."""
 
     def __init__(
-        self, model_config: ModelConfig, engine_config: EngineConfig, pre_process: bool = True, post_process: bool = True
+        self,
+        model_config: ModelConfig,
+        engine_config: EngineConfig,
+        pre_process: bool = True,
+        post_process: bool = True,
     ):
         super().__init__()
 
@@ -1397,7 +1437,9 @@ class TransformerBlock(torch.nn.Module):
         )
         if self.post_process:
             # Final layer norm before output.
-            self.final_layernorm = FusedLayerNorm(model_config=self.model_config, hidden_size=self.model_config.hidden_size)
+            self.final_layernorm = FusedLayerNorm(
+                model_config=self.model_config, hidden_size=self.model_config.hidden_size
+            )
 
     def set_input_tensor(self, input_tensor: Tensor):
         """Set input tensor to be used instead of forward()'s input.

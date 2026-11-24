@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
-from einops import rearrange
 import torch.nn.functional as F
+from einops import rearrange
+
 
 def flatten_t_dim(x):
     assert len(x.shape) == 5
@@ -12,6 +13,7 @@ def flatten_t_dim(x):
         x = x.contiguous()
     return x
 
+
 def unflatten_t_dim(x, t):
     assert len(x.shape) == 4
     if not x.is_contiguous():
@@ -21,42 +23,19 @@ def unflatten_t_dim(x, t):
         x = x.contiguous()
     return x
 
+
 def preprocess(videos, target_resolution):
     # videos in {0, ..., 255} as np.uint8 array
     b, t, h, w, c = videos.shape
-    all_frames = torch.FloatTensor(videos).flatten(end_dim=1) # (b * t, h, w, c)
-    all_frames = all_frames.permute(0, 3, 1, 2).contiguous() # (b * t, c, h, w)
-    resized_videos = F.interpolate(all_frames, size=target_resolution,
-                                   mode='bilinear', align_corners=False) #resize 224
+    all_frames = torch.FloatTensor(videos).flatten(end_dim=1)  # (b * t, h, w, c)
+    all_frames = all_frames.permute(0, 3, 1, 2).contiguous()  # (b * t, c, h, w)
+    resized_videos = F.interpolate(
+        all_frames, size=target_resolution, mode="bilinear", align_corners=False
+    )  # resize 224
     resized_videos = resized_videos.view(b, t, c, *target_resolution)
-    output_videos = resized_videos.transpose(1, 2).contiguous() # (b, c, t, *)
-    scaled_videos = 2. * output_videos / 255. - 1 # [-1, 1]
+    output_videos = resized_videos.transpose(1, 2).contiguous()  # (b, c, t, *)
+    scaled_videos = 2.0 * output_videos / 255.0 - 1  # [-1, 1]
     return scaled_videos
-
-def shift_dim(x, src_dim=-1, dest_dim=-1, make_contiguous=True):
-    n_dims = len(x.shape)
-    if src_dim < 0:
-        src_dim = n_dims + src_dim
-    if dest_dim < 0:
-        dest_dim = n_dims + dest_dim
-
-    assert 0 <= src_dim < n_dims and 0 <= dest_dim < n_dims
-
-    dims = list(range(n_dims))
-    del dims[src_dim]
-
-    permutation = []
-    ctr = 0
-    for i in range(n_dims):
-        if i == dest_dim:
-            permutation.append(src_dim)
-        else:
-            permutation.append(dims[ctr])
-            ctr += 1
-    x = x.permute(permutation)
-    if make_contiguous:
-        x = x.contiguous()
-    return x
 
 
 def count_params(model):
@@ -65,8 +44,7 @@ def count_params(model):
 
 
 class ActNorm(nn.Module):
-    def __init__(self, num_features, logdet=False, affine=True,
-                 allow_reverse_init=False):
+    def __init__(self, num_features, logdet=False, affine=True, allow_reverse_init=False):
         assert affine
         super().__init__()
         self.logdet = logdet
@@ -74,25 +52,13 @@ class ActNorm(nn.Module):
         self.scale = nn.Parameter(torch.ones(1, num_features, 1, 1))
         self.allow_reverse_init = allow_reverse_init
 
-        self.register_buffer('initialized', torch.tensor(0, dtype=torch.uint8))
+        self.register_buffer("initialized", torch.tensor(0, dtype=torch.uint8))
 
     def initialize(self, input):
         with torch.no_grad():
             flatten = input.permute(1, 0, 2, 3).contiguous().view(input.shape[1], -1)
-            mean = (
-                flatten.mean(1)
-                .unsqueeze(1)
-                .unsqueeze(2)
-                .unsqueeze(3)
-                .permute(1, 0, 2, 3)
-            )
-            std = (
-                flatten.std(1)
-                .unsqueeze(1)
-                .unsqueeze(2)
-                .unsqueeze(3)
-                .permute(1, 0, 2, 3)
-            )
+            mean = flatten.mean(1).unsqueeze(1).unsqueeze(2).unsqueeze(3).permute(1, 0, 2, 3)
+            std = flatten.std(1).unsqueeze(1).unsqueeze(2).unsqueeze(3).permute(1, 0, 2, 3)
 
             self.loc.data.copy_(-mean)
             self.scale.data.copy_(1 / (std + 1e-6))
@@ -101,7 +67,7 @@ class ActNorm(nn.Module):
         if reverse:
             return self.reverse(input)
         if len(input.shape) == 2:
-            input = input[:,:,None,None]
+            input = input[:, :, None, None]
             squeeze = True
         else:
             squeeze = False
@@ -119,7 +85,7 @@ class ActNorm(nn.Module):
 
         if self.logdet:
             log_abs = torch.log(torch.abs(self.scale))
-            logdet = height*width*torch.sum(log_abs)
+            logdet = height * width * torch.sum(log_abs)
             logdet = logdet * torch.ones(input.shape[0]).to(input)
             return h, logdet
 
@@ -137,7 +103,7 @@ class ActNorm(nn.Module):
                 self.initialized.fill_(1)
 
         if len(output.shape) == 2:
-            output = output[:,:,None,None]
+            output = output[:, :, None, None]
             squeeze = True
         else:
             squeeze = False
@@ -149,29 +115,22 @@ class ActNorm(nn.Module):
         return h
 
 
-class AbstractEncoder(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def encode(self, *args, **kwargs):
-        raise NotImplementedError
-
-
-class Labelator(AbstractEncoder):
+class Labelator(nn.Module):
     """Net2Net Interface for Class-Conditional Model"""
+
     def __init__(self, n_classes, quantize_interface=True):
         super().__init__()
         self.n_classes = n_classes
         self.quantize_interface = quantize_interface
 
     def encode(self, c):
-        c = c[:,None]
+        c = c[:, None]
         if self.quantize_interface:
             return c, None, [None, None, c.long()]
         return c
 
 
-class SOSProvider(AbstractEncoder):
+class SOSProvider(nn.Module):
     # for unconditional training
     def __init__(self, sos_token, quantize_interface=True):
         super().__init__()
@@ -180,11 +139,12 @@ class SOSProvider(AbstractEncoder):
 
     def encode(self, x):
         # get batch size from data and replicate sos_token
-        c = torch.ones(x.shape[0], 1)*self.sos_token
+        c = torch.ones(x.shape[0], 1) * self.sos_token
         c = c.long().to(x.device)
         if self.quantize_interface:
             return c, None, [None, None, c]
         return c
+
 
 def requires_grad(model, flag=True):
     """

@@ -3,13 +3,13 @@
 The model implementation and this high-level inference wrapper both live in
 ``base_models`` so downstream integrations share one SAM3 stack.
 """
+
 from __future__ import annotations
 
 import gc
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional
-
 
 import cv2
 import numpy as np
@@ -19,8 +19,7 @@ from PIL import Image
 from worldfoundry.base_models.perception_core.segment.sam3.model_builder import (
     build_sam3_video_predictor,
 )
-from worldfoundry.core.io import load_video_frames
-
+from worldfoundry.core.media.codecs.video import load_video_frames
 
 _NULL_PROMPT_PHRASES = (
     "nothing",
@@ -40,14 +39,13 @@ _NULL_PROMPT_PHRASES = (
 
 @dataclass
 class Sam3VideoSegmenter:
-    """SAM3 video segmenter."""
-    gpus_to_use: Optional[list[int]] = None
+    gpus_to_use: list[int] | None = None
     propagation_direction: str = "both"
-    score_threshold_detection: Optional[float] = None
-    new_det_thresh: Optional[float] = None
-    checkpoint_path: Optional[str] = None
+    score_threshold_detection: float | None = None
+    new_det_thresh: float | None = None
+    checkpoint_path: str | None = None
     multi_prompt: bool = False
-    resize_input_to: Optional[int] = None
+    resize_input_to: int | None = None
 
     def __post_init__(self):
         self.predictor = build_sam3_video_predictor(
@@ -60,9 +58,7 @@ class Sam3VideoSegmenter:
         model = getattr(self.predictor, "model", None)
         if model is None:
             return
-        if self.score_threshold_detection is not None and hasattr(
-            model, "score_threshold_detection"
-        ):
+        if self.score_threshold_detection is not None and hasattr(model, "score_threshold_detection"):
             model.score_threshold_detection = float(self.score_threshold_detection)
         if self.new_det_thresh is not None and hasattr(model, "new_det_thresh"):
             model.new_det_thresh = float(self.new_det_thresh)
@@ -96,46 +92,40 @@ class Sam3VideoSegmenter:
         expected_frames: int | None,
     ) -> np.ndarray:
         response = self.predictor.handle_request(
-            request=dict(
-                type="start_session",
-                resource_path=video_resource,
-            )
+            request={
+                "type": "start_session",
+                "resource_path": video_resource,
+            }
         )
         session_id = response["session_id"]
 
         masks_by_frame: dict[int, np.ndarray] = {}
         try:
             self.predictor.handle_request(
-                request=dict(
-                    type="add_prompt",
-                    session_id=session_id,
-                    frame_index=frame_index,
-                    text=prompt,
-                    obj_id=1,
-                )
+                request={
+                    "type": "add_prompt",
+                    "session_id": session_id,
+                    "frame_index": frame_index,
+                    "text": prompt,
+                    "obj_id": 1,
+                }
             )
 
             for response in self.predictor.handle_stream_request(
-                request=dict(
-                    type="propagate_in_video",
-                    session_id=session_id,
-                    propagation_direction=self.propagation_direction,
-                    start_frame_index=start_frame_index,
-                    max_frame_num_to_track=max_frame_num_to_track,
-                )
+                request={
+                    "type": "propagate_in_video",
+                    "session_id": session_id,
+                    "propagation_direction": self.propagation_direction,
+                    "start_frame_index": start_frame_index,
+                    "max_frame_num_to_track": max_frame_num_to_track,
+                }
             ):
                 response["prompt"] = prompt
                 frame_idx = int(response["frame_index"])
                 outputs = response["outputs"]
                 masks = outputs["out_binary_masks"]
-                if hasattr(masks, "detach"):
-                    masks = masks.detach().cpu().numpy()
-                else:
-                    masks = np.asarray(masks)
-                if masks.size == 0:
-                    merged = None
-                else:
-                    merged = np.any(masks, axis=0)
+                masks = masks.detach().cpu().numpy() if hasattr(masks, "detach") else np.asarray(masks)
+                merged = None if masks.size == 0 else np.any(masks, axis=0)
 
                 if merged is None:
                     if frame_idx not in masks_by_frame:
@@ -147,10 +137,10 @@ class Sam3VideoSegmenter:
                         masks_by_frame[frame_idx] = merged
         finally:
             self.predictor.handle_request(
-                request=dict(
-                    type="close_session",
-                    session_id=session_id,
-                )
+                request={
+                    "type": "close_session",
+                    "session_id": session_id,
+                }
             )
 
         result = self._finalize_masks(masks_by_frame, expected_frames)
@@ -167,10 +157,10 @@ class Sam3VideoSegmenter:
         expected_frames: int | None,
     ) -> np.ndarray:
         response = self.predictor.handle_request(
-            request=dict(
-                type="start_session",
-                resource_path=video_resource,
-            )
+            request={
+                "type": "start_session",
+                "resource_path": video_resource,
+            }
         )
         session_id = response["session_id"]
 
@@ -179,36 +169,30 @@ class Sam3VideoSegmenter:
             prompt_list = list(prompts)
             for obj_id, prompt in enumerate(prompt_list, start=1):
                 self.predictor.handle_request(
-                    request=dict(
-                        type="add_prompt",
-                        session_id=session_id,
-                        frame_index=frame_index,
-                        text=prompt,
-                        obj_id=obj_id,
-                    )
+                    request={
+                        "type": "add_prompt",
+                        "session_id": session_id,
+                        "frame_index": frame_index,
+                        "text": prompt,
+                        "obj_id": obj_id,
+                    }
                 )
 
             for response in self.predictor.handle_stream_request(
-                request=dict(
-                    type="propagate_in_video",
-                    session_id=session_id,
-                    propagation_direction=self.propagation_direction,
-                    start_frame_index=start_frame_index,
-                    max_frame_num_to_track=max_frame_num_to_track,
-                )
+                request={
+                    "type": "propagate_in_video",
+                    "session_id": session_id,
+                    "propagation_direction": self.propagation_direction,
+                    "start_frame_index": start_frame_index,
+                    "max_frame_num_to_track": max_frame_num_to_track,
+                }
             ):
                 response["prompts"] = prompt_list
                 frame_idx = int(response["frame_index"])
                 outputs = response["outputs"]
                 masks = outputs["out_binary_masks"]
-                if hasattr(masks, "detach"):
-                    masks = masks.detach().cpu().numpy()
-                else:
-                    masks = np.asarray(masks)
-                if masks.size == 0:
-                    merged = None
-                else:
-                    merged = np.any(masks, axis=0)
+                masks = masks.detach().cpu().numpy() if hasattr(masks, "detach") else np.asarray(masks)
+                merged = None if masks.size == 0 else np.any(masks, axis=0)
 
                 if merged is None:
                     if frame_idx not in masks_by_frame:
@@ -220,10 +204,10 @@ class Sam3VideoSegmenter:
                         masks_by_frame[frame_idx] = merged
         finally:
             self.predictor.handle_request(
-                request=dict(
-                    type="close_session",
-                    session_id=session_id,
-                )
+                request={
+                    "type": "close_session",
+                    "session_id": session_id,
+                }
             )
 
         result = self._finalize_masks(masks_by_frame, expected_frames)
@@ -279,8 +263,8 @@ class Sam3VideoSegmenter:
             return [], (0, 0), (0, 0), (0, 0)
         orig_h, orig_w = frames[0].shape[:2]
         scale = target_size / float(max(orig_h, orig_w))
-        new_w = max(1, int(round(orig_w * scale)))
-        new_h = max(1, int(round(orig_h * scale)))
+        new_w = max(1, int(round(orig_w * scale)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        new_h = max(1, int(round(orig_h * scale)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         pad_x = max(0, (target_size - new_w) // 2)
         pad_y = max(0, (target_size - new_h) // 2)
         interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
@@ -288,7 +272,7 @@ class Sam3VideoSegmenter:
         for frame in frames:
             resized = cv2.resize(frame, (new_w, new_h), interpolation=interp)
             canvas = np.zeros((target_size, target_size, 3), dtype=resized.dtype)
-            canvas[pad_y: pad_y + new_h, pad_x: pad_x + new_w] = resized
+            canvas[pad_y : pad_y + new_h, pad_x : pad_x + new_w] = resized
             padded_frames.append(canvas)
         return padded_frames, (orig_h, orig_w), (new_h, new_w), (pad_y, pad_x)
 
@@ -303,7 +287,7 @@ class Sam3VideoSegmenter:
         resized_h, resized_w = resized_hw
         if masks.size == 0:
             return masks
-        cropped = masks[:, pad_y: pad_y + resized_h, pad_x: pad_x + resized_w]
+        cropped = masks[:, pad_y : pad_y + resized_h, pad_x : pad_x + resized_w]
         return self._resize_masks_to_hw(cropped, orig_hw)
 
     def _release_gpu_memory(self) -> None:
@@ -330,9 +314,7 @@ class Sam3VideoSegmenter:
         owned_frames: list[Image.Image] | None = None
         if self.resize_input_to and isinstance(video_path, (str, Path)):
             frames = load_video_frames(video_path)
-            padded, original_hw, resized_hw, padding = self._letterbox_frames(
-                frames, self.resize_input_to
-            )
+            padded, original_hw, resized_hw, padding = self._letterbox_frames(frames, self.resize_input_to)
             owned_frames = [Image.fromarray(frame) for frame in padded]
             video_resource = owned_frames
             expected_frames = len(owned_frames)
@@ -353,9 +335,7 @@ class Sam3VideoSegmenter:
                     continue
                 if resize_meta is not None:
                     original_hw, resized_hw, padding = resize_meta
-                    masks = self._restore_masks_from_letterbox(
-                        masks, original_hw, resized_hw, padding
-                    )
+                    masks = self._restore_masks_from_letterbox(masks, original_hw, resized_hw, padding)
                 masks_by_category[prompt] = masks
         finally:
             if owned_frames is not None:
@@ -396,51 +376,46 @@ class Sam3VideoSegmenter:
         pil_frames: list[Image.Image] | None = None
         if self.resize_input_to:
             frames = load_video_frames(video_path)
-            padded_frames, orig_hw, resized_hw, pad_xy = self._letterbox_frames(
-                frames, self.resize_input_to
-            )
+            padded_frames, orig_hw, resized_hw, pad_xy = self._letterbox_frames(frames, self.resize_input_to)
             pil_frames = [Image.fromarray(frame) for frame in padded_frames]
             video_resource = pil_frames
-            expected_frames = len(pil_frames)
+            _expected_frames = len(pil_frames)
             resize_meta = (orig_hw, resized_hw, pad_xy)
             del frames, padded_frames
 
         instance_masks: list[np.ndarray] = []
         try:
             response = self.predictor.handle_request(
-                request=dict(
-                    type="start_session",
-                    resource_path=video_resource,
-                )
+                request={
+                    "type": "start_session",
+                    "resource_path": video_resource,
+                }
             )
             session_id = response["session_id"]
 
             try:
                 self.predictor.handle_request(
-                    request=dict(
-                        type="add_prompt",
-                        session_id=session_id,
-                        frame_index=frame_index,
-                        text=prompt,
-                        obj_id=1,
-                    )
+                    request={
+                        "type": "add_prompt",
+                        "session_id": session_id,
+                        "frame_index": frame_index,
+                        "text": prompt,
+                        "obj_id": 1,
+                    }
                 )
 
                 for response in self.predictor.handle_stream_request(
-                    request=dict(
-                        type="propagate_in_video",
-                        session_id=session_id,
-                        propagation_direction=self.propagation_direction,
-                        start_frame_index=None,
-                        max_frame_num_to_track=None,
-                    )
+                    request={
+                        "type": "propagate_in_video",
+                        "session_id": session_id,
+                        "propagation_direction": self.propagation_direction,
+                        "start_frame_index": None,
+                        "max_frame_num_to_track": None,
+                    }
                 ):
                     outputs = response["outputs"]
                     masks = outputs["out_binary_masks"]
-                    if hasattr(masks, "detach"):
-                        masks = masks.detach().cpu().numpy()
-                    else:
-                        masks = np.asarray(masks)
+                    masks = masks.detach().cpu().numpy() if hasattr(masks, "detach") else np.asarray(masks)
                     if masks.size == 0:
                         continue
                     # Keep each instance mask separately (masks shape: N_instances, H, W).
@@ -450,10 +425,10 @@ class Sam3VideoSegmenter:
                             instance_masks.append(inst_mask)
             finally:
                 self.predictor.handle_request(
-                    request=dict(
-                        type="close_session",
-                        session_id=session_id,
-                    )
+                    request={
+                        "type": "close_session",
+                        "session_id": session_id,
+                    }
                 )
         finally:
             if pil_frames is not None:
@@ -467,9 +442,7 @@ class Sam3VideoSegmenter:
         if resize_meta is not None and instance_masks:
             orig_hw, resized_hw, pad_xy = resize_meta
             stacked = np.stack(instance_masks, axis=0)
-            restored = self._restore_masks_from_letterbox(
-                stacked, orig_hw, resized_hw, pad_xy
-            )
+            restored = self._restore_masks_from_letterbox(stacked, orig_hw, resized_hw, pad_xy)
             instance_masks = [restored[i] for i in range(restored.shape[0])]
 
         return instance_masks
@@ -507,9 +480,7 @@ class Sam3VideoSegmenter:
             pil_frames_input = video_path
             if self.resize_input_to:
                 frames_np = [np.asarray(img) for img in pil_frames_input]
-                padded, orig_hw, resized_hw, pad_xy = self._letterbox_frames(
-                    frames_np, self.resize_input_to
-                )
+                padded, orig_hw, resized_hw, pad_xy = self._letterbox_frames(frames_np, self.resize_input_to)
                 resize_meta = (orig_hw, resized_hw, pad_xy)
                 pil_frames = [Image.fromarray(f) for f in padded]
                 video_resource = pil_frames
@@ -520,9 +491,7 @@ class Sam3VideoSegmenter:
                     expected_frames = len(pil_frames_input)
         elif self.resize_input_to:
             frames_np = load_video_frames(video_path)
-            padded, orig_hw, resized_hw, pad_xy = self._letterbox_frames(
-                frames_np, self.resize_input_to
-            )
+            padded, orig_hw, resized_hw, pad_xy = self._letterbox_frames(frames_np, self.resize_input_to)
             resize_meta = (orig_hw, resized_hw, pad_xy)
             pil_frames = [Image.fromarray(f) for f in padded]
             video_resource = pil_frames
@@ -534,33 +503,33 @@ class Sam3VideoSegmenter:
         try:
             for prompt in prompts:
                 response = self.predictor.handle_request(
-                    request=dict(
-                        type="start_session",
-                        resource_path=video_resource,
-                    )
+                    request={
+                        "type": "start_session",
+                        "resource_path": video_resource,
+                    }
                 )
                 session_id = response["session_id"]
 
                 try:
                     self.predictor.handle_request(
-                        request=dict(
-                            type="add_prompt",
-                            session_id=session_id,
-                            frame_index=frame_index,
-                            text=prompt,
-                        )
+                        request={
+                            "type": "add_prompt",
+                            "session_id": session_id,
+                            "frame_index": frame_index,
+                            "text": prompt,
+                        }
                     )
 
                     local_to_global: dict[int, int] = {}
 
                     for resp in self.predictor.handle_stream_request(
-                        request=dict(
-                            type="propagate_in_video",
-                            session_id=session_id,
-                            propagation_direction=self.propagation_direction,
-                            start_frame_index=None,
-                            max_frame_num_to_track=None,
-                        )
+                        request={
+                            "type": "propagate_in_video",
+                            "session_id": session_id,
+                            "propagation_direction": self.propagation_direction,
+                            "start_frame_index": None,
+                            "max_frame_num_to_track": None,
+                        }
                     ):
                         fidx = int(resp["frame_index"])
                         outputs = resp["outputs"]
@@ -569,14 +538,8 @@ class Sam3VideoSegmenter:
                         if obj_ids is None or masks is None:
                             continue
 
-                        if hasattr(obj_ids, "detach"):
-                            obj_ids = obj_ids.detach().cpu().numpy()
-                        else:
-                            obj_ids = np.asarray(obj_ids)
-                        if hasattr(masks, "detach"):
-                            masks = masks.detach().cpu().numpy()
-                        else:
-                            masks = np.asarray(masks)
+                        obj_ids = obj_ids.detach().cpu().numpy() if hasattr(obj_ids, "detach") else np.asarray(obj_ids)
+                        masks = masks.detach().cpu().numpy() if hasattr(masks, "detach") else np.asarray(masks)
 
                         if masks.size == 0 or obj_ids.size == 0:
                             continue
@@ -585,9 +548,7 @@ class Sam3VideoSegmenter:
 
                         if resize_meta is not None:
                             orig_hw, resized_hw, pad_xy = resize_meta
-                            masks = self._restore_masks_from_letterbox(
-                                masks, orig_hw, resized_hw, pad_xy
-                            )
+                            masks = self._restore_masks_from_letterbox(masks, orig_hw, resized_hw, pad_xy)
 
                         for i, local_id in enumerate(obj_ids.tolist()):
                             mask = masks[i]
@@ -605,10 +566,10 @@ class Sam3VideoSegmenter:
 
                 finally:
                     self.predictor.handle_request(
-                        request=dict(
-                            type="close_session",
-                            session_id=session_id,
-                        )
+                        request={
+                            "type": "close_session",
+                            "session_id": session_id,
+                        }
                     )
 
         finally:
@@ -663,9 +624,7 @@ class Sam3VideoSegmenter:
         pil_frames: list[Image.Image] | None = None
         if self.resize_input_to:
             frames = load_video_frames(video_path)
-            padded_frames, orig_hw, resized_hw, pad_xy = self._letterbox_frames(
-                frames, self.resize_input_to
-            )
+            padded_frames, orig_hw, resized_hw, pad_xy = self._letterbox_frames(frames, self.resize_input_to)
             pil_frames = [Image.fromarray(frame) for frame in padded_frames]
             video_resource = pil_frames
             expected_frames = len(pil_frames)
@@ -695,10 +654,7 @@ class Sam3VideoSegmenter:
                     )
                     if masks.size == 0:
                         continue
-                    if merged_masks is None:
-                        merged_masks = masks
-                    else:
-                        merged_masks = merged_masks | masks
+                    merged_masks = masks if merged_masks is None else merged_masks | masks
         finally:
             if pil_frames is not None:
                 for img in pil_frames:
@@ -712,9 +668,7 @@ class Sam3VideoSegmenter:
 
         if resize_meta is not None:
             orig_hw, resized_hw, pad_xy = resize_meta
-            merged_masks = self._restore_masks_from_letterbox(
-                merged_masks, orig_hw, resized_hw, pad_xy
-            )
+            merged_masks = self._restore_masks_from_letterbox(merged_masks, orig_hw, resized_hw, pad_xy)
 
         if output_dir is not None:
             output_dir = Path(output_dir)

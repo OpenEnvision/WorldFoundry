@@ -3,12 +3,12 @@
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
+# ruff: noqa: F405 - Names come from the upstream star import.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> dependency -> track_predict.py functionality."""
-
-import torch
 import numpy as np
-from .vggsfm_utils import *
+import torch
+
+from .vggsfm_utils import *  # noqa: F403 - Upstream star import kept as written.
 
 
 def predict_tracks(

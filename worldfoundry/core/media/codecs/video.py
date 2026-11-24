@@ -21,8 +21,9 @@ import shutil
 import subprocess
 import tempfile
 import threading
+from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, cast
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     import numpy as np
@@ -113,7 +114,7 @@ def resize_video_tensor_to_resolution(video_tensor, resolution: Iterable[int]):
     target_h, target_w = [int(value) for value in resolution]
     orig_h, orig_w = int(video_tensor.shape[2]), int(video_tensor.shape[3])
     scaling_ratio = max(target_w / orig_w, target_h / orig_h)
-    resizing_shape = [int(math.ceil(scaling_ratio * orig_h)), int(math.ceil(scaling_ratio * orig_w))]
+    resizing_shape = [math.ceil(scaling_ratio * orig_h), math.ceil(scaling_ratio * orig_w)]
     resized = functional.resize(video_tensor, resizing_shape)
     return functional.center_crop(resized, [target_h, target_w])
 
@@ -318,10 +319,7 @@ def coerce_video_frames(video_input, *, max_frames: int | None = None, from_end:
         if max_frames is not None:
             converted = converted[-max_frames:] if from_end else converted[:max_frames]
         if np.issubdtype(converted.dtype, np.floating):
-            if normalized_range:
-                converted = np.clip(converted * 255.0, 0, 255)
-            else:
-                converted = np.clip(converted, 0, 255)
+            converted = np.clip(converted * 255.0, 0, 255) if normalized_range else np.clip(converted, 0, 255)
         else:
             converted = np.clip(converted, 0, 255)
         return converted.astype(np.uint8)
@@ -394,14 +392,13 @@ def read_video_window_rgb(
     if frame_count < 1:
         raise ValueError("frame_count must be positive")
     frames = []
-    with local_path_for_uri(video_path) as local_path:
-        with av.open(str(local_path)) as container:
-            for index, frame in enumerate(container.decode(video=0)):
-                if index < start_frame:
-                    continue
-                frames.append(frame.to_rgb().to_ndarray())
-                if len(frames) == frame_count:
-                    break
+    with local_path_for_uri(video_path) as local_path, av.open(str(local_path)) as container:
+        for index, frame in enumerate(container.decode(video=0)):
+            if index < start_frame:
+                continue
+            frames.append(frame.to_rgb().to_ndarray())
+            if len(frames) == frame_count:
+                break
     if not frames:
         raise ValueError(f"No frames found in video window starting at {start_frame}: {video_path}")
     return np.stack(frames, axis=0)
@@ -430,7 +427,7 @@ def sample_video_frames(
     force_sample: bool = False,
     *,
     num_threads: int = 2,
-) -> tuple["object", str, float]:
+) -> tuple[object, str, float]:
     """Decode uniformly bounded RGB frames and their correct source timestamps.
 
     ``fps`` is the requested temporal sampling rate when ``force_sample`` is
@@ -464,7 +461,7 @@ def sample_video_frames(
     if force_sample:
         indices = np.linspace(0, total_frames - 1, max_frames, dtype=np.int64)
     else:
-        frame_step = max(int(round(source_fps / requested_fps)), 1)
+        frame_step = max(round(source_fps / requested_fps), 1)
         indices = np.arange(0, total_frames, frame_step, dtype=np.int64)
         if len(indices) > max_frames:
             indices = np.linspace(0, total_frames - 1, max_frames, dtype=np.int64)
@@ -884,15 +881,15 @@ def save_image_or_video_tensor(
     ffmpeg_params: list[str] | None = None,
     value_range: str | tuple[float, float] = "auto",
     layout: VideoTensorLayout | None = None,
-    image_format: str = "JPEG",
+    image_format: str | None = None,
     video_format: str = "mp4",
     **kwargs,
 ) -> str | None:
     """Save a normalized ``[C,T,H,W]`` or ``[B,C,T,H,W]`` tensor as image/video.
 
     A single-frame tensor is saved as an image; multi-frame tensors are saved as
-    videos. Local paths and URI-like targets supported by ``worldfoundry.core.io``
-    storage helpers are both accepted.
+    videos. Image paths ending in ``.png`` default to PNG. Other image targets
+    default to JPEG. Local paths and URI-like targets are both accepted.
     """
 
     from io import BytesIO
@@ -906,12 +903,13 @@ def save_image_or_video_tensor(
     if frames.shape[0] == 1:
         image = Image.fromarray(frames[0][..., :3]).convert("RGB")
         if is_file_obj:
-            image.save(target, format=image_format, quality=quality or 85, **kwargs)
+            image.save(target, format=image_format or "JPEG", quality=quality or 85, **kwargs)
             return None
 
         path_text = str(target)
         if not Path(path_text).suffix:
             path_text = f"{path_text}.jpg"
+        image_format = image_format or ("PNG" if Path(path_text).suffix.lower() == ".png" else "JPEG")
         if parse_uri_scheme(path_text) == "file":
             output_path = uri_to_local_path(path_text)
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -957,6 +955,89 @@ def save_image_or_video_tensor(
     return path_text
 
 
+def read_video_torchvision(
+    filename: str | Path,
+    start_pts: int | float = 0,
+    end_pts: int | float | None = None,
+    pts_unit: str = "pts",
+    output_format: str = "THWC",
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Read video frames with a ``torchvision.io.read_video``-compatible signature."""
+
+    try:
+        import torchvision.io
+    except (ImportError, AttributeError, RuntimeError):
+        torchvision_read_video = None
+    else:
+        torchvision_read_video = getattr(torchvision.io, "read_video", None)
+
+    if torchvision_read_video is not None:
+        return torchvision_read_video(
+            str(filename),
+            start_pts=start_pts,
+            end_pts=end_pts,
+            pts_unit=pts_unit,
+            output_format=output_format,
+        )
+
+    import av
+    import numpy as np
+    import torch
+
+    if output_format not in {"THWC", "TCHW"}:
+        raise ValueError(f"output_format must be 'THWC' or 'TCHW', got {output_format!r}")
+
+    frames: list[np.ndarray] = []
+    audio_chunks: list[np.ndarray] = []
+    info: dict[str, Any] = {}
+    with av.open(str(filename)) as container:
+        if container.streams.video:
+            stream = container.streams.video[0]
+            if stream.average_rate is not None:
+                info["video_fps"] = float(stream.average_rate)
+            elif stream.guessed_rate is not None:
+                info["video_fps"] = float(stream.guessed_rate)
+            for frame in container.decode(video=0):
+                pts_val = frame.time if pts_unit == "sec" else frame.pts
+                if pts_val is not None:
+                    if start_pts and pts_val < start_pts:
+                        continue
+                    if end_pts is not None and pts_val > end_pts:
+                        break
+                frames.append(frame.to_ndarray(format="rgb24"))
+        if container.streams.audio:
+            audio_stream = container.streams.audio[0]
+            if audio_stream.rate is not None:
+                info["audio_fps"] = int(audio_stream.rate)
+            container.seek(0)
+            for frame in container.decode(audio=0):
+                pts_val = frame.time if pts_unit == "sec" else frame.pts
+                if pts_val is not None:
+                    if start_pts and pts_val < start_pts:
+                        continue
+                    if end_pts is not None and pts_val > end_pts:
+                        break
+                arr = frame.to_ndarray()
+                if frame.format.is_packed and frame.layout.nb_channels > 1:
+                    arr = arr.reshape(-1, frame.layout.nb_channels).T
+                elif arr.ndim == 1:
+                    arr = arr[None, :]
+                audio_chunks.append(arr.astype(np.float32, copy=False))
+
+    if frames:
+        video_tensor = torch.from_numpy(np.stack(frames, axis=0)).to(torch.uint8)
+    else:
+        video_tensor = torch.empty((0, 0, 0, 3), dtype=torch.uint8)
+    if output_format == "TCHW":
+        video_tensor = video_tensor.permute(0, 3, 1, 2).contiguous()
+
+    if audio_chunks:
+        audio_tensor = torch.from_numpy(np.concatenate(audio_chunks, axis=-1))
+    else:
+        audio_tensor = torch.empty((1, 0), dtype=torch.float32)
+    return video_tensor, audio_tensor, info
+
+
 def write_video_torchvision(
     filename: str | Path,
     video_array: Any,
@@ -967,9 +1048,11 @@ def write_video_torchvision(
     """Write RGB video frames with a ``torchvision.io.write_video``-compatible signature."""
 
     try:
-        from torchvision.io import write_video as torchvision_write_video
+        import torchvision.io
     except (ImportError, AttributeError, RuntimeError):
         torchvision_write_video = None
+    else:
+        torchvision_write_video = getattr(torchvision.io, "write_video", None)
 
     if torchvision_write_video is not None:
         try:
@@ -1004,7 +1087,16 @@ def write_video_torchvision(
     import cv2
     import numpy as np
 
-    frames = video_array.detach().cpu().numpy() if hasattr(video_array, "detach") else np.asarray(video_array)
+    if hasattr(video_array, "detach"):
+        import torch
+
+        tensor = video_array.detach().cpu()
+        # NumPy cannot represent BF16. Keep the float values for clipping.
+        if tensor.dtype == torch.bfloat16:
+            tensor = tensor.float()
+        frames = tensor.numpy()
+    else:
+        frames = np.asarray(video_array)
     if frames.ndim != 4 or frames.shape[-1] != 3:
         raise ValueError("write_video_torchvision expects frames shaped [T, H, W, C]")
     if frames.dtype != np.uint8:
@@ -1027,7 +1119,7 @@ def write_video(
     video_frames,
     output_path: str | Path,
     *,
-    fps: int = 16,
+    fps: float = 16,
     quality: int | None = None,
     format: str | None = None,
     **kwargs,
@@ -1056,8 +1148,8 @@ def write_video(
         write_kwargs = {"fps": fps, "macro_block_size": 1, **kwargs}
         if quality is not None:
             write_kwargs["quality"] = quality
-        # ImageIO v2 accepts THWC arrays and format names; its stub only declares lists and Format objects.
-        imageio.mimsave(str(target), frames, format=format, **write_kwargs)  # ty: ignore[no-matching-overload]
+        # ImageIO v2 accepts ndarray stacks and string formats beyond its declared overloads.
+        cast(Any, imageio.mimsave)(str(target), frames, format=format, **write_kwargs)
         return
 
     import imageio
@@ -1067,8 +1159,7 @@ def write_video(
         write_kwargs["quality"] = quality
     suffix = Path(str(output_path)).suffix or ".mp4"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) as handle:
-        # The same ImageIO v2 array/format contract applies to remote staging.
-        imageio.mimsave(handle.name, frames, format=format, **write_kwargs)  # ty: ignore[no-matching-overload]
+        cast(Any, imageio.mimsave)(handle.name, frames, format=format, **write_kwargs)
         handle.seek(0)
         write_binary_uri(output_path, handle.read())
 
@@ -1127,8 +1218,8 @@ def save_videos_grid(videos, path: str, rescale=False, n_rows=6, fps=8):
 __all__ = [
     "VIDEO_EXTENSIONS",
     "coerce_video_frames",
-    "extract_video_frames_to_directory",
     "extract_frames_from_video_url",
+    "extract_video_frames_to_directory",
     "get_video_details",
     "list_numbered_frame_paths",
     "load_frames_from_video",
@@ -1137,14 +1228,15 @@ __all__ = [
     "probe_video_metadata",
     "read_image_as_video_tensor",
     "read_video",
+    "read_video_torchvision",
     "read_video_window_rgb",
     "resize_video_tensor_to_resolution",
     "sample_video_frames",
     "save_image_or_video_tensor",
     "save_video_frames",
     "save_videos_grid",
-    "video_tensor_to_uint8_frames",
     "video_chunk_to_uint8_frames",
+    "video_tensor_to_uint8_frames",
     "write_video",
     "write_video_torchvision",
 ]

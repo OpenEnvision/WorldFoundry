@@ -32,11 +32,7 @@ class LingBotMapOperator(BaseOperator):
                 image_exts = {".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
                 return sorted(str(item) for item in path.iterdir() if item.suffix.lower() in image_exts)
             if path.is_file() and path.suffix.lower() == ".txt":
-                return [
-                    line.strip()
-                    for line in path.read_text(encoding="utf-8").splitlines()
-                    if line.strip()
-                ]
+                return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
         return input_signal
 
     def check_interaction(self, interaction):

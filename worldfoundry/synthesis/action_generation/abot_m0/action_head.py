@@ -10,8 +10,9 @@ imports an adjacent source checkout.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -20,6 +21,8 @@ from diffusers.configuration_utils import register_to_config
 from diffusers.models.attention import Attention, FeedForward
 from diffusers.models.embeddings import TimestepEmbedding, Timesteps
 from torch import nn
+
+from worldfoundry.core.nn.blocks.layers import TwoLayerReLU as MLP
 
 
 class SinusoidalPositionalEncoding(nn.Module):
@@ -40,16 +43,6 @@ class SinusoidalPositionalEncoding(nn.Module):
         if encoded.shape[-1] < self.embedding_dim:
             encoded = F.pad(encoded, (0, self.embedding_dim - encoded.shape[-1]))
         return encoded
-
-
-class MLP(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int) -> None:
-        super().__init__()
-        self.layer1 = nn.Linear(input_dim, hidden_dim)
-        self.layer2 = nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, value: torch.Tensor) -> torch.Tensor:
-        return self.layer2(F.relu(self.layer1(value)))
 
 
 class ActionEncoder(nn.Module):
@@ -286,7 +279,7 @@ class ActionHeadConfig:
     diffusion_model_cfg: Mapping[str, Any] | None = None
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any]) -> "ActionHeadConfig":
+    def from_mapping(cls, value: Mapping[str, Any]) -> ActionHeadConfig:
         fields = cls.__dataclass_fields__
         return cls(**{key: item for key, item in value.items() if key in fields})
 
@@ -317,9 +310,7 @@ class FlowmatchingActionHead(nn.Module):
         self.action_horizon = config.action_horizon
         self.num_inference_timesteps = config.num_inference_timesteps
         self.state_encoder = (
-            MLP(config.state_dim, config.hidden_size, self.input_embedding_dim)
-            if config.state_dim
-            else None
+            MLP(config.state_dim, config.hidden_size, self.input_embedding_dim) if config.state_dim else None
         )
         self.action_encoder = ActionEncoder(config.action_dim, self.input_embedding_dim)
         self.action_decoder = MLP(self.model.config.output_dim, config.hidden_size, config.action_dim)

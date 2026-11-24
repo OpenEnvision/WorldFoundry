@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from torch import Tensor, nn
 from torch.nn import functional as F
 
@@ -13,14 +15,13 @@ from worldfoundry.base_models.perception_core.general_perception.dinov3.hub.back
 class DINOv3Adapter(nn.Module):
     """Expose the feature-map interface expected by the DAP checkpoint."""
 
-    _MODEL_NAMES = {"vits", "vitb", "vitl"}
+    _MODEL_NAMES: ClassVar[set] = {"vits", "vitb", "vitl"}
 
     def __init__(self, model_name: str) -> None:
         super().__init__()
         if model_name not in self._MODEL_NAMES:
             raise ValueError(
-                f"Unsupported DAP DINOv3 backbone {model_name!r}; "
-                f"expected one of {sorted(self._MODEL_NAMES)}."
+                f"Unsupported DAP DINOv3 backbone {model_name!r}; expected one of {sorted(self._MODEL_NAMES)}."
             )
 
         self.model = DINOv3(model_name)
@@ -60,13 +61,9 @@ class DINOv3Adapter(nn.Module):
             batch, token_count, channels = patches.shape
             square_size = int(token_count**0.5)
             if square_size * square_size == token_count:
-                grid = patches.transpose(1, 2).reshape(
-                    batch, channels, square_size, square_size
-                )
+                grid = patches.transpose(1, 2).reshape(batch, channels, square_size, square_size)
             else:
-                grid = patches.transpose(1, 2).reshape(
-                    batch, channels, token_count, 1
-                )
+                grid = patches.transpose(1, 2).reshape(batch, channels, token_count, 1)
                 grid = F.interpolate(
                     grid,
                     size=(grid_height * grid_width, 1),
@@ -85,5 +82,5 @@ class DINOv3Adapter(nn.Module):
             class_tokens.append(class_token)
 
         if return_class_token:
-            return tuple(zip(patch_maps, class_tokens))
+            return tuple(zip(patch_maps, class_tokens, strict=False))
         return tuple(patch_maps)

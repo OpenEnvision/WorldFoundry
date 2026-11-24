@@ -19,12 +19,9 @@ Public surface:
 
 from __future__ import annotations
 
-from typing import Dict
-
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Patch grid cache — rebuild only when (H, W) or device changes
@@ -37,7 +34,7 @@ class PositionGetter:
     def __init__(self) -> None:
         """Start with an empty ``(height, width) → coordinates`` cache."""
 
-        self.position_cache: Dict[tuple[int, int], Tensor] = {}
+        self.position_cache: dict[tuple[int, int], Tensor] = {}
 
     def __call__(self, batch_size: int, height: int, width: int, device: torch.device) -> Tensor:
         """Return ``[B, H*W, 2]`` integer ``(y, x)`` coords, cloned per caller.
@@ -72,7 +69,7 @@ class RotaryPositionEmbedding2D(nn.Module):
         super().__init__()
         self.base_frequency = float(frequency)
         self.scaling_factor = float(scaling_factor)
-        self.frequency_cache: Dict[tuple[int, int, torch.device, torch.dtype], tuple[Tensor, Tensor]] = {}
+        self.frequency_cache: dict[tuple[int, int, torch.device, torch.dtype], tuple[Tensor, Tensor]] = {}
 
     def forward(self, tokens: Tensor, positions: Tensor) -> Tensor:
         """Apply Y then X RoPE to even-width features.
@@ -136,4 +133,11 @@ class RotaryPositionEmbedding2D(nn.Module):
         return (tokens * cos) + (self._rotate_features(tokens) * sin)
 
 
-__all__ = ["PositionGetter", "RotaryPositionEmbedding2D"]
+class CrocoRotaryPositionEmbedding2D(RotaryPositionEmbedding2D):
+    """Axial RoPE with the native CroCo freq/F0 constructor names."""
+
+    def __init__(self, freq: float = 100.0, F0: float = 1.0) -> None:
+        super().__init__(frequency=freq, scaling_factor=F0)
+
+
+__all__ = ["CrocoRotaryPositionEmbedding2D", "PositionGetter", "RotaryPositionEmbedding2D"]

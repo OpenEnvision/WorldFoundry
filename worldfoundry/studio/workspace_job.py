@@ -5,11 +5,11 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from worldfoundry.studio.inference.catalog import find_entry
 from worldfoundry.studio.inference.dispatch import dispatch_spec_for_inference, run_manager_payload_in_conda
-from worldfoundry.studio.inference.execution import StudioManager
+from worldfoundry.studio.inference.execution import RunRecord, StudioManager
 from worldfoundry.studio.inference.requests import (
     DEFAULT_SETTINGS,
     JobCreateRequest,
@@ -166,7 +166,8 @@ def _run_infer(args: argparse.Namespace) -> int:
     else:
         manager = StudioManager(workspace_root=workspace_root)
         try:
-            record = manager.run(**run_kwargs, progress_callback=None)
+            # run() returns None only for materialize=False, which this caller never passes.
+            record = cast(RunRecord, manager.run(**run_kwargs, progress_callback=None))
         finally:
             manager.close()
     print(json.dumps(record.to_manifest(), ensure_ascii=False, indent=2, sort_keys=True))

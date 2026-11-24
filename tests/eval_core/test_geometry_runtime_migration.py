@@ -31,12 +31,13 @@ def test_pi3_model_loading_and_geometry_outputs_survive_migration(monkeypatch) -
             }
 
     model_module = ModuleType("worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.models.pi3")
-    model_module.Pi3 = Model
+    monkeypatch.setattr(model_module, "Pi3", Model, raising=False)
     monkeypatch.setitem(sys.modules, model_module.__name__, model_module)
     from worldfoundry.core.io.paths import package_root
 
     runtime_path = package_root() / "base_models/three_dimensions/point_clouds/pi3_inference/runtime.py"
     spec = importlib.util.spec_from_file_location("pi3_runtime_under_test", runtime_path)
+    assert spec is not None and spec.loader is not None
     runtime_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(runtime_module)
     model = runtime_module.Pi3Representation.from_pretrained("local-model", device="cpu")
@@ -50,13 +51,15 @@ def test_pi3_model_loading_and_geometry_outputs_survive_migration(monkeypatch) -
     np.testing.assert_array_equal(result["camera_poses"][0, 0], np.eye(4))
 
 
-def test_lingbot_runtime_locates_its_bundled_model() -> None:
-    from worldfoundry.base_models.three_dimensions.point_clouds.lingbot_map import (
-        runtime,
-    )
+def test_lingbot_runtime_imports_its_bundled_model() -> None:
+    from worldfoundry.base_models.three_dimensions.point_clouds.lingbot_map import runtime
 
-    assert runtime._runtime_root() == Path(runtime.__file__).resolve().parent
-    assert (runtime._runtime_root() / "lingbot_map/models/gct_stream.py").is_file()
+    spec = importlib.util.find_spec(
+        "worldfoundry.base_models.three_dimensions.point_clouds.lingbot_map.lingbot_map.models.gct_stream"
+    )
+    assert spec is not None and spec.origin is not None
+    assert runtime.__file__ is not None
+    assert Path(spec.origin).parent.parent.parent == Path(runtime.__file__).resolve().parent
 
 
 @pytest.mark.parametrize("version", (1, 2))
@@ -136,6 +139,7 @@ def test_lyra_pipeline_passes_assembled_checkpoints_to_reconstruction(monkeypatc
     )
 
     assert calls == [{"checkpoint_dir": str(gen3c), "repo_root": str(repo)}]
+    assert pipeline.representation_model is not None
     assert pipeline.representation_model.static_ckpt_path == str(staged / "Lyra/lyra_static.pt")
     assert pipeline.representation_model.dynamic_ckpt_path == str(staged / "Lyra/lyra_dynamic.pt")
 

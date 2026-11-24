@@ -8,19 +8,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from worldfoundry.base_models.perception_core.tracking.cotracker.models.core.model_utils import sample_features4d, sample_features5d
 from worldfoundry.base_models.perception_core.tracking.cotracker.models.core.embeddings import (
-    get_2d_embedding,
     get_1d_sincos_pos_embed_from_grid,
+    get_2d_embedding,
     get_2d_sincos_pos_embed,
 )
-
+from worldfoundry.base_models.perception_core.tracking.cotracker.models.core.model_utils import (
+    sample_features4d,
+    sample_features5d,
+)
 from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracker2_utils.models.core.cotracker.blocks import (
-    Mlp,
-    BasicEncoder,
-    AttnBlock,
-    CorrBlock,
     Attention,
+    AttnBlock,
+    BasicEncoder,
+    CorrBlock,
+    Mlp,
 )
 
 torch.manual_seed(0)
@@ -35,7 +37,7 @@ class CoTracker2(nn.Module):
         num_virtual_tracks=64,
         model_resolution=(384, 512),
     ):
-        super(CoTracker2, self).__init__()
+        super().__init__()
         self.window_len = window_len
         self.stride = stride
         self.hidden_dim = 256
@@ -58,9 +60,7 @@ class CoTracker2(nn.Module):
 
         time_grid = torch.linspace(0, window_len - 1, window_len).reshape(1, window_len, 1)
 
-        self.register_buffer(
-            "time_emb", get_1d_sincos_pos_embed_from_grid(self.input_dim, time_grid[0])
-        )
+        self.register_buffer("time_emb", get_1d_sincos_pos_embed_from_grid(self.input_dim, time_grid[0]))
 
         self.register_buffer(
             "pos_emb",
@@ -108,9 +108,7 @@ class CoTracker2(nn.Module):
         B, S, *_ = fmaps.shape
 
         track_mask = F.pad(track_mask, (0, 0, 0, 0, 0, S - S_init), "constant")
-        track_mask_vis = (
-            torch.cat([track_mask, vis], dim=-1).permute(0, 2, 1, 3).reshape(B * N, S, 2)
-        )
+        track_mask_vis = torch.cat([track_mask, vis], dim=-1).permute(0, 2, 1, 3).reshape(B * N, S, 2)
 
         corr_block = CorrBlock(
             fmaps,
@@ -120,9 +118,7 @@ class CoTracker2(nn.Module):
         )
 
         sampled_pos_emb = (
-            sample_features4d(self.pos_emb.repeat(B, 1, 1, 1), coords[:, 0])
-            .reshape(B * N, self.input_dim)
-            .unsqueeze(1)
+            sample_features4d(self.pos_emb.repeat(B, 1, 1, 1), coords[:, 0]).reshape(B * N, self.input_dim).unsqueeze(1)
         )  # B E N -> (B N) 1 E
 
         coord_preds = []
@@ -155,9 +151,7 @@ class CoTracker2(nn.Module):
             delta_feats_ = delta[..., 2:].reshape(B * N * S, self.latent_dim)
             track_feat_ = track_feat.permute(0, 2, 1, 3).reshape(B * N * S, self.latent_dim)
             track_feat_ = self.track_feat_updater(self.norm(delta_feats_)) + track_feat_
-            track_feat = track_feat_.reshape(B, N, S, self.latent_dim).permute(
-                0, 2, 1, 3
-            )  # (B N S) C -> B S N C
+            track_feat = track_feat_.reshape(B, N, S, self.latent_dim).permute(0, 2, 1, 3)  # (B N S) C -> B S N C
 
         vis_pred = self.vis_predictor(track_feat).reshape(B, S, N)
         return coord_preds, vis_pred
@@ -243,9 +237,7 @@ class CoTracker2(nn.Module):
             else:
                 # Pad online predictions with zeros for the current window
                 pad = min(step, T - step)
-                coords_predicted = F.pad(
-                    self.online_coords_predicted, (0, 0, 0, 0, 0, pad), "constant"
-                )
+                coords_predicted = F.pad(self.online_coords_predicted, (0, 0, 0, 0, 0, pad), "constant")
                 vis_predicted = F.pad(self.online_vis_predicted, (0, 0, 0, pad), "constant")
         all_coords_predictions, all_vis_predictions = [], []
 
@@ -253,9 +245,7 @@ class CoTracker2(nn.Module):
         # TODO: we may drop this requirement because the transformer should not care
         # TODO: pad the features instead of the video
         pad = S - T if is_online else (S - T % S) % S  # We don't want to pad if T % S == 0
-        video = F.pad(video.reshape(B, 1, T, C * H * W), (0, 0, 0, pad), "replicate").reshape(
-            B, -1, C, H, W
-        )
+        video = F.pad(video.reshape(B, 1, T, C * H * W), (0, 0, 0, pad), "replicate").reshape(B, -1, C, H, W)
 
         # Compute convolutional features for the video or for the current chunk in case of online mode
         if cached_feat is None:
@@ -306,9 +296,7 @@ class CoTracker2(nn.Module):
                     (0, 0, 0, 0, 0, step),
                     "replicate",
                 )  # B S N 1
-                coords_init = torch.where(
-                    copy_over.expand_as(coords_init), coords_prev, coords_init
-                )
+                coords_init = torch.where(copy_over.expand_as(coords_init), coords_prev, coords_init)
                 vis_init = torch.where(copy_over.expand_as(vis_init), vis_prev, vis_init)
 
             # The attention mask is 1 for the spatio-temporal points within
@@ -319,8 +307,7 @@ class CoTracker2(nn.Module):
             # need updating: only after begin queried, and not if contained
             # in a previous window
             track_mask = (
-                queried_frames[:, None, :, None]
-                <= torch.arange(ind, ind + S, device=device)[None, :, None, None]
+                queried_frames[:, None, :, None] <= torch.arange(ind, ind + S, device=device)[None, :, None, None]
             ).contiguous()  # B S N 1
 
             if ind > 0:
@@ -410,16 +397,10 @@ class EfficientUpdateFormer(nn.Module):
                 ]
             )
             self.space_point2virtual_blocks = nn.ModuleList(
-                [
-                    CrossAttnBlock(hidden_size, hidden_size, num_heads, mlp_ratio=mlp_ratio)
-                    for _ in range(space_depth)
-                ]
+                [CrossAttnBlock(hidden_size, hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(space_depth)]
             )
             self.space_virtual2point_blocks = nn.ModuleList(
-                [
-                    CrossAttnBlock(hidden_size, hidden_size, num_heads, mlp_ratio=mlp_ratio)
-                    for _ in range(space_depth)
-                ]
+                [CrossAttnBlock(hidden_size, hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(space_depth)]
             )
             assert len(self.time_blocks) >= len(self.space_virtual2point_blocks)
         self.initialize_weights()
@@ -446,22 +427,14 @@ class EfficientUpdateFormer(nn.Module):
             time_tokens = self.time_blocks[i](time_tokens)
 
             tokens = time_tokens.view(B, N, T, -1)  # (B N) T C -> B N T C
-            if self.add_space_attn and (
-                i % (len(self.time_blocks) // len(self.space_virtual_blocks)) == 0
-            ):
-                space_tokens = (
-                    tokens.permute(0, 2, 1, 3).contiguous().view(B * T, N, -1)
-                )  # B N T C -> (B T) N C
+            if self.add_space_attn and (i % (len(self.time_blocks) // len(self.space_virtual_blocks)) == 0):
+                space_tokens = tokens.permute(0, 2, 1, 3).contiguous().view(B * T, N, -1)  # B N T C -> (B T) N C
                 point_tokens = space_tokens[:, : N - self.num_virtual_tracks]
                 virtual_tokens = space_tokens[:, N - self.num_virtual_tracks :]
 
-                virtual_tokens = self.space_virtual2point_blocks[j](
-                    virtual_tokens, point_tokens, mask=mask
-                )
+                virtual_tokens = self.space_virtual2point_blocks[j](virtual_tokens, point_tokens, mask=mask)
                 virtual_tokens = self.space_virtual_blocks[j](virtual_tokens)
-                point_tokens = self.space_point2virtual_blocks[j](
-                    point_tokens, virtual_tokens, mask=mask
-                )
+                point_tokens = self.space_point2virtual_blocks[j](point_tokens, virtual_tokens, mask=mask)
                 space_tokens = torch.cat([point_tokens, virtual_tokens], dim=1)
                 tokens = space_tokens.view(B, T, N, -1).permute(0, 2, 1, 3)  # (B T) N C -> B N T C
                 j += 1
@@ -481,7 +454,10 @@ class CrossAttnBlock(nn.Module):
 
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
         self.mlp = Mlp(
             in_features=hidden_size,
             hidden_features=mlp_hidden_dim,
@@ -492,16 +468,12 @@ class CrossAttnBlock(nn.Module):
     def forward(self, x, context, mask=None):
         if mask is not None:
             if mask.shape[1] == x.shape[1]:
-                mask = mask[:, None, :, None].expand(
-                    -1, self.cross_attn.heads, -1, context.shape[1]
-                )
+                mask = mask[:, None, :, None].expand(-1, self.cross_attn.heads, -1, context.shape[1])
             else:
                 mask = mask[:, None, None].expand(-1, self.cross_attn.heads, x.shape[1], -1)
 
             max_neg_value = -torch.finfo(x.dtype).max
             attn_bias = (~mask) * max_neg_value
-        x = x + self.cross_attn(
-            self.norm1(x), context=self.norm_context(context), attn_bias=attn_bias
-        )
+        x = x + self.cross_attn(self.norm1(x), context=self.norm_context(context), attn_bias=attn_bias)
         x = x + self.mlp(self.norm2(x))
         return x

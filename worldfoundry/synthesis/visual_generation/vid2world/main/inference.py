@@ -5,21 +5,20 @@ import datetime
 import os
 from pathlib import Path
 
-import pytorch_lightning as pl
 import torch
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
 from pytorch_lightning.trainer import Trainer
 from transformers import logging as transf_logging
 
-from worldfoundry.core.model_loading.factory import instantiate_from_config
+from worldfoundry.core.configuration.factory import instantiate_from_config
 
 
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Vid2World inference-only validation runner")
     parser.add_argument("--seed", "-s", type=int, default=20230211)
     parser.add_argument("--name", "-n", type=str, default="worldfoundry_infer")
-    parser.add_argument("--base", "-b", nargs="*", metavar="base_config.yaml", default=list())
+    parser.add_argument("--base", "-b", nargs="*", metavar="base_config.yaml", default=[])
     parser.add_argument("--val", "-v", action="store_true", default=True, help=argparse.SUPPRESS)
     parser.add_argument("--logdir", "-l", type=str, default="logs")
     parser.add_argument("--debug", "-d", action="store_true", default=False)

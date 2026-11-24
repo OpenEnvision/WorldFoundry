@@ -1,8 +1,8 @@
-import flax.nnx as nnx
-import jax.numpy as jnp
-import jax
 from functools import partial
 
+import flax.nnx as nnx
+import jax
+import jax.numpy as jnp
 
 kernel_init = nnx.initializers.normal(stddev=0.02)
 kernel_init_ttt_v = nnx.initializers.normal(stddev=0.01)
@@ -11,16 +11,13 @@ kernel_init_out_proj = nnx.initializers.normal(stddev=0.002)
 kernel_init_out_proj_rmt = nnx.initializers.normal(stddev=0.005)
 
 
-
 def scan_remat_every_n_iterations_scan(f, n, carry, x):
     """
     Remat every n mini batches - memory efficient scanning.
     Following TTT-LM-JAX implementation.
     """
     x_grouped = jax.tree.map(lambda x: x.reshape((-1, n, *x.shape[1:])), x)
-    carry, y_grouped = jax.lax.scan(
-        jax.remat(partial(jax.lax.scan, f)), carry, x_grouped
-    )
+    carry, y_grouped = jax.lax.scan(jax.remat(partial(jax.lax.scan, f)), carry, x_grouped)
     y = jax.tree.map(lambda x: x.reshape((-1, *x.shape[2:])), y_grouped)
     return carry, y
 
@@ -50,12 +47,8 @@ def apply_rotary_emb(
     reshape_xq = xq.astype(jnp.float32).reshape(*xq.shape[:-1], -1, 2)
     reshape_xk = xk.astype(jnp.float32).reshape(*xk.shape[:-1], -1, 2)
 
-    xq_ = jax.lax.complex(
-        reshape_xq[..., 0], reshape_xq[..., 1]
-    )  # (..., seq_len, heads, head_dim // 2)
-    xk_ = jax.lax.complex(
-        reshape_xk[..., 0], reshape_xk[..., 1]
-    )  # (..., seq_len, heads, head_dim // 2)
+    xq_ = jax.lax.complex(reshape_xq[..., 0], reshape_xq[..., 1])  # (..., seq_len, heads, head_dim // 2)
+    xk_ = jax.lax.complex(reshape_xk[..., 0], reshape_xk[..., 1])  # (..., seq_len, heads, head_dim // 2)
 
     for _ in range(len(xq.shape) - 3):  # Add extra dimensions
         freqs_cis = jnp.expand_dims(freqs_cis, axis=0)
@@ -79,9 +72,7 @@ def apply_rotary_emb(
 def apply_layer_norm(x: jnp.ndarray, scale_and_shift: jnp.ndarray) -> jnp.ndarray:
     dtype = x.dtype
     var = jnp.mean(jnp.square(x.astype(jnp.float32)), axis=-1, keepdims=True)
-    x_normed = (
-        x * jax.lax.rsqrt(var + 1e-8) * (1 + scale_and_shift[0]) + scale_and_shift[1]
-    )
+    x_normed = x * jax.lax.rsqrt(var + 1e-8) * (1 + scale_and_shift[0]) + scale_and_shift[1]
     return x_normed.astype(dtype)
 
 

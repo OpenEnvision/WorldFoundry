@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     completed_action_result,
@@ -15,6 +16,12 @@ from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     option_int,
     runtime_options_cache_key,
 )
+
+_MLP_CHECKPOINT_KEY_MAPPING = {
+    r"^(.*\.feed_forward)\.w1\.weight$": r"\1.gate_proj.weight",
+    r"^(.*\.feed_forward)\.w3\.weight$": r"\1.up_proj.weight",
+    r"^(.*\.feed_forward)\.w2\.weight$": r"\1.down_proj.weight",
+}
 
 
 @dataclass(frozen=True)
@@ -97,9 +104,7 @@ class GO1Runtime:
             )
         safe_weights = list(snapshot.glob("*.safetensors"))
         if not safe_weights:
-            raise FileNotFoundError(
-                f"GO-1 staged checkpoint has no safetensors weights: {snapshot}"
-            )
+            raise FileNotFoundError(f"GO-1 staged checkpoint has no safetensors weights: {snapshot}")
         self._snapshot = snapshot
         return snapshot
 
@@ -125,9 +130,13 @@ class GO1Runtime:
     def _load_model(self) -> Any:
         if self._model is not None:
             return self._model
-        import torch
 
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from accelerate import init_empty_weights
+
+        from worldfoundry.core.model_loading.checkpoints.sharded_safetensors import (
+            load_safetensors_into_model_streaming,
+        )
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .configuration_go1 import GO1ModelConfig
         from .modeling_go1 import GO1Model
@@ -146,15 +155,16 @@ class GO1Runtime:
         config.action_config.attn_implementation = backend
         config.latent_planner_config.attn_implementation = backend
         config.vision_config.use_flash_attn = backend == "flash_attention_2"
-        model = GO1Model.from_pretrained(
+        with init_empty_weights(include_buffers=False):
+            model = GO1Model(config, torch_dtype=dtype)
+        load_safetensors_into_model_streaming(
+            model,
             snapshot,
-            config=config,
-            torch_dtype=dtype,
-            low_cpu_mem_usage=True,
-            local_files_only=True,
-            trust_remote_code=False,
-            use_safetensors=True,
-        ).to(device=device, dtype=dtype).eval()
+            device="cpu",
+            dtype=dtype,
+            key_mapping=_MLP_CHECKPOINT_KEY_MAPPING,
+        )
+        model = model.to(device=device, dtype=dtype).eval()
         model.torch_dtype = dtype
         model.time_embedder.dtype = dtype
         model.freq_embedder.dtype = dtype
@@ -206,9 +216,7 @@ class GO1Runtime:
         mean = np.asarray(stats["mean"], dtype=np.float32).reshape(-1)
         std = np.asarray(stats["std"], dtype=np.float32).reshape(-1)
         if values.shape != mean.shape or values.shape != std.shape:
-            raise ValueError(
-                f"GO-1 state shape {values.shape} does not match statistics {mean.shape}/{std.shape}"
-            )
+            raise ValueError(f"GO-1 state shape {values.shape} does not match statistics {mean.shape}/{std.shape}")
         return (values - mean) / (std + float(self.config.normalization_epsilon))
 
     def _denormalize_actions(self, actions: Any) -> Any:
@@ -223,9 +231,7 @@ class GO1Runtime:
         mean = np.asarray(stats["mean"], dtype=np.float32).reshape(-1)
         std = np.asarray(stats["std"], dtype=np.float32).reshape(-1)
         if values.shape[-1] != mean.shape[0] or mean.shape != std.shape:
-            raise ValueError(
-                f"GO-1 action width {values.shape[-1]} does not match statistics {mean.shape}/{std.shape}"
-            )
+            raise ValueError(f"GO-1 action width {values.shape[-1]} does not match statistics {mean.shape}/{std.shape}")
         return values * (std + float(self.config.normalization_epsilon)) + mean
 
     @staticmethod
@@ -280,8 +286,7 @@ class GO1Runtime:
         model_config = self._model.config
         image_size = int(model_config.force_image_size or model_config.vision_config.image_size)
         num_image_tokens = int(
-            (image_size // int(model_config.vision_config.patch_size)) ** 2
-            * float(model_config.downsample_ratio) ** 2
+            (image_size // int(model_config.vision_config.patch_size)) ** 2 * float(model_config.downsample_ratio) ** 2
         )
         return prepare_inputs(
             images=self._camera_values(observation, image),
@@ -418,15 +423,9 @@ def predict_action(
         revision=str(options["revision"]) if options.get("revision") else None,
         attention_backend=str(options.get("attention_backend") or "auto"),
         dynamic_image_size=(
-            option_bool(options.get("dynamic_image_size"))
-            if options.get("dynamic_image_size") is not None
-            else None
+            option_bool(options.get("dynamic_image_size")) if options.get("dynamic_image_size") is not None else None
         ),
-        use_thumbnail=(
-            option_bool(options.get("use_thumbnail"))
-            if options.get("use_thumbnail") is not None
-            else None
-        ),
+        use_thumbnail=(option_bool(options.get("use_thumbnail")) if options.get("use_thumbnail") is not None else None),
         min_dynamic_patches=(
             option_int(options.get("min_dynamic_patches"), 1)
             if options.get("min_dynamic_patches") is not None
@@ -437,15 +436,9 @@ def predict_action(
             if options.get("max_dynamic_patches") is not None
             else None
         ),
-        pad_to_square=(
-            option_bool(options.get("pad_to_square"))
-            if options.get("pad_to_square") is not None
-            else None
-        ),
+        pad_to_square=(option_bool(options.get("pad_to_square")) if options.get("pad_to_square") is not None else None),
         action_horizon=(
-            option_int(options.get("action_horizon"), 0)
-            if options.get("action_horizon") is not None
-            else None
+            option_int(options.get("action_horizon"), 0) if options.get("action_horizon") is not None else None
         ),
         seed=option_int(options.get("seed"), 0),
         statistics_path=str(options["statistics_path"]) if options.get("statistics_path") else None,

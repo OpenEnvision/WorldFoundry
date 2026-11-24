@@ -3,10 +3,12 @@ This module provides the InspatioWorldSynthesis class, which acts as a thin adap
 InspatioWorldRuntime for easy integration into evaluation frameworks. It abstracts the underlying
 runtime's initialization and core functionalities like `plan` and `predict`.
 """
+
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
+from worldfoundry.synthesis.base_synthesis import BaseSynthesis
 from worldfoundry.synthesis.visual_generation.inspatio_world.worldfoundry_runtime import (
     DEFAULT_CHECKPOINT_REPO,
     DEFAULT_DA3_MODEL_REPO,
@@ -14,7 +16,6 @@ from worldfoundry.synthesis.visual_generation.inspatio_world.worldfoundry_runtim
     DEFAULT_WAN_MODEL_REPO,
     InspatioWorldRuntime,
 )
-from worldfoundry.synthesis.base_synthesis import BaseSynthesis
 
 
 class InspatioWorldSynthesis(BaseSynthesis):
@@ -22,14 +23,13 @@ class InspatioWorldSynthesis(BaseSynthesis):
 
     def __init__(
         self,
-        repo_root: Optional[str] = None,
         checkpoint_source: str = DEFAULT_CHECKPOINT_REPO,
         wan_model_source: str = DEFAULT_WAN_MODEL_REPO,
         da3_model_source: str = DEFAULT_DA3_MODEL_REPO,
         florence_model_source: str = DEFAULT_FLORENCE_MODEL_REPO,
         device: str = "cuda",
-        defaults: Optional[Dict[str, Any]] = None,
-        runtime: Optional[InspatioWorldRuntime] = None,
+        defaults: dict[str, Any] | None = None,
+        runtime: InspatioWorldRuntime | None = None,
     ) -> None:
         """
         Initializes the InspatioWorldSynthesis adapter.
@@ -38,7 +38,6 @@ class InspatioWorldSynthesis(BaseSynthesis):
         InSpatio-World environment and models.
 
         Args:
-            repo_root (Optional[str]): Path to the root of the InSpatio-World repository. If None, uses the bundled repo.
             checkpoint_source (str): Source for the main InSpatio-World model checkpoint.
                                      Defaults to `DEFAULT_CHECKPOINT_REPO`.
             wan_model_source (str): Source for the WAN model checkpoint. Defaults to `DEFAULT_WAN_MODEL_REPO`.
@@ -48,14 +47,13 @@ class InspatioWorldSynthesis(BaseSynthesis):
             device (str): The device to load models onto (e.g., "cuda", "cpu"). Defaults to "cuda".
             defaults (Optional[Dict[str, Any]]): A dictionary of default settings to pass to the runtime.
             runtime (Optional[InspatioWorldRuntime]): An optional pre-initialized `InspatioWorldRuntime` instance.
-                                                     If provided, other initialization arguments (repo_root,
-                                                     checkpoint_source, etc.) are ignored.
+                                                     If provided, other initialization arguments
+                                                     (checkpoint_source, device, etc.) are ignored.
         """
         super().__init__()
         # Initialize the underlying InspatioWorldRuntime. If a runtime is provided, use it;
         # otherwise, create a new one with the given configuration.
         self.runtime = runtime or InspatioWorldRuntime(
-            repo_root=repo_root,
             checkpoint_source=checkpoint_source,
             wan_model_source=wan_model_source,
             da3_model_source=da3_model_source,
@@ -69,9 +67,8 @@ class InspatioWorldSynthesis(BaseSynthesis):
         """
         Synchronizes public attributes of this synthesis adapter with the attributes of the underlying runtime.
 
-        This ensures that properties like `repo_root` or `device` are accessible directly from the synthesis instance.
+        This exposes checkpoint sources and device settings directly on the synthesis instance.
         """
-        self.repo_root = self.runtime.repo_root
         self.checkpoint_source = self.runtime.checkpoint_source
         self.wan_model_source = self.runtime.wan_model_source
         self.da3_model_source = self.runtime.da3_model_source
@@ -80,29 +77,19 @@ class InspatioWorldSynthesis(BaseSynthesis):
         self.defaults = self.runtime.defaults
 
     @classmethod
-    def bundled_repo_root(cls) -> str:
-        """
-        Returns the path to the bundled InSpatio-World repository root.
-
-        Returns:
-            str: The absolute path to the bundled repository root.
-        """
-        return InspatioWorldRuntime.bundled_repo_root()
-
-    @classmethod
     def from_pretrained(
         cls,
         pretrained_model_path: str = DEFAULT_CHECKPOINT_REPO,
         args=None,
-        device: Optional[str] = None,
+        device: str | None = None,
         wan_model_path: str = DEFAULT_WAN_MODEL_REPO,
         da3_model_path: str = DEFAULT_DA3_MODEL_REPO,
         florence_model_path: str = DEFAULT_FLORENCE_MODEL_REPO,
-        config_path: Optional[str] = None,
-        tae_checkpoint_path: Optional[str] = None,
-        default_traj_txt_path: Optional[str] = None,
+        config_path: str | None = None,
+        tae_checkpoint_path: str | None = None,
+        default_traj_txt_path: str | None = None,
         **kwargs,
-    ) -> "InspatioWorldSynthesis":
+    ) -> InspatioWorldSynthesis:
         """
         Initializes the `InspatioWorldSynthesis` adapter by loading a pretrained InSpatio-World model.
 
@@ -144,7 +131,7 @@ class InspatioWorldSynthesis(BaseSynthesis):
         )
         return cls(runtime=runtime)
 
-    def plan(self, *args, **kwargs) -> Dict[str, Any]:
+    def plan(self, *args, **kwargs) -> dict[str, Any]:
         """
         Executes the planning phase using the underlying InSpatio-World runtime.
 

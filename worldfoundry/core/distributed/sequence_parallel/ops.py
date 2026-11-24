@@ -14,8 +14,10 @@ import torch
 import torch.distributed as dist
 
 import worldfoundry.core.distributed.runtime.torch_process_group as _torch_process_group
-
-from worldfoundry.core.distributed.collectives.generic import get_rank, get_world_size  # noqa: F401 - public compatibility exports
+from worldfoundry.core.distributed.collectives.generic import (  # noqa: F401 - public compatibility exports
+    get_rank,
+    get_world_size,
+)
 from worldfoundry.core.distributed.collectives.tensor import all_gather_concat, all_to_all_concat
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -90,9 +92,7 @@ def all_to_all_many(tensors, scatter_dim, gather_dim, group=None, **kwargs):
         return values
     first = values[0]
     compatible = all(
-        value.shape == first.shape
-        and value.dtype == first.dtype
-        and value.device == first.device
+        value.shape == first.shape and value.dtype == first.dtype and value.device == first.device
         for value in values[1:]
     )
     try:

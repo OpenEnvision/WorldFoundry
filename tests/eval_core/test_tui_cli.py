@@ -8,18 +8,15 @@ import sys
 import pytest
 
 from worldfoundry import cli
-from worldfoundry.cli.tui import main as tui_main
-from worldfoundry.cli.tui_discovery import (
-    INFER_MODEL_VARIANTS,
+from worldfoundry.cli.catalog import is_infer_model_row, load_catalog
+from worldfoundry.cli.command_builders import (
     build_model_benchmark_command,
     build_model_infer_command,
     build_suite_command,
     format_shell_command,
-    infer_control_specs,
-    infer_model_variant_ids,
-    is_infer_model_row,
-    load_tui_catalog,
 )
+from worldfoundry.cli.inference_variants import INFER_MODEL_VARIANTS, infer_model_variant_ids
+from worldfoundry.cli.tui.controls import infer_control_specs
 
 
 def _assert_worldfoundry_cli_prefix(command: tuple[str, ...]) -> None:
@@ -32,15 +29,16 @@ def _parse_worldfoundry_cli_command(command: tuple[str, ...]):
 
 
 def test_tui_catalog_loads_model_and_benchmark_rows() -> None:
-    catalog = load_tui_catalog()
+    catalog = load_catalog()
 
     assert any(row.model_id == "openvla" for row in catalog.models)
     assert any(row.benchmark_id == "libero" for row in catalog.benchmarks)
     summary = catalog.to_dict()["summary"]
+    assert isinstance(summary, dict)
     assert summary["models"] == len(catalog.models)
     assert summary["benchmarks"] == len(catalog.benchmarks)
     # TUI training support (training_targets / training_stages) was removed
-    # from tui_discovery together with worldfoundry.training.visual_generation.
+    # from the CLI catalog together with worldfoundry.training.visual_generation.
     assert summary["runtime_profiles"] == len(catalog.runtime_profiles)
     assert "leaderboard_ready_benchmarks" in summary
     assert any(row.profile_id == "openvla" for row in catalog.runtime_profiles)
@@ -49,6 +47,7 @@ def test_tui_catalog_loads_model_and_benchmark_rows() -> None:
     assert robotwin.maturity
     assert robotwin.leaderboard_valid is False
     assert robotwin.to_dict()["official_benchmark_verified"] is False
+    assert catalog.conda_status is not None
     assert catalog.conda_status["env_specs"] >= 1
 
 
@@ -77,7 +76,7 @@ def test_model_benchmark_command_uses_unified_run_surface() -> None:
 
 
 def test_tui_infer_catalog_uses_official_script_models_by_default() -> None:
-    catalog = load_tui_catalog()
+    catalog = load_catalog()
     depth_row = next(row for row in catalog.models if row.model_id == "depth-anything-v2")
 
     assert is_infer_model_row(depth_row)
@@ -85,7 +84,7 @@ def test_tui_infer_catalog_uses_official_script_models_by_default() -> None:
     assert any("scripts/inference/run_infer.sh" in note for note in depth_row.notes)
     # Infer commands were consolidated onto the Studio workspace_job pipeline;
     # run_infer.sh is now a thin exec shim over the same entry point
-    # (tui_discovery.exec_run_infer_sh), so the built command targets
+    # (inference_variants.exec_run_infer_sh), so the built command targets
     # workspace_job directly and GPU selection rides on CUDA_VISIBLE_DEVICES.
     command = build_model_infer_command(
         model_id="depth-anything-v2",
@@ -119,7 +118,9 @@ def test_tui_infer_control_schema_is_variant_specific() -> None:
     hy2_specs = {spec.field_id: spec for spec in infer_control_specs("hunyuan", "hy-world-2.0")}
     lyra2_specs = {spec.field_id: spec for spec in infer_control_specs("lyra", "lyra2")}
     worldcam_specs = {spec.field_id: spec for spec in infer_control_specs("worldcam", "worldcam")}
-    dynamicrafter_specs = {spec.field_id: spec for spec in infer_control_specs("dynamicrafter", "dynamicrafter-512-i2v")}
+    dynamicrafter_specs = {
+        spec.field_id: spec for spec in infer_control_specs("dynamicrafter", "dynamicrafter-512-i2v")
+    }
 
     assert set(depth_specs) == {"input"}
     assert depth_specs["input"].label == "Input image"
@@ -143,7 +144,7 @@ def test_tui_infer_control_schema_is_variant_specific() -> None:
 
 
 def test_tui_keeps_studio_runtime_for_non_script_infer_models() -> None:
-    catalog = load_tui_catalog()
+    catalog = load_catalog()
     rows = {row.model_id: row for row in catalog.models}
 
     # Studio catalog entries are folded into their owning TUI rows:
@@ -227,10 +228,8 @@ def test_suite_command_defaults_to_plan_only() -> None:
     assert parsed.benchmark_ids == ["libero"]
 
 
-
-
 def test_tui_cli_catalog_json_does_not_import_textual(capsys) -> None:
-    assert tui_main(["--catalog-json"]) == 0
+    assert cli.main(["tui", "--catalog-json"]) == 0
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["summary"]["models"] >= 1
@@ -263,8 +262,9 @@ def test_cli_tui_print_command(capsys) -> None:
 
 def test_tui_fallback_lists_catalog_runtime_and_conda(capsys) -> None:
     assert (
-        tui_main(
+        cli.main(
             [
+                "tui",
                 "--fallback",
                 "--model-id",
                 "openvla",
@@ -293,7 +293,7 @@ def test_tui_fallback_lists_catalog_runtime_and_conda(capsys) -> None:
 
 def test_textual_app_headless_generates_action_commands_when_available() -> None:
     pytest.importorskip("textual")
-    from worldfoundry.cli.tui_app import WorldFoundryTui
+    from worldfoundry.cli.tui.app import WorldFoundryTui
 
     async def run_app() -> dict[str, str]:
         app = WorldFoundryTui(
@@ -335,7 +335,7 @@ def test_textual_app_headless_button_interactions_when_available(tmp_path) -> No
     pytest.importorskip("textual")
     from textual.widgets import Button, Collapsible
 
-    from worldfoundry.cli.tui_app import WorldFoundryTui
+    from worldfoundry.cli.tui.app import WorldFoundryTui
 
     async def wait_until(predicate, timeout: float = 5.0) -> bool:
         end = asyncio.get_running_loop().time() + timeout
@@ -409,7 +409,7 @@ def test_textual_app_headless_selects_and_tables_when_available() -> None:
     pytest.importorskip("textual")
     from textual.widgets import DataTable, Input, Label, Select
 
-    from worldfoundry.cli.tui_app import WorldFoundryTui
+    from worldfoundry.cli.tui.app import WorldFoundryTui
 
     async def run_app() -> dict[str, bool]:
         app = WorldFoundryTui(
@@ -477,8 +477,9 @@ def test_textual_app_headless_selects_and_tables_when_available() -> None:
 
 def test_tui_cli_writes_suite_plan(tmp_path, capsys) -> None:
     assert (
-        tui_main(
+        cli.main(
             [
+                "tui",
                 "--model-id",
                 "openvla",
                 "--benchmark-id",
@@ -504,8 +505,8 @@ def test_tui_cli_writes_suite_plan(tmp_path, capsys) -> None:
 
 
 def test_robotics_framework_imports_use_embodied_owner() -> None:
-    embodied = importlib.import_module("worldfoundry.evaluation.tasks.embodied")
-    normalizer = importlib.import_module("worldfoundry.evaluation.tasks.embodied.normalizer")
+    embodied = importlib.import_module("worldfoundry.evals.tasks.embodied")
+    normalizer = importlib.import_module("worldfoundry.evals.tasks.embodied.normalizer")
 
     assert hasattr(embodied, "EmbodiedGenerationSpec")
     assert hasattr(embodied, "run_vla_va_wam")

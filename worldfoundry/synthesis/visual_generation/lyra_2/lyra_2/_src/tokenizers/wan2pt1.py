@@ -20,16 +20,13 @@ from contextlib import nullcontext
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from einops import rearrange
-from lyra_2._src.tokenizers.interface import VideoTokenizerInterface
 
-from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 from worldfoundry.core.configuration.lazy_config import LazyCall as L
 from worldfoundry.core.configuration.lazy_config import LazyDict
-from worldfoundry.core.distributed.runtime.logging import log
 from worldfoundry.core.distributed.runtime.torch_process_group import broadcast, get_rank, sync_model_states
+from worldfoundry.core.observability.rank_logging import log
 from worldfoundry.data.io import easy_io
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.tokenizers.interface import VideoTokenizerInterface
 
 __all__ = [
     "WanVAE",
@@ -38,45 +35,13 @@ __all__ = [
 CACHE_T = 2
 
 
-from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import CausalConv3d
-
-
-class RMS_norm(nn.Module):
-    def __init__(self, dim, channel_first=True, images=True, bias=False):
-        super().__init__()
-        broadcastable_dims = (1, 1, 1) if not images else (1, 1)
-        shape = (dim, *broadcastable_dims) if channel_first else (dim,)
-
-        self.channel_first = channel_first
-        self.scale = dim**0.5
-        self.gamma = nn.Parameter(torch.ones(shape))
-        self.bias = nn.Parameter(torch.zeros(shape)) if bias else 0.0
-
-    def forward(self, x):
-        return F.normalize(x, dim=(1 if self.channel_first else -1)) * self.scale * self.gamma + self.bias
-
-
-class Upsample(nn.Upsample):
-    def forward(self, x):
-        """
-        Fix bfloat16 support for nearest neighbor interpolation.
-        """
-        return super().forward(x.float()).type_as(x)
-
-
-from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import Resample
-
-
-from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_22 import ResidualBlock
-
-
-from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import AttentionBlock
-
-
-from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import Encoder3d
-
-
-from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import Decoder3d
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import (  # noqa: E402 - Follows module-level setup, as upstream.
+    CausalConv3d,
+)
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import (  # noqa: E402 - Follows module-level setup, as upstream.
+    Decoder3d,
+    Encoder3d,
+)
 
 
 def count_conv3d(model):
@@ -92,10 +57,10 @@ class WanVAE_(nn.Module):
         self,
         dim=128,
         z_dim=4,
-        dim_mult=[1, 2, 4, 4],
+        dim_mult=[1, 2, 4, 4],  # noqa: B006 - Keeps the upstream default object and signature.
         num_res_blocks=2,
-        attn_scales=[],
-        temperal_downsample=[True, True, False],
+        attn_scales=[],  # noqa: B006 - Keeps the upstream default object and signature.
+        temperal_downsample=[True, True, False],  # noqa: B006 - Keeps the upstream default object and signature.
         dropout=0.0,
         temporal_window=4,
     ):
@@ -247,15 +212,15 @@ def _video_vae(
     Autoencoder3d adapted from Stable Diffusion 1.x, 2.x and XL.
     """
     # params
-    cfg = dict(
-        dim=96,
-        z_dim=z_dim,
-        dim_mult=[1, 2, 4, 4],
-        num_res_blocks=2,
-        attn_scales=[],
-        temperal_downsample=[False, True, True],
-        dropout=0.0,
-    )
+    cfg = {
+        "dim": 96,
+        "z_dim": z_dim,
+        "dim_mult": [1, 2, 4, 4],
+        "num_res_blocks": 2,
+        "attn_scales": [],
+        "temperal_downsample": [False, True, True],
+        "dropout": 0.0,
+    }
     cfg.update(**kwargs)
 
     if mean_std_path is not None:

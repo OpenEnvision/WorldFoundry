@@ -14,9 +14,7 @@ class PositionalEncoding(nn.Module):
         super().__init__()
         encoding = torch.zeros(max_len, model_dim)
         position = torch.arange(max_len).float().unsqueeze(1)
-        exponent = torch.arange(0, model_dim, 2).float() * -(
-            math.log(10000.0) / model_dim
-        )
+        exponent = torch.arange(0, model_dim, 2).float() * -(math.log(10000.0) / model_dim)
         divisor = torch.exp(exponent)
         encoding[:, 0::2] = torch.sin(position * divisor)
         encoding[:, 1::2] = torch.cos(position * divisor)
@@ -44,9 +42,7 @@ class SelfAttention(nn.Module):
             nn.Dropout(dropout),
         )
 
-    def forward(
-        self, values: Tensor, *, is_causal: bool = False
-    ) -> Tensor:
+    def forward(self, values: Tensor, *, is_causal: bool = False) -> Tensor:
         query, key, value = (
             rearrange(
                 projection(values),
@@ -66,22 +62,14 @@ class SelfAttention(nn.Module):
             ).triu(diagonal=1)
             weights = weights.masked_fill(mask, float("-inf"))
         output = weights.softmax(dim=-1) @ value
-        return self.to_out(
-            rearrange(output, "b h n d -> b n (h d)")
-        )
+        return self.to_out(rearrange(output, "b h n d -> b n (h d)"))
 
 
 class SpatioTemporalBlock(nn.Module):
-    def __init__(
-        self, model_dim: int, num_heads: int, dropout: float = 0.0
-    ) -> None:
+    def __init__(self, model_dim: int, num_heads: int, dropout: float = 0.0) -> None:
         super().__init__()
-        self.spatial_attn = SelfAttention(
-            model_dim, num_heads, dropout=dropout
-        )
-        self.temporal_attn = SelfAttention(
-            model_dim, num_heads, dropout=dropout
-        )
+        self.spatial_attn = SelfAttention(model_dim, num_heads, dropout=dropout)
+        self.temporal_attn = SelfAttention(model_dim, num_heads, dropout=dropout)
         self.ffn = nn.Sequential(
             nn.Linear(model_dim, model_dim * 4),
             nn.GELU(),
@@ -92,24 +80,16 @@ class SpatioTemporalBlock(nn.Module):
         self.norm2 = nn.LayerNorm(model_dim)
         self.norm3 = nn.LayerNorm(model_dim)
 
-    def forward(
-        self, values: Tensor, causal_temporal: bool = False
-    ) -> Tensor:
+    def forward(self, values: Tensor, causal_temporal: bool = False) -> Tensor:
         time_length, spatial_length = values.shape[1:3]
 
         values = rearrange(values, "b t s e -> (b t) s e")
         values = values + self.spatial_attn(self.norm1(values))
-        values = rearrange(
-            values, "(b t) s e -> b t s e", t=time_length
-        )
+        values = rearrange(values, "(b t) s e -> b t s e", t=time_length)
 
         values = rearrange(values, "b t s e -> (b s) t e")
-        values = values + self.temporal_attn(
-            self.norm2(values), is_causal=causal_temporal
-        )
-        values = rearrange(
-            values, "(b s) t e -> b t s e", s=spatial_length
-        )
+        values = values + self.temporal_attn(self.norm2(values), is_causal=causal_temporal)
+        values = rearrange(values, "(b s) t e -> b t s e", s=spatial_length)
         return values + self.ffn(self.norm3(values))
 
 
@@ -133,16 +113,9 @@ class SpatioTemporalTransformer(nn.Module):
         )
         self.pos_enc = PositionalEncoding(model_dim)
         self.transformer_blocks = nn.ModuleList(
-            [
-                SpatioTemporalBlock(
-                    model_dim, num_heads, dropout
-                )
-                for _ in range(num_blocks)
-            ]
+            [SpatioTemporalBlock(model_dim, num_heads, dropout) for _ in range(num_blocks)]
         )
-        self.out = (
-            nn.Linear(model_dim, out_dim) if to_out else nn.Identity()
-        )
+        self.out = nn.Linear(model_dim, out_dim) if to_out else nn.Identity()
         self.causal_temporal = causal_temporal
 
     def forward(self, values: Tensor) -> Tensor:
@@ -153,18 +126,12 @@ class SpatioTemporalTransformer(nn.Module):
 
 
 class VectorQuantizer(nn.Module):
-    def __init__(
-        self, num_latents: int, latent_dim: int, **_: object
-    ) -> None:
+    def __init__(self, num_latents: int, latent_dim: int, **_: object) -> None:
         super().__init__()
         self.codebook = nn.Embedding(num_latents, latent_dim)
-        self.codebook.weight.data.uniform_(
-            -1.0 / num_latents, 1.0 / num_latents
-        )
+        self.codebook.weight.data.uniform_(-1.0 / num_latents, 1.0 / num_latents)
 
     def forward(self, values: Tensor) -> tuple[Tensor, Tensor]:
-        indices = torch.cdist(values, self.codebook.weight).argmin(
-            dim=-1
-        )
+        indices = torch.cdist(values, self.codebook.weight).argmin(dim=-1)
         quantized = self.codebook(indices)
         return quantized, indices

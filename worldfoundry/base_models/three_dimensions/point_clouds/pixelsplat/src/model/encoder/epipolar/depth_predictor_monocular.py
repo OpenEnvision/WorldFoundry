@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> encoder -> epipolar -> depth_predictor_monocular.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 import torch
 from einops import rearrange
 from jaxtyping import Float
@@ -10,7 +9,6 @@ from .distribution_sampler import DistributionSampler
 
 
 class DepthPredictorMonocular(nn.Module):
-    """Depth predictor monocular implementation."""
     projection: nn.Sequential
     sampler: DistributionSampler
     num_samples: int
@@ -23,17 +21,6 @@ class DepthPredictorMonocular(nn.Module):
         num_surfaces: int,
         use_transmittance: bool,
     ) -> None:
-        """Init.
-
-        Args:
-            d_in: The d in.
-            num_samples: The num samples.
-            num_surfaces: The num surfaces.
-            use_transmittance: The use transmittance.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.projection = nn.Sequential(
             nn.ReLU(),
@@ -59,25 +46,11 @@ class DepthPredictorMonocular(nn.Module):
         Float[Tensor, "batch view ray surface sample"],  # depth
         Float[Tensor, "batch view ray surface sample"],  # pdf
     ]:
-        """Forward.
-
-        Args:
-            features: The features.
-            near: The near.
-            far: The far.
-            deterministic: The deterministic.
-            gaussians_per_pixel: The gaussians per pixel.
-
-        Returns:
-            The return value.
-        """
         s = self.num_samples
 
         # Convert the features into a depth distribution plus intra-bucket offsets.
         features = self.projection(features)
-        pdf_raw, offset_raw = rearrange(
-            features, "... (dpt srf c) -> c ... srf dpt", c=2, srf=self.num_surfaces
-        )
+        pdf_raw, offset_raw = rearrange(features, "... (dpt srf c) -> c ... srf dpt", c=2, srf=self.num_surfaces)
         pdf = self.to_pdf(pdf_raw)
         offset = self.to_offset(offset_raw)
 
@@ -96,9 +69,7 @@ class DepthPredictorMonocular(nn.Module):
         # Compute opacity from PDF.
         if self.use_transmittance:
             partial = pdf.cumsum(dim=-1)
-            partial = torch.cat(
-                (torch.zeros_like(partial[..., :1]), partial[..., :-1]), dim=-1
-            )
+            partial = torch.cat((torch.zeros_like(partial[..., :1]), partial[..., :-1]), dim=-1)
             opacity = pdf / (1 - partial + 1e-10)
             opacity = self.sampler.gather(index, opacity)
         else:

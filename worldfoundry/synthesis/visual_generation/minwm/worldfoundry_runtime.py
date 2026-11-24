@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
-from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path
 from worldfoundry.core.distributed.runtime.multiprocess_launch import find_free_port
+from worldfoundry.core.execution.process import package_module_command
+from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
-
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 _MINWM_CONFIG_ROOT = _PROJECT_ROOT / "worldfoundry" / "data" / "models" / "runtime" / "configs" / "minwm"
@@ -119,18 +120,9 @@ class MinWMHYAction2VRuntime(_MinWMRuntime):
         )
         env = {
             **self.env,
-            # The module is launched from the WorldFoundry root; do not let an
-            # ambient checkout shadow the in-tree implementation.
-            "PYTHONPATH": "",
             "WORLDFOUNDRY_MINWM_ROT_STEP_DEG": str(_rotation_step(token_mapping_details)),
         }
-        command = [
-            self.python_executable,
-            "-m",
-            "torch.distributed.run",
-            "--nproc_per_node=1",
-            "--module",
-            "worldfoundry.synthesis.visual_generation.minwm.hy15_inference",
+        command_args = [
             "--mode",
             "ar_rollout",
             "--transformer_dir",
@@ -166,12 +158,17 @@ class MinWMHYAction2VRuntime(_MinWMRuntime):
             str(seed),
         ]
         result = execute_in_tree(
-            command,
+            package_module_command(
+                "worldfoundry.synthesis.visual_generation.minwm.hy15_inference",
+                command_args,
+                python_executable=self.python_executable,
+                nproc_per_node=1,
+                launcher_options=(),
+            ),
             cwd=_PROJECT_ROOT,
             output_path=output,
             search_roots=(native_output,),
             env=env,
-            python_paths=(),
         )
         return result if return_dict else result.get("video")
 
@@ -224,23 +221,11 @@ class MinWMWanAction2VRuntime(_MinWMRuntime):
         trajectory_txt.write_text(trajectory.strip() + "\n", encoding="utf-8")
         env = {
             **self.env,
-            # The module is launched from the WorldFoundry root; do not let an
-            # ambient checkout shadow the in-tree implementation.
-            "PYTHONPATH": "",
             "SP_SIZE": str(sp_size),
             "WORLDFOUNDRY_MINWM_ROT_STEP_DEG": str(_rotation_step(token_mapping_details)),
             "WORLDFOUNDRY_MINWM_WAN_BASE_MODEL": str(base),
         }
-        command = [
-            self.python_executable,
-            "-m",
-            "torch.distributed.run",
-            "--nproc_per_node",
-            str(sp_size),
-            "--master_port",
-            str(int(master_port) if master_port is not None else find_free_port()),
-            "--module",
-            "worldfoundry.synthesis.visual_generation.minwm.minwm_runtime.Wan21.wan_inference",
+        command_args = [
             "--config_path",
             _MINWM_CONFIG_ROOT / "wan_action2v.yaml",
             "--checkpoint_path",
@@ -259,12 +244,20 @@ class MinWMWanAction2VRuntime(_MinWMRuntime):
             str(seed),
         ]
         result = execute_in_tree(
-            command,
+            package_module_command(
+                "worldfoundry.synthesis.visual_generation.minwm.minwm_runtime.Wan21.wan_inference",
+                command_args,
+                python_executable=self.python_executable,
+                nproc_per_node=sp_size,
+                launcher_options=(
+                    "--master_port",
+                    str(int(master_port) if master_port is not None else find_free_port()),
+                ),
+            ),
             cwd=_PROJECT_ROOT,
             output_path=output,
             search_roots=(native_output,),
             env=env,
-            python_paths=(),
         )
         return result if return_dict else result.get("video")
 

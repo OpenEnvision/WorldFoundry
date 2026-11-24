@@ -18,7 +18,6 @@ from worldfoundry.studio.inference.dispatch import (
     _payload_run_kwargs_with_secret_refs,
     _requested_torchrun_nproc,
     _retire_idle_resident_workers_for_cuda_request,
-    _retire_idle_resident_workers_for_new_resident_key,
     _runtime_pythonpath,
     _with_lingbot_world_parallelism,
     _with_longvie2_parallelism,
@@ -315,55 +314,6 @@ def test_multi_gpu_request_retires_older_idle_resident_lease(monkeypatch):
     try:
         assert _retire_idle_resident_workers_for_cuda_request(3) == 1
         assert pool.available_count == 3
-    finally:
-        with conda_dispatch._RESIDENT_WORKERS_LOCK:
-            conda_dispatch._RESIDENT_WORKERS.pop(worker.key, None)
-
-
-def test_new_resident_key_retires_an_unrelated_idle_gpu_worker(monkeypatch):
-    pool = CudaDeviceLeasePool(("0",))
-    lease = pool.acquire()
-    worker = SimpleNamespace(
-        key=("old-model",),
-        base_key=("old-model",),
-        process=SimpleNamespace(poll=lambda: None),
-        in_use=0,
-        last_used_at=1.0,
-        device_lease=lease,
-    )
-    monkeypatch.setattr(conda_dispatch, "_automatic_gpu_pool", lambda: pool)
-    monkeypatch.setattr(
-        conda_dispatch,
-        "_shutdown_resident_worker",
-        lambda retired, force=False: retired.device_lease.release(),
-    )
-    with conda_dispatch._RESIDENT_WORKERS_LOCK:
-        conda_dispatch._RESIDENT_WORKERS[worker.key] = worker
-    try:
-        assert _retire_idle_resident_workers_for_new_resident_key(("new-model",), 1) == 1
-        assert pool.available_count == 1
-    finally:
-        with conda_dispatch._RESIDENT_WORKERS_LOCK:
-            conda_dispatch._RESIDENT_WORKERS.pop(worker.key, None)
-
-
-def test_new_resident_key_keeps_a_reusable_worker(monkeypatch):
-    worker = SimpleNamespace(
-        key=("same-model", "auto-cuda:0"),
-        base_key=("same-model",),
-        process=SimpleNamespace(poll=lambda: None),
-    )
-    retire_calls = []
-    monkeypatch.setattr(
-        conda_dispatch,
-        "_retire_idle_resident_workers_for_cuda_request",
-        lambda count: retire_calls.append(count) or 1,
-    )
-    with conda_dispatch._RESIDENT_WORKERS_LOCK:
-        conda_dispatch._RESIDENT_WORKERS[worker.key] = worker
-    try:
-        assert _retire_idle_resident_workers_for_new_resident_key(("same-model",), 1) == 0
-        assert retire_calls == []
     finally:
         with conda_dispatch._RESIDENT_WORKERS_LOCK:
             conda_dispatch._RESIDENT_WORKERS.pop(worker.key, None)

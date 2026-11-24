@@ -1,5 +1,4 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -16,17 +15,17 @@ EPS = 1.0e-7
 
 @TASK_UTILS.register_module()
 class PoseSimOTAAssigner(SimOTAAssigner):
-
-    def __init__(self,
-                 center_radius: float = 2.5,
-                 candidate_topk: int = 10,
-                 iou_weight: float = 3.0,
-                 cls_weight: float = 1.0,
-                 oks_weight: float = 0.0,
-                 vis_weight: float = 0.0,
-                 iou_calculator: ConfigType = dict(type='BboxOverlaps2D'),
-                 oks_calculator: ConfigType = dict(type='OksLoss')):
-
+    def __init__(
+        self,
+        center_radius: float = 2.5,
+        candidate_topk: int = 10,
+        iou_weight: float = 3.0,
+        cls_weight: float = 1.0,
+        oks_weight: float = 0.0,
+        vis_weight: float = 0.0,
+        iou_calculator: ConfigType = {"type": "BboxOverlaps2D"},  # noqa: B006 - Keeps the upstream default object and signature.
+        oks_calculator: ConfigType = {"type": "OksLoss"},  # noqa: B006 - Keeps the upstream default object and signature.
+    ):
         self.center_radius = center_radius
         self.candidate_topk = candidate_topk
         self.iou_weight = iou_weight
@@ -37,11 +36,13 @@ class PoseSimOTAAssigner(SimOTAAssigner):
         self.iou_calculator = TASK_UTILS.build(iou_calculator)
         self.oks_calculator = MODELS.build(oks_calculator)
 
-    def assign(self,
-               pred_instances: InstanceData,
-               gt_instances: InstanceData,
-               gt_instances_ignore: Optional[InstanceData] = None,
-               **kwargs) -> AssignResult:
+    def assign(
+        self,
+        pred_instances: InstanceData,
+        gt_instances: InstanceData,
+        gt_instances_ignore: InstanceData | None = None,
+        **kwargs,
+    ) -> AssignResult:
         """Assign gt to priors using SimOTA.
 
         Args:
@@ -78,20 +79,14 @@ class PoseSimOTAAssigner(SimOTAAssigner):
         num_bboxes = decoded_bboxes.size(0)
 
         # assign 0 by default
-        assigned_gt_inds = decoded_bboxes.new_full((num_bboxes, ),
-                                                   0,
-                                                   dtype=torch.long)
+        assigned_gt_inds = decoded_bboxes.new_full((num_bboxes,), 0, dtype=torch.long)
         if num_gt == 0 or num_bboxes == 0:
             # No ground truth or boxes, return empty assignment
-            max_overlaps = decoded_bboxes.new_zeros((num_bboxes, ))
-            assigned_labels = decoded_bboxes.new_full((num_bboxes, ),
-                                                      -1,
-                                                      dtype=torch.long)
-            return AssignResult(
-                num_gt, assigned_gt_inds, max_overlaps, labels=assigned_labels)
+            max_overlaps = decoded_bboxes.new_zeros((num_bboxes,))
+            assigned_labels = decoded_bboxes.new_full((num_bboxes,), -1, dtype=torch.long)
+            return AssignResult(num_gt, assigned_gt_inds, max_overlaps, labels=assigned_labels)
 
-        valid_mask, is_in_boxes_and_center = self.get_in_gt_and_in_center_info(
-            priors, gt_bboxes)
+        valid_mask, is_in_boxes_and_center = self.get_in_gt_and_in_center_info(priors, gt_bboxes)
         valid_decoded_bbox = decoded_bboxes[valid_mask]
         valid_pred_scores = pred_scores[valid_mask]
         valid_pred_kpts = pred_kpts[valid_mask]
@@ -99,12 +94,9 @@ class PoseSimOTAAssigner(SimOTAAssigner):
         num_valid = valid_decoded_bbox.size(0)
         if num_valid == 0:
             # No valid bboxes, return empty assignment
-            max_overlaps = decoded_bboxes.new_zeros((num_bboxes, ))
-            assigned_labels = decoded_bboxes.new_full((num_bboxes, ),
-                                                      -1,
-                                                      dtype=torch.long)
-            return AssignResult(
-                num_gt, assigned_gt_inds, max_overlaps, labels=assigned_labels)
+            max_overlaps = decoded_bboxes.new_zeros((num_bboxes,))
+            assigned_labels = decoded_bboxes.new_full((num_bboxes,), -1, dtype=torch.long)
+            return AssignResult(num_gt, assigned_gt_inds, max_overlaps, labels=assigned_labels)
 
         cost_matrix = (~is_in_boxes_and_center) * INF
 
@@ -128,57 +120,56 @@ class PoseSimOTAAssigner(SimOTAAssigner):
         # calculate cls
         if self.cls_weight > 0:
             gt_onehot_label = (
-                F.one_hot(gt_labels.to(torch.int64),
-                          pred_scores.shape[-1]).float().unsqueeze(0).repeat(
-                              num_valid, 1, 1))
+                F.one_hot(gt_labels.to(torch.int64), pred_scores.shape[-1]).float().unsqueeze(0).repeat(num_valid, 1, 1)
+            )
 
-            valid_pred_scores = valid_pred_scores.unsqueeze(1).repeat(
-                1, num_gt, 1)
+            valid_pred_scores = valid_pred_scores.unsqueeze(1).repeat(1, num_gt, 1)
             # disable AMP autocast to avoid overflow
             with torch.cuda.amp.autocast(enabled=False):
                 cls_cost = (
                     F.binary_cross_entropy(
                         valid_pred_scores.to(dtype=torch.float32),
                         gt_onehot_label,
-                        reduction='none',
-                    ).sum(-1).to(dtype=valid_pred_scores.dtype))
+                        reduction="none",
+                    )
+                    .sum(-1)
+                    .to(dtype=valid_pred_scores.dtype)
+                )
             cost_matrix = cost_matrix + cls_cost * self.cls_weight
 
         # calculate vis
         if self.vis_weight > 0:
-            valid_pred_kpts_vis = valid_pred_kpts_vis.sigmoid().unsqueeze(
-                1).repeat(1, num_gt, 1)  # [num_valid, 1, k]
-            gt_kpt_vis = gt_keypoints_visible.unsqueeze(
-                0).float()  # [1, num_gt, k]
+            valid_pred_kpts_vis = valid_pred_kpts_vis.sigmoid().unsqueeze(1).repeat(1, num_gt, 1)  # [num_valid, 1, k]
+            gt_kpt_vis = gt_keypoints_visible.unsqueeze(0).float()  # [1, num_gt, k]
             with torch.cuda.amp.autocast(enabled=False):
                 vis_cost = (
                     F.binary_cross_entropy(
                         valid_pred_kpts_vis.to(dtype=torch.float32),
                         gt_kpt_vis.repeat(num_valid, 1, 1),
-                        reduction='none',
-                    ).sum(-1).to(dtype=valid_pred_kpts_vis.dtype))
+                        reduction="none",
+                    )
+                    .sum(-1)
+                    .to(dtype=valid_pred_kpts_vis.dtype)
+                )
             cost_matrix = cost_matrix + vis_cost * self.vis_weight
 
         # mixed metric
         pairwise_oks = pairwise_oks.pow(0.5)
-        matched_pred_oks, matched_gt_inds = \
-            self.dynamic_k_matching(
-                cost_matrix, pairwise_ious, pairwise_oks, num_gt, valid_mask)
+        matched_pred_oks, matched_gt_inds = self.dynamic_k_matching(
+            cost_matrix, pairwise_ious, pairwise_oks, num_gt, valid_mask
+        )
 
         # convert to AssignResult format
         assigned_gt_inds[valid_mask] = matched_gt_inds + 1
-        assigned_labels = assigned_gt_inds.new_full((num_bboxes, ), -1)
+        assigned_labels = assigned_gt_inds.new_full((num_bboxes,), -1)
         assigned_labels[valid_mask] = gt_labels[matched_gt_inds].long()
-        max_overlaps = assigned_gt_inds.new_full((num_bboxes, ),
-                                                 -INF,
-                                                 dtype=torch.float32)
+        max_overlaps = assigned_gt_inds.new_full((num_bboxes,), -INF, dtype=torch.float32)
         max_overlaps[valid_mask] = matched_pred_oks
-        return AssignResult(
-            num_gt, assigned_gt_inds, max_overlaps, labels=assigned_labels)
+        return AssignResult(num_gt, assigned_gt_inds, max_overlaps, labels=assigned_labels)
 
-    def dynamic_k_matching(self, cost: Tensor, pairwise_ious: Tensor,
-                           pairwise_oks: Tensor, num_gt: int,
-                           valid_mask: Tensor) -> Tuple[Tensor, Tensor]:
+    def dynamic_k_matching(
+        self, cost: Tensor, pairwise_ious: Tensor, pairwise_oks: Tensor, num_gt: int, valid_mask: Tensor
+    ) -> tuple[Tensor, Tensor]:
         """Use IoU and matching cost to calculate the dynamic top-k positive
         targets."""
         matching_matrix = torch.zeros_like(cost, dtype=torch.uint8)
@@ -188,16 +179,14 @@ class PoseSimOTAAssigner(SimOTAAssigner):
         # calculate dynamic k for each gt
         dynamic_ks = torch.clamp(topk_ious.sum(0).int(), min=1)
         for gt_idx in range(num_gt):
-            _, pos_idx = torch.topk(
-                cost[:, gt_idx], k=dynamic_ks[gt_idx], largest=False)
+            _, pos_idx = torch.topk(cost[:, gt_idx], k=dynamic_ks[gt_idx], largest=False)
             matching_matrix[:, gt_idx][pos_idx] = 1
 
         del topk_ious, dynamic_ks, pos_idx
 
         prior_match_gt_mask = matching_matrix.sum(1) > 1
         if prior_match_gt_mask.sum() > 0:
-            cost_min, cost_argmin = torch.min(
-                cost[prior_match_gt_mask, :], dim=1)
+            cost_min, cost_argmin = torch.min(cost[prior_match_gt_mask, :], dim=1)
             matching_matrix[prior_match_gt_mask, :] *= 0
             matching_matrix[prior_match_gt_mask, cost_argmin] = 1
         # get foreground mask inside box and center prior
@@ -205,6 +194,5 @@ class PoseSimOTAAssigner(SimOTAAssigner):
         valid_mask[valid_mask.clone()] = fg_mask_inboxes
 
         matched_gt_inds = matching_matrix[fg_mask_inboxes, :].argmax(1)
-        matched_pred_oks = (matching_matrix *
-                            pairwise_oks).sum(1)[fg_mask_inboxes]
+        matched_pred_oks = (matching_matrix * pairwise_oks).sum(1)[fg_mask_inboxes]
         return matched_pred_oks, matched_gt_inds

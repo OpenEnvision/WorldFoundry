@@ -144,7 +144,7 @@ class LazyCudaFrame:
             return self._host.dtype
         return np.dtype(str(self.to_cuda_tensor().dtype).removeprefix("torch."))
 
-    def snapshot_cuda(self) -> "LazyCudaFrame":
+    def snapshot_cuda(self) -> LazyCudaFrame:
         """Own device pixels before the decoder can reuse its output storage."""
         import torch
 

@@ -28,7 +28,7 @@ def inference(groups, model, device, verbose=True):
     groups = [_to_device(view, device) for view in groups]
     with torch.autocast(device_type=torch.device(device).type, enabled=False):
         output, state_args = model(groups, ret_state=True)
-    return to_cpu(dict(views=output.views, pred=output.ress)), state_args
+    return to_cpu({"views": output.views, "pred": output.ress}), state_args
 
 
 @torch.no_grad()
@@ -38,7 +38,7 @@ def inference_recurrent(groups, model, device, verbose=True):
     groups = [_to_device(view, device) for view in groups]
     with torch.autocast(device_type=torch.device(device).type, enabled=False):
         preds, views, state_args = model.forward_recurrent(groups, device, ret_state=True)
-    return to_cpu(dict(views=views, pred=preds)), state_args
+    return to_cpu({"views": views, "pred": preds}), state_args
 
 
 @torch.no_grad()
@@ -46,4 +46,4 @@ def inference_step(view, state_args, model, device, verbose=True):
     view = _to_device(view, device)
     with torch.autocast(device_type=torch.device(device).type, enabled=False):
         pred, _ = model.inference_step(view, *state_args)
-    return to_cpu(dict(pred=pred))
+    return to_cpu({"pred": pred})

@@ -7,7 +7,6 @@ and text prompt, guided by camera motion parameters.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import torch
 
@@ -69,11 +68,11 @@ class FantasyWorldWan22Synthesis(BaseSynthesis):
         cls,
         pretrained_model_path: str = DEFAULT_FANTASY_WORLD_WAN22_REPO,
         args=None,
-        device: Optional[str] = None,
-        wan_model_path: Optional[str] = None,
-        lora_path: Optional[str] = None,
-        moge_path: Optional[str] = None,
-        moge_pretrained: Optional[str] = None,
+        device: str | None = None,
+        wan_model_path: str | None = None,
+        lora_path: str | None = None,
+        moge_path: str | None = None,
+        moge_pretrained: str | None = None,
         sample_steps: int = 50,
         cfg_scale: float = 5.0,
         timestep_boundary: int = 900,
@@ -82,14 +81,14 @@ class FantasyWorldWan22Synthesis(BaseSynthesis):
         height: int = 480,
         width: int = 832,
         base_seed: int = 1024,
-        high_model_device: Optional[str] = None,
-        low_model_device: Optional[str] = None,
-        moge_device: Optional[str] = None,
+        high_model_device: str | None = None,
+        low_model_device: str | None = None,
+        moge_device: str | None = None,
         weight_dtype: torch.dtype = torch.bfloat16,
-        model_ckpt_high: Optional[str] = None,
-        model_ckpt_low: Optional[str] = None,
+        model_ckpt_high: str | None = None,
+        model_ckpt_low: str | None = None,
         **kwargs,
-    ) -> "FantasyWorldWan22Synthesis":
+    ) -> FantasyWorldWan22Synthesis:
         """
         Loads a pre-trained FantasyWorld Wan2.2 synthesis model.
 
@@ -136,8 +135,12 @@ class FantasyWorldWan22Synthesis(BaseSynthesis):
 
         # Determine the specific paths for high and low noise model checkpoints.
         # If not provided, default to paths within the resolved checkpoint_dir.
-        high_ckpt = Path(model_ckpt_high).expanduser().resolve() if model_ckpt_high else checkpoint_dir / "high_noise_model.pth"
-        low_ckpt = Path(model_ckpt_low).expanduser().resolve() if model_ckpt_low else checkpoint_dir / "low_noise_model.pth"
+        high_ckpt = (
+            Path(model_ckpt_high).expanduser().resolve() if model_ckpt_high else checkpoint_dir / "high_noise_model.pth"
+        )
+        low_ckpt = (
+            Path(model_ckpt_low).expanduser().resolve() if model_ckpt_low else checkpoint_dir / "low_noise_model.pth"
+        )
 
         # Validate that the necessary checkpoint files exist.
         if not high_ckpt.is_file():
@@ -186,9 +189,9 @@ class FantasyWorldWan22Synthesis(BaseSynthesis):
         prompt: str,
         camera_source,
         K=None,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         scene_name: str = "fantasyworld_wan22_scene",
-        neg_prompt: Optional[str] = None,
+        neg_prompt: str | None = None,
         fps: int = 16,
         using_scale: bool = True,
         conf_threshold: float = 1.5,

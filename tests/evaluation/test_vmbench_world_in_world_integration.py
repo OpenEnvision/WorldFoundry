@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNNERS = REPO_ROOT / "worldfoundry" / "evaluation" / "tasks" / "execution" / "runners"
+RUNNERS = REPO_ROOT / "worldfoundry" / "evals" / "tasks" / "execution" / "runners"
 
 
 class VMBenchWorldInWorldSmokeTests(unittest.TestCase):
@@ -32,7 +32,7 @@ class VMBenchWorldInWorldSmokeTests(unittest.TestCase):
         )
 
     def test_vmbench_bundled_prompts_materialize(self) -> None:
-        from worldfoundry.evaluation.tasks.execution.runners.vmbench.vmbench_prompts import (
+        from worldfoundry.evals.tasks.execution.runners.vmbench.vmbench_prompts import (
             materialize_vmbench_generation_requests,
         )
 
@@ -42,7 +42,7 @@ class VMBenchWorldInWorldSmokeTests(unittest.TestCase):
         self.assertEqual(requests[0].inputs["official_video_name"], "0001.mp4")
 
     def test_world_in_world_bundled_prompts_materialize(self) -> None:
-        from worldfoundry.evaluation.tasks.execution.runners.world_in_world.world_in_world_prompts import (
+        from worldfoundry.evals.tasks.execution.runners.world_in_world.world_in_world_prompts import (
             materialize_world_in_world_generation_requests,
         )
 

@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> metric3d -> __init__.py functionality."""
-
 from dataclasses import dataclass
 
 import torch
@@ -39,7 +37,6 @@ class Metric3DDepthModel(DepthEstimationModel):
 
     @dataclass
     class PadInfo:
-        """Pad info implementation."""
         pad_up: int
         pad_down: int
         pad_left: int
@@ -48,16 +45,6 @@ class Metric3DDepthModel(DepthEstimationModel):
         focal_length: float
 
     def __init__(self, version: int = 2, model: str = "giant2", weights_path: str | None = None) -> None:
-        """Init.
-
-        Args:
-            version: The version.
-            model: The model.
-            weights_path: The weights path.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         if version == 1:
@@ -92,11 +79,6 @@ class Metric3DDepthModel(DepthEstimationModel):
 
     @property
     def depth_type(self) -> DepthType:
-        """Depth type.
-
-        Returns:
-            The return value.
-        """
         return DepthType.METRIC_DEPTH
 
     @torch.no_grad()
@@ -164,14 +146,6 @@ class Metric3DDepthModel(DepthEstimationModel):
         return feature
 
     def estimate(self, src: DepthEstimationInput) -> DepthEstimationResult:
-        """Estimate.
-
-        Args:
-            src: The src.
-
-        Returns:
-            The return value.
-        """
         rgb: torch.Tensor = unpack_optional(src.rgb)
         assert rgb.dtype == torch.float32, "Input image should be float32"
 

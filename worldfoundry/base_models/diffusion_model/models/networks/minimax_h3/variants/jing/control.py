@@ -11,13 +11,8 @@ def control_vector(keys):
     if not isinstance(keys, (str, list, tuple, set)):
         raise TypeError("control must be a WASD/IJKL string or a list of keys")
     if isinstance(keys, str):
-        keys = ([key.strip().lower() for key in keys.split(",")]
-                if "," in keys else list(keys.strip().lower()))
-    if any(
-        not isinstance(key, str)
-        or key.lower() not in {"w", "a", "s", "d", "i", "j", "k", "l"}
-        for key in keys
-    ):
+        keys = [key.strip().lower() for key in keys.split(",")] if "," in keys else list(keys.strip().lower())
+    if any(not isinstance(key, str) or key.lower() not in {"w", "a", "s", "d", "i", "j", "k", "l"} for key in keys):
         raise ValueError(
             "control only accepts individual w/a/s/d/i/j/k/l keys; repetition expressions are not supported"
         )
@@ -45,9 +40,7 @@ class ControlEncoder(nn.Module):
 
     def forward(self, control, height, width):
         t, h, w = self.patch_size
-        value = self.input_proj(
-            control.reshape(-1, t * control.shape[-1]).to(self.input_proj.weight.dtype)
-        )
+        value = self.input_proj(control.reshape(-1, t * control.shape[-1]).to(self.input_proj.weight.dtype))
         value = value.repeat_interleave((height // h) * (width // w), dim=0)
         return value + self.mlp2(F.silu(self.mlp1(value)))
 
@@ -70,9 +63,7 @@ class FiLM(nn.Module):
         encoded = encoded.to(self.mlp1.weight.dtype)
         value = encoded + self.mlp2(F.silu(self.mlp1(encoded)))
         selected = hidden.index_select(1, indices)
-        value = selected * (1 + self.scale(value).to(hidden.dtype)) + self.shift(
-            value
-        ).to(hidden.dtype)
+        value = selected * (1 + self.scale(value).to(hidden.dtype)) + self.shift(value).to(hidden.dtype)
         return hidden.index_copy(1, indices, value)
 
 
@@ -81,14 +72,9 @@ class Control(nn.Module):
         super().__init__()
         if config["dim_in"] != 6:
             raise ValueError("This demo supports six-dimensional camera control")
-        self.encoder = ControlEncoder(
-            config["dim_in"], config["dim_out"], model_config["patch_size"]
-        )
+        self.encoder = ControlEncoder(config["dim_in"], config["dim_out"], model_config["patch_size"])
         self.block_injectors = nn.ModuleList(
-            [
-                FiLM(config["dim_out"], model_config["hidden_size"])
-                for _ in range(model_config["num_layers"])
-            ]
+            [FiLM(config["dim_out"], model_config["hidden_size"]) for _ in range(model_config["num_layers"])]
         )
 
     def forward(self, segments):

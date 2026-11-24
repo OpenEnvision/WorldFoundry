@@ -1,13 +1,12 @@
 {
-  "modelsTotal": 275,
-  "modelsListed": 265,
-  "benchmarksTotal": 74,
+  "modelsListed": 260,
+  "benchmarksTotal": 75,
   "modelFamilies": [
     {
       "id": "video",
       "label": "Video",
       "blurb": "Text-, image-, and video-conditioned generation, editing, and audio-video systems.",
-      "count": 62,
+      "count": 65,
       "entries": [
         {
           "id": "allegro",
@@ -92,6 +91,14 @@
           "status": "integrated",
           "aliases": [
             "framepack"
+          ]
+        },
+        {
+          "id": "h3-tiny",
+          "name": "H 3-Tiny",
+          "status": "integrated",
+          "aliases": [
+            "h3-tiny"
           ]
         },
         {
@@ -335,6 +342,22 @@
           ]
         },
         {
+          "id": "pi-h3",
+          "name": "pi-H 3",
+          "status": "integrated",
+          "aliases": [
+            "pi-h3"
+          ]
+        },
+        {
+          "id": "pika-h3-flex",
+          "name": "Pika H 3 Flex",
+          "status": "integrated",
+          "aliases": [
+            "pika-h3-flex"
+          ]
+        },
+        {
           "id": "pusa-vidgen",
           "name": "Pusa VidGen",
           "status": "integrated",
@@ -352,7 +375,7 @@
         },
         {
           "id": "sama-14b",
-          "name": "SAMA",
+          "name": "SAMA-14B",
           "status": "integrated",
           "aliases": [
             "sama-14b"
@@ -517,7 +540,7 @@
       "id": "world_models",
       "label": "World models",
       "blurb": "Interactive worlds, camera/action conditioning, navigation, and simulator-shaped systems.",
-      "count": 106,
+      "count": 103,
       "entries": [
         {
           "id": "abot-world-0-5b-lf",
@@ -725,19 +748,19 @@
           ]
         },
         {
-          "id": "egowm",
-          "name": "EgoWM",
-          "status": "runtime_ported",
-          "aliases": [
-            "egowm"
-          ]
-        },
-        {
           "id": "evoke",
           "name": "Evoke",
           "status": "integrated",
           "aliases": [
             "evoke"
+          ]
+        },
+        {
+          "id": "fastframes",
+          "name": "FastFrames",
+          "status": "integrated",
+          "aliases": [
+            "fastframes"
           ]
         },
         {
@@ -770,6 +793,14 @@
           "status": "runtime_ported",
           "aliases": [
             "giga-world-0"
+          ]
+        },
+        {
+          "id": "h3-world",
+          "name": "H 3-World",
+          "status": "integrated",
+          "aliases": [
+            "h3-world"
           ]
         },
         {
@@ -821,11 +852,11 @@
           ]
         },
         {
-          "id": "hunyuanworld-voyager",
-          "name": "HunyuanWorld-Voyager",
+          "id": "hy-nomas",
+          "name": "Hy-Nomas",
           "status": "integrated",
           "aliases": [
-            "hunyuanworld-voyager"
+            "hy-nomas"
           ]
         },
         {
@@ -834,14 +865,6 @@
           "status": "component_verified",
           "aliases": [
             "hy-world-2.0"
-          ]
-        },
-        {
-          "id": "hyworld-worldgen",
-          "name": "HY-World 2.0 Trajectory Renderer",
-          "status": "runtime_ported",
-          "aliases": [
-            "hyworld-worldgen"
           ]
         },
         {
@@ -1092,14 +1115,6 @@
           ]
         },
         {
-          "id": "open-dreamer",
-          "name": "Open Dreamer",
-          "status": "runtime_ported",
-          "aliases": [
-            "open-dreamer"
-          ]
-        },
-        {
           "id": "pointworld",
           "name": "PointWorld",
           "status": "runtime_ported",
@@ -1137,14 +1152,6 @@
           "status": "integrated",
           "aliases": [
             "self-forcing"
-          ]
-        },
-        {
-          "id": "shotstream",
-          "name": "ShotStream",
-          "status": "runtime_ported",
-          "aliases": [
-            "shotstream"
           ]
         },
         {
@@ -1278,14 +1285,6 @@
           ]
         },
         {
-          "id": "wilddet3d",
-          "name": "WildDet 3D",
-          "status": "runtime_ported",
-          "aliases": [
-            "wilddet3d"
-          ]
-        },
-        {
           "id": "wildworld",
           "name": "WildWorld",
           "status": "runtime_ported",
@@ -1403,7 +1402,7 @@
       "id": "three_d_four_d",
       "label": "3D / 4D",
       "blurb": "Reconstruction, depth, point clouds, scene representations, and dynamic geometry.",
-      "count": 34,
+      "count": 29,
       "entries": [
         {
           "id": "cut3r",
@@ -1444,31 +1443,10 @@
         },
         {
           "id": "depth-anything-v2-prior",
-          "name": "Depth Anything V 2",
+          "name": "Depth Anything V 2 Prior",
           "status": "integrated",
           "aliases": [
             "depth-anything-v2-prior"
-          ]
-        },
-        {
-          "id": "dust3r",
-          "name": "DUSt3R",
-          "status": "verified",
-          "aliases": [
-            "dust3r",
-            "dust3r-base-model"
-          ],
-          "versions": [
-            "Catalog",
-            "Base"
-          ]
-        },
-        {
-          "id": "dvlt",
-          "name": "Déjà View Looping Transformer",
-          "status": "integrated",
-          "aliases": [
-            "dvlt"
           ]
         },
         {
@@ -1489,7 +1467,7 @@
         },
         {
           "id": "geocalib-prior",
-          "name": "GeoCalib",
+          "name": "GeoCalib Prior",
           "status": "integrated",
           "aliases": [
             "geocalib-prior"
@@ -1537,18 +1515,10 @@
         },
         {
           "id": "metric3d-prior",
-          "name": "Metric 3D",
+          "name": "Metric 3D Prior",
           "status": "integrated",
           "aliases": [
             "metric3d-prior"
-          ]
-        },
-        {
-          "id": "monst3r",
-          "name": "MonST 3R",
-          "status": "verified",
-          "aliases": [
-            "monst3r"
           ]
         },
         {
@@ -1573,6 +1543,14 @@
           "status": "runtime_ported",
           "aliases": [
             "pi3"
+          ]
+        },
+        {
+          "id": "pi4",
+          "name": "Pi 4",
+          "status": "runtime_ported",
+          "aliases": [
+            "pi4"
           ]
         },
         {
@@ -1601,42 +1579,18 @@
         },
         {
           "id": "track-anything-prior",
-          "name": "Segment and Track Anything",
+          "name": "Segment and Track Anything Prior",
           "status": "integrated",
           "aliases": [
             "track-anything-prior"
           ]
         },
         {
-          "id": "splatt3r",
-          "name": "Splatt 3R",
-          "status": "verified",
-          "aliases": [
-            "splatt3r"
-          ]
-        },
-        {
-          "id": "stable-virtual-camera",
-          "name": "Stable Virtual Camera",
-          "status": "integrated",
-          "aliases": [
-            "stable-virtual-camera"
-          ]
-        },
-        {
           "id": "unidepth-v2-prior",
-          "name": "UniDepth V 2",
+          "name": "UniDepth V 2 Prior",
           "status": "integrated",
           "aliases": [
             "unidepth-v2-prior"
-          ]
-        },
-        {
-          "id": "unik3d-prior",
-          "name": "UniK 3D",
-          "status": "integrated",
-          "aliases": [
-            "unik3d-prior"
           ]
         },
         {
@@ -1657,7 +1611,7 @@
         },
         {
           "id": "video-depth-anything-prior",
-          "name": "Video Depth Anything",
+          "name": "Video Depth Anything Prior",
           "status": "integrated",
           "aliases": [
             "video-depth-anything-prior"
@@ -2214,7 +2168,7 @@
     {
       "id": "video",
       "label": "Video & world",
-      "count": 52,
+      "count": 53,
       "entries": [
         {
           "id": "4dworldbench",
@@ -2543,6 +2497,13 @@
           "name": "WorldBench",
           "aliases": [
             "worldbench"
+          ]
+        },
+        {
+          "id": "worldmembench",
+          "name": "WorldMemBench",
+          "aliases": [
+            "worldmembench"
           ]
         },
         {

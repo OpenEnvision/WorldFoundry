@@ -107,9 +107,7 @@ class NativeCheckpointResolver:
             raise FileNotFoundError(f"checkpoint files do not exist: {[str(path) for path in missing]}")
         missing_resources = tuple(root / name for name in checkpoint.resources if not (root / name).is_file())
         if missing_resources:
-            raise FileNotFoundError(
-                f"checkpoint resources do not exist: {[str(path) for path in missing_resources]}"
-            )
+            raise FileNotFoundError(f"checkpoint resources do not exist: {[str(path) for path in missing_resources]}")
         return MaterializedCheckpoint(root=root, paths=paths)
 
     @staticmethod

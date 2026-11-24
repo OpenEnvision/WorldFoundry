@@ -1,24 +1,25 @@
-from math import pi
-import torch
-from torch import nn
-from einops import rearrange, repeat
 import logging
+from math import pi
+
+import torch
+from einops import rearrange, repeat
+from torch import nn
 
 
 def broadcat(tensors, dim=-1):
     num_tensors = len(tensors)
-    shape_lens = set(list(map(lambda t: len(t.shape), tensors)))
+    shape_lens = {len(t.shape) for t in tensors}
     assert len(shape_lens) == 1, "tensors must all have the same number of dimensions"
-    shape_len = list(shape_lens)[0]
+    shape_len = list(shape_lens)[0]  # noqa: RUF015 - Keeps eager list construction and IndexError.
     dim = (dim + shape_len) if dim < 0 else dim
-    dims = list(zip(*map(lambda t: list(t.shape), tensors)))
+    dims = list(zip(*(list(t.shape) for t in tensors), strict=False))
     expandable_dims = [(i, val) for i, val in enumerate(dims) if i != dim]
-    assert all([*map(lambda t: len(set(t[1])) <= 2, expandable_dims)]), "invalid dimensions for broadcastable concatentation"
-    max_dims = list(map(lambda t: (t[0], max(t[1])), expandable_dims))
-    expanded_dims = list(map(lambda t: (t[0], (t[1],) * num_tensors), max_dims))
+    assert all([*(len(set(t[1])) <= 2 for t in expandable_dims)]), "invalid dimensions for broadcastable concatentation"
+    max_dims = [(t[0], max(t[1])) for t in expandable_dims]
+    expanded_dims = [(t[0], (t[1],) * num_tensors) for t in max_dims]
     expanded_dims.insert(dim, (dim, dims[dim]))
-    expandable_shapes = list(zip(*map(lambda t: t[1], expanded_dims)))
-    tensors = list(map(lambda t: t[0].expand(*t[1]), zip(tensors, expandable_shapes)))
+    expandable_shapes = list(zip(*(t[1] for t in expanded_dims), strict=False))
+    tensors = [t[0].expand(*t[1]) for t in zip(tensors, expandable_shapes, strict=False)]
     return torch.cat(tensors, dim=dim)
 
 
@@ -73,7 +74,9 @@ class VisionRotaryEmbedding(nn.Module):
     def forward(self, t, start_index=0):
         rot_dim = self.freqs_cos.shape[-1]
         end_index = start_index + rot_dim
-        assert rot_dim <= t.shape[-1], f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
+        assert rot_dim <= t.shape[-1], (
+            f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
+        )
         t_left, t, t_right = t[..., :start_index], t[..., start_index:end_index], t[..., end_index:]
         t = (t * self.freqs_cos) + (rotate_half(t) * self.freqs_sin)
 
@@ -81,7 +84,18 @@ class VisionRotaryEmbedding(nn.Module):
 
 
 class VisionRotaryEmbeddingFast(nn.Module):
-    def __init__(self, dim, pt_seq_len, ft_seq_len=None, custom_freqs=None, freqs_for="lang", theta=10000, max_freq=10, num_freqs=1, patch_dropout=0.0):
+    def __init__(
+        self,
+        dim,
+        pt_seq_len,
+        ft_seq_len=None,
+        custom_freqs=None,
+        freqs_for="lang",
+        theta=10000,
+        max_freq=10,
+        num_freqs=1,
+        patch_dropout=0.0,
+    ):
         super().__init__()
         if custom_freqs:
             freqs = custom_freqs

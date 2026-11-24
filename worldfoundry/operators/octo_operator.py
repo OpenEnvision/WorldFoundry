@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,7 +16,7 @@ class OctoOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "generalist_robot_transformer_policy"
     ACTION_REPRESENTATION = "task_conditioned_action_chunk"
     OBSERVATION_LAYOUT = "windowed_rgb_goal_language_proprio"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": False,
@@ -24,7 +25,7 @@ class OctoOperator(EmbodiedActionOperator):
         "actions": ["action_chunk", "action_sequence"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
         task = prompt if prompt not in (None, "") else _first_present(kwargs, "task", "instruction", "task_instruction")
         task = "" if task is None else str(task)
@@ -44,7 +45,7 @@ class OctoOperator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         observation = _compact_dict(
             {
@@ -69,7 +70,7 @@ class OctoOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "action_chunk", "action_sequence")

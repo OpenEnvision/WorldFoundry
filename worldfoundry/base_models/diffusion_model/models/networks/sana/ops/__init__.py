@@ -85,10 +85,8 @@ def _prepare_fused_gdn_inputs(self, x: torch.Tensor, HW) -> _FusedGDNPrep:
     if any(bias is not None for bias in biases):
         qkv_b = torch.cat(
             [
-                bias
-                if bias is not None
-                else torch.zeros(weight.shape[0], device=weight.device, dtype=weight.dtype)
-                for bias, weight in zip(biases, (q_w, k_w, v_w))
+                bias if bias is not None else torch.zeros(weight.shape[0], device=weight.device, dtype=weight.dtype)
+                for bias, weight in zip(biases, (q_w, k_w, v_w), strict=False)
             ]
         )
     qkv = F.linear(x, qkv_w, qkv_b).reshape(B, N, 3, H, D)
@@ -125,8 +123,8 @@ def _prepare_fused_gdn_inputs(self, x: torch.Tensor, HW) -> _FusedGDNPrep:
 
 
 __all__ = [
-    "_precompute_inv_rms",
     "_execution_weight_bias",
+    "_precompute_inv_rms",
     "_prepare_fused_gdn_inputs",
     "_resolve_gdn_variant",
     "fused_bidi_merge",

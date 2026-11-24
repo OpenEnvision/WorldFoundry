@@ -1,8 +1,7 @@
+import inspect
 import math
 import os
-import inspect
 import socket
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -30,7 +29,6 @@ def get_sampling_sigmas(sampling_steps, shift):
 
 
 class YumeRuntime:
-
     def __init__(
         self,
         model,
@@ -48,12 +46,8 @@ class YumeRuntime:
         try:
             forward = self.model.model.forward
             signature = inspect.signature(forward)
-            accepts_rand_num_img = (
-                "rand_num_img" in signature.parameters
-                or any(
-                    param.kind == inspect.Parameter.VAR_KEYWORD
-                    for param in signature.parameters.values()
-                )
+            accepts_rand_num_img = "rand_num_img" in signature.parameters or any(
+                param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()
             )
         except (TypeError, ValueError):
             accepts_rand_num_img = True
@@ -84,9 +78,9 @@ class YumeRuntime:
         spatial_patch = int(patch_size[1]) * int(patch_size[2])
         seq_len = int(latent.shape[1]) * int(latent.shape[2]) * int(latent.shape[3]) // spatial_patch
         sp_size = int(getattr(self.model, "sp_size", 1) or 1)
-        return int(math.ceil(seq_len / sp_size)) * sp_size
+        return int(math.ceil(seq_len / sp_size)) * sp_size  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
-    def _ensure_arg_seq_len(self, *arg_dicts: Optional[Dict[str, torch.Tensor]], latent: torch.Tensor) -> None:
+    def _ensure_arg_seq_len(self, *arg_dicts: dict[str, torch.Tensor] | None, latent: torch.Tensor) -> None:
         required_seq_len = self._patchified_seq_len(latent)
         for arg_dict in arg_dicts:
             if arg_dict is None:
@@ -183,12 +177,12 @@ class YumeRuntime:
 
     def _build_initial_visual_condition(
         self,
-        image: Optional[torch.Tensor],
-        video: Optional[torch.Tensor],
+        image: torch.Tensor | None,
+        video: torch.Tensor | None,
         task_type: str,
-        size: Tuple[int, int],
+        size: tuple[int, int],
         current_frame_num: int,
-    ) -> Tuple[torch.Tensor, Image.Image]:
+    ) -> tuple[torch.Tensor, Image.Image]:
         if task_type == "i2v":
             if image is None:
                 if video is None:
@@ -196,9 +190,7 @@ class YumeRuntime:
                 if video.ndim != 4:
                     raise ValueError(f"Expected video tensor shape (F,C,H,W), got {tuple(video.shape)}")
                 image = video[0].add(1.0).div(2.0).clamp(0, 1)
-            base_video = torch.zeros(
-                image.shape[0], 1 + current_frame_num, size[0], size[1], device=self.device
-            )
+            base_video = torch.zeros(image.shape[0], 1 + current_frame_num, size[0], size[1], device=self.device)
             base_video[:, 0] = (image.to(self.device) - 0.5) * 2
         elif task_type == "v2v":
             if video is None:
@@ -208,9 +200,7 @@ class YumeRuntime:
             v = video.to(self.device)
             expected = 1 + current_frame_num
             if v.shape[0] < expected:
-                pad = torch.zeros(
-                    expected - v.shape[0], v.shape[1], v.shape[2], v.shape[3], device=self.device
-                )
+                pad = torch.zeros(expected - v.shape[0], v.shape[1], v.shape[2], v.shape[3], device=self.device)
                 v = torch.cat([v, pad], dim=0)
             v = v[:expected]
             base_video = v.permute(1, 0, 2, 3).contiguous()
@@ -227,14 +217,12 @@ class YumeRuntime:
         return model_input_de, anchor_img
 
     @staticmethod
-    def _normalize_sampling_method(sampling_method: Optional[str]) -> str:
+    def _normalize_sampling_method(sampling_method: str | None) -> str:
         if sampling_method is None:
             return "ode"
         method = sampling_method.lower()
         if method not in ("ode", "sde"):
-            raise ValueError(
-                f"Unsupported sampling_method: {sampling_method}. Supported values: ['ode', 'sde']"
-            )
+            raise ValueError(f"Unsupported sampling_method: {sampling_method}. Supported values: ['ode', 'sde']")
         return method
 
     @torch.no_grad()
@@ -344,9 +332,7 @@ class YumeRuntime:
                     pred_original_sample = latent_tail + (0 - sigma_i) * noise_pred_tail
                     delta_t = 0.0 if i + 1 == sample_step_num else max(0.0, sigma_i - sigma_i_next)
                     std_dev_t = eta * math.sqrt(delta_t)
-                    score_estimate = -(
-                        latent_tail - pred_original_sample * (1 - sigma_i)
-                    ) / (sigma_i ** 2 + 1e-8)
+                    score_estimate = -(latent_tail - pred_original_sample * (1 - sigma_i)) / (sigma_i**2 + 1e-8)
                     log_term = -0.5 * (eta**2) * score_estimate
                     prev_sample_mean = temp_x0 + log_term * dsigma
                     temp_x0 = prev_sample_mean + torch.randn_like(prev_sample_mean) * std_dev_t
@@ -404,8 +390,7 @@ class YumeRuntime:
             next_caption = "First-person perspective." + next_interaction_caption
             if "camera_" not in next_interaction.lower():
                 next_caption += (
-                    f"Actual distance moved: {next_interaction_distance} "
-                    f"at {next_interaction_speed} meters per second."
+                    f"Actual distance moved: {next_interaction_distance} at {next_interaction_speed} meters per second."
                 )
             else:
                 next_caption += f"View rotation speed: {next_interaction_speed}."
@@ -477,7 +462,7 @@ class YumeRuntime:
         size,
         seed,
         num_euler_timesteps,
-        sampling_method: Optional[str] = None,
+        sampling_method: str | None = None,
     ):
         if size not in YUME_SIZE_CONFIGS:
             raise ValueError(f"Unsupported size: {size}. Supported sizes: {list(YUME_SIZE_CONFIGS.keys())}")
@@ -485,7 +470,7 @@ class YumeRuntime:
 
         current_latent_num = 8
         current_frame_num = 32
-        output_video_list: List[torch.Tensor] = []
+        output_video_list: list[torch.Tensor] = []
 
         if image is not None:
             image = image.to(self.device)
@@ -500,20 +485,14 @@ class YumeRuntime:
             current_frame_num=current_frame_num,
         )
 
-        history_state: Optional[Dict[str, torch.Tensor]] = None
+        history_state: dict[str, torch.Tensor] | None = None
         for interaction_idx, interaction_caption in enumerate(interaction_captions):
             next_caption = (
-                interaction_captions[interaction_idx + 1]
-                if interaction_idx + 1 < len(interaction_captions)
-                else None
+                interaction_captions[interaction_idx + 1] if interaction_idx + 1 < len(interaction_captions) else None
             )
             next_interaction = interactions[interaction_idx + 1] if next_caption is not None else None
-            next_speed = (
-                interaction_speeds[interaction_idx + 1] if next_caption is not None else None
-            )
-            next_distance = (
-                interaction_distances[interaction_idx + 1] if next_caption is not None else None
-            )
+            next_speed = interaction_speeds[interaction_idx + 1] if next_caption is not None else None
+            next_distance = interaction_distances[interaction_idx + 1] if next_caption is not None else None
 
             output_video_per_interaction, history_state = self.predict_per_interaction(
                 prompt=prompt,

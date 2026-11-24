@@ -8,8 +8,12 @@ but exactly replicate the logic in `prismatic.models.vlms.prismatic.py`.
 
 import logging
 import os
+from collections.abc import Callable
 from functools import partial
-from typing import Any, Callable, ClassVar, Dict, List, Optional, Tuple
+from typing import Any, ClassVar
+
+from worldfoundry.base_models.llm_mllm_core.mllm.prismatic import PrismaticProjector as PrismaticProjector
+from worldfoundry.base_models.llm_mllm_core.mllm.prismatic import ls_apply_patch as ls_apply_patch
 
 os.environ.setdefault("USE_FLAX", "0")
 os.environ.setdefault("USE_TF", "0")
@@ -26,10 +30,7 @@ from timm.models.vision_transformer import LayerScale
 from transformers import PretrainedConfig, PreTrainedModel
 from transformers.models.llama.modeling_llama import LlamaForCausalLM
 
-from .masks import (
-    get_current_action_mask,
-    get_next_actions_mask,
-)
+from ..config import OpenVLAConfig, PrismaticConfig
 from ..constants import (
     ACTION_DIM,
     ACTION_PROPRIO_NORMALIZATION_TYPE,
@@ -39,15 +40,17 @@ from ..constants import (
     STOP_INDEX,
     NormalizationType,
 )
-
-from ..config import OpenVLAConfig, PrismaticConfig
+from .masks import (
+    get_current_action_mask,
+    get_next_actions_mask,
+)
 
 # Set up logger
 logger = logging.getLogger(__name__)
 
 
 # === Utility Functions for Monkey-Patching ===
-def unpack_tuple(fn: Callable[[Any], Tuple[Any]]) -> Callable[[Any], Any]:
+def unpack_tuple(fn: Callable[[Any], tuple[Any]]) -> Callable[[Any], Any]:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         result = fn(*args, **kwargs)
         # TIMM 0.9 returned a one-element tuple here; TIMM 1.x returns a
@@ -65,14 +68,6 @@ def unpack_tuple(fn: Callable[[Any], Tuple[Any]]) -> Callable[[Any], Any]:
 # HF Transformers overwrites parameters with names containing `gamma`; we're going to patch VisionBackbone.LayerScale.
 #   =>> TIMM :: https://github.com/huggingface/pytorch-image-models/blob/main/timm/models/vision_transformer.py#L109
 #   =>> Transformers :: https://github.com/huggingface/transformers/blob/main/src/transformers/modeling_utils.py#L3960
-def _ls_new_forward(self, x: torch.Tensor) -> torch.Tensor:
-    return x.mul_(self.scale_factor) if self.inplace else x * self.scale_factor
-
-
-def ls_apply_patch(ls_module: LayerScale):
-    ls_module.scale_factor = nn.Parameter(ls_module.gamma.clone())
-    ls_module.forward = _ls_new_forward.__get__(ls_module, LayerScale)
-    del ls_module.gamma
 
 
 # === Prismatic Vision Backbone (nn.Module) Definitions (w/ Fused Backbone Support) ===
@@ -87,9 +82,9 @@ class PrismaticVisionBackbone(nn.Module):
     def __init__(
         self,
         use_fused_vision_backbone: bool,
-        image_sizes: List[int],
-        timm_model_ids: List[str],
-        timm_override_act_layers: List[Optional[str]],
+        image_sizes: list[int],
+        timm_model_ids: list[str],
+        timm_override_act_layers: list[str | None],
     ) -> None:
         """
         Initialize the vision backbone.
@@ -124,7 +119,7 @@ class PrismaticVisionBackbone(nn.Module):
         # Patch LayerScale modules for HF compatibility
         self._patch_layer_scales()
 
-    def _create_featurizer(self, model_id: str, img_size: int, act_layer: Optional[str]) -> nn.Module:
+    def _create_featurizer(self, model_id: str, img_size: int, act_layer: str | None) -> nn.Module:
         """
         Create a TIMM-based featurizer model with appropriate configurations.
 
@@ -240,38 +235,6 @@ class PrismaticVisionBackbone(nn.Module):
 
 
 # === Prismatic Projector (nn.Module) Definitions ===
-class PrismaticProjector(nn.Module):
-    def __init__(self, use_fused_vision_backbone: bool, vision_dim: int, llm_dim: int) -> None:
-        super().__init__()
-        self.use_fused_vision_backbone = use_fused_vision_backbone
-        self.vision_dim, self.llm_dim = vision_dim, llm_dim
-
-        # Switch on `use_fused_vision_backbone` =>> use slightly different MLPs and projection factors!
-        if not self.use_fused_vision_backbone:
-            self.fc1 = nn.Linear(self.vision_dim, self.llm_dim, bias=True)
-            self.fc2 = nn.Linear(self.llm_dim, self.llm_dim, bias=True)
-            self.act_fn1 = nn.GELU()
-        else:
-            initial_projection_dim = 4 * vision_dim
-            self.fc1 = nn.Linear(self.vision_dim, initial_projection_dim, bias=True)
-            self.fc2 = nn.Linear(initial_projection_dim, self.llm_dim, bias=True)
-            self.fc3 = nn.Linear(self.llm_dim, self.llm_dim, bias=True)
-            self.act_fn1 = nn.GELU()
-            self.act_fn2 = nn.GELU()
-
-    def forward(self, img_patches: torch.Tensor) -> torch.Tensor:
-        if not self.use_fused_vision_backbone:
-            projected_features = self.fc1(img_patches)
-            projected_features = self.act_fn1(projected_features)
-            projected_features = self.fc2(projected_features)
-        else:
-            projected_features = self.fc1(img_patches)
-            projected_features = self.act_fn1(projected_features)
-            projected_features = self.fc2(projected_features)
-            projected_features = self.act_fn2(projected_features)
-            projected_features = self.fc3(projected_features)
-
-        return projected_features
 
 
 # === Main HF Class Definitions ===
@@ -280,7 +243,7 @@ class PrismaticPreTrainedModel(PreTrainedModel):
     base_model_prefix: str = "model"
     supports_gradient_checkpointing: bool = False
 
-    _no_split_modules: ClassVar[List[str]] = ["PrismaticProjector"]
+    _no_split_modules: ClassVar[list[str]] = ["PrismaticProjector"]
     _skip_keys_device_placement: str = "past_key_values"
     _supports_flash_attn_2: bool = True
 
@@ -395,7 +358,7 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
         return self.language_model.tie_weights(*args, **kwargs)
 
     def resize_token_embeddings(
-        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
+        self, new_num_tokens: int | None = None, pad_to_multiple_of: int | None = None
     ) -> nn.Embedding:
         updated_embeddings = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
 
@@ -712,8 +675,8 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
 
     def predict_action(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        unnorm_key: Optional[str] = None,
+        input_ids: torch.LongTensor | None = None,
+        unnorm_key: str | None = None,
         proprio=None,
         proprio_projector=None,
         action_head=None,
@@ -774,7 +737,9 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         # Add proprioceptive features if provided
         use_proprio = proprio_projector is not None and proprio is not None
         if use_proprio:
-            proprio = torch.Tensor(proprio).to(projected_patch_embeddings.device, dtype=projected_patch_embeddings.dtype)
+            proprio = torch.Tensor(proprio).to(
+                projected_patch_embeddings.device, dtype=projected_patch_embeddings.dtype
+            )
             projected_patch_embeddings = self._process_proprio_features(
                 projected_patch_embeddings, proprio, proprio_projector
             )
@@ -825,7 +790,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         return actions, actions_hidden_states
 
     @staticmethod
-    def _check_unnorm_key(norm_stats: Dict[str, Dict[str, Any]], unnorm_key: Optional[str]) -> str:
+    def _check_unnorm_key(norm_stats: dict[str, dict[str, Any]], unnorm_key: str | None) -> str:
         """Validate and resolve the unnormalization key for action statistics"""
         if unnorm_key is None:
             assert len(norm_stats) == 1, (
@@ -841,12 +806,12 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         )
         return unnorm_key
 
-    def get_action_dim(self, unnorm_key: Optional[str] = None) -> int:
+    def get_action_dim(self, unnorm_key: str | None = None) -> int:
         """Get the dimensionality of the policy's action space."""
         unnorm_key = self._check_unnorm_key(self.norm_stats, unnorm_key)
         return len(self.norm_stats[unnorm_key]["action"]["min"])
 
-    def get_action_stats(self, unnorm_key: Optional[str] = None) -> Dict[str, Any]:
+    def get_action_stats(self, unnorm_key: str | None = None) -> dict[str, Any]:
         """Get all the logged statistics for the given dataset."""
         unnorm_key = self._check_unnorm_key(self.norm_stats, unnorm_key)
         return self.norm_stats[unnorm_key]["action"]

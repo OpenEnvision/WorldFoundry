@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """Convert DA3 depth output to Pi3 format expected by the v2v pipeline.
 
 DA3 outputs:
@@ -114,7 +113,7 @@ def convert_intrinsics(da3_dir, output_dir):
         line = line.replace("\n", "")
         f.write(line + "\n")
 
-    print(f"  Converted intrinsics (first frame)")
+    print("  Converted intrinsics (first frame)")
 
 
 def convert_images(da3_dir, output_dir, video_path=None, target_width=832, target_height=480):
@@ -135,8 +134,7 @@ def convert_images(da3_dir, output_dir, video_path=None, target_width=832, targe
 
         # Count DA3 frames to know how many to extract
         da3_frames_dir = os.path.join(da3_dir, "frames")
-        n_da3_frames = len([f for f in os.listdir(da3_frames_dir)
-                            if f.endswith((".jpg", ".png"))])
+        n_da3_frames = len([f for f in os.listdir(da3_frames_dir) if f.endswith((".jpg", ".png"))])
 
         target_ar = target_width / target_height  # 832/480 = 1.7333
 
@@ -152,19 +150,17 @@ def convert_images(da3_dir, output_dir, video_path=None, target_width=832, targe
                 # Source is wider -> crop width
                 crop_w = int(h * target_ar)
                 x0 = (w - crop_w) // 2
-                frame = frame[:, x0:x0 + crop_w]
+                frame = frame[:, x0 : x0 + crop_w]
             elif src_ar < target_ar:
                 # Source is taller -> crop height
                 crop_h = int(w / target_ar)
                 y0 = (h - crop_h) // 2
-                frame = frame[y0:y0 + crop_h, :]
+                frame = frame[y0 : y0 + crop_h, :]
 
-            frame = cv2.resize(frame, (target_width, target_height),
-                               interpolation=cv2.INTER_AREA)
+            frame = cv2.resize(frame, (target_width, target_height), interpolation=cv2.INTER_AREA)
             # BGR -> RGB -> PIL -> save
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            Image.fromarray(frame_rgb).save(
-                os.path.join(out_images_dir, f"{count:06d}.png"))
+            Image.fromarray(frame_rgb).save(os.path.join(out_images_dir, f"{count:06d}.png"))
             count += 1
 
         cap.release()
@@ -193,11 +189,15 @@ def main():
     parser = argparse.ArgumentParser(description="Convert DA3 depth output to Pi3 format")
     parser.add_argument("--da3_dir", type=str, required=True, help="DA3 output directory")
     parser.add_argument("--output_dir", type=str, required=True, help="Pi3-format output directory")
-    parser.add_argument("--video_path", type=str, default=None,
-                        help="Original video path (for crop+resize to fix DA3 stretch distortion)")
+    parser.add_argument(
+        "--video_path",
+        type=str,
+        default=None,
+        help="Original video path (for crop+resize to fix DA3 stretch distortion)",
+    )
     args = parser.parse_args()
 
-    print(f"Converting DA3 -> Pi3 format:")
+    print("Converting DA3 -> Pi3 format:")
     print(f"  DA3 dir:    {args.da3_dir}")
     print(f"  Output dir: {args.output_dir}")
     if args.video_path:

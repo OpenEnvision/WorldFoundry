@@ -18,15 +18,15 @@ python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots: [.]
 preflight_command: >-
   PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight
+  worldfoundry.evals.tasks.execution.orchestration.runtime_preflight
   --profile apple-pi
   --manifest worldfoundry/data/benchmarks/runtime_profiles/official/apple-pi.yaml
   --output-dir tmp/worldfoundry_preflight/apple-pi --json
 
 required_assets:
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
-  - worldfoundry/evaluation/tasks/execution/runners/apple_pi/apple_pi_runtime.py
+  - worldfoundry/evals/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/apple_pi/apple_pi_runtime.py
   task_yaml: worldfoundry/data/benchmarks/tasks/external/apple-pi.yaml
 
 required_env: []
@@ -54,9 +54,9 @@ required_packages:
 
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
 - id: in_tree_runtime
-  path: worldfoundry/evaluation/tasks/execution/runners/apple_pi/apple_pi_runtime.py
+  path: worldfoundry/evals/tasks/execution/runners/apple_pi/apple_pi_runtime.py
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/apple-pi.yaml
 
@@ -93,7 +93,7 @@ bounded_fixture_validation:
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 - -m
-- worldfoundry.evaluation.tasks.execution.runners.apple_pi.run_apple_pi_official_runner
+- worldfoundry.evals.tasks.execution.runners.apple_pi.run_apple_pi_official_runner
 - --run-official
 - --gt-dir
 - ${WORLDFOUNDRY_APPLE_PI_GT_DIR}

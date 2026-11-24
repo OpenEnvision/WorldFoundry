@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import av
 import numpy as np
 import pytest
 import torch
-from torchvision.io import read_video
 
 from worldfoundry.core.media.codecs.video import read_video_window_rgb, save_video_h264
 
@@ -64,18 +65,23 @@ def test_decode_failure_still_closes_decoder(monkeypatch):
     "kwargs", [{"start_frame": -1, "frame_count": 1}, {"frame_count": 0}, {"frame_count": 1.5}, {"frame_count": True}]
 )
 def test_invalid_windows_fail_before_opening_decoder(monkeypatch, kwargs):
-    monkeypatch.setattr(av, "open", lambda _: pytest.fail("decoder must not be opened"))
+    monkeypatch.setattr(av, "open", lambda _: pytest.fail())
     with pytest.raises((TypeError, ValueError)):
         read_video_window_rgb("unused.mp4", **kwargs)
 
 
-def test_real_window_matches_existing_torchvision_pixels_and_frame_order(tmp_path):
+def _decode_full_video(path: Path) -> np.ndarray:
+    with av.open(str(path)) as container:
+        return np.stack([frame.to_ndarray(format="rgb24") for frame in container.decode(video=0)])
+
+
+def test_real_window_matches_full_decode_pixels_and_frame_order(tmp_path):
     frames = np.random.default_rng(7).integers(0, 256, size=(12, 32, 48, 3), dtype=np.uint8)
     path = tmp_path / "input.mp4"
     save_video_h264(frames, path, fps=12)
-    full, _, _ = read_video(str(path), pts_unit="sec")
-    np.testing.assert_array_equal(read_video_window_rgb(path, start_frame=2, frame_count=3), full[2:5].numpy())
-    np.testing.assert_array_equal(read_video_window_rgb(path, start_frame=10, frame_count=4), full[10:].numpy())
+    full = _decode_full_video(path)
+    np.testing.assert_array_equal(read_video_window_rgb(path, start_frame=2, frame_count=3), full[2:5])
+    np.testing.assert_array_equal(read_video_window_rgb(path, start_frame=10, frame_count=4), full[10:])
     with pytest.raises(ValueError, match="No frames found"):
         read_video_window_rgb(path, start_frame=12, frame_count=1)
 
@@ -88,14 +94,17 @@ def test_oasis_window_retains_original_normalized_conditioning(tmp_path):
     frames = np.random.default_rng(9).integers(0, 256, size=(8, 32, 48, 3), dtype=np.uint8)
     path = tmp_path / "input.mp4"
     save_video_h264(frames, path, fps=12)
-    full, _, _ = read_video(str(path), pts_unit="sec")
-    expected = resize(full[2:5].permute(0, 3, 1, 2), (360, 640)).unsqueeze(0).float() / 255
+    full = torch.from_numpy(_decode_full_video(path))
+    expected = resize(full[2:5].permute(0, 3, 1, 2), [360, 640]).unsqueeze(0).float() / 255
     actual = load_prompt(str(path), video_offset=2, n_prompt_frames=3)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
-    expected_tail = resize(full[-2:].permute(0, 3, 1, 2), (360, 640)).unsqueeze(0).float() / 255
-    torch.testing.assert_close(
-        load_prompt(str(path), video_offset=-2, n_prompt_frames=2), expected_tail, rtol=0, atol=0
-    )
+    for offset in (-2, -5, -10):
+        expected_tail = resize(full[offset:][:2].permute(0, 3, 1, 2), [360, 640]).unsqueeze(0).float() / 255
+        torch.testing.assert_close(
+            load_prompt(str(path), video_offset=offset, n_prompt_frames=2), expected_tail, rtol=0, atol=0
+        )
+    with pytest.raises(AssertionError, match="had less than n_prompt_frames=2"):
+        load_prompt(str(path), video_offset=-1, n_prompt_frames=2)
 
 
 class _ImageIOReader:
@@ -183,15 +192,20 @@ def test_truncation_preserves_whole_input_value_range_inference(kind):
 
 @pytest.mark.parametrize(
     "options,error",
-    [({"max_frames": 0}, ValueError), ({"max_frames": -1}, ValueError),
-     ({"max_frames": True}, TypeError), ({"max_frames": 1.5}, TypeError),
-     ({"from_end": True}, ValueError), ({"max_frames": 1, "from_end": "false"}, TypeError)],
+    [
+        ({"max_frames": 0}, ValueError),
+        ({"max_frames": -1}, ValueError),
+        ({"max_frames": True}, TypeError),
+        ({"max_frames": 1.5}, TypeError),
+        ({"from_end": True}, ValueError),
+        ({"max_frames": 1, "from_end": "false"}, TypeError),
+    ],
 )
 def test_invalid_limits_fail_before_opening_reader(monkeypatch, options, error):
     import imageio
 
     from worldfoundry.core.media.codecs.video import coerce_video_frames
 
-    monkeypatch.setattr(imageio, "get_reader", lambda _: pytest.fail("must not open reader"))
+    monkeypatch.setattr(imageio, "get_reader", lambda _: pytest.fail())
     with pytest.raises(error):
         coerce_video_frames("unused.mp4", **options)

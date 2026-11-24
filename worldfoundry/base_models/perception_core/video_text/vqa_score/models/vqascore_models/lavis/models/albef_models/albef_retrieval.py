@@ -1,24 +1,42 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 from copy import deepcopy
+from typing import ClassVar
 
 import torch
 import torch.nn.functional as F
+
 from ...common.registry import registry
+
+# isort: split
 from ...models.albef_models import AlbefBase, compute_sim_matrix
+
+# isort: split
+# isort: split
 from ...models.albef_models.albef_outputs import (
     AlbefIntermediateOutput,
     AlbefOutput,
     AlbefSimilarity,
 )
+
+# isort: split
+# isort: split
 from ...models.base_model import MomentumDistilationMixin, SharedQueueMixin
+
+# isort: split
+# isort: split
 from ...models.med import XBertEncoder
+
+# isort: split
+# isort: split
 from ...models.vit import VisionTransformerEncoder
+
+# isort: split
 from torch import nn
 
 
@@ -37,7 +55,7 @@ class AlbefRetrieval(AlbefBase, MomentumDistilationMixin, SharedQueueMixin):
         >>> model = load_model("albef_retrieval", "flickr")
     """
 
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "coco": "configs/models/albef_retrieval_coco.yaml",
         "flickr": "configs/models/albef_retrieval_flickr.yaml",
     }
@@ -144,9 +162,7 @@ class AlbefRetrieval(AlbefBase, MomentumDistilationMixin, SharedQueueMixin):
             self.temp.clamp_(0.001, 0.5)
 
         image_embeds = self.visual_encoder.forward_features(image)
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            self.device
-        )
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(self.device)
 
         image_feat = F.normalize(self.vision_proj(image_embeds[:, 0, :]), dim=-1)
 
@@ -171,47 +187,29 @@ class AlbefRetrieval(AlbefBase, MomentumDistilationMixin, SharedQueueMixin):
         with torch.no_grad():
             self._momentum_update()
             image_embeds_m = self.visual_encoder_m(image)
-            image_feat_m = F.normalize(
-                self.vision_proj_m(image_embeds_m[:, 0, :]), dim=-1
-            )
-            image_feat_all = torch.cat(
-                [image_feat_m.t(), self.image_queue.clone().detach()], dim=1
-            )
+            image_feat_m = F.normalize(self.vision_proj_m(image_embeds_m[:, 0, :]), dim=-1)
+            image_feat_all = torch.cat([image_feat_m.t(), self.image_queue.clone().detach()], dim=1)
             text_output_m = self.text_encoder_m.forward_text(text)
             text_embeds_m = text_output_m.last_hidden_state
             text_feat_m = F.normalize(self.text_proj_m(text_embeds_m[:, 0, :]), dim=-1)
-            text_feat_all = torch.cat(
-                [text_feat_m.t(), self.text_queue.clone().detach()], dim=1
-            )
+            text_feat_all = torch.cat([text_feat_m.t(), self.text_queue.clone().detach()], dim=1)
 
             if self.use_distill:
                 sim_i2t_m = image_feat_m @ text_feat_all / self.temp
                 sim_t2i_m = text_feat_m @ image_feat_all / self.temp
 
-                sim_i2t_targets = (
-                    alpha * F.softmax(sim_i2t_m, dim=1) + (1 - alpha) * sim_targets
-                )
-                sim_t2i_targets = (
-                    alpha * F.softmax(sim_t2i_m, dim=1) + (1 - alpha) * sim_targets
-                )
+                sim_i2t_targets = alpha * F.softmax(sim_i2t_m, dim=1) + (1 - alpha) * sim_targets
+                sim_t2i_targets = alpha * F.softmax(sim_t2i_m, dim=1) + (1 - alpha) * sim_targets
 
         sim_i2t = image_feat @ text_feat_all / self.temp
         sim_t2i = text_feat @ image_feat_all / self.temp
 
         if self.use_distill:
-            loss_i2t = -torch.sum(
-                F.log_softmax(sim_i2t, dim=1) * sim_i2t_targets, dim=1
-            ).mean()
-            loss_t2i = -torch.sum(
-                F.log_softmax(sim_t2i, dim=1) * sim_t2i_targets, dim=1
-            ).mean()
+            loss_i2t = -torch.sum(F.log_softmax(sim_i2t, dim=1) * sim_i2t_targets, dim=1).mean()
+            loss_t2i = -torch.sum(F.log_softmax(sim_t2i, dim=1) * sim_t2i_targets, dim=1).mean()
         else:
-            loss_i2t = -torch.sum(
-                F.log_softmax(sim_i2t, dim=1) * sim_targets, dim=1
-            ).mean()
-            loss_t2i = -torch.sum(
-                F.log_softmax(sim_t2i, dim=1) * sim_targets, dim=1
-            ).mean()
+            loss_i2t = -torch.sum(F.log_softmax(sim_i2t, dim=1) * sim_targets, dim=1).mean()
+            loss_t2i = -torch.sum(F.log_softmax(sim_t2i, dim=1) * sim_targets, dim=1).mean()
 
         loss_itc = (loss_i2t + loss_t2i) / 2
 

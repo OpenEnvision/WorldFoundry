@@ -14,6 +14,7 @@ official_sources:
   paper: https://arxiv.org/pdf/2507.13347
   github:
     url: https://github.com/yyfz/Pi3
+    revision: b56ef4b9cc9be05b8590604861aa3906db0ef45e
   huggingface:
   - repo_id: yyfz233/Pi3X
     type: model
@@ -22,7 +23,7 @@ integration:
   status: runtime_ported
   notes:
   - In-tree Pi3 point-cloud navigation pipeline is registered for reconstruction and trajectory rendering.
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: pi3
 runner_parity:
   status: pending
@@ -34,15 +35,9 @@ docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: Pi3 (π³) is a feed-forward visual-geometry model that reconstructs 3D scenes, camera trajectories, and point clouds without relying on a fixed reference view — its permutation-equivariant design treats all input views symmetrically. In this catalog the in-tree point-cloud navigation pipeline is registered for reconstruction and trajectory rendering.
-  overview_zh: Pi3（π³）是前馈式视觉几何模型，重建 3D 场景、相机轨迹与点云，且不依赖固定参考视图——其置换等变设计对所有输入视图一视同仁。本 catalog 中树内点云导航 pipeline 已按重建与轨迹渲染注册。
-  architecture: Per the paper (arXiv 2507.13347), Pi3 predicts affine-invariant camera poses and scale-invariant local pointmaps with a permutation-equivariant transformer, removing the need for a reference-view heuristic. Weights are apache-2.0; internals beyond the recorded tasks are not stored here.
-  architecture_zh: 按论文（arXiv 2507.13347），Pi3 用置换等变 Transformer 预测仿射不变的相机位姿与尺度不变的局部点图，摆脱了参考视图启发式。权重为 apache-2.0；除已记录任务外的内部细节此处未存。
-  usage_notes: Integration is runtime_ported with runner parity pending; per-run validation evidence is tracked outside the catalog. Stage the upstream Pi3 weights before expecting real reconstruction output.
-  usage_notes_zh: 集成为 runtime_ported，runner parity 待验证；每次运行的验证证据在 catalog 外跟踪。期望得到真实重建输出前请先就位上游 Pi3 权重。
-  limitations:
-  - Runner parity is pending in this workspace.
-  - The publishing institution is not recorded in this repository.
-  limitations_zh:
-  - 本工作区中 runner parity 待验证。
-  - 发表机构在本仓库中未记录。
+  overview: Pi3 (π³) is a feed-forward visual-geometry model that reconstructs 3D scenes, camera trajectories, and point clouds without relying on a fixed reference view — its permutation-equivariant design treats all input views symmetrically. WorldFoundry runs an in-tree point-cloud navigation pipeline for reconstruction and trajectory rendering.
+  overview_zh: Pi3（π³）是前馈式视觉几何模型，重建 3D 场景、相机轨迹与点云，且不依赖固定参考视图——其置换等变设计对所有输入视图一视同仁。WorldFoundry 在树内运行点云导航 pipeline，用于重建与轨迹渲染。
+  architecture: Per the paper (arXiv 2507.13347), Pi3 predicts affine-invariant camera poses and scale-invariant local pointmaps with a permutation-equivariant transformer, removing the need for a reference-view heuristic. Weights are apache-2.0.
+  architecture_zh: 按论文（arXiv 2507.13347），Pi3 用置换等变 Transformer 预测仿射不变的相机位姿与尺度不变的局部点图，摆脱了参考视图启发式。权重为 apache-2.0。
+  usage_notes: Stage the upstream Pi3 weights (`yyfz233/Pi3X`) before running reconstruction.
+  usage_notes_zh: 运行重建前请先就位上游 Pi3 权重（`yyfz233/Pi3X`）。

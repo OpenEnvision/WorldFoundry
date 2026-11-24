@@ -1,4 +1,5 @@
 """Strict Diffusers checkpoint conversion into the shared H3 parameter layout."""
+
 import json
 from pathlib import Path
 
@@ -11,17 +12,22 @@ from .model import JINGTransformer
 def convert_state_dict(state):
     out, qkv = {}, {}
     prefixes = {
-        "proj_in.": "video_patch_proj.", "audio_proj_in.": "audio_patch_proj.",
-        "context_embedder.": "condition_proj.", "time_embedder.linear_1.": "time_embedder.proj_in.",
-        "time_embedder.linear_2.": "time_embedder.proj_out.", "proj_out.": "final_layer.video_out.",
-        "audio_proj_out.": "final_layer.audio_out.", "norm_out.norm.": "final_layer.norm.",
+        "proj_in.": "video_patch_proj.",
+        "audio_proj_in.": "audio_patch_proj.",
+        "context_embedder.": "condition_proj.",
+        "time_embedder.linear_1.": "time_embedder.proj_in.",
+        "time_embedder.linear_2.": "time_embedder.proj_out.",
+        "proj_out.": "final_layer.video_out.",
+        "audio_proj_out.": "final_layer.audio_out.",
+        "norm_out.norm.": "final_layer.norm.",
         "norm_out.linear.": "final_layer.adaln_proj.linear.",
-        "transformer_blocks.": "blocks.", "token_refiner.refiner_blocks.": "token_refiner.blocks.",
+        "transformer_blocks.": "blocks.",
+        "token_refiner.refiner_blocks.": "token_refiner.blocks.",
     }
     for key, value in state.items():
         for old, new in prefixes.items():
             if key.startswith(old):
-                key = new + key[len(old):]
+                key = new + key[len(old) :]
                 break
         key = key.replace(".attn.norm_q.", ".attn.q_norm.").replace(".attn.norm_k.", ".attn.k_norm.")
         key = key.replace(".attn.to_out.0.", ".attn.out_proj.")
@@ -69,10 +75,15 @@ def load_transformer(path, *, device="cpu"):
             raise ValueError(f"Unexpected checkpoint tensor/shape: {key}")
         converted[key] = converted[key].to(dtype=expected[key].dtype)
     dim = model.arch.rope_inv_freq_len
-    converted["rope.inv_freq"] = 1 / (float(config.get("rope_theta", 10000)) ** (
-        torch.arange(0, 2 * dim, 2, dtype=torch.float32) / (2 * dim)))
+    converted["rope.inv_freq"] = 1 / (
+        float(config.get("rope_theta", 10000)) ** (torch.arange(0, 2 * dim, 2, dtype=torch.float32) / (2 * dim))
+    )
     result = model.load_state_dict(converted, strict=True, assign=True)
     model.post_load_weights()
-    model.loading_report = {"missing": list(result.missing_keys), "unexpected": list(result.unexpected_keys),
-                            "checkpoint_tensors": len(raw), "native_tensors": len(converted)}
+    model.loading_report = {
+        "missing": list(result.missing_keys),
+        "unexpected": list(result.unexpected_keys),
+        "checkpoint_tensors": len(raw),
+        "native_tensors": len(converted),
+    }
     return model.eval().requires_grad_(False).to(device)

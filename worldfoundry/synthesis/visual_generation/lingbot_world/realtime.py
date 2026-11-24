@@ -12,10 +12,11 @@ import math
 import os
 import threading
 import time
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, Sequence, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import torch
@@ -28,6 +29,7 @@ from PIL import Image
 from worldfoundry.core import autocast_context
 from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
 from worldfoundry.core.execution.realtime.flow_sampling import reference_flow_schedule, reference_flow_to_clean
+from worldfoundry.core.execution.realtime.frame_prefetch import LazyCudaFrame
 from worldfoundry.core.io.paths import checkpoint_root_path
 from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.core.model_loading.checkpoints.file import load_state_dict
@@ -648,7 +650,9 @@ class LingBotRealtimeSession:
         self._sigmas = self.core.scheduler.sigmas[indices].to(self.device, dtype=torch.float32)
         if self.reference_sampling:
             self._timesteps, self._sigmas = reference_flow_schedule(
-                indices=indices, shift=self.sample_shift, device=self.device,
+                indices=indices,
+                shift=self.sample_shift,
+                device=self.device,
             )
         self._generator = torch.Generator(device=self.device).manual_seed(max(int(seed), 0))
         self._cross_attention_initialized = False
@@ -725,6 +729,20 @@ class LingBotRealtimeSession:
         ).to(self.param_dtype)
 
     def _decode(self, latent: torch.Tensor) -> np.ndarray:
+        """Materialize the decoded chunk for direct CPU consumers."""
+        return self._decode_pixels(latent).cpu().numpy()
+
+    def _decode_for_transport(self, latent: torch.Tensor) -> list[LazyCudaFrame] | np.ndarray:
+        """Retain owned CUDA pixels and their producer event until transport consumes them."""
+        pixels = self._decode_pixels(latent)
+        if not pixels.is_cuda:
+            return pixels.numpy()
+        ready = torch.cuda.Event()
+        ready.record(torch.cuda.current_stream(pixels.device))
+        return [LazyCudaFrame(pixels, index, source_event=ready) for index in range(pixels.shape[0])]
+
+    def _decode_pixels(self, latent: torch.Tensor) -> torch.Tensor:
+        """Decode to newly allocated THWC uint8 pixels on the decoder device."""
         if self.rank != 0:
             raise RuntimeError("Only rank zero decodes realtime frames.")
         if self._decoder is None:
@@ -746,7 +764,7 @@ class LingBotRealtimeSession:
         expected = self.next_output_frames()
         if video.shape[0] != expected:
             raise RuntimeError(f"LightTAE produced {video.shape[0]} frames; expected {expected}.")
-        return video.permute(0, 2, 3, 1).mul_(255.0).round_().clamp_(0, 255).to(torch.uint8).cpu().numpy()
+        return video.permute(0, 2, 3, 1).mul_(255.0).round_().clamp_(0, 255).to(torch.uint8)
 
     def generate(
         self,
@@ -754,7 +772,9 @@ class LingBotRealtimeSession:
         interactions: Sequence[str],
         control_segments: Sequence[Mapping[str, Any]] | None = None,
         seed: int | None = None,
+        defer_frame_materialization: bool = False,
     ) -> dict[str, Any] | None:
+        """Advance one chunk; transport consumers may defer its device-to-host copy."""
         with self._state_lock:
             self._wait_for_state_stream()
             try:
@@ -762,6 +782,7 @@ class LingBotRealtimeSession:
                     interactions=interactions,
                     control_segments=control_segments,
                     seed=seed,
+                    defer_frame_materialization=defer_frame_materialization,
                 )
             finally:
                 self._record_state_stream()
@@ -774,7 +795,10 @@ class LingBotRealtimeSession:
         if bank_index == 0:
             bank_shape = (shape[0], shape[1] * self.reference_noise_chunks, *shape[2:])
             self._reference_noise_bank = torch.randn(
-                bank_shape, dtype=torch.float32, generator=self._generator, device=self.device,
+                bank_shape,
+                dtype=torch.float32,
+                generator=self._generator,
+                device=self.device,
             )
         return cast(torch.Tensor, self._reference_noise_bank).narrow(1, bank_index * shape[1], shape[1])
 
@@ -785,6 +809,7 @@ class LingBotRealtimeSession:
         interactions: Sequence[str],
         control_segments: Sequence[Mapping[str, Any]] | None = None,
         seed: int | None = None,
+        defer_frame_materialization: bool = False,
     ) -> dict[str, Any] | None:
         del seed  # A rollout owns one continuous RNG stream, seeded at configure().
         if not self.configured:
@@ -849,11 +874,13 @@ class LingBotRealtimeSession:
             prepare_camera = getattr(self.raw_model, "prepare_camera_condition", None)
             if prepare_camera is not None and self.sp_size == 1 and not _is_fsdp_module(self.model):
                 model_kwargs["dit_cond_dict"] = prepare_camera(
-                    model_kwargs["dit_cond_dict"], token_length=self.max_sequence_length,
+                    model_kwargs["dit_cond_dict"],
+                    token_length=self.max_sequence_length,
                 )
                 camera_cache_bytes = sum(
                     tensor.numel() * tensor.element_size()
-                    for pair in model_kwargs["dit_cond_dict"]["_camera_modulations"] for tensor in pair
+                    for pair in model_kwargs["dit_cond_dict"]["_camera_modulations"]
+                    for tensor in pair
                 )
             rotary = self._prepare_rotary_frequencies(latent, current_start=current_start)
             if rotary is not None:
@@ -869,9 +896,14 @@ class LingBotRealtimeSession:
                 )[0]
                 self._cross_attention_initialized = True
                 sigma = sigmas[index].to(
-                    device=latent.device, dtype=torch.float32 if self.reference_sampling else latent.dtype,
+                    device=latent.device,
+                    dtype=torch.float32 if self.reference_sampling else latent.dtype,
                 )
-                x0 = reference_flow_to_clean(latent, flow.to(self.param_dtype), sigma) if self.reference_sampling else latent - sigma * flow
+                x0 = (
+                    reference_flow_to_clean(latent, flow.to(self.param_dtype), sigma)
+                    if self.reference_sampling
+                    else latent - sigma * flow
+                )
                 if index + 1 < len(timesteps):
                     next_sigma = sigmas[index + 1].to(
                         device=latent.device,
@@ -892,12 +924,13 @@ class LingBotRealtimeSession:
             )
         events[2].record()
 
-        video: np.ndarray | None = None
+        video: np.ndarray | list[LazyCudaFrame] | None = None
         if self.rank == 0:
-            video = self._decode(x0)
+            video = self._decode_for_transport(x0) if defer_frame_materialization else self._decode(x0)
         events[3].record()
         if self.rank == 0:
-            torch.cuda.synchronize(self.device)
+            # Stage timings require completed decode, not unrelated device streams.
+            events[3].synchronize()
 
         metrics = {
             "ar_index": self.autoregressive_index,
@@ -922,7 +955,11 @@ class LingBotRealtimeSession:
             return None
         return {
             "video": video,
-            "video_chunk": VideoChunk(frames=video, layout="thwc", value_range="0,255"),
+            "video_chunk": VideoChunk(
+                frames=video,
+                layout="frame-list" if isinstance(video, list) else "thwc",
+                value_range="0,255",
+            ),
             "realtime_metrics": metrics,
             "realtime_spec": self.realtime_spec().to_payload(),
         }

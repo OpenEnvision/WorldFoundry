@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Tuple
-
 import torch
 
 
@@ -10,7 +8,7 @@ def compute_plucker_rays(
     w2c: torch.Tensor,  # (B, V, 4, 4) camera<-world
     K: torch.Tensor,  # (B, V, 3, 3) pixel intrinsics in the SAME image space as image_hw
     image_hw: torch.Tensor,  # (B, 2) [H, W] in pixels
-    token_hw: Tuple[int, int],  # (h_tokens, w_tokens_per_view)
+    token_hw: tuple[int, int],  # (h_tokens, w_tokens_per_view)
     device: torch.device,
     dtype: torch.dtype,
 ) -> torch.Tensor:
@@ -70,4 +68,3 @@ def compute_plucker_rays(
     o_cross_d = torch.cross(o, d_world, dim=-1)
     plucker = torch.cat([o_cross_d, d_world], dim=-1)  # (B,V,h,w,6)
     return plucker.to(dtype=dtype)
-

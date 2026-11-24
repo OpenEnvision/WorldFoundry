@@ -1,0 +1,23 @@
+model_id: hy-nomas
+env_name: worldfoundry-unified-cu121
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+cuda_profile: cu121
+python: '3.11'
+conda_packages:
+- python
+- pip
+- ffmpeg
+pip_packages:
+- torch
+- transformers
+- safetensors
+- numpy
+- pillow
+validation_imports:
+- torch
+- transformers
+- safetensors
+notes:
+- Portable dense inference uses the unified environment and shared SDPA dispatch.
+- Native FP8 decoder execution additionally needs a compatible CUDA GPU and BF16/FP16 kernels.
+- This integration does not install the upstream training or web-service dependency set.

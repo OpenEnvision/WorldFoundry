@@ -1,6 +1,7 @@
-artifact_filename: lingbot_va_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_checkpoint_runtime
+schema_version: 2
+model_id: lingbot-va
+display_name: LingBot-VA
+task_family: embodied_action
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/lingbot-va-base
   repo_id: robbyant/lingbot-va-base
@@ -14,8 +15,6 @@ checkpoints:
   repo_id: robbyant/lingbot-va-posttrain-libero-long
   role: libero_long_posttrain_demo_checkpoint
   status: local_checkpoint_staged_checkpoint_gpu_probe_ready_server_init_ready
-display_name: LingBot-VA
-id: lingbot-va
 input_schema:
   actions:
   - robot_action
@@ -29,7 +28,14 @@ input_schema:
   prompt: true
   state: true
   video: true
-integration_status: in_tree_checkpoint_runtime_gpu_server_init_verified_rollout_pending
+artifact_kind: action_trace
+artifact_filename: lingbot_va_action_trace.json
+execution:
+  backend_stage: in_tree_checkpoint_runtime
+  runtime_status: in_tree_checkpoint_runtime_gpu_server_init_verified_action_rollout_pending
+  integration_status: in_tree_checkpoint_runtime_gpu_server_init_verified_rollout_pending
+integration:
+  status: in_tree_checkpoint_runtime_gpu_server_init_verified_rollout_pending
 notes:
 - LingBot-VA is an autoregressive video-action world model for robot control. The
   profile emits action_trace artifacts and can carry predicted-video metadata, but
@@ -39,8 +45,8 @@ notes:
 - The staged checkpoint transformer/config.json files are set to attn_mode=torch,
   and the repo-integrated server command passes --checkpoint-dir for the selected
   local checkpoint.
-- WorldFoundry keeps the inference-only Wan-VA architecture, server, client, and utilities under
-  worldfoundry/synthesis/action_generation/wan_va; construction is strictly local-checkpoint gated.
-- All three declared checkpoints are staged and manifest-validated; numerical end-to-end rollout validation remains pending.
-runtime_status: in_tree_checkpoint_runtime_gpu_server_init_verified_action_rollout_pending
-task_family: embodied_action
+- WorldFoundry keeps the inference-only Wan-VA architecture, server, client, and utilities
+  under worldfoundry/synthesis/action_generation/wan_va; construction is strictly
+  local-checkpoint gated.
+- All three declared checkpoints are staged and manifest-validated; numerical end-to-end
+  rollout validation remains pending.

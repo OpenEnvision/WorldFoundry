@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import gc
 import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -832,10 +834,8 @@ class AlayaWorldRuntime:
             self._owns_process_group = False
 
     def __del__(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self.close()
-        except Exception:
-            pass
 
 
 __all__ = ["AlayaWorldRuntime"]

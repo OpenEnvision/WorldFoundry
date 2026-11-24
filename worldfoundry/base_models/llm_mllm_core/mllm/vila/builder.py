@@ -17,9 +17,7 @@
 import math
 import os
 import os.path as osp
-import warnings
-from dataclasses import asdict
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 import torch
 import transformers
@@ -73,10 +71,10 @@ def _maybe_add_sentinel_token(tokenizer: transformers.PreTrainedTokenizer) -> No
 
 
 def tokenize_conversation_legacy(
-    messages: Sequence[Dict[str, str]],
+    messages: Sequence[dict[str, str]],
     tokenizer: transformers.PreTrainedTokenizer,
     add_generation_prompt: bool = False,
-    overrides: Optional[Dict[str, str]] = None,
+    overrides: dict[str, str] | None = None,
     no_system_prompt: bool = False,
 ) -> torch.Tensor:
     conv = default_conversation.copy()
@@ -106,10 +104,10 @@ def tokenize_conversation_legacy(
 
 
 def tokenize_conversation(
-    messages: Sequence[Dict[str, str]],
+    messages: Sequence[dict[str, str]],
     tokenizer: transformers.PreTrainedTokenizer,
     add_generation_prompt: bool = False,
-    overrides: Optional[Dict[str, str]] = None,
+    overrides: dict[str, str] | None = None,
     no_system_prompt: bool = False,
 ) -> torch.Tensor:
     # Normalize the conversation before tokenization
@@ -141,7 +139,7 @@ def tokenize_conversation(
         conversation.append(message)
 
     if no_system_prompt:
-        conversation = [{"role": "system", "content": ""}] + conversation
+        conversation = [{"role": "system", "content": ""}] + conversation  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     text = tokenizer.apply_chat_template(
         conversation,
@@ -151,7 +149,7 @@ def tokenize_conversation(
     return tokenizer_image_token(text, tokenizer, return_tensors="pt")
 
 
-def infer_stop_tokens(tokenizer: transformers.PreTrainedTokenizer) -> List[str]:
+def infer_stop_tokens(tokenizer: transformers.PreTrainedTokenizer) -> list[str]:
     _maybe_add_sentinel_token(tokenizer)
     template = tokenize_conversation(DUMMY_CONVERSATION, tokenizer, overrides={"gpt": SENTINEL_TOKEN})
 
@@ -180,7 +178,7 @@ def build_llm_and_tokenizer(
     model_max_length=None,
     *args,
     **kwargs,
-) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
+) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
     # print(model_name_or_path)
     llm_cfg = AutoConfig.from_pretrained(model_name_or_path)
     llm_cfg._attn_implementation = attn_implementation
@@ -195,14 +193,22 @@ def build_llm_and_tokenizer(
         fp8_model_name_or_path = kwargs.pop("fp8_llm_cfg", None)
 
         llm = AutoModelForCausalLM.from_pretrained(
-            fp8_model_name_or_path, config=llm_cfg, torch_dtype=eval(config.model_dtype), *args, **kwargs
+            fp8_model_name_or_path,
+            config=llm_cfg,
+            torch_dtype=eval(config.model_dtype),
+            *args,  # noqa: B026 - Keeps the upstream argument order.
+            **kwargs,
         )
     else:
         if is_deepspeed_zero3_enabled():
             # NOTE: found by wei, need to pop out device_map when using zero3
             kwargs.pop("device_map")
         llm = AutoModelForCausalLM.from_pretrained(
-            model_name_or_path, config=llm_cfg, torch_dtype=eval(config.model_dtype), *args, **kwargs
+            model_name_or_path,
+            config=llm_cfg,
+            torch_dtype=eval(config.model_dtype),
+            *args,  # noqa: B026 - Keeps the upstream argument order.
+            **kwargs,
         )
     # Locate the tokenizer.
     llm_path = model_name_or_path

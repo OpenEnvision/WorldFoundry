@@ -21,10 +21,12 @@ metrics:
   subgoal_success:
     aggregation: mean
 metadata:
+  base_model_dependencies:
+  - behavior1k_official_runtime_assets
   source_kind: benchmark_zoo
   benchmark_id: behavior1k
   status: integrated
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:Behavior1KContract
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:behavior1k
   prompt_suite:
     split: eval
   runtime:
@@ -32,12 +34,12 @@ metadata:
     root_env: WORLDFOUNDRY_BEHAVIOR1K_ROOT
     results_path_env: WORLDFOUNDRY_BEHAVIOR1K_RESULTS_PATH
     preflight_profile: behavior1k
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.embodied.normalizer:normalize_results
+    target: worldfoundry.evals.tasks.embodied.normalizer:normalize_results
     status: implemented
     protocol: official_embodied_result_normalizer
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id behavior1k --mode contract 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id behavior1k --mode contract 
     --output-dir tmp/benchmark_zoo/benchmark_contract/behavior1k --json
   release_status: normalizer_only
   maturity: contract_ready
@@ -54,7 +56,7 @@ metadata:
   - Full leaderboard parity is not claimed until official rollouts are executed and imported.
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:Behavior1KContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:behavior1k
     task_yaml_available: true
     runtime_verified: false
     normalizer_verified: true
@@ -68,7 +70,7 @@ metadata:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/behavior1k.yaml
   checkpoint_refs: []
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -129,4 +131,4 @@ tasks:
       - task_success
       - episode_success
       - subgoal_success
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:Behavior1KContract
+      runner_target: worldfoundry.evals.tasks.contracts.external:behavior1k

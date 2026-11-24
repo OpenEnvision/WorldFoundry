@@ -1,6 +1,6 @@
 ---
 title: EvalCrafter
-description: "700-prompt T2V quality bench: visual, alignment, motion, temporality (17 metrics → Total). WorldFoundry recomputes CLIP subset or imports; no invented board."
+description: "700-prompt T2V quality bench: visual, alignment, motion, temporality (17 metrics → Total). WorldFoundry recomputes the CLIP subset or imports official results."
 ---
 
 EvalCrafter (Tencent AI Lab and City University of Hong Kong) is a **700-prompt** text-to-video quality suite. Seventeen objective metrics roll up into four aspects plus `evalcrafter_total`:
@@ -21,7 +21,7 @@ WorldFoundry keeps an **in-tree CLIP subset** (`clip_score`, `clip_temp_score`, 
 Import official aggregates (smoke uses the bundled sample):
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id evalcrafter \
   --mode official-validation \
   --official-results-path worldfoundry/data/benchmarks/assets/evalcrafter/sample_results.txt \
@@ -33,7 +33,7 @@ Recompute the in-tree CLIP subset from numbered MP4s:
 
 ```bash
 export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/evalcrafter/generated_videos
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id evalcrafter \
   --mode official-run \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
@@ -47,7 +47,7 @@ In-tree pointers:
 
 ```text
 worldfoundry/data/benchmarks/tasks/external/evalcrafter.yaml
-worldfoundry/evaluation/tasks/execution/runners/evalcrafter/
+worldfoundry/evals/tasks/execution/runners/evalcrafter/
 worldfoundry/data/benchmarks/assets/evalcrafter
 ```
 

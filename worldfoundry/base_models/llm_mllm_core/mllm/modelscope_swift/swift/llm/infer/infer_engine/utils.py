@@ -9,16 +9,17 @@ from dataclasses import dataclass
 from functools import partial
 from itertools import repeat
 from queue import Queue
-from typing import List, Optional, Union
 
 import torch
-import torch.distributed as dist
 from packaging import version
 from transformers import GenerationConfig, LogitsProcessor
 from transformers.generation.streamers import BaseStreamer
 
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm.model.register import fix_do_sample_warning
-from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.utils import get_current_device, get_device, get_device_count, get_node_setting, set_device
+from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.utils import (
+    get_device,
+)
+
 from ..protocol import RequestConfig
 
 
@@ -29,21 +30,23 @@ class AdapterRequest:
 
 
 class InferTools:
-
     @staticmethod
     def _is_chinese_char(cp: int) -> bool:
         """Checks whether CP is the codepoint of a CJK character."""
         # copy from transformers.generation.streamers.TextStreamer
-        if ((0x4E00 <= cp <= 0x9FFF) or (0x3400 <= cp <= 0x4DBF) or (0x20000 <= cp <= 0x2A6DF)
-                or (0x2A700 <= cp <= 0x2B73F) or (0x2B740 <= cp <= 0x2B81F) or (0x2B820 <= cp <= 0x2CEAF)
-                or (0xF900 <= cp <= 0xFAFF) or (0x2F800 <= cp <= 0x2FA1F)):
-            return True
-
-        return False
+        return bool(
+            (0x4E00 <= cp <= 0x9FFF)
+            or (0x3400 <= cp <= 0x4DBF)
+            or (0x20000 <= cp <= 0x2A6DF)
+            or (0x2A700 <= cp <= 0x2B73F)
+            or (0x2B740 <= cp <= 0x2B81F)
+            or (0x2B820 <= cp <= 0x2CEAF)
+            or (0xF900 <= cp <= 0xFAFF)
+            or (0x2F800 <= cp <= 0x2FA1F)
+        )
 
 
 class InferStreamer(InferTools):
-
     def __init__(self, template, **decode_kwargs):
         self.template = template
         self.tokenizer = template.tokenizer
@@ -56,13 +59,13 @@ class InferStreamer(InferTools):
 
     def _align_blank_suffix(self, response: str) -> str:
         # Avoid the occurrence of repeated words in sentence.
-        cur_num_space = len(response) - len(response.lstrip(' '))
+        cur_num_space = len(response) - len(response.lstrip(" "))
         if self.first_num_space == -1:
             self.first_num_space = cur_num_space
         elif cur_num_space < self.first_num_space:
-            response = ' ' * (self.first_num_space - cur_num_space) + response
+            response = " " * (self.first_num_space - cur_num_space) + response
         elif cur_num_space > self.first_num_space:
-            response = response[cur_num_space - self.first_num_space:]
+            response = response[cur_num_space - self.first_num_space :]
         return response
 
     def _get_response(self, response: str, is_finished: bool, token_len: int) -> str:
@@ -70,34 +73,34 @@ class InferStreamer(InferTools):
         if self.first_token:
             printable_text = response
             self.first_token = False
-        elif response.endswith('\n') or is_finished:
-            printable_text = response[self.print_idx:]
+        elif response.endswith("\n") or is_finished:
+            printable_text = response[self.print_idx :]
             self.cache_idx += token_len
             self.first_num_space = -1
             self.print_idx = 0
         # If the last token is a CJK character, we print the characters.
         elif len(response) > 0 and self._is_chinese_char(ord(response[-1])):
-            printable_text = response[self.print_idx:]
+            printable_text = response[self.print_idx :]
             self.print_idx += len(printable_text)
         # Otherwise, prints until the last space char (simple heuristic to avoid printing incomplete words,
         # which may change with the subsequent token -- there are probably smarter ways to do this!)
         else:
-            printable_text = response[self.print_idx:response.rfind(' ') + 1]
+            printable_text = response[self.print_idx : response.rfind(" ") + 1]
             self.print_idx += len(printable_text)
         return printable_text
 
-    def get_printable_text(self, raw_tokens: List[int], is_finished: bool) -> str:
-        raw_tokens = raw_tokens[self.cache_idx:]
+    def get_printable_text(self, raw_tokens: list[int], is_finished: bool) -> str:
+        raw_tokens = raw_tokens[self.cache_idx :]
         if self.first_token:
             raw_tokens = []
         response = self.template.decode(
-            raw_tokens, is_finished=is_finished, tokenizer_kwargs=self.decode_kwargs, first_token=self.first_token)
+            raw_tokens, is_finished=is_finished, tokenizer_kwargs=self.decode_kwargs, first_token=self.first_token
+        )
         response = self._align_blank_suffix(response)
         return self._get_response(response, is_finished, len(raw_tokens))
 
 
 class StreamerMixin:
-
     def __init__(self):
         self.queue = Queue()
 
@@ -113,7 +116,6 @@ class StreamerMixin:
 
 
 class TokensIteratorStreamer(StreamerMixin, BaseStreamer):
-
     def put(self, value: torch.Tensor) -> None:
         self.queue.put(value)
 
@@ -122,7 +124,6 @@ class TokensIteratorStreamer(StreamerMixin, BaseStreamer):
 
 
 class LogitsStreamer(LogitsProcessor):
-
     def __init__(self):
         self.queue = Queue()
 
@@ -131,26 +132,28 @@ class LogitsStreamer(LogitsProcessor):
         return scores
 
 
-def _set_generation_config_default_value(model_generation_config: GenerationConfig,
-                                         generation_config: GenerationConfig) -> GenerationConfig:
+def _set_generation_config_default_value(
+    model_generation_config: GenerationConfig, generation_config: GenerationConfig
+) -> GenerationConfig:
     for k, v in model_generation_config.to_dict().items():
         new_v = getattr(generation_config, k, None)
-        if k in ['max_length']:
+        if k in ["max_length"]:
             continue
-        if k in ['no_repeat_ngram_size'] or v is not None and new_v is None:
+        if k in ["no_repeat_ngram_size"] or (v is not None and new_v is None):
             setattr(generation_config, k, v)
     return generation_config
 
 
-def prepare_generation_config(model_generation_config: Optional[GenerationConfig], request_config: RequestConfig,
-                              tokenizer) -> Optional[GenerationConfig]:
+def prepare_generation_config(
+    model_generation_config: GenerationConfig | None, request_config: RequestConfig, tokenizer
+) -> GenerationConfig | None:
     if model_generation_config is None or request_config is None:
         return model_generation_config
-    kwargs = {'max_new_tokens': request_config.max_tokens}
+    kwargs = {"max_new_tokens": request_config.max_tokens}
     # not use: 'n', 'best_of', 'frequency_penalty', 'presence_penalty'
-    for key in ['length_penalty']:
+    for key in ["length_penalty"]:
         kwargs[key] = getattr(request_config, key)
-    for key in ['temperature', 'top_k', 'top_p', 'repetition_penalty', 'num_beams']:
+    for key in ["temperature", "top_k", "top_p", "repetition_penalty", "num_beams"]:
         new_value = getattr(request_config, key)
         if new_value is None:
             kwargs[key] = getattr(model_generation_config, key)
@@ -158,14 +161,14 @@ def prepare_generation_config(model_generation_config: Optional[GenerationConfig
             kwargs[key] = new_value
 
     if not model_generation_config.do_sample and request_config.temperature in {0, None}:
-        kwargs['temperature'] = 0
-    if kwargs['temperature'] == 0:
-        kwargs['do_sample'] = False
-        kwargs['temperature'] = 1
-        kwargs['top_p'] = 1
-        kwargs['top_k'] = 50
+        kwargs["temperature"] = 0
+    if kwargs["temperature"] == 0:
+        kwargs["do_sample"] = False
+        kwargs["temperature"] = 1
+        kwargs["top_p"] = 1
+        kwargs["top_k"] = 50
     else:
-        kwargs['do_sample'] = True
+        kwargs["do_sample"] = True
     generation_config = GenerationConfig(**kwargs)
     generation_config = _set_generation_config_default_value(model_generation_config, generation_config)
     fix_do_sample_warning(generation_config)
@@ -179,7 +182,8 @@ def prepare_generation_config(model_generation_config: Optional[GenerationConfig
 def patch_lmdeploy(load_weights=False):
     """This patch allows lmdeploy selects device and reload state_dict"""
     import lmdeploy
-    assert version.parse(lmdeploy.__version__) >= version.parse('0.7.0')
+
+    assert version.parse(lmdeploy.__version__) >= version.parse("0.7.0")
     from lmdeploy.messages import TurbomindEngineConfig
     from lmdeploy.turbomind.deploy import loader
     from lmdeploy.turbomind.deploy.loader import create_loader
@@ -231,45 +235,52 @@ def patch_lmdeploy(load_weights=False):
 
     @contextmanager
     def tm_model_context(self):
-
-        def _get_tm_model(model_path,
-                          model_name,
-                          chat_template_name,
-                          engine_config: TurbomindEngineConfig,
-                          group_size: int = None,
-                          out_dir: str = None):
+        def _get_tm_model(
+            model_path,
+            model_name,
+            chat_template_name,
+            engine_config: TurbomindEngineConfig,
+            group_size: int | None = None,
+            out_dir: str | None = None,
+        ):
             from lmdeploy.turbomind.deploy.converter import get_tm_model_origin
-            tm_model = get_tm_model_origin(model_path, model_name, chat_template_name, engine_config, group_size,
-                                           out_dir)
+
+            tm_model = get_tm_model_origin(
+                model_path, model_name, chat_template_name, engine_config, group_size, out_dir
+            )
             self.tm_model = tm_model
             return tm_model
 
         from lmdeploy.turbomind.deploy import converter
+
         converter.get_tm_model_origin = converter.get_tm_model
         converter.get_tm_model = _get_tm_model
         yield
         converter.get_tm_model = converter.get_tm_model_origin
         del converter.get_tm_model_origin
 
-    def __init__(self,
-                 model_path: str,
-                 tokenizer: object,
-                 model_name: str = None,
-                 chat_template_name: str = None,
-                 engine_config: TurbomindEngineConfig = None,
-                 model_source: ModelSource = ModelSource.WORKSPACE,
-                 **kwargs):
+    def __init__(
+        self,
+        model_path: str,
+        tokenizer: object,
+        model_name: str | None = None,
+        chat_template_name: str | None = None,
+        engine_config: TurbomindEngineConfig = None,
+        model_source: ModelSource = ModelSource.WORKSPACE,
+        **kwargs,
+    ):
         self.gpu_list = engine_config.devices
         with patch_threadpool_map(), tm_model_context(self):
-            self.__origin_init__(model_path, tokenizer, model_name, chat_template_name, engine_config, model_source,
-                                 **kwargs)
+            self.__origin_init__(
+                model_path, tokenizer, model_name, chat_template_name, engine_config, model_source, **kwargs
+            )
 
         with ThreadPoolExecutor(max_workers=self.gpu_count) as e:
             ranks = [self.node_id * self.gpu_count + device_id for device_id in range(self.gpu_count)]
             if not load_weights:
                 for _ in e.map(self.model_comm.process_weight, self.gpu_list, ranks):
                     pass
-            if version.parse(lmdeploy.__version__) < version.parse('0.7.2'):
+            if version.parse(lmdeploy.__version__) < version.parse("0.7.2"):
                 for _ in e.map(self.model_comm.create_engine, self.gpu_list, ranks, repeat(self.nccl_params)):
                     pass
             else:
@@ -282,7 +293,7 @@ def patch_lmdeploy(load_weights=False):
         # TODO: support mpi
         self.node_id = 0
         self.node_num = 1
-        if version.parse(lmdeploy.__version__) < version.parse('0.7.2'):
+        if version.parse(lmdeploy.__version__) < version.parse("0.7.2"):
             self.nccl_params = model_comm.create_nccl_params(self.node_id)
         torch.cuda.synchronize()
 
@@ -361,7 +372,7 @@ def patch_lmdeploy(load_weights=False):
 def patch_npu_vllm(vllm_device: str):
     if isinstance(vllm_device, int):
         vllm_device = get_device(vllm_device)
-    device_type = vllm_device.split(':')[0]
+    device_type = vllm_device.split(":")[0]
 
     @contextmanager
     def new_group_context():
@@ -373,32 +384,34 @@ def patch_npu_vllm(vllm_device: str):
         finally:
             torch.distributed.new_group = original_new_group
 
-    return new_group_context() if device_type == 'npu' else nullcontext()
+    return new_group_context() if device_type == "npu" else nullcontext()
 
 
 def patch_vllm_memory_leak():
     # fix vllm 0.7.3 memory leak
     # https://github.com/vllm-project/vllm/pull/14326
     import vllm
-    if version.parse(vllm.__version__) != version.parse('0.7.3'):
+
+    if version.parse(vllm.__version__) != version.parse("0.7.3"):
         return
 
     def patch_vllm_abort_seq_group():
+        from collections.abc import Iterable
+
         from vllm.core.scheduler import Scheduler
-        from typing import Iterable, Dict
-        from vllm.sequence import SequenceGroupBase, SequenceGroup, SequenceStatus
+        from vllm.sequence import SequenceGroup, SequenceGroupBase, SequenceStatus
 
         def new_abort_seq_group(
             self,
-            request_id: Union[str, Iterable[str]],
-            seq_id_to_seq_group: Optional[Dict[str, SequenceGroupBase]] = None,
+            request_id: str | Iterable[str],
+            seq_id_to_seq_group: dict[str, SequenceGroupBase] | None = None,
         ) -> None:
             if isinstance(request_id, str):
-                request_id = (request_id, )
+                request_id = (request_id,)
             request_ids = set(request_id)
             seq_id_to_seq_group = seq_id_to_seq_group or {}
             for state_queue in [self.waiting, self.running, self.swapped]:
-                aborted_groups: List[SequenceGroup] = []
+                aborted_groups: list[SequenceGroup] = []
                 for seq_group in state_queue:
                     # When n>1, seq_group.request_id looks like
                     # foo_parallel_sample_0, while request_ids is just foo, and we
@@ -445,10 +458,12 @@ def patch_vllm_memory_leak():
         LLMEngine._old_abort_request = origin_method
         LLMEngine.abort_request = new_abort_request
 
-        def new_step(self) -> List[Union[RequestOutput, PoolingRequestOutput]]:
+        def new_step(self) -> list[RequestOutput | PoolingRequestOutput]:
             if self.parallel_config.pipeline_parallel_size > 1:
-                raise NotImplementedError('Pipeline parallelism is only supported through AsyncLLMEngine '
-                                          'as performance will be severely degraded otherwise.')
+                raise NotImplementedError(
+                    "Pipeline parallelism is only supported through AsyncLLMEngine "
+                    "as performance will be severely degraded otherwise."
+                )
 
             # For llm_engine, there is no pipeline parallel support, so the engine
             # used is always 0.
@@ -473,8 +488,9 @@ def patch_vllm_memory_leak():
             # engine step to fail, and the previous schedule needs to be rerun.
             if not self._has_remaining_steps(seq_group_metadata_list):
                 # Schedule iteration
-                (seq_group_metadata_list, scheduler_outputs,
-                 allow_async_output_proc) = self.scheduler[virtual_engine].schedule()
+                (seq_group_metadata_list, scheduler_outputs, allow_async_output_proc) = self.scheduler[
+                    virtual_engine
+                ].schedule()
 
                 ctx.seq_group_metadata_list = seq_group_metadata_list
                 ctx.scheduler_outputs = scheduler_outputs
@@ -490,25 +506,24 @@ def patch_vllm_memory_leak():
                 if not allow_async_output_proc and len(ctx.output_queue) > 0:
                     self._process_model_outputs(ctx=ctx)
 
-                if (self.scheduler_config.is_multi_step and scheduler_outputs.num_lookahead_slots > 0):
+                if self.scheduler_config.is_multi_step and scheduler_outputs.num_lookahead_slots > 0:
                     # cache the scheduler outputs for the next iteration if we have
                     # lookahead slots
-                    self._cache_scheduler_outputs_for_multi_step(virtual_engine, seq_group_metadata_list,
-                                                                 scheduler_outputs, allow_async_output_proc)
+                    self._cache_scheduler_outputs_for_multi_step(
+                        virtual_engine, seq_group_metadata_list, scheduler_outputs, allow_async_output_proc
+                    )
             else:
-                finished_requests_ids = list()
+                finished_requests_ids = []
 
             assert seq_group_metadata_list is not None
             assert scheduler_outputs is not None
 
             if not scheduler_outputs.is_empty():
-
                 # Check if we have a cached last_output from the previous iteration.
                 # For supporting PP this is probably the best way to pass the
                 # sampled_token_ids, as a separate broadcast over all the PP stages
                 # will cause one virtual engine's microbatch to block the pipeline.
-                last_sampled_token_ids = \
-                    self._get_last_sampled_token_ids(virtual_engine)
+                last_sampled_token_ids = self._get_last_sampled_token_ids(virtual_engine)
 
                 execute_model_req = ExecuteModelRequest(
                     seq_group_metadata_list=seq_group_metadata_list,
@@ -520,7 +535,8 @@ def patch_vllm_memory_leak():
                     finished_requests_ids=finished_requests_ids,
                     # We use ExecuteModelRequest to pass the last sampled_token_ids
                     # to each of the non-last PP stages for in-place prepare_input.
-                    last_sampled_token_ids=last_sampled_token_ids)
+                    last_sampled_token_ids=last_sampled_token_ids,
+                )
 
                 if allow_async_output_proc:
                     execute_model_req.async_callback = self.async_callbacks[virtual_engine]
@@ -552,8 +568,9 @@ def patch_vllm_memory_leak():
                 # is_first_step_output is True only when the num_steps of all
                 # the sequences are 1. When the num_steps > 1,
                 # multi_step_model_runner does the first-step output append.
-                is_first_step_output: bool = False if not seq_group_metadata_list \
-                    else seq_group_metadata_list[0].state.num_steps == 1
+                is_first_step_output: bool = (
+                    False if not seq_group_metadata_list else seq_group_metadata_list[0].state.num_steps == 1
+                )
 
                 # Add results to the output_queue
                 ctx.append_output(
@@ -562,13 +579,15 @@ def patch_vllm_memory_leak():
                     scheduler_outputs=scheduler_outputs,
                     is_async=allow_async_output_proc,
                     is_last_step=True,
-                    is_first_step_output=is_first_step_output)
+                    is_first_step_output=is_first_step_output,
+                )
 
                 if outputs and allow_async_output_proc:
-                    assert len(outputs) == 1, ('Async postprocessor expects only a single output set')
+                    assert len(outputs) == 1, "Async postprocessor expects only a single output set"
 
-                    self._advance_to_next_step(outputs[0], seq_group_metadata_list,
-                                               scheduler_outputs.scheduled_seq_groups)
+                    self._advance_to_next_step(
+                        outputs[0], seq_group_metadata_list, scheduler_outputs.scheduled_seq_groups
+                    )
 
                 # Check if need to run the usual non-async path
                 if not allow_async_output_proc:

@@ -13,24 +13,14 @@ Wan CLIP family only.
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
-__all__ = ['XLMRoberta', 'xlm_roberta_large']
+__all__ = ["XLMRoberta", "xlm_roberta_large"]
 
 
 class SelfAttention(nn.Module):
-    """Self attention implementation."""
-
     def __init__(self, dim, num_heads, dropout=0.1, eps=1e-5):
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            dropout: The dropout.
-            eps: The eps.
-        """
         assert dim % num_heads == 0
         super().__init__()
         self.dim = dim
@@ -68,18 +58,7 @@ class SelfAttention(nn.Module):
 
 
 class AttentionBlock(nn.Module):
-    """Attention block implementation."""
-
     def __init__(self, dim, num_heads, post_norm, dropout=0.1, eps=1e-5):
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            post_norm: The post norm.
-            dropout: The dropout.
-            eps: The eps.
-        """
         super().__init__()
         self.dim = dim
         self.num_heads = num_heads
@@ -89,18 +68,10 @@ class AttentionBlock(nn.Module):
         # layers
         self.attn = SelfAttention(dim, num_heads, dropout, eps)
         self.norm1 = nn.LayerNorm(dim, eps=eps)
-        self.ffn = nn.Sequential(
-            nn.Linear(dim, dim * 4), nn.GELU(), nn.Linear(dim * 4, dim),
-            nn.Dropout(dropout))
+        self.ffn = nn.Sequential(nn.Linear(dim, dim * 4), nn.GELU(), nn.Linear(dim * 4, dim), nn.Dropout(dropout))
         self.norm2 = nn.LayerNorm(dim, eps=eps)
 
     def forward(self, x, mask):
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-        """
         if self.post_norm:
             x = self.norm1(x + self.attn(x, mask))
             x = self.norm2(x + self.ffn(x))
@@ -115,31 +86,19 @@ class XLMRoberta(nn.Module):
     XLMRobertaModel with no pooler and no LM head.
     """
 
-    def __init__(self,
-                 vocab_size=250002,
-                 max_seq_len=514,
-                 type_size=1,
-                 pad_id=1,
-                 dim=1024,
-                 num_heads=16,
-                 num_layers=24,
-                 post_norm=True,
-                 dropout=0.1,
-                 eps=1e-5):
-        """Init.
-
-        Args:
-            vocab_size: The vocab size.
-            max_seq_len: The max seq len.
-            type_size: The type size.
-            pad_id: The pad id.
-            dim: The dim.
-            num_heads: The num heads.
-            num_layers: The num layers.
-            post_norm: The post norm.
-            dropout: The dropout.
-            eps: The eps.
-        """
+    def __init__(
+        self,
+        vocab_size=250002,
+        max_seq_len=514,
+        type_size=1,
+        pad_id=1,
+        dim=1024,
+        num_heads=16,
+        num_layers=24,
+        post_norm=True,
+        dropout=0.1,
+        eps=1e-5,
+    ):
         super().__init__()
         self.vocab_size = vocab_size
         self.max_seq_len = max_seq_len
@@ -158,10 +117,9 @@ class XLMRoberta(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         # blocks
-        self.blocks = nn.ModuleList([
-            AttentionBlock(dim, num_heads, post_norm, dropout, eps)
-            for _ in range(num_layers)
-        ])
+        self.blocks = nn.ModuleList(
+            [AttentionBlock(dim, num_heads, post_norm, dropout, eps) for _ in range(num_layers)]
+        )
 
         # norm layer
         self.norm = nn.LayerNorm(dim, eps=eps)
@@ -174,17 +132,17 @@ class XLMRoberta(nn.Module):
         mask = ids.ne(self.pad_id).long()
 
         # embeddings
-        x = self.token_embedding(ids) + \
-            self.type_embedding(torch.zeros_like(ids)) + \
-            self.pos_embedding(self.pad_id + torch.cumsum(mask, dim=1) * mask)
+        x = (
+            self.token_embedding(ids)
+            + self.type_embedding(torch.zeros_like(ids))
+            + self.pos_embedding(self.pad_id + torch.cumsum(mask, dim=1) * mask)
+        )
         if self.post_norm:
             x = self.norm(x)
         x = self.dropout(x)
 
         # blocks
-        mask = torch.where(
-            mask.view(b, 1, 1, s).gt(0), 0.0,
-            torch.finfo(x.dtype).min)
+        mask = torch.where(mask.view(b, 1, 1, s).gt(0), 0.0, torch.finfo(x.dtype).min)
         for block in self.blocks:
             x = block(x, mask)
 
@@ -194,25 +152,23 @@ class XLMRoberta(nn.Module):
         return x
 
 
-def xlm_roberta_large(pretrained=False,
-                      return_tokenizer=False,
-                      device='cpu',
-                      **kwargs):
+def xlm_roberta_large(pretrained=False, return_tokenizer=False, device="cpu", **kwargs):
     """
     XLMRobertaLarge adapted from Huggingface.
     """
     # params
-    cfg = dict(
-        vocab_size=250002,
-        max_seq_len=514,
-        type_size=1,
-        pad_id=1,
-        dim=1024,
-        num_heads=16,
-        num_layers=24,
-        post_norm=True,
-        dropout=0.1,
-        eps=1e-5)
+    cfg = {
+        "vocab_size": 250002,
+        "max_seq_len": 514,
+        "type_size": 1,
+        "pad_id": 1,
+        "dim": 1024,
+        "num_heads": 16,
+        "num_layers": 24,
+        "post_norm": True,
+        "dropout": 0.1,
+        "eps": 1e-5,
+    }
     cfg.update(**kwargs)
 
     # init a model on device

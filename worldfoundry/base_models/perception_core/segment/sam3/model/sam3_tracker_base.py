@@ -2,19 +2,35 @@
 
 # pyre-unsafe
 
-"""Module for base_models -> perception_core -> segment -> sam3 -> model -> sam3_tracker_base.py functionality."""
-
 import logging
 
 import torch
 import torch.nn.functional as F
-from worldfoundry.base_models.perception_core.segment.sam3.model.memory import SimpleMaskEncoder
-from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_tracker_utils import get_1d_sine_pe, select_closest_cond_frames
-from worldfoundry.base_models.perception_core.segment.sam3.sam.mask_decoder import MaskDecoder
+
+from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_tracker_utils import (
+    select_closest_cond_frames,
+)
+from worldfoundry.base_models.perception_core.segment.sam_components.mask_decoder import (
+    MaskDecoder as MaskDecoder,
+)
+from worldfoundry.base_models.perception_core.segment.sam_components.memory import (
+    MemoryEncoder as SimpleMaskEncoder,
+)
+from worldfoundry.base_models.perception_core.segment.sam_components.prompt_encoder import (
+    PromptEncoder as PromptEncoder,
+)
+from worldfoundry.base_models.perception_core.segment.sam_components.transformer import (
+    Sam3TwoWayTransformer as TwoWayTransformer,
+)
+from worldfoundry.base_models.perception_core.segment.sam_components.utils import (
+    get_1d_sine_pe,
+)
 from worldfoundry.core.nn.blocks.layers import SamHeadMLP
-from worldfoundry.base_models.perception_core.segment.sam3.sam.prompt_encoder import PromptEncoder
-from worldfoundry.base_models.perception_core.segment.sam3.sam.transformer import TwoWayTransformer
-from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import BatchedDatapoint
+
+# isort: split
+from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import (
+    BatchedDatapoint,
+)
 
 try:
     from timm.layers import trunc_normal_
@@ -28,6 +44,7 @@ NO_OBJ_SCORE = -1024.0
 
 class Sam3TrackerBase(torch.nn.Module):
     """Sam tracker base implementation."""
+
     def __init__(
         self,
         backbone,
@@ -76,32 +93,6 @@ class Sam3TrackerBase(torch.nn.Module):
         # when using memory selection, the threshold to determine if the frame is good
         mf_threshold=0.01,
     ):
-        """Init.
-
-        Args:
-            backbone: The backbone.
-            transformer: The transformer.
-            maskmem_backbone: The maskmem backbone.
-            num_maskmem: The num maskmem.
-            image_size: The image size.
-            backbone_stride: The backbone stride.
-            max_cond_frames_in_attn: The max cond frames in attn.
-            keep_first_cond_frame: The keep first cond frame.
-            multimask_output_in_sam: The multimask output in sam.
-            multimask_min_pt_num: The multimask min pt num.
-            multimask_max_pt_num: The multimask max pt num.
-            multimask_output_for_tracking: The multimask output for tracking.
-            forward_backbone_per_frame_for_eval: The forward backbone per frame for eval.
-            memory_temporal_stride_for_eval: The memory temporal stride for eval.
-            offload_output_to_cpu_for_eval: The offload output to cpu for eval.
-            trim_past_non_cond_mem_for_eval: The trim past non cond mem for eval.
-            non_overlap_masks_for_mem_enc: The non overlap masks for mem enc.
-            max_obj_ptrs_in_encoder: The max obj ptrs in encoder.
-            sam_mask_decoder_extra_args: The sam mask decoder extra args.
-            compile_all_components: The compile all components.
-            use_memory_selection: The use memory selection.
-            mf_threshold: The mf threshold.
-        """
         super().__init__()
 
         # Part 1: the image backbone
@@ -122,17 +113,13 @@ class Sam3TrackerBase(torch.nn.Module):
         # Part 3: memory encoder for the previous frame's outputs
         self.maskmem_backbone = maskmem_backbone
         self.mem_dim = self.hidden_dim
-        if hasattr(self.maskmem_backbone, "out_proj") and hasattr(
-            self.maskmem_backbone.out_proj, "weight"
-        ):
+        if hasattr(self.maskmem_backbone, "out_proj") and hasattr(self.maskmem_backbone.out_proj, "weight"):
             # if there is compression of memories along channel dim
             self.mem_dim = self.maskmem_backbone.out_proj.weight.shape[0]
         self.num_maskmem = num_maskmem  # Number of memories accessible
 
         # Temporal encoding of the memories
-        self.maskmem_tpos_enc = torch.nn.Parameter(
-            torch.zeros(num_maskmem, 1, 1, self.mem_dim)
-        )
+        self.maskmem_tpos_enc = torch.nn.Parameter(torch.zeros(num_maskmem, 1, 1, self.mem_dim))
         trunc_normal_(self.maskmem_tpos_enc, std=0.02)
 
         # a single token to indicate no memory embedding from previous frames
@@ -186,26 +173,14 @@ class Sam3TrackerBase(torch.nn.Module):
 
     @property
     def device(self):
-        """Device."""
         return next(self.parameters()).device
 
     def _get_tpos_enc(self, rel_pos_list, device, max_abs_pos=None, dummy=False):
-        """Helper function to get tpos enc.
-
-        Args:
-            rel_pos_list: The rel pos list.
-            device: The device.
-            max_abs_pos: The max abs pos.
-            dummy: The dummy.
-        """
         if dummy:
             return torch.zeros(len(rel_pos_list), self.mem_dim, device=device)
 
         t_diff_max = max_abs_pos - 1 if max_abs_pos is not None else 1
-        pos_enc = (
-            torch.tensor(rel_pos_list).pin_memory().to(device=device, non_blocking=True)
-            / t_diff_max
-        )
+        pos_enc = torch.tensor(rel_pos_list).pin_memory().to(device=device, non_blocking=True) / t_diff_max
         tpos_dim = self.hidden_dim
         pos_enc = get_1d_sine_pe(pos_enc, dim=tpos_dim)
         pos_enc = self.obj_ptr_tpos_proj(pos_enc)
@@ -473,12 +448,6 @@ class Sam3TrackerBase(torch.nn.Module):
         )
 
     def forward(self, input: BatchedDatapoint, is_inference=False):
-        """Forward.
-
-        Args:
-            input: The input.
-            is_inference: The is inference.
-        """
         raise NotImplementedError(
             "Please use the corresponding methods in SAM3VideoPredictor for inference."
             "See examples/sam3_dense_video_tracking.ipynb for an inference example."
@@ -491,20 +460,12 @@ class Sam3TrackerBase(torch.nn.Module):
         backbone_out = self.backbone.forward_image(img_batch)["sam2_backbone_out"]
         # precompute projected level 0 and level 1 features in SAM decoder
         # to avoid running it again on every SAM click
-        backbone_out["backbone_fpn"][0] = self.sam_mask_decoder.conv_s0(
-            backbone_out["backbone_fpn"][0]
-        )
-        backbone_out["backbone_fpn"][1] = self.sam_mask_decoder.conv_s1(
-            backbone_out["backbone_fpn"][1]
-        )
+        backbone_out["backbone_fpn"][0] = self.sam_mask_decoder.conv_s0(backbone_out["backbone_fpn"][0])
+        backbone_out["backbone_fpn"][1] = self.sam_mask_decoder.conv_s1(backbone_out["backbone_fpn"][1])
         # Clone to help torch.compile
         for i in range(len(backbone_out["backbone_fpn"])):
-            backbone_out["backbone_fpn"][i] = self._maybe_clone(
-                backbone_out["backbone_fpn"][i]
-            )
-            backbone_out["vision_pos_enc"][i] = self._maybe_clone(
-                backbone_out["vision_pos_enc"][i]
-            )
+            backbone_out["backbone_fpn"][i] = self._maybe_clone(backbone_out["backbone_fpn"][i])
+            backbone_out["vision_pos_enc"][i] = self._maybe_clone(backbone_out["vision_pos_enc"][i])
         return backbone_out
 
     def _prepare_backbone_features(self, backbone_out):
@@ -551,12 +512,6 @@ class Sam3TrackerBase(torch.nn.Module):
         return image, vision_feats, vision_pos_embeds, feat_sizes
 
     def cal_mem_score(self, object_score_logits, iou_score):
-        """Cal mem score.
-
-        Args:
-            object_score_logits: The object score logits.
-            iou_score: The iou score.
-        """
         object_score_norm = torch.where(
             object_score_logits > 0,
             object_score_logits.sigmoid() * 2 - 1,  ## rescale to [0, 1]
@@ -566,23 +521,10 @@ class Sam3TrackerBase(torch.nn.Module):
         return score_per_frame
 
     def frame_filter(self, output_dict, track_in_reverse, frame_idx, num_frames, r):
-        """Frame filter.
-
-        Args:
-            output_dict: The output dict.
-            track_in_reverse: The track in reverse.
-            frame_idx: The frame idx.
-            num_frames: The num frames.
-            r: The r.
-        """
-        if (frame_idx == 0 and not track_in_reverse) or (
-            frame_idx == num_frames - 1 and track_in_reverse
-        ):
+        if (frame_idx == 0 and not track_in_reverse) or (frame_idx == num_frames - 1 and track_in_reverse):
             return []
 
-        max_num = min(
-            num_frames, self.max_obj_ptrs_in_encoder
-        )  ## maximum number of pointer memory frames to consider
+        max_num = min(num_frames, self.max_obj_ptrs_in_encoder)  ## maximum number of pointer memory frames to consider
 
         if not track_in_reverse:
             start = frame_idx - 1
@@ -656,10 +598,7 @@ class Sam3TrackerBase(torch.nn.Module):
                 self.max_cond_frames_in_attn,
                 keep_first_cond_frame=self.keep_first_cond_frame,
             )
-            t_pos_and_prevs = [
-                ((frame_idx - t) * tpos_sign_mul, out, True)
-                for t, out in selected_cond_outputs.items()
-            ]
+            t_pos_and_prevs = [((frame_idx - t) * tpos_sign_mul, out, True) for t, out in selected_cond_outputs.items()]
             # Add last (self.num_maskmem - 1) frames before current frame for non-conditioning memory
             # the earliest one has t_pos=1 and the latest one has t_pos=self.num_maskmem-1
             # We also allow taking the memory frame non-consecutively (with r>1), in which case
@@ -667,9 +606,7 @@ class Sam3TrackerBase(torch.nn.Module):
             r = 1 if self.training else self.memory_temporal_stride_for_eval
 
             if self.use_memory_selection:
-                valid_indices = self.frame_filter(
-                    output_dict, track_in_reverse, frame_idx, num_frames, r
-                )
+                valid_indices = self.frame_filter(output_dict, track_in_reverse, frame_idx, num_frames, r)
 
             for t_pos in range(1, self.num_maskmem):
                 t_rel = self.num_maskmem - t_pos  # how many frames before current frame
@@ -680,7 +617,7 @@ class Sam3TrackerBase(torch.nn.Module):
                 else:
                     if t_rel == 1:
                         # for t_rel == 1, we take the last frame (regardless of r)
-                        if not track_in_reverse:
+                        if not track_in_reverse:  # noqa: SIM108 - Branches carry per-case comments.
                             # the frame immediately before this frame (i.e. frame_idx - 1)
                             prev_frame_idx = frame_idx - t_rel
                         else:
@@ -716,25 +653,18 @@ class Sam3TrackerBase(torch.nn.Module):
                 feats = prev["maskmem_features"].cuda(non_blocking=True)
                 seq_len = feats.shape[-2] * feats.shape[-1]
                 to_cat_prompt.append(feats.flatten(2).permute(2, 0, 1))
-                to_cat_prompt_mask.append(
-                    torch.zeros(B, seq_len, device=device, dtype=bool)
-                )
+                to_cat_prompt_mask.append(torch.zeros(B, seq_len, device=device, dtype=bool))
                 # Spatial positional encoding (it might have been offloaded to CPU in eval)
                 maskmem_enc = prev["maskmem_pos_enc"][-1].cuda()
                 maskmem_enc = maskmem_enc.flatten(2).permute(2, 0, 1)
 
-                if (
-                    is_selected_cond_frame
-                    and getattr(self, "cond_frame_spatial_embedding", None) is not None
-                ):
+                if is_selected_cond_frame and getattr(self, "cond_frame_spatial_embedding", None) is not None:
                     # add a spatial embedding for the conditioning frame
                     maskmem_enc = maskmem_enc + self.cond_frame_spatial_embedding
 
                 # Temporal positional encoding
                 t = t_pos if not is_selected_cond_frame else 0
-                maskmem_enc = (
-                    maskmem_enc + self.maskmem_tpos_enc[self.num_maskmem - t - 1]
-                )
+                maskmem_enc = maskmem_enc + self.maskmem_tpos_enc[self.num_maskmem - t - 1]
                 to_cat_prompt_pos_embed.append(maskmem_enc)
 
             # Construct the list of past object pointers
@@ -745,9 +675,7 @@ class Sam3TrackerBase(torch.nn.Module):
                 and self.rng.random() < self.prob_to_dropout_spatial_mem
             ):
                 num_spatial_mem_keep = self.rng.integers(len(to_cat_prompt) + 1)
-                keep = self.rng.choice(
-                    range(len(to_cat_prompt)), num_spatial_mem_keep, replace=False
-                ).tolist()
+                keep = self.rng.choice(range(len(to_cat_prompt)), num_spatial_mem_keep, replace=False).tolist()
                 to_cat_prompt = [to_cat_prompt[i] for i in keep]
                 to_cat_prompt_mask = [to_cat_prompt_mask[i] for i in keep]
                 to_cat_prompt_pos_embed = [to_cat_prompt_pos_embed[i] for i in keep]
@@ -784,24 +712,20 @@ class Sam3TrackerBase(torch.nn.Module):
                         break
                     t = valid_indices[-t_diff]
 
-                out = output_dict["non_cond_frame_outputs"].get(
-                    t, unselected_cond_outputs.get(t, None)
-                )
+                out = output_dict["non_cond_frame_outputs"].get(t, unselected_cond_outputs.get(t, None))
                 if out is not None:
                     pos_and_ptrs.append((t_diff, out["obj_ptr"], False))
 
             # If we have at least one object pointer, add them to the across attention
             if len(pos_and_ptrs) > 0:
-                pos_list, ptrs_list, is_selected_cond_frame_list = zip(*pos_and_ptrs)
+                pos_list, ptrs_list, is_selected_cond_frame_list = zip(*pos_and_ptrs, strict=False)
                 # stack object pointers along dim=0 into [ptr_seq_len, B, C] shape
                 obj_ptrs = torch.stack(ptrs_list, dim=0)
                 if getattr(self, "cond_frame_obj_ptr_embedding", None) is not None:
                     obj_ptrs = (
                         obj_ptrs
                         + self.cond_frame_obj_ptr_embedding
-                        * torch.tensor(is_selected_cond_frame_list, device=device)[
-                            ..., None, None
-                        ].float()
+                        * torch.tensor(is_selected_cond_frame_list, device=device)[..., None, None].float()
                     )
                 # a temporal positional embedding based on how far each object pointer is from
                 # the current frame (sine embedding normalized by the max pointer num).
@@ -874,9 +798,7 @@ class Sam3TrackerBase(torch.nn.Module):
             # optionally, apply non-overlapping constraints to the masks (it's applied
             # in the batch dimension and should only be used during eval, where all
             # the objects come from the same video under batch size 1).
-            pred_masks_high_res = self._apply_non_overlapping_constraints(
-                pred_masks_high_res
-            )
+            pred_masks_high_res = self._apply_non_overlapping_constraints(pred_masks_high_res)
         # scale the raw mask logits with a temperature before applying sigmoid
         if is_mask_from_pts and not self.training:
             mask_for_mem = (pred_masks_high_res > 0).float()
@@ -891,9 +813,7 @@ class Sam3TrackerBase(torch.nn.Module):
 
         if isinstance(self.maskmem_backbone, SimpleMaskEncoder):
             pix_feat = pix_feat.view_as(pix_feat)
-            maskmem_out = self.maskmem_backbone(
-                pix_feat, mask_for_mem, skip_mask_sigmoid=True
-            )
+            maskmem_out = self.maskmem_backbone(pix_feat, mask_for_mem, skip_mask_sigmoid=True)
         else:
             maskmem_out = self.maskmem_backbone(image, pix_feat, mask_for_mem)
         # Clone the feats and pos_enc to enable compilation
@@ -902,9 +822,9 @@ class Sam3TrackerBase(torch.nn.Module):
         # add a no-object embedding to the spatial memory to indicate that the frame
         # is predicted to be occluded (i.e. no object is appearing in the frame)
         is_obj_appearing = (object_score_logits > 0).float()
-        maskmem_features += (
-            1 - is_obj_appearing[..., None, None]
-        ) * self.no_obj_embed_spatial[..., None, None].expand(*maskmem_features.shape)
+        maskmem_features += (1 - is_obj_appearing[..., None, None]) * self.no_obj_embed_spatial[..., None, None].expand(
+            *maskmem_features.shape
+        )
 
         return maskmem_features, maskmem_pos_enc
 
@@ -964,8 +884,7 @@ class Sam3TrackerBase(torch.nn.Module):
             )
             # Append the output, depending on whether it's a conditioning frame
             add_output_as_cond_frame = stage_id in init_cond_frames or (
-                self.add_all_frames_to_correct_as_cond
-                and stage_id in frames_to_add_correction_pt
+                self.add_all_frames_to_correct_as_cond and stage_id in frames_to_add_correction_pt
             )
             if add_output_as_cond_frame:
                 output_dict["cond_frame_outputs"][stage_id] = current_out
@@ -980,9 +899,7 @@ class Sam3TrackerBase(torch.nn.Module):
         all_frame_outputs.update(output_dict["non_cond_frame_outputs"])
         all_frame_outputs = [all_frame_outputs[t] for t in range(num_frames)]
         # Make DDP happy with activation checkpointing by removing unused keys
-        all_frame_outputs = [
-            {k: v for k, v in d.items() if k != "obj_ptr"} for d in all_frame_outputs
-        ]
+        all_frame_outputs = [{k: v for k, v in d.items() if k != "obj_ptr"} for d in all_frame_outputs]
 
         return all_frame_outputs
 
@@ -1009,30 +926,12 @@ class Sam3TrackerBase(torch.nn.Module):
         prev_sam_mask_logits=None,
         use_prev_mem_frame=True,
     ):
-        """Track step.
-
-        Args:
-            frame_idx: The frame idx.
-            is_init_cond_frame: The is init cond frame.
-            current_vision_feats: The current vision feats.
-            current_vision_pos_embeds: The current vision pos embeds.
-            feat_sizes: The feat sizes.
-            image: The image.
-            point_inputs: The point inputs.
-            mask_inputs: The mask inputs.
-            output_dict: The output dict.
-            num_frames: The num frames.
-            track_in_reverse: The track in reverse.
-            run_mem_encoder: The run mem encoder.
-            prev_sam_mask_logits: The prev sam mask logits.
-            use_prev_mem_frame: The use prev mem frame.
-        """
         current_out = {"point_inputs": point_inputs, "mask_inputs": mask_inputs}
         # High-resolution feature maps for the SAM head, reshape (HW)BC => BCHW
         if len(current_vision_feats) > 1:
             high_res_features = [
                 x.permute(1, 2, 0).view(x.size(1), x.size(2), *s)
-                for x, s in zip(current_vision_feats[:-1], feat_sizes[:-1])
+                for x, s in zip(current_vision_feats[:-1], feat_sizes[:-1], strict=False)
             ]
         else:
             high_res_features = None
@@ -1040,9 +939,7 @@ class Sam3TrackerBase(torch.nn.Module):
             # (see it as a GT mask) without using a SAM prompt encoder + mask decoder.
             pix_feat = current_vision_feats[-1].permute(1, 2, 0)
             pix_feat = pix_feat.view(-1, self.hidden_dim, *feat_sizes[-1])
-            sam_outputs = self._use_mask_as_output(
-                pix_feat, high_res_features, mask_inputs
-            )
+            sam_outputs = self._use_mask_as_output(pix_feat, high_res_features, mask_inputs)
         else:
             # fused the visual feature with previous memory features in the memory bank
             pix_feat_with_mem = self._prepare_memory_conditioned_features(
@@ -1090,9 +987,7 @@ class Sam3TrackerBase(torch.nn.Module):
             current_out["object_score_logits"] = object_score_logits
             iou_score = ious.max(-1)[0]
             current_out["iou_score"] = iou_score
-            current_out["eff_iou_score"] = self.cal_mem_score(
-                object_score_logits, iou_score
-            )
+            current_out["eff_iou_score"] = self.cal_mem_score(object_score_logits, iou_score)
         if not self.training:
             # Only add this in inference (to avoid unused param in activation checkpointing;
             # it's mainly used in the demo to encode spatial memories w/ consolidated masks)
@@ -1143,12 +1038,6 @@ class Sam3TrackerBase(torch.nn.Module):
         # before the current frame) during evaluation. This is intended to save GPU or CPU
         # memory for semi-supervised VOS eval, where only the first frame receives prompts.
         def _trim_past_out(past_out, current_out):
-            """Helper function to trim past out.
-
-            Args:
-                past_out: The past out.
-                current_out: The current out.
-            """
             if past_out is None:
                 return None
             return {
@@ -1165,24 +1054,17 @@ class Sam3TrackerBase(torch.nn.Module):
             if past_out is not None:
                 print(past_out.get("eff_iou_score", 0))
                 if (
-                    self.use_memory_selection
-                    and past_out.get("eff_iou_score", 0) < self.mf_threshold
+                    self.use_memory_selection and past_out.get("eff_iou_score", 0) < self.mf_threshold
                 ) or not self.use_memory_selection:
-                    output_dict["non_cond_frame_outputs"][past_frame_idx] = (
-                        _trim_past_out(past_out, current_out)
-                    )
+                    output_dict["non_cond_frame_outputs"][past_frame_idx] = _trim_past_out(past_out, current_out)
 
             if (
                 self.use_memory_selection and not self.offload_output_to_cpu_for_eval
             ):  ## design for memory selection, trim too old frames to save memory
                 far_old_frame_idx = frame_idx - 20 * self.max_obj_ptrs_in_encoder
-                past_out = output_dict["non_cond_frame_outputs"].get(
-                    far_old_frame_idx, None
-                )
+                past_out = output_dict["non_cond_frame_outputs"].get(far_old_frame_idx, None)
                 if past_out is not None:
-                    output_dict["non_cond_frame_outputs"][far_old_frame_idx] = (
-                        _trim_past_out(past_out, current_out)
-                    )
+                    output_dict["non_cond_frame_outputs"][far_old_frame_idx] = _trim_past_out(past_out, current_out)
 
         return current_out
 
@@ -1222,7 +1104,9 @@ class Sam3TrackerBase(torch.nn.Module):
         # see https://github.com/pytorch/pytorch/blob/v2.5.1/torch/_dynamo/config.py#L42-L49
         torch._dynamo.config.cache_size_limit = 64
         torch._dynamo.config.accumulated_cache_size_limit = 2048
-        from worldfoundry.base_models.perception_core.segment.sam3.perflib.compile import compile_wrapper
+        from worldfoundry.base_models.perception_core.segment.sam3.perflib.compile import (
+            compile_wrapper,
+        )
 
         logging.info("Compiling all components. First time may be very slow.")
 
@@ -1256,14 +1140,3 @@ class Sam3TrackerBase(torch.nn.Module):
     def _maybe_clone(self, x):
         """Clone a tensor if and only if `self.compile_all_components` is True."""
         return x.clone() if self.compile_all_components else x
-
-
-def concat_points(old_point_inputs, new_points, new_labels):
-    """Add new points and labels to previous point inputs (add at the end)."""
-    if old_point_inputs is None:
-        points, labels = new_points, new_labels
-    else:
-        points = torch.cat([old_point_inputs["point_coords"], new_points], dim=1)
-        labels = torch.cat([old_point_inputs["point_labels"], new_labels], dim=1)
-
-    return {"point_coords": points, "point_labels": labels}

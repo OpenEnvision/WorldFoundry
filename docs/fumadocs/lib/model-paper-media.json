@@ -51,23 +51,6 @@
       }
     ]
   },
-  "dust3r": {
-    "paper": {
-      "title": "DUSt3R: Geometric 3D Vision Made Easy",
-      "year": 2023,
-      "venue": null,
-      "arxivId": "2312.14132",
-      "abstract": "Multi-view stereo reconstruction (MVS) in the wild requires to first estimate the camera parameters e.g. intrinsic and extrinsic parameters. These are usually tedious and cumbersome to obtain, yet they are mandatory to triangulate corresponding pixels in 3D space, which is the core of all best performing MVS algorithms. In this work, we take an opposite stance and introduce DUSt3R, a radically novel paradigm for Dense and Unconstrained Stereo 3D Reconstruction of arbitrary image collections, i.e. operating without prior information about camera calibration nor viewpoint poses. We cast the pairwise reconstruction problem as a regression of pointmaps, relaxing the hard constraints of usual projective camera models. We show that this formulation smoothly unifies the monocular and binocular reconstruction cases. In the case where more than two images are provided, we further propose a simple"
-    },
-    "figures": [
-      {
-        "kind": "image",
-        "src": "/models/dust3r/paper.png",
-        "caption": "DUSt3R: Geometric 3D Vision Made Easy",
-        "captionZh": "DUSt3R: Geometric 3D Vision Made Easy"
-      }
-    ]
-  },
   "fantasyworld": {
     "paper": {
       "title": "FantasyWorld: Geometry-Consistent World Modeling via Unified Video and 3D Prediction",
@@ -195,23 +178,6 @@
       }
     ]
   },
-  "splatt3r": {
-    "paper": {
-      "title": "Splatt3R: Zero-shot Gaussian Splatting from Uncalibrated Image Pairs",
-      "year": 2024,
-      "venue": null,
-      "arxivId": "2408.13912",
-      "abstract": "In this paper, we introduce Splatt3R, a pose-free, feed-forward method for in-the-wild 3D reconstruction and novel view synthesis from stereo pairs. Given uncalibrated natural images, Splatt3R can predict 3D Gaussian Splats without requiring any camera parameters or depth information. For generalizability, we build Splatt3R upon a ``foundation'' 3D geometry reconstruction method, MASt3R, by extending it to deal with both 3D structure and appearance. Specifically, unlike the original MASt3R which reconstructs only 3D point clouds, we predict the additional Gaussian attributes required to construct a Gaussian primitive for each point. Hence, unlike other novel view synthesis methods, Splatt3R is first trained by optimizing the 3D point cloud's geometry loss, and then a novel view synthesis objective. By doing this, we avoid the local minima present in training 3D Gaussian Splats from stere"
-    },
-    "figures": [
-      {
-        "kind": "image",
-        "src": "/models/splatt3r/paper.png",
-        "caption": "Splatt3R: Zero-shot Gaussian Splatting from Uncalibrated Image Pairs",
-        "captionZh": "Splatt3R: Zero-shot Gaussian Splatting from Uncalibrated Image Pairs"
-      }
-    ]
-  },
   "vmem": {
     "paper": {
       "title": "VMem: Consistent Interactive Video Scene Generation with Surfel-Indexed View Memory",
@@ -322,23 +288,6 @@
   },
   "cosmos-predict-2.5": {
     "figures": []
-  },
-  "dvlt": {
-    "paper": {
-      "title": "Déjà View: Looping Transformers for Multi-View 3D Reconstruction",
-      "year": 2026,
-      "venue": null,
-      "arxivId": "2605.30215",
-      "abstract": "Recent feed-forward 3D reconstruction transformers have scaled to over a billion parameters, following the broader trend of increasing model capacity in computer vision. Yet emerging evidence suggests that contiguous transformer layers often behave like repeated applications of similar operations, and multi-view reconstruction transformers refine their predictions progressively across decoder depth. We posit that model depth partially buys iteration, paid for inefficiently in unique parameters, and instead make that iteration explicit in architecture. Our model, DéjàView, applies a single looped transformer block recurrently to per-view features for K refinement steps. Trained once, it exposes K as an inference-time compute knob, matching or outperforming substantially larger feed-forward baselines across five reconstruction benchmarks spanning indoor, outdoor, object-centric, and drivin"
-    },
-    "figures": [
-      {
-        "kind": "image",
-        "src": "/models/dvlt/paper.png",
-        "caption": "Déjà View: Looping Transformers for Multi-View 3D Reconstruction",
-        "captionZh": "Déjà View: Looping Transformers for Multi-View 3D Reconstruction"
-      }
-    ]
   },
   "echo-memory-context-k1": {
     "paper": {
@@ -548,23 +497,6 @@
       }
     ]
   },
-  "stable-virtual-camera": {
-    "paper": {
-      "title": "Stable Virtual Camera: Generative View Synthesis with Diffusion Models",
-      "year": 2025,
-      "venue": null,
-      "arxivId": "2503.14489",
-      "abstract": "We present Stable Virtual Camera (Seva), a generalist diffusion model that creates novel views of a scene, given any number of input views and target cameras. Existing works struggle to generate either large viewpoint changes or temporally smooth samples, while relying on specific task configurations. Our approach overcomes these limitations through simple model design, optimized training recipe, and flexible sampling strategy that generalize across view synthesis tasks at test time. As a result, our samples maintain high consistency without requiring additional 3D representation-based distillation, thus streamlining view synthesis in the wild. Furthermore, we show that our method can generate high-quality videos lasting up to half a minute with seamless loop closure. Extensive benchmarking demonstrates that Seva outperforms existing methods across different datasets and settings. Projec"
-    },
-    "figures": [
-      {
-        "kind": "image",
-        "src": "/models/stable-virtual-camera/paper.png",
-        "caption": "Stable Virtual Camera: Generative View Synthesis with Diffusion Models",
-        "captionZh": "Stable Virtual Camera: Generative View Synthesis with Diffusion Models"
-      }
-    ]
-  },
   "t2v_turbo_t2v": {
     "paper": {
       "title": "T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback",
@@ -631,23 +563,6 @@
       "abstract": "We present WonderWorld, a novel framework for interactive 3D scene generation that enables users to interactively specify scene contents and layout and see the created scenes in low latency. The major challenge lies in achieving fast generation of 3D scenes. Existing scene generation approaches fall short of speed as they often require (1) progressively generating many views and depth maps, and (2) time-consuming optimization of the scene geometry representations. We introduce the Fast Layered Gaussian Surfels (FLAGS) as our scene representation and an algorithm to generate it from a single view. Our approach does not need multiple views, and it leverages a geometry-based initialization that significantly reduces optimization time. Another challenge is generating coherent geometry that allows all scenes to be connected. We introduce the guided depth diffusion that allows partial conditio"
     }
   },
-  "worldgen": {
-    "paper": {
-      "title": "WorldGen: From Text to Traversable and Interactive 3D Worlds",
-      "year": 2025,
-      "venue": null,
-      "arxivId": "2511.16825",
-      "abstract": "We introduce WorldGen, a system that enables the automatic creation of large-scale, interactive 3D worlds directly from text prompts. Our approach transforms natural language descriptions into traversable, fully textured environments that can be immediately explored or edited within standard game engines. By combining LLM-driven scene layout reasoning, procedural generation, diffusion-based 3D generation, and object-aware scene decomposition, WorldGen bridges the gap between creative intent and functional virtual spaces, allowing creators to design coherent, navigable worlds without manual modeling or specialized 3D expertise. The system is fully modular and supports fine-grained control over layout, scale, and style, producing worlds that are geometrically consistent, visually rich, and efficient to render in real time. This work represents a step towards accessible, generative world-bu"
-    },
-    "figures": [
-      {
-        "kind": "image",
-        "src": "/models/worldgen/paper.png",
-        "caption": "WorldGen: From Text to Traversable and Interactive 3D Worlds",
-        "captionZh": "WorldGen: From Text to Traversable and Interactive 3D Worlds"
-      }
-    ]
-  },
   "causal-rcm": {
     "paper": {
       "title": "Large Scale Diffusion Distillation via Score-Regularized Continuous-Time Consistency",
@@ -684,11 +599,11 @@
   },
   "h-rdt": {
     "paper": {
-      "title": "Data Augmentation for Cognitive Behavioral Therapy: Leveraging ERNIE Language Models using Artificial Intelligence",
+      "title": "H-RDT: Human Manipulation Enhanced Bimanual Robotic Manipulation",
       "year": 2025,
       "venue": null,
-      "arxivId": "2506.23503",
-      "abstract": "Cognitive Behavioral Therapy (CBT) is a proven approach for addressing the irrational thought patterns associated with mental health disorders, but its effectiveness relies on accurately identifying cognitive pathways to provide targeted treatment. In today's digital age, individuals often express negative emotions on social media, where they may reveal cognitive distortions, and in severe cases, exhibit suicidal tendencies. However, there is a significant gap in methodologies designed to analyze these cognitive pathways, which could be critical for psychotherapists aiming to deliver timely and effective interventions in online environments. Cognitive Behavioral Therapy (CBT) framework leveraging acceptance, commitment and data augmentation to categorize and address both textual and visual content as positive or negative. Specifically, the system employs BERT, RoBERTa for Sentiment Analy"
+      "arxivId": "2507.23523",
+      "abstract": "Imitation learning for robotic manipulation faces a fundamental challenge: the scarcity of large-scale, high-quality robot demonstration data. Recent robotic foundation models often pre-train on cross-embodiment robot datasets to increase data scale, while they face significant limitations as the diverse morphologies and action spaces across different robot embodiments make unified training challenging. In this paper, we present H-RDT (Human to Robotics Diffusion Transformer), a novel approach that leverages human manipulation data to enhance robot manipulation capabilities. Our key insight is that large-scale egocentric human manipulation videos with paired 3D hand pose annotations provide rich behavioral priors that capture natural manipulation strategies and can benefit robotic policy learning. We introduce a two-stage training paradigm: (1) pre-training on large-scale egocentric human manipulation data, and (2) cross-embodiment fine-tuning on robot-specific data with modular action encoders and decoders. Built on a diffusion transformer architecture with 2B parameters, H-RDT uses flow matching to model complex action distributions. Extensive evaluations encompassing both simulation and real-world experiments, single-task and multitask scenarios, as well as few-shot learning and robustness assessments, demonstrate that H-RDT outperforms training from scratch and existing state-of-the-art methods, including Pi0 and RDT, achieving significant improvements of 13.9% and 40.5% over training from scratch in simulation and real-world experiments, respectively. The results validate our core hypothesis that human manipulation data can serve as a powerful foundation for learning bimanual robotic manipulation policies."
     }
   },
   "hma": {
@@ -759,23 +674,6 @@
         "src": "/models/motionbricks/paper.png",
         "caption": "MotionBricks: Scalable Real-Time Motions with Modular Latent Generative Model and Smart Primitives",
         "captionZh": "MotionBricks: Scalable Real-Time Motions with Modular Latent Generative Model and Smart Primitives"
-      }
-    ]
-  },
-  "open-dreamer": {
-    "paper": {
-      "title": "Training Agents Inside of Scalable World Models",
-      "year": 2025,
-      "venue": null,
-      "arxivId": "2509.24527",
-      "abstract": "World models learn general knowledge from videos and simulate experience for training behaviors in imagination, offering a path towards intelligent agents. However, previous world models have been unable to accurately predict object interactions in complex environments. We introduce Dreamer 4, a scalable agent that learns to solve control tasks by reinforcement learning inside of a fast and accurate world model. In the complex video game Minecraft, the world model accurately predicts object interactions and game mechanics, outperforming previous world models by a large margin. The world model achieves real-time interactive inference on a single GPU through a shortcut forcing objective and an efficient transformer architecture. Moreover, the world model learns general action conditioning from only a small amount of data, allowing it to extract the majority of its knowledge from diverse un"
-    },
-    "figures": [
-      {
-        "kind": "image",
-        "src": "/models/open-dreamer/paper.png",
-        "caption": "Training Agents Inside of Scalable World Models",
-        "captionZh": "Training Agents Inside of Scalable World Models"
       }
     ]
   },

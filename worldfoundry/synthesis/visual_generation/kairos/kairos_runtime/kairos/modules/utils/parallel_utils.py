@@ -1,5 +1,5 @@
-import torch
 import torch.distributed as dist
+
 
 class SimpleParallelState:
     """
@@ -43,6 +43,7 @@ class SimpleParallelState:
     - This class does not implement true CP subgrouping; it simply reuses TP as
       the "context parallel" group and falls back to WORLD when TP is absent.
     """
+
     _tp_group = None
     _vae_group = None
 
@@ -130,5 +131,6 @@ class SimpleParallelState:
         if dist.is_initialized():
             return dist.get_rank(g)
         return 0
+
 
 parallel_state = SimpleParallelState()

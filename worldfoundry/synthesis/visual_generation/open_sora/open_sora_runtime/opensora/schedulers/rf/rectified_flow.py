@@ -51,9 +51,9 @@ class RFlowScheduler:
 
         # sample method
         assert sample_method in ["uniform", "logit-normal"]
-        assert (
-            sample_method == "uniform" or not use_discrete_timesteps
-        ), "Only uniform sampling is supported for discrete timesteps"
+        assert sample_method == "uniform" or not use_discrete_timesteps, (
+            "Only uniform sampling is supported for discrete timesteps"
+        )
         self.sample_method = sample_method
         if sample_method == "logit-normal":
             self.distribution = LogisticNormal(torch.tensor([loc]), torch.tensor([scale]))

@@ -15,7 +15,14 @@ class ZingPipeline(PipelineABC):
     SYNTHESIS_CLS = ZingSynthesis
 
     @classmethod
-    def from_pretrained(cls, model_path=None, required_components=None, device="cuda", lazy=True, **kwargs):
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
+        cls,
+        model_path=None,
+        required_components=None,
+        device="cuda",
+        lazy=True,
+        **kwargs,
+    ):
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
         options.update(required_components or {})
         options.update(kwargs)
@@ -38,13 +45,15 @@ class ZingPipeline(PipelineABC):
         unknown = options.keys() - inspect.signature(ZingRuntime).parameters.keys()
         if unknown:
             raise TypeError(f"Unknown Zing load options: {sorted(unknown)}")
-        synthesis = cls.SYNTHESIS_CLS.from_pretrained(
+        synthesis = cls._component("SYNTHESIS_CLS").from_pretrained(
             pretrained_model_path=None if isinstance(model_path, Mapping) else model_path,
             generator_overrides=options,
             device=device,
             lazy=lazy,
         )
-        return cls(model_id=cls.MODEL_ID, synthesis_model=synthesis, device=device, operator=cls.OPERATOR_CLS())
+        return cls(
+            model_id=cls.MODEL_ID, synthesis_model=synthesis, device=device, operator=cls._component("OPERATOR_CLS")()
+        )
 
     @staticmethod
     def process(prompt, images=None, **kwargs):

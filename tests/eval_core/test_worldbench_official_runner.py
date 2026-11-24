@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.execution.runners.worldbench import run_worldbench_official_runner
+from worldfoundry.evals.tasks.execution.runners.worldbench import run_worldbench_official_runner
 
 
 def _jsonl(path: Path) -> list[dict[str, object]]:

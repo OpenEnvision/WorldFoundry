@@ -543,9 +543,19 @@ function HighlightedSignature({ text, locale }: { text: string; locale: Locale }
     /(->|\*\*|::|[(),:[\]|=]|\s+)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\d+(?:\.\d+)?)|([A-Za-z_]\w*(?:\.\w+)*)/g;
   const nodes: ReactNode[] = [];
   let match: RegExpExecArray | null;
+  let lastIndex = 0;
   let index = 0;
   while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(
+        <span className="wf-api-sig-op" key={`gap-${index}`}>
+          {text.slice(lastIndex, match.index)}
+        </span>,
+      );
+      index += 1;
+    }
     const token = match[0];
+    lastIndex = match.index + token.length;
     if (!token) continue;
     if (match[1]) {
       nodes.push(
@@ -585,7 +595,55 @@ function HighlightedSignature({ text, locale }: { text: string; locale: Locale }
     }
     index += 1;
   }
+  if (lastIndex < text.length) {
+    nodes.push(
+      <span className="wf-api-sig-op" key={`gap-${index}`}>
+        {text.slice(lastIndex)}
+      </span>,
+    );
+  }
   return <>{nodes}</>;
+}
+
+type MultilineSignatureEntry =
+  | { kind: 'separator'; token: '/' | '*'; key: string }
+  | { kind: 'param'; param: ApiParameter; key: string };
+
+function buildMultilineSignatureEntries(parameters: ApiParameter[]): MultilineSignatureEntry[] {
+  const entries: MultilineSignatureEntry[] = [];
+  let inPositionalOnly = false;
+  let sawVarPositional = false;
+  let emittedKeywordOnlySeparator = false;
+
+  for (let i = 0; i < parameters.length; i += 1) {
+    const param = parameters[i];
+
+    if (inPositionalOnly && param.kind !== 'positional_only') {
+      entries.push({ kind: 'separator', token: '/', key: `sep-pos-${i}` });
+      inPositionalOnly = false;
+    }
+
+    if (param.kind === 'positional_only') {
+      inPositionalOnly = true;
+    } else if (param.kind === 'var_positional') {
+      sawVarPositional = true;
+    } else if (
+      param.kind === 'keyword_only' &&
+      !sawVarPositional &&
+      !emittedKeywordOnlySeparator
+    ) {
+      entries.push({ kind: 'separator', token: '*', key: `sep-kw-${i}` });
+      emittedKeywordOnlySeparator = true;
+    }
+
+    entries.push({ kind: 'param', param, key: `${param.name}-${i}` });
+  }
+
+  if (inPositionalOnly) {
+    entries.push({ kind: 'separator', token: '/', key: 'sep-pos-end' });
+  }
+
+  return entries;
 }
 
 function SignatureDisplay({
@@ -622,6 +680,7 @@ function SignatureDisplay({
   }
 
   if (parameters.length > 0 && multiline && lead.isCallable && symbolName) {
+    const multilineEntries = buildMultilineSignatureEntries(parameters);
     return (
       <code className={`wf-api-sig-code wf-api-sig-${variant}`}>
         <span className="wf-api-sig-line">
@@ -633,10 +692,16 @@ function SignatureDisplay({
           <span className="wf-api-sig-name">{symbolName}</span>
           <span className="wf-api-sig-op">(</span>
         </span>
-        {parameters.map((param, paramIndex) => (
-          <span className="wf-api-sig-line wf-api-sig-indent" key={`${param.name}-${paramIndex}`}>
-            <SignatureParam locale={locale} param={param} />
-            {paramIndex < parameters.length - 1 ? <span className="wf-api-sig-op">,</span> : null}
+        {multilineEntries.map((entry, entryIndex) => (
+          <span className="wf-api-sig-line wf-api-sig-indent" key={entry.key}>
+            {entry.kind === 'separator' ? (
+              <span className="wf-api-sig-op">{entry.token}</span>
+            ) : (
+              <SignatureParam locale={locale} param={entry.param} />
+            )}
+            {entryIndex < multilineEntries.length - 1 ? (
+              <span className="wf-api-sig-op">,</span>
+            ) : null}
           </span>
         ))}
         <span className="wf-api-sig-line">

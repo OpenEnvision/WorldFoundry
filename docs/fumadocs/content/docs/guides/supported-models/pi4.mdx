@@ -1,0 +1,81 @@
+---
+title: "Pi4"
+description: "Pi4 (π⁴): 4D scene geometry, metric point clouds, camera poses, dense 2D/3D tracking, and moving-object segmentation (CC BY-NC 4.0)."
+modelId: "pi4"
+pageSource: authored
+---
+
+Pi4 ($\pi^4$) is a 0.5B-parameter feed-forward foundation model for joint 4D scene geometry and motion. Given a single image, unordered image collection, or video without camera calibration, Pi4 predicts metric-scale 3D point clouds, camera-to-world poses, geometry confidence, dense 2D/3D point tracks from a chosen query frame, and sequence-level moving-object masks in one forward pass.
+
+Paper: [$\pi^4$: A Foundation Model for 4D Scene Geometry and Motion](https://arxiv.org/abs/2611.23144) (2026).
+
+Project page: [yyfz.github.io/pi4](https://yyfz.github.io/pi4). Code: [yyfz/Pi4](https://github.com/yyfz/Pi4) (pinned revision `32dfbea9ce6268ea17446208a804710df9475c32`). Weights: [yyfz233/Pi4](https://huggingface.co/yyfz233/Pi4) (`model.safetensors`, revision `59f307317fb630c9c5a5aa635038d98ed106aaf5`).
+
+> **License notice:** Upstream Pi4 code and weights are licensed under **CC BY-NC 4.0** (non-commercial use only). CoWTracker-derived tracking components remain subject to the FAIR Noncommercial Research License as recorded in the upstream `NOTICE`.
+
+## What it is for
+
+Use `pi4` for:
+
+- **Metric 3D reconstruction (`query_frame=None`)**: camera-space and metric world point clouds, depth maps, geometry confidence masks, and camera-to-world poses from images or videos.
+- **Joint 4D geometry and dense tracking (`query_frame=<int>`)**: adds dense 2D target correspondences (`tracks_2d`), metric 3D surface tracks (`tracks_3d`), visibility, tracking confidence, and sequence-level moving-object probabilities (`dynamic_mask`) for sequences of at least two frames.
+
+Tasks: 4D reconstruction, 3D reconstruction, point cloud, dense tracking, and motion segmentation.
+
+## Architecture and sparse refinement backend
+
+WorldFoundry ports the complete 1,319-tensor Pi4 inference architecture under `worldfoundry.base_models.three_dimensions.point_clouds.pi4_inference`, consisting of:
+
+- Patch-16 axial-RoPE ViT `Encoder` and 16-step looped alternating frame/global `GeometryDecoder`
+- `PointHead`, 5-level 3D `DepthRefiner` (`SparseUNet`), `CameraHead`, and `MetricHead`
+- 8-step geometry-conditioned `MotionDecoder`, iterative `Tracker`, and Hiera-small `MotionMask`
+
+`DepthRefiner` lazily probes `flex_gemm.nn` on CUDA and delegates directly to `flex_gemm` when installed. In the default `worldfoundry-unified-cu128` environment without `flex_gemm`, it runs a checkpoint-identical pure-PyTorch sparse 3D fallback preserving the exact `[C_out, 3, 3, 3, C_in]` weight layout so `yyfz233/Pi4/model.safetensors` loads strictly (`1319/1319` keys) on both CUDA and CPU.
+
+## Runtime contract
+
+- **Inputs**: `input_path` / `images` / `videos` (image file, image directory, or video file). Frames are Lanczos-resized to shared aspect-preserving positive multiples of `16` bounded by `max_size` (default `512`), sampled with `stride` (default `1`) and optional `max_frames`.
+- **Options**: `query_frame` (`None` for geometry-only, or integer index after sampling for 4D tracking), `stride`, `max_frames`, `max_size`, `conf_threshold` (default `0.05`).
+- **Outputs (`Pi4Result.save()`)**:
+  - `point_cloud/result.ply` (metric world XYZ + RGB filtered by `geometry_confidence`)
+  - `raw_data/*.npy` (`points`, `local_points`, `camera_poses`, `metric_scale`, `confidence`, `depth_map`, `masks`, plus `tracks_2d`, `tracks_3d`, `visibility`, `tracking_confidence`, `dynamic_mask`, `query_frame` when tracking is enabled)
+  - `depth/depth_*.png`, `rgb/frame_*.png`, `camera_poses/pose_*.json`, and `meta.json`
+- **Pipeline binding**: `worldfoundry.pipelines.pi4.pipeline_pi4:Pi4Pipeline` (`Pi4Pipeline`).
+- **Family status**: **Checkpoint GPU validated on H200** (`yyfz233/Pi4/model.safetensors`, 1,319 tensors, 4D geometry + dense tracking + moving-object masks on `kart.mp4` at 512×288 via the pure-PyTorch sparse 3D `DepthRefiner`, alongside weight-free component parity and sparse 3D conv/pool/upsample unit tests).
+
+## Running in WorldFoundry
+
+### CLI
+
+Prepare the unified CUDA 12.8 environment (`worldfoundry-unified-cu128`) and stage `yyfz233/Pi4`:
+
+```bash
+bash scripts/inference/prepare_model_infer.sh pi4 --download
+wf run pi4 --pipeline.task-profile reconstruction --input /path/to/images_or_video
+wf run pi4 --pipeline.task-profile 4d-tracking --input /path/to/video.mp4
+```
+
+### Python API
+
+```python
+from worldfoundry.pipelines.pi4 import Pi4Pipeline
+
+pipeline = Pi4Pipeline.from_pretrained("yyfz233/Pi4", device="cuda")
+
+# Geometry-only metric 3D reconstruction
+geom_result = pipeline(images="/path/to/images_or_video", stride=1, max_frames=25)
+geom_result.save("outputs/pi4_geometry")
+
+# Joint 4D geometry, dense tracking, and moving-object masks
+track_result = pipeline(
+    videos="/path/to/video.mp4",
+    query_frame=0,
+    stride=2,
+    max_frames=50,
+)
+track_result.save("outputs/pi4_4d_tracking")
+```
+
+### Optional FlexGEMM acceleration
+
+For long high-resolution sequences on CUDA (e.g., 150–750 frames at `512x288`), installing `flex_gemm` pinned at `JeffreyXiang/FlexGEMM@b2fadb29d41846c7981ade6801ffc689fae119cf` enables Triton sparse-convolution kernels automatically without changing weights or outputs.

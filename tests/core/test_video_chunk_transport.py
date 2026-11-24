@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
@@ -135,16 +136,22 @@ def test_invalid_declared_layout_does_not_fall_back_to_guessing(
         realtime_frames_from_result({"video_chunk": chunk, "video": np.zeros((5, 8, 8, 3), dtype=np.uint8)})
 
 
-def test_artifact_conversion_uses_the_same_declared_pixels() -> None:
+@pytest.mark.parametrize("to_path", [False, True])
+def test_artifact_conversion_uses_the_same_declared_pixels(tmp_path: Path, to_path: bool) -> None:
     from io import BytesIO
 
     from PIL import Image
 
     tensor = torch.full((1, 3, 1, 3, 4), 0.5)
-    target = BytesIO()
-    save_image_or_video_tensor(tensor, target, layout="bcthw", value_range="-1,1", image_format="PNG")
-    target.seek(0)
+    if to_path:
+        target = tmp_path / "prediction.png"
+        save_image_or_video_tensor(tensor, target, layout="bcthw", value_range="-1,1")
+    else:
+        target = BytesIO()
+        save_image_or_video_tensor(tensor, target, layout="bcthw", value_range="-1,1", image_format="PNG")
+        target.seek(0)
     with Image.open(target) as image:
+        assert image.format == "PNG"
         actual = np.asarray(image)
     expected = video_chunk_to_uint8_frames(VideoChunk(frames=tensor, layout="bcthw", value_range="-1,1"))[0]
     np.testing.assert_array_equal(actual, expected)

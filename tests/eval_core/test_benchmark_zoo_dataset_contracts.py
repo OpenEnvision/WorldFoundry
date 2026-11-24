@@ -5,13 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import load_benchmark_catalog_shard_entries
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import (
-    BenchmarkExecutionUnavailableError,
+from worldfoundry.evals.tasks.catalog.benchmark_catalog import load_benchmark_catalog_shard_entries
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_commands import BenchmarkExecutionUnavailableError
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_runner import (
     BenchmarkRunnerRegistry,
     build_benchmark_runner_registry,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "catalog"

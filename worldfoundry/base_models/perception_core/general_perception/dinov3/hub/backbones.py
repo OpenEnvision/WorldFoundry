@@ -3,45 +3,25 @@
 # This software may be used and distributed in accordance with
 # the terms of the DINOv3 License Agreement.
 
-"""Module for base_models -> perception_core -> general_perception -> dinov3 -> hub -> backbones.py functionality."""
-
 import os
 from enum import Enum
-from typing import List, Optional, Union
-from urllib.parse import urlparse
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .utils import _DINOV3_BASE_URL, _safe_load_state_dict_from_url
 
 
 class Weights(Enum):
-    """Weights implementation."""
     LVD1689M = "LVD1689M"
     SAT493M = "SAT493M"
 
 
 def is_url(path: str) -> bool:
-    """Is url.
-
-    Args:
-        path: The path.
-
-    Returns:
-        The return value.
-    """
     parsed = urlparse(path)
     return parsed.scheme in ("https", "file")
 
 
 def convert_path_or_url_to_url(path: str) -> str:
-    """Convert path or url to url.
-
-    Args:
-        path: The path.
-
-    Returns:
-        The return value.
-    """
     if is_url(path):
         return path
     return Path(path).expanduser().resolve().as_uri()
@@ -52,7 +32,6 @@ def _make_dinov3_vit_model_arch(
     patch_size: int = 16,
     compact_arch_name: str = "vitb",
 ):
-    """Helper function to make dinov3 vit model arch."""
     if "plus" in compact_arch_name:
         model_arch = compact_arch_name.replace("plus", f"{patch_size}plus")
     else:
@@ -64,11 +43,10 @@ def _make_dinov3_vit_model_url(
     *,
     patch_size: int = 16,
     compact_arch_name: str = "vitb",
-    version: Optional[str] = None,
-    weights: Union[Weights, str] = Weights.LVD1689M,
-    hash: Optional[str] = None,
+    version: str | None = None,
+    weights: Weights | str = Weights.LVD1689M,
+    hash: str | None = None,
 ):
-    """Helper function to make dinov3 vit model url."""
     model_name = "dinov3"
     model_arch = _make_dinov3_vit_model_arch(patch_size=patch_size, compact_arch_name=compact_arch_name)
     version_suffix = f"_{version}" if version else ""
@@ -107,41 +85,40 @@ def _make_dinov3_vit(
     n_storage_tokens: int = 0,
     mask_k_bias: bool = False,
     pretrained: bool = True,
-    version: Optional[str] = None,
-    weights: Union[Weights, str] = Weights.LVD1689M,
-    hash: Optional[str] = None,
+    version: str | None = None,
+    weights: Weights | str = Weights.LVD1689M,
+    hash: str | None = None,
     check_hash: bool = False,
     **kwargs,
 ):
-    """Helper function to make dinov3 vit."""
     from ..models.vision_transformer import DinoVisionTransformer
 
-    vit_kwargs = dict(
-        img_size=img_size,
-        patch_size=patch_size,
-        in_chans=in_chans,
-        pos_embed_rope_base=pos_embed_rope_base,
-        pos_embed_rope_min_period=pos_embed_rope_min_period,
-        pos_embed_rope_max_period=pos_embed_rope_max_period,
-        pos_embed_rope_normalize_coords=pos_embed_rope_normalize_coords,
-        pos_embed_rope_shift_coords=pos_embed_rope_shift_coords,
-        pos_embed_rope_jitter_coords=pos_embed_rope_jitter_coords,
-        pos_embed_rope_rescale_coords=pos_embed_rope_rescale_coords,
-        pos_embed_rope_dtype=pos_embed_rope_dtype,
-        embed_dim=embed_dim,
-        depth=depth,
-        num_heads=num_heads,
-        ffn_ratio=ffn_ratio,
-        qkv_bias=qkv_bias,
-        drop_path_rate=drop_path_rate,
-        layerscale_init=layerscale_init,
-        norm_layer=norm_layer,
-        ffn_layer=ffn_layer,
-        ffn_bias=ffn_bias,
-        proj_bias=proj_bias,
-        n_storage_tokens=n_storage_tokens,
-        mask_k_bias=mask_k_bias,
-    )
+    vit_kwargs = {
+        "img_size": img_size,
+        "patch_size": patch_size,
+        "in_chans": in_chans,
+        "pos_embed_rope_base": pos_embed_rope_base,
+        "pos_embed_rope_min_period": pos_embed_rope_min_period,
+        "pos_embed_rope_max_period": pos_embed_rope_max_period,
+        "pos_embed_rope_normalize_coords": pos_embed_rope_normalize_coords,
+        "pos_embed_rope_shift_coords": pos_embed_rope_shift_coords,
+        "pos_embed_rope_jitter_coords": pos_embed_rope_jitter_coords,
+        "pos_embed_rope_rescale_coords": pos_embed_rope_rescale_coords,
+        "pos_embed_rope_dtype": pos_embed_rope_dtype,
+        "embed_dim": embed_dim,
+        "depth": depth,
+        "num_heads": num_heads,
+        "ffn_ratio": ffn_ratio,
+        "qkv_bias": qkv_bias,
+        "drop_path_rate": drop_path_rate,
+        "layerscale_init": layerscale_init,
+        "norm_layer": norm_layer,
+        "ffn_layer": ffn_layer,
+        "ffn_bias": ffn_bias,
+        "proj_bias": proj_bias,
+        "n_storage_tokens": n_storage_tokens,
+        "mask_k_bias": mask_k_bias,
+    }
     vit_kwargs.update(**kwargs)
     model = DinoVisionTransformer(**vit_kwargs)
     if pretrained:
@@ -167,10 +144,9 @@ def _make_dinov3_vit(
 def _make_dinov3_convnext_model_url(
     *,
     compact_arch_name: str = "convnext_base",
-    weights: Union[Weights, str] = Weights.LVD1689M,
-    hash: Optional[str] = None,
+    weights: Weights | str = Weights.LVD1689M,
+    hash: str | None = None,
 ):
-    """Helper function to make dinov3 convnext model url."""
     model_name = "dinov3"
     weights_name = weights.value.lower()
     hash_suffix = f"-{hash}" if hash else ""
@@ -181,38 +157,25 @@ def _make_dinov3_convnext_model_url(
 
 def _make_dinov3_convnext(
     in_chans: int = 3,
-    depths: List[int] = [3, 3, 27, 3],
-    dims: List[int] = [128, 256, 512, 1024],
+    depths: list[int] = [3, 3, 27, 3],  # noqa: B006 - Keeps the upstream default object and signature.
+    dims: list[int] = [128, 256, 512, 1024],  # noqa: B006 - Keeps the upstream default object and signature.
     compact_arch_name: str = "convnext_base",
     drop_path_rate: float = 0.0,
     layer_scale_init_value: float = 1e-6,
     pretrained: bool = True,
-    weights: Union[Weights, str] = Weights.LVD1689M,
-    hash: Optional[str] = None,
+    weights: Weights | str = Weights.LVD1689M,
+    hash: str | None = None,
     **kwargs,
 ):
-    """Helper function to make dinov3 convnext.
-
-    Args:
-        in_chans: The in chans.
-        depths: The depths.
-        dims: The dims.
-        compact_arch_name: The compact arch name.
-        drop_path_rate: The drop path rate.
-        layer_scale_init_value: The layer scale init value.
-        pretrained: The pretrained.
-        weights: The weights.
-        hash: The hash.
-    """
     from ..models.convnext import ConvNeXt
 
-    model_kwargs = dict(
-        in_chans=in_chans,
-        depths=depths,
-        dims=dims,
-        drop_path_rate=drop_path_rate,
-        layer_scale_init_value=layer_scale_init_value,
-    )
+    model_kwargs = {
+        "in_chans": in_chans,
+        "depths": depths,
+        "dims": dims,
+        "drop_path_rate": drop_path_rate,
+        "layer_scale_init_value": layer_scale_init_value,
+    }
     model_kwargs.update(**kwargs)
     model = ConvNeXt(**model_kwargs)
     if pretrained:
@@ -237,7 +200,7 @@ def _make_dinov3_convnext(
 def dinov3_vits16(
     *,
     pretrained: bool = True,
-    weights: Union[Weights, str] = Weights.LVD1689M,
+    weights: Weights | str = Weights.LVD1689M,
     check_hash: bool = False,
     **kwargs,
 ):
@@ -277,7 +240,7 @@ def dinov3_vits16(
 def dinov3_vits16plus(
     *,
     pretrained: bool = True,
-    weights: Union[Weights, str] = Weights.LVD1689M,
+    weights: Weights | str = Weights.LVD1689M,
     check_hash: bool = False,
     **kwargs,
 ):
@@ -317,7 +280,7 @@ def dinov3_vits16plus(
 def dinov3_vitb16(
     *,
     pretrained: bool = True,
-    weights: Union[Weights, str] = Weights.LVD1689M,
+    weights: Weights | str = Weights.LVD1689M,
     check_hash: bool = False,
     **kwargs,
 ):
@@ -357,7 +320,7 @@ def dinov3_vitb16(
 def dinov3_vitl16(
     *,
     pretrained: bool = True,
-    weights: Union[Weights, str] = Weights.LVD1689M,
+    weights: Weights | str = Weights.LVD1689M,
     check_hash: bool = False,
     **kwargs,
 ):
@@ -414,7 +377,7 @@ def dinov3_vitl16(
 def dinov3_vitl16plus(
     *,
     pretrained: bool = True,
-    weights: Union[Weights, str] = Weights.LVD1689M,
+    weights: Weights | str = Weights.LVD1689M,
     check_hash: bool = False,
     **kwargs,
 ):
@@ -453,7 +416,7 @@ def dinov3_vitl16plus(
 def dinov3_vith16plus(
     *,
     pretrained: bool = True,
-    weights: Union[Weights, str] = Weights.LVD1689M,
+    weights: Weights | str = Weights.LVD1689M,
     check_hash: bool = False,
     **kwargs,
 ):
@@ -492,7 +455,7 @@ def dinov3_vith16plus(
 def dinov3_vit7b16(
     *,
     pretrained: bool = True,
-    weights: Union[Weights, str] = Weights.LVD1689M,
+    weights: Weights | str = Weights.LVD1689M,
     check_hash: bool = False,
     **kwargs,
 ):
@@ -500,9 +463,8 @@ def dinov3_vit7b16(
     if weights == Weights.LVD1689M:
         if "hash" not in kwargs:
             kwargs["hash"] = "a955f4ea"
-    elif weights == Weights.SAT493M:
-        if "hash" not in kwargs:
-            kwargs["hash"] = "a6675841"
+    elif weights == Weights.SAT493M and "hash" not in kwargs:
+        kwargs["hash"] = "a6675841"
     kwargs["version"] = None
     untie_global_and_local_cls_norm = True
     return _make_dinov3_vit(
@@ -541,7 +503,7 @@ def dinov3_vit7b16(
 def dinov3_convnext_tiny(
     *,
     pretrained: bool = True,
-    weights: Union[Weights, str] = Weights.LVD1689M,
+    weights: Weights | str = Weights.LVD1689M,
     **kwargs,
 ):
     """DINOv3 ConvNeXt-Tiny model (optionally) pretrained on the LVD-1689M dataset."""
@@ -570,7 +532,7 @@ def dinov3_convnext_tiny(
 def dinov3_convnext_small(
     *,
     pretrained: bool = True,
-    weights: Union[Weights, str] = Weights.LVD1689M,
+    weights: Weights | str = Weights.LVD1689M,
     **kwargs,
 ):
     """DINOv3 ConvNeXt-Small model (optionally) pretrained on the LVD-1689M dataset."""
@@ -599,7 +561,7 @@ def dinov3_convnext_small(
 def dinov3_convnext_base(
     *,
     pretrained: bool = True,
-    weights: Union[Weights, str] = Weights.LVD1689M,
+    weights: Weights | str = Weights.LVD1689M,
     **kwargs,
 ):
     """DINOv3 ConvNeXt-Base model (optionally) pretrained on the LVD-1689M dataset."""
@@ -628,7 +590,7 @@ def dinov3_convnext_base(
 def dinov3_convnext_large(
     *,
     pretrained: bool = True,
-    weights: Union[Weights, str] = Weights.LVD1689M,
+    weights: Weights | str = Weights.LVD1689M,
     **kwargs,
 ):
     """DINOv3 ConvNeXt-Large model (optionally) pretrained on the LVD-1689M dataset."""
@@ -680,7 +642,7 @@ def DINOv3(model_name: str):
         "vit_7b": {"embed_dim": 4096, "depth": 40, "num_heads": 32, "ffn_ratio": 3},
     }
     vit_cfg = vit_configs[arch_name]
-    qkv_bias = True if arch_name != "vit_7b" else False
+    qkv_bias = arch_name != "vit_7b"
 
     return _make_dinov3_vit(
         ffn_layer=ffn_layer,

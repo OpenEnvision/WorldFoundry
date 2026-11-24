@@ -1,16 +1,10 @@
 """LingBot-VLA v2 inference tensor transforms."""
 
-from typing import Dict
-from pathlib import Path
-
 import numpy as np
 import torch
-import math
-import einops
-import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 from torchvision.transforms import v2
+
 from . import logging as logging_utils
 
 logger = logging_utils.get_logger(__name__)
@@ -41,11 +35,12 @@ def dict_apply(func, d):
             d[key] = func(value)
     return d
 
+
 class Normalizer:
     def __init__(
         self,
-        norm_stats: Dict[str, Dict[str, np.ndarray]],
-        norm_type: Dict[str, str] | None = None,
+        norm_stats: dict[str, dict[str, np.ndarray]],
+        norm_type: dict[str, str] | None = None,
     ):
         self.norm_stats = dict_apply(lambda x: np.array(x), norm_stats)
         self.norm_type = norm_type or {}
@@ -73,7 +68,7 @@ class Normalizer:
 
         return stat
 
-    def normalize(self, data: Dict[str, np.ndarray]) -> Dict[str, torch.Tensor]:
+    def normalize(self, data: dict[str, np.ndarray]) -> dict[str, torch.Tensor]:
         normalized_data = {}
         for key, value in data.items():
             if key in self.norm_stats:
@@ -86,37 +81,33 @@ class Normalizer:
                 elif norm_type == "bounds_98":
                     low = self._get_stat(key, "q02", value)
                     high = self._get_stat(key, "q98", value)
-                    normalized_value = (value  - low) / (high - low + 1e-6) * 2.0 - 1.0
+                    normalized_value = (value - low) / (high - low + 1e-6) * 2.0 - 1.0
                     normalized_value = torch.clamp(normalized_value, min=-1.5, max=1.5)
                 elif norm_type == "bounds_99":
                     low = self._get_stat(key, "q01", value)
                     high = self._get_stat(key, "q99", value)
-                    normalized_value = (value  - low) / (high - low + 1e-6) * 2.0 - 1.0
+                    normalized_value = (value - low) / (high - low + 1e-6) * 2.0 - 1.0
                     normalized_value = torch.clamp(normalized_value, min=-1.5, max=1.5)
                 elif norm_type == "bounds_98_woclip":
                     low = self._get_stat(key, "q02", value)
                     high = self._get_stat(key, "q98", value)
-                    normalized_value = (value  - low) / (high - low + 1e-6) * 2.0 - 1.0
+                    normalized_value = (value - low) / (high - low + 1e-6) * 2.0 - 1.0
                 elif norm_type == "bounds_99_woclip":
                     low = self._get_stat(key, "q01", value)
                     high = self._get_stat(key, "q99", value)
-                    normalized_value = (value  - low) / (high - low + 1e-6) * 2.0 - 1.0
+                    normalized_value = (value - low) / (high - low + 1e-6) * 2.0 - 1.0
                 elif norm_type == "std":
                     std = self._get_stat(key, "std", value)
                     normalized_value = value / (std + 1e-6)
                 elif norm_type == "minmax":
                     min_val = self._get_stat(key, "min", value)
                     max_val = self._get_stat(key, "max", value)
-                    normalized_value = (value - min_val) / (
-                        max_val - min_val + 1e-6
-                    ) * 2 - 1
+                    normalized_value = (value - min_val) / (max_val - min_val + 1e-6) * 2 - 1
                     normalized_value = torch.clamp(normalized_value, min=-1, max=1)
                 elif norm_type == "minmax_woclip":
                     min_val = self._get_stat(key, "min", value)
                     max_val = self._get_stat(key, "max", value)
-                    normalized_value = (value - min_val) / (
-                        max_val - min_val + 1e-6
-                    ) * 2 - 1
+                    normalized_value = (value - min_val) / (max_val - min_val + 1e-6) * 2 - 1
                 elif norm_type == "sincos":
                     if not key.startswith("observation.state."):
                         raise ValueError(f"sincos normalization is only allowed for state keys, got {key}")
@@ -136,7 +127,7 @@ class Normalizer:
                 normalized_data[key] = value
         return normalized_data
 
-    def unnormalize(self, data: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    def unnormalize(self, data: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         """
         Unnormalize the given data using stored normalization statistics.
 
@@ -150,12 +141,12 @@ class Normalizer:
         for key, value in data.items():
             if key in self.norm_stats:
                 norm_type = self.norm_type.get(key, "identity")
-                stats = self.norm_stats[key]
+                _stats = self.norm_stats[key]
                 if norm_type == "meanstd":
                     mean = self._get_stat(key, "mean", value)
                     std = self._get_stat(key, "std", value)
                     unnormalized_value = value * (std + 1e-6) + mean
-                elif norm_type == "bounds_98" or norm_type == 'bounds_98_woclip':
+                elif norm_type == "bounds_98" or norm_type == "bounds_98_woclip":
                     low = self._get_stat(key, "q02", value)
                     high = self._get_stat(key, "q98", value)
                     unnormalized_value = ((value + 1.0) / 2.0) * (high - low + 1e-6) + low
@@ -195,27 +186,6 @@ class Normalizer:
                 unnormalized_data[key] = value
         return unnormalized_data
 
-def resize_with_pad_item(img, width, height, pad_value=-1):
-    # assume no-op when width height fits already
-    if img.ndim != 3:
-        raise ValueError(f"(c,h,w) expected, but {img.shape}")
-
-    cur_height, cur_width = img.shape[1:]
-
-    ratio = max(cur_width / width, cur_height / height)
-    resized_height = int(cur_height / ratio)
-    resized_width = int(cur_width / ratio)
-    resized_img = F.interpolate(
-        img.unsqueeze(0), size=(resized_height, resized_width), mode="bilinear", align_corners=False
-    ).squeeze(0)
-
-    pad_height = max(0, int(height - resized_height))
-    pad_width = max(0, int(width - resized_width))
-
-    # pad on left and top of image
-    padded_img = F.pad(resized_img, (pad_width, 0, pad_height, 0), value=pad_value)
-    return padded_img
-
 
 def _visual_hw(visual: Tensor) -> tuple[int, int]:
     if visual.ndim == 3:
@@ -237,6 +207,7 @@ def sample_visual_augmentation_params(
         "saturation": 0.5 + torch.rand((), device=device),
     }
 
+
 def apply_visual_augmentation(
     visual: Tensor,
     params: dict,
@@ -257,7 +228,7 @@ def apply_visual_augmentation(
         raise ValueError(f"Expected image (C,H,W) or video (T,C,H,W), got {tuple(visual.shape)}")
 
     orig_dtype = visual.dtype
-    height, width = int(visual_bchw.shape[-2]), int(visual_bchw.shape[-1])
+    height, width = int(visual_bchw.shape[-2]), int(visual_bchw.shape[-1])  # noqa: F841 - Upstream assignment kept.
     image = visual_bchw.to(torch.float32)
     if image.max() > 1.0:
         image = image / 255.0
@@ -272,11 +243,9 @@ def apply_visual_augmentation(
     image = gray + (image - gray) * saturation
     image = image.clamp(0.0, 1.0)
 
-    if orig_dtype == torch.uint8:
-        image = (image * 255.0).round().to(torch.uint8)
-    else:
-        image = image.to(orig_dtype)
+    image = (image * 255.0).round().to(torch.uint8) if orig_dtype == torch.uint8 else image.to(orig_dtype)
     return image.squeeze(0) if squeeze else image
+
 
 def prepare_images(
     image_processor,
@@ -297,7 +266,7 @@ def prepare_images(
         images (torch.Tensor): (*b, n, c, h, w) images in range [-1.0, 1.0]
         img_masks (torch.Tensor): (*b, n) masks for images, True if image is present, False if missing
     """
-    dtype = observation["state"].dtype # fp32
+    dtype = observation["state"].dtype  # fp32
     images, img_masks = [], []
     image_grid_thw_list = []
     image_dict = {}
@@ -330,12 +299,14 @@ def prepare_images(
             pil_image_dict[key] = img.cpu().numpy()
 
         if image_processor is None:
-            img = img.to(dtype) / 127.5 - 1.0 # to [-1, 1]
+            img = img.to(dtype) / 127.5 - 1.0  # to [-1, 1]
         else:
             processed = image_processor(img)
-            img = processed['pixel_values'] # (grid_t * grid_h * grid_w, channel * temporal_patch_size * patch_size * patch_size) in qwen2.5vl, 256, 3*2*14*14
-            if return_image_grid_thw and 'image_grid_thw' in processed:
-                image_grid_thw_dict[key] = processed['image_grid_thw']
+            img = processed[
+                "pixel_values"
+            ]  # (grid_t * grid_h * grid_w, channel * temporal_patch_size * patch_size * patch_size) in qwen2.5vl, 256, 3*2*14*14
+            if return_image_grid_thw and "image_grid_thw" in processed:
+                image_grid_thw_dict[key] = processed["image_grid_thw"]
         image_dict[key] = img
 
     for key in image_keys:
@@ -350,18 +321,18 @@ def prepare_images(
                 pil_images.append(pil_img)
         else:
             # zero padding
-            img = image_dict[list(image_dict.keys())[0]]
+            img = image_dict[list(image_dict.keys())[0]]  # noqa: RUF015 - Keeps eager list construction and IndexError.
             if use_depth_align:
-                pil_img = pil_image_dict[list(pil_image_dict.keys())[0]]
+                pil_img = pil_image_dict[list(pil_image_dict.keys())[0]]  # noqa: RUF015 - Keeps eager list construction and IndexError.
             if isinstance(img, torch.Tensor):
-                img = torch.full_like(img, fill_value=-1.0) # paligemma [-1,1], now Qwen3vl
+                img = torch.full_like(img, fill_value=-1.0)  # paligemma [-1,1], now Qwen3vl
             else:
-                img = np.zeros_like(img) # Qwen2.5vl
+                img = np.zeros_like(img)  # Qwen2.5vl
                 if use_depth_align:
                     pil_img = np.zeros_like(pil_img)
             images.append(img)
             if return_image_grid_thw:
-                image_grid_thw_list.append(image_grid_thw_dict.get(list(image_dict.keys())[0], None))
+                image_grid_thw_list.append(image_grid_thw_dict.get(list(image_dict.keys())[0], None))  # noqa: RUF015 - Keeps eager list construction and IndexError.
             if use_depth_align:
                 pil_images.append(pil_img)
             img_masks.append(False)
@@ -372,7 +343,7 @@ def prepare_images(
         images = torch.from_numpy(np.stack(images, axis=0))  # (n, c, h, w)
     img_masks = torch.tensor(img_masks, dtype=torch.bool)  # (*n)
 
-    if use_depth_align:
+    if use_depth_align:  # noqa: SIM108 - Branches carry per-case comments.
         # pil_images = np.stack(pil_images, axis=0)
         # pil_images = [pil_images[i].transpose(1,2,0) for i in range(pil_images.shape[0])]
         # pil_images = np.concatenate(pil_images, axis=1)
@@ -397,33 +368,6 @@ def prepare_images(
         return images, img_masks, pil_images, image_grid_thw, augment_params
     return images, img_masks, pil_images, image_grid_thw
 
-def prepare_state(observation: dict[str, Tensor], max_state_dim):
-    """Pad the state to the maximum state dimension.
-
-    Args:
-        observation (dict[str, Tensor])
-
-    Returns:
-        state (torch.Tensor): (*b, max_state_dim) padded state tensor
-    """
-    state = observation["state"]
-    state = F.pad(state, (0, max_state_dim - state.shape[-1]))
-    return state
-
-def prepare_action(observation: dict[str, Tensor], max_action_dim):
-    """Pad the action to the maximum action dimension.
-
-    Args:
-        observation (dict[str, Tensor])
-
-    Returns:
-        action (torch.Tensor): (*b, n, max_action_dim) padded action tensor
-        action_dim (int): the actual dimension of the action before padding
-    """
-    action = observation["action"]
-    action = F.pad(action, (0, max_action_dim - action.shape[-1]))
-    return action
-
 
 def prepare_language(config, language_tokenizer, observation: dict[str, Tensor]):
     """If `prompt` is provided, modify it to PaliGemma format and tokenize it.
@@ -441,15 +385,13 @@ def prepare_language(config, language_tokenizer, observation: dict[str, Tensor])
         lang_tokens (torch.Tensor): (*b, l) language tokens
         lang_masks (torch.Tensor): (*b, l) masks for language tokens, True if token is present, False if missing
     """
-    lang_tokens = observation.get("lang_tokens", None)
-    lang_masks = observation.get("lang_masks", None)
-    prompt = observation.get("prompt", None)
+    lang_tokens = observation.get("lang_tokens")
+    lang_masks = observation.get("lang_masks")
+    prompt = observation.get("prompt")
 
     # either provide `prompt` or (`lang_tokens`, `lang_masks`)
     if prompt is None and (lang_tokens is None or lang_masks is None):
-        raise ValueError(
-            "Either 'prompt' or ('lang_tokens', 'lang_masks') must be provided in the observation."
-        )
+        raise ValueError("Either 'prompt' or ('lang_tokens', 'lang_masks') must be provided in the observation.")
 
     device = observation["state"].device
     if prompt is not None and (lang_tokens is None or lang_masks is None):
@@ -475,14 +417,13 @@ def prepare_language(config, language_tokenizer, observation: dict[str, Tensor])
             return_tensors="pt",
         )
         lang_tokens = tokenized_prompt["input_ids"].to(device=device)
-        lang_masks = tokenized_prompt["attention_mask"].to(
-            device=device, dtype=torch.bool
-        )
+        lang_masks = tokenized_prompt["attention_mask"].to(device=device, dtype=torch.bool)
     else:
         lang_tokens = observation["lang_tokens"].to(device=device)
         lang_masks = observation["lang_masks"].to(device=device, dtype=torch.bool)
 
     return lang_tokens.squeeze(0), lang_masks.squeeze(0)
+
 
 def expert_visual_transform(config, observation: dict[str, Tensor], image_keys=None):
     # TODO： pad for redundant views

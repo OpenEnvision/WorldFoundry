@@ -30,7 +30,7 @@ they live in :mod:`.vace` and :mod:`.variants`.
 from __future__ import annotations
 
 import math
-from typing import Any, Optional, Tuple
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -52,20 +52,25 @@ from worldfoundry.core.attention import (
     packed_sequence_attention as flash_attention,
 )
 from worldfoundry.core.kernels import (
+    fused_layer_norm_scale_shift,
     hidden_qk_rmsnorm_rope_3d,
+    hidden_qk_rmsnorm_rope_freqs,
     layer_norm_scale_shift,
+    residual_add_layer_norm_scale_shift,
     residual_gate_add,
     residual_gate_add_,
+    residual_gate_layer_norm,
 )
 from worldfoundry.core.kernels.registry import kernel_dispatch_receipt_scope
 from worldfoundry.core.nn import RMSNorm, sinusoidal_embedding_1d
-from worldfoundry.core.nn import scale_shift as modulate  # noqa: F401
+from worldfoundry.core.nn import scale_shift as modulate  # noqa: F401 - Historical import path.
 from worldfoundry.core.nn.checkpointing.gradient import gradient_checkpoint_forward
 
 from .adapter import SimpleAdapter
 
 _SELF_ATTENTION_INTERNAL_KWARGS = (
     "_worldfoundry_attention_context",
+    "_worldfoundry_fused_rope_indexed",
     "_worldfoundry_rope_precision",
     "_worldfoundry_rope_grid",
     "_worldfoundry_rope_table",
@@ -112,11 +117,27 @@ class AttentionModule(nn.Module):
                 [
                     self.forward(query, key, value)
                     for query, key, value in zip(
-                        q.split(request_batch_sizes), k.split(request_batch_sizes), v.split(request_batch_sizes)
+                        q.split(request_batch_sizes),
+                        k.split(request_batch_sizes),
+                        v.split(request_batch_sizes),
+                        strict=False,
                     )
                 ]
             )
+        if getattr(self, "_worldfoundry_force_dense", False):
+            dense_backend = getattr(self, "_worldfoundry_dense_attention_backend", None) or "torch"
+            return flash_attention(
+                q=q,
+                k=k,
+                v=v,
+                num_heads=self.num_heads,
+                compatibility_mode=self.compatibility_mode,
+                backend=dense_backend,
+            )
         options = getattr(self, "_worldfoundry_attention_options", None)
+        sink_override = getattr(self, "_worldfoundry_sol_sink_tokens", None)
+        if sink_override is not None and self.attention_backend == "sol_attn":
+            options = {**(options or {}), "sink_tokens": int(sink_override)}
         x = flash_attention(
             q=q,
             k=k,
@@ -134,7 +155,7 @@ class SelfAttentionProcessor:
 
     def __call__(
         self,
-        attention: "SelfAttention",
+        attention: SelfAttention,
         x: torch.Tensor,
         freqs: torch.Tensor,
         **kwargs: Any,
@@ -154,6 +175,7 @@ class SelfAttentionProcessor:
         v = attention.v(x)
         fused_table = kwargs.pop("_worldfoundry_rope_table", None)
         fused_grid = kwargs.pop("_worldfoundry_rope_grid", None)
+        fused_indexed = bool(kwargs.pop("_worldfoundry_fused_rope_indexed", False))
         q, k = apply_wan_qk_norm_rope(
             attention,
             q,
@@ -161,6 +183,7 @@ class SelfAttentionProcessor:
             freqs,
             fused_table=fused_table,
             fused_grid=fused_grid,
+            fused_indexed=fused_indexed,
             precision=kwargs.pop("_worldfoundry_rope_precision", "fp64"),
         )
         sizes = kwargs.pop("_worldfoundry_request_batch_sizes", ())
@@ -169,13 +192,14 @@ class SelfAttentionProcessor:
 
 
 def apply_wan_qk_norm_rope(
-    attention: "SelfAttention",
+    attention: SelfAttention,
     q: torch.Tensor,
     k: torch.Tensor,
     freqs: torch.Tensor,
     *,
     fused_table: torch.Tensor | None = None,
     fused_grid: tuple[int, int, int] | None = None,
+    fused_indexed: bool = False,
     precision: str = "fp64",
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply Wan Q/K RMSNorm and 3D RoPE through the selected exact path."""
@@ -211,18 +235,51 @@ def apply_wan_qk_norm_rope(
                 record_compiled_fused_rope_graph_trace,
             )
 
-            record_compiled_fused_rope_graph_trace(runtime_state)
+            receipt_token = getattr(attention, "_worldfoundry_fused_rope_token", None)
+            record_compiled_fused_rope_graph_trace(receipt_token if isinstance(receipt_token, str) else runtime_state)
             return fused_call()
         receipt: dict[str, Any] = {}
         with kernel_dispatch_receipt_scope(receipt):
             output = fused_call()
         runtime_state.record_eager_dispatch(receipt)
         return output
+    if fused_indexed:
+        runtime_state = getattr(
+            attention,
+            "_worldfoundry_fused_rope_runtime",
+            None,
+        )
+
+        def indexed_fused_call() -> tuple[torch.Tensor, torch.Tensor]:
+            return hidden_qk_rmsnorm_rope_freqs(
+                q,
+                k,
+                attention.norm_q.weight,
+                attention.norm_k.weight,
+                freqs,
+                num_heads=attention.num_heads,
+                eps=attention.norm_q.eps,
+                precision=normalized_precision,
+            )
+
+        if runtime_state is None:
+            return indexed_fused_call()
+        if torch.compiler.is_compiling():
+            from ....optimizations.fused_rope import (
+                record_compiled_fused_rope_graph_trace,
+            )
+
+            receipt_token = getattr(attention, "_worldfoundry_fused_rope_token", None)
+            record_compiled_fused_rope_graph_trace(receipt_token if isinstance(receipt_token, str) else runtime_state)
+            return indexed_fused_call()
+        receipt = {}
+        with kernel_dispatch_receipt_scope(receipt):
+            output = indexed_fused_call()
+        runtime_state.record_eager_dispatch(receipt)
+        return output
     q = attention.norm_q(q)
     k = attention.norm_k(k)
-    compute_dtype = (
-        torch.float32 if normalized_precision == "fp32" else torch.float64
-    )
+    compute_dtype = torch.float32 if normalized_precision == "fp32" else torch.float64
     return (
         rope_apply(q, freqs, attention.num_heads, compute_dtype=compute_dtype),
         rope_apply(k, freqs, attention.num_heads, compute_dtype=compute_dtype),
@@ -278,7 +335,7 @@ class SelfAttention(nn.Module):
 
 
 def project_wan_cross_kv(
-    attention: "CrossAttention", context: torch.Tensor, *, image: bool = False
+    attention: CrossAttention, context: torch.Tensor, *, image: bool = False
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Return normalized keys and values, preserving the dense call order."""
     norm_key = attention.norm_k_img if image else attention.norm_k
@@ -295,7 +352,7 @@ class CrossAttentionProcessor:
 
     def __call__(
         self,
-        attention: "CrossAttention",
+        attention: CrossAttention,
         x: torch.Tensor,
         context: torch.Tensor,
         **kwargs: Any,
@@ -327,9 +384,7 @@ class CrossAttentionProcessor:
         prepared = kwargs.pop("_worldfoundry_cross_kv", None)
         if prepared is not None and len(prepared) != (4 if attention.has_image_input else 2):
             raise ValueError("Wan prepared cross-KV must contain text K/V and, for I2V, image K/V")
-        key, value, *image_kv = (
-            reuse_cross_kv(attention, context, store, project) if prepared is None else prepared
-        )
+        key, value, *image_kv = reuse_cross_kv(attention, context, store, project) if prepared is None else prepared
         sizes = kwargs.pop("_worldfoundry_request_batch_sizes", ())
         attention_options = {"request_batch_sizes": sizes} if sizes else {}
         output = attention.attn(query, key, value, **attention_options)
@@ -501,11 +556,13 @@ class DiTBlock(nn.Module):
         if not isinstance(inplace_residual, bool):
             raise TypeError("Wan internal inplace-residual flag must be a bool")
         inplace_residual = inplace_residual and not torch.is_grad_enabled()
+        fused_adaln = bool(kwargs.pop("_worldfoundry_fused_adaln", False))
+        ln_mod = fused_layer_norm_scale_shift if fused_adaln else layer_norm_scale_shift
         if run_remaining:
             if modifiers is None:
                 raise ValueError("Wan block modifiers are required for run_remaining")
             shift_mlp, scale_mlp, gate_mlp = modifiers
-            input_x = layer_norm_scale_shift(
+            input_x = ln_mod(
                 x,
                 scale_mlp,
                 shift_mlp,
@@ -533,7 +590,7 @@ class DiTBlock(nn.Module):
                 scale_mlp.squeeze(2),
                 gate_mlp.squeeze(2),
             )
-        input_x = layer_norm_scale_shift(
+        input_x = ln_mod(
             x,
             scale_msa,
             shift_msa,
@@ -545,28 +602,52 @@ class DiTBlock(nn.Module):
         for key in _SELF_ATTENTION_INTERNAL_KWARGS:
             if key in kwargs:
                 self_attention_kwargs[key] = kwargs.pop(key)
-        x = self.gate(
-            x,
-            gate_msa,
-            self.self_attn(input_x, freqs, **self_attention_kwargs),
-            inplace=inplace_residual,
-        )
+        self_attn_out = self.self_attn(input_x, freqs, **self_attention_kwargs)
+        if fused_adaln and type(self.norm3) is nn.LayerNorm and self.norm3.normalized_shape == (self.dim,):
+            x, cross_in = residual_gate_layer_norm(
+                x,
+                self_attn_out,
+                gate_msa,
+                self.norm3.weight,
+                self.norm3.bias,
+                eps=self.norm3.eps,
+                inplace=inplace_residual,
+            )
+        else:
+            x = self.gate(
+                x,
+                gate_msa,
+                self_attn_out,
+                inplace=inplace_residual,
+            )
+            cross_in = self.norm3(x)
         cross_attn_out = self.cross_attn(
-            self.norm3(x),
+            cross_in,
             context,
             **kwargs,
         )
-        x = x.add_(cross_attn_out) if inplace_residual else x + cross_attn_out
         if return_partial:
+            x = x.add_(cross_attn_out) if inplace_residual else x + cross_attn_out
             return x, (shift_mlp, scale_mlp, gate_mlp)
         if modifiers is not None:
             shift_mlp, scale_mlp, gate_mlp = modifiers
-        input_x = layer_norm_scale_shift(
-            x,
-            scale_mlp,
-            shift_mlp,
-            eps=self.norm2.eps,
-        )
+        if fused_adaln:
+            x, input_x = residual_add_layer_norm_scale_shift(
+                x,
+                cross_attn_out,
+                scale_mlp,
+                shift_mlp,
+                eps=self.norm2.eps,
+                inplace=inplace_residual,
+            )
+        else:
+            x = x.add_(cross_attn_out) if inplace_residual else x + cross_attn_out
+            input_x = layer_norm_scale_shift(
+                x,
+                scale_mlp,
+                shift_mlp,
+                eps=self.norm2.eps,
+            )
         x = self.gate(
             x,
             gate_mlp,
@@ -602,6 +683,8 @@ class DiTBlock(nn.Module):
         if not isinstance(inplace_residual, bool):
             raise TypeError("Wan internal inplace-residual flag must be a bool")
         inplace_residual = inplace_residual and not torch.is_grad_enabled()
+        fused_adaln = bool(kwargs.pop("_worldfoundry_fused_adaln", False))
+        ln_mod = fused_layer_norm_scale_shift if fused_adaln else layer_norm_scale_shift
 
         has_seq = t_mod.ndim == 4
         chunk_dim = 2 if has_seq else 1
@@ -621,18 +704,13 @@ class DiTBlock(nn.Module):
         phase_names = {"self_attn_out", "cross_attn_out", "ffn_out"}
         if cached_phases is not None:
             if set(cached_phases) != phase_names:
-                raise ValueError(
-                    "Wan BlockTaylorSeer requires self_attn_out, "
-                    "cross_attn_out, and ffn_out"
-                )
+                raise ValueError("Wan BlockTaylorSeer requires self_attn_out, cross_attn_out, and ffn_out")
             for name, value in cached_phases.items():
                 if not isinstance(value, torch.Tensor) or value.shape != x.shape:
-                    raise ValueError(
-                        f"Wan BlockTaylorSeer cached {name} must match hidden shape"
-                    )
+                    raise ValueError(f"Wan BlockTaylorSeer cached {name} must match hidden shape")
             self_attn_out = cached_phases["self_attn_out"]
         else:
-            input_x = layer_norm_scale_shift(
+            input_x = ln_mod(
                 x,
                 scale_msa,
                 shift_msa,
@@ -649,32 +727,58 @@ class DiTBlock(nn.Module):
                 freqs,
                 **self_attention_kwargs,
             )
-        x = self.gate(
-            x,
-            gate_msa,
-            self_attn_out,
-            inplace=inplace_residual,
-        )
 
         if cached_phases is None:
+            if fused_adaln and type(self.norm3) is nn.LayerNorm and self.norm3.normalized_shape == (self.dim,):
+                x, cross_in = residual_gate_layer_norm(
+                    x,
+                    self_attn_out,
+                    gate_msa,
+                    self.norm3.weight,
+                    self.norm3.bias,
+                    eps=self.norm3.eps,
+                    inplace=inplace_residual,
+                )
+            else:
+                x = self.gate(
+                    x,
+                    gate_msa,
+                    self_attn_out,
+                    inplace=inplace_residual,
+                )
+                cross_in = self.norm3(x)
             cross_attn_out = self.cross_attn(
-                self.norm3(x),
+                cross_in,
                 context,
                 **kwargs,
             )
-        else:
-            cross_attn_out = cached_phases["cross_attn_out"]
-        x = x.add_(cross_attn_out) if inplace_residual else x + cross_attn_out
-
-        if cached_phases is None:
-            input_x = layer_norm_scale_shift(
-                x,
-                scale_mlp,
-                shift_mlp,
-                eps=self.norm2.eps,
-            )
+            if fused_adaln:
+                x, input_x = residual_add_layer_norm_scale_shift(
+                    x,
+                    cross_attn_out,
+                    scale_mlp,
+                    shift_mlp,
+                    eps=self.norm2.eps,
+                    inplace=inplace_residual,
+                )
+            else:
+                x = x.add_(cross_attn_out) if inplace_residual else x + cross_attn_out
+                input_x = layer_norm_scale_shift(
+                    x,
+                    scale_mlp,
+                    shift_mlp,
+                    eps=self.norm2.eps,
+                )
             ffn_out = self.ffn(input_x)
         else:
+            x = self.gate(
+                x,
+                gate_msa,
+                self_attn_out,
+                inplace=inplace_residual,
+            )
+            cross_attn_out = cached_phases["cross_attn_out"]
+            x = x.add_(cross_attn_out) if inplace_residual else x + cross_attn_out
             ffn_out = cached_phases["ffn_out"]
         x = self.gate(
             x,
@@ -740,7 +844,7 @@ class MLP(torch.nn.Module):
 class Head(nn.Module):
     """AdaLN-modulated output projection from tokens back to patch voxels."""
 
-    def __init__(self, dim: int, out_dim: int, patch_size: Tuple[int, int, int], eps: float):
+    def __init__(self, dim: int, out_dim: int, patch_size: tuple[int, int, int], eps: float):
         """Build the unmodulated LayerNorm and the ``C_out * prod(patch)`` linear.
 
         Args:
@@ -773,21 +877,79 @@ class Head(nn.Module):
                     )
                     + t_mod.float().unsqueeze(2)
                 ).chunk(2, dim=2)
-                x = self.head(
-                    (
-                        self.norm(x.float()) * (1 + scale.squeeze(2))
-                        + shift.squeeze(2)
-                    ).to(dtype=head_dtype)
-                )
+                x = self.head((self.norm(x.float()) * (1 + scale.squeeze(2)) + shift.squeeze(2)).to(dtype=head_dtype))
             else:
                 shift, scale = (
-                    self.modulation.to(device=t_mod.device, dtype=torch.float32)
-                    + t_mod.float().unsqueeze(1)
+                    self.modulation.to(device=t_mod.device, dtype=torch.float32) + t_mod.float().unsqueeze(1)
                 ).chunk(2, dim=1)
-                x = self.head(
-                    (self.norm(x.float()) * (1 + scale) + shift).to(dtype=head_dtype)
-                )
+                x = self.head((self.norm(x.float()) * (1 + scale) + shift).to(dtype=head_dtype))
         return x
+
+
+def _build_sol_tile_permutation(
+    f: int,
+    h: int,
+    w: int,
+    tile_3d: tuple[int, int, int],
+    device: torch.device,
+) -> tuple[torch.Tensor, torch.Tensor, int]:
+    """Build bijective 3D tile permutation, inverse, and remaining sink count.
+
+    Primary tiles pack ``(tf, th, tw)`` blocks. For 64-token 2D spatial tiling
+    (``tf == 1, th * tw == 64``), leftover bottom and right strips are also
+    carved into exact 64-token intra-frame 2D patches (``4x16``, ``2x32``,
+    ``1x64``, ``16x4``, ``32x2``, ``64x1``) so Sol-Attn's forced-dense suffix
+    sink shrinks from ~11-26% down to ~0.4-6% of tokens without mixing frames
+    or losing locality.
+    """
+    tf, th, tw = (int(v) for v in tile_3d)
+    f_full, h_full, w_full = (f // tf) * tf, (h // th) * th, (w // tw) * tw
+    grid_idx = torch.arange(f * h * w, device=device, dtype=torch.long).view(f, h, w)
+    parts: list[torch.Tensor] = [
+        grid_idx[:f_full, :h_full, :w_full]
+        .view(f_full // tf, tf, h_full // th, th, w_full // tw, tw)
+        .permute(0, 2, 4, 1, 3, 5)
+        .reshape(-1)
+    ]
+    mask = torch.zeros((f, h, w), dtype=torch.bool, device=device)
+    mask[:f_full, :h_full, :w_full] = True
+
+    if tf == 1 and th * tw == 64:
+        row_cursor = h_full
+        for bh, bw in ((4, 16), (2, 32), (1, 64)):
+            rows_fit = ((h - row_cursor) // bh) * bh
+            cols_fit = (w // bw) * bw
+            if rows_fit > 0 and cols_fit > 0:
+                parts.append(
+                    grid_idx[:f_full, row_cursor : row_cursor + rows_fit, :cols_fit]
+                    .view(f_full, rows_fit // bh, bh, cols_fit // bw, bw)
+                    .permute(0, 1, 3, 2, 4)
+                    .reshape(-1)
+                )
+                mask[:f_full, row_cursor : row_cursor + rows_fit, :cols_fit] = True
+                row_cursor += rows_fit
+        col_cursor = w_full
+        for bh, bw in ((16, 4), (32, 2), (64, 1)):
+            rows_fit = (h_full // bh) * bh
+            cols_fit = ((w - col_cursor) // bw) * bw
+            if rows_fit > 0 and cols_fit > 0:
+                parts.append(
+                    grid_idx[:f_full, :rows_fit, col_cursor : col_cursor + cols_fit]
+                    .view(f_full, rows_fit // bh, bh, cols_fit // bw, bw)
+                    .permute(0, 1, 3, 2, 4)
+                    .reshape(-1)
+                )
+                mask[:f_full, :rows_fit, col_cursor : col_cursor + cols_fit] = True
+                col_cursor += cols_fit
+
+    rem = grid_idx[~mask]
+    sink_tok = int(rem.numel())
+    if sink_tok > 0:
+        parts.append(rem)
+    perm_t = parts[0] if len(parts) == 1 else torch.cat(parts, dim=0)
+    inv_t = torch.empty_like(perm_t)
+    inv_t[perm_t] = torch.arange(perm_t.numel(), device=device, dtype=torch.long)
+    return perm_t, inv_t, sink_tok
 
 
 class WanModel(torch.nn.Module):
@@ -798,6 +960,10 @@ class WanModel(torch.nn.Module):
     copying patchify / RoPE / timestep / unpatchify.
     """
 
+    # Whole-stack residual caches (TeaCache / MagCache / AdaCache / TaylorSeer)
+    # broadcast rank-0 skip decisions across Ulysses SP ranks in forward().
+    _worldfoundry_supports_sp_synced_cache: bool = True
+
     def __init__(
         self,
         dim: int,
@@ -807,7 +973,7 @@ class WanModel(torch.nn.Module):
         text_dim: int,
         freq_dim: int,
         eps: float,
-        patch_size: Tuple[int, int, int],
+        patch_size: tuple[int, int, int],
         num_heads: int,
         num_layers: int,
         has_image_input: bool,
@@ -885,10 +1051,7 @@ class WanModel(torch.nn.Module):
         block_class = block_class or DiTBlock
         block_kwargs = dict(block_kwargs or {})
         if "vsa_gate_compress" in block_kwargs:
-            raise ValueError(
-                "WanModel.block_kwargs cannot override checkpoint-derived "
-                "vsa_gate_compress"
-            )
+            raise ValueError("WanModel.block_kwargs cannot override checkpoint-derived vsa_gate_compress")
         if vsa_gate_compress:
             block_kwargs["vsa_gate_compress"] = True
         self.blocks = nn.ModuleList(
@@ -975,7 +1138,7 @@ class WanModel(torch.nn.Module):
             stride=self.patch_size[1:],
         ).to(device=reference.device, dtype=reference.dtype)
 
-    def patchify(self, x: torch.Tensor, control_camera_latents_input: Optional[torch.Tensor] = None):
+    def patchify(self, x: torch.Tensor, control_camera_latents_input: torch.Tensor | None = None):
         """Conv3d-patchify ``x`` and optionally add the camera-control residual.
 
         Args:
@@ -1041,6 +1204,7 @@ class WanModel(torch.nn.Module):
         del kwargs
         if context is None:
             raise ValueError("Wan text-conditioned inference requires a context tensor")
+
         def project_single(source: torch.Tensor, clip: torch.Tensor | None) -> torch.Tensor:
             projected = self.text_embedding(source)
             if self.has_image_input:
@@ -1056,7 +1220,9 @@ class WanModel(torch.nn.Module):
                 return torch.cat(
                     [
                         project_single(part, image)
-                        for part, image in zip(source.split(request_batch_sizes), clip.split(request_batch_sizes))
+                        for part, image in zip(
+                            source.split(request_batch_sizes), clip.split(request_batch_sizes), strict=False
+                        )
                     ]
                 )
             return project_single(source, clip)
@@ -1113,11 +1279,7 @@ class WanModel(torch.nn.Module):
             .reshape(f * h * w, 1, -1)
             .to(
                 device=device,
-                dtype=(
-                    torch.complex64
-                    if normalized == "fp32"
-                    else torch.complex128
-                ),
+                dtype=(torch.complex64 if normalized == "fp32" else torch.complex128),
             )
         )
         cache[key] = assembled
@@ -1199,18 +1361,21 @@ class WanModel(torch.nn.Module):
         x: torch.Tensor,
         timestep: torch.Tensor,
         context: torch.Tensor,
-        clip_feature: Optional[torch.Tensor] = None,
-        y: Optional[torch.Tensor] = None,
+        clip_feature: torch.Tensor | None = None,
+        y: torch.Tensor | None = None,
         use_gradient_checkpointing: bool = False,
         use_gradient_checkpointing_offload: bool = False,
         memory_context=None,
-        fps: Optional[torch.Tensor] = None,
-        control_camera_latents_input: Optional[torch.Tensor] = None,
+        fps: torch.Tensor | None = None,
+        control_camera_latents_input: torch.Tensor | None = None,
         feature_cache: Any = None,
         feature_cache_step: int = 0,
         feature_cache_total_steps: int | None = None,
         cross_attention_kv: tuple[tuple[torch.Tensor, ...], ...] | None = None,
         request_batch_sizes: tuple[int, ...] = (),
+        _worldfoundry_piecewise_graph: Any = None,
+        _worldfoundry_token_pruning_step: tuple[int, int | None, str, str] | None = None,
+        _worldfoundry_sol_step_index: int | None = None,
         **kwargs,
     ):
         """Denoise packed latents: timestep → condition → patchify → blocks → head.
@@ -1257,11 +1422,7 @@ class WanModel(torch.nn.Module):
         # denoiser only supplies the flag for no-grad, cache-free inference,
         # but feature caches retain block inputs to form residuals and must
         # never observe those tensors after an in-place mutation.
-        inplace_residual = bool(
-            inplace_residual
-            and not torch.is_grad_enabled()
-            and feature_cache is None
-        )
+        inplace_residual = bool(inplace_residual and not torch.is_grad_enabled() and feature_cache is None)
         with torch.autocast(device_type=x.device.type, enabled=False):
             # Native Wan checkpoints can be loaded directly in BF16 (SCOPE
             # does this to fit the full 14B model).  Hard-casting the
@@ -1286,7 +1447,7 @@ class WanModel(torch.nn.Module):
                     token_sizes = tuple(size * sequence for size in request_batch_sizes)
                     time_parts = [
                         self.time_embedding(part).unflatten(0, (size, sequence))
-                        for part, size in zip(features.split(token_sizes), request_batch_sizes)
+                        for part, size in zip(features.split(token_sizes), request_batch_sizes, strict=False)
                     ]
                     t = torch.cat(time_parts)
                     t_mod = torch.cat([self.time_projection(part) for part in time_parts]).unflatten(2, (6, self.dim))
@@ -1294,9 +1455,7 @@ class WanModel(torch.nn.Module):
                     t = self.time_embedding(features).unflatten(0, (batch, sequence))
                     t_mod = self.time_projection(t).unflatten(2, (6, self.dim))
             else:
-                raise ValueError(
-                    "Wan timestep must be [B], or [B,L] when per-token timesteps are enabled"
-                )
+                raise ValueError("Wan timestep must be [B], or [B,L] when per-token timesteps are enabled")
         if self.inject_sample_info:
             if fps is None:
                 raise ValueError("Wan sample-info conditioning requires fps ids")
@@ -1340,9 +1499,7 @@ class WanModel(torch.nn.Module):
                 memory_context=memory_context,
             )
 
-        rope_precision = str(
-            getattr(self, "_worldfoundry_rope_precision", "fp64")
-        ).strip().casefold()
+        rope_precision = str(getattr(self, "_worldfoundry_rope_precision", "fp64")).strip().casefold()
         freqs = self.rotary_frequencies(
             (f, h, w),
             device=x.device,
@@ -1358,38 +1515,137 @@ class WanModel(torch.nn.Module):
             **kwargs,
         )
 
+        phase_cache_runner = getattr(feature_cache, "run_phase_blocks", None)
+        stack_cache_runner = getattr(feature_cache, "run_stack", None)
+        block_cache_runner = getattr(feature_cache, "run_blocks", None)
+        is_residual_cache = (
+            feature_cache is not None
+            and not callable(phase_cache_runner)
+            and not callable(stack_cache_runner)
+            and not callable(block_cache_runner)
+        )
+        is_whole_stack_cache = is_residual_cache or callable(stack_cache_runner)
+        sol_schedule = getattr(self, "_worldfoundry_sol_schedule", None)
+        has_tile_schedule = isinstance(sol_schedule, dict) and sol_schedule.get("tile_3d") is not None
+        sol_dense_steps = int(sol_schedule.get("dense_steps", 0)) if isinstance(sol_schedule, dict) else 0
+        sol_force_dense = bool(
+            isinstance(sol_schedule, dict)
+            and sol_dense_steps > 0
+            and _worldfoundry_sol_step_index is not None
+            and int(_worldfoundry_sol_step_index) < sol_dense_steps
+        )
+        # 3D tile permutation is only semantics-preserving when blocks are standard
+        # permutation-equivariant DiTBlocks with no custom per-block spatial hook
+        # (e.g. VACE hints or SCOPE action reshapes) and when block/phase caches
+        # will not mix canonical dense-step entries with permuted tiled steps.
+        tile_layout_safe = (
+            "after_transformer_block" not in self.__dict__
+            and type(self).after_transformer_block is WanModel.after_transformer_block
+            and all(type(getattr(block, "_orig_mod", block)) is DiTBlock for block in self.blocks)
+            and not (
+                (callable(phase_cache_runner) or (callable(block_cache_runner) and not callable(stack_cache_runner)))
+                and sol_dense_steps > 0
+            )
+        )
+        tile_perm: torch.Tensor | None = None
+        tile_inv_perm: torch.Tensor | None = None
+        tile_sink_tokens: int | None = None
+        if (
+            has_tile_schedule
+            and isinstance(sol_schedule, dict)
+            and tile_layout_safe
+            and not sol_force_dense
+            and x.shape[1] == f * h * w
+            and t_mod.ndim != 4
+            and not self.training
+            and not torch.is_grad_enabled()
+        ):
+            tf, th, tw = (int(v) for v in sol_schedule["tile_3d"])
+            f_full, h_full, w_full = (f // tf) * tf, (h // th) * th, (w // tw) * tw
+            if f_full > 0 and h_full > 0 and w_full > 0:
+                perm_cache: dict[Any, tuple[torch.Tensor, torch.Tensor, int]] = self.__dict__.setdefault(
+                    "_worldfoundry_tile_perm_cache", {}
+                )
+                cache_key = (f, h, w, tf, th, tw, x.device)
+                cached_perm = perm_cache.get(cache_key)
+                if cached_perm is None:
+                    cached_perm = _build_sol_tile_permutation(f, h, w, (tf, th, tw), x.device)
+                    if len(perm_cache) >= 8:
+                        perm_cache.clear()
+                    perm_cache[cache_key] = cached_perm
+                tile_perm, tile_inv_perm, tile_sink_tokens = cached_perm
+
         sequence_parallel_state = getattr(
             self,
             "_worldfoundry_sequence_parallel",
             None,
         )
         sequence_parallel_length = x.shape[1]
+        sp_padding = 0
         if sequence_parallel_state is not None:
-            from worldfoundry.core.distributed.sequence_parallel.runtime import (
-                sequence_parallel_chunk,
-            )
+            sp_padding = (-sequence_parallel_length) % int(sequence_parallel_state.sp_degree)
+            if sp_padding and tile_sink_tokens is not None:
+                tile_sink_tokens += int(sp_padding)
 
-            degree = int(sequence_parallel_state.sp_degree)
-            padding = (-sequence_parallel_length) % degree
-            if padding:
-                x = torch.nn.functional.pad(x, (0, 0, 0, padding))
-                freqs = torch.cat(
-                    [
-                        freqs,
-                        torch.ones(
-                            padding,
-                            *freqs.shape[1:],
-                            dtype=freqs.dtype,
-                            device=freqs.device,
-                        ),
-                    ],
-                    dim=0,
+        # Keep whole-stack reuse caches (TeaCache / MagCache / AdaCache / EasyCache)
+        # in canonical unpermuted full-sequence token space across dense-to-tiled
+        # transitions and skip tile permutation + SP all-gather entirely on cache hits.
+        defer_tile_and_sp = bool(
+            is_whole_stack_cache and ((has_tile_schedule and tile_layout_safe) or sequence_parallel_state is not None)
+        )
+
+        def _prepare_block_layout(
+            hidden_in: torch.Tensor,
+            freqs_in: torch.Tensor,
+            t_mod_in: torch.Tensor,
+        ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            out_x = hidden_in
+            out_freqs = freqs_in
+            out_t_mod = t_mod_in
+            if tile_perm is not None:
+                out_x = out_x.index_select(1, tile_perm)
+                out_freqs = out_freqs.index_select(0, tile_perm)
+            if sequence_parallel_state is not None:
+                from worldfoundry.core.distributed.sequence_parallel.runtime import (
+                    sequence_parallel_chunk,
                 )
-                if t_mod.ndim == 4:
-                    t_mod = torch.nn.functional.pad(t_mod, (0, 0, 0, 0, 0, padding))
-            x = sequence_parallel_chunk(x, dim=1)
-            if t_mod.ndim == 4:
-                t_mod = sequence_parallel_chunk(t_mod, dim=1)
+
+                if sp_padding:
+                    out_x = torch.nn.functional.pad(out_x, (0, 0, 0, sp_padding))
+                    out_freqs = torch.cat(
+                        [
+                            out_freqs,
+                            torch.ones(
+                                sp_padding,
+                                *out_freqs.shape[1:],
+                                dtype=out_freqs.dtype,
+                                device=out_freqs.device,
+                            ),
+                        ],
+                        dim=0,
+                    )
+                    if out_t_mod.ndim == 4:
+                        out_t_mod = torch.nn.functional.pad(out_t_mod, (0, 0, 0, 0, 0, sp_padding))
+                out_x = sequence_parallel_chunk(out_x, dim=1)
+                if out_t_mod.ndim == 4:
+                    out_t_mod = sequence_parallel_chunk(out_t_mod, dim=1)
+            return out_x, out_freqs, out_t_mod
+
+        def _restore_block_layout(hidden_out: torch.Tensor) -> torch.Tensor:
+            out_x = hidden_out
+            if sequence_parallel_state is not None:
+                from worldfoundry.core.distributed.sequence_parallel.runtime import (
+                    sequence_parallel_all_gather,
+                )
+
+                out_x = sequence_parallel_all_gather(out_x, dim=1)
+                out_x = out_x[:, :sequence_parallel_length]
+            if tile_inv_perm is not None:
+                out_x = out_x.index_select(1, tile_inv_perm)
+            return out_x
+
+        if not defer_tile_and_sp:
+            x, freqs, t_mod = _prepare_block_layout(x, freqs, t_mod)
 
         block_kwargs = self.block_forward_kwargs(
             (f, h, w),
@@ -1400,16 +1656,19 @@ class WanModel(torch.nn.Module):
             block_kwargs["_worldfoundry_request_batch_sizes"] = request_batch_sizes
         if inplace_residual:
             block_kwargs["_worldfoundry_inplace_residual"] = True
+        if bool(getattr(self, "_worldfoundry_fused_adaln", False)):
+            block_kwargs["_worldfoundry_fused_adaln"] = True
         if getattr(self, "_worldfoundry_approximate_attention", None) is not None:
             block_kwargs["_worldfoundry_sparse_grid"] = (f, h, w)
         if bool(getattr(self, "_worldfoundry_fused_rope", False)):
-            block_kwargs["_worldfoundry_rope_grid"] = (f, h, w)
-            block_kwargs["_worldfoundry_rope_table"] = self.fused_rope_table(
-                device=x.device,
-                precision=str(
-                    getattr(self, "_worldfoundry_rope_precision", "fp32")
-                ),
-            )
+            if tile_inv_perm is None:
+                block_kwargs["_worldfoundry_rope_grid"] = (f, h, w)
+                block_kwargs["_worldfoundry_rope_table"] = self.fused_rope_table(
+                    device=x.device,
+                    precision=str(getattr(self, "_worldfoundry_rope_precision", "fp32")),
+                )
+            else:
+                block_kwargs["_worldfoundry_fused_rope_indexed"] = True
         if memory_context is not None:
             block_kwargs["memory_context"] = memory_context
 
@@ -1452,16 +1711,246 @@ class WanModel(torch.nn.Module):
                 hidden = run_transformer_block(block_id, hidden)
             return hidden
 
+        piecewise_eligible = (
+            _worldfoundry_piecewise_graph is not None
+            and not self.training
+            and not torch.is_grad_enabled()
+            and x.device.type == "cuda"
+            and probe_observer is None
+            and memory_context is None
+            and not kwargs
+        )
+
+        piecewise_rope_table = block_kwargs.get("_worldfoundry_rope_table")
+        piecewise_has_rope_table = isinstance(piecewise_rope_table, torch.Tensor)
+        piecewise_xkv_count = sum(len(entry) for entry in cross_attention_kv) if cross_attention_kv is not None else 0
+        piecewise_seg_name = (
+            f"wan_blocks_g{f}x{h}x{w}_r{int(piecewise_has_rope_table)}_xkv{piecewise_xkv_count}"
+            f"_ip{int(inplace_residual)}_fa{int(bool(getattr(self, '_worldfoundry_fused_adaln', False)))}"
+            f"_rb{len(request_batch_sizes)}_sd{int(sol_force_dense)}_st{int(tile_inv_perm is not None)}"
+        )
+
+        def run_transformer_blocks_maybe_graphed(block_input: torch.Tensor) -> torch.Tensor:
+            tp_cfg = getattr(self, "_worldfoundry_token_pruning_config", None)
+            tp_rt = getattr(self, "_worldfoundry_token_pruning_runtime", None)
+            if (
+                tp_cfg is not None
+                and tp_rt is not None
+                and not self.training
+                and not torch.is_grad_enabled()
+                and sequence_parallel_state is None
+                and not request_batch_sizes
+                and probe_observer is None
+                and memory_context is None
+                and not kwargs
+                and tp_cfg.keep_ratio < 1.0
+            ):
+                num_blocks = len(self.blocks)
+                start_blk = int(tp_cfg.start_block)
+                end_blk = num_blocks + int(tp_cfg.end_block) if int(tp_cfg.end_block) <= 0 else int(tp_cfg.end_block)
+                if _worldfoundry_token_pruning_step is not None:
+                    cur_step, tot_steps, req_key, branch_key = _worldfoundry_token_pruning_step
+                else:
+                    cur_step = 0 if feature_cache_step is None else int(feature_cache_step)
+                    tot_steps = feature_cache_total_steps
+                    req_key = ""
+                    branch_key = f"ctx:{id(context)}"
+                in_prune_window = cur_step >= int(tp_cfg.dense_first_steps) and (
+                    tot_steps is None or cur_step < int(tot_steps) - int(tp_cfg.dense_last_steps)
+                )
+                if in_prune_window:
+                    from worldfoundry.core.acceleration.token_pruning import TokenPruner
+
+                    pruner_key = (req_key, branch_key, tuple(block_input.shape))
+                    pruners: dict[Any, Any] = tp_rt["pruners"]
+                    pruner = pruners.get(pruner_key)
+                    if pruner is None:
+                        if len(pruners) >= 8:
+                            pruners.clear()
+                        pruner = TokenPruner(tp_cfg.keep_ratio, method=tp_cfg.method)
+                        pruners[pruner_key] = pruner
+
+                    def _run_range(
+                        h_in: torch.Tensor,
+                        b_start: int,
+                        b_end: int,
+                        freqs_sub: torch.Tensor,
+                        t_mod_sub: torch.Tensor,
+                        *,
+                        strip_fused_rope: bool,
+                        seg_tag: str,
+                    ) -> torch.Tensor:
+                        sub_kwargs = (
+                            {
+                                k: v
+                                for k, v in block_kwargs.items()
+                                if k not in {"_worldfoundry_rope_table", "_worldfoundry_rope_grid"}
+                            }
+                            if strip_fused_rope
+                            else block_kwargs
+                        )
+                        if not piecewise_eligible:
+                            h_cur = h_in
+                            for bid in range(b_start, b_end):
+                                ck = (
+                                    dict(sub_kwargs, _worldfoundry_cross_kv=cross_attention_kv[bid])
+                                    if cross_attention_kv is not None
+                                    else sub_kwargs
+                                )
+                                h_cur = self.blocks[bid](h_cur, context, t_mod_sub, freqs_sub, **ck)
+                                h_cur = self.after_transformer_block(h_cur, bid, token_state)
+                            return h_cur
+                        sub_rope_tbl = sub_kwargs.get("_worldfoundry_rope_table")
+                        sub_has_rope = isinstance(sub_rope_tbl, torch.Tensor)
+                        static_sub = {k: v for k, v in sub_kwargs.items() if k != "_worldfoundry_rope_table"}
+                        sub_xkv: list[torch.Tensor] = []
+                        sub_arities: list[int] = []
+                        if cross_attention_kv is not None:
+                            for bid in range(b_start, b_end):
+                                entry = cross_attention_kv[bid]
+                                sub_arities.append(len(entry))
+                                sub_xkv.extend(entry)
+
+                        def _seg_fn(
+                            h_arg: torch.Tensor,
+                            ctx_arg: torch.Tensor,
+                            tm_arg: torch.Tensor,
+                            fr_arg: torch.Tensor,
+                            *extras: torch.Tensor,
+                        ) -> torch.Tensor:
+                            cur = 0
+                            lk = dict(static_sub)
+                            if sub_has_rope:
+                                lk["_worldfoundry_rope_table"] = extras[cur]
+                                cur += 1
+                            h_cur = h_arg
+                            for offset, bid in enumerate(range(b_start, b_end)):
+                                ck = lk
+                                if sub_arities:
+                                    ar = sub_arities[offset]
+                                    ck = dict(lk, _worldfoundry_cross_kv=extras[cur : cur + ar])
+                                    cur += ar
+                                h_cur = self.blocks[bid](h_cur, ctx_arg, tm_arg, fr_arg, **ck)
+                                h_cur = self.after_transformer_block(h_cur, bid, token_state)
+                            return h_cur
+
+                        s_name = f"{piecewise_seg_name}_{seg_tag}_{b_start}_{b_end}_L{h_in.shape[1]}"
+                        _worldfoundry_piecewise_graph.get_or_register_segment(
+                            s_name, _seg_fn, extra_key=f"wan_tp:{id(self)}:{s_name}"
+                        )
+                        extra_list: list[torch.Tensor] = []
+                        if sub_has_rope:
+                            extra_list.append(sub_rope_tbl)
+                        extra_list.extend(sub_xkv)
+                        return _worldfoundry_piecewise_graph.run_segment(
+                            s_name, h_in, context, t_mod_sub, freqs_sub, *extra_list
+                        )
+
+                    hidden = _run_range(block_input, 0, start_blk, freqs, t_mod, strip_fused_rope=False, seg_tag="head")
+                    pruned_hidden, prune_state = pruner.prune(hidden, key=pruner_key, seq_dim=1)
+                    if prune_state is not None:
+                        freqs_mid = freqs.index_select(0, prune_state.indices)
+                        t_mod_mid = t_mod.index_select(1, prune_state.indices) if t_mod.ndim == 4 else t_mod
+                        mid_sink_saved: list[tuple[Any, Any]] = []
+                        if tile_sink_tokens is not None:
+                            for bid in range(start_blk, end_blk):
+                                attn_mod = getattr(getattr(self.blocks[bid], "self_attn", None), "attn", None)
+                                if attn_mod is not None:
+                                    mid_sink_saved.append(
+                                        (attn_mod, getattr(attn_mod, "_worldfoundry_sol_sink_tokens", None))
+                                    )
+                                    attn_mod._worldfoundry_sol_sink_tokens = None
+                        try:
+                            mid_out = _run_range(
+                                pruned_hidden,
+                                start_blk,
+                                end_blk,
+                                freqs_mid,
+                                t_mod_mid,
+                                strip_fused_rope=True,
+                                seg_tag="mid",
+                            )
+                        finally:
+                            for attn_mod, prev_sink in mid_sink_saved:
+                                attn_mod._worldfoundry_sol_sink_tokens = prev_sink
+                        hidden = pruner.restore(mid_out, prune_state, key=pruner_key)
+                        tp_rt["pruned_calls"] = int(tp_rt["pruned_calls"]) + 1
+                    else:
+                        mid_out = _run_range(
+                            hidden, start_blk, end_blk, freqs, t_mod, strip_fused_rope=False, seg_tag="mid_dense"
+                        )
+                        hidden = pruner.restore(mid_out, None, key=pruner_key)
+                        tp_rt["dense_calls"] = int(tp_rt["dense_calls"]) + 1
+                    return _run_range(hidden, end_blk, num_blocks, freqs, t_mod, strip_fused_rope=False, seg_tag="tail")
+                tp_rt["dense_calls"] = int(tp_rt["dense_calls"]) + 1
+
+            if not piecewise_eligible:
+                return run_transformer_blocks(block_input)
+            # Pass every dynamic tensor (hidden, context, t_mod, freqs, optional
+            # fused RoPE table, optional per-block static cross-KV tensors) as
+            # explicit positional arguments so InferenceCUDAGraphRunner copies
+            # them into static capture buffers across prompts, branches & steps.
+            static_block_kwargs = {
+                key: value for key, value in block_kwargs.items() if key != "_worldfoundry_rope_table"
+            }
+            flat_cross_kv: list[torch.Tensor] = []
+            cross_kv_arities: list[int] = []
+            if cross_attention_kv is not None:
+                for entry in cross_attention_kv:
+                    cross_kv_arities.append(len(entry))
+                    flat_cross_kv.extend(entry)
+
+            def _graphed_stack(
+                hidden_in: torch.Tensor,
+                context_in: torch.Tensor,
+                t_mod_in: torch.Tensor,
+                freqs_in: torch.Tensor,
+                *extra_tensors: torch.Tensor,
+            ) -> torch.Tensor:
+                cursor = 0
+                local_kwargs = dict(static_block_kwargs)
+                if piecewise_has_rope_table:
+                    local_kwargs["_worldfoundry_rope_table"] = extra_tensors[cursor]
+                    cursor += 1
+                hidden = hidden_in
+                for block_id, block in enumerate(self.blocks):
+                    call_kwargs = local_kwargs
+                    if cross_kv_arities:
+                        arity = cross_kv_arities[block_id]
+                        call_kwargs = dict(
+                            local_kwargs,
+                            _worldfoundry_cross_kv=extra_tensors[cursor : cursor + arity],
+                        )
+                        cursor += arity
+                    hidden = block(hidden, context_in, t_mod_in, freqs_in, **call_kwargs)
+                    hidden = self.after_transformer_block(hidden, block_id, token_state)
+                return hidden
+
+            _worldfoundry_piecewise_graph.get_or_register_segment(
+                piecewise_seg_name,
+                _graphed_stack,
+                extra_key=f"wan_piecewise:{id(self)}:{piecewise_seg_name}",
+            )
+            extra_args: list[torch.Tensor] = []
+            if piecewise_has_rope_table:
+                extra_args.append(piecewise_rope_table)
+            extra_args.extend(flat_cross_kv)
+            return _worldfoundry_piecewise_graph.run_segment(
+                piecewise_seg_name,
+                block_input,
+                context,
+                t_mod,
+                freqs,
+                *extra_args,
+            )
+
         def run_taylor_phase_block(block_id, hidden, cached_phases):
             """Execute/replay the raw phases required by BlockTaylorSeer."""
 
             block = self.blocks[block_id]
             phase_forward = getattr(block, "forward_with_phase_cache", None)
             if not callable(phase_forward):
-                raise TypeError(
-                    "Wan BlockTaylorSeer requires blocks implementing "
-                    "forward_with_phase_cache"
-                )
+                raise TypeError("Wan BlockTaylorSeer requires blocks implementing forward_with_phase_cache")
             hidden, phase_outputs = phase_forward(
                 hidden,
                 context,
@@ -1478,63 +1967,133 @@ class WanModel(torch.nn.Module):
             )
             return hidden, phase_outputs
 
-        if feature_cache is None:
-            x = run_transformer_blocks(x)
-        else:
-            block_input = x
-            phase_cache_runner = getattr(feature_cache, "run_phase_blocks", None)
-            block_cache_runner = getattr(feature_cache, "run_blocks", None)
-            if callable(phase_cache_runner):
-                x = phase_cache_runner(
-                    int(feature_cache_step),
-                    block_input,
-                    run_transformer_block,
-                    run_taylor_phase_block,
-                    block_count=len(self.blocks),
-                    total_steps=feature_cache_total_steps,
-                )
-            elif callable(block_cache_runner):
-                x = block_cache_runner(
-                    int(feature_cache_step),
-                    block_input,
-                    run_transformer_block,
-                    block_count=len(self.blocks),
-                    total_steps=feature_cache_total_steps,
-                )
+        sol_attn_modules = (
+            [
+                block.self_attn.attn
+                for block in self.blocks
+                if hasattr(block, "self_attn") and hasattr(block.self_attn, "attn")
+            ]
+            if (sol_force_dense or tile_sink_tokens is not None)
+            else []
+        )
+        for mod in sol_attn_modules:
+            if sol_force_dense:
+                mod._worldfoundry_force_dense = True
+            if tile_sink_tokens is not None:
+                mod._worldfoundry_sol_sink_tokens = tile_sink_tokens
+        try:
+            if feature_cache is None:
+                x = run_transformer_blocks_maybe_graphed(x)
             else:
-                signal_kind = str(
-                    getattr(feature_cache, "signal_kind", "timestep-modulation")
-                )
-                if signal_kind == "time-embedding":
-                    cache_signal = t
-                elif signal_kind == "timestep-modulation":
-                    cache_signal = t_mod
-                else:
-                    raise ValueError(
-                        f"unsupported Wan feature-cache signal kind: {signal_kind!r}"
+                block_input = x
+                if callable(phase_cache_runner):
+                    x = phase_cache_runner(
+                        int(feature_cache_step),
+                        block_input,
+                        run_transformer_block,
+                        run_taylor_phase_block,
+                        block_count=len(self.blocks),
+                        total_steps=feature_cache_total_steps,
                     )
-                residual = feature_cache.run(
-                    int(feature_cache_step),
-                    cache_signal,
-                    lambda: run_transformer_blocks(block_input) - block_input,
-                    total_steps=feature_cache_total_steps,
-                )
-                x = block_input + residual
+                elif callable(stack_cache_runner):
+                    if sequence_parallel_state is not None:
+                        raise ValueError(
+                            "Wan stack feature-cache runner (EasyCache) is not synchronized across "
+                            "Ulysses sequence-parallel ranks"
+                        )
 
-        if sequence_parallel_state is not None:
-            from worldfoundry.core.distributed.sequence_parallel.runtime import (
-                sequence_parallel_all_gather,
-            )
+                    def _dense_stack(stack_in: torch.Tensor) -> torch.Tensor:
+                        nonlocal freqs, t_mod
+                        if defer_tile_and_sp:
+                            orig_freqs, orig_t_mod = freqs, t_mod
+                            work_x, freqs, t_mod = _prepare_block_layout(stack_in, orig_freqs, orig_t_mod)
+                            try:
+                                work_x = run_transformer_blocks_maybe_graphed(work_x)
+                            finally:
+                                freqs, t_mod = orig_freqs, orig_t_mod
+                            return _restore_block_layout(work_x)
+                        return run_transformer_blocks_maybe_graphed(stack_in)
 
-            x = sequence_parallel_all_gather(x, dim=1)
-            x = x[:, :sequence_parallel_length]
+                    x, hit = stack_cache_runner(
+                        int(feature_cache_step),
+                        block_input,
+                        _dense_stack,
+                        block_count=len(self.blocks),
+                        total_steps=feature_cache_total_steps,
+                    )
+                    if piecewise_eligible and hit:
+                        _worldfoundry_piecewise_graph.record_skip(piecewise_seg_name)
+                elif callable(block_cache_runner):
+                    x = block_cache_runner(
+                        int(feature_cache_step),
+                        block_input,
+                        run_transformer_block,
+                        block_count=len(self.blocks),
+                        total_steps=feature_cache_total_steps,
+                    )
+                else:
+                    signal_kind = str(getattr(feature_cache, "signal_kind", "timestep-modulation"))
+                    if signal_kind == "time-embedding":
+                        cache_signal = t
+                    elif signal_kind == "timestep-modulation":
+                        cache_signal = t_mod
+                    else:
+                        raise ValueError(f"unsupported Wan feature-cache signal kind: {signal_kind!r}")
+                    if sequence_parallel_state is not None:
+                        import torch.distributed as dist
+
+                        from worldfoundry.core.distributed.sequence_parallel.runtime import (
+                            get_sequence_parallel_group,
+                        )
+
+                        if dist.is_initialized():
+                            sp_group = get_sequence_parallel_group()
+                            if sp_group is not None and dist.get_world_size(sp_group) > 1:
+                                # Broadcast the cache probe signal from SP group rank 0 so every
+                                # sequence-parallel rank observes bitwise-identical cache decisions
+                                # and either enters or skips Ulysses collectives together.
+                                cache_signal = cache_signal.contiguous()
+                                src_global = dist.get_global_rank(sp_group, 0)
+                                dist.broadcast(cache_signal, src=src_global, group=sp_group)
+                    ran_dense = [False]
+
+                    def _dense_residual() -> torch.Tensor:
+                        nonlocal freqs, t_mod
+                        ran_dense[0] = True
+                        if defer_tile_and_sp:
+                            work_x, freqs, t_mod = _prepare_block_layout(block_input, freqs, t_mod)
+                            work_x = run_transformer_blocks_maybe_graphed(work_x)
+                            work_x = _restore_block_layout(work_x)
+                            return work_x - block_input
+                        return run_transformer_blocks_maybe_graphed(block_input) - block_input
+
+                    residual = feature_cache.run(
+                        int(feature_cache_step),
+                        cache_signal,
+                        _dense_residual,
+                        total_steps=feature_cache_total_steps,
+                    )
+                    if piecewise_eligible and not ran_dense[0]:
+                        _worldfoundry_piecewise_graph.record_skip(piecewise_seg_name)
+                    x = block_input + residual
+        finally:
+            for mod in sol_attn_modules:
+                if sol_force_dense:
+                    mod._worldfoundry_force_dense = False
+                if tile_sink_tokens is not None:
+                    mod._worldfoundry_sol_sink_tokens = None
+
+        if not defer_tile_and_sp:
+            x = _restore_block_layout(x)
 
         x, auxiliary = self.finalize_token_sequence(x, token_state, **kwargs)
         if request_batch_sizes:
-            x = torch.cat([
-                self.project_output(part, time_part, **kwargs)
-                for part, time_part in zip(x.split(request_batch_sizes), t.split(request_batch_sizes))
-            ])
+            x = torch.cat(
+                [
+                    self.project_output(part, time_part, **kwargs)
+                    for part, time_part in zip(x.split(request_batch_sizes), t.split(request_batch_sizes), strict=False)
+                ]
+            )
         else:
             x = self.project_output(x, t, **kwargs)
         x = self.unpatchify(x, (f, h, w))
@@ -1565,10 +2124,7 @@ class WanModel(torch.nn.Module):
             if provided != expected:
                 missing = sorted(expected - provided)
                 unexpected = sorted(provided - expected)
-                raise ValueError(
-                    f"Wan attention processor paths mismatch; missing={missing}, "
-                    f"unexpected={unexpected}"
-                )
+                raise ValueError(f"Wan attention processor paths mismatch; missing={missing}, unexpected={unexpected}")
             for index, block in enumerate(self.blocks):
                 path = f"blocks.{index}.cross_attn.processor"
                 if path in processor:

@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> adapter.py functionality."""
-
 import torch
 
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.cameras import BaseCameraModel, CameraType
@@ -30,11 +28,6 @@ class PinholeDepthAdapter(DepthEstimationModel):
     """
 
     def __init__(self, model: DepthEstimationModel):
-        """Init.
-
-        Args:
-            model: The model.
-        """
         super().__init__()
         self.model = model
         assert CameraType.PINHOLE in self.model.supported_camera_types, "Model must support pinhole cameras"
@@ -45,32 +38,14 @@ class PinholeDepthAdapter(DepthEstimationModel):
 
     @property
     def supported_camera_types(self) -> list[CameraType]:
-        """Supported camera types.
-
-        Returns:
-            The return value.
-        """
         return [CameraType.PINHOLE, CameraType.MEI]
 
     @property
     def depth_type(self) -> DepthType:
-        """Depth type.
-
-        Returns:
-            The return value.
-        """
         # Model needs to be re-run if intrinsics are updated
         return DepthType.MODEL_METRIC_DEPTH
 
     def _compute_rectification_map(self, h: int, w: int, src_model: BaseCameraModel, dst_model: BaseCameraModel):
-        """Helper function to compute rectification map.
-
-        Args:
-            h: The h.
-            w: The w.
-            src_model: The src model.
-            dst_model: The dst model.
-        """
         # Compute rectification map that should be performed on the src img to obtain the dst model img
         device = src_model.intrinsics.device
         y, x = torch.meshgrid(
@@ -83,14 +58,6 @@ class PinholeDepthAdapter(DepthEstimationModel):
         return coords_norm
 
     def estimate(self, src: DepthEstimationInput) -> DepthEstimationResult:
-        """Estimate.
-
-        Args:
-            src: The src.
-
-        Returns:
-            The return value.
-        """
         # Short-cut for supported camera types
         if src.camera_type in self.model.supported_camera_types:
             return self.model.estimate(src)

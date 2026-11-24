@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -131,6 +133,8 @@ def committed_plan(project):
     git("init", "-q")
     git("config", "user.name", "Regression test")
     git("config", "user.email", "test@example.invalid")
+    (root / "docs").mkdir()
+    (root / "docs/guide.md").write_text("Guide\n")
     git("add", ".")
     git("commit", "-qm", "original")
     base = git("rev-parse", "HEAD")
@@ -149,6 +153,14 @@ def test_commit_diff_plan_is_recomputed_before_gpu_verification(committed_plan):
     gate.verify_checkout_plan(plan, root, matrix, dependencies)
 
 
+def test_unrelated_worktree_files_do_not_block_verification(committed_plan: tuple) -> None:
+    root, matrix, dependencies, plan = committed_plan
+    (root / "docs/guide.md").write_text("Draft guide\n")
+    (root / "run-report.json").write_text("{}")
+    (root / "worldfoundry/untracked.py").write_text("raise RuntimeError()\n")
+    gate.verify_checkout_plan(plan, root, matrix, dependencies)
+
+
 @pytest.mark.parametrize("change", ["omitted_path", "manual_paths", "other_head", "stale_definitions", "omitted_case"])
 def test_missing_diff_paths_or_cases_cannot_bypass_commit_gpu_verification(committed_plan, change):
     root, matrix, dependencies, plan = committed_plan
@@ -164,6 +176,64 @@ def test_missing_diff_paths_or_cases_cannot_bypass_commit_gpu_verification(commi
         plan.update(status="no_inference_changes", selected_cases=[])
     with pytest.raises(ValueError):
         gate.verify_checkout_plan(plan, root, matrix, dependencies)
+
+
+@pytest.mark.parametrize("dirty_input", ["dependencies", "staged_import", "unstaged_import"])
+def test_checkout_dirt_cannot_hide_an_uncovered_committed_change(
+    committed_plan: tuple, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dirty_input: str
+) -> None:
+    root, matrix, dependencies, original_plan = committed_plan
+    base = original_plan["head_revision"]
+    changed = "worldfoundry/uncovered.py"
+    (root / changed).write_text("VALUE = 1\n")
+    git = ["git", "-C", str(root)]
+    subprocess.run([*git, "add", changed], check=True)
+    subprocess.run([*git, "commit", "-qm", "add uncovered model source"], check=True)
+    head = gate.impact.revision(root)
+    assert head
+    changed_paths = gate.impact.changed_paths(root, base, head)
+    assert gate.impact.select_cases(matrix, dependencies, root, changed_paths)["uncovered_paths"] == [changed]
+
+    if dirty_input == "dependencies":
+        policy = json.loads(dependencies.read_text())
+        policy["ignored_paths"].append(changed)
+        dependencies.write_text(json.dumps(policy))
+    elif dirty_input == "staged_import":
+        initializer = root / "worldfoundry/pipelines/__init__.py"
+        initializer.write_text("import worldfoundry.uncovered\n")
+        subprocess.run([*git, "add", str(initializer)], check=True)
+    else:
+        pipeline = root / "worldfoundry/pipelines/example.py"
+        pipeline.write_text("import worldfoundry.uncovered\n" + pipeline.read_text())
+
+    plan = gate.impact.select_cases(matrix, dependencies, root, changed_paths)
+    plan.update(base_revision=base, head_revision=head)
+    assert plan["uncovered_paths"] == []
+    if dirty_input != "dependencies":
+        assert plan["selected_cases"] == ["small-short"]
+        with pytest.raises(ValueError, match="checkout sources"):
+            gate.verify_checkout_plan(plan, root, matrix, dependencies)
+        return
+
+    assert plan["status"] == "no_inference_changes"
+    index = tmp_path / "accepted-index.json"
+    index.write_text('{"schema_version":1,"cases":{}}')
+    profile = {
+        "matrix": matrix.relative_to(root).as_posix(),
+        "dependencies": dependencies.relative_to(root).as_posix(),
+        "reference": str(tmp_path),
+        "reference_index_sha256": hashlib.sha256(index.read_bytes()).hexdigest(),
+    }
+    options = {"plan": plan, "report": {"status": "failed"}, "profile": profile}
+    argv = ["verify", "--source-root", str(root)]
+    for key, value in options.items():
+        path = tmp_path / (key + ".json")
+        path.write_text(json.dumps(value))
+        argv.extend(["--" + key, str(path)])
+    output = tmp_path / "result.json"
+    monkeypatch.setattr(sys, "argv", [*argv, "--output", str(output)])
+    assert gate.main() == 1, output.read_text()
+    assert "committed definitions" in json.loads(output.read_text())["error"]
 
 
 @pytest.fixture

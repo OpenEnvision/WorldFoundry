@@ -24,8 +24,8 @@ from worldfoundry.base_models.diffusion_model.models.initializers.sana import (
     SanaWorldInitializer,
 )
 from worldfoundry.core.geometry.trajectory import rollout_wasd_camera_actions
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
 from worldfoundry.pipelines.sana.pipeline_sana import SanaVideo2b480pPipeline
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
 
 
 def test_sana_video_480p_config_matches_official_checkpoint_graph() -> None:
@@ -126,9 +126,7 @@ def test_sana_720p_geometry_pads_latent_height_without_reducing_resolution() -> 
         allow_spatial_padding=True,
     )
 
-    shape = initializer.latent_shape(
-        DiffusionRequest(prompt="test", height=720, width=1280, num_frames=81)
-    )
+    shape = initializer.latent_shape(DiffusionRequest(prompt="test", height=720, width=1280, num_frames=81))
 
     assert shape == (1, 128, 11, 23, 40)
 
@@ -143,7 +141,7 @@ def test_sana_world_camera_actions_fall_back_to_interactions_when_default_is_non
         return torch.eye(4).repeat(num_frames, 1, 1)
 
     monkeypatch.setattr(
-        "worldfoundry.core.geometry.trajectory.rollout_sana_wm_camera_actions",
+        "worldfoundry.base_models.diffusion_model.models.initializers.sana_camera.rollout_sana_wm_camera_actions",
         rollout,
     )
     request = DiffusionRequest(

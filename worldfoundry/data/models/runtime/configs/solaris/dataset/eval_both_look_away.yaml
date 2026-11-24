@@ -1,6 +1,6 @@
 train_dataset_name: ""
 test_dataset_name: "eval/bothLookAwayEval/test"
-class: src.data.dataset.DatasetMultiplayer
+class: worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.data.dataset.DatasetMultiplayer
 name: eval_both_look_away
 multiplayer: true
 additional_params:

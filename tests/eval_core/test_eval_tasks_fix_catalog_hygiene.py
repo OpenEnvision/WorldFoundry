@@ -15,12 +15,12 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.catalog import schema as catalog_schema
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import (
+from worldfoundry.evals.tasks.catalog import schema as catalog_schema
+from worldfoundry.evals.tasks.catalog.benchmark_catalog import (
     _catalog_benchmark_path_index,
     benchmark_catalog_ids,
 )
-from worldfoundry.evaluation.tasks.catalog.schema import (
+from worldfoundry.evals.tasks.catalog.schema import (
     _normalize_integration_status,
     _normalize_source_status,
 )
@@ -37,19 +37,19 @@ def test_unknown_source_status_warns_and_degrades(caplog: pytest.LogCaptureFixtu
     # Use a synthetic value: real catalog statuses (e.g.
     # confirmed_official_code_in_github) are registered aliases now and no
     # longer exercise the unknown-status path.
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.evaluation.tasks.catalog.schema"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.evals.tasks.catalog.schema"):
         assert _normalize_source_status("definitely_not_a_registered_source_status") == "unknown"
     assert any("definitely_not_a_registered_source_status" in record.message for record in caplog.records)
 
     # Deduped: the same value does not warn twice.
     caplog.clear()
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.evaluation.tasks.catalog.schema"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.evals.tasks.catalog.schema"):
         assert _normalize_source_status("definitely_not_a_registered_source_status") == "unknown"
     assert not caplog.records
 
 
 def test_known_source_aliases_do_not_warn(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.evaluation.tasks.catalog.schema"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.evals.tasks.catalog.schema"):
         assert _normalize_source_status("confirmed_official_code_and_data_in_github") == "open_source"
         assert _normalize_source_status("open_source") == "open_source"
         assert _normalize_source_status(None) == "unknown"
@@ -58,12 +58,12 @@ def test_known_source_aliases_do_not_warn(caplog: pytest.LogCaptureFixture) -> N
 
 
 def test_unknown_integration_status_warns_and_degrades(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.evaluation.tasks.catalog.schema"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.evals.tasks.catalog.schema"):
         assert _normalize_integration_status("integrated_v2_totally_new") == "planned"
     assert any("integrated_v2_totally_new" in record.message for record in caplog.records)
 
     caplog.clear()
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.evaluation.tasks.catalog.schema"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.evals.tasks.catalog.schema"):
         assert _normalize_integration_status("integrated") == "integrated"
         assert _normalize_integration_status("blocked_on_assets") == "blocked"
         assert _normalize_integration_status("pending_review") == "planned"
@@ -91,7 +91,7 @@ def test_malformed_shard_is_skipped_with_warning(tmp_path: Path, caplog: pytest.
     bad_path = shard_dir / "bad.yaml"
     bad_path.write_text("id: [unclosed\n  nope: {", encoding="utf-8")
 
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.evaluation.tasks.catalog.benchmark_catalog"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.evals.tasks.catalog.benchmark_catalog"):
         index = _catalog_benchmark_path_index(str(shard_dir))
 
     assert set(index) == {"good-bench"}

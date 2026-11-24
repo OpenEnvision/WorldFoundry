@@ -117,11 +117,10 @@ def prepare_selective_fp8(model: nn.Module, options: Mapping[str, Any], policy: 
     config = SelectiveFP8Policy(**options)
     modules, selected = select_native_projections(model, config, policy)
 
-    seams = {
-        "diffusion.approximation",
-        "diffusion.precision_cache",
-        *(f"diffusion.projection.{path}" for path, _ in selected),
-    }
+    allow_compose = bool(policy is not None and policy.options.get("allow_approximate_composition", False))
+    seams = {*(f"diffusion.projection.{path}" for path, _ in selected)}
+    if not allow_compose:
+        seams.update({"diffusion.approximation", "diffusion.precision_cache"})
     if any(re.fullmatch(r"blocks\.\d+\.cross_attn\.[kv]", path) for path, _ in selected):
         seams.add("wan.cross_attention.projections")
 

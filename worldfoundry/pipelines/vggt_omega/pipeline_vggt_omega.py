@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import numpy as np
-from PIL import Image
 
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt_omega.runtime import (
     VGGTOmegaRepresentation,
@@ -42,12 +41,12 @@ class VGGTOmegaPipeline(PipelineABC):
 
     def __init__(
         self,
-        representation_model: Optional[Any] = None,
-        reasoning_model: Optional[Any] = None,
-        synthesis_model: Optional[Any] = None,
-        base_pipeline: Optional[Any] = None,
-        operator: Optional[VGGTOmegaOperator] = None,
-        memory_module: Optional[RuntimeMemory] = None,
+        representation_model: Any | None = None,
+        reasoning_model: Any | None = None,
+        synthesis_model: Any | None = None,
+        base_pipeline: Any | None = None,
+        operator: VGGTOmegaOperator | None = None,
+        memory_module: RuntimeMemory | None = None,
         model_id: str | None = None,
     ) -> None:
         """Initialize the pipeline and configure runtime components."""
@@ -55,12 +54,12 @@ class VGGTOmegaPipeline(PipelineABC):
         self.reasoning_model = reasoning_model
         self.synthesis_model = synthesis_model
         self.base_pipeline = base_pipeline
-        self.operator = operator or self.OPERATOR_CLS()
+        self.operator = operator or self._component("OPERATOR_CLS")()
         self.model_id = model_id or self.MODEL_ID
-        self.memory_module = memory_module or self.MEMORY_CLS(model_id=self.model_id)
+        self.memory_module = memory_module or self._component("MEMORY_CLS")(model_id=self.model_id)
 
     @staticmethod
-    def _normalize_image_paths(input_: Union[str, Path, list[str], list[Path]]) -> list[str]:
+    def _normalize_image_paths(input_: str | Path | list[str] | list[Path]) -> list[str]:
         """
         Normalize VGGT-Omega inputs to image file paths.
 
@@ -91,7 +90,7 @@ class VGGTOmegaPipeline(PipelineABC):
             model_path: Optional path or mapping from adapter/runtime config.
             **kwargs: Optional explicit checkpoint keys.
         """
-        options: Dict[str, Any] = {}
+        options: dict[str, Any] = {}
         if isinstance(model_path, dict):
             options.update(model_path)
         elif model_path is not None:
@@ -110,17 +109,17 @@ class VGGTOmegaPipeline(PipelineABC):
         return "facebook/VGGT-Omega"
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         representation_path: str | None = None,
-        reasoning_path: Optional[str] = None,
-        synthesis_path: Optional[str] = None,
+        reasoning_path: str | None = None,
+        synthesis_path: str | None = None,
         model_path: Any = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        required_components: dict[str, Any] | None = None,
         device: str | None = None,
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "VGGTOmegaPipeline":
+    ) -> VGGTOmegaPipeline:
         """
         Load VGGT-Omega through the official Omega representation loader.
 
@@ -153,8 +152,8 @@ class VGGTOmegaPipeline(PipelineABC):
             reasoning_model=base.reasoning_model,
             synthesis_model=base.synthesis_model,
             base_pipeline=base,
-            operator=cls.OPERATOR_CLS(),
-            memory_module=cls.MEMORY_CLS(model_id=model_id or cls.MODEL_ID),
+            operator=cls._component("OPERATOR_CLS")(),
+            memory_module=cls._component("MEMORY_CLS")(model_id=model_id or cls.MODEL_ID),
             model_id=model_id or cls.MODEL_ID,
         )
 
@@ -218,7 +217,9 @@ class VGGTOmegaPipeline(PipelineABC):
             "predict_depth": interaction_dict.get("predict_depth", True),
             "predict_points": interaction_dict.get("predict_points", True),
             "predict_tracks": False,
-            "preprocess_mode": kwargs.get("preprocess_mode", getattr(self.representation_model, "preprocess_mode", "balanced")),
+            "preprocess_mode": kwargs.get(
+                "preprocess_mode", getattr(self.representation_model, "preprocess_mode", "balanced")
+            ),
             "resolution": kwargs.get("resolution", getattr(self.representation_model, "resolution", 512)),
             "patch_size": kwargs.get("patch_size", getattr(self.representation_model, "patch_size", 16)),
         }
@@ -285,20 +286,20 @@ class VGGTOmegaPipeline(PipelineABC):
 
     def run_official_scene_export(
         self,
-        image_path: Union[str, list[str]],
-        output_dir: Optional[str] = None,
-        image_resolution: Optional[int] = None,
+        image_path: str | list[str],
+        output_dir: str | None = None,
+        image_resolution: int | None = None,
         preprocess_mode: str = "balanced",
-        patch_size: Optional[int] = None,
+        patch_size: int | None = None,
         video_sample_fps: float = 1.0,
         conf_thres: float = 20.0,
         mask_black_bg: bool = False,
         mask_white_bg: bool = False,
         show_cam: bool = True,
         max_points_k: int = 1000,
-        output_name: Optional[str] = None,
+        output_name: str | None = None,
         **_unused: Any,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Run official scene export for VGGTOmegaPipeline."""
         if self.representation_model is None or self.representation_model.model is None:
             raise RuntimeError("Representation model not loaded. Use from_pretrained() first.")
@@ -329,15 +330,15 @@ class VGGTOmegaPipeline(PipelineABC):
 
     def __call__(
         self,
-        image_path: Optional[Union[str, list[str]]] = None,
+        image_path: str | list[str] | None = None,
         images: Any = None,
-        interactions: Optional[list[str]] = None,
-        camera_view: Optional[list[float]] = None,
-        task_type: Optional[str] = None,
-        output_dir: Optional[str] = None,
+        interactions: list[str] | None = None,
+        camera_view: list[float] | None = None,
+        task_type: str | None = None,
+        output_dir: str | None = None,
         return_dict: bool = False,
         **kwargs: Any,
-    ) -> Union[str, dict[str, Any], Any]:
+    ) -> str | dict[str, Any] | Any:
         """Execute the complete pipeline generation flow."""
         del camera_view
         data = images if images is not None else image_path

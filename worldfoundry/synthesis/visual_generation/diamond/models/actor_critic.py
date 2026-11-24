@@ -1,18 +1,15 @@
 from collections import namedtuple
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import torch
-from torch import Tensor
 import torch.nn as nn
+from torch import Tensor
+
+from worldfoundry.synthesis.visual_generation.diamond.utils import init_lstm
 
 from .blocks import Conv3x3, SmallResBlock
-from utils import init_lstm
-
 
 ActorCriticOutput = namedtuple("ActorCriticOutput", "logits_act val hx_cx")
-
-
 
 
 @dataclass
@@ -20,9 +17,9 @@ class ActorCriticConfig:
     lstm_dim: int
     img_channels: int
     img_size: int
-    channels: List[int]
-    down: List[int]
-    num_actions: Optional[int] = None
+    channels: list[int]
+    down: list[int]
+    num_actions: int | None = None
 
 
 class ActorCritic(nn.Module):
@@ -45,14 +42,12 @@ class ActorCritic(nn.Module):
     def device(self) -> torch.device:
         return self.lstm.weight_hh.device
 
-
-    def predict_act_value(self, obs: Tensor, hx_cx: Tuple[Tensor, Tensor]) -> ActorCriticOutput:
+    def predict_act_value(self, obs: Tensor, hx_cx: tuple[Tensor, Tensor]) -> ActorCriticOutput:
         assert obs.ndim == 4
         x = self.encoder(obs)
         x = x.flatten(start_dim=1)
         hx, cx = self.lstm(x, hx_cx)
         return ActorCriticOutput(self.actor_linear(hx), self.critic_linear(hx).squeeze(dim=1), (hx, cx))
-
 
 
 class ActorCriticEncoder(nn.Module):

@@ -55,7 +55,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: rbench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id rbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/rbench --json
+  contract_validation_command: wf zoo benchmark-run --benchmark-id rbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/rbench --json
   name: RBench
   domain:
   - robotics
@@ -125,15 +125,15 @@ metadata:
     - <results_root>/5_tasks/<model>/<task>/<vlm>/results.csv
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:RBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:rbench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
     surface: in_tree_official_aggregation
     normalizer_verified: true
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:RBenchContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/rbench/run_rbench_official_runner.py
-  metric_evaluator_target: worldfoundry.evaluation.tasks.execution.runners.rbench.rbench_contract_evaluator:write_rbench_evaluation
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:rbench
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/rbench/run_rbench_official_runner.py
+  metric_evaluator_target: worldfoundry.evals.tasks.execution.runners.rbench.rbench_contract_evaluator:write_rbench_evaluation
   metric_protocol:
     official_definition: The embodiment track merges three VLM scores with two motion-operator scores per video, min-max normalizes each, then derives Task_Completion as their mean and Visual_Quality as 0.8*RSS + 0.2*MS minus amplitude and stability-consistency penalties, floored at zero. The task track rescales each rubric score to (score-1)/4 and pools per video for ALL_TASKS_MEAN.
     official_results_fields:
@@ -154,12 +154,12 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_official_source
-    root: worldfoundry/evaluation/tasks/execution/runners/rbench
+    root: worldfoundry/evals/tasks/execution/runners/rbench
     repo_url: https://github.com/DAGroup-PKU/ReVidgen.git
     root_env: WORLDFOUNDRY_RBENCH_ROOT
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.execution.runners.rbench.rbench_contract_evaluator:write_rbench_evaluation
+    target: worldfoundry.evals.tasks.execution.runners.rbench.rbench_contract_evaluator:write_rbench_evaluation
     status: implemented
     protocol: local_artifact_checks_and_official_aggregation
     official_result_normalization:
@@ -175,7 +175,7 @@ metadata:
       - json
       provenance: reproduces the official ReVidgen aggregation from caller-provided per-video outputs
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -263,11 +263,11 @@ tasks:
       - task_completion
       - visual_quality
       - task_track_overall
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.rbench.rbench_contract_evaluator:write_rbench_evaluation
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:RBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/rbench/run_rbench_official_runner.py
+      evaluator_target: worldfoundry.evals.tasks.execution.runners.rbench.rbench_contract_evaluator:write_rbench_evaluation
+      runner_target: worldfoundry.evals.tasks.contracts.external:rbench
+      runner_script: worldfoundry/evals/tasks/execution/runners/rbench/run_rbench_official_runner.py
       status: implemented
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id rbench --mode official-validation --official-results-path <rbench_results_root> --result-model-id <model_id> --output-dir <out> --json
+      official_validation_command: wf zoo benchmark-run --benchmark-id rbench --mode official-validation --official-results-path <rbench_results_root> --result-model-id <model_id> --output-dir <out> --json
     - name: external_official_runner
       metric_ids:
       - rbench_overall
@@ -286,8 +286,8 @@ tasks:
       - multi_entity_collaboration
       - spatial_relationship
       - visual_reasoning
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:RBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/rbench/run_rbench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:rbench
+      runner_script: worldfoundry/evals/tasks/execution/runners/rbench/run_rbench_official_runner.py
     runtime_requirements:
       benchmark_data_root_env: WORLDFOUNDRY_RBENCH_DATA_ROOT
       results_path_env: WORLDFOUNDRY_RBENCH_RESULTS_PATH

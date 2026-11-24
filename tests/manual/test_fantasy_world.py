@@ -3,8 +3,6 @@ from PIL import Image
 
 from worldfoundry.pipelines.fantasy_world.pipeline_fantasy_world import (
     FantasyWorldWan21Pipeline,
-)
-from worldfoundry.pipelines.fantasy_world.pipeline_fantasy_world import (
     FantasyWorldWan22Pipeline,
 )
 

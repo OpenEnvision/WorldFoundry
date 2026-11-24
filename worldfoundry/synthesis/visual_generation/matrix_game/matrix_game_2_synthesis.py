@@ -39,7 +39,7 @@ class MatrixGame2Synthesis(RuntimeFacadeSynthesis):
         mode: str = "universal",
         device: str = "cuda",
         *,
-        runtime: "MatrixGame2Runtime | None" = None,
+        runtime: MatrixGame2Runtime | None = None,
     ) -> None:
         """Wrap ``runtime``, or build one from the given pipeline components."""
         super().__init__(
@@ -59,7 +59,7 @@ class MatrixGame2Synthesis(RuntimeFacadeSynthesis):
         device=None,
         weight_dtype: Any = None,
         **kwargs,
-    ) -> "MatrixGame2Synthesis":
+    ) -> MatrixGame2Synthesis:
         """Load the MatrixGame2 runtime from pretrained weights and wrap it."""
         return cls(
             runtime=cls._runtime_cls().from_pretrained(

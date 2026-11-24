@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 aliases:
 - giga_brain_0
 - gigabrain0
@@ -25,6 +25,7 @@ official_sources:
   github:
     head_sha: 61a919407dbc2bb945a926cc002749097cc9ebdf
     url: https://github.com/open-gigaai/giga-brain-0
+    revision: 61a919407dbc2bb945a926cc002749097cc9ebdf
   huggingface:
   - license: apache-2.0
     repo_id: open-gigaai/GigaBrain-0-3.5B-Base
@@ -84,18 +85,16 @@ docs:
   publisher: GigaAI
   publisher_kind: company
   publisher_zh: 极佳科技（GigaAI）
-  overview: GigaBrain-0 is GigaAI's 3.5B VLA foundation policy with subtask prediction, released as GigaBrain-0-3.5B-Base and the 0.1 refresh under Apache-2.0. In this catalog the in-tree GigaBrain-0.1 runtime emitted a checkpoint-backed CUDA action_trace using converted LeRobot RoboTwin statistics, with PaliGemma tokenizer and the physical-intelligence FAST tokenizer staged.
-  overview_zh: GigaBrain-0 是极佳科技（GigaAI）的 3.5B VLA 基础策略，支持子任务预测，发布 GigaBrain-0-3.5B-Base 与 0.1 更新版，Apache-2.0 许可。本 catalog 中树内 GigaBrain-0.1 运行时使用转换的 LeRobot RoboTwin 统计输出了 checkpoint 驱动的 CUDA action_trace，PaliGemma tokenizer 与 physical-intelligence FAST tokenizer 均已就位。
-  architecture: A 3.5B policy on a PaliGemma tokenizer base using the FAST action tokenizer for discrete action encoding, plus subtask prediction heads. Architecture internals beyond the official repository pointer are not recorded in this repository.
-  architecture_zh: 3.5B 策略，PaliGemma tokenizer 基座，用 FAST 动作 tokenizer 做离散动作编码，另有子任务预测头。官方仓库指针之外的架构内部细节仓库未记录。
-  usage_notes: The PaliGemma tokenizer model is gated (manual review) and requires Hugging Face auth. Official task-score parity remains separate because official task norm_stats/delta_mask assets are gated or not staged.
-  usage_notes_zh: PaliGemma tokenizer 模型为门控（需人工审查），需要 Hugging Face 认证。由于官方任务 norm_stats/delta_mask 资产门控或未就位，官方任务分数 parity 单独跟踪。
+  overview: "GigaBrain-0 is GigaAI's 3.5B VLA foundation policy with subtask prediction, released as GigaBrain-0-3.5B-Base and the 0.1 refresh under Apache-2.0. Validated with the GigaBrain-0.1 checkpoint: the in-tree runtime produces a CUDA action_trace using converted LeRobot RoboTwin statistics."
+  overview_zh: GigaBrain-0 是极佳科技（GigaAI）的 3.5B VLA 基础策略，支持子任务预测，发布 GigaBrain-0-3.5B-Base 与 0.1 更新版，Apache-2.0 许可。已使用 GigaBrain-0.1 权重验证：树内运行时使用转换的 LeRobot RoboTwin 统计输出 CUDA action_trace。
+  architecture: A 3.5B policy on a PaliGemma tokenizer base using the FAST action tokenizer for discrete action encoding, plus subtask prediction heads.
+  architecture_zh: 3.5B 策略，PaliGemma tokenizer 基座，用 FAST 动作 tokenizer 做离散动作编码，另有子任务预测头。
+  usage_notes: Stage the PaliGemma tokenizer model and the physical-intelligence FAST tokenizer. PaliGemma is gated (manual review) and requires Hugging Face auth.
+  usage_notes_zh: 需准备 PaliGemma tokenizer 模型与 physical-intelligence FAST tokenizer。PaliGemma 为门控模型（需人工审查），需要 Hugging Face 认证。
   limitations:
-  - Gated PaliGemma dependency requires auth.
-  - Official task-score parity is pending gated normalization assets.
+  - 'Official task scores are not reproduced: they need the gated task-specific norm_stats/delta_mask assets.'
   limitations_zh:
-  - 门控的 PaliGemma 依赖需要认证。
-  - 官方任务分数 parity 因门控归一化资产而待定。
+  - 尚未复现官方任务分数：需要门控的任务专用 norm_stats/delta_mask 资产。
   recommended_benchmarks:
   - id: robotwin
     reason: CUDA action trace was produced with converted RoboTwin statistics.

@@ -8,10 +8,10 @@ import pytest
 
 from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_MODEL_ID, CONTRACT_FIXTURE_RUNNER_TARGET
 from worldfoundry.cli import main
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import formal_benchmark_ids
-from worldfoundry.evaluation.tasks.execution.orchestration import model_benchmark as model_benchmark_module
-from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import OfficialRunResult
-from worldfoundry.evaluation.tasks.execution.orchestration.model_benchmark import (
+from worldfoundry.evals.tasks.catalog.benchmark_catalog import formal_benchmark_ids
+from worldfoundry.evals.tasks.execution.orchestration import model_benchmark as model_benchmark_module
+from worldfoundry.evals.tasks.execution.orchestration.interfaces import OfficialRunResult
+from worldfoundry.evals.tasks.execution.orchestration.model_benchmark import (
     ModelBenchmarkRunRequest,
     run_model_benchmark,
 )

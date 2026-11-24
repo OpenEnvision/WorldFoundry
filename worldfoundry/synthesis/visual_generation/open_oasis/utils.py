@@ -4,13 +4,14 @@ Action format derived from VPT https://github.com/openai/Video-Pre-Training
 """
 
 import json
+from collections import deque
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Mapping, Sequence
 
 import av
 import torch
 from einops import rearrange
-from torchvision.io import read_image, read_video
+from torchvision.io import read_image
 from torchvision.transforms.functional import resize
 
 from worldfoundry.core.media.codecs.video import read_video_window_rgb
@@ -111,6 +112,7 @@ def write_video_compat(path, frames: torch.Tensor, *, fps: int) -> None:
 
 
 def load_prompt(path, video_offset=None, n_prompt_frames=1):
+    frame_count_error = f"input prompt {path} had less than n_prompt_frames={n_prompt_frames} frames"
     if path.lower().split(".")[-1] in IMAGE_EXTENSIONS:
         print("prompt is image; ignoring video_offset and n_prompt_frames")
         prompt = read_image(path)
@@ -118,16 +120,25 @@ def load_prompt(path, video_offset=None, n_prompt_frames=1):
         prompt = rearrange(prompt, "c h w -> 1 c h w")
     elif path.lower().split(".")[-1] in VIDEO_EXTENSIONS:
         if video_offset is not None and video_offset < 0:
-            # Retain the existing Python-slice semantics for offsets from EOF.
-            prompt = read_video(path, pts_unit="sec")[0][video_offset:][:n_prompt_frames]
+            with av.open(path) as container:
+                tail = deque(container.decode(video=0), maxlen=-video_offset)
+                frames = list(tail)[:n_prompt_frames]
+                assert len(frames) == n_prompt_frames, frame_count_error
+                prompt = torch.stack([torch.from_numpy(frame.to_rgb().to_ndarray()) for frame in frames])
         else:
-            prompt = torch.from_numpy(read_video_window_rgb(
-                path, start_frame=video_offset or 0, frame_count=n_prompt_frames,
-            ))
+            prompt = torch.from_numpy(
+                read_video_window_rgb(
+                    path,
+                    start_frame=video_offset or 0,
+                    frame_count=n_prompt_frames,
+                )
+            )
         prompt = rearrange(prompt, "t h w c -> t c h w")
     else:
-        raise ValueError(f"unrecognized prompt file extension; expected one in {IMAGE_EXTENSIONS} or {VIDEO_EXTENSIONS}")
-    assert prompt.shape[0] == n_prompt_frames, f"input prompt {path} had less than n_prompt_frames={n_prompt_frames} frames"
+        raise ValueError(
+            f"unrecognized prompt file extension; expected one in {IMAGE_EXTENSIONS} or {VIDEO_EXTENSIONS}"
+        )
+    assert prompt.shape[0] == n_prompt_frames, frame_count_error
     if prompt.shape[1] == 1:
         prompt = prompt.repeat(1, 3, 1, 1)
     elif prompt.shape[1] == 4:
@@ -167,9 +178,7 @@ def load_actions(path, action_offset=None, num_frames=None):
             "'*.one_hot_actions.pt', or '*.one_hot_actions.json'"
         )
     if actions.ndim != 2 or actions.shape[1] != len(ACTION_KEYS):
-        raise ValueError(
-            f"one-hot actions must have shape [frames, {len(ACTION_KEYS)}], got {tuple(actions.shape)}"
-        )
+        raise ValueError(f"one-hot actions must have shape [frames, {len(ACTION_KEYS)}], got {tuple(actions.shape)}")
     if action_offset is not None:
         actions = actions[action_offset:]
     actions = torch.cat([torch.zeros_like(actions[:1]), actions], dim=0)

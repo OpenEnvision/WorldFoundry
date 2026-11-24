@@ -35,14 +35,14 @@ base_model_dependency_preflight:
   - The version-specific VBench-2.0 runner has no runner-local foundation-model fork; dimension code resolves 
     checkpoints through the base-model/cache paths.
   missing: []
-preflight_command: PYTHONPATH=worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime:. 
+preflight_command: PYTHONPATH=worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime:. 
   ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile vbench-2.0 --manifest 
+  worldfoundry.evals.tasks.execution.orchestration.runtime_preflight --profile vbench-2.0 --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/vbench-2.0.yaml --output-dir 
   tmp/worldfoundry_preflight/vbench-2.0 --json
 python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
-- worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime
+- worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime
 required_assets:
   local_dataset_paths:
   - cache/worldfoundry/data/hfd_datasets/Vchitect/VBench-2.0_sampled_videos
@@ -52,7 +52,7 @@ required_assets:
   - cache/worldfoundry/data/hfd_datasets/Vchitect/VBench-2.0_human_anomaly
   - cache/worldfoundry/data/hfd_datasets/Vchitect__VBench-2.0_human_anomaly
   in_tree_source_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime
+  - worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime
   task_yaml: worldfoundry/data/benchmarks/tasks/external/vbench-2.0.yaml
   scorecard_paths:
   - tmp/local_open_eval/gpu_vbench2_cu113_diversity_probe/scorecard.json
@@ -83,15 +83,15 @@ optional_packages:
 - retinaface-py==0.0.2
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/vbench-2.0.yaml
 - id: in_tree_vbench_source
-  path: worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime
+  path: worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime
 requires_cuda_visibility: true
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-- worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
 - --benchmark-id
 - vbench-2.0
 - --variant

@@ -17,7 +17,7 @@ from typing import NamedTuple
 
 import torch
 
-from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.observability.rank_logging import log
 
 # ──────────────────────────────────────────────────────────────────────────
 # Non-strict assign — drop shape mismatches and TE extra-state; report leftovers

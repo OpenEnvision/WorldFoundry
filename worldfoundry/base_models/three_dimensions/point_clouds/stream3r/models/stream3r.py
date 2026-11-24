@@ -4,21 +4,26 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Tuple, List
+
 import torch
 import torch.nn as nn
 from huggingface_hub import PyTorchModelHubMixin  # used for model hub
 
+
 def freeze_all_params(modules):
     for module in modules:
         try:
-            for n, param in module.named_parameters():
+            for _n, param in module.named_parameters():
                 param.requires_grad = False
         except AttributeError:
             module.requires_grad = False
-from .components.aggregator.streamaggregator import STreamAggregator
-from .components.heads.camera_head import CameraHead
-from .components.heads.dpt_head import DPTHead
+
+
+from .components.aggregator.streamaggregator import (  # noqa: E402 - Follows module-level definitions, as upstream.
+    STreamAggregator,
+)
+from .components.heads.camera_head import CameraHead  # noqa: E402 - Follows module-level definitions, as upstream.
+from .components.heads.dpt_head import DPTHead  # noqa: E402 - Follows module-level definitions, as upstream.
 
 
 class STream3R(nn.Module, PyTorchModelHubMixin):
@@ -45,8 +50,8 @@ class STream3R(nn.Module, PyTorchModelHubMixin):
         self,
         images: torch.Tensor,
         mode: str = "causal",
-        aggregator_kv_cache_list: List[List[torch.Tensor]] = None,
-        camera_head_kv_cache_list: List[List[List[torch.Tensor]]] = None,
+        aggregator_kv_cache_list: list[list[torch.Tensor]] | None = None,
+        camera_head_kv_cache_list: list[list[list[torch.Tensor]]] | None = None,
     ):
         """
         Forward pass of the STream3R model.
@@ -71,14 +76,16 @@ class STream3R(nn.Module, PyTorchModelHubMixin):
         """
         if self.training:
             images = torch.stack([view["img"] for view in images], dim=1)
-            images = (images + 1.) / 2.
+            images = (images + 1.0) / 2.0
 
         # If without batch dimension, add it
         if len(images.shape) == 4:
             images = images.unsqueeze(0)
 
         if aggregator_kv_cache_list is not None:
-            aggregated_tokens_list, patch_start_idx, aggregator_kv_cache_list = self.aggregator(images, mode=mode, kv_cache_list=aggregator_kv_cache_list)
+            aggregated_tokens_list, patch_start_idx, aggregator_kv_cache_list = self.aggregator(
+                images, mode=mode, kv_cache_list=aggregator_kv_cache_list
+            )
         else:
             aggregated_tokens_list, patch_start_idx = self.aggregator(images, mode=mode)
 
@@ -87,7 +94,9 @@ class STream3R(nn.Module, PyTorchModelHubMixin):
         with torch.autocast(device_type=next(self.parameters()).device.type, dtype=torch.float32):
             if self.camera_head is not None:
                 if camera_head_kv_cache_list is not None:
-                    pose_enc_list, camera_head_kv_cache_list = self.camera_head(aggregated_tokens_list, mode=mode, kv_cache_list=camera_head_kv_cache_list)
+                    pose_enc_list, camera_head_kv_cache_list = self.camera_head(
+                        aggregated_tokens_list, mode=mode, kv_cache_list=camera_head_kv_cache_list
+                    )
                 else:
                     pose_enc_list = self.camera_head(aggregated_tokens_list, mode=mode)
                 predictions["pose_enc"] = pose_enc_list[-1]  # pose encoding of the last iteration

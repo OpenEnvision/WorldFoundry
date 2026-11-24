@@ -32,11 +32,7 @@ def bind_security_warning(host: str) -> str | None:
 
     if is_loopback_host(host):
         return None
-    token_state = (
-        "token auth is enabled"
-        if configured_auth_token()
-        else f"{AUTH_TOKEN_ENV} is NOT set"
-    )
+    token_state = "token auth is enabled" if configured_auth_token() else f"{AUTH_TOKEN_ENV} is NOT set"
     return (
         f"SECURITY WARNING: binding {host!r} exposes this Studio server to the "
         f"network ({token_state}). Anyone who can reach this address can use "

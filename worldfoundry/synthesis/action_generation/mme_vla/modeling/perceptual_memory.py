@@ -1,6 +1,6 @@
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 import flax.nnx as nnx
 import jax.numpy as jnp
-
 
 from ...openpi import array_typing as at
 from .memory_encoder import FeatureEncoder

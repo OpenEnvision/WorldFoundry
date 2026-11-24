@@ -9,9 +9,7 @@ class FastWAMPipeline(ComponentPipeline):
     MODEL_ID = "fastwam"
     OPERATOR_TARGET = "worldfoundry.operators.official_policy_operator:OfficialPolicyOperator"
     MEMORY_TARGET = "worldfoundry.synthesis.action_generation.memory:ActionTraceMemory"
-    SYNTHESIS_TARGET = (
-        "worldfoundry.synthesis.action_generation.fastwam.fastwam_synthesis:FastWAMSynthesis"
-    )
+    SYNTHESIS_TARGET = "worldfoundry.synthesis.action_generation.fastwam.fastwam_synthesis:FastWAMSynthesis"
     generation_type = "world_action_model"
 
 

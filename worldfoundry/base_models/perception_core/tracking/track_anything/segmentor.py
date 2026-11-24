@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> segmentor.py functionality."""
-
 import numpy as np
 import torch
 
@@ -11,7 +9,6 @@ from worldfoundry.base_models.perception_core.segment.sam_v1 import SamAutomatic
 
 
 class Segmentor:
-    """Segmentor implementation."""
     def __init__(self, sam_args):
         """
         sam_args:
@@ -32,11 +29,6 @@ class Segmentor:
 
     @torch.no_grad()
     def set_image(self, image):
-        """Set image.
-
-        Args:
-            image: The image.
-        """
         # calculate the embedding only once per frame.
         if not self.have_embedded:
             self.interactive_predictor.set_image(image)
@@ -44,13 +36,6 @@ class Segmentor:
 
     @torch.no_grad()
     def interactive_predict(self, prompts, mode, multimask=True):
-        """Interactive predict.
-
-        Args:
-            prompts: The prompts.
-            mode: The mode.
-            multimask: The multimask.
-        """
         assert self.have_embedded, "image embedding for sam need be set before predict."
 
         if mode == "point":
@@ -99,13 +84,6 @@ class Segmentor:
         return mask.astype(np.uint8)
 
     def segment_with_box(self, origin_frame, bbox, reset_image=False):
-        """Segment with box.
-
-        Args:
-            origin_frame: The origin frame.
-            bbox: The bbox.
-            reset_image: The reset image.
-        """
         if reset_image:
             self.interactive_predictor.set_image(origin_frame)
         else:

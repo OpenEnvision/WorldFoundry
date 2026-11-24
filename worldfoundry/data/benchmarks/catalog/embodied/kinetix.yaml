@@ -25,7 +25,7 @@ runner:
   normalization:
     dispatch: embodied
     embodied_track: vla
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:KinetixContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:kinetix
   expected_artifacts:
   - scorecard.json
   - raw_results.jsonl
@@ -43,7 +43,7 @@ runner:
     - official rollout result dump
   verification_status: normalizer_only
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -98,7 +98,7 @@ data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/kinetix.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:KinetixContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:kinetix
   task_yaml_available: true
   runtime_verified: false
   normalizer_verified: true
@@ -106,7 +106,7 @@ runner_availability:
   runner_script_available: false
 checkpoint_refs: []
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -122,3 +122,29 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_KINETIX_RESULTS_PATH
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - dataset_root
+  - simulator_root
+  - task_manifest
+  - policy_results_path
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_results
+  - per_sample_metrics
+  - rollout_logs
+  - videos
+  metric_ids:
+  - success_rate
+  - task_success
+  - episode_success
+  - reward
+  - normalized_return
+  - real_time_success_rate
+  notes:
+  - Contract covers Kinetix embodied policy rollouts and official result normalization.
+  - WorldFoundry exposes the native request/result surface; simulator assets, policy checkpoints, and
+    full official rollout evidence remain explicit runtime inputs.
+  - Kinetix uses a JAX 2D physics runtime; keep it in a simulator-specific environment when the unified
+    PyTorch environment is insufficient.

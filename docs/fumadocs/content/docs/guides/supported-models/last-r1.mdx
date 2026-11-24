@@ -1,6 +1,6 @@
 ---
 title: "LaST-R1"
-description: "LaST-R1: vla and reinforcement learning; Runner parity pending."
+description: "LaST-R1: VLA, reinforcement learning, and 1 more task; Runner parity pending."
 modelId: "last-r1"
 pageSource: generated
 ---
@@ -9,7 +9,7 @@ LaST-R1 is an MIT-licensed VLA policy. WorldFoundry integrates offline image-and
 
 <ModelPaperFigures modelId="last-r1" locale="en" />
 
-The recorded paper is [arXiv 2604.28192](https://arxiv.org/abs/2604.28192).
+Paper: [arXiv 2604.28192](https://arxiv.org/abs/2604.28192).
 
 Project page: [siriyep.github.io/last-r1](https://siriyep.github.io/last-r1/). Code: [CHEN-H01/LaST-R1](https://github.com/CHEN-H01/LaST-R1).
 
@@ -17,34 +17,32 @@ Project page: [siriyep.github.io/last-r1](https://siriyep.github.io/last-r1/). C
 
 ## What it is for
 
-Use `last-r1` for vision-language-action inference on this card. The recipe exists so you can launch the recorded policy profile.
+`last-r1` maps camera observations and an instruction to an action trajectory.
 
-Task tags record a VLA plus reinforcement-learning design. Architecture internals beyond the official repository pointer (CHEN-H01/LaST-R1, pinned head ba4e9396) are not recorded in this repository.
+LaST-R1 extends Qwen3-VL with latent reasoning tokens, a bidirectional block of 56 action tokens decoded into eight 7-D actions, and a value head. WorldFoundry vendors the inference path of the official model code (CHEN-H01/LaST-R1 at ba4e9396).
 
-Catalog tasks include vla, reinforcement learning, and policy rollout.
+Tasks: VLA, reinforcement learning, and policy rollout.
 
-Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub/libero) (Referenced in this model's manifest evidence notes).
+Suggested benchmarks: [LIBERO](/docs/evaluation/benchmark-hub/libero) (Referenced in this model's manifest evidence notes).
 
 ## Runtime contract
 
-Optional `prompt`, `input_path`, `interactions`, and `fps`; artifacts `action_trace` and `last-r1_action_trace.json`.
+Inputs `prompt` and `input-path` (bundled samples are used when omitted); artifacts `action_trace` and `last-r1_action_trace.json`.
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `LastR1Pipeline`.
 
 Family status: **Runner parity pending**.
 
-Prepare the libero_10 checkpoint and pinned official source declared by the runtime profile. The adapter returns eight finite seven-dimensional actions from one image and instruction.
+Stage the LIBERO-10 RL checkpoint from chenhao01/LaST-R1 at revision d62fa3df151cd3dd65cc4a1fbc230f3632ed3390. The in-tree adapter returns eight finite seven-dimensional actions from one image and instruction.
 
-The model-specific adapter executes offline image-and-instruction inference with the libero_10 RL checkpoint and pinned official source.
+Integration is scoped to offline action inference; closed-loop LIBERO rollout and task success rate are not validated.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run last-r1 --pipeline.task-profile interactive-video` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Run the policy with `wf run last-r1 --pipeline.task-profile interactive-video`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `chenhao01/LaST-R1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh last-r1`. Add `--download` to fetch missing public checkpoints.
-
-Status: **Runner parity pending**.
+Weights: `chenhao01/LaST-R1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh last-r1`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="last-r1" locale="en" />

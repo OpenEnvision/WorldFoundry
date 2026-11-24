@@ -9,4 +9,3 @@ export const OPENENVISION_AWESOME_WORLD_MODELING =
   'https://github.com/OpenEnvision/Awesome-World-Modeling';
 export const OPENENVISION_BLOGXIV_SITE =
   'https://openenvision.github.io/BlogrXiv/';
-export const ROBODOJO_SITE = 'https://robodojo-benchmark.com/';

@@ -19,27 +19,33 @@ Usage (distilled / few-step):
 """
 
 import argparse
+import itertools
 import os
 
 import numpy as np
 import torch
+import torchvision.transforms.v2 as T
 from einops import rearrange, repeat
 from PIL import Image
-import torchvision.transforms.v2 as T
 from tqdm import tqdm
 
-from worldfoundry.core.configuration.lazy_config import LazyCall as L, LazyDict, instantiate
-from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.attention.cache.kv_cache_policy import SlidingWindowPolicy
+from worldfoundry.core.configuration.lazy_config import LazyCall as L
+from worldfoundry.core.configuration.lazy_config import LazyDict, instantiate
+from worldfoundry.core.observability.rank_logging import log
+from worldfoundry.core.vram.initialization import init_weights_on_device
 from worldfoundry.synthesis.visual_generation.rcm.kv_cache_plan import make_kv_cache_plan
 from worldfoundry.synthesis.visual_generation.rcm.policy_kv_cache import policy_cache_factory
-from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.io_compat import save_image_or_video
-
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.datasets.utils import VIDEO_RES_SIZE_INFO
+from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.io_compat import save_image_or_video
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.networks.wan2pt1 import WanModel
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.tokenizers.wan2pt1 import Wan2pt1VAEInterface
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.blockmask import AttnMaskSpec, BlockPattern
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.kv_cache import CausalInferenceState, KVCacheMode
-from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.model_utils import init_weights_on_device, load_state_dict, load_state_dict_from_dcp
+from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.model_utils import (
+    load_state_dict,
+    load_state_dict_from_dcp,
+)
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.umt5 import clear_umt5_memory, get_umt5_embedding
 
 torch._dynamo.config.suppress_errors = True
@@ -115,7 +121,9 @@ def parse_mid_t_schedules(spec: str | None) -> list[list[float]]:
     return schedules
 
 
-def build_shifted_ode_t_steps(num_steps: int, sigma_max: float, timestep_shift: float, device: torch.device) -> torch.Tensor:
+def build_shifted_ode_t_steps(
+    num_steps: int, sigma_max: float, timestep_shift: float, device: torch.device
+) -> torch.Tensor:
     sigma_max_rf = sigma_max / (sigma_max + 1)
     unshifted_sigma_max = sigma_max_rf / (timestep_shift - (timestep_shift - 1) * sigma_max_rf)
     t_steps = torch.linspace(unshifted_sigma_max, 0.0, num_steps + 1, dtype=torch.float64, device=device)
@@ -231,11 +239,15 @@ def load_i2v_image_and_resolution(
             T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
         ]
     )
-    image_tensor = image_transforms(input_image).unsqueeze(0).unsqueeze(2).to(device=TENSOR_KWARGS["device"], dtype=torch.float32)
+    image_tensor = (
+        image_transforms(input_image).unsqueeze(0).unsqueeze(2).to(device=TENSOR_KWARGS["device"], dtype=torch.float32)
+    )
     return tokenizer.encode(image_tensor), w, h
 
 
-def record_chunk_latency_event(profile: dict | None, label: str, start_event: torch.cuda.Event | None) -> torch.cuda.Event | None:
+def record_chunk_latency_event(
+    profile: dict | None, label: str, start_event: torch.cuda.Event | None
+) -> torch.cuda.Event | None:
     if profile is None or start_event is None:
         return start_event
     end_event = torch.cuda.Event(enable_timing=True)
@@ -266,7 +278,9 @@ def causal_rollout_sampling(
     profile: dict | None = None,
 ) -> torch.Tensor:
     if context_from_last_step_start_chunk < 0:
-        raise ValueError(f"context_from_last_step_start_chunk must be non-negative, got {context_from_last_step_start_chunk}")
+        raise ValueError(
+            f"context_from_last_step_start_chunk must be non-negative, got {context_from_last_step_start_chunk}"
+        )
     B, C, T, H, W = init_noise.shape
     frame_tokens, num_blocks, bp = make_block_pattern(T, H, W, first_chunk_t, chunk_t, net.get_spatial_patch_size())
     ones_B_1 = torch.ones(B, 1, device=init_noise.device, dtype=torch.float64)
@@ -315,12 +329,20 @@ def causal_rollout_sampling(
 
         x = init_noise[:, :, frame_start:frame_end].to(torch.float64) * t_steps_block[0]
 
-        step_bar = tqdm(zip(t_steps_block[:-1], t_steps_block[1:]), total=num_steps, desc=f"  Chunk {i}/{num_blocks}", position=1, leave=False)
+        step_bar = tqdm(
+            itertools.pairwise(t_steps_block),
+            total=num_steps,
+            desc=f"  Chunk {i}/{num_blocks}",
+            position=1,
+            leave=False,
+        )
         for step_idx, (t_cur, t_next) in enumerate(step_bar):
             t_cur_B_1 = (t_cur * ones_B_1 * RECTIFIED_FLOW_T_SCALING).to(**TENSOR_KWARGS)
             is_last = step_idx == num_steps - 1
             kv_mode = KVCacheMode.APPEND if (use_last_step_context and is_last) else KVCacheMode.READONLY
-            inf_cond = CausalInferenceState(mode=kv_mode, kv_caches=kv_cond, pattern=bp, block_cursor=i, fast_infer=True)
+            inf_cond = CausalInferenceState(
+                mode=kv_mode, kv_caches=kv_cond, pattern=bp, block_cursor=i, fast_infer=True
+            )
 
             v_cond = net(
                 x_B_C_T_H_W=x.to(**TENSOR_KWARGS),
@@ -331,7 +353,9 @@ def causal_rollout_sampling(
             ).float()
 
             if use_cfg:
-                inf_uncond = CausalInferenceState(mode=kv_mode, kv_caches=kv_uncond, pattern=bp, block_cursor=i, fast_infer=True)
+                inf_uncond = CausalInferenceState(
+                    mode=kv_mode, kv_caches=kv_uncond, pattern=bp, block_cursor=i, fast_infer=True
+                )
                 v_uncond = net(
                     x_B_C_T_H_W=x.to(**TENSOR_KWARGS),
                     timesteps_B_T=t_cur_B_1,
@@ -351,11 +375,27 @@ def causal_rollout_sampling(
 
         if not use_last_step_context:
             zero_t = torch.zeros(B, 1, **TENSOR_KWARGS)
-            inf_append_cond = CausalInferenceState(mode=KVCacheMode.APPEND, kv_caches=kv_cond, pattern=bp, block_cursor=i, fast_infer=True)
-            net(x_B_C_T_H_W=x.to(**TENSOR_KWARGS), timesteps_B_T=zero_t, **condition, inference_state=inf_append_cond, attn_meta=attn_meta)
+            inf_append_cond = CausalInferenceState(
+                mode=KVCacheMode.APPEND, kv_caches=kv_cond, pattern=bp, block_cursor=i, fast_infer=True
+            )
+            net(
+                x_B_C_T_H_W=x.to(**TENSOR_KWARGS),
+                timesteps_B_T=zero_t,
+                **condition,
+                inference_state=inf_append_cond,
+                attn_meta=attn_meta,
+            )
             if use_cfg:
-                inf_append_uncond = CausalInferenceState(mode=KVCacheMode.APPEND, kv_caches=kv_uncond, pattern=bp, block_cursor=i, fast_infer=True)
-                net(x_B_C_T_H_W=x.to(**TENSOR_KWARGS), timesteps_B_T=zero_t, **uncondition, inference_state=inf_append_uncond, attn_meta=attn_meta)
+                inf_append_uncond = CausalInferenceState(
+                    mode=KVCacheMode.APPEND, kv_caches=kv_uncond, pattern=bp, block_cursor=i, fast_infer=True
+                )
+                net(
+                    x_B_C_T_H_W=x.to(**TENSOR_KWARGS),
+                    timesteps_B_T=zero_t,
+                    **uncondition,
+                    inference_state=inf_append_uncond,
+                    attn_meta=attn_meta,
+                )
 
         x_blocks.append(x)
         generated_chunks = len(x_blocks)
@@ -392,7 +432,9 @@ def causal_i2v_rollout_sampling(
     profile: dict | None = None,
 ) -> torch.Tensor:
     if context_from_last_step_start_chunk < 0:
-        raise ValueError(f"context_from_last_step_start_chunk must be non-negative, got {context_from_last_step_start_chunk}")
+        raise ValueError(
+            f"context_from_last_step_start_chunk must be non-negative, got {context_from_last_step_start_chunk}"
+        )
     B, C, _, H, W = image_latent.shape
     T_remaining = init_noise.shape[2]
     if T_remaining % chunk_t != 0:
@@ -400,7 +442,9 @@ def causal_i2v_rollout_sampling(
 
     first_chunk_t = 1
     T_total = 1 + T_remaining
-    frame_tokens, num_blocks, bp = make_block_pattern(T_total, H, W, first_chunk_t, chunk_t, net.get_spatial_patch_size())
+    frame_tokens, num_blocks, bp = make_block_pattern(
+        T_total, H, W, first_chunk_t, chunk_t, net.get_spatial_patch_size()
+    )
     ones_B_1 = torch.ones(B, 1, device=image_latent.device, dtype=torch.float64)
     use_cfg = uncondition is not None and guidance > 1.0
 
@@ -448,10 +492,20 @@ def causal_i2v_rollout_sampling(
         image_context = (1 - prefill_t) * image_context + prefill_t * image_noise.to(torch.float64)
     prefill_t_B_1 = (prefill_t * ones_B_1 * RECTIFIED_FLOW_T_SCALING).to(**TENSOR_KWARGS)
 
-    inf_cond = CausalInferenceState(mode=KVCacheMode.APPEND, kv_caches=kv_cond, pattern=bp, block_cursor=0, fast_infer=True)
-    net(x_B_C_T_H_W=image_context.to(**TENSOR_KWARGS), timesteps_B_T=prefill_t_B_1, **condition, inference_state=inf_cond, attn_meta=attn_meta_0)
+    inf_cond = CausalInferenceState(
+        mode=KVCacheMode.APPEND, kv_caches=kv_cond, pattern=bp, block_cursor=0, fast_infer=True
+    )
+    net(
+        x_B_C_T_H_W=image_context.to(**TENSOR_KWARGS),
+        timesteps_B_T=prefill_t_B_1,
+        **condition,
+        inference_state=inf_cond,
+        attn_meta=attn_meta_0,
+    )
     if use_cfg:
-        inf_uncond = CausalInferenceState(mode=KVCacheMode.APPEND, kv_caches=kv_uncond, pattern=bp, block_cursor=0, fast_infer=True)
+        inf_uncond = CausalInferenceState(
+            mode=KVCacheMode.APPEND, kv_caches=kv_uncond, pattern=bp, block_cursor=0, fast_infer=True
+        )
         net(
             x_B_C_T_H_W=image_context.to(**TENSOR_KWARGS),
             timesteps_B_T=prefill_t_B_1,
@@ -472,12 +526,20 @@ def causal_i2v_rollout_sampling(
 
         x = init_noise[:, :, noise_start : noise_start + block_size].to(torch.float64) * t_steps_block[0]
 
-        step_bar = tqdm(zip(t_steps_block[:-1], t_steps_block[1:]), total=num_steps, desc=f"  Chunk {i}/{num_blocks}", position=1, leave=False)
+        step_bar = tqdm(
+            itertools.pairwise(t_steps_block),
+            total=num_steps,
+            desc=f"  Chunk {i}/{num_blocks}",
+            position=1,
+            leave=False,
+        )
         for step_idx, (t_cur, t_next) in enumerate(step_bar):
             t_cur_B_1 = (t_cur * ones_B_1 * RECTIFIED_FLOW_T_SCALING).to(**TENSOR_KWARGS)
             is_last = step_idx == num_steps - 1
             kv_mode = KVCacheMode.APPEND if (use_last_step_context and is_last) else KVCacheMode.READONLY
-            inf_cond = CausalInferenceState(mode=kv_mode, kv_caches=kv_cond, pattern=bp, block_cursor=i, fast_infer=True)
+            inf_cond = CausalInferenceState(
+                mode=kv_mode, kv_caches=kv_cond, pattern=bp, block_cursor=i, fast_infer=True
+            )
 
             v_cond = net(
                 x_B_C_T_H_W=x.to(**TENSOR_KWARGS),
@@ -488,7 +550,9 @@ def causal_i2v_rollout_sampling(
             ).float()
 
             if use_cfg:
-                inf_uncond = CausalInferenceState(mode=kv_mode, kv_caches=kv_uncond, pattern=bp, block_cursor=i, fast_infer=True)
+                inf_uncond = CausalInferenceState(
+                    mode=kv_mode, kv_caches=kv_uncond, pattern=bp, block_cursor=i, fast_infer=True
+                )
                 v_uncond = net(
                     x_B_C_T_H_W=x.to(**TENSOR_KWARGS),
                     timesteps_B_T=t_cur_B_1,
@@ -508,11 +572,27 @@ def causal_i2v_rollout_sampling(
 
         if not use_last_step_context:
             zero_t = torch.zeros(B, 1, **TENSOR_KWARGS)
-            inf_append_cond = CausalInferenceState(mode=KVCacheMode.APPEND, kv_caches=kv_cond, pattern=bp, block_cursor=i, fast_infer=True)
-            net(x_B_C_T_H_W=x.to(**TENSOR_KWARGS), timesteps_B_T=zero_t, **condition, inference_state=inf_append_cond, attn_meta=attn_meta)
+            inf_append_cond = CausalInferenceState(
+                mode=KVCacheMode.APPEND, kv_caches=kv_cond, pattern=bp, block_cursor=i, fast_infer=True
+            )
+            net(
+                x_B_C_T_H_W=x.to(**TENSOR_KWARGS),
+                timesteps_B_T=zero_t,
+                **condition,
+                inference_state=inf_append_cond,
+                attn_meta=attn_meta,
+            )
             if use_cfg:
-                inf_append_uncond = CausalInferenceState(mode=KVCacheMode.APPEND, kv_caches=kv_uncond, pattern=bp, block_cursor=i, fast_infer=True)
-                net(x_B_C_T_H_W=x.to(**TENSOR_KWARGS), timesteps_B_T=zero_t, **uncondition, inference_state=inf_append_uncond, attn_meta=attn_meta)
+                inf_append_uncond = CausalInferenceState(
+                    mode=KVCacheMode.APPEND, kv_caches=kv_uncond, pattern=bp, block_cursor=i, fast_infer=True
+                )
+                net(
+                    x_B_C_T_H_W=x.to(**TENSOR_KWARGS),
+                    timesteps_B_T=zero_t,
+                    **uncondition,
+                    inference_state=inf_append_uncond,
+                    attn_meta=attn_meta,
+                )
 
         x_blocks.append(x)
         generated_chunks = len(x_blocks) - 1
@@ -530,15 +610,27 @@ def causal_i2v_rollout_sampling(
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Causal inference script for Wan2.1 T2V")
     parser.add_argument("--model_size", choices=["1.3B", "14B"], default="1.3B")
-    parser.add_argument("--distilled", action="store_true", help="Use few-step distilled sampling instead of diffusion ODE")
+    parser.add_argument(
+        "--distilled", action="store_true", help="Use few-step distilled sampling instead of diffusion ODE"
+    )
     parser.add_argument("--num_samples", type=int, default=1)
     parser.add_argument("--num_steps", type=int, default=50, help="ODE steps (non-distilled) or 1-4 (distilled)")
     parser.add_argument("--sigma_max", type=float, default=1600)
     parser.add_argument("--guidance_scale", type=float, default=3.0, help="CFG scale (only used in ODE mode)")
     parser.add_argument("--timestep_shift", type=float, default=3.0, help="Timestep shift for diffusion ODE sampling")
-    parser.add_argument("--mid_t", type=str, nargs="*", default=[15 / 16, 5 / 6, 5 / 8], help="Intermediate timesteps for distilled mode")
     parser.add_argument(
-        "--steps_per_chunk", type=int, nargs="*", default=None, help="Distilled causal steps per chunk; repeats the last value, e.g. 4 2"
+        "--mid_t",
+        type=str,
+        nargs="*",
+        default=[15 / 16, 5 / 6, 5 / 8],
+        help="Intermediate timesteps for distilled mode",
+    )
+    parser.add_argument(
+        "--steps_per_chunk",
+        type=int,
+        nargs="*",
+        default=None,
+        help="Distilled causal steps per chunk; repeats the last value, e.g. 4 2",
     )
     parser.add_argument(
         "--mid_t_schedules",
@@ -551,10 +643,18 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--dit_path", type=str, required=True, help="Path to the DiT checkpoint")
     parser.add_argument("--vae_path", type=str, default="assets/checkpoints/Wan2.1_VAE.pth")
     parser.add_argument("--text_encoder_path", type=str, default="assets/checkpoints/models_t5_umt5-xxl-enc-bf16.pth")
+    parser.add_argument(
+        "--tokenizer_path", type=str, default="", help="Optional local path or HF repo id for UMT5 tokenizer"
+    )
     parser.add_argument("--num_frames", type=int, default=81)
     parser.add_argument("--prompt", type=str, default=_DEFAULT_PROMPT)
     parser.add_argument("--negative_prompt", type=str, default=_DEFAULT_NEGATIVE_PROMPT)
-    parser.add_argument("--image_path", type=str, default="", help="Optional conditioning image path for I2V; output still has --num_frames frames")
+    parser.add_argument(
+        "--image_path",
+        type=str,
+        default="",
+        help="Optional conditioning image path for I2V; output still has --num_frames frames",
+    )
     parser.add_argument("--resolution", default="480p", type=str)
     parser.add_argument("--aspect_ratio", default="16:9", type=str)
     parser.add_argument(
@@ -564,16 +664,32 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--save_path", type=str, default="output/causal_generated_video.mp4")
-    parser.add_argument("--context_from_last_step", action="store_true", help="Cache KVs from last denoising step instead of extra t=0 forward pass")
-    parser.add_argument("--context_from_last_step_start_chunk", type=int, default=0, help="First causal chunk index to use --context_from_last_step")
+    parser.add_argument(
+        "--context_from_last_step",
+        action="store_true",
+        help="Cache KVs from last denoising step instead of extra t=0 forward pass",
+    )
+    parser.add_argument(
+        "--context_from_last_step_start_chunk",
+        type=int,
+        default=0,
+        help="First causal chunk index to use --context_from_last_step",
+    )
     parser.add_argument(
         "--kv_cache_policy",
         choices=["keep_all", "sliding_window"],
         default="keep_all",
         help="KV-cache horizon policy; keep_all is the upstream default, sliding_window bounds cache memory.",
     )
-    parser.add_argument("--kv_cache_window_blocks", type=int, default=6, help="Total retained blocks for --kv_cache_policy=sliding_window")
-    parser.add_argument("--kv_cache_sink_blocks", type=int, default=0, help="Leading blocks pinned in a sliding-window cache")
+    parser.add_argument(
+        "--kv_cache_window_blocks",
+        type=int,
+        default=6,
+        help="Total retained blocks for --kv_cache_policy=sliding_window",
+    )
+    parser.add_argument(
+        "--kv_cache_sink_blocks", type=int, default=0, help="Leading blocks pinned in a sliding-window cache"
+    )
     parser.add_argument("--warmup_iters", type=int, default=0, help="Number of warmup runs before timed run")
     parser.add_argument("--num_runs", type=int, default=1, help="Number of timed runs to average")
     args = parser.parse_args()
@@ -588,13 +704,10 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def load_dit_weights(net, dit_path: str):
-    if os.path.isdir(dit_path):
-        state_dict = load_state_dict_from_dcp(dit_path)
-    else:
-        state_dict = load_state_dict(dit_path)
+    state_dict = load_state_dict_from_dcp(dit_path) if os.path.isdir(dit_path) else load_state_dict(dit_path)
 
     for key in ["generator", "generator_ema"]:
-        if key in state_dict.keys():
+        if key in state_dict.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             state_dict = state_dict[key]
     for prefix in ["model.", "net.", "_fsdp_wrapped_module."]:
         state_dict = {(k[len(prefix) :] if k.startswith(prefix) else k): v for k, v in state_dict.items()}
@@ -638,14 +751,33 @@ if __name__ == "__main__":
         image_latent = None
 
     # --- Text embeddings ---
-    log.info(f"Computing text embeddings...")
-    text_emb = get_umt5_embedding(checkpoint_path=args.text_encoder_path, prompts=args.prompt).to(dtype=torch.bfloat16).cuda()
+    log.info("Computing text embeddings...")
+    tokenizer_path = args.tokenizer_path or None
+    text_emb = (
+        get_umt5_embedding(
+            checkpoint_path=args.text_encoder_path,
+            prompts=args.prompt,
+            tokenizer_path=tokenizer_path,
+        )
+        .to(dtype=torch.bfloat16)
+        .cuda()
+    )
 
     condition = {"crossattn_emb": repeat(text_emb.to(**TENSOR_KWARGS), "b l d -> (k b) l d", k=args.num_samples)}
 
     if not args.distilled and args.guidance_scale > 1.0:
-        neg_text_emb = get_umt5_embedding(checkpoint_path=args.text_encoder_path, prompts=args.negative_prompt).to(dtype=torch.bfloat16).cuda()
-        uncondition = {"crossattn_emb": repeat(neg_text_emb.to(**TENSOR_KWARGS), "b l d -> (k b) l d", k=args.num_samples)}
+        neg_text_emb = (
+            get_umt5_embedding(
+                checkpoint_path=args.text_encoder_path,
+                prompts=args.negative_prompt,
+                tokenizer_path=tokenizer_path,
+            )
+            .to(dtype=torch.bfloat16)
+            .cuda()
+        )
+        uncondition = {
+            "crossattn_emb": repeat(neg_text_emb.to(**TENSOR_KWARGS), "b l d -> (k b) l d", k=args.num_samples)
+        }
     else:
         uncondition = None
 
@@ -661,7 +793,9 @@ if __name__ == "__main__":
         if latent_frames <= 1:
             raise ValueError(f"I2V requires more than one latent frame, got num_frames={args.num_frames}")
         if (latent_frames - 1) % args.chunk_t != 0:
-            raise ValueError(f"I2V latent remaining frames ({latent_frames - 1}) must be divisible by chunk_t={args.chunk_t}")
+            raise ValueError(
+                f"I2V latent remaining frames ({latent_frames - 1}) must be divisible by chunk_t={args.chunk_t}"
+            )
         image_latent = repeat(image_latent.to(**TENSOR_KWARGS), "1 c t h w -> b c t h w", b=args.num_samples)
         noise_shape = [tokenizer.latent_ch, latent_frames - 1, latent_h, latent_w]
 
@@ -687,7 +821,9 @@ if __name__ == "__main__":
     else:
         if args.steps_per_chunk:
             raise ValueError("--steps_per_chunk is only supported with --distilled")
-        t_steps = build_shifted_ode_t_steps(args.num_steps, args.sigma_max, args.timestep_shift, TENSOR_KWARGS["device"])
+        t_steps = build_shifted_ode_t_steps(
+            args.num_steps, args.sigma_max, args.timestep_shift, TENSOR_KWARGS["device"]
+        )
         t_steps_per_chunk = None
         step_counts = None
         ode = True
@@ -700,7 +836,7 @@ if __name__ == "__main__":
         log.info(f"Chunk pattern: first_chunk_t=1 (image), chunk_t={args.chunk_t}")
     else:
         log.info(f"Chunk pattern: first_chunk_t={args.first_chunk_t}, chunk_t={args.chunk_t}")
-    log.info(f"Mode: {'distilled' if args.distilled else 'ODE'}, steps={len(t_steps)-1}, guidance={guidance}")
+    log.info(f"Mode: {'distilled' if args.distilled else 'ODE'}, steps={len(t_steps) - 1}, guidance={guidance}")
     if step_counts is not None and args.steps_per_chunk:
         log.info(f"Per-{'generated-' if is_i2v else ''}chunk distilled steps: {step_counts}")
     if args.kv_cache_policy != "keep_all":
@@ -715,7 +851,9 @@ if __name__ == "__main__":
     def _run_sampling(profile: dict | None = None):
         g = torch.Generator(device=TENSOR_KWARGS["device"])
         g.manual_seed(args.seed)
-        noise = torch.randn(args.num_samples, *noise_shape, dtype=torch.float32, device=TENSOR_KWARGS["device"], generator=g)
+        noise = torch.randn(
+            args.num_samples, *noise_shape, dtype=torch.float32, device=TENSOR_KWARGS["device"], generator=g
+        )
         if is_i2v:
             return causal_i2v_rollout_sampling(
                 net,
@@ -799,7 +937,9 @@ if __name__ == "__main__":
         if args.num_runs > 1:
             first_msg = f"  FirstChunk={chunk_times['first_chunk']:.1f}ms" if "first_chunk" in chunk_times else ""
             second_msg = f"  SecondChunk={chunk_times['second_chunk']:.1f}ms" if "second_chunk" in chunk_times else ""
-            log.info(f"  Run {ri + 1}/{args.num_runs}: DiT={dit_ms:.1f}ms  VAE={vae_ms:.1f}ms  Total={dit_ms + vae_ms:.1f}ms{first_msg}{second_msg}")
+            log.info(
+                f"  Run {ri + 1}/{args.num_runs}: DiT={dit_ms:.1f}ms  VAE={vae_ms:.1f}ms  Total={dit_ms + vae_ms:.1f}ms{first_msg}{second_msg}"
+            )
 
     net.cpu()
     torch.cuda.empty_cache()

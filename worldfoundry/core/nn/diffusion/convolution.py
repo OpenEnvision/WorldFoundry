@@ -29,10 +29,10 @@ Public surface:
 - :func:`normalization` / :class:`GroupNormSpecific` / :class:`HybridConditioner`.
 """
 
-import torch.nn as nn
 import torch
-from worldfoundry.core.model_loading.factory import instantiate_from_config
+import torch.nn as nn
 
+from worldfoundry.core.configuration.factory import instantiate_from_config
 
 # ──────────────────────────────────────────────────────────────────────────
 # Causal convolutions — pad then crop the leading axis so t cannot see t+1
@@ -150,6 +150,7 @@ def disabled_train(self, mode=True):
     does not change anymore."""
     return self
 
+
 def zero_module(module):
     """
     Zero out the parameters of a module and return it.
@@ -157,6 +158,7 @@ def zero_module(module):
     for p in module.parameters():
         p.detach().zero_()
     return module
+
 
 def scale_module(module, scale):
     """
@@ -213,21 +215,23 @@ def avg_pool_nd(dims, *args, **kwargs):
     raise ValueError(f"unsupported dimensions: {dims}")
 
 
-def nonlinearity(type='silu'):
+def nonlinearity(type="silu"):
     """Return SiLU or LeakyReLU; unknown ``type`` yields ``None`` (legacy).
 
     Callers historically treated a missing activation as optional, so this
     does not raise on an unrecognized name.
     """
-    if type == 'silu':
+    if type == "silu":
         return nn.SiLU()
-    elif type == 'leaky_relu':
+    elif type == "leaky_relu":
         return nn.LeakyReLU()
 
 
 class GroupNormSpecific(nn.GroupNorm):
     """GroupNorm subclass some U-Net checkpoints address by type name."""
-    def forward(self, x):
+
+    # Keyword callers use the upstream ``x`` name; nn.GroupNorm names its input ``input``.
+    def forward(self, x):  # ty: ignore[invalid-method-override]
         """Same as :class:`torch.nn.GroupNorm`; kept for checkpoint type identity."""
         return super().forward(x)
 
@@ -261,4 +265,4 @@ class HybridConditioner(nn.Module):
 
         c_concat = self.concat_conditioner(c_concat)
         c_crossattn = self.crossattn_conditioner(c_crossattn)
-        return {'c_concat': [c_concat], 'c_crossattn': [c_crossattn]}
+        return {"c_concat": [c_concat], "c_crossattn": [c_crossattn]}

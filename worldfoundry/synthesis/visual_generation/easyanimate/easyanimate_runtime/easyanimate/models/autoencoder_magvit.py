@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,14 +13,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, Optional, Tuple, Union
-
 import torch
 import torch.nn as nn
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.loaders.single_file_model import FromOriginalModelMixin
-from diffusers.models.autoencoders.vae import (DecoderOutput,
-                                               DiagonalGaussianDistribution)
+from diffusers.models.autoencoders.vae import DecoderOutput, DiagonalGaussianDistribution
 from diffusers.models.modeling_outputs import AutoencoderKLOutput
 from diffusers.models.modeling_utils import ModelMixin
 from diffusers.utils import logging
@@ -28,32 +27,31 @@ from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 try:
     from diffusers.loaders import FromOriginalVAEMixin
-except:
+except BaseException:
     from diffusers.loaders import FromOriginalModelMixin as FromOriginalVAEMixin
 
-from diffusers.models.attention_processor import (
-    ADDED_KV_ATTENTION_PROCESSORS, CROSS_ATTENTION_PROCESSORS, Attention,
-    AttentionProcessor, AttnAddedKVProcessor, AttnProcessor)
-from diffusers import AutoencoderKL
+from diffusers import AutoencoderKL as AutoencoderKL
 
-from .hf_loading import resolve_pretrained_subfolder
-
-from ..vae.ldm.models.cogvideox_enc_dec import (CogVideoXCausalConv3d,
-                                                CogVideoXDecoder3D,
-                                                CogVideoXEncoder3D,
-                                                CogVideoXSafeConv3d)
+from ..vae.ldm.models.cogvideox_enc_dec import (
+    CogVideoXCausalConv3d,
+    CogVideoXDecoder3D,
+    CogVideoXEncoder3D,
+    CogVideoXSafeConv3d,
+)
 from ..vae.ldm.models.omnigen_enc_dec import CausalConv3d
 from ..vae.ldm.models.omnigen_enc_dec import Decoder as omnigen_Mag_Decoder
 from ..vae.ldm.models.omnigen_enc_dec import Encoder as omnigen_Mag_Encoder
+from .hf_loading import resolve_pretrained_subfolder
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 def str_eval(item):
-    if type(item) == str:
+    if type(item) is str:
         return eval(item)
     else:
         return item
+
 
 class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
     r"""
@@ -94,12 +92,12 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         self,
         in_channels: int = 3,
         out_channels: int = 3,
-        ch =  128,
-        ch_mult = [ 1,2,4,4 ],
-        block_out_channels = [128, 256, 512, 512],
-        use_gc_blocks = None,
-        down_block_types: tuple = None,
-        up_block_types: tuple = None,
+        ch=128,
+        ch_mult=[1, 2, 4, 4],  # noqa: B006 - Keeps the upstream default object and signature.
+        block_out_channels=[128, 256, 512, 512],  # noqa: B006 - Keeps the upstream default object and signature.
+        use_gc_blocks=None,
+        down_block_types: tuple | None = None,
+        up_block_types: tuple | None = None,
         mid_block_type: str = "MidBlock3D",
         mid_block_use_attention: bool = True,
         mid_block_attention_type: str = "3d",
@@ -221,14 +219,14 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
             module.gradient_checkpointing = value
 
     def _clear_conv_cache(self):
-        for name, module in self.named_modules():
+        for _name, module in self.named_modules():
             if isinstance(module, CausalConv3d):
                 module._clear_conv_cache()
 
     @apply_forward_hook
     def encode(
         self, x: torch.FloatTensor, return_dict: bool = True
-    ) -> Union[AutoencoderKLOutput, Tuple[DiagonalGaussianDistribution]]:
+    ) -> AutoencoderKLOutput | tuple[DiagonalGaussianDistribution]:
         """
         Encode a batch of images into latents.
 
@@ -248,7 +246,9 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         if self.use_tiling and (x.shape[-1] > self.tile_sample_min_size or x.shape[-2] > self.tile_sample_min_size):
             x = self.tiled_encode(x, return_dict=return_dict)
             return x
-        if self.use_tiling_encoder and (x.shape[-1] > self.tile_sample_min_size or x.shape[-2] > self.tile_sample_min_size):
+        if self.use_tiling_encoder and (
+            x.shape[-1] > self.tile_sample_min_size or x.shape[-2] > self.tile_sample_min_size
+        ):
             x = self.tiled_encode(x, return_dict=return_dict)
             return x
 
@@ -267,14 +267,16 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
 
         return AutoencoderKLOutput(latent_dist=posterior)
 
-    def _decode(self, z: torch.FloatTensor, return_dict: bool = True) -> Union[DecoderOutput, torch.FloatTensor]:
+    def _decode(self, z: torch.FloatTensor, return_dict: bool = True) -> DecoderOutput | torch.FloatTensor:
         if self.upcast_vae:
             z = z.float()
             self.decoder = self.decoder.float()
             self.post_quant_conv = self.post_quant_conv.float()
         if self.use_tiling and (z.shape[-1] > self.tile_latent_min_size or z.shape[-2] > self.tile_latent_min_size):
             return self.tiled_decode(z, return_dict=return_dict)
-        if self.use_tiling_decoder and (z.shape[-1] > self.tile_latent_min_size or z.shape[-2] > self.tile_latent_min_size):
+        if self.use_tiling_decoder and (
+            z.shape[-1] > self.tile_latent_min_size or z.shape[-2] > self.tile_latent_min_size
+        ):
             return self.tiled_decode(z, return_dict=return_dict)
 
         z = self.post_quant_conv(z)
@@ -288,7 +290,7 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
     @apply_forward_hook
     def decode(
         self, z: torch.FloatTensor, return_dict: bool = True, generator=None
-    ) -> Union[DecoderOutput, torch.FloatTensor]:
+    ) -> DecoderOutput | torch.FloatTensor:
         """
         Decode a batch of images.
 
@@ -315,24 +317,20 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
 
         return DecoderOutput(sample=decoded)
 
-    def blend_v(
-        self, a: torch.Tensor, b: torch.Tensor, blend_extent: int
-    ) -> torch.Tensor:
+    def blend_v(self, a: torch.Tensor, b: torch.Tensor, blend_extent: int) -> torch.Tensor:
         blend_extent = min(a.shape[3], b.shape[3], blend_extent)
         for y in range(blend_extent):
-            b[:, :, :, y, :] = a[:, :, :, -blend_extent + y, :] * (
-                1 - y / blend_extent
-            ) + b[:, :, :, y, :] * (y / blend_extent)
+            b[:, :, :, y, :] = a[:, :, :, -blend_extent + y, :] * (1 - y / blend_extent) + b[:, :, :, y, :] * (
+                y / blend_extent
+            )
         return b
 
-    def blend_h(
-        self, a: torch.Tensor, b: torch.Tensor, blend_extent: int
-    ) -> torch.Tensor:
+    def blend_h(self, a: torch.Tensor, b: torch.Tensor, blend_extent: int) -> torch.Tensor:
         blend_extent = min(a.shape[4], b.shape[4], blend_extent)
         for x in range(blend_extent):
-            b[:, :, :, :, x] = a[:, :, :, :, -blend_extent + x] * (
-                1 - x / blend_extent
-            ) + b[:, :, :, :, x] * (x / blend_extent)
+            b[:, :, :, :, x] = a[:, :, :, :, -blend_extent + x] * (1 - x / blend_extent) + b[:, :, :, :, x] * (
+                x / blend_extent
+            )
         return b
 
     def tiled_encode(self, x: torch.FloatTensor, return_dict: bool = True) -> AutoencoderKLOutput:
@@ -377,7 +375,7 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
 
         return AutoencoderKLOutput(latent_dist=posterior)
 
-    def tiled_decode(self, z: torch.FloatTensor, return_dict: bool = True) -> Union[DecoderOutput, torch.FloatTensor]:
+    def tiled_decode(self, z: torch.FloatTensor, return_dict: bool = True) -> DecoderOutput | torch.FloatTensor:
         overlap_size = int(self.tile_latent_min_size * (1 - self.tile_overlap_factor))
         blend_extent = int(self.tile_sample_min_size * self.tile_overlap_factor)
         row_limit = self.tile_sample_min_size - blend_extent
@@ -413,15 +411,9 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
             result_rows.append(torch.cat(result_row, dim=4))
 
         dec = torch.cat(result_rows, dim=3)
-    
+
         # Handle the lower right corner tile separately
-        lower_right_original = z[
-            :,
-            :,
-            :,
-            -self.tile_latent_min_size:,
-            -self.tile_latent_min_size:
-        ]
+        lower_right_original = z[:, :, :, -self.tile_latent_min_size :, -self.tile_latent_min_size :]
         quantized_lower_right = self.decoder(self.post_quant_conv(lower_right_original))
 
         # Combine
@@ -451,8 +443,8 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         sample: torch.FloatTensor,
         sample_posterior: bool = False,
         return_dict: bool = True,
-        generator: Optional[torch.Generator] = None,
-    ) -> Union[DecoderOutput, torch.FloatTensor]:
+        generator: torch.Generator | None = None,
+    ) -> DecoderOutput | torch.FloatTensor:
         r"""
         Args:
             sample (`torch.FloatTensor`): Input sample.
@@ -463,10 +455,7 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         """
         x = sample
         posterior = self.encode(x).latent_dist
-        if sample_posterior:
-            z = posterior.sample(generator=generator)
-        else:
-            z = posterior.mode()
+        z = posterior.sample(generator=generator) if sample_posterior else posterior.mode()
         dec = self.decode(z).sample
 
         if not return_dict:
@@ -478,20 +467,23 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
     def from_pretrained(cls, pretrained_model_path, subfolder=None, **vae_additional_kwargs):
         import json
         import os
+
         pretrained_model_path = resolve_pretrained_subfolder(pretrained_model_path, subfolder)
 
-        config_file = os.path.join(pretrained_model_path, 'config.json')
+        config_file = os.path.join(pretrained_model_path, "config.json")
         if not os.path.isfile(config_file):
             raise RuntimeError(f"{config_file} does not exist")
-        with open(config_file, "r") as f:
+        with open(config_file) as f:
             config = json.load(f)
 
         model = cls.from_config(config, **vae_additional_kwargs)
         from diffusers.utils import WEIGHTS_NAME
+
         model_file = os.path.join(pretrained_model_path, WEIGHTS_NAME)
         model_file_safetensors = model_file.replace(".bin", ".safetensors")
         if os.path.exists(model_file_safetensors):
-            from safetensors.torch import load_file, safe_open
+            from safetensors.torch import load_file
+
             state_dict = load_file(model_file_safetensors)
         else:
             if not os.path.isfile(model_file):
@@ -553,26 +545,26 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
     """
 
     _supports_gradient_checkpointing = True
-    _no_split_modules = ["CogVideoXResnetBlock3D"]
+    _no_split_modules: ClassVar[list] = ["CogVideoXResnetBlock3D"]
 
     @register_to_config
     def __init__(
         self,
         in_channels: int = 3,
         out_channels: int = 3,
-        down_block_types: Tuple[str] = (
+        down_block_types: tuple[str] = (
             "CogVideoXDownBlock3D",
             "CogVideoXDownBlock3D",
             "CogVideoXDownBlock3D",
             "CogVideoXDownBlock3D",
         ),
-        up_block_types: Tuple[str] = (
+        up_block_types: tuple[str] = (
             "CogVideoXUpBlock3D",
             "CogVideoXUpBlock3D",
             "CogVideoXUpBlock3D",
             "CogVideoXUpBlock3D",
         ),
-        block_out_channels: Tuple[int] = (128, 256, 256, 512),
+        block_out_channels: tuple[int] = (128, 256, 256, 512),
         latent_channels: int = 16,
         layers_per_block: int = 3,
         act_fn: str = "silu",
@@ -582,9 +574,9 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
         sample_height: int = 480,
         sample_width: int = 720,
         scaling_factor: float = 1.15258426,
-        shift_factor: Optional[float] = None,
-        latents_mean: Optional[Tuple[float]] = None,
-        latents_std: Optional[Tuple[float]] = None,
+        shift_factor: float | None = None,
+        latents_mean: tuple[float] | None = None,
+        latents_std: tuple[float] | None = None,
         force_upcast: float = True,
         use_quant_conv: bool = False,
         use_post_quant_conv: bool = False,
@@ -670,10 +662,10 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
 
     def enable_tiling(
         self,
-        tile_sample_min_height: Optional[int] = None,
-        tile_sample_min_width: Optional[int] = None,
-        tile_overlap_factor_height: Optional[float] = None,
-        tile_overlap_factor_width: Optional[float] = None,
+        tile_sample_min_height: int | None = None,
+        tile_sample_min_width: int | None = None,
+        tile_overlap_factor_height: float | None = None,
+        tile_overlap_factor_width: float | None = None,
     ) -> None:
         r"""
         Enable tiled VAE decoding. When this option is enabled, the VAE will split the input tensor into tiles to
@@ -728,7 +720,7 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
     @apply_forward_hook
     def encode(
         self, x: torch.Tensor, return_dict: bool = True
-    ) -> Union[AutoencoderKLOutput, Tuple[DiagonalGaussianDistribution]]:
+    ) -> AutoencoderKLOutput | tuple[DiagonalGaussianDistribution]:
         """
         Encode a batch of images into latents.
 
@@ -767,7 +759,7 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
             return (posterior,)
         return AutoencoderKLOutput(latent_dist=posterior)
 
-    def _decode(self, z: torch.Tensor, return_dict: bool = True) -> Union[DecoderOutput, torch.Tensor]:
+    def _decode(self, z: torch.Tensor, return_dict: bool = True) -> DecoderOutput | torch.Tensor:
         batch_size, num_channels, num_frames, height, width = z.shape
 
         if self.use_tiling and (width > self.tile_latent_min_width or height > self.tile_latent_min_height):
@@ -802,7 +794,7 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
         return DecoderOutput(sample=dec)
 
     @apply_forward_hook
-    def decode(self, z: torch.Tensor, return_dict: bool = True) -> Union[DecoderOutput, torch.Tensor]:
+    def decode(self, z: torch.Tensor, return_dict: bool = True) -> DecoderOutput | torch.Tensor:
         """
         Decode a batch of images.
 
@@ -842,7 +834,7 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
             )
         return b
 
-    def tiled_decode(self, z: torch.Tensor, return_dict: bool = True) -> Union[DecoderOutput, torch.Tensor]:
+    def tiled_decode(self, z: torch.Tensor, return_dict: bool = True) -> DecoderOutput | torch.Tensor:
         r"""
         Decode a batch of images using a tiled decoder.
 
@@ -927,14 +919,11 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
         sample: torch.Tensor,
         sample_posterior: bool = False,
         return_dict: bool = True,
-        generator: Optional[torch.Generator] = None,
-    ) -> Union[torch.Tensor, torch.Tensor]:
+        generator: torch.Generator | None = None,
+    ) -> torch.Tensor | torch.Tensor:
         x = sample
         posterior = self.encode(x).latent_dist
-        if sample_posterior:
-            z = posterior.sample(generator=generator)
-        else:
-            z = posterior.mode()
+        z = posterior.sample(generator=generator) if sample_posterior else posterior.mode()
         dec = self.decode(z)
         if not return_dict:
             return (dec,)

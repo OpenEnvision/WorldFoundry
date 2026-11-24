@@ -2,14 +2,13 @@
 Based on https://github.com/buoyancy99/diffusion-forcing/blob/main/algorithms/diffusion_forcing/models/attention.py
 """
 
-from typing import Optional
-from collections import namedtuple
 import torch
-from torch import nn
-from torch.nn import functional as F
 from einops import rearrange
-from rotary_embedding_torch import RotaryEmbedding, apply_rotary_emb
+from torch import nn
+
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+from worldfoundry.core.attention.rotary.interleaved import apply_rotary_emb
+from worldfoundry.synthesis.visual_generation.open_oasis.rotary_embedding_torch import RotaryEmbedding
 
 
 class TemporalAxialAttention(nn.Module):
@@ -44,7 +43,7 @@ class TemporalAxialAttention(nn.Module):
         q = self.rotary_emb.rotate_queries_or_keys(q, self.rotary_emb.freqs)
         k = self.rotary_emb.rotate_queries_or_keys(k, self.rotary_emb.freqs)
 
-        q, k, v = map(lambda t: t.contiguous(), (q, k, v))
+        q, k, v = (t.contiguous() for t in (q, k, v))
 
         x = _worldfoundry_scaled_dot_product_attention(query=q, key=k, value=v, is_causal=self.is_causal)
 

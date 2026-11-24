@@ -142,7 +142,9 @@ def _recipe(
                 {"weights": "text-encoder", "tokenizer": "tokenizer"},
             ),
             ComponentSpec(
-                codec, _build_cosmos25_video_codec, {"weights": "vae"},
+                codec,
+                _build_cosmos25_video_codec,
+                {"weights": "vae"},
                 options={
                     "minimum_frames": minimum_frames,
                     "zero_pad_image": zero_pad_image,
@@ -250,7 +252,7 @@ def cosmos25_transfer_2b_recipe() -> NativeDiffusionRecipe:
         ),
         architecture="cosmos-transfer2.5-minimal-v4-lvg-vace-dit",
         minimum_frames=93,
-        use_karras_sigma=True,
+        use_karras_sigma=False,
         zero_pad_image=False,
         conditional_frame_timestep=0.0,
     )

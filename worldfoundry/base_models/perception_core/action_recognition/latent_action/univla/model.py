@@ -42,12 +42,8 @@ class ControllableDINOLatentActionModel(nn.Module):
         self.dino_encoder = get_dinov2_vitb14_reg_tokenizer()
         dino_dim = 768
 
-        self.action_latent = nn.Parameter(
-            torch.empty(1, 1, self.num_codes, dino_dim)
-        )
-        self.action_latent_controllable = nn.Parameter(
-            torch.empty(1, 1, self.num_codes, dino_dim)
-        )
+        self.action_latent = nn.Parameter(torch.empty(1, 1, self.num_codes, dino_dim))
+        self.action_latent_controllable = nn.Parameter(torch.empty(1, 1, self.num_codes, dino_dim))
         nn.init.uniform_(self.action_latent, a=-1, b=1)
         nn.init.uniform_(self.action_latent_controllable, a=-1, b=1)
 
@@ -69,26 +65,16 @@ class ControllableDINOLatentActionModel(nn.Module):
 
     def vq_encode(self, videos: Tensor, **_: Any) -> dict[str, Tensor]:
         if videos.ndim != 5 or videos.shape[1] != 2:
-            raise ValueError(
-                f"UniVLA expects [B, 2, C, H, W] frame pairs, got {videos.shape}"
-            )
+            raise ValueError(f"UniVLA expects [B, 2, C, H, W] frame pairs, got {videos.shape}")
 
         batch_size = videos.shape[0]
         images = rearrange(videos, "b t c h w -> (b t) c h w")
         images = self.dino_transform(images)
-        features = self.dino_encoder.forward_features(images)[
-            "x_norm_patchtokens"
-        ]
-        features = rearrange(
-            features, "(b t) l d -> b t l d", t=2
-        )
+        features = self.dino_encoder.forward_features(images)["x_norm_patchtokens"]
+        features = rearrange(features, "(b t) l d -> b t l d", t=2)
 
-        uncontrolled_prompt = self.action_latent.expand(
-            batch_size, 2, -1, -1
-        )
-        controllable_prompt = self.action_latent_controllable.expand(
-            batch_size, 2, -1, -1
-        )
+        uncontrolled_prompt = self.action_latent.expand(batch_size, 2, -1, -1)
+        controllable_prompt = self.action_latent_controllable.expand(batch_size, 2, -1, -1)
         encoded = self.encoder(
             torch.cat(
                 (controllable_prompt, uncontrolled_prompt, features),
@@ -96,13 +82,11 @@ class ControllableDINOLatentActionModel(nn.Module):
             )
         )
 
-        actions = self.to_codebook(
-            encoded[:, 1:, : self.num_codes]
-        ).reshape(batch_size, self.num_codes, self.latent_dim)
+        actions = self.to_codebook(encoded[:, 1:, : self.num_codes]).reshape(
+            batch_size, self.num_codes, self.latent_dim
+        )
         quantized, indices = self.vq_action(actions)
         return {
-            "z_q": quantized.reshape(
-                batch_size, 1, self.num_codes, self.latent_dim
-            ),
+            "z_q": quantized.reshape(batch_size, 1, self.num_codes, self.latent_dim),
             "indices": indices,
         }

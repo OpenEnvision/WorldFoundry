@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from worldfoundry.cli.dataset import _handle_dataset_locate, _handle_dataset_plan
-from worldfoundry.evaluation.tasks.datasets.manager import dataset_location_env_var
+from worldfoundry.evals.tasks.datasets.location import dataset_location_env_var
 
 
 def test_dataset_locate_prefers_per_dataset_env_override(tmp_path: Path, monkeypatch) -> None:

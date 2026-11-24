@@ -4,54 +4,21 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.models.runtime import (
+from worldfoundry.evals.models.validate import (
+    validate_pipeline_aliases_against_bindings,
+    validate_runtime_environment_imports,
+    validate_runtime_profile_references,
+)
+from worldfoundry.zoo.catalog.registry import discover_model_registry
+from worldfoundry.zoo.runtime import (
+    RuntimeEnvironmentProfile,
     RuntimeProfile,
     load_runtime_asset_profile_by_id,
     load_runtime_asset_profiles,
     load_runtime_environment_profile_by_id,
-    load_runtime_environment_profiles,
     load_runtime_profile_manifest,
     load_runtime_profiles,
-    validate_pipeline_aliases_against_bindings,
-    validate_runtime_profile_references,
 )
-from worldfoundry.evaluation.models.catalog.registry import discover_model_registry
-
-
-def test_runtime_environment_profiles_use_legacy_conda_specs(tmp_path: Path) -> None:
-    legacy_root = tmp_path / "legacy_envs"
-    (legacy_root / "video").mkdir(parents=True)
-    (legacy_root / "video" / "demo.yaml").write_text(
-        "\n".join(
-            [
-                "model_id: demo-model",
-                "env_name: worldfoundry-demo",
-                "python: '3.11'",
-                "cuda_profile: cpu",
-                "conda_packages:",
-                "- python",
-                "pip_packages:",
-                "- torch",
-                "validation_imports:",
-                "- torch",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    profiles = load_runtime_environment_profiles(
-        root=tmp_path / "missing_target",
-        legacy_root=legacy_root,
-        env_root=tmp_path / "envs",
-    )
-
-    profile = profiles["demo-model"]
-    assert profile.source == "legacy"
-    assert profile.env_name == "worldfoundry-demo"
-    assert profile.python == "3.11"
-    assert profile.cuda_profile == "cpu"
-    assert profile.to_dict()["env_prefix"].endswith("envs/worldfoundry-demo")
 
 
 def test_runtime_profile_manifest_parses_target_schema(tmp_path: Path) -> None:
@@ -236,61 +203,6 @@ def test_runtime_profile_target_tree_wins_over_legacy_profile_for_same_model_id(
     assert profile.execution["pipeline_binding"] == "target-binding"
 
 
-def test_runtime_environment_target_manifest_overrides_legacy(tmp_path: Path) -> None:
-    legacy_root = tmp_path / "legacy_envs"
-    target_root = tmp_path / "target_envs"
-    legacy_root.mkdir()
-    target_root.mkdir()
-    (legacy_root / "demo.yaml").write_text(
-        "model_id: demo-model\nenv_name: legacy-env\npython: '3.10'\n",
-        encoding="utf-8",
-    )
-    (target_root / "demo.yaml").write_text(
-        "\n".join(
-            [
-                "environment_id: target-demo",
-                "model_id: demo-model",
-                "python: '3.12'",
-                "system:",
-                "  cuda: cu121",
-                "packages:",
-                "  conda:",
-                "  - python",
-                "  pip:",
-                "  - diffusers",
-                "env:",
-                "  required:",
-                "  - WORLDFOUNDRY_MODEL_DIR",
-                "  optional:",
-                "  - WORLDFOUNDRY_OUTPUT_DIR",
-                "commands:",
-                "  setup:",
-                "  - pip install -e .",
-                "conda:",
-                "  env_name: target-env",
-                "validation:",
-                "  imports:",
-                "  - diffusers",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    profile = load_runtime_environment_profile_by_id("demo-model", root=target_root, legacy_root=legacy_root)
-
-    assert profile.source == "target"
-    assert profile.schema_version is None
-    assert profile.environment_id == "target-demo"
-    assert profile.env_name == "target-env"
-    assert profile.python == "3.12"
-    assert profile.cuda_profile == "cu121"
-    assert profile.pip_packages == ("diffusers",)
-    assert profile.env_required == ("WORLDFOUNDRY_MODEL_DIR",)
-    assert profile.env_optional == ("WORLDFOUNDRY_OUTPUT_DIR",)
-    assert profile.setup_commands == ("pip install -e .",)
-
-
 def test_runtime_environment_manifest_rejects_unsupported_schema_version(tmp_path: Path) -> None:
     path = tmp_path / "bad-env.yaml"
     path.write_text(
@@ -401,7 +313,7 @@ def test_runtime_profiles_cover_matrix_game_1_binding_environment_and_assets() -
     registry_entry = discover_model_registry().get("matrix-game-1")
 
     assert runtime_profile.display_name == "Matrix-Game 1.0"
-    assert runtime_profile.schema_version is None
+    assert runtime_profile.schema_version == 2
     assert runtime_profile.task_family == "world_model"
     assert runtime_profile.artifact_kind == "generated_world"
     assert runtime_profile.artifact_filename == "world.mp4"
@@ -411,7 +323,10 @@ def test_runtime_profiles_cover_matrix_game_1_binding_environment_and_assets() -
     assert "torch" in environment.validation_imports
     assert assets.source == "runtime_profile"
     assert assets.assets[0].repo_id == "Skywork/Matrix-Game"
-    assert registry_entry.pipeline_target == "worldfoundry.pipelines.matrix_game.pipeline_matrix_game_1:MatrixGame1Pipeline"
+    assert (
+        registry_entry.pipeline_target
+        == "worldfoundry.pipelines.matrix_game.pipeline_matrix_game_1:MatrixGame1Pipeline"
+    )
 
 
 def test_runtime_profile_validator_checks_references_artifacts_and_aliases(tmp_path: Path) -> None:
@@ -469,3 +384,24 @@ def test_runtime_profile_validator_checks_references_artifacts_and_aliases(tmp_p
     }
     assert {issue.code for issue in alias_issues} == {"pipeline_alias_unknown_canonical"}
     assert default_alias_issues == ()
+
+
+def test_runtime_environment_validator_flags_missing_in_tree_imports() -> None:
+    environment = RuntimeEnvironmentProfile(
+        environment_id="stale-env",
+        model_id="stale-model",
+        env_name="stale-env",
+        validation_imports=(
+            "torch",
+            "worldfoundry.base_models.diffusion_model.models.networks.ltx.model",
+            "worldfoundry.base_models.diffusion_model.models.representations",
+            "worldfoundry.base_models.diffusion_model.models.networks.ltx.missing",
+        ),
+    )
+
+    issues = validate_runtime_environment_imports({"stale-env": environment})
+
+    assert [(issue.code, issue.field) for issue in issues] == [
+        ("runtime_environment_import_missing", "environments.stale-env.validation_imports")
+    ]
+    assert "networks.ltx.missing" in issues[0].message

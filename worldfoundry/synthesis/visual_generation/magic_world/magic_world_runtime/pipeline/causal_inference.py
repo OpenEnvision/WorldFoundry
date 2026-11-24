@@ -1,47 +1,41 @@
-from typing import List, Optional
 import torch
 
-from utils.wan_wrapper import WanDiffusionWrapper, WanTextEncoder, WanVAEWrapper
-
 from worldfoundry.core.vram import (
-    DynamicSwapInstaller,
     get_cuda_free_memory_gb,
     gpu,
     move_model_to_device_with_memory_preservation,
 )
 
-def cond_current(conditional_dict, current_start_frame, num_frame_per_block):
+from ..utils.wan_wrapper import WanDiffusionWrapper, WanTextEncoder, WanVAEWrapper
 
+
+def cond_current(conditional_dict, current_start_frame, num_frame_per_block):
     new_cond = {}
 
     new_cond["prompt_embeds"] = conditional_dict["prompt_embeds"]
-    new_cond["y"] = conditional_dict["y"][:, :, current_start_frame: current_start_frame + num_frame_per_block]
+    new_cond["y"] = conditional_dict["y"][:, :, current_start_frame : current_start_frame + num_frame_per_block]
     new_cond["clip_fea"] = conditional_dict["clip_fea"]
     new_cond["y_history"] = conditional_dict["y_history"]
-    new_cond["y_camera"] = conditional_dict["y_camera"][:, :, current_start_frame: current_start_frame + num_frame_per_block]
+    new_cond["y_camera"] = conditional_dict["y_camera"][
+        :, :, current_start_frame : current_start_frame + num_frame_per_block
+    ]
 
     return new_cond
 
+
 class CausalInferencePipeline(torch.nn.Module):
-    def __init__(
-            self,
-            args,
-            device,
-            generator=None,
-            text_encoder=None,
-            vae=None
-    ):
+    def __init__(self, args, device, generator=None, text_encoder=None, vae=None):
         super().__init__()
         # Step 1: Initialize all models
-        self.generator = WanDiffusionWrapper(
-            **getattr(args, "model_kwargs", {}), is_causal=True) if generator is None else generator
+        self.generator = (
+            WanDiffusionWrapper(**getattr(args, "model_kwargs", {}), is_causal=True) if generator is None else generator
+        )
         self.text_encoder = WanTextEncoder() if text_encoder is None else text_encoder
         self.vae = WanVAEWrapper() if vae is None else vae
 
         # Step 2: Initialize all causal hyperparmeters
         self.scheduler = self.generator.get_scheduler()
-        self.denoising_step_list = torch.tensor(
-            args.denoising_step_list, dtype=torch.long)
+        self.denoising_step_list = torch.tensor(args.denoising_step_list, dtype=torch.long)
         if args.warp_denoising_step:
             timesteps = torch.cat((self.scheduler.timesteps.cpu(), torch.tensor([0], dtype=torch.float32)))
             self.denoising_step_list = timesteps[1000 - self.denoising_step_list]
@@ -63,12 +57,12 @@ class CausalInferencePipeline(torch.nn.Module):
     def inference(
         self,
         noise: torch.Tensor,
-        text_prompts: List[str],
-        initial_latent: Optional[torch.Tensor] = None,
-        y_input: Optional[torch.Tensor] = None,
-        y_history: Optional[torch.Tensor] = None,
-        y_camera_input: Optional[torch.Tensor] = None,
-        clip_context: Optional[torch.Tensor] = None,
+        text_prompts: list[str],
+        initial_latent: torch.Tensor | None = None,
+        y_input: torch.Tensor | None = None,
+        y_history: torch.Tensor | None = None,
+        y_camera_input: torch.Tensor | None = None,
+        clip_context: torch.Tensor | None = None,
         return_latents: bool = False,
         profile: bool = False,
         low_memory: bool = False,
@@ -102,25 +96,25 @@ class CausalInferencePipeline(torch.nn.Module):
         num_input_frames = initial_latent.shape[1] if initial_latent is not None else 0
         num_output_frames = num_frames + num_input_frames  # add the initial latent frames
 
-        conditional_dict = self.text_encoder(
-            text_prompts=text_prompts
-        )
+        conditional_dict = self.text_encoder(text_prompts=text_prompts)
 
-        conditional_dict.update({
+        conditional_dict.update(
+            {
                 "clip_fea": clip_context,
                 "y": y_input,
                 "y_history": y_history,
                 "y_camera": y_camera_input,
-            })
+            }
+        )
 
         if low_memory:
             gpu_memory_preservation = get_cuda_free_memory_gb(gpu) + 5
-            move_model_to_device_with_memory_preservation(self.text_encoder, target_device=gpu, preserved_memory_gb=gpu_memory_preservation)
+            move_model_to_device_with_memory_preservation(
+                self.text_encoder, target_device=gpu, preserved_memory_gb=gpu_memory_preservation
+            )
 
         output = torch.zeros(
-            [batch_size, num_output_frames, num_channels, height, width],
-            device=noise.device,
-            dtype=noise.dtype
+            [batch_size, num_output_frames, num_channels, height, width], device=noise.device, dtype=noise.dtype
         )
 
         # Set up profiling if requested
@@ -138,16 +132,8 @@ class CausalInferencePipeline(torch.nn.Module):
 
         # Step 1: Initialize KV cache to all zeros
         if self.kv_cache1 is None:
-            self._initialize_kv_cache(
-                batch_size=batch_size,
-                dtype=noise.dtype,
-                device=noise.device
-            )
-            self._initialize_crossattn_cache(
-                batch_size=batch_size,
-                dtype=noise.dtype,
-                device=noise.device
-            )
+            self._initialize_kv_cache(batch_size=batch_size, dtype=noise.dtype, device=noise.device)
+            self._initialize_crossattn_cache(batch_size=batch_size, dtype=noise.dtype, device=noise.device)
         else:
             # reset cross attn cache
             for block_index in range(self.num_transformer_blocks):
@@ -155,9 +141,11 @@ class CausalInferencePipeline(torch.nn.Module):
             # reset kv cache
             for block_index in range(len(self.kv_cache1)):
                 self.kv_cache1[block_index]["global_end_index"] = torch.tensor(
-                    [0], dtype=torch.long, device=noise.device)
+                    [0], dtype=torch.long, device=noise.device
+                )
                 self.kv_cache1[block_index]["local_end_index"] = torch.tensor(
-                    [0], dtype=torch.long, device=noise.device)
+                    [0], dtype=torch.long, device=noise.device
+                )
 
         # Step 2: Cache context feature
         current_start_frame = 0
@@ -178,14 +166,15 @@ class CausalInferencePipeline(torch.nn.Module):
             #     )
             #     current_start_frame += 1
             # else:
-                # Assume num_input_frames is self.num_frame_per_block * num_input_blocks
+            # Assume num_input_frames is self.num_frame_per_block * num_input_blocks
             assert num_input_frames % self.num_frame_per_block == 0
             num_input_blocks = num_input_frames // self.num_frame_per_block
 
             for _ in range(num_input_blocks):
-                current_ref_latents = \
-                    initial_latent[:, current_start_frame:current_start_frame + self.num_frame_per_block]
-                output[:, current_start_frame:current_start_frame + self.num_frame_per_block] = current_ref_latents
+                current_ref_latents = initial_latent[
+                    :, current_start_frame : current_start_frame + self.num_frame_per_block
+                ]
+                output[:, current_start_frame : current_start_frame + self.num_frame_per_block] = current_ref_latents
 
                 self.generator(
                     noisy_image_or_video=current_ref_latents,
@@ -205,22 +194,23 @@ class CausalInferencePipeline(torch.nn.Module):
         # Step 3: Temporal denoising loop
         all_num_frames = [self.num_frame_per_block] * num_blocks
         if self.independent_first_frame and initial_latent is None:
-            all_num_frames = [1] + all_num_frames
+            all_num_frames = [1] + all_num_frames  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         for current_num_frames in all_num_frames:
             if profile:
                 block_start.record()
 
             noisy_input = noise[
-                :, current_start_frame - num_input_frames:current_start_frame + current_num_frames - num_input_frames]
+                :, current_start_frame - num_input_frames : current_start_frame + current_num_frames - num_input_frames
+            ]
 
             # Step 3.1: Spatial denoising loop
             for index, current_timestep in enumerate(self.denoising_step_list):
                 # print(f"current_timestep: {current_timestep}")
                 # set current timestep
-                timestep = torch.ones(
-                    [batch_size, current_num_frames],
-                    device=noise.device,
-                    dtype=torch.int64) * current_timestep
+                timestep = (
+                    torch.ones([batch_size, current_num_frames], device=noise.device, dtype=torch.int64)
+                    * current_timestep
+                )
 
                 if index < len(self.denoising_step_list) - 1:
                     _, denoised_pred = self.generator(
@@ -229,14 +219,14 @@ class CausalInferencePipeline(torch.nn.Module):
                         timestep=timestep,
                         kv_cache=self.kv_cache1,
                         crossattn_cache=self.crossattn_cache,
-                        current_start=current_start_frame * self.frame_seq_length
+                        current_start=current_start_frame * self.frame_seq_length,
                     )
                     next_timestep = self.denoising_step_list[index + 1]
                     noisy_input = self.scheduler.add_noise(
                         denoised_pred.flatten(0, 1),
                         torch.randn_like(denoised_pred.flatten(0, 1)),
-                        next_timestep * torch.ones(
-                            [batch_size * current_num_frames], device=noise.device, dtype=torch.long)
+                        next_timestep
+                        * torch.ones([batch_size * current_num_frames], device=noise.device, dtype=torch.long),
                     ).unflatten(0, denoised_pred.shape[:2])
                 else:
                     # for getting real output
@@ -246,11 +236,11 @@ class CausalInferencePipeline(torch.nn.Module):
                         timestep=timestep,
                         kv_cache=self.kv_cache1,
                         crossattn_cache=self.crossattn_cache,
-                        current_start=current_start_frame * self.frame_seq_length
+                        current_start=current_start_frame * self.frame_seq_length,
                     )
 
             # Step 3.2: record the model's output
-            output[:, current_start_frame:current_start_frame + current_num_frames] = denoised_pred
+            output[:, current_start_frame : current_start_frame + current_num_frames] = denoised_pred
 
             # Step 3.3: rerun with timestep zero to update KV cache using clean context
             context_timestep = torch.ones_like(timestep) * self.args.context_noise
@@ -295,7 +285,9 @@ class CausalInferencePipeline(torch.nn.Module):
             print(f"  - Initialization/caching time: {init_time:.2f} ms ({100 * init_time / total_time:.2f}%)")
             print(f"  - Diffusion generation time: {diffusion_time:.2f} ms ({100 * diffusion_time / total_time:.2f}%)")
             for i, block_time in enumerate(block_times):
-                print(f"    - Block {i} generation time: {block_time:.2f} ms ({100 * block_time / diffusion_time:.2f}% of diffusion)")
+                print(
+                    f"    - Block {i} generation time: {block_time:.2f} ms ({100 * block_time / diffusion_time:.2f}% of diffusion)"
+                )
             print(f"  - VAE decoding time: {vae_time:.2f} ms ({100 * vae_time / total_time:.2f}%)")
             print(f"  - Total time: {total_time:.2f} ms")
 
@@ -309,7 +301,7 @@ class CausalInferencePipeline(torch.nn.Module):
         Initialize a Per-GPU KV cache for the Wan model.
         """
         kv_cache1 = []
-        if self.local_attn_size != -1:
+        if self.local_attn_size != -1:  # noqa: SIM108 - Branches carry per-case comments.
             # Use the local attention size to compute the KV cache size
             kv_cache_size = self.local_attn_size * self.frame_seq_length
         else:
@@ -317,12 +309,14 @@ class CausalInferencePipeline(torch.nn.Module):
             kv_cache_size = 32760
 
         for _ in range(self.num_transformer_blocks):
-            kv_cache1.append({
-                "k": torch.zeros([batch_size, kv_cache_size, 12, 128], dtype=dtype, device=device),
-                "v": torch.zeros([batch_size, kv_cache_size, 12, 128], dtype=dtype, device=device),
-                "global_end_index": torch.tensor([0], dtype=torch.long, device=device),
-                "local_end_index": torch.tensor([0], dtype=torch.long, device=device)
-            })
+            kv_cache1.append(
+                {
+                    "k": torch.zeros([batch_size, kv_cache_size, 12, 128], dtype=dtype, device=device),
+                    "v": torch.zeros([batch_size, kv_cache_size, 12, 128], dtype=dtype, device=device),
+                    "global_end_index": torch.tensor([0], dtype=torch.long, device=device),
+                    "local_end_index": torch.tensor([0], dtype=torch.long, device=device),
+                }
+            )
 
         self.kv_cache1 = kv_cache1  # always store the clean cache
 
@@ -333,9 +327,11 @@ class CausalInferencePipeline(torch.nn.Module):
         crossattn_cache = []
 
         for _ in range(self.num_transformer_blocks):
-            crossattn_cache.append({
-                "k": torch.zeros([batch_size, 512, 12, 128], dtype=dtype, device=device),
-                "v": torch.zeros([batch_size, 512, 12, 128], dtype=dtype, device=device),
-                "is_init": False
-            })
+            crossattn_cache.append(
+                {
+                    "k": torch.zeros([batch_size, 512, 12, 128], dtype=dtype, device=device),
+                    "v": torch.zeros([batch_size, 512, 12, 128], dtype=dtype, device=device),
+                    "is_init": False,
+                }
+            )
         self.crossattn_cache = crossattn_cache

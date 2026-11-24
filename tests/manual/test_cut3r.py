@@ -1,11 +1,9 @@
-import sys
 import os
-from pathlib import Path
+import sys
 
 sys.path.append("..")
 
 from worldfoundry.pipelines.cut3r.pipeline_cut3r import CUT3RPipeline
-
 
 DATA_PATH = os.environ.get("CUT3R_DATA_PATH", "./worldfoundry/data/test_cases/test_image_case1/ref_image.png")
 MODEL_NAME = os.environ.get("CUT3R_MODEL_PATH", "liguang0115/cut3r")

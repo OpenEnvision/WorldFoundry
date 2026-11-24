@@ -9,7 +9,6 @@ from .pipeline_utils import PipelineABC
 
 
 def _load_target(target: str) -> type[Any]:
-    """Load target helper function."""
     module_name, class_name = target.split(":", 1)
     # Dynamically load target module to prevent eager-import overhead
     module = importlib.import_module(module_name)
@@ -19,8 +18,8 @@ def _load_target(target: str) -> type[Any]:
 class _ComponentPipelineMeta(type):
     """Metaclass for ComponentPipeline that dynamically resolves and loads target components on access."""
 
-    _COMPONENT_ATTRIBUTES = {"OPERATOR_CLS", "MEMORY_CLS", "SYNTHESIS_CLS"}
-    _TARGET_ATTRIBUTES = {
+    _COMPONENT_ATTRIBUTES: ClassVar[set[str]] = {"OPERATOR_CLS", "MEMORY_CLS", "SYNTHESIS_CLS"}
+    _TARGET_ATTRIBUTES: ClassVar[dict[str, str]] = {
         "OPERATOR_CLS": "OPERATOR_TARGET",
         "MEMORY_CLS": "MEMORY_TARGET",
         "SYNTHESIS_CLS": "SYNTHESIS_TARGET",
@@ -92,7 +91,6 @@ def _component_pipeline_class(
     generation_type: str | None = None,
     model_path_option: str = "repo_root",
 ) -> type[ComponentPipeline]:
-    """Component pipeline class helper function."""
     attributes: dict[str, Any] = {
         "__doc__": doc,
         "__module__": __name__,
@@ -252,7 +250,6 @@ StarVLAPipeline.MODEL_PATH_OPTION = "checkpoint_dir"
 def _official_policy_pipeline(
     name: str, *, model_id: str, doc: str, generation_type: str = "vla_policy"
 ) -> type[ComponentPipeline]:
-    """Official policy pipeline helper function."""
     return _component_pipeline_class(
         name,
         doc=doc,
@@ -426,15 +423,6 @@ DreamDojoPipeline = _component_pipeline_class(
 )
 
 
-DVLTPipeline = _component_pipeline_class(
-    "DVLTPipeline",
-    doc="WorldFoundry pipeline for the in-tree DVLT multi-view 3D reconstruction runtime.",
-    model_id="dvlt",
-    operator_target="worldfoundry.operators.dvlt_operator:DVLTOperator",
-    memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
-    synthesis_target="worldfoundry.base_models.three_dimensions.depth.dvlt:DVLTSynthesis",
-)
-DVLTPipeline.MODEL_PATH_OPTION = "checkpoint_path"
 OpenMAGVIT2Pipeline = _component_pipeline_class(
     "OpenMAGVIT2Pipeline",
     doc="WorldFoundry video/token-generation pipeline for Open-MAGVIT2.",
@@ -460,15 +448,6 @@ ShowOPipeline = _component_pipeline_class(
     memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
     synthesis_target="worldfoundry.synthesis.visual_generation.show_o:ShowOSynthesis",
 )
-Splatt3RPipeline = _component_pipeline_class(
-    "Splatt3RPipeline",
-    doc="WorldFoundry 3D Gaussian splatting pipeline for Splatt3R.",
-    model_id="splatt3r",
-    operator_target="worldfoundry.operators.splatt3r_operator:Splatt3ROperator",
-    memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
-    synthesis_target="worldfoundry.base_models.three_dimensions.general_3d.splatt3r:Splatt3RSynthesis",
-)
-Splatt3RPipeline.MODEL_PATH_OPTION = "checkpoint_path"
 ZeroScopePipeline = _component_pipeline_class(
     "ZeroScopePipeline",
     doc="WorldFoundry video-generation pipeline for ZeroScope.",
@@ -482,20 +461,19 @@ ZeroScopePipeline.MODEL_PATH_OPTION = "model_path"
 __all__ = [
     "ACTPipeline",
     "AnimateDiffPipeline",
-    "BeingH07Pipeline",
     "BeingH05Pipeline",
+    "BeingH07Pipeline",
     "CameraCtrlPipeline",
     "CogACTPipeline",
     "ComponentPipeline",
     "DBCogACTPipeline",
-    "DVLTPipeline",
     "DiffusionPolicyPipeline",
     "DreamDojoPipeline",
     "DreamZeroPipeline",
     "DualCamCtrlPipeline",
     "FastWAMPipeline",
-    "GigaBrain0Pipeline",
     "GR00TPipeline",
+    "GigaBrain0Pipeline",
     "LAPAPipeline",
     "LastR1Pipeline",
     "LingBotVAPipeline",
@@ -514,7 +492,6 @@ __all__ = [
     "RoboFlamingoPipeline",
     "ShowOPipeline",
     "SmolVLAPipeline",
-    "Splatt3RPipeline",
     "SpiritV15Pipeline",
     "StarVLAPipeline",
     "VLANeXtPipeline",

@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict
 from torch import Tensor
 
 if TYPE_CHECKING:
-    from mira.world_model.actions_config import ActionTensors
+    from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.world_model.actions_config import ActionTensors
 
 
 def embeddings_pca_to_rgb(
@@ -43,7 +43,7 @@ def embeddings_pca_to_rgb(
     Returns:
         Tensor of shape (B, T, 3, output_height, output_width), dtype uint8.
     """
-    from sklearn.decomposition import PCA  # type: ignore[import-not-found]  # noqa: PLC0415 -- optional dep
+    from sklearn.decomposition import PCA  # type: ignore[import-not-found]  # optional dep
 
     b, t, _c, h, w = embeddings.shape
 
@@ -156,7 +156,7 @@ def videos_for_wandb(videos: dict[str, VideoForWandb], fps: float = 10) -> Itera
     Creating ``wandb.Video`` from a video Tensor directly can hang in some cases and crash training.
     Writing the video to a temporary file first and uploading that works reliably.
     """
-    import wandb  # noqa: PLC0415 -- optional dep, used only here
+    import wandb  # optional dep, used only here
 
     tmp_files: list[tempfile._TemporaryFileWrapper] = []
     try:
@@ -164,7 +164,7 @@ def videos_for_wandb(videos: dict[str, VideoForWandb], fps: float = 10) -> Itera
         for key, value in videos.items():
             video_tensor = videos_to_grid(value.video)
 
-            f = tempfile.NamedTemporaryFile(suffix=".mp4", delete=True)
+            f = tempfile.NamedTemporaryFile(suffix=".mp4", delete=True)  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
             tmp_files.append(f)
             write_video_ffmpeg(f.name, video_tensor.cpu(), fps=fps)
             wandb_videos[key] = wandb.Video(f.name, format="mp4", caption=value.caption)
@@ -225,9 +225,7 @@ def visualize_batch(videos: Tensor, actions: ActionTensors, action_temporal_down
     assert videos.shape[:2] == actions.key_presses.shape[:2], (
         f"Mismatch: {videos.shape[:2]=}, {actions.key_presses.shape[:2]=}"
     )
-    visualized_videos = [
-        visualize_sample(videos[i], actions.slice_batch(i, i + 1)) for i in range(videos.shape[0])
-    ]
+    visualized_videos = [visualize_sample(videos[i], actions.slice_batch(i, i + 1)) for i in range(videos.shape[0])]
     return torch.stack(visualized_videos, dim=0)
 
 
@@ -331,7 +329,7 @@ def draw_keyboard_video(
             frames_since_press = t - last_pressed_frame[key_to_idx[key_name]]
             alpha = 1.0 - max(0, min(1, frames_since_press / fade_frames))
             faded_color = tuple(
-                int(bg * (1 - alpha) + pressed * alpha) for bg, pressed in zip(key_color, pressed_color)
+                int(bg * (1 - alpha) + pressed * alpha) for bg, pressed in zip(key_color, pressed_color, strict=False)
             )
             draw.rectangle([x, y, x + w, y + h], fill=faded_color, width=outline_width)
 

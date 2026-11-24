@@ -5,26 +5,26 @@ description: Score generated artifacts with benchmarks, metrics, and reproducibl
 
 Evaluation turns model outputs into reviewable evidence: prepare inputs, generate or import results, score them, and write a scorecard. Model launch details stay in runners; benchmarks consume normalized `GenerationResult` rows. Scoring and leaderboard claims are separate — a successful framework import is not the same as an official leaderboard run.
 
-For a first end-to-end path, use [Quickstart](/docs/quickstart). For flags and discovery commands, see [CLI](/docs/reference/cli). For per-benchmark layouts, see [Benchmark Hub](/docs/evaluation/benchmark-hub). For metric recipes, see [Metrics](/docs/evaluation/metrics).
+For a first end-to-end path, use [Quickstart](/docs/quickstart). For flags and discovery commands, see [CLI](/docs/reference/cli). For per-benchmark layouts, see [Benchmark Hub](/docs/evaluation/benchmark-hub). For metric recipes, see [Metrics](/docs/evaluation/metrics). For 15-model H200 inference speedups and quality verification, see [VideoGen & World Model Acceleration Benchmarks](/docs/guides/videogen-acceleration-benchmarks).
 
 ## What to run
 
-- **Score a directory with a complete benchmark protocol** — `worldfoundry-eval score --benchmark <id> --artifacts <dir> ...`
-- **Generate from a dataset manifest, then score metric IDs** — `worldfoundry-eval generate-score --model <id> --dataset-manifest <file> ...`
-- **Reproduce a known model × benchmark configuration** — `worldfoundry-eval reproduce --recipe <recipe.yaml> ...`
-- **Run a new/custom model on an existing benchmark** — `worldfoundry-eval run --model <id> --model-manifest-dir <dir> --benchmark <id> ...`
-- **Score existing JSON/JSONL results** — `worldfoundry-eval evaluate --mode existing-results ...`
-- **Build a request ledger from a task** — `worldfoundry-eval task materialize ...`
-- **Run one benchmark × model** — `worldfoundry-eval run --benchmark <id> --model <id> ...`
-- **Import official-shaped results** — `worldfoundry-eval zoo benchmark-run --mode official-validation ...`
-- **Try a new benchmark manifest** — `worldfoundry-eval run --benchmark-manifest-dir <dir> --benchmark <id> ...`
-- **List metric IDs** — `worldfoundry-eval metric list`
+- **Score a directory with a complete benchmark protocol** — `wf score --benchmark <id> --artifacts <dir> ...`
+- **Generate from a dataset manifest, then score metric IDs** — `wf generate-score --model <id> --dataset-manifest <file> ...`
+- **Reproduce a known model × benchmark configuration** — `wf reproduce --recipe <recipe.yaml> ...`
+- **Run a new/custom model on an existing benchmark** — `wf run --model <id> --model-manifest-dir <dir> --benchmark <id> ...`
+- **Score existing JSON/JSONL results** — `wf evaluate --mode existing-results ...`
+- **Build a request ledger from a task** — `wf task materialize ...`
+- **Run one benchmark × model** — `wf run --benchmark <id> --model <id> ...`
+- **Import official-shaped results** — `wf zoo benchmark-run --mode official-validation ...`
+- **Try a new benchmark manifest** — `wf run --benchmark-manifest-dir <dir> --benchmark <id> ...`
+- **List metric IDs** — `wf metric list`
 
-Default user shape is `worldfoundry-eval run`. Use `evaluate` when you already have materialized requests or results. Use `zoo benchmark-run` for integrated external benchmarks where you supply the data root, generated artifacts, or official result files.
+Default user shape is `wf run`. Use `evaluate` when you already have materialized requests or results. Use `zoo benchmark-run` for integrated external benchmarks where you supply the data root, generated artifacts, or official result files.
 
 ## Choose by intent
 
-The CLI, TUI, and Workspace compile these user intents onto the same two execution requests; they do not maintain separate inference or metric implementations.
+The CLI, TUI, and Workspace compile these user intents onto the same two execution requests and share one inference and metric implementation.
 
 - **Official reproduction** — Pinned recipe, official sample coverage, model generation settings, and benchmark runtime settings. Classification: `reproduction`.
 - **Model benchmark** — In-tree model plus the benchmark's official prompt/data protocol. Classification: `protocol_compliant`.
@@ -48,7 +48,7 @@ Models and benchmarks meet only through standard artifacts and manifests. The mo
 
 ```bash
 # Materialize a small request ledger
-worldfoundry-eval task materialize <task-name> \
+wf task materialize <task-name> \
   --benchmark <benchmark-id> \
   --dataset-manifest /path/to/dataset_manifest.json \
   --num-samples 8 \
@@ -56,7 +56,7 @@ worldfoundry-eval task materialize <task-name> \
   --json
 
 # Score existing results
-worldfoundry-eval evaluate \
+wf evaluate \
   --mode existing-results \
   --results-path tmp/results.jsonl \
   --output-dir tmp/evaluate_existing \
@@ -66,7 +66,7 @@ worldfoundry-eval evaluate \
   --json
 
 # Apply VBench's complete protocol to videos generated elsewhere
-worldfoundry-eval score \
+wf score \
   --benchmark vbench \
   --artifacts /path/to/videos \
   --output-dir tmp/vbench_custom \
@@ -74,7 +74,7 @@ worldfoundry-eval score \
   --json
 
 # Run an in-tree model over a checksum-verified dataset manifest
-worldfoundry-eval generate-score \
+wf generate-score \
   --model <model-id> \
   --dataset-manifest /path/to/dataset_manifest.json \
   --metric artifact_count \
@@ -83,7 +83,7 @@ worldfoundry-eval generate-score \
   --json
 
 # Run one benchmark cell
-worldfoundry-eval run \
+wf run \
   --benchmark <benchmark-id> \
   --model <model-id> \
   --output-dir tmp/benchmark_run \
@@ -91,7 +91,7 @@ worldfoundry-eval run \
   --json
 
 # Import official-shaped results (framework evidence, not a leaderboard claim)
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -131,9 +131,9 @@ reference:
   reported_score: <value>
 ```
 
-Run `worldfoundry-eval reproduce --recipe recipe.yaml --output-dir tmp/reproduce --plan-only --json` first. The prepared record includes the recipe and requests SHA-256 values, source fields, model/benchmark revisions, scope, and leaderboard candidacy; execution still verifies the benchmark runner and local assets.
+Run `wf reproduce --recipe recipe.yaml --output-dir tmp/reproduce --plan-only --json` first. The prepared record includes the recipe and requests SHA-256 values, source fields, model/benchmark revisions, scope, and leaderboard candidacy; execution still verifies the benchmark runner and local assets.
 
-Benchmark-specific layouts and flags belong on each Benchmark Hub page.
+Benchmark-specific layouts and flags are on each Benchmark Hub page.
 
 ## Outputs
 
@@ -186,5 +186,6 @@ Subsystem ownership and data flow: [Evaluation core](/docs/maintainers/architect
 
 - [Benchmark Hub](/docs/evaluation/benchmark-hub) — per-benchmark setup and run notes
 - [Metrics](/docs/evaluation/metrics) — in-tree scorers and compute APIs
+- [VideoGen & World Model Acceleration Benchmarks](/docs/guides/videogen-acceleration-benchmarks) — 15-model H200 speedup & quality benchmark report
 - [Supported models](/docs/guides/supported-models) — catalog status
 - [Embodied official runtime](/docs/evaluation/embodied-official-runtime) — Docker / simulator path

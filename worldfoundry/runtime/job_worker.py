@@ -15,7 +15,7 @@ from pathlib import Path
 # Launched by absolute filename so arbitrary command working directories and
 # source checkouts work without depending on the controller's sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from worldfoundry.core.execution.process import process_identity  # noqa: E402
+from worldfoundry.core.execution.process import process_identity
 
 
 def _members() -> list[int]:

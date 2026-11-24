@@ -31,7 +31,7 @@ integration:
   - WorldFoundry exposes an in-tree adapter that runs the upstream LagrNVS minimal_inference.py command.
   - Missing HF_TOKEN/gated checkpoint access is reported at inference time.
 runtime_profile: runtime-profile:lagernvs
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: lagernvs
 runner_parity:
   status: pending
@@ -46,15 +46,13 @@ docs:
   publisher: Meta AI (FAIR)
   publisher_kind: company
   publisher_zh: Meta AI（FAIR）
-  overview: LagrNVS is Meta's novel-view-synthesis model for rendering new camera paths through a scene (facebook/lagernvs_general_512). WorldFoundry wraps the upstream minimal_inference.py command with an in-tree adapter; the checkpoint is gated on Hugging Face and missing HF_TOKEN access is reported at inference time.
-  overview_zh: LagrNVS 是 Meta 的新视角合成模型，用于沿新的相机路径渲染场景（facebook/lagernvs_general_512）。 WorldFoundry 用树内适配器封装上游 minimal_inference.py 命令；checkpoint 在 Hugging Face 上为 gated， HF_TOKEN 缺失会在推理时报告。
-  architecture: The catalog records a novel-view/camera-path rendering model at 512 resolution; internals are not recorded in this repository. License is the FAIR non-commercial research license.
-  architecture_zh: catalog 记录其为 512 分辨率的新视角/相机路径渲染模型；内部细节仓库未记录。许可为 FAIR 非商用研究许可。
-  usage_notes: 'Runner parity is pending: pipeline imports and plan-only inference are wired, and full artifact parity needs the gated checkpoint plus CUDA. Accept the gated terms and set HF_TOKEN before running.'
-  usage_notes_zh: runner parity 为 pending：pipeline 导入与 plan-only 推理已接好，完整产物一致性需要 gated checkpoint 与 CUDA。运行前请先接受 gated 条款并设置 HF_TOKEN。
+  overview: LagrNVS is Meta's novel-view-synthesis model for rendering new camera paths through a scene (facebook/lagernvs_general_512). WorldFoundry runs the upstream minimal_inference.py command through an in-tree adapter. The checkpoint is gated on Hugging Face.
+  overview_zh: LagrNVS 是 Meta 的新视角合成模型，用于沿新的相机路径渲染场景（facebook/lagernvs_general_512）。WorldFoundry 通过树内适配器运行上游 minimal_inference.py 命令。checkpoint 在 Hugging Face 上为 gated。
+  architecture: A novel-view / camera-path rendering model at 512 resolution.
+  architecture_zh: 512 分辨率的新视角/相机路径渲染模型。
+  usage_notes: Running needs the gated checkpoint and a CUDA GPU. Accept the gated terms on Hugging Face and set HF_TOKEN before running.
+  usage_notes_zh: 运行需要 gated checkpoint 与 CUDA GPU。运行前请先在 Hugging Face 接受 gated 条款并设置 HF_TOKEN。
   limitations:
   - Gated checkpoint under the FAIR non-commercial research license.
-  - Full artifact parity is pending gated access and CUDA validation.
   limitations_zh:
   - checkpoint 为 gated，受 FAIR 非商用研究许可约束。
-  - 完整产物一致性待 gated 权限与 CUDA 验证。

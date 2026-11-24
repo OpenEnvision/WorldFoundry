@@ -7,36 +7,28 @@
 #   https://github.com/facebookresearch/dino/blob/main/vision_transformer.py
 #   https://github.com/rwightman/pytorch-image-models/tree/master/timm/models/vision_transformer.py
 
-from functools import partial
-import math
 import logging
-from typing import Sequence, Tuple, Union, Callable
+import math
+from collections.abc import Sequence
+from functools import partial
 
 import torch
 import torch.nn as nn
-from torch.utils.checkpoint import checkpoint
 from torch.nn.init import trunc_normal_
-from . import Mlp, PatchEmbed, SwiGLUFFNFused, MemEffAttention, NestedTensorBlock as Block
+from torch.utils.checkpoint import checkpoint
+
+from worldfoundry.base_models.perception_core.general_perception.dinov2.layers.construction import (
+    BlockChunk as BlockChunk,
+)
+from worldfoundry.base_models.perception_core.general_perception.dinov2.layers.construction import (
+    init_weights_vit_timm as init_weights_vit_timm,
+)
+from worldfoundry.core.nn.blocks.module_utils import named_apply as named_apply
+
+from . import MemEffAttention, Mlp, PatchEmbed, SwiGLUFFNFused
+from . import NestedTensorBlock as Block
 
 logger = logging.getLogger("dinov2")
-
-
-def named_apply(fn: Callable, module: nn.Module, name="", depth_first=True, include_root=False) -> nn.Module:
-    if not depth_first and include_root:
-        fn(module=module, name=name)
-    for child_name, child_module in module.named_children():
-        child_name = ".".join((name, child_name)) if name else child_name
-        named_apply(fn=fn, module=child_module, name=child_name, depth_first=depth_first, include_root=True)
-    if depth_first and include_root:
-        fn(module=module, name=name)
-    return module
-
-
-class BlockChunk(nn.ModuleList):
-    def forward(self, x):
-        for b in self:
-            x = b(x)
-        return x
 
 
 class DinoVisionTransformer(nn.Module):
@@ -68,7 +60,6 @@ class DinoVisionTransformer(nn.Module):
         """
         Args:
             img_size (int, tuple): input image size
-            patch_size (int, tuple): patch size
             in_chans (int): number of input channels
             embed_dim (int): embedding dimension
             depth (int): depth of transformer
@@ -236,17 +227,14 @@ class DinoVisionTransformer(nn.Module):
         return x
 
     def forward_features_list(self, x_list, masks_list):
-        x = [self.prepare_tokens_with_masks(x, masks) for x, masks in zip(x_list, masks_list)]
+        x = [self.prepare_tokens_with_masks(x, masks) for x, masks in zip(x_list, masks_list, strict=False)]
 
         for blk in self.blocks:
-            if self.use_checkpoint:
-                x = checkpoint(blk, x, use_reentrant=self.use_reentrant)
-            else:
-                x = blk(x)
+            x = checkpoint(blk, x, use_reentrant=self.use_reentrant) if self.use_checkpoint else blk(x)
 
         all_x = x
         output = []
-        for x, masks in zip(all_x, masks_list):
+        for x, masks in zip(all_x, masks_list, strict=False):
             x_norm = self.norm(x)
             output.append(
                 {
@@ -266,10 +254,7 @@ class DinoVisionTransformer(nn.Module):
         x = self.prepare_tokens_with_masks(x, masks)
 
         for blk in self.blocks:
-            if self.use_checkpoint:
-                x = checkpoint(blk, x, use_reentrant=self.use_reentrant)
-            else:
-                x = blk(x)
+            x = checkpoint(blk, x, use_reentrant=self.use_reentrant) if self.use_checkpoint else blk(x)
 
         x_norm = self.norm(x)
         return {
@@ -309,11 +294,11 @@ class DinoVisionTransformer(nn.Module):
     def get_intermediate_layers(
         self,
         x: torch.Tensor,
-        n: Union[int, Sequence] = 1,  # Layers or n last layers to take
+        n: int | Sequence = 1,  # Layers or n last layers to take
         reshape: bool = False,
         return_class_token: bool = False,
         norm=True,
-    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor | tuple[torch.Tensor]]:
         if self.chunked_blocks:
             outputs = self._get_intermediate_layers_chunked(x, n)
         else:
@@ -329,7 +314,7 @@ class DinoVisionTransformer(nn.Module):
                 for out in outputs
             ]
         if return_class_token:
-            return tuple(zip(outputs, class_tokens))
+            return tuple(zip(outputs, class_tokens, strict=False))
         return tuple(outputs)
 
     def forward(self, *args, is_training=True, **kwargs):
@@ -338,14 +323,6 @@ class DinoVisionTransformer(nn.Module):
             return ret
         else:
             return self.head(ret["x_norm_clstoken"])
-
-
-def init_weights_vit_timm(module: nn.Module, name: str = ""):
-    """ViT weight initialization, original timm impl (for reproducibility)"""
-    if isinstance(module, nn.Linear):
-        trunc_normal_(module.weight, std=0.02)
-        if module.bias is not None:
-            nn.init.zeros_(module.bias)
 
 
 def vit_small(patch_size=16, num_register_tokens=0, **kwargs):

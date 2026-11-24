@@ -9,7 +9,7 @@ These optimizations are experimental. They may change, may not apply to every mo
 
 WorldFoundry only treats a technique as available when a public control exists and the main path consumes it. An accepted flag is not a speedup. After a forward, read `requested / effective / fallbacks` from `runtime_optimization_report()`.
 
-[Pluggable diffusion acceleration](/docs/guides/diffusion-acceleration) covers the Sol-Engine / FlashDreams comparison, native SANA/Wan adapters, removal and request isolation, and configurations accepted or rejected by complete video diagnostics.
+[Pluggable diffusion acceleration](/docs/guides/diffusion-acceleration) covers native SANA/Wan adapters, removal and request isolation, and configurations accepted or rejected by complete video diagnostics. For measured exclusive NVIDIA H200 speedups, quality gates, and receipts across all 15 accelerated models, see [Acceleration benchmarks](/docs/guides/videogen-acceleration-benchmarks).
 
 Most named knobs below are on the **native Wan 2.1 / Wan 2.2** pipelines (`Wan2p1*`, `Wan2p2*`, including VACE). Wan 2.5 / 2.6 / 2.7 are hosted APIs and have no local kernel controls. Other native recipes share only a subset (dtype, offload, sometimes attention or VAE tiling). Family runtimes (LTX, CogVideoX, and the rest) keep their own flags — do not copy Wan keys onto them.
 
@@ -27,7 +27,7 @@ Missing kernels, calibration, process groups, or checkpoint weights fail at buil
 
 ## What you can do
 
-These controls are wired. Enable them from `from_pretrained(...)`, Workspace **load JSON**, or `worldfoundry-eval run --pipeline.load.<kebab-name>` when that key is on the model’s load schema.
+These controls are wired. Enable them from `from_pretrained(...)`, Workspace **load JSON**, or `wf run --pipeline.load.<kebab-name>` when that key is on the model’s load schema.
 
 ### Precision and placement
 
@@ -132,7 +132,7 @@ configurations; compute remains BF16. Reports record observed parameter dtypes
 and require current-request execution evidence from both experts.
 `--configurations static-graph` selects that candidate alone; dense remains the reference and the report lists the
 requested configurations. Add `--inplace-residual` to exercise candidates with
-native mutating gates against the unchanged dense reference. This uses the existing native
+native mutating gates against the unchanged dense reference. This uses the native
 quality budget, additionally requires bitwise latent parity for static-Graph,
 reports RGB equality separately, and checks actual frozen-Graph replay. Its timings are diagnostic only.
 
@@ -209,7 +209,7 @@ export WORLDFOUNDRY_STUDIO_BATCH_DELAY_MS=5
 
 The size defaults to **1** (ordinary singleton dispatch). The collection window
 defaults to **5 ms**; a full batch or incompatible next request ends it early.
-The existing Workspace job pool admits concurrent jobs (default 8 via
+The Workspace job pool admits concurrent jobs (default 8 via
 `WORLDFOUNDRY_WORKSPACE_MAX_JOBS`); at least two are needed to coalesce requests.
 The resident worker still has one execution owner and keeps its request lock.
 Only a compatible FIFO prefix merges, up to the configured request cap.
@@ -266,6 +266,10 @@ throughput gains.
   { name: "vae_parallel", hintLabel: "How", hint: "vae_parallel=True or a degree", description: "Rank-parallel Wan VAE tiles with a typed all-gather. Degree must be the full SP×CFG world size when those are on. Needs torchrun WORLD_SIZE>1.", reads: [{ label: "Applies to", value: "official Wan VAE, not TAEW preview" }] }
 ]} />
 
+At the native pipeline boundary, `cfg_parallel=True` selects two ranks;
+`False`, `0`, and `1` disable CFG parallelism. `cfg_parallel_degree` is an alias.
+When both are supplied, their normalized degrees must agree.
+
 ### Wan VAE decode
 
 <KvCatalog heading="VAE" vars rows={[
@@ -274,6 +278,18 @@ throughput gains.
   { name: "vae_temporal_chunk_size", hintLabel: "How", hint: "vae_temporal_chunk_size=4", description: "Causal temporal streaming decode. Convolution cache is kept across chunks. A sequence that fits in one chunk is not streaming.", reads: [{ label: "Applies to", value: "official Wan VAE" }] },
   { name: "vae_channels_last_3d", hintLabel: "How", hint: "vae_channels_last_3d=True", description: "Convert Conv3d weights to channels-last. Fails if the VAE has no Conv3d.", reads: [{ label: "Applies to", value: "native Wan VAE" }] }
 ]} />
+
+Wan's one-latent streaming decoder reuses compiled wrappers with the same policy
+and options across requests, while each request owns its convolution history.
+If a chunk fails after partially advancing that history, only that request's
+history is cleared and the original error is raised. Restart decoding from the
+beginning of the rollout rather than retrying only the failed chunk.
+
+Streaming receipts separate `compile_requested` from `compile_effective`.
+`compiled_decode_calls` counts latent steps in successfully returned chunks
+through the selected compiled wrapper, not kernel dispatches or measured speedup.
+`StreamingWanDecoder` counters reset with its request; the native Wan decoder's
+successful-return counters remain cumulative across requests.
 
 HunyuanVideo and Cosmos Predict2 expose their own `vae_tiling` (and Cosmos tile size/stride) on those pipelines only.
 
@@ -290,7 +306,7 @@ Opt-in, single-rank, mutually exclusive. Each CFG branch gets its own cache. Tea
   { name: "adacache", hintLabel: "How", hint: "feature_cache=\"adacache\"", description: "Adaptive residual cache. Same SP / CUDA Graph bans as other caches.", reads: [{ label: "Applies to", value: "native Wan" }] },
   { name: "magcache", hintLabel: "How", hint: "magcache={\"ratios\": [...]}", description: "Requires calibrated per-step ratios. No Wan2.2 preset is published in-tree.", reads: [{ label: "Fails closed", value: "magcache=True without ratios" }] },
   { name: "blocktaylorseer", hintLabel: "How", hint: "feature_cache={\"algorithm\": \"blocktaylorseer\"}", description: "Pinned LightX2V per-block self / cross / FFN predictor. Default dense pattern [true, false, false, false].", reads: [{ label: "Applies to", value: "native Wan, single rank" }] },
-  { name: "taylorseer", hintLabel: "How", hint: "feature_cache=\"taylorseer\"", description: "Legacy whole-stack residual predictor. Not LightX2V’s per-block algorithm. Default interval 4.", reads: [{ label: "Applies to", value: "native Wan, single rank" }] },
+  { name: "taylorseer", hintLabel: "How", hint: "feature_cache=\"taylorseer\"", description: "Whole-stack residual predictor. Not LightX2V’s per-block algorithm. Default interval 4.", reads: [{ label: "Applies to", value: "native Wan, single rank" }] },
   { name: "custom", hintLabel: "How", hint: "feature_cache={\"algorithm\": \"custom\", ...}", description: "LightX2V Tea decision plus first-order stack residual. Needs published or explicit Tea coefficients.", reads: [{ label: "Applies to", value: "native Wan, single rank" }] },
   { name: "firstblock / dualblock / dynamicblock", hintLabel: "How", hint: "feature_cache={\"algorithm\": \"firstblock\", \"residual_diff_threshold\": ...}", description: "Block-selective caches. residual_diff_threshold is required; there is no quality-safe default.", reads: [{ label: "Applies to", value: "native Wan, single rank" }] },
   { name: "cfg_gate_step", hintLabel: "Alias", hint: "cfg_gate_fraction", description: "After this fraction of steps, reuse the CFG delta instead of running the negative branch. 1.0 (default) is full CFG.", reads: [{ label: "Rejected with", value: "cfg_parallel=2" }] }
@@ -308,20 +324,59 @@ Never auto-selected. The run is marked `quality_tier="approximate"`. Only the Wa
   { name: "LightX2V sparse kinds", hintLabel: "Kinds", hint: "dynamic_sparse, sparge, nbhd, lightx2v_sla_mask, flexblock, lightx2v_spas_sage, draft_attn, radial_attn, rainfusion_attn, svg_attn, svg2_attn, lightx2v_svg_mask", description: "Pinned LightX2V training-free sparse lanes. Each call must hit the pinned provider. Ambiguous aliases sla / sagesla are not accepted.", reads: [{ label: "Needs", value: "the pinned LightX2V checkout and a matching operator" }] }
 ]} />
 
-STA / VSA / VMoBA symbols come from the vendored `thirdparty/fastvideo-kernel` tree (or a matching installed `fastvideo_kernel` wheel). Local build: set `CUDA_HOME` and `CUDACXX`, then `./build.sh` in that directory. ThunderKittens C++ kernels compile only on Hopper `sm_90a` (never on aarch64 hosts); otherwise Triton fallbacks run. FP4 attention / quant CUDA extensions need Blackwell `sm_120a` and CUDA ≥ 12.8. FA4 CuTe block-sparse is an optional `flash_attn.cute` extra, not part of the default build.
+STA / VSA / VMoBA symbols come from the vendored `thirdparty/fastvideo-kernel` tree (or a matching installed `fastvideo_kernel` wheel). Local build: set `CUDA_HOME` and `CUDACXX`, then run `./fetch_headers.sh` (pinned CUTLASS and ThunderKittens headers) and `./build.sh` in that directory. ThunderKittens C++ kernels compile only on Hopper `sm_90a` (never on aarch64 hosts); otherwise Triton fallbacks run. FP4 attention / quant CUDA extensions need Blackwell `sm_120a` and CUDA ≥ 12.8. FA4 CuTe block-sparse is an optional `flash_attn.cute` extra, not part of the default build.
 
 ### Quantization (experimental)
 
 <KvCatalog heading="Quant" vars rows={[
   { name: "fp8 / nvfp4", hintLabel: "How", hint: "quantization={\"mode\": \"fp8\", \"min_features\": 1024}", description: "Packed low-precision wrappers. Ineligible shapes stay dense and say so. This is a numerical approximation, not a certified quality preset.", reads: [{ label: "Rejected with", value: "block or disk offload" }] },
-  { name: "int8", hintLabel: "How", hint: "quantization=\"int8\"", description: "Dynamic per-token / per-channel W8A8 Triton on large GEMMs. Small shapes keep BF16 (counted as dense_policy_calls, not a fallback). Full-pipeline INT8 is opt-in and quality-unsafe by default.", reads: [{ label: "Measured", value: "A full Wan INT8 smoke executed the kernels and still failed latent / video quality (cosine ~0.91, video PSNR ~17). Treat as calibration, not a speed claim." }] },
+  { name: "int8", hintLabel: "How", hint: "quantization=\"int8\"", description: "Dynamic per-token / per-channel W8A8 Triton on large GEMMs. Small shapes keep BF16 (counted as dense_policy_calls, not a fallback). Full-pipeline INT8 is opt-in and quality-unsafe by default.", reads: [{ label: "Measured", value: "Full Wan INT8 runs the kernels but fails latent / video quality (cosine ~0.91, video PSNR ~17)." }] },
   { name: "int4", hintLabel: "How", hint: "quantization=\"int4\"", description: "Packed / groupwise storage, then dequantize + dense. Not a claimed INT4 GEMM speedup.", reads: [{ label: "Rejected with", value: "block or disk offload" }] },
   { name: "gguf", hintLabel: "How", hint: "quantization=\"gguf\" or a .gguf file", description: "Real GGUF tensor loader and compressed storage. There is no qualified GGUF low-bit GEMM in this runtime.", reads: [{ label: "Applies to", value: "native loader when the optional gguf package is installed" }] }
 ]} />
 
+Native pipeline loading accepts flat companions alongside `quantization` or
+`quantization_mode`: `quantization_exclude`, `quantization_compute_dtype`,
+`fp8_min_features`, `fp8_scaling` / `scaling`, `keep_dense_fallback`, and
+`use_fast_accum`. Explicit non-`None` values override the corresponding nested
+quantization settings without modifying the caller's configuration.
+`fp8_scaling` takes precedence over `scaling` when both are supplied.
+
 ### Preview decode only
 
-`vae_preview_decoder_path` swaps the Wan2.2 48-channel official VAE for TAEW2.2. That is a fast, approximate, decode-only preview. Official VAE tiling, temporal chunking, and VAE-parallel do not apply because the official decoder is not built. Do not use TAEW for final-quality or official-benchmark videos.
+`vae_preview_decoder_path` swaps the official Wan VAE for a tiny decoder: TAEW2.2 (`taew2_2.pth`) for the Wan2.2 48-channel codec, TAEW2.1 (`taew2_1.pth`) for the Wan2.1 16-channel codec. That is a fast, approximate, decode-only preview. TAEW2.1 keeps the Wan frame count and alignment (`4 * T - 3` frames; streamed chunks of three latents give 9, then 12 frames). Because it has no encoder, TAEW2.1 applies to text-to-video Wan2.1 recipes; image-conditioned recipes need the Wan VAE encoder. Official VAE tiling, temporal chunking, and VAE-parallel do not apply because the official decoder is not built. Do not use TAEW for final-quality or official-benchmark videos.
+
+### Self-Forcing
+
+The native Self-Forcing pipeline (`self-forcing`) reproduces the official runtime bitwise by default: eager PyTorch SDPA and the BF16 Wan2.1 VAE. The options below are opt-in and approximate. They were measured with torch 2.5.1 for the default 81-frame 480×832 request. All times come from one H100 that another process kept partly busy; on the idle GPU, the exact path's rollout took 3.97 s. Times are warm medians over the count in the last column. The FA3 and regional compile rows come from an earlier set of runs under the same condition, in which the default rollout measured 4.89 s.
+
+| Option | Load arguments | Rollout (7 blocks) | Block 6 | Decode 81 frames | Warm runs |
+| --- | --- | --- | --- | --- | --- |
+| Default (exact) | — | 4.79 s | 924 ms | 2.32 s | 6 rollouts, 6 decodes |
+| FA3 self-attention | `attention_backend="flash3"` | 3.72 s | 636 ms | — | 6 rollouts |
+| Regional compile | `compile=True, compile_scope="regional"` | 4.18 s | 852 ms | — | 6 rollouts |
+| FA3 + regional compile | both of the above | 3.12 s | 554 ms | — | 15 rollouts |
+| TAEW2.1 decode | `vae_preview_decoder_path="…/taew2_1.pth"` | — | — | 0.12 s | 15 decodes |
+
+- `attention_backend` binds the cached causal self-attention; cross-attention stays on PyTorch SDPA. FA3 and compile each change BF16 rounding (teacher-forced flow error about one BF16 ulp per call), so a free-running rollout drifts to a different sample of the same prompt.
+- Compile adds about 45 s to the first request when the Inductor cache is already populated, and about 90 s when it is empty: every block recompiles once for its KV length, then later requests reuse the graphs.
+- One of 11 processes with FA3 + regional compile aborted with `CUDA error: unspecified launch failure` in its second rollout; the cause was not identified.
+- TAEW2.1 is decode-only, so it applies to text-to-video Wan2.1 recipes; image-conditioned recipes need the Wan VAE encoder. It decodes the same latents at 27.3 dB PSNR and 0.87 SSIM against the Wan VAE. A whole-clip decode raises the process peak memory from 22.8 GiB to 30.6 GiB.
+- CUDA Graph does not apply: the cached attention reads cache cursors on the host and writes the per-request cache in place.
+- Long rollouts (approximate, not a default): `kv_window="sink5-window7-rerope"` replaces the 21-frame global cache with a static sink of the first five latent frames and a rolling window of the seven newest (the previous four plus the current block of three), and rotates the cached keys on every read with their cache-slot positions. Only this option accepts more than 81 frames, and its realtime session is unbounded: it reports no `max_chunks` and streams until it is reset. The first four blocks (45 frames) are bitwise equal to the default path; from the fifth block, where the window first rolls, the rollout becomes a different sample. Over 40 streamed chunks on the same H100, each block from the fifth takes 0.81 s (median of 36; the default path's seventh block: 0.92 s) plus 0.35 s decode, and allocated memory stays at 18.6 GiB (default 21.0 GiB) with a 24.0 GiB per-chunk peak. Blocks 2–4 take 40–125 ms longer than on the default path because the whole cache is re-rotated on each read. In 477-frame rollouts of four prompts, VBench subject consistency per 3 s window stays at 0.96–0.99 and the temporal flickering score never falls more than 0.013 below the first window's and rises by up to 0.017, while the scene drifts: DINO similarity to the first window falls to 0.57–0.63 for the Tokyo and Big Sur prompts (the camera pushes in, the waves smooth out) and stays above 0.91 for the other two. Imaging quality, aesthetic quality and motion smoothness were not measured.
+
+```python
+from worldfoundry.pipelines.forcing.pipeline_native_forcing import NativeSelfForcingPipeline
+
+pipeline = NativeSelfForcingPipeline.from_pretrained(
+    torch_dtype="bf16",
+    offload_mode="none",
+    attention_backend="flash3",
+    compile=True,
+    compile_scope="regional",
+    vae_preview_decoder_path="/path/to/taew2_1.pth",
+)
+```
 
 ## What you cannot do
 
@@ -337,17 +392,17 @@ STA / VSA / VMoBA symbols come from the vendored `thirdparty/fastvideo-kernel` t
   { name: "Reuse a VMoBA profile on another resolution or frame count", hint: "Fails closed", description: "Chunk sizes must divide the real post-patch grid. Derive the grid first." },
   { name: "FastVideo SLA on official dense Wan", hint: "Fails closed", description: "Those checkpoints have no proj_l. Do not use LightX2V sla / sagesla aliases for this lane." },
   { name: "sage_attn2_k_int8_v_fp8 as a Wan sparse provider", hint: "Fails closed", description: "That registry entry expects quantized K/V tuples. The Wan generator supplies floating K/V and has no audited per-layer quantize cache." },
-  { name: "INT8 / INT4 / GGUF as a default quality path", hint: "Quality cliff", description: "INT8 kernels can run and still wreck latents. INT4 and GGUF are storage plus dense compute unless a future kernel path is certified." },
+  { name: "INT8 / INT4 / GGUF as a default quality path", hint: "Quality cliff", description: "INT8 kernels can run and still wreck latents. INT4 and GGUF are storage plus dense compute." },
   { name: "TAEW2.2 as the official VAE", hint: "Preview only", description: "Wrong colors / structure vs the 48-channel Wan2.2 VAE. Keep the official decoder for release and benchmarks." },
   { name: "These Wan knobs on APIs or other families", hint: "Not wired", description: "Wan 2.5+ APIs ignore them. HunyuanVideo takes dtype, offload, attention, vae_tiling. Cosmos Predict2 takes dtype, offload, vae_tiling. Echo-Memory exposes offload_model only. Matrix-Game 3.5 builds a fixed BF16 RuntimePolicy. LTX-2.5 has its own offload_mode / quantization, not this matrix." },
-  { name: "PyTorch tricks that are not in RuntimePolicy", hint: "Not wired", description: "Arbitrary torch.compile on a family runtime, sequential offload, xFormers installed but not selected, or a community TeaCache monkey-patch is “possible in PyTorch,” not a WorldFoundry control. Put it here, not under What you can do." },
+  { name: "PyTorch tricks that are not in RuntimePolicy", hint: "Not wired", description: "Arbitrary torch.compile on a family runtime, sequential offload, xFormers installed but not selected, or a community TeaCache monkey-patch is “possible in PyTorch,” not a WorldFoundry control." },
   { name: "Change official benchmark steps, CFG, size, or enable lossy caches", hint: "Invalid comparison", description: "Scoring belongs in Evaluation. A faster unofficial schedule is a different workload." },
   { name: "Inference accelerators on a training build", hint: "Rejected at build", description: "Training forbids offload, quantization, Sage, TeaCache, CUDA Graph, fuse_qkv, static_cross_kv, and the other inference wrappers." },
   { name: "cfg_parallel degree other than 2", hint: "Rejected at build", description: "The runner only implements degree 1 or 2, and degree 2 needs a live two-rank CFG group." }
 ]} />
 
 <Callout type="warn" title="OOM and first-run cost">
-Block offload is the VRAM escape hatch; resident + INT8 without expandable CUDA segments has OOM’d in the VAE stage because of an extra BF16 copy. `torch.compile` and CUDA Graph make the first request much slower. Do not time that request.
+Block offload is the VRAM escape hatch; resident + INT8 without expandable CUDA segments can OOM in the VAE stage because of an extra BF16 copy. `torch.compile` and CUDA Graph make the first request much slower. Do not time that request.
 </Callout>
 
 ## How to turn knobs on
@@ -396,7 +451,7 @@ pipe = Wan2p2Pipeline.from_pretrained(
 Keys on that model’s load schema:
 
 ```bash
-worldfoundry-eval run wan2.2-ti2v-5b \
+wf run wan2.2-ti2v-5b \
   --pipeline.task-profile <task-profile> \
   --pipeline.load.offload-mode resident \
   --pipeline.load.attention-backend flash3 \
@@ -488,6 +543,7 @@ not satisfy that gate; their timings are diagnostic rather than framework speedu
 ## Next steps
 
 <Cards>
+  <Card title="Acceleration benchmarks" description="15-model exclusive H200 speedups, quality gates, and receipts." href="/docs/guides/videogen-acceleration-benchmarks" />
   <Card title="Run inference" description="Environment, CLI, and Workspace commands." href="/docs/guides/inference" />
   <Card title="Models" description="Pick a model ID and its default profile." href="/docs/guides/supported-models" />
   <Card title="Studio" description="Workspace checkboxes and load JSON." href="/docs/guides/studio" />
@@ -517,7 +573,7 @@ Opt in through the Python helper `enable_layerwise_cpu_offload(..., reuse_buffer
 contiguous weights by dtype into aligned CPU buffers and reuse at most two CUDA
 slots. CUDA events prevent overwriting a slot while compute still reads it.
 Its report includes `buffer_mode` and `device_buffer_bytes`. Non-contiguous
-weights preserve the legacy layout and report `per-parameter`; callers can also
+weights keep the per-parameter layout and report `per-parameter`; callers can also
 select that path with `reuse_buffers=False` (the default).
 
 The packed path requires `torch.no_grad()` or `torch.inference_mode()`, sequential
@@ -532,27 +588,24 @@ The core `scaled_dot_product_attention` uses grouped query heads with zero-strid
 K/V views for equal-batch 4D tensors and shared masks when explicitly selecting
 `backend="efficient"`, or adapting an older SDPA without `enable_gqa`. Batch- or
 head-specific masks retain explicit head expansion. Shape and layout can still
-require a reshape copy. Existing native GQA selection remains unchanged.
+require a reshape copy. Other calls use SDPA's native GQA selection.
 
-The local measurements below used synthetic component probes with warmup
+The measurements below use synthetic component probes with warmup
 excluded, CUDA-event timings, and peak allocated memory. They are not
-end-to-end model FPS. The design was
-informed by FlashDreams [#637](https://github.com/NVIDIA/flashdreams/pull/637),
-[#632](https://github.com/NVIDIA/flashdreams/pull/632), and
-[#634](https://github.com/NVIDIA/flashdreams/pull/634).
+end-to-end model FPS.
 
-A local component measurement on 2026-09-18 used one H100 80GB, PyTorch
-2.5.1+cu121, FP16, 10 warmups and 50 measured rounds per fresh process:
+Measured on one H100 80GB with PyTorch 2.5.1+cu121, FP16, 10 warmups and 50
+measured rounds per fresh process:
 
 | Probe | Median CUDA time | Peak allocated memory |
 | --- | ---: | ---: |
-| Offload, legacy per-parameter copies | 0.932 ms | 37.38 MiB |
+| Offload, per-parameter copies (default) | 0.932 ms | 37.38 MiB |
 | Offload, packed reusable slots | 1.514 ms | 37.38 MiB |
 | GQA, explicit K/V head copies | 0.419 ms | 82 MiB |
 | GQA, grouped views | 0.358 ms | 19 MiB |
 
 Offload used eight 1024-wide Linear layers, batch 64. GQA used
 Q `[1,32,256,64]`, K/V `[1,8,8192,64]`, and the efficient SDPA backend.
-Packed offload halved H2D copy calls but was slower for these small layers, so
-it stays opt-in. Measure the actual model and its layer sizes before selecting
+Packed offload halves H2D copy calls but is slower for these small layers, so
+it is opt-in. Measure the actual model and its layer sizes before selecting
 it. Peak memory includes all live tensors in the process; it is not just weights.

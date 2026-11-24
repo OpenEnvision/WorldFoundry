@@ -7,13 +7,13 @@ description: 选择模型，检查运行时，并复制与你的机器匹配的�
 
 ## 如何读懂就绪度
 
-每个模型都有一个就绪度徽章。徽章由相互独立的 manifest 记录计算得出，缺失的证据永远不会被四舍五入成更强的声明。
+每个模型都有一个就绪度徽章，由其 manifest 得出。
 
 - **Runner verified** — 至少一条路径已记录 WorldFoundry runner parity 产物。请选择证据对应的 variant 和配置。
 - **Integrated** — 已绑定可运行 Pipeline，但端到端 GPU parity 仍在验证。可以运行；在 parity 记录之前，输出应视为未验证。
 - **Runtime ported** — 运行时代码已在仓库中，路径还在接线。检查 manifest；运行可能需要手动步骤。
 - **Profile only** — 只记录了 runtime profile，没有绑定 Pipeline。页面可用于溯源与规划；不会显示运行命令。
-- **Planned** — 条目只记录了意向与上游来源。可以跟踪；目前没有可运行内容。
+- **Planned** — 只有上游来源信息，目前没有可运行内容。
 - **Blocked** — 已记录的 blocker（许可、权重、上游）阻止了集成。阅读 manifest 备注了解具体 blocker。
 
 ## 如何选择模型
@@ -25,7 +25,7 @@ description: 选择模型，检查运行时，并复制与你的机器匹配的�
 
 ## 每个模型页面包含什么
 
-模型页面由自动生成的运行时记录与模型专属文章组成。`docs/fumadocs/scripts/generate-model-recipes.py` 刷新 recipe 数据和标记为 `pageSource: generated` 的页面；手写文章单独维护。每个页面会把下面几类声明分开呈现：
+每个模型页面分别展示以下内容：
 
 <RecipeRecords items={[
   {
@@ -34,7 +34,7 @@ description: 选择模型，检查运行时，并复制与你的机器匹配的�
   },
   {
     term: '发表机构',
-    detail: '正式发表机构（企业优先，其次大学或实验室）及其类型。GitHub 账号永远不会被当作品牌展示；若仓库未记录正式机构，页面会明确说明。',
+    detail: '正式发表机构（企业优先，其次大学或实验室）及其类型。没有正式机构信息时，页面会注明。',
   },
   {
     term: 'Runtime profile',
@@ -54,23 +54,23 @@ description: 选择模型，检查运行时，并复制与你的机器匹配的�
   },
   {
     term: 'Evidence',
-    detail: '原生 demo 与 WorldFoundry runner 的 parity；只有 catalog 记录并不代表 GPU 已验证。',
+    detail: '原生 demo 与 WorldFoundry runner 的 parity 结果。',
   },
 ]} />
 
-缺失值会明确显示为**未记录**。Catalog manifest 可以携带人工撰写的双语 `docs:` 块，记录概述、架构、发表机构与推荐评测；没有此块的条目使用已有 catalog 和 runtime 元数据。使用说明与 blocker 写在每个模型页的**运行时契约**中。Catalog tasks 描述模型能力；命令构建器使用 CLI 实际接受的 task-profile ID 和参数。验证记录只适用于所注明的路径与配置。
+缺失值显示为**未记录**。使用说明与 blocker 写在每个模型页的**运行时契约**中。Catalog tasks 描述模型能力；命令构建器使用 CLI 实际接受的 task-profile ID 和参数。验证结果只适用于所注明的路径与配置。
 
 ## 常用命令
 
 ```bash
 # 检查完整 catalog manifest。
-worldfoundry-eval zoo model-show \
+wf zoo model-show \
   --model-id <model-id> \
   --include-manifest \
   --json
 
 # 不下载，只解析 checkpoint、凭据与本地资产 blocker。
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id <model-id> \
   --check-local \
   --json
@@ -82,7 +82,7 @@ bash scripts/setup/model_env_install.sh --model <model-id>
 bash scripts/inference/prepare_model_infer.sh <model-id> --download
 
 # 运行一个已记录的 task profile（每个模型页面会生成精确的参数）。
-worldfoundry-eval run <model-id> --pipeline.task-profile <task> --json
+wf run <model-id> --pipeline.task-profile <task> --json
 ```
 
 ## 在文档中的位置

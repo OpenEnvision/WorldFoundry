@@ -1,6 +1,6 @@
 {
   "title": "Guides",
-  "defaultOpen": false,
+  "defaultOpen": true,
   "pages": [
     "local-assets",
     "tui",
@@ -8,6 +8,7 @@
     "interactive-inference",
     "inference-optimization",
     "diffusion-acceleration",
+    "videogen-acceleration-benchmarks",
     "supported-models",
     "studio",
     "add-model",

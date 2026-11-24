@@ -7,11 +7,10 @@ Multimodal prep adds A↔V RoPE and cross-attn AdaLN from the other
 stream's sigma.
 """
 
+from collections.abc import Callable, Hashable
 from dataclasses import dataclass, replace
 
 import torch
-
-from worldfoundry.core.attention.cache.context import ContextAttentionCache
 
 from worldfoundry.base_models.diffusion_model.models.networks.ltx.adaln import AdaLayerNormSingle
 from worldfoundry.base_models.diffusion_model.models.networks.ltx.modality import Modality
@@ -25,6 +24,24 @@ from worldfoundry.base_models.diffusion_model.models.networks.ltx.rope import (
     generate_freq_grid_pytorch,
     precompute_freqs_cis,
 )
+from worldfoundry.core.attention.cache.context import ContextAttentionCache
+
+KeyframesEmbeddingProvider = Callable[[], torch.Tensor | None]
+
+
+def apply_keyframes_absolute_embedding(
+    hidden_states: torch.Tensor,
+    keyframes_mask: torch.Tensor | None,
+    embedding_provider: KeyframesEmbeddingProvider | None,
+) -> torch.Tensor:
+    """Add the learned ``(1, D)`` marker to projected ``(B, T, D)`` keyframe tokens."""
+    if embedding_provider is None or keyframes_mask is None:
+        return hidden_states
+    embedding = embedding_provider()
+    if embedding is None:
+        return hidden_states
+    mask = (keyframes_mask > 0).to(dtype=hidden_states.dtype)
+    return hidden_states + mask * embedding.to(dtype=hidden_states.dtype)
 
 
 @dataclass(frozen=True)
@@ -62,6 +79,17 @@ class TransformerArgs:
     cross_attn_skip_all: bool = False
 
 
+def _register_transformer_args_pytree() -> None:
+    """Register :class:`TransformerArgs` as a pytree dataclass for piecewise CUDA Graphs."""
+    import torch.utils._pytree as pytree
+
+    if TransformerArgs not in pytree.SUPPORTED_NODES:
+        pytree.register_dataclass(TransformerArgs)
+
+
+_register_transformer_args_pytree()
+
+
 class BlockPerturbationsProcessor:
     """Per-block preparation of ``TransformerArgs``.
     The base implementation returns a copy of ``args`` with this block's
@@ -76,6 +104,19 @@ class BlockPerturbationsProcessor:
     is None when every sample skips the cross-attention entirely.
     """
 
+    def _block_guards(
+        self,
+        perturbations: BatchedPerturbationConfig,
+        block_idx: int,
+        self_type: PerturbationType,
+        cross_type: PerturbationType,
+    ) -> tuple[bool, bool, bool]:
+        """Return the partial-self, skip-self and skip-cross branch decisions."""
+        all_self = perturbations.all_in_batch(self_type, block_idx)
+        any_self = perturbations.any_in_batch(self_type, block_idx)
+        all_cross = perturbations.all_in_batch(cross_type, block_idx)
+        return (any_self and not all_self), all_self, all_cross
+
     def __call__(
         self,
         args: "TransformerArgs",
@@ -84,32 +125,35 @@ class BlockPerturbationsProcessor:
         self_attn_type: PerturbationType,
         cross_attn_type: PerturbationType,
     ) -> "TransformerArgs":
-        device, dtype = args.x.device, args.x.dtype
-
-        all_self = perturbations.all_in_batch(self_attn_type, block_idx)
-        any_self = perturbations.any_in_batch(self_attn_type, block_idx)
-        self_mask: torch.Tensor | None = None
-        if any_self and not all_self:
-            self_mask = perturbations.mask(self_attn_type, block_idx, device, dtype).view(-1, 1, 1)
-
-        all_cross = perturbations.all_in_batch(cross_attn_type, block_idx)
-        cross_mask: torch.Tensor | None = None
-        if not all_cross:
-            cross_mask = perturbations.mask(cross_attn_type, block_idx, device, dtype).view(-1, 1, 1)
-
+        self_mask_present, all_self, all_cross = self._block_guards(
+            perturbations, block_idx, self_attn_type, cross_attn_type
+        )
         return replace(
             args,
-            self_attn_perturbation_mask=self_mask,
+            self_attn_perturbation_mask=perturbations.mask(self_attn_type, block_idx) if self_mask_present else None,
             self_attn_all_perturbed=all_self,
-            cross_attn_perturbation_mask=cross_mask,
+            cross_attn_perturbation_mask=None if all_cross else perturbations.mask(cross_attn_type, block_idx),
             cross_attn_skip_all=all_cross,
+        )
+
+    def graph_signature(self, perturbations: BatchedPerturbationConfig) -> Hashable:
+        """Key a captured block graph by branch decisions, not runtime mask values."""
+        assert perturbations.block_masks_cpu is not None, "graph signatures require the CPU mask mirror"
+        modality_types = (
+            (PerturbationType.SKIP_VIDEO_SELF_ATTN, PerturbationType.SKIP_A2V_CROSS_ATTN),
+            (PerturbationType.SKIP_AUDIO_SELF_ATTN, PerturbationType.SKIP_V2A_CROSS_ATTN),
+        )
+        return tuple(
+            self._block_guards(perturbations, block_idx, self_type, cross_type)
+            for block_idx in range(perturbations.block_masks_cpu.shape[1])
+            for self_type, cross_type in modality_types
         )
 
 
 class TransformerArgsPreprocessor:
     """Single-modality stem: patch proj, AdaLN, RoPE, caption proj, masks."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         patchify_proj: torch.nn.Linear,
         adaln: AdaLayerNormSingle,
@@ -124,6 +168,7 @@ class TransformerArgsPreprocessor:
         caption_projection: torch.nn.Module | None = None,
         prompt_adaln: AdaLayerNormSingle | None = None,
         action_embedder: torch.nn.Module | None = None,
+        keyframes_embedding_provider: KeyframesEmbeddingProvider | None = None,
     ) -> None:
         self.patchify_proj = patchify_proj
         self.adaln = adaln
@@ -138,9 +183,14 @@ class TransformerArgsPreprocessor:
         self.caption_projection = caption_projection
         self.prompt_adaln = prompt_adaln
         self.action_embedder = action_embedder
+        self.keyframes_embedding_provider = keyframes_embedding_provider
 
     def _prepare_timestep(
-        self, timestep: torch.Tensor, adaln: AdaLayerNormSingle, batch_size: int, hidden_dtype: torch.dtype,
+        self,
+        timestep: torch.Tensor,
+        adaln: AdaLayerNormSingle,
+        batch_size: int,
+        hidden_dtype: torch.dtype,
         video_control: object | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Prepare timestep embeddings."""
@@ -151,7 +201,9 @@ class TransformerArgsPreprocessor:
             embedded_timestep = adaln.emb(timestep_scaled.flatten(), hidden_dtype=hidden_dtype)
             embedded_timestep = embedded_timestep.view(batch_size, -1, embedded_timestep.shape[-1])
             embedded_timestep = embedded_timestep + self.action_embedder(
-                video_control.action_ids, video_control.action_valid_mask, hidden_dtype=hidden_dtype,
+                video_control.action_ids,
+                video_control.action_valid_mask,
+                hidden_dtype=hidden_dtype,
             )
             timestep = adaln.linear(adaln.silu(embedded_timestep))
         # Second dimension is 1 or number of tokens (if timestep_per_token)
@@ -172,7 +224,6 @@ class TransformerArgsPreprocessor:
         return context.view(batch_size, -1, x.shape[-1])
 
     def _prepare_attention_mask(self, attention_mask: torch.Tensor | None, x_dtype: torch.dtype) -> torch.Tensor | None:
-        """Prepare attention mask."""
         if attention_mask is None or torch.is_floating_point(attention_mask):
             return attention_mask
 
@@ -198,16 +249,17 @@ class TransformerArgsPreprocessor:
         if attention_mask is None:
             return None
 
-        # Convert [0, 1] attention mask to additive log-space bias:
+        # Convert [0, 1] attention mask to additive log-space bias without host sync:
         #   1.0 -> log(1.0) = 0.0  (no bias, full attention)
         #   0.0 -> finfo.min        (fully masked)
         finfo = torch.finfo(x_dtype)
         eps = finfo.tiny
 
-        bias = torch.full_like(attention_mask, finfo.min, dtype=x_dtype)
+        mask_float = attention_mask if attention_mask.is_floating_point() else attention_mask.to(x_dtype)
         positive = attention_mask > 0
-        if positive.any():
-            bias[positive] = torch.log(attention_mask[positive].clamp(min=eps)).to(x_dtype)
+        log_bias = torch.log(mask_float.clamp(min=eps)).to(x_dtype)
+        fill_value = attention_mask.new_full((), finfo.min, dtype=x_dtype)
+        bias = torch.where(positive, log_bias, fill_value)
 
         return bias.unsqueeze(1)  # (B, 1, T_q, T_k) for head broadcast
 
@@ -220,7 +272,6 @@ class TransformerArgsPreprocessor:
         num_attention_heads: int,
         x_dtype: torch.dtype,
     ) -> torch.Tensor:
-        """Prepare positional embeddings."""
         freq_grid_generator = generate_freq_grid_np if self.double_precision_rope else generate_freq_grid_pytorch
         pe = precompute_freqs_cis(
             positions,
@@ -238,10 +289,11 @@ class TransformerArgsPreprocessor:
     def prepare(
         self,
         modality: Modality,
-        cross_modality: Modality | None = None,  # noqa: ARG002
+        cross_modality: Modality | None = None,
     ) -> TransformerArgs:
         """Lift a :class:`Modality` into block-ready :class:`TransformerArgs`."""
         x = self.patchify_proj(modality.latent)
+        x = apply_keyframes_absolute_embedding(x, modality.keyframes_mask, self.keyframes_embedding_provider)
         batch_size = x.shape[0]
         timestep, embedded_timestep = self._prepare_timestep(
             modality.timesteps, self.adaln, batch_size, modality.latent.dtype, modality.video_control
@@ -283,7 +335,7 @@ class TransformerArgsPreprocessor:
 class MultiModalTransformerArgsPreprocessor:
     """Joint-AV stem: single-stream prep plus A↔V RoPE and cross-attn AdaLN."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         patchify_proj: torch.nn.Linear,
         adaln: AdaLayerNormSingle,
@@ -303,6 +355,7 @@ class MultiModalTransformerArgsPreprocessor:
         caption_projection: torch.nn.Module | None = None,
         prompt_adaln: AdaLayerNormSingle | None = None,
         action_embedder: torch.nn.Module | None = None,
+        keyframes_embedding_provider: KeyframesEmbeddingProvider | None = None,
     ) -> None:
         self.simple_preprocessor = TransformerArgsPreprocessor(
             patchify_proj=patchify_proj,
@@ -318,6 +371,7 @@ class MultiModalTransformerArgsPreprocessor:
             caption_projection=caption_projection,
             prompt_adaln=prompt_adaln,
             action_embedder=action_embedder,
+            keyframes_embedding_provider=keyframes_embedding_provider,
         )
         self.cross_scale_shift_adaln = cross_scale_shift_adaln
         self.cross_gate_adaln = cross_gate_adaln

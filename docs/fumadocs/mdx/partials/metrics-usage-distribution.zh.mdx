@@ -17,7 +17,7 @@ Lower values indicate closer generated and reference feature distributions. FID 
 **资产：** Torch-fidelity InceptionV3 / CLIP / SwAV 权重，经 `torch.hub` 与 `torchvision` cache 加载。离线可传 `feature_extractor_weights_path` 或提前放入 Torch cache。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_fid
+from worldfoundry.evals.tasks.metrics import compute_fid
 
 ref_dir = "/data/coco_val"
 gen_dir = "/data/my_model_samples"
@@ -44,7 +44,7 @@ Lower values indicate closer generated and reference feature distributions. FID 
 **用法**: 带 bbox 物体裁剪的 SceneFID。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_scene_fid
+from worldfoundry.evals.tasks.metrics import compute_scene_fid
 
 score = compute_scene_fid(
     "/data/ref",
@@ -73,7 +73,7 @@ A high score means individual images produce confident predictions while the who
 **资产：** Torch-fidelity InceptionV3，经 `torch.hub` / `torchvision` cache 加载。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_inception_score
+from worldfoundry.evals.tasks.metrics import compute_inception_score
 
 result = compute_inception_score("/data/generated_only")
 print(result)  # dict with mean/std IS
@@ -98,7 +98,7 @@ Unlike FID, KID does not fit Gaussian distributions and its estimator can be unb
 **资产：** Torch-fidelity Inception feature，经 `torch.hub` / `torchvision` cache 加载。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_kid
+from worldfoundry.evals.tasks.metrics import compute_kid
 
 kid = compute_kid("/data/ref", "/data/gen")
 print(kid["kernel_inception_distance_mean"])
@@ -117,7 +117,7 @@ print(kid["kernel_inception_distance_mean"])
 **资产：** Torch-fidelity Inception feature，经 `torch.hub` / `torchvision` cache 加载。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_precision_recall
+from worldfoundry.evals.tasks.metrics import compute_precision_recall
 
 pr = compute_precision_recall("/data/ref", "/data/gen")
 print(pr)
@@ -131,12 +131,12 @@ print(pr)
 
 **用法**: α-precision、β-recall、realism score（k-NN 半径）。
 
-**参考:** 特征空间 k-NN 半径的 α-precision、β-recall 与 realism score。 论文: [Kynkä et al.](https://arxiv.org/abs/1905.05473) 仓库: [kynkaat/improved-precision-and-recall-metric](https://github.com/kynkaat/improved-precision-and-recall-metric)
+**参考:** 特征空间 k-NN 半径的 α-precision、β-recall 与 realism score。 论文: [Kynkäänniemi et al.](https://arxiv.org/abs/1904.06991) 仓库: [kynkaat/improved-precision-and-recall-metric](https://github.com/kynkaat/improved-precision-and-recall-metric)
 
 **资产：** Torchvision VGG16 feature extractor（`TORCH_HOME` / torch cache）。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_improved_precision_recall,
     compute_realism_score,
 )
@@ -179,33 +179,33 @@ Lower values indicate that generated and reference image distributions are close
 
 #### `trend`
 
-**原理：** `trend` / `trend_jsd` compares reference and generated trend distributions, usually through a divergence such as Jensen-Shannon divergence. Given two categorical or binned distributions `P` and `Q`, the common computation is:
+**原理：** `trend` / `trend_jsd` 对每个特征维度拟合截断广义正态分布（TGND）并计算参考分布与生成分布间的 Jensen-Shannon 散度：
 
 $$
 \mathrm{JSD}(P, Q) = \tfrac{1}{2}\,\mathrm{KL}(P \parallel M) + \tfrac{1}{2}\,\mathrm{KL}(Q \parallel M), \quad M = \tfrac{1}{2}(P + Q)
 $$
 
-Lower values indicate that generated outputs preserve the reference trend distribution more closely. In WorldFoundry, this is best used when the benchmark defines explicit attributes, categories, temporal bins, or other trend statistics to compare.
+越低表示生成分布与参考分布越接近。
 
 
 **用法**: 图像文件夹上的分布距离（不同特征后端）。
 
 **参考：**
-- **`fwd`:** 图像分布间的 Fréchet Wavelet Distance。 论文: [Karras et al.](https://arxiv.org/abs/1812.04948) 仓库: WorldFoundry（vendored `pytorchfwd`）
+- **`fwd`:** 图像分布间的 Fréchet Wavelet Distance。 仓库: WorldFoundry（vendored `pytorchfwd`）
 - **`cmmd`:** 图像集合间的 CLIP Maximum Mean Discrepancy。 论文: [Jayasumana et al.](https://arxiv.org/abs/2402.05236) 仓库: WorldFoundry（改编自 CMMD repo）
-- **`clean_fid`:** 改进 Inception 预处理的 Clean-FID。 论文: [Parmar et al.](https://arxiv.org/abs/2204.06191) 仓库: [GaParmar/clean-fid](https://github.com/GaParmar/clean-fid)
+- **`clean_fid`:** 改进 Inception 预处理的 Clean-FID。 论文: [Parmar et al.](https://arxiv.org/abs/2104.11222) 仓库: [GaParmar/clean-fid](https://github.com/GaParmar/clean-fid)
 - **`mind`:** 图像集合间的 Monge Inception Distance。 论文: [John et al.](https://arxiv.org/abs/2306.04594) 仓库: WorldFoundry（torch-fidelity 集成）
-- **`trend`:** 特征直方图上的截断熵 / trend divergence。 论文: [Han et al.](https://arxiv.org/abs/2206.08599) 仓库: WorldFoundry（按论文复现）
+- **`trend`:** Inception 特征上的 TGND 参数 JSD 指标。 仓库: WorldFoundry（树内 `distribution/trend/`）
 
 **资产：**
-- **`fwd`:** Vendored distribution helper / wavelet 后端权重，经 torch cache 加载。
+- **`fwd`:** 树内 vendored `pytorchfwd` 小波包变换。
 - **`cmmd`:** CLIP vision encoder `openai/clip-vit-large-patch14-336`，Hugging Face `transformers` cache（`WORLDFOUNDRY_HFD_ROOT`）。
 - **`clean_fid`:** Clean-FID Inception 网络与可选 reference statistics，放在 `cleanfid` runtime cache。
 - **`mind`:** Torch-fidelity feature extractor，经 `torch.hub` / `torchvision` cache 加载。
-- **`trend`:** 调用方提供 API 要求的统计量或 feature 时，无需模型 checkpoint。
+- **`trend`:** InceptionV3 特征（via `pytorch_fid`）或预计算参数数组。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_fwd,
     compute_cmmd,
     compute_clean_fid,
@@ -240,7 +240,7 @@ Lower values indicate smoother perceptual changes under latent interpolation. PP
 **资产：** Torch-fidelity latent / perceptual path 权重，经 `torch.hub` / `torchvision` cache 加载。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_ppl
+from worldfoundry.evals.tasks.metrics import compute_ppl
 
 ppl = compute_ppl("/path/to/generated_or_latent_inputs")
 print(ppl)
@@ -271,9 +271,9 @@ The score can be interpreted as an effective number of distinct samples under th
 **用法**: 由特征矩阵或图像目录计算多样性。
 
 **参考：**
-- **`vendi_score`:** 由 feature 矩阵或图像 embedding 计算的 Vendi 多样性分数。 论文: [Friedman & Dieng](https://arxiv.org/abs/2202.03269) 仓库: WorldFoundry（改编）
+- **`vendi_score`:** 由 feature 矩阵或图像 embedding 计算的 Vendi 多样性分数。 论文: [Friedman & Dieng](https://arxiv.org/abs/2210.02410) 仓库: WorldFoundry（改编）
 - **`rke`:** feature embedding 上 Rényi 核熵模式计数（多样性）。 论文: [Jalali et al. (NeurIPS 2023)](https://openreview.net/forum?id=PdZhf6PiAb) 仓库: [mjalali/renyi-kernel-entropy](https://github.com/mjalali/renyi-kernel-entropy)
-- **`rnd`:** feature 向量上的 Random Network Distillation 新颖度分数。 论文: [Burda et al.](https://arxiv.org/abs/1810.12894) 仓库: WorldFoundry（按论文复现）
+- **`rnd`:** feature 向量上的 Random Network Distillation 多样性分数。 论文: [Fowl et al.](https://arxiv.org/abs/2010.06715) 仓库: WorldFoundry（按论文复现）
 
 **资产：**
 - **`vendi_score`:** 图像 helper：torchvision InceptionV3。文本 helper：`roberta-base` 与 `princeton-nlp/unsup-simcse-roberta-base`（`WORLDFOUNDRY_HFD_ROOT`）。feature 数组模式无需 extractor。
@@ -282,7 +282,7 @@ The score can be interpreted as an effective number of distinct samples under th
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_vendi_score,
     compute_rke,
     compute_rrke,
@@ -312,7 +312,7 @@ print("rnd_images", compute_rnd_from_images("/data/generated"))
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import compute_mean_rarity_score
+from worldfoundry.evals.tasks.metrics import compute_mean_rarity_score
 
 real_feats = np.load("real.npy")
 gen_feats = np.load("gen.npy")
@@ -325,15 +325,15 @@ print(compute_mean_rarity_score(real_feats, gen_feats, k=5))
 **原理：** Feature Likelihood Divergence evaluates fidelity, diversity, and novelty using density estimation in feature space. The method fits or estimates feature likelihoods for train, test, and generated samples, then measures whether generated samples look like unseen test data rather than memorized training data. Lower values indicate better generalization under the FLD formulation. This metric is useful when overfitting or memorization is a concern and when train/test/generated feature sets are available.
 
 
-**适用场景**：在预计算特征数组上计算 Feature Likelihood Divergence。
+**用法**: 在预计算特征数组上计算 Feature Likelihood Divergence。
 
-**参考：** 真实与生成特征分布之间的 Feature Likelihood Divergence。论文：[Richter & Rhodes (ICML 2022)](https://arxiv.org/abs/2204.06496) 仓库：WorldFoundry（论文复现）
+**参考：** 真实与生成特征分布之间的 Feature Likelihood Divergence。论文：[Jiralerspong et al. (NeurIPS 2023)](https://arxiv.org/abs/2302.04440) 仓库：WorldFoundry（树内 `distribution/fld/`）
 
 **资产：** 调用方提供 train/test/generated 特征数组时无需 checkpoint。
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import compute_fld
+from worldfoundry.evals.tasks.metrics import compute_fld
 
 train = np.load("train_feats.npy")
 test = np.load("test_feats.npy")
@@ -344,17 +344,17 @@ print(compute_fld(train, test, gen))
 **返回**：浮点 FLD；越低越好。
 
 ### `multimodal_mid` (↑)
-**原理：** Mutual Information Divergence is a multimodal generation metric based on CLIP-style image-text features. It estimates cross-modal mutual information behavior between paired modalities and uses a negative Gaussian cross-mutual-information formulation to score alignment. Higher WorldFoundry scores should indicate stronger multimodal consistency when the implementation exposes MID as a positive alignment score. Use it for paired multimodal generation such as text-to-image or image captioning, and document the exact feature model.
+**原理：** Mutual Information Divergence is a multimodal generation metric based on CLIP-style image-text features. It estimates cross-modal mutual information behavior between paired modalities and uses a negative Gaussian cross-mutual-information formulation to score alignment. Higher WorldFoundry scores indicate stronger multimodal consistency. Use it for paired multimodal generation such as text-to-image or image captioning, and document the exact feature model.
 
 
-**适用场景**：在配对图文 embedding 上计算 Mutual Information Divergence。
+**用法**：在配对图文 embedding 上计算 Mutual Information Divergence。
 
-**参考：** 比较联合图文 embedding 分布的 Mutual Information Divergence。论文：[Dhaka et al. (NeurIPS 2021)](https://arxiv.org/abs/2106.04566) 仓库：WorldFoundry（论文复现）
+**参考：** 比较联合图文 embedding 分布的 Mutual Information Divergence（Naver `mid.metric`，非 MIND）。仓库：WorldFoundry（树内 `distribution/mid_metric/`）
 
 **资产：** 调用方提供配对特征数组时无需 checkpoint。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_multimodal_mid
+from worldfoundry.evals.tasks.metrics import compute_multimodal_mid
 
 print(compute_multimodal_mid(image_feats, text_feats))
 ```
@@ -365,14 +365,14 @@ print(compute_multimodal_mid(image_feats, text_feats))
 **原理：** Fréchet Joint Distance evaluates conditional generation by comparing joint distributions of generated content and conditioning variables. Instead of computing Fréchet distance only on image features, FJD builds joint embeddings, for example image features concatenated or combined with class, text, mask, or layout-condition features, then computes a Fréchet distance between real and generated joint distributions. Lower values indicate better joint fidelity, condition consistency, and intra-condition diversity.
 
 
-**适用场景**：在配对图文联合 embedding 上计算 Fréchet Joint Distance。
+**用法**：在配对条件/图像联合 embedding 上计算 Fréchet Joint Distance。
 
-**参考：** 配对图文联合 embedding 的 Fréchet Joint Distance。论文：[Lee et al. (ICCV 2023)](https://arxiv.org/abs/2303.08118) 仓库：WorldFoundry（论文复现）
+**参考：** 配对联合 embedding 的 Fréchet Joint Distance。论文：[DeVries et al.](https://arxiv.org/abs/1907.07175) 仓库：WorldFoundry（树内 `distribution/fjd/`）
 
 **资产：** 调用方提供联合 embedding 时无需 checkpoint。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_fjd_from_joint_embeddings
+from worldfoundry.evals.tasks.metrics import compute_fjd_from_joint_embeddings
 
 print(compute_fjd_from_joint_embeddings(real_joint, gen_joint))
 ```
@@ -383,32 +383,32 @@ print(compute_fjd_from_joint_embeddings(real_joint, gen_joint))
 **原理：** CrossLID evaluates how well generated and real manifolds coincide using local intrinsic dimensionality. The method estimates the local intrinsic dimensionality of real samples with respect to neighborhoods formed by generated samples. Lower CrossLID indicates that generated samples better match the local structure of the real data manifold. It is useful for diagnosing mode collapse and distribution mismatch beyond global moment statistics.
 
 
-**适用场景**：用 Cross local intrinsic dimensionality 评估多样性。
+**用法**：用 Cross local intrinsic dimensionality 评估多样性。
 
 **参考：** 用于多样性评估的 Cross local intrinsic dimensionality。论文：[Barua et al. (ICLR 2019)](https://openreview.net/forum?id=H1x0sA4tDr) 仓库：[sukarnabarua/CrossLID](https://github.com/sukarnabarua/CrossLID)
 
 **资产：** 调用方提供特征数组时无需 checkpoint。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_crosslid
+from worldfoundry.evals.tasks.metrics import compute_crosslid
 
 print(compute_crosslid(features, k=5))
 ```
 
-**返回**：浮点 CrossLID；越低表示多样性越低。
+**返回**：浮点 CrossLID；越低越好。
 
 ### `cfid` (↓)
 **原理：** Conditional FID generalizes FID to conditional distributions. Instead of comparing only unconditional generated and real image distributions, CFID measures discrepancies between conditional distributions, making it more sensitive to cases where outputs are realistic but unrelated to inputs. The closed-form version follows a conditional Gaussian/Wasserstein setup. Lower values indicate better conditional fidelity.
 
 
-**适用场景**：从条件/无条件配对 embedding 计算 Conditional FID。
+**用法**：从条件/无条件配对 embedding 计算 Conditional FID。
 
-**参考：** 从条件/无条件配对 embedding 计算的 Conditional FID。论文：[Benny & Wolf (NeurIPS 2020)](https://arxiv.org/abs/2008.06993) 仓库：WorldFoundry（论文复现）
+**参考：** Conditional FID（Soloveitchik 配对 CFID）。论文：[Soloveitchik et al.](https://arxiv.org/abs/2103.11521) 仓库：WorldFoundry（树内 `distribution/cfid/`）
 
 **资产：** 调用方提供条件特征数组时无需 checkpoint。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_cfid
+from worldfoundry.evals.tasks.metrics import compute_cfid
 
 print(compute_cfid(ref_pairs, gen_pairs))
 ```
@@ -419,45 +419,39 @@ print(compute_cfid(ref_pairs, gen_pairs))
 **原理：** Semantic Similarity Distance is a CLIP-based metric for text-image consistency. It compares generated images and text prompts from a distributional semantic-alignment perspective, combining text-image similarity and semantic variation differences. Lower values indicate better text-image semantic consistency. Use it for text-to-image benchmarks where prompt faithfulness matters more than pixel-level similarity.
 
 
-**适用场景**：文本与图像 embedding 之间的 Semantic Similarity Distance。
+**用法**：文本与图像 embedding 之间的 Semantic Similarity Distance。
 
-**参考：** 文本与图像 embedding 之间的 Semantic Similarity Distance。论文：[Tschannen et al. (ICLR 2018)](https://arxiv.org/abs/1710.05135) 仓库：WorldFoundry（论文复现）
+**参考：** 文本与图像 embedding 之间的 Semantic Similarity Distance。仓库：WorldFoundry（树内 `distribution/ssd/`）
 
 **资产：** 调用方提供文本/图像 embedding 时无需 checkpoint。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_ssd
+from worldfoundry.evals.tasks.metrics import compute_ssd
 
 print(compute_ssd(text_embeds, image_embeds))
 ```
 
 **返回**：浮点 SSD；越低越好。
 
-### `linear_separability` (↑)
-**原理：** Linear separability measures disentanglement in a latent or attribute space. The StyleGAN formulation asks whether latent-space samples corresponding to a binary attribute can be separated by a linear hyperplane. In WorldFoundry, the public helper computes a score from a confusion matrix, so the effective computation depends on classifier outcomes:
-
-$$
-\text{linear\_separability} = \mathrm{score}(\mathbf{C})
-$$
-
-Higher values indicate that the attribute or factor is more linearly separable. This metric is meaningful only when the upstream classifier, labels, and attribute definitions are stable.
+### `linear_separability` (↓)
+**原理：** StyleGAN 线性可分性在潜空间上训练线性 SVM 预测二元属性，并由混淆矩阵计算条件熵指标 `2**H(Y|X)`。数值越低表示条件熵越小、潜变量线性解耦越好。该指标仅在上游分类器、标签与属性定义一致时可比。
 
 
 **用法**: 由 StyleGAN 潜空间 SVM 混淆矩阵计算线性可分性。
 
-**参考:** StyleGAN 潜空间 SVM 线性可分性（混淆矩阵）。 论文: [Karras et al.](https://arxiv.org/abs/1812.04948) 仓库: [NVlabs/stylegan](https://github.com/NVlabs/stylegan)
+**参考:** StyleGAN 潜空间线性可分性（`2**H(Y|X)`，越低越解耦）。 论文: [Karras et al.](https://arxiv.org/abs/1812.04948) 仓库: [NVlabs/stylegan](https://github.com/NVlabs/stylegan)
 
 **资产：** 无需模型 checkpoint — 传入 API 要求的 confusion matrix / separability 输入。
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import compute_linear_separability
+from worldfoundry.evals.tasks.metrics import compute_linear_separability
 
 confusion = np.load("svm_confusion.npy")
 print(compute_linear_separability(confusion))
 ```
 
-**返回**: 可分性分数；越高潜变量越解耦。
+**返回**: 线性可分性分数 `2**H(Y|X)`；越低潜变量越解耦。
 
 ### `fdd` (↓)
 **原理：** Fréchet Denoised Distance replaces the Inception feature extractor in FID with a denoising-autoencoder representation. The metric encodes real and generated images with a DAE, fits Gaussian statistics in the denoised latent space, and computes a Fréchet distance. Lower values indicate that generated images are closer to reference images in a structure-biased denoised feature space. FDD is especially relevant when structural plausibility matters more than low-level visual artifacts.
@@ -470,7 +464,7 @@ print(compute_linear_separability(confusion))
 **资产：** `WORLDFOUNDRY_FDD_DAE_CKPT`，或通过 `gdown` 自动下载（Google Drive id `1j7MVFWYfRNZLQ3uChe7TGQG8L1Oaf9Gt`）。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_fdd
+from worldfoundry.evals.tasks.metrics import compute_fdd
 
 # export WORLDFOUNDRY_FDD_DAE_CKPT=/path/to/dae.pt
 score = compute_fdd("/data/ref", "/data/gen")
@@ -480,7 +474,7 @@ print(score)
 **返回**: FDD 浮点；越低结构越合理。
 
 ### `cis` (↑)
-**原理：** Conditional Inception Score generalizes Inception Score to class-conditional generation. It decomposes quality and diversity by conditioning class, using within-class and between-class components derived from classifier predictions. Higher values indicate better class-conditional quality and diversity. Use CIS only when generated samples have known class conditions and classifier predictions are meaningful for those classes.
+**原理：** Conditional Inception Score generalizes Inception Score to class-conditional generation. It decomposes quality and diversity by conditioning class, using within-class and between-class components derived from classifier predictions（`BCIS × WCIS`）. Higher values indicate better class-conditional quality and diversity. Use CIS only when generated samples have known class conditions and classifier predictions are meaningful for those classes.
 
 
 **用法**: 由类概率 batch 计算 Conditional Inception Score。
@@ -491,7 +485,7 @@ print(score)
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import compute_cis, compute_cis_from_predictions
+from worldfoundry.evals.tasks.metrics import compute_cis, compute_cis_from_predictions
 
 # probs: list of (N, num_classes) arrays, one bucket per condition
 print(compute_cis(class_probs))
@@ -499,6 +493,39 @@ print(compute_cis_from_predictions(predictions, num_classes=1000))
 ```
 
 **返回**: 含 BCIS、WCIS 与组合 CIS 的 dict。
+
+### `cas` (↑)
+**原理：** Classification Accuracy Score 仅使用合成样本训练分类器，并在真实测试集上计算 Top-k 分类准确率。CAS 越高，说明合成分布越能保留真实分布的类别判别结构。
+
+
+**用法**: 合成图训练分类器，在真实标签上算 Top-k accuracy。
+
+**参考:** 分类准确率分 CAS：仅用合成图训练分类器，在真实标签上测 Top-k。 论文: [Ravuri & Vinyals](https://arxiv.org/abs/1905.10887) 仓库: WorldFoundry（按论文复现）
+
+**资产：** 无固定 checkpoint — 在 API 提供的 synthetic feature 上训练轻量分类器。
+
+```python
+import numpy as np
+from worldfoundry.evals.tasks.metrics import (
+    train_classifier_and_compute_cas,
+    compute_cas_from_predictions,
+)
+
+out = train_classifier_and_compute_cas(
+    synthetic_images=syn_x,
+    synthetic_labels=syn_y,
+    real_images=real_x,
+    real_labels=real_y,
+    num_classes=10,
+    device="cuda",
+)
+print(out["cas_top1"], out.get("cas_top5"))
+
+# or with existing predictions
+print(compute_cas_from_predictions(real_y, pred_topk, topk=(1, 5)))
+```
+
+**返回**: 含 `cas`、`cas_top1`、可选 `cas_top5` 的 dict。
 
 ### `attribute_sad / attribute_pad` (↓)
 #### `attribute_sad`
@@ -510,18 +537,18 @@ print(compute_cis_from_predictions(predictions, num_classes=1000))
 **原理：** Attribute PaD is the paired or relationship-sensitive counterpart to SaD. It evaluates whether generated samples preserve attribute relationships or paired attribute behavior relative to the reference set. Lower values indicate better attribute-pair consistency. Use it when attribute co-occurrence or implausible attribute relationships are important evaluation targets.
 
 
-**用法**: 由预计算 HCS 直方图计算 SadPaD 属性散度。
+**用法**: 由预计算 HCS 张量计算 SadPaD 属性散度。
 
 **参考：**
-- **`attribute_sad`:** 属性直方图间的 KL / JS / W1 散度（attribute SAD）。 论文: [Ramesh et al.](https://arxiv.org/abs/2105.05233) 仓库: WorldFoundry（SadPaD 复现）
-- **`attribute_pad`:** 文本属性的 attribute-aware Padé approximant divergence。 论文: [Ramesh et al.](https://arxiv.org/abs/2105.05233) 仓库: WorldFoundry（SadPaD 复现）
+- **`attribute_sad`:** 基于 HCS 特征的 Semantic Attribute Distance（SaD）。 仓库: WorldFoundry（树内 `distribution/sadpad/`）
+- **`attribute_pad`:** 基于 HCS 特征的 Pairwise Attribute Distance（PaD）。 仓库: WorldFoundry（树内 `distribution/sadpad/`）
 
 **资产：**
-- **`attribute_sad`:** 无需模型 checkpoint — 传入预计算 HCS histogram（`hcs_real`、`hcs_gen`、`text_list`）。
-- **`attribute_pad`:** 无需模型 checkpoint — 传入预计算 HCS histogram（`hcs_real`、`hcs_gen`、`text_list`）。
+- **`attribute_sad`:** 无需模型 checkpoint — 传入预计算 HCS 张量（`hcs_real`、`hcs_gen`、`text_list`）。
+- **`attribute_pad`:** 无需模型 checkpoint — 传入预计算 HCS 张量（`hcs_real`、`hcs_gen`、`text_list`）。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_attribute_sad, compute_attribute_pad
+from worldfoundry.evals.tasks.metrics import compute_attribute_sad, compute_attribute_pad
 
 text_list = ["smiling", "young", "eyeglasses"]
 sad = compute_attribute_sad(hcs_real, hcs_gen, text_list)
@@ -545,7 +572,7 @@ print(sad, pad)
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_fvd_from_numpy,
     compute_fvd_from_frame_dirs,
 )
@@ -577,7 +604,7 @@ print(
 **资产：** FVMD release 的 PIPs2 tracker `pips2_weights.pth`，经 torch hub cache 加载。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_fvmd
+from worldfoundry.evals.tasks.metrics import compute_fvmd
 
 score = compute_fvmd("/data/ref_videos", "/data/gen_videos")
 print(score)
@@ -603,7 +630,7 @@ Lower values indicate closer video distributions. JEDi was proposed to address l
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_jedi_from_features,
     compute_mock_jedi,
 )
@@ -621,11 +648,10 @@ print(compute_mock_jedi())
 ### 一次跑多个 torch-fidelity 指标
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_distribution_metrics
+from worldfoundry.evals.tasks.metrics import compute_distribution_metrics
 
 scores = compute_distribution_metrics(
     "/data/ref", "/data/gen", metrics=("fid", "kid", "prc")
 )
 print(scores)
 ```
-

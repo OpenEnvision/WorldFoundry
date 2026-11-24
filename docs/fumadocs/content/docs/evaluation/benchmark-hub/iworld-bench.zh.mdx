@@ -1,15 +1,15 @@
 ---
 title: iWorld-Bench
-description: "ICML 2026 交互式世界模型评测：4.9k 任务覆盖视觉质量、轨迹跟随与记忆。WorldFoundry 封装官方指标，不编造榜单。"
+description: "ICML 2026 交互式世界模型评测：4.9k 任务覆盖视觉质量、轨迹跟随与记忆。WorldFoundry 封装官方指标。"
 ---
 
-iWorld-Bench（清华，联合东北大学与华南理工；ICML 2026）评的是 **交互式** 世界模型——能响应外部动作序列的生成器。统一的 Action Generation Framework 桥接文本动作、相机矩阵与轨迹。发布从 **330k** 片段筛到 **2.1k** 高质量样本，再定义 **六类任务 / 4.9k 测试样本**，覆盖视觉生成、轨迹跟随与记忆（例如内容离镜再入镜的 `memory_symmetry`）。
+iWorld-Bench（清华，联合东北大学与华南理工；ICML 2026）评测**交互式**世界模型，即能响应外部动作序列的生成器。统一的 Action Generation Framework 桥接文本动作、相机矩阵与轨迹。该基准先从 **330k** 个片段中筛选出 **2.1k** 个高质量样本，再定义**六类任务 / 4.9k 测试样本**，覆盖视觉生成、轨迹跟随与记忆（例如内容离镜再入镜的 `memory_symmetry`）。
 
 `iworldbench_average` 是已有分面的均值。许可证：Apache-2.0。
 
 项目：[iworld-bench.com](https://iworld-bench.com/)。代码：[EmbodiedCity/iWorld-Bench](https://github.com/EmbodiedCity/iWorld-Bench)。数据：[`EmbodiedCity/iWorld-Bench-Dataset`](https://huggingface.co/datasets/EmbodiedCity/iWorld-Bench-Dataset)。
 
-WorldFoundry **封装官方指标 runtime** 并归一化报告 CSV/JSON。目录记录的有界命令用 `--metric memory`（仅像素记忆，不编译 ViPE）。完整官方 GPU 执行需要数据集元数据、VBench 资产，以及兼容 CUDA 的 ViPE 构建——仓内 ViPE 树缺少原生扩展源码。
+WorldFoundry **封装官方指标 runtime** 并归一化报告 CSV/JSON。下面的命令只运行记忆指标（`--metric memory`：仅像素记忆，不编译 ViPE）。完整官方 GPU 执行需要数据集元数据、VBench 资产，以及兼容 CUDA 的 ViPE 构建；附带的 ViPE 树缺少原生扩展源码。
 
 <BenchmarkPageSections id="iworld-bench" locale="zh" />
 
@@ -21,7 +21,7 @@ hf download EmbodiedCity/iWorld-Bench-Dataset --repo-type dataset \
   --local-dir "${WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT}"
 
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py \
   --run-official \
   --generated-videos-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --metric memory \
@@ -29,9 +29,9 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
   --json
 ```
 
-`--split` 选择任务划分。`--official-results-path` 导入已有报告。环境变量：`WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT`、`WORLDFOUNDRY_IWORLD_BENCH_RESULTS_PATH`、`WORLDFOUNDRY_IWORLD_BENCH_RUNTIME_BACKEND`。`WORLDFOUNDRY_IWORLD_BENCH_PYTHON` 是可选的兼容 Python 覆盖，不是单独环境要求。
+`--split` 选择任务划分。`--official-results-path` 导入已有报告。环境变量：`WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT`、`WORLDFOUNDRY_IWORLD_BENCH_RESULTS_PATH`、`WORLDFOUNDRY_IWORLD_BENCH_RUNTIME_BACKEND`。`WORLDFOUNDRY_IWORLD_BENCH_PYTHON` 是可选的兼容 Python 解释器覆盖配置，不代表需要单独的环境。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/iworld-bench.yaml`。数据布局：`dataset/all_pack/metadata.csv`、`camera_following_metadata.csv`、`assets/`。
+清单：`worldfoundry/data/benchmarks/tasks/external/iworld-bench.yaml`。数据布局：`dataset/all_pack/metadata.csv`、`camera_following_metadata.csv`、`assets/`。
 
 产物包括 `scorecard.json`（主键 `iworldbench_average`）与 `raw_metric_table.jsonl`。
 

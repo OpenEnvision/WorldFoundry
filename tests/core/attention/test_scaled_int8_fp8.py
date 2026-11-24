@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch.nn import functional as F
 
-from worldfoundry.core.attention.schedule import MHASchedule, scheduled_sdpa
+from worldfoundry.core.acceleration.mha_schedule import MHASchedule, scheduled_sdpa
 from worldfoundry.core.attention.sequence.key_centering import streaming_key_mean
 
 

@@ -3,14 +3,18 @@ from __future__ import annotations
 import ast
 import importlib
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from worldfoundry.cli import zoo as zoo_cli
-from worldfoundry.evaluation.api import BenchmarkSpec
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import load_benchmark_catalog_shard_entries
-from worldfoundry.evaluation.tasks.catalog.schema import (
+from worldfoundry.evals.api import BenchmarkSpec
+from worldfoundry.evals.tasks.catalog.benchmark_catalog import (
+    clear_benchmark_catalog_cache,
+    load_benchmark_catalog_shard_entries,
+)
+from worldfoundry.evals.tasks.catalog.schema import (
     OPEN_SOURCE_STATUSES,
     BenchmarkDatasetRef,
     BenchmarkMetricSpec,
@@ -18,16 +22,12 @@ from worldfoundry.evaluation.tasks.catalog.schema import (
     BenchmarkSource,
     BenchmarkZooEntry,
 )
-from worldfoundry.evaluation.tasks.catalog.specs import (
+from worldfoundry.evals.tasks.catalog.specs import (
     benchmark_zoo_entries_to_benchmark_specs,
     benchmark_zoo_entry_to_benchmark_spec,
 )
-from worldfoundry.evaluation.tasks.catalog.zoo_registry import (
-    BenchmarkZooRegistry,
-    clear_benchmark_zoo_registry_cache,
-    load_benchmark_zoo_registry,
-)
-from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
+from worldfoundry.evals.tasks.catalog.zoo_registry import BenchmarkZooRegistry, load_benchmark_zoo_registry
+from worldfoundry.evals.tasks.contracts.external import get_external_benchmark_contract
 
 NEW_VIDEO_WORLD_NORMALIZER_IDS = (
     "aigcbench",
@@ -95,7 +95,7 @@ def test_benchmark_zoo_entry_roundtrips_nested_dict_and_json() -> None:
         integration_status="integrated",
         runner=BenchmarkRunnerSpec(
             install_profile="default",
-            runner_target="worldfoundry.evaluation.example",
+            runner_target="worldfoundry.evals.example",
             run_command="conda run -n worldfoundry example",
             verification_status="verified",
             notes=("runner note",),
@@ -158,7 +158,7 @@ def test_benchmark_zoo_entry_accepts_flat_manifest_fields() -> None:
             "runner_availability": {"available": True, "task_yaml_available": True},
             "integration_status": "planned",
             "install_profile": "api",
-            "runner_target": "worldfoundry.evaluation.flat",
+            "runner_target": "worldfoundry.evals.flat",
             "run_command": "conda run -n worldfoundry flat",
             "verification_status": "pending",
             "metrics": [{"id": "score", "higher_is_better": False}],
@@ -195,7 +195,7 @@ def test_benchmark_zoo_entry_accepts_flat_manifest_fields() -> None:
     assert entry.data_refs["task_yaml"] == "data/benchmarks/tasks/external/flat-example.yaml"
     assert entry.runner_availability["task_yaml_available"] is True
     assert entry.install_profile == "api"
-    assert entry.runner_target == "worldfoundry.evaluation.flat"
+    assert entry.runner_target == "worldfoundry.evals.flat"
     assert entry.run_command == "conda run -n worldfoundry flat"
     assert entry.verification_status == "pending"
     assert entry.metrics[0].metric_id == "score"
@@ -398,7 +398,7 @@ def test_benchmark_zoo_loads_video_world_manifest() -> None:
     assert worldscore_validation["leaderboard_valid"] is False
     assert (
         by_id["worldscore"].runner.clone_dir
-        == "worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore"
+        == "worldfoundry/evals/tasks/execution/runners/worldscore/runtime/worldscore"
     )
     assert by_id["worldscore"].run_command is not None
     assert "run_worldscore_official_runner.py" in _command_text(by_id["worldscore"].run_command)
@@ -522,18 +522,18 @@ def test_benchmark_zoo_loads_embodied_world_manifest() -> None:
     assert by_id["rlbench"].official_repo_url == "https://github.com/stepjam/RLBench"
     assert by_id["metaworld"].paper_url == "https://arxiv.org/abs/1910.10897"
     assert by_id["bridgedata-v2"].dataset.path == "${WORLDFOUNDRY_DATA_DIR}/datasets/bridgedata-v2"
-    assert by_id["bridgedata-v2"].runner_target.endswith("BridgeDataV2Contract")
+    assert by_id["bridgedata-v2"].runner_target.endswith(":bridgedata-v2")
     assert "libero-para" not in by_id
-    assert by_id["libero-plus"].runner_target.endswith("LIBEROPlusContract")
+    assert by_id["libero-plus"].runner_target.endswith(":libero-plus")
     assert by_id["libero-plus"].runner_runtime["task_manifest"].endswith("libero-plus.yaml")
     assert by_id["robotwin"].name == "RoboTwin 2.0"
     assert by_id["robotwin"].paper_url == "https://arxiv.org/abs/2506.18088"
-    assert by_id["robotwin"].runner_target.endswith("RoboTwinContract")
+    assert by_id["robotwin"].runner_target.endswith(":robotwin")
     assert by_id["robotwin"].run_command is not None
     # The robotwin manifest routes runs through the embodied CLI entrypoint
     # (config-driven) instead of the old standalone runner script.
     robotwin_command = _command_text(by_id["robotwin"].run_command)
-    assert "worldfoundry-eval embodied run" in robotwin_command
+    assert "wf embodied run" in robotwin_command
     assert "--config" in robotwin_command
     assert "embodied/robotwin/eval.yaml" in robotwin_command
     assert by_id["robotwin"].runner.clone_dir == "thirdparty/RoboTwin"
@@ -709,9 +709,9 @@ def test_benchmark_zoo_video_world_manifest_converts_to_public_specs() -> None:
         tuple(metric.metric_id for metric in by_id["vbench"].metrics)
         == get_external_benchmark_contract("vbench").metric_ids
     )
-    assert by_id["vbench-plus-plus"].tasks[0].metadata["runner"]["runner_target"].endswith("VBenchPlusPlusContract")
+    assert by_id["vbench-plus-plus"].tasks[0].metadata["runner"]["runner_target"].endswith(":vbench-plus-plus")
     assert by_id["vbench-plus-plus"].tasks[0].metadata["dataset"]["not_applicable"] is True
-    assert by_id["vbench-2.0"].tasks[0].metadata["runner"]["runner_target"].endswith("VBench2Contract")
+    assert by_id["vbench-2.0"].tasks[0].metadata["runner"]["runner_target"].endswith(":vbench-2.0")
     assert by_id["vbench-2.0"].metadata["open_source_status"] == "experimental"
     assert by_id["vbench-2.0"].metadata["official_runtime_validated"] is False
     assert by_id["vbench-2.0"].tasks[0].metadata["contract_only_surface"] is True
@@ -724,7 +724,7 @@ def test_benchmark_zoo_video_world_manifest_converts_to_public_specs() -> None:
     assert by_id["vbench-2.0"].metrics[-1].metric_id == "vbench2_total"
     assert by_id["worldmodelbench"].tasks[0].data["hf_dataset_id"] == "Efficient-Large-Model/worldmodelbench"
     assert "judge_responses" in by_id["worldmodelbench"].tasks[0].output_keys
-    assert by_id["worldscore"].tasks[0].metadata["runner"]["runner_target"].endswith("WorldScoreContract")
+    assert by_id["worldscore"].tasks[0].metadata["runner"]["runner_target"].endswith(":worldscore")
     assert by_id["worldscore"].tasks[0].metadata["official_runtime_validated"] is False
     assert by_id["worldscore"].tasks[0].metadata["open_source_status"] == "experimental"
     assert (
@@ -734,16 +734,16 @@ def test_benchmark_zoo_video_world_manifest_converts_to_public_specs() -> None:
         .endswith("worldscore_bounded_gpu_validation_after_readiness_layers_20260525/scorecard.json")
     )
     assert "per_sample_metrics" in by_id["worldscore"].tasks[0].output_keys
-    assert by_id["video-bench"].tasks[0].metadata["runner"]["runner_target"].endswith("VideoBenchContract")
+    assert by_id["video-bench"].tasks[0].metadata["runner"]["runner_target"].endswith(":video-bench")
     assert by_id["video-bench"].metadata["integration_status"] == "integrated"
     assert by_id["video-bench"].tasks[0].metadata["official_runtime_validated"] is False
     assert by_id["video-bench"].tasks[0].metadata["leaderboard_valid"] is False
     assert by_id["video-bench"].metrics[-1].metric_id == "videobench_average"
-    assert by_id["worldbench"].tasks[0].metadata["runner"]["runner_target"].endswith("WorldBenchContract")
+    assert by_id["worldbench"].tasks[0].metadata["runner"]["runner_target"].endswith(":worldbench")
     assert by_id["worldbench"].metrics[0].metric_id == "foreground_miou"
-    assert by_id["t2v-compbench"].tasks[0].metadata["runner"]["runner_target"].endswith("T2VCompBenchContract")
+    assert by_id["t2v-compbench"].tasks[0].metadata["runner"]["runner_target"].endswith(":t2v-compbench")
     assert "leaderboard_csv_manifest" in by_id["t2v-compbench"].tasks[0].output_keys
-    assert by_id["vmbench"].tasks[0].metadata["runner"]["runner_target"].endswith("VMBenchContract")
+    assert by_id["vmbench"].tasks[0].metadata["runner"]["runner_target"].endswith(":vmbench")
     assert by_id["vmbench"].tasks[0].metadata["dataset"]["not_applicable"] is True
     assert "per_sample_metrics" in by_id["vmbench"].tasks[0].output_keys
 
@@ -757,9 +757,11 @@ def test_benchmark_zoo_video_world_manifest_converts_to_public_specs() -> None:
         (BenchmarkRunnerSpec, {"verification_status": "matching"}, "BenchmarkRunnerSpec.verification_status"),
     ],
 )
-def test_status_fields_validate_known_enum_strings(factory: object, kwargs: dict[str, object], message: str) -> None:
+def test_status_fields_validate_known_enum_strings(
+    factory: Callable[..., object], kwargs: dict[str, object], message: str
+) -> None:
     with pytest.raises(ValueError, match=message):
-        factory(**kwargs)  # type: ignore[operator]
+        factory(**kwargs)
 
 
 def test_open_source_status_enum_documents_release_labels() -> None:
@@ -788,7 +790,7 @@ def test_benchmark_maturity_comes_from_manifest() -> None:
             "official_benchmark_verified": True,
             "integration_evidence": True,
             "runner": {
-                "runner_target": "worldfoundry.evaluation.tasks.contracts.external:VBenchContract",
+                "runner_target": "worldfoundry.evals.tasks.contracts.external:vbench",
                 "verification_status": "verified",
             },
             "metrics": [{"id": "score"}],
@@ -807,10 +809,10 @@ def test_benchmark_user_commands_use_manifest_fields_only() -> None:
             "open_source_status": "stable",
             "maturity": "contract_ready",
             "contract_validation_command": (
-                "worldfoundry-eval zoo benchmark-run --benchmark-id stable-release-planned-runner "
+                "wf zoo benchmark-run --benchmark-id stable-release-planned-runner "
                 "--mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/stable-release-planned-runner --json"
             ),
-            "runner": {"runner_target": "worldfoundry.evaluation.tasks.contracts.external:VBenchContract"},
+            "runner": {"runner_target": "worldfoundry.evals.tasks.contracts.external:vbench"},
             "metrics": [{"id": "score"}],
             "dataset": {"not_applicable": True},
         }
@@ -879,7 +881,7 @@ entries:
         encoding="utf-8",
     )
 
-    clear_benchmark_zoo_registry_cache()
+    clear_benchmark_catalog_cache()
     try:
         first = load_benchmark_zoo_registry(tmp_path)
         second = load_benchmark_zoo_registry(tmp_path)
@@ -887,12 +889,12 @@ entries:
         assert first is second
         assert first.get("cached-benchmark").benchmark_id == "cached-benchmark"
 
-        clear_benchmark_zoo_registry_cache()
+        clear_benchmark_catalog_cache()
         refreshed = load_benchmark_zoo_registry(tmp_path)
         assert refreshed is not first
         assert refreshed.keys() == ["cached-benchmark"]
     finally:
-        clear_benchmark_zoo_registry_cache()
+        clear_benchmark_catalog_cache()
 
 
 def test_benchmark_zoo_registry_rejects_duplicate_aliases() -> None:
@@ -908,8 +910,8 @@ def test_benchmark_zoo_registry_rejects_duplicate_aliases() -> None:
 def test_benchmark_zoo_schema_and_registry_imports_are_lightweight() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     paths = [
-        repo_root / "worldfoundry" / "evaluation" / "tasks" / "catalog" / "schema.py",
-        repo_root / "worldfoundry" / "evaluation" / "tasks" / "catalog" / "zoo_registry.py",
+        repo_root / "worldfoundry" / "evals" / "tasks" / "catalog" / "schema.py",
+        repo_root / "worldfoundry" / "evals" / "tasks" / "catalog" / "zoo_registry.py",
     ]
     allowed_modules = set(sys.stdlib_module_names) | {"__future__", "worldfoundry"}
 

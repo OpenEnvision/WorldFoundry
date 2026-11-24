@@ -1,9 +1,9 @@
 ---
 title: WRBench
-description: "中科大 / X-Humanoid 持久状态评测：Natural-25，D1–D6 相机转开链。WorldFoundry 检入整包；完整 D1–D6 未验证。"
+description: "中科大 / X-Humanoid 持久状态评测：Natural-25，D1–D6 相机转开链。WorldFoundry 内置整包与 Natural-25 资产。"
 ---
 
-WRBench（“Current World Models Lack a Persistent State Core”；中科大与 X-Humanoid / 北京人形机器人创新中心）把相机运动当成 **可观测性干预**：事件开始，相机转开，回来时问目标是 **推进到终点还是冻在离开时的状态**。**Natural-25** 交叉 25 个场景族与四级事件设计（空间变化 × 状态变化）。标准相机轨把 **100 个语义变体 × 五种相机控制** 展开成 **500 条请求**。
+WRBench（“Current World Models Lack a Persistent State Core”；中科大与 X-Humanoid / 北京人形机器人创新中心）把相机运动当成**可观测性干预**：事件开始后相机转开，返回时判断目标是**推进到终点，还是停留在离开时的状态**。**Natural-25** 交叉 25 个场景族与四级事件设计（空间变化 × 状态变化）。标准相机轨把 **100 个语义变体 × 五种相机控制**展开成 **500 条请求**。
 
 分层 **D1–D6**：
 
@@ -14,14 +14,14 @@ WRBench（“Current World Models Lack a Persistent State Core”；中科大与
 
 `wrbench_average` 汇总 D1–D6。论文：[WRBench](https://arxiv.org/abs/2606.20545)。项目：[jinplu.github.io/WRBench](https://jinplu.github.io/WRBench/)。代码：[JinPLu/WRBench](https://github.com/JinPLu/WRBench)。数据：[`WRBench/wrbench-natural25`](https://huggingface.co/datasets/WRBench/wrbench-natural25)。
 
-WorldFoundry **检入完整包装与 Natural-25 资产**。Natural-25 请求物化与结果归一化可用；**完整 D1–D6 执行未验证**。打分器：VGGT-Omega、DINOv2、Qwen3.5、Qwen3-VL。
+WorldFoundry **内置完整包与 Natural-25 资产**，可物化 Natural-25 请求并归一化结果。打分器：VGGT-Omega、DINOv2、Qwen3.5、Qwen3-VL。
 
 <BenchmarkPageSections id="wrbench" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id wrbench \
   --mode official-validation \
   --official-results-path <official_results.json_or_csv> \
@@ -30,9 +30,9 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-`--run-official` 对照 Natural-25 给生成视频加相机 sidecar 打分（`--scorer-profile`、`--sidecar-profile-gate`）。没有再观察支持的行从 D5/D6 **排除**，不记失败。环境变量：`WORLDFOUNDRY_WRBENCH_RESULTS_PATH`、`WORLDFOUNDRY_WRBENCH_ROOT`。共享栈：`vggt_omega`、`dinov2`、`qwen3_5_vl`、`qwen3_vl`。
+`--run-official` 对照 Natural-25 给生成视频加相机 sidecar 打分（`--scorer-profile`、`--sidecar-profile-gate`）。不支持再观察的数据行将从 D5/D6 **排除**，不记为失败。环境变量：`WORLDFOUNDRY_WRBENCH_RESULTS_PATH`、`WORLDFOUNDRY_WRBENCH_ROOT`。共享栈：`vggt_omega`、`dinov2`、`qwen3_5_vl`、`qwen3_vl`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/wrbench.yaml`，`worldfoundry/data/benchmarks/assets/wrbench`，`worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench`。
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/wrbench.yaml`、`worldfoundry/data/benchmarks/assets/wrbench`、`worldfoundry/evals/tasks/execution/runners/wrbench/runtime/wrbench`。
 
 产物包括 `scorecard.json`（主键 `wrbench_average`，榜单键 `Avg`）与 `generation_requests.jsonl`。
 
@@ -45,7 +45,7 @@ worldfoundry-eval zoo benchmark-run \
 | `scene_events_25x4.csv` | 25 个场景族 × 4 个事件轴（无 / 空间 / 状态 / 全） |
 | `families.jsonl` | 场景族元数据与 prompt 变体 |
 | `variants.jsonl` | 确定性 TI2V 变体：25 族 × 4 事件档 × 4 相机间隔。`ti2v_prompt` 是锚定首帧的正式 prompt |
-| `variants.legacy_pronoun_20260620.jsonl` | 冻结的 provenance 快照；目前与 `variants.jsonl` 字节相同 |
+| `variants.legacy_pronoun_20260620.jsonl` | provenance 快照；内容与 `variants.jsonl` 相同 |
 | `t2v_layout_anchors.jsonl` | 纯文本布局事实（主体在左、交互者在右、开放表面、背景） |
 | `t2v_event_tails.jsonl` | 按 `variant_id` 的纯文本事件 / 动作尾巴 |
 | `prompt_profiles/t2v_layout_anchor.json` | 纯文本 prompt profile；禁止 T2I/TI2V 风格词 |

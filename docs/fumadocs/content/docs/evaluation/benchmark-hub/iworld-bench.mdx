@@ -1,6 +1,6 @@
 ---
 title: iWorld-Bench
-description: "ICML 2026 interactive world-model bench: 4.9k tasks over visual quality, trajectory following, and memory. WorldFoundry wraps official metrics; it does not invent a board."
+description: "ICML 2026 interactive world-model bench: 4.9k tasks over visual quality, trajectory following, and memory. WorldFoundry wraps the official metrics."
 ---
 
 iWorld-Bench (Tsinghua, with Northeastern and SCUT; ICML 2026) evaluates **interactive** world models — generators that respond to external action sequences. A unified Action Generation Framework bridges text actions, camera matrices, and trajectories. The release filters **330k** clips to **2.1k** high-quality samples, then defines **six task types / 4.9k test samples** across visual generation, trajectory following, and memory (e.g. `memory_symmetry` for content that leaves and re-enters view).
@@ -9,7 +9,7 @@ iWorld-Bench (Tsinghua, with Northeastern and SCUT; ICML 2026) evaluates **inter
 
 Project: [iworld-bench.com](https://iworld-bench.com/). Code: [EmbodiedCity/iWorld-Bench](https://github.com/EmbodiedCity/iWorld-Bench). Data: [`EmbodiedCity/iWorld-Bench-Dataset`](https://huggingface.co/datasets/EmbodiedCity/iWorld-Bench-Dataset).
 
-WorldFoundry **wraps the official metric runtime** and normalizes report CSV/JSON. The catalog-bounded command uses `--metric memory` (pixel-only memory, no compiled ViPE). Full official GPU execution needs dataset metadata, VBench assets, and a CUDA-compatible ViPE build — the vendored ViPE tree lacks native extension sources.
+WorldFoundry **wraps the official metric runtime** and normalizes report CSV/JSON. The command below runs only the memory metric (`--metric memory`: pixel-only, no compiled ViPE). Full official GPU execution needs dataset metadata, VBench assets, and a CUDA-compatible ViPE build; the bundled ViPE tree lacks native extension sources.
 
 <BenchmarkPageSections id="iworld-bench" locale="en" />
 
@@ -21,7 +21,7 @@ hf download EmbodiedCity/iWorld-Bench-Dataset --repo-type dataset \
   --local-dir "${WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT}"
 
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py \
   --run-official \
   --generated-videos-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --metric memory \
@@ -31,7 +31,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 `--split` selects task splits. `--official-results-path` imports an existing report. Env: `WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT`, `WORLDFOUNDRY_IWORLD_BENCH_RESULTS_PATH`, `WORLDFOUNDRY_IWORLD_BENCH_RUNTIME_BACKEND`. `WORLDFOUNDRY_IWORLD_BENCH_PYTHON` is an optional compatible-Python override, not a separate-env requirement.
 
-In-tree pointer: `worldfoundry/data/benchmarks/tasks/external/iworld-bench.yaml`. Dataset layout: `dataset/all_pack/metadata.csv`, `camera_following_metadata.csv`, `assets/`.
+Manifest: `worldfoundry/data/benchmarks/tasks/external/iworld-bench.yaml`. Dataset layout: `dataset/all_pack/metadata.csv`, `camera_following_metadata.csv`, `assets/`.
 
 Outputs include `scorecard.json` (primary `iworldbench_average`) and `raw_metric_table.jsonl`.
 

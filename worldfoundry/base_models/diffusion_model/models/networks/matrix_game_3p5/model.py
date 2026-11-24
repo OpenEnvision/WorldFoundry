@@ -11,7 +11,7 @@ Subject-ref memory adds learned embeddings concatenated into the stream.
 Reuses Wan ``MLP`` / ``CrossAttention`` / ``Head`` from ``../wan.model``.
 """
 
-from typing import Optional, Tuple
+from typing import ClassVar
 
 import torch
 import torch.nn as nn
@@ -234,7 +234,7 @@ class DiTBlock(nn.Module):
 class WanModel(torch.nn.Module):
     """Matrix Game 3.5 backbone: 3D patch DiT with optional camera PRoPE and ref memory."""
 
-    _repeated_blocks = ["DiTBlock"]
+    _repeated_blocks: ClassVar[list] = ["DiTBlock"]
 
     def __init__(
         self,
@@ -245,7 +245,7 @@ class WanModel(torch.nn.Module):
         text_dim: int,
         freq_dim: int,
         eps: float,
-        patch_size: Tuple[int, int, int],
+        patch_size: tuple[int, int, int],
         num_heads: int,
         num_layers: int,
         has_image_input: bool,
@@ -363,13 +363,13 @@ class WanModel(torch.nn.Module):
     def patchify(
         self,
         x: torch.Tensor,
-        control_camera_latents_input: Optional[torch.Tensor] = None,
+        control_camera_latents_input: torch.Tensor | None = None,
     ):
         """Conv3d-patch ``B C F H W``; optionally add a spatial camera-control adapter."""
         x = self.patch_embedding(x)
         if self.control_adapter is not None and control_camera_latents_input is not None:
             y_camera = self.control_adapter(control_camera_latents_input)
-            x = [u + v for u, v in zip(x, y_camera)]
+            x = [u + v for u, v in zip(x, y_camera, strict=False)]
             x = x[0].unsqueeze(0)
         return x
 
@@ -391,8 +391,8 @@ class WanModel(torch.nn.Module):
         x: torch.Tensor,
         timestep: torch.Tensor,
         context: torch.Tensor,
-        clip_feature: Optional[torch.Tensor] = None,
-        y: Optional[torch.Tensor] = None,
+        clip_feature: torch.Tensor | None = None,
+        y: torch.Tensor | None = None,
         **kwargs,
     ):
         """Denoise ``B C F H W`` latents; return residual in the same layout."""

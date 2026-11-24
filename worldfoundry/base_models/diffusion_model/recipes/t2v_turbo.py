@@ -21,7 +21,6 @@ from ..models.initializers.lvdm import build_lvdm_t2v_latent_initializer
 from ..schedulers import build_t2v_turbo_lcm_scheduler
 from .spec import NativeDiffusionRecipe
 
-
 T2V_TURBO_MODEL_ID = "t2v_turbo_t2v"
 T2V_TURBO_BASE_REPO_ID = "VideoCrafter/VideoCrafter2"
 T2V_TURBO_LORA_REPO_ID = "jiachenli-ucsb/T2V-Turbo-VC2"

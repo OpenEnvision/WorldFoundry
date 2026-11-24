@@ -9,6 +9,7 @@ from worldfoundry.studio.inference.catalog import (
     find_entry,
     template_id_hint,
 )
+from worldfoundry.studio.inference.catalog import resolve as catalog_resolve
 
 _TEMPLATE_TO_WORKLOAD = {
     "depth-geometry": "geometry",
@@ -22,13 +23,10 @@ _TEMPLATE_TO_WORKLOAD = {
 @pytest.mark.parametrize(
     ("model_id", "category", "template_id", "workload"),
     [
-        ("dust3r", "Depth / Geometry", "depth-geometry", "geometry"),
-        ("dust3r-base-model", "Depth / Geometry", "depth-geometry", "geometry"),
         ("inspatio-world", "Video-to-Video", "video-to-video", "v2v"),
         ("recammaster", "Video-to-Video", "video-to-video", "v2v"),
         ("neoverse", "Video-to-Video", "video-to-video", "v2v"),
         ("worldlabs-marble-1.1", "Remote API", "hosted-api", "api"),
-        ("dvlt", "3D Scene", "scene-3d", "3d"),
         ("lagernvs", "3D Scene", "scene-3d", "3d"),
         ("lingbot-map", "3D Scene", "scene-3d", "3d"),
         ("lyra-1", "3D Scene", "scene-3d", "3d"),
@@ -68,7 +66,7 @@ def test_cut3r_default_ref_prefers_owner_prefixed_local_checkpoint(
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(checkpoint_root))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
 
-    assert catalog._cut3r_default_ref() == str(local_model)
+    assert catalog.models.scene_3d._cut3r_default_ref() == str(local_model)
 
 
 def test_show_o_defaults_resolve_all_owner_prefixed_local_checkpoints(
@@ -84,8 +82,8 @@ def test_show_o_defaults_resolve_all_owner_prefixed_local_checkpoints(
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(checkpoint_root))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
 
-    assert catalog._show_o_default_ref() == str(show_o)
-    assert catalog._show_o_default_load_kwargs() == {
+    assert catalog.models.video_generation._show_o_default_ref() == str(show_o)
+    assert catalog.models.video_generation._show_o_default_load_kwargs() == {
         "vq_model_path": str(magvit),
         "llm_model_path": str(phi),
         "resolution": 256,
@@ -102,7 +100,7 @@ def test_longcat_default_ref_prefers_owner_prefixed_local_checkpoint(
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(checkpoint_root))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
 
-    assert catalog._longcat_video_default_ref() == str(local_model)
+    assert catalog.models.video_generation._longcat_video_default_ref() == str(local_model)
 
 
 def test_astra_default_ref_prefers_owner_prefixed_local_checkpoint(
@@ -115,7 +113,7 @@ def test_astra_default_ref_prefers_owner_prefixed_local_checkpoint(
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(checkpoint_root))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
 
-    assert catalog._astra_default_ref() == str(local_model)
+    assert catalog.models.video_generation._astra_default_ref() == str(local_model)
 
 
 def test_gen3c_defaults_resolve_all_owner_prefixed_local_checkpoints(
@@ -132,8 +130,8 @@ def test_gen3c_defaults_resolve_all_owner_prefixed_local_checkpoints(
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(checkpoint_root))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
 
-    assert catalog._gen3c_default_ref() == str(transformer)
-    assert catalog._gen3c_default_load_kwargs() == {
+    assert catalog.models.world_models._gen3c_default_ref() == str(transformer)
+    assert catalog.models.world_models._gen3c_default_load_kwargs() == {
         "required_components": {
             "transformer_model_path": str(transformer),
             "tokenizer_model_path": str(tokenizer),
@@ -150,10 +148,10 @@ def test_gen3c_defaults_keep_public_hub_fallbacks_without_local_checkpoints(
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path / "checkpoints"))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
     monkeypatch.setenv("HF_HOME", str(tmp_path / "hf-home"))
-    monkeypatch.setattr(catalog, "_cache_candidates", lambda *names: [])
+    monkeypatch.setattr(catalog_resolve, "_cache_candidates", lambda *names: [])
 
-    assert catalog._gen3c_default_ref() == "nvidia/GEN3C-Cosmos-7B"
-    assert catalog._gen3c_default_load_kwargs() == {
+    assert catalog.models.world_models._gen3c_default_ref() == "nvidia/GEN3C-Cosmos-7B"
+    assert catalog.models.world_models._gen3c_default_load_kwargs() == {
         "required_components": {
             "transformer_model_path": "nvidia/GEN3C-Cosmos-7B",
             "tokenizer_model_path": "nvidia/Cosmos-Tokenize1-CV8x8x8-720p",
@@ -185,8 +183,8 @@ def test_cameractrl_defaults_resolve_owner_prefixed_local_checkpoints(
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(checkpoint_root))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
 
-    assert catalog._cameractrl_default_ref() == str(pose)
-    assert catalog._cameractrl_default_load_kwargs() == {
+    assert catalog.models.video_generation._cameractrl_default_ref() == str(pose)
+    assert catalog.models.video_generation._cameractrl_default_load_kwargs() == {
         "sd15_path": str(sd15_root),
         "pose_adaptor_ckpt": str(pose),
         "image_lora_ckpt": str(image_lora),

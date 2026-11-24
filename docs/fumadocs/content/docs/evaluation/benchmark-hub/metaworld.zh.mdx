@@ -3,13 +3,13 @@ title: Meta-World
 description: "CoRL 2019 的 Sawyer / MuJoCo 套件：50 个技能，MT 与 ML 划分。WorldFoundry 导入官方结果导出——不跑 MuJoCo。"
 ---
 
-Meta-World（CoRL 2019）是斯坦福、加州大学伯克利分校与南加州大学的多任务与**元强化学习**操作评测，现由 **Farama Foundation** 维护。**Sawyer** 臂在 **MuJoCo** 里要完成 **50** 个不同的桌面技能（reach、push、抽屉、装配……）。官方评测**不是**一个数字：你必须点名套件。
+Meta-World（CoRL 2019）是斯坦福、加州大学伯克利分校与南加州大学的多任务与**元强化学习**操作评测，现由 **Farama Foundation** 维护。**Sawyer** 臂在 **MuJoCo** 里要完成 **50** 个不同的桌面技能（reach、push、抽屉、装配……）。官方评测**不是**一个数字：必须明确指定套件。
 
 多任务（同一策略，共享训练）：
 
 - **MT1** — 一个技能。
 - **MT10** — 十个技能；报告平均成功。
-- **MT50** — 全部五十个。
+- **MT50** — 全部五十个技能。
 
 元学习（适应留出任务 / 目标）：
 
@@ -19,14 +19,14 @@ Meta-World（CoRL 2019）是斯坦福、加州大学伯克利分校与南加州�
 
 常用成绩单是**二值成功率**，不是原始回报。论文：[Meta-World: A Benchmark and Evaluation for Multi-Task and Meta Reinforcement Learning](https://arxiv.org/abs/1910.10897)。项目：[meta-world.github.io](https://meta-world.github.io/)。代码：[Farama-Foundation/Metaworld](https://github.com/Farama-Foundation/Metaworld)（MIT）。
 
-WorldFoundry **只导入官方结果**。你在上游跑 Farama Metaworld / MuJoCo，再经 `official-validation` 归一化 JSON/CSV。仓内无模拟器。导出须声明 MT/ML 套件，否则行不可比。
+WorldFoundry **只导入官方结果**。先在上游运行 Farama Metaworld / MuJoCo，再经 `official-validation` 归一化 JSON/CSV。仓内无模拟器。导出中必须声明 MT/ML 套件，否则结果行不可比。
 
 <BenchmarkPageSections id="metaworld" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id metaworld \
   --mode official-validation \
   --official-results-path <official_results.json> \

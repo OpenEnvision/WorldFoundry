@@ -1,12 +1,11 @@
+import logging
+
 import torch
 import torch.nn as nn
 import torch.nn.init as init
-import logging
-from diffusers.models.lora import LoRALinearLayer
 from diffusers.models.attention import Attention
+from diffusers.models.lora import LoRALinearLayer
 from diffusers.utils import USE_PEFT_BACKEND
-from typing import Optional
-
 from einops import rearrange
 
 logger = logging.getLogger(__name__)
@@ -18,18 +17,18 @@ class AttnProcessor:
     """
 
     def __call__(
-            self,
-            attn: Attention,
-            hidden_states: torch.FloatTensor,
-            encoder_hidden_states: Optional[torch.FloatTensor] = None,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            temb: Optional[torch.FloatTensor] = None,
-            scale: float = 1.0,
-            pose_feature=None
+        self,
+        attn: Attention,
+        hidden_states: torch.FloatTensor,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        temb: torch.FloatTensor | None = None,
+        scale: float = 1.0,
+        pose_feature=None,
     ) -> torch.Tensor:
         residual = hidden_states
 
-        args = () if USE_PEFT_BACKEND else (scale,)
+        args = () if USE_PEFT_BACKEND or not hasattr(attn.to_q, "lora_layer") else (scale,)
 
         if attn.spatial_norm is not None:
             hidden_states = attn.spatial_norm(hidden_states, temb)
@@ -88,12 +87,12 @@ class LoRAAttnProcessor(nn.Module):
     """
 
     def __init__(
-            self,
-            hidden_size=None,
-            cross_attention_dim=None,
-            rank=4,
-            network_alpha=None,
-            lora_scale=1.0,
+        self,
+        hidden_size=None,
+        cross_attention_dim=None,
+        rank=4,
+        network_alpha=None,
+        lora_scale=1.0,
     ):
         super().__init__()
 
@@ -106,14 +105,14 @@ class LoRAAttnProcessor(nn.Module):
         self.to_out_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
 
     def __call__(
-            self,
-            attn,
-            hidden_states,
-            encoder_hidden_states=None,
-            attention_mask=None,
-            temb=None,
-            pose_feature=None,
-            scale=None
+        self,
+        attn,
+        hidden_states,
+        encoder_hidden_states=None,
+        attention_mask=None,
+        temb=None,
+        pose_feature=None,
+        scale=None,
     ):
         lora_scale = self.lora_scale if scale is None else scale
         residual = hidden_states
@@ -170,13 +169,15 @@ class LoRAAttnProcessor(nn.Module):
 
 
 class PoseAdaptorAttnProcessor(nn.Module):
-    def __init__(self,
-                 hidden_size,  # dimension of hidden state
-                 pose_feature_dim=None,  # dimension of the pose feature
-                 cross_attention_dim=None,  # dimension of the text embedding
-                 query_condition=False,
-                 key_value_condition=False,
-                 scale=1.0):
+    def __init__(
+        self,
+        hidden_size,  # dimension of hidden state
+        pose_feature_dim=None,  # dimension of the pose feature
+        cross_attention_dim=None,  # dimension of the text embedding
+        query_condition=False,
+        key_value_condition=False,
+        scale=1.0,
+    ):
         super().__init__()
 
         self.hidden_size = hidden_size
@@ -199,25 +200,27 @@ class PoseAdaptorAttnProcessor(nn.Module):
             init.zeros_(self.kv_merge.weight)
             init.zeros_(self.kv_merge.bias)
 
-    def forward(self,
-                attn,
-                hidden_states,
-                pose_feature,
-                encoder_hidden_states=None,
-                attention_mask=None,
-                temb=None,
-                scale=None,):
+    def forward(
+        self,
+        attn,
+        hidden_states,
+        pose_feature,
+        encoder_hidden_states=None,
+        attention_mask=None,
+        temb=None,
+        scale=None,
+    ):
         assert pose_feature is not None
-        pose_embedding_scale = (scale or self.scale)
+        pose_embedding_scale = scale or self.scale
 
         residual = hidden_states
         if attn.spatial_norm is not None:
             hidden_states = attn.spatial_norm(hidden_states, temb)
 
         if hidden_states.dim == 5:
-            hidden_states = rearrange(hidden_states, 'b c f h w -> (b f) (h w) c')
+            hidden_states = rearrange(hidden_states, "b c f h w -> (b f) (h w) c")
         elif hidden_states.ndim == 4:
-            hidden_states = rearrange(hidden_states, 'b c h w -> b (h w) c')
+            hidden_states = rearrange(hidden_states, "b c h w -> b (h w) c")
         else:
             assert hidden_states.ndim == 3
 
@@ -228,9 +231,9 @@ class PoseAdaptorAttnProcessor(nn.Module):
             encoder_hidden_states = hidden_states
 
         if encoder_hidden_states.ndim == 5:
-            encoder_hidden_states = rearrange(encoder_hidden_states, 'b c f h w -> (b f) (h w) c')
+            encoder_hidden_states = rearrange(encoder_hidden_states, "b c f h w -> (b f) (h w) c")
         elif encoder_hidden_states.ndim == 4:
-            encoder_hidden_states = rearrange(encoder_hidden_states, 'b c h w -> b (h w) c')
+            encoder_hidden_states = rearrange(encoder_hidden_states, "b c h w -> b (h w) c")
         else:
             assert encoder_hidden_states.ndim == 3
         if pose_feature.ndim == 5:
@@ -256,7 +259,9 @@ class PoseAdaptorAttnProcessor(nn.Module):
             query_hidden_state = self.q_merge(hidden_states + pose_feature) * pose_embedding_scale + hidden_states
             key_value_hidden_state = encoder_hidden_states
         else:
-            key_value_hidden_state = self.kv_merge(encoder_hidden_states + pose_feature) * pose_embedding_scale + encoder_hidden_states
+            key_value_hidden_state = (
+                self.kv_merge(encoder_hidden_states + pose_feature) * pose_embedding_scale + encoder_hidden_states
+            )
             query_hidden_state = hidden_states
 
         # original attention
@@ -286,17 +291,19 @@ class PoseAdaptorAttnProcessor(nn.Module):
 
 
 class LORAPoseAdaptorAttnProcessor(nn.Module):
-    def __init__(self,
-                 hidden_size,  # dimension of hidden state
-                 pose_feature_dim=None,  # dimension of the pose feature
-                 cross_attention_dim=None,  # dimension of the text embedding
-                 query_condition=False,
-                 key_value_condition=False,
-                 scale=1.0,
-                 # lora keywords
-                 rank=4,
-                 network_alpha=None,
-                 lora_scale=1.0):
+    def __init__(
+        self,
+        hidden_size,  # dimension of hidden state
+        pose_feature_dim=None,  # dimension of the pose feature
+        cross_attention_dim=None,  # dimension of the text embedding
+        query_condition=False,
+        key_value_condition=False,
+        scale=1.0,
+        # lora keywords
+        rank=4,
+        network_alpha=None,
+        lora_scale=1.0,
+    ):
         super().__init__()
 
         self.hidden_size = hidden_size
@@ -326,15 +333,16 @@ class LORAPoseAdaptorAttnProcessor(nn.Module):
         self.to_v_lora = LoRALinearLayer(cross_attention_dim or hidden_size, hidden_size, rank, network_alpha)
         self.to_out_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
 
-    def __call__(self,
-                 attn,
-                 hidden_states,
-                 encoder_hidden_states=None,
-                 attention_mask=None,
-                 temb=None,
-                 scale=1.0,
-                 pose_feature=None,
-                 ):
+    def __call__(
+        self,
+        attn,
+        hidden_states,
+        encoder_hidden_states=None,
+        attention_mask=None,
+        temb=None,
+        scale=1.0,
+        pose_feature=None,
+    ):
         assert pose_feature is not None
         lora_scale = self.lora_scale if scale is None else scale
         residual = hidden_states
@@ -342,9 +350,9 @@ class LORAPoseAdaptorAttnProcessor(nn.Module):
             hidden_states = attn.spatial_norm(hidden_states, temb)
 
         if hidden_states.dim == 5:
-            hidden_states = rearrange(hidden_states, 'b c f h w -> (b f) (h w) c')
+            hidden_states = rearrange(hidden_states, "b c f h w -> (b f) (h w) c")
         elif hidden_states.ndim == 4:
-            hidden_states = rearrange(hidden_states, 'b c h w -> b (h w) c')
+            hidden_states = rearrange(hidden_states, "b c h w -> b (h w) c")
         else:
             assert hidden_states.ndim == 3
 
@@ -355,9 +363,9 @@ class LORAPoseAdaptorAttnProcessor(nn.Module):
             encoder_hidden_states = hidden_states
 
         if encoder_hidden_states.ndim == 5:
-            encoder_hidden_states = rearrange(encoder_hidden_states, 'b c f h w -> (b f) (h w) c')
+            encoder_hidden_states = rearrange(encoder_hidden_states, "b c f h w -> (b f) (h w) c")
         elif encoder_hidden_states.ndim == 4:
-            encoder_hidden_states = rearrange(encoder_hidden_states, 'b c h w -> b (h w) c')
+            encoder_hidden_states = rearrange(encoder_hidden_states, "b c h w -> b (h w) c")
         else:
             assert encoder_hidden_states.ndim == 3
         if pose_feature.ndim == 5:
@@ -383,7 +391,9 @@ class LORAPoseAdaptorAttnProcessor(nn.Module):
             query_hidden_state = self.q_merge(hidden_states + pose_feature) * self.scale + hidden_states
             key_value_hidden_state = encoder_hidden_states
         else:
-            key_value_hidden_state = self.kv_merge(encoder_hidden_states + pose_feature) * self.scale + encoder_hidden_states
+            key_value_hidden_state = (
+                self.kv_merge(encoder_hidden_states + pose_feature) * self.scale + encoder_hidden_states
+            )
             query_hidden_state = hidden_states
 
         # original attention

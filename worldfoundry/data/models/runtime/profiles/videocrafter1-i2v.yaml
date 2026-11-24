@@ -8,6 +8,7 @@ groups:
 - videocrafter
 source_repos:
 - url: https://github.com/VideoCrafter/VideoCrafter
+  revision: f6c7f7f28f71d3069a9ee0e002d2f4b019eb78f6
 checkpoints:
 - role: image_to_video_checkpoint
   repo_id: VideoCrafter/Image2Video-512

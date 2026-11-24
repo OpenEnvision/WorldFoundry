@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -19,5 +18,5 @@ def test_visual_generation_training_package_was_removed() -> None:
 
 def test_solaris_multiplayer_eval_task_was_removed() -> None:
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("worldfoundry.evaluation.tasks.official.solaris_multiplayer")
-    assert not (REPO_ROOT / "worldfoundry" / "evaluation" / "tasks" / "official").exists()
+        importlib.import_module("worldfoundry.evals.tasks.official.solaris_multiplayer")
+    assert not (REPO_ROOT / "worldfoundry" / "evals" / "tasks" / "official").exists()

@@ -1,11 +1,12 @@
 # Written by Dibya
 import logging
-from typing import Dict, Optional
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 
+from ..spec import ModuleSpec
+from ..types import Data, Sequence
 from .base import TokenGroup
 from .block_transformer import (
     AttentionRule,
@@ -13,8 +14,6 @@ from .block_transformer import (
     PrefixGroup,
     TimestepGroup,
 )
-from ..spec import ModuleSpec
-from ..types import Data, Sequence
 
 
 class OctoTransformer(nn.Module):
@@ -77,10 +76,10 @@ class OctoTransformer(nn.Module):
 
     """
 
-    observation_tokenizers: Dict[str, nn.Module]
-    task_tokenizers: Dict[str, nn.Module]
-    readouts: Dict[str, int]
-    transformer_kwargs: Dict
+    observation_tokenizers: dict[str, nn.Module]
+    task_tokenizers: dict[str, nn.Module]
+    readouts: dict[str, int]
+    transformer_kwargs: dict
     token_embedding_size: int
     max_horizon: int
     repeat_task_tokens: bool
@@ -92,10 +91,10 @@ class OctoTransformer(nn.Module):
         observations: Data,
         tasks: Data,
         timestep_pad_mask: jax.Array,
-        readouts: Optional[Sequence[str]] = None,
+        readouts: Sequence[str] | None = None,
         train: bool = False,
         verbose: bool = False,
-    ) -> Dict[str, TokenGroup]:
+    ) -> dict[str, TokenGroup]:
         """
         Args:
             observations: A dictionary containing observation data for a batch of trajectory windows.
@@ -121,15 +120,13 @@ class OctoTransformer(nn.Module):
         # Check that all inputs are valid
         #
 
-        assert set(readouts).issubset(
-            set(self.readouts.keys())
-        ), "readouts must be specified in the model config"
+        assert set(readouts).issubset(set(self.readouts.keys())), "readouts must be specified in the model config"
 
         batch_size, horizon = jax.tree_util.tree_leaves(observations)[0].shape[:2]
         assert horizon <= self.max_horizon, "horizon must be <= max_horizon"
-        assert jax.tree_util.tree_all(
-            jax.tree_map(lambda x: x.shape[1] == horizon, observations)
-        ), "observations must have the same horizon"
+        assert jax.tree_util.tree_all(jax.tree_map(lambda x: x.shape[1] == horizon, observations)), (
+            "observations must have the same horizon"
+        )
 
         #
         # Attention rules for the transformer
@@ -165,9 +162,7 @@ class OctoTransformer(nn.Module):
                 logging.warning(f"Skipping task tokenizer: {group_name}")
                 continue
 
-            task_tokens = nn.Dense(
-                self.token_embedding_size, name=f"{group_name}_projection"
-            )(tokenizer_output.tokens)
+            task_tokens = nn.Dense(self.token_embedding_size, name=f"{group_name}_projection")(tokenizer_output.tokens)
             # task_tokens shape is (batch, n_tokens, token_embedding_size)
 
             # Add positional embedding
@@ -194,18 +189,14 @@ class OctoTransformer(nn.Module):
                 logging.warning(f"Skipping observation tokenizer: {group_name}")
                 continue
 
-            obs_tokens = nn.Dense(
-                self.token_embedding_size, name=f"{group_name}_projection"
-            )(tokenizer_output.tokens)
+            obs_tokens = nn.Dense(self.token_embedding_size, name=f"{group_name}_projection")(tokenizer_output.tokens)
             # obs_tokens shape is (batch, horizon, n_tokens, token_embedding_size)
 
             # Add positional embedding
             obs_tokens += self._create_positional_embedding(group_name, obs_tokens)
 
             # Update mask to account for which timesteps are padding
-            obs_pad_mask = jnp.logical_and(
-                timestep_pad_mask[:, :, None], tokenizer_output.mask
-            )
+            obs_pad_mask = jnp.logical_and(timestep_pad_mask[:, :, None], tokenizer_output.mask)
 
             all_timestep_groups.append(
                 TimestepGroup(
@@ -216,9 +207,7 @@ class OctoTransformer(nn.Module):
                 )
             )
         if self.repeat_task_tokens:
-            logging.info(
-                "repeating task tokens at each timestep to perform cross-modal attention"
-            )
+            logging.info("repeating task tokens at each timestep to perform cross-modal attention")
             # get task tokens
             for tasks in all_prefix_groups:
                 # lang (batch, n_tokens, token_embedding_size)
@@ -245,14 +234,10 @@ class OctoTransformer(nn.Module):
             group_name = f"readout_{readout_name}"
             # Readouts do not correspond to any inputs, just positional embeddings
             n_tokens_for_readout = self.readouts[readout_name]
-            readout_tokens = jnp.zeros(
-                (batch_size, horizon, n_tokens_for_readout, self.token_embedding_size)
-            )
+            readout_tokens = jnp.zeros((batch_size, horizon, n_tokens_for_readout, self.token_embedding_size))
 
             # Add positional embedding
-            readout_tokens += self._create_positional_embedding(
-                group_name, readout_tokens
-            )
+            readout_tokens += self._create_positional_embedding(group_name, readout_tokens)
             readout_mask = jnp.ones((batch_size, horizon, n_tokens_for_readout))
             readout_attention_rules = {
                 "task_*": AttentionRule.CAUSAL,
@@ -270,9 +255,9 @@ class OctoTransformer(nn.Module):
             )
 
         # Run the transformer!
-        assert (
-            self.transformer_kwargs.get("add_position_embedding", False) is False
-        ), "Already added positional embeddings to the tokens"
+        assert self.transformer_kwargs.get("add_position_embedding", False) is False, (
+            "Already added positional embeddings to the tokens"
+        )
 
         prefix_outputs, timestep_outputs = BlockTransformer(
             self.transformer_kwargs, use_correct_attention=self.use_correct_attention
@@ -283,30 +268,14 @@ class OctoTransformer(nn.Module):
             verbose=verbose,
         )
         outputs = {}
-        outputs.update(
-            {
-                group.name: TokenGroup(group.tokens, group.mask)
-                for group in prefix_outputs
-            }
-        )
-        outputs.update(
-            {
-                group.name: TokenGroup(group.tokens, group.mask)
-                for group in timestep_outputs
-            }
-        )
+        outputs.update({group.name: TokenGroup(group.tokens, group.mask) for group in prefix_outputs})
+        outputs.update({group.name: TokenGroup(group.tokens, group.mask) for group in timestep_outputs})
 
         if len(prefix_outputs) > 0:
-            outputs["task"] = TokenGroup.concatenate(
-                [TokenGroup(group.tokens, group.mask) for group in prefix_outputs]
-            )
+            outputs["task"] = TokenGroup.concatenate([TokenGroup(group.tokens, group.mask) for group in prefix_outputs])
 
         outputs["obs"] = TokenGroup.concatenate(
-            [
-                TokenGroup(group.tokens, group.mask)
-                for group in timestep_outputs
-                if group.name.startswith("obs_")
-            ],
+            [TokenGroup(group.tokens, group.mask) for group in timestep_outputs if group.name.startswith("obs_")],
             axis=-2,
         )
 
@@ -315,9 +284,7 @@ class OctoTransformer(nn.Module):
     def _create_positional_embedding(self, name: str, tokens: jax.Array):
         if tokens.ndim == 3:  # for prefixes
             shape = (1, *tokens.shape[-2:])
-        elif (
-            tokens.ndim == 4
-        ):  # for timesteps, create embedding for max_horizon, then truncate
+        elif tokens.ndim == 4:  # for timesteps, create embedding for max_horizon, then truncate
             shape = (1, self.max_horizon, *tokens.shape[-2:])
         else:
             raise ValueError(f"Invalid tokens shape: {tokens.shape}")
@@ -339,11 +306,9 @@ class OctoModule(nn.Module):
     """
 
     octo_transformer: OctoTransformer
-    heads: Dict[str, nn.Module]
+    heads: dict[str, nn.Module]
 
-    def __call__(
-        self, observations, tasks, timestep_pad_mask, train=False, verbose=False
-    ):
+    def __call__(self, observations, tasks, timestep_pad_mask, train=False, verbose=False):
         """Run transformer and the main method for all heads. Useful for init.
 
         Args:
@@ -370,11 +335,11 @@ class OctoModule(nn.Module):
     @classmethod
     def create(
         cls,
-        observation_tokenizers: Dict[str, ModuleSpec],
-        task_tokenizers: Dict[str, ModuleSpec],
-        heads: Dict[str, ModuleSpec],
-        readouts: Dict[str, int],
-        transformer_kwargs: Dict,
+        observation_tokenizers: dict[str, ModuleSpec],
+        task_tokenizers: dict[str, ModuleSpec],
+        heads: dict[str, ModuleSpec],
+        readouts: dict[str, int],
+        transformer_kwargs: dict,
         token_embedding_size: int,
         max_horizon: int,
         repeat_task_tokens: bool = False,
@@ -400,13 +365,8 @@ class OctoModule(nn.Module):
                 attention_dropout_rate (float): dropout rate in self attention.
         """
 
-        observation_tokenizer_defs = {
-            k: ModuleSpec.instantiate(spec)()
-            for k, spec in observation_tokenizers.items()
-        }
-        task_tokenizer_defs = {
-            k: ModuleSpec.instantiate(spec)() for k, spec in task_tokenizers.items()
-        }
+        observation_tokenizer_defs = {k: ModuleSpec.instantiate(spec)() for k, spec in observation_tokenizers.items()}
+        task_tokenizer_defs = {k: ModuleSpec.instantiate(spec)() for k, spec in task_tokenizers.items()}
 
         head_defs = {k: ModuleSpec.instantiate(spec)() for k, spec in heads.items()}
 

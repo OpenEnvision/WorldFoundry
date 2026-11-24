@@ -3,7 +3,6 @@
 import base64
 from io import BytesIO
 from pathlib import Path
-from typing import Union
 
 from PIL import Image
 
@@ -44,7 +43,7 @@ def pil_to_png_data_url(image_input: Image.Image) -> str:
 
 
 def image_or_string_to_png_data_url(
-    image_input: Union[Image.Image, str],
+    image_input: Image.Image | str,
     *,
     load_existing_path: bool = False,
 ) -> str:

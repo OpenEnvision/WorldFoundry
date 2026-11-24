@@ -69,10 +69,7 @@ def audit_page(path: Path) -> list[str]:
 
 
 def main() -> int:
-    pages = sorted(
-        path for path in PAGES_DIR.glob("*.mdx")
-        if path.name not in {"index.mdx", "index.zh.mdx"}
-    )
+    pages = sorted(path for path in PAGES_DIR.glob("*.mdx") if path.name not in {"index.mdx", "index.zh.mdx"})
     by_model: dict[str, set[str]] = {}
     issues: list[tuple[str, str]] = []
     for path in pages:

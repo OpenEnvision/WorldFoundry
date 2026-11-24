@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from copy import copy
 from threading import RLock
-from typing import Any, Generator, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import torch

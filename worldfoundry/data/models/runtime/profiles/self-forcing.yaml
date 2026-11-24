@@ -7,30 +7,31 @@ groups:
 - autoregressive_video
 source_repos:
 - url: https://github.com/guandeh17/Self-Forcing
+  revision: 33593df3e81fa3ec10239271dd2c100facac6de1
 checkpoints:
 - role: self_forcing_dmd
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Self-Forcing/checkpoints/self_forcing_dmd.pt
+  repo_id: gdhe17/Self-Forcing
+  revision: 2f8b779212da279d212c22a509b66ad6552f350e
+  filename: checkpoints/self_forcing_dmd.pt
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/gdhe17--Self-Forcing/checkpoints/self_forcing_dmd.pt
 - role: wan2_1_t2v_1_3b
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-1.3B
-- role: wan2_1_t2v_14b
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-14B
+  repo_id: Wan-AI/Wan2.1-T2V-1.3B
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan-AI--Wan2.1-T2V-1.3B
 input_schema:
   prompt: true
-  image: true
+  image: false
   video: false
-  actions:
-  - seed
 artifact_kind: generated_video
 artifact_filename: self-forcing.mp4
 execution:
-  backend_stage: official_in_tree_runtime
-  runtime_status: official_demo_parity_pending
+  backend_stage: native_diffusion
+  runtime_status: checkpoint_gpu_validated
   integration_status: integrated
   pipeline_binding: self-forcing
 integration:
   status: integrated
 notes:
-- WorldFoundry vendors the infer-only Self-Forcing runtime under worldfoundry/synthesis/visual_generation/forcing/self_forcing_runtime.
-- Benchmark prompt lists live under worldfoundry/data/test_cases/forcing/prompts/ (override with WORLDFOUNDRY_FORCING_PROMPTS_ROOT).
-- Override checkpoint_path when the official self_forcing_dmd.pt checkpoint is staged
-  outside the default path.
+- NativeSelfForcingPipeline loads the self-forcing native diffusion recipe and serves it offline and as a resident
+  realtime session.
+- The generator, Wan2.1 text encoder, tokenizer and VAE resolve from their Hugging Face repositories under
+  ${WORLDFOUNDRY_CKPT_DIR} or the Hub cache; checkpoint_path or checkpoint_overrides selects other local files.

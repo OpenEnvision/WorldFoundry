@@ -28,7 +28,7 @@ This is the layer to read when you are about to copy a utility into a model dire
       <li className="pi-kv-row">
         <div className="pi-kv-head"><div className="pi-kv-names"><code>model_loading</code></div></div>
         <p>Model construction, loading policy and weight conversion; checkpoints is the single owner of safe state-dict loading and assignment.</p>
-        <p className="pi-kv-read"><span>Start here</span> <code>checkpoints/, factory.py, inference_model.py, lora.py</code></p>
+        <p className="pi-kv-read"><span>Start here</span> <code>checkpoints/, model.py, inference_model.py, lora.py</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head"><div className="pi-kv-names"><code>io</code></div></div>
@@ -42,13 +42,18 @@ This is the layer to read when you are about to copy a utility into a model dire
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head"><div className="pi-kv-names"><code>execution</code></div></div>
-        <p>Device and process lifecycle, inference policy, runtime caches, CUDA graph replay and realtime orchestration.</p>
+        <p>Process lifecycle, inference policy, runtime caches, compile preparation, CUDA graph replay and realtime orchestration.</p>
         <p className="pi-kv-read"><span>Start here</span> <code>graphs/, realtime/, inference.py, inference_runtime.py, process.py</code></p>
       </li>
       <li className="pi-kv-row">
+        <div className="pi-kv-head"><div className="pi-kv-names"><code>platform</code></div></div>
+        <p>Accelerator detection, torch and collective backend selection, and the persistent <code>torch.compile</code> cache.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>device.py, compile_cache.py</code></p>
+      </li>
+      <li className="pi-kv-row">
         <div className="pi-kv-head"><div className="pi-kv-names"><code>configuration</code></div></div>
-        <p>Structured/Python config, Hydra adapters, overrides, lazy instantiation and validation.</p>
-        <p className="pi-kv-read"><span>Start here</span> <code>lazy_config/, hydra.py, hydra_utils.py, overrides.py, python.py, validators.py</code></p>
+        <p>Structured/Python config, Hydra adapters, overrides, lazy instantiation, <code>target</code> factories and validation.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>lazy_config/, factory.py, hydra.py, hydra_utils.py, overrides.py, python.py, validators.py</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head"><div className="pi-kv-names"><code>nn</code></div></div>
@@ -57,8 +62,8 @@ This is the layer to read when you are about to copy a utility into a model dire
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head"><div className="pi-kv-names"><code>acceleration</code></div></div>
-        <p>Reusable cache, token pruning and opt-in low-precision linear operators.</p>
-        <p className="pi-kv-read"><span>Start here</span> <code>quantization/, cache.py, token_pruning.py, technology.py</code></p>
+        <p>Reusable cache, token pruning, opt-in low-precision linear operators and projection/precision schedules for resident attention.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>quantization/, cache.py, mha_schedule.py, token_pruning.py, technology.py</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head"><div className="pi-kv-names"><code>kernels</code></div></div>
@@ -73,7 +78,7 @@ This is the layer to read when you are about to copy a utility into a model dire
       <li className="pi-kv-row">
         <div className="pi-kv-head"><div className="pi-kv-names"><code>memory</code></div></div>
         <p>Semantic/context memory contracts, retrieval, conditioning and persistence.</p>
-        <p className="pi-kv-read"><span>Start here</span> <code>base.py, conditioning.py, media.py, mosaic.py, retrieval.py, store.py</code></p>
+        <p className="pi-kv-read"><span>Start here</span> <code>base.py, conditioning.py, media.py, retrieval.py, store.py</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head"><div className="pi-kv-names"><code>geometry</code></div></div>
@@ -82,8 +87,8 @@ This is the layer to read when you are about to copy a utility into a model dire
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head"><div className="pi-kv-names"><code>observability</code></div></div>
-        <p>Logging, terminal formatting, timing, profiling and optional NVTX ranges.</p>
-        <p className="pi-kv-read"><span>Start here</span> <code>logging_setup.py, formatting.py, colors.py, time.py, torchprofile.py</code></p>
+        <p>Logging, rank-aware output, terminal formatting, timing, profiling and optional NVTX ranges.</p>
+        <p className="pi-kv-read"><span>Start here</span> <code>logging_setup.py, rank_logging.py, formatting.py, colors.py, time.py, torchprofile.py</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head"><div className="pi-kv-names"><code>safety</code></div></div>
@@ -101,13 +106,32 @@ This is the layer to read when you are about to copy a utility into a model dire
 
 ## Dependency rule
 
-`core` may depend on PyTorch, `diffusers` model/operator primitives, and narrow third-party libraries. It must not import `worldfoundry.pipelines`, `worldfoundry.synthesis`, `worldfoundry.operators`, `worldfoundry.base_models` family packages, or `worldfoundry.evaluation`, or `worldfoundry.studio`. The edge points *out of* family packages *into* `core`, never the reverse.
+`core` may depend on PyTorch, `diffusers` model/operator primitives, and narrow third-party libraries. It must not import `worldfoundry.pipelines`, `worldfoundry.synthesis`, `worldfoundry.operators`, `worldfoundry.base_models` family packages, or `worldfoundry.evals`, or `worldfoundry.studio`. The edge points *out of* family packages *into* `core`, never the reverse.
 
 This keeps family packages thin: a model directory contains checkpoint-compatible tensor math and contract adapters, not a second copy of an offload manager, a distributed bootstrap, a kernel registry, or a quantization system. When you find yourself adding one of those to a family package, move it to `core` first and import it from there.
 
 <Callout type="info">
   The diffusion package restates this rule for its own boundary in [Native diffusion](/docs/maintainers/architecture/native-diffusion). Generic attention, transformer, loading, and offload primitives live in `core`; diffusion-domain contracts, schedulers, and recipes live in `base_models/diffusion_model`.
 </Callout>
+
+### Layering inside core
+
+Core subpackages form a fixed stack. A module imports from its own layer or lower layers, and modules in one layer never import each other in a cycle. From the bottom up:
+
+1. `utils`, the root modules `registry`, `contracts`, `env_registry`, `prompting`, `action_normalization`, and the independent leaves `execution.deadline`, `model_loading.policy`
+2. `observability`
+3. `io`
+4. `configuration`, `platform`
+5. `distributed`
+6. `media`, `geometry`, `kernels`
+7. `attention`
+8. `nn`
+9. `model_loading/checkpoints`
+10. `acceleration`, `vram`
+11. `model_loading`
+12. `execution`, `memory`, `safety`
+
+A helper that a lower layer needs moves down to that layer instead of being imported upward. `tests/core/test_core_module_boundaries.py` holds the table and fails on any upward import.
 
 ## Where it is consumed
 
@@ -128,20 +152,21 @@ Training entrypoints, training-only datasets and dataloaders, losses, callbacks,
 
 For the directory-level map of every package, see [Codebase map](/docs/maintainers/architecture/file-index). For how a model call flows through these primitives, see [Model runtime](/docs/maintainers/architecture/model-runtime) and [Runtime assembly](/docs/maintainers/architecture/runtime-assembly).
 
-
 ## Ownership decisions
 
 - `checkpoint` is part of `model_loading/checkpoints`; weight loading, assignment and conversion have one owner.
-- Media codecs and the former `video` processing helpers share `media`; downloading and filesystem work stay in `io`.
+- Media codecs and video processing helpers share `media`; downloading and filesystem work stay in `io`.
 - CUDA graphs, prewarm, frame prefetch and overlap belong to `execution`; encoder placement/lifetime belongs to `vram`.
 - `memory` stays separate from `vram`: context/retrieval is a model input concern, while placement/offload manages physical memory.
-- Configuration helpers leave `io`, terminal formatting leaves `io`, and runtime scheduling leaves `utils`.
+- Configuration helpers belong to `configuration`, terminal formatting to `observability`, and runtime scheduling to `execution`.
+- `target`/`class_path` factories belong to `configuration`; rank-aware logging belongs to `observability`.
+- Accelerator detection and the persistent compile cache belong to `platform`; attention projection and precision schedules belong to `acceleration`; eval-only feature helpers live in `worldfoundry/evals`.
 - Wan sequence-parallel adapters and VGGT observation preprocessing live in their model families. Repository inventory audits live in `scripts/model_zoo`.
 
-Public lazy function/class facades remain stable. Internal module imports use the current owners; removed directories do not contain compatibility wrappers.
+Each subpackage's lazy export table lists only that package's own modules, so `worldfoundry.core.io` exports I/O names and media helpers come from `worldfoundry.core.media`. The `worldfoundry.core` facade maps every public name to the module that defines it. Internal module imports use the owning module directly; there are no compatibility wrappers.
 
 ## Regression gates
 
-`tests/core/test_core_module_boundaries.py` checks lazy targets and core imports without optional model dependencies. It also guards against dependencies from core into model/application packages. Runtime facade tests run in model environments.
+`tests/core/test_core_module_boundaries.py` checks lazy targets and core imports without optional model dependencies. It also guards against dependencies from core into model/application packages, enforces the layer table above, and keeps every export table pointing at the owning modules. Runtime facade tests run in model environments.
 
 Real-checkpoint changes also require `make test-geometry`: use fixed inputs, checkpoints, environments and seeds, compare numerical outputs against an accepted reference, and verify the replay hashes still match the current source. Moving files must preserve computation as well as importability.

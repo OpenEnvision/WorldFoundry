@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from worldfoundry.core.memory import BaseMemory
 
@@ -20,7 +20,7 @@ class ModelScopedMemory(BaseMemory):
 
     MODEL_ID: str | None = None
 
-    def __init__(self, capacity: Optional[int] = None, model_id: str | None = None, **kwargs: Any):
+    def __init__(self, capacity: int | None = None, model_id: str | None = None, **kwargs: Any):
         """Initialize the memory.
 
         Args:

@@ -14,6 +14,14 @@ type BenchmarkLiveEmbedProps = {
 
 const LOAD_TIMEOUT_MS = 12000;
 
+function isBlankFrame(frame: HTMLIFrameElement): boolean {
+  try {
+    return (frame.contentWindow?.location.href ?? '') === 'about:blank';
+  } catch {
+    return false;
+  }
+}
+
 function frameLooksBlocked(frame: HTMLIFrameElement): boolean {
   try {
     const href = frame.contentWindow?.location.href ?? '';
@@ -66,9 +74,14 @@ export function BenchmarkLiveEmbed({
 
   const handleLoad = useCallback(() => {
     const frame = frameRef.current;
-    if (frame && frameLooksBlocked(frame)) {
-      advance();
-      return;
+    if (frame) {
+      if (isBlankFrame(frame)) {
+        return;
+      }
+      if (frameLooksBlocked(frame)) {
+        advance();
+        return;
+      }
     }
     setSettled(true);
   }, [advance]);

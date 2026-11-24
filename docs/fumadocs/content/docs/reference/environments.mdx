@@ -7,7 +7,7 @@ description: Choose the dependency stack for each model family, benchmark runtim
 
 An environment is the dependency and launch context expected by a model or benchmark: Python packages, CUDA/Torch bucket, optional system tools, checkpoint layout, device assumptions, and command shape.
 
-The repository still uses `runtime_profile` as a metadata field because it points to a concrete environment record in `worldfoundry/data/models/runtime/profiles/<model-id>.yaml`. In reader-facing docs, this page calls the same concept an environment.
+The metadata field is `runtime_profile`; it points to a concrete environment record in `worldfoundry/data/models/runtime/profiles/<model-id>.yaml`. This page calls the same concept an environment.
 
 WorldFoundry is GPU-first and uses conda as the supported runtime and development environment path. The documented workflow creates one named CUDA environment for the main framework; separate environments are used only when an upstream simulator or official runtime requires isolation. Install `.[dev,test]` into the active GPU environment for contribution work.
 
@@ -36,7 +36,6 @@ WorldFoundry is GPU-first and uses conda as the supported runtime and developmen
     { name: <><code>molmobot_pi0</code></>, description: "Pinned MolmoBot Pi0 policy runtime.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[molmobot_pi0]</code></> }] },
     { name: <><code>metrics</code></>, description: "General evaluation metrics and dataset I/O.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[metrics]</code></> }] },
     { name: <><code>distribution_metrics</code></>, description: "Perceptual and distribution metric models.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[distribution_metrics]</code></> }] },
-    { name: <><code>dvlt</code></>, description: "DVLT 3D/visualization runtime.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[dvlt]</code></> }] },
     { name: <><code>ui</code></>, description: "Complete Studio/browser UI, including realtime transport dependencies.", reads: [{ label: "In all", value: "Yes" }, { label: "Install", value: <><code>.[ui]</code></> }] },
     { name: <><code>studio_realtime</code></>, description: "Minimal WebRTC/realtime Studio transport stack.", reads: [{ label: "In all", value: "Yes" }, { label: "Install", value: <><code>.[studio_realtime]</code></> }] },
     { name: <><code>rtx_postprocess</code></>, description: "Proprietary NVIDIA VFX post-processing; explicit opt-in only.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[rtx_postprocess]</code></> }] },
@@ -149,7 +148,7 @@ Start the Workspace after setup:
 source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 PYTHONPATH=. WORLDFOUNDRY_WORKSPACE_MAX_JOBS=8 \
-python -m worldfoundry.studio.serving.workspace --host 127.0.0.1 --port 7870
+python -m worldfoundry.studio.workspace.app --host 127.0.0.1 --port 7870
 ```
 
 Use explicit roots when datasets or checkpoints should live on shared storage:
@@ -325,18 +324,18 @@ links that preserve official paths without duplicating large files.
 
 ### Benchmark dataset layouts
 
-`worldfoundry-eval dataset locate <org/name>` resolves an existing dataset
+`wf dataset locate <org/name>` resolves an existing dataset
 without network access. It checks the per-dataset environment override first,
 then local asset/data manifests, a direct data root, and finally Hugging Face
 cache snapshots. Direct roots accept `org/name`, `org--name`, and nested
 `hfd_datasets` layouts; hub caches use the standard
 `datasets--org--name/snapshots/<revision>` layout. Use
-`worldfoundry-eval dataset plan <org/name> [...]` to print deduplicated download
+`wf dataset plan <org/name> [...]` to print deduplicated download
 commands without executing them.
 
 ## Compiler caches
 
-`worldfoundry.core.execution.compile_cache` configures persistent `torch.compile` caches
+`worldfoundry.core.platform.compile_cache` configures persistent `torch.compile` caches
 for Inductor, Triton, the CUDA driver JIT, and torch C++/CUDA extensions. The
 compatibility import `worldfoundry.runtime.compile_cache` exposes the same API.
 The root is `WORLDFOUNDRY_COMPILE_CACHE_DIR` when set, otherwise
@@ -359,6 +358,20 @@ launch win. WorldFoundry defaults to
 `TORCHINDUCTOR_AUTOTUNE_LOCAL_CACHE=1` and
 `TORCHINDUCTOR_AUTOTUNE_REMOTE_CACHE=0`; opt in to a remote autotune cache only
 when the cluster provides a compatible service.
+
+Dynamo's in-process graph-variant limits are separate from these disk caches.
+The shared module and callable compile helpers accept
+`WORLDFOUNDRY_COMPILE_RECOMPILE_LIMIT` and
+`WORLDFOUNDRY_COMPILE_ACCUMULATED_RECOMPILE_LIMIT` as positive integers.
+Unset variables leave PyTorch's limits unchanged; invalid explicit values raise
+before either limit is changed. The settings apply process-wide, including when
+a compiled wrapper is reused. Set them before worker startup when recompile logs
+show that the workload's shapes exceed the existing limits; larger limits can
+increase compilation time and memory use.
+
+With the shared helpers, non-empty compiler `options` replace the default mode.
+Combining options with an explicit non-default mode is rejected. Wrappers are
+reused only for the same underlying callable, policy, and options.
 
 ## Logging
 
@@ -414,7 +427,7 @@ The models below should still use `worldfoundry-unified-<cuda-tier>`, but their
 docs should call out extra local assets, compiled wheels, or external services.
 These are not reasons to clone an external repository; the code path is in-tree.
 
-- **Unified-env WRBench camera/world integrations (EasyAnimate, Hunyuan WorldPlay, HunyuanWorld-Voyager, InSpatio-World, Matrix-Game 2/3, ReCamMaster, SANA-WM, ATI, HyDRA, Spatia, minWM, MagicWorld, LiveWorld, VerseCrafter, VideoX-Fun camera variants, and the HY-World renderer)** — Extra requirement: Hugging Face checkpoints declared by each profile; Spatia's default MapAnything checkpoint is non-commercial research only. Notes: These resolve to `worldfoundry-unified-<cuda-tier>`. Every model keeps an independent in-tree inference binding. Reusable Wan2.1, MapAnything, UniCeption, Uni3C, Depth Pro, STream3R, SAM3 video segmentation, Qwen3-VL entity extraction, and point-cloud projection components live under `base_models`; runtime config lives under `worldfoundry/data`. Runtime setup never clones source repositories. AC3D, Cosmos3, GEN3C, Hunyuan GameCraft, and both LingBot routes use the dedicated environments listed above.
+- **Unified-env WRBench camera/world integrations (EasyAnimate, Hunyuan WorldPlay, InSpatio-World, Matrix-Game 2/3, ReCamMaster, SANA-WM, ATI, HyDRA, Spatia, minWM, MagicWorld, LiveWorld, VerseCrafter, VideoX-Fun camera variants, and the HY-World renderer)** — Extra requirement: Hugging Face checkpoints declared by each profile; Spatia's default MapAnything checkpoint is non-commercial research only. Notes: These resolve to `worldfoundry-unified-<cuda-tier>`. Every model keeps an independent in-tree inference binding. Reusable Wan2.1, MapAnything, UniCeption, Uni3C, Depth Pro, STream3R, SAM3 video segmentation, Qwen3-VL entity extraction, and point-cloud projection components live under `base_models`; runtime config lives under `worldfoundry/data`. Runtime setup never clones source repositories. AC3D, Cosmos3, GEN3C, Hunyuan GameCraft, and both LingBot routes use the dedicated environments listed above.
 - **SkyReels V3** — Extra requirement: CUDA compiler, flash-attn, and torchao for the official 8-GPU USP path. Notes: Use `unified_install.sh` without `--skip-flash-attn` or build flash-attn through `scripts/setup/install_flash_attn.sh`.
 - **Matrix-Game-3** — Extra requirement: Flash-attn. Notes: FA3 may be requested by config; FA2 fallback is acceptable on A100 validation hosts.
 - **HunyuanWorld-Mirror** — Extra requirement: CUDA/PyTorch-matched `gsplat` wheel. Notes: Remains a unified-env model when the wheel matches the active torch stack.
@@ -428,7 +441,7 @@ These are not reasons to clone an external repository; the code path is in-tree.
 Most benchmark official validation runs and official-result normalizers run in the
 unified environment. Full official metric suites can require a separate conda
 profile when their dependency stack would disturb model inference. Install those
-profiles through the same public setup entrypoint:
+profiles through the same public setup entrypoint, `scripts/setup/model_env_install.sh`.
 
 The complete per-benchmark mapping for all 42 Video Generation and World Model
 entries is in the [benchmark runtime environment matrix](/docs/evaluation/benchmark-hub/runtime-environments).
@@ -458,13 +471,8 @@ and runtime profile must name its Python executable or setup command, assets,
 and verified scope. If no reproducible environment recipe exists, the affected
 metric remains blocked rather than being reported through a fallback score.
 
-The in-tree code keeps reusable foundation models under `worldfoundry/base_models`.
-These components are available for future full-suite work; their presence does
-not mean the bounded EvalCrafter runner currently executes them:
-
-- **DeepFace runtime** (`worldfoundry/base_models/perception_core/face/deepface`) — Available for future celebrity identity integration; the supported CLIP subset does not execute it.
-- **DOVER runtime** (`worldfoundry/base_models/perception_core/video_quality/dover`) — Available for future video-quality integration; the supported CLIP subset does not execute it.
-- **VideoMAE action recipe** (`worldfoundry/base_models/perception_core/action_recognition/videomae_mmaction`) — Only the EvalCrafter-used VideoMAEv2 config and Kinetics-400 label map are vendored. MMAction2 is installed as an environment dependency, not copied as framework source.
+The in-tree DOVER runtime (`worldfoundry/base_models/perception_core/video_quality/dover`)
+is not executed by the supported CLIP subset.
 
 For the supported subset, stage CLIP ViT-B/32 under the standard checkpoint
 root or set its explicit override:
@@ -475,8 +483,8 @@ export WORLDFOUNDRY_CLIP_VIT_B32_MODEL_DIR="${WORLDFOUNDRY_HFD_ROOT}/openai--cli
 
 See the [EvalCrafter benchmark page](/docs/evaluation/benchmark-hub/evalcrafter)
 for the no-proxy download and smoke command. The complete upstream suite also
-expects direct `0000.mp4` through `0699.mp4` files, but WorldFoundry does not
-currently claim that full path.
+expects direct `0000.mp4` through `0699.mp4` files; WorldFoundry does not
+support that full path.
 
 ## WorldFoundry container
 
@@ -490,14 +498,14 @@ The host setup is Docker plus the unified WorldFoundry environment:
 bash scripts/setup/bootstrap_worldfoundry.sh
 source tmp/worldfoundry_unified_env.sh
 docker pull ghcr.io/allenai/vla-evaluation-harness/robotwin:latest
-worldfoundry-eval embodied run \
+wf embodied run \
   --config worldfoundry/data/benchmarks/eval_configs/embodied/robotwin/eval.yaml \
   --pull-docker
 ```
 
 Benchmark configs that have a `docker.image` entry, either directly or through
 `worldfoundry/data/benchmarks/runtime_profiles/official/<benchmark>.yaml`, are
-launched through `worldfoundry/evaluation/tasks/embodied/docker_runner.py`.
+launched through `worldfoundry/evals/tasks/embodied/docker_runner.py`.
 Inside the container, simulator dependencies are provided by the image. On the
 host, only mount datasets/checkpoints/results and provide the policy server
 endpoint.
@@ -522,4 +530,4 @@ sudo apt-get update && sudo apt-get install -y libgl1-mesa-glx libglib2.0-0
 
 ### 3. Flash Attention installation fails
 **Symptom**: The unified install script hangs or fails during `flash-attn` compilation.
-**Solution**: `flash-attn` is extremely sensitive to mismatched CUDA compiler (`nvcc`) versions. Ensure your `nvcc --version` matches the PyTorch CUDA version. Alternatively, you can disable `flash-attn` installation by passing `--skip-flash-attn` (if supported by your environment) or installing a pre-compiled wheel from the official release page.
+**Solution**: `flash-attn` is extremely sensitive to mismatched CUDA compiler (`nvcc`) versions. Ensure your `nvcc --version` matches the PyTorch CUDA version. Alternatively, pass `--skip-flash-attn` to `unified_install.sh` to skip it, or install a pre-compiled wheel from the official release page.

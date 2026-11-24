@@ -55,8 +55,6 @@ class HunyuanVideoFlowMatchDiscreteScheduler(SchedulerMixin, ConfigMixin):
             if not len(indices):
                 raise ValueError("Timestep is not in the current schedule.")
             self._step_index = int(indices[1 if len(indices) > 1 else 0])
-        previous = self.native.step(
-            model_output.float(), self._steps[self._step_index], sample.float(), generator=None
-        )
+        previous = self.native.step(model_output.float(), self._steps[self._step_index], sample.float(), generator=None)
         self._step_index += 1
         return SimpleNamespace(prev_sample=previous) if return_dict else (previous,)

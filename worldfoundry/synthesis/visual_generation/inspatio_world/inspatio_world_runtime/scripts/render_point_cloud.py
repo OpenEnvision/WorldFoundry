@@ -17,19 +17,19 @@ import argparse
 import glob
 import logging
 import os
-import subprocess
 import shutil
+import subprocess
 
 import cv2
 import numpy as np
 import open3d as o3d
 import torch
 
-from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.trajectory import (
-    generate_traj_txt,
-)
 from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.reproducibility import (
     initialize_reproducibility,
+)
+from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.trajectory import (
+    generate_traj_txt,
 )
 
 logging.basicConfig(
@@ -47,6 +47,7 @@ _splat_offset_cache = {}
 
 # ── Core rendering (from reference render_utils.py) ──
 
+
 def load_ply_data(ply_path, device):
     """Load point cloud from PLY file. Returns (points, colors) tensors."""
     pcd = o3d.io.read_point_cloud(ply_path)
@@ -58,15 +59,13 @@ def load_ply_data(ply_path, device):
     return torch.from_numpy(pts).to(device), torch.from_numpy(colors).to(device)
 
 
-def render_batch(points, colors, c2w, K, width, height, point_size=2,
-                 ss_ratio=2.0, bg_color=0):
+def render_batch(points, colors, c2w, K, width, height, point_size=2, ss_ratio=2.0, bg_color=0):
     """Render point cloud from given camera pose with supersampling.
 
     Returns (rgb_bgr, mask) as numpy arrays.
     """
     if points is None or colors is None:
-        return (np.zeros((height, width, 3), dtype=np.uint8),
-                np.zeros((height, width), dtype=np.uint8))
+        return (np.zeros((height, width, 3), dtype=np.uint8), np.zeros((height, width), dtype=np.uint8))
 
     H_high = int(height * ss_ratio)
     W_high = int(width * ss_ratio)
@@ -88,8 +87,7 @@ def render_batch(points, colors, c2w, K, width, height, point_size=2,
 
     mask_z = z > MIN_DEPTH_THRESHOLD
     if mask_z.sum() == 0:
-        return (np.zeros((height, width, 3), dtype=np.uint8),
-                np.zeros((height, width), dtype=np.uint8))
+        return (np.zeros((height, width, 3), dtype=np.uint8), np.zeros((height, width), dtype=np.uint8))
 
     xyz = cam_xyz[mask_z]
     rgb = colors[mask_z]
@@ -105,7 +103,7 @@ def render_batch(points, colors, c2w, K, width, height, point_size=2,
         if cache_key not in _splat_offset_cache:
             radius = p_size_high // 2
             offset_range = torch.arange(-radius, radius + 1, device=points.device)
-            dy, dx = torch.meshgrid(offset_range, offset_range, indexing='ij')
+            dy, dx = torch.meshgrid(offset_range, offset_range, indexing="ij")
             _splat_offset_cache[cache_key] = (dx.flatten(), dy.flatten())
         dx, dy = _splat_offset_cache[cache_key]
 
@@ -128,8 +126,8 @@ def render_batch(points, colors, c2w, K, width, height, point_size=2,
 
     # Z-buffer depth test
     indices = v * W_high + u
-    depth_buffer = torch.full((H_high * W_high,), float('inf'), device=points.device)
-    depth_buffer.scatter_reduce_(0, indices, z, reduce='min', include_self=True)
+    depth_buffer = torch.full((H_high * W_high,), float("inf"), device=points.device)
+    depth_buffer.scatter_reduce_(0, indices, z, reduce="min", include_self=True)
     is_closest = z <= depth_buffer[indices] + DEPTH_EPSILON
 
     final_u = u[is_closest]
@@ -146,14 +144,14 @@ def render_batch(points, colors, c2w, K, width, height, point_size=2,
     # Downsample
     img_high = (canvas.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
     img_final = cv2.resize(img_high, (width, height), interpolation=cv2.INTER_AREA)
-    mask_final = cv2.resize(mask_canvas.cpu().numpy(), (width, height),
-                            interpolation=cv2.INTER_NEAREST)
+    mask_final = cv2.resize(mask_canvas.cpu().numpy(), (width, height), interpolation=cv2.INTER_NEAREST)
 
     img_bgr = cv2.cvtColor(img_final, cv2.COLOR_RGB2BGR)
     return img_bgr, mask_final
 
 
 # ── Data loading ──
+
 
 def load_intrinsic(da3_dir, device):
     """Load first-frame intrinsic (3x3) from DA3 intrinsic.txt."""
@@ -178,7 +176,7 @@ def load_extrinsic_c2w(da3_dir, device):
 
     source_c2ws = []
     for i in range(num_frames):
-        w2c_34 = data[i * 3:(i + 1) * 3, :4].astype(np.float32)
+        w2c_34 = data[i * 3 : (i + 1) * 3, :4].astype(np.float32)
         w2c = np.vstack([w2c_34, np.array([[0, 0, 0, 1]], dtype=np.float32)])
         w2c_t = torch.tensor(w2c, dtype=torch.float32, device=device)
         c2w = torch.linalg.inv(w2c_t)
@@ -222,8 +220,10 @@ def scale_intrinsic(K, target_width, target_height):
 
 # ── Camera pose generation ──
 
-def generate_target_c2ws(traj_txt_path, initial_c2w, source_c2ws, num_frames, device,
-                         relative_to_source=False, rotation_only=False):
+
+def generate_target_c2ws(
+    traj_txt_path, initial_c2w, source_c2ws, num_frames, device, relative_to_source=False, rotation_only=False
+):
     """Generate target c2w poses from traj_txt.
 
     1. Read traj_txt -> generate_traj_txt() -> relative c2w offsets (N, 4, 4)
@@ -242,7 +242,7 @@ def generate_target_c2ws(traj_txt_path, initial_c2w, source_c2ws, num_frames, de
     Returns:
         list of (4, 4) c2w tensors, length = num_frames
     """
-    with open(traj_txt_path, 'r') as f:
+    with open(traj_txt_path) as f:
         lines = f.readlines()
     x_up_angle = [float(i) for i in lines[0].split()]
     y_left_angle = [float(i) for i in lines[1].split()]
@@ -257,13 +257,15 @@ def generate_target_c2ws(traj_txt_path, initial_c2w, source_c2ws, num_frames, de
     abs_source_c2ws = []
     for i in range(num_frames):
         rel_source = source_c2ws[i]  # already a torch tensor (4,4) on device, Twc
-        abs_source_c2w = initial_c2w.inverse() @ rel_source # Tc0w @ Twc = Tc0c
+        abs_source_c2w = initial_c2w.inverse() @ rel_source  # Tc0w @ Twc = Tc0c
         abs_source_c2ws.append(abs_source_c2w)
 
-        rel = torch.tensor(relative_c2ws[i], dtype=torch.float32, device=device) #Twc
-        abs_target_c2w = initial_c2w.inverse() @ rel # Tc0w @ Twc = Tc0c
+        rel = torch.tensor(relative_c2ws[i], dtype=torch.float32, device=device)  # Twc
+        abs_target_c2w = initial_c2w.inverse() @ rel  # Tc0w @ Twc = Tc0c
         if relative_to_source:
-            abs_target_c2w = (abs_target_c2w.inverse() @ abs_source_c2w.inverse()).inverse() # (new_Tcw_tgt = Tcw_tgt @ Tcw_src).inverse
+            abs_target_c2w = (
+                abs_target_c2w.inverse() @ abs_source_c2w.inverse()
+            ).inverse()  # (new_Tcw_tgt = Tcw_tgt @ Tcw_src).inverse
 
         target_c2ws.append(abs_target_c2w)
     return target_c2ws
@@ -271,12 +273,14 @@ def generate_target_c2ws(traj_txt_path, initial_c2w, source_c2ws, num_frames, de
 
 # ── ffmpeg streaming ──
 
+
 def open_ffmpeg_writer(output_path, width, height, fps=24):
     """Open ffmpeg subprocess for streaming raw RGB24 frames to mp4."""
     ffmpeg_binary = os.environ.get("FFMPEG_BINARY") or shutil.which("ffmpeg")
     if not ffmpeg_binary:
         try:
             import imageio_ffmpeg
+
             ffmpeg_binary = imageio_ffmpeg.get_ffmpeg_exe()
         except Exception as exc:
             raise RuntimeError(
@@ -285,15 +289,28 @@ def open_ffmpeg_writer(output_path, width, height, fps=24):
             ) from exc
 
     cmd = [
-        ffmpeg_binary, "-y",
-        "-f", "rawvideo", "-vcodec", "rawvideo",
-        "-pix_fmt", "rgb24",
-        "-s", f"{width}x{height}",
-        "-r", str(fps),
-        "-i", "-",
-        "-c:v", "libx264", "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        "-loglevel", "warning",
+        ffmpeg_binary,
+        "-y",
+        "-f",
+        "rawvideo",
+        "-vcodec",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-s",
+        f"{width}x{height}",
+        "-r",
+        str(fps),
+        "-i",
+        "-",
+        "-c:v",
+        "libx264",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-loglevel",
+        "warning",
         output_path,
     ]
     return subprocess.Popen(cmd, stdin=subprocess.PIPE)
@@ -301,9 +318,20 @@ def open_ffmpeg_writer(output_path, width, height, fps=24):
 
 # ── Main rendering pipeline ──
 
-def render_point_cloud(da3_dir, traj_txt_path, output_dir, width=832, height=480,
-                       point_size=2, fps=24, relative_to_source=False, rotation_only=False,
-                       freeze_repeat=0, freeze_frame=None):
+
+def render_point_cloud(
+    da3_dir,
+    traj_txt_path,
+    output_dir,
+    width=832,
+    height=480,
+    point_size=2,
+    fps=24,
+    relative_to_source=False,
+    rotation_only=False,
+    freeze_repeat=0,
+    freeze_frame=None,
+):
     """Main entry: load data, generate poses, render, save mp4s."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Device: {device}")
@@ -326,8 +354,9 @@ def render_point_cloud(da3_dir, traj_txt_path, output_dir, width=832, height=480
         if freeze_frame is None:
             freeze_frame = num_pcds // 2
         freeze_frame = max(0, min(freeze_frame, num_pcds - 1))
-        logger.info(f"Time-freeze: repeating frame {freeze_frame} x{freeze_repeat} "
-                     f"(inserting {freeze_repeat} extra frames)")
+        logger.info(
+            f"Time-freeze: repeating frame {freeze_frame} x{freeze_repeat} (inserting {freeze_repeat} extra frames)"
+        )
         insert_pos = freeze_frame + 1
         frozen_pts = points_list[freeze_frame]
         frozen_cols = colors_list[freeze_frame]
@@ -339,9 +368,15 @@ def render_point_cloud(da3_dir, traj_txt_path, output_dir, width=832, height=480
         logger.info(f"After freeze: {num_pcds} total frames")
 
     # Generate target camera poses
-    target_c2ws = generate_target_c2ws(traj_txt_path, initial_c2w, source_c2ws, num_pcds, device,
-                                       relative_to_source=relative_to_source,
-                                       rotation_only=rotation_only)
+    target_c2ws = generate_target_c2ws(
+        traj_txt_path,
+        initial_c2w,
+        source_c2ws,
+        num_pcds,
+        device,
+        relative_to_source=relative_to_source,
+        rotation_only=rotation_only,
+    )
     num_frames = len(target_c2ws)
     logger.info(f"Generated {num_frames} target camera poses")
 
@@ -362,8 +397,7 @@ def render_point_cloud(da3_dir, traj_txt_path, output_dir, width=832, height=480
             c2w = target_c2ws[idx]
 
             img_bgr, mask_gray = render_batch(
-                pts, cols, c2w, K_render, width, height,
-                point_size=point_size, ss_ratio=2.0, bg_color=0
+                pts, cols, c2w, K_render, width, height, point_size=point_size, ss_ratio=2.0, bg_color=0
             )
 
             # BGR -> RGB for ffmpeg
@@ -375,8 +409,7 @@ def render_point_cloud(da3_dir, traj_txt_path, output_dir, width=832, height=480
 
             if idx % 50 == 0:
                 pos = c2w[:3, 3]
-                logger.info(f"  Frame {idx}/{num_frames} | "
-                            f"Pose: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})")
+                logger.info(f"  Frame {idx}/{num_frames} | Pose: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})")
     finally:
         video_proc.stdin.close()
         mask_proc.stdin.close()
@@ -394,27 +427,39 @@ def render_point_cloud(da3_dir, traj_txt_path, output_dir, width=832, height=480
 
 # ── CLI ──
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Offline point cloud rendering using DA3 output + traj_txt")
-    parser.add_argument("--da3_dir", type=str, required=True,
-                        help="DA3 output directory (contains frames_pcd/, intrinsic.txt, extrinsic.txt)")
-    parser.add_argument("--traj_txt_path", type=str, required=True,
-                        help="Trajectory txt file (3 lines: x_up, y_left, r)")
-    parser.add_argument("--output_dir", type=str, required=True,
-                        help="Output directory for render_offline.mp4 and mask_offline.mp4")
+    parser = argparse.ArgumentParser(description="Offline point cloud rendering using DA3 output + traj_txt")
+    parser.add_argument(
+        "--da3_dir",
+        type=str,
+        required=True,
+        help="DA3 output directory (contains frames_pcd/, intrinsic.txt, extrinsic.txt)",
+    )
+    parser.add_argument(
+        "--traj_txt_path", type=str, required=True, help="Trajectory txt file (3 lines: x_up, y_left, r)"
+    )
+    parser.add_argument(
+        "--output_dir", type=str, required=True, help="Output directory for render_offline.mp4 and mask_offline.mp4"
+    )
     parser.add_argument("--width", type=int, default=832)
     parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--point_size", type=int, default=2)
     parser.add_argument("--fps", type=int, default=24)
-    parser.add_argument("--relative_to_source", action="store_true",
-                        help="Compose trajectory poses relative to initial view (default: off, use absolute poses)")
-    parser.add_argument("--rotation_only", action="store_true",
-                        help="Only apply rotation from the trajectory, ignore translation (tripod pan/tilt)")
-    parser.add_argument("--freeze_repeat", type=int, default=0,
-                        help="Number of times to repeat the freeze frame (0 = disabled)")
-    parser.add_argument("--freeze_frame", type=int, default=None,
-                        help="Frame index to freeze (default: middle frame)")
+    parser.add_argument(
+        "--relative_to_source",
+        action="store_true",
+        help="Compose trajectory poses relative to initial view (default: off, use absolute poses)",
+    )
+    parser.add_argument(
+        "--rotation_only",
+        action="store_true",
+        help="Only apply rotation from the trajectory, ignore translation (tripod pan/tilt)",
+    )
+    parser.add_argument(
+        "--freeze_repeat", type=int, default=0, help="Number of times to repeat the freeze frame (0 = disabled)"
+    )
+    parser.add_argument("--freeze_frame", type=int, default=None, help="Frame index to freeze (default: middle frame)")
     args = parser.parse_args()
     initialize_reproducibility()
 

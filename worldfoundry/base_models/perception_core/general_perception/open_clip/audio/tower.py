@@ -1,51 +1,39 @@
-"""Module for base_models -> perception_core -> general_perception -> open_clip -> audio -> tower.py functionality."""
-
 import logging
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .config import CLIPAudioCfg
 from worldfoundry.core.model_loading import load_torch_checkpoint
+
+from .config import CLIPAudioCfg
 
 _logger = logging.getLogger(__name__)
 
 _HTSAT_CONFIGS = {
-    "tiny": dict(embed_dim=96, depths=[2, 2, 6, 2], num_heads=[4, 8, 16, 32]),
-    "base": dict(embed_dim=128, depths=[2, 2, 12, 2], num_heads=[4, 8, 16, 32]),
-    "large": dict(embed_dim=256, depths=[2, 2, 12, 2], num_heads=[4, 8, 16, 32]),
+    "tiny": {"embed_dim": 96, "depths": [2, 2, 6, 2], "num_heads": [4, 8, 16, 32]},
+    "base": {"embed_dim": 128, "depths": [2, 2, 12, 2], "num_heads": [4, 8, 16, 32]},
+    "large": {"embed_dim": 256, "depths": [2, 2, 12, 2], "num_heads": [4, 8, 16, 32]},
 }
 
 
 def _htsat_output_dim(swin_embed_dim, num_layers=4):
-    """Helper function to htsat output dim.
-
-    Args:
-        swin_embed_dim: The swin embed dim.
-        num_layers: The num layers.
-    """
     return int(swin_embed_dim * 2 ** (num_layers - 1))
 
 
-def _load_audio_checkpoint(path: Union[str, Path], weights_only: bool = True):
-    """Helper function to load audio checkpoint.
-
-    Args:
-        path: The path.
-        weights_only: The weights only.
-    """
+def _load_audio_checkpoint(path: str | Path, weights_only: bool = True):
     checkpoint = load_torch_checkpoint(
         path,
         map_location="cpu",
         weights_only=weights_only,
         allow_unsafe_pickle_fallback=True,
     )
-    if weights_only is True and isinstance(checkpoint, Mapping) and not all(
-        isinstance(value, torch.Tensor) for value in checkpoint.values()
+    if (
+        weights_only is True
+        and isinstance(checkpoint, Mapping)
+        and not all(isinstance(value, torch.Tensor) for value in checkpoint.values())
     ):
         _logger.warning(
             "Audio encoder checkpoint %s contains non-tensor payload after safe loading.",
@@ -58,12 +46,6 @@ class AudioTower(nn.Module):
     """Audio encoder wrapper for CLAP models."""
 
     def __init__(self, audio_cfg: CLIPAudioCfg, embed_dim: int):
-        """Init.
-
-        Args:
-            audio_cfg: The audio cfg.
-            embed_dim: The embed dim.
-        """
         super().__init__()
         if isinstance(audio_cfg, dict):
             audio_cfg = CLIPAudioCfg(**audio_cfg)
@@ -115,20 +97,13 @@ class AudioTower(nn.Module):
                 module.use_checkpoint = enable
 
     def no_weight_decay(self):
-        """No weight decay."""
         no_wd = set()
         if hasattr(self.encoder, "no_weight_decay"):
             for name in self.encoder.no_weight_decay():
                 no_wd.add("encoder." + name)
         return no_wd
 
-    def load_pretrained_encoder(self, path: Union[str, Path], weights_only: bool = True):
-        """Load pretrained encoder.
-
-        Args:
-            path: The path.
-            weights_only: The weights only.
-        """
+    def load_pretrained_encoder(self, path: str | Path, weights_only: bool = True):
         checkpoint = _load_audio_checkpoint(path, weights_only=weights_only)
         if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
             checkpoint = checkpoint["state_dict"]
@@ -146,12 +121,6 @@ class AudioTower(nn.Module):
         return self.encoder.load_state_dict(state_dict, strict=False)
 
     def forward(self, audio, apply_proj=True):
-        """Forward.
-
-        Args:
-            audio: The audio.
-            apply_proj: The apply proj.
-        """
         device = self.proj[0].weight.device
         if self._is_whisper:
             audio_input = dict(audio)

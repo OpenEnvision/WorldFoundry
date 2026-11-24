@@ -11,7 +11,7 @@ on:
       # Site content is generated from these catalog and public API surfaces.
       - "worldfoundry/data/models/**"
       - "worldfoundry/data/benchmarks/**"
-      - "worldfoundry/evaluation/api/**"
+      - "worldfoundry/evals/api/**"
   workflow_dispatch:
 
 # Keep the OIDC token out of the npm/Next.js build job. Only deploy-pages
@@ -34,7 +34,6 @@ jobs:
     env:
       NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
       NEXT_PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io
-      NEXT_PUBLIC_DEMO_ASSET_BASE_URL: https://media.githubusercontent.com/media/${{ github.repository }}/${{ github.ref_name }}/docs/fumadocs/public
 
     steps:
       - name: Checkout
@@ -55,10 +54,8 @@ jobs:
       - name: Build Fumadocs site
         run: bash scripts/docs/build.sh
 
-      - name: Drop demos from Pages artifact and add .nojekyll
-        run: |
-          rm -rf docs/fumadocs/out/demos
-          touch docs/fumadocs/out/.nojekyll
+      - name: Add .nojekyll to Pages artifact
+        run: touch docs/fumadocs/out/.nojekyll
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0

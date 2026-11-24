@@ -1,4 +1,3 @@
-
 import einops
 import jax
 import jax.numpy as jnp
@@ -22,9 +21,7 @@ def sinusoidal_embedding_1d(dim, position):
     except Exception:
         position = position.astype(jnp.float32)
         dtype = jnp.float32
-    freqs = jnp.outer(
-        position, jnp.power(10000.0, -jnp.arange(half, dtype=dtype) / dtype(half))
-    )
+    freqs = jnp.outer(position, jnp.power(10000.0, -jnp.arange(half, dtype=dtype) / dtype(half)))
     x = jnp.concatenate([jnp.cos(freqs), jnp.sin(freqs)], axis=1)
     return x
 
@@ -40,9 +37,7 @@ def rope_params(max_seq_len, dim, theta=10000.0):
         RoPE frequency parameters of shape [max_seq_len, dim//2]
     """
     assert dim % 2 == 0, "Dimension must be even"
-    freqs = jnp.outer(
-        jnp.arange(max_seq_len), 1.0 / jnp.power(theta, jnp.arange(0, dim, 2) / dim)
-    )
+    freqs = jnp.outer(jnp.arange(max_seq_len), 1.0 / jnp.power(theta, jnp.arange(0, dim, 2) / dim))
     freqs = jnp.exp(1j * freqs)
     return freqs
 
@@ -73,13 +68,9 @@ def rope_apply(
     ).reshape(1, seq_len, 1, -1)
 
     x_reshaped = rearrange(x.astype(jnp.float32), "b s n (c r) -> b s n c r", r=2)
-    x_complex = (x_reshaped[:, :, :, :, 0] + x_reshaped[:, :, :, :, 1] * 1j).astype(
-        jnp.complex64
-    )
+    x_complex = (x_reshaped[:, :, :, :, 0] + x_reshaped[:, :, :, :, 1] * 1j).astype(jnp.complex64)
     x_roped = x_complex * freqs_3d
-    x_i = rearrange(
-        jnp.stack([x_roped.real, x_roped.imag], axis=-1), "b s n c r -> b s n (c r)"
-    )
+    x_i = rearrange(jnp.stack([x_roped.real, x_roped.imag], axis=-1), "b s n c r -> b s n (c r)")
     return x_i.astype(x.dtype)
 
 

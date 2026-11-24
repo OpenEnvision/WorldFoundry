@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot -> networks -> encoders -> resnet.py functionality."""
-
 import math
 
 import torch.nn as nn
@@ -12,21 +10,10 @@ from ...utils.learning import freeze_params
 
 
 class Bottleneck(nn.Module):
-    """Bottleneck implementation."""
     expansion = 4
 
     def __init__(self, inplanes, planes, stride=1, dilation=1, downsample=None, BatchNorm=None):
-        """Init.
-
-        Args:
-            inplanes: The inplanes.
-            planes: The planes.
-            stride: The stride.
-            dilation: The dilation.
-            downsample: The downsample.
-            BatchNorm: The batchnorm.
-        """
-        super(Bottleneck, self).__init__()
+        super().__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         self.bn1 = BatchNorm(planes)
         self.conv2 = nn.Conv2d(
@@ -47,11 +34,6 @@ class Bottleneck(nn.Module):
         self.dilation = dilation
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         residual = x
 
         out = self.conv1(x)
@@ -75,19 +57,9 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
-    """Res net implementation."""
     def __init__(self, block, layers, output_stride, BatchNorm, freeze_at=0):
-        """Init.
-
-        Args:
-            block: The block.
-            layers: The layers.
-            output_stride: The output stride.
-            BatchNorm: The batchnorm.
-            freeze_at: The freeze at.
-        """
         self.inplanes = 64
-        super(ResNet, self).__init__()
+        super().__init__()
 
         if output_stride == 16:
             strides = [1, 2, 2, 1]
@@ -137,16 +109,6 @@ class ResNet(nn.Module):
         self.freeze(freeze_at)
 
     def _make_layer(self, block, planes, blocks, stride=1, dilation=1, BatchNorm=None):
-        """Helper function to make layer.
-
-        Args:
-            block: The block.
-            planes: The planes.
-            blocks: The blocks.
-            stride: The stride.
-            dilation: The dilation.
-            BatchNorm: The batchnorm.
-        """
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
@@ -172,17 +134,12 @@ class ResNet(nn.Module):
             )
         )
         self.inplanes = planes * block.expansion
-        for i in range(1, blocks):
+        for _i in range(1, blocks):
             layers.append(block(self.inplanes, planes, dilation=dilation, BatchNorm=BatchNorm))
 
         return nn.Sequential(*layers)
 
     def forward(self, input):
-        """Forward.
-
-        Args:
-            input: The input.
-        """
         x = self.conv1(input)
         x = self.bn1(x)
         x = self.relu(x)
@@ -202,7 +159,6 @@ class ResNet(nn.Module):
         return xs
 
     def _init_weight(self):
-        """Helper function to init weight."""
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -212,11 +168,6 @@ class ResNet(nn.Module):
                 m.bias.data.zero_()
 
     def freeze(self, freeze_at):
-        """Freeze.
-
-        Args:
-            freeze_at: The freeze at.
-        """
         if freeze_at >= 1:
             for m in self.stem:
                 freeze_params(m)

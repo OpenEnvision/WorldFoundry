@@ -6,7 +6,6 @@ from worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v2 import (
     DepthAnything2Pipeline,
 )
 
-
 DATA_TYPE = os.environ.get("DEPTH_ANYTHING2_DATA_TYPE", "image")
 DATA_PATH = os.environ.get(
     "DEPTH_ANYTHING2_DATA_PATH",

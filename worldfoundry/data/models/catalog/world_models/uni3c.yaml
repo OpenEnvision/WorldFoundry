@@ -44,7 +44,7 @@ integration:
   - Pre-rendered control bundles stay explicit runtime inputs; preprocessing is not silently substituted.
 runtime_profile: runtime-profile:uni3c
 pipeline_binding: uni3c
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 runner_parity:
   status: checkpoint_gpu_validated
   notes:
@@ -61,17 +61,17 @@ docs:
   publisher: Alibaba DAMO Academy
   publisher_kind: company
   publisher_zh: 阿里巴巴达摩院
-  overview: 'Uni3C from Alibaba DAMO Academy unifies camera control and human-motion control for image-to-video generation: the PCDController stage steers the camera while the unified stage combines camera plus human motion (RealisDance-DiT). WorldFoundry vendors both official stage-two inference paths in-tree, with public Apache-2.0 checkpoints (ewrfcas/Uni3C, theFoxofSky/RealisDance-DiT) on top of the Wan2.1-I2V-14B-720P base.'
-  overview_zh: 阿里巴巴达摩院的 Uni3C 将相机控制与人体动作控制统一到图生视频中：PCDController 阶段负责相机操控，统一阶段结合相机与人体动作（RealisDance-DiT）。WorldFoundry 已将两条官方第二阶段推理路径内置树内，公开 Apache-2.0 checkpoint（ewrfcas/Uni3C、theFoxofSky/RealisDance-DiT）构建在 Wan2.1-I2V-14B-720P 基座之上。
-  architecture: 'Three checkpoint roles are recorded: ewrfcas/Uni3C as pcd_controller, Wan-AI/Wan2.1-I2V-14B-720P-Diffusers as camera_base, and theFoxofSky/RealisDance-DiT as the unified camera-plus-human model. Pre-rendered control bundles stay explicit runtime inputs; preprocessing is not silently substituted.'
-  architecture_zh: 仓库记录三个 checkpoint 角色：ewrfcas/Uni3C 为 pcd_controller、 Wan-AI/Wan2.1-I2V-14B-720P-Diffusers 为 camera_base、theFoxofSky/RealisDance-DiT 为相机+人体统一模型。预渲染控制包保持为显式运行时输入；预处理不会被隐式替换。
-  usage_notes: Choose the camera-only or unified camera-plus-human route and provide the matching pre-rendered control bundle. The default PCDController camera route is checkpoint-backed and GPU-validated on H100; the unified camera-plus-human route still requires its own checkpoint-backed validation.
-  usage_notes_zh: 按需选择仅相机或相机+人体统一路由，并提供匹配的预渲染控制包。默认 PCDController 相机路线已使用正式 checkpoint 在 H100 上完成 GPU 验证；相机+人体统一路线仍需单独完成 checkpoint 支撑的验证。
+  overview: 'Uni3C from Alibaba DAMO Academy unifies camera control and human-motion control for image-to-video generation: the PCDController stage steers the camera while the unified stage combines camera plus human motion (RealisDance-DiT). WorldFoundry runs both official stage-two inference paths with public Apache-2.0 checkpoints (ewrfcas/Uni3C, theFoxofSky/RealisDance-DiT) on top of the Wan2.1-I2V-14B-720P base.'
+  overview_zh: 阿里巴巴达摩院的 Uni3C 将相机控制与人体动作控制统一到图生视频中：PCDController 阶段负责相机操控，统一阶段结合相机与人体动作（RealisDance-DiT）。WorldFoundry 运行两条官方第二阶段推理路径，使用公开的 Apache-2.0 checkpoint（ewrfcas/Uni3C、theFoxofSky/RealisDance-DiT），构建在 Wan2.1-I2V-14B-720P 基座之上。
+  architecture: 'Three checkpoints are used: ewrfcas/Uni3C as the PCDController, Wan-AI/Wan2.1-I2V-14B-720P-Diffusers as the camera base, and theFoxofSky/RealisDance-DiT as the unified camera-plus-human model. Pre-rendered control bundles are explicit runtime inputs.'
+  architecture_zh: 使用三个 checkpoint：ewrfcas/Uni3C 为 PCDController，Wan-AI/Wan2.1-I2V-14B-720P-Diffusers 为相机基座，theFoxofSky/RealisDance-DiT 为相机+人体统一模型。预渲染控制包作为显式运行时输入。
+  usage_notes: 'Choose the camera-only or unified camera-plus-human route and provide the matching pre-rendered control bundle. Validated on an H100 with the released checkpoints: the default PCDController camera route runs end to end.'
+  usage_notes_zh: 按需选择仅相机或相机+人体统一路线，并提供匹配的预渲染控制包。已在 H100 上用官方 checkpoint 验证：默认 PCDController 相机路线可端到端运行。
   limitations:
-  - The recorded GPU validation covers the default PCDController camera route, not the unified camera-plus-human route.
+  - GPU validation covers only the default PCDController camera route; the unified camera-plus-human route is not validated.
   - Control bundles must be pre-rendered; the pipeline does not generate them.
   limitations_zh:
-  - 已记录的 GPU 验证覆盖默认 PCDController 相机路线，不覆盖相机+人体统一路线。
+  - GPU 验证仅覆盖默认 PCDController 相机路线，相机+人体统一路线尚未验证。
   - 控制包需预先渲染；pipeline 不代为生成。
   recommended_benchmarks:
   - id: camerabench

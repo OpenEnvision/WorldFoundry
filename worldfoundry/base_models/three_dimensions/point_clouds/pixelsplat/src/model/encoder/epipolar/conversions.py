@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> encoder -> epipolar -> conversions.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from jaxtyping import Float
 from torch import Tensor
 

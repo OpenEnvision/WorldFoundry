@@ -9,13 +9,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.core.io.filesystem.storage import copy_uri, exists_uri, list_uri
 from worldfoundry.core.io.formats.serialization import (
     _TORCH_FORMATS,
     dump_serialized,
     infer_serialization_format,
     load_serialized,
 )
-from worldfoundry.core.io.filesystem.storage import copy_uri, exists_uri, list_uri
 
 # ──────────────────────────────────────────────────────────────────────────
 # Path resolve — hf:// snapshots vs local expanduser; S3 stays a URI
@@ -86,9 +86,7 @@ class EasyIO:
         """
 
         options = {
-            key: value
-            for key, value in kwargs.items()
-            if key in {"allow_pickle", "encoding", "file_format", "loader"}
+            key: value for key, value in kwargs.items() if key in {"allow_pickle", "encoding", "file_format", "loader"}
         }
         resolved = resolve_checkpoint_path(path)
         try:

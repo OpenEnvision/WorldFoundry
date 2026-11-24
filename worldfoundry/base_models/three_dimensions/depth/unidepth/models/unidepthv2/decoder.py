@@ -28,7 +28,7 @@ class ListAdapter(nn.Module):
 
     def forward(self, x: torch.Tensor, splits: torch.Tensor) -> torch.Tensor:
         xs = torch.split(x, splits.int().tolist(), dim=-1)
-        xs = [adapter(x) for x, adapter in zip(xs, self.input_adapters)]
+        xs = [adapter(x) for x, adapter in zip(xs, self.input_adapters, strict=False)]
         return torch.cat(xs, dim=-1)
 
 
@@ -238,7 +238,7 @@ class DepthHead(nn.Module):
     def decode_depth(self, latents_16, rays, shapes):
         latents = latents_16
         out_features, depths, confidences = [], [], []
-        for i, (up, layers, rays_embedding) in enumerate(zip(self.ups, self.process_layers, rays)):
+        for i, (up, layers, rays_embedding) in enumerate(zip(self.ups, self.process_layers, rays, strict=False)):
             for layer in layers:
                 latents = layer(latents, pos_embed=rays_embedding)
             latents = up(
@@ -258,14 +258,14 @@ class DepthHead(nn.Module):
             out_features.append(out)
 
         # aggregate output and project to depth
-        for i, (layer, features) in enumerate(zip(self.depth_mlp[::-1], out_features[::-1])):
+        for i, (layer, features) in enumerate(zip(self.depth_mlp[::-1], out_features[::-1], strict=False)):  # noqa: B007 - The loop variable is read outside the loop.
             out_depth_features = layer(features).permute(0, 3, 1, 2)
             out_depth_features = F.interpolate(out_depth_features, size=self.original_shapes, mode="bilinear")
             depths.append(out_depth_features)
         logdepth = self.to_depth(torch.cat(depths, dim=1))
 
         # aggregate output and project to confidences
-        for i, (layer, features) in enumerate(zip(self.confidence_mlp[::-1], out_features[::-1])):
+        for i, (layer, features) in enumerate(zip(self.confidence_mlp[::-1], out_features[::-1], strict=False)):  # noqa: B007 - The loop variable is read outside the loop.
             out_conf_features = layer(features).permute(0, 3, 1, 2)
             out_conf_features = F.interpolate(out_conf_features, size=self.original_shapes, mode="bilinear")
             confidences.append(out_conf_features)
@@ -321,11 +321,7 @@ class Decoder(nn.Module):
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.Conv2d):
+        if isinstance(m, (nn.Linear, nn.Conv2d)):
             trunc_normal_(m.weight, std=0.02)
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
@@ -386,7 +382,7 @@ class Decoder(nn.Module):
 
         # get features in b n d format
         # level shapes, the shape per level, for swin like [[128, 128], [64, 64],...], for vit [[32,32]] -> mult times resolutions
-        level_shapes = sorted(list(set([tuple([x.shape[1], x.shape[2]]) for x in inputs["features"]])))[::-1]
+        level_shapes = sorted({(x.shape[1], x.shape[2]) for x in inputs["features"]})[::-1]
         if len(level_shapes) == 1:
             level_shapes = level_shapes * self.num_resolutions
         input_shapes = [
@@ -397,7 +393,7 @@ class Decoder(nn.Module):
         # input shapes repeat shapes for each level, times the amount of the layers:
         features_flat = [
             flat_interpolate(rearrange(x, "b h w c -> b (h w) c"), old=input_shape, new=common_shape)
-            for x, input_shape in zip(inputs["features"], input_shapes)
+            for x, input_shape in zip(inputs["features"], input_shapes, strict=False)
         ]
         features_splits = torch.tensor(
             [x.shape[-1] for x in features_flat],
@@ -474,7 +470,7 @@ class Decoder(nn.Module):
         self.downsample = 4
         self.num_resolutions = len(depths_encoder)
 
-        self.slices_encoder = list(zip([d - 1 for d in depths_encoder], depths_encoder))
+        self.slices_encoder = list(zip([d - 1 for d in depths_encoder], depths_encoder, strict=False))
         cls_token_input_dims = [input_dims[i] for i in [-1, -2, -3, -4]]
         input_dims = [input_dims[d - 1] for d in depths_encoder]
 

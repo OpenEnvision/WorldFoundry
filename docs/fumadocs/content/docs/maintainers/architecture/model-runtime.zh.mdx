@@ -11,19 +11,19 @@ description: Pipeline、operator、synthesis、representation、memory 和 hoste
 
 模型特定的公开 wrapper 应当保持轻薄，但 inference implementation 不能散落复制在各个模型目录中。本地 diffusion 模型族应组合 `worldfoundry/base_models/diffusion_model` 中的 canonical components；family package 只保留真正属于该模型的 network block 和 adapter。职责与依赖规则见[原生 Diffusion](/zh/docs/maintainers/architecture/native-diffusion)。
 
-所有 model runtime 都必须是仓内实现，不能依赖机器本地的外部 checkout。DiffSynth、Diffusers、LightX2V 和各模型官方仓库只作为迁移参考，而不是 runtime backend。外部仓库和 checkpoint 在所需推理代码进入 WorldFoundry canonical components 之前，只能作为 provenance 或 acquisition metadata 存在。
+所有 model runtime 都必须是仓内实现，不能依赖机器本地的外部 checkout。DiffSynth、Diffusers、LightX2V 和各模型官方仓库只作为实现参考，而不是 runtime backend。外部仓库和 checkpoint 只作为 provenance 或 acquisition metadata；推理代码本身位于 WorldFoundry canonical components。
 
-公开支持声明看 `integration_status`，实现深度看 `backend_stage`。只有 `integrated` 且 `in_tree_runtime` 同时成立，才代表完整 runnable integration。`metadata_only`、`profile_only` 和 `official_client_bridge_only` 对规划很有用，但不等于已经可运行。
+公开支持声明看 `integration.status`，实现深度看 runtime profile 的 `backend_stage`（如 `native_diffusion`、`in_tree_runtime`）。是否可运行由 catalog 决定：声明了 `runner_target` 且 `integration.status: integrated` 的条目是 `runnable_runner`；有 runner target 但状态不是 `integrated` 的是 `runner_candidate`；没有 runner target 的是 `listed_only`。`profile_only`（默认值）或 `metadata_only` 这类规划阶段不会让条目变成可运行。
 
-## 当前运行时契约
+## 运行时契约
 
 每个 runnable method 都必须同时具备 Pipeline 和 Operator。Pipeline 是从 catalog `pipeline_target` 或 canonical binding resolver 可达的具体类，负责模型加载、归一化执行，以及 `GenerationResult` 的 artifact 语义。Operator 是 Pipeline 在输入侧的搭档，负责 validation、image/video loading、camera/action parsing、interaction shaping 和 perception preprocessing。Operator 可以很薄，但不能缺失。
 
-Binding 解析应统一走 `worldfoundry/evaluation/models/pipelines/bindings.py`。Catalog loading、pipeline loading、runner resolution 和 validation 都应调用这里的 helpers，而不是各自重新解析 route string。Runtime profile 可以携带 execution metadata、环境预期、checkpoint path 和 command hints，但它不能替代 pipeline/operator pair；`metadata_only` 或 `profile_only` 的条目不应被宣传成 runnable support。
+Binding 解析应统一走 `worldfoundry/zoo/bindings.py`。Catalog loading、pipeline loading、runner resolution 和 validation 都应调用这里的 helpers，而不是各自重新解析 route string。Runtime profile 可以携带 execution metadata、环境预期、checkpoint path 和 command hints，但它不能替代 pipeline/operator pair；`metadata_only` 或 `profile_only` 的条目不应被宣传成 runnable support。
 
-`worldfoundry/base_models/diffusion_model` 是本地 diffusion 的 canonical runtime，也是唯一 diffusion package boundary。根部 contract 与按职责组织的 `models/`、`recipes/`、`loaders/`、`runners/`、`schedulers/`、`optimizations/`、`extensions/` 共同构成架构。旧 `diffsynth/`、`image/`、`video/` 与兜底式 `common/` 子目录已经删除，不再是受支持的 ownership layer。产品模块可以单向 import 或 re-export canonical component，但 canonical component 永远不能反向 import。通用 checkpoint materialization、state-dict loading、placement/offload、distributed execution、kernel、configuration 与 IO 全部来自 `worldfoundry/core`，family package 不能重新实现一套。`worldfoundry/base_models/perception_core` 和 `worldfoundry/base_models/three_dimensions` 仍是 inference/runtime package。这里只保留推理必需的 transforms 和 geometry helpers，不保留 training datasets、dataloaders、callbacks、losses、augmentation-only modules 或 experiment scripts。
+`worldfoundry/base_models/diffusion_model` 是本地 diffusion 的 canonical runtime，也是唯一 diffusion package boundary。根部 contract 与按职责组织的 `models/`、`recipes/`、`loaders/`、`runners/`、`schedulers/`、`optimizations/`、`extensions/` 共同构成架构。不要新增 `diffsynth/`、`image/`、`video/` 或兜底式 `common/` 子目录，它们不是受支持的 ownership layer。产品模块可以单向 import 或 re-export canonical component，但 canonical component 永远不能反向 import。通用 checkpoint materialization、state-dict loading、placement/offload、distributed execution、kernel、configuration 与 IO 全部来自 `worldfoundry/core`，family package 不能重新实现一套。`worldfoundry/base_models/perception_core` 和 `worldfoundry/base_models/three_dimensions` 仍是 inference/runtime package。这里只保留推理必需的 transforms 和 geometry helpers，不保留 training datasets、dataloaders、callbacks、losses、augmentation-only modules 或 experiment scripts。
 
-内置 `wan2.1-t2v-1.3b` recipe 是这条边界的第一个完整实例；其他 diffusion family（Matrix Game 3.5、Echo Memory、LTX、Cosmos Predict/Transfer、HunyuanVideo、Sana、FLUX.2）复用同一套 role 装配，不持有自己的 pipeline、loader、scheduler 或 runner。各 family 的迁移状态——复用了哪些 role、删除了什么、以及支撑 recipe 的结构/tensor 验证证据——记录在 [原生 Diffusion 整合](/zh/docs/maintainers/native-diffusion-consolidation)。checkpoint 结构验证与 CUDA artifact parity 是两回事，后者按 family 仍是独立 release gate。
+内置 `wan2.1-t2v-1.3b` recipe 是这条边界的第一个完整实例；其他 diffusion family（Matrix Game 3.5、Echo Memory、LTX、Cosmos Predict/Transfer、HunyuanVideo、Sana、FLUX.2）复用同一套 role 装配，不持有自己的 pipeline、loader、scheduler 或 runner。各 family 复用了哪些 role，以及支撑各 recipe 的结构/tensor 验证，见 [原生 Diffusion 整合](/zh/docs/maintainers/native-diffusion-consolidation)。checkpoint 结构验证与 CUDA artifact parity 是两回事，后者按 family 仍是独立 release gate。
 
 ## 基础抽象
 
@@ -39,7 +39,7 @@ Binding 解析应统一走 `worldfoundry/evaluation/models/pipelines/bindings.py
 from worldfoundry.core.io.paths import package_data_path
 
 config = package_data_path(
-    "models", "runtime", "configs", "wonderworld", "inference.yaml"
+    "models", "runtime", "configs", "wonderjourney", "base-config.yaml"
 )
 ```
 
@@ -47,13 +47,13 @@ Runtime manifest 可以用 `${WORLDFOUNDRY_DATA_ROOT}/models/runtime/configs/<mo
 
 ## 参考实现：OpenVLA
 
-`openvla` 是当前树里第一个完整跑通的 VLA 集成，也是理解 embodied-action runtime 的最好例子。它的设计目标很简单：同一份 checkpoint loader 同时服务 Studio 的一次性 action trace 和 benchmark 的闭环 rollout，而不需要用户再 clone 上游 GitHub 仓库。
+`openvla` 是参考 VLA 集成，也是理解 embodied-action runtime 的最好例子。它的设计目标很简单：同一份 checkpoint loader 同时服务 Studio 的一次性 action trace 和 benchmark 的闭环 rollout，而不需要用户再 clone 上游 GitHub 仓库。
 
-Embodied 闭环路径从 runtime config 开始。`data/models/runtime/configs/vla_va_wam/openvla.yaml` 声明 `backend: callable_entrypoint`，并把 `policy_target` 指向 `worldfoundry.synthesis.action_generation.openvla.runtime:predict_action`。Embodied eval 在 `evaluation/tasks/embodied/policy_adapter.py` 里通过 `build_policy_adapter()` 读取这份 config，再由 `evaluation/tasks/embodied/adapters/runtime_policy_adapters.py` 中的 `CallableRuntimePolicyAdapter` 把该 callable 包装成统一的 policy protocol。这样 simulator rollout 只需要语言指令和 RGB observation，就能拿到一步 robot action，而不必经过完整 pipeline lifecycle。
+Embodied 闭环路径从 runtime config 开始。`data/models/runtime/configs/vla_va_wam/openvla.yaml` 声明 `backend: callable_entrypoint`，并把 `policy_target` 指向 `worldfoundry.synthesis.action_generation.openvla.runtime:predict_action`。Embodied eval 在 `evals/tasks/embodied/policy_adapter.py` 里通过 `build_policy_adapter()` 读取这份 config，再由 `evals/tasks/embodied/adapters/runtime_policy_adapters.py` 中的 `CallableRuntimePolicyAdapter` 把该 callable 包装成统一的 policy protocol。这样 simulator rollout 只需要语言指令和 RGB observation，就能拿到一步 robot action，而不必经过完整 pipeline lifecycle。
 
-Studio 和一次性 action trace 仍走 pipeline 路径。`OpenVLAPipeline` 绑定 `OpenVLASynthesis`；`OpenVLASynthesis.predict()` 会先解析 runtime profile、选择 checkpoint、写出 plan JSON，然后在未设置 `plan_only` 时派发真实推理。这条路径更适合需要 artifact 文件、run directory 和 profile metadata 的单次 job，而不是逐步 simulator 交互。
+Studio 和一次性 action trace 仍走 pipeline 路径。`OpenVLAPipeline`（在 `pipelines/component_pipelines.py` 中构造）绑定 `OpenVLASynthesis`；`OpenVLASynthesis.predict()` 会先解析 runtime profile、选择 checkpoint、写出 plan JSON，然后在未设置 `plan_only` 时派发真实推理。这条路径更适合需要 artifact 文件、run directory 和 profile metadata 的单次 job，而不是逐步 simulator 交互。
 
-两条入口最终都会落到 `synthesis/action_generation/openvla/openvla_runtime/inference.py`。这里的 `select_openvla_checkpoint()` 根据 `unnorm_key` 在 base checkpoint 和 LIBERO fine-tuned checkpoint 之间选择本地 staged 权重；`OpenVLARuntime` 再加载 processor/model，构造官方 OpenVLA prompt，执行 `predict_action`，并写出归一化的 action trace metadata。Prismatic/OpenVLA 的 HF config、model 和 processor 代码 vendored 在 `openvla_runtime/configuration_prismatic.py`、`modeling_prismatic.py` 和 `processing_prismatic.py` 中，因此 runtime 不依赖外部 repo checkout，也不依赖 Hugging Face remote-code cache。
+两条入口最终都会落到 `synthesis/action_generation/openvla/engine.py`。这里的 `select_openvla_checkpoint()` 根据 `unnorm_key` 在 base checkpoint 和 LIBERO fine-tuned checkpoint 之间选择本地 staged 权重；`OpenVLARuntime` 再加载 processor/model，构造官方 OpenVLA prompt，执行 `predict_action`，并写出归一化的 action trace metadata。Prismatic/OpenVLA 的 HF config、model 和 processor 代码以 `configuration.py`、`modeling.py` 和 `preprocessing.py` vendored 在同一个 package 中，因此 runtime 不依赖外部 repo checkout，也不依赖 Hugging Face remote-code cache。
 
 如果你要新增一个类似的 VLA policy，通常只需要三件事：在 `data/models/runtime/configs/vla_va_wam/` 增加 callable config，在 `synthesis/action_generation/<model>/runtime.py` 暴露 `predict_action()`，并确保 embodied adapter 能从 observation 中解析出 image 和 instruction。Pipeline/synthesis 层可以后补，用于 Studio 和 model-zoo one-shot 运行，但不应成为闭环 eval 的前置条件。
 
@@ -97,7 +97,7 @@ Evaluation runner 不会直接 import pipeline 文件，除非 catalog 中的 mo
 
 <ArchDiagram id="model-runtime-bridge" locale="zh" />
 
-`resolve_pipeline_route()`（`evaluation/models/pipelines/bindings.py:359`）与 `resolve_model_zoo_runner()`（`evaluation/models/runners/resolver.py:386`）把这条链路解析成可运行 runner。其背后的 catalog 解析、spec 合成与 runner 解析机制见 [评测核心 — 模型解析](/zh/docs/maintainers/architecture/evaluation-core)。Planned 或 profile-only 条目可以保留 `runtime_profile`，但不应暴露 runner target；薄 planning wrapper 也不应把 `pipeline_target` 误报成已验证支持。
+`resolve_pipeline_route()`（`zoo/bindings.py`）与 `resolve_model_zoo_runner()`（`evals/models/runners/resolver.py`）把这条链路解析成可运行 runner。其背后的 catalog 解析、spec 合成与 runner 解析机制见 [评测核心 — 模型解析](/zh/docs/maintainers/architecture/evaluation-core)。Planned 或 profile-only 条目可以保留 `runtime_profile`，但不应暴露 runner target；薄 planning wrapper 也不应把 `pipeline_target` 误报成已验证支持。
 
 ## 模型族索引
 

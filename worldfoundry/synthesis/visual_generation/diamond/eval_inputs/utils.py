@@ -1,5 +1,5 @@
 import math
-from typing import Generator, List
+from collections.abc import Generator
 
 import torch
 import torch.nn.functional as F
@@ -9,7 +9,7 @@ from .episode import Episode
 from .segment import Segment, SegmentId
 
 
-def collate_segments_to_batch(segments: List[Segment]) -> Batch:
+def collate_segments_to_batch(segments: list[Segment]) -> Batch:
     attrs = ("obs", "act", "rew", "end", "trunc", "mask_padding")
     stack = (torch.stack([getattr(s, x) for s in segments]) for x in attrs)
     return Batch(*stack, [s.info for s in segments], [s.id for s in segments])

@@ -14,45 +14,38 @@ evaluation math.
 """
 
 import warnings
+
 import cv2
 import numpy as np
-from typing import List
 from PIL import Image
 
 
-def box_convert_simple(box, convert_type='xyxy2xywh'):
-    """Box convert simple.
-
-    Args:
-        box: The box.
-        convert_type: The convert type.
-    """
-    if convert_type == 'xyxy2xywh':
+def box_convert_simple(box, convert_type="xyxy2xywh"):
+    if convert_type == "xyxy2xywh":
         return [box[0], box[1], box[2] - box[0], box[3] - box[1]]
-    elif convert_type == 'xywh2xyxy':
+    elif convert_type == "xywh2xyxy":
         return [box[0], box[1], box[2] + box[0], box[3] + box[1]]
-    elif convert_type == 'xyxy2ctwh':
+    elif convert_type == "xyxy2ctwh":
         return [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2, box[2] - box[0], box[3] - box[1]]
-    elif convert_type == 'ctwh2xyxy':
-        return [box[0] - box[2] // 2, box[1] - box[3] // 2, box[0] + (box[2] - box[2] // 2), box[1] + (box[3] - box[3] // 2)]
+    elif convert_type == "ctwh2xyxy":
+        return [
+            box[0] - box[2] // 2,
+            box[1] - box[3] // 2,
+            box[0] + (box[2] - box[2] // 2),
+            box[1] + (box[3] - box[3] // 2),
+        ]
 
-def read_img(image, convert='RGB', check_exist=False):
-    """Read img.
 
-    Args:
-        image: The image.
-        convert: The convert.
-        check_exist: The check exist.
-    """
+def read_img(image, convert="RGB", check_exist=False):
     if isinstance(image, str):
-        if check_exist and not osp.exists(image):
+        if check_exist and not osp.exists(image):  # noqa: F821 - Name is undefined in the upstream source.
             return None
         try:
             img = Image.open(image)
             if convert:
                 img = img.convert(convert)
-        except:
-            raise IOError('File error: ', image)
+        except BaseException:
+            raise OSError("File error: ", image)  # noqa: B904 - Keeps the implicit exception context.
         return np.asarray(img)
     else:
         if isinstance(image, np.ndarray):
@@ -63,15 +56,9 @@ def read_img(image, convert='RGB', check_exist=False):
                 img = img.convert(convert)
             return np.asarray(img)
 
-class AAPoseMeta:
-    """Aa pose meta implementation."""
-    def __init__(self, meta=None, kp2ds=None):
-        """Init.
 
-        Args:
-            meta: The meta.
-            kp2ds: The kp2ds.
-        """
+class AAPoseMeta:
+    def __init__(self, meta=None, kp2ds=None):
         self.image_id = ""
         self.height = 0
         self.width = 0
@@ -85,50 +72,24 @@ class AAPoseMeta:
         self.kps_rhand_p: np.ndarray = None
         self.kps_face_p: np.ndarray = None
 
-
         if meta is not None:
             self.load_from_meta(meta)
         elif kp2ds is not None:
             self.load_from_kp2ds(kp2ds)
-    
+
     def is_valid(self, kp, p, threshold):
-        """Is valid.
-
-        Args:
-            kp: The kp.
-            p: The p.
-            threshold: The threshold.
-        """
         x, y = kp
-        if x < 0 or y < 0 or x > self.width or y > self.height or p < threshold: 
-            return False
-        else:
-            return True
-    
-    def get_bbox(self, kp, kp_p, threshold=0.5):
-        """Get bbox.
+        return not (x < 0 or y < 0 or x > self.width or y > self.height or p < threshold)
 
-        Args:
-            kp: The kp.
-            kp_p: The kp p.
-            threshold: The threshold.
-        """
+    def get_bbox(self, kp, kp_p, threshold=0.5):
         kps = kp[kp_p > threshold]
         if kps.size == 0:
             return 0, 0, 0, 0
         x0, y0 = kps.min(axis=0)
         x1, y1 = kps.max(axis=0)
         return x0, y0, x1, y1
-    
-    def crop(self, x0, y0, x1, y1):
-        """Crop.
 
-        Args:
-            x0: The x0.
-            y0: The y0.
-            x1: The x1.
-            y1: The y1.
-        """
+    def crop(self, x0, y0, x1, y1):
         all_kps = [self.kps_body, self.kps_lhand, self.kps_rhand, self.kps_face]
         for kps in all_kps:
             if kps is not None:
@@ -137,14 +98,8 @@ class AAPoseMeta:
         self.width = x1 - x0
         self.height = y1 - y0
         return self
-    
-    def resize(self, width, height):
-        """Resize.
 
-        Args:
-            width: The width.
-            height: The height.
-        """
+    def resize(self, width, height):
         scale_x = width / self.width
         scale_y = height / self.height
         all_kps = [self.kps_body, self.kps_lhand, self.kps_rhand, self.kps_face]
@@ -156,29 +111,15 @@ class AAPoseMeta:
         self.height = height
         return self
 
-    
     def get_kps_body_with_p(self, normalize=False):
-        """Get kps body with p.
-
-        Args:
-            normalize: The normalize.
-        """
         kps_body = self.kps_body.copy()
         if normalize:
             kps_body = kps_body / np.array([self.width, self.height])
 
         return np.concatenate([kps_body, self.kps_body_p[:, None]])
-    
+
     @staticmethod
     def from_kps_face(kps_face: np.ndarray, height: int, width: int):
-        """From kps face.
-
-        Args:
-            kps_face: The kps face.
-            height: The height.
-            width: The width.
-        """
-
         pose_meta = AAPoseMeta()
         pose_meta.kps_face = kps_face[:, :2]
         if kps_face.shape[1] == 3:
@@ -191,27 +132,15 @@ class AAPoseMeta:
 
     @staticmethod
     def from_kps_body(kps_body: np.ndarray, height: int, width: int):
-        """From kps body.
-
-        Args:
-            kps_body: The kps body.
-            height: The height.
-            width: The width.
-        """
-
         pose_meta = AAPoseMeta()
         pose_meta.kps_body = kps_body[:, :2]
         pose_meta.kps_body_p = kps_body[:, 2]
         pose_meta.height = height
         pose_meta.width = width
         return pose_meta
+
     @staticmethod
     def from_humanapi_meta(meta):
-        """From humanapi meta.
-
-        Args:
-            meta: The meta.
-        """
         pose_meta = AAPoseMeta()
         width, height = meta["width"], meta["height"]
         pose_meta.width = width
@@ -222,20 +151,12 @@ class AAPoseMeta:
         pose_meta.kps_lhand_p = meta["keypoints_left_hand"][:, 2]
         pose_meta.kps_rhand = meta["keypoints_right_hand"][:, :2] * (width, height)
         pose_meta.kps_rhand_p = meta["keypoints_right_hand"][:, 2]
-        if 'keypoints_face' in meta:
+        if "keypoints_face" in meta:
             pose_meta.kps_face = meta["keypoints_face"][:, :2] * (width, height)
             pose_meta.kps_face_p = meta["keypoints_face"][:, 2]
         return pose_meta
-    
-    def load_from_meta(self, meta, norm_body=True, norm_hand=False):
-        """Load from meta.
 
-        Args:
-            meta: The meta.
-            norm_body: The norm body.
-            norm_hand: The norm hand.
-        """
-        
+    def load_from_meta(self, meta, norm_body=True, norm_hand=False):
         self.image_id = meta.get("image_id", "00000.png")
         self.height = meta["height"]
         self.width = meta["width"]
@@ -260,24 +181,18 @@ class AAPoseMeta:
         self.kps_rhand_p = np.array(meta["keypoints_right_hand"])[:, 2]
 
     @staticmethod
-    def load_from_kp2ds(kp2ds: List[np.ndarray], width: int, height: int): 
-        """input 133x3 numpy keypoints and output AAPoseMeta
-
-        Args:
-            kp2ds (List[np.ndarray]): _description_
-            width (int): _description_
-            height (int): _description_
-
-        Returns:
-            _type_: _description_
-        """
+    def load_from_kp2ds(kp2ds: list[np.ndarray], width: int, height: int):
+        """Build an AAPoseMeta of the given size from 133 whole-body keypoint rows of (x, y, score)."""
         pose_meta = AAPoseMeta()
         pose_meta.width = width
         pose_meta.height = height
-        kps_body = (kp2ds[[0, 6, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3, 17, 20]] + kp2ds[[0, 5, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3, 18, 21]]) / 2
+        kps_body = (
+            kp2ds[[0, 6, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3, 17, 20]]
+            + kp2ds[[0, 5, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3, 18, 21]]
+        ) / 2
         kps_lhand = kp2ds[91:112]
         kps_rhand = kp2ds[112:133]
-        kps_face = np.concatenate([kp2ds[23:23+68], kp2ds[1:3]], axis=0)
+        kps_face = np.concatenate([kp2ds[23 : 23 + 68], kp2ds[1:3]], axis=0)
         pose_meta.kps_body = kps_body[:, :2]
         pose_meta.kps_body_p = kps_body[:, 2]
         pose_meta.kps_lhand = kps_lhand[:, :2]
@@ -287,16 +202,9 @@ class AAPoseMeta:
         pose_meta.kps_face = kps_face[:, :2]
         pose_meta.kps_face_p = kps_face[:, 2]
         return pose_meta
-    
+
     @staticmethod
     def from_dwpose(dwpose_det_res, height, width):
-        """From dwpose.
-
-        Args:
-            dwpose_det_res: The dwpose det res.
-            height: The height.
-            width: The width.
-        """
         pose_meta = AAPoseMeta()
         pose_meta.kps_body = dwpose_det_res["bodies"]["candidate"]
         pose_meta.kps_body_p = dwpose_det_res["bodies"]["score"]
@@ -317,32 +225,16 @@ class AAPoseMeta:
         return pose_meta
 
     def save_json(self):
-        """Save json."""
         pass
 
     def draw_aapose(self, img, threshold=0.5, stick_width_norm=200, draw_hand=True, draw_head=True):
-        """Draw aapose.
-
-        Args:
-            img: The img.
-            threshold: The threshold.
-            stick_width_norm: The stick width norm.
-            draw_hand: The draw hand.
-            draw_head: The draw head.
-        """
         from .render import (
             draw_aapose_by_meta,
         )
+
         return draw_aapose_by_meta(img, self, threshold, stick_width_norm, draw_hand, draw_head)
 
-    
     def translate(self, x0, y0):
-        """Translate.
-
-        Args:
-            x0: The x0.
-            y0: The y0.
-        """
         all_kps = [self.kps_body, self.kps_lhand, self.kps_rhand, self.kps_face]
         for kps in all_kps:
             if kps is not None:
@@ -350,22 +242,14 @@ class AAPoseMeta:
                 kps[:, 1] -= y0
 
     def scale(self, sx, sy):
-        """Scale.
-
-        Args:
-            sx: The sx.
-            sy: The sy.
-        """
         all_kps = [self.kps_body, self.kps_lhand, self.kps_rhand, self.kps_face]
         for kps in all_kps:
             if kps is not None:
                 kps[:, 0] *= sx
                 kps[:, 1] *= sy
-    
-    def padding_resize2(self, height=512, width=512):
-        """kps will be changed inplace
 
-        """
+    def padding_resize2(self, height=512, width=512):
+        """kps will be changed inplace"""
 
         all_kps = [self.kps_body, self.kps_lhand, self.kps_rhand, self.kps_face]
 
@@ -374,9 +258,9 @@ class AAPoseMeta:
         if (ori_height / ori_width) > (height / width):
             new_width = int(height / ori_height * ori_width)
             padding = int((width - new_width) / 2)
-            padding_width = padding
-            padding_height = 0
-            scale = height / ori_height 
+            padding_width = padding  # noqa: F841 - Upstream assignment kept.
+            padding_height = 0  # noqa: F841 - Kept as upstream; an underscore name already exists.
+            scale = height / ori_height
 
             for kps in all_kps:
                 if kps is not None:
@@ -386,19 +270,17 @@ class AAPoseMeta:
         else:
             new_height = int(width / ori_width * ori_height)
             padding = int((height - new_height) / 2)
-            padding_width = 0
-            padding_height = padding 
+            _padding_height = padding
             scale = width / ori_width
             for kps in all_kps:
                 if kps is not None:
                     kps[:, 1] = kps[:, 1] * scale + padding
                     kps[:, 0] = kps[:, 0] * scale
 
-
         self.width = width
         self.height = height
         return self
-        
+
 
 def transform_preds(coords, center, scale, output_size, use_udp=False):
     """Get final keypoint predictions from heatmaps and apply scaling and
@@ -474,8 +356,7 @@ def _calc_distances(preds, targets, mask, normalize):
     distances = np.full((N, K), -1, dtype=np.float32)
     # handle invalid values
     normalize[np.where(normalize <= 0)] = 1e6
-    distances[_mask] = np.linalg.norm(
-        ((preds - targets) / normalize[:, None, :])[_mask], axis=-1)
+    distances[_mask] = np.linalg.norm(((preds - targets) / normalize[:, None, :])[_mask], axis=-1)
     return distances.T
 
 
@@ -518,9 +399,8 @@ def _get_max_preds(heatmaps):
         - preds (np.ndarray[N, K, 2]): Predicted keypoint location.
         - maxvals (np.ndarray[N, K, 1]): Scores (confidence) of the keypoints.
     """
-    assert isinstance(heatmaps,
-                      np.ndarray), ('heatmaps should be numpy.ndarray')
-    assert heatmaps.ndim == 4, 'batch_images should be 4-ndim'
+    assert isinstance(heatmaps, np.ndarray), "heatmaps should be numpy.ndarray"
+    assert heatmaps.ndim == 4, "batch_images should be 4-ndim"
 
     N, K, _, W = heatmaps.shape
     heatmaps_reshaped = heatmaps.reshape((N, K, -1))
@@ -554,9 +434,8 @@ def _get_max_preds_3d(heatmaps):
         - preds (np.ndarray[N, K, 3]): Predicted keypoint location.
         - maxvals (np.ndarray[N, K, 1]): Scores (confidence) of the keypoints.
     """
-    assert isinstance(heatmaps, np.ndarray), \
-        ('heatmaps should be numpy.ndarray')
-    assert heatmaps.ndim == 5, 'heatmaps should be 5-ndim'
+    assert isinstance(heatmaps, np.ndarray), "heatmaps should be numpy.ndarray"
+    assert heatmaps.ndim == 5, "heatmaps should be 5-ndim"
 
     N, K, D, H, W = heatmaps.shape
     heatmaps_reshaped = heatmaps.reshape((N, K, -1))
@@ -728,9 +607,7 @@ def keypoint_epe(pred, gt, mask):
         float: Average end-point error.
     """
 
-    distances = _calc_distances(
-        pred, gt, mask,
-        np.ones((pred.shape[0], pred.shape[2]), dtype=np.float32))
+    distances = _calc_distances(pred, gt, mask, np.ones((pred.shape[0], pred.shape[2]), dtype=np.float32))
     distance_valid = distances[distances != -1]
     return distance_valid.sum() / max(1, len(distance_valid))
 
@@ -754,14 +631,11 @@ def _taylor(heatmap, coord):
     if 1 < px < W - 2 and 1 < py < H - 2:
         dx = 0.5 * (heatmap[py][px + 1] - heatmap[py][px - 1])
         dy = 0.5 * (heatmap[py + 1][px] - heatmap[py - 1][px])
-        dxx = 0.25 * (
-            heatmap[py][px + 2] - 2 * heatmap[py][px] + heatmap[py][px - 2])
+        dxx = 0.25 * (heatmap[py][px + 2] - 2 * heatmap[py][px] + heatmap[py][px - 2])
         dxy = 0.25 * (
-            heatmap[py + 1][px + 1] - heatmap[py - 1][px + 1] -
-            heatmap[py + 1][px - 1] + heatmap[py - 1][px - 1])
-        dyy = 0.25 * (
-            heatmap[py + 2 * 1][px] - 2 * heatmap[py][px] +
-            heatmap[py - 2 * 1][px])
+            heatmap[py + 1][px + 1] - heatmap[py - 1][px + 1] - heatmap[py + 1][px - 1] + heatmap[py - 1][px - 1]
+        )
+        dyy = 0.25 * (heatmap[py + 2 * 1][px] - 2 * heatmap[py][px] + heatmap[py - 2 * 1][px])
         derivative = np.array([[dx], [dy]])
         hessian = np.array([[dxx, dxy], [dxy, dyy]])
         if dxx * dyy - dxy**2 != 0:
@@ -790,7 +664,6 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
 
     Args:
         coords (np.ndarray[N, K, 2]): Initial coordinates of human pose.
-        batch_heatmaps (np.ndarray[B, K, H, W]): batch_heatmaps
         kernel (int): Gaussian kernel size (K) for modulation.
 
     Returns:
@@ -800,16 +673,14 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
         batch_heatmaps = batch_heatmaps.cpu().numpy()
     B, K, H, W = batch_heatmaps.shape
     N = coords.shape[0]
-    assert (B == 1 or B == N)
+    assert B == 1 or B == N
     for heatmaps in batch_heatmaps:
         for heatmap in heatmaps:
             cv2.GaussianBlur(heatmap, (kernel, kernel), 0, heatmap)
     np.clip(batch_heatmaps, 0.001, 50, batch_heatmaps)
     np.log(batch_heatmaps, batch_heatmaps)
 
-    batch_heatmaps_pad = np.pad(
-        batch_heatmaps, ((0, 0), (0, 0), (1, 1), (1, 1)),
-        mode='edge').flatten()
+    batch_heatmaps_pad = np.pad(batch_heatmaps, ((0, 0), (0, 0), (1, 1), (1, 1)), mode="edge").flatten()
 
     index = coords[..., 0] + 1 + (coords[..., 1] + 1) * (W + 2)
     index += (W + 2) * (H + 2) * np.arange(0, B * K).reshape(-1, K)
@@ -832,7 +703,7 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
     hessian = np.concatenate([dxx, dxy, dxy, dyy], axis=1)
     hessian = hessian.reshape(N, K, 2, 2)
     hessian = np.linalg.inv(hessian + np.finfo(np.float32).eps * np.eye(2))
-    coords -= np.einsum('ijmn,ijnk->ijmk', hessian, derivative).squeeze()
+    coords -= np.einsum("ijmn,ijnk->ijmk", hessian, derivative).squeeze()
     return coords
 
 
@@ -869,8 +740,7 @@ def _gaussian_blur(heatmaps, kernel=11):
     for i in range(batch_size):
         for j in range(num_joints):
             origin_max = np.max(heatmaps[i, j])
-            dr = np.zeros((height + 2 * border, width + 2 * border),
-                          dtype=np.float32)
+            dr = np.zeros((height + 2 * border, width + 2 * border), dtype=np.float32)
             dr[border:-border, border:-border] = heatmaps[i, j].copy()
             dr = cv2.GaussianBlur(dr, (kernel, kernel), 0)
             heatmaps[i, j] = dr[border:-border, border:-border].copy()
@@ -911,15 +781,17 @@ def keypoints_from_regression(regression_preds, center, scale, img_size):
     return preds, maxvals
 
 
-def keypoints_from_heatmaps(heatmaps,
-                            center,
-                            scale,
-                            unbiased=False,
-                            post_process='default',
-                            kernel=11,
-                            valid_radius_factor=0.0546875,
-                            use_udp=False,
-                            target_type='GaussianHeatmap'):
+def keypoints_from_heatmaps(
+    heatmaps,
+    center,
+    scale,
+    unbiased=False,
+    post_process="default",
+    kernel=11,
+    valid_radius_factor=0.0546875,
+    use_udp=False,
+    target_type="GaussianHeatmap",
+):
     """Get final keypoint predictions from heatmaps and transform them back to
     the image.
 
@@ -967,48 +839,52 @@ def keypoints_from_heatmaps(heatmaps,
 
     # detect conflicts
     if unbiased:
-        assert post_process not in [False, None, 'megvii']
-    if post_process in ['megvii', 'unbiased']:
+        assert post_process not in [False, None, "megvii"]
+    if post_process in ["megvii", "unbiased"]:
         assert kernel > 0
     if use_udp:
-        assert not post_process == 'megvii'
+        assert not post_process == "megvii"  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
 
     # normalize configs
     if post_process is False:
         warnings.warn(
-            'post_process=False is deprecated, '
-            'please use post_process=None instead', DeprecationWarning)
+            "post_process=False is deprecated, please use post_process=None instead", DeprecationWarning, stacklevel=1
+        )
         post_process = None
     elif post_process is True:
         if unbiased is True:
             warnings.warn(
-                'post_process=True, unbiased=True is deprecated,'
-                " please use post_process='unbiased' instead",
-                DeprecationWarning)
-            post_process = 'unbiased'
+                "post_process=True, unbiased=True is deprecated, please use post_process='unbiased' instead",
+                DeprecationWarning,
+                stacklevel=1,
+            )
+            post_process = "unbiased"
         else:
             warnings.warn(
-                'post_process=True, unbiased=False is deprecated, '
-                "please use post_process='default' instead",
-                DeprecationWarning)
-            post_process = 'default'
-    elif post_process == 'default':
+                "post_process=True, unbiased=False is deprecated, please use post_process='default' instead",
+                DeprecationWarning,
+                stacklevel=1,
+            )
+            post_process = "default"
+    elif post_process == "default":
         if unbiased is True:
             warnings.warn(
-                'unbiased=True is deprecated, please use '
-                "post_process='unbiased' instead", DeprecationWarning)
-            post_process = 'unbiased'
+                "unbiased=True is deprecated, please use post_process='unbiased' instead",
+                DeprecationWarning,
+                stacklevel=1,
+            )
+            post_process = "unbiased"
 
     # start processing
-    if post_process == 'megvii':
+    if post_process == "megvii":
         heatmaps = _gaussian_blur(heatmaps, kernel=kernel)
 
     N, K, H, W = heatmaps.shape
     if use_udp:
-        if target_type.lower() == 'GaussianHeatMap'.lower():
+        if target_type.lower() == "GaussianHeatMap".lower():
             preds, maxvals = _get_max_preds(heatmaps)
             preds = post_dark_udp(preds, heatmaps, kernel=kernel)
-        elif target_type.lower() == 'CombinedTarget'.lower():
+        elif target_type.lower() == "CombinedTarget".lower():
             for person_heatmaps in heatmaps:
                 for i, heatmap in enumerate(person_heatmaps):
                     kt = 2 * kernel + 1 if i % 3 == 0 else kernel
@@ -1024,14 +900,12 @@ def keypoints_from_heatmaps(heatmaps,
             index = index.astype(int).reshape(N, K // 3, 1)
             preds += np.concatenate((offset_x[index], offset_y[index]), axis=2)
         else:
-            raise ValueError('target_type should be either '
-                             "'GaussianHeatmap' or 'CombinedTarget'")
+            raise ValueError("target_type should be either 'GaussianHeatmap' or 'CombinedTarget'")
     else:
         preds, maxvals = _get_max_preds(heatmaps)
-        if post_process == 'unbiased':  # alleviate biased coordinate
+        if post_process == "unbiased":  # alleviate biased coordinate
             # apply Gaussian distribution modulation.
-            heatmaps = np.log(
-                np.maximum(_gaussian_blur(heatmaps, kernel), 1e-10))
+            heatmaps = np.log(np.maximum(_gaussian_blur(heatmaps, kernel), 1e-10))
             for n in range(N):
                 for k in range(K):
                     preds[n][k] = _taylor(heatmaps[n][k], preds[n][k])
@@ -1043,20 +917,18 @@ def keypoints_from_heatmaps(heatmaps,
                     px = int(preds[n][k][0])
                     py = int(preds[n][k][1])
                     if 1 < px < W - 1 and 1 < py < H - 1:
-                        diff = np.array([
-                            heatmap[py][px + 1] - heatmap[py][px - 1],
-                            heatmap[py + 1][px] - heatmap[py - 1][px]
-                        ])
-                        preds[n][k] += np.sign(diff) * .25
-                        if post_process == 'megvii':
+                        diff = np.array(
+                            [heatmap[py][px + 1] - heatmap[py][px - 1], heatmap[py + 1][px] - heatmap[py - 1][px]]
+                        )
+                        preds[n][k] += np.sign(diff) * 0.25
+                        if post_process == "megvii":
                             preds[n][k] += 0.5
 
     # Transform back to the image
     for i in range(N):
-        preds[i] = transform_preds(
-            preds[i], center[i], scale[i], [W, H], use_udp=use_udp)
+        preds[i] = transform_preds(preds[i], center[i], scale[i], [W, H], use_udp=use_udp)
 
-    if post_process == 'megvii':
+    if post_process == "megvii":
         maxvals = maxvals / 255.0 + 0.5
 
     return preds, maxvals
@@ -1090,8 +962,7 @@ def keypoints_from_heatmaps3d(heatmaps, center, scale):
     preds, maxvals = _get_max_preds_3d(heatmaps)
     # Transform back to the image
     for i in range(N):
-        preds[i, :, :2] = transform_preds(preds[i, :, :2], center[i], scale[i],
-                                          [W, H])
+        preds[i, :, :2] = transform_preds(preds[i, :, :2], center[i], scale[i], [W, H])
     return preds, maxvals
 
 
@@ -1115,14 +986,13 @@ def multilabel_classification_accuracy(pred, gt, mask, thr=0.5):
     valid = (mask > 0).min(axis=1) if mask.ndim == 2 else (mask > 0)
     pred, gt = pred[valid], gt[valid]
 
-    if pred.shape[0] == 0:
+    if pred.shape[0] == 0:  # noqa: SIM108 - Branches carry per-case comments.
         acc = 0.0  # when no sample is with gt labels, set acc to 0.
     else:
         # The classification of a sample is regarded as correct
         # only if it's correct for all labels.
         acc = (((pred - thr) * (gt - thr)) > 0).all(axis=1).mean()
     return acc
-
 
 
 def get_transform(center, scale, res, rot=0):
@@ -1134,10 +1004,10 @@ def get_transform(center, scale, res, rot=0):
     t = np.zeros((3, 3))
     t[0, 0] = float(res[1]) / w
     t[1, 1] = float(res[0]) / h
-    t[0, 2] = res[1] * (-float(center[0]) / w + .5)
-    t[1, 2] = res[0] * (-float(center[1]) / h + .5)
+    t[0, 2] = res[1] * (-float(center[0]) / w + 0.5)
+    t[1, 2] = res[0] * (-float(center[1]) / h + 0.5)
     t[2, 2] = 1
-    if not rot == 0:
+    if not rot == 0:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
         rot = -rot  # To match direction of rotation from cropping
         rot_mat = np.zeros((3, 3))
         rot_rad = rot * np.pi / 180
@@ -1160,7 +1030,7 @@ def transform(pt, center, scale, res, invert=0, rot=0):
     t = get_transform(center, scale, res, rot=rot)
     if invert:
         t = np.linalg.inv(t)
-    new_pt = np.array([pt[0] - 1, pt[1] - 1, 1.]).T
+    new_pt = np.array([pt[0] - 1, pt[1] - 1, 1.0]).T
     new_pt = np.dot(t, new_pt)
     return np.array([round(new_pt[0]), round(new_pt[1])], dtype=int) + 1
 
@@ -1201,7 +1071,7 @@ def crop(img, center, scale, res):
     br = np.array(transform([res[1] + 1, res[0] + 1], center, max(scale), res, invert=1)) - 1
 
     # Padding so that when rotated proper amount of context is included
-    pad = int(np.linalg.norm(br - ul) / 2 - float(br[1] - ul[1]) / 2)
+    _pad = int(np.linalg.norm(br - ul) / 2 - float(br[1] - ul[1]) / 2)
 
     new_shape = [br[1] - ul[1], br[0] - ul[0]]
     if len(img.shape) > 2:
@@ -1215,7 +1085,7 @@ def crop(img, center, scale, res):
     old_x = max(0, ul[0]), min(len(img[0]), br[0])
     old_y = max(0, ul[1]), min(len(img), br[1])
     try:
-        new_img[new_y[0]:new_y[1], new_x[0]:new_x[1]] = img[old_y[0]:old_y[1], old_x[0]:old_x[1]]
+        new_img[new_y[0] : new_y[1], new_x[0] : new_x[1]] = img[old_y[0] : old_y[1], old_x[0] : old_x[1]]
     except Exception as e:
         print(e)
 
@@ -1224,13 +1094,10 @@ def crop(img, center, scale, res):
 
 
 def split_kp2ds_for_aa(kp2ds, ret_face=False):
-    """Split kp2ds for aa.
-
-    Args:
-        kp2ds: The kp2ds.
-        ret_face: The ret face.
-    """
-    kp2ds_body = (kp2ds[[0, 6, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3, 17, 20]] + kp2ds[[0, 5, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3, 18, 21]]) / 2
+    kp2ds_body = (
+        kp2ds[[0, 6, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3, 17, 20]]
+        + kp2ds[[0, 5, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3, 18, 21]]
+    ) / 2
     kp2ds_lhand = kp2ds[91:112]
     kp2ds_rhand = kp2ds[112:133]
     kp2ds_face = kp2ds[22:91]
@@ -1238,14 +1105,8 @@ def split_kp2ds_for_aa(kp2ds, ret_face=False):
         return kp2ds_body.copy(), kp2ds_lhand.copy(), kp2ds_rhand.copy(), kp2ds_face.copy()
     return kp2ds_body.copy(), kp2ds_lhand.copy(), kp2ds_rhand.copy()
 
-def load_pose_metas_from_kp2ds_seq_list(kp2ds_seq, width, height):
-    """Load pose metas from kp2ds seq list.
 
-    Args:
-        kp2ds_seq: The kp2ds seq.
-        width: The width.
-        height: The height.
-    """
+def load_pose_metas_from_kp2ds_seq_list(kp2ds_seq, width, height):
     metas = []
     for kps in kp2ds_seq:
         if len(kps) != 1:
@@ -1256,8 +1117,8 @@ def load_pose_metas_from_kp2ds_seq_list(kp2ds_seq, width, height):
         kp2ds_body, kp2ds_lhand, kp2ds_rhand, kp2ds_face = split_kp2ds_for_aa(kps, ret_face=True)
 
         if kp2ds_body[:, :2].min(axis=1).max() < 0:
-            kp2ds_body = last_kp2ds_body
-        last_kp2ds_body = kp2ds_body
+            kp2ds_body = last_kp2ds_body  # noqa: F821 - Previous-frame state; the first frame requires a valid body.
+        last_kp2ds_body = kp2ds_body  # noqa: F841 - Read by the next frame's fallback branch.
 
         meta = {
             "width": width,
@@ -1272,13 +1133,6 @@ def load_pose_metas_from_kp2ds_seq_list(kp2ds_seq, width, height):
 
 
 def load_pose_metas_from_kp2ds_seq(kp2ds_seq, width, height):
-    """Load pose metas from kp2ds seq.
-
-    Args:
-        kp2ds_seq: The kp2ds seq.
-        width: The width.
-        height: The height.
-    """
     metas = []
     for kps in kp2ds_seq:
         kps = kps.copy()
@@ -1286,10 +1140,10 @@ def load_pose_metas_from_kp2ds_seq(kp2ds_seq, width, height):
         kps[:, 1] /= height
         kp2ds_body, kp2ds_lhand, kp2ds_rhand, kp2ds_face = split_kp2ds_for_aa(kps, ret_face=True)
 
-        # 排除全部小于0的情况
+        # Reuse the previous body if every keypoint has a negative x or y coordinate.
         if kp2ds_body[:, :2].min(axis=1).max() < 0:
-            kp2ds_body = last_kp2ds_body
-        last_kp2ds_body = kp2ds_body
+            kp2ds_body = last_kp2ds_body  # noqa: F821 - Previous-frame state; the first frame requires a valid body.
+        last_kp2ds_body = kp2ds_body  # noqa: F841 - Read by the next frame's fallback branch.
 
         meta = {
             "width": width,

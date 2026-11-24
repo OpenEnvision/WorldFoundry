@@ -4,9 +4,10 @@
 Adapted from inspatio-world-v1.5 dd3561f544053fe22d739b6b2f8461c9c97bf8cb.
 Only inference codecs are retained, with atomic output publication.
 """
+
 import subprocess
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +17,8 @@ from PIL import Image
 
 MAX_UINT16 = (1 << 16) - 1
 DEPTH_ENCODING = "uint16_minmax_v1"
+
+
 def image_depth_paths(depth_dir: Path, views: int):
     if views == 1:
         return [depth_dir / "depth.png"]
@@ -45,8 +48,7 @@ def encode_depth(depth, minimum: float, maximum: float):
 def decode_depth(quantized, minimum: float, maximum: float):
     if quantized.ndim != 2 or quantized.dtype != np.uint16:
         raise ValueError("Linear uint16 depth must be one uint16 channel")
-    return (minimum + quantized.astype(np.float64) / MAX_UINT16 *
-            (maximum - minimum)).astype(np.float32)
+    return (minimum + quantized.astype(np.float64) / MAX_UINT16 * (maximum - minimum)).astype(np.float32)
 
 
 def decode_image_depth(path: Path, metadata_path: Path):
@@ -60,8 +62,7 @@ def decode_image_depth(path: Path, metadata_path: Path):
 def decode_video_depth_frame(frame_bgr, minimum: float, maximum: float):
     if frame_bgr.ndim != 3 or frame_bgr.shape[-1] != 3 or frame_bgr.dtype != np.uint8:
         raise ValueError("Video depth must be three uint8 channels")
-    quantized = ((frame_bgr[..., 2].astype(np.uint16) << 8) |
-                 frame_bgr[..., 1].astype(np.uint16))
+    quantized = (frame_bgr[..., 2].astype(np.uint16) << 8) | frame_bgr[..., 1].astype(np.uint16)
     return decode_depth(quantized, minimum, maximum)
 
 
@@ -116,8 +117,9 @@ def iter_mask_latents(chunks, device, dtype):
     for index, frames in enumerate(chunks):
         mask = (frames[:, :1] > 127.5).float() * 2 - 1
         mask = mask.to(device=device, dtype=dtype)
-        mask = F.interpolate(mask, size=(frames.shape[-2] // 8, frames.shape[-1] // 8),
-                             mode="bilinear", align_corners=False)
+        mask = F.interpolate(
+            mask, size=(frames.shape[-2] // 8, frames.shape[-1] // 8), mode="bilinear", align_corners=False
+        )
         if index == 0:
             mask = mask.expand(4, -1, -1, -1)
         yield mask[:, 0][None, None]
@@ -129,10 +131,33 @@ def video_writer(path, fps, width=832, height=480, lossless=False, depth=False):
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(suffix=".mp4", dir=path.parent, delete=False) as stream:
         temporary = Path(stream.name)
-    command = ["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-f", "rawvideo",
-               "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", str(fps),
-               "-i", "-", "-an", "-c:v", "libx264rgb" if depth else "libx264", "-preset", "ultrafast",
-               "-crf", "0" if lossless or depth else "18", "-pix_fmt", "rgb24" if depth else "yuv420p", str(temporary)]
+    command = [
+        "ffmpeg",
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-y",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-s",
+        f"{width}x{height}",
+        "-r",
+        str(fps),
+        "-i",
+        "-",
+        "-an",
+        "-c:v",
+        "libx264rgb" if depth else "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "0" if lossless or depth else "18",
+        "-pix_fmt",
+        "rgb24" if depth else "yuv420p",
+        str(temporary),
+    ]
     process = None
     try:
         process = subprocess.Popen(command, stdin=subprocess.PIPE)
@@ -146,9 +171,7 @@ def video_writer(path, fps, width=832, height=480, lossless=False, depth=False):
             if process.poll() is None:
                 process.terminate()
             if not process.stdin.closed:
-                try:
+                with suppress(BrokenPipeError):
                     process.stdin.close()
-                except BrokenPipeError:
-                    pass
             process.wait()
         temporary.unlink(missing_ok=True)

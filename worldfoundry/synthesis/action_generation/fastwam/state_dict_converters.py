@@ -72,10 +72,10 @@ def wan_video_dit_from_diffusers(state_dict):
         if name in rename_dict:
             converted[rename_dict[name]] = value
         else:
-            probe_name = ".".join(name.split(".")[:1] + ["0"] + name.split(".")[2:])
+            probe_name = ".".join(name.split(".")[:1] + ["0"] + name.split(".")[2:])  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             if probe_name in rename_dict:
                 mapped = rename_dict[probe_name]
-                mapped = ".".join(mapped.split(".")[:1] + [name.split(".")[1]] + mapped.split(".")[2:])
+                mapped = ".".join(mapped.split(".")[:1] + [name.split(".")[1]] + mapped.split(".")[2:])  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                 converted[mapped] = value
     return converted
 

@@ -1,27 +1,27 @@
-import sys
-from pathlib import Path
-
-# Modified by WorldFoundry: upstream appended the CWD-relative '..' (only valid when the
-# process CWD is inference/). Anchor to the ac3d_runtime root instead so the bare imports
-# below (cogvideo_controlnet, controlnet_pipeline, inference.*) resolve regardless of CWD.
-_AC3D_RUNTIME_ROOT = str(Path(__file__).resolve().parents[1])
-if _AC3D_RUNTIME_ROOT not in sys.path:
-    sys.path.append(_AC3D_RUNTIME_ROOT)
 import argparse
 import os
 
 import torch
-from cogvideo_controlnet import CogVideoXControlnet
-from cogvideo_transformer import CustomCogVideoXTransformer3DModel
-from controlnet_pipeline import ControlnetCogVideoXPipeline
-from diffusers import AutoencoderKLCogVideoX, CogVideoXDDIMScheduler, CogVideoXDPMScheduler
+from diffusers import (
+    AutoencoderKLCogVideoX,
+    CogVideoXDDIMScheduler,
+    CogVideoXDPMScheduler,
+)
 from diffusers.utils import export_to_video
 from torchvision.transforms.functional import to_pil_image
 from transformers import T5EncoderModel, T5Tokenizer
 
-from inference.datasets.controlnet_datasets_camera import RealEstate10KPoseControlnetDataset
-from inference.utils import stack_images_horizontally
-from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import (
+    load_tensor_state_dict,
+)
+
+from ..cogvideo_controlnet import CogVideoXControlnet
+from ..cogvideo_transformer import CustomCogVideoXTransformer3DModel
+from ..controlnet_pipeline import ControlnetCogVideoXPipeline
+from .datasets.controlnet_datasets_camera import (
+    RealEstate10KPoseControlnetDataset,
+)
+from .utils import stack_images_horizontally
 
 
 @torch.no_grad()
@@ -35,7 +35,7 @@ def generate_video(
     controlnet_guidance_start: float = 0.0,
     controlnet_guidance_end: float = 1.0,
     use_dynamic_cfg: bool = True,
-    lora_path: str = None,
+    lora_path: str | None = None,
     lora_rank: int = 128,
     output_path: str = "./output/",
     num_inference_steps: int = 50,
@@ -50,9 +50,9 @@ def generate_video(
     stride_max: int = 1,
     start_camera_idx: int = 0,
     end_camera_idx: int = 1,
-    controlnet_transformer_num_attn_heads: int = None,
-    controlnet_transformer_attention_head_dim: int = None,
-    controlnet_transformer_out_proj_dim_factor: int = None,
+    controlnet_transformer_num_attn_heads: int | None = None,
+    controlnet_transformer_attention_head_dim: int | None = None,
+    controlnet_transformer_out_proj_dim_factor: int | None = None,
     controlnet_transformer_out_proj_dim_zero_init: bool = False,
     controlnet_transformer_num_layers: int = 8,
     downscale_coef: int = 8,
@@ -81,21 +81,11 @@ def generate_video(
     """
     os.makedirs(output_path, exist_ok=True)
     # 1.  Load the pre-trained CogVideoX pipeline with the specified precision (bfloat16).
-    tokenizer = T5Tokenizer.from_pretrained(
-        base_model_path, subfolder="tokenizer"
-    )
-    text_encoder = T5EncoderModel.from_pretrained(
-        base_model_path, subfolder="text_encoder"
-    )
-    transformer = CustomCogVideoXTransformer3DModel.from_pretrained(
-        base_model_path, subfolder="transformer"
-    )
-    vae = AutoencoderKLCogVideoX.from_pretrained(
-        base_model_path, subfolder="vae"
-    )
-    scheduler = CogVideoXDDIMScheduler.from_pretrained(
-        base_model_path, subfolder="scheduler"
-    )
+    tokenizer = T5Tokenizer.from_pretrained(base_model_path, subfolder="tokenizer")
+    text_encoder = T5EncoderModel.from_pretrained(base_model_path, subfolder="text_encoder")
+    transformer = CustomCogVideoXTransformer3DModel.from_pretrained(base_model_path, subfolder="transformer")
+    vae = AutoencoderKLCogVideoX.from_pretrained(base_model_path, subfolder="vae")
+    scheduler = CogVideoXDDIMScheduler.from_pretrained(base_model_path, subfolder="scheduler")
     # ControlNet
     num_attention_heads_orig = 48 if "5b" in base_model_path.lower() else 30
     controlnet_kwargs = {}
@@ -112,13 +102,13 @@ def generate_video(
         num_layers=controlnet_transformer_num_layers,
         downscale_coef=downscale_coef,
         in_channels=controlnet_input_channels,
-        **controlnet_kwargs,   
+        **controlnet_kwargs,
     )
     if controlnet_model_path:
         controlnet_state_dict = load_tensor_state_dict(controlnet_model_path)
         m, u = controlnet.load_state_dict(controlnet_state_dict, strict=False)
-        print(f'[ Weights from pretrained controlnet was loaded into controlnet ] [M: {len(m)} | U: {len(u)}]')
-    
+        print(f"[ Weights from pretrained controlnet was loaded into controlnet ] [M: {len(m)} | U: {len(u)}]")
+
     # Full pipeline
     pipe = ControlnetCogVideoXPipeline(
         tokenizer=tokenizer,
@@ -151,32 +141,31 @@ def generate_video(
 
     pipe.vae.enable_slicing()
     pipe.vae.enable_tiling()
-    
+
     # 4. Load dataset
     eval_dataset = RealEstate10KPoseControlnetDataset(
         video_root_dir=video_root_dir,
         annotation_json=annotation_json,
-        image_size=(height, width), 
+        image_size=(height, width),
         stride=(stride_min, stride_max),
         sample_n_frames=num_frames,
     )
     for camera_idx in range(start_camera_idx, end_camera_idx):
-        
         # Get data
         data_dict = eval_dataset[camera_idx]
-        reference_video = data_dict['video']
-        reference_frames = [to_pil_image(frame) for frame in ((reference_video)/2+0.5)]
-        controlnet_latents = data_dict['controlnet_video']
+        reference_video = data_dict["video"]
+        reference_frames = [to_pil_image(frame) for frame in ((reference_video) / 2 + 0.5)]
+        controlnet_latents = data_dict["controlnet_video"]
         controlnet_latents = controlnet_latents[None]
-        
+
         # Set output directory
         output_path_file = os.path.join(output_path, f"{camera_idx:05d}_out.mp4")
         output_path_file_reference = output_path_file.replace("_out.mp4", "_reference.mp4")
         output_path_file_out_reference = output_path_file.replace(".mp4", "_reference.mp4")
-        
+
         if os.path.isfile(output_path_file):
             continue
-        
+
         # 5. Generate the video frames based on the prompt.
         # `num_frames` is the Number of frames to generate.
         # This is the default value for 6 seconds video and 8 fps and will plus 1 frame for the first frame and 49 frames.
@@ -202,8 +191,8 @@ def generate_video(
         export_to_video(reference_frames, output_path_file_reference, fps=8)
         out_reference_frames = [
             stack_images_horizontally(frame_reference, frame_out)
-            for frame_out, frame_reference in zip(video_generate, reference_frames)
-            ]
+            for frame_out, frame_reference in zip(video_generate, reference_frames, strict=False)
+        ]
         export_to_video(out_reference_frames, output_path_file_out_reference, fps=8)
 
 
@@ -220,12 +209,22 @@ if __name__ == "__main__":
         "--base_model_path", type=str, default="THUDM/CogVideoX-5b", help="The path of the pre-trained model to be used"
     )
     parser.add_argument(
-        "--controlnet_model_path", type=str, default="TheDenk/cogvideox-5b-controlnet-hed-v1", help="The path of the controlnet pre-trained model to be used"
+        "--controlnet_model_path",
+        type=str,
+        default="TheDenk/cogvideox-5b-controlnet-hed-v1",
+        help="The path of the controlnet pre-trained model to be used",
     )
-    parser.add_argument("--annotation_json", type=str, default='test.json', help="Subset of video_root_dir dataset")
+    parser.add_argument("--annotation_json", type=str, default="test.json", help="Subset of video_root_dir dataset")
     parser.add_argument("--controlnet_weights", type=float, default=0.5, help="Strenght of controlnet")
-    parser.add_argument("--controlnet_guidance_start", type=float, default=0.0, help="The stage when the controlnet starts to be applied")
-    parser.add_argument("--controlnet_guidance_end", type=float, default=0.5, help="The stage when the controlnet end to be applied")
+    parser.add_argument(
+        "--controlnet_guidance_start",
+        type=float,
+        default=0.0,
+        help="The stage when the controlnet starts to be applied",
+    )
+    parser.add_argument(
+        "--controlnet_guidance_end", type=float, default=0.5, help="The stage when the controlnet end to be applied"
+    )
     parser.add_argument("--use_dynamic_cfg", type=bool, default=True, help="Use dynamic cfg")
     parser.add_argument("--lora_path", type=str, default=None, help="The path of the LoRA weights to be used")
     parser.add_argument("--lora_rank", type=int, default=128, help="The rank of the LoRA weights")
@@ -233,9 +232,7 @@ if __name__ == "__main__":
         "--output_path", type=str, default="./output", help="The path where the generated video will be saved"
     )
     parser.add_argument("--guidance_scale", type=float, default=6.0, help="The scale for classifier-free guidance")
-    parser.add_argument(
-        "--num_inference_steps", type=int, default=50, help="Number of steps for the inference process"
-    )
+    parser.add_argument("--num_inference_steps", type=int, default=50, help="Number of steps for the inference process")
     parser.add_argument("--num_videos_per_prompt", type=int, default=1, help="Number of videos to generate per prompt")
     parser.add_argument(
         "--dtype", type=str, default="bfloat16", help="The data type for computation (e.g., 'float16' or 'bfloat16')"
@@ -251,7 +248,11 @@ if __name__ == "__main__":
     parser.add_argument("--controlnet_transformer_num_attn_heads", type=int, default=None)
     parser.add_argument("--controlnet_transformer_attention_head_dim", type=int, default=None)
     parser.add_argument("--controlnet_transformer_out_proj_dim_factor", type=int, default=None)
-    parser.add_argument("--controlnet_transformer_out_proj_dim_zero_init", action="store_true", default=False, help=("Init project zero."),
+    parser.add_argument(
+        "--controlnet_transformer_out_proj_dim_zero_init",
+        action="store_true",
+        default=False,
+        help=("Init project zero."),
     )
     parser.add_argument("--downscale_coef", type=int, default=8)
     parser.add_argument("--controlnet_input_channels", type=int, default=6)

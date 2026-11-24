@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNNERS = REPO_ROOT / "worldfoundry" / "evaluation" / "tasks" / "execution" / "runners"
+RUNNERS = REPO_ROOT / "worldfoundry" / "evals" / "tasks" / "execution" / "runners"
 
 
 class BenchmarkInTreeSmokeTests(unittest.TestCase):
@@ -120,8 +120,8 @@ class BenchmarkInTreeSmokeTests(unittest.TestCase):
             self.assertIn("only supports the raw-video backend", scorecard["run"]["error"])
 
     def test_bundled_assets_resolve_without_env(self) -> None:
-        from worldfoundry.evaluation.tasks.execution.runners.ewmbench.ewmbench_paths import resolve_task_manifest_path
-        from worldfoundry.evaluation.tasks.execution.runners.evalcrafter.evalcrafter_prompts import resolve_prompt700_path
+        from worldfoundry.evals.tasks.execution.runners.evalcrafter.evalcrafter_prompts import resolve_prompt700_path
+        from worldfoundry.evals.tasks.execution.runners.ewmbench.ewmbench_paths import resolve_task_manifest_path
 
         task_manifest = resolve_task_manifest_path()
         prompt700 = resolve_prompt700_path()
@@ -129,7 +129,7 @@ class BenchmarkInTreeSmokeTests(unittest.TestCase):
         self.assertTrue(prompt700.is_file())
 
     def test_evalcrafter_official_metric_prompt_is_distinct_from_generation_prompt(self) -> None:
-        from worldfoundry.evaluation.tasks.execution.runners.evalcrafter.evalcrafter_prompts import (
+        from worldfoundry.evals.tasks.execution.runners.evalcrafter.evalcrafter_prompts import (
             load_prompt_records,
             resolve_official_metric_prompt_path,
         )

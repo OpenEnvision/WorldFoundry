@@ -18,33 +18,20 @@
 # Licensed under the MIT License.
 # -------------------------------------------------------------------------------------------------
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> networks -> droid_net.py functionality."""
-
 from collections import OrderedDict
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from worldfoundry.base_models.perception_core.optical_flow.raft_features import ResidualBlock
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext import droid_net_ext
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext.scatter import scatter_mean
 
 
 class CorrSampler(torch.autograd.Function):
-    """Corr sampler implementation."""
     @staticmethod
     def forward(ctx, volume, coords, radius) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            ctx: The ctx.
-            volume: The volume.
-            coords: The coords.
-            radius: The radius.
-
-        Returns:
-            The return value.
-        """
         ctx.save_for_backward(volume, coords)
         ctx.radius = radius
         (corr,) = droid_net_ext.corr_index_forward(volume, coords, radius)
@@ -52,12 +39,6 @@ class CorrSampler(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        """Backward.
-
-        Args:
-            ctx: The ctx.
-            grad_output: The grad output.
-        """
         volume, coords = ctx.saved_tensors
         grad_output = grad_output.contiguous()
         (grad_volume,) = droid_net_ext.corr_index_backward(volume, coords, grad_output, ctx.radius)
@@ -73,14 +54,6 @@ class CorrBlock:
     """
 
     def __init__(self, fmap1, fmap2, num_levels=4, radius=3):
-        """Init.
-
-        Args:
-            fmap1: The fmap1.
-            fmap2: The fmap2.
-            num_levels: The num levels.
-            radius: The radius.
-        """
         self.num_levels = num_levels
         self.radius = radius
         self.corr_pyramid = []
@@ -96,11 +69,6 @@ class CorrBlock:
             corr = F.avg_pool2d(corr, 2, stride=2)
 
     def __call__(self, coords):
-        """Call.
-
-        Args:
-            coords: The coords.
-        """
         out_pyramid = []
         batch, num, ht, wd, _ = coords.shape
         coords = coords.permute(0, 1, 4, 2, 3)
@@ -114,21 +82,11 @@ class CorrBlock:
         return torch.cat(out_pyramid, dim=2)
 
     def cat(self, other):
-        """Cat.
-
-        Args:
-            other: The other.
-        """
         for i in range(self.num_levels):
             self.corr_pyramid[i] = torch.cat([self.corr_pyramid[i], other.corr_pyramid[i]], 0)
         return self
 
     def __getitem__(self, index):
-        """Getitem.
-
-        Args:
-            index: The index.
-        """
         for i in range(self.num_levels):
             self.corr_pyramid[i] = self.corr_pyramid[i][index]
         return self
@@ -145,18 +103,8 @@ class CorrBlock:
 
 
 class CorrLayer(torch.autograd.Function):
-    """Corr layer implementation."""
     @staticmethod
     def forward(ctx, fmap1, fmap2, coords, r):
-        """Forward.
-
-        Args:
-            ctx: The ctx.
-            fmap1: The fmap1.
-            fmap2: The fmap2.
-            coords: The coords.
-            r: The r.
-        """
         ctx.r = r
         ctx.save_for_backward(fmap1, fmap2, coords)
         (corr,) = droid_net_ext.altcorr_forward(fmap1, fmap2, coords, ctx.r)
@@ -164,12 +112,6 @@ class CorrLayer(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_corr):
-        """Backward.
-
-        Args:
-            ctx: The ctx.
-            grad_corr: The grad corr.
-        """
         fmap1, fmap2, coords = ctx.saved_tensors
         grad_corr = grad_corr.contiguous()
         fmap1_grad, fmap2_grad, coords_grad = droid_net_ext.altcorr_backward(fmap1, fmap2, coords, grad_corr, ctx.r)
@@ -186,13 +128,6 @@ class AltCorrBlock:
     """
 
     def __init__(self, fmaps, num_levels=4, radius=3):
-        """Init.
-
-        Args:
-            fmaps: The fmaps.
-            num_levels: The num levels.
-            radius: The radius.
-        """
         self.num_levels = num_levels
         self.radius = radius
 
@@ -207,13 +142,6 @@ class AltCorrBlock:
             fmaps = F.avg_pool2d(fmaps, 2, stride=2)
 
     def corr_fn_reference(self, coords, ii, jj):
-        """Corr fn reference.
-
-        Args:
-            coords: The coords.
-            ii: The ii.
-            jj: The jj.
-        """
         B, N, H, W, S, _ = coords.shape
         coords = coords.permute(0, 1, 4, 2, 3, 5)
 
@@ -223,8 +151,8 @@ class AltCorrBlock:
             fmap2_i = self.pyramid[i][:, jj]
 
             coords_i = (coords / 2**i).reshape(B * N, S, H, W, 2).contiguous()
-            fmap1_i = fmap1_i.reshape((B * N,) + fmap1_i.shape[2:])
-            fmap2_i = fmap2_i.reshape((B * N,) + fmap2_i.shape[2:])
+            fmap1_i = fmap1_i.reshape((B * N,) + fmap1_i.shape[2:])  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+            fmap2_i = fmap2_i.reshape((B * N,) + fmap2_i.shape[2:])  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
             corr = CorrLayer.apply(fmap1_i.float(), fmap2_i.float(), coords_i, self.radius)
             assert isinstance(corr, torch.Tensor)
@@ -235,13 +163,6 @@ class AltCorrBlock:
         return corr
 
     def corr_fn_indexed(self, coords, ii, jj):
-        """Corr fn indexed.
-
-        Args:
-            coords: The coords.
-            ii: The ii.
-            jj: The jj.
-        """
         if coords.shape[-2] != 1:
             return self.corr_fn_reference(coords, ii, jj)
 
@@ -259,23 +180,9 @@ class AltCorrBlock:
         return corr.unsqueeze(dim=-1)
 
     def corr_fn(self, coords, ii, jj):
-        """Corr fn.
-
-        Args:
-            coords: The coords.
-            ii: The ii.
-            jj: The jj.
-        """
         return self.corr_fn_indexed(coords, ii, jj)
 
     def __call__(self, coords, ii, jj):
-        """Call.
-
-        Args:
-            coords: The coords.
-            ii: The ii.
-            jj: The jj.
-        """
         squeeze_output = False
         if len(coords.shape) == 5:
             coords = coords.unsqueeze(dim=-2)
@@ -289,157 +196,12 @@ class AltCorrBlock:
         return corr.contiguous()
 
 
-class ResidualBlock(nn.Module):
-    """Residual block implementation."""
-    def __init__(self, in_planes, planes, norm_fn="group", stride=1):
-        """Init.
-
-        Args:
-            in_planes: The in planes.
-            planes: The planes.
-            norm_fn: The norm fn.
-            stride: The stride.
-        """
-        super(ResidualBlock, self).__init__()
-
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, padding=1, stride=stride)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, padding=1)
-        self.relu = nn.ReLU(inplace=True)
-
-        num_groups = planes // 8
-
-        if norm_fn == "group":
-            self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
-            self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
-            if not stride == 1:
-                self.norm3 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
-
-        elif norm_fn == "batch":
-            self.norm1 = nn.BatchNorm2d(planes)
-            self.norm2 = nn.BatchNorm2d(planes)
-            if not stride == 1:
-                self.norm3 = nn.BatchNorm2d(planes)
-
-        elif norm_fn == "instance":
-            self.norm1 = nn.InstanceNorm2d(planes)
-            self.norm2 = nn.InstanceNorm2d(planes)
-            if not stride == 1:
-                self.norm3 = nn.InstanceNorm2d(planes)
-
-        elif norm_fn == "none":
-            self.norm1 = nn.Sequential()
-            self.norm2 = nn.Sequential()
-            if not stride == 1:
-                self.norm3 = nn.Sequential()
-
-        if stride == 1:
-            self.downsample = None
-
-        else:
-            self.downsample = nn.Sequential(nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride), self.norm3)
-
-    def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        y = x
-        y = self.relu(self.norm1(self.conv1(y)))
-        y = self.relu(self.norm2(self.conv2(y)))
-
-        if self.downsample is not None:
-            x = self.downsample(x)
-
-        return self.relu(x + y)
-
-
-class BottleneckBlock(nn.Module):
-    """Bottleneck block implementation."""
-    def __init__(self, in_planes, planes, norm_fn="group", stride=1):
-        """Init.
-
-        Args:
-            in_planes: The in planes.
-            planes: The planes.
-            norm_fn: The norm fn.
-            stride: The stride.
-        """
-        super(BottleneckBlock, self).__init__()
-
-        self.conv1 = nn.Conv2d(in_planes, planes // 4, kernel_size=1, padding=0)
-        self.conv2 = nn.Conv2d(planes // 4, planes // 4, kernel_size=3, padding=1, stride=stride)
-        self.conv3 = nn.Conv2d(planes // 4, planes, kernel_size=1, padding=0)
-        self.relu = nn.ReLU(inplace=True)
-
-        num_groups = planes // 8
-
-        if norm_fn == "group":
-            self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=planes // 4)
-            self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=planes // 4)
-            self.norm3 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
-            if not stride == 1:
-                self.norm4 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
-
-        elif norm_fn == "batch":
-            self.norm1 = nn.BatchNorm2d(planes // 4)
-            self.norm2 = nn.BatchNorm2d(planes // 4)
-            self.norm3 = nn.BatchNorm2d(planes)
-            if not stride == 1:
-                self.norm4 = nn.BatchNorm2d(planes)
-
-        elif norm_fn == "instance":
-            self.norm1 = nn.InstanceNorm2d(planes // 4)
-            self.norm2 = nn.InstanceNorm2d(planes // 4)
-            self.norm3 = nn.InstanceNorm2d(planes)
-            if not stride == 1:
-                self.norm4 = nn.InstanceNorm2d(planes)
-
-        elif norm_fn == "none":
-            self.norm1 = nn.Sequential()
-            self.norm2 = nn.Sequential()
-            self.norm3 = nn.Sequential()
-            if not stride == 1:
-                self.norm4 = nn.Sequential()
-
-        if stride == 1:
-            self.downsample = None
-
-        else:
-            self.downsample = nn.Sequential(nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride), self.norm4)
-
-    def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        y = x
-        y = self.relu(self.norm1(self.conv1(y)))
-        y = self.relu(self.norm2(self.conv2(y)))
-        y = self.relu(self.norm3(self.conv3(y)))
-
-        if self.downsample is not None:
-            x = self.downsample(x)
-
-        return self.relu(x + y)
-
-
 DIM = 32
 
 
 class BasicEncoder(nn.Module):
-    """Basic encoder implementation."""
     def __init__(self, output_dim=128, norm_fn="batch", dropout=0.0, multidim=False):
-        """Init.
-
-        Args:
-            output_dim: The output dim.
-            norm_fn: The norm fn.
-            dropout: The dropout.
-            multidim: The multidim.
-        """
-        super(BasicEncoder, self).__init__()
+        super().__init__()
         self.norm_fn = norm_fn
         self.multidim = multidim
 
@@ -495,12 +257,6 @@ class BasicEncoder(nn.Module):
                     nn.init.constant_(m.bias, 0)
 
     def _make_layer(self, dim, stride=1):
-        """Helper function to make layer.
-
-        Args:
-            dim: The dim.
-            stride: The stride.
-        """
         layer1 = ResidualBlock(self.in_planes, dim, self.norm_fn, stride=stride)
         layer2 = ResidualBlock(dim, dim, self.norm_fn, stride=1)
         layers = (layer1, layer2)
@@ -509,11 +265,6 @@ class BasicEncoder(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         b, n, c1, h1, w1 = x.shape
         x = x.view(b * n, c1, h1, w1)
 
@@ -532,15 +283,8 @@ class BasicEncoder(nn.Module):
 
 
 class ConvGRU(nn.Module):
-    """Conv gru implementation."""
     def __init__(self, h_planes=128, i_planes=128):
-        """Init.
-
-        Args:
-            h_planes: The h planes.
-            i_planes: The i planes.
-        """
-        super(ConvGRU, self).__init__()
+        super().__init__()
         self.do_checkpoint = False
         self.convz = nn.Conv2d(h_planes + i_planes, h_planes, 3, padding=1)
         self.convr = nn.Conv2d(h_planes + i_planes, h_planes, 3, padding=1)
@@ -553,11 +297,6 @@ class ConvGRU(nn.Module):
         self.convq_glo = nn.Conv2d(h_planes, h_planes, 1, padding=0)
 
     def forward(self, net, *inputs):
-        """Forward.
-
-        Args:
-            net: The net.
-        """
         inp = torch.cat(inputs, dim=1)
         net_inp = torch.cat([net, inp], dim=1)
 
@@ -574,10 +313,8 @@ class ConvGRU(nn.Module):
 
 
 class GraphAgg(nn.Module):
-    """Graph agg implementation."""
     def __init__(self):
-        """Init."""
-        super(GraphAgg, self).__init__()
+        super().__init__()
         self.conv1 = nn.Conv2d(128, 128, 3, padding=1)
         self.conv2 = nn.Conv2d(128, 128, 3, padding=1)
         self.relu = nn.ReLU(inplace=True)
@@ -587,12 +324,6 @@ class GraphAgg(nn.Module):
         self.upmask = nn.Sequential(nn.Conv2d(128, 8 * 8 * 9, 1, padding=0))
 
     def forward(self, net, ix):
-        """Forward.
-
-        Args:
-            net: The net.
-            ix: The ix.
-        """
         batch, num, ch, ht, wd = net.shape
         net = net.view(batch * num, ch, ht, wd)
 
@@ -611,10 +342,8 @@ class GraphAgg(nn.Module):
 
 
 class UpdateModule(nn.Module):
-    """Update module implementation."""
     def __init__(self):
-        """Init."""
-        super(UpdateModule, self).__init__()
+        super().__init__()
         cor_planes = 4 * (2 * 3 + 1) ** 2
 
         self.corr_encoder = nn.Sequential(
@@ -683,10 +412,8 @@ class UpdateModule(nn.Module):
 
 
 class DroidNet(nn.Module):
-    """Droid net implementation."""
     def __init__(self):
-        """Init."""
-        super(DroidNet, self).__init__()
+        super().__init__()
         self.fnet = BasicEncoder(output_dim=128, norm_fn="instance")
         self.cnet = BasicEncoder(output_dim=256, norm_fn="none")
         self.update = UpdateModule()

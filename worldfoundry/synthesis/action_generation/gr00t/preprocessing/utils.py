@@ -105,9 +105,7 @@ def normalize_values_minmax(values, params):
 
     mask = ~np.isclose(max_vals, min_vals)
 
-    normalized[..., mask] = (values[..., mask] - min_vals[..., mask]) / (
-        max_vals[..., mask] - min_vals[..., mask]
-    )
+    normalized[..., mask] = (values[..., mask] - min_vals[..., mask]) / (max_vals[..., mask] - min_vals[..., mask])
     normalized[..., mask] = 2 * normalized[..., mask] - 1
 
     return normalized
@@ -238,9 +236,7 @@ def unnormalize_values_meanstd(normalized_values, params):
     unnormalized = np.zeros_like(normalized_values)
 
     # Unnormalize only features with non-zero std
-    unnormalized[..., mask] = (
-        normalized_values[..., mask] * std_vals[..., mask] + mean_vals[..., mask]
-    )
+    unnormalized[..., mask] = normalized_values[..., mask] * std_vals[..., mask] + mean_vals[..., mask]
 
     # Keep normalized values for zero-std features
     unnormalized[..., ~mask] = normalized_values[..., ~mask]

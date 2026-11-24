@@ -13,30 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
 import torch.nn.functional as F
-from typing import List, Tuple, Optional
+
 
 # Sample Gumbel noise for Gumbel-Softmax trick
 def sample_gumbel(shape: torch.Size, eps: float = 1e-6, device=None, dtype=None) -> torch.Tensor:
     U = torch.rand(shape, device=device, dtype=dtype)
     return -torch.log(-torch.log(U.clamp(min=eps, max=1 - eps)))
 
+
 # Select the top-k or softmax probabilities (with Gumbel-Softmax for differentiability)
-def select_topk(
-    logits: torch.Tensor,
-    k: int,
-    method: str,
-    temperature: float,
-    hard: bool,
-    eps: float
-) -> torch.Tensor:
+def select_topk(logits: torch.Tensor, k: int, method: str, temperature: float, hard: bool, eps: float) -> torch.Tensor:
     B, N = logits.shape
 
-    if method == 'topk':
+    if method == "topk":
         topk_vals, topk_idx = torch.topk(logits, k, dim=-1)
         mask = torch.zeros_like(logits).scatter(-1, topk_idx, 1.0)
-    elif method == 'softmax':
+    elif method == "softmax":
         gumbel_noise = sample_gumbel(logits.shape, eps=eps, device=logits.device, dtype=logits.dtype)
         y = (logits + gumbel_noise) / temperature
         y_soft = F.softmax(y, dim=-1)
@@ -52,6 +47,7 @@ def select_topk(
 
     return mask
 
+
 # Perform global selection of k tokens across the entire tensor
 def global_selection(
     mask_logits: torch.Tensor,  # (B, T, H, W)
@@ -59,7 +55,7 @@ def global_selection(
     method: str,
     temperature: float,
     hard: bool,
-    eps: float
+    eps: float,
 ) -> torch.Tensor:
     B, T, H, W = mask_logits.shape
     N = T * H * W
@@ -67,6 +63,7 @@ def global_selection(
     mask_flat = select_topk(logits_flat, total_k, method, temperature, hard, eps)
     mask = mask_flat.reshape(B, T, H, W)
     return mask
+
 
 # Perform structured selection: k_t and k_hw tokens independently for time and space
 def structured_selection(
@@ -76,7 +73,7 @@ def structured_selection(
     method: str,
     temperature: float,
     hard: bool,
-    eps: float
+    eps: float,
 ) -> torch.Tensor:
     B, T, H, W = mask_logits.shape
 
@@ -100,12 +97,13 @@ def structured_selection(
     mask = mask_spatial * mask_t.unsqueeze(-1).unsqueeze(-1)  # (B, T, H, W)
     return mask
 
+
 # Apply the mask and select tokens and other tensors based on the selected indices
 def apply_mask_and_select(
-    tokens: torch.Tensor,             # (B, C, T, H, W)
-    other_tensors: List[torch.Tensor],
-    mask: torch.Tensor               # (B, T, H, W)
-) -> Tuple[torch.Tensor, List[torch.Tensor]]:
+    tokens: torch.Tensor,  # (B, C, T, H, W)
+    other_tensors: list[torch.Tensor],
+    mask: torch.Tensor,  # (B, T, H, W)
+) -> tuple[torch.Tensor, list[torch.Tensor]]:
     B, C, T, H, W = tokens.shape
     N = T * H * W
 
@@ -129,19 +127,20 @@ def apply_mask_and_select(
 
     return tokens_out, others_out
 
+
 # Main process function to prune tokens and other tensors based on mask logits
 def process_tensors(
-    tokens: torch.Tensor,           # (B, C, T, H, W)
-    mask_logits: torch.Tensor,      # (B, 1, T, H, W)
-    other_tensors: List[torch.Tensor],
-    total_k: Optional[int] = None,
-    k_t: Optional[int] = None,
-    k_hw: Optional[int] = None,
+    tokens: torch.Tensor,  # (B, C, T, H, W)
+    mask_logits: torch.Tensor,  # (B, 1, T, H, W)
+    other_tensors: list[torch.Tensor],
+    total_k: int | None = None,
+    k_t: int | None = None,
+    k_hw: int | None = None,
     temperature: float = 1.0,
     eps: float = 1e-6,
     training: bool = True,
     soft_inference: bool = True,
-) -> Tuple[torch.Tensor, List[torch.Tensor]]:
+) -> tuple[torch.Tensor, list[torch.Tensor]]:
     """
     If training=True -> uses softmax + hard sampling (Gumbel-Softmax trick)
     If training=False -> uses topk (non-differentiable)
@@ -150,10 +149,10 @@ def process_tensors(
     mask_logits = mask_logits.squeeze(1)  # (B, T, H, W)
 
     if training or soft_inference:
-        method = 'softmax'
+        method = "softmax"
         hard = True
     else:
-        method = 'topk'
+        method = "topk"
         hard = False  # ignored in topk mode
 
     if total_k is not None:
@@ -166,7 +165,7 @@ def process_tensors(
     return tokens_out, others_out, mask
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Case 1: Structured pruning (select 60 frames and 1/4 spatial tokens)
     temperature = 1.0
     training = False
@@ -180,13 +179,13 @@ if __name__ == '__main__':
     # Other tensors with different channels
     other1 = torch.randn(B, 6, T, H, W)
     other2 = torch.randn(B, 9, T, H, W)
-    
+
     tokens_out, others_out = process_tensors(
         tokens=tokens,
         mask_logits=mask_logits,
         other_tensors=[other1, other2],
-        k_t=k_t,                       # select 60 frames out of 121
-        k_hw=k_h * k_w,               # select 1/4 spatial tokens (since 720x1280 is 2*2)
+        k_t=k_t,  # select 60 frames out of 121
+        k_hw=k_h * k_w,  # select 1/4 spatial tokens (since 720x1280 is 2*2)
         temperature=temperature,
         training=training,  # differentiable Gumbel-Softmax
     )
@@ -195,7 +194,7 @@ if __name__ == '__main__':
         tokens=tokens,
         mask_logits=mask_logits,
         other_tensors=[other1, other2],
-        total_k=k_t * k_h * k_w,       # select k tokens globally (joint T and HW selection)
+        total_k=k_t * k_h * k_w,  # select k tokens globally (joint T and HW selection)
         temperature=temperature,
         training=training,  # inference: real top-k selection
     )

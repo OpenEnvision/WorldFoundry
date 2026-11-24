@@ -1,12 +1,7 @@
-id: xiaomi-robotics-1
+schema_version: 2
+model_id: xiaomi-robotics-1
 display_name: Xiaomi-Robotics-1
 task_family: vla_policy
-artifact_kind: action_trace
-artifact_filename: xiaomi_robotics_1_action_trace.json
-backend_stage: in_tree_checkpoint_runtime
-integration_status: integrated
-runtime_status: historical_checkpoint_strict_restore_validated_gpu_rollout_pending
-verification_status: checkpoint_sha256_tensor_schema_and_meta_restore_validated_gpu_rollout_pending
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/xiaomi-robotics-1
   role: bimanual_policy_checkpoint
@@ -25,13 +20,29 @@ input_schema:
   state_dim: 60
   action_chunk: 10
   action_dim: 60
-  action_modes: [joint, ee]
+  action_modes:
+  - joint
+  - ee
+artifact_kind: action_trace
+artifact_filename: xiaomi_robotics_1_action_trace.json
 execution:
   environment: xiaomi-robotics-1
   pipeline_binding: xiaomi-robotics-1
+  backend_stage: in_tree_checkpoint_runtime
+  runtime_status: historical_checkpoint_strict_restore_validated_gpu_rollout_pending
+  integration_status: integrated
+integration:
+  status: integrated
+verification_status: checkpoint_sha256_tensor_schema_and_meta_restore_validated_gpu_rollout_pending
 notes:
-- The staged checkpoint must contain model_states.pt and config.py; config.py is never executed.
-- The pinned historical checkpoint is complete and matches its published LFS SHA256; the current publisher branch no longer carries that weight file.
-- The DeepSpeed module state contains 1,135 bfloat16 tensors and strictly restores the 5.1B-parameter meta model with no missing or unexpected keys; a full numerical GPU rollout is still pending.
-- Dtype auto selects fp16 on Turing, bf16 on Ampere/Ada/Hopper/Blackwell, and fp32 on CPU.
-- Attention auto uses the in-tree exact SDPA dispatcher and remains functional without optional FlashAttention packages.
+- The staged checkpoint must contain model_states.pt and config.py; config.py is never
+  executed.
+- The pinned historical checkpoint is complete and matches its published LFS SHA256;
+  the current publisher branch no longer carries that weight file.
+- The DeepSpeed module state contains 1,135 bfloat16 tensors and strictly restores
+  the 5.1B-parameter meta model with no missing or unexpected keys; a full numerical
+  GPU rollout is still pending.
+- Dtype auto selects fp16 on Turing, bf16 on Ampere/Ada/Hopper/Blackwell, and fp32
+  on CPU.
+- Attention auto uses the in-tree exact SDPA dispatcher and remains functional without
+  optional FlashAttention packages.

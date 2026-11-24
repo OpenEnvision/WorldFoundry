@@ -1,15 +1,18 @@
-import os
+import argparse
 import json
+import os
 from glob import glob
+
 import cv2
 import torch
 from PIL import Image
-import argparse
-from transformers import AutoProcessor, AutoConfig, AutoModelForCausalLM
 from tqdm import tqdm
+from transformers import AutoConfig, AutoModelForCausalLM, AutoProcessor
+
 from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.reproducibility import (
     initialize_reproducibility,
 )
+
 
 class CaptionModel:
     def __init__(self, model_path="microsoft/Florence-2-large", batch_size=8):
@@ -27,7 +30,7 @@ class CaptionModel:
             config=config,
             torch_dtype=self.torch_dtype,
             local_files_only=True,
-            attn_implementation="eager"  # prevents _supports_sdpa errors with some model versions
+            attn_implementation="eager",  # prevents _supports_sdpa errors with some model versions
         ).to(self.device)
 
         self.processor = AutoProcessor.from_pretrained(
@@ -52,19 +55,17 @@ class CaptionModel:
             max_new_tokens=1024,
             do_sample=False,
             num_beams=1,
-            use_cache=False  # disable KV cache for compatibility with older model code
+            use_cache=False,  # disable KV cache for compatibility with older model code
         )
 
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=False)
 
         final_captions = []
-        for text, img in zip(generated_texts, image_list):
+        for text, img in zip(generated_texts, image_list, strict=False):
             text = text.replace("<pad>", "")
             try:
                 parsed_answer = self.processor.post_process_generation(
-                    text,
-                    task=self.task_prompt,
-                    image_size=(img.width, img.height)
+                    text, task=self.task_prompt, image_size=(img.width, img.height)
                 )
                 caption_core = parsed_answer[self.task_prompt]
                 final_captions.append(caption_core)
@@ -73,6 +74,7 @@ class CaptionModel:
                 final_captions.append(text)
 
         return final_captions
+
 
 def extract_middle_frame(vid_path):
     """Read the middle frame of a video."""
@@ -97,6 +99,7 @@ def extract_middle_frame(vid_path):
         print(f"Error processing video {vid_path}: {e}")
         return None
 
+
 def process_videos(video_paths, vggt_root, model_path, batch_size):
     """Process a list of video paths and return caption results."""
     caption_model = CaptionModel(model_path=model_path, batch_size=batch_size)
@@ -120,7 +123,7 @@ def process_videos(video_paths, vggt_root, model_path, batch_size):
             "video_path": vid_path,
             "vggt_depth_path": vggt_depth_path,
             "vggt_extrinsics_path": vggt_extrinsics_path,
-            "radius_ratio": 1
+            "radius_ratio": 1,
         }
 
         batch_images.append(pil_img)
@@ -128,7 +131,7 @@ def process_videos(video_paths, vggt_root, model_path, batch_size):
 
         if len(batch_images) >= batch_size:
             captions = caption_model.process_batch(batch_images)
-            for meta, cap in zip(batch_meta, captions):
+            for meta, cap in zip(batch_meta, captions, strict=False):
                 meta["text"] = cap
                 results.append(meta)
             batch_images = []
@@ -136,7 +139,7 @@ def process_videos(video_paths, vggt_root, model_path, batch_size):
 
     if batch_images:
         captions = caption_model.process_batch(batch_images)
-        for meta, cap in zip(batch_meta, captions):
+        for meta, cap in zip(batch_meta, captions, strict=False):
             meta["text"] = cap
             results.append(meta)
 
@@ -147,7 +150,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root_dir", type=str, required=True, help="Input video folder containing .mp4 files")
     parser.add_argument("--batch_size", type=int, default=8)
-    parser.add_argument("--model_path", type=str, default="microsoft/Florence-2-large", help="Florence-2 model path (local or HuggingFace)")
+    parser.add_argument(
+        "--model_path",
+        type=str,
+        default="microsoft/Florence-2-large",
+        help="Florence-2 model path (local or HuggingFace)",
+    )
     parser.add_argument("--worker_id", type=int, default=None, help="Worker index for multi-GPU parallel (0-based)")
     parser.add_argument("--num_workers", type=int, default=1, help="Total number of workers for multi-GPU parallel")
     parser.add_argument("--output_json", type=str, default=None, help="Output JSON path (default: <root_dir>/new.json)")
@@ -171,6 +179,7 @@ def main():
     print(f"Saving {len(results)} captions to {output_json}...")
     with open(output_json, "w") as f:
         json.dump(results, f, indent=4, ensure_ascii=False)
+
 
 if __name__ == "__main__":
     main()

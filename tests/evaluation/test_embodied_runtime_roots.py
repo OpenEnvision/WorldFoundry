@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.embodied.simulators.calvin.benchmark import CALVINBenchmark
-from worldfoundry.evaluation.tasks.embodied.simulators.robocerebra.benchmark import RoboCerebraBenchmark
-from worldfoundry.evaluation.tasks.embodied.simulators.robotwin import benchmark as robotwin_module
+from worldfoundry.evals.tasks.embodied.simulators.calvin.benchmark import CALVINBenchmark
+from worldfoundry.evals.tasks.embodied.simulators.robocerebra.benchmark import RoboCerebraBenchmark
+from worldfoundry.evals.tasks.embodied.simulators.robotwin import benchmark as robotwin_module
 
 
 def test_calvin_runtime_roots_follow_environment_and_explicit_override(
@@ -33,7 +33,7 @@ def test_calvin_runtime_roots_follow_environment_and_explicit_override(
 
 
 def test_calvin_source_checkout_exposes_agent_and_environment_packages(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.tasks.embodied.simulators.calvin import benchmark as calvin_module
+    from worldfoundry.evals.tasks.embodied.simulators.calvin import benchmark as calvin_module
 
     root = tmp_path / "calvin"
     agent_package = root / "calvin_models" / "calvin_agent"

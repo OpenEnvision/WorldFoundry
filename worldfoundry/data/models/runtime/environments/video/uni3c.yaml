@@ -31,8 +31,6 @@ pip_packages:
 - timm==1.0.11
 - av==13.0.0
 - pillow
-pythonpath_dirs:
-- worldfoundry/synthesis/visual_generation/uni3c/uni3c_runtime
 validation_imports:
 - torch
 - torchvision

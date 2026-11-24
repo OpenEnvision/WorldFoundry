@@ -1,3 +1,3 @@
-_target_: models.encoder.resnet.resnet18
+_target_: worldfoundry.synthesis.visual_generation.dino_wm.models.encoder.resnet.resnet18
 pretrained: True
 unit_norm: False

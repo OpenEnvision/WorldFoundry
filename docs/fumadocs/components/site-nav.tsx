@@ -5,8 +5,6 @@ import { WORLDFOUNDRY_SLACK_INVITE } from '@/lib/site-links';
 export type SiteNavItemId =
   | 'home'
   | 'docs'
-  | 'models'
-  | 'benchmarks'
   | 'blog'
   | 'events'
   | 'community'

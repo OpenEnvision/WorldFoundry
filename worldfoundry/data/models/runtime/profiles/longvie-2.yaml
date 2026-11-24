@@ -1,6 +1,7 @@
-artifact_filename: longvie-2.mp4
-artifact_kind: generated_video
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: longvie-2
+display_name: LongVie 2
+task_family: video_generation
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Vchitect--LongVie2
   repo_id: Vchitect/LongVie2
@@ -14,8 +15,6 @@ checkpoints:
   repo_id: Wan-AI/Wan2.1-T2V-1.3B
   revision: 37ec512624d61f7aa208f7ea8140a131f93afc9a
   role: umt5_tokenizer
-display_name: LongVie 2
-id: longvie-2
 input_schema:
   controls:
   - dense_depth_video_per_segment
@@ -23,7 +22,14 @@ input_schema:
   image: true
   prompt: true
   video: true
-integration_status: integrated
+artifact_kind: generated_video
+artifact_filename: longvie-2.mp4
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: checkpoint_backed_full_quality_verified
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - LongVie 2 runs on canonical Wan components and the shared staged diffusion runner;
   its synthesis package owns only product assembly and LongVie-specific conditioning.
@@ -32,10 +38,8 @@ notes:
 - The LongVie 2 adapter loads both control.safetensors and dit.safetensors and preserves
   the official previous-final-frame, eight-frame-history, and noise continuation loop.
 - Quality defaults are 81 frames at 16 FPS with 50 steps. The Studio profile uses
-  four-rank USP, keeps the complete model resident on each supported 80GB rank,
-  and only rank zero materializes the output artifact.
-- Workspace full-quality verification completed on 2026-07-28 with the staged
-  LongVie 2 control/DiT weights; 81/81 frames decoded at 640x352 and 16 FPS,
-  with all 50 denoising steps and the four-rank USP topology.
-runtime_status: checkpoint_backed_full_quality_verified
-task_family: video_generation
+  four-rank USP, keeps the complete model resident on each supported 80GB rank, and
+  only rank zero materializes the output artifact.
+- Workspace full-quality verification completed on 2026-07-28 with the staged LongVie
+  2 control/DiT weights; 81/81 frames decoded at 640x352 and 16 FPS, with all 50 denoising
+  steps and the four-rank USP topology.

@@ -71,15 +71,15 @@ benchmarks:
   assets:
   - id: vbench_source
     kind: in_tree_source
-    path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
+    path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evals/tasks/execution/runners/vbench/runtime
     optional_override_env: WORLDFOUNDRY_VBENCH_ROOT
   - id: vbench_plus_plus_source
     kind: in_tree_source
-    path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
+    path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
     optional_override_env: WORLDFOUNDRY_VBENCH_PLUS_PLUS_ROOT
   - id: vbench2_source
     kind: in_tree_source
-    path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime
+    path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime
     optional_override_env: WORLDFOUNDRY_VBENCH2_ROOT
   - id: metric_checkpoints
     kind: checkpoint_cache

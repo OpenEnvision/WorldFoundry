@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
 from worldfoundry.synthesis.visual_generation.liveworld import LiveWorldSynthesis
@@ -23,7 +24,7 @@ class LiveWorldPipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "LiveWorldPipeline":
+    ) -> LiveWorldPipeline:
         del model_id
         options = cls._runtime_options(model_path, dict(required_components or {}), kwargs)
         checkpoint = options.pop("checkpoint_path", options.pop("model_path", None))

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 NUS Show Lab, HuggingFace.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,24 +15,26 @@
 import torch
 import torch.nn.functional as F
 from transformers import AutoConfig
+
 from .modeling_utils import ConfigMixin, ModelMixin, register_to_config
-from .sampling import cosine_schedule, mask_by_random_topk
 from .phi import PhiForCausalLM
+from .sampling import cosine_schedule, mask_by_random_topk
+
 
 class Showo(ModelMixin, ConfigMixin):
     _supports_gradient_checkpointing = True
 
     @register_to_config
     def __init__(
-            self,
-            w_clip_vit,
-            vocab_size,
-            llm_vocab_size,
-            llm_model_path='',
-            codebook_size=8192,
-            num_vq_tokens=256,
-            load_from_showo=True,
-            **kwargs,
+        self,
+        w_clip_vit,
+        vocab_size,
+        llm_vocab_size,
+        llm_model_path="",
+        codebook_size=8192,
+        num_vq_tokens=256,
+        load_from_showo=True,
+        **kwargs,
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -42,7 +43,7 @@ class Showo(ModelMixin, ConfigMixin):
             config = AutoConfig.from_pretrained(llm_model_path)
             self.showo = PhiForCausalLM(config)
         else:
-            self.showo = PhiForCausalLM.from_pretrained(llm_model_path, attn_implementation='sdpa')
+            self.showo = PhiForCausalLM.from_pretrained(llm_model_path, attn_implementation="sdpa")
         try:
             self.showo.resize_token_embeddings(self.vocab_size, mean_resizing=False)
         except TypeError:
@@ -51,53 +52,53 @@ class Showo(ModelMixin, ConfigMixin):
 
         if self.w_clip_vit:
             self.mm_projector = torch.nn.Sequential(
-                torch.nn.Linear(1024, 2048),
-                torch.nn.GELU(),
-                torch.nn.Linear(2048, 2048)
+                torch.nn.Linear(1024, 2048), torch.nn.GELU(), torch.nn.Linear(2048, 2048)
             )
 
     def _set_gradient_checkpointing(self, module, value=False):
         self.gradient_checkpointing = True
 
     def forward(
-            self,
-            input_ids,
-            input_embeddings=None,
-            attention_mask=None,
-            labels=None,
-            label_smoothing=0.0,
-            batch_size_t2i=0,
-            batch_size_lm=0,
-            batch_size_mmu=0,
-            max_seq_length=128,
-            labels_mask_text=None,
-            labels_mask_image=None,
-            **kwargs,
+        self,
+        input_ids,
+        input_embeddings=None,
+        attention_mask=None,
+        labels=None,
+        label_smoothing=0.0,
+        batch_size_t2i=0,
+        batch_size_lm=0,
+        batch_size_mmu=0,
+        max_seq_length=128,
+        labels_mask_text=None,
+        labels_mask_image=None,
+        **kwargs,
     ):
-
         if input_embeddings is None:
-            logits = self.showo(input_ids=input_ids, attention_mask=attention_mask)['logits']
+            logits = self.showo(input_ids=input_ids, attention_mask=attention_mask)["logits"]
         else:
-            logits = self.showo(inputs_embeds=input_embeddings, attention_mask=attention_mask)['logits']
+            logits = self.showo(inputs_embeds=input_embeddings, attention_mask=attention_mask)["logits"]
 
         if labels is not None:
             # 1. Mask token prediction (discrete diffusion) for image generation
             # Note that, max_seq_length indicates the maximum number of text tokens, maybe a bit confused.
             loss_t2i = F.cross_entropy(
-                logits[:batch_size_t2i, max_seq_length + 1:].contiguous().view(-1, self.output_size),
-                labels[:batch_size_t2i, max_seq_length + 1:].contiguous().view(-1), ignore_index=-100,
+                logits[:batch_size_t2i, max_seq_length + 1 :].contiguous().view(-1, self.output_size),
+                labels[:batch_size_t2i, max_seq_length + 1 :].contiguous().view(-1),
+                ignore_index=-100,
             )
 
             # 2. Next token prediction for language modeling
             loss_lm = F.cross_entropy(
-                logits[batch_size_t2i:batch_size_t2i + batch_size_lm, :-1].contiguous().view(-1, self.output_size),
-                labels[batch_size_t2i:batch_size_t2i + batch_size_lm, 1:].contiguous().view(-1), ignore_index=-100,
+                logits[batch_size_t2i : batch_size_t2i + batch_size_lm, :-1].contiguous().view(-1, self.output_size),
+                labels[batch_size_t2i : batch_size_t2i + batch_size_lm, 1:].contiguous().view(-1),
+                ignore_index=-100,
             )
 
             # 3. Next token prediction for captioning/multimodal understanding
             loss_mmu = F.cross_entropy(
                 logits[-batch_size_mmu:, :-1].contiguous().view(-1, self.output_size),
-                labels[-batch_size_mmu:, 1:].contiguous().view(-1), ignore_index=-100,
+                labels[-batch_size_mmu:, 1:].contiguous().view(-1),
+                ignore_index=-100,
             )
 
             return logits, loss_t2i, loss_lm, loss_mmu
@@ -105,17 +106,17 @@ class Showo(ModelMixin, ConfigMixin):
         return logits
 
     def t2i_generate(
-            self,
-            input_ids: torch.LongTensor = None,
-            uncond_input_ids: torch.LongTensor = None,
-            attention_mask=None,
-            temperature=1.0,
-            timesteps=18,  # ideal number of steps is 18 in maskgit paper
-            guidance_scale=0,
-            noise_schedule=cosine_schedule,
-            generator: torch.Generator = None,
-            config=None,
-            **kwargs,
+        self,
+        input_ids: torch.LongTensor = None,
+        uncond_input_ids: torch.LongTensor = None,
+        attention_mask=None,
+        temperature=1.0,
+        timesteps=18,  # ideal number of steps is 18 in maskgit paper
+        guidance_scale=0,
+        noise_schedule=cosine_schedule,
+        generator: torch.Generator = None,
+        config=None,
+        **kwargs,
     ):
         """
         Generate 1:1 similar to the original MaskGit repo
@@ -126,28 +127,35 @@ class Showo(ModelMixin, ConfigMixin):
         num_vq_tokens = config.model.showo.num_vq_tokens
         num_new_special_tokens = config.model.showo.num_new_special_tokens
 
-        input_ids_minus_lm_vocab_size = input_ids[:, -(num_vq_tokens + 1):-1].clone()
-        input_ids_minus_lm_vocab_size = torch.where(input_ids_minus_lm_vocab_size == mask_token_id,
-                                                    mask_token_id,
-                                                    input_ids_minus_lm_vocab_size - config.model.showo.llm_vocab_size - num_new_special_tokens)
+        input_ids_minus_lm_vocab_size = input_ids[:, -(num_vq_tokens + 1) : -1].clone()
+        input_ids_minus_lm_vocab_size = torch.where(
+            input_ids_minus_lm_vocab_size == mask_token_id,
+            mask_token_id,
+            input_ids_minus_lm_vocab_size - config.model.showo.llm_vocab_size - num_new_special_tokens,
+        )
 
         # for classifier-free guidance
         if uncond_input_ids is not None:
-            uncond_prefix = uncond_input_ids[:, :config.dataset.preprocessing.max_seq_length + 1]
+            uncond_prefix = uncond_input_ids[:, : config.dataset.preprocessing.max_seq_length + 1]
 
         for step in range(timesteps):
             if uncond_input_ids is not None and guidance_scale > 0:
                 uncond_input_ids = torch.cat(
-                    [uncond_prefix, input_ids[:, config.dataset.preprocessing.max_seq_length + 1:]], dim=1)
+                    [uncond_prefix, input_ids[:, config.dataset.preprocessing.max_seq_length + 1 :]], dim=1
+                )
                 model_input = torch.cat([input_ids, uncond_input_ids])
                 cond_logits, uncond_logits = self(model_input, attention_mask=attention_mask).chunk(2)
                 # logits = uncond_logits + guidance_scale * (cond_logits - uncond_logits)
                 # it seems that muse has a different cfg setting
                 logits = (1 + guidance_scale) * cond_logits - guidance_scale * uncond_logits
-                logits = logits[:, -(num_vq_tokens + 1):-1, config.model.showo.llm_vocab_size + num_new_special_tokens:-1]
+                logits = logits[
+                    :, -(num_vq_tokens + 1) : -1, config.model.showo.llm_vocab_size + num_new_special_tokens : -1
+                ]
             else:
                 logits = self(input_ids, attention_mask=attention_mask)
-                logits = logits[:, -(num_vq_tokens + 1):-1, config.model.showo.llm_vocab_size + num_new_special_tokens:-1]
+                logits = logits[
+                    :, -(num_vq_tokens + 1) : -1, config.model.showo.llm_vocab_size + num_new_special_tokens : -1
+                ]
 
             probs = logits.softmax(dim=-1)
             sampled = probs.reshape(-1, logits.size(-1))
@@ -176,15 +184,24 @@ class Showo(ModelMixin, ConfigMixin):
             temperature = temperature * (1.0 - ratio)
             masking = mask_by_random_topk(mask_len, selected_probs, temperature, generator=generator)
             # Masks tokens with lower confidence.
-            input_ids[:, -(num_vq_tokens + 1):-1] = torch.where(masking, mask_token_id,
-                                                          sampled_ids + config.model.showo.llm_vocab_size
-                                                          + num_new_special_tokens)
+            input_ids[:, -(num_vq_tokens + 1) : -1] = torch.where(
+                masking, mask_token_id, sampled_ids + config.model.showo.llm_vocab_size + num_new_special_tokens
+            )
             input_ids_minus_lm_vocab_size = torch.where(masking, mask_token_id, sampled_ids)
 
         return sampled_ids
 
     @torch.no_grad()
-    def mmu_generate(self, idx=None, input_embeddings=None, attention_mask=None, max_new_tokens=100, temperature=1.0, top_k=None, eot_token=None):
+    def mmu_generate(
+        self,
+        idx=None,
+        input_embeddings=None,
+        attention_mask=None,
+        max_new_tokens=100,
+        temperature=1.0,
+        top_k=None,
+        eot_token=None,
+    ):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
@@ -192,7 +209,7 @@ class Showo(ModelMixin, ConfigMixin):
         """
         try:
             device = idx.device
-        except:
+        except BaseException:
             device = input_embeddings.device
 
         result = []
@@ -224,7 +241,7 @@ class Showo(ModelMixin, ConfigMixin):
             # optionally crop the logits to only the top k options
             if top_k is not None:
                 v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-                logits[logits < v[:, [-1]]] = -float('Inf')
+                logits[logits < v[:, [-1]]] = -float("Inf")
             # apply softmax to convert logits to (normalized) probabilities
             probs = F.softmax(logits, dim=-1)
             # sample from the distribution

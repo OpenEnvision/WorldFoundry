@@ -1,23 +1,17 @@
-from typing import Dict, List, Optional, Union
 import random
-from PIL import Image
+
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
+import torchvision.transforms as transforms
 from diffusers.utils.torch_utils import randn_tensor
 from einops import rearrange
-
-import torchvision
-import torchvision.transforms as transforms
-
+from PIL import Image
 
 
 def _encode_prompt(
     tokenizer,
     text_encoder,
-    prompt: List[str],
+    prompt: list[str],
     device: torch.device,
     dtype: torch.dtype,
     max_sequence_length,
@@ -46,9 +40,9 @@ def _encode_prompt(
 def prepare_conditions(
     tokenizer,
     text_encoder,
-    prompt: Union[str, List[str]],
-    device: Optional[torch.device] = None,
-    dtype: Optional[torch.dtype] = None,
+    prompt: str | list[str],
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
     max_sequence_length: int = 128,
     **kwargs,
 ) -> torch.Tensor:
@@ -61,7 +55,7 @@ def prepare_conditions(
     return _encode_prompt(tokenizer, text_encoder, prompt, device, dtype, max_sequence_length)
 
 
-def read_img(img_file, target_shape=(512,384)):
+def read_img(img_file, target_shape=(512, 384)):
     """
     traget_shape: tuple of width, height
     """
@@ -69,9 +63,9 @@ def read_img(img_file, target_shape=(512,384)):
     image = image.resize(target_shape)
     image_array = np.array(image)
     if image_array.shape[0] != 3:
-        image_array = np.transpose(image_array, (2,0,1))
+        image_array = np.transpose(image_array, (2, 0, 1))
     image = torch.from_numpy(image_array)
-    image = image.float()/255.0 * 2 - 1
+    image = image.float() / 255.0 * 2 - 1
     return image
 
 
@@ -79,9 +73,9 @@ def read_img(img_file, target_shape=(512,384)):
 def get_text_conditions(
     tokenizer,
     text_encoder,
-    prompt: Union[str, List[str]],
-    device: Optional[torch.device] = None,
-    dtype: Optional[torch.dtype] = None,
+    prompt: str | list[str],
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
     max_sequence_length: int = 128,
     **kwargs,
 ) -> torch.Tensor:
@@ -95,14 +89,16 @@ def get_text_conditions(
 
 
 @torch.no_grad()
-def get_latents(vae,
-                mem: torch.Tensor,
-                video: torch.Tensor,
-                patch_size: int = 1,
-                patch_size_t: int = 1,
-                device: Optional[torch.device] = None,
-                dtype: Optional[torch.dtype] = None,
-                generator: Optional[torch.Generator] = None):
+def get_latents(
+    vae,
+    mem: torch.Tensor,
+    video: torch.Tensor,
+    patch_size: int = 1,
+    patch_size_t: int = 1,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+    generator: torch.Generator | None = None,
+):
     """
     mem: (b v) c m h w [-1,1]
     video: (b v) c f h w [-1,1]
@@ -119,7 +115,7 @@ def get_latents(vae,
     video_latents = _pack_latents(video_latents, patch_size, patch_size_t)
 
     ### seperately encode memory frmaes since memory frames are randomly or uniformly sampled
-    mem = rearrange(mem, 'b c m h w -> (b m) c h w').unsqueeze(2)
+    mem = rearrange(mem, "b c m h w -> (b m) c h w").unsqueeze(2)
     mem_latents = vae.encode(mem).latent_dist.sample(generator=generator)
     mem_latents = mem_latents.to(dtype=dtype)
     mem_latents = _normalize_latents(mem_latents, vae.latents_mean, vae.latents_std)
@@ -129,7 +125,14 @@ def get_latents(vae,
 
 
 @torch.no_grad()
-def decode_latents(vae, latents, decode_timestep=0.0, decode_noise_scale=None, dtype=torch.bfloat16, generator=None,):
+def decode_latents(
+    vae,
+    latents,
+    decode_timestep=0.0,
+    decode_noise_scale=None,
+    dtype=torch.bfloat16,
+    generator=None,
+):
     """Input shape b,c,t,h,w, return latents shape b,c,t,h,w ranging from -1 to 1"""
     batch_size = latents.shape[0]
     latents = _normalize_latents(latents, vae.latents_mean, vae.latents_std, vae.config.scaling_factor, reverse=True)
@@ -157,15 +160,14 @@ def decode_latents(vae, latents, decode_timestep=0.0, decode_noise_scale=None, d
     return video.clamp(-1, 1)
 
 
-
 def prepare_latents(
     vae,
     image_or_video: torch.Tensor,
     patch_size: int = 1,
     patch_size_t: int = 1,
-    device: Optional[torch.device] = None,
-    dtype: Optional[torch.dtype] = None,
-    generator: Optional[torch.Generator] = None,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+    generator: torch.Generator | None = None,
     precompute: bool = False,
 ) -> torch.Tensor:
     device = device or vae.device
@@ -219,9 +221,11 @@ def post_latent_preparation(
     return {"latents": latents, "num_frames": num_frames, "height": height, "width": width}
 
 
-
 def _normalize_latents(
-    latents: torch.Tensor, latents_mean: torch.Tensor, latents_std: torch.Tensor, scaling_factor: float = 1.0,
+    latents: torch.Tensor,
+    latents_mean: torch.Tensor,
+    latents_std: torch.Tensor,
+    scaling_factor: float = 1.0,
     reverse=False,
 ) -> torch.Tensor:
     # Normalize latents across the channel dimension [B, C, F, H, W]
@@ -235,8 +239,8 @@ def _normalize_latents(
 
 
 def unpack_latents(
-        latents: torch.Tensor, num_frames: int, height: int, width: int, patch_size: int = 1, patch_size_t: int = 1
-    ) -> torch.Tensor:
+    latents: torch.Tensor, num_frames: int, height: int, width: int, patch_size: int = 1, patch_size_t: int = 1
+) -> torch.Tensor:
     # Packed latents of shape [B, S, D] (S is the effective video sequence length, D is the effective feature dimensions)
     # are unpacked and reshaped into a video tensor of shape [B, C, F, H, W]. This is the inverse operation of
     # what happens in the `_pack_latents` method.
@@ -270,11 +274,13 @@ def _pack_latents(latents: torch.Tensor, patch_size: int = 1, patch_size_t: int 
 
 
 def gen_noise_from_condition_frame_latent(
-    condition_frame_latent, latent_num_frames,
-    latent_height=12, latent_width=16,
-    generator=None, noise_to_condition_frames=0.05
+    condition_frame_latent,
+    latent_num_frames,
+    latent_height=12,
+    latent_width=16,
+    generator=None,
+    noise_to_condition_frames=0.05,
 ):
-
     """
     To train the model for memory-frames conditioning,
     we occasionally set the timestep of the tokens
@@ -282,26 +288,30 @@ def gen_noise_from_condition_frame_latent(
     random value and noise these tokens to the corresponding
     level. The model quickly learns to utilize
     this new information (when provided) as a conditioning signal
-    
+
     condition_frame_latent: (b v) c m h w
 
     """
 
     mem_size = condition_frame_latent.shape[2]
-    num_channels_latents = condition_frame_latent.shape[1] # 128
-    batch_size = condition_frame_latent.size(0)   # bv
+    num_channels_latents = condition_frame_latent.shape[1]  # 128
+    batch_size = condition_frame_latent.size(0)  # bv
     # latent_num_frames = (num_frames - 1) // vae_temporal_compression_ratio + 1
 
     shape = (batch_size, num_channels_latents, latent_num_frames, latent_height, latent_width)
     mask_shape = (batch_size, 1, latent_num_frames, latent_height, latent_width)
 
-    init_latents = condition_frame_latent[:,:,:1].repeat(1, 1, latent_num_frames, 1, 1)
-    init_latents[:,:,:mem_size] = condition_frame_latent
-    conditioning_mask = torch.zeros(mask_shape, device=condition_frame_latent.device, dtype=condition_frame_latent.dtype)
+    init_latents = condition_frame_latent[:, :, :1].repeat(1, 1, latent_num_frames, 1, 1)
+    init_latents[:, :, :mem_size] = condition_frame_latent
+    conditioning_mask = torch.zeros(
+        mask_shape, device=condition_frame_latent.device, dtype=condition_frame_latent.dtype
+    )
     conditioning_mask[:, :, :mem_size] = 1.0
 
     # similar to conditioning mask but useful to timesteps
-    cond_indicator = torch.zeros((1, 1, latent_num_frames, 1, 1), device=condition_frame_latent.device, dtype=condition_frame_latent.dtype)
+    cond_indicator = torch.zeros(
+        (1, 1, latent_num_frames, 1, 1), device=condition_frame_latent.device, dtype=condition_frame_latent.dtype
+    )
     cond_indicator[:, :, :mem_size] = 1.0
 
     rand_noise_ff = random.random() * noise_to_condition_frames
@@ -309,7 +319,9 @@ def gen_noise_from_condition_frame_latent(
     first_frame_mask = conditioning_mask.clone()
     first_frame_mask[:, :, :mem_size] = 1.0 - rand_noise_ff
 
-    noise = randn_tensor(shape, generator=generator, device=condition_frame_latent.device, dtype=condition_frame_latent.dtype)
+    noise = randn_tensor(
+        shape, generator=generator, device=condition_frame_latent.device, dtype=condition_frame_latent.dtype
+    )
     latents = init_latents * first_frame_mask + noise * (1 - first_frame_mask)
 
     conditioning_mask = _pack_latents(conditioning_mask).squeeze(-1)
@@ -337,10 +349,10 @@ def apply_color_jitter_to_video(tensor, jitter=None):
         # jitter = transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1)
         jitter = transforms.ColorJitter(brightness=0.3, contrast=0.4, saturation=0.5, hue=0.1)
     tensor = (tensor + 1.0) / 2.0
-    tensor = rearrange(tensor, 'b c t h w -> b t c h w')
+    tensor = rearrange(tensor, "b c t h w -> b t c h w")
     for b in range(B):
         tensor[b, :, :] = jitter(tensor[b, :, :])
-    tensor = rearrange(tensor, 'b t c h w -> b c t h w')
+    tensor = rearrange(tensor, "b t c h w -> b c t h w")
     tensor = tensor * 2.0 - 1.0
     return tensor
 
@@ -355,16 +367,23 @@ def prepare_ray_map(intrinsic, c2w, H, W):
         rays:      b, H, W, 3 and b, H, W, 3
     """
     batch_size = intrinsic.shape[0]
-    fx, fy, cx, cy = intrinsic[:,0,0].unsqueeze(1).unsqueeze(2), intrinsic[:,1,1].unsqueeze(1).unsqueeze(2), intrinsic[:,0,2].unsqueeze(1).unsqueeze(2), intrinsic[:,1,2].unsqueeze(1).unsqueeze(2)
-    i, j = torch.meshgrid(torch.linspace(0.5, W-0.5, W, device=c2w.device), torch.linspace(0.5, H-0.5, H, device=c2w.device))  # pytorch's meshgrid has indexing='ij'
+    fx, fy, cx, cy = (
+        intrinsic[:, 0, 0].unsqueeze(1).unsqueeze(2),
+        intrinsic[:, 1, 1].unsqueeze(1).unsqueeze(2),
+        intrinsic[:, 0, 2].unsqueeze(1).unsqueeze(2),
+        intrinsic[:, 1, 2].unsqueeze(1).unsqueeze(2),
+    )
+    i, j = torch.meshgrid(
+        torch.linspace(0.5, W - 0.5, W, device=c2w.device), torch.linspace(0.5, H - 0.5, H, device=c2w.device)
+    )  # pytorch's meshgrid has indexing='ij'
     i = i.t()
     j = j.t()
-    i = i.unsqueeze(0).repeat(batch_size,1,1)
-    j = j.unsqueeze(0).repeat(batch_size,1,1)
-    dirs = torch.stack([(i-cx)/fx, (j-cy)/fy, torch.ones_like(i)], -1)
-    rays_d = torch.sum(dirs[..., np.newaxis, :] * c2w[:,np.newaxis,np.newaxis, :3,:3], -1)
-    rays_o = c2w[:, :3,-1].unsqueeze(1).unsqueeze(2).repeat(1,H,W,1)
-    viewdir = rays_d/torch.norm(rays_d, dim=-1, keepdim=True)
+    i = i.unsqueeze(0).repeat(batch_size, 1, 1)
+    j = j.unsqueeze(0).repeat(batch_size, 1, 1)
+    dirs = torch.stack([(i - cx) / fx, (j - cy) / fy, torch.ones_like(i)], -1)
+    rays_d = torch.sum(dirs[..., np.newaxis, :] * c2w[:, np.newaxis, np.newaxis, :3, :3], -1)
+    rays_o = c2w[:, :3, -1].unsqueeze(1).unsqueeze(2).repeat(1, H, W, 1)
+    viewdir = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
     return rays_o, viewdir
 
 

@@ -1,6 +1,6 @@
 ---
 title: "RoboFlamingo"
-description: "OpenFlamingo plus an LSTM action head; WorldFoundry GPU-validated predict needs three staged checkpoints."
+description: "OpenFlamingo plus an LSTM action head for language-conditioned robot manipulation; GPU-validated, needs three staged checkpoints."
 modelId: "roboflamingo"
 pageSource: authored
 ---
@@ -9,7 +9,7 @@ RoboFlamingo turns OpenFlamingo into a language-conditioned robot policy: the VL
 
 <ModelPaperFigures modelId="roboflamingo" locale="en" />
 
-WorldFoundry vendors the architecture and inference source under `worldfoundry/synthesis/action_generation/roboflamingo`. There is a single catalog card — no extra variants. The public pipeline passed CUDA `action_trace` validation with three staged stacks: the released CALVIN policy, the OpenFlamingo VLM, and the MPT language backbone. Keep this model on embodied action maps, not video-generation scorecards. Alias `robo-flamingo` resolves here.
+Validated on GPU: with three staged stacks — the released CALVIN policy, the OpenFlamingo VLM, and the MPT language backbone — the public pipeline produces a CUDA `action_trace`. Evaluate it on embodied action benchmarks, not video-generation scorecards. The alias `robo-flamingo` selects the same model.
 
 <ModelCommandBuilder modelId="roboflamingo" locale="en" />
 
@@ -17,11 +17,11 @@ WorldFoundry vendors the architecture and inference source under `worldfoundry/s
 
 Language-conditioned manipulation on a [CALVIN](/docs/evaluation/benchmark-hub/calvin)-style long-horizon suite is the intended route. Required inputs are `image`, `instruction`, `prompt`, and `video`. `RoboFlamingoPipeline` writes `roboflamingo_action_trace.json`.
 
-Use this card when you need a GPU-ready OpenFlamingo policy with explicit backbone staging — not a chunking or diffusion action head.
+Use it when you need a GPU-ready OpenFlamingo policy with explicit backbone staging. Its action head is recurrent, not a chunking or diffusion head.
 
 ## Runtime contract
 
-In-tree architecture defaults:
+Architecture defaults:
 
 - Vision: **ViT-L-14** (OpenCLIP), language: **MPT-1B** (`mpt_dolly_3b` in config)
 - **`window_size` 12**, **`n_obs_steps` 2**, fusion `post`
@@ -34,16 +34,18 @@ Checkpoint directories — all must already exist under `${WORLDFOUNDRY_HFD_ROOT
 - `openflamingo/OpenFlamingo-3B-vitl-mpt1b-langinstruct` → `openflamingo--OpenFlamingo-3B-vitl-mpt1b-langinstruct`
 - `anas-awadalla/mpt-1b-redpajama-200b-dolly` → `anas-awadalla--mpt-1b-redpajama-200b-dolly`
 
-The vision encoder file is also declared at `${WORLDFOUNDRY_CKPT_DIR}/open_clip/ViT-L-14.pt`. Full official CALVIN eval still needs the CALVIN assets themselves.
+The released MPT-1B checkpoint uses `mosaic_gpt`. WorldFoundry loads its configuration and weights with the canonical `worldfoundry.base_models.llm_mllm_core.mllm.mosaic_gpt` implementation; checkpoint Python files are not executed.
+
+The vision encoder file is expected at `${WORLDFOUNDRY_CKPT_DIR}/open_clip/ViT-L-14.pt`. Full official CALVIN evaluation also needs the CALVIN assets.
 
 ## Running in WorldFoundry
 
-The environment profile is `worldfoundry-unified-cu128`. The recorded env YAML is **Python 3.8** with a prepare-only CUDA tag; the runner still completed a CUDA `action_trace` with those three checkpoints staged. After staging:
+The environment profile is `worldfoundry-unified-cu128`; its environment YAML pins **Python 3.8** to match RoboFlamingo's upstream requirements. After staging the three checkpoints:
 
 ```
-worldfoundry-eval run roboflamingo
+wf run roboflamingo
 ```
 
-No license is recorded in this repository. Confirm RoboFlamingo / OpenFlamingo / MPT terms before production use.
+No license is listed for this model. MosaicGPT source is Apache-2.0 and its language weights are CC-BY-SA-3.0. Confirm RoboFlamingo / OpenFlamingo / MPT terms before production use.
 
 <ModelRelatedRecipes modelId="roboflamingo" locale="en" />

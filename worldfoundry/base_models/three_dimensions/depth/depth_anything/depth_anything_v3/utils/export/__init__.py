@@ -12,20 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> export -> __init__.py functionality."""
-
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.specs import Prediction
 
 
 def _import_exporter(export_format: str):
-    """Helper function to import exporter.
-
-    Args:
-        export_format: The export format.
-    """
     try:
         if export_format == "glb":
-            from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.export_glb import export_to_glb
+            from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.export_glb import (
+                export_to_glb,
+            )
 
             return export_to_glb
         if export_format == "mini_npz":
@@ -37,11 +32,15 @@ def _import_exporter(export_format: str):
 
             return export_to_npz
         if export_format == "feat_vis":
-            from worldfoundry.studio.visualization.plugins.scene3d.depth_anything_v3.export_vis import export_to_feat_vis
+            from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.visualize import (
+                export_to_feat_vis,
+            )
 
             return export_to_feat_vis
         if export_format == "depth_vis":
-            from worldfoundry.studio.visualization.plugins.scene3d.depth_anything_v3.export_vis import export_to_depth_vis
+            from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.visualize import (
+                export_to_depth_vis,
+            )
 
             return export_to_depth_vis
         if export_format == "gs_ply":
@@ -72,13 +71,6 @@ def export(
     export_dir: str,
     **kwargs,
 ):
-    """Export.
-
-    Args:
-        prediction: The prediction.
-        export_format: The export format.
-        export_dir: The export dir.
-    """
     if "-" in export_format:
         export_formats = export_format.split("-")
         for export_format in export_formats:

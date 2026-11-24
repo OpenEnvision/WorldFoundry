@@ -5,23 +5,23 @@ Each handler manages:
 2. Incremental point cloud updates (streaming or batched)
 3. Scene projection rendering (point cloud → VAE latent)
 """
+
 from __future__ import annotations
 
 import os
 import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
 import torch
 
-from liveworld.geometry_utils import (
+from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.geometry_utils import (
+    _limit_points_by_density,
+    _safe_frame_index,
     render_projection,
     scale_intrinsics,
-    _safe_frame_index,
-    _limit_points_by_density,
 )
 
 
@@ -29,10 +29,10 @@ from liveworld.geometry_utils import (
 class ReconstructionResult:
     """Result of first-frame 3D reconstruction."""
 
-    points_world: np.ndarray       # (M, 3) float32
-    colors: np.ndarray             # (M, 3) uint8
-    intrinsics: np.ndarray         # (3, 3) float32
-    intrinsics_size: Tuple[int, int]  # (H, W) of the model's output resolution
+    points_world: np.ndarray  # (M, 3) float32
+    colors: np.ndarray  # (M, 3) uint8
+    intrinsics: np.ndarray  # (3, 3) float32
+    intrinsics_size: tuple[int, int]  # (H, W) of the model's output resolution
     alignment_transform: np.ndarray
 
 
@@ -67,8 +67,8 @@ class PointCloudUpdater(ABC):
         self,
         frame: np.ndarray,
         geometry_poses_c2w: np.ndarray,
-        dynamic_mask: Optional[np.ndarray],
-        options: BackboneInferenceOptions,
+        dynamic_mask: np.ndarray | None,
+        options: BackboneInferenceOptions,  # noqa: F821 - Name is undefined in the upstream source.
     ) -> ReconstructionResult:
         """Reconstruct initial point cloud from a single first frame.
 
@@ -91,14 +91,14 @@ class PointCloudUpdater(ABC):
         self,
         iter_idx: int,
         frames: np.ndarray,
-        frame_indices: Optional[List[int]],
-        state_points: Optional[np.ndarray],
-        state_colors: Optional[np.ndarray],
-        options: BackboneInferenceOptions,
-        debug_dir: Optional[str] = None,
-        rgb_frames: Optional[np.ndarray] = None,
-        extra_entity_prompts: Optional[List[str]] = None,
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+        frame_indices: list[int] | None,
+        state_points: np.ndarray | None,
+        state_colors: np.ndarray | None,
+        options: BackboneInferenceOptions,  # noqa: F821 - Name is undefined in the upstream source.
+        debug_dir: str | None = None,
+        rgb_frames: np.ndarray | None = None,
+        extra_entity_prompts: list[str] | None = None,
+    ) -> tuple[np.ndarray | None, np.ndarray | None]:
         """Process new frames and return aligned (new_points, new_colors).
 
         Also updates internal point cloud state.
@@ -129,14 +129,14 @@ class PointCloudUpdater(ABC):
     @abstractmethod
     def render_scene_projection(
         self,
-        target_frame_indices: List[int],
-        output_size: Tuple[int, int],
+        target_frame_indices: list[int],
+        output_size: tuple[int, int],
         vae,
         device: torch.device,
         dtype: torch.dtype,
-        density_max_pixels: Optional[int] = None,
-        density_rng: Optional[np.random.Generator] = None,
-        density_blue_noise: Optional[np.ndarray] = None,
+        density_max_pixels: int | None = None,
+        density_rng: np.random.Generator | None = None,
+        density_blue_noise: np.ndarray | None = None,
     ) -> torch.Tensor:
         """Render scene projections from internal point cloud and VAE-encode.
 
@@ -158,27 +158,27 @@ class PointCloudUpdater(ABC):
 
     @property
     @abstractmethod
-    def points_world(self) -> Optional[np.ndarray]:
+    def points_world(self) -> np.ndarray | None:
         """Current global point cloud ``(M, 3)`` float32."""
 
     @property
     @abstractmethod
-    def colors(self) -> Optional[np.ndarray]:
+    def colors(self) -> np.ndarray | None:
         """Current point cloud colors ``(M, 3)`` uint8."""
 
     @property
     @abstractmethod
-    def poses_c2w(self) -> Optional[np.ndarray]:
+    def poses_c2w(self) -> np.ndarray | None:
         """Camera-to-world poses ``(N, 4, 4)`` float32."""
 
     @property
     @abstractmethod
-    def intrinsics(self) -> Optional[np.ndarray]:
+    def intrinsics(self) -> np.ndarray | None:
         """Camera intrinsics ``(3, 3)`` or ``(N, 3, 3)`` float32."""
 
     @property
     @abstractmethod
-    def intrinsics_size(self) -> Optional[Tuple[int, int]]:
+    def intrinsics_size(self) -> tuple[int, int] | None:
         """Resolution ``(H, W)`` at which intrinsics are defined."""
 
 
@@ -194,18 +194,11 @@ Supports:
 - Scene projection rendering from internal point cloud
 """
 
-import gc
-import os
-import sys
-from typing import List, Optional, Tuple
+import gc  # noqa: E402 - Follows a module-level setup call, as upstream.
 
-import cv2
-import numpy as np
-import open3d as o3d
-import torch
-import torchvision.transforms.functional as TF
-from PIL import Image
-
+import open3d as o3d  # noqa: E402 - Follows a module-level setup call, as upstream.
+import torchvision.transforms.functional as TF  # noqa: E402 - Follows a module-level setup call, as upstream.
+from PIL import Image  # noqa: E402 - Follows a module-level setup call, as upstream.
 
 
 def _depth_based_upsample(
@@ -216,7 +209,7 @@ def _depth_based_upsample(
     c2w: np.ndarray,
     out_h: int,
     out_w: int,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Upsample Stream3R outputs via depth map interpolation and unprojection.
 
     Uses Stream3R's native depth prediction to upsample and unproject to
@@ -258,7 +251,7 @@ def _depth_based_upsample(
     v_coords, u_coords = np.meshgrid(
         np.arange(out_h, dtype=np.float32),
         np.arange(out_w, dtype=np.float32),
-        indexing='ij',
+        indexing="ij",
     )
     fx, fy = K_scaled[0, 0], K_scaled[1, 1]
     cx, cy = K_scaled[0, 2], K_scaled[1, 2]
@@ -277,12 +270,14 @@ def _depth_based_upsample(
     return wp_up, conf_up, img_up, K_scaled
 
 
-
-
 # Ensure stream3r is importable, then import at module level
-from worldfoundry.base_models.three_dimensions.point_clouds.stream3r.models.stream3r import STream3R
-from worldfoundry.base_models.three_dimensions.point_clouds.stream3r.stream_session import StreamSession
-from worldfoundry.base_models.three_dimensions.point_clouds.stream3r.models.components.utils.pose_enc import (
+from worldfoundry.base_models.three_dimensions.point_clouds.stream3r.models.stream3r import (  # noqa: E402 - Follows module-level definitions, as upstream.
+    STream3R,
+)
+from worldfoundry.base_models.three_dimensions.point_clouds.stream3r.stream_session import (  # noqa: E402 - Follows module-level definitions, as upstream.
+    StreamSession,
+)
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.utils.pose_enc import (  # noqa: E402 - Follows module-level definitions, as upstream.
     pose_encoding_to_extri_intri,
 )
 
@@ -312,10 +307,7 @@ def _preprocess_frames(
     shapes = set()
 
     for frame in frames:
-        if isinstance(frame, torch.Tensor):
-            frame_np = frame.detach().cpu().numpy()
-        else:
-            frame_np = np.asarray(frame)
+        frame_np = frame.detach().cpu().numpy() if isinstance(frame, torch.Tensor) else np.asarray(frame)
 
         if frame_np.dtype != np.uint8:
             frame_np = np.clip(frame_np, 0, 255).astype(np.uint8)
@@ -343,7 +335,7 @@ def _preprocess_frames(
 
         if mode == "crop" and new_height > target_size:
             start_y = (new_height - target_size) // 2
-            img_tensor = img_tensor[:, start_y:start_y + target_size, :]
+            img_tensor = img_tensor[:, start_y : start_y + target_size, :]
 
         if mode == "pad":
             h_padding = target_size - img_tensor.shape[1]
@@ -354,8 +346,10 @@ def _preprocess_frames(
                 pad_left = w_padding // 2
                 pad_right = w_padding - pad_left
                 img_tensor = torch.nn.functional.pad(
-                    img_tensor, (pad_left, pad_right, pad_top, pad_bottom),
-                    mode="constant", value=1.0,
+                    img_tensor,
+                    (pad_left, pad_right, pad_top, pad_bottom),
+                    mode="constant",
+                    value=1.0,
                 )
 
         shapes.add((img_tensor.shape[1], img_tensor.shape[2]))
@@ -374,8 +368,10 @@ def _preprocess_frames(
                 pad_left = w_padding // 2
                 pad_right = w_padding - pad_left
                 img_tensor = torch.nn.functional.pad(
-                    img_tensor, (pad_left, pad_right, pad_top, pad_bottom),
-                    mode="constant", value=1.0,
+                    img_tensor,
+                    (pad_left, pad_right, pad_top, pad_bottom),
+                    mode="constant",
+                    value=1.0,
                 )
             padded.append(img_tensor)
         images = padded
@@ -446,7 +442,7 @@ def _check_multiview_depth_consistency(
     # Track how many views each point was checked against
     view_counts = np.zeros(n_points, dtype=np.int32)
 
-    for pose_idx, (hist_depth, hist_c2w, hist_K, (H, W)) in depth_history.items():
+    for _pose_idx, (hist_depth, hist_c2w, hist_K, (H, W)) in depth_history.items():
         # Project new points to this historical camera
         w2c = np.linalg.inv(hist_c2w)
         R, t = w2c[:3, :3], w2c[:3, 3]
@@ -487,10 +483,7 @@ def _check_multiview_depth_consistency(
         # Hole-filling-friendly rule:
         # Reject only points that are significantly *in front of* historical depth.
         # Points farther than history can be valid newly revealed background.
-        inconsistent_local = (
-            valid_proj_depth[valid_hist]
-            < hist_depth_at_pts[valid_hist] * (1.0 - rel_threshold)
-        )
+        inconsistent_local = valid_proj_depth[valid_hist] < hist_depth_at_pts[valid_hist] * (1.0 - rel_threshold)
 
         # Map back to original point indices
         in_front_indices = np.where(in_front)[0]
@@ -567,9 +560,8 @@ def _filter_points_preserve_historical_projection(
         # Keep only points safely behind known historical depth.
         too_close_or_in_front = np.zeros_like(hist_unknown, dtype=bool)
         if np.any(hist_known):
-            too_close_or_in_front[hist_known] = (
-                valid_proj_depth[hist_known]
-                <= hist_depth_at_pts[hist_known] * (1.0 + rel_threshold)
+            too_close_or_in_front[hist_known] = valid_proj_depth[hist_known] <= hist_depth_at_pts[hist_known] * (
+                1.0 + rel_threshold
             )
         reject_local = hist_unknown | too_close_or_in_front
 
@@ -593,7 +585,8 @@ def _project_points_to_depth_map(
     points: np.ndarray,
     c2w: np.ndarray,
     intrinsics: np.ndarray,
-    H: int, W: int,
+    H: int,
+    W: int,
 ) -> np.ndarray:
     """Project 3D points to camera and create a depth map.
 
@@ -639,11 +632,12 @@ def _save_update_debug(
     debug_dir: str,
     iter_idx: int,
     frame_idx: int,
-    frame_img: Optional[np.ndarray],
+    frame_img: np.ndarray | None,
     confidence: np.ndarray,
-    coverage_mask: Optional[np.ndarray],
-    dynamic_mask: Optional[np.ndarray],
-    H: int, W: int,
+    coverage_mask: np.ndarray | None,
+    dynamic_mask: np.ndarray | None,
+    H: int,
+    W: int,
 ):
     """Save per-frame debug visualizations during point cloud update.
 
@@ -677,12 +671,12 @@ def _save_update_debug(
 
     # Save 2D coverage mask
     if coverage_mask is not None:
-        cov_vis = (coverage_mask.astype(np.uint8) * 255)
+        cov_vis = coverage_mask.astype(np.uint8) * 255
         cv2.imwrite(os.path.join(sub, f"{prefix}_coverage_mask.png"), cov_vis)
 
     # Save dynamic object mask
     if dynamic_mask is not None:
-        dm_vis = (dynamic_mask.astype(np.uint8) * 255)
+        dm_vis = dynamic_mask.astype(np.uint8) * 255
         cv2.imwrite(os.path.join(sub, f"{prefix}_dynamic_mask.png"), dm_vis)
 
         # Overlay dynamic mask on input frame (red tint on dynamic regions)
@@ -692,14 +686,14 @@ def _save_update_debug(
             # Resize dynamic mask to match frame_img resolution if needed
             if dynamic_mask.shape[:2] != (img_h, img_w):
                 dm_resized = cv2.resize(
-                    dynamic_mask.astype(np.uint8), (img_w, img_h),
+                    dynamic_mask.astype(np.uint8),
+                    (img_w, img_h),
                     interpolation=cv2.INTER_NEAREST,
                 ).astype(bool)
             else:
                 dm_resized = dynamic_mask
             overlay[dm_resized] = (
-                overlay[dm_resized].astype(np.float32) * 0.5
-                + np.array([255, 0, 0], dtype=np.float32) * 0.5
+                overlay[dm_resized].astype(np.float32) * 0.5 + np.array([255, 0, 0], dtype=np.float32) * 0.5
             ).astype(np.uint8)
             cv2.imwrite(
                 os.path.join(sub, f"{prefix}_dynamic_overlay.png"),
@@ -713,9 +707,10 @@ def _save_keep_mask_debug(
     frame_idx: int,
     conf_mask: np.ndarray,
     keep_mask: np.ndarray,
-    coverage_mask: Optional[np.ndarray],
-    dynamic_mask: Optional[np.ndarray],
-    H: int, W: int,
+    coverage_mask: np.ndarray | None,
+    dynamic_mask: np.ndarray | None,
+    H: int,
+    W: int,
 ):
     """Save the final keep mask visualization.
 
@@ -756,14 +751,14 @@ class Stream3RUpdater(PointCloudUpdater):
         self._model = None
         self._session = None
         self._frames_fed: int = 0
-        self._device: Optional[torch.device] = None
+        self._device: torch.device | None = None
 
         # Internal state
-        self._points_world: Optional[np.ndarray] = None
-        self._colors: Optional[np.ndarray] = None
-        self._poses_c2w: Optional[np.ndarray] = None
-        self._intrinsics: Optional[np.ndarray] = None
-        self._intrinsics_size: Optional[Tuple[int, int]] = None
+        self._points_world: np.ndarray | None = None
+        self._colors: np.ndarray | None = None
+        self._poses_c2w: np.ndarray | None = None
+        self._intrinsics: np.ndarray | None = None
+        self._intrinsics_size: tuple[int, int] | None = None
 
         # Multi-view depth consistency: store depth maps for each processed pose
         # Key: pose_idx, Value: (depth_map, c2w, intrinsics, (H, W))
@@ -773,38 +768,38 @@ class Stream3RUpdater(PointCloudUpdater):
         # Dynamic object detection models (lazy-loaded)
         self._sam3_segmenter = None
         self._qwen_extractor = None
-        self._sam3_model_path: Optional[str] = None
-        self._qwen_model_path: Optional[str] = None
+        self._sam3_model_path: str | None = None
+        self._qwen_model_path: str | None = None
 
         # Last dynamic masks from update() — exposed for callers to read.
         # List of (H, W) bool masks (one per frame), or None.
-        self.last_dynamic_masks: Optional[List[np.ndarray]] = None
+        self.last_dynamic_masks: list[np.ndarray] | None = None
 
         # Pre-filtering per-frame world points from update() — includes dynamic pixels.
         # List of (H, W, 3) float32 arrays (one per frame), or None.
         # Used by intermediate event detection for fg back-projection.
-        self.last_per_frame_world_points: Optional[List[np.ndarray]] = None
+        self.last_per_frame_world_points: list[np.ndarray] | None = None
 
     # -- Properties ----------------------------------------------------------
 
     @property
-    def points_world(self) -> Optional[np.ndarray]:
+    def points_world(self) -> np.ndarray | None:
         return self._points_world
 
     @property
-    def colors(self) -> Optional[np.ndarray]:
+    def colors(self) -> np.ndarray | None:
         return self._colors
 
     @property
-    def poses_c2w(self) -> Optional[np.ndarray]:
+    def poses_c2w(self) -> np.ndarray | None:
         return self._poses_c2w
 
     @property
-    def intrinsics(self) -> Optional[np.ndarray]:
+    def intrinsics(self) -> np.ndarray | None:
         return self._intrinsics
 
     @property
-    def intrinsics_size(self) -> Optional[Tuple[int, int]]:
+    def intrinsics_size(self) -> tuple[int, int] | None:
         return self._intrinsics_size
 
     def set_dynamic_models(
@@ -836,8 +831,8 @@ class Stream3RUpdater(PointCloudUpdater):
         self,
         frames: np.ndarray,
         options,
-        extra_entity_prompts: Optional[List[str]] = None,
-    ) -> Optional[List[np.ndarray]]:
+        extra_entity_prompts: list[str] | None = None,
+    ) -> list[np.ndarray] | None:
         """Detect dynamic objects in generated frames using Qwen + SAM3.
 
         Uses the shared Qwen/SAM3 instances set via ``set_dynamic_models()``.
@@ -861,17 +856,15 @@ class Stream3RUpdater(PointCloudUpdater):
 
         device_str = str(self._device) if self._device else "cuda:0"
         cpu_offload_qwen = getattr(self, "_cpu_offload_qwen", False)
-        cpu_offload_sam3 = getattr(self, "_cpu_offload_sam3", False)
+        _cpu_offload_sam3 = getattr(self, "_cpu_offload_sam3", False)
 
         # Step 1: Save frames as temp video for Qwen video-mode detection
-        tmp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        tmp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
         tmp_video_path = tmp_video.name
         tmp_video.close()
         try:
             h, w = frames.shape[1], frames.shape[2]
-            writer = cv2.VideoWriter(
-                tmp_video_path, cv2.VideoWriter_fourcc(*"mp4v"), 16, (w, h)
-            )
+            writer = cv2.VideoWriter(tmp_video_path, cv2.VideoWriter_fourcc(*"mp4v"), 16, (w, h))
             for f in frames:
                 writer.write(cv2.cvtColor(f, cv2.COLOR_RGB2BGR))
             writer.release()
@@ -882,7 +875,8 @@ class Stream3RUpdater(PointCloudUpdater):
             try:
                 detect_prompt = getattr(self, "_scene_detect_prompt", "")
                 dynamic_prompts, raw_text = self._qwen_extractor.extract(
-                    tmp_video_path, prompt=detect_prompt,
+                    tmp_video_path,
+                    prompt=detect_prompt,
                 )
             finally:
                 if cpu_offload_qwen and hasattr(self._qwen_extractor, "model"):
@@ -907,7 +901,7 @@ class Stream3RUpdater(PointCloudUpdater):
         pil_frames = [Image.fromarray(f) for f in frames]
         n_frames = len(pil_frames)
 
-        merged: Optional[np.ndarray] = None  # (T, H, W) bool
+        merged: np.ndarray | None = None  # (T, H, W) bool
 
         for prompt in all_prompts:
             seg_result = self._sam3_segmenter.segment(
@@ -918,10 +912,7 @@ class Stream3RUpdater(PointCloudUpdater):
             )
             if seg_result.size == 0:
                 continue
-            if merged is None:
-                merged = seg_result.copy()
-            else:
-                merged = merged | seg_result
+            merged = seg_result.copy() if merged is None else merged | seg_result
 
         if merged is None or not merged.any():
             return None
@@ -963,7 +954,7 @@ class Stream3RUpdater(PointCloudUpdater):
     def init_model(self, device: torch.device) -> None:
         self._device = device
 
-    def to(self, device: torch.device) -> "Stream3RUpdater":
+    def to(self, device: torch.device) -> Stream3RUpdater:
         self._device = device
         if self._model is not None:
             self._model = self._model.to(device)
@@ -1010,14 +1001,13 @@ class Stream3RUpdater(PointCloudUpdater):
         self._depth_history = {}
         self.last_dynamic_masks = None
 
-
     # -- First-frame reconstruction ------------------------------------------
 
     def reconstruct_first_frame(
         self,
         frame: np.ndarray,
         geometry_poses_c2w: np.ndarray,
-        dynamic_mask: Optional[np.ndarray],
+        dynamic_mask: np.ndarray | None,
         options,
     ) -> ReconstructionResult:
         device = self._device
@@ -1111,7 +1101,7 @@ class Stream3RUpdater(PointCloudUpdater):
         v_coords, u_coords = np.meshgrid(
             np.arange(out_h, dtype=np.float32),
             np.arange(out_w, dtype=np.float32),
-            indexing='ij',
+            indexing="ij",
         )
         fx, fy = K_scaled[0, 0], K_scaled[1, 1]
         cx, cy = K_scaled[0, 2], K_scaled[1, 2]
@@ -1140,7 +1130,8 @@ class Stream3RUpdater(PointCloudUpdater):
         if dynamic_mask is not None:
             if dynamic_mask.shape != (H, W):
                 dynamic_mask_resized = cv2.resize(
-                    dynamic_mask.astype(np.uint8), (W, H),
+                    dynamic_mask.astype(np.uint8),
+                    (W, H),
                     interpolation=cv2.INTER_NEAREST,
                 ).astype(bool)
             else:
@@ -1149,11 +1140,7 @@ class Stream3RUpdater(PointCloudUpdater):
 
         pts = wp[valid].astype(np.float32)
         cols = img[valid]
-        if cols.max() <= 1.5:
-            cols = (cols * 255.0).clip(0, 255).astype(np.uint8)
-        else:
-            cols = cols.clip(0, 255).astype(np.uint8)
-
+        cols = (cols * 255.0).clip(0, 255).astype(np.uint8) if cols.max() <= 1.5 else cols.clip(0, 255).astype(np.uint8)
 
         # Voxel downsample
         if options.voxel_size and options.voxel_size > 0 and len(pts) > 0:
@@ -1168,12 +1155,15 @@ class Stream3RUpdater(PointCloudUpdater):
         self._points_world = pts
         self._colors = cols
         # Transform geometry poses into Stream3R world coordinate system
-        aligned_poses = np.array([
-            self._alignment_transform @ p.astype(np.float32)
-            if p.shape == (4, 4)
-            else self._alignment_transform @ np.vstack([p.astype(np.float32), [0, 0, 0, 1]])
-            for p in geometry_poses_c2w
-        ], dtype=np.float32)
+        aligned_poses = np.array(
+            [
+                self._alignment_transform @ p.astype(np.float32)
+                if p.shape == (4, 4)
+                else self._alignment_transform @ np.vstack([p.astype(np.float32), [0, 0, 0, 1]])
+                for p in geometry_poses_c2w
+            ],
+            dtype=np.float32,
+        )
         self._poses_c2w = aligned_poses
         self._intrinsics_size = (H, W)
 
@@ -1182,12 +1172,8 @@ class Stream3RUpdater(PointCloudUpdater):
 
         # Save first-frame depth history using only retained static points.
         # This keeps dynamic/filtered-out pixels as unknown (inf).
-        first_hist_depth = _project_points_to_depth_map(
-            pts, stream3r_c2w, K_scaled, out_h, out_w
-        )
-        self._depth_history[0] = (
-            first_hist_depth, stream3r_c2w.copy(), K_scaled.copy(), (out_h, out_w)
-        )
+        first_hist_depth = _project_points_to_depth_map(pts, stream3r_c2w, K_scaled, out_h, out_w)
+        self._depth_history[0] = (first_hist_depth, stream3r_c2w.copy(), K_scaled.copy(), (out_h, out_w))
         self._frames_fed = 1
 
         return ReconstructionResult(
@@ -1202,14 +1188,14 @@ class Stream3RUpdater(PointCloudUpdater):
 
     def render_scene_projection(
         self,
-        target_frame_indices: List[int],
-        output_size: Tuple[int, int],
+        target_frame_indices: list[int],
+        output_size: tuple[int, int],
         vae,
         device: torch.device,
         dtype: torch.dtype,
-        density_max_pixels: Optional[int] = None,
-        density_rng: Optional[np.random.Generator] = None,
-        density_blue_noise: Optional[np.ndarray] = None,
+        density_max_pixels: int | None = None,
+        density_rng: np.random.Generator | None = None,
+        density_blue_noise: np.ndarray | None = None,
     ) -> torch.Tensor:
         if self._points_world is None or self._poses_c2w is None:
             raise RuntimeError("No point cloud available for rendering")
@@ -1230,10 +1216,14 @@ class Stream3RUpdater(PointCloudUpdater):
 
             if use_density:
                 pts, cols = _limit_points_by_density(
-                    self._points_world, self._colors,
-                    self._poses_c2w[pose_idx], K_scaled,
-                    (height, width), density_max_pixels,
-                    rng=density_rng, blue_noise=density_blue_noise,
+                    self._points_world,
+                    self._colors,
+                    self._poses_c2w[pose_idx],
+                    K_scaled,
+                    (height, width),
+                    density_max_pixels,
+                    rng=density_rng,
+                    blue_noise=density_blue_noise,
                 )
             else:
                 pts, cols = self._points_world, self._colors
@@ -1273,14 +1263,14 @@ class Stream3RUpdater(PointCloudUpdater):
         self,
         iter_idx: int,
         frames: np.ndarray,
-        frame_indices: Optional[List[int]],
-        state_points: Optional[np.ndarray],
-        state_colors: Optional[np.ndarray],
+        frame_indices: list[int] | None,
+        state_points: np.ndarray | None,
+        state_colors: np.ndarray | None,
         options,
-        debug_dir: Optional[str] = None,
-        rgb_frames: Optional[np.ndarray] = None,
-        extra_entity_prompts: Optional[List[str]] = None,
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+        debug_dir: str | None = None,
+        rgb_frames: np.ndarray | None = None,
+        extra_entity_prompts: list[str] | None = None,
+    ) -> tuple[np.ndarray | None, np.ndarray | None]:
         if frames.size == 0:
             return None, None
 
@@ -1304,7 +1294,9 @@ class Stream3RUpdater(PointCloudUpdater):
 
         # Detect dynamic objects before Stream3R processing.
         dynamic_masks_sampled = self._detect_dynamic_masks(
-            frames, options, extra_entity_prompts=extra_entity_prompts,
+            frames,
+            options,
+            extra_entity_prompts=extra_entity_prompts,
         )
         self.last_dynamic_masks = dynamic_masks_sampled
 
@@ -1318,14 +1310,12 @@ class Stream3RUpdater(PointCloudUpdater):
         running_points = state_points.copy() if state_points is not None else None
         running_colors = state_colors.copy() if state_colors is not None else None
         total_new_pts = 0
-        update_mode = _normalize_stream3r_update_mode(
-            getattr(options, "stream3r_update_mode", "complete")
-        )
+        update_mode = _normalize_stream3r_update_mode(getattr(options, "stream3r_update_mode", "complete"))
         freeze_old_projection = update_mode == "freeze"
 
         with torch.no_grad():
             for i in range(images.shape[0]):
-                image = images[i:i + 1]
+                image = images[i : i + 1]
                 self._frames_fed += 1
                 total_fed = self._frames_fed
 
@@ -1337,9 +1327,7 @@ class Stream3RUpdater(PointCloudUpdater):
 
                 cur_preds = {}
                 for key in preds:
-                    if (isinstance(preds[key], np.ndarray)
-                            and preds[key].ndim >= 1
-                            and preds[key].shape[0] == total_fed):
+                    if isinstance(preds[key], np.ndarray) and preds[key].ndim >= 1 and preds[key].shape[0] == total_fed:
                         cur_preds[key] = preds[key][-1:]
                     else:
                         cur_preds[key] = preds[key]
@@ -1355,26 +1343,25 @@ class Stream3RUpdater(PointCloudUpdater):
                     img = np.transpose(img, (0, 2, 3, 1))
 
                 # Compute camera-space depth from world_points at proc resolution
-                proc_h, proc_w = wp[0].shape[:2]     # 294, 518   wp.shape
-                out_h, out_w = options.target_hw     # 720, 1280
+                proc_h, proc_w = wp[0].shape[:2]  # 294, 518   wp.shape
+                out_h, out_w = options.target_hw  # 720, 1280
                 global_frame_idx = frame_indices_used[i] if frame_indices_used is not None else (total_fed - 1)
-                pose_idx = min(global_frame_idx, len(self._poses_c2w) - 1)     # 1 here
+                pose_idx = min(global_frame_idx, len(self._poses_c2w) - 1)  # 1 here
                 c2w = self._poses_c2w[pose_idx]
                 w2c = np.linalg.inv(c2w)
                 pts_cam = (w2c[:3, :3] @ wp[0].reshape(-1, 3).T).T + w2c[:3, 3]
-                depth_frame = pts_cam[:, 2].reshape(proc_h, proc_w).astype(np.float32)    # depth for pose1
+                depth_frame = pts_cam[:, 2].reshape(proc_h, proc_w).astype(np.float32)  # depth for pose1
 
                 # Resize frame image to target resolution
                 frame_img = color_frames[i].astype(np.float32)
                 if frame_img.max() > 1.5:
                     frame_img = frame_img / 255.0
-                frame_img = cv2.resize(frame_img, (out_w, out_h), interpolation=cv2.INTER_LINEAR)   # 720, 1280
+                frame_img = cv2.resize(frame_img, (out_w, out_h), interpolation=cv2.INTER_LINEAR)  # 720, 1280
 
                 # Upsample depth & conf, unproject at target resolution
                 # Use proc-resolution intrinsics; _depth_based_upsample scales them to out_h/out_w
                 wp_frame, conf_frame, img_frame, _ = _depth_based_upsample(
-                    depth_frame, conf[0], frame_img,
-                    self._stream3r_intrinsics_proc, c2w, out_h, out_w
+                    depth_frame, conf[0], frame_img, self._stream3r_intrinsics_proc, c2w, out_h, out_w
                 )
 
                 H, W = wp_frame.shape[:2]
@@ -1405,7 +1392,8 @@ class Stream3RUpdater(PointCloudUpdater):
                 )
                 if use_2d_cov:
                     coverage, _ = _project_global_to_frame(
-                        running_points, self._poses_c2w[pose_idx], self._intrinsics, H, W)
+                        running_points, self._poses_c2w[pose_idx], self._intrinsics, H, W
+                    )
                     keep_mask_2d = (~coverage).reshape(-1)
                 else:
                     coverage = None
@@ -1418,7 +1406,8 @@ class Stream3RUpdater(PointCloudUpdater):
                     dm = dynamic_masks_sampled[i]
                     if dm.shape != (H, W):
                         dm = cv2.resize(
-                            dm.astype(np.uint8), (W, H),
+                            dm.astype(np.uint8),
+                            (W, H),
                             interpolation=cv2.INTER_NEAREST,
                         ).astype(bool)
                     dynamic_mask_2d = dm
@@ -1434,7 +1423,8 @@ class Stream3RUpdater(PointCloudUpdater):
                         confidence=c.reshape(H, W),
                         coverage_mask=coverage,
                         dynamic_mask=dynamic_mask_2d,
-                        H=H, W=W,
+                        H=H,
+                        W=W,
                     )
 
                 # Confidence filter
@@ -1456,7 +1446,8 @@ class Stream3RUpdater(PointCloudUpdater):
                         keep_mask=keep_mask.reshape(H, W),
                         coverage_mask=coverage,
                         dynamic_mask=dynamic_mask_2d,
-                        H=H, W=W,
+                        H=H,
+                        W=W,
                     )
 
                 if not np.any(keep_mask):
@@ -1502,13 +1493,9 @@ class Stream3RUpdater(PointCloudUpdater):
                     frame_cols = frame_cols[preserve_mask]
 
                 # Save current frame depth history from retained static points only.
-                filtered_hist_depth = _project_points_to_depth_map(
-                    frame_pts, c2w, K_out, out_h, out_w
-                )
+                filtered_hist_depth = _project_points_to_depth_map(frame_pts, c2w, K_out, out_h, out_w)
                 if (not freeze_old_projection) or (pose_idx not in self._depth_history):
-                    self._depth_history[pose_idx] = (
-                        filtered_hist_depth, c2w.copy(), K_out.copy(), (out_h, out_w)
-                    )
+                    self._depth_history[pose_idx] = (filtered_hist_depth, c2w.copy(), K_out.copy(), (out_h, out_w))
 
                 if len(frame_pts) == 0:
                     continue
@@ -1525,20 +1512,17 @@ class Stream3RUpdater(PointCloudUpdater):
         # Outlier removal on newly added points only
 
         if running_points is None or len(running_points) == 0:
-
             return None, None
 
         n_state = len(state_points) if state_points is not None else 0
         n_new = len(running_points) - n_state
 
         if n_new > 0 and n_state > 0:
-
             new_pcd = o3d.geometry.PointCloud()
             new_pcd.points = o3d.utility.Vector3dVector(running_points[n_state:])
             new_pcd.colors = o3d.utility.Vector3dVector(running_colors[n_state:].astype(np.float64) / 255.0)
 
             if len(new_pcd.points) > 20:
-
                 new_pcd, _ = new_pcd.remove_statistical_outlier(
                     nb_neighbors=int(options.stream3r_outlier_nb_neighbors),
                     std_ratio=float(options.stream3r_outlier_std_ratio),
@@ -1549,14 +1533,12 @@ class Stream3RUpdater(PointCloudUpdater):
             running_points = np.concatenate([running_points[:n_state], new_pts_clean], axis=0)
             running_colors = np.concatenate([running_colors[:n_state], new_cols_clean], axis=0)
 
-
         new_points = running_points.astype(np.float32)
         new_colors = running_colors
 
         # Sync internal state
         self._points_world = new_points
         self._colors = new_colors
-
 
         return new_points, new_colors
 

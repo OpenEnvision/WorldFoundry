@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,7 +16,7 @@ class OfficialPolicyOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "official_vla_action_policy"
     ACTION_REPRESENTATION = "model_native_action_trace"
     OBSERVATION_LAYOUT = "model_native_observation"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": True,
@@ -24,7 +25,6 @@ class OfficialPolicyOperator(EmbodiedActionOperator):
     }
 
     def _schema_value(self, key: str, default: Any = None) -> Any:
-        """Schema value implementation."""
         return self.input_schema.get(key, default)
 
     def operator_metadata(self, **overrides: Any) -> dict[str, Any]:
@@ -45,13 +45,17 @@ class OfficialPolicyOperator(EmbodiedActionOperator):
             }
         )
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
-        instruction = prompt if prompt not in (None, "") else _first_present(
-            kwargs,
-            "instruction",
-            "task_instruction",
-            "language_instruction",
+        instruction = (
+            prompt
+            if prompt not in (None, "")
+            else _first_present(
+                kwargs,
+                "instruction",
+                "task_instruction",
+                "language_instruction",
+            )
         )
         instruction = "" if instruction is None else str(instruction)
         return {
@@ -69,7 +73,7 @@ class OfficialPolicyOperator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         observation = kwargs.get("observation") if isinstance(kwargs.get("observation"), Mapping) else {}
         state = _first_present(kwargs, "state", "robot_state", "proprio", "joint_state")
@@ -99,7 +103,7 @@ class OfficialPolicyOperator(EmbodiedActionOperator):
             "observation": normalized,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "action_chunk", "robot_action", "trajectory", "latent_action_tokens")
@@ -110,9 +114,7 @@ class OfficialPolicyOperator(EmbodiedActionOperator):
                 actions,
                 action_contract=str(self._schema_value("action_contract", "model_native_action_trace")),
                 control_mode=str(self._schema_value("control_mode", "official_policy_inference")),
-                action_horizon=(
-                    raw.get("action_horizon") if isinstance(raw, Mapping) else None
-                )
+                action_horizon=(raw.get("action_horizon") if isinstance(raw, Mapping) else None)
                 or self._schema_value("action_horizon", "model_default"),
             ),
             "action_space": action_space or self._schema_value("action_space") or {"kind": "model_native"},

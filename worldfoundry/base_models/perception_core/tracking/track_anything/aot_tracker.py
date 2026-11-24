@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot_tracker.py functionality."""
-
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -18,15 +16,8 @@ from .aot.transforms import video_transforms as tr
 from .aot.utils.checkpoint import load_network
 
 
-class AOTTracker(object):
-    """Aot tracker implementation."""
+class AOTTracker:
     def __init__(self, cfg, gpu_id=0):
-        """Init.
-
-        Args:
-            cfg: The cfg.
-            gpu_id: The gpu id.
-        """
         self.gpu_id = gpu_id
         self.model = build_vos_model(cfg.MODEL_VOS, cfg).cuda(gpu_id)
         self.model, _ = load_network(self.model, cfg.TEST_CKPT_PATH, gpu_id)
@@ -57,15 +48,6 @@ class AOTTracker(object):
 
     @torch.no_grad()
     def add_reference_frame(self, frame, mask, obj_nums, frame_step, incremental=False):
-        """Add reference frame.
-
-        Args:
-            frame: The frame.
-            mask: The mask.
-            obj_nums: The obj nums.
-            frame_step: The frame step.
-            incremental: The incremental.
-        """
         # mask = cv2.resize(mask, frame.shape[:2][::-1], interpolation = cv2.INTER_NEAREST)
 
         sample = {
@@ -85,11 +67,6 @@ class AOTTracker(object):
 
     @torch.no_grad()
     def track(self, image):
-        """Track.
-
-        Args:
-            image: The image.
-        """
         output_height, output_width = image.shape[0], image.shape[1]
         sample = {"current_img": image}
         sample = self.transform(sample)
@@ -104,25 +81,14 @@ class AOTTracker(object):
 
     @torch.no_grad()
     def update_memory(self, pred_label):
-        """Update memory.
-
-        Args:
-            pred_label: The pred label.
-        """
         self.engine.update_memory(pred_label)
 
     @torch.no_grad()
     def restart(self):
-        """Restart."""
         self.engine.restart_engine()
 
     @torch.no_grad()
     def build_tracker_engine(self, name, **kwargs):
-        """Build tracker engine.
-
-        Args:
-            name: The name.
-        """
         if name == "aotengine":
             return AOTTrackerInferEngine(**kwargs)
         elif name == "deaotengine":
@@ -132,7 +98,6 @@ class AOTTracker(object):
 
 
 class AOTTrackerInferEngine(AOTInferEngine):
-    """Aot tracker infer engine implementation."""
     def __init__(
         self,
         aot_model,
@@ -141,26 +106,9 @@ class AOTTrackerInferEngine(AOTInferEngine):
         short_term_mem_skip=1,
         max_aot_obj_num=None,
     ):
-        """Init.
-
-        Args:
-            aot_model: The aot model.
-            gpu_id: The gpu id.
-            long_term_mem_gap: The long term mem gap.
-            short_term_mem_skip: The short term mem skip.
-            max_aot_obj_num: The max aot obj num.
-        """
         super().__init__(aot_model, gpu_id, long_term_mem_gap, short_term_mem_skip, max_aot_obj_num)
 
     def add_reference_frame_incremental(self, img, mask, obj_nums, frame_step=-1):
-        """Add reference frame incremental.
-
-        Args:
-            img: The img.
-            mask: The mask.
-            obj_nums: The obj nums.
-            frame_step: The frame step.
-        """
         if isinstance(obj_nums, list):
             obj_nums = obj_nums[0]
         self.obj_nums = obj_nums
@@ -172,7 +120,9 @@ class AOTTrackerInferEngine(AOTInferEngine):
 
         separated_masks, separated_obj_nums = self.separate_mask(mask, obj_nums)
         img_embs = None
-        for aot_engine, separated_mask, separated_obj_num in zip(self.aot_engines, separated_masks, separated_obj_nums):
+        for aot_engine, separated_mask, separated_obj_num in zip(
+            self.aot_engines, separated_masks, separated_obj_nums, strict=False
+        ):
             if aot_engine.obj_nums is None or aot_engine.obj_nums[0] < separated_obj_num:
                 aot_engine.add_reference_frame(
                     img,
@@ -191,7 +141,6 @@ class AOTTrackerInferEngine(AOTInferEngine):
 
 
 class DeAOTTrackerInferEngine(DeAOTInferEngine):
-    """De aot tracker infer engine implementation."""
     def __init__(
         self,
         aot_model,
@@ -200,26 +149,9 @@ class DeAOTTrackerInferEngine(DeAOTInferEngine):
         short_term_mem_skip=1,
         max_aot_obj_num=None,
     ):
-        """Init.
-
-        Args:
-            aot_model: The aot model.
-            gpu_id: The gpu id.
-            long_term_mem_gap: The long term mem gap.
-            short_term_mem_skip: The short term mem skip.
-            max_aot_obj_num: The max aot obj num.
-        """
         super().__init__(aot_model, gpu_id, long_term_mem_gap, short_term_mem_skip, max_aot_obj_num)
 
     def add_reference_frame_incremental(self, img, mask, obj_nums, frame_step=-1):
-        """Add reference frame incremental.
-
-        Args:
-            img: The img.
-            mask: The mask.
-            obj_nums: The obj nums.
-            frame_step: The frame step.
-        """
         if isinstance(obj_nums, list):
             obj_nums = obj_nums[0]
         self.obj_nums = obj_nums
@@ -231,7 +163,9 @@ class DeAOTTrackerInferEngine(DeAOTInferEngine):
 
         separated_masks, separated_obj_nums = self.separate_mask(mask, obj_nums)
         img_embs = None
-        for aot_engine, separated_mask, separated_obj_num in zip(self.aot_engines, separated_masks, separated_obj_nums):
+        for aot_engine, separated_mask, separated_obj_num in zip(
+            self.aot_engines, separated_masks, separated_obj_nums, strict=False
+        ):
             if aot_engine.obj_nums is None or aot_engine.obj_nums[0] < separated_obj_num:
                 aot_engine.add_reference_frame(
                     img,
@@ -250,11 +184,6 @@ class DeAOTTrackerInferEngine(DeAOTInferEngine):
 
 
 def get_aot(args):
-    """Get aot.
-
-    Args:
-        args: The args.
-    """
     # build vos engine
     cfg = engine_config.EngineConfig(args["phase"])
     cfg.TEST_CKPT_PATH = args["model_path"]

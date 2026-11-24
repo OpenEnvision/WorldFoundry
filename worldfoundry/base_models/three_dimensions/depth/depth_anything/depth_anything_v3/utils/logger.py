@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> logger.py functionality."""
-
 import os
 import sys
 
 
 class Color:
-    """Color implementation."""
     RED = "\033[91m"
     YELLOW = "\033[93m"
     WHITE = "\033[97m"
@@ -33,23 +30,15 @@ COLOR_MAP = {"ERROR": Color.RED, "WARN": Color.YELLOW, "INFO": Color.WHITE, "DEB
 
 
 def get_env_log_level():
-    """Get env log level."""
     level = os.environ.get("DA3_LOG_LEVEL", "INFO").upper()
     return LOG_LEVELS.get(level, LOG_LEVELS["INFO"])
 
 
 class Logger:
-    """Logger implementation."""
     def __init__(self):
-        """Init."""
         self.level = get_env_log_level()
 
     def log(self, level_str, *args, **kwargs):
-        """Log.
-
-        Args:
-            level_str: The level str.
-        """
         level_key = level_str.split(":")[0].strip()
         level_val = LOG_LEVELS.get(level_key)
         if level_val is None:
@@ -70,19 +59,15 @@ class Logger:
             )
 
     def error(self, *args, **kwargs):
-        """Error."""
         self.log("ERROR:", *args, **kwargs)
 
     def warn(self, *args, **kwargs):
-        """Warn."""
         self.log("WARN:", *args, **kwargs)
 
     def info(self, *args, **kwargs):
-        """Info."""
         self.log("INFO:", *args, **kwargs)
 
     def debug(self, *args, **kwargs):
-        """Debug."""
         self.log("DEBUG:", *args, **kwargs)
 
 

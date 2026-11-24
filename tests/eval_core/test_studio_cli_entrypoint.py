@@ -23,7 +23,7 @@ def test_studio_cli_entrypoint_import_is_lightweight() -> None:
 
 
 def test_studio_entrypoint_parses_world_realtime_session() -> None:
-    from worldfoundry.studio.ui.launcher import parse_launch_config
+    from worldfoundry.studio.visualization.launcher import parse_launch_config
 
     config = parse_launch_config(["lingbot-world", "--frontend", "world", "--variant", "fast", "--device", "cuda:0"])
 
@@ -62,7 +62,7 @@ raise SystemExit(exit_code)
 
 def test_studio_cli_routes_to_standalone_launcher(monkeypatch) -> None:
     from worldfoundry.studio import cli
-    from worldfoundry.studio.ui import launcher as native_app
+    from worldfoundry.studio.visualization import launcher as native_app
 
     recorded: list[list[str]] = []
     monkeypatch.setattr(native_app, "main", lambda argv=None: recorded.append(list(argv or ())))

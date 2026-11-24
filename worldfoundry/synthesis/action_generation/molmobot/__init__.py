@@ -12,4 +12,5 @@ def __getattr__(name: str) -> Any:
         return MolmoBotSynthesis
     raise AttributeError(name)
 
+
 __all__ = ["MolmoBotSynthesis"]

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence, Union
+from collections.abc import Sequence
+from typing import Any, ClassVar
 
 from worldfoundry.core.media.codecs.image import load_pil_image
 
@@ -12,7 +13,7 @@ from .base_operator import BaseOperator
 class Lyra1Operator(BaseOperator):
     """Collapse WorldFoundry actions into a single Lyra-1 trajectory."""
 
-    OFFICIAL_TRAJECTORIES = [
+    OFFICIAL_TRAJECTORIES: ClassVar[list[str]] = [
         "left",
         "right",
         "up",
@@ -23,7 +24,7 @@ class Lyra1Operator(BaseOperator):
         "counterclockwise",
     ]
 
-    ACTION_TO_TRAJECTORY = {
+    ACTION_TO_TRAJECTORY: ClassVar[dict[str, str]] = {
         "forward": "zoom_in",
         "backward": "zoom_out",
         "left": "left",
@@ -55,9 +56,7 @@ class Lyra1Operator(BaseOperator):
         """Validate the given interaction sequence or parameters."""
         candidate = self._normalize_interaction_candidate(interaction)
         if candidate["trajectory"] is None:
-            raise ValueError(
-                f"{candidate['action']} not in template. Available: {self.interaction_template}"
-            )
+            raise ValueError(f"{candidate['action']} not in template. Available: {self.interaction_template}")
         return True
 
     def get_interaction(self, interaction):
@@ -68,7 +67,7 @@ class Lyra1Operator(BaseOperator):
             normalized = [self._normalize_interaction(interaction)]
         self.current_interaction.append(normalized)
 
-    def process_interaction(self, prompt: str = "") -> Dict[str, Any]:
+    def process_interaction(self, prompt: str = "") -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         if len(self.current_interaction) == 0:
             raise ValueError("No interaction to process. Use get_interaction() first.")
@@ -82,11 +81,7 @@ class Lyra1Operator(BaseOperator):
         actions = [item["action"] for item in latest_interaction]
         mapped_trajectories = [item["trajectory"] for item in latest_interaction]
 
-        captions = [
-            item["caption"]
-            for item in latest_interaction
-            if item["caption"] and item["caption"].strip()
-        ]
+        captions = [item["caption"] for item in latest_interaction if item["caption"] and item["caption"].strip()]
         selected_caption = captions[-1] if captions else (prompt or "")
 
         return {
@@ -114,15 +109,12 @@ class Lyra1Operator(BaseOperator):
             return videos
         raise ValueError(f"Unsupported Lyra-1 mode: {mode}")
 
-    def _normalize_interaction_candidate(self, interaction: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
-        """Normalize interaction candidate implementation."""
+    def _normalize_interaction_candidate(self, interaction: str | dict[str, Any]) -> dict[str, Any]:
         if isinstance(interaction, str):
             action = interaction
             caption = ""
             explicit_trajectory = (
-                action
-                if action in self.OFFICIAL_TRAJECTORIES and action not in self.ACTION_TO_TRAJECTORY
-                else None
+                action if action in self.OFFICIAL_TRAJECTORIES and action not in self.ACTION_TO_TRAJECTORY else None
             )
         elif isinstance(interaction, dict):
             explicit_trajectory = interaction.get("trajectory")
@@ -132,18 +124,11 @@ class Lyra1Operator(BaseOperator):
                 or interaction.get("interaction")
                 or explicit_trajectory
             )
-            caption = (
-                interaction.get("caption")
-                or interaction.get("prompt")
-                or interaction.get("text_prompt")
-                or ""
-            )
+            caption = interaction.get("caption") or interaction.get("prompt") or interaction.get("text_prompt") or ""
         else:
             raise TypeError(f"Unsupported interaction type: {type(interaction)}")
 
-        explicit_trajectory = (
-            explicit_trajectory if explicit_trajectory in self.OFFICIAL_TRAJECTORIES else None
-        )
+        explicit_trajectory = explicit_trajectory if explicit_trajectory in self.OFFICIAL_TRAJECTORIES else None
         trajectory = explicit_trajectory or self.ACTION_TO_TRAJECTORY.get(action)
         return {
             "action": action,
@@ -152,20 +137,18 @@ class Lyra1Operator(BaseOperator):
             "explicit": explicit_trajectory is not None,
         }
 
-    def _normalize_interaction(self, interaction: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
-        """Normalize interaction implementation."""
+    def _normalize_interaction(self, interaction: str | dict[str, Any]) -> dict[str, Any]:
         candidate = self._normalize_interaction_candidate(interaction)
         self.check_interaction(interaction)
         return candidate
 
-    def _select_trajectory(self, items: Sequence[Dict[str, Any]]) -> str:
-        """Select trajectory implementation."""
+    def _select_trajectory(self, items: Sequence[dict[str, Any]]) -> str:
         explicit = [item["trajectory"] for item in items if item["explicit"]]
         if explicit:
             return explicit[0]
 
-        counts: Dict[str, int] = {}
-        first_seen: Dict[str, int] = {}
+        counts: dict[str, int] = {}
+        first_seen: dict[str, int] = {}
         for idx, item in enumerate(items):
             trajectory = item["trajectory"]
             counts[trajectory] = counts.get(trajectory, 0) + 1

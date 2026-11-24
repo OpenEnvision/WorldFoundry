@@ -12,14 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> model -> cam_enc.py functionality."""
-
 import torch.nn as nn
 
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.utils.attention import Mlp
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.utils.block import Block
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.utils.transform import extri_intri_to_pose_encoding
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import affine_inverse
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.utils.transform import (
+    extri_intri_to_pose_encoding,
+)
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import (
+    affine_inverse,
+)
+from worldfoundry.core.nn.blocks.layers import Mlp
 
 
 class CameraEnc(nn.Module):
@@ -40,17 +42,6 @@ class CameraEnc(nn.Module):
         init_values: float = 0.01,
         **kwargs,
     ):
-        """Init.
-
-        Args:
-            dim_out: The dim out.
-            dim_in: The dim in.
-            trunk_depth: The trunk depth.
-            target_dim: The target dim.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            init_values: The init values.
-        """
         super().__init__()
         self.target_dim = target_dim
         self.trunk_depth = trunk_depth
@@ -80,16 +71,6 @@ class CameraEnc(nn.Module):
         ixt,
         image_size,
     ) -> tuple:
-        """Forward.
-
-        Args:
-            ext: The ext.
-            ixt: The ixt.
-            image_size: The image size.
-
-        Returns:
-            The return value.
-        """
         c2ws = affine_inverse(ext)
         pose_encoding = extri_intri_to_pose_encoding(
             c2ws,

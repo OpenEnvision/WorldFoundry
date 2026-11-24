@@ -101,9 +101,9 @@ metrics:
   aggregator: mean
   output_unit: rate
 runner:
-  official_script: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.stevo_bench.run_stevo_bench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.stevo_bench.run_stevo_bench_official_runner
     generated_arg: --generated-artifact-dir
     dataset_root_arg: --task-root
     model_arg: --judge-model
@@ -112,9 +112,9 @@ runner:
     supports_fixture: true
     default_metrics: [task_success]
     input_kind: stevo_bench_run_dir_or_official_results
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:StevoBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:stevo-bench
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -127,7 +127,7 @@ runner:
   - <out>
   - --json
   run_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -148,8 +148,8 @@ runner:
   - benchmark_contract.json
   runtime:
     kind: in_tree_official_runtime_hosted_judges
-    root: worldfoundry/evaluation/tasks/execution/runners/stevo_bench
-    runtime_root: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench
+    root: worldfoundry/evals/tasks/execution/runners/stevo_bench
+    runtime_root: worldfoundry/evals/tasks/execution/runners/stevo_bench/runtime/stevo_bench
     root_env: WORLDFOUNDRY_STEVO_BENCH_ROOT
     results_path_env: WORLDFOUNDRY_STEVO_BENCH_RESULTS_PATH
     task_root_env: WORLDFOUNDRY_STEVO_BENCH_TASK_ROOT
@@ -196,7 +196,7 @@ data_refs:
   dataset_repo: JhanLiufu/StEvo-Bench
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:StevoBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:stevo-bench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
@@ -205,10 +205,27 @@ runner_availability:
 checkpoint_refs: []
 base_model_dependencies: []
 optional_base_model_dependencies:
-- hosted_vlm_judge_api
-validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id stevo-bench --mode official-validation
+- stevo_bench_vlm_judge_api
+validation_command: wf zoo benchmark-run --benchmark-id stevo-bench --mode official-validation
   --official-results-path <stevo_bench_run_dir_or_summary_json> --output-dir <out> --json
 artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - generated_video_dir
+  - stevo_output_map
+  - stevo_task_root
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_scores
+  - benchmark_contract
+  notes:
+  - The official evaluator is vendored in-tree; --run-official executes it without an external checkout.
+  - Official judging is performed by hosted VLM APIs (Gemini default, OpenAI supported), so real runs
+    need GOOGLE_API_KEY or OPENAI_API_KEY plus network access; result normalization is pure-local.
+  - The 225-task YAML suite is a separate Hugging Face dataset (JhanLiufu/StEvo-Bench) supplied by the
+    caller.

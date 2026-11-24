@@ -102,9 +102,7 @@ class FASTTokenizer:
         self._fast_tokenizer = UniversalActionTokenizer.from_pretrained(fast_location)
         self._fast_skip_tokens = 128  # Skip last 128 tokens in PaliGemma vocab since they are special tokens
 
-    def tokenize(
-        self, prompt: str, state: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def tokenize(self, prompt: str, state: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         cleaned_text = prompt.lower().strip().replace("_", " ")
 
         # Convention: state gets discretized into 256 discrete bins (assumed range after normalization: [-1, 1])

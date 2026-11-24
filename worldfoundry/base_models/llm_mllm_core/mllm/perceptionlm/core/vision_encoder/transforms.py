@@ -6,25 +6,22 @@ from worldfoundry.base_models.llm_mllm_core.mllm.perceptionlm.core.vision_encode
 def get_image_transform(
     image_size: int,
     center_crop: bool = False,
-    interpolation: T.InterpolationMode = T.InterpolationMode.BILINEAR  # We used bilinear during training
+    interpolation: T.InterpolationMode = T.InterpolationMode.BILINEAR,  # We used bilinear during training
 ):
     if center_crop:
-        crop = [
-            T.Resize(image_size, interpolation=interpolation),
-            T.CenterCrop(image_size)
-        ]
+        crop = [T.Resize(image_size, interpolation=interpolation), T.CenterCrop(image_size)]
     else:
         # "Squash": most versatile
-        crop = [
-            T.Resize((image_size, image_size), interpolation=interpolation)
-        ]
-    
-    return T.Compose(crop + [
-        T.Lambda(lambda x: x.convert("RGB")),
-        T.ToTensor(),
-        T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5], inplace=True),
-    ])
+        crop = [T.Resize((image_size, image_size), interpolation=interpolation)]
 
+    return T.Compose(
+        crop  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+        + [
+            T.Lambda(lambda x: x.convert("RGB")),
+            T.ToTensor(),
+            T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5], inplace=True),
+        ]
+    )
 
 
 def get_text_tokenizer(context_length: int):

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 from ..config import D
 from .multicrop_preprocessor import MultiCropConfig
@@ -23,37 +22,35 @@ class MultiModalVideoPreprocessorConfig(TextPreprocessorConfig):
 
     max_frames: int = 1
     frame_sample_mode: str = "uniform_last_frame"
-    candidate_sampling_fps: List[float] = field(
-        default_factory=lambda: [0.25, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0, 16.0]
-    )
+    candidate_sampling_fps: list[float] = field(default_factory=lambda: [0.25, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0, 16.0])
     cache_videos: bool = True
     loading_method: str = "torchcodec_exact"
-    max_fps: List[float] = field(default_factory=lambda: [2.0])
+    max_fps: list[float] = field(default_factory=lambda: [2.0])
     time_sampling: bool = True
     time_mode: str = "per-frame"
     subtitle_mode: str = "frame_1"
     max_crops: int = 1
-    overlap_margins: Tuple[float, float] = (4.0, 4.0)
+    overlap_margins: tuple[float, float] = (4.0, 4.0)
     use_col_tokens: bool = False
-    periodic_high_res_frame: Optional[int] = None
-    high_low_train_mode: Optional[str] = "local_rnd"
-    high_res_frame_sample_options: Optional[Tuple[int, ...]] = None
-    periodic_sample_rate_training: Optional[Dict[int, List[float]]] = field(
+    periodic_high_res_frame: int | None = None
+    high_low_train_mode: str | None = "local_rnd"
+    high_res_frame_sample_options: tuple[int, ...] | None = None
+    periodic_sample_rate_training: dict[int, list[float]] | None = field(
         default_factory=lambda: {4: [0.9, 0.03, 0.03, 0.04], 3: [0.6, 0.2, 0.2]}
     )
     skip_low_res_in_high_low: bool = False
     pooling_w: int = 3
     pooling_h: int = 3
-    high_res_pooling_w: Optional[int] = 3
-    high_res_pooling_h: Optional[int] = 3
+    high_res_pooling_w: int | None = 3
+    high_res_pooling_h: int | None = 3
     query_based_resolution_selection: bool = False
     max_queries_for_resolution_selection: int = 8
     use_frame_special_tokens: bool = True
     frame_sel_clip_identifier: str = "google/siglip2-so400m-patch14-384"
     image_padding_mask: bool | int = False
-    max_subtitle_tokens: Optional[int] = None
-    image: Optional[MultiCropConfig] = None
-    topk: Optional[float] = None
+    max_subtitle_tokens: int | None = None
+    image: MultiCropConfig | None = None
+    topk: float | None = None
     prune_from_frame: int = 0
 
     @classmethod

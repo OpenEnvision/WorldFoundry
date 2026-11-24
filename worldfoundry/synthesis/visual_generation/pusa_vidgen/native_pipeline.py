@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
 import torch
 from PIL import Image
@@ -133,9 +133,7 @@ class PusaWanPipeline(WanStagedPipeline):
             self.load_models_to_device(["vae"])
             for latent_index, (image, multiplier) in multi_frame_images.items():
                 if not 0 <= int(latent_index) < latent_frames:
-                    raise IndexError(
-                        f"PUSA conditioning latent index {latent_index} is outside [0, {latent_frames})"
-                    )
+                    raise IndexError(f"PUSA conditioning latent index {latent_index} is outside [0, {latent_frames})")
                 frame_multipliers[:, int(latent_index)] = float(multiplier)
                 encoded = self._encode_conditioning_image(
                     image,
@@ -146,9 +144,9 @@ class PusaWanPipeline(WanStagedPipeline):
                     tile_stride=tile_stride,
                 ).to(latents)
                 sigma = self.scheduler.sigmas[0].to(latents) * float(multiplier)
-                latents[:, :, int(latent_index) : int(latent_index) + 1] = (
-                    (1 - sigma) * encoded + sigma * noise[:, :, int(latent_index) : int(latent_index) + 1]
-                )
+                latents[:, :, int(latent_index) : int(latent_index) + 1] = (1 - sigma) * encoded + sigma * noise[
+                    :, :, int(latent_index) : int(latent_index) + 1
+                ]
 
         self.load_models_to_device(["text_encoder"])
         context_positive = self.encode_prompt(prompt, positive=True)["context"]

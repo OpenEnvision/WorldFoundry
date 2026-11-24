@@ -6,14 +6,6 @@ __all__ = ["DAPModel", "DepthAnything", "DepthAnythingAdapter", "make_dap_model"
 
 
 def __getattr__(name: str) -> Any:
-    """Getattr.
-
-    Args:
-        name: The name.
-
-    Returns:
-        The return value.
-    """
     if name == "DepthAnything":
         from .dpt import DepthAnything
 

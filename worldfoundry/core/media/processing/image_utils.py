@@ -38,6 +38,16 @@ from worldfoundry.core.utils.tensors.torch import torch_normalize
 # ──────────────────────────────────────────────────────────────────────────
 
 
+def numpy_to_pil(images: np.ndarray) -> list[Image.Image]:
+    """Round unit-range HWC or NHWC arrays to uint8 PIL images, retaining grayscale."""
+    if images.ndim == 3:
+        images = images[None, ...]
+    images = (images * 255).round().astype("uint8")
+    if images.shape[-1] == 1:
+        return [Image.fromarray(image.squeeze(), mode="L") for image in images]
+    return [Image.fromarray(image) for image in images]
+
+
 def to_image(img, channel_order="auto"):
     """
     Returns:
@@ -88,9 +98,8 @@ def load_pil_image(image_input, *, first_sequence_item: bool = True) -> Image.Im
         if array.ndim == 3 and array.shape[0] in {1, 3, 4}:
             array = np.transpose(array, (1, 2, 0))
         if array.dtype != np.uint8:
-            if np.issubdtype(array.dtype, np.floating):
-                if array.size and array.min() >= -1.0 and array.max() <= 1.0:
-                    array = (array + 1.0) * 127.5 if array.min() < 0.0 else array * 255.0
+            if np.issubdtype(array.dtype, np.floating) and array.size and array.min() >= -1.0 and array.max() <= 1.0:
+                array = (array + 1.0) * 127.5 if array.min() < 0.0 else array * 255.0
             array = np.clip(array, 0, 255).astype(np.uint8)
         if array.ndim == 3 and array.shape[-1] == 1:
             array = np.repeat(array, 3, axis=-1)
@@ -199,9 +208,9 @@ def resize_and_center_crop(image, target_width, target_height):
     pil_image = Image.fromarray(image)
     original_width, original_height = pil_image.size
     scale_factor = max(target_width / original_width, target_height / original_height)
-    resized_width = int(round(original_width * scale_factor))
-    resized_height = int(round(original_height * scale_factor))
-    resized_image = pil_image.resize((resized_width, resized_height), Image.LANCZOS)
+    resized_width = round(original_width * scale_factor)
+    resized_height = round(original_height * scale_factor)
+    resized_image = pil_image.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
     left = (resized_width - target_width) / 2
     top = (resized_height - target_height) / 2
     right = (resized_width + target_width) / 2
@@ -235,7 +244,10 @@ def resize_and_letterbox(
 
 
 def center_crop_resize_geometry(
-    source_height: int, source_width: int, target_height: int, target_width: int,
+    source_height: int,
+    source_width: int,
+    target_height: int,
+    target_width: int,
 ) -> tuple[int, int, int, int]:
     """Return floor-sized resize height/width and centered crop top/left."""
     if source_width / source_height > target_width / target_height:
@@ -249,12 +261,12 @@ def resize_and_center_crop_pytorch(image, target_width, target_height):
     """Batched NCHW bilinear resize + center crop; ``align_corners=False``."""
     B, C, H, W = image.shape
 
-    if H == target_height and W == target_width:
+    if target_height == H and target_width == W:
         return image
 
     scale_factor = max(target_width / W, target_height / H)
-    resized_width = int(round(W * scale_factor))
-    resized_height = int(round(H * scale_factor))
+    resized_width = round(W * scale_factor)
+    resized_height = round(H * scale_factor)
 
     resized = torch.nn.functional.interpolate(
         image, size=(resized_height, resized_width), mode="bilinear", align_corners=False
@@ -273,7 +285,7 @@ def resize_without_crop(image, target_width, target_height):
         return image
 
     pil_image = Image.fromarray(image)
-    resized_image = pil_image.resize((target_width, target_height), Image.LANCZOS)
+    resized_image = pil_image.resize((target_width, target_height), Image.Resampling.LANCZOS)
     return np.array(resized_image)
 
 
@@ -404,7 +416,7 @@ def sanity_check_image_tensor(img: torch.Tensor, on_error: Literal["raise", "war
         if on_error == "raise":
             raise ValueError(msg)
         elif on_error == "warn":
-            warnings.warn(msg)
+            warnings.warn(msg, stacklevel=1)
         else:
             return False
     # check if all values in the image are close to an integer
@@ -413,7 +425,7 @@ def sanity_check_image_tensor(img: torch.Tensor, on_error: Literal["raise", "war
         if on_error == "raise":
             raise ValueError(msg)
         elif on_error == "warn":
-            warnings.warn(msg)
+            warnings.warn(msg, stacklevel=1)
         else:
             return False
     return True
@@ -429,7 +441,7 @@ def basic_image_tensor_preprocess(
     """
     Check for resize, and divide by 255
     """
-    import kornia
+    kornia = __import__("kornia")
 
     assert torch.is_tensor(img)
     assert img.dim() >= 4, any_describe(img)
@@ -447,7 +459,8 @@ def basic_image_tensor_preprocess(
             warnings.warn(
                 f"{'Down' if shape < input_size else 'Up'}sampling image"
                 f" from original resolution {input_size}x{input_size}"
-                f" to {shape}x{shape}"
+                f" to {shape}x{shape}",
+                stacklevel=1,
             )
         img = kornia.geometry.transform.resize(img, shape).clamp(0.0, 255.0)
 

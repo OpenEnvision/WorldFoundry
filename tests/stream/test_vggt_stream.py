@@ -5,7 +5,6 @@ sys.path.append("..")
 
 from worldfoundry.pipelines.vggt.pipeline_vggt import VGGTPipeline
 
-
 DATA_PATH = "./data/test_cases/test_image_case1/ref_image.png"
 MODEL_PATH = "facebook/VGGT-1B"
 OUTPUT_DIR = "./vggt_stream_output"
@@ -19,12 +18,24 @@ FPS = 12
 
 # Unified 3D interaction schema, aligned with VGGTOperator
 AVAILABLE_INTERACTIONS = [
-    "forward", "backward", "left", "right",
-    "forward_left", "forward_right", "backward_left", "backward_right",
-    "camera_up", "camera_down",
-    "camera_l", "camera_r",
-    "camera_ul", "camera_ur", "camera_dl", "camera_dr",
-    "camera_zoom_in", "camera_zoom_out",
+    "forward",
+    "backward",
+    "left",
+    "right",
+    "forward_left",
+    "forward_right",
+    "backward_left",
+    "backward_right",
+    "camera_up",
+    "camera_down",
+    "camera_l",
+    "camera_r",
+    "camera_ul",
+    "camera_ur",
+    "camera_dl",
+    "camera_dr",
+    "camera_zoom_in",
+    "camera_zoom_out",
 ]
 
 

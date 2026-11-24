@@ -24,7 +24,9 @@ import torch
 import torch.nn.functional as F
 
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.api import DepthAnything3
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.logger import logger as dav3_logger
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.logger import (
+    logger as dav3_logger,
+)
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.cameras import CameraType
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.misc import unpack_optional
 
@@ -38,14 +40,6 @@ class DepthAnything3Model(DepthEstimationModel):
     MODEL_NAME = "da3metric-large"
 
     def __init__(self, weights_path: str | None = None) -> None:
-        """Init.
-
-        Args:
-            weights_path: The weights path.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         dav3_logger.level = 0
         self.model = DepthAnything3.from_pretrained(
@@ -62,22 +56,9 @@ class DepthAnything3Model(DepthEstimationModel):
 
     @property
     def supported_camera_types(self) -> list[CameraType]:
-        """Supported camera types.
-
-        Returns:
-            The return value.
-        """
         return [CameraType.PINHOLE]
 
     def estimate(self, src: DepthEstimationInput) -> DepthEstimationResult:
-        """Estimate.
-
-        Args:
-            src: The src.
-
-        Returns:
-            The return value.
-        """
         rgb: torch.Tensor = unpack_optional(src.rgb)
         assert rgb.dtype == torch.float32, "Input image should be float32"
         assert src.camera_type == CameraType.PINHOLE, "DAv3 only supports pinhole cameras"

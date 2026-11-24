@@ -1,3 +1,4 @@
+import contextlib
 import os
 
 import torch
@@ -46,8 +47,6 @@ def _release_cached_memory():
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-        try:
+        with contextlib.suppress(RuntimeError):
             torch.cuda.ipc_collect()
-        except RuntimeError:
-            pass
     _trim_cpu_allocator()

@@ -14,7 +14,6 @@ from .model_irse import (
 )
 from .model_resnet import ResNet_50, ResNet_101, ResNet_152
 
-
 _model_dict = {
     "ResNet_50": ResNet_50,
     "ResNet_101": ResNet_101,
@@ -38,7 +37,7 @@ def get_model(key):
     IR_18, IR_34, IR_50, IR_101, IR_152, IR_200,
     IR_SE_50, IR_SE_101, IR_SE_152, IR_SE_200.
     """
-    if key in _model_dict.keys():
+    if key in _model_dict:
         return _model_dict[key]
     else:
-        raise KeyError("not support model {}".format(key))
+        raise KeyError(f"not support model {key}")

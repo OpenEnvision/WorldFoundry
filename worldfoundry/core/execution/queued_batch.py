@@ -127,5 +127,5 @@ class QueuedBatchExecutor(Generic[_Input, _Output]):
             for entry in batch:
                 entry.future.set_exception(error)
         else:
-            for entry, output in zip(batch, outputs):
+            for entry, output in zip(batch, outputs, strict=False):
                 entry.future.set_result(output)

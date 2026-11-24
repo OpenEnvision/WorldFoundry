@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.catalog import workspace_registry
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import formal_benchmark_ids
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import (
+from worldfoundry.evals.tasks.catalog import workspace_registry
+from worldfoundry.evals.tasks.catalog.benchmark_catalog import formal_benchmark_ids
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_runner import (
     build_benchmark_runner_registry,
     run_benchmark_execution,
 )
-from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import BenchmarkRunner, OfficialBenchmarkRunner
-from worldfoundry.evaluation.utils import benchmark_task_sample_path
+from worldfoundry.evals.tasks.execution.orchestration.interfaces import BenchmarkRunner, OfficialBenchmarkRunner
+from worldfoundry.evals.utils import benchmark_task_sample_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_ZOO_DIR = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "catalog"

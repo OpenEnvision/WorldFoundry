@@ -17,6 +17,7 @@ the module on GPU until the next explicit unload.
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
 import torch
 
@@ -149,7 +150,8 @@ def patched_diffusers_current_device(model: torch.nn.Module, target_device: torc
     probe without migrating the whole tree.
     """
     if hasattr(model, "scale_shift_table"):
-        model.scale_shift_table.data = model.scale_shift_table.data.to(target_device)
+        table = cast(torch.Tensor, model.scale_shift_table)
+        table.data = table.data.to(target_device)
         return
 
     for _, module in model.named_modules():
@@ -173,8 +175,8 @@ def get_cuda_free_memory_gb(device=None) -> float:
         device = _default_gpu_device()
 
     memory_stats = torch.cuda.memory_stats(device)
-    bytes_active = memory_stats["active_bytes.all.current"]
-    bytes_reserved = memory_stats["reserved_bytes.all.current"]
+    bytes_active = memory_stats.get("active_bytes.all.current", 0)
+    bytes_reserved = memory_stats.get("reserved_bytes.all.current", 0)
     bytes_free_cuda, _ = torch.cuda.mem_get_info(device)
     bytes_inactive_reserved = bytes_reserved - bytes_active
     bytes_total_available = bytes_free_cuda + bytes_inactive_reserved
@@ -302,10 +304,7 @@ def _uniform_model_device(model: torch.nn.Module) -> torch.device:
         return cpu
     if len(devices) != 1:
         rendered = ", ".join(sorted(str(device) for device in devices))
-        raise RuntimeError(
-            f"Refusing to migrate mixed-device {model.__class__.__name__}; "
-            f"found tensors on: {rendered}"
-        )
+        raise RuntimeError(f"Refusing to migrate mixed-device {model.__class__.__name__}; found tensors on: {rendered}")
     device = next(iter(devices))
     if device.type == "meta":
         raise RuntimeError("Meta-initialized modules require to_empty() and cannot use the VRAM preservation mover")
@@ -314,11 +313,7 @@ def _uniform_model_device(model: torch.nn.Module) -> torch.device:
 
 def _model_transfer_bytes(model: torch.nn.Module, target: torch.device) -> int:
     """Bytes that would be allocated on *target* (already-resident tensors skip)."""
-    return sum(
-        tensor.numel() * tensor.element_size()
-        for tensor in _model_tensors(model)
-        if tensor.device != target
-    )
+    return sum(tensor.numel() * tensor.element_size() for tensor in _model_tensors(model) if tensor.device != target)
 
 
 def _move_model_with_rollback(
@@ -358,6 +353,25 @@ def _move_model_with_rollback(
 # ──────────────────────────────────────────────────────────────────────────
 
 
+def release_module_storage(model: torch.nn.Module) -> None:
+    """Release checkpoint storage to meta, retaining non-persistent runtime buffers.
+
+    Staged loaders keep the module graph and its operator configuration for
+    the next load. Parameters and persistent buffers are rebuilt from the
+    checkpoint; derived buffers stay resident. Synchronization and allocator
+    trimming belong to the caller.
+    """
+    for module in model.modules():
+        for name, parameter in list(module.named_parameters(recurse=False, remove_duplicate=False)):
+            module.register_parameter(
+                name,
+                torch.nn.Parameter(torch.empty_like(parameter, device="meta"), requires_grad=parameter.requires_grad),
+            )
+        for name, buffer in list(module.named_buffers(recurse=False, remove_duplicate=False)):
+            if name not in module._non_persistent_buffers_set:
+                module.register_buffer(name, torch.empty_like(buffer, device="meta"), persistent=True)
+
+
 def unload_complete_models(*models: torch.nn.Module) -> None:
     """Move the registry and any extra *models* to CPU, then clear the registry."""
     for model in gpu_complete_modules + list(models):
@@ -389,12 +403,32 @@ __all__ = [
     "cpu",
     "fake_diffusers_current_device",
     "get_cuda_free_memory_gb",
-    "gpu",
+    "gpu",  # noqa: F822  # resolved lazily by the module __getattr__
     "gpu_complete_modules",
     "load_model_as_complete",
     "log_gpu_memory",
     "move_model_to_device_with_memory_preservation",
     "offload_model_from_device_for_memory_preservation",
     "patched_diffusers_current_device",
+    "release_module_storage",
     "unload_complete_models",
 ]
+
+
+def activation_budget_bytes(device: torch.device) -> int:
+    """Available CUDA/MPS activation bytes, respecting the CUDA process memory cap.
+
+    CPU returns zero (unknown budget). CUDA accounts for reserved allocator
+    blocks; MPS uses the recommended working set minus driver allocations.
+    """
+    if device.type == "cuda" and torch.cuda.is_available():
+        index = device.index if device.index is not None else torch.cuda.current_device()
+        free, _ = torch.cuda.mem_get_info(index)
+        total = torch.cuda.get_device_properties(index).total_memory
+        # Older Torch stubs omit the API supplied by the LTX CUDA runtime.
+        fraction = cast(Any, torch.cuda).get_per_process_memory_fraction(index)
+        available = max(0, int(fraction * total) - int(torch.cuda.memory_reserved(index)))
+        return min(int(free), available)
+    if device.type == "mps" and torch.backends.mps.is_available():
+        return max(0, int(torch.mps.recommended_max_memory()) - int(torch.mps.driver_allocated_memory()))
+    return 0

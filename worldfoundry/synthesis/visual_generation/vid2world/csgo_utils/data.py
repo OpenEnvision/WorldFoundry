@@ -1,20 +1,22 @@
 # Adapted from https://github.com/eloialonso/diamond/tree/csgo
 from __future__ import annotations
 
-import h5py
-import torch
-import numpy as np
-import torch.nn.functional as F
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-from torchvision import transforms
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+import h5py
+import numpy as np
+import torch
+import torch.nn.functional as F
+from torch.utils.data import Dataset
+
+from worldfoundry.core.utils.tensors.torch import merge_info as merge_info
+
 
 @dataclass
 class SegmentId:
-    episode_id: Union[int, str]
+    episode_id: int | str
     start: int
     stop: int
 
@@ -27,12 +29,13 @@ class Segment:
     end: torch.ByteTensor
     trunc: torch.ByteTensor
     mask_padding: torch.BoolTensor
-    info: Dict[str, Any]
+    info: dict[str, Any]
     id: SegmentId
 
     @property
     def effective_size(self):
         return self.mask_padding.sum().item()
+
 
 class StateDictMixin:
     def _init_fields(self) -> None:
@@ -48,17 +51,18 @@ class StateDictMixin:
     def _set_field(self, k: str, v: Any) -> None:
         getattr(self, k).load_state_dict(v) if k in self._fields_sd else setattr(self, k, v)
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         if not hasattr(self, "_all_fields"):
             self._init_fields()
         return {k: self._get_field(k) for k in self._all_fields}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         if not hasattr(self, "_all_fields"):
             self._init_fields()
-        assert set(list(state_dict.keys())) == self._all_fields
+        assert set(state_dict.keys()) == self._all_fields
         for k, v in state_dict.items():
             self._set_field(k, v)
+
 
 @dataclass
 class Episode:
@@ -67,7 +71,7 @@ class Episode:
     rew: torch.FloatTensor
     end: torch.ByteTensor
     trunc: torch.ByteTensor
-    info: Dict[str, Any]
+    info: dict[str, Any]
 
     def __len__(self) -> int:
         return self.obs.size(0)
@@ -84,11 +88,11 @@ class Episode:
     def dead(self) -> torch.ByteTensor:
         return (self.end + self.trunc).clip(max=1)
 
-    def compute_metrics(self) -> Dict[str, Any]:
+    def compute_metrics(self) -> dict[str, Any]:
         return {"length": len(self), "return": self.rew.sum().item()}
 
     @classmethod
-    def load(cls, path: Path, map_location: Optional[torch.device] = None) -> Episode:
+    def load(cls, path: Path, map_location: torch.device | None = None) -> Episode:
         return cls(
             **{
                 k: v.div(255).mul(2).sub(1) if k == "obs" else v
@@ -104,17 +108,6 @@ class Episode:
         path.with_suffix(".tmp").rename(path)
 
 
-def merge_info(info_a, info_b):
-    keys_a = set(info_a)
-    keys_b = set(info_b)
-    intersection = keys_a & keys_b
-    info = {
-        **{k: info_a[k] for k in keys_a if k not in intersection},
-        **{k: info_b[k] for k in keys_b if k not in intersection},
-        **{k: torch.cat((info_a[k], info_b[k]), dim=0) for k in intersection},
-    }
-    return info
-
 class CSGOHdf5Dataset(StateDictMixin, Dataset):
     def __init__(self, directory: Path) -> None:
         super().__init__()
@@ -129,13 +122,17 @@ class CSGOHdf5Dataset(StateDictMixin, Dataset):
         return self.num_steps
 
     def __getitem__(self, segment_id: SegmentId) -> Segment:
-        assert segment_id.start < self._length_one_episode and segment_id.stop > 0 and segment_id.start < segment_id.stop
+        assert (
+            segment_id.start < self._length_one_episode and segment_id.stop > 0 and segment_id.start < segment_id.stop
+        )
         pad_len_right = max(0, segment_id.stop - self._length_one_episode)
         pad_len_left = max(0, -segment_id.start)
 
         start = max(0, segment_id.start)
         stop = min(self._length_one_episode, segment_id.stop)
-        mask_padding = torch.cat((torch.zeros(pad_len_left), torch.ones(stop - start), torch.zeros(pad_len_right))).bool()
+        mask_padding = torch.cat(
+            (torch.zeros(pad_len_left), torch.ones(stop - start), torch.zeros(pad_len_right))
+        ).bool()
 
         with h5py.File(self._filenames[segment_id.episode_id], "r") as f:
             obs = torch.stack([torch.tensor(f[f"frame_{i}_x"][:]).flip(2).permute(2, 0, 1) for i in range(start, stop)])
@@ -150,7 +147,9 @@ class CSGOHdf5Dataset(StateDictMixin, Dataset):
         rew = torch.zeros(obs.size(0))
         end = torch.zeros(obs.size(0), dtype=torch.uint8)
         trunc = torch.zeros(obs.size(0), dtype=torch.uint8)
-        return Segment(obs, act, rew, end, trunc, mask_padding, info={}, id=SegmentId(segment_id.episode_id, start, stop))
+        return Segment(
+            obs, act, rew, end, trunc, mask_padding, info={}, id=SegmentId(segment_id.episode_id, start, stop)
+        )
 
     def load_episode(self, episode_id: int) -> Episode:  # used by DatasetTraverser
         s = self[SegmentId(episode_id, 0, self._length_one_episode)]

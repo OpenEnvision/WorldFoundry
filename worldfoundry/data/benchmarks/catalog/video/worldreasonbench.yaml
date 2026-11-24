@@ -151,17 +151,17 @@ metrics:
   aggregator: mean
   output_unit: accuracy
 runner:
-  official_script: worldfoundry/evaluation/tasks/execution/runners/worldreasonbench/run_worldreasonbench_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/worldreasonbench/run_worldreasonbench_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.worldreasonbench.run_worldreasonbench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.worldreasonbench.run_worldreasonbench_official_runner
     generated_arg: --generated-artifact-dir
     limit_arg: --limit
     supports_official_runtime: true
     accepts_generated_artifacts: true
     supports_fixture: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldReasonBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:worldreasonbench
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -175,7 +175,7 @@ runner:
   - --json
   runtime:
     kind: in_tree_protocol_runtime_external_assets
-    root: worldfoundry/evaluation/tasks/execution/runners/worldreasonbench
+    root: worldfoundry/evals/tasks/execution/runners/worldreasonbench
     root_env: WORLDFOUNDRY_WORLDREASONBENCH_ROOT
     results_path_env: WORLDFOUNDRY_WORLDREASONBENCH_RESULTS_PATH
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -208,16 +208,16 @@ data_refs:
   fixture: worldfoundry/data/benchmarks/assets/worldreasonbench
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldReasonBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:worldreasonbench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
   surface: worldreasonbench_official_in_tree
   normalizer_verified: true
 optional_base_model_dependencies:
-- openai_compatible_multimodal_judge
+- openai_compatible_judge_endpoint
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -234,3 +234,17 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - qa_manifest
+  - generated_video_dir
+  - reward_pairs
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - protocol_results
+  - benchmark_contract
+  notes:
+  - All three official protocol families are normalized by an in-tree runner.
+  - Official restricted data and judge prompts remain caller-provided external assets.

@@ -29,6 +29,7 @@ from worldfoundry.core.nn import ModuleDeviceDtypeMixin
 
 class WanT5EncoderModel(ModuleDeviceDtypeMixin, nn.Module):
     """DreamX-World name for the canonical Wan UMT5 encoder."""
+
     def __init__(
         self,
         vocab: int | nn.Embedding,
@@ -50,11 +51,7 @@ class WanT5EncoderModel(ModuleDeviceDtypeMixin, nn.Module):
         self.num_buckets = num_buckets
         self.shared_pos = shared_pos
         self.token_embedding = vocab if isinstance(vocab, nn.Embedding) else nn.Embedding(vocab, dim)
-        self.pos_embedding = (
-            T5RelativeEmbedding(num_buckets, num_heads, bidirectional=True)
-            if shared_pos
-            else None
-        )
+        self.pos_embedding = T5RelativeEmbedding(num_buckets, num_heads, bidirectional=True) if shared_pos else None
         self.dropout = nn.Dropout(dropout)
         self.blocks = nn.ModuleList(
             [
@@ -79,11 +76,7 @@ class WanT5EncoderModel(ModuleDeviceDtypeMixin, nn.Module):
         attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor]:
         value = self.dropout(self.token_embedding(input_ids))
-        position = (
-            self.pos_embedding(value.size(1), value.size(1))
-            if self.pos_embedding is not None
-            else None
-        )
+        position = self.pos_embedding(value.size(1), value.size(1)) if self.pos_embedding is not None else None
         for block in self.blocks:
             value = block(value, attention_mask, pos_bias=position)
         return (self.dropout(self.norm(value)),)
@@ -95,14 +88,10 @@ class WanT5EncoderModel(ModuleDeviceDtypeMixin, nn.Module):
         additional_kwargs: dict | None = None,
         low_cpu_mem_usage: bool = True,
         torch_dtype: torch.dtype = torch.bfloat16,
-    ) -> "WanT5EncoderModel":
+    ) -> WanT5EncoderModel:
         del low_cpu_mem_usage
         parameters = set(inspect.signature(cls.__init__).parameters) - {"self", "cls"}
-        config = {
-            key: value
-            for key, value in (additional_kwargs or {}).items()
-            if key in parameters
-        }
+        config = {key: value for key, value in (additional_kwargs or {}).items() if key in parameters}
         return load_model(
             cls,
             pretrained_model_path,

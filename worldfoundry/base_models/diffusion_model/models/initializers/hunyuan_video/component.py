@@ -113,8 +113,13 @@ class HunyuanVideoLatentInitializer:
             return noise
         condition = torch.zeros_like(noise)
         mask = torch.zeros(
-            noise.shape[0], 1, noise.shape[2], noise.shape[3], noise.shape[4],
-            device=device, dtype=dtype,
+            noise.shape[0],
+            1,
+            noise.shape[2],
+            noise.shape[3],
+            noise.shape[4],
+            device=device,
+            dtype=dtype,
         )
         return LatentInitialization(noise, {"condition_latents": torch.cat((condition, mask), dim=1)})
 
@@ -152,17 +157,19 @@ class HunyuanVideoLatentInitializer:
             # of the reference latent to every initial noise frame before
             # token replacement freezes the first frame during denoising.
             stability_t = torch.tensor([0.999], device=device, dtype=torch.float32)
-            noise = (
-                noise * stability_t
-                + image_latents.expand_as(noise) * (1.0 - stability_t)
-            ).to(dtype=dtype)
+            noise = (noise * stability_t + image_latents.expand_as(noise) * (1.0 - stability_t)).to(dtype=dtype)
 
         if self.concat_condition:
             condition = torch.zeros_like(noise)
             condition[:, :, :1] = image_latents
             mask = torch.zeros(
-                noise.shape[0], 1, noise.shape[2], noise.shape[3], noise.shape[4],
-                device=device, dtype=dtype,
+                noise.shape[0],
+                1,
+                noise.shape[2],
+                noise.shape[3],
+                noise.shape[4],
+                device=device,
+                dtype=dtype,
             )
             mask[:, :, :1] = 1.0
             return LatentInitialization(

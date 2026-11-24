@@ -1,4 +1,4 @@
-### 感知成对指标
+### 成对感知与图像质量指标
 
 ### `lpips / ssim / ms_ssim / psnr` (mixed)
 #### `lpips`
@@ -48,7 +48,7 @@ Higher values indicate lower pixel-level error. PSNR is fast and standard for co
 ```python
 import numpy as np
 from PIL import Image
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_lpips,
     compute_ssim,
     compute_ms_ssim,
@@ -108,7 +108,7 @@ Higher values indicate stronger representation-level similarity. Because DINO fe
 ```python
 import numpy as np
 from PIL import Image
-from worldfoundry.evaluation.tasks.metrics import (
+from worldfoundry.evals.tasks.metrics import (
     compute_dino_similarity,
     compute_dreamsim,
     compute_fsim,
@@ -125,6 +125,31 @@ print("cpbd", compute_cpbd(gen))  # single image, no reference
 ```
 
 **返回**: 浮点分数；DreamSim 越低越相似。
+
+### `irs` (↑)
+
+**用法**: 相对真实图统计校准的 Image Realism Score。
+
+**参考:** 图像真实感分 IRS：五种统计量构成 pentagon 面积。 论文: [arXiv:2309.14756](https://arxiv.org/abs/2309.14756) 仓库: WorldFoundry（按论文复现）
+
+**资产：** 无需模型 checkpoint — 由输入图像直接计算统计量。
+
+```python
+from PIL import Image
+from worldfoundry.evals.tasks.metrics import compute_irs_with_reference
+
+real_paths = ["real/1.jpg", "real/2.jpg"]
+test_paths = ["gen/1.jpg", "gen/2.jpg"]
+real_images = [Image.open(p) for p in real_paths]
+test_images = [Image.open(p) for p in test_paths]
+
+out = compute_irs_with_reference(test_images, real_images)
+print(out["irs_mean"], out["irs_scores"])
+```
+
+**返回**: 含逐图 IRS 与拟合 reference means 的 dict。
+
+### Mask、目标检测与布局指标
 
 ### `mask_accuracy` (↑)
 **原理：** `mask_accuracy` compares predicted masks against reference masks. Pixel accuracy computes the fraction of correctly matched mask pixels, while mask IoU computes overlap divided by union:
@@ -145,7 +170,7 @@ Higher values indicate better mask agreement. The benchmark protocol should spec
 
 ```python
 import numpy as np
-from worldfoundry.evaluation.tasks.metrics import compute_mask_accuracy, compute_mask_iou
+from worldfoundry.evals.tasks.metrics import compute_mask_accuracy, compute_mask_iou
 
 pred = np.load("pred_mask.npy")  # HxW binary or label map
 gt = np.load("gt_mask.npy")
@@ -172,7 +197,7 @@ Higher values indicate better object presence or localization. The result depend
 **资产：** 无需模型 checkpoint — 按 WorldScore 协议提供 phrase/box 输入。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_object_detection_success_rate
+from worldfoundry.evals.tasks.metrics import compute_object_detection_success_rate
 
 result = compute_object_detection_success_rate(
     generated_dir="/data/generated",
@@ -181,7 +206,7 @@ result = compute_object_detection_success_rate(
 print(result)
 ```
 
-**返回**: 成功率 dict；输入 schema 见 `object_detection/` wrapper。
+**返回**: 成功率 dict；输入 schema 见 `perceptual/object_detection/` wrapper。
 
 ### `lqs` (↑)
 **原理：** Layout Quality Score evaluates generated layouts against ground-truth or expected layouts. The original layout-to-image formulation considers both absolute bounding-box distribution errors and mutual spatial relationships between boxes. Higher values in WorldFoundry should indicate better layout agreement if the wrapper exposes a quality score rather than an error score. The protocol must define the layout schema, coordinate system, object matching rule, and handling of missing or extra boxes.
@@ -194,7 +219,7 @@ print(result)
 **资产：** 无需模型 checkpoint — 只需要预测与 GT layout bbox。
 
 ```python
-from worldfoundry.evaluation.tasks.metrics import compute_lqs
+from worldfoundry.evals.tasks.metrics import compute_lqs
 
 gt_layout = [{"label": "person", "bbox": [10, 20, 110, 220]}]
 pred_layout = [{"label": "person", "bbox": [12, 18, 108, 218]}]
@@ -203,4 +228,21 @@ print(compute_lqs(gt_layout, pred_layout))
 
 **返回**: 含 LR/LP/LC/AC 分量与组合 LQS 的 dict。
 
+### `object_wise_consistency` (↑)
 
+**用法**: 位置感知 T2I：guidance box 与检测框匹配。
+
+**参考:** 对象级一致性：检测框与引导框 max IoU 及 R_suc（IoU>0.5）。 论文: [arXiv:2304.13427](https://arxiv.org/abs/2304.13427) 仓库: WorldFoundry（按论文复现）
+
+**资产：** 无需模型 checkpoint — 只需要 guidance box 与 detector 输出。
+
+```python
+from worldfoundry.evals.tasks.metrics import compute_object_wise_consistency
+
+guidance = [([10, 20, 100, 200], "cat"), ([120, 30, 220, 180], "dog")]
+detections = [([12, 22, 98, 198], "cat"), ([125, 35, 215, 175], "dog")]
+
+print(compute_object_wise_consistency(guidance, detections, iou_threshold=0.5))
+```
+
+**返回**: 含 mean IoU 与 `object_wise_success_rate` 的 dict。

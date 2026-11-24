@@ -54,7 +54,7 @@ class LowdimMaskGenerator(ModuleAttrMixin):
             )
 
         steps = torch.arange(horizon, device=device).reshape(1, horizon).expand(batch_size, horizon)
-        observation_mask = (steps.T < observation_steps).T.reshape(batch_size, horizon, 1).expand(shape)
+        observation_mask = (observation_steps > steps.T).T.reshape(batch_size, horizon, 1).expand(shape)
         observation_mask = observation_mask & observation_dimensions
 
         if not self.action_visible:
@@ -64,6 +64,6 @@ class LowdimMaskGenerator(ModuleAttrMixin):
             observation_steps - 1,
             torch.tensor(0, dtype=observation_steps.dtype, device=device),
         )
-        action_mask = (steps.T < action_steps).T.reshape(batch_size, horizon, 1).expand(shape)
+        action_mask = (action_steps > steps.T).T.reshape(batch_size, horizon, 1).expand(shape)
         action_mask = action_mask & action_dimensions
         return observation_mask | action_mask

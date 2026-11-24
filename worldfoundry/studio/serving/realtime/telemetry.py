@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import math
 from collections import OrderedDict, deque
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any
 
 from worldfoundry.core.observability.realtime_timing import TimingDistribution
 
@@ -66,7 +67,9 @@ class DeliveryTelemetry:
         value = payload.get("control_id")
         return value if isinstance(value, str) and 0 < len(value) <= 128 else None
 
-    def sample_controls(self, *, keys: bool, prompt: bool, step: bool) -> tuple[str, ...]:
+    def sample_controls(
+        self, *, keys: bool, prompt: bool, step: bool, axis_control_ids: tuple[str, ...] = ()
+    ) -> tuple[str, ...]:
         """Snapshot only controls consumed by this generation call."""
         if prompt:
             self.prompt_control = self.pending_prompt_control
@@ -79,10 +82,11 @@ class DeliveryTelemetry:
                     self.key_control if keys else None,
                     self.prompt_control,
                     step_control,
+                    *axis_control_ids,
                 )
                 if value is not None
             )
-        )
+        )[-HISTORY_SIZE:]
 
     def sent(self, context: FrameContext, *, rtp_timestamp: int, queue_ms: float, encode_ms: float) -> None:
         """Publish the actual RTP timestamp after all packets of a frame leave."""

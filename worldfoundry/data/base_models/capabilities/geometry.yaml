@@ -1,0 +1,306 @@
+# Depth, SLAM, and multi-view geometry models.
+# Schema and templates: see the module docstring of worldfoundry/base_models/capabilities.py.
+
+vigeo:
+  family: depth
+  canonical_path: worldfoundry/base_models/three_dimensions/depth/vigeo
+  package_imports: [torch, numpy, einops, huggingface_hub]
+  install_packages: [torch, numpy, einops, huggingface-hub]
+  assets:
+    - id: vigeo_model
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_VIGEO_MODEL_DIR, EVOKE_VIGEO_WEIGHTS]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/pkqbajng--ViGeo1.1
+      hf_repo_id: pkqbajng/ViGeo1.1
+      hf_revision: 49103e6eeab888bae974251d3578b496bec711d7
+      required_files: [vigeo.pt]
+      note: Shared ViGeo video geometry model; checkpoint weights are CC-BY-NC-4.0.
+
+depth_anything_v3:
+  family: depth
+  canonical_path: worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v3
+  package_imports:
+    - torch
+    - torchvision
+    - cv2
+    - numpy
+    - PIL
+    - omegaconf
+    - einops
+    - huggingface_hub
+    - safetensors
+  install_packages:
+    - torch
+    - torchvision
+    - opencv-python
+    - numpy
+    - Pillow
+    - omegaconf
+    - einops
+    - huggingface-hub
+    - safetensors
+  assets:
+    - id: depth_anything_v3_model
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_DEPTH_ANYTHING_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/depth-anything--DA3-LARGE-1.1
+      alternate_paths:
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/depth-anything--DA3-LARGE-1.1
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/depth-anything--DA3-LARGE
+      hf_repo_id: depth-anything/DA3-LARGE-1.1
+      min_file_count: 1
+      required_files: [config.json, model.safetensors]
+      note: Default Depth Anything 3 model used by the in-tree DA3 pipeline.
+
+droid_slam:
+  family: slam
+  canonical_path: worldfoundry/base_models/three_dimensions/slam/droid_slam
+  package_imports: [torch, cv2, numpy, lietorch, droid_backends, torch_scatter]
+  install_packages: [torch, opencv-python, numpy, torch-scatter]
+  non_pip_imports: [lietorch, droid_backends]
+  manual_install_actions:
+    - Build/stage importable DROID-SLAM CUDA extensions (`lietorch` and `droid_backends`) from source in the active
+      benchmark env; do not install the unrelated PyPI `lietorch` package. Build against the same Torch/CUDA ABI
+      before rerunning readiness.
+  assets:
+    - id: droid_slam_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_DROID_SLAM_CKPT]
+      local_path: ${WORLDFOUNDRY_CKPT_DIR}/droid.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/WorldScore/droid.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/shape-of-motion/checkpoints/droid.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WorldScore/metrics/checkpoints/droid.pth
+        - ${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/droid.pth
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/droid.pth
+      min_size_bytes: 15000000
+      note: DROID-SLAM checkpoint reused by WorldScore camera metrics.
+
+moge_vitl:
+  family: depth
+  canonical_path: worldfoundry/base_models/three_dimensions/depth/moge
+  package_imports: [torch, cv2, numpy, scipy, huggingface_hub]
+  install_packages: [torch, opencv-python, numpy, scipy, huggingface-hub]
+  assets:
+    - id: moge_vitl_model_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_MOGE_VITL_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/Ruicheng--moge-vitl
+      alternate_paths:
+        - ${WORLDFOUNDRY_BENCH_ROOT}/ckpt/hfd/Ruicheng--moge-vitl
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/Ruicheng--moge-vitl
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/Ruicheng--moge-vitl
+        - ${WORLDFOUNDRY_HFD_ROOT}/moge-vitl
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/moge-vitl
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/moge-vitl
+      hf_repo_id: Ruicheng/moge-vitl
+      min_file_count: 1
+      required_files: [model.pt]
+      note: MoGe v1 ViT-L metric-depth model used by Gen3C, ViPE, and world geometry pipelines.
+
+moge_v2_vitl_normal:
+  family: depth
+  canonical_path: worldfoundry/base_models/three_dimensions/depth/moge
+  package_imports: [torch, cv2, numpy, scipy, huggingface_hub]
+  install_packages: [torch, opencv-python, numpy, scipy, huggingface-hub]
+  assets:
+    - id: moge_v2_vitl_normal_model_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_MOGE_V2_VITL_NORMAL_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/Ruicheng--moge-2-vitl-normal
+      alternate_paths:
+        - ${WORLDFOUNDRY_BENCH_ROOT}/ckpt/hfd/Ruicheng--moge-2-vitl-normal
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/Ruicheng--moge-2-vitl-normal
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/Ruicheng--moge-2-vitl-normal
+        - ${WORLDFOUNDRY_HFD_ROOT}/moge-2-vitl-normal
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/moge-2-vitl-normal
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/moge-2-vitl-normal
+        - ${WORLDFOUNDRY_HFD_ROOT}/Ruicheng--moge-2-vitl
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/Ruicheng--moge-2-vitl
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/Ruicheng--moge-2-vitl
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/moge-2-vitl
+      hf_repo_id: Ruicheng/moge-2-vitl-normal
+      min_file_count: 1
+      required_files: [model.pt]
+      note: MoGe v2 ViT-L normal model used as the preferred shared geometry prior.
+
+unidepth_v2_vitl14:
+  family: depth
+  canonical_path: worldfoundry/base_models/three_dimensions/depth/unidepth
+  package_imports:
+    - torch
+    - torchvision
+    - numpy
+    - einops
+    - huggingface_hub
+    - safetensors
+    - xformers.components.attention
+  install_packages:
+    - torch
+    - torchvision
+    - numpy
+    - einops
+    - huggingface-hub
+    - safetensors
+    - xformers==0.0.28.post3
+  assets:
+    - id: unidepth_v2_vitl14_model_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unidepth-v2-vitl14
+      alternate_paths:
+        - ${WORLDFOUNDRY_BENCH_ROOT}/ckpt/hfd/lpiccinelli--unidepth-v2-vitl14
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/lpiccinelli--unidepth-v2-vitl14
+      hf_repo_id: lpiccinelli/unidepth-v2-vitl14
+      hf_revision: 1d0d3c52f60b5164629d279bb9a7546458e6dcc4
+      min_file_count: 1
+      required_files: [config.json, model.safetensors]
+      note: UniDepth v2 ViT-L depth prior reused by ViPE-style geometric perception paths.
+
+midas_v21_small_256:
+  family: depth
+  canonical_path: worldfoundry/base_models/three_dimensions/depth/midas
+  package_imports: [torch, torchvision, cv2, numpy, timm]
+  install_packages: [torch, torchvision, opencv-python, numpy, timm]
+  assets:
+    - id: midas_v21_small_256_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_MIDAS_V21_SMALL_CKPT]
+      local_path: ${WORLDFOUNDRY_CKPT_DIR}/midas_v21_small_256.pt
+      alternate_paths:
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/midas_v21_small_256.pt
+        - ${WORLDFOUNDRY_CKPT_DIR}/MiDaS/midas_v21_small_256.pt
+      download_url: https://github.com/isl-org/MiDaS/releases/download/v2_1/midas_v21_small_256.pt
+      min_size_bytes: 80000000
+      note: Official MiDaS v2.1 Small 256 checkpoint from isl-org/MiDaS.
+
+vggt_1b:
+  family: multi_view_geometry
+  canonical_path: worldfoundry/base_models/three_dimensions/point_clouds/vggt
+  package_imports: [torch, numpy, einops, huggingface_hub, safetensors]
+  install_packages: [torch, numpy, einops, huggingface-hub, safetensors]
+  assets:
+    - id: vggt_1b_model_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_VGGT_1B_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/facebook--VGGT-1B
+      alternate_paths:
+        - ${WORLDFOUNDRY_BENCH_ROOT}/ckpt/hfd/facebook--VGGT-1B
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/facebook--VGGT-1B
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/facebook--VGGT-1B
+        - ${WORLDFOUNDRY_HFD_ROOT}/VGGT-1B
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/VGGT-1B
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/VGGT-1B
+      hf_repo_id: facebook/VGGT-1B
+      min_file_count: 1
+      required_files: [config.json, model.safetensors]
+      note: VGGT 1B multi-view geometry prior for camera, depth, point, and track estimates.
+
+wbench_megasam:
+  family: geometry
+  canonical_path: worldfoundry/base_models/three_dimensions/slam/megasam.py
+  package_imports: [torch, cv2, numpy, lietorch, droid_backends]
+  install_packages: [torch, opencv-python, numpy]
+  non_pip_imports: [lietorch, droid_backends]
+  manual_install_actions:
+    - Build MegaSAM CUDA extensions from worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base with
+      `pip install -e .`.
+  asset_env_policy: all
+  assets:
+    - id: wbench_megasam_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_WBENCH_MEGASAM_CKPT]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/models/wbench/megasam/megasam_final.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/megasam/megasam_final.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/megasam/megasam_final.pth
+      hf_repo_id: meituan-longcat/WBench-weights
+      hf_filename: megasam/megasam_final.pth
+      min_size_bytes: 10000000
+      note: MegaSAM camera-pose checkpoint used by WBench navigation/spatial metrics.
+    - id: wbench_megasam_depth_anything_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_WBENCH_MEGASAM_DEPTH_ANYTHING_CKPT]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/models/wbench/megasam/depth_anything_vitl14.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/megasam/depth_anything_vitl14.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/megasam/depth_anything_vitl14.pth
+      hf_repo_id: meituan-longcat/WBench-weights
+      hf_filename: megasam/depth_anything_vitl14.pth
+      min_size_bytes: 100000000
+      note: Depth-Anything ViT-L checkpoint used by MegaSAM mono-depth preprocessing.
+
+depth_anything_v3_nested_giant_large:
+  family: depth
+  canonical_path: worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v3
+  package_imports: [torch, torchvision, numpy, PIL, omegaconf, einops, huggingface_hub, safetensors]
+  install_packages: [torch, torchvision, numpy, Pillow, omegaconf, einops, huggingface-hub, safetensors]
+  assets:
+    - id: depth_anything_v3_nested_giant_large_model
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_DA3_NESTED_GIANT_LARGE_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1
+      hf_repo_id: depth-anything/DA3NESTED-GIANT-LARGE-1.1
+      required_files: [config.json, model.safetensors]
+      note: >-
+        Depth Anything 3 nested giant-large reconstruction model; the upstream WorldOlympiad 3D reward default
+        (`depth-anything/DA3NESTED-GIANT-LARGE-1.1`).
+
+video_depth_anything_vits:
+  family: depth
+  canonical_path: worldfoundry/base_models/three_dimensions/depth/videodepthanything
+  package_imports: [torch, numpy, cv2]
+  install_packages: [torch, numpy, opencv-python]
+  assets:
+    - id: video_depth_anything_vits_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VIDEO_DEPTH_ANYTHING_CKPT]
+      local_path: ${WORLDFOUNDRY_CKPT_DIR}/Video-Depth-Anything-Small/video_depth_anything_vits.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/Video-Depth-Anything/video_depth_anything_vits.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/video_depth_anything/video_depth_anything_vits.pth
+      hf_repo_id: depth-anything/Video-Depth-Anything-Small
+      hf_filename: video_depth_anything_vits.pth
+      min_size_bytes: 50000000
+      note: Video-Depth-Anything small (ViT-S) checkpoint used by PAI-Bench-C depth scoring.
+
+pi3:
+  family: multi_view_geometry
+  canonical_path: worldfoundry/base_models/three_dimensions/point_clouds/pi3_inference
+  package_imports: [torch, numpy, safetensors]
+  assets:
+    - id: pi3_model_dir
+      kind: dir
+      role: model_dir
+      env: []
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/yyfz233--Pi3
+      hf_repo_id: yyfz233/Pi3
+      required_files: [config.json, model.safetensors]
+      note: Pi3 camera/point-map model the official SANA-WM-Bench evaluator uses to estimate eval poses.
+
+vipe_official_checkout:
+  family: geometry
+  canonical_path: worldfoundry/base_models/three_dimensions/general_3d/vipe
+  assets:
+    - id: vipe_official_checkout_dir
+      kind: dir
+      role: external_source_checkout
+      env: [WORLDFOUNDRY_MIND_VIPE_REPO]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/repos/nv-tlabs--vipe
+      required_files: [scripts/vipe_to_colmap.py]
+      manual_action: >-
+        Install https://github.com/nv-tlabs/vipe following its instructions so the `vipe` command is on PATH, then
+        point WORLDFOUNDRY_MIND_VIPE_REPO at the checkout (MIND runs scripts/vipe_to_colmap.py from it).
+      note: Official ViPE pose pipeline used by the MIND action metric.

@@ -17,8 +17,8 @@ from worldfoundry.studio.serving.realtime.media import (
     FrameQueuePolicy,
     LatestFrameBuffer,
 )
-from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
 from worldfoundry.studio.visualization.backends import world_realtime as backend
+from worldfoundry.studio.visualization.launch_config import StudioLaunchConfig
 
 pytestmark = pytest.mark.gpu
 

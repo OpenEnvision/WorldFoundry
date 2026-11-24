@@ -23,7 +23,7 @@ class RDTRunner(nn.Module):
         img_pos_embed_config=None,
         dtype=None,
     ):
-        super(RDTRunner, self).__init__()
+        super().__init__()
         if dtype is None:
             raise ValueError("RDTRunner dtype must be resolved by the inference runtime")
         # Create diffusion model

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from typing_extensions import override
@@ -134,15 +134,15 @@ class AHAWAM(AHAWAMChunkBase):
     def prefill_video(
         self,
         *,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         input_image: torch.Tensor,
         action_horizon: int,
-        context: Optional[torch.Tensor] = None,
-        context_mask: Optional[torch.Tensor] = None,
-        seed: Optional[int] = None,
+        context: torch.Tensor | None = None,
+        context_mask: torch.Tensor | None = None,
+        seed: int | None = None,
         rand_device: str = "cpu",
         tiled: bool = False,
-        video_frame_index: Optional[int] = None,
+        video_frame_index: int | None = None,
     ) -> dict[str, Any]:
         self.eval()
         if action_horizon % self.action_chunk_size != 0:

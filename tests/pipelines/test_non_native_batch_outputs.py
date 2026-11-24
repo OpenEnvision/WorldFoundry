@@ -199,7 +199,7 @@ def test_lingbot_constructor_owns_default_operator_and_frame_memory() -> None:
 
 
 def test_lingbot_export_matches_transport_pixels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import worldfoundry.core.io as io
+    import worldfoundry.core.media.codecs.video as video_codecs
 
     pipeline, decoded = _lingbot(monkeypatch, 5)
     encoded: list[np.ndarray] = []
@@ -211,7 +211,7 @@ def test_lingbot_export_matches_transport_pixels(tmp_path: Path, monkeypatch: py
         encoded.append(frames)
         output.write_bytes(b"encoded-video")
 
-    monkeypatch.setattr(io, "save_video_frames", save)
+    monkeypatch.setattr(video_codecs, "save_video_frames", save)
     result = pipeline(
         images=Image.new("RGB", (4, 3)),
         prompt="scene",
@@ -296,7 +296,6 @@ def test_longvie_declares_pil_frames_and_preserves_continuation(
 def test_longvie_encoder_receives_the_declared_pil_pixels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import imageio
 
-    from worldfoundry.synthesis.visual_generation.longvie import worldfoundry_runtime as module
     from worldfoundry.synthesis.visual_generation.longvie.longvie_synthesis import LongVieSynthesis
 
     encoded: list[np.ndarray] = []
@@ -317,7 +316,6 @@ def test_longvie_encoder_receives_the_declared_pil_pixels(tmp_path: Path, monkey
         target.write_bytes(b"encoded-video")
         return Writer()
 
-    monkeypatch.setattr(module, "ensure_longvie_runtime", lambda: None)
     monkeypatch.setattr(imageio, "get_writer", writer)
     runtime = _LongVieRuntime()
     synthesis = LongVieSynthesis(runtime=cast(Any, runtime), execute_by_default=True)

@@ -28,7 +28,7 @@ def normalize(d):
     out = torch.zeros(d.size())
     if d.is_cuda:
         out = out.cuda()
-    B = list(d.size())[0]
+    B = list(d.size())[0]  # noqa: RUF015 - Keeps eager list construction and IndexError.
     for b in list(range(B)):
         out[b] = normalize_single(d[b])
     return out
@@ -58,7 +58,7 @@ def reduce_masked_mean(x, mask, dim=None, keepdim=False):
     # x and mask are the same shape, or at least broadcastably so < actually it's safer if you disallow broadcasting
     # returns shape-1
     # axis can be a list of axes
-    for (a, b) in zip(x.size(), mask.size()):
+    for a, b in zip(x.size(), mask.size(), strict=False):
         assert a == b  # some shape mismatch!
     prod = x * mask
     if dim is None:
@@ -119,18 +119,10 @@ def bilinear_sample2d(im, x, y, return_inbounds=False):
     # move C out to last dim
     if len(im.shape) == 5:
         im_flat = (im.permute(0, 3, 4, 1, 2)).reshape(B * H * W, N, C)
-        i_y0_x0 = torch.diagonal(im_flat[idx_y0_x0.long()], dim1=1, dim2=2).permute(
-            0, 2, 1
-        )
-        i_y0_x1 = torch.diagonal(im_flat[idx_y0_x1.long()], dim1=1, dim2=2).permute(
-            0, 2, 1
-        )
-        i_y1_x0 = torch.diagonal(im_flat[idx_y1_x0.long()], dim1=1, dim2=2).permute(
-            0, 2, 1
-        )
-        i_y1_x1 = torch.diagonal(im_flat[idx_y1_x1.long()], dim1=1, dim2=2).permute(
-            0, 2, 1
-        )
+        i_y0_x0 = torch.diagonal(im_flat[idx_y0_x0.long()], dim1=1, dim2=2).permute(0, 2, 1)
+        i_y0_x1 = torch.diagonal(im_flat[idx_y0_x1.long()], dim1=1, dim2=2).permute(0, 2, 1)
+        i_y1_x0 = torch.diagonal(im_flat[idx_y1_x0.long()], dim1=1, dim2=2).permute(0, 2, 1)
+        i_y1_x1 = torch.diagonal(im_flat[idx_y1_x1.long()], dim1=1, dim2=2).permute(0, 2, 1)
     else:
         im_flat = (im.permute(0, 2, 3, 1)).reshape(B * H * W, C)
         i_y0_x0 = im_flat[idx_y0_x0.long()]
@@ -149,9 +141,7 @@ def bilinear_sample2d(im, x, y, return_inbounds=False):
     w_y1_x0 = ((x1_f - x) * (y - y0_f)).unsqueeze(2)
     w_y1_x1 = ((x - x0_f) * (y - y0_f)).unsqueeze(2)
 
-    output = (
-        w_y0_x0 * i_y0_x0 + w_y0_x1 * i_y0_x1 + w_y1_x0 * i_y1_x0 + w_y1_x1 * i_y1_x1
-    )
+    output = w_y0_x0 * i_y0_x0 + w_y0_x1 * i_y0_x1 + w_y1_x0 * i_y1_x0 + w_y1_x1 * i_y1_x1
     # output is B*N x C
     output = output.view(B, -1, C)
     output = output.permute(0, 2, 1)

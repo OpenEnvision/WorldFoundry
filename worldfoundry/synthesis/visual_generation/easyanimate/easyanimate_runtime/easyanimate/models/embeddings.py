@@ -1,18 +1,14 @@
 import math
-from typing import Optional
 
-import numpy as np
 import torch
 import torch.nn.functional as F
-from diffusers.models.embeddings import (PixArtAlphaTextProjection,
-                                         TimestepEmbedding, Timesteps,
-                                         get_timestep_embedding)
+from diffusers.models.embeddings import PixArtAlphaTextProjection, TimestepEmbedding, Timesteps, get_timestep_embedding
 from einops import rearrange
 from torch import nn
 
 
 class HunyuanDiTAttentionPool(nn.Module):
-    def __init__(self, spacial_dim: int, embed_dim: int, num_heads: int, output_dim: int = None):
+    def __init__(self, spacial_dim: int, embed_dim: int, num_heads: int, output_dim: int | None = None):
         super().__init__()
         self.positional_embedding = nn.Parameter(torch.randn(spacial_dim + 1, embed_dim) / embed_dim**0.5)
         self.k_proj = nn.Linear(embed_dim, embed_dim)
@@ -30,16 +26,24 @@ class HunyuanDiTAttentionPool(nn.Module):
         value = self.v_proj(x)
         batch_size, _, _ = query.size()
 
-        query = query.reshape(batch_size, -1, self.num_heads, query.size(-1) // self.num_heads).transpose(1, 2)  # (1, H, N, E/H)
-        key = key.reshape(batch_size, -1, self.num_heads, key.size(-1) // self.num_heads).transpose(1, 2)  # (L+1, H, N, E/H)
-        value = value.reshape(batch_size, -1, self.num_heads, value.size(-1) // self.num_heads).transpose(1, 2)  # (L+1, H, N, E/H)
+        query = query.reshape(batch_size, -1, self.num_heads, query.size(-1) // self.num_heads).transpose(
+            1, 2
+        )  # (1, H, N, E/H)
+        key = key.reshape(batch_size, -1, self.num_heads, key.size(-1) // self.num_heads).transpose(
+            1, 2
+        )  # (L+1, H, N, E/H)
+        value = value.reshape(batch_size, -1, self.num_heads, value.size(-1) // self.num_heads).transpose(
+            1, 2
+        )  # (L+1, H, N, E/H)
 
-        x = F.scaled_dot_product_attention(query=query, key=key, value=value, attn_mask=None, dropout_p=0.0, is_causal=False)
+        x = F.scaled_dot_product_attention(
+            query=query, key=key, value=value, attn_mask=None, dropout_p=0.0, is_causal=False
+        )
         x = x.transpose(1, 2).reshape(batch_size, 1, -1)
         x = x.to(query.dtype)
-        x = self.c_proj(x) 
+        x = self.c_proj(x)
 
-        return x.squeeze(1) 
+        return x.squeeze(1)
 
 
 class HunyuanCombinedTimestepTextSizeStyleEmbedding(nn.Module):
@@ -85,12 +89,7 @@ class HunyuanCombinedTimestepTextSizeStyleEmbedding(nn.Module):
 
 
 class TimePositionalEncoding(nn.Module):
-    def __init__(
-        self, 
-        d_model, 
-        dropout = 0., 
-        max_len = 24
-    ):
+    def __init__(self, d_model, dropout=0.0, max_len=24):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
         position = torch.arange(max_len).unsqueeze(1)
@@ -98,11 +97,11 @@ class TimePositionalEncoding(nn.Module):
         pe = torch.zeros(1, max_len, d_model)
         pe[0, :, 0::2] = torch.sin(position * div_term)
         pe[0, :, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
+        self.register_buffer("pe", pe)
 
     def forward(self, x):
         b, c, f, h, w = x.size()
         x = rearrange(x, "b c f h w -> (b h w) f c")
-        x = x + self.pe[:, :x.size(1)]
+        x = x + self.pe[:, : x.size(1)]
         x = rearrange(x, "(b h w) f c -> b c f h w", b=b, h=h, w=w)
         return self.dropout(x)

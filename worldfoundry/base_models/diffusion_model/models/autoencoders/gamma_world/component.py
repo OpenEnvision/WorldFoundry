@@ -42,9 +42,7 @@ class GammaWorldVideoCodec:
             return latents
         n_views = int(request.inputs.get("n_players", 2))
         if latents.shape[2] % n_views:
-            raise ValueError(
-                f"Gamma latent time dimension {latents.shape[2]} is not divisible by n_players={n_views}"
-            )
+            raise ValueError(f"Gamma latent time dimension {latents.shape[2]} is not divisible by n_players={n_views}")
         per_view = rearrange(latents, "B C (V T) H W -> (B V) C T H W", V=n_views)
         decoded = self.codec.decode(per_view)
         decoded = decoded[:, :, : request.num_frames]

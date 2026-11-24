@@ -28,7 +28,7 @@ runner:
   normalization:
     dispatch: embodied
     embodied_track: vla
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:LIBEROMemContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:libero-mem
   expected_artifacts:
   - scorecard.json
   - raw_results.jsonl
@@ -46,7 +46,7 @@ runner:
     - official rollout result dump
   verification_status: normalizer_only
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -102,7 +102,7 @@ data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/libero-mem.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:LIBEROMemContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:libero-mem
   task_yaml_available: true
   runtime_verified: false
   normalizer_verified: true
@@ -110,7 +110,7 @@ runner_availability:
   runner_script_available: false
 checkpoint_refs: []
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -126,3 +126,25 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_LIBERO_MEM_RESULTS_PATH
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - dataset_root
+  - episode_manifest
+  - memory_manifest
+  - policy_results_path
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_results
+  - per_sample_metrics
+  - rollout_logs
+  metric_ids:
+  - success_rate
+  - memory_success_rate
+  - task_success
+  - episode_success
+  - action_accuracy
+  notes:
+  - Contract covers LIBERO-Mem embodied policy rollouts and official result normalization.
+  - WorldFoundry exposes the native request/result surface; simulator assets, policy checkpoints, and
+    full official rollout evidence remain explicit runtime inputs.

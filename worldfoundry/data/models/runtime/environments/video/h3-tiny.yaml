@@ -1,0 +1,23 @@
+schema_version: 2
+model_id: h3-tiny
+env_name: worldfoundry-unified-cu128
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+conda_packages: [python=3.11, pip, ffmpeg]
+pip_extra_index_url: https://download.pytorch.org/whl/cu128
+pip_packages:
+- torch
+- torchvision
+- torchaudio
+- transformers
+- diffusers
+- accelerate
+- safetensors
+- av
+- pillow
+- pyyaml
+validation_imports: [torch, transformers, diffusers, safetensors, av, PIL]
+notes:
+- H3-Tiny runs in-tree on the canonical MiniMax-H3 components in the unified CUDA 12.8 environment.
+- H3-Tiny transformer checkpoints and the shared MiniMax-H3 base snapshot stay outside Git and are injected via runtime configuration.

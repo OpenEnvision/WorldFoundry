@@ -5,17 +5,15 @@ from __future__ import annotations
 import pytest
 
 from worldfoundry.pipelines.hydra.pipeline_hydra import HydraPipeline
-from worldfoundry.pipelines.hunyuan_world.pipeline_hy_world_2p0_worldgen import (
-    HYWorld2WorldgenPipeline,
-)
 from worldfoundry.pipelines.liveworld.pipeline_liveworld import LiveWorldPipeline
 from worldfoundry.pipelines.magic_world.pipeline_magic_world import MagicWorldPipeline
 from worldfoundry.pipelines.minwm.pipeline_minwm import MinWMHYAction2VPipeline
 from worldfoundry.pipelines.spatia.pipeline_spatia import SpatiaPipeline
 from worldfoundry.pipelines.versecrafter.pipeline_versecrafter import VerseCrafterPipeline
+from worldfoundry.synthesis.visual_generation.hydra import HydraSynthesis
 
 
-class _RecordingSynthesis:
+class _RecordingSynthesis(HydraSynthesis):
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
 
@@ -30,7 +28,6 @@ class _RecordingSynthesis:
         MinWMHYAction2VPipeline,
         MagicWorldPipeline,
         VerseCrafterPipeline,
-        HYWorld2WorldgenPipeline,
     ],
 )
 def test_explicit_image_and_workspace_image_path_do_not_collide(pipeline_cls) -> None:
@@ -47,8 +44,6 @@ def test_explicit_image_and_workspace_image_path_do_not_collide(pipeline_cls) ->
             "output_path": None,
             "return_dict": True,
         }
-    ] if pipeline_cls is not HYWorld2WorldgenPipeline else [
-        {"image_path": "explicit.png", "output_path": None, "return_dict": True}
     ]
 
 

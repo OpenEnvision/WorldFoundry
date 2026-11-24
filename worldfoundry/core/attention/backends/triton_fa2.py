@@ -20,6 +20,7 @@ from __future__ import annotations
 import math
 
 import torch
+import torch.version
 import triton
 import triton.language as tl
 from packaging.version import Version
@@ -231,10 +232,7 @@ def _flash_attention_2_kernel(
             other=0.0,
         )
         accumulator *= correction[:, None]
-        if QUANTIZED_SDPA:
-            probabilities = probabilities.to(tl.float8e4nv)
-        else:
-            probabilities = probabilities.to(value.dtype)
+        probabilities = probabilities.to(tl.float8e4nv) if QUANTIZED_SDPA else probabilities.to(value.dtype)
         accumulator = tl.dot(probabilities, value, accumulator)
         row_max = next_row_max
 

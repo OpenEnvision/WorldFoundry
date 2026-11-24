@@ -12,23 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> model -> gs_adapter.py functionality."""
-
-from typing import Optional
 import torch
 from einops import einsum, rearrange, repeat
 from torch import nn
 
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.utils.transform import cam_quat_xyzw_to_world_quat_wxyz
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.utils.transform import (
+    cam_quat_xyzw_to_world_quat_wxyz,
+)
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.specs import Gaussians
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import affine_inverse, get_world_rays, sample_image_grid
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.pose_align import batch_align_poses_umeyama
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import (
+    affine_inverse,
+    get_world_rays,
+    sample_image_grid,
+)
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.pose_align import (
+    batch_align_poses_umeyama,
+)
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.sh_helpers import rotate_sh
 
 
 class GaussianAdapter(nn.Module):
-    """Gaussian adapter implementation."""
-
     def __init__(
         self,
         sh_degree: int = 0,
@@ -38,16 +41,6 @@ class GaussianAdapter(nn.Module):
         gaussian_scale_min: float = 1e-5,
         gaussian_scale_max: float = 30.0,
     ):
-        """Init.
-
-        Args:
-            sh_degree: The sh degree.
-            pred_color: The pred color.
-            pred_offset_depth: The pred offset depth.
-            pred_offset_xy: The pred offset xy.
-            gaussian_scale_min: The gaussian scale min.
-            gaussian_scale_max: The gaussian scale max.
-        """
         super().__init__()
         self.sh_degree = sh_degree
         self.pred_color = pred_color
@@ -77,24 +70,10 @@ class GaussianAdapter(nn.Module):
         raw_gaussians: torch.Tensor,  # "*#batch _"
         image_shape: tuple[int, int],
         eps: float = 1e-8,
-        gt_extrinsics: Optional[torch.Tensor] = None,  # "*#batch 4 4"
+        gt_extrinsics: torch.Tensor | None = None,  # "*#batch 4 4"
+        gs_scale_extra_multiplier: float = 1.0,
         **kwargs,
     ) -> Gaussians:
-        """Forward.
-
-        Args:
-            extrinsics: The extrinsics.
-            intrinsics: The intrinsics.
-            depths: The depths.
-            opacities: The opacities.
-            raw_gaussians: The raw gaussians.
-            image_shape: The image shape.
-            eps: The eps.
-            gt_extrinsics: The gt extrinsics.
-
-        Returns:
-            The return value.
-        """
         device = extrinsics.device
         dtype = raw_gaussians.dtype
         H, W = image_shape
@@ -123,9 +102,7 @@ class GaussianAdapter(nn.Module):
             except Exception:
                 pose_scales = torch.ones_like(extrinsics[:, 0, 0, 0])
             pose_scales = torch.clamp(pose_scales, min=1 / 3.0, max=3.0)
-            cam2worlds[:, :, :3, 3] = cam2worlds[:, :, :3, 3] * rearrange(
-                pose_scales, "b -> b () ()"
-            )  # [b, i, j]
+            cam2worlds[:, :, :3, 3] = cam2worlds[:, :, :3, 3] * rearrange(pose_scales, "b -> b () ()")  # [b, i, j]
             gs_depths = gs_depths * rearrange(pose_scales, "b -> b () () ()")  # [b, v, h, w]
         # 1.3) casting xy in image space
         xy_ray, _ = sample_image_grid((H, W), device)
@@ -152,6 +129,8 @@ class GaussianAdapter(nn.Module):
         # make the scale invarient to resolution
         scale_min = self.gaussian_scale_min
         scale_max = self.gaussian_scale_max
+        if gs_scale_extra_multiplier != 1.0:
+            scale_max = scale_max * gs_scale_extra_multiplier
         scales = scale_min + (scale_max - scale_min) * scales.sigmoid()
         pixel_size = 1 / torch.tensor((W, H), dtype=dtype, device=device)
         multiplier = self.get_scale_multiplier(intr_normed, pixel_size)
@@ -202,16 +181,6 @@ class GaussianAdapter(nn.Module):
         pixel_size: torch.Tensor,  # "*#batch 2"
         multiplier: float = 0.1,
     ) -> torch.Tensor:  # " *batch"
-        """Get scale multiplier.
-
-        Args:
-            intrinsics: The intrinsics.
-            pixel_size: The pixel size.
-            multiplier: The multiplier.
-
-        Returns:
-            The return value.
-        """
         xy_multipliers = multiplier * einsum(
             intrinsics[..., :2, :2].float().inverse().to(intrinsics),
             pixel_size,
@@ -221,20 +190,10 @@ class GaussianAdapter(nn.Module):
 
     @property
     def d_sh(self) -> int:
-        """D sh.
-
-        Returns:
-            The return value.
-        """
         return 1 if self.pred_color else (self.sh_degree + 1) ** 2
 
     @property
     def d_in(self) -> int:
-        """D in.
-
-        Returns:
-            The return value.
-        """
         # provided as reference to the gs_dpt output dim
         raw_gs_dim = 0
         if self.pred_offset_xy:

@@ -7,26 +7,23 @@
 # --------------------------------------------------------
 
 
-import torch
 import torch.nn as nn
+
+from worldfoundry.base_models.llm_mllm_core.action.cogact_diffusion import (
+    ModelVarType,
+    create_diffusion,
+)
+
 from .dit import DiT
-from .diffusion import create_diffusion, ModelVarType
+
 
 class LinearModel(nn.Module):
-    def __init__(self,
-                 token_size,
-                 model_type,
-                 in_channels,
-                 future_action_window_size,
-                 past_action_window_size,
-                 action_scale=1.0):
+    def __init__(
+        self, token_size, model_type, in_channels, future_action_window_size, past_action_window_size, action_scale=1.0
+    ):
         super().__init__()
         self.linear = nn.Sequential(
-            nn.Linear(token_size, 768),
-            nn.ReLU(),
-            nn.Linear(768, 768),
-            nn.ReLU(),
-            nn.Linear(768, 7)
+            nn.Linear(token_size, 768), nn.ReLU(), nn.Linear(768, 768), nn.ReLU(), nn.Linear(768, 7)
         )
         self.action_scale = action_scale
 
@@ -34,7 +31,6 @@ class LinearModel(nn.Module):
         # print(x.dtype, self.linear.weight.dtype)
         x = self.linear(x) / self.action_scale
         return x
-
 
 
 def DiT_S(**kwargs):
@@ -50,18 +46,20 @@ def DiT_L(**kwargs):
 
 
 # Model size
-DiT_models = {'DiT-S': DiT_S, 'DiT-B': DiT_B, 'DiT-L': DiT_L}
+DiT_models = {"DiT-S": DiT_S, "DiT-B": DiT_B, "DiT-L": DiT_L}
+
 
 class ActionModel(nn.Module):
-    def __init__(self,
-                 token_size,
-                 model_type,
-                 in_channels,
-                 future_action_window_size,
-                 past_action_window_size,
-                 diffusion_steps=100,
-                 noise_schedule='squaredcos_cap_v2'
-                 ):
+    def __init__(
+        self,
+        token_size,
+        model_type,
+        in_channels,
+        future_action_window_size,
+        past_action_window_size,
+        diffusion_steps=100,
+        noise_schedule="squaredcos_cap_v2",
+    ):
         super().__init__()
         self.in_channels = in_channels
         self.noise_schedule = noise_schedule
@@ -72,10 +70,10 @@ class ActionModel(nn.Module):
             noise_schedule=noise_schedule,
             diffusion_steps=self.diffusion_steps,
             sigma_small=True,
-            learn_sigma=False)
+            learn_sigma=False,
+        )
         self.ddim_diffusion = None
-        if self.diffusion.model_var_type in [
-                ModelVarType.LEARNED, ModelVarType.LEARNED_RANGE]:
+        if self.diffusion.model_var_type in [ModelVarType.LEARNED, ModelVarType.LEARNED_RANGE]:
             learn_sigma = True
         else:
             learn_sigma = False
@@ -87,7 +85,7 @@ class ActionModel(nn.Module):
             class_dropout_prob=0.1,
             learn_sigma=learn_sigma,
             future_action_window_size=future_action_window_size,
-            past_action_window_size=past_action_window_size
+            past_action_window_size=past_action_window_size,
         )
 
     # Create DDIM sampler
@@ -97,5 +95,6 @@ class ActionModel(nn.Module):
             noise_schedule=self.noise_schedule,
             diffusion_steps=self.diffusion_steps,
             sigma_small=True,
-            learn_sigma=False)
+            learn_sigma=False,
+        )
         return self.ddim_diffusion

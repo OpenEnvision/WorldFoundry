@@ -3,11 +3,9 @@
 # This software may be used and distributed in accordance with
 # the terms of the DINOv3 License Agreement.
 
-"""Module for base_models -> perception_core -> general_perception -> dinov3 -> models -> convnext.py functionality."""
-
 import logging
+from collections.abc import Sequence
 from functools import partial
-from typing import Dict, List, Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -16,7 +14,7 @@ import torch.nn.init
 from torch import Tensor, nn
 
 # DropPath — imported from shared canonical definition
-from worldfoundry.core.nn.blocks.layers import DropPath, drop_path
+from worldfoundry.core.nn.blocks.layers import DropPath
 
 logger = logging.getLogger("dinov3")
 
@@ -25,13 +23,6 @@ class Block(nn.Module):
     r"""ConvNeXt Block."""
 
     def __init__(self, dim, drop_path=0.0, layer_scale_init_value=1e-6):
-        """Init.
-
-        Args:
-            dim: The dim.
-            drop_path: The drop path.
-            layer_scale_init_value: The layer scale init value.
-        """
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)
         self.norm = LayerNorm(dim, eps=1e-6)
@@ -40,18 +31,13 @@ class Block(nn.Module):
         self.pwconv2 = nn.Linear(4 * dim, dim)
         self.layer_scale_init_value = layer_scale_init_value
         self.gamma = (
-            nn.Parameter(layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            nn.Parameter(layer_scale_init_value * torch.ones(dim), requires_grad=True)
             if layer_scale_init_value > 0
             else None
         )
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         input = x
         x = self.dwconv(x)
         x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
@@ -70,13 +56,6 @@ class LayerNorm(nn.Module):
     r"""LayerNorm that supports two data formats: channels_last or channels_first."""
 
     def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        """Init.
-
-        Args:
-            normalized_shape: The normalized shape.
-            eps: The eps.
-            data_format: The data format.
-        """
         super().__init__()
         self.weight = nn.Parameter(torch.empty(normalized_shape))
         self.bias = nn.Parameter(torch.empty(normalized_shape))
@@ -87,16 +66,10 @@ class LayerNorm(nn.Module):
         self.normalized_shape = (normalized_shape,)
 
     def init_weights(self):
-        """Init weights."""
         nn.init.ones_(self.weight)
         nn.init.zeros_(self.bias)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         if self.data_format == "channels_last":
             return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         elif self.data_format == "channels_first":
@@ -113,23 +86,13 @@ class ConvNeXt(nn.Module):
     def __init__(
         self,
         in_chans: int = 3,
-        depths: List[int] = [3, 3, 9, 3],
-        dims: List[int] = [96, 192, 384, 768],
+        depths: list[int] = [3, 3, 9, 3],  # noqa: B006 - Keeps the upstream default object and signature.
+        dims: list[int] = [96, 192, 384, 768],  # noqa: B006 - Keeps the upstream default object and signature.
         drop_path_rate: float = 0.0,
         layer_scale_init_value: float = 1e-6,
         patch_size: int | None = None,
         **ignored_kwargs,
     ):
-        """Init.
-
-        Args:
-            in_chans: The in chans.
-            depths: The depths.
-            dims: The dims.
-            drop_path_rate: The drop path rate.
-            layer_scale_init_value: The layer scale init value.
-            patch_size: The patch size.
-        """
         super().__init__()
         if len(ignored_kwargs) > 0:
             logger.warning(f"Ignored kwargs: {ignored_kwargs}")
@@ -149,7 +112,7 @@ class ConvNeXt(nn.Module):
             self.downsample_layers.append(downsample_layer)
 
         self.stages = nn.ModuleList()
-        dp_rates = [x for x in np.linspace(0, drop_path_rate, sum(depths))]
+        dp_rates = list(np.linspace(0, drop_path_rate, sum(depths)))
         cur = 0
         for i in range(4):
             stage = nn.Sequential(
@@ -176,7 +139,6 @@ class ConvNeXt(nn.Module):
         self.input_pad_size = 4
 
     def init_weights(self):
-        """Init weights."""
         self.apply(self._init_weights)
         for stage_id, stage in enumerate(self.stages):
             for block_id, block in enumerate(stage):
@@ -184,11 +146,6 @@ class ConvNeXt(nn.Module):
                     nn.init.constant_(self.stages[stage_id][block_id].gamma, block.layer_scale_init_value)
 
     def _init_weights(self, module):
-        """Helper function to init weights.
-
-        Args:
-            module: The module.
-        """
         if isinstance(module, nn.LayerNorm):
             module.reset_parameters()
         if isinstance(module, LayerNorm):
@@ -199,33 +156,15 @@ class ConvNeXt(nn.Module):
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
 
-    def forward_features(self, x: Tensor | List[Tensor], masks: Optional[Tensor] = None) -> List[Dict[str, Tensor]]:
-        """Forward features.
-
-        Args:
-            x: The x.
-            masks: The masks.
-
-        Returns:
-            The return value.
-        """
+    def forward_features(self, x: Tensor | list[Tensor], masks: Tensor | None = None) -> list[dict[str, Tensor]]:
         if isinstance(x, torch.Tensor):
             return self.forward_features_list([x], [masks])[0]
         else:
             return self.forward_features_list(x, masks)
 
-    def forward_features_list(self, x_list: List[Tensor], masks_list: List[Tensor]) -> List[Dict[str, Tensor]]:
-        """Forward features list.
-
-        Args:
-            x_list: The x list.
-            masks_list: The masks list.
-
-        Returns:
-            The return value.
-        """
+    def forward_features_list(self, x_list: list[Tensor], masks_list: list[Tensor]) -> list[dict[str, Tensor]]:
         output = []
-        for x, masks in zip(x_list, masks_list):
+        for x, masks in zip(x_list, masks_list, strict=False):
             h, w = x.shape[-2:]
             for i in range(4):
                 x = self.downsample_layers[i](x)
@@ -246,7 +185,6 @@ class ConvNeXt(nn.Module):
         return output
 
     def forward(self, *args, is_training=False, **kwargs):
-        """Forward."""
         ret = self.forward_features(*args, **kwargs)
         if is_training:
             return ret
@@ -254,12 +192,6 @@ class ConvNeXt(nn.Module):
             return self.head(ret["x_norm_clstoken"])
 
     def _get_intermediate_layers(self, x, n=1):
-        """Helper function to get intermediate layers.
-
-        Args:
-            x: The x.
-            n: The n.
-        """
         h, w = x.shape[-2:]
         output, total_block_len = [], len(self.downsample_layers)
         blocks_to_take = range(total_block_len - n, total_block_len) if isinstance(n, int) else n
@@ -288,81 +220,64 @@ class ConvNeXt(nn.Module):
     def get_intermediate_layers(
         self,
         x,
-        n: Union[int, Sequence] = 1,
+        n: int | Sequence = 1,
         reshape: bool = False,
         return_class_token: bool = False,
         norm: bool = True,
     ):
-        """Get intermediate layers.
-
-        Args:
-            x: The x.
-            n: The n.
-            reshape: The reshape.
-            return_class_token: The return class token.
-            norm: The norm.
-        """
         outputs = self._get_intermediate_layers(x, n)
 
         if norm:
             nchw_shapes = [out[-1].shape for out in outputs]
-            if isinstance(n, int):
-                norms = self.norms[-n:]
-            else:
-                norms = [self.norms[i] for i in n]
+            norms = self.norms[-n:] if isinstance(n, int) else [self.norms[i] for i in n]
             outputs = [
                 (
                     norm(cls_token),
                     norm(patches.flatten(-2, -1).permute(0, 2, 1)),
                 )
-                for (cls_token, patches), norm in zip(outputs, norms)
+                for (cls_token, patches), norm in zip(outputs, norms, strict=False)
             ]
             if reshape:
                 outputs = [
                     (cls_token, patches.permute(0, 2, 1).reshape(*nchw).contiguous())
-                    for (cls_token, patches), nchw in zip(outputs, nchw_shapes)
+                    for (cls_token, patches), nchw in zip(outputs, nchw_shapes, strict=False)
                 ]
         elif not reshape:
             outputs = [(cls_token, patches.flatten(-2, -1).permute(0, 2, 1)) for (cls_token, patches) in outputs]
         class_tokens = [out[0] for out in outputs]
         outputs = [out[1] for out in outputs]
         if return_class_token:
-            return tuple(zip(outputs, class_tokens))
+            return tuple(zip(outputs, class_tokens, strict=False))
         return tuple(outputs)
 
 
 convnext_sizes = {
-    "tiny": dict(
-        depths=[3, 3, 9, 3],
-        dims=[96, 192, 384, 768],
-    ),
-    "small": dict(
-        depths=[3, 3, 27, 3],
-        dims=[96, 192, 384, 768],
-    ),
-    "base": dict(
-        depths=[3, 3, 27, 3],
-        dims=[128, 256, 512, 1024],
-    ),
-    "large": dict(
-        depths=[3, 3, 27, 3],
-        dims=[192, 384, 768, 1536],
-    ),
+    "tiny": {
+        "depths": [3, 3, 9, 3],
+        "dims": [96, 192, 384, 768],
+    },
+    "small": {
+        "depths": [3, 3, 27, 3],
+        "dims": [96, 192, 384, 768],
+    },
+    "base": {
+        "depths": [3, 3, 27, 3],
+        "dims": [128, 256, 512, 1024],
+    },
+    "large": {
+        "depths": [3, 3, 27, 3],
+        "dims": [192, 384, 768, 1536],
+    },
 }
 
 
 def get_convnext_arch(arch_name):
-    """Get convnext arch.
-
-    Args:
-        arch_name: The arch name.
-    """
     size_dict = None
     query_sizename = arch_name.split("_")[1]
     try:
         size_dict = convnext_sizes[query_sizename]
     except KeyError:
-        raise NotImplementedError("didn't recognize convnext size string")
+        raise NotImplementedError("didn't recognize convnext size string")  # noqa: B904 - Keeps the implicit exception context.
 
     return partial(
         ConvNeXt,

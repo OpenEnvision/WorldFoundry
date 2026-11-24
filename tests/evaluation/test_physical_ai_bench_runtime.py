@@ -7,21 +7,21 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from worldfoundry.evaluation.tasks.catalog.workspace_registry import (
+from worldfoundry.evals.tasks.catalog.workspace_registry import (
     build_workspace_benchmark_command,
 )
-from worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.physical_ai_bench_official_impl import (
+from worldfoundry.evals.tasks.execution.runners.physical_ai_bench.physical_ai_bench_official_impl import (
     TRACKS,
     main,
 )
-from worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.runtime.physical_ai_bench.conditional_generation import (
+from worldfoundry.evals.tasks.execution.runners.physical_ai_bench.runtime.physical_ai_bench.conditional_generation import (
     ConditionalGenerationRequest,
     _caption_phrases,
     _depth_reference,
     _prediction_videos,
     _segmentation_reference,
 )
-from worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.runtime.physical_ai_bench.metrics import (
+from worldfoundry.evals.tasks.execution.runners.physical_ai_bench.runtime.physical_ai_bench.metrics import (
     aggregate_generation_vqa,
     blur_ssim,
     canny_scores,

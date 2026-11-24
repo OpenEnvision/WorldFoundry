@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Mapping
+from collections.abc import Mapping
 
 SEED_ENV = "WORLDFOUNDRY_INSPATIO_WORLD_SEED"
 DETERMINISTIC_ENV = "WORLDFOUNDRY_DETERMINISTIC"
@@ -23,12 +23,17 @@ def seed_for_rank(seed: int, rank: int) -> int:
 
 
 def reproducibility_env(
-    env: Mapping[str, str], seed: int | None = None, deterministic: bool = False,
+    env: Mapping[str, str],
+    seed: int | None = None,
+    deterministic: bool = False,
 ) -> dict[str, str]:
     """Return child settings without changing the caller's environment or RNG."""
     result = dict(env)
     strict = deterministic or result.get(DETERMINISTIC_ENV, "").strip().lower() in {
-        "1", "true", "yes", "on",
+        "1",
+        "true",
+        "yes",
+        "on",
     }
     if seed is None and strict and SEED_ENV not in result:
         seed = 0
@@ -52,6 +57,7 @@ def initialize_reproducibility() -> None:
     from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 
     set_seed_everywhere(
-        int(seed), deterministic=env.get(DETERMINISTIC_ENV) == "1",
+        int(seed),
+        deterministic=env.get(DETERMINISTIC_ENV) == "1",
         handle_invalid_seed="raise",
     )

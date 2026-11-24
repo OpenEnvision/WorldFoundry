@@ -5,11 +5,12 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import nn
 
+
 def detach_clone(v):
     return v.detach().clone() if torch.is_tensor(v) else v
 
-class JEPA(nn.Module):
 
+class JEPA(nn.Module):
     def __init__(
         self,
         encoder,
@@ -31,9 +32,9 @@ class JEPA(nn.Module):
         info: dict with pixels and action keys
         """
 
-        pixels = info['pixels'].float()
+        pixels = info["pixels"].float()
         b = pixels.size(0)
-        pixels = rearrange(pixels, "b t ... -> (b t) ...") # flatten for encoding
+        pixels = rearrange(pixels, "b t ... -> (b t) ...")  # flatten for encoding
         output = self.encoder(pixels, interpolate_pos_encoding=True)
         pixels_emb = output.last_hidden_state[:, 0]  # cls token
         emb = self.projector(pixels_emb)
@@ -126,7 +127,7 @@ class JEPA(nn.Module):
         return cost
 
     def get_cost(self, info_dict: dict, action_candidates: torch.Tensor):
-        """ Compute the cost of action candidates given an info dict with goal and initial state."""
+        """Compute the cost of action candidates given an info dict with goal and initial state."""
 
         assert "goal" in info_dict, "goal not in info_dict"
 
@@ -149,5 +150,5 @@ class JEPA(nn.Module):
         info_dict = self.rollout(info_dict, action_candidates)
 
         cost = self.criterion(info_dict)
-        
+
         return cost

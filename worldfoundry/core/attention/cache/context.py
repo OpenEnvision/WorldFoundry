@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from typing import cast
 
 import torch
 from torch import Tensor
@@ -28,13 +29,17 @@ class ContextAttentionCache:
         return replace(self, write=enabled)
 
     def combine(
-        self, key: object, keys: Tensor, values: Tensor, key_mask: Tensor | None = None,
+        self,
+        key: object,
+        keys: Tensor,
+        values: Tensor,
+        key_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor, Tensor | None, int]:
         store = self.stores.get(key)
         history_tokens = 0 if store is None else store.length
         current_keys, current_values, current_mask = keys, values, key_mask
         if history_tokens:
-            history_keys, history_values = store.cached()
+            history_keys, history_values = cast(CompactingKVCache, store).cached()
             keys = torch.cat((history_keys, keys), dim=1)
             values = torch.cat((history_values, values), dim=1)
             if key_mask is not None:
@@ -45,7 +50,7 @@ class ContextAttentionCache:
                 self.stores[key] = store
             store.append(current_keys.detach(), current_values.detach(), frame_count=current_keys.shape[1])
             if current_mask is not None:
-                self.key_masks[key] = key_mask.detach()
+                self.key_masks[key] = cast(Tensor, key_mask).detach()
         return keys, values, key_mask, history_tokens
 
 

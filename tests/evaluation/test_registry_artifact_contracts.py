@@ -15,18 +15,18 @@ from pathlib import Path
 import pytest
 import yaml
 
-from worldfoundry.evaluation.api.artifacts import (
+from worldfoundry.core.world_model_manifest import WorldModelManifest
+from worldfoundry.evals.api.artifacts import (
     ArtifactRef,
     coerce_artifact_refs,
     enrich_artifact_ref,
 )
-from worldfoundry.evaluation.api.metrics import MetricSpec
-from worldfoundry.evaluation.api.registry import (
+from worldfoundry.evals.api.metrics import MetricSpec
+from worldfoundry.evals.api.registry import (
     DuplicateRegistryKeyError,
     MetricSpecRegistry,
     ModelManifestRegistry,
 )
-from worldfoundry.evaluation.api.world_model_manifest import WorldModelManifest
 
 # ── EF-01: duplicate MetricSpec must raise the documented error ──────────
 
@@ -117,7 +117,7 @@ def test_enrich_without_hash_preserves_existing_sha256(tmp_path: Path) -> None:
 
 
 def test_zoo_yaml_parse_error_contains_path(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.models.catalog.zoo_registry import ModelZooRegistry
+    from worldfoundry.zoo.catalog.zoo_registry import ModelZooRegistry
 
     broken = tmp_path / "broken.yaml"
     broken.write_text("model_id: [unclosed", encoding="utf-8")
@@ -126,7 +126,7 @@ def test_zoo_yaml_parse_error_contains_path(tmp_path: Path) -> None:
 
 
 def test_zoo_schema_error_contains_path(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.models.catalog.zoo_registry import ModelZooRegistry
+    from worldfoundry.zoo.catalog.zoo_registry import ModelZooRegistry
 
     bad_entry = tmp_path / "bad_entry.yaml"
     bad_entry.write_text("models:\n  - name: entry-without-model-id\n", encoding="utf-8")
@@ -138,14 +138,14 @@ def test_zoo_schema_error_contains_path(tmp_path: Path) -> None:
 
 
 def test_duplicate_model_id_across_files_warns(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-    from worldfoundry.evaluation.models.catalog.zoo_registry import ModelZooRegistry
+    from worldfoundry.zoo.catalog.zoo_registry import ModelZooRegistry
 
     first = tmp_path / "a.yaml"
     second = tmp_path / "b.yaml"
     first.write_text("model_id: dup-model\n", encoding="utf-8")
     second.write_text("model_id: dup-model\n", encoding="utf-8")
 
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.evaluation.models.catalog.zoo_registry"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.zoo.catalog.zoo_registry"):
         registry = ModelZooRegistry.from_paths([first, second])
 
     assert len(registry) == 1
@@ -157,7 +157,7 @@ def test_duplicate_model_id_across_files_warns(tmp_path: Path, caplog: pytest.Lo
 
 
 def test_unknown_zoo_model_raises_resolution_error_with_suggestions(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.models.runners.resolver import (
+    from worldfoundry.evals.models.runners.resolver import (
         ModelResolutionError,
         resolve_model_zoo_config,
     )
@@ -175,9 +175,9 @@ def test_unknown_zoo_model_raises_resolution_error_with_suggestions(tmp_path: Pa
 
 
 def test_generation_result_from_pipeline_forwards_timings(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.api import GenerationRequest
-    from worldfoundry.evaluation.models.pipelines.invocation import build_pipeline_invocation
-    from worldfoundry.evaluation.models.pipelines.results import (
+    from worldfoundry.evals.api import GenerationRequest
+    from worldfoundry.evals.models.pipelines.invocation import build_pipeline_invocation
+    from worldfoundry.evals.models.pipelines.results import (
         PipelineResultContext,
         generation_result_from_pipeline,
     )
@@ -214,7 +214,7 @@ def test_generation_result_from_pipeline_forwards_timings(tmp_path: Path) -> Non
 
 
 def test_run_report_public_helper_api() -> None:
-    from worldfoundry.evaluation.reporting import run_report
+    from worldfoundry.evals.reporting import run_report
 
     for name in (
         "dedupe_labels",

@@ -113,7 +113,7 @@ def _raster_backward(
     red = tl.full((BLOCK,), BACKGROUND, tl.float32)
     green = tl.full((BLOCK,), BACKGROUND, tl.float32)
     blue = tl.full((BLOCK,), BACKGROUND, tl.float32)
-    for reverse in range(0, end - start):
+    for reverse in range(end - start):
         position = end - reverse - 1
         index = tl.load(indices + position)
         dx = tl.load(means + index * 2) - (x + 0.5)
@@ -170,16 +170,16 @@ class _GaussianRaster(torch.autograd.Function):
         last = torch.empty_like(alpha, dtype=torch.int32)
         tile_width = triton.cdiv(width, 16)
         tile_count = tile_width * triton.cdiv(height, 16)
-        configuration = dict(
-            WIDTH=width,
-            HEIGHT=height,
-            TILE_WIDTH=tile_width,
-            TILE_COUNT=tile_count,
-            INTERSECTIONS=indices.numel(),
-            BACKGROUND=background,
-            BLOCK=256,
-        )
-        cast(Any, _raster_forward)[(tile_count,)](
+        configuration = {
+            "WIDTH": width,
+            "HEIGHT": height,
+            "TILE_WIDTH": tile_width,
+            "TILE_COUNT": tile_count,
+            "INTERSECTIONS": indices.numel(),
+            "BACKGROUND": background,
+            "BLOCK": 256,
+        }
+        _raster_forward[(tile_count,)](
             means,
             conics,
             opacities,
@@ -203,7 +203,7 @@ class _GaussianRaster(torch.autograd.Function):
         grad_means, grad_conics, grad_opacities, grad_colors = (
             torch.zeros_like(value) for value in (means, conics, opacities, colors)
         )
-        cast(Any, _raster_backward)[(ctx.configuration["TILE_COUNT"],)](
+        _raster_backward[(ctx.configuration["TILE_COUNT"],)](
             means,
             conics,
             opacities,

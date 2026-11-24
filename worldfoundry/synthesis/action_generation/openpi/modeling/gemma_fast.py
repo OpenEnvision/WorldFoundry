@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 
 """
 Gemma model implementation from big_vision/models/ppp/gemma.py (with small modifications for NNX compatibility)
@@ -26,8 +27,8 @@ import jax
 import jax.numpy as jnp
 import ml_collections
 
-from . import lora
 from .. import array_typing as at
+from . import lora
 
 Variant = Literal["gemma_2b", "gemma_2b_lora"]
 
@@ -183,7 +184,7 @@ class Attention(nn.Module):
         return idx_new, k_new, v_new
 
     @nn.compact
-    def __call__(self, x, positions, attn_mask, kv_cache, decode, deterministic=True):  # noqa: FBT002
+    def __call__(self, x, positions, attn_mask, kv_cache, decode, deterministic=True):
         dtype = x.dtype  # original dtype, could be half-precision
         if self.num_kv_heads == self.num_heads:
             q, k, v = self.qkv_einsum("BSD,3KDH->3BSKH", x)
@@ -258,7 +259,7 @@ class Block(nn.Module):
         else:
             self.drop = lambda x, _: x
 
-    def __call__(self, x, kv_cache, positions, attn_mask, decode, deterministic=True):  # noqa: FBT002
+    def __call__(self, x, kv_cache, positions, attn_mask, decode, deterministic=True):
         x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
         inputs_normalized = self.pre_attention_norm(x)
         attn_output, kv_cache = self.attn(inputs_normalized, positions, attn_mask, kv_cache, decode, deterministic)
@@ -304,14 +305,14 @@ class Module(nn.Module):
         self,
         tokens=None,
         embedded_prefix=None,
-        embed_only=False,  # noqa: FBT002
+        embed_only=False,
         pre_logits=None,
         positions=None,
         mask=None,
-        decode=False,  # noqa: FBT002
+        decode=False,
         kv_cache=None,
-        deterministic=True,  # noqa: FBT002
-        return_prelogits=False,  # noqa: FBT002
+        deterministic=True,
+        return_prelogits=False,
     ):
         """Embed only, or complete forward pass.
 
@@ -355,9 +356,7 @@ class Module(nn.Module):
             return x
 
         if decode:
-            assert positions is not None and mask is not None, (  # noqa: PT018
-                "Must explicitly pass positions and mask for decoding."
-            )
+            assert positions is not None and mask is not None, "Must explicitly pass positions and mask for decoding."
 
         if positions is None:
             positions = jnp.arange(seq_len).astype(jnp.int32)[None, :]

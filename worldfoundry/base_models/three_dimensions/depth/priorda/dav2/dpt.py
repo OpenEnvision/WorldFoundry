@@ -2,86 +2,29 @@
 # https://github.com/SpatialVision/Prior-Depth-Anything
 # Licensed under the Apache-2.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> three_dimensions -> depth -> priorda -> dav2 -> dpt.py functionality."""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.transforms import Compose
 
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v2.util.blocks import FeatureFusionBlock, _make_scratch
-
 from worldfoundry.base_models.perception_core.general_perception.dinov2.variants.vipe_priorda_dav2 import DINOv2
+from worldfoundry.base_models.three_dimensions.depth.midas.fusion import make_fusion_block as _make_fusion_block
+from worldfoundry.base_models.three_dimensions.depth.midas.fusion import make_scratch as _make_scratch
+
 from .transform import NormalizeImage, Resize
 
 
-def _make_fusion_block(features, use_bn, size=None):
-    """Helper function to make fusion block.
-
-    Args:
-        features: The features.
-        use_bn: The use bn.
-        size: The size.
-    """
-    return FeatureFusionBlock(
-        features,
-        nn.ReLU(False),
-        deconv=False,
-        bn=use_bn,
-        expand=False,
-        align_corners=True,
-        size=size,
-    )
-
-
-class ConvBlock(nn.Module):
-    """Conv block implementation."""
-    def __init__(self, in_feature, out_feature):
-        """Init.
-
-        Args:
-            in_feature: The in feature.
-            out_feature: The out feature.
-        """
-        super().__init__()
-
-        self.conv_block = nn.Sequential(
-            nn.Conv2d(in_feature, out_feature, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(out_feature),
-            nn.ReLU(True),
-        )
-
-    def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        return self.conv_block(x)
-
-
 class DPTHead(nn.Module):
-    """Dpt head implementation."""
     def __init__(
         self,
         in_channels,
         features=256,
         use_bn=False,
-        out_channels=[256, 512, 1024, 1024],
+        out_channels=[256, 512, 1024, 1024],  # noqa: B006 - Keeps the upstream default object and signature.
         use_clstoken=False,
         encoder_cond_dim=-1,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            features: The features.
-            use_bn: The use bn.
-            out_channels: The out channels.
-            use_clstoken: The use clstoken.
-            encoder_cond_dim: The encoder cond dim.
-        """
-        super(DPTHead, self).__init__()
+        super().__init__()
 
         self.use_clstoken = use_clstoken
         self.encoder_cond_dim = encoder_cond_dim
@@ -159,14 +102,6 @@ class DPTHead(nn.Module):
         )
 
     def forward(self, out_features, patch_h, patch_w, condition=None):
-        """Forward.
-
-        Args:
-            out_features: The out features.
-            patch_h: The patch h.
-            patch_w: The patch w.
-            condition: The condition.
-        """
         out = []
         for i, x in enumerate(out_features):
             if self.use_clstoken:
@@ -208,26 +143,17 @@ class DPTHead(nn.Module):
 
 class DepthAnythingV2(nn.Module):
     """Depth anything implementation."""
+
     def __init__(
         self,
         encoder="vitl",
         features=256,
-        out_channels=[256, 512, 1024, 1024],
+        out_channels=[256, 512, 1024, 1024],  # noqa: B006 - Keeps the upstream default object and signature.
         use_bn=False,
         use_clstoken=False,
         encoder_cond_dim=-1,
     ):
-        """Init.
-
-        Args:
-            encoder: The encoder.
-            features: The features.
-            out_channels: The out channels.
-            use_bn: The use bn.
-            use_clstoken: The use clstoken.
-            encoder_cond_dim: The encoder cond dim.
-        """
-        super(DepthAnythingV2, self).__init__()
+        super().__init__()
 
         self.intermediate_layer_idx = {
             "vits": [2, 5, 8, 11],
@@ -251,14 +177,6 @@ class DepthAnythingV2(nn.Module):
         )
 
     def forward(self, image, input_size=518, condition=None, device="cuda:0"):
-        """Forward.
-
-        Args:
-            image: The image.
-            input_size: The input size.
-            condition: The condition.
-            device: The device.
-        """
         x, (h, w) = self.raw2input(image, input_size, device)
 
         rh, rw = x.shape[-2:]
@@ -283,11 +201,6 @@ class DepthAnythingV2(nn.Module):
         return disparity
 
     def freeze_network(self, names: dict):
-        """Freeze network.
-
-        Args:
-            names: The names.
-        """
         trainable_params = {"encoder": self.pretrained, "decoder": self.depth_head}
 
         for name in names:
@@ -296,11 +209,6 @@ class DepthAnythingV2(nn.Module):
                     param.requires_grad = False
 
     def init_state_dict(self, state_dict, **kwargs):
-        """Init state dict.
-
-        Args:
-            state_dict: The state dict.
-        """
         missing, unexpected = super().load_state_dict(state_dict=state_dict, strict=True)
 
         self.depth_head.scratch.output_conv2 = nn.Sequential(
@@ -317,13 +225,6 @@ class DepthAnythingV2(nn.Module):
         return missing, unexpected
 
     def raw2input(self, raw_image, input_size=518, device="cuda"):
-        """Raw2input.
-
-        Args:
-            raw_image: The raw image.
-            input_size: The input size.
-            device: The device.
-        """
         assert isinstance(raw_image, torch.Tensor)
         assert raw_image.dtype == torch.uint8
         transform = Compose(

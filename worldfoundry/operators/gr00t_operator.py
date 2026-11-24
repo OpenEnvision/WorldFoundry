@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,7 +16,7 @@ class GR00TOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "humanoid_foundation_policy"
     ACTION_REPRESENTATION = "embodiment_conditioned_joint_or_eef_action"
     OBSERVATION_LAYOUT = "multi_sensor_embodiment_state_language"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": False,
@@ -24,9 +25,11 @@ class GR00TOperator(EmbodiedActionOperator):
         "actions": ["whole_body_action", "joint_targets", "eef_targets"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
-        instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "instruction", "skill", "task_instruction")
+        instruction = (
+            prompt if prompt not in (None, "") else _first_present(kwargs, "instruction", "skill", "task_instruction")
+        )
         instruction = "" if instruction is None else str(instruction)
         return {
             "prompt": instruction,
@@ -44,7 +47,7 @@ class GR00TOperator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         embodiment = _first_present(kwargs, "embodiment", "robot_type", "embodiment_id")
         observation = _compact_dict(
@@ -72,7 +75,7 @@ class GR00TOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "whole_body_action", "joint_targets", "eef_targets")

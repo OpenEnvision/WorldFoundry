@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any
 
 import numpy as np
 from PIL import Image
@@ -34,7 +35,7 @@ _NAVIGATION_DELTAS: dict[str, tuple[float, float, float, float, float]] = {
 }
 
 
-def _navigation_poses(interactions: Sequence[str]) -> List[np.ndarray]:
+def _navigation_poses(interactions: Sequence[str]) -> list[np.ndarray]:
     """Include the initial pose, then apply world translation and local Rx/Rz rotation."""
     current = np.eye(4, dtype=np.float64)
     poses = [current.copy()]
@@ -66,7 +67,6 @@ def _image_intrinsics(image: str | Path | Image.Image) -> np.ndarray:
 
 
 def _as_pose_matrix(value: Any) -> np.ndarray:
-    """As pose matrix implementation."""
     if isinstance(value, dict):
         if "c2w" not in value:
             raise ValueError("WorldFM pose dict must contain a `c2w` key.")
@@ -83,7 +83,6 @@ def _as_pose_matrix(value: Any) -> np.ndarray:
 
 
 def _looks_like_single_pose(value: Any) -> bool:
-    """Looks like single pose implementation."""
     try:
         matrix = np.asarray(value, dtype=np.float64)
     except Exception:
@@ -100,8 +99,7 @@ class WorldFMOperator(BaseOperator):
         self.interaction_template = interaction_template or ["camera_pose"]
         self.interaction_template_init()
 
-    def _load_meta(self, meta_path: str | Path) -> Dict[str, Any]:
-        """Load meta implementation."""
+    def _load_meta(self, meta_path: str | Path) -> dict[str, Any]:
         meta_path = Path(meta_path).expanduser().resolve()
         with meta_path.open("r", encoding="utf-8") as file:
             meta = json.load(file)
@@ -128,14 +126,17 @@ class WorldFMOperator(BaseOperator):
             "c2w_list": c2w_list,
         }
 
-    def _normalize_interactions(self, interaction: Any) -> List[np.ndarray]:
-        """Normalize interactions implementation."""
+    def _normalize_interactions(self, interaction: Any) -> list[np.ndarray]:
         if isinstance(interaction, np.ndarray) and interaction.ndim == 3:
             return [_as_pose_matrix(item) for item in interaction]
 
-        if isinstance(interaction, Sequence) and not isinstance(interaction, (str, bytes)):
-            if interaction and isinstance(interaction[0], str):
-                return _navigation_poses(interaction)
+        if (
+            isinstance(interaction, Sequence)
+            and not isinstance(interaction, (str, bytes))
+            and interaction
+            and isinstance(interaction[0], str)
+        ):
+            return _navigation_poses(interaction)
 
         if _looks_like_single_pose(interaction):
             return [_as_pose_matrix(interaction)]
@@ -174,7 +175,7 @@ class WorldFMOperator(BaseOperator):
         scene_name: str | None = None,
         panorama_image=None,
         panorama_path: str | Path | None = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         image_path = None
         default_interactions = None

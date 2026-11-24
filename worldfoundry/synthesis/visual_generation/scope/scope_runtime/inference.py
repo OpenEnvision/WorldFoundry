@@ -20,14 +20,14 @@ single-image and batch-directory inference modes.
 
 Example usage:
     # Single image inference
-    python inference.py \\
+    python -m worldfoundry.synthesis.visual_generation.scope.scope_runtime.inference \\
         --model_dir ./SCOPE \\
         --input_image /path/to/input/image.png \\
         --action_path /path/to/actions.parquet \\
         --prompt "First-person shooter perspective in a toy garden"
 
     # Batch inference
-    python inference.py \\
+    python -m worldfoundry.synthesis.visual_generation.scope.scope_runtime.inference \\
         --model_dir ./SCOPE \\
         --input_image_dir ./images \\
         --action_path action.parquet \\
@@ -44,17 +44,18 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
+
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan import (
     WanVideoVAE38,
     WanVideoVAEStateDictConverter,
 )
 from worldfoundry.base_models.diffusion_model.models.encoders.wan import WanTextEncoder
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants import ScopeActionWanModel
-from worldfoundry.core.model_loading import load_model
 from worldfoundry.core.io import (
     crop_and_resize,
     save_video,
 )
+from worldfoundry.core.model_loading import load_model
 from worldfoundry.synthesis.visual_generation.scope.scope_runtime.native_pipeline import (
     ScopeVideoPipeline,
 )
@@ -69,21 +70,21 @@ logger = logging.getLogger(__name__)
 # Each button is binary (0 = released, 1 = pressed).
 BUTTON_COLS = [
     "right_trigger",  # Fire (RT)
-    "left_trigger",   # Aim Down Sights (LT)
-    "south",          # Jump (A)
-    "right_thumb",    # Melee (R3)
-    "west",           # Reload (X)
-    "north",          # Weapon Switch (Y)
+    "left_trigger",  # Aim Down Sights (LT)
+    "south",  # Jump (A)
+    "right_thumb",  # Melee (R3)
+    "west",  # Reload (X)
+    "north",  # Weapon Switch (Y)
 ]
 
 # ActionModule hyperparameters controlling how raw action signals are processed.
 ACTION_CONFIG = {
-    "mouse_dim_in": 4,                  # 2D left stick + 2D right stick
+    "mouse_dim_in": 4,  # 2D left stick + 2D right stick
     "keyboard_dim_in": len(BUTTON_COLS),  # 6 binary buttons
-    "dim": 3072,                        # Must match DiT hidden dim
-    "num_heads": 24,                    # Must match DiT num_heads
-    "vae_time_compression_ratio": 4,    # Wan2.2 VAE temporal compression
-    "windows_size": 4,                  # Sliding window for temporal context
+    "dim": 3072,  # Must match DiT hidden dim
+    "num_heads": 24,  # Must match DiT num_heads
+    "vae_time_compression_ratio": 4,  # Wan2.2 VAE temporal compression
+    "windows_size": 4,  # Sliding window for temporal context
 }
 
 # Full DiT architecture configuration for SCOPE.
@@ -145,9 +146,7 @@ def load_actions(
 
     # Pad with last row if parquet has fewer frames than requested.
     if len(df) < num_frames:
-        pad = pd.concat(
-            [df.iloc[[-1]]] * (num_frames - len(df)), ignore_index=True
-        )
+        pad = pd.concat([df.iloc[[-1]]] * (num_frames - len(df)), ignore_index=True)
         df = pd.concat([df, pad], ignore_index=True)
 
     # Extract button presses as binary tensor.
@@ -157,11 +156,7 @@ def load_actions(
     # Extract joystick axes (2D left + 2D right = 4D total).
     j_left = np.array(df["j_left"].tolist())[:num_frames].astype(np.float32)
     j_right = np.array(df["j_right"].tolist())[:num_frames].astype(np.float32)
-    mouse = (
-        torch.tensor(np.concatenate([j_left, j_right], axis=-1))
-        .unsqueeze(0)
-        .to(device, torch.bfloat16)
-    )
+    mouse = torch.tensor(np.concatenate([j_left, j_right], axis=-1)).unsqueeze(0).to(device, torch.bfloat16)
 
     return keyboard, mouse
 
@@ -214,17 +209,14 @@ def find_model_files(model_dir: str) -> dict[str, any]:
         FileNotFoundError: If required model files are missing.
     """
     # SCOPE DiT checkpoint shards.
-    scope_shards = sorted(
-        glob.glob(os.path.join(model_dir, "model-*-of-*.safetensors"))
-    )
+    scope_shards = sorted(glob.glob(os.path.join(model_dir, "model-*-of-*.safetensors")))
     if not scope_shards:
         single = os.path.join(model_dir, "SCOPE.safetensors")
         if os.path.isfile(single):
             scope_shards = [single]
         else:
             raise FileNotFoundError(
-                f"No SCOPE checkpoint found in {model_dir}. "
-                "Expected 'model-*-of-*.safetensors' or 'SCOPE.safetensors'."
+                f"No SCOPE checkpoint found in {model_dir}. Expected 'model-*-of-*.safetensors' or 'SCOPE.safetensors'."
             )
 
     # Text encoder (UMT5-XXL).
@@ -243,13 +235,7 @@ def find_model_files(model_dir: str) -> dict[str, any]:
         raise FileNotFoundError(f"Tokenizer not found: {tokenizer_path}")
 
     # Base DiT (optional; used by pipeline model registry).
-    base_dit_shards = sorted(
-        glob.glob(
-            os.path.join(
-                model_dir, "diffusion_pytorch_model-*-of-*.safetensors"
-            )
-        )
-    )
+    base_dit_shards = sorted(glob.glob(os.path.join(model_dir, "diffusion_pytorch_model-*-of-*.safetensors")))
 
     return {
         "scope_shards": scope_shards,
@@ -278,9 +264,7 @@ def init_pipeline(model_dir: str) -> ScopeVideoPipeline:
 
     files = find_model_files(model_dir)
 
-    logger.info(
-        "Loading SCOPE DiT (%d shard(s))...", len(files["scope_shards"])
-    )
+    logger.info("Loading SCOPE DiT (%d shard(s))...", len(files["scope_shards"]))
     device = os.getenv("SCOPE_DEVICE", "cuda")
     dit = load_model(
         ScopeActionWanModel,
@@ -373,9 +357,7 @@ def parse_args() -> argparse.Namespace:
     Returns:
         Parsed argument namespace.
     """
-    parser = argparse.ArgumentParser(
-        description="SCOPE: Action-Conditioned Game World Video Generation"
-    )
+    parser = argparse.ArgumentParser(description="SCOPE: Action-Conditioned Game World Video Generation")
     parser.add_argument(
         "--model_dir",
         type=str,
@@ -438,11 +420,13 @@ def main() -> None:
 
     # Collect input images.
     if args.input_image_dir:
-        images = sorted([
-            os.path.join(args.input_image_dir, f)
-            for f in os.listdir(args.input_image_dir)
-            if f.lower().endswith((".png", ".jpg", ".jpeg"))
-        ])
+        images = sorted(
+            [
+                os.path.join(args.input_image_dir, f)
+                for f in os.listdir(args.input_image_dir)
+                if f.lower().endswith((".png", ".jpg", ".jpeg"))
+            ]
+        )
     else:
         images = [args.input_image]
 

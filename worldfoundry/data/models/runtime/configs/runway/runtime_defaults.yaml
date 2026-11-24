@@ -1,6 +1,0 @@
-schema_version: worldfoundry.runtime_defaults.v1
-defaults:
-  gen_3_i2v:
-    model_name: gen_3_i2v
-    generation_type: i2v
-    model_id: gen3a_turbo

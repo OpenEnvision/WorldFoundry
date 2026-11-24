@@ -1,15 +1,9 @@
 """LingBot-VLA v1 inference tensor transforms."""
 
-from typing import Dict
-
 import numpy as np
 import torch
-import math
-import einops
-import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-
 
 IMAGE_KEYS = (
     "base_0_rgb",
@@ -30,17 +24,18 @@ def dict_apply(func, d):
             d[key] = func(value)
     return d
 
+
 class Normalizer:
     def __init__(
         self,
-        norm_stats: Dict[str, Dict[str, np.ndarray]],
-        data_type: str=None,
-        norm_type: Dict[str, str] | None = None,
+        norm_stats: dict[str, dict[str, np.ndarray]],
+        data_type: str | None = None,
+        norm_type: dict[str, str] | None = None,
     ):
         self.norm_stats = dict_apply(lambda x: np.array(x).astype(np.float32), norm_stats)
         self.norm_type = norm_type or {}
 
-    def normalize(self, data: Dict[str, np.ndarray]) -> Dict[str, torch.Tensor]:
+    def normalize(self, data: dict[str, np.ndarray]) -> dict[str, torch.Tensor]:
         normalized_data = {}
         for key, value in data.items():
             if key in self.norm_stats:
@@ -52,13 +47,11 @@ class Normalizer:
                 elif norm_type == "bounds_99":
                     low = self.norm_stats[key]["q01"]
                     high = self.norm_stats[key]["q99"]
-                    normalized_value = (value  - low) / (high - low + 1e-6) * 2.0 - 1.0
+                    normalized_value = (value - low) / (high - low + 1e-6) * 2.0 - 1.0
                 elif norm_type == "minmax":
                     min_val = self.norm_stats[key]["min"]
                     max_val = self.norm_stats[key]["max"]
-                    normalized_value = (value - min_val) / (
-                        max_val - min_val + 1e-6
-                    ) * 2 - 1
+                    normalized_value = (value - min_val) / (max_val - min_val + 1e-6) * 2 - 1
                 elif norm_type == "identity":
                     normalized_value = value
                 else:
@@ -71,7 +64,7 @@ class Normalizer:
                 normalized_data[key] = value
         return normalized_data
 
-    def unnormalize(self, data: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    def unnormalize(self, data: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         """
         Unnormalize the given data using stored normalization statistics.
 
@@ -111,6 +104,7 @@ class Normalizer:
                 unnormalized_data[key] = value
         return unnormalized_data
 
+
 def resize_with_pad_item(img, width, height, pad_value=-1):
     # assume no-op when width height fits already
     if img.ndim != 3:
@@ -132,7 +126,10 @@ def resize_with_pad_item(img, width, height, pad_value=-1):
     padded_img = F.pad(resized_img, (pad_width, 0, pad_height, 0), value=pad_value)
     return padded_img
 
-def prepare_images(image_processor, observation: dict[str, Tensor], resize_imgs_with_padding, use_depth_align=False, image_keys=None):
+
+def prepare_images(
+    image_processor, observation: dict[str, Tensor], resize_imgs_with_padding, use_depth_align=False, image_keys=None
+):
     """Normalize, resize, and pad images and stack them into a tensor.
 
     Args:
@@ -155,15 +152,11 @@ def prepare_images(image_processor, observation: dict[str, Tensor], resize_imgs_
             assert img.ndim == 3, f"Expected 3D image, got {img.shape}"
             pil_img = img.cpu().numpy()
             if image_processor is None:
-                img = img.to(dtype) / 127.5 - 1.0 # to [-1, 1]
-                img = resize_with_pad_item(
-                    img, *resize_imgs_with_padding, pad_value=-1.0
-                )
+                img = img.to(dtype) / 127.5 - 1.0  # to [-1, 1]
+                img = resize_with_pad_item(img, *resize_imgs_with_padding, pad_value=-1.0)
             else:
-                img = resize_with_pad_item(
-                    img, *resize_imgs_with_padding, pad_value=0
-                )
-                img = image_processor(img)['pixel_values']
+                img = resize_with_pad_item(img, *resize_imgs_with_padding, pad_value=0)
+                img = image_processor(img)["pixel_values"]
             images.append(img)
             img_masks.append(True)
             if use_depth_align:
@@ -188,40 +181,13 @@ def prepare_images(image_processor, observation: dict[str, Tensor], resize_imgs_
         images = torch.from_numpy(np.stack(images, axis=0))  # (n, c, h, w)
     img_masks = torch.tensor(img_masks, dtype=torch.bool)  # (*n)
 
-    if use_depth_align:
+    if use_depth_align:  # noqa: SIM108 - Branches carry per-case comments.
         pil_images = torch.from_numpy(np.stack(pil_images, axis=0))  # (n, c, h, w)
     else:
         pil_images = []
 
     return images, img_masks, pil_images
 
-def prepare_state(observation: dict[str, Tensor], max_state_dim):
-    """Pad the state to the maximum state dimension.
-
-    Args:
-        observation (dict[str, Tensor])
-
-    Returns:
-        state (torch.Tensor): (*b, max_state_dim) padded state tensor
-    """
-    state = observation["state"]
-    state = F.pad(state, (0, max_state_dim - state.shape[-1]))
-    return state
-
-def prepare_action(observation: dict[str, Tensor], max_action_dim):
-    """Pad the action to the maximum action dimension.
-
-    Args:
-        observation (dict[str, Tensor])
-
-    Returns:
-        action (torch.Tensor): (*b, n, max_action_dim) padded action tensor
-        action_dim (int): the actual dimension of the action before padding
-    """
-    # ipdb.set_trace()
-    action = observation["action"]
-    action = F.pad(action, (0, max_action_dim - action.shape[-1]))
-    return action
 
 def prepare_joint_pad(observation: dict[str, Tensor], max_dim):
     """Pad the state to the maximum state dimension.
@@ -235,6 +201,7 @@ def prepare_joint_pad(observation: dict[str, Tensor], max_dim):
     joint_mask = observation["joint_mask"]
     joint_mask = F.pad(joint_mask, (0, max_dim - joint_mask.shape[-1]))
     return joint_mask
+
 
 def prepare_language(language_tokenizer, observation: dict[str, Tensor], tokenizer_max_length):
     """If `prompt` is provided, modify it to PaliGemma format and tokenize it.
@@ -252,15 +219,13 @@ def prepare_language(language_tokenizer, observation: dict[str, Tensor], tokeniz
         lang_tokens (torch.Tensor): (*b, l) language tokens
         lang_masks (torch.Tensor): (*b, l) masks for language tokens, True if token is present, False if missing
     """
-    lang_tokens = observation.get("lang_tokens", None)
-    lang_masks = observation.get("lang_masks", None)
-    prompt = observation.get("prompt", None)
+    lang_tokens = observation.get("lang_tokens")
+    lang_masks = observation.get("lang_masks")
+    prompt = observation.get("prompt")
 
     # either provide `prompt` or (`lang_tokens`, `lang_masks`)
     if prompt is None and (lang_tokens is None or lang_masks is None):
-        raise ValueError(
-            "Either 'prompt' or ('lang_tokens', 'lang_masks') must be provided in the observation."
-        )
+        raise ValueError("Either 'prompt' or ('lang_tokens', 'lang_masks') must be provided in the observation.")
 
     device = observation["state"].device
     if prompt is not None and (lang_tokens is None or lang_masks is None):
@@ -275,9 +240,7 @@ def prepare_language(language_tokenizer, observation: dict[str, Tensor], tokeniz
             return_tensors="pt",
         )
         lang_tokens = tokenized_prompt["input_ids"].to(device=device)
-        lang_masks = tokenized_prompt["attention_mask"].to(
-            device=device, dtype=torch.bool
-        )
+        lang_masks = tokenized_prompt["attention_mask"].to(device=device, dtype=torch.bool)
     else:
         lang_tokens = observation["lang_tokens"].to(device=device)
         lang_masks = observation["lang_masks"].to(device=device, dtype=torch.bool)

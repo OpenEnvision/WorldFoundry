@@ -3,7 +3,6 @@ Base Information Sharing Class for UniCeption
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
 
 import torch.nn as nn
 from torch import Tensor
@@ -26,7 +25,7 @@ class UniCeptionInfoSharingBase(nn.Module):
     def __init__(
         self,
         name: str,
-        size: Optional[str] = None,
+        size: str | None = None,
         *args,
         **kwargs,
     ):
@@ -36,7 +35,7 @@ class UniCeptionInfoSharingBase(nn.Module):
         super().__init__(*args, **kwargs)
 
         self.name: str = name
-        self.size: Optional[str] = size
+        self.size: str | None = size
 
     def forward(
         self,
@@ -76,11 +75,9 @@ class MultiViewTransformerInput(InfoSharingInput):
     Input class for Multi-View Transformer.
     """
 
-    features: List[Tensor]
-    additional_input_tokens: Optional[Tensor] = None
-    additional_input_tokens_per_view: Optional[
-        List[Tensor]
-    ] = None
+    features: list[Tensor]
+    additional_input_tokens: Tensor | None = None
+    additional_input_tokens_per_view: list[Tensor] | None = None
 
 
 @dataclass
@@ -89,11 +86,9 @@ class MultiViewTransformerOutput(InfoSharingOutput):
     Output class for Multi-View Transformer.
     """
 
-    features: List[Tensor]
-    additional_token_features: Optional[Tensor] = None
-    additional_token_features_per_view: Optional[
-        List[Tensor]
-    ] = None
+    features: list[Tensor]
+    additional_token_features: Tensor | None = None
+    additional_token_features_per_view: list[Tensor] | None = None
 
 
 @dataclass
@@ -102,8 +97,8 @@ class MultiSetTransformerInput(InfoSharingInput):
     Input class for Multi-Set Transformer.
     """
 
-    features: List[Tensor]
-    additional_input_tokens: Optional[Tensor] = None
+    features: list[Tensor]
+    additional_input_tokens: Tensor | None = None
 
 
 @dataclass
@@ -112,5 +107,5 @@ class MultiSetTransformerOutput(InfoSharingOutput):
     Output class for Multi-Set Transformer.
     """
 
-    features: List[Tensor]
-    additional_token_features: Optional[Tensor] = None
+    features: list[Tensor]
+    additional_token_features: Tensor | None = None

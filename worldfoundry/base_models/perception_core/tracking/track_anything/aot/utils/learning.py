@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot -> utils -> learning.py functionality."""
-
 import math
 
 
@@ -18,25 +16,10 @@ def adjust_learning_rate(
     is_cosine_decay=False,
     min_lr=1e-5,
     encoder_lr_ratio=1.0,
-    freeze_params=[],
+    freeze_params=[],  # noqa: B006 - Keeps the upstream default object and signature.
 ):
-    """Adjust learning rate.
-
-    Args:
-        optimizer: The optimizer.
-        base_lr: The base lr.
-        p: The p.
-        itr: The itr.
-        max_itr: The max itr.
-        restart: The restart.
-        warm_up_steps: The warm up steps.
-        is_cosine_decay: The is cosine decay.
-        min_lr: The min lr.
-        encoder_lr_ratio: The encoder lr ratio.
-        freeze_params: The freeze params.
-    """
     if restart > 1:
-        each_max_itr = int(math.ceil(float(max_itr) / restart))
+        each_max_itr = int(math.ceil(float(max_itr) / restart))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         itr = itr % each_max_itr
         warm_up_steps /= restart
         max_itr = each_max_itr
@@ -71,19 +54,9 @@ def get_trainable_params(
     base_lr,
     weight_decay,
     use_frozen_bn=False,
-    exclusive_wd_dict={},
-    no_wd_keys=[],
+    exclusive_wd_dict={},  # noqa: B006 - Keeps the upstream default object and signature.
+    no_wd_keys=[],  # noqa: B006 - Keeps the upstream default object and signature.
 ):
-    """Get trainable params.
-
-    Args:
-        model: The model.
-        base_lr: The base lr.
-        weight_decay: The weight decay.
-        use_frozen_bn: The use frozen bn.
-        exclusive_wd_dict: The exclusive wd dict.
-        no_wd_keys: The no wd keys.
-    """
     params = []
     memo = set()
     total_param = 0
@@ -95,16 +68,15 @@ def get_trainable_params(
             continue
         memo.add(value)
         wd = weight_decay
-        for exclusive_key in exclusive_wd_dict.keys():
+        for exclusive_key in exclusive_wd_dict.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if exclusive_key in key:
                 wd = exclusive_wd_dict[exclusive_key]
                 break
         if len(value.shape) == 1:  # normalization layers
-            if "bias" in key:  # bias requires no weight decay
-                wd = 0.0
-            elif not use_frozen_bn:  # if not use frozen BN, apply zero weight decay
-                wd = 0.0
-            elif "encoder." not in key:  # if use frozen BN, apply weight decay to all frozen BNs in the encoder
+            # bias requires no weight decay
+            # if not use frozen BN, apply zero weight decay
+            # if use frozen BN, apply weight decay to all frozen BNs in the encoder
+            if "bias" in key or not use_frozen_bn or "encoder." not in key:
                 wd = 0.0
         else:
             for no_wd_key in no_wd_keys:
@@ -113,31 +85,21 @@ def get_trainable_params(
                     break
         params += [{"params": [value], "lr": base_lr, "weight_decay": wd, "name": key}]
 
-    print("Total Param: {:.2f}M".format(total_param / 1e6))
+    print(f"Total Param: {total_param / 1e6:.2f}M")
     return params
 
 
 def freeze_params(module):
-    """Freeze params.
-
-    Args:
-        module: The module.
-    """
     for p in module.parameters():
         p.requires_grad = False
 
 
 def calculate_params(state_dict):
-    """Calculate params.
-
-    Args:
-        state_dict: The state dict.
-    """
     memo = set()
     total_param = 0
-    for key, value in state_dict.items():
+    for _key, value in state_dict.items():
         if value in memo:
             continue
         memo.add(value)
         total_param += value.numel()
-    print("Total Param: {:.2f}M".format(total_param / 1e6))
+    print(f"Total Param: {total_param / 1e6:.2f}M")

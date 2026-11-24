@@ -31,11 +31,11 @@ metadata:
   official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:larybench
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/larybench/run_larybench_official_runner.py
   runtime:
     kind: in_tree_official_source
-    root: worldfoundry/evaluation/tasks/execution/runners/larybench
+    root: worldfoundry/evals/tasks/execution/runners/larybench
     results_path_env: WORLDFOUNDRY_LARYBENCH_RESULTS_PATH
     dataset_root_env: DATA_DIR
     metadata_root_env: LARY_METADATA_DIR
@@ -44,7 +44,7 @@ metadata:
     root_env: WORLDFOUNDRY_LARYBENCH_ROOT
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:larybench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
@@ -54,7 +54,7 @@ metadata:
   data_refs:
     hf_dataset_id: meituan-longcat/LARYBench
     task_yaml: worldfoundry/data/benchmarks/tasks/external/larybench.yaml
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id larybench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/larybench --json
+  contract_validation_command: wf zoo benchmark-run --benchmark-id larybench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/larybench --json
   requires:
   - selected LARYBench dataset shards
   - checkpoint assets for the selected representation model
@@ -63,7 +63,7 @@ metadata:
   - Full leaderboard parity requires the complete official split, exact checkpoint, probe configuration, and retained run artifacts.
   checkpoint_refs: []
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -98,8 +98,8 @@ tasks:
         latent_action_root: {kind: directory}
     evaluation_protocol:
     - name: in_tree_larybench_extract
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:larybench
+      runner_script: worldfoundry/evals/tasks/execution/runners/larybench/run_larybench_official_runner.py
     - name: in_tree_official_runtime
       metric_ids:
       - extraction_coverage
@@ -108,8 +108,8 @@ tasks:
       - weighted_f1
       - val_seen_mse
       - val_unseen_mse
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:larybench
+      runner_script: worldfoundry/evals/tasks/execution/runners/larybench/run_larybench_official_runner.py
     metadata:
       stage_metric_ids:
       - extraction_coverage
@@ -136,8 +136,8 @@ tasks:
         benchmark_scorecard: {kind: benchmark_result}
     evaluation_protocol:
     - name: in_tree_larybench_classify
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:larybench
+      runner_script: worldfoundry/evals/tasks/execution/runners/larybench/run_larybench_official_runner.py
     - name: in_tree_official_runtime
       metric_ids:
       - extraction_coverage
@@ -146,8 +146,8 @@ tasks:
       - weighted_f1
       - val_seen_mse
       - val_unseen_mse
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:larybench
+      runner_script: worldfoundry/evals/tasks/execution/runners/larybench/run_larybench_official_runner.py
     metadata:
       stage_metric_ids:
       - top1_accuracy
@@ -176,8 +176,8 @@ tasks:
         benchmark_scorecard: {kind: benchmark_result}
     evaluation_protocol:
     - name: in_tree_larybench_regress
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:larybench
+      runner_script: worldfoundry/evals/tasks/execution/runners/larybench/run_larybench_official_runner.py
     - name: in_tree_official_runtime
       metric_ids:
       - extraction_coverage
@@ -186,8 +186,8 @@ tasks:
       - weighted_f1
       - val_seen_mse
       - val_unseen_mse
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:larybench
+      runner_script: worldfoundry/evals/tasks/execution/runners/larybench/run_larybench_official_runner.py
     metadata:
       stage_metric_ids:
       - val_seen_mse

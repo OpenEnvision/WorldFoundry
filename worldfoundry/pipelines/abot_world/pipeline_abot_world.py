@@ -53,7 +53,7 @@ class ABotWorldPipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "ABotWorldPipeline":
+    ) -> ABotWorldPipeline:
         from worldfoundry.synthesis.visual_generation.abot_world import ABotWorldInference
 
         options = cls._runtime_options(model_path, required_components, kwargs)

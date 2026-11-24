@@ -1,64 +1,55 @@
-import types
-import json
-from typing import List, Optional
-import torch
-from torch import nn
-import os
-import numpy as np
 import gc
+import json
+import os
+import types
 
+import numpy as np
+import torch
 from safetensors.torch import load_file
 
-from .utils import SchedulerInterface, FlowMatchScheduler
-from .wan.modules.tokenizers import HuggingfaceTokenizer
-from .wan.modules.model import WanModel
-from .wan.modules.vae import _video_vae
-from .wan.modules.t5 import umt5_xxl
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import umt5_xxl
+
+from .utils import FlowMatchScheduler, SchedulerInterface
 from .wan.modules.clip import CLIPModel
-from .utils import GeneralLoRALoader
+from .wan.modules.tokenizers import HuggingfaceTokenizer
+from .wan.modules.vae import _video_vae
+
 
 class WanTextEncoder(torch.nn.Module):
     def __init__(self, model_name: str) -> None:
         super().__init__()
         self.model_name = model_name
 
-        self.text_encoder = umt5_xxl(
-            encoder_only=True,
-            return_tokenizer=False,
-            dtype=torch.float32,
-            device=torch.device('cpu')
-        ).eval().requires_grad_(False)
+        self.text_encoder = (
+            umt5_xxl(encoder_only=True, return_tokenizer=False, dtype=torch.float32, device=torch.device("cpu"))
+            .eval()
+            .requires_grad_(False)
+        )
 
         # Dynamically construct path based on model_name
         t5_encoder_path = os.path.join(model_name, "models_t5_umt5-xxl-enc-bf16.pth")
-        self.text_encoder.load_state_dict(
-            torch.load(t5_encoder_path, map_location="cpu", weights_only=True)
-        )
+        self.text_encoder.load_state_dict(torch.load(t5_encoder_path, map_location="cpu", weights_only=True))
 
         # Dynamically construct tokenizer path
         tokenizer_path = os.path.join(model_name, "google/umt5-xxl/")
-        self.tokenizer = HuggingfaceTokenizer(
-            name=tokenizer_path, seq_len=512, clean='whitespace')
+        self.tokenizer = HuggingfaceTokenizer(name=tokenizer_path, seq_len=512, clean="whitespace")
 
     @property
     def device(self):
         # Return actual device of text_encoder parameters
         return next(self.text_encoder.parameters()).device
 
-    def forward(self, text_prompts: List[str]) -> dict:
-        ids, mask = self.tokenizer(
-            text_prompts, return_mask=True, add_special_tokens=True)
+    def forward(self, text_prompts: list[str]) -> dict:
+        ids, mask = self.tokenizer(text_prompts, return_mask=True, add_special_tokens=True)
         ids = ids.to(self.device)
         mask = mask.to(self.device)
         seq_lens = mask.gt(0).sum(dim=1).long()
         context = self.text_encoder(ids, mask)
 
-        for u, v in zip(context, seq_lens):
+        for u, v in zip(context, seq_lens, strict=False):
             u[v:] = 0.0  # set padding to 0.0
 
-        return {
-            "prompt_embeds": context
-        }
+        return {"prompt_embeds": context}
 
 
 class WanVAEWrapper(torch.nn.Module):
@@ -66,21 +57,53 @@ class WanVAEWrapper(torch.nn.Module):
         super().__init__()
         self.model_name = model_name
         mean = [
-            -0.7571, -0.7089, -0.9113, 0.1075, -0.1745, 0.9653, -0.1517, 1.5508,
-            0.4134, -0.0715, 0.5517, -0.3632, -0.1922, -0.9497, 0.2503, -0.2921
+            -0.7571,
+            -0.7089,
+            -0.9113,
+            0.1075,
+            -0.1745,
+            0.9653,
+            -0.1517,
+            1.5508,
+            0.4134,
+            -0.0715,
+            0.5517,
+            -0.3632,
+            -0.1922,
+            -0.9497,
+            0.2503,
+            -0.2921,
         ]
         std = [
-            2.8184, 1.4541, 2.3275, 2.6558, 1.2196, 1.7708, 2.6052, 2.0743,
-            3.2687, 2.1526, 2.8652, 1.5579, 1.6382, 1.1253, 2.8251, 1.9160
+            2.8184,
+            1.4541,
+            2.3275,
+            2.6558,
+            1.2196,
+            1.7708,
+            2.6052,
+            2.0743,
+            3.2687,
+            2.1526,
+            2.8652,
+            1.5579,
+            1.6382,
+            1.1253,
+            2.8251,
+            1.9160,
         ]
         self.mean = torch.tensor(mean, dtype=torch.float32)
         self.std = torch.tensor(std, dtype=torch.float32)
 
         # init model
-        self.model = _video_vae(
-            pretrained_path=f"{self.model_name}/Wan2.1_VAE.pth",
-            z_dim=16,
-        ).eval().requires_grad_(False)
+        self.model = (
+            _video_vae(
+                pretrained_path=f"{self.model_name}/Wan2.1_VAE.pth",
+                z_dim=16,
+            )
+            .eval()
+            .requires_grad_(False)
+        )
 
         self.dtype = torch.bfloat16
 
@@ -90,22 +113,18 @@ class WanVAEWrapper(torch.nn.Module):
     @torch.no_grad()
     def encode(self, pixel):
         device, dtype = pixel[0].device, self.dtype
-        scale = [self.mean.to(device=device, dtype=dtype),
-                 1.0 / self.std.to(device=device, dtype=dtype)]
-        with torch.autocast(device_type='cuda', dtype=self.dtype):
-            output = [
-                self.model.encode(u.to(self.dtype).unsqueeze(0), scale).squeeze(0)
-                for u in pixel
-            ]
+        scale = [self.mean.to(device=device, dtype=dtype), 1.0 / self.std.to(device=device, dtype=dtype)]
+        with torch.autocast(device_type="cuda", dtype=self.dtype):
+            output = [self.model.encode(u.to(self.dtype).unsqueeze(0), scale).squeeze(0) for u in pixel]
         return output
 
     def run_vae_encoder(self, img, new_target_video_length=None, add_first_to_kvcache=False):
-        if add_first_to_kvcache == None:
+        if add_first_to_kvcache == None:  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
             add_first_to_kvcache = False
 
         if new_target_video_length is not None:
             self.target_video_length = new_target_video_length
-        # 将输入直接转换到目标 dtype/device，避免频繁 cpu<->cuda 拷贝触发大块缓存
+        # Convert once to the target device and dtype to avoid repeated CPU/GPU copies.
         img = img.to(device="cuda", dtype=torch.bfloat16)
         h, w = img.shape[1:]
         lat_h = h // self.vae_stride[1]
@@ -120,29 +139,42 @@ class WanVAEWrapper(torch.nn.Module):
             dtype=torch.bfloat16,
         )
 
-        #! 只有普通I2V，才不用生成第一帧
+        #! Only plain I2V keeps the first frame as a given condition.
         msk[:, 1:] = 0
 
-        #! 其他所有情况，就算是把第一帧加到KVCache里，也是denoise的一部分。
+        #! Otherwise the first frame is denoised too, even when it is added to the KV cache.
         if add_first_to_kvcache:
             msk[:, 0:] = 0
 
-        msk = torch.concat([torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]], dim=1) # 首帧是1，后续20都是0
+        msk = torch.concat(
+            [torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]], dim=1
+        )  # Plain I2V: 1 for the first frame, 0 for the remaining 20.
         msk = msk.view(1, msk.shape[1] // 4, 4, lat_h, lat_w)
         msk = msk.transpose(1, 2)[0]
-        #! 如果是普通I2V
+        #! Plain I2V
         if not add_first_to_kvcache:
             vae_encode_out = self.encode(
                 [
                     torch.concat(
                         [
-                            torch.nn.functional.interpolate(img[None], size=(h, w),mode="bicubic",).transpose(0, 1),  # [3, 1, H, W]
-                            torch.zeros(3, self.target_video_length - 1, h, w, device=img.device, dtype=torch.bfloat16,),  # [3, F-1, H, W]
+                            torch.nn.functional.interpolate(
+                                img[None],
+                                size=(h, w),
+                                mode="bicubic",
+                            ).transpose(0, 1),  # [3, 1, H, W]
+                            torch.zeros(
+                                3,
+                                self.target_video_length - 1,
+                                h,
+                                w,
+                                device=img.device,
+                                dtype=torch.bfloat16,
+                            ),  # [3, F-1, H, W]
                         ],
                         dim=1,  # [3, F, H, W]
                     )
                 ],
-            )[0]  # [1帧img, 其余全 0]
+            )[0]  # [first frame image, zeros]
 
         else:
             vae_encode_out = self.encode(
@@ -163,22 +195,18 @@ class WanVAEWrapper(torch.nn.Module):
                 ],
             )[0]
 
-        # msk: [1帧1,后面都是0],维度4
+        # msk: 4 channels; plain I2V has 1 on the first frame and 0 elsewhere.
 
         vae_encode_out = torch.concat([msk, vae_encode_out]).to(torch.bfloat16)
-        return vae_encode_out # [20, 21, H, W]
+        return vae_encode_out  # [20, 21, H, W]
 
     def encode_to_latent(self, pixel: torch.Tensor) -> torch.Tensor:
         # pixel: [batch_size, num_channels, num_frames, height, width]
         device, dtype = pixel.device, pixel.dtype
-        scale = [self.mean.to(device=device, dtype=dtype),
-                 1.0 / self.std.to(device=device, dtype=dtype)]
+        scale = [self.mean.to(device=device, dtype=dtype), 1.0 / self.std.to(device=device, dtype=dtype)]
 
-        with torch.autocast(device_type='cuda', dtype=self.dtype):
-            output = [
-                self.model.encode(u.unsqueeze(0), scale).squeeze(0)
-                for u in pixel
-            ]
+        with torch.autocast(device_type="cuda", dtype=self.dtype):
+            output = [self.model.encode(u.unsqueeze(0), scale).squeeze(0) for u in pixel]
         output = torch.stack(output, dim=0)
         # from [batch_size, num_channels, num_frames, height, width]
         # to [batch_size, num_frames, num_channels, height, width]
@@ -193,13 +221,9 @@ class WanVAEWrapper(torch.nn.Module):
             assert latent.shape[0] == 1, "Batch size must be 1 when using cache"
 
         device, dtype = latent.device, latent.dtype
-        scale = [self.mean.to(device=device, dtype=dtype),
-                 1.0 / self.std.to(device=device, dtype=dtype)]
+        scale = [self.mean.to(device=device, dtype=dtype), 1.0 / self.std.to(device=device, dtype=dtype)]
 
-        if use_cache:
-            decode_function = self.model.cached_decode
-        else:
-            decode_function = self.model.decode
+        decode_function = self.model.cached_decode if use_cache else self.model.decode
 
         output = []
         for u in zs:
@@ -217,11 +241,11 @@ class WanCLIPEncoder(torch.nn.Module):
         self.model_name = model_name
         self.image_encoder = CLIPModel(
             dtype=torch.bfloat16,
-            device=torch.device('cpu'),
+            device=torch.device("cpu"),
             checkpoint_path=os.path.join(
                 f"{self.model_name}/",
                 "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth",
-            )
+            ),
         )
 
     @property
@@ -230,7 +254,7 @@ class WanCLIPEncoder(torch.nn.Module):
         try:
             return next(self.image_encoder.model.parameters()).device
         except StopIteration:
-            return torch.device('cpu')
+            return torch.device("cpu")
 
     def forward(self, img):
         # img = TF.to_tensor(img).sub_(0.5).div_(0.5).cuda()
@@ -238,7 +262,7 @@ class WanCLIPEncoder(torch.nn.Module):
         if img.ndim == 3:
             img = img[:, None, :, :].to(target_device)
         elif img.ndim == 4:
-            img = img.transpose(0,1).to(target_device)
+            img = img.transpose(0, 1).to(target_device)
 
         clip_encoder_out = self.image_encoder.visual([img]).squeeze(0)
         return clip_encoder_out
@@ -257,27 +281,24 @@ class WanWrapperBase(torch.nn.Module):
     - Submodule weights (control_adapter, sp_blocks) loaded in Task layer
     """
 
-    def __init__(
-            self,
-            role="generator",
-            config=None,
-            **kwargs
-    ):
+    def __init__(self, role="generator", config=None, **kwargs):
         super().__init__()
         self.config = config
         self.role = role
 
         # Extract parameters from config
-        wan_model_name = getattr(config, 'wan_model_name', None)
-        generator_backbone_ckpt_path = getattr(config, 'generator_backbone_ckpt_path', None)
-        generator_lora_ckpt_path = getattr(config, 'generator_lora_ckpt_path', None)
-        timestep_shift = getattr(config, 'timestep_shift', 8.0)
-        num_latent_frames = getattr(config, 'num_latent_frames', config.image_or_video_shape[1])
-        use_lora = getattr(config, 'use_lora', False)
+        wan_model_name = getattr(config, "wan_model_name", None)
+        generator_backbone_ckpt_path = getattr(config, "generator_backbone_ckpt_path", None)
+        _generator_lora_ckpt_path = getattr(config, "generator_lora_ckpt_path", None)
+        timestep_shift = getattr(config, "timestep_shift", 8.0)
+        num_latent_frames = getattr(config, "num_latent_frames", config.image_or_video_shape[1])
+        use_lora = getattr(config, "use_lora", False)
         # Default: if we already have a backbone checkpoint (non-LoRA), skip the official weights to avoid double loading a 14B model.
         default_load_official_backbone = use_lora or generator_backbone_ckpt_path is None
-        load_official_backbone = getattr(config, 'load_official_backbone', default_load_official_backbone)
-        print(f"[Wrapper] load_official_backbone={load_official_backbone}, use_lora={use_lora}, generator_backbone_ckpt_path_set={generator_backbone_ckpt_path is not None}")
+        load_official_backbone = getattr(config, "load_official_backbone", default_load_official_backbone)
+        print(
+            f"[Wrapper] load_official_backbone={load_official_backbone}, use_lora={use_lora}, generator_backbone_ckpt_path_set={generator_backbone_ckpt_path is not None}"
+        )
 
         # ====== Stage 1: Random initialization ======
         self._init_base_model(**config)
@@ -322,10 +343,7 @@ class WanWrapperBase(torch.nn.Module):
         wan_state_dict = self._load_state_dict_from_pretrained(wan_model_name)
 
         # Filter out adapter/controller weights to keep them randomly initialized
-        backbone_state_dict = {
-            k: v for k, v in wan_state_dict.items()
-            if not self._is_submodule_key(k)
-        }
+        backbone_state_dict = {k: v for k, v in wan_state_dict.items() if not self._is_submodule_key(k)}
 
         missing, unexpected = self.model.load_state_dict(backbone_state_dict, strict=False)
 
@@ -343,7 +361,7 @@ class WanWrapperBase(torch.nn.Module):
         del wan_state_dict, backbone_state_dict
         gc.collect()
         torch.cuda.empty_cache()
-        print(f"[Wrapper] Official weights loaded successfully")
+        print("[Wrapper] Official weights loaded successfully")
 
     def _is_submodule_key(self, key: str) -> bool:
         """
@@ -351,9 +369,9 @@ class WanWrapperBase(torch.nn.Module):
         These should be loaded separately, not from official weights.
         """
         submodule_prefixes = [
-            'control_adapter',
-            'sp_blocks',
-            'sp_patch_embedding',
+            "control_adapter",
+            "sp_blocks",
+            "sp_patch_embedding",
         ]
         return any(prefix in key for prefix in submodule_prefixes)
 
@@ -366,18 +384,17 @@ class WanWrapperBase(torch.nn.Module):
         state_dict = self._load_checkpoint_file(generator_ckpt_path)
 
         # Load full model weights (excluding submodule keys)
-        backbone_state_dict = {
-            k: v for k, v in state_dict.items()
-            if not self._is_submodule_key(k)
-        }
+        backbone_state_dict = {k: v for k, v in state_dict.items() if not self._is_submodule_key(k)}
         missing, unexpected = self.model.load_state_dict(backbone_state_dict, strict=False)
 
         if unexpected:
             # Filter out LoRA keys which are expected to be missing when not using LoRA
-            non_lora_unexpected = [k for k in unexpected if 'lora_' not in k]
-            assert len(non_lora_unexpected) == 0, f"Backbone checkpoint load failed! Unexpected keys: {non_lora_unexpected}"
+            non_lora_unexpected = [k for k in unexpected if "lora_" not in k]
+            assert len(non_lora_unexpected) == 0, (
+                f"Backbone checkpoint load failed! Unexpected keys: {non_lora_unexpected}"
+            )
 
-        print(f"[Wrapper] Backbone weights loaded successfully")
+        print("[Wrapper] Backbone weights loaded successfully")
         del state_dict, backbone_state_dict
         gc.collect()
         torch.cuda.empty_cache()
@@ -390,20 +407,20 @@ class WanWrapperBase(torch.nn.Module):
         - load_ema=True (default): prefer generator_ema if available
         - load_ema=False: always use generator, ignore generator_ema
         """
-        if ckpt_path.endswith('.safetensors'):
+        if ckpt_path.endswith(".safetensors"):
             state_dict = load_file(ckpt_path, device="cpu")
         else:
             # Use mmap for large checkpoint files to avoid OOM during loading
             state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=True, mmap=True)
 
         # Check load_ema config (default True for backward compatibility)
-        load_ema = getattr(self.config, 'load_ema', True)
+        load_ema = getattr(self.config, "load_ema", True)
 
         # Handle different checkpoint formats
         if "generator" in state_dict or "generator_ema" in state_dict:
             if load_ema and "generator_ema" in state_dict:
                 # Prefer EMA weights
-                print(f"[Wrapper] Loading generator_ema weights (load_ema=True)")
+                print("[Wrapper] Loading generator_ema weights (load_ema=True)")
                 state_dict = state_dict["generator_ema"]
             elif "generator" in state_dict:
                 # Use non-EMA weights
@@ -411,7 +428,7 @@ class WanWrapperBase(torch.nn.Module):
                 state_dict = state_dict["generator"]
             else:
                 # Only EMA available but load_ema=False, use EMA anyway with warning
-                print(f"[Wrapper] WARNING: load_ema=False but only generator_ema found, using it anyway")
+                print("[Wrapper] WARNING: load_ema=False but only generator_ema found, using it anyway")
                 state_dict = state_dict["generator_ema"]
 
             state_dict = {k.replace("model.", ""): v for k, v in state_dict.items()}
@@ -433,13 +450,13 @@ class WanWrapperBase(torch.nn.Module):
         single_file = os.path.join(model_path, "diffusion_pytorch_model.safetensors")
         if os.path.exists(single_file):
             print(f"Loading state_dict from single file: {single_file}")
-            return load_file(single_file, device='cpu')
+            return load_file(single_file, device="cpu")
 
         # Check for sharded safetensors files
         index_file = os.path.join(model_path, "diffusion_pytorch_model.safetensors.index.json")
         if os.path.exists(index_file):
             print(f"Loading state_dict from sharded files: {index_file}")
-            with open(index_file, 'r') as f:
+            with open(index_file) as f:
                 index = json.load(f)
 
             # Get unique shard files
@@ -450,7 +467,7 @@ class WanWrapperBase(torch.nn.Module):
             for shard_file in sorted(shard_files):
                 shard_path = os.path.join(model_path, shard_file)
                 print(f"  Loading shard: {shard_file}")
-                shard_dict = load_file(shard_path, device='cpu')
+                shard_dict = load_file(shard_path, device="cpu")
                 state_dict.update(shard_dict)
 
             return state_dict
@@ -467,12 +484,12 @@ class WanWrapperBase(torch.nn.Module):
             f"diffusion_pytorch_model.safetensors.index.json, or diffusion_pytorch_model.bin"
         )
 
-
     def enable_gradient_checkpointing(self) -> None:
         self.model.enable_gradient_checkpointing()
 
-
-    def _convert_flow_pred_to_x0(self, flow_pred: torch.Tensor, xt: torch.Tensor, timestep: torch.Tensor) -> torch.Tensor:
+    def _convert_flow_pred_to_x0(
+        self, flow_pred: torch.Tensor, xt: torch.Tensor, timestep: torch.Tensor
+    ) -> torch.Tensor:
         """
         Convert flow matching's prediction to x0 prediction.
         flow_pred: the prediction with shape [B, C, H, W]
@@ -486,18 +503,14 @@ class WanWrapperBase(torch.nn.Module):
         """
         # use higher precision for calculations
         original_dtype = flow_pred.dtype
-        flow_pred, xt, sigmas, timesteps = map(
-            lambda x: x.double().to(flow_pred.device), [flow_pred, xt,
-                                                        self.scheduler.sigmas,
-                                                        self.scheduler.timesteps]
+        flow_pred, xt, sigmas, timesteps = (
+            x.double().to(flow_pred.device) for x in [flow_pred, xt, self.scheduler.sigmas, self.scheduler.timesteps]
         )
 
-        timestep_id = torch.argmin(
-            (timesteps.unsqueeze(0) - timestep.unsqueeze(1)).abs(), dim=1)
+        timestep_id = torch.argmin((timesteps.unsqueeze(0) - timestep.unsqueeze(1)).abs(), dim=1)
         sigma_t = sigmas[timestep_id].reshape(-1, 1, 1, 1)
         x0_pred = xt - sigma_t * flow_pred
         return x0_pred.to(original_dtype)
-
 
     @staticmethod
     def forward(
@@ -507,19 +520,16 @@ class WanWrapperBase(torch.nn.Module):
         context,
         clip_fea=None,
         y=None,
-        kv_cache: Optional[List[dict]] = None,
-        crossattn_cache: Optional[List[dict]] = None,
-        kv_start: Optional[int] = None,
-        kv_end: Optional[int] = None,
-        rope_start: Optional[int] = None,
+        kv_cache: list[dict] | None = None,
+        crossattn_cache: list[dict] | None = None,
+        kv_start: int | None = None,
+        kv_end: int | None = None,
+        rope_start: int | None = None,
         y_camera=None,
-        **kwargs
+        **kwargs,
     ) -> torch.Tensor:
         # [B, F] -> [B]
-        if self.uniform_timestep:
-            input_timestep = timestep[:, 0]
-        else:
-            input_timestep = timestep
+        input_timestep = timestep[:, 0] if self.uniform_timestep else timestep
 
         if kv_cache is not None:
             # dzc: For training Self-Forcing; for infering DMD, Self-Forcing
@@ -535,7 +545,7 @@ class WanWrapperBase(torch.nn.Module):
                 kv_start=kv_start,
                 kv_end=kv_end,
                 rope_start=rope_start,
-                **kwargs
+                **kwargs,
             ).permute(0, 2, 1, 3, 4)
         else:
             flow_pred = self.model(
@@ -546,29 +556,23 @@ class WanWrapperBase(torch.nn.Module):
                 y=list(y) if y is not None else None,  # y is [B, C, F, H, W], model expects list of [C, F, H, W]
                 seq_len=self.seq_len,
                 y_camera=y_camera,
-                **kwargs
+                **kwargs,
             ).permute(0, 2, 1, 3, 4)
 
         pred_x0 = self._convert_flow_pred_to_x0(
-            flow_pred=flow_pred.flatten(0, 1),
-            xt=noisy_image_or_video.flatten(0, 1),
-            timestep=timestep.flatten(0, 1)
+            flow_pred=flow_pred.flatten(0, 1), xt=noisy_image_or_video.flatten(0, 1), timestep=timestep.flatten(0, 1)
         ).unflatten(0, flow_pred.shape[:2])
 
         return flow_pred, pred_x0
-
 
     def get_scheduler(self) -> SchedulerInterface:
         """
         Update the current scheduler with the interface's static method
         """
         scheduler = self.scheduler
-        scheduler.convert_x0_to_noise = types.MethodType(
-            SchedulerInterface.convert_x0_to_noise, scheduler)
-        scheduler.convert_noise_to_x0 = types.MethodType(
-            SchedulerInterface.convert_noise_to_x0, scheduler)
-        scheduler.convert_velocity_to_x0 = types.MethodType(
-            SchedulerInterface.convert_velocity_to_x0, scheduler)
+        scheduler.convert_x0_to_noise = types.MethodType(SchedulerInterface.convert_x0_to_noise, scheduler)
+        scheduler.convert_noise_to_x0 = types.MethodType(SchedulerInterface.convert_noise_to_x0, scheduler)
+        scheduler.convert_velocity_to_x0 = types.MethodType(SchedulerInterface.convert_velocity_to_x0, scheduler)
         self.scheduler = scheduler
         return scheduler
 
@@ -581,12 +585,13 @@ class WanWrapperBase(torch.nn.Module):
         self.get_scheduler()
 
 
-
 # --- Additional import for BidirectionalWanWrapperSP ---
-from .wan.modules.model_state_adapter import StateAdapterWanModel
 
-from typing import Optional, List
-import torch
+import torch  # noqa: E402 - Follows module-level definitions, as upstream.
+
+from .wan.modules.model_state_adapter import (  # noqa: E402 - Follows module-level definitions, as upstream.
+    StateAdapterWanModel,
+)
 
 
 class BidirectionalWanWrapperSP(WanWrapperBase):
@@ -601,17 +606,8 @@ class BidirectionalWanWrapperSP(WanWrapperBase):
     not in the wrapper, following the same pattern as camera adapter loading.
     """
 
-    def __init__(
-            self,
-            role="generator",
-            config=None,
-            **kwargs
-    ):
-        super().__init__(
-            role=role,
-            config=config,
-            **kwargs
-        )
+    def __init__(self, role="generator", config=None, **kwargs):
+        super().__init__(role=role, config=config, **kwargs)
         # LiveWorld always uses per-frame timestep
         self.uniform_timestep = False
 
@@ -619,7 +615,6 @@ class BidirectionalWanWrapperSP(WanWrapperBase):
         wan_config_dict = kwargs["wan_config_dict"]
         self.model = StateAdapterWanModel(**wan_config_dict, **kwargs)
         self.model.eval()
-
 
     def forward(
         self,
@@ -631,19 +626,16 @@ class BidirectionalWanWrapperSP(WanWrapperBase):
         sp_context=None,
         sp_context_scale=1.0,
         sp_hint_offset=0,
-        kv_cache: Optional[List[dict]] = None,
-        crossattn_cache: Optional[List[dict]] = None,
-        kv_start: Optional[int] = None,
-        kv_end: Optional[int] = None,
-        rope_start: Optional[int] = None,
+        kv_cache: list[dict] | None = None,
+        crossattn_cache: list[dict] | None = None,
+        kv_start: int | None = None,
+        kv_end: int | None = None,
+        rope_start: int | None = None,
         y_camera=None,
-        **kwargs
+        **kwargs,
     ) -> torch.Tensor:
         # [B, F] -> [B]
-        if self.uniform_timestep:
-            input_timestep = timestep[:, 0]
-        else:
-            input_timestep = timestep
+        input_timestep = timestep[:, 0] if self.uniform_timestep else timestep
 
         # Calculate seq_len based on actual input shape (may include R+P+T frames for LiveWorld)
         # noisy_image_or_video: [B, F, C, H, W]
@@ -669,7 +661,7 @@ class BidirectionalWanWrapperSP(WanWrapperBase):
                 kv_start=kv_start,
                 kv_end=kv_end,
                 rope_start=rope_start,
-                **kwargs
+                **kwargs,
             ).permute(0, 2, 1, 3, 4)
         else:
             flow_pred = self.model(
@@ -683,13 +675,11 @@ class BidirectionalWanWrapperSP(WanWrapperBase):
                 sp_hint_offset=sp_hint_offset,
                 seq_len=actual_seq_len,
                 y_camera=y_camera,
-                **kwargs
+                **kwargs,
             ).permute(0, 2, 1, 3, 4)
 
         pred_x0 = self._convert_flow_pred_to_x0(
-            flow_pred=flow_pred.flatten(0, 1),
-            xt=noisy_image_or_video.flatten(0, 1),
-            timestep=timestep.flatten(0, 1)
+            flow_pred=flow_pred.flatten(0, 1), xt=noisy_image_or_video.flatten(0, 1), timestep=timestep.flatten(0, 1)
         ).unflatten(0, flow_pred.shape[:2])
 
         return flow_pred, pred_x0

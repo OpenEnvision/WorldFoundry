@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
 from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
+
 from ..base_action_synthesis import ActionModelSynthesis
 
 
@@ -67,7 +69,7 @@ class OctoSynthesis(ActionModelSynthesis):
         hf_models_root: str | Path | None = None,
         command_template: Sequence[str] | None = None,
         **kwargs: Any,
-    ) -> "OctoSynthesis":
+    ) -> OctoSynthesis:
         """
         Creates an OctoSynthesis instance from a pre-trained model.
 
@@ -166,9 +168,7 @@ class OctoSynthesis(ActionModelSynthesis):
             raise ValueError("Octo image_size must contain width and height.")
         jax_platform = explicit_options.get("jax_platform")
         if jax_platform is None:
-            jax_platform = (
-                "cuda" if str(self.device).lower().startswith("cuda") else merged["jax_platform"]
-            )
+            jax_platform = "cuda" if str(self.device).lower().startswith("cuda") else merged["jax_platform"]
         return OctoRuntimeConfig(
             checkpoint_dir=checkpoint,
             variant=variant,
@@ -297,7 +297,7 @@ class OctoSynthesis(ActionModelSynthesis):
         # Obtain the Octo runtime configuration, conditionally requiring a checkpoint.
         runtime_config = self._runtime_config(
             runtime_options,
-            require_checkpoint=not plan_only, # Checkpoint not strictly needed if only planning
+            require_checkpoint=not plan_only,  # Checkpoint not strictly needed if only planning
         )
         # Define the path for saving the runtime plan.
         plan_path = run_dir / "runtime_profile_plan.json"
@@ -318,7 +318,9 @@ class OctoSynthesis(ActionModelSynthesis):
             },
         }
         # Write the plan payload to a JSON file.
-        plan_path.write_text(json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        plan_path.write_text(
+            json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
         # If 'plan_only' is True, return the plan details without executing the model.
         if plan_only:
@@ -346,7 +348,7 @@ class OctoSynthesis(ActionModelSynthesis):
                 "run_dir": str(run_dir),
                 "profile": self.profile.to_dict(),
                 "interactions": list(interactions),
-                "operator_context": { # Contextual information for the operator handling the action.
+                "operator_context": {  # Contextual information for the operator handling the action.
                     "action_space": kwargs.get("action_space"),
                     "policy_controls": kwargs.get("policy_controls"),
                     "observation_keys": sorted((kwargs.get("octo_observation") or {}).keys())

@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """InSpatio depth-weighted RGBD splatting, used for camera control."""
 
-
 import torch
 
 
@@ -23,18 +22,27 @@ class DepthWarper:
         trans_pos_floor = torch.floor(trans_pos_offset).long()
         trans_pos_ceil = torch.ceil(trans_pos_offset).long()
 
-        trans_pos_offset = torch.stack([
-            torch.clamp(trans_pos_offset[:, 0], min=0, max=w + 1),
-            torch.clamp(trans_pos_offset[:, 1], min=0, max=h + 1),
-        ], dim=1)
-        trans_pos_floor = torch.stack([
-            torch.clamp(trans_pos_floor[:, 0], min=0, max=w + 1),
-            torch.clamp(trans_pos_floor[:, 1], min=0, max=h + 1),
-        ], dim=1)
-        trans_pos_ceil = torch.stack([
-            torch.clamp(trans_pos_ceil[:, 0], min=0, max=w + 1),
-            torch.clamp(trans_pos_ceil[:, 1], min=0, max=h + 1),
-        ], dim=1)
+        trans_pos_offset = torch.stack(
+            [
+                torch.clamp(trans_pos_offset[:, 0], min=0, max=w + 1),
+                torch.clamp(trans_pos_offset[:, 1], min=0, max=h + 1),
+            ],
+            dim=1,
+        )
+        trans_pos_floor = torch.stack(
+            [
+                torch.clamp(trans_pos_floor[:, 0], min=0, max=w + 1),
+                torch.clamp(trans_pos_floor[:, 1], min=0, max=h + 1),
+            ],
+            dim=1,
+        )
+        trans_pos_ceil = torch.stack(
+            [
+                torch.clamp(trans_pos_ceil[:, 0], min=0, max=w + 1),
+                torch.clamp(trans_pos_ceil[:, 1], min=0, max=h + 1),
+            ],
+            dim=1,
+        )
 
         prox_weight_nw = (1 - (trans_pos_offset[:, 1:2] - trans_pos_floor[:, 1:2])) * (
             1 - (trans_pos_offset[:, 0:1] - trans_pos_floor[:, 0:1])
@@ -135,8 +143,9 @@ class DepthWarper:
     def create_grid(self, b, h, w, device=None, dtype=torch.float32):
         key = (h, w, str(device), dtype)
         if self._grid_key != key:
-            y, x = torch.meshgrid(torch.arange(h, device=device, dtype=dtype),
-                                  torch.arange(w, device=device, dtype=dtype), indexing="ij")
+            y, x = torch.meshgrid(
+                torch.arange(h, device=device, dtype=dtype), torch.arange(w, device=device, dtype=dtype), indexing="ij"
+            )
             self._grid = torch.stack([x, y])[None]
             self._grid_key = key
         return self._grid.expand(b, -1, -1, -1)

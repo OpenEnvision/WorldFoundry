@@ -31,7 +31,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any
 
@@ -40,13 +41,17 @@ import torch
 from worldfoundry.base_models.diffusion_model.schedulers.minimax_h3 import (
     minimax_h3_align_frame_count,
     minimax_h3_audio_latent_t,
+    minimax_h3_sigma_schedule,
     minimax_h3_time_shift_sigmas,
     minimax_h3_video_latent_t,
 )
 
 from ..pipeline_utils import PipelineABC
 from ._minimax_h3 import (
+    MiniMaxH3CFGParallelConfig,
+    MiniMaxH3ContextParallelConfig,
     MiniMaxH3DenoiseBranch,
+    MiniMaxH3StepCacheConfig,
     minimax_h3_denoise_loop,
     minimax_h3_packed_sequence,
     minimax_h3_packed_sequence_ref2va_blocks,
@@ -68,6 +73,11 @@ _ASPECT_RATIOS: dict[str, tuple[int, int]] = {
     "1:1": (1, 1),
     "3:4": (3, 4),
     "9:16": (9, 16),
+    "3:2": (3, 2),
+    "5:4": (5, 4),
+    "4:5": (4, 5),
+    "2:3": (2, 3),
+    "9:21": (9, 21),
 }
 
 # Video VAE compression: 16x spatial, 4x temporal (see the video VAE config).
@@ -82,13 +92,7 @@ _COMPONENT_NAMES = ("transformer", "text_encoder", "video_vae", "audio_vae")
 
 
 def _round_to_multiple(value: int, multiple: int) -> int:
-    return max(multiple, int(round(value / multiple)) * multiple)
-
-
-def _is_module(value: Any) -> bool:
-    """True only for an instantiated nn.Module (not a bare class placeholder)."""
-
-    return isinstance(value, torch.nn.Module)
+    return max(multiple, round(value / multiple) * multiple)
 
 
 def _resolve_component_devices(
@@ -154,10 +158,10 @@ def _resolve_canvas(short_edge: int, aspect_ratio: str) -> tuple[int, int]:
     aw, ah = _ASPECT_RATIOS[aspect_ratio]
     if aw >= ah:  # landscape or square: height is the short edge
         height = int(short_edge)
-        width = int(round(short_edge * aw / ah))
+        width = round(short_edge * aw / ah)
     else:  # portrait: width is the short edge
         width = int(short_edge)
-        height = int(round(short_edge * ah / aw))
+        height = round(short_edge * ah / aw)
     # Latent grid must be divisible by (spatial_compression * patch) on each axis.
     unit_h = _SPATIAL_COMPRESSION * _PATCH_H
     unit_w = _SPATIAL_COMPRESSION * _PATCH_W
@@ -185,6 +189,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         audio_vae: Any = None,
         text_encoder: Any = None,
         tokenizer: Any = None,
+        processor: Any = None,
         device: str = "cuda",
         component_devices: Mapping[str, str] | None = None,
         model_id: str | None = None,
@@ -195,7 +200,38 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         self.audio_vae = audio_vae
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
+        self.processor = processor
         self.component_devices = dict(component_devices or dict.fromkeys(_COMPONENT_NAMES, device))
+        self._step_cache_config: MiniMaxH3StepCacheConfig | Mapping[str, Any] | None = None
+        self._cfg_parallel_config: MiniMaxH3CFGParallelConfig | bool | None = None
+        self._context_parallel_config: MiniMaxH3ContextParallelConfig | None = None
+        self._last_step_cache_report: dict[str, Any] | None = None
+        self._last_cfg_parallel_report: dict[str, Any] | None = None
+        self._last_context_parallel_report: dict[str, Any] | None = None
+
+    @staticmethod
+    def _merge_context_parallel_args(
+        context_parallel: MiniMaxH3ContextParallelConfig | Mapping[str, Any] | int | bool | None,
+        context_parallel_size: int | None,
+    ) -> tuple[bool, MiniMaxH3ContextParallelConfig | int | bool | None]:
+        """Validate and merge ``context_parallel`` and ``context_parallel_size`` aliases."""
+
+        if context_parallel is None and context_parallel_size is None:
+            return False, None
+        from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.dit import (
+            _coerce_context_parallel_config,
+        )
+
+        cp1 = _coerce_context_parallel_config(context_parallel) if context_parallel is not None else None
+        cp2 = _coerce_context_parallel_config(context_parallel_size) if context_parallel_size is not None else None
+        if context_parallel is not None and context_parallel_size is not None:
+            sp1 = int(cp1.sp_size) if cp1 is not None else 1
+            sp2 = int(cp2.sp_size) if cp2 is not None else 1
+            if sp1 != sp2:
+                raise ValueError(f"conflicting context_parallel (sp_size={sp1}) and context_parallel_size={sp2}")
+            return True, (cp1 if cp1 is not None else 1)
+        resolved = cp1 if context_parallel is not None else cp2
+        return True, (resolved if resolved is not None else 1)
 
     # ------------------------------------------------------------------ #
     # Loading.
@@ -206,10 +242,10 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         model_path: str | Mapping[str, Any] | None = None,
         required_components: Mapping[str, Any] | None = None,
         device: str = "cuda",
-        component_devices: Mapping[str, str] | None = None,
         model_id: str | None = None,
+        component_devices: Mapping[str, str] | None = None,
         **kwargs: Any,
-    ) -> "NativeMiniMaxH3Pipeline":
+    ) -> NativeMiniMaxH3Pipeline:
         """Materialize the DiT / VAEs / Qwen3-VL encoder from a checkpoint root.
 
         ``model_path`` (or ``kwargs['checkpoint_path']``) should point at a
@@ -235,6 +271,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
             if source is not None
             else dict(component_devices or dict.fromkeys(_COMPONENT_NAMES, device))
         )
+        transformer_subfolder = options.get("transformer_subfolder")
 
         if source is not None and any(
             component is None for component in (transformer, video_vae, audio_vae, text_encoder)
@@ -253,9 +290,10 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
                 audio_vae=audio_vae,
                 text_encoder=text_encoder,
                 tokenizer=tokenizer,
+                transformer_subfolder=transformer_subfolder,
             )
 
-        return cls(
+        pipe = cls(
             transformer=transformer,
             video_vae=video_vae,
             audio_vae=audio_vae,
@@ -265,6 +303,153 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
             component_devices=placements,
             model_id=resolved_model_id,
         )
+        if any(
+            options.get(key) not in (None, False)
+            for key in (
+                "acceleration",
+                "step_cache",
+                "cfg_parallel",
+                "context_parallel",
+                "context_parallel_size",
+                "vae_decode_autocast",
+                "vae_channels_last_3d",
+                "vae_stack_tiling",
+                "vae_tile_batch_size",
+                "vae_compile",
+            )
+        ):
+            pipe.configure_acceleration(
+                acceleration=options.get("acceleration"),
+                step_cache=options.get("step_cache"),
+                cfg_parallel=options.get("cfg_parallel"),
+                context_parallel=options.get("context_parallel"),
+                context_parallel_size=options.get("context_parallel_size"),
+                vae_decode_autocast=options.get("vae_decode_autocast"),
+                vae_channels_last_3d=options.get("vae_channels_last_3d"),
+                vae_stack_tiling=options.get("vae_stack_tiling"),
+                vae_tile_batch_size=options.get("vae_tile_batch_size"),
+                vae_compile=bool(options.get("vae_compile", False)),
+            )
+        return pipe
+
+    def configure_acceleration(
+        self,
+        *,
+        acceleration: Any = None,
+        step_cache: MiniMaxH3StepCacheConfig | Mapping[str, Any] | None = None,
+        cfg_parallel: MiniMaxH3CFGParallelConfig | bool | None = None,
+        context_parallel: MiniMaxH3ContextParallelConfig | Mapping[str, Any] | int | bool | None = None,
+        context_parallel_size: int | None = None,
+        vae_decode_autocast: torch.dtype | str | bool | None = None,
+        vae_channels_last_3d: bool | None = None,
+        vae_stack_tiling: bool | None = None,
+        vae_tile_batch_size: int | None = None,
+        vae_compile: bool = False,
+    ) -> dict[str, Any]:
+        """Configure SOL-Engine acceleration across the DiT, denoise loop, and Video VAE."""
+
+        cp_supplied, merged_cp = self._merge_context_parallel_args(context_parallel, context_parallel_size)
+        receipt: dict[str, Any] = {}
+        if acceleration is not None and self.transformer is not None:
+            from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.acceleration import (
+                accelerate_minimax_h3_dit,
+            )
+
+            receipt["transformer"] = accelerate_minimax_h3_dit(self.transformer, acceleration)
+            if not cp_supplied:
+                transformer_cp = getattr(self.transformer, "_context_parallel", None)
+                self._context_parallel_config = (
+                    transformer_cp if isinstance(transformer_cp, MiniMaxH3ContextParallelConfig) else None
+                )
+                self._last_context_parallel_report = None
+                if "context_parallel" in receipt["transformer"]:
+                    receipt["context_parallel"] = dict(receipt["transformer"]["context_parallel"])
+            # When a declarative SOL profile tier string is requested and VAE
+            # flags were not explicitly overridden, align VAE acceleration too.
+            if isinstance(acceleration, str):
+                if vae_decode_autocast is None:
+                    vae_decode_autocast = torch.bfloat16
+                if vae_channels_last_3d is None:
+                    vae_channels_last_3d = True
+                if vae_stack_tiling is None:
+                    vae_stack_tiling = True
+
+        if step_cache is not None:
+            from ._minimax_h3.denoise_loop import _coerce_step_cache_config
+
+            parsed_cache = _coerce_step_cache_config(step_cache)
+            self._step_cache_config = parsed_cache
+            self._last_step_cache_report = None
+            receipt["step_cache"] = parsed_cache.to_dict() if parsed_cache is not None else {"enabled": False}
+
+        if cfg_parallel is not None:
+            from ._minimax_h3.denoise_loop import _coerce_cfg_parallel_config
+
+            parsed_cfg_parallel = _coerce_cfg_parallel_config(cfg_parallel)
+            self._cfg_parallel_config = parsed_cfg_parallel
+            self._last_cfg_parallel_report = None
+            receipt["cfg_parallel"] = {
+                "enabled": bool(parsed_cfg_parallel is not None and parsed_cfg_parallel.enabled),
+            }
+
+        if cp_supplied:
+            parsed_cp = merged_cp if isinstance(merged_cp, MiniMaxH3ContextParallelConfig) else None
+            if self.transformer is not None and hasattr(self.transformer, "set_context_parallel"):
+                cp_receipt = self.transformer.set_context_parallel(parsed_cp)
+            else:
+                sp_size = int(parsed_cp.sp_size) if parsed_cp is not None else 1
+                cp_receipt = {
+                    "enabled": sp_size > 1,
+                    "sp_size": sp_size,
+                    "allow_cuda_graph": bool(parsed_cp.allow_cuda_graph) if parsed_cp is not None else False,
+                }
+            self._context_parallel_config = parsed_cp
+            self._last_context_parallel_report = None
+            receipt["context_parallel"] = cp_receipt
+
+        if (
+            self.video_vae is not None
+            and hasattr(self.video_vae, "configure_acceleration")
+            and any(
+                flag not in (None, False)
+                for flag in (vae_decode_autocast, vae_channels_last_3d, vae_stack_tiling, vae_compile)
+            )
+        ):
+            receipt["video_vae"] = self.video_vae.configure_acceleration(
+                autocast_dtype=vae_decode_autocast,
+                channels_last_3d=bool(vae_channels_last_3d),
+                stack_tiling=bool(vae_stack_tiling),
+                tile_batch_size=vae_tile_batch_size,
+                compile_blocks=bool(vae_compile),
+            )
+        return receipt
+
+    def acceleration_report(self) -> dict[str, Any]:
+        """Return runtime acceleration receipts for the transformer, denoise loop, and video VAE."""
+
+        report: dict[str, Any] = {}
+        if self.transformer is not None and hasattr(self.transformer, "acceleration_report"):
+            report["transformer"] = self.transformer.acceleration_report()
+        if self.video_vae is not None and hasattr(self.video_vae, "acceleration_report"):
+            report["video_vae"] = self.video_vae.acceleration_report()
+        if self._last_step_cache_report is not None:
+            report["step_cache"] = dict(self._last_step_cache_report)
+        if self._last_cfg_parallel_report is not None:
+            report["cfg_parallel"] = dict(self._last_cfg_parallel_report)
+        elif self._cfg_parallel_config is not None:
+            cfg_p = self._cfg_parallel_config
+            report["cfg_parallel"] = {
+                "enabled": bool(cfg_p.enabled if isinstance(cfg_p, MiniMaxH3CFGParallelConfig) else cfg_p),
+            }
+        if self._last_context_parallel_report is not None:
+            report["context_parallel"] = dict(self._last_context_parallel_report)
+        elif self._context_parallel_config is not None:
+            report["context_parallel"] = {
+                "enabled": bool(self._context_parallel_config.sp_size > 1),
+                "sp_size": int(self._context_parallel_config.sp_size),
+                "allow_cuda_graph": bool(self._context_parallel_config.allow_cuda_graph),
+            }
+        return report
 
     @classmethod
     def _load_components(
@@ -277,6 +462,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         audio_vae: Any,
         text_encoder: Any,
         tokenizer: Any,
+        transformer_subfolder: str | None = None,
     ) -> tuple[Any, Any, Any, Any, Any]:
         """Load real weights for missing components from a checkpoint directory.
 
@@ -288,7 +474,10 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         """
 
         if transformer is None:
-            transformer = cls._load_transformer(root, device=component_devices["transformer"])
+            transformer_kwargs: dict[str, Any] = {"device": component_devices["transformer"]}
+            if transformer_subfolder is not None:
+                transformer_kwargs["subfolder"] = str(transformer_subfolder)
+            transformer = cls._load_transformer(root, **transformer_kwargs)
         if video_vae is None:
             video_vae = cls._load_video_vae(root, device=component_devices["video_vae"])
         if audio_vae is None:
@@ -310,7 +499,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         return root
 
     @classmethod
-    def _load_transformer(cls, root: Path, *, device: str) -> Any:
+    def _load_transformer(cls, root: Path, *, device: str, subfolder: str = "transformer") -> Any:
         import torch
 
         from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3 import (
@@ -321,7 +510,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
             load_minimax_h3_dit_weights,
         )
 
-        tdir = cls._subdir(root, "transformer")
+        tdir = cls._subdir(root, subfolder)
         arch = MiniMaxH3DiTArchConfig()
         if not any(tdir.glob("*.safetensors")):
             raise FileNotFoundError(f"MiniMax H3 DiT weights are missing from {tdir}")
@@ -419,6 +608,109 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         pdir = cls._subdir(root, "processor", "tokenizer")
         return AutoTokenizer.from_pretrained(str(pdir))
 
+    @staticmethod
+    def _processor_root(base_root: Path, partition: str | None) -> Path:
+        """Resolve processor assets from either a partition or a repository root."""
+
+        candidates = [base_root / "processor"]
+        if partition is not None:
+            candidates.append(base_root / partition / "processor")
+        candidates.append(base_root.parent / "processor")
+        return next((candidate for candidate in candidates if candidate.is_dir()), candidates[0])
+
+    @staticmethod
+    def _load_processor(root: Path) -> Any:
+        from transformers import AutoProcessor
+
+        return AutoProcessor.from_pretrained(str(root))
+
+    @staticmethod
+    def _as_image(value: Any) -> Any:
+        from PIL import Image, ImageOps
+
+        if isinstance(value, Image.Image):
+            return ImageOps.exif_transpose(value).convert("RGB")
+        return ImageOps.exif_transpose(Image.open(value)).convert("RGB")
+
+    @staticmethod
+    def _fit_image(image: Any, *, height: int, width: int) -> Any:
+        from PIL import Image, ImageOps
+
+        if image.size == (width, height):
+            return image
+        return ImageOps.fit(
+            image,
+            (width, height),
+            method=Image.Resampling.LANCZOS,
+            centering=(0.5, 0.5),
+        )
+
+    def _encode_image(self, image: Any, *, deterministic: bool = False) -> torch.Tensor:
+        """Encode one PIL image into normalized H3 video latent storage."""
+
+        if self.video_vae is None:
+            raise RuntimeError(f"{self.model_id} image conditioning requires the video VAE")
+        device = torch.device(self.component_devices["video_vae"])
+        if deterministic:
+            latent = self.video_vae.encode_images([image], deterministic=True)[0]
+        else:
+            cuda_devices = (
+                [device.index if device.index is not None else torch.cuda.current_device()]
+                if device.type == "cuda"
+                else []
+            )
+            with torch.random.fork_rng(devices=cuda_devices):
+                torch.manual_seed(42)
+                if cuda_devices:
+                    torch.cuda.manual_seed(42)
+                latent = self.video_vae.encode_images([image])[0]
+        if latent.ndim == 4:
+            latent = latent.unsqueeze(0)
+        if latent.ndim != 5 or int(latent.shape[1]) != _VIDEO_LATENT_CHANNELS:
+            raise ValueError(f"Unexpected MiniMax-H3 image latent shape: {tuple(latent.shape)}")
+        arch = self.video_vae.sglang_config.arch_config
+        mean = latent.new_tensor(arch.latents_mean).view(1, -1, 1, 1, 1)
+        std = latent.new_tensor(arch.latents_std).view(1, -1, 1, 1, 1)
+        return ((latent.float() - mean) / std).contiguous()
+
+    def _encode_presentation(self, prompt: str, images: Sequence[Any]) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Encode a verbatim H3 prompt with optional numbered vision frames."""
+
+        if not images:
+            return self._encode_prompt(prompt), None
+        if self.processor is None:
+            raise RuntimeError(f"{self.model_id} visual conditioning requires processor assets")
+        if self.text_encoder is None or self.tokenizer is None:
+            raise RuntimeError(f"{self.model_id} text components are not initialized")
+        hidden, tags = self.text_encoder.encode_presentation(
+            prompt,
+            tokenizer=self.tokenizer,
+            processor=self.processor,
+            images=list(images),
+        )
+        if hidden.ndim == 3:
+            hidden = hidden[0]
+        return hidden, tags.detach().to("cpu")
+
+    @staticmethod
+    def _patchify_condition(
+        latent: torch.Tensor,
+        *,
+        seed: int,
+        noise_aug: float = 0.999,
+        seed_offset: int = 7919,
+    ) -> torch.Tensor:
+        """Apply H3 keyframe/reference noise augmentation and patchify into DiT rows."""
+
+        clean = latent.float()
+        if float(noise_aug) == 1.0:
+            augmented = clean
+        else:
+            generator = torch.Generator(device=latent.device).manual_seed(int(seed) + int(seed_offset))
+            noise = torch.randn(clean.shape, device=clean.device, dtype=clean.dtype, generator=generator)
+            augmented = float(noise_aug) * clean + (1.0 - float(noise_aug)) * noise
+        return minimax_h3_patchify_video_latent(augmented, patch_size=(1, _PATCH_H, _PATCH_W))
+
     # ------------------------------------------------------------------ #
     # Geometry / plan resolution.
     # ------------------------------------------------------------------ #
@@ -429,21 +721,43 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         short_edge: int,
         aspect_ratio: str,
         duration_seconds: float,
+        height: int | None = None,
+        width: int | None = None,
+        num_frames: int | None = None,
     ) -> dict[str, int]:
-        if not (MINIMAX_H3_MIN_DURATION_SECONDS <= duration_seconds <= MINIMAX_H3_MAX_DURATION_SECONDS):
-            raise ValueError(
-                f"duration_seconds must be in [{MINIMAX_H3_MIN_DURATION_SECONDS}, "
-                f"{MINIMAX_H3_MAX_DURATION_SECONDS}], got {duration_seconds}"
-            )
-        height, width = _resolve_canvas(short_edge, aspect_ratio)
-        frame_count = minimax_h3_align_frame_count(int(round(duration_seconds * self.DEFAULT_FPS)))
+        del task
+        unit_h = _SPATIAL_COMPRESSION * _PATCH_H
+        unit_w = _SPATIAL_COMPRESSION * _PATCH_W
+        if height is not None or width is not None:
+            if height is None or width is None:
+                raise ValueError("height and width must be supplied together")
+            resolved_h, resolved_w = int(height), int(width)
+            if resolved_h <= 0 or resolved_w <= 0 or resolved_h % unit_h or resolved_w % unit_w:
+                raise ValueError(
+                    f"height and width must be positive multiples of {unit_h}, got {resolved_w}x{resolved_h}"
+                )
+        else:
+            resolved_h, resolved_w = _resolve_canvas(short_edge, aspect_ratio)
+
+        if num_frames is not None:
+            if isinstance(num_frames, bool) or int(num_frames) <= 0:
+                raise ValueError(f"num_frames must be a positive integer, got {num_frames!r}")
+            frame_count = minimax_h3_align_frame_count(int(num_frames))
+            audio_t = minimax_h3_audio_latent_t(frame_count / self.DEFAULT_FPS)
+        else:
+            if not (MINIMAX_H3_MIN_DURATION_SECONDS <= duration_seconds <= MINIMAX_H3_MAX_DURATION_SECONDS):
+                raise ValueError(
+                    f"duration_seconds must be in [{MINIMAX_H3_MIN_DURATION_SECONDS}, "
+                    f"{MINIMAX_H3_MAX_DURATION_SECONDS}], got {duration_seconds}"
+                )
+            frame_count = minimax_h3_align_frame_count(round(duration_seconds * self.DEFAULT_FPS))
+            audio_t = minimax_h3_audio_latent_t(duration_seconds)
         latent_t = minimax_h3_video_latent_t(frame_count)
-        latent_h = height // _SPATIAL_COMPRESSION
-        latent_w = width // _SPATIAL_COMPRESSION
-        audio_t = minimax_h3_audio_latent_t(duration_seconds)
+        latent_h = resolved_h // _SPATIAL_COMPRESSION
+        latent_w = resolved_w // _SPATIAL_COMPRESSION
         return {
-            "height": height,
-            "width": width,
+            "height": resolved_h,
+            "width": resolved_w,
             "frame_count": frame_count,
             "latent_t": latent_t,
             "latent_h": latent_h,
@@ -463,6 +777,9 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         short_edge: int = DEFAULT_SHORT_EDGE,
         aspect_ratio: str = DEFAULT_ASPECT_RATIO,
         duration_seconds: float = DEFAULT_DURATION_SECONDS,
+        height: int | None = None,
+        width: int | None = None,
+        num_frames: int | None = None,
         num_inference_steps: int = DEFAULT_NUM_INFERENCE_STEPS,
         seed: int = 0,
         flow_shift: float | None = None,
@@ -471,7 +788,21 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         keyframe_cond_rows: torch.Tensor | None = None,
         ref_blocks: list[dict[str, Any]] | None = None,
         audio_ref_rows: torch.Tensor | None = None,
+        text_token_tags: torch.Tensor | None = None,
+        action_text_spans: Sequence[tuple[int, int]] | None = None,
+        negative_prompt_embeds: torch.Tensor | None = None,
+        negative_text_token_tags: torch.Tensor | None = None,
+        negative_action_text_spans: Sequence[tuple[int, int]] | None = None,
+        cfg_scale: float = 1.0,
+        branch_context: Callable[[MiniMaxH3DenoiseBranch], AbstractContextManager] | None = None,
+        sigma_knots: tuple[float, ...] | None = None,
+        renoise: bool = False,
+        shared_initial_noise: bool = False,
         return_latent_rows: bool = False,
+        step_cache: MiniMaxH3StepCacheConfig | Mapping[str, Any] | None = None,
+        cfg_parallel: MiniMaxH3CFGParallelConfig | bool | None = None,
+        context_parallel: MiniMaxH3ContextParallelConfig | Mapping[str, Any] | int | bool | None = None,
+        context_parallel_size: int | None = None,
     ) -> dict[str, Any]:
         """Run the coupled denoise loop and return decoded (or raw) modalities."""
 
@@ -486,39 +817,64 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
             short_edge=short_edge,
             aspect_ratio=aspect_ratio,
             duration_seconds=duration_seconds,
+            height=height,
+            width=width,
+            num_frames=num_frames,
         )
-        text_len = int(prompt_embeds.shape[0])
 
-        if task == "ref2va":
-            if ref_blocks is None:
-                raise ValueError("ref2va requires ref_blocks")
-            packed = minimax_h3_packed_sequence_ref2va_blocks(
-                text_len=text_len,
-                latent_t=plan["latent_t"],
-                latent_h=plan["latent_h"],
-                latent_w=plan["latent_w"],
-                audio_t=plan["audio_t"],
-                ref_blocks=ref_blocks,
-            )
-        else:
-            include_keyframe = task == "fl2va"
-            packed = minimax_h3_packed_sequence(
-                text_len=text_len,
-                latent_t=plan["latent_t"],
-                latent_h=plan["latent_h"],
-                latent_w=plan["latent_w"],
-                audio_t=plan["audio_t"],
-                include_keyframe_cond=include_keyframe,
-                keyframe_frame_indices=keyframe_frame_indices if include_keyframe else None,
-                frame_count=plan["frame_count"] if include_keyframe else None,
+        def _build_branch(
+            embeds: torch.Tensor,
+            tags_override: torch.Tensor | None,
+            spans: Sequence[tuple[int, int]] | None,
+        ) -> tuple[dict[str, Any], MiniMaxH3DenoiseBranch]:
+            branch_text_len = int(embeds.shape[0])
+            if task == "ref2va":
+                if ref_blocks is None:
+                    raise ValueError("ref2va requires ref_blocks")
+                packed_branch = minimax_h3_packed_sequence_ref2va_blocks(
+                    text_len=branch_text_len,
+                    latent_t=plan["latent_t"],
+                    latent_h=plan["latent_h"],
+                    latent_w=plan["latent_w"],
+                    audio_t=plan["audio_t"],
+                    ref_blocks=ref_blocks,
+                )
+            else:
+                include_keyframe = task == "fl2va"
+                packed_branch = minimax_h3_packed_sequence(
+                    text_len=branch_text_len,
+                    latent_t=plan["latent_t"],
+                    latent_h=plan["latent_h"],
+                    latent_w=plan["latent_w"],
+                    audio_t=plan["audio_t"],
+                    include_keyframe_cond=include_keyframe,
+                    keyframe_frame_indices=keyframe_frame_indices if include_keyframe else None,
+                    frame_count=plan["frame_count"] if include_keyframe else None,
+                    action_text_spans=spans,
+                )
+            branch_tags = packed_branch["token_tags"].clone()
+            if tags_override is not None:
+                supplied_tags = tags_override.reshape(-1).to(dtype=branch_tags.dtype, device=branch_tags.device)
+                if int(supplied_tags.numel()) != branch_text_len:
+                    raise ValueError(
+                        f"text_token_tags length {int(supplied_tags.numel())} != prompt length {branch_text_len}"
+                    )
+                branch_tags[:branch_text_len] = supplied_tags
+            return packed_branch, MiniMaxH3DenoiseBranch(
+                packed=packed_branch,
+                text_embeddings=embeds,
+                token_tags=branch_tags,
+                device=device,
             )
 
-        branch = MiniMaxH3DenoiseBranch(
-            packed=packed,
-            text_embeddings=prompt_embeds,
-            token_tags=packed["token_tags"],
-            device=device,
-        )
+        packed, branch = _build_branch(prompt_embeds, text_token_tags, action_text_spans)
+        negative_branch: MiniMaxH3DenoiseBranch | None = None
+        if negative_prompt_embeds is not None and float(cfg_scale) != 1.0:
+            _, negative_branch = _build_branch(
+                negative_prompt_embeds,
+                negative_text_token_tags,
+                negative_action_text_spans if negative_action_text_spans is not None else action_text_spans,
+            )
 
         generator = torch.Generator(device="cpu").manual_seed(int(seed))
         n_video_rows = int(packed["img_pos"].shape[0])
@@ -526,7 +882,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         # The released t2va recipe seeds the raw BCTHW latent before
         # patchification. Drawing directly in token-row order changes which
         # noise value lands at each channel/time/pixel for a given seed.
-        initial_video = minimax_h3_patchify_video_latent(
+        initial_video_target = minimax_h3_patchify_video_latent(
             torch.randn(
                 1,
                 _VIDEO_LATENT_CHANNELS,
@@ -538,35 +894,101 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
             ),
             patch_size=(1, _PATCH_H, _PATCH_W),
         )
+        if branch.video_target_start > 0:
+            initial_video = torch.cat(
+                [
+                    torch.zeros(
+                        branch.video_target_start,
+                        int(initial_video_target.shape[-1]),
+                        dtype=torch.float32,
+                    ),
+                    initial_video_target,
+                ],
+                dim=0,
+            )
+        else:
+            initial_video = initial_video_target
         assert initial_video.shape == (n_video_rows, 96)
-        # Audio uses an independently reseeded generator (same seed) — matches the
-        # reference, which draws audio noise from a fresh generator.
-        audio_generator = torch.Generator(device="cpu").manual_seed(int(seed))
-        initial_audio = torch.randn(
-            n_audio_rows, _AUDIO_LATENT_CHANNELS, generator=audio_generator, dtype=torch.float32
+        # The reference H3 recipe uses a fresh generator for audio. Distilled
+        # adapters can opt into one shared stream when their release specifies it.
+        audio_generator = generator if shared_initial_noise else torch.Generator(device="cpu").manual_seed(int(seed))
+        target_audio_rows = n_audio_rows - branch.audio_target_start
+        initial_audio_target = torch.randn(
+            target_audio_rows, _AUDIO_LATENT_CHANNELS, generator=audio_generator, dtype=torch.float32
         )
+        if branch.audio_target_start > 0:
+            initial_audio = torch.cat(
+                [
+                    torch.zeros(branch.audio_target_start, _AUDIO_LATENT_CHANNELS, dtype=torch.float32),
+                    initial_audio_target,
+                ],
+                dim=0,
+            )
+        else:
+            initial_audio = initial_audio_target
 
-        sigmas_video = minimax_h3_time_shift_sigmas(num_steps=num_inference_steps, shift_scale=flow_shift)
-        sigmas_audio = minimax_h3_time_shift_sigmas(num_steps=num_inference_steps, shift_scale=audio_flow_shift)
-        steps = min(len(sigmas_video), len(sigmas_audio))
-        sigmas_video, sigmas_audio = sigmas_video[:steps], sigmas_audio[:steps]
+        if sigma_knots is None:
+            sigmas_video = minimax_h3_time_shift_sigmas(num_steps=num_inference_steps, shift_scale=flow_shift)
+            sigmas_audio = minimax_h3_time_shift_sigmas(num_steps=num_inference_steps, shift_scale=audio_flow_shift)
+        else:
+            sigmas_video = minimax_h3_sigma_schedule(sigma_knots, shift_scale=flow_shift)
+            sigmas_audio = minimax_h3_sigma_schedule(sigma_knots, shift_scale=audio_flow_shift)
+        if len(sigmas_video) != len(sigmas_audio):
+            raise ValueError("video/audio sigma schedules must have equal lengths")
 
-        video_rows, audio_rows = minimax_h3_denoise_loop(
-            model=self.transformer,
-            positive=branch,
-            initial_video_rows=initial_video,
-            initial_audio_rows=initial_audio,
-            keyframe_cond_rows=keyframe_cond_rows,
-            audio_ref_rows=audio_ref_rows,
-            sigmas_video=sigmas_video,
-            sigmas_audio=sigmas_audio,
-            device=device,
-        )
+        loop_kwargs: dict[str, Any] = {
+            "model": self.transformer,
+            "positive": branch,
+            "initial_video_rows": initial_video,
+            "initial_audio_rows": initial_audio,
+            "keyframe_cond_rows": keyframe_cond_rows,
+            "audio_ref_rows": audio_ref_rows,
+            "sigmas_video": sigmas_video,
+            "sigmas_audio": sigmas_audio,
+            "device": device,
+            "renoise": renoise,
+            "noise_generator": torch.Generator(device=device).manual_seed(int(seed) + 1) if renoise else None,
+        }
+        if negative_branch is not None:
+            loop_kwargs["negative"] = negative_branch
+            loop_kwargs["cfg_scale"] = float(cfg_scale)
+        if branch_context is not None:
+            loop_kwargs["branch_context"] = branch_context
+        effective_step_cache = self._step_cache_config if step_cache is None else step_cache
+        cache_report: dict[str, Any] | None = None
+        if effective_step_cache is not None:
+            cache_report = {}
+            loop_kwargs["step_cache"] = effective_step_cache
+            loop_kwargs["step_cache_report"] = cache_report
+        effective_cfg_parallel = self._cfg_parallel_config if cfg_parallel is None else cfg_parallel
+        cfg_parallel_report: dict[str, Any] | None = None
+        if effective_cfg_parallel is not None:
+            cfg_parallel_report = {}
+            loop_kwargs["cfg_parallel"] = effective_cfg_parallel
+            loop_kwargs["cfg_parallel_report"] = cfg_parallel_report
+        cp_supplied, merged_cp = self._merge_context_parallel_args(context_parallel, context_parallel_size)
+        effective_cp = merged_cp if cp_supplied else self._context_parallel_config
+        cp_report: dict[str, Any] | None = None
+        if effective_cp is not None or getattr(self.transformer, "_context_parallel", None) is not None:
+            cp_report = {}
+            if effective_cp is not None:
+                loop_kwargs["context_parallel"] = effective_cp
+            loop_kwargs["context_parallel_report"] = cp_report
+        video_rows, audio_rows = minimax_h3_denoise_loop(**loop_kwargs)
+        self._last_step_cache_report = cache_report
+        self._last_cfg_parallel_report = cfg_parallel_report
+        self._last_context_parallel_report = cp_report
 
         # Target rows are the suffix after any condition/reference rows.
         video_target = video_rows[branch.video_target_slice]
         audio_target = audio_rows[branch.audio_target_slice]
         result: dict[str, Any] = {"plan": plan, "task": task}
+        if cache_report is not None and cache_report.get("enabled"):
+            result["step_cache"] = cache_report
+        if cfg_parallel_report is not None and cfg_parallel_report.get("active"):
+            result["cfg_parallel"] = cfg_parallel_report
+        if cp_report is not None and cp_report.get("active"):
+            result["context_parallel"] = cp_report
         if return_latent_rows:
             result["video_rows"] = video_target
             result["audio_rows"] = audio_target
@@ -589,9 +1011,9 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         )
         result["video_latent"] = video_latent
         result["audio_latent"] = audio_latent
-        if _is_module(self.video_vae):
+        if isinstance(self.video_vae, torch.nn.Module):
             result["video"] = self._decode_video(video_latent.to(self.component_devices["video_vae"]))
-        if _is_module(self.audio_vae):
+        if isinstance(self.audio_vae, torch.nn.Module):
             result["audio"] = self._decode_audio(audio_latent.to(self.component_devices["audio_vae"]))
         return result
 
@@ -601,10 +1023,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         arch = self.video_vae.sglang_config.arch_config
         latent = _reverse_normalize_latents(latent, mean_values=arch.latents_mean, std_values=arch.latents_std)
         decode_base = getattr(self.video_vae, "decode_base", None)
-        if callable(decode_base):
-            decoded = decode_base(latent)
-        else:
-            decoded = self.video_vae.decode(latent)
+        decoded = decode_base(latent) if callable(decode_base) else self.video_vae.decode(latent)
         # The released VAE decodes into ImageNet-normalized pixel space. The
         # official processor reverses that normalization before video export.
         return self.video_vae.processor.revert_tensor(decoded)
@@ -624,6 +1043,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         self,
         prompt: str,
         *,
+        negative_prompt: str | None = None,
         task: str = "t2va",
         short_edge: int = DEFAULT_SHORT_EDGE,
         aspect_ratio: str = DEFAULT_ASPECT_RATIO,
@@ -638,6 +1058,8 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         if self.text_encoder is None or self.tokenizer is None:
             raise RuntimeError("text_encoder/tokenizer are not initialized; call from_pretrained with a checkpoint")
         prompt_embeds = self._encode_prompt(prompt)
+        if negative_prompt is not None and "negative_prompt_embeds" not in kwargs:
+            kwargs["negative_prompt_embeds"] = self._encode_prompt(negative_prompt)
         result = self.generate(
             prompt_embeds=prompt_embeds,
             task=task,

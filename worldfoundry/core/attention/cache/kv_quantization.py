@@ -19,7 +19,7 @@ values in a full-width tensor.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
@@ -187,7 +187,9 @@ def quantize_kv(tensor: Tensor, config: KVQuantConfig) -> QuantizedTensor:
 
     if config.dtype == "fp8":
         # fp8 keeps its own exponent, so one absmax scale per group is enough.
-        scale = grouped.abs().amax(dim=-1, keepdim=True).clamp_min(1e-12) / torch.finfo(_FP8_DTYPE).max
+        scale = (
+            grouped.abs().amax(dim=-1, keepdim=True).clamp_min(1e-12) / torch.finfo(cast(torch.dtype, _FP8_DTYPE)).max
+        )
         codes = (grouped / scale).to(_FP8_DTYPE)
         return QuantizedTensor(
             codes=codes.reshape(tensor.shape),
@@ -264,7 +266,9 @@ class QuantizedKVStore:
     coarser settings.
     """
 
-    def __init__(self, key_config: KVQuantConfig, value_config: KVQuantConfig | None = None, *, seq_dim: int = 1) -> None:
+    def __init__(
+        self, key_config: KVQuantConfig, value_config: KVQuantConfig | None = None, *, seq_dim: int = 1
+    ) -> None:
         """Configure per-tensor quantization and the sequence dimension.
 
         Args:
@@ -281,10 +285,7 @@ class QuantizedKVStore:
     @property
     def length(self) -> int:
         """Cached tokens along the sequence dimension."""
-        return sum(
-            (item.shape[self.seq_dim] if isinstance(item, QuantizedTensor) else item.shape[self.seq_dim])
-            for item in self._keys
-        )
+        return sum(item.shape[self.seq_dim] for item in self._keys)
 
     def nbytes(self) -> int:
         """Bytes held across keys and values."""

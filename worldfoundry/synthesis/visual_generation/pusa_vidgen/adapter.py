@@ -12,9 +12,6 @@ from typing import Any
 from worldfoundry.core import as_list, cuda_visible_devices_from_device, jsonable, resolve_hf_snapshot_path
 
 
-_REPO_SRC = Path(__file__).resolve().parents[4]
-
-
 @dataclass(frozen=True)
 class PusaVidGenRuntimePlan:
     """Executable Pusa VidGen command and artifact paths."""
@@ -54,7 +51,7 @@ class PusaVidGenRuntime:
         runner_version: str | None = None,
     ) -> None:
         """
-        Store Pusa runtime paths without importing official repository code.
+        Store Pusa V1 asset paths without importing model components.
 
         Args:
             model_id: WorldFoundry model identifier.
@@ -64,7 +61,7 @@ class PusaVidGenRuntime:
             low_lora_path: Optional low-noise LoRA checkpoint.
             lightx2v_root: Optional LightX2V checkpoint directory.
             device: Runtime device label.
-            python_executable: Optional Python executable with the Genmo/Mochi dependencies.
+            python_executable: Optional Python executable with the Pusa V1 dependencies.
         """
         self.model_id = model_id
         self.checkpoint_root = resolve_hf_snapshot_path(
@@ -75,21 +72,20 @@ class PusaVidGenRuntime:
             base_model_root,
             required_files=("models_t5_umt5-xxl-enc-bf16.pth", "Wan2.1_VAE.pth"),
         )
-        self.high_lora_path = Path(high_lora_path).expanduser() if high_lora_path else self.checkpoint_root / "high_noise_pusa.safetensors"
-        self.low_lora_path = Path(low_lora_path).expanduser() if low_lora_path else self.checkpoint_root / "low_noise_pusa.safetensors"
+        self.high_lora_path = (
+            Path(high_lora_path).expanduser()
+            if high_lora_path
+            else self.checkpoint_root / "high_noise_pusa.safetensors"
+        )
+        self.low_lora_path = (
+            Path(low_lora_path).expanduser() if low_lora_path else self.checkpoint_root / "low_noise_pusa.safetensors"
+        )
         self.lightx2v_root = resolve_hf_snapshot_path(lightx2v_root) if lightx2v_root else None
         self.device = device
         self.python_executable = Path(python_executable).expanduser() if python_executable else Path(sys.executable)
-        self.runner_version = (runner_version or "").strip().lower()
-
-    def _runner_version(self) -> str:
-        if self.runner_version:
-            return self.runner_version
-        if (self.checkpoint_root / "high_noise_pusa.safetensors").is_file() and (
-            self.checkpoint_root / "low_noise_pusa.safetensors"
-        ).is_file():
-            return "v1"
-        return "v0"
+        self.runner_version = (runner_version or "v1").strip().lower() or "v1"
+        if self.runner_version != "v1":
+            raise ValueError("Pusa v0 / Mochi route is not available in this in-tree build; use v1")
 
     def prepare(
         self,
@@ -134,7 +130,9 @@ class PusaVidGenRuntime:
             "sampling": {
                 "num_inference_steps": int(kwargs.pop("num_inference_steps", kwargs.pop("num_steps", 30))),
                 "cfg_scale": cfg_scale,
-                "switch_dit_boundary": float(kwargs.pop("switch_dit_boundary", kwargs.pop("switch_DiT_boundary", 0.875))),
+                "switch_dit_boundary": float(
+                    kwargs.pop("switch_dit_boundary", kwargs.pop("switch_DiT_boundary", 0.875))
+                ),
                 "num_frames": int(kwargs.pop("num_frames", 81)),
                 "height": int(kwargs.pop("height", 720)),
                 "width": int(kwargs.pop("width", 1280)),
@@ -152,7 +150,7 @@ class PusaVidGenRuntime:
                 "high_lora_path": str(self.high_lora_path),
                 "low_lora_path": str(self.low_lora_path),
                 "lightx2v_root": str(self.lightx2v_root) if self.lightx2v_root else "",
-                "runner_version": self._runner_version(),
+                "runner_version": self.runner_version,
                 "device": self.device,
             },
             "extra_inputs": dict(kwargs),
@@ -166,7 +164,7 @@ class PusaVidGenRuntime:
         output_dir: str | Path,
         output_path: str | Path | None = None,
     ) -> PusaVidGenRuntimePlan:
-        """Build the bounded official Genmo/Mochi runner command for Pusa.
+        """Build the in-tree Pusa V1 runner command.
 
         Args:
             request: Request payload returned by :meth:`prepare`.
@@ -183,102 +181,75 @@ class PusaVidGenRuntime:
             else target_dir / "pusa_vidgen_public_runner.mp4"
         )
         target_output_path.parent.mkdir(parents=True, exist_ok=True)
-        runner_version = str((request.get("runtime") or {}).get("runner_version") or self._runner_version()).lower()
-        if runner_version == "v1":
-            mode = str(request.get("mode") or "t2v")
-            conditioning = dict(request.get("conditioning") or {})
-            images = [str(item) for item in conditioning.get("images") or [] if str(item)]
-            command_list = [
-                str(self.python_executable),
-                "-m",
-                "worldfoundry.synthesis.visual_generation.pusa_vidgen.pusa_v1_runner",
-                "--mode",
-                "multi" if images else mode,
-                "--checkpoint-root",
-                str(self.checkpoint_root),
-                "--base-model-root",
-                str(self.base_model_root),
-                "--high-lora-path",
-                str(self.high_lora_path),
-                "--low-lora-path",
-                str(self.low_lora_path),
-                "--output-path",
-                str(target_output_path),
-                "--prompt",
-                str(request.get("prompt") or ""),
-                "--negative-prompt",
-                str(request.get("negative_prompt") or ""),
-                "--width",
-                str(int(sampling.get("width", 1280))),
-                "--height",
-                str(int(sampling.get("height", 720))),
-                "--num-frames",
-                str(int(sampling.get("num_frames", 81))),
-                "--num-inference-steps",
-                str(int(sampling.get("num_inference_steps", 4))),
-                "--cfg-scale",
-                str(float(sampling.get("cfg_scale", 1.0 if bool(sampling.get("lightx2v", False)) else 3.0))),
-                "--seed",
-                str(int(sampling.get("seed", 0))),
-                "--fps",
-                str(int(sampling.get("fps", 24))),
-                "--quality",
-                str(int(sampling.get("quality", 5))),
-                "--high-lora-alpha",
-                str(float(sampling.get("high_lora_alpha", 1.5))),
-                "--low-lora-alpha",
-                str(float(sampling.get("low_lora_alpha", 1.4))),
-                "--switch-dit-boundary",
-                str(float(sampling.get("switch_dit_boundary", 0.875))),
-            ]
-            if self.lightx2v_root:
-                command_list.extend(["--lightx2v-root", str(self.lightx2v_root)])
-            if bool(sampling.get("lightx2v", False)):
-                command_list.append("--lightx2v")
-            for image in images:
-                command_list.extend(["--image-path", image])
-            cond_position = ",".join(str(item) for item in conditioning.get("cond_position") or [])
-            noise_multipliers = ",".join(str(item) for item in conditioning.get("noise_multipliers") or [])
-            if cond_position:
-                command_list.extend(["--cond-position", cond_position])
-            if noise_multipliers:
-                command_list.extend(["--noise-multipliers", noise_multipliers])
-            command = tuple(command_list)
-            checkpoint_src = None
-        else:
-            checkpoint_src = self.checkpoint_root / "src"
-            command = (
-                str(self.python_executable),
-                "-m",
-                "worldfoundry.synthesis.visual_generation.pusa_vidgen.official_runner",
-                "--checkpoint-root",
-                str(self.checkpoint_root),
-                "--output-path",
-                str(target_output_path),
-                "--prompt",
-                str(request.get("prompt") or ""),
-                "--negative-prompt",
-                str(request.get("negative_prompt") or ""),
-                "--width",
-                str(int(sampling.get("width", 64))),
-                "--height",
-                str(int(sampling.get("height", 64))),
-                "--num-frames",
-                str(int(sampling.get("num_frames", 1))),
-                "--num-inference-steps",
-                str(int(sampling.get("num_inference_steps", 1))),
-                "--cfg-scale",
-                str(float(sampling.get("cfg_scale", 1.0))),
-                "--seed",
-                str(int(sampling.get("seed", 0))),
+        runner_version = str((request.get("runtime") or {}).get("runner_version") or self.runner_version).lower()
+        if runner_version != "v1":
+            raise ValueError("Pusa v0 / Mochi route is not available in this in-tree build; use v1")
+        missing_loras = [path for path in (self.high_lora_path, self.low_lora_path) if not path.is_file()]
+        if missing_loras:
+            raise FileNotFoundError(
+                "Pusa v1 requires high- and low-noise LoRA checkpoints: "
+                + ", ".join(str(path) for path in missing_loras)
             )
-        pythonpath_parts = [
-            str(_REPO_SRC),
-            str(checkpoint_src) if checkpoint_src is not None else "",
-            os.environ.get("PYTHONPATH", ""),
+        mode = str(request.get("mode") or "t2v")
+        conditioning = dict(request.get("conditioning") or {})
+        images = [str(item) for item in conditioning.get("images") or [] if str(item)]
+        command_list = [
+            str(self.python_executable),
+            "-m",
+            "worldfoundry.synthesis.visual_generation.pusa_vidgen.pusa_v1_runner",
+            "--mode",
+            "multi" if images else mode,
+            "--checkpoint-root",
+            str(self.checkpoint_root),
+            "--base-model-root",
+            str(self.base_model_root),
+            "--high-lora-path",
+            str(self.high_lora_path),
+            "--low-lora-path",
+            str(self.low_lora_path),
+            "--output-path",
+            str(target_output_path),
+            "--prompt",
+            str(request.get("prompt") or ""),
+            "--negative-prompt",
+            str(request.get("negative_prompt") or ""),
+            "--width",
+            str(int(sampling.get("width", 1280))),
+            "--height",
+            str(int(sampling.get("height", 720))),
+            "--num-frames",
+            str(int(sampling.get("num_frames", 81))),
+            "--num-inference-steps",
+            str(int(sampling.get("num_inference_steps", 4))),
+            "--cfg-scale",
+            str(float(sampling.get("cfg_scale", 1.0 if bool(sampling.get("lightx2v", False)) else 3.0))),
+            "--seed",
+            str(int(sampling.get("seed", 0))),
+            "--fps",
+            str(int(sampling.get("fps", 24))),
+            "--quality",
+            str(int(sampling.get("quality", 5))),
+            "--high-lora-alpha",
+            str(float(sampling.get("high_lora_alpha", 1.5))),
+            "--low-lora-alpha",
+            str(float(sampling.get("low_lora_alpha", 1.4))),
+            "--switch-dit-boundary",
+            str(float(sampling.get("switch_dit_boundary", 0.875))),
         ]
+        if self.lightx2v_root:
+            command_list.extend(["--lightx2v-root", str(self.lightx2v_root)])
+        if bool(sampling.get("lightx2v", False)):
+            command_list.append("--lightx2v")
+        for image in images:
+            command_list.extend(["--image-path", image])
+        cond_position = ",".join(str(item) for item in conditioning.get("cond_position") or [])
+        noise_multipliers = ",".join(str(item) for item in conditioning.get("noise_multipliers") or [])
+        if cond_position:
+            command_list.extend(["--cond-position", cond_position])
+        if noise_multipliers:
+            command_list.extend(["--noise-multipliers", noise_multipliers])
+        command = tuple(command_list)
         env = {
-            "PYTHONPATH": os.pathsep.join(part for part in pythonpath_parts if part),
             "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
         }
         visible_devices = cuda_visible_devices_from_device(self.device)

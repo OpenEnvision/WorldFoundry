@@ -18,10 +18,14 @@ import torch
 from worldfoundry.base_models.diffusion_model.models.networks.wan.vace_core import (
     build_vace_wan_classes,
 )
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.networks.wan.model import (
     DiTBlock,
     WanModel,
 )
+
+# isort: split
 from worldfoundry.core.model_loading import hash_state_dict_keys
 
 VaceWanAttentionBlock, VaceWanModel, VaceWanModelDictConverter = build_vace_wan_classes(
@@ -61,20 +65,18 @@ class SpatiaWanModel(WanModel):
         reference_tokens = num_ref_frames * h * w
         if num_ref_frames:
             target_f = f_all - num_ref_frames
-            reference_freqs = torch.cat(
-                [
-                    self.freqs[0][-num_ref_frames:]
-                    .view(num_ref_frames, 1, 1, -1)
-                    .expand(num_ref_frames, h, w, -1),
-                    self.freqs[1][h : 2 * h]
-                    .view(1, h, 1, -1)
-                    .expand(num_ref_frames, h, w, -1),
-                    self.freqs[2][:w]
-                    .view(1, 1, w, -1)
-                    .expand(num_ref_frames, h, w, -1),
-                ],
-                dim=-1,
-            ).reshape(reference_tokens, 1, -1).to(x.device)
+            reference_freqs = (
+                torch.cat(
+                    [
+                        self.freqs[0][-num_ref_frames:].view(num_ref_frames, 1, 1, -1).expand(num_ref_frames, h, w, -1),
+                        self.freqs[1][h : 2 * h].view(1, h, 1, -1).expand(num_ref_frames, h, w, -1),
+                        self.freqs[2][:w].view(1, 1, w, -1).expand(num_ref_frames, h, w, -1),
+                    ],
+                    dim=-1,
+                )
+                .reshape(reference_tokens, 1, -1)
+                .to(x.device)
+            )
             freqs = torch.cat(
                 [reference_freqs, self.rotary_frequencies((target_f, h, w), device=x.device)],
                 dim=0,
@@ -118,6 +120,7 @@ class SpatiaWanModel(WanModel):
         start = token_state.reference_tokens
         target = x[:, start:] + token_state.vace_hints[mapping[block_id]] * token_state.vace_scale
         return torch.cat([x[:, :start], target], dim=1) if start else target
+
 
 __all__ = [
     "SpatiaWanModel",

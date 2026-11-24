@@ -25,4 +25,4 @@ def effective_refiner_model_dir(args: Any) -> Path | None:
     requested = bool(getattr(args, "run_refiner", False) or refiner_model_dir)
     if not requested:
         return None
-    return Path(refiner_model_dir or getattr(args, "model_dir"))
+    return Path(refiner_model_dir or args.model_dir)

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -80,7 +81,7 @@ def checkpoint_shapes(root: str | Path) -> dict[str, tuple[int, ...]]:
         shapes: dict[str, tuple[int, ...]] = {}
         for path in safe_files:
             with safe_open(path, framework="pt", device="cpu") as handle:
-                shapes.update({key: tuple(handle.get_slice(key).get_shape()) for key in handle.keys()})
+                shapes.update({key: tuple(handle.get_slice(key).get_shape()) for key in handle.keys()})  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
         normalized = _strip_uniform_prefix(shapes)
         return {key: tuple(value) for key, value in normalized.items()}
 
@@ -90,9 +91,7 @@ def checkpoint_shapes(root: str | Path) -> dict[str, tuple[int, ...]]:
         if len(candidates) == 1:
             model_file = candidates[0]
         else:
-            raise FileNotFoundError(
-                f"A1 checkpoint requires model.pt or model.safetensors under {directory}"
-            )
+            raise FileNotFoundError(f"A1 checkpoint requires model.pt or model.safetensors under {directory}")
     from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
 
     try:
@@ -129,9 +128,7 @@ def _load_checkpoint(model: torch.nn.Module, root: Path, *, strict: bool) -> Non
         from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
 
         try:
-            payload = load_torch_checkpoint(
-                model_file, map_location="cpu", weights_only=True, mmap=True
-            )
+            payload = load_torch_checkpoint(model_file, map_location="cpu", weights_only=True, mmap=True)
         except (TypeError, RuntimeError):
             payload = load_torch_checkpoint(model_file, map_location="cpu", weights_only=True)
         state = _unwrap_state(payload)
@@ -234,13 +231,20 @@ def _unnormalize(values: np.ndarray, stats: Mapping[str, Any] | None, mode: str)
     source = values.astype(np.float32, copy=False)
     if mode in {"bounds_q99", "q99"}:
         low, high = np.asarray(stats["q01"], np.float32), np.asarray(stats["q99"], np.float32)
-        transform = lambda item, index: (item + 1.0) * 0.5 * (high[index] - low[index]) + low[index]
+
+        def transform(item, index):
+            return (item + 1.0) * 0.5 * (high[index] - low[index]) + low[index]
     elif mode in {"bounds", "minmax"}:
         low, high = np.asarray(stats["min"], np.float32), np.asarray(stats["max"], np.float32)
-        transform = lambda item, index: (item + 1.0) * 0.5 * (high[index] - low[index]) + low[index]
+
+        def transform(item, index):
+            return (item + 1.0) * 0.5 * (high[index] - low[index]) + low[index]
     elif mode in {"normal", "mean_std"}:
         mean, std = np.asarray(stats["mean"], np.float32), np.asarray(stats["std"], np.float32)
-        transform = lambda item, index: item * std[index] + mean[index]
+
+        def transform(item, index):
+            return item * std[index] + mean[index]
+
         low = high = mean
     else:
         raise ValueError(f"Unsupported A1 normalization mode: {mode!r}")
@@ -286,11 +290,8 @@ class A1Runtime:
         self.runtime_config = config
         self.checkpoint_root = Path(config.checkpoint_location).expanduser().resolve()
         if not self.checkpoint_root.is_dir():
-            raise FileNotFoundError(
-                "A1 requires an hfd-staged local checkpoint directory: "
-                f"{self.checkpoint_root}"
-            )
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+            raise FileNotFoundError(f"A1 requires an hfd-staged local checkpoint directory: {self.checkpoint_root}")
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         self.device = torch.device(resolve_inference_device(config.device))
         self.dtype = resolve_inference_dtype(self.device, config.torch_dtype)
@@ -344,8 +345,7 @@ class A1Runtime:
         ):
             return self.checkpoint_root
         raise FileNotFoundError(
-            "A1 checkpoint does not bundle tokenizer assets; stage Qwen/Qwen2-7B with hfd "
-            "and set tokenizer_path"
+            "A1 checkpoint does not bundle tokenizer assets; stage Qwen/Qwen2-7B with hfd and set tokenizer_path"
         )
 
     def _load_statistics(self) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
@@ -376,15 +376,11 @@ class A1Runtime:
                 "A1 normalization statistics were not found in the local checkpoint; "
                 "provide statistics_file or explicitly set normalization=none"
             )
-        selected = _nested_stats(
-            _load_data_file(path), self.runtime_config.statistics_key
-        )
+        selected = _nested_stats(_load_data_file(path), self.runtime_config.statistics_key)
         state_stats = _feature_stats(selected, ("state", "proprio", "robot_state"))
         action_stats = _feature_stats(selected, ("actions", "action"))
         if state_stats is None or action_stats is None:
-            raise KeyError(
-                f"A1 statistics {path} must contain state/proprio and action/actions entries"
-            )
+            raise KeyError(f"A1 statistics {path} must contain state/proprio and action/actions entries")
         return selected, state_stats, action_stats
 
     @torch.inference_mode()
@@ -396,9 +392,7 @@ class A1Runtime:
         state: Any,
     ) -> dict[str, Any]:
         raw_state = np.asarray(state, dtype=np.float32).reshape(-1)
-        normalized_state = _normalize(
-            raw_state, self.state_stats, self.runtime_config.normalization
-        )
+        normalized_state = _normalize(raw_state, self.state_stats, self.runtime_config.normalization)
         prepared = self.processor.prepare(instruction, images, normalized_state)
         batch = {
             key: value.to(
@@ -408,26 +402,27 @@ class A1Runtime:
             for key, value in prepared.tensors.items()
         }
         generator = torch.Generator(device=self.device).manual_seed(self.runtime_config.seed)
-        actions = self.model.predict_actions(
-            batch,
-            action_start_token_id=self.special_ids[ACTION_START_TOKEN],
-            action_end_token_id=self.special_ids[ACTION_END_TOKEN],
-            generator=generator,
-        ).float().cpu().numpy()[0]
+        actions = (
+            self.model.predict_actions(
+                batch,
+                action_start_token_id=self.special_ids[ACTION_START_TOKEN],
+                action_end_token_id=self.special_ids[ACTION_END_TOKEN],
+                generator=generator,
+            )
+            .float()
+            .cpu()
+            .numpy()[0]
+        )
         output_dim = self.runtime_config.output_action_dim or self.model_config.action_dim
         output_dim = min(int(output_dim), actions.shape[-1])
         actions = actions[..., :output_dim]
-        actions = _unnormalize(
-            actions, self.action_stats, self.runtime_config.normalization
-        )
+        actions = _unnormalize(actions, self.action_stats, self.runtime_config.normalization)
         if self.runtime_config.action_mode == "delta":
             width = min(actions.shape[-1], raw_state.shape[-1])
             mask = _signed_mask(self.runtime_config.delta_mask, width)
             actions[..., :width] += np.where(mask, raw_state[:width], 0.0)
         elif self.runtime_config.action_mode != "absolute":
-            raise ValueError(
-                f"Unsupported A1 action_mode: {self.runtime_config.action_mode!r}"
-            )
+            raise ValueError(f"Unsupported A1 action_mode: {self.runtime_config.action_mode!r}")
         return completed_action_result(
             model_id="a1",
             instruction=instruction,
@@ -472,9 +467,7 @@ def predict_action(
     if not checkpoint:
         raise ValueError("A1 requires a local checkpoint_path")
     camera_keys = tuple(
-        str(item)
-        for item in options.get("camera_keys")
-        or ("front_camera", "wrist_camera", "side_camera")
+        str(item) for item in options.get("camera_keys") or ("front_camera", "wrist_camera", "side_camera")
     )
     images = collect_images(observation, image, camera_keys)
     if not images:
@@ -496,9 +489,7 @@ def predict_action(
         statistics_file=str(options.get("statistics_file") or "") or None,
         statistics_key=str(options.get("statistics_key") or "") or None,
         normalization=str(options.get("normalization") or "bounds_q99").lower(),
-        allow_missing_statistics=option_bool(
-            options.get("allow_missing_statistics"), False
-        ),
+        allow_missing_statistics=option_bool(options.get("allow_missing_statistics"), False),
         output_action_dim=(
             option_int(options.get("output_action_dim"), 0)
             if options.get("output_action_dim") not in (None, "")

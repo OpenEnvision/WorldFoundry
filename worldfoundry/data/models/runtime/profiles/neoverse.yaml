@@ -8,6 +8,7 @@ groups:
 - camera_control
 source_repos:
 - url: https://github.com/IamCreateAI/NeoVerse
+  revision: bb97880d3f6d5cb06b2fcccc8ca889e0988daa4d
 checkpoints:
 - repo_id: Yuppie1204/NeoVerse
   role: neoverse_checkpoint_bundle

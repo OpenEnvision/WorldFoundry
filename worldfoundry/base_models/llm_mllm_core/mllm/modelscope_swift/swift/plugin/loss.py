@@ -1,7 +1,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import os
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable, Optional
 
 import numpy as np
 import torch
@@ -16,27 +16,27 @@ from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.plugin i
 
 
 class LossType:
-    loss_scale = 'loss_scale'
-    cosine_similarity = 'cosine_similarity'
-    contrastive = 'contrastive'
-    online_contrastive = 'online_contrastive'
-    infonce = 'infonce'
-    channel_loss = 'channel_loss'
+    loss_scale = "loss_scale"
+    cosine_similarity = "cosine_similarity"
+    contrastive = "contrastive"
+    online_contrastive = "online_contrastive"
+    infonce = "infonce"
+    channel_loss = "channel_loss"
 
 
 LOSS_MAPPING = {}
 
 
-def register_loss_func(loss_type: str, loss_func: Optional[Callable] = None):
+def register_loss_func(loss_type: str, loss_func: Callable | None = None):
     loss_info = {}
 
     if loss_func is not None:
-        loss_info['loss_func'] = loss_func
+        loss_info["loss_func"] = loss_func
         LOSS_MAPPING[loss_type] = loss_info
         return
 
     def _register_loss_func(loss_func: Callable) -> Callable:
-        loss_info['loss_func'] = loss_func
+        loss_info["loss_func"] = loss_func
         LOSS_MAPPING[loss_type] = loss_info
         return loss_func
 
@@ -54,7 +54,7 @@ def ce_loss_func(outputs, labels):
     shift_logits = shift_logits[masks]
     shift_labels = shift_labels[masks]
     # Flatten the tokens
-    loss_fct = CrossEntropyLoss(reduction='none')
+    loss_fct = CrossEntropyLoss(reduction="none")
     loss = loss_fct(shift_logits, shift_labels)
     return loss, masks
 
@@ -66,19 +66,16 @@ def loss_scale_func(outputs, labels, loss_scale=None, num_items_in_batch=None) -
 
     Args:
         outputs: The model outputs
-        labels: The labels
-        loss_scale: The loss scale
         num_items_in_batch: Number of tokens in the labels of gradient accumulation round that are not -100.
 
     Returns:
-
     """
     loss, masks = ce_loss_func(outputs, labels)
     if loss_scale is not None:
         shift_scale = loss_scale[..., 1:].to(masks.device)
         shift_scale = shift_scale[masks]
-        loss = (shift_scale * loss)
-    if num_items_in_batch is None:
+        loss = shift_scale * loss
+    if num_items_in_batch is None:  # noqa: SIM108 - Branches carry per-case comments.
         loss = loss.mean()
     else:
         # compat transformers>=4.46
@@ -87,10 +84,7 @@ def loss_scale_func(outputs, labels, loss_scale=None, num_items_in_batch=None) -
 
 
 def _parse_pair_sentence(outputs):
-    if isinstance(outputs, dict):
-        last_hidden_state = outputs['last_hidden_state']
-    else:
-        last_hidden_state = outputs
+    last_hidden_state = outputs["last_hidden_state"] if isinstance(outputs, dict) else outputs
     batch_size = last_hidden_state.shape[0]
     shape_len = len(last_hidden_state.shape)
     first_sentence = list(range(0, batch_size, 2))
@@ -108,9 +102,9 @@ def _parse_pair_sentence(outputs):
 class SiameseDistanceMetric(Enum):
     """The metric for the contrastive loss"""
 
-    EUCLIDEAN = lambda x, y: F.pairwise_distance(x, y, p=2)  # noqa
-    MANHATTAN = lambda x, y: F.pairwise_distance(x, y, p=1)  # noqa
-    COSINE_DISTANCE = lambda x, y: 1 - F.cosine_similarity(x, y)  # noqa
+    EUCLIDEAN = lambda x, y: F.pairwise_distance(x, y, p=2)  # noqa: E731 - Upstream distance functions kept as lambdas.
+    MANHATTAN = lambda x, y: F.pairwise_distance(x, y, p=1)  # noqa: E731 - Upstream distance functions kept as lambdas.
+    COSINE_DISTANCE = lambda x, y: 1 - F.cosine_similarity(x, y)  # noqa: E731 - Upstream distance functions kept as lambdas.
 
 
 @register_loss_func(LossType.cosine_similarity)
@@ -134,15 +128,14 @@ def contrastive_loss(outputs, labels, loss_scale=None, num_items_in_batch=None) 
 
 
 def calculate_paired_metrics(embeddings, labels):
-    from sklearn.metrics.pairwise import paired_cosine_distances, paired_euclidean_distances, \
-        paired_manhattan_distances
     from scipy.stats import pearsonr, spearmanr
+    from sklearn.metrics.pairwise import paired_cosine_distances, paired_euclidean_distances, paired_manhattan_distances
 
     embeddings1, embeddings2 = _parse_pair_sentence(embeddings)
     cosine_scores = 1 - (paired_cosine_distances(embeddings1, embeddings2))
     manhattan_distances = -paired_manhattan_distances(embeddings1, embeddings2)
     euclidean_distances = -paired_euclidean_distances(embeddings1, embeddings2)
-    dot_products = [np.dot(emb1, emb2) for emb1, emb2 in zip(embeddings1, embeddings2)]
+    dot_products = [np.dot(emb1, emb2) for emb1, emb2 in zip(embeddings1, embeddings2, strict=False)]
 
     eval_pearson_cosine, _ = pearsonr(labels, cosine_scores)
     eval_spearman_cosine, _ = spearmanr(labels, cosine_scores)
@@ -157,27 +150,24 @@ def calculate_paired_metrics(embeddings, labels):
     eval_spearman_dot, _ = spearmanr(labels, dot_products)
 
     return {
-        'pearson_cosine': eval_pearson_cosine,
-        'pearson_euclidean': eval_pearson_manhattan,
-        'pearson_manhattan': eval_pearson_euclidean,
-        'pearson_dot_product': eval_pearson_dot,
-        'spearman_cosine': eval_spearman_cosine,
-        'spearman_euclidean': eval_spearman_manhattan,
-        'spearman_manhattan': eval_spearman_euclidean,
-        'spearman_dot_product': eval_spearman_dot,
+        "pearson_cosine": eval_pearson_cosine,
+        "pearson_euclidean": eval_pearson_manhattan,
+        "pearson_manhattan": eval_pearson_euclidean,
+        "pearson_dot_product": eval_pearson_dot,
+        "spearman_cosine": eval_spearman_cosine,
+        "spearman_euclidean": eval_spearman_manhattan,
+        "spearman_manhattan": eval_spearman_euclidean,
+        "spearman_dot_product": eval_spearman_dot,
     }
 
 
 def calculate_infonce_metrics(embeddings, labels):
-    from sklearn.metrics.pairwise import paired_cosine_distances, paired_euclidean_distances, \
-        paired_manhattan_distances
-    from scipy.stats import pearsonr, spearmanr
-    hard_negatives = os.environ.get('INFONCE_HARD_NEGATIVES', None)
-    use_batch = strtobool(os.environ.get('INFONCE_USE_BATCH', 'True'))
+    hard_negatives = os.environ.get("INFONCE_HARD_NEGATIVES", None)
+    use_batch = strtobool(os.environ.get("INFONCE_USE_BATCH", "True"))
     split_tensors = _parse_multi_negative_sentences(torch.tensor(embeddings), torch.tensor(labels), hard_negatives)
     split_tensors = [t.numpy() for t in split_tensors]
     can_batched = hard_negatives is not None
-    if hard_negatives is None and len(set([s.shape[0] for s in split_tensors])) == 1:
+    if hard_negatives is None and len({s.shape[0] for s in split_tensors}) == 1:
         can_batched = True
     all_similarity_matrix = []
     all_labels = []
@@ -214,7 +204,7 @@ def calculate_infonce_metrics(embeddings, labels):
                 all_tensors.append(tensor[1:])
             sentences = np.concatenate(all_tensors, axis=0)
             length = 0
-            for idx, tensor in enumerate(split_tensors):
+            for _idx, tensor in enumerate(split_tensors):
                 similarity_matrix = np.matmul(tensor[0], sentences.T)
                 all_similarity_matrix.append(similarity_matrix)
                 labels = np.zeros_like(similarity_matrix)
@@ -238,7 +228,7 @@ def calculate_infonce_metrics(embeddings, labels):
 
     mean_neg = np.mean(neg_scores)
     mean_pos = np.mean(pos_scores)
-    return {'margin': pos_neg_margin, 'mean_neg': mean_neg, 'mean_pos': mean_pos}
+    return {"margin": pos_neg_margin, "mean_neg": mean_neg, "mean_pos": mean_pos}
 
 
 def _parse_multi_negative_sentences(sentences, labels, hard_negatives=None):
@@ -257,7 +247,7 @@ def _parse_multi_negative_sentences(sentences, labels, hard_negatives=None):
             negatives = len(split_part) - 2
             assert negatives > 0
             if negatives > hard_negatives:
-                split_part = split_part[:hard_negatives + 2]
+                split_part = split_part[: hard_negatives + 2]
             elif negatives < hard_negatives:
                 selected = np.random.choice(list(range(negatives)), size=hard_negatives - negatives, replace=True)
                 selected += 1  # skip positive
@@ -268,18 +258,19 @@ def _parse_multi_negative_sentences(sentences, labels, hard_negatives=None):
 
 @register_loss_func(LossType.infonce)
 def infonce_loss(outputs, labels, loss_scale=None, num_items_in_batch=None) -> torch.Tensor:
-    temperature = float(os.environ.get('INFONCE_TEMPERATURE', '0.01'))  # temperature
+    temperature = float(os.environ.get("INFONCE_TEMPERATURE", "0.01"))  # temperature
     # calculate CE across the batch, meaning all samples will be negative except the matching positive
-    use_batch = strtobool(os.environ.get('INFONCE_USE_BATCH', 'True'))
-    hard_negatives = os.environ.get('INFONCE_HARD_NEGATIVES', None)  # how many negative prompts kept in one sample
+    use_batch = strtobool(os.environ.get("INFONCE_USE_BATCH", "True"))
+    hard_negatives = os.environ.get("INFONCE_HARD_NEGATIVES", None)  # how many negative prompts kept in one sample
     # mask out fake negatives
-    infonce_mask_fake_negative = strtobool(os.environ.get('INFONCE_MASK_FAKE_NEGATIVE', 'False'))
+    infonce_mask_fake_negative = strtobool(os.environ.get("INFONCE_MASK_FAKE_NEGATIVE", "False"))
     if hard_negatives is not None:
         hard_negatives = int(hard_negatives)
     from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.utils import get_dist_setting
+
     rank, _, world_size, _ = get_dist_setting()
     # repeat of anchor(1)+positive(1)+negatives(n)
-    sentences = outputs['last_hidden_state']
+    sentences = outputs["last_hidden_state"]
 
     if world_size > 1 and use_batch:
         # gather all the sentences and labels across the gpus when calculate loss across all batches of all gpus
@@ -302,7 +293,7 @@ def infonce_loss(outputs, labels, loss_scale=None, num_items_in_batch=None) -> t
     split_tensors = _parse_multi_negative_sentences(sentences, labels, hard_negatives)
     loss = 0
     can_batched = hard_negatives is not None
-    if hard_negatives is None and len(set([s.shape[0] for s in split_tensors])) == 1:
+    if hard_negatives is None and len({s.shape[0] for s in split_tensors}) == 1:
         # all tensors have the same batch size
         can_batched = True
     if not use_batch:
@@ -332,17 +323,20 @@ def infonce_loss(outputs, labels, loss_scale=None, num_items_in_batch=None) -> t
             thresholds = sim_matrix[torch.arange(sim_matrix.size(0)), sim_labels].view(-1, 1) + 0.1
             thresholds = thresholds.detach()
             mask = sim_matrix > thresholds
-            sim_matrix[mask] = float('-inf')
+            sim_matrix[mask] = float("-inf")
 
         if can_batched:
             # [B, neg+2, D]
             sentences = torch.stack(split_tensors, dim=0)
             # [B, D] * [B*(neg+1), D]
-            similarity_matrix = torch.matmul(sentences[:, 0].squeeze(1), sentences[:,
-                                                                                   1:].reshape(-1, sentences.size(2)).T)
-            labels = torch.tensor(range(0,
-                                        sentences.size(0) * (sentences.size(1) - 1),
-                                        sentences.size(1) - 1)).view(-1).to(sentences.device)
+            similarity_matrix = torch.matmul(
+                sentences[:, 0].squeeze(1), sentences[:, 1:].reshape(-1, sentences.size(2)).T
+            )
+            labels = (
+                torch.tensor(range(0, sentences.size(0) * (sentences.size(1) - 1), sentences.size(1) - 1))
+                .view(-1)
+                .to(sentences.device)
+            )
             if infonce_mask_fake_negative:
                 mask_fake_negative(similarity_matrix, labels)
             similarity_matrix = similarity_matrix / temperature
@@ -355,7 +349,7 @@ def infonce_loss(outputs, labels, loss_scale=None, num_items_in_batch=None) -> t
             # cat all neg+1 tensors
             sentences = torch.cat(all_tensors, dim=0)
             length = 0
-            for idx, tensor in enumerate(split_tensors):
+            for idx, tensor in enumerate(split_tensors):  # noqa: B007 - The loop variable is read outside the loop.
                 # [D] * [B*(neg+1), D], neg numbers are different
                 similarity_matrix = torch.matmul(tensor[0], sentences.T) / temperature
                 labels = torch.tensor(length).to(tensor.device)
@@ -388,15 +382,15 @@ def online_contrastive_loss(outputs, labels, loss_scale=None, num_items_in_batch
 
 @register_loss_func(LossType.channel_loss)
 def channel_loss_func(outputs, labels, num_items_in_batch=None, sample_channels=None, trainer=None) -> torch.Tensor:
-    assert sample_channels is not None, 'Data does not have channel field.'
+    assert sample_channels is not None, "Data does not have channel field."
     channels = trainer.args.channels
-    assert channels is not None, 'Please pass --channels as a hyperparameter.'
+    assert channels is not None, "Please pass --channels as a hyperparameter."
     logits = outputs.logits
 
     # compute token loss
     shift_logits = logits[..., :-1, :].contiguous()
     shift_labels = labels[..., 1:].contiguous()
-    loss_fct = nn.CrossEntropyLoss(reduction='none')
+    loss_fct = nn.CrossEntropyLoss(reduction="none")
     flat_logits = shift_logits.view(-1, shift_logits.size(-1))
     flat_labels = shift_labels.view(-1)
     token_loss = loss_fct(flat_logits, flat_labels).view_as(shift_labels)  # [batch_size, seq_len-1]
@@ -415,12 +409,12 @@ def channel_loss_func(outputs, labels, num_items_in_batch=None, sample_channels=
     if state.local_step % trainer.args.gradient_accumulation_steps == 0:
         for ch in channels:
             ch_loss_steps = state.ch_loss_steps.get(ch, [])
-            loss_sum_tensor = torch.tensor([sum(torch.sum(x) for x in ch_loss_steps)],
-                                           dtype=torch.float32,
-                                           device=logits.device)
-            num_items_tensor = torch.tensor([sum(x.numel() for x in ch_loss_steps)],
-                                            dtype=torch.float32,
-                                            device=logits.device)
+            loss_sum_tensor = torch.tensor(
+                [sum(torch.sum(x) for x in ch_loss_steps)], dtype=torch.float32, device=logits.device
+            )
+            num_items_tensor = torch.tensor(
+                [sum(x.numel() for x in ch_loss_steps)], dtype=torch.float32, device=logits.device
+            )
             if dist.is_initialized():
                 dist.all_reduce(loss_sum_tensor, op=dist.ReduceOp.SUM)
                 dist.all_reduce(num_items_tensor, op=dist.ReduceOp.SUM)
@@ -429,7 +423,7 @@ def channel_loss_func(outputs, labels, num_items_in_batch=None, sample_channels=
             ch_loss = loss_sum / (num_items + 1e-12)
 
             if ch_loss > 0.0:
-                metric_key = f'loss_{ch}'
+                metric_key = f"loss_{ch}"
                 trainer._custom_metrics.setdefault(metric_key, MeanMetric(nan_value=None)).update(ch_loss)
             # Reset
             state.ch_loss_steps[ch] = []
@@ -437,11 +431,14 @@ def channel_loss_func(outputs, labels, num_items_in_batch=None, sample_channels=
     # return loss
     total_loss = token_loss.masked_select(mask).sum()
     total_tokens = mask.sum()
-    return total_loss / num_items_in_batch if num_items_in_batch is not None \
+    return (
+        total_loss / num_items_in_batch
+        if num_items_in_batch is not None
         else total_loss / (total_tokens.float() + 1e-12)
+    )
 
 
-def get_loss_func(loss_type: Optional[str]) -> Optional[Callable]:
+def get_loss_func(loss_type: str | None) -> Callable | None:
     if loss_type is None:
         return None
-    return LOSS_MAPPING[loss_type]['loss_func']
+    return LOSS_MAPPING[loss_type]["loss_func"]

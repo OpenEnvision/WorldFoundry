@@ -6,8 +6,6 @@ remain ``B T D``; the linear maps sinusoidal timestep features to those
 coefficients.
 """
 
-from typing import Optional, Tuple
-
 import torch
 
 from worldfoundry.core.nn.diffusion.timestep import (
@@ -49,8 +47,8 @@ class AdaLayerNormSingle(torch.nn.Module):
     def forward(
         self,
         timestep: torch.Tensor,
-        hidden_dtype: Optional[torch.dtype] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        hidden_dtype: torch.dtype | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Return ``(linear(silu(emb(t))), emb(t))`` for block AdaLN and the final head."""
         embedded_timestep = self.emb(timestep, hidden_dtype=hidden_dtype)
         return self.linear(self.silu(embedded_timestep)), embedded_timestep

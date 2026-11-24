@@ -46,7 +46,6 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.ops import (
     _execution_weight_bias,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.sana.ops.fused_cam_gdn import (
-    _invert_SE3,
     _prepare_ucpe_rope_tables,
     _process_camera_conditions_raymats_only,
     cam_prep_func,
@@ -67,6 +66,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_gdn_bloc
 from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_gdn_camctrl_blocks import (
     BidirectionalGDNUCPESinglePathLiteLA,
 )
+from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.models.layers.prope import _invert_SE3
 
 
 def _triton_gdn_is_supported(version: str | None = None) -> bool:
@@ -82,7 +82,7 @@ def _triton_gdn_is_supported(version: str | None = None) -> bool:
     for item in str(version).split(".")[:2]:
         digits = "".join(character for character in item if character.isdigit())
         numeric.append(int(digits or 0))
-    return tuple((numeric + [0, 0])[:2]) >= (3, 2)
+    return tuple((numeric + [0, 0])[:2]) >= (3, 2)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
 
 def _project_materialized_camera_qkv(
@@ -103,10 +103,8 @@ def _project_materialized_camera_qkv(
     if any(bias is not None for bias in biases):
         qkv_b = torch.cat(
             [
-                bias
-                if bias is not None
-                else torch.zeros(weight.shape[0], device=weight.device, dtype=weight.dtype)
-                for bias, weight in zip(biases, weights)
+                bias if bias is not None else torch.zeros(weight.shape[0], device=weight.device, dtype=weight.dtype)
+                for bias, weight in zip(biases, weights, strict=False)
             ]
         )
     return torch.nn.functional.linear(x, qkv_w, qkv_b)
@@ -129,7 +127,6 @@ class BidirectionalGDNTriton(BidirectionalGDN):
     """
 
     def __init__(self, *args, use_autograd_kernel: bool = False, **kwargs):
-        """Init."""
         super().__init__(*args, **kwargs)
         self.use_autograd_kernel = use_autograd_kernel
 
@@ -143,19 +140,6 @@ class BidirectionalGDNTriton(BidirectionalGDN):
         apply_output_gate: bool = True,
         **kwargs: object,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            rotary_emb: The rotary emb.
-            block_mask: The block mask.
-            apply_output_gate: The apply output gate.
-
-        Returns:
-            The return value.
-        """
         if not _triton_gdn_is_supported():
             return BidirectionalGDN.forward(
                 self,
@@ -172,7 +156,7 @@ class BidirectionalGDNTriton(BidirectionalGDN):
         if HW is None:
             raise ValueError("BidirectionalGDNTriton requires HW=(T, H, W).")
         del mask, block_mask  # unused in the bidirectional Triton path
-        if kwargs.get("frame_valid_mask", None) is not None:
+        if kwargs.get("frame_valid_mask") is not None:
             raise NotImplementedError(
                 "BidirectionalGDNTriton does not support frame_valid_mask (training-only feature)."
             )
@@ -201,7 +185,7 @@ class BidirectionalGDNTriton(BidirectionalGDN):
             qkv[:, :, 1].copy_(k_conv.reshape(B, N, H, D))
 
         # ---- 3. Frame gates (precomputed when shared with cam branch). ----
-        precomputed_gates = kwargs.get("precomputed_gates", None)
+        precomputed_gates = kwargs.get("precomputed_gates")
         if precomputed_gates is not None:
             beta, decay = precomputed_gates
         else:
@@ -286,7 +270,6 @@ class BidirectionalGDNUCPESinglePathLiteLATriton(BidirectionalGDNUCPESinglePathL
     """
 
     def __init__(self, *args, use_autograd_kernel: bool = False, **kwargs):
-        """Init."""
         super().__init__(*args, **kwargs)
         self.use_autograd_kernel = use_autograd_kernel
 
@@ -301,30 +284,13 @@ class BidirectionalGDNUCPESinglePathLiteLATriton(BidirectionalGDNUCPESinglePathL
         chunk_size: int | None = None,
         **kwargs: object,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            rotary_emb: The rotary emb.
-            block_mask: The block mask.
-            camera_conditions: The camera conditions.
-            chunk_size: The chunk size.
-
-        Returns:
-            The return value.
-        """
         if self.cam_debug_ratios:
             self.reset_cam_debug_stats()
         if self.training:
             self._cam_debug_step_counter += 1
 
         # Pre-compute shared gates once for both branches.
-        if HW is not None:
-            precomputed_gates = self._compute_frame_gates(x, HW)
-        else:
-            precomputed_gates = None
+        precomputed_gates = self._compute_frame_gates(x, HW) if HW is not None else None
 
         # Main branch — Triton-fused bidirectional scan.
         main_raw = BidirectionalGDNTriton.forward(
@@ -405,17 +371,6 @@ class BidirectionalGDNUCPESinglePathLiteLABothTriton(BidirectionalGDNUCPESingleP
         rotary_emb: torch.Tensor | None,
         **kwargs: object,
     ) -> torch.Tensor:
-        """Helper function to forward cam branch.
-
-        Args:
-            x: The x.
-            HW: The hw.
-            camera_conditions: The camera conditions.
-            rotary_emb: The rotary emb.
-
-        Returns:
-            The return value.
-        """
         if not _triton_gdn_is_supported():
             return super()._forward_cam_branch(
                 x,
@@ -426,7 +381,7 @@ class BidirectionalGDNUCPESinglePathLiteLABothTriton(BidirectionalGDNUCPESingleP
             )
 
         # ---- Guards: k_conv_only=True. ----
-        if kwargs.get("frame_valid_mask", None) is not None:
+        if kwargs.get("frame_valid_mask") is not None:
             raise NotImplementedError(
                 "BidirectionalGDNUCPESinglePathLiteLABothTriton does not "
                 "support frame_valid_mask (training-only feature)."
@@ -489,16 +444,8 @@ class BidirectionalGDNUCPESinglePathLiteLABothTriton(BidirectionalGDNUCPESingleP
             rope_sin = torch.zeros(N, D_head // 2, device=x.device, dtype=torch.float32)
 
         # ---- 4. Fused Triton prep kernel --------------------------------
-        q_norm_w = (
-            _execution_weight_bias(self.q_norm_cam)[0]
-            .to(device=x.device, dtype=torch.float32)
-            .contiguous()
-        )
-        k_norm_w = (
-            _execution_weight_bias(self.k_norm_cam)[0]
-            .to(device=x.device, dtype=torch.float32)
-            .contiguous()
-        )
+        q_norm_w = _execution_weight_bias(self.q_norm_cam)[0].to(device=x.device, dtype=torch.float32).contiguous()
+        k_norm_w = _execution_weight_bias(self.k_norm_cam)[0].to(device=x.device, dtype=torch.float32).contiguous()
         k_scale = (D_head**-0.5) * (S**-0.5)
         norm_eps_val = float(
             getattr(
@@ -523,7 +470,7 @@ class BidirectionalGDNUCPESinglePathLiteLABothTriton(BidirectionalGDNUCPESingleP
         inflation_sq = inflation_sq.view(B, H_heads, 1, N)
 
         # ---- 5. Gates + beta discounting -------------------------------
-        precomputed_gates = kwargs.get("precomputed_gates", None)
+        precomputed_gates = kwargs.get("precomputed_gates")
         if precomputed_gates is not None:
             beta, decay = precomputed_gates
         else:

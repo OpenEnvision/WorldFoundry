@@ -10,7 +10,7 @@ WorldFoundry's in-tree evaluator implements **two tracks only**:
 - **PAI-Bench-G** (`--track generation`): VBench / VBench++-style perception metrics plus VQA. Dataset: `shi-labs/physical-ai-bench-generation`.
 - **PAI-Bench-C** (`--track conditional-generation`): control fidelity (Canny, depth si-RMSE, segmentation, blur SSIM, LPIPS diversity). Dataset: `shi-labs/physical-ai-bench-conditional-generation` (~273 GB).
 
-The paper may describe additional tracks. Those are **not** in this contract — do not pass `--track understanding`. The contract also does **not** mark a single primary metric; do not treat `aesthetic_quality` as the official total.
+Tracks beyond these two are not supported; do not pass `--track understanding`. PAI-Bench defines no single primary metric, so do not treat `aesthetic_quality` as the official total.
 
 Paper: [PAI-Bench](https://arxiv.org/abs/2512.01989). Code: [SHI-Labs/physical-ai-bench](https://github.com/SHI-Labs/physical-ai-bench).
 
@@ -22,7 +22,7 @@ Score the generation track over staged data and generated videos:
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py \
   --run-official \
   --track generation \
   --dataset-root "${WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT}" \
@@ -35,7 +35,7 @@ Conditional track (checkpoints or prediction dirs as needed):
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  -m worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner \
+  -m worldfoundry.evals.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner \
   --run-official \
   --track conditional-generation \
   --dataset-root "${WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT}" \
@@ -48,7 +48,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 ## In-tree tracks and sidecars
 
-This integration is inference-only. It never clones or imports the upstream repo or its `third_party` tree. Prompts, evaluator settings, and provenance live under `worldfoundry/data/benchmarks/assets/physical-ai-bench` (no `SOURCE.json` on purpose).
+Prompts, evaluator settings, and provenance live under `worldfoundry/data/benchmarks/assets/physical-ai-bench`; no upstream checkout is needed.
 
 - **Generation** reuses the checked-in VBench / VBench++ I2V runtimes. Example metric list: `aesthetic_quality`, `background_consistency`, `imaging_quality`, `motion_smoothness`, `overall_consistency`, `subject_consistency`. Binary physical VQA accepts a prediction manifest **or** a Qwen video judge.
 - **Conditional-generation** implements the published CPU transfer metrics locally and reuses shared DOVER, LPIPS, Video-Depth-Anything, GroundingDINO, and SAM2 base models. Precomputed sidecars: `--pred-depth-dir` (`.npy`) and `--pred-segmentation-dir` (JSON). Official dataset pickles load only with explicit `--allow-trusted-pickle`; prefer JSON segmentation sidecars.

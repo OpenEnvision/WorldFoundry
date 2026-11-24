@@ -5,18 +5,17 @@ from checked-in YAML configuration files specific to various Hunyuan World
 runtimes. It includes logic for expanding special placeholders within
 configuration values, such as paths resolved via `worldfoundry`.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.paths import resolve_worldfoundry_path
-from worldfoundry.evaluation.utils import load_manifest
-from worldfoundry.evaluation.utils import worldfoundry_data_path
-
+from worldfoundry.core.io.manifests import load_manifest
+from worldfoundry.core.io.paths import package_data_path, resolve_worldfoundry_path
 
 # Root directory where Hunyuan World runtime configuration YAML files are stored.
-HUNYUAN_WORLD_RUNTIME_CONFIG_ROOT = worldfoundry_data_path("models", "runtime", "configs", "hunyuan_world")
+HUNYUAN_WORLD_RUNTIME_CONFIG_ROOT = package_data_path("models", "runtime", "configs", "hunyuan_world")
 
 
 def hunyuan_world_runtime_config_path(runtime_name: str) -> Path:

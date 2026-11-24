@@ -114,7 +114,7 @@ class MatrixGame35Synthesis(BaseSynthesis):
         lazy: bool = True,
         generator_overrides: Mapping[str, Any] | None = None,
         **kwargs: Any,
-    ) -> "MatrixGame35Synthesis":
+    ) -> MatrixGame35Synthesis:
         del args
         options = _runtime_defaults(cls.MODEL_ID)
         if isinstance(pretrained_model_path, Mapping):

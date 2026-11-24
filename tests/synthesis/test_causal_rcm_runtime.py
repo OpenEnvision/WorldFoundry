@@ -7,8 +7,8 @@ import pytest
 import torch
 
 from worldfoundry.core.attention.sparse.block_pattern import AttnMaskSpec, BlockPattern, build_mask_fn
-from worldfoundry.synthesis.visual_generation.rcm import worldfoundry_runtime as rcm_runtime
 from worldfoundry.synthesis.visual_generation import runtime_manifest
+from worldfoundry.synthesis.visual_generation.rcm import worldfoundry_runtime as rcm_runtime
 
 
 def _dense(mask_fn, q_len: int, kv_len: int) -> torch.Tensor:
@@ -534,3 +534,45 @@ def test_every_registered_mask_mode_round_trips() -> None:
         # Every query must retain at least one key, or its softmax row is empty.
         for q in range(12):
             assert mask[q].any(), f"query {q} has an empty attention row"
+
+
+def test_resolve_umt5_tokenizer_path_prefers_local_offline_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.umt5 import resolve_umt5_tokenizer_path
+
+    ckpt_root = tmp_path / "ckpts"
+    rcm_dir = ckpt_root / "rcm"
+    rcm_dir.mkdir(parents=True)
+    text_encoder_path = rcm_dir / "models_t5_umt5-xxl-enc-bf16.pth"
+    text_encoder_path.write_bytes(b"")
+
+    sibling_tok = ckpt_root / "Wan-AI--Wan2.1-T2V-1.3B" / "google" / "umt5-xxl"
+    sibling_tok.mkdir(parents=True)
+    (sibling_tok / "tokenizer_config.json").write_text("{}\n", encoding="utf-8")
+
+    monkeypatch.delenv("HF_HUB_CACHE", raising=False)
+    monkeypatch.delenv("HF_HOME", raising=False)
+    monkeypatch.delenv("WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT", raising=False)
+
+    resolved, is_local = resolve_umt5_tokenizer_path(str(text_encoder_path))
+    assert resolved == str(sibling_tok)
+    assert is_local is True
+
+
+def test_build_command_forwards_optional_tokenizer_path(tmp_path: Path) -> None:
+    tok_dir = tmp_path / "umt5-xxl"
+    tok_dir.mkdir()
+    command = rcm_runtime.build_command(
+        {
+            "entrypoint": str(rcm_runtime.INFERENCE_ENTRYPOINT),
+            "output_path": str(tmp_path / "video.mp4"),
+            "prompt": "test prompt",
+            "options": {
+                **_stage_checkpoints(tmp_path),
+                "tokenizer_path": str(tok_dir),
+            },
+        }
+    )
+    assert "--tokenizer_path" in command
+    assert command[command.index("--tokenizer_path") + 1] == str(tok_dir)

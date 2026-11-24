@@ -10,7 +10,7 @@ import imageio
 import pytest
 from PIL import Image
 
-from worldfoundry.evaluation.utils import worldfoundry_data_path
+from worldfoundry.evals.utils import worldfoundry_data_path
 
 
 def test_lyra2_gpu_integration(tmp_path):

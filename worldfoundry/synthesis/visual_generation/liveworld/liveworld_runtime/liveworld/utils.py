@@ -8,19 +8,19 @@ media functionality to WorldFoundry's canonical modules.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 import torch
 
+from worldfoundry.core.media.codecs.video import save_video_h264 as _save_video_h264
 from worldfoundry.core.model_loading import GeneralLoRALoader
-from worldfoundry.core.utils.tensors.torch import set_seed_everywhere as set_seed
 from worldfoundry.core.nn.diffusion.schedulers import (
     FlowMatchScheduler,
     SchedulerInterface,
 )
-from worldfoundry.core.io import save_video_h264 as _save_video_h264
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere as set_seed
 
 
 def save_video_h264(
@@ -30,9 +30,7 @@ def save_video_h264(
 ) -> None:
     """Write inference frames as an H.264 MP4 through shared video I/O."""
 
-    if isinstance(frames, torch.Tensor):
-        frame_count = int(frames.shape[0])
-    elif isinstance(frames, np.ndarray):
+    if isinstance(frames, (torch.Tensor, np.ndarray)):
         frame_count = int(frames.shape[0])
     else:
         frames = list(frames)

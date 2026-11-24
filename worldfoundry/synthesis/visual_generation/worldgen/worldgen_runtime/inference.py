@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 from PIL import Image
 
-from worldgen import WorldGen
+from .src.worldgen import WorldGen
 
 
 def parse_args() -> argparse.Namespace:
@@ -17,7 +17,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pano_image", type=str, default=None, help="Path to an input panorama image")
     parser.add_argument("--output_dir", "-o", type=str, default="output", help="Directory for generated artifacts")
     parser.add_argument("--resolution", "-r", type=int, default=1600, help="Generated world resolution")
-    parser.add_argument("--use_sharp", action="store_true", help="Enable ml-sharp generation")
     parser.add_argument("--inpaint_bg", action="store_true", help="Inpaint panorama background")
     parser.add_argument("--return_mesh", action="store_true", help="Save a mesh artifact instead of gaussian splats")
     parser.add_argument("--low_vram", action="store_true", help="Enable low VRAM mode")
@@ -39,7 +38,6 @@ def generate_scene(args: argparse.Namespace):
     mode = "t2s" if args.image is None else "i2s"
     worldgen = WorldGen(
         mode=mode,
-        use_sharp=args.use_sharp,
         inpaint_bg=args.inpaint_bg,
         resolution=args.resolution,
         device=device,

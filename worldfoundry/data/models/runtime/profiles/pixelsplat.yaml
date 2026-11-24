@@ -1,13 +1,5 @@
-artifact_filename: pixelsplat.ply
-artifact_kind: generated_3d_asset
-backend_stage: in_tree_runtime
-id: pixelsplat
-input_schema:
-  actions:
-  - view_sequence
-  image: true
-  prompt: false
-integration_status: integrated
+schema_version: 2
+model_id: pixelsplat
 checkpoints:
 - repo_id: dylanebert/pixelSplat
   revision: f66c00e4f43b7347f61eee8801f19c5a09405d10
@@ -17,12 +9,26 @@ checkpoints:
   revision: f66c00e4f43b7347f61eee8801f19c5a09405d10
   filename: acid.ckpt
   role: acid_checkpoint
+input_schema:
+  actions:
+  - view_sequence
+  image: true
+  prompt: false
+artifact_kind: generated_3d_asset
+artifact_filename: pixelsplat.ply
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: checkpoint_backed_gpu_verified
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - WorldFoundry vendors the pixelSplat source and runtime under worldfoundry/base_models/three_dimensions/point_clouds/pixelsplat
   and registers a lazy wrapper.
 - Requires the declared pixelSplat environment dependencies, a local Gaussian rasterization
-  extension, and a staged re10k.ckpt or acid.ckpt from the original convolutional model.
-- Both checkpoints were validated on real posed two-view inputs. Unposed image input uses
-  a synthetic camera baseline and does not establish accurate scene geometry.
-- PLY export stores world-space rotations and standard opacity logits; only DC color is exported.
-runtime_status: checkpoint_backed_gpu_verified
+  extension, and a staged re10k.ckpt or acid.ckpt from the original convolutional
+  model.
+- Both checkpoints were validated on real posed two-view inputs. Unposed image input
+  uses a synthetic camera baseline and does not establish accurate scene geometry.
+- PLY export stores world-space rotations and standard opacity logits; only DC color
+  is exported.

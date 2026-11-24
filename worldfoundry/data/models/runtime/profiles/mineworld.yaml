@@ -7,6 +7,7 @@ groups:
 - minecraft
 source_repos:
 - url: https://github.com/microsoft/mineworld
+  revision: 9f49efbcc68a5f0cf60e78f0abc566eac409282f
 input_schema:
   prompt: true
   image: true

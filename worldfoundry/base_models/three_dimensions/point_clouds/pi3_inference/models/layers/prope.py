@@ -51,8 +51,8 @@
 #    o_src = F.scaled_dot_product_attention(q_src, k_tgt, v_tgt, **kwargs)
 #    o_src = attn_src._apply_to_o(o_src)
 
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, List, Optional, Tuple
 
 import torch
 
@@ -60,14 +60,14 @@ import torch
 def _prepare_apply_fns(
     head_dim: int,  # Q/K/V will have this last dimension
     viewmats: torch.Tensor,  # (batch, cameras, 4, 4)
-    Ks: Optional[torch.Tensor],  # (batch, cameras, 3, 3)
+    Ks: torch.Tensor | None,  # (batch, cameras, 3, 3)
     patches_x: int,  # How many patches wide is each image?
     patches_y: int,  # How many patches tall is each image?
     image_width: int,  # Width of the image. Used to normalize intrinsics.
     image_height: int,  # Height of the image. Used to normalize intrinsics.
-    coeffs_x: Optional[torch.Tensor] = None,
-    coeffs_y: Optional[torch.Tensor] = None,
-) -> Tuple[
+    coeffs_x: torch.Tensor | None = None,
+    coeffs_y: torch.Tensor | None = None,
+) -> tuple[
     Callable[[torch.Tensor], torch.Tensor],
     Callable[[torch.Tensor], torch.Tensor],
     Callable[[torch.Tensor], torch.Tensor],
@@ -175,7 +175,7 @@ def _rope_precompute_coeffs(
     freq_base: float,
     freq_scale: float,
     feat_dim: int,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Precompute RoPE coefficients."""
     assert len(positions.shape) == 1
     assert feat_dim % 2 == 0
@@ -192,7 +192,7 @@ def _rope_precompute_coeffs(
 
 def _rope_apply_coeffs(
     feats: torch.Tensor,  # (batch, num_heads, seqlen, feat_dim)
-    coeffs: Tuple[torch.Tensor, torch.Tensor],
+    coeffs: tuple[torch.Tensor, torch.Tensor],
     inverse: bool = False,
 ) -> torch.Tensor:
     """Apply RoPE coefficients to features. We adopt a 'split' ordering
@@ -221,7 +221,7 @@ def _rope_apply_coeffs(
 
 def _apply_block_diagonal(
     feats: torch.Tensor,  # (..., dim)
-    func_size_pairs: List[Tuple[Callable[[torch.Tensor], torch.Tensor], int]],
+    func_size_pairs: list[tuple[Callable[[torch.Tensor], torch.Tensor], int]],
 ) -> torch.Tensor:
     """Apply a block-diagonal function to an input array.
 
@@ -231,11 +231,11 @@ def _apply_block_diagonal(
 
     Where the integer is the size of the input to the function.
     """
-    funcs, block_sizes = zip(*func_size_pairs)
+    funcs, block_sizes = zip(*func_size_pairs, strict=False)
     assert feats.shape[-1] == sum(block_sizes)
     x_blocks = torch.split(feats, block_sizes, dim=-1)
     out = torch.cat(
-        [f(x_block) for f, x_block in zip(funcs, x_blocks)],
+        [f(x_block) for f, x_block in zip(funcs, x_blocks, strict=False)],
         dim=-1,
     )
     assert out.shape == feats.shape, "Input/output shapes should match."
@@ -256,7 +256,7 @@ def _invert_SE3(transforms: torch.Tensor) -> torch.Tensor:
 def _lift_K(Ks: torch.Tensor) -> torch.Tensor:
     """Lift 3x3 matrices to homogeneous 4x4 matrices."""
     assert Ks.shape[-2:] == (3, 3)
-    out = torch.zeros(Ks.shape[:-2] + (4, 4), device=Ks.device)
+    out = torch.zeros(Ks.shape[:-2] + (4, 4), device=Ks.device)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     out[..., :3, :3] = Ks
     out[..., 3, 3] = 1.0
     return out
@@ -278,15 +278,15 @@ def _prepare_apply_fns_query(
     head_dim: int,  # Q/K/V will have this last dimension
     viewmats_src: torch.Tensor,  # (batch, cameras, 4, 4)
     viewmats_query: torch.Tensor,  # (batch, cameras, 4, 4)
-    Ks_src: Optional[torch.Tensor],  # (batch, cameras, 3, 3)
-    Ks_query: Optional[torch.Tensor],  # (batch, cameras, 3, 3)
+    Ks_src: torch.Tensor | None,  # (batch, cameras, 3, 3)
+    Ks_query: torch.Tensor | None,  # (batch, cameras, 3, 3)
     patches_x: int,  # How many patches wide is each image?
     patches_y: int,  # How many patches tall is each image?
     image_width: int,  # Width of the image. Used to normalize intrinsics.
     image_height: int,  # Height of the image. Used to normalize intrinsics.
-    coeffs_x: Optional[torch.Tensor] = None,
-    coeffs_y: Optional[torch.Tensor] = None,
-) -> Tuple[
+    coeffs_x: torch.Tensor | None = None,
+    coeffs_y: torch.Tensor | None = None,
+) -> tuple[
     Callable[[torch.Tensor], torch.Tensor],
     Callable[[torch.Tensor], torch.Tensor],
     Callable[[torch.Tensor], torch.Tensor],

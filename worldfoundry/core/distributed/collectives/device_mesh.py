@@ -9,7 +9,7 @@ collective. Used with FSDP2 meshes; plain TP/CP groups stay on
 from __future__ import annotations
 
 import itertools
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import torch
 import torch.distributed as dist
@@ -86,9 +86,7 @@ def all_to_all_tensor(
 
     actual_world_size = dist.get_world_size(group) if dist.is_available() and dist.is_initialized() else 1
     if int(world_size) != int(actual_world_size):
-        raise ValueError(
-            f"configured world size {world_size} does not match process-group size {actual_world_size}"
-        )
+        raise ValueError(f"configured world size {world_size} does not match process-group size {actual_world_size}")
     return all_to_all_concat(
         tensor,
         scatter_dim=scatter_dim,
@@ -102,71 +100,6 @@ def all_to_all_tensor(
 # ──────────────────────────────────────────────────────────────────────────
 
 
-class DTensorFastEmaModelUpdater:
-    """Foreach-based EMA updater that operates on local DTensor shards."""
-
-    def __init__(self) -> None:
-        """Start with an empty cache; :meth:`cache` must precede :meth:`restore`."""
-
-        self.is_cached = False
-
-    def copy_to(self, src_model: torch.nn.Module, tgt_model: torch.nn.Module) -> None:
-        """Overwrite target local shards with source local shards (no broadcast)."""
-
-        with torch.no_grad():
-            for tgt_params, src_params in zip(tgt_model.parameters(), src_model.parameters()):
-                get_local_tensor_if_dtensor(tgt_params).data.copy_(get_local_tensor_if_dtensor(src_params).data)
-
-    @torch.no_grad()
-    def update_average(self, src_model: torch.nn.Module, tgt_model: torch.nn.Module, beta: float = 0.9999) -> None:
-        """In-place EMA on local FP32 shards: ``tgt = beta * tgt + (1 - beta) * src``.
-
-        EMA in a lower dtype silently underflows the ``1 - beta`` term, so the
-        target must already be FP32.
-        """
-
-        target_list = []
-        source_list = []
-        for tgt_params, src_params in zip(tgt_model.parameters(), src_model.parameters()):
-            local_tgt = get_local_tensor_if_dtensor(tgt_params)
-            local_src = get_local_tensor_if_dtensor(src_params)
-            assert local_tgt.dtype == torch.float32, f"EMA model only works in FP32 dtype, got {local_tgt.dtype}."
-            target_list.append(local_tgt)
-            source_list.append(local_src.data)
-        torch._foreach_mul_(target_list, beta)
-        torch._foreach_add_(target_list, source_list, alpha=1.0 - beta)
-
-    @torch.no_grad()
-    def cache(self, parameters: Any, is_cpu: bool = False) -> None:
-        """Snapshot local shards before a temporary overwrite (eval / checkpoint).
-
-        Nested :meth:`cache` without :meth:`restore` is refused so a later
-        restore cannot apply the wrong generation of weights.
-        """
-
-        assert self.is_cached is False, "EMA cache is already taken. Did you forget to restore it?"
-        device = "cpu" if is_cpu else ("cuda" if torch.cuda.is_available() else None)
-        collected = []
-        for param in parameters:
-            local_param = get_local_tensor_if_dtensor(param)
-            cached = local_param.clone()
-            collected.append(cached.to(device) if device is not None else cached)
-        self.collected_params = collected
-        self.is_cached = True
-
-    @torch.no_grad()
-    def restore(self, parameters: Any) -> None:
-        """Write cached local shards back; ``strict=False`` zip matches FSDP holes."""
-
-        assert self.is_cached, "EMA cache is not taken yet."
-        for cached_param, param in zip(self.collected_params, parameters, strict=False):
-            local_param = get_local_tensor_if_dtensor(param)
-            local_param.copy_(cached_param.data.type_as(local_param))
-        self.collected_params = []
-        self.is_cached = False
-
-
-FastEmaModelUpdater = DTensorFastEmaModelUpdater
 get_local_tensor_if_DTensor = get_local_tensor_if_dtensor
 
 
@@ -197,11 +130,9 @@ def broadcast_dtensor_model_states(model: torch.nn.Module, mesh: DeviceMesh) -> 
 
 
 __all__ = [
-    "DTensorFastEmaModelUpdater",
-    "FastEmaModelUpdater",
     "broadcast",
     "broadcast_dtensor_model_states",
     "broadcast_with_shape_check",
-    "get_local_tensor_if_dtensor",
     "get_local_tensor_if_DTensor",
+    "get_local_tensor_if_dtensor",
 ]

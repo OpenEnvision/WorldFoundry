@@ -33,10 +33,10 @@ metadata:
   source_kind: benchmark_zoo
   benchmark_id: wrbench
   name: WRBench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id wrbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/wrbench --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  contract_validation_command: wf zoo benchmark-run --benchmark-id wrbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/wrbench --json
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:wrbench
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
+  official_result_entrypoint: wf zoo benchmark-run
   domain:
   - video-generation
   - camera-control
@@ -68,7 +68,7 @@ metadata:
   - raw_metric_table
   runtime:
     kind: in_tree_official_source
-    root: worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime
+    root: worldfoundry/evals/tasks/execution/runners/wrbench/runtime
     root_env: WORLDFOUNDRY_WRBENCH_ROOT
     results_path_env: WORLDFOUNDRY_WRBENCH_RESULTS_PATH
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -92,10 +92,10 @@ metadata:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/wrbench.yaml
     natural25: worldfoundry/data/benchmarks/assets/wrbench/natural25
     in_tree_runtime_paths:
-    - worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench
+    - worldfoundry/evals/tasks/execution/runners/wrbench/runtime/wrbench
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:wrbench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
@@ -103,7 +103,7 @@ metadata:
     surface: wrbench_official_in_tree
   integration_status: integrated
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -177,9 +177,9 @@ tasks:
           kind: array
     evaluation_protocol:
     - name: in_tree_wrbench_d1_d6
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id wrbench --mode official-validation --official-results-path <official_results.json_or_csv> --generated-artifact-dir <generated_videos> --output-dir <out> --json
+      runner_target: worldfoundry.evals.tasks.contracts.external:wrbench
+      runner_script: worldfoundry/evals/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
+      official_validation_command: wf zoo benchmark-run --benchmark-id wrbench --mode official-validation --official-results-path <official_results.json_or_csv> --generated-artifact-dir <generated_videos> --output-dir <out> --json
     - name: in_tree_official_runtime
       metric_ids:
       - d1_cam_prec
@@ -191,10 +191,10 @@ tasks:
       - d5_reobservation_spatial_consistency
       - d6_reobservation_state_consistency
       - wrbench_average
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:wrbench
+      runner_script: worldfoundry/evals/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
     runtime_requirements:
-      in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench
+      in_tree_runtime: worldfoundry/evals/tasks/execution/runners/wrbench/runtime/wrbench
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
       results_path_env: WORLDFOUNDRY_WRBENCH_RESULTS_PATH
       runtime_config_env: WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG

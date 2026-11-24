@@ -23,7 +23,7 @@ wrapper concatenates cached K/V in front of the current chunk.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -55,7 +55,7 @@ class AttentionOpWithKVCache(nn.Module):
       `max_cache_size` frames. Upon overflow, the oldest frames are dropped.
     """
 
-    def __init__(self, attn_op: nn.Module | Any, max_cache_size: Optional[int] = None):
+    def __init__(self, attn_op: nn.Module | Any, max_cache_size: int | None = None):
         """Initialize the KV cache wrapper.
 
         Args:
@@ -67,10 +67,10 @@ class AttentionOpWithKVCache(nn.Module):
         super().__init__()
         self.attn_op = attn_op
         self.reset_kv_cache(max_cache_size=max_cache_size)
-        self.pg: Optional[Any] = None
-        self.stream: Optional[Any] = None
+        self.pg: Any | None = None
+        self.stream: Any | None = None
 
-    def reset_kv_cache(self, max_cache_size: Optional[int] = None) -> None:
+    def reset_kv_cache(self, max_cache_size: int | None = None) -> None:
         """Reset/initialize the KV caches.
 
         Args:
@@ -109,8 +109,8 @@ class AttentionOpWithKVCache(nn.Module):
             history_v = self.v_cache[self.start_idx : kv_cache_cfg.current_idx]
             assert not any(x is None for x in history_k)
             assert not any(x is None for x in history_v)
-            k_out = torch.cat(history_k + [k], dim=1)  # type: ignore
-            v_out = torch.cat(history_v + [v], dim=1)  # type: ignore
+            k_out = torch.cat(history_k + [k], dim=1)  # type: ignore  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+            v_out = torch.cat(history_v + [v], dim=1)  # type: ignore  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         else:
             k_out = k
             v_out = v
@@ -156,7 +156,7 @@ class VideoSeqPos:
     def size(self) -> int:
         return int(self.pos_h.numel())
 
-    def frame(self, t_idx: int) -> "VideoSeqPos":
+    def frame(self, t_idx: int) -> VideoSeqPos:
         """Return a `VideoSeqPos` view for a single frame at absolute index `t_idx`.
 
         This is useful for streaming / KV-cache inference where the model is run on

@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> model -> dpt.py functionality."""
-
 from typing import Dict as TyDict
 from typing import List, Sequence, Tuple
 import torch
@@ -23,10 +21,12 @@ from einops import rearrange
 
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.utils.head_utils import (
     Permute,
-    create_uv_grid,
     custom_interpolate,
-    position_grid_to_embed,
 )
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.utils import (
+    position_grid_to_embed_fp32 as position_grid_to_embed,
+)
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.utils import create_uv_grid
 from addict import Dict
 
 
@@ -62,14 +62,6 @@ class DPT(nn.Module):
         norm_type: str = "idt",  # use to match legacy GS-DPT head, "idt" / "layer"
         fusion_block_inplace: bool = False,
     ) -> None:
-        """Init.
-
-        Args:
-            dim_in: The dim in.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         # -------------------- configuration --------------------
@@ -109,12 +101,8 @@ class DPT(nn.Module):
         # Design consistent with original: relative to patch grid (x4, x2, x1, /2)
         self.resize_layers = nn.ModuleList(
             [
-                nn.ConvTranspose2d(
-                    out_channels[0], out_channels[0], kernel_size=4, stride=4, padding=0
-                ),
-                nn.ConvTranspose2d(
-                    out_channels[1], out_channels[1], kernel_size=2, stride=2, padding=0
-                ),
+                nn.ConvTranspose2d(out_channels[0], out_channels[0], kernel_size=4, stride=4, padding=0),
+                nn.ConvTranspose2d(out_channels[1], out_channels[1], kernel_size=2, stride=2, padding=0),
                 nn.Identity(),
                 nn.Conv2d(out_channels[3], out_channels[3], kernel_size=3, stride=2, padding=1),
             ]
@@ -127,21 +115,15 @@ class DPT(nn.Module):
         self.scratch.refinenet1 = _make_fusion_block(features, inplace=fusion_block_inplace)
         self.scratch.refinenet2 = _make_fusion_block(features, inplace=fusion_block_inplace)
         self.scratch.refinenet3 = _make_fusion_block(features, inplace=fusion_block_inplace)
-        self.scratch.refinenet4 = _make_fusion_block(
-            features, has_residual=False, inplace=fusion_block_inplace
-        )
+        self.scratch.refinenet4 = _make_fusion_block(features, has_residual=False, inplace=fusion_block_inplace)
 
         # Heads (shared neck1; then split into two heads)
         head_features_1 = features
         head_features_2 = 32
-        self.scratch.output_conv1 = nn.Conv2d(
-            head_features_1, head_features_1 // 2, kernel_size=3, stride=1, padding=1
-        )
+        self.scratch.output_conv1 = nn.Conv2d(head_features_1, head_features_1 // 2, kernel_size=3, stride=1, padding=1)
 
         ln_seq = (
-            [Permute((0, 2, 3, 1)), nn.LayerNorm(head_features_2), Permute((0, 3, 1, 2))]
-            if use_ln_for_heads
-            else []
+            [Permute((0, 2, 3, 1)), nn.LayerNorm(head_features_2), Permute((0, 3, 1, 2))] if use_ln_for_heads else []
         )
 
         # Main head
@@ -155,9 +137,7 @@ class DPT(nn.Module):
         # Sky head (fixed 1 channel)
         if self.use_sky_head:
             self.scratch.sky_output_conv2 = nn.Sequential(
-                nn.Conv2d(
-                    head_features_1 // 2, head_features_2, kernel_size=3, stride=1, padding=1
-                ),
+                nn.Conv2d(head_features_1 // 2, head_features_2, kernel_size=3, stride=1, padding=1),
                 *ln_seq,
                 nn.ReLU(inplace=True),
                 nn.Conv2d(head_features_2, 1, kernel_size=1, stride=1, padding=0),
@@ -204,9 +184,7 @@ class DPT(nn.Module):
             kw = {}
             if "images" in extra_kwargs:
                 kw.update({"images": extra_kwargs["images"][s0:s1]})
-            out_dicts.append(
-                self._forward_impl([f[s0:s1] for f in feats], H, W, patch_start_idx, **kw)
-            )
+            out_dicts.append(self._forward_impl([f[s0:s1] for f in feats], H, W, patch_start_idx, **kw))
         out_dict = {k: torch.cat([od[k] for od in out_dicts], dim=0) for k in out_dicts[0].keys()}
         out_dict = {k: v.view(B, S, *v.shape[1:]) for k, v in out_dict.items()}
         return Dict(out_dict)
@@ -221,17 +199,6 @@ class DPT(nn.Module):
         W: int,
         patch_start_idx: int,
     ) -> TyDict[str, torch.Tensor]:
-        """Helper function to forward impl.
-
-        Args:
-            feats: The feats.
-            H: The h.
-            W: The w.
-            patch_start_idx: The patch start idx.
-
-        Returns:
-            The return value.
-        """
         B, _, C = feats[0].shape
         ph, pw = H // self.patch_size, W // self.patch_size
         resized_feats = []
@@ -272,9 +239,7 @@ class DPT(nn.Module):
             outs[self.head_main] = pred.squeeze(1)
             outs[f"{self.head_main}_conf"] = conf.squeeze(1)
         else:
-            outs[self.head_main] = self._apply_activation_single(
-                main_logits, self.activation
-            ).squeeze(1)
+            outs[self.head_main] = self._apply_activation_single(main_logits, self.activation).squeeze(1)
 
         # 6) Sky head (fixed 1 channel)
         if self.use_sky_head:
@@ -304,9 +269,7 @@ class DPT(nn.Module):
         out = self.scratch.refinenet1(out, l1_rn)
         return out
 
-    def _apply_activation_single(
-        self, x: torch.Tensor, activation: str = "linear"
-    ) -> torch.Tensor:
+    def _apply_activation_single(self, x: torch.Tensor, activation: str = "linear") -> torch.Tensor:
         """
         Apply activation to single channel output, maintaining semantic consistency with value branch in multi-channel case.
         Supports: exp / relu / sigmoid / softplus / tanh / linear / expp1
@@ -336,11 +299,7 @@ class DPT(nn.Module):
           * 'relu'    -> ReLU positive domain output
           * 'linear'  -> Original value (logits)
         """
-        act = (
-            self.sky_activation.lower()
-            if isinstance(self.sky_activation, str)
-            else self.sky_activation
-        )
+        act = self.sky_activation.lower() if isinstance(self.sky_activation, str) else self.sky_activation
         if act == "sigmoid":
             return torch.sigmoid(x)
         if act == "relu":
@@ -367,18 +326,6 @@ def _make_fusion_block(
     groups: int = 1,
     inplace: bool = False,
 ) -> nn.Module:
-    """Helper function to make fusion block.
-
-    Args:
-        features: The features.
-        size: The size.
-        has_residual: The has residual.
-        groups: The groups.
-        inplace: The inplace.
-
-    Returns:
-        The return value.
-    """
     return FeatureFusionBlock(
         features=features,
         activation=nn.ReLU(inplace=inplace),
@@ -392,20 +339,7 @@ def _make_fusion_block(
     )
 
 
-def _make_scratch(
-    in_shape: List[int], out_shape: int, groups: int = 1, expand: bool = False
-) -> nn.Module:
-    """Helper function to make scratch.
-
-    Args:
-        in_shape: The in shape.
-        out_shape: The out shape.
-        groups: The groups.
-        expand: The expand.
-
-    Returns:
-        The return value.
-    """
+def _make_scratch(in_shape: List[int], out_shape: int, groups: int = 1, expand: bool = False) -> nn.Module:
     scratch = nn.Module()
     # Optional expansion by stage
     c1 = out_shape
@@ -424,17 +358,6 @@ class ResidualConvUnit(nn.Module):
     """Lightweight residual convolution block for fusion"""
 
     def __init__(self, features: int, activation: nn.Module, bn: bool, groups: int = 1) -> None:
-        """Init.
-
-        Args:
-            features: The features.
-            activation: The activation.
-            bn: The bn.
-            groups: The groups.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.bn = bn
         self.groups = groups
@@ -446,14 +369,6 @@ class ResidualConvUnit(nn.Module):
         self.skip_add = nn.quantized.FloatFunctional()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         out = self.activation(x)
         out = self.conv1(out)
         if self.norm1 is not None:
@@ -482,30 +397,12 @@ class FeatureFusionBlock(nn.Module):
         has_residual: bool = True,
         groups: int = 1,
     ) -> None:
-        """Init.
-
-        Args:
-            features: The features.
-            activation: The activation.
-            deconv: The deconv.
-            bn: The bn.
-            expand: The expand.
-            align_corners: The align corners.
-            size: The size.
-            has_residual: The has residual.
-            groups: The groups.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.align_corners = align_corners
         self.size = size
         self.has_residual = has_residual
 
-        self.resConfUnit1 = (
-            ResidualConvUnit(features, activation, bn, groups=groups) if has_residual else None
-        )
+        self.resConfUnit1 = ResidualConvUnit(features, activation, bn, groups=groups) if has_residual else None
         self.resConfUnit2 = ResidualConvUnit(features, activation, bn, groups=groups)
 
         out_features = (features // 2) if expand else features

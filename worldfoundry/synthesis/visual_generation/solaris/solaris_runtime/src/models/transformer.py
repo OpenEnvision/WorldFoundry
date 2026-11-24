@@ -22,9 +22,7 @@ class WanRMSNorm(nnx.Module):
         super().__init__()
         self.dim = dim
         self.eps = eps
-        self.weight = nnx.Param(
-            jnp.ones(dim, dtype=param_dtype), param_dtype=param_dtype
-        )
+        self.weight = nnx.Param(jnp.ones(dim, dtype=param_dtype), param_dtype=param_dtype)
         self.param_dtype = param_dtype
 
     def __call__(self, x):
@@ -50,7 +48,7 @@ class WanLayerNorm(nnx.LayerNorm):
         num_features,
         eps=1e-6,
         elementwise_affine=False,
-        rngs=nnx.Rngs(0),
+        rngs=nnx.Rngs(0),  # noqa: B008 - Default evaluated once at definition, as upstream.
         param_dtype=jnp.float32,
         dtype=jnp.float32,
     ):
@@ -88,7 +86,7 @@ class Conv3d(nnx.Module):
         in_channels,
         out_channels,
         kernel_size,
-        rngs=nnx.Rngs(0),
+        rngs=nnx.Rngs(0),  # noqa: B008 - Default evaluated once at definition, as upstream.
         strides=(1, 1, 1),
         padding="VALID",
         param_dtype=jnp.float32,
@@ -107,12 +105,7 @@ class Conv3d(nnx.Module):
         kernel_shape = (*kernel_size, in_channels, out_channels)
         self.kernel = nnx.Param(
             jax.random.normal(key, kernel_shape, dtype=jnp.float32)
-            * (
-                2.0
-                / math.sqrt(
-                    in_channels * kernel_size[0] * kernel_size[1] * kernel_size[2]
-                )
-            )
+            * (2.0 / math.sqrt(in_channels * kernel_size[0] * kernel_size[1] * kernel_size[2]))
         )
         # Initialize bias
         self.bias = nnx.Param(jnp.zeros(out_channels, dtype=param_dtype))
@@ -178,7 +171,7 @@ class WanSelfAttention(nnx.Module):
         window_size=(-1, -1),
         qk_norm=True,
         eps=1e-6,
-        rngs=nnx.Rngs(0),
+        rngs=nnx.Rngs(0),  # noqa: B008 - Default evaluated once at definition, as upstream.
     ):
         super().__init__()
         self.dim = dim
@@ -189,30 +182,14 @@ class WanSelfAttention(nnx.Module):
         self.eps = eps
 
         # Linear projections
-        self.q = nnx.Linear(
-            dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-        )
-        self.k = nnx.Linear(
-            dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-        )
-        self.v = nnx.Linear(
-            dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-        )
-        self.o = nnx.Linear(
-            dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-        )
+        self.q = nnx.Linear(dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16)
+        self.k = nnx.Linear(dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16)
+        self.v = nnx.Linear(dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16)
+        self.o = nnx.Linear(dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16)
 
         # Normalization layers
-        self.norm_q = (
-            WanRMSNorm(dim, eps, dtype=jnp.bfloat16, param_dtype=jnp.float32)
-            if qk_norm
-            else lambda x: x
-        )
-        self.norm_k = (
-            WanRMSNorm(dim, eps, dtype=jnp.bfloat16, param_dtype=jnp.float32)
-            if qk_norm
-            else lambda x: x
-        )
+        self.norm_q = WanRMSNorm(dim, eps, dtype=jnp.bfloat16, param_dtype=jnp.float32) if qk_norm else lambda x: x
+        self.norm_k = WanRMSNorm(dim, eps, dtype=jnp.bfloat16, param_dtype=jnp.float32) if qk_norm else lambda x: x
 
     def __call__(
         self,
@@ -247,17 +224,13 @@ class WanSelfAttention(nnx.Module):
 class WanI2VCrossAttention(WanSelfAttention):
     def __call__(self, x_bsd, context_btd):
         "b: batch, s: seq_len, d: dim, t: number of embeddings in context"
-        q = rearrange(
-            self.norm_q(self.q(x_bsd)), "b s (nh hd) -> b s nh hd", nh=self.num_heads
-        )
+        q = rearrange(self.norm_q(self.q(x_bsd)), "b s (nh hd) -> b s nh hd", nh=self.num_heads)
         k = rearrange(
             self.norm_k(self.k(context_btd)),
             "b t (nh hd) -> b t nh hd",
             nh=self.num_heads,
         )
-        v = rearrange(
-            self.v(context_btd), "b t (nh hd) -> b t nh hd", nh=self.num_heads
-        )
+        v = rearrange(self.v(context_btd), "b t (nh hd) -> b t nh hd", nh=self.num_heads)
         x = jax.nn.dot_product_attention(q, k, v)
         x = rearrange(x, "b s nh hd -> b s (nh hd)")
         x = self.o(x)
@@ -278,9 +251,7 @@ class MLPProj(nnx.Module):
         # `eps` from the config, so we must match the PyTorch default here.
         TORCH_DEFAULT_EPS = 1e-5
         self.proj = [
-            WanLayerNorm(
-                in_dim, eps=TORCH_DEFAULT_EPS, elementwise_affine=True, rngs=nnx.Rngs(0)
-            ),  # index 0
+            WanLayerNorm(in_dim, eps=TORCH_DEFAULT_EPS, elementwise_affine=True, rngs=nnx.Rngs(0)),  # index 0
             nnx.Linear(
                 in_dim,
                 in_dim,

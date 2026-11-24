@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.api import ArtifactRef, GenerationRequest, GenerationResult
-from worldfoundry.evaluation.api.artifacts import local_path_for_uri
-from worldfoundry.evaluation.tasks.execution.orchestration.cache import (
+from worldfoundry.evals.api import ArtifactRef, GenerationRequest, GenerationResult
+from worldfoundry.evals.api.artifacts import local_path_for_uri
+from worldfoundry.evals.tasks.execution.orchestration.cache import (
     CacheKey,
     GenerationResultCache,
     canonical_json_bytes,

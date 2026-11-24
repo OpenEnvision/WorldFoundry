@@ -14,8 +14,11 @@
 # limitations under the License.
 
 import time
+
 import torch
-from src.models.eval_inputs.provider import Provider
+
+from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.eval_inputs.provider import Provider
+
 
 def get_multi_dataloader(opt, accelerator=None):
     train_datasets, test_datasets = get_datasets(opt, accelerator)
@@ -29,7 +32,7 @@ def get_multi_dataloader(opt, accelerator=None):
         pin_memory=True,
         drop_last=True,
     )
-    
+
     test_dataset = torch.utils.data.ConcatDataset(test_datasets)
     test_dataloader = torch.utils.data.DataLoader(
         test_dataset,
@@ -40,8 +43,8 @@ def get_multi_dataloader(opt, accelerator=None):
         drop_last=False,
     )
 
-
     return train_dataloader, test_dataloader
+
 
 def get_datasets(opt, accelerator=None):
     train_datasets = []
@@ -60,6 +63,8 @@ def get_datasets(opt, accelerator=None):
         test_dataset = Provider(dataset_name, opt, training=False, num_repeat=num_repeat)
         test_datasets.append(test_dataset)
         if accelerator is None or accelerator.is_main_process:
-            print(f"Loaded {dataset_name}, train size: {len(train_dataset)}, test size: {len(test_dataset)}, loading took {time.time() - begin_time} seconds")
+            print(
+                f"Loaded {dataset_name}, train size: {len(train_dataset)}, test size: {len(test_dataset)}, loading took {time.time() - begin_time} seconds"
+            )
 
     return train_datasets, test_datasets

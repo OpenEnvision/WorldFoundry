@@ -1,8 +1,7 @@
-artifact_filename: motionbricks_runtime_plan.json
-artifact_kind: action_trace
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: motionbricks
 display_name: MotionBricks
-id: motionbricks
+task_family: world_model
 input_schema:
   actions:
   - whole_body_motion
@@ -10,7 +9,15 @@ input_schema:
   image: false
   prompt: true
   video: true
-integration_status: runtime_ported
+artifact_kind: action_trace
+artifact_filename: motionbricks_runtime_plan.json
+execution:
+  pipeline_binding: motionbricks
+  backend_stage: worldfoundry_runtime_plan
+  runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - MotionBricks official source route is registered; motion/robot assets are runtime-gated.
 - Missing checkpoints/assets are reported by the runtime plan and are not catalog
@@ -21,9 +28,3 @@ notes:
   at a9d20b2ac0949244d94461a1a3263f38c5027c4a.
 - Real execution remains blocked until MotionBricks checkpoints, robot assets, and
   runtime parity are staged.
-runtime_status: route_ready_assets_pending
-task_family: world_model
-execution:
-  pipeline_binding: motionbricks
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending

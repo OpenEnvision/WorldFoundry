@@ -32,14 +32,14 @@ import inspect
 import pydoc
 from typing import Any
 
-__all__ = ["locate", "convert_target_to_string"]
+__all__ = ["convert_target_to_string", "locate"]
 
 # ──────────────────────────────────────────────────────────────────────────
 # Optional fvcore Registry — keep the name for configs that still import it
 # ──────────────────────────────────────────────────────────────────────────
 
 try:
-    from fvcore.common.registry import Registry  # for backward compatibility.
+    Registry = __import__("fvcore.common.registry", fromlist=["Registry"]).Registry
 
     __all__ += ["Registry"]
 except Exception:
@@ -113,7 +113,7 @@ def locate(name: str) -> Any:
         try:
             # from hydra.utils import get_method - will print many errors
 
-            from hydra.utils import _locate
+            _locate = __import__("hydra.utils", fromlist=["_locate"])._locate
         except ImportError as e:
             raise ImportError(f"Cannot dynamically locate object {name}!") from e
         else:

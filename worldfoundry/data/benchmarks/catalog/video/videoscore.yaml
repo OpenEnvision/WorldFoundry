@@ -134,26 +134,26 @@ metrics:
   output_unit: score
   primary: true
 runner:
-  official_script: worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/videoscore/run_videoscore_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.videoscore.run_videoscore_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.videoscore.run_videoscore_official_runner
     generated_arg: --frames-dir
     dataset_root_arg: --dataset-root
     supports_run_official: false
     supports_official_runtime: true
     accepts_generated_artifacts: true
     input_kind: generated_frames_dir_or_official_results
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoScoreContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:videoscore
   validation_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py --videoscore-root 
-    "${WORLDFOUNDRY_VIDEOSCORE_ROOT:-worldfoundry/evaluation/tasks/execution/runners/videoscore/runtime/videoscore}" 
+    worldfoundry/evals/tasks/execution/runners/videoscore/run_videoscore_official_runner.py --videoscore-root 
+    "${WORLDFOUNDRY_VIDEOSCORE_ROOT:-worldfoundry/evals/tasks/execution/runners/videoscore/runtime/videoscore}" 
     --model-repo-name "${WORLDFOUNDRY_VIDEOSCORE_MODEL_DIR:-TIGER-Lab/VideoScore-v1.1}" --bench-data-root "${WORLDFOUNDRY_VIDEOSCORE_BENCH_ROOT}" 
     --bench-name "${WORLDFOUNDRY_VIDEOSCORE_BENCH_NAME:-video_feedback}" --bounded-sample-count 
     "${WORLDFOUNDRY_VIDEOSCORE_BOUNDED_SAMPLE_COUNT:-1}" --python "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" --timeout 
     "${WORLDFOUNDRY_VIDEOSCORE_TIMEOUT:-1800}" --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py --videoscore-root 
-    "${WORLDFOUNDRY_VIDEOSCORE_ROOT:-worldfoundry/evaluation/tasks/execution/runners/videoscore/runtime/videoscore}" 
+    worldfoundry/evals/tasks/execution/runners/videoscore/run_videoscore_official_runner.py --videoscore-root 
+    "${WORLDFOUNDRY_VIDEOSCORE_ROOT:-worldfoundry/evals/tasks/execution/runners/videoscore/runtime/videoscore}" 
     --model-repo-name "${WORLDFOUNDRY_VIDEOSCORE_MODEL_DIR:-TIGER-Lab/VideoScore-v1.1}" --bench-data-root "${WORLDFOUNDRY_VIDEOSCORE_BENCH_ROOT}" 
     --bench-name "${WORLDFOUNDRY_VIDEOSCORE_BENCH_NAME:-video_feedback}" --frames-dir 
     "${WORLDFOUNDRY_VIDEOSCORE_FRAMES_DIR}" --dataset-root "${WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT}" --python 
@@ -164,7 +164,7 @@ runner:
   - WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT optional TIGER-Lab/VideoFeedback local root
   runtime:
     kind: in_tree_official_source
-    root: worldfoundry/evaluation/tasks/execution/runners/videoscore/runtime/videoscore
+    root: worldfoundry/evals/tasks/execution/runners/videoscore/runtime/videoscore
     optional_root_env: WORLDFOUNDRY_VIDEOSCORE_ROOT
   expected_artifacts:
   - scorecard.json
@@ -219,11 +219,11 @@ data_refs:
   - cache/worldfoundry/data/hfd_datasets/TIGER-Lab__VideoScore-Bench
   - cache/worldfoundry/data/hfd_datasets/TIGER-Lab__VideoScore-Bench
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/videoscore/runtime/videoscore
+  - worldfoundry/evals/tasks/execution/runners/videoscore/runtime/videoscore
   task_yaml: worldfoundry/data/benchmarks/tasks/external/videoscore.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoScoreContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:videoscore
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
@@ -242,10 +242,22 @@ base_model_dependency_preflight:
   missing: []
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-- worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/videoscore/run_videoscore_official_runner.py
 - --json
 checkpoint_refs: []
 artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - video_prompt_manifest
+  - video_frames_dir
+  - videoscore_model_repo
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_scores
+  notes:
+  - Contract maps VideoScore's five human-feedback dimensions to WorldFoundry scorecard.
+  - Official scorer-model inference and benchmark correlations remain explicit validation stages.

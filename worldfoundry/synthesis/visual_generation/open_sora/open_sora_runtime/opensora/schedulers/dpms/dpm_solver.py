@@ -248,7 +248,7 @@ class NoiseScheduleVP:
         if self.schedule == "discrete":
             return interpolate_fn(
                 t.reshape((-1, 1)), self.t_array.to(t.device), self.log_alpha_array.to(t.device)
-            ).reshape((-1))
+            ).reshape(-1)
         elif self.schedule == "linear":
             return -0.25 * t**2 * (self.beta_1 - self.beta_0) - 0.5 * t * self.beta_0
 
@@ -294,13 +294,13 @@ def model_wrapper(
     model,
     noise_schedule,
     model_type="noise",
-    model_kwargs={},
+    model_kwargs={},  # noqa: B006 - Keeps the upstream default object and signature.
     guidance_type="uncond",
     condition=None,
     unconditional_condition=None,
     guidance_scale=1.0,
     classifier_fn=None,
-    classifier_kwargs={},
+    classifier_kwargs={},  # noqa: B006 - Keeps the upstream default object and signature.
 ):
     """Create a wrapper function for the noise prediction model.
 
@@ -404,10 +404,7 @@ def model_wrapper(
 
     def noise_pred_fn(x, t_continuous, cond=None):
         t_input = get_model_input_time(t_continuous)
-        if cond is None:
-            output = model(x, t_input, **model_kwargs)
-        else:
-            output = model(x, t_input, cond, **model_kwargs)
+        output = model(x, t_input, **model_kwargs) if cond is None else model(x, t_input, cond, **model_kwargs)
         if model_type == "noise":
             return output
         elif model_type == "x_start":
@@ -523,7 +520,7 @@ class DPM_Solver:
             Burcu Karagol Ayan, S Sara Mahdavi, Rapha Gontijo Lopes, et al. Photorealistic text-to-image diffusion models
             with deep language understanding. arXiv preprint arXiv:2205.11487, 2022b.
         """
-        self.model = lambda x, t: model_fn(x, t.expand((x.shape[0])))
+        self.model = lambda x, t: model_fn(x, t.expand(x.shape[0]))
         self.noise_schedule = noise_schedule
         assert algorithm_type in ["dpmsolver", "dpmsolver++"]
         self.algorithm_type = algorithm_type
@@ -639,21 +636,15 @@ class DPM_Solver:
             if steps % 3 == 0:
                 orders = [
                     3,
-                ] * (
-                    K - 2
-                ) + [2, 1]
+                ] * (K - 2) + [2, 1]
             elif steps % 3 == 1:
                 orders = [
                     3,
-                ] * (
-                    K - 1
-                ) + [1]
+                ] * (K - 1) + [1]
             else:
                 orders = [
                     3,
-                ] * (
-                    K - 1
-                ) + [2]
+                ] * (K - 1) + [2]
         elif order == 2:
             if steps % 2 == 0:
                 K = steps // 2
@@ -664,9 +655,7 @@ class DPM_Solver:
                 K = steps // 2 + 1
                 orders = [
                     2,
-                ] * (
-                    K - 1
-                ) + [1]
+                ] * (K - 1) + [1]
         elif order == 1:
             K = 1
             orders = [
@@ -681,7 +670,7 @@ class DPM_Solver:
             timesteps_outer = self.get_time_steps(skip_type, t_T, t_0, steps, device)[
                 torch.cumsum(
                     torch.tensor(
-                        [
+                        [  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                             0,
                         ]
                         + orders
@@ -1151,26 +1140,33 @@ class DPM_Solver:
         nfe = 0
         if order == 2:
             r1 = 0.5
-            lower_update = lambda x, s, t: self.dpm_solver_first_update(x, s, t, return_intermediate=True)
-            higher_update = lambda x, s, t, **kwargs: self.singlestep_dpm_solver_second_update(
-                x, s, t, r1=r1, solver_type=solver_type, **kwargs
-            )
+
+            def lower_update(x, s, t):
+                return self.dpm_solver_first_update(x, s, t, return_intermediate=True)
+
+            def higher_update(x, s, t, **kwargs):
+                return self.singlestep_dpm_solver_second_update(x, s, t, r1=r1, solver_type=solver_type, **kwargs)
         elif order == 3:
             r1, r2 = 1.0 / 3.0, 2.0 / 3.0
-            lower_update = lambda x, s, t: self.singlestep_dpm_solver_second_update(
-                x, s, t, r1=r1, return_intermediate=True, solver_type=solver_type
-            )
-            higher_update = lambda x, s, t, **kwargs: self.singlestep_dpm_solver_third_update(
-                x, s, t, r1=r1, r2=r2, solver_type=solver_type, **kwargs
-            )
+
+            def lower_update(x, s, t):
+                return self.singlestep_dpm_solver_second_update(
+                    x, s, t, r1=r1, return_intermediate=True, solver_type=solver_type
+                )
+
+            def higher_update(x, s, t, **kwargs):
+                return self.singlestep_dpm_solver_third_update(x, s, t, r1=r1, r2=r2, solver_type=solver_type, **kwargs)
         else:
             raise ValueError(f"For adaptive step size solver, order must be 2 or 3, got {order}")
-        while torch.abs((s - t_0)).mean() > t_err:
+        while torch.abs(s - t_0).mean() > t_err:
             t = ns.inverse_lambda(lambda_s + h)
             x_lower, lower_noise_kwargs = lower_update(x, s, t)
             x_higher = higher_update(x, s, t, **lower_noise_kwargs)
             delta = torch.max(torch.ones_like(x).to(x) * atol, rtol * torch.max(torch.abs(x_lower), torch.abs(x_prev)))
-            norm_fn = lambda v: torch.sqrt(torch.square(v.reshape((v.shape[0], -1))).mean(dim=-1, keepdim=True))
+
+            def norm_fn(v):
+                return torch.sqrt(torch.square(v.reshape((v.shape[0], -1))).mean(dim=-1, keepdim=True))
+
             E = norm_fn((x_higher - x_lower) / delta).max()
             if torch.all(E <= 1.0):
                 x = x_higher
@@ -1221,9 +1217,9 @@ class DPM_Solver:
         """
         t_0 = 1.0 / self.noise_schedule.total_N if t_start is None else t_start
         t_T = self.noise_schedule.T if t_end is None else t_end
-        assert (
-            t_0 > 0 and t_T > 0
-        ), "Time range needs to be greater than 0. For discrete-time DPMs, it needs to be in [1 / N, 1], where N is the length of betas array"
+        assert t_0 > 0 and t_T > 0, (
+            "Time range needs to be greater than 0. For discrete-time DPMs, it needs to be in [1 / N, 1], where N is the length of betas array"
+        )
         return self.sample(
             x,
             steps=steps,
@@ -1367,9 +1363,9 @@ class DPM_Solver:
         """
         t_0 = 1.0 / self.noise_schedule.total_N if t_end is None else t_end
         t_T = self.noise_schedule.T if t_start is None else t_start
-        assert (
-            t_0 > 0 and t_T > 0
-        ), "Time range needs to be greater than 0. For discrete-time DPMs, it needs to be in [1 / N, 1], where N is the length of betas array"
+        assert t_0 > 0 and t_T > 0, (
+            "Time range needs to be greater than 0. For discrete-time DPMs, it needs to be in [1 / N, 1], where N is the length of betas array"
+        )
         if return_intermediate:
             assert method in [
                 "multistep",
@@ -1419,10 +1415,7 @@ class DPM_Solver:
                 for step in progress_fn(range(order, steps + 1)):
                     t = timesteps[step]
                     # We only use lower order for steps < 10
-                    if lower_order_final and steps < 10:
-                        step_order = min(order, steps + 1 - step)
-                    else:
-                        step_order = order
+                    step_order = min(order, steps + 1 - step) if lower_order_final and steps < 10 else order
                     x = self.multistep_dpm_solver_update(
                         x, model_prev_list, t_prev_list, t, step_order, solver_type=solver_type
                     )

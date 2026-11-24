@@ -14,7 +14,6 @@ import numpy as np
 import torch
 from hydra import compose, initialize_config_dir
 from omegaconf import DictConfig, OmegaConf
-from sklearn import preprocessing
 from torchvision.transforms import v2 as transforms
 
 from worldfoundry.core import jsonable
@@ -24,7 +23,6 @@ from worldfoundry.core.io.paths import (
     resolve_worldfoundry_path,
     worldfoundry_path_tokens,
 )
-
 
 DEFAULT_CONFIG_DIR = resolve_data_path("models", "runtime", "configs", "le_wm", "config", "eval")
 
@@ -100,7 +98,7 @@ def _dataset(cfg: DictConfig, swm: Any):
                         "event": "leworldmodel_dataset_loaded",
                         "dataset_name": _portable_path(resolve_worldfoundry_path(dataset_name)),
                         "dataset_path": _portable_path(candidate),
-                        "num_episodes": int(len(dataset.lengths)),
+                        "num_episodes": len(dataset.lengths),
                         "num_rows": int(np.asarray(dataset.lengths).sum()),
                         "columns": list(dataset.column_names),
                     },
@@ -110,9 +108,7 @@ def _dataset(cfg: DictConfig, swm: Any):
             )
             return dataset
     checked = ", ".join(str(path) for path in candidates)
-    raise FileNotFoundError(
-        f"LeWorldModel dataset {dataset_name!r} was not found. Checked: {checked}"
-    )
+    raise FileNotFoundError(f"LeWorldModel dataset {dataset_name!r} was not found. Checked: {checked}")
 
 
 def _overrides(args: argparse.Namespace) -> list[str]:
@@ -196,16 +192,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     ep_indices = np.unique(row_episode_ids)
 
     process = {}
-    for col in cfg.dataset.keys_to_cache:
-        if col == "pixels":
-            continue
-        processor = preprocessing.StandardScaler()
-        col_data = stats_dataset.get_col_data(col)
-        col_data = col_data[~np.isnan(col_data).any(axis=1)]
-        processor.fit(col_data)
-        process[col] = processor
-        if col != "action":
-            process[f"goal_{col}"] = process[col]
+    non_pixel_cols = [col for col in cfg.dataset.keys_to_cache if col != "pixels"]
+    if non_pixel_cols:
+        from sklearn import preprocessing
+
+        for col in non_pixel_cols:
+            processor = preprocessing.StandardScaler()
+            col_data = stats_dataset.get_col_data(col)
+            col_data = col_data[~np.isnan(col_data).any(axis=1)]
+            processor.fit(col_data)
+            process[col] = processor
+            if col != "action":
+                process[f"goal_{col}"] = process[col]
 
     if cfg.policy != "random":
         model = swm.wm.utils.load_pretrained(cfg.policy)
@@ -257,8 +255,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     text_path = output_dir / cfg.output.filename
     public_cfg = OmegaConf.create(OmegaConf.to_container(cfg, resolve=False))
-    public_cfg.cache_dir = _portable_path(resolve_worldfoundry_path(str(cfg.cache_dir)))
-    public_cfg.eval.dataset_name = _portable_path(resolve_worldfoundry_path(str(cfg.eval.dataset_name)))
+    _assign_portable_public_paths(public_cfg, cfg)
     with text_path.open("a", encoding="utf-8") as handle:
         handle.write("\n==== CONFIG ====\n")
         handle.write(OmegaConf.to_yaml(public_cfg))
@@ -276,7 +273,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "results_file": _portable_path(text_path),
         "output_dir": _portable_path(output_dir),
     }
-    artifact_path = Path(args.artifact_path).expanduser().resolve() if args.artifact_path else output_dir / "worldfoundry_leworldmodel_result.json"
+    artifact_path = (
+        Path(args.artifact_path).expanduser().resolve()
+        if args.artifact_path
+        else output_dir / "worldfoundry_leworldmodel_result.json"
+    )
     artifact_path.parent.mkdir(parents=True, exist_ok=True)
     artifact_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return payload
@@ -298,6 +299,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--goal-offset-steps", type=int, default=None)
     parser.add_argument("--img-size", type=int, default=None)
     return parser.parse_args()
+
+
+def _assign_portable_public_paths(public_cfg: Any, cfg: DictConfig) -> None:
+    """Populate portable cache_dir and dataset_name paths on public_cfg for result logging."""
+    raw_cache_dir = cfg.get("cache_dir")
+    public_cfg.cache_dir = (
+        _portable_path(resolve_worldfoundry_path(str(raw_cache_dir))) if raw_cache_dir is not None else None
+    )
+    public_cfg.eval.dataset_name = _portable_path(resolve_worldfoundry_path(str(cfg.eval.dataset_name)))
 
 
 def main() -> None:

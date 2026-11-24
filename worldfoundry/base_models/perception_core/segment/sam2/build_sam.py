@@ -4,8 +4,6 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> perception_core -> segment -> sam2 -> build_sam.py functionality."""
-
 import logging
 import os
 
@@ -86,11 +84,6 @@ def _canonicalize_in_tree_targets(node):
 
 
 def _torch_load(path, **kwargs):
-    """Helper function to torch load.
-
-    Args:
-        path: The path.
-    """
     try:
         return torch.load(path, **kwargs)
     except TypeError as exc:
@@ -110,17 +103,6 @@ def build_sam2(
     apply_postprocessing=True,
     **kwargs,
 ):
-    """Build sam2.
-
-    Args:
-        config_file: The config file.
-        ckpt_path: The ckpt path.
-        device: The device.
-        mode: The mode.
-        hydra_overrides_extra: The hydra overrides extra.
-        apply_postprocessing: The apply postprocessing.
-    """
-
     hydra_overrides_extra = list(hydra_overrides_extra or ())
     if apply_postprocessing:
         hydra_overrides_extra += [
@@ -151,17 +133,6 @@ def build_sam2_video_predictor(
     vos_optimized=False,
     **kwargs,
 ):
-    """Build sam2 video predictor.
-
-    Args:
-        config_file: The config file.
-        ckpt_path: The ckpt path.
-        device: The device.
-        mode: The mode.
-        hydra_overrides_extra: The hydra overrides extra.
-        apply_postprocessing: The apply postprocessing.
-        vos_optimized: The vos optimized.
-    """
     hydra_overrides = [
         "++model._target_=worldfoundry.base_models.perception_core.segment.sam2.sam2_video_predictor.SAM2VideoPredictor",
     ]
@@ -198,11 +169,6 @@ def build_sam2_video_predictor(
 
 
 def _hf_download(model_id):
-    """Helper function to hf download.
-
-    Args:
-        model_id: The model id.
-    """
     from huggingface_hub import hf_hub_download
 
     config_name, checkpoint_name = HF_MODEL_ID_TO_FILENAMES[model_id]
@@ -211,34 +177,16 @@ def _hf_download(model_id):
 
 
 def build_sam2_hf(model_id, **kwargs):
-    """Build sam2 hf.
-
-    Args:
-        model_id: The model id.
-    """
     config_name, ckpt_path = _hf_download(model_id)
     return build_sam2(config_file=config_name, ckpt_path=ckpt_path, **kwargs)
 
 
 def build_sam2_video_predictor_hf(model_id, **kwargs):
-    """Build sam2 video predictor hf.
-
-    Args:
-        model_id: The model id.
-    """
     config_name, ckpt_path = _hf_download(model_id)
-    return build_sam2_video_predictor(
-        config_file=config_name, ckpt_path=ckpt_path, **kwargs
-    )
+    return build_sam2_video_predictor(config_file=config_name, ckpt_path=ckpt_path, **kwargs)
 
 
 def _load_checkpoint(model, ckpt_path):
-    """Helper function to load checkpoint.
-
-    Args:
-        model: The model.
-        ckpt_path: The ckpt path.
-    """
     if ckpt_path is not None:
         sd = _torch_load(ckpt_path, map_location="cpu", weights_only=True)["model"]
         missing_keys, unexpected_keys = model.load_state_dict(sd)

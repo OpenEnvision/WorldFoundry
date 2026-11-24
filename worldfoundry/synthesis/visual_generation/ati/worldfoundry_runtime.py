@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 
@@ -134,7 +136,7 @@ class ATIRuntime:
         self.config = i2v_14B
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> "ATIRuntime":
+    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> ATIRuntime:
         options = dict(pretrained_model_path) if isinstance(pretrained_model_path, Mapping) else {}
         if pretrained_model_path is not None and not isinstance(pretrained_model_path, Mapping):
             options["checkpoint_path"] = pretrained_model_path
@@ -221,7 +223,9 @@ class ATIRuntime:
         **_: Any,
     ) -> Any:
         if int(num_frames) != 81:
-            raise ValueError("ATI's released inference checkpoint and trajectory resampler require exactly 81 output frames.")
+            raise ValueError(
+                "ATI's released inference checkpoint and trajectory resampler require exactly 81 output frames."
+            )
         image_value = _image(image)
         image_width, image_height = image_value.size
         tracks = self._tracks(
@@ -247,7 +251,7 @@ class ATIRuntime:
         )
         if video is None:
             raise RuntimeError("ATI did not return video frames on the current rank.")
-        from worldfoundry.core.io import save_image_or_video_tensor
+        from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
 
         output = Path(output_path).expanduser().resolve()
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -271,10 +275,8 @@ class ATIRuntime:
             self._checkpoint_overlay = None
 
     def __del__(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self.close()
-        except Exception:
-            pass
 
 
-__all__ = ["ATIRuntime", "DEFAULT_ATI_REPO", "DEFAULT_WAN_I2V_REPO"]
+__all__ = ["DEFAULT_ATI_REPO", "DEFAULT_WAN_I2V_REPO", "ATIRuntime"]

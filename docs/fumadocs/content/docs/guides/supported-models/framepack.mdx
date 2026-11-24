@@ -1,15 +1,15 @@
 ---
 title: "FramePack"
-description: "Stanford constant-memory long image-to-video. Integration verified; runner and official long-video demo still pending. HF license cards are pending. Artifact framepack.mp4."
+description: "Stanford's constant-memory long image-to-video model: a prompt and a start image in, framepack.mp4 out."
 modelId: "framepack"
 pageSource: authored
 ---
 
-FramePack is Stanford's **constant-memory** long image-to-video packer (ControlNet authors): input-frame context is packed into a **fixed-length** window so generation cost stays roughly constant as the clip grows, including minute-scale clips on modest VRAM. WorldFoundry vendors a minimal infer-only runtime under `worldfoundry/synthesis/visual_generation/framepack/framepack_runtime` and exposes `FramePackPipeline`. Integration is Verified. The **runner and official long-video demo are still pending**.
+FramePack is Stanford's **constant-memory** long image-to-video packer (ControlNet authors): input-frame context is packed into a **fixed-length** window so generation cost stays roughly constant as the clip grows, including minute-scale clips on modest VRAM. WorldFoundry runs a minimal infer-only runtime through `FramePackPipeline`.
 
 <ModelPaperFigures modelId="framepack" locale="en" />
 
-Paper: [arXiv 2504.12626](https://arxiv.org/abs/2504.12626). Project: [lllyasviel.github.io/frame_pack_gitpage](https://lllyasviel.github.io/frame_pack_gitpage/). Code: [lllyasviel/FramePack](https://github.com/lllyasviel/FramePack). Public, non-gated weights: `lllyasviel/FramePackI2V_HY` and `lllyasviel/FramePack_F1_I2V_HY_20250503`. HF `cardData` did **not** expose a license — review before promotion. Catalog VRAM is unset.
+Paper: [arXiv 2504.12626](https://arxiv.org/abs/2504.12626). Project: [lllyasviel.github.io/frame_pack_gitpage](https://lllyasviel.github.io/frame_pack_gitpage/). Code: [lllyasviel/FramePack](https://github.com/lllyasviel/FramePack). Public, non-gated weights: `lllyasviel/FramePackI2V_HY` and `lllyasviel/FramePack_F1_I2V_HY_20250503`. Their Hugging Face metadata publishes **no license** — review the upstream terms before use.
 
 <ModelCommandBuilder modelId="framepack" locale="en" />
 
@@ -17,13 +17,15 @@ Paper: [arXiv 2504.12626](https://arxiv.org/abs/2504.12626). Project: [lllyasvie
 
 Pack long video as next-frame chunks from a start image.
 
-Launch `worldfoundry-eval run framepack`.
+Launch `wf run framepack`.
 
 Score on [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) — long-horizon generation suite matching FramePack's long-video focus.
 
 ## Runtime contract
 
 Required: `prompt` and `image`; artifacts: `framepack.mp4`.
+
+Official in-tree runner defaults, taken from the upstream UI quality recipe:
 
 | Knob | Default |
 | --- | --- |
@@ -35,10 +37,10 @@ Required: `prompt` and `image`; artifacts: `framepack.mp4`.
 | Seed | **31337** |
 | TeaCache | **on** |
 
-Official in-tree runner defaults (the upstream UI quality recipe — not a GPU-validated long clip here):
+The request seed controls VAE sampling for the starting image and the noise used to denoise each section.
 
-## Run in WorldFoundry
+## Running in WorldFoundry
 
-Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `lllyasviel/FramePackI2V_HY`, `lllyasviel/FramePack_F1_I2V_HY_20250503`, and `lllyasviel/FramePackI2V_HY` among others locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run framepack`. Catalog VRAM is unset.
+Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `lllyasviel/FramePackI2V_HY` and `lllyasviel/FramePack_F1_I2V_HY_20250503` locally, then run `wf run framepack`. No VRAM requirement is recorded.
 
 <ModelRelatedRecipes modelId="framepack" locale="en" />

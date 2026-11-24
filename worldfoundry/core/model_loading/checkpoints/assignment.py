@@ -45,8 +45,7 @@ def validate_state_dict_compatibility(
             tuple(getattr(expected[key], "shape", ())),
         )
         for key in expected_keys & actual_keys
-        if tuple(getattr(state_dict[key], "shape", ()))
-        != tuple(getattr(expected[key], "shape", ()))
+        if tuple(getattr(state_dict[key], "shape", ())) != tuple(getattr(expected[key], "shape", ()))
     )
     if not (missing or unexpected or mismatched):
         return

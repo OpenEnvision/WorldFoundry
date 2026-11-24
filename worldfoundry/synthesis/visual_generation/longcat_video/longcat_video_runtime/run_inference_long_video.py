@@ -1,22 +1,37 @@
-import os
 import argparse
 import datetime
-import PIL.Image
-import numpy as np
+import os
 
+import numpy as np
+import PIL.Image
 import torch
 import torch.distributed as dist
-
 from transformers import UMT5EncoderModel
+
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.tokenizer_loading import (
     load_longcat_tokenizer,
 )
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.video_io import write_video
 
-from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.pipeline_longcat_video import LongCatVideoPipeline
-from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.scheduling_flow_match_euler import FlowMatchEulerDiscreteScheduler
-from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.autoencoder_kl_wan import AutoencoderKLWan
-from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.longcat_video_dit import LongCatVideoTransformer3DModel
+# isort: split
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.pipeline_longcat_video import (
+    LongCatVideoPipeline,
+)
+
+# isort: split
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.autoencoder_kl_wan import (
+    AutoencoderKLWan,
+)
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.scheduling_flow_match_euler import (
+    FlowMatchEulerDiscreteScheduler,
+)
+
+# isort: split
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.longcat_video_dit import (
+    LongCatVideoTransformer3DModel,
+)
+
+# isort: split
 from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
 from worldfoundry.core.distributed.model_parallel.context_state import init_context_parallel
 
@@ -24,6 +39,7 @@ from worldfoundry.core.distributed.model_parallel.context_state import init_cont
 def torch_gc():
     torch.cuda.empty_cache()
     torch.cuda.ipc_collect()
+
 
 def generate(args):
     # case setup
@@ -40,34 +56,42 @@ def generate(args):
     enable_compile = args.enable_compile
 
     # prepare distributed environment
-    rank = int(os.environ['RANK'])
+    rank = int(os.environ["RANK"])
     num_gpus = torch.cuda.device_count()
     local_rank = rank % num_gpus
     torch.cuda.set_device(local_rank)
-    dist.init_process_group(backend="nccl", timeout=datetime.timedelta(seconds=3600*24))
-    global_rank    = dist.get_rank()
-    num_processes  = dist.get_world_size()
+    dist.init_process_group(backend="nccl", timeout=datetime.timedelta(seconds=3600 * 24))
+    global_rank = dist.get_rank()
+    num_processes = dist.get_world_size()
 
     # initialize context parallel before loading models
-    init_context_parallel(context_parallel_size=context_parallel_size, global_rank=global_rank, world_size=num_processes)
+    init_context_parallel(
+        context_parallel_size=context_parallel_size, global_rank=global_rank, world_size=num_processes
+    )
     cp_size = context_parallel_util.get_cp_size()
     cp_split_hw = context_parallel_util.get_optimal_split(cp_size)
 
     tokenizer = load_longcat_tokenizer(checkpoint_dir)
-    text_encoder = UMT5EncoderModel.from_pretrained(checkpoint_dir, subfolder="text_encoder", torch_dtype=torch.bfloat16)
+    text_encoder = UMT5EncoderModel.from_pretrained(
+        checkpoint_dir, subfolder="text_encoder", torch_dtype=torch.bfloat16
+    )
     vae = AutoencoderKLWan.from_pretrained(checkpoint_dir, subfolder="vae", torch_dtype=torch.bfloat16)
-    scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(checkpoint_dir, subfolder="scheduler", torch_dtype=torch.bfloat16)
-    dit = LongCatVideoTransformer3DModel.from_pretrained(checkpoint_dir, subfolder="dit", cp_split_hw=cp_split_hw, torch_dtype=torch.bfloat16)
+    scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
+        checkpoint_dir, subfolder="scheduler", torch_dtype=torch.bfloat16
+    )
+    dit = LongCatVideoTransformer3DModel.from_pretrained(
+        checkpoint_dir, subfolder="dit", cp_split_hw=cp_split_hw, torch_dtype=torch.bfloat16
+    )
 
     if enable_compile:
         dit = torch.compile(dit)
 
     pipe = LongCatVideoPipeline(
-        tokenizer = tokenizer,
-        text_encoder = text_encoder,
-        vae = vae,
-        scheduler = scheduler,
-        dit = dit,
+        tokenizer=tokenizer,
+        text_encoder=text_encoder,
+        vae=vae,
+        scheduler=scheduler,
+        dit=dit,
     )
     pipe.to(local_rank)
 
@@ -92,11 +116,11 @@ def generate(args):
     if local_rank == 0:
         output_tensor = torch.from_numpy(np.array(output))
         output_tensor = (output_tensor * 255).clamp(0, 255).to(torch.uint8)
-        write_video(f"output_long_video_0.mp4", output_tensor, fps=15, video_codec="libx264", options={"crf": f"{18}"})
+        write_video("output_long_video_0.mp4", output_tensor, fps=15, video_codec="libx264", options={"crf": f"{18}"})
 
     video = [(output[i] * 255).astype(np.uint8) for i in range(output.shape[0])]
     video = [PIL.Image.fromarray(img) for img in video]
-    del output 
+    del output
     torch_gc()
 
     target_size = video[0].size
@@ -107,12 +131,12 @@ def generate(args):
     for segment_idx in range(num_segments):
         if local_rank == 0:
             print(f"Generating segment {segment_idx + 1}/{num_segments}...")
-        
+
         output = pipe.generate_vc(
             video=current_video,
             prompt=prompt,
             negative_prompt=negative_prompt,
-            resolution='480p', # 480p / 720p
+            resolution="480p",  # 480p / 720p
             num_frames=num_frames,
             num_cond_frames=num_cond_frames,
             num_inference_steps=50,
@@ -120,7 +144,7 @@ def generate(args):
             generator=generator,
             use_kv_cache=True,
             offload_kv_cache=False,
-            enhance_hf=True
+            enhance_hf=True,
         )[0]
 
         new_video = [(output[i] * 255).astype(np.uint8) for i in range(output.shape[0])]
@@ -134,17 +158,23 @@ def generate(args):
 
         if local_rank == 0:
             output_tensor = torch.from_numpy(np.array(all_generated_frames))
-            write_video(f"output_long_video_{segment_idx+1}.mp4", output_tensor, fps=15, video_codec="libx264", options={"crf": f"{18}"})
+            write_video(
+                f"output_long_video_{segment_idx + 1}.mp4",
+                output_tensor,
+                fps=15,
+                video_codec="libx264",
+                options={"crf": f"{18}"},
+            )
             del output_tensor
 
     ### long video refinement (720p)
-    refinement_lora_path = os.path.join(checkpoint_dir, 'lora/refinement_lora.safetensors')
-    pipe.dit.load_lora(refinement_lora_path, 'refinement_lora')
-    pipe.dit.enable_loras(['refinement_lora'])
+    refinement_lora_path = os.path.join(checkpoint_dir, "lora/refinement_lora.safetensors")
+    pipe.dit.load_lora(refinement_lora_path, "refinement_lora")
+    pipe.dit.enable_loras(["refinement_lora"])
     pipe.dit.enable_bsa()
 
     if enable_compile:
-        dit = torch.compile(dit)    
+        dit = torch.compile(dit)
 
     torch_gc()
     cur_condition_video = None
@@ -152,18 +182,18 @@ def generate(args):
     start_id = 0
     all_refine_frames = []
 
-    for segment_idx in range(num_segments+1):
+    for segment_idx in range(num_segments + 1):
         if local_rank == 0:
-            print(f"Refine segment {segment_idx + 1}/{num_segments+1}...")
+            print(f"Refine segment {segment_idx + 1}/{num_segments + 1}...")
 
         output_refine = pipe.generate_refine(
             video=cur_condition_video,
-            prompt='',
-            stage1_video=all_generated_frames[start_id:start_id+num_frames],
+            prompt="",
+            stage1_video=all_generated_frames[start_id : start_id + num_frames],
             num_cond_frames=cur_num_cond_frames,
             num_inference_steps=50,
             generator=generator,
-            spatial_refine_only=spatial_refine_only
+            spatial_refine_only=spatial_refine_only,
         )[0]
 
         new_video = [(output_refine[i] * 255).astype(np.uint8) for i in range(output_refine.shape[0])]
@@ -174,11 +204,18 @@ def generate(args):
         cur_condition_video = new_video
         cur_num_cond_frames = num_cond_frames if spatial_refine_only else num_cond_frames * 2
         start_id = start_id + num_frames - num_cond_frames
-        
+
         if local_rank == 0:
             output_tensor = torch.from_numpy(np.array(all_refine_frames))
             fps = 15 if spatial_refine_only else 30
-            write_video(f"output_longvideo_refine_{segment_idx}.mp4", output_tensor, fps=fps, video_codec="libx264", options={"crf": f"{10}"})
+            write_video(
+                f"output_longvideo_refine_{segment_idx}.mp4",
+                output_tensor,
+                fps=fps,
+                video_codec="libx264",
+                options={"crf": f"{10}"},
+            )
+
 
 def _parse_args():
     parser = argparse.ArgumentParser()
@@ -193,8 +230,8 @@ def _parse_args():
         default=None,
     )
     parser.add_argument(
-        '--enable_compile',
-        action='store_true',
+        "--enable_compile",
+        action="store_true",
     )
 
     args = parser.parse_args()

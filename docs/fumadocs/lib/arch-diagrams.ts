@@ -121,7 +121,7 @@ const SYSTEM: ArchDiagramSpec = {
     orchestration: {
       role: { en: 'Orchestration', zh: '编排' },
       title: 'prepare_evaluation / execute_prepared',
-      file: 'evaluation/tasks/execution/orchestration/service.py',
+      file: 'evals/tasks/execution/orchestration/service.py',
       detail: {
         en: 'Compile intent into PreparedEvaluation, then into a runner request',
         zh: '把 intent 编译成 PreparedEvaluation，再变成 runner request',
@@ -263,7 +263,7 @@ const MODEL_RUNTIME: ArchDiagramSpec = {
     {
       type: 'call',
       label: 'resolve_pipeline_route()',
-      file: 'evaluation/models/pipelines/bindings.py:359',
+      file: 'zoo/bindings.py:327',
     },
     { type: 'lane', label: { en: 'Runtime', zh: '运行时' } },
     { type: 'node', id: 'pipeline' },
@@ -320,7 +320,7 @@ const MODEL_RUNTIME_BRIDGE: ArchDiagramSpec = {
     route: {
       role: { en: 'Resolver', zh: '解析' },
       title: 'resolve_pipeline_route()',
-      file: 'evaluation/models/pipelines/bindings.py:359',
+      file: 'zoo/bindings.py:327',
       detail: {
         en: 'Canonical binding helpers; do not re-parse route strings',
         zh: '唯一绑定入口；不要各自重解析 route string',
@@ -329,7 +329,7 @@ const MODEL_RUNTIME_BRIDGE: ArchDiagramSpec = {
     runner: {
       role: { en: 'Resolver', zh: '解析' },
       title: 'resolve_model_zoo_runner()',
-      file: 'evaluation/models/runners/resolver.py:386',
+      file: 'evals/models/runners/resolver.py:386',
       detail: {
         en: 'Returns a WorldModelRunner instance',
         zh: '返回 WorldModelRunner 实例',
@@ -468,7 +468,7 @@ const EVALUATION_CORE: ArchDiagramSpec = {
     facade: {
       role: { en: 'Facade', zh: '门面' },
       title: 'execute_prepared_evaluation()',
-      file: 'evaluation/tasks/execution/orchestration/service.py:775',
+      file: 'evals/tasks/execution/orchestration/service.py:775',
       detail: {
         en: 'Dispatch: EvaluateRunRequest → run_evaluate; ModelBenchmarkRunRequest → run_model_benchmark',
         zh: '分发：EvaluateRunRequest → run_evaluate；ModelBenchmarkRunRequest → run_model_benchmark',
@@ -495,7 +495,7 @@ const EVALUATION_CORE: ArchDiagramSpec = {
     benchmark: {
       role: { en: 'Delegate', zh: '委派' },
       title: 'run_model_benchmark()',
-      file: 'orchestration/model_benchmark.py:825',
+      file: 'orchestration/model_benchmark.py:795',
       detail: {
         en: 'Generate, then official suite via ManifestBenchmarkRunner',
         zh: '先生成，再经 ManifestBenchmarkRunner 跑官方 suite',
@@ -740,7 +740,7 @@ const WORKFLOW: ArchDiagramSpec = {
     facade: {
       role: { en: 'Facade', zh: '门面' },
       title: 'run_evaluate()',
-      file: 'evaluation/tasks/execution/orchestration/evaluate.py:1071',
+      file: 'evals/tasks/execution/orchestration/evaluate.py:1071',
       detail: {
         en: 'Validate, choose mode, hand off',
         zh: '校验、选 mode、移交',
@@ -908,10 +908,10 @@ const STUDIO: ArchDiagramSpec = {
       role: { en: 'Launch', zh: '启动' },
       title: { en: 'CLI flags', zh: '启动参数' },
       detail: {
-        en: 'Parse worldfoundry-studio flags into a launch config',
-        zh: '把 worldfoundry-studio 的 flags 收成启动配置',
+        en: 'Parse wf-studio flags into a launch config',
+        zh: '把 wf-studio 的 flags 收成启动配置',
       },
-      file: 'studio/ui/launch_config.py',
+      file: 'studio/visualization/launch_config.py',
     },
     config: {
       role: { en: 'Frontend', zh: '前端' },
@@ -920,7 +920,7 @@ const STUDIO: ArchDiagramSpec = {
         en: 'Route model or artifact metadata to a standalone browser frontend',
         zh: '根据模型或 artifact 元数据选择独立浏览器前端',
       },
-      file: 'studio/ui/launcher.py',
+      file: 'studio/visualization/launcher.py',
     },
     catalog: {
       role: { en: 'Discovery', zh: '发现' },
@@ -929,7 +929,7 @@ const STUDIO: ArchDiagramSpec = {
         en: 'AST-scan pipeline modules without importing CUDA stacks',
         zh: '用 AST 扫描 pipeline 模块，不 import CUDA 栈',
       },
-      file: 'studio/inference/catalog.py',
+      file: 'studio/inference/catalog/discovery.py',
     },
     manager: {
       role: { en: 'Orchestration', zh: '编排' },
@@ -1105,7 +1105,7 @@ const CATALOG_SCORECARD: ArchDiagramSpec = {
       resolve: {
         role: { en: 'Resolve', zh: '解析' },
         title: 'resolve_model_zoo_runner()',
-        file: 'evaluation/models/runners/resolver.py:386',
+        file: 'evals/models/runners/resolver.py:386',
       },
     },
     steps: [
@@ -1162,8 +1162,8 @@ const TASK_MATERIALIZE: ArchDiagramSpec = {
     zh: 'Task materialization',
   },
   caption: {
-    en: 'Prove this step with worldfoundry-eval task materialize before spending GPU time.',
-    zh: '耗 GPU 之前用 worldfoundry-eval task materialize 证明此步。',
+    en: 'Prove this step with wf task materialize before spending GPU time.',
+    zh: '耗 GPU 之前用 wf task materialize 证明此步。',
   },
   nodes: {
     task: {

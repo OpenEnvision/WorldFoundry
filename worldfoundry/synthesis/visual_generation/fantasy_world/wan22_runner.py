@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
-from pathlib import Path
 import random
 import sys
-from typing import Optional
+from contextlib import nullcontext
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -34,9 +33,9 @@ class FantasyWorldWan22Runner:
     def _auto_device_layout(
         cls,
         base_device: str,
-        high_model_device: Optional[str],
-        low_model_device: Optional[str],
-        moge_device: Optional[str],
+        high_model_device: str | None,
+        low_model_device: str | None,
+        moge_device: str | None,
     ) -> tuple[str, str, str]:
         resolved_base = cls._canonical_cuda_device(base_device)
         if not resolved_base.startswith("cuda"):
@@ -67,8 +66,8 @@ class FantasyWorldWan22Runner:
         lora_dir: str,
         model_ckpt_high: str,
         model_ckpt_low: str,
-        moge_path: Optional[str] = None,
-        moge_pretrained: Optional[str] = None,
+        moge_path: str | None = None,
+        moge_pretrained: str | None = None,
         base_seed: int = -1,
         sample_steps: int = 50,
         cfg_scale: float = 5.0,
@@ -78,9 +77,9 @@ class FantasyWorldWan22Runner:
         height: int = 480,
         width: int = 832,
         device: str = "cuda",
-        high_model_device: Optional[str] = None,
-        low_model_device: Optional[str] = None,
-        moge_device: Optional[str] = None,
+        high_model_device: str | None = None,
+        low_model_device: str | None = None,
+        moge_device: str | None = None,
         weight_dtype: torch.dtype = torch.bfloat16,
     ) -> None:
         if not str(device).startswith("cuda") or not torch.cuda.is_available():
@@ -142,19 +141,21 @@ class FantasyWorldWan22Runner:
             is_i2v=True,
             pose_encoding_to_extri_intri=pose_encoding_to_extri_intri,
         )
-        self.moge = MoGeModel.from_pretrained(
-            resolve_moge_pretrained(moge_pretrained)
-        ).to(self.moge_device).eval()
+        self.moge = MoGeModel.from_pretrained(resolve_moge_pretrained(moge_pretrained)).to(self.moge_device).eval()
 
     def _prepare_control_latents(
         self,
         plucker_embedding: torch.Tensor,
         target_device: str,
     ) -> torch.Tensor:
-        camera_video = plucker_embedding.to(
-            device=target_device,
-            dtype=self.torch_dtype,
-        )[0].permute(3, 0, 1, 2).unsqueeze(0)
+        camera_video = (
+            plucker_embedding.to(
+                device=target_device,
+                dtype=self.torch_dtype,
+            )[0]
+            .permute(3, 0, 1, 2)
+            .unsqueeze(0)
+        )
         values = torch.cat(
             (
                 torch.repeat_interleave(camera_video[:, :, :1], repeats=4, dim=2),
@@ -195,25 +196,13 @@ class FantasyWorldWan22Runner:
         ).to(device=self.high_device, dtype=self.torch_dtype)
 
         devices = {self.high_device, self.low_device}
-        control_by_device = {
-            target: self._prepare_control_latents(plucker_embedding, target)
-            for target in devices
-        }
-        y_by_device = {
-            target: y.to(device=target, dtype=self.torch_dtype)
-            for target in devices
-        }
-        positive_by_device = {
-            target: context_pos.to(device=target, dtype=self.torch_dtype)
-            for target in devices
-        }
+        control_by_device = {target: self._prepare_control_latents(plucker_embedding, target) for target in devices}
+        y_by_device = {target: y.to(device=target, dtype=self.torch_dtype) for target in devices}
+        positive_by_device = {target: context_pos.to(device=target, dtype=self.torch_dtype) for target in devices}
         negative_by_device = (
             None
             if context_neg is None
-            else {
-                target: context_neg.to(device=target, dtype=self.torch_dtype)
-                for target in devices
-            }
+            else {target: context_neg.to(device=target, dtype=self.torch_dtype) for target in devices}
         )
         final_prediction = None
 
@@ -250,9 +239,9 @@ class FantasyWorldWan22Runner:
         self,
         *,
         image: Image.Image,
-        end_image: Optional[Image.Image],
+        end_image: Image.Image | None,
         prompt: str,
-        neg_prompt: Optional[str],
+        neg_prompt: str | None,
         camera_params,
         using_scale: bool = True,
     ):
@@ -268,13 +257,9 @@ class FantasyWorldWan22Runner:
             moge_output = self.moge.infer(input_image_tensor)
             moge = {key: value.cpu().contiguous() for key, value in moge_output.items()}
             intrinsics = torch.from_numpy(
-                np.stack([self._fw_utils.get_intrinsic_matrix(camera) for camera in camera_params]).astype(
-                    np.float32
-                )
+                np.stack([self._fw_utils.get_intrinsic_matrix(camera) for camera in camera_params]).astype(np.float32)
             )
-            extrinsics = torch.from_numpy(
-                np.stack([camera.w2c_mat for camera in camera_params]).astype(np.float32)
-            )
+            extrinsics = torch.from_numpy(np.stack([camera.w2c_mat for camera in camera_params]).astype(np.float32))
             if using_scale:
                 first_world, first_mask = self._fw_utils.batch_depth_to_world(
                     prediction=moge,
@@ -340,8 +325,8 @@ def build_wan22_runner(
     lora_dir: str,
     model_ckpt_high: str,
     model_ckpt_low: str,
-    moge_path: Optional[str] = None,
-    moge_pretrained: Optional[str] = None,
+    moge_path: str | None = None,
+    moge_pretrained: str | None = None,
     base_seed: int = -1,
     sample_steps: int = 50,
     cfg_scale: float = 5.0,
@@ -351,9 +336,9 @@ def build_wan22_runner(
     height: int = 480,
     width: int = 832,
     device: str = "cuda",
-    high_model_device: Optional[str] = None,
-    low_model_device: Optional[str] = None,
-    moge_device: Optional[str] = None,
+    high_model_device: str | None = None,
+    low_model_device: str | None = None,
+    moge_device: str | None = None,
     weight_dtype: torch.dtype = torch.bfloat16,
 ) -> FantasyWorldWan22Runner:
     return FantasyWorldWan22Runner(

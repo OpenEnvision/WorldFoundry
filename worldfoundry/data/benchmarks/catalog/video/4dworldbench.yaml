@@ -174,17 +174,17 @@ metrics:
   output_unit: score
   primary: true
 runner:
-  official_script: worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.four_d_worldbench.run_four_d_worldbench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.four_d_worldbench.run_four_d_worldbench_official_runner
     dataset_manifest_arg: --dataset-json
     dimension_arg: --dimension
     supports_official_runtime: true
     accepts_generated_artifacts: true
     default_metrics: [perceptual_clip_iqa_metrics]
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:FourDWorldBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:4dworldbench
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -205,8 +205,8 @@ runner:
   - per_sample_scores.jsonl
   runtime:
     kind: in_tree_official_runtime
-    root: worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench
-    runtime_root: worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/runtime/four_d_worldbench
+    root: worldfoundry/evals/tasks/execution/runners/four_d_worldbench
+    runtime_root: worldfoundry/evals/tasks/execution/runners/four_d_worldbench/runtime/four_d_worldbench
     root_env: WORLDFOUNDRY_4DWORLDBENCH_ROOT
     results_path_env: WORLDFOUNDRY_4DWORLDBENCH_RESULTS_PATH
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -215,7 +215,7 @@ integration:
   tier: model_backed
   judge_model_id: Kwai-Keye/Keye-VL-1_5-8B
   evidence:
-  - In-tree runner and metric entrypoints are available under worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench.
+  - In-tree runner and metric entrypoints are available under worldfoundry/evals/tasks/execution/runners/four_d_worldbench.
   - Heavy official dependencies are resolved through WorldFoundry base_models or explicit environment variables.
 release_status: experimental
 maturity: contract_ready
@@ -236,7 +236,7 @@ data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/4dworldbench.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:FourDWorldBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:4dworldbench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
@@ -249,7 +249,7 @@ base_model_dependencies:
 - fastvqa
 validation_command:
 - python
-- worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
 - --run-official
 - --dataset-json
 - <dataset.json>
@@ -273,3 +273,20 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - dataset_json
+  - generated_video_dir
+  - model_name
+  - dimension
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_scores
+  - dimension_result_json
+  notes:
+  - Contract covers the official 4DWorldBench world-generation dimensions for perceptual quality, Condition-4D
+    alignment, physical realism, and 4D consistency.
+  - WorldFoundry keeps the runner and metric entrypoints in-tree; heavy judges and geometry/video-quality
+    backbones are resolved through WorldFoundry base_models or explicit environment variables.

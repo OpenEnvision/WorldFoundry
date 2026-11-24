@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> __init__.py functionality."""
-
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any
 
@@ -40,14 +38,6 @@ __all__ = [
 
 
 def _version_info(version_string: str) -> tuple[int, ...]:
-    """Helper function to version info.
-
-    Args:
-        version_string: The version string.
-
-    Returns:
-        The return value.
-    """
     release = version_string.split("+", 1)[0].split("-", 1)[0]
     return tuple(int(part) for part in release.split(".") if part.isdigit())
 
@@ -66,14 +56,6 @@ if OmegaConf is not None:
 
 
 def __getattr__(name: str) -> Any:
-    """Getattr.
-
-    Args:
-        name: The name.
-
-    Returns:
-        The return value.
-    """
     if name == "make_pipeline":
         from worldfoundry.base_models.three_dimensions.general_3d.vipe.pipeline import make_pipeline
 

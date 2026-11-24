@@ -11,7 +11,8 @@ import os
 import pickle
 import shutil
 import sys
-from typing import Callable, Union
+from collections.abc import Callable
+from typing import Any
 
 from worldfoundry.core.utils.python.functional_utils import is_sequence
 
@@ -21,7 +22,6 @@ __all__ = [
     "dump_text",
     "dump_text_lines",
     "extract_tar",
-    "file_sha256",
     "f_add_ext",
     "f_append_before_ext",
     "f_copy",
@@ -41,6 +41,7 @@ __all__ = [
     "f_size",
     "f_split_path",
     "f_time",
+    "file_sha256",
     "get_dir",
     "get_file_lock",
     "get_package_root",
@@ -137,7 +138,8 @@ def utf_open(fname, mode):
     """
     import codecs
 
-    return codecs.open(fname, mode=mode, encoding="utf-8")
+    # Public contract: codecs.open semantics (binary-backed stream, no newline translation), not builtin open().
+    return codecs.open(fname, mode=mode, encoding="utf-8")  # ty: ignore[deprecated]
 
 
 def f_not_empty(*fpaths):
@@ -431,10 +433,7 @@ def _f_copytree(
     Use f_copytree as entry
     """
     names = os.listdir(src)
-    if ignore is not None:
-        ignored_names = ignore(src, names)
-    else:
-        ignored_names = set()
+    ignored_names = ignore(src, names) if ignore is not None else set()
 
     os.makedirs(dst, exist_ok=exist_ok)
     errors = []
@@ -498,8 +497,8 @@ def _include_patterns(*patterns):
 
         import fnmatch
 
-        keep = set(name for pattern in patterns for name in fnmatch.filter(names, pattern))
-        ignore = set(name for name in names if name not in keep and not os.path.isdir(os.path.join(path, name)))
+        keep = {name for pattern in patterns for name in fnmatch.filter(names, pattern)}
+        ignore = {name for name in names if name not in keep and not os.path.isdir(os.path.join(path, name))}
         return ignore
 
     return _ignore_patterns
@@ -660,9 +659,8 @@ def extract_tar(source_tarball, output_dir=".", members=None):
                 safe_relative_path(member.name, field_name="tar member")
                 if member.islnk() or member.issym():
                     raise ValueError(
-                        f"tar member {member.name!r} is a link; refusing to extract "
-                        "without PEP 706 tarfile filters"
-                    )
+                        f"tar member {member.name!r} is a link; refusing to extract without PEP 706 tarfile filters"
+                    ) from None
             tar.extractall(output_dir, members=members)
 
 
@@ -700,7 +698,7 @@ def timestamp_file_name(fname):
 
 def next_available_file_name(
     *fpath,
-    suffix_template: Union[str, Callable[[int], str]] = "_v{i+1}",
+    suffix_template: str | Callable[[int], str] = "_v{i+1}",
     before_ext: bool = True,
 ):
     """
@@ -714,7 +712,7 @@ def next_available_file_name(
         """Format ``{i}`` / ``{i+1}`` suffix templates without ``eval``."""
         import re
 
-        def _eval_node(node: ast.AST, env: dict) -> object:
+        def _eval_node(node: ast.AST, env: dict[str, Any]) -> Any:
             """Evaluate ``{i}`` / ``{i+1}`` AST fragments; reject names outside *env*."""
 
             if isinstance(node, ast.Name):
@@ -755,10 +753,7 @@ def next_available_file_name(
             assert isinstance(suffix, str)
         else:
             raise NotImplementedError(f"Unsupported suffix template {suffix_template}")
-        if before_ext:
-            fpath = insert_before_ext(orig_file_path, suffix)
-        else:
-            fpath = orig_file_path + suffix
+        fpath = insert_before_ext(orig_file_path, suffix) if before_ext else orig_file_path + suffix
         i += 1
     return fpath
 
@@ -774,7 +769,7 @@ def get_file_lock(*fpath, timeout: int = 15, logging_level="critical"):
     """
     import logging
 
-    from flufl.lock import Lock
+    Lock = __import__("flufl.lock", fromlist=["Lock"]).Lock
 
     logging.getLogger("flufl.lock").setLevel(logging_level.upper())
     return Lock(f_join(*fpath), lifetime=timeout)
@@ -783,9 +778,7 @@ def get_file_lock(*fpath, timeout: int = 15, logging_level="critical"):
 def load_pickle(*fpaths, allow_pickle=False):
     """Load a trusted pickle after an explicit unsafe-format opt-in."""
     if not allow_pickle:
-        raise ValueError(
-            "Refusing to unpickle without allow_pickle=True; only opt in for a trusted source"
-        )
+        raise ValueError("Refusing to unpickle without allow_pickle=True; only opt in for a trusted source")
     with open(f_join(*fpaths), "rb") as fp:
         return pickle.load(fp)
 
@@ -800,7 +793,7 @@ def dump_pickle(data, *fpaths):
 def load_text(*fpaths, by_lines=False):
     """Read a local text file; ``by_lines=True`` keeps trailing newlines."""
 
-    with open(f_join(*fpaths), "r") as fp:
+    with open(f_join(*fpaths)) as fp:
         if by_lines:
             return fp.readlines()
         else:

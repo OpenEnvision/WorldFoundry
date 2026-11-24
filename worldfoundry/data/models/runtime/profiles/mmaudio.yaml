@@ -5,6 +5,7 @@ task_family: video_generation
 groups: [video, audio_generation]
 source_repos:
 - url: https://github.com/hkchengrex/MMAudio
+  revision: 974010a026c731054592d8f777218bd9d85a6c24
 checkpoints:
 - repo_id: hkchengrex/MMAudio
   role: audio_checkpoint

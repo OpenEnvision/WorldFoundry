@@ -17,9 +17,7 @@ class _TinyNativeModel(nn.Module, NativeConfigMixin):
 
 
 def test_native_from_config_filters_diffusers_metadata() -> None:
-    loaded = _TinyNativeModel.from_config(
-        {"_class_name": "IgnoredDiffusersMetadata", "width": 3}
-    )
+    loaded = _TinyNativeModel.from_config({"_class_name": "IgnoredDiffusersMetadata", "width": 3})
 
     assert loaded.config.width == 3
     assert loaded.proj.in_features == 3

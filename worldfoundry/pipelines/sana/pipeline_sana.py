@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from collections.abc import Mapping
+from typing import Any, ClassVar
 
+from worldfoundry.base_models.diffusion_model.models.networks.sana.acceleration import (
+    SanaAccelerationConfig,
+    accelerate_sana_vae,
+    accelerate_sana_video,
+    sana_runtime_receipt,
+)
 from worldfoundry.base_models.diffusion_model.recipes.sana_variants import get_sana_variant
 
 from ..native_diffusion import NativeVisualDiffusionPipeline
@@ -20,10 +27,10 @@ class SanaPipeline(NativeVisualDiffusionPipeline):
         "tokenizer",
         "codec",
     )
-    PRIMARY_CHECKPOINT_ROLE: ClassVar[str] = "dit"
+    PRIMARY_CHECKPOINT_ROLE: ClassVar[str | None] = "dit"
     ALLOW_MODEL_ID_OVERRIDE: ClassVar[bool] = True
     NUM_INFERENCE_STEP_ALIASES: ClassVar[tuple[str, ...]] = ("step", "infer_steps")
-    SCHEDULER_OPTION_ALIASES: ClassVar[dict[str, str]] = {"flow_shift": "shift"}
+    SCHEDULER_OPTION_ALIASES: ClassVar[Mapping[str, str]] = {"flow_shift": "shift"}
 
     def __init__(self, *, native_pipeline, device: str, model_id: str | None = None) -> None:
         variant = get_sana_variant(model_id or self.MODEL_ID)
@@ -55,9 +62,12 @@ class SanaPipeline(NativeVisualDiffusionPipeline):
             self.DEFAULT_SCHEDULER_OPTIONS = {}
         else:
             self.DEFAULT_SCHEDULER_OPTIONS = {
-                "shift": 8.0 if variant.resolution == "720p" else 7.0
+                "shift": 8.0
+                if variant.resolution == "720p"
+                else 7.0
                 if variant.resolution == "480p"
-                else 4.0 if "600m" in variant.model_id.split("-")
+                else 4.0
+                if "600m" in variant.model_id.split("-")
                 else 3.0
             }
         super().__init__(
@@ -67,6 +77,69 @@ class SanaPipeline(NativeVisualDiffusionPipeline):
         )
         self.model_name = variant.display_name
         self.generation_type = variant.task
+        self._sol_acceleration_receipt: dict[str, Any] | None = None
+
+    def _resolve_native_components(self) -> tuple[Any, Any]:
+        components = getattr(self.native_pipeline, "components", None)
+        denoiser = getattr(components, "denoiser", None) if components is not None else None
+        if denoiser is None:
+            denoiser = getattr(self.native_pipeline, "denoiser", None)
+        decoder = getattr(components, "decoder", None) if components is not None else None
+        if decoder is None:
+            decoder = getattr(self.native_pipeline, "decoder", None)
+        return denoiser, decoder
+
+    def apply_sol_engine(
+        self,
+        config: SanaAccelerationConfig | str = "sol_balanced",
+        *,
+        vae_channels_last_3d: bool | None = None,
+        vae_decode_autocast_bf16: bool | None = None,
+        vae_compile: bool | None = None,
+    ) -> dict[str, Any]:
+        """Apply the SANA SOL-Engine stack to this pipeline's denoiser and VideoVAE."""
+        denoiser, decoder = self._resolve_native_components()
+        model = getattr(denoiser, "model", None)
+        if model is None:
+            raise RuntimeError("SanaPipeline native_pipeline does not expose a denoiser.model")
+        if denoiser is not None and hasattr(denoiser, "apply_sol_engine"):
+            receipt = denoiser.apply_sol_engine(config)
+        else:
+            receipt = accelerate_sana_video(model, config)
+            if denoiser is not None and hasattr(denoiser, "_feature_cache_config"):
+                denoiser._feature_cache_config = getattr(model, "_worldfoundry_easycache_config", None)
+        if decoder is not None:
+            cfg_dict = receipt.get("config", {})
+            eff_cl3d = (
+                bool(cfg_dict.get("vae_channels_last_3d", True))
+                if vae_channels_last_3d is None
+                else bool(vae_channels_last_3d)
+            )
+            eff_bf16 = (
+                bool(cfg_dict.get("vae_decode_autocast", True))
+                if vae_decode_autocast_bf16 is None
+                else bool(vae_decode_autocast_bf16)
+            )
+            eff_compile = bool(cfg_dict.get("vae_compile", False)) if vae_compile is None else bool(vae_compile)
+            receipt["vae"] = accelerate_sana_vae(
+                decoder,
+                channels_last_3d=eff_cl3d,
+                decode_autocast_bf16=eff_bf16,
+                compile_decoder=eff_compile,
+                compile_mode=receipt.get("compile", {}).get("mode") or "default",
+            )
+        self._sol_acceleration_receipt = receipt
+        return receipt
+
+    def sol_engine_report(self) -> dict[str, Any]:
+        """Return the live SOL-Engine optimization receipt for this pipeline."""
+        denoiser, _ = self._resolve_native_components()
+        if denoiser is not None and hasattr(denoiser, "runtime_optimization_report"):
+            return denoiser.runtime_optimization_report()
+        model = getattr(denoiser, "model", None)
+        if model is not None:
+            return sana_runtime_receipt(model)
+        return {"installed": [], "fallbacks": []}
 
     @staticmethod
     def _default_size(variant) -> tuple[int, int]:
@@ -162,22 +235,22 @@ class SanaStreamingBidirectional2b720pPipeline(SanaPipeline):
 
 __all__ = [
     "LongsanaVideo2b480pPipeline",
-    "Sana1600M1024pxBf16Pipeline",
-    "Sana1600M1024pxMultilingPipeline",
-    "Sana1600M1024pxPipeline",
+    "Sana1p51600M1024pxPipeline",
+    "Sana1p54800M1024pxPipeline",
+    "Sana600M512pxPipeline",
+    "Sana600M1024pxPipeline",
     "Sana1600M2kBf16Pipeline",
     "Sana1600M4kBf16Pipeline",
     "Sana1600M512pxMultilingPipeline",
     "Sana1600M512pxPipeline",
-    "Sana1p51600M1024pxPipeline",
-    "Sana1p54800M1024pxPipeline",
-    "Sana600M1024pxPipeline",
-    "Sana600M512pxPipeline",
-    "SanaControlnet1600M1024pxBf16Pipeline",
+    "Sana1600M1024pxBf16Pipeline",
+    "Sana1600M1024pxMultilingPipeline",
+    "Sana1600M1024pxPipeline",
     "SanaControlnet600M1024pxPipeline",
+    "SanaControlnet1600M1024pxBf16Pipeline",
     "SanaPipeline",
-    "SanaSprint1600M1024pxPipeline",
     "SanaSprint600M1024pxPipeline",
+    "SanaSprint1600M1024pxPipeline",
     "SanaStreaming2b720pPipeline",
     "SanaStreamingBidirectional2b720pPipeline",
     "SanaVideo2b480pPipeline",

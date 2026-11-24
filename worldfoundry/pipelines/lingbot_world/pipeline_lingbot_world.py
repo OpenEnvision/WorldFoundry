@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import numpy as np
 from PIL import Image
@@ -26,7 +26,7 @@ WMFACTORY_BASE_INTRINSICS = np.asarray(
     [502.9116, 503.10812, 415.77786, 239.77779],
     dtype=np.float32,
 )
-WMFACTORY_INTERACTION_KEYS: Dict[str, tuple[str, ...]] = {
+WMFACTORY_INTERACTION_KEYS: dict[str, tuple[str, ...]] = {
     "forward": ("w",),
     "backward": ("s",),
     "left": ("a",),
@@ -49,10 +49,9 @@ logger = logging.getLogger(__name__)
 
 
 def _wmfactory_trajectory_from_interactions(
-    interactions: Optional[list[str]],
+    interactions: list[str] | None,
     num_frames: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Wmfactory trajectory from interactions helper function."""
     keys: list[str] = []
     unknown: list[str] = []
     for raw_token in interactions or []:
@@ -83,9 +82,9 @@ class LingBotPipeline(PipelineABC):
 
     def __init__(
         self,
-        operators: Optional[LingBotOperator] = None,
-        synthesis_model: Optional[LingBotSynthesis] = None,
-        memory_module: Optional[Any] = None,
+        operators: LingBotOperator | None = None,
+        synthesis_model: LingBotSynthesis | None = None,
+        memory_module: Any | None = None,
         device: str = "cuda",
         model_id: str = "lingbot-world",
     ):
@@ -99,10 +98,10 @@ class LingBotPipeline(PipelineABC):
 
     @classmethod
     # LingBot's public loader retains its positional mode argument.
-    def from_pretrained(  # ty: ignore[invalid-method-override]
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Union[str, Dict[str, Any], None] = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        model_path: str | dict[str, Any] | None = None,
+        required_components: dict[str, Any] | None = None,
         mode: str = "i2v-A14B",
         device: str = "cuda",
         **kwargs,
@@ -149,12 +148,12 @@ class LingBotPipeline(PipelineABC):
     def process(
         self,
         images: Any = None,
-        prompt: Optional[str] = None,
-        interactions: Optional[list[str]] = None,
-        action_path: Optional[str] = None,
+        prompt: str | None = None,
+        interactions: list[str] | None = None,
+        action_path: str | None = None,
         resize_H: int = 480,
         resize_W: int = 832,
-        num_frames: Optional[int] = 81,
+        num_frames: int | None = 81,
         wmfactory_action_controls: bool = False,
         poses_c2ws: Any = None,
         poses_Ks: Any = None,
@@ -196,16 +195,16 @@ class LingBotPipeline(PipelineABC):
     def __call__(
         self,
         images: Any = None,
-        num_frames: Optional[int] = 81,
-        prompt: Optional[str] = None,
-        interactions: Optional[list[str]] = None,
-        action_path: Optional[str] = None,
+        num_frames: int | None = 81,
+        prompt: str | None = None,
+        interactions: list[str] | None = None,
+        action_path: str | None = None,
         resize_H: int = 480,
         resize_W: int = 832,
         max_area: int = 720 * 1280,
         vis_ui: bool = False,
         allow_act2cam: bool = False,
-        action_string: Optional[str] = None,
+        action_string: str | None = None,
         wmfactory_action_controls: bool = False,
         poses_c2ws: Any = None,
         poses_Ks: Any = None,
@@ -279,7 +278,7 @@ class LingBotPipeline(PipelineABC):
         video_chunk = VideoChunk(frames=output_video, layout="thwc", value_range="0,1")
         artifact_path = None
         if output_path is not None:
-            from worldfoundry.core.io import save_video_frames
+            from worldfoundry.core.media.codecs.video import save_video_frames
 
             output = Path(output_path).expanduser().resolve()
             output.parent.mkdir(parents=True, exist_ok=True)
@@ -300,17 +299,17 @@ class LingBotPipeline(PipelineABC):
 
     def stream(
         self,
-        prompt: Optional[str] = None,
-        interactions: Optional[list[str]] = None,
+        prompt: str | None = None,
+        interactions: list[str] | None = None,
         images: Any = None,
-        action_path: Optional[str] = None,
-        num_frames: Optional[int] = 81,
+        action_path: str | None = None,
+        num_frames: int | None = 81,
         resize_H: int = 480,
         resize_W: int = 832,
         max_area: int = 720 * 1280,
         vis_ui: bool = False,
         allow_act2cam: bool = False,
-        action_string: Optional[str] = None,
+        action_string: str | None = None,
         wmfactory_action_controls: bool = False,
         seed: int = 42,
         return_dict: bool = False,
@@ -377,7 +376,7 @@ class LingBotPipeline(PipelineABC):
     def configure_realtime(
         self,
         images: Any,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         seed: int = 42,
         fps: int = 16,
         **_: Any,
@@ -399,12 +398,12 @@ class LingBotPipeline(PipelineABC):
 
     def stream_realtime(
         self,
-        prompt: Optional[str] = None,
-        interactions: Optional[list[str]] = None,
-        realtime_segments: Optional[list[dict[str, Any]]] = None,
+        prompt: str | None = None,
+        interactions: list[str] | None = None,
+        realtime_segments: list[dict[str, Any]] | None = None,
         seed: int = 42,
         **_: Any,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Advance the existing autoregressive rollout by one model chunk."""
 
         session = self._ensure_realtime_session()

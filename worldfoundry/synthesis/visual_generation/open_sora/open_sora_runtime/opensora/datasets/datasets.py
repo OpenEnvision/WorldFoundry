@@ -6,7 +6,7 @@ import torch
 from PIL import ImageFile
 from torchvision.datasets.folder import IMG_EXTENSIONS, pil_loader
 
-from opensora.registry import DATASETS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import DATASETS
 
 from .read_video import read_video
 from .utils import VID_EXTENSIONS, get_transforms_image, get_transforms_video, read_file, temporal_random_crop
@@ -70,7 +70,7 @@ class VideoTextDataset(torch.utils.data.Dataset):
         if file_type == "video":
             # loading
             vframes, vinfo = read_video(path, backend="av")
-            video_fps = vinfo["video_fps"] if "video_fps" in vinfo else 24
+            video_fps = vinfo["video_fps"] if "video_fps" in vinfo else 24  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
 
             # Sampling video frames
             video = temporal_random_crop(vframes, self.num_frames, self.frame_interval)
@@ -147,7 +147,7 @@ class VariableVideoTextDataset(VideoTextDataset):
         if file_type == "video":
             # loading
             vframes, vinfo = read_video(path, backend="av")
-            video_fps = vinfo["video_fps"] if "video_fps" in vinfo else 24
+            video_fps = vinfo["video_fps"] if "video_fps" in vinfo else 24  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
 
             # Sampling video frames
             video = temporal_random_crop(vframes, num_frames, self.frame_interval)

@@ -3,20 +3,15 @@
 from importlib import import_module
 
 __all__ = [
-    "MogeModel",
     "MoGeModelV1",
     "MoGeModelV2",
+    "MogeModel",
     "model",
     "utils",
 ]
 
 
 def __getattr__(name: str):
-    """Getattr.
-
-    Args:
-        name: The name.
-    """
     if name == "MogeModel":
         from .adapter import MogeModel
 

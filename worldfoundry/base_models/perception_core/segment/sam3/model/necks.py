@@ -5,15 +5,16 @@
 """Necks are the interface between a vision backbone and the rest of the detection model"""
 
 from copy import deepcopy
-from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+
 from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import NestedTensor
 
 
 class Sam3DualViTDetNeck(nn.Module):
     """Sam dual vi t det neck implementation."""
+
     def __init__(
         self,
         trunk: nn.Module,
@@ -101,21 +102,13 @@ class Sam3DualViTDetNeck(nn.Module):
             self.sam2_convs = deepcopy(self.convs)
 
     def forward(
-        self, tensor_list: List[torch.Tensor]
-    ) -> Tuple[
-        List[torch.Tensor],
-        List[torch.Tensor],
-        Optional[List[torch.Tensor]],
-        Optional[List[torch.Tensor]],
+        self, tensor_list: list[torch.Tensor]
+    ) -> tuple[
+        list[torch.Tensor],
+        list[torch.Tensor],
+        list[torch.Tensor] | None,
+        list[torch.Tensor] | None,
     ]:
-        """Forward.
-
-        Args:
-            tensor_list: The tensor list.
-
-        Returns:
-            The return value.
-        """
         xs = self.trunk(tensor_list)
         sam3_out, sam3_pos = [], []
         sam2_out, sam2_pos = None, None
@@ -138,6 +131,7 @@ class Sam3DualViTDetNeck(nn.Module):
 
 class Sam3TriViTDetNeck(nn.Module):
     """Sam tri vi t det neck implementation."""
+
     def __init__(
         self,
         trunk: nn.Module,
@@ -225,11 +219,6 @@ class Sam3TriViTDetNeck(nn.Module):
         need_interactive_out: bool = True,
         need_propagation_out: bool = True,
     ):
-        """Forward.
-
-        Args:
-            tensor_list: The tensor list.
-        """
         xs = self.trunk(tensor_list)
         sam3_out = []
         interactive_out = []
@@ -244,35 +233,25 @@ class Sam3TriViTDetNeck(nn.Module):
         x_data = getattr(x, "tensors", x)
         x_mask = getattr(x, "mask", None)
         for _, (conv, interactive_conv, propagation_conv) in enumerate(
-            zip(self.convs, self.interactive_convs, self.propagation_convs)
+            zip(self.convs, self.interactive_convs, self.propagation_convs, strict=False)
         ):
             if need_sam3_out:
                 sam3_conv_out = conv(x_data)
                 sam3_x_out = NestedTensor(sam3_conv_out, x_mask)
                 sam3_out.append(sam3_x_out)
-                sam3_pos.append(
-                    self.position_encoding(sam3_conv_out).to(sam3_conv_out.dtype)
-                )
+                sam3_pos.append(self.position_encoding(sam3_conv_out).to(sam3_conv_out.dtype))
 
             if need_interactive_out:
                 interactive_conv_out_t = interactive_conv(x_data)
                 interactive_conv_out = NestedTensor(interactive_conv_out_t, x_mask)
                 interactive_out.append(interactive_conv_out)
-                interactive_pos.append(
-                    self.position_encoding(interactive_conv_out_t).to(
-                        interactive_conv_out_t.dtype
-                    )
-                )
+                interactive_pos.append(self.position_encoding(interactive_conv_out_t).to(interactive_conv_out_t.dtype))
 
             if need_propagation_out:
                 propagation_conv_out = propagation_conv(x_data)
                 propagation_x_out = NestedTensor(propagation_conv_out, x_mask)
                 propagation_out.append(propagation_x_out)
-                propagation_pos.append(
-                    self.position_encoding(propagation_conv_out).to(
-                        propagation_conv_out.dtype
-                    )
-                )
+                propagation_pos.append(self.position_encoding(propagation_conv_out).to(propagation_conv_out.dtype))
 
         return (
             sam3_out,

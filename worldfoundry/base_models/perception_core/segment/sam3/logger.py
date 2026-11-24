@@ -1,8 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved
 
 # pyre-unsafe
-"""Module for base_models -> perception_core -> segment -> sam3 -> logger.py functionality."""
-
 import logging
 import os
 
@@ -19,7 +17,6 @@ class ColoredFormatter(logging.Formatter):
     """A command line formatter with different colors for each level."""
 
     def __init__(self):
-        """Init."""
         super().__init__()
         reset = "\033[0m"
         colors = {
@@ -31,17 +28,11 @@ class ColoredFormatter(logging.Formatter):
         }
         fmt_str = "{color}%(levelname)s %(asctime)s %(process)d %(filename)s:%(lineno)4d:{reset} %(message)s"
         self.formatters = {
-            level: logging.Formatter(fmt_str.format(color=color, reset=reset))
-            for level, color in colors.items()
+            level: logging.Formatter(fmt_str.format(color=color, reset=reset)) for level, color in colors.items()
         }
         self.default_formatter = self.formatters[logging.INFO]
 
     def format(self, record):
-        """Format.
-
-        Args:
-            record: The record.
-        """
         formatter = self.formatters.get(record.levelno, self.default_formatter)
         return formatter.format(record)
 
@@ -50,9 +41,7 @@ def get_logger(name, level=logging.INFO):
     """A command line logger."""
     if "LOG_LEVEL" in os.environ:
         level = os.environ["LOG_LEVEL"].upper()
-        assert level in LOG_LEVELS, (
-            f"Invalid LOG_LEVEL: {level}, must be one of {list(LOG_LEVELS.keys())}"
-        )
+        assert level in LOG_LEVELS, f"Invalid LOG_LEVEL: {level}, must be one of {list(LOG_LEVELS.keys())}"
         level = LOG_LEVELS[level]
     logger = logging.getLogger(name)
     logger.setLevel(level)

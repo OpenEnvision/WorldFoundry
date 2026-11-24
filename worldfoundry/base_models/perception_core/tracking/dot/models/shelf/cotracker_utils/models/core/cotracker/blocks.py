@@ -7,14 +7,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from einops import rearrange
 from timm.models.vision_transformer import Attention, Mlp
 
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_planes, planes, norm_fn="group", stride=1):
-        super(ResidualBlock, self).__init__()
+        super().__init__()
 
         self.conv1 = nn.Conv2d(
             in_planes,
@@ -24,9 +23,7 @@ class ResidualBlock(nn.Module):
             stride=stride,
             padding_mode="zeros",
         )
-        self.conv2 = nn.Conv2d(
-            planes, planes, kernel_size=3, padding=1, padding_mode="zeros"
-        )
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, padding=1, padding_mode="zeros")
         self.relu = nn.ReLU(inplace=True)
 
         num_groups = planes // 8
@@ -34,34 +31,32 @@ class ResidualBlock(nn.Module):
         if norm_fn == "group":
             self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
             self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
-            if not stride == 1:
+            if not stride == 1:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 self.norm3 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
 
         elif norm_fn == "batch":
             self.norm1 = nn.BatchNorm2d(planes)
             self.norm2 = nn.BatchNorm2d(planes)
-            if not stride == 1:
+            if not stride == 1:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 self.norm3 = nn.BatchNorm2d(planes)
 
         elif norm_fn == "instance":
             self.norm1 = nn.InstanceNorm2d(planes)
             self.norm2 = nn.InstanceNorm2d(planes)
-            if not stride == 1:
+            if not stride == 1:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 self.norm3 = nn.InstanceNorm2d(planes)
 
         elif norm_fn == "none":
             self.norm1 = nn.Sequential()
             self.norm2 = nn.Sequential()
-            if not stride == 1:
+            if not stride == 1:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
                 self.norm3 = nn.Sequential()
 
         if stride == 1:
             self.downsample = None
 
         else:
-            self.downsample = nn.Sequential(
-                nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride), self.norm3
-            )
+            self.downsample = nn.Sequential(nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride), self.norm3)
 
     def forward(self, x):
         y = x
@@ -75,10 +70,8 @@ class ResidualBlock(nn.Module):
 
 
 class BasicEncoder(nn.Module):
-    def __init__(
-        self, input_dim=3, output_dim=128, stride=8, norm_fn="batch", dropout=0.0
-    ):
-        super(BasicEncoder, self).__init__()
+    def __init__(self, input_dim=3, output_dim=128, stride=8, norm_fn="batch", dropout=0.0):
+        super().__init__()
         self.stride = stride
         self.norm_fn = norm_fn
         self.in_planes = 64
@@ -228,13 +221,14 @@ class AttnBlock(nn.Module):
     def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, **block_kwargs):
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.attn = Attention(
-            hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs
-        )
+        self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
 
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
         self.mlp = Mlp(
             in_features=hidden_size,
             hidden_features=mlp_hidden_dim,
@@ -276,7 +270,7 @@ class CorrBlock:
         self.fmaps_pyramid = []
 
         self.fmaps_pyramid.append(fmaps)
-        for i in range(self.num_levels - 1):
+        for _i in range(self.num_levels - 1):
             fmaps_ = fmaps.reshape(B * S, C, H, W)
             fmaps_ = F.avg_pool2d(fmaps_, 2, stride=2)
             _, _, H, W = fmaps_.shape
@@ -296,11 +290,9 @@ class CorrBlock:
 
             dx = torch.linspace(-r, r, 2 * r + 1)
             dy = torch.linspace(-r, r, 2 * r + 1)
-            delta = torch.stack(torch.meshgrid(dy, dx, indexing="ij"), axis=-1).to(
-                coords.device
-            )
+            delta = torch.stack(torch.meshgrid(dy, dx, indexing="ij"), axis=-1).to(coords.device)
 
-            centroid_lvl = coords.reshape(B * S * N, 1, 1, 2) / 2 ** i
+            centroid_lvl = coords.reshape(B * S * N, 1, 1, 2) / 2**i
             delta_lvl = delta.view(1, 2 * r + 1, 2 * r + 1, 2)
             coords_lvl = centroid_lvl + delta_lvl
 
@@ -353,18 +345,12 @@ class UpdateFormer(nn.Module):
         self.flow_head = torch.nn.Linear(hidden_size, output_dim, bias=True)
 
         self.time_blocks = nn.ModuleList(
-            [
-                AttnBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio)
-                for _ in range(time_depth)
-            ]
+            [AttnBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(time_depth)]
         )
 
         if add_space_attn:
             self.space_blocks = nn.ModuleList(
-                [
-                    AttnBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio)
-                    for _ in range(space_depth)
-                ]
+                [AttnBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(space_depth)]
             )
             assert len(self.time_blocks) >= len(self.space_blocks)
         self.initialize_weights()
@@ -388,9 +374,7 @@ class UpdateFormer(nn.Module):
             x_time = self.time_blocks[i](x_time)
 
             x = rearrange(x_time, "(b n) t c -> b n t c ", b=B, t=T, n=N)
-            if self.add_space_attn and (
-                i % (len(self.time_blocks) // len(self.space_blocks)) == 0
-            ):
+            if self.add_space_attn and (i % (len(self.time_blocks) // len(self.space_blocks)) == 0):
                 x_space = rearrange(x, "b n t c -> (b t) n c ", b=B, t=T, n=N)
                 x_space = self.space_blocks[j](x_space)
                 x = rearrange(x_space, "(b t) n c -> b n t c  ", b=B, t=T, n=N)

@@ -23,11 +23,14 @@ def runtime_root() -> Path:
     """
     # Resolve the absolute path of the current file and then get its parent directory
     # Finally, append 'easyanimate_runtime' to locate the specific runtime asset directory.
-    return Path(__file__).resolve().parent / 'easyanimate_runtime'
+    return Path(__file__).resolve().parent / "easyanimate_runtime"
 
 
-from .worldfoundry_runtime import EasyAnimate, default_model_path, resolve_config_path
-
+from .worldfoundry_runtime import (  # noqa: E402 - Follows module-level definitions, as upstream.
+    EasyAnimate,
+    default_model_path,
+    resolve_config_path,
+)
 
 # Defines the public API of this module when a user imports using `from easyanimate import *`.
 # It ensures that only the specified names are exported, making the module's interface clear.

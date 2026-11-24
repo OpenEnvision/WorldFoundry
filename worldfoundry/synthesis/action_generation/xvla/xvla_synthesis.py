@@ -1,6 +1,7 @@
 """WorldFoundry synthesis facade for X-VLA."""
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any, ClassVar
 
 from worldfoundry.core.model_loading.checkpoints import select_profile_checkpoint, selected_checkpoint_options
 from worldfoundry.synthesis.action_generation.base_action_synthesis import ActionModelSynthesis
@@ -16,7 +17,7 @@ class XVLASynthesis(OfficialPolicySynthesis, ActionModelSynthesis):
     """Profile-backed direct X-VLA action generation."""
 
     MODEL_ID = "xvla"
-    CHECKPOINT_ALIASES = {
+    CHECKPOINT_ALIASES: ClassVar[dict] = {
         "widowx": "widowx_checkpoint",
         "bridge": "widowx_checkpoint",
         "google": "google_robot_checkpoint",
@@ -40,8 +41,7 @@ class XVLASynthesis(OfficialPolicySynthesis, ActionModelSynthesis):
         requested = {**self.runtime_options, **dict(options)}
         selector = requested.get("checkpoint_variant") or requested.get("variant_id") or requested.get("variant")
         has_explicit_path = any(
-            requested.get(key) not in (None, "")
-            for key in ("checkpoint_path", "checkpoint_dir", "ckpt_path")
+            requested.get(key) not in (None, "") for key in ("checkpoint_path", "checkpoint_dir", "ckpt_path")
         )
         has_explicit_ref = any(
             requested.get(key) not in (None, "")
@@ -80,11 +80,10 @@ class XVLASynthesis(OfficialPolicySynthesis, ActionModelSynthesis):
                     break
                 except ValueError:
                     pass
-        if selected is not None and explicit_record is not None:
+        if selected is not None and explicit_record is not None:  # noqa: SIM102 - Statement form kept for readability.
             if selected.get("repo_id") != explicit_record.get("repo_id"):
                 raise ValueError(
-                    f"X-VLA variant {selector!r} conflicts with explicit checkpoint "
-                    f"{explicit_record.get('repo_id')!r}"
+                    f"X-VLA variant {selector!r} conflicts with explicit checkpoint {explicit_record.get('repo_id')!r}"
                 )
         domain_record = selected or explicit_record
         if requested.get("domain_id") in (None, "") and (

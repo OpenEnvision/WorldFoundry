@@ -11,7 +11,18 @@ from worldfoundry.core.io.paths import resolve_worldfoundry_path
 
 
 def load_pil_image(image_input) -> Image.Image:
-    """Load pil image helper function."""
+    """Convert a single image input to an RGB PIL image.
+
+    Accepted inputs are a PIL image; a path, where WorldFoundry path tokens are expanded and
+    relative paths resolve against the repository root; or a list or tuple with exactly one
+    non-None item. NumPy arrays use HW grayscale or PIL-compatible HWC layouts and are clipped
+    to [0, 255] unless they are uint8. Tensors use HW grayscale, three-channel CHW, or
+    PIL-compatible HWC with a leading dimension other than 1 or 3. Non-uint8 tensors are scaled
+    by 255 when their maximum is at most 1, then clipped to [0, 255].
+
+    Raises:
+        TypeError: The input type is unsupported or a sequence does not hold exactly one image.
+    """
     if isinstance(image_input, (list, tuple)):
         items = [item for item in image_input if item is not None]
         if len(items) != 1:
@@ -45,10 +56,10 @@ def load_pil_image(image_input) -> Image.Image:
 
 def materialize_image_input(
     image_input,
-    output_dir: str,
+    output_dir: str | os.PathLike[str],
     filename: str = "input.png",
 ) -> str:
-    """Materialize image input helper function."""
+    """Save an image input accepted by :func:`load_pil_image` as ``output_dir/filename`` and return the absolute path."""
     image = load_pil_image(image_input)
     output_path = Path(output_dir).expanduser().resolve() / filename
     output_path.parent.mkdir(parents=True, exist_ok=True)

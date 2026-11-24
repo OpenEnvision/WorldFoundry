@@ -10,7 +10,7 @@ Tensors are BCTHW.  2-D siblings are :mod:`.ops`.
 Used only by Sana temporal DC-AE, not MiniMax / Wan CNNs.
 """
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import torch
 import torch.nn as nn
@@ -18,6 +18,7 @@ import torch.nn.functional as F
 
 from worldfoundry.core.model_loading.checkpoints import submodule_state_dict
 from worldfoundry.core.nn import get_same_padding, val2tuple
+
 from .act import build_act
 from .norm import TritonRMSNorm2d, build_norm
 from .ops import IdentityLayer, OpSequential, ResidualBlock
@@ -26,28 +27,13 @@ from .ops import IdentityLayer, OpSequential, ResidualBlock
 def conv3d_split_channel(
     x: torch.Tensor,
     weight: torch.Tensor,
-    bias: Optional[torch.Tensor],
+    bias: torch.Tensor | None,
     stride: int | Sequence[int],
     padding: int | Sequence[int],
     dilation: int | Sequence[int],
     num_in_channel_chunks: int,
     num_out_channel_chunks: int,
 ) -> torch.Tensor:
-    """Conv3d split channel.
-
-    Args:
-        x: The x.
-        weight: The weight.
-        bias: The bias.
-        stride: The stride.
-        padding: The padding.
-        dilation: The dilation.
-        num_in_channel_chunks: The num in channel chunks.
-        num_out_channel_chunks: The num out channel chunks.
-
-    Returns:
-        The return value.
-    """
     out_channels, in_channels = weight.shape[0], weight.shape[1]
     assert in_channels % num_in_channel_chunks == 0 and out_channels % num_out_channel_chunks == 0
     in_channels_per_split = in_channels // num_in_channel_chunks
@@ -72,26 +58,12 @@ def conv3d_split_channel(
 def custom_conv3d(
     input: torch.Tensor,
     weight: torch.Tensor,
-    bias: Optional[torch.Tensor],
+    bias: torch.Tensor | None,
     stride: Sequence[int],
     padding: int | Sequence[int],
     dilation: int | Sequence[int],
     groups: int,
 ) -> torch.Tensor:
-    """Custom conv3d.
-
-    Args:
-        input: The input.
-        weight: The weight.
-        bias: The bias.
-        stride: The stride.
-        padding: The padding.
-        dilation: The dilation.
-        groups: The groups.
-
-    Returns:
-        The return value.
-    """
     input_sample_numel = input[0].numel()
     output_sample_numel = (
         weight.shape[0] * (input.shape[2] // stride[0]) * (input.shape[3] // stride[1]) * (input.shape[4] // stride[2])
@@ -114,6 +86,7 @@ def custom_conv3d(
 
 class ConvLayer3d(nn.Module):
     """Conv layer d implementation."""
+
     def __init__(
         self,
         in_channels: int,
@@ -128,25 +101,8 @@ class ConvLayer3d(nn.Module):
         spatial_padding_mode: str = "zeros",
         temporal_padding_mode: str = "zeros",
         causal: bool = False,
-        causal_chunk_length: Optional[int] = None,
+        causal_chunk_length: int | None = None,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            stride: The stride.
-            groups: The groups.
-            use_bias: The use bias.
-            norm: The norm.
-            act_func: The act func.
-            zero_out: The zero out.
-            spatial_padding_mode: The spatial padding mode.
-            temporal_padding_mode: The temporal padding mode.
-            causal: The causal.
-            causal_chunk_length: The causal chunk length.
-        """
         super().__init__()
         kernel_size = val2tuple(kernel_size, 3)
         stride = val2tuple(stride, 3)
@@ -190,12 +146,6 @@ class ConvLayer3d(nn.Module):
                 nn.init.constant_(self.conv.bias, 0)
 
     def load_state_dict_from_2d(self, state_dict: dict[str, torch.Tensor], method: str = "zero_pad"):
-        """Load state dict from 2d.
-
-        Args:
-            state_dict: The state dict.
-            method: The method.
-        """
         if method == "zero_pad":
             nn.init.constant_(self.conv.weight, 0)
             if self.causal:
@@ -217,19 +167,9 @@ class ConvLayer3d(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        feature_cache: Optional[dict[str, torch.Tensor]] = None,
-        feature_key: Optional[str] = None,
+        feature_cache: dict[str, torch.Tensor] | None = None,
+        feature_key: str | None = None,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            feature_cache: The feature cache.
-            feature_key: The feature key.
-
-        Returns:
-            The return value.
-        """
         # if x.shape[2] == 1:  # images
         #     x = x.squeeze(2)
         #     if self.custom_padding is not None:
@@ -262,7 +202,7 @@ class ConvLayer3d(nn.Module):
             )  # (B, T // self.causal_chunk_length, C, self.causal_chunk_length, H, W)
 
             if feature_cache is not None:
-                first_left_pad = feature_cache[feature_key] if feature_key in feature_cache else None
+                first_left_pad = feature_cache[feature_key] if feature_key in feature_cache else None  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
                 feature_cache[feature_key] = x[:, -1:, :, -self.conv.padding[0] :].clone()
             else:
                 first_left_pad = None
@@ -325,8 +265,7 @@ class ConvLayer3d(nn.Module):
         return x
 
     def __repr__(self):
-        """Repr."""
-        _str = f"{self.__class__.__name__}(\n" f"  (conv): {self.conv}\n"
+        _str = f"{self.__class__.__name__}(\n  (conv): {self.conv}\n"
         if self.norm:
             _str += f"  (norm): {self.norm}\n"
         if self.act:
@@ -334,47 +273,30 @@ class ConvLayer3d(nn.Module):
         _str += f"  zero_out={self.zero_out}\n"
         _str += f"  causal={self.causal}\n"
         _str += f"  causal_chunk_length={self.causal_chunk_length}\n"
-        _str += f")"
+        _str += ")"
         return _str
 
 
 class ResBlock3d(nn.Module):
     """Res block d implementation."""
+
     def __init__(
         self,
         in_channels: int,
         out_channels: int,
         kernel_size: int | tuple[int] = 3,
         stride: int | tuple[int] = 1,
-        mid_channels: Optional[int] = None,
+        mid_channels: int | None = None,
         expand_ratio: float = 1,
         use_bias: bool = False,
-        norm: tuple[Optional[str]] = ("bn2d", "bn2d"),
-        act_func: tuple[Optional[str]] = ("relu6", None),
+        norm: tuple[str | None] = ("bn2d", "bn2d"),
+        act_func: tuple[str | None] = ("relu6", None),
         zero_out: bool = False,
         spatial_padding_mode: str = "zeros",
         temporal_padding_mode: str = "zeros",
         causal: bool = False,
-        causal_chunk_length: Optional[int] = None,
+        causal_chunk_length: int | None = None,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            stride: The stride.
-            mid_channels: The mid channels.
-            expand_ratio: The expand ratio.
-            use_bias: The use bias.
-            norm: The norm.
-            act_func: The act func.
-            zero_out: The zero out.
-            spatial_padding_mode: The spatial padding mode.
-            temporal_padding_mode: The temporal padding mode.
-            causal: The causal.
-            causal_chunk_length: The causal chunk length.
-        """
         super().__init__()
         use_bias = val2tuple(use_bias, 2)
         norm = val2tuple(norm, 2)
@@ -411,52 +333,26 @@ class ResBlock3d(nn.Module):
         )
 
     def load_state_dict_from_2d(self, state_dict: dict[str, torch.Tensor], method: str):
-        """Load state dict from 2d.
-
-        Args:
-            state_dict: The state dict.
-            method: The method.
-        """
         self.conv1.load_state_dict_from_2d(submodule_state_dict(state_dict, "conv1."), method)
         self.conv2.load_state_dict_from_2d(submodule_state_dict(state_dict, "conv2."), method)
 
     def forward(
         self,
         x: torch.Tensor,
-        feature_cache: Optional[dict[str, torch.Tensor]] = None,
-        feature_key: Optional[str] = None,
+        feature_cache: dict[str, torch.Tensor] | None = None,
+        feature_key: str | None = None,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            feature_cache: The feature cache.
-            feature_key: The feature key.
-
-        Returns:
-            The return value.
-        """
         x = self.conv1(x, feature_cache, feature_key + "conv1." if feature_key is not None else None)
         x = self.conv2(x, feature_cache, feature_key + "conv2." if feature_key is not None else None)
         return x
 
 
 def pixel_unshuffle_3d(x: torch.Tensor, spatial_factor: int, temporal_factor: int) -> torch.Tensor:
-    """Pixel unshuffle 3d.
-
-    Args:
-        x: The x.
-        spatial_factor: The spatial factor.
-        temporal_factor: The temporal factor.
-
-    Returns:
-        The return value.
-    """
     # x: (B, C, T, H, W)
     B, C, T, H, W = x.shape
-    assert (
-        T % temporal_factor == 0 and W % spatial_factor == 0 and H % spatial_factor == 0
-    ), f"T:{T} {temporal_factor} W:{W} {spatial_factor} H:{H} {spatial_factor}"
+    assert T % temporal_factor == 0 and W % spatial_factor == 0 and H % spatial_factor == 0, (
+        f"T:{T} {temporal_factor} W:{W} {spatial_factor} H:{H} {spatial_factor}"
+    )
     x = (
         x.reshape(
             (
@@ -479,16 +375,6 @@ def pixel_unshuffle_3d(x: torch.Tensor, spatial_factor: int, temporal_factor: in
 
 
 def pixel_shuffle_3d(x: torch.Tensor, spatial_factor: int, temporal_factor: int) -> torch.Tensor:
-    """Pixel shuffle 3d.
-
-    Args:
-        x: The x.
-        spatial_factor: The spatial factor.
-        temporal_factor: The temporal factor.
-
-    Returns:
-        The return value.
-    """
     # x: (B, C, T, H, W)
     B, C, T, H, W = x.shape
     assert C % (temporal_factor * spatial_factor**2) == 0
@@ -506,6 +392,7 @@ def pixel_shuffle_3d(x: torch.Tensor, spatial_factor: int, temporal_factor: int)
 
 class ConvPixelUnshuffleDownSampleLayer3d(nn.Module):
     """Conv pixel unshuffle down sample layer d implementation."""
+
     def __init__(
         self,
         in_channels: int,
@@ -517,22 +404,8 @@ class ConvPixelUnshuffleDownSampleLayer3d(nn.Module):
         temporal_padding_mode: str = "zeros",
         zero_out: bool = False,
         causal: bool = False,
-        causal_chunk_length: Optional[int] = None,
+        causal_chunk_length: int | None = None,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            spatial_factor: The spatial factor.
-            temporal_factor: The temporal factor.
-            spatial_padding_mode: The spatial padding mode.
-            temporal_padding_mode: The temporal padding mode.
-            zero_out: The zero out.
-            causal: The causal.
-            causal_chunk_length: The causal chunk length.
-        """
         super().__init__()
         self.spatial_factor = spatial_factor
         self.temporal_factor = temporal_factor
@@ -553,30 +426,14 @@ class ConvPixelUnshuffleDownSampleLayer3d(nn.Module):
         )
 
     def load_state_dict_from_2d(self, state_dict: dict[str, torch.Tensor], method: str):
-        """Load state dict from 2d.
-
-        Args:
-            state_dict: The state dict.
-            method: The method.
-        """
         self.conv.load_state_dict_from_2d(submodule_state_dict(state_dict, "conv."), method)
 
     def forward(
         self,
         x: torch.Tensor,
-        feature_cache: Optional[dict[str, torch.Tensor]] = None,
-        feature_key: Optional[str] = None,
+        feature_cache: dict[str, torch.Tensor] | None = None,
+        feature_key: str | None = None,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            feature_cache: The feature cache.
-            feature_key: The feature key.
-
-        Returns:
-            The return value.
-        """
         x = self.conv(x, feature_cache, feature_key + "conv." if feature_key is not None else None)
         x = pixel_unshuffle_3d(x, self.spatial_factor, self.temporal_factor)
         return x
@@ -584,6 +441,7 @@ class ConvPixelUnshuffleDownSampleLayer3d(nn.Module):
 
 class PixelUnshuffleChannelAveragingDownSampleLayer3d(nn.Module):
     """Pixel unshuffle channel averaging down sample layer d implementation."""
+
     def __init__(
         self,
         in_channels: int,
@@ -591,14 +449,6 @@ class PixelUnshuffleChannelAveragingDownSampleLayer3d(nn.Module):
         spatial_factor: int,
         temporal_factor: int,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            spatial_factor: The spatial factor.
-            temporal_factor: The temporal factor.
-        """
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -608,23 +458,9 @@ class PixelUnshuffleChannelAveragingDownSampleLayer3d(nn.Module):
         self.group_size = in_channels * spatial_factor**2 * temporal_factor // out_channels
 
     def load_state_dict_from_2d(self, state_dict: dict[str, torch.Tensor], method: str):
-        """Load state dict from 2d.
-
-        Args:
-            state_dict: The state dict.
-            method: The method.
-        """
         pass
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         x = pixel_unshuffle_3d(x, self.spatial_factor, self.temporal_factor)
         B, C, T, H, W = x.shape
         x = x.view(B, self.out_channels, self.group_size, T, H, W)
@@ -634,6 +470,7 @@ class PixelUnshuffleChannelAveragingDownSampleLayer3d(nn.Module):
 
 class ConvPixelShuffleUpSampleLayer3d(nn.Module):
     """Conv pixel shuffle up sample layer d implementation."""
+
     def __init__(
         self,
         in_channels: int,
@@ -645,22 +482,8 @@ class ConvPixelShuffleUpSampleLayer3d(nn.Module):
         temporal_padding_mode: str = "zeros",
         zero_out: bool = False,
         causal: bool = False,
-        causal_chunk_length: Optional[int] = None,
+        causal_chunk_length: int | None = None,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            kernel_size: The kernel size.
-            spatial_factor: The spatial factor.
-            temporal_factor: The temporal factor.
-            spatial_padding_mode: The spatial padding mode.
-            temporal_padding_mode: The temporal padding mode.
-            zero_out: The zero out.
-            causal: The causal.
-            causal_chunk_length: The causal chunk length.
-        """
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -682,30 +505,14 @@ class ConvPixelShuffleUpSampleLayer3d(nn.Module):
         )
 
     def load_state_dict_from_2d(self, state_dict: dict[str, torch.Tensor], method: str):
-        """Load state dict from 2d.
-
-        Args:
-            state_dict: The state dict.
-            method: The method.
-        """
         self.conv.load_state_dict_from_2d(submodule_state_dict(state_dict, "conv."), method)
 
     def forward(
         self,
         x: torch.Tensor,
-        feature_cache: Optional[dict[str, torch.Tensor]] = None,
-        feature_key: Optional[str] = None,
+        feature_cache: dict[str, torch.Tensor] | None = None,
+        feature_key: str | None = None,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            feature_cache: The feature cache.
-            feature_key: The feature key.
-
-        Returns:
-            The return value.
-        """
         x = self.conv(x, feature_cache, feature_key + "conv." if feature_key is not None else None)
         x = pixel_shuffle_3d(x, self.spatial_factor, self.temporal_factor)
         return x
@@ -713,6 +520,7 @@ class ConvPixelShuffleUpSampleLayer3d(nn.Module):
 
 class ChannelDuplicatingPixelShuffleUpSampleLayer3d(nn.Module):
     """Channel duplicating pixel shuffle up sample layer d implementation."""
+
     def __init__(
         self,
         in_channels: int,
@@ -720,14 +528,6 @@ class ChannelDuplicatingPixelShuffleUpSampleLayer3d(nn.Module):
         spatial_factor: int,
         temporal_factor: int,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-            spatial_factor: The spatial factor.
-            temporal_factor: The temporal factor.
-        """
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -737,23 +537,9 @@ class ChannelDuplicatingPixelShuffleUpSampleLayer3d(nn.Module):
         self.repeats = out_channels * spatial_factor**2 * temporal_factor // in_channels
 
     def load_state_dict_from_2d(self, state_dict: dict[str, torch.Tensor], method: str):
-        """Load state dict from 2d.
-
-        Args:
-            state_dict: The state dict.
-            method: The method.
-        """
         pass
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         x = x.repeat_interleave(self.repeats, dim=1)
         x = pixel_shuffle_3d(x, self.spatial_factor, self.temporal_factor)
         return x
@@ -761,13 +547,8 @@ class ChannelDuplicatingPixelShuffleUpSampleLayer3d(nn.Module):
 
 class ResidualBlock3d(ResidualBlock):
     """Residual block d implementation."""
-    def load_state_dict_from_2d(self, state_dict: dict[str, torch.Tensor], method: str):
-        """Load state dict from 2d.
 
-        Args:
-            state_dict: The state dict.
-            method: The method.
-        """
+    def load_state_dict_from_2d(self, state_dict: dict[str, torch.Tensor], method: str):
         self.main.load_state_dict_from_2d(submodule_state_dict(state_dict, "main."), method)
         if isinstance(self.shortcut, (IdentityLayer,)):
             pass
@@ -777,19 +558,9 @@ class ResidualBlock3d(ResidualBlock):
     def forward_main(
         self,
         x: torch.Tensor,
-        feature_cache: Optional[dict[str, torch.Tensor]] = None,
-        feature_key: Optional[str] = None,
+        feature_cache: dict[str, torch.Tensor] | None = None,
+        feature_key: str | None = None,
     ) -> torch.Tensor:
-        """Forward main.
-
-        Args:
-            x: The x.
-            feature_cache: The feature cache.
-            feature_key: The feature key.
-
-        Returns:
-            The return value.
-        """
         feature_key = feature_key + "main." if feature_key is not None else None
         if self.pre_norm is None:
             return self.main(x, feature_cache, feature_key)
@@ -799,19 +570,9 @@ class ResidualBlock3d(ResidualBlock):
     def forward(
         self,
         x: torch.Tensor,
-        feature_cache: Optional[dict[str, torch.Tensor]] = None,
-        feature_key: Optional[str] = None,
+        feature_cache: dict[str, torch.Tensor] | None = None,
+        feature_key: str | None = None,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            feature_cache: The feature cache.
-            feature_key: The feature key.
-
-        Returns:
-            The return value.
-        """
         if self.main is None:
             res = x
         elif self.shortcut is None:
@@ -825,13 +586,8 @@ class ResidualBlock3d(ResidualBlock):
 
 class OpSequential3d(OpSequential):
     """Op sequential d implementation."""
-    def load_state_dict_from_2d(self, state_dict: dict[str, torch.Tensor], method: str):
-        """Load state dict from 2d.
 
-        Args:
-            state_dict: The state dict.
-            method: The method.
-        """
+    def load_state_dict_from_2d(self, state_dict: dict[str, torch.Tensor], method: str):
         for i, op in enumerate(self.op_list):
             if isinstance(op, (TritonRMSNorm2d, nn.SiLU)):
                 op.load_state_dict(submodule_state_dict(state_dict, f"op_list.{i}."))
@@ -841,19 +597,9 @@ class OpSequential3d(OpSequential):
     def forward(
         self,
         x: torch.Tensor,
-        feature_cache: Optional[dict[str, torch.Tensor]] = None,
-        feature_key: Optional[str] = None,
+        feature_cache: dict[str, torch.Tensor] | None = None,
+        feature_key: str | None = None,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            feature_cache: The feature cache.
-            feature_key: The feature key.
-
-        Returns:
-            The return value.
-        """
         for i, op in enumerate(self.op_list):
             if isinstance(op, (ConvLayer3d, ResidualBlock3d, ConvPixelShuffleUpSampleLayer3d)):
                 x = op(x, feature_cache, feature_key + f"op_list.{i}." if feature_key is not None else None)

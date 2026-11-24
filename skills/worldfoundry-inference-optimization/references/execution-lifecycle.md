@@ -23,7 +23,7 @@ neighboring model's implementation do not establish execution support.
 
 ## Keep Compilation and Capture Owner-Local
 
-Reuse [compile caching](../../../worldfoundry/core/execution/compile_cache.py)
+Reuse [compile caching](../../../worldfoundry/core/platform/compile_cache.py)
 and [inference graphs](../../../worldfoundry/core/execution/graphs/inference_graph.py).
 Keep stable tensor compute inside the compiled/captured region and checkpoint
 loading, offload transfers, Python request setup, and cleanup outside it.

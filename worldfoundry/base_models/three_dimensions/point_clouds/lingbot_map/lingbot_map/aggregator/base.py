@@ -11,15 +11,16 @@ Subclasses implement mode-specific attention logic.
 """
 
 import logging
+from abc import ABC, abstractmethod
+
 import torch
 import torch.nn as nn
-from abc import ABC, abstractmethod
-from typing import Optional, Tuple, List
 
 from worldfoundry.core.nn.blocks.layers import PatchEmbed
+
 from ..layers.block import Block
-from ..layers.rope import RotaryPositionEmbedding2D, PositionGetter
-from ..layers.vision_transformer import vit_small, vit_base, vit_large, vit_giant2
+from ..layers.rope import PositionGetter, RotaryPositionEmbedding2D
+from ..layers.vision_transformer import vit_base, vit_giant2, vit_large, vit_small
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ class AggregatorBase(nn.Module, ABC):
         patch_embed="dinov2_vitl14_reg",
         pretrained_path=None,
         # Attention pattern
-        aa_order=["frame", "global"],
+        aa_order=["frame", "global"],  # noqa: B006 - Keeps the upstream default object and signature.
         aa_block_size=1,
         # RoPE
         rope_freq=100,
@@ -102,31 +103,6 @@ class AggregatorBase(nn.Module, ABC):
         use_reentrant: bool = False,
         use_gradient_checkpoint: bool = True,
     ):
-        """Init.
-
-        Args:
-            img_size: The img size.
-            patch_size: The patch size.
-            embed_dim: The embed dim.
-            depth: The depth.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            num_register_tokens: The num register tokens.
-            block_fn: The block fn.
-            qkv_bias: The qkv bias.
-            proj_bias: The proj bias.
-            ffn_bias: The ffn bias.
-            qk_norm: The qk norm.
-            init_values: The init values.
-            patch_embed: The patch embed.
-            pretrained_path: The pretrained path.
-            aa_order: The aa order.
-            aa_block_size: The aa block size.
-            rope_freq: The rope freq.
-            disable_global_rope: The disable global rope.
-            use_reentrant: The use reentrant.
-            use_gradient_checkpoint: The use gradient checkpoint.
-        """
         super().__init__()
 
         # Store configuration
@@ -156,7 +132,7 @@ class AggregatorBase(nn.Module, ABC):
             patch_size=patch_size,
             num_register_tokens=num_register_tokens,
             embed_dim=embed_dim,
-            pretrained_path=pretrained_path
+            pretrained_path=pretrained_path,
         )
 
         # Initialize RoPE
@@ -185,7 +161,7 @@ class AggregatorBase(nn.Module, ABC):
             self.register_buffer(name, torch.FloatTensor(value).view(1, 1, 3, 1, 1), persistent=False)
 
         # Initialize from DINO checkpoint if available
-        if hasattr(self, '_dino_checkpoint') and self._dino_checkpoint is not None:
+        if hasattr(self, "_dino_checkpoint") and self._dino_checkpoint is not None:
             self._init_blocks_from_dino(self._dino_checkpoint)
             del self._dino_checkpoint  # Free memory
 
@@ -210,12 +186,7 @@ class AggregatorBase(nn.Module, ABC):
         - "dinov2_*": DINOv2 ViT variants (vitl14, vitb14, vits14, vitg2)
         """
         if "conv" in patch_embed:
-            self.patch_embed = PatchEmbed(
-                img_size=img_size,
-                patch_size=patch_size,
-                in_chans=3,
-                embed_dim=embed_dim
-            )
+            self.patch_embed = PatchEmbed(img_size=img_size, patch_size=patch_size, in_chans=3, embed_dim=embed_dim)
             self._dino_checkpoint = None
 
         else:
@@ -245,7 +216,7 @@ class AggregatorBase(nn.Module, ABC):
             if pretrained_path:
                 try:
                     ckpt = torch.load(pretrained_path)
-                    ckpt.pop('pos_embed', None)
+                    ckpt.pop("pos_embed", None)
                     logger.info("Loading pretrained weights for DINOv2")
                     missing, unexpected = self.patch_embed.load_state_dict(ckpt, strict=False)
                     logger.info(f"Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
@@ -285,7 +256,6 @@ class AggregatorBase(nn.Module, ABC):
         - self.frame_blocks: nn.ModuleList of frame attention blocks
         - self.global_blocks: nn.ModuleList of global attention blocks
         """
-        pass
 
     @abstractmethod
     def _setup_special_tokens(self):
@@ -301,7 +271,6 @@ class AggregatorBase(nn.Module, ABC):
         - self.patch_start_idx
         - self.num_special_tokens
         """
-        pass
 
     def _init_blocks_from_dino(self, dino_ckpt: dict):
         """
@@ -313,7 +282,7 @@ class AggregatorBase(nn.Module, ABC):
         logger.info("Initializing blocks from DINOv2 pretrained weights")
 
         # Extract block keys
-        dino_block_keys = [k for k in dino_ckpt.keys() if k.startswith('blocks.')]
+        dino_block_keys = [k for k in dino_ckpt if k.startswith("blocks.")]
         if not dino_block_keys:
             logger.warning("No 'blocks' found in DINO checkpoint")
             return
@@ -321,7 +290,7 @@ class AggregatorBase(nn.Module, ABC):
         # Get block indices
         block_indices = set()
         for key in dino_block_keys:
-            parts = key.split('.')
+            parts = key.split(".")
             if len(parts) > 1 and parts[1].isdigit():
                 block_indices.add(int(parts[1]))
 
@@ -332,10 +301,10 @@ class AggregatorBase(nn.Module, ABC):
         for i, block in enumerate(self.frame_blocks):
             dino_block_idx = i % num_dino_blocks
             block_state_dict = {}
-            prefix = f'blocks.{dino_block_idx}.'
+            prefix = f"blocks.{dino_block_idx}."
             for key, value in dino_ckpt.items():
                 if key.startswith(prefix):
-                    new_key = key[len(prefix):]
+                    new_key = key[len(prefix) :]
                     block_state_dict[new_key] = value
 
             if block_state_dict:
@@ -347,10 +316,10 @@ class AggregatorBase(nn.Module, ABC):
         for i, block in enumerate(self.global_blocks):
             dino_block_idx = i % num_dino_blocks
             block_state_dict = {}
-            prefix = f'blocks.{dino_block_idx}.'
+            prefix = f"blocks.{dino_block_idx}."
             for key, value in dino_ckpt.items():
                 if key.startswith(prefix):
-                    new_key = key[len(prefix):]
+                    new_key = key[len(prefix) :]
                     block_state_dict[new_key] = value
 
             if block_state_dict:
@@ -363,8 +332,8 @@ class AggregatorBase(nn.Module, ABC):
     def _embed_images(
         self,
         images: torch.Tensor,
-        num_frame_for_scale: Optional[int] = None,
-    ) -> Tuple[torch.Tensor, int, int, int, int, int]:
+        num_frame_for_scale: int | None = None,
+    ) -> tuple[torch.Tensor, int, int, int, int, int]:
         """
         Embed images and prepare for attention processing.
 
@@ -410,10 +379,7 @@ class AggregatorBase(nn.Module, ABC):
         _, P_patch, C = patch_tokens.shape
 
         # Prepare special tokens
-        special_tokens = self._prepare_special_tokens(
-            B, S_local, S_global, C,
-            num_frame_for_scale=num_frame_for_scale
-        )
+        special_tokens = self._prepare_special_tokens(B, S_local, S_global, C, num_frame_for_scale=num_frame_for_scale)
 
         # Concatenate special tokens + patch tokens
         tokens = torch.cat([special_tokens, patch_tokens], dim=1)
@@ -439,9 +405,8 @@ class AggregatorBase(nn.Module, ABC):
         Returns:
             Special tokens [B*S, N_special, C]
         """
-        pass
 
-    def _get_positions(self, B: int, S: int, H: int, W: int, device) -> Optional[torch.Tensor]:
+    def _get_positions(self, B: int, S: int, H: int, W: int, device) -> torch.Tensor | None:
         """
         Get 2D position embeddings for RoPE.
 
@@ -477,8 +442,8 @@ class AggregatorBase(nn.Module, ABC):
         P: int,
         C: int,
         frame_idx: int,
-        pos: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, int, List[torch.Tensor]]:
+        pos: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, int, list[torch.Tensor]]:
         """
         Process frame attention blocks.
 
@@ -510,15 +475,11 @@ class AggregatorBase(nn.Module, ABC):
         intermediates = []
 
         # Process blocks
-        for i in range(self.aa_block_size):
+        for _i in range(self.aa_block_size):
             if self.training and self.use_gradient_checkpoint:
                 from torch.utils.checkpoint import checkpoint
-                tokens = checkpoint(
-                    self.frame_blocks[frame_idx],
-                    tokens,
-                    pos,
-                    use_reentrant=self.use_reentrant
-                )
+
+                tokens = checkpoint(self.frame_blocks[frame_idx], tokens, pos, use_reentrant=self.use_reentrant)
             else:
                 tokens = self.frame_blocks[frame_idx](tokens, pos=pos)
 
@@ -537,9 +498,9 @@ class AggregatorBase(nn.Module, ABC):
         P: int,
         C: int,
         global_idx: int,
-        pos: Optional[torch.Tensor] = None,
-        **kwargs
-    ) -> Tuple[torch.Tensor, int, List[torch.Tensor]]:
+        pos: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, int, list[torch.Tensor]]:
         """
         Process global (cross-frame) attention blocks.
 
@@ -562,20 +523,17 @@ class AggregatorBase(nn.Module, ABC):
                 global_idx: Updated global block index
                 intermediates: List of intermediate outputs
         """
-        pass
 
     def forward(
         self,
         images: torch.Tensor,
-        selected_idx: Optional[List[int]] = None,
+        selected_idx: list[int] | None = None,
         # Mode-specific parameters
-        num_frame_for_scale: Optional[int] = None,
-        sliding_window_size: Optional[int] = None,
+        num_frame_for_scale: int | None = None,
+        sliding_window_size: int | None = None,
         num_frame_per_block: int = 1,
-    ) -> Tuple[List[torch.Tensor], int]:
+    ) -> tuple[list[torch.Tensor], int]:
         """
-        Forward pass.
-
         Args:
             images: Input images [B, S, 3, H, W] in range [0, 1]
             selected_idx: Which block indices to output (None = all)
@@ -613,7 +571,13 @@ class AggregatorBase(nn.Module, ABC):
                     )
                 elif attn_type == "global":
                     tokens, global_idx, global_intermediates = self._process_global_attention(
-                        tokens, B, S_local, S_global, P, C, global_idx,
+                        tokens,
+                        B,
+                        S_local,
+                        S_global,
+                        P,
+                        C,
+                        global_idx,
                         pos=pos_global,
                         num_frame_for_scale=num_frame_for_scale,
                         sliding_window_size=sliding_window_size,

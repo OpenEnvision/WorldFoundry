@@ -20,12 +20,13 @@ import math
 import operator as index_operator
 import subprocess
 from collections import OrderedDict
+from collections.abc import Callable, Mapping
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
 from types import SimpleNamespace
-from typing import Any, Callable, Mapping
+from typing import Any
 
 import torch
 
@@ -47,9 +48,7 @@ _KINDS = frozenset(
         "lightx2v_svg_mask",
     }
 )
-_DYNAMIC_OPERATORS = frozenset(
-    {"triton", "triton_ar", "sage2", "sage3", "fa4", "magi"}
-)
+_DYNAMIC_OPERATORS = frozenset({"triton", "triton_ar", "sage2", "sage3", "fa4", "magi"})
 _GENERAL_OPERATOR_PATHS = {
     "triton": "sla_triton_operator",
     "sage2": "spas_sage2_operator",
@@ -110,9 +109,7 @@ _GRID_LOCAL_KINDS = frozenset(
         "lightx2v_svg_mask",
     }
 )
-_REQUEST_LOCAL_KINDS = frozenset(
-    {"rainfusion_attn", "svg2_attn", "lightx2v_svg_mask"}
-)
+_REQUEST_LOCAL_KINDS = frozenset({"rainfusion_attn", "svg2_attn", "lightx2v_svg_mask"})
 _SLA_TOPK_KINDS = frozenset(
     {
         "dynamic_sparse",
@@ -141,9 +138,7 @@ class _FlashinferRuntime:
 
 
 _FLASHINFER_WORKSPACE_BYTES = 128 * 1024 * 1024
-_FLASHINFER_RUNTIMES: dict[
-    tuple[int, str, int | None, str], _FlashinferRuntime
-] = {}
+_FLASHINFER_RUNTIMES: dict[tuple[int, str, int | None, str], _FlashinferRuntime] = {}
 _PROVIDER_SOURCE_IDENTITIES: dict[str, dict[str, Any]] = {}
 
 
@@ -179,8 +174,7 @@ def _run_provider_git(
         except (OSError, subprocess.TimeoutExpired) as exc:
             last_error = exc
     raise LightX2VSparseUnavailableError(
-        "could not audit the LightX2V provider checkout after "
-        f"{_PROVIDER_GIT_ATTEMPTS} attempts: {' '.join(command)}"
+        f"could not audit the LightX2V provider checkout after {_PROVIDER_GIT_ATTEMPTS} attempts: {' '.join(command)}"
     ) from last_error
 
 
@@ -190,9 +184,7 @@ def _positive_int(name: str, value: Any) -> int:
     try:
         normalized = index_operator.index(value)
     except TypeError as exc:
-        raise ValueError(
-            f"{name} must be a positive integer, got {value!r}"
-        ) from exc
+        raise ValueError(f"{name} must be a positive integer, got {value!r}") from exc
     if normalized <= 0:
         raise ValueError(f"{name} must be a positive integer, got {normalized}")
     return normalized
@@ -202,15 +194,9 @@ def _positive_coefficients(values: Any) -> tuple[float, ...]:
     try:
         normalized = tuple(float(value) for value in values)
     except (TypeError, ValueError) as exc:
-        raise ValueError(
-            "nbhd_coefficient must be a non-empty sequence of positive numbers"
-        ) from exc
-    if not normalized or any(
-        not math.isfinite(value) or value <= 0.0 for value in normalized
-    ):
-        raise ValueError(
-            "nbhd_coefficient must be a non-empty sequence of positive finite numbers"
-        )
+        raise ValueError("nbhd_coefficient must be a non-empty sequence of positive numbers") from exc
+    if not normalized or any(not math.isfinite(value) or value <= 0.0 for value in normalized):
+        raise ValueError("nbhd_coefficient must be a non-empty sequence of positive finite numbers")
     return normalized
 
 
@@ -261,17 +247,12 @@ class LightX2VSparseConfig:
         }
         kind = kind_aliases.get(kind, kind)
         if kind not in _KINDS:
-            raise ValueError(
-                f"unsupported LightX2V sparse kind {self.kind!r}; "
-                f"expected one of {sorted(_KINDS)}"
-            )
+            raise ValueError(f"unsupported LightX2V sparse kind {self.kind!r}; expected one of {sorted(_KINDS)}")
         object.__setattr__(self, "kind", kind)
 
         sparsity = float(self.sparsity_ratio)
         if not math.isfinite(sparsity) or not 0.0 <= sparsity < 1.0:
-            raise ValueError(
-                f"sparsity_ratio must be finite and in [0, 1), got {sparsity!r}"
-            )
+            raise ValueError(f"sparsity_ratio must be finite and in [0, 1), got {sparsity!r}")
         object.__setattr__(self, "sparsity_ratio", sparsity)
 
         operator_name = self.operator
@@ -320,19 +301,14 @@ class LightX2VSparseConfig:
         else:
             allowed = frozenset(_GENERAL_OPERATOR_PATHS)
         if operator_name not in allowed:
-            raise ValueError(
-                f"operator {operator_name!r} is invalid for {kind}; "
-                f"expected one of {sorted(allowed)}"
-            )
+            raise ValueError(f"operator {operator_name!r} is invalid for {kind}; expected one of {sorted(allowed)}")
         object.__setattr__(self, "operator", operator_name)
 
         coefficients = _positive_coefficients(self.nbhd_coefficient)
         object.__setattr__(self, "nbhd_coefficient", coefficients)
         minimum_width = float(self.nbhd_min_width)
         if not math.isfinite(minimum_width) or minimum_width <= 0.0:
-            raise ValueError(
-                f"nbhd_min_width must be positive and finite, got {minimum_width!r}"
-            )
+            raise ValueError(f"nbhd_min_width must be positive and finite, got {minimum_width!r}")
         object.__setattr__(self, "nbhd_min_width", minimum_width)
         if self.attnmap_frame_num is not None:
             object.__setattr__(
@@ -371,9 +347,7 @@ class LightX2VSparseConfig:
         try:
             svg_context_length = index_operator.index(self.svg_context_length)
         except TypeError as exc:
-            raise ValueError(
-                "svg_context_length must be a non-negative integer"
-            ) from exc
+            raise ValueError("svg_context_length must be a non-negative integer") from exc
         if svg_context_length < 0:
             raise ValueError("svg_context_length must be a non-negative integer")
         object.__setattr__(self, "svg_context_length", svg_context_length)
@@ -392,14 +366,11 @@ def _import_symbol(module_name: str, symbol: str) -> Any:
         module = importlib.import_module(module_name)
     except (ImportError, OSError) as exc:
         raise LightX2VSparseUnavailableError(
-            f"cannot import LightX2V provider module {module_name!r}: "
-            f"{type(exc).__name__}: {exc}"
+            f"cannot import LightX2V provider module {module_name!r}: {type(exc).__name__}: {exc}"
         ) from exc
     value = getattr(module, symbol, None)
     if value is None:
-        raise LightX2VSparseUnavailableError(
-            f"LightX2V provider module {module_name!r} has no {symbol!r}"
-        )
+        raise LightX2VSparseUnavailableError(f"LightX2V provider module {module_name!r} has no {symbol!r}")
     return value
 
 
@@ -484,21 +455,14 @@ def _isolated_svg_mask_generator(mask_generator: Any) -> Any:
 
     def isolated_prepare_mask(self: Any, q: torch.Tensor) -> None:
         with _SVG_MASK_CLASS_LOCK:
-            previous = {
-                name: getattr(base, name, None)
-                for name in ("seqlen", "attention_masks", "mask")
-            }
+            previous = {name: getattr(base, name, None) for name in ("seqlen", "attention_masks", "mask")}
             base.seqlen = getattr(self, "_worldfoundry_seqlen", None)
-            base.attention_masks = getattr(
-                self, "_worldfoundry_attention_masks", None
-            )
+            base.attention_masks = getattr(self, "_worldfoundry_attention_masks", None)
             base.mask = getattr(self, "_worldfoundry_mask", None)
             try:
                 base.prepare_mask(self, q)
                 self._worldfoundry_seqlen = getattr(base, "seqlen", None)
-                self._worldfoundry_attention_masks = getattr(
-                    base, "attention_masks", None
-                )
+                self._worldfoundry_attention_masks = getattr(base, "attention_masks", None)
                 self._worldfoundry_mask = getattr(base, "mask", None)
                 self.attention_masks = self._worldfoundry_attention_masks
                 self.mask = self._worldfoundry_mask
@@ -543,9 +507,7 @@ def _flashinfer_wrapper_type() -> type[Any]:
     try:
         module = importlib.import_module(module_name)
     except (ImportError, OSError) as exc:
-        raise LightX2VSparseUnavailableError(
-            f"cannot import LightX2V FlashInfer operator module: {exc}"
-        ) from exc
+        raise LightX2VSparseUnavailableError(f"cannot import LightX2V FlashInfer operator module: {exc}") from exc
     dependency = getattr(module, "flashinfer", None)
     wrapper_type = getattr(
         getattr(dependency, "sparse", None),
@@ -554,8 +516,7 @@ def _flashinfer_wrapper_type() -> type[Any]:
     )
     if not callable(wrapper_type):
         raise LightX2VSparseUnavailableError(
-            "LightX2V FlashInfer operator requires callable "
-            "flashinfer.sparse.VariableBlockSparseAttentionWrapper"
+            "LightX2V FlashInfer operator requires callable flashinfer.sparse.VariableBlockSparseAttentionWrapper"
         )
     return wrapper_type
 
@@ -567,9 +528,7 @@ def _flashinfer_runtime(
     backend: str = "fa2",
 ) -> _FlashinferRuntime:
     if device.type != "cuda":
-        raise LightX2VSparseUnavailableError(
-            f"LightX2V FlashInfer requires CUDA, got {device.type}"
-        )
+        raise LightX2VSparseUnavailableError(f"LightX2V FlashInfer requires CUDA, got {device.type}")
     device_type, device_index = _device_key(device)
     key = (id(wrapper_type), device_type, device_index, backend)
     with _FLASHINFER_RUNTIME_LOCK:
@@ -583,12 +542,8 @@ def _flashinfer_runtime(
                 device=device,
             )
             wrapper = wrapper_type(workspace, backend=backend)
-        if not callable(getattr(wrapper, "plan", None)) or not callable(
-            getattr(wrapper, "run", None)
-        ):
-            raise LightX2VSparseUnavailableError(
-                "FlashInfer sparse wrapper must expose callable plan/run"
-            )
+        if not callable(getattr(wrapper, "plan", None)) or not callable(getattr(wrapper, "run", None)):
+            raise LightX2VSparseUnavailableError("FlashInfer sparse wrapper must expose callable plan/run")
         runtime = _FlashinferRuntime(wrapper=wrapper, lock=RLock())
         _FLASHINFER_RUNTIMES[key] = runtime
         return runtime
@@ -608,9 +563,7 @@ def _isolated_flashinfer_operator(
     ) -> None:
         self.q_block_size = 128
         self.k_block_size = 128
-        self.operator_setting = (
-            {} if operator_setting is None else dict(operator_setting)
-        )
+        self.operator_setting = {} if operator_setting is None else dict(operator_setting)
 
     def isolated_call(
         self: Any,
@@ -630,10 +583,7 @@ def _isolated_flashinfer_operator(
         softmax_scale = kwargs.get("softmax_scale")
         block_mask = mask.squeeze(0)
         if block_mask.ndim != 3:
-            raise RuntimeError(
-                "LightX2V FlashInfer mask must be [H,Q_blocks,K_blocks], got "
-                f"{tuple(block_mask.shape)}"
-            )
+            raise RuntimeError(f"LightX2V FlashInfer mask must be [H,Q_blocks,K_blocks], got {tuple(block_mask.shape)}")
         runtime = _flashinfer_runtime(wrapper_type, q.device)
         plan_key = (
             tuple(block_mask.shape),
@@ -650,11 +600,7 @@ def _isolated_flashinfer_operator(
             softmax_scale,
         )
         with runtime.lock, _device_context(q.device):
-            if (
-                runtime.mask is None
-                or runtime.plan_key != plan_key
-                or not torch.equal(block_mask, runtime.mask)
-            ):
+            if runtime.mask is None or runtime.plan_key != plan_key or not torch.equal(block_mask, runtime.mask):
                 _, q_block_num, k_block_num = block_mask.shape
                 block_row_sz = torch.full(
                     (head_num, q_block_num),
@@ -662,18 +608,14 @@ def _isolated_flashinfer_operator(
                     dtype=torch.int32,
                     device=q.device,
                 )
-                block_row_sz[:, -1] = seqlen - self.q_block_size * (
-                    q_block_num - 1
-                )
+                block_row_sz[:, -1] = seqlen - self.q_block_size * (q_block_num - 1)
                 block_col_sz = torch.full(
                     (head_num, k_block_num),
                     self.k_block_size,
                     dtype=torch.int32,
                     device=k.device,
                 )
-                block_col_sz[:, -1] = kv_seqlen - self.k_block_size * (
-                    k_block_num - 1
-                )
+                block_col_sz[:, -1] = kv_seqlen - self.k_block_size * (k_block_num - 1)
                 runtime.wrapper.plan(
                     block_mask_map=block_mask,
                     block_row_sz=block_row_sz,
@@ -721,22 +663,14 @@ def _svg2_flashinfer_forward(
     expected_mask = (batch, heads, q_clusters, k_clusters)
     if tuple(block_mask_map.shape) != expected_mask:
         raise RuntimeError(
-            "LightX2V SVG2 block mask shape mismatch: "
-            f"got {tuple(block_mask_map.shape)}, expected {expected_mask}"
+            f"LightX2V SVG2 block mask shape mismatch: got {tuple(block_mask_map.shape)}, expected {expected_mask}"
         )
-    if is_cpu and any(
-        tensor.device.type != "cpu"
-        for tensor in (block_mask_map, block_row_sz, block_col_sz)
-    ):
+    if is_cpu and any(tensor.device.type != "cpu" for tensor in (block_mask_map, block_row_sz, block_col_sz)):
         raise RuntimeError("LightX2V SVG2 CPU planning metadata must stay on CPU")
-    if not torch.all(
-        block_col_sz.sum(dim=2) == block_col_sz.sum(dim=2)[0, 0]
-    ) or not torch.all(
+    if not torch.all(block_col_sz.sum(dim=2) == block_col_sz.sum(dim=2)[0, 0]) or not torch.all(
         block_row_sz.sum(dim=2) == block_row_sz.sum(dim=2)[0, 0]
     ):
-        raise RuntimeError(
-            "LightX2V SVG2 requires equal per-head query/key sequence totals"
-        )
+        raise RuntimeError("LightX2V SVG2 requires equal per-head query/key sequence totals")
 
     runtime = _flashinfer_runtime(wrapper_type, q.device, backend="auto")
     flat_mask = block_mask_map.reshape(batch * heads, q_clusters, k_clusters)
@@ -795,42 +729,31 @@ def _resolve_callable(path: str) -> Any:
         remainder = parts[split_at:]
         break
     if module is None:
-        raise LightX2VSparseUnavailableError(
-            f"cannot import required LightX2V kernel symbol {path!r}"
-        )
+        raise LightX2VSparseUnavailableError(f"cannot import required LightX2V kernel symbol {path!r}")
     value = module
     for name in remainder:
         value = getattr(value, name, None)
         if value is None:
-            raise LightX2VSparseUnavailableError(
-                f"required LightX2V kernel symbol {path!r} is missing at {name!r}"
-            )
+            raise LightX2VSparseUnavailableError(f"required LightX2V kernel symbol {path!r} is missing at {name!r}")
     if not callable(value):
-        raise LightX2VSparseUnavailableError(
-            f"required LightX2V kernel symbol {path!r} is not callable"
-        )
+        raise LightX2VSparseUnavailableError(f"required LightX2V kernel symbol {path!r} is not callable")
     return value
 
 
 def _sage2_capability_symbols(device: torch.device) -> list[str]:
     """Resolve the exact Sparge/Sage2 kernel branch selected by pinned upstream."""
 
-    module = importlib.import_module(
-        "lightx2v.common.ops.attn.utils.sparge_util"
-    )
+    module = importlib.import_module("lightx2v.common.ops.attn.utils.sparge_util")
     qattn = getattr(module, "qattn", None)
     fused = getattr(module, "fused", None)
     if qattn is None:
-        raise LightX2VSparseUnavailableError(
-            "LightX2V Sage2 requires spas_sage_attn._qattn"
-        )
+        raise LightX2VSparseUnavailableError("LightX2V Sage2 requires spas_sage_attn._qattn")
     capability = torch.cuda.get_device_capability(device)
     arch = f"sm{capability[0]}{capability[1]}"
     supported = {"sm80", "sm86", "sm87", "sm89", "sm90", "sm120"}
     if arch not in supported:
         raise LightX2VSparseUnavailableError(
-            f"LightX2V Sage2 has no audited upstream branch for {arch}; "
-            f"expected one of {sorted(supported)}"
+            f"LightX2V Sage2 has no audited upstream branch for {arch}; expected one of {sorted(supported)}"
         )
     symbols: list[tuple[Any, str]] = []
     if arch in {"sm80", "sm86", "sm87"}:
@@ -841,8 +764,7 @@ def _sage2_capability_symbols(device: torch.device) -> list[str]:
                     "qk_int8_sv_f16_accum_f16_block_sparse_attn_inst_buf_with_pv_threshold",
                     None,
                 ),
-                "spas_sage_attn._qattn."
-                "qk_int8_sv_f16_accum_f16_block_sparse_attn_inst_buf_with_pv_threshold",
+                "spas_sage_attn._qattn.qk_int8_sv_f16_accum_f16_block_sparse_attn_inst_buf_with_pv_threshold",
             )
         )
     elif arch == "sm90":
@@ -853,8 +775,7 @@ def _sage2_capability_symbols(device: torch.device) -> list[str]:
                     "qk_int8_sv_f8_accum_f32_block_sparse_attn_inst_buf_fuse_v_scale_sm90",
                     None,
                 ),
-                "spas_sage_attn._qattn."
-                "qk_int8_sv_f8_accum_f32_block_sparse_attn_inst_buf_fuse_v_scale_sm90",
+                "spas_sage_attn._qattn.qk_int8_sv_f8_accum_f32_block_sparse_attn_inst_buf_fuse_v_scale_sm90",
             )
         )
     else:
@@ -880,9 +801,7 @@ def _sage2_capability_symbols(device: torch.device) -> list[str]:
         )
         selected = next((candidate for candidate in candidates if callable(candidate[0])), None)
         if selected is None:
-            raise LightX2VSparseUnavailableError(
-                f"LightX2V Sage2 has no callable {arch} qattn branch"
-            )
+            raise LightX2VSparseUnavailableError(f"LightX2V Sage2 has no callable {arch} qattn branch")
         symbols.append(selected)
     if arch not in {"sm80", "sm86", "sm87"}:
         for name in ("transpose_pad_permute_cuda", "scale_fuse_quant_cuda"):
@@ -894,9 +813,7 @@ def _sage2_capability_symbols(device: torch.device) -> list[str]:
             )
     missing = [name for value, name in symbols if not callable(value)]
     if missing:
-        raise LightX2VSparseUnavailableError(
-            f"LightX2V Sage2 kernel ABI is incomplete for {arch}: {missing}"
-        )
+        raise LightX2VSparseUnavailableError(f"LightX2V Sage2 kernel ABI is incomplete for {arch}: {missing}")
     return [name for _, name in symbols]
 
 
@@ -907,23 +824,18 @@ def lightx2v_sparse_capability_contract(
     """Fail-closed package, symbol, ABI, and GPU preflight for one provider."""
 
     if device.type != "cuda":
-        raise LightX2VSparseUnavailableError(
-            f"LightX2V sparse capability preflight requires CUDA, got {device.type}"
-        )
+        raise LightX2VSparseUnavailableError(f"LightX2V sparse capability preflight requires CUDA, got {device.type}")
     capability = torch.cuda.get_device_capability(device)
     if capability < (8, 0):
         raise LightX2VSparseUnavailableError(
-            "LightX2V BF16 sparse providers require NVIDIA SM80 or newer, got "
-            f"sm{capability[0]}{capability[1]}"
+            f"LightX2V BF16 sparse providers require NVIDIA SM80 or newer, got sm{capability[0]}{capability[1]}"
         )
     required: list[str] = []
     if config.kind in _DIRECT_PROVIDER_SPECS:
         module_name, class_name = _DIRECT_PROVIDER_SPECS[config.kind]
         provider_type = _import_symbol(module_name, class_name)
         if not callable(provider_type):
-            raise LightX2VSparseUnavailableError(
-                f"LightX2V provider {module_name}.{class_name} is not callable"
-            )
+            raise LightX2VSparseUnavailableError(f"LightX2V provider {module_name}.{class_name} is not callable")
         required.append(f"{module_name}.{class_name}.apply")
     elif config.kind == "dynamic_sparse":
         _import_symbol(
@@ -969,31 +881,22 @@ def lightx2v_sparse_capability_contract(
         module = importlib.import_module(_DIRECT_PROVIDER_SPECS[config.kind][0])
         dense = getattr(module, "flash_attn_varlen_func", None)
         if not callable(dense):
-            raise LightX2VSparseUnavailableError(
-                "LightX2V DraftAttention requires a callable FA2 or FA3 varlen kernel"
-            )
+            raise LightX2VSparseUnavailableError("LightX2V DraftAttention requires a callable FA2 or FA3 varlen kernel")
         required.append(_callable_identity(dense))
     elif config.kind == "rainfusion_attn":
-        registry_module = importlib.import_module(
-            "lightx2v.utils.registry_factory"
-        )
+        registry_module = importlib.import_module("lightx2v.utils.registry_factory")
         registry = getattr(registry_module, "ATTN_WEIGHT_REGISTER", {})
         dense_type = registry.get(config.dense_attn_type)
         if dense_type is None or not callable(getattr(dense_type, "apply", None)):
             raise LightX2VSparseUnavailableError(
-                "LightX2V RainFusion dense provider is unavailable: "
-                f"{config.dense_attn_type!r}"
+                f"LightX2V RainFusion dense provider is unavailable: {config.dense_attn_type!r}"
             )
-        required.append(
-            f"{dense_type.__module__}.{dense_type.__name__}.apply"
-        )
+        required.append(f"{dense_type.__module__}.{dense_type.__name__}.apply")
     elif config.kind in {"svg_attn", "lightx2v_svg_mask"}:
         module = importlib.import_module("lightx2v.common.ops.attn.svg_attn")
         for name in ("wan_sparse_head_placement", "wan_hidden_states_placement"):
             if not callable(getattr(module, name, None)):
-                raise LightX2VSparseUnavailableError(
-                    f"LightX2V SVG provider is missing callable {name}"
-                )
+                raise LightX2VSparseUnavailableError(f"LightX2V SVG provider is missing callable {name}")
             required.append(f"lightx2v.common.ops.attn.svg_attn.{name}")
     elif config.kind == "svg2_attn":
         module = importlib.import_module("lightx2v.common.ops.attn.svg2_attn")
@@ -1030,9 +933,7 @@ def lightx2v_kernel_symbol(config: LightX2VSparseConfig) -> str:
 
     symbol = _KERNEL_SYMBOLS.get(str(config.operator))
     if symbol is None:
-        raise AssertionError(
-            f"no canonical kernel symbol for {config.kind}/{config.operator}"
-        )
+        raise AssertionError(f"no canonical kernel symbol for {config.kind}/{config.operator}")
     return symbol
 
 
@@ -1139,9 +1040,7 @@ def _provider_source_identity(provider: Any) -> dict[str, Any]:
             dirty_payload += "\n<diff-unavailable>"
         else:
             dirty_payload += "\n" + diff.stdout
-    fingerprint = hashlib.sha256(
-        f"{commit}\0{clean}\0{dirty_payload}".encode()
-    ).hexdigest()
+    fingerprint = hashlib.sha256(f"{commit}\0{clean}\0{dirty_payload}".encode()).hexdigest()
     identity = {
         "provider_source_commit": commit,
         "provider_source_clean": clean,
@@ -1182,14 +1081,11 @@ def _build_direct_sparge_provider(config: LightX2VSparseConfig) -> Any:
     kernel = getattr(getattr(dependency, "core", None), "spas_sage2_attn_meansim_topk_cuda", None)
     if not callable(kernel):
         raise LightX2VSparseUnavailableError(
-            "LightX2V Sparge requires callable "
-            "spas_sage_attn.core.spas_sage2_attn_meansim_topk_cuda"
+            "LightX2V Sparge requires callable spas_sage_attn.core.spas_sage2_attn_meansim_topk_cuda"
         )
     base = getattr(module, "SpargeAttnWeight", None)
     if base is None:
-        raise LightX2VSparseUnavailableError(
-            f"LightX2V provider module {module_name!r} has no 'SpargeAttnWeight'"
-        )
+        raise LightX2VSparseUnavailableError(f"LightX2V provider module {module_name!r} has no 'SpargeAttnWeight'")
     provider_type = _configured_subclass(
         base,
         "WorldFoundrySpargeAttnWeight",
@@ -1206,14 +1102,11 @@ def _build_direct_nbhd_provider(
     module = importlib.import_module(module_name)
     if not callable(getattr(module, "magi_ffa_func", None)):
         raise LightX2VSparseUnavailableError(
-            "LightX2V NBHD requires callable "
-            "magi_attention.functional.flex_flash_attn_func"
+            "LightX2V NBHD requires callable magi_attention.functional.flex_flash_attn_func"
         )
     base = getattr(module, "NbhdAttnWeight", None)
     if base is None:
-        raise LightX2VSparseUnavailableError(
-            f"LightX2V provider module {module_name!r} has no 'NbhdAttnWeight'"
-        )
+        raise LightX2VSparseUnavailableError(f"LightX2V provider module {module_name!r} has no 'NbhdAttnWeight'")
     provider_type = _configured_subclass(
         base,
         "WorldFoundryNbhdAttnWeight",
@@ -1242,13 +1135,10 @@ def _rainfusion_operator(config: LightX2VSparseConfig, module: Any) -> Any:
     sparse_type = sparse_registry.get(sparse_name)
     dense_type = dense_registry.get(config.dense_attn_type)
     if sparse_type is None:
-        raise LightX2VSparseUnavailableError(
-            f"LightX2V RainFusion sparse operator {sparse_name!r} is unavailable"
-        )
+        raise LightX2VSparseUnavailableError(f"LightX2V RainFusion sparse operator {sparse_name!r} is unavailable")
     if dense_type is None:
         raise LightX2VSparseUnavailableError(
-            "LightX2V RainFusion dense attention provider is unavailable: "
-            f"{config.dense_attn_type!r}"
+            f"LightX2V RainFusion dense attention provider is unavailable: {config.dense_attn_type!r}"
         )
     if config.operator == "flashinfer":
         sparse_operator = _isolated_flashinfer_operator(sparse_type, {})
@@ -1262,25 +1152,18 @@ def _rainfusion_operator(config: LightX2VSparseConfig, module: Any) -> Any:
         except TypeError:
             sparse_operator = sparse_type({})
     if (
-        getattr(sparse_operator, "q_block_size", config.pool_size)
-        != config.pool_size
-        or getattr(sparse_operator, "k_block_size", config.pool_size)
-        != config.pool_size
+        getattr(sparse_operator, "q_block_size", config.pool_size) != config.pool_size
+        or getattr(sparse_operator, "k_block_size", config.pool_size) != config.pool_size
     ):
         raise LightX2VSparseUnavailableError(
-            f"LightX2V {sparse_name} does not support RainFusion "
-            f"pool_size={config.pool_size}"
+            f"LightX2V {sparse_name} does not support RainFusion pool_size={config.pool_size}"
         )
     dense_provider = dense_type()
     if not callable(getattr(dense_provider, "apply", None)):
-        raise LightX2VSparseUnavailableError(
-            f"LightX2V dense provider {config.dense_attn_type!r} has no apply"
-        )
+        raise LightX2VSparseUnavailableError(f"LightX2V dense provider {config.dense_attn_type!r} has no apply")
     operator_type = getattr(module, "CudaRainfusionSparseOperator", None)
     if operator_type is None:
-        raise LightX2VSparseUnavailableError(
-            "LightX2V rainfusion module has no CudaRainfusionSparseOperator"
-        )
+        raise LightX2VSparseUnavailableError("LightX2V rainfusion module has no CudaRainfusionSparseOperator")
     operator = object.__new__(operator_type)
     operator.pool_size = config.pool_size
     operator.dense_attn_type = config.dense_attn_type
@@ -1298,9 +1181,7 @@ def _build_direct_provider(
     module = importlib.import_module(module_name)
     base = getattr(module, class_name, None)
     if base is None:
-        raise LightX2VSparseUnavailableError(
-            f"LightX2V provider module {module_name!r} has no {class_name!r}"
-        )
+        raise LightX2VSparseUnavailableError(f"LightX2V provider module {module_name!r} has no {class_name!r}")
     attrs: dict[str, Any] = {}
     adaptations: list[str] = []
     if config.kind == "draft_attn":
@@ -1379,8 +1260,7 @@ def _build_direct_provider(
         )
         if not callable(wrapper_type):
             raise LightX2VSparseUnavailableError(
-                "LightX2V SVG2 requires callable FlashInfer variable-block sparse "
-                "attention"
+                "LightX2V SVG2 requires callable FlashInfer variable-block sparse attention"
             )
 
         def dynamic_block_sparse_fwd_flashinfer(
@@ -1407,9 +1287,7 @@ def _build_direct_provider(
 
         attrs.update(
             centroids_init=False,
-            dynamic_block_sparse_fwd_flashinfer=(
-                dynamic_block_sparse_fwd_flashinfer
-            ),
+            dynamic_block_sparse_fwd_flashinfer=(dynamic_block_sparse_fwd_flashinfer),
         )
         adaptations.extend(
             [
@@ -1476,11 +1354,7 @@ def _build_general_provider(
         }
     else:
         sparse_setting = {"sparsity_ratio": config.sparsity_ratio}
-    operator_setting = (
-        {"per_block_mean": config.per_block_mean}
-        if config.operator == "sage3"
-        else {}
-    )
+    operator_setting = {"per_block_mean": config.per_block_mean} if config.operator == "sage3" else {}
     provider_attrs: dict[str, Any] = {
         "sparse_mask_generator": _MASK_GENERATOR_PATHS[mask_kind],
         "sparse_operator": _GENERAL_OPERATOR_PATHS[str(config.operator)],
@@ -1502,25 +1376,20 @@ def _build_general_provider(
             )
 
         provider_attrs["_setup_operator"] = setup_flashinfer
-        adaptations.append(
-            "flashinfer_constructor_and_device_plan_isolation"
-        )
+        adaptations.append("flashinfer_constructor_and_device_plan_isolation")
     if mask_kind == "nbhd":
 
         def setup_nbhd_mask(instance: Any) -> None:
             base._setup_mask_generator(instance)
-            instance.mask_generator = _isolated_nbhd_mask_generator(
-                instance.mask_generator
-            )
+            instance.mask_generator = _isolated_nbhd_mask_generator(instance.mask_generator)
 
         provider_attrs["_setup_mask_generator"] = setup_nbhd_mask
         adaptations.append("nbhd_provider_local_mask_cache")
     if mask_kind == "svg":
+
         def setup_svg_mask(instance: Any) -> None:
             base._setup_mask_generator(instance)
-            instance.mask_generator = _isolated_svg_mask_generator(
-                instance.mask_generator
-            )
+            instance.mask_generator = _isolated_svg_mask_generator(instance.mask_generator)
 
         provider_attrs["_setup_mask_generator"] = setup_svg_mask
         adaptations.append("request_local_svg_mask_generator")
@@ -1548,9 +1417,7 @@ def _build_provider(config: LightX2VSparseConfig, frame_num: int | None) -> Any:
             provider = _build_direct_sparge_provider(config)
         elif config.kind == "nbhd" and config.operator == "magi":
             if frame_num is None:
-                raise ValueError(
-                    "NBHD sparse attention requires attnmap_frame_num or grid"
-                )
+                raise ValueError("NBHD sparse attention requires attnmap_frame_num or grid")
             provider = _build_direct_nbhd_provider(config, frame_num)
         else:
             provider = _build_general_provider(config, frame_num)
@@ -1558,18 +1425,14 @@ def _build_provider(config: LightX2VSparseConfig, frame_num: int | None) -> Any:
         raise
     except (ImportError, OSError) as exc:
         raise LightX2VSparseUnavailableError(
-            f"cannot construct LightX2V {config.kind}/{config.operator} provider: "
-            f"{type(exc).__name__}: {exc}"
+            f"cannot construct LightX2V {config.kind}/{config.operator} provider: {type(exc).__name__}: {exc}"
         ) from exc
     except Exception as exc:
         raise LightX2VSparseUnavailableError(
-            f"LightX2V {config.kind}/{config.operator} provider initialization "
-            f"failed: {type(exc).__name__}: {exc}"
+            f"LightX2V {config.kind}/{config.operator} provider initialization failed: {type(exc).__name__}: {exc}"
         ) from exc
     if not callable(getattr(provider, "apply", None)):
-        raise LightX2VSparseUnavailableError(
-            f"LightX2V {config.kind}/{config.operator} provider has no callable apply"
-        )
+        raise LightX2VSparseUnavailableError(f"LightX2V {config.kind}/{config.operator} provider has no callable apply")
     return provider
 
 
@@ -1622,8 +1485,7 @@ def _validate_nonempty_sla_selection(
         ) from exc
     if not math.isfinite(normalized_ratio) or not 0.0 <= normalized_ratio <= 1.0:
         raise LightX2VSparseUnavailableError(
-            "pinned LightX2V SLA provider exposes an invalid top-k ratio: "
-            f"{normalized_ratio!r}"
+            f"pinned LightX2V SLA provider exposes an invalid top-k ratio: {normalized_ratio!r}"
         )
     key_blocks = math.ceil(sequence / normalized_block_size)
     selected_blocks = min(key_blocks, int(normalized_ratio * key_blocks))
@@ -1667,20 +1529,21 @@ class LightX2VSparseAdapter:
         ] = OrderedDict()
         self._provider_cache_lock = RLock()
         self._last_provider_key: tuple[Any, ...] | None = None
-        self._last_provider_entry: tuple[
-            Any,
-            str,
-            str,
-            RLock,
-            dict[str, Any],
-            dict[str, Any],
-            dict[str, Any],
-        ] | None = None
+        self._last_provider_entry: (
+            tuple[
+                Any,
+                str,
+                str,
+                RLock,
+                dict[str, Any],
+                dict[str, Any],
+                dict[str, Any],
+            ]
+            | None
+        ) = None
         self._last_validated_sla_provider: Any | None = None
         self._last_validated_sla_sequence: int | None = None
-        self._capability_contracts: dict[
-            tuple[str, int | None], dict[str, Any]
-        ] = {}
+        self._capability_contracts: dict[tuple[str, int | None], dict[str, Any]] = {}
 
     def _capability_for(self, device: torch.device) -> dict[str, Any]:
         """Resolve one device capability contract once per adapter.
@@ -1702,9 +1565,7 @@ class LightX2VSparseAdapter:
                 contract = {
                     "preflight_passed": None,
                     "cuda_compute_capability": None,
-                    "provider_class": _provider_identity(
-                        self._injected_provider
-                    ),
+                    "provider_class": _provider_identity(self._injected_provider),
                     "required_symbols": [],
                     "injected_test_provider": True,
                 }
@@ -1750,16 +1611,10 @@ class LightX2VSparseAdapter:
             try:
                 raw_grid = tuple(grid)
             except TypeError as exc:
-                raise ValueError(
-                    f"grid must contain three positive integers, got {grid!r}"
-                ) from exc
+                raise ValueError(f"grid must contain three positive integers, got {grid!r}") from exc
             if len(raw_grid) != 3:
-                raise ValueError(
-                    f"grid must contain three positive integers, got {raw_grid!r}"
-                )
-            normalized_grid = tuple(
-                _positive_int("grid dimension", value) for value in raw_grid
-            )
+                raise ValueError(f"grid must contain three positive integers, got {raw_grid!r}")
+            normalized_grid = tuple(_positive_int("grid dimension", value) for value in raw_grid)
 
         capability = self._capability_for(resolved_device)
         needs_grid = self.config.kind in _GRID_LOCAL_KINDS
@@ -1806,20 +1661,12 @@ class LightX2VSparseAdapter:
 
     def _frame_num(self, grid: tuple[int, int, int] | None) -> int | None:
         configured = self.config.attnmap_frame_num
-        if grid is None:
-            frame_num = configured
-        else:
-            frame_num = _positive_int("grid temporal size", grid[0])
+        frame_num = configured if grid is None else _positive_int("grid temporal size", grid[0])
         if configured is not None and frame_num is not None and configured != frame_num:
             raise ValueError(
-                "attnmap_frame_num/grid mismatch: "
-                f"configured={configured}, grid temporal size={frame_num}"
+                f"attnmap_frame_num/grid mismatch: configured={configured}, grid temporal size={frame_num}"
             )
-        if (
-            self.config.kind == "nbhd"
-            and frame_num is not None
-            and len(self.config.nbhd_coefficient) > frame_num
-        ):
+        if self.config.kind == "nbhd" and frame_num is not None and len(self.config.nbhd_coefficient) > frame_num:
             raise ValueError(
                 "NBHD coefficient length must not exceed the temporal grid: "
                 f"len={len(self.config.nbhd_coefficient)}, frames={frame_num}"
@@ -1845,19 +1692,9 @@ class LightX2VSparseAdapter:
     ]:
         frame_num = self._frame_num(grid)
         device_type, device_index = _device_key(device)
-        grid_key = (
-            tuple(grid)
-            if self.config.kind in _GRID_LOCAL_KINDS and grid is not None
-            else None
-        )
-        local_request_key = (
-            request_key or "legacy"
-            if self.config.kind in _REQUEST_LOCAL_KINDS
-            else None
-        )
-        geometry_key = (
-            (heads, head_dim) if self.config.kind == "svg_attn" else None
-        )
+        grid_key = tuple(grid) if self.config.kind in _GRID_LOCAL_KINDS and grid is not None else None
+        local_request_key = request_key or "legacy" if self.config.kind in _REQUEST_LOCAL_KINDS else None
+        geometry_key = (heads, head_dim) if self.config.kind == "svg_attn" else None
         key = (
             device_type,
             device_index,
@@ -1882,9 +1719,7 @@ class LightX2VSparseAdapter:
             capability_contract = self._capability_for(device)
             if self._injected_provider is not None:
                 provider = self._injected_provider
-                provider_path = (
-                    self._injected_provider_path or _provider_identity(provider)
-                )
+                provider_path = self._injected_provider_path or _provider_identity(provider)
             else:
                 with _device_context(device):
                     provider = _build_provider(self.config, frame_num)
@@ -1892,9 +1727,7 @@ class LightX2VSparseAdapter:
             if self.config.kind == "svg_attn":
                 prepare = getattr(type(provider), "prepare", None)
                 if not callable(prepare):
-                    raise LightX2VSparseUnavailableError(
-                        "LightX2V SVG provider has no callable prepare"
-                    )
+                    raise LightX2VSparseUnavailableError("LightX2V SVG provider has no callable prepare")
                 with _device_context(device):
                     prepare(
                         head_num=heads,
@@ -1906,9 +1739,7 @@ class LightX2VSparseAdapter:
                     )
             adapter_path = _provider_identity(provider)
             if not callable(getattr(provider, "apply", None)):
-                raise LightX2VSparseUnavailableError(
-                    f"provider {adapter_path!r} has no callable apply"
-                )
+                raise LightX2VSparseUnavailableError(f"provider {adapter_path!r} has no callable apply")
             source_identity = (
                 {
                     "provider_source_commit": None,
@@ -1948,8 +1779,7 @@ class LightX2VSparseAdapter:
                 "runtime_effective": True,
                 "capability_contract": capability_contract,
                 "reference_parity_verified": (
-                    source_identity["provider_source_commit"]
-                    == PINNED_LIGHTX2V_COMMIT
+                    source_identity["provider_source_commit"] == PINNED_LIGHTX2V_COMMIT
                     and source_identity["provider_source_clean"] is True
                 ),
             }
@@ -1959,9 +1789,7 @@ class LightX2VSparseAdapter:
                 None,
             )
             if isinstance(provider_adaptation, Mapping):
-                receipt_base["provider_adaptation"] = dict(
-                    provider_adaptation
-                )
+                receipt_base["provider_adaptation"] = dict(provider_adaptation)
             cached = (
                 provider,
                 provider_path,
@@ -1989,9 +1817,7 @@ class LightX2VSparseAdapter:
         if not all(isinstance(tensor, torch.Tensor) for tensor in (q, k, v)):
             raise TypeError("LightX2V sparse q/k/v must all be tensors")
         if q.ndim != 4:
-            raise ValueError(
-                f"LightX2V sparse q/k/v must use BSHD rank-4 layout, got {q.ndim}D"
-            )
+            raise ValueError(f"LightX2V sparse q/k/v must use BSHD rank-4 layout, got {q.ndim}D")
         if q.shape != k.shape or q.shape != v.shape:
             raise ValueError(
                 "LightX2V sparse q/k/v shapes must match exactly; "
@@ -2022,10 +1848,7 @@ class LightX2VSparseAdapter:
                     f"but q/k/v contain {q.shape[1]}"
                 )
         elif self.config.kind in _GRID_LOCAL_KINDS:
-            raise ValueError(
-                f"{self.config.kind} requires the complete 3D grid for "
-                "provider-local cache isolation"
-            )
+            raise ValueError(f"{self.config.kind} requires the complete 3D grid for provider-local cache isolation")
 
     def _provider_execution(
         self,
@@ -2039,9 +1862,7 @@ class LightX2VSparseAdapter:
             return "provider_dense" if layer_idx < 1 else "sparse"
         if self.config.kind == "rainfusion_attn":
             if step_index is None:
-                raise ValueError(
-                    "RainFusion attention requires an explicit denoise step index"
-                )
+                raise ValueError("RainFusion attention requires an explicit denoise step index")
             if step_index < self.config.skip_timesteps:
                 return "provider_dense"
         return "sparse"
@@ -2079,9 +1900,7 @@ class LightX2VSparseAdapter:
             kwargs.update(
                 block_idx=layer_idx,
                 scheduler=SimpleNamespace(
-                    latents=SimpleNamespace(
-                        shape=(1, 1, grid[1], grid[2])
-                    ),
+                    latents=SimpleNamespace(shape=(1, 1, grid[1], grid[2])),
                     patch_size=(1, 1, 1),
                     step_index=step_index,
                 ),
@@ -2108,9 +1927,7 @@ class LightX2VSparseAdapter:
         if self.config.kind == "rainfusion_attn":
             operator = type(provider)._get_operator()
             return _provider_identity(operator.dense_attn)
-        raise AssertionError(
-            f"no provider-dense path is defined for {self.config.kind}"
-        )
+        raise AssertionError(f"no provider-dense path is defined for {self.config.kind}")
 
     def __call__(
         self,
@@ -2142,10 +1959,7 @@ class LightX2VSparseAdapter:
             head_dim=q.shape[3],
         )
         batch, sequence, heads, head_dim = q.shape
-        if (
-            provider is not self._last_validated_sla_provider
-            or sequence != self._last_validated_sla_sequence
-        ):
+        if provider is not self._last_validated_sla_provider or sequence != self._last_validated_sla_sequence:
             _validate_nonempty_sla_selection(
                 self.config,
                 provider,
@@ -2166,11 +1980,7 @@ class LightX2VSparseAdapter:
         if on_provider_attempt is not None:
             on_provider_attempt()
         prepare_mask = getattr(provider, "prepare_mask", None)
-        if (
-            self.config.kind == "nbhd"
-            and self.config.operator == "magi"
-            and callable(prepare_mask)
-        ):
+        if self.config.kind == "nbhd" and self.config.operator == "magi" and callable(prepare_mask):
             # The configured direct-NBHD subclass is unique to this full grid.
             # Pre-populate its class cache once under a narrow lock, then the
             # expensive provider kernels can run without serializing requests.
@@ -2196,8 +2006,7 @@ class LightX2VSparseAdapter:
                 )
                 if not isinstance(result, torch.Tensor):
                     raise RuntimeError(
-                        f"LightX2V provider {provider_path} returned "
-                        f"{type(result).__name__}, expected Tensor"
+                        f"LightX2V provider {provider_path} returned {type(result).__name__}, expected Tensor"
                     )
                 expected_flat = (sequence, heads * head_dim)
                 expected_heads = (sequence, heads, head_dim)
@@ -2216,11 +2025,7 @@ class LightX2VSparseAdapter:
                         f"expected device={q.device}, dtype={q.dtype}"
                     )
                 outputs.append(result)
-        output = (
-            outputs[0].unsqueeze(0)
-            if batch == 1
-            else torch.stack(outputs, dim=0)
-        )
+        output = outputs[0].unsqueeze(0) if batch == 1 else torch.stack(outputs, dim=0)
         if output.shape != q.shape:
             raise RuntimeError(
                 f"LightX2V provider {provider_path} produced final shape "
@@ -2234,17 +2039,19 @@ class LightX2VSparseAdapter:
         receipt: dict[str, Any] = dict(receipt_base)
         provider_config = dict(receipt_base["provider_config"])
         provider_config["attnmap_frame_num"] = self._frame_num(grid)
-        receipt.update({
-            "provider_path": effective_provider_path,
-            "provider_calls": batch,
-            "grid": list(grid) if grid is not None else None,
-            "provider_config": provider_config,
-            "input": _tensor_contract(q),
-            "output": _tensor_contract(output),
-            "execution": execution,
-            "sparse_kernel_executed": execution == "sparse",
-            "provider_dense_executed": execution == "provider_dense",
-        })
+        receipt.update(
+            {
+                "provider_path": effective_provider_path,
+                "provider_calls": batch,
+                "grid": list(grid) if grid is not None else None,
+                "provider_config": provider_config,
+                "input": _tensor_contract(q),
+                "output": _tensor_contract(output),
+                "execution": execution,
+                "sparse_kernel_executed": execution == "sparse",
+                "provider_dense_executed": execution == "provider_dense",
+            }
+        )
         if self.config.kind == "nbhd":
             receipt["attnmap_frame_num"] = self._frame_num(grid)
             receipt["nbhd_coefficient"] = list(self.config.nbhd_coefficient)
@@ -2260,10 +2067,7 @@ def parse_lightx2v_sparse(option: Any) -> LightX2VSparseConfig:
     if isinstance(option, str):
         return LightX2VSparseConfig(kind=option)
     if not isinstance(option, Mapping):
-        raise TypeError(
-            "LightX2V sparse attention must be a kind string, mapping, or "
-            "LightX2VSparseConfig"
-        )
+        raise TypeError("LightX2V sparse attention must be a kind string, mapping, or LightX2VSparseConfig")
     allowed = {
         "kind",
         "sparsity_ratio",
@@ -2288,11 +2092,11 @@ def parse_lightx2v_sparse(option: Any) -> LightX2VSparseConfig:
 
 
 __all__ = [
+    "PINNED_LIGHTX2V_COMMIT",
     "LightX2VSparseAdapter",
     "LightX2VSparseConfig",
     "LightX2VSparseResult",
     "LightX2VSparseUnavailableError",
-    "PINNED_LIGHTX2V_COMMIT",
     "lightx2v_kernel_symbol",
     "lightx2v_provider_family",
     "lightx2v_sparse_capability_contract",

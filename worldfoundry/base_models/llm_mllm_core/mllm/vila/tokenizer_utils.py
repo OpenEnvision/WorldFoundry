@@ -14,7 +14,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import torch
 import transformers
@@ -36,10 +37,10 @@ DUMMY_CONVERSATION = [
 
 
 def tokenize_conversation_legacy(
-    messages: Sequence[Dict[str, str]],
+    messages: Sequence[dict[str, str]],
     tokenizer: transformers.PreTrainedTokenizer,
     add_generation_prompt: bool = False,
-    overrides: Optional[Dict[str, str]] = None,
+    overrides: dict[str, str] | None = None,
     no_system_prompt: bool = False,
 ) -> torch.Tensor:
     conv = default_conversation.copy()
@@ -70,10 +71,10 @@ def tokenize_conversation_legacy(
 
 # NOTE(ligeng): add a return typing to help code analyze
 def tokenize_conversation(
-    messages: Sequence[Dict[str, str]],
+    messages: Sequence[dict[str, str]],
     tokenizer: transformers.PreTrainedTokenizer,
     add_generation_prompt: bool = False,
-    overrides: Optional[Dict[str, str]] = None,
+    overrides: dict[str, str] | None = None,
     no_system_prompt: bool = False,
     return_ids_only=True,
 ) -> torch.Tensor:
@@ -110,7 +111,7 @@ def tokenize_conversation(
         conversation.append(message)
 
     if no_system_prompt:
-        conversation = [{"role": "system", "content": ""}] + conversation
+        conversation = [{"role": "system", "content": ""}] + conversation  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     text = tokenizer.apply_chat_template(
         conversation,
@@ -128,12 +129,12 @@ def _maybe_add_sentinel_token(tokenizer: transformers.PreTrainedTokenizer) -> No
 
 
 def preprocess_conversation(
-    conversation: Sequence[Dict[str, str]],
+    conversation: Sequence[dict[str, str]],
     tokenizer: transformers.PreTrainedTokenizer,
     no_system_prompt: bool = False,
     retried: bool = False,
     **kwargs: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     inputs = tokenize_conversation(conversation, tokenizer, no_system_prompt=no_system_prompt)
     labels = torch.ones_like(inputs) * IGNORE_INDEX
 
@@ -177,7 +178,7 @@ def preprocess_conversation(
     return {"input_ids": inputs, "labels": labels}
 
 
-def infer_stop_tokens(tokenizer: transformers.PreTrainedTokenizer) -> List[str]:
+def infer_stop_tokens(tokenizer: transformers.PreTrainedTokenizer) -> list[str]:
     _maybe_add_sentinel_token(tokenizer)
     template = tokenize_conversation(DUMMY_CONVERSATION, tokenizer, overrides={"gpt": SENTINEL_TOKEN})
 

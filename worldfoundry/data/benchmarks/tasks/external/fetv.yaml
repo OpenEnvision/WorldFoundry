@@ -37,61 +37,61 @@ metrics:
   static_quality:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   temporal_quality:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   overall_alignment:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   fine_grained_alignment:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   clip_score:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: bounded_official_runtime_verified
   blip_score:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   fid:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   fvd:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   fetv_average:
     aggregation: mean
     primary: true
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: fetv
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id fetv --mode contract --output-dir
+  contract_validation_command: wf zoo benchmark-run --benchmark-id fetv --mode contract --output-dir
     tmp/benchmark_zoo/benchmark_contract/fetv --json
   base_model_dependencies:
   - video_quality_motion_stack
@@ -102,8 +102,8 @@ metadata:
     notes:
     - CLIP ViT-B/32 and RAFT reusable video-quality assets are tracked through the WorldFoundry base-model registry.
     - FETV-specific BLIP, FID/FVD, and official scorer assets are metric assets, not external checkout requirements.
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:FETVContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/fetv/run_fetv_official_runner.py
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:fetv
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/fetv/run_fetv_official_runner.py
   prompt_suite:
     hf_dataset_id: lyx97/FETV
     manifest: worldfoundry/data/benchmarks/assets/fetv/fetv_data.json
@@ -114,9 +114,9 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_official_runtime
-    root: worldfoundry/evaluation/tasks/execution/runners/fetv/runtime/fetv_eval
+    root: worldfoundry/evals/tasks/execution/runners/fetv/runtime/fetv_eval
     runtime_root_env: WORLDFOUNDRY_FETV_RUNTIME_ROOT
-    adapter: worldfoundry/evaluation/tasks/execution/runners/fetv/fetv_official_runtime.py
+    adapter: worldfoundry/evals/tasks/execution/runners/fetv/fetv_official_runtime.py
     artifact_score_dir_env: WORLDFOUNDRY_FETV_ARTIFACT_SCORE_DIR
   release_status: experimental
   maturity: bounded_official_component_verified
@@ -139,22 +139,22 @@ metadata:
       license: cc-by-4.0
       path: cache/worldfoundry/data/hfd_datasets/lyx97__FETV
     in_tree_runtime_paths:
-    - worldfoundry/evaluation/tasks/execution/runners/fetv/run_fetv_official_runner.py
-    - worldfoundry/evaluation/tasks/execution/runners/fetv/fetv_official_runtime.py
-    - worldfoundry/evaluation/tasks/execution/runners/fetv/runtime/fetv_eval/auto_eval.py
-    - worldfoundry/evaluation/tasks/execution/runners/fetv/runtime/fetv_eval/compute_fid.py
+    - worldfoundry/evals/tasks/execution/runners/fetv/run_fetv_official_runner.py
+    - worldfoundry/evals/tasks/execution/runners/fetv/fetv_official_runtime.py
+    - worldfoundry/evals/tasks/execution/runners/fetv/runtime/fetv_eval/auto_eval.py
+    - worldfoundry/evals/tasks/execution/runners/fetv/runtime/fetv_eval/compute_fid.py
     - worldfoundry/base_models/perception_core/video_quality/fetv_stylegan_v/src/scripts/calc_metrics_for_dataset.py
     - worldfoundry/base_models/perception_core/video_text/fetv_blip/models/blip_retrieval.py
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:FETVContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:fetv
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
     normalizer_verified: true
     surface: strict_video_bridge_and_bounded_official_clipscore
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
+    target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
     status: implemented
     protocol: in_tree_official_runtime_and_result_normalization
     output_fields:
@@ -185,10 +185,10 @@ metadata:
       provenance: normalizes caller-provided official outputs or FETV-EVAL result directories without executing upstream
         repos
   open_source_status: bounded_official_clipscore_and_result_normalizer
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   runner:
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -204,11 +204,11 @@ metadata:
     - --json
     runtime:
       results_path_env: WORLDFOUNDRY_FETV_RESULTS_PATH
-    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id fetv --mode official-validation
+    official_validation_command: wf zoo benchmark-run --benchmark-id fetv --mode official-validation
       --official-results-path <official_results.csv-or-FETV-EVAL-dir> --generated-artifact-dir <generated_videos>
       --output-dir <out> --json
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -277,7 +277,7 @@ tasks:
       metric_ids:
       - local_metadata_coverage
       - local_prompt_video_pair_completeness
-      evaluator_target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
+      evaluator_target: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: implemented
     - name: external_official_runner
       metric_ids:
@@ -290,9 +290,9 @@ tasks:
       - fid
       - fvd
       - fetv_average
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:FETVContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/fetv/run_fetv_official_runner.py
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id fetv --mode official-validation
+      runner_target: worldfoundry.evals.tasks.contracts.external:fetv
+      runner_script: worldfoundry/evals/tasks/execution/runners/fetv/run_fetv_official_runner.py
+      official_validation_command: wf zoo benchmark-run --benchmark-id fetv --mode official-validation
         --official-results-path <official_results.csv-or-FETV-EVAL-dir> --generated-artifact-dir <generated_videos>
         --output-dir <out> --json
-      official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+      official_result_entrypoint: wf zoo benchmark-run

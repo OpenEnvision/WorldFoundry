@@ -16,13 +16,10 @@
 Alignment utilities for depth estimation and metric scaling.
 """
 
-from typing import Tuple
 import torch
 
 
-def least_squares_scale_scalar(
-    a: torch.Tensor, b: torch.Tensor, eps: float = 1e-12
-) -> torch.Tensor:
+def least_squares_scale_scalar(a: torch.Tensor, b: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
     """
     Compute least squares scale factor s such that a ≈ s * b.
 
@@ -115,9 +112,7 @@ def sample_tensor_for_quantile(tensor: torch.Tensor, max_samples: int = 100000) 
     return tensor.flatten()[idx]
 
 
-def apply_metric_scaling(
-    depth: torch.Tensor, intrinsics: torch.Tensor, scale_factor: float = 300.0
-) -> torch.Tensor:
+def apply_metric_scaling(depth: torch.Tensor, intrinsics: torch.Tensor, scale_factor: float = 300.0) -> torch.Tensor:
     """
     Apply metric scaling to depth based on camera intrinsics.
 
@@ -138,7 +133,7 @@ def set_sky_regions_to_max_depth(
     depth_conf: torch.Tensor,
     non_sky_mask: torch.Tensor,
     max_depth: float = 200.0,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Set sky regions to maximum depth and high confidence.
 

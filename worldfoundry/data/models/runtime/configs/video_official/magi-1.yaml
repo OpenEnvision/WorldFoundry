@@ -3,8 +3,6 @@ model_id: magi-1
 runtime:
   kind: official_cli
   backend_quality: in_tree_official_runtime
-  repo_root_candidates:
-  - ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/synthesis/visual_generation/magi/magi_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_CKPT_DIR/MAGI-1
   - $WORLDFOUNDRY_CKPT_DIR/sand-ai--MAGI-1
@@ -19,12 +17,8 @@ runtime:
     num_steps: 64
     fps: 24
     seed: 1234
-  command:
-  - "{python}"
-  - "-m"
-  - "worldfoundry.synthesis.visual_generation.magi.worldfoundry_runner"
-  - "--repo-root"
-  - "{repo_root}"
+  module: worldfoundry.synthesis.visual_generation.magi.worldfoundry_runner
+  args:
   - "--checkpoint-path"
   - "{checkpoint_path}"
   - "--prompt"
@@ -50,5 +44,6 @@ runtime:
   - "--seed"
   - "{seed}"
 notes:
-- Runtime wraps the official MAGI inference/pipeline/entry.py with a generated config that points at local checkpoint assets.
+- Runtime launches worldfoundry.synthesis.visual_generation.magi.magi_runtime.inference.pipeline.entry
+  with a generated config that points at local checkpoint assets.
 - Example configs and `special_tokens.npz` live under `worldfoundry/data/test_cases/magi/example/` (override with `WORLDFOUNDRY_MAGI_EXAMPLE_ROOT` or `SPECIAL_TOKEN_PATH`).

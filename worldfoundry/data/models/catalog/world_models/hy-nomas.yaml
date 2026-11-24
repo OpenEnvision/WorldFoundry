@@ -1,0 +1,80 @@
+id: hy-nomas
+name: Hy-Nomas
+aliases:
+- hynomas
+- tencent/Hy-Nomas
+tasks:
+- text-to-video
+- action-conditioned-video
+- interactive-world-generation
+output_artifacts:
+- generated_video
+provider: official_repo
+source:
+  status: open_source
+  official_repo_url: https://github.com/Tencent-Hunyuan/Hy-Nomas
+  revision: 911cea6458a89c2663513ff7099561ec190dd491
+  license: apache-2.0
+official_sources:
+  github:
+    url: https://github.com/Tencent-Hunyuan/Hy-Nomas
+    revision: 911cea6458a89c2663513ff7099561ec190dd491
+  huggingface:
+  - repo_id: tencent/Hy-Nomas
+    role: transformer_and_decoder
+checkpoints:
+- repo_id: tencent/Hy-Nomas
+  revision: bac719a80c8d02f91c485fca804bb8221e149b70
+  license: apache-2.0
+  role: transformer_and_decoder
+- repo_id: Qwen/Qwen2.5-VL-7B-Instruct
+  revision: cc594898137f460bfe9f0759e9844b3ce807cfb5
+  license: apache-2.0
+  role: text_encoder
+variants:
+- id: hy-nomas
+  task: text-to-video
+  provider: official_repo
+  runtime_profile: hy-nomas
+  pipeline_binding: hy-nomas
+  integration:
+    status: integrated
+  runner_parity:
+    status: checkpoint_environment_required
+- id: hy-nomas-low-memory
+  task: text-to-video
+  provider: official_repo
+  runtime_profile: hy-nomas
+  pipeline_binding: hy-nomas
+  integration:
+    status: integrated
+  runner_parity:
+    status: checkpoint_environment_required
+integration:
+  status: integrated
+  notes:
+  - Inference-only native component graph; no external checkout, training package or upstream web service.
+  - Standard and low-memory variants reuse shared checkpoint loading, Euler scheduling, weight quantization and KV compression.
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+runtime_profile: runtime-profile:hy-nomas
+pipeline_binding: hy-nomas
+runner_parity:
+  status: checkpoint_environment_required
+catalog_category: world_models
+catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes.
+docs:
+  publisher: Tencent Hunyuan
+  publisher_kind: company
+  publisher_zh: 腾讯混元
+  overview: Segment-autoregressive text and camera controlled world generation with the distilled Hy-Nomas DiT and PixelUMM decoder.
+  overview_zh: 基于蒸馏 Hy-Nomas DiT 与 PixelUMM 解码器的文本和相机控制分段自回归世界生成。
+  architecture: A distilled Hy-Nomas DiT conditioned on a Qwen2.5-VL text backbone generates latent segments autoregressively with Euler scheduling and compressed KV history; the PixelUMM decoder turns the latents into frames.
+  architecture_zh: 蒸馏 Hy-Nomas DiT 以 Qwen2.5-VL 文本基座为条件，用 Euler 调度和压缩 KV 历史自回归生成 latent 片段；PixelUMM 解码器将 latent 解码为视频帧。
+  usage_notes: Ordered prompts are successive segments of one world. Use normalized camera-to-world matrices for explicit camera control. Stage the floating-point DiT, PixelUMM and Qwen2.5-VL-7B weights separately.
+  usage_notes_zh: 有序 prompt 表示同一世界的连续片段。显式相机控制使用归一化 camera-to-world 矩阵。分别准备浮点 DiT、PixelUMM 与 Qwen2.5-VL-7B 权重。
+  limitations:
+  - Generation with the full released checkpoints, low-memory quantization at deployed sizes, and Studio performance are not yet measured.
+  - Low-memory inference quantizes the floating-point checkpoints at load time (INT8/FP8); upstream packed INT8/FP8 export files are not supported.
+  limitations_zh:
+  - 尚未测量完整发布权重的生成效果、部署规模下的低显存量化与 Studio 性能。
+  - 低显存推理在加载时对浮点 checkpoint 做 INT8/FP8 量化；不支持上游打包导出的 INT8/FP8 文件。

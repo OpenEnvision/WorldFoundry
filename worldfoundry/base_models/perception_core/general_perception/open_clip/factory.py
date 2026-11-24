@@ -1,31 +1,44 @@
-"""Module for base_models -> perception_core -> general_perception -> open_clip -> factory.py functionality."""
-
 import json
 import logging
 import os
 
 _logger = logging.getLogger(__name__)
-import re
-import warnings
-from copy import deepcopy
-from dataclasses import asdict
-from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+import re  # noqa: E402 - Follows the logging setup.
+import warnings  # noqa: E402 - Follows the logging setup.
+from copy import deepcopy  # noqa: E402 - Follows the logging setup.
+from dataclasses import asdict  # noqa: E402 - Follows the logging setup.
+from pathlib import Path  # noqa: E402 - Follows the logging setup.
+from typing import Any  # noqa: E402 - Follows the logging setup.
 
-import torch
+import torch  # noqa: E402 - Follows the logging setup.
 
-from worldfoundry.core.model_loading import load_torch_checkpoint
-from worldfoundry.core.io.paths import resolve_data_path
+from worldfoundry.core.io.paths import resolve_data_path  # noqa: E402 - Follows the logging setup.
+from worldfoundry.core.model_loading import load_torch_checkpoint  # noqa: E402 - Follows the logging setup.
 
-from .convert import convert_state_dict
-from .model import CLIP, CustomTextCLIP, convert_weights_to_lp, convert_to_custom_text_state_dict,\
-    resize_pos_embed, get_cast_dtype, resize_text_pos_embed, set_model_preprocess_cfg
-from .clap_model import CLAP
-from .coca_model import CoCa
-from .naflex_convert import apply_naflex_vision_config, convert_naflex_state_dict
-from .pretrained import is_pretrained_cfg, get_pretrained_cfg, download_pretrained,\
-    list_pretrained_tags_by_model, download_pretrained_from_hf
-from .transform import (
+from .clap_model import CLAP  # noqa: E402 - Follows the logging setup.
+from .coca_model import CoCa  # noqa: E402 - Follows the logging setup.
+from .convert import convert_state_dict  # noqa: E402 - Follows the logging setup.
+from .model import (  # noqa: E402 - Follows the logging setup.
+    CLIP,
+    CustomTextCLIP,
+    convert_to_custom_text_state_dict,
+    convert_weights_to_lp,
+    get_cast_dtype,
+    resize_pos_embed,
+    resize_text_pos_embed,
+    set_model_preprocess_cfg,
+)
+from .naflex_convert import (  # noqa: E402 - Follows the logging setup.
+    apply_naflex_vision_config,
+    convert_naflex_state_dict,
+)
+from .pretrained import (  # noqa: E402 - Follows the logging setup.
+    download_pretrained,
+    download_pretrained_from_hf,
+    get_pretrained_cfg,
+    list_pretrained_tags_by_model,
+)
+from .transform import (  # noqa: E402 - Follows the logging setup.
     AugmentationCfg,
     PreprocessCfg,
     image_transform_v2,
@@ -34,56 +47,57 @@ from .transform import (
     merge_preprocess_kwargs,
     naflex_eval_transform_v2,
 )
-from .tokenizer import HFTokenizer, SimpleTokenizer, SigLipTokenizer, DEFAULT_CONTEXT_LENGTH
 
-HF_HUB_PREFIX = 'hf-hub:'
+# isort: split
+from .tokenizer import (  # noqa: E402 - Follows the logging setup.
+    DEFAULT_CONTEXT_LENGTH,
+    HFTokenizer,
+    SigLipTokenizer,
+    SimpleTokenizer,
+)
+
+HF_HUB_PREFIX = "hf-hub:"
 _MODEL_CONFIG_PATHS = [resolve_data_path("models", "runtime", "configs", "open_clip", "model_configs")]
 _MODEL_CONFIGS = {}  # directory (model_name: config) of model architecture configs
 
 
 def _natural_key(string_):
-    """Helper function to natural key.
-
-    Args:
-        string_: The string.
-    """
-    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_.lower())]
+    return [int(s) if s.isdigit() else s for s in re.split(r"(\d+)", string_.lower())]
 
 
 def _rescan_model_configs():
-    """Helper function to rescan model configs."""
     global _MODEL_CONFIGS
 
-    config_ext = ('.json',)
+    config_ext = (".json",)
     config_files = []
     for config_path in _MODEL_CONFIG_PATHS:
         if config_path.is_file() and config_path.suffix in config_ext:
             config_files.append(config_path)
         elif config_path.is_dir():
             for ext in config_ext:
-                config_files.extend(config_path.glob(f'*{ext}'))
+                config_files.extend(config_path.glob(f"*{ext}"))
 
     for cf in config_files:
-        with open(cf, 'r') as f:
+        with open(cf) as f:
             model_cfg = json.load(f)
-            has_vision = all(a in model_cfg for a in ('embed_dim', 'vision_cfg', 'text_cfg'))
-            has_audio = all(a in model_cfg for a in ('embed_dim', 'audio_cfg', 'text_cfg'))
+            has_vision = all(a in model_cfg for a in ("embed_dim", "vision_cfg", "text_cfg"))
+            has_audio = all(a in model_cfg for a in ("embed_dim", "audio_cfg", "text_cfg"))
             if has_vision or has_audio:
                 _MODEL_CONFIGS[cf.stem] = model_cfg
 
-    _MODEL_CONFIGS = {k: v for k, v in sorted(_MODEL_CONFIGS.items(), key=lambda x: _natural_key(x[0]))}
+    _MODEL_CONFIGS = dict(sorted(_MODEL_CONFIGS.items(), key=lambda x: _natural_key(x[0])))
 
 
 _rescan_model_configs()  # initial populate of model config registry
 
 
 def list_models():
-    """ enumerate available model architectures based on config files """
+    """enumerate available model architectures based on config files"""
     return list(_MODEL_CONFIGS.keys())
 
 
 def add_model_config(path):
-    """ add model config path or file and update registry """
+    """add model config path or file and update registry"""
     if not isinstance(path, Path):
         path = Path(path)
     _MODEL_CONFIG_PATHS.append(path)
@@ -91,10 +105,11 @@ def add_model_config(path):
 
 
 # Define Schema Prefixes as constants
-HF_HUB_PREFIX = 'hf-hub:'
-LOCAL_DIR_PREFIX = 'local-dir:'
+HF_HUB_PREFIX = "hf-hub:"
+LOCAL_DIR_PREFIX = "local-dir:"
 
-def parse_model_name(model_name: str) -> Tuple[Optional[str], str]:
+
+def parse_model_name(model_name: str) -> tuple[str | None, str]:
     """
     Parses a model name string to identify a schema and the remaining identifier.
 
@@ -115,24 +130,24 @@ def parse_model_name(model_name: str) -> Tuple[Optional[str], str]:
     # Check for local directory schema first
     if model_name.startswith(LOCAL_DIR_PREFIX):
         # Extract the identifier (path) after the prefix
-        identifier = model_name[len(LOCAL_DIR_PREFIX):]
+        identifier = model_name[len(LOCAL_DIR_PREFIX) :]
         # Validate that the identifier (path) is not empty
         if not identifier:
             raise ValueError("Empty path specified after 'local-dir:' schema.")
         # Return the schema and the raw path identifier
         # Note: We don't resolve or fully validate the path here,
         #       that's left to the calling function (e.g., using os.path.isdir)
-        return 'local-dir', identifier
+        return "local-dir", identifier
 
     # Check for Hugging Face Hub schema
     elif model_name.startswith(HF_HUB_PREFIX):
         # Extract the identifier (HF Hub ID) after the prefix
-        identifier = model_name[len(HF_HUB_PREFIX):]
+        identifier = model_name[len(HF_HUB_PREFIX) :]
         # Validate that the identifier is not empty
         if not identifier:
             raise ValueError("Empty identifier specified after 'hf-hub:' schema.")
         # Return the schema and the HF Hub ID
-        return 'hf-hub', identifier
+        return "hf-hub", identifier
 
     # If neither schema prefix is found
     else:
@@ -141,33 +156,31 @@ def parse_model_name(model_name: str) -> Tuple[Optional[str], str]:
 
 
 def _get_hf_config(
-        model_id: str,
-        cache_dir: Optional[str] = None,
+    model_id: str,
+    cache_dir: str | None = None,
 ):
-    """ Fetch model config from HuggingFace Hub.
-    """
+    """Fetch model config from HuggingFace Hub."""
     config_path = download_pretrained_from_hf(
         model_id,
-        filename='open_clip_config.json',
+        filename="open_clip_config.json",
         cache_dir=cache_dir,
     )
-    with open(config_path, 'r', encoding='utf-8') as f:
+    with open(config_path, encoding="utf-8") as f:
         config = json.load(f)
     return config
 
 
 def get_model_config(model_name):
-    """ Fetch model config from schema specified location or local library configs.
-    """
+    """Fetch model config from schema specified location or local library configs."""
     loc, model_id = parse_model_name(model_name)
-    if loc == 'local-dir':
-        local_path = Path(model_id) / 'open_clip_config.json'
-        with open(local_path, 'r', encoding='utf-8') as f:
+    if loc == "local-dir":
+        local_path = Path(model_id) / "open_clip_config.json"
+        with open(local_path, encoding="utf-8") as f:
             config = json.load(f)
-        return config.get('model_cfg', config)
-    elif loc == 'hf-hub':
+        return config.get("model_cfg", config)
+    elif loc == "hf-hub":
         config = _get_hf_config(model_id)
-        return config.get('model_cfg', config)
+        return config.get("model_cfg", config)
     elif model_name in _MODEL_CONFIGS:
         return deepcopy(_MODEL_CONFIGS[model_name])
     else:
@@ -175,52 +188,37 @@ def get_model_config(model_name):
 
 
 def load_state_dict(
-        checkpoint_path: str,
-        device='cpu',
-        weights_only=True,
+    checkpoint_path: str,
+    device="cpu",
+    weights_only=True,
 ):
-    """Load state dict.
-
-    Args:
-        checkpoint_path: The checkpoint path.
-        device: The device.
-        weights_only: The weights only.
-    """
     # Check if safetensors or not and load weights accordingly
     if str(checkpoint_path).endswith(".safetensors"):
         from safetensors.torch import load_file
+
         checkpoint = load_file(checkpoint_path, device=device)
     else:
         checkpoint = load_torch_checkpoint(checkpoint_path, map_location=device, weights_only=weights_only)
 
-    if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
-        state_dict = checkpoint['state_dict']
-    else:
-        state_dict = checkpoint
-    if next(iter(state_dict.items()))[0].startswith('module'):
+    state_dict = checkpoint["state_dict"] if isinstance(checkpoint, dict) and "state_dict" in checkpoint else checkpoint
+    if next(iter(state_dict.items()))[0].startswith("module"):
         state_dict = {k[7:]: v for k, v in state_dict.items()}
     return state_dict
 
 
 def load_checkpoint(
-        model: Union[CLIP, CustomTextCLIP],
-        checkpoint_path: str,
-        strict: bool = True,
-        weights_only: bool = True,
-        device='cpu',
+    model: CLIP | CustomTextCLIP,
+    checkpoint_path: str,
+    strict: bool = True,
+    weights_only: bool = True,
+    device="cpu",
 ):
-    """Load checkpoint.
-
-    Args:
-        model: The model.
-        checkpoint_path: The checkpoint path.
-        strict: The strict.
-        weights_only: The weights only.
-        device: The device.
-    """
-    if Path(checkpoint_path).suffix in ('.npz', '.npy'):
+    if Path(checkpoint_path).suffix in (".npz", ".npy"):
         # Separate path loading numpy big_vision (SigLIP) weights
-        from worldfoundry.base_models.perception_core.general_perception.open_clip.convert import load_big_vision_weights
+        from worldfoundry.base_models.perception_core.general_perception.open_clip.convert import (
+            load_big_vision_weights,
+        )
+
         load_big_vision_weights(model, checkpoint_path)
         return {}
 
@@ -231,23 +229,23 @@ def load_checkpoint(
     state_dict = convert_naflex_state_dict(model, state_dict)
 
     # Detect old format and make compatible with new format
-    if 'positional_embedding' in state_dict and not hasattr(model, 'positional_embedding'):
+    if "positional_embedding" in state_dict and not hasattr(model, "positional_embedding"):
         state_dict = convert_to_custom_text_state_dict(state_dict)
 
     # correct if logit_scale differs in being scaler vs 1d param
-    if 'logit_scale' in state_dict and model.logit_scale.ndim != state_dict['logit_scale'].ndim:
-        state_dict['logit_scale'] = state_dict['logit_scale'].reshape(model.logit_scale.shape)
+    if "logit_scale" in state_dict and model.logit_scale.ndim != state_dict["logit_scale"].ndim:
+        state_dict["logit_scale"] = state_dict["logit_scale"].reshape(model.logit_scale.shape)
 
     # correct if logit_bias differs in being scaler vs 1d param
-    if 'logit_bias' in state_dict and model.logit_bias.ndim != state_dict['logit_bias'].ndim:
-        state_dict['logit_bias'] = state_dict['logit_bias'].reshape(model.logit_bias.shape)
+    if "logit_bias" in state_dict and model.logit_bias.ndim != state_dict["logit_bias"].ndim:
+        state_dict["logit_bias"] = state_dict["logit_bias"].reshape(model.logit_bias.shape)
 
     # If loading a non-SigLIP model for SigLIP training. See https://github.com/mlfoundations/open_clip/issues/712
-    if 'logit_bias' not in state_dict and model.logit_bias is not None:
+    if "logit_bias" not in state_dict and model.logit_bias is not None:
         state_dict["logit_bias"] = torch.zeros_like(state_dict["logit_scale"])
 
     # Certain text transformers no longer expect position_ids after transformers==4.31
-    position_id_key = 'text.transformer.embeddings.position_ids'
+    position_id_key = "text.transformer.embeddings.position_ids"
     if position_id_key in state_dict and not hasattr(model, position_id_key):
         del state_dict[position_id_key]
 
@@ -259,24 +257,21 @@ def load_checkpoint(
     return incompatible_keys
 
 
-def _find_checkpoint_in_dir(dir_path: Path) -> Optional[str]:
-    """Helper function to find checkpoint in dir.
-
-    Args:
-        dir_path: The dir path.
-
-    Returns:
-        The return value.
-    """
-    checkpoints = list(dir_path.glob('*.safetensors')) + list(dir_path.glob('*.bin')) + list(dir_path.glob('*.pth'))
+def _find_checkpoint_in_dir(dir_path: Path) -> str | None:
+    checkpoints = list(dir_path.glob("*.safetensors")) + list(dir_path.glob("*.bin")) + list(dir_path.glob("*.pth"))
     if not checkpoints:
         return None
     checkpoints.sort()
-    checkpoints.sort(key=lambda x: x.suffix == '.safetensors', reverse=True)
+    checkpoints.sort(key=lambda x: x.suffix == ".safetensors", reverse=True)
     preferred_order = [
-        "open_clip_model.safetensors", "open_clip_pytorch_model.safetensors",
-        "open_clip_pytorch_model.bin",  "open_clip_pytorch_model.pth",
-        "model.safetensors", "pytorch_model.bin", "pytorch_model.pth", "model.pth"
+        "open_clip_model.safetensors",
+        "open_clip_pytorch_model.safetensors",
+        "open_clip_pytorch_model.bin",
+        "open_clip_pytorch_model.pth",
+        "model.safetensors",
+        "pytorch_model.bin",
+        "pytorch_model.pth",
+        "model.pth",
     ]
     preferred_checkpoints = [c for c in checkpoints if c.name in preferred_order]
     if preferred_checkpoints:
@@ -286,33 +281,34 @@ def _find_checkpoint_in_dir(dir_path: Path) -> Optional[str]:
         return str(chosen)
     chosen = checkpoints[0]
     _logger.warning(
-        f"Multiple checkpoints found in {dir_path}: {[c.name for c in checkpoints]}. Using '{chosen.name}'.")
+        f"Multiple checkpoints found in {dir_path}: {[c.name for c in checkpoints]}. Using '{chosen.name}'."
+    )
     return str(chosen)
 
 
 def create_model(
-        model_name: str, # Can contain schemas 'hf-hub:' or 'local-dir:'
-        pretrained: Optional[str] = None, # Used ONLY if model_name has NO schema
-        load_weights: bool = True,
-        precision: str = 'fp32',
-        device: Union[str, torch.device] = 'cpu',
-        force_quick_gelu: bool = False,
-        force_custom_text: bool = False,
-        force_patch_dropout: Optional[float] = None,
-        force_image_size: Optional[Union[int, Tuple[int, int]]] = None,
-        force_preprocess_cfg: Optional[Dict[str, Any]] = None,
-        force_context_length: Optional[int] = None,
-        force_naflex_vision: bool = False,
-        pretrained_image: bool = False, # Load default base image weights (at creation, if no CLIP weights)
-        pretrained_text: bool = True,  # Load default base text weights (at creation, if no CLIP weights) - NEW
-        pretrained_image_path: Optional[str] = None, # Load specific image weights from file (after creation)
-        pretrained_text_path: Optional[str] = None, # Load specific text weights from file (after creation)
-        pretrained_audio_path: Optional[str] = None, # Load specific audio encoder weights from file (after creation)
-        cache_dir: Optional[str] = None,
-        output_dict: Optional[bool] = None,
-        require_pretrained: bool = False,
-        weights_only: bool = True,
-        **model_kwargs,
+    model_name: str,  # Can contain schemas 'hf-hub:' or 'local-dir:'
+    pretrained: str | None = None,  # Used ONLY if model_name has NO schema
+    load_weights: bool = True,
+    precision: str = "fp32",
+    device: str | torch.device = "cpu",
+    force_quick_gelu: bool = False,
+    force_custom_text: bool = False,
+    force_patch_dropout: float | None = None,
+    force_image_size: int | tuple[int, int] | None = None,
+    force_preprocess_cfg: dict[str, Any] | None = None,
+    force_context_length: int | None = None,
+    force_naflex_vision: bool = False,
+    pretrained_image: bool = False,  # Load default base image weights (at creation, if no CLIP weights)
+    pretrained_text: bool = True,  # Load default base text weights (at creation, if no CLIP weights) - NEW
+    pretrained_image_path: str | None = None,  # Load specific image weights from file (after creation)
+    pretrained_text_path: str | None = None,  # Load specific text weights from file (after creation)
+    pretrained_audio_path: str | None = None,  # Load specific audio encoder weights from file (after creation)
+    cache_dir: str | None = None,
+    output_dict: bool | None = None,
+    require_pretrained: bool = False,
+    weights_only: bool = True,
+    **model_kwargs,
 ) -> torch.nn.Module:
     """
     Creates and configures a contrastive vision-language model.
@@ -356,16 +352,16 @@ def create_model(
         The created model instance.
     """
     schema, identifier = parse_model_name(model_name)
-    if 'pretrained_hf' in model_kwargs:
+    if "pretrained_hf" in model_kwargs:
         # for backwards compat, override pretrained_text
-        pretrained_text = model_kwargs.pop('pretrained_hf')
+        pretrained_text = model_kwargs.pop("pretrained_hf")
     if isinstance(device, str):
         device = torch.device(device)
 
     model_cfg = None
     preprocess_cfg = asdict(PreprocessCfg())  # Populate with defaults
-    checkpoint_path = None # Final path for full CLIP weights
-    pretrained_cfg_for_tag = None # Store tag config if pretrained is a tag and schema is None
+    checkpoint_path = None  # Final path for full CLIP weights
+    pretrained_cfg_for_tag = None  # Store tag config if pretrained is a tag and schema is None
 
     _logger.info(f"Parsing model identifier. Schema: {schema}, Identifier: {identifier}")
     if schema and pretrained:
@@ -373,24 +369,24 @@ def create_model(
         pretrained = None  # Nullify pretrained as it's ignored
 
     # Handle schemas first - these ignore the `pretrained` argument
-    if schema == 'local-dir':
+    if schema == "local-dir":
         # Handle local directory schema
         local_path = Path(identifier)
         if not local_path.is_dir():
             raise FileNotFoundError(f"Directory specified via 'local-dir:' schema not found: {local_path}")
 
-        local_config_path = local_path / 'open_clip_config.json'
+        local_config_path = local_path / "open_clip_config.json"
         _logger.info(f"Attempting to load config from local dir: {local_config_path}")
         if local_config_path.is_file():
             try:
                 # Try loading and parsing the JSON config
-                with open(local_config_path, 'r', encoding='utf-8') as f:
+                with open(local_config_path, encoding="utf-8") as f:
                     local_json_config = json.load(f)
                 # Check if the required 'model_cfg' key is present
-                if 'model_cfg' in local_json_config:
+                if "model_cfg" in local_json_config:
                     # Load model config and merge preprocess config
-                    model_cfg = local_json_config['model_cfg']
-                    preprocess_cfg = merge_preprocess_dict(preprocess_cfg, local_json_config.get('preprocess_cfg', {}))
+                    model_cfg = local_json_config["model_cfg"]
+                    preprocess_cfg = merge_preprocess_dict(preprocess_cfg, local_json_config.get("preprocess_cfg", {}))
                     _logger.info(f"Loaded model config and preprocess from: {local_config_path}")
                     # Look for weights checkpoint in the same directory
                     checkpoint_path = _find_checkpoint_in_dir(local_path)
@@ -408,18 +404,18 @@ def create_model(
             # Directory exists but the config file is missing
             raise FileNotFoundError(f"'local-dir:' specified, but config file missing: {local_config_path}")
 
-    elif schema == 'hf-hub':
+    elif schema == "hf-hub":
         # Handle Hugging Face Hub schema
         model_id = identifier
         _logger.info(f"Attempting to load config from HF Hub: {model_id}")
         try:
             # Fetch configuration from Hugging Face Hub
             hf_config = _get_hf_config(model_id, cache_dir=cache_dir)
-            if 'model_cfg' not in hf_config:
+            if "model_cfg" not in hf_config:
                 raise RuntimeError(f"'model_cfg' not found in config from {model_id}")
             # Load model config and merge preprocess config
-            model_cfg = hf_config['model_cfg']
-            preprocess_cfg = merge_preprocess_dict(preprocess_cfg, hf_config.get('preprocess_cfg', {}))
+            model_cfg = hf_config["model_cfg"]
+            preprocess_cfg = merge_preprocess_dict(preprocess_cfg, hf_config.get("preprocess_cfg", {}))
             _logger.info(f"Loaded model config from HF Hub: {model_id}")
             # Attempt find default weights file from the Hub repo
             try:
@@ -436,14 +432,15 @@ def create_model(
     elif schema is None:
         # Handle model names without schema prefix
         # Use identifier (original model_name) and clean it for lookup
-        model_name_cleaned = identifier.replace('/', '-')
+        model_name_cleaned = identifier.replace("/", "-")
 
         # Get base config from built-in name using the cleaned identifier
         model_cfg = get_model_config(model_name_cleaned)
         if model_cfg is None:
             # Raise error if no matching built-in config found
             raise RuntimeError(
-                f"Model config for '{model_name_cleaned}' not found in built-ins. Available: {list_models()}")
+                f"Model config for '{model_name_cleaned}' not found in built-ins. Available: {list_models()}"
+            )
         _logger.info(f"Loaded built-in {model_name_cleaned} model config.")
 
         # Determine checkpoint path and update preprocess_cfg based on `pretrained` arg (tag or file)
@@ -458,7 +455,7 @@ def create_model(
                     # QuickGELU compatibility check will happen in after force overrides
                 except Exception as e:
                     _logger.error(f"Failed to download weights for tag '{pretrained}': {e}")
-                    raise RuntimeError(f"Failed to download weights for tag '{pretrained}': {e}")
+                    raise RuntimeError(f"Failed to download weights for tag '{pretrained}': {e}")  # noqa: B904 - Keeps the implicit exception context.
             elif os.path.isfile(pretrained):
                 # Handle pretrained file path
                 _logger.info(f"`pretrained` specifies file path: {pretrained}")
@@ -473,16 +470,16 @@ def create_model(
     # Apply model config overrides
     if model_cfg is None:
         raise RuntimeError("Model configuration could not be determined after Stage 1.")
-    text_cfg = model_cfg['text_cfg']
-    is_audio_model = 'audio_cfg' in model_cfg
-    vision_cfg = model_cfg.get('vision_cfg', {})
+    text_cfg = model_cfg["text_cfg"]
+    is_audio_model = "audio_cfg" in model_cfg
+    vision_cfg = model_cfg.get("vision_cfg", {})
     if force_quick_gelu:
         model_cfg["quick_gelu"] = True
     if is_audio_model:
         if force_patch_dropout is not None:
-            warnings.warn("force_patch_dropout is ignored for CLAP audio models.", UserWarning)
+            warnings.warn("force_patch_dropout is ignored for CLAP audio models.", UserWarning, stacklevel=1)
         if force_image_size is not None:
-            warnings.warn("force_image_size is ignored for CLAP audio models.", UserWarning)
+            warnings.warn("force_image_size is ignored for CLAP audio models.", UserWarning, stacklevel=1)
         if force_naflex_vision:
             raise ValueError("force_naflex_vision is only valid for image models.")
     else:
@@ -498,21 +495,23 @@ def create_model(
     # Check compatibility (e.g., QuickGELU warning for tags)
     if schema is None and pretrained_cfg_for_tag:
         # Only perform check if config came from built-in and weights from a tag
-        model_quick_gelu = model_cfg.get('quick_gelu', False) # Check the potentially overridden value
-        tag_quick_gelu = pretrained_cfg_for_tag.get('quick_gelu', False)
+        model_quick_gelu = model_cfg.get("quick_gelu", False)  # Check the potentially overridden value
+        tag_quick_gelu = pretrained_cfg_for_tag.get("quick_gelu", False)
         if tag_quick_gelu != model_quick_gelu:
             # Warn if the final model config's GELU setting mismatches the tag's training setting
-             warnings.warn(
-                 f"QuickGELU mismatch between final model config (quick_gelu={model_quick_gelu}) "
-                 f"and pretrained tag '{pretrained}' (quick_gelu={tag_quick_gelu}).",
-                 UserWarning
-             )
+            warnings.warn(
+                f"QuickGELU mismatch between final model config (quick_gelu={model_quick_gelu}) "
+                f"and pretrained tag '{pretrained}' (quick_gelu={tag_quick_gelu}).",
+                UserWarning,
+                stacklevel=1,
+            )
 
     # Decide whether to use the checkpoint path based on load_weights
     if checkpoint_path is not None:
         if not load_weights:
             _logger.info(
-                f"Potential checkpoint path '{checkpoint_path}' found, but skipping assignment due to load_weights=False.")
+                f"Potential checkpoint path '{checkpoint_path}' found, but skipping assignment due to load_weights=False."
+            )
             checkpoint_path = None
     else:
         _logger.info("No potential checkpoint path found from config source or pretrained arg.")
@@ -523,14 +522,14 @@ def create_model(
         pretrained_image and not is_audio_model and pretrained_image_path is None and checkpoint_path is None
     )
     enable_default_text_weights = pretrained_text and pretrained_text_path is None and checkpoint_path is None
-    is_timm_model = (not is_audio_model) and 'timm_model_name' in model_cfg.get("vision_cfg", {})
-    is_hf_text_model = 'hf_model_name' in model_cfg.get('text_cfg', {})
+    is_timm_model = (not is_audio_model) and "timm_model_name" in model_cfg.get("vision_cfg", {})
+    is_hf_text_model = "hf_model_name" in model_cfg.get("text_cfg", {})
     if is_timm_model:
-        vision_cfg['timm_model_pretrained'] = enable_default_image_weights
+        vision_cfg["timm_model_pretrained"] = enable_default_image_weights
     else:
         enable_default_image_weights = False  # for accurate logging
     if is_hf_text_model:
-        text_cfg['hf_model_pretrained'] = enable_default_text_weights
+        text_cfg["hf_model_pretrained"] = enable_default_text_weights
     else:
         enable_default_text_weights = False  # for accurate logging
 
@@ -538,21 +537,14 @@ def create_model(
     if is_audio_model:
         model_class = CLAP
     else:
-        custom_text = model_cfg.pop('custom_text', False) or force_custom_text or is_hf_text_model
-        if custom_text:
-            if "multimodal_cfg" in model_cfg:
-                model_class = CoCa
-            else:
-                model_class = CustomTextCLIP
-        else:
-            model_class = CLIP
+        custom_text = model_cfg.pop("custom_text", False) or force_custom_text or is_hf_text_model
+        model_class = (CoCa if "multimodal_cfg" in model_cfg else CustomTextCLIP) if custom_text else CLIP
 
     # Strip removed legacy kwargs that external callers may still pass
-    if 'jit' in model_kwargs:
-        model_kwargs.pop('jit')
+    if "jit" in model_kwargs:
+        model_kwargs.pop("jit")
         warnings.warn(
-            "The 'jit' argument has been removed from create_model(). "
-            "TorchScript support is no longer available.",
+            "The 'jit' argument has been removed from create_model(). TorchScript support is no longer available.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -572,15 +564,14 @@ def create_model(
     # Load Full Pretrained CLIP Weights (if path exists)
     pretrained_loaded = False
     if checkpoint_path:
-        _logger.info(f'Loading full pretrained weights from: {checkpoint_path}')
-        if pretrained_cfg_for_tag and pretrained_cfg_for_tag.get('hf_transformers_clap', False):
+        _logger.info(f"Loading full pretrained weights from: {checkpoint_path}")
+        if pretrained_cfg_for_tag and pretrained_cfg_for_tag.get("hf_transformers_clap", False):
             from .audio.convert import load_hf_clap_state_dict
 
             state_dict = load_hf_clap_state_dict(checkpoint_path)
             incompatible_keys = model.load_state_dict(state_dict, strict=False)
             _logger.info(
-                f"Loaded Transformers CLAP checkpoint from {checkpoint_path}. "
-                f"Incompatible keys: {incompatible_keys}"
+                f"Loaded Transformers CLAP checkpoint from {checkpoint_path}. Incompatible keys: {incompatible_keys}"
             )
         else:
             # Use the load_checkpoint helper which handles state dict loading, conversions, etc.
@@ -590,33 +581,31 @@ def create_model(
                 checkpoint_path,
                 strict=True,
                 weights_only=weights_only,
-                device='cpu' # Load to CPU first
+                device="cpu",  # Load to CPU first
             )
         pretrained_loaded = True
 
     # Load tower-specific weights (image and text), after the full CLIP checkpoint, potentially overwriting parts.
-    pretrained_image_loaded = False # Track if specific image weights loaded
+    pretrained_image_loaded = False  # Track if specific image weights loaded
     if pretrained_image_path:
         if os.path.isfile(pretrained_image_path):
             _logger.info(f"Attempting to load image tower weights from: {pretrained_image_path}")
             try:
                 # Load the state dict from the file
-                image_state_dict = load_state_dict(
-                    pretrained_image_path,
-                    device='cpu',
-                    weights_only=weights_only
-                )
+                image_state_dict = load_state_dict(pretrained_image_path, device="cpu", weights_only=weights_only)
                 # Check if model has the 'visual' attribute
-                if hasattr(model, 'visual'):
+                if hasattr(model, "visual"):
                     # Load into the visual tower, use strict=False for flexibility
                     incompatible_keys = model.visual.load_state_dict(image_state_dict, strict=False)
                     _logger.info(
-                        f"Loaded image tower weights from {pretrained_image_path}. Incompatible keys: {incompatible_keys}")
-                    pretrained_image_loaded = True # Mark specific image weights as loaded
+                        f"Loaded image tower weights from {pretrained_image_path}. Incompatible keys: {incompatible_keys}"
+                    )
+                    pretrained_image_loaded = True  # Mark specific image weights as loaded
                 else:
                     # Model structure doesn't match expectation
                     _logger.warning(
-                        f"Model does not have a 'visual' attribute, cannot load image tower weights from {pretrained_image_path}")
+                        f"Model does not have a 'visual' attribute, cannot load image tower weights from {pretrained_image_path}"
+                    )
             except Exception as e:
                 # Handle errors during image tower weight loading
                 _logger.error(f"Error loading image tower weights from {pretrained_image_path}: {e}")
@@ -624,27 +613,27 @@ def create_model(
             # Path provided is not a valid file
             _logger.warning(f"Invalid file path specified for pretrained_image_path: {pretrained_image_path}")
 
-    pretrained_text_loaded = False # Track if specific text weights loaded
+    pretrained_text_loaded = False  # Track if specific text weights loaded
     if pretrained_text_path:
         if os.path.isfile(pretrained_text_path):
             _logger.info(f"Attempting to load text tower weights from: {pretrained_text_path}")
             try:
                 # Load the state dict from the file
-                text_state_dict = load_state_dict(
-                    pretrained_text_path,
-                    device='cpu',
-                    weights_only=weights_only
-                )
+                text_state_dict = load_state_dict(pretrained_text_path, device="cpu", weights_only=weights_only)
                 # Safely get the text attribute (usually 'text', but could be different)
-                text_module = getattr(model, 'text', model)
+                text_module = getattr(model, "text", model)
                 if text_module is not None:
                     # Load into the text tower, use strict=False for flexibility
                     incompatible_keys = text_module.load_state_dict(text_state_dict, strict=False)
-                    _logger.info(f"Loaded text tower weights from {pretrained_text_path}. Incompatible keys: {incompatible_keys}")
-                    pretrained_text_loaded = True # Mark specific text weights as loaded
+                    _logger.info(
+                        f"Loaded text tower weights from {pretrained_text_path}. Incompatible keys: {incompatible_keys}"
+                    )
+                    pretrained_text_loaded = True  # Mark specific text weights as loaded
                 else:
                     # Model structure doesn't match expectation
-                    _logger.warning(f"Model does not have a standard 'text' attribute, cannot load text tower weights from {pretrained_text_path}")
+                    _logger.warning(
+                        f"Model does not have a standard 'text' attribute, cannot load text tower weights from {pretrained_text_path}"
+                    )
             except Exception as e:
                 # Handle errors during text tower weight loading
                 _logger.error(f"Error loading text tower weights from {pretrained_text_path}: {e}")
@@ -655,7 +644,7 @@ def create_model(
     pretrained_audio_loaded = False
     if pretrained_audio_path:
         if os.path.isfile(pretrained_audio_path):
-            if hasattr(model, 'audio') and hasattr(model.audio, 'load_pretrained_encoder'):
+            if hasattr(model, "audio") and hasattr(model.audio, "load_pretrained_encoder"):
                 _logger.info(f"Attempting to load audio encoder weights from: {pretrained_audio_path}")
                 try:
                     incompatible_keys = model.audio.load_pretrained_encoder(
@@ -670,42 +659,45 @@ def create_model(
                 except Exception as e:
                     _logger.error(f"Error loading audio encoder weights from {pretrained_audio_path}: {e}")
             else:
-                _logger.warning(
-                    f"Model does not have an audio encoder loader, cannot load {pretrained_audio_path}"
-                )
+                _logger.warning(f"Model does not have an audio encoder loader, cannot load {pretrained_audio_path}")
         else:
             _logger.warning(f"Invalid file path specified for pretrained_audio_path: {pretrained_audio_path}")
 
-    partially_loaded = enable_default_text_weights or enable_default_image_weights \
-        or pretrained_image_loaded or pretrained_text_loaded or pretrained_audio_loaded
+    partially_loaded = (
+        enable_default_text_weights
+        or enable_default_image_weights
+        or pretrained_image_loaded
+        or pretrained_text_loaded
+        or pretrained_audio_loaded
+    )
     if require_pretrained and not pretrained_loaded:
-         # If CLIP weights were required but failed to load, raise an error.
-         # Loading tower-specific weights does not satisfy `require_pretrained`.
-         raise RuntimeError(
-             f"Required pretrained weights (`model_name='{model_name}', pretrained='{pretrained}'`) could not be loaded. "
-         )
+        # If CLIP weights were required but failed to load, raise an error.
+        # Loading tower-specific weights does not satisfy `require_pretrained`.
+        raise RuntimeError(
+            f"Required pretrained weights (`model_name='{model_name}', pretrained='{pretrained}'`) could not be loaded. "
+        )
     elif not pretrained_loaded and partially_loaded:
-         # Some tower weights loaded
-         _logger.warning(f"Model {model_name} initialized partially.")
+        # Some tower weights loaded
+        _logger.warning(f"Model {model_name} initialized partially.")
     elif not pretrained_loaded and not partially_loaded:
-         # Absolutely no weights were loaded from any source
-         _logger.warning(f"No pretrained weights loaded for model '{model_name}'. Model initialized randomly.")
+        # Absolutely no weights were loaded from any source
+        _logger.warning(f"No pretrained weights loaded for model '{model_name}'. Model initialized randomly.")
 
     if output_dict and hasattr(model, "output_dict"):
         # Enable dictionary output if model supports it
         model.output_dict = True
 
     # If force_image_size was specified and we have a timm model, call set_input_size after loading weights
-    if force_image_size is not None and is_timm_model and hasattr(model.visual, 'set_input_size'):
+    if force_image_size is not None and is_timm_model and hasattr(model.visual, "set_input_size"):
         _logger.info(f"Calling set_input_size({force_image_size}) on timm vision model.")
         model.visual.set_input_size(force_image_size)
 
     # Prepare and set final image preprocessing configuration on image models.
-    visual_module = getattr(model, 'visual', None)
+    visual_module = getattr(model, "visual", None)
     if visual_module is not None:
         final_preprocess_cfg = deepcopy(preprocess_cfg)
-        if hasattr(visual_module, 'image_size'):
-            final_preprocess_cfg['size'] = visual_module.image_size
+        if hasattr(visual_module, "image_size"):
+            final_preprocess_cfg["size"] = visual_module.image_size
         final_preprocess_cfg = merge_preprocess_dict(final_preprocess_cfg, force_preprocess_cfg or {})
         set_model_preprocess_cfg(model, final_preprocess_cfg)
         _logger.info(f"Final image preprocessing configuration set: {final_preprocess_cfg}")
@@ -716,10 +708,10 @@ def create_model(
 
 
 def get_tokenizer(
-        model_name: str = '',
-        context_length: Optional[int] = None,
-        cache_dir: Optional[str] = None,
-        **kwargs, # Additional tokenizer kwargs passed to constructor
+    model_name: str = "",
+    context_length: int | None = None,
+    cache_dir: str | None = None,
+    **kwargs,  # Additional tokenizer kwargs passed to constructor
 ):
     """
     Gets the appropriate tokenizer based on the model identifier schema or name.
@@ -731,45 +723,45 @@ def get_tokenizer(
     """
     schema, identifier = parse_model_name(model_name)
 
-    config = {} # Stores the loaded model_cfg relevant section (usually text_cfg)
-    local_dir_path = None # Store path if schema is local-dir to resolve relative paths
+    config = {}  # Stores the loaded model_cfg relevant section (usually text_cfg)
+    local_dir_path = None  # Store path if schema is local-dir to resolve relative paths
     hf_fallback_id = None
 
     # Determine Configuration Source based on Schema
     _logger.info(f"Parsing tokenizer identifier. Schema: {schema}, Identifier: {identifier}")
 
-    if schema == 'local-dir':
+    if schema == "local-dir":
         # Handle local directory schema
-        local_dir_path = Path(identifier) # Store the path for later use
+        local_dir_path = Path(identifier)  # Store the path for later use
         if not local_dir_path.is_dir():
             raise FileNotFoundError(f"Directory specified via 'local-dir:' schema not found at {local_dir_path}")
-        local_config_path = local_dir_path / 'open_clip_config.json'
+        local_config_path = local_dir_path / "open_clip_config.json"
         _logger.info(f"Attempting to load config from local-dir: {local_config_path}")
         if local_config_path.is_file():
             try:
                 # Load and parse the JSON config
-                with open(local_config_path, 'r', encoding='utf-8') as f:
+                with open(local_config_path, encoding="utf-8") as f:
                     local_json_config = json.load(f)
-                if 'model_cfg' in local_json_config:
-                    config = local_json_config['model_cfg']
+                if "model_cfg" in local_json_config:
+                    config = local_json_config["model_cfg"]
                 else:
                     raise ValueError(f"Local config {local_config_path} missing 'model_cfg'.")
             except Exception as e:
                 raise ValueError(f"Could not load valid config for 'local-dir:{identifier}' ({e}).") from e
         else:
-             raise FileNotFoundError(f"'local-dir:' specified, but config file missing: {local_config_path}")
+            raise FileNotFoundError(f"'local-dir:' specified, but config file missing: {local_config_path}")
 
-    elif schema == 'hf-hub':
+    elif schema == "hf-hub":
         # Handle Hugging Face Hub schema
         model_id = identifier
         _logger.info(f"Attempting to load config from hf-hub:{model_id}")
-        config_err = ''
+        config_err = ""
         try:
             # Fetch config from HF Hub
             hf_config = _get_hf_config(model_id, cache_dir=cache_dir)
-            config = hf_config.get('model_cfg', None)
+            config = hf_config.get("model_cfg", None)
             if not config:
-                config_err = 'model_cfg key not found'
+                config_err = "model_cfg key not found"
         except Exception as e:
             config_err = str(e)
         if not config:
@@ -777,7 +769,8 @@ def get_tokenizer(
             config = {}
             _logger.warning(
                 f"Could not load config from hf-hub:{model_id} ({config_err})."
-                f"Falling back to using model_id for tokenizer.")
+                f"Falling back to using model_id for tokenizer."
+            )
 
     elif schema is None and identifier:
         # Try built-in config lookup using the identifier (original model_name)
@@ -786,38 +779,38 @@ def get_tokenizer(
 
     # Check if config determination failed completely (should only be possible if initial schema parsing failed badly)
     if config is None:
-        _logger.warning(f"Model configuration not found, returning default SimpleTokenizer.")
+        _logger.warning("Model configuration not found, returning default SimpleTokenizer.")
         return SimpleTokenizer(context_length=context_length or DEFAULT_CONTEXT_LENGTH, **kwargs)
 
     # Safely access text_cfg even if config is {} (from non-builtin name case)
-    text_config = config.get('text_cfg', {})
+    text_config = config.get("text_cfg", {})
 
     # Resolve context length: argument > config > default
     if context_length is None:
         # Use context_length from text_cfg if available, otherwise default
-        context_length = text_config.get('context_length', DEFAULT_CONTEXT_LENGTH)
+        context_length = text_config.get("context_length", DEFAULT_CONTEXT_LENGTH)
 
     # Merge tokenizer kwargs: function kwargs override config kwargs
-    tokenizer_kwargs = text_config.get('tokenizer_kwargs', {}) # Start with config kwargs
-    tokenizer_kwargs.update(kwargs) # Apply caller kwargs, overriding config ones
+    tokenizer_kwargs = text_config.get("tokenizer_kwargs", {})  # Start with config kwargs
+    tokenizer_kwargs.update(kwargs)  # Apply caller kwargs, overriding config ones
 
     # Get the specified HF tokenizer name from config, if any
-    hf_tokenizer_name = text_config.get('hf_tokenizer_name', '')
+    hf_tokenizer_name = text_config.get("hf_tokenizer_name", "")
     if not hf_tokenizer_name and hf_fallback_id:
         hf_tokenizer_name = hf_fallback_id
 
     if hf_tokenizer_name:
         # If 'hf_tokenizer_name' key exists in text_cfg (even if empty string): Use HFTokenizer.
-        if schema == 'local-dir':
+        if schema == "local-dir":  # noqa: SIM108 - Branches carry per-case comments.
             # If config came from local-dir, ALWAYS use the local dir path for HFTokenizer.
             # This assumes the tokenizer files are inside that directory.
             tokenizer_source = local_dir_path
         else:
             tokenizer_source = hf_tokenizer_name
-        tokenizer_mode = text_config.get('tokenizer_mode', None)
+        tokenizer_mode = text_config.get("tokenizer_mode", None)
 
         _logger.info(f"Using HFTokenizer with source: '{tokenizer_source}', mode: '{tokenizer_mode}'")
-        tokenizer_kwargs.pop('trust_remote_code', False)
+        tokenizer_kwargs.pop("trust_remote_code", False)
         tokenizer = HFTokenizer(
             tokenizer_source,
             context_length=context_length,
@@ -826,10 +819,10 @@ def get_tokenizer(
             **tokenizer_kwargs,
         )
 
-    elif schema is None and 'siglip' in identifier.lower():
+    elif schema is None and "siglip" in identifier.lower():
         # Check for SigLIP naming convention ONLY if no schema was present AND no hf_tokenizer_name found
         # Avoids misinterpreting 'local-dir:/path/with/siglip/in/name'
-        tn_variant = 'gemma' if 'siglip2' in identifier.lower() else 'mc4' if 'i18n' in identifier.lower() else 'c4-en'
+        tn_variant = "gemma" if "siglip2" in identifier.lower() else "mc4" if "i18n" in identifier.lower() else "c4-en"
         _logger.info(f"Using SigLipTokenizer variant: {tn_variant}")
         tokenizer = SigLipTokenizer(
             tn_variant,
@@ -847,35 +840,20 @@ def get_tokenizer(
 
 
 def _set_model_device_and_precision(
-        model: torch.nn.Module,
-        device: torch.device,
-        precision: str,
-        is_timm_model: bool = False
+    model: torch.nn.Module, device: torch.device, precision: str, is_timm_model: bool = False
 ):
-    """Helper function to set model device and precision.
-
-    Args:
-        model: The model.
-        device: The device.
-        precision: The precision.
-        is_timm_model: The is timm model.
-    """
     if precision in ("fp16", "bf16"):
-        dtype = torch.float16 if 'fp16' in precision else torch.bfloat16
+        dtype = torch.float16 if "fp16" in precision else torch.bfloat16
         # manual mixed precision that matches original OpenAI behaviour
         if is_timm_model:
             from .transformer import LayerNormFp32
+
             # FIXME this is a bit janky, create timm based model in low-precision and
             # then cast only LayerNormFp32 instances back to float32 so they don't break.
             # Why? The convert_weights_to_lp fn only works with native models.
             model.to(device=device, dtype=dtype)
 
             def _convert_ln(m):
-                """Helper function to convert ln.
-
-                Args:
-                    m: The m.
-                """
                 if isinstance(m, LayerNormFp32):
                     m.weight.data = m.weight.data.to(torch.float32)
                     m.bias.data = m.bias.data.to(torch.float32)
@@ -885,39 +863,39 @@ def _set_model_device_and_precision(
             model.to(device=device)
             convert_weights_to_lp(model, dtype=dtype)
     elif precision in ("pure_fp16", "pure_bf16"):
-        dtype = torch.float16 if 'fp16' in precision else torch.bfloat16
+        dtype = torch.float16 if "fp16" in precision else torch.bfloat16
         model.to(device=device, dtype=dtype)
     else:
         model.to(device=device)
 
 
 def create_model_and_transforms(
-        model_name: str,
-        pretrained: Optional[str] = None,
-        load_weights: bool = True,
-        precision: str = 'fp32',
-        device: Union[str, torch.device] = 'cpu',
-        force_quick_gelu: bool = False,
-        force_custom_text: bool = False,
-        force_patch_dropout: Optional[float] = None,
-        force_image_size: Optional[Union[int, Tuple[int, int]]] = None,
-        force_context_length: Optional[int] = None,
-        force_naflex_vision: bool = False,
-        image_mean: Optional[Tuple[float, ...]] = None,
-        image_std: Optional[Tuple[float, ...]] = None,
-        image_interpolation: Optional[str] = None,
-        image_resize_mode: Optional[str] = None,  # only effective for inference
-        aug_cfg: Optional[Union[Dict[str, Any], AugmentationCfg]] = None,
-        audio_aug_cfg: Optional[Any] = None,
-        pretrained_image: bool = False,
-        pretrained_text: bool = True,
-        pretrained_image_path: Optional[str] = None,
-        pretrained_text_path: Optional[str] = None,
-        pretrained_audio_path: Optional[str] = None,
-        cache_dir: Optional[str] = None,
-        output_dict: Optional[bool] = None,
-        weights_only: bool = True,
-        **model_kwargs,
+    model_name: str,
+    pretrained: str | None = None,
+    load_weights: bool = True,
+    precision: str = "fp32",
+    device: str | torch.device = "cpu",
+    force_quick_gelu: bool = False,
+    force_custom_text: bool = False,
+    force_patch_dropout: float | None = None,
+    force_image_size: int | tuple[int, int] | None = None,
+    force_context_length: int | None = None,
+    force_naflex_vision: bool = False,
+    image_mean: tuple[float, ...] | None = None,
+    image_std: tuple[float, ...] | None = None,
+    image_interpolation: str | None = None,
+    image_resize_mode: str | None = None,  # only effective for inference
+    aug_cfg: dict[str, Any] | AugmentationCfg | None = None,
+    audio_aug_cfg: Any | None = None,
+    pretrained_image: bool = False,
+    pretrained_text: bool = True,
+    pretrained_image_path: str | None = None,
+    pretrained_text_path: str | None = None,
+    pretrained_audio_path: str | None = None,
+    cache_dir: str | None = None,
+    output_dict: bool | None = None,
+    weights_only: bool = True,
+    **model_kwargs,
 ):
     """
     Creates a contrastive vision-language model along with preprocessing transforms for training and validation.
@@ -1022,7 +1000,7 @@ def create_model_and_transforms(
         **model_kwargs,
     )
 
-    if hasattr(model, 'audio'):
+    if hasattr(model, "audio"):
         from .audio.transform import audio_transform_v2
 
         preprocess_train = audio_transform_v2(model.audio.cfg, is_train=True, audio_aug_cfg=audio_aug_cfg)
@@ -1047,24 +1025,24 @@ def create_model_and_transforms(
 
 
 def create_model_from_pretrained(
-        model_name: str,
-        pretrained: Optional[str] = None,
-        precision: str = 'fp32',
-        device: Union[str, torch.device] = 'cpu',
-        force_quick_gelu: bool = False,
-        force_custom_text: bool = False,
-        force_image_size: Optional[Union[int, Tuple[int, int]]] = None,
-        force_context_length: Optional[int] = None,
-        force_naflex_vision: bool = False,
-        image_mean: Optional[Tuple[float, ...]] = None,
-        image_std: Optional[Tuple[float, ...]] = None,
-        image_interpolation: Optional[str] = None,
-        image_resize_mode: Optional[str] = None,  # only effective for inference
-        return_transform: bool = True,
-        cache_dir: Optional[str] = None,
-        audio_aug_cfg: Optional[Any] = None,
-        weights_only: bool = True,
-        **model_kwargs,
+    model_name: str,
+    pretrained: str | None = None,
+    precision: str = "fp32",
+    device: str | torch.device = "cpu",
+    force_quick_gelu: bool = False,
+    force_custom_text: bool = False,
+    force_image_size: int | tuple[int, int] | None = None,
+    force_context_length: int | None = None,
+    force_naflex_vision: bool = False,
+    image_mean: tuple[float, ...] | None = None,
+    image_std: tuple[float, ...] | None = None,
+    image_interpolation: str | None = None,
+    image_resize_mode: str | None = None,  # only effective for inference
+    return_transform: bool = True,
+    cache_dir: str | None = None,
+    audio_aug_cfg: Any | None = None,
+    weights_only: bool = True,
+    **model_kwargs,
 ):
     """
     Creates a contrastive vision-language model from pretrained weights with optional preprocessing transform.
@@ -1161,7 +1139,7 @@ def create_model_from_pretrained(
     if not return_transform:
         return model
 
-    if hasattr(model, 'audio'):
+    if hasattr(model, "audio"):
         from .audio.transform import audio_transform_v2
 
         preprocess = audio_transform_v2(model.audio.cfg, is_train=False, audio_aug_cfg=audio_aug_cfg)

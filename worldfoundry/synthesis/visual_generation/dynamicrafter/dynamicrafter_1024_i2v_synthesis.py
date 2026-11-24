@@ -7,6 +7,7 @@ for the `dynamicrafter_1024_i2v` model. It sets up various class attributes
 to specify model details, generation type, and configuration paths,
 allowing for standardized integration within a larger synthesis framework.
 """
+
 from __future__ import annotations
 
 from worldfoundry.synthesis.visual_generation.dynamicrafter import DynamiCrafter

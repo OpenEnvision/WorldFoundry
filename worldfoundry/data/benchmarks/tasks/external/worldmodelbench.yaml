@@ -20,7 +20,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: worldmodelbench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldmodelbench --mode contract
+  contract_validation_command: wf zoo benchmark-run --benchmark-id worldmodelbench --mode contract
     --output-dir tmp/benchmark_zoo/benchmark_contract/worldmodelbench --json
   open_source_status: in_tree_runtime
   official_benchmark_verified: false
@@ -49,9 +49,9 @@ metadata:
     350-instance manifest, and upstream submission evidence.
   - Leaderboard answers are withheld, so local regression must use public outputs or caller-provided official-shaped
     result files.
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldModelBenchContract
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:worldmodelbench
   official_runner_script:
-    worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py
+    worldfoundry/evals/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py
   prompt_suite:
     hf_dataset_id: Efficient-Large-Model/worldmodelbench
     split: test
@@ -63,7 +63,7 @@ metadata:
     kind: in_tree_official_source
     repo_url: https://github.com/WorldModelBench-Team/WorldModelBench
     repo_revision: 00b7aa17a05f9fd1ab5c8f66bcf476d04c9c33bf
-    root: worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/runtime
+    root: worldfoundry/evals/tasks/execution/runners/worldmodelbench/runtime
     root_env: WORLDFOUNDRY_WORLDMODELBENCH_ROOT
     results_path_env: WORLDFOUNDRY_WORLDMODELBENCH_RESULTS_PATH
   release_status: experimental
@@ -75,20 +75,20 @@ metadata:
     - cache/worldfoundry/data/hfd_datasets/datasets--Efficient-Large-Model--worldmodelbench
     - cache/worldfoundry/data/hfd_datasets/worldmodelbench
     in_tree_runtime_paths:
-    - worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/runtime/evaluation.py
+    - worldfoundry/evals/tasks/execution/runners/worldmodelbench/runtime/evaluation.py
     - worldfoundry/data/benchmarks/assets/worldmodelbench/worldmodelbench.json
     task_yaml: worldfoundry/data/benchmarks/tasks/external/worldmodelbench.yaml
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldModelBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:worldmodelbench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
     surface: worldmodelbench_official_in_tree
     normalizer_verified: true
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   local_evaluator:
-    target: worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py
+    target: worldfoundry/evals/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py
     status: implemented
     protocol: worldmodelbench_official_in_tree
     official_result_normalization:
@@ -103,13 +103,13 @@ metadata:
       full_test_harness_ready: true
     official_runtime_execution:
       status: implemented
-      command: worldfoundry-eval zoo benchmark-run --benchmark-id worldmodelbench --mode official-run
+      command: wf zoo benchmark-run --benchmark-id worldmodelbench --mode official-run
         --benchmark-data-root <worldmodelbench_data_root> --generated-artifact-dir <generated_videos> --env
         WORLDFOUNDRY_WORLDMODELBENCH_JUDGE=<VILA_checkpoint_or_HF_model_id> --output-dir <out> --json
       checkpoint_env: WORLDFOUNDRY_WORLDMODELBENCH_JUDGE
       pythonpath_note: Uses WorldFoundry's in-tree VILA runtime; no external VILA checkout is required.
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -169,9 +169,9 @@ tasks:
           kind: video
     evaluation_protocol:
     - name: external_official_runner
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldModelBenchContract
+      runner_target: worldfoundry.evals.tasks.contracts.external:worldmodelbench
       runner_script:
-        worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py
+        worldfoundry/evals/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py
       required_judge: true
       metric_ids:
       - instruction_following

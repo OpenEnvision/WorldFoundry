@@ -13,6 +13,7 @@ import re
 import sys
 from collections import OrderedDict
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
 OUT = Path(__file__).resolve().parents[1] / "lib" / "catalog-coverage-data.json"
@@ -92,13 +93,6 @@ MODEL_VERSION_GROUPS = {
             "depth-anything-v3-prior": "Metric Prior",
         },
     },
-    "dust3r": {
-        "name": "DUSt3R",
-        "versions": {
-            "dust3r": "Catalog",
-            "dust3r-base-model": "Base",
-        },
-    },
     "minwm": {
         "name": "minWM",
         "versions": {
@@ -155,9 +149,9 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="Fail when generated coverage data is stale.")
     args = parser.parse_args()
 
-    families = []
+    families: list[dict[str, Any]] = []
     for fam, (label, blurb) in FAMILY_META.items():
-        raw = []
+        raw: list[dict[str, Any]] = []
         catalog_root = ROOT / "worldfoundry/data/models/catalog"
         catalog_paths = list((catalog_root / fam).glob("*.yaml"))
         if fam == "video":
@@ -177,12 +171,12 @@ def main() -> int:
                 status = status or item.get("integration_status") or item.get("status")
                 raw.append({"id": mid, "name": name, "status": status})
 
-        buckets: OrderedDict[str, list[dict]] = OrderedDict()
+        buckets: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
         for entry in raw:
             key = model_group_key(entry["id"])
             buckets.setdefault(key, []).append(entry)
 
-        entries = []
+        entries: list[dict[str, Any]] = []
         for key, group in buckets.items():
             if len(group) == 1:
                 entry = group[0]
@@ -203,16 +197,14 @@ def main() -> int:
                 display = version_group["name"] if version_group else sorted(names, key=len)[0]
                 aliases = [item["id"] for item in group]
                 statuses = [item.get("status") for item in group if item.get("status")]
-                grouped_entry = {
+                grouped_entry: dict[str, Any] = {
                     "id": key,
                     "name": display,
                     "status": statuses[0] if statuses else None,
                     "aliases": aliases,
                 }
                 if version_group:
-                    grouped_entry["versions"] = [
-                        version_group["versions"][item["id"]] for item in group
-                    ]
+                    grouped_entry["versions"] = [version_group["versions"][item["id"]] for item in group]
                 entries.append(grouped_entry)
         entries.sort(key=lambda item: item["name"].lower())
         families.append(
@@ -221,12 +213,11 @@ def main() -> int:
                 "label": label,
                 "blurb": blurb,
                 "count": len(entries),
-                "catalogCount": len(raw),
                 "entries": entries,
             }
         )
 
-    bench_groups = []
+    bench_groups: list[dict[str, Any]] = []
     for fam, label in [("video", "Video & world"), ("embodied", "Embodied")]:
         entries = []
         for path in sorted((ROOT / "worldfoundry/data/benchmarks/catalog" / fam).glob("*.yaml")):
@@ -241,12 +232,9 @@ def main() -> int:
         bench_groups.append({"id": fam, "label": label, "count": len(entries), "entries": entries})
 
     payload = {
-        "modelsTotal": sum(family["catalogCount"] for family in families),
         "modelsListed": sum(family["count"] for family in families),
         "benchmarksTotal": sum(group["count"] for group in bench_groups),
-        "modelFamilies": [
-            {key: value for key, value in family.items() if key != "catalogCount"} for family in families
-        ],
+        "modelFamilies": families,
         "benchmarkGroups": bench_groups,
     }
     serialized = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
@@ -262,7 +250,7 @@ def main() -> int:
     current = OUT.read_text(encoding="utf-8") if OUT.is_file() else ""
     if current != serialized:
         OUT.write_text(serialized, encoding="utf-8")
-    print(f"wrote {OUT} modelsTotal={payload['modelsTotal']} listed={payload['modelsListed']}")
+    print(f"wrote {OUT} listed={payload['modelsListed']} benchmarks={payload['benchmarksTotal']}")
     return 0
 
 

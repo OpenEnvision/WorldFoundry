@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-from ..pipeline_utils import PipelineABC
-from typing import Any, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import torch
 
-from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
 from ...operators.vmem_operator import VMemOperator
+from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
 from ...synthesis.visual_generation.vmem.vmem_synthesis import (
     DEFAULT_VMEM_REPO,
     DEFAULT_VMEM_SURFEL_REPO,
     VMemSynthesis,
 )
+from ..pipeline_utils import PipelineABC
 
 
 class VMemPipeline(PipelineABC):
@@ -21,9 +22,9 @@ class VMemPipeline(PipelineABC):
 
     def __init__(
         self,
-        operator: Optional[VMemOperator] = None,
-        synthesis_model: Optional[VMemSynthesis] = None,
-        memory_module: Optional[Any] = None,
+        operator: VMemOperator | None = None,
+        synthesis_model: VMemSynthesis | None = None,
+        memory_module: Any | None = None,
         device: str = "cuda",
         weight_dtype: torch.dtype = torch.float32,
     ):
@@ -35,14 +36,14 @@ class VMemPipeline(PipelineABC):
         self.weight_dtype = weight_dtype
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[str] = None,
-        required_components: Optional[dict] = None,
+        model_path: str | None = None,
+        required_components: dict | None = None,
         device: str = "cuda",
         weight_dtype: torch.dtype = torch.float32,
         **kwargs,
-    ) -> "VMemPipeline":
+    ) -> VMemPipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         component_options = {**(required_components or {}), **kwargs}
         synthesis_model = VMemSynthesis.from_pretrained(
@@ -119,7 +120,7 @@ class VMemPipeline(PipelineABC):
 
     def stream(
         self,
-        images: Optional[Any],
+        images: Any | None,
         interactions: Sequence[str],
         prompt: str = "",
         reset_memory: bool = False,

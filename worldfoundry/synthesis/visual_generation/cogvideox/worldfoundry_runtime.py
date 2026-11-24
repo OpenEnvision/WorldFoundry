@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Literal
 
-
 _RESOLUTION_MAP = {
     "cogvideox-2b": (480, 720),
     "cogvideox-5b": (480, 720),
@@ -37,30 +36,6 @@ class CogVideoXOfficialRuntime:
         max_sequence_length: int | None = None,
         scheduler: str = "dpm",
     ) -> None:
-        """Init.
-
-        Args:
-            model_name: The model name.
-            model_path: The model path.
-            generation_type: The generation type.
-            lora_path: The lora path.
-            lora_rank: The lora rank.
-            num_inference_steps: The num inference steps.
-            guidance_scale: The guidance scale.
-            num_videos_per_prompt: The num videos per prompt.
-            num_frames: The num frames.
-            dtype: The dtype.
-            seed: The seed.
-            device: The device.
-            height: The height.
-            width: The width.
-            negative_prompt: The negative prompt.
-            max_sequence_length: The max sequence length.
-            scheduler: The scheduler.
-
-        Returns:
-            The return value.
-        """
         self.model_name = model_name
         self.generation_type = generation_type
         self.num_videos_per_prompt = num_videos_per_prompt
@@ -126,28 +101,10 @@ class CogVideoXOfficialRuntime:
 
     @staticmethod
     def _normalize_model_key(model_name: str, model_path: str) -> str:
-        """Helper function to normalize model key.
-
-        Args:
-            model_name: The model name.
-            model_path: The model path.
-
-        Returns:
-            The return value.
-        """
         return f"{model_name} {model_path}".replace("_", "-").lower()
 
     @classmethod
     def _default_dtype(cls, model_name: str, model_path: str) -> str:
-        """Helper function to default dtype.
-
-        Args:
-            model_name: The model name.
-            model_path: The model path.
-
-        Returns:
-            The return value.
-        """
         model_key = cls._normalize_model_key(model_name, model_path)
         return "float16" if "2b" in model_key else "bfloat16"
 
@@ -159,17 +116,6 @@ class CogVideoXOfficialRuntime:
         height: int | None,
         width: int | None,
     ) -> tuple[int, int]:
-        """Helper function to resolve resolution.
-
-        Args:
-            model_name: The model name.
-            model_path: The model path.
-            height: The height.
-            width: The width.
-
-        Returns:
-            The return value.
-        """
         model_key = cls._normalize_model_key(model_name, model_path)
         default = (480, 720)
         for key, resolution in _RESOLUTION_MAP.items():
@@ -185,12 +131,6 @@ class CogVideoXOfficialRuntime:
         prompt: str,
         image_path: str | None,
     ):
-        """Generate video.
-
-        Args:
-            prompt: The prompt.
-            image_path: The image path.
-        """
         import torch
         from diffusers.utils import load_image, load_video
 

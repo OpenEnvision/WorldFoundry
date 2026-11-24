@@ -15,7 +15,8 @@ memories without an accelerator runtime.
 """
 
 from abc import ABC
-from typing import Any, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from .store import MemoryStore
 
@@ -24,7 +25,7 @@ from .store import MemoryStore
 # ──────────────────────────────────────────────────────────────────────────
 
 
-class BaseMemory(ABC):
+class BaseMemory(ABC):  # noqa: B024 - The public contract is an instantiable ABC.
     """Generic multimodal memory template for VLM and generative tasks.
 
     Subclasses implement the five-stage pipeline:

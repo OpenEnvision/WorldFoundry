@@ -127,7 +127,7 @@ class VideoTokenizerABC(ABC):
             tile_sample_min_length=tile_sample_min_length,
             spatial_tile_overlap_factor=spatial_tile_overlap_factor,
             temporal_tile_overlap_factor=temporal_tile_overlap_factor,
-            sr_ratio=getattr(self, 'sr_ratio', 1),
+            sr_ratio=getattr(self, "sr_ratio", 1),
             spatial_downsample_factor=self.spatial_downsample_factor,
             temporal_downsample_factor=self.temporal_downsample_factor,
             first_frame_as_image=self.first_frame_as_image,
@@ -143,7 +143,7 @@ class VideoTokenizerABC(ABC):
         tile_sample_min_length: int = 16,
         spatial_tile_overlap_factor: float = 0.25,
         temporal_tile_overlap_factor: float = 0,
-        allow_spatial_tiling: bool = None,
+        allow_spatial_tiling: bool | None = None,
         verbose: bool = False,
         parallel_group: torch.distributed.ProcessGroup = None,
     ) -> torch.Tensor:
@@ -185,7 +185,7 @@ class VideoTokenizerABC(ABC):
         tile_sample_min_length: int = 16,
         spatial_tile_overlap_factor: float = 0.25,
         temporal_tile_overlap_factor: float = 0,
-        allow_spatial_tiling: bool = None,
+        allow_spatial_tiling: bool | None = None,
         verbose: bool = False,
         parallel_group: torch.distributed.ProcessGroup = None,
     ) -> torch.Tensor:
@@ -221,13 +221,13 @@ class VideoTokenizerABC(ABC):
 
 class ViTVAE(ModelMixin, ConfigMixin, VideoTokenizerABC):
     @register_to_config
-    def __init__(self, ddconfig: dict, model_type: Literal['vit', 'vit_ncthw'] = 'vit'):
+    def __init__(self, ddconfig: dict, model_type: Literal["vit", "vit_ncthw"] = "vit"):
         super().__init__()
 
-        if model_type == 'vit':
+        if model_type == "vit":
             self.encoder = ViTEncoder(**ddconfig)
             self.decoder = ViTDecoder(**ddconfig)
-        elif model_type == 'vit_ncthw':
+        elif model_type == "vit_ncthw":
             from videotokenizer.modules.vit_ncthw import ViTDecoderNCTHW, ViTEncoderNCTHW
 
             self.encoder = ViTEncoderNCTHW(**ddconfig)
@@ -235,13 +235,13 @@ class ViTVAE(ModelMixin, ConfigMixin, VideoTokenizerABC):
         else:
             raise ValueError(f"model_type {model_type} not supported")
 
-        if 'patch_length' in ddconfig:
-            self._temporal_downsample_factor = ddconfig['patch_length']
+        if "patch_length" in ddconfig:  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
+            self._temporal_downsample_factor = ddconfig["patch_length"]
         else:
             self._temporal_downsample_factor = 1
 
-        if 'patch_size' in ddconfig:
-            self._spatial_downsample_factor = ddconfig['patch_size']
+        if "patch_size" in ddconfig:  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
+            self._spatial_downsample_factor = ddconfig["patch_size"]
         else:
             self._spatial_downsample_factor = 8
 
@@ -253,7 +253,7 @@ class ViTVAE(ModelMixin, ConfigMixin, VideoTokenizerABC):
     def temporal_downsample_factor(self):
         return self._temporal_downsample_factor
 
-    def init_from_ckpt(self, path, ignore_keys=list()):
+    def init_from_ckpt(self, path, ignore_keys=[]):  # noqa: B006 - Keeps the upstream default object and signature.
         raise NotImplementedError
 
     def encode(self, x, sample_posterior=True):
@@ -271,19 +271,13 @@ class ViTVAE(ModelMixin, ConfigMixin, VideoTokenizerABC):
             x = x.expand(-1, -1, 4, -1, -1)
             x = self.encoder(x)
             posterior = DiagonalGaussianDistribution(x)
-            if sample_posterior:
-                z = posterior.sample()
-            else:
-                z = posterior.mode()
+            z = posterior.sample() if sample_posterior else posterior.mode()
 
             return z[:, :, :1, :, :].type(x.dtype)
         else:
             x = self.encoder(x)
             posterior = DiagonalGaussianDistribution(x)
-            if sample_posterior:
-                z = posterior.sample()
-            else:
-                z = posterior.mode()
+            z = posterior.sample() if sample_posterior else posterior.mode()
 
             return z.type(x.dtype)
 
@@ -311,10 +305,7 @@ class ViTVAE(ModelMixin, ConfigMixin, VideoTokenizerABC):
         x = self.encoder(x)
         posterior = DiagonalGaussianDistribution(x)
 
-        if sample_posterior:
-            z = posterior.sample()
-        else:
-            z = posterior.mode()
+        z = posterior.sample() if sample_posterior else posterior.mode()
 
         dec = self.decoder(z)
         return dec, posterior
@@ -344,18 +335,18 @@ class AutoModel:
     """
 
     def __init__(self):
-        raise EnvironmentError(
+        raise OSError(
             "AutoModel is designed to be instantiated "
             "using the `AutoModel.from_pretrained(pretrained_model_name_or_path)` method."
         )
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs) -> VideoTokenizerABC:
-        config = os.path.join(pretrained_model_name_or_path, 'config.json')
+        config = os.path.join(pretrained_model_name_or_path, "config.json")
         if not os.path.exists(config):
-            raise ValueError("Can't find a model config file at {}.".format(config))
+            raise ValueError(f"Can't find a model config file at {config}.")
         # Load config
-        with open(config, 'r') as json_file:
+        with open(config) as json_file:
             config_dict = json.load(json_file)
-        assert config_dict['_class_name'] == 'ViTVAE'
+        assert config_dict["_class_name"] == "ViTVAE"
         return ViTVAE.from_pretrained(pretrained_model_name_or_path, *args, **kwargs)

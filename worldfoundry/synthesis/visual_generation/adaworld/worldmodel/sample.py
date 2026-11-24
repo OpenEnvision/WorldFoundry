@@ -12,10 +12,9 @@ from einops import rearrange
 from pytorch_lightning import seed_everything
 from torch import autocast
 from tqdm import tqdm
+
 from worldfoundry.core.io.paths import resolve_data_path
-
-from sample_utils import *
-
+from worldfoundry.synthesis.visual_generation.adaworld.worldmodel.sample_utils import *  # noqa: F403 - Upstream star import kept as written.
 
 DEFAULT_CONFIG = resolve_data_path("models", "runtime", "configs", "adaworld", "worldmodel/inference/adaworld.yaml")
 DEFAULT_OUTPUT = Path("outputs") / "adaworld.mp4"
@@ -109,7 +108,7 @@ def load_video_slices(
     video = rearrange(video, "t h w c -> t c h w")
     if video.shape[-1] != resolution or video.shape[-2] != resolution:
         video = F.interpolate(video, resolution, mode="bicubic")
-    return [frame for frame in video]
+    return list(video)
 
 
 def get_sample(source_video_dict: dict[str, object], target_video_dict: dict[str, object], args: argparse.Namespace):
@@ -125,7 +124,7 @@ def get_sample(source_video_dict: dict[str, object], target_video_dict: dict[str
         video_len=args.video_len,
         resolution=args.resolution,
     )
-    lam_inputs = torch.stack(source_image_seq[:2] + [target_image_seq[0]])
+    lam_inputs = torch.stack(source_image_seq[:2] + [target_image_seq[0]])  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     filled_seq = [torch.zeros_like(target_image_seq[0])] * (args.context_frame - 1) + target_image_seq
     gt_frames = torch.stack(filled_seq[args.context_frame - 1 :])
     next_frames = torch.Tensor(filled_seq[args.context_frame])
@@ -146,10 +145,12 @@ def get_sample(source_video_dict: dict[str, object], target_video_dict: dict[str
     }
 
 
-def run_fdm(fdm_model, source_video_dict: dict[str, object], target_video_dict: dict[str, object], args: argparse.Namespace):
+def run_fdm(
+    fdm_model, source_video_dict: dict[str, object], target_video_dict: dict[str, object], args: argparse.Namespace
+):
     value_dict = get_sample(source_video_dict, target_video_dict, args)
-    sampler = init_sampling(steps=args.num_steps, cfg_scale=args.cfg_scale, n_context_frames=args.context_frame)
-    return do_sample(
+    sampler = init_sampling(steps=args.num_steps, cfg_scale=args.cfg_scale, n_context_frames=args.context_frame)  # noqa: F405 - Name comes from the upstream star import.
+    return do_sample(  # noqa: F405 - Name comes from the upstream star import.
         fdm_model,
         sampler,
         value_dict,
@@ -174,7 +175,7 @@ def main() -> None:
     seed_everything(args.seed)
 
     samples_to_run = discover_samples(args)
-    model = init_model(str(args.config), str(args.checkpoint))
+    model = init_model(str(args.config), str(args.checkpoint))  # noqa: F405 - Name comes from the upstream star import.
     generated = []
     with torch.no_grad(), autocast("cuda"):
         for source_item, target_item in tqdm(samples_to_run, desc="AdaWorld inference"):

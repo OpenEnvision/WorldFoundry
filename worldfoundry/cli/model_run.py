@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from difflib import get_close_matches
 from functools import lru_cache
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 _SKIPPED_CALL_FIELDS = {"output-path", "return-dict"}
 _SKIPPED_LOAD_FIELDS = {"device", "model_id", "required_components"}
@@ -306,8 +308,8 @@ def _suggestions(model_id: str) -> str:
     except Exception:
         pass
     try:
-        from worldfoundry.evaluation.models.catalog.zoo_registry import load_model_zoo_registry
-        from worldfoundry.evaluation.utils import MODEL_ZOO_DIR
+        from worldfoundry.evals.utils import MODEL_ZOO_DIR
+        from worldfoundry.zoo.catalog.zoo_registry import load_model_zoo_registry
 
         ids.extend(entry.model_id for entry in load_model_zoo_registry(MODEL_ZOO_DIR).list())
     except Exception:
@@ -347,7 +349,7 @@ def _runtime_profile_id(value: Any) -> str:
 
 @lru_cache(maxsize=1)
 def _runtime_profile_paths_by_stem() -> Mapping[str, tuple[Any, ...]]:
-    from worldfoundry.evaluation.models.runtime.profiles import DEFAULT_RUNTIME_PROFILES_ROOT
+    from worldfoundry.zoo.runtime.profiles import DEFAULT_RUNTIME_PROFILES_ROOT
 
     paths: dict[str, list[Any]] = {}
     for path in DEFAULT_RUNTIME_PROFILES_ROOT.rglob("*.y*ml"):
@@ -366,7 +368,7 @@ def _load_catalog_runtime_profile(entry: Any, variant: Any | None) -> tuple[Any 
             getattr(entry, "model_id", None),
         )
     )
-    from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile_manifests
+    from worldfoundry.zoo.runtime.profiles import load_runtime_profile_manifests
 
     paths_by_stem = _runtime_profile_paths_by_stem()
     for candidate in candidates:
@@ -480,7 +482,7 @@ def _profile_inputs(profile: Any | None) -> tuple[tuple[str, Any, bool], ...]:
     required = schema.get("required")
     optional = schema.get("optional")
     if isinstance(required, Sequence) and not isinstance(required, (str, bytes)):
-        rows = [(str(key), True, True) for key in required]
+        rows: list[tuple[str, Any, bool]] = [(str(key), True, True) for key in required]
         if isinstance(optional, Sequence) and not isinstance(optional, (str, bytes)):
             rows.extend((str(key), "optional", False) for key in optional)
         return tuple(rows)
@@ -527,9 +529,15 @@ def _fallback_input_fields(entry: Any, profile: Any | None, display_name: str) -
         choices: tuple[Any, ...] = ()
         if option_name in {"image", "video", "audio", "input-path", "ref-image-path"}:
             kind = "path"
-        elif option_name in {"images", "state", "actions", "action", "interactions", "controls", "proprio"}:
-            kind = "json"
-        elif isinstance(raw_contract, Mapping):
+        elif option_name in {
+            "images",
+            "state",
+            "actions",
+            "action",
+            "interactions",
+            "controls",
+            "proprio",
+        } or isinstance(raw_contract, Mapping):
             kind = "json"
         elif isinstance(raw_contract, Sequence) and not isinstance(raw_contract, (str, bytes)):
             if option_name == "task-type":
@@ -709,8 +717,9 @@ def _fallback_model_run_schema(
         output_kinds = ("action_trace",)
     if not output_kinds and any(token in task_text for token in ("geometry", "reconstruction", "3d")):
         output_kinds = ("generated_3d_asset",)
-    if not output_kinds and getattr(profile, "artifact_kind", None):
-        output_kinds = (getattr(profile, "artifact_kind"),)
+    artifact_kind = getattr(profile, "artifact_kind", None)
+    if not output_kinds and artifact_kind:
+        output_kinds = (artifact_kind,)
     outputs = tuple(
         {
             "artifact_id": str(kind),
@@ -755,12 +764,12 @@ def load_model_run_schema(
     task_id: str | None = None,
 ) -> ModelRunSchema:
     """Resolve one model into a Studio contract or Model Zoo/runtime fallback."""
-    from worldfoundry.evaluation.models.catalog.schema import select_default_variant
-    from worldfoundry.evaluation.models.catalog.zoo_registry import load_model_zoo_registry
-    from worldfoundry.evaluation.utils import MODEL_ZOO_DIR
+    from worldfoundry.evals.utils import MODEL_ZOO_DIR
     from worldfoundry.runtime.inference_catalog import model_inference_spec
     from worldfoundry.runtime.interactive_inference_catalog import interactive_task_for_variant
     from worldfoundry.studio.inference.catalog import find_entry
+    from worldfoundry.zoo.catalog.schema import select_default_variant
+    from worldfoundry.zoo.catalog.zoo_registry import load_model_zoo_registry
 
     canonical_model_id = model_id
     catalog_variant_id: str | None = None
@@ -829,10 +838,8 @@ def load_model_run_schema(
         if selected_catalog_variant is not None:
             catalog_variant_id = selected_catalog_variant.variant_id
             if selected_catalog_variant.pipeline_binding:
-                try:
+                with contextlib.suppress(KeyError):
                     entry = find_entry(selected_catalog_variant.pipeline_binding)
-                except KeyError:
-                    pass
         elif variant_id is None and not catalog_entry.runner_target:
             selected_catalog_variant = select_default_variant(
                 catalog_entry,
@@ -908,7 +915,10 @@ def load_model_run_schema(
         field_id = _normalise(input_field.field_id)
         if field_id in _SKIPPED_CALL_FIELDS:
             continue
-        if field_id == "input-path" and text_to_video_entry:
+        # Text-to-video entries drop the generic input path, except on a named task that
+        # requires its own conditioning input (for example image-to-video or video-to-video).
+        named_conditioned_task = task.task_id != spec.default_task_id and input_field.required
+        if field_id == "input-path" and text_to_video_entry and not named_conditioned_task:
             continue
         target = _normalise(input_field.target)
         scope = "input" if target in {"prompt", "input-path"} else "load" if target == "load-kwargs" else "call"
@@ -1210,7 +1220,7 @@ def model_id_from_run_argv(argv: Sequence[str]) -> str | None:
     for index, item in enumerate(argv[1:]):
         if item in {"--model", "--model-id"} and index + 2 < len(argv):
             values.append(argv[index + 2])
-        elif item.startswith("--model=") or item.startswith("--model-id="):
+        elif item.startswith(("--model=", "--model-id=")):
             values.append(item.split("=", 1)[1])
     unique = tuple(dict.fromkeys(value for value in values if value))
     return unique[0] if len(unique) == 1 else None

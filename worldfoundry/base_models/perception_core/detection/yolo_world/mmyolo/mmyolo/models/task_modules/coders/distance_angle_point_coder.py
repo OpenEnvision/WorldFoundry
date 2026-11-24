@@ -1,16 +1,17 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import Optional, Sequence, Union
+from collections.abc import Sequence
 
 import torch
 
 from mmyolo.registry import TASK_UTILS
 
 try:
-    from mmrotate.models.task_modules.coders import \
-        DistanceAnglePointCoder as MMROTATE_DistanceAnglePointCoder
+    from mmrotate.models.task_modules.coders import DistanceAnglePointCoder as MMROTATE_DistanceAnglePointCoder
+
     MMROTATE_AVAILABLE = True
 except ImportError:
     from mmdet.models.task_modules.coders import BaseBBoxCoder
+
     MMROTATE_DistanceAnglePointCoder = BaseBBoxCoder
     MMROTATE_AVAILABLE = False
 
@@ -23,11 +24,11 @@ class DistanceAnglePointCoder(MMROTATE_DistanceAnglePointCoder):
     right, theta) and decode it back to the original.
     """
 
-    def __init__(self, clip_border=True, angle_version='oc'):
+    def __init__(self, clip_border=True, angle_version="oc"):
         if not MMROTATE_AVAILABLE:
             raise ImportError(
-                'Please run "mim install -r requirements/mmrotate.txt" '
-                'to install mmrotate first for rotated detection.')
+                'Please run "mim install -r requirements/mmrotate.txt" to install mmrotate first for rotated detection.'
+            )
 
         super().__init__(clip_border=clip_border, angle_version=angle_version)
 
@@ -36,8 +37,7 @@ class DistanceAnglePointCoder(MMROTATE_DistanceAnglePointCoder):
         points: torch.Tensor,
         pred_bboxes: torch.Tensor,
         stride: torch.Tensor,
-        max_shape: Optional[Union[Sequence[int], torch.Tensor,
-                                  Sequence[Sequence[int]]]] = None,
+        max_shape: Sequence[int] | torch.Tensor | Sequence[Sequence[int]] | None = None,
     ) -> torch.Tensor:
         """Decode distance prediction to bounding box.
 
@@ -61,20 +61,14 @@ class DistanceAnglePointCoder(MMROTATE_DistanceAnglePointCoder):
         if self.clip_border is False:
             max_shape = None
 
-        if pred_bboxes.dim() == 2:
-            stride = stride[:, None]
-        else:
-            stride = stride[None, :, None]
+        stride = stride[:, None] if pred_bboxes.dim() == 2 else stride[None, :, None]
         pred_bboxes[..., :4] = pred_bboxes[..., :4] * stride
 
-        return self.distance2obb(points, pred_bboxes, max_shape,
-                                 self.angle_version)
+        return self.distance2obb(points, pred_bboxes, max_shape, self.angle_version)
 
-    def encode(self,
-               points: torch.Tensor,
-               gt_bboxes: torch.Tensor,
-               max_dis: float = 16.,
-               eps: float = 0.01) -> torch.Tensor:
+    def encode(
+        self, points: torch.Tensor, gt_bboxes: torch.Tensor, max_dis: float = 16.0, eps: float = 0.01
+    ) -> torch.Tensor:
         """Encode bounding box to distances.
 
         Args:

@@ -24,6 +24,11 @@ from typing import Any
 import numpy as np
 import torch
 
+from worldfoundry.core.nn.blocks.stochastic_depth import (
+    add_residual,
+    drop_add_residual_stochastic_depth,
+    get_branges_scales,
+)
 
 # ──────────────────────────────────────────────────────────────────────────
 # Shape spec — hidden / heads / MLP width with divisibility checks
@@ -78,7 +83,7 @@ def mlp_hidden_size(hidden_size: int, *, multiplier: float = 4.0, multiple_of: i
         raise ValueError("hidden_size must be positive.")
     if float(multiplier) <= 0:
         raise ValueError("multiplier must be positive.")
-    width = int(round(int(hidden_size) * float(multiplier)))
+    width = round(int(hidden_size) * float(multiplier))
     if multiple_of is None:
         return max(1, width)
     multiple = int(multiple_of)
@@ -180,12 +185,6 @@ def _swapaxes(value: Any, axis1: int, axis2: int) -> Any:
         return value.transpose(axis1, axis2)
     raise TypeError(f"object of type {type(value).__name__} does not support axis swapping.")
 
-
-from worldfoundry.core.nn.blocks.stochastic_depth import (  # noqa: E402
-    add_residual,
-    drop_add_residual_stochastic_depth,
-    get_branges_scales,
-)
 
 __all__ = [
     "TransformerShapeSpec",

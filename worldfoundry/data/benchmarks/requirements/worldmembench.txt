@@ -1,0 +1,13 @@
+# Install into the prepared GPU environment; retain its Torch/CUDA ABI.
+# Quality: pyiqa. Human: ultralytics, insightface, onnxruntime-gpu.
+# Object/environment: transformers. Dynamic Memory uses a configured VLM endpoint.
+numpy>=1.24
+opencv-python-headless>=4.8,<5
+Pillow>=10
+PyYAML>=6
+pyiqa
+transformers>=4.57
+ultralytics>=8.3
+insightface>=0.7
+onnxruntime-gpu>=1.24
+scipy>=1.10

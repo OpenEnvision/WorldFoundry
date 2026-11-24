@@ -13,8 +13,9 @@ torch) are imported at use time.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from PIL import Image
 
@@ -121,7 +122,8 @@ def extract_video_frames(video_data: Any, *, copy: bool = True) -> list[Any]:
             raise ValueError("Video path frame extraction requires imageio.") from exc
         reader = imageio.get_reader(str(path))
         try:
-            return [frame.copy() if copy and hasattr(frame, "copy") else frame for frame in reader]
+            # ImageIO's Reader yields frames, but its __iter__ stub returns a single Array.
+            return [frame.copy() if copy and hasattr(frame, "copy") else frame for frame in cast(Iterable[Any], reader)]
         finally:
             reader.close()
 
@@ -156,7 +158,7 @@ def extract_last_frame(video_data: Any) -> Image.Image | None:
     """Best-effort last-frame PIL image; returns ``None`` on any failure."""
     try:
         frames = extract_video_frames(video_data)
-    except Exception:  # noqa: BLE001 - selection should degrade gracefully.
+    except Exception:
         return None
     if not frames:
         return None
@@ -181,7 +183,7 @@ def infer_content_type(data: Any) -> str:
         return "text" if isinstance(data, str) else "other"
     try:
         array = to_numpy(data)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return "other"
     if array.ndim >= 4:
         return "video"

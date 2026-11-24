@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot -> transforms -> image_transforms.py functionality."""
-
 import math
 import numbers
 import random
@@ -26,20 +24,15 @@ _pil_interpolation_to_str = {
 
 
 def _get_image_size(img):
-    """Helper function to get image size.
-
-    Args:
-        img: The img.
-    """
     if TF._is_pil_image(img):
         return img.size
     elif isinstance(img, torch.Tensor) and img.dim() > 2:
         return img.shape[-2:][::-1]
     else:
-        raise TypeError("Unexpected type {}".format(type(img)))
+        raise TypeError(f"Unexpected type {type(img)}")
 
 
-class RandomHorizontalFlip(object):
+class RandomHorizontalFlip:
     """Horizontal flip the given PIL Image randomly with a given probability.
 
     Args:
@@ -47,11 +40,6 @@ class RandomHorizontalFlip(object):
     """
 
     def __init__(self, p=0.5):
-        """Init.
-
-        Args:
-            p: The p.
-        """
         self.p = p
 
     def __call__(self, img, mask):
@@ -68,11 +56,10 @@ class RandomHorizontalFlip(object):
         return img, mask
 
     def __repr__(self):
-        """Repr."""
-        return self.__class__.__name__ + "(p={})".format(self.p)
+        return self.__class__.__name__ + f"(p={self.p})"
 
 
-class RandomVerticalFlip(object):
+class RandomVerticalFlip:
     """Vertical flip the given PIL Image randomly with a given probability.
 
     Args:
@@ -80,11 +67,6 @@ class RandomVerticalFlip(object):
     """
 
     def __init__(self, p=0.5):
-        """Init.
-
-        Args:
-            p: The p.
-        """
         self.p = p
 
     def __call__(self, img, mask):
@@ -101,33 +83,22 @@ class RandomVerticalFlip(object):
         return img, mask
 
     def __repr__(self):
-        """Repr."""
-        return self.__class__.__name__ + "(p={})".format(self.p)
+        return self.__class__.__name__ + f"(p={self.p})"
 
 
-class GaussianBlur(object):
+class GaussianBlur:
     """Gaussian blur augmentation from SimCLR: https://arxiv.org/abs/2002.05709"""
 
-    def __init__(self, sigma=[0.1, 2.0]):
-        """Init.
-
-        Args:
-            sigma: The sigma.
-        """
+    def __init__(self, sigma=[0.1, 2.0]):  # noqa: B006 - Keeps the upstream default object and signature.
         self.sigma = sigma
 
     def __call__(self, x):
-        """Call.
-
-        Args:
-            x: The x.
-        """
         sigma = random.uniform(self.sigma[0], self.sigma[1])
         x = x.filter(ImageFilter.GaussianBlur(radius=sigma))
         return x
 
 
-class RandomAffine(object):
+class RandomAffine:
     """Random affine transformation of the image keeping center invariant
 
     Args:
@@ -165,16 +136,6 @@ class RandomAffine(object):
         resample=False,
         fillcolor=0,
     ):
-        """Init.
-
-        Args:
-            degrees: The degrees.
-            translate: The translate.
-            scale: The scale.
-            shear: The shear.
-            resample: The resample.
-            fillcolor: The fillcolor.
-        """
         if isinstance(degrees, numbers.Number):
             if degrees < 0:
                 raise ValueError("If degrees is a single number, it must be positive.")
@@ -216,7 +177,7 @@ class RandomAffine(object):
                 if len(shear) == 2:
                     self.shear = [shear[0], shear[1], 0.0, 0.0]
                 elif len(shear) == 4:
-                    self.shear = [s for s in shear]
+                    self.shear = list(shear)
         else:
             self.shear = shear
 
@@ -241,10 +202,7 @@ class RandomAffine(object):
         else:
             translations = (0, 0)
 
-        if scale_ranges is not None:
-            scale = random.uniform(scale_ranges[0], scale_ranges[1])
-        else:
-            scale = 1.0
+        scale = random.uniform(scale_ranges[0], scale_ranges[1]) if scale_ranges is not None else 1.0
 
         if shears is not None:
             if len(shears) == 2:
@@ -272,7 +230,6 @@ class RandomAffine(object):
         return img, mask
 
     def __repr__(self):
-        """Repr."""
         s = "{name}(degrees={degrees}"
         if self.translate is not None:
             s += ", translate={translate}"
@@ -290,7 +247,7 @@ class RandomAffine(object):
         return s.format(name=self.__class__.__name__, **d)
 
 
-class RandomCrop(object):
+class RandomCrop:
     """Crop the given PIL Image at a random location.
 
     Args:
@@ -327,15 +284,6 @@ class RandomCrop(object):
     """
 
     def __init__(self, size, padding=None, pad_if_needed=False, fill=0, padding_mode="constant"):
-        """Init.
-
-        Args:
-            size: The size.
-            padding: The padding.
-            pad_if_needed: The pad if needed.
-            fill: The fill.
-            padding_mode: The padding mode.
-        """
         if isinstance(size, numbers.Number):
             self.size = (int(size), int(size))
         else:
@@ -390,11 +338,10 @@ class RandomCrop(object):
         return img, mask
 
     def __repr__(self):
-        """Repr."""
-        return self.__class__.__name__ + "(size={0}, padding={1})".format(self.size, self.padding)
+        return self.__class__.__name__ + f"(size={self.size}, padding={self.padding})"
 
 
-class RandomResizedCrop(object):
+class RandomResizedCrop:
     """Crop the given PIL Image to random size and aspect ratio.
 
     A crop of random size (default: of 0.08 to 1.0) of the original size and a random
@@ -416,20 +363,12 @@ class RandomResizedCrop(object):
         ratio=(3.0 / 4.0, 4.0 / 3.0),
         interpolation=Image.BILINEAR,
     ):
-        """Init.
-
-        Args:
-            size: The size.
-            scale: The scale.
-            ratio: The ratio.
-            interpolation: The interpolation.
-        """
         if isinstance(size, (tuple, list)):
             self.size = size
         else:
             self.size = (size, size)
         if (scale[0] > scale[1]) or (ratio[0] > ratio[1]):
-            warnings.warn("range should be of kind (min, max)")
+            warnings.warn("range should be of kind (min, max)", stacklevel=1)
 
         self.interpolation = interpolation
         self.scale = scale
@@ -456,8 +395,8 @@ class RandomResizedCrop(object):
             log_ratio = (math.log(ratio[0]), math.log(ratio[1]))
             aspect_ratio = math.exp(random.uniform(*log_ratio))
 
-            w = int(round(math.sqrt(target_area * aspect_ratio)))
-            h = int(round(math.sqrt(target_area / aspect_ratio)))
+            w = int(round(math.sqrt(target_area * aspect_ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+            h = int(round(math.sqrt(target_area / aspect_ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
             if 0 < w <= width and 0 < h <= height:
                 i = random.randint(0, height - h)
@@ -468,10 +407,10 @@ class RandomResizedCrop(object):
         in_ratio = float(width) / float(height)
         if in_ratio < min(ratio):
             w = width
-            h = int(round(w / min(ratio)))
+            h = int(round(w / min(ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         elif in_ratio > max(ratio):
             h = height
-            w = int(round(h * max(ratio)))
+            w = int(round(h * max(ratio)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         else:  # whole image
             w = width
             h = height
@@ -494,16 +433,15 @@ class RandomResizedCrop(object):
         return img, mask
 
     def __repr__(self):
-        """Repr."""
         interpolate_str = _pil_interpolation_to_str[self.interpolation]
-        format_string = self.__class__.__name__ + "(size={0}".format(self.size)
-        format_string += ", scale={0}".format(tuple(round(s, 4) for s in self.scale))
-        format_string += ", ratio={0}".format(tuple(round(r, 4) for r in self.ratio))
-        format_string += ", interpolation={0})".format(interpolate_str)
+        format_string = self.__class__.__name__ + f"(size={self.size}"
+        format_string += f", scale={tuple(round(s, 4) for s in self.scale)}"
+        format_string += f", ratio={tuple(round(r, 4) for r in self.ratio)}"
+        format_string += f", interpolation={interpolate_str})"
         return format_string
 
 
-class ToOnehot(object):
+class ToOnehot:
     """To oneshot tensor
 
     Args:
@@ -511,12 +449,6 @@ class ToOnehot(object):
     """
 
     def __init__(self, max_obj_n, shuffle):
-        """Init.
-
-        Args:
-            max_obj_n: The max obj n.
-            shuffle: The shuffle.
-        """
         self.max_obj_n = max_obj_n
         self.shuffle = shuffle
 
@@ -532,7 +464,7 @@ class ToOnehot(object):
         new_mask = np.zeros((self.max_obj_n + 1, *mask.shape), np.uint8)
 
         if not obj_list:
-            obj_list = list()
+            obj_list = []
             obj_max = mask.max() + 1
             for i in range(1, obj_max):
                 tmp = (mask == i).astype(np.uint8)
@@ -550,8 +482,7 @@ class ToOnehot(object):
         return torch.from_numpy(new_mask), obj_list
 
     def __repr__(self):
-        """Repr."""
-        return self.__class__.__name__ + "(max_obj_n={})".format(self.max_obj_n)
+        return self.__class__.__name__ + f"(max_obj_n={self.max_obj_n})"
 
 
 class Resize(torch.nn.Module):
@@ -573,15 +504,9 @@ class Resize(torch.nn.Module):
     """
 
     def __init__(self, size, interpolation=Image.BILINEAR):
-        """Init.
-
-        Args:
-            size: The size.
-            interpolation: The interpolation.
-        """
         super().__init__()
         if not isinstance(size, (int, Sequence)):
-            raise TypeError("Size should be int or sequence. Got {}".format(type(size)))
+            raise TypeError(f"Size should be int or sequence. Got {type(size)}")
         if isinstance(size, Sequence) and len(size) not in (1, 2):
             raise ValueError("If size is a sequence, it should have 1 or 2 values")
         self.size = size
@@ -600,6 +525,5 @@ class Resize(torch.nn.Module):
         return img, mask
 
     def __repr__(self):
-        """Repr."""
         interpolate_str = _pil_interpolation_to_str[self.interpolation]
-        return self.__class__.__name__ + "(size={0}, interpolation={1})".format(self.size, interpolate_str)
+        return self.__class__.__name__ + f"(size={self.size}, interpolation={interpolate_str})"

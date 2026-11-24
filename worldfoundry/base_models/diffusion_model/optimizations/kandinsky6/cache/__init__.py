@@ -12,7 +12,12 @@ from typing import Literal
 from torch import nn
 
 from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.base import ConfigModel
-from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.cache.magcache import MagCache, MagCacheConfig, prepare_mag_ratios, select_mag_ratios
+from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.cache.magcache import (
+    MagCache,
+    MagCacheConfig,
+    prepare_mag_ratios,
+    select_mag_ratios,
+)
 from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.cache.navicache import NaviCache, NaviCacheConfig
 
 CacheMode = Literal["none", "magcache", "navicache"]
@@ -49,7 +54,7 @@ class CacheDiT(MagCache, NaviCache, nn.Module):
         mag_ratios: Sequence[float] | Mapping[str, Sequence[float]] | None = None,
         mode_name: str | None = None,
         thresh: float | None = None,
-        K: int | None = None,  # noqa: N803  # MagCache paper hyperparameter name
+        K: int | None = None,  # MagCache paper hyperparameter name
         retention_ratio: float | None = None,
         # NaviCache
         align_steps: int | None = None,

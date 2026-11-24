@@ -4,17 +4,13 @@ import importlib
 from collections import Counter
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import (
-    DEFAULT_EMBODIED_CATALOG_DIR,
-    DEFAULT_VIDEO_CATALOG_DIR,
-    load_benchmark_catalog_entries,
+from worldfoundry.evals.models.runners.registry import ModelRunnerRegistry
+from worldfoundry.evals.tasks.catalog.benchmark_catalog import (
     load_benchmark_catalog_shard_entries,
 )
-from worldfoundry.evaluation.tasks.catalog.specs import benchmark_zoo_entry_to_benchmark_spec
-from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
-from worldfoundry.evaluation.models import ModelRunnerRegistry
-from worldfoundry.evaluation.models.catalog import load_entries as load_model_entries
-
+from worldfoundry.evals.tasks.catalog.specs import benchmark_zoo_entry_to_benchmark_spec
+from worldfoundry.evals.tasks.contracts.external import get_external_benchmark_contract
+from worldfoundry.zoo.catalog import load_entries as load_model_entries
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NEW_VIDEO_WORLD_NORMALIZER_IDS = {
@@ -72,9 +68,7 @@ def test_model_zoo_readiness_does_not_overclaim_integrated_runners() -> None:
             # A claimed runner needs a declared runtime route: either a conda
             # runtime profile or a pipeline binding/target (hosted-API and
             # shared-pipeline models run without a per-model conda profile).
-            assert (
-                entry.runtime_profile or entry.pipeline_binding or entry.pipeline_target
-            ), entry.model_id
+            assert entry.runtime_profile or entry.pipeline_binding or entry.pipeline_target, entry.model_id
 
 
 def test_model_zoo_claimed_runner_targets_match_registry_contract() -> None:
@@ -88,9 +82,7 @@ def test_model_zoo_claimed_runner_targets_match_registry_contract() -> None:
         entry_pipeline_route = entry.pipeline_binding or entry.pipeline_target
         claimed_targets = []
         if entry.runner_target:
-            claimed_targets.append(
-                (entry.model_id, entry.runner_target, entry.runtime_profile or entry_pipeline_route)
-            )
+            claimed_targets.append((entry.model_id, entry.runner_target, entry.runtime_profile or entry_pipeline_route))
         for variant in entry.variants:
             if variant.runner_target:
                 claimed_targets.append(
@@ -158,7 +150,7 @@ def test_iworld_bench_tracks_released_public_assets_without_leaderboard_claim() 
     # is catalog-integrated now; it still must not claim official-benchmark
     # verification or leaderboard validity.
     assert entry.integration_status == "integrated"
-    assert entry.runner_target == "worldfoundry.evaluation.tasks.contracts.external:IWorldBenchContract"
+    assert entry.runner_target == "worldfoundry.evals.tasks.contracts.external:iworld-bench"
     assert entry.open_source_status == "experimental"
     assert entry.official_benchmark_verified is False
     assert entry.integration_evidence is True

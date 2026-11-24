@@ -4,21 +4,19 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> perception_core -> segment -> sam2 -> modeling -> memory_attention.py functionality."""
-
-from typing import Optional
-
 import torch
-from torch import nn, Tensor
+from torch import Tensor, nn
 
-from worldfoundry.base_models.perception_core.segment.sam2.modeling.sam.transformer import RoPEAttention
-
-from worldfoundry.base_models.perception_core.segment.sam2.modeling.sam2_utils import get_activation_fn, get_clones
+from worldfoundry.base_models.perception_core.segment.sam2.modeling.sam.transformer import (
+    RoPEAttention,
+)
+from worldfoundry.base_models.perception_core.segment.sam_components.utils import (
+    get_activation_fn,
+    get_clones,
+)
 
 
 class MemoryAttentionLayer(nn.Module):
-    """Memory attention layer implementation."""
-
     def __init__(
         self,
         activation: str,
@@ -31,19 +29,6 @@ class MemoryAttentionLayer(nn.Module):
         pos_enc_at_cross_attn_queries: bool,
         self_attention: nn.Module,
     ):
-        """Init.
-
-        Args:
-            activation: The activation.
-            cross_attention: The cross attention.
-            d_model: The d model.
-            dim_feedforward: The dim feedforward.
-            dropout: The dropout.
-            pos_enc_at_attn: The pos enc at attn.
-            pos_enc_at_cross_attn_keys: The pos enc at cross attn keys.
-            pos_enc_at_cross_attn_queries: The pos enc at cross attn queries.
-            self_attention: The self attention.
-        """
         super().__init__()
         self.d_model = d_model
         self.dim_feedforward = dim_feedforward
@@ -72,12 +57,6 @@ class MemoryAttentionLayer(nn.Module):
         self.pos_enc_at_cross_attn_keys = pos_enc_at_cross_attn_keys
 
     def _forward_sa(self, tgt, query_pos):
-        """Helper function to forward sa.
-
-        Args:
-            tgt: The tgt.
-            query_pos: The query pos.
-        """
         # Self-Attention
         tgt2 = self.norm1(tgt)
         q = k = tgt2 + query_pos if self.pos_enc_at_attn else tgt2
@@ -86,15 +65,6 @@ class MemoryAttentionLayer(nn.Module):
         return tgt
 
     def _forward_ca(self, tgt, memory, query_pos, pos, num_k_exclude_rope=0):
-        """Helper function to forward ca.
-
-        Args:
-            tgt: The tgt.
-            memory: The memory.
-            query_pos: The query pos.
-            pos: The pos.
-            num_k_exclude_rope: The num k exclude rope.
-        """
         kwds = {}
         if num_k_exclude_rope > 0:
             assert isinstance(self.cross_attn_image, RoPEAttention)
@@ -115,23 +85,10 @@ class MemoryAttentionLayer(nn.Module):
         self,
         tgt,
         memory,
-        pos: Optional[Tensor] = None,
-        query_pos: Optional[Tensor] = None,
+        pos: Tensor | None = None,
+        query_pos: Tensor | None = None,
         num_k_exclude_rope: int = 0,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            tgt: The tgt.
-            memory: The memory.
-            pos: The pos.
-            query_pos: The query pos.
-            num_k_exclude_rope: The num k exclude rope.
-
-        Returns:
-            The return value.
-        """
-
         # Self-Attn, Cross-Attn
         tgt = self._forward_sa(tgt, query_pos)
         tgt = self._forward_ca(tgt, memory, query_pos, pos, num_k_exclude_rope)
@@ -143,7 +100,6 @@ class MemoryAttentionLayer(nn.Module):
 
 
 class MemoryAttention(nn.Module):
-    """Memory attention implementation."""
     def __init__(
         self,
         d_model: int,
@@ -152,15 +108,6 @@ class MemoryAttention(nn.Module):
         num_layers: int,
         batch_first: bool = True,  # Do layers expect batch first input?
     ):
-        """Init.
-
-        Args:
-            d_model: The d model.
-            pos_enc_at_input: The pos enc at input.
-            layer: The layer.
-            num_layers: The num layers.
-            batch_first: The batch first.
-        """
         super().__init__()
         self.d_model = d_model
         self.layers = get_clones(layer, num_layers)
@@ -173,19 +120,10 @@ class MemoryAttention(nn.Module):
         self,
         curr: torch.Tensor,  # self-attention inputs
         memory: torch.Tensor,  # cross-attention inputs
-        curr_pos: Optional[Tensor] = None,  # pos_enc for self-attention inputs
-        memory_pos: Optional[Tensor] = None,  # pos_enc for cross-attention inputs
+        curr_pos: Tensor | None = None,  # pos_enc for self-attention inputs
+        memory_pos: Tensor | None = None,  # pos_enc for cross-attention inputs
         num_obj_ptr_tokens: int = 0,  # number of object pointer *tokens*
     ):
-        """Forward.
-
-        Args:
-            curr: The curr.
-            memory: The memory.
-            curr_pos: The curr pos.
-            memory_pos: The memory pos.
-            num_obj_ptr_tokens: The num obj ptr tokens.
-        """
         if isinstance(curr, list):
             assert isinstance(curr_pos, list)
             assert len(curr) == len(curr_pos) == 1
@@ -194,9 +132,7 @@ class MemoryAttention(nn.Module):
                 curr_pos[0],
             )
 
-        assert (
-            curr.shape[1] == memory.shape[1]
-        ), "Batch size must be the same for curr and memory"
+        assert curr.shape[1] == memory.shape[1], "Batch size must be the same for curr and memory"
 
         output = curr
         if self.pos_enc_at_input and curr_pos is not None:

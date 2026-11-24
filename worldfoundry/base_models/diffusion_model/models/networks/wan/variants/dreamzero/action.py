@@ -5,27 +5,22 @@ Adds action conditioning.  No VACE, causal, or linear attn.
 """
 
 # Inference-only DreamZero runtime retained in-tree.
+import math
+import os
+from typing import ClassVar
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from worldfoundry.base_models.diffusion_model.models.autoencoders.lvdm.blocks import nonlinearity as swish
+from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
+
+from .action_encoder import SinusoidalPositionalEncoding
 from .attention import (
     AttentionModule,
 )
-from .action_encoder import (
-    SinusoidalPositionalEncoding,
-    swish,
-)
-from .model import (
-    WanRMSNorm,
-    WanLayerNorm,
-    WAN_CROSSATTENTION_CLASSES,
-    rope_params,
-    MLPProj,
-    sinusoidal_embedding_1d
-)
-from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
-import torch.nn as nn
-import torch.nn.functional as F
-import torch
-import math
-import os
+from .model import WAN_CROSSATTENTION_CLASSES, MLPProj, WanLayerNorm, WanRMSNorm, rope_params, sinusoidal_embedding_1d
 
 ENABLE_TENSORRT = os.getenv("ENABLE_TENSORRT", "False").lower() == "true"
 
@@ -92,11 +87,38 @@ class MultiEmbodimentActionEncoder(nn.Module):
         return x
 
 
-def causal_rope_action_apply(x, freqs, freqs_action, freqs_state, action_register_length, num_action_per_block, num_state_per_block, action_state_index):
+def causal_rope_action_apply(
+    x,
+    freqs,
+    freqs_action,
+    freqs_state,
+    action_register_length,
+    num_action_per_block,
+    num_state_per_block,
+    action_state_index,
+):
     if ENABLE_TENSORRT:
-        return causal_rope_action_apply_no_polar(x, freqs, freqs_action, freqs_state, action_register_length, num_action_per_block, num_state_per_block, action_state_index)
+        return causal_rope_action_apply_no_polar(
+            x,
+            freqs,
+            freqs_action,
+            freqs_state,
+            action_register_length,
+            num_action_per_block,
+            num_state_per_block,
+            action_state_index,
+        )
     else:
-        return causal_rope_action_apply_polar(x, freqs, freqs_action, freqs_state, action_register_length, num_action_per_block, num_state_per_block, action_state_index)
+        return causal_rope_action_apply_polar(
+            x,
+            freqs,
+            freqs_action,
+            freqs_state,
+            action_register_length,
+            num_action_per_block,
+            num_state_per_block,
+            action_state_index,
+        )
 
 
 def causal_rope_action_apply_no_polar(
@@ -118,24 +140,22 @@ def causal_rope_action_apply_no_polar(
 
     # Split freqs into cos and sin components
     freqs = freqs.unsqueeze(0).view(1, freqs.shape[0], 1, -1, 2)
-    freqs_cos = freqs[..., 0] # Shape: (1, seq_len', 1, d/2)
-    freqs_sin = freqs[..., 1] # Shape: (1, seq_len', 1, d/2)
+    freqs_cos = freqs[..., 0]  # Shape: (1, seq_len', 1, d/2)
+    freqs_sin = freqs[..., 1]  # Shape: (1, seq_len', 1, d/2)
 
     #  Handle the Action/State Register Frequencies
     if action_register_length is not None:
         assert action_register_length == (num_action_per_block + num_state_per_block)
 
         freqs_action_slice = freqs_action[
-            action_state_index * num_action_per_block:(action_state_index + 1) * num_action_per_block
+            action_state_index * num_action_per_block : (action_state_index + 1) * num_action_per_block
         ]
         freqs_state_slice = freqs_state[
-            action_state_index * num_state_per_block:(action_state_index + 1) * num_state_per_block
+            action_state_index * num_state_per_block : (action_state_index + 1) * num_state_per_block
         ]
 
         # Combine the action/state tokens for this frame
-        freqs_1d = torch.cat([freqs_action_slice, freqs_state_slice], dim=0).view(
-            action_register_length, 1, -1, 2
-        )
+        freqs_1d = torch.cat([freqs_action_slice, freqs_state_slice], dim=0).view(action_register_length, 1, -1, 2)
 
         # Split the new action/state frequencies
         freqs_cos_1d = freqs_1d[..., 0]
@@ -152,6 +172,7 @@ def causal_rope_action_apply_no_polar(
 
     return x_rotated.flatten(3)
 
+
 def causal_rope_action_apply_polar(
     x: torch.Tensor,
     freqs: torch.Tensor,
@@ -165,17 +186,15 @@ def causal_rope_action_apply_polar(
     B, seq_len, n, _ = x.shape
 
     # precompute multipliers
-    x = torch.view_as_complex(
-        x.to(torch.float64).reshape(B, seq_len, n, -1, 2)
-    )
+    x = torch.view_as_complex(x.to(torch.float64).reshape(B, seq_len, n, -1, 2))
 
     if action_register_length is not None:
         assert action_register_length == (num_action_per_block + num_state_per_block)
         freqs_action = freqs_action[
-            action_state_index * num_action_per_block:(action_state_index + 1) * num_action_per_block
+            action_state_index * num_action_per_block : (action_state_index + 1) * num_action_per_block
         ]
         freqs_state = freqs_state[
-            action_state_index * num_state_per_block:(action_state_index + 1) * num_state_per_block
+            action_state_index * num_state_per_block : (action_state_index + 1) * num_state_per_block
         ]
         freqs_1d = torch.cat([freqs_action, freqs_state], dim=0).view(action_register_length, 1, -1)
         freqs = torch.cat([freqs, freqs_1d], dim=0)
@@ -188,18 +207,19 @@ def causal_rope_action_apply_polar(
 
 
 class CausalWanSelfAttention(nn.Module):
-
-    def __init__(self,
-                 dim,
-                 num_heads,
-                 frame_seqlen,
-                 local_attn_size=-1,
-                 sink_size=0,
-                 num_frame_per_block=1,
-                 qk_norm=True,
-                 eps=1e-6,
-                 num_action_per_block=32,
-                 num_state_per_block=1):
+    def __init__(
+        self,
+        dim,
+        num_heads,
+        frame_seqlen,
+        local_attn_size=-1,
+        sink_size=0,
+        num_frame_per_block=1,
+        qk_norm=True,
+        eps=1e-6,
+        num_action_per_block=32,
+        num_state_per_block=1,
+    ):
         assert dim % num_heads == 0
         super().__init__()
         self.dim = dim
@@ -219,12 +239,6 @@ class CausalWanSelfAttention(nn.Module):
         self.norm_q = WanRMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
         self.norm_k = WanRMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
         self.attn = AttentionModule(num_heads=self.num_heads, head_dim=self.head_dim)
-
-
-
-
-
-
 
     def forward(
         self,
@@ -312,8 +326,8 @@ class CausalWanSelfAttention(nn.Module):
         new_v = torch.cat([updated_v, v], dim=1)
 
         # We may need to truncate the KV cache if it's size is larger than the max attention size.
-        new_k = new_k[:, -self.max_attention_size:]
-        new_v = new_v[:, -self.max_attention_size:]
+        new_k = new_k[:, -self.max_attention_size :]
+        new_v = new_v[:, -self.max_attention_size :]
 
         if action_register_length is not None:
             x = self.attn(
@@ -329,7 +343,6 @@ class CausalWanSelfAttention(nn.Module):
             )
         updated_kv_cache = torch.stack([new_k, new_v], dim=0)
 
-
         # output
         x = x.flatten(2)
         x = self.o(x)
@@ -337,21 +350,22 @@ class CausalWanSelfAttention(nn.Module):
 
 
 class CausalWanAttentionBlock(nn.Module):
-
-    def __init__(self,
-                 cross_attn_type,
-                 dim,
-                 ffn_dim,
-                 num_heads,
-                 frame_seqlen,
-                 local_attn_size=-1,
-                 sink_size=0,
-                 num_frame_per_block=1,
-                 qk_norm=True,
-                 cross_attn_norm=False,
-                 eps=1e-6,
-                 num_action_per_block=32,
-                 num_state_per_block=1):
+    def __init__(
+        self,
+        cross_attn_type,
+        dim,
+        ffn_dim,
+        num_heads,
+        frame_seqlen,
+        local_attn_size=-1,
+        sink_size=0,
+        num_frame_per_block=1,
+        qk_norm=True,
+        cross_attn_norm=False,
+        eps=1e-6,
+        num_action_per_block=32,
+        num_state_per_block=1,
+    ):
         super().__init__()
         self.dim = dim
         self.ffn_dim = ffn_dim
@@ -375,18 +389,10 @@ class CausalWanAttentionBlock(nn.Module):
             num_action_per_block=num_action_per_block,
             num_state_per_block=num_state_per_block,
         )
-        self.norm3 = WanLayerNorm(
-            dim, eps,
-            elementwise_affine=True) if cross_attn_norm else nn.Identity()
-        self.cross_attn = WAN_CROSSATTENTION_CLASSES[cross_attn_type](dim,
-                                                                      num_heads,
-                                                                      (-1, -1),
-                                                                      qk_norm,
-                                                                      eps)
+        self.norm3 = WanLayerNorm(dim, eps, elementwise_affine=True) if cross_attn_norm else nn.Identity()
+        self.cross_attn = WAN_CROSSATTENTION_CLASSES[cross_attn_type](dim, num_heads, (-1, -1), qk_norm, eps)
         self.norm2 = WanLayerNorm(dim, eps)
-        self.ffn = nn.Sequential(
-            nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'),
-            nn.Linear(ffn_dim, dim))
+        self.ffn = nn.Sequential(nn.Linear(dim, ffn_dim), nn.GELU(approximate="tanh"), nn.Linear(ffn_dim, dim))
 
         # modulation
         self.modulation = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
@@ -441,9 +447,7 @@ class CausalWanAttentionBlock(nn.Module):
         # cross-attention & ffn function
         def cross_attn_ffn(x, context, e):
             x = x + self.cross_attn(self.norm3(x), context)
-            y = self.ffn(
-                (self.norm2(x) * (1 + e[4].squeeze(2)) + e[3].squeeze(2))
-            )
+            y = self.ffn(self.norm2(x) * (1 + e[4].squeeze(2)) + e[3].squeeze(2))
             x = x + (y * e[5].squeeze(2))
             return x
 
@@ -452,7 +456,6 @@ class CausalWanAttentionBlock(nn.Module):
 
 
 class CausalHead(nn.Module):
-
     def __init__(self, dim, out_dim, patch_size, eps=1e-6):
         super().__init__()
         self.dim = dim
@@ -488,48 +491,48 @@ class CausalHead(nn.Module):
                 repeat = (L + L_e - 1) // L_e
                 aligned.append(part.repeat_interleave(repeat, dim=1)[:, :L])
         e = tuple(aligned)
-        x = (self.head(self.norm(x) * (1 + e[1].squeeze(2)) + e[0].squeeze(2)))
+        x = self.head(self.norm(x) * (1 + e[1].squeeze(2)) + e[0].squeeze(2))
         return x
 
 
 class CausalWanModel(nn.Module, NativeConfigMixin):
     r"""DreamZero Wan 2.1 DiT with Pi0 action-token conditioning."""
 
-    ignore_for_config = [
-        'patch_size', 'cross_attn_norm', 'qk_norm', 'text_dim'
-    ]
-    _no_split_modules = ['WanAttentionBlock']
+    ignore_for_config: ClassVar[list] = ["patch_size", "cross_attn_norm", "qk_norm", "text_dim"]
+    _no_split_modules: ClassVar[list] = ["WanAttentionBlock"]
     _supports_gradient_checkpointing = False
 
     @register_to_config
-    def __init__(self,
-                 model_type='t2v',
-                 patch_size=(1, 2, 2),
-                 frame_seqlen=220,
-                 text_len=512,
-                 in_dim=16,
-                 dim=2048,
-                 ffn_dim=8192,
-                 freq_dim=256,
-                 text_dim=4096,
-                 out_dim=16,
-                 num_heads=16,
-                 num_layers=32,
-                 max_chunk_size=-1,
-                 sink_size=0,
-                 qk_norm=True,
-                 cross_attn_norm=True,
-                 eps=1e-6,
-                 num_frame_per_block=1,
-                 action_dim=32,
-                 num_registers=8,
-                 max_state_dim=64,
-                 max_num_embodiments=32,
-                 hidden_size=1024,
-                 diffusion_model_pretrained_path=None,
-                 num_action_per_block=32,
-                 num_state_per_block=1,
-                 concat_first_frame_latent=True):
+    def __init__(
+        self,
+        model_type="t2v",
+        patch_size=(1, 2, 2),
+        frame_seqlen=220,
+        text_len=512,
+        in_dim=16,
+        dim=2048,
+        ffn_dim=8192,
+        freq_dim=256,
+        text_dim=4096,
+        out_dim=16,
+        num_heads=16,
+        num_layers=32,
+        max_chunk_size=-1,
+        sink_size=0,
+        qk_norm=True,
+        cross_attn_norm=True,
+        eps=1e-6,
+        num_frame_per_block=1,
+        action_dim=32,
+        num_registers=8,
+        max_state_dim=64,
+        max_num_embodiments=32,
+        hidden_size=1024,
+        diffusion_model_pretrained_path=None,
+        num_action_per_block=32,
+        num_state_per_block=1,
+        concat_first_frame_latent=True,
+    ):
         r"""
         Initialize the diffusion model backbone.
 
@@ -572,7 +575,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
 
         super().__init__()
 
-        assert model_type in ['t2v', 'i2v', 'ti2v']
+        assert model_type in ["t2v", "i2v", "ti2v"]
         self.model_type = model_type
 
         self.patch_size = patch_size
@@ -622,25 +625,34 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         )
 
         # embeddings
-        self.patch_embedding = nn.Conv3d(
-            in_dim, dim, kernel_size=patch_size, stride=patch_size)
-        self.text_embedding = nn.Sequential(
-            nn.Linear(text_dim, dim), nn.GELU(approximate='tanh'),
-            nn.Linear(dim, dim))
+        self.patch_embedding = nn.Conv3d(in_dim, dim, kernel_size=patch_size, stride=patch_size)
+        self.text_embedding = nn.Sequential(nn.Linear(text_dim, dim), nn.GELU(approximate="tanh"), nn.Linear(dim, dim))
 
-        self.time_embedding = nn.Sequential(
-            nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
-        self.time_projection = nn.Sequential(
-            nn.SiLU(), nn.Linear(dim, dim * 6))
+        self.time_embedding = nn.Sequential(nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
+        self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(dim, dim * 6))
 
         # blocks
-        cross_attn_type = 't2v_cross_attn' if model_type == 't2v' else 'i2v_cross_attn'
-        self.blocks = nn.ModuleList([
-            CausalWanAttentionBlock(cross_attn_type, dim, ffn_dim, num_heads, frame_seqlen,
-                                    self.local_attn_size, sink_size, num_frame_per_block, qk_norm, cross_attn_norm, eps,
-                                    num_action_per_block, num_state_per_block)
-            for _ in range(num_layers)
-        ])
+        cross_attn_type = "t2v_cross_attn" if model_type == "t2v" else "i2v_cross_attn"
+        self.blocks = nn.ModuleList(
+            [
+                CausalWanAttentionBlock(
+                    cross_attn_type,
+                    dim,
+                    ffn_dim,
+                    num_heads,
+                    frame_seqlen,
+                    self.local_attn_size,
+                    sink_size,
+                    num_frame_per_block,
+                    qk_norm,
+                    cross_attn_norm,
+                    eps,
+                    num_action_per_block,
+                    num_state_per_block,
+                )
+                for _ in range(num_layers)
+            ]
+        )
 
         # head
         self.head = CausalHead(dim, out_dim, patch_size, eps)
@@ -649,25 +661,20 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         assert (dim % num_heads) == 0 and (dim // num_heads) % 2 == 0
         d = dim // num_heads
 
-        self.freqs_action = rope_params(1024*10, d)
+        self.freqs_action = rope_params(1024 * 10, d)
         self.freqs_state = rope_params(1024, d)
         self.freqs = [
             rope_params(1024, d - 4 * (d // 6)),
             rope_params(1024, 2 * (d // 6)),
             rope_params(1024, 2 * (d // 6)),
         ]
-        if model_type in ('i2v', 'ti2v'):
+        if model_type in ("i2v", "ti2v"):
             self.img_emb = MLPProj(1280, dim)
 
         # initialize weights
         self.init_weights()
 
-        self.independent_first_frame = False if self.num_frame_per_block == 1 else True
-
-
-
-
-
+        self.independent_first_frame = not self.num_frame_per_block == 1  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
 
     def _forward_blocks(
         self,
@@ -707,7 +714,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             action_register_length = None
 
         # time embeddings: expand to exactly seq_len so e matches x (5B: frame_seqlen=50, 1 frame -> 50 tokens)
-        if F <= seq_len:
+        if seq_len >= F:
             repeat = (seq_len + F - 1) // F
             timestep = timestep.repeat_interleave(repeat, dim=1)[:, :seq_len]
         else:
@@ -721,8 +728,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             timestep_state = timestep_action[:, ::stride]
             timestep = torch.cat([timestep, timestep_action, timestep_state], dim=1)
 
-        e = self.time_embedding(
-            sinusoidal_embedding_1d(self.freq_dim, timestep.flatten()).type_as(x))
+        e = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, timestep.flatten()).type_as(x))
         e = e.unflatten(dim=0, sizes=(B, -1))
         e0 = self.time_projection(e)
         e0 = e0.unflatten(dim=2, sizes=(6, self.dim))
@@ -750,7 +756,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             updated_kv_caches.append(updated_kv_cache)
 
         if action is not None:
-            action_noise_pred = x[:, seq_len: seq_len + action_length]
+            action_noise_pred = x[:, seq_len : seq_len + action_length]
             action_noise_pred = self.action_decoder(action_noise_pred, embodiment_id)
         else:
             action_noise_pred = None
@@ -764,7 +770,6 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
 
         return x_video, action_noise_pred, updated_kv_caches
 
-
     def _forward_inference_trt(
         self,
         x,
@@ -777,12 +782,10 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         timestep_action,
         state,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-
-
         frame_seqlen = 880
-        seq_len = 2*frame_seqlen
+        seq_len = 2 * frame_seqlen
         kv_cache_seq_len = kv_cache_packed.shape[3]
-        current_start_frame =  kv_cache_seq_len // frame_seqlen
+        current_start_frame = kv_cache_seq_len // frame_seqlen
 
         kv_cache_list = []
         for block_index in range(len(self.blocks)):
@@ -800,7 +803,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             action=action,
             timestep_action=timestep_action,
             state=state,
-            current_start_frame = current_start_frame,
+            current_start_frame=current_start_frame,
         )
 
         return x_video, action_noise_pred
@@ -817,12 +820,10 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         timestep_action,
         state,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-
-
         frame_seqlen = 880
-        seq_len = 2*frame_seqlen
+        seq_len = 2 * frame_seqlen
         kv_cache_seq_len = kv_cache_packed.shape[3]
-        current_start_frame =  kv_cache_seq_len // frame_seqlen
+        current_start_frame = kv_cache_seq_len // frame_seqlen
 
         kv_cache_list = []
         for block_index in range(len(self.blocks)):
@@ -840,11 +841,10 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             action=action,
             timestep_action=timestep_action,
             state=state,
-            current_start_frame = current_start_frame,
+            current_start_frame=current_start_frame,
         )
 
         return x_video, action_noise_pred
-
 
     def _forward_inference(
         self,
@@ -893,7 +893,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             List[Tensor]:
                 List of denoised video tensors with original input shapes [C_out, F, H / 8, W / 8]
         """
-        if self.model_type == 'i2v':
+        if self.model_type == "i2v":
             assert clip_feature is not None and y is not None
         assert context.shape[1] == self.text_len
 
@@ -929,19 +929,14 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         x_video = x_video.clone()
         if action_noise_pred is not None:
             action_noise_pred = action_noise_pred.clone()
-        #for block_index, updated_kv_cache in enumerate(updated_kv_caches):
+        # for block_index, updated_kv_cache in enumerate(updated_kv_caches):
         #    kv_cache[block_index] = updated_kv_cache.clone()
 
         video_noise_pred = self.unpatchify(x_video, grid_size)
 
         return video_noise_pred, action_noise_pred, updated_kv_caches
 
-
-    def forward(
-        self,
-        *args,
-        **kwargs
-    ):
+    def forward(self, *args, **kwargs):
         if kwargs.get("kv_cache") is None:
             raise ValueError("DreamZero inference requires per-layer KV caches")
         return self._forward_inference(*args, **kwargs)
@@ -966,8 +961,8 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         grid_size = grid_size.tolist()
         assert x.shape[1] == math.prod(grid_size)
         x = x.view(B, *grid_size, *self.patch_size, c)
-        x = torch.einsum('bfhwpqrc->bcfphqwr', x)
-        x = x.reshape(B, c, *[i * j for i, j in zip(grid_size, self.patch_size)])
+        x = torch.einsum("bfhwpqrc->bcfphqwr", x)
+        x = x.reshape(B, c, *[i * j for i, j in zip(grid_size, self.patch_size, strict=False)])
         return x
 
     def _create_freqs(
@@ -986,11 +981,11 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         f, h, w = grid_size.tolist()
         freqs = torch.cat(
             [
-                self.freqs[0][start_frame:start_frame + f].view(f, 1, 1, -1).expand(f, h, w, -1),
+                self.freqs[0][start_frame : start_frame + f].view(f, 1, 1, -1).expand(f, h, w, -1),
                 self.freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
                 self.freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1),
             ],
-            dim=-1
+            dim=-1,
         ).reshape(f * h * w, 1, -1)
 
         return freqs
@@ -1011,10 +1006,10 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         nn.init.xavier_uniform_(self.patch_embedding.weight.flatten(1))
         for m in self.text_embedding.modules():
             if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, std=.02)
+                nn.init.normal_(m.weight, std=0.02)
         for m in self.time_embedding.modules():
             if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, std=.02)
+                nn.init.normal_(m.weight, std=0.02)
 
         # init output layer
         nn.init.zeros_(self.head.head.weight)

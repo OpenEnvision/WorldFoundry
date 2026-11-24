@@ -3,27 +3,40 @@ A collection of useful functions for 3D computer vision and graphics researchers
 - Use `utils3d.{function}` to call the function automatically selecting the backend based on the input type (Numpy ndarray or Pytorch tensor).
 - Use `utils3d.{np/pt}.{function}` to specifically call the Numpy or Pytorch version.
 """
-import importlib
+
+import contextlib
 from typing import TYPE_CHECKING
-from .helpers import lazy_import, lazy_import_from
 
-try:
-    from .interface import *
-except ImportError:
-    pass
+from .helpers import lazy_import
+from .helpers import lazy_import_from as lazy_import_from
 
-__all__ = ['numpy', 'torch', 'np', 'pt']
+with contextlib.suppress(ImportError):
+    from .interface import *  # noqa: F403 - Upstream star import kept as written.
+
+__all__ = ["np", "numpy", "pt", "torch"]
 
 
-lazy_import(globals(), '.numpy', 'numpy')
-lazy_import(globals(), '.numpy', 'np')
-lazy_import(globals(), '.torch', 'torch')
-lazy_import(globals(), '.torch', 'pt')
+lazy_import(globals(), ".numpy", "numpy")
+lazy_import(globals(), ".numpy", "np")
+lazy_import(globals(), ".torch", "torch")
+lazy_import(globals(), ".torch", "pt")
 
 
 if TYPE_CHECKING:
     from . import numpy
-    from . import numpy as np   # short alias
+
+    # isort: split
+    # isort: split
+    from . import numpy as np  # short alias
+
+    # isort: split
+    # isort: split
     from . import torch
-    from . import torch as pt   # short alias
-    from . import io
+
+    # isort: split
+    # isort: split
+    from . import torch as pt  # short alias
+
+    # isort: split
+    # isort: split
+    from . import io as io

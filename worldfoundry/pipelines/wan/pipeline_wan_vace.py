@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from worldfoundry.core.media.types import MediaKind, infer_media_kind
@@ -26,15 +27,15 @@ class Wan2p1VACEPipeline(NativeTextToVideoPipeline):
     DEFAULT_GUIDANCE_SCALE = 5.0
     DEFAULT_NEGATIVE_PROMPT = WAN21_NEGATIVE_PROMPT
     DEFAULT_FPS = 16
-    DEFAULT_SCHEDULER_OPTIONS = {"shift": 16.0}
-    REQUEST_INPUT_DEFAULTS = {
+    DEFAULT_SCHEDULER_OPTIONS: Mapping[str, object] = {"shift": 16.0}
+    REQUEST_INPUT_DEFAULTS: Mapping[str, object] = {
         "vace_context": None,
         "vace_context_scale": 1.0,
         "vace_mask": None,
         "vace_reference_count": 0,
     }
 
-    def __call__(
+    def __call__(  # ty: ignore[invalid-method-override]  # model-specific call arguments, passed by keyword
         self,
         prompt: str | list[str] = "",
         images: Any = None,

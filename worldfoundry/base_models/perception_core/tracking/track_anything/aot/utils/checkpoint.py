@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot -> utils -> checkpoint.py functionality."""
-
 import os
 import shutil
 
@@ -12,15 +10,6 @@ import torch
 
 
 def load_network_and_optimizer(net, opt, pretrained_dir, gpu, scaler=None):
-    """Load network and optimizer.
-
-    Args:
-        net: The net.
-        opt: The opt.
-        pretrained_dir: The pretrained dir.
-        gpu: The gpu.
-        scaler: The scaler.
-    """
     pretrained = torch.load(pretrained_dir, map_location=torch.device("cuda:" + str(gpu)))
     pretrained_dict = pretrained["state_dict"]
     model_dict = net.state_dict()
@@ -37,22 +26,13 @@ def load_network_and_optimizer(net, opt, pretrained_dir, gpu, scaler=None):
     model_dict.update(pretrained_dict_update)
     net.load_state_dict(model_dict)
     opt.load_state_dict(pretrained["optimizer"])
-    if scaler is not None and "scaler" in pretrained.keys():
+    if scaler is not None and "scaler" in pretrained.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
         scaler.load_state_dict(pretrained["scaler"])
     del pretrained
     return net.cuda(gpu), opt, pretrained_dict_remove
 
 
 def load_network_and_optimizer_v2(net, opt, pretrained_dir, gpu, scaler=None):
-    """Load network and optimizer v2.
-
-    Args:
-        net: The net.
-        opt: The opt.
-        pretrained_dir: The pretrained dir.
-        gpu: The gpu.
-        scaler: The scaler.
-    """
     pretrained = torch.load(pretrained_dir, map_location=torch.device("cuda:" + str(gpu)))
     # load model
     pretrained_dict = pretrained["state_dict"]
@@ -76,7 +56,7 @@ def load_network_and_optimizer_v2(net, opt, pretrained_dir, gpu, scaler=None):
     pretrained_opt_dict = {"state": {}, "param_groups": []}
     for idx in range(len(pretrained["optimizer"]["param_groups"])):
         param_group = pretrained["optimizer"]["param_groups"][idx]
-        if param_group["name"] in all_params.keys():
+        if param_group["name"] in all_params:
             pretrained_opt_dict["state"][all_params[param_group["name"]]] = pretrained["optimizer"]["state"][
                 param_group["params"][0]
             ]
@@ -87,28 +67,21 @@ def load_network_and_optimizer_v2(net, opt, pretrained_dir, gpu, scaler=None):
     opt.load_state_dict(opt_dict)
 
     # load scaler
-    if scaler is not None and "scaler" in pretrained.keys():
+    if scaler is not None and "scaler" in pretrained.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
         scaler.load_state_dict(pretrained["scaler"])
     del pretrained
     return net.cuda(gpu), opt, pretrained_dict_remove
 
 
 def load_network(net, pretrained_dir, gpu):
-    """Load network.
-
-    Args:
-        net: The net.
-        pretrained_dir: The pretrained dir.
-        gpu: The gpu.
-    """
     pretrained = torch.load(
         pretrained_dir,
         map_location=torch.device("cuda:" + str(gpu)),
         weights_only=False,
     )
-    if "state_dict" in pretrained.keys():
+    if "state_dict" in pretrained.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
         pretrained_dict = pretrained["state_dict"]
-    elif "model" in pretrained.keys():
+    elif "model" in pretrained.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
         pretrained_dict = pretrained["model"]
     else:
         pretrained_dict = pretrained
@@ -130,17 +103,6 @@ def load_network(net, pretrained_dir, gpu):
 
 
 def save_network(net, opt, step, save_path, max_keep=8, backup_dir="./saved_models", scaler=None):
-    """Save network.
-
-    Args:
-        net: The net.
-        opt: The opt.
-        step: The step.
-        save_path: The save path.
-        max_keep: The max keep.
-        backup_dir: The backup dir.
-        scaler: The scaler.
-    """
     ckpt = {"state_dict": net.state_dict(), "optimizer": opt.state_dict()}
     if scaler is not None:
         ckpt["scaler"] = scaler.state_dict()
@@ -148,14 +110,14 @@ def save_network(net, opt, step, save_path, max_keep=8, backup_dir="./saved_mode
     try:
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-        save_file = "save_step_%s.pth" % (step)
+        save_file = "save_step_%s.pth" % (step)  # noqa: UP031 - Keeps printf conversions that depend on argument types.
         save_dir = os.path.join(save_path, save_file)
         torch.save(ckpt, save_dir)
     except Exception:
         save_path = backup_dir
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-        save_file = "save_step_%s.pth" % (step)
+        save_file = "save_step_%s.pth" % (step)  # noqa: UP031 - Keeps printf conversions that depend on argument types.
         save_dir = os.path.join(save_path, save_file)
         torch.save(ckpt, save_dir)
 
@@ -167,17 +129,11 @@ def save_network(net, opt, step, save_path, max_keep=8, backup_dir="./saved_mode
             all_step.append(step)
         all_step = list(np.sort(all_step))[:-max_keep]
         for step in all_step:
-            ckpt_path = os.path.join(save_path, "save_step_%s.pth" % (step))
-            os.system("rm {}".format(ckpt_path))
+            ckpt_path = os.path.join(save_path, "save_step_%s.pth" % (step))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
+            os.system(f"rm {ckpt_path}")
 
 
 def cp_ckpt(remote_dir="data_wd/youtube_vos_jobs/result", curr_dir="backup"):
-    """Cp ckpt.
-
-    Args:
-        remote_dir: The remote dir.
-        curr_dir: The curr dir.
-    """
     exps = os.listdir(curr_dir)
     for exp in exps:
         exp_dir = os.path.join(curr_dir, exp)
@@ -194,9 +150,9 @@ def cp_ckpt(remote_dir="data_wd/youtube_vos_jobs/result", curr_dir="backup"):
                     curr_ckpt_path = os.path.join(final_dir, ckpt)
                     remote_ckpt_path = os.path.join(remote_dir, exp, stage, final, ckpt)
                     if os.path.exists(remote_ckpt_path):
-                        os.system("rm {}".format(remote_ckpt_path))
+                        os.system(f"rm {remote_ckpt_path}")
                     try:
                         shutil.copy(curr_ckpt_path, remote_ckpt_path)
-                        print("Copy {} to {}.".format(curr_ckpt_path, remote_ckpt_path))
+                        print(f"Copy {curr_ckpt_path} to {remote_ckpt_path}.")
                     except OSError:
                         return

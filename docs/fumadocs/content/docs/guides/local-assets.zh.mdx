@@ -5,9 +5,9 @@ description: 从哪里查来源、下载到哪里、用什么命令准备 checkp
 
 ## 0. 前置条件
 
-当命令提示缺 checkpoint、dataset、metric 权重、生成输出或官方结果文件时，优先看这一页。WorldFoundry 把这些大型或带 license 的文件放在 git 外；仓库内保存代码和 manifest，本机或共享存储保存 manifest 引用的资产。
+当命令提示缺少 checkpoint、dataset、metric 权重、生成输出或官方结果文件时，优先看这一页。WorldFoundry 把这些大型或带 license 的文件放在 git 外；仓库内保存代码和 manifest，本机或共享存储保存 manifest 引用的资产。
 
-典型路径：用 `worldfoundry-eval zoo ... --json` 查看模型或 benchmark ID；评测时再生成单个 benchmark 的 asset plan；只补齐本次运行需要的路径。使用框架不需要提前准备所有 benchmark 资产。统一 conda 环境见 [环境配置](/zh/docs/reference/environments)。
+典型路径：用 `wf zoo ... --json` 查看模型或 benchmark ID；评测时再生成单个 benchmark 的 asset plan；只补齐本次运行需要的路径。使用框架不需要提前准备所有 benchmark 资产。统一 conda 环境见 [环境配置](/zh/docs/reference/environments)。
 
 安装 Hugging Face Hub 包。`hf` / `huggingface-cli` 是可选入口；下载脚本会优先用 CLI，缺少时回退到 `huggingface_hub.snapshot_download`：
 
@@ -98,7 +98,7 @@ bash scripts/workspace/run_workspace.sh \
 - **HF 数据集 `org/name`** — 本地目录 `org__name`。示例：`lerobot/libero` → `lerobot__libero`。
 - **GitHub `owner/repo`** — 常见为 `owner--repo`。示例：`Lifelong-Robot-Learning/LIBERO` → `Lifelong-Robot-Learning--LIBERO`。
 
-**以 catalog 或 `local_assets.example.yaml` 里的 `path` 为准。** 部分具身 benchmark 仍引用 legacy 路径如 `cache/vla_va_wam/hf_datasets/org--name`，可按同样结构放置，或在 manifest 里改路径。
+**以 catalog 或 `local_assets.example.yaml` 里的 `path` 为准。** 部分具身 benchmark 使用 `cache/vla_va_wam/hf_datasets/org--name` 这类路径，可按同样结构放置，或在 manifest 里改路径。
 
 ## 2. 去哪里查“要下载什么”
 
@@ -131,7 +131,7 @@ official_sources:
 `checkpoints` / `checkpoint.repos[].id` 是要下载的仓库；`sha` 钉 revision；`runtime_profile` 指向期望本地路径与 env。同一信息也在 CLI JSON 里：
 
 ```bash
-worldfoundry-eval zoo model-show --model-id matrix-game-2 --json
+wf zoo model-show --model-id matrix-game-2 --json
 ```
 
 落盘后大致是：
@@ -175,7 +175,7 @@ runner:
 `dataset_refs[].repo_id` 是 HF 下载源；`path` 是数据根下的期望相对路径；`required_assets` / `*_env` 列出其余要准备的东西。把 catalog + task + profile 合成清单：
 
 ```bash
-worldfoundry-eval zoo benchmark-show --benchmark-id libero --json
+wf zoo benchmark-show --benchmark-id libero --json
 
 python scripts/setup/prepare_benchmark_assets.py \
   --benchmark-id libero \
@@ -206,19 +206,6 @@ python scripts/setup/prepare_benchmark_assets.py \
         </div>
         <p>官方来源：HF <a href="https://huggingface.co/facebook/sam2.1-hiera-base-plus">facebook/sam2.1-hiera-base-plus</a>。文件名：<code>sam2.1_hiera_base_plus.pt</code></p>
         <p className="pi-kv-read"><span>默认位置</span> <code>{'${WORLDFOUNDRY_HFD_ROOT}/facebook--sam2.1-hiera-base-plus/'}</code></p>
-      </li>
-      <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>mobile_sam</code>
-          </div>
-          <span className="pi-kv-default">
-            <span>覆盖变量</span>
-            <code>WORLDFOUNDRY_MOBILE_SAM_CKPT</code>
-          </span>
-        </div>
-        <p>官方来源：GitHub <a href="https://github.com/ChaoningZhang/MobileSAM/tree/master/weights">ChaoningZhang/MobileSAM</a> 的 <code>weights/</code>。文件名：<code>mobile_sam.pt</code></p>
-        <p className="pi-kv-read"><span>默认位置</span> <code>{'${WORLDFOUNDRY_CKPT_DIR}/MobileSAM/'}</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -259,62 +246,45 @@ python scripts/setup/prepare_benchmark_assets.py \
         <p>官方来源：HF <a href="https://huggingface.co/lpiccinelli/unidepth-v2-vitl14">lpiccinelli/unidepth-v2-vitl14</a>。文件名：<code>config.json</code>、<code>model.safetensors</code></p>
         <p className="pi-kv-read"><span>默认位置</span> <code>{'${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unidepth-v2-vitl14/'}</code></p>
       </li>
-      <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>unik3d_vitl</code>
-          </div>
-          <span className="pi-kv-default">
-            <span>覆盖变量</span>
-            <code>WORLDFOUNDRY_UNIK3D_VITL_MODEL_DIR</code>
-          </span>
-        </div>
-        <p>官方来源：HF <a href="https://huggingface.co/lpiccinelli/unik3d-vitl">lpiccinelli/unik3d-vitl</a>。文件名：<code>config.json</code>、<code>model.safetensors</code></p>
-        <p className="pi-kv-read"><span>默认位置</span> <code>{'${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unik3d-vitl/'}</code></p>
-      </li>
     </ul>
   </section>
 </div>
 
-UniDepth V2 与 UniK3D 权重采用 CC-BY-NC-4.0；下载或再分发前需要核对上游的非商业使用条款。
+UniDepth V2 权重采用 CC-BY-NC-4.0；下载或再分发前需要核对上游的非商业使用条款。
 
 先查看准确 URL、解析后路径、大小校验和 export 命令，不执行下载：
 
 ```bash
-worldfoundry-eval models assets \
+wf models assets \
   --capability sam2 \
-  --capability mobile_sam \
   --capability repvit_sam \
   --capability midas_v21_small_256 \
   --capability unidepth_v2_vitl14 \
-  --capability unik3d_vitl \
   --json
 ```
 
-补齐缺失文件时添加 `--execute-downloads`。SAM2、UniDepth V2 与 UniK3D 的 Hugging Face 下载会遵循 `HF_ENDPOINT`；MobileSAM、RepViT-SAM 与 MiDaS 使用各自官方 GitHub repo/release URL：
+补齐缺失文件时添加 `--execute-downloads`。SAM2 与 UniDepth V2 的 Hugging Face 下载会遵循 `HF_ENDPOINT`；RepViT-SAM 与 MiDaS 使用各自官方 GitHub repo/release URL：
 
 ```bash
 export HF_ENDPOINT=https://hf-mirror.com
-worldfoundry-eval models assets \
+wf models assets \
   --capability sam2 \
-  --capability mobile_sam \
   --capability repvit_sam \
   --capability midas_v21_small_256 \
   --capability unidepth_v2_vitl14 \
-  --capability unik3d_vitl \
   --execute-downloads
 ```
 
-先 plan，确认存储与 license 后再 execute：
+先生成 plan，确认存储与 license 后再 execute：
 
 ```bash
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id matrix-game-2 \
   --cache-dir "${WORLDFOUNDRY_HFD_ROOT}" \
   --check-local \
   --json
 
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id matrix-game-2 \
   --cache-dir "${WORLDFOUNDRY_HFD_ROOT}" \
   --execute \
@@ -322,6 +292,8 @@ worldfoundry-eval zoo model-download \
   --check-local \
   --json
 ```
+
+如果 checkpoint 声明了 commit SHA，本地检查会使用 Hugging Face 缓存中对应的快照。缓存里的 `main` ref 可以指向其他提交。
 
 备选：
 
@@ -336,12 +308,10 @@ hf download Skywork/Matrix-Game-2.0 \
 ### 走读示例：Echo-Memory
 
 Echo recipes 共用 Wan2.1 T2V 1.3B backbone，但分别要求
-`Echo-Team/Echo-Memory` 下的不同文件。截至 2026-07-20，官方 HF `main`
-只保留 `context_k1/epoch-0.safetensors`。其他 Echo model ID 仍以精确预期
-文件名保留在 catalog 中，但上游状态是 `unreleased_by_upstream` 或
-`retracted_misaligned_by_upstream`；不能用 K=1 权重代替它们。
+`Echo-Team/Echo-Memory` 下的不同文件。官方 HF `main` 只发布了
+`context_k1/epoch-0.safetensors`。其他 Echo model ID 的权重在上游未发布或已撤回，不能用 K=1 权重替代。
 
-将当前公开 recipe 与钉定的 backbone 放入 runtime layout，再创建正常 HFD
+将公开 recipe 与钉定的 backbone 放入 runtime layout，再创建正常 HFD
 alias，全程不复制 tensor：
 
 ```bash
@@ -361,28 +331,26 @@ bash scripts/setup/link_hf_checkpoints.sh \
   --repo Wan-AI/Wan2.1-T2V-1.3B=Wan2.1-T2V-1.3B
 ```
 
-标准 checker 现在同时检查 recipe-specific filename 与仓库，因此只有 K=1
+标准 checker 会同时检查 recipe-specific filename 和仓库，因此只有 K=1
 的 cache 不会把 K=20 或 SSM 模型误报为 ready：
 
 ```bash
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id echo-memory-context-k1 \
   --check-local \
   --json
 ```
 
-研究者若有未公开 checkpoint，可放到对应 runtime profile 声明的精确
+研究者若有未公开 checkpoint，可将其放在对应 runtime profile 指定的
 `checkpoint_path`，再建立相同 HFD alias。在严格 checkpoint 加载与 CUDA
 artifact validation 通过前，catalog entry 应继续保持 blocked。
 
 ### 走读示例：Matrix-Game 3.5
 
 第一、第三人称模型 ID 共用 Wan2.2、UMT5 与 DA3 资产，但分别绑定
-`RiemannDynamics/Matrix-Game-3.5-Base` 中的不同文件。一次下载两个人称权重，
-两个不可变 recipe 就都能通过标准 HFD alias 解析。使用 HF-Mirror 时先设置
+`RiemannDynamics/Matrix-Game-3.5-Base` 中的不同文件。一次下载两个人称权重，两个不可变 recipe 就都能通过标准 HFD alias 解析。使用 HF-Mirror 时先设置
 `HF_ENDPOINT=https://hf-mirror.com`。DA3 checkpoint 有独立的
-CC-BY-NC-4.0 license，而 Matrix-Game 与 Wan checkpoint 是 Apache-2.0；
-使用时需要分别遵守各依赖的上游条款。
+CC-BY-NC-4.0 license，而 Matrix-Game 与 Wan checkpoint 是 Apache-2.0；使用时需要分别遵守各依赖的上游条款。
 
 ```bash
 hf download RiemannDynamics/Matrix-Game-3.5-Base \
@@ -409,12 +377,12 @@ hf download depth-anything/DA3NESTED-GIANT-LARGE-1.1 \
 不加载模型张量即可检查两个 recipe 的本地资产：
 
 ```bash
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id matrix-game-3.5-first-person \
   --check-local \
   --json
 
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id matrix-game-3.5-third-person \
   --check-local \
   --json
@@ -457,8 +425,7 @@ GEN3C 还需按 runtime profile 下载 `nvidia/Cosmos-Tokenize1-CV8x8x8-720p`
 
 Cosmos Predict 与 Transfer 共用 Predict 2B 的 `tokenizer.pth` Wan codec 和
 Reason1 language model，只需要下载所选 transformer 与这两组共享资产。
-Transfer 当前固定官方 `general/edge` 精确 revision；目录存在但缺少该文件
-不能算 ready。需要镜像时先设置 `HF_ENDPOINT=https://hf-mirror.com`。
+Transfer 固定使用官方 `general/edge` 的精确 revision；目录存在但缺少该文件不能算 ready。需要镜像时先设置 `HF_ENDPOINT=https://hf-mirror.com`。
 
 ```bash
 hf download nvidia/Cosmos-Predict2.5-2B \

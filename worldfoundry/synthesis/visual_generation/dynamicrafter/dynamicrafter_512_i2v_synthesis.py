@@ -5,6 +5,7 @@ This module sets up the necessary configuration and class references for integra
 DynamiCrafter with a standardized video synthesis runtime, making it easily
 pluggable into evaluation or deployment systems.
 """
+
 from __future__ import annotations
 
 from worldfoundry.synthesis.visual_generation.dynamicrafter import DynamiCrafter

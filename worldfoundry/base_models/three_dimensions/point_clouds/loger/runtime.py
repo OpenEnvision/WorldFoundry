@@ -1,11 +1,11 @@
+import contextlib
 import inspect
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import torch
 import yaml
-from huggingface_hub import snapshot_download
 
 from worldfoundry.base_models.three_dimensions.point_clouds.loger.pi3 import Pi3
 from worldfoundry.base_models.three_dimensions.point_clouds.loger.utils.geometry import (
@@ -37,18 +37,19 @@ class LoGeRRepresentation:
         conf_threshold  : float confidence sigmoid threshold for mask (default 0.1)
         edge_rtol       : float relative tolerance for depth-edge filter (default 0.03)
     """
+
     def __init__(
         self,
-        model: Optional[Pi3] = None,
-        device: Optional[str] = None,
-        inference_defaults: Optional[Dict[str, Any]] = None,
+        model: Pi3 | None = None,
+        device: str | None = None,
+        inference_defaults: dict[str, Any] | None = None,
     ):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model
         self.model_type = "loger"
         # Inference-time forward() defaults parsed from original_config.yaml.
         # Keys here serve as fallbacks; values in data dict always take priority.
-        self.inference_defaults: Dict[str, Any] = inference_defaults or {}
+        self.inference_defaults: dict[str, Any] = inference_defaults or {}
 
         if self.model is not None:
             self.model = self.model.to(self.device).eval()
@@ -63,9 +64,9 @@ class LoGeRRepresentation:
     def from_pretrained(
         cls,
         pretrained_model_path: str,
-        device: Optional[str] = None,
-        config_path: Optional[str] = None,
-        subfolder: Optional[str] = None,
+        device: str | None = None,
+        config_path: str | None = None,
+        subfolder: str | None = None,
         **kwargs,
     ) -> "LoGeRRepresentation":
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -74,10 +75,10 @@ class LoGeRRepresentation:
         if not os.path.exists(pretrained_model_path):
             from huggingface_hub import hf_hub_download
 
-            ckpt_filename   = f"{subfolder}/latest.pt"            if subfolder else "latest.pt"
+            ckpt_filename = f"{subfolder}/latest.pt" if subfolder else "latest.pt"
             config_filename = f"{subfolder}/original_config.yaml" if subfolder else "original_config.yaml"
 
-            # 先查本地缓存，没有再联网
+            # Check the local cache before accessing the network.
             try:
                 ckpt_file = hf_hub_download(
                     repo_id=pretrained_model_path,
@@ -100,13 +101,11 @@ class LoGeRRepresentation:
                         local_files_only=True,
                     )
                 except Exception:
-                    try:
+                    with contextlib.suppress(Exception):
                         config_path = hf_hub_download(
                             repo_id=pretrained_model_path,
                             filename=config_filename,
                         )
-                    except Exception:
-                        pass
 
         elif os.path.isfile(pretrained_model_path):
             ckpt_file = pretrained_model_path
@@ -130,8 +129,8 @@ class LoGeRRepresentation:
                 config_path = candidate if os.path.exists(candidate) else None
 
         # ── Parse config ───────────────────────────────────────────
-        model_kwargs: Dict[str, Any] = {}
-        inference_defaults: Dict[str, Any] = {}
+        model_kwargs: dict[str, Any] = {}
+        inference_defaults: dict[str, Any] = {}
 
         if config_path:
             model_kwargs, inference_defaults = cls._parse_config(config_path)
@@ -143,23 +142,15 @@ class LoGeRRepresentation:
 
         print(f"Loading checkpoint from {ckpt_file} ...")
         checkpoint = load_torch_checkpoint(ckpt_file, map_location="cpu", weights_only=False)
-        state_dict = (
-            checkpoint["model_state_dict"]
-            if "model_state_dict" in checkpoint
-            else checkpoint
-        )
-        state_dict = {
-            (k[7:] if k.startswith("module.") else k): v
-            for k, v in state_dict.items()
-        }
+        state_dict = checkpoint["model_state_dict"] if "model_state_dict" in checkpoint else checkpoint  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
+        state_dict = {(k[7:] if k.startswith("module.") else k): v for k, v in state_dict.items()}
         model.load_state_dict(state_dict, strict=True)
         print("Checkpoint loaded successfully.")
 
         return cls(model=model, device=device, inference_defaults=inference_defaults)
 
-
     @staticmethod
-    def _to_numpy(tensor: Optional[torch.Tensor]) -> Optional[np.ndarray]:
+    def _to_numpy(tensor: torch.Tensor | None) -> np.ndarray | None:
         """Move a tensor to CPU and convert to float32 numpy array."""
         if tensor is None:
             return None
@@ -176,21 +167,22 @@ class LoGeRRepresentation:
         model_kwargs      : valid Pi3.__init__ parameters
         inference_defaults: forward() parameters (se3, window_size, overlap_size, ...)
         """
-        model_kwargs: Dict[str, Any] = {}
-        inference_defaults: Dict[str, Any] = {}
+        model_kwargs: dict[str, Any] = {}
+        inference_defaults: dict[str, Any] = {}
 
         try:
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config = yaml.safe_load(f)
 
             # ── Model init kwargs ──────────────────────────────────
             model_cfg = config.get("model", {})
-            pi3_sig   = inspect.signature(Pi3.__init__)
+            pi3_sig = inspect.signature(Pi3.__init__)
             valid_init_keys = {
                 name
                 for name, param in pi3_sig.parameters.items()
                 if name not in {"self", "args", "kwargs"}
-                and param.kind in (
+                and param.kind
+                in (
                     inspect.Parameter.POSITIONAL_OR_KEYWORD,
                     inspect.Parameter.KEYWORD_ONLY,
                 )
@@ -228,25 +220,24 @@ class LoGeRRepresentation:
                 return config.get(key, default)
 
             inference_defaults = {
-                "se3":             bool(_get("se3",             True)),
-                "sim3":            bool(_get("sim3",            False)),
-                "window_size":     int(_get("window_size",      32)),
-                "overlap_size":    int(_get("overlap_size",     3)),
-                "reset_every":     int(_get("reset_every",      0)),
-                "num_iterations":  int(_get("num_iterations",   1)),
-                "sim3_scale_mode": str(_get("sim3_scale_mode",  "median")),
-                "turn_off_ttt":    bool(_get("turn_off_ttt",    False)),
-                "turn_off_swa":    bool(_get("turn_off_swa",    False)),
+                "se3": bool(_get("se3", True)),
+                "sim3": bool(_get("sim3", False)),
+                "window_size": int(_get("window_size", 32)),
+                "overlap_size": int(_get("overlap_size", 3)),
+                "reset_every": int(_get("reset_every", 0)),
+                "num_iterations": int(_get("num_iterations", 1)),
+                "sim3_scale_mode": str(_get("sim3_scale_mode", "median")),
+                "turn_off_ttt": bool(_get("turn_off_ttt", False)),
+                "turn_off_swa": bool(_get("turn_off_swa", False)),
             }
 
         except Exception as exc:
-            print(f"Warning: could not parse config {config_path}: {exc}. "
-                  "Using default Pi3 init parameters.")
+            print(f"Warning: could not parse config {config_path}: {exc}. Using default Pi3 init parameters.")
 
         return model_kwargs, inference_defaults
 
     @torch.no_grad()
-    def get_representation(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def get_representation(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Run LoGeR inference and return all scene representation outputs.
 
@@ -273,11 +264,9 @@ class LoGeRRepresentation:
 
         imgs = data["images"]
         if not isinstance(imgs, torch.Tensor):
-            raise TypeError(
-                f"data['images'] must be a torch.Tensor, got {type(imgs)}"
-            )
+            raise TypeError(f"data['images'] must be a torch.Tensor, got {type(imgs)}")
         if imgs.dim() == 4:
-            imgs = imgs.unsqueeze(0)   # add batch dim if missing
+            imgs = imgs.unsqueeze(0)  # add batch dim if missing
         imgs = imgs.to(self.device)
 
         # ── Build forward kwargs ───────────────────────────────────
@@ -292,60 +281,65 @@ class LoGeRRepresentation:
                 return self.inference_defaults[key]
             return fallback
 
-        forward_kwargs = dict(
-            window_size      = int(_get("window_size",      32)),
-            overlap_size     = int(_get("overlap_size",      3)),
-            num_iterations   = int(_get("num_iterations",    1)),
-            sim3             = bool(_get("sim3",             False)),
-            se3              = bool(_get("se3",              False)),
-            reset_every      = int(_get("reset_every",       0)),
-            turn_off_ttt     = bool(_get("turn_off_ttt",     False)),
-            turn_off_swa     = bool(_get("turn_off_swa",     False)),
-            sim3_scale_mode  = str(_get("sim3_scale_mode",   "median")),
-        )
+        forward_kwargs = {
+            "window_size": int(_get("window_size", 32)),
+            "overlap_size": int(_get("overlap_size", 3)),
+            "num_iterations": int(_get("num_iterations", 1)),
+            "sim3": bool(_get("sim3", False)),
+            "se3": bool(_get("se3", False)),
+            "reset_every": int(_get("reset_every", 0)),
+            "turn_off_ttt": bool(_get("turn_off_ttt", False)),
+            "turn_off_swa": bool(_get("turn_off_swa", False)),
+            "sim3_scale_mode": str(_get("sim3_scale_mode", "median")),
+        }
 
         conf_threshold = float(_get("conf_threshold", 0.1))
-        edge_rtol      = float(_get("edge_rtol",      0.03))
+        edge_rtol = float(_get("edge_rtol", 0.03))
 
         # ── Forward pass ───────────────────────────────────────────
-        autocast_enabled = (self.device == "cuda")
+        autocast_enabled = self.device == "cuda"
         with torch.amp.autocast("cuda", dtype=self.dtype, enabled=autocast_enabled):
             raw = self.model(imgs, **forward_kwargs)
 
         # ── Core geometry outputs ──────────────────────────────────
-        results: Dict[str, Any] = {}
-        results["points"]       = self._to_numpy(raw.get("points"))
+        results: dict[str, Any] = {}
+        results["points"] = self._to_numpy(raw.get("points"))
         results["local_points"] = self._to_numpy(raw.get("local_points"))
         results["camera_poses"] = self._to_numpy(raw.get("camera_poses"))
-        results["conf"]         = self._to_numpy(raw.get("conf"))
+        results["conf"] = self._to_numpy(raw.get("conf"))
 
         # ── Quality mask: sigmoid(conf) > threshold AND non-depth-edge ─
         conf_tensor = raw.get("conf")
         if conf_tensor is not None:
             conf_prob = torch.sigmoid(conf_tensor[..., 0])
-            masks     = conf_prob > conf_threshold
+            masks = conf_prob > conf_threshold
             lp = raw.get("local_points")
             if lp is not None:
                 non_edge = ~depth_edge(lp[..., 2], rtol=edge_rtol)
-                masks    = torch.logical_and(masks, non_edge)
-            results["masks"]     = masks.cpu().numpy()
-            results["depth_map"] = self._to_numpy(
-                lp[..., 2] if lp is not None else None
-            )
+                masks = torch.logical_and(masks, non_edge)
+            results["masks"] = masks.cpu().numpy()
+            results["depth_map"] = self._to_numpy(lp[..., 2] if lp is not None else None)
         else:
             # use_conf=False model: accept everything
             B, N, C, H, W = imgs.shape
-            results["masks"]     = np.ones((B, N, H, W), dtype=bool)
+            results["masks"] = np.ones((B, N, H, W), dtype=bool)
             lp = raw.get("local_points")
             results["depth_map"] = self._to_numpy(lp[..., 2]) if lp is not None else None
 
         # ── Optional / diagnostic outputs ─────────────────────────
         _scalar_keys = ("avg_gate_scale", "attn_gate_scale", "alignment_mode")
         _tensor_keys = (
-            "chunk_sim3_scales", "chunk_sim3_poses", "chunk_se3_poses",
-            "metric", "local_camera_poses", "camera_qvec",
-            "overlap_prev_cam", "overlap_next_cam",
-            "overlap_prev_pcd", "overlap_next_pcd", "overlap_next_conf",
+            "chunk_sim3_scales",
+            "chunk_sim3_poses",
+            "chunk_se3_poses",
+            "metric",
+            "local_camera_poses",
+            "camera_qvec",
+            "overlap_prev_cam",
+            "overlap_next_cam",
+            "overlap_prev_pcd",
+            "overlap_next_pcd",
+            "overlap_next_conf",
         )
 
         for key in _scalar_keys:

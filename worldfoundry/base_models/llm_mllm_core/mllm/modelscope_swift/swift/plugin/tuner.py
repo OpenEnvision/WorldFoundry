@@ -1,5 +1,5 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from peft import IA3Config, PeftModel, get_peft_model
@@ -11,9 +11,8 @@ TrainArguments = Any
 
 
 class Tuner:
-
     @staticmethod
-    def prepare_model(args: 'TrainArguments', model: torch.nn.Module) -> torch.nn.Module:
+    def prepare_model(args: "TrainArguments", model: torch.nn.Module) -> torch.nn.Module:
         """Prepare a new model with a tuner
 
         Args:
@@ -29,7 +28,7 @@ class Tuner:
     def save_pretrained(
         model: torch.nn.Module,
         save_directory: str,
-        state_dict: Optional[dict] = None,
+        state_dict: dict | None = None,
         safe_serialization: bool = True,
         **kwargs,
     ) -> None:
@@ -56,12 +55,11 @@ class Tuner:
 
 
 class PeftTuner(Tuner):
-
     @staticmethod
     def save_pretrained(
         model: torch.nn.Module,
         save_directory: str,
-        state_dict: Optional[dict] = None,
+        state_dict: dict | None = None,
         safe_serialization: bool = True,
         **kwargs,
     ) -> None:
@@ -74,21 +72,20 @@ class PeftTuner(Tuner):
 
 # Here gives a simple example of IA3
 class IA3(PeftTuner):
-
     @staticmethod
-    def prepare_model(args: 'TrainArguments', model: torch.nn.Module) -> torch.nn.Module:
+    def prepare_model(args: "TrainArguments", model: torch.nn.Module) -> torch.nn.Module:
         model_arch: ModelKeys = MODEL_ARCH_MAPPING[model.model_meta.model_arch]
         ia3_config = IA3Config(
-            target_modules=find_all_linears(model), feedforward_modules='.*' + model_arch.mlp.split('{}.')[1] + '.*')
+            target_modules=find_all_linears(model), feedforward_modules=".*" + model_arch.mlp.split("{}.")[1] + ".*"
+        )
         return get_peft_model(model, ia3_config)
 
 
 class DummyTuner(PeftTuner):
-
     @staticmethod
-    def prepare_model(args: 'TrainArguments', model: torch.nn.Module) -> torch.nn.Module:
+    def prepare_model(args: "TrainArguments", model: torch.nn.Module) -> torch.nn.Module:
         return model
 
 
 # Add your own tuner here, use --train_type xxx to begin
-extra_tuners = {'ia3': IA3, 'dummy': DummyTuner}
+extra_tuners = {"ia3": IA3, "dummy": DummyTuner}

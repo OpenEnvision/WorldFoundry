@@ -8,28 +8,30 @@
 # --------------------------------------------------------
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
-import os
-from torch import nn
 import torch
 import torch.nn.functional as F
-from einops import rearrange
-
-from diffusers.utils import BaseOutput, logging
 from diffusers.configuration_utils import ConfigMixin, register_to_config
-from diffusers.models.modeling_utils import ModelMixin
 from diffusers.models.embeddings import PixArtAlphaTextProjection
+from diffusers.models.modeling_utils import ModelMixin
+from diffusers.utils import BaseOutput, logging
+from einops import rearrange
+from torch import nn
 
-from allegro.models.transformers.block import to_2tuple, BasicTransformerBlock, AdaLayerNormSingle
-from allegro.models.transformers.embedding import PatchEmbed2D, PatchEmbed2DTI2V
+from worldfoundry.core.nn.diffusion.convolution import zero_module as zero_module
+from worldfoundry.synthesis.visual_generation.allegro.allegro_runtime.allegro.models.transformers.block import (
+    AdaLayerNormSingle,
+    BasicTransformerBlock,
+    to_2tuple,
+)
+from worldfoundry.synthesis.visual_generation.allegro.allegro_runtime.allegro.models.transformers.embedding import (
+    PatchEmbed2D,
+    PatchEmbed2DTI2V,
+)
 
 logger = logging.get_logger(__name__)
 
-def zero_module(module):
-    for p in module.parameters():
-        nn.init.zeros_(p)
-    return module
 
 @dataclass
 class Transformer3DModelOutput(BaseOutput):
@@ -80,18 +82,18 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
         self,
         num_attention_heads: int = 16,
         attention_head_dim: int = 88,
-        in_channels: Optional[int] = None,
-        out_channels: Optional[int] = None,
+        in_channels: int | None = None,
+        out_channels: int | None = None,
         num_layers: int = 1,
         dropout: float = 0.0,
-        cross_attention_dim: Optional[int] = None,
+        cross_attention_dim: int | None = None,
         attention_bias: bool = False,
-        sample_size: Optional[int] = None,
-        sample_size_t: Optional[int] = None,
-        patch_size: Optional[int] = None,
-        patch_size_t: Optional[int] = 1,
+        sample_size: int | None = None,
+        sample_size_t: int | None = None,
+        patch_size: int | None = None,
+        patch_size_t: int | None = 1,
         activation_fn: str = "geglu",
-        num_embeds_ada_norm: Optional[int] = 1000,
+        num_embeds_ada_norm: int | None = 1000,
         use_linear_projection: bool = False,
         only_cross_attention: bool = False,
         double_self_attention: bool = False,
@@ -99,14 +101,14 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
         norm_type: str = "layer_norm",
         norm_elementwise_affine: bool = True,
         norm_eps: float = 1e-5,
-        caption_channels: int = None,
-        interpolation_scale_h: float = None,
-        interpolation_scale_w: float = None,
-        interpolation_scale_t: float = None,
-        use_additional_conditions: Optional[bool] = None,
-        sa_attention_mode: str = "flash", 
-        ca_attention_mode: str = 'xformers', 
-        downsampler: str = None, 
+        caption_channels: int | None = None,
+        interpolation_scale_h: float | None = None,
+        interpolation_scale_w: float | None = None,
+        interpolation_scale_t: float | None = None,
+        use_additional_conditions: bool | None = None,
+        sa_attention_mode: str = "flash",
+        ca_attention_mode: str = "xformers",
+        downsampler: str | None = None,
         use_rope: bool = True,
         model_max_length: int = 300,
         **kwargs,
@@ -129,7 +131,6 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
         self.num_layers = num_layers
         self.config.hidden_size = inner_dim
 
-
         # 1. Transformer3DModel can process both standard continuous images of shape `(batch_size, num_channels, width, height)` as well as quantized image embeddings of shape `(batch_size, num_image_vectors)`
         # Define whether input is continuous or discrete depending on configuration
         assert in_channels is not None and patch_size is not None
@@ -137,8 +138,12 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
         # 2. Initialize the right blocks.
         # Initialize the output blocks and other projection blocks when necessary.
 
-        assert self.config.sample_size_t is not None, "AllegroTransformerTI2V3DModel over patched input must provide sample_size_t"
-        assert self.config.sample_size is not None, "AllegroTransformerTI2V3DModel over patched input must provide sample_size"
+        assert self.config.sample_size_t is not None, (
+            "AllegroTransformerTI2V3DModel over patched input must provide sample_size_t"
+        )
+        assert self.config.sample_size is not None, (
+            "AllegroTransformerTI2V3DModel over patched input must provide sample_size"
+        )
 
         self.num_frames = self.config.sample_size_t
         self.config.sample_size = to_2tuple(self.config.sample_size)
@@ -146,13 +151,23 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
         self.width = self.config.sample_size[1]
         self.patch_size_t = self.config.patch_size_t
         self.patch_size = self.config.patch_size
-        interpolation_scale_t = ((self.config.sample_size_t - 1) // 16 + 1) if self.config.sample_size_t % 2 == 1 else self.config.sample_size_t / 16
         interpolation_scale_t = (
-            self.config.interpolation_scale_t if self.config.interpolation_scale_t is not None else interpolation_scale_t
+            ((self.config.sample_size_t - 1) // 16 + 1)
+            if self.config.sample_size_t % 2 == 1
+            else self.config.sample_size_t / 16
+        )
+        interpolation_scale_t = (
+            self.config.interpolation_scale_t
+            if self.config.interpolation_scale_t is not None
+            else interpolation_scale_t
         )
         interpolation_scale = (
-            self.config.interpolation_scale_h if self.config.interpolation_scale_h is not None else self.config.sample_size[0] / 30, 
-            self.config.interpolation_scale_w if self.config.interpolation_scale_w is not None else self.config.sample_size[1] / 40, 
+            self.config.interpolation_scale_h
+            if self.config.interpolation_scale_h is not None
+            else self.config.sample_size[0] / 30,
+            self.config.interpolation_scale_w
+            if self.config.interpolation_scale_w is not None
+            else self.config.sample_size[1] / 40,
         )
         self.pos_embed = PatchEmbed2D(
             num_frames=self.config.sample_size_t,
@@ -162,9 +177,9 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
             patch_size=self.config.patch_size,
             in_channels=self.in_channels,
             embed_dim=self.inner_dim,
-            interpolation_scale=interpolation_scale, 
+            interpolation_scale=interpolation_scale,
             interpolation_scale_t=interpolation_scale_t,
-            use_abs_pos=not self.config.use_rope, 
+            use_abs_pos=not self.config.use_rope,
         )
         interpolation_scale_thw = (interpolation_scale_t, *interpolation_scale)
 
@@ -187,9 +202,9 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
                     norm_elementwise_affine=norm_elementwise_affine,
                     norm_eps=norm_eps,
                     sa_attention_mode=sa_attention_mode,
-                    ca_attention_mode=ca_attention_mode, 
+                    ca_attention_mode=ca_attention_mode,
                     use_rope=use_rope,
-                    interpolation_scale_thw=interpolation_scale_thw, 
+                    interpolation_scale_thw=interpolation_scale_thw,
                     block_idx=d,
                 )
                 for d in range(num_layers)
@@ -214,13 +229,11 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
             # TODO(Sayak, PVP) clean this, for now we use sample size to determine whether to use
             # additional conditions until we find better name
             self.adaln_single = AdaLayerNormSingle(inner_dim, use_additional_conditions=self.use_additional_conditions)
-        
+
         self.caption_projection = None
         if caption_channels is not None:
-            self.caption_projection = PixArtAlphaTextProjection(
-                in_features=caption_channels, hidden_size=inner_dim
-            )
-        
+            self.caption_projection = PixArtAlphaTextProjection(in_features=caption_channels, hidden_size=inner_dim)
+
         self.gradient_checkpointing = False
 
         # init masked_video and mask conv_in
@@ -229,18 +242,17 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
     def _set_gradient_checkpointing(self, value=False):
         self.gradient_checkpointing = value
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
-        timestep: Optional[torch.LongTensor] = None,
-        all_timesteps: Optional[torch.LongTensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        added_cond_kwargs: Dict[str, torch.Tensor] = None,
-        class_labels: Optional[torch.LongTensor] = None,
-        cross_attention_kwargs: Dict[str, Any] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        timestep: torch.LongTensor | None = None,
+        all_timesteps: torch.LongTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        added_cond_kwargs: dict[str, torch.Tensor] | None = None,
+        class_labels: torch.LongTensor | None = None,
+        cross_attention_kwargs: dict[str, Any] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         return_dict: bool = True,
     ):
         """
@@ -305,31 +317,40 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
 
             if attention_mask_vid.numel() > 0:
                 attention_mask_vid = attention_mask_vid.unsqueeze(1)  # b 1 t h w
-                attention_mask_vid = F.max_pool3d(attention_mask_vid, kernel_size=(self.patch_size_t, self.patch_size, self.patch_size), 
-                                                  stride=(self.patch_size_t, self.patch_size, self.patch_size))
-                attention_mask_vid = rearrange(attention_mask_vid, 'b 1 t h w -> (b 1) 1 (t h w)') 
+                attention_mask_vid = F.max_pool3d(
+                    attention_mask_vid,
+                    kernel_size=(self.patch_size_t, self.patch_size, self.patch_size),
+                    stride=(self.patch_size_t, self.patch_size, self.patch_size),
+                )
+                attention_mask_vid = rearrange(attention_mask_vid, "b 1 t h w -> (b 1) 1 (t h w)")
 
-            attention_mask_vid = (1 - attention_mask_vid.bool().to(self.dtype)) * -10000.0 if attention_mask_vid.numel() > 0 else None
+            attention_mask_vid = (
+                (1 - attention_mask_vid.bool().to(self.dtype)) * -10000.0 if attention_mask_vid.numel() > 0 else None
+            )
 
         # convert encoder_attention_mask to a bias the same way we do for attention_mask
-        if encoder_attention_mask is not None and encoder_attention_mask.ndim == 3:  
+        if encoder_attention_mask is not None and encoder_attention_mask.ndim == 3:
             # b, 1+use_image_num, l -> a video with images
             # b, 1, l -> only images
             encoder_attention_mask = (1 - encoder_attention_mask.to(self.dtype)) * -10000.0
-            encoder_attention_mask_vid = rearrange(encoder_attention_mask, 'b 1 l -> (b 1) 1 l') if encoder_attention_mask.numel() > 0 else None
+            encoder_attention_mask_vid = (
+                rearrange(encoder_attention_mask, "b 1 l -> (b 1) 1 l") if encoder_attention_mask.numel() > 0 else None
+            )
 
         # 1. Input
         frame = frame // self.patch_size_t  # patchfy
         height, width = hidden_states.shape[-2] // self.patch_size, hidden_states.shape[-1] // self.patch_size
 
         added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
-        hidden_states, encoder_hidden_states_vid, \
-        timestep_vid, embedded_timestep_vid = self._operate_on_patched_inputs(
-            hidden_states, encoder_hidden_states, timestep, added_cond_kwargs, batch_size,
+        hidden_states, encoder_hidden_states_vid, timestep_vid, embedded_timestep_vid = self._operate_on_patched_inputs(
+            hidden_states,
+            encoder_hidden_states,
+            timestep,
+            added_cond_kwargs,
+            batch_size,
         )
 
-
-        for _, block in enumerate(self.transformer_blocks):                
+        for _, block in enumerate(self.transformer_blocks):
             hidden_states = block(
                 hidden_states,
                 attention_mask_vid,
@@ -338,20 +359,20 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
                 timestep_vid,
                 cross_attention_kwargs,
                 class_labels,
-                frame=frame, 
-                height=height, 
-                width=width, 
+                frame=frame,
+                height=height,
+                width=width,
             )
 
-         # 3. Output
-        output = None 
+        # 3. Output
+        output = None
         if hidden_states is not None:
             output = self._get_output_for_patched_inputs(
                 hidden_states=hidden_states,
                 timestep=timestep_vid,
                 class_labels=class_labels,
                 embedded_timestep=embedded_timestep_vid,
-                num_frames=frame, 
+                num_frames=frame,
                 height=height,
                 width=width,
             )  # b c t h w
@@ -362,8 +383,12 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
         return Transformer3DModelOutput(sample=output)
 
     def _init_patched_inputs_for_ti2v(self):
-        assert self.config.sample_size_t is not None, "AllegroTransformerTI2V3DModel over patched input must provide sample_size_t"
-        assert self.config.sample_size is not None, "AllegroTransformerTI2V3DModel over patched input must provide sample_size"
+        assert self.config.sample_size_t is not None, (
+            "AllegroTransformerTI2V3DModel over patched input must provide sample_size_t"
+        )
+        assert self.config.sample_size is not None, (
+            "AllegroTransformerTI2V3DModel over patched input must provide sample_size"
+        )
 
         self.num_frames = self.config.sample_size_t
         self.config.sample_size = to_2tuple(self.config.sample_size)
@@ -371,15 +396,25 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
         self.width = self.config.sample_size[1]
         self.patch_size_t = self.config.patch_size_t
         self.patch_size = self.config.patch_size
-        interpolation_scale_t = ((self.config.sample_size_t - 1) // 16 + 1) if self.config.sample_size_t % 2 == 1 else self.config.sample_size_t / 16
         interpolation_scale_t = (
-            self.config.interpolation_scale_t if self.config.interpolation_scale_t is not None else interpolation_scale_t
+            ((self.config.sample_size_t - 1) // 16 + 1)
+            if self.config.sample_size_t % 2 == 1
+            else self.config.sample_size_t / 16
+        )
+        interpolation_scale_t = (
+            self.config.interpolation_scale_t
+            if self.config.interpolation_scale_t is not None
+            else interpolation_scale_t
         )
         interpolation_scale = (
-            self.config.interpolation_scale_h if self.config.interpolation_scale_h is not None else self.config.sample_size[0] / 30, 
-            self.config.interpolation_scale_w if self.config.interpolation_scale_w is not None else self.config.sample_size[1] / 40, 
+            self.config.interpolation_scale_h
+            if self.config.interpolation_scale_h is not None
+            else self.config.sample_size[0] / 30,
+            self.config.interpolation_scale_w
+            if self.config.interpolation_scale_w is not None
+            else self.config.sample_size[1] / 40,
         )
-        
+
         self.pos_embed_mask = nn.ModuleList(
             [
                 PatchEmbed2DTI2V(
@@ -390,9 +425,9 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
                     patch_size=self.config.patch_size,
                     in_channels=self.in_channels,
                     embed_dim=self.inner_dim,
-                    interpolation_scale=interpolation_scale, 
+                    interpolation_scale=interpolation_scale,
                     interpolation_scale_t=interpolation_scale_t,
-                    use_abs_pos=not self.config.use_rope, 
+                    use_abs_pos=not self.config.use_rope,
                 ),
                 zero_module(nn.Linear(self.inner_dim, self.inner_dim, bias=False)),
             ]
@@ -407,9 +442,9 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
                     patch_size=self.config.patch_size,
                     in_channels=self.in_channels,
                     embed_dim=self.inner_dim,
-                    interpolation_scale=interpolation_scale, 
+                    interpolation_scale=interpolation_scale,
                     interpolation_scale_t=interpolation_scale_t,
-                    use_abs_pos=not self.config.use_rope, 
+                    use_abs_pos=not self.config.use_rope,
                 ),
                 zero_module(nn.Linear(self.inner_dim, self.inner_dim, bias=False)),
             ]
@@ -425,18 +460,24 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
                     patch_size=self.config.patch_size,
                     in_channels=self.in_channels,
                     embed_dim=self.inner_dim,
-                    interpolation_scale=interpolation_scale, 
+                    interpolation_scale=interpolation_scale,
                     interpolation_scale_t=interpolation_scale_t,
-                    use_abs_pos=not self.config.use_rope, 
+                    use_abs_pos=not self.config.use_rope,
                 ),
                 zero_module(nn.Linear(self.inner_dim, self.inner_dim, bias=False)),
             ]
         )
 
-    def _operate_on_patched_inputs(self, hidden_states, encoder_hidden_states, timestep, added_cond_kwargs, batch_size, frame=88):
+    def _operate_on_patched_inputs(
+        self, hidden_states, encoder_hidden_states, timestep, added_cond_kwargs, batch_size, frame=88
+    ):
         assert hidden_states.shape[2] > 1, "AllegroTransformerTI2V3DModel only supports video input"
         in_channels = self.config.in_channels
-        hidden_states, hidden_states_masked_vid, hidden_states_mask = hidden_states[:, :in_channels], hidden_states[:, in_channels: 2 * in_channels], hidden_states[:, 2 * in_channels:]
+        hidden_states, hidden_states_masked_vid, hidden_states_mask = (
+            hidden_states[:, :in_channels],
+            hidden_states[:, in_channels : 2 * in_channels],
+            hidden_states[:, 2 * in_channels :],
+        )
 
         hidden_states_vid = self.pos_embed(hidden_states.to(self.dtype))
         hidden_states_masked_vid, _ = self.pos_embed_masked_video[0](hidden_states_masked_vid.to(self.dtype), frame)
@@ -447,10 +488,10 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
 
         hidden_states_first_frame, _ = self.pos_embed_first_frame[0](hidden_states.to(self.dtype), 1)
         hidden_states_first_frame = self.pos_embed_first_frame[1](hidden_states_first_frame)
-        
-        timestep_vid, timestep_img = None, None
-        embedded_timestep_vid, embedded_timestep_img = None, None
-        encoder_hidden_states_vid, encoder_hidden_states_img = None, None
+
+        timestep_vid, timestep_img = None, None  # noqa: F841 - Kept as upstream; an underscore name already exists.
+        embedded_timestep_vid, embedded_timestep_img = None, None  # noqa: F841 - Kept as upstream; an underscore name already exists.
+        encoder_hidden_states_vid, encoder_hidden_states_img = None, None  # noqa: F841 - Kept as upstream; an underscore name already exists.
 
         if self.adaln_single is not None:
             if self.use_additional_conditions and added_cond_kwargs is None:
@@ -461,19 +502,21 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
                 timestep, added_cond_kwargs, batch_size=batch_size, hidden_dtype=self.dtype
             )  # b 6d, b d
             if hidden_states_vid is None:
-                timestep_img = timestep
-                embedded_timestep_img = embedded_timestep
+                _timestep_img = timestep
+                _embedded_timestep_img = embedded_timestep
             else:
                 timestep_vid = timestep
                 embedded_timestep_vid = embedded_timestep
 
         if self.caption_projection is not None:
-            encoder_hidden_states = self.caption_projection(encoder_hidden_states)  # b, 1+use_image_num, l, d or b, 1, l, d
+            encoder_hidden_states = self.caption_projection(
+                encoder_hidden_states
+            )  # b, 1+use_image_num, l, d or b, 1, l, d
 
             if hidden_states_vid is None:
-                encoder_hidden_states_img = rearrange(encoder_hidden_states, 'b 1 l d -> (b 1) l d')
+                _encoder_hidden_states_img = rearrange(encoder_hidden_states, "b 1 l d -> (b 1) l d")
             else:
-                encoder_hidden_states_vid = rearrange(encoder_hidden_states[:, :1], 'b 1 l d -> (b 1) l d')
+                encoder_hidden_states_vid = rearrange(encoder_hidden_states[:, :1], "b 1 l d -> (b 1) l d")
 
         hidden_states_first_frame = torch.mean(hidden_states_first_frame, dim=1)
         embedded_timestep_vid = embedded_timestep_vid + hidden_states_first_frame
@@ -482,12 +525,10 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
 
     def _get_output_for_patched_inputs(
         self, hidden_states, timestep, class_labels, embedded_timestep, num_frames, height=None, width=None
-    ):  
+    ):
         # import ipdb;ipdb.set_trace()
         if self.config.norm_type != "ada_norm_single":
-            conditioning = self.transformer_blocks[0].norm1.emb(
-                timestep, class_labels, hidden_dtype=self.dtype
-            )
+            conditioning = self.transformer_blocks[0].norm1.emb(timestep, class_labels, hidden_dtype=self.dtype)
             shift, scale = self.proj_out_1(F.silu(conditioning)).chunk(2, dim=1)
             hidden_states = self.norm_out(hidden_states) * (1 + scale[:, None]) + shift[:, None]
             hidden_states = self.proj_out_2(hidden_states)
@@ -503,15 +544,25 @@ class AllegroTransformerTI2V3DModel(ModelMixin, ConfigMixin):
         if self.adaln_single is None:
             height = width = int(hidden_states.shape[1] ** 0.5)
         hidden_states = hidden_states.reshape(
-            shape=(-1, num_frames, height, width, self.patch_size_t, self.patch_size, self.patch_size, self.out_channels)
+            shape=(
+                -1,
+                num_frames,
+                height,
+                width,
+                self.patch_size_t,
+                self.patch_size,
+                self.patch_size,
+                self.out_channels,
+            )
         )
         hidden_states = torch.einsum("nthwopqc->nctohpwq", hidden_states)
         output = hidden_states.reshape(
-            shape=(-1, self.out_channels, num_frames * self.patch_size_t, height * self.patch_size, width * self.patch_size)
+            shape=(
+                -1,
+                self.out_channels,
+                num_frames * self.patch_size_t,
+                height * self.patch_size,
+                width * self.patch_size,
+            )
         )
         return output
-
-
-
-
-

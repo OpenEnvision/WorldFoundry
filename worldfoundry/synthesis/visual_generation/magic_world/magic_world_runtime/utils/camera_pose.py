@@ -91,10 +91,7 @@ def process_pose_file(
             camera.fy = resized_height * camera.fy / height
 
     intrinsics = np.asarray(
-        [
-            [camera.fx * width, camera.fy * height, camera.cx * width, camera.cy * height]
-            for camera in cameras
-        ],
+        [[camera.fx * width, camera.fy * height, camera.cx * width, camera.cy * height] for camera in cameras],
         dtype=np.float32,
     )
     intrinsic_tensor = torch.as_tensor(intrinsics, device=device)[None]

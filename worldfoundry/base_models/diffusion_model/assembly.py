@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from pathlib import Path
+from typing import ClassVar
 
 from .components import BuildPurpose, ComponentBuildContext, ComponentKey, ComponentKind
 from .contracts import (
@@ -64,7 +65,7 @@ class NativeDiffusionAssembler:
     registry and a concrete runner such as NativeDiffusionRunner.
     """
 
-    _EXPECTED_PROTOCOLS = {
+    _EXPECTED_PROTOCOLS: ClassVar[dict] = {
         ComponentKind.DENOISER: Denoiser,
         ComponentKind.CONDITIONER: ConditionEncoder,
         ComponentKind.LATENT_ENCODER: LatentEncoder,

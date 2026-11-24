@@ -51,4 +51,4 @@ def test_prepare_script_has_no_default_third_party_mirror() -> None:
     script = Path(__file__).resolve().parents[2] / "scripts" / "inference" / "prepare_model_infer.sh"
     source = script.read_text(encoding="utf-8")
     assert "HF_ENDPOINT:-https://hf-mirror.com" not in source
-    assert 'WORLDFOUNDRY_HF_ENDPOINT:-${HF_ENDPOINT:-}' in source
+    assert "WORLDFOUNDRY_HF_ENDPOINT:-${HF_ENDPOINT:-}" in source

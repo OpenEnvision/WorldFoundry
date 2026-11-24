@@ -1,6 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import copy
-from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -10,15 +9,14 @@ from mmcv.cnn import ConvModule, is_norm
 from mmcv.ops import batched_nms
 from mmdet.models.utils import filter_scores_and_topk
 from mmdet.structures.bbox import get_box_tensor, get_box_wh, scale_boxes
-from mmdet.utils import (ConfigType, InstanceList, OptConfigType,
-                         OptInstanceList, OptMultiConfig)
+from mmdet.utils import ConfigType, InstanceList, OptConfigType, OptInstanceList, OptMultiConfig
 from mmengine import ConfigDict
-from mmengine.model import (BaseModule, bias_init_with_prob, constant_init,
-                            normal_init)
+from mmengine.model import BaseModule, bias_init_with_prob, constant_init, normal_init
 from mmengine.structures import InstanceData
 from torch import Tensor
 
 from mmyolo.registry import MODELS
+
 from .rtmdet_head import RTMDetHead, RTMDetSepBNHeadModule
 
 
@@ -48,8 +46,8 @@ class MaskFeatModule(BaseModule):
         stacked_convs: int = 4,
         num_levels: int = 3,
         num_prototypes: int = 8,
-        act_cfg: ConfigType = dict(type='ReLU', inplace=True),
-        norm_cfg: ConfigType = dict(type='BN')
+        act_cfg: ConfigType = {"type": "ReLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
+        norm_cfg: ConfigType = {"type": "BN"},  # noqa: B006 - Keeps the upstream default object and signature.
     ) -> None:
         super().__init__(init_cfg=None)
         self.num_levels = num_levels
@@ -57,24 +55,16 @@ class MaskFeatModule(BaseModule):
         convs = []
         for i in range(stacked_convs):
             in_c = in_channels if i == 0 else feat_channels
-            convs.append(
-                ConvModule(
-                    in_c,
-                    feat_channels,
-                    3,
-                    padding=1,
-                    act_cfg=act_cfg,
-                    norm_cfg=norm_cfg))
+            convs.append(ConvModule(in_c, feat_channels, 3, padding=1, act_cfg=act_cfg, norm_cfg=norm_cfg))
         self.stacked_convs = nn.Sequential(*convs)
-        self.projection = nn.Conv2d(
-            feat_channels, num_prototypes, kernel_size=1)
+        self.projection = nn.Conv2d(feat_channels, num_prototypes, kernel_size=1)
 
-    def forward(self, features: Tuple[Tensor, ...]) -> Tensor:
+    def forward(self, features: tuple[Tensor, ...]) -> Tensor:
         # multi-level feature fusion
         fusion_feats = [features[0]]
         size = features[0].shape[-2:]
         for i in range(1, self.num_levels):
-            f = F.interpolate(features[i], size=size, mode='bilinear')
+            f = F.interpolate(features[i], size=size, mode="bilinear")
             fusion_feats.append(f)
         fusion_feats = torch.cat(fusion_feats, dim=1)
         fusion_feats = self.fusion_conv(fusion_feats)
@@ -101,14 +91,16 @@ class RTMDetInsSepBNHeadModule(RTMDetSepBNHeadModule):
             Defaults to True.
     """
 
-    def __init__(self,
-                 num_classes: int,
-                 *args,
-                 num_prototypes: int = 8,
-                 dyconv_channels: int = 8,
-                 num_dyconvs: int = 3,
-                 use_sigmoid_cls: bool = True,
-                 **kwargs):
+    def __init__(
+        self,
+        num_classes: int,
+        *args,
+        num_prototypes: int = 8,
+        dyconv_channels: int = 8,
+        num_dyconvs: int = 3,
+        use_sigmoid_cls: bool = True,
+        **kwargs,
+    ):
         self.num_prototypes = num_prototypes
         self.num_dyconvs = num_dyconvs
         self.dyconv_channels = dyconv_channels
@@ -117,7 +109,7 @@ class RTMDetInsSepBNHeadModule(RTMDetSepBNHeadModule):
             self.cls_out_channels = num_classes
         else:
             self.cls_out_channels = num_classes + 1
-        super().__init__(num_classes=num_classes, *args, **kwargs)
+        super().__init__(num_classes=num_classes, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
     def _init_layers(self):
         """Initialize layers of the head."""
@@ -134,8 +126,7 @@ class RTMDetInsSepBNHeadModule(RTMDetSepBNHeadModule):
         weight_nums, bias_nums = [], []
         for i in range(self.num_dyconvs):
             if i == 0:
-                weight_nums.append(
-                    (self.num_prototypes + 2) * self.dyconv_channels)
+                weight_nums.append((self.num_prototypes + 2) * self.dyconv_channels)
                 bias_nums.append(self.dyconv_channels)
             elif i == self.num_dyconvs - 1:
                 weight_nums.append(self.dyconv_channels)
@@ -148,7 +139,7 @@ class RTMDetInsSepBNHeadModule(RTMDetSepBNHeadModule):
         self.num_gen_params = sum(weight_nums) + sum(bias_nums)
         pred_pad_size = self.pred_kernel_size // 2
 
-        for n in range(len(self.featmap_strides)):
+        for n in range(len(self.featmap_strides)):  # noqa: B007 - The loop variable is read outside the loop.
             cls_convs = nn.ModuleList()
             reg_convs = nn.ModuleList()
             kernel_convs = nn.ModuleList()
@@ -163,7 +154,9 @@ class RTMDetInsSepBNHeadModule(RTMDetSepBNHeadModule):
                         padding=1,
                         conv_cfg=self.conv_cfg,
                         norm_cfg=self.norm_cfg,
-                        act_cfg=self.act_cfg))
+                        act_cfg=self.act_cfg,
+                    )
+                )
                 reg_convs.append(
                     ConvModule(
                         chn,
@@ -173,7 +166,9 @@ class RTMDetInsSepBNHeadModule(RTMDetSepBNHeadModule):
                         padding=1,
                         conv_cfg=self.conv_cfg,
                         norm_cfg=self.norm_cfg,
-                        act_cfg=self.act_cfg))
+                        act_cfg=self.act_cfg,
+                    )
+                )
                 kernel_convs.append(
                     ConvModule(
                         chn,
@@ -183,7 +178,9 @@ class RTMDetInsSepBNHeadModule(RTMDetSepBNHeadModule):
                         padding=1,
                         conv_cfg=self.conv_cfg,
                         norm_cfg=self.norm_cfg,
-                        act_cfg=self.act_cfg))
+                        act_cfg=self.act_cfg,
+                    )
+                )
             self.cls_convs.append(cls_convs)
             self.reg_convs.append(cls_convs)
             self.kernel_convs.append(kernel_convs)
@@ -193,19 +190,15 @@ class RTMDetInsSepBNHeadModule(RTMDetSepBNHeadModule):
                     self.feat_channels,
                     self.num_base_priors * self.cls_out_channels,
                     self.pred_kernel_size,
-                    padding=pred_pad_size))
+                    padding=pred_pad_size,
+                )
+            )
             self.rtm_reg.append(
-                nn.Conv2d(
-                    self.feat_channels,
-                    self.num_base_priors * 4,
-                    self.pred_kernel_size,
-                    padding=pred_pad_size))
+                nn.Conv2d(self.feat_channels, self.num_base_priors * 4, self.pred_kernel_size, padding=pred_pad_size)
+            )
             self.rtm_kernel.append(
-                nn.Conv2d(
-                    self.feat_channels,
-                    self.num_gen_params,
-                    self.pred_kernel_size,
-                    padding=pred_pad_size))
+                nn.Conv2d(self.feat_channels, self.num_gen_params, self.pred_kernel_size, padding=pred_pad_size)
+            )
 
         if self.share_conv:
             for n in range(len(self.featmap_strides)):
@@ -220,7 +213,8 @@ class RTMDetInsSepBNHeadModule(RTMDetSepBNHeadModule):
             num_levels=len(self.featmap_strides),
             num_prototypes=self.num_prototypes,
             act_cfg=self.act_cfg,
-            norm_cfg=self.norm_cfg)
+            norm_cfg=self.norm_cfg,
+        )
 
     def init_weights(self) -> None:
         """Initialize weights of the head."""
@@ -230,12 +224,11 @@ class RTMDetInsSepBNHeadModule(RTMDetSepBNHeadModule):
             if is_norm(m):
                 constant_init(m, 1)
         bias_cls = bias_init_with_prob(0.01)
-        for rtm_cls, rtm_reg, rtm_kernel in zip(self.rtm_cls, self.rtm_reg,
-                                                self.rtm_kernel):
+        for rtm_cls, rtm_reg, _rtm_kernel in zip(self.rtm_cls, self.rtm_reg, self.rtm_kernel, strict=False):
             normal_init(rtm_cls, std=0.01, bias=bias_cls)
             normal_init(rtm_reg, std=0.01, bias=1)
 
-    def forward(self, feats: Tuple[Tensor, ...]) -> tuple:
+    def forward(self, feats: tuple[Tensor, ...]) -> tuple:
         """Forward features from the upstream network.
 
         Args:
@@ -261,7 +254,7 @@ class RTMDetInsSepBNHeadModule(RTMDetSepBNHeadModule):
         cls_scores = []
         bbox_preds = []
         kernel_preds = []
-        for idx, (x, stride) in enumerate(zip(feats, self.featmap_strides)):
+        for idx, (x, _stride) in enumerate(zip(feats, self.featmap_strides, strict=False)):
             cls_feat = x
             reg_feat = x
             kernel_feat = x
@@ -281,8 +274,7 @@ class RTMDetInsSepBNHeadModule(RTMDetSepBNHeadModule):
             cls_scores.append(cls_score)
             bbox_preds.append(reg_dist)
             kernel_preds.append(kernel_pred)
-        return tuple(cls_scores), tuple(bbox_preds), tuple(
-            kernel_preds), mask_feat
+        return tuple(cls_scores), tuple(bbox_preds), tuple(kernel_preds), mask_feat
 
 
 @MODELS.register_module()
@@ -306,29 +298,18 @@ class RTMDetInsSepBNHead(RTMDetHead):
             Defaults to None.
     """
 
-    def __init__(self,
-                 head_module: ConfigType,
-                 prior_generator: ConfigType = dict(
-                     type='mmdet.MlvlPointGenerator',
-                     offset=0,
-                     strides=[8, 16, 32]),
-                 bbox_coder: ConfigType = dict(type='DistancePointBBoxCoder'),
-                 loss_cls: ConfigType = dict(
-                     type='mmdet.QualityFocalLoss',
-                     use_sigmoid=True,
-                     beta=2.0,
-                     loss_weight=1.0),
-                 loss_bbox: ConfigType = dict(
-                     type='mmdet.GIoULoss', loss_weight=2.0),
-                 loss_mask=dict(
-                     type='mmdet.DiceLoss',
-                     loss_weight=2.0,
-                     eps=5e-6,
-                     reduction='mean'),
-                 train_cfg: OptConfigType = None,
-                 test_cfg: OptConfigType = None,
-                 init_cfg: OptMultiConfig = None):
-
+    def __init__(
+        self,
+        head_module: ConfigType,
+        prior_generator: ConfigType = {"type": "mmdet.MlvlPointGenerator", "offset": 0, "strides": [8, 16, 32]},  # noqa: B006 - Keeps the upstream default object and signature.
+        bbox_coder: ConfigType = {"type": "DistancePointBBoxCoder"},  # noqa: B006 - Keeps the upstream default object and signature.
+        loss_cls: ConfigType = {"type": "mmdet.QualityFocalLoss", "use_sigmoid": True, "beta": 2.0, "loss_weight": 1.0},  # noqa: B006 - Keeps the upstream default object and signature.
+        loss_bbox: ConfigType = {"type": "mmdet.GIoULoss", "loss_weight": 2.0},  # noqa: B006 - Keeps the upstream default object and signature.
+        loss_mask={"type": "mmdet.DiceLoss", "loss_weight": 2.0, "eps": 5e-6, "reduction": "mean"},  # noqa: B006 - Keeps the upstream default object and signature.
+        train_cfg: OptConfigType = None,
+        test_cfg: OptConfigType = None,
+        init_cfg: OptMultiConfig = None,
+    ):
         super().__init__(
             head_module=head_module,
             prior_generator=prior_generator,
@@ -337,23 +318,26 @@ class RTMDetInsSepBNHead(RTMDetHead):
             loss_bbox=loss_bbox,
             train_cfg=train_cfg,
             test_cfg=test_cfg,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
 
-        self.use_sigmoid_cls = loss_cls.get('use_sigmoid', False)
+        self.use_sigmoid_cls = loss_cls.get("use_sigmoid", False)
         if isinstance(self.head_module, RTMDetInsSepBNHeadModule):
             assert self.use_sigmoid_cls == self.head_module.use_sigmoid_cls
         self.loss_mask = MODELS.build(loss_mask)
 
-    def predict_by_feat(self,
-                        cls_scores: List[Tensor],
-                        bbox_preds: List[Tensor],
-                        kernel_preds: List[Tensor],
-                        mask_feats: Tensor,
-                        score_factors: Optional[List[Tensor]] = None,
-                        batch_img_metas: Optional[List[dict]] = None,
-                        cfg: Optional[ConfigDict] = None,
-                        rescale: bool = True,
-                        with_nms: bool = True) -> List[InstanceData]:
+    def predict_by_feat(
+        self,
+        cls_scores: list[Tensor],
+        bbox_preds: list[Tensor],
+        kernel_preds: list[Tensor],
+        mask_feats: Tensor,
+        score_factors: list[Tensor] | None = None,
+        batch_img_metas: list[dict] | None = None,
+        cfg: ConfigDict | None = None,
+        rescale: bool = True,
+        with_nms: bool = True,
+    ) -> list[InstanceData]:
         """Transform a batch of output features extracted from the head into
         bbox results.
 
@@ -411,110 +395,86 @@ class RTMDetInsSepBNHead(RTMDetHead):
         # If the shape does not change, use the previous mlvl_priors
         if featmap_sizes != self.featmap_sizes:
             self.mlvl_priors = self.prior_generator.grid_priors(
-                featmap_sizes,
-                dtype=cls_scores[0].dtype,
-                device=cls_scores[0].device,
-                with_stride=True)
+                featmap_sizes, dtype=cls_scores[0].dtype, device=cls_scores[0].device, with_stride=True
+            )
             self.featmap_sizes = featmap_sizes
         flatten_priors = torch.cat(self.mlvl_priors)
 
         mlvl_strides = [
-            flatten_priors.new_full(
-                (featmap_size.numel() * self.num_base_priors, ), stride) for
-            featmap_size, stride in zip(featmap_sizes, self.featmap_strides)
+            flatten_priors.new_full((featmap_size.numel() * self.num_base_priors,), stride)
+            for featmap_size, stride in zip(featmap_sizes, self.featmap_strides, strict=False)
         ]
         flatten_stride = torch.cat(mlvl_strides)
 
         # flatten cls_scores, bbox_preds
         flatten_cls_scores = [
-            cls_score.permute(0, 2, 3, 1).reshape(num_imgs, -1,
-                                                  self.num_classes)
-            for cls_score in cls_scores
+            cls_score.permute(0, 2, 3, 1).reshape(num_imgs, -1, self.num_classes) for cls_score in cls_scores
         ]
-        flatten_bbox_preds = [
-            bbox_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, 4)
-            for bbox_pred in bbox_preds
-        ]
+        flatten_bbox_preds = [bbox_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, 4) for bbox_pred in bbox_preds]
         flatten_kernel_preds = [
-            kernel_pred.permute(0, 2, 3,
-                                1).reshape(num_imgs, -1,
-                                           self.head_module.num_gen_params)
+            kernel_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, self.head_module.num_gen_params)
             for kernel_pred in kernel_preds
         ]
 
         flatten_cls_scores = torch.cat(flatten_cls_scores, dim=1).sigmoid()
         flatten_bbox_preds = torch.cat(flatten_bbox_preds, dim=1)
         flatten_decoded_bboxes = self.bbox_coder.decode(
-            flatten_priors[..., :2].unsqueeze(0), flatten_bbox_preds,
-            flatten_stride)
+            flatten_priors[..., :2].unsqueeze(0), flatten_bbox_preds, flatten_stride
+        )
 
         flatten_kernel_preds = torch.cat(flatten_kernel_preds, dim=1)
 
         results_list = []
-        for (bboxes, scores, kernel_pred, mask_feat,
-             img_meta) in zip(flatten_decoded_bboxes, flatten_cls_scores,
-                              flatten_kernel_preds, mask_feats,
-                              batch_img_metas):
-            ori_shape = img_meta['ori_shape']
-            scale_factor = img_meta['scale_factor']
-            if 'pad_param' in img_meta:
-                pad_param = img_meta['pad_param']
-            else:
-                pad_param = None
+        for bboxes, scores, kernel_pred, mask_feat, img_meta in zip(
+            flatten_decoded_bboxes, flatten_cls_scores, flatten_kernel_preds, mask_feats, batch_img_metas, strict=False
+        ):
+            ori_shape = img_meta["ori_shape"]
+            scale_factor = img_meta["scale_factor"]
+            pad_param = img_meta["pad_param"] if "pad_param" in img_meta else None  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
 
-            score_thr = cfg.get('score_thr', -1)
+            score_thr = cfg.get("score_thr", -1)
             if scores.shape[0] == 0:
                 empty_results = InstanceData()
                 empty_results.bboxes = bboxes
                 empty_results.scores = scores[:, 0]
                 empty_results.labels = scores[:, 0].int()
-                h, w = ori_shape[:2] if rescale else img_meta['img_shape'][:2]
-                empty_results.masks = torch.zeros(
-                    size=(0, h, w), dtype=torch.bool, device=bboxes.device)
+                h, w = ori_shape[:2] if rescale else img_meta["img_shape"][:2]
+                empty_results.masks = torch.zeros(size=(0, h, w), dtype=torch.bool, device=bboxes.device)
                 results_list.append(empty_results)
                 continue
 
-            nms_pre = cfg.get('nms_pre', 100000)
+            nms_pre = cfg.get("nms_pre", 100000)
             if cfg.multi_label is False:
                 scores, labels = scores.max(1, keepdim=True)
                 scores, _, keep_idxs, results = filter_scores_and_topk(
                     scores,
                     score_thr,
                     nms_pre,
-                    results=dict(
-                        labels=labels[:, 0],
-                        kernel_pred=kernel_pred,
-                        priors=flatten_priors))
-                labels = results['labels']
-                kernel_pred = results['kernel_pred']
-                priors = results['priors']
+                    results={"labels": labels[:, 0], "kernel_pred": kernel_pred, "priors": flatten_priors},
+                )
+                labels = results["labels"]
+                kernel_pred = results["kernel_pred"]
+                priors = results["priors"]
             else:
                 out = filter_scores_and_topk(
-                    scores,
-                    score_thr,
-                    nms_pre,
-                    results=dict(
-                        kernel_pred=kernel_pred, priors=flatten_priors))
+                    scores, score_thr, nms_pre, results={"kernel_pred": kernel_pred, "priors": flatten_priors}
+                )
                 scores, labels, keep_idxs, filtered_results = out
-                kernel_pred = filtered_results['kernel_pred']
-                priors = filtered_results['priors']
+                kernel_pred = filtered_results["kernel_pred"]
+                priors = filtered_results["priors"]
 
             results = InstanceData(
-                scores=scores,
-                labels=labels,
-                bboxes=bboxes[keep_idxs],
-                kernels=kernel_pred,
-                priors=priors)
+                scores=scores, labels=labels, bboxes=bboxes[keep_idxs], kernels=kernel_pred, priors=priors
+            )
 
             if rescale:
                 if pad_param is not None:
-                    results.bboxes -= results.bboxes.new_tensor([
-                        pad_param[2], pad_param[0], pad_param[2], pad_param[0]
-                    ])
-                results.bboxes /= results.bboxes.new_tensor(
-                    scale_factor).repeat((1, 2))
+                    results.bboxes -= results.bboxes.new_tensor(
+                        [pad_param[2], pad_param[0], pad_param[2], pad_param[0]]
+                    )
+                results.bboxes /= results.bboxes.new_tensor(scale_factor).repeat((1, 2))
 
-            if cfg.get('yolox_style', False):
+            if cfg.get("yolox_style", False):
                 # do not need max_per_img
                 cfg.max_per_img = len(results)
 
@@ -526,7 +486,8 @@ class RTMDetInsSepBNHead(RTMDetHead):
                 rescale_mask=rescale,
                 with_nms=with_nms,
                 pad_param=pad_param,
-                img_meta=img_meta)
+                img_meta=img_meta,
+            )
             results.bboxes[:, 0::2].clamp_(0, ori_shape[1])
             results.bboxes[:, 1::2].clamp_(0, ori_shape[0])
 
@@ -534,15 +495,16 @@ class RTMDetInsSepBNHead(RTMDetHead):
         return results_list
 
     def _bbox_mask_post_process(
-            self,
-            results: InstanceData,
-            mask_feat: Tensor,
-            cfg: ConfigDict,
-            rescale_bbox: bool = False,
-            rescale_mask: bool = True,
-            with_nms: bool = True,
-            pad_param: Optional[np.ndarray] = None,
-            img_meta: Optional[dict] = None) -> InstanceData:
+        self,
+        results: InstanceData,
+        mask_feat: Tensor,
+        cfg: ConfigDict,
+        rescale_bbox: bool = False,
+        rescale_mask: bool = True,
+        with_nms: bool = True,
+        pad_param: np.ndarray | None = None,
+        img_meta: dict | None = None,
+    ) -> InstanceData:
         """bbox and mask post-processing method.
 
         The boxes would be rescaled to the original image scale and do
@@ -577,74 +539,60 @@ class RTMDetInsSepBNHead(RTMDetHead):
                 - masks (Tensor): Has a shape (num_instances, h, w).
         """
         if rescale_bbox:
-            assert img_meta.get('scale_factor') is not None
-            scale_factor = [1 / s for s in img_meta['scale_factor']]
+            assert img_meta.get("scale_factor") is not None
+            scale_factor = [1 / s for s in img_meta["scale_factor"]]
             results.bboxes = scale_boxes(results.bboxes, scale_factor)
 
-        if hasattr(results, 'score_factors'):
+        if hasattr(results, "score_factors"):
             # TODO： Add sqrt operation in order to be consistent with
             #  the paper.
-            score_factors = results.pop('score_factors')
+            score_factors = results.pop("score_factors")
             results.scores = results.scores * score_factors
 
         # filter small size bboxes
-        if cfg.get('min_bbox_size', -1) >= 0:
+        if cfg.get("min_bbox_size", -1) >= 0:
             w, h = get_box_wh(results.bboxes)
             valid_mask = (w > cfg.min_bbox_size) & (h > cfg.min_bbox_size)
             if not valid_mask.all():
                 results = results[valid_mask]
 
         # TODO: deal with `with_nms` and `nms_cfg=None` in test_cfg
-        assert with_nms, 'with_nms must be True for RTMDet-Ins'
+        assert with_nms, "with_nms must be True for RTMDet-Ins"
         if results.bboxes.numel() > 0:
             bboxes = get_box_tensor(results.bboxes)
-            det_bboxes, keep_idxs = batched_nms(bboxes, results.scores,
-                                                results.labels, cfg.nms)
+            det_bboxes, keep_idxs = batched_nms(bboxes, results.scores, results.labels, cfg.nms)
             results = results[keep_idxs]
             # some nms would reweight the score, such as softnms
             results.scores = det_bboxes[:, -1]
-            results = results[:cfg.max_per_img]
+            results = results[: cfg.max_per_img]
 
             # process masks
-            mask_logits = self._mask_predict_by_feat(mask_feat,
-                                                     results.kernels,
-                                                     results.priors)
+            mask_logits = self._mask_predict_by_feat(mask_feat, results.kernels, results.priors)
 
             stride = self.prior_generator.strides[0][0]
-            mask_logits = F.interpolate(
-                mask_logits.unsqueeze(0), scale_factor=stride, mode='bilinear')
+            mask_logits = F.interpolate(mask_logits.unsqueeze(0), scale_factor=stride, mode="bilinear")
             if rescale_mask:
                 # TODO: When use mmdet.Resize or mmdet.Pad, will meet bug
                 # Use img_meta to crop and resize
-                ori_h, ori_w = img_meta['ori_shape'][:2]
+                ori_h, ori_w = img_meta["ori_shape"][:2]
                 if isinstance(pad_param, np.ndarray):
                     pad_param = pad_param.astype(np.int32)
-                    crop_y1, crop_y2 = pad_param[
-                        0], mask_logits.shape[-2] - pad_param[1]
-                    crop_x1, crop_x2 = pad_param[
-                        2], mask_logits.shape[-1] - pad_param[3]
-                    mask_logits = mask_logits[..., crop_y1:crop_y2,
-                                              crop_x1:crop_x2]
-                mask_logits = F.interpolate(
-                    mask_logits,
-                    size=[ori_h, ori_w],
-                    mode='bilinear',
-                    align_corners=False)
+                    crop_y1, crop_y2 = pad_param[0], mask_logits.shape[-2] - pad_param[1]
+                    crop_x1, crop_x2 = pad_param[2], mask_logits.shape[-1] - pad_param[3]
+                    mask_logits = mask_logits[..., crop_y1:crop_y2, crop_x1:crop_x2]
+                mask_logits = F.interpolate(mask_logits, size=[ori_h, ori_w], mode="bilinear", align_corners=False)
 
             masks = mask_logits.sigmoid().squeeze(0)
             masks = masks > cfg.mask_thr_binary
             results.masks = masks
         else:
-            h, w = img_meta['ori_shape'][:2] if rescale_mask else img_meta[
-                'img_shape'][:2]
+            h, w = img_meta["ori_shape"][:2] if rescale_mask else img_meta["img_shape"][:2]
             results.masks = torch.zeros(
-                size=(results.bboxes.shape[0], h, w),
-                dtype=torch.bool,
-                device=results.bboxes.device)
+                size=(results.bboxes.shape[0], h, w), dtype=torch.bool, device=results.bboxes.device
+            )
         return results
 
-    def _mask_predict_by_feat(self, mask_feat: Tensor, kernels: Tensor,
-                              priors: Tensor) -> Tensor:
+    def _mask_predict_by_feat(self, mask_feat: Tensor, kernels: Tensor, priors: Tensor) -> Tensor:
         """Generate mask logits from mask features with dynamic convs.
 
         Args:
@@ -661,32 +609,26 @@ class RTMDetInsSepBNHead(RTMDetHead):
         num_inst = kernels.shape[0]
         h, w = mask_feat.size()[-2:]
         if num_inst < 1:
-            return torch.empty(
-                size=(num_inst, h, w),
-                dtype=mask_feat.dtype,
-                device=mask_feat.device)
+            return torch.empty(size=(num_inst, h, w), dtype=mask_feat.dtype, device=mask_feat.device)
         if len(mask_feat.shape) < 4:
             mask_feat.unsqueeze(0)
 
-        coord = self.prior_generator.single_level_grid_priors(
-            (h, w), level_idx=0, device=mask_feat.device).reshape(1, -1, 2)
+        coord = self.prior_generator.single_level_grid_priors((h, w), level_idx=0, device=mask_feat.device).reshape(
+            1, -1, 2
+        )
         num_inst = priors.shape[0]
         points = priors[:, :2].reshape(-1, 1, 2)
         strides = priors[:, 2:].reshape(-1, 1, 2)
-        relative_coord = (points - coord).permute(0, 2, 1) / (
-            strides[..., 0].reshape(-1, 1, 1) * 8)
+        relative_coord = (points - coord).permute(0, 2, 1) / (strides[..., 0].reshape(-1, 1, 1) * 8)
         relative_coord = relative_coord.reshape(num_inst, 2, h, w)
 
-        mask_feat = torch.cat(
-            [relative_coord,
-             mask_feat.repeat(num_inst, 1, 1, 1)], dim=1)
+        mask_feat = torch.cat([relative_coord, mask_feat.repeat(num_inst, 1, 1, 1)], dim=1)
         weights, biases = self.parse_dynamic_params(kernels)
 
         n_layers = len(weights)
         x = mask_feat.reshape(1, -1, h, w)
-        for i, (weight, bias) in enumerate(zip(weights, biases)):
-            x = F.conv2d(
-                x, weight, bias=bias, stride=1, padding=0, groups=num_inst)
+        for i, (weight, bias) in enumerate(zip(weights, biases, strict=False)):
+            x = F.conv2d(x, weight, bias=bias, stride=1, padding=0, groups=num_inst)
             if i < n_layers - 1:
                 x = F.relu(x)
         x = x.reshape(num_inst, h, w)
@@ -697,18 +639,14 @@ class RTMDetInsSepBNHead(RTMDetHead):
         n_inst = flatten_kernels.size(0)
         n_layers = len(self.head_module.weight_nums)
         params_splits = list(
-            torch.split_with_sizes(
-                flatten_kernels,
-                self.head_module.weight_nums + self.head_module.bias_nums,
-                dim=1))
+            torch.split_with_sizes(flatten_kernels, self.head_module.weight_nums + self.head_module.bias_nums, dim=1)
+        )
         weight_splits = params_splits[:n_layers]
         bias_splits = params_splits[n_layers:]
         for i in range(n_layers):
             if i < n_layers - 1:
-                weight_splits[i] = weight_splits[i].reshape(
-                    n_inst * self.head_module.dyconv_channels, -1, 1, 1)
-                bias_splits[i] = bias_splits[i].reshape(
-                    n_inst * self.head_module.dyconv_channels)
+                weight_splits[i] = weight_splits[i].reshape(n_inst * self.head_module.dyconv_channels, -1, 1, 1)
+                bias_splits[i] = bias_splits[i].reshape(n_inst * self.head_module.dyconv_channels)
             else:
                 weight_splits[i] = weight_splits[i].reshape(n_inst, -1, 1, 1)
                 bias_splits[i] = bias_splits[i].reshape(n_inst)
@@ -716,10 +654,11 @@ class RTMDetInsSepBNHead(RTMDetHead):
         return weight_splits, bias_splits
 
     def loss_by_feat(
-            self,
-            cls_scores: List[Tensor],
-            bbox_preds: List[Tensor],
-            batch_gt_instances: InstanceList,
-            batch_img_metas: List[dict],
-            batch_gt_instances_ignore: OptInstanceList = None) -> dict:
+        self,
+        cls_scores: list[Tensor],
+        bbox_preds: list[Tensor],
+        batch_gt_instances: InstanceList,
+        batch_img_metas: list[dict],
+        batch_gt_instances_ignore: OptInstanceList = None,
+    ) -> dict:
         raise NotImplementedError

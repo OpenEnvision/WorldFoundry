@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> encoder -> common -> sampler.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from jaxtyping import Float, Int64, Shaped
 from torch import Tensor, nn
 
@@ -10,7 +9,6 @@ from ....misc.discrete_probability_distribution import (
 
 
 class Sampler(nn.Module):
-    """Sampler implementation."""
     def forward(
         self,
         probabilities: Float[Tensor, "*batch bucket"],
@@ -20,16 +18,6 @@ class Sampler(nn.Module):
         Int64[Tensor, "*batch 1"],  # index
         Float[Tensor, "*batch 1"],  # probability density
     ]:
-        """Forward.
-
-        Args:
-            probabilities: The probabilities.
-            num_samples: The num samples.
-            deterministic: The deterministic.
-
-        Returns:
-            The return value.
-        """
         return (
             gather_discrete_topk(probabilities, num_samples)
             if deterministic

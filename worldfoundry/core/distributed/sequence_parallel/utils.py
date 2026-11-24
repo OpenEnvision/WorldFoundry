@@ -22,10 +22,10 @@ import pickle
 import time
 from collections import deque
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 import torch
-from torch.distributed import TCPStore
+from torch.distributed import Store, TCPStore
 
 from worldfoundry.core.utils.python.misc_utils import divide
 
@@ -41,7 +41,7 @@ logger = init_logger(__name__)
 
 def ensure_divisibility(numerator, denominator) -> None:
     """Ensure that numerator is divisible by the denominator."""
-    assert numerator % denominator == 0, "{} is not divisible by {}".format(numerator, denominator)
+    assert numerator % denominator == 0, f"{numerator} is not divisible by {denominator}"
 
 
 def split_tensor_along_last_dim(
@@ -86,7 +86,7 @@ class StatelessProcessGroup:
 
     rank: int
     world_size: int
-    store: torch._C._distributed_c10d.Store
+    store: Store
     data_expiration_seconds: int = 3600  # 1 hour
 
     # dst rank -> counter
@@ -102,15 +102,16 @@ class StatelessProcessGroup:
     def __post_init__(self):
         """Zero per-peer counters; ``rank`` must be strictly less than ``world_size``."""
         assert self.rank < self.world_size
-        self.send_dst_counter = {i: 0 for i in range(self.world_size)}
-        self.recv_src_counter = {i: 0 for i in range(self.world_size)}
-        self.broadcast_recv_src_counter = {i: 0 for i in range(self.world_size)}
+        self.send_dst_counter = dict.fromkeys(range(self.world_size), 0)
+        self.recv_src_counter = dict.fromkeys(range(self.world_size), 0)
+        self.broadcast_recv_src_counter = dict.fromkeys(range(self.world_size), 0)
 
     def send_obj(self, obj: Any, dst: int):
         """Send an object to a destination rank."""
         self.expire_data()
         key = f"send_to/{dst}/{self.send_dst_counter[dst]}"
-        self.store.set(key, pickle.dumps(obj))
+        # Store.set accepts serialized bytes; the torch stub only names str.
+        cast(Any, self.store.set)(key, pickle.dumps(obj))
         self.send_dst_counter[dst] += 1
         self.entries.append((key, time.perf_counter()))
 
@@ -139,7 +140,7 @@ class StatelessProcessGroup:
         if self.rank == src:
             self.expire_data()
             key = f"broadcast_from/{src}/{self.broadcast_send_counter}"
-            self.store.set(key, pickle.dumps(obj))
+            cast(Any, self.store.set)(key, pickle.dumps(obj))
             self.broadcast_send_counter += 1
             self.entries.append((key, time.perf_counter()))
             return obj
@@ -191,7 +192,7 @@ class StatelessProcessGroup:
         used for exchanging metadata. With this function, process A and process B
         can call `StatelessProcessGroup.create` to form a group, and then process A, B,
         C, and D can call `StatelessProcessGroup.create` to form another group.
-        """  # noqa
+        """
         store = TCPStore(
             host_name=host,
             port=port,

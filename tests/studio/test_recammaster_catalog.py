@@ -7,11 +7,8 @@ import worldfoundry.studio.inference.catalog as catalog
 import worldfoundry.synthesis.visual_generation.kling.recammaster_runtime.models.wan_model as wan_model
 
 from worldfoundry.pipelines.kling.pipeline_recammaster import ReCamMasterPipeline
-from worldfoundry.studio.inference.catalog import (
-    _recammaster_default_load_kwargs,
-    _recammaster_default_ref,
-    find_entry,
-)
+from worldfoundry.studio.inference.catalog import find_entry
+from worldfoundry.studio.inference.catalog.models.video_generation import _recammaster_default_load_kwargs, _recammaster_default_ref
 
 
 def test_recammaster_catalog_resolves_owner_prefixed_checkpoint(tmp_path, monkeypatch) -> None:
@@ -33,7 +30,7 @@ def test_recammaster_catalog_resolves_owner_prefixed_checkpoint(tmp_path, monkey
 def test_recammaster_catalog_fallbacks_and_demo_inputs_are_portable(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path / "ckpt"))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
-    monkeypatch.setattr(catalog, "_cache_candidates", lambda *names: [])
+    monkeypatch.setattr(catalog.resolve, "_cache_candidates", lambda *names: [])
 
     assert _recammaster_default_ref() == "KlingTeam/ReCamMaster-Wan2.1"
     assert find_entry("recammaster").default_call_kwargs["video_path"] == (

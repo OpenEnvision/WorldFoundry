@@ -6,10 +6,17 @@ from einops import rearrange
 from timm.models.layers import DropPath
 from timm.models.vision_transformer import Mlp
 
-from opensora.acceleration.checkpoint import auto_grad_checkpoint
-from opensora.acceleration.communications import gather_forward_split_backward, split_forward_gather_backward
-from opensora.acceleration.parallel_states import get_sequence_parallel_group
-from opensora.models.layers.blocks import (
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.acceleration.checkpoint import (
+    auto_grad_checkpoint,
+)
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.acceleration.communications import (
+    gather_forward_split_backward,
+    split_forward_gather_backward,
+)
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.acceleration.parallel_states import (
+    get_sequence_parallel_group,
+)
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.models.layers.blocks import (
     Attention,
     CaptionEmbedder,
     MultiHeadCrossAttention,
@@ -24,8 +31,10 @@ from opensora.models.layers.blocks import (
     get_layernorm,
     t2i_modulate,
 )
-from opensora.registry import MODELS
-from opensora.utils.ckpt_utils import load_checkpoint
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import MODELS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.utils.ckpt_utils import (
+    load_checkpoint,
+)
 
 
 class STDiTBlock(nn.Module):

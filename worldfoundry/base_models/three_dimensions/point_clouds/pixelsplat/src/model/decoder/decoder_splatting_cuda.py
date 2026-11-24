@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> decoder -> decoder_splatting_cuda.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from dataclasses import dataclass
 from typing import Literal
 
@@ -16,12 +15,10 @@ from .decoder import Decoder, DecoderOutput
 
 @dataclass
 class DecoderSplattingCUDACfg:
-    """Decoder splatting cuda cfg implementation."""
     name: Literal["splatting_cuda"]
 
 
 class DecoderSplattingCUDA(Decoder[DecoderSplattingCUDACfg]):
-    """Decoder splatting cuda implementation."""
     background_color: Float[Tensor, "3"]
 
     def __init__(
@@ -29,15 +26,6 @@ class DecoderSplattingCUDA(Decoder[DecoderSplattingCUDACfg]):
         cfg: DecoderSplattingCUDACfg,
         dataset_cfg: DatasetCfg,
     ) -> None:
-        """Init.
-
-        Args:
-            cfg: The cfg.
-            dataset_cfg: The dataset cfg.
-
-        Returns:
-            The return value.
-        """
         super().__init__(cfg, dataset_cfg)
         self.register_buffer(
             "background_color",
@@ -55,20 +43,6 @@ class DecoderSplattingCUDA(Decoder[DecoderSplattingCUDACfg]):
         image_shape: tuple[int, int],
         depth_mode: DepthRenderingMode | None = None,
     ) -> DecoderOutput:
-        """Forward.
-
-        Args:
-            gaussians: The gaussians.
-            extrinsics: The extrinsics.
-            intrinsics: The intrinsics.
-            near: The near.
-            far: The far.
-            image_shape: The image shape.
-            depth_mode: The depth mode.
-
-        Returns:
-            The return value.
-        """
         b, v, _, _ = extrinsics.shape
         color = render_cuda(
             rearrange(extrinsics, "b v i j -> (b v) i j"),
@@ -88,9 +62,7 @@ class DecoderSplattingCUDA(Decoder[DecoderSplattingCUDACfg]):
             color,
             None
             if depth_mode is None
-            else self.render_depth(
-                gaussians, extrinsics, intrinsics, near, far, image_shape, depth_mode
-            ),
+            else self.render_depth(gaussians, extrinsics, intrinsics, near, far, image_shape, depth_mode),
         )
 
     def render_depth(
@@ -103,20 +75,6 @@ class DecoderSplattingCUDA(Decoder[DecoderSplattingCUDACfg]):
         image_shape: tuple[int, int],
         mode: DepthRenderingMode = "depth",
     ) -> Float[Tensor, "batch view height width"]:
-        """Render depth.
-
-        Args:
-            gaussians: The gaussians.
-            extrinsics: The extrinsics.
-            intrinsics: The intrinsics.
-            near: The near.
-            far: The far.
-            image_shape: The image shape.
-            mode: The mode.
-
-        Returns:
-            The return value.
-        """
         b, v, _, _ = extrinsics.shape
         result = render_depth_cuda(
             rearrange(extrinsics, "b v i j -> (b v) i j"),

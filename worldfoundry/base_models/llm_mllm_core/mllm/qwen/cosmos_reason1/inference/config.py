@@ -1,7 +1,5 @@
 """Inference and distributed-layout configuration for the bundled Reason1 encoder."""
 
-from typing import Optional, Union
-
 import attrs
 
 
@@ -45,13 +43,13 @@ class FSDP2ModelConfig:
     add_tile_tag: bool = False
     add_image_start_end_tag: bool = False
     add_answer_tag: bool = True
-    tile_tag_type: Union[str, None] = "space_separated"
+    tile_tag_type: str | None = "space_separated"
     use_cache: bool = False
-    cp_size: Optional[int] = None
-    ep_size: Optional[int] = None
+    cp_size: int | None = None
+    ep_size: int | None = None
 
     def __getitem__(self, item):
         return getattr(self, item)
 
 
-__all__ = ["ExperimentalConfig", "Float8Config", "FSDP2ModelConfig", "ParallelConfig"]
+__all__ = ["ExperimentalConfig", "FSDP2ModelConfig", "Float8Config", "ParallelConfig"]

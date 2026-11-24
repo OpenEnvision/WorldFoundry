@@ -8,14 +8,14 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.utils import benchmark_task_sample_path
+from worldfoundry.evals.utils import benchmark_task_sample_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 PHYSICS_VIDEO_BENCHMARK_RUNNERS = (
-    ("phygenbench", "worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py"),
-    ("videophy", "worldfoundry/evaluation/tasks/execution/runners/videophy/run_videophy_official_runner.py"),
-    ("videophy2", "worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py"),
+    ("phygenbench", "worldfoundry/evals/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py"),
+    ("videophy", "worldfoundry/evals/tasks/execution/runners/videophy/run_videophy_official_runner.py"),
+    ("videophy2", "worldfoundry/evals/tasks/execution/runners/videophy2/run_videophy2_official_runner.py"),
 )
 
 

@@ -36,7 +36,9 @@ def convert(source: Path, output: Path) -> None:
     shard_names = sorted(set(weight_map.values()))
     if any(not name.startswith("pytorch_model-") or not name.endswith(".bin") for name in shard_names):
         raise ValueError(f"Unexpected source shard names: {shard_names}")
-    converted_names = {name: name.replace("pytorch_model-", "model-", 1).replace(".bin", ".safetensors") for name in shard_names}
+    converted_names = {
+        name: name.replace("pytorch_model-", "model-", 1).replace(".bin", ".safetensors") for name in shard_names
+    }
     output.mkdir(parents=True, exist_ok=True)
     for sidecar in ("config.json", "spiece.model", "tokenizer_config.json", "special_tokens_map.json"):
         temporary = output / (sidecar + ".part")
@@ -64,7 +66,11 @@ def convert(source: Path, output: Path) -> None:
             raise TypeError(f"Source shard contains non-tensor values: {shard_name}")
         temporary = target.with_name(target.name + ".part")
         try:
-            save_file({key: value.detach().contiguous() for key, value in weights.items()}, temporary, metadata={"format": "pt"})
+            save_file(
+                {key: value.detach().contiguous() for key, value in weights.items()},
+                temporary,
+                metadata={"format": "pt"},
+            )
             with safe_open(temporary, framework="pt", device="cpu") as saved:
                 if set(saved.keys()) != expected_keys:
                     raise ValueError(f"Converted shard keys disagree with index: {temporary}")

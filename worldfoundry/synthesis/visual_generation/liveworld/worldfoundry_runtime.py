@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import yaml
 
-from worldfoundry.core.io.paths import checkpoint_root_candidates, hfd_root_path
-from worldfoundry.evaluation.utils import worldfoundry_data_path
+from worldfoundry.core.execution.process import package_module_command
+from worldfoundry.core.io.paths import checkpoint_root_candidates, hfd_root_path, package_data_path
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
 
-_CONFIG_ROOT = worldfoundry_data_path("models", "runtime", "configs", "liveworld")
+_CONFIG_ROOT = package_data_path("models", "runtime", "configs", "liveworld")
 
 
 def _first_local_path(*candidates: Path) -> Path:
@@ -99,7 +100,7 @@ class LiveWorldRuntime:
         return Path(__file__).resolve().parent / "liveworld_runtime"
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> "LiveWorldRuntime":
+    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> LiveWorldRuntime:
         return cls(checkpoint_path=pretrained_model_path, **kwargs)
 
     def plan(self, **kwargs: Any) -> dict[str, Any]:
@@ -179,9 +180,7 @@ class LiveWorldRuntime:
         # The official Hub snapshot stores the two runtime weights under ``ckpts/``.
         # Also accept an explicit path to that directory for backwards compatibility.
         nested_checkpoint_root = checkpoint_snapshot / "ckpts"
-        checkpoint_root = (
-            nested_checkpoint_root if nested_checkpoint_root.is_dir() else checkpoint_snapshot
-        )
+        checkpoint_root = nested_checkpoint_root if nested_checkpoint_root.is_dir() else checkpoint_snapshot
         require_path(checkpoint_root / "lora" / "model.pt", "LiveWorld LoRA", kind="file")
         require_path(checkpoint_root / "state_adapter" / "model.pt", "LiveWorld state adapter", kind="file")
         base = require_path(self.base_model_path, "Wan2.1-T2V-14B base model", kind="dir")
@@ -234,18 +233,20 @@ class LiveWorldRuntime:
             seed=seed,
         )
         native_output = input_dir / "outputs"
-        command = [
-            self.python_executable,
-            "scripts/infer.py",
-            "--config",
-            sample_path,
-            "--system-config",
-            system_path,
-            "--output-root",
-            native_output,
-            "--device",
-            self.device,
-        ]
+        command = package_module_command(
+            "worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.scripts.infer",
+            [
+                "--config",
+                sample_path,
+                "--system-config",
+                system_path,
+                "--output-root",
+                native_output,
+                "--device",
+                self.device,
+            ],
+            python_executable=self.python_executable,
+        )
         result = execute_in_tree(
             command,
             cwd=self.repo_root,
@@ -253,7 +254,6 @@ class LiveWorldRuntime:
             search_roots=(native_output,),
             preferred_names=("final_video.mp4",),
             env=self.env,
-            python_paths=(self.repo_root,),
         )
         return result if return_dict else result.get("video")
 

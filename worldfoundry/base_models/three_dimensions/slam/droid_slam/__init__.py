@@ -6,6 +6,7 @@ from pathlib import Path
 
 from worldfoundry.base_models.capabilities import BASE_MODEL_CAPABILITIES
 
+
 def checkpoint_path() -> Path:
     asset = BASE_MODEL_CAPABILITIES["droid_slam"].assets[0]
     status = asset.check()

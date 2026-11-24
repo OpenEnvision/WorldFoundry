@@ -14,30 +14,20 @@ not by the unified NativeDiffusionRunner path.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 
 
 @dataclass
 class LabelImageCondition:
-    """Label image condition implementation."""
-
     label: torch.Tensor
 
-    def get_classifier_free_guidance_condition(self) -> "LabelImageCondition":
-        """Get classifier free guidance condition.
-
-        Returns:
-            The return value.
-        """
+    def get_classifier_free_guidance_condition(self) -> LabelImageCondition:
         return LabelImageCondition(torch.zeros_like(self.label))
 
 
 @dataclass
 class DenoisePrediction:
-    """Denoise prediction implementation."""
-
     x0: torch.Tensor
-    eps: Optional[torch.Tensor] = None
-    logvar: Optional[torch.Tensor] = None
+    eps: torch.Tensor | None = None
+    logvar: torch.Tensor | None = None

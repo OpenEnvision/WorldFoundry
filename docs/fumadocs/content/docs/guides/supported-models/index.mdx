@@ -7,13 +7,13 @@ description: Pick a model, inspect its runtime, and copy a command that matches 
 
 ## How to read readiness
 
-Every model carries one readiness badge. The badge is computed from independent manifest records and never rounds missing evidence up to a stronger claim.
+Every model carries one readiness badge, derived from its manifest.
 
 - **Runner verified** — A WorldFoundry runner-parity artifact is recorded for at least one route. Select the variant and configuration named in that evidence.
 - **Integrated** — A runnable pipeline is bound, but end-to-end GPU parity is still pending. Run it; treat outputs as unvalidated until parity is recorded.
 - **Runtime ported** — Runtime code exists in-tree; the route is still being wired up. Inspect the manifest; running may require manual steps.
 - **Profile only** — Only a runtime profile is recorded — no bound pipeline. Use the page for provenance and planning; no run command is shown.
-- **Planned** — The entry records intent and upstream provenance only. Track it; nothing is runnable yet.
+- **Planned** — Only upstream provenance is known. Nothing is runnable yet.
 - **Blocked** — A recorded blocker (license, weights, upstream) prevents integration. Read the manifest notes for the specific blocker.
 
 ## How to choose a model
@@ -25,7 +25,7 @@ Every model carries one readiness badge. The badge is computed from independent 
 
 ## What each model page contains
 
-Model pages combine generated runtime records with model-specific articles. `docs/fumadocs/scripts/generate-model-recipes.py` refreshes recipe data and pages marked `pageSource: generated`; authored articles are maintained separately. Each page keeps these claims separate:
+Each model page shows these items separately:
 
 <RecipeRecords items={[
   {
@@ -34,7 +34,7 @@ Model pages combine generated runtime records with model-specific articles. `doc
   },
   {
     term: 'Publisher',
-    detail: 'The formal publishing institution (company first, then university or lab) with its kind. GitHub handles are never presented as brands; when the repository records no formal institution, the page says so explicitly.',
+    detail: 'The formal publishing institution (company first, then university or lab) with its kind. When no formal institution is known, the page says so.',
   },
   {
     term: 'Runtime profile',
@@ -54,23 +54,23 @@ Model pages combine generated runtime records with model-specific articles. `doc
   },
   {
     term: 'Evidence',
-    detail: 'Native-demo and WorldFoundry-runner parity; a catalog entry alone is not proof of a successful GPU run.',
+    detail: 'Native-demo and WorldFoundry-runner parity results.',
   },
 ]} />
 
-Unknown values remain **Not recorded**. Catalog manifests can carry a curated bilingual `docs:` block with overview, architecture, publisher attribution, and recommended benchmarks. Entries without that block use recorded catalog and runtime metadata. Usage notes and blockers live in the **Runtime contract** on each model page. Catalog tasks describe model capabilities; the command builder uses the CLI's accepted task-profile IDs and options. Recorded validation applies to the stated route and configuration.
+Unknown values show as **Not recorded**. Usage notes and blockers are in the **Runtime contract** section of each model page. Catalog tasks describe model capabilities; the command builder uses the task-profile IDs and options that the CLI accepts. Validation results apply to the stated route and configuration.
 
 ## Common commands
 
 ```bash
 # Inspect the complete catalog manifest.
-worldfoundry-eval zoo model-show \
+wf zoo model-show \
   --model-id <model-id> \
   --include-manifest \
   --json
 
 # Resolve checkpoints, credentials, and local asset blockers without downloading.
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id <model-id> \
   --check-local \
   --json
@@ -82,7 +82,7 @@ bash scripts/setup/model_env_install.sh --model <model-id>
 bash scripts/inference/prepare_model_infer.sh <model-id> --download
 
 # Run a recorded task profile (each model page generates the exact flags).
-worldfoundry-eval run <model-id> --pipeline.task-profile <task> --json
+wf run <model-id> --pipeline.task-profile <task> --json
 ```
 
 ## Where this fits in the docs

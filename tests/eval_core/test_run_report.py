@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from worldfoundry.evaluation.reporting import (
+from worldfoundry.evals.reporting import (
     RUN_SUMMARY_SCHEMA_VERSION,
     build_run_summary,
     write_run_report_artifacts,

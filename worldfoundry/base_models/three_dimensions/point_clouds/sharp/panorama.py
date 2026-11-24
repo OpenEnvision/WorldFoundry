@@ -21,8 +21,8 @@ from .color_space import srgb_to_linear
 from .layers import (
     DAPFeatureAdapter,
     DAPFeatures,
-    DPTFeatureHead,
     DirectPredictionHead,
+    DPTFeatureHead,
 )
 from .types import (
     ColorInitOption,
@@ -152,9 +152,7 @@ class PanoMultiLayerInitializer(nn.Module):
         self.exp_growth_rate = exp_growth_rate
         self.transition_depth = transition_depth
 
-    def prepare_feature_input(
-        self, image: torch.Tensor, depth: torch.Tensor
-    ) -> torch.Tensor:
+    def prepare_feature_input(self, image: torch.Tensor, depth: torch.Tensor) -> torch.Tensor:
         if self.feature_input_stop_grad:
             image = image.detach()
             depth = depth.detach()
@@ -162,9 +160,7 @@ class PanoMultiLayerInitializer(nn.Module):
         features = torch.cat((image, self.disparity_factor / stable_depth), dim=1)
         return 2.0 * features - 1.0
 
-    def forward(
-        self, image: torch.Tensor, depth: torch.Tensor
-    ) -> PanoInitializerOutput:
+    def forward(self, image: torch.Tensor, depth: torch.Tensor) -> PanoInitializerOutput:
         image = image.contiguous()
         depth = depth.contiguous()
         batch_size, _, image_height, image_width = depth.shape
@@ -183,9 +179,7 @@ class PanoMultiLayerInitializer(nn.Module):
                 device=depth.device,
                 dtype=depth.dtype,
             )
-            return values[None, None, :-1, None, None].repeat(
-                batch_size, 1, 1, base_height, base_width
-            )
+            return values[None, None, :-1, None, None].repeat(batch_size, 1, 1, base_height, base_width)
 
         def surface_disparity(value: torch.Tensor, mode: str) -> torch.Tensor:
             disparity = 1.0 / (value + 1e-6)
@@ -215,20 +209,14 @@ class PanoMultiLayerInitializer(nn.Module):
             elif self.rest_layer_depth_option == "surface_max":
                 remaining = surface_disparity(remaining_depth, "max")
             elif self.rest_layer_depth_option == "base_depth":
-                remaining = torch.cat(
-                    [fixed_disparity() for _ in range(self.num_layers - 1)], dim=2
-                )
+                remaining = torch.cat([fixed_disparity() for _ in range(self.num_layers - 1)], dim=2)
             elif self.rest_layer_depth_option == "linear_disparity":
                 remaining = fixed_disparity(self.num_layers - 1)
             else:
-                raise ValueError(
-                    f"Unknown remaining depth mode: {self.rest_layer_depth_option!r}."
-                )
+                raise ValueError(f"Unknown remaining depth mode: {self.rest_layer_depth_option!r}.")
             disparity = torch.cat((first, remaining), dim=2)
 
-        dir_x, dir_y, dir_z = _equirectangular_directions(
-            depth, self.stride, self.num_layers
-        )
+        dir_x, dir_y, dir_z = _equirectangular_directions(depth, self.stride, self.num_layers)
         scales = _base_scale(
             disparity,
             2.0 * self.scale_factor * self.stride / float(image_width),
@@ -236,9 +224,9 @@ class PanoMultiLayerInitializer(nn.Module):
             self.exp_growth_rate,
             self.transition_depth,
         )
-        quaternions = torch.tensor(
-            [1.0, 0.0, 0.0, 0.0], device=depth.device, dtype=depth.dtype
-        )[None, :, None, None, None]
+        quaternions = torch.tensor([1.0, 0.0, 0.0, 0.0], device=depth.device, dtype=depth.dtype)[
+            None, :, None, None, None
+        ]
         opacities = torch.tensor(
             [min(1.0 / self.num_layers, 0.5)],
             device=depth.device,
@@ -295,9 +283,7 @@ def create_initializer(params: InitializerParams) -> PanoMultiLayerInitializer:
 
 def _scale_activation_constants(max_scale: float, min_scale: float) -> tuple[float, float]:
     constant_a = (max_scale - min_scale) / (1.0 - min_scale) / (max_scale - 1.0)
-    constant_b = math_utils.inverse_sigmoid(
-        torch.tensor((1.0 - min_scale) / (max_scale - min_scale))
-    ).item()
+    constant_b = math_utils.inverse_sigmoid(torch.tensor((1.0 - min_scale) / (max_scale - min_scale))).item()
     return constant_a, constant_b
 
 
@@ -334,15 +320,12 @@ class PanoGaussianComposer(nn.Module):
             )
 
         inverse_depth = F.softplus(
-            math_utils.inverse_softplus(base_values.inverse_depth)
-            + self.delta_factor.z * delta[:, 2:3]
+            math_utils.inverse_softplus(base_values.inverse_depth) + self.delta_factor.z * delta[:, 2:3]
         )
         theta = torch.atan2(base_values.dir_x, base_values.dir_z)
         phi = -torch.asin(base_values.dir_y.clamp(-1.0 + 1e-6, 1.0 - 1e-6))
         theta = theta + self.delta_factor.xy * delta[:, 0:1]
-        phi = (phi + self.delta_factor.xy * delta[:, 1:2]).clamp(
-            -math.pi / 2.0 + 1e-5, math.pi / 2.0 - 1e-5
-        )
+        phi = (phi + self.delta_factor.xy * delta[:, 1:2]).clamp(-math.pi / 2.0 + 1e-5, math.pi / 2.0 - 1e-5)
         cos_phi = torch.cos(phi)
         directions = torch.cat(
             (cos_phi * torch.sin(theta), -torch.sin(phi), cos_phi * torch.cos(theta)),
@@ -351,23 +334,15 @@ class PanoGaussianComposer(nn.Module):
         means = directions / (inverse_depth + 1e-3)
 
         if self.base_scale_on_predicted_mean:
-            base_scales = (
-                base_values.scales
-                * base_values.inverse_depth
-                / (inverse_depth + 1e-3)
-            )
+            base_scales = base_values.scales * base_values.inverse_depth / (inverse_depth + 1e-3)
         else:
             base_scales = base_values.scales
-        constant_a, constant_b = _scale_activation_constants(
-            self.max_scale, self.min_scale
-        )
+        constant_a, constant_b = _scale_activation_constants(self.max_scale, self.min_scale)
         scale_multiplier = (self.max_scale - self.min_scale) * torch.sigmoid(
             constant_a * self.delta_factor.scale * delta[:, 3:6] + constant_b
         ) + self.min_scale
         scales = base_scales * scale_multiplier
-        quaternions = (
-            base_values.quaternions + self.delta_factor.quaternion * delta[:, 6:10]
-        )
+        quaternions = base_values.quaternions + self.delta_factor.quaternion * delta[:, 6:10]
 
         color_base = base_values.colors
         if self.color_activation_type == "sigmoid":
@@ -376,17 +351,13 @@ class PanoGaussianComposer(nn.Module):
             color_base = color_base.clamp_min(0.01)
         color_activation = math_utils.create_activation_pair(self.color_activation_type)
         colors = color_activation.forward(
-            color_activation.inverse(color_base)
-            + self.delta_factor.color * delta[:, 10:13]
+            color_activation.inverse(color_base) + self.delta_factor.color * delta[:, 10:13]
         )
         if self.color_space == "linearRGB":
             colors = srgb_to_linear(colors)
-        opacity_activation = math_utils.create_activation_pair(
-            self.opacity_activation_type
-        )
+        opacity_activation = math_utils.create_activation_pair(self.opacity_activation_type)
         opacities = opacity_activation.forward(
-            opacity_activation.inverse(base_values.opacities)
-            + self.delta_factor.opacity * delta[:, 13]
+            opacity_activation.inverse(base_values.opacities) + self.delta_factor.opacity * delta[:, 13]
         )
 
         means = means.permute(0, 2, 3, 4, 1).flatten(1, 3)
@@ -459,14 +430,9 @@ class PanoGaussianPredictor(nn.Module):
 _DAP_MODEL_TYPES = {"vits", "vitb", "vitl"}
 
 
-def create_depth_model(
-    encoder: str = "vitl", checkpoint_path: str | Path | None = None
-) -> DepthAnythingV2:
+def create_depth_model(encoder: str = "vitl", checkpoint_path: str | Path | None = None) -> DepthAnythingV2:
     if encoder not in _DAP_MODEL_TYPES:
-        raise ValueError(
-            f"Unsupported DAP model type {encoder!r}; "
-            f"expected one of {sorted(_DAP_MODEL_TYPES)}."
-        )
+        raise ValueError(f"Unsupported DAP model type {encoder!r}; expected one of {sorted(_DAP_MODEL_TYPES)}.")
     model = make_dap_model(
         midas_model_type=encoder,
         max_depth=1.0,
@@ -541,9 +507,7 @@ def build_panorama_predictor(
             feature_input_stop_grad=True,
         )
     )
-    return create_panorama_predictor(
-        params, create_depth_model(checkpoint_path=depth_checkpoint)
-    ).to(device)
+    return create_panorama_predictor(params, create_depth_model(checkpoint_path=depth_checkpoint)).to(device)
 
 
 def load_predictor_checkpoint(

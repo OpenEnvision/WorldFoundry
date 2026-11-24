@@ -17,9 +17,9 @@ path, resolution, optional ``mode``) and composes the native recipe.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
 
 from worldfoundry.core.io.paths import package_data_path
 
@@ -366,9 +366,7 @@ SANA_VARIANTS: Mapping[str, SanaVariant] = {
         task="video-to-video",
         runner="streaming",
         config_path="sana_streaming/sana_streaming_bidirectional_2b_720p.yaml",
-        model_path=(
-            "hf://Efficient-Large-Model/SANA-Streaming_bidirectional/dit/sana_bidirectional_short.pth"
-        ),
+        model_path=("hf://Efficient-Large-Model/SANA-Streaming_bidirectional/dit/sana_bidirectional_short.pth"),
         resolution="720p",
         repo_id="Efficient-Large-Model/SANA-Streaming_bidirectional",
         default_steps=50,

@@ -1,6 +1,6 @@
 ---
 title: LIBERO
-description: "终身机器人学习评测，四个桌面套件。WorldFoundry 可导入官方结果或接线闭环执行——不编造排名。"
+description: "终身机器人学习评测，四个桌面套件。WorldFoundry 可导入官方结果，也可运行闭环执行。"
 ---
 
 LIBERO（NeurIPS 2023 Datasets & Benchmarks）是德州大学奥斯汀分校的终身操作评测，联合清华与 Sony AI。Franka 在 **robosuite / MuJoCo** 桌面上，必须跨任务迁移**陈述性**与**程序性**知识。四个官方套件把「迁了什么」拆开：
@@ -10,9 +10,9 @@ LIBERO（NeurIPS 2023 Datasets & Benchmarks）是德州大学奥斯汀分校的�
 - **LIBERO-Goal** — 场景相同，目标语言不同。
 - **LIBERO-100** — LIBERO-10 短任务加 LIBERO-90 更长时程的混合。
 
-它几乎成了 VLA 的默认成绩单。论文是 [LIBERO: Benchmarking Knowledge Transfer for Lifelong Robot Learning](https://arxiv.org/abs/2306.03310)。项目：[libero-project.github.io](https://libero-project.github.io/)。代码：[Lifelong-Robot-Learning/LIBERO](https://github.com/Lifelong-Robot-Learning/LIBERO)（MIT）。
+它几乎已成为 VLA 的默认评测标准。论文是 [LIBERO: Benchmarking Knowledge Transfer for Lifelong Robot Learning](https://arxiv.org/abs/2306.03310)。项目：[libero-project.github.io](https://libero-project.github.io/)。代码：[Lifelong-Robot-Learning/LIBERO](https://github.com/Lifelong-Robot-Learning/LIBERO)（MIT）。
 
-WorldFoundry 支持**两条**路径。官方 `eval_result` 树（或结构化导出）走 `worldfoundry.evaluation.tasks.embodied.normalizer`。闭环执行经 `worldfoundry-eval embodied run` 接线，需要上游模拟器、套件资产，以及官方脚本期望的策略。数据集快照 `yifengzhu-hf/LIBERO-datasets` 与 `lerobot/libero` 作为就位资产跟踪。[Being-H0.5](/zh/docs/guides/supported-models/being-h05) 等模型有 LIBERO 专家 checkpoint——那是模型卡片事实，不是 Hub 的 leaderboard 行。
+WorldFoundry 支持**两条**路径。官方 `eval_result` 树（或结构化导出）走 `worldfoundry.evals.tasks.embodied.normalizer`。闭环执行通过 `wf embodied run` 进行，需要上游模拟器、套件资产，以及官方脚本期望的策略。数据集快照：`yifengzhu-hf/LIBERO-datasets`（官方演示）与 `lerobot/libero`（LeRobot 转换版）。[Being-H0.5](/zh/docs/guides/supported-models/being-h05) 等模型提供 LIBERO 专家 checkpoint。
 
 <BenchmarkPageSections id="libero" locale="zh" />
 
@@ -21,7 +21,7 @@ WorldFoundry 支持**两条**路径。官方 `eval_result` 树（或结构化导
 导入官方结果树（不跑模拟器）：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id libero \
   --mode official-validation \
   --official-results-path <official_results.json> \

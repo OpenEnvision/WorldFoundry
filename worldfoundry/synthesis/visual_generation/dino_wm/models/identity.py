@@ -1,5 +1,6 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
+
 
 class IdentityFeatureModel(nn.Module):
     def __init__(self, emb_dim, **kwargs):
@@ -14,8 +15,9 @@ class IdentityFeatureModel(nn.Module):
         num_repeat = self.emb_dim // dim
         processed_x = torch.zeros([b, self.emb_dim]).to(x.device)
         x_repeated = x.repeat(1, num_repeat)
-        processed_x[:, :num_repeat * dim] = x_repeated
+        processed_x[:, : num_repeat * dim] = x_repeated
         return x.unsqueeze(1)  # return shape: (b, 1(or # patches), num_features)
+
 
 class RepeatActionEncoder(nn.Module):
     def __init__(self, in_chans, emb_dim, **kwargs):
@@ -27,12 +29,12 @@ class RepeatActionEncoder(nn.Module):
         self.fc = nn.Linear(in_chans, 1)  # not used
 
     def forward(self, act):
-        '''
+        """
         (b, t, act_dim) --> (b, t, action_emb_dim)
-        '''
+        """
         b, t, act_dim = act.shape
         num_repeat = self.emb_dim // act_dim
         processed_act = torch.zeros([b, t, self.emb_dim]).to(act.device)
         act_repeated = act.repeat(1, 1, num_repeat)
-        processed_act[:, :, :num_repeat * act_dim] = act_repeated
+        processed_act[:, :, : num_repeat * act_dim] = act_repeated
         return processed_act

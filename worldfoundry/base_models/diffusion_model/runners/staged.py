@@ -9,13 +9,13 @@ Must not: mutate a process-wide DiffSynth registry; discover checkpoints without
 an explicit ``model_pool_factory``.
 """
 
-from PIL import Image
-import torch
 import numpy as np
-from einops import rearrange, repeat, reduce
-from typing import Union
-from worldfoundry.core.execution.device import get_device_name, get_device_type, is_npu_available, parse_device_type
+import torch
+from einops import rearrange, reduce, repeat
+from PIL import Image
+
 from worldfoundry.core.model_loading import GeneralLoRALoader, ModelConfig, load_state_dict
+from worldfoundry.core.platform.device import get_device_name, get_device_type, is_npu_available, parse_device_type
 from worldfoundry.core.vram import AutoTorchModule, AutoWrappedLinear
 
 
@@ -36,23 +36,12 @@ class InferenceStage:
         self,
         seperate_cfg: bool = False,
         take_over: bool = False,
-        input_params: tuple[str] = None,
-        output_params: tuple[str] = None,
-        input_params_posi: dict[str, str] = None,
-        input_params_nega: dict[str, str] = None,
-        onload_model_names: tuple[str] = None,
+        input_params: tuple[str] | None = None,
+        output_params: tuple[str] | None = None,
+        input_params_posi: dict[str, str] | None = None,
+        input_params_nega: dict[str, str] | None = None,
+        onload_model_names: tuple[str] | None = None,
     ):
-        """Init.
-
-        Args:
-            seperate_cfg: The seperate cfg.
-            take_over: The take over.
-            input_params: The input params.
-            output_params: The output params.
-            input_params_posi: The input params posi.
-            input_params_nega: The input params nega.
-            onload_model_names: The onload model names.
-        """
         self.seperate_cfg = seperate_cfg
         self.take_over = take_over
         self.input_params = input_params
@@ -73,7 +62,7 @@ class InferenceStage:
         if self.input_params_nega is not None:
             for _, param in self.input_params_nega.items():
                 params.append(param)
-        params = sorted(list(set(params)))
+        params = sorted(set(params))
         return params
 
     def fetch_output_params(self):
@@ -89,14 +78,6 @@ class InferenceStage:
         return {}
 
     def post_process(self, pipe, **kwargs) -> dict:
-        """Post process.
-
-        Args:
-            pipe: The pipe.
-
-        Returns:
-            The return value.
-        """
         return {}
 
 
@@ -115,23 +96,13 @@ class StagedDiffusionPipeline(torch.nn.Module):
 
     def __init__(
         self,
-        device=get_device_type(),
+        device=get_device_type(),  # noqa: B008 - The device type is resolved once, when the class is defined.
         torch_dtype=torch.float16,
         height_division_factor=64,
         width_division_factor=64,
         time_division_factor=None,
         time_division_remainder=None,
     ):
-        """Init.
-
-        Args:
-            device: The device.
-            torch_dtype: The torch dtype.
-            height_division_factor: The height division factor.
-            width_division_factor: The width division factor.
-            time_division_factor: The time division factor.
-            time_division_remainder: The time division remainder.
-        """
         super().__init__()
         # The device and torch_dtype is used for the storage of intermediate variables, not models.
         self.device = device
@@ -152,7 +123,6 @@ class StagedDiffusionPipeline(torch.nn.Module):
         self.lora_loader = GeneralLoRALoader
 
     def to(self, *args, **kwargs):
-        """To."""
         device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(*args, **kwargs)
         if device is not None:
             self.device = device
@@ -162,13 +132,6 @@ class StagedDiffusionPipeline(torch.nn.Module):
         return self
 
     def check_resize_height_width(self, height, width, num_frames=None):
-        """Check resize height width.
-
-        Args:
-            height: The height.
-            width: The width.
-            num_frames: The num frames.
-        """
         # Shape check
         if height % self.height_division_factor != 0:
             height = (
@@ -191,16 +154,6 @@ class StagedDiffusionPipeline(torch.nn.Module):
             return height, width, num_frames
 
     def preprocess_image(self, image, torch_dtype=None, device=None, pattern="B C H W", min_value=-1, max_value=1):
-        """Preprocess image.
-
-        Args:
-            image: The image.
-            torch_dtype: The torch dtype.
-            device: The device.
-            pattern: The pattern.
-            min_value: The min value.
-            max_value: The max value.
-        """
         target_dtype = torch_dtype or self.torch_dtype
         target_device = device or self.device
         if isinstance(image, torch.Tensor):
@@ -216,9 +169,7 @@ class StagedDiffusionPipeline(torch.nn.Module):
             elif image.ndim == 3:
                 source_pattern = "H W C"
             else:
-                raise ValueError(
-                    f"Tensor image must have CHW, HWC, or BCHW layout, got shape {tuple(image.shape)}"
-                )
+                raise ValueError(f"Tensor image must have CHW, HWC, or BCHW layout, got shape {tuple(image.shape)}")
             if source_pattern != pattern:
                 if "B" in pattern and "B" not in source_pattern:
                     image = rearrange(image, f"{source_pattern} -> {pattern}", B=1)
@@ -243,17 +194,6 @@ class StagedDiffusionPipeline(torch.nn.Module):
         max_value=1,
         normalize=1.0,
     ):
-        """Preprocess video.
-
-        Args:
-            video: The video.
-            torch_dtype: The torch dtype.
-            device: The device.
-            pattern: The pattern.
-            min_value: The min value.
-            max_value: The max value.
-            normalize: The normalize.
-        """
         if isinstance(video, torch.Tensor) or (
             isinstance(video, (list, tuple)) and video and isinstance(video[0], torch.Tensor)
         ):
@@ -263,9 +203,7 @@ class StagedDiffusionPipeline(torch.nn.Module):
                 # A frame sequence is T C H W; add the batch dimension.
                 video = video.unsqueeze(0)
             elif video.ndim != 5:
-                raise ValueError(
-                    f"Tensor video must have TCHW or BTCHW layout, got shape {tuple(video.shape)}"
-                )
+                raise ValueError(f"Tensor video must have TCHW or BTCHW layout, got shape {tuple(video.shape)}")
             video = video / normalize
             video = video.to(dtype=torch_dtype or self.torch_dtype, device=device or self.device)
             video = video * (max_value - min_value) + min_value
@@ -287,22 +225,9 @@ class StagedDiffusionPipeline(torch.nn.Module):
         return video
 
     def preprocess_images(self, images):
-        """Preprocess images.
-
-        Args:
-            images: The images.
-        """
         return [self.preprocess_image(image) for image in images]
 
     def vae_output_to_image(self, vae_output, pattern="B C H W", min_value=-1, max_value=1):
-        """Vae output to image.
-
-        Args:
-            vae_output: The vae output.
-            pattern: The pattern.
-            min_value: The min value.
-            max_value: The max value.
-        """
         # Transform a torch.Tensor to PIL.Image
         if pattern != "H W C":
             vae_output = reduce(vae_output, f"{pattern} -> H W C", reduction="mean")
@@ -312,14 +237,6 @@ class StagedDiffusionPipeline(torch.nn.Module):
         return image
 
     def vae_output_to_video(self, vae_output, pattern="B C T H W", min_value=-1, max_value=1):
-        """Vae output to video.
-
-        Args:
-            vae_output: The vae output.
-            pattern: The pattern.
-            min_value: The min value.
-            max_value: The max value.
-        """
         # Transform a torch.Tensor to list of PIL.Image
         if pattern != "T H W C":
             vae_output = reduce(vae_output, f"{pattern} -> T H W C", reduction="mean")
@@ -330,11 +247,6 @@ class StagedDiffusionPipeline(torch.nn.Module):
         return video
 
     def load_models_to_device(self, model_names=()):
-        """Load models to device.
-
-        Args:
-            model_names: The model names.
-        """
         if not (self.vram_management_enabled or self.cpu_offload):
             return
         model_names = set(model_names or ())
@@ -382,17 +294,6 @@ class StagedDiffusionPipeline(torch.nn.Module):
         torch_dtype=None,
         dtype=None,
     ):
-        """Generate noise.
-
-        Args:
-            shape: The shape.
-            seed: The seed.
-            rand_device: The rand device.
-            rand_torch_dtype: The rand torch dtype.
-            device: The device.
-            torch_dtype: The torch dtype.
-            dtype: The dtype.
-        """
         # Initialize Gaussian noise
         if dtype is not None:
             torch_dtype = dtype
@@ -404,22 +305,14 @@ class StagedDiffusionPipeline(torch.nn.Module):
         return noise
 
     def get_vram(self):
-        """Get vram."""
         device = self.device if not is_npu_available() else get_device_name()
         return getattr(torch, self.device_type).mem_get_info(device)[1] / (1024**3)
 
     def enable_cpu_offload(self):
-        """Enable cpu offload."""
         self.cpu_offload = True
         self.vram_management_enabled = True
 
     def get_module(self, model, name):
-        """Get module.
-
-        Args:
-            model: The model.
-            name: The name.
-        """
         if "." in name:
             name, suffix = name[: name.index(".")], name[name.index(".") + 1 :]
             if name.isdigit():
@@ -430,11 +323,6 @@ class StagedDiffusionPipeline(torch.nn.Module):
             return getattr(model, name)
 
     def freeze_except(self, model_names):
-        """Freeze except.
-
-        Args:
-            model_names: The model names.
-        """
         self.eval()
         self.requires_grad_(False)
         for name in model_names:
@@ -448,26 +336,9 @@ class StagedDiffusionPipeline(torch.nn.Module):
             module.requires_grad_(True)
 
     def blend_with_mask(self, base, addition, mask):
-        """Blend with mask.
-
-        Args:
-            base: The base.
-            addition: The addition.
-            mask: The mask.
-        """
         return base * (1 - mask) + addition * mask
 
     def step(self, scheduler, latents, progress_id, noise_pred, input_latents=None, inpaint_mask=None, **kwargs):
-        """Step.
-
-        Args:
-            scheduler: The scheduler.
-            latents: The latents.
-            progress_id: The progress id.
-            noise_pred: The noise pred.
-            input_latents: The input latents.
-            inpaint_mask: The inpaint mask.
-        """
         timestep = scheduler.timesteps[progress_id]
         if inpaint_mask is not None:
             noise_pred_expected = scheduler.return_to_timestep(scheduler.timesteps[progress_id], latents, input_latents)
@@ -476,16 +347,6 @@ class StagedDiffusionPipeline(torch.nn.Module):
         return latents_next
 
     def merge_latents(self, value, latents, masks, scales, blur_kernel_size=33, blur_sigma=10.0):
-        """Merge latents.
-
-        Args:
-            value: The value.
-            latents: The latents.
-            masks: The masks.
-            scales: The scales.
-            blur_kernel_size: The blur kernel size.
-            blur_sigma: The blur sigma.
-        """
         if len(latents) == 0:
             return value
         from torchvision.transforms import GaussianBlur
@@ -493,7 +354,7 @@ class StagedDiffusionPipeline(torch.nn.Module):
         blur = GaussianBlur(kernel_size=blur_kernel_size, sigma=blur_sigma)
         height, width = value.shape[-2:]
         weight = torch.ones_like(value)
-        for latent, mask, scale in zip(latents, masks, scales):
+        for latent, mask, scale in zip(latents, masks, scales, strict=False):
             mask = self.preprocess_image(mask.resize((width, height))).mean(dim=1, keepdim=True) > 0
             mask = mask.repeat(1, latent.shape[1], 1, 1).to(dtype=latent.dtype, device=latent.device)
             mask = blur(mask)
@@ -512,17 +373,6 @@ class StagedDiffusionPipeline(torch.nn.Module):
         special_kwargs=None,
         special_local_kwargs_list=None,
     ):
-        """Control noise via local prompts.
-
-        Args:
-            prompt_emb_global: The prompt emb global.
-            prompt_emb_locals: The prompt emb locals.
-            masks: The masks.
-            mask_scales: The mask scales.
-            inference_callback: The inference callback.
-            special_kwargs: The special kwargs.
-            special_local_kwargs_list: The special local kwargs list.
-        """
         if special_kwargs is None:
             noise_pred_global = inference_callback(prompt_emb_global)
         else:
@@ -532,19 +382,11 @@ class StagedDiffusionPipeline(torch.nn.Module):
         else:
             noise_pred_locals = [
                 inference_callback(prompt_emb_local, special_kwargs)
-                for prompt_emb_local, special_kwargs in zip(prompt_emb_locals, special_local_kwargs_list)
+                for prompt_emb_local, special_kwargs in zip(prompt_emb_locals, special_local_kwargs_list, strict=False)
             ]
         return self.merge_latents(noise_pred_global, noise_pred_locals, masks, mask_scales)
 
     def extend_prompt(self, prompt, local_prompts, masks, mask_scales):
-        """Extend prompt.
-
-        Args:
-            prompt: The prompt.
-            local_prompts: The local prompts.
-            masks: The masks.
-            mask_scales: The mask scales.
-        """
         local_prompts = local_prompts or []
         masks = masks or []
         mask_scales = mask_scales or []
@@ -556,19 +398,9 @@ class StagedDiffusionPipeline(torch.nn.Module):
         return prompt, local_prompts, masks, mask_scales
 
     def split_pipeline_units(self, model_names: list[str]):
-        """Split pipeline units.
-
-        Args:
-            model_names: The model names.
-        """
         return InferenceStageGraph().split_pipeline_units(self.units, model_names)
 
     def flush_vram_management_device(self, device):
-        """Flush vram management device.
-
-        Args:
-            device: The device.
-        """
         for module in self.modules():
             if isinstance(module, AutoTorchModule):
                 module.offload_device = device
@@ -579,22 +411,12 @@ class StagedDiffusionPipeline(torch.nn.Module):
     def load_lora(
         self,
         module: torch.nn.Module,
-        lora_config: Union[ModelConfig, str] = None,
+        lora_config: ModelConfig | str = None,
         alpha=1,
         hotload=None,
         state_dict=None,
         verbose=1,
     ):
-        """Load lora.
-
-        Args:
-            module: The module.
-            lora_config: The lora config.
-            alpha: The alpha.
-            hotload: The hotload.
-            state_dict: The state dict.
-            verbose: The verbose.
-        """
         if state_dict is None:
             if isinstance(lora_config, str):
                 lora = load_state_dict(lora_config, torch_dtype=self.torch_dtype, device=self.device)
@@ -606,20 +428,20 @@ class StagedDiffusionPipeline(torch.nn.Module):
         lora_loader = self.lora_loader(torch_dtype=self.torch_dtype, device=self.device)
         lora = lora_loader.convert_state_dict(lora)
         if hotload is None:
-            hotload = hasattr(module, "vram_management_enabled") and getattr(module, "vram_management_enabled")
+            hotload = hasattr(module, "vram_management_enabled") and module.vram_management_enabled
         if hotload:
-            if not (hasattr(module, "vram_management_enabled") and getattr(module, "vram_management_enabled")):
+            if not (hasattr(module, "vram_management_enabled") and module.vram_management_enabled):
                 raise ValueError("VRAM Management is not enabled. LoRA hotloading is not supported.")
             updated_num = 0
-            for _, module in module.named_modules():
-                if isinstance(module, AutoWrappedLinear):
-                    name = module.name
+            for _, submodule in module.named_modules():
+                if isinstance(submodule, AutoWrappedLinear):
+                    name = submodule.name
                     lora_a_name = f"{name}.lora_A.weight"
                     lora_b_name = f"{name}.lora_B.weight"
                     if lora_a_name in lora and lora_b_name in lora:
                         updated_num += 1
-                        module.lora_A_weights.append(lora[lora_a_name] * alpha)
-                        module.lora_B_weights.append(lora[lora_b_name])
+                        submodule.lora_A_weights.append(lora[lora_a_name] * alpha)
+                        submodule.lora_B_weights.append(lora[lora_b_name])
             if verbose >= 1:
                 print(
                     f"{updated_num} tensors are patched by LoRA. You can use `pipe.clear_lora()` to clear all LoRA layers."
@@ -628,13 +450,8 @@ class StagedDiffusionPipeline(torch.nn.Module):
             lora_loader.fuse_lora_to_base_model(module, lora, alpha=alpha)
 
     def clear_lora(self, verbose=1):
-        """Clear lora.
-
-        Args:
-            verbose: The verbose.
-        """
         cleared_num = 0
-        for name, module in self.named_modules():
+        for _name, module in self.named_modules():
             if isinstance(module, AutoWrappedLinear):
                 if hasattr(module, "lora_A_weights"):
                     if len(module.lora_A_weights) > 0:
@@ -645,17 +462,9 @@ class StagedDiffusionPipeline(torch.nn.Module):
         if verbose >= 1:
             print(f"{cleared_num} LoRA layers are cleared.")
 
-    def download_and_load_models(self, model_configs: list[ModelConfig] = [], vram_limit: float = None):
-        """Download and load models.
-
-        Args:
-            model_configs: The model configs.
-            vram_limit: The vram limit.
-        """
+    def download_and_load_models(self, model_configs: list[ModelConfig] = [], vram_limit: float | None = None):  # noqa: B006 - Read-only default; the function never mutates it.
         if self.model_pool_factory is None:
-            raise RuntimeError(
-                "staged pipeline checkpoint discovery requires an explicit model_pool_factory"
-            )
+            raise RuntimeError("staged pipeline checkpoint discovery requires an explicit model_pool_factory")
         model_pool = self.model_pool_factory(model_configs=self.model_pool_configs)
         for model_config in model_configs:
             model_config.download_if_necessary()
@@ -672,10 +481,9 @@ class StagedDiffusionPipeline(torch.nn.Module):
         return model_pool
 
     def check_vram_management_state(self):
-        """Check vram management state."""
         vram_management_enabled = False
         for module in self.children():
-            if hasattr(module, "vram_management_enabled") and getattr(module, "vram_management_enabled"):
+            if hasattr(module, "vram_management_enabled") and module.vram_management_enabled:
                 vram_management_enabled = True
         return vram_management_enabled
 
@@ -696,7 +504,8 @@ class StagedDiffusionPipeline(torch.nn.Module):
             if isinstance(noise_pred_posi, tuple):
                 # Separately handling different output types of latents, eg. video and audio latents.
                 noise_pred = tuple(
-                    n_nega + cfg_scale * (n_posi - n_nega) for n_posi, n_nega in zip(noise_pred_posi, noise_pred_nega)
+                    n_nega + cfg_scale * (n_posi - n_nega)
+                    for n_posi, n_nega in zip(noise_pred_posi, noise_pred_nega, strict=False)
                 )
             else:
                 noise_pred = noise_pred_nega + cfg_scale * (noise_pred_posi - noise_pred_nega)
@@ -713,15 +522,9 @@ class InferenceStageGraph:
     """
 
     def __init__(self):
-        """Init."""
         pass
 
     def build_edges(self, units: list[InferenceStage]):
-        """Build edges.
-
-        Args:
-            units: The units.
-        """
         # Establish dependencies between units
         # to search for subsequent related computation units.
         last_compute_unit_id = {}
@@ -735,15 +538,10 @@ class InferenceStageGraph:
         return edges
 
     def build_chains(self, units: list[InferenceStage]):
-        """Build chains.
-
-        Args:
-            units: The units.
-        """
         # Establish updating chains for each variable
         # to track their computation process.
-        params = sum([unit.fetch_input_params() + unit.fetch_output_params() for unit in units], [])
-        params = sorted(list(set(params)))
+        params = [param for unit in units for param in unit.fetch_input_params() + unit.fetch_output_params()]
+        params = sorted(set(params))
         chains = {param: [] for param in params}
         for unit_id, unit in enumerate(units):
             for param in unit.fetch_output_params():
@@ -751,12 +549,6 @@ class InferenceStageGraph:
         return chains
 
     def search_direct_unit_ids(self, units: list[InferenceStage], model_names: list[str]):
-        """Search direct unit ids.
-
-        Args:
-            units: The units.
-            model_names: The model names.
-        """
         # Search for units that directly participate in the model's computation.
         related_unit_ids = []
         for unit_id, unit in enumerate(units):
@@ -767,15 +559,8 @@ class InferenceStageGraph:
         return related_unit_ids
 
     def search_related_unit_ids(self, edges, start_unit_ids, direction="target"):
-        """Search related unit ids.
-
-        Args:
-            edges: The edges.
-            start_unit_ids: The start unit ids.
-            direction: The direction.
-        """
         # Search for subsequent related computation units.
-        related_unit_ids = [unit_id for unit_id in start_unit_ids]
+        related_unit_ids = list(start_unit_ids)
         while True:
             neighbors = []
             for source, target in edges:
@@ -783,22 +568,15 @@ class InferenceStageGraph:
                     neighbors.append(target)
                 elif direction == "source" and source not in related_unit_ids and target in related_unit_ids:
                     neighbors.append(source)
-            neighbors = sorted(list(set(neighbors)))
+            neighbors = sorted(set(neighbors))
             if len(neighbors) == 0:
                 break
             else:
                 related_unit_ids.extend(neighbors)
-        related_unit_ids = sorted(list(set(related_unit_ids)))
+        related_unit_ids = sorted(set(related_unit_ids))
         return related_unit_ids
 
     def search_updating_unit_ids(self, units: list[InferenceStage], chains, related_unit_ids):
-        """Search updating unit ids.
-
-        Args:
-            units: The units.
-            chains: The chains.
-            related_unit_ids: The related unit ids.
-        """
         # If the input parameters of this subgraph are updated outside the subgraph,
         # search for the units where these updates occur.
         first_compute_unit_id = {}
@@ -815,16 +593,10 @@ class InferenceStageGraph:
                     if unit_id_ not in related_unit_ids:
                         updating_unit_ids.append(unit_id_)
         related_unit_ids.extend(updating_unit_ids)
-        related_unit_ids = sorted(list(set(related_unit_ids)))
+        related_unit_ids = sorted(set(related_unit_ids))
         return related_unit_ids
 
     def split_pipeline_units(self, units: list[InferenceStage], model_names: list[str]):
-        """Split pipeline units.
-
-        Args:
-            units: The units.
-            model_names: The model names.
-        """
         # Split the computation graph,
         # separating all model-related computations.
         related_unit_ids = self.search_direct_unit_ids(units, model_names)
@@ -847,7 +619,6 @@ class InferenceStageRunner:
     """Execute an :class:`InferenceStage` against shared/CFG state maps."""
 
     def __init__(self):
-        """Init."""
         pass
 
     def __call__(

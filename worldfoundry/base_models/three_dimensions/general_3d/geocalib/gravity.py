@@ -74,7 +74,7 @@ class Gravity(TensorWrapper):
         """Return the Jacobian of the roll angle of the gravity vector."""
         cp, _ = torch.cos(self.pitch), torch.sin(self.pitch)
         cr, sr = torch.cos(self.roll), torch.sin(self.roll)
-        Jr = self.new_zeros(self.shape + (3,))
+        Jr = self.new_zeros(self.shape + (3,))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         Jr[..., 0] = -cr * cp
         Jr[..., 1] = sr * cp
         return Jr
@@ -89,7 +89,7 @@ class Gravity(TensorWrapper):
         cp, sp = torch.cos(self.pitch), torch.sin(self.pitch)
         cr, sr = torch.cos(self.roll), torch.sin(self.roll)
 
-        Jp = self.new_zeros(self.shape + (3,))
+        Jp = self.new_zeros(self.shape + (3,))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         Jp[..., 0] = sr * sp
         Jp[..., 1] = cr * sp
         Jp[..., 2] = cp

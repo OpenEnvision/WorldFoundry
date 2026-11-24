@@ -11,13 +11,13 @@ from worldfoundry.base_models.diffusion_model.recipes.wan_configs.wan21 import (
     WAN_CONFIGS,
     i2v_14B,
 )
-from worldfoundry.synthesis.visual_generation.yume.yume_runtime.yume_1p5.modules.model import (
-    Yume1p5WanModel,
-)
+from worldfoundry.synthesis.visual_generation.yume._facade import YumeFacadeSynthesis
 from worldfoundry.synthesis.visual_generation.yume.yume_runtime.yume_1p5 import (
     worldfoundry_runtime as yume15_runtime,
 )
-from worldfoundry.synthesis.visual_generation.yume._facade import YumeFacadeSynthesis
+from worldfoundry.synthesis.visual_generation.yume.yume_runtime.yume_1p5.modules.model import (
+    Yume1p5WanModel,
+)
 
 
 def test_wan21_package_exports_upstream_config_map() -> None:
@@ -74,9 +74,7 @@ def test_yume_facade_forwards_runtime_memory_options() -> None:
     assert calls[0]["t5_cpu"] is True
 
 
-def test_yume15_loader_destroys_owned_process_group_after_load_failure(
-    monkeypatch, tmp_path
-) -> None:
+def test_yume15_loader_destroys_owned_process_group_after_load_failure(monkeypatch, tmp_path) -> None:
     distributed_state = {"initialized": False, "destroy_calls": 0}
 
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)

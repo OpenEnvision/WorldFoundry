@@ -1,6 +1,5 @@
 import json
 import os
-from typing import List
 
 import imageio
 import torch
@@ -10,14 +9,17 @@ import tyro
 from accelerate.utils import set_seed
 from giga_datasets import image_utils
 from giga_datasets import utils as gd_utils
+from giga_models import GigaWorld0Pipeline
+from giga_models.utils import find_free_port
 from PIL import Image
 from torchvision.transforms import InterpolationMode
 from torchvision.transforms import functional as F
 from tqdm import tqdm
 
-from giga_models import GigaWorld0Pipeline
-from worldfoundry.core.distributed.sequence_parallel.runtime import get_sequence_parallel_group, initialize_sequence_parallel_group
-from giga_models.utils import find_free_port
+from worldfoundry.core.distributed.sequence_parallel.runtime import (
+    get_sequence_parallel_group,
+    initialize_sequence_parallel_group,
+)
 
 
 def _inference(
@@ -25,9 +27,9 @@ def _inference(
     data_path: str,
     save_dir: str,
     transformer_model_path: str,
-    text_encoder_model_path: str = None,
-    vae_model_path: str = None,
-    lora_model_path: str = None,
+    text_encoder_model_path: str | None = None,
+    vae_model_path: str | None = None,
+    lora_model_path: str | None = None,
     lora_fuse: bool = False,
     num_inference_steps: int = 30,
     fps: int = 16,
@@ -64,33 +66,35 @@ def _inference(
     )
     pipe.to(device)
     # Load and split data for this process
-    negative_prompt = 'The video captures a series of frames showing ugly scenes, static with no motion, motion blur, \
+    negative_prompt = "The video captures a series of frames showing ugly scenes, static with no motion, motion blur, \
                     over-saturation, shaky footage, low resolution, grainy texture, pixelated images, poorly lit areas, \
                     underexposed and overexposed scenes, poor color balance, washed out colors, choppy sequences, \
                     jerky movements, low frame rate, artifacting, color banding, unnatural transitions, outdated special \
                     effects, fake elements, unconvincing visuals, poorly edited content, jump cuts, visual noise, and \
-                    flickering. Overall, the video is of poor quality.'
-    data_list = json.load(open(data_path, 'r'))
+                    flickering. Overall, the video is of poor quality."
+    data_list = json.load(open(data_path))  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
     data_list = gd_utils.split_data(data_list, dp_world_size, dp_rank)
     os.makedirs(save_dir, exist_ok=True)
     # Inference loop
     for n in tqdm(range(len(data_list))):
         set_seed(seed)
         data_dict = data_list[n]
-        prompt = data_dict['prompt']
-        image_path = data_dict['image']
+        prompt = data_dict["prompt"]
+        image_path = data_dict["image"]
         if not os.path.exists(image_path):
             image_path = os.path.join(os.path.dirname(data_path), image_path)
         image = Image.open(image_path)
         image_width, image_height = image.width, image.height
         # Compute resize/crop to maintain aspect ratio and fit model input
-        dst_width, dst_height = image_utils.get_image_size((image_width, image_height), (width, height), mode='area', multiple=16)
+        dst_width, dst_height = image_utils.get_image_size(
+            (image_width, image_height), (width, height), mode="area", multiple=16
+        )
         if float(dst_height) / image_height < float(dst_width) / image_width:
-            new_height = int(round(float(dst_width) / image_width * image_height))
+            new_height = int(round(float(dst_width) / image_width * image_height))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
             new_width = dst_width
         else:
             new_height = dst_height
-            new_width = int(round(float(dst_height) / image_height * image_width))
+            new_width = int(round(float(dst_height) / image_height * image_width))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         assert dst_width <= new_width and dst_height <= new_height
         x1 = (new_width - dst_width) // 2
         y1 = (new_height - dst_height) // 2
@@ -112,13 +116,10 @@ def _inference(
         if process_index == 0:
             vis_images = []
             for k in range(len(output_images)):
-                if image is not None:
-                    vis_image = [input_image, output_images[k]]
-                else:
-                    vis_image = [output_images[k]]
+                vis_image = [input_image, output_images[k]] if image is not None else [output_images[k]]
                 vis_image = image_utils.concat_images_grid(vis_image, cols=2, pad=2)
                 vis_images.append(vis_image)
-            save_path = os.path.join(save_dir, f'{n}.mp4')
+            save_path = os.path.join(save_dir, f"{n}.mp4")
             imageio.mimsave(save_path, vis_images, fps=fps)
 
 
@@ -136,10 +137,10 @@ def _inference_sp(rank, gpu_ids, sp_size, port, kwargs):
     gpu_id = gpu_ids[rank]
     world_size = len(gpu_ids)
     torch.cuda.set_device(gpu_id)
-    device = f'cuda:{gpu_id}'
+    device = f"cuda:{gpu_id}"
     dist.init_process_group(
-        backend='nccl',
-        init_method=f'tcp://127.0.0.1:{port}',
+        backend="nccl",
+        init_method=f"tcp://127.0.0.1:{port}",
         world_size=world_size,
         rank=rank,
         device_id=torch.device(device),
@@ -158,11 +159,11 @@ def inference(
     data_path: str,
     save_dir: str,
     transformer_model_path: str,
-    text_encoder_model_path: str = None,
-    vae_model_path: str = None,
-    lora_model_path: str = None,
+    text_encoder_model_path: str | None = None,
+    vae_model_path: str | None = None,
+    lora_model_path: str | None = None,
     lora_fuse: bool = False,
-    gpu_ids: List[int] = [0],
+    gpu_ids: list[int] = [0],  # noqa: B006 - Keeps the upstream default object and signature.
     num_inference_steps: int = 30,
     fps: int = 16,
     num_frames: int = 61,
@@ -182,25 +183,25 @@ def inference(
         gpu_ids: List of GPU IDs to use.
         num_inference_steps, fps, num_frames, height, width, seed: Generation parameters.
     """
-    kwargs = dict(
-        data_path=data_path,
-        save_dir=save_dir,
-        transformer_model_path=transformer_model_path,
-        text_encoder_model_path=text_encoder_model_path,
-        vae_model_path=vae_model_path,
-        lora_model_path=lora_model_path,
-        lora_fuse=lora_fuse,
-        num_inference_steps=num_inference_steps,
-        fps=fps,
-        num_frames=num_frames,
-        height=height,
-        width=width,
-        seed=seed,
-    )
+    kwargs = {
+        "data_path": data_path,
+        "save_dir": save_dir,
+        "transformer_model_path": transformer_model_path,
+        "text_encoder_model_path": text_encoder_model_path,
+        "vae_model_path": vae_model_path,
+        "lora_model_path": lora_model_path,
+        "lora_fuse": lora_fuse,
+        "num_inference_steps": num_inference_steps,
+        "fps": fps,
+        "num_frames": num_frames,
+        "height": height,
+        "width": width,
+        "seed": seed,
+    }
     num_gpus = len(gpu_ids)
     assert num_gpus >= 1
     if num_gpus == 1:
-        _inference(f'cuda:{gpu_ids[0]}', **kwargs)
+        _inference(f"cuda:{gpu_ids[0]}", **kwargs)
     else:
         port = find_free_port()
         mp.start_processes(
@@ -210,5 +211,5 @@ def inference(
         )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     tyro.cli(inference)

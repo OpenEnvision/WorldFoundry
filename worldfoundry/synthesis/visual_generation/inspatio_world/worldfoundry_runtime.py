@@ -5,31 +5,32 @@ import os
 import subprocess
 import sys
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any
 
 import torch
 
-from worldfoundry.core.io import (
-    VIDEO_EXTENSIONS,
-    load_video_frames,
-    materialize_video_input,
-)
-from worldfoundry.core.io.paths import package_module_root as package_root
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import (
     checkpoint_root_path,
     hfd_root_path,
+    package_data_path,
     resolve_local_hf_model_path,
 )
-from worldfoundry.evaluation.utils import worldfoundry_data_path
+from worldfoundry.core.io.paths import package_module_root as package_root
+from worldfoundry.core.media.codecs.video import load_video_frames, materialize_video_input
+from worldfoundry.core.media.types import VIDEO_EXTENSIONS
+
 from .inspatio_world_runtime.utils.reproducibility import SEED_ENV, reproducibility_env
 
-
-_BUNDLED_REPO_ROOT = (
-    package_root("worldfoundry.synthesis.visual_generation.inspatio_world")
-    / "inspatio_world_runtime"
+_RUNTIME_ROOT = (
+    package_root("worldfoundry.synthesis.visual_generation.inspatio_world") / "inspatio_world_runtime"
+).resolve()
+_PIPELINE_MODULE = (
+    "worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.run_inference_pipeline"
 )
-_CONFIG_ROOT = worldfoundry_data_path("models", "runtime", "configs", "inspatio_world")
+_CONFIG_ROOT = package_data_path("models", "runtime", "configs", "inspatio_world")
 _TRAJECTORY_ROOT = _CONFIG_ROOT / "traj"
 
 DEFAULT_CHECKPOINT_REPO = "inspatio/world"
@@ -56,18 +57,13 @@ class InspatioWorldRuntime:
 
     def __init__(
         self,
-        repo_root: Optional[str] = None,
         checkpoint_source: str = DEFAULT_CHECKPOINT_REPO,
         wan_model_source: str = DEFAULT_WAN_MODEL_REPO,
         da3_model_source: str = DEFAULT_DA3_MODEL_REPO,
         florence_model_source: str = DEFAULT_FLORENCE_MODEL_REPO,
         device: str = "cuda",
-        defaults: Optional[Dict[str, Any]] = None,
+        defaults: dict[str, Any] | None = None,
     ) -> None:
-        bundled_root = Path(self.bundled_repo_root()).resolve()
-        if repo_root is not None and Path(repo_root).expanduser().resolve() != bundled_root:
-            raise ValueError("InSpatio-World runtime is vendored in-tree; external repo_root is not supported.")
-        self.repo_root = str(bundled_root)
         self.checkpoint_source = checkpoint_source
         self.wan_model_source = wan_model_source
         self.da3_model_source = da3_model_source
@@ -76,23 +72,19 @@ class InspatioWorldRuntime:
         self.defaults = defaults or {}
 
     @classmethod
-    def bundled_repo_root(cls) -> str:
-        return str(_BUNDLED_REPO_ROOT)
-
-    @classmethod
     def from_pretrained(
         cls,
         pretrained_model_path: str = DEFAULT_CHECKPOINT_REPO,
         args=None,
-        device: Optional[str] = None,
+        device: str | None = None,
         wan_model_path: str = DEFAULT_WAN_MODEL_REPO,
         da3_model_path: str = DEFAULT_DA3_MODEL_REPO,
         florence_model_path: str = DEFAULT_FLORENCE_MODEL_REPO,
-        config_path: Optional[str] = None,
-        tae_checkpoint_path: Optional[str] = None,
-        default_traj_txt_path: Optional[str] = None,
+        config_path: str | None = None,
+        tae_checkpoint_path: str | None = None,
+        default_traj_txt_path: str | None = None,
         **kwargs,
-    ) -> "InspatioWorldRuntime":
+    ) -> InspatioWorldRuntime:
         defaults = {
             "config_path": config_path,
             "tae_checkpoint_path": tae_checkpoint_path,
@@ -100,7 +92,6 @@ class InspatioWorldRuntime:
             **kwargs,
         }
         return cls(
-            repo_root=cls.bundled_repo_root(),
             checkpoint_source=pretrained_model_path or DEFAULT_CHECKPOINT_REPO,
             wan_model_source=wan_model_path or DEFAULT_WAN_MODEL_REPO,
             da3_model_source=da3_model_path or DEFAULT_DA3_MODEL_REPO,
@@ -149,7 +140,7 @@ class InspatioWorldRuntime:
             return str(matches[0].resolve())
         raise FileNotFoundError(f"Unable to locate an InSpatio-World checkpoint under {root}.")
 
-    def _resolve_config_path(self, config_path: Optional[str]) -> str:
+    def _resolve_config_path(self, config_path: str | None) -> str:
         resolved = config_path or self.defaults.get("config_path") or DEFAULT_CONFIG_PATH
         candidate = Path(str(resolved)).expanduser()
         if candidate.is_absolute() and candidate.exists():
@@ -159,12 +150,12 @@ class InspatioWorldRuntime:
         data_candidate = _CONFIG_ROOT / data_relative
         if data_candidate.exists():
             return str(data_candidate.resolve())
-        repo_candidate = Path(self.repo_root) / str(resolved)
-        if repo_candidate.exists():
-            return str(repo_candidate.resolve())
+        runtime_candidate = _RUNTIME_ROOT / str(resolved)
+        if runtime_candidate.exists():
+            return str(runtime_candidate.resolve())
         raise FileNotFoundError(f"InSpatio-World config not found: {resolved}")
 
-    def _resolve_trajectory_path(self, traj_txt_path: Optional[str]) -> str:
+    def _resolve_trajectory_path(self, traj_txt_path: str | None) -> str:
         raw_value = traj_txt_path or self.defaults.get("default_traj_txt_path") or DEFAULT_TRAJECTORY_NAME
         candidate = Path(str(raw_value)).expanduser()
         if candidate.exists():
@@ -184,18 +175,17 @@ class InspatioWorldRuntime:
                 return str(data_candidate.resolve())
 
         raise FileNotFoundError(
-            "Trajectory file not found: "
-            f"{raw_value}. Checked local path and data trajectory root {_TRAJECTORY_ROOT}."
+            f"Trajectory file not found: {raw_value}. Checked local path and data trajectory root {_TRAJECTORY_ROOT}."
         )
 
-    def _resolve_optional_tae_checkpoint(self, tae_checkpoint_path: Optional[str], use_tae: bool) -> Optional[str]:
+    def _resolve_optional_tae_checkpoint(self, tae_checkpoint_path: str | None, use_tae: bool) -> str | None:
         if not use_tae:
             return None
 
         resolved = tae_checkpoint_path or self.defaults.get("tae_checkpoint_path")
         if resolved is None:
             fallbacks = (
-                Path(self.repo_root) / "checkpoints" / "taehv" / "taew2_1.pth",
+                _RUNTIME_ROOT / "checkpoints" / "taehv" / "taew2_1.pth",
                 checkpoint_root_path("taehv", "taew2_1.pth"),
                 hfd_root_path("custom--taehv", "taew2_1.pth"),
             )
@@ -225,12 +215,12 @@ class InspatioWorldRuntime:
             dst.unlink()
         dst.symlink_to(src)
 
-    def _stage_input_dir(self, visual_input, output_root: Path, fps: int) -> tuple[Path, list[Path], Optional[Path]]:
+    def _stage_input_dir(self, visual_input, output_root: Path, fps: int) -> tuple[Path, list[Path], Path | None]:
         input_dir = output_root / "input"
         input_dir.mkdir(parents=True, exist_ok=True)
 
         staged_videos: list[Path] = []
-        source_dir: Optional[Path] = None
+        source_dir: Path | None = None
         if isinstance(visual_input, (str, os.PathLike)):
             candidate = Path(visual_input).expanduser()
             if not candidate.exists():
@@ -253,8 +243,10 @@ class InspatioWorldRuntime:
             self._link_or_copy(candidate.resolve(), target)
             return input_dir, [target], None
 
-        if isinstance(visual_input, (list, tuple)) and visual_input and all(
-            isinstance(item, (str, os.PathLike)) for item in visual_input
+        if (
+            isinstance(visual_input, (list, tuple))
+            and visual_input
+            and all(isinstance(item, (str, os.PathLike)) for item in visual_input)
         ):
             if len(visual_input) == 1 and Path(visual_input[0]).expanduser().is_dir():
                 # Workspace normalizes ``input_path`` into ``videos=[path]``.
@@ -332,7 +324,7 @@ class InspatioWorldRuntime:
         json_path.write_text(json.dumps(payload, indent=4, ensure_ascii=False), encoding="utf-8")
         return str(json_path)
 
-    def _stage_existing_vggt(self, source_dir: Optional[Path], input_dir: Path, enable: bool) -> None:
+    def _stage_existing_vggt(self, source_dir: Path | None, input_dir: Path, enable: bool) -> None:
         if not enable or source_dir is None:
             return
         source_vggt_dir = source_dir / "new_vggt"
@@ -360,23 +352,12 @@ class InspatioWorldRuntime:
         return str(runtime_config_path)
 
     def _build_runtime_env(self) -> dict[str, str]:
-        """Build an isolated subprocess environment for the bundled runtime.
-
-        Args:
-            None: Environment values are derived from the current process and scoped to repo_root.
-        """
+        """Build the subprocess environment with offline assets and package data paths."""
         env = os.environ.copy()
         for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "DIFFUSERS_OFFLINE"):
             value = env.get(name)
             if value is not None and value.strip().lower() not in {"1", "true", "yes", "on"}:
-                raise ValueError(
-                    f"InSpatio-World requires offline model loading; {name}={value!r} is not allowed."
-                )
-        source_root = str(package_root("worldfoundry").parent)
-        pythonpath = [source_root, self.repo_root]
-        if env.get("PYTHONPATH"):
-            pythonpath.append(env["PYTHONPATH"])
-        env["PYTHONPATH"] = os.pathsep.join(pythonpath)
+                raise ValueError(f"InSpatio-World requires offline model loading; {name}={value!r} is not allowed.")
         env_bin = str(Path(sys.executable).expanduser().parent)
         env["PATH"] = env_bin + os.pathsep + env.get("PATH", "")
         env["PYTHON"] = sys.executable
@@ -389,18 +370,18 @@ class InspatioWorldRuntime:
 
     def plan(
         self,
-        config_path: Optional[str] = None,
-        traj_txt_path: Optional[str] = None,
+        config_path: str | None = None,
+        traj_txt_path: str | None = None,
         skip_step1: bool = False,
         skip_step2: bool = False,
         skip_step3: bool = False,
         use_tae: bool = False,
-        tae_checkpoint_path: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        tae_checkpoint_path: str | None = None,
+    ) -> dict[str, Any]:
         """Describe the in-tree runtime plan without launching inference.
 
         Args:
-            config_path: Optional runtime YAML path, resolved relative to the bundled repo.
+            config_path: Optional runtime YAML path, resolved from package data or the installed runtime directory.
             traj_txt_path: Optional trajectory path or bundled trajectory name.
             skip_step1: Whether Florence caption generation will be skipped.
             skip_step2: Whether DA3 depth generation will be skipped.
@@ -408,8 +389,7 @@ class InspatioWorldRuntime:
             use_tae: Whether the optional TAE checkpoint is required.
             tae_checkpoint_path: Optional local TAE checkpoint path.
         """
-        runtime_root = Path(self.repo_root)
-        script_path = runtime_root / "run_inference_pipeline.py"
+        runtime_root = _RUNTIME_ROOT
         raw_config = config_path or self.defaults.get("config_path") or DEFAULT_CONFIG_PATH
         config_candidate = Path(str(raw_config)).expanduser()
         if not config_candidate.is_absolute():
@@ -467,10 +447,6 @@ class InspatioWorldRuntime:
                 blockers.append(f"TAE checkpoint is missing: {exc}")
                 tae_candidate = Path(str(tae_checkpoint_path or "taew2_1.pth")).expanduser()
 
-        if not runtime_root.exists():
-            blockers.append(f"Bundled runtime directory is missing: {runtime_root}")
-        if not script_path.is_file():
-            blockers.append(f"Pipeline script is missing: {script_path}")
         if not config_candidate.is_file():
             blockers.append(f"Runtime config is missing: {config_candidate}")
         if not traj_candidate.is_file():
@@ -479,7 +455,7 @@ class InspatioWorldRuntime:
         return {
             "status": "ready" if not blockers else "blocked",
             "runtime_root": str(runtime_root),
-            "entrypoint": str(script_path),
+            "entrypoint": _PIPELINE_MODULE,
             "cwd": str(runtime_root),
             "config_path": str(config_candidate),
             "traj_txt_path": str(traj_candidate),
@@ -500,17 +476,17 @@ class InspatioWorldRuntime:
     def predict(
         self,
         visual_input,
-        traj_txt_path: Optional[str] = None,
+        traj_txt_path: str | None = None,
         prompt: str = "",
-        output_root: Optional[str] = None,
+        output_root: str | None = None,
         fps: int = 24,
         step1_gpus: str = "0",
         step2_gpus: str = "0",
-        step3_gpus: Optional[str] = None,
+        step3_gpus: str | None = None,
         step3_nproc: int = 1,
         master_port: int = 29513,
-        config_path: Optional[str] = None,
-        json_path: Optional[str] = None,
+        config_path: str | None = None,
+        json_path: str | None = None,
         skip_step1: bool = False,
         skip_step2: bool = False,
         skip_step3: bool = False,
@@ -518,12 +494,12 @@ class InspatioWorldRuntime:
         rotation_only: bool = False,
         adaptive_frame: bool = True,
         freeze_repeat: int = 0,
-        freeze_frame: Optional[int] = None,
+        freeze_frame: int | None = None,
         use_tae: bool = False,
-        tae_checkpoint_path: Optional[str] = None,
+        tae_checkpoint_path: str | None = None,
         compile_dit: bool = False,
-        seed: Optional[int] = None,
-        deterministic: Optional[bool] = None,
+        seed: int | None = None,
+        deterministic: bool | None = None,
         show_progress: bool = True,
         return_dict: bool = False,
         **kwargs,
@@ -570,24 +546,16 @@ class InspatioWorldRuntime:
             )
 
         if skip_step2 and not (input_dir / "new_vggt").exists():
-            raise ValueError(
-                "skip_step2=True requires precomputed new_vggt outputs in the input directory."
-            )
+            raise ValueError("skip_step2=True requires precomputed new_vggt outputs in the input directory.")
 
         resolved_checkpoint = (
-            self._resolve_checkpoint_path(self.checkpoint_source)
-            if not skip_step3
-            else str(self.checkpoint_source)
+            self._resolve_checkpoint_path(self.checkpoint_source) if not skip_step3 else str(self.checkpoint_source)
         )
         resolved_wan_dir = (
-            self._resolve_snapshot_dir(self.wan_model_source)
-            if not skip_step3
-            else str(self.wan_model_source)
+            self._resolve_snapshot_dir(self.wan_model_source) if not skip_step3 else str(self.wan_model_source)
         )
         resolved_da3_dir = (
-            self._resolve_snapshot_dir(self.da3_model_source)
-            if not skip_step2
-            else str(self.da3_model_source)
+            self._resolve_snapshot_dir(self.da3_model_source) if not skip_step2 else str(self.da3_model_source)
         )
         resolved_florence_dir = (
             self._resolve_snapshot_dir(self.florence_model_source)
@@ -608,36 +576,37 @@ class InspatioWorldRuntime:
             if step3_gpus is None or step3_gpus == "0":
                 step3_gpus = inherited_devices
 
-        command = [
-            sys.executable,
-            str((Path(self.repo_root) / "run_inference_pipeline.py").resolve()),
-            "--input_dir",
-            str(input_dir),
-            "--traj_txt_path",
-            resolved_traj,
-            "--checkpoint_path",
-            resolved_checkpoint,
-            "--config_path",
-            resolved_config,
-            "--da3_model_path",
-            resolved_da3_dir,
-            "--wan_model_path",
-            resolved_wan_dir,
-            "--florence_model_path",
-            resolved_florence_dir,
-            "--output_folder",
-            str(resolved_output_root),
-            "--step1_gpus",
-            str(step1_gpus),
-            "--step2_gpus",
-            str(step2_gpus),
-            "--step3_gpus",
-            str(step3_gpus or self.defaults.get("step3_gpus", "0")),
-            "--step3_nproc",
-            str(int(step3_nproc)),
-            "--master_port",
-            str(int(master_port)),
-        ]
+        command = package_module_command(
+            _PIPELINE_MODULE,
+            [
+                "--input_dir",
+                str(input_dir),
+                "--traj_txt_path",
+                resolved_traj,
+                "--checkpoint_path",
+                resolved_checkpoint,
+                "--config_path",
+                resolved_config,
+                "--da3_model_path",
+                resolved_da3_dir,
+                "--wan_model_path",
+                resolved_wan_dir,
+                "--florence_model_path",
+                resolved_florence_dir,
+                "--output_folder",
+                str(resolved_output_root),
+                "--step1_gpus",
+                str(step1_gpus),
+                "--step2_gpus",
+                str(step2_gpus),
+                "--step3_gpus",
+                str(step3_gpus or self.defaults.get("step3_gpus", "0")),
+                "--step3_nproc",
+                str(int(step3_nproc)),
+                "--master_port",
+                str(int(master_port)),
+            ],
+        )
 
         if effective_skip_step1:
             command.append("--skip_step1")
@@ -671,16 +640,13 @@ class InspatioWorldRuntime:
         subprocess.run(
             command,
             check=True,
-            cwd=self.repo_root,
+            cwd=str(_RUNTIME_ROOT),
             env=env,
             stdout=stdout,
             stderr=stderr,
         )
 
-        generated_video_paths = sorted(
-            path.resolve()
-            for path in resolved_output_root.rglob("*-pred_video_rank*.mp4")
-        )
+        generated_video_paths = sorted(path.resolve() for path in resolved_output_root.rglob("*-pred_video_rank*.mp4"))
 
         videos = [load_video_frames(str(path)) for path in generated_video_paths]
         result = {

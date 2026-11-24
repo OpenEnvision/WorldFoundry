@@ -1,33 +1,28 @@
 """Module for the KlingApi operator implementation."""
 
-from typing import Optional, Dict, Any, Union
+from typing import Any
 
 from PIL import Image
 
-from .base_operator import BaseOperator
 from ._media import image_or_string_to_png_data_url
+from .base_operator import BaseOperator
 
 
-def _image_to_data_url(image_input: Union[Image.Image, str]) -> str:
-    """Image to data url implementation."""
+def _image_to_data_url(image_input: Image.Image | str) -> str:
     return image_or_string_to_png_data_url(image_input, load_existing_path=True)
 
 
 class KlingApiOperator(BaseOperator):
-    """
-    Kling API 数据处理 Operator。
-
-    当前主要覆盖 text-to-video 和 image-to-video。
-    """
+    """Prepare prompts and image payloads for Kling API text-to-video and image-to-video requests."""
 
     def __init__(
         self,
-        operation_types: list = None,
+        operation_types: list | None = None,
     ):
         """Initialize the operator with specific configurations."""
         if operation_types is None:
             operation_types = ["image_processing", "prompt_processing"]
-        super(KlingApiOperator, self).__init__(operation_types)
+        super().__init__(operation_types)
 
         self.interaction_template = ["text_prompt", "image_prompt", "multimodal_prompt"]
         self.interaction_template_init()
@@ -43,24 +38,19 @@ class KlingApiOperator(BaseOperator):
             raise TypeError(f"Interaction must be a string, got {type(interaction)}")
         return True
 
-    def process_interaction(self, **kwargs) -> Dict[str, Any]:
+    def process_interaction(self, **kwargs) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         if len(self.current_interaction) == 0:
             raise ValueError("No interaction to process")
         now_interaction = self.current_interaction[-1]
         self.interaction_history.append(now_interaction)
-        return {
-            "processed_prompt": now_interaction
-        }
+        return {"processed_prompt": now_interaction}
 
     def process_perception(
-        self,
-        images: Optional[Union[Image.Image, str]] = None,
-        image_field: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        self, images: Image.Image | str | None = None, image_field: str | None = None, **kwargs
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "image_payload": None,
             "images": None,
         }
@@ -69,17 +59,12 @@ class KlingApiOperator(BaseOperator):
             return result
 
         if isinstance(images, str) and images.startswith(("http://", "https://")):
-            result["image_payload"] = {
-                "field": image_field or "image_url",
-                "value": images,
-            }
-            result["images"] = images
-            return result
-
-        encoded = _image_to_data_url(images)
+            value = images
+        else:
+            value = _image_to_data_url(images)
         result["image_payload"] = {
             "field": image_field or "image_url",
-            "value": encoded,
+            "value": value,
         }
         result["images"] = images
         return result

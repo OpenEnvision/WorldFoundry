@@ -61,8 +61,8 @@ metadata:
   base_model_dependency_preflight:
     status: integrated
     missing: []
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:EvalCrafterContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:evalcrafter
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
   prompt_suite:
     manifest: worldfoundry/data/benchmarks/assets/evalcrafter/prompt700.txt
     num_prompts: 700
@@ -103,12 +103,12 @@ metadata:
   - Leaderboard eligibility requires all 700 videos, all 17 raw metrics, and all five official aggregates.
   data_refs:
     in_tree_runtime_paths:
-    - worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
-    - worldfoundry/evaluation/tasks/execution/runners/evalcrafter/evalcrafter_raw_metrics.py
+    - worldfoundry/evals/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
+    - worldfoundry/evals/tasks/execution/runners/evalcrafter/evalcrafter_raw_metrics.py
     task_yaml: worldfoundry/data/benchmarks/tasks/external/evalcrafter.yaml
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:EvalCrafterContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:evalcrafter
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
@@ -117,7 +117,7 @@ metadata:
     surface: bounded_official_clip_metrics_and_final_result_importer
     normalizer_verified: true
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -182,7 +182,7 @@ tasks:
       hf_dataset_id: RaphaelLiu/EvalCrafter_T2V_Dataset
       split: standard
     runtime_requirements:
-      in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/evalcrafter
+      in_tree_runtime: worldfoundry/evals/tasks/execution/runners/evalcrafter
       optional_root_env: WORLDFOUNDRY_EVALCRAFTER_ROOT
       dataset_root_env: WORLDFOUNDRY_EVALCRAFTER_DATASET_ROOT
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -216,8 +216,8 @@ tasks:
       - count_score
       - ocr_error
       - celebrity_id_error
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:EvalCrafterContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:evalcrafter
+      runner_script: worldfoundry/evals/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
       official_validation_command: ${WORLDFOUNDRY_UNIFIED_PYTHON}
-        worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
+        worldfoundry/evals/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
         --results-dir <results-dir-with-final_result.txt> --output-dir <out> --json

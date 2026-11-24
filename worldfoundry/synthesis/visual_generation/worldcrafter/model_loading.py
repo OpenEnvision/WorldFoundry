@@ -14,16 +14,15 @@ import torch
 from diffusers.models import AutoencoderKLWan
 from transformers import AutoTokenizer, UMT5EncoderModel
 
-from worldfoundry.base_models.diffusion_model.runners.worldcrafter import WorldCrafterPipeline
-from worldfoundry.base_models.diffusion_model.schedulers.worldcrafter import WorldCrafterScheduler
-from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.transformer import WorldCrafterTransformer3DModel
-from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.fast.compact_ucpe import compact_ucpe
 from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.fast.attention import FastUcpeSelfAttention
-from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.fast.contract import load_dmd_inference_contract
+from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.fast.compact_ucpe import compact_ucpe
+from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.fast.contract import (
+    load_dmd_inference_contract,
+)
 from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.fast.resident import ResidentBranches
 from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.kernels import (
-    replace_rmsnorm_with_fp32,
     replace_all_norms_with_flash_norms,
+    replace_rmsnorm_with_fp32,
     replace_rope_with_flash_rope,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.repencoder import (
@@ -31,11 +30,16 @@ from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.repen
     RepEncoderInferenceMemoryProvider,
     RepEncoderInferenceProviderConfig,
 )
+from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.transformer import (
+    WorldCrafterTransformer3DModel,
+)
 from worldfoundry.base_models.diffusion_model.models.networks.worldcrafter.ucpe.bridge import (
     enable_ucpe_inference_sdpa_attention,
-    patch_worldcrafter_transformer_ucpe,
     load_ucpe_camera_adapter_weights,
+    patch_worldcrafter_transformer_ucpe,
 )
+from worldfoundry.base_models.diffusion_model.runners.worldcrafter import WorldCrafterPipeline
+from worldfoundry.base_models.diffusion_model.schedulers.worldcrafter import WorldCrafterScheduler
 
 
 def load_fast(
@@ -60,41 +64,38 @@ def load_fast(
     device = torch.device(device)
     if device.type != "cuda" or not torch.cuda.is_available():
         raise RuntimeError("Fast inference requires CUDA")
+    if device.index is None:
+        device = torch.device("cuda", torch.cuda.current_device())
     torch.cuda.set_device(device)
     root = Path(model_path).expanduser().resolve()
     config = json.loads((root / "inference_config.json").read_text())
     manifest = json.loads((root / "manifest.json").read_text())
-    expected_config = dict(
-        steps_per_stage=[2, 2, 2],
-        guidance_scale=1.0,
-        ucpe_pixel_center=True,
-        repencoder_target_microbatch=1,
-        representation="resident_byte_compact_ucpe",
-        compile=False,
-    )
+    expected_config = {
+        "steps_per_stage": [2, 2, 2],
+        "guidance_scale": 1.0,
+        "ucpe_pixel_center": True,
+        "repencoder_target_microbatch": 1,
+        "representation": "resident_byte_compact_ucpe",
+        "compile": False,
+    }
     if any(config.get(key) != value for key, value in expected_config.items()):
-        raise ValueError(
-            "Fast inference configuration differs from the validated release contract"
-        )
+        raise ValueError("Fast inference configuration differs from the validated release contract")
     if config["routing"] != [["equal", "equal"], ["equal", "equal"], ["equal", "old"]]:
         raise ValueError("Fast I2V requires 5+1 routing")
-    shared = (Path(shared_model_path).expanduser().resolve()
-              if shared_model_path is not None
-              else (root / config["shared_components"]).resolve())
+    shared = (
+        Path(shared_model_path).expanduser().resolve()
+        if shared_model_path is not None
+        else (root / config["shared_components"]).resolve()
+    )
     for row in manifest["files"]:
         path = root / row["path"]
         if not path.is_file():
             raise ValueError(f"Incomplete fast checkpoint: {path}")
     adapters = [root / "adapter_high_noise", root / "adapter_low_noise"]
-    contracts = [
-        load_dmd_inference_contract(p, expected_latent_shape=(16, 9, 48, 80))
-        for p in adapters
-    ]
+    contracts = [load_dmd_inference_contract(p, expected_latent_shape=(16, 9, 48, 80)) for p in adapters]
     contract = contracts[0]
     if contract != contracts[1] or contract.rollout_steps_per_stage != (2, 2, 2):
-        raise ValueError(
-            "Fast branches must have identical native 2/2/2 timestep contracts"
-        )
+        raise ValueError("Fast branches must have identical native 2/2/2 timestep contracts")
     enable_ucpe_inference_sdpa_attention()
     repencoder = RepEncoder.from_pretrained(
         shared / "repencoder", device=device, compute_dtype="bf16", target_microbatch=1
@@ -109,7 +110,10 @@ def load_fast(
         ),
     )
 
+    resolved_attention_backend = attention_backend
+
     def transformer(branch):
+        nonlocal resolved_attention_backend
         model = WorldCrafterTransformer3DModel.from_pretrained(
             root / f"transformer_{branch}_noise", torch_dtype=torch.bfloat16
         )
@@ -122,14 +126,12 @@ def load_fast(
             adaptation_method="parallel",
             attention_cls=FastUcpeSelfAttention,
         )
-        loaded = load_ucpe_camera_adapter_weights(
-            model, root / f"adapter_{branch}_noise" / "transformer_partial.pth"
-        )
+        loaded = load_ucpe_camera_adapter_weights(model, root / f"adapter_{branch}_noise" / "transformer_partial.pth")
         if loaded["loaded_tensor_keys"] != loaded["expected_tensor_keys"]:
             raise ValueError(f"Incomplete {branch} UCPE state")
         model = replace_rmsnorm_with_fp32(model)
         model = replace_all_norms_with_flash_norms(model)
-        configure_attention(model, attention_backend)
+        resolved_attention_backend = configure_attention(model, attention_backend)
         return model
 
     early = transformer("high")
@@ -148,9 +150,7 @@ def load_fast(
     )
     pipe = WorldCrafterPipeline(
         tokenizer=AutoTokenizer.from_pretrained(shared / "tokenizer"),
-        text_encoder=UMT5EncoderModel.from_pretrained(
-            shared / "text_encoder", torch_dtype=torch.bfloat16
-        ),
+        text_encoder=UMT5EncoderModel.from_pretrained(shared / "text_encoder", torch_dtype=torch.bfloat16),
         transformer=early,
         vae=AutoencoderKLWan.from_pretrained(shared / "vae", torch_dtype=torch.float32),
         scheduler=scheduler,
@@ -181,13 +181,13 @@ def load_fast(
             if branch != expected or pipe.resident_branches.active != branch:
                 raise RuntimeError("Fast transformer/adapter routing mismatch")
             pipe.stage_model_trace.append(
-                dict(
-                    chunk=chunk,
-                    stage=stage,
-                    step=step,
-                    stage_steps=stage_steps,
-                    branch=branch,
-                )
+                {
+                    "chunk": chunk,
+                    "stage": stage,
+                    "step": step,
+                    "stage_steps": stage_steps,
+                    "branch": branch,
+                }
             )
 
         return hook
@@ -207,17 +207,17 @@ def load_fast(
         memory_provider=provider,
         model_path=root,
         device=device,
-        attention_backend=attention_backend,
+        attention_backend=resolved_attention_backend,
         adapter_load={"high": early_lora, "low": late_lora},
         height=height,
         width=width,
     )
     model.model_type = "fast"
     model.fast_config = config
-    model.fast_report = dict(
-        compile_enabled=bool(enable_compile),
-        compile_scope="transformer_blocks" if enable_compile else None,
-        compact_ucpe=compact,
-        resident=pipe.resident_branches.report,
-    )
+    model.fast_report = {
+        "compile_enabled": bool(enable_compile),
+        "compile_scope": "transformer_blocks" if enable_compile else None,
+        "compact_ucpe": compact,
+        "resident": pipe.resident_branches.report,
+    }
     return model

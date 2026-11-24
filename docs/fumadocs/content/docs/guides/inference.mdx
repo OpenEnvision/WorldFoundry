@@ -1,6 +1,6 @@
 ---
 title: Run inference
-description: Run model demos, inspect generated artifacts, and validate release readiness — scoring belongs in Evaluation.
+description: Run model demos and inspect generated artifacts; scoring is covered in Evaluation.
 ---
 
 WorldFoundry inference covers environment setup, checkpoint staging, model launch, and artifact review. Benchmark scoring and scorecards belong in [Evaluation](/docs/evaluation). To pick a model ID and read readiness labels, start with [Models](/docs/guides/supported-models).
@@ -12,7 +12,7 @@ bash scripts/setup/bootstrap_worldfoundry.sh
 source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 
-worldfoundry-eval run <model-id> \
+wf run <model-id> \
   --pipeline.task-profile <task-profile> \
   --output-dir tmp/worldfoundry_infer/<model-id>
 ```
@@ -59,10 +59,10 @@ Hugging Face cache aliases such as
 `refs/main` pointing at that local revision. New users do not need this step;
 they can let Hugging Face download into the default `HF_HOME` cache normally.
 
-The public default is still the Hugging Face repo ID. Local symlinks only
+The default checkpoint source is the Hugging Face repo ID. Local symlinks only
 simulate that cache layout for machines that already have downloaded weights.
 
-For a single model, the release-facing helper wires those steps together:
+For a single model, one helper wires those steps together:
 
 ```bash
 bash scripts/inference/prepare_model_infer.sh <model-id> --verify-env-only
@@ -75,8 +75,7 @@ checkpoints through the native HF cache or documented HFD aliases, runs
 
 ## Reproducible model setup
 
-Use the same sequence for local release validation and public user
-reproduction:
+Use this sequence to set up any model:
 
 ```bash
 bash scripts/setup/bootstrap_worldfoundry.sh
@@ -95,21 +94,20 @@ environment is expected only when `runtime/environments` records a real
 compatibility reason, for example pinned torch/CUDA ABI, JAX/TensorFlow
 isolation, or simulator dependencies.
 
-Do not copy private cache paths into public guides. Public checkpoint paths
-should be Hugging Face repo IDs, native HF cache locations, or documented
-`WORLDFOUNDRY_CKPT_DIR` aliases.
+Checkpoint paths are Hugging Face repo IDs, native HF cache locations, or
+documented `WORLDFOUNDRY_CKPT_DIR` aliases.
 
 ## CLI inference
 
-The canonical command for everyday reproducible and documented runs is `worldfoundry-eval run`. This is the same shape as the commands on model pages:
+The canonical command for everyday reproducible and documented runs is `wf run`. This is the same shape as the commands on model pages:
 
 ```bash
-worldfoundry-eval run <model-id> \
+wf run <model-id> \
   --pipeline.task-profile <task-profile> \
   --output-dir tmp/worldfoundry_infer/<model-id>
 ```
 
-**Which command.** Everyday reproducible / model-page commands use `worldfoundry-eval run`. Use `python -m worldfoundry.studio.workspace_job infer` only for Workspace visual smoke. See [CLI entrypoints](/docs/reference/cli#entrypoints).
+**Which command.** Everyday reproducible / model-page commands use `wf run`. Use `python -m worldfoundry.studio.workspace_job infer` only for Workspace visual smoke. See [CLI entrypoints](/docs/reference/cli#entrypoints).
 
 Workspace visual smoke (the same job path the Studio UI submits):
 
@@ -147,10 +145,10 @@ python -m worldfoundry.studio.workspace_job infer \
 ### Echo-Memory Context-K1
 
 WorldFoundry integrates `echo-memory-context-k1` with a fixed model recipe,
-checkpoint filename, and sampler layout. Structural loading covers the released
-1,185-tensor DiT; fresh two-chunk CUDA validation after the native pipeline
-cutover, official-sample parity, and benchmark scoring remain pending. Unreleased and retracted Echo-Memory variants are outside the
-integration scope.
+checkpoint filename, and sampler layout. The released DiT loads with full key and
+shape coverage; CUDA generation, official-sample parity, and benchmark scoring
+are not yet validated. Unreleased and retracted Echo-Memory variants are not
+supported.
 
 The runtime extends WorldFoundry's canonical Wan 2.1 model directly and does
 not invoke DiffSynth. No architecture is ever selected implicitly from a
@@ -267,8 +265,7 @@ gen3c(
 ```
 
 Both wrappers invoke `NativeDiffusionPipeline`. Predict2 checkpoint access is
-gated; registry and structural validation do not imply full-resolution GPU
-artifact parity.
+gated. Full-resolution GPU artifact parity is not yet validated.
 
 ### Cosmos 2.5 native models
 
@@ -295,10 +292,9 @@ result = pipe(
 print(result["artifact_path"])
 ```
 
-The native path does not import Diffusers or the deleted
-`base_models/diffusion_model/video/cosmos2p5` package. Transfer currently pins
-the official `general/edge` checkpoint; other control variants must be added as
-separate, checkpoint-specific recipes after validation.
+The native path does not import Diffusers. Transfer pins the official
+`general/edge` checkpoint; other control variants need separate,
+checkpoint-specific recipes.
 
 ### HunyuanVideo native models
 
@@ -323,22 +319,21 @@ print(result["artifact_path"])
 
 `hunyuanvideo-t2v`, `hunyuanvideo-i2v`, `hunyuanvideo-1.5-t2v`, and
 `hunyuanvideo-1.5-i2v` reuse the framework loader, scheduler, offload policy,
-standard denoising runner, and media writer. The old upstream CLI runtime is not
-a backend. To run generated artifacts through an integrated benchmark, use the
+standard denoising runner, and media writer. To run generated artifacts through an integrated benchmark, use the
 public CLI with the model catalog ID and a benchmark ID:
 
 ```bash
-worldfoundry run --benchmark vbench \
+wf run --benchmark vbench \
   --model hunyuanvideo-1.5-t2v \
   --generated-artifact-dir /path/to/generated-videos \
   --mode official-run \
   --output-dir tmp/bench/hunyuanvideo-1.5-t2v
 ```
 
-Registry and checkpoint-structure validation pass; fresh native CUDA artifact
-parity is still required and is not implied by the historical CLI artifacts.
+Registry and checkpoint-structure checks pass; native CUDA artifact parity is
+not yet validated.
 
-The compatibility bridge also exists:
+A shell wrapper is also available:
 
 ```bash
 bash scripts/inference/run_infer.sh \
@@ -361,9 +356,8 @@ Open:
 http://127.0.0.1:7870/
 ```
 
-The workspace is the preferred surface for checking release readiness. Use it to
-inspect model-specific input forms, official-demo defaults, generated files,
-gallery previews, and visual regressions before recording model readiness.
+Use the workspace to inspect model-specific input forms, official-demo defaults,
+generated files, gallery previews, and visual regressions.
 
 Per-model viewer routing and the Visualizers tab are documented in the
 [Studio guide](/docs/guides/studio#workspace-visualizers).
@@ -378,7 +372,7 @@ Each inference run should produce a manifest-like JSON record and one or more ar
 - **Generated video/image/3D/action artifact** — Primary demo output to inspect visually or structurally.
 - **Job manifest or run record** — Model ID, variant, backend, parameters, paths, timings, status, and errors.
 - **Logs** — Runtime import, checkpoint, CUDA, and model-specific call details.
-- **Gallery/files entry in Studio** — Human review surface for release validation.
+- **Gallery/files entry in Studio** — Human review surface.
 
 A video file existing is not success on its own. Check that the input contract,
 prompt/camera/action controls, frame count, resolution, and artifact content

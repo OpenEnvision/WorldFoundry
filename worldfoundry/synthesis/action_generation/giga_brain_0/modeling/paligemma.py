@@ -6,13 +6,18 @@ from transformers.activations import ACT2FN
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from transformers.models.auto import CONFIG_MAPPING
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
-from transformers.models.siglip.modeling_siglip import SiglipEncoder, SiglipMultiheadAttentionPoolingHead, SiglipVisionEmbeddings
+from transformers.models.siglip.modeling_siglip import (
+    SiglipEncoder,
+    SiglipMultiheadAttentionPoolingHead,
+    SiglipVisionEmbeddings,
+)
 from transformers.utils import can_return_tuple
+
 from worldfoundry.core.attention import apply_rotary_embedding, scaled_dot_product_attention
 
 
 def get_transformers_siglip_vision_config(vision_in_channels: int = 3) -> SiglipVisionConfig:
-    return CONFIG_MAPPING['siglip_vision_model'](
+    return CONFIG_MAPPING["siglip_vision_model"](
         hidden_size=1152,
         intermediate_size=4304,
         num_channels=vision_in_channels,
@@ -21,8 +26,8 @@ def get_transformers_siglip_vision_config(vision_in_channels: int = 3) -> Siglip
         num_image_tokens=256,
         patch_size=14,
         projection_dim=2048,
-        projector_hidden_act='gelu_fast',
-        torch_dtype='float32',
+        projector_hidden_act="gelu_fast",
+        torch_dtype="float32",
         vision_use_head=False,
     )
 
@@ -57,22 +62,22 @@ class GemmaRMSNorm(nn.Module):
 
     def extra_repr(self):
         if self.use_ada_rms_norm:
-            return f'{tuple(self.dense.weight.shape)}, eps={self.eps}, use_ada_rms_norm=True'
+            return f"{tuple(self.dense.weight.shape)}, eps={self.eps}, use_ada_rms_norm=True"
         else:
-            return f'{tuple(self.weight.shape)}, eps={self.eps}'
+            return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
 class SiglipVisionTransformer(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
         self.config = config
-        self.config._attn_implementation = 'sdpa'
+        self.config._attn_implementation = "sdpa"
         embed_dim = config.hidden_size
 
         self.embeddings = SiglipVisionEmbeddings(config)
         self.encoder = SiglipEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.use_head = True if not hasattr(config, 'vision_use_head') else config.vision_use_head
+        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
             self.head = SiglipMultiheadAttentionPoolingHead(config)
 
@@ -96,11 +101,13 @@ class SiglipVisionTransformer(nn.Module):
             BaseModelOutputWithPooling with last_hidden_state and optionally pooled output.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = hidden_states.to(dtype=torch.bfloat16)
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
             encoder_outputs: BaseModelOutput = self.encoder(
                 inputs_embeds=hidden_states,
                 output_attentions=output_attentions,
@@ -159,8 +166,8 @@ class RoPEEmbedding(nn.Module):
         sin_cached = torch.sin(freqs).unsqueeze(1)  # [max_seq_len, 1, d_half]
 
         # Register as buffers so they automatically move to the correct device with the model
-        self.register_buffer('cos_cached', cos_cached, persistent=False)
-        self.register_buffer('sin_cached', sin_cached, persistent=False)
+        self.register_buffer("cos_cached", cos_cached, persistent=False)
+        self.register_buffer("sin_cached", sin_cached, persistent=False)
 
     def forward(self, positions: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Returns RoPE embeddings (cos, sin) for the given positions.
@@ -198,25 +205,41 @@ class GemmaAttentionWithExpert(nn.Module):
         self.layer_idx = layer_idx
         self.q_proj = nn.ModuleList(
             [
-                nn.Linear(paligemma_hidden_size, paligemma_num_attention_heads * paligemma_head_dim, bias=paligemma_attention_bias),
+                nn.Linear(
+                    paligemma_hidden_size,
+                    paligemma_num_attention_heads * paligemma_head_dim,
+                    bias=paligemma_attention_bias,
+                ),
                 nn.Linear(expert_hidden_size, expert_num_attention_heads * expert_head_dim, bias=expert_attention_bias),
             ]
         )
         self.k_proj = nn.ModuleList(
             [
-                nn.Linear(paligemma_hidden_size, paligemma_num_key_value_heads * paligemma_head_dim, bias=paligemma_attention_bias),
+                nn.Linear(
+                    paligemma_hidden_size,
+                    paligemma_num_key_value_heads * paligemma_head_dim,
+                    bias=paligemma_attention_bias,
+                ),
                 nn.Linear(expert_hidden_size, expert_num_key_value_heads * expert_head_dim, bias=expert_attention_bias),
             ]
         )
         self.v_proj = nn.ModuleList(
             [
-                nn.Linear(paligemma_hidden_size, paligemma_num_key_value_heads * paligemma_head_dim, bias=paligemma_attention_bias),
+                nn.Linear(
+                    paligemma_hidden_size,
+                    paligemma_num_key_value_heads * paligemma_head_dim,
+                    bias=paligemma_attention_bias,
+                ),
                 nn.Linear(expert_hidden_size, expert_num_key_value_heads * expert_head_dim, bias=expert_attention_bias),
             ]
         )
         self.o_proj = nn.ModuleList(
             [
-                nn.Linear(paligemma_num_attention_heads * paligemma_head_dim, paligemma_hidden_size, bias=paligemma_attention_bias),
+                nn.Linear(
+                    paligemma_num_attention_heads * paligemma_head_dim,
+                    paligemma_hidden_size,
+                    bias=paligemma_attention_bias,
+                ),
                 nn.Linear(expert_num_attention_heads * expert_head_dim, expert_hidden_size, bias=expert_attention_bias),
             ]
         )
@@ -287,14 +310,14 @@ class GemmaAttentionWithExpert(nn.Module):
         if use_cache:
             if fill_kv_cache:
                 past_key_values[self.layer_idx] = {
-                    'key_states': key_states,
-                    'value_states': value_states,
+                    "key_states": key_states,
+                    "value_states": value_states,
                 }
             else:
-                key_states = torch.cat([past_key_values[self.layer_idx]['key_states'], key_states], dim=1)
-                value_states = torch.cat([past_key_values[self.layer_idx]['value_states'], value_states], dim=1)
+                key_states = torch.cat([past_key_values[self.layer_idx]["key_states"], key_states], dim=1)
+                value_states = torch.cat([past_key_values[self.layer_idx]["value_states"], value_states], dim=1)
                 if auto_regression_inference_mode:
-                    past_key_values[self.layer_idx] = {'key_states': key_states, 'value_states': value_states}
+                    past_key_values[self.layer_idx] = {"key_states": key_states, "value_states": value_states}
 
         num_att_heads = self.paligemma_num_attention_heads  # Assume same for both
         num_key_value_heads = self.paligemma_num_key_value_heads
@@ -352,7 +375,7 @@ class GemmaAttentionWithExpert(nn.Module):
 
 
 class GemmaMLP(nn.Module):
-    def __init__(self, hidden_size: int = 1024, intermediate_size: int = 4096, hidden_act: str = 'gelu_pytorch_tanh'):
+    def __init__(self, hidden_size: int = 1024, intermediate_size: int = 4096, hidden_act: str = "gelu_pytorch_tanh"):
         super().__init__()
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -379,7 +402,7 @@ class GemmaDecoderLayerWithExpert(nn.Module):
         paligemma_head_dim: int = 256,
         paligemma_attention_bias: bool = False,
         paligemma_intermediate_size: int = 16384,
-        paligemma_hidden_act: str = 'gelu_pytorch_tanh',
+        paligemma_hidden_act: str = "gelu_pytorch_tanh",
         paligemma_rms_norm_eps: float = 1e-6,
         # Expert params
         expert_hidden_size: int = 1024,
@@ -388,7 +411,7 @@ class GemmaDecoderLayerWithExpert(nn.Module):
         expert_head_dim: int = 256,
         expert_attention_bias: bool = False,
         expert_intermediate_size: int = 4096,
-        expert_hidden_act: str = 'gelu_pytorch_tanh',
+        expert_hidden_act: str = "gelu_pytorch_tanh",
         expert_rms_norm_eps: float = 1e-6,
     ):
         super().__init__()
@@ -480,11 +503,17 @@ class GemmaDecoderLayerWithExpert(nn.Module):
                 attn_gates.append(None)
 
         attn_outputs = self.self_attn(
-            normed_embeds, position_embeddings, attention_mask, use_cache, past_key_values, fill_kv_cache, auto_regression_inference_mode
+            normed_embeds,
+            position_embeddings,
+            attention_mask,
+            use_cache,
+            past_key_values,
+            fill_kv_cache,
+            auto_regression_inference_mode,
         )
 
         after_attn_embeds = []
-        for i, (residual, attn_output, attn_gate) in enumerate(zip(residuals, attn_outputs, attn_gates)):
+        for i, (residual, attn_output, attn_gate) in enumerate(zip(residuals, attn_outputs, attn_gates, strict=False)):  # noqa: B007 - The loop variable is read outside the loop.
             if residual is not None:
                 after_attn_embeds.append(self.gated_residual(residual, attn_output, attn_gate))
             else:
@@ -527,7 +556,7 @@ class PaliGemmaWithExpertModel(nn.Module):
         paligemma_head_dim: int = 256,
         paligemma_attention_bias: bool = False,
         paligemma_intermediate_size: int = 16384,
-        paligemma_hidden_act: str = 'gelu_pytorch_tanh',
+        paligemma_hidden_act: str = "gelu_pytorch_tanh",
         paligemma_rms_norm_eps: float = 1e-6,
         # Expert params
         expert_hidden_size: int = 1024,
@@ -536,7 +565,7 @@ class PaliGemmaWithExpertModel(nn.Module):
         expert_head_dim: int = 256,
         expert_attention_bias: bool = False,
         expert_intermediate_size: int = 4096,
-        expert_hidden_act: str = 'gelu_pytorch_tanh',
+        expert_hidden_act: str = "gelu_pytorch_tanh",
         expert_rms_norm_eps: float = 1e-6,
         # RoPE params
         rope_max_wavelength: int = 10_000,
@@ -556,7 +585,9 @@ class PaliGemmaWithExpertModel(nn.Module):
 
         # RoPE
         self.rope_embedding = RoPEEmbedding(
-            dim=paligemma_hidden_size // paligemma_num_attention_heads, max_wavelength=rope_max_wavelength, max_seq_len=rope_max_seq_len
+            dim=paligemma_hidden_size // paligemma_num_attention_heads,
+            max_wavelength=rope_max_wavelength,
+            max_seq_len=rope_max_seq_len,
         )
 
         # Language embed
@@ -622,19 +653,23 @@ class PaliGemmaWithExpertModel(nn.Module):
 
         This mirrors the common HF behavior: if shapes align, share the same storage.
         """
-        if not hasattr(self, 'lm_head') or not hasattr(self, 'embed_tokens'):
+        if not hasattr(self, "lm_head") or not hasattr(self, "embed_tokens"):
             return
         output_module = self.lm_head
         input_emb = self.embed_tokens
 
         # Validate shapes before tying
-        if isinstance(output_module, nn.Linear) and isinstance(input_emb, nn.Embedding) and output_module.weight.shape == input_emb.weight.shape:
+        if (
+            isinstance(output_module, nn.Linear)
+            and isinstance(input_emb, nn.Embedding)
+            and output_module.weight.shape == input_emb.weight.shape
+        ):
             output_module.weight = input_emb.weight
         else:
             # Fall back: clone weights when direct tie is impossible
             # (e.g., when loading a compatible checkpoint with a resized vocabulary).
             with torch.no_grad():
-                if isinstance(output_module, nn.Linear) and isinstance(input_emb, nn.Embedding):
+                if isinstance(output_module, nn.Linear) and isinstance(input_emb, nn.Embedding):  # noqa: SIM102 - Statement form kept for readability.
                     if output_module.weight.shape[::-1] == input_emb.weight.shape[::-1]:
                         output_module.weight.copy_(input_emb.weight)
                 # Otherwise do nothing; caller should ensure compatible shapes.
@@ -684,9 +719,11 @@ class PaliGemmaWithExpertModel(nn.Module):
             inputs_embeds = [None, None]
         if adarms_cond is None:
             adarms_cond = [None, None]
-        inputs_embeds = [input_embed.to(dtype=torch.bfloat16) if input_embed is not None else None for input_embed in inputs_embeds]
+        inputs_embeds = [
+            input_embed.to(dtype=torch.bfloat16) if input_embed is not None else None for input_embed in inputs_embeds
+        ]
 
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
             if use_cache and past_key_values is None:
                 past_key_values = {}
 

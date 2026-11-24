@@ -7,7 +7,10 @@ from typing import Literal
 from torch import nn
 
 from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.base import ConfigModel
-from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.kernels.attention_engine import SelfAttentionEngine, resolve_attention_engine
+from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.kernels.attention_engine import (
+    SelfAttentionEngine,
+    resolve_attention_engine,
+)
 
 AttentionEngineName = Literal[
     "flash_attention_3",

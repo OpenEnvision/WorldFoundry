@@ -1,8 +1,8 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 __author__ = "aagrawal"
@@ -23,9 +23,9 @@ __version__ = "0.9"
 
 # Help on each function can be accessed by: "help(COCO.function)"
 
-import json
-import datetime
 import copy
+import datetime
+import json
 
 
 class VQA:
@@ -41,11 +41,11 @@ class VQA:
         self.qa = {}
         self.qqa = {}
         self.imgToQA = {}
-        if not annotation_file == None and not question_file == None:
+        if not annotation_file == None and not question_file == None:  # noqa: SIM201, E711 - Keeps `not ==` for operands that may compare elementwise.; Keeps `==` for operands that may compare elementwise.
             print("loading VQA annotations and questions into memory...")
-            time_t = datetime.datetime.utcnow()
-            dataset = json.load(open(annotation_file, "r"))
-            questions = json.load(open(question_file, "r"))
+            _time_t = datetime.datetime.utcnow()
+            dataset = json.load(open(annotation_file))  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
+            questions = json.load(open(question_file))  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
             self.dataset = dataset
             self.questions = questions
             self.createIndex()
@@ -74,9 +74,9 @@ class VQA:
         :return:
         """
         for key, value in self.datset["info"].items():
-            print("%s: %s" % (key, value))
+            print("%s: %s" % (key, value))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
-    def getQuesIds(self, imgIds=[], quesTypes=[], ansTypes=[]):
+    def getQuesIds(self, imgIds=[], quesTypes=[], ansTypes=[]):  # noqa: B006 - Keeps the upstream default object and signature.
         """
         Get question ids that satisfy given filter conditions. default skips that filter
         :param 	imgIds    (int array)   : get question ids for given imgs
@@ -84,34 +84,26 @@ class VQA:
                         ansTypes  (str array)   : get question ids for given answer types
         :return:    ids   (int array)   : integer array of question ids
         """
-        imgIds = imgIds if type(imgIds) == list else [imgIds]
-        quesTypes = quesTypes if type(quesTypes) == list else [quesTypes]
-        ansTypes = ansTypes if type(ansTypes) == list else [ansTypes]
+        imgIds = imgIds if type(imgIds) is list else [imgIds]
+        quesTypes = quesTypes if type(quesTypes) is list else [quesTypes]
+        ansTypes = ansTypes if type(ansTypes) is list else [ansTypes]
 
         if len(imgIds) == len(quesTypes) == len(ansTypes) == 0:
             anns = self.dataset["annotations"]
         else:
-            if not len(imgIds) == 0:
-                anns = sum(
+            if not len(imgIds) == 0:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
+                anns = sum(  # noqa: RUF017 - Keeps the upstream sum() list concatenation.
                     [self.imgToQA[imgId] for imgId in imgIds if imgId in self.imgToQA],
                     [],
                 )
             else:
                 anns = self.dataset["annotations"]
-            anns = (
-                anns
-                if len(quesTypes) == 0
-                else [ann for ann in anns if ann["question_type"] in quesTypes]
-            )
-            anns = (
-                anns
-                if len(ansTypes) == 0
-                else [ann for ann in anns if ann["answer_type"] in ansTypes]
-            )
+            anns = anns if len(quesTypes) == 0 else [ann for ann in anns if ann["question_type"] in quesTypes]
+            anns = anns if len(ansTypes) == 0 else [ann for ann in anns if ann["answer_type"] in ansTypes]
         ids = [ann["question_id"] for ann in anns]
         return ids
 
-    def getImgIds(self, quesIds=[], quesTypes=[], ansTypes=[]):
+    def getImgIds(self, quesIds=[], quesTypes=[], ansTypes=[]):  # noqa: B006 - Keeps the upstream default object and signature.
         """
          Get image ids that satisfy given filter conditions. default skips that filter
          :param quesIds   (int array)   : get image ids for given question ids
@@ -119,41 +111,31 @@ class VQA:
         ansTypes  (str array)   : get image ids for given answer types
          :return: ids     (int array)   : integer array of image ids
         """
-        quesIds = quesIds if type(quesIds) == list else [quesIds]
-        quesTypes = quesTypes if type(quesTypes) == list else [quesTypes]
-        ansTypes = ansTypes if type(ansTypes) == list else [ansTypes]
+        quesIds = quesIds if type(quesIds) is list else [quesIds]
+        quesTypes = quesTypes if type(quesTypes) is list else [quesTypes]
+        ansTypes = ansTypes if type(ansTypes) is list else [ansTypes]
 
         if len(quesIds) == len(quesTypes) == len(ansTypes) == 0:
             anns = self.dataset["annotations"]
         else:
-            if not len(quesIds) == 0:
-                anns = sum(
-                    [self.qa[quesId] for quesId in quesIds if quesId in self.qa], []
-                )
+            if not len(quesIds) == 0:  # noqa: SIM201 - Keeps `not ==` for operands that may compare elementwise.
+                anns = sum([self.qa[quesId] for quesId in quesIds if quesId in self.qa], [])  # noqa: RUF017 - Keeps the upstream sum() list concatenation.
             else:
                 anns = self.dataset["annotations"]
-            anns = (
-                anns
-                if len(quesTypes) == 0
-                else [ann for ann in anns if ann["question_type"] in quesTypes]
-            )
-            anns = (
-                anns
-                if len(ansTypes) == 0
-                else [ann for ann in anns if ann["answer_type"] in ansTypes]
-            )
+            anns = anns if len(quesTypes) == 0 else [ann for ann in anns if ann["question_type"] in quesTypes]
+            anns = anns if len(ansTypes) == 0 else [ann for ann in anns if ann["answer_type"] in ansTypes]
         ids = [ann["image_id"] for ann in anns]
         return ids
 
-    def loadQA(self, ids=[]):
+    def loadQA(self, ids=[]):  # noqa: B006 - Keeps the upstream default object and signature.
         """
         Load questions and answers with the specified question ids.
         :param ids (int array)       : integer ids specifying question ids
         :return: qa (object array)   : loaded qa objects
         """
-        if type(ids) == list:
+        if type(ids) is list:
             return [self.qa[id] for id in ids]
-        elif type(ids) == int:
+        elif type(ids) is int:
             return [self.qa[ids]]
 
     def showQA(self, anns):
@@ -166,9 +148,9 @@ class VQA:
             return 0
         for ann in anns:
             quesId = ann["question_id"]
-            print("Question: %s" % (self.qqa[quesId]["question"]))
+            print("Question: %s" % (self.qqa[quesId]["question"]))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             for ans in ann["answers"]:
-                print("Answer %d: %s" % (ans["answer_id"], ans["answer"]))
+                print("Answer %d: %s" % (ans["answer_id"], ans["answer"]))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
     def loadRes(self, resFile, quesFile):
         """
@@ -177,7 +159,7 @@ class VQA:
         :return: res (obj)         : result api object
         """
         res = VQA()
-        res.questions = json.load(open(quesFile))
+        res.questions = json.load(open(quesFile))  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
         res.dataset["info"] = copy.deepcopy(self.questions["info"])
         res.dataset["task_type"] = copy.deepcopy(self.questions["task_type"])
         res.dataset["data_type"] = copy.deepcopy(self.questions["data_type"])
@@ -186,25 +168,23 @@ class VQA:
 
         print("Loading and preparing results...     ")
         time_t = datetime.datetime.utcnow()
-        anns = json.load(open(resFile))
-        assert type(anns) == list, "results is not an array of objects"
+        anns = json.load(open(resFile))  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
+        assert type(anns) is list, "results is not an array of objects"
         annsQuesIds = [ann["question_id"] for ann in anns]
-        assert set(annsQuesIds) == set(
-            self.getQuesIds()
-        ), "Results do not correspond to current VQA set. Either the results do not have predictions for all question ids in annotation file or there is atleast one question id that does not belong to the question ids in the annotation file."
+        assert set(annsQuesIds) == set(self.getQuesIds()), (
+            "Results do not correspond to current VQA set. Either the results do not have predictions for all question ids in annotation file or there is atleast one question id that does not belong to the question ids in the annotation file."
+        )
         for ann in anns:
             quesId = ann["question_id"]
             if res.dataset["task_type"] == "Multiple Choice":
-                assert (
-                    ann["answer"] in self.qqa[quesId]["multiple_choices"]
-                ), "predicted answer is not one of the multiple choices"
+                assert ann["answer"] in self.qqa[quesId]["multiple_choices"], (
+                    "predicted answer is not one of the multiple choices"
+                )
             qaAnn = self.qa[quesId]
             ann["image_id"] = qaAnn["image_id"]
             ann["question_type"] = qaAnn["question_type"]
             ann["answer_type"] = qaAnn["answer_type"]
-        print(
-            "DONE (t=%0.2fs)" % ((datetime.datetime.utcnow() - time_t).total_seconds())
-        )
+        print("DONE (t=%0.2fs)" % ((datetime.datetime.utcnow() - time_t).total_seconds()))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
         res.dataset["annotations"] = anns
         res.createIndex()

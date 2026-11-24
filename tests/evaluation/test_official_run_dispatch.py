@@ -5,16 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation import framework
-from worldfoundry.evaluation.tasks.catalog.dispatch import CLI_RUNNERS, VIDEO_RUNNER_REGISTRY
-from worldfoundry.evaluation.tasks.catalog.workspace_registry import (
+from worldfoundry.evals.tasks.catalog.dispatch import CLI_RUNNERS, VIDEO_RUNNER_REGISTRY
+from worldfoundry.evals.tasks.catalog.workspace_registry import (
     build_workspace_benchmark_command,
     validate_workspace_registry,
 )
-from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
-from worldfoundry.evaluation.tasks.execution.orchestration import model_benchmark
-from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import OfficialRunResult
-from worldfoundry.evaluation.utils import BENCHMARK_ZOO_DIR
+from worldfoundry.evals.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
+from worldfoundry.evals.tasks.execution.orchestration import model_benchmark
+from worldfoundry.evals.tasks.execution.orchestration import run as unified_run
+from worldfoundry.evals.tasks.execution.orchestration.interfaces import OfficialRunResult
+from worldfoundry.evals.utils import BENCHMARK_ZOO_DIR
 
 
 def test_every_video_benchmark_has_a_registered_route_with_explicit_capability() -> None:
@@ -91,10 +91,10 @@ def test_official_run_does_not_promote_normalizer_success_to_evidence(tmp_path: 
 def test_specialized_result_import_refreshes_runtime_report(tmp_path: Path) -> None:
     import json
 
-    from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import (
+    from worldfoundry.evals.tasks.execution.orchestration.benchmark_runner import (
         run_benchmark_execution,
     )
-    from worldfoundry.evaluation.utils import benchmark_task_sample_path
+    from worldfoundry.evals.utils import benchmark_task_sample_path
 
     sample_results = benchmark_task_sample_path("evalcrafter")
     assert sample_results is not None
@@ -290,9 +290,9 @@ def test_public_run_forwards_custom_benchmark_parameters(tmp_path: Path, monkeyp
         captured["request"] = request
         raise StopAfterDispatch
 
-    monkeypatch.setattr(framework, "run_model_benchmark", capture)
+    monkeypatch.setattr(unified_run, "run_model_benchmark", capture)
     with pytest.raises(StopAfterDispatch):
-        framework.run_worldfoundry(
+        unified_run.run_worldfoundry(
             output_dir=tmp_path,
             model_ids=("bernini",),
             benchmark_ids=("wbench",),
@@ -311,8 +311,8 @@ def test_single_video_vbench_runtime_is_bounded_evidence(tmp_path: Path) -> None
     import argparse
     import json
 
-    from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
-    from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import (
+    from worldfoundry.evals.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
+    from worldfoundry.evals.tasks.execution.runners.vbench.vbench_official_impl import (
         DEFAULT_VBENCH_ROOT,
         normalize_vbench_results,
         validate_prompt_suite_materialization,
@@ -362,7 +362,7 @@ def test_single_video_vbench_runtime_is_bounded_evidence(tmp_path: Path) -> None
 
 @pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf")))
 def test_vbench_non_finite_results_fail_closed(tmp_path: Path, value: float) -> None:
-    from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import (
+    from worldfoundry.evals.tasks.execution.runners.vbench.vbench_official_impl import (
         normalize_vbench_results,
     )
 
@@ -391,7 +391,7 @@ def test_vbench_non_finite_results_fail_closed(tmp_path: Path, value: float) -> 
 
 
 def test_vbench_invalid_dimension_does_not_discard_healthy_dimension(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import normalize_vbench_results
+    from worldfoundry.evals.tasks.execution.runners.vbench.vbench_official_impl import normalize_vbench_results
 
     scorecard = normalize_vbench_results(
         {"temporal_flickering": [float("nan"), [{"video_results": float("nan")}]], "motion_smoothness": 0.75},
@@ -415,7 +415,7 @@ def test_vbench_invalid_dimension_does_not_discard_healthy_dimension(tmp_path: P
 
 
 def test_vbench_series_non_finite_results_fail_closed() -> None:
-    from worldfoundry.evaluation.tasks.execution.runners.vbench_2_0.vbench_shared_official_impl import (
+    from worldfoundry.evals.tasks.execution.runners.vbench_2_0.vbench_shared_official_impl import (
         raw_dimension_rows,
     )
 
@@ -465,8 +465,8 @@ def test_single_video_vbench_series_runtime_is_never_full_suite(
     import argparse
     import json
 
-    from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
-    from worldfoundry.evaluation.tasks.execution.runners.vbench_2_0.vbench_shared_official_impl import (
+    from worldfoundry.evals.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
+    from worldfoundry.evals.tasks.execution.runners.vbench_2_0.vbench_shared_official_impl import (
         build_vbench2_video_coverage,
         canonical_suite_coverage,
         normalize_results,
@@ -521,10 +521,10 @@ def test_single_video_vbench_series_runtime_is_never_full_suite(
 
 
 def test_imported_vbench_results_are_not_runtime_evidence(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import (
+    from worldfoundry.evals.tasks.execution.runners.vbench.vbench_official_impl import (
         normalize_vbench_results,
     )
-    from worldfoundry.evaluation.tasks.execution.runners.vbench_2_0.vbench_shared_official_impl import (
+    from worldfoundry.evals.tasks.execution.runners.vbench_2_0.vbench_shared_official_impl import (
         normalize_results,
     )
 

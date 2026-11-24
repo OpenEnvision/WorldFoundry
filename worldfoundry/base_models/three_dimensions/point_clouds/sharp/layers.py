@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-from typing import NamedTuple, Sequence
+from collections.abc import Sequence
+from typing import NamedTuple
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v2.dpt import (
-    _make_fusion_block,
-)
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v1.dap_model import (
     DepthAnythingV2,
 )
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v2.util.blocks import (
-    _make_scratch,
-)
+from worldfoundry.base_models.three_dimensions.depth.midas.fusion import make_fusion_block as _make_fusion_block
+from worldfoundry.base_models.three_dimensions.depth.midas.fusion import make_scratch as _make_scratch
 
 from .types import ImageFeatures
 
@@ -53,9 +50,7 @@ class FeatureFusionBlock2d(nn.Module):
         self.out_conv = nn.Conv2d(channels, channels, 1)
         self.skip_add = nn.quantized.FloatFunctional()
 
-    def forward(
-        self, value: torch.Tensor, skip: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, value: torch.Tensor, skip: torch.Tensor | None = None) -> torch.Tensor:
         if skip is not None:
             value = self.skip_add.add(value, self.resnet1(skip))
         return self.out_conv(self.deconv(self.resnet2(value)))
@@ -105,9 +100,7 @@ class DAPFeatureAdapter(nn.Module):
                 replacement.bias.copy_(original.bias.expand_as(replacement.bias))
         output[index] = replacement
 
-    def forward(
-        self, image: torch.Tensor, infer_depth: bool = True
-    ) -> DAPFeatures:
+    def forward(self, image: torch.Tensor, infer_depth: bool = True) -> DAPFeatures:
         encoder_features = self.model.extract_features(image)
         if not infer_depth:
             return DAPFeatures(None, None, encoder_features)
@@ -145,9 +138,7 @@ class DPTFeatureHead(nn.Module):
         self.feature_dim = feature_dim
         self.patch_size = patch_size
         self.stride = stride
-        self.projects = nn.ModuleList(
-            [nn.Conv2d(in_channels, channels, 1) for channels in out_channels]
-        )
+        self.projects = nn.ModuleList([nn.Conv2d(in_channels, channels, 1) for channels in out_channels])
         self.resize_layers = nn.ModuleList(
             [
                 nn.ConvTranspose2d(out_channels[0], out_channels[0], 4, stride=4),
@@ -158,10 +149,7 @@ class DPTFeatureHead(nn.Module):
         )
         if use_clstoken:
             self.readout_projects = nn.ModuleList(
-                [
-                    nn.Sequential(nn.Linear(2 * in_channels, in_channels), nn.GELU())
-                    for _ in self.projects
-                ]
+                [nn.Sequential(nn.Linear(2 * in_channels, in_channels), nn.GELU()) for _ in self.projects]
             )
 
         self.scratch = _make_scratch(out_channels, features, groups=1, expand=False)
@@ -228,9 +216,7 @@ class DPTFeatureHead(nn.Module):
         encodings: list[torch.Tensor],
     ) -> ImageFeatures:
         patch_height, patch_width = encodings[0].shape[-2:]
-        layer_1, layer_2, layer_3, layer_4 = self._process_encoder_features(
-            encodings, patch_height, patch_width
-        )
+        layer_1, layer_2, layer_3, layer_4 = self._process_encoder_features(encodings, patch_height, patch_width)
         layer_1 = self.scratch.layer1_rn(layer_1)
         layer_2 = self.scratch.layer2_rn(layer_2)
         layer_3 = self.scratch.layer3_rn(layer_3)
@@ -267,10 +253,6 @@ class DirectPredictionHead(nn.Module):
         nn.init.zeros_(self.texture_prediction_head.bias)
 
     def forward(self, features: ImageFeatures) -> torch.Tensor:
-        geometry = self.geometry_prediction_head(features.geometry_features).unflatten(
-            1, (3, self.num_layers)
-        )
-        texture = self.texture_prediction_head(features.texture_features).unflatten(
-            1, (11, self.num_layers)
-        )
+        geometry = self.geometry_prediction_head(features.geometry_features).unflatten(1, (3, self.num_layers))
+        texture = self.texture_prediction_head(features.texture_features).unflatten(1, (11, self.num_layers))
         return torch.cat((geometry, texture), dim=1)

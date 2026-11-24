@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping
+from typing import Any, ClassVar
 
 from .base_operator import BaseOperator
 
 
 def _is_empty_value(value: Any) -> bool:
-    """Is empty value implementation."""
     if value is None:
         return True
     if isinstance(value, str):
@@ -20,7 +20,6 @@ def _is_empty_value(value: Any) -> bool:
 
 
 def _as_action_list(value: Any) -> list[Any]:
-    """As action list implementation."""
     if _is_empty_value(value):
         return []
     if isinstance(value, (str, Mapping)):
@@ -31,12 +30,10 @@ def _as_action_list(value: Any) -> list[Any]:
 
 
 def _compact_dict(value: Mapping[str, Any]) -> dict[str, Any]:
-    """Compact dict implementation."""
     return {str(key): item for key, item in value.items() if not _is_empty_value(item)}
 
 
 def _first_present(mapping: Mapping[str, Any], *keys: str) -> Any:
-    """First present implementation."""
     for key in keys:
         if key in mapping and not _is_empty_value(mapping[key]):
             return mapping[key]
@@ -44,7 +41,6 @@ def _first_present(mapping: Mapping[str, Any], *keys: str) -> Any:
 
 
 def _extract_action_signal(value: Any, *keys: str) -> list[Any]:
-    """Extract action signal implementation."""
     if isinstance(value, Mapping):
         action_value = _first_present(
             value,
@@ -73,14 +69,14 @@ class EmbodiedActionOperator(BaseOperator):
     POLICY_FAMILY = "generic_embodied_policy"
     ACTION_REPRESENTATION = "generic_action"
     OBSERVATION_LAYOUT = "generic_observation"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": True,
         "actions": ["robot_action", "latent_action", "world_action"],
     }
 
-    def __init__(self, input_schema: Dict[str, Any] | None = None):
+    def __init__(self, input_schema: dict[str, Any] | None = None):
         """Initialize the operator with specific configurations."""
         super().__init__(operation_types=["textual_instruction", "visual_instruction", "action_instruction"])
         self.input_schema = {**self.DEFAULT_INPUT_SCHEMA, **dict(input_schema or {})}
@@ -97,7 +93,7 @@ class EmbodiedActionOperator(BaseOperator):
         self.check_interaction(interaction)
         self.current_interaction.append(interaction)
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         actions = _extract_action_signal(self.current_interaction[-1] if self.current_interaction else None)
         self.interaction_history.append(actions)
@@ -117,14 +113,14 @@ class EmbodiedActionOperator(BaseOperator):
             }
         )
 
-    def action_payload(self, actions: list[Any], **metadata: Any) -> Dict[str, Any]:
+    def action_payload(self, actions: list[Any], **metadata: Any) -> dict[str, Any]:
         """Format processed interactions into a model action payload."""
         return {
             "actions": actions,
             "operator_metadata": self.operator_metadata(**metadata),
         }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
         instruction = kwargs.pop("instruction", None)
         text = prompt if prompt not in (None, "") else instruction
@@ -139,7 +135,7 @@ class EmbodiedActionOperator(BaseOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         extra_inputs = dict(kwargs)
         for key in ("observation", "observations", "video_context", "initial_world_state"):
@@ -175,15 +171,14 @@ def __getattr__(name: str):
     """
     import warnings
 
-    from worldfoundry.operators import _OPERATOR_MODULES
     from worldfoundry import operators as operators_pkg
+    from worldfoundry.operators import _OPERATOR_MODULES
 
     if name not in _OPERATOR_MODULES:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
     warnings.warn(
-        f"Importing {name!r} from {__name__!r} is deprecated; "
-        f"import it from 'worldfoundry.operators' instead.",
+        f"Importing {name!r} from {__name__!r} is deprecated; import it from 'worldfoundry.operators' instead.",
         DeprecationWarning,
         stacklevel=2,
     )

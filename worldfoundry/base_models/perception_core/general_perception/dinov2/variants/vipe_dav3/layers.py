@@ -7,19 +7,15 @@
 """DINO-style layers assembled from shared WorldFoundry neural-network primitives."""
 
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from torch import nn
 
-from worldfoundry.base_models.perception_core.general_perception.dinov2.variants.depth_anything_v3.layers.attention import (
-    Attention,
-)
 from worldfoundry.base_models.perception_core.general_perception.dinov2.variants.depth_anything_v3.layers.block import (
     Block,
 )
 from worldfoundry.core.attention.rotary.rope_2d import PositionGetter, RotaryPositionEmbedding2D
 from worldfoundry.core.nn import SwiGLUFFN
-from worldfoundry.core.nn.blocks.stochastic_depth import drop_add_residual_stochastic_depth, get_branges_scales
 
 logger = logging.getLogger("dinov2")
 XFORMERS_AVAILABLE = False
@@ -31,9 +27,9 @@ class SwiGLUFFNFused(SwiGLUFFN):
     def __init__(
         self,
         in_features: int,
-        hidden_features: Optional[int] = None,
-        out_features: Optional[int] = None,
-        act_layer: Callable[..., nn.Module] = None,
+        hidden_features: int | None = None,
+        out_features: int | None = None,
+        act_layer: Callable[..., nn.Module] | None = None,
         drop: float = 0.0,
         bias: bool = True,
     ) -> None:
@@ -50,9 +46,9 @@ class SwiGLUFFNFused(SwiGLUFFN):
 
 
 __all__ = [
-    "SwiGLUFFN",
-    "SwiGLUFFNFused",
     "Block",
     "PositionGetter",
     "RotaryPositionEmbedding2D",
+    "SwiGLUFFN",
+    "SwiGLUFFNFused",
 ]

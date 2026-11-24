@@ -130,9 +130,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
         or os.path.join(get_default_cache_root(), "trainer")
     ),
     # Interval in seconds to log a warning message when the ring buffer is full
-    "TRAINER_RINGBUFFER_WARNING_INTERVAL": lambda: int(
-        _trainer("TRAINER_RINGBUFFER_WARNING_INTERVAL", "60") or "60"
-    ),
+    "TRAINER_RINGBUFFER_WARNING_INTERVAL": lambda: int(_trainer("TRAINER_RINGBUFFER_WARNING_INTERVAL", "60") or "60"),
     # Path to the NCCL library file. It is needed because nccl>=2.19 brought
     # by PyTorch contains a bug: https://github.com/NVIDIA/nccl/issues/1234
     "TRAINER_NCCL_SO_PATH": lambda: _trainer("TRAINER_NCCL_SO_PATH"),
@@ -149,9 +147,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # used to control the visible devices in the distributed setting
     "CUDA_VISIBLE_DEVICES": lambda: os.environ.get("CUDA_VISIBLE_DEVICES", None),
     # timeout for each iteration in the engine
-    "TRAINER_ENGINE_ITERATION_TIMEOUT_S": lambda: int(
-        _trainer("TRAINER_ENGINE_ITERATION_TIMEOUT_S", "60") or "60"
-    ),
+    "TRAINER_ENGINE_ITERATION_TIMEOUT_S": lambda: int(_trainer("TRAINER_ENGINE_ITERATION_TIMEOUT_S", "60") or "60"),
     # Logging configuration
     # If set to 0, trainer will not configure logging
     # If set to 1, trainer will configure logging using the default configuration
@@ -168,9 +164,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "TRAINER_TRACE_FUNCTION": lambda: int(_trainer("TRAINER_TRACE_FUNCTION", "0") or "0"),
     # Use dedicated multiprocess context for workers.
     # Both spawn and fork work
-    "TRAINER_WORKER_MULTIPROC_METHOD": lambda: (
-        _trainer("TRAINER_WORKER_MULTIPROC_METHOD", "fork") or "fork"
-    ),
+    "TRAINER_WORKER_MULTIPROC_METHOD": lambda: (_trainer("TRAINER_WORKER_MULTIPROC_METHOD", "fork") or "fork"),
     # Enables torch profiler if set. Path to the directory where torch profiler
     # traces are saved. Note that it must be an absolute path.
     "TRAINER_TORCH_PROFILER_DIR": lambda: (

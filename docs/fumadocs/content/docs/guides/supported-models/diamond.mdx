@@ -40,10 +40,10 @@ CS:GO named actions are `idle`, `forward`, `backward`, `left`, `right`, `jump`, 
 
 The official `higher_quality` preset uses three denoising steps and ten upsampling steps per frame; `fast` uses one of each. Both write H.264 at the requested playback FPS. A rollout of N steps produces N+1 frames including the initial observation. Atari's horizon-50 and terminal resets can restart the context inside the video. CS:GO produces a continuous finite rollout.
 
-## Validation scope
+## Validation
 
-All 26 released Atari checkpoints completed local H100 inference with strict loading, finite pre-clamp outputs, complete video decoding and visual inspection. Following the shared sampler refactor, 52 Euler/Heun comparisons across those checkpoints matched the previous implementation bitwise. A separate matched-context Pong test confirmed opposite paddle responses.
+Validated locally: all 26 released Atari checkpoints generate complete rollout videos, and CS:GO `higher_quality` and `fast` rollouts from spawn 0 match the official implementation's low-resolution and upsampled outputs.
 
-CS:GO `higher_quality` forward/backward rollouts from spawn 0, 24 steps each, matched the official implementation's low-resolution and upsampled tensors bitwise; pre-clamp outputs were finite. The fast preset also matched both branches bitwise on two six-step rollouts. These short checks do not establish long-horizon physics, reward accuracy, or game success. Attribution is centralized in `THIRD-PARTY-NOTICES`.
+Validation covers short rollouts only; long-horizon physics, reward accuracy, and game success are not validated. Licenses and attribution are listed in `THIRD-PARTY-NOTICES`.
 
 <ModelRelatedRecipes modelId="diamond" locale="en" />

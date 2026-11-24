@@ -25,6 +25,48 @@ canonical_model_id() {
     cosmos3-nano|cosmos3-super|cosmos-3|cosmos-3-nano|cosmos-3-super)
       printf '%s\n' "cosmos3"
       ;;
+    solarwm-wan22|solarwm-wan22-5b|solarwm-wan2.2-5b|solarwm-wan2.2-14b)
+      printf '%s\n' "solarwm"
+      ;;
+    dreamzero-droid)
+      printf '%s\n' "dreamzero"
+      ;;
+    gamma-world-causal-few-step)
+      printf '%s\n' "gamma-world"
+      ;;
+    hy-embodied-vla-umi)
+      printf '%s\n' "hy-embodied-vla"
+      ;;
+    kandinsky6-lite|kandinsky6-lite-distill|kandinsky6-lite-pretrain|kandinsky6-pro|kandinsky6-pro-distill|kandinsky6-pro-pretrain)
+      printf '%s\n' "kandinsky6"
+      ;;
+    lapa-7b-openx)
+      printf '%s\n' "lapa"
+      ;;
+    lingbot-va-base)
+      printf '%s\n' "lingbot-va"
+      ;;
+    lingbot-vla-4b)
+      printf '%s\n' "lingbot-vla"
+      ;;
+    lingbot-vla-v2-6b)
+      printf '%s\n' "lingbot-vla-v2"
+      ;;
+    lingbot-world-act)
+      printf '%s\n' "lingbot-world"
+      ;;
+    local-checkpoint)
+      printf '%s\n' "mira"
+      ;;
+    matrix-game-3.5-first-person)
+      printf '%s\n' "matrix-game-3.5"
+      ;;
+    spatial-forcing-libero-spatial)
+      printf '%s\n' "spatial-forcing"
+      ;;
+    x-wam-robocasa-sft)
+      printf '%s\n' "x-wam"
+      ;;
     *)
       printf '%s\n' "$1"
       ;;
@@ -246,7 +288,7 @@ print_mapping() {
 from worldfoundry.runtime.conda import load_runtime_conda_env_specs_with_overrides
 from worldfoundry.runtime.cuda_tiers import DEFAULT_CUDA_TIER, unified_env_name
 from worldfoundry.core.io.paths import conda_envs_root_path
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profiles
+from worldfoundry.zoo.runtime.profiles import load_runtime_profiles
 
 specs = load_runtime_conda_env_specs_with_overrides()
 profiles = load_runtime_profiles(check_conda_env_exists=False)
@@ -568,6 +610,16 @@ post_install_model_env() {
   esac
 }
 
+install_env_setup_commands() {
+  local spec_json="$1"
+  local env_prefix="$2"
+  local setup_command
+  while IFS= read -r setup_command; do
+    [[ -n "$setup_command" ]] || continue
+    "$CONDA_EXE_PATH" run -p "$env_prefix" bash -c "$setup_command"
+  done < <(json_array_lines "$spec_json" setup_commands)
+}
+
 install_dedicated_env() {
   local spec_json="$1"
   local model_id env_name env_prefix python_version pip_extra_index
@@ -681,6 +733,7 @@ install_dedicated_env() {
         } >"$site_packages/worldfoundry.pth"
       fi
     fi
+    install_env_setup_commands "$spec_json" "$env_prefix"
     post_install_model_env "$model_id" "$env_prefix"
   fi
   verify_env_imports "$env_prefix" "${validation_imports[@]}"
@@ -702,6 +755,7 @@ install_model_env() {
   if [[ "$env_name" == worldfoundry-unified-* ]]; then
     install_unified_env "$env_prefix" "$cuda_profile"
     if [[ "$VERIFY_ONLY" != "1" ]]; then
+      install_env_setup_commands "$spec_json" "$env_prefix"
       post_install_model_env "$model_id" "$env_prefix"
     fi
   else

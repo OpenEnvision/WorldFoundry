@@ -13,6 +13,7 @@ instructions. Skills are first-party source documentation under
 | [Benchmark integration](worldfoundry-benchmark-integration/SKILL.md) | Adding benchmark manifests, task materialization, official runners, metrics, or scorecard normalization |
 | [Inference optimization](worldfoundry-inference-optimization/SKILL.md) | Profiling and changing attention, compilation, warmup, caches, offload, decoding, or streaming latency |
 | [Inference validation](worldfoundry-inference-validation/SKILL.md) | Comparing component numerics, locating first divergence, running checkpoint replays, or reviewing inference evidence |
+| [Studio serving](worldfoundry-studio-serving/SKILL.md) | Serving a model in Studio or the Workspace: catalog discovery, streaming, interactive, or realtime sessions, worker lifecycle, GPU leases, and serving evidence |
 | [Repository maintenance](worldfoundry-repository-maintenance/SKILL.md) | Updating docs, tests, packaging, licensing, scoped self-review, or release readiness |
 
 ## Using Skills

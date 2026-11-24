@@ -1,55 +1,75 @@
-"""Module for base_models -> perception_core -> segment -> sam3 -> model -> sam3_multiplex_tracking.py functionality."""
-
 from collections import defaultdict
-from functools import reduce
-from typing import Dict
 
 import numpy as np
+
+# isort: split
 import worldfoundry.base_models.perception_core.segment.sam3.model.sam3_multiplex_base
-import worldfoundry.base_models.perception_core.segment.sam3.model.sam3_video_base
+
+# isort: split
+# isort: split
+import worldfoundry.base_models.perception_core.segment.sam3.model.sam3_video_base  # noqa: F401 - Keeps the module's import-time setup.
+
+# isort: split
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
+
 from worldfoundry.base_models.perception_core.segment.sam3 import perflib
 from worldfoundry.base_models.perception_core.segment.sam3.logger import get_logger
 from worldfoundry.base_models.perception_core.segment.sam3.model.box_ops import box_xywh_to_cxcywh, box_xyxy_to_xywh
+
+# isort: split
 from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import BatchedDatapoint
-from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_multiplex_base import MaskletConfirmationStatus, Sam3MultiplexBase
+
+# isort: split
+# isort: split
+from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_multiplex_base import (
+    MaskletConfirmationStatus,
+    Sam3MultiplexBase,
+)
+
+# isort: split
 from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_tracker_utils import fill_holes_in_mask_scores
+
+# isort: split
 from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_video_inference import is_image_type
+
+# isort: split
+# isort: split
 from worldfoundry.base_models.perception_core.segment.sam3.perflib.compile import (
     clone_output_wrapper,
     compile_wrapper,
     shape_logging_wrapper,
 )
-from worldfoundry.base_models.perception_core.segment.sam3.perflib.masks_ops import mask_iou, masks_to_boxes as perf_masks_to_boxes
-from torch import Tensor
+
+# isort: split
 from torchvision.ops import masks_to_boxes
 from tqdm.auto import tqdm
 
+from worldfoundry.base_models.perception_core.segment.sam3.perflib.masks_ops import (
+    masks_to_boxes as perf_masks_to_boxes,
+)
+
 logger = get_logger(__name__)
 
-import gc
-from collections.abc import Mapping, Sequence
-from dataclasses import fields, is_dataclass
-from typing import List
+from collections.abc import Mapping, Sequence  # noqa: E402 - Follows the logging setup.
+from dataclasses import fields, is_dataclass  # noqa: E402 - Follows the logging setup.
 
-from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import (
+from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import (  # noqa: E402 - Follows the logging setup.
     BatchedPointer,
-    convert_my_tensors,
     FindStage,
     NestedTensor,
+    convert_my_tensors,
 )
-from worldfoundry.base_models.perception_core.segment.sam3.model.geometry_encoders import Prompt
-from worldfoundry.base_models.perception_core.segment.sam3.model.io_utils import load_resource_as_video_frames
+from worldfoundry.base_models.perception_core.segment.sam3.model.geometry_encoders import (  # noqa: E402 - Follows the logging setup.
+    Prompt,
+)
+from worldfoundry.base_models.perception_core.segment.sam3.model.io_utils import (  # noqa: E402 - Follows the logging setup.
+    load_resource_as_video_frames,
+)
 
 
 def recursive_to(data, *args, **kwargs):
-    """Recursive to.
-
-    Args:
-        data: The data.
-    """
     if isinstance(data, torch.Tensor):
         ret = data.to(*args, **kwargs)
     elif isinstance(data, np.ndarray):
@@ -68,10 +88,7 @@ def recursive_to(data, *args, **kwargs):
             ret.append(recursive_to(value, *args, **kwargs))
     elif is_dataclass(data):
         ret_cls = type(data)
-        ret_fields = {
-            field.name: recursive_to(getattr(data, field.name), *args, **kwargs)
-            for field in fields(data)
-        }
+        ret_fields = {field.name: recursive_to(getattr(data, field.name), *args, **kwargs) for field in fields(data)}
         ret = ret_cls(**ret_fields)
     else:
         ret = data
@@ -83,6 +100,7 @@ DUMMY_OUTPUT = "DUMMY_OUTPUT"
 
 class Sam3MultiplexTracking(Sam3MultiplexBase):
     """Sam multiplex tracking implementation."""
+
     def __init__(
         self,
         image_size=1008,
@@ -125,9 +143,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         # 3) find_inputs
         input_box_embedding_dim = 258  # historical default
         input_points_embedding_dim = 257  # historical default
-        dummy_ptrs = BatchedPointer(
-            stage_ids=[], query_ids=[], object_ids=[], ptr_mask=[], ptr_types=[]
-        )
+        dummy_ptrs = BatchedPointer(stage_ids=[], query_ids=[], object_ids=[], ptr_mask=[], ptr_types=[])
         stages = [
             FindStage(
                 img_ids=[stage_id],
@@ -146,9 +162,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             )
             for stage_id in range(num_frames)
         ]
-        with torch.profiler.record_function(
-            "Sam3MultiplexTracking._construct_initial_input_batch"
-        ):
+        with torch.profiler.record_function("Sam3MultiplexTracking._construct_initial_input_batch"):
             for i in range(len(stages)):
                 stages[i] = convert_my_tensors(stages[i])
 
@@ -192,22 +206,10 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         inference_state["visual_prompt_mask"] = None
 
     def _get_visual_prompt(self, inference_state, frame_idx, boxes_cxcywh, box_labels):
-        """Helper function to get visual prompt.
-
-        Args:
-            inference_state: The inference state.
-            frame_idx: The frame idx.
-            boxes_cxcywh: The boxes cxcywh.
-            box_labels: The box labels.
-        """
         batch_size = 1
         geometric_prompt = Prompt(
-            box_embeddings=torch.zeros(
-                0, batch_size, 4, device=inference_state["device"]
-            ),
-            box_mask=torch.zeros(
-                batch_size, 0, device=inference_state["device"], dtype=torch.bool
-            ),
+            box_embeddings=torch.zeros(0, batch_size, 4, device=inference_state["device"]),
+            box_mask=torch.zeros(batch_size, 0, device=inference_state["device"], dtype=torch.bool),
             point_embeddings=None,
             point_mask=None,
         )
@@ -229,16 +231,6 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         use_cv2=False,
         input_is_mp4=False,
     ):
-        """Init state.
-
-        Args:
-            resource_path: The resource path.
-            offload_video_to_cpu: The offload video to cpu.
-            async_loading_frames: The async loading frames.
-            use_torchcodec: The use torchcodec.
-            use_cv2: The use cv2.
-            input_is_mp4: The input is mp4.
-        """
         # Initialize inference state (inlined from Sam3DemoMixin.init_state)
         if use_torchcodec:
             video_loader_type = "torchcodec"
@@ -275,11 +267,6 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         return inference_state
 
     def reset_state(self, inference_state):
-        """Reset state.
-
-        Args:
-            inference_state: The inference state.
-        """
         # Inlined from Sam3DemoMixin.reset_state
         inference_state["input_batch"].find_text_batch[0] = "<text placeholder>"
         inference_state["text_prompt"] = None
@@ -300,17 +287,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         inference_state["feature_cache"].clear()
         inference_state["cached_frame_outputs"] = {}
 
-    def _get_processing_order(
-        self, inference_state, start_frame_idx, max_frame_num_to_track, reverse
-    ):
-        """Helper function to get processing order.
-
-        Args:
-            inference_state: The inference state.
-            start_frame_idx: The start frame idx.
-            max_frame_num_to_track: The max frame num to track.
-            reverse: The reverse.
-        """
+    def _get_processing_order(self, inference_state, start_frame_idx, max_frame_num_to_track, reverse):
         num_frames = inference_state["num_frames"]
         previous_stages_out = inference_state["previous_stages_out"]
         if all(out is None for out in previous_stages_out) and start_frame_idx is None:
@@ -320,9 +297,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         # set start index, end index, and processing order
         if start_frame_idx is None:
             # default: start from the earliest frame with input points
-            start_frame_idx = min(
-                t for t, out in enumerate(previous_stages_out) if out is not None
-            )
+            start_frame_idx = min(t for t, out in enumerate(previous_stages_out) if out is not None)
         if max_frame_num_to_track is None:
             # default: track all the frames in the video
             max_frame_num_to_track = num_frames
@@ -384,9 +359,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         # Batch postprocessing: accumulate yield_list entries and process every postprocess_batch_size frames
         postprocess_yield_list = []
 
-        for frame_idx in tqdm(
-            processing_order, desc="propagate_in_video", disable=self.rank > 0
-        ):
+        for frame_idx in tqdm(processing_order, desc="propagate_in_video", disable=self.rank > 0):
             out = self._run_single_frame_inference(
                 inference_state,
                 frame_idx,
@@ -422,20 +395,14 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             # Snapshot hotstart_removed_obj_ids at the time of accumulation to preserve
             # the correct state for each frame (important: this set is mutated over time)
             for yield_frame_idx, yield_out in yield_list:
-                postprocess_yield_list.append(
-                    (yield_frame_idx, yield_out, set(hotstart_removed_obj_ids))
-                )
+                postprocess_yield_list.append((yield_frame_idx, yield_out, set(hotstart_removed_obj_ids)))
 
             # Process batch when we have enough frames
             while len(postprocess_yield_list) >= self.postprocess_batch_size:
                 batch_to_process = postprocess_yield_list[: self.postprocess_batch_size]
-                postprocess_yield_list = postprocess_yield_list[
-                    self.postprocess_batch_size :
-                ]
+                postprocess_yield_list = postprocess_yield_list[self.postprocess_batch_size :]
 
-                with torch.profiler.record_function(
-                    "Sam3MultiplexTracking.postprocess_output_batched"
-                ):
+                with torch.profiler.record_function("Sam3MultiplexTracking.postprocess_output_batched"):
                     if self.rank == 0:
                         # Prepare batched inputs for postprocessing
                         H_video, W_video = (
@@ -457,12 +424,8 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                                 if not reverse
                                 else yield_frame_idx - unconfirmed_status_delay
                             )
-                            unconfirmed_status_frame_idx = max(
-                                0, min(unconfirmed_status_frame_idx, num_frames - 1)
-                            )
-                            unconfirmed_obj_ids = unconfirmed_obj_ids_per_frame.get(
-                                unconfirmed_status_frame_idx, None
-                            )
+                            unconfirmed_status_frame_idx = max(0, min(unconfirmed_status_frame_idx, num_frames - 1))
+                            unconfirmed_obj_ids = unconfirmed_obj_ids_per_frame.get(unconfirmed_status_frame_idx)
 
                             batched_outs.append(
                                 (
@@ -486,9 +449,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
 
                         if self.postprocess_batch_size > 1:
                             # Process all frames in batch
-                            postprocessed_outs = self._postprocess_output_batched(
-                                H_video, W_video, batched_outs
-                            )
+                            postprocessed_outs = self._postprocess_output_batched(H_video, W_video, batched_outs)
                         else:
                             # Process each frame individually but output together
                             postprocessed_outs = []
@@ -508,9 +469,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                                 postprocessed_outs.append(postprocessed_out)
 
                         # Yield results
-                        for yield_frame_idx, postprocessed_out in zip(
-                            frame_indices, postprocessed_outs
-                        ):
+                        for yield_frame_idx, postprocessed_out in zip(frame_indices, postprocessed_outs, strict=False):
                             yield yield_frame_idx, postprocessed_out
                     else:
                         # No output on other GPUs
@@ -519,9 +478,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
 
         # Flush any remaining frames in the postprocess buffer
         if len(postprocess_yield_list) > 0:
-            with torch.profiler.record_function(
-                "Sam3MultiplexTracking.postprocess_output_batched"
-            ):
+            with torch.profiler.record_function("Sam3MultiplexTracking.postprocess_output_batched"):
                 if self.rank == 0:
                     H_video, W_video = (
                         inference_state["orig_height"],
@@ -542,12 +499,8 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                             if not reverse
                             else yield_frame_idx - unconfirmed_status_delay
                         )
-                        unconfirmed_status_frame_idx = max(
-                            0, min(unconfirmed_status_frame_idx, num_frames - 1)
-                        )
-                        unconfirmed_obj_ids = unconfirmed_obj_ids_per_frame.get(
-                            unconfirmed_status_frame_idx, None
-                        )
+                        unconfirmed_status_frame_idx = max(0, min(unconfirmed_status_frame_idx, num_frames - 1))
+                        unconfirmed_obj_ids = unconfirmed_obj_ids_per_frame.get(unconfirmed_status_frame_idx)
 
                         batched_outs.append(
                             (
@@ -569,9 +522,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                         )
 
                     if self.postprocess_batch_size > 1:
-                        postprocessed_outs = self._postprocess_output_batched(
-                            H_video, W_video, batched_outs
-                        )
+                        postprocessed_outs = self._postprocess_output_batched(H_video, W_video, batched_outs)
                     else:
                         # Process each frame individually but output together
                         postprocessed_outs = []
@@ -590,9 +541,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                             )
                             postprocessed_outs.append(postprocessed_out)
 
-                    for yield_frame_idx, postprocessed_out in zip(
-                        frame_indices, postprocessed_outs
-                    ):
+                    for yield_frame_idx, postprocessed_out in zip(frame_indices, postprocessed_outs, strict=False):
                         yield yield_frame_idx, postprocessed_out
                 else:
                     for yield_frame_idx, _, _ in postprocess_yield_list:
@@ -605,16 +554,11 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             total_valid_objects = 0
             total_num_buckets = 0
             for state in inference_state["sam2_inference_states"]:
-                assert (
-                    len(state["obj_ids"])
-                    == state["multiplex_state"].total_valid_entries
-                )
+                assert len(state["obj_ids"]) == state["multiplex_state"].total_valid_entries
                 total_valid_objects += len(state["obj_ids"])
                 total_num_buckets += state["multiplex_state"].num_buckets
             if total_num_buckets > 0:
-                bucket_utilization_rate = (
-                    total_valid_objects / (total_num_buckets * self.bucket_capacity)
-                ) * 100
+                bucket_utilization_rate = (total_valid_objects / (total_num_buckets * self.bucket_capacity)) * 100
                 subscription_rate = (total_valid_objects / total_num_buckets) * 100
                 logger.info(
                     f"Bucket utilization rate: {bucket_utilization_rate:.2f}%, subscription rate: {subscription_rate:.2f}%"
@@ -642,9 +586,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         text_batch_key = tuple(input_batch.find_text_batch)
         inference_state["feature_cache"]["text"] = {
             text_batch_key: {
-                "language_features": inference_state["backbone_out"][
-                    "language_features"
-                ],
+                "language_features": inference_state["backbone_out"]["language_features"],
                 "language_mask": inference_state["backbone_out"]["language_mask"],
             }
         }
@@ -681,9 +623,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         out = {
             "obj_id_to_mask": obj_id_to_mask,
             "obj_id_to_score": obj_id_to_score,  # first frame detection score
-            "obj_id_to_sam2_score": tracker_metadata_new[
-                "obj_id_to_sam2_score_frame_wise"
-            ][frame_idx],
+            "obj_id_to_sam2_score": tracker_metadata_new["obj_id_to_sam2_score_frame_wise"][frame_idx],
         }
         # removed_obj_ids is only needed on rank 0 to handle hotstart delay buffer
         if self.rank == 0:
@@ -695,9 +635,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             if self.masklet_confirmation_enable:
                 status = rank0_metadata["masklet_confirmation"]["status"]
                 is_unconfirmed = status == MaskletConfirmationStatus.UNCONFIRMED.value
-                out["unconfirmed_obj_ids"] = tracker_metadata_new["obj_ids_all_gpu"][
-                    is_unconfirmed
-                ].tolist()
+                out["unconfirmed_obj_ids"] = tracker_metadata_new["obj_ids_all_gpu"][is_unconfirmed].tolist()
             else:
                 out["unconfirmed_obj_ids"] = []
 
@@ -711,15 +649,6 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         suppressed_obj_ids=None,
         unconfirmed_obj_ids=None,
     ):
-        """Helper function to postprocess output.
-
-        Args:
-            inference_state: The inference state.
-            out: The out.
-            removed_obj_ids: The removed obj ids.
-            suppressed_obj_ids: The suppressed obj ids.
-            unconfirmed_obj_ids: The unconfirmed obj ids.
-        """
         obj_id_to_mask = out["obj_id_to_mask"]  # low res masks
         curr_obj_ids = sorted(obj_id_to_mask.keys())
         H_video, W_video = inference_state["orig_height"], inference_state["orig_width"]
@@ -730,22 +659,14 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             out_boxes_xywh = torch.zeros(0, 4, dtype=torch.float32)
         else:
             out_obj_ids = torch.tensor(curr_obj_ids, dtype=torch.int64)
-            out_probs = torch.tensor(
-                [out["obj_id_to_score"][obj_id] for obj_id in curr_obj_ids]
-            )
+            out_probs = torch.tensor([out["obj_id_to_score"][obj_id] for obj_id in curr_obj_ids])
             out_sam2_probs = torch.tensor(
                 [
-                    (
-                        out["obj_id_to_sam2_score"][obj_id]
-                        if obj_id in out["obj_id_to_sam2_score"]
-                        else 0.0
-                    )
+                    (out["obj_id_to_sam2_score"][obj_id] if obj_id in out["obj_id_to_sam2_score"] else 0.0)  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
                     for obj_id in curr_obj_ids
                 ]
             )
-            out_binary_masks = torch.cat(
-                [obj_id_to_mask[obj_id] for obj_id in curr_obj_ids], dim=0
-            )
+            out_binary_masks = torch.cat([obj_id_to_mask[obj_id] for obj_id in curr_obj_ids], dim=0)
 
             assert out_binary_masks.dtype == torch.bool
             keep = out_binary_masks.any(dim=(1, 2)).cpu()  # remove masks with 0 areas
@@ -763,9 +684,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
 
             # slice those valid entries from the original outputs
             keep_idx = torch.nonzero(keep, as_tuple=True)[0]
-            keep_idx_gpu = keep_idx.pin_memory().to(
-                device=out_binary_masks.device, non_blocking=True
-            )
+            keep_idx_gpu = keep_idx.pin_memory().to(device=out_binary_masks.device, non_blocking=True)
 
             out_obj_ids = torch.index_select(out_obj_ids, 0, keep_idx)
             out_probs = torch.index_select(out_probs, 0, keep_idx)
@@ -773,9 +692,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             out_binary_masks = torch.index_select(out_binary_masks, 0, keep_idx_gpu)
 
             if perflib.is_enabled:
-                out_boxes_xyxy = perf_masks_to_boxes(
-                    out_binary_masks, out_obj_ids.tolist()
-                )
+                out_boxes_xyxy = perf_masks_to_boxes(out_binary_masks, out_obj_ids.tolist())
             else:
                 out_boxes_xyxy = masks_to_boxes(out_binary_masks)
 
@@ -799,9 +716,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
 
         prod_outputs = {}
         if self.running_in_prod:
-            with torch.profiler.record_function(
-                "Sam3MultiplexTracking._postprocess_output.prod_outputs"
-            ):
+            with torch.profiler.record_function("Sam3MultiplexTracking._postprocess_output.prod_outputs"):
                 out_centers = torch.zeros(
                     out_binary_masks.shape[0],
                     2,
@@ -809,17 +724,11 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                     device=out_binary_masks.device,
                 )
 
-                y_coords = torch.arange(
-                    H_video, device=out_binary_masks.device, dtype=torch.float32
-                )
-                x_coords = torch.arange(
-                    W_video, device=out_binary_masks.device, dtype=torch.float32
-                )
+                y_coords = torch.arange(H_video, device=out_binary_masks.device, dtype=torch.float32)
+                x_coords = torch.arange(W_video, device=out_binary_masks.device, dtype=torch.float32)
                 y_grid = y_coords.view(1, H_video, 1)
                 x_grid = x_coords.view(1, 1, W_video)
-                with torch.profiler.record_function(
-                    "Sam3MultiplexTracking._postprocess_output.prod_outputs.center"
-                ):
+                with torch.profiler.record_function("Sam3MultiplexTracking._postprocess_output.prod_outputs.center"):
                     weighted_y_sum = (out_binary_masks * y_grid).sum(dim=(1, 2))
                     weighted_x_sum = (out_binary_masks * x_grid).sum(dim=(1, 2))
                     total_mass = out_binary_masks.sum(dim=(1, 2)).clamp_min(1e-6)
@@ -828,9 +737,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                     out_centers[:, 0] = center_x
                     out_centers[:, 1] = center_y
 
-                with torch.profiler.record_function(
-                    "Sam3MultiplexTracking._postprocess_output.prod_outputs.to_cpu"
-                ):
+                with torch.profiler.record_function("Sam3MultiplexTracking._postprocess_output.prod_outputs.to_cpu"):
                     prod_outputs["out_centers"] = out_centers.cpu().numpy()
 
         outputs = {
@@ -901,9 +808,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
 
             for obj_id in curr_obj_ids:
                 probs_list.append(obj_id_to_score_dict[obj_id])
-                sam2_probs_list.append(
-                    obj_id_to_sam2_score.get(obj_id, default_sam2_score)
-                )
+                sam2_probs_list.append(obj_id_to_sam2_score.get(obj_id, default_sam2_score))
                 binary_masks_list.append(obj_id_to_mask[obj_id])
 
             out_probs = torch.tensor(probs_list, dtype=torch.float32)
@@ -1006,12 +911,8 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             # Need to gather obj_ids for perflib
             all_obj_ids_list = [frame_data[i][0] for i in frames_with_objects]
             all_obj_ids_cat = torch.cat(all_obj_ids_list, dim=0)
-            kept_obj_ids_for_perf = torch.index_select(
-                all_obj_ids_cat, 0, keep_indices.cpu()
-            )
-            kept_boxes_xyxy = perf_masks_to_boxes(
-                kept_masks, kept_obj_ids_for_perf.tolist()
-            )
+            kept_obj_ids_for_perf = torch.index_select(all_obj_ids_cat, 0, keep_indices.cpu())
+            kept_boxes_xyxy = perf_masks_to_boxes(kept_masks, kept_obj_ids_for_perf.tolist())
         else:
             kept_boxes_xyxy = masks_to_boxes(kept_masks)
 
@@ -1029,9 +930,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         kept_counts = []
         offset = 0
         for count in frame_obj_counts:
-            kept_in_frame = sum(
-                1 for j in range(offset, offset + count) if j in keep_set
-            )
+            kept_in_frame = sum(1 for j in range(offset, offset + count) if j in keep_set)
             kept_counts.append(kept_in_frame)
             offset += count
 
@@ -1065,18 +964,14 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             local_kept_t = torch.tensor(local_kept, dtype=torch.int64)
             out_obj_ids = torch.index_select(data[0], 0, local_kept_t)
             out_probs = torch.index_select(data[1], 0, local_kept_t)
-            out_sam2_probs = torch.index_select(
-                data[2], 0, local_kept_t.to(data[2].device)
-            )
+            out_sam2_probs = torch.index_select(data[2], 0, local_kept_t.to(data[2].device))
             out_masks = split_masks[idx]
             out_boxes = split_boxes[idx]
 
             # Apply non-overlapping constraints (per-frame operation)
             if out_masks.shape[0] > 1:
                 # Copy sam2_probs to CPU pinned memory then back to GPU for the operation
-                out_sam2_probs_cpu = torch.empty(
-                    out_sam2_probs.shape, dtype=out_sam2_probs.dtype, pin_memory=True
-                )
+                out_sam2_probs_cpu = torch.empty(out_sam2_probs.shape, dtype=out_sam2_probs.dtype, pin_memory=True)
                 out_sam2_probs_cpu.copy_(out_sam2_probs, non_blocking=True)
                 out_masks = (
                     self.tracker._apply_object_wise_non_overlapping_constraints(
@@ -1086,25 +981,17 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                     ).squeeze(1)
                 ) > 0
 
-            final_results.append(
-                (frame_i, out_obj_ids, out_probs, out_boxes, out_masks)
-            )
+            final_results.append((frame_i, out_obj_ids, out_probs, out_boxes, out_masks))
 
         # ========== Phase 6.5: Compute centers for prod ==========
         all_centers = None
         if self.running_in_prod and len(final_results) > 0:
-            with torch.profiler.record_function(
-                "Sam3MultiplexTracking._postprocess_output_batched.prod_outputs"
-            ):
+            with torch.profiler.record_function("Sam3MultiplexTracking._postprocess_output_batched.prod_outputs"):
                 # Concatenate all masks for batched center computation
                 all_masks = torch.cat([r[4] for r in final_results], dim=0)
                 if all_masks.shape[0] > 0:
-                    y_coords = torch.arange(
-                        H_video, device=all_masks.device, dtype=torch.float32
-                    )
-                    x_coords = torch.arange(
-                        W_video, device=all_masks.device, dtype=torch.float32
-                    )
+                    y_coords = torch.arange(H_video, device=all_masks.device, dtype=torch.float32)
+                    x_coords = torch.arange(W_video, device=all_masks.device, dtype=torch.float32)
                     y_grid = y_coords.view(1, H_video, 1)
                     x_grid = x_coords.view(1, 1, W_video)
 
@@ -1222,19 +1109,13 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             else:
                 buf_offset, num_objects = frame_to_offset_count[i]
                 output_dict = {
-                    "out_obj_ids": self.buffer_cpu_batched["out_obj_ids"][
-                        buf_offset : buf_offset + num_objects
-                    ]
+                    "out_obj_ids": self.buffer_cpu_batched["out_obj_ids"][buf_offset : buf_offset + num_objects]
                     .numpy()
                     .copy(),
-                    "out_probs": self.buffer_cpu_batched["out_probs"][
-                        buf_offset : buf_offset + num_objects
-                    ]
+                    "out_probs": self.buffer_cpu_batched["out_probs"][buf_offset : buf_offset + num_objects]
                     .numpy()
                     .copy(),
-                    "out_boxes_xywh": self.buffer_cpu_batched["out_boxes_xywh"][
-                        buf_offset : buf_offset + num_objects
-                    ]
+                    "out_boxes_xywh": self.buffer_cpu_batched["out_boxes_xywh"][buf_offset : buf_offset + num_objects]
                     .numpy()
                     .copy(),
                     "out_binary_masks": self.buffer_cpu_batched["out_binary_masks"][
@@ -1246,11 +1127,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                 }
                 if all_centers is not None:
                     output_dict["out_centers"] = (
-                        self.buffer_cpu_batched["out_centers"][
-                            buf_offset : buf_offset + num_objects
-                        ]
-                        .numpy()
-                        .copy()
+                        self.buffer_cpu_batched["out_centers"][buf_offset : buf_offset + num_objects].numpy().copy()
                     )
                 outputs.append(output_dict)
 
@@ -1265,16 +1142,6 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         removed_obj_ids=None,
         unconfirmed_obj_ids=None,
     ):
-        """Helper function to cache frame outputs.
-
-        Args:
-            inference_state: The inference state.
-            frame_idx: The frame idx.
-            obj_id_to_mask: The obj id to mask.
-            suppressed_obj_ids: The suppressed obj ids.
-            removed_obj_ids: The removed obj ids.
-            unconfirmed_obj_ids: The unconfirmed obj ids.
-        """
         if "cached_frame_outputs" not in inference_state:
             inference_state["cached_frame_outputs"] = {}
 
@@ -1296,17 +1163,8 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
 
         inference_state["cached_frame_outputs"][frame_idx] = filtered_obj_id_to_mask
 
-    def _build_sam2_output(
-        self, inference_state, frame_idx, refined_obj_id_to_mask=None
-    ):
-        """Helper function to build sam2 output.
-
-        Args:
-            inference_state: The inference state.
-            frame_idx: The frame idx.
-            refined_obj_id_to_mask: The refined obj id to mask.
-        """
-        if not frame_idx in inference_state["cached_frame_outputs"]:
+    def _build_sam2_output(self, inference_state, frame_idx, refined_obj_id_to_mask=None):
+        if frame_idx not in inference_state["cached_frame_outputs"]:
             return {}
 
         cached_outputs = inference_state["cached_frame_outputs"][frame_idx]
@@ -1315,9 +1173,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         # Update with refined masks if provided
         if refined_obj_id_to_mask is not None:
             for obj_id, refined_mask in refined_obj_id_to_mask.items():
-                assert refined_mask is not None, (
-                    f"Refined mask data must be provided for obj_id {obj_id}"
-                )
+                assert refined_mask is not None, f"Refined mask data must be provided for obj_id {obj_id}"
                 obj_id_to_mask[obj_id] = refined_mask
 
         return obj_id_to_mask
@@ -1409,8 +1265,8 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             dynamic=False,  # Accuracy regression on True
         )
 
-        sam3.model.sam3_video_base._associate_det_trk_compilable = compile_wrapper(
-            sam3.model.sam3_video_base._associate_det_trk_compilable,
+        sam3.model.sam3_video_base._associate_det_trk_compilable = compile_wrapper(  # noqa: F821 - This port lacks the namespace for the optional compilation branch.
+            sam3.model.sam3_video_base._associate_det_trk_compilable,  # noqa: F821 - This port lacks the namespace for the optional compilation branch.
             mode="max-autotune-no-cudagraphs",
             fullgraph=True,
             dynamic=False,
@@ -1426,12 +1282,6 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         self._model_is_compiled = True
 
     def _warm_up_vg_propagation(self, inference_state, start_frame_idx=0):
-        """Helper function to warm up vg propagation.
-
-        Args:
-            inference_state: The inference state.
-            start_frame_idx: The start frame idx.
-        """
         # use different tracking score thresholds for each round to simulate different number of output objects
         num_objects_list = range(self.num_obj_for_compile + 1)
         num_rounds = 3
@@ -1442,9 +1292,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                     f"round {i + 1}/{num_rounds} warming up model compilation -- simulating {num_objects}/{self.num_obj_for_compile} objects"
                 )
                 # Initialize text prompt and cache image features
-                self.add_prompt(
-                    inference_state, frame_idx=start_frame_idx, text_str="cat"
-                )
+                self.add_prompt(inference_state, frame_idx=start_frame_idx, text_str="cat")
                 if num_objects > 0:
                     inference_state = self.add_fake_objects_to_inference_state(
                         inference_state, num_objects, frame_idx=start_frame_idx
@@ -1453,19 +1301,13 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                     {
                         "masklet_confirmation": {
                             "status": np.zeros(num_objects, dtype=np.int64),
-                            "consecutive_det_num": np.zeros(
-                                num_objects, dtype=np.int64
-                            ),
+                            "consecutive_det_num": np.zeros(num_objects, dtype=np.int64),
                         }
                     }
                 )
-                for _ in self.propagate_in_video(
-                    inference_state, start_frame_idx, reverse=False
-                ):
+                for _ in self.propagate_in_video(inference_state, start_frame_idx, reverse=False):
                     pass
-                for _ in self.propagate_in_video(
-                    inference_state, start_frame_idx, reverse=True
-                ):
+                for _ in self.propagate_in_video(inference_state, start_frame_idx, reverse=True):
                     pass
                 self.reset_state(inference_state)
                 logger.info(
@@ -1485,10 +1327,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                     1,
                     self.tracker.max_cond_frames_in_attn + self.tracker.num_maskmem,
                 ):
-                    for j in range(
-                        self.tracker.max_cond_frames_in_attn
-                        + self.tracker.max_obj_ptrs_in_encoder
-                    ):
+                    for j in range(self.tracker.max_cond_frames_in_attn + self.tracker.max_obj_ptrs_in_encoder):
                         if is_multiplex:
                             # Multiplex encoder: mem_dim == hidden_dim, uses decoupled cross-attention
                             # num_obj_ptr_tokens = j (since hidden_dim // mem_dim = 1)
@@ -1496,32 +1335,16 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                             memory_seq_len = feat_size * i + num_obj_ptr_tokens
 
                             # src and memory have batch=num_buckets (b)
-                            src = torch.randn(
-                                feat_size, b, hidden_dim, device=self.device
-                            )
-                            src_pos = torch.randn(
-                                feat_size, b, hidden_dim, device=self.device
-                            )
-                            memory = torch.randn(
-                                memory_seq_len, b, hidden_dim, device=self.device
-                            )
-                            memory_pos = torch.randn(
-                                memory_seq_len, b, hidden_dim, device=self.device
-                            )
+                            src = torch.randn(feat_size, b, hidden_dim, device=self.device)
+                            src_pos = torch.randn(feat_size, b, hidden_dim, device=self.device)
+                            memory = torch.randn(memory_seq_len, b, hidden_dim, device=self.device)
+                            memory_pos = torch.randn(memory_seq_len, b, hidden_dim, device=self.device)
 
                             # image and memory_image always have batch=1 (shared image features)
-                            image = torch.randn(
-                                feat_size, 1, hidden_dim, device=self.device
-                            )
-                            image_pos = torch.randn(
-                                feat_size, 1, hidden_dim, device=self.device
-                            )
-                            memory_image = torch.randn(
-                                feat_size * i, 1, hidden_dim, device=self.device
-                            )
-                            memory_image_pos = torch.randn(
-                                feat_size * i, 1, hidden_dim, device=self.device
-                            )
+                            image = torch.randn(feat_size, 1, hidden_dim, device=self.device)
+                            image_pos = torch.randn(feat_size, 1, hidden_dim, device=self.device)
+                            memory_image = torch.randn(feat_size * i, 1, hidden_dim, device=self.device)
+                            memory_image_pos = torch.randn(feat_size * i, 1, hidden_dim, device=self.device)
 
                             self.tracker.transformer.encoder.forward(
                                 image=image,
@@ -1538,12 +1361,8 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                             # Non-multiplex encoder: mem_dim = 64, uses standard cross-attention
                             # num_obj_ptr_tokens = (hidden_dim // mem_dim) * j = 4 * j
                             num_obj_ptr_tokens = (hidden_dim // mem_dim) * j
-                            src = torch.randn(
-                                feat_size, b, hidden_dim, device=self.device
-                            )
-                            src_pos = torch.randn(
-                                feat_size, b, hidden_dim, device=self.device
-                            )
+                            src = torch.randn(feat_size, b, hidden_dim, device=self.device)
+                            src_pos = torch.randn(feat_size, b, hidden_dim, device=self.device)
                             prompt = torch.randn(
                                 feat_size * i + num_obj_ptr_tokens,
                                 b,
@@ -1568,9 +1387,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         # Warm up different number of kbox
         for _ in tqdm(range(num_iters)):
             for i in range(1, self.max_num_kboxes + 1):
-                kboxes = (
-                    torch.rand(i, 4, dtype=torch.float32) * 0.5
-                )  # Generate positive values between 0 and 1
+                kboxes = torch.rand(i, 4, dtype=torch.float32) * 0.5  # Generate positive values between 0 and 1
                 print(
                     "Warming up masks_to_boxes with",
                     i,
@@ -1584,31 +1401,16 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                     box_labels=[1] * len(kboxes),
                 )
 
-                for _ in self.propagate_in_video(
-                    inference_state, start_frame_idx, reverse=False
-                ):
+                for _ in self.propagate_in_video(inference_state, start_frame_idx, reverse=False):
                     pass
 
         self.new_det_thresh = orig_new_det_thresh
         return inference_state
 
-    def add_fake_objects_to_inference_state(
-        self, inference_state, num_objects, frame_idx
-    ):
-        """Add fake objects to inference state.
-
-        Args:
-            inference_state: The inference state.
-            num_objects: The num objects.
-            frame_idx: The frame idx.
-        """
+    def add_fake_objects_to_inference_state(self, inference_state, num_objects, frame_idx):
         new_det_obj_ids_local = np.arange(num_objects)
-        high_res_H, high_res_W = (
-            self.tracker.maskmem_backbone.mask_downsampler.interpol_size
-        )
-        new_det_masks = torch.ones(
-            len(new_det_obj_ids_local), high_res_H, high_res_W
-        ).to(self.device)
+        high_res_H, high_res_W = self.tracker.maskmem_backbone.mask_downsampler.interpol_size
+        new_det_masks = torch.ones(len(new_det_obj_ids_local), high_res_H, high_res_W).to(self.device)
 
         inference_state["sam2_inference_states"] = self._tracker_add_new_objects(
             frame_idx=frame_idx,
@@ -1643,7 +1445,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             "obj_ids_per_gpu": [np.arange(num_objects)],
             "obj_ids_all_gpu": np.arange(num_objects),  # Same as 1 GPU
             "num_obj_per_gpu": [num_objects],
-            "obj_id_to_score": {i: 1.0 for i in range(num_objects)},
+            "obj_id_to_score": dict.fromkeys(range(num_objects), 1.0),
             "obj_id_to_sam2_score_frame_wise": defaultdict(dict),
             "obj_id_to_last_occluded": {},
             "max_obj_id": num_objects,
@@ -1658,35 +1460,19 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             # gpu_metadata for hotstart tracking on GPU
             "gpu_metadata": {
                 "N_obj": num_objects,
-                "obj_first_frame": torch.zeros(
-                    num_objects, dtype=torch.long, device=self.device
-                ),
-                "consecutive_unmatch_count": torch.zeros(
-                    num_objects, dtype=torch.long, device=self.device
-                ),
-                "trk_keep_alive": torch.ones(
-                    num_objects, dtype=torch.bool, device=self.device
-                ),
-                "removed_mask": torch.zeros(
-                    num_objects, dtype=torch.bool, device=self.device
-                ),
-                "overlap_pair_counts": torch.zeros(
-                    (num_objects, num_objects), dtype=torch.long, device=self.device
-                ),
-                "last_occluded_tensor": torch.zeros(
-                    num_objects, dtype=torch.long, device=self.device
-                ),
+                "obj_first_frame": torch.zeros(num_objects, dtype=torch.long, device=self.device),
+                "consecutive_unmatch_count": torch.zeros(num_objects, dtype=torch.long, device=self.device),
+                "trk_keep_alive": torch.ones(num_objects, dtype=torch.bool, device=self.device),
+                "removed_mask": torch.zeros(num_objects, dtype=torch.bool, device=self.device),
+                "overlap_pair_counts": torch.zeros((num_objects, num_objects), dtype=torch.long, device=self.device),
+                "last_occluded_tensor": torch.zeros(num_objects, dtype=torch.long, device=self.device),
             },
         }
         # Add num_buc_per_gpu for multiplex mode
         if self.is_multiplex:
             # Count actual buckets from the inference states
-            num_buc = self._count_buckets_in_states(
-                inference_state["sam2_inference_states"]
-            )
-            inference_state["tracker_metadata"]["num_buc_per_gpu"] = np.array(
-                [num_buc], dtype=np.int64
-            )
+            num_buc = self._count_buckets_in_states(inference_state["sam2_inference_states"])
+            inference_state["tracker_metadata"]["num_buc_per_gpu"] = np.array([num_buc], dtype=np.int64)
 
         return inference_state
 
@@ -1701,9 +1487,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
             return
         self._warm_up_complete = False
         if self.device.type != "cuda":
-            raise RuntimeError(
-                f"The model must be on CUDA for warm-up compilation, got {self.device=}."
-            )
+            raise RuntimeError(f"The model must be on CUDA for warm-up compilation, got {self.device=}.")
 
         # temporally set to single GPU temporarily for warm-up compilation
         orig_rank = self.rank
@@ -1754,20 +1538,16 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         """
         logger.info("Running add_prompt on frame %d", frame_idx)
 
-        device = inference_state["device"]
+        _device = inference_state["device"]
         num_frames = inference_state["num_frames"]
         assert text_str is not None or points is not None or boxes_xywh is not None, (
             "at least one type of prompt (text, points, boxes) must be provided"
         )
-        assert 0 <= frame_idx < num_frames, (
-            f"{frame_idx=} is out of range for a total of {num_frames} frames"
-        )
+        assert 0 <= frame_idx < num_frames, f"{frame_idx=} is out of range for a total of {num_frames} frames"
 
         assert clear_old_boxes, "clear old boxes must be True"
 
-        assert points is None and clear_old_points is True and point_labels is None, (
-            "Point prompts not accepted"
-        )
+        assert points is None and clear_old_points is True and point_labels is None, "Point prompts not accepted"
 
         # since it's a semantic prompt, we start over
         self.reset_state(inference_state)
@@ -1824,9 +1604,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         input = inference_state["input_batch"]
         device = self.device
         backbone_out = {"img_batch_all_stages": input.img_batch}
-        text_outputs = self.detector.backbone.forward_text(
-            input.find_text_batch, device=device
-        )
+        text_outputs = self.detector.backbone.forward_text(input.find_text_batch, device=device)
         backbone_out.update(text_outputs)
         return backbone_out
 
@@ -1847,7 +1625,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
         tracking_res = defaultdict(dict)  # frame_idx --> {obj_id: mask}
         scores_labels = defaultdict(tuple)  # obj_id --> (score, text_prompt_id)
         inference_state = self.init_state(resource_path=input.raw_images)
-        for prompt_id, prompt in zip(text_prompt_ids, text_prompt_list):
+        for prompt_id, prompt in zip(text_prompt_ids, text_prompt_list, strict=False):
             self.add_prompt(inference_state, frame_idx=0, text_str=prompt)
             start_obj_id = max(scores_labels.keys(), default=-1) + 1  # prev max + 1
 
@@ -1860,9 +1638,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                 reverse=False,
             ):
                 out_obj_ids = (
-                    out["out_obj_ids"].numpy()
-                    if isinstance(out["out_obj_ids"], torch.Tensor)
-                    else out["out_obj_ids"]
+                    out["out_obj_ids"].numpy() if isinstance(out["out_obj_ids"], torch.Tensor) else out["out_obj_ids"]
                 )
                 out_binary_masks = (
                     out["out_binary_masks"].numpy()
@@ -1871,7 +1647,7 @@ class Sam3MultiplexTracking(Sam3MultiplexBase):
                 )
 
                 current_frame_res = tracking_res[frame_idx]
-                for obj_id, mask in zip(out_obj_ids, out_binary_masks):
+                for obj_id, mask in zip(out_obj_ids, out_binary_masks, strict=False):
                     mask_tensor = torch.tensor(mask[None], dtype=torch.bool)
                     current_frame_res[obj_id + start_obj_id] = mask_tensor
                 obj_ids_this_prompt.update(current_frame_res.keys())
@@ -1916,16 +1692,6 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
         use_cv2=False,
         input_is_mp4=False,
     ):
-        """Init state.
-
-        Args:
-            resource_path: The resource path.
-            offload_video_to_cpu: The offload video to cpu.
-            async_loading_frames: The async loading frames.
-            use_torchcodec: The use torchcodec.
-            use_cv2: The use cv2.
-            input_is_mp4: The input is mp4.
-        """
         inference_state = super().init_state(
             resource_path=resource_path,
             offload_video_to_cpu=offload_video_to_cpu,
@@ -1944,11 +1710,6 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
         return inference_state
 
     def reset_state(self, inference_state):
-        """Reset state.
-
-        Args:
-            inference_state: The inference state.
-        """
         super().reset_state(inference_state)
         # Reset generator state for batched processing
         inference_state["generator_state"] = {
@@ -2022,9 +1783,7 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
         # e.g., we output an object on frame 4 only if it becomes confirmed on frame 6.
         unconfirmed_status_delay = self.masklet_confirmation_consecutive_det_thresh - 1
 
-        for frame_idx in tqdm(
-            processing_order, desc="propagate_in_video", disable=self.rank > 0
-        ):
+        for frame_idx in tqdm(processing_order, desc="propagate_in_video", disable=self.rank > 0):
             out = self._run_single_frame_inference(
                 inference_state,
                 frame_idx,
@@ -2060,20 +1819,14 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
             # Snapshot hotstart_removed_obj_ids at the time of accumulation to preserve
             # the correct state for each frame (important: this set is mutated over time)
             for yield_frame_idx, yield_out in yield_list:
-                postprocess_yield_list.append(
-                    (yield_frame_idx, yield_out, set(hotstart_removed_obj_ids))
-                )
+                postprocess_yield_list.append((yield_frame_idx, yield_out, set(hotstart_removed_obj_ids)))
 
             # Process batch when we have enough frames
             while len(postprocess_yield_list) >= self.postprocess_batch_size:
                 batch_to_process = postprocess_yield_list[: self.postprocess_batch_size]
-                postprocess_yield_list = postprocess_yield_list[
-                    self.postprocess_batch_size :
-                ]
+                postprocess_yield_list = postprocess_yield_list[self.postprocess_batch_size :]
 
-                with torch.profiler.record_function(
-                    "Sam3MultiplexTrackingProd.postprocess_output_batched"
-                ):
+                with torch.profiler.record_function("Sam3MultiplexTrackingProd.postprocess_output_batched"):
                     if self.rank == 0:
                         # Prepare batched inputs for postprocessing
                         H_video, W_video = (
@@ -2095,12 +1848,8 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
                                 if not reverse
                                 else yield_frame_idx - unconfirmed_status_delay
                             )
-                            unconfirmed_status_frame_idx = max(
-                                0, min(unconfirmed_status_frame_idx, num_frames - 1)
-                            )
-                            unconfirmed_obj_ids = unconfirmed_obj_ids_per_frame.get(
-                                unconfirmed_status_frame_idx, None
-                            )
+                            unconfirmed_status_frame_idx = max(0, min(unconfirmed_status_frame_idx, num_frames - 1))
+                            unconfirmed_obj_ids = unconfirmed_obj_ids_per_frame.get(unconfirmed_status_frame_idx, None)
 
                             batched_outs.append(
                                 (
@@ -2124,9 +1873,7 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
 
                         # Process all frames in batch
                         if self.postprocess_batch_size > 1:
-                            postprocessed_outs = self._postprocess_output_batched(
-                                H_video, W_video, batched_outs
-                            )
+                            postprocessed_outs = self._postprocess_output_batched(H_video, W_video, batched_outs)
                         else:
                             # Process each frame individually but output together
                             postprocessed_outs = []
@@ -2146,9 +1893,7 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
                                 postprocessed_outs.append(postprocessed_out)
 
                         # Yield results
-                        for yield_frame_idx, postprocessed_out in zip(
-                            frame_indices, postprocessed_outs
-                        ):
+                        for yield_frame_idx, postprocessed_out in zip(frame_indices, postprocessed_outs, strict=False):
                             yield yield_frame_idx, postprocessed_out
                     else:
                         # No output on other GPUs
@@ -2158,9 +1903,7 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
         # Handle remaining frames in hotstart buffer at end of last batch
         if is_last_batch and len(hotstart_buffer) > 0:
             for yield_frame_idx, yield_out in hotstart_buffer:
-                postprocess_yield_list.append(
-                    (yield_frame_idx, yield_out, set(hotstart_removed_obj_ids))
-                )
+                postprocess_yield_list.append((yield_frame_idx, yield_out, set(hotstart_removed_obj_ids)))
             hotstart_buffer = []
 
         # Flush any remaining frames in the postprocess buffer (even partial
@@ -2170,9 +1913,7 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
         # the client would have to wait for the next batch before receiving any
         # output, hurting time-to-first-frame.
         if len(postprocess_yield_list) > 0:
-            with torch.profiler.record_function(
-                "Sam3MultiplexTrackingProd.postprocess_output_batched"
-            ):
+            with torch.profiler.record_function("Sam3MultiplexTrackingProd.postprocess_output_batched"):
                 if self.rank == 0:
                     H_video, W_video = (
                         inference_state["orig_height"],
@@ -2193,12 +1934,8 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
                             if not reverse
                             else yield_frame_idx - unconfirmed_status_delay
                         )
-                        unconfirmed_status_frame_idx = max(
-                            0, min(unconfirmed_status_frame_idx, num_frames - 1)
-                        )
-                        unconfirmed_obj_ids = unconfirmed_obj_ids_per_frame.get(
-                            unconfirmed_status_frame_idx, None
-                        )
+                        unconfirmed_status_frame_idx = max(0, min(unconfirmed_status_frame_idx, num_frames - 1))
+                        unconfirmed_obj_ids = unconfirmed_obj_ids_per_frame.get(unconfirmed_status_frame_idx, None)
 
                         batched_outs.append(
                             (
@@ -2220,9 +1957,7 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
                         )
 
                     if self.postprocess_batch_size > 1:
-                        postprocessed_outs = self._postprocess_output_batched(
-                            H_video, W_video, batched_outs
-                        )
+                        postprocessed_outs = self._postprocess_output_batched(H_video, W_video, batched_outs)
                     else:
                         # Process each frame individually but output together
                         postprocessed_outs = []
@@ -2241,9 +1976,7 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
                             )
                             postprocessed_outs.append(postprocessed_out)
 
-                    for yield_frame_idx, postprocessed_out in zip(
-                        frame_indices, postprocessed_outs
-                    ):
+                    for yield_frame_idx, postprocessed_out in zip(frame_indices, postprocessed_outs, strict=False):
                         yield yield_frame_idx, postprocessed_out
                 else:
                     for yield_frame_idx, _, _ in postprocess_yield_list:
@@ -2264,16 +1997,11 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
             total_valid_objects = 0
             total_num_buckets = 0
             for state in inference_state["sam2_inference_states"]:
-                assert (
-                    len(state["obj_ids"])
-                    == state["multiplex_state"].total_valid_entries
-                )
+                assert len(state["obj_ids"]) == state["multiplex_state"].total_valid_entries
                 total_valid_objects += len(state["obj_ids"])
                 total_num_buckets += state["multiplex_state"].num_buckets
             if total_num_buckets > 0:
-                bucket_utilization_rate = (
-                    total_valid_objects / (total_num_buckets * self.bucket_capacity)
-                ) * 100
+                bucket_utilization_rate = (total_valid_objects / (total_num_buckets * self.bucket_capacity)) * 100
                 subscription_rate = (total_valid_objects / total_num_buckets) * 100
                 logger.info(
                     f"Bucket utilization rate: {bucket_utilization_rate:.2f}%, subscription rate: {subscription_rate:.2f}%"
@@ -2282,6 +2010,7 @@ class Sam3MultiplexTrackingProd(Sam3MultiplexTracking):
 
 class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
     """Sam multiplex tracking with interactivity implementation."""
+
     def __init__(
         self,
         use_prev_mem_frame=False,
@@ -2299,9 +2028,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         super().__init__(**kwargs)
         self.use_prev_mem_frame = use_prev_mem_frame
         self.use_stateless_refinement = use_stateless_refinement
-        self.refinement_detector_cond_frame_removal_window = (
-            refinement_detector_cond_frame_removal_window
-        )
+        self.refinement_detector_cond_frame_removal_window = refinement_detector_cond_frame_removal_window
 
     @torch.inference_mode()
     def init_state(
@@ -2313,16 +2040,6 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         use_cv2=False,
         input_is_mp4=False,
     ):
-        """Init state.
-
-        Args:
-            resource_path: The resource path.
-            offload_video_to_cpu: The offload video to cpu.
-            async_loading_frames: The async loading frames.
-            use_torchcodec: The use torchcodec.
-            use_cv2: The use cv2.
-            input_is_mp4: The input is mp4.
-        """
         inference_state = super().init_state(
             resource_path=resource_path,
             offload_video_to_cpu=offload_video_to_cpu,
@@ -2335,31 +2052,17 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         inference_state["action_history"] = []  # for logging user actions
         if self.tracker.per_obj_inference:
             # in per_obj mode only 1 inference state is needed, we init it here.
-            inference_state["sam2_inference_states"] = [
-                self._init_new_sam2_state(inference_state)
-            ]
+            inference_state["sam2_inference_states"] = [self._init_new_sam2_state(inference_state)]
         return inference_state
 
     def reset_state(self, inference_state):
-        """Reset state.
-
-        Args:
-            inference_state: The inference state.
-        """
         super().reset_state(inference_state)
         # reset extra states
         inference_state["action_history"].clear()
         if self.tracker.per_obj_inference:
-            inference_state["sam2_inference_states"] = [
-                self._init_new_sam2_state(inference_state)
-            ]
+            inference_state["sam2_inference_states"] = [self._init_new_sam2_state(inference_state)]
 
     def _init_new_sam2_state(self, inference_state):
-        """Helper function to init new sam2 state.
-
-        Args:
-            inference_state: The inference state.
-        """
         return self.tracker.init_state(
             cached_features=inference_state["feature_cache"],
             video_height=inference_state["orig_height"],
@@ -2380,31 +2083,19 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         )
 
     def fetch_and_process_single_frame_results(self, inference_state, frame_idx):
-        """Fetch and process single frame results.
-
-        Args:
-            inference_state: The inference state.
-            frame_idx: The frame idx.
-        """
         tracker_metadata = inference_state["tracker_metadata"]
         obj_id_to_mask = inference_state["cached_frame_outputs"][frame_idx]
         # post processing - remove suppressed obj_ids
         obj_id_to_score = tracker_metadata["obj_id_to_score"]
-        suppressed_obj_ids = tracker_metadata["rank0_metadata"]["suppressed_obj_ids"][
-            frame_idx
-        ]
-        obj_id_to_sam2_score = tracker_metadata["obj_id_to_sam2_score_frame_wise"][
-            frame_idx
-        ]
+        suppressed_obj_ids = tracker_metadata["rank0_metadata"]["suppressed_obj_ids"][frame_idx]
+        obj_id_to_sam2_score = tracker_metadata["obj_id_to_sam2_score_frame_wise"][frame_idx]
 
         out = {
             "obj_id_to_mask": obj_id_to_mask,
             "obj_id_to_score": obj_id_to_score,
             "obj_id_to_sam2_score": obj_id_to_sam2_score,
         }
-        return frame_idx, self._postprocess_output(
-            inference_state, out, suppressed_obj_ids=suppressed_obj_ids
-        )
+        return frame_idx, self._postprocess_output(inference_state, out, suppressed_obj_ids=suppressed_obj_ids)
 
     @torch.inference_mode()
     def propagate_in_video(
@@ -2418,22 +2109,8 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         is_instance_processing=False,
         is_last_batch: bool = False,
     ):
-        """Propagate in video.
-
-        Args:
-            inference_state: The inference state.
-            start_frame_idx: The start frame idx.
-            max_frame_num_to_track: The max frame num to track.
-            reverse: The reverse.
-            output_prob_thresh: The output prob thresh.
-            compute_stability_score: The compute stability score.
-            is_instance_processing: The is instance processing.
-            is_last_batch: The is last batch.
-        """
         # step 1: check which type of propagation to run, should be the same for all GPUs.
-        propagation_type, obj_ids = self.parse_action_history_for_propagation(
-            inference_state
-        )
+        propagation_type, obj_ids = self.parse_action_history_for_propagation(inference_state)
         self.add_action_history(
             inference_state,
             action_type=propagation_type,
@@ -2473,9 +2150,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         if propagation_type == "propagation_fetch":
             for frame_idx in tqdm(processing_order):
                 if self.rank == 0:
-                    frame_idx, out = self.fetch_and_process_single_frame_results(
-                        inference_state, frame_idx
-                    )
+                    frame_idx, out = self.fetch_and_process_single_frame_results(inference_state, frame_idx)
                     yield frame_idx, out
                 else:
                     yield frame_idx, DUMMY_OUTPUT  # no output for other GPUs
@@ -2485,25 +2160,19 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         # get SAM2 inference states containing selected obj_ids
         if propagation_type == "propagation_partial":
             # can be empty for GPUs where objects are not in their inference states
-            tracker_states_local = self._get_sam2_inference_states_by_obj_ids(
-                inference_state, obj_ids
-            )
+            tracker_states_local = self._get_sam2_inference_states_by_obj_ids(inference_state, obj_ids)
             for sam2_state in tracker_states_local:
-                self.tracker.propagate_in_video_preflight(
-                    sam2_state, run_mem_encoder=True
-                )
+                self.tracker.propagate_in_video_preflight(sam2_state, run_mem_encoder=True)
 
         for frame_idx in tqdm(processing_order):
             # run SAM2 propagation
             if propagation_type == "propagation_partial":
                 self._prepare_backbone_feats(inference_state, frame_idx, reverse)
-                obj_ids_local, low_res_masks_local, sam2_scores_local = (
-                    self._propogate_tracker_one_frame_local_gpu(
-                        tracker_states_local,
-                        frame_idx=frame_idx,
-                        reverse=reverse,
-                        run_mem_encoder=True,
-                    )
+                obj_ids_local, low_res_masks_local, sam2_scores_local = self._propogate_tracker_one_frame_local_gpu(
+                    tracker_states_local,
+                    frame_idx=frame_idx,
+                    reverse=reverse,
+                    run_mem_encoder=True,
                 )
 
                 # broadcast refined object sam2 scores and masks to all GPUs
@@ -2516,9 +2185,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                     obj_rank = self._get_gpu_id_by_obj_id(inference_state, obj_id)
                     if self.rank == obj_rank and obj_id in obj_ids_local:
                         refined_obj_idx = obj_ids_local.index(obj_id)
-                        refined_mask_low_res = low_res_masks_local[
-                            refined_obj_idx
-                        ]  # (H_low_res, W_low_res)
+                        refined_mask_low_res = low_res_masks_local[refined_obj_idx]  # (H_low_res, W_low_res)
                         refined_score = sam2_scores_local[refined_obj_idx]
 
                         # Keep low resolution for broadcasting to reduce communication cost
@@ -2530,7 +2197,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                         obj_rank = self._get_gpu_id_by_obj_id(inference_state, obj_id)
                         if self.rank == obj_rank:
                             # This GPU has the object, broadcast its data
-                            data_to_broadcast = local_obj_data.get(obj_id, None)
+                            data_to_broadcast = local_obj_data.get(obj_id)
                             data_list = [data_to_broadcast]
                             self.broadcast_python_obj_cpu(data_list, src=obj_rank)
                             if data_to_broadcast is not None:
@@ -2550,12 +2217,8 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                     # After broadcast_python_obj_cpu in multi-GPU, tensors may become numpy scalars
                     # Ensure it's a GPU tensor for consistency with base class behavior
                     if not isinstance(refined_score, torch.Tensor):
-                        refined_score = torch.tensor(
-                            refined_score, dtype=torch.float32, device=self.device
-                        )
-                    tracker_metadata["obj_id_to_sam2_score_frame_wise"][
-                        frame_idx
-                    ].update({obj_id: refined_score})
+                        refined_score = torch.tensor(refined_score, dtype=torch.float32, device=self.device)
+                    tracker_metadata["obj_id_to_sam2_score_frame_wise"][frame_idx].update({obj_id: refined_score})
 
                 if self.rank == 0:
                     # get predictions from SAM2 inference states, it includes the original
@@ -2564,47 +2227,33 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                     # Prepare refined masks dictionary - upscale to video resolution after broadcast
                     refined_obj_id_to_mask = {}
                     for obj_id, (_, refined_mask_low_res) in refined_obj_data.items():
-                        refined_mask_video_res = (
-                            self._convert_low_res_mask_to_video_res(
-                                refined_mask_low_res, inference_state
-                            )
+                        refined_mask_video_res = self._convert_low_res_mask_to_video_res(
+                            refined_mask_low_res, inference_state
                         )  # (1, H_video, W_video) bool
                         refined_obj_id_to_mask[obj_id] = refined_mask_video_res
 
-                    obj_id_to_mask = self._build_sam2_output(
-                        inference_state, frame_idx, refined_obj_id_to_mask
-                    )
+                    obj_id_to_mask = self._build_sam2_output(inference_state, frame_idx, refined_obj_id_to_mask)
                     out = {
                         "obj_id_to_mask": obj_id_to_mask,
                         "obj_id_to_score": tracker_metadata["obj_id_to_score"],
-                        "obj_id_to_sam2_score": tracker_metadata[
-                            "obj_id_to_sam2_score_frame_wise"
-                        ][frame_idx],
+                        "obj_id_to_sam2_score": tracker_metadata["obj_id_to_sam2_score_frame_wise"][frame_idx],
                     }
-                    suppressed_obj_ids = tracker_metadata["rank0_metadata"][
-                        "suppressed_obj_ids"
-                    ][frame_idx]
+                    suppressed_obj_ids = tracker_metadata["rank0_metadata"]["suppressed_obj_ids"][frame_idx]
                     self._cache_frame_outputs(
                         inference_state,
                         frame_idx,
                         obj_id_to_mask,
                         suppressed_obj_ids=suppressed_obj_ids,
                     )
-                    suppressed_obj_ids = tracker_metadata["rank0_metadata"][
-                        "suppressed_obj_ids"
-                    ][frame_idx]
+                    suppressed_obj_ids = tracker_metadata["rank0_metadata"]["suppressed_obj_ids"][frame_idx]
                     yield (
                         frame_idx,
-                        self._postprocess_output(
-                            inference_state, out, suppressed_obj_ids=suppressed_obj_ids
-                        ),
+                        self._postprocess_output(inference_state, out, suppressed_obj_ids=suppressed_obj_ids),
                     )
                 else:
                     yield frame_idx, DUMMY_OUTPUT  # no output for other GPUs
 
-    def add_action_history(
-        self, inference_state, action_type, frame_idx=None, obj_ids=None
-    ):
+    def add_action_history(self, inference_state, action_type, frame_idx=None, obj_ids=None):
         """
         action_history is used to automatically decide what to do during propagation.
         action_type: one of ["add", "remove", "refine"] + ["propagation_full", "propagation_partial", "propagation_fetch", "propagation_cancel"]
@@ -2627,47 +2276,28 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         inference_state["action_history"].append(action)
 
     def _has_object_been_refined(self, inference_state, obj_id):
-        """Helper function to has object been refined.
-
-        Args:
-            inference_state: The inference state.
-            obj_id: The obj id.
-        """
         if "action_history" not in inference_state:
             return False
         action_history = inference_state["action_history"]
         for action in action_history:
-            if action["type"] in ["add", "refine"] and action.get("obj_ids"):
+            if action["type"] in ["add", "refine"] and action.get("obj_ids"):  # noqa: SIM102 - Statement form kept for readability.
                 if obj_id in action["obj_ids"]:
                     return True
         return False
 
     def parse_action_history_for_propagation(self, inference_state):
-        """Parse action history for propagation.
-
-        Args:
-            inference_state: The inference state.
-        """
         action_history = inference_state["action_history"]
-        if (
-            len(action_history) == 1
-            and action_history[0]["type"] == "propagation_cancel"
-        ):
+        if len(action_history) == 1 and action_history[0]["type"] == "propagation_cancel":
             # only one action and it is cancel, we do full propagation
             return "propagation_full", None
-        elif (
-            len(action_history) >= 2
-            and action_history[-1]["type"] == "propagation_cancel"
-        ):
+        elif len(action_history) >= 2 and action_history[-1]["type"] == "propagation_cancel":
             # last action is cancel, we go back to the action before cancel
             action_before_cancelation = inference_state["action_history"][-2]
             # the action before cancellation can be a propagation_fetch from running both forward
             # and backward propagation as in webdemo interface, in that case we go back one more step
             if action_before_cancelation["type"] == "propagation_fetch":
                 action_before_cancelation = inference_state["action_history"][-3]
-            return action_before_cancelation["type"], action_before_cancelation.get(
-                "obj_ids", None
-            )
+            return action_before_cancelation["type"], action_before_cancelation.get("obj_ids", None)
         return self._parse_action_history_for_propagation(
             inference_state["action_history"], inference_state["num_frames"]
         )
@@ -2706,8 +2336,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                 # propagation once and it is from the first frame or last frame.
                 if (
                     len(action_history) > 1
-                    and action_history[-2]["type"]
-                    in ["propagation_partial", "propagation_full"]
+                    and action_history[-2]["type"] in ["propagation_partial", "propagation_full"]
                 ) or action_history[-1]["frame_idx"] in [
                     0,
                     num_frames - 1,
@@ -2728,9 +2357,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                 obj_ids.extend(action["obj_ids"])
             # else action["type"] == "remove": noop
         obj_ids = list(set(obj_ids)) if len(obj_ids) > 0 else None
-        propagation_type = (
-            "propagation_partial" if obj_ids is not None else "propagation_fetch"
-        )
+        propagation_type = "propagation_partial" if obj_ids is not None else "propagation_fetch"
         return propagation_type, obj_ids
 
     def remove_object(self, inference_state, obj_id, frame_idx, is_user_action=False):
@@ -2744,8 +2371,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
             # propagation). Log a warning and skip SAM2 state and metadata
             # removal, but still record action history and clean up cached outputs.
             logger.warning(
-                f"Object {obj_id} not found in any GPU (already removed). "
-                f"Skipping SAM2 state and metadata removal."
+                f"Object {obj_id} not found in any GPU (already removed). Skipping SAM2 state and metadata removal."
             )
         else:
             tracker_states_local = inference_state["sam2_inference_states"]
@@ -2756,19 +2382,13 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
             tracker_metadata = inference_state["tracker_metadata"]
             _obj_ids = tracker_metadata["obj_ids_per_gpu"][obj_rank]
             tracker_metadata["obj_ids_per_gpu"][obj_rank] = _obj_ids[_obj_ids != obj_id]
-            tracker_metadata["num_obj_per_gpu"][obj_rank] = len(
-                tracker_metadata["obj_ids_per_gpu"][obj_rank]
-            )
-            tracker_metadata["obj_ids_all_gpu"] = np.concatenate(
-                tracker_metadata["obj_ids_per_gpu"]
-            )
+            tracker_metadata["num_obj_per_gpu"][obj_rank] = len(tracker_metadata["obj_ids_per_gpu"][obj_rank])
+            tracker_metadata["obj_ids_all_gpu"] = np.concatenate(tracker_metadata["obj_ids_per_gpu"])
             tracker_metadata["obj_id_to_score"].pop(obj_id, None)
             # tracker_metadata["max_obj_id"] # we do not reuse the object id, so we do not update it here
 
         if is_user_action:
-            self.add_action_history(
-                inference_state, action_type="remove", obj_ids=[obj_id]
-            )
+            self.add_action_history(inference_state, action_type="remove", obj_ids=[obj_id])
 
         # Clean up cached frame outputs to remove references to the deleted object
         if "cached_frame_outputs" in inference_state:
@@ -2779,9 +2399,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
 
         out = None
         if frame_idx is not None and self.rank == 0:
-            frame_idx, out = self.fetch_and_process_single_frame_results(
-                inference_state, frame_idx
-            )
+            frame_idx, out = self.fetch_and_process_single_frame_results(inference_state, frame_idx)
         return frame_idx, out
 
     def _get_gpu_id_by_obj_id(self, inference_state, obj_id):
@@ -2800,21 +2418,10 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         This is used to run partial SAM2 propagation on a single object/bucket.
         Possibly multiple or zero states can be returned.
         """
-        states = [
-            state
-            for state in inference_state["sam2_inference_states"]
-            if set(obj_ids) & set(state["obj_ids"])
-        ]
+        states = [state for state in inference_state["sam2_inference_states"] if set(obj_ids) & set(state["obj_ids"])]
         return states
 
     def _prepare_backbone_feats(self, inference_state, frame_idx, reverse):
-        """Helper function to prepare backbone feats.
-
-        Args:
-            inference_state: The inference state.
-            frame_idx: The frame idx.
-            reverse: The reverse.
-        """
         input_batch = inference_state["input_batch"]
         feature_cache = inference_state["feature_cache"]
         num_frames = inference_state["num_frames"]
@@ -2848,30 +2455,12 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         obj_id=None,
         rel_coordinates=True,
     ):
-        """Add prompt.
-
-        Args:
-            inference_state: The inference state.
-            frame_idx: The frame idx.
-            text_str: The text str.
-            clear_old_points: The clear old points.
-            points: The points.
-            point_labels: The point labels.
-            boxes_xywh: The boxes xywh.
-            box_labels: The box labels.
-            clear_old_boxes: The clear old boxes.
-            output_prob_thresh: The output prob thresh.
-            obj_id: The obj id.
-            rel_coordinates: The rel coordinates.
-        """
         if points is not None:
             # SAM2 instance prompts
             assert text_str is None and boxes_xywh is None, (
                 "When points are provided, text_str and boxes_xywh must be None."
             )
-            assert obj_id is not None, (
-                "When points are provided, obj_id must be provided."
-            )
+            assert obj_id is not None, "When points are provided, obj_id must be provided."
             return self.add_sam2_new_points(
                 inference_state,
                 frame_idx,
@@ -2932,33 +2521,21 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         self._prepare_backbone_feats(inference_state, frame_idx, reverse=False)
 
         object_has_been_refined = self._has_object_been_refined(inference_state, obj_id)
-        if (
-            obj_rank is not None
-            and self.use_stateless_refinement
-            and not object_has_been_refined
-        ):
+        if obj_rank is not None and self.use_stateless_refinement and not object_has_been_refined:
             # The first time we start refinement on the object, we remove it.
-            logger.info(
-                f"[rank={self.rank}] Removing object {obj_id} before refinement."
-            )
+            logger.info(f"[rank={self.rank}] Removing object {obj_id} before refinement.")
             self.remove_object(inference_state, obj_id, is_user_action=False)
             obj_rank = None
         elif obj_rank is not None and not object_has_been_refined:
             # Extract the object into its own singleton inference state if it belongs to a batch
             if self.rank == obj_rank and not self.tracker.per_obj_inference:
-                tracker_states = self._get_sam2_inference_states_by_obj_ids(
-                    inference_state, [obj_id]
-                )
+                tracker_states = self._get_sam2_inference_states_by_obj_ids(inference_state, [obj_id])
                 assert len(tracker_states) == 1
                 # Check if this is a batched state (contains multiple objects)
                 sam2_state = tracker_states[0]
                 if len(sam2_state["obj_ids"]) > 1:
-                    logger.info(
-                        f"[rank={self.rank}] Extracting object {obj_id} into singleton inference state."
-                    )
-                    self._extract_object_to_singleton_state(
-                        inference_state, obj_id, obj_rank
-                    )
+                    logger.info(f"[rank={self.rank}] Extracting object {obj_id} into singleton inference state.")
+                    self._extract_object_to_singleton_state(inference_state, obj_id, obj_rank)
 
         if obj_rank is None:
             # new object, we assign it a GPU and create a new inference state if limit allows
@@ -2992,43 +2569,29 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                     np.array([obj_id], dtype=np.int64),
                 ]
             )
-            tracker_metadata["num_obj_per_gpu"][obj_rank] = len(
-                tracker_metadata["obj_ids_per_gpu"][obj_rank]
-            )
-            tracker_metadata["obj_ids_all_gpu"] = np.concatenate(
-                tracker_metadata["obj_ids_per_gpu"]
-            )
+            tracker_metadata["num_obj_per_gpu"][obj_rank] = len(tracker_metadata["obj_ids_per_gpu"][obj_rank])
+            tracker_metadata["obj_ids_all_gpu"] = np.concatenate(tracker_metadata["obj_ids_per_gpu"])
             tracker_metadata["max_obj_id"] = max(tracker_metadata["max_obj_id"], obj_id)
 
-            logger.info(
-                f"[rank={self.rank}] Adding new object with id {obj_id} at frame {frame_idx}."
-            )
-            self.add_action_history(
-                inference_state, "add", frame_idx=frame_idx, obj_ids=[obj_id]
-            )
+            logger.info(f"[rank={self.rank}] Adding new object with id {obj_id} at frame {frame_idx}.")
+            self.add_action_history(inference_state, "add", frame_idx=frame_idx, obj_ids=[obj_id])
         else:
             # existing object, for refinement
             if self.rank == obj_rank:
-                tracker_states = self._get_sam2_inference_states_by_obj_ids(
-                    inference_state, [obj_id]
-                )
+                tracker_states = self._get_sam2_inference_states_by_obj_ids(inference_state, [obj_id])
                 assert len(tracker_states) == 1, (
                     f"[rank={self.rank}] Multiple SAM2 inference states found for the same object id."
                 )
                 sam2_state = tracker_states[0]
 
             # log
-            logger.info(
-                f"[rank={self.rank}] Refining existing object with id {obj_id} at frame {frame_idx}."
-            )
-            self.add_action_history(
-                inference_state, "refine", frame_idx=frame_idx, obj_ids=[obj_id]
-            )
+            logger.info(f"[rank={self.rank}] Refining existing object with id {obj_id} at frame {frame_idx}.")
+            self.add_action_history(inference_state, "refine", frame_idx=frame_idx, obj_ids=[obj_id])
 
         # assign higher score to added/refined object
         tracker_metadata["obj_id_to_score"][obj_id] = 1.0
-        tracker_metadata["obj_id_to_sam2_score_frame_wise"][frame_idx][obj_id] = (
-            torch.tensor(1.0, dtype=torch.float32, device=self.device)
+        tracker_metadata["obj_id_to_sam2_score_frame_wise"][frame_idx][obj_id] = torch.tensor(
+            1.0, dtype=torch.float32, device=self.device
         )
 
         if self.rank == 0:
@@ -3048,14 +2611,12 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                     obj_idx = obj_indices[0]
                     if obj_idx < len(rank0_metadata["masklet_confirmation"]["status"]):
                         rank0_metadata["masklet_confirmation"]["status"][obj_idx] = 1
-                        rank0_metadata["masklet_confirmation"]["consecutive_det_num"][
-                            obj_idx
-                        ] = self.masklet_confirmation_consecutive_det_thresh
+                        rank0_metadata["masklet_confirmation"]["consecutive_det_num"][obj_idx] = (
+                            self.masklet_confirmation_consecutive_det_thresh
+                        )
 
         if self.rank == obj_rank:
-            should_fallback_to_original_mask = (
-                len(points) == 0 and inference_state["is_image_only"]
-            )
+            should_fallback_to_original_mask = len(points) == 0 and inference_state["is_image_only"]
             if should_fallback_to_original_mask:
                 mask_input = self._get_mask_input(sam2_state, frame_idx, obj_id)
                 if mask_input is None or 0 in mask_input.shape:
@@ -3068,29 +2629,23 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                 # by re-feeding the detector mask to SAM2.
                 mask_input = self._get_mask_input(sam2_state, frame_idx, obj_id)
                 # clear out states related to this object to have a fresh start
-                self.tracker.clear_all_points_in_frame(
-                    sam2_state, frame_idx, obj_id, need_output=False
-                )
-                frame_idx, obj_ids, low_res_masks, video_res_masks = (
-                    self.tracker.add_new_mask(
-                        sam2_state,
-                        frame_idx,
-                        obj_id,
-                        mask_input,
-                    )
+                self.tracker.clear_all_points_in_frame(sam2_state, frame_idx, obj_id, need_output=False)
+                frame_idx, obj_ids, low_res_masks, video_res_masks = self.tracker.add_new_mask(
+                    sam2_state,
+                    frame_idx,
+                    obj_id,
+                    mask_input,
                 )
             else:
-                frame_idx, obj_ids, low_res_masks, video_res_masks = (
-                    self.tracker.add_new_points(
-                        inference_state=sam2_state,
-                        frame_idx=frame_idx,
-                        obj_id=obj_id,
-                        points=points,
-                        labels=labels,
-                        clear_old_points=clear_old_points,
-                        rel_coordinates=rel_coordinates,
-                        use_prev_mem_frame=use_prev_mem_frame,
-                    )
+                frame_idx, obj_ids, low_res_masks, video_res_masks = self.tracker.add_new_points(
+                    inference_state=sam2_state,
+                    frame_idx=frame_idx,
+                    obj_id=obj_id,
+                    points=points,
+                    labels=labels,
+                    clear_old_points=clear_old_points,
+                    rel_coordinates=rel_coordinates,
+                    use_prev_mem_frame=use_prev_mem_frame,
                 )
 
             if video_res_masks is not None and len(video_res_masks) > 0:
@@ -3119,13 +2674,9 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
 
             # (a) Clear detector-only mask inputs
             for _obj_idx in list(sam2_state["mask_inputs_per_obj"].keys()):
-                _point_frames = set(
-                    sam2_state["point_inputs_per_obj"].get(_obj_idx, {}).keys()
-                )
+                _point_frames = set(sam2_state["point_inputs_per_obj"].get(_obj_idx, {}).keys())
                 _mask_only_frames = [
-                    f
-                    for f in list(sam2_state["mask_inputs_per_obj"][_obj_idx].keys())
-                    if f not in _point_frames
+                    f for f in list(sam2_state["mask_inputs_per_obj"][_obj_idx].keys()) if f not in _point_frames
                 ]
                 for f in _mask_only_frames:
                     sam2_state["mask_inputs_per_obj"][_obj_idx].pop(f, None)
@@ -3158,16 +2709,12 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                 # Clear detector conditioning frames when user clicks are received to allow
                 # model updating masks on these frames. It is a noop if user is refining on the
                 # detector conditioning frames or adding new objects.
-                self.clear_detector_added_cond_frame_in_sam2(
-                    sam2_state, obj_id, frame_idx
-                )
+                self.clear_detector_added_cond_frame_in_sam2(sam2_state, obj_id, frame_idx)
 
         # fetch results from states and gather across GPUs
         # Use optimized caching approach to avoid reprocessing unmodified objects
         if self.rank == obj_rank and len(obj_ids) > 0:
-            new_mask_data = (video_res_masks[obj_ids.index(obj_id)] > 0.0).to(
-                torch.bool
-            )
+            new_mask_data = (video_res_masks[obj_ids.index(obj_id)] > 0.0).to(torch.bool)
         else:
             new_mask_data = None
 
@@ -3185,12 +2732,8 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
             )
             # post processing - remove suppressed obj_ids
             obj_id_to_score = tracker_metadata["obj_id_to_score"]
-            suppressed_obj_ids = tracker_metadata["rank0_metadata"][
-                "suppressed_obj_ids"
-            ][frame_idx]
-            obj_id_to_sam2_score = tracker_metadata["obj_id_to_sam2_score_frame_wise"][
-                frame_idx
-            ]
+            suppressed_obj_ids = tracker_metadata["rank0_metadata"]["suppressed_obj_ids"][frame_idx]
+            obj_id_to_sam2_score = tracker_metadata["obj_id_to_sam2_score_frame_wise"][frame_idx]
 
             out = {
                 "obj_id_to_mask": obj_id_to_mask,
@@ -3203,9 +2746,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                 obj_id_to_mask,
                 suppressed_obj_ids=suppressed_obj_ids,
             )
-            return frame_idx, self._postprocess_output(
-                inference_state, out, suppressed_obj_ids=suppressed_obj_ids
-            )
+            return frame_idx, self._postprocess_output(inference_state, out, suppressed_obj_ids=suppressed_obj_ids)
         else:
             return frame_idx, None  # no output on other GPUs
 
@@ -3214,9 +2755,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         obj_idx = self.tracker._obj_id_to_idx(inference_state, obj_id)
         mask_inputs_per_frame = inference_state["mask_inputs_per_obj"][obj_idx]
         if frame_idx not in mask_inputs_per_frame:
-            logger.info(
-                f"frame {frame_idx} not in mask_inputs_per_frame for obj_id {obj_id}"
-            )
+            logger.info(f"frame {frame_idx} not in mask_inputs_per_frame for obj_id {obj_id}")
             return None
 
         mask_inputs_orig = mask_inputs_per_frame[frame_idx].squeeze(0, 1)  # (H, W)
@@ -3234,9 +2773,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
             if obj_id in obj_id_to_mask_local:
                 low_res_masks_local.append(obj_id_to_mask_local[obj_id])
             else:
-                low_res_masks_local.append(
-                    torch.full((H_mask, W_mask), -1024.0, device=self.device)
-                )
+                low_res_masks_local.append(torch.full((H_mask, W_mask), -1024.0, device=self.device))
         if len(low_res_masks_local) > 0:
             low_res_masks_local = torch.stack(low_res_masks_local, dim=0)  # (N, H, W)
             assert low_res_masks_local.shape[1:] == (H_mask, W_mask)
@@ -3288,9 +2825,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         # Convert to boolean - already in the right shape!
         return (video_res_mask.squeeze(0) > 0.0).to(torch.bool)
 
-    def clear_detector_added_cond_frame_in_sam2(
-        self, sam2_state, obj_id, refined_frame_idx
-    ):
+    def clear_detector_added_cond_frame_in_sam2(self, sam2_state, obj_id, refined_frame_idx):
         """Clear detector added conditioning frame if it is within a predefined window
         of the refined frame. This allow model to update masks on these frames."""
         obj_idx = self.tracker._obj_id_to_idx(sam2_state, obj_id)
@@ -3298,7 +2833,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         mask_only_cond_frame_indices = []
         window = self.refinement_detector_cond_frame_removal_window
         for frame_idx in sam2_state["mask_inputs_per_obj"][obj_idx]:
-            if frame_idx not in sam2_state["point_inputs_per_obj"][obj_idx]:
+            if frame_idx not in sam2_state["point_inputs_per_obj"][obj_idx]:  # noqa: SIM102 - Branches carry per-case comments.
                 # clear conditioning frames within a window of the refined frame
                 if abs(frame_idx - refined_frame_idx) <= window:
                     mask_only_cond_frame_indices.append(frame_idx)
@@ -3310,12 +2845,8 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                 # since they are bucket batched
                 obj_ids_on_this_frame = sam2_state["obj_id_to_idx"].keys()
                 for obj_id2 in obj_ids_on_this_frame:
-                    self.tracker.clear_all_points_in_frame(
-                        sam2_state, frame_idx, obj_id2, need_output=False
-                    )
-            logger.info(
-                f"Cleared detector mask only conditioning frames ({mask_only_cond_frame_indices}) in SAM2."
-            )
+                    self.tracker.clear_all_points_in_frame(sam2_state, frame_idx, obj_id2, need_output=False)
+            logger.info(f"Cleared detector mask only conditioning frames ({mask_only_cond_frame_indices}) in SAM2.")
         return
 
     def _extract_object_to_singleton_state(self, inference_state, obj_id, obj_rank):
@@ -3359,9 +2890,7 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                     if source_frame_out["pred_masks"].shape[0] < obj_idx_in_source + 1:
                         continue
                     singleton_frame_out = {
-                        "pred_masks": source_frame_out["pred_masks"][
-                            obj_idx_in_source : obj_idx_in_source + 1
-                        ].clone(),
+                        "pred_masks": source_frame_out["pred_masks"][obj_idx_in_source : obj_idx_in_source + 1].clone(),
                         "object_score_logits": source_frame_out["object_score_logits"][
                             obj_idx_in_source : obj_idx_in_source + 1
                         ].clone(),
@@ -3374,15 +2903,11 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                     if maskmem_features is not None and multiplex_state is not None:
                         try:
                             demuxed = multiplex_state.demux(maskmem_features)
-                            maskmem_features = demuxed[
-                                obj_idx_in_source : obj_idx_in_source + 1
-                            ].clone()
+                            maskmem_features = demuxed[obj_idx_in_source : obj_idx_in_source + 1].clone()
                         except (AssertionError, IndexError):
                             maskmem_features = None
                     elif maskmem_features is not None:
-                        maskmem_features = maskmem_features[
-                            obj_idx_in_source : obj_idx_in_source + 1
-                        ].clone()
+                        maskmem_features = maskmem_features[obj_idx_in_source : obj_idx_in_source + 1].clone()
                     singleton_frame_out["maskmem_features"] = maskmem_features
                     # Extract maskmem_pos_enc (demux level by level)
                     maskmem_pos_enc = source_frame_out.get("maskmem_pos_enc")
@@ -3395,26 +2920,15 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                             if multiplex_state is not None:
                                 try:
                                     demuxed = multiplex_state.demux(level_enc)
-                                    remapped.append(
-                                        demuxed[
-                                            obj_idx_in_source : obj_idx_in_source + 1
-                                        ].clone()
-                                    )
+                                    remapped.append(demuxed[obj_idx_in_source : obj_idx_in_source + 1].clone())
                                 except (AssertionError, IndexError):
                                     remapped.append(None)
                             else:
-                                remapped.append(
-                                    level_enc[
-                                        obj_idx_in_source : obj_idx_in_source + 1
-                                    ].clone()
-                                )
+                                remapped.append(level_enc[obj_idx_in_source : obj_idx_in_source + 1].clone())
                         maskmem_pos_enc = remapped
                     singleton_frame_out["maskmem_pos_enc"] = maskmem_pos_enc
                     # Extract obj_ptr (demux from multiplex space)
-                    if (
-                        "obj_ptr" in source_frame_out
-                        and self.tracker.use_obj_ptrs_in_encoder
-                    ):
+                    if "obj_ptr" in source_frame_out and self.tracker.use_obj_ptrs_in_encoder:
                         source_obj_ptr = source_frame_out["obj_ptr"]
                         if multiplex_state is not None:
                             obj_ptr_data = multiplex_state.demux(source_obj_ptr)
@@ -3427,36 +2941,21 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
                             ].clone()
                     # Extract conditioning_objects
                     if "conditioning_objects" in source_frame_out:
-                        if (
-                            obj_idx_in_source
-                            in source_frame_out["conditioning_objects"]
-                        ):
+                        if obj_idx_in_source in source_frame_out["conditioning_objects"]:
                             singleton_frame_out["conditioning_objects"] = {0}
                         else:
                             singleton_frame_out["conditioning_objects"] = set()
-                    singleton_consolidated_outputs[storage_key][f_idx] = (
-                        singleton_frame_out
-                    )
+                    singleton_consolidated_outputs[storage_key][f_idx] = singleton_frame_out
 
         # Extract point and mask inputs for this object
         extracted_point_inputs = {}
         extracted_mask_inputs = {}
 
-        if (
-            "point_inputs_per_obj" in source_state
-            and obj_idx_in_source in source_state["point_inputs_per_obj"]
-        ):
-            extracted_point_inputs = source_state["point_inputs_per_obj"][
-                obj_idx_in_source
-            ].copy()
+        if "point_inputs_per_obj" in source_state and obj_idx_in_source in source_state["point_inputs_per_obj"]:
+            extracted_point_inputs = source_state["point_inputs_per_obj"][obj_idx_in_source].copy()
 
-        if (
-            "mask_inputs_per_obj" in source_state
-            and obj_idx_in_source in source_state["mask_inputs_per_obj"]
-        ):
-            extracted_mask_inputs = source_state["mask_inputs_per_obj"][
-                obj_idx_in_source
-            ].copy()
+        if "mask_inputs_per_obj" in source_state and obj_idx_in_source in source_state["mask_inputs_per_obj"]:
+            extracted_mask_inputs = source_state["mask_inputs_per_obj"][obj_idx_in_source].copy()
 
         # Extract per-object outputs - these are already properly sliced for the object
         extracted_obj_cond_outputs = {}
@@ -3464,46 +2963,22 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         extracted_temp_cond_outputs = {}
         extracted_temp_non_cond_outputs = {}
 
-        if (
-            "output_dict_per_obj" in source_state
-            and obj_idx_in_source in source_state["output_dict_per_obj"]
-        ):
+        if "output_dict_per_obj" in source_state and obj_idx_in_source in source_state["output_dict_per_obj"]:
             obj_output_dict = source_state["output_dict_per_obj"][obj_idx_in_source]
-            extracted_obj_cond_outputs = obj_output_dict.get(
-                "cond_frame_outputs", {}
-            ).copy()
-            cond_input_keys = (
-                extracted_point_inputs.keys() | extracted_mask_inputs.keys()
-            )
+            extracted_obj_cond_outputs = obj_output_dict.get("cond_frame_outputs", {}).copy()
+            cond_input_keys = extracted_point_inputs.keys() | extracted_mask_inputs.keys()
             # we may have obj cond outputs for other objects in a batch, so limit to cond inputs for only this object
-            extracted_obj_cond_outputs = {
-                k: v
-                for k, v in extracted_obj_cond_outputs.items()
-                if k in cond_input_keys
-            }
+            extracted_obj_cond_outputs = {k: v for k, v in extracted_obj_cond_outputs.items() if k in cond_input_keys}
 
-            extracted_obj_non_cond_outputs = obj_output_dict.get(
-                "non_cond_frame_outputs", {}
-            ).copy()
+            extracted_obj_non_cond_outputs = obj_output_dict.get("non_cond_frame_outputs", {}).copy()
 
-        if (
-            "temp_output_dict_per_obj" in source_state
-            and obj_idx_in_source in source_state["temp_output_dict_per_obj"]
-        ):
-            temp_obj_output_dict = source_state["temp_output_dict_per_obj"][
-                obj_idx_in_source
-            ]
-            extracted_temp_cond_outputs = temp_obj_output_dict.get(
-                "cond_frame_outputs", {}
-            ).copy()
-            extracted_temp_non_cond_outputs = temp_obj_output_dict.get(
-                "non_cond_frame_outputs", {}
-            ).copy()
+        if "temp_output_dict_per_obj" in source_state and obj_idx_in_source in source_state["temp_output_dict_per_obj"]:
+            temp_obj_output_dict = source_state["temp_output_dict_per_obj"][obj_idx_in_source]
+            extracted_temp_cond_outputs = temp_obj_output_dict.get("cond_frame_outputs", {}).copy()
+            extracted_temp_non_cond_outputs = temp_obj_output_dict.get("non_cond_frame_outputs", {}).copy()
 
         # Step 2: Remove the object from the source state
-        remaining_obj_ids, _ = self.tracker.remove_object(
-            source_state, obj_id, strict=False, need_output=False
-        )
+        remaining_obj_ids, _ = self.tracker.remove_object(source_state, obj_id, strict=False, need_output=False)
 
         # Step 3: Create a new singleton inference state
         new_sam2_state = self.tracker.init_state(
@@ -3555,15 +3030,12 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         new_sam2_state["multiplex_state"] = new_multiplex_state
 
         for storage_key in ["cond_frame_outputs", "non_cond_frame_outputs"]:
-            for f_idx, frame_out in singleton_consolidated_outputs[storage_key].items():
+            for f_idx, frame_out in singleton_consolidated_outputs[storage_key].items():  # noqa: B007 - The loop variable is read outside the loop.
                 if frame_out.get("maskmem_features") is not None:
-                    frame_out["maskmem_features"] = frame_out[
-                        "maskmem_features"
-                    ].clone()
+                    frame_out["maskmem_features"] = frame_out["maskmem_features"].clone()
                 if frame_out.get("maskmem_pos_enc") is not None:
                     frame_out["maskmem_pos_enc"] = [
-                        level.clone() if level is not None else None
-                        for level in frame_out["maskmem_pos_enc"]
+                        level.clone() if level is not None else None for level in frame_out["maskmem_pos_enc"]
                     ]
                 if "obj_ptr" in frame_out and self.tracker.use_obj_ptrs_in_encoder:
                     frame_out["obj_ptr"] = new_multiplex_state.mux(frame_out["obj_ptr"])
@@ -3590,8 +3062,6 @@ class Sam3MultiplexTrackingWithInteractivity(Sam3MultiplexTracking):
         # Step 9: If the source state is now empty, remove it
         if len(remaining_obj_ids) == 0:
             tracker_states_local.pop(source_state_idx)
-            logger.info(
-                f"Removed empty inference state after extracting object {obj_id}"
-            )
+            logger.info(f"Removed empty inference state after extracting object {obj_id}")
 
         logger.info(f"Object {obj_id} successfully extracted to singleton state")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 from collections import namedtuple
 from collections.abc import Iterator
 
@@ -119,10 +120,10 @@ def test_new_request_replays_existing_graph_with_request_scoped_evidence(cuda_de
 
 @torch.inference_mode()
 def test_graph_nested_outputs_do_not_alias_across_replays(cuda_device: torch.device) -> None:
-    result_type = namedtuple("Result", ("prediction", "label"))
+    Result = namedtuple("Result", ("prediction", "label"))
 
     def transform(value: torch.Tensor) -> dict:
-        return {"nested": ([value + 1], {"result": result_type(value.square(), "prediction")}), "metadata": 3}
+        return {"nested": ([value + 1], {"result": Result(value.square(), "prediction")}), "metadata": 3}
 
     runner = InferenceCUDAGraphRunner(transform, warmup=1)
     first_input = torch.arange(12, device=cuda_device, dtype=torch.float32).reshape(3, 4)
@@ -133,7 +134,7 @@ def test_graph_nested_outputs_do_not_alias_across_replays(cuda_device: torch.dev
     for result, value in ((first, first_input), (second, second_input)):
         assert isinstance(result["nested"], tuple)
         assert isinstance(result["nested"][0], list)
-        assert isinstance(result["nested"][1]["result"], result_type)
+        assert isinstance(result["nested"][1]["result"], Result)
         assert result["metadata"] == 3
         assert result["nested"][1]["result"].label == "prediction"
         torch.testing.assert_close(result["nested"][0][0], value + 1, rtol=0, atol=0)
@@ -277,3 +278,36 @@ def test_nested_kv_inputs_and_explicit_capture_freeze(cuda_device: torch.device)
     assert report["replay"] == 3 and report["eager"] == 1
     assert runner.capture(value, state=state)
     assert not runner.capture_on_miss
+
+
+@torch.inference_mode()
+def test_cuda_graph_capture_pauses_and_restores_cyclic_gc(cuda_device: torch.device) -> None:
+    assert gc.isenabled()
+    gc_states: list[bool] = []
+
+    def op(value: torch.Tensor) -> torch.Tensor:
+        gc_states.append(gc.isenabled())
+        return value + 1
+
+    runner = InferenceCUDAGraphRunner(op, warmup=1)
+    value = torch.ones((4, 4), device=cuda_device)
+    assert runner.capture(value)
+    assert gc_states == [True, False]
+    assert gc.isenabled()
+
+    fail_states: list[bool] = []
+    calls = 0
+
+    def fail_on_capture(tensor: torch.Tensor) -> torch.Tensor:
+        nonlocal calls
+        calls += 1
+        fail_states.append(gc.isenabled())
+        if calls == 2:
+            raise RuntimeError("boom during capture")
+        return tensor * 2
+
+    failing_runner = InferenceCUDAGraphRunner(fail_on_capture, warmup=1)
+    assert not failing_runner.capture(value)
+    assert fail_states == [True, False]
+    assert gc.isenabled()
+    assert failing_runner.report()["capture_failed"] == 1

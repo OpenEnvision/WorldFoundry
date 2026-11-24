@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any, ClassVar
 
 from .base_operator import BaseOperator
 
@@ -16,9 +17,9 @@ class ShowOOperator(BaseOperator):
     """
 
     MODEL_ID = "show-o"
-    DEFAULT_INPUT_SCHEMA = {"prompt": True, "image": True, "video": False, "actions": []}
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {"prompt": True, "image": True, "video": False, "actions": []}
 
-    def __init__(self, input_schema: Dict[str, Any] | None = None):
+    def __init__(self, input_schema: dict[str, Any] | None = None):
         """Initialize the operator with specific configurations."""
         super().__init__(operation_types=["textual_instruction", "visual_instruction", "action_instruction"])
         self.input_schema = {**self.DEFAULT_INPUT_SCHEMA, **dict(input_schema or {})}
@@ -27,7 +28,6 @@ class ShowOOperator(BaseOperator):
 
     @staticmethod
     def _modes(interaction) -> list[str]:
-        """Modes implementation."""
         if interaction is None:
             return []
         if isinstance(interaction, str):
@@ -49,16 +49,16 @@ class ShowOOperator(BaseOperator):
         self.check_interaction(interaction)
         self.current_interaction.append(interaction)
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         modes = self._modes(self.current_interaction[-1] if self.current_interaction else None)
         self.interaction_history.append(modes)
-        result: Dict[str, Any] = {"actions": modes}
+        result: dict[str, Any] = {"actions": modes}
         if modes:
             result["mode"] = modes[0]
         return result
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
         question = kwargs.get("question")
         text = prompt if prompt is not None else question
@@ -70,7 +70,7 @@ class ShowOOperator(BaseOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         if video is not None:
             raise ValueError("Show-o official inference does not expose video conditioning in this integration.")

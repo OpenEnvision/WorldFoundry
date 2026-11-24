@@ -1,12 +1,9 @@
 """File containing utils for sharding."""
 
-
-
 import jax
 import numpy as np
 from jax.experimental import mesh_utils
 from jax.tree_util import DictKey, GetAttrKey, SequenceKey
-
 
 
 def unroll_path(path):
@@ -28,9 +25,7 @@ def apply_sharding(state_shape, mesh):
     def get_sharding(path, x):
         repl_sharding = (None,) * x.ndim
 
-        return jax.sharding.NamedSharding(
-            mesh, jax.sharding.PartitionSpec(*repl_sharding)
-        )
+        return jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(*repl_sharding))
 
     shardings = jax.tree_util.tree_map_with_path(get_sharding, state_shape)
     return shardings
@@ -49,7 +44,7 @@ def create_device_mesh(
         allow_split_physical_axes: Whether to allow splitting physical axes.
     """
     devices = jax.devices()
-    mesh_axes, mesh_size = tuple(zip(*config_mesh))
+    mesh_axes, mesh_size = tuple(zip(*config_mesh, strict=False))
     # Because jax.utils do not support `-1` shape size.
     mesh_size = np.array(devices).reshape(mesh_size).shape
     device_mesh = mesh_utils.create_device_mesh(
@@ -63,15 +58,9 @@ def build_shardings(
     data_axis,
     allow_split_physical_axes=False,
 ):
-    device_mesh = create_device_mesh(
-        mesh, allow_split_physical_axes=allow_split_physical_axes
-    )
-    data_sharding = jax.sharding.NamedSharding(
-        device_mesh, jax.sharding.PartitionSpec(data_axis)
-    )
-    repl_sharding = jax.sharding.NamedSharding(
-        device_mesh, jax.sharding.PartitionSpec()
-    )
+    device_mesh = create_device_mesh(mesh, allow_split_physical_axes=allow_split_physical_axes)
+    data_sharding = jax.sharding.NamedSharding(device_mesh, jax.sharding.PartitionSpec(data_axis))
+    repl_sharding = jax.sharding.NamedSharding(device_mesh, jax.sharding.PartitionSpec())
 
     return device_mesh, data_sharding, repl_sharding
 
@@ -114,9 +103,9 @@ def get_local_slice_from_fsarray(global_array):
     """
     # For now, for simplicity, we only implement slicing along the first axis.
     for shard in global_array.addressable_shards:
-        assert all(
-            idx == slice(None) for idx in shard.index[1:]
-        ), f"global_array is sharded along non-first dimensions:\n{shard.index}"
+        assert all(idx == slice(None) for idx in shard.index[1:]), (
+            f"global_array is sharded along non-first dimensions:\n{shard.index}"
+        )
 
     # Get the shards back in the same order in which the global array was created
     # in the first place. This makes sure it's consistent with other things in the

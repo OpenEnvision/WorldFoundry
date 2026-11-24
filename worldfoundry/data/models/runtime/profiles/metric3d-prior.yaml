@@ -7,6 +7,7 @@ groups:
 - prior
 source_repos:
 - url: https://github.com/YvanYin/Metric3D
+  revision: eb5b6fac0dc155e4e52f576e304fbf11655ff339
 checkpoints:
 - repo_id: JUGGHM/Metric3D
   filename: metric_depth_vit_giant2_800k.pth
@@ -30,6 +31,3 @@ notes:
 - Independent base-model profile for the Metric3D prior under worldfoundry.base_models.three_dimensions.depth.metric3d.
 - WorldFoundry exposes this prior through the shared geometry-prior pipeline/operator
   contract.
-backend_stage: in_tree_geometry_prior_runtime
-runtime_status: in_tree_runtime_wired
-integration_status: integrated

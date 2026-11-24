@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 N_PLAYERS = 4
 
 
-def _read_member(tar: tarfile.TarFile, member: "tarfile.TarInfo | str") -> bytes:
+def _read_member(tar: tarfile.TarFile, member: tarfile.TarInfo | str) -> bytes:
     """Read a tar member's bytes, raising if it is missing or not a regular file."""
     info = tar.getmember(member) if isinstance(member, str) else member
     f = tar.extractfile(info)
@@ -103,9 +103,9 @@ class MatchClip:
     teams: list[int]  # per selected perspective
     recording_offsets: list[float]  # recording_offset_sec per selected perspective (master clock)
     metadata: list[dict]  # full per-perspective metadata
-    actions: "torch.Tensor"  # (P, T, n_keys) int32 multi-hot
+    actions: torch.Tensor  # (P, T, n_keys) int32 multi-hot
     events: list[Event]  # events overlapping this window (mapped via the first selected perspective)
-    frames: "torch.Tensor | None" = None  # (P, T, C, H, W) uint8; None if decode=False
+    frames: torch.Tensor | None = None  # (P, T, C, H, W) uint8; None if decode=False
     physics: list[list[FrameState]] | None = None  # per perspective, T per-frame game-state dicts
     # (None if the dataset carries no physics). All perspectives share the same world state; kept
     # per-perspective so it stays frame-aligned with that perspective's frames/actions.
@@ -116,7 +116,7 @@ class MatchClip:
     # bytes (set when decode=False and carry_video=True), for decoding a drawn clip later via
     # `decode_perspective`. Shared by reference across all clips read from the same chunk.
 
-    def decode_perspective(self, p: int, frame_size: tuple[int, int] | None = None) -> "torch.Tensor":
+    def decode_perspective(self, p: int, frame_size: tuple[int, int] | None = None) -> torch.Tensor:
         """Decode selected perspective `p`'s carried video bytes to a (T, C, H, W) uint8 tensor."""
         if self.video_bytes is None:
             raise ValueError("clip carries no video_bytes; read it with carry_video=True")
@@ -163,7 +163,7 @@ class RocketScienceDataset:
             self._chunk_pos[e.match_id] = {e.chunk_id(pos): pos for pos in range(len(e.chunk_frames))}
 
     @classmethod
-    def from_local(cls, path: str | Path, **kwargs) -> "RocketScienceDataset":
+    def from_local(cls, path: str | Path, **kwargs) -> RocketScienceDataset:
         """`path` may be the dataset directory (containing index.json) or the index.json itself."""
         path = Path(path)
         if path.is_dir():
@@ -181,7 +181,7 @@ class RocketScienceDataset:
         revision: str | None = None,
         shards: int | None = None,
         **kwargs,
-    ) -> "RocketScienceDataset":
+    ) -> RocketScienceDataset:
         """Load one split from a WorldFoundry-local Hugging Face snapshot.
 
         The repo holds each split under its own prefix: `{split}/index.json` plus WebDataset shards,
@@ -218,8 +218,7 @@ class RocketScienceDataset:
         missing_shards = [name for name in keep_shards if not (Path(local) / prefix / name).is_file()]
         if missing_shards:
             raise FileNotFoundError(
-                "MIRA's local Rocket Science snapshot is incomplete; missing shards: "
-                + ", ".join(missing_shards)
+                "MIRA's local Rocket Science snapshot is incomplete; missing shards: " + ", ".join(missing_shards)
             )
         ds = cls.from_local(Path(local) / prefix, **kwargs)
         ds._restrict_to_shards(set(keep_shards))
@@ -270,8 +269,7 @@ class RocketScienceDataset:
         for p in persp:
             if p.frames != total:
                 raise ValueError(
-                    f"{entry.match_id}: perspective {p.player_id} has {p.frames} frames != "
-                    f"sum(chunk_frames)={total}"
+                    f"{entry.match_id}: perspective {p.player_id} has {p.frames} frames != sum(chunk_frames)={total}"
                 )
         src_fps = total / persp[0].duration
         stride = compute_stride(src_fps, target_fps)
@@ -323,7 +321,7 @@ class RocketScienceDataset:
         return out
 
     @staticmethod
-    def _select_perspectives(perspective: str | int, n: int, rng: "random.Random") -> list[int]:
+    def _select_perspectives(perspective: str | int, n: int, rng: random.Random) -> list[int]:
         """Resolve the `perspective` selector to a list of source-perspective indices.
 
         "all" -> [0..n-1]; "random" -> one random index (per call, so per clip when streaming);
@@ -371,8 +369,7 @@ class RocketScienceDataset:
         else:
             if action_fps < target_fps or action_fps % target_fps != 0:
                 raise ValueError(
-                    f"action_fps ({action_fps}) must be a positive integer multiple of "
-                    f"target_fps ({target_fps})"
+                    f"action_fps ({action_fps}) must be a positive integer multiple of target_fps ({target_fps})"
                 )
             act_fps, n_action_steps = action_fps, clip_len * (action_fps // target_fps)
 
@@ -382,9 +379,7 @@ class RocketScienceDataset:
             # frame indices (mp.src_fps), not a per-perspective re-derivation. `keep_last_partial`
             # OR-s a short final window (a clip running to the chunk's end) into a real step rather
             # than dropping it, so the trailing step carries the keys actually held over its frames.
-            a = tensorize_actions(
-                chunk[i]["lines"][l0:l_end], self.vocab, mp.src_fps, act_fps, keep_last_partial=True
-            )
+            a = tensorize_actions(chunk[i]["lines"][l0:l_end], self.vocab, mp.src_fps, act_fps, keep_last_partial=True)
             # A clip ending at the chunk boundary can have a short final action window (the chunk
             # ends mid-window), so with action_fps > target_fps (multiple action steps per frame) it
             # yields fewer than `n_action_steps`. Hold the last step to pad back to the nominal count
@@ -403,9 +398,7 @@ class RocketScienceDataset:
         if decode:
             frames = torch.stack([decode_frames(chunk[i]["video"], cp.local, frame_size) for i in sel], dim=0)
             if frames.shape[1] != clip_len:
-                raise ValueError(
-                    f"{mp.entry.match_id} clip {cp.clip_id}: decoded {frames.shape[1]} != {clip_len}"
-                )
+                raise ValueError(f"{mp.entry.match_id} clip {cp.clip_id}: decoded {frames.shape[1]} != {clip_len}")
 
         physics = None
         if all(chunk[i].get("physics") is not None for i in sel):
@@ -506,9 +499,7 @@ class RocketScienceDataset:
         out = []
         for cp in selected:
             sel = self._select_perspectives(perspective, entry.n_players, rng)
-            out.append(
-                self._assemble(mp, cp, chunks[cp.chunk_idx], sel, target_fps, decode, frame_size, action_fps)
-            )
+            out.append(self._assemble(mp, cp, chunks[cp.chunk_idx], sel, target_fps, decode, frame_size, action_fps))
         return out
 
     def iter_clips(
@@ -599,9 +590,7 @@ class RocketScienceDataset:
                         continue
                     sel = self._select_perspectives(perspective, entry.n_players, rng)
                     clips.append(
-                        self._assemble(
-                            mp, cp, chunk, sel, target_fps, decode, frame_size, action_fps, carry_video
-                        )
+                        self._assemble(mp, cp, chunk, sel, target_fps, decode, frame_size, action_fps, carry_video)
                     )
             except (ValueError, IndexError, KeyError, RuntimeError, OSError) as err:
                 logger.warning("Skipping chunk %s c%05d while streaming: %s", match_id, orig, err)

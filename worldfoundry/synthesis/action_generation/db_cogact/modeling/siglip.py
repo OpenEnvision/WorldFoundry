@@ -1,9 +1,7 @@
 # Inference-only DB-CogACT source retained in-tree.
 import torch
 import torch.nn as nn
-
-from transformers import (PretrainedConfig, SiglipVisionModel,
-                          SiglipImageProcessor, SiglipVisionConfig)
+from transformers import PretrainedConfig, SiglipImageProcessor, SiglipVisionConfig, SiglipVisionModel
 
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
 
@@ -13,7 +11,8 @@ def _local_assets(location: str, *required_files: str):
 
 
 class SiglipVisionTower(nn.Module):
-    def __init__(self,
+    def __init__(
+        self,
         vision_tower_config,
         processor_config=None,
         delay_load=False,
@@ -28,8 +27,7 @@ class SiglipVisionTower(nn.Module):
             self.processor_config = processor_config
         else:
             assert isinstance(vision_tower_config, str), (
-                'vision_tower_config should be str or `PretrainedConfig, '
-                f'but got {type(self.vision_tower_config)}'
+                f"vision_tower_config should be str or `PretrainedConfig, but got {type(self.vision_tower_config)}"
             )
             self.processor_config = vision_tower_config
 
@@ -47,10 +45,7 @@ class SiglipVisionTower(nn.Module):
             elif isinstance(vision_tower_config, PretrainedConfig):
                 self.cfg_only = vision_tower_config
             else:
-                raise ValueError(
-                    'vision_tower_config should be str or dict, but got '
-                    f'{type(self.vision_tower_config)}'
-                )
+                raise ValueError(f"vision_tower_config should be str or dict, but got {type(self.vision_tower_config)}")
 
     def load_model(self):
         if self.is_loaded:
@@ -69,9 +64,7 @@ class SiglipVisionTower(nn.Module):
         elif isinstance(self.processor_config, dict):
             self.image_processor = SiglipImageProcessor(**self.processor_config)
         else:
-            raise TypeError(
-                "processor_config must be a local path, processor, or config mapping"
-            )
+            raise TypeError("processor_config must be a local path, processor, or config mapping")
         self.image_processor.crop_size = self.image_processor.size
         if isinstance(self.vision_tower_config, str):
             local_vision = _local_assets(self.vision_tower_config, "config.json")
@@ -83,8 +76,7 @@ class SiglipVisionTower(nn.Module):
             self.vision_tower = SiglipVisionModel(self.vision_tower_config)
         else:
             raise ValueError(
-                'vision_tower_config should be str or `PretrainedConfig, '
-                f'but got {type(self.vision_tower_config)}'
+                f"vision_tower_config should be str or `PretrainedConfig, but got {type(self.vision_tower_config)}"
             )
 
         self.is_loaded = True
@@ -100,18 +92,14 @@ class SiglipVisionTower(nn.Module):
             image_features = []
             for image in images:
                 image_forward_out = self.vision_tower(
-                    image.to(
-                        device=self.device,
-                        dtype=self.dtype).unsqueeze(0),
-                    output_hidden_states=True)
+                    image.to(device=self.device, dtype=self.dtype).unsqueeze(0), output_hidden_states=True
+                )
                 image_feature = self.feature_select(image_forward_out).to(image.dtype)
                 image_features.append(image_feature)
         else:
             image_forward_outs = self.vision_tower(
-                images.to(
-                    device=self.device,
-                    dtype=self.dtype),
-                output_hidden_states=True)
+                images.to(device=self.device, dtype=self.dtype), output_hidden_states=True
+            )
             image_features = self.feature_select(image_forward_outs).to(images.dtype)
 
         return image_features

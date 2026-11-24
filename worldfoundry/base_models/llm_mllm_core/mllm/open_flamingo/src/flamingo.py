@@ -1,23 +1,19 @@
-"""Module for base_models -> llm_mllm_core -> mllm -> open_flamingo -> src -> flamingo.py functionality."""
-
 import torch
 from einops import rearrange
 from torch import nn
-from .helpers import PerceiverResampler
+from torch.distributed.fsdp import (
+    FullyShardedDataParallel as FSDP,
+)
 from torch.distributed.fsdp.wrap import (
     enable_wrap,
     wrap,
 )
-from transformers.modeling_outputs import CausalLMOutputWithPast
-from torch.distributed.fsdp import (
-    FullyShardedDataParallel as FSDP,
-)
 
+from .helpers import PerceiverResampler
 from .utils import apply_with_stopping_condition
 
 
 class Flamingo(nn.Module):
-    """Flamingo implementation."""
     def __init__(
         self,
         vision_encoder: nn.Module,
@@ -90,20 +86,20 @@ class Flamingo(nn.Module):
             use_cache: whether to use cached key values. See use_cache
                 documentation in Hugging Face CausalLM models.
         """
-        assert (
-            self.lang_encoder.initialized_flamingo
-        ), "Flamingo layers are not initialized. Please call `init_flamingo` first."
+        assert self.lang_encoder.initialized_flamingo, (
+            "Flamingo layers are not initialized. Please call `init_flamingo` first."
+        )
 
-        assert (
-            self.lang_encoder._use_cached_vision_x or vision_x is not None
-        ), "Must provide either vision_x or have precached media using cache_media()."
+        assert self.lang_encoder._use_cached_vision_x or vision_x is not None, (
+            "Must provide either vision_x or have precached media using cache_media()."
+        )
 
         if self.lang_encoder._use_cached_vision_x:
             # Case: use cached; vision_x should be cached and other
             # vision-related inputs should not be provided.
-            assert (
-                vision_x is None
-            ), "Expect vision_x to be None when media has been cached using cache_media(). Try uncache_media() first."
+            assert vision_x is None, (
+                "Expect vision_x to be None when media has been cached using cache_media(). Try uncache_media() first."
+            )
             assert self.lang_encoder.is_conditioned()
 
         else:
@@ -267,16 +263,11 @@ class Flamingo(nn.Module):
                 wrap(wrap(block)) for block in self.lang_encoder.old_decoder_blocks
             )
             self.lang_encoder.gated_cross_attn_layers = nn.ModuleList(
-                wrap(wrap(layer)) if layer is not None else None
-                for layer in self.lang_encoder.gated_cross_attn_layers
+                wrap(wrap(layer)) if layer is not None else None for layer in self.lang_encoder.gated_cross_attn_layers
             )
             self.lang_encoder.init_flamingo_layers(self._use_gradient_checkpointing)
-            self.lang_encoder.set_input_embeddings(
-                wrap(wrap(self.lang_encoder.get_input_embeddings()))
-            )
-            self.lang_encoder.set_output_embeddings(
-                wrap(wrap(self.lang_encoder.get_output_embeddings()))
-            )
+            self.lang_encoder.set_input_embeddings(wrap(wrap(self.lang_encoder.get_input_embeddings())))
+            self.lang_encoder.set_output_embeddings(wrap(wrap(self.lang_encoder.get_output_embeddings())))
             self.vision_encoder = wrap(wrap(self.vision_encoder))  # frozen
 
         # manually move non-FSDP managed parameters to device_id
@@ -295,11 +286,6 @@ class Flamingo(nn.Module):
 
         # set up clip_grad_norm_ function
         def clip_grad_norm_(max_norm):
-            """Clip grad norm.
-
-            Args:
-                max_norm: The max norm.
-            """
             self.perceiver.clip_grad_norm_(max_norm)
             for layer in self.lang_encoder.gated_cross_attn_layers:
                 if layer is not None:

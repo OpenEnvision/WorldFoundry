@@ -16,27 +16,30 @@
 from __future__ import annotations
 
 from statistics import NormalDist
-from typing import Any, List, Optional, cast
+from typing import Any, cast
 
 import attrs
 import numpy as np
 import torch
 from einops import rearrange
-from lyra_2._src.models.wan_t2v_model import T2VModelConfig, WANDiffusionModel
-from lyra_2._src.modules.conditioner import DataType
-from lyra_2._src.utils.forward_warp_utils_pytorch import (
-    forward_warp_multiframes,
-    unproject_points,
-)
 from torch.distributed._composable.fsdp import fully_shard
 from torch.distributed.tensor import DTensor
 
 from worldfoundry.core.configuration.lazy_config import instantiate as lazy_instantiate
 from worldfoundry.core.distributed import broadcast_dtensor_model_states
 from worldfoundry.core.distributed.model_parallel.context import broadcast
-from worldfoundry.core.distributed.runtime.logging import log
-from worldfoundry.core.geometry.transforms import ray_condition
 from worldfoundry.core.execution import inference_runtime as misc
+from worldfoundry.core.geometry.transforms import ray_condition
+from worldfoundry.core.observability.rank_logging import log
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.models.wan_t2v_model import (
+    T2VModelConfig,
+    WANDiffusionModel,
+)
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.modules.conditioner import DataType
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.utils.forward_warp_utils_pytorch import (
+    forward_warp_multiframes,
+    unproject_points,
+)
 
 try:
     from worldfoundry.core.distributed.model_parallel.megatron_compat import parallel_state
@@ -83,8 +86,8 @@ class Lyra2T2VConfig(T2VModelConfig):
     self_aug_steps: int = 5
     # Number of discrete inference-like timesteps
     self_aug_num_discrete_timesteps: int = 8
-    self_aug_guidance: Optional[float] = None
-    self_aug_scheduler_shift: Optional[float] = None
+    self_aug_guidance: float | None = None
+    self_aug_scheduler_shift: float | None = None
     self_aug_every_k: int = 1
     self_aug_prob: float = 1.0
     self_aug_max_T: int = 50
@@ -99,7 +102,7 @@ class Lyra2T2VConfig(T2VModelConfig):
 
     # Optional: comma-separated list of submodule names in Lyra2AttentionBlock to train.
     # If provided, all other parameters are frozen.
-    framepack_trainable_modules: Optional[str] = None
+    framepack_trainable_modules: str | None = None
 
     # This port is intentionally collapsed to the single target branch:
     # accumulated correspondence + multibuffer + depth-augmented slots + K/Q-only injection.
@@ -107,7 +110,7 @@ class Lyra2T2VConfig(T2VModelConfig):
     spatial_memory_drop_rate: float = 0.1
     # Max number of spatial buffers to keep (pad with zeros if fewer are available).
     # If None, defaults to the number of spatial history slots from framepack_type.
-    multibuffer_max_spatial_frames: Optional[int] = None
+    multibuffer_max_spatial_frames: int | None = None
     warp_chunk_size: int = 2
 
 
@@ -124,8 +127,8 @@ class Lyra2Model(WANDiffusionModel):
         # Parse Lyra2 AR metadata
         self._init_lyra2_metadata()
         self.framepack_weights_initialized = False
-        self._cached_spatial_coords: Optional[torch.Tensor] = None
-        self._cached_spatial_coords_meta: Optional[tuple[int, int, int, torch.device, torch.dtype]] = None
+        self._cached_spatial_coords: torch.Tensor | None = None
+        self._cached_spatial_coords_meta: tuple[int, int, int, torch.device, torch.dtype] | None = None
 
         self._spatial_history_positions = self._compute_spatial_history_positions()
         log.info(
@@ -139,7 +142,7 @@ class Lyra2Model(WANDiffusionModel):
         positions: list[int] = []
         offset = 0
         for count, kernel_type in zip(
-            self.framepack_clean_latent_frame_splits, self.framepack_clean_latent_frame_kernel_types
+            self.framepack_clean_latent_frame_splits, self.framepack_clean_latent_frame_kernel_types, strict=False
         ):
             cnt = int(count)
             if kernel_type == "s":
@@ -272,7 +275,7 @@ class Lyra2Model(WANDiffusionModel):
 
             max_spatial = config.multibuffer_max_spatial_frames
             if max_spatial is None:
-                max_spatial = sum(s for s, t in zip(splits, kernel_types) if t == "s")
+                max_spatial = sum(s for s, t in zip(splits, kernel_types, strict=False) if t == "s")
             max_spatial = int(max_spatial)
 
             buffer_in_dim = 0
@@ -343,7 +346,7 @@ class Lyra2Model(WANDiffusionModel):
                                 trainable_param_names.add(name)
 
                     log.info(
-                        f"Enabled gradients for {len(trainable_param_names)} parameters: {sorted(list(trainable_param_names))}"
+                        f"Enabled gradients for {len(trainable_param_names)} parameters: {sorted(trainable_param_names)}"
                     )
 
         return net
@@ -430,9 +433,9 @@ class Lyra2Model(WANDiffusionModel):
 
         # Parse segments supporting both temporal ('k') and spatial ('s') kernels per segment
         segments = [seg for seg in fk_substring.split("f")[1:] if len(seg) > 0]
-        splits: List[int] = []
-        kernel_sizes: List[int] = []
-        kernel_types: List[str] = []
+        splits: list[int] = []
+        kernel_sizes: list[int] = []
+        kernel_types: list[str] = []
         for seg in segments:
             # seg like '2k2' or '2s2'
             i = 0
@@ -447,16 +450,18 @@ class Lyra2Model(WANDiffusionModel):
             kernel_sizes.append(ksize)
             kernel_types.append(t)
 
-        self.framepack_clean_latent_frame_splits: List[int] = splits
-        self.framepack_clean_latent_frame_kernel_sizes: List[int] = kernel_sizes
-        self.framepack_clean_latent_frame_kernel_types: List[str] = kernel_types
+        self.framepack_clean_latent_frame_splits: list[int] = splits
+        self.framepack_clean_latent_frame_kernel_sizes: list[int] = kernel_sizes
+        self.framepack_clean_latent_frame_kernel_types: list[str] = kernel_types
         # Cache commonly used counts (temporal vs spatial history slots) for downstream helpers.
         # Temporal slots correspond to kernel_type == 'k'; spatial slots correspond to 's'.
         self.framepack_num_temporal_hist = int(
             sum(
                 s
                 for s, t in zip(
-                    self.framepack_clean_latent_frame_splits, self.framepack_clean_latent_frame_kernel_types
+                    self.framepack_clean_latent_frame_splits,
+                    self.framepack_clean_latent_frame_kernel_types,
+                    strict=False,
                 )
                 if t == "k"
             )
@@ -465,7 +470,9 @@ class Lyra2Model(WANDiffusionModel):
             sum(
                 s
                 for s, t in zip(
-                    self.framepack_clean_latent_frame_splits, self.framepack_clean_latent_frame_kernel_types
+                    self.framepack_clean_latent_frame_splits,
+                    self.framepack_clean_latent_frame_kernel_types,
+                    strict=False,
                 )
                 if t == "s"
             )
@@ -481,11 +488,11 @@ class Lyra2Model(WANDiffusionModel):
         self.framepack_total_max_num_latent_frames = max_num_clean_latent_frames + self.framepack_num_new_latent_frames
 
         # framepack_splits: e.g., [16, 2, 1, 9]
-        framepack_splits = self.framepack_clean_latent_frame_splits + [self.framepack_num_new_latent_frames]
+        framepack_splits = self.framepack_clean_latent_frame_splits + [self.framepack_num_new_latent_frames]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         # framepack_indices: 0, 1, ..., 18 (history), 19, 20, ..., 27 (new)
         framepack_indices = torch.arange(self.framepack_total_max_num_latent_frames)
         # framepack_kernel_ids: 0, 1, 2, -1 (new frames -- using the original patch embedding kernel)
-        framepack_kernel_ids = list(range(len(self.framepack_clean_latent_frame_kernel_sizes))) + [-1]
+        framepack_kernel_ids = list(range(len(self.framepack_clean_latent_frame_kernel_sizes))) + [-1]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         self.framepack_params = {
             "framepack_indices": framepack_indices,
             "framepack_splits": framepack_splits,
@@ -633,13 +640,13 @@ class Lyra2Model(WANDiffusionModel):
         T_new = self.framepack_num_new_latent_frames
         assert cond_latent.shape[2] == T_hist + T_new, "cond_latent must have T_hist + T_new frames"
 
-        mask = kwargs.get("cond_latent_mask", None)
+        mask = kwargs.get("cond_latent_mask")
         if mask is None:
             mask = torch.ones((B, 4, T_hist + T_new, H, W), dtype=history_latents.dtype, device=history_latents.device)
 
         data_batch["cond_latent_mask"] = mask
         data_batch[WAN2PT1_I2V_COND_LATENT_KEY] = cond_latent
-        data_batch["cond_latent_buffer"] = kwargs.get("cond_latent_buffer", None)
+        data_batch["cond_latent_buffer"] = kwargs.get("cond_latent_buffer")
 
         # Add-through extras if present
         if "fps" in kwargs and kwargs["fps"] is not None:
@@ -724,9 +731,8 @@ class Lyra2Model(WANDiffusionModel):
           => x0 = x_t - sigma_t * pred
         """
         original_dtype = flow_pred.dtype
-        flow_pred, xt, sigmas, timesteps = map(
-            lambda x: x.double().to(flow_pred.device),
-            [flow_pred, xt, scheduler.sigmas, scheduler.timesteps],
+        flow_pred, xt, sigmas, timesteps = (
+            x.double().to(flow_pred.device) for x in [flow_pred, xt, scheduler.sigmas, scheduler.timesteps]
         )
         timestep_id = torch.argmin((timesteps.unsqueeze(0) - timestep.unsqueeze(1)).abs(), dim=1)
         sigma_t = sigmas[timestep_id].reshape(-1, 1, 1, 1)
@@ -750,10 +756,12 @@ class Lyra2Model(WANDiffusionModel):
         LoRA is already conditional-only).
         """
         # 0) Create DMD flow scheduler (4-step schedule over 1000 train timesteps)
-        denoising_step_list: List[int] = [1000, 750, 500, 250]
+        denoising_step_list: list[int] = [1000, 750, 500, 250]
         num_train_timestep: int = 1000
         if self.dmd_scheduler is None:
-            from lyra_2._src.schedulers.self_forcing_scheduler import FlowMatchScheduler
+            from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.schedulers.self_forcing_scheduler import (
+                FlowMatchScheduler,
+            )
 
             self.dmd_scheduler = FlowMatchScheduler(shift=5.0, sigma_min=0.0, extra_one_step=True)
             self.dmd_scheduler.set_timesteps(num_train_timestep, training=True)
@@ -787,13 +795,13 @@ class Lyra2Model(WANDiffusionModel):
         T_new = self.framepack_num_new_latent_frames
         assert cond_latent.shape[2] == T_hist + T_new, "cond_latent must have T_hist + T_new frames"
 
-        mask = kwargs.get("cond_latent_mask", None)
+        mask = kwargs.get("cond_latent_mask")
         if mask is None:
             mask = torch.ones((B, 4, T_hist + T_new, H, W), dtype=history_latents.dtype, device=history_latents.device)
 
         data_batch["cond_latent_mask"] = mask
         data_batch[WAN2PT1_I2V_COND_LATENT_KEY] = cond_latent
-        data_batch["cond_latent_buffer"] = kwargs.get("cond_latent_buffer", None)
+        data_batch["cond_latent_buffer"] = kwargs.get("cond_latent_buffer")
 
         if "fps" in kwargs and kwargs["fps"] is not None:
             data_batch["fps"] = kwargs["fps"]
@@ -1093,10 +1101,7 @@ class Lyra2Model(WANDiffusionModel):
         vae_wrap = self.tokenizer.model  # WanVAE wrapper
         vae_core = vae_wrap.model  # WanVAE_ core
         with vae_wrap.context:
-            if not vae_wrap.is_amp:
-                x_vid = video.to(vae_wrap.dtype)
-            else:
-                x_vid = video
+            x_vid = video.to(vae_wrap.dtype) if not vae_wrap.is_amp else video
             # Restore encoder caches
             vae_core._enc_feat_map = self._clone_vae_cache(enc_cache)
             # Always start layer-iteration index at 0 when resuming with an explicit cache
@@ -1244,7 +1249,7 @@ class Lyra2Model(WANDiffusionModel):
         temporal_rest_needed = max(0, num_temporal_hist - 1)
         recent_start = max(0, T_hist_total - temporal_rest_needed)
         temporal_rest = list(range(recent_start, T_hist_total))
-        return [0] + temporal_rest
+        return [0] + temporal_rest  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     def _compose_selected_indices(
         self,
@@ -1259,7 +1264,7 @@ class Lyra2Model(WANDiffusionModel):
         temporal_pool = [idx for idx in temporal_selected if idx != 0]
         spatial_pool = list(spatial_selected)
         ordered_past: list[int] = []
-        for seg_idx, (cnt, tp) in enumerate(zip(splits, types)):
+        for seg_idx, (cnt, tp) in enumerate(zip(splits, types, strict=False)):
             if tp == "k":
                 for j in range(cnt):
                     if seg_idx == 0 and j == 0:
@@ -1283,7 +1288,7 @@ class Lyra2Model(WANDiffusionModel):
         num_spatial_hist: int,
         device: torch.device,
         dtype: torch.dtype,
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         if num_spatial_hist <= 0:
             return None
         xs = torch.linspace(-1.0, 1.0, W, device=device, dtype=dtype)
@@ -1306,7 +1311,7 @@ class Lyra2Model(WANDiffusionModel):
         num_spatial_hist: int,
         device: torch.device,
         dtype: torch.dtype,
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         meta = (H, W, num_spatial_hist, device, dtype)
         if self._cached_spatial_coords is None or self._cached_spatial_coords_meta != meta:
             self._cached_spatial_coords = self._build_canonical_spatial_coords(
@@ -1338,7 +1343,7 @@ class Lyra2Model(WANDiffusionModel):
         coord_pixels: torch.Tensor,
         *,
         dtype: torch.dtype,
-        target_t: Optional[int] = None,
+        target_t: int | None = None,
     ) -> torch.Tensor:
         """Convert warped coordinate pixels to latent grid via subsample+pixelshuffle."""
         frames_per_lat = int(self.framepack_num_frames_per_latent)
@@ -1357,20 +1362,20 @@ class Lyra2Model(WANDiffusionModel):
         cond_latent,
         selected_idx,
         video_indices,
-        spatial_selected_frame_ids: Optional[torch.Tensor] = None,
-        spatial_selected_coords: Optional[torch.Tensor] = None,
+        spatial_selected_frame_ids: torch.Tensor | None = None,
+        spatial_selected_coords: torch.Tensor | None = None,
         *,
-        video: Optional[torch.Tensor] = None,
-        camera_w2c: Optional[torch.Tensor] = None,
-        intrinsics: Optional[torch.Tensor] = None,
-        buffer_depth_B_1_H_W: Optional[torch.Tensor] = None,
-        spatial_cache: Optional[Sparse3DCache] = None,
+        video: torch.Tensor | None = None,
+        camera_w2c: torch.Tensor | None = None,
+        intrinsics: torch.Tensor | None = None,
+        buffer_depth_B_1_H_W: torch.Tensor | None = None,
+        spatial_cache: Sparse3DCache | None = None,
         is_training: bool = True,
     ):
         cfg = self.config
         if video is None or camera_w2c is None or intrinsics is None:
             return cond_latent, None
-        buffer_cond_latents: Optional[torch.Tensor] = None
+        buffer_cond_latents: torch.Tensor | None = None
         T_new_lat = int(self.framepack_num_new_latent_frames)
         # Depth warp / HD map condition overwriting the tail of cond_latent
         with misc.timer("camera_pose_condition - build"):
@@ -1396,7 +1401,7 @@ class Lyra2Model(WANDiffusionModel):
                     src_K: torch.Tensor,
                     *,
                     return_depth: bool = False,
-                ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+                ) -> tuple[torch.Tensor, torch.Tensor | None]:
                     # Repeat sources across target frames, flatten (B,F) into batch, then chunk-wise warp.
                     src_rgb_bf = rearrange(
                         src_rgb.unsqueeze(1).repeat(1, F, 1, 1, 1, 1),
@@ -1481,7 +1486,7 @@ class Lyra2Model(WANDiffusionModel):
                     if spatial_selected_frame_ids is not None
                     else []
                 )
-                spatial_coords: Optional[torch.Tensor] = spatial_selected_coords
+                spatial_coords: torch.Tensor | None = spatial_selected_coords
 
                 spatial_unique: list[int] = []
                 seen_sp: set[int] = set()
@@ -1570,7 +1575,7 @@ class Lyra2Model(WANDiffusionModel):
             if self._collect_return_condition_state:
                 if len(spatial_condition_pixels_list) > 0:
                     # Show buffer warp + all per-frame spatial warps (like multibuffer vis).
-                    vis_list = [condition_state_pixels] + spatial_condition_pixels_list
+                    vis_list = [condition_state_pixels] + spatial_condition_pixels_list  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                     condition_vis = torch.cat(vis_list, dim=1)
                     self._latest_condition_state_pixels = condition_vis
                 else:
@@ -1606,7 +1611,7 @@ class Lyra2Model(WANDiffusionModel):
             frames_per_lat = int(self.framepack_num_frames_per_latent)
             v_len = int(K_sel.shape[1])
             # subsample long T to 0, 4, 8, 12, ... to match VAE latent indexing used elsewhere
-            time_idx = [0] + [i for i in range(4, v_len, frames_per_lat)]
+            time_idx = [0] + list(range(4, v_len, frames_per_lat))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             time_idx_t = torch.tensor(time_idx, device=device, dtype=torch.long)
 
             # Select downsampled intrinsics and poses
@@ -1652,9 +1657,9 @@ class Lyra2Model(WANDiffusionModel):
         self,
         history_full: torch.Tensor,
         gen_cond: torch.Tensor,
-        spatial_cache: Optional[Sparse3DCache],
+        spatial_cache: Sparse3DCache | None,
         video: torch.Tensor,
-        buffer_depth_B_1_H_W: Optional[torch.Tensor],
+        buffer_depth_B_1_H_W: torch.Tensor | None,
         camera_w2c: torch.Tensor,
         intrinsics: torch.Tensor,
         video_indices: torch.Tensor,
@@ -1662,7 +1667,7 @@ class Lyra2Model(WANDiffusionModel):
         is_training: bool = True,
         spatial_cache_skip_last_n: int = 0,
         num_retrieval_views: int = 1,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
         """Prepare (latents, cond_latent, mask) for Lyra2Model.
 
         This consolidates the history selection + camera-control tail + optional image-based
@@ -1694,9 +1699,9 @@ class Lyra2Model(WANDiffusionModel):
 
         temporal_selected = self._select_temporal_history_indices(T_hist_total, num_temporal_hist)
 
-        spatial_selected_frame_ids_t: Optional[torch.Tensor] = None
-        spatial_coords_all: Optional[torch.Tensor] = None
-        spatial_selected_coords: Optional[torch.Tensor] = None
+        spatial_selected_frame_ids_t: torch.Tensor | None = None
+        spatial_coords_all: torch.Tensor | None = None
+        spatial_selected_coords: torch.Tensor | None = None
 
         if num_spatial_hist > 0:
             H = int(video.shape[-2])
@@ -1784,7 +1789,9 @@ class Lyra2Model(WANDiffusionModel):
             splits_temp = [
                 s
                 for s, t in zip(
-                    self.framepack_clean_latent_frame_splits, self.framepack_clean_latent_frame_kernel_types
+                    self.framepack_clean_latent_frame_splits,
+                    self.framepack_clean_latent_frame_kernel_types,
+                    strict=False,
                 )
                 if t == "k"
             ]
@@ -1926,7 +1933,7 @@ class Lyra2Model(WANDiffusionModel):
             s_cursor = 0
             B0 = latents.shape[0]
             for s_cnt, tp in zip(
-                self.framepack_clean_latent_frame_splits, self.framepack_clean_latent_frame_kernel_types
+                self.framepack_clean_latent_frame_splits, self.framepack_clean_latent_frame_kernel_types, strict=False
             ):
                 if tp == "k":
                     final_latents.append(current_temp_lat[:, :, t_cursor : t_cursor + s_cnt])
@@ -1997,7 +2004,7 @@ class Lyra2Model(WANDiffusionModel):
         C_buf = int(buffer_cond_latents.shape[1]) if buffer_cond_latents is not None else C_coord_lat
 
         # Convert spatial coords to slotted latent space.
-        spatial_coords_latent: Optional[torch.Tensor] = None
+        spatial_coords_latent: torch.Tensor | None = None
         if spatial_coords_all is not None and num_spatial_hist > 0:
             spatial_coords_all_b = spatial_coords_all.unsqueeze(0).permute(0, 2, 1, 3, 4).repeat(B0, 1, 1, 1, 1)
             spatial_coords_latent = _coords_to_slotted_latent(spatial_coords_all_b)
@@ -2006,7 +2013,7 @@ class Lyra2Model(WANDiffusionModel):
         s_cursor = 0
         _debug_labels: list[str] = []
         for _pos, (s_cnt, tp) in enumerate(
-            zip(self.framepack_clean_latent_frame_splits, self.framepack_clean_latent_frame_kernel_types)
+            zip(self.framepack_clean_latent_frame_splits, self.framepack_clean_latent_frame_kernel_types, strict=False)
         ):
             s_cnt = int(s_cnt)
             if tp == "s" and spatial_coords_latent is not None:
@@ -2138,12 +2145,12 @@ class Lyra2Model(WANDiffusionModel):
             # In inference, this cache is maintained incrementally during AR, so the build logic differs.
             splits = self.framepack_clean_latent_frame_splits
             types = self.framepack_clean_latent_frame_kernel_types
-            num_spatial_hist = int(sum(s for s, t in zip(splits, types) if t == "s"))
-            num_temporal_hist = int(sum(s for s, t in zip(splits, types) if t == "k"))
+            num_spatial_hist = int(sum(s for s, t in zip(splits, types, strict=False) if t == "s"))
+            num_temporal_hist = int(sum(s for s, t in zip(splits, types, strict=False) if t == "k"))
             _ = num_temporal_hist  # explicit for readability
 
-            spatial_cache: Optional[Sparse3DCache] = None
-            buffer_depth_B_1_H_W: Optional[torch.Tensor] = None
+            spatial_cache: Sparse3DCache | None = None
+            buffer_depth_B_1_H_W: torch.Tensor | None = None
             # Last history frame (buffer) absolute index; depth passed explicitly for warping and NOT cached.
             rel_buffer_idx = video_indices.shape[0] - self.framepack_num_new_video_frames - 1
             abs_buffer_idx = int(video_indices[rel_buffer_idx].item())
@@ -2192,7 +2199,7 @@ class Lyra2Model(WANDiffusionModel):
                         for t in range(int(data_batch["video"].shape[2])):
                             if t == abs_buffer_idx:
                                 continue
-                            if t < (t0 - skip_recent) or t > (t1 + skip_recent):
+                            if t < (t0 - skip_recent) or t > (t1 + skip_recent):  # noqa: SIM102 - Statement form kept for readability.
                                 if (t % stride == 0) and t != 0:
                                     spatial_cache.add(
                                         data_batch["depth"][:, t].to(device=latents.device, dtype=torch.float32),
@@ -2330,7 +2337,7 @@ class Sparse3DCache:
         w2c_B_4_4: torch.Tensor,
         K_B_3_3: torch.Tensor,
         latent_index: int,
-        frame_id: Optional[int] = None,
+        frame_id: int | None = None,
     ) -> None:
         ds = self.downsample
         # Subsample depth and scale intrinsics accordingly

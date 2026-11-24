@@ -388,7 +388,7 @@ def so3_to_se3(so3: SO3) -> SE3:
     Returns:
         single / batch of SE3 Lie group elements [] / [bs]
     """
-    t_component = torch.zeros(so3.shape + (3,), device=so3.device, dtype=so3.dtype)
+    t_component = torch.zeros(so3.shape + (3,), device=so3.device, dtype=so3.dtype)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     return SE3.InitFromVec(torch.cat((t_component, so3.vec()), dim=-1))
 
 
@@ -449,7 +449,7 @@ class ScaledTransform:
         """Applies the similarity transform to a set of 3D poinqts."""
         return self.scale * self.rotation.act(points) + self.translation[None]
 
-    def inv(self) -> "ScaledTransform":
+    def inv(self) -> ScaledTransform:
         """Returns the inverse of the similarity transform."""
         inv_rotation = self.rotation.inv()
         inv_scale = 1.0 / self.scale
@@ -489,19 +489,10 @@ class ScaledTransform:
 
 @dataclass(slots=True, kw_only=True)
 class IncompleteRigScaledTransform:
-    """Incomplete rig scaled transform implementation."""
     transform: ScaledTransform
     right_translation: torch.Tensor
 
     def apply_se3(self, se3: SE3) -> SE3:
-        """Apply se3.
-
-        Args:
-            se3: The se3.
-
-        Returns:
-            The return value.
-        """
         sim3 = Sim3(se3)
         sim3_prior = self.transform.to_sim3()[None] * sim3
         sim3_post = Sim3.Identity(1).to(sim3.device)
@@ -510,28 +501,10 @@ class IncompleteRigScaledTransform:
         return SE3(sim3_final.data[..., :7])
 
     def apply_points(self, points: torch.Tensor) -> torch.Tensor:
-        """Apply points.
-
-        Args:
-            points: The points.
-
-        Returns:
-            The return value.
-        """
         return self.transform.apply_points(points + self.right_translation[None])
 
 
 def align_trajectories(source_traj: SE3, target_traj: SE3, scale: bool = True) -> ScaledTransform:
-    """Align trajectories.
-
-    Args:
-        source_traj: The source traj.
-        target_traj: The target traj.
-        scale: The scale.
-
-    Returns:
-        The return value.
-    """
     return align_points(
         source_traj.translation()[:, :3],
         target_traj.translation()[:, :3],

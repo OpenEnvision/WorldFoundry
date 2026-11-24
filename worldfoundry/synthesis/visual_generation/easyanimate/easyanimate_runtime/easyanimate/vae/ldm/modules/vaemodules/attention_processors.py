@@ -6,6 +6,7 @@ import torch.nn.functional as F
 if TYPE_CHECKING:
     from .attention import Attention
 
+
 class AttnProcessor:
     r"""
     Default processor for performing attention-related computations.
@@ -17,12 +18,12 @@ class AttnProcessor:
         hidden_states: torch.FloatTensor,
         encoder_hidden_states,
         attention_mask,
-        temb = None,
+        temb=None,
     ) -> torch.Tensor:
         residual = hidden_states
 
         if attn.spatial_norm is not None:
-            hidden_states = attn.spatial_norm(hidden_states, temb = None)
+            hidden_states = attn.spatial_norm(hidden_states, temb=None)
 
         # B, L, C
         assert hidden_states.ndim == 3, f"Hidden states must be 3-dimensional, got {hidden_states.ndim}"
@@ -64,6 +65,7 @@ class AttnProcessor:
 
         return hidden_states
 
+
 class AttnProcessor2_0:
     r"""
     Processor for implementing scaled dot-product attention (enabled by default if you're using PyTorch 2.0).
@@ -79,11 +81,11 @@ class AttnProcessor2_0:
         hidden_states: torch.FloatTensor,
         encoder_hidden_states,
         attention_mask,
-        temb = None,
+        temb=None,
     ) -> torch.FloatTensor:
         residual = hidden_states
         if attn.spatial_norm is not None:
-            hidden_states = attn.spatial_norm(hidden_states, temb = None)
+            hidden_states = attn.spatial_norm(hidden_states, temb=None)
 
         # B, L, C
         assert hidden_states.ndim == 3, f"Hidden states must be 3-dimensional, got {hidden_states.ndim}"

@@ -6,13 +6,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_metrics import compute_physvidbench_metrics
-from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_prompts import (
+from worldfoundry.evals.tasks.execution.runners.physvidbench.physvidbench_metrics import compute_physvidbench_metrics
+from worldfoundry.evals.tasks.execution.runners.physvidbench.physvidbench_prompts import (
     materialize_physvidbench_generation_requests,
-    unique_prompt_records,
-    load_prompt_rows,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -63,7 +60,7 @@ def test_physvidbench_official_run_with_mock_backend_writes_scorecard(tmp_path: 
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py",
             "--run-official",
             "--generated-artifact-dir",
             str(generated_dir),

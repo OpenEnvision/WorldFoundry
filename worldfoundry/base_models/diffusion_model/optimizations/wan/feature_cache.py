@@ -26,9 +26,7 @@ from worldfoundry.core.acceleration.cache import (
     TeaCacheResidualCache,
 )
 
-_TEACACHE_PRESETS: tuple[
-    tuple[tuple[str, ...], tuple[float, ...], str, int], ...
-] = (
+_TEACACHE_PRESETS: tuple[tuple[tuple[str, ...], tuple[float, ...], str, int], ...] = (
     (
         ("wan2.1-t2v-1.3b", "wan2.1-fun-1.3b", "wan2.1-vace-1.3b"),
         (-5.21862437e04, 9.23041404e03, -5.28275948e02, 1.36987616e01, -4.99875664e-02),
@@ -153,10 +151,7 @@ def resolve_wan_feature_cache(context: Any) -> WanFeatureCacheConfig | None:
         return None
     normalized_names = [_normalize_algorithm(name) for name, _ in selected]
     if len(selected) != 1:
-        raise ValueError(
-            "Wan feature caches are mutually exclusive; requested "
-            + ", ".join(normalized_names)
-        )
+        raise ValueError("Wan feature caches are mutually exclusive; requested " + ", ".join(normalized_names))
 
     algorithm = normalized_names[0]
     raw_value = selected[0][1]
@@ -236,9 +231,7 @@ def resolve_wan_feature_cache(context: Any) -> WanFeatureCacheConfig | None:
         allowed_options = {"dense_pattern", "dense_last"}
         unknown_options = sorted(set(options) - allowed_options)
         if unknown_options:
-            raise ValueError(
-                f"unsupported blocktaylorseer options: {unknown_options}"
-            )
+            raise ValueError(f"unsupported blocktaylorseer options: {unknown_options}")
         pattern = options.get("dense_pattern", (True, False, False, False))
         if not isinstance(pattern, Sequence) or isinstance(pattern, (str, bytes)):
             raise TypeError("BlockTaylorSeer dense_pattern must be a bool sequence")
@@ -265,13 +258,10 @@ def resolve_wan_feature_cache(context: Any) -> WanFeatureCacheConfig | None:
             allowed_options.update({"front_blocks", "back_blocks"})
         unknown_options = sorted(set(options) - allowed_options)
         if unknown_options:
-            raise ValueError(
-                f"unsupported {algorithm} options: {unknown_options}"
-            )
+            raise ValueError(f"unsupported {algorithm} options: {unknown_options}")
         if "residual_diff_threshold" not in options:
             raise ValueError(
-                f"{algorithm} requires an explicit 'residual_diff_threshold'; "
-                "no quality-safe default is published"
+                f"{algorithm} requires an explicit 'residual_diff_threshold'; no quality-safe default is published"
             )
         threshold = options["residual_diff_threshold"]
         if isinstance(threshold, bool):

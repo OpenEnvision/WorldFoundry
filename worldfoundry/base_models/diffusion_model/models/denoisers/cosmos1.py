@@ -85,6 +85,7 @@ def convert_cosmos1_state_dict(state_dict: Mapping[str, object]) -> Mapping[str,
 
 class Cosmos1Gen3CDenoiser:
     """GEN3C Video2World denoiser with EDM preconditioning and pose control."""
+
     def __init__(self, model: Cosmos1Transformer3DModel, *, sigma_data: float = 0.5) -> None:
         self.model = model
         self.sigma_data = float(sigma_data)

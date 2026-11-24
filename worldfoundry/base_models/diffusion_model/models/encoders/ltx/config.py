@@ -17,6 +17,7 @@ from dataclasses import asdict, dataclass, field
 @dataclass
 class Gemma3RopeScaling:
     """RoPE scaling hyperparameters for LTX Gemma-3."""
+
     factor: float = 8.0
     rope_type: str = "linear"
 
@@ -24,6 +25,7 @@ class Gemma3RopeScaling:
 @dataclass
 class Gemma3TextConfig:
     """Gemma-3 text-tower hyperparameters used by LTX."""
+
     attention_bias: bool = False
     attention_dropout: float = 0.0
     attn_logit_softcapping: float | None = None
@@ -54,6 +56,7 @@ class Gemma3TextConfig:
 @dataclass
 class Gemma3VisionConfig:
     """Gemma-3 vision-tower hyperparameters used by LTX."""
+
     attention_dropout: float = 0.0
     hidden_act: str = "gelu_pytorch_tanh"
     hidden_size: int = 1152
@@ -72,6 +75,7 @@ class Gemma3VisionConfig:
 @dataclass
 class Gemma3ConfigData:
     """Combined Gemma-3 config blob serialized with LTX weights."""
+
     architectures: list[str] = field(default_factory=lambda: ["Gemma3ForConditionalGeneration"])
     boi_token_index: int = 255999
     eoi_token_index: int = 256000

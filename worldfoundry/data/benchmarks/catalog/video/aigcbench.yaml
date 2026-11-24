@@ -135,18 +135,18 @@ runner:
   scoring:
     engines: [video_quality]
     hooks:
-      video_quality: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      video_quality: worldfoundry.evals.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
   normalization:
     artifact_official_run: true
     pass_generated_artifact_dir: true
-  official_script: worldfoundry/evaluation/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.aigcbench.run_aigcbench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.aigcbench.run_aigcbench_official_runner
     generated_arg: null
     limit_arg: --limit
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:AIGCBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:aigcbench
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -206,7 +206,7 @@ data_refs:
   official_repo: provenance only; runtime uses WorldFoundry-integrated generation and in-tree metric normalization
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:AIGCBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:aigcbench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
@@ -221,7 +221,7 @@ base_model_dependency_preflight:
   status: ready
   missing: []
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -240,3 +240,24 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - reference_image_dir
+  - prompt_suite_json
+  - generated_video_dir
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_scores
+  - benchmark_contract
+  notes:
+  - Contract maps AIGCBench's 11 paper metrics for image-to-video evaluation to WorldFoundry scorecard.
+  - Official metric execution requires reference assets, CLIP/DOVER/optical-flow dependencies, and upstream
+    scorer outputs.
+generation:
+  request_provider: worldfoundry.evals.tasks.execution.runners.aigcbench.aigcbench_prompts:materialize_aigcbench_generation_requests
+  artifact_materializer: worldfoundry.evals.tasks.execution.runners.aigcbench.aigcbench_prompts:copy_aigcbench_generated_videos
+  dataset_root_parameter: dataset_root
+  split_parameter: split
+  missing_requests_hint: set WORLDFOUNDRY_AIGCBENCH_DATASET_ROOT or WORLDFOUNDRY_AIGCBENCH_PROMPT_MANIFEST

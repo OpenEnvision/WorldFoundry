@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     collect_images,
@@ -50,6 +51,8 @@ def _normalization_stats(checkpoint_path: str, options: Mapping[str, Any]) -> di
 
 def _model_resources_for(location: str, device: str, options: Mapping[str, Any]) -> tuple[Any, Any]:
     """Reuse checkpoint-backed model and tokenizer independently of request normalization."""
+    if option_bool(options.get("trust_remote_code"), False):
+        raise ValueError("DB-CogACT requires trust_remote_code=False; use the native Transformers tokenizer.")
     cpu_offload_enabled = option_bool(options.get("cpu_offload"), False)
     key = (
         location,
@@ -128,7 +131,7 @@ def _model_resources_for(location: str, device: str, options: Mapping[str, Any])
         model = model.eval()
     tokenizer = AutoTokenizer.from_pretrained(
         location,
-        trust_remote_code=option_bool(options.get("trust_remote_code"), False),
+        trust_remote_code=False,
         local_files_only=True,
     )
     resources = (model, tokenizer)

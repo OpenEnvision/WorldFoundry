@@ -7,9 +7,10 @@ import math
 import numpy as np
 import torch
 from torch import nn
-import torch.nn.functional as functional
 
-from .transformer import Transformer, TransformerEncoder, TransformerEncoderLayer
+from worldfoundry.base_models.llm_mllm_core.action.transformer import TransformerEncoder
+
+from .transformer import Transformer, TransformerEncoderLayer
 
 
 def _sinusoid_encoding_table(n_position: int, hidden_dim: int) -> torch.Tensor:
@@ -28,8 +29,7 @@ def _position_encoding_1d(source: torch.Tensor) -> torch.Tensor:
     compute_dtype = torch.float32
     position = torch.arange(sequence_length, dtype=compute_dtype, device=device).unsqueeze(1)
     divisor = torch.exp(
-        torch.arange(0, hidden_dim, 2, dtype=compute_dtype, device=device)
-        * (-math.log(10000.0) / hidden_dim)
+        torch.arange(0, hidden_dim, 2, dtype=compute_dtype, device=device) * (-math.log(10000.0) / hidden_dim)
     )
     encoding = torch.zeros((sequence_length, hidden_dim), dtype=compute_dtype, device=device)
     encoding[:, 0::2] = torch.sin(position * divisor)
@@ -101,9 +101,7 @@ class DETRVAEHead(nn.Module):
 
     def forward(self, qpos=None, env_state=None, hidden_states=None, actions=None, is_pad=None, vq_sample=None):
         del env_state
-        latent_input, probabilities, binaries, mean, log_variance = self.encode(
-            qpos, actions, is_pad, vq_sample
-        )
+        latent_input, probabilities, binaries, mean, log_variance = self.encode(qpos, actions, is_pad, vq_sample)
         proprio_input = self.input_proj_robot_state(qpos)
         position = _position_encoding_1d(hidden_states)
         decoded = self.transformer(
@@ -128,9 +126,7 @@ def build_act_head(spec: dict, *, state_dim: int) -> DETRVAEHead:
     encoder_layers = int(spec["enc_layers"])
     decoder_layers = int(spec["dec_layers"])
     pre_norm = bool(spec["pre_norm"])
-    encoder_layer = TransformerEncoderLayer(
-        hidden_dim, heads, feedforward, dropout, "relu", pre_norm
-    )
+    encoder_layer = TransformerEncoderLayer(hidden_dim, heads, feedforward, dropout, "relu", pre_norm)
     encoder_norm = nn.LayerNorm(hidden_dim) if pre_norm else None
     encoder = TransformerEncoder(encoder_layer, encoder_layers, encoder_norm)
     transformer = Transformer(

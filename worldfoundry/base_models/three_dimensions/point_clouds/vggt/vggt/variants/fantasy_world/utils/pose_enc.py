@@ -6,7 +6,6 @@ extri_intri_to_pose_encoding = _shared_pose_enc.extri_intri_to_pose_encoding
 
 
 def pose_encoding_to_extri_intri(*args, **kwargs):
-    """Pose encoding to extri intri."""
     extrinsics, intrinsics = _shared_pose_enc.pose_encoding_to_extri_intri(*args, **kwargs)
     pose_encoding = args[0] if args else kwargs.get("pose_encoding")
     if intrinsics is not None and pose_encoding is not None:

@@ -8,7 +8,7 @@ groups:
 - action_chunk
 source_repos:
 - url: https://github.com/DravenALG/VLANeXt
-  revision: f4162397af20
+  revision: f4162397af201bddbdb2ec17e836bde4743c1913
 checkpoints:
 - repo_id: DravenALG/VLANeXt
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/DravenALG--VLANeXt

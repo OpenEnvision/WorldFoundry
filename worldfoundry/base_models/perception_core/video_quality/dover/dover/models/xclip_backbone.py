@@ -1,11 +1,7 @@
-import copy
-import math
 from collections import OrderedDict
-from typing import Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from einops import rearrange
 from timm.models.layers import trunc_normal_
 from torch import nn
@@ -23,9 +19,7 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     if drop_prob == 0.0 or not training:
         return x
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (
-        x.ndim - 1
-    )  # work with diff dim tensors, not just 2D ConvNets
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
     random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
     random_tensor.floor_()  # binarize
     output = x.div(keep_prob) * random_tensor
@@ -36,7 +30,7 @@ class DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob=None):
-        super(DropPath, self).__init__()
+        super().__init__()
         self.drop_prob = drop_prob
 
     def forward(self, x):
@@ -60,11 +54,17 @@ class QuickGELU(nn.Module):
 
 class ResidualAttentionBlock(nn.Module):
     def __init__(
-        self, d_model: int, n_head: int, attn_mask: torch.Tensor = None,
+        self,
+        d_model: int,
+        n_head: int,
+        attn_mask: torch.Tensor = None,
     ):
         super().__init__()
 
-        self.attn = nn.MultiheadAttention(d_model, n_head,)
+        self.attn = nn.MultiheadAttention(
+            d_model,
+            n_head,
+        )
         self.ln_1 = LayerNorm(d_model)
 
         self.mlp = nn.Sequential(
@@ -80,11 +80,7 @@ class ResidualAttentionBlock(nn.Module):
         self.attn_mask = attn_mask
 
     def attention(self, x: torch.Tensor):
-        self.attn_mask = (
-            self.attn_mask.to(dtype=x.dtype, device=x.device)
-            if self.attn_mask is not None
-            else None
-        )
+        self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
         return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
 
     def forward(self, x: torch.Tensor):
@@ -94,15 +90,11 @@ class ResidualAttentionBlock(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(
-        self, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None
-    ):
+    def __init__(self, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None):
         super().__init__()
         self.width = width
         self.layers = layers
-        self.resblocks = nn.Sequential(
-            *[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers)]
-        )
+        self.resblocks = nn.Sequential(*[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers)])
 
     def forward(self, x: torch.Tensor):
         return self.resblocks(x)
@@ -129,11 +121,9 @@ class VisionTransformer(nn.Module):
             bias=False,
         )
 
-        scale = width ** -0.5
+        scale = width**-0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
-        self.positional_embedding = nn.Parameter(
-            scale * torch.randn((input_resolution // patch_size) ** 2 + 1, width)
-        )
+        self.positional_embedding = nn.Parameter(scale * torch.randn((input_resolution // patch_size) ** 2 + 1, width))
         self.ln_pre = LayerNorm(width)
 
         self.transformer = Transformer(width, layers, heads)
@@ -148,9 +138,7 @@ class VisionTransformer(nn.Module):
         x = torch.cat(
             [
                 self.class_embedding.to(x.dtype)
-                + torch.zeros(
-                    x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device
-                ),
+                + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device),
                 x,
             ],
             dim=1,
@@ -175,7 +163,7 @@ class CLIP(nn.Module):
         embed_dim: int,
         # vision
         image_resolution: int,
-        vision_layers: Union[Tuple[int, int, int, int], int],
+        vision_layers: tuple[int, int, int, int] | int,
         vision_width: int,
         vision_patch_size: int,
         # text
@@ -220,10 +208,8 @@ class CLIP(nn.Module):
         nn.init.normal_(self.token_embedding.weight, std=0.02)
         nn.init.normal_(self.positional_embedding, std=0.01)
 
-        proj_std = (self.transformer.width ** -0.5) * (
-            (2 * self.transformer.layers) ** -0.5
-        )
-        attn_std = self.transformer.width ** -0.5
+        proj_std = (self.transformer.width**-0.5) * ((2 * self.transformer.layers) ** -0.5)
+        attn_std = self.transformer.width**-0.5
         fc_std = (2 * self.transformer.width) ** -0.5
         for block in self.transformer.resblocks:
             nn.init.normal_(block.attn.in_proj_weight, std=attn_std)
@@ -232,7 +218,7 @@ class CLIP(nn.Module):
             nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
 
         if self.text_projection is not None:
-            nn.init.normal_(self.text_projection, std=self.transformer.width ** -0.5)
+            nn.init.normal_(self.text_projection, std=self.transformer.width**-0.5)
 
     def build_attention_mask(self):
         # lazily create causal attention mask, with full attention between the vision tokens
@@ -295,9 +281,15 @@ class CrossFramelAttentionBlock(nn.Module):
 
         self.message_fc = nn.Linear(d_model, d_model)
         self.message_ln = LayerNorm(d_model)
-        self.message_attn = nn.MultiheadAttention(d_model, n_head,)
+        self.message_attn = nn.MultiheadAttention(
+            d_model,
+            n_head,
+        )
 
-        self.attn = nn.MultiheadAttention(d_model, n_head,)
+        self.attn = nn.MultiheadAttention(
+            d_model,
+            n_head,
+        )
         self.ln_1 = LayerNorm(d_model)
 
         self.drop_path = DropPath(droppath) if droppath > 0.0 else nn.Identity()
@@ -314,15 +306,11 @@ class CrossFramelAttentionBlock(nn.Module):
         self.attn_mask = attn_mask
 
     def attention(self, x: torch.Tensor):
-        self.attn_mask = (
-            self.attn_mask.to(dtype=x.dtype, device=x.device)
-            if self.attn_mask is not None
-            else None
-        )
+        self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
         return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
 
     def forward(self, x):
-        l, bt, d = x.size()
+        l, bt, d = x.size()  # noqa: E741 - Ambiguous upstream name kept as written.
         b = bt // self.T
         x = x.view(l, b, self.T, d)
 
@@ -349,7 +337,7 @@ class CrossFramelAttentionBlock(nn.Module):
         return x
 
 
-class Transformer(nn.Module):
+class Transformer(nn.Module):  # noqa: F811 - Later definition replaces the earlier one, as upstream.
     def __init__(
         self,
         width: int,
@@ -368,10 +356,7 @@ class Transformer(nn.Module):
         self.layers = layers
 
         self.resblocks = nn.Sequential(
-            *[
-                CrossFramelAttentionBlock(width, heads, attn_mask, droppath[i], T)
-                for i in range(layers)
-            ]
+            *[CrossFramelAttentionBlock(width, heads, attn_mask, droppath[i], T) for i in range(layers)]
         )
 
     def forward(self, x: torch.Tensor):
@@ -406,16 +391,19 @@ class CrossFrameCommunicationTransformer(nn.Module):
             bias=False,
         )
 
-        scale = width ** -0.5
+        scale = width**-0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
-        self.positional_embedding = nn.Parameter(
-            scale * torch.randn((input_resolution // patch_size) ** 2 + 1, width)
-        )
+        self.positional_embedding = nn.Parameter(scale * torch.randn((input_resolution // patch_size) ** 2 + 1, width))
         self.ln_pre = LayerNorm(width)
 
         ## Attention Blocks
         self.transformer = Transformer(
-            width, layers, heads, droppath=droppath, use_checkpoint=use_checkpoint, T=T,
+            width,
+            layers,
+            heads,
+            droppath=droppath,
+            use_checkpoint=use_checkpoint,
+            T=T,
         )
         self.ln_post = LayerNorm(width)
         self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
@@ -439,9 +427,7 @@ class CrossFrameCommunicationTransformer(nn.Module):
         x = torch.cat(
             [
                 self.class_embedding.to(x.dtype)
-                + torch.zeros(
-                    x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device
-                ),
+                + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device),
                 x,
             ],
             dim=1,
@@ -476,7 +462,7 @@ class MulitHeadAttention(nn.Module):
         self.num_heads = num_heads
         head_dim = dim // num_heads
 
-        self.scale = qk_scale or head_dim ** -0.5
+        self.scale = qk_scale or head_dim**-0.5
 
         self.q_proj = nn.Linear(dim, dim, bias=qkv_bias)
         self.k_proj = nn.Linear(dim, dim, bias=qkv_bias)
@@ -489,21 +475,9 @@ class MulitHeadAttention(nn.Module):
     def forward(self, q, k, v):
         B, N, C = q.shape
         B, M, C = k.shape
-        q = (
-            self.q_proj(q)
-            .reshape(B, N, self.num_heads, C // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
-        k = (
-            self.k_proj(k)
-            .reshape(B, M, self.num_heads, C // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
-        v = (
-            self.v_proj(v)
-            .reshape(B, M, self.num_heads, C // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
+        q = self.q_proj(q).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        k = self.k_proj(k).reshape(B, M, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        v = self.v_proj(v).reshape(B, M, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
@@ -517,7 +491,10 @@ class MulitHeadAttention(nn.Module):
 
 class PromptGeneratorLayer(nn.Module):
     def __init__(
-        self, d_model, nhead, dropout=0.0,
+        self,
+        d_model,
+        nhead,
+        dropout=0.0,
     ):
         super().__init__()
         self.cross_attn = MulitHeadAttention(d_model, nhead, proj_drop=dropout)
@@ -535,7 +512,7 @@ class PromptGeneratorLayer(nn.Module):
         )
 
     def forward(self, x, visual):
-        q = k = v = self.norm1(x)
+        q = k = v = self.norm1(x)  # noqa: F841 - Upstream assignment kept.
         x = x + self.cross_attn(q, visual, visual)
         x = x + self.dropout(self.mlp(self.norm3(x)))
         return x
@@ -543,13 +520,14 @@ class PromptGeneratorLayer(nn.Module):
 
 class VideoSpecificPrompt(nn.Module):
     def __init__(
-        self, layers=2, embed_dim=512, alpha=0.1,
+        self,
+        layers=2,
+        embed_dim=512,
+        alpha=0.1,
     ):
         super().__init__()
         self.norm = nn.LayerNorm(embed_dim)
-        self.decoder = nn.ModuleList(
-            [PromptGeneratorLayer(embed_dim, embed_dim // 64) for _ in range(layers)]
-        )
+        self.decoder = nn.ModuleList([PromptGeneratorLayer(embed_dim, embed_dim // 64) for _ in range(layers)])
         self.alpha = nn.Parameter(torch.ones(embed_dim) * alpha)
         self.apply(self._init_weights)
 
@@ -569,12 +547,7 @@ class VideoSpecificPrompt(nn.Module):
             text = layer(text, visual)
 
 
-from collections import OrderedDict
-
-from timm.models.layers import trunc_normal_
-
-
-class ResidualAttentionBlock(nn.Module):
+class ResidualAttentionBlock(nn.Module):  # noqa: F811 - Later definition replaces the earlier one, as upstream.
     def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None):
         super().__init__()
 
@@ -593,11 +566,7 @@ class ResidualAttentionBlock(nn.Module):
         self.attn_mask = attn_mask
 
     def attention(self, x: torch.Tensor):
-        self.attn_mask = (
-            self.attn_mask.to(dtype=x.dtype, device=x.device)
-            if self.attn_mask is not None
-            else None
-        )
+        self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
         return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
 
     def forward(self, x: torch.Tensor):
@@ -608,7 +577,10 @@ class ResidualAttentionBlock(nn.Module):
 
 class MultiframeIntegrationTransformer(nn.Module):
     def __init__(
-        self, T, embed_dim=512, layers=1,
+        self,
+        T,
+        embed_dim=512,
+        layers=1,
     ):
         super().__init__()
         self.T = T
@@ -616,10 +588,7 @@ class MultiframeIntegrationTransformer(nn.Module):
         self.positional_embedding = nn.Parameter(torch.empty(1, T, embed_dim))
         trunc_normal_(self.positional_embedding, std=0.02)
         self.resblocks = nn.Sequential(
-            *[
-                ResidualAttentionBlock(d_model=embed_dim, n_head=transformer_heads)
-                for _ in range(layers)
-            ]
+            *[ResidualAttentionBlock(d_model=embed_dim, n_head=transformer_heads) for _ in range(layers)]
         )
 
         self.apply(self._init_weights)
@@ -650,7 +619,7 @@ class XCLIP(CLIP):
         embed_dim: int,
         # vision
         image_resolution: int,
-        vision_layers: Union[Tuple[int, int, int, int], int],
+        vision_layers: tuple[int, int, int, int] | int,
         vision_width: int,
         vision_patch_size: int,
         # text
@@ -684,18 +653,18 @@ class XCLIP(CLIP):
         )
 
         self.prompts_generator = VideoSpecificPrompt(
-            layers=prompts_layers, embed_dim=embed_dim, alpha=prompts_alpha,
+            layers=prompts_layers,
+            embed_dim=embed_dim,
+            alpha=prompts_alpha,
         )
         self.use_cache = use_cache
         self.mit = MultiframeIntegrationTransformer(
-            T=T, embed_dim=embed_dim, layers=mit_layers,
+            T=T,
+            embed_dim=embed_dim,
+            layers=mit_layers,
         )
 
-        dpr = (
-            [x.item() for x in torch.linspace(0, droppath, vision_layers)]
-            if droppath > 0.0
-            else None
-        )
+        dpr = [x.item() for x in torch.linspace(0, droppath, vision_layers)] if droppath > 0.0 else None
 
         vision_heads = vision_width // 64
         self.visual = CrossFrameCommunicationTransformer(
@@ -718,9 +687,7 @@ class XCLIP(CLIP):
         )
         self.vocab_size = vocab_size
         self.token_embedding = nn.Embedding(vocab_size, transformer_width)
-        self.positional_embedding = nn.Parameter(
-            torch.empty(self.context_length, transformer_width)
-        )
+        self.positional_embedding = nn.Parameter(torch.empty(self.context_length, transformer_width))
         self.ln_final = LayerNorm(transformer_width)
         self.text_projection = nn.Parameter(torch.empty(transformer_width, embed_dim))
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
@@ -787,15 +754,10 @@ class XCLIP(CLIP):
         video_features, img_features = self.encode_video(image)
         img_features = img_features.mean(dim=1, keepdim=False)
 
-        if self.use_cache:
-            text_features = self.cache_text(text)
-        else:
-            text_features = self.encode_text(text)
+        text_features = self.cache_text(text) if self.use_cache else self.encode_text(text)
 
         text_features = text_features.unsqueeze(0).expand(b, -1, -1)
-        text_features = text_features + self.prompts_generator(
-            text_features, img_features
-        )
+        text_features = text_features + self.prompts_generator(text_features, img_features)
 
         video_features = video_features / video_features.norm(dim=-1, keepdim=True)
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
@@ -824,39 +786,21 @@ def build_x_clip_model(
     if vit:
         vision_width = state_dict["visual.conv1.weight"].shape[0]
         vision_layers = len(
-            [
-                k
-                for k in state_dict.keys()
-                if k.startswith("visual.") and k.endswith(".attn.in_proj_weight")
-            ]
+            [k for k in state_dict.keys() if k.startswith("visual.") and k.endswith(".attn.in_proj_weight")]  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
         )
         vision_patch_size = state_dict["visual.conv1.weight"].shape[-1]
-        grid_size = round(
-            (state_dict["visual.positional_embedding"].shape[0] - 1) ** 0.5
-        )
+        grid_size = round((state_dict["visual.positional_embedding"].shape[0] - 1) ** 0.5)
         image_resolution = vision_patch_size * grid_size
     else:
         counts: list = [
-            len(
-                set(
-                    k.split(".")[2]
-                    for k in state_dict
-                    if k.startswith(f"visual.layer{b}")
-                )
-            )
-            for b in [1, 2, 3, 4]
+            len({k.split(".")[2] for k in state_dict if k.startswith(f"visual.layer{b}")}) for b in [1, 2, 3, 4]
         ]
         vision_layers = tuple(counts)
 
         vision_width = state_dict["visual.layer1.0.conv1.weight"].shape[0]
-        output_width = round(
-            (state_dict["visual.attnpool.positional_embedding"].shape[0] - 1) ** 0.5
-        )
+        output_width = round((state_dict["visual.attnpool.positional_embedding"].shape[0] - 1) ** 0.5)
         vision_patch_size = None
-        assert (
-            output_width ** 2 + 1
-            == state_dict["visual.attnpool.positional_embedding"].shape[0]
-        )
+        assert output_width**2 + 1 == state_dict["visual.attnpool.positional_embedding"].shape[0]
         image_resolution = output_width * 32
 
     embed_dim = state_dict["text_projection"].shape[1]
@@ -864,13 +808,7 @@ def build_x_clip_model(
     vocab_size = state_dict["token_embedding.weight"].shape[0]
     transformer_width = state_dict["ln_final.weight"].shape[0]
     transformer_heads = transformer_width // 64
-    transformer_layers = len(
-        set(
-            k.split(".")[2]
-            for k in state_dict
-            if k.startswith(f"transformer.resblocks")
-        )
-    )
+    transformer_layers = len({k.split(".")[2] for k in state_dict if k.startswith("transformer.resblocks")})
 
     model = XCLIP(
         embed_dim,
@@ -896,6 +834,6 @@ def build_x_clip_model(
         if key in state_dict:
             del state_dict[key]
 
-    msg = model.load_state_dict(state_dict, strict=False)
+    _msg = model.load_state_dict(state_dict, strict=False)
 
     return model.eval()

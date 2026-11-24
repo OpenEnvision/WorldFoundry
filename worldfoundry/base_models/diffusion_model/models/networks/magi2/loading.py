@@ -104,7 +104,7 @@ def load_magi2_audio_vae_weights(audio_vae: torch.nn.Module, safetensors_path: s
 
     full = load_file(str(safetensors_path))
     prefix = "pretransform.model."
-    sd = {k[len(prefix):]: v for k, v in full.items() if k.startswith(prefix)}
+    sd = {k[len(prefix) :]: v for k, v in full.items() if k.startswith(prefix)}
     model_keys = set(dict(audio_vae.named_parameters()) | dict(audio_vae.named_buffers()))
     sd = _remap_weight_norm(sd, model_keys)
     result = audio_vae.load_state_dict(sd, strict=strict)

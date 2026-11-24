@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> model -> __init__.py functionality."""
-
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.da3 import DepthAnything3Net, NestedDepthAnything3Net
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.model.da3 import (
+    DepthAnything3Net,
+    NestedDepthAnything3Net,
+)
 
 __export__ = [
     NestedDepthAnything3Net,

@@ -12,6 +12,4 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 # ------------------------------------------------------------------------
 
-"""Module for base_models -> perception_core -> detection -> grounding_dino -> models -> GroundingDINO -> __init__.py functionality."""
-
-from .groundingdino import build_groundingdino
+from .groundingdino import build_groundingdino as build_groundingdino

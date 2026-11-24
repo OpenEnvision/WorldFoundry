@@ -7,18 +7,18 @@ import numpy as np
 import pytest
 
 from worldfoundry.core.io.formats.serialization import read_jsonl_objects, write_jsonl
-from worldfoundry.evaluation.api import ArtifactRef, GenerationResult
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_generation import (
+from worldfoundry.evals.api import ArtifactRef, GenerationResult
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_generation import (
     get_benchmark_generation_adapter,
 )
-from worldfoundry.evaluation.tasks.execution.runners.t2v_compbench import (
+from worldfoundry.evals.tasks.execution.runners.t2v_compbench import (
     run_t2v_compbench_official_runner as runner_module,
 )
-from worldfoundry.evaluation.tasks.execution.runners.t2v_compbench.run_t2v_compbench_official_runner import (
+from worldfoundry.evals.tasks.execution.runners.t2v_compbench.run_t2v_compbench_official_runner import (
     build_metric_rows,
     normalize_t2v_compbench_results,
 )
-from worldfoundry.evaluation.tasks.execution.runners.t2v_compbench.t2v_compbench_prompts import (
+from worldfoundry.evals.tasks.execution.runners.t2v_compbench.t2v_compbench_prompts import (
     CANONICAL_PROMPT_COUNT,
     CATEGORY_ORDER,
     GENERATION_MANIFEST_NAME,

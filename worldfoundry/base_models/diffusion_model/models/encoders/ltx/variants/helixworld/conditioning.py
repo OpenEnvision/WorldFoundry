@@ -32,7 +32,8 @@ class HelixWorldConditioner:
             raise ValueError("supply video, audio and joint descriptions or a canonical HelixWorld triplet caption")
         conditioning = self.text_conditioner.encode(replace(request, prompt=prompts), device=device, dtype=dtype)
         return Conditioning(
-            positive=conditioning.positive, negative=conditioning.negative,
+            positive=conditioning.positive,
+            negative=conditioning.negative,
             shared={**conditioning.shared, "video_control": control},
         )
 

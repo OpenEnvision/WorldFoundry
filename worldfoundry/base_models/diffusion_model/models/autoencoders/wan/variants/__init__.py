@@ -11,4 +11,3 @@ DreamX-World VAE38.
 Recipes should prefer :class:`~..component.WanVideoDecoder`
 unless the checkpoint requires one of these shapes.
 """
-

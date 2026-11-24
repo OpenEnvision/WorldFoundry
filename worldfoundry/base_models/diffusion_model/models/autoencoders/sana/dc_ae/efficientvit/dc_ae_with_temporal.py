@@ -28,7 +28,8 @@ This is still the Sana DC-AE family, not a Wan causal VAE.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
+from typing import Optional as Optional
 
 import torch
 import torch.nn as nn
@@ -53,7 +54,6 @@ from ..nn.ops_3d import (
 
 @dataclass
 class DCAEWithTemporalEncoderConfig:
-    """Dcae with temporal encoder config implementation."""
     in_channels: int = MISSING
     latent_channels: int = MISSING
 
@@ -63,10 +63,8 @@ class DCAEWithTemporalEncoderConfig:
     block_type: Any = "ResBlock3d@3@1"  # spatial kernel size 3, temporal kernel size 1
     norm: Any = "trms2d"
     act: str = "silu"
-    downsample_block_type: Any = (
-        "ConvPixelUnshuffle@2@1@3@1"  # spatial factor 2, temporal factor 1, spatial kernel size 3, temporal kernel size 1
-    )
-    downsample_shortcut: Optional[str] = "averaging"
+    downsample_block_type: Any = "ConvPixelUnshuffle@2@1@3@1"  # spatial factor 2, temporal factor 1, spatial kernel size 3, temporal kernel size 1
+    downsample_shortcut: str | None = "averaging"
     project_out_block_type: str = "ConvLayer3d@3@1"  # spatial kernel size 3, temporal kernel size 1
 
     zero_out: bool = False
@@ -74,7 +72,6 @@ class DCAEWithTemporalEncoderConfig:
 
 @dataclass
 class DCAEWithTemporalDecoderConfig:
-    """Dcae with temporal decoder config implementation."""
     in_channels: int = MISSING
     latent_channels: int = MISSING
 
@@ -98,7 +95,6 @@ class DCAEWithTemporalDecoderConfig:
 
 @dataclass
 class DCAEWithTemporalConfig:
-    """Dcae with temporal config implementation."""
     in_channels: int = 3
     latent_channels: int = 32
     encoder: DCAEWithTemporalEncoderConfig = field(
@@ -116,46 +112,34 @@ class DCAEWithTemporalConfig:
 
     num_pad_frames: int = 0
 
-    pretrained_path: Optional[str] = None
+    pretrained_path: str | None = None
 
     zero_out: bool = False
     use_feature_cache: bool = False
 
-    encode_temporal_tile_size: Optional[int] = None
-    encode_temporal_tile_latent_size: Optional[int] = None
-    decode_temporal_tile_size: Optional[int] = None
-    decode_temporal_tile_latent_size: Optional[int] = None
+    encode_temporal_tile_size: int | None = None
+    encode_temporal_tile_latent_size: int | None = None
+    decode_temporal_tile_size: int | None = None
+    decode_temporal_tile_latent_size: int | None = None
 
     # spatial tiling
     encode_temporal_tile_overlap_factor: float = 0.0
     decode_temporal_tile_overlap_factor: float = 0.0
 
-    spatial_tile_size: Optional[int] = None
+    spatial_tile_size: int | None = None
     spatial_tile_overlap_factor: float = 0.0
 
     # scaling factor
-    scaling_factor: Optional[float] = None
+    scaling_factor: float | None = None
     # cache_dir
-    cache_dir: Optional[str] = None
+    cache_dir: str | None = None
 
     verbose: bool = False
 
 
 def build_downsample_block(
-    block_type: str, in_channels: int, out_channels: int, shortcut: Optional[str], zero_out: bool = False
+    block_type: str, in_channels: int, out_channels: int, shortcut: str | None, zero_out: bool = False
 ) -> nn.Module:
-    """Build downsample block.
-
-    Args:
-        block_type: The block type.
-        in_channels: The in channels.
-        out_channels: The out channels.
-        shortcut: The shortcut.
-        zero_out: The zero out.
-
-    Returns:
-        The return value.
-    """
     cfg = block_type.split("@")
     block_name, spatial_factor, temporal_factor = cfg[0], int(cfg[1]), int(cfg[2])
     if block_name in ["ConvPixelUnshuffle", "CausalConvPixelUnshuffle"]:
@@ -200,20 +184,8 @@ def build_downsample_block(
 
 
 def build_upsample_block(
-    block_type: str, in_channels: int, out_channels: int, shortcut: Optional[str], zero_out: bool = False
+    block_type: str, in_channels: int, out_channels: int, shortcut: str | None, zero_out: bool = False
 ) -> nn.Module:
-    """Build upsample block.
-
-    Args:
-        block_type: The block type.
-        in_channels: The in channels.
-        out_channels: The out channels.
-        shortcut: The shortcut.
-        zero_out: The zero out.
-
-    Returns:
-        The return value.
-    """
     cfg = block_type.split("@")
     block_name, spatial_factor, temporal_factor = cfg[0], int(cfg[1]), int(cfg[2])
     if block_name in ["ConvPixelShuffle", "CausalConvPixelShuffle"]:
@@ -259,19 +231,7 @@ def build_upsample_block(
     return block
 
 
-def build_block(block_type: str, channels: int, norm: Optional[str], act: Optional[str], zero_out: bool) -> nn.Module:
-    """Build block.
-
-    Args:
-        block_type: The block type.
-        channels: The channels.
-        norm: The norm.
-        act: The act.
-        zero_out: The zero out.
-
-    Returns:
-        The return value.
-    """
+def build_block(block_type: str, channels: int, norm: str | None, act: str | None, zero_out: bool) -> nn.Module:
     cfg = block_type.split("@")
     block_name = cfg[0]
     if block_name in ["ResBlock3d", "CausalResBlock3d"]:
@@ -314,19 +274,6 @@ def build_block(block_type: str, channels: int, norm: Optional[str], act: Option
 def build_stage_main(
     width: int, depth: int, block_type: str | list[str], norm: str, act: str, zero_out: bool = False
 ) -> list[nn.Module]:
-    """Build stage main.
-
-    Args:
-        width: The width.
-        depth: The depth.
-        block_type: The block type.
-        norm: The norm.
-        act: The act.
-        zero_out: The zero out.
-
-    Returns:
-        The return value.
-    """
     assert isinstance(block_type, str) or (isinstance(block_type, list) and depth == len(block_type))
     stage = []
     for d in range(depth):
@@ -343,13 +290,6 @@ def build_stage_main(
 
 
 def build_encoder_project_in_block(block_type: str, in_channels: int, out_channels: int):
-    """Build encoder project in block.
-
-    Args:
-        block_type: The block type.
-        in_channels: The in channels.
-        out_channels: The out channels.
-    """
     block = build_downsample_block(
         block_type=block_type, in_channels=in_channels, out_channels=out_channels, shortcut=None
     )
@@ -357,13 +297,6 @@ def build_encoder_project_in_block(block_type: str, in_channels: int, out_channe
 
 
 def build_encoder_project_out_block(block_type: str, in_channels: int, out_channels: int):
-    """Build encoder project out block.
-
-    Args:
-        block_type: The block type.
-        in_channels: The in channels.
-        out_channels: The out channels.
-    """
     cfg = block_type.split("@")
     block_name = cfg[0]
     if block_name in ["ConvLayer3d", "CausalConvLayer3d"]:
@@ -399,13 +332,6 @@ def build_encoder_project_out_block(block_type: str, in_channels: int, out_chann
 
 
 def build_decoder_project_in_block(block_type: str, in_channels: int, out_channels: int):
-    """Build decoder project in block.
-
-    Args:
-        block_type: The block type.
-        in_channels: The in channels.
-        out_channels: The out channels.
-    """
     cfg = block_type.split("@")
     block_name = cfg[0]
     if block_name in ["ConvLayer3d", "CausalConvLayer3d"]:
@@ -441,17 +367,8 @@ def build_decoder_project_in_block(block_type: str, in_channels: int, out_channe
 
 
 def build_decoder_project_out_block(
-    block_type: str, in_channels: int, out_channels: int, norm: Optional[str], act: Optional[str]
+    block_type: str, in_channels: int, out_channels: int, norm: str | None, act: str | None
 ):
-    """Build decoder project out block.
-
-    Args:
-        block_type: The block type.
-        in_channels: The in channels.
-        out_channels: The out channels.
-        norm: The norm.
-        act: The act.
-    """
     layers: list[nn.Module] = [
         build_norm(norm, in_channels),
         build_act(act),
@@ -461,13 +378,7 @@ def build_decoder_project_out_block(
 
 
 class DCAEWithTemporalEncoder(nn.Module):
-    """Dcae with temporal encoder implementation."""
     def __init__(self, cfg: DCAEWithTemporalEncoderConfig):
-        """Init.
-
-        Args:
-            cfg: The cfg.
-        """
         super().__init__()
         self.cfg = cfg
 
@@ -490,7 +401,7 @@ class DCAEWithTemporalEncoder(nn.Module):
         )
 
         self.stages: list[OpSequential3d] = []
-        for stage_id, (width, depth) in enumerate(zip(cfg.width_list, cfg.depth_list)):
+        for stage_id, (width, depth) in enumerate(zip(cfg.width_list, cfg.depth_list, strict=False)):
             block_type = cfg.block_type[stage_id] if isinstance(cfg.block_type, list) else cfg.block_type
             norm = cfg.norm[stage_id] if isinstance(cfg.norm, list) else cfg.norm
             stage = build_stage_main(
@@ -527,19 +438,9 @@ class DCAEWithTemporalEncoder(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        feature_cache: Optional[dict[str, torch.Tensor]] = None,
-        feature_key: Optional[str] = None,
+        feature_cache: dict[str, torch.Tensor] | None = None,
+        feature_key: str | None = None,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            feature_cache: The feature cache.
-            feature_key: The feature key.
-
-        Returns:
-            The return value.
-        """
         # x: (B, C, T, H, W)
         x = self.project_in(x, feature_cache, feature_key + "project_in." if feature_key is not None else None)
         for stage_id, stage in enumerate(self.stages):
@@ -551,13 +452,7 @@ class DCAEWithTemporalEncoder(nn.Module):
 
 
 class DCAEWithTemporalDecoder(nn.Module):
-    """Dcae with temporal decoder implementation."""
     def __init__(self, cfg: DCAEWithTemporalDecoderConfig):
-        """Init.
-
-        Args:
-            cfg: The cfg.
-        """
         super().__init__()
         self.cfg = cfg
 
@@ -582,7 +477,7 @@ class DCAEWithTemporalDecoder(nn.Module):
         self.stages: list[OpSequential3d] = []
         self.spatial_compression_ratio = 1
         self.temporal_compression_ratio = 1
-        for stage_id, (width, depth) in reversed(list(enumerate(zip(cfg.width_list, cfg.depth_list)))):
+        for stage_id, (width, depth) in reversed(list(enumerate(zip(cfg.width_list, cfg.depth_list, strict=False)))):
             stage = []
             if stage_id < num_stages - 1 and depth > 0:
                 upsample_block_type = (
@@ -625,19 +520,9 @@ class DCAEWithTemporalDecoder(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        feature_cache: Optional[dict[str, torch.Tensor]] = None,
-        feature_key: Optional[str] = None,
+        feature_cache: dict[str, torch.Tensor] | None = None,
+        feature_key: str | None = None,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            feature_cache: The feature cache.
-            feature_key: The feature key.
-
-        Returns:
-            The return value.
-        """
         # x: (B, C, T, H, W)
         x = self.project_in(x, feature_cache, feature_key + "project_in." if feature_key is not None else None)
         for stage_id, stage in reversed(list(enumerate(self.stages))):
@@ -649,13 +534,7 @@ class DCAEWithTemporalDecoder(nn.Module):
 
 
 class DCAEWithTemporal(nn.Module):
-    """Dcae with temporal implementation."""
     def __init__(self, cfg: DCAEWithTemporalConfig):
-        """Init.
-
-        Args:
-            cfg: The cfg.
-        """
         super().__init__()
         self.cfg = cfg
         self.encoder = DCAEWithTemporalEncoder(cfg.encoder)
@@ -663,33 +542,13 @@ class DCAEWithTemporal(nn.Module):
 
     @property
     def spatial_compression_ratio(self) -> int:
-        """Spatial compression ratio.
-
-        Returns:
-            The return value.
-        """
         return self.decoder.spatial_compression_ratio
 
     @property
     def temporal_compression_ratio(self) -> int:
-        """Temporal compression ratio.
-
-        Returns:
-            The return value.
-        """
         return self.decoder.temporal_compression_ratio
 
     def blend_t(self, a: torch.Tensor, b: torch.Tensor, blend_extent: int) -> torch.Tensor:
-        """Blend t.
-
-        Args:
-            a: The a.
-            b: The b.
-            blend_extent: The blend extent.
-
-        Returns:
-            The return value.
-        """
         blend_extent = min(a.shape[-3], b.shape[-3], blend_extent)
         for x in range(blend_extent):
             blend_ratio = x / blend_extent
@@ -697,46 +556,18 @@ class DCAEWithTemporal(nn.Module):
         return b
 
     def blend_w(self, a: torch.Tensor, b: torch.Tensor, blend_extent: int) -> torch.Tensor:
-        """Blend w.
-
-        Args:
-            a: The a.
-            b: The b.
-            blend_extent: The blend extent.
-
-        Returns:
-            The return value.
-        """
         blend_extent = min(a.shape[-2], b.shape[-2], blend_extent)
         for y in range(blend_extent):
             b[..., y, :] = a[..., -blend_extent + y, :] * (1 - y / blend_extent) + b[..., y, :] * (y / blend_extent)
         return b
 
     def blend_h(self, a: torch.Tensor, b: torch.Tensor, blend_extent: int) -> torch.Tensor:
-        """Blend h.
-
-        Args:
-            a: The a.
-            b: The b.
-            blend_extent: The blend extent.
-
-        Returns:
-            The return value.
-        """
         blend_extent = min(a.shape[-1], b.shape[-1], blend_extent)
         for x in range(blend_extent):
             b[..., x] = a[..., -blend_extent + x] * (1 - x / blend_extent) + b[..., x] * (x / blend_extent)
         return b
 
     def temporal_tiled_encode(self, x: torch.Tensor) -> torch.Tensor:
-        """Temporal tiled encode.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         overlap_size = int(self.cfg.encode_temporal_tile_size * (1 - self.cfg.encode_temporal_tile_overlap_factor))
         blend_extent = int(self.cfg.encode_temporal_tile_latent_size * self.cfg.encode_temporal_tile_overlap_factor)
         t_limit = self.cfg.encode_temporal_tile_latent_size - blend_extent
@@ -747,7 +578,7 @@ class DCAEWithTemporal(nn.Module):
         row = []
         for i in tqdm(range(0, x.shape[2], overlap_size), desc="Tiled Encode", disable=not self.cfg.verbose):
             tile = x[:, :, i : i + self.cfg.encode_temporal_tile_size, :, :]
-            tile = self.encoder(tile, feature_cache, f"encoder." if self.cfg.use_feature_cache else None)
+            tile = self.encoder(tile, feature_cache, "encoder." if self.cfg.use_feature_cache else None)
             row.append(tile)
         result_row = []
         for i, tile in enumerate(row):
@@ -758,14 +589,6 @@ class DCAEWithTemporal(nn.Module):
         return torch.cat(result_row, dim=2)
 
     def spatial_tiled_encode(self, x: torch.Tensor) -> torch.Tensor:
-        """Spatial tiled encode.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         height, width = x.shape[-2:]
         latent_height = height // self.spatial_compression_ratio
         latent_width = width // self.spatial_compression_ratio
@@ -813,14 +636,6 @@ class DCAEWithTemporal(nn.Module):
         return encoded
 
     def encode_single(self, x: torch.Tensor) -> torch.Tensor:
-        """Encode single.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         # x: (B, C, T, H, W)
         # Pad image data
         if x.ndim == 4:
@@ -840,25 +655,9 @@ class DCAEWithTemporal(nn.Module):
         return x
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
-        """Encode.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         return torch.cat([self.encode_single(x[i : i + 1]) for i in range(x.shape[0])], dim=0)
 
     def temporal_tiled_decode(self, z: torch.Tensor) -> torch.Tensor:
-        """Temporal tiled decode.
-
-        Args:
-            z: The z.
-
-        Returns:
-            The return value.
-        """
         overlap_size = int(
             self.cfg.decode_temporal_tile_latent_size * (1 - self.cfg.decode_temporal_tile_overlap_factor)
         )
@@ -870,7 +669,7 @@ class DCAEWithTemporal(nn.Module):
         row = []
         for i in tqdm(range(0, z.shape[2], overlap_size), desc="Tiled Decode", disable=not self.cfg.verbose):
             tile = z[:, :, i : i + self.cfg.decode_temporal_tile_latent_size, :, :]
-            decoded = self.decoder(tile, feature_cache, f"decoder." if self.cfg.use_feature_cache else None)
+            decoded = self.decoder(tile, feature_cache, "decoder." if self.cfg.use_feature_cache else None)
             row.append(decoded)
         result_row = []
         for i, tile in enumerate(row):
@@ -881,14 +680,6 @@ class DCAEWithTemporal(nn.Module):
         return torch.cat(result_row, dim=2)
 
     def spatial_tiled_decode(self, z: torch.Tensor) -> torch.Tensor:
-        """Spatial tiled decode.
-
-        Args:
-            z: The z.
-
-        Returns:
-            The return value.
-        """
         height, width = z.shape[-2:]
 
         spatial_tile_size = self.cfg.spatial_tile_size
@@ -929,14 +720,6 @@ class DCAEWithTemporal(nn.Module):
         return decoded
 
     def decode_single(self, z: torch.Tensor) -> torch.Tensor:
-        """Decode single.
-
-        Args:
-            z: The z.
-
-        Returns:
-            The return value.
-        """
         if self.cfg.spatial_tile_size is not None:
             z = self.spatial_tiled_decode(z)
         elif self.cfg.decode_temporal_tile_size is not None:
@@ -948,25 +731,9 @@ class DCAEWithTemporal(nn.Module):
         return z
 
     def decode(self, x: torch.Tensor) -> torch.Tensor:
-        """Decode.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         return torch.cat([self.decode_single(x[i : i + 1]) for i in range(x.shape[0])], dim=0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         # x: (B, C, T, H, W)
         z = self.encode(x)
         out = self.decode(z)
@@ -974,15 +741,6 @@ class DCAEWithTemporal(nn.Module):
 
 
 def st_dc_ae_f32t4c32_chunked_causal(name: str, pretrained_path: str) -> DCAEWithTemporalConfig:
-    """St dc ae f32t4c32 chunked causal.
-
-    Args:
-        name: The name.
-        pretrained_path: The pretrained path.
-
-    Returns:
-        The return value.
-    """
     spatial_tile_overlap_factor = 0.0
     depth_list = "[0,5,10,4,4,4,4]"
     if name == "st-dc-ae-f32t4c32":
@@ -1018,17 +776,17 @@ def st_dc_ae_f32t4c32_chunked_causal(name: str, pretrained_path: str) -> DCAEWit
         raise ValueError(f"model {name} is not supported")
 
     cfg_str = (
-        f"latent_channels=32 use_feature_cache=True encode_temporal_tile_size={chunk_size} encode_temporal_tile_latent_size={chunk_size//4} decode_temporal_tile_size={chunk_size} decode_temporal_tile_latent_size={chunk_size//4} "
+        f"latent_channels=32 use_feature_cache=True encode_temporal_tile_size={chunk_size} encode_temporal_tile_latent_size={chunk_size // 4} decode_temporal_tile_size={chunk_size} decode_temporal_tile_latent_size={chunk_size // 4} "
         f"spatial_tile_size={spatial_tile_size} spatial_tile_overlap_factor={spatial_tile_overlap_factor} "
         f"encoder.project_in_block_type=ChunkedCausalConvPixelUnshuffle@2@1@3@3@{chunk_size} "
         f"encoder.depth_list={depth_list} encoder.width_list=[128,256,512,512,1024,1024,1024] "
-        f"encoder.block_type=[ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size//4}] "
+        f"encoder.block_type=[ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size // 4}] "
         f"encoder.downsample_block_type=[ChunkedCausalConvPixelUnshuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelUnshuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelUnshuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelUnshuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelUnshuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelUnshuffle@1@4@3@3@{chunk_size}] "
-        f"encoder.project_out_block_type=ChunkedCausalConvLayer3d@3@3@{chunk_size//4} "
+        f"encoder.project_out_block_type=ChunkedCausalConvLayer3d@3@3@{chunk_size // 4} "
         f"decoder.depth_list={depth_list} decoder.width_list=[128,256,512,512,1024,1024,1024] "
-        f"decoder.project_in_block_type=ChunkedCausalConvLayer3d@3@3@{chunk_size//4} "
-        f"decoder.block_type=[ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size//4}] "
-        f"decoder.upsample_block_type=[ChunkedCausalConvPixelShuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelShuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelShuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelShuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelShuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelShuffle@1@4@3@3@{chunk_size//4}] "
+        f"decoder.project_in_block_type=ChunkedCausalConvLayer3d@3@3@{chunk_size // 4} "
+        f"decoder.block_type=[ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size},ChunkedCausalResBlock3d@3@3@{chunk_size // 4}] "
+        f"decoder.upsample_block_type=[ChunkedCausalConvPixelShuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelShuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelShuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelShuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelShuffle@2@1@3@3@{chunk_size},ChunkedCausalConvPixelShuffle@1@4@3@3@{chunk_size // 4}] "
         f"decoder.project_out_block_type=ChunkedCausalConvPixelShuffle@2@1@3@3@{chunk_size} "
         f"scaling_factor={scaling_factor}"
     )

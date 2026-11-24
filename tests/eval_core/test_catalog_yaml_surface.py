@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.catalog.yaml import load_yaml_mapping_with_extends
+from worldfoundry.evals.tasks.catalog.yaml import load_yaml_mapping_with_extends
 
 
 def test_catalog_yaml_extends_resolves_relative_paths(tmp_path: Path) -> None:
@@ -45,4 +45,4 @@ metadata:
 
 def test_native_task_loader_package_is_removed() -> None:
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("worldfoundry.evaluation.tasks.native")
+        importlib.import_module("worldfoundry.evals.tasks.native")

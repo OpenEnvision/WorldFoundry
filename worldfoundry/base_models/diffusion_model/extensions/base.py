@@ -49,7 +49,7 @@ class DiffusionRunContext:
     """
 
     request: DiffusionRequest
-    components: "RunnerComponents"
+    components: RunnerComponents
     conditioning: Conditioning
     generator: torch.Generator
     request_id: str = field(default_factory=lambda: uuid.uuid4().hex)

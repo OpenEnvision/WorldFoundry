@@ -114,7 +114,7 @@ class SamaWanPipeline(WanStagedPipeline):
             context_negative = self.encode_prompt(negative_prompt, positive=False)["context"]
 
         self.load_models_to_device(["dit"])
-        for progress_id, timestep in enumerate(progress_bar_cmd(self.scheduler.timesteps)):
+        for _progress_id, timestep in enumerate(progress_bar_cmd(self.scheduler.timesteps)):
             timestep_batch = timestep.to(device=self.device, dtype=self.torch_dtype).reshape(1)
             positive, semantic_positive = self.dit(
                 x=latents,

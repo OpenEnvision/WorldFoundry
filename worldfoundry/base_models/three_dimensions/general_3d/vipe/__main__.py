@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Sequence
+from collections.abc import Sequence
 
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.assets import prepare_pose_assets
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext.build import native_extension_status

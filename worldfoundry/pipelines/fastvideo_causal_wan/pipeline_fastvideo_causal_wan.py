@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from PIL import Image
@@ -49,9 +50,9 @@ class FastVideoCausalWanPipeline(NativeVisualDiffusionPipeline):
     DEFAULT_GUIDANCE_SCALE = 1.0
     DEFAULT_FPS = 16
     DEFAULT_NEGATIVE_PROMPT = ""
-    DEFAULT_SCHEDULER_OPTIONS = {"shift": 12.0}
+    DEFAULT_SCHEDULER_OPTIONS: Mapping[str, object] = {"shift": 12.0}
 
-    def __call__(
+    def __call__(  # ty: ignore[invalid-method-override]  # model-specific call arguments, passed by keyword
         self,
         prompt: str | list[str] = "",
         images: Any = None,
@@ -73,9 +74,7 @@ class FastVideoCausalWanPipeline(NativeVisualDiffusionPipeline):
         target_height = int(kwargs.get("height") or self.DEFAULT_HEIGHT)
         if target_width <= 0 or target_height <= 0:
             raise ValueError("CausalWan target width and height must be positive")
-        output_width, output_height = _best_output_size(
-            image.width, image.height, target_width * target_height
-        )
+        output_width, output_height = _best_output_size(image.width, image.height, target_width * target_height)
         scale = max(output_width / image.width, output_height / image.height)
         resized = image.resize(
             (round(image.width * scale), round(image.height * scale)),

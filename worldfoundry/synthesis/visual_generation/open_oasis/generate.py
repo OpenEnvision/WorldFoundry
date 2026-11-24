@@ -3,17 +3,24 @@ References:
     - Diffusion Forcing: https://github.com/buoyancy99/diffusion-forcing
 """
 
-import torch
-from dit import DiT_models
-from vae import VAE_models
-from utils import load_prompt, load_actions, sigmoid_beta_schedule, write_video_compat
-from tqdm import tqdm
-from einops import rearrange
-from torch import autocast
-from safetensors.torch import load_model
 import argparse
-from pprint import pprint
 import os
+from pprint import pprint
+
+import torch
+from einops import rearrange
+from safetensors.torch import load_model
+from torch import autocast
+from tqdm import tqdm
+
+from worldfoundry.synthesis.visual_generation.open_oasis.dit import DiT_models
+from worldfoundry.synthesis.visual_generation.open_oasis.utils import (
+    load_actions,
+    load_prompt,
+    sigmoid_beta_schedule,
+    write_video_compat,
+)
+from worldfoundry.synthesis.visual_generation.open_oasis.vae import VAE_models
 
 device = os.environ.get("WORLDFOUNDRY_DEVICE") or ("cuda:0" if torch.cuda.is_available() else "cpu")
 device_type = torch.device(device).type
@@ -75,9 +82,8 @@ def main(args):
     H, W = x.shape[-2:]
     scaling_factor = 0.07843137255
     x = rearrange(x, "b t c h w -> (b t) c h w")
-    with torch.no_grad():
-        with autocast(device_type, dtype=torch.half, enabled=device_type == "cuda"):
-            x = vae.encode(x * 2 - 1).mean * scaling_factor
+    with torch.no_grad(), autocast(device_type, dtype=torch.half, enabled=device_type == "cuda"):
+        x = vae.encode(x * 2 - 1).mean * scaling_factor
     x = rearrange(x, "(b t) (h w) c -> b t c h w", t=n_prompt_frames, h=H // vae.patch_size, w=W // vae.patch_size)
     x = x[:, :n_prompt_frames]
 
@@ -110,9 +116,8 @@ def main(args):
             t_next = t_next[:, start_frame:]
 
             # get model predictions
-            with torch.no_grad():
-                with autocast(device_type, dtype=torch.half, enabled=device_type == "cuda"):
-                    v = model(x_curr, t, actions[:, start_frame : i + 1])
+            with torch.no_grad(), autocast(device_type, dtype=torch.half, enabled=device_type == "cuda"):
+                v = model(x_curr, t, actions[:, start_frame : i + 1])
 
             x_start = alphas_cumprod[t].sqrt() * x_curr - (1 - alphas_cumprod[t]).sqrt() * v
             x_noise = ((1 / alphas_cumprod[t]).sqrt() * x_curr - x_start) / (1 / alphas_cumprod[t] - 1).sqrt()

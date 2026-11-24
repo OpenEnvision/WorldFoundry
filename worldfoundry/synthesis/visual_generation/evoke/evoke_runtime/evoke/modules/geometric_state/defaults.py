@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 GEO_PROMPT_TRIGGER = "camctl23x."
 GEO_DEFAULT_LORA_PATH = "checkpoints/geometric_state/visible_lora_state_step1000.safetensors"
 

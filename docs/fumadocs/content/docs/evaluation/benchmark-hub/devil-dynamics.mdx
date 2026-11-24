@@ -1,6 +1,6 @@
 ---
 title: DEVIL Dynamics
-description: "NeurIPS 2024 dynamics-centric T2V bench: range, controllability, dynamics-conditioned quality. WorldFoundry imports official rows or artifact scores; it does not invent a board."
+description: "NeurIPS 2024 dynamics-centric T2V bench: range, controllability, dynamics-conditioned quality. WorldFoundry imports official rows or artifact scores."
 ---
 
 DEVIL (UCAS and Baidu; NeurIPS 2024) evaluates text-to-video models on **dynamics**, not beauty. Prompts are stratified by dynamics grade; scores at several temporal granularities become three protocol metrics that the paper reports at **>90% human correlation**:
@@ -13,14 +13,14 @@ DEVIL (UCAS and Baidu; NeurIPS 2024) evaluates text-to-video models on **dynamic
 
 Paper: [DEVIL](https://arxiv.org/abs/2407.01094). Code: [MingXiangL/DEVIL](https://github.com/MingXiangL/DEVIL).
 
-WorldFoundry **materializes metric rows from staged artifact scores** (`WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR`) or **imports official JSON**. Full recomputation still needs upstream checkpoints (RAFT, CLIP ViT-L/14 and ViT-B/32, ViCLIP, DINOv2, AMT, dynamics regression). The Gemini naturalness component is not part of local recomputation.
+WorldFoundry **builds metric rows from staged artifact scores** (`WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR`) or **imports official JSON**. Full recomputation needs upstream checkpoints (RAFT, CLIP ViT-L/14 and ViT-B/32, ViCLIP, DINOv2, AMT, dynamics regression). The Gemini naturalness component is not part of local recomputation.
 
 <BenchmarkPageSections id="devil-dynamics" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id devil-dynamics \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -31,7 +31,7 @@ worldfoundry-eval zoo benchmark-run \
 
 Generate one video per official DEVIL prompt; grade stratification comes from official prompt metadata. Default import: `WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH`. Runtime scores: `WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/devil-dynamics.yaml`, `worldfoundry/evaluation/tasks/execution/runners/devil_dynamics`.
+Manifest: `worldfoundry/data/benchmarks/tasks/external/devil-dynamics.yaml`.
 
 Outputs include `scorecard.json` (primary `devil_dynamics_average`) and `raw_metric_table.jsonl`.
 

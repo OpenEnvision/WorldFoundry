@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 import dataclasses
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -224,7 +224,7 @@ class RiseRuntime:
 
         import torch
 
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
         from worldfoundry.synthesis.action_generation.openpi import config as openpi_config
         from worldfoundry.synthesis.action_generation.openpi import policy_loader
         from worldfoundry.synthesis.action_generation.openpi.modeling.pi0_config import Pi0Config
@@ -359,11 +359,7 @@ def predict_action(
         camera_keys=tuple(str(item) for item in options["camera_keys"]),
         image_width=int(options.get("image_width") or 320),
         image_height=int(options.get("image_height") or 240),
-        action_advantage=float(
-            options.get("action_advantage")
-            if options.get("action_advantage") is not None
-            else 1.0
-        ),
+        action_advantage=float(options.get("action_advantage") if options.get("action_advantage") is not None else 1.0),
         advantage_bins=int(options.get("advantage_bins") or 10),
     )
     if config.num_inference_steps <= 0:

@@ -1,8 +1,8 @@
 {
   "generatedFrom": "worldfoundry/data/benchmarks/catalog + tasks/external + recorded About facts + curated docs overrides",
-  "benchmarkCount": 74,
+  "benchmarkCount": 75,
   "leaderboardIngestedIds": [],
-  "leaderboardPlaceholderCount": 74,
+  "leaderboardPlaceholderCount": 75,
   "pages": {
     "ai2thor": {
       "id": "ai2thor",
@@ -28,11 +28,11 @@
         },
         {
           "id": "ai2thor_default",
-          "name": "WorldFoundry wiring scenes",
-          "nameZh": "WorldFoundry 接线场景",
+          "name": "WorldFoundry smoke-check scenes",
+          "nameZh": "WorldFoundry 冒烟检查场景",
           "kind": "split",
-          "description": "In-tree eval configs use FloorPlan1–3 only to prove Unity closed-loop wiring. Not an ALFRED or TEACh split.",
-          "descriptionZh": "仓内评测配置只用 FloorPlan1–3 验证 Unity 闭环接线，不是 ALFRED / TEACh 划分。"
+          "description": "Bundled eval configs use FloorPlan1–3 as Unity closed-loop smoke checks. Not an ALFRED or TEACh split.",
+          "descriptionZh": "附带的评测配置用 FloorPlan1–3 做 Unity 闭环冒烟检查，不是 ALFRED / TEACh 划分。"
         },
         {
           "id": "language-stacks",
@@ -67,10 +67,10 @@
         ],
         "license": "Apache-2.0",
         "notes": [
-          "WorldFoundry boots Unity for FloorPlan wiring or imports a rollout export. It does not bundle ALFRED/TEACh assets or invent a public AI2-THOR model board."
+          "WorldFoundry boots Unity for the FloorPlan smoke checks or imports a rollout export. ALFRED/TEACh assets are not bundled."
         ],
         "notesZh": [
-          "WorldFoundry 可为接线启动 Unity，或导入 rollout 导出。不附带 ALFRED/TEACh 资产，也不编造公开模型榜。"
+          "WorldFoundry 可为 FloorPlan 冒烟检查启动 Unity，或导入 rollout 导出。不附带 ALFRED/TEACh 资产。"
         ],
         "notApplicable": false
       },
@@ -284,10 +284,10 @@
         ],
         "license": "MIT",
         "notes": [
-          "Code repo is MIT. Dataset materialization follows the project-page HTTP release. Hugging Face copies in the wild are third-party conversions."
+          "Code repo is MIT. Download the dataset from the project-page HTTP release. Hugging Face copies in the wild are third-party conversions."
         ],
         "notesZh": [
-          "代码仓库为 MIT。数据就位遵循项目页 HTTP 发布。网上的 Hugging Face 副本是第三方转换。"
+          "代码仓库为 MIT。数据集从项目页 HTTP 发布下载。网上的 Hugging Face 副本是第三方转换。"
         ],
         "notApplicable": false
       },
@@ -716,7 +716,7 @@
         {
           "id": "om",
           "name": "Object Motion (OM)",
-          "nameZh": "物体运动 (OM)",
+          "nameZh": "物体运动（OM）",
           "kind": "axis",
           "description": "Recall the last pick or place when the current frame is aliased.",
           "descriptionZh": "当前帧存在歧义时，回忆上一次抓取或放置。"
@@ -724,7 +724,7 @@
         {
           "id": "os",
           "name": "Object Sequence (OS)",
-          "nameZh": "物体序列 (OS)",
+          "nameZh": "物体序列（OS）",
           "kind": "axis",
           "description": "Count repeated pick-and-place (3× / 5× / 7×) that vision alone cannot disambiguate.",
           "descriptionZh": "统计视觉无法消歧的重复抓放次数（3× / 5× / 7×）。"
@@ -732,7 +732,7 @@
         {
           "id": "or",
           "name": "Object Relations (OR)",
-          "nameZh": "物体关系 (OR)",
+          "nameZh": "物体关系（OR）",
           "kind": "axis",
           "description": "Track temporal order when swapping or rotating identical bowls across plates.",
           "descriptionZh": "在相同碗盘间交换或轮转时跟踪时间顺序。"
@@ -740,7 +740,7 @@
         {
           "id": "oo",
           "name": "Object Occlusion (OO)",
-          "nameZh": "物体遮挡 (OO)",
+          "nameZh": "物体遮挡（OO）",
           "kind": "axis",
           "description": "Remember which basket hid which object after it leaves the view.",
           "descriptionZh": "物体离开视野后，记住哪个篮子藏了哪个物体。"
@@ -931,10 +931,10 @@
         ],
         "license": "mit",
         "notes": [
-          "Paper analysis of ten models reports drops from ~95% to below 30% under modest camera / initial-state shifts. That is an upstream finding, not a WorldFoundry board."
+          "Paper analysis of ten models reports drops from ~95% to below 30% under modest camera / initial-state shifts."
         ],
         "notesZh": [
-          "论文对十个模型的分析报告：在不大的相机 / 初始状态扰动下，成功率从约 95% 降到 30% 以下。那是上游结论，不是 WorldFoundry 榜单。"
+          "论文对十个模型的分析报告：在不大的相机 / 初始状态扰动下，成功率从约 95% 降到 30% 以下。"
         ],
         "notApplicable": false
       },
@@ -1065,10 +1065,10 @@
         ],
         "license": "mit",
         "notes": [
-          "The paper reports 90%+ stock-LIBERO scores collapsing to 0% under generalized PRO settings. That is an upstream finding, not a WorldFoundry board."
+          "The paper reports 90%+ stock-LIBERO scores collapsing to 0% under generalized PRO settings."
         ],
         "notesZh": [
-          "论文报告原版 LIBERO 上 90%+ 的分数在泛化 PRO 设置下塌到 0%。那是上游结论，不是 WorldFoundry 榜单。"
+          "论文报告原版 LIBERO 上 90%+ 的分数在泛化 PRO 设置下塌到 0%。"
         ],
         "notApplicable": false
       },
@@ -1196,10 +1196,10 @@
         ],
         "license": "mit",
         "notes": [
-          "WorldFoundry can import official eval_result trees and also wire closed-loop execution; suite choice and seeds must match the upstream protocol to compare."
+          "WorldFoundry can import official eval_result trees and also run closed-loop execution; suite choice and seeds must match the upstream protocol to compare."
         ],
         "notesZh": [
-          "WorldFoundry 可以导入官方 eval_result 树，也可以接线闭环执行；套件选择与随机种子必须匹配上游协议才可比较。"
+          "WorldFoundry 可以导入官方 eval_result 树，也可以运行闭环执行；套件选择与随机种子必须匹配上游协议才可比较。"
         ],
         "notApplicable": false
       },
@@ -1311,10 +1311,10 @@
         ],
         "license": "apache-2.0",
         "notes": [
-          "Simulator execution, policy loading, and rollout collection stay upstream. This page is an official-results importer."
+          "Simulator execution, policy loading, and rollout collection run in the upstream tooling."
         ],
         "notesZh": [
-          "模拟器执行、策略加载与 rollout 采集仍在上游。本页是官方结果导入器。"
+          "模拟器执行、策略加载与 rollout 采集都在上游工具中完成。"
         ],
         "notApplicable": false
       },
@@ -1412,8 +1412,8 @@
         }
       ],
       "data": {
-        "summary": "ICLR 2023 SAPIEN suite: 20 task families, 2,000+ object models, 4M+ demonstration frames. Gym API with multiple controllers. Distinct from the later GPU-parallel maniskill hub card.",
-        "summaryZh": "ICLR 2023 的 SAPIEN 套件：20 个任务族、2,000+ 物体模型、400 万+ 演示帧。Gym API，多种控制器。与后来的 GPU 并行 maniskill Hub 页分开。",
+        "summary": "ICLR 2023 SAPIEN suite: 20 task families, 2,000+ object models, 4M+ demonstration frames. Gym API with multiple controllers. Distinct from the later GPU-parallel ManiSkill benchmark.",
+        "summaryZh": "ICLR 2023 的 SAPIEN 套件：20 个任务族、2,000+ 物体模型、400 万+ 演示帧。Gym API，多种控制器。与后来的 GPU 并行 ManiSkill 评测不同。",
         "sizeLabel": "20 task families · 2,000+ objects · 4M+ demo frames",
         "sizeLabelZh": "20 个任务族 · 2,000+ 物体 · 400 万+ 演示帧",
         "count": 20,
@@ -1674,8 +1674,8 @@
         }
       ],
       "data": {
-        "summary": "AIRI / MIPT / HSE tabletop memory bench on ManiSkill. ICLR 2026 paper: 32 RL tasks in 12 groups across four memory types. The later VLA release grows to 90 language-conditioned tasks (10 memory types) with 22,500 oracle trajectories. WorldFoundry does not pick a release for you — declare RL vs VLA on the export.",
-        "summaryZh": "AIRI / MIPT / HSE 的桌面记忆评测，基于 ManiSkill。ICLR 2026 论文：32 个 RL 任务、12 组、四类记忆。后续 VLA 发布扩展为 90 个语言条件任务（10 类记忆）与 22500 条 oracle 轨迹。WorldFoundry 不替你选定发布——在导出上声明 RL 还是 VLA。",
+        "summary": "AIRI / MIPT / HSE tabletop memory bench on ManiSkill. ICLR 2026 paper: 32 RL tasks in 12 groups across four memory types. The later VLA release grows to 90 language-conditioned tasks (10 memory types) with 22,500 oracle trajectories. Declare RL vs VLA on the export.",
+        "summaryZh": "AIRI / MIPT / HSE 的桌面记忆评测，基于 ManiSkill。ICLR 2026 论文：32 个 RL 任务、12 组、四类记忆。后续 VLA 发布扩展为 90 个语言条件任务（10 类记忆）与 22500 条 oracle 轨迹。请在导出上声明 RL 还是 VLA。",
         "sizeLabel": "32 RL tasks; 90 VLA tasks",
         "sizeLabelZh": "32 个 RL 任务；90 个 VLA 任务",
         "count": 32,
@@ -1762,7 +1762,7 @@
           "name": "Pick variants",
           "nameZh": "抓取变体",
           "kind": "task",
-          "description": "Pick MSProc, Pick Classic, photorealistic Pick, and Pick Random-Cam. Official sim episodes are 1,000-long; pick budget is 20 seconds.",
+          "description": "Pick MSProc, Pick Classic, photorealistic Pick, and Pick Random-Cam. The official sim ladder has 1,000 episodes; pick budget is 20 seconds.",
           "descriptionZh": "Pick MSProc、Pick Classic、照片级 Pick 与 Pick Random-Cam。官方仿真为 1000 episode；抓取时限 20 秒。"
         },
         {
@@ -1807,10 +1807,10 @@
         ],
         "license": "upstream_terms",
         "notes": [
-          "An official leaderboard exists. This hub has not ingested its rows. WorldFoundry only normalizes a caller-provided export."
+          "WorldFoundry normalizes a caller-provided export. Official rankings are on the Ai2 leaderboard."
         ],
         "notesZh": [
-          "官方 leaderboard 存在。本 Hub 尚未收录其行。WorldFoundry 只归一化调用方提供的导出。"
+          "WorldFoundry 归一化调用方提供的导出。官方排名见 Ai2 leaderboard。"
         ],
         "notApplicable": false
       },
@@ -2043,7 +2043,7 @@
         ],
         "license": "other:noassertion_github_api",
         "notes": [
-          "RoboCasa uses simulator assets and generated policy rollouts rather than a single public HF benchmark table."
+          "RoboCasa evaluates with simulator assets and policy rollouts rather than a public Hugging Face results table."
         ],
         "notesZh": [
           "RoboCasa 使用模拟器资产与策略 rollout，而不是一张公开的 Hugging Face 评测表。"
@@ -2179,7 +2179,7 @@
           "WorldFoundry imports official rollout exports. It does not run the bundled LIBERO simulator or the hierarchical VLM+VLA stack."
         ],
         "notesZh": [
-          "WorldFoundry 导入官方 rollout 导出。仓内不跑捆绑的 LIBERO 模拟器，也不跑分层 VLM+VLA 栈。"
+          "WorldFoundry 导入官方 rollout 导出。它不跑捆绑的 LIBERO 模拟器，也不跑分层 VLM+VLA 栈。"
         ],
         "notApplicable": false
       },
@@ -2269,8 +2269,8 @@
         }
       ],
       "data": {
-        "summary": "ICML 2026 memory-augmented manipulation bench from Michigan, Stanford, and Figure AI. 16 long-horizon tasks (4 suites × 4), 1,600 demonstrations, 770k training timesteps. The paper also releases 14 memory-augmented VLA variants on a π0.5 backbone. Built for history-dependent VLA evaluation, not a single binary pick-and-place bit.",
-        "summaryZh": "ICML 2026 记忆增强操作评测，来自密歇根、斯坦福与 Figure AI。16 个长时程任务（4 套件 × 4）、1600 条演示、77 万训练时间步。论文还发布了基于 π0.5 骨干的 14 个记忆增强 VLA 变体。面向依赖历史的 VLA 评测，不是单一抓放二值位。",
+        "summary": "ICML 2026 memory-augmented manipulation bench from Michigan, Stanford, and Figure AI. 16 long-horizon tasks (4 suites × 4), 1,600 demonstrations, 770k training timesteps. The paper also releases 14 memory-augmented VLA variants on a π0.5 backbone. Built for history-dependent VLA evaluation.",
+        "summaryZh": "ICML 2026 记忆增强操作评测，来自密歇根、斯坦福与 Figure AI。16 个长时程任务（4 套件 × 4）、1600 条演示、77 万训练时间步。论文还发布了基于 π0.5 骨干的 14 个记忆增强 VLA 变体。面向依赖历史的 VLA 评测。",
         "sizeLabel": "16 tasks · 1,600 demos · 770k steps",
         "sizeLabelZh": "16 个任务 · 1600 条演示 · 77 万步",
         "count": 16,
@@ -2398,8 +2398,8 @@
         }
       ],
       "data": {
-        "summary": "50 dual-arm tasks, RoboTwin-OD (731 objects / 147 categories), five embodiments, 100k+ pre-collected trajectories. Official dumps: TianxingChen/RoboTwin2.0 (MIT) and lerobot/robotwin_unified (license under review).",
-        "summaryZh": "50 个双臂任务、RoboTwin-OD（731 物体 / 147 类）、五种本体、10 万+ 预采集轨迹。官方包：TianxingChen/RoboTwin2.0（MIT）与 lerobot/robotwin_unified（许可证待审）。",
+        "summary": "50 dual-arm tasks, RoboTwin-OD (731 objects / 147 categories), five embodiments, 100k+ pre-collected trajectories. Official dumps: TianxingChen/RoboTwin2.0 (MIT) and lerobot/robotwin_unified (no license declared).",
+        "summaryZh": "50 个双臂任务、RoboTwin-OD（731 物体 / 147 类）、五种本体、10 万+ 预采集轨迹。官方包：TianxingChen/RoboTwin2.0（MIT）与 lerobot/robotwin_unified（未声明许可证）。",
         "sizeLabel": "50 tasks · 731 objects · 5 embodiments · 100k+ trajectories",
         "sizeLabelZh": "50 个任务 · 731 个物体 · 5 种本体 · 10 万+ 轨迹",
         "count": 50,
@@ -2437,10 +2437,10 @@
         ],
         "license": "mit",
         "notes": [
-          "Official leaderboard lives at robotwin-platform.github.io/leaderboard. WorldFoundry has not ingested those rows."
+          "Official leaderboard lives at robotwin-platform.github.io/leaderboard."
         ],
         "notesZh": [
-          "官方榜单在 robotwin-platform.github.io/leaderboard。WorldFoundry 尚未收录这些行。"
+          "官方榜单在 robotwin-platform.github.io/leaderboard。"
         ],
         "notApplicable": false
       },
@@ -2575,7 +2575,7 @@
         ],
         "license": "mit",
         "notes": [
-          "SimplerEnv evaluates policy rollouts in simulator; generated result files and rollout logs are normalized by WorldFoundry."
+          "SimplerEnv evaluates policy rollouts in simulation; WorldFoundry normalizes the resulting result files and rollout logs."
         ],
         "notesZh": [
           "SimplerEnv 在模拟器里评测策略 rollout；WorldFoundry 归一化生成的结果文件与 rollout 日志。"
@@ -2781,10 +2781,10 @@
         ],
         "license": "",
         "notes": [
-          "WorldFoundry hosts the official runtime and scores one dimension at a time. It does not invent a 4DWorldBench board."
+          "WorldFoundry hosts the official runtime and scores one dimension at a time."
         ],
         "notesZh": [
-          "WorldFoundry 托管官方 runtime，一次评一个维度。不编造 4DWorldBench 榜单。"
+          "WorldFoundry 托管官方 runtime，一次评一个维度。"
         ],
         "notApplicable": false
       },
@@ -3224,8 +3224,8 @@
         }
       ],
       "data": {
-        "summary": "Orchard: 400 classical-mechanics videos (10 canonical tasks; 9 single-law plus one multi-law composition). Sources are simulated, lab-recorded, and internet footage. Protocol asks for three independent rollouts per case and subtrack; frame 0 is the conditioning frame. The documented Hugging Face GT id is yaorunmao/Apple-PI-GT — not treated as public in this workspace.",
-        "summaryZh": "Orchard：400 段经典力学视频（10 个标准任务；9 个单定律加 1 个多定律组合）。来源含仿真、实验室自录与互联网片段。协议要求每个 case、每个子赛道三次独立 rollout；第 0 帧为条件帧。文档中的 Hugging Face GT id 为 yaorunmao/Apple-PI-GT——本工作区不视为已公开。",
+        "summary": "Orchard: 400 classical-mechanics videos (10 canonical tasks; 9 single-law plus one multi-law composition). Sources are simulated, lab-recorded, and internet footage. Protocol asks for three independent rollouts per case and subtrack; frame 0 is the conditioning frame. The documented Hugging Face GT id is yaorunmao/Apple-PI-GT.",
+        "summaryZh": "Orchard：400 段经典力学视频（10 个标准任务；9 个单定律加 1 个多定律组合）。来源含仿真、实验室自录与互联网片段。协议要求每个 case、每个子赛道三次独立 rollout；第 0 帧为条件帧。文档中的 Hugging Face GT id 为 yaorunmao/Apple-PI-GT。",
         "sizeLabel": "400 videos · 10 tasks",
         "sizeLabelZh": "400 段视频 · 10 个任务",
         "count": 400,
@@ -3529,10 +3529,10 @@
         ],
         "license": "cc-by-4.0",
         "notes": [
-          "CHScore is the bounded official component verified in tree. Leaderboard parity still needs MTScore, GPT-4o-MTScore, UMT-FVD, UMTScore, full prompt coverage, and the official submission protocol."
+          "CHScore is the validated component. Leaderboard-comparable results also need MTScore, GPT-4o-MTScore, UMT-FVD, UMTScore, full prompt coverage, and the official submission protocol."
         ],
         "notesZh": [
-          "CHScore 是仓内已验证的有界官方分量。榜单对齐仍需要 MTScore、GPT-4o-MTScore、UMT-FVD、UMTScore、完整 prompt 覆盖与官方提交协议。"
+          "CHScore 是已验证的分量。要得到可与榜单对比的结果，还需要 MTScore、GPT-4o-MTScore、UMT-FVD、UMTScore、完整 prompt 覆盖与官方提交协议。"
         ],
         "notApplicable": false
       },
@@ -3616,10 +3616,10 @@
         ],
         "license": "",
         "notes": [
-          "WorldFoundry imports official JSON or staged artifact scores. Full recomputation needs RAFT/CLIP/ViCLIP/DINOv2/AMT plus the dynamics regression checkpoint. Gemini naturalness is not local."
+          "WorldFoundry imports official JSON or staged artifact scores. Full recomputation needs RAFT/CLIP/ViCLIP/DINOv2/AMT plus the dynamics regression checkpoint. Gemini naturalness is not recomputed locally."
         ],
         "notesZh": [
-          "WorldFoundry 导入官方 JSON 或已就位 artifact 分数。完整重算需要 RAFT/CLIP/ViCLIP/DINOv2/AMT 与动力学回归权重。Gemini 自然度不在本地。"
+          "WorldFoundry 导入官方 JSON 或已放置的 artifact 分数。完整重算需要 RAFT/CLIP/ViCLIP/DINOv2/AMT 与动力学回归权重。Gemini 自然度不在本地重算。"
         ],
         "notApplicable": false
       },
@@ -3826,7 +3826,7 @@
         {
           "id": "warping_error",
           "name": "Warping Error",
-          "description": "Temporal warping error.",
+          "description": "Temporal warping error; lower is better.",
           "descriptionZh": "时序 warping 误差；越低越好。",
           "higherIsBetter": false,
           "primary": false,
@@ -4140,10 +4140,10 @@
         ],
         "license": "cc-by-4.0",
         "notes": [
-          "CLIPScore is the bounded official component verified in tree. Human ratings and BLIP / FID / FVD need imported scores or extra assets."
+          "CLIPScore is the validated component. Human ratings and BLIP / FID / FVD need imported scores or extra assets."
         ],
         "notesZh": [
-          "CLIPScore 是仓内已验证的有界官方分量。人工评分与 BLIP / FID / FVD 需要导入分数或额外资源。"
+          "CLIPScore 是已验证的分量。人工评分与 BLIP / FID / FVD 需要导入分数或额外资源。"
         ],
         "notApplicable": false
       },
@@ -4205,7 +4205,7 @@
         {
           "id": "fid",
           "name": "FID",
-          "description": "FETV Fréchet Inception Distance component.",
+          "description": "FETV Fréchet Inception Distance component; lower is better.",
           "descriptionZh": "FETV 的 Fréchet Inception Distance 组件；越低越好。",
           "higherIsBetter": false,
           "primary": false,
@@ -4214,7 +4214,7 @@
         {
           "id": "fvd",
           "name": "FVD",
-          "description": "FETV Fréchet Video Distance component.",
+          "description": "FETV Fréchet Video Distance component; lower is better.",
           "descriptionZh": "FETV 的 Fréchet Video Distance 组件；越低越好。",
           "higherIsBetter": false,
           "primary": false,
@@ -4607,7 +4607,7 @@
           "WorldFoundry normalizes official CSV/JSON. It does not run the official judges or understanding models."
         ],
         "notesZh": [
-          "WorldFoundry 归一化官方 CSV/JSON。不跑官方裁判或理解模型。"
+          "WorldFoundry 归一化官方 CSV/JSON。不运行官方 judge 或理解模型。"
         ],
         "notApplicable": false
       },
@@ -4711,8 +4711,8 @@
           "name": "Memory",
           "nameZh": "记忆",
           "kind": "axis",
-          "description": "memory_symmetry for content that leaves and re-enters view. Bounded verified metric: memory.",
-          "descriptionZh": "内容离镜再入镜的 memory_symmetry。有界已验证指标：memory。"
+          "description": "memory_symmetry for content that leaves and re-enters view.",
+          "descriptionZh": "内容离镜再入镜的 memory_symmetry。"
         }
       ],
       "data": {
@@ -4737,10 +4737,10 @@
         ],
         "license": "Apache-2.0",
         "notes": [
-          "Bounded verified scope is one real 16-frame official memory_ability run. Full suite needs VBench assets and a CUDA ViPE build."
+          "Validated: the official memory_ability metric runs on a 16-frame generated video. The full suite needs VBench assets and a CUDA ViPE build."
         ],
         "notesZh": [
-          "已验证有界范围是一次真实 16 帧官方 memory_ability 运行。全套需要 VBench 资产与 CUDA ViPE 构建。"
+          "已验证：官方 memory_ability 指标可在 16 帧生成视频上运行。全套需要 VBench 资产与 CUDA ViPE 构建。"
         ],
         "notApplicable": false
       },
@@ -4892,8 +4892,8 @@
         }
       ],
       "data": {
-        "summary": "12 simulated scenarios × 10 subgroups; catalog records 920 clips (physically valid clip + matched implausible variations). Clips come from JianhaoDYDY/LikePhys-Benchmark. WorldFoundry recomputes official mis-rank; the ELBO probe needs a caller-supplied LikePhys checkout.",
-        "summaryZh": "12 个仿真场景 × 10 个 subgroup；目录记录 920 个片段（物理合法片段 + 配对的不合理变体）。片段来自 JianhaoDYDY/LikePhys-Benchmark。WorldFoundry 重算官方误排；ELBO 探针需要调用方提供的 LikePhys checkout。",
+        "summary": "12 simulated scenarios × 10 subgroups; 920 clips (physically valid clip + matched implausible variations). Clips come from JianhaoDYDY/LikePhys-Benchmark. WorldFoundry recomputes official mis-rank; the ELBO probe needs a caller-supplied LikePhys checkout.",
+        "summaryZh": "12 个仿真场景 × 10 个 subgroup；共 920 个片段（物理合法片段 + 配对的不合理变体）。片段来自 JianhaoDYDY/LikePhys-Benchmark。WorldFoundry 重算官方误排；ELBO 探针需要调用方提供的 LikePhys checkout。",
         "sizeLabel": "12 scenarios; 920 clips",
         "sizeLabelZh": "12 个场景；920 个片段",
         "count": 920,
@@ -5162,7 +5162,7 @@
         {
           "id": "gt_all_lpips",
           "name": "GT All LPIPS",
-          "description": "LPIPS against ground-truth frames across all phases.",
+          "description": "LPIPS against ground-truth frames across all phases; lower is better.",
           "descriptionZh": "所有阶段相对真值帧的 LPIPS；越低越好。",
           "higherIsBetter": false,
           "primary": false,
@@ -5297,10 +5297,10 @@
         ],
         "license": "MIT",
         "notes": [
-          "WorldFoundry vendors the metric runtime and scores generated videos. It does not generate those videos. mind_average is a WorldFoundry aggregate — MIND publishes no official composite."
+          "WorldFoundry vendors the metric runtime and scores generated videos. mind_average is a WorldFoundry aggregate — MIND publishes no official composite."
         ],
         "notesZh": [
-          "WorldFoundry 内置指标 runtime，对已生成视频打分。它不生成这些视频。mind_average 是 WorldFoundry 聚合值——MIND 官方不发布综合分。"
+          "WorldFoundry 内置指标 runtime，对已生成视频打分。mind_average 是 WorldFoundry 聚合值——MIND 官方不发布综合分。"
         ],
         "notApplicable": false
       },
@@ -5497,8 +5497,8 @@
         {
           "id": "mind_average",
           "name": "MIND Average",
-          "description": "WorldFoundry-derived mean of the available MIND ability-group scores. MIND publishes no official composite score, so this is never a leaderboard number.",
-          "descriptionZh": "WorldFoundry 派生的可用 MIND 能力组得分均值。MIND 官方不发布综合分，该值绝不是 leaderboard 数字。",
+          "description": "WorldFoundry-derived mean of the available MIND ability-group scores. MIND publishes no official composite score.",
+          "descriptionZh": "WorldFoundry 派生的可用 MIND 能力组得分均值。MIND 官方不发布综合分。",
           "higherIsBetter": true,
           "primary": true,
           "leaderboardKey": "mind_average"
@@ -5580,10 +5580,10 @@
         ],
         "license": "GPL-3.0",
         "notes": [
-          "WorldFoundry vendors calculate_score.py. Mock backend is wiring only. Complete upstream scorer execution is pending."
+          "WorldFoundry vendors calculate_score.py. The mock backend only checks wiring and does not produce real scores. A complete upstream scorer run has not been validated in WorldFoundry."
         ],
         "notesZh": [
-          "WorldFoundry 内置 calculate_score.py。Mock 后端只是接线。完整上游打分器执行仍待完成。"
+          "WorldFoundry 内置 calculate_score.py。Mock 后端只检查流程，不产生真实分数。完整的上游打分器运行尚未在 WorldFoundry 中验证。"
         ],
         "notApplicable": false
       },
@@ -5592,7 +5592,7 @@
           "id": "dynamic_degree",
           "name": "Dynamic Degree",
           "description": "MiraBench RAFT optical-flow dynamic degree for motion strength.",
-          "descriptionZh": "运动强度和长程 tracking strength。",
+          "descriptionZh": "MiraBench 基于 RAFT 光流的动态度，衡量运动强度。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "dynamic_degree"
@@ -5601,25 +5601,25 @@
           "id": "tracking_strength",
           "name": "Tracking Strength",
           "description": "MiraBench tracking-based long-range motion strength.",
-          "descriptionZh": "",
+          "descriptionZh": "MiraBench 基于跟踪的长程运动强度。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "tracking_strength"
         },
         {
           "id": "dino_temporal_consistency",
-          "name": "Dino Temporal Consistency",
+          "name": "DINO Temporal Consistency",
           "description": "MiraBench DINO adjacent-frame structural temporal consistency.",
-          "descriptionZh": "时序结构、语义连续性和运动平滑度。",
+          "descriptionZh": "MiraBench 基于 DINO 相邻帧的结构时序一致性。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "dino_temporal_consistency"
         },
         {
           "id": "clip_temporal_consistency",
-          "name": "Clip Temporal Consistency",
+          "name": "CLIP Temporal Consistency",
           "description": "MiraBench CLIP adjacent-frame semantic temporal consistency.",
-          "descriptionZh": "",
+          "descriptionZh": "MiraBench 基于 CLIP 相邻帧的语义时序一致性。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "clip_temporal_consistency"
@@ -5628,7 +5628,7 @@
           "id": "temporal_motion_smoothness",
           "name": "Temporal Motion Smoothness",
           "description": "MiraBench AMT-prior temporal motion smoothness.",
-          "descriptionZh": "",
+          "descriptionZh": "MiraBench 基于 AMT 先验的时序运动平滑度。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "temporal_motion_smoothness"
@@ -5637,7 +5637,7 @@
           "id": "mean_absolute_error",
           "name": "Mean Absolute Error",
           "description": "MiraBench 3D reconstruction mean absolute error; lower is better.",
-          "descriptionZh": "3D consistency errors；越低越好。",
+          "descriptionZh": "MiraBench 3D 重建平均绝对误差；越低越好。",
           "higherIsBetter": false,
           "primary": false,
           "leaderboardKey": "mean_absolute_error"
@@ -5646,7 +5646,7 @@
           "id": "root_mean_square_error",
           "name": "Root Mean Square Error",
           "description": "MiraBench 3D reconstruction root mean square error; lower is better.",
-          "descriptionZh": "",
+          "descriptionZh": "MiraBench 3D 重建均方根误差；越低越好。",
           "higherIsBetter": false,
           "primary": false,
           "leaderboardKey": "root_mean_square_error"
@@ -5655,7 +5655,7 @@
           "id": "aesthetic_quality",
           "name": "Aesthetic Quality",
           "description": "MiraBench LAION aesthetic quality score.",
-          "descriptionZh": "视觉质量指标。",
+          "descriptionZh": "MiraBench LAION 美学质量得分。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "aesthetic_quality"
@@ -5664,7 +5664,7 @@
           "id": "imaging_quality",
           "name": "Imaging Quality",
           "description": "MiraBench MUSIQ imaging quality score.",
-          "descriptionZh": "",
+          "descriptionZh": "MiraBench MUSIQ 成像质量得分。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "imaging_quality"
@@ -5673,7 +5673,7 @@
           "id": "camera_alignment",
           "name": "Camera Alignment",
           "description": "MiraBench ViCLIP camera-caption alignment.",
-          "descriptionZh": "结构化 caption alignment 指标。",
+          "descriptionZh": "MiraBench ViCLIP 相机描述对齐。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "camera_alignment"
@@ -5682,7 +5682,7 @@
           "id": "main_object_alignment",
           "name": "Main Object Alignment",
           "description": "MiraBench ViCLIP main-object-caption alignment.",
-          "descriptionZh": "",
+          "descriptionZh": "MiraBench ViCLIP 主体物体描述对齐。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "main_object_alignment"
@@ -5691,7 +5691,7 @@
           "id": "background_alignment",
           "name": "Background Alignment",
           "description": "MiraBench ViCLIP background-caption alignment.",
-          "descriptionZh": "",
+          "descriptionZh": "MiraBench ViCLIP 背景描述对齐。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "background_alignment"
@@ -5700,7 +5700,7 @@
           "id": "style_alignment",
           "name": "Style Alignment",
           "description": "MiraBench ViCLIP style-caption alignment.",
-          "descriptionZh": "",
+          "descriptionZh": "MiraBench ViCLIP 风格描述对齐。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "style_alignment"
@@ -5709,43 +5709,43 @@
           "id": "overall_alignment",
           "name": "Overall Alignment",
           "description": "MiraBench ViCLIP overall text-video alignment.",
-          "descriptionZh": "",
+          "descriptionZh": "MiraBench ViCLIP 整体文本-视频对齐。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "overall_alignment"
         },
         {
           "id": "fvd",
-          "name": "Fvd",
+          "name": "FVD",
           "description": "MiraBench Fréchet Video Distance distribution metric; lower is better.",
-          "descriptionZh": "分布指标；越低越好。",
+          "descriptionZh": "MiraBench Fréchet Video Distance 分布指标；越低越好。",
           "higherIsBetter": false,
           "primary": false,
           "leaderboardKey": "fvd"
         },
         {
           "id": "fid",
-          "name": "Fid",
+          "name": "FID",
           "description": "MiraBench Fréchet Inception Distance distribution metric; lower is better.",
-          "descriptionZh": "",
+          "descriptionZh": "MiraBench Fréchet Inception Distance 分布指标；越低越好。",
           "higherIsBetter": false,
           "primary": false,
           "leaderboardKey": "fid"
         },
         {
           "id": "kid",
-          "name": "Kid",
+          "name": "KID",
           "description": "MiraBench Kernel Inception Distance distribution metric; lower is better.",
-          "descriptionZh": "",
+          "descriptionZh": "MiraBench Kernel Inception Distance 分布指标；越低越好。",
           "higherIsBetter": false,
           "primary": false,
           "leaderboardKey": "kid"
         },
         {
           "id": "mirabench_average",
-          "name": "Mirabench Average",
-          "description": "MiraBench official aggregate when supplied by the official scorer or normalized output.",
-          "descriptionZh": "官方 aggregate，或可用指标的均值。",
+          "name": "MiraBench Average",
+          "description": "MiraBench official aggregate when the official scorer supplies it; otherwise the mean of available metrics.",
+          "descriptionZh": "官方打分器提供的 MiraBench 聚合分；未提供时为可用指标的均值。",
           "higherIsBetter": true,
           "primary": true,
           "leaderboardKey": "mirabench_average"
@@ -5809,10 +5809,10 @@
         ],
         "license": "Apache-2.0",
         "notes": [
-          "WorldFoundry vendors PAWEval (Gemini 3.5 Flash via OpenRouter by default). Incomplete coverage is a blocker, not a silent average."
+          "WorldFoundry bundles PAWEval (Gemini 3.5 Flash via OpenRouter by default). An incomplete run reports blockers instead of a partial average."
         ],
         "notesZh": [
-          "WorldFoundry 内置 PAWEval（默认 OpenRouter 上的 Gemini 3.5 Flash）。不完整覆盖是 blocker，不会静默平均。"
+          "WorldFoundry 内置 PAWEval（默认 OpenRouter 上的 Gemini 3.5 Flash）。不完整的运行会报告 blocker，而不是给出部分平均分。"
         ],
         "notApplicable": false
       },
@@ -5821,7 +5821,7 @@
           "id": "calibration_tvd_percent",
           "name": "PAW-Calibration TVD",
           "description": "Total variation distance between generated and reference outcome distributions, reported as a percentage.",
-          "descriptionZh": "生成结果分布与参考分布之间的总变差距离。",
+          "descriptionZh": "生成结果分布与参考分布之间的总变差距离，以百分比报告。",
           "higherIsBetter": false,
           "primary": false,
           "leaderboardKey": "calibration_tvd_percent"
@@ -5966,8 +5966,8 @@
         {
           "id": "temporal_flickering",
           "name": "Temporal Flickering",
-          "description": "Imported temporal-flickering family as exposed by the result file (higher is better on this surface).",
-          "descriptionZh": "导入结果文件中的时序闪烁族（本指标面越高越好）。",
+          "description": "Imported temporal-flickering family as exposed by the result file (higher is better).",
+          "descriptionZh": "导入结果文件中的时序闪烁族（越高越好）。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "temporal_flickering"
@@ -6001,8 +6001,8 @@
           "name": "Chronometric FPS audit",
           "nameZh": "时间刻度 FPS 审计",
           "kind": "task",
-          "description": "Does the generator's declared Meta FPS match the PhyFPS implied by motion (Visual Chronometer)? Not a physics-law or commonsense generation bench.",
-          "descriptionZh": "生成器声明的 Meta FPS 是否与运动隐含的 PhyFPS（Visual Chronometer）一致？不是物理定律或常识生成评测。"
+          "description": "Does the generator's declared Meta FPS match the PhyFPS implied by motion (Visual Chronometer)?",
+          "descriptionZh": "生成器声明的 Meta FPS 是否与运动隐含的 PhyFPS（Visual Chronometer）一致？"
         },
         {
           "id": "alignment",
@@ -6136,13 +6136,13 @@
           "name": "Physical law adherence",
           "nameZh": "物理定律遵循",
           "kind": "axis",
-          "description": "Catalog axis over the claimed 27-law suite (mechanics, optics, thermal, materials).",
-          "descriptionZh": "声称覆盖 27 条定律套件（力学、光学、热学、材料）的目录轴。"
+          "description": "Adherence to the 27 claimed physical laws (mechanics, optics, thermal, materials).",
+          "descriptionZh": "是否遵循声称覆盖的 27 条物理定律（力学、光学、热学、材料）。"
         }
       ],
       "data": {
-        "summary": "160 bundled T2V prompts spanning 27 claimed physical laws across four domains. WorldFoundry ships prompts.json and PhyGenEval overall.py; stage judges (VQAScore, GPT-4o/LLaVA, InternVideo2) are not run in tree.",
-        "summaryZh": "160 条捆绑 T2V prompt，声称覆盖四大领域的 27 条物理定律。WorldFoundry 提供 prompts.json 与 PhyGenEval overall.py；各阶段 judge（VQAScore、GPT-4o/LLaVA、InternVideo2）不在仓内运行。",
+        "summary": "160 bundled T2V prompts spanning 27 claimed physical laws across four domains. WorldFoundry ships prompts.json and PhyGenEval overall.py; it does not run the stage judges (VQAScore, GPT-4o/LLaVA, InternVideo2).",
+        "summaryZh": "160 条捆绑 T2V prompt，声称覆盖四大领域的 27 条物理定律。WorldFoundry 提供 prompts.json 与 PhyGenEval overall.py；不运行各阶段 judge（VQAScore、GPT-4o/LLaVA、InternVideo2）。",
         "sizeLabel": "160 prompts; 27 laws",
         "sizeLabelZh": "160 条 prompt；27 条定律",
         "count": 160,
@@ -6161,10 +6161,10 @@
         ],
         "license": "",
         "notes": [
-          "Result import or prepared-stage overall.py aggregation only. Aggregation alone is not official PhyGenEval evidence."
+          "Result import or prepared-stage overall.py aggregation only. overall.py aggregation does not replace the full PhyGenEval judge stack."
         ],
         "notesZh": [
-          "仅支持结果导入或已备 stage 的 overall.py 聚合。仅有聚合不是官方 PhyGenEval 证据。"
+          "仅支持结果导入或已备 stage 的 overall.py 聚合。overall.py 聚合不能替代完整的 PhyGenEval judge 栈。"
         ],
         "notApplicable": true
       },
@@ -6199,8 +6199,8 @@
         {
           "id": "phygenbench_average",
           "name": "PhyGenBench Average",
-          "description": "Mean over available PhyGenBench families on the imported or aggregated surface.",
-          "descriptionZh": "导入或聚合表面上可用 PhyGenBench 族的均值。",
+          "description": "Mean over available PhyGenBench families in the imported or aggregated results.",
+          "descriptionZh": "导入或聚合结果中可用 PhyGenBench 族的均值。",
           "higherIsBetter": true,
           "primary": true,
           "leaderboardKey": "phygenbench_average"
@@ -6384,8 +6384,8 @@
         }
       ],
       "data": {
-        "summary": "WorldFoundry's in-tree evaluator covers two tracks only: generation (shi-labs/physical-ai-bench-generation) and conditional-generation (shi-labs/physical-ai-bench-conditional-generation, ~273 GB). The paper may describe additional tracks; those are not in this contract. No official leaderboard is ingested.",
-        "summaryZh": "WorldFoundry 仓内 evaluator 只覆盖两条赛道：generation（shi-labs/physical-ai-bench-generation）与 conditional-generation（shi-labs/physical-ai-bench-conditional-generation，约 273 GB）。论文可能还有其他赛道，不在本 contract。未收录官方 leaderboard。",
+        "summary": "WorldFoundry's in-tree evaluator covers two tracks: generation (shi-labs/physical-ai-bench-generation) and conditional-generation (shi-labs/physical-ai-bench-conditional-generation, ~273 GB). Other tracks from the paper are not supported.",
+        "summaryZh": "WorldFoundry 仓内 evaluator 覆盖两条赛道：generation（shi-labs/physical-ai-bench-generation）与 conditional-generation（shi-labs/physical-ai-bench-conditional-generation，约 273 GB）。不支持论文中的其他赛道。",
         "sizeLabel": "2 in-tree tracks (G, C)",
         "sizeLabelZh": "仓内 2 条赛道（G、C）",
         "count": null,
@@ -6418,10 +6418,10 @@
         ],
         "license": "",
         "notes": [
-          "The contract does not mark a single primary metric. Generation and conditional-generation expose different families. Local scorecards are not SHI-Labs leaderboard submissions."
+          "PAI-Bench defines no single primary metric. Generation and conditional-generation expose different metric families. Local scorecards are not SHI-Labs leaderboard submissions."
         ],
         "notesZh": [
-          "contract 未指定单一主指标。生成与条件生成暴露不同指标族。本地 scorecard 不是 SHI-Labs leaderboard 提交。"
+          "PAI-Bench 没有单一主指标。生成与条件生成提供不同指标族。本地 scorecard 不是 SHI-Labs leaderboard 提交。"
         ],
         "notApplicable": false
       },
@@ -6661,8 +6661,8 @@
         }
       ],
       "data": {
-        "summary": "Same continuation task as Physics-IQ Original (5-second futures of filmed scenes), but a different dataset and score adapter. Official media live on Hugging Face Anates-Labs-Research/Physics-IQ-Verified (396 references + 396 masks). WorldFoundry tracks a 198-video single-pass contract and scores per view before aggregation.",
-        "summaryZh": "续写任务与 Physics-IQ Original 相同（实拍场景的 5 秒未来），但数据集与分数适配器不同。官方媒体在 Hugging Face Anates-Labs-Research/Physics-IQ-Verified（396 参考 + 396 mask）。WorldFoundry 跟踪 198 视频单次 contract，并在聚合前按视角打分。",
+        "summary": "Same continuation task as Physics-IQ Original (5-second futures of filmed scenes), but a different dataset and score adapter. Official media live on Hugging Face Anates-Labs-Research/Physics-IQ-Verified (396 references + 396 masks). One WorldFoundry run scores 198 generated videos, per view before aggregation.",
+        "summaryZh": "续写任务与 Physics-IQ Original 相同（实拍场景的 5 秒未来），但数据集与分数适配器不同。官方媒体在 Hugging Face Anates-Labs-Research/Physics-IQ-Verified（396 参考 + 396 mask）。WorldFoundry 单次运行对 198 段生成视频打分，并在聚合前按视角打分。",
         "sizeLabel": "198 generated videos / 396 verified references",
         "sizeLabelZh": "198 段生成视频 / 396 个 verified 参考",
         "count": 198,
@@ -6799,15 +6799,15 @@
           "name": "Single-pass 198-video split",
           "nameZh": "单次 198 视频划分",
           "kind": "split",
-          "description": "WorldFoundry tracks 198 generated 5-second continuations (66 scenarios × views in the released protocol; published papers often average multiple runs).",
-          "descriptionZh": "WorldFoundry 跟踪 198 段 5 秒续写（发布协议为 66 场景 × 视角；论文常对多次运行取平均）。"
+          "description": "WorldFoundry scores 198 generated 5-second continuations (66 scenarios × 3 views, one take each; published papers often average multiple runs).",
+          "descriptionZh": "WorldFoundry 评测 198 段 5 秒续写（66 个场景 × 3 视角，每个视角一次拍摄；论文常对多次运行取平均）。"
         }
       ],
       "data": {
-        "summary": "396 test items in the published protocol (66 real physics scenarios × 2 views). WorldFoundry's in-tree scorer tracks a 198-video single-pass split of 5-second continuations. Official media (real videos, masks, conditioning frames) are downloaded separately from Google DeepMind — not redistributed here.",
-        "summaryZh": "发表协议共 396 个测试项（66 个真实物理场景 × 2 视角）。WorldFoundry 仓内打分器跟踪 198 段 5 秒续写的单次划分。官方媒体（真实视频、mask、条件帧）需按 DeepMind 说明另行下载，不在本仓库分发。",
-        "sizeLabel": "66 scenarios; 198-video single-pass contract",
-        "sizeLabelZh": "66 个场景；198 视频单次 contract",
+        "summary": "396 test items in the published protocol (66 real physics scenarios × 3 views × 2 takes). WorldFoundry's in-tree scorer evaluates a 198-video single-pass split of 5-second continuations. Official media (real videos, masks, conditioning frames) are downloaded separately from Google DeepMind.",
+        "summaryZh": "发表协议共 396 个测试项（66 个真实物理场景 × 3 视角 × 2 次拍摄）。WorldFoundry 仓内打分器评测 198 段 5 秒续写的单次划分。官方媒体（真实视频、mask、条件帧）需按 DeepMind 说明另行下载。",
+        "sizeLabel": "66 scenarios; 198-video single-pass split",
+        "sizeLabelZh": "66 个场景；198 视频单次划分",
         "count": 198,
         "unit": "videos",
         "sources": [
@@ -6824,10 +6824,10 @@
         ],
         "license": "",
         "notes": [
-          "Original reference videos and masks are officially distributed through Google Cloud Storage and prepared externally; the separate Physics-IQ Verified Hugging Face dataset is not interchangeable."
+          "The original reference videos and masks are distributed through Google Cloud Storage and must be prepared separately; the Physics-IQ Verified Hugging Face dataset is not interchangeable with them."
         ],
         "notesZh": [
-          "原始参考视频与 mask 经 Google Cloud Storage 分发，在仓外准备；Physics-IQ Verified 的 Hugging Face 数据集不可互换。"
+          "原始参考视频与 mask 通过 Google Cloud Storage 分发，需要单独准备；它们与 Physics-IQ Verified 的 Hugging Face 数据集不可互换。"
         ],
         "notApplicable": false
       },
@@ -6943,8 +6943,8 @@
         }
       ],
       "data": {
-        "summary": "Catalog records 383 prompts and 4123 questions (cc-by-4.0). WorldFoundry bundles prompts_questions.csv and caption tracks; it imports output.csv or runs bounded Gemini QA on supplied captions. AuroraCap captioning from your videos is not in tree.",
-        "summaryZh": "目录记录 383 条 prompt 与 4123 道问题（cc-by-4.0）。WorldFoundry 捆绑 prompts_questions.csv 与字幕轨道；导入 output.csv，或对所供字幕跑有界 Gemini QA。从你的视频生成 AuroraCap 字幕不在仓内。",
+        "summary": "383 prompts and 4123 questions (cc-by-4.0). WorldFoundry bundles prompts_questions.csv and caption tracks; it imports output.csv or runs Gemini QA on supplied captions. It does not run AuroraCap captioning on your videos.",
+        "summaryZh": "383 条 prompt 与 4123 道问题（cc-by-4.0）。WorldFoundry 捆绑 prompts_questions.csv 与字幕轨道；导入 output.csv，或对所供字幕跑 Gemini QA。它不对你的视频跑 AuroraCap 字幕生成。",
         "sizeLabel": "383 prompts; 4123 questions",
         "sizeLabelZh": "383 条 prompt；4123 道问题",
         "count": 383,
@@ -6968,10 +6968,10 @@
         ],
         "license": "cc-by-4.0",
         "notes": [
-          "Gemini QA over supplied captions is not official pipeline evidence. Only upstream full-pipeline output.csv import carries official weight."
+          "Gemini QA over supplied captions is not comparable to official results. Only an imported upstream full-pipeline output.csv follows the official protocol."
         ],
         "notesZh": [
-          "对所供字幕的 Gemini QA 不是官方全流水线证据。只有导入上游全流水线 output.csv 才具官方效力。"
+          "对所供字幕的 Gemini QA 不能与官方结果直接比较。只有导入的上游全流水线 output.csv 符合官方协议。"
         ],
         "notApplicable": false
       },
@@ -7104,10 +7104,10 @@
         ],
         "license": "CC-BY-4.0",
         "notes": [
-          "WorldFoundry aggregates official eval/4_embodiments and eval/5_tasks trees. rbench_overall is a WorldFoundry composite, not a published RBench number. GPT and Qwen are never mixed."
+          "WorldFoundry aggregates official eval/4_embodiments and eval/5_tasks trees. rbench_overall is a WorldFoundry composite, not a published RBench number. GPT and Qwen judge outputs are scored separately."
         ],
         "notesZh": [
-          "WorldFoundry 聚合官方 eval/4_embodiments 与 eval/5_tasks 树。rbench_overall 是 WorldFoundry 合成值，不是已发表数字。GPT 与 Qwen 从不混用。"
+          "WorldFoundry 聚合官方 eval/4_embodiments 与 eval/5_tasks 树。rbench_overall 是 WorldFoundry 合成值，不是已发表数字。GPT 与 Qwen 裁判输出分开计分。"
         ],
         "notApplicable": false
       },
@@ -7319,10 +7319,10 @@
         ],
         "license": "Apache-2.0",
         "notes": [
-          "WorldFoundry owns the evaluator and reuses resident VBench/Pi3. Full 80×2 numerical parity has not been run. Pose inference is a separate GPU stage."
+          "WorldFoundry ships its own evaluator and reuses the installed VBench/Pi3. Scores have not been compared numerically with official results over the full 80×2 set. Pose inference is a separate GPU stage."
         ],
         "notesZh": [
-          "WorldFoundry 自研评测器并复用已有 VBench/Pi3。尚未跑 80×2 数值对齐。位姿推断是单独 GPU 阶段。"
+          "WorldFoundry 自带评测器，并复用已安装的 VBench/Pi3。尚未在完整 80×2 场景上与官方结果做数值比对。位姿推断是单独的 GPU 阶段。"
         ],
         "notApplicable": false
       },
@@ -7330,8 +7330,8 @@
         {
           "id": "vbench_overall",
           "name": "VBench Overall",
-          "description": "Mean over the resident VBench visual/temporal quality dimensions.",
-          "descriptionZh": "常驻 VBench 视觉/时序质量维度的均值。",
+          "description": "Mean over the VBench visual/temporal quality dimensions.",
+          "descriptionZh": "VBench 视觉/时序质量维度的均值。",
           "higherIsBetter": true,
           "primary": true,
           "leaderboardKey": "vbench_overall"
@@ -7475,10 +7475,10 @@
         ],
         "license": "MIT",
         "notes": [
-          "WorldFoundry vendors the official evaluator (pin 680fb6ee2733…). leaderboard_valid stays false until the full 225-task official ensemble is judged. No offline judge."
+          "WorldFoundry vendors the official evaluator. leaderboard_valid is true only when all 225 tasks are judged with the official ensemble. No offline judge is available."
         ],
         "notesZh": [
-          "WorldFoundry 内置官方评测器（钉选 680fb6ee2733…）。在用官方 ensemble 评完 225 个任务前 leaderboard_valid 为 false。没有离线裁判。"
+          "WorldFoundry 内置官方评测器。只有用官方 ensemble 评完全部 225 个任务时 leaderboard_valid 才为 true。没有离线裁判。"
         ],
         "notApplicable": false
       },
@@ -7487,7 +7487,7 @@
           "id": "task_success",
           "name": "Task Success",
           "description": "Primary metric: fraction of tasks with confirmed state evolution and no physical inaccuracy (state_evol AND NOT physical_inaccuracy).",
-          "descriptionZh": "状态演化被确认且无物理不合理；<strong>主指标</strong>。",
+          "descriptionZh": "主指标：状态演化被确认且无物理不合理的任务比例（state_evol AND NOT physical_inaccuracy）。",
           "higherIsBetter": true,
           "primary": true,
           "leaderboardKey": "task_success"
@@ -7496,7 +7496,7 @@
           "id": "state_evol_success",
           "name": "State Progress",
           "description": "Fraction of tasks where the state-evolution judge confirmed the hidden process kept progressing while unobserved.",
-          "descriptionZh": "隐藏过程在不可见期间持续推进。",
+          "descriptionZh": "状态演化裁判确认隐藏过程在不可见期间持续推进的任务比例。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "state_evol_success"
@@ -7505,7 +7505,7 @@
           "id": "physical_inaccuracy",
           "name": "Physical Inaccuracy",
           "description": "Fraction of tasks flagged physically implausible by the physics judge; lower is better and the normalized score is 1 - rate.",
-          "descriptionZh": "物理 judge 标记出不合理伪影的比例；normalized score 为 <code>1 - rate</code>。",
+          "descriptionZh": "被物理裁判标记为物理不合理的任务比例；越低越好，归一化分数为 1 - rate。",
           "higherIsBetter": false,
           "primary": false,
           "leaderboardKey": "physical_inaccuracy"
@@ -7514,7 +7514,7 @@
           "id": "occlusion_done",
           "name": "Observation Control",
           "description": "Fraction of tasks where the requested observation control (occlusion, camera lookaway, or illumination dimming) was applied in the generated video.",
-          "descriptionZh": "请求的观察控制确实出现在生成视频中。",
+          "descriptionZh": "生成视频中确实施加了所请求观察控制（遮挡、相机转开或光照变暗）的任务比例。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "occlusion_done"
@@ -7523,7 +7523,7 @@
           "id": "trigger_applied",
           "name": "Action Control",
           "description": "Fraction of tasks where the requested trigger action was applied in the generated video.",
-          "descriptionZh": "请求的触发动作确实被施加。",
+          "descriptionZh": "生成视频中确实施加了所请求触发动作的任务比例。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "trigger_applied"
@@ -7532,7 +7532,7 @@
           "id": "control_success",
           "name": "Control Success",
           "description": "Fraction of tasks where the observation control and the trigger action were both applied.",
-          "descriptionZh": "两种控制都被施加。",
+          "descriptionZh": "观察控制与触发动作都被施加的任务比例。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "control_success"
@@ -7605,8 +7605,8 @@
           "name": "Generative numeracy",
           "nameZh": "生成计数",
           "kind": "category",
-          "description": "Object-count fidelity scored with GroundingDINO detection. Bounded official component verified in tree.",
-          "descriptionZh": "用 GroundingDINO 检测打分的物体计数。仓内已对有界官方分量做过验证。"
+          "description": "Object-count fidelity scored with GroundingDINO detection. Validated in WorldFoundry on a real MP4.",
+          "descriptionZh": "用 GroundingDINO 检测打分的物体计数。已在 WorldFoundry 中用真实 MP4 验证。"
         }
       ],
       "data": {
@@ -8010,10 +8010,10 @@
         ],
         "license": "unknown_pending_review",
         "notes": [
-          "WorldFoundry normalizes official result fields. Full raw-video/VLM evaluation (LLaVA + Drive assets) is pending."
+          "WorldFoundry normalizes official result fields. Full raw-video/VLM evaluation needs the upstream LLaVA runtime and Drive assets."
         ],
         "notesZh": [
-          "WorldFoundry 归一化官方结果字段。完整原始视频/VLM 评测（LLaVA + Drive 资产）仍待完成。"
+          "WorldFoundry 归一化官方结果字段。完整原始视频/VLM 评测需要上游 LLaVA runtime 与 Drive 资产。"
         ],
         "notApplicable": false
       },
@@ -8155,10 +8155,10 @@
         ],
         "license": "unknown_pending_review",
         "notes": [
-          "WorldFoundry vendors the VBench-2.0 runtime and writes coverage manifests. A bounded diversity component is verified; the full suite is not."
+          "WorldFoundry vendors the VBench-2.0 runtime and writes coverage manifests. The diversity dimension is validated."
         ],
         "notesZh": [
-          "WorldFoundry 内置 VBench-2.0 runtime 并写出覆盖清单。有界 diversity 组件已验证；全套未验证。"
+          "WorldFoundry 内置 VBench-2.0 runtime 并写出覆盖清单。diversity 维度已验证。"
         ],
         "notApplicable": false
       },
@@ -8245,8 +8245,8 @@
           "name": "Long-video",
           "nameZh": "长视频",
           "kind": "track",
-          "description": "Temporal-window scoring. Bounded verified component: temporal_flickering / long_custom_input.",
-          "descriptionZh": "时间窗口打分。已验证有界组件：temporal_flickering / long_custom_input。"
+          "description": "Temporal-window scoring, for example temporal_flickering in long_custom_input mode.",
+          "descriptionZh": "时间窗口打分，例如以 long_custom_input 模式运行 temporal_flickering。"
         },
         {
           "id": "trustworthiness",
@@ -8275,10 +8275,10 @@
         "modalities": [],
         "license": "Apache-2.0",
         "notes": [
-          "WorldFoundry vendors the VBench++ runtime. A bounded long-video component is verified; the complete suite is not."
+          "WorldFoundry bundles the VBench++ runtime. The long-video temporal_flickering dimension is validated; the full suite has not been validated."
         ],
         "notesZh": [
-          "WorldFoundry 内置 VBench++ runtime。有界长视频组件已验证；全套未验证。"
+          "WorldFoundry 内置 VBench++ runtime。长视频 temporal_flickering 维度已验证；完整套件尚未验证。"
         ],
         "notApplicable": false
       },
@@ -8380,10 +8380,10 @@
         ],
         "license": "apache-2.0",
         "notes": [
-          "WorldFoundry vendors the official runtime. Bounded GPU validation covers aesthetic_quality only. No public Hugging Face dataset is required."
+          "WorldFoundry vendors the official runtime. GPU validation in WorldFoundry covers aesthetic_quality only. No public Hugging Face dataset is required."
         ],
         "notesZh": [
-          "WorldFoundry 内置官方 runtime。有界 GPU 验证只覆盖 aesthetic_quality。不需要公开 Hugging Face 数据集。"
+          "WorldFoundry 内置官方 runtime。WorldFoundry 中的 GPU 验证只覆盖 aesthetic_quality。不需要公开 Hugging Face 数据集。"
         ],
         "notApplicable": false
       },
@@ -8472,8 +8472,8 @@
         {
           "id": "aesthetic_quality",
           "name": "Aesthetic Quality",
-          "description": "Frame-wise aesthetic score. Bounded official component verified in tree.",
-          "descriptionZh": "逐帧美学分。仓内已验证的有界官方分量。",
+          "description": "Frame-wise aesthetic score.",
+          "descriptionZh": "逐帧美学分。",
           "higherIsBetter": true,
           "primary": false,
           "leaderboardKey": "aesthetic_quality"
@@ -8628,10 +8628,10 @@
         "modalities": [],
         "license": "Apache-2.0",
         "notes": [
-          "WorldFoundry vendors the runtime and wraps evaluate.py. Credential-gated path is present; no credentialed release run is claimed."
+          "WorldFoundry vendors the runtime and wraps evaluate.py. A full credentialed GPT-4o judge run has not been validated."
         ],
         "notesZh": [
-          "WorldFoundry 内置 runtime 并封装 evaluate.py。凭证门控路径存在；不声称已做带凭证的发布运行。"
+          "WorldFoundry 内置 runtime 并封装 evaluate.py。尚未用凭证完成完整的 GPT-4o 裁判运行验证。"
         ],
         "notApplicable": false
       },
@@ -8767,8 +8767,8 @@
         }
       ],
       "data": {
-        "summary": "UCLA / Google T2V physical-commonsense bench. Official judge: VideoCon-Physics. Full official suite is 688 prompts; in-tree prompt list is bundled. Scoring path present; full reproduction pending.",
-        "summaryZh": "UCLA / Google 的 T2V 物理常识评测。官方裁判：VideoCon-Physics。官方全套 688 条 prompt；仓内捆绑 prompt 列表。打分路径存在；完整复现仍待完成。",
+        "summary": "UCLA / Google T2V physical-commonsense bench. Official judge: VideoCon-Physics. Full official suite is 688 prompts; the prompt list is bundled.",
+        "summaryZh": "UCLA / Google 的 T2V 物理常识评测。官方裁判：VideoCon-Physics。官方全套 688 条 prompt；prompt 列表已捆绑。",
         "sizeLabel": "688 prompts",
         "sizeLabelZh": "688 条 prompt",
         "count": 688,
@@ -8851,8 +8851,8 @@
           "name": "Action-centric prompts",
           "nameZh": "动作向 prompt",
           "kind": "suite",
-          "description": "Harder physical activities and object interactions; catalog claims 200 actions.",
-          "descriptionZh": "更难的物理活动与物体交互；目录宣称 200 个动作。"
+          "description": "Harder physical activities and object interactions; the official suite lists 200 actions.",
+          "descriptionZh": "更难的物理活动与物体交互；官方套件列出 200 个动作。"
         },
         {
           "id": "rules",
@@ -8864,8 +8864,8 @@
         }
       ],
       "data": {
-        "summary": "Action-centric successor to VideoPhy. 200 claimed actions. AutoEval adds rule-level judgements plus SA/PC/Joint. Official scoring path present; full 200-prompt reproduction pending.",
-        "summaryZh": "VideoPhy 的动作向后继。宣称 200 个动作。AutoEval 增加规则级判断，以及 SA/PC/Joint。官方打分路径存在；完整 200 prompt 复现仍待完成。",
+        "summary": "Action-centric successor to VideoPhy. 200 claimed actions. AutoEval adds rule-level judgements plus SA/PC/Joint.",
+        "summaryZh": "VideoPhy 的动作向后继。宣称 200 个动作。AutoEval 增加规则级判断，以及 SA/PC/Joint。",
         "sizeLabel": "200 actions",
         "sizeLabelZh": "200 个动作",
         "count": 200,
@@ -8995,8 +8995,8 @@
         }
       ],
       "data": {
-        "summary": "UCSD Hao AI Lab science-understanding T2V bench. Five dimensions on a 1–4 rubric; official weighted overall normalizes to videoscience_average. Catalog status: experimental.",
-        "summaryZh": "UCSD Hao AI Lab 科学理解 T2V 评测。五维 1–4 量表；官方加权总分归一化为 videoscience_average。目录状态：experimental。",
+        "summary": "UCSD Hao AI Lab science-understanding T2V bench. Five dimensions on a 1–4 rubric; official weighted overall normalizes to videoscience_average.",
+        "summaryZh": "UCSD Hao AI Lab 科学理解 T2V 评测。五维 1–4 量表；官方加权总分归一化为 videoscience_average。",
         "sizeLabel": "Experiment-grounded prompt suite",
         "sizeLabelZh": "实验接地的 prompt 套件",
         "count": null,
@@ -9015,10 +9015,10 @@
         ],
         "license": "",
         "notes": [
-          "WorldFoundry wires the VLM judge and normalizes official files. No complete credentialed upstream run is claimed."
+          "WorldFoundry runs the VLM judge when a provider, model, and credential are configured, and normalizes official result files. A complete upstream run with judge credentials has not been validated."
         ],
         "notesZh": [
-          "WorldFoundry 接好 VLM 裁判并归一化官方文件。不声称已完成带凭证的完整上游运行。"
+          "配置好提供方、模型与凭证后，WorldFoundry 可调用 VLM 裁判，并归一化官方结果文件。带裁判凭证的完整上游运行尚未验证。"
         ],
         "notApplicable": false
       },
@@ -9137,10 +9137,10 @@
         "modalities": [],
         "license": "MIT",
         "notes": [
-          "A bounded official scorer GPU run is verified. SPCC/pairwise full-suite parity is not."
+          "A bounded GPU run with the official scorer is validated. Full-suite SPCC/pairwise correlation has not been checked against official numbers."
         ],
         "notesZh": [
-          "有界官方打分器 GPU 运行已验证。SPCC/成对全套对齐未验证。"
+          "已用官方打分器完成有界 GPU 运行验证。全套 SPCC/成对相关尚未与官方数值核对。"
         ],
         "notApplicable": false
       },
@@ -9249,10 +9249,10 @@
         ],
         "license": "Apache-2.0",
         "notes": [
-          "WorldFoundry runs Gemini/URL/local VLM judges. Official path is integrated; a full credentialed suite is not release-verified."
+          "WorldFoundry runs Gemini/URL/local VLM judges. A full 300-prompt run with a credentialed judge has not been validated in WorldFoundry."
         ],
         "notesZh": [
-          "WorldFoundry 可跑 Gemini/URL/本地 VLM 裁判。官方路径已接入；带凭证的完整套件未做发布级验证。"
+          "WorldFoundry 可跑 Gemini/URL/本地 VLM 裁判。使用带凭证裁判的完整 300 prompt 运行尚未在 WorldFoundry 中验证。"
         ],
         "notApplicable": false
       },
@@ -9364,10 +9364,10 @@
         ],
         "license": "",
         "notes": [
-          "Runtime/normalizer surfaces exist; no release-verified full official run is claimed. Mock backends are wiring-only."
+          "Mock prediction backends do not produce real PhyFPS scores."
         ],
         "notesZh": [
-          "运行时/归一化表面存在；不声称已做发布级完整官方运行。Mock 后端只是接线。"
+          "Mock 预测后端不产生真实 PhyFPS 分数。"
         ],
         "notApplicable": false
       },
@@ -9465,8 +9465,8 @@
         }
       ],
       "data": {
-        "summary": "Alibaba AMAP ICCV 2025 motion bench. 1,050 prompts named 0001.mp4–1050.mp4. Five local metrics, no hosted judge. Apache-2.0. Official HF dataset was not public at integration.",
-        "summaryZh": "阿里高德 ICCV 2025 运动评测。1050 条 prompt，命名 0001.mp4–1050.mp4。五个本地指标，无托管裁判。Apache-2.0。接入时官方 HF 数据集未公开。",
+        "summary": "Alibaba AMAP ICCV 2025 motion bench. 1,050 prompts named 0001.mp4–1050.mp4. Five local metrics, no hosted judge. Apache-2.0.",
+        "summaryZh": "阿里高德 ICCV 2025 运动评测。1050 条 prompt，命名 0001.mp4–1050.mp4。五个本地指标，无托管裁判。Apache-2.0。",
         "sizeLabel": "1,050 prompts",
         "sizeLabelZh": "1050 条 prompt",
         "count": 1050,
@@ -9482,10 +9482,10 @@
         "modalities": [],
         "license": "Apache-2.0",
         "notes": [
-          "In-tree prompt bundle is the tracked source. Result/runtime wiring is present; full CUDA recomputation (MMDetection/MMPose/DeepSpeed) is unverified."
+          "Prompts come from the in-tree bundle. Full CUDA recomputation (MMDetection/MMPose/DeepSpeed) has not been validated."
         ],
         "notesZh": [
-          "仓内 prompt 包是跟踪源。结果/runtime 接线存在；完整 CUDA 重算（MMDetection/MMPose/DeepSpeed）未验证。"
+          "prompt 来自仓内捆绑包。完整 CUDA 重算（MMDetection/MMPose/DeepSpeed）尚未验证。"
         ],
         "notApplicable": false
       },
@@ -9632,10 +9632,10 @@
         ],
         "license": "",
         "notes": [
-          "A real single-video temporal_flickering component is verified. The 289-case multi-turn protocol is not."
+          "Validated in WorldFoundry: the temporal_flickering metric on a single real video. The full 289-case multi-turn protocol has not been validated."
         ],
         "notesZh": [
-          "真实单视频 temporal_flickering 组件已验证。289 例多轮协议未验证。"
+          "已在 WorldFoundry 中验证：单个真实视频上的 temporal_flickering 指标。完整的 289 例多轮协议尚未验证。"
         ],
         "notApplicable": false
       },
@@ -9942,7 +9942,7 @@
       ],
       "data": {
         "summary": "ICLR 2026 oral closed-loop utility bench. Four environments with a unified planner and action API. Task success over visual quality.",
-        "summaryZh": "ICLR 2026 口头闭环效用评测。四个环境，统一规划器与动作 API。任务成功优先于视觉质量。",
+        "summaryZh": "ICLR 2026 Oral 闭环效用评测。四个环境，统一规划器与动作 API。任务成功优先于视觉质量。",
         "sizeLabel": "4 closed-loop environments",
         "sizeLabelZh": "4 个闭环环境",
         "count": 4,
@@ -9962,10 +9962,10 @@
         ],
         "license": "",
         "notes": [
-          "WorldFoundry imports task summaries only. Closed-loop runtime parity is pending."
+          "WorldFoundry imports task summaries only; closed-loop runs happen upstream."
         ],
         "notesZh": [
-          "WorldFoundry 只导入任务摘要。闭环 runtime 对齐仍待完成。"
+          "WorldFoundry 只导入任务摘要；闭环运行在上游完成。"
         ],
         "notApplicable": false
       },
@@ -9973,7 +9973,7 @@
         {
           "id": "active_recognition_success_rate",
           "name": "Active Recognition Success Rate",
-          "description": "active_recognition_success_rate normalized benchmark score.",
+          "description": "Closed-loop Active Recognition task success rate.",
           "descriptionZh": "主动识别闭环任务成功率。",
           "higherIsBetter": true,
           "primary": false,
@@ -9982,7 +9982,7 @@
         {
           "id": "image_goal_navigation_success_rate",
           "name": "Image Goal Navigation Success Rate",
-          "description": "image_goal_navigation_success_rate normalized benchmark score.",
+          "description": "Image-Goal Navigation success rate.",
           "descriptionZh": "图像目标导航成功率。",
           "higherIsBetter": true,
           "primary": false,
@@ -9990,8 +9990,8 @@
         },
         {
           "id": "image_goal_navigation_spl",
-          "name": "Image Goal Navigation Spl",
-          "description": "image_goal_navigation_spl normalized benchmark score.",
+          "name": "Image-Goal Navigation SPL",
+          "description": "Image-Goal Navigation success weighted by path length (SPL).",
           "descriptionZh": "图像目标导航按路径长度加权的成功率（SPL）。",
           "higherIsBetter": true,
           "primary": false,
@@ -9999,8 +9999,8 @@
         },
         {
           "id": "active_embodied_qa_score",
-          "name": "Active Embodied Qa Score",
-          "description": "active_embodied_qa_score normalized benchmark score.",
+          "name": "Active Embodied QA Score",
+          "description": "Answer score for Active Embodied QA.",
           "descriptionZh": "主动具身 QA 的答案得分。",
           "higherIsBetter": true,
           "primary": false,
@@ -10008,8 +10008,8 @@
         },
         {
           "id": "active_embodied_qa_spl",
-          "name": "Active Embodied Qa Spl",
-          "description": "active_embodied_qa_spl normalized benchmark score.",
+          "name": "Active Embodied QA SPL",
+          "description": "SPL of the exploration path in Active Embodied QA.",
           "descriptionZh": "主动具身 QA 探索过程的 SPL。",
           "higherIsBetter": true,
           "primary": false,
@@ -10018,7 +10018,7 @@
         {
           "id": "robotic_manipulation_success_rate",
           "name": "Robotic Manipulation Success Rate",
-          "description": "robotic_manipulation_success_rate normalized benchmark score.",
+          "description": "Robotic Manipulation task success rate.",
           "descriptionZh": "机器人操作任务成功率。",
           "higherIsBetter": true,
           "primary": false,
@@ -10027,7 +10027,7 @@
         {
           "id": "interaction_trace_consistency",
           "name": "Interaction Trace Consistency",
-          "description": "interaction_trace_consistency normalized benchmark score.",
+          "description": "Consistency of the interaction traces predicted by the world model.",
           "descriptionZh": "世界模型预测交互轨迹的一致性。",
           "higherIsBetter": true,
           "primary": false,
@@ -10035,8 +10035,8 @@
         },
         {
           "id": "world_in_world_average",
-          "name": "World In World Average",
-          "description": "world_in_world_average normalized benchmark score.",
+          "name": "World-in-World Average",
+          "description": "Mean over available closed-loop task metrics.",
           "descriptionZh": "可用闭环任务指标的均值。",
           "higherIsBetter": true,
           "primary": true,
@@ -10075,8 +10075,8 @@
         }
       ],
       "data": {
-        "summary": "Tsinghua FIB Lab embodied world-model bench. Primary ewm_score.",
-        "summaryZh": "清华 FIB Lab 具身世界模型评测。主键 ewm_score。",
+        "summary": "Tsinghua FIB Lab embodied world-model bench: perceptual quality plus data-engine / policy-evaluator / action-planner utility. Primary metric: ewm_score.",
+        "summaryZh": "清华 FIB Lab 具身世界模型评测：感知质量加数据引擎 / 策略评估器 / 动作规划器效用。主键 ewm_score。",
         "sizeLabel": "Perceptual + functional tracks",
         "sizeLabelZh": "感知 + 功能赛道",
         "count": null,
@@ -10096,10 +10096,10 @@
         ],
         "license": "",
         "notes": [
-          "One real prepared-data PSNR component is verified. Full Track 1 and embodied tracks are not."
+          "The PSNR component is validated on prepared data. Full Track 1 and the embodied tracks have not been validated."
         ],
         "notesZh": [
-          "一个真实已准备数据的 PSNR 组件已验证。完整 Track 1 与具身赛道未验证。"
+          "PSNR 组件已在准备好的数据上验证。完整 Track 1 与具身赛道尚未验证。"
         ],
         "notApplicable": false
       },
@@ -10107,7 +10107,7 @@
         {
           "id": "visual_quality",
           "name": "Visual Quality",
-          "description": "visual_quality normalized benchmark score.",
+          "description": "Perceptual visual quality of generated embodied videos.",
           "descriptionZh": "生成具身视频的感知视觉质量。",
           "higherIsBetter": true,
           "primary": false,
@@ -10116,7 +10116,7 @@
         {
           "id": "motion_quality",
           "name": "Motion Quality",
-          "description": "motion_quality normalized benchmark score.",
+          "description": "Motion quality and smoothness.",
           "descriptionZh": "运动质量与平滑度维度。",
           "higherIsBetter": true,
           "primary": false,
@@ -10125,7 +10125,7 @@
         {
           "id": "content_consistency",
           "name": "Content Consistency",
-          "description": "content_consistency normalized benchmark score.",
+          "description": "Content consistency across the rollout.",
           "descriptionZh": "rollout 全程的内容一致性。",
           "higherIsBetter": true,
           "primary": false,
@@ -10134,7 +10134,7 @@
         {
           "id": "physics_adherence",
           "name": "Physics Adherence",
-          "description": "physics_adherence normalized benchmark score.",
+          "description": "Physical plausibility of the generated dynamics.",
           "descriptionZh": "生成动态的物理合理性。",
           "higherIsBetter": true,
           "primary": false,
@@ -10143,7 +10143,7 @@
         {
           "id": "three_d_accuracy",
           "name": "Three D Accuracy",
-          "description": "three_d_accuracy normalized benchmark score.",
+          "description": "3D structural accuracy of the generated scene.",
           "descriptionZh": "生成场景的 3D 结构准确性。",
           "higherIsBetter": true,
           "primary": false,
@@ -10152,7 +10152,7 @@
         {
           "id": "controllability",
           "name": "Controllability",
-          "description": "controllability normalized benchmark score.",
+          "description": "How closely the video follows the conditioning / action controls.",
           "descriptionZh": "对条件/动作控制的遵循程度。",
           "higherIsBetter": true,
           "primary": false,
@@ -10161,7 +10161,7 @@
         {
           "id": "data_engine_success",
           "name": "Data Engine Success",
-          "description": "data_engine_success normalized benchmark score.",
+          "description": "Utility as a synthetic-data engine for downstream policies.",
           "descriptionZh": "作为下游策略合成数据引擎的效用。",
           "higherIsBetter": true,
           "primary": false,
@@ -10170,7 +10170,7 @@
         {
           "id": "policy_evaluator_correlation",
           "name": "Policy Evaluator Correlation",
-          "description": "policy_evaluator_correlation normalized benchmark score.",
+          "description": "Correlation between in-model policy evaluation and real rollout outcomes.",
           "descriptionZh": "模型内策略评估与真实 rollout 结果的相关性。",
           "higherIsBetter": true,
           "primary": false,
@@ -10179,7 +10179,7 @@
         {
           "id": "action_planner_success",
           "name": "Action Planner Success",
-          "description": "action_planner_success normalized benchmark score.",
+          "description": "Task success when the world model acts as an action planner.",
           "descriptionZh": "世界模型充当动作规划器时的任务成功率。",
           "higherIsBetter": true,
           "primary": false,
@@ -10188,7 +10188,7 @@
         {
           "id": "human_quality",
           "name": "Human Quality",
-          "description": "human_quality normalized benchmark score.",
+          "description": "Generation quality for human subjects.",
           "descriptionZh": "人体主体生成质量维度。",
           "higherIsBetter": true,
           "primary": false,
@@ -10197,7 +10197,7 @@
         {
           "id": "ewm_score",
           "name": "Ewm Score",
-          "description": "ewm_score normalized benchmark score.",
+          "description": "Primary aggregate embodied-world-model score.",
           "descriptionZh": "具身世界模型主聚合分。",
           "higherIsBetter": true,
           "primary": true,
@@ -10236,10 +10236,10 @@
         }
       ],
       "data": {
-        "summary": "UCLA diagnostic physics bench. Paper: 425 Kubric scenes (motion, permanence, support, scale). Inspected HF tree currently has 375 scene directories. No redistribution license. Public evaluator names Dice as mIoU.",
-        "summaryZh": "UCLA 诊断物理评测。论文：425 个 Kubric 场景（运动、恒存、支撑、尺度）。当前检视的 HF 树是 375 个场景目录。无再分发许可证。公开评测器把 Dice 叫做 mIoU。",
-        "sizeLabel": "425 scenes claimed / 375 on HF",
-        "sizeLabelZh": "宣称 425 场景 / HF 上 375",
+        "summary": "UCLA diagnostic physics bench. Paper: 425 Kubric scenes (motion, permanence, support, scale). The public HF dataset has 375 scene directories. No redistribution license. Public evaluator names Dice as mIoU.",
+        "summaryZh": "UCLA 诊断物理评测。论文：425 个 Kubric 场景（运动、恒存、支撑、尺度）。公开 HF 数据集有 375 个场景目录。无再分发许可证。公开评测器把 Dice 叫做 mIoU。",
+        "sizeLabel": "425 scenes in paper / 375 on HF",
+        "sizeLabelZh": "论文 425 场景 / HF 上 375",
         "count": 425,
         "unit": "scenes",
         "sources": [
@@ -10253,10 +10253,10 @@
         "modalities": [],
         "license": "not_provided",
         "notes": [
-          "In-tree runner exists, but runtime environments record no confirmed redistributable official raw-video evaluator. official-run from videos is not a release claim."
+          "There is no confirmed redistributable official raw-video evaluator, so official-run scores from videos are not official results."
         ],
         "notesZh": [
-          "仓内 runner 存在，但运行时环境记录没有确认可再分发的官方原始视频评测器。从视频做 official-run 不是发布声明。"
+          "目前没有确认可再分发的官方原始视频评测器，因此从视频运行 official-run 得到的分数不是官方结果。"
         ],
         "notApplicable": false
       },
@@ -10324,6 +10324,179 @@
         "entries": []
       }
     },
+    "worldmembench": {
+      "id": "worldmembench",
+      "name": "WorldMemBench",
+      "projectPage": "",
+      "paperUrl": "",
+      "dimensions": [
+        {
+          "id": "imaging_quality",
+          "name": "Imaging Quality",
+          "nameZh": "Imaging Quality",
+          "kind": "axis",
+          "description": "Official MUSIQ-SPAQ frame scores, normalized upstream and averaged equally per video.",
+          "descriptionZh": ""
+        },
+        {
+          "id": "aesthetic_quality",
+          "name": "Aesthetic Quality",
+          "nameZh": "Aesthetic Quality",
+          "kind": "axis",
+          "description": "Official CLIP/LAION aesthetic frame scores, normalized upstream and averaged per video.",
+          "descriptionZh": ""
+        },
+        {
+          "id": "environment_scene_reconstruction",
+          "name": "Environment Scene Reconstruction",
+          "nameZh": "Environment Scene Reconstruction",
+          "kind": "axis",
+          "description": "Official scene reconstruction score at departure and revisit frames.",
+          "descriptionZh": ""
+        }
+      ],
+      "data": {
+        "summary": "",
+        "summaryZh": "",
+        "sizeLabel": "",
+        "sizeLabelZh": "",
+        "count": null,
+        "unit": "",
+        "sources": [
+          {
+            "kind": "github",
+            "id": "https://github.com/ZJU-REAL/WorldMemBench",
+            "license": ""
+          }
+        ],
+        "splits": [],
+        "modalities": [
+          "video",
+          "text"
+        ],
+        "license": "",
+        "notes": [],
+        "notesZh": [],
+        "notApplicable": false
+      },
+      "metrics": [
+        {
+          "id": "imaging_quality",
+          "name": "Imaging Quality",
+          "description": "Official MUSIQ-SPAQ frame scores, normalized upstream and averaged equally per video.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "imaging_quality"
+        },
+        {
+          "id": "aesthetic_quality",
+          "name": "Aesthetic Quality",
+          "description": "Official CLIP/LAION aesthetic frame scores, normalized upstream and averaged per video.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "aesthetic_quality"
+        },
+        {
+          "id": "human_identity",
+          "name": "Human Identity",
+          "description": "Human identity retention across departure and revisit segments.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "human_identity"
+        },
+        {
+          "id": "human_appearance",
+          "name": "Human Appearance",
+          "description": "Human appearance retention under the official revisit protocol.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "human_appearance"
+        },
+        {
+          "id": "object_geometry",
+          "name": "Object Geometry",
+          "description": "Object geometry retention under the official revisit protocol.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "object_geometry"
+        },
+        {
+          "id": "object_appearance",
+          "name": "Object Appearance",
+          "description": "Object appearance retention under the official revisit protocol.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "object_appearance"
+        },
+        {
+          "id": "environment_visible_memory",
+          "name": "Environment Visible Memory",
+          "description": "DINOv2 full-frame similarity at camera return frames.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "environment_visible_memory"
+        },
+        {
+          "id": "environment_depth_fidelity",
+          "name": "Environment Depth Fidelity",
+          "description": "Pixel-aligned DA3 depth-order Spearman correlation at return frames.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "environment_depth_fidelity"
+        },
+        {
+          "id": "environment_scene_reconstruction",
+          "name": "Environment Scene Reconstruction",
+          "description": "Official scene reconstruction score at departure and revisit frames.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "environment_scene_reconstruction"
+        },
+        {
+          "id": "dynamic_memory",
+          "name": "Dynamic Memory",
+          "description": "Event-gated eight-question VLM checklist score with per-category details retained.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "dynamic_memory"
+        },
+        {
+          "id": "camera_rotation",
+          "name": "Camera Rotation",
+          "description": "DA3 adjacent rotation RPE normalized by the reference rotation path.",
+          "descriptionZh": "",
+          "higherIsBetter": false,
+          "primary": false,
+          "leaderboardKey": "camera_rotation"
+        },
+        {
+          "id": "camera_translation",
+          "name": "Camera Translation",
+          "description": "DA3/ViPE path-normalized translation RPE following Sim(3) alignment.",
+          "descriptionZh": "",
+          "higherIsBetter": false,
+          "primary": false,
+          "leaderboardKey": "camera_translation"
+        }
+      ],
+      "leaderboard": {
+        "ingested": false,
+        "source": "",
+        "sourceZh": "",
+        "officialUrl": "",
+        "entries": []
+      }
+    },
     "worldmodelbench": {
       "id": "worldmodelbench",
       "name": "WorldModelBench",
@@ -10357,7 +10530,7 @@
       ],
       "data": {
         "summary": "NeurIPS 2025 world-model judging suite. 350 instances, 67K crowd labels, fine-tuned 2B VILA judge. Leaderboard answers withheld upstream.",
-        "summaryZh": "NeurIPS 2025 世界模型裁判套件。350 条实例、6.7 万条众包标注、微调 2B VILA 裁判。榜单答案在上游扣留。",
+        "summaryZh": "NeurIPS 2025 世界模型裁判套件。350 条实例、6.7 万条众包标注、微调 2B VILA 裁判。上游未公开榜单答案。",
         "sizeLabel": "350 instances",
         "sizeLabelZh": "350 条实例",
         "count": 350,
@@ -10382,10 +10555,10 @@
         ],
         "license": "unknown_pending_review",
         "notes": [
-          "Result import and manifest coverage checks are verified. Full judge-checkpoint execution is not."
+          "Result import and manifest coverage checks are validated."
         ],
         "notesZh": [
-          "结果导入与清单覆盖检查已验证。完整裁判权重执行未验证。"
+          "结果导入与清单覆盖检查已验证。"
         ],
         "notApplicable": false
       },
@@ -10469,8 +10642,8 @@
       "data": {
         "summary": "Alibaba DAMO triathlon for long-video world models. Dataset ziplab/WorldOlympiad. Upstream publishes no LICENSE at the pinned revision. Official split cited as 1,000 videos.",
         "summaryZh": "阿里达摩院长视频世界模型三项赛。数据 ziplab/WorldOlympiad。钉选修订没有 LICENSE。官方划分引用 1000 条视频。",
-        "sizeLabel": "1,000-video split (unscored here)",
-        "sizeLabelZh": "1000 视频划分（此处未计分）",
+        "sizeLabel": "1,000-video split",
+        "sizeLabelZh": "1000 视频划分",
         "count": 1000,
         "unit": "videos",
         "sources": [
@@ -10498,10 +10671,10 @@
         ],
         "license": "unlicensed_upstream",
         "notes": [
-          "In-tree batch plan (--run-official --dry-run) and judge-output normalization are verified. No scored triathlon run is claimed."
+          "The batch plan (--run-official --dry-run) and judge-output normalization are validated. A scored triathlon run has not been validated."
         ],
         "notesZh": [
-          "仓内批量计划（--run-official --dry-run）与裁判输出归一化已验证。不声称已做计分三项赛。"
+          "批量计划（--run-official --dry-run）与裁判输出归一化已验证。计分三项赛运行尚未验证。"
         ],
         "notApplicable": false
       },
@@ -10726,10 +10899,10 @@
         ],
         "license": "restricted_noncommercial",
         "notes": [
-          "Result normalization/QA component code exists. No complete official judge run is claimed."
+          "A complete official judge run has not been validated."
         ],
         "notesZh": [
-          "结果归一化/QA 组件代码存在。不声称已完成完整官方裁判运行。"
+          "完整的官方裁判运行尚未验证。"
         ],
         "notApplicable": false
       },
@@ -10955,10 +11128,10 @@
         ],
         "license": "MIT",
         "notes": [
-          "A bounded dynamic component is verified. Full metric-tree execution (DROID/lietorch, GroundingDINO, SAM, flow, Mamba) is not."
+          "The dynamics component is validated on a bounded sample; the full metric tree needs DROID/lietorch, GroundingDINO, SAM, optical flow, and Mamba."
         ],
         "notesZh": [
-          "有界动态组件已验证。完整指标树执行（DROID/lietorch、GroundingDINO、SAM、光流、Mamba）未验证。"
+          "动态组件已在有限样本上验证；完整指标树需要 DROID/lietorch、GroundingDINO、SAM、光流和 Mamba。"
         ],
         "notApplicable": false
       },
@@ -11095,10 +11268,10 @@
         ],
         "license": "",
         "notes": [
-          "Natural-25 request materialization and result normalization are available. Full D1–D6 execution (VGGT-Omega, DINOv2, Qwen3.5, Qwen3-VL) is unverified."
+          "Natural-25 request materialization and result normalization are available. Full D1–D6 scoring needs VGGT-Omega, DINOv2, Qwen3.5, and Qwen3-VL checkpoints."
         ],
         "notesZh": [
-          "Natural-25 请求物化与结果归一化可用。完整 D1–D6 执行（VGGT-Omega、DINOv2、Qwen3.5、Qwen3-VL）未验证。"
+          "Natural-25 请求物化与结果归一化可用。完整 D1–D6 打分需要 VGGT-Omega、DINOv2、Qwen3.5 与 Qwen3-VL 权重。"
         ],
         "notApplicable": false
       },

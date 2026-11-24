@@ -1,50 +1,46 @@
 ---
 title: "VGGT"
-description: "VGGT from Meta AI (FAIR) / University of Oxford (VGG): 3d-reconstruction and 3dgs; Runner parity pending."
+description: "VGGT from Meta AI (FAIR) / University of Oxford (VGG): 3D reconstruction, 3dgs, and 1 more task; Runner parity pending."
 modelId: "vggt"
 pageSource: authored
 ---
 
-VGGT (Visual Geometry Grounded Transformer, CVPR 2025) is a feed-forward network that infers cameras, depth maps, point maps, and 3D point tracks from one to hundreds of views in a single pass — no per-scene optimization. In this catalog the in-tree two-stage 3DGS pipeline is registered, distinct from the vggt-omega and vggt-world entries.
+VGGT (Visual Geometry Grounded Transformer, CVPR 2025) is a feed-forward network that infers cameras, depth maps, point maps, and 3D point tracks from one to hundreds of views in a single pass — no per-scene optimization. WorldFoundry runs an in-tree two-stage 3DGS pipeline on VGGT geometry; vggt-omega and vggt-world are separate models.
 
 <ModelPaperFigures modelId="vggt" locale="en" />
 
 Project page: [vgg-t.github.io](https://vgg-t.github.io/). Code: [facebookresearch/vggt](https://github.com/facebookresearch/vggt).
 
-The paper is [Paper](https://openaccess.thecvf.com/content/CVPR2025/papers/Wang_VGGT_Visual_Geometry_Grounded_Transformer_CVPR_2025_paper.pdf). Project page: [vgg-t.github.io](https://vgg-t.github.io). Code: [facebookresearch/vggt](https://github.com/facebookresearch/vggt).
+Paper: [VGGT: Visual Geometry Grounded Transformer](https://openaccess.thecvf.com/content/CVPR2025/papers/Wang_VGGT_Visual_Geometry_Grounded_Transformer_CVPR_2025_paper.pdf) (CVPR 2025).
 
 <ModelCommandBuilder modelId="vggt" locale="en" />
 
 ## What it is for
 
-Use `vggt` for catalog geometry inference. Choose it when the artifact is a reconstruction, not a generated video.
+`vggt` estimates scene geometry from the input views.
 
-Per the CVPR 2025 paper, a large transformer alternates frame-wise and global attention over image tokens, with task-specific heads for cameras, depth, pointmaps, and tracking. Weights are apache-2.0 (facebookresearch/vggt); the recorded route builds 3DGS from VGGT geometry in two stages. It is published by Meta AI (FAIR) / University of Oxford (VGG).
+Per the CVPR 2025 paper, a large transformer alternates frame-wise and global attention over image tokens, with task-specific heads for cameras, depth, pointmaps, and tracking. Weights are apache-2.0 (facebookresearch/vggt); the WorldFoundry route builds 3DGS from VGGT geometry in two stages. It is published by Meta AI (FAIR) / University of Oxford (VGG).
 
-Catalog tasks include 3d-reconstruction, 3dgs, and point-cloud. Documented outputs include point cloud.
+Tasks: 3D reconstruction, 3dgs, and point cloud. Output modalities: point cloud.
 
-Not [VGGT-World](/docs/guides/supported-models/vggt-world) and [Infinite VGGT](/docs/guides/supported-models/infinite-vggt).
+Related VGGT-based models: [VGGT-World](/docs/guides/supported-models/vggt-world) and [Infinite VGGT](/docs/guides/supported-models/infinite-vggt).
 
 ## Runtime contract
 
-Optional `input_path`, `interactions`, `fps`, `height`, and `width`.
+Inputs `input-path` (bundled samples are used when omitted); options `fps`, `height`, `width`, `point-conf-threshold`, `resolution`, and `preprocess-mode`.
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `VGGTPipeline`.
 
 Family status: **Runner parity pending**.
 
-Integration is **Runner parity pending**. For the verified scene-export route use vggt-omega; use this entry when you want the two-stage 3DGS pipeline over base VGGT geometry.
-
-In-tree VGGT two-stage 3DGS pipeline is registered; distinct from vggt-omega and vggt-world catalog entries.
+For the verified scene-export route use vggt-omega; use vggt when you want the two-stage 3DGS pipeline over base VGGT geometry.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run vggt --pipeline.task-profile interactive-video` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Reconstruct the scene with `wf run vggt --pipeline.task-profile interactive-video`.
 
-The environment profile is not recorded.
+No runtime environment is recorded for this model.
 
-Recorded weight repositories include `facebook/VGGT-1B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh vggt`. Add `--download` to fetch missing public checkpoints.
-
-Status: **Runner parity pending**.
+Weights: `facebook/VGGT-1B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh vggt`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="vggt" locale="en" />

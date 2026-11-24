@@ -6,7 +6,7 @@ blocks keep video and text separate until joint attention; single-stream
 blocks concatenate them.  Token-replace AdaLN can modulate an i2v prefix.
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -67,8 +67,8 @@ class MMDoubleStreamBlock(nn.Module):
         qk_norm: bool = True,
         qk_norm_type: str = "rms",
         qkv_bias: bool = False,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
@@ -84,31 +84,19 @@ class MMDoubleStreamBlock(nn.Module):
             act_layer=get_activation_layer("silu"),
             **factory_kwargs,
         )
-        self.img_norm1 = nn.LayerNorm(
-            hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs
-        )
+        self.img_norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs)
 
-        self.img_attn_qkv = nn.Linear(
-            hidden_size, hidden_size * 3, bias=qkv_bias, **factory_kwargs
-        )
+        self.img_attn_qkv = nn.Linear(hidden_size, hidden_size * 3, bias=qkv_bias, **factory_kwargs)
         qk_norm_layer = get_norm_layer(qk_norm_type)
         self.img_attn_q_norm = (
-            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs)
-            if qk_norm
-            else nn.Identity()
+            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs) if qk_norm else nn.Identity()
         )
         self.img_attn_k_norm = (
-            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs)
-            if qk_norm
-            else nn.Identity()
+            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs) if qk_norm else nn.Identity()
         )
-        self.img_attn_proj = nn.Linear(
-            hidden_size, hidden_size, bias=qkv_bias, **factory_kwargs
-        )
+        self.img_attn_proj = nn.Linear(hidden_size, hidden_size, bias=qkv_bias, **factory_kwargs)
 
-        self.img_norm2 = nn.LayerNorm(
-            hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs
-        )
+        self.img_norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs)
         self.img_mlp = MLP(
             hidden_size,
             mlp_hidden_dim,
@@ -123,30 +111,18 @@ class MMDoubleStreamBlock(nn.Module):
             act_layer=get_activation_layer("silu"),
             **factory_kwargs,
         )
-        self.txt_norm1 = nn.LayerNorm(
-            hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs
-        )
+        self.txt_norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs)
 
-        self.txt_attn_qkv = nn.Linear(
-            hidden_size, hidden_size * 3, bias=qkv_bias, **factory_kwargs
-        )
+        self.txt_attn_qkv = nn.Linear(hidden_size, hidden_size * 3, bias=qkv_bias, **factory_kwargs)
         self.txt_attn_q_norm = (
-            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs)
-            if qk_norm
-            else nn.Identity()
+            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs) if qk_norm else nn.Identity()
         )
         self.txt_attn_k_norm = (
-            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs)
-            if qk_norm
-            else nn.Identity()
+            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs) if qk_norm else nn.Identity()
         )
-        self.txt_attn_proj = nn.Linear(
-            hidden_size, hidden_size, bias=qkv_bias, **factory_kwargs
-        )
+        self.txt_attn_proj = nn.Linear(hidden_size, hidden_size, bias=qkv_bias, **factory_kwargs)
 
-        self.txt_norm2 = nn.LayerNorm(
-            hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs
-        )
+        self.txt_norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs)
         self.txt_mlp = MLP(
             hidden_size,
             mlp_hidden_dim,
@@ -155,6 +131,11 @@ class MMDoubleStreamBlock(nn.Module):
             **factory_kwargs,
         )
         self.hybrid_seq_parallel_attn = None
+        self.attention_backend: str | None = "torch"
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention backend for dual-stream attention."""
+        self.attention_backend = "torch" if backend is None else str(backend)
 
     def enable_deterministic(self):
         self.deterministic = True
@@ -167,30 +148,29 @@ class MMDoubleStreamBlock(nn.Module):
         img: torch.Tensor,
         txt: torch.Tensor,
         vec: torch.Tensor,
-        cu_seqlens_q: Optional[torch.Tensor] = None,
-        cu_seqlens_kv: Optional[torch.Tensor] = None,
-        max_seqlen_q: Optional[int] = None,
-        max_seqlen_kv: Optional[int] = None,
-        freqs_cis: tuple = None,
-        condition_type: str = None,
+        cu_seqlens_q: torch.Tensor | None = None,
+        cu_seqlens_kv: torch.Tensor | None = None,
+        max_seqlen_q: int | None = None,
+        max_seqlen_kv: int | None = None,
+        freqs_cis: tuple | None = None,
+        condition_type: str | None = None,
         token_replace_vec: torch.Tensor = None,
-        frist_frame_token_num: int = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        frist_frame_token_num: int | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Joint-attend video ``img`` and text ``txt`` (both ``B S C``); return the pair."""
         if condition_type == "token_replace":
             img_mod1, token_replace_img_mod1 = self.img_mod(vec, secondary_value=token_replace_vec)
-            (img_mod1_shift,
-             img_mod1_scale,
-             img_mod1_gate,
-             img_mod2_shift,
-             img_mod2_scale,
-             img_mod2_gate) = img_mod1.chunk(6, dim=-1)
-            (tr_img_mod1_shift,
-             tr_img_mod1_scale,
-             tr_img_mod1_gate,
-             tr_img_mod2_shift,
-             tr_img_mod2_scale,
-             tr_img_mod2_gate) = token_replace_img_mod1.chunk(6, dim=-1)
+            (img_mod1_shift, img_mod1_scale, img_mod1_gate, img_mod2_shift, img_mod2_scale, img_mod2_gate) = (
+                img_mod1.chunk(6, dim=-1)
+            )
+            (
+                tr_img_mod1_shift,
+                tr_img_mod1_scale,
+                tr_img_mod1_gate,
+                tr_img_mod2_shift,
+                tr_img_mod2_scale,
+                tr_img_mod2_gate,
+            ) = token_replace_img_mod1.chunk(6, dim=-1)
         else:
             (
                 img_mod1_shift,
@@ -222,13 +202,9 @@ class MMDoubleStreamBlock(nn.Module):
                 prefix_length=frist_frame_token_num,
             )
         else:
-            img_modulated = modulate(
-                img_modulated, shift=img_mod1_shift, scale=img_mod1_scale
-            )
+            img_modulated = modulate(img_modulated, shift=img_mod1_shift, scale=img_mod1_scale)
         img_qkv = self.img_attn_qkv(img_modulated)
-        img_q, img_k, img_v = rearrange(
-            img_qkv, "B L (K H D) -> K B L H D", K=3, H=self.heads_num
-        )
+        img_q, img_k, img_v = rearrange(img_qkv, "B L (K H D) -> K B L H D", K=3, H=self.heads_num)
         # Apply QK-Norm if needed
         img_q = self.img_attn_q_norm(img_q).to(img_v)
         img_k = self.img_attn_k_norm(img_k).to(img_v)
@@ -236,20 +212,16 @@ class MMDoubleStreamBlock(nn.Module):
         # Apply RoPE if needed.
         if freqs_cis is not None:
             img_qq, img_kk = apply_rotary_emb(img_q, img_k, freqs_cis, head_first=False)
-            assert (
-                img_qq.shape == img_q.shape and img_kk.shape == img_k.shape
-            ), f"img_kk: {img_qq.shape}, img_q: {img_q.shape}, img_kk: {img_kk.shape}, img_k: {img_k.shape}"
+            assert img_qq.shape == img_q.shape and img_kk.shape == img_k.shape, (
+                f"img_kk: {img_qq.shape}, img_q: {img_q.shape}, img_kk: {img_kk.shape}, img_k: {img_k.shape}"
+            )
             img_q, img_k = img_qq, img_kk
 
         # Prepare txt for attention.
         txt_modulated = self.txt_norm1(txt)
-        txt_modulated = modulate(
-            txt_modulated, shift=txt_mod1_shift, scale=txt_mod1_scale
-        )
+        txt_modulated = modulate(txt_modulated, shift=txt_mod1_shift, scale=txt_mod1_scale)
         txt_qkv = self.txt_attn_qkv(txt_modulated)
-        txt_q, txt_k, txt_v = rearrange(
-            txt_qkv, "B L (K H D) -> K B L H D", K=3, H=self.heads_num
-        )
+        txt_q, txt_k, txt_v = rearrange(txt_qkv, "B L (K H D) -> K B L H D", K=3, H=self.heads_num)
         # Apply QK-Norm if needed.
         txt_q = self.txt_attn_q_norm(txt_q).to(txt_v)
         txt_k = self.txt_attn_k_norm(txt_k).to(txt_v)
@@ -258,16 +230,17 @@ class MMDoubleStreamBlock(nn.Module):
         q = torch.cat((img_q, txt_q), dim=1)
         k = torch.cat((img_k, txt_k), dim=1)
         v = torch.cat((img_v, txt_v), dim=1)
-        assert (
-            cu_seqlens_q.shape[0] == 2 * img.shape[0] + 1
-        ), f"cu_seqlens_q.shape:{cu_seqlens_q.shape}, img.shape[0]:{img.shape[0]}"
-        
+        assert cu_seqlens_q.shape[0] == 2 * img.shape[0] + 1, (
+            f"cu_seqlens_q.shape:{cu_seqlens_q.shape}, img.shape[0]:{img.shape[0]}"
+        )
+
         # attention computation start
         if not self.hybrid_seq_parallel_attn:
             attn = attention(
                 q,
                 k,
                 v,
+                mode=self.attention_backend or "torch",
                 cu_seqlens_q=cu_seqlens_q,
                 cu_seqlens_kv=cu_seqlens_kv,
                 max_seqlen_q=max_seqlen_q,
@@ -283,9 +256,9 @@ class MMDoubleStreamBlock(nn.Module):
                 img_q_len=img_q.shape[1],
                 img_kv_len=img_k.shape[1],
                 cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_kv=cu_seqlens_kv
+                cu_seqlens_kv=cu_seqlens_kv,
             )
-            
+
         # attention computation end
 
         img_attn, txt_attn = attn[:, : img.shape[1]], attn[:, img.shape[1] :]
@@ -316,22 +289,14 @@ class MMDoubleStreamBlock(nn.Module):
         else:
             img = img + apply_gate(self.img_attn_proj(img_attn), gate=img_mod1_gate)
             img = img + apply_gate(
-                self.img_mlp(
-                    modulate(
-                        self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale
-                    )
-                ),
+                self.img_mlp(modulate(self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale)),
                 gate=img_mod2_gate,
             )
 
         # Calculate the txt bloks.
         txt = txt + apply_gate(self.txt_attn_proj(txt_attn), gate=txt_mod1_gate)
         txt = txt + apply_gate(
-            self.txt_mlp(
-                modulate(
-                    self.txt_norm2(txt), shift=txt_mod2_shift, scale=txt_mod2_scale
-                )
-            ),
+            self.txt_mlp(modulate(self.txt_norm2(txt), shift=txt_mod2_shift, scale=txt_mod2_scale)),
             gate=txt_mod2_gate,
         )
 
@@ -354,9 +319,9 @@ class MMSingleStreamBlock(nn.Module):
         mlp_act_type: str = "gelu_tanh",
         qk_norm: bool = True,
         qk_norm_type: str = "rms",
-        qk_scale: float = None,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        qk_scale: float | None = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
@@ -367,32 +332,22 @@ class MMSingleStreamBlock(nn.Module):
         head_dim = hidden_size // heads_num
         mlp_hidden_dim = int(hidden_size * mlp_width_ratio)
         self.mlp_hidden_dim = mlp_hidden_dim
-        self.scale = qk_scale or head_dim ** -0.5
+        self.scale = qk_scale or head_dim**-0.5
 
         # qkv and mlp_in
-        self.linear1 = nn.Linear(
-            hidden_size, hidden_size * 3 + mlp_hidden_dim, **factory_kwargs
-        )
+        self.linear1 = nn.Linear(hidden_size, hidden_size * 3 + mlp_hidden_dim, **factory_kwargs)
         # proj and mlp_out
-        self.linear2 = nn.Linear(
-            hidden_size + mlp_hidden_dim, hidden_size, **factory_kwargs
-        )
+        self.linear2 = nn.Linear(hidden_size + mlp_hidden_dim, hidden_size, **factory_kwargs)
 
         qk_norm_layer = get_norm_layer(qk_norm_type)
         self.q_norm = (
-            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs)
-            if qk_norm
-            else nn.Identity()
+            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs) if qk_norm else nn.Identity()
         )
         self.k_norm = (
-            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs)
-            if qk_norm
-            else nn.Identity()
+            qk_norm_layer(head_dim, elementwise_affine=True, eps=1e-6, **factory_kwargs) if qk_norm else nn.Identity()
         )
 
-        self.pre_norm = nn.LayerNorm(
-            hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs
-        )
+        self.pre_norm = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs)
 
         self.mlp_act = get_activation_layer(mlp_act_type)()
         self.modulation = ModulateDiT(
@@ -402,6 +357,11 @@ class MMSingleStreamBlock(nn.Module):
             **factory_kwargs,
         )
         self.hybrid_seq_parallel_attn = None
+        self.attention_backend: str | None = "torch"
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention backend for dual-stream attention."""
+        self.attention_backend = "torch" if backend is None else str(backend)
 
     def enable_deterministic(self):
         self.deterministic = True
@@ -414,24 +374,20 @@ class MMSingleStreamBlock(nn.Module):
         x: torch.Tensor,
         vec: torch.Tensor,
         txt_len: int,
-        cu_seqlens_q: Optional[torch.Tensor] = None,
-        cu_seqlens_kv: Optional[torch.Tensor] = None,
-        max_seqlen_q: Optional[int] = None,
-        max_seqlen_kv: Optional[int] = None,
-        freqs_cis: Tuple[torch.Tensor, torch.Tensor] = None,
-        condition_type: str = None,
+        cu_seqlens_q: torch.Tensor | None = None,
+        cu_seqlens_kv: torch.Tensor | None = None,
+        max_seqlen_q: int | None = None,
+        max_seqlen_kv: int | None = None,
+        freqs_cis: tuple[torch.Tensor, torch.Tensor] | None = None,
+        condition_type: str | None = None,
         token_replace_vec: torch.Tensor = None,
-        frist_frame_token_num: int = None,
+        frist_frame_token_num: int | None = None,
     ) -> torch.Tensor:
         """Single-stream block on concatenated video+text tokens ``B (Sv+St) C``."""
         if condition_type == "token_replace":
             mod, tr_mod = self.modulation(vec, secondary_value=token_replace_vec)
-            (mod_shift,
-             mod_scale,
-             mod_gate) = mod.chunk(3, dim=-1)
-            (tr_mod_shift,
-             tr_mod_scale,
-             tr_mod_gate) = tr_mod.chunk(3, dim=-1)
+            (mod_shift, mod_scale, mod_gate) = mod.chunk(3, dim=-1)
+            (tr_mod_shift, tr_mod_scale, tr_mod_gate) = tr_mod.chunk(3, dim=-1)
         else:
             mod_shift, mod_scale, mod_gate = self.modulation(vec).chunk(3, dim=-1)
         if condition_type == "token_replace":
@@ -445,9 +401,7 @@ class MMSingleStreamBlock(nn.Module):
             )
         else:
             x_mod = modulate(self.pre_norm(x), shift=mod_shift, scale=mod_scale)
-        qkv, mlp = torch.split(
-            self.linear1(x_mod), [3 * self.hidden_size, self.mlp_hidden_dim], dim=-1
-        )
+        qkv, mlp = torch.split(self.linear1(x_mod), [3 * self.hidden_size, self.mlp_hidden_dim], dim=-1)
 
         q, k, v = rearrange(qkv, "B L (K H D) -> K B L H D", K=3, H=self.heads_num)
 
@@ -460,24 +414,25 @@ class MMSingleStreamBlock(nn.Module):
             img_q, txt_q = q[:, :-txt_len, :, :], q[:, -txt_len:, :, :]
             img_k, txt_k = k[:, :-txt_len, :, :], k[:, -txt_len:, :, :]
             img_qq, img_kk = apply_rotary_emb(img_q, img_k, freqs_cis, head_first=False)
-            assert (
-                img_qq.shape == img_q.shape and img_kk.shape == img_k.shape
-            ), f"img_kk: {img_qq.shape}, img_q: {img_q.shape}, img_kk: {img_kk.shape}, img_k: {img_k.shape}"
+            assert img_qq.shape == img_q.shape and img_kk.shape == img_k.shape, (
+                f"img_kk: {img_qq.shape}, img_q: {img_q.shape}, img_kk: {img_kk.shape}, img_k: {img_k.shape}"
+            )
             img_q, img_k = img_qq, img_kk
             q = torch.cat((img_q, txt_q), dim=1)
             k = torch.cat((img_k, txt_k), dim=1)
 
         # Compute attention.
-        assert (
-            cu_seqlens_q.shape[0] == 2 * x.shape[0] + 1
-        ), f"cu_seqlens_q.shape:{cu_seqlens_q.shape}, x.shape[0]:{x.shape[0]}"
-        
+        assert cu_seqlens_q.shape[0] == 2 * x.shape[0] + 1, (
+            f"cu_seqlens_q.shape:{cu_seqlens_q.shape}, x.shape[0]:{x.shape[0]}"
+        )
+
         # attention computation start
         if not self.hybrid_seq_parallel_attn:
             attn = attention(
                 q,
                 k,
                 v,
+                mode=self.attention_backend or "torch",
                 cu_seqlens_q=cu_seqlens_q,
                 cu_seqlens_kv=cu_seqlens_kv,
                 max_seqlen_q=max_seqlen_q,
@@ -493,7 +448,7 @@ class MMSingleStreamBlock(nn.Module):
                 img_q_len=img_q.shape[1],
                 img_kv_len=img_k.shape[1],
                 cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_kv=cu_seqlens_kv
+                cu_seqlens_kv=cu_seqlens_kv,
             )
         # attention computation end
 
@@ -565,24 +520,24 @@ class HYVideoDiffusionTransformer(nn.Module):
     def __init__(
         self,
         args: Any,
-        patch_size: list = [1, 2, 2],
+        patch_size: list = [1, 2, 2],  # noqa: B006 - Keeps the upstream default object and signature.
         in_channels: int = 4,  # Should be VAE.config.latent_channels.
-        out_channels: int = None,
+        out_channels: int | None = None,
         hidden_size: int = 3072,
         heads_num: int = 24,
         mlp_width_ratio: float = 4.0,
         mlp_act_type: str = "gelu_tanh",
         mm_double_blocks_depth: int = 20,
         mm_single_blocks_depth: int = 40,
-        rope_dim_list: List[int] = [16, 56, 56],
+        rope_dim_list: list[int] = [16, 56, 56],  # noqa: B006 - Keeps the upstream default object and signature.
         qkv_bias: bool = True,
         qk_norm: bool = True,
         qk_norm_type: str = "rms",
         guidance_embed: bool = False,  # For modulation.
         text_projection: str = "single_refiner",
         use_attention_mask: bool = True,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
@@ -607,27 +562,22 @@ class HYVideoDiffusionTransformer(nn.Module):
         self.gradient_checkpoint = args.gradient_checkpoint
         self.gradient_checkpoint_layers = args.gradient_checkpoint_layers
         if self.gradient_checkpoint:
-            assert self.gradient_checkpoint_layers <= mm_double_blocks_depth + mm_single_blocks_depth, \
-                f"Gradient checkpoint layers must be less or equal than the depth of the model. " \
-                f"Got gradient_checkpoint_layers={self.gradient_checkpoint_layers} and " \
+            assert self.gradient_checkpoint_layers <= mm_double_blocks_depth + mm_single_blocks_depth, (
+                f"Gradient checkpoint layers must be less or equal than the depth of the model. "
+                f"Got gradient_checkpoint_layers={self.gradient_checkpoint_layers} and "
                 f"depth={mm_double_blocks_depth + mm_single_blocks_depth}."
+            )
 
         if hidden_size % heads_num != 0:
-            raise ValueError(
-                f"Hidden size {hidden_size} must be divisible by heads_num {heads_num}"
-            )
+            raise ValueError(f"Hidden size {hidden_size} must be divisible by heads_num {heads_num}")
         pe_dim = hidden_size // heads_num
         if sum(rope_dim_list) != pe_dim:
-            raise ValueError(
-                f"Got {rope_dim_list} but expected positional dim {pe_dim}"
-            )
+            raise ValueError(f"Got {rope_dim_list} but expected positional dim {pe_dim}")
         self.hidden_size = hidden_size
         self.heads_num = heads_num
 
         # image projection
-        self.img_in = PatchEmbed(
-            self.patch_size, self.in_channels, self.hidden_size, **factory_kwargs
-        )
+        self.img_in = PatchEmbed(self.patch_size, self.in_channels, self.hidden_size, **factory_kwargs)
 
         # text projection
         if self.text_projection == "linear":
@@ -638,29 +588,19 @@ class HYVideoDiffusionTransformer(nn.Module):
                 **factory_kwargs,
             )
         elif self.text_projection == "single_refiner":
-            self.txt_in = SingleTokenRefiner(
-                self.text_states_dim, hidden_size, heads_num, depth=2, **factory_kwargs
-            )
+            self.txt_in = SingleTokenRefiner(self.text_states_dim, hidden_size, heads_num, depth=2, **factory_kwargs)
         else:
-            raise NotImplementedError(
-                f"Unsupported text_projection: {self.text_projection}"
-            )
+            raise NotImplementedError(f"Unsupported text_projection: {self.text_projection}")
 
         # time modulation
-        self.time_in = TimestepEmbedder(
-            self.hidden_size, get_activation_layer("silu"), **factory_kwargs
-        )
+        self.time_in = TimestepEmbedder(self.hidden_size, get_activation_layer("silu"), **factory_kwargs)
 
         # text modulation
-        self.vector_in = MLPEmbedder(
-            self.text_states_dim_2, self.hidden_size, **factory_kwargs
-        )
+        self.vector_in = MLPEmbedder(self.text_states_dim_2, self.hidden_size, **factory_kwargs)
 
         # guidance modulation
         self.guidance_in = (
-            TimestepEmbedder(
-                self.hidden_size, get_activation_layer("silu"), **factory_kwargs
-            )
+            TimestepEmbedder(self.hidden_size, get_activation_layer("silu"), **factory_kwargs)
             if guidance_embed
             else None
         )
@@ -705,6 +645,16 @@ class HYVideoDiffusionTransformer(nn.Module):
             get_activation_layer("silu"),
             **factory_kwargs,
         )
+        self.attention_backend: str | None = "torch"
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention provider on all double and single blocks."""
+        resolved = "torch" if backend is None else str(backend)
+        self.attention_backend = resolved
+        for block in self.double_blocks:
+            block.set_attention_backend(resolved)
+        for block in self.single_blocks:
+            block.set_attention_backend(resolved)
 
     def enable_deterministic(self):
         for block in self.double_blocks:
@@ -724,12 +674,12 @@ class HYVideoDiffusionTransformer(nn.Module):
         t: torch.Tensor,  # Should be in range(0, 1000).
         text_states: torch.Tensor = None,
         text_mask: torch.Tensor = None,  # Now we don't use it.
-        text_states_2: Optional[torch.Tensor] = None,  # Text embedding for modulation.
-        freqs_cos: Optional[torch.Tensor] = None,
-        freqs_sin: Optional[torch.Tensor] = None,
+        text_states_2: torch.Tensor | None = None,  # Text embedding for modulation.
+        freqs_cos: torch.Tensor | None = None,
+        freqs_sin: torch.Tensor | None = None,
         guidance: torch.Tensor = None,  # Guidance for modulation, should be cfg_scale x 1000.
         return_dict: bool = True,
-    ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+    ) -> torch.Tensor | dict[str, torch.Tensor]:
         """Patch-embed ``x`` as ``B C T H W``, run dual- then single-stream blocks, unpatchify."""
         out = {}
         img = x
@@ -761,9 +711,7 @@ class HYVideoDiffusionTransformer(nn.Module):
         # guidance modulation
         if self.guidance_embed:
             if guidance is None:
-                raise ValueError(
-                    "Didn't get guidance strength for guidance distilled model."
-                )
+                raise ValueError("Didn't get guidance strength for guidance distilled model.")
 
             # our timestep_embedding is merged into guidance_in(TimestepEmbedder)
             vec = vec + self.guidance_in(guidance)
@@ -775,9 +723,7 @@ class HYVideoDiffusionTransformer(nn.Module):
         elif self.text_projection == "single_refiner":
             txt = self.txt_in(txt, t, text_mask if self.use_attention_mask else None)
         else:
-            raise NotImplementedError(
-                f"Unsupported text_projection: {self.text_projection}"
-            )
+            raise NotImplementedError(f"Unsupported text_projection: {self.text_projection}")
 
         txt_seq_len = txt.shape[1]
         img_seq_len = img.shape[1]
@@ -789,61 +735,179 @@ class HYVideoDiffusionTransformer(nn.Module):
         max_seqlen_kv = max_seqlen_q
 
         freqs_cis = (freqs_cos, freqs_sin) if freqs_cos is not None else None
+        piecewise_graph = None
+        if isinstance(return_dict, bool):
+            piecewise_graph = getattr(self, "_active_piecewise_graph", None)
         # --------------------- Pass through DiT blocks ------------------------
-        for layer_num, block in enumerate(self.double_blocks):
-            double_block_args = [
+        if piecewise_graph is not None and not self.training:
+            use_cpu_cu = self.attention_backend in (None, "torch")
+            cu_q_tuple = tuple(int(v) for v in cu_seqlens_q.tolist()) if use_cpu_cu else None
+            cu_kv_tuple = tuple(int(v) for v in cu_seqlens_kv.tolist()) if use_cpu_cu else None
+
+            def _run_double_stack(
+                img_in,
+                txt_in,
+                vec_in,
+                cu_q_dev,
+                cu_kv_dev,
+                cu_q_host,
+                cu_kv_host,
+                cos_in,
+                sin_in,
+                tr_vec,
+                max_q_val,
+                max_kv_val,
+                first_frame_tokens_val,
+            ):
+                cu_q_eff = torch.tensor(cu_q_host, dtype=torch.int32) if cu_q_host is not None else cu_q_dev
+                cu_kv_eff = torch.tensor(cu_kv_host, dtype=torch.int32) if cu_kv_host is not None else cu_kv_dev
+                f_cis = (cos_in, sin_in) if cos_in is not None else None
+                for block in self.double_blocks:
+                    img_in, txt_in = block(
+                        img_in,
+                        txt_in,
+                        vec_in,
+                        cu_q_eff,
+                        cu_kv_eff,
+                        max_q_val,
+                        max_kv_val,
+                        f_cis,
+                        self.i2v_condition_type,
+                        tr_vec,
+                        first_frame_tokens_val,
+                    )
+                return img_in, txt_in
+
+            def _run_single_stack(
+                x_in,
+                vec_in,
+                cu_q_dev,
+                cu_kv_dev,
+                cu_q_host,
+                cu_kv_host,
+                cos_in,
+                sin_in,
+                tr_vec,
+                txt_len_val,
+                max_q_val,
+                max_kv_val,
+                first_frame_tokens_val,
+            ):
+                cu_q_eff = torch.tensor(cu_q_host, dtype=torch.int32) if cu_q_host is not None else cu_q_dev
+                cu_kv_eff = torch.tensor(cu_kv_host, dtype=torch.int32) if cu_kv_host is not None else cu_kv_dev
+                for block in self.single_blocks:
+                    x_in = block(
+                        x_in,
+                        vec_in,
+                        txt_len_val,
+                        cu_q_eff,
+                        cu_kv_eff,
+                        max_q_val,
+                        max_kv_val,
+                        (cos_in, sin_in),
+                        self.i2v_condition_type,
+                        tr_vec,
+                        first_frame_tokens_val,
+                    )
+                return x_in
+
+            piecewise_graph.get_or_register_segment("double_blocks", _run_double_stack)
+            img, txt = piecewise_graph.run_segment(
+                "double_blocks",
                 img,
                 txt,
                 vec,
                 cu_seqlens_q,
                 cu_seqlens_kv,
+                cu_q_tuple,
+                cu_kv_tuple,
+                freqs_cos,
+                freqs_sin,
+                token_replace_vec,
                 max_seqlen_q,
                 max_seqlen_kv,
-                freqs_cis,
-                self.i2v_condition_type,
-                token_replace_vec,
                 frist_frame_token_num,
-            ]
-
-            use_checkpoint = self.training and self.gradient_checkpoint and (
-                self.gradient_checkpoint_layers == -1 or layer_num < self.gradient_checkpoint_layers
             )
-            img, txt = gradient_checkpoint_forward(
-                block,
-                use_checkpoint,
-                False,
-                *double_block_args,
-            )
-
-        # Merge txt and img to pass through single stream blocks.
-        x = torch.cat((img, txt), 1)
-
-        if len(self.single_blocks) > 0:
-            for _, block in enumerate(self.single_blocks):
-                single_block_args = [
+            x = torch.cat((img, txt), 1)
+            if len(self.single_blocks) > 0:
+                piecewise_graph.get_or_register_segment("single_blocks", _run_single_stack)
+                x = piecewise_graph.run_segment(
+                    "single_blocks",
                     x,
                     vec,
+                    cu_seqlens_q,
+                    cu_seqlens_kv,
+                    cu_q_tuple,
+                    cu_kv_tuple,
+                    freqs_cos,
+                    freqs_sin,
+                    token_replace_vec,
                     txt_seq_len,
+                    max_seqlen_q,
+                    max_seqlen_kv,
+                    frist_frame_token_num,
+                )
+        else:
+            for layer_num, block in enumerate(self.double_blocks):
+                double_block_args = [
+                    img,
+                    txt,
+                    vec,
                     cu_seqlens_q,
                     cu_seqlens_kv,
                     max_seqlen_q,
                     max_seqlen_kv,
-                    (freqs_cos, freqs_sin),
+                    freqs_cis,
                     self.i2v_condition_type,
                     token_replace_vec,
                     frist_frame_token_num,
                 ]
 
-                use_checkpoint = self.training and self.gradient_checkpoint and (
-                    self.gradient_checkpoint_layers == -1
-                    or layer_num + len(self.double_blocks) < self.gradient_checkpoint_layers
+                use_checkpoint = (
+                    self.training
+                    and self.gradient_checkpoint
+                    and (self.gradient_checkpoint_layers == -1 or layer_num < self.gradient_checkpoint_layers)
                 )
-                x = gradient_checkpoint_forward(
+                img, txt = gradient_checkpoint_forward(
                     block,
                     use_checkpoint,
                     False,
-                    *single_block_args,
+                    *double_block_args,
                 )
+
+            # Merge txt and img to pass through single stream blocks.
+            x = torch.cat((img, txt), 1)
+
+            if len(self.single_blocks) > 0:
+                for _, block in enumerate(self.single_blocks):
+                    single_block_args = [
+                        x,
+                        vec,
+                        txt_seq_len,
+                        cu_seqlens_q,
+                        cu_seqlens_kv,
+                        max_seqlen_q,
+                        max_seqlen_kv,
+                        (freqs_cos, freqs_sin),
+                        self.i2v_condition_type,
+                        token_replace_vec,
+                        frist_frame_token_num,
+                    ]
+
+                    use_checkpoint = (
+                        self.training
+                        and self.gradient_checkpoint
+                        and (
+                            self.gradient_checkpoint_layers == -1
+                            or layer_num + len(self.double_blocks) < self.gradient_checkpoint_layers
+                        )
+                    )
+                    x = gradient_checkpoint_forward(
+                        block,
+                        use_checkpoint,
+                        False,
+                        *single_block_args,
+                    )
 
         img = x[:, :img_seq_len, ...]
 
@@ -898,6 +962,7 @@ class HYVideoDiffusionTransformer(nn.Module):
 
     def set_input_tensor(self, input_tensor):
         pass
+
 
 #################################################################################
 #                             HunyuanVideo Configs                              #

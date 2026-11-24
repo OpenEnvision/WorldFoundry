@@ -1,8 +1,8 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import io
@@ -15,7 +15,6 @@ import shutil
 import urllib
 import urllib.error
 import urllib.request
-from typing import Optional
 from urllib.parse import urlparse
 
 import numpy as np
@@ -23,13 +22,14 @@ import pandas as pd
 import yaml
 from iopath.common.download import download
 from iopath.common.file_io import file_lock, g_pathmgr
-from .registry import registry
 from torch.utils.model_zoo import tqdm
 from torchvision.datasets.utils import (
     check_integrity,
     download_file_from_google_drive,
     extract_archive,
 )
+
+from .registry import registry
 
 
 def now():
@@ -52,7 +52,7 @@ def get_abs_path(rel_path):
 
 
 def load_json(filename):
-    with open(filename, "r") as f:
+    with open(filename) as f:
         return json.load(f)
 
 
@@ -82,12 +82,11 @@ def get_redirected_url(url: str):
     """
     import requests
 
-    with requests.Session() as session:
-        with session.get(url, stream=True, allow_redirects=True) as response:
-            if response.history:
-                return response.url
-            else:
-                return url
+    with requests.Session() as session, session.get(url, stream=True, allow_redirects=True) as response:
+        if response.history:
+            return response.url
+        else:
+            return url
 
 
 def to_google_drive_download_url(view_url: str) -> str:
@@ -115,7 +114,6 @@ def download_google_drive_url(url: str, output_path: str, output_file_name: str)
     import requests
 
     with requests.Session() as session:
-
         # First get the confirmation token and append it to the URL
         with session.get(url, stream=True, allow_redirects=True) as response:
             for k, v in response.cookies.items():
@@ -131,14 +129,12 @@ def download_google_drive_url(url: str, output_path: str, output_file_name: str)
                 from tqdm import tqdm
 
                 with tqdm(total=total_size) as progress_bar:
-                    for block in response.iter_content(
-                        chunk_size=io.DEFAULT_BUFFER_SIZE
-                    ):
+                    for block in response.iter_content(chunk_size=io.DEFAULT_BUFFER_SIZE):
                         file.write(block)
                         progress_bar.update(len(block))
 
 
-def _get_google_drive_file_id(url: str) -> Optional[str]:
+def _get_google_drive_file_id(url: str) -> str | None:
     parts = urlparse(url)
 
     if re.match(r"(drive|docs)[.]google[.]com", parts.netloc) is None:
@@ -152,10 +148,8 @@ def _get_google_drive_file_id(url: str) -> Optional[str]:
 
 
 def _urlretrieve(url: str, filename: str, chunk_size: int = 1024) -> None:
-    with open(filename, "wb") as fh:
-        with urllib.request.urlopen(
-            urllib.request.Request(url, headers={"User-Agent": "vissl"})
-        ) as response:
+    with open(filename, "wb") as fh:  # noqa: SIM117 - Keeps the nested context managers.
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "vissl"})) as response:
             with tqdm(total=response.length) as pbar:
                 for chunk in iter(lambda: response.read(chunk_size), ""):
                     if not chunk:
@@ -167,8 +161,8 @@ def _urlretrieve(url: str, filename: str, chunk_size: int = 1024) -> None:
 def download_url(
     url: str,
     root: str,
-    filename: Optional[str] = None,
-    md5: Optional[str] = None,
+    filename: str | None = None,
+    md5: str | None = None,
 ) -> None:
     """Download a file from a url and place it in root.
     Args:
@@ -202,13 +196,10 @@ def download_url(
     try:
         print("Downloading " + url + " to " + fpath)
         _urlretrieve(url, fpath)
-    except (urllib.error.URLError, IOError) as e:  # type: ignore[attr-defined]
+    except (OSError, urllib.error.URLError) as e:  # type: ignore[attr-defined]
         if url[:5] == "https":
             url = url.replace("https:", "http:")
-            print(
-                "Failed download. Trying https -> http instead."
-                " Downloading " + url + " to " + fpath
-            )
+            print("Failed download. Trying https -> http instead. Downloading " + url + " to " + fpath)
             _urlretrieve(url, fpath)
         else:
             raise e
@@ -221,9 +212,9 @@ def download_url(
 def download_and_extract_archive(
     url: str,
     download_root: str,
-    extract_root: Optional[str] = None,
-    filename: Optional[str] = None,
-    md5: Optional[str] = None,
+    extract_root: str | None = None,
+    filename: str | None = None,
+    md5: str | None = None,
     remove_finished: bool = False,
 ) -> None:
     download_root = os.path.expanduser(download_root)
@@ -235,7 +226,7 @@ def download_and_extract_archive(
     download_url(url, download_root, filename, md5)
 
     archive = os.path.join(download_root, filename)
-    print("Extracting {} to {}".format(archive, extract_root))
+    print(f"Extracting {archive} to {extract_root}")
     extract_archive(archive, extract_root, remove_finished)
 
 
@@ -340,9 +331,7 @@ def load_file(filename, mmap_mode=None, verbose=True, allow_pickle=False):
                         mmap_mode=mmap_mode,
                     )
             except ValueError as e:
-                logging.info(
-                    f"Could not mmap {filename}: {e}. Trying without g_pathmgr"
-                )
+                logging.info(f"Could not mmap {filename}: {e}. Trying without g_pathmgr")
                 data = np.load(
                     filename,
                     allow_pickle=allow_pickle,
@@ -383,7 +372,7 @@ def abspath(resource_path: str):
         return resource_path
 
 
-def makedir(dir_path):
+def makedir(dir_path):  # noqa: F811 - Later definition replaces the earlier one, as upstream.
     """
     Create the directory if it does not exist.
     """
@@ -397,7 +386,7 @@ def makedir(dir_path):
     return is_success
 
 
-def is_url(input_url):
+def is_url(input_url):  # noqa: F811 - Later definition replaces the earlier one, as upstream.
     """
     Check if an input string is a url. look for http(s):// and ignoring the case
     """

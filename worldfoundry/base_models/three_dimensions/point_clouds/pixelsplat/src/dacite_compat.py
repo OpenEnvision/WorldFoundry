@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import types
+from collections.abc import Mapping
 from dataclasses import MISSING, fields, is_dataclass
-from typing import Any, Literal, Mapping, Union, get_args, get_origin, get_type_hints
+from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 
 
 class Config:
@@ -51,14 +52,11 @@ def _convert(value: Any, annotation: Any, config: Config) -> Any:
         if len(arguments) == 2 and arguments[1] is Ellipsis:
             return tuple(_convert(item, arguments[0], config) for item in value)
         if arguments:
-            return tuple(_convert(item, item_type, config) for item, item_type in zip(value, arguments))
+            return tuple(_convert(item, item_type, config) for item, item_type in zip(value, arguments, strict=False))
         return tuple(value)
     if origin is dict:
         key_type, value_type = arguments or (Any, Any)
-        return {
-            _convert(key, key_type, config): _convert(item, value_type, config)
-            for key, item in value.items()
-        }
+        return {_convert(key, key_type, config): _convert(item, value_type, config) for key, item in value.items()}
     if annotation in config.cast:
         return annotation(value)
     if isinstance(annotation, type) and not isinstance(value, annotation):

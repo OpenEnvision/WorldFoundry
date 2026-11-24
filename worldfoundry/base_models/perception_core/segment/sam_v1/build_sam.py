@@ -4,21 +4,14 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> perception_core -> segment -> sam_v1 -> build_sam.py functionality."""
+from functools import partial
 
 import torch
-
-from functools import partial
 
 from .modeling import ImageEncoderViT, MaskDecoder, PromptEncoder, Sam, TwoWayTransformer
 
 
 def build_sam_vit_h(checkpoint=None):
-    """Build sam vit h.
-
-    Args:
-        checkpoint: The checkpoint.
-    """
     return _build_sam(
         encoder_embed_dim=1280,
         encoder_depth=32,
@@ -32,11 +25,6 @@ build_sam = build_sam_vit_h
 
 
 def build_sam_vit_l(checkpoint=None):
-    """Build sam vit l.
-
-    Args:
-        checkpoint: The checkpoint.
-    """
     return _build_sam(
         encoder_embed_dim=1024,
         encoder_depth=24,
@@ -47,11 +35,6 @@ def build_sam_vit_l(checkpoint=None):
 
 
 def build_sam_vit_b(checkpoint=None):
-    """Build sam vit b.
-
-    Args:
-        checkpoint: The checkpoint.
-    """
     return _build_sam(
         encoder_embed_dim=768,
         encoder_depth=12,
@@ -70,11 +53,6 @@ sam_model_registry = {
 
 
 def _torch_load_weights(path_or_file, **kwargs):
-    """Helper function to torch load weights.
-
-    Args:
-        path_or_file: The path or file.
-    """
     try:
         return torch.load(path_or_file, **kwargs)
     except TypeError as exc:
@@ -92,15 +70,6 @@ def _build_sam(
     encoder_global_attn_indexes,
     checkpoint=None,
 ):
-    """Helper function to build sam.
-
-    Args:
-        encoder_embed_dim: The encoder embed dim.
-        encoder_depth: The encoder depth.
-        encoder_num_heads: The encoder num heads.
-        encoder_global_attn_indexes: The encoder global attn indexes.
-        checkpoint: The checkpoint.
-    """
     prompt_embed_dim = 256
     image_size = 1024
     vit_patch_size = 16

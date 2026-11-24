@@ -26,8 +26,9 @@ class CompressedMemoryRunner(NativeDiffusionRunner):
         mode = denoiser.mode
         generator = self._generator(request.sampling.seed)
         conditioning = self.components.conditioner.encode(request, device=self.device, dtype=self.dtype)
-        context = DiffusionRunContext(request=request, components=self.components,
-                                      conditioning=conditioning, generator=generator)
+        context = DiffusionRunContext(
+            request=request, components=self.components, conditioning=conditioning, generator=generator
+        )
         error = None
         try:
             for extension in self.extensions:
@@ -35,8 +36,11 @@ class CompressedMemoryRunner(NativeDiffusionRunner):
             for extension in self.extensions:
                 context.conditioning = extension.prepare_conditioning(context, context.conditioning)
             initialized = self.components.latent_initializer.initialize_with_encoder(
-                request, latent_encoder=self.components.latent_encoder, generator=generator,
-                device=self.device, dtype=self.dtype,
+                request,
+                latent_encoder=self.components.latent_encoder,
+                generator=generator,
+                device=self.device,
+                dtype=self.dtype,
             )
             latents = initialized.latents
             high_condition = initialized.conditioning["condition_latents"].to(dtype=self.dtype)
@@ -67,34 +71,50 @@ class CompressedMemoryRunner(NativeDiffusionRunner):
                 schedule = self.components.scheduler.schedule(request.sampling, device=self.device, dtype=self.dtype)
                 if len(schedule) != request.sampling.num_inference_steps:
                     raise ValueError("WorldPlay2 scheduler returned an unexpected number of steps")
-                experts = (tuple(block.expert for block in self.components.scheduler.ordered_blocks)
-                           if mode == "few_step" else tuple(
-                               "high" if value >= 900 else "low"
-                               for value in torch.stack([step.timestep for step in schedule]).cpu().tolist()
-                           ))
-                for step, expert in zip(schedule, experts):
+                experts = (
+                    tuple(block.expert for block in self.components.scheduler.ordered_blocks)
+                    if mode == "few_step"
+                    else tuple(
+                        "high" if value >= 900 else "low"
+                        for value in torch.stack([step.timestep for step in schedule]).cpu().tolist()
+                    )
+                )
+                for step, expert in zip(schedule, experts, strict=False):
                     context.step = replace(step, index=chunk_index * len(schedule) + step.index)
                     common = {
-                        "expert": expert, "context": text,
+                        "expert": expert,
+                        "context": text,
                         "condition_latents": high_condition[:, :, start:end],
-                        "actions": actions[start:end], "chunk_start": start,
+                        "actions": actions[start:end],
+                        "chunk_start": start,
                         "memory": memories[expert],
                         "cache": caches[expert]["positive"] if caches is not None else None,
                     }
                     if mode == "few_step":
                         common["pdd_block_index"] = self.components.scheduler.ordered_blocks[step.index].local_index
                     prediction = self._call_denoiser_with_conditioning(
-                        context, latents=chunk, branch="positive", conditioning=common,
+                        context,
+                        latents=chunk,
+                        branch="positive",
+                        conditioning=common,
                     )
                     calls += 1
                     if request.sampling.guidance_scale != 1.0:
-                        negative_condition = {**common, "context": negative,
-                                              "cache": caches[expert]["negative"] if caches is not None else None}
+                        negative_condition = {
+                            **common,
+                            "context": negative,
+                            "cache": caches[expert]["negative"] if caches is not None else None,
+                        }
                         unconditional = self._call_denoiser_with_conditioning(
-                            context, latents=chunk, branch="negative", conditioning=negative_condition,
+                            context,
+                            latents=chunk,
+                            branch="negative",
+                            conditioning=negative_condition,
                         )
                         calls += 1
-                        sample = unconditional.sample + request.sampling.guidance_scale * (prediction.sample - unconditional.sample)
+                        sample = unconditional.sample + request.sampling.guidance_scale * (
+                            prediction.sample - unconditional.sample
+                        )
                     elif mode == "few_step":
                         sample = torch.cat((prediction.sample, prediction.extras["endpoint_velocity"]), dim=1)
                     else:
@@ -110,36 +130,58 @@ class CompressedMemoryRunner(NativeDiffusionRunner):
                 if chunk_index + 1 < chunks:
                     pixels = rgb[:, :, ::2]
                     batch, channels, frames, height, width = pixels.shape
-                    pixels = F.interpolate(
-                        pixels.permute(0, 2, 1, 3, 4).reshape(batch * frames, channels, height, width),
-                        size=(height // 4, width // 4), mode="bilinear", align_corners=False,
-                    ).reshape(batch, frames, channels, height // 4, width // 4).permute(0, 2, 1, 3, 4).contiguous()
+                    pixels = (
+                        F.interpolate(
+                            pixels.permute(0, 2, 1, 3, 4).reshape(batch * frames, channels, height, width),
+                            size=(height // 4, width // 4),
+                            mode="bilinear",
+                            align_corners=False,
+                        )
+                        .reshape(batch, frames, channels, height // 4, width // 4)
+                        .permute(0, 2, 1, 3, 4)
+                        .contiguous()
+                    )
                     low_latents.append(codec.encode_chunk(pixels, state=stream, is_first_chunk=chunk_index == 0))
                     inputs = {
                         "hr_input": torch.cat((latents[:, :, :end], high_condition[:, :, :end]), dim=1).to(self.dtype),
-                        "lr_input": torch.cat((torch.cat(low_latents, dim=2), low_condition[:, :, :end // 2]), dim=1).to(self.dtype),
-                        "lr_actions": actions[::2][:end // 2],
-                        "temporal_input": torch.cat((latents[:, :, end - recent:end],
-                                                     high_condition[:, :, end - recent:end]), dim=1).to(self.dtype),
-                        "temporal_actions": actions[end - recent:end],
+                        "lr_input": torch.cat(
+                            (torch.cat(low_latents, dim=2), low_condition[:, :, : end // 2]), dim=1
+                        ).to(self.dtype),
+                        "lr_actions": actions[::2][: end // 2],
+                        "temporal_input": torch.cat(
+                            (latents[:, :, end - recent : end], high_condition[:, :, end - recent : end]), dim=1
+                        ).to(self.dtype),
+                        "temporal_actions": actions[end - recent : end],
                         "sink_actions": actions[:sink] if sink else None,
                     }
-                    memories = denoiser.prepare_memory(memory_inputs=inputs, contexts=text,
-                                                       negative_context=negative, caches=caches)
+                    memories = denoiser.prepare_memory(
+                        memory_inputs=inputs, contexts=text, negative_context=negative, caches=caches
+                    )
             self._notify_diffusion_complete(context, latents)
-            sample = (latents if return_latent else
-                      torch.cat(output_chunks, dim=2)[0].permute(1, 2, 3, 0).add(1).mul(0.5))
+            sample = (
+                latents if return_latent else torch.cat(output_chunks, dim=2)[0].permute(1, 2, 3, 0).add(1).mul(0.5)
+            )
             for extension in self.extensions:
                 sample = extension.after_decode(context, sample)
-            output = DiffusionOutput(sample=sample, latents=latents, metadata={
-                "model_id": self.model_id, "seed": request.sampling.seed, "mode": mode,
-                "num_inference_steps": request.sampling.num_inference_steps,
-                "guidance_scale": request.sampling.guidance_scale, "chunks": chunks,
-                "model_evaluations": chunks * request.sampling.num_inference_steps,
-                "denoiser_calls": calls, "execution_strategy": self.execution_strategy,
-                "chunk_length": chunk_length, "sink_size": sink, "temporal_size": recent,
-                "extensions": [extension.extension_id for extension in self.extensions],
-            })
+            output = DiffusionOutput(
+                sample=sample,
+                latents=latents,
+                metadata={
+                    "model_id": self.model_id,
+                    "seed": request.sampling.seed,
+                    "mode": mode,
+                    "num_inference_steps": request.sampling.num_inference_steps,
+                    "guidance_scale": request.sampling.guidance_scale,
+                    "chunks": chunks,
+                    "model_evaluations": chunks * request.sampling.num_inference_steps,
+                    "denoiser_calls": calls,
+                    "execution_strategy": self.execution_strategy,
+                    "chunk_length": chunk_length,
+                    "sink_size": sink,
+                    "temporal_size": recent,
+                    "extensions": [extension.extension_id for extension in self.extensions],
+                },
+            )
             for extension in reversed(self.extensions):
                 extension.on_run_end(context)
             return output

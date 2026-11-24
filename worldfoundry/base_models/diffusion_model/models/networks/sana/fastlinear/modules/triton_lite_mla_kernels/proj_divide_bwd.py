@@ -29,7 +29,6 @@ from worldfoundry.core.kernels.triton_autotune import custom_autotune
 
 
 def get_cuda_autotune_config():
-    """Get cuda autotune config."""
     return [
         triton.Config(
             {"BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_H_": 8, "BLOCK_SIZE_K": 64, "GROUP_SIZE_M": 8},
@@ -116,7 +115,6 @@ def get_cuda_autotune_config():
 
 
 def get_autotune_config():
-    """Get autotune config."""
     return get_cuda_autotune_config()
 
 
@@ -204,7 +202,7 @@ def proj_divide_bwd_kernel(
     # of fp32 values for higher accuracy.
     # `accumulator` will be converted back to fp16 after the loop.
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
+    for k in range(tl.cdiv(K, BLOCK_SIZE_K)):
         # Load the next block of A and B, generate a mask by checking the K dimension.
         # If it is out of bounds, set it to 0.
         grad_y = tl.load(grad_y_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
@@ -279,8 +277,11 @@ def proj_divide_bwd(grad_y: torch.Tensor, proj_weight: torch.Tensor, vk_q: torch
 
     # Allocates output.
     grad_vk_q = torch.empty_like(vk_q)
+
     # 1D launch kernel where each block gets its own program.
-    grid = lambda META: (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
+    def grid(META):
+        return (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
+
     proj_divide_bwd_kernel[grid](
         grad_y,
         proj_weight,

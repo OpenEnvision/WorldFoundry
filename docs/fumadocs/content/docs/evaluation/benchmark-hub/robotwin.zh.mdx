@@ -1,20 +1,20 @@
 ---
 title: RoboTwin 2.0
-description: "50 个双臂任务、731 个物体、五种本体、强域随机化。WorldFoundry 导入官方 eval_result——不声称公开榜。"
+description: "50 个双臂任务、731 个物体、五种本体、强域随机化。WorldFoundry 导入官方 eval_result 文件。"
 ---
 
-RoboTwin 2.0（香港大学与上海人工智能实验室，联合松灵 AgileX）是 **SAPIEN 双臂**评测，不是视频生成套件。论文在 **RoboTwin-OD**（**731** 个物体、**147** 类）上实例化 **50** 个双臂任务，覆盖 **五** 种本体：Aloha-AgileX、ARX-X5、Piper、Franka Panda、UR5-WSG。域随机化是五轴——杂物、光照、背景、桌面高度、语言——**clean** 与 **randomized** 成功率分开报。配套包是 **10 万+** 专家轨迹（`TianxingChen/RoboTwin2.0`）。
+RoboTwin 2.0（香港大学与上海人工智能实验室，联合松灵 AgileX）是 **SAPIEN 双臂**评测，不是视频生成套件。论文基于 **RoboTwin-OD**（**731** 个物体、**147** 类）构建 **50** 个双臂任务，覆盖**五**种本体：Aloha-AgileX、ARX-X5、Piper、Franka Panda、UR5-WSG。域随机化包括五个维度——杂物、光照、背景、桌面高度、语言——分别报告 **clean** 与 **randomized** 成功率。配套包是 **10 万+** 专家轨迹（`TianxingChen/RoboTwin2.0`）。
 
-论文：[RoboTwin 2.0](https://arxiv.org/abs/2506.18088)。项目：[robotwin-platform.github.io](https://robotwin-platform.github.io/)。文档：[usage / configurations](https://robotwin-platform.github.io/doc/)。代码：[RoboTwin-Platform/RoboTwin](https://github.com/RoboTwin-Platform/RoboTwin)。官方榜：[leaderboard](https://robotwin-platform.github.io/leaderboard)——本页**未收录**。
+论文：[RoboTwin 2.0](https://arxiv.org/abs/2506.18088)。项目：[robotwin-platform.github.io](https://robotwin-platform.github.io/)。文档：[usage / configurations](https://robotwin-platform.github.io/doc/)。代码：[RoboTwin-Platform/RoboTwin](https://github.com/RoboTwin-Platform/RoboTwin)。官方榜：[leaderboard](https://robotwin-platform.github.io/leaderboard)。
 
-WorldFoundry **导入**官方 `eval_result/_result.txt`（布局 `eval_result/{task}/{policy}/{config}/{ckpt}/{timestamp}/_result.txt`）或结构化 JSON/CSV。离线归一化不需要模拟器。真实对齐仍要上游 **SAPIEN / Curobo** 栈和官方 `policy/*/eval.sh`。2026-05-25 的有界本地检查到达了 CUDA 分配；`script/test_render.py` 超时，因此渲染**不**声称通过。共享栈：`robotwin_dataset_assets`。
+WorldFoundry **导入**官方 `eval_result/_result.txt`（布局 `eval_result/{task}/{policy}/{config}/{ckpt}/{timestamp}/_result.txt`）或结构化 JSON/CSV。离线归一化不需要模拟器。产出新结果需要上游 **SAPIEN / Curobo** 栈和官方 `policy/*/eval.sh`。通过 `script/test_render.py` 的渲染尚未在 WorldFoundry 中验证。共享栈：`robotwin_dataset_assets`。
 
 <BenchmarkPageSections id="robotwin" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id robotwin \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -24,7 +24,7 @@ worldfoundry-eval zoo benchmark-run \
 
 `--official-results-path` 可以指向 `_result.txt` 树或 JSON/CSV 导出。可选 `WORLDFOUNDRY_ROBOTWIN_ROOT` 覆盖 runtime / 仓库根。默认导入路径：`WORLDFOUNDRY_ROBOTWIN_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/robotwin.yaml`。
 
-仓内指针：
+数据包与上游检出的默认本地路径：
 
 ```text
 cache/worldfoundry/data/hfd_datasets/TianxingChen__RoboTwin2.0

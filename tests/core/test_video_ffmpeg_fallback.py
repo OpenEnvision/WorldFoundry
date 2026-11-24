@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import torch
 import torchvision.io
+from typing_extensions import Buffer
 
 from worldfoundry.core.media.codecs import video
 
@@ -63,7 +64,7 @@ def test_save_video_h264_drains_stderr_before_streaming_frames(monkeypatch, tmp_
             return self._chunks.pop(0)
 
     class GuardedStdin(io.BytesIO):
-        def write(self, data: bytes) -> int:
+        def write(self, data: Buffer, /) -> int:
             assert drain_started.wait(timeout=1.0)
             return super().write(data)
 
@@ -144,7 +145,7 @@ def test_torchvision_pyav_failure_falls_back_to_h264(monkeypatch, tmp_path) -> N
 
     frames = np.zeros((2, 4, 6, 3), dtype=np.uint8)
     output_path = tmp_path / "video.mp4"
-    monkeypatch.setattr(torchvision.io, "write_video", incompatible_torchvision_writer)
+    monkeypatch.setattr(torchvision.io, "write_video", incompatible_torchvision_writer, raising=False)
     monkeypatch.setattr(video, "save_video_h264", fake_h264_writer)
 
     video.write_video_torchvision(
@@ -172,7 +173,7 @@ def test_torchvision_pyav_fallback_preserves_float_0_255_tensor(monkeypatch, tmp
         [[[[0.0, 64.0, 255.0], [12.0, 128.0, 240.0]]]],
         dtype=torch.float32,
     )
-    monkeypatch.setattr(torchvision.io, "write_video", incompatible_torchvision_writer)
+    monkeypatch.setattr(torchvision.io, "write_video", incompatible_torchvision_writer, raising=False)
     monkeypatch.setattr(video, "save_video_h264", fake_h264_writer)
 
     video.write_video_torchvision(tmp_path / "video.mp4", frames, 16)

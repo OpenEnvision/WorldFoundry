@@ -166,4 +166,4 @@ variants:
     normalization_exceptions: {}
 action_contract: g0plus_flow_matching_action_chunk
 runtime_backend: galaxea_vla_in_tree_model
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner

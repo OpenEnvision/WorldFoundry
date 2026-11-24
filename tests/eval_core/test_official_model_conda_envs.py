@@ -2,122 +2,19 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
-import yaml
-
-from worldfoundry.evaluation.utils import load_manifest_collection
+from worldfoundry.evals.utils import load_manifest_collection
 from worldfoundry.pipelines.component_pipelines import OpenVLAPipeline
 from worldfoundry.runtime.conda import (
     is_cuda_profile_supported,
-    load_runtime_conda_env_specs,
     load_runtime_conda_env_specs_with_overrides,
 )
 from worldfoundry.synthesis.visual_generation.animatediff.worldfoundry_runtime import DEFAULT_ANIMATEDIFF_REPO_ROOT
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profiles
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-
-
-def test_runtime_conda_env_specs_cover_runtime_profiles() -> None:
-    specs = load_runtime_conda_env_specs(env_root="/tmp/worldfoundry-conda-test")
-    profiles = load_runtime_profiles()
-    expected = {
-        "step-video-t2v",
-        "open-magvit2",
-        "show-o",
-        "animatediff",
-        "zeroscope",
-        "cameractrl",
-        "motionctrl",
-        "dreamdojo",
-        "irasim",
-        "pandora",
-        "splatt3r",
-        "pixelsplat",
-        "openvla",
-        "openpi",
-        "giga-brain-0",
-        "being-h05",
-        "dreamzero",
-        "gr00t",
-        "starvla",
-        "lingbot-va",
-        "lapa",
-        "octo",
-        "rt-1",
-        "diffusion-policy",
-        "act",
-        "roboflamingo",
-    }
-
-    assert expected.issubset(profiles)
-    assert expected.issubset(specs)
-    assert specs["zeroscope"].cuda_profile == "cu128"
-    assert specs["zeroscope"].driver_compatible is True
-    # step-video-t2v moved onto the shared native diffusion runtime and now
-    # routes into the unified cu128 env instead of a driver-gated isolated env.
-    assert specs["step-video-t2v"].env_name == "worldfoundry-unified-cu128"
-    assert specs["step-video-t2v"].driver_compatible is True
-    assert specs["animatediff"].env_name == "worldfoundry-unified-cu128"
-    assert "diffusers" in specs["animatediff"].pip_packages
-    assert "transformers" in specs["animatediff"].pip_packages
-    assert "huggingface_hub" in specs["animatediff"].pip_packages
-    assert specs["openvla"].cuda_profile == "cu113"
-    assert specs["openvla"].driver_compatible is True
-    assert "torch" in specs["openvla"].validation_imports
-    assert specs["scope"].pythonpath_dirs == (
-        "worldfoundry/synthesis/visual_generation/scope/scope_runtime",
-    )
-    assert specs["scope"].editable_install_dirs == ()
-    assert specs["scope"].source_requirement_files == ()
-    assert profiles["openvla"].task_family == "vla_policy"
-    assert profiles["openvla"].backend_stage == "in_tree_runtime"
-    # runtime_status vocabulary was downgraded from *_verified to *_ready where
-    # GPU parity evidence has not been re-recorded; keep the current statuses.
-    assert profiles["openvla"].runtime_status == "in_tree_openvla_predict_action_ready"
-    assert specs["openpi"].cuda_profile == "cu124_or_newer"
-    assert specs["openpi"].driver_compatible is True
-    assert specs["openpi"].env_name == "worldfoundry-openpi-cu12"
-    assert specs["openpi"].pythonpath_dirs == ()
-    assert specs["giga-brain-0"].cuda_profile == "cu128"
-    assert profiles["giga-brain-0"].task_family == "vla_policy"
-    assert profiles["giga-brain-0"].artifact_kind == "action_trace"
-    assert specs["being-h05"].cuda_profile == "cu118_or_newer"
-    assert profiles["being-h05"].task_family == "vla_policy"
-    assert profiles["being-h05"].artifact_kind == "action_trace"
-    assert specs["dreamzero"].cuda_profile == "cu129"
-    assert profiles["dreamzero"].task_family == "world_action_model"
-    assert profiles["dreamzero"].artifact_kind == "action_trace"
-    assert profiles["dreamzero"].backend_stage == "in_tree_official_server_client"
-    assert (
-        profiles["dreamzero"].runtime_status
-        == "in_tree_official_server_client_checkpoint_gpu_probe_ready_cuda129_multigpu_required"
-    )
-    assert specs["lingbot-va"].cuda_profile == "cu126_or_newer"
-    assert profiles["lingbot-va"].task_family == "embodied_action"
-    assert profiles["lingbot-va"].artifact_kind == "action_trace"
-    assert specs["lapa"].driver_compatible is True
-    assert profiles["lapa"].runtime_status == "in_tree_lapa_7b_openx_jax_gpu_action_tokens_ready"
-    assert specs["dreamdojo"].cuda_profile == "cu128"
-    assert profiles["dreamdojo"].task_family == "world_model"
-    assert profiles["dreamdojo"].artifact_kind == "generated_world"
-    assert specs["rt-1"].cuda_profile == "cpu"
-    assert specs["diffusion-policy"].cuda_profile == "cu118_or_newer"
-    assert profiles["diffusion-policy"].task_family == "visuomotor_policy"
-    assert profiles["openpi"].runtime_status == "in_tree_openpi_pi05_libero_local_checkpoint_runtime_ready"
-    assert (
-        profiles["giga-brain-0"].runtime_status
-        == "in_tree_giga_brain_0_runtime_converted_lerobot_stats_predict_gpu_ready_non_leaderboard"
-    )
-    assert profiles["octo"].runtime_status == "in_tree_octo_small_jax_gpu_sample_actions_ready"
-    assert profiles["rt-1"].runtime_status == "in_tree_rt1_runtime_ported_savedmodel_checkpoint_missing"
-    assert profiles["diffusion-policy"].runtime_status == "in_tree_lowdim_pusht_runtime_safe_checkpoint_gpu_validated"
-    assert profiles["act"].task_family == "action_chunking_policy"
-    assert "torch" in specs["zeroscope"].pip_packages
 
 
 def test_runtime_conda_envs_do_not_install_from_cache_or_external_model_repos() -> None:

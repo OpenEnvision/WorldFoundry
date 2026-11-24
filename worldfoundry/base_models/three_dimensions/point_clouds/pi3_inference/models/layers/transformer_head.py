@@ -53,7 +53,7 @@ class TransformerDecoder(nn.Module):
 
     def forward(self, hidden, xpos=None):
         hidden = self.projects(hidden)
-        for i, blk in enumerate(self.blocks):
+        for _i, blk in enumerate(self.blocks):
             hidden = blk(hidden, xpos=xpos)
         out = self.linear_out(hidden)
         return out
@@ -144,7 +144,7 @@ class ContextOnlyTransformerDecoder(nn.Module):
         hidden = self.projects_x(hidden)
         context = self.projects_y(context)
 
-        for i, blk in enumerate(self.blocks):
+        for _i, blk in enumerate(self.blocks):
             hidden = blk(hidden, context, xpos=xpos, ypos=ypos)
 
         out = self.linear_out(hidden)

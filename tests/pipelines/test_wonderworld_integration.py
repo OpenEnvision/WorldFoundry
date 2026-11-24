@@ -13,10 +13,10 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
 from worldfoundry.operators.wonderworld_operator import WonderWorldOperator
 from worldfoundry.pipelines.three_d_four_d.pipeline_wonderworld import WonderWorldPipeline
+from worldfoundry.zoo.catalog import load_model_zoo_registry
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
 
 pytestmark = pytest.mark.unit
 
@@ -53,7 +53,7 @@ def test_invalid_inputs_fail_before_model_loading(monkeypatch: pytest.MonkeyPatc
 
 
 def test_public_loader_is_lazy_and_forwards_native_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from worldfoundry.evaluation.models.pipelines.loading import PipelineRunnerSpec, load_pipeline_from_spec
+    from worldfoundry.evals.models.pipelines.loading import PipelineRunnerSpec, load_pipeline_from_spec
 
     target = load_model_zoo_registry().get("wonderworld").pipeline_target
     assert target is not None
@@ -105,8 +105,8 @@ def test_public_loader_is_lazy_and_forwards_native_inputs(tmp_path: Path, monkey
 def test_standard_evaluation_invocation_preserves_inputs_and_controls(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, image_key: str, viewer: bool
 ) -> None:
-    from worldfoundry.evaluation.api import GenerationRequest
-    from worldfoundry.evaluation.models.pipelines.lifecycle import (
+    from worldfoundry.evals.api import GenerationRequest
+    from worldfoundry.evals.models.pipelines.lifecycle import (
         PipelineLifecycleContext,
         PipelineRuntimeProfile,
         WorldFoundryPipelineLifecycle,

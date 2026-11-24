@@ -9,7 +9,7 @@ This page traces one evaluation run from the CLI through artifact files on disk.
 
 ## Entry points
 
-The console entry is `worldfoundry/cli/main.py:1888` `main()`. Most evaluate and model-only runs then enter `run_evaluate()` in `evaluation/tasks/execution/orchestration/evaluate.py` (`:1071`). A model-plus-benchmark run does **not** go through that facade: orchestration calls `execute_prepared_evaluation()` → `run_model_benchmark()` in `model_benchmark.py`. The CLI dispatches into one of four shapes:
+The console entry is `worldfoundry/cli/main.py:304` `main()`. Most evaluate and model-only runs then enter `run_evaluate()` in `evals/tasks/execution/orchestration/evaluate.py` (`:808`). A model-plus-benchmark run does **not** go through that facade: orchestration calls `execute_prepared_evaluation()` → `run_model_benchmark()` in `model_benchmark.py`. The CLI dispatches into one of four shapes:
 
 - **evaluate** — normalizes inputs, picks a run mode, and returns one `EvaluateRunResult`.
 - **existing outputs** — scores artifacts already on disk through `existing_results.py` without loading a model.
@@ -22,10 +22,10 @@ For evaluate and model-only runs, the first meaningful branch is mode selection:
 
 The happy path looks like this: one `EvaluateRunRequest` enters the facade, a mode is chosen, inputs are loaded or materialized from a task registry, and a delegate runner writes the standard artifact bundle. If something is missing from an output directory, follow this flow to see which runner stage should have produced it.
 
-<CallChainDiagram />
+<ArchDiagram id="workflow" />
 
 ```python
-# worldfoundry/cli/main.py → evaluation/tasks/execution/orchestration/evaluate.py
+# worldfoundry/cli/main.py → evals/tasks/execution/orchestration/evaluate.py
 result = run_evaluate(EvaluateRunRequest(...))
 
 mode = _mode(request)
@@ -57,12 +57,11 @@ The model runner emits `GenerationResult` objects. After sample alignment, `Exis
 
 ```python
 results = runner.generate(requests)
-results = _align_model_results(requests, results)
+results = align_generation_results(requests, results, model_id=model_id)
 return ExistingResultsRunner().run(
     output_dir=output_dir, requests=requests, results=results, metrics=resolved_metrics,
 )
 ```
-
 
 ## Contract runner detail
 

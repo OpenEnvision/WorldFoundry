@@ -1,23 +1,22 @@
 # Inference-only LAPA source retained in-tree.
-from typing import Optional
-from functools import cached_property, partial
 import pickle
-import numpy as np
+from functools import cached_property, partial
+
+import flax.linen as nn
 import jax
 import jax.numpy as jnp
-import flax.linen as nn
 from flax import jax_utils
-from transformers.configuration_utils import PretrainedConfig
 from ml_collections import ConfigDict
+from transformers.configuration_utils import PretrainedConfig
 from tux import function_args_to_config, open_file
 
 
 class VQGAN:
     def __init__(self, vqgan_checkpoint, replicate=False):
-        assert vqgan_checkpoint != ''
+        assert vqgan_checkpoint != ""
         self.replicate = replicate
         self.config = VQGANConfig.get_default_config()
-        self.params = pickle.load(open_file(vqgan_checkpoint, 'rb'))
+        self.params = pickle.load(open_file(vqgan_checkpoint, "rb"))
         if replicate:
             self.params = jax_utils.replicate(self.params)
         else:
@@ -29,33 +28,27 @@ class VQGAN:
             return jax.pmap(fn, devices=jax.local_devices())
         else:
             return jax.jit(fn)
-    
+
     @cached_property
     def _encode(self):
         def fn(pixel_values, params):
-            return self.model.apply(
-                {'params': params}, 
-                pixel_values,
-                method=self.model.encode
-            )
+            return self.model.apply({"params": params}, pixel_values, method=self.model.encode)
+
         return partial(self._wrap_fn(fn), params=self.params)
-    
+
     @cached_property
     def _decode(self):
         def fn(encoding, params):
-            return self.model.apply(
-                {'params': params},
-                encoding,
-                method=self.model.decode
-            )
+            return self.model.apply({"params": params}, encoding, method=self.model.decode)
+
         return partial(self._wrap_fn(fn), params=self.params)
-    
+
     def encode(self, pixel_values):
         return self._encode(pixel_values)
-    
+
     def decode(self, encoding):
         return self._decode(encoding)
-    
+
 
 class VQGANConfig(PretrainedConfig):
     model_type = "vqgan"
@@ -74,7 +67,7 @@ class VQGANConfig(PretrainedConfig):
         quantized_embed_dim=64,
         dropout=0.0,
         resample_with_conv=True,
-        commitment_cost=0.25
+        commitment_cost=0.25,
     ):
         self.resolution = resolution
         self.num_channels = num_channels
@@ -89,7 +82,7 @@ class VQGANConfig(PretrainedConfig):
         self.dropout = dropout
         self.resample_with_conv = resample_with_conv
         self.commitment_cost = commitment_cost
-    
+
     @classmethod
     def get_default_config(cls, updates=None):
         config = function_args_to_config(cls.__init__)
@@ -97,27 +90,25 @@ class VQGANConfig(PretrainedConfig):
             config.update(ConfigDict(updates).copy_and_resolve_references())
         config.num_resolutions = len(config.channel_mult)
         return config
-    
+
     @classmethod
     def load_config(cls, path):
         return cls.get_default_config(cls)
 
-        
+
 class VQGANModel(nn.Module):
     config: VQGANConfig
 
     def setup(self):
         self.encoder = Encoder(self.config)
         self.decoder = Decoder(self.config)
-        self.quantize = VectorQuantizer(
-            self.config.num_embeddings, self.config.quantized_embed_dim
-        )
+        self.quantize = VectorQuantizer(self.config.num_embeddings, self.config.quantized_embed_dim)
         self.quant_conv = nn.Conv(self.config.quantized_embed_dim, [1, 1])
         self.post_quant_conv = nn.Conv(self.config.z_channels, [1, 1])
-    
+
     def encode(self, pixel_values):
         T = None
-        if len(pixel_values.shape) == 5: # video
+        if len(pixel_values.shape) == 5:  # video
             T = pixel_values.shape[1]
             pixel_values = pixel_values.reshape(-1, *pixel_values.shape[2:])
         hidden_states = self.encoder(pixel_values)
@@ -138,45 +129,42 @@ class VQGANModel(nn.Module):
         hidden_states = self.post_quant_conv(encoding)
         reconstructed_pixel_values = self.decoder(hidden_states)
         if T is not None:
-            reconstructed_pixel_values = reconstructed_pixel_values.reshape(-1, T, *reconstructed_pixel_values.shape[1:])
+            reconstructed_pixel_values = reconstructed_pixel_values.reshape(
+                -1, T, *reconstructed_pixel_values.shape[1:]
+            )
         return jnp.clip(reconstructed_pixel_values, -1, 1)
-    
+
     def __call__(self, pixel_values):
         encoding = self.encode(pixel_values)[1]
         recon = self.decode(encoding)
         return recon
-    
+
 
 class Encoder(nn.Module):
     config: VQGANConfig
-    
+
     @nn.compact
     def __call__(self, pixel_values):
         assert pixel_values.shape[1] == pixel_values.shape[2] == self.config.resolution, pixel_values.shape
         hidden_states = nn.Conv(self.config.hidden_channels, [3, 3])(pixel_values)
         for i_level in range(self.config.num_resolutions):
             hidden_states = DownsamplingBlock(self.config, i_level)(hidden_states)
-        hidden_states = MidBlock(
-            self.config, self.config.no_attn_mid_block, self.config.dropout
-        )(hidden_states)
+        hidden_states = MidBlock(self.config, self.config.no_attn_mid_block, self.config.dropout)(hidden_states)
         hidden_states = nn.GroupNorm()(hidden_states)
         hidden_states = nn.silu(hidden_states)
         hidden_states = nn.Conv(self.config.z_channels, [3, 3])(hidden_states)
         return hidden_states
 
-        
+
 class Decoder(nn.Module):
     config: VQGANConfig
 
     @nn.compact
     def __call__(self, hidden_states):
         hidden_states = nn.Conv(
-            self.config.hidden_channels * self.config.channel_mult[self.config.num_resolutions - 1],
-            [3, 3]
+            self.config.hidden_channels * self.config.channel_mult[self.config.num_resolutions - 1], [3, 3]
         )(hidden_states)
-        hidden_states = MidBlock(
-            self.config, self.config.no_attn_mid_block, self.config.dropout
-        )(hidden_states)
+        hidden_states = MidBlock(self.config, self.config.no_attn_mid_block, self.config.dropout)(hidden_states)
         for i_level in reversed(range(self.config.num_resolutions)):
             hidden_states = UpsamplingBlock(self.config, i_level)(hidden_states)
         hidden_states = nn.GroupNorm()(hidden_states)
@@ -194,22 +182,26 @@ class VectorQuantizer(nn.Module):
         def quantize(encoding_indices):
             w = jax.device_put(embeddings)
             return w[(encoding_indices,)]
+
         embeddings = self.param(
-            'embeddings',
+            "embeddings",
             lambda rng, shape, dtype: jax.random.uniform(
                 rng, shape, dtype, minval=-1.0 / self.n_e, maxval=1.0 / self.n_e
             ),
-            [self.n_e, self.e_dim], jnp.float32
+            [self.n_e, self.e_dim],
+            jnp.float32,
         )
-        
+
         if encoding_indices is not None:
             return quantize(encoding_indices)
 
         z_flattened = z.reshape(-1, z.shape[-1])
-        d = jnp.sum(z_flattened ** 2, axis=1, keepdims=True) + \
-            jnp.sum(embeddings.T ** 2, axis=0, keepdims=True) - \
-            2 * jnp.einsum('bd,nd->bn', z_flattened, embeddings)
-        
+        d = (
+            jnp.sum(z_flattened**2, axis=1, keepdims=True)
+            + jnp.sum(embeddings.T**2, axis=0, keepdims=True)
+            - 2 * jnp.einsum("bd,nd->bn", z_flattened, embeddings)
+        )
+
         min_encoding_indices = jnp.argmin(d, axis=1)
         z_q = quantize(min_encoding_indices)
         z_q = jnp.reshape(z_q, z.shape)
@@ -230,9 +222,7 @@ class DownsamplingBlock(nn.Module):
     def __call__(self, hidden_states):
         block_out = self.config.hidden_channels * self.config.channel_mult[self.block_idx]
         for _ in range(self.config.num_res_blocks):
-            hidden_states = ResnetBlock(
-                block_out, dropout_prob=self.config.dropout
-            )(hidden_states) 
+            hidden_states = ResnetBlock(block_out, dropout_prob=self.config.dropout)(hidden_states)
             if hidden_states.shape[1] in self.config.attn_resolutions:
                 hidden_states = AttnBlock()(hidden_states)
         if self.block_idx != self.config.num_resolutions - 1:
@@ -241,7 +231,7 @@ class DownsamplingBlock(nn.Module):
 
 
 class ResnetBlock(nn.Module):
-    out_channels: Optional[int] = None
+    out_channels: int | None = None
     use_conv_shortcut: bool = False
     dropout_prob: float = 0.0
 
@@ -262,7 +252,7 @@ class ResnetBlock(nn.Module):
             else:
                 residual = nn.Conv(out_channels, [1, 1])(residual)
         return hidden_states + residual
-        
+
 
 class AttnBlock(nn.Module):
     @nn.compact
@@ -272,10 +262,7 @@ class AttnBlock(nn.Module):
         query = nn.Conv(hidden_states.shape[-1], [1, 1])(hidden_states)
         key = nn.Conv(hidden_states.shape[-1], [1, 1])(hidden_states)
         value = nn.Conv(hidden_states.shape[-1], [1, 1])(hidden_states)
-        query, key, value = map(
-            lambda x: x.reshape(x.shape[0], -1, x.shape[-1]),
-            [query, key, value]
-        )
+        query, key, value = (x.reshape(x.shape[0], -1, x.shape[-1]) for x in [query, key, value])
         attn_weights = jnp.einsum("bqd,bkd->bqk", query, key)
         attn_weights *= hidden_states.shape[-1] ** -0.5
         attn_weights = jax.nn.softmax(attn_weights, axis=-1)
@@ -283,38 +270,27 @@ class AttnBlock(nn.Module):
         hidden_states = nn.Conv(hidden_states.shape[-1], [1, 1])(hidden_states)
         return hidden_states + residual
 
-        
+
 class Downsample(nn.Module):
     with_conv: bool
-    
+
     @nn.compact
     def __call__(self, hidden_states):
         if self.with_conv:
-            hidden_states = jnp.pad(
-                hidden_states,
-                [(0, 0), (0, 1), (0, 1), (0, 0)]
-            )
-            hidden_states = nn.Conv(
-                hidden_states.shape[-1], [3, 3], 
-                strides=[2, 2], 
-                padding="VALID"
-            )(hidden_states)
+            hidden_states = jnp.pad(hidden_states, [(0, 0), (0, 1), (0, 1), (0, 0)])
+            hidden_states = nn.Conv(hidden_states.shape[-1], [3, 3], strides=[2, 2], padding="VALID")(hidden_states)
         else:
             hidden_states = nn.avg_pool(hidden_states, [2, 2], [2, 2])
         return hidden_states
 
-        
+
 class Upsample(nn.Module):
     with_conv: bool
 
     @nn.compact
     def __call__(self, hidden_states):
         B, H, W, C = hidden_states.shape
-        hidden_states = jax.image.resize(
-            hidden_states,
-            (B, H * 2, W * 2, C),
-            method="nearest"
-        )
+        hidden_states = jax.image.resize(hidden_states, (B, H * 2, W * 2, C), method="nearest")
         if self.with_conv:
             hidden_states = nn.Conv(hidden_states.shape[-1], [3, 3])(hidden_states)
         return hidden_states
@@ -328,9 +304,7 @@ class UpsamplingBlock(nn.Module):
     def __call__(self, hidden_states):
         block_out = self.config.hidden_channels * self.config.channel_mult[self.block_idx]
         for _ in range(self.config.num_res_blocks + 1):
-            hidden_states = ResnetBlock(
-                block_out, dropout_prob=self.config.dropout
-            )(hidden_states)
+            hidden_states = ResnetBlock(block_out, dropout_prob=self.config.dropout)(hidden_states)
             if hidden_states.shape[1] in self.config.attn_resolutions:
                 hidden_states = AttnBlock()(hidden_states)
         if self.block_idx != 0:

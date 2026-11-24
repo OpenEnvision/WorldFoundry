@@ -2,25 +2,30 @@
 Partially ported from https://github.com/crowsonkb/k-diffusion/blob/master/k_diffusion/sampling.py
 """
 
-from typing import Dict, Union
-
 import torch
 from einops import rearrange
 from omegaconf import ListConfig, OmegaConf
 from tqdm import tqdm
-from vwm.modules.diffusionmodules.sampling_utils import to_d
-from vwm.util import append_dims, default, instantiate_from_config
+
+from worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.diffusionmodules.sampling_utils import (
+    to_d,
+)
+from worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.util import (
+    append_dims,
+    default,
+    instantiate_from_config,
+)
 
 
 class BaseDiffusionSampler:
     def __init__(
-            self,
-            discretization_config: Union[Dict, ListConfig, OmegaConf],
-            num_steps: Union[int, None] = None,
-            guider_config: Union[Dict, ListConfig, OmegaConf, None] = None,
-            verbose: bool = False,
-            device: str = "cuda",
-            n_context_frames: int = 5
+        self,
+        discretization_config: dict | ListConfig | OmegaConf,
+        num_steps: int | None = None,
+        guider_config: dict | ListConfig | OmegaConf | None = None,
+        verbose: bool = False,
+        device: str = "cuda",
+        n_context_frames: int = 5,
     ):
         self.num_steps = num_steps
         self.discretization = instantiate_from_config(discretization_config)
@@ -30,9 +35,7 @@ class BaseDiffusionSampler:
         self.num_frames = n_context_frames + 1
 
     def prepare_sampling_loop(self, x, cond, uc=None, num_steps=None):
-        sigmas = self.discretization(
-            self.num_steps if num_steps is None else num_steps, device=self.device
-        )
+        sigmas = self.discretization(self.num_steps if num_steps is None else num_steps, device=self.device)
         uc = default(uc, cond)
 
         x *= torch.sqrt(1.0 + sigmas[0] ** 2)
@@ -56,7 +59,7 @@ class BaseDiffusionSampler:
             sigma_generator = tqdm(
                 sigma_generator,
                 total=num_sigmas,
-                desc=f"Sampling with {self.__class__.__name__} for {num_sigmas} steps"
+                desc=f"Sampling with {self.__class__.__name__} for {num_sigmas} steps",
             )
         return sigma_generator
 
@@ -71,7 +74,7 @@ class SingleStepDiffusionSampler(BaseDiffusionSampler):
 
 class EulerEDMSampler(SingleStepDiffusionSampler):
     def __init__(self, s_churn=0.0, s_tmin=0.0, s_tmax=float("inf"), s_noise=1.0, *args, **kwargs):
-        super(EulerEDMSampler, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.s_churn = s_churn
         self.s_tmin = s_tmin
         self.s_tmax = s_tmax
@@ -81,7 +84,7 @@ class EulerEDMSampler(SingleStepDiffusionSampler):
         sigma_hat = sigma * (gamma + 1.0)
         if gamma > 0:
             eps = torch.randn_like(x) * self.s_noise
-            x = x + eps * append_dims(sigma_hat ** 2 - sigma ** 2, x.ndim) ** 0.5
+            x = x + eps * append_dims(sigma_hat**2 - sigma**2, x.ndim) ** 0.5
 
         denoised = self.denoise(x, denoiser, sigma_hat, cond, uc)
         d = to_d(x, sigma_hat, denoised)
@@ -103,19 +106,8 @@ class EulerEDMSampler(SingleStepDiffusionSampler):
         for i in self.get_sigma_gen(num_sigmas):
             x = self.replace_cond(x, x_ori)
 
-            gamma = (
-                min(self.s_churn / (num_sigmas - 1), 2 ** 0.5 - 1)
-                if self.s_tmin <= sigmas[i] <= self.s_tmax else 0.0
-            )
-            x = self.sampler_step(
-                s_in * sigmas[i],
-                s_in * sigmas[i + 1],
-                denoiser,
-                x,
-                cond,
-                uc,
-                gamma
-            )
+            gamma = min(self.s_churn / (num_sigmas - 1), 2**0.5 - 1) if self.s_tmin <= sigmas[i] <= self.s_tmax else 0.0
+            x = self.sampler_step(s_in * sigmas[i], s_in * sigmas[i + 1], denoiser, x, cond, uc, gamma)
 
         x = self.replace_cond(x, x_ori)
         return x

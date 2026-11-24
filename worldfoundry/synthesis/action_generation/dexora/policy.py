@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 ``DexoraPolicy`` — thin runtime wrapper around the Dexora policy
 (``models.rdt_runner.RDTRunner``) that exposes the same ``get_action(obs_dict)``
@@ -25,16 +24,16 @@ first 12 dims) and ``xhand_forwarder`` (hands, last 24 dims).
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Sequence
 
 import numpy as np
 import torch
 import yaml
 from PIL import Image
 
-from worldfoundry.core.execution.device import resolve_inference_dtype
+from worldfoundry.core.platform.device import resolve_inference_dtype
 
 from .runner import RDTRunner
 from .siglip import SiglipVisionTower
@@ -63,7 +62,7 @@ class DexoraPolicy:
     def __init__(
         self,
         model_path: str,
-        cfg: Optional[DexoraPolicyConfig] = None,
+        cfg: DexoraPolicyConfig | None = None,
     ) -> None:
         if cfg is None:
             raise ValueError("DexoraPolicy requires resolved data-backed configuration")
@@ -72,7 +71,7 @@ class DexoraPolicy:
         self.cfg.dtype = resolve_inference_dtype(self.device, self.cfg.dtype)
 
         # ---- Load YAML config the policy was trained with ------------------
-        with open(self.cfg.model_config_path, "r") as f:
+        with open(self.cfg.model_config_path) as f:
             self.model_yaml = yaml.safe_load(f)
 
         common = self.model_yaml["common"]
@@ -113,9 +112,9 @@ class DexoraPolicy:
         self._action_mask = torch.ones((1, 1, self.cfg.state_dim), device=self.device, dtype=self.cfg.dtype)
 
         # Cache last language embedding to avoid re-running T5 every step.
-        self._cached_instruction: Optional[str] = None
-        self._cached_lang_tokens: Optional[torch.Tensor] = None
-        self._cached_lang_mask: Optional[torch.Tensor] = None
+        self._cached_instruction: str | None = None
+        self._cached_lang_tokens: torch.Tensor | None = None
+        self._cached_lang_mask: torch.Tensor | None = None
 
     # -----------------------------------------------------------------------
     # Public API

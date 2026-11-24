@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from worldfoundry.synthesis.action_generation.base_action_synthesis import ActionModelSynthesis
 from worldfoundry.synthesis.action_generation.official_policy import OfficialPolicySynthesis
@@ -27,19 +28,14 @@ class XWAMSynthesis(OfficialPolicySynthesis, ActionModelSynthesis):
             self.MODEL_ID,
             options.get("runtime_config_path") or self.runtime_options.get("runtime_config_path"),
         )
-        selected_variant = (
-            options.get("variant")
-            or self.runtime_options.get("variant")
-            or data_defaults.get("variant")
-        )
+        selected_variant = options.get("variant") or self.runtime_options.get("variant") or data_defaults.get("variant")
         merged = {
             **data_defaults,
             **variant_defaults(data_defaults, selected_variant),
             **requested,
         }
         has_explicit_path = any(
-            requested.get(key) not in (None, "")
-            for key in ("checkpoint_path", "checkpoint_dir", "ckpt_path")
+            requested.get(key) not in (None, "") for key in ("checkpoint_path", "checkpoint_dir", "ckpt_path")
         )
         has_explicit_ref = any(
             requested.get(key) not in (None, "")
@@ -53,8 +49,7 @@ class XWAMSynthesis(OfficialPolicySynthesis, ActionModelSynthesis):
             merged.pop("ckpt_path", None)
         has_explicit_base_path = requested.get("base_model_path") not in (None, "")
         has_explicit_base_ref = any(
-            requested.get(key) not in (None, "")
-            for key in ("base_model_ref", "base_model_repo_id")
+            requested.get(key) not in (None, "") for key in ("base_model_ref", "base_model_repo_id")
         )
         if has_explicit_base_ref and not has_explicit_base_path:
             merged.pop("base_model_path", None)

@@ -8,6 +8,7 @@ groups:
 - official_repo
 source_repos:
 - url: https://github.com/facebookresearch/lagernvs
+  revision: 12c8e0ffbb554e55f3671fd222155e297e7a2623
 checkpoints:
 - repo_id: facebook/lagernvs_general_512
   role: lagernvs_general_checkpoint

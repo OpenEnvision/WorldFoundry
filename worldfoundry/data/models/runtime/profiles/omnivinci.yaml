@@ -5,8 +5,10 @@ task_family: video_generation
 groups: [video, multimodal]
 source_repos:
 - url: https://huggingface.co/nvidia/omnivinci
+  revision: 7b3777b1c1f7c4e85f7bdef7b765dee1e76c1b7f
 checkpoints:
 - repo_id: nvidia/omnivinci
+  revision: 7b3777b1c1f7c4e85f7bdef7b765dee1e76c1b7f
   role: model_checkpoint
 input_schema:
   prompt: true
@@ -15,7 +17,7 @@ input_schema:
 artifact_kind: model_response
 artifact_filename: omnivinci.json
 execution:
-  backend_stage: official_hf_transformers_runtime
+  backend_stage: in_tree_runtime
   runtime_status: integrated_checkpoint_required
   integration_status: integrated
   pipeline_binding: omnivinci

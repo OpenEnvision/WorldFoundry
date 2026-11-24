@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -101,7 +101,7 @@ class AHAWAMChunkBase(BaseWAM):
         action_seq_len: int,
         video_tokens_per_frame: int,
         device: torch.device,
-        action_self_attn_mask: Optional[torch.Tensor] = None,
+        action_self_attn_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Build the joint video/action mask with chunk-action visibility."""
         total_seq_len = video_seq_len + action_seq_len
@@ -219,7 +219,7 @@ class AHAWAMChunkBase(BaseWAM):
 
     def _build_action_obs_context(
         self,
-        obs_latents: Optional[torch.Tensor],
+        obs_latents: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         action_obs_visual_proj = getattr(self, "action_obs_visual_proj", None)
         if action_obs_visual_proj is None:
@@ -334,10 +334,10 @@ class AHAWAMChunkBase(BaseWAM):
         *,
         inference_state: dict[str, Any],
         chunk_obs_image: torch.Tensor,
-        chunk_proprio: Optional[torch.Tensor] = None,
+        chunk_proprio: torch.Tensor | None = None,
         chunk_index: int,
         num_inference_steps: int = 20,
-        sigma_shift: Optional[float] = None,
+        sigma_shift: float | None = None,
         tiled: bool = False,
     ) -> dict[str, Any]:
         self.eval()
@@ -400,7 +400,7 @@ class AHAWAMChunkBase(BaseWAM):
             shift_override=sigma_shift,
         )
 
-        for step_t_action, step_delta_action in zip(infer_timesteps_action, infer_deltas_action):
+        for step_t_action, step_delta_action in zip(infer_timesteps_action, infer_deltas_action, strict=False):
             timestep_action = step_t_action.expand(noisy_chunk.shape[0]).to(
                 device=self.device,
                 dtype=self.torch_dtype,
@@ -472,11 +472,11 @@ class AHAWAMChunkBase(BaseWAM):
         video_tokens_per_frame: int,
         action_history_seq_len: int,
         chunk_start: int,
-        obs_context: Optional[torch.Tensor] = None,
-        obs_context_mask: Optional[torch.Tensor] = None,
+        obs_context: torch.Tensor | None = None,
+        obs_context_mask: torch.Tensor | None = None,
         obs_chunk_offset: int = 0,
         obs_proprio_tokens_per_chunk: int = 0,
-        cross_attn_kv_cache: Optional[list[dict[str, torch.Tensor]]] = None,
+        cross_attn_kv_cache: list[dict[str, torch.Tensor]] | None = None,
     ) -> tuple[dict[str, Any], torch.Tensor]:
         action_pre = self.action_expert.pre_dit(
             action_tokens=action_chunk,
@@ -521,14 +521,14 @@ class AHAWAMChunkBase(BaseWAM):
         video_kv_cache: list[dict[str, torch.Tensor]],
         video_seq_len: int,
         video_tokens_per_frame: int,
-        action_history_kv_cache: Optional[list[dict[str, torch.Tensor]]],
+        action_history_kv_cache: list[dict[str, torch.Tensor]] | None,
         action_history_seq_len: int,
         chunk_start: int,
-        obs_context: Optional[torch.Tensor] = None,
-        obs_context_mask: Optional[torch.Tensor] = None,
+        obs_context: torch.Tensor | None = None,
+        obs_context_mask: torch.Tensor | None = None,
         obs_chunk_offset: int = 0,
         obs_proprio_tokens_per_chunk: int = 0,
-        cross_attn_kv_cache: Optional[list[dict[str, torch.Tensor]]] = None,
+        cross_attn_kv_cache: list[dict[str, torch.Tensor]] | None = None,
     ) -> torch.Tensor:
         action_pre, attention_mask = self._build_prefilled_action_pre_and_mask(
             action_chunk=noisy_action_chunk,
@@ -577,14 +577,14 @@ class AHAWAMChunkBase(BaseWAM):
         video_kv_cache: list[dict[str, torch.Tensor]],
         video_seq_len: int,
         video_tokens_per_frame: int,
-        action_history_kv_cache: Optional[list[dict[str, torch.Tensor]]],
+        action_history_kv_cache: list[dict[str, torch.Tensor]] | None,
         action_history_seq_len: int,
         chunk_start: int,
-        obs_context: Optional[torch.Tensor] = None,
-        obs_context_mask: Optional[torch.Tensor] = None,
+        obs_context: torch.Tensor | None = None,
+        obs_context_mask: torch.Tensor | None = None,
         obs_chunk_offset: int = 0,
         obs_proprio_tokens_per_chunk: int = 0,
-        cross_attn_kv_cache: Optional[list[dict[str, torch.Tensor]]] = None,
+        cross_attn_kv_cache: list[dict[str, torch.Tensor]] | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         clean_timestep = torch.zeros(
             (clean_action_chunk.shape[0], clean_action_chunk.shape[1]),
@@ -632,21 +632,21 @@ class AHAWAMChunkBase(BaseWAM):
     def infer_action(
         self,
         prompt=None,
-        input_image: Optional[torch.Tensor] = None,
-        action_horizon: Optional[int] = None,
+        input_image: torch.Tensor | None = None,
+        action_horizon: int | None = None,
         proprio=None,
         context=None,
         context_mask=None,
         negative_prompt=None,
         text_cfg_scale: float = 1.0,
         num_inference_steps: int = 20,
-        sigma_shift: Optional[float] = None,
+        sigma_shift: float | None = None,
         seed=None,
         rand_device: str = "cpu",
         tiled: bool = False,
-        chunk_obs_image: Optional[torch.Tensor] = None,
-        chunk_proprio: Optional[torch.Tensor] = None,
-        video_frame_index: Optional[int] = None,
+        chunk_obs_image: torch.Tensor | None = None,
+        chunk_proprio: torch.Tensor | None = None,
+        video_frame_index: int | None = None,
         phase: str = "video",
     ) -> dict[str, Any]:
         del negative_prompt, text_cfg_scale

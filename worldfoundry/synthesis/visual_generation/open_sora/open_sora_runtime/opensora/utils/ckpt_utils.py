@@ -4,11 +4,12 @@ import functools
 import json
 import operator
 import os
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 import torch
 import torch.distributed as dist
 import torch.nn as nn
+
 if TYPE_CHECKING:
     from colossalai.booster import Booster
 from torch.optim import Optimizer
@@ -149,6 +150,7 @@ def download_model(model_name=None, local_path=None, url=None):
 
 def load_from_sharded_state_dict(model, ckpt_path, model_name="model", strict=False):
     from colossalai.checkpoint_io import GeneralCheckpointIO
+
     ckpt_io = GeneralCheckpointIO()
     ckpt_io.load_model(model, os.path.join(ckpt_path, model_name), strict=strict)
 
@@ -179,7 +181,7 @@ def model_gathering(model: torch.nn.Module, model_shape_dict: dict):
     dist.barrier()
 
 
-def remove_padding(tensor: torch.Tensor, original_shape: Tuple) -> torch.Tensor:
+def remove_padding(tensor: torch.Tensor, original_shape: tuple) -> torch.Tensor:
     return tensor[: functools.reduce(operator.mul, original_shape)]
 
 
@@ -191,7 +193,7 @@ def record_model_param_shape(model: torch.nn.Module) -> dict:
 
 
 def load_checkpoint(model, ckpt_path, save_as_pt=False, model_name="model", strict=False):
-    if ckpt_path.endswith(".pt") or ckpt_path.endswith(".pth"):
+    if ckpt_path.endswith((".pt", ".pth")):
         state_dict = find_model(ckpt_path, model=model)
         missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=strict)
         get_logger().info("Missing keys: %s", missing_keys)
@@ -217,7 +219,7 @@ def load_checkpoint(model, ckpt_path, save_as_pt=False, model_name="model", stri
 
 
 def load_json(file_path: str):
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         return json.load(f)
 
 
@@ -237,10 +239,10 @@ def save(
     optimizer: Optimizer = None,
     lr_scheduler: _LRScheduler = None,
     sampler=None,
-    epoch: int = None,
-    step: int = None,
-    global_step: int = None,
-    batch_size: int = None,
+    epoch: int | None = None,
+    step: int | None = None,
+    global_step: int | None = None,
+    batch_size: int | None = None,
 ):
     save_dir = os.path.join(save_dir, f"epoch{epoch}-global_step{global_step}")
     os.makedirs(os.path.join(save_dir, "model"), exist_ok=True)
@@ -278,7 +280,7 @@ def load(
     optimizer: Optimizer = None,
     lr_scheduler: _LRScheduler = None,
     sampler=None,
-) -> Tuple[int, int, int]:
+) -> tuple[int, int, int]:
     assert os.path.exists(load_dir), f"Checkpoint directory {load_dir} does not exist"
     assert os.path.exists(os.path.join(load_dir, "running_states.json")), "running_states.json does not exist"
     running_states = load_json(os.path.join(load_dir, "running_states.json"))

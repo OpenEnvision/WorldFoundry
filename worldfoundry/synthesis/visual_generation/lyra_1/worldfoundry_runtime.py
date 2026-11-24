@@ -7,7 +7,7 @@ import random
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import torch
@@ -24,7 +24,7 @@ class Lyra1Runtime:
     MODEL_ID = "lyra-1"
     DISPLAY_NAME = "Lyra-1"
     BLOCKED_REASONS: tuple[str, ...] = ()
-    MULTI_TRAJECTORY_INDEX = {
+    MULTI_TRAJECTORY_INDEX: ClassVar[dict] = {
         "left": 0,
         "right": 1,
         "up": 2,
@@ -34,7 +34,7 @@ class Lyra1Runtime:
         "clockwise": 5,
         "counterclockwise": 5,
     }
-    _MULTI_TRAJECTORIES = {
+    _MULTI_TRAJECTORIES: ClassVar[dict] = {
         "left": (0, (0.2, 0.3)),
         "right": (1, (0.2, 0.3)),
         "up": (2, (0.1, 0.2)),
@@ -67,7 +67,7 @@ class Lyra1Runtime:
         checkpoint_dir: str | None = None,
         default_mode: str = "static",
         **kwargs: Any,
-    ) -> "Lyra1Runtime":
+    ) -> Lyra1Runtime:
         del args
         options = dict(pretrained_model_path) if isinstance(pretrained_model_path, Mapping) else {}
         if pretrained_model_path is not None and not isinstance(pretrained_model_path, Mapping):
@@ -107,8 +107,7 @@ class Lyra1Runtime:
 
     @staticmethod
     def _dynamic_reference(visual_input: Any) -> Any:
-        from worldfoundry.core.io import coerce_video_frames
-        from worldfoundry.core.media.codecs.video import video_chunk_to_uint8_frames
+        from worldfoundry.core.media.codecs.video import coerce_video_frames, video_chunk_to_uint8_frames
         from worldfoundry.core.media.processing.postprocess import VideoChunk
         from worldfoundry.core.memory.media import to_pil_image
 
@@ -170,7 +169,7 @@ class Lyra1Runtime:
                 latent_value = latent_value.permute(0, 2, 1, 3, 4).contiguous()
             latent_dir = output_root / "latent"
             latent_dir.mkdir(parents=True, exist_ok=True)
-            torch.save(latent_value.numpy(), latent_dir / f"{clip_name}.pkl")
+            torch.save(latent_value, latent_dir / f"{clip_name}.pkl")
 
     def _write_plan(
         self,
@@ -311,8 +310,7 @@ class Lyra1Runtime:
                 )
             if warp_images is None or warp_masks is None:
                 raise NotImplementedError(
-                    "Native Lyra-1 dynamic synthesis requires explicit rendered_warp_images "
-                    "and rendered_warp_masks"
+                    "Native Lyra-1 dynamic synthesis requires explicit rendered_warp_images and rendered_warp_masks"
                 )
             reference_image = kwargs.pop("reference_image", None)
             if reference_image is None:

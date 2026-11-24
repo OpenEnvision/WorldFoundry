@@ -324,7 +324,7 @@ def build_plan(benchmark_id: str, *, repo_root: Path | None = None) -> dict[str,
         grouped_assets.setdefault(key, []).append(asset)
 
     normalize = [
-        "worldfoundry-eval",
+        "wf",
         "zoo",
         "benchmark-run",
         "--benchmark-id",

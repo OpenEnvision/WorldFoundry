@@ -1,11 +1,12 @@
 from __future__ import annotations
-from typing import Any, Dict, Optional, Tuple
 
-import ale_py
+from typing import Any
+
+import ale_py  # noqa: F401 - Keeps the module's import-time setup.
 import gymnasium
-from gymnasium.vector import AsyncVectorEnv
 import numpy as np
 import torch
+from gymnasium.vector import AsyncVectorEnv
 from torch import Tensor
 
 from .atari_preprocessing import AtariPreprocessing
@@ -17,7 +18,7 @@ def make_atari_env(
     device: torch.device,
     done_on_life_loss: bool,
     size: int,
-    max_episode_steps: Optional[int],
+    max_episode_steps: int | None,
 ) -> TorchEnv:
     def env_fn():
         env = gymnasium.make(
@@ -54,7 +55,7 @@ class DoneOnLifeLoss(gymnasium.Wrapper):
     def __init__(self, env: AsyncVectorEnv) -> None:
         super().__init__(env)
 
-    def step(self, actions: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
+    def step(self, actions: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
         obs, rew, end, trunc, info = self.env.step(actions)
         life_loss = info["life_loss"]
         if life_loss.any():
@@ -72,11 +73,11 @@ class TorchEnv(gymnasium.Wrapper):
         b, h, w, c = env.observation_space.shape
         self.observation_space = gymnasium.spaces.Box(low=-1, high=1, shape=(b, c, h, w))
 
-    def reset(self, *args, **kwargs) -> Tuple[Tensor, Dict[str, Any]]:
+    def reset(self, *args, **kwargs) -> tuple[Tensor, dict[str, Any]]:
         obs, info = self.env.reset(*args, **kwargs)
         return self._to_tensor(obs), info
 
-    def step(self, actions: Tensor) -> Tuple[Tensor, Tensor, Tensor, Tensor, Dict[str, Any]]:
+    def step(self, actions: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor, dict[str, Any]]:
         obs, rew, end, trunc, info = self.env.step(actions.cpu().numpy())
         dead = np.logical_or(end, trunc)
         if dead.any():

@@ -10,9 +10,7 @@ import torch
 from pycocotools import mask as mask_util
 
 
-def instance_masks_to_semantic_masks(
-    instance_masks: torch.Tensor, num_instances: torch.Tensor
-) -> torch.Tensor:
+def instance_masks_to_semantic_masks(instance_masks: torch.Tensor, num_instances: torch.Tensor) -> torch.Tensor:
     """This function converts instance masks to semantic masks.
     It accepts a collapsed batch of instances masks (ie all instance masks are concatenated in a single tensor) and
     the number of instances in each image of the batch.
@@ -59,16 +57,10 @@ def mask_intersection(masks1, masks2, block_size=16):
     assert masks1.shape[1:] == masks2.shape[1:]
     assert masks1.dtype == torch.bool and masks2.dtype == torch.bool
 
-    result = torch.zeros(
-        masks1.shape[0], masks2.shape[0], device=masks1.device, dtype=torch.long
-    )
+    result = torch.zeros(masks1.shape[0], masks2.shape[0], device=masks1.device, dtype=torch.long)
     for i in range(0, masks1.shape[0], block_size):
         for j in range(0, masks2.shape[0], block_size):
-            intersection = (
-                (masks1[i : i + block_size, None] * masks2[None, j : j + block_size])
-                .flatten(-2)
-                .sum(-1)
-            )
+            intersection = (masks1[i : i + block_size, None] * masks2[None, j : j + block_size]).flatten(-2).sum(-1)
             result[i : i + block_size, j : j + block_size] = intersection
     return result
 
@@ -119,9 +111,7 @@ def dilation(mask, kernel_size):
 
     assert mask.ndim == 3
     kernel_size = int(kernel_size)
-    assert kernel_size % 2 == 1, (
-        f"Dilation expects a odd kernel size, got {kernel_size}"
-    )
+    assert kernel_size % 2 == 1, f"Dilation expects a odd kernel size, got {kernel_size}"
 
     if mask.is_cuda:
         m = mask.unsqueeze(1).to(torch.float16)
@@ -140,9 +130,7 @@ def dilation(mask, kernel_size):
     return torch.stack(processed).view_as(mask).to(mask)
 
 
-def compute_F_measure(
-    gt_boundary_rle, gt_dilated_boundary_rle, dt_boundary_rle, dt_dilated_boundary_rle
-):
+def compute_F_measure(gt_boundary_rle, gt_dilated_boundary_rle, dt_boundary_rle, dt_dilated_boundary_rle):
     """Adapted from https://github.com/JonathonLuiten/TrackEval/blob/master/trackeval/metrics/j_and_f.py#L207
 
     Assumes the boundary and dilated boundaries have already been computed and converted to RLE
@@ -167,10 +155,7 @@ def compute_F_measure(
         recall = maskUtils.area(gt_match) / float(n_gt)
 
     # Compute F measure
-    if precision + recall == 0:
-        f_val = 0
-    else:
-        f_val = 2 * precision * recall / (precision + recall)
+    f_val = 0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
 
     return f_val
 
@@ -205,9 +190,7 @@ def rle_encode(orig_mask, return_areas=False):
     if return_areas:
         mask_areas = flat_mask.sum(-1).tolist()
     # Find the indices where the mask changes
-    differences = torch.ones(
-        mask.shape[0], flat_mask.shape[1] + 1, device=mask.device, dtype=torch.bool
-    )
+    differences = torch.ones(mask.shape[0], flat_mask.shape[1] + 1, device=mask.device, dtype=torch.bool)
     differences[:, 1:-1] = flat_mask[:, :-1] != flat_mask[:, 1:]
     differences[:, 0] = flat_mask[:, 0]
     _, change_indices = torch.where(differences)
@@ -257,12 +240,7 @@ def robust_rle_encode(masks):
         return rle_encode(masks)
     except RuntimeError as _:
         masks = masks.cpu().numpy()
-        rles = [
-            mask_util.encode(
-                np.array(mask[:, :, np.newaxis], dtype=np.uint8, order="F")
-            )[0]
-            for mask in masks
-        ]
+        rles = [mask_util.encode(np.array(mask[:, :, np.newaxis], dtype=np.uint8, order="F"))[0] for mask in masks]
         for rle in rles:
             rle["counts"] = rle["counts"].decode("utf-8")
         return rles

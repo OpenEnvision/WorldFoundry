@@ -33,44 +33,121 @@ class SymbolSpec:
 
 SYMBOLS = (
     # Serializable evaluation contracts.
-    SymbolSpec("worldfoundry.evaluation.api", "ArtifactRef", "worldfoundry/evaluation/api/artifacts.py", "contracts"),
-    SymbolSpec("worldfoundry.evaluation.api", "local_path_for_uri", "worldfoundry/evaluation/api/artifacts.py", "contracts"),
-    SymbolSpec("worldfoundry.evaluation.api", "enrich_artifact_ref", "worldfoundry/evaluation/api/artifacts.py", "contracts"),
-    SymbolSpec("worldfoundry.evaluation.api", "GenerationRequest", "worldfoundry/evaluation/api/generation.py", "contracts"),
-    SymbolSpec("worldfoundry.evaluation.api", "GenerationResult", "worldfoundry/evaluation/api/generation.py", "contracts"),
-    SymbolSpec("worldfoundry.evaluation.api", "normalize_generation_status", "worldfoundry/evaluation/api/generation.py", "contracts"),
-    SymbolSpec("worldfoundry.evaluation.api", "is_generation_result_successful", "worldfoundry/evaluation/api/generation.py", "contracts"),
+    SymbolSpec("worldfoundry.evals.api", "ArtifactRef", "worldfoundry/evals/api/artifacts.py", "contracts"),
+    SymbolSpec("worldfoundry.evals.api", "local_path_for_uri", "worldfoundry/evals/api/artifacts.py", "contracts"),
+    SymbolSpec("worldfoundry.evals.api", "enrich_artifact_ref", "worldfoundry/evals/api/artifacts.py", "contracts"),
+    SymbolSpec("worldfoundry.evals.api", "GenerationRequest", "worldfoundry/evals/api/generation.py", "contracts"),
+    SymbolSpec("worldfoundry.evals.api", "GenerationResult", "worldfoundry/evals/api/generation.py", "contracts"),
+    SymbolSpec(
+        "worldfoundry.evals.api",
+        "normalize_generation_status",
+        "worldfoundry/evals/api/generation.py",
+        "contracts",
+    ),
+    SymbolSpec(
+        "worldfoundry.evals.api",
+        "is_generation_result_successful",
+        "worldfoundry/evals/api/generation.py",
+        "contracts",
+    ),
     # Models, runners, and pipeline extension points.
-    SymbolSpec("worldfoundry.evaluation.api", "WorldModelManifest", "worldfoundry/evaluation/api/world_model_manifest.py", "models"),
-    SymbolSpec("worldfoundry.evaluation.api", "WorldModelConfig", "worldfoundry/evaluation/api/models.py", "models"),
-    SymbolSpec("worldfoundry.evaluation.api", "WorldModelRunner", "worldfoundry/evaluation/api/models.py", "models"),
-    SymbolSpec("worldfoundry.pipelines.pipeline_utils", "PipelineABC", "worldfoundry/pipelines/pipeline_utils.py", "models"),
+    SymbolSpec(
+        "worldfoundry.evals.api",
+        "WorldModelManifest",
+        "worldfoundry/core/world_model_manifest.py",
+        "models",
+    ),
+    SymbolSpec("worldfoundry.evals.api", "WorldModelConfig", "worldfoundry/evals/api/models.py", "models"),
+    SymbolSpec("worldfoundry.evals.api", "WorldModelRunner", "worldfoundry/evals/api/models.py", "models"),
+    SymbolSpec(
+        "worldfoundry.pipelines.pipeline_utils", "PipelineABC", "worldfoundry/pipelines/pipeline_utils.py", "models"
+    ),
     # Metric and task contracts.
-    SymbolSpec("worldfoundry.evaluation.api", "MetricSpec", "worldfoundry/evaluation/api/metrics.py", "metrics-tasks"),
-    SymbolSpec("worldfoundry.evaluation.api", "MetricResult", "worldfoundry/evaluation/api/metrics.py", "metrics-tasks"),
-    SymbolSpec("worldfoundry.evaluation.api", "AggregateResult", "worldfoundry/evaluation/api/metrics.py", "metrics-tasks"),
-    SymbolSpec("worldfoundry.evaluation.api", "Metric", "worldfoundry/evaluation/api/metrics.py", "metrics-tasks"),
-    SymbolSpec("worldfoundry.evaluation.api", "EvaluationProtocolSpec", "worldfoundry/evaluation/api/tasks.py", "metrics-tasks"),
-    SymbolSpec("worldfoundry.evaluation.api", "WorldTaskConfig", "worldfoundry/evaluation/api/tasks.py", "metrics-tasks"),
-    SymbolSpec("worldfoundry.evaluation.api", "BenchmarkSpec", "worldfoundry/evaluation/api/tasks.py", "metrics-tasks"),
+    SymbolSpec("worldfoundry.evals.api", "MetricSpec", "worldfoundry/evals/api/metrics.py", "metrics-tasks"),
+    SymbolSpec("worldfoundry.evals.api", "MetricResult", "worldfoundry/evals/api/metrics.py", "metrics-tasks"),
+    SymbolSpec("worldfoundry.evals.api", "AggregateResult", "worldfoundry/evals/api/metrics.py", "metrics-tasks"),
+    SymbolSpec("worldfoundry.evals.api", "Metric", "worldfoundry/evals/api/metrics.py", "metrics-tasks"),
+    SymbolSpec("worldfoundry.evals.api", "EvaluationProtocolSpec", "worldfoundry/evals/api/tasks.py", "metrics-tasks"),
+    SymbolSpec("worldfoundry.evals.api", "WorldTaskConfig", "worldfoundry/evals/api/tasks.py", "metrics-tasks"),
+    SymbolSpec("worldfoundry.evals.api", "BenchmarkSpec", "worldfoundry/evals/api/tasks.py", "metrics-tasks"),
     # Canonical run and benchmark facade.
-    SymbolSpec("worldfoundry.evaluation.public", "WorldFoundryRunRequest", "worldfoundry/evaluation/framework.py", "runs"),
-    SymbolSpec("worldfoundry.evaluation.public", "WorldFoundryRunResult", "worldfoundry/evaluation/framework.py", "runs"),
-    SymbolSpec("worldfoundry.evaluation.public", "run_worldfoundry", "worldfoundry/evaluation/framework.py", "runs"),
-    SymbolSpec("worldfoundry.evaluation.public", "list_video_benchmarks", "worldfoundry/evaluation/public.py", "runs"),
-    SymbolSpec("worldfoundry.evaluation.public", "run_benchmark", "worldfoundry/evaluation/public.py", "runs"),
-    SymbolSpec("worldfoundry.evaluation.public", "normalize_upstream_results", "worldfoundry/evaluation/public.py", "runs"),
-    SymbolSpec("worldfoundry.evaluation.public", "benchmark_integration_spec", "worldfoundry/evaluation/public.py", "runs"),
+    SymbolSpec(
+        "worldfoundry.evals.public",
+        "WorldFoundryRunRequest",
+        "worldfoundry/evals/tasks/execution/orchestration/run.py",
+        "runs",
+    ),
+    SymbolSpec(
+        "worldfoundry.evals.public",
+        "WorldFoundryRunResult",
+        "worldfoundry/evals/tasks/execution/orchestration/run.py",
+        "runs",
+    ),
+    SymbolSpec(
+        "worldfoundry.evals.public",
+        "run_worldfoundry",
+        "worldfoundry/evals/tasks/execution/orchestration/run.py",
+        "runs",
+    ),
+    SymbolSpec("worldfoundry.evals.public", "list_video_benchmarks", "worldfoundry/evals/public.py", "runs"),
+    SymbolSpec("worldfoundry.evals.public", "run_benchmark", "worldfoundry/evals/public.py", "runs"),
+    SymbolSpec("worldfoundry.evals.public", "normalize_upstream_results", "worldfoundry/evals/public.py", "runs"),
+    SymbolSpec("worldfoundry.evals.public", "benchmark_integration_spec", "worldfoundry/evals/public.py", "runs"),
     # Evidence and reporting.
-    SymbolSpec("worldfoundry.evaluation.reporting", "build_env_requirements", "worldfoundry/evaluation/reporting/run_manifest.py", "reporting"),
-    SymbolSpec("worldfoundry.evaluation.reporting", "build_environment", "worldfoundry/evaluation/reporting/run_manifest.py", "reporting"),
-    SymbolSpec("worldfoundry.evaluation.reporting", "build_run_manifest", "worldfoundry/evaluation/reporting/run_manifest.py", "reporting"),
-    SymbolSpec("worldfoundry.evaluation.reporting", "write_run_manifest_artifacts", "worldfoundry/evaluation/reporting/run_manifest.py", "reporting"),
-    SymbolSpec("worldfoundry.evaluation.reporting", "build_scorecard", "worldfoundry/evaluation/reporting/scorecard.py", "reporting"),
-    SymbolSpec("worldfoundry.evaluation.reporting", "write_scorecard", "worldfoundry/evaluation/reporting/scorecard.py", "reporting"),
-    SymbolSpec("worldfoundry.evaluation.reporting", "build_run_summary", "worldfoundry/evaluation/reporting/run_report.py", "reporting"),
-    SymbolSpec("worldfoundry.evaluation.reporting", "build_markdown_report", "worldfoundry/evaluation/reporting/run_report.py", "reporting"),
-    SymbolSpec("worldfoundry.evaluation.reporting", "write_run_report_artifacts", "worldfoundry/evaluation/reporting/run_report.py", "reporting"),
+    SymbolSpec(
+        "worldfoundry.evals.reporting",
+        "build_env_requirements",
+        "worldfoundry/evals/reporting/run_manifest.py",
+        "reporting",
+    ),
+    SymbolSpec(
+        "worldfoundry.evals.reporting",
+        "build_environment",
+        "worldfoundry/evals/reporting/run_manifest.py",
+        "reporting",
+    ),
+    SymbolSpec(
+        "worldfoundry.evals.reporting",
+        "build_run_manifest",
+        "worldfoundry/evals/reporting/run_manifest.py",
+        "reporting",
+    ),
+    SymbolSpec(
+        "worldfoundry.evals.reporting",
+        "write_run_manifest_artifacts",
+        "worldfoundry/evals/reporting/run_manifest.py",
+        "reporting",
+    ),
+    SymbolSpec(
+        "worldfoundry.evals.reporting",
+        "build_scorecard",
+        "worldfoundry/evals/reporting/scorecard.py",
+        "reporting",
+    ),
+    SymbolSpec(
+        "worldfoundry.evals.reporting",
+        "write_scorecard",
+        "worldfoundry/evals/reporting/scorecard.py",
+        "reporting",
+    ),
+    SymbolSpec(
+        "worldfoundry.evals.reporting",
+        "build_run_summary",
+        "worldfoundry/evals/reporting/run_report.py",
+        "reporting",
+    ),
+    SymbolSpec(
+        "worldfoundry.evals.reporting",
+        "build_markdown_report",
+        "worldfoundry/evals/reporting/run_report.py",
+        "reporting",
+    ),
+    SymbolSpec(
+        "worldfoundry.evals.reporting",
+        "write_run_report_artifacts",
+        "worldfoundry/evals/reporting/run_report.py",
+        "reporting",
+    ),
     # Runtime paths, local assets, and bounded subprocesses.
     SymbolSpec("worldfoundry.runtime.env", "RequiredEnvReport", "worldfoundry/runtime/env.py", "runtime"),
     SymbolSpec("worldfoundry.runtime.env", "WorldFoundryEnv", "worldfoundry/runtime/env.py", "runtime"),
@@ -81,7 +158,7 @@ SYMBOLS = (
 )
 
 # Ordered catalog sections for the API reference landing page (vLLM-style summary).
-CATALOG_SECTIONS = (
+CATALOG_SECTIONS: tuple[dict[str, Any], ...] = (
     {
         "id": "core",
         "title": {"en": "Core", "zh": "Core"},
@@ -163,56 +240,240 @@ CORE_GROUP_BY_MODULE = {
 # additional public imports that recur throughout model integrations.
 CORE_ADDITIONAL_SYMBOLS = (
     # Attention state and dispatch controls.
-    SymbolSpec("worldfoundry.core.attention", "NativeAttention", "worldfoundry/core/attention/backends/native.py", "core-attention"),
-    SymbolSpec("worldfoundry.core.attention", "ContextParallelAttention", "worldfoundry/core/attention/parallel/cp.py", "core-attention"),
-    SymbolSpec("worldfoundry.core.attention", "BlockKVCache", "worldfoundry/core/attention/cache/kvcache.py", "core-attention"),
-    SymbolSpec("worldfoundry.core.attention", "packed_sequence_attention", "worldfoundry/core/attention/backends/dispatch.py", "core-attention"),
-    SymbolSpec("worldfoundry.core.attention", "attention_dispatch_report", "worldfoundry/core/attention/backends/dispatch.py", "core-attention"),
-    SymbolSpec("worldfoundry.core.attention", "clear_attention_dispatch_cache", "worldfoundry/core/attention/backends/dispatch.py", "core-attention"),
+    SymbolSpec(
+        "worldfoundry.core.attention",
+        "NativeAttention",
+        "worldfoundry/core/attention/backends/native.py",
+        "core-attention",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.attention",
+        "ContextParallelAttention",
+        "worldfoundry/core/attention/parallel/cp.py",
+        "core-attention",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.attention", "BlockKVCache", "worldfoundry/core/attention/cache/kvcache.py", "core-attention"
+    ),
+    SymbolSpec(
+        "worldfoundry.core.attention",
+        "packed_sequence_attention",
+        "worldfoundry/core/attention/backends/dispatch.py",
+        "core-attention",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.attention",
+        "attention_dispatch_report",
+        "worldfoundry/core/attention/backends/dispatch.py",
+        "core-attention",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.attention",
+        "clear_attention_dispatch_cache",
+        "worldfoundry/core/attention/backends/dispatch.py",
+        "core-attention",
+    ),
     # Lazy configuration is the construction seam used by released configs.
-    SymbolSpec("worldfoundry.core.configuration", "Config", "worldfoundry/core/configuration/cosmos_config.py", "core-configuration"),
-    SymbolSpec("worldfoundry.core.configuration", "CheckpointConfig", "worldfoundry/core/configuration/cosmos_config.py", "core-configuration"),
-    SymbolSpec("worldfoundry.core.configuration", "EMAConfig", "worldfoundry/core/configuration/cosmos_config.py", "core-configuration"),
-    SymbolSpec("worldfoundry.core.configuration", "ObjectStoreConfig", "worldfoundry/core/configuration/cosmos_config.py", "core-configuration"),
-    SymbolSpec("worldfoundry.core.configuration", "LazyCall", "worldfoundry/core/configuration/lazy_config/lazy_call.py", "core-configuration"),
-    SymbolSpec("worldfoundry.core.configuration", "LazyDict", "worldfoundry/core/configuration/lazy_config/__init__.py", "core-configuration"),
-    SymbolSpec("worldfoundry.core.configuration", "LazyConfig", "worldfoundry/core/configuration/lazy_config/config.py", "core-configuration"),
-    SymbolSpec("worldfoundry.core.configuration", "instantiate", "worldfoundry/core/configuration/lazy_config/instantiate.py", "core-configuration"),
-    SymbolSpec("worldfoundry.core.configuration", "make_freezable", "worldfoundry/core/configuration/cosmos_config.py", "core-configuration"),
+    SymbolSpec(
+        "worldfoundry.core.configuration",
+        "Config",
+        "worldfoundry/core/configuration/cosmos_config.py",
+        "core-configuration",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.configuration",
+        "CheckpointConfig",
+        "worldfoundry/core/configuration/cosmos_config.py",
+        "core-configuration",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.configuration",
+        "EMAConfig",
+        "worldfoundry/core/configuration/cosmos_config.py",
+        "core-configuration",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.configuration",
+        "ObjectStoreConfig",
+        "worldfoundry/core/configuration/cosmos_config.py",
+        "core-configuration",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.configuration",
+        "LazyCall",
+        "worldfoundry/core/configuration/lazy_config/lazy_call.py",
+        "core-configuration",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.configuration",
+        "LazyDict",
+        "worldfoundry/core/configuration/lazy_config/__init__.py",
+        "core-configuration",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.configuration",
+        "LazyConfig",
+        "worldfoundry/core/configuration/lazy_config/config.py",
+        "core-configuration",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.configuration",
+        "instantiate",
+        "worldfoundry/core/configuration/lazy_config/instantiate.py",
+        "core-configuration",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.configuration",
+        "make_freezable",
+        "worldfoundry/core/configuration/cosmos_config.py",
+        "core-configuration",
+    ),
     # Logical paths are imported directly because callers often need a specific root.
     SymbolSpec("worldfoundry.core.io.paths", "project_root", "worldfoundry/core/io/paths.py", "core-io-media"),
-    SymbolSpec("worldfoundry.core.io.paths", "worldfoundry_path_tokens", "worldfoundry/core/io/paths.py", "core-io-media"),
-    SymbolSpec("worldfoundry.core.io.paths", "resolve_worldfoundry_path", "worldfoundry/core/io/paths.py", "core-io-media"),
+    SymbolSpec(
+        "worldfoundry.core.io.paths", "worldfoundry_path_tokens", "worldfoundry/core/io/paths.py", "core-io-media"
+    ),
+    SymbolSpec(
+        "worldfoundry.core.io.paths", "resolve_worldfoundry_path", "worldfoundry/core/io/paths.py", "core-io-media"
+    ),
     SymbolSpec("worldfoundry.core.io.paths", "checkpoint_root_path", "worldfoundry/core/io/paths.py", "core-io-media"),
     SymbolSpec("worldfoundry.core.io.paths", "hfd_root_path", "worldfoundry/core/io/paths.py", "core-io-media"),
     SymbolSpec("worldfoundry.core.io.paths", "resolve_data_path", "worldfoundry/core/io/paths.py", "core-io-media"),
     SymbolSpec("worldfoundry.core.io.paths", "local_model_root_path", "worldfoundry/core/io/paths.py", "core-io-media"),
     # Context-parallel helpers are a public subpackage boundary.
-    SymbolSpec("worldfoundry.core.distributed", "split_inputs_cp", "worldfoundry/core/distributed/model_parallel/context.py", "core-distributed"),
-    SymbolSpec("worldfoundry.core.distributed", "cat_outputs_cp", "worldfoundry/core/distributed/model_parallel/context.py", "core-distributed"),
-    SymbolSpec("worldfoundry.core.distributed", "cat_outputs_cp_with_grad", "worldfoundry/core/distributed/model_parallel/context.py", "core-distributed"),
-    SymbolSpec("worldfoundry.core.distributed", "broadcast", "worldfoundry/core/distributed/model_parallel/context.py", "core-distributed"),
-    SymbolSpec("worldfoundry.core.distributed", "broadcast_split_tensor", "worldfoundry/core/distributed/model_parallel/context.py", "core-distributed"),
-    SymbolSpec("worldfoundry.core.distributed", "find_split", "worldfoundry/core/distributed/model_parallel/context.py", "core-distributed"),
+    SymbolSpec(
+        "worldfoundry.core.distributed",
+        "split_inputs_cp",
+        "worldfoundry/core/distributed/model_parallel/context.py",
+        "core-distributed",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.distributed",
+        "cat_outputs_cp",
+        "worldfoundry/core/distributed/model_parallel/context.py",
+        "core-distributed",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.distributed",
+        "cat_outputs_cp_with_grad",
+        "worldfoundry/core/distributed/model_parallel/context.py",
+        "core-distributed",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.distributed",
+        "broadcast",
+        "worldfoundry/core/distributed/model_parallel/context.py",
+        "core-distributed",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.distributed",
+        "broadcast_split_tensor",
+        "worldfoundry/core/distributed/model_parallel/context.py",
+        "core-distributed",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.distributed",
+        "find_split",
+        "worldfoundry/core/distributed/model_parallel/context.py",
+        "core-distributed",
+    ),
     # In-tree acceleration, memory, kernel, and safety primitives.
-    SymbolSpec("worldfoundry.core.acceleration", "FixedStepCache", "worldfoundry/core/acceleration/cache.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.acceleration", "AdaptiveResidualCache", "worldfoundry/core/acceleration/cache.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.acceleration", "TokenPruner", "worldfoundry/core/acceleration/token_pruning.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.acceleration", "TokenPruneState", "worldfoundry/core/acceleration/token_pruning.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.acceleration", "select_token_indices", "worldfoundry/core/acceleration/token_pruning.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.acceleration", "prune_tokens", "worldfoundry/core/acceleration/token_pruning.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.acceleration", "restore_tokens", "worldfoundry/core/acceleration/token_pruning.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.vram", "enable_vram_management", "worldfoundry/core/vram/layers.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.vram", "enable_vram_management_recursively", "worldfoundry/core/vram/layers.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.vram", "fill_vram_config", "worldfoundry/core/vram/layers.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.kernels", "residual_gate_add", "worldfoundry/core/kernels/diffusion.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.kernels", "layer_norm_scale_shift", "worldfoundry/core/kernels/diffusion.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.memory", "BaseMemory", "worldfoundry/core/memory/base.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.memory", "MemoryStore", "worldfoundry/core/memory/store.py", "core-acceleration-memory"),
-    SymbolSpec("worldfoundry.core.execution.realtime.contracts", "RealtimeSpec", "worldfoundry/core/execution/realtime/contracts.py", "core-runtime"),
-    SymbolSpec("worldfoundry.core.safety", "ContentSafetyGuardrail", "worldfoundry/core/safety/guardrails.py", "core-foundations"),
-    SymbolSpec("worldfoundry.core.safety", "PostprocessingGuardrail", "worldfoundry/core/safety/guardrails.py", "core-foundations"),
-    SymbolSpec("worldfoundry.core.safety", "GuardrailRunner", "worldfoundry/core/safety/guardrails.py", "core-foundations"),
+    SymbolSpec(
+        "worldfoundry.core.acceleration",
+        "FixedStepCache",
+        "worldfoundry/core/acceleration/cache.py",
+        "core-acceleration-memory",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.acceleration",
+        "AdaptiveResidualCache",
+        "worldfoundry/core/acceleration/cache.py",
+        "core-acceleration-memory",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.acceleration",
+        "TokenPruner",
+        "worldfoundry/core/acceleration/token_pruning.py",
+        "core-acceleration-memory",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.acceleration",
+        "TokenPruneState",
+        "worldfoundry/core/acceleration/token_pruning.py",
+        "core-acceleration-memory",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.acceleration",
+        "select_token_indices",
+        "worldfoundry/core/acceleration/token_pruning.py",
+        "core-acceleration-memory",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.acceleration",
+        "prune_tokens",
+        "worldfoundry/core/acceleration/token_pruning.py",
+        "core-acceleration-memory",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.acceleration",
+        "restore_tokens",
+        "worldfoundry/core/acceleration/token_pruning.py",
+        "core-acceleration-memory",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.vram",
+        "enable_vram_management",
+        "worldfoundry/core/vram/layers.py",
+        "core-acceleration-memory",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.vram",
+        "enable_vram_management_recursively",
+        "worldfoundry/core/vram/layers.py",
+        "core-acceleration-memory",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.vram", "fill_vram_config", "worldfoundry/core/vram/layers.py", "core-acceleration-memory"
+    ),
+    SymbolSpec(
+        "worldfoundry.core.kernels",
+        "residual_gate_add",
+        "worldfoundry/core/kernels/diffusion.py",
+        "core-acceleration-memory",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.kernels",
+        "layer_norm_scale_shift",
+        "worldfoundry/core/kernels/diffusion.py",
+        "core-acceleration-memory",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.memory", "BaseMemory", "worldfoundry/core/memory/base.py", "core-acceleration-memory"
+    ),
+    SymbolSpec(
+        "worldfoundry.core.memory", "MemoryStore", "worldfoundry/core/memory/store.py", "core-acceleration-memory"
+    ),
+    SymbolSpec(
+        "worldfoundry.core.execution.realtime.contracts",
+        "RealtimeSpec",
+        "worldfoundry/core/execution/realtime/contracts.py",
+        "core-runtime",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.safety",
+        "ContentSafetyGuardrail",
+        "worldfoundry/core/safety/guardrails.py",
+        "core-foundations",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.safety",
+        "PostprocessingGuardrail",
+        "worldfoundry/core/safety/guardrails.py",
+        "core-foundations",
+    ),
+    SymbolSpec(
+        "worldfoundry.core.safety", "GuardrailRunner", "worldfoundry/core/safety/guardrails.py", "core-foundations"
+    ),
 )
 
 
@@ -306,7 +567,9 @@ def parse_google_docstring(value: str | None) -> dict[str, Any]:
     }
 
 
-def function_parameters(node: ast.FunctionDef | ast.AsyncFunctionDef, *, drop_first: bool = False) -> list[dict[str, Any]]:
+def function_parameters(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, *, drop_first: bool = False
+) -> list[dict[str, Any]]:
     parsed_doc = parse_google_docstring(ast.get_docstring(node, clean=False))
     descriptions = parsed_doc["parameters"]
     positional = [*node.args.posonlyargs, *node.args.args]
@@ -365,7 +628,11 @@ def format_parameters(parameters: Iterable[dict[str, Any]]) -> str:
 
     for parameter in values:
         kind = parameter["kind"]
-        if kind == "keyword_only" and not inserted_kw_marker and not any(item["kind"] == "var_positional" for item in values):
+        if (
+            kind == "keyword_only"
+            and not inserted_kw_marker
+            and not any(item["kind"] == "var_positional" for item in values)
+        ):
             rendered.append("*")
             inserted_kw_marker = True
         prefix = "*" if kind == "var_positional" else "**" if kind == "var_keyword" else ""
@@ -466,7 +733,15 @@ def method_payload(node: ast.FunctionDef | ast.AsyncFunctionDef, source_path: st
     if node.name.startswith("_") and node.name != "__call__":
         return None
     decorators = {unparse(decorator) for decorator in node.decorator_list}
-    kind = "property" if "property" in decorators else "classmethod" if "classmethod" in decorators else "staticmethod" if "staticmethod" in decorators else "method"
+    kind = (
+        "property"
+        if "property" in decorators
+        else "classmethod"
+        if "classmethod" in decorators
+        else "staticmethod"
+        if "staticmethod" in decorators
+        else "method"
+    )
     parameters = function_parameters(node, drop_first=kind not in {"staticmethod", "property"})
     return_annotation = unparse(node.returns)
     if kind == "property":
@@ -504,7 +779,7 @@ def method_payload(node: ast.FunctionDef | ast.AsyncFunctionDef, source_path: st
     }
 
 
-def symbol_payload(spec: SymbolSpec, node: ast.AST) -> dict[str, Any]:
+def symbol_payload(spec: SymbolSpec, node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, Any]:
     doc = parse_google_docstring(ast.get_docstring(node, clean=False))
     qualified_name = f"{spec.public_module}.{spec.name}"
     base = {
@@ -551,7 +826,11 @@ def symbol_payload(spec: SymbolSpec, node: ast.AST) -> dict[str, Any]:
 
     fields = class_fields(node)
     init_node = next(
-        (item for item in node.body if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "__init__"),
+        (
+            item
+            for item in node.body
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "__init__"
+        ),
         None,
     )
     if init_node is not None:
@@ -714,11 +993,7 @@ def build_name_index(symbols: dict[str, Any]) -> dict[str, str]:
     candidates: dict[str, list[str]] = {}
     for qualified, entry in symbols.items():
         candidates.setdefault(str(entry["name"]), []).append(qualified)
-    return {
-        name: qualified[0]
-        for name, qualified in candidates.items()
-        if len(qualified) == 1
-    }
+    return {name: qualified[0] for name, qualified in candidates.items() if len(qualified) == 1}
 
 
 def generate() -> dict[str, Any]:
@@ -803,18 +1078,8 @@ def serialized_payload() -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="Fail when the generated file is stale.")
-    args = parser.parse_args()
+    argparse.ArgumentParser(description=__doc__).parse_args()
     payload = serialized_payload()
-    if args.check:
-        current = OUTPUT_PATH.read_text(encoding="utf-8") if OUTPUT_PATH.is_file() else ""
-        if current != payload:
-            print(f"stale generated API metadata: {OUTPUT_PATH}")
-            return 1
-        print(f"API metadata is current: {OUTPUT_PATH}")
-        return 0
-
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     current = OUTPUT_PATH.read_text(encoding="utf-8") if OUTPUT_PATH.is_file() else ""
     if current != payload:

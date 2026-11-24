@@ -8,33 +8,17 @@
 # Modified from https://github.com/facebookresearch/co-tracker/
 
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> dependency -> track_modules -> blocks.py functionality."""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from functools import partial
-from typing import Callable
-import collections
-from torch import Tensor
-from itertools import repeat
 
+from .modules import AttnBlock, CrossAttnBlock, ResidualBlock
 from .utils import bilinear_sampler
-
-from .modules import Mlp, AttnBlock, CrossAttnBlock, ResidualBlock
 
 
 class BasicEncoder(nn.Module):
-    """Basic encoder implementation."""
     def __init__(self, input_dim=3, output_dim=128, stride=4):
-        """Init.
-
-        Args:
-            input_dim: The input dim.
-            output_dim: The output dim.
-            stride: The stride.
-        """
-        super(BasicEncoder, self).__init__()
+        super().__init__()
 
         self.stride = stride
         self.norm_fn = "instance"
@@ -66,12 +50,6 @@ class BasicEncoder(nn.Module):
                     nn.init.constant_(m.bias, 0)
 
     def _make_layer(self, dim, stride=1):
-        """Helper function to make layer.
-
-        Args:
-            dim: The dim.
-            stride: The stride.
-        """
         layer1 = ResidualBlock(self.in_planes, dim, self.norm_fn, stride=stride)
         layer2 = ResidualBlock(dim, dim, self.norm_fn, stride=1)
         layers = (layer1, layer2)
@@ -80,11 +58,6 @@ class BasicEncoder(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         _, _, H, W = x.shape
 
         x = self.conv1(x)
@@ -109,17 +82,8 @@ class BasicEncoder(nn.Module):
 
 
 class ShallowEncoder(nn.Module):
-    """Shallow encoder implementation."""
     def __init__(self, input_dim=3, output_dim=32, stride=1, norm_fn="instance"):
-        """Init.
-
-        Args:
-            input_dim: The input dim.
-            output_dim: The output dim.
-            stride: The stride.
-            norm_fn: The norm fn.
-        """
-        super(ShallowEncoder, self).__init__()
+        super().__init__()
         self.stride = stride
         self.norm_fn = norm_fn
         self.in_planes = output_dim
@@ -154,23 +118,12 @@ class ShallowEncoder(nn.Module):
                     nn.init.constant_(m.bias, 0)
 
     def _make_layer(self, dim, stride=1):
-        """Helper function to make layer.
-
-        Args:
-            dim: The dim.
-            stride: The stride.
-        """
         self.in_planes = dim
 
         layer1 = ResidualBlock(self.in_planes, dim, self.norm_fn, stride=stride)
         return layer1
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         _, _, H, W = x.shape
 
         x = self.conv1(x)
@@ -190,14 +143,6 @@ class ShallowEncoder(nn.Module):
 
 
 def _bilinear_intepolate(x, stride, H, W):
-    """Helper function to bilinear intepolate.
-
-    Args:
-        x: The x.
-        stride: The stride.
-        H: The h.
-        W: The w.
-    """
     return F.interpolate(x, (H // stride, W // stride), mode="bilinear", align_corners=True)
 
 
@@ -218,19 +163,6 @@ class EfficientUpdateFormer(nn.Module):
         add_space_attn=True,
         num_virtual_tracks=64,
     ):
-        """Init.
-
-        Args:
-            space_depth: The space depth.
-            time_depth: The time depth.
-            input_dim: The input dim.
-            hidden_size: The hidden size.
-            num_heads: The num heads.
-            output_dim: The output dim.
-            mlp_ratio: The mlp ratio.
-            add_space_attn: The add space attn.
-            num_virtual_tracks: The num virtual tracks.
-        """
         super().__init__()
 
         self.out_channels = 2
@@ -270,13 +202,7 @@ class EfficientUpdateFormer(nn.Module):
         self.initialize_weights()
 
     def initialize_weights(self):
-        """Initialize weights."""
         def _basic_init(module):
-            """Helper function to basic init.
-
-            Args:
-                module: The module.
-            """
             if isinstance(module, nn.Linear):
                 torch.nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
@@ -285,17 +211,11 @@ class EfficientUpdateFormer(nn.Module):
         def init_weights_vit_timm(module: nn.Module, name: str = ""):
             """ViT weight initialization, original timm impl (for reproducibility)"""
             if isinstance(module, nn.Linear):
-                trunc_normal_(module.weight, std=0.02)
+                trunc_normal_(module.weight, std=0.02)  # noqa: F821 - Uncalled initialization helper retained from upstream.
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
 
     def forward(self, input_tensor, mask=None):
-        """Forward.
-
-        Args:
-            input_tensor: The input tensor.
-            mask: The mask.
-        """
         tokens = self.input_transform(input_tensor)
 
         init_tokens = tokens
@@ -336,17 +256,7 @@ class EfficientUpdateFormer(nn.Module):
 
 
 class CorrBlock:
-    """Corr block implementation."""
     def __init__(self, fmaps, num_levels=4, radius=4, multiple_track_feats=False, padding_mode="zeros"):
-        """Init.
-
-        Args:
-            fmaps: The fmaps.
-            num_levels: The num levels.
-            radius: The radius.
-            multiple_track_feats: The multiple track feats.
-            padding_mode: The padding mode.
-        """
         B, S, C, H, W = fmaps.shape
         self.S, self.C, self.H, self.W = S, C, H, W
         self.padding_mode = padding_mode
@@ -356,7 +266,7 @@ class CorrBlock:
         self.multiple_track_feats = multiple_track_feats
 
         self.fmaps_pyramid.append(fmaps)
-        for i in range(self.num_levels - 1):
+        for _i in range(self.num_levels - 1):
             fmaps_ = fmaps.reshape(B * S, C, H, W)
             fmaps_ = F.avg_pool2d(fmaps_, 2, stride=2)
             _, _, H, W = fmaps_.shape
@@ -364,11 +274,6 @@ class CorrBlock:
             self.fmaps_pyramid.append(fmaps)
 
     def sample(self, coords):
-        """Sample.
-
-        Args:
-            coords: The coords.
-        """
         r = self.radius
         B, S, N, D = coords.shape
         assert D == 2
@@ -396,11 +301,6 @@ class CorrBlock:
         return out
 
     def corr(self, targets):
-        """Corr.
-
-        Args:
-            targets: The targets.
-        """
         B, S, N, C = targets.shape
         if self.multiple_track_feats:
             targets_split = targets.split(C // self.num_levels, dim=-1)

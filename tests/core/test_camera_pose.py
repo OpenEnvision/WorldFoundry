@@ -14,7 +14,10 @@ from worldfoundry.core.geometry.pose import Camera, RealEstate10KPoseProcessor
 def test_pose_processor_preserves_pixel_centers_ray_layout_and_flip(views, flipped, monkeypatch):
     height, width = 2, 4
     processor = RealEstate10KPoseProcessor(
-        sample_stride=1, sample_n_frames=views, sample_size=(height, width), use_flip=flipped,
+        sample_stride=1,
+        sample_n_frames=views,
+        sample_size=(height, width),
+        use_flip=flipped,
     )
     # A 90-degree Z rotation with a nonzero origin exercises both ray halves.
     c2w = np.array([[0, -1, 0, 1], [1, 0, 0, 2], [0, 0, 1, 3], [0, 0, 0, 1]])

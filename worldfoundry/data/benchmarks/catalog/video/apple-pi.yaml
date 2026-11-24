@@ -100,17 +100,17 @@ metrics:
   output_unit: score
 
 runner:
-  official_script: worldfoundry/evaluation/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.apple_pi.run_apple_pi_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.apple_pi.run_apple_pi_official_runner
     generated_arg: --pred-dir
     dataset_root_arg: --gt-dir
     supports_official_runtime: true
     accepts_generated_artifacts: true
     input_kind: apple_pi_prediction_dir_or_official_results
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:ApplePIContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:apple-pi
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -123,7 +123,7 @@ runner:
   - <out>
   - --json
   run_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -144,7 +144,7 @@ runner:
   - benchmark_contract.json
   runtime:
     kind: in_tree_model_backed
-    evaluator: worldfoundry.evaluation.tasks.execution.runners.apple_pi.apple_pi_runtime:evaluate_native_apple_pi
+    evaluator: worldfoundry.evals.tasks.execution.runners.apple_pi.apple_pi_runtime:evaluate_native_apple_pi
     results_path_env: WORLDFOUNDRY_APPLE_PI_RESULTS_PATH
     gt_dir_env: WORLDFOUNDRY_APPLE_PI_GT_DIR
     prediction_dir_env: WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR
@@ -187,7 +187,7 @@ data_refs:
   upstream_repository: https://github.com/21yrm/Apple-PI
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:ApplePIContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:apple-pi
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
@@ -211,7 +211,7 @@ artifact_layout:
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 - -m
-- worldfoundry.evaluation.tasks.execution.runners.apple_pi.run_apple_pi_official_runner
+- worldfoundry.evals.tasks.execution.runners.apple_pi.run_apple_pi_official_runner
 - --run-official
 - --gt-dir
 - ${WORLDFOUNDRY_APPLE_PI_GT_DIR}
@@ -222,3 +222,24 @@ validation_command:
 - --output-dir
 - <out>
 - --json
+contract:
+  input_keys:
+  - apple_pi_gt_dir
+  - apple_pi_prediction_dir
+  - apple_pi_submission_json
+  - apple_pi_prompt_jsonl
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_scores
+  - benchmark_contract
+  - apple_pi_results
+  requires_upstream_runtime: false
+  notes:
+  - WorldFoundry executes the Apple-PI protocol in-tree through its native evaluator/runtime.
+  - The evaluator reuses the shared WorldFoundry SAM3 and MoGe-2 base-model capabilities and the existing
+    Gemini client convention.
+  - An official-compatible result JSON can still be imported for reproducibility and comparison.
+  - Apple-PI requires three independent rollouts for every case and subtrack.
+  - The GT dataset is not vendored; follow the upstream Apple-PI data contract.

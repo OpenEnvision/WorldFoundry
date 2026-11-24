@@ -1,14 +1,14 @@
 ---
 title: EWMBench
-description: "AgiBot 具身世界模型视频评测：场景、运动、语义、多样性。WorldFoundry 导入官方结果行，不编造榜单。"
+description: "AgiBot 具身世界模型视频评测：场景、运动、语义、多样性。WorldFoundry 导入官方结果行。"
 ---
 
-EWMBench（AgiBot / AgibotTech）评的是 AgiBot-World 生态里**动作条件**的机器人操作视频。这是世界模型质量评测，不是桌面操作成功率套件。四个分面汇总为 `ewmbench_average`：
+EWMBench（AgiBot / AgibotTech）评估 AgiBot-World 生态中**以动作为条件**的机器人操作视频。这是世界模型质量评测，不是桌面操作成功率套件。四个分面汇总为 `ewmbench_average`：
 
-- **场景一致性** — 工作空间是否保持稳定？
-- **运动正确性** — 机械臂 / 物体轨迹是否匹配任务？
-- **语义对齐** — 片段是否匹配语言指令？
-- **多样性** — 生成 rollout 的多样性。
+- **场景一致性**：工作空间是否保持稳定？
+- **运动正确性**：机械臂 / 物体轨迹是否匹配任务？
+- **语义对齐**：片段是否匹配语言指令？
+- **多样性**：生成 rollout 的多样性。
 
 论文：[EWMBench](https://arxiv.org/abs/2505.09694)。数据 / 项目：[`agibot-world/EWMBench`](https://huggingface.co/datasets/agibot-world/EWMBench)（CC-BY-NC-SA-4.0）。代码：[AgibotTech/EWMBench](https://github.com/AgibotTech/EWMBench)。
 
@@ -19,7 +19,7 @@ WorldFoundry **内置 runtime 资源**，并通过 `benchmark-run` 归一化官�
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id ewmbench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -28,13 +28,13 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-`--task-manifest` 与 `--config-path` 绑定任务集和打分配置；`--limit` 限制接线运行。默认导入路径：`WORLDFOUNDRY_EWMBENCH_RESULTS_PATH`。可选根：`WORLDFOUNDRY_EWMBENCH_ROOT`。共享资源：`ewmbench_dataset_assets`。
+`--task-manifest` 与 `--config-path` 绑定任务集和打分配置；`--limit` 限制样本数，用于短时测试。默认导入路径：`WORLDFOUNDRY_EWMBENCH_RESULTS_PATH`。可选根：`WORLDFOUNDRY_EWMBENCH_ROOT`。共享资源：`ewmbench_dataset_assets`。
 
-仓内指针：
+清单与内置 runtime：
 
 ```text
 worldfoundry/data/benchmarks/tasks/external/ewmbench.yaml
-worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench
+worldfoundry/evals/tasks/execution/runners/ewmbench/runtime/ewmbench
 ```
 
 产物包括 `scorecard.json`（主键 `ewmbench_average`）、`benchmark_contract.json`、`raw_metric_table.jsonl`。

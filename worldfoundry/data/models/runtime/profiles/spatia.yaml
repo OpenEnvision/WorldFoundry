@@ -11,9 +11,10 @@ source_repos:
   revision: c845b8f4f6cde0c20aecd87573656c3f69f5b2b0
   in_tree_path: worldfoundry/base_models/three_dimensions/general_3d/mapanything
 - url: https://github.com/castacks/UniCeption
-  revision: v0.1.7
+  revision: 802ebc1783d71bbaa9d139c88d87d062ad18ce62  # v0.1.7
   in_tree_path: worldfoundry/base_models/perception_core/general_perception/uniception
 - url: https://github.com/facebookresearch/dinov2
+  revision: 3a3217b0c05b4c2e1dd861210e9afe3494f5fcb5
   in_tree_path: worldfoundry/base_models/perception_core/general_perception/dinov2
 checkpoints:
 - repo_id: Jinjing713/Spatia

@@ -54,12 +54,7 @@ class WanAutoencoderAdapterMixin(ModuleDeviceDtypeMixin):
     def encode(self, value: torch.Tensor, return_dict: bool = True):
         """Encode a batch; wrap the mean as a deterministic diagonal Gaussian."""
         self._prepare_codec_offload()
-        encoded = torch.stack(
-            [
-                self.model.encode(item.unsqueeze(0), self.scale).squeeze(0)
-                for item in value
-            ]
-        )
+        encoded = torch.stack([self.model.encode(item.unsqueeze(0), self.scale).squeeze(0) for item in value])
         moments = torch.cat((encoded, torch.zeros_like(encoded)), dim=1)
         posterior = DiagonalGaussianDistribution(moments, deterministic=True)
         if return_dict:
@@ -70,12 +65,7 @@ class WanAutoencoderAdapterMixin(ModuleDeviceDtypeMixin):
         """Decode a latent batch and clamp pixels to ``[-1, 1]``."""
         self._prepare_codec_offload()
         decoded = torch.stack(
-            [
-                self.model.decode(item.unsqueeze(0), self.scale)
-                .clamp_(-1, 1)
-                .squeeze(0)
-                for item in value
-            ]
+            [self.model.decode(item.unsqueeze(0), self.scale).clamp_(-1, 1).squeeze(0) for item in value]
         )
         if return_dict:
             return DecoderOutput(sample=decoded)

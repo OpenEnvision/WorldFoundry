@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 SVI_NEGATIVE_PROMPT = (
     "bright tones, overexposed, static, blurred details, subtitles, style, works, "
@@ -411,6 +411,6 @@ __all__ = [
     "SVI_NEGATIVE_PROMPT",
     "StableVideoInfinityRuntime",
     "calculate_dimensions",
-    "normalize_svi_lora_state_dict",
     "normalize_prompt_stream",
+    "normalize_svi_lora_state_dict",
 ]

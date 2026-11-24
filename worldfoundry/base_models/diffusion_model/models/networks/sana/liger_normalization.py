@@ -23,14 +23,13 @@ Enabled when liger-kernel is installed; disable with ``SANA_USE_LIGER=0``.
 
 import logging
 import os
-from typing import Type
 
 import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
 
-def get_rmsnorm_class() -> Type[nn.Module]:
+def get_rmsnorm_class() -> type[nn.Module]:
     """Return the RMSNorm class to use, controlled by ``SANA_USE_LIGER`` env var.
 
     Liger is **on by default** when the package is installed.
@@ -69,17 +68,6 @@ def get_rmsnorm_class() -> Type[nn.Module]:
             eps: float = 1e-6,
             norm_dim: int = -1,
         ) -> None:
-            """Init.
-
-            Args:
-                dim: The dim.
-                scale_factor: The scale factor.
-                eps: The eps.
-                norm_dim: The norm dim.
-
-            Returns:
-                The return value.
-            """
             if norm_dim != -1:
                 raise ValueError(f"LigerRMSNorm only supports norm_dim=-1, got {norm_dim}")
             if scale_factor != 1.0:

@@ -10,6 +10,7 @@ initializers, then imports only the modules used by GigaWorld-0.
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib import import_module
@@ -17,7 +18,6 @@ from importlib.machinery import ModuleSpec
 from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
 from types import ModuleType
-from typing import Iterator
 
 
 @dataclass(frozen=True)
@@ -46,9 +46,7 @@ def giga_models_root() -> Path:
     try:
         root = Path(distribution("giga-models").locate_file("giga_models"))
     except PackageNotFoundError as exc:
-        raise ImportError(
-            "GigaWorld-0 requires the pinned open-gigaai/giga-models package"
-        ) from exc
+        raise ImportError("GigaWorld-0 requires the pinned open-gigaai/giga-models package") from exc
     if not (root / "models" / "diffusion" / "giga_world_0").is_dir():
         raise ImportError("the installed giga-models package has no GigaWorld-0 runtime")
     return root
@@ -67,9 +65,7 @@ def selective_giga_world_imports() -> Iterator[GigaWorldComponents]:
 
     root = giga_models_root()
     previous = {
-        name: module
-        for name, module in sys.modules.items()
-        if name == "giga_models" or name.startswith("giga_models.")
+        name: module for name, module in sys.modules.items() if name == "giga_models" or name.startswith("giga_models.")
     }
     for name in tuple(previous):
         sys.modules.pop(name, None)

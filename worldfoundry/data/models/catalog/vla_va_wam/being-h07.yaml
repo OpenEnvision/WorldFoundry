@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 id: being-h07
 name: Being-H0.7
 aliases:
@@ -12,6 +12,7 @@ official_sources:
   project_page: https://research.beingbeyond.com/ptr
   github:
     url: https://github.com/BeingBeyond/Being-H
+    revision: 66b959e05db225fd816f8a517d94a9c0585cfc3e
     subdir: Being-H07
 integration:
   status: runtime_ported
@@ -34,15 +35,15 @@ docs:
   publisher: BeingBeyond
   publisher_kind: company
   publisher_zh: BeingBeyond（北京智在无界）
-  overview: Being-H0.7 is the successor line in BeingBeyond's Being-H family, recorded here as a latent world-action model (WAM) plus robot policy. WorldFoundry routes it through the in-tree official-policy action runtime from the Being-H07 subdirectory of the official repository; checkpoints are not yet recorded.
-  overview_zh: Being-H0.7 是 BeingBeyond Being-H 家族的后继线，在本 catalog 中记录为隐式世界-动作模型（WAM）加机器人策略。WorldFoundry 经树内官方策略动作运行时路由，源码来自官方仓库的 Being-H07 子目录；尚未记录 checkpoint。
-  architecture: Task tags record a latent world-action-model design — the policy predicts in a learned latent world space rather than raw pixels. Architecture internals beyond the official repository subdirectory pointer are not recorded in this repository.
-  architecture_zh: 任务标签记录其为隐式世界-动作模型设计——策略在学习到的隐式世界空间而非原始像素中预测。官方仓库子目录指针之外的架构内部细节仓库未记录。
-  usage_notes: Checkpoint absence is reported by the runtime missing_assets plan and is not a catalog blocker; stage weights once BeingBeyond releases them, or use the GPU-validated being-h05 entry meanwhile.
-  usage_notes_zh: checkpoint 缺失由运行时 missing_assets 计划报告，不视为 catalog 阻塞；待 BeingBeyond 发布权重后就位即可，期间可先用 GPU 已验证的 being-h05 条目。
+  overview: "Being-H0.7 is the successor in BeingBeyond's Being-H family: a latent world-action model (WAM) plus robot policy that maps an image, a prompt, and robot state to an action trace. WorldFoundry runs it through an in-tree port of the official policy runtime from the Being-H07 subdirectory of the official repository."
+  overview_zh: Being-H0.7 是 BeingBeyond Being-H 家族的后继模型：隐式世界-动作模型（WAM）加机器人策略，从图像、提示与机器人状态生成动作轨迹。WorldFoundry 通过树内移植的官方策略运行时运行它，源码来自官方仓库的 Being-H07 子目录。
+  architecture: 'A latent world-action model: the policy predicts in a learned latent world space rather than raw pixels.'
+  architecture_zh: 隐式世界-动作模型：策略在学习到的隐式世界空间而非原始像素中预测。
+  usage_notes: Stage BeingBeyond/Being-H07 once BeingBeyond releases the weights; until then a run returns a plan listing the missing assets. For a GPU-validated BeingBeyond policy, use being-h05.
+  usage_notes_zh: 待 BeingBeyond 发布权重后就位 BeingBeyond/Being-H07；在此之前运行只返回列出缺失资产的计划。需要 GPU 已验证的 BeingBeyond 策略时，使用 being-h05。
   limitations:
-  - No checkpoints are recorded yet; runs emit a runtime plan only.
-  - No license is recorded in this repository.
+  - Weights are not yet available; runs return a runtime plan only, not actions.
+  - License terms are not documented; check the upstream repository before use.
   limitations_zh:
-  - 尚未记录任何 checkpoint；运行仅输出运行时计划。
-  - 仓库未记录许可证。
+  - 权重尚未可用；运行只返回运行时计划，不输出动作。
+  - 许可证条款未注明，使用前请查看上游仓库。

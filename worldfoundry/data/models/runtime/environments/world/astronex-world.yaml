@@ -30,11 +30,9 @@ pip_packages:
 - av
 - tqdm
 - regex
-- lmdb
 validation_imports:
 - torch
 - yaml
-- lmdb
 - worldfoundry.synthesis.visual_generation.astronex_world
 notes:
 - CUDA inference dependencies are optional and separate from the CPU catalog installation.

@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 availability: open_source
 checkpoints:
 - nvidia/Cosmos-Predict2.5-2B
@@ -91,6 +91,7 @@ official_sources:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
     url: https://github.com/nvidia-cosmos/cosmos-predict2.5
+    revision: a2c298b0a3df3778b973fe65e9e58877b292d8a7
   huggingface:
   - confirmed_by: https://huggingface.co/api/models/nvidia/Cosmos-Predict2.5-2B
     repo_id: nvidia/Cosmos-Predict2.5-2B
@@ -114,17 +115,17 @@ docs:
   publisher: NVIDIA
   publisher_kind: company
   publisher_zh: 英伟达（NVIDIA）
-  overview: 'Cosmos Predict 2.5 is NVIDIA''s world foundation model for physical AI: text, image, or video in — world video out, with 2B and 14B variants. In this catalog it is assembled natively from WorldFoundry''s canonical denoiser, conditioner, scheduler, decoder, and loader roles without Diffusers; official EMA transformer structures match 569/569 (2B) and 729/729 (14B) tensors, Reason1 language weights match 338/338, and the shared Wan VAE matches 194/194.'
-  overview_zh: Cosmos Predict 2.5 是英伟达面向物理 AI 的世界基础模型：输入文本、图像或视频，输出世界视频，含 2B 与 14B 两个 variant。本 catalog 中它由 WorldFoundry 规范的去噪器、条件器、调度器、解码器与加载器角色原生组装、不依赖 Diffusers；官方 EMA transformer 结构 2B 匹配 569/569、14B 匹配 729/729 张量， Reason1 语言权重匹配 338/338，共享 Wan VAE 匹配 194/194。
-  architecture: Predict 2.5 unifies text/image/video-to-world generation in one flow-based model with a Reason1 language conditioner and shared Wan VAE. Image/video conditioning and positive classifier-free guidance are expressed through shared runner contracts rather than a model-specific runtime.
-  architecture_zh: Predict 2.5 用单一流模型统一文/图/视频到世界生成，配 Reason1 语言条件器与共享 Wan VAE。图像/视频条件与正向 CFG 通过共享 runner 契约表达，而非模型专属运行时。
-  usage_notes: The public CosmosPredict2p5Pipeline invokes the native recipes directly. The 2B text-to-world route is verified at 1280x704 for 93 frames and 35 steps; the 14B route still requires end-to-end GPU output validation. NVIDIA checkpoint access remains gated.
-  usage_notes_zh: 公开的 CosmosPredict2p5Pipeline 直接调用原生配方。2B 文生世界路径已按 1280x704、93 帧、35 步完成验证；14B 路径仍需端到端 GPU 输出验证。NVIDIA checkpoint 访问仍受许可控制。
+  overview: "Cosmos Predict 2.5 is NVIDIA's world foundation model for physical AI: text, image, or video in — world video out, with 2B and 14B variants. WorldFoundry assembles it natively from its shared denoiser, conditioner, scheduler, decoder, and loader roles without Diffusers."
+  overview_zh: Cosmos Predict 2.5 是英伟达面向物理 AI 的世界基础模型：输入文本、图像或视频，输出世界视频，含 2B 与 14B 两个 variant。WorldFoundry 用共享的去噪器、条件器、调度器、解码器与加载器角色原生组装该模型，不依赖 Diffusers。
+  architecture: Predict 2.5 unifies text/image/video-to-world generation in one flow-based model with a Reason1 language conditioner and shared Wan VAE.
+  architecture_zh: Predict 2.5 用单一流模型统一文/图/视频到世界生成，配 Reason1 语言条件器与共享 Wan VAE。
+  usage_notes: "Validated with the released 2B checkpoint: the text-to-world route generates 93 frames at 1280x704 with 35 steps. Accept NVIDIA's access terms before staging the checkpoints."
+  usage_notes_zh: 已用发布的 2B checkpoint 验证：文生世界路径以 35 步生成 93 帧 1280x704 视频。就位 checkpoint 前需先接受 NVIDIA 的访问条款。
   limitations:
-  - End-to-end GPU output parity for the 14B variant is pending.
+  - The 14B variant has not been validated end to end on GPU.
   - Checkpoint access is gated by NVIDIA.
   limitations_zh:
-  - 14B variant 的端到端 GPU 输出一致性待验证。
+  - 14B variant 尚未完成端到端 GPU 验证。
   - checkpoint 权限由英伟达管控。
   recommended_benchmarks:
   - id: worldmodelbench

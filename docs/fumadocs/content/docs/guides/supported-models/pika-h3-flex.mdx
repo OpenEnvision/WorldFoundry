@@ -1,0 +1,26 @@
+---
+title: "Pika H3 Flex"
+description: "Pika H3 Flex six-step joint video/audio generation on the shared MiniMax-H3 runtime."
+modelId: "pika-h3-flex"
+pageSource: authored
+---
+
+Pika H3 Flex is a six-step MiniMax-H3 adapter for joint video and stereo audio generation. It runs on the MiniMax-H3 base model with its Qwen3-VL conditioner.
+
+Code: [Pika-Labs/Pika-H3-Flex](https://github.com/Pika-Labs/Pika-H3-Flex).
+
+## Runtime contract
+
+Use the `fl2va` adapter for text and endpoint-frame generation, and the `ref2va` adapter for image references. Outputs use 24 FPS video with synchronized 32 kHz stereo audio.
+
+The adapter is loaded with `adapter_task=fl2va` or `adapter_task=ref2va`:
+
+```bash
+wf run pika-h3-flex --pipeline.task-profile t2va --json
+```
+
+Prepare the pinned MiniMax-H3 base snapshot and the Pika adapter files before running.
+
+## Limitations
+
+Reference generation accepts image references only; video and standalone-audio references are not supported. Multi-GPU execution, the full 480p/768p bucket set, and checkpoint-backed outputs are not validated.

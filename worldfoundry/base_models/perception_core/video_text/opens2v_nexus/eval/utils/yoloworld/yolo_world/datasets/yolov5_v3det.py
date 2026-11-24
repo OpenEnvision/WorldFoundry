@@ -1,13 +1,11 @@
 # Copyright (c) Tencent Inc. All rights reserved.
 import copy
 import os.path as osp
-from typing import List
+from typing import ClassVar
 
-from mmengine.fileio import get_local_path
-
-from mmdet.datasets.api_wrappers import COCO
 from mmdet.datasets import CocoDataset
-
+from mmdet.datasets.api_wrappers import COCO
+from mmengine.fileio import get_local_path
 from mmyolo.datasets.yolov5_coco import BatchShapePolicyDataset
 from mmyolo.registry import DATASETS
 
@@ -33,21 +31,19 @@ v3det_ignore_list = [
 class V3DetDataset(CocoDataset):
     """Objects365 v1 dataset for detection."""
 
-    METAINFO = {"classes": "classes", "palette": None}
+    METAINFO: ClassVar[dict] = {"classes": "classes", "palette": None}
 
     COCOAPI = COCO
     # ann_id is unique in coco dataset.
     ANN_ID_UNIQUE = True
 
-    def load_data_list(self) -> List[dict]:
+    def load_data_list(self) -> list[dict]:
         """Load annotations from an annotation file named as ``self.ann_file``
 
         Returns:
             List[dict]: A list of annotation.
-        """  # noqa: E501
-        with get_local_path(
-            self.ann_file, backend_args=self.backend_args
-        ) as local_path:
+        """
+        with get_local_path(self.ann_file, backend_args=self.backend_args) as local_path:
             self.coco = self.COCOAPI(local_path)
 
         # 'categories' list in objects365_train.json and objects365_val.json
@@ -83,14 +79,10 @@ class V3DetDataset(CocoDataset):
             if file_name in v3det_ignore_list:
                 continue
 
-            parsed_data_info = self.parse_data_info(
-                {"raw_ann_info": raw_ann_info, "raw_img_info": raw_img_info}
-            )
+            parsed_data_info = self.parse_data_info({"raw_ann_info": raw_ann_info, "raw_img_info": raw_img_info})
             data_list.append(parsed_data_info)
         if self.ANN_ID_UNIQUE:
-            assert len(set(total_ann_ids)) == len(total_ann_ids), (
-                f"Annotation ids in '{self.ann_file}' are not unique!"
-            )
+            assert len(set(total_ann_ids)) == len(total_ann_ids), f"Annotation ids in '{self.ann_file}' are not unique!"
 
         del self.coco
 
@@ -104,5 +96,3 @@ class YOLOv5V3DetDataset(BatchShapePolicyDataset, V3DetDataset):
     We only add `BatchShapePolicy` function compared with Objects365V1Dataset.
     See `mmyolo/datasets/utils.py#BatchShapePolicy` for details
     """
-
-    pass

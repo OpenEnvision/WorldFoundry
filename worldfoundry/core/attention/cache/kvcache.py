@@ -30,6 +30,7 @@ Two shapes, deliberately kept separate:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import cast
 
 import torch
 from torch import Tensor
@@ -43,7 +44,7 @@ from worldfoundry.core.attention.cache.kv_cache_policy import (
     KVCachePolicy,
 )
 from worldfoundry.core.attention.cache.kv_quantization import KVQuantConfig, QuantizedKVStore
-from worldfoundry.core.execution.device import get_current_torch_device
+from worldfoundry.core.platform.device import get_current_torch_device
 
 # ──────────────────────────────────────────────────────────────────────────
 # Fixed rolling buffer — shapes never change, so CUDA Graphs can capture it
@@ -190,9 +191,7 @@ class BlockKVCache:
     def _roll_local_window_left(self, shift_size: int) -> None:
         """Shift valid local-window tokens left by ``shift_size`` tokens."""
         total_size = self._k.shape[self.seq_dim]
-        assert 0 < shift_size <= self.chunk_size, (
-            f"shift_size ({shift_size}) must be in (0, {self.chunk_size}]"
-        )
+        assert 0 < shift_size <= self.chunk_size, f"shift_size ({shift_size}) must be in (0, {self.chunk_size}]"
         valid_end = min(self._n_cached, total_size)
         valid_local_size = max(0, valid_end - self.sink_size)
         tokens_to_keep = max(0, valid_local_size - shift_size)
@@ -468,13 +467,10 @@ class CompactingKVCache:
         expected = frame_count * self.frame_tokens
         if keys.shape[self.seq_dim] != expected:
             raise ValueError(
-                f"expected {expected} tokens on seq_dim for frame_count={frame_count}, "
-                f"got {keys.shape[self.seq_dim]}"
+                f"expected {expected} tokens on seq_dim for frame_count={frame_count}, got {keys.shape[self.seq_dim]}"
             )
         if values.shape[self.seq_dim] != expected:
-            raise ValueError(
-                f"values must match keys on seq_dim; got {values.shape[self.seq_dim]} != {expected}"
-            )
+            raise ValueError(f"values must match keys on seq_dim; got {values.shape[self.seq_dim]} != {expected}")
 
         self._store.append(keys, values)
         self._blocks.append(
@@ -485,7 +481,7 @@ class CompactingKVCache:
 
         decision = self.policy.decide(self.state())
         if decision.evicts:
-            self._store.compact(decision.keep_indices)
+            self._store.compact(cast(Tensor, decision.keep_indices))
             self._blocks = self._surviving_blocks(decision)
         self._frame_positions = decision.frame_positions
         return decision
@@ -497,7 +493,7 @@ class CompactingKVCache:
 
         # A token-level policy may have split blocks apart, so the surviving
         # tokens collapse into one synthetic block covering what is left.
-        kept_tokens = int(decision.keep_indices.numel())
+        kept_tokens = int(cast(Tensor, decision.keep_indices).numel())
         frames = max(1, kept_tokens // self.frame_tokens)
         newest = self._blocks[-1]
         return [CachedBlock(block_idx=newest.block_idx, frame_start=newest.frame_end - frames, frame_count=frames)]

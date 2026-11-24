@@ -13,7 +13,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from worldfoundry.evaluation.tasks.execution.runners.worldscore import run_worldscore_official_runner
+from worldfoundry.evals.tasks.execution.runners.worldscore import run_worldscore_official_runner
 
 pytestmark = pytest.mark.unit
 

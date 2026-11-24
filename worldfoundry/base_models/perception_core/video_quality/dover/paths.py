@@ -15,7 +15,7 @@ def package_root() -> Path:
 
 
 def config_path() -> Path:
-    return package_data_path('models', 'runtime', 'configs', 'dover', 'dover.yml')
+    return package_data_path("models", "runtime", "configs", "dover", "dover.yml")
 
 
 def checkpoint_path() -> Path:

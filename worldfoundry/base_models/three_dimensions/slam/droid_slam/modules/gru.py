@@ -1,23 +1,14 @@
-"""Module for base_models -> three_dimensions -> slam -> droid_slam -> modules -> gru.py functionality."""
-
 import torch
 import torch.nn as nn
 
 
 class ConvGRU(nn.Module):
-    """Conv gru implementation."""
     def __init__(self, h_planes=128, i_planes=128):
-        """Init.
-
-        Args:
-            h_planes: The h planes.
-            i_planes: The i planes.
-        """
-        super(ConvGRU, self).__init__()
+        super().__init__()
         self.do_checkpoint = False
-        self.convz = nn.Conv2d(h_planes+i_planes, h_planes, 3, padding=1)
-        self.convr = nn.Conv2d(h_planes+i_planes, h_planes, 3, padding=1)
-        self.convq = nn.Conv2d(h_planes+i_planes, h_planes, 3, padding=1)
+        self.convz = nn.Conv2d(h_planes + i_planes, h_planes, 3, padding=1)
+        self.convr = nn.Conv2d(h_planes + i_planes, h_planes, 3, padding=1)
+        self.convq = nn.Conv2d(h_planes + i_planes, h_planes, 3, padding=1)
 
         self.w = nn.Conv2d(h_planes, h_planes, 1, padding=0)
 
@@ -26,21 +17,16 @@ class ConvGRU(nn.Module):
         self.convq_glo = nn.Conv2d(h_planes, h_planes, 1, padding=0)
 
     def forward(self, net, *inputs):
-        """Forward.
-
-        Args:
-            net: The net.
-        """
         inp = torch.cat(inputs, dim=1)
         net_inp = torch.cat([net, inp], dim=1)
 
         b, c, h, w = net.shape
         glo = torch.sigmoid(self.w(net)) * net
-        glo = glo.view(b, c, h*w).mean(-1).view(b, c, 1, 1)
+        glo = glo.view(b, c, h * w).mean(-1).view(b, c, 1, 1)
 
         z = torch.sigmoid(self.convz(net_inp) + self.convz_glo(glo))
         r = torch.sigmoid(self.convr(net_inp) + self.convr_glo(glo))
-        q = torch.tanh(self.convq(torch.cat([r*net, inp], dim=1)) + self.convq_glo(glo))
+        q = torch.tanh(self.convq(torch.cat([r * net, inp], dim=1)) + self.convq_glo(glo))
 
-        net = (1-z) * net + z * q
+        net = (1 - z) * net + z * q
         return net

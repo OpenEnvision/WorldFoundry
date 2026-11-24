@@ -1,6 +1,6 @@
-artifact_filename: pi0_fast_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: pi0-fast
+task_family: vla_policy
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi/openpi-assets/checkpoints/pi0_fast_droid
   path: gs://openpi-assets/checkpoints/pi0_fast_droid
@@ -8,10 +8,6 @@ checkpoints:
 - local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi/openpi-assets/checkpoints/pi0_fast_base
   path: gs://openpi-assets/checkpoints/pi0_fast_base
   role: pi0_fast_base_checkpoint
-execution:
-  environment: pi0-fast
-  pipeline_binding: pi0-fast
-id: pi0-fast
 input_schema:
   actions:
   - robot_action
@@ -21,14 +17,22 @@ input_schema:
   instruction: true
   prompt: true
   video: false
-integration_status: runtime_ported
+artifact_kind: action_trace
+artifact_filename: pi0_fast_action_trace.json
+execution:
+  environment: pi0-fast
+  pipeline_binding: pi0-fast
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_openpi_pi0_fast_runtime_ported_checkpoint_asset_gated
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - pi0-FAST is a concrete OpenPI algorithm variant routed through the in-tree OpenPI
   runtime.
-- WorldFoundry keeps the inference-only OpenPI FAST action-token policy directly under worldfoundry/synthesis/action_generation/openpi.
+- WorldFoundry keeps the inference-only OpenPI FAST action-token policy directly under
+  worldfoundry/synthesis/action_generation/openpi.
 - Default runtime config uses pi0_fast_droid; checkpoint-backed execution requires
   a local pi0-FAST GCS checkpoint.
 - This profile emits action_trace artifacts and is not a video-generation profile.
-runtime_status: in_tree_openpi_pi0_fast_runtime_ported_checkpoint_asset_gated
-task_family: vla_policy
 verification_status: checkpoint_parity_pending

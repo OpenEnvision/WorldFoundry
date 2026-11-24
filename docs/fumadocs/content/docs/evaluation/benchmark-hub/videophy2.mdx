@@ -1,20 +1,20 @@
 ---
 title: VideoPhy2
-description: "Action-centric successor to VideoPhy: 200 harder prompts plus rule-level AutoEval. WorldFoundry ships the judge path; it does not invent a board."
+description: "Action-centric successor to VideoPhy: 200 harder prompts plus rule-level AutoEval. WorldFoundry ships the AutoEval judge path."
 ---
 
 VideoPhy2 (UCLA and Google DeepMind) is the **action-centric** successor to [VideoPhy](/docs/evaluation/benchmark-hub/videophy). The prompt suite focuses on harder physical activities and object interactions (**200 claimed actions**). AutoEval adds **rule-level** judgements: which physical rules apply, and whether each is followed or violated (`rule_followed_rate`), alongside Semantic Adherence, Physical Commonsense, and primary **Joint Score**.
 
 Paper: [VideoPhy-2](https://arxiv.org/abs/2503.06800). Project: [videophy2.github.io](https://videophy2.github.io/). Code: [Hritikbansal/videophy](https://github.com/Hritikbansal/videophy).
 
-WorldFoundry **bundles the prompt list** and drives the in-tree AutoEval judge (`--autoeval-checkpoint`, optional `--autoeval-lora-checkpoint`). Official scoring path is present; **full 200-prompt reproduction is pending**. Weights are caller-supplied.
+WorldFoundry **bundles the prompt list** and drives the in-tree AutoEval judge (`--autoeval-checkpoint`, optional `--autoeval-lora-checkpoint`). Weights are caller-supplied.
 
 <BenchmarkPageSections id="videophy2" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id videophy2 \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -25,7 +25,7 @@ worldfoundry-eval zoo benchmark-run \
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/videophy2/run_videophy2_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --autoeval-checkpoint /path/to/videophy2_autoeval \
@@ -35,7 +35,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 Env: `WORLDFOUNDRY_VIDEOPHY2_RESULTS_PATH`, `WORLDFOUNDRY_VIDEOPHY2_JUDGE_BACKEND`. Prompt list: `worldfoundry/data/benchmarks/assets/videophy2/prompts.json`. Shared asset: `videophy2_dataset_assets`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/videophy2.yaml`, `worldfoundry/evaluation/tasks/execution/runners/videophy2`.
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/videophy2.yaml`, `worldfoundry/evals/tasks/execution/runners/videophy2`.
 
 Outputs include `scorecard.json` (primary `joint_score`).
 

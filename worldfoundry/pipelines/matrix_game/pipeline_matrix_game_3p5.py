@@ -25,8 +25,8 @@ class MatrixGame35Pipeline(PipelineABC):
     """Shared native input contract; subclasses permanently select one checkpoint."""
 
     ABSTRACT_PIPELINE = True
-    MODEL_ID: ClassVar[str]
-    SYNTHESIS_CLS: ClassVar[type[MatrixGame35Synthesis]]
+    MODEL_ID: ClassVar[str]  # ty: ignore[invalid-mutable-override]  # each pipeline binds one model id
+    SYNTHESIS_CLS: ClassVar[type[MatrixGame35Synthesis]]  # ty: ignore[invalid-mutable-override]  # each pipeline binds one synthesis class
     generation_type = "camera_trajectory_image_to_video"
 
     def __init__(
@@ -49,7 +49,7 @@ class MatrixGame35Pipeline(PipelineABC):
         model_id: str | None = None,
         lazy: bool = True,
         **kwargs: Any,
-    ) -> "MatrixGame35Pipeline":
+    ) -> MatrixGame35Pipeline:
         options: dict[str, Any] = {}
         checkpoint_path = model_path
         if isinstance(model_path, Mapping):

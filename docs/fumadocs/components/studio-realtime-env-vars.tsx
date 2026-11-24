@@ -126,8 +126,8 @@ const groups: readonly EnvVarGroup[] = [
         name: 'WORLDFOUNDRY_REALTIME_POSTPROCESS_PRESET',
         fallback: { en: 'identity', zh: 'identity' },
         effect: {
-          en: 'Select identity, rtx-super-resolution, rtx-super-resolution-ultra, or rtx-deblur-ultra. RTX choices are explicit opt-ins and fail before serving if their runtime is unavailable.',
-          zh: '可选 identity、rtx-super-resolution、rtx-super-resolution-ultra 或 rtx-deblur-ultra。RTX 必须显式启用；运行条件不满足时会在启动服务前失败。',
+          en: 'Select a preset from the post-processing registry: identity, rtx-super-resolution, rtx-super-resolution-ultra, or rtx-deblur-ultra. Non-identity presets are explicit opt-ins and fail before serving if their runtime is unavailable. RTX_* overrides apply only to RTX presets.',
+          zh: '从后处理预设注册表中选择：identity、rtx-super-resolution、rtx-super-resolution-ultra 或 rtx-deblur-ultra。非 identity 预设必须显式启用；运行条件不满足时会在启动服务前失败。RTX_* 覆盖项只适用于 RTX 预设。',
         },
       },
       {

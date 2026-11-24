@@ -7,7 +7,6 @@ from torch import nn
 
 from .transformer import MultiviewTransformer
 
-from typing import Union
 
 def timestep_embedding(
     timesteps: torch.Tensor,
@@ -17,24 +16,20 @@ def timestep_embedding(
 ) -> torch.Tensor:
     if not repeat_only:
         half = dim // 2
-        freqs = torch.exp(
-            -math.log(max_period)
-            * torch.arange(start=0, end=half, dtype=torch.float32)
-            / half
-        ).to(device=timesteps.device)
+        freqs = torch.exp(-math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half).to(
+            device=timesteps.device
+        )
         args = timesteps[:, None].float() * freqs[None]
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
         if dim % 2:
-            embedding = torch.cat(
-                [embedding, torch.zeros_like(embedding[:, :1])], dim=-1
-            )
+            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
     else:
         embedding = repeat(timesteps, "b -> b d", d=dim)
     return embedding
 
 
 class Upsample(nn.Module):
-    def __init__(self, channels: int, out_channels: Union[int, None] = None):
+    def __init__(self, channels: int, out_channels: int | None = None):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -48,7 +43,7 @@ class Upsample(nn.Module):
 
 
 class Downsample(nn.Module):
-    def __init__(self, channels: int, out_channels: Union[int, None] = None):
+    def __init__(self, channels: int, out_channels: int | None = None):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -89,25 +84,20 @@ class ResBlock(nn.Module):
         self,
         channels: int,
         emb_channels: int,
-        out_channels: Union[int, None],
+        out_channels: int | None,
         dense_in_channels: int,
         dropout: float,
     ):
         super().__init__()
         out_channels = out_channels or channels
 
-
         self.in_layers = nn.Sequential(
             GroupNorm32(32, channels),
             nn.SiLU(),
             nn.Conv2d(channels, out_channels, 3, 1, 1),
         )
-        self.emb_layers = nn.Sequential(
-            nn.SiLU(), nn.Linear(emb_channels, out_channels)
-        )
-        self.dense_emb_layers = nn.Sequential(
-            nn.Conv2d(dense_in_channels, 2 * channels, 1, 1, 0)
-        )
+        self.emb_layers = nn.Sequential(nn.SiLU(), nn.Linear(emb_channels, out_channels))
+        self.dense_emb_layers = nn.Sequential(nn.Conv2d(dense_in_channels, 2 * channels, 1, 1, 0))
         self.out_layers = nn.Sequential(
             GroupNorm32(32, out_channels),
             nn.SiLU(),
@@ -119,15 +109,11 @@ class ResBlock(nn.Module):
         else:
             self.skip_connection = nn.Conv2d(channels, out_channels, 1, 1, 0)
 
-    def forward(
-        self, x: torch.Tensor, emb: torch.Tensor, dense_emb: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, emb: torch.Tensor, dense_emb: torch.Tensor) -> torch.Tensor:
         in_rest, in_conv = self.in_layers[:-1], self.in_layers[-1]
         h = in_rest(x)
         dense = self.dense_emb_layers(
-            F.interpolate(
-                dense_emb, size=h.shape[2:], mode="bilinear", align_corners=True
-            )
+            F.interpolate(dense_emb, size=h.shape[2:], mode="bilinear", align_corners=True)
         ).type(h.dtype)
         dense_scale, dense_shift = torch.chunk(dense, 2, dim=1)
         h = h * (1 + dense_scale) + dense_shift

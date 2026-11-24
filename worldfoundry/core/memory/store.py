@@ -14,8 +14,9 @@ subclasses can persist or JSON-dump without a custom encoder.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────────
 # Record / query / selection — typed view; store persists plain dicts
@@ -33,7 +34,7 @@ class MemoryRecord:
     score: float | None = None
 
     @classmethod
-    def from_dict(cls, value: Mapping[str, Any]) -> "MemoryRecord":
+    def from_dict(cls, value: Mapping[str, Any]) -> MemoryRecord:
         """Build a record from a dict; ``kind`` and ``type`` are aliases."""
         kind = value.get("kind", value.get("type", "other"))
         return cls(
@@ -189,10 +190,7 @@ class MemoryStore:
 
 def _metadata_matches(record_metadata: Mapping[str, Any], query_metadata: Mapping[str, Any]) -> bool:
     """Require every query key to equal the record value; extra record keys are ignored."""
-    for key, value in query_metadata.items():
-        if record_metadata.get(key) != value:
-            return False
-    return True
+    return all(record_metadata.get(key) == value for key, value in query_metadata.items())
 
 
 __all__ = [

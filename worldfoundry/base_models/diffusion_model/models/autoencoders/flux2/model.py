@@ -94,7 +94,7 @@ class Encoder(nn.Module):
         self.num_res_blocks = num_res_blocks
         self.conv_in = nn.Conv2d(in_channels, ch, kernel_size=3, padding=1)
 
-        in_ch_mult = (1,) + tuple(ch_mult)
+        in_ch_mult = (1,) + tuple(ch_mult)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         self.down = nn.ModuleList()
         block_in = ch
         for level in range(self.num_resolutions):
@@ -138,6 +138,7 @@ class Encoder(nn.Module):
 
 class Flux2Autoencoder(nn.Module):
     """FLUX.2 2-D AE with official encode/decode and latent scale."""
+
     def __init__(self, params: Flux2AutoencoderConfig) -> None:
         super().__init__()
         self.encoder = Encoder(

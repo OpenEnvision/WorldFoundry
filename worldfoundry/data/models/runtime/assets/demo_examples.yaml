@@ -3,7 +3,7 @@ asset_profile_id: demo_runtime_assets
 model_id: demo_runtime_assets
 notes:
   - Demo galleries under worldfoundry/data/models/runtime_assets are not shipped in git/sdist.
-  - Run scripts/setup/fetch_runtime_demo_assets.py to stage them locally.
+  - Stage a bundle by copying its source_paths from source_repo into local_dir.
   - Override the install root with WORLDFOUNDRY_RUNTIME_ASSET_DIR when needed.
 roots:
   runtime_assets: "{WORLDFOUNDRY_DATA_ROOT}/models/runtime_assets"
@@ -32,13 +32,3 @@ assets:
       source_paths:
         - examples/images
         - examples/sky_images
-  - asset_id: stable-virtual-camera-demos
-    kind: demo_bundle
-    role: stable_virtual_camera
-    required: false
-    local_dir: "{WORLDFOUNDRY_DATA_ROOT}/models/runtime_assets/stable_virtual_camera"
-    metadata:
-      size_hint_mb: 34
-      source_repo: https://github.com/Stability-AI/stable-virtual-camera
-      source_paths:
-        - assets

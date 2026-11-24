@@ -31,17 +31,9 @@ def test_echo_runtime_and_catalog_share_the_action_default():
     config = yaml.safe_load(
         (root / "worldfoundry/data/models/runtime/configs/echo_memory/runtime_defaults.yaml").read_text()
     )["defaults"]["echo-memory-context-k1"]
-    runtime_default = inspect.signature(EchoMemoryRuntime.__init__).parameters[
-        "camera_translation_step"
-    ].default
-    helper_default = inspect.signature(echo_camera_trajectory_actions).parameters[
-        "translation_step"
-    ].default
+    runtime_default = inspect.signature(EchoMemoryRuntime.__init__).parameters["camera_translation_step"].default
+    helper_default = inspect.signature(echo_camera_trajectory_actions).parameters["translation_step"].default
     assert config["camera_translation_step"] == runtime_default == helper_default == pytest.approx(0.00125)
-    runtime_rotation = inspect.signature(EchoMemoryRuntime.__init__).parameters[
-        "camera_rotation_step_degrees"
-    ].default
-    helper_rotation = inspect.signature(echo_camera_trajectory_actions).parameters[
-        "rotation_step_degrees"
-    ].default
+    runtime_rotation = inspect.signature(EchoMemoryRuntime.__init__).parameters["camera_rotation_step_degrees"].default
+    helper_rotation = inspect.signature(echo_camera_trajectory_actions).parameters["rotation_step_degrees"].default
     assert config["camera_rotation_step_degrees"] == runtime_rotation == helper_rotation == pytest.approx(0.5625)

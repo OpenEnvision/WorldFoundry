@@ -12,13 +12,19 @@ import hashlib
 import importlib.util
 import json
 import re
+import subprocess
 from pathlib import Path
+from types import ModuleType
 
 import yaml
 
 
-def _coverage_policy():
-    spec = importlib.util.spec_from_file_location("native_coverage_policy", Path(__file__).with_name("native_coverage_policy.py"))
+def _coverage_policy() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "native_coverage_policy", Path(__file__).with_name("native_coverage_policy.py")
+    )
+    if spec is None or spec.loader is None:
+        raise ValueError("Could not load native coverage policy")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -48,8 +54,11 @@ def native_models(root: Path) -> tuple[list[dict], list[dict]]:
         aliases = config.get("aliases") or []
         if isinstance(aliases, str):
             aliases = [aliases]
-        if (not isinstance(binding_id, str) or not isinstance(aliases, list)
-                or not all(isinstance(alias, str) for alias in aliases)):
+        if (
+            not isinstance(binding_id, str)
+            or not isinstance(aliases, list)
+            or not all(isinstance(alias, str) for alias in aliases)
+        ):
             raise ValueError(f"Invalid native binding identities: {binding}")
         record = (binding, config)
         binding_records.append(record)
@@ -80,10 +89,15 @@ def native_models(root: Path) -> tuple[list[dict], list[dict]]:
                     if model_id is None:
                         # Some catalog variants describe only an upstream
                         # checkpoint, with no separately exposed native route.
-                        inactive.append({"catalog_id": parent, "category": category,
-                                         "variant_name": variant.get("name"),
-                                         "checkpoint": variant.get("checkpoint"),
-                                         "status": "variant_without_native_identity"})
+                        inactive.append(
+                            {
+                                "catalog_id": parent,
+                                "category": category,
+                                "variant_name": variant.get("name"),
+                                "checkpoint": variant.get("checkpoint"),
+                                "status": "variant_without_native_identity",
+                            }
+                        )
                         continue
                     if not isinstance(model_id, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", model_id):
                         raise ValueError(f"Invalid catalog model/variant id: {parent}")
@@ -91,12 +105,19 @@ def native_models(root: Path) -> tuple[list[dict], list[dict]]:
                     if not isinstance(binding_id, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", binding_id):
                         raise ValueError(f"Invalid pipeline binding id: {model_id}")
                     record = binding_lookup.get(binding_id.strip().lower())
-                    info = {"model_id": model_id, "catalog_id": parent, "category": category,
-                            "catalog_path": path.relative_to(root).as_posix()}
+                    info = {
+                        "model_id": model_id,
+                        "catalog_id": parent,
+                        "category": category,
+                        "catalog_path": path.relative_to(root).as_posix(),
+                    }
                     if record is None:
                         if "pipeline_binding" in variant:
                             rows[(model_id, binding_id)] = {
-                                **info, "binding_id": binding_id, "binding_status": "missing_binding", "target": None
+                                **info,
+                                "binding_id": binding_id,
+                                "binding_status": "missing_binding",
+                                "target": None,
                             }
                             continue
                         inactive.append({**info, "status": "no_native_binding"})
@@ -107,9 +128,13 @@ def native_models(root: Path) -> tuple[list[dict], list[dict]]:
                     if not re.fullmatch(r"worldfoundry(?:\.[a-zA-Z_]\w*)+:[a-zA-Z_]\w*", target):
                         raise ValueError(f"Invalid native binding target: {binding_id}")
                     module = root / (target.partition(":")[0].replace(".", "/") + ".py")
-                    info.update(binding_id=binding_id, binding_model_id=config.get("model_id"), target=target,
-                                binding_path=binding.relative_to(root).as_posix(),
-                                binding_status="ready" if module.is_file() else "missing_implementation")
+                    info.update(
+                        binding_id=binding_id,
+                        binding_model_id=config.get("model_id"),
+                        target=target,
+                        binding_path=binding.relative_to(root).as_posix(),
+                        binding_status="ready" if module.is_file() else "missing_implementation",
+                    )
                     key = (model_id, binding_id)
                     if key in rows and rows[key]["target"] != target:
                         raise ValueError(f"Contradictory catalog bindings: {model_id}")
@@ -117,7 +142,7 @@ def native_models(root: Path) -> tuple[list[dict], list[dict]]:
     # Some runtime variants are declared only in bindings. Associate them with
     # a catalog family by the exact class for inventory purposes; coverage
     # below still requires each variant's own model id and recipe.
-    families = {}
+    families: dict[str, dict] = {}
     for row in rows.values():
         if row.get("target"):
             families.setdefault(row["target"], row)
@@ -132,11 +157,18 @@ def native_models(root: Path) -> tuple[list[dict], list[dict]]:
         if key in rows:
             continue
         parent = families[target]
-        rows[key] = {"model_id": model_id, "catalog_id": parent["catalog_id"], "category": parent["category"],
-                     "catalog_path": parent["catalog_path"], "binding_id": binding_id,
-                     "binding_model_id": model_id, "binding_path": binding.relative_to(root).as_posix(),
-                     "target": target, "binding_status": parent["binding_status"],
-                     "catalog_match": "registered_variant_with_same_pipeline_class"}
+        rows[key] = {
+            "model_id": model_id,
+            "catalog_id": parent["catalog_id"],
+            "category": parent["category"],
+            "catalog_path": parent["catalog_path"],
+            "binding_id": binding_id,
+            "binding_model_id": model_id,
+            "binding_path": binding.relative_to(root).as_posix(),
+            "target": target,
+            "binding_status": parent["binding_status"],
+            "catalog_match": "registered_variant_with_same_pipeline_class",
+        }
     return list(rows.values()), inactive
 
 
@@ -157,10 +189,14 @@ def coverage(root: Path, matrix: Path) -> dict:
             if case.get("target") != row["target"]:
                 raise ValueError(f"Case and catalog pipeline targets differ: {name}")
             matching.append(name)
-        row.update(case_ids=matching if row["binding_status"] == "ready" else [], status=(
-            row["binding_status"] if row["binding_status"] != "ready" else
-            ("case_defined" if matching else "missing_short_case")
-        ))
+        row.update(
+            case_ids=matching if row["binding_status"] == "ready" else [],
+            status=(
+                row["binding_status"]
+                if row["binding_status"] != "ready"
+                else ("case_defined" if matching else "missing_short_case")
+            ),
+        )
         covered.update(row["case_ids"])
     gaps = [row["model_id"] for row in rows if not row["case_ids"]]
     return {
@@ -179,6 +215,52 @@ def coverage(root: Path, matrix: Path) -> dict:
     }
 
 
+def verify_committed_inputs(root: Path, matrix: Path, head: str) -> None:
+    if not matrix.is_relative_to(root):
+        raise ValueError("Commit-diff coverage requires committed inputs: matrix is outside the checkout")
+    path = matrix.relative_to(root).as_posix()
+    committed = subprocess.run(["git", "-C", str(root), "cat-file", "blob", f"{head}:{path}"], capture_output=True)
+    if committed.returncode or matrix.read_bytes() != committed.stdout:
+        raise ValueError("Commit-diff coverage requires committed inputs: matrix differs from the candidate")
+    manifests = [
+        ":(glob)worldfoundry/data/models/catalog/video/*.y*ml",
+        ":(glob)worldfoundry/data/models/catalog/world_models/*.y*ml",
+        ":(glob)worldfoundry/data/models/bindings/pipelines/*.y*ml",
+        ":(glob)worldfoundry/data/models/runtime/profiles/*.y*ml",
+    ]
+    status = subprocess.run(
+        [
+            "git",
+            "--no-optional-locks",
+            "-C",
+            str(root),
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--",
+            "tests/manual/geometry_regression_dependencies.json",
+            *manifests,
+            ":(glob)worldfoundry/**/*.py",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if status.returncode:
+        raise ValueError("Could not verify committed inputs for coverage")
+    if status.stdout:
+        raise ValueError("Commit-diff coverage requires committed inputs. Changed coverage sources:\n" + status.stdout)
+    # Inventory globs also see YAML files ignored by the normal status query.
+    ignored = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "--others", "--ignored", "--exclude-standard", "--", *manifests],
+        capture_output=True,
+        text=True,
+    )
+    if ignored.returncode:
+        raise ValueError("Could not verify committed inputs for coverage")
+    if ignored.stdout:
+        raise ValueError("Commit-diff coverage requires committed inputs. Ignored coverage sources:\n" + ignored.stdout)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, default=Path.cwd())
@@ -193,24 +275,61 @@ def main() -> int:
     args = parser.parse_args()
     try:
         root = args.source_root.resolve()
-        matrix = args.matrix if args.matrix.is_absolute() else root / args.matrix
+        matrix = (args.matrix if args.matrix.is_absolute() else root / args.matrix).resolve()
         baseline = args.baseline if args.baseline.is_absolute() else root / args.baseline
         policy = _coverage_policy()
         if args.base and args.changed_file:
             raise ValueError("Use a pinned commit diff or explicit changed paths, not both")
-        changed = policy._load_impact_module().changed_paths(root, args.base, args.head) if args.base else args.changed_file
-        report = coverage(root, matrix.resolve())
-        report["policy"] = policy.evaluate_policy(report, json.loads(matrix.read_text()),
-                                                 policy.load_frozen_baseline(baseline), root, changed, args.affected_model)
+        changed = args.changed_file
+        revisions = {}
+        if args.base:
+            impact = policy._load_impact_module()
+            head = impact.revision(root, args.head + "^{commit}")
+            if head is None or head != impact.revision(root, "HEAD^{commit}"):
+                raise ValueError("--head must match the inspected checkout; check out the requested head first")
+            base = impact.revision(root, args.base + "^{commit}")
+            if base is None:
+                raise ValueError("Diff base must resolve to a commit")
+            verify_committed_inputs(root, matrix, head)
+            changed = impact.changed_paths(root, base, head)
+            retirements = impact.retirement_proofs(root, changed, base=base, head=head)
+            retired_paths = {proof["path"] for proof in retirements}
+            changed = [path for path in changed if path not in retired_paths]
+            revisions = {
+                "base_revision": base,
+                "proven_retirements": retirements,
+                "source_revision": head,
+                "source_tree": impact.revision(root, head + "^{tree}"),
+            }
+        report = coverage(root, matrix)
+        report.update(revisions)
+        report["policy"] = policy.evaluate_policy(
+            report,
+            json.loads(matrix.read_text()),
+            policy.load_frozen_baseline(baseline),
+            root,
+            changed,
+            args.affected_model,
+        )
         report["policy"]["baseline_sha256"] = policy._BASELINE_SHA256
-        report["policy"]["change_scope"] = "commit_diff" if args.base else ("explicit_paths" if changed else "inventory_only")
-        code = 2 if report["policy"]["status"] != "passed" or (args.require_complete and report["missing_short_cases"]) else 0
+        report["policy"]["change_scope"] = (
+            "commit_diff" if args.base else ("explicit_paths" if changed else "inventory_only")
+        )
+        code = (
+            2
+            if report["policy"]["status"] != "passed" or (args.require_complete and report["missing_short_cases"])
+            else 0
+        )
     except (ValueError, OSError, KeyError, TypeError, yaml.YAMLError) as error:
         report, code = {"status": "failed", "error": str(error)}, 1
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
-    print(json.dumps({key: value for key, value in report.items() if key not in {"models", "catalog_without_native_binding"}},
-                     indent=2))
+    print(
+        json.dumps(
+            {key: value for key, value in report.items() if key not in {"models", "catalog_without_native_binding"}},
+            indent=2,
+        )
+    )
     return code
 
 

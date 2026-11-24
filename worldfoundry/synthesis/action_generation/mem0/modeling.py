@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from types import SimpleNamespace
-from typing import Any, Mapping
+from typing import Any
 
 import torch
 from torch import nn
@@ -58,9 +59,7 @@ class Mem0Policy(nn.Module):
             hidden_sizes=hidden_sizes,
             dropout=float(classifier_config["dropout"]),
             pos_weight=(
-                None
-                if classifier_config.get("pos_weight") is None
-                else float(classifier_config["pos_weight"])
+                None if classifier_config.get("pos_weight") is None else float(classifier_config["pos_weight"])
             ),
         ).to(device=device, dtype=dtype)
         self.classifier_threshold = float(classifier_config["threshold"])

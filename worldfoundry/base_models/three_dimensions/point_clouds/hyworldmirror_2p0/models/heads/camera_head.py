@@ -1,21 +1,19 @@
 # inspired by https://github.com/facebookresearch/vggt/blob/main/src/models/heads/camera_head.py
-"""Module for base_models -> three_dimensions -> point_clouds -> hyworldmirror_2p0 -> models -> heads -> camera_head.py functionality."""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from worldfoundry.core.nn.blocks.layers import Mlp
+from ..layers.block import Block
 from ..layers.mlp import MlpFP32
-from ..layers.block import Block, DistBlock
 
 
 class CameraHead(nn.Module):
     """
     Camera head module: predicts camera parameters from token representations using iterative refinement
-    
+
     Processes dedicated camera tokens through a series of transformer blocks
     """
+
     def __init__(
         self,
         dim_in: int = 2048,
@@ -28,19 +26,6 @@ class CameraHead(nn.Module):
         fl_act: str = "relu",
         block_fn: nn.Module = Block,
     ):
-        """Init.
-
-        Args:
-            dim_in: The dim in.
-            trunk_depth: The trunk depth.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            init_values: The init values.
-            trans_act: The trans act.
-            quat_act: The quat act.
-            fl_act: The fl act.
-            block_fn: The block fn.
-        """
         super().__init__()
 
         self.out_dim = 9
@@ -71,10 +56,11 @@ class CameraHead(nn.Module):
         # Adaptive layer normalization (no learnable parameters)
         self.adapt_norm = nn.LayerNorm(dim_in, elementwise_affine=False, eps=1e-6)
         # self.param_predictor = Mlp(in_features=dim_in, hidden_features=dim_in // 2, out_features=self.out_dim, drop=0)
-        self.param_predictor = MlpFP32(in_features=dim_in, hidden_features=dim_in // 2, out_features=self.out_dim, drop=0)
+        self.param_predictor = MlpFP32(
+            in_features=dim_in, hidden_features=dim_in // 2, out_features=self.out_dim, drop=0
+        )
 
     def to(self, *args, **kwargs):
-        """To."""
         self.refine_net = self.refine_net.to(*args, **kwargs)
         self.token_norm = self.token_norm.to(*args, **kwargs)
         self.out_norm = self.out_norm.to(*args, **kwargs)
@@ -92,11 +78,11 @@ class CameraHead(nn.Module):
     def forward(self, feat_seq: list, steps: int = 4) -> list:
         """
         Forward pass to predict camera parameters
-        
+
         Args:
             feat_seq: List of token tensors from network, last one used for prediction
             steps: Number of iterative refinement steps, default 4
-            
+
         Returns:
             List of predicted camera encodings (post-activation) from each iteration
         """
@@ -112,7 +98,7 @@ class CameraHead(nn.Module):
         curr_pred = None
         pred_seq = []
 
-        for step in range(steps):
+        for _step in range(steps):
             # Use learned initial token for first iteration
             if curr_pred is None:
                 net_input = self.param_embed(self.init_token.expand(b, seq_len, -1))
@@ -121,16 +107,15 @@ class CameraHead(nn.Module):
                 net_input = self.param_embed(curr_pred)
             net_input = net_input.to(cam_tokens.dtype)
             norm_shift, norm_scale, norm_gate = self.adapt_norm_gen(net_input).chunk(3, dim=-1)
-            mod_cam_feat = norm_gate * self.apply_adaptive_modulation(self.adapt_norm(cam_tokens), norm_shift, norm_scale)
+            mod_cam_feat = norm_gate * self.apply_adaptive_modulation(
+                self.adapt_norm(cam_tokens), norm_shift, norm_scale
+            )
             mod_cam_feat = mod_cam_feat + cam_tokens
 
             proc_feat = self.refine_net(mod_cam_feat)
             param_delta = self.param_predictor(self.out_norm(proc_feat))
 
-            if curr_pred is None:
-                curr_pred = param_delta
-            else:
-                curr_pred = curr_pred + param_delta
+            curr_pred = param_delta if curr_pred is None else curr_pred + param_delta
 
             # Apply final activation functions for translation, quaternion, and field-of-view
             activated_params = self.apply_camera_parameter_activation(curr_pred)
@@ -141,10 +126,10 @@ class CameraHead(nn.Module):
     def apply_camera_parameter_activation(self, params: torch.Tensor) -> torch.Tensor:
         """
         Apply activation functions to camera parameter components
-        
+
         Args:
             params: Tensor containing camera parameters [translation, quaternion, focal_length]
-            
+
         Returns:
             Activated camera parameters tensor
         """
@@ -162,11 +147,11 @@ class CameraHead(nn.Module):
     def apply_parameter_activation(self, tensor: torch.Tensor, act_type: str) -> torch.Tensor:
         """
         Apply specified activation function to parameter tensor
-        
+
         Args:
             tensor: Tensor containing parameter values
             act_type: Activation type ("linear", "inv_log", "exp", "relu")
-            
+
         Returns:
             Activated parameter tensor
         """
@@ -184,10 +169,10 @@ class CameraHead(nn.Module):
     def apply_inverse_logarithm_transform(self, x: torch.Tensor) -> torch.Tensor:
         """
         Apply inverse logarithm transform: sign(y) * (exp(|y|) - 1)
-        
+
         Args:
             x: Input tensor
-            
+
         Returns:
             Transformed tensor
         """

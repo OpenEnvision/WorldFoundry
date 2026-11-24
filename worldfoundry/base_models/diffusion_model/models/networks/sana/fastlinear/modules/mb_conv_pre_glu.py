@@ -30,10 +30,10 @@ import torch
 from torch import nn
 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.activation import build_act, get_act_name
+from worldfoundry.core.nn import val2tuple
 
 from .nn.conv import ConvLayer
-from .nn.norm import build_norm, get_norm_name
-from worldfoundry.core.nn import get_same_padding, val2tuple
+from .nn.norm import get_norm_name
 
 
 class MBConvPreGLU(nn.Module):
@@ -52,20 +52,6 @@ class MBConvPreGLU(nn.Module):
         norm=(None, None, "ln2d"),
         act=("silu", "silu", None),
     ):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            kernel_size: The kernel size.
-            stride: The stride.
-            mid_dim: The mid dim.
-            expand: The expand.
-            padding: The padding.
-            use_bias: The use bias.
-            norm: The norm.
-            act: The act.
-        """
         super().__init__()
         use_bias = val2tuple(use_bias, 3)
         norm = val2tuple(norm, 3)
@@ -103,15 +89,6 @@ class MBConvPreGLU(nn.Module):
         )
 
     def forward(self, x: torch.Tensor, HW=None) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            HW: The hw.
-
-        Returns:
-            The return value.
-        """
         B, N, C = x.shape
         if HW is None:
             H = W = int(N**0.5)
@@ -133,11 +110,6 @@ class MBConvPreGLU(nn.Module):
 
     @property
     def module_str(self) -> str:
-        """Module str.
-
-        Returns:
-            The return value.
-        """
         _str = f"{self.depth_conv.kernel_size}{type(self).__name__}("
         _str += f"in={self.inverted_conv.in_dim},mid={self.depth_conv.in_dim},out={self.point_conv.out_dim},s={self.depth_conv.stride}"
         _str += (

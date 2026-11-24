@@ -1,9 +1,10 @@
 # Adapted from seedleap/zing-world-model (Apache-2.0).
 from __future__ import annotations
 
+import itertools
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 import torch
@@ -164,7 +165,7 @@ class MessageProcessor:
         boundaries.update(value for value in hard_boundaries if 0 < value < total_frames)
         spans = []
         ordered = sorted(boundaries)
-        for start, end in zip(ordered, ordered[1:]):
+        for start, end in itertools.pairwise(ordered):
             frame = start
             while frame < end:
                 block_end = min(frame + self.config.inference.frames_per_block, end)

@@ -6,16 +6,19 @@ removing trainers, dataset readers, servers, and video-generation entrypoints.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from types import SimpleNamespace
-from typing import Any, Mapping
+from typing import Any
 
 import torch
 import torch.nn.functional as F
-from torch import Tensor, nn
-
 from diffusers.models.attention import Attention, FeedForward
 from diffusers.models.embeddings import TimestepEmbedding, Timesteps
+from torch import Tensor, nn
 
+from worldfoundry.base_models.llm_mllm_core.action.gr00t.modeling.embodiment_mlp import (
+    SmallMLP as MLP,
+)
 from worldfoundry.core.attention import scaled_dot_product_attention
 
 from .dinov3_configuration import DINOv3ViTConfig
@@ -81,20 +84,12 @@ class JointAttention(nn.Module):
         self.num_inputs = len(dim_inputs)
         self.heads = heads
         self.dim_head = dim_head
-        self.to_qkv = nn.ModuleList(
-            [nn.Linear(dim_input, inner_dim * 3, bias=False) for dim_input in dim_inputs]
-        )
-        self.to_out = nn.ModuleList(
-            [nn.Linear(inner_dim, dim_input, bias=False) for dim_input in dim_inputs]
-        )
+        self.to_qkv = nn.ModuleList([nn.Linear(dim_input, inner_dim * 3, bias=False) for dim_input in dim_inputs])
+        self.to_out = nn.ModuleList([nn.Linear(inner_dim, dim_input, bias=False) for dim_input in dim_inputs])
         self.qk_rmsnorm = bool(qk_rmsnorm)
         if self.qk_rmsnorm:
-            self.q_rmsnorms = nn.ModuleList(
-                [MultiHeadRMSNorm(dim_head, heads=heads) for _ in dim_inputs]
-            )
-            self.k_rmsnorms = nn.ModuleList(
-                [MultiHeadRMSNorm(dim_head, heads=heads) for _ in dim_inputs]
-            )
+            self.q_rmsnorms = nn.ModuleList([MultiHeadRMSNorm(dim_head, heads=heads) for _ in dim_inputs])
+            self.k_rmsnorms = nn.ModuleList([MultiHeadRMSNorm(dim_head, heads=heads) for _ in dim_inputs])
         else:
             self.q_rmsnorms = (None,) * self.num_inputs
             self.k_rmsnorms = (None,) * self.num_inputs
@@ -112,7 +107,7 @@ class JointAttention(nn.Module):
         keep_masks: list[Tensor] = []
         lengths: list[int] = []
         for value, mask, projection, q_norm, k_norm in zip(
-            inputs, masks, self.to_qkv, self.q_rmsnorms, self.k_rmsnorms
+            inputs, masks, self.to_qkv, self.q_rmsnorms, self.k_rmsnorms, strict=False
         ):
             batch, length, _ = value.shape
             lengths.append(length)
@@ -132,7 +127,7 @@ class JointAttention(nn.Module):
         output = scaled_dot_product_attention(query, key, value, attn_mask=key_mask)
         output = output.transpose(1, 2).reshape(output.shape[0], -1, self.heads * self.dim_head)
         chunks = output.split(lengths, dim=1)
-        return tuple(projection(chunk) for chunk, projection in zip(chunks, self.to_out))
+        return tuple(projection(chunk) for chunk, projection in zip(chunks, self.to_out, strict=False))
 
 
 class MultiHeadRMSNorm(nn.Module):
@@ -281,9 +276,7 @@ class MMDiTBlock(nn.Module):
 
         image_tokens, add_image = self.image_ff_residual_fn(image_tokens)
         action_tokens, add_action = self.action_ff_residual_fn(action_tokens)
-        image_tokens = self.image_ff(
-            self.image_ff_layernorm(image_tokens) * image_pre_ff_gamma + image_pre_ff_beta
-        )
+        image_tokens = self.image_ff(self.image_ff_layernorm(image_tokens) * image_pre_ff_gamma + image_pre_ff_beta)
         action_tokens = self.action_ff(
             self.action_ff_layernorm(action_tokens) * action_pre_ff_gamma + action_pre_ff_beta
         )
@@ -315,9 +308,7 @@ class MMDiT(nn.Module):
         inner_dim = int(resolved["num_attention_heads"]) * int(resolved["attention_head_dim"])
         self.inner_dim = inner_dim
         self.timestep_encoder = TimestepEncoder(inner_dim)
-        self.text_attn_layernorm = nn.LayerNorm(
-            int(resolved["cross_attention_dim"]), elementwise_affine=False
-        )
+        self.text_attn_layernorm = nn.LayerNorm(int(resolved["cross_attention_dim"]), elementwise_affine=False)
         block_kwargs = dict(resolved)
         block_kwargs.pop("num_layers", None)
         block_kwargs.pop("output_dim", None)
@@ -412,16 +403,6 @@ class CategorySpecificMLP(nn.Module):
         return self.layer2(F.relu(self.layer1(value, category_ids)), category_ids)
 
 
-class MLP(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int) -> None:
-        super().__init__()
-        self.layer1 = nn.Linear(input_dim, hidden_dim)
-        self.layer2 = nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, value: Tensor) -> Tensor:
-        return self.layer2(F.relu(self.layer1(value)))
-
-
 class ActionEncoder(nn.Module):
     def __init__(self, action_dim: int, hidden_size: int) -> None:
         super().__init__()
@@ -502,15 +483,11 @@ class FlowmatchingActionHead(nn.Module):
         self.multi_embodiment = int(cfg.max_num_embodiments) > 1
         if self.multi_embodiment:
             self.state_encoder = (
-                CategorySpecificMLP(
-                    int(cfg.max_num_embodiments), self.state_dim, self.hidden_size, input_dim
-                )
+                CategorySpecificMLP(int(cfg.max_num_embodiments), self.state_dim, self.hidden_size, input_dim)
                 if self.state_dim is not None
                 else None
             )
-            self.action_encoder = MultiEmbodimentActionEncoder(
-                self.action_dim, input_dim, int(cfg.max_num_embodiments)
-            )
+            self.action_encoder = MultiEmbodimentActionEncoder(self.action_dim, input_dim, int(cfg.max_num_embodiments))
             self.action_decoder = CategorySpecificMLP(
                 int(cfg.max_num_embodiments),
                 int(diffusion["output_dim"]),
@@ -519,14 +496,10 @@ class FlowmatchingActionHead(nn.Module):
             )
         else:
             self.state_encoder = (
-                MLP(self.state_dim, self.hidden_size, input_dim)
-                if self.state_dim is not None
-                else None
+                MLP(self.state_dim, self.hidden_size, input_dim) if self.state_dim is not None else None
             )
             self.action_encoder = ActionEncoder(self.action_dim, input_dim)
-            self.action_decoder = MLP(
-                int(diffusion["output_dim"]), self.hidden_size, self.action_dim
-            )
+            self.action_decoder = MLP(int(diffusion["output_dim"]), self.hidden_size, self.action_dim)
         self.vision_encoder = DINOv3ViTModel(vision_config)
         self.img_size = vision_config.image_size
         num_channels = int(vision_config.hidden_size)
@@ -586,16 +559,12 @@ class FlowmatchingActionHead(nn.Module):
             raise ValueError("num_inference_timesteps must be positive")
         for step in range(steps):
             timestep_value = int((step / float(steps)) * self.num_timestep_buckets)
-            timesteps = torch.full(
-                (batch,), timestep_value, device=vl_embs.device, dtype=torch.long
-            )
+            timesteps = torch.full((batch,), timestep_value, device=vl_embs.device, dtype=torch.long)
             if self.multi_embodiment:
                 action_features = self.action_encoder(actions, timesteps, embodiment_id)
             else:
                 action_features = self.action_encoder(actions, timesteps)
-            noisy_next_obs = self.next_obs_learnable_tokens[None, None].expand(
-                batch, curr_obs.shape[1], -1
-            )
+            noisy_next_obs = self.next_obs_learnable_tokens[None, None].expand(batch, curr_obs.shape[1], -1)
             obs_tokens = self.obs_merger(torch.cat((curr_obs, noisy_next_obs), dim=-1))
             register_tokens = self.register_tokens.weight.unsqueeze(0).expand(batch, -1, -1)
             if state_features is not None:
@@ -649,9 +618,7 @@ class LDAInferenceModel(nn.Module):
         hidden_size = int(qwen_config.text_config.hidden_size)
         expected = int(action_config["diffusion_model_cfg"]["cross_attention_dim"])
         if hidden_size != expected:
-            raise ValueError(
-                f"Qwen hidden size {hidden_size} does not match action cross-attention {expected}"
-            )
+            raise ValueError(f"Qwen hidden size {hidden_size} does not match action cross-attention {expected}")
         self.qwen_vl_interface = QwenVLInterface(qwen_config)
         self.action_model = FlowmatchingActionHead(action_config, vision_config)
 

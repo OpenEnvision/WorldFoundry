@@ -1,1 +1,1 @@
-from .autoencoder import AutoEncoderModule
+from .autoencoder import AutoEncoderModule as AutoEncoderModule

@@ -10,8 +10,16 @@ import torch
 from worldfoundry.base_models.diffusion_model.contracts import Conditioning
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.component import build_wan_text_conditioner
 
-_MOVEMENT = {"w": (1, 0), "s": (-1, 0), "a": (0, -1), "d": (0, 1),
-             "wa": (1, -1), "wd": (1, 1), "sa": (-1, -1), "sd": (-1, 1)}
+_MOVEMENT = {
+    "w": (1, 0),
+    "s": (-1, 0),
+    "a": (0, -1),
+    "d": (0, 1),
+    "wa": (1, -1),
+    "wd": (1, 1),
+    "sa": (-1, -1),
+    "sd": (-1, 1),
+}
 _ROTATION = {"up": (1, 0), "down": (-1, 0), "left": (0, -1), "right": (0, 1)}
 
 
@@ -105,10 +113,12 @@ class WorldPlay2Conditioner:
         prompts, schedule = worldplay2_prompt_schedule(request, latent_frames=frames, chunk_length=chunk_length)
         names = tuple(dict.fromkeys(schedule))
         encoded = self.text_conditioner._encode([prompts[name] for name in names], device=device, dtype=dtype)
-        contexts = {name: encoded[index:index + 1] for index, name in enumerate(names)}
+        contexts = {name: encoded[index : index + 1] for index, name in enumerate(names)}
         negative = {}
         if request.sampling.guidance_scale != 1.0:
-            negative["context"] = self.text_conditioner._encode(request.negative_prompts or ("",), device=device, dtype=dtype)
+            negative["context"] = self.text_conditioner._encode(
+                request.negative_prompts or ("",), device=device, dtype=dtype
+            )
         raw_actions = request.inputs.get("actions")
         if raw_actions is None:
             raw_actions = request.inputs.get("interactions")
@@ -116,14 +126,20 @@ class WorldPlay2Conditioner:
             raw_actions = f"w-{frames}"
         actions = parse_worldplay2_actions(
             raw_actions,
-            latent_frames=frames, perspective=str(request.inputs.get("perspective", "tps")),
+            latent_frames=frames,
+            perspective=str(request.inputs.get("perspective", "tps")),
             yaw_speed=float(request.inputs.get("yaw_rotation_speed_deg", 3.0)),
             pitch_speed=float(request.inputs.get("pitch_rotation_speed_deg", 1.0 if self.mode == "few_step" else 3.0)),
         ).to(device=device, dtype=dtype)
         return Conditioning(
-            positive={"context": contexts[schedule[0]]}, negative=negative,
-            shared={"chunk_contexts": contexts, "chunk_prompts": schedule,
-                    "actions": actions, "chunk_length": chunk_length},
+            positive={"context": contexts[schedule[0]]},
+            negative=negative,
+            shared={
+                "chunk_contexts": contexts,
+                "chunk_prompts": schedule,
+                "actions": actions,
+                "chunk_length": chunk_length,
+            },
         )
 
 

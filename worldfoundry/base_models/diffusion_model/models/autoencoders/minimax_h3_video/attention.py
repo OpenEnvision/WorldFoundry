@@ -14,7 +14,6 @@ This is H3 video decoder graph math, not a
 """
 
 import logging
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -53,15 +52,16 @@ def _apply_qk_norm(module, hidden_states):
 
 class Attention(nn.Module):
     """Multi-head self-attention for the MiniMax H3 ViT decoder."""
+
     def __init__(
         self,
         heads,
         dim_head,
-        embed_dim: Optional[int] = None,
-        qk_norm_type: Optional[str] = None,
+        embed_dim: int | None = None,
+        qk_norm_type: str | None = None,
         qk_norm_affine: bool = False,
         bias: bool = True,
-        out_bias: Optional[bool] = None,
+        out_bias: bool | None = None,
         eps: float = 1e-5,
         **kwargs,
     ):
@@ -77,23 +77,13 @@ class Attention(nn.Module):
             self.norm_q = None
             self.norm_k = None
         elif qk_norm_type == "layer_norm":
-            self.norm_q = nn.LayerNorm(
-                dim_head, eps=eps, elementwise_affine=qk_norm_affine
-            )
-            self.norm_k = nn.LayerNorm(
-                dim_head, eps=eps, elementwise_affine=qk_norm_affine
-            )
+            self.norm_q = nn.LayerNorm(dim_head, eps=eps, elementwise_affine=qk_norm_affine)
+            self.norm_k = nn.LayerNorm(dim_head, eps=eps, elementwise_affine=qk_norm_affine)
         elif qk_norm_type == "rms_norm":
-            self.norm_q = nn.RMSNorm(
-                dim_head, eps=eps, elementwise_affine=qk_norm_affine
-            )
-            self.norm_k = nn.RMSNorm(
-                dim_head, eps=eps, elementwise_affine=qk_norm_affine
-            )
+            self.norm_q = nn.RMSNorm(dim_head, eps=eps, elementwise_affine=qk_norm_affine)
+            self.norm_k = nn.RMSNorm(dim_head, eps=eps, elementwise_affine=qk_norm_affine)
         else:
-            raise ValueError(
-                f"unknown qk_norm_type: {qk_norm_type}. Should be None,'layer_norm','rms_norm'"
-            )
+            raise ValueError(f"unknown qk_norm_type: {qk_norm_type}. Should be None,'layer_norm','rms_norm'")
 
         self.to_qkv = nn.Linear(self.embed_dim, self.attn_inner_dim * 3, bias=bias)
 
@@ -110,9 +100,7 @@ class Attention(nn.Module):
         valid_seq_len = pack_info.get("valid_seq_len", None)
 
         if cu_seqlens is not None:
-            raise NotImplementedError(
-                "varlen attention is not supported in this inference-only bundle"
-            )
+            raise NotImplementedError("varlen attention is not supported in this inference-only bundle")
 
         padded_seq_len = query.shape[1]
         if valid_seq_len is not None:
@@ -157,14 +145,14 @@ class Attention(nn.Module):
 
         return hidden_states
 
-    def perform_attention(self, query, key, value, pack_info={}):
+    def perform_attention(self, query, key, value, pack_info={}):  # noqa: B006 - Keeps the upstream default object and signature.
         return self._perform_attention(query, key, value, pack_info)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        pack_info: dict = {},
+        rotary_pos_emb: torch.Tensor | None = None,
+        pack_info: dict = {},  # noqa: B006 - Keeps the upstream default object and signature.
     ) -> torch.Tensor:
         batch_size, seq_len, _ = hidden_states.shape
 

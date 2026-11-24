@@ -8,7 +8,7 @@ import torch
 class DXPolicy:
     """Network-free DX policy over one flow-matching segment."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         denoising_output: torch.Tensor,
         x_t_src: torch.Tensor,
@@ -38,7 +38,7 @@ class DXPolicy:
     @staticmethod
     def _interpolate(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         n = x.size(1)
-        if n < 2:  # noqa: PLR2004
+        if n < 2:
             return x.squeeze(1)
         t = t.clamp(min=0, max=1) * (n - 1)
         t0 = t.floor().to(torch.long).clamp(min=0, max=n - 2)
@@ -98,7 +98,7 @@ class DXPolicy:
 class MultimodalDXPolicy:
     """Independent video and audio DX policies for the fused DiT."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         denoising_output_v: torch.Tensor,
         x_t_src_v: torch.Tensor,
@@ -152,7 +152,7 @@ def shift_timesteps(t: torch.Tensor, shift: float) -> torch.Tensor:
     return shift * t / (1 + (shift - 1) * t)
 
 
-def policy_rollout_fm(  # noqa: PLR0913
+def policy_rollout_fm(
     x_t_start: torch.Tensor,
     sigma_t_start: torch.Tensor,
     raw_t_start: torch.Tensor,

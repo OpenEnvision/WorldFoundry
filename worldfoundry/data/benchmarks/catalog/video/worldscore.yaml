@@ -119,9 +119,9 @@ metrics:
   output_unit: score
   primary: true
 runner:
-  official_script: worldfoundry/evaluation/tasks/execution/runners/worldscore/run_worldscore_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/worldscore/run_worldscore_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.worldscore.run_worldscore_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.worldscore.run_worldscore_official_runner
     generated_arg: --stage-dynamic-source
     dataset_root_arg: --data-path
     model_arg: --model-name
@@ -129,11 +129,11 @@ runner:
     supports_official_runtime: true
     accepts_generated_artifacts: true
     input_kind: worldscore_output_dir_or_official_results
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldScoreContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:worldscore
   repo_url: https://github.com/haoyi-duan/WorldScore
   repo_revision: 344983c1be7d515c1e4ecb167d40d622adf502bc
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -148,8 +148,8 @@ runner:
   - <out>
   - --json
   run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/worldscore/run_worldscore_official_runner.py --worldscore-root 
-    "${WORLDFOUNDRY_WORLDSCORE_ROOT:-worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore}" 
+    worldfoundry/evals/tasks/execution/runners/worldscore/run_worldscore_official_runner.py --worldscore-root 
+    "${WORLDFOUNDRY_WORLDSCORE_ROOT:-worldfoundry/evals/tasks/execution/runners/worldscore/runtime/worldscore}" 
     --worldscore-config-root "${WORLDFOUNDRY_WORLDSCORE_CONFIG_ROOT:-worldfoundry/data/benchmarks/assets/worldscore/config}" 
     --model-name "${WORLDFOUNDRY_WORLDSCORE_MODEL_NAME:-wan2.1_i2v}" --model-path 
     "${WORLDFOUNDRY_WORLDSCORE_MODEL_PATH:-${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}/worldscore_model_path}" --data-path 
@@ -161,13 +161,13 @@ runner:
     kind: in_tree_official_runtime
     repo_url: https://github.com/haoyi-duan/WorldScore
     repo_revision: 344983c1be7d515c1e4ecb167d40d622adf502bc
-    root: worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore
+    root: worldfoundry/evals/tasks/execution/runners/worldscore/runtime/worldscore
     root_env: WORLDFOUNDRY_WORLDSCORE_ROOT
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
     official_results_path_env: WORLDFOUNDRY_WORLDSCORE_RESULTS_PATH
     evaluation_output_dir_env: WORLDFOUNDRY_WORLDSCORE_OUTPUT_DIR
     entrypoints:
-      evaluate: worldfoundry/evaluation/tasks/execution/runners/worldscore/run_worldscore_official_runner.py
+      evaluate: worldfoundry/evals/tasks/execution/runners/worldscore/run_worldscore_official_runner.py
   expected_artifacts:
   - scorecard.json
   - per_sample_metrics.jsonl
@@ -223,11 +223,11 @@ data_refs:
   local_dataset_paths:
   - cache/worldfoundry/data/hfd_datasets/Howieeeee/WorldScore
   - cache/worldfoundry/data/hfd_datasets/Howieeeee__WorldScore
-  in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore
+  in_tree_runtime: worldfoundry/evals/tasks/execution/runners/worldscore/runtime/worldscore
   task_yaml: worldfoundry/data/benchmarks/tasks/external/worldscore.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldScoreContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:worldscore
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
@@ -258,12 +258,12 @@ base_model_dependency_preflight:
     WORLDFOUNDRY_SEA_RAFT_CKPT: 
       cache/worldfoundry/assets/worldscore_official/metrics/checkpoints/Tartan-C-T-TSKH-spring540x960-M.pth
   runtime_env:
-    WORLDFOUNDRY_WORLDSCORE_ROOT: worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore
+    WORLDFOUNDRY_WORLDSCORE_ROOT: worldfoundry/evals/tasks/execution/runners/worldscore/runtime/worldscore
     WORLDFOUNDRY_WORLDSCORE_CONFIG_ROOT: worldfoundry/data/benchmarks/assets/worldscore/config
     WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR: cache/worldfoundry/assets/worldscore_official/metrics/checkpoints
   missing: []
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -282,3 +282,15 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - world_outputs_dir
+  - camera_trajectory_json
+  - worldscore_dataset_root
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_metrics
+  notes:
+  - Contract supports video, 3D, and 4D generation outputs through one artifact schema.
+  - Dataset download and upstream metric execution remain explicit validation stages.

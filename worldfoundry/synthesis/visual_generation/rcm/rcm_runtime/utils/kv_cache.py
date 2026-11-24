@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Tuple
 
 import torch
+
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.blockmask import BlockPattern
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.rope import RopeCache
 
@@ -27,8 +27,8 @@ class KVCache:
         self.k = None
         self.v = None
         self.cur = 0
-        self._chunk_lens: List[int] = []
-        self._cum_ends: List[int] = []
+        self._chunk_lens: list[int] = []
+        self._cum_ends: list[int] = []
 
     def reset(self, free_buffers: bool = True):
         if free_buffers:
@@ -42,7 +42,7 @@ class KVCache:
             self.k = torch.empty((B, self.max_len, H, D), device=device, dtype=dtype)
             self.v = torch.empty((B, self.max_len, H, D), device=device, dtype=dtype)
 
-    def append(self, k: torch.Tensor, v: torch.Tensor) -> Tuple[int, int]:
+    def append(self, k: torch.Tensor, v: torch.Tensor) -> tuple[int, int]:
         B, s, H, D = k.shape
         if self.cur + s > self.max_len:
             raise RuntimeError(f"KV cache overflow: cur={self.cur}, append={s}, max_len={self.max_len}")
@@ -56,7 +56,7 @@ class KVCache:
         self._cum_ends.append(self.cur)
         return start, end
 
-    def get(self, block_range: Optional[int] = None) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+    def get(self, block_range: int | None = None) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         """
         Returns a prefix of cached K/V.
 
@@ -81,7 +81,7 @@ class KVCache:
             end = self._cum_ends[block_range - 1]
         return self.k[:, :end], self.v[:, :end]
 
-    def compact_(self, keep_indices: Optional[torch.Tensor]):
+    def compact_(self, keep_indices: torch.Tensor | None):
         """Keep only the tokens at ``keep_indices``.
 
         Args:
@@ -126,7 +126,7 @@ class KVCache:
         self._chunk_lens = [new_len]
         self._cum_ends = [new_len]
 
-    def get_prefix_end(self, block_range: Optional[int] = None) -> int:
+    def get_prefix_end(self, block_range: int | None = None) -> int:
         """End position of the committed prefix up to ``block_range`` chunks."""
         if block_range is None:
             return self.cur
@@ -136,7 +136,7 @@ class KVCache:
             raise IndexError(f"block_range={block_range} exceeds cached chunks={len(self._cum_ends)}")
         return self._cum_ends[block_range - 1]
 
-    def write_transient(self, k: torch.Tensor, v: torch.Tensor, at: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def write_transient(self, k: torch.Tensor, v: torch.Tensor, at: int) -> tuple[torch.Tensor, torch.Tensor]:
         """Write K/V at position ``at`` WITHOUT updating metadata.
 
         Returns slices ``[0, at + s)`` covering the committed prefix plus the
@@ -170,12 +170,12 @@ class AttnContext:
     """Per-layer attention context carrying KV cache, RoPE, and observer."""
 
     mode: KVCacheMode = KVCacheMode.DISABLED
-    kv_cache: Optional[KVCache] = None
-    block_range: Optional[int] = 0
+    kv_cache: KVCache | None = None
+    block_range: int | None = 0
     layer_idx: int = 0
     q_block_idx: int = 0
-    attn_observer: Optional[object] = None
-    rope: Optional[RopeCache] = None
+    attn_observer: object | None = None
+    rope: RopeCache | None = None
     fast_infer: bool = False
 
 
@@ -200,14 +200,14 @@ class CausalInferenceState:
     """
 
     mode: KVCacheMode = KVCacheMode.DISABLED
-    kv_caches: Optional[List[KVCache]] = None
-    pattern: Optional[BlockPattern] = None
+    kv_caches: list[KVCache] | None = None
+    pattern: BlockPattern | None = None
     block_cursor: int = 0
-    block_range: Optional[int] = -1
-    cached_t_indices: Optional[torch.Tensor] = None
-    current_t_indices: Optional[torch.Tensor] = None
-    attn_observer: Optional[object] = None
-    rope: Optional[RopeCache] = None
+    block_range: int | None = -1
+    cached_t_indices: torch.Tensor | None = None
+    current_t_indices: torch.Tensor | None = None
+    attn_observer: object | None = None
+    rope: RopeCache | None = None
     fast_infer: bool = False
 
     def __post_init__(self):
@@ -220,7 +220,7 @@ class CausalInferenceState:
             return 0
         return self.pattern.blocks_to_frames(self.block_cursor)
 
-    def attn_ctx(self, layer_idx: int) -> Optional[AttnContext]:
+    def attn_ctx(self, layer_idx: int) -> AttnContext | None:
         if self.mode == KVCacheMode.DISABLED or self.kv_caches is None:
             return None
         return AttnContext(

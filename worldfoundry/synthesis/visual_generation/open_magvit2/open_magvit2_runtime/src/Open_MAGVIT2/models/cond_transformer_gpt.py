@@ -1,5 +1,5 @@
 """
-Refer to 
+Refer to
 https://github.com/FoundationVision/LlamaGen
 https://github.com/FoundationVision/VAR
 """
@@ -8,8 +8,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from worldfoundry.core.model_loading.factory import instantiate_from_config
-from src.Open_MAGVIT2.modules.util import SOSProvider
+from worldfoundry.core.configuration.factory import instantiate_from_config
+from worldfoundry.synthesis.visual_generation.open_magvit2.open_magvit2_runtime.src.Open_MAGVIT2.modules.util import (
+    SOSProvider,
+)
 
 
 def disabled_train(self, mode=True):
@@ -17,21 +19,23 @@ def disabled_train(self, mode=True):
     does not change anymore."""
     return self
 
+
 class Net2NetTransformer(nn.Module):
-    def __init__(self,
-                transformer_config,
-                first_stage_config,
-                cond_stage_config,
-                permuter_config=None,
-                ckpt_path=None,
-                ignore_keys=[],
-                first_stage_key="image",
-                cond_stage_key="depth",
-                downsample_cond_size=-1,
-                sos_token=0,
-                unconditional=False,
-                token_factorization=False,
-                 ):
+    def __init__(
+        self,
+        transformer_config,
+        first_stage_config,
+        cond_stage_config,
+        permuter_config=None,
+        ckpt_path=None,
+        ignore_keys=[],  # noqa: B006 - Keeps the upstream default object and signature.
+        first_stage_key="image",
+        cond_stage_key="depth",
+        downsample_cond_size=-1,
+        sos_token=0,
+        unconditional=False,
+        token_factorization=False,
+    ):
         super().__init__()
 
         self.be_unconditional = unconditional
@@ -41,7 +45,9 @@ class Net2NetTransformer(nn.Module):
         self.init_first_stage_from_ckpt(first_stage_config)
         self.init_cond_stage_from_ckpt(cond_stage_config)
         if permuter_config is None:
-            permuter_config = {"target": "src.Open_MAGVIT2.modules.transformer.permuter.Identity"}
+            permuter_config = {
+                "target": "worldfoundry.synthesis.visual_generation.open_magvit2.open_magvit2_runtime.src.Open_MAGVIT2.modules.transformer.permuter.Identity"
+            }
         self.permuter = instantiate_from_config(config=permuter_config)
         self.transformer = instantiate_from_config(config=transformer_config)
 
@@ -57,15 +63,19 @@ class Net2NetTransformer(nn.Module):
         except StopIteration:
             return torch.device("cpu")
 
-    def state_dict(self, *kwargs, destination=None, prefix='', keep_vars=False):
-        return {k: v for k, v in super().state_dict(*kwargs, destination, prefix, keep_vars).items() if ("inception_model" not in k and "lpips_vgg" not in k and "lpips_alex" not in k)}
+    def state_dict(self, *kwargs, destination=None, prefix="", keep_vars=False):
+        return {
+            k: v
+            for k, v in super().state_dict(*kwargs, destination, prefix, keep_vars).items()
+            if ("inception_model" not in k and "lpips_vgg" not in k and "lpips_alex" not in k)
+        }
 
-    def init_from_ckpt(self, path, ignore_keys=list()):
+    def init_from_ckpt(self, path, ignore_keys=[]):  # noqa: B006 - Keeps the upstream default object and signature.
         sd = torch.load(path, map_location="cpu")["state_dict"]
-        for k in sd.keys():
+        for k in sd.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             for ik in ignore_keys:
                 if k.startswith(ik):
-                    print("Deleting key {} from state_dict.".format(k))
+                    print(f"Deleting key {k} from state_dict.")
                     del sd[k]
         self.load_state_dict(sd, strict=False)
         print(f"Restored from {path}")
@@ -97,14 +107,14 @@ class Net2NetTransformer(nn.Module):
         _, c_indices = self.encode_to_c(c)
         a_indices = z_indices
 
-        if self.token_factorization: ## must be use
+        if self.token_factorization:  ## must be use
             a_indices_pre, a_indices_post = a_indices[0], a_indices[1]
-            cz_indices = (a_indices_pre, a_indices_post, c_indices) ## AR inside
+            cz_indices = (a_indices_pre, a_indices_post, c_indices)  ## AR inside
 
             target_pre = a_indices_pre
             target_post = a_indices_post
-            
-            logits, _ = self.transformer(cz_indices) #[B N 2 D]
+
+            logits, _ = self.transformer(cz_indices)  # [B N 2 D]
 
             logits_pre, logits_post = logits[0], logits[1]
 
@@ -116,10 +126,10 @@ class Net2NetTransformer(nn.Module):
             # differently because we are conditioning)
             target = z_indices
             # make the prediction
-            cz_indices = (a_indices[:, :-1], c_indices) #not token factorization
+            cz_indices = (a_indices[:, :-1], c_indices)  # not token factorization
             logits, _ = self.transformer(cz_indices)
             # cut off conditioning outputs - output i corresponds to p(z_i | z_{<i}, c)
-            logits = logits[:, c_indices.shape[1]-1:]
+            logits = logits[:, c_indices.shape[1] - 1 :]
 
         return logits, target
 
@@ -139,14 +149,14 @@ class Net2NetTransformer(nn.Module):
     def encode_to_c(self, c):
         if self.downsample_cond_size > -1:
             c = F.interpolate(c, size=(self.downsample_cond_size, self.downsample_cond_size))
-        quant_c, _, [_,_,indices] = self.cond_stage_model.encode(c)
+        quant_c, _, [_, _, indices] = self.cond_stage_model.encode(c)
         if len(indices.shape) > 2:
             indices = indices.view(c.shape[0], -1)
         return quant_c, indices
 
     @torch.no_grad()
     def decode_to_img(self, index, zshape):
-        if self.token_factorization: #using token factorization
+        if self.token_factorization:  # using token factorization
             index_pre, index_post = index[0], index[1]
             # index_pre = self.permuter(index_pre, reverse=True)
             # index_post = self.permuter(index_post, reverse=True) #
@@ -156,13 +166,12 @@ class Net2NetTransformer(nn.Module):
             # index_post[index_post < 0] = 0 #in case the overflow of index but usually not happended
             quant_pre = self.first_stage_model.quantize.get_codebook_entry(index_pre, bhwc_pre, order="pre")
             quant_post = self.first_stage_model.quantize.get_codebook_entry(index_post, bhwc_post, order="post")
-            quant_z = torch.concat([quant_pre, quant_post], dim=1) # concate in the final dimension 
+            quant_z = torch.concat([quant_pre, quant_post], dim=1)  # concate in the final dimension
             x = self.first_stage_model.decode(quant_z)
         else:
             # index = self.permuter(index, reverse=True)
-            bhwc = (zshape[0],zshape[2],zshape[3],zshape[1])
-            quant_z = self.first_stage_model.quantize.get_codebook_entry(
-                index, shape=bhwc)
+            bhwc = (zshape[0], zshape[2], zshape[3], zshape[1])
+            quant_z = self.first_stage_model.quantize.get_codebook_entry(index, shape=bhwc)
             x = self.first_stage_model.decode(quant_z)
         return x
 

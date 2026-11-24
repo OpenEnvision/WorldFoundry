@@ -25,7 +25,7 @@ description: pipeline、operator、synthesis、representation、base_models 的�
             <code>PipelineABC</code>
           </div>
         </div>
-        <p>最小公共入口：<code>from_pretrained()</code> <code>:118</code>、<code>process()</code> <code>:173</code>，支持增量输出时还有 <code>stream()</code>。拥有模型构造、checkpoint 加载、设备放置、归一化执行与 <code>GenerationResult</code> artifact 语义。</p>
+        <p>最小公共入口：<code>from_pretrained()</code> <code>:124</code>、<code>process()</code> <code>:178</code>，支持增量输出时还有 <code>stream()</code>。拥有模型构造、checkpoint 加载、设备放置、归一化执行与 <code>GenerationResult</code> artifact 语义。</p>
         <p className="pi-kv-read"><span>首读</span> <code>pipelines/pipeline_utils.py:11</code></p>
       </li>
       <li className="pi-kv-row">
@@ -35,7 +35,7 @@ description: pipeline、operator、synthesis、representation、base_models 的�
           </div>
         </div>
         <p>仅输入与 interaction 整形：<code>interaction_template_init</code>、<code>get_interaction</code>、<code>check_interaction</code>、<code>process_interaction</code>、<code>process_perception</code>。不得承载生成或打分。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>operators/base_operator.py:4</code></p>
+        <p className="pi-kv-read"><span>首读</span> <code>operators/base_operator.py:6</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -43,8 +43,8 @@ description: pipeline、operator、synthesis、representation、base_models 的�
             <code>BaseSynthesis</code>
           </div>
         </div>
-        <p>把公共 artifact 处理连接到本地 native runtime 或 hosted API：<code>from_pretrained</code> <code>:57</code>、<code>api_init</code> <code>:76</code>、<code>predict</code> <code>:93</code>。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>synthesis/base_synthesis.py:38</code></p>
+        <p>把公共 artifact 处理连接到本地 native runtime 或 hosted API：<code>from_pretrained</code> <code>:49</code>、<code>api_init</code> <code>:68</code>、<code>predict</code> <code>:85</code>。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>synthesis/base_synthesis.py:31</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -53,7 +53,7 @@ description: pipeline、operator、synthesis、representation、base_models 的�
           </div>
         </div>
         <p>具身动作 synthesis 面（继承 <code>RuntimeProfileSynthesis</code>）；用于 VLA 类动作策略。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>synthesis/action_generation/base_action_synthesis.py:14</code></p>
+        <p className="pi-kv-read"><span>首读</span> <code>synthesis/action_generation/base_action_synthesis.py:15</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -62,7 +62,7 @@ description: pipeline、operator、synthesis、representation、base_models 的�
           </div>
         </div>
         <p>为流式、长上下文或交互式流程存储与变换前序多模态状态。在 <code>core</code> 定义，由各 family 在 <code>{"synthesis/*/memory"}</code> 实现。</p>
-        <p className="pi-kv-read"><span>首读</span> <code>core/memory/base.py:9</code></p>
+        <p className="pi-kv-read"><span>首读</span> <code>core/memory/base.py:28</code></p>
       </li>
     </ul>
   </section>
@@ -71,14 +71,14 @@ description: pipeline、operator、synthesis、representation、base_models 的�
 ## 目录职责
 
 ### `worldfoundry/pipelines/`
-每个 model family 一个薄 public wrapper（`pipelines/<family>/pipeline_*.py`）。`from_pretrained()` staging checkpoint 或初始化 API client；`process()`/`__call__()` 把用户输入变成 artifact；`stream()` 仅在 Studio 实时控制或增量输出需要时实现。共 88 个 family 目录。Hosted provider wrapper（Wan hosted、Kling、Runway、Luma、Hailuo、Sora/Veo、World Labs）与本地 checkpoint runtime 分开存放。
+每个 model family 一个薄 public wrapper（`pipelines/<family>/pipeline_*.py`）。`from_pretrained()` 负责 staging checkpoint 或初始化 API client；`process()`/`__call__()` 把用户输入变成 artifact；`stream()` 仅在 Studio 实时控制或增量输出需要时实现。共 107 个 family 目录。Hosted provider wrapper（Wan hosted、Kling、Runway、Luma、Hailuo、Sora/Veo、World Labs）与本地 checkpoint runtime 分开存放。
 
 ### `worldfoundry/operators/`
 各 family 的 `*_operator.py`，负责校验、图像/视频加载、camera/action 解析、interaction 整形、perception 预处理。输入在模型执行前就出错时先看这里。共享媒体助手在 `operators/_media.py`。
 
 ### `worldfoundry/synthesis/`
-仅树内 runtime 实现。外部 repo 或 checkpoint 在移植前只是 metadata。
-- `synthesis/visual_generation/**` —— 视觉/世界生成 checkpoint 调用、hosted API、子进程桥、runtime env 助手，以及各 family 的 `synthesis.py`（如 `cameractrl/synthesis.py`、`motionctrl/synthesis.py`、`echo_memory/`、`openvla/`）。
+仅树内 runtime 实现。外部 repo 与 checkpoint 只是 metadata，不是 runtime 依赖。
+- `synthesis/visual_generation/**` —— 视觉/世界生成 checkpoint 调用、hosted API、子进程桥、runtime env 助手，以及各 family 的 `synthesis.py`（如 `cameractrl/synthesis.py`、`motionctrl/synthesis.py`、`echo_memory/`）。
 - `synthesis/action_generation/**` —— 具身动作面，含 OpenVLA runtime、`_native_policy_runtime.py`、`_official_action_trace.py`、`base_action_synthesis.py`。
 
 CameraCtrl 与 MotionCtrl 不共享同一个 synthesis 包；它们各有 `synthesis.py`，共享的 camera-control YAML 在 `data/models/runtime/configs/camera_control`。

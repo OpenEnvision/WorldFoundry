@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -123,12 +124,10 @@ def _run_distributed_manager_payload(
 
     if rank == 0:
         for stale in (prepared_path, error_path):
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 stale.unlink()
-            except FileNotFoundError:
-                pass
         try:
-            prepare_kwargs = {key: run_kwargs.get(key) for key in _RUN_PREPARE_KEYS}
+            prepare_kwargs: dict[str, Any] = {key: run_kwargs.get(key) for key in _RUN_PREPARE_KEYS}
             entry, request, perf_segments, wall_t0 = manager._prepare_run_request(**prepare_kwargs)
             _write_json_atomic(
                 prepared_path,
@@ -303,7 +302,7 @@ def _run_manager_worker(args: argparse.Namespace) -> int:
                 if len(records) != len(members):
                     raise RuntimeError("resident batch did not return one record per request")
                 manifests = [record.to_manifest() for record in records]
-                for member, manifest in zip(members, manifests):
+                for member, manifest in zip(members, manifests, strict=False):
                     _write_json_atomic(Path(member["result_path"]), manifest)
                 _write_json_atomic(result_path, {"records": manifests})
                 print(
@@ -339,7 +338,7 @@ def _run_manager_worker(args: argparse.Namespace) -> int:
                 ),
                 flush=True,
             )
-        except Exception as exc:  # noqa: BLE001 - surfaced to the parent Studio job.
+        except Exception as exc:
             _write_json_atomic(
                 error_path,
                 {

@@ -2,4 +2,3 @@
 #
 # This software may be used and distributed in accordance with
 # the terms of the DINOv3 License Agreement.
-"""Module for base_models -> perception_core -> general_perception -> dinov3 -> hub -> __init__.py functionality."""

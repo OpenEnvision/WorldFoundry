@@ -57,7 +57,7 @@ assignees: ""
 
 <!-- Required if available: provide command output paths. Use "Not available yet" for proposals. -->
 
-- `worldfoundry-eval prepare` or env-check report:
+- `wf prepare` or env-check report:
 - Runner demo or validation scorecard:
 - Expected `leaderboard_valid` value:
 - Known blockers before integration:

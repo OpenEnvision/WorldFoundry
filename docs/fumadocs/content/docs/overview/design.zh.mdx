@@ -30,9 +30,9 @@ WorldFoundry 遵循一条最重要的设计规则：**把模型执行与 benchma
 - **Studio** — 浏览器 workspace。提供模型感知的 job 表单、推理历史、gallery，以及面向媒体、几何、timeline、simulator 与交互模型输出的 visualizer。Job 会写出可持久化输出，之后仍可评测；结果不会困在 UI 里。
 - **Python API** — 研究契约。向进程内研究代码公开 request、result、run、metric 与 reporting 类型。
 - **MCP server** — agent 工具。为 agent-driven 工作流提供边界明确的发现与评测工具。
-- **Shell helper** — 逃生口。为上游细节无法干净塞进通用命令的模型家族或环境保留。
+- **Shell helper** — 补充入口。为上游细节无法干净塞进通用命令的模型家族或环境保留。
 
-它们可以收集不同输入，但不应该私藏模型实现或打分逻辑。
+它们可以收集不同输入，但不应该各自包含模型实现或打分逻辑。
 
 **控制平面**回答系统中有什么、什么能运行、需要什么、应该怎样调度。模型与 benchmark catalog、alias、资产声明、runtime profile、readiness 字段和 run plan 都位于这一层。它负责描述与路由，不执行 GPU kernel，也不计算 benchmark 分数。
 
@@ -51,10 +51,10 @@ WorldFoundry 遵循一条最重要的设计规则：**把模型执行与 benchma
 下载任何资产之前，先查询 catalog：
 
 ```bash
-worldfoundry-eval zoo models --json
-worldfoundry-eval zoo benchmarks --json
-worldfoundry-eval zoo model-show --model-id <model-id> --include-manifest --json
-worldfoundry-eval zoo benchmark-show --benchmark-id <benchmark-id> --json
+wf zoo models --json
+wf zoo benchmarks --json
+wf zoo model-show --model-id <model-id> --include-manifest --json
+wf zoo benchmark-show --benchmark-id <benchmark-id> --json
 ```
 
 模型的详细索引见[模型目录](/zh/docs/guides/supported-models)，benchmark 的真实要求与当前执行路径见 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)。
@@ -101,7 +101,7 @@ WorldFoundry 把 run 目录当作研究记录，而不是一次性 cache。典�
 
 生成 artifact 可以是视频、frame、图像、几何、点云、trajectory、动作、trace 或结构化行。Metric summary 保留机器可读的聚合结果，`report.md` 与 `summary.json` 分别服务人工阅读和紧凑的程序读取，`scorecard.json` 则在分数之外加入覆盖率、provenance、blocker、validation 状态与 eligibility。
 
-具体文件取决于 run mode 与 integration。共同契约是：不可用的工作必须保持不可用——scorecard 不能把缺失 dataset、跳过的 sample 或未验证的官方路径伪装成成功。
+具体文件取决于 run mode 与 integration。共同契约是：scorecard 必须如实反映不可用的工作——不能把缺失 dataset、跳过的 sample 或未验证的官方路径伪装成成功。
 
 ## 刻意不包含什么
 
@@ -111,7 +111,7 @@ WorldFoundry 不转发模型 checkpoint、受限权重、完整 benchmark 数据
 
 ## 各层在仓库中的位置
 
-模型身份与要求位于 `worldfoundry/data/models/catalog/`。模型执行分布在 `worldfoundry/pipelines/`、`worldfoundry/operators/` 与 `worldfoundry/synthesis/`。Benchmark metadata、资产、任务与 runtime profile 位于 `worldfoundry/data/benchmarks/`，公开评测契约、runner、metric、report 与 scorecard 则位于 `worldfoundry/evaluation/`。
+模型身份与要求位于 `worldfoundry/data/models/catalog/`。模型执行分布在 `worldfoundry/pipelines/`、`worldfoundry/operators/` 与 `worldfoundry/synthesis/`。Benchmark metadata、资产、任务与 runtime profile 位于 `worldfoundry/data/benchmarks/`，公开评测契约、runner、metric、report 与 scorecard 则位于 `worldfoundry/evals/`。
 
 浏览器 workspace 与 visualizer 位于 `worldfoundry/studio/`。发现、规划、执行、验证与报告命令位于 `worldfoundry/cli/`。受支持的运维辅助路径集中在 `scripts/setup/`、`scripts/inference/` 和 `scripts/workspace/`。
 

@@ -22,28 +22,13 @@
 
 # This file comes from https://github.com/stelzner/srt
 
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> transformer -> attention.py functionality."""
-
 import torch
 from einops import rearrange
 from torch import nn
 
 
 class Attention(nn.Module):
-    """Attention implementation."""
-    def __init__(
-        self, dim, heads=8, dim_head=64, dropout=0.0, selfatt=True, kv_dim=None
-    ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            heads: The heads.
-            dim_head: The dim head.
-            dropout: The dropout.
-            selfatt: The selfatt.
-            kv_dim: The kv dim.
-        """
+    def __init__(self, dim, heads=8, dim_head=64, dropout=0.0, selfatt=True, kv_dim=None):
         super().__init__()
         inner_dim = dim_head * heads
         project_out = not (heads == 1 and dim_head == dim)
@@ -58,19 +43,9 @@ class Attention(nn.Module):
             self.to_q = nn.Linear(dim, inner_dim, bias=False)
             self.to_kv = nn.Linear(kv_dim, inner_dim * 2, bias=False)
 
-        self.to_out = (
-            nn.Sequential(nn.Linear(inner_dim, dim), nn.Dropout(dropout))
-            if project_out
-            else nn.Identity()
-        )
+        self.to_out = nn.Sequential(nn.Linear(inner_dim, dim), nn.Dropout(dropout)) if project_out else nn.Identity()
 
     def forward(self, x, z=None):
-        """Forward.
-
-        Args:
-            x: The x.
-            z: The z.
-        """
         if z is None:
             qkv = self.to_qkv(x).chunk(3, dim=-1)
         else:
@@ -78,7 +53,7 @@ class Attention(nn.Module):
             k, v = self.to_kv(z).chunk(2, dim=-1)
             qkv = (q, k, v)
 
-        q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=self.heads), qkv)
+        q, k, v = (rearrange(t, "b n (h d) -> b h n d", h=self.heads) for t in qkv)
 
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
 

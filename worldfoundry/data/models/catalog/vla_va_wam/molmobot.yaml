@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 aliases:
 - molmob0t
 - molmobot-droid
@@ -22,6 +22,7 @@ official_sources:
   github:
     head_sha: 33c0ca77bf60
     url: https://github.com/allenai/MolmoBot
+    revision: 33c0ca77bf6062a23d60ffd4a6859334c4a46d30
   huggingface:
   - repo_id: allenai/MolmoBot-DROID
     role: franka_droid_checkpoint
@@ -76,12 +77,12 @@ docs:
   publisher: Allen Institute for AI (AI2)
   publisher_kind: lab
   publisher_zh: 艾伦人工智能研究所（AI2）
-  overview: MolmoBot is AI2's robot policy family around the Molmo VLM, with Apache-2.0 checkpoints for Franka DROID, image-conditioned DROID, and RBY1 multitask; the Pi0-based DROID checkpoint is Gemma-licensed. WorldFoundry records both action inference contracts.
-  overview_zh: MolmoBot 是 AI2 围绕 Molmo VLM 的机器人策略家族。Franka DROID、图像条件 DROID 和 RBY1 多任务 checkpoint 采用 Apache-2.0；基于 Pi0 的 DROID checkpoint 标注为 Gemma 许可。WorldFoundry 记录两条动作推理路径。
-  architecture: The in-tree OLMo-based path returns robot-specific action chunks; the separate Pi0-DROID path loads the released OpenPI checkpoint and decodes joint-position arm/gripper actions. Both paths have checkpoint-backed offline GPU evidence.
-  architecture_zh: 仓内基于 OLMo 的路径输出机器人专用动作块；独立的 Pi0-DROID 路径加载发布的 OpenPI 权重并解码关节位置手臂/夹爪动作。两条路径都有权重驱动的离线 GPU 推理证据。
-  usage_notes: MolmoBot-DROID, MolmoBot-Img-DROID, and MolmoBot-Pi0-DROID passed offline inference on a real DROID observation. Pi0 requires its pinned OpenPI dependencies and PaliGemma tokenizer. RBY1Multitask has not been validated here.
-  usage_notes_zh: MolmoBot-DROID、MolmoBot-Img-DROID 和 MolmoBot-Pi0-DROID 已在真实 DROID 观测上通过离线推理。Pi0 需要固定版本的 OpenPI 依赖与 PaliGemma tokenizer；RBY1Multitask 尚未在这里验证。
+  overview: MolmoBot is AI2's robot policy family around the Molmo VLM, with Apache-2.0 checkpoints for Franka DROID, image-conditioned DROID, and RBY1 multitask; the Pi0-based DROID checkpoint is Gemma-licensed. WorldFoundry supports both action inference routes.
+  overview_zh: MolmoBot 是 AI2 围绕 Molmo VLM 的机器人策略家族。Franka DROID、图像条件 DROID 和 RBY1 多任务 checkpoint 采用 Apache-2.0；基于 Pi0 的 DROID checkpoint 标注为 Gemma 许可。WorldFoundry 支持两条动作推理路径。
+  architecture: The OLMo-based path returns robot-specific action chunks; the separate Pi0-DROID path loads the released OpenPI checkpoint and decodes joint-position arm/gripper actions.
+  architecture_zh: 基于 OLMo 的路径输出机器人专用动作块；独立的 Pi0-DROID 路径加载发布的 OpenPI 权重并解码关节位置手臂/夹爪动作。
+  usage_notes: MolmoBot-DROID, MolmoBot-Img-DROID, and MolmoBot-Pi0-DROID are validated with offline inference on a real DROID observation. Pi0 requires its pinned OpenPI dependencies and PaliGemma tokenizer. RBY1Multitask has not been validated.
+  usage_notes_zh: MolmoBot-DROID、MolmoBot-Img-DROID 和 MolmoBot-Pi0-DROID 已在真实 DROID 观测上通过离线推理验证。Pi0 需要固定版本的 OpenPI 依赖与 PaliGemma tokenizer；RBY1Multitask 尚未验证。
   limitations:
   - No closed-loop robot task success or semantic action quality has been measured.
   - The Pi0 probe used an out-of-distribution real observation for a simulation-trained policy.

@@ -13,26 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from copy import deepcopy
 import json
-from pathlib import Path
 import re
-from typing import Any
 import warnings
+from copy import deepcopy
+from pathlib import Path
+from typing import Any
 
 import numpy as np
-from PIL import Image
 import torch
+from PIL import Image
 from transformers import AutoProcessor
 from transformers.feature_extraction_utils import BatchFeature
 
-from .types import ModalityConfig
-from .embodiment import EmbodimentTag
 from .base import BaseProcessor
-from .state_action import StateActionProcessor
-from .utils import parse_modality_configs
+from .embodiment import EmbodimentTag
 from .image import build_image_transformations
-
+from .state_action import StateActionProcessor
+from .types import ModalityConfig
+from .utils import parse_modality_configs
 
 try:
     from transformers import Qwen3VLProcessor
@@ -66,8 +65,7 @@ EMBODIMENT_TAG_TO_PROJECTOR_INDEX = {
 def build_processor(model_name: str, transformers_loading_kwargs: dict) -> Qwen3VLProcessor:
     if Qwen3VLProcessor is None:
         raise ImportError(
-            "Qwen3VLProcessor is not available. "
-            "Please upgrade transformers: pip install transformers>=4.52.0"
+            "Qwen3VLProcessor is not available. Please upgrade transformers: pip install transformers>=4.52.0"
         )
     return Qwen3VLProcessor.from_pretrained(model_name, **transformers_loading_kwargs)
 
@@ -136,8 +134,8 @@ class Gr00tN1d7Processor(BaseProcessor):
         statistics: (dict[str, dict[str, dict[str, dict[str, list[float]]]]] | None) = None,
         use_percentiles: bool = False,
         clip_outliers: bool = True,
-        image_crop_size: list[int] = None,
-        image_target_size: list[int] = None,
+        image_crop_size: list[int] | None = None,
+        image_target_size: list[int] | None = None,
         formalize_language: bool = True,
         model_name: str = "nvidia/Cosmos-Reason2-2B",
         model_type: str = "qwen",
@@ -186,9 +184,7 @@ class Gr00tN1d7Processor(BaseProcessor):
         self.processor = build_processor(model_name, transformers_loading_kwargs)
         # Set padding side to 'left' for Flash Attention compatibility
         self.processor.tokenizer.padding_side = "left"
-        self.embodiment_id_mapping = dict(
-            embodiment_id_mapping or EMBODIMENT_TAG_TO_PROJECTOR_INDEX
-        )
+        self.embodiment_id_mapping = dict(embodiment_id_mapping or EMBODIMENT_TAG_TO_PROJECTOR_INDEX)
         # Merge any missing pre-trained embodiment tags into the custom mapping
         for k, v in EMBODIMENT_TAG_TO_PROJECTOR_INDEX.items():
             if k not in self.embodiment_id_mapping:
@@ -233,9 +229,7 @@ class Gr00tN1d7Processor(BaseProcessor):
         # Compute action dimensions for convenience
         self.action_dim = {}
         for embodiment_tag in self.state_action_processor.statistics:
-            self.action_dim[embodiment_tag] = self.state_action_processor.get_action_dim(
-                embodiment_tag
-            )
+            self.action_dim[embodiment_tag] = self.state_action_processor.get_action_dim(embodiment_tag)
 
     def decode_action(
         self,
@@ -250,16 +244,12 @@ class Gr00tN1d7Processor(BaseProcessor):
         joint_groups = self.modality_configs[embodiment_tag.value]["action"].modality_keys
         action_horizon = len(self.modality_configs[embodiment_tag.value]["action"].delta_indices)
         for key in joint_groups:
-            joint_dim = self.state_action_processor.norm_params[embodiment_tag.value]["action"][
-                key
-            ]["dim"].item()
+            joint_dim = self.state_action_processor.norm_params[embodiment_tag.value]["action"][key]["dim"].item()
             out_dict[key] = action[..., :action_horizon, start_idx : start_idx + joint_dim]
             start_idx += joint_dim
 
         # Use StateActionProcessor to unnormalize and convert to absolute
-        return self.state_action_processor.unapply_action(
-            out_dict, embodiment_tag.value, state=state
-        )
+        return self.state_action_processor.unapply_action(out_dict, embodiment_tag.value, state=state)
 
     def unapply(
         self,
@@ -272,7 +262,6 @@ class Gr00tN1d7Processor(BaseProcessor):
 
         Args:
             action: Normalized action array of shape (..., action_horizon, action_dim)
-            embodiment_tag: Embodiment tag
             state: State observations with "state." prefixed keys (for relative actions)
             prev_action: Unused (kept for API compatibility)
 
@@ -284,9 +273,7 @@ class Gr00tN1d7Processor(BaseProcessor):
         joint_groups = self.modality_configs[embodiment_tag.value]["action"].modality_keys
         action_horizon = len(self.modality_configs[embodiment_tag.value]["action"].delta_indices)
         for key in joint_groups:
-            joint_dim = self.state_action_processor.norm_params[embodiment_tag.value]["action"][
-                key
-            ]["dim"].item()
+            joint_dim = self.state_action_processor.norm_params[embodiment_tag.value]["action"][key]["dim"].item()
             out_dict[key] = action[..., :action_horizon, start_idx : start_idx + joint_dim]
             start_idx += joint_dim
 
@@ -295,9 +282,7 @@ class Gr00tN1d7Processor(BaseProcessor):
         if state is not None:
             stripped_state = {k.replace("state.", ""): v for k, v in state.items()}
 
-        result = self.state_action_processor.unapply_action(
-            out_dict, embodiment_tag.value, state=stripped_state
-        )
+        result = self.state_action_processor.unapply_action(out_dict, embodiment_tag.value, state=stripped_state)
         return {f"action.{key}": value for key, value in result.items()}
 
     def process_observation(self, observation: dict[str, Any], embodiment_tag: EmbodimentTag):
@@ -317,9 +302,7 @@ class Gr00tN1d7Processor(BaseProcessor):
         # Normalize states
         state_keys = modality_config["state"].modality_keys
         state_data = {key: observation[f"state.{key}"] for key in state_keys}
-        exclude_state = self.exclude_state or getattr(
-            modality_config["state"], "exclude_state", False
-        )
+        exclude_state = self.exclude_state or getattr(modality_config["state"], "exclude_state", False)
         if exclude_state:
             normalized_states = torch.cat(
                 [torch.from_numpy(np.zeros_like(state_data[key])) for key in state_keys], dim=-1
@@ -328,9 +311,7 @@ class Gr00tN1d7Processor(BaseProcessor):
             norm_state_dict = self.state_action_processor.apply_state(
                 state=state_data, embodiment_tag=embodiment_tag.value
             )
-            normalized_states = torch.cat(
-                [torch.from_numpy(norm_state_dict[key]) for key in state_keys], dim=-1
-            )
+            normalized_states = torch.cat([torch.from_numpy(norm_state_dict[key]) for key in state_keys], dim=-1)
 
         assert normalized_states.shape[1] <= self.max_state_dim, (
             f"State dimension {normalized_states.shape[1]} exceeds max_state_dim {self.max_state_dim}"
@@ -345,16 +326,12 @@ class Gr00tN1d7Processor(BaseProcessor):
         # Process images: observation values are (B, T, H, W, C) numpy arrays
         image_keys = modality_config["video"].modality_keys
         images_dict = {view: torch.from_numpy(observation[f"video.{view}"]) for view in image_keys}
-        images = torch.stack(
-            [images_dict[view] for view in image_keys], dim=2
-        )  # (B, T, V, H, W, C)
+        images = torch.stack([images_dict[view] for view in image_keys], dim=2)  # (B, T, V, H, W, C)
         assert images.ndim == 6
         B, T, V, img_H, img_W, img_C = images.shape
 
         # Rearrange (B, T, V, H, W, C) -> (B, T*V, C, H, W).
-        images_perm = images.permute(0, 1, 2, 5, 3, 4).reshape(
-            B, T * V, img_C, img_H, img_W
-        )
+        images_perm = images.permute(0, 1, 2, 5, 3, 4).reshape(B, T * V, img_C, img_H, img_W)
         transformed_images = self.image_transform(images_perm).numpy()
 
         language_key = modality_config["language"].modality_keys[0]
@@ -373,9 +350,7 @@ class Gr00tN1d7Processor(BaseProcessor):
         for k, v in tokenized.items():
             transformed_observation[k] = v
 
-        embodiment_id = (
-            torch.ones(B, dtype=torch.int32) * self.embodiment_id_mapping[embodiment_tag.value]
-        )
+        embodiment_id = torch.ones(B, dtype=torch.int32) * self.embodiment_id_mapping[embodiment_tag.value]
         transformed_observation["embodiment_id"] = embodiment_id
 
         # Action mask: shape (B, max_action_horizon), 1 in the valid horizon window
@@ -415,9 +390,7 @@ class Gr00tN1d7Processor(BaseProcessor):
         ]
 
         # Apply chat template but don't process yet - let collator handle it
-        text = self.processor.apply_chat_template(
-            conversation, tokenize=False, add_generation_prompt=False
-        )
+        text = self.processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=False)
 
         # Return vlm_content format for collation
         return {
@@ -499,9 +472,7 @@ class Gr00tN1d7Processor(BaseProcessor):
                 [torch.from_numpy(np.zeros_like(state_data[key])) for key in state_keys], dim=-1
             )
         else:
-            normalized_states = torch.cat(
-                [torch.from_numpy(norm_state_dict[key]) for key in state_keys], dim=-1
-            )
+            normalized_states = torch.cat([torch.from_numpy(norm_state_dict[key]) for key in state_keys], dim=-1)
         normalized_states = torch.cat(
             [
                 normalized_states,
@@ -566,9 +537,7 @@ class Gr00tN1d7Processor(BaseProcessor):
             assert v.shape[1] == 3, f"{v} is not a 3 channel tensor"
 
         stacked_images = (
-            torch.stack([temporal_stacked_images[view] for view in image_keys], dim=1)
-            .flatten(0, 1)
-            .numpy()
+            torch.stack([temporal_stacked_images[view] for view in image_keys], dim=1).flatten(0, 1).numpy()
         )  # (T*V, C, H, W), processor expects numpy array
 
         vlm_inputs = self._apply_vlm_processing(stacked_images, language)
@@ -576,9 +545,7 @@ class Gr00tN1d7Processor(BaseProcessor):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: str | Path, **kwargs):
-        transformers_loading_kwargs = kwargs.pop(
-            "transformers_loading_kwargs", {"trust_remote_code": False}
-        )
+        transformers_loading_kwargs = kwargs.pop("transformers_loading_kwargs", {"trust_remote_code": False})
         pretrained_model_name_or_path = Path(pretrained_model_name_or_path)
         config_file = pretrained_model_name_or_path / "processor_config.json"
         statistics_file = pretrained_model_name_or_path / "statistics.json"
@@ -589,12 +556,12 @@ class Gr00tN1d7Processor(BaseProcessor):
                 f"GR00T processor must be loaded from a staged local directory: {pretrained_model_name_or_path}"
             )
 
-        with open(config_file, "r") as f:
+        with open(config_file) as f:
             config = json.load(f)
-        with open(statistics_file, "r") as f:
+        with open(statistics_file) as f:
             statistics = json.load(f)
         if embodiment_id_file.exists():
-            with open(embodiment_id_file, "r") as f:
+            with open(embodiment_id_file) as f:
                 embodiment_id_mapping = json.load(f)
         else:
             embodiment_id_mapping = None

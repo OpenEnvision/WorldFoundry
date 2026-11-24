@@ -16,12 +16,14 @@ from enum import Enum
 
 class NormLayerType(Enum):
     """Normalization kind serialized in LTX video checkpoint JSON."""
+
     GROUP_NORM = "group_norm"
     PIXEL_NORM = "pixel_norm"
 
 
 class LogVarianceType(Enum):
     """How the video VAE parameterizes posterior log-variance."""
+
     PER_CHANNEL = "per_channel"
     UNIFORM = "uniform"
     CONSTANT = "constant"
@@ -30,6 +32,7 @@ class LogVarianceType(Enum):
 
 class PaddingModeType(Enum):
     """Spatial/temporal padding mode serialized in LTX video config."""
+
     ZEROS = "zeros"
     REFLECT = "reflect"
     REPLICATE = "replicate"

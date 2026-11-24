@@ -5,9 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from scipy import interpolate
-from typing import List
-
-from torch import nn
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +24,7 @@ def load_temp_embed_with_mismatch(temp_embed_old, temp_embed_new, add_zero=True)
     logger.info(f"Load temporal_embeddings, lengths: {num_frms_old}-->{num_frms_new}")
     if num_frms_new > num_frms_old:
         if add_zero:
-            temp_embed_new[
-                :, :num_frms_old
-            ] = temp_embed_old  # untrained embeddings are zeros.
+            temp_embed_new[:, :num_frms_old] = temp_embed_old  # untrained embeddings are zeros.
         else:
             temp_embed_new = interpolate_temporal_pos_embed(temp_embed_old, num_frms_new)
     elif num_frms_new < num_frms_old:
@@ -45,15 +40,9 @@ def interpolate_temporal_pos_embed(temp_embed_old, num_frames_new):
     Returns:
         temp_embed_new: (1, num_frames_new, 1, d)
     """
-    temp_embed_old = temp_embed_old.squeeze(2).permute(
-        0, 2, 1
-    )  # (1, d, num_frames_old)
-    temp_embed_new = F.interpolate(
-        temp_embed_old, num_frames_new, mode="linear"
-    )  # (1, d, num_frames_new)
-    temp_embed_new = temp_embed_new.permute(0, 2, 1).unsqueeze(
-        2
-    )  # (1, num_frames_new, 1, d)
+    temp_embed_old = temp_embed_old.squeeze(2).permute(0, 2, 1)  # (1, d, num_frames_old)
+    temp_embed_new = F.interpolate(temp_embed_old, num_frames_new, mode="linear")  # (1, d, num_frames_new)
+    temp_embed_new = temp_embed_new.permute(0, 2, 1).unsqueeze(2)  # (1, num_frames_new, 1, d)
     return temp_embed_new
 
 
@@ -70,7 +59,7 @@ def interpolate_pos_embed(pos_embed_old, pos_embed_new, num_patches_new):
     # height (== width) for the checkpoint position embedding
     orig_size = int((pos_embed_old.shape[-2] - num_extra_tokens) ** 0.5)
     # height (== width) for the new position embedding
-    new_size = int(num_patches_new ** 0.5)
+    new_size = int(num_patches_new**0.5)
 
     if orig_size != new_size:
         # class_token and dist_token are kept unchanged
@@ -78,9 +67,7 @@ def interpolate_pos_embed(pos_embed_old, pos_embed_new, num_patches_new):
         extra_tokens = pos_embed_old[:, :num_extra_tokens]
         # only the position tokens are interpolated
         pos_tokens = pos_embed_old[:, num_extra_tokens:]
-        pos_tokens = pos_tokens.reshape(
-            -1, orig_size, orig_size, embedding_size
-        ).permute(0, 3, 1, 2)
+        pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
         pos_tokens = torch.nn.functional.interpolate(
             pos_tokens, size=(new_size, new_size), mode="bicubic", align_corners=False
         )
@@ -112,9 +99,7 @@ def interpolate_pos_relative_bias_beit(state_dict_old, state_dict_new, patch_sha
             dst_patch_shape = patch_shape_new
             if dst_patch_shape[0] != dst_patch_shape[1]:
                 raise NotImplementedError()
-            num_extra_tokens = dst_num_pos - (dst_patch_shape[0] * 2 - 1) * (
-                dst_patch_shape[1] * 2 - 1
-            )
+            num_extra_tokens = dst_num_pos - (dst_patch_shape[0] * 2 - 1) * (dst_patch_shape[1] * 2 - 1)
             src_size = int((src_num_pos - num_extra_tokens) ** 0.5)
             dst_size = int((dst_num_pos - num_extra_tokens) ** 0.5)
             if src_size != dst_size:
@@ -124,7 +109,7 @@ def interpolate_pos_relative_bias_beit(state_dict_old, state_dict_new, patch_sha
                 rel_pos_bias = rel_pos_bias[:-num_extra_tokens, :]
 
                 def geometric_progression(a, r, n):
-                    return a * (1.0 - r ** n) / (1.0 - r)
+                    return a * (1.0 - r**n) / (1.0 - r)
 
                 left, right = 1.01, 1.5
                 while right - left > 1e-6:
@@ -146,8 +131,8 @@ def interpolate_pos_relative_bias_beit(state_dict_old, state_dict_new, patch_sha
 
                 r_ids = [-_ for _ in reversed(dis)]
 
-                x = r_ids + [0] + dis
-                y = r_ids + [0] + dis
+                x = r_ids + [0] + dis  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+                y = r_ids + [0] + dis  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
                 t = dst_size // 2.0
                 dx = np.arange(-t, t + 0.1, 1.0)
@@ -161,12 +146,7 @@ def interpolate_pos_relative_bias_beit(state_dict_old, state_dict_new, patch_sha
                 for i in range(num_attn_heads):
                     z = rel_pos_bias[:, i].view(src_size, src_size).float().numpy()
                     f = interpolate.interp2d(x, y, z, kind="cubic")
-                    all_rel_pos_bias.append(
-                        torch.Tensor(f(dx, dy))
-                        .contiguous()
-                        .view(-1, 1)
-                        .to(rel_pos_bias.device)
-                    )
+                    all_rel_pos_bias.append(torch.Tensor(f(dx, dy)).contiguous().view(-1, 1).to(rel_pos_bias.device))
 
                 rel_pos_bias = torch.cat(all_rel_pos_bias, dim=-1)
 
@@ -180,9 +160,7 @@ def tile(x, dim, n_tile):
     repeat_idx = [1] * x.dim()
     repeat_idx[dim] = n_tile
     x = x.repeat(*repeat_idx)
-    order_index = torch.LongTensor(
-        np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)])
-    )
+    order_index = torch.LongTensor(np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)]))
     return torch.index_select(x, dim, order_index.to(x.device))
 
 
@@ -212,10 +190,8 @@ class AllGather(torch.autograd.Function):
 allgather_wgrad = AllGather.apply
 
 
-def tie_encoder_decoder_weights(
-    encoder: nn.Module, decoder: nn.Module, base_model_prefix: str, skip_key: str
-):
-    uninitialized_encoder_weights: List[str] = []
+def tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str, skip_key: str):
+    uninitialized_encoder_weights: list[str] = []
     if decoder.__class__ != encoder.__class__:
         if issubclass(decoder.__class__, encoder.__class__):
             logger.info(
@@ -232,13 +208,13 @@ def tie_encoder_decoder_weights(
         decoder_pointer: nn.Module,
         encoder_pointer: nn.Module,
         module_name: str,
-        uninitialized_encoder_weights: List[str],
+        uninitialized_encoder_weights: list[str],
         skip_key: str,
         depth=0,
     ):
-        assert isinstance(decoder_pointer, nn.Module) and isinstance(
-            encoder_pointer, nn.Module
-        ), f"{decoder_pointer} and {encoder_pointer} have to be of type torch.nn.Module"
+        assert isinstance(decoder_pointer, nn.Module) and isinstance(encoder_pointer, nn.Module), (
+            f"{decoder_pointer} and {encoder_pointer} have to be of type torch.nn.Module"
+        )
         if hasattr(decoder_pointer, "weight") and skip_key not in module_name:
             assert hasattr(encoder_pointer, "weight")
             encoder_pointer.weight = decoder_pointer.weight
@@ -251,15 +227,13 @@ def tie_encoder_decoder_weights(
         encoder_modules = encoder_pointer._modules
         decoder_modules = decoder_pointer._modules
         if len(decoder_modules) > 0:
-            assert (
-                len(encoder_modules) > 0
-            ), f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
-
-            all_encoder_weights = set(
-                [module_name + "/" + sub_name for sub_name in encoder_modules.keys()]
+            assert len(encoder_modules) > 0, (
+                f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
             )
+
+            all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             encoder_layer_pos = 0
-            for name, module in decoder_modules.items():
+            for name, _module in decoder_modules.items():
                 if name.isdigit():
                     encoder_name = str(int(name) + encoder_layer_pos)
                     decoder_name = name
@@ -293,7 +267,4 @@ def tie_encoder_decoder_weights(
             uninitialized_encoder_weights += list(all_encoder_weights)
 
     # tie weights recursively
-    tie_encoder_to_decoder_recursively(
-        decoder, encoder, base_model_prefix, uninitialized_encoder_weights, skip_key
-    )
-
+    tie_encoder_to_decoder_recursively(decoder, encoder, base_model_prefix, uninitialized_encoder_weights, skip_key)

@@ -23,7 +23,7 @@ class EarlyStopCallback(TrainerCallback):
             self.interval += 1
 
         if self.interval >= self.total_interval:
-            logger.info(f'Training stop because of eval metric is stable at step {state.global_step}')
+            logger.info(f"Training stop because of eval metric is stable at step {state.global_step}")
             control.should_training_stop = True
 
 

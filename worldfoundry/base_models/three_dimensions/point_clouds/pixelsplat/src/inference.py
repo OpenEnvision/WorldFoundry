@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import hydra
 import torch
 from omegaconf import DictConfig
@@ -22,11 +20,7 @@ from .model.ply_export import export_ply
 
 
 def _load_component_state(module: nn.Module, state: dict[str, torch.Tensor], prefix: str) -> None:
-    component = {
-        key.removeprefix(prefix): value
-        for key, value in state.items()
-        if key.startswith(prefix)
-    }
+    component = {key.removeprefix(prefix): value for key, value in state.items() if key.startswith(prefix)}
     if not component:
         if not module.state_dict():
             return
@@ -81,9 +75,9 @@ def run_inference(cfg_dict: DictConfig) -> None:
 
         scene = batch["scene"][0]
         scene_dir = cfg.output_path / scene
-        for index, image in zip(target["index"][0], color[0]):
+        for index, image in zip(target["index"][0], color[0], strict=False):
             save_image(image, scene_dir / "color" / f"{int(index):06d}.png")
-        for index, image in zip(context["index"][0], context["image"][0]):
+        for index, image in zip(context["index"][0], context["image"][0], strict=False):
             save_image(image, scene_dir / "context" / f"{int(index):06d}.png")
         if gaussians.scales is not None and gaussians.rotations is not None:
             export_ply(

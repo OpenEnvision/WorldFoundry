@@ -11,9 +11,9 @@ table from the conditioning tensors that will actually enter the transformer.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import torch
 
@@ -64,16 +64,13 @@ def _history_nonempty_mask(
         if history is None:
             continue
         if history.ndim < 1:
-            raise ValueError(
-                f"DMD history tensor must have a batch dimension, got shape={tuple(history.shape)}"
-            )
+            raise ValueError(f"DMD history tensor must have a batch dimension, got shape={tuple(history.shape)}")
         if batch_size is None:
             batch_size = int(history.shape[0])
             mask = torch.zeros(batch_size, dtype=torch.bool, device=history.device)
         elif int(history.shape[0]) != batch_size:
             raise ValueError(
-                "DMD history tensors disagree on batch size: "
-                f"expected {batch_size}, got {int(history.shape[0])}"
+                f"DMD history tensors disagree on batch size: expected {batch_size}, got {int(history.shape[0])}"
             )
         current = history.detach().reshape(batch_size, -1).ne(0).any(dim=1)
         mask = mask | current.to(device=mask.device)
@@ -114,8 +111,7 @@ def resolve_dmd_inference_trace(
 
     if contract is None:
         raise RuntimeError(
-            "DMD inference requires dmd_timestep_contract.json from the checkpoint; "
-            "no contract was loaded."
+            "DMD inference requires dmd_timestep_contract.json from the checkpoint; no contract was loaded."
         )
 
     actual_shape = tuple(int(value) for value in latent_shape)
@@ -134,8 +130,7 @@ def resolve_dmd_inference_trace(
 
     empty_history = history_is_empty(history_tensors)
     stages = tuple(
-        tuple(contract.stage(stage_index, empty_history=empty_history))
-        for stage_index in range(int(num_stages))
+        tuple(contract.stage(stage_index, empty_history=empty_history)) for stage_index in range(int(num_stages))
     )
     return DmdInferenceTrace(
         empty_history=empty_history,

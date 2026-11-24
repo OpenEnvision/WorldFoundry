@@ -1,19 +1,9 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> decoder -> cuda_splatting.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
+import contextlib
 from math import isqrt
 from typing import Literal
 
 import torch
-
-from worldfoundry.base_models.three_dimensions.three_d_four_d.runtime_extension_overlay import (
-    add_runtime_extension_overlay,
-)
-
-add_runtime_extension_overlay(
-    "diff_gaussian_rasterization",
-    environment_variable="WORLDFOUNDRY_DIFF_GAUSSIAN_RASTERIZATION_EXTENSION_DIR",
-)
-
 from diff_gaussian_rasterization import (
     GaussianRasterizationSettings,
     GaussianRasterizer,
@@ -22,8 +12,14 @@ from einops import einsum, rearrange, repeat
 from jaxtyping import Float
 from torch import Tensor
 
-from ...geometry.projection import get_fov, homogenize_points
-from ..encoder.epipolar.conversions import depth_to_relative_disparity
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import (
+    homogenize_points,
+)
+
+from ...geometry.projection import get_fov
+from ..encoder.epipolar.conversions import (
+    depth_to_relative_disparity,
+)
 
 
 def get_projection_matrix(
@@ -70,25 +66,6 @@ def render_cuda(
     scale_invariant: bool = True,
     use_sh: bool = True,
 ) -> Float[Tensor, "batch 3 height width"]:
-    """Render cuda.
-
-    Args:
-        extrinsics: The extrinsics.
-        intrinsics: The intrinsics.
-        near: The near.
-        far: The far.
-        image_shape: The image shape.
-        background_color: The background color.
-        gaussian_means: The gaussian means.
-        gaussian_covariances: The gaussian covariances.
-        gaussian_sh_coefficients: The gaussian sh coefficients.
-        gaussian_opacities: The gaussian opacities.
-        scale_invariant: The scale invariant.
-        use_sh: The use sh.
-
-    Returns:
-        The return value.
-    """
     assert use_sh or gaussian_sh_coefficients.shape[-1] == 1
 
     # Make sure everything is in a range where numerical issues don't appear.
@@ -122,10 +99,8 @@ def render_cuda(
     for i in range(b):
         # Set up a tensor for the gradients of the screen-space means.
         mean_gradients = torch.zeros_like(gaussian_means[i], requires_grad=True)
-        try:
+        with contextlib.suppress(Exception):
             mean_gradients.retain_grad()
-        except Exception:
-            pass
 
         settings = GaussianRasterizationSettings(
             image_height=h,
@@ -175,27 +150,6 @@ def render_cuda_orthographic(
     use_sh: bool = True,
     dump: dict | None = None,
 ) -> Float[Tensor, "batch 3 height width"]:
-    """Render cuda orthographic.
-
-    Args:
-        extrinsics: The extrinsics.
-        width: The width.
-        height: The height.
-        near: The near.
-        far: The far.
-        image_shape: The image shape.
-        background_color: The background color.
-        gaussian_means: The gaussian means.
-        gaussian_covariances: The gaussian covariances.
-        gaussian_sh_coefficients: The gaussian sh coefficients.
-        gaussian_opacities: The gaussian opacities.
-        fov_degrees: The fov degrees.
-        use_sh: The use sh.
-        dump: The dump.
-
-    Returns:
-        The return value.
-    """
     b, _, _ = extrinsics.shape
     h, w = image_shape
     assert use_sh or gaussian_sh_coefficients.shape[-1] == 1
@@ -225,9 +179,7 @@ def render_cuda_orthographic(
         dump["near"] = near
         dump["far"] = far
 
-    projection_matrix = get_projection_matrix(
-        near, far, repeat(fov_x, "-> b", b=b), fov_y
-    )
+    projection_matrix = get_projection_matrix(near, far, repeat(fov_x, "-> b", b=b), fov_y)
     projection_matrix = rearrange(projection_matrix, "b i j -> b j i")
     view_matrix = rearrange(extrinsics.inverse(), "b i j -> b j i")
     full_projection = view_matrix @ projection_matrix
@@ -237,10 +189,8 @@ def render_cuda_orthographic(
     for i in range(b):
         # Set up a tensor for the gradients of the screen-space means.
         mean_gradients = torch.zeros_like(gaussian_means[i], requires_grad=True)
-        try:
+        with contextlib.suppress(Exception):
             mean_gradients.retain_grad()
-        except Exception:
-            pass
 
         settings = GaussianRasterizationSettings(
             image_height=h,
@@ -289,35 +239,14 @@ def render_depth_cuda(
     scale_invariant: bool = True,
     mode: DepthRenderingMode = "depth",
 ) -> Float[Tensor, "batch height width"]:
-    """Render depth cuda.
-
-    Args:
-        extrinsics: The extrinsics.
-        intrinsics: The intrinsics.
-        near: The near.
-        far: The far.
-        image_shape: The image shape.
-        gaussian_means: The gaussian means.
-        gaussian_covariances: The gaussian covariances.
-        gaussian_opacities: The gaussian opacities.
-        scale_invariant: The scale invariant.
-        mode: The mode.
-
-    Returns:
-        The return value.
-    """
     # Specify colors according to Gaussian depths.
-    camera_space_gaussians = einsum(
-        extrinsics.inverse(), homogenize_points(gaussian_means), "b i j, b g j -> b g i"
-    )
+    camera_space_gaussians = einsum(extrinsics.inverse(), homogenize_points(gaussian_means), "b i j, b g j -> b g i")
     fake_color = camera_space_gaussians[..., 2]
 
     if mode == "disparity":
         fake_color = 1 / fake_color
     elif mode == "relative_disparity":
-        fake_color = depth_to_relative_disparity(
-            fake_color, near[:, None], far[:, None]
-        )
+        fake_color = depth_to_relative_disparity(fake_color, near[:, None], far[:, None])
     elif mode == "log":
         fake_color = fake_color.minimum(near[:, None]).maximum(far[:, None]).log()
 

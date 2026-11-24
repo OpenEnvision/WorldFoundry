@@ -1,83 +1,75 @@
-"""Module for base_models -> three_dimensions -> general_3d -> eastern_journalist -> utils3d -> numpy -> transforms.py functionality."""
+# ruff: noqa: F405 - Names come from the upstream star import.
+import itertools
+from numbers import Number
+from typing import *  # noqa: F403 - Upstream star import kept as written.
 
 import numpy as np
 from numpy import ndarray
-from typing import *
-import itertools
-from numbers import Number
-from .helpers import toarray, batched
-from ..helpers import no_warnings
 
+from ..helpers import no_warnings
+from .helpers import batched, toarray
 
 __all__ = [
-    'perspective_from_fov',
-    'perspective_from_window',
-    'intrinsics_from_fov',
-    'intrinsics_from_focal_center',
-    'fov_to_focal',
-    'focal_to_fov',
-    'intrinsics_to_fov',
-    'view_look_at',
-    'extrinsics_look_at',
-    'perspective_to_intrinsics',
-    'perspective_to_near_far',
-    'intrinsics_to_perspective',
-    'extrinsics_to_view',
-    'view_to_extrinsics',
-    'normalize_intrinsics',
-    'denormalize_intrinsics',
-    'crop_intrinsics',
-    'pixel_to_uv',
-    'pixel_to_ndc',
-    'uv_to_pixel',
-    'depth_linear_to_buffer',
-    'depth_buffer_to_linear',
-    'unproject_cv',
-    'unproject_gl',
-    'project_cv',
-    'project_gl',
-    'project',
-    'unproject',
-    'screen_coord_to_view_coord',
-    'quaternion_to_matrix',
-    'axis_angle_to_matrix',
-    'matrix_to_quaternion',
-    'extrinsics_to_essential',
-    'axis_angle_to_quaternion',
-    'euler_axis_angle_rotation',
-    'euler_angles_to_matrix',
-    'matrix_to_axis_angle',
-    'matrix_to_euler_angles',
-    'quaternion_to_axis_angle',
-    'skew_symmetric',
-    'rotation_matrix_from_vectors',
-    'ray_intersection',
-    'make_affine_matrix',
-    'random_rotation_matrix',
-    'lerp',
-    'slerp',
-    'slerp_rotation_matrix',
-    'interpolate_se3_matrix',
-    'piecewise_lerp',
-    'piecewise_interpolate_se3_matrix',
-    'transform_points',
-    'angle_between',
-    'vector_outer',
-    'procrustes',
-    'solve_pose',
-    'solve_poses_sequential',
+    "angle_between",
+    "axis_angle_to_matrix",
+    "axis_angle_to_quaternion",
+    "crop_intrinsics",
+    "denormalize_intrinsics",
+    "depth_buffer_to_linear",
+    "depth_linear_to_buffer",
+    "euler_angles_to_matrix",
+    "euler_axis_angle_rotation",
+    "extrinsics_look_at",
+    "extrinsics_to_essential",
+    "extrinsics_to_view",
+    "focal_to_fov",
+    "fov_to_focal",
+    "interpolate_se3_matrix",
+    "intrinsics_from_focal_center",
+    "intrinsics_from_fov",
+    "intrinsics_to_fov",
+    "intrinsics_to_perspective",
+    "lerp",
+    "make_affine_matrix",
+    "matrix_to_axis_angle",
+    "matrix_to_euler_angles",
+    "matrix_to_quaternion",
+    "normalize_intrinsics",
+    "perspective_from_fov",
+    "perspective_from_window",
+    "perspective_to_intrinsics",
+    "perspective_to_near_far",
+    "piecewise_interpolate_se3_matrix",
+    "piecewise_lerp",
+    "pixel_to_ndc",
+    "pixel_to_uv",
+    "procrustes",
+    "project",
+    "project_cv",
+    "project_gl",
+    "quaternion_to_axis_angle",
+    "quaternion_to_matrix",
+    "random_rotation_matrix",
+    "ray_intersection",
+    "rotation_matrix_from_vectors",
+    "screen_coord_to_view_coord",
+    "skew_symmetric",
+    "slerp",
+    "slerp_rotation_matrix",
+    "solve_pose",
+    "solve_poses_sequential",
+    "transform_points",
+    "unproject",
+    "unproject_cv",
+    "unproject_gl",
+    "uv_to_pixel",
+    "vector_outer",
+    "view_look_at",
+    "view_to_extrinsics",
 ]
 
 
 def _matrix_transpose(matrix: ndarray) -> ndarray:
-    """Helper function to matrix transpose.
-
-    Args:
-        matrix: The matrix.
-
-    Returns:
-        The return value.
-    """
     return np.swapaxes(matrix, -1, -2)
 
 
@@ -94,7 +86,7 @@ def perspective_from_fov(
     far: Optional[Union[float, ndarray]],
 ) -> ndarray:
     """
-    Get OpenGL perspective matrix from field of view 
+    Get OpenGL perspective matrix from field of view
 
     ## Returns
         (ndarray): [..., 4, 4] perspective matrix
@@ -118,8 +110,8 @@ def perspective_from_fov(
     perspective[:, 0, 0] = fx
     perspective[:, 1, 1] = fy
     perspective[:, 2, 2] = (near / far + 1) / (near / far - 1)
-    perspective[:, 2, 3] = 2. * near / (near / far - 1)
-    perspective[:, 3, 2] = -1.
+    perspective[:, 2, 3] = 2.0 * near / (near / far - 1)
+    perspective[:, 3, 2] = -1.0
     return perspective
 
 
@@ -131,7 +123,7 @@ def perspective_from_window(
     bottom: Union[float, ndarray],
     top: Union[float, ndarray],
     near: Union[float, ndarray],
-    far: Union[float, ndarray]
+    far: Union[float, ndarray],
 ) -> ndarray:
     """
     Get OpenGL perspective matrix from the window of z=-1 projection plane
@@ -145,8 +137,8 @@ def perspective_from_window(
     perspective[:, 1, 1] = 2 / (top - bottom)
     perspective[:, 1, 2] = (top + bottom) / (top - bottom)
     perspective[:, 2, 2] = (near / far + 1) / (near / far - 1)
-    perspective[:, 2, 3] = 2. * near / (near / far - 1)
-    perspective[:, 3, 2] = -1.
+    perspective[:, 2, 3] = 2.0 * near / (near / far - 1)
+    perspective[:, 3, 2] = -1.0
     return perspective
 
 
@@ -172,7 +164,7 @@ def intrinsics_from_focal_center(
     ret[..., 1, 1] = fy
     ret[..., 0, 2] = cx
     ret[..., 1, 2] = cy
-    ret[..., 2, 2] = 1.
+    ret[..., 2, 2] = 1.0
     return ret
 
 
@@ -221,32 +213,14 @@ def intrinsics_from_fov(
 
 
 def focal_to_fov(focal: ndarray):
-    """Focal to fov.
-
-    Args:
-        focal: The focal.
-    """
     return 2 * np.arctan(0.5 / focal)
 
 
 def fov_to_focal(fov: ndarray):
-    """Fov to focal.
-
-    Args:
-        fov: The fov.
-    """
     return 0.5 / np.tan(fov / 2)
 
 
 def intrinsics_to_fov(intrinsics: ndarray) -> Tuple[ndarray, ndarray]:
-    """Intrinsics to fov.
-
-    Args:
-        intrinsics: The intrinsics.
-
-    Returns:
-        The return value.
-    """
     fov_x = focal_to_fov(intrinsics[..., 0, 0])
     fov_y = focal_to_fov(intrinsics[..., 1, 1])
     return fov_x, fov_y
@@ -254,11 +228,7 @@ def intrinsics_to_fov(intrinsics: ndarray) -> Tuple[ndarray, ndarray]:
 
 @toarray(_others=np.float32)
 @batched(_others=1)
-def view_look_at(
-    eye: ndarray,
-    look_at: ndarray,
-    up: ndarray
-) -> ndarray:
+def view_look_at(eye: ndarray, look_at: ndarray, up: ndarray) -> ndarray:
     """
     Get OpenGL view matrix looking at something
 
@@ -281,11 +251,7 @@ def view_look_at(
 
 @toarray(_others=np.float32)
 @batched(_others=1)
-def extrinsics_look_at(
-    eye: ndarray,
-    look_at: ndarray,
-    up: ndarray
-) -> ndarray:
+def extrinsics_look_at(eye: ndarray, look_at: ndarray, up: ndarray) -> ndarray:
     """
     Get OpenCV extrinsics matrix looking at something
 
@@ -306,10 +272,13 @@ def extrinsics_look_at(
     z = z / np.linalg.norm(z, axis=-1, keepdims=True)
     R = np.stack([x, y, z], axis=-2)
     t = -np.matmul(R, eye[..., None])
-    return np.concatenate([
-        np.concatenate([R, t], axis=-1),
-        np.array([[[0., 0., 0., 1.]]], dtype=eye.dtype).repeat(eye.shape[0], axis=0)
-    ], axis=-2)
+    return np.concatenate(
+        [
+            np.concatenate([R, t], axis=-1),
+            np.array([[[0.0, 0.0, 0.0, 1.0]]], dtype=eye.dtype).repeat(eye.shape[0], axis=0),
+        ],
+        axis=-2,
+    )
 
 
 def perspective_to_intrinsics(perspective: ndarray) -> ndarray:
@@ -323,9 +292,11 @@ def perspective_to_intrinsics(perspective: ndarray) -> ndarray:
         (ndarray): shape [..., 3, 3] OpenCV intrinsics
     """
     assert np.allclose(perspective[:, [0, 1, 3], 3], 0), "The matrix is not a perspective projection matrix"
-    ret = np.array([[0.5, 0., 0.5], [0., -0.5, 0.5], [0., 0., 1.]], dtype=perspective.dtype) \
-        @ perspective[..., [0, 1, 3], :3] \
+    ret = (
+        np.array([[0.5, 0.0, 0.5], [0.0, -0.5, 0.5], [0.0, 0.0, 1.0]], dtype=perspective.dtype)
+        @ perspective[..., [0, 1, 3], :3]
         @ np.diag(np.array([1, -1, -1], dtype=perspective.dtype))
+    )
     return ret
 
 
@@ -336,11 +307,11 @@ def perspective_to_near_far(perspective: ndarray) -> Tuple[ndarray, ndarray]:
     ## Parameters
     """
     a, b = perspective[..., 2, 2], perspective[..., 2, 3]
-    near, far =  b / (a - 1), b / (a + 1)
+    near, far = b / (a - 1), b / (a + 1)
     return near, far
 
 
-@toarray(None, _others='intrinsics')
+@toarray(None, _others="intrinsics")
 @batched(2, 0, 0)
 def intrinsics_to_perspective(
     intrinsics: ndarray,
@@ -358,12 +329,14 @@ def intrinsics_to_perspective(
         (ndarray): [..., 4, 4] OpenGL perspective matrix
     """
     perspective = np.zeros((intrinsics.shape[0], 4, 4), dtype=intrinsics.dtype)
-    perspective[..., [0, 1, 3], :3] = np.array([[2, 0, -1], [0, -2, 1], [0, 0, 1]], dtype=intrinsics.dtype) \
-        @ intrinsics \
+    perspective[..., [0, 1, 3], :3] = (
+        np.array([[2, 0, -1], [0, -2, 1], [0, 0, 1]], dtype=intrinsics.dtype)
+        @ intrinsics
         @ np.diag(np.array([1, -1, -1], dtype=intrinsics.dtype))
+    )
     perspective[:, 2, 2] = (near / far + 1) / (near / far - 1)
-    perspective[:, 2, 3] = 2. * near / (near / far - 1)
-    perspective[:, 3, 2] = -1.
+    perspective[:, 2, 3] = 2.0 * near / (near / far - 1)
+    perspective[:, 3, 2] = -1.0
     return perspective
 
 
@@ -393,12 +366,12 @@ def view_to_extrinsics(view: ndarray) -> ndarray:
     return view * np.array([1, -1, -1, 1], dtype=view.dtype)[:, None]
 
 
-@toarray(None, 'intrinsics')
+@toarray(None, "intrinsics")
 @batched(2, 1)
 def normalize_intrinsics(
     intrinsics: ndarray,
     size: Union[Tuple[Number, Number], ndarray],
-    pixel_convention: Literal['integer-center', 'integer-corner'] = 'integer-center',
+    pixel_convention: Literal["integer-center", "integer-corner"] = "integer-center",
 ) -> ndarray:
     """
     Normalize intrinsics from pixel cooridnates to uv coordinates
@@ -419,27 +392,23 @@ def normalize_intrinsics(
     height, width = size[..., 0], size[..., 1]
     zeros = np.zeros_like(width)
     ones = np.ones_like(width)
-    if pixel_convention == 'integer-center':
-        transform = np.stack([
-            1 / width, zeros, 0.5 / width,
-            zeros, 1 / height, 0.5 / height,
-            zeros, zeros, ones
-        ]).reshape(*zeros.shape, 3, 3)
-    elif pixel_convention == 'integer-corner':
-        transform = np.stack([
-            1 / width, zeros, zeros,
-            zeros, 1 / height, zeros,
-            zeros, zeros, ones
-        ]).reshape(*zeros.shape, 3, 3)
+    if pixel_convention == "integer-center":
+        transform = np.stack(
+            [1 / width, zeros, 0.5 / width, zeros, 1 / height, 0.5 / height, zeros, zeros, ones]
+        ).reshape(*zeros.shape, 3, 3)
+    elif pixel_convention == "integer-corner":
+        transform = np.stack([1 / width, zeros, zeros, zeros, 1 / height, zeros, zeros, zeros, ones]).reshape(
+            *zeros.shape, 3, 3
+        )
     return transform @ intrinsics
 
 
-@toarray(None, 'intrinsics')
+@toarray(None, "intrinsics")
 @batched(2, 1)
 def denormalize_intrinsics(
     intrinsics: ndarray,
     size: Union[Tuple[Number, Number], ndarray],
-    pixel_convention: Literal['integer-center', 'integer-corner'] = 'integer-center',
+    pixel_convention: Literal["integer-center", "integer-corner"] = "integer-center",
 ) -> ndarray:
     """
     Denormalize intrinsics from uv cooridnates to pixel coordinates
@@ -460,21 +429,18 @@ def denormalize_intrinsics(
     height, width = size[..., 0], size[..., 1]
     zeros = np.zeros_like(width)
     ones = np.ones_like(width)
-    if pixel_convention == 'integer-center':
-        transform = np.stack([
-            width, zeros, -0.5 * ones,
-            zeros, height, -0.5 * ones,
-            zeros, zeros, ones
-        ]).reshape(*zeros.shape, 3, 3)
-    elif pixel_convention == 'integer-corner':
-        transform = np.stack([
-            width, zeros, zeros,
-            zeros, height, zeros,
-            zeros, zeros, ones
-        ]).reshape(*zeros.shape, 3, 3)
+    if pixel_convention == "integer-center":
+        transform = np.stack([width, zeros, -0.5 * ones, zeros, height, -0.5 * ones, zeros, zeros, ones]).reshape(
+            *zeros.shape, 3, 3
+        )
+    elif pixel_convention == "integer-corner":
+        transform = np.stack([width, zeros, zeros, zeros, height, zeros, zeros, zeros, ones]).reshape(
+            *zeros.shape, 3, 3
+        )
     return transform @ intrinsics
 
-@toarray(None, _others='intrinsics')
+
+@toarray(None, _others="intrinsics")
 @batched(2, 1, _others=0)
 def crop_intrinsics(
     intrinsics: ndarray,
@@ -502,24 +468,32 @@ def crop_intrinsics(
     height, width = size[..., 0], size[..., 1]
     zeros = np.zeros_like(width)
     ones = np.ones_like(width)
-    transform = np.stack([
-        width / cropped_width, zeros, -cropped_left / cropped_width,
-        zeros, height / cropped_height, -cropped_top / cropped_height,
-        zeros, zeros, ones
-    ]).reshape(*zeros.shape, 3, 3)
+    transform = np.stack(
+        [
+            width / cropped_width,
+            zeros,
+            -cropped_left / cropped_width,
+            zeros,
+            height / cropped_height,
+            -cropped_top / cropped_height,
+            zeros,
+            zeros,
+            ones,
+        ]
+    ).reshape(*zeros.shape, 3, 3)
     return transform @ intrinsics
 
 
 def pixel_to_uv(
     pixel: ndarray,
     size: Union[Tuple[Number, Number], ndarray],
-    pixel_convention: Literal['integer-center', 'integer-corner'] = 'integer-center',
+    pixel_convention: Literal["integer-center", "integer-corner"] = "integer-center",
 ) -> ndarray:
     """
     Convert pixel space coordiantes to UV space coordinates.
 
     ## Parameters
-    - `pixel` (ndarray): `(..., 2)` pixel coordinrates 
+    - `pixel` (ndarray): `(..., 2)` pixel coordinrates
     - `size` (tuple | ndarray): A tuple `(height, width)` of the image size,
         or an array of shape `(..., 2)` corresponding to the multiple image size(s)
     - `pixel_convention`: `str`, optional `'integer-center'` or `'integer-corner'`, whether integer coordinates correspond to pixel centers or corners. Defaults to 'integer-center'.
@@ -530,17 +504,17 @@ def pixel_to_uv(
     """
     if not np.issubdtype(pixel.dtype, np.floating):
         pixel = pixel.astype(np.float32)
-    if pixel_convention == 'integer-center':
+    if pixel_convention == "integer-center":
         pixel = pixel + 0.5
     uv = pixel / np.flip(size, axis=-1)
     return uv
 
 
-@toarray(size='uv')
+@toarray(size="uv")
 def uv_to_pixel(
     uv: ndarray,
     size: Optional[Union[Tuple[Number, Number], ndarray]] = None,
-    pixel_convention: Literal['integer-center', 'integer-corner'] = 'integer-center',
+    pixel_convention: Literal["integer-center", "integer-corner"] = "integer-center",
     *,
     width: Optional[Number] = None,
     height: Optional[Number] = None,
@@ -563,7 +537,7 @@ def uv_to_pixel(
             raise ValueError("Either size or both width and height must be provided.")
         size = np.array([height, width], dtype=uv.dtype)
     pixel = uv * np.flip(size, axis=-1)
-    if pixel_convention == 'integer-center':
+    if pixel_convention == "integer-center":
         pixel = pixel - 0.5
     return pixel
 
@@ -572,7 +546,7 @@ def uv_to_pixel(
 def pixel_to_ndc(
     pixel: ndarray,
     size: Union[Tuple[Number, Number], ndarray],
-    pixel_convention: Literal['integer-center', 'integer-corner'] = 'integer-center',
+    pixel_convention: Literal["integer-center", "integer-corner"] = "integer-center",
 ) -> ndarray:
     """
     Convert pixel coordinates to NDC (Normalized Device Coordinates).
@@ -590,19 +564,14 @@ def pixel_to_ndc(
     if not np.issubdtype(pixel.dtype, np.floating):
         pixel = pixel.astype(np.float32)
     dtype = pixel.dtype
-    if pixel_convention == 'integer-center':
+    if pixel_convention == "integer-center":
         pixel = pixel + 0.5
-    ndc = pixel / (np.flip(size, axis=-1) * np.array([2, -2], dtype=dtype)) \
-        + np.array([-1, 1], dtype=dtype)
+    ndc = pixel / (np.flip(size, axis=-1) * np.array([2, -2], dtype=dtype)) + np.array([-1, 1], dtype=dtype)
     return ndc
 
 
 @batched(0, 0, 0)
-def depth_linear_to_buffer(
-    depth: ndarray,
-    near: Union[float, ndarray],
-    far: Union[float, ndarray]
-) -> ndarray:
+def depth_linear_to_buffer(depth: ndarray, near: Union[float, ndarray], far: Union[float, ndarray]) -> ndarray:
     """
     Project linear depth to depth value in screen space
 
@@ -618,11 +587,7 @@ def depth_linear_to_buffer(
 
 
 @batched(0, 0, 0)
-def depth_buffer_to_linear(
-    depth_buffer: ndarray,
-    near: Union[float, ndarray],
-    far: Union[float, ndarray]
-) -> ndarray:
+def depth_buffer_to_linear(depth_buffer: ndarray, near: Union[float, ndarray], far: Union[float, ndarray]) -> ndarray:
     """
     OpenGL depth buffer to linear depth
 
@@ -646,7 +611,7 @@ def project_gl(
     Project 3D points to 2D following the OpenGL convention (except for row major matrices)
 
     ## Parameters
-        points (ndarray): [..., N, 3] or [..., N, 4] 3D points to project, if the last 
+        points (ndarray): [..., N, 3] or [..., N, 4] 3D points to project, if the last
             dimension is 4, the points are assumed to be in homogeneous coordinates
         view (ndarray): [..., 4, 4] view matrix
         projection (ndarray): [..., 4, 4] projection matrix
@@ -687,10 +652,12 @@ def project_cv(
     """
     assert intrinsics is not None, "intrinsics matrix is required"
     points = np.concatenate([points, np.ones((*points.shape[:-1], 1), dtype=points.dtype)], axis=-1)
-    intrinsics = np.block([
-        [intrinsics, np.zeros((*intrinsics.shape[:-2], 3, 1), dtype=intrinsics.dtype)],
-        [np.broadcast_to(np.array([0, 0, 0, 1], dtype=intrinsics.dtype), (*intrinsics.shape[:-2], 1, 4))]
-    ])
+    intrinsics = np.block(
+        [
+            [intrinsics, np.zeros((*intrinsics.shape[:-2], 3, 1), dtype=intrinsics.dtype)],
+            [np.broadcast_to(np.array([0, 0, 0, 1], dtype=intrinsics.dtype), (*intrinsics.shape[:-2], 1, 4))],
+        ]
+    )
     transform = intrinsics @ extrinsics if extrinsics is not None else intrinsics
     points = points @ _matrix_transpose(transform)
     uv_coord = points[..., :2] / points[..., 2:3]
@@ -713,15 +680,16 @@ def unproject_gl(
         depth (ndarray): (..., N) linear depth values
         projection (ndarray): (..., 4, 4) projection  matrix
         view (ndarray): (..., 4, 4) view matrix
-        
+
     ## Returns
         points (ndarray): (..., N, 3) 3d points
     """
     ndc_xy = uv * 2 - 1
     view_z = -depth
-    clip_xy = np.linalg.inv(projection[..., :2, :2] - ndc_xy[..., :, None] * projection[..., 3:, :2]) \
-        @ ((ndc_xy[..., :, None] * projection[..., 3:, 2:] - projection[..., :2, 2:]) \
-        @ np.concatenate([view_z[..., None, None], np.ones_like(view_z[..., None, None])], axis=-2))
+    clip_xy = np.linalg.inv(projection[..., :2, :2] - ndc_xy[..., :, None] * projection[..., 3:, :2]) @ (
+        (ndc_xy[..., :, None] * projection[..., 3:, 2:] - projection[..., :2, 2:])
+        @ np.concatenate([view_z[..., None, None], np.ones_like(view_z[..., None, None])], axis=-2)
+    )
     points = np.concatenate([clip_xy.squeeze(-1), view_z[..., None], np.ones_like(view_z)[..., None]], axis=-1)
     if view is not None:
         points = points @ _matrix_transpose(np.linalg.inv(view))
@@ -773,10 +741,12 @@ def unproject_cv(
         raise ValueError("intrinsics is required")
     if depth is None:
         depth = np.ones(uv.shape[:-1], dtype=uv.dtype)
-    intrinsics = np.block([
-        [intrinsics, np.zeros((*intrinsics.shape[:-2], 3, 1), dtype=intrinsics.dtype)],
-        [np.broadcast_to(np.array([0, 0, 0, 1], dtype=intrinsics.dtype), (*intrinsics.shape[:-2], 1, 4))]
-    ])
+    intrinsics = np.block(
+        [
+            [intrinsics, np.zeros((*intrinsics.shape[:-2], 3, 1), dtype=intrinsics.dtype)],
+            [np.broadcast_to(np.array([0, 0, 0, 1], dtype=intrinsics.dtype), (*intrinsics.shape[:-2], 1, 4))],
+        ]
+    )
     transform = intrinsics @ extrinsics if extrinsics is not None else intrinsics
     points = np.concatenate([uv, np.ones((*uv.shape[:-1], 1), dtype=uv.dtype)], axis=-1) * depth[..., None]
     points = np.concatenate([points, np.ones((*points.shape[:-1], 1), dtype=uv.dtype)], axis=-1)
@@ -785,18 +755,17 @@ def unproject_cv(
     return points
 
 
-
 def project(
     points: ndarray,
     *,
     intrinsics: Optional[ndarray] = None,
     extrinsics: Optional[ndarray] = None,
     view: Optional[ndarray] = None,
-    projection: Optional[ndarray] = None
+    projection: Optional[ndarray] = None,
 ) -> Tuple[ndarray, ndarray]:
     """
-    Calculate projection. 
-    - For OpenCV convention, use `intrinsics` and `extrinsics` matrices. 
+    Calculate projection.
+    - For OpenCV convention, use `intrinsics` and `extrinsics` matrices.
     - For OpenGL convention, use `view` and `projection` matrices.
 
     ## Parameters
@@ -809,16 +778,17 @@ def project(
 
     ## Returns
 
-    - `uv`: (..., N, 2) 2D coordinates. 
+    - `uv`: (..., N, 2) 2D coordinates.
         - For OpenCV convention, it is the normalized image coordinate where (0, 0) is the top left corner.
         - For OpenGL convention, it is the screen space XY coordinate where (0, 0) is the bottom left corner.
     - `depth`: (..., N) linear depth values, where `depth > 0` is visible.
         - For OpenCV convention, it is the Z coordinate in camera space.
         - For OpenGL convention, it is the -Z coordinate in camera space.
     """
-    assert (intrinsics is not None or extrinsics is not None) ^ (view is not None or projection is not None), \
+    assert (intrinsics is not None or extrinsics is not None) ^ (view is not None or projection is not None), (
         "Either camera intrinsics (and extrinsics) or projection (and view) matrices must be provided."
-    
+    )
+
     if intrinsics is not None:
         return project_cv(points, intrinsics, extrinsics)
     elif projection is not None:
@@ -837,13 +807,13 @@ def unproject(
     view: Optional[ndarray] = None,
 ) -> ndarray:
     """
-    Calculate inverse projection. 
-    - For OpenCV convention, use `intrinsics` and `extrinsics` matrices. 
+    Calculate inverse projection.
+    - For OpenCV convention, use `intrinsics` and `extrinsics` matrices.
     - For OpenGL convention, use `view` and `projection` matrices.
 
     ## Parameters
 
-    - `uv`: (..., N, 2) 2D coordinates. 
+    - `uv`: (..., N, 2) 2D coordinates.
         - For OpenCV convention, it is the normalized image coordinate where (0, 0) is the top left corner.
         - For OpenGL convention, it is the screen space XY coordinate where (0, 0) is the bottom left corner.
     - `depth`: (..., N) linear depth values, where `depth > 0` is visible.
@@ -858,8 +828,9 @@ def unproject(
 
     - `points`: (..., N, 3) 3D world-space points
     """
-    assert (intrinsics is not None or extrinsics is not None) ^ (view is not None or projection is not None), \
+    assert (intrinsics is not None or extrinsics is not None) ^ (view is not None or projection is not None), (
         "Either camera intrinsics (and extrinsics) or projection (and view) matrices must be provided."
+    )
 
     if intrinsics is not None:
         return unproject_cv(uv, depth, intrinsics, extrinsics)
@@ -871,25 +842,23 @@ def unproject(
 
 def quaternion_to_matrix(quaternion: ndarray) -> ndarray:
     """Converts a batch of quaternions (w, x, y, z) to rotation matrices
-    
+
     ## Parameters
         quaternion (ndarray): shape (..., 4), the quaternions to convert
-    
+
     ## Returns
         ndarray: shape (..., 3, 3), the rotation matrices corresponding to the given quaternions
     """
     assert quaternion.shape[-1] == 4
-    quaternion = quaternion / np.maximum(np.linalg.norm(quaternion, axis=-1, keepdims=True), np.finfo(quaternion.dtype).tiny)
+    quaternion = quaternion / np.maximum(
+        np.linalg.norm(quaternion, axis=-1, keepdims=True), np.finfo(quaternion.dtype).tiny
+    )
     w, x, y, z = quaternion[..., 0], quaternion[..., 1], quaternion[..., 2], quaternion[..., 3]
     zeros = np.zeros_like(w)
-    I = np.eye(3, dtype=quaternion.dtype)
+    I = np.eye(3, dtype=quaternion.dtype)  # noqa: E741 - Ambiguous upstream name kept as written.
     xyz = quaternion[..., 1:]
-    A = xyz[..., :, None] * xyz[..., None, :] - I * (xyz ** 2).sum(axis=-1)[..., None, None]
-    B = np.stack([
-        zeros, -z, y,
-        z, zeros, -x,
-        -y, x, zeros
-    ], axis=-1).reshape(*quaternion.shape[:-1], 3, 3)
+    A = xyz[..., :, None] * xyz[..., None, :] - I * (xyz**2).sum(axis=-1)[..., None, None]
+    B = np.stack([zeros, -z, y, z, zeros, -x, -y, x, zeros], axis=-1).reshape(*quaternion.shape[:-1], 3, 3)
     rot_mat = I + 2 * (A + w[..., None, None] * B)
     return rot_mat
 
@@ -907,12 +876,7 @@ def matrix_to_quaternion(rot_mat: ndarray) -> ndarray:
     m00, m01, m02, m10, m11, m12, m20, m21, m22 = [rot_mat[..., i, j] for i in range(3) for j in range(3)]
 
     diag = np.diagonal(rot_mat, axis1=-2, axis2=-1)
-    M = np.array([
-        [1, 1, 1],
-        [1, -1, -1],
-        [-1, 1, -1],
-        [-1, -1, 1]
-    ], dtype=rot_mat.dtype)
+    M = np.array([[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]], dtype=rot_mat.dtype)
     wxyz = 0.5 * np.clip(1 + diag @ M.T, 0.0, None) ** 0.5
     max_idx = np.argmax(wxyz, axis=-1)
     xw = np.sign(m21 - m12)
@@ -929,11 +893,9 @@ def matrix_to_quaternion(rot_mat: ndarray) -> ndarray:
             max_idx[..., None] == 1,
             np.stack([xw, ones, xy, xz], axis=-1),
             np.where(
-                max_idx[..., None] == 2,
-                np.stack([yw, xy, ones, yz], axis=-1),
-                np.stack([zw, xz, yz, ones], axis=-1)
-            )
-        )
+                max_idx[..., None] == 2, np.stack([yw, xy, ones, yz], axis=-1), np.stack([zw, xz, yz, ones], axis=-1)
+            ),
+        ),
     )
     quat = sign * wxyz
     quat = quat / np.maximum(np.linalg.norm(quat, axis=-1, keepdims=True), np.finfo(quat.dtype).tiny)
@@ -984,12 +946,10 @@ def extrinsics_to_essential(extrinsics: ndarray):
     R = extrinsics[..., :3, :3]
     t = extrinsics[..., :3, 3]
     zeros = np.zeros_like(t[..., 0])
-    t_x = np.stack([
-        zeros, -t[..., 2], t[..., 1],
-        t[..., 2], zeros, -t[..., 0],
-        -t[..., 1], t[..., 0], zeros
-    ]).reshape(*t.shape[:-1], 3, 3)
-    return t_x @ R 
+    t_x = np.stack([zeros, -t[..., 2], t[..., 1], t[..., 2], zeros, -t[..., 0], -t[..., 1], t[..., 0], zeros]).reshape(
+        *t.shape[:-1], 3, 3
+    )
+    return t_x @ R
 
 
 def euler_axis_angle_rotation(axis: str, angle: ndarray) -> ndarray:
@@ -1019,10 +979,10 @@ def euler_axis_angle_rotation(axis: str, angle: ndarray) -> ndarray:
     else:
         raise ValueError("letter must be either X, Y or Z.")
 
-    return np.stack(R_flat, -1).reshape(angle.shape + (3, 3))
+    return np.stack(R_flat, -1).reshape(angle.shape + (3, 3))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
 
-def euler_angles_to_matrix(euler_angles: ndarray, convention: str = 'XYZ') -> ndarray:
+def euler_angles_to_matrix(euler_angles: ndarray, convention: str = "XYZ") -> ndarray:
     """
     Convert rotations given as Euler angles in radians to rotation matrices.
 
@@ -1042,10 +1002,7 @@ def euler_angles_to_matrix(euler_angles: ndarray, convention: str = 'XYZ') -> nd
     for letter in convention:
         if letter not in ("X", "Y", "Z"):
             raise ValueError(f"Invalid letter {letter} in convention string.")
-    matrices = [
-        euler_axis_angle_rotation(c, euler_angles[..., 'XYZ'.index(c)])
-        for c in convention
-    ]
+    matrices = [euler_axis_angle_rotation(c, euler_angles[..., "XYZ".index(c)]) for c in convention]
     return matrices[2] @ matrices[1] @ matrices[0]
 
 
@@ -1054,22 +1011,31 @@ def skew_symmetric(v: ndarray):
     assert v.shape[-1] == 3, "v must be 3D"
     x, y, z = v[..., 0], v[..., 1], v[..., 2]
     zeros = np.zeros_like(x)
-    return np.stack([
-        zeros, -z, y,
-        z, zeros, -x,
-        -y, x, zeros,
-    ], axis=-1).reshape(*v.shape[:-1], 3, 3)
+    return np.stack(
+        [
+            zeros,
+            -z,
+            y,
+            z,
+            zeros,
+            -x,
+            -y,
+            x,
+            zeros,
+        ],
+        axis=-1,
+    ).reshape(*v.shape[:-1], 3, 3)
 
 
 def rotation_matrix_from_vectors(v1: ndarray, v2: ndarray):
     "Rotation matrix that rotates v1 to v2"
-    I = np.eye(3, dtype=v1.dtype)
+    I = np.eye(3, dtype=v1.dtype)  # noqa: E741 - Ambiguous upstream name kept as written.
     v1 = v1 / np.linalg.norm(v1, axis=-1)
     v2 = v2 / np.linalg.norm(v2, axis=-1)
     v = np.cross(v1, v2, axis=-1)
     c = np.sum(v1 * v2, axis=-1)
     K = skew_symmetric(v)
-    R = I + K + (1 / (1 + c)).astype(v1.dtype)[None, None] * (K @ K)    # Avoid numpy's default type casting for scalars
+    R = I + K + (1 / (1 + c)).astype(v1.dtype)[None, None] * (K @ K)  # Avoid numpy's default type casting for scalars
     return R
 
 
@@ -1085,7 +1051,7 @@ def axis_angle_to_matrix(axis_angle: ndarray) -> ndarray:
     batch_shape = axis_angle.shape[:-1]
     dtype = axis_angle.dtype
 
-    angle = np.linalg.norm(axis_angle, axis=-1, keepdims=True) 
+    angle = np.linalg.norm(axis_angle, axis=-1, keepdims=True)
     axis = axis_angle / np.maximum(angle, np.finfo(dtype).tiny)
 
     cos = np.cos(angle)[..., None, :]
@@ -1115,9 +1081,7 @@ def axis_angle_to_quaternion(axis_angle: ndarray) -> ndarray:
     return quat
 
 
-def _angle_from_tan(
-    axis: str, other_axis: str, data: ndarray, horizontal: bool, tait_bryan: bool
-) -> ndarray:
+def _angle_from_tan(axis: str, other_axis: str, data: ndarray, horizontal: bool, tait_bryan: bool) -> ndarray:
     """
     Extract the first or third Euler angle from the two members of
     the matrix which are positive constant times its sine and cosine.
@@ -1160,13 +1124,13 @@ def matrix_to_euler_angles(matrix: ndarray, convention: str) -> ndarray:
     ## Returns
         Euler angles in radians as tensor of shape (..., 3), in the order of XYZ (like blender), instead of convention (like pytorch3d)
     """
-    if not all(c in 'XYZ' for c in convention) or not all(c in convention for c in 'XYZ'):
+    if not all(c in "XYZ" for c in convention) or not all(c in convention for c in "XYZ"):
         raise ValueError(f"Invalid convention {convention}.")
     if not matrix.shape[-2:] == (3, 3):
         raise ValueError(f"Invalid rotation matrix shape {matrix.shape}.")
-    
-    i0 = 'XYZ'.index(convention[0])
-    i2 = 'XYZ'.index(convention[2])
+
+    i0 = "XYZ".index(convention[0])
+    i2 = "XYZ".index(convention[2])
     tait_bryan = i0 != i2
     if tait_bryan:
         central_angle = np.asin(matrix[..., i2, i0] * (-1.0 if i2 - i0 in [-1, 2] else 1.0))
@@ -1175,15 +1139,11 @@ def matrix_to_euler_angles(matrix: ndarray, convention: str) -> ndarray:
 
     # Angles in composition order
     o = [
-        _angle_from_tan(
-            convention[0], convention[1], matrix[..., i2, :], True, tait_bryan
-        ),
+        _angle_from_tan(convention[0], convention[1], matrix[..., i2, :], True, tait_bryan),
         central_angle,
-        _angle_from_tan(
-            convention[2], convention[1], matrix[..., i0], False, tait_bryan
-        ),
+        _angle_from_tan(convention[2], convention[1], matrix[..., i0], False, tait_bryan),
     ]
-    return np.stack([o[convention.index(c)] for c in 'XYZ'], -1)
+    return np.stack([o[convention.index(c)] for c in "XYZ"], -1)
 
 
 def random_rotation_matrix(*size: int, dtype=np.float32) -> ndarray:
@@ -1219,14 +1179,23 @@ def ray_intersection(p1: ndarray, d1: ndarray, p2: ndarray, d2: ndarray):
     p1, d1, p2, d2 = np.broadcast_arrays(p1, d1, p2, d2)
     dtype = p1.dtype
     dim = p1.shape[-1]
-    d = np.stack([d1, d2], axis=-2)     # (..., 2, D)
-    p = np.stack([p1, p2], axis=-2)     # (..., 2, D)
-    A = np.concatenate([
-        (np.eye(dim, dtype=dtype) * np.ones((*p.shape[:-2], 2, 1, 1))).reshape(*d.shape[:-2], 2 * dim, dim),         # (..., 2 * D, D)
-        -(np.eye(2, dtype=dtype)[..., None] * d[..., None, :]).swapaxes(-2, -1).reshape(*d.shape[:-2], 2 * dim, 2)    # (..., 2 * D, 2)
-    ], axis=-1)                             # (..., 2 * D, D + 2)
-    b = p.reshape(*p.shape[:-2], 2 * dim)   # (..., 2 * D)
-    x = np.linalg.solve(A.swapaxes(-1, -2) @ A + 1e-12 * np.eye(dim + 2, dtype=dtype), (A.swapaxes(-1, -2) @ b[..., :, None]))[..., 0]
+    d = np.stack([d1, d2], axis=-2)  # (..., 2, D)
+    p = np.stack([p1, p2], axis=-2)  # (..., 2, D)
+    A = np.concatenate(
+        [
+            (np.eye(dim, dtype=dtype) * np.ones((*p.shape[:-2], 2, 1, 1))).reshape(
+                *d.shape[:-2], 2 * dim, dim
+            ),  # (..., 2 * D, D)
+            -(np.eye(2, dtype=dtype)[..., None] * d[..., None, :])
+            .swapaxes(-2, -1)
+            .reshape(*d.shape[:-2], 2 * dim, 2),  # (..., 2 * D, 2)
+        ],
+        axis=-1,
+    )  # (..., 2 * D, D + 2)
+    b = p.reshape(*p.shape[:-2], 2 * dim)  # (..., 2 * D)
+    x = np.linalg.solve(
+        A.swapaxes(-1, -2) @ A + 1e-12 * np.eye(dim + 2, dtype=dtype), (A.swapaxes(-1, -2) @ b[..., :, None])
+    )[..., 0]
     return x[..., :dim], (x[..., dim], x[..., dim + 1])
 
 
@@ -1242,10 +1211,12 @@ def make_affine_matrix(M: ndarray, t: ndarray) -> ndarray:
     ## Returns
         ndarray: [..., D + 1, D + 1] affine transformation matrix
     """
-    x = np.block([
-        [M, t[..., None]], 
-        [np.zeros((*M.shape[:-2], 1, M.shape[-1]), dtype=M.dtype), np.ones((*M.shape[:-2], 1, 1), dtype=M.dtype)]
-    ])
+    x = np.block(
+        [
+            [M, t[..., None]],
+            [np.zeros((*M.shape[:-2], 1, M.shape[-1]), dtype=M.dtype), np.ones((*M.shape[:-2], 1, 1), dtype=M.dtype)],
+        ]
+    )
     return x
 
 
@@ -1264,7 +1235,6 @@ def lerp(x1: ndarray, x2: ndarray, t: ndarray) -> ndarray:
         ndarray: [..., N, D] interpolated vector
     """
     return x1[..., None, :] + t[..., None] * (x2 - x1)[..., None, :]
-
 
 
 @toarray(_others=np.float32)
@@ -1333,7 +1303,9 @@ def interpolate_se3_matrix(T1: ndarray, T2: ndarray, t: ndarray) -> ndarray:
     return make_affine_matrix(rot, pos)
 
 
-def piecewise_lerp(x: ndarray, t: ndarray, s: ndarray, extrapolation_mode: Literal['constant', 'linear'] = 'constant') -> ndarray:
+def piecewise_lerp(
+    x: ndarray, t: ndarray, s: ndarray, extrapolation_mode: Literal["constant", "linear"] = "constant"
+) -> ndarray:
     """
     Linear spline interpolation.
 
@@ -1342,27 +1314,29 @@ def piecewise_lerp(x: ndarray, t: ndarray, s: ndarray, extrapolation_mode: Liter
     - `t`: ndarray, shape (n,): the times of the data points.
     - `s`: ndarray, shape (m,): the times to be interpolated.
     - `extrapolation_mode`: str, the mode of extrapolation. 'constant' means extrapolate the boundary values, 'linear' means extrapolate linearly.
-    
+
     ## Returns
     - `y`: ndarray, shape (..., m, d): the interpolated values.
     """
-    i = np.searchsorted(t, s, side='left')
-    if extrapolation_mode == 'constant':
+    i = np.searchsorted(t, s, side="left")
+    if extrapolation_mode == "constant":
         prev = np.clip(i - 1, 0, len(t) - 1)
         suc = np.clip(i, 0, len(t) - 1)
-    elif extrapolation_mode == 'linear':
+    elif extrapolation_mode == "linear":
         prev = np.clip(i - 1, 0, len(t) - 2)
         suc = np.clip(i, 1, len(t) - 1)
     else:
-        raise ValueError(f'Invalid extrapolation_mode: {extrapolation_mode}')
-    
+        raise ValueError(f"Invalid extrapolation_mode: {extrapolation_mode}")
+
     u = (s - t[prev]) / np.maximum(t[suc] - t[prev], 1e-12)
     y = lerp(x[prev], x[suc], u)
 
     return y
 
 
-def piecewise_interpolate_se3_matrix(T: ndarray, t: ndarray, s: ndarray, extrapolation_mode: Literal['constant', 'linear'] = 'constant') -> ndarray:
+def piecewise_interpolate_se3_matrix(
+    T: ndarray, t: ndarray, s: ndarray, extrapolation_mode: Literal["constant", "linear"] = "constant"
+) -> ndarray:
     """
     Linear spline interpolation for SE(3) matrices.
 
@@ -1375,16 +1349,16 @@ def piecewise_interpolate_se3_matrix(T: ndarray, t: ndarray, s: ndarray, extrapo
     ## Returns
     - `T_interp`: ndarray, shape (..., m, 4, 4): the interpolated SE(3) matrices.
     """
-    i = np.searchsorted(t, s, side='left')
-    if extrapolation_mode == 'constant':
+    i = np.searchsorted(t, s, side="left")
+    if extrapolation_mode == "constant":
         prev = np.clip(i - 1, 0, len(t) - 1)
         suc = np.clip(i, 0, len(t) - 1)
-    elif extrapolation_mode == 'linear':
+    elif extrapolation_mode == "linear":
         prev = np.clip(i - 1, 0, len(t) - 2)
         suc = np.clip(i, 1, len(t) - 1)
     else:
-        raise ValueError(f'Invalid extrapolation_mode: {extrapolation_mode}')
-    
+        raise ValueError(f"Invalid extrapolation_mode: {extrapolation_mode}")
+
     u = (s - t[prev]) / np.maximum(t[suc] - t[prev], 1e-12)
     T = interpolate_se3_matrix(T[prev], T[suc], u)
 
@@ -1394,12 +1368,12 @@ def piecewise_interpolate_se3_matrix(T: ndarray, t: ndarray, s: ndarray, extrapo
 def transform_points(x: ndarray, *Ts: ndarray) -> ndarray:
     """
     Apply transformation(s) to a point or a set of points.
-    It is like `(Tn @ ... @ T2 @ T1 @ x[:, None]).squeeze(0)`, but: 
+    It is like `(Tn @ ... @ T2 @ T1 @ x[:, None]).squeeze(0)`, but:
     1. Automatically handle the homogeneous coordinate;
             - x will be padded with homogeneous coordinate 1.
-            - Each T will be padded by identity matrix to match the dimension. 
+            - Each T will be padded by identity matrix to match the dimension.
     2. Using efficient contraction path when array sizes are large, based on `einsum`.
-    
+
     ## Parameters
     - `x`: ndarray, shape `(..., D)`: the points to be transformed.
     - `Ts`: ndarray, shape `(..., D1, D2)`: the affine transformation matrix (matrices)
@@ -1408,11 +1382,11 @@ def transform_points(x: ndarray, *Ts: ndarray) -> ndarray:
     - `y`: ndarray, shape `(..., D)`: the transformed point or a set of points.
 
     ## Example Usage
-    
+
     - Just linear transformation
 
         ```
-        y = transform(x_3, mat_3x3) 
+        y = transform(x_3, mat_3x3)
         ```
 
     - Affine transformation
@@ -1430,12 +1404,23 @@ def transform_points(x: ndarray, *Ts: ndarray) -> ndarray:
     input_dim = x.shape[-1]
     pad_dim = max(max(max(T.shape[-2:]) for T in Ts), x.shape[-1])
     x = np.concatenate([x, np.ones((*x.shape[:-1], pad_dim - x.shape[-1]), dtype=x.dtype)], axis=-1)
-    I = np.eye(pad_dim, dtype=x.dtype)
+    I = np.eye(pad_dim, dtype=x.dtype)  # noqa: E741 - Ambiguous upstream name kept as written.
     Ts = [
-        np.concatenate([
-            np.concatenate([T, np.broadcast_to(I[:T.shape[-2], T.shape[-1]:], (*T.shape[:-2], T.shape[-2], pad_dim - T.shape[-1]))], axis=-1),
-            np.broadcast_to(I[T.shape[-2]:, :], (*T.shape[:-2], pad_dim - T.shape[-2], pad_dim))
-        ], axis=-2)
+        np.concatenate(
+            [
+                np.concatenate(
+                    [
+                        T,
+                        np.broadcast_to(
+                            I[: T.shape[-2], T.shape[-1] :], (*T.shape[:-2], T.shape[-2], pad_dim - T.shape[-1])
+                        ),
+                    ],
+                    axis=-1,
+                ),
+                np.broadcast_to(I[T.shape[-2] :, :], (*T.shape[:-2], pad_dim - T.shape[-2], pad_dim)),
+            ],
+            axis=-2,
+        )
         for T in Ts
     ]
     total_numel = sum(t.size for t in Ts) + x.size
@@ -1448,17 +1433,26 @@ def transform_points(x: ndarray, *Ts: ndarray) -> ndarray:
         # Broadcasted size 1 dimensions can be squeezed to avoid redundant broadcasting in einsum
         subscripts, squeezed_operands = [], []
         for i, m in enumerate(operands):
-            squeezable = tuple(b_m == 1 and b > 1 for b_m, b in zip(m.shape[:-2], batch_shape[len(batch_shape) - (m.ndim - 2):]))
-            squeezed_operands.append(
-                m.squeeze(axis=tuple(j for j, s in enumerate(squeezable) if s))
+            squeezable = tuple(
+                b_m == 1 and b > 1
+                for b_m, b in zip(m.shape[:-2], batch_shape[len(batch_shape) - (m.ndim - 2) :], strict=False)
             )
+            squeezed_operands.append(m.squeeze(axis=tuple(j for j, s in enumerate(squeezable) if s)))
             subscripts.append(
-                (*tuple(j for j, s in zip(batch_subscripts[len(batch_shape) - (m.ndim - 2):], squeezable) if not s), i, i + 1)
+                (
+                    *tuple(
+                        j
+                        for j, s in zip(batch_subscripts[len(batch_shape) - (m.ndim - 2) :], squeezable, strict=False)
+                        if not s
+                    ),
+                    i,
+                    i + 1,
+                )
             )
         y = np.einsum(
-            *itertools.chain(*zip(squeezed_operands, subscripts)), 
-            (*range(offset, offset + len(batch_shape)), 0, len(operands)), 
-            optimize="optimal"
+            *itertools.chain(*zip(squeezed_operands, subscripts, strict=False)),
+            (*range(offset, offset + len(batch_shape)), 0, len(operands)),
+            optimize="optimal",
         )
         y = y.squeeze(-1)
     else:
@@ -1467,7 +1461,7 @@ def transform_points(x: ndarray, *Ts: ndarray) -> ndarray:
             y = T @ y
         y = y.squeeze(-1)
     return y[..., :input_dim]
-    
+
 
 def angle_between(v1: ndarray, v2: ndarray):
     """
@@ -1486,26 +1480,26 @@ def angle_between(v1: ndarray, v2: ndarray):
     v1 = v1 / np.where(n1 == 0, 1, n1)
     v2 = v2 / np.where(n2 == 0, 1, n2)
     cos = (v1 * v2).sum(axis=-1)
-    sin = np.minimum(np.linalg.norm(v2 - v1 * cos[..., None], axis=-1), np.linalg.norm(v1 - v2 * cos[..., None], axis=-1))
+    sin = np.minimum(
+        np.linalg.norm(v2 - v1 * cos[..., None], axis=-1), np.linalg.norm(v1 - v2 * cos[..., None], axis=-1)
+    )
     return np.atan2(sin, cos)
 
 
 def vector_outer(x: ndarray, y: Optional[ndarray] = None) -> ndarray:
-    """Vector outer.
-
-    Args:
-        x: The x.
-        y: The y.
-
-    Returns:
-        The return value.
-    """
     if y is None:
         return x[..., :, None] * x[..., None, :]
     return x[..., :, None] * y[..., None, :]
 
 
-def procrustes(cov_yx: ndarray, cov_xx: Optional[ndarray] = None, cov_yy: Optional[ndarray] = None, mean_x: Optional[ndarray] = None, mean_y: Optional[ndarray] = None, niter: int = 8) -> Tuple[ndarray, ndarray]:
+def procrustes(
+    cov_yx: ndarray,
+    cov_xx: Optional[ndarray] = None,
+    cov_yy: Optional[ndarray] = None,
+    mean_x: Optional[ndarray] = None,
+    mean_y: Optional[ndarray] = None,
+    niter: int = 8,
+) -> Tuple[ndarray, ndarray]:
     """
     Procrustes analysis to solve for scale `s`, rotation `R` and translation `t` such that `y_i ~= s R x_i + t`.
 
@@ -1519,20 +1513,20 @@ def procrustes(cov_yx: ndarray, cov_xx: Optional[ndarray] = None, cov_yy: Option
     - `niter`: int, number of Newton iterations for scale solving when both cov_xx and cov_yy are given.
 
     Specifically, based on provided inputs:
-    
+
     - To solve the rotation `R`, `cov_yx` must be given.
     - To solve the scale `s`, at least one of `cov_xx` and `cov_yy` must be given.
         - (Recommended) If both `cov_xx` and `cov_yy` are given, the scale will be solved by minimizing a symmetric cost:
             `||s R X + t - Y||_F^2 / ||Y||_F^2 + ||s R^T (Y - t)  - X||_F^2 / ||X||_F^2`
         - If only `cov_xx` is given, the scale will be solved by minimizing forward cost
             `||s R X  + t - Y||_F^2`
-        - If only `cov_yy` is given, the scale will be solved by minimizing inverse cost 
+        - If only `cov_yy` is given, the scale will be solved by minimizing inverse cost
             `||s R^T (Y - t)  - X||_F^2`
     - To solve the translation `t`, provide `mean_x` and `mean_y`.
 
     Returns
     ----
-    - `s`: (...) scale factor. None if both cov_xx and cov_yy are None. 
+    - `s`: (...) scale factor. None if both cov_xx and cov_yy are None.
     - `R`: (..., 3, 3) rotation matrix.
     - `t`: (..., 3) translation vector. None if mean_x or mean_y is None.
     """
@@ -1542,9 +1536,13 @@ def procrustes(cov_yx: ndarray, cov_xx: Optional[ndarray] = None, cov_yy: Option
     Vh[..., 2, :] *= np.sign(np.linalg.det(R))[..., None]
     R = U @ Vh
     if cov_xx is not None and cov_yy is None:
-        s = np.trace(cov_yx @ _matrix_transpose(R), axis1=-2, axis2=-1) / np.maximum(np.trace(cov_xx, axis1=-2, axis2=-1), np.finfo(dtype).tiny)
+        s = np.trace(cov_yx @ _matrix_transpose(R), axis1=-2, axis2=-1) / np.maximum(
+            np.trace(cov_xx, axis1=-2, axis2=-1), np.finfo(dtype).tiny
+        )
     if cov_xx is None and cov_yy is not None:
-        s = np.trace(cov_yy, axis1=-2, axis2=-1) / np.maximum(np.trace(cov_yx @ _matrix_transpose(R), axis1=-2, axis2=-1), np.finfo(dtype).tiny)
+        s = np.trace(cov_yy, axis1=-2, axis2=-1) / np.maximum(
+            np.trace(cov_yx @ _matrix_transpose(R), axis1=-2, axis2=-1), np.finfo(dtype).tiny
+        )
     elif cov_xx is not None and cov_yy is not None:
         a = np.maximum(np.trace(cov_xx, axis1=-2, axis2=-1), np.finfo(dtype).tiny)
         b = np.maximum(np.trace(cov_yy, axis1=-2, axis2=-1), np.finfo(dtype).tiny)
@@ -1552,22 +1550,29 @@ def procrustes(cov_yx: ndarray, cov_xx: Optional[ndarray] = None, cov_yy: Option
         u = (b / a) ** 0.5
         for _ in range(niter):
             s = np.exp(u)
-            du = -(2 * (s ** 2 - 1 / s ** 2) - 2 * c * (s / b - 1 / s / a)) / (4 * (s ** 2 + 1 / (s ** 2)) - 2 * c * (s / b + 1 / s / a))
+            du = -(2 * (s**2 - 1 / s**2) - 2 * c * (s / b - 1 / s / a)) / (
+                4 * (s**2 + 1 / (s**2)) - 2 * c * (s / b + 1 / s / a)
+            )
             u = u + du
         s = np.exp(u)
     else:
         s = None
     if mean_x is not None and mean_y is not None:
-        if s is not None:
-            t = mean_y - transform_points(mean_x, s * R)
-        else:
-            t = mean_y - transform_points(mean_x, R)
+        t = mean_y - transform_points(mean_x, s * R) if s is not None else mean_y - transform_points(mean_x, R)
     else:
         t = None
     return s, R, t
 
 
-def affine_procrustes(cov_yx: ndarray, cov_xx: ndarray, cov_yy: ndarray, mean_x: ndarray, mean_y: ndarray, lam: float = 1e-2, niter: int = 8) -> Tuple[ndarray, ndarray]:
+def affine_procrustes(
+    cov_yx: ndarray,
+    cov_xx: ndarray,
+    cov_yy: ndarray,
+    mean_x: ndarray,
+    mean_y: ndarray,
+    lam: float = 1e-2,
+    niter: int = 8,
+) -> Tuple[ndarray, ndarray]:
     """
     Extended Procrustes analysis to solve for affine transformation `A` and translation `t` such that `y_i ~= A x_i + t`.
 
@@ -1596,24 +1601,38 @@ def affine_procrustes(cov_yx: ndarray, cov_xx: ndarray, cov_yy: ndarray, mean_x:
     tr_yy = np.trace(cov_yy, axis1=-2, axis2=-1) + np.finfo(dtype).eps
     A, B = R, _matrix_transpose(R)
     for i in range(niter):
-        gamma_i = 1.2 ** i - 1
-        A = (cov_yx + (lam * tr_xx)[..., None, None] * R + (gamma_i * tr_xx)[..., None, None] * _matrix_transpose(B)) @ np.linalg.inv(cov_xx + (lam * tr_xx)[..., None, None] * np.eye(3, dtype=dtype) + (gamma_i * tr_xx)[..., None, None] * (B @ _matrix_transpose(B)))
-        B = (_matrix_transpose(cov_yx) + (lam * tr_yy)[..., None, None] * _matrix_transpose(R) + (gamma_i * tr_yy)[..., None, None] * _matrix_transpose(A)) @ np.linalg.inv(cov_yy + (lam * tr_yy)[..., None, None] * np.eye(3, dtype=dtype) + (gamma_i * tr_yy)[..., None, None] * (A @ _matrix_transpose(A)))
+        gamma_i = 1.2**i - 1
+        A = (
+            cov_yx + (lam * tr_xx)[..., None, None] * R + (gamma_i * tr_xx)[..., None, None] * _matrix_transpose(B)
+        ) @ np.linalg.inv(
+            cov_xx
+            + (lam * tr_xx)[..., None, None] * np.eye(3, dtype=dtype)
+            + (gamma_i * tr_xx)[..., None, None] * (B @ _matrix_transpose(B))
+        )
+        B = (
+            _matrix_transpose(cov_yx)
+            + (lam * tr_yy)[..., None, None] * _matrix_transpose(R)
+            + (gamma_i * tr_yy)[..., None, None] * _matrix_transpose(A)
+        ) @ np.linalg.inv(
+            cov_yy
+            + (lam * tr_yy)[..., None, None] * np.eye(3, dtype=dtype)
+            + (gamma_i * tr_yy)[..., None, None] * (A @ _matrix_transpose(A))
+        )
     t = mean_y - transform_points(mean_x, A)
     return A, t
 
 
 def solve_pose(
-    p: np.ndarray, 
-    q: np.ndarray, 
-    w: Optional[np.ndarray] = None, 
-    offsets: Optional[np.ndarray] = None, 
-    mode: Literal['rigid', 'similar', 'affine'] = 'rigid',
-    lam: float = 1e-2, 
-    niter: int = 5
+    p: np.ndarray,
+    q: np.ndarray,
+    w: Optional[np.ndarray] = None,
+    offsets: Optional[np.ndarray] = None,
+    mode: Literal["rigid", "similar", "affine"] = "rigid",
+    lam: float = 1e-2,
+    niter: int = 5,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Solve for the pose (transformation from p to q) given weighted point correspondences.
-    
+
     Parameters
     ----
     For batch input
@@ -1626,7 +1645,7 @@ def solve_pose(
     - `q`: (N, 3) target points
     - `w`: (N,) weights for each point correspondence
     - `offsets`: (S + 1,) segment offsets. Points in each segment belong to the same rigid / affine body.
-    
+
     Optional parameters
     ----
     - `mode`: mode of transformation to apply. Can be 'rigid', 'similar', or 'affine'.
@@ -1635,7 +1654,7 @@ def solve_pose(
         - For 'affine', full affine transformation is allowed. Using least squares.
     - `lam`: regularization weight for 'affine' mode.
     - `niter`: number of iterations for 'affine' mode.
-    
+
     Returns
     ----
     - `pose`: (..., 4, 4) transformations matrix from p to q.
@@ -1651,7 +1670,7 @@ def solve_pose(
         pw = p * w[..., None]
         qw = q * w[..., None]
         cov_qp = np.sum(vector_outer(qw, p), axis=-3) / w_sum[..., None, None]
-        if mode == 'similar' or mode == 'affine':
+        if mode == "similar" or mode == "affine":
             cov_qp = np.sum(vector_outer(qw, p), axis=-3) / w_sum[..., None, None]
             cov_qq = np.sum(vector_outer(qw, q), axis=-3) / w_sum[..., None, None]
     else:
@@ -1664,20 +1683,20 @@ def solve_pose(
         pw = p * w[..., None]
         qw = q * w[..., None]
         cov_qp = np.add.reduceat(vector_outer(q, pw), offsets[:-1], axis=0) / w_sum[:, None, None]
-        if mode == 'similar' or mode == 'affine':
-            cov_pp = np.add.reduceat(vector_outer(p, pw), offsets[:-1], axis=0) / w_sum[:, None, None]    
+        if mode == "similar" or mode == "affine":
+            cov_pp = np.add.reduceat(vector_outer(p, pw), offsets[:-1], axis=0) / w_sum[:, None, None]
             cov_qq = np.add.reduceat(vector_outer(q, qw), offsets[:-1], axis=0) / w_sum[:, None, None]
-    
-    if mode == 'rigid':
+
+    if mode == "rigid":
         _, R, t = procrustes(cov_qp, mean_x=p_mean, mean_y=q_mean)
         pose = make_affine_matrix(R, t)
-    elif mode == 'similar':
+    elif mode == "similar":
         s, R, t = procrustes(cov_qp, cov_xx=cov_pp, cov_yy=cov_qq, mean_x=p_mean, mean_y=q_mean)
         pose = make_affine_matrix(s * R, t)
-    elif mode == 'affine':
+    elif mode == "affine":
         A, t = affine_procrustes(cov_qp, cov_pp, cov_qq, p_mean, q_mean, lam=lam, niter=niter)
         pose = make_affine_matrix(A, t)
-    
+
     return pose
 
 
@@ -1687,9 +1706,9 @@ def solve_poses_sequential(
     offsets: Optional[ndarray] = None,
     accum: Optional[Tuple[ndarray, ...]] = None,
     min_valid_size: int = 0,
-    mode: Literal['rigid', 'similar', 'affine'] = 'rigid',
+    mode: Literal["rigid", "similar", "affine"] = "rigid",
     lam: float = 1e-2,
-    niter: int = 8
+    niter: int = 8,
 ) -> Tuple[ndarray, Tuple[ndarray, ...], Tuple[ndarray, ndarray, ndarray, ndarray]]:
     """
     Given trajectories of points over time, sequentially solve for the poses (transformations from canonical to each frame) of each body at each frame.
@@ -1711,7 +1730,7 @@ def solve_poses_sequential(
     - `min_valid_size`: minimum number of valid points in each frame to consider the segment / group valid.
     - `mode`: mode of transformation to apply. Can be 'rigid', 'similar', or 'affine'.
         - For 'rigid', only rotation and translation are allowed.
-        - For 'similar', uniform scaling, rotation and translation are allowed. 
+        - For 'similar', uniform scaling, rotation and translation are allowed.
         - For 'affine', full affine transformation is allowed. Using least squares.
     - `lam`: rigidity regularization weight for 'affine' mode.
     - `niter`: number of iterations for 'affine' mode.
@@ -1770,18 +1789,37 @@ def solve_poses_sequential(
         num_segments = len(offsets) - 1
         lengths = np.diff(offsets)
         poses = np.zeros((num_frames, num_segments, 4, 4), dtype=dtype)
-        
+
     if accum is not None:
         accum_sqrtw, accum_sqrtwx, accum_sqrtwxx, accum_w, accum_wx, accum_wxx, accum_nnz = [a.copy() for a in accum]
     else:
-        accum_sqrtw, accum_sqrtwx, accum_sqrtwxx, accum_w, accum_wx, accum_wxx, accum_nnz = \
-            np.zeros((*batch_shape, num_points,), dtype=dtype), \
-            np.zeros((*batch_shape, num_points, 3), dtype=dtype), \
-            np.zeros((*batch_shape, num_points, 3, 3), dtype=dtype), \
-            np.zeros((*batch_shape, num_points,), dtype=dtype), \
-            np.zeros((*batch_shape, num_points, 3), dtype=dtype), \
-            np.zeros((*batch_shape, num_points, 3, 3), dtype=dtype), \
-            np.zeros((*batch_shape, num_points,), dtype=dtype)
+        accum_sqrtw, accum_sqrtwx, accum_sqrtwxx, accum_w, accum_wx, accum_wxx, accum_nnz = (
+            np.zeros(
+                (
+                    *batch_shape,
+                    num_points,
+                ),
+                dtype=dtype,
+            ),
+            np.zeros((*batch_shape, num_points, 3), dtype=dtype),
+            np.zeros((*batch_shape, num_points, 3, 3), dtype=dtype),
+            np.zeros(
+                (
+                    *batch_shape,
+                    num_points,
+                ),
+                dtype=dtype,
+            ),
+            np.zeros((*batch_shape, num_points, 3), dtype=dtype),
+            np.zeros((*batch_shape, num_points, 3, 3), dtype=dtype),
+            np.zeros(
+                (
+                    *batch_shape,
+                    num_points,
+                ),
+                dtype=dtype,
+            ),
+        )
 
     for i in range(num_frames):
         # Compute weighted statistics
@@ -1792,29 +1830,73 @@ def solve_poses_sequential(
             sum_w = np.sum(sqrtwi * accum_sqrtw, axis=-1) + np.finfo(dtype).tiny
             center_x = np.sum(sqrtwi[..., None] * accum_sqrtwx, axis=-2) / sum_w[..., None]
             center_y = np.sum(sqrtwi[..., None] * accum_sqrtw[..., None] * yi, axis=-2) / sum_w[..., None]
-            cov_yx = np.sum(sqrtwi[..., None, None] * vector_outer(yi - center_y, accum_sqrtwx - accum_sqrtw[..., None] * center_x), axis=-3) / sum_w[..., None, None]
-            if mode == 'affine' or mode == 'similar':
-                cov_xx = np.sum(sqrtwi[..., None, None] * (accum_sqrtwxx + accum_sqrtw[..., None, None] * vector_outer(mean_sqrtwx - center_x)), axis=-3) / sum_w[..., None, None]
-                cov_yy = np.sum(sqrtwi[..., None, None] * accum_sqrtw[..., None, None] * vector_outer(yi - center_y), axis=-3) / sum_w[..., None, None]
+            cov_yx = (
+                np.sum(
+                    sqrtwi[..., None, None]
+                    * vector_outer(yi - center_y, accum_sqrtwx - accum_sqrtw[..., None] * center_x),
+                    axis=-3,
+                )
+                / sum_w[..., None, None]
+            )
+            if mode == "affine" or mode == "similar":
+                cov_xx = (
+                    np.sum(
+                        sqrtwi[..., None, None]
+                        * (accum_sqrtwxx + accum_sqrtw[..., None, None] * vector_outer(mean_sqrtwx - center_x)),
+                        axis=-3,
+                    )
+                    / sum_w[..., None, None]
+                )
+                cov_yy = (
+                    np.sum(
+                        sqrtwi[..., None, None] * accum_sqrtw[..., None, None] * vector_outer(yi - center_y), axis=-3
+                    )
+                    / sum_w[..., None, None]
+                )
         else:
             sum_w = np.add.reduceat(sqrtwi * accum_sqrtw, offsets[:-1], axis=0) + np.finfo(dtype).tiny
             center_x = np.add.reduceat(sqrtwi[:, None] * accum_sqrtwx, offsets[:-1], axis=0) / sum_w[:, None]
-            center_y = np.add.reduceat(sqrtwi[:, None] * accum_sqrtw[:, None] * yi, offsets[:-1], axis=0) / sum_w[:, None]
+            center_y = (
+                np.add.reduceat(sqrtwi[:, None] * accum_sqrtw[:, None] * yi, offsets[:-1], axis=0) / sum_w[:, None]
+            )
             center_x_broadcast = np.repeat(center_x, lengths, axis=0)
             center_y_broadcast = np.repeat(center_y, lengths, axis=0)
-            cov_yx = np.add.reduceat(sqrtwi[:, None, None] * vector_outer(yi - center_y_broadcast, accum_sqrtwx - accum_sqrtw[:, None] * center_x_broadcast), offsets[:-1], axis=0) / sum_w[:, None, None]
-            if mode == 'affine' or mode == 'similar':
-                cov_xx = np.add.reduceat(sqrtwi[:, None, None] * (accum_sqrtwxx + accum_sqrtw[:, None, None] * vector_outer(mean_sqrtwx - center_x_broadcast)), offsets[:-1], axis=0) / sum_w[:, None, None]
-                cov_yy = np.add.reduceat(sqrtwi[:, None, None] * accum_sqrtw[:, None, None] * vector_outer(yi - center_y_broadcast), offsets[:-1], axis=0) / sum_w[:, None, None]
-        
+            cov_yx = (
+                np.add.reduceat(
+                    sqrtwi[:, None, None]
+                    * vector_outer(yi - center_y_broadcast, accum_sqrtwx - accum_sqrtw[:, None] * center_x_broadcast),
+                    offsets[:-1],
+                    axis=0,
+                )
+                / sum_w[:, None, None]
+            )
+            if mode == "affine" or mode == "similar":
+                cov_xx = (
+                    np.add.reduceat(
+                        sqrtwi[:, None, None]
+                        * (accum_sqrtwxx + accum_sqrtw[:, None, None] * vector_outer(mean_sqrtwx - center_x_broadcast)),
+                        offsets[:-1],
+                        axis=0,
+                    )
+                    / sum_w[:, None, None]
+                )
+                cov_yy = (
+                    np.add.reduceat(
+                        sqrtwi[:, None, None] * accum_sqrtw[:, None, None] * vector_outer(yi - center_y_broadcast),
+                        offsets[:-1],
+                        axis=0,
+                    )
+                    / sum_w[:, None, None]
+                )
+
         # Solve for pose
-        if mode == 'rigid':
+        if mode == "rigid":
             _, R, t = procrustes(cov_yx, mean_x=center_x, mean_y=center_y)
             poses[i] = make_affine_matrix(R, t)
-        elif mode == 'similar':
+        elif mode == "similar":
             s, R, t = procrustes(cov_yx, cov_xx=cov_xx, mean_x=center_x, mean_y=center_y, niter=niter)
             poses[i] = make_affine_matrix(s * R, t)
-        elif mode == 'affine':
+        elif mode == "affine":
             A, t = affine_procrustes(cov_yx, cov_xx, cov_yy, center_x, center_y, lam=lam, niter=niter)
             poses[i] = make_affine_matrix(A, t)
 
@@ -1828,21 +1910,28 @@ def solve_poses_sequential(
         accum_sqrtw += sqrtwi
         accum_sqrtwx += sqrtwi[:, None] * xi
         mean_sqrtwx = accum_sqrtwx / np.maximum(accum_sqrtw, np.finfo(dtype).tiny)[:, None]
-        accum_sqrtwxx += old_accum_sqrtw[:, None, None] * vector_outer(mean_sqrtwx - old_mean_sqrtwx) + sqrtwi[:, None, None] * vector_outer(xi - mean_sqrtwx)
+        accum_sqrtwxx += old_accum_sqrtw[:, None, None] * vector_outer(mean_sqrtwx - old_mean_sqrtwx) + sqrtwi[
+            :, None, None
+        ] * vector_outer(xi - mean_sqrtwx)
 
         mean_wx = accum_wx / np.maximum(accum_w, np.finfo(dtype).tiny)[:, None]
         old_mean_wx, old_accum_w = mean_wx.copy(), accum_w.copy()
         accum_w += wi
         accum_wx += wi[:, None] * xi
         mean_wx = accum_wx / np.maximum(accum_w, np.finfo(dtype).tiny)[:, None]
-        accum_wxx += old_accum_w[:, None, None] * vector_outer(mean_wx - old_mean_wx) + wi[:, None, None] * vector_outer(xi - mean_wx)
+        accum_wxx += old_accum_w[:, None, None] * vector_outer(mean_wx - old_mean_wx) + wi[
+            :, None, None
+        ] * vector_outer(xi - mean_wx)
         accum_nnz += wi > 0
 
     if offsets is None:
         tot_w = np.sum(accum_w, axis=-1)
         mu = np.sum(accum_wx, axis=-2) / np.maximum(tot_w, np.finfo(dtype).tiny)[:, None]
         mean_wx = accum_wx / np.maximum(accum_w, np.finfo(dtype).tiny)[:, None]
-        sigma = np.sum(accum_wxx + accum_w[:, None, None] * vector_outer(mu[..., None, :] - mean_wx), axis=-3) / np.maximum(tot_w, np.finfo(dtype).tiny)[:, None, None]
+        sigma = (
+            np.sum(accum_wxx + accum_w[:, None, None] * vector_outer(mu[..., None, :] - mean_wx), axis=-3)
+            / np.maximum(tot_w, np.finfo(dtype).tiny)[:, None, None]
+        )
         nnz = np.sum(accum_nnz, axis=-1)
         valid = np.sum(weights > 0, axis=-1) >= min_valid_size
     else:
@@ -1850,10 +1939,22 @@ def solve_poses_sequential(
         mu = np.add.reduceat(accum_wx, offsets[:-1], axis=0) / np.maximum(tot_w, np.finfo(dtype).tiny)[:, None]
         mean_wx = accum_wx / np.maximum(accum_w, np.finfo(dtype).tiny)[:, None]
         mu_broadcast = np.repeat(mu, lengths, axis=0)
-        sigma = np.add.reduceat(accum_wxx + accum_w[:, None, None] * vector_outer(mu_broadcast - mean_wx), offsets[:-1], axis=0) / np.maximum(tot_w, np.finfo(dtype).tiny)[:, None, None]
+        sigma = (
+            np.add.reduceat(
+                accum_wxx + accum_w[:, None, None] * vector_outer(mu_broadcast - mean_wx), offsets[:-1], axis=0
+            )
+            / np.maximum(tot_w, np.finfo(dtype).tiny)[:, None, None]
+        )
         nnz = np.add.reduceat(accum_nnz, offsets[:-1], axis=0)
         valid = np.add.reduceat(weights > 0, offsets[:-1], axis=1) >= min_valid_size
 
     err = np.sqrt(np.trace(accum_wxx, axis1=-2, axis2=-1) / np.maximum(accum_nnz, np.finfo(dtype).tiny))
 
-    return poses, valid, (mu, sigma, tot_w, nnz), mean_wx, err, (accum_sqrtw, accum_sqrtwx, accum_sqrtwxx, accum_w, accum_wx, accum_wxx, accum_nnz)
+    return (
+        poses,
+        valid,
+        (mu, sigma, tot_w, nnz),
+        mean_wx,
+        err,
+        (accum_sqrtw, accum_sqrtwx, accum_sqrtwxx, accum_w, accum_wx, accum_wxx, accum_nnz),
+    )

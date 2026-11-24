@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> pipeline -> panorama.py functionality."""
-
 import logging
 import pickle
 from pathlib import Path
@@ -24,10 +22,12 @@ import rerun as rr
 import torch
 from omegaconf import DictConfig
 
+# isort: split
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext import lietorch as lt
+
+# isort: split
 from worldfoundry.base_models.three_dimensions.depth.base import DepthEstimationInput, DepthEstimationModel
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v1 import DAPModel
-from worldfoundry.base_models.three_dimensions.depth.unik3d import Unik3DModel
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.slam.interface import SLAMOutput
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.slam.system import SLAMSystem
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base import (
@@ -40,8 +40,12 @@ from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base impo
     VideoStream,
 )
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils import io
-from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.geometry import project_points_to_panorama, se3_to_so3, so3_to_se3
-from worldfoundry.studio.visualization.plugins.scene3d.projection import save_projection_video
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.geometry import (
+    project_points_to_panorama,
+    se3_to_so3,
+    so3_to_se3,
+)
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.visualization import save_projection_video
 
 from . import AnnotationPipelineOutput, Pipeline
 from .processors import EquirectProjectionProcessor, TrackAnythingProcessor
@@ -50,7 +54,6 @@ logger = logging.getLogger(__name__)
 
 
 class MergedPanoramaVideoStream(VideoStream):
-    """Merged panorama video stream implementation."""
     # Determines how much height of the panorama is kept for depth estimation.
     # This way we crop the top and bottom of the input to avoid distortion (where depth estimation is not reliable).
     DEPTH_KEEP_RATIO = 0.6
@@ -62,14 +65,6 @@ class MergedPanoramaVideoStream(VideoStream):
         slam_output: SLAMOutput,
         pano_depth_method: str | None,
     ):
-        """Init.
-
-        Args:
-            pano_stream: The pano stream.
-            projected_streams: The projected streams.
-            slam_output: The slam output.
-            pano_depth_method: The pano depth method.
-        """
         assert len(projected_streams) > 0
         self.pano_stream = pano_stream
         self.projected_streams = projected_streams
@@ -77,9 +72,7 @@ class MergedPanoramaVideoStream(VideoStream):
         self.pano_depth_method = pano_depth_method
         self.pano_depth_model: DepthEstimationModel | None
 
-        if self.pano_depth_method == "unik3d":
-            self.pano_depth_model = Unik3DModel()
-        elif self.pano_depth_method == "dap":
+        if self.pano_depth_method == "dap":
             self.pano_depth_model = DAPModel()
         elif self.pano_depth_method is None:
             self.pano_depth_model = None
@@ -87,31 +80,15 @@ class MergedPanoramaVideoStream(VideoStream):
             raise ValueError(f"Unknown pano_depth_method: {self.pano_depth_method}")
 
     def frame_size(self) -> tuple[int, int]:
-        """Frame size.
-
-        Returns:
-            The return value.
-        """
         return self.pano_stream.frame_size()
 
     def fps(self) -> float:
-        """Fps.
-
-        Returns:
-            The return value.
-        """
         return self.pano_stream.fps()
 
     def __len__(self) -> int:
-        """Len.
-
-        Returns:
-            The return value.
-        """
         return len(self.pano_stream)
 
     def __iter__(self):
-        """Iter."""
         if self.pano_depth_method is not None:
             xyz_global, _ = self.slam_output.slam_map.get_dense_disp_full_pcd()
         else:
@@ -119,8 +96,8 @@ class MergedPanoramaVideoStream(VideoStream):
 
         last_inv_scale = 1.0
 
-        for frame_idx, (pano_frame_data, *projected_frame_data) in enumerate(
-            zip(self.pano_stream, *self.projected_streams)
+        for frame_idx, (pano_frame_data, *_projected_frame_data) in enumerate(
+            zip(self.pano_stream, *self.projected_streams, strict=False)
         ):
             pano_frame_data.intrinsics = torch.zeros(4).float().cuda()
             pano_frame_data.pose = self.slam_output.trajectory[frame_idx]
@@ -217,24 +194,13 @@ class MergedPanoramaVideoStream(VideoStream):
             yield pano_frame_data
 
     def attributes(self) -> set[FrameAttribute]:
-        """Attributes.
-
-        Returns:
-            The return value.
-        """
         return {FrameAttribute.POSE, FrameAttribute.INTRINSICS}
 
     def name(self) -> str:
-        """Name.
-
-        Returns:
-            The return value.
-        """
         return self.pano_stream.name()
 
 
 class PanoramaAnnotationPipeline(Pipeline):
-    """Panorama annotation pipeline implementation."""
     def __init__(
         self,
         init: DictConfig,
@@ -243,18 +209,6 @@ class PanoramaAnnotationPipeline(Pipeline):
         output: DictConfig,
         post: DictConfig,
     ) -> None:
-        """Init.
-
-        Args:
-            init: The init.
-            virtual: The virtual.
-            slam: The slam.
-            output: The output.
-            post: The post.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.init_cfg = init
         virtual_height = virtual.height
@@ -278,14 +232,6 @@ class PanoramaAnnotationPipeline(Pipeline):
         self.out_path.mkdir(exist_ok=True, parents=True)
 
     def run(self, video_stream: VideoStream | MultiviewVideoList) -> AnnotationPipelineOutput:
-        """Run.
-
-        Args:
-            video_stream: The video stream.
-
-        Returns:
-            The return value.
-        """
         assert isinstance(video_stream, VideoStream), "Panorama pipeline only supports single video stream"
         annotate_output = AnnotationPipelineOutput()
         artifact_path = io.ArtifactPath(self.out_path, video_stream.name())
@@ -322,7 +268,7 @@ class PanoramaAnnotationPipeline(Pipeline):
         cached_video_stream = CachedVideoStream(video_stream)
 
         slam_streams: list[VideoStream] = []
-        for rig_transform, rig_name in zip(rig_transforms, rig_names):
+        for rig_transform, _rig_name in zip(rig_transforms, rig_names, strict=False):
             projectors: list[StreamProcessor] = [
                 EquirectProjectionProcessor(
                     se3_to_so3(rig_transform),

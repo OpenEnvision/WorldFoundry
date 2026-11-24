@@ -1,18 +1,18 @@
 ---
 title: ManiSkill
-description: "UCSD Hao Su 实验室基于 SAPIEN 的 GPU 并行操作评测。WorldFoundry 导入官方 rollout——不跑模拟器。"
+description: "UCSD Hao Su 实验室基于 SAPIEN 的 GPU 并行操作评测。WorldFoundry 导入官方 rollout 结果。"
 ---
 
-ManiSkill 是加州大学圣迭戈分校 Hao Su 实验室在 **SAPIEN** 上的 **GPU 并行**操作评测：数十个技能族、多种机器人本体、演示数据集，以及面向 RL 与模仿学习的大规模并行 rollout。论文是 [ManiSkill: Generalizable Manipulation Skill Benchmark with Large-Scale Demonstrations](https://arxiv.org/abs/2302.04659)。项目：[maniskill.ai](https://maniskill.ai/)。代码：[haosulab/ManiSkill](https://github.com/haosulab/ManiSkill)（Apache-2.0）。后来的 ManiSkill2 / ManiSkill3 仍是同一实验室和引擎；本卡片是 ManiSkill 导入器，不是那些页面的静默改名。
+ManiSkill 是加州大学圣迭戈分校 Hao Su 实验室基于 **SAPIEN** 的 **GPU 并行**操作评测：数十个技能族、多种机器人本体、演示数据集，以及面向 RL 与模仿学习的大规模并行 rollout。论文是 [ManiSkill: Generalizable Manipulation Skill Benchmark with Large-Scale Demonstrations](https://arxiv.org/abs/2302.04659)。项目：[maniskill.ai](https://maniskill.ai/)。代码：[haosulab/ManiSkill](https://github.com/haosulab/ManiSkill)（Apache-2.0）。后续的 ManiSkill2 / ManiSkill3 仍由同一实验室开发，并使用同一引擎。
 
-WorldFoundry 的路径是**只收官方结果**。你在上游工具里跑完，再用 `official-validation` 把 JSON/CSV rollout 摘要归一进统一 scorecard。模拟器执行、策略加载和数据采集保持显式、留在上游。仓库镜像：`cache/vla_va_wam/repos/haosulab--ManiSkill`。
+WorldFoundry **只导入官方结果**。先在上游工具中完成评测，再用 `official-validation` 将 JSON/CSV rollout 摘要归一化到统一 scorecard。模拟器执行、策略加载和数据采集都在上游工具中完成。仓库镜像：`cache/vla_va_wam/repos/haosulab--ManiSkill`。
 
 <BenchmarkPageSections id="maniskill" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id maniskill \
   --mode official-validation \
   --official-results-path <official_results.json> \

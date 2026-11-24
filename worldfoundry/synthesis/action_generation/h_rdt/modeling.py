@@ -12,7 +12,8 @@ from __future__ import annotations
 import math
 import re
 from collections import OrderedDict
-from typing import Any, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 import numpy as np
 import torch
@@ -34,7 +35,7 @@ def _one_dimensional_embedding(embed_dim: int, positions: np.ndarray) -> np.ndar
 
 
 def _nd_embedding(embed_dim: int, grid_sizes: tuple[int, ...]) -> np.ndarray:
-    embedding = np.zeros(grid_sizes + (embed_dim,))
+    embedding = np.zeros(grid_sizes + (embed_dim,))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     for axis, size in enumerate(grid_sizes):
         if size <= 1:
             continue
@@ -68,7 +69,7 @@ def multimodal_position_embedding(
         if name == "image" and isinstance(length, (tuple, list)):
             full_shape = tuple(abs(int(item)) for item in length)
             embedded_shape = tuple(int(item) if int(item) > 0 else 1 for item in length)
-            current = np.zeros(full_shape + (embed_dim,))
+            current = np.zeros(full_shape + (embed_dim,))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             current += _nd_embedding(embed_dim, embedded_shape)
             current = current.reshape(-1, embed_dim)
         else:

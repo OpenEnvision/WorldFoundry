@@ -20,16 +20,16 @@ from .rae_encoder import RAEEncoder, RAEEncoderOutputs
 from .vit_decoder import ViTVideoDecoder
 
 __all__ = [
-    "VideoCodecConfig",
-    "RAEEncoderConfig",
-    "ViTDecoderConfig",
-    "StridedConvBottleneckConfig",
-    "VideoCodec",
-    "VideoCodecOutputs",
-    "RAEEncoder",
-    "RAEEncoderOutputs",
-    "ViTVideoDecoder",
+    "DINO_DIM",
     "DinoModel",
     "DinoPerceptualLoss",
-    "DINO_DIM",
+    "RAEEncoder",
+    "RAEEncoderConfig",
+    "RAEEncoderOutputs",
+    "StridedConvBottleneckConfig",
+    "ViTDecoderConfig",
+    "ViTVideoDecoder",
+    "VideoCodec",
+    "VideoCodecConfig",
+    "VideoCodecOutputs",
 ]

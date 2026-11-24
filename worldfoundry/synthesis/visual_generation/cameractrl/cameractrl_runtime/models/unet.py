@@ -1,25 +1,28 @@
 # Adapted from https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/unet_2d_condition.py
-import os
 import json
-import safetensors
 import logging
+import os
+from dataclasses import dataclass
+from typing import Any
+
+import safetensors
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
-
-from einops import repeat, rearrange
-from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union, Dict, Any
-
 from diffusers.configuration_utils import ConfigMixin, register_to_config
-from diffusers.models.attention_processor import AttentionProcessor
-
-from diffusers.models.modeling_utils import ModelMixin
-from diffusers.utils import BaseOutput, logging
-from diffusers.models.embeddings import TimestepEmbedding, Timesteps
-from diffusers.models.attention_processor import LoRAAttnProcessor
 from diffusers.loaders import AttnProcsLayers, UNet2DConditionLoadersMixin
+from diffusers.models.attention_processor import AttentionProcessor, LoRAAttnProcessor
+from diffusers.models.embeddings import TimestepEmbedding, Timesteps
+from diffusers.models.modeling_utils import ModelMixin
+from diffusers.utils import BaseOutput, logging  # noqa: F811 - Later import provides the binding, as upstream.
+from einops import rearrange, repeat
 
+from worldfoundry.base_models.diffusion_model.models.networks.animatediff.resnet import InflatedConv3d
+
+from .attention_processor import AttnProcessor as CustomizedAttnProcessor
+from .attention_processor import LoRAAttnProcessor as CustomizedLoRAAttnProcessor
+from .attention_processor import LORAPoseAdaptorAttnProcessor, PoseAdaptorAttnProcessor
+from .resnet import FusionBlock2D
 from .unet_blocks import (
     CrossAttnDownBlock3D,
     CrossAttnUpBlock3D,
@@ -29,16 +32,7 @@ from .unet_blocks import (
     get_down_block,
     get_up_block,
 )
-from .attention_processor import (
-    LORAPoseAdaptorAttnProcessor,
-    PoseAdaptorAttnProcessor
-)
-from .attention_processor import LoRAAttnProcessor as CustomizedLoRAAttnProcessor
-from .attention_processor import AttnProcessor as CustomizedAttnProcessor
-from .resnet import (
-    InflatedConv3d,
-    FusionBlock2D
-)
+
 
 @dataclass
 class UNet3DConditionOutput(BaseOutput):
@@ -50,53 +44,51 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
 
     @register_to_config
     def __init__(
-            self,
-            sample_size: Optional[int] = None,
-            in_channels: int = 4,
-            out_channels: int = 4,
-            center_input_sample: bool = False,
-            flip_sin_to_cos: bool = True,
-            freq_shift: int = 0,
-            down_block_types: Tuple[str] = (
-                    "CrossAttnDownBlock3D",
-                    "CrossAttnDownBlock3D",
-                    "CrossAttnDownBlock3D",
-                    "DownBlock3D",
-            ),
-            mid_block_type: str = "UNetMidBlock3DCrossAttn",
-            up_block_types: Tuple[str] = (
-                    "UpBlock3D",
-                    "CrossAttnUpBlock3D",
-                    "CrossAttnUpBlock3D",
-                    "CrossAttnUpBlock3D",
-            ),
-            only_cross_attention: Union[bool, Tuple[bool]] = False,
-            block_out_channels: Tuple[int] = (320, 640, 1280, 1280),
-            layers_per_block: int = 2,
-            downsample_padding: int = 1,
-            mid_block_scale_factor: float = 1,
-            act_fn: str = "silu",
-            norm_num_groups: int = 32,
-            norm_eps: float = 1e-5,
-            cross_attention_dim: int = 1280,
-            attention_head_dim: Union[int, Tuple[int]] = 8,
-            dual_cross_attention: bool = False,
-            use_linear_projection: bool = False,
-            class_embed_type: Optional[str] = None,
-            addition_embed_type: Optional[str] = None,
-            num_class_embeds: Optional[int] = None,
-            upcast_attention: bool = False,
-            resnet_time_scale_shift: str = "default",
-
-            # Additional
-            use_motion_module=False,
-            motion_module_resolutions=(1, 2, 4, 8),
-            motion_module_mid_block=False,
-            motion_module_type=None,
-            motion_module_kwargs={},
-
-            # whether fuse first frame's feature
-            fuse_first_frame: bool = False,
+        self,
+        sample_size: int | None = None,
+        in_channels: int = 4,
+        out_channels: int = 4,
+        center_input_sample: bool = False,
+        flip_sin_to_cos: bool = True,
+        freq_shift: int = 0,
+        down_block_types: tuple[str] = (
+            "CrossAttnDownBlock3D",
+            "CrossAttnDownBlock3D",
+            "CrossAttnDownBlock3D",
+            "DownBlock3D",
+        ),
+        mid_block_type: str = "UNetMidBlock3DCrossAttn",
+        up_block_types: tuple[str] = (
+            "UpBlock3D",
+            "CrossAttnUpBlock3D",
+            "CrossAttnUpBlock3D",
+            "CrossAttnUpBlock3D",
+        ),
+        only_cross_attention: bool | tuple[bool] = False,
+        block_out_channels: tuple[int] = (320, 640, 1280, 1280),
+        layers_per_block: int = 2,
+        downsample_padding: int = 1,
+        mid_block_scale_factor: float = 1,
+        act_fn: str = "silu",
+        norm_num_groups: int = 32,
+        norm_eps: float = 1e-5,
+        cross_attention_dim: int = 1280,
+        attention_head_dim: int | tuple[int] = 8,
+        dual_cross_attention: bool = False,
+        use_linear_projection: bool = False,
+        class_embed_type: str | None = None,
+        addition_embed_type: str | None = None,
+        num_class_embeds: int | None = None,
+        upcast_attention: bool = False,
+        resnet_time_scale_shift: str = "default",
+        # Additional
+        use_motion_module=False,
+        motion_module_resolutions=(1, 2, 4, 8),
+        motion_module_mid_block=False,
+        motion_module_type=None,
+        motion_module_kwargs={},  # noqa: B006 - Keeps the upstream default object and signature.
+        # whether fuse first frame's feature
+        fuse_first_frame: bool = False,
     ):
         super().__init__()
         self.logger = logging.get_logger(__name__)
@@ -138,7 +130,9 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 groups=norm_num_groups,
                 time_embedding_norm=resnet_time_scale_shift,
                 non_linearity=act_fn,
-            ) if fuse_first_frame else None
+            )
+            if fuse_first_frame
+            else None
         )
 
         if isinstance(only_cross_attention, bool):
@@ -150,7 +144,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         # down
         output_channel = block_out_channels[0]
         for i, down_block_type in enumerate(down_block_types):
-            res = 2 ** i
+            res = 2**i
             input_channel = output_channel
             output_channel = block_out_channels[i]
             is_final_block = i == len(block_out_channels) - 1
@@ -173,7 +167,6 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 only_cross_attention=only_cross_attention[i],
                 upcast_attention=upcast_attention,
                 resnet_time_scale_shift=resnet_time_scale_shift,
-
                 use_motion_module=use_motion_module and (res in motion_module_resolutions),
                 motion_module_type=motion_module_type,
                 motion_module_kwargs=motion_module_kwargs,
@@ -189,8 +182,10 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                         groups=norm_num_groups,
                         time_embedding_norm=resnet_time_scale_shift,
                         non_linearity=act_fn,
-                    ) if fuse_first_frame else None for _ in
-                    range(layers_per_block if is_final_block else layers_per_block + 1)
+                    )
+                    if fuse_first_frame
+                    else None
+                    for _ in range(layers_per_block if is_final_block else layers_per_block + 1)
                 ]
             )
 
@@ -212,7 +207,6 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 dual_cross_attention=dual_cross_attention,
                 use_linear_projection=use_linear_projection,
                 upcast_attention=upcast_attention,
-
                 use_motion_module=use_motion_module and motion_module_mid_block,
                 motion_module_type=motion_module_type,
                 motion_module_kwargs=motion_module_kwargs,
@@ -220,15 +214,19 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         else:
             raise ValueError(f"unknown mid_block_type : {mid_block_type}")
 
-        self.mid_fuser = FusionBlock2D(
-            in_channels=block_out_channels[-1],
-            out_channels=block_out_channels[-1],
-            temb_channels=time_embed_dim,
-            eps=norm_eps,
-            groups=norm_num_groups,
-            time_embedding_norm=resnet_time_scale_shift,
-            non_linearity=act_fn,
-        ) if fuse_first_frame else None
+        self.mid_fuser = (
+            FusionBlock2D(
+                in_channels=block_out_channels[-1],
+                out_channels=block_out_channels[-1],
+                temb_channels=time_embed_dim,
+                eps=norm_eps,
+                groups=norm_num_groups,
+                time_embedding_norm=resnet_time_scale_shift,
+                non_linearity=act_fn,
+            )
+            if fuse_first_frame
+            else None
+        )
 
         # count how many layers upsample the videos
         self.num_upsamplers = 0
@@ -271,7 +269,6 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 only_cross_attention=only_cross_attention[i],
                 upcast_attention=upcast_attention,
                 resnet_time_scale_shift=resnet_time_scale_shift,
-
                 use_motion_module=use_motion_module and (res in motion_module_resolutions),
                 motion_module_type=motion_module_type,
                 motion_module_kwargs=motion_module_kwargs,
@@ -286,7 +283,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
 
     def set_image_layer_lora(self, image_layer_lora_rank: int = 128):
         lora_attn_procs = {}
-        for name in self.attn_processors.keys():
+        for name in self.attn_processors.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             self.logger.info(f"(add lora) {name}")
             cross_attention_dim = None if name.endswith("attn1.processor") else self.config.cross_attention_dim
             if name.startswith("mid_block"):
@@ -310,17 +307,21 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         del lora_layers
 
     def set_image_layer_lora_scale(self, lora_scale: float = 1.0):
-        for block in self.down_blocks: setattr(block, "lora_scale", lora_scale)
-        for block in self.up_blocks:   setattr(block, "lora_scale", lora_scale)
-        setattr(self.mid_block, "lora_scale", lora_scale)
+        for block in self.down_blocks:
+            block.lora_scale = lora_scale
+        for block in self.up_blocks:
+            block.lora_scale = lora_scale
+        self.mid_block.lora_scale = lora_scale
 
     def set_motion_module_lora_scale(self, lora_scale: float = 1.0):
-        for block in self.down_blocks: setattr(block, "motion_lora_scale", lora_scale)
-        for block in self.up_blocks: setattr(block, "motion_lora_scale", lora_scale)
-        setattr(self.mid_block, "motion_lora_scale", lora_scale)
+        for block in self.down_blocks:
+            block.motion_lora_scale = lora_scale
+        for block in self.up_blocks:
+            block.motion_lora_scale = lora_scale
+        self.mid_block.motion_lora_scale = lora_scale
 
     @property
-    def attn_processors(self) -> Dict[str, AttentionProcessor]:
+    def attn_processors(self) -> dict[str, AttentionProcessor]:
         r"""
         Returns:
             `dict` of attention processors: A dictionary containing all attention processors used in the model with
@@ -329,11 +330,10 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         # set recursively
         processors = {}
 
-        def fn_recursive_add_processors(name: str, module: torch.nn.Module, processors: Dict[str, AttentionProcessor]):
+        def fn_recursive_add_processors(name: str, module: torch.nn.Module, processors: dict[str, AttentionProcessor]):
             # filter out processors in motion module
-            if hasattr(module, "set_processor"):
-                if not "motion_modules." in name:
-                    processors[f"{name}.processor"] = module.processor
+            if hasattr(module, "set_processor") and "motion_modules." not in name:
+                processors[f"{name}.processor"] = module.processor
 
             for sub_name, child in module.named_children():
                 fn_recursive_add_processors(f"{name}.{sub_name}", child, processors)
@@ -345,7 +345,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
 
         return processors
 
-    def set_attn_processor(self, processor: Union[AttentionProcessor, Dict[str, AttentionProcessor]]):
+    def set_attn_processor(self, processor: AttentionProcessor | dict[str, AttentionProcessor]):
         r"""
         Sets the attention processor to use to compute attention.
 
@@ -367,12 +367,11 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             )
 
         def fn_recursive_attn_processor(name: str, module: torch.nn.Module, processor):
-            if hasattr(module, "set_processor"):
-                if not "motion_modules." in name:
-                    if not isinstance(processor, dict):
-                        module.set_processor(processor)
-                    else:
-                        module.set_processor(processor.pop(f"{name}.processor"))
+            if hasattr(module, "set_processor") and "motion_modules." not in name:
+                if not isinstance(processor, dict):
+                    module.set_processor(processor)
+                else:
+                    module.set_processor(processor.pop(f"{name}.processor"))
 
             for sub_name, child in module.named_children():
                 fn_recursive_attn_processor(f"{name}.{sub_name}", child, processor)
@@ -382,7 +381,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
 
     def set_motion_module_lora_layers(self, motion_module_lora_rank: int = 32):
         lora_attn_procs = {}
-        for name in self.mm_attn_processors.keys():
+        for name in self.mm_attn_processors.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             self.logger.info(f"(add lora) {name}")
             cross_attention_dim = None
             if name.startswith("mid_block"):
@@ -397,7 +396,9 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             lora_attn_procs[name] = LoRAAttnProcessor(
                 hidden_size=hidden_size,
                 cross_attention_dim=cross_attention_dim,
-                rank=motion_module_lora_rank if motion_module_lora_rank > 16 else hidden_size // motion_module_lora_rank,
+                rank=motion_module_lora_rank
+                if motion_module_lora_rank > 16
+                else hidden_size // motion_module_lora_rank,
             )
         self.set_mm_attn_processor(lora_attn_procs)
 
@@ -405,7 +406,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         return lora_layers
 
     @property
-    def mm_attn_processors(self) -> Dict[str, AttentionProcessor]:
+    def mm_attn_processors(self) -> dict[str, AttentionProcessor]:
         r"""
         Returns:
             `dict` of attention processors: A dictionary containing all attention processors used in the model with
@@ -414,12 +415,10 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         # set recursively
         processors = {}
 
-        def fn_recursive_add_processors(name: str, module: torch.nn.Module,
-                                        processors: Dict[str, AttentionProcessor]):
+        def fn_recursive_add_processors(name: str, module: torch.nn.Module, processors: dict[str, AttentionProcessor]):
             # filter out processors in motion module
-            if hasattr(module, "set_processor"):
-                if "motion_modules." in name:
-                    processors[f"{name}.processor"] = module.processor
+            if hasattr(module, "set_processor") and "motion_modules." in name:
+                processors[f"{name}.processor"] = module.processor
 
             for sub_name, child in module.named_children():
                 fn_recursive_add_processors(f"{name}.{sub_name}", child, processors)
@@ -431,7 +430,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
 
         return processors
 
-    def set_mm_attn_processor(self, processor: Union[AttentionProcessor, Dict[str, AttentionProcessor]]):
+    def set_mm_attn_processor(self, processor: AttentionProcessor | dict[str, AttentionProcessor]):
         r"""
         Sets the attention processor to use to compute attention.
 
@@ -453,12 +452,11 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             )
 
         def fn_recursive_attn_processor(name: str, module: torch.nn.Module, processor):
-            if hasattr(module, "set_processor"):
-                if "motion_modules." in name:
-                    if not isinstance(processor, dict):
-                        module.set_processor(processor)
-                    else:
-                        module.set_processor(processor.pop(f"{name}.processor"))
+            if hasattr(module, "set_processor") and "motion_modules." in name:
+                if not isinstance(processor, dict):
+                    module.set_processor(processor)
+                else:
+                    module.set_processor(processor.pop(f"{name}.processor"))
 
             for sub_name, child in module.named_children():
                 fn_recursive_attn_processor(f"{name}.{sub_name}", child, processor)
@@ -520,7 +518,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         # Recursively walk through all the children.
         # Any children which exposes the set_attention_slice method
         # gets the message
-        def fn_recursive_set_attention_slice(module: torch.nn.Module, slice_size: List[int]):
+        def fn_recursive_set_attention_slice(module: torch.nn.Module, slice_size: list[int]):
             if hasattr(module, "set_attention_slice"):
                 module.set_attention_slice(slice_size.pop())
 
@@ -536,24 +534,21 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             module.gradient_checkpointing = value
 
     def forward(
-            self,
-            sample: torch.FloatTensor,
-            timestep: Union[torch.Tensor, float, int],
-            encoder_hidden_states: Union[torch.Tensor, List[torch.Tensor]],
-            class_labels: Optional[torch.Tensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            cross_attention_kwargs: Optional[Dict[str, Any]] = None,
-            return_dict: bool = True,
-
-            # support controlnet
-            down_block_additional_residuals: Optional[Tuple[torch.Tensor]] = None,
-            mid_block_additional_residual: Optional[torch.Tensor] = None,
-
-            # other features
-            motion_module_alphas: Union[tuple, float] = 1.0,
-            debug: bool = False,
-    ) -> Union[UNet3DConditionOutput, Tuple]:
-
+        self,
+        sample: torch.FloatTensor,
+        timestep: torch.Tensor | float | int,
+        encoder_hidden_states: torch.Tensor | list[torch.Tensor],
+        class_labels: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        cross_attention_kwargs: dict[str, Any] | None = None,
+        return_dict: bool = True,
+        # support controlnet
+        down_block_additional_residuals: tuple[torch.Tensor] | None = None,
+        mid_block_additional_residual: torch.Tensor | None = None,
+        # other features
+        motion_module_alphas: tuple | float = 1.0,
+        debug: bool = False,
+    ) -> UNet3DConditionOutput | tuple:
         activations = {}
 
         r"""
@@ -573,7 +568,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         # The overall upsampling factor is equal to 2 ** (# num of upsampling layears).
         # However, the upsampling interpolation output size can be forced to fit any upsampling size
         # on the fly if necessary.
-        default_overall_up_factor = 2 ** self.num_upsamplers
+        default_overall_up_factor = 2**self.num_upsamplers
 
         # upsample size should be forwarded when sample is not a multiple of `default_overall_up_factor`
         forward_upsample_size = False
@@ -638,13 +633,13 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         activations["conv_in_out"] = sample
 
         # to be fused
-        if self.down_fusers[0] != None:
+        if self.down_fusers[0] != None:  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
             # scale, shift   = self.down_fusers[0](sample[:,:,0].contiguous(), emb_single).unsqueeze(2).chunk(2, dim=1)
             # sample[:,:,1:] = (1 + scale) * sample[:,:,1:].contiguous() + shift
             fused_sample = self.down_fusers[0](
                 init_hidden_state=sample[:, :, :1].contiguous(),
                 post_hidden_states=sample[:, :, 1:].contiguous(),
-                temb=emb_single,
+                temb=emb_single,  # noqa: F821 - Name is undefined in the upstream source.
             )
             sample = torch.cat([sample[:, :, :1], fused_sample], dim=2)
 
@@ -657,23 +652,24 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         if isinstance(motion_module_alphas, float):
             motion_module_alphas = (motion_module_alphas,) * 5
 
-        for downsample_block, down_fuser, motion_module_alpha in zip(self.down_blocks, self.down_fusers[1:],
-                                                                     motion_module_alphas[:-1]):
+        for downsample_block, down_fuser, motion_module_alpha in zip(
+            self.down_blocks, self.down_fusers[1:], motion_module_alphas[:-1], strict=False
+        ):
             sample, res_samples = downsample_block(
                 hidden_states=sample,
                 temb=emb,
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=attention_mask,
                 motion_module_alpha=motion_module_alpha,
-                cross_attention_kwargs=cross_attention_kwargs
+                cross_attention_kwargs=cross_attention_kwargs,
             )
             # to be fused
             for sample_idx, fuser in enumerate(down_fuser):
-                if fuser != None:
+                if fuser != None:  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
                     fused_sample = fuser(
                         init_hidden_state=res_samples[sample_idx][:, :, :1].contiguous(),
                         post_hidden_states=res_samples[sample_idx][:, :, 1:].contiguous(),
-                        temb=emb_single,
+                        temb=emb_single,  # noqa: F821 - Name is undefined in the upstream source.
                     )
                     res_samples = list(res_samples)
                     res_samples[sample_idx] = torch.cat([res_samples[sample_idx][:, :, :1], fused_sample], dim=2)
@@ -686,7 +682,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             new_down_block_res_samples = ()
 
             for down_block_res_sample, down_block_additional_residual in zip(
-                    down_block_res_samples, down_block_additional_residuals
+                down_block_res_samples, down_block_additional_residuals, strict=False
             ):
                 if len(down_block_additional_residual.shape) == 4:
                     # b c h w
@@ -702,16 +698,20 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
 
         # mid
         sample = self.mid_block(
-            sample, emb, encoder_hidden_states=encoder_hidden_states, attention_mask=attention_mask,
-            motion_module_alpha=motion_module_alphas[-1], cross_attention_kwargs=cross_attention_kwargs
+            sample,
+            emb,
+            encoder_hidden_states=encoder_hidden_states,
+            attention_mask=attention_mask,
+            motion_module_alpha=motion_module_alphas[-1],
+            cross_attention_kwargs=cross_attention_kwargs,
         )
 
         # mid block fuser
-        if self.mid_fuser != None:
+        if self.mid_fuser != None:  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
             fused_sample = self.mid_fuser(
                 init_hidden_state=sample[:, :, :1],
                 post_hidden_states=sample[:, :, 1:],
-                temb=emb_single,
+                temb=emb_single,  # noqa: F821 - Name is undefined in the upstream source.
             )
             sample = torch.cat([sample[:, :, :1], fused_sample], dim=2)
 
@@ -725,10 +725,12 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             sample = sample + mid_block_additional_residual
 
         # up
-        for i, (upsample_block, motion_module_alpha) in enumerate(zip(self.up_blocks, motion_module_alphas[:-1][::-1])):
+        for i, (upsample_block, motion_module_alpha) in enumerate(
+            zip(self.up_blocks, motion_module_alphas[:-1][::-1], strict=False)
+        ):
             is_final_block = i == len(self.up_blocks) - 1
 
-            res_samples = down_block_res_samples[-len(upsample_block.resnets):]
+            res_samples = down_block_res_samples[-len(upsample_block.resnets) :]
             down_block_res_samples = down_block_res_samples[: -len(upsample_block.resnets)]
 
             # if we have not reached the final block and need to forward the
@@ -745,13 +747,17 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                     upsample_size=upsample_size,
                     attention_mask=attention_mask,
                     motion_module_alpha=motion_module_alpha,
-                    cross_attention_kwargs=cross_attention_kwargs
+                    cross_attention_kwargs=cross_attention_kwargs,
                 )
             else:
                 sample = upsample_block(
-                    hidden_states=sample, temb=emb, res_hidden_states_tuple=res_samples, upsample_size=upsample_size,
-                    encoder_hidden_states=encoder_hidden_states, motion_module_alpha=motion_module_alpha,
-                    cross_attention_kwargs=cross_attention_kwargs
+                    hidden_states=sample,
+                    temb=emb,
+                    res_hidden_states_tuple=res_samples,
+                    upsample_size=upsample_size,
+                    encoder_hidden_states=encoder_hidden_states,
+                    motion_module_alpha=motion_module_alpha,
+                    cross_attention_kwargs=cross_attention_kwargs,
                 )
         activations["upblocks_out"] = sample
 
@@ -764,7 +770,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         sample = self.conv_act(sample)
         sample = self.conv_out(sample)
 
-        if (not return_dict):
+        if not return_dict:
             return (sample,)
         elif debug:
             return UNet3DConditionOutput(sample=sample), activations
@@ -779,11 +785,11 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         if subfolder is not None:
             pretrained_model_path = os.path.join(pretrained_model_path, subfolder)
 
-        config_file = os.path.join(pretrained_model_path, 'config.json')
+        config_file = os.path.join(pretrained_model_path, "config.json")
         if not os.path.isfile(config_file):
             raise RuntimeError(f"{config_file} does not exist")
 
-        with open(config_file, "r") as f:
+        with open(config_file) as f:
             config = json.load(f)
 
         config["_class_name"] = cls.__name__
@@ -791,23 +797,18 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             "CrossAttnDownBlock3D",
             "CrossAttnDownBlock3D",
             "CrossAttnDownBlock3D",
-            "DownBlock3D"
+            "DownBlock3D",
         ]
-        config["up_block_types"] = [
-            "UpBlock3D",
-            "CrossAttnUpBlock3D",
-            "CrossAttnUpBlock3D",
-            "CrossAttnUpBlock3D"
-        ]
+        config["up_block_types"] = ["UpBlock3D", "CrossAttnUpBlock3D", "CrossAttnUpBlock3D", "CrossAttnUpBlock3D"]
 
         from diffusers.utils import SAFETENSORS_WEIGHTS_NAME
 
         model, unused_kwargs = cls.from_config(config, return_unused_kwargs=True, **unet_additional_kwargs)
         if logger is not None:
-            logger.info(f"please check unused kwargs in 'unet_additional_kwargs' config:")
+            logger.info("please check unused kwargs in 'unet_additional_kwargs' config:")
         for k, v in unused_kwargs.items():
             if logger is not None:
-                logger.info(f"{k:50s}: {repr(v)}")
+                logger.info(f"{k:50s}: {v!r}")
 
         model_file = os.path.join(pretrained_model_path, SAFETENSORS_WEIGHTS_NAME)
         if not os.path.isfile(model_file):
@@ -888,31 +889,31 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
 
         return init_dict, unused_kwargs, hidden_config_dict
 
-    def __init__(self,
-                 decoder_add_posecond=True,
-                 **kwargs):
-        super(UNet3DConditionModelPoseCond, self).__init__(**kwargs)
+    def __init__(self, decoder_add_posecond=True, **kwargs):
+        super().__init__(**kwargs)
         self.decoder_add_posecond = decoder_add_posecond
 
-    def set_all_attn_processor(self,
-                               add_spatial=False,
-                               spatial_attn_names='attn1',
-                               add_temporal=False,
-                               add_spatial_lora=True,
-                               add_motion_lora=False,
-                               temporal_attn_names='0',
-                               pose_feature_dimensions=[320, 640, 1280, 1280],
-                               lora_kwargs={},
-                               motion_lora_kwargs={},
-                               **attention_processor_kwargs):
-        lora_rank = lora_kwargs.pop('lora_rank')
-        motion_lora_rank = motion_lora_kwargs.pop('lora_rank')
+    def set_all_attn_processor(
+        self,
+        add_spatial=False,
+        spatial_attn_names="attn1",
+        add_temporal=False,
+        add_spatial_lora=True,
+        add_motion_lora=False,
+        temporal_attn_names="0",
+        pose_feature_dimensions=[320, 640, 1280, 1280],  # noqa: B006 - Keeps the upstream default object and signature.
+        lora_kwargs={},  # noqa: B006 - Keeps the upstream default object and signature.
+        motion_lora_kwargs={},  # noqa: B006 - Keeps the upstream default object and signature.
+        **attention_processor_kwargs,
+    ):
+        lora_rank = lora_kwargs.pop("lora_rank")
+        motion_lora_rank = motion_lora_kwargs.pop("lora_rank")
         spatial_attn_procs = {}
         if add_spatial:
-            set_processor_names = spatial_attn_names.split(',')
-            for name in self.attn_processors.keys():
-                attention_name = name.split('.')[-2]
-                cross_attention_dim = None if attention_name == 'attn1' else self.config.cross_attention_dim
+            set_processor_names = spatial_attn_names.split(",")
+            for name in self.attn_processors.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+                attention_name = name.split(".")[-2]
+                cross_attention_dim = None if attention_name == "attn1" else self.config.cross_attention_dim
                 if name.startswith("mid_block"):
                     hidden_size = self.config.block_out_channels[-1]
                     block_id = -1
@@ -930,25 +931,31 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
                     add_pose_adaptor = attention_name in set_processor_names
                     pose_feature_dim = pose_feature_dimensions[block_id] if add_pose_adaptor else None
                 if add_pose_adaptor and add_spatial_lora:
-                    spatial_attn_procs[name] = LORAPoseAdaptorAttnProcessor(hidden_size=hidden_size,
-                                                                            pose_feature_dim=pose_feature_dim,
-                                                                            cross_attention_dim=cross_attention_dim,
-                                                                            rank=lora_rank if lora_rank > 16 else hidden_size // lora_rank,
-                                                                            **attention_processor_kwargs,
-                                                                            **lora_kwargs)
+                    spatial_attn_procs[name] = LORAPoseAdaptorAttnProcessor(
+                        hidden_size=hidden_size,
+                        pose_feature_dim=pose_feature_dim,
+                        cross_attention_dim=cross_attention_dim,
+                        rank=lora_rank if lora_rank > 16 else hidden_size // lora_rank,
+                        **attention_processor_kwargs,
+                        **lora_kwargs,
+                    )
                 elif add_pose_adaptor:
-                    spatial_attn_procs[name] = PoseAdaptorAttnProcessor(hidden_size=hidden_size,
-                                                                        pose_feature_dim=pose_feature_dim,
-                                                                        cross_attention_dim=cross_attention_dim,
-                                                                        **attention_processor_kwargs)
+                    spatial_attn_procs[name] = PoseAdaptorAttnProcessor(
+                        hidden_size=hidden_size,
+                        pose_feature_dim=pose_feature_dim,
+                        cross_attention_dim=cross_attention_dim,
+                        **attention_processor_kwargs,
+                    )
                 elif add_spatial_lora:
-                    spatial_attn_procs[name] = CustomizedLoRAAttnProcessor(hidden_size=hidden_size,
-                                                                           cross_attention_dim=cross_attention_dim,
-                                                                           rank=lora_rank if lora_rank > 16 else hidden_size // lora_rank)
+                    spatial_attn_procs[name] = CustomizedLoRAAttnProcessor(
+                        hidden_size=hidden_size,
+                        cross_attention_dim=cross_attention_dim,
+                        rank=lora_rank if lora_rank > 16 else hidden_size // lora_rank,
+                    )
                 else:
                     spatial_attn_procs[name] = CustomizedAttnProcessor()
         elif (not add_spatial) and add_spatial_lora:
-            for name in self.attn_processors.keys():
+            for name in self.attn_processors.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 cross_attention_dim = None if name.endswith("attn1.processor") else self.config.cross_attention_dim
                 if name.startswith("mid_block"):
                     hidden_size = self.config.block_out_channels[-1]
@@ -965,16 +972,16 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
                     rank=lora_rank if lora_rank > 16 else hidden_size // lora_rank,
                 )
         else:
-            for name in self.attn_processors.keys():
+            for name in self.attn_processors.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 spatial_attn_procs[name] = CustomizedAttnProcessor()
         self.set_attn_processor(spatial_attn_procs)
 
         mm_attn_procs = {}
         if add_temporal:
-            set_processor_names = temporal_attn_names.split(',')
+            set_processor_names = temporal_attn_names.split(",")
             cross_attention_dim = None
-            for name in self.mm_attn_processors.keys():
-                attention_name = name.split('.')[-2]
+            for name in self.mm_attn_processors.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
+                attention_name = name.split(".")[-2]
                 if name.startswith("mid_block"):
                     hidden_size = self.config.block_out_channels[-1]
                     block_id = -1
@@ -991,25 +998,31 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
                     add_pose_adaptor = attention_name in set_processor_names
                     pose_feature_dim = pose_feature_dimensions[block_id] if add_pose_adaptor else None
                 if add_pose_adaptor and add_motion_lora:
-                    mm_attn_procs[name] = LORAPoseAdaptorAttnProcessor(hidden_size=hidden_size,
-                                                                       pose_feature_dim=pose_feature_dim,
-                                                                       cross_attention_dim=cross_attention_dim,
-                                                                       rank=motion_lora_rank if motion_lora_rank > 16 else hidden_size // motion_lora_rank,
-                                                                       **attention_processor_kwargs,
-                                                                       **motion_lora_kwargs)
+                    mm_attn_procs[name] = LORAPoseAdaptorAttnProcessor(
+                        hidden_size=hidden_size,
+                        pose_feature_dim=pose_feature_dim,
+                        cross_attention_dim=cross_attention_dim,
+                        rank=motion_lora_rank if motion_lora_rank > 16 else hidden_size // motion_lora_rank,
+                        **attention_processor_kwargs,
+                        **motion_lora_kwargs,
+                    )
                 elif add_pose_adaptor:
-                    mm_attn_procs[name] = PoseAdaptorAttnProcessor(hidden_size=hidden_size,
-                                                                   pose_feature_dim=pose_feature_dim,
-                                                                   cross_attention_dim=cross_attention_dim,
-                                                                   **attention_processor_kwargs)
+                    mm_attn_procs[name] = PoseAdaptorAttnProcessor(
+                        hidden_size=hidden_size,
+                        pose_feature_dim=pose_feature_dim,
+                        cross_attention_dim=cross_attention_dim,
+                        **attention_processor_kwargs,
+                    )
                 elif add_motion_lora:
-                    mm_attn_procs[name] = CustomizedLoRAAttnProcessor(hidden_size=hidden_size,
-                                                                      cross_attention_dim=cross_attention_dim,
-                                                                      rank=motion_lora_rank if motion_lora_rank > 16 else hidden_size // motion_lora_rank)
+                    mm_attn_procs[name] = CustomizedLoRAAttnProcessor(
+                        hidden_size=hidden_size,
+                        cross_attention_dim=cross_attention_dim,
+                        rank=motion_lora_rank if motion_lora_rank > 16 else hidden_size // motion_lora_rank,
+                    )
                 else:
                     mm_attn_procs[name] = CustomizedAttnProcessor()
         elif (not add_temporal) and add_motion_lora:
-            for name in self.mm_attn_processors.keys():
+            for name in self.mm_attn_processors.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 cross_attention_dim = None
                 if name.startswith("mid_block"):
                     hidden_size = self.config.block_out_channels[-1]
@@ -1026,33 +1039,30 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
                     rank=motion_lora_rank if motion_lora_rank > 16 else hidden_size // motion_lora_rank,
                 )
         else:
-            for name in self.mm_attn_processors.keys():
+            for name in self.mm_attn_processors.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 mm_attn_procs[name] = CustomizedAttnProcessor()
         self.set_mm_attn_processor(mm_attn_procs)
 
     def forward(
-            self,
-            sample: torch.FloatTensor,
-            timestep: Union[torch.Tensor, float, int],
-            encoder_hidden_states: Union[torch.Tensor, List[torch.Tensor]],
-            class_labels: Optional[torch.Tensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            cross_attention_kwargs: Optional[Dict[str, Any]] = None,
-            pose_embedding_features: List[torch.Tensor] = None,
-            return_dict: bool = True,
-
-            # support controlnet
-            down_block_additional_residuals: Optional[Tuple[torch.Tensor]] = None,
-            mid_block_additional_residual: Optional[torch.Tensor] = None,
-
-            # other features
-            motion_module_alphas: Union[tuple, float] = 1.0,
-            debug: bool = False,
-    ) -> Union[UNet3DConditionOutput, Tuple]:
-
+        self,
+        sample: torch.FloatTensor,
+        timestep: torch.Tensor | float | int,
+        encoder_hidden_states: torch.Tensor | list[torch.Tensor],
+        class_labels: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        cross_attention_kwargs: dict[str, Any] | None = None,
+        pose_embedding_features: list[torch.Tensor] | None = None,
+        return_dict: bool = True,
+        # support controlnet
+        down_block_additional_residuals: tuple[torch.Tensor] | None = None,
+        mid_block_additional_residual: torch.Tensor | None = None,
+        # other features
+        motion_module_alphas: tuple | float = 1.0,
+        debug: bool = False,
+    ) -> UNet3DConditionOutput | tuple:
         activations = {}
 
-        default_overall_up_factor = 2 ** self.num_upsamplers
+        default_overall_up_factor = 2**self.num_upsamplers
 
         # upsample size should be forwarded when sample is not a multiple of `default_overall_up_factor`
         forward_upsample_size = False
@@ -1110,17 +1120,17 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
         encoder_hidden_states = repeat(encoder_hidden_states, "b n c -> (b f) n c", f=video_length)
 
         # pre-process
-        sample = self.conv_in(sample)           # b c f h w
+        sample = self.conv_in(sample)  # b c f h w
         activations["conv_in_out"] = sample
 
         # to be fused
-        if self.down_fusers[0] != None:
+        if self.down_fusers[0] != None:  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
             # scale, shift   = self.down_fusers[0](sample[:,:,0].contiguous(), emb_single).unsqueeze(2).chunk(2, dim=1)
             # sample[:,:,1:] = (1 + scale) * sample[:,:,1:].contiguous() + shift
             fused_sample = self.down_fusers[0](
                 init_hidden_state=sample[:, :, :1].contiguous(),
                 post_hidden_states=sample[:, :, 1:].contiguous(),
-                temb=emb_single,
+                temb=emb_single,  # noqa: F821 - Name is undefined in the upstream source.
             )
             sample = torch.cat([sample[:, :, :1], fused_sample], dim=2)
 
@@ -1133,10 +1143,9 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
         if isinstance(motion_module_alphas, float):
             motion_module_alphas = (motion_module_alphas,) * 5
 
-        for downsample_block, pose_embedding_feature, down_fuser, motion_module_alpha in zip(self.down_blocks,
-                                                                                             pose_embedding_features,
-                                                                                             self.down_fusers[1:],
-                                                                                             motion_module_alphas[:-1]):
+        for downsample_block, pose_embedding_feature, down_fuser, motion_module_alpha in zip(
+            self.down_blocks, pose_embedding_features, self.down_fusers[1:], motion_module_alphas[:-1], strict=False
+        ):
             if hasattr(downsample_block, "has_cross_attention") and downsample_block.has_cross_attention:
                 sample, res_samples = downsample_block(
                     hidden_states=sample,
@@ -1145,8 +1154,9 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
                     attention_mask=attention_mask,
                     motion_module_alpha=motion_module_alpha,
                     cross_attention_kwargs=cross_attention_kwargs.update({"pose_feature": pose_embedding_feature})
-                    if cross_attention_kwargs is not None else {"pose_feature": pose_embedding_feature},
-                    motion_cross_attention_kwargs={"pose_feature": pose_embedding_feature}
+                    if cross_attention_kwargs is not None
+                    else {"pose_feature": pose_embedding_feature},
+                    motion_cross_attention_kwargs={"pose_feature": pose_embedding_feature},
                 )
             else:
                 sample, res_samples = downsample_block(
@@ -1154,17 +1164,18 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
                     temb=emb,
                     motion_module_alpha=motion_module_alpha,
                     cross_attention_kwargs=cross_attention_kwargs.update({"pose_feature": pose_embedding_feature})
-                    if cross_attention_kwargs is not None else {"pose_feature": pose_embedding_feature},
-                    motion_cross_attention_kwargs={"pose_feature": pose_embedding_feature}
+                    if cross_attention_kwargs is not None
+                    else {"pose_feature": pose_embedding_feature},
+                    motion_cross_attention_kwargs={"pose_feature": pose_embedding_feature},
                 )
 
             # to be fused
             for sample_idx, fuser in enumerate(down_fuser):
-                if fuser != None:
+                if fuser != None:  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
                     fused_sample = fuser(
                         init_hidden_state=res_samples[sample_idx][:, :, :1].contiguous(),
                         post_hidden_states=res_samples[sample_idx][:, :, 1:].contiguous(),
-                        temb=emb_single,
+                        temb=emb_single,  # noqa: F821 - Name is undefined in the upstream source.
                     )
                     res_samples = list(res_samples)
                     res_samples[sample_idx] = torch.cat([res_samples[sample_idx][:, :, :1], fused_sample], dim=2)
@@ -1177,7 +1188,7 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
             new_down_block_res_samples = ()
 
             for down_block_res_sample, down_block_additional_residual in zip(
-                    down_block_res_samples, down_block_additional_residuals
+                down_block_res_samples, down_block_additional_residuals, strict=False
             ):
                 if len(down_block_additional_residual.shape) == 4:
                     # b c h w
@@ -1199,16 +1210,17 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
             attention_mask=attention_mask,
             motion_module_alpha=motion_module_alphas[-1],
             cross_attention_kwargs=cross_attention_kwargs.update({"pose_feature": pose_embedding_features[-1]})
-            if cross_attention_kwargs is not None else {"pose_feature": pose_embedding_features[-1]},
-            motion_cross_attention_kwargs={"pose_feature": pose_embedding_features[-1]}
+            if cross_attention_kwargs is not None
+            else {"pose_feature": pose_embedding_features[-1]},
+            motion_cross_attention_kwargs={"pose_feature": pose_embedding_features[-1]},
         )
 
         # mid block fuser
-        if self.mid_fuser != None:
+        if self.mid_fuser != None:  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
             fused_sample = self.mid_fuser(
                 init_hidden_state=sample[:, :, :1],
                 post_hidden_states=sample[:, :, 1:],
-                temb=emb_single,
+                temb=emb_single,  # noqa: F821 - Name is undefined in the upstream source.
             )
             sample = torch.cat([sample[:, :, :1], fused_sample], dim=2)
 
@@ -1222,11 +1234,13 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
             sample = sample + mid_block_additional_residual
 
         # up
-        for i, (upsample_block, motion_module_alpha) in enumerate(zip(self.up_blocks, motion_module_alphas[:-1][::-1])):
+        for i, (upsample_block, motion_module_alpha) in enumerate(
+            zip(self.up_blocks, motion_module_alphas[:-1][::-1], strict=False)
+        ):
             is_final_block = i == len(self.up_blocks) - 1
-            pose_embedding_feature = pose_embedding_features[-(i+1)] if self.decoder_add_posecond else None
+            pose_embedding_feature = pose_embedding_features[-(i + 1)] if self.decoder_add_posecond else None
 
-            res_samples = down_block_res_samples[-len(upsample_block.resnets):]
+            res_samples = down_block_res_samples[-len(upsample_block.resnets) :]
             down_block_res_samples = down_block_res_samples[: -len(upsample_block.resnets)]
 
             # if we have not reached the final block and need to forward the
@@ -1245,8 +1259,9 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
                         attention_mask=attention_mask,
                         motion_module_alpha=motion_module_alpha,
                         cross_attention_kwargs=cross_attention_kwargs.update({"pose_feature": pose_embedding_feature})
-                        if cross_attention_kwargs is not None else {"pose_feature": pose_embedding_feature},
-                        motion_cross_attention_kwargs={"pose_feature": pose_embedding_feature}
+                        if cross_attention_kwargs is not None
+                        else {"pose_feature": pose_embedding_feature},
+                        motion_cross_attention_kwargs={"pose_feature": pose_embedding_feature},
                     )
                 else:
                     sample = upsample_block(
@@ -1256,8 +1271,9 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
                         upsample_size=upsample_size,
                         motion_module_alpha=motion_module_alpha,
                         cross_attention_kwargs=cross_attention_kwargs.update({"pose_feature": pose_embedding_feature})
-                        if cross_attention_kwargs is not None else {"pose_feature": pose_embedding_feature},
-                        motion_cross_attention_kwargs={"pose_feature": pose_embedding_feature}
+                        if cross_attention_kwargs is not None
+                        else {"pose_feature": pose_embedding_feature},
+                        motion_cross_attention_kwargs={"pose_feature": pose_embedding_feature},
                     )
             else:
                 if hasattr(upsample_block, "has_cross_attention") and upsample_block.has_cross_attention:
@@ -1278,7 +1294,7 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
                         res_hidden_states_tuple=res_samples,
                         upsample_size=upsample_size,
                         motion_module_alpha=motion_module_alpha,
-                        cross_attention_kwargs=cross_attention_kwargs
+                        cross_attention_kwargs=cross_attention_kwargs,
                     )
 
         activations["upblocks_out"] = sample
@@ -1292,7 +1308,7 @@ class UNet3DConditionModelPoseCond(UNet3DConditionModel):
         sample = self.conv_act(sample)
         sample = self.conv_out(sample)
 
-        if (not return_dict):
+        if not return_dict:
             return (sample,)
         elif debug:
             return UNet3DConditionOutput(sample=sample), activations

@@ -11,13 +11,13 @@ Helios is a 14B **autoregressive** video generator from Peking University's Yuan
 
 WorldFoundry vendors the inference implementation and exposes three checkpoints. **`helios-distilled`** (default) is the fast line: about **3** sampling steps and no CFG. **`helios-mid`** adds Pyramid Unified Predictor-Corrector token compression. **`helios-base`** is the quality line (official pyramid **[20,20,20]**, on the order of **50** steps). Distilled resident sessions keep a native **9-latent / 33-frame** history and accept `prompt_update` between segments — there is no keyboard or camera control.
 
-The in-tree pipeline generates in **33-frame** chunks and rounds requested lengths up to a compatible chunk count. Recorded defaults: **384×640**, **240** requested frames, **24 fps**, `num_inference_steps=50` (Distilled overrides this toward 3). The default route also accepts T2V, I2V, and V2V. Group offloading and multi-GPU context parallelism are exposed as runtime options.
+The in-tree pipeline generates in **33-frame** chunks and rounds requested lengths up to a compatible chunk count. Defaults: **384×640**, **240** requested frames, **24 fps**, `num_inference_steps=50` (Distilled overrides this toward 3). The default route also accepts T2V, I2V, and V2V. Group offloading and multi-GPU context parallelism are exposed as runtime options.
 
 <ModelCommandBuilder modelId="helios" locale="en" />
 
 ## What it is for
 
-Generate long video when a bidirectional Wan2.1-14B job would be too slow. Start on `helios-distilled` for iteration; switch to `helios-base` only when you need the quality recipe and can wait. [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) matches the long-horizon focus; [VBench](/docs/evaluation/benchmark-hub/vbench) is the short-clip quality suite. Neither is an ingested WorldFoundry board.
+Generate long video when a bidirectional Wan2.1-14B job would be too slow. Start on `helios-distilled` for iteration; switch to `helios-base` only when you need the quality recipe and can wait. [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) matches the long-horizon focus; [VBench](/docs/evaluation/benchmark-hub/vbench) is the short-clip quality suite.
 
 ## Runtime contract
 
@@ -25,6 +25,8 @@ Required: `prompt`. Optional: `negative_prompt`, `num_frames`, `height`, `width`
 
 ## Running in WorldFoundry
 
-Use the dedicated environment `worldfoundry-helios-cu128` (Python 3.11.2, CUDA 12.8, `torch==2.10.0`). Launch `worldfoundry-eval run helios-distilled` (or `helios-mid` / `helios-base`) with `--pipeline.task-profile text-to-video`. Runner status is **Runner parity pending** (visual QA): import-light preflight is unit-tested, but full **240-request-frame** visual parity still needs that environment plus a GPU run. The recorded Base A100 smoke used a 3-step `[1,1,1]` pyramid — it proves wiring and a non-blank artifact, **not** the official `[20,20,20]` quality recipe. Weights: `BestWishYsh/Helios-Distilled`, `Helios-Mid`, `Helios-Base`.
+Use the dedicated environment `worldfoundry-helios-cu128` (Python 3.11.2, CUDA 12.8, `torch==2.10.0`). Launch `wf run helios-distilled` (or `helios-mid` / `helios-base`) with `--pipeline.task-profile text-to-video`. Validated with `helios-base` on an A100: a 3-step `[1,1,1]` pyramid run loads the checkpoint and decodes a non-blank video. The official `[20,20,20]` quality recipe and full **240-request-frame** visual parity have not been run yet. Weights: `BestWishYsh/Helios-Distilled`, `Helios-Mid`, `Helios-Base`.
+
+License: Apache-2.0.
 
 <ModelRelatedRecipes modelId="helios" locale="en" />

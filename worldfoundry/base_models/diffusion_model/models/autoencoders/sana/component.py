@@ -9,11 +9,14 @@ decode.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import torch
 
 from ....components import ComponentBuildContext
 from ....contracts import DiffusionRequest
 from ....loaders import ModuleLoadSpec, NativeModuleLoader
+from ....optimizations import OffloadMode, OffloadPolicy
 from .dc_ae import DCAE, dc_ae_f32c32
 
 
@@ -41,7 +44,8 @@ class SanaDCAutoencoder:
         self.spatial_tile_size = spatial_tile_size
         self.spatial_overlap = int(spatial_overlap)
         if spatial_tile_size is not None and (
-            spatial_tile_size <= 0 or spatial_tile_size % self.spatial_compression_factor
+            spatial_tile_size <= 0
+            or spatial_tile_size % self.spatial_compression_factor
             or not 0 <= self.spatial_overlap < spatial_tile_size
             or self.spatial_overlap % self.spatial_compression_factor
         ):
@@ -81,11 +85,13 @@ class SanaDCAutoencoder:
         tile_size = self.spatial_tile_size // scale
         stride = tile_size - self.spatial_overlap // scale
         height, width = latents.shape[-2:]
-        pixels = torch.zeros((latents.shape[0], 3, height * scale, width * scale), device=latents.device, dtype=torch.float32)
+        pixels = torch.zeros(
+            (latents.shape[0], 3, height * scale, width * scale), device=latents.device, dtype=torch.float32
+        )
         weights = torch.zeros_like(pixels[:1, :1])
         for top in range(0, height, stride):
             for left in range(0, width, stride):
-                tile = self.model.decode(latents[..., top:top + tile_size, left:left + tile_size])
+                tile = self.model.decode(latents[..., top : top + tile_size, left : left + tile_size])
                 th, tw = tile.shape[-2:]
                 wy = torch.ones(th, device=tile.device, dtype=torch.float32)
                 wx = torch.ones(tw, device=tile.device, dtype=torch.float32)
@@ -107,19 +113,34 @@ class SanaDCAutoencoder:
 def build_sana_dc_autoencoder(context: ComponentBuildContext) -> SanaDCAutoencoder:
     """Load the original DC-AE graph through the shared module loader."""
 
+    policy = context.policy
+    block_offload = policy.offload.mode is OffloadMode.BLOCK
+    if block_offload:
+        policy = replace(policy, offload=OffloadPolicy())
     config = dc_ae_f32c32("dc-ae-f32c32-sana-1.1", None)
     model = NativeModuleLoader().load(
         ModuleLoadSpec(module_class=DCAE, config={"cfg": config}),
         context.require_checkpoint("weights"),
-        context.policy,
+        policy,
     )
     if not isinstance(model, DCAE):
         raise TypeError(f"expected DCAE, got {type(model).__name__}")
+    if block_offload:
+        applied = vars(model)["_worldfoundry_applied_optimizations"]
+        applied.record_offload(
+            requested_mode=OffloadMode.BLOCK.value,
+            effective="resident",
+            reason="Sana DC-AE has separate encoder and decoder stages",
+        )
     return SanaDCAutoencoder(
         model,
         scaling_factor=config.scaling_factor or 0.41407,
         decoder_input_scale=float(context.component_options.get("decoder_input_scale", 1.0)),
-        spatial_tile_size=(int(context.component_options.get("spatial_tile_size", 1024)) if context.component_options.get("tiled", False) else None),
+        spatial_tile_size=(
+            int(context.component_options.get("spatial_tile_size", 1024))
+            if context.component_options.get("tiled", False)
+            else None
+        ),
         spatial_overlap=int(context.component_options.get("spatial_overlap", 256)),
     )
 

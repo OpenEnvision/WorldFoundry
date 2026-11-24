@@ -18,20 +18,18 @@ import torch.distributed as dist
 import torchvision.transforms.functional as TF
 from tqdm import tqdm
 
-from worldfoundry.core.distributed.sharding.block_fsdp import (
-    shard_model,
+from worldfoundry.base_models.diffusion_model.loaders.wan_variant import load_wan_transformer
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import (
+    WanVAE,
 )
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.clip import (
     CLIPModel,
 )
-from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import (
-    WanModel,
-)
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import (
     T5EncoderModel,
 )
-from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import (
-    WanVAE,
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import (
+    WanModel,
 )
 from worldfoundry.base_models.diffusion_model.schedulers.flow_dpm import (
     FlowDPMSolverMultistepScheduler,
@@ -41,7 +39,9 @@ from worldfoundry.base_models.diffusion_model.schedulers.flow_dpm import (
 from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import (
     FlowUniPCMultistepScheduler,
 )
-from worldfoundry.base_models.diffusion_model.loaders.wan_variant import load_wan_transformer
+from worldfoundry.core.distributed.sharding.block_fsdp import (
+    shard_model,
+)
 
 from .motion_patch import patch_motion
 
@@ -95,7 +95,7 @@ class WanATI:
         self.text_encoder = T5EncoderModel(
             text_len=config.text_len,
             dtype=config.t5_dtype,
-            device=torch.device('cpu'),
+            device=torch.device("cpu"),
             checkpoint_path=os.path.join(checkpoint_dir, config.t5_checkpoint),
             tokenizer_path=os.path.join(checkpoint_dir, config.t5_tokenizer),
             shard_fn=shard_fn if t5_fsdp else None,
@@ -103,16 +103,14 @@ class WanATI:
 
         self.vae_stride = config.vae_stride
         self.patch_size = config.patch_size
-        self.vae = WanVAE(
-            vae_pth=os.path.join(checkpoint_dir, config.vae_checkpoint),
-            device=self.device)
+        self.vae = WanVAE(vae_pth=os.path.join(checkpoint_dir, config.vae_checkpoint), device=self.device)
 
         self.clip = CLIPModel(
             dtype=config.clip_dtype,
             device=self.device,
-            checkpoint_path=os.path.join(checkpoint_dir,
-                                         config.clip_checkpoint),
-            tokenizer_path=os.path.join(checkpoint_dir, config.clip_tokenizer))
+            checkpoint_path=os.path.join(checkpoint_dir, config.clip_checkpoint),
+            tokenizer_path=os.path.join(checkpoint_dir, config.clip_tokenizer),
+        )
 
         logging.info(f"Creating WanModel from {checkpoint_dir}")
         self.model = load_wan_transformer(
@@ -128,13 +126,13 @@ class WanATI:
         if use_usp:
             from xfuser.core.distributed import get_sequence_parallel_world_size
 
-            from worldfoundry.core.attention.parallel.video_xdit_context_parallel import (
+            from .xdit_context_parallel import (
                 usp_attn_forward,
                 usp_dit_forward,
             )
+
             for block in self.model.blocks:
-                block.self_attn.forward = types.MethodType(
-                    usp_attn_forward, block.self_attn)
+                block.self_attn.forward = types.MethodType(usp_attn_forward, block.self_attn)
             self.model.forward = types.MethodType(usp_dit_forward, self.model)
             self.sp_size = get_sequence_parallel_world_size()
         else:
@@ -150,19 +148,21 @@ class WanATI:
 
         self.sample_neg_prompt = config.sample_neg_prompt
 
-    def generate(self,
-                 input_prompt,
-                 img,
-                 tracks,
-                 max_area=720 * 1280,
-                 frame_num=81,
-                 shift=5.0,
-                 sample_solver='unipc',
-                 sampling_steps=40,
-                 guide_scale=5.0,
-                 n_prompt="",
-                 seed=-1,
-                 offload_model=True):
+    def generate(
+        self,
+        input_prompt,
+        img,
+        tracks,
+        max_area=720 * 1280,
+        frame_num=81,
+        shift=5.0,
+        sample_solver="unipc",
+        sampling_steps=40,
+        guide_scale=5.0,
+        n_prompt="",
+        seed=-1,
+        offload_model=True,
+    ):
         r"""
         Generates video frames from input image and text prompt using diffusion process.
 
@@ -205,36 +205,24 @@ class WanATI:
         F = frame_num
         h, w = img.shape[1:]
         aspect_ratio = h / w
-        lat_h = round(
-            np.sqrt(max_area * aspect_ratio) // self.vae_stride[1] //
-            self.patch_size[1] * self.patch_size[1])
-        lat_w = round(
-            np.sqrt(max_area / aspect_ratio) // self.vae_stride[2] //
-            self.patch_size[2] * self.patch_size[2])
+        lat_h = round(np.sqrt(max_area * aspect_ratio) // self.vae_stride[1] // self.patch_size[1] * self.patch_size[1])
+        lat_w = round(np.sqrt(max_area / aspect_ratio) // self.vae_stride[2] // self.patch_size[2] * self.patch_size[2])
         h = lat_h * self.vae_stride[1]
         w = lat_w * self.vae_stride[2]
 
-        max_seq_len = ((F - 1) // self.vae_stride[0] + 1) * lat_h * lat_w // (
-            self.patch_size[1] * self.patch_size[2])
-        max_seq_len = int(math.ceil(max_seq_len / self.sp_size)) * self.sp_size
+        max_seq_len = ((F - 1) // self.vae_stride[0] + 1) * lat_h * lat_w // (self.patch_size[1] * self.patch_size[2])
+        max_seq_len = int(math.ceil(max_seq_len / self.sp_size)) * self.sp_size  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
         seed = seed if seed >= 0 else random.randint(0, sys.maxsize)
         seed_g = torch.Generator(device=self.device)
         seed_g.manual_seed(seed)
         noise = torch.randn(
-            16, (F - 1) // 4 + 1,
-            lat_h,
-            lat_w,
-            dtype=torch.float32,
-            generator=seed_g,
-            device=self.device)
+            16, (F - 1) // 4 + 1, lat_h, lat_w, dtype=torch.float32, generator=seed_g, device=self.device
+        )
 
         msk = torch.ones(1, 81, lat_h, lat_w, device=self.device)
         msk[:, 1:] = 0
-        msk = torch.concat([
-            torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]
-        ],
-            dim=1)
+        msk = torch.concat([torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]], dim=1)
         msk = msk.view(1, msk.shape[1] // 4, 4, lat_h, lat_w)
         msk = msk.transpose(1, 2)[0]
 
@@ -249,8 +237,8 @@ class WanATI:
             if offload_model:
                 self.text_encoder.model.cpu()
         else:
-            context = self.text_encoder([input_prompt], torch.device('cpu'))
-            context_null = self.text_encoder([n_prompt], torch.device('cpu'))
+            context = self.text_encoder([input_prompt], torch.device("cpu"))
+            context_null = self.text_encoder([n_prompt], torch.device("cpu"))
             context = [t.to(self.device) for t in context]
             context_null = [t.to(self.device) for t in context_null]
 
@@ -259,15 +247,17 @@ class WanATI:
         if offload_model:
             self.clip.model.cpu()
 
-        y = self.vae.encode([
-            torch.concat([
-                torch.nn.functional.interpolate(
-                    img[None].cpu(), size=(h, w), mode='bicubic').transpose(
-                        0, 1),
-                torch.zeros(3, F - 1, h, w)
-            ],
-                dim=1).to(self.device)
-        ])[0]
+        y = self.vae.encode(
+            [
+                torch.concat(
+                    [
+                        torch.nn.functional.interpolate(img[None].cpu(), size=(h, w), mode="bicubic").transpose(0, 1),
+                        torch.zeros(3, F - 1, h, w),
+                    ],
+                    dim=1,
+                ).to(self.device)
+            ]
+        )[0]
         y = torch.concat([msk, y])
 
         with torch.no_grad():
@@ -277,29 +267,22 @@ class WanATI:
         def noop_no_sync():
             yield
 
-        no_sync = getattr(self.model, 'no_sync', noop_no_sync)
+        no_sync = getattr(self.model, "no_sync", noop_no_sync)
 
         # evaluation mode
         with amp.autocast(dtype=self.param_dtype), torch.no_grad(), no_sync():
-
-            if sample_solver == 'unipc':
+            if sample_solver == "unipc":
                 sample_scheduler = FlowUniPCMultistepScheduler(
-                    num_train_timesteps=self.num_train_timesteps,
-                    shift=1,
-                    use_dynamic_shifting=False)
-                sample_scheduler.set_timesteps(
-                    sampling_steps, device=self.device, shift=shift)
+                    num_train_timesteps=self.num_train_timesteps, shift=1, use_dynamic_shifting=False
+                )
+                sample_scheduler.set_timesteps(sampling_steps, device=self.device, shift=shift)
                 timesteps = sample_scheduler.timesteps
-            elif sample_solver == 'dpm++':
+            elif sample_solver == "dpm++":
                 sample_scheduler = FlowDPMSolverMultistepScheduler(
-                    num_train_timesteps=self.num_train_timesteps,
-                    shift=1,
-                    use_dynamic_shifting=False)
+                    num_train_timesteps=self.num_train_timesteps, shift=1, use_dynamic_shifting=False
+                )
                 sampling_sigmas = get_sampling_sigmas(sampling_steps, shift)
-                timesteps, _ = retrieve_timesteps(
-                    sample_scheduler,
-                    device=self.device,
-                    sigmas=sampling_sigmas)
+                timesteps, _ = retrieve_timesteps(sample_scheduler, device=self.device, sigmas=sampling_sigmas)
             else:
                 raise NotImplementedError("Unsupported solver.")
 
@@ -307,17 +290,17 @@ class WanATI:
             latent = noise
 
             arg_c = {
-                'context': [context[0]],
-                'clip_fea': clip_context,
-                'seq_len': max_seq_len,
-                'y': [y],
+                "context": [context[0]],
+                "clip_fea": clip_context,
+                "seq_len": max_seq_len,
+                "y": [y],
             }
 
             arg_null = {
-                'context': context_null,
-                'clip_fea': clip_context,
-                'seq_len': max_seq_len,
-                'y': [y],
+                "context": context_null,
+                "clip_fea": clip_context,
+                "seq_len": max_seq_len,
+                "y": [y],
             }
 
             if offload_model:
@@ -330,28 +313,23 @@ class WanATI:
 
                 timestep = torch.stack(timestep).to(self.device)
 
-                noise_pred_cond = self.model(
-                    latent_model_input, t=timestep, **arg_c)[0].to(
-                        torch.device('cpu') if offload_model else self.device)
+                noise_pred_cond = self.model(latent_model_input, t=timestep, **arg_c)[0].to(
+                    torch.device("cpu") if offload_model else self.device
+                )
                 if offload_model:
                     torch.cuda.empty_cache()
-                noise_pred_uncond = self.model(
-                    latent_model_input, t=timestep, **arg_null)[0].to(
-                        torch.device('cpu') if offload_model else self.device)
+                noise_pred_uncond = self.model(latent_model_input, t=timestep, **arg_null)[0].to(
+                    torch.device("cpu") if offload_model else self.device
+                )
                 if offload_model:
                     torch.cuda.empty_cache()
-                noise_pred = noise_pred_uncond + guide_scale * (
-                    noise_pred_cond - noise_pred_uncond)
+                noise_pred = noise_pred_uncond + guide_scale * (noise_pred_cond - noise_pred_uncond)
 
-                latent = latent.to(
-                    torch.device('cpu') if offload_model else self.device)
+                latent = latent.to(torch.device("cpu") if offload_model else self.device)
 
                 temp_x0 = sample_scheduler.step(
-                    noise_pred.unsqueeze(0),
-                    t,
-                    latent.unsqueeze(0),
-                    return_dict=False,
-                    generator=seed_g)[0]
+                    noise_pred.unsqueeze(0), t, latent.unsqueeze(0), return_dict=False, generator=seed_g
+                )[0]
                 latent = temp_x0.squeeze(0)
 
                 x0 = [latent.to(self.device)]

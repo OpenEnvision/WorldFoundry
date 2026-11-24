@@ -4,7 +4,6 @@ import triton.language as tl
 
 from .utils import calculate_settings, torch_gpu_device
 
-
 # ------------------------------- replace funtion -------------------------------
 
 
@@ -305,9 +304,7 @@ def test_in_training_loop_comparison():
     print("-" * 80)
 
     torch.manual_seed(42)
-    inputs = [
-        (torch.randn(1, 128, 12, 128, device="cuda"), torch.randn(1, 128, 256, device="cuda")) for _ in range(10)
-    ]
+    inputs = [(torch.randn(1, 128, 12, 128, device="cuda"), torch.randn(1, 128, 256, device="cuda")) for _ in range(10)]
 
     for step, (x, freqs_cis) in enumerate(inputs):
         optimizer_orig.zero_grad()
@@ -350,8 +347,8 @@ def test_in_training_loop_comparison():
 
     print("-" * 80)
 
-    avg_diff = sum(abs(o - f) for o, f in zip(losses_orig, losses_fast)) / len(losses_orig)
-    max_diff = max(abs(o - f) for o, f in zip(losses_orig, losses_fast))
+    avg_diff = sum(abs(o - f) for o, f in zip(losses_orig, losses_fast, strict=False)) / len(losses_orig)
+    max_diff = max(abs(o - f) for o, f in zip(losses_orig, losses_fast, strict=False))
 
     print(f"\n{'Summary':<20} {'Original':<15} {'Optimized':<15} {'Difference':<15}")
     print("-" * 65)
@@ -370,7 +367,9 @@ def test_in_training_loop_comparison():
     print(f"{'Max difference:':<20} {'':<15} {'':<15} {max_diff:<15.2e}")
 
     weight_diffs = []
-    for (name_o, param_o), (name_f, param_f) in zip(model_orig.named_parameters(), model_fast.named_parameters()):
+    for (_name_o, param_o), (_name_f, param_f) in zip(
+        model_orig.named_parameters(), model_fast.named_parameters(), strict=False
+    ):
         diff = (param_o - param_f).abs().max().item()
         weight_diffs.append(diff)
 

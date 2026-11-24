@@ -30,11 +30,14 @@ def test_disabled_staging_accepts_huggingface_snapshot_links(tmp_path, monkeypat
     (snapshot / "model.safetensors").symlink_to(blob)
     monkeypatch.delenv("WORLDFOUNDRY_REALTIME_STAGE_CHECKPOINT", raising=False)
 
-    assert stage_checkpoint_for_realtime(
-        snapshot,
-        required_paths=("model.safetensors",),
-        include_paths=("model.safetensors",),
-    ) == snapshot
+    assert (
+        stage_checkpoint_for_realtime(
+            snapshot,
+            required_paths=("model.safetensors",),
+            include_paths=("model.safetensors",),
+        )
+        == snapshot
+    )
 
 
 def test_stage_checkpoint_reuses_immutable_local_copy(tmp_path: Path, monkeypatch) -> None:

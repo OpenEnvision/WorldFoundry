@@ -1,26 +1,26 @@
 # Adapted from Diffusers and Open-Sora-Plan
 
 import torch
-
-
 from diffusers.utils import logging
 
 logger = logging.get_logger(__name__)
 
 
-class PositionGetter3D(object):
-    """ return positions of patches """
+class PositionGetter3D:
+    """return positions of patches"""
 
-    def __init__(self, ):
+    def __init__(
+        self,
+    ):
         self.cache_positions = {}
-        
+
     def __call__(self, b, t, h, w, device):
-        if not (b, t,h,w) in self.cache_positions:
+        if (b, t, h, w) not in self.cache_positions:
             x = torch.arange(w, device=device)
             y = torch.arange(h, device=device)
             z = torch.arange(t, device=device)
             pos = torch.cartesian_prod(z, y, x)
-           
+
             pos = pos.reshape(t * h * w, 3).transpose(0, 1).reshape(3, 1, -1).contiguous().expand(3, b, -1).clone()
             poses = (pos[0].contiguous(), pos[1].contiguous(), pos[2].contiguous())
             max_poses = (int(poses[0].max()), int(poses[1].max()), int(poses[2].max()))
@@ -29,10 +29,9 @@ class PositionGetter3D(object):
         pos = self.cache_positions[b, t, h, w]
 
         return pos
-    
+
 
 class RoPE3D(torch.nn.Module):
-
     def __init__(self, freq=10000.0, F0=1.0, interpolation_scale_thw=(1, 1, 1)):
         super().__init__()
         self.base = freq
@@ -55,13 +54,13 @@ class RoPE3D(torch.nn.Module):
 
     @staticmethod
     def rotate_half(x):
-        x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2:]
+        x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
         return torch.cat((-x2, x1), dim=-1)
 
     def apply_rope1d(self, tokens, pos1d, cos, sin):
         assert pos1d.ndim == 2
 
-            # for (batch_size x ntokens x nheads x dim)
+        # for (batch_size x ntokens x nheads x dim)
         cos = torch.nn.functional.embedding(pos1d, cos)[:, None, :, :]
         sin = torch.nn.functional.embedding(pos1d, sin)[:, None, :, :]
         return (tokens * cos) + (self.rotate_half(tokens) * sin)
@@ -77,7 +76,7 @@ class RoPE3D(torch.nn.Module):
         assert tokens.size(3) % 3 == 0, "number of dimensions should be a multiple of three"
         D = tokens.size(3) // 3
         poses, max_poses = positions
-        assert len(poses) == 3 and poses[0].ndim == 2# Batch, Seq, 3
+        assert len(poses) == 3 and poses[0].ndim == 2  # Batch, Seq, 3
         cos_t, sin_t = self.get_cos_sin(D, max_poses[0] + 1, tokens.device, tokens.dtype, self.interpolation_scale_t)
         cos_y, sin_y = self.get_cos_sin(D, max_poses[1] + 1, tokens.device, tokens.dtype, self.interpolation_scale_h)
         cos_x, sin_x = self.get_cos_sin(D, max_poses[2] + 1, tokens.device, tokens.dtype, self.interpolation_scale_w)

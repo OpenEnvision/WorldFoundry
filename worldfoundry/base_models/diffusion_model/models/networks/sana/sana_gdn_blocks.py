@@ -42,22 +42,18 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
+
+from worldfoundry.base_models.diffusion_model.models.networks.sana.chunking import (
+    normalize_chunk_index,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.sana.liger_normalization import get_rmsnorm_class
+from worldfoundry.base_models.diffusion_model.models.networks.sana.short_convolution import ShortConvolution
 from worldfoundry.core.nn.blocks.layers import VisionAttention as Attention_
 
-from worldfoundry.base_models.diffusion_model.models.networks.sana.short_convolution import ShortConvolution
-
-from worldfoundry.base_models.diffusion_model.models.networks.sana.liger_normalization import get_rmsnorm_class
-from worldfoundry.base_models.diffusion_model.models.networks.sana.chunking import (
-    chunk_index_from_chunk_size,
-    is_chunk_causal_request,
-    is_uniform_chunking,
-    normalize_chunk_index,
-    size1_chunk_position_indices,
-)
-
 RMSNorm = get_rmsnorm_class()
-from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+from worldfoundry.core.attention import (  # noqa: E402 - Follows module-level setup, as upstream.
+    scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention,
+)
 
 _HAS_FLEX_ATTENTION = bool(int(os.environ.get("SANA_USE_FLEX_ATTENTION", "0")))
 
@@ -100,28 +96,10 @@ class _IdentityForwardContiguousBackward(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            ctx: The ctx.
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         return x
 
     @staticmethod
     def backward(ctx, grad_output: torch.Tensor) -> tuple[torch.Tensor]:
-        """Backward.
-
-        Args:
-            ctx: The ctx.
-            grad_output: The grad output.
-
-        Returns:
-            The return value.
-        """
         return (grad_output.contiguous(),)
 
 
@@ -159,11 +137,6 @@ def torch_recurrent_sana_gdn(q, k, v, q_rot, k_rot, beta, decay, recall_gate, ep
     target_z = 1.0
 
     def to_frame_seq(x):
-        """To frame seq.
-
-        Args:
-            x: The x.
-        """
         return x.view(B, H, D, T, S).permute(0, 1, 3, 2, 4)
 
     q = to_frame_seq(q)
@@ -173,10 +146,7 @@ def torch_recurrent_sana_gdn(q, k, v, q_rot, k_rot, beta, decay, recall_gate, ep
     k_rot = to_frame_seq(k_rot)
 
     # beta: (B, H, T) -> (B, H, T, 1, 1) or (B, H, T, S) -> (B, H, T, 1, S)
-    if beta.ndim == 4:
-        beta = beta.unsqueeze(3)
-    else:
-        beta = beta.view(B, H, T, 1, 1)
+    beta = beta.unsqueeze(3) if beta.ndim == 4 else beta.view(B, H, T, 1, 1)
 
     decay = decay.view(B, H, T, 1, 1)
 
@@ -225,12 +195,6 @@ def torch_recurrent_sana_gdn(q, k, v, q_rot, k_rot, beta, decay, recall_gate, ep
     den_stacked = torch.stack(den_list, dim=2)
 
     def restore_shape(tensor, target_d):
-        """Restore shape.
-
-        Args:
-            tensor: The tensor.
-            target_d: The target d.
-        """
         # tensor: (B, H, T, d_in, S) -> (B, H, d_in, T*S)
         return tensor.permute(0, 1, 3, 2, 4).reshape(B, H, target_d, N)
 
@@ -257,21 +221,6 @@ def torch_chunk_sana_gdn(
     eps: float = 1e-6,
     return_components: bool = False,
 ):
-    """Torch chunk sana gdn.
-
-    Args:
-        q: The q.
-        k: The k.
-        v: The v.
-        q_rot: The q rot.
-        k_rot: The k rot.
-        beta: The beta.
-        decay: The decay.
-        recall_gate: The recall gate.
-        chunk_size: The chunk size.
-        eps: The eps.
-        return_components: The return components.
-    """
     del recall_gate  # Currently unused; kept for API parity.
 
     B, H, D, N = q.shape
@@ -288,20 +237,12 @@ def torch_chunk_sana_gdn(
     scale = 1.0
 
     def to_frame_seq(x):
-        """To frame seq.
-
-        Args:
-            x: The x.
-        """
         return x.view(B, H, D, T, S).permute(0, 1, 3, 2, 4)
 
     q, k, v = to_frame_seq(q), to_frame_seq(k), to_frame_seq(v)
     q_rot, k_rot = to_frame_seq(q_rot), to_frame_seq(k_rot)
 
-    if beta.ndim == 4:
-        beta = beta.unsqueeze(3)
-    else:
-        beta = beta.view(B, H, T, 1, 1)
+    beta = beta.unsqueeze(3) if beta.ndim == 4 else beta.view(B, H, T, 1, 1)
 
     decay = decay.view(B, H, T, 1, 1)
 
@@ -309,7 +250,7 @@ def torch_chunk_sana_gdn(
     # 1. PARALLEL PRE-PROCESSING
     # =========================================================================
 
-    I = torch.eye(D, device=q.device, dtype=q.dtype).view(1, 1, 1, D, D)
+    I = torch.eye(D, device=q.device, dtype=q.dtype).view(1, 1, 1, D, D)  # noqa: E741 - Ambiguous upstream name kept as written.
 
     # KV State Matrices: W = g * (I - c * K @ K^T)
     k_rot_beta = k_rot * beta
@@ -344,16 +285,6 @@ def torch_chunk_sana_gdn(
     out_S_z = []
 
     def _chunk_scan(w_kv, u_kv, w_z, u_z, s_kv, s_z):
-        """Helper function to chunk scan.
-
-        Args:
-            w_kv: The w kv.
-            u_kv: The u kv.
-            w_z: The w z.
-            u_z: The u z.
-            s_kv: The s kv.
-            s_z: The s z.
-        """
         c_len = w_kv.shape[2]
         s_kv_list, s_z_list = [], []
         for t in range(c_len):
@@ -379,12 +310,6 @@ def torch_chunk_sana_gdn(
     out_den = torch.matmul(S_z_all.transpose(-1, -2), q)
 
     def restore_shape(tensor, target_d):
-        """Restore shape.
-
-        Args:
-            tensor: The tensor.
-            target_d: The target d.
-        """
         return tensor.permute(0, 1, 3, 2, 4).reshape(B, H, target_d, N)
 
     final_num = restore_shape(out_num, D)
@@ -482,27 +407,6 @@ class GDN(Attention_):
         k_conv_only: bool = True,
         **kwargs: object,
     ) -> None:
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            heads: The heads.
-            heads_ratio: The heads ratio.
-            dim: The dim.
-            eps: The eps.
-            use_bias: The use bias.
-            qk_norm: The qk norm.
-            norm_eps: The norm eps.
-            use_output_gate: The use output gate.
-            update_rule_func: The update rule func.
-            chunk_gdn_chunk_size: The chunk gdn chunk size.
-            conv_kernel_size: The conv kernel size.
-            k_conv_only: The k conv only.
-
-        Returns:
-            The return value.
-        """
         heads = heads or int(out_dim // dim * heads_ratio)
         super().__init__(in_dim, num_heads=heads, qkv_bias=use_bias)
 
@@ -641,15 +545,6 @@ class GDN(Attention_):
         self._init_short_conv_for_linear_equiv()
 
     def _apply_output_gate(self, out: torch.Tensor, gate_x: torch.Tensor) -> torch.Tensor:
-        """Helper function to apply output gate.
-
-        Args:
-            out: The out.
-            gate_x: The gate x.
-
-        Returns:
-            The return value.
-        """
         if not (self.use_output_gate and self.output_gate is not None):
             return out
         from worldfoundry.base_models.diffusion_model.models.networks.sana.ops import (
@@ -880,7 +775,7 @@ class GDN(Attention_):
             Tensor of shape (B, N, C) after attention and projection.
         """
         del mask, block_mask
-        frame_valid_mask = kwargs.get("frame_valid_mask", None)
+        frame_valid_mask = kwargs.get("frame_valid_mask")
 
         if HW is None:
             raise ValueError("HW (T, H, W) must be provided for GDN attention.")
@@ -955,7 +850,7 @@ class GDN(Attention_):
 
         # Gate computation (use pre-computed gates when available to avoid
         # redundant work in dual-branch CamCtrl models).
-        precomputed_gates = kwargs.get("precomputed_gates", None)
+        precomputed_gates = kwargs.get("precomputed_gates")
         if precomputed_gates is not None:
             beta, decay = precomputed_gates
         else:
@@ -1056,7 +951,7 @@ class BidirectionalGDN(GDN):
             Tensor of shape (B, N, C) after attention and projection.
         """
         del mask, block_mask
-        frame_valid_mask = kwargs.get("frame_valid_mask", None)
+        frame_valid_mask = kwargs.get("frame_valid_mask")
 
         if HW is None:
             raise ValueError("HW (T, H, W) must be provided for GDN attention.")
@@ -1130,7 +1025,7 @@ class BidirectionalGDN(GDN):
             k_rot = k_rot * token_mask_qkv
 
         # Gate computation (use pre-computed gates when available).
-        precomputed_gates = kwargs.get("precomputed_gates", None)
+        precomputed_gates = kwargs.get("precomputed_gates")
         if precomputed_gates is not None:
             beta, decay = precomputed_gates
         else:
@@ -1166,25 +1061,9 @@ class BidirectionalGDN(GDN):
 
         # Backward pass (exclusive: t+1..T).
         def to_time_structure(tensor: torch.Tensor) -> torch.Tensor:
-            """To time structure.
-
-            Args:
-                tensor: The tensor.
-
-            Returns:
-                The return value.
-            """
             return tensor.view(B, H_eff, self.dim, T_eff, S).permute(0, 1, 3, 2, 4)
 
         def from_time_structure(tensor: torch.Tensor) -> torch.Tensor:
-            """From time structure.
-
-            Args:
-                tensor: The tensor.
-
-            Returns:
-                The return value.
-            """
             return tensor.permute(0, 1, 3, 2, 4).reshape(B, H_eff, self.dim, N_eff)
 
         q_T = to_time_structure(q)
@@ -1222,14 +1101,6 @@ class BidirectionalGDN(GDN):
         )
 
         def flip_back(tensor: torch.Tensor) -> torch.Tensor:
-            """Flip back.
-
-            Args:
-                tensor: The tensor.
-
-            Returns:
-                The return value.
-            """
             d_actual = tensor.shape[2]
             t_struct = tensor.view(B, H_eff, d_actual, T_eff, S)
             return torch.flip(t_struct, dims=[3]).reshape(B, H_eff, d_actual, N_eff)
@@ -1300,7 +1171,7 @@ def _forward_softmax_attn(
     T, H, W = HW
     S = H * W
 
-    frame_valid_mask = kwargs.get("frame_valid_mask", None)
+    frame_valid_mask = kwargs.get("frame_valid_mask")
     token_valid_mask, _, _ = GDN._prepare_frame_valid_masks(
         frame_valid_mask,
         B=B,

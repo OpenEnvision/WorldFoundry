@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Optional, Union
 
 import attrs
 from transformers.utils import is_flash_attn_2_available
@@ -31,33 +30,33 @@ class QwenVisionConfig:
     _attn_implementation: str = _DEFAULT_ATTN_IMPLEMENTATION
 
     add_cross_attention: bool = False
-    architectures: Optional[List[str]] = None
-    bad_words_ids: Optional[List[List[int]]] = None
-    begin_suppress_tokens: Optional[List[int]] = None
-    bos_token_id: Optional[int] = None
+    architectures: list[str] | None = None
+    bad_words_ids: list[list[int]] | None = None
+    begin_suppress_tokens: list[int] | None = None
+    bos_token_id: int | None = None
     chunk_size_feed_forward: int = 0
-    cross_attention_hidden_size: Optional[int] = None
-    decoder_start_token_id: Optional[int] = None
+    cross_attention_hidden_size: int | None = None
+    decoder_start_token_id: int | None = None
     depth: int = 32
     diversity_penalty: float = 0.0
     do_sample: bool = False
     early_stopping: bool = False
     encoder_no_repeat_ngram_size: int = 0
-    eos_token_id: Optional[int] = None
-    exponential_decay_length_penalty: Optional[float] = None
-    finetuning_task: Optional[str] = None
-    forced_bos_token_id: Optional[int] = None
-    forced_eos_token_id: Optional[int] = None
-    fullatt_block_indexes: Optional[List[int] | None] = [7, 15, 23, 31]
+    eos_token_id: int | None = None
+    exponential_decay_length_penalty: float | None = None
+    finetuning_task: str | None = None
+    forced_bos_token_id: int | None = None
+    forced_eos_token_id: int | None = None
+    fullatt_block_indexes: list[int] | None = [7, 15, 23, 31]  # noqa: RUF008 - Upstream mutable default kept as written.
     hidden_act: str = "silu"
     hidden_size: int = 1280
-    id2label: Dict[int, str] = {0: "LABEL_0", 1: "LABEL_1"}
+    id2label: dict[int, str] = {0: "LABEL_0", 1: "LABEL_1"}  # noqa: RUF008 - Upstream mutable default kept as written.
     in_channels: int = 3
     in_chans: int = 3
     intermediate_size: int = 3420
     is_decoder: bool = False
     is_encoder_decoder: bool = False
-    label2id: Dict[str, int] = {"LABEL_0": 0, "LABEL_1": 1}
+    label2id: dict[str, int] = {"LABEL_0": 0, "LABEL_1": 1}  # noqa: RUF008 - Upstream mutable default kept as written.
     length_penalty: float = 1.0
     max_length: int = 20
     min_length: int = 0
@@ -67,40 +66,40 @@ class QwenVisionConfig:
     num_beams: int = 1
     num_heads: int = 16
     num_return_sequences: int = 1
-    out_hidden_size: Optional[int | None] = 2048
+    out_hidden_size: int | None = 2048
     output_attentions: bool = False
     output_hidden_states: bool = False
     output_scores: bool = False
-    pad_token_id: Optional[int] = None
+    pad_token_id: int | None = None
     patch_size: int = 14
-    prefix: Optional[str] = None
-    problem_type: Optional[str] = None
-    pruned_heads: Dict = attrs.field(factory=dict)
+    prefix: str | None = None
+    problem_type: str | None = None
+    pruned_heads: dict = attrs.field(factory=dict)
     remove_invalid_values: bool = False
     repetition_penalty: float = 1.0
     return_dict: bool = True
     return_dict_in_generate: bool = False
-    sep_token_id: Optional[int] = None
+    sep_token_id: int | None = None
     spatial_merge_size: int = 2
     spatial_patch_size: int = 14
-    suppress_tokens: Optional[List[int]] = None
-    task_specific_params: Optional[Dict] = None
+    suppress_tokens: list[int] | None = None
+    task_specific_params: dict | None = None
     temperature: float = 1.0
     temporal_patch_size: int = 2
     tie_encoder_decoder: bool = False
     tie_word_embeddings: bool = True
-    tokenizer_class: Optional[str] = None
-    tokens_per_second: Optional[int | None] = 2
+    tokenizer_class: str | None = None
+    tokens_per_second: int | None = 2
     top_k: int = 50
     top_p: float = 1.0
     torch_dtype: str = "bfloat16"
     torchscript: bool = False
     typical_p: float = 1.0
     use_bfloat16: bool = False
-    window_size: Optional[int | None] = 112
+    window_size: int | None = 112
 
-    embed_dim: Optional[int | None] = None
-    mlp_ratio: Optional[int | None] = None
+    embed_dim: int | None = None
+    mlp_ratio: int | None = None
 
 
 @attrs.define
@@ -110,32 +109,32 @@ class QwenModelConfig(FSDP2ModelConfig):
     name_or_path: str = "Qwen/Qwen2.5-VL-3B-Instruct"
 
     add_cross_attention: bool = False
-    architectures: List[str] = ["Qwen2_5_VLModel"]
+    architectures: list[str] = ["Qwen2_5_VLModel"]  # noqa: RUF008 - Upstream mutable default kept as written.
     attention_dropout: float = 0.0
-    bad_words_ids: Optional[List[List[int]]] = None
-    begin_suppress_tokens: Optional[List[int]] = None
+    bad_words_ids: list[list[int]] | None = None
+    begin_suppress_tokens: list[int] | None = None
     bos_token_id: int = 151643
     chunk_size_feed_forward: int = 0
-    cross_attention_hidden_size: Optional[int] = None
-    decoder_start_token_id: Optional[int] = None
+    cross_attention_hidden_size: int | None = None
+    decoder_start_token_id: int | None = None
     diversity_penalty: float = 0.0
     do_sample: bool = False
     early_stopping: bool = False
     encoder_no_repeat_ngram_size: int = 0
     eos_token_id: int = 151645
-    exponential_decay_length_penalty: Optional[float] = None
-    finetuning_task: Optional[str] = None
-    forced_bos_token_id: Optional[int] = None
-    forced_eos_token_id: Optional[int] = None
+    exponential_decay_length_penalty: float | None = None
+    finetuning_task: str | None = None
+    forced_bos_token_id: int | None = None
+    forced_eos_token_id: int | None = None
     hidden_act: str = "silu"
     hidden_size: int = 2048
-    id2label: Dict[int, str] = {0: "LABEL_0", 1: "LABEL_1"}
+    id2label: dict[int, str] = {0: "LABEL_0", 1: "LABEL_1"}  # noqa: RUF008 - Upstream mutable default kept as written.
     image_token_id: int = 151655
     initializer_range: float = 0.02
-    intermediate_size: Optional[int | None] = 11008
+    intermediate_size: int | None = 11008
     is_decoder: bool = False
     is_encoder_decoder: bool = False
-    label2id: Dict[str, int] = {"LABEL_0": 0, "LABEL_1": 1}
+    label2id: dict[str, int] = {"LABEL_0": 0, "LABEL_1": 1}  # noqa: RUF008 - Upstream mutable default kept as written.
     length_penalty: float = 1.0
     max_length: int = 20
     max_position_embeddings: int = 128000
@@ -152,29 +151,29 @@ class QwenModelConfig(FSDP2ModelConfig):
     output_attentions: bool = False
     output_hidden_states: bool = False
     output_scores: bool = False
-    pad_token_id: Optional[int] = None
-    prefix: Optional[str] = None
-    problem_type: Optional[str] = None
-    pruned_heads: Dict = attrs.field(factory=dict)
+    pad_token_id: int | None = None
+    prefix: str | None = None
+    problem_type: str | None = None
+    pruned_heads: dict = attrs.field(factory=dict)
     remove_invalid_values: bool = False
     repetition_penalty: float = 1.0
     return_dict: bool = True
     return_dict_in_generate: bool = False
     rms_norm_eps: float = 1e-6
-    rope_scaling: Dict[str, Union[str, List[int]]] = {
+    rope_scaling: dict[str, str | list[int]] = {  # noqa: RUF008 - Upstream mutable default kept as written.
         "mrope_section": [16, 24, 24],
         "rope_type": "default",
         "type": "default",
     }
     rope_theta: float = 1_000_000.0
-    sep_token_id: Optional[int] = None
+    sep_token_id: int | None = None
     sliding_window: int = 32768
-    suppress_tokens: Optional[List[int]] = None
-    task_specific_params: Optional[Dict] = None
+    suppress_tokens: list[int] | None = None
+    task_specific_params: dict | None = None
     temperature: float = 1.0
     tie_encoder_decoder: bool = False
     tie_word_embeddings: bool = True
-    tokenizer_class: Optional[str] = None
+    tokenizer_class: str | None = None
     top_k: int = 50
     top_p: float = 1.0
     torch_dtype: str = "bfloat16"
@@ -190,7 +189,7 @@ class QwenModelConfig(FSDP2ModelConfig):
     vision_end_token_id: int = 151653
     vision_token_id: int = 151654
     vocab_size: int = 151936
-    vision_config: QwenVisionConfig = L(QwenVisionConfig)()
+    vision_config: QwenVisionConfig = L(QwenVisionConfig)()  # noqa: RUF009 - Default evaluated once at definition, as upstream.
 
     def __getitem__(self, item):
         return getattr(self, item)

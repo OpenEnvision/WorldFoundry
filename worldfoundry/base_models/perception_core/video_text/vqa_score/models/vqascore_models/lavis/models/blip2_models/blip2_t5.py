@@ -1,10 +1,12 @@
 """
- Copyright (c) 2023, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2023, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
+
 import logging
+from typing import ClassVar
 
 import torch
 import torch.nn as nn
@@ -30,7 +32,7 @@ class Blip2T5(Blip2Base):
         >>> model = load_model("blip2_t5", "pretrain_flant5xl")
     """
 
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "pretrain_flant5xl": "configs/models/blip2/blip2_pretrain_flant5xl.yaml",
         "pretrain_flant5xl_vitL": "configs/models/blip2/blip2_pretrain_flant5xl_vitL.yaml",
         "pretrain_flant5xxl": "configs/models/blip2/blip2_pretrain_flant5xxl.yaml",
@@ -65,15 +67,13 @@ class Blip2T5(Blip2Base):
             vit_model, img_size, drop_path_rate, use_grad_checkpoint, vit_precision
         )
         if freeze_vit:
-            for name, param in self.visual_encoder.named_parameters():
+            for _name, param in self.visual_encoder.named_parameters():
                 param.requires_grad = False
             self.visual_encoder = self.visual_encoder.eval()
             self.visual_encoder.train = disabled_train
             logging.info("freeze vision encoder")
 
-        self.Qformer, self.query_tokens = self.init_Qformer(
-            num_query_token, self.visual_encoder.num_features
-        )
+        self.Qformer, self.query_tokens = self.init_Qformer(num_query_token, self.visual_encoder.num_features)
         self.Qformer.cls = None
         self.Qformer.bert.embeddings.word_embeddings = None
         self.Qformer.bert.embeddings.position_embeddings = None
@@ -84,17 +84,13 @@ class Blip2T5(Blip2Base):
         self.t5_tokenizer = T5TokenizerFast.from_pretrained(t5_model)
         t5_config = T5Config.from_pretrained(t5_model)
         t5_config.dense_act_fn = "gelu"
-        self.t5_model = T5ForConditionalGeneration.from_pretrained(
-            t5_model, config=t5_config
-        )
+        self.t5_model = T5ForConditionalGeneration.from_pretrained(t5_model, config=t5_config)
 
-        for name, param in self.t5_model.named_parameters():
+        for _name, param in self.t5_model.named_parameters():
             param.requires_grad = False
             param.data = param.data.bfloat16()
 
-        self.t5_proj = nn.Linear(
-            self.Qformer.config.hidden_size, self.t5_model.config.hidden_size
-        )
+        self.t5_proj = nn.Linear(self.Qformer.config.hidden_size, self.t5_model.config.hidden_size)
 
         self.max_txt_len = max_txt_len
         self.prompt = prompt
@@ -107,9 +103,7 @@ class Blip2T5(Blip2Base):
 
         with self.maybe_autocast():
             image_embeds = self.ln_vision(self.visual_encoder(image))
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
         query_output = self.Qformer.bert(
@@ -191,9 +185,7 @@ class Blip2T5(Blip2Base):
         with self.maybe_autocast():
             image_embeds = self.ln_vision(self.visual_encoder(image))
         image_embeds = image_embeds.float()
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
         query_output = self.Qformer.bert(
@@ -206,21 +198,14 @@ class Blip2T5(Blip2Base):
         inputs_t5 = self.t5_proj(query_output.last_hidden_state)
         atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
 
-        if "prompt" in samples.keys():
-            prompt = samples["prompt"]
-        else:
-            prompt = self.prompt
+        prompt = samples["prompt"] if "prompt" in samples.keys() else self.prompt  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
 
         if isinstance(prompt, str):
             prompt = [prompt] * image.size(0)
         else:
-            assert len(prompt) == image.size(
-                0
-            ), "The number of prompts must be equal to the batch size."
+            assert len(prompt) == image.size(0), "The number of prompts must be equal to the batch size."
 
-        input_tokens = self.t5_tokenizer(
-            prompt, padding="longest", return_tensors="pt"
-        ).to(image.device)
+        input_tokens = self.t5_tokenizer(prompt, padding="longest", return_tensors="pt").to(image.device)
 
         encoder_atts = torch.cat([atts_t5, input_tokens.attention_mask], dim=1)
 
@@ -241,9 +226,7 @@ class Blip2T5(Blip2Base):
                 length_penalty=length_penalty,
                 num_return_sequences=num_captions,
             )
-            output_text = self.t5_tokenizer.batch_decode(
-                outputs, skip_special_tokens=True
-            )
+            output_text = self.t5_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         return output_text
 
@@ -258,15 +241,13 @@ class Blip2T5(Blip2Base):
         answer_list=None,
         prompt="",
         length_penalty=-1,
-        **kwargs
+        **kwargs,
     ):
         image = samples["image"]
         with self.maybe_autocast():
             image_embeds = self.ln_vision(self.visual_encoder(image))
         image_embeds = image_embeds.float()
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
         query_output = self.Qformer.bert(
@@ -286,9 +267,7 @@ class Blip2T5(Blip2Base):
         else:
             text_input = samples["text_input"]
 
-        input_tokens = self.t5_tokenizer(
-            text_input, padding="longest", return_tensors="pt"
-        ).to(image.device)
+        input_tokens = self.t5_tokenizer(text_input, padding="longest", return_tensors="pt").to(image.device)
 
         encoder_atts = torch.cat([atts_t5, input_tokens.attention_mask], dim=1)
 
@@ -305,9 +284,7 @@ class Blip2T5(Blip2Base):
                 min_length=min_len,
                 length_penalty=length_penalty,
             )
-            output_text = self.t5_tokenizer.batch_decode(
-                outputs, skip_special_tokens=True
-            )
+            output_text = self.t5_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         if self._apply_lemmatizer:
             output_text = self._lemmatize(output_text)

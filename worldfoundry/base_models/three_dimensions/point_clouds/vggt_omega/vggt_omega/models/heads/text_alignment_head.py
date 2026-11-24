@@ -4,8 +4,6 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt_omega -> vggt_omega -> models -> heads -> text_alignment_head.py functionality."""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,14 +15,6 @@ class TextAlignmentHead(nn.Module):
     """Read out a language-aligned sequence embedding from camera/register tokens."""
 
     def __init__(self, dim_in: int = 2048) -> None:
-        """Init.
-
-        Args:
-            dim_in: The dim in.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.token_norm = nn.LayerNorm(dim_in, eps=1e-5)
 
@@ -60,15 +50,6 @@ class TextAlignmentHead(nn.Module):
         aggregated_tokens_list: list[torch.Tensor | None],
         patch_token_start: int,
     ) -> dict[str, torch.Tensor]:
-        """Forward.
-
-        Args:
-            aggregated_tokens_list: The aggregated tokens list.
-            patch_token_start: The patch token start.
-
-        Returns:
-            The return value.
-        """
         tokens = aggregated_tokens_list[-1]
         if tokens is None:
             raise ValueError("Aggregator did not cache the final layer, which TextAlignmentHead needs.")

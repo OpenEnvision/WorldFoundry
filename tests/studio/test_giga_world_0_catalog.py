@@ -7,9 +7,7 @@ def test_giga_world_catalog_executes_local_checkpoint_by_default(tmp_path, monke
 
     entry = find_entry("giga-world-0")
 
-    transformer = (
-        tmp_path / "ckpts" / "open-gigaai--GigaWorld-0-Video-GR1-2b" / "transformer"
-    )
+    transformer = tmp_path / "ckpts" / "open-gigaai--GigaWorld-0-Video-GR1-2b" / "transformer"
     assert entry.display_name == "GigaWorld-0"
     assert entry.supports_from_pretrained is True
     assert entry.default_backend == "from_pretrained"
@@ -19,9 +17,7 @@ def test_giga_world_catalog_executes_local_checkpoint_by_default(tmp_path, monke
         "model_id": "giga-world-0",
         "transformer_model_dir": str(transformer),
         "text_encoder_model_dir": str(tmp_path / "ckpts" / "google-t5--t5-11b-encoder"),
-        "vae_model_dir": str(
-            tmp_path / "ckpts" / "Wan-AI--Wan2.1-T2V-1.3B-Diffusers" / "vae"
-        ),
+        "vae_model_dir": str(tmp_path / "ckpts" / "Wan-AI--Wan2.1-T2V-1.3B-Diffusers" / "vae"),
     }
     assert entry.default_call_kwargs["attention_backend"] == "natten"
     assert entry.default_call_kwargs["num_frames"] == 61

@@ -22,6 +22,7 @@ class Conv3DBlock(nn.Module):
       - residual connection
     Input/Output shape: (B, C, F, H, W)
     """
+
     def __init__(self, channels):
         super().__init__()
         self.channels = channels
@@ -74,6 +75,7 @@ class ResidualFusion3D_Stack(nn.Module):
       - fuse_pw2 -> proj_out (zero-init) for residual safety
     Inputs x, r are expected as [B, F*H*W, C]
     """
+
     def __init__(self, C, reduction=4, num_blocks=4):
         super().__init__()
         mid = max(4, C // reduction)
@@ -113,7 +115,7 @@ class ResidualFusion3D_Stack(nn.Module):
         x, r: [B, F*H*W, C]
         returns v: [B, F*H*W, C]
         """
-        B = x.shape[0]
+        _B = x.shape[0]
         C = x.shape[-1]
         assert C == self.C, f"Expected channel {self.C}, got {C}"
 

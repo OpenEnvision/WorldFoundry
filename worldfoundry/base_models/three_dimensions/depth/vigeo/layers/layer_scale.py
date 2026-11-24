@@ -6,8 +6,7 @@
 # Modified from: https://github.com/huggingface/pytorch-image-models/blob/main/timm/models/vision_transformer.py#L103-L110
 
 import torch
-from torch import Tensor
-from torch import nn
+from torch import Tensor, nn
 
 
 class LayerScale(nn.Module):

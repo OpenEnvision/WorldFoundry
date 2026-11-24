@@ -304,7 +304,7 @@ def print_table(title: str, headers: Sequence[str], rows: Sequence[Sequence[obje
             if index:
                 lines.append("")
             lines.extend(paint(line, BOLD) for line in _wrap(row[0], inner))
-            lines.extend("  " + line for line in _field_lines(dict(zip(headers[1:], row[1:])), inner - 2))
+            lines.extend("  " + line for line in _field_lines(dict(zip(headers[1:], row[1:], strict=False)), inner - 2))
     else:
         widths = [
             max(_cell_width(header), *(_cell_width(row[index]) for row in values))
@@ -318,17 +318,17 @@ def print_table(title: str, headers: Sequence[str], rows: Sequence[Sequence[obje
         def cells(parts: Sequence[str], styles: Sequence[str]) -> str:
             return "  ".join(
                 paint(part, style) + " " * (cell_width - _cell_width(part))
-                for part, style, cell_width in zip(parts, styles, widths)
+                for part, style, cell_width in zip(parts, styles, widths, strict=False)
             )
 
-        wrapped_headers = [_wrap(header, cell_width) for header, cell_width in zip(headers, widths)]
+        wrapped_headers = [_wrap(header, cell_width) for header, cell_width in zip(headers, widths, strict=False)]
         for line in range(max(map(len, wrapped_headers))):
             lines.append(
                 cells([part[line] if line < len(part) else "" for part in wrapped_headers], [MUTED] * len(headers))
             )
         lines.append(paint("─" * inner, ACCENT))
         for row in values:
-            wrapped = [_wrap(value, cell_width) for value, cell_width in zip(row, widths)]
+            wrapped = [_wrap(value, cell_width) for value, cell_width in zip(row, widths, strict=False)]
             styles = [BOLD, *(_value_style(value) for value in row[1:])]
             for line in range(max(map(len, wrapped))):
                 lines.append(cells([part[line] if line < len(part) else "" for part in wrapped], styles))

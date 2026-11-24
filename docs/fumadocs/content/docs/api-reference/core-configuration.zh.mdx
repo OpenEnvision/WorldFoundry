@@ -3,7 +3,7 @@ title: Core 配置
 description: 延迟构造图、结构化推理配置、递归实例化与 freeze 行为。
 ---
 
-Core 配置把“描述对象图”和“构造昂贵模型对象”分开。`LazyCall(target)(...)` 会把 target 与命名参数记录成可编辑的 OmegaConf 节点；只有当 runtime 准备好以后，`instantiate` 才遍历对象图并真正创建对象。
+Core 配置把“描述对象图”和“构造昂贵模型对象”分开。`LazyCall(target)(...)` 会把 target 与命名参数记录成可编辑的 OmegaConf 节点；只有 runtime 准备就绪后，`instantiate` 才遍历对象图并真正创建对象。
 
 这个 package 需要 `attrs` 和 `omegaconf`。它们由视频或模型 runtime 环境提供，不属于最小 CLI 安装。
 

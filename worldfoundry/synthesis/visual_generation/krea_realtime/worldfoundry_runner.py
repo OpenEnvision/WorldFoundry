@@ -12,12 +12,9 @@ from omegaconf import OmegaConf
 
 from worldfoundry.core.io.paths import package_data_path
 
-DEFAULT_RUNTIME_ROOT = Path(__file__).resolve().parent / "krea_runtime"
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="WorldFoundry Krea realtime-video official runner")
-    parser.add_argument("--repo-root", default=str(DEFAULT_RUNTIME_ROOT))
     parser.add_argument("--checkpoint-path", required=True)
     parser.add_argument("--model-folder", required=True)
     parser.add_argument("--prompt", required=True)
@@ -30,10 +27,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _write_config(repo_root: Path, checkpoint_path: Path, output_path: Path) -> Path:
-    base_config = repo_root / "configs" / "self_forcing_server_14b.yaml"
-    if not base_config.is_file():
-        base_config = package_data_path('models', 'runtime', 'configs', 'krea_realtime', 'self_forcing_server_14b.yaml')
+def _write_config(checkpoint_path: Path, output_path: Path) -> Path:
+    base_config = package_data_path("models", "runtime", "configs", "krea_realtime", "self_forcing_server_14b.yaml")
     if not base_config.is_file():
         raise FileNotFoundError(f"Krea official config not found: {base_config}")
     config = OmegaConf.load(base_config)
@@ -64,7 +59,6 @@ def _save_video_cv2(pixels, output_path: Path, fps: int = 16):
 
 def main() -> None:
     args = parse_args()
-    repo_root = Path(args.repo_root).expanduser().resolve()
     checkpoint_path = Path(args.checkpoint_path).expanduser().resolve()
     output_path = Path(args.output_path).expanduser().resolve()
     if not checkpoint_path.is_file():
@@ -72,43 +66,36 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     os.environ["MODEL_FOLDER"] = str(Path(args.model_folder).expanduser().resolve())
-    if str(repo_root) not in sys.path:
-        sys.path.insert(0, str(repo_root))
     if "dotenv" not in sys.modules:
         try:
-            import dotenv  # noqa: F401
+            import dotenv  # noqa: F401 - Availability probe; a stub is installed when it is missing.
         except ModuleNotFoundError:
             shim = types.ModuleType("dotenv")
             shim.load_dotenv = lambda *_, **__: False
             sys.modules["dotenv"] = shim
 
-    old_cwd = Path.cwd()
-    os.chdir(repo_root)
-    try:
-        import sample
-        from release_server import GenerateParams
+    from .krea_runtime import sample
+    from .krea_runtime.release_server import GenerateParams
 
-        sample.save_video_direct = _save_video_cv2
-        sample.save_video_ffmpeg_pipe = _save_video_cv2
+    sample.save_video_direct = _save_video_cv2
+    sample.save_video_ffmpeg_pipe = _save_video_cv2
 
-        config_path = _write_config(repo_root, checkpoint_path, output_path)
-        params = GenerateParams(
-            prompt=args.prompt,
-            width=args.width,
-            height=args.height,
-            seed=args.seed,
-            num_blocks=args.num_blocks,
-        )
-        results = sample.sample_videos(
-            [args.prompt],
-            config_path=str(config_path),
-            output_dir=str(output_path.parent),
-            params=params,
-            save_videos=True,
-            fps=args.fps,
-        )
-    finally:
-        os.chdir(old_cwd)
+    config_path = _write_config(checkpoint_path, output_path)
+    params = GenerateParams(
+        prompt=args.prompt,
+        width=args.width,
+        height=args.height,
+        seed=args.seed,
+        num_blocks=args.num_blocks,
+    )
+    results = sample.sample_videos(
+        [args.prompt],
+        config_path=str(config_path),
+        output_dir=str(output_path.parent),
+        params=params,
+        save_videos=True,
+        fps=args.fps,
+    )
 
     produced = results.get(0, {}).get("video_path") if isinstance(results, dict) else None
     produced_path = Path(produced).expanduser() if produced else None

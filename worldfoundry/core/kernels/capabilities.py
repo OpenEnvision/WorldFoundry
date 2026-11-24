@@ -30,6 +30,7 @@ from dataclasses import asdict, dataclass
 from functools import lru_cache
 
 import torch
+import torch.version
 
 # Architectures qualified for the small, portable in-tree Triton fusion set.
 # Product names are intentionally absent: A30/A100 share SM80, A10/30-series
@@ -292,8 +293,8 @@ def detected_kernel_device_profiles() -> tuple[KernelDeviceProfile, ...]:
 
 
 __all__ = [
-    "KernelDeviceProfile",
     "QUALIFIED_TRITON_CAPABILITIES",
+    "KernelDeviceProfile",
     "default_kernel_thresholds",
     "detected_kernel_device_profiles",
     "kernel_device_profile",

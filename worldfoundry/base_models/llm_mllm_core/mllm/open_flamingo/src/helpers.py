@@ -7,36 +7,15 @@ from einops import rearrange, repeat
 from einops_exts import rearrange_many
 from torch import einsum, nn
 
+from worldfoundry.base_models.diffusion_model.models.encoders.lvdm.resampler import FeedForward as FeedForward
+
 
 def exists(val):
-    """Exists.
-
-    Args:
-        val: The val.
-    """
     return val is not None
 
 
-def FeedForward(dim, mult=4):
-    """Feedforward.
-
-    Args:
-        dim: The dim.
-        mult: The mult.
-    """
-    inner_dim = int(dim * mult)
-    return nn.Sequential(
-        nn.LayerNorm(dim),
-        nn.Linear(dim, inner_dim, bias=False),
-        nn.GELU(),
-        nn.Linear(inner_dim, dim, bias=False),
-    )
-
-
 class PerceiverAttention(nn.Module):
-    """Perceiver attention implementation."""
     def __init__(self, *, dim, dim_head=64, heads=8):
-        """Init."""
         super().__init__()
         self.scale = dim_head**-0.5
         self.heads = heads
@@ -79,7 +58,6 @@ class PerceiverAttention(nn.Module):
 
 
 class PerceiverResampler(nn.Module):
-    """Perceiver resampler implementation."""
     def __init__(
         self,
         *,
@@ -92,19 +70,10 @@ class PerceiverResampler(nn.Module):
         max_num_frames=None,
         ff_mult=4,
     ):
-        """Init."""
         super().__init__()
         self.latents = nn.Parameter(torch.randn(num_latents, dim))
-        self.frame_embs = (
-            nn.Parameter(torch.randn(max_num_frames, dim))
-            if exists(max_num_frames)
-            else None
-        )
-        self.media_time_embs = (
-            nn.Parameter(torch.randn(max_num_media, 1, dim))
-            if exists(max_num_media)
-            else None
-        )
+        self.frame_embs = nn.Parameter(torch.randn(max_num_frames, dim)) if exists(max_num_frames) else None
+        self.media_time_embs = nn.Parameter(torch.randn(max_num_media, 1, dim)) if exists(max_num_media) else None
 
         self.layers = nn.ModuleList([])
         for _ in range(depth):
@@ -133,9 +102,7 @@ class PerceiverResampler(nn.Module):
         if exists(self.frame_embs):
             frame_embs = repeat(self.frame_embs[:F], "F d -> b T F v d", b=b, T=T, v=v)
             x = x + frame_embs
-        x = rearrange(
-            x, "b T F v d -> b T (F v) d"
-        )  # flatten the frame and spatial dimensions
+        x = rearrange(x, "b T F v d -> b T (F v) d")  # flatten the frame and spatial dimensions
         if exists(self.media_time_embs):
             x = x + self.media_time_embs[:T]
 
@@ -149,7 +116,6 @@ class PerceiverResampler(nn.Module):
 
 # gated cross attention
 class MaskedCrossAttention(nn.Module):
-    """Masked cross attention implementation."""
     def __init__(
         self,
         *,
@@ -159,7 +125,6 @@ class MaskedCrossAttention(nn.Module):
         heads=8,
         only_attend_immediate_media=True,
     ):
-        """Init."""
         super().__init__()
         self.scale = dim_head**-0.5
         self.heads = heads
@@ -190,9 +155,9 @@ class MaskedCrossAttention(nn.Module):
         """
 
         if not use_cached_media:
-            assert (
-                media_locations.shape[1] == x.shape[1]
-            ), f"media_location.shape is {media_locations.shape} but x.shape is {x.shape}"
+            assert media_locations.shape[1] == x.shape[1], (
+                f"media_location.shape is {media_locations.shape} but x.shape is {x.shape}"
+            )
 
         T_txt = x.shape[1]
         _, T_img, n = media.shape[:3]
@@ -240,9 +205,7 @@ class MaskedCrossAttention(nn.Module):
         if exists(media_locations) and self.only_attend_immediate_media:
             # any text without a preceding media needs to have attention zeroed out
             text_without_media_mask = text_time == 0
-            text_without_media_mask = rearrange(
-                text_without_media_mask, "b i -> b 1 i 1"
-            )
+            text_without_media_mask = rearrange(text_without_media_mask, "b i -> b 1 i 1")
             attn = attn.masked_fill(text_without_media_mask, 0.0)
 
         out = einsum("... i j, ... j d -> ... i d", attn, v)
@@ -251,7 +214,6 @@ class MaskedCrossAttention(nn.Module):
 
 
 class GatedCrossAttentionBlock(nn.Module):
-    """Gated cross attention block implementation."""
     def __init__(
         self,
         *,
@@ -262,7 +224,6 @@ class GatedCrossAttentionBlock(nn.Module):
         ff_mult=4,
         only_attend_immediate_media=True,
     ):
-        """Init."""
         super().__init__()
         self.attn = MaskedCrossAttention(
             dim=dim,
@@ -283,14 +244,6 @@ class GatedCrossAttentionBlock(nn.Module):
         media_locations=None,
         use_cached_media=False,
     ):
-        """Forward.
-
-        Args:
-            x: The x.
-            media: The media.
-            media_locations: The media locations.
-            use_cached_media: The use cached media.
-        """
         x = (
             self.attn(
                 x,

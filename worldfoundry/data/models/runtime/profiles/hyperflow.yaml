@@ -25,8 +25,8 @@ artifact_kind: generated_video
 artifact_filename: hyperflow.mp4
 execution:
   environment: hyperflow
-  backend_stage: official_external_runtime
-  runtime_status: gpu_smoke_validated
+  backend_stage: in_tree_runtime
+  runtime_status: cpu_contract_validated_checkpoint_gpu_pending
   integration_status: integrated
   pipeline_binding: hyperflow
   defaults:
@@ -37,11 +37,11 @@ execution:
 integration:
   status: integrated
 notes:
-- Uses the pinned upstream inference package and official diffusers H3 components; no training code is bundled.
-- The dedicated loader installs two-time conditioning and the fixed eight-step grid; ordinary LoRA loading is insufficient.
+- In-tree HyperFlow reuses canonical MiniMax-H3 DiT, refiner, Qwen3-VL feature encoder and video/audio VAEs.
+- The H3 variant owns two-time conditioning, unmerged LoRA, Sol-Attn policy and the fixed eight-step grid.
 - Local base-model shards and adapter weights are required; inference runs offline.
 - T2VA, first/last-frame FL2VA and ordered image/video/audio Ref2VA retain joint audio-video output.
-- Single GPU CPU offload is the default; 2 or 4 GPUs use the upstream Ulysses implementation.
-- T2VA, single-image FL2VA and image-reference Ref2VA passed single-H100 smoke inference at 640x384, 124 frames, 24 fps and eight steps; video and stereo audio decoded successfully.
-- High-resolution quality parity, multi-GPU inference, last-frame and video/audio reference conditioning have not been GPU validated.
+- Single GPU CPU offload is the default; 2 or 4 GPUs use core Ulysses collectives. Diffusers is retained for automatic CPU eviction and selected attention dispatch utilities only.
+- Released-key mappings are bijective and tiny FP32 components and all workflow denoising paths match the pinned reference exactly.
+- CUDA kernels, distributed execution, offload placement and released-weight output parity require GPU validation.
 - Source code is Apache-2.0; adapter and base weights use the MiniMax H3 Community License.

@@ -110,9 +110,7 @@ class Cosmos25VideoCodec:
         frame_array = coerce_video_frames(control, max_frames=request.num_frames)
         if not len(frame_array):
             raise ValueError("Cosmos Transfer2.5 control video cannot be empty")
-        control_is_preprocessed = bool(
-            request.inputs.get("control_is_preprocessed", control_is_mapping)
-        )
+        control_is_preprocessed = bool(request.inputs.get("control_is_preprocessed", control_is_mapping))
         if variant == "edge" and not control_is_preprocessed:
             frame_array = _extract_canny_edges(
                 frame_array,

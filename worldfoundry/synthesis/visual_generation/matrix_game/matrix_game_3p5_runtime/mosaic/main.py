@@ -24,7 +24,7 @@ def main():
     _pre_accelerate_device = _set_rank_local_cuda_device()
     accelerator = accelerate.Accelerator()
     _set_rank_local_cuda_device() or _pre_accelerate_device
-    setattr(args, "rank", accelerator.process_index)
+    args.rank = accelerator.process_index
 
     # Create one shared log directory across ranks. Multi-node wrapper scripts
     # can pass --log_dir_name so every node uses the same run folder before any

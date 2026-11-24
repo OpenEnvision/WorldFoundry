@@ -40,6 +40,7 @@ def get_boundaries_mask(disparity, sobel_threshold=0.3):
 
 
 if PointsRenderer is not None:
+
     class PointsZbufRenderer(PointsRenderer):
         def __init__(self, *args, **kwargs) -> None:
             super().__init__(*args, **kwargs)
@@ -61,6 +62,7 @@ if PointsRenderer is not None:
             images = images.permute(0, 2, 3, 1)
             return images, fragments.zbuf
 else:
+
     class PointsZbufRenderer:
         def __init__(self, *_args, **_kwargs) -> None:
             raise RuntimeError("PyTorch3D is unavailable; use point_rendering's torch fallback")
@@ -68,7 +70,7 @@ else:
 
 @contextlib.contextmanager
 def suppress_stdout_stderr():
-    with open(os.devnull, 'w') as devnull:
+    with open(os.devnull, "w") as devnull:
         old_stdout_fd = os.dup(sys.stdout.fileno())
         old_stderr_fd = os.dup(sys.stderr.fileno())
         try:
@@ -82,9 +84,18 @@ def suppress_stdout_stderr():
             os.close(old_stderr_fd)
 
 
-def point_rendering(K, w2cs, depth, image, raster_settings, device,
-                    background_color=[0, 0, 0], sobel_threshold=0.35, contract=8.0,
-                    sam_mask=None):
+def point_rendering(
+    K,
+    w2cs,
+    depth,
+    image,
+    raster_settings,
+    device,
+    background_color=[0, 0, 0],  # noqa: B006 - Keeps the upstream default object and signature.
+    sobel_threshold=0.35,
+    contract=8.0,
+    sam_mask=None,
+):
     """
     only support batchsize=1
     :param K: [F,3,3]
@@ -111,7 +122,7 @@ def point_rendering(K, w2cs, depth, image, raster_settings, device,
         render_masks = torch.ones((nframe, 1, h, w), device=device, dtype=torch.float32)
     else:
         mid_depth = torch.median(depth.reshape(-1), dim=0)[0] * contract
-        depth[depth > mid_depth] = ((2 * mid_depth) - (mid_depth ** 2 / (depth[depth > mid_depth] + 1e-6)))
+        depth[depth > mid_depth] = (2 * mid_depth) - (mid_depth**2 / (depth[depth > mid_depth] + 1e-6))
 
         point_depth = einops.rearrange(depth[0], "c h w -> (h w) c")
         disp = 1 / (depth + 1e-7)
@@ -119,19 +130,21 @@ def point_rendering(K, w2cs, depth, image, raster_settings, device,
 
         x = torch.arange(w).float() + 0.5
         y = torch.arange(h).float() + 0.5
-        points = torch.stack(torch.meshgrid(x, y, indexing='ij'), -1).to(device)
+        points = torch.stack(torch.meshgrid(x, y, indexing="ij"), -1).to(device)
         points = einops.rearrange(points, "w h c -> (h w) c")
-        # GPU求逆有错
-        points_3d = (c2ws[0] @ points_padding((K[0].cpu().inverse().to(device) @ points_padding(points).T).T * point_depth).T).T[:, :3]
+        # Invert on CPU to avoid GPU inversion errors.
+        points_3d = (
+            c2ws[0] @ points_padding((K[0].cpu().inverse().to(device) @ points_padding(points).T).T * point_depth).T
+        ).T[:, :3]
 
         colors = einops.rearrange(image[0], "c h w -> (h w) c")
 
         boundary_mask = boundary_mask.reshape(-1)
         if sam_mask is not None:
             sam_mask = sam_mask.reshape(-1)
-            boundary_mask[sam_mask == True] = True
+            boundary_mask[sam_mask == True] = True  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
 
-        points_3d = points_3d[boundary_mask == False]
+        points_3d = points_3d[boundary_mask == False]  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
 
         if points_3d.shape[0] <= 8:
             render_rgbs = torch.zeros((nframe, 3, h, w), device=device, dtype=torch.float32)
@@ -140,7 +153,7 @@ def point_rendering(K, w2cs, depth, image, raster_settings, device,
             render_masks[0:1] = 0
             return render_rgbs, render_masks
 
-        colors = colors[boundary_mask == False]
+        colors = colors[boundary_mask == False]  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
 
         if PointsRenderer is None:
             render_rgbs, render_masks, _ = render_point_cloud_frames_torch(
@@ -158,20 +171,26 @@ def point_rendering(K, w2cs, depth, image, raster_settings, device,
             point_cloud = Pointclouds(points=[points_3d.to(device)], features=[colors.to(device)]).extend(nframe)
 
             # convert opencv to opengl coordinate
-            c2ws[:, :, 0] = - c2ws[:, :, 0]
-            c2ws[:, :, 1] = - c2ws[:, :, 1]
+            c2ws[:, :, 0] = -c2ws[:, :, 0]
+            c2ws[:, :, 1] = -c2ws[:, :, 1]
             w2cs = c2ws.inverse()
 
             focal_length = torch.stack([K[:, 0, 0], K[:, 1, 1]], dim=1)
             principal_point = torch.stack([K[:, 0, 2], K[:, 1, 2]], dim=1)
             image_shapes = torch.tensor([[h, w]]).repeat(nframe, 1)
-            cameras = PerspectiveCameras(focal_length=focal_length, principal_point=principal_point,
-                                         R=c2ws[:, :3, :3], T=w2cs[:, :3, -1], in_ndc=False,
-                                         image_size=image_shapes, device=device)
+            cameras = PerspectiveCameras(
+                focal_length=focal_length,
+                principal_point=principal_point,
+                R=c2ws[:, :3, :3],
+                T=w2cs[:, :3, -1],
+                in_ndc=False,
+                image_size=image_shapes,
+                device=device,
+            )
 
             renderer = PointsZbufRenderer(
                 rasterizer=PointsRasterizer(cameras=cameras, raster_settings=raster_settings),
-                compositor=AlphaCompositor(background_color=background_color)
+                compositor=AlphaCompositor(background_color=background_color),
             )
 
             try:

@@ -1,4 +1,3 @@
-# coding: utf-8
 # Copyright (c) 2008-2011 Volvox Development Team
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -34,7 +33,6 @@ Not a logging backend and not Windows-console aware beyond the env flag.
 
 import io
 import os
-from typing import List, Optional, Union
 
 __ALL__ = ["Color", "color_text", "cprint"]
 
@@ -47,6 +45,7 @@ STYLES = dict(
         zip(
             ["bold", "dark", "", "underline", "blink", "", "reverse", "concealed"],
             list(range(1, 9)),
+            strict=False,
         )
     )
 )
@@ -58,6 +57,7 @@ HIGHLIGHTS = dict(
         zip(
             ["grey", "red", "green", "yellow", "blue", "magenta", "cyan", "white"],
             list(range(40, 48)),
+            strict=False,
         )
     )
 )
@@ -68,6 +68,7 @@ COLORS = dict(
         zip(
             ["grey", "red", "green", "yellow", "blue", "magenta", "cyan", "white"],
             list(range(30, 38)),
+            strict=False,
         )
     )
 )
@@ -86,9 +87,9 @@ RESET = "\033[0m"
 
 def color_text(
     text,
-    color: Optional[str] = None,
-    bg_color: Optional[str] = None,
-    styles: Optional[Union[str, List[str]]] = None,
+    color: str | None = None,
+    bg_color: str | None = None,
+    styles: str | list[str] | None = None,
 ):
     """Colorize text.
 
@@ -126,9 +127,9 @@ def color_text(
 
 def cprint(
     *args,
-    color: Optional[str] = None,
-    bg_color: Optional[str] = None,
-    styles: Optional[Union[str, List[str]]] = None,
+    color: str | None = None,
+    bg_color: str | None = None,
+    styles: str | list[str] | None = None,
     **kwargs,
 ):
     """Print colorize text.
@@ -176,7 +177,7 @@ class Color:
 
 
 if __name__ == "__main__":
-    print("Current terminal type: %s" % os.getenv("TERM"))
+    print("Current terminal type: {}".format(os.getenv("TERM")))
     print("Test basic colors:")
     cprint("Grey color", color="grey")
     cprint("Red color", color="red")
@@ -186,7 +187,7 @@ if __name__ == "__main__":
     cprint("Magenta color", color="magenta")
     cprint("Cyan color", color="cyan")
     cprint("White color", color="white")
-    print(("-" * 78))
+    print("-" * 78)
 
     print("Test highlights:")
     cprint("On grey color", bg_color="on_grey")
@@ -216,7 +217,7 @@ if __name__ == "__main__":
         color="white",
         styles=["dark", "blink", "concealed"],
     )
-    print(("-" * 78))
+    print("-" * 78)
 
     print("Test mixing:")
     cprint(

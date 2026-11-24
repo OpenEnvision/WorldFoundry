@@ -29,6 +29,7 @@ def build_vace_wan_classes(dit_block_cls, hash_state_dict_keys, *, module_name: 
     Returns:
         ``(VaceWanAttentionBlock, VaceWanModel, VaceWanModelDictConverter)``.
     """
+
     class VaceWanAttentionBlock(dit_block_cls):
         """VACE condition block that stacks skip hints for later main-graph injection."""
 
@@ -108,9 +109,7 @@ def build_vace_wan_classes(dit_block_cls, hash_state_dict_keys, *, module_name: 
                     for i in self.vace_layers
                 ]
             )
-            self.vace_patch_embedding = torch.nn.Conv3d(
-                vace_in_dim, dim, kernel_size=patch_size, stride=patch_size
-            )
+            self.vace_patch_embedding = torch.nn.Conv3d(vace_in_dim, dim, kernel_size=patch_size, stride=patch_size)
 
         def forward(
             self,
@@ -138,12 +137,7 @@ def build_vace_wan_classes(dit_block_cls, hash_state_dict_keys, *, module_name: 
             """
             c = [self.vace_patch_embedding(u.unsqueeze(0)) for u in vace_context]
             c = [u.flatten(2).transpose(1, 2) for u in c]
-            c = torch.cat(
-                [
-                    torch.cat([u, u.new_zeros(1, x.shape[1] - u.size(1), u.size(2))], dim=1)
-                    for u in c
-                ]
-            )
+            c = torch.cat([torch.cat([u, u.new_zeros(1, x.shape[1] - u.size(1), u.size(2))], dim=1) for u in c])
 
             def create_custom_forward(module):
                 """Wrap ``module`` so ``torch.utils.checkpoint`` can call it."""

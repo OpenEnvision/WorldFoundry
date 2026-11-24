@@ -5,8 +5,8 @@ task_family: video_generation
 groups:
 - video
 source_repos:
-- url: https://github.com/Lightricks/LTX-Video
-  revision: d6053703e00195bc668cbd1d5eda9dc0b2e7b74a
+- url: https://github.com/Lightricks/LTX-2
+  revision: a95ab856bf29407b6b066ede0abe1846050db56c
 checkpoints:
 - repo_id: Lightricks/LTX-2
   revision: 47da56e2ad66ce4125a9922b4a8826bf407f9d0a

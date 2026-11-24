@@ -1,26 +1,26 @@
 # Copyright (c) Tencent Inc. All rights reserved.
-import math
 import copy
-from typing import List, Optional, Tuple, Union, Sequence
+import math
+from collections.abc import Sequence
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 from mmcv.cnn import ConvModule
+from mmcv.cnn.bricks import build_norm_layer
+from mmdet.models.utils import filter_scores_and_topk, multi_apply, unpack_gt_instances
+from mmdet.structures import SampleList
+from mmdet.utils import InstanceList, OptConfigType, OptInstanceList
 from mmengine.config import ConfigDict
+from mmengine.dist import get_dist_info
 from mmengine.model import BaseModule
+from mmengine.structures import InstanceData
+from mmyolo.models.dense_heads import YOLOv8Head, YOLOv8HeadModule
+from mmyolo.models.utils import gt_instances_preprocess
+from mmyolo.registry import MODELS
 from torch import Tensor
 from torch.nn.modules.batchnorm import _BatchNorm
-
-from mmengine.dist import get_dist_info
-from mmengine.structures import InstanceData
-from mmdet.structures import SampleList
-from mmdet.utils import OptConfigType, InstanceList, OptInstanceList
-from mmdet.models.utils import multi_apply, unpack_gt_instances, filter_scores_and_topk
-from mmyolo.registry import MODELS
-from mmyolo.models.dense_heads import YOLOv8HeadModule, YOLOv8Head
-from mmyolo.models.utils import gt_instances_preprocess
-from mmcv.cnn.bricks import build_norm_layer
 
 
 @MODELS.register_module()
@@ -32,9 +32,7 @@ class ContrastiveHead(BaseModule):
         embed_dims (int): embed dim of text and image features
     """
 
-    def __init__(
-        self, embed_dims: int, init_cfg: OptConfigType = None, use_einsum: bool = True
-    ) -> None:
+    def __init__(self, embed_dims: int, init_cfg: OptConfigType = None, use_einsum: bool = True) -> None:
         super().__init__(init_cfg=init_cfg)
 
         self.bias = nn.Parameter(torch.zeros([]))
@@ -161,7 +159,7 @@ class YOLOWorldHeadModule(YOLOv8HeadModule):
         """Initialize the weight and bias of PPYOLOE head."""
         super().init_weights()
         for cls_pred, cls_contrast, stride in zip(
-            self.cls_preds, self.cls_contrasts, self.featmap_strides
+            self.cls_preds, self.cls_contrasts, self.featmap_strides, strict=False
         ):
             cls_pred[-1].bias.data[:] = 0.0  # reset bias
             if hasattr(cls_contrast, "bias"):
@@ -236,15 +234,9 @@ class YOLOWorldHeadModule(YOLOv8HeadModule):
                 )
             )
             if self.use_bn_head:
-                self.cls_contrasts.append(
-                    BNContrastiveHead(
-                        self.embed_dims, self.norm_cfg, use_einsum=self.use_einsum
-                    )
-                )
+                self.cls_contrasts.append(BNContrastiveHead(self.embed_dims, self.norm_cfg, use_einsum=self.use_einsum))
             else:
-                self.cls_contrasts.append(
-                    ContrastiveHead(self.embed_dims, use_einsum=self.use_einsum)
-                )
+                self.cls_contrasts.append(ContrastiveHead(self.embed_dims, use_einsum=self.use_einsum))
 
         proj = torch.arange(self.reg_max, dtype=torch.float)
         self.register_buffer("proj", proj, persistent=False)
@@ -265,7 +257,7 @@ class YOLOWorldHeadModule(YOLOv8HeadModule):
         if self.freeze_all:
             self._freeze_all()
 
-    def forward(self, img_feats: Tuple[Tensor], txt_feats: Tensor) -> Tuple[List]:
+    def forward(self, img_feats: tuple[Tensor], txt_feats: Tensor) -> tuple[list]:
         """Forward features from the upstream network."""
         assert len(img_feats) == self.num_levels
         txt_feats = [txt_feats for _ in range(self.num_levels)]
@@ -285,23 +277,19 @@ class YOLOWorldHeadModule(YOLOv8HeadModule):
         cls_pred: nn.ModuleList,
         reg_pred: nn.ModuleList,
         cls_contrast: nn.ModuleList,
-    ) -> Tuple:
+    ) -> tuple:
         """Forward feature of a single scale level."""
         b, _, h, w = img_feat.shape
         cls_embed = cls_pred(img_feat)
         cls_logit = cls_contrast(cls_embed, txt_feat)
         bbox_dist_preds = reg_pred(img_feat)
         if self.reg_max > 1:
-            bbox_dist_preds = bbox_dist_preds.reshape(
-                [-1, 4, self.reg_max, h * w]
-            ).permute(0, 3, 1, 2)
+            bbox_dist_preds = bbox_dist_preds.reshape([-1, 4, self.reg_max, h * w]).permute(0, 3, 1, 2)
 
             # TODO: The get_flops script cannot handle the situation of
             #  matmul, and needs to be fixed later
             # bbox_preds = bbox_dist_preds.softmax(3).matmul(self.proj)
-            bbox_preds = (
-                bbox_dist_preds.softmax(3).matmul(self.proj.view([-1, 1])).squeeze(-1)
-            )
+            bbox_preds = bbox_dist_preds.softmax(3).matmul(self.proj.view([-1, 1])).squeeze(-1)
             bbox_preds = bbox_preds.transpose(1, 2).reshape(b, -1, h, w)
         else:
             bbox_preds = bbox_dist_preds
@@ -313,9 +301,7 @@ class YOLOWorldHeadModule(YOLOv8HeadModule):
 
 @MODELS.register_module()
 class RepYOLOWorldHeadModule(YOLOWorldHeadModule):
-    def __init__(
-        self, *args, embed_dims: int, num_guide: int, freeze_all: bool = False, **kwargs
-    ) -> None:
+    def __init__(self, *args, embed_dims: int, num_guide: int, freeze_all: bool = False, **kwargs) -> None:
         super().__init__(
             *args,
             embed_dims=embed_dims,
@@ -343,23 +329,19 @@ class RepYOLOWorldHeadModule(YOLOWorldHeadModule):
         cls_pred: nn.ModuleList,
         reg_pred: nn.ModuleList,
         cls_contrast: nn.ModuleList,
-    ) -> Tuple:
+    ) -> tuple:
         """Forward features from the upstream network."""
         b, _, h, w = img_feat.shape
         cls_embed = cls_pred(img_feat)
         cls_logit = cls_contrast(cls_embed)
         bbox_dist_preds = reg_pred(img_feat)
         if self.reg_max > 1:
-            bbox_dist_preds = bbox_dist_preds.reshape(
-                [-1, 4, self.reg_max, h * w]
-            ).permute(0, 3, 1, 2)
+            bbox_dist_preds = bbox_dist_preds.reshape([-1, 4, self.reg_max, h * w]).permute(0, 3, 1, 2)
 
             # TODO: The get_flops script cannot handle the situation of
             #  matmul, and needs to be fixed later
             # bbox_preds = bbox_dist_preds.softmax(3).matmul(self.proj)
-            bbox_preds = (
-                bbox_dist_preds.softmax(3).matmul(self.proj.view([-1, 1])).squeeze(-1)
-            )
+            bbox_preds = bbox_dist_preds.softmax(3).matmul(self.proj.view([-1, 1])).squeeze(-1)
             bbox_preds = bbox_preds.transpose(1, 2).reshape(b, -1, h, w)
         else:
             bbox_preds = bbox_dist_preds
@@ -368,7 +350,7 @@ class RepYOLOWorldHeadModule(YOLOWorldHeadModule):
         else:
             return cls_logit, bbox_preds
 
-    def forward(self, img_feats: Tuple[Tensor]) -> Tuple[List]:
+    def forward(self, img_feats: tuple[Tensor]) -> tuple[list]:
         assert len(img_feats) == self.num_levels
         return multi_apply(
             self.forward_single,
@@ -381,8 +363,6 @@ class RepYOLOWorldHeadModule(YOLOWorldHeadModule):
 
 @MODELS.register_module()
 class YOLOWorldHead(YOLOv8Head):
-    """YOLO-World Head"""
-
     def __init__(self, world_size=-1, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.world_size = world_size
@@ -391,16 +371,16 @@ class YOLOWorldHead(YOLOv8Head):
 
     def loss(
         self,
-        img_feats: Tuple[Tensor],
+        img_feats: tuple[Tensor],
         txt_feats: Tensor,
-        batch_data_samples: Union[list, dict],
+        batch_data_samples: list | dict,
     ) -> dict:
         """Perform forward propagation and loss calculation of the detection
         head on the features of the upstream network."""
 
         outs = self(img_feats, txt_feats)
         # Fast version
-        loss_inputs = outs + (
+        loss_inputs = outs + (  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             batch_data_samples["bboxes_labels"],
             batch_data_samples["img_metas"],
         )
@@ -410,11 +390,11 @@ class YOLOWorldHead(YOLOv8Head):
 
     def loss_and_predict(
         self,
-        img_feats: Tuple[Tensor],
+        img_feats: tuple[Tensor],
         txt_feats: Tensor,
         batch_data_samples: SampleList,
-        proposal_cfg: Optional[ConfigDict] = None,
-    ) -> Tuple[dict, InstanceList]:
+        proposal_cfg: ConfigDict | None = None,
+    ) -> tuple[dict, InstanceList]:
         """Perform forward propagation of the head, then calculate loss and
         predictions from the features and data samples.
         """
@@ -423,25 +403,23 @@ class YOLOWorldHead(YOLOv8Head):
 
         outs = self(img_feats, txt_feats)
 
-        loss_inputs = outs + (
+        loss_inputs = outs + (  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             batch_gt_instances,
             batch_img_metas,
             batch_gt_instances_ignore,
         )
         losses = self.loss_by_feat(*loss_inputs)
 
-        predictions = self.predict_by_feat(
-            *outs, batch_img_metas=batch_img_metas, cfg=proposal_cfg
-        )
+        predictions = self.predict_by_feat(*outs, batch_img_metas=batch_img_metas, cfg=proposal_cfg)
         return losses, predictions
 
-    def forward(self, img_feats: Tuple[Tensor], txt_feats: Tensor) -> Tuple[List]:
+    def forward(self, img_feats: tuple[Tensor], txt_feats: Tensor) -> tuple[list]:
         """Forward features from the upstream network."""
         return self.head_module(img_feats, txt_feats)
 
     def predict(
         self,
-        img_feats: Tuple[Tensor],
+        img_feats: tuple[Tensor],
         txt_feats: Tensor,
         batch_data_samples: SampleList,
         rescale: bool = False,
@@ -451,9 +429,7 @@ class YOLOWorldHead(YOLOv8Head):
         """
         batch_img_metas = [data_samples.metainfo for data_samples in batch_data_samples]
         outs = self(img_feats, txt_feats)
-        predictions = self.predict_by_feat(
-            *outs, batch_img_metas=batch_img_metas, rescale=rescale
-        )
+        predictions = self.predict_by_feat(*outs, batch_img_metas=batch_img_metas, rescale=rescale)
         return predictions
 
     def aug_test(
@@ -526,17 +502,12 @@ class YOLOWorldHead(YOLOv8Head):
 
         # pred info
         flatten_cls_preds = [
-            cls_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, self.num_classes)
-            for cls_pred in cls_scores
+            cls_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, self.num_classes) for cls_pred in cls_scores
         ]
-        flatten_pred_bboxes = [
-            bbox_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, 4)
-            for bbox_pred in bbox_preds
-        ]
+        flatten_pred_bboxes = [bbox_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, 4) for bbox_pred in bbox_preds]
         # (bs, n, 4 * reg_max)
         flatten_pred_dists = [
-            bbox_pred_org.reshape(num_imgs, -1, self.head_module.reg_max * 4)
-            for bbox_pred_org in bbox_dist_preds
+            bbox_pred_org.reshape(num_imgs, -1, self.head_module.reg_max * 4) for bbox_pred_org in bbox_dist_preds
         ]
 
         flatten_dist_preds = torch.cat(flatten_pred_dists, dim=1)
@@ -577,19 +548,10 @@ class YOLOWorldHead(YOLOv8Head):
             # will not report an error
             # iou loss
             prior_bbox_mask = fg_mask_pre_prior.unsqueeze(-1).repeat([1, 1, 4])
-            pred_bboxes_pos = torch.masked_select(
-                flatten_pred_bboxes, prior_bbox_mask
-            ).reshape([-1, 4])
-            assigned_bboxes_pos = torch.masked_select(
-                assigned_bboxes, prior_bbox_mask
-            ).reshape([-1, 4])
-            bbox_weight = torch.masked_select(
-                assigned_scores.sum(-1), fg_mask_pre_prior
-            ).unsqueeze(-1)
-            loss_bbox = (
-                self.loss_bbox(pred_bboxes_pos, assigned_bboxes_pos, weight=bbox_weight)
-                / assigned_scores_sum
-            )
+            pred_bboxes_pos = torch.masked_select(flatten_pred_bboxes, prior_bbox_mask).reshape([-1, 4])
+            assigned_bboxes_pos = torch.masked_select(assigned_bboxes, prior_bbox_mask).reshape([-1, 4])
+            bbox_weight = torch.masked_select(assigned_scores.sum(-1), fg_mask_pre_prior).unsqueeze(-1)
+            loss_bbox = self.loss_bbox(pred_bboxes_pos, assigned_bboxes_pos, weight=bbox_weight) / assigned_scores_sum
 
             # dfl loss
             pred_dist_pos = flatten_dist_preds[fg_mask_pre_prior]
@@ -599,9 +561,7 @@ class YOLOWorldHead(YOLOv8Head):
                 max_dis=self.head_module.reg_max - 1,
                 eps=0.01,
             )
-            assigned_ltrb_pos = torch.masked_select(
-                assigned_ltrb, prior_bbox_mask
-            ).reshape([-1, 4])
+            assigned_ltrb_pos = torch.masked_select(assigned_ltrb, prior_bbox_mask).reshape([-1, 4])
             loss_dfl = self.loss_dfl(
                 pred_dist_pos.reshape(-1, self.head_module.reg_max),
                 assigned_ltrb_pos.reshape(-1),
@@ -615,22 +575,22 @@ class YOLOWorldHead(YOLOv8Head):
             _, world_size = get_dist_info()
         else:
             world_size = self.world_size
-        return dict(
-            loss_cls=loss_cls * num_imgs * world_size,
-            loss_bbox=loss_bbox * num_imgs * world_size,
-            loss_dfl=loss_dfl * num_imgs * world_size,
-        )
+        return {
+            "loss_cls": loss_cls * num_imgs * world_size,
+            "loss_bbox": loss_bbox * num_imgs * world_size,
+            "loss_dfl": loss_dfl * num_imgs * world_size,
+        }
 
     def predict_by_feat(
         self,
-        cls_scores: List[Tensor],
-        bbox_preds: List[Tensor],
-        objectnesses: Optional[List[Tensor]] = None,
-        batch_img_metas: Optional[List[dict]] = None,
-        cfg: Optional[ConfigDict] = None,
+        cls_scores: list[Tensor],
+        bbox_preds: list[Tensor],
+        objectnesses: list[Tensor] | None = None,
+        batch_img_metas: list[dict] | None = None,
+        cfg: ConfigDict | None = None,
         rescale: bool = True,
         with_nms: bool = True,
-    ) -> List[InstanceData]:
+    ) -> list[InstanceData]:
         """Transform a batch of output features extracted by the head into
         bbox results.
         Args:
@@ -690,34 +650,23 @@ class YOLOWorldHead(YOLOv8Head):
         flatten_priors = torch.cat(self.mlvl_priors)
 
         mlvl_strides = [
-            flatten_priors.new_full(
-                (featmap_size.numel() * self.num_base_priors,), stride
-            )
-            for featmap_size, stride in zip(featmap_sizes, self.featmap_strides)
+            flatten_priors.new_full((featmap_size.numel() * self.num_base_priors,), stride)
+            for featmap_size, stride in zip(featmap_sizes, self.featmap_strides, strict=False)
         ]
         flatten_stride = torch.cat(mlvl_strides)
 
         # flatten cls_scores, bbox_preds and objectness
         flatten_cls_scores = [
-            cls_score.permute(0, 2, 3, 1).reshape(num_imgs, -1, self.num_classes)
-            for cls_score in cls_scores
+            cls_score.permute(0, 2, 3, 1).reshape(num_imgs, -1, self.num_classes) for cls_score in cls_scores
         ]
-        flatten_bbox_preds = [
-            bbox_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, 4)
-            for bbox_pred in bbox_preds
-        ]
+        flatten_bbox_preds = [bbox_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, 4) for bbox_pred in bbox_preds]
 
         flatten_cls_scores = torch.cat(flatten_cls_scores, dim=1).sigmoid()
         flatten_bbox_preds = torch.cat(flatten_bbox_preds, dim=1)
-        flatten_decoded_bboxes = self.bbox_coder.decode(
-            flatten_priors[None], flatten_bbox_preds, flatten_stride
-        )
+        flatten_decoded_bboxes = self.bbox_coder.decode(flatten_priors[None], flatten_bbox_preds, flatten_stride)
 
         if with_objectnesses:
-            flatten_objectness = [
-                objectness.permute(0, 2, 3, 1).reshape(num_imgs, -1)
-                for objectness in objectnesses
-            ]
+            flatten_objectness = [objectness.permute(0, 2, 3, 1).reshape(num_imgs, -1) for objectness in objectnesses]
             flatten_objectness = torch.cat(flatten_objectness, dim=1).sigmoid()
         else:
             flatten_objectness = [None for _ in range(num_imgs)]
@@ -729,21 +678,15 @@ class YOLOWorldHead(YOLOv8Head):
             flatten_cls_scores,
             flatten_objectness,
             batch_img_metas,
+            strict=False,
         ):
             ori_shape = img_meta["ori_shape"]
             scale_factor = img_meta["scale_factor"]
-            if "pad_param" in img_meta:
-                pad_param = img_meta["pad_param"]
-            else:
-                pad_param = None
+            pad_param = img_meta["pad_param"] if "pad_param" in img_meta else None  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
 
             score_thr = cfg.get("score_thr", -1)
             # yolox_style does not require the following operations
-            if (
-                objectness is not None
-                and score_thr > 0
-                and not cfg.get("yolox_style", False)
-            ):
+            if objectness is not None and score_thr > 0 and not cfg.get("yolox_style", False):
                 conf_inds = objectness > score_thr
                 bboxes = bboxes[conf_inds, :]
                 scores = scores[conf_inds, :]
@@ -765,17 +708,13 @@ class YOLOWorldHead(YOLOv8Head):
             if cfg.multi_label is False:
                 scores, labels = scores.max(1, keepdim=True)
                 scores, _, keep_idxs, results = filter_scores_and_topk(
-                    scores, score_thr, nms_pre, results=dict(labels=labels[:, 0])
+                    scores, score_thr, nms_pre, results={"labels": labels[:, 0]}
                 )
                 labels = results["labels"]
             else:
-                scores, labels, keep_idxs, _ = filter_scores_and_topk(
-                    scores, score_thr, nms_pre
-                )
+                scores, labels, keep_idxs, _ = filter_scores_and_topk(scores, score_thr, nms_pre)
 
-            results = InstanceData(
-                scores=scores, labels=labels, bboxes=bboxes[keep_idxs]
-            )
+            results = InstanceData(scores=scores, labels=labels, bboxes=bboxes[keep_idxs])
 
             if rescale:
                 if pad_param is not None:

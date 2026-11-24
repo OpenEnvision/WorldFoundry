@@ -6,19 +6,19 @@ Masks are ``[0, 1]`` and broadcast over ``B T D`` token tensors.
 """
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import IntEnum
 
 import torch
 from torch._prims_common import DeviceLikeType
 
 
-class PerturbationType(Enum):
-    """Types of attention perturbations for STG (Spatio-Temporal Guidance)."""
+class PerturbationType(IntEnum):
+    """Attention branches skipped by STG; values index rows of the batched keep masks."""
 
-    SKIP_A2V_CROSS_ATTN = "skip_a2v_cross_attn"
-    SKIP_V2A_CROSS_ATTN = "skip_v2a_cross_attn"
-    SKIP_VIDEO_SELF_ATTN = "skip_video_self_attn"
-    SKIP_AUDIO_SELF_ATTN = "skip_audio_self_attn"
+    SKIP_VIDEO_SELF_ATTN = 0
+    SKIP_AUDIO_SELF_ATTN = 1
+    SKIP_A2V_CROSS_ATTN = 2
+    SKIP_V2A_CROSS_ATTN = 3
 
 
 @dataclass(frozen=True)
@@ -58,37 +58,76 @@ class PerturbationConfig:
         return PerturbationConfig([])
 
 
-@dataclass(frozen=True)
 class BatchedPerturbationConfig:
-    """Perturbation configurations for a batch, with utilities for generating attention masks."""
+    """Materialize per-block keep masks before compilation or CUDA graph capture.
 
-    perturbations: list[PerturbationConfig]
+    The compute tensor has shape ``(types, blocks, batch)``, indexed by
+    :class:`PerturbationType`. Its CPU mirror supplies sync-free eager branch
+    decisions; compiled paths consume masks as tensor inputs, without
+    retaining the Python rule lists.
+    """
 
-    def mask(
-        self, perturbation_type: PerturbationType, block: int, device: DeviceLikeType,         dtype: torch.dtype
-    ) -> torch.Tensor:
-        """Per-sample ``[B]`` mask: 1 keeps the branch, 0 skips it."""
-        mask = torch.ones((len(self.perturbations),), device=device, dtype=dtype)
-        for batch_idx, perturbation in enumerate(self.perturbations):
-            if perturbation.is_perturbed(perturbation_type, block):
-                mask[batch_idx] = 0
+    def __init__(
+        self,
+        perturbations: list[PerturbationConfig],
+        num_blocks: int,
+        device: DeviceLikeType | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        keep = [
+            [[not config.is_perturbed(kind, block) for config in perturbations] for block in range(num_blocks)]
+            for kind in PerturbationType
+        ]
+        self._block_masks_cpu = torch.tensor(keep, dtype=dtype, device="cpu")
+        self._block_masks = self._block_masks_cpu if device is None else self._block_masks_cpu.to(device)
 
-        return mask
+    @classmethod
+    def from_masks(
+        cls, block_masks: torch.Tensor, block_masks_cpu: torch.Tensor | None = None
+    ) -> "BatchedPerturbationConfig":
+        """Use prebuilt masks; eager skip decisions additionally require the CPU mirror."""
+        obj = cls.__new__(cls)
+        obj._block_masks = block_masks
+        obj._block_masks_cpu = block_masks_cpu
+        return obj
 
-    def mask_like(self, perturbation_type: PerturbationType, block: int, values: torch.Tensor) -> torch.Tensor:
-        """Broadcast :meth:`mask` to ``values``'s trailing dims (typically ``B 1 1``)."""
-        mask = self.mask(perturbation_type, block, values.device, values.dtype)
-        return mask.view(mask.numel(), *([1] * len(values.shape[1:])))
+    @property
+    def block_masks(self) -> torch.Tensor:
+        """Compute-device keep masks, indexed by perturbation type, block and sample."""
+        return self._block_masks
+
+    @property
+    def block_masks_cpu(self) -> torch.Tensor | None:
+        """CPU keep masks used outside compiled regions to choose attention branches."""
+        return self._block_masks_cpu
+
+    def batch_slice(self, start: int, end: int) -> "BatchedPerturbationConfig":
+        """Slice batch views without rebuilding the host masks during capture."""
+        cpu_mask = self._block_masks_cpu[:, :, start:end] if self._block_masks_cpu is not None else None
+        return self.from_masks(self._block_masks[:, :, start:end], cpu_mask)
+
+    def mask(self, perturbation_type: PerturbationType, block: int) -> torch.Tensor:
+        """Return an owned ``(B, 1, 1)`` keep mask so compiled inputs do not alias."""
+        return self._block_masks[perturbation_type, block].reshape(-1, 1, 1).clone()
 
     def any_in_batch(self, perturbation_type: PerturbationType, block: int) -> bool:
-        """True if at least one sample skips this branch (needs a mixed mask)."""
-        return any(perturbation.is_perturbed(perturbation_type, block) for perturbation in self.perturbations)
+        """True if at least one sample skips this branch."""
+        assert self._block_masks_cpu is not None, "eager skip decisions require the CPU mask mirror"
+        return bool((self._block_masks_cpu[perturbation_type, block] == 0).any())
 
     def all_in_batch(self, perturbation_type: PerturbationType, block: int) -> bool:
-        """True if every sample skips this branch (Q/K path can be omitted)."""
-        return all(perturbation.is_perturbed(perturbation_type, block) for perturbation in self.perturbations)
+        """True if every sample skips this branch."""
+        assert self._block_masks_cpu is not None, "eager skip decisions require the CPU mask mirror"
+        return bool((self._block_masks_cpu[perturbation_type, block] == 0).all())
 
     @staticmethod
-    def empty(batch_size: int) -> "BatchedPerturbationConfig":
+    def empty(
+        batch_size: int,
+        num_blocks: int,
+        device: DeviceLikeType | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> "BatchedPerturbationConfig":
         """All-keep config for a batch that is not using STG."""
-        return BatchedPerturbationConfig([PerturbationConfig.empty() for _ in range(batch_size)])
+        return BatchedPerturbationConfig(
+            [PerturbationConfig.empty() for _ in range(batch_size)], num_blocks, device, dtype
+        )

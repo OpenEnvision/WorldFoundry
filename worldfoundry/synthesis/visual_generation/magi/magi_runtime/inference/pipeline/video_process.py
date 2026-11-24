@@ -11,19 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import gc
 import os
 import tempfile
+from typing import ClassVar
 
 import ffmpeg
 import torch
 from einops import rearrange
 
 import worldfoundry.core.distributed.model_parallel.groups as mpu
-from inference.common.config import MagiConfig
-from inference.model.vae import AutoModel, DiagonalGaussianDistribution, VideoTokenizerABC
-from worldfoundry.core.distributed.runtime.logging import distributed_logger as magi_logger
+from worldfoundry.core.observability.rank_logging import distributed_logger as magi_logger
+from worldfoundry.synthesis.visual_generation.magi.magi_runtime.inference.common.config import MagiConfig
+from worldfoundry.synthesis.visual_generation.magi.magi_runtime.inference.model.vae import (
+    AutoModel,
+    DiagonalGaussianDistribution,
+    VideoTokenizerABC,
+)
 
 
 ############################################
@@ -34,7 +38,7 @@ class SingletonMeta(type):
     Singleton metaclass
     """
 
-    _instances = {}
+    _instances: ClassVar[dict] = {}
 
     def __call__(cls, *args, **kwargs):
         if cls not in cls._instances:
@@ -129,8 +133,6 @@ class VaeHelper(metaclass=SingletonMeta):
             tile_sample_min_length (int): Minimum length of the tile sample.
             tile_sample_min_height (int): Minimum height of the tile sample.
             tile_sample_min_width (int): Minimum width of the tile sample.
-            spatial_tile_overlap_factor (float): Spatial tile overlap factor.
-            allow_spatial_tiling (bool): Allow spatial tiling.
             parallel_group (ProcessGroup): Distributed encoding group.
         Returns:
             torch.Tensor: Encoded tensor.
@@ -173,9 +175,6 @@ class VaeHelper(metaclass=SingletonMeta):
             tile_sample_min_length (int): Minimum length of the tile sample.
             tile_sample_min_height (int): Minimum height of the tile sample.
             tile_sample_min_width (int): Minimum width of the tile sample.
-            spatial_tile_overlap_factor (float): Spatial tile overlap factor.
-            temporal_tile_overlap_factor (float): Temporal tile overlap factor.
-            allow_spatial_tiling (bool): Allow spatial tiling.
             uint8_output (bool): Whether to output uint8 tensor.
             parallel_group (ProcessGroup): Distributed decoding group.
         Returns:
@@ -218,7 +217,7 @@ def ffmpeg_i2v(image_path, w=384, h=224, aspect_policy="fit"):
     else:
         magi_logger.warning(f"Unknown aspect policy: {aspect_policy}, using fit as fallback")
         r = r.filter("scale", w, h)
-    image_byte = open(image_path, "rb").read()
+    image_byte = open(image_path, "rb").read()  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
     try:
         out, _ = r.output("pipe:", format="rawvideo", pix_fmt="rgb24", vframes=1).run(
             input=image_byte, capture_stdout=True, capture_stderr=True
@@ -267,7 +266,7 @@ def save_video_to_disk(video: torch.Tensor, save_path: str, fps: int) -> bytes:
 
     output, _ = (
         ffmpeg.input(temp_file_path, format="rawvideo", pix_fmt="rgb24", s=f"{W}x{H}", r=fps)
-        .output(save_path, format='mp4', vcodec='libx264', pix_fmt='yuv420p')
+        .output(save_path, format="mp4", vcodec="libx264", pix_fmt="yuv420p")
         .overwrite_output()
         .run(capture_stdout=True, capture_stderr=True)
     )

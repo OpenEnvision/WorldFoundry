@@ -42,7 +42,7 @@ base_model_dependency_preflight:
     driver-compatible CameraBench validation path.
   missing: []
 preflight_command: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile camerabench --manifest 
+  worldfoundry.evals.tasks.execution.orchestration.runtime_preflight --profile camerabench --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/camerabench.yaml --output-dir 
   tmp/worldfoundry_preflight/camerabench --json
 python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
@@ -72,7 +72,7 @@ required_packages:
 - decord
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/camerabench/run_camerabench_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/camerabench/run_camerabench_official_runner.py
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/camerabench.yaml
 - id: local_dataset_1
@@ -85,7 +85,7 @@ required_paths:
 requires_cuda_visibility: false
 status: in_tree_score_normalizer_ready_raw_video_evaluator_pending
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id

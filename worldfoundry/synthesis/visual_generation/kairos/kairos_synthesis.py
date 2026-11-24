@@ -9,7 +9,7 @@ from .runtime import KairosRuntime
 
 
 class KairosSynthesis(RuntimeAdapterSynthesis):
-    """Thin synthesis facade over the official Kairos Sensenova runtime checkout."""
+    """Thin synthesis facade over the official Kairos Sensenova package runtime."""
 
     RUNTIME_CLS = KairosRuntime
     MODEL_ID = KairosRuntime.MODEL_ID

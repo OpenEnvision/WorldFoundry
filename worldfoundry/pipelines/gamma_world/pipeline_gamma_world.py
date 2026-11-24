@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from numbers import Integral
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from worldfoundry.base_models.diffusion_model import NativeDiffusionPipeline
 from worldfoundry.base_models.diffusion_model.models.encoders.gamma_world import component as gamma_conditioning
@@ -28,6 +28,7 @@ _MODE_TO_MODEL_ID = {
 class GammaWorldPipeline(NativeTextToVideoPipeline):
     """Generate synchronized two-player rollouts through native diffusion infra."""
 
+    recipe_model_id: str
     MODEL_ID = "gamma-world"
     OWNER = "Gamma-World"
     CHECKPOINT_ROLES = ("transformer", "vae")
@@ -41,13 +42,13 @@ class GammaWorldPipeline(NativeTextToVideoPipeline):
     DEFAULT_GUIDANCE_SCALE = 1.0
     DEFAULT_NEGATIVE_PROMPT = gamma_conditioning.DEFAULT_NEGATIVE_PROMPT
     DEFAULT_FPS = 16
-    DEFAULT_SCHEDULER_OPTIONS = {"shift": 5.0}
-    REQUEST_INPUT_DEFAULTS = {
+    DEFAULT_SCHEDULER_OPTIONS: Mapping[str, object] = {"shift": 5.0}
+    REQUEST_INPUT_DEFAULTS: Mapping[str, object] = {
         "n_players": 2,
         "actions": None,
         "num_conditional_frames": 1,
     }
-    REQUEST_INPUT_ALIASES = {"action_paths": "actions"}
+    REQUEST_INPUT_ALIASES: ClassVar[Mapping[str, str]] = {"action_paths": "actions"}
 
     @classmethod
     def _validate_num_frames(cls, options: Mapping[str, Any]) -> None:
@@ -57,9 +58,7 @@ class GammaWorldPipeline(NativeTextToVideoPipeline):
                 break
         else:
             value = cls.DEFAULT_NUM_FRAMES
-        integer_value = (
-            isinstance(value, Integral) and not isinstance(value, bool)
-        ) or (
+        integer_value = (isinstance(value, Integral) and not isinstance(value, bool)) or (
             isinstance(value, str) and value.strip().lstrip("+-").isdigit()
         )
         if not integer_value:
@@ -110,17 +109,17 @@ class GammaWorldPipeline(NativeTextToVideoPipeline):
         return overrides or None
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: str | Mapping[str, Any] | None = None,
         required_components: Mapping[str, Any] | None = None,
         device: str = "cuda",
         **kwargs: Any,
-    ) -> "GammaWorldPipeline":
+    ) -> GammaWorldPipeline:
         options = cls._options(model_path, required_components, kwargs)
         cls._validate_num_frames(options)
         component_options = dict(cls._component_options(options) or {})
-        encoder_options = dict(component_options.get("conditioner:main", {}))
+        encoder_options: dict[str, Any] = dict(component_options.get("conditioner:main", {}))
         resolved_encoder_options = reason1_component_options(options)
         for name, value in resolved_encoder_options.items():
             public_name = "text_encoder_run_on_cpu" if name == "run_on_cpu" else f"text_{name}"
@@ -173,7 +172,7 @@ class GammaWorldPipeline(NativeTextToVideoPipeline):
             return root
         return None
 
-    def __call__(
+    def __call__(  # ty: ignore[invalid-method-override]  # model-specific call arguments, passed by keyword
         self,
         prompt: str | list[str] = "",
         images: Any = None,

@@ -10,22 +10,23 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 import yaml
 
-from worldfoundry.evaluation.tasks.catalog.dispatch import (
+from worldfoundry.evals.tasks.catalog.dispatch import (
     BENCHMARK_INTEGRATION_REGISTRY,
     VIDEO_RUNNER_REGISTRY,
     IntegrationTier,
 )
-from worldfoundry.evaluation.tasks.catalog.workspace_registry import (
+from worldfoundry.evals.tasks.catalog.workspace_registry import (
     CLI_RUNNERS,
     build_workspace_benchmark_command,
 )
-from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
-from worldfoundry.evaluation.tasks.contracts import PAWBenchContract, get_external_benchmark_contract
-from worldfoundry.evaluation.tasks.execution.runners.pawbench.run_pawbench_official_runner import (
+from worldfoundry.evals.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
+from worldfoundry.evals.tasks.contracts import get_external_benchmark_contract
+from worldfoundry.evals.tasks.execution.runners.pawbench.run_pawbench_official_runner import (
     CONFIG,
     DEFAULT_RUNTIME_ROOT,
     METRIC_IDS,
@@ -35,12 +36,12 @@ from worldfoundry.evaluation.tasks.execution.runners.pawbench.run_pawbench_offic
     main,
     prepare_upstream_results,
 )
-from worldfoundry.evaluation.utils import BENCHMARK_ZOO_DIR, REPO_ROOT
+from worldfoundry.evals.utils import BENCHMARK_ZOO_DIR, REPO_ROOT
 
 FIXTURE_PATH = REPO_ROOT / "worldfoundry/data/benchmarks/assets/pawbench/sample_results.json"
 
 
-def _fixture_payload() -> dict[str, object]:
+def _fixture_payload() -> dict[str, Any]:
     return json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
@@ -62,8 +63,7 @@ def test_catalog_contract_and_execution_registries_expose_pawbench() -> None:
     assert entry.base_model_dependencies == ()
     assert entry.optional_base_model_dependencies == ()
 
-    assert PAWBenchContract == get_external_benchmark_contract("pawbench")
-    assert PAWBenchContract.metric_ids == METRIC_IDS
+    assert get_external_benchmark_contract("pawbench").metric_ids == METRIC_IDS
     assert VIDEO_RUNNER_REGISTRY["pawbench"].script.endswith("pawbench/run_pawbench_official_runner.py")
     integration = BENCHMARK_INTEGRATION_REGISTRY["pawbench"]
     assert integration.tier is IntegrationTier.MODEL_BACKED

@@ -76,7 +76,7 @@ class HunyuanWorldPlaySynthesis(BaseSynthesis):
         self.model = runtime.model
 
     @classmethod
-    def from_pretrained(cls, *args: Any, **kwargs: Any) -> "HunyuanWorldPlaySynthesis":
+    def from_pretrained(cls, *args: Any, **kwargs: Any) -> HunyuanWorldPlaySynthesis:
         """Creates a new `HunyuanWorldPlaySynthesis` instance by loading the runtime from pretrained weights.
 
         This method acts as a convenience constructor, forwarding its arguments
@@ -182,9 +182,9 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    "HunyuanWorldPlaySynthesis",
+    "HunyuanVideoPipelineOutput",  # noqa: F822 - Provided by the module-level __getattr__.
     "HunyuanWorldPlayRuntime",
-    "HunyuanVideoPipelineOutput",
-    "_HunyuanWorldPlayInternalPipeline",
+    "HunyuanWorldPlaySynthesis",
+    "_HunyuanWorldPlayInternalPipeline",  # noqa: F822 - Provided by the module-level __getattr__.
     "load_runtime",
 ]

@@ -10,9 +10,10 @@ Public surface: :class:`ParallelDims`, :func:`initialize_parallel_state`,
 
 import os
 from dataclasses import dataclass
+from typing import cast
 
 import torch.distributed as dist
-from torch.distributed.device_mesh import init_device_mesh
+from torch.distributed.device_mesh import DeviceMesh, init_device_mesh
 
 # ──────────────────────────────────────────────────────────────────────────
 # ParallelDims — DeviceMesh snapshot; skip the mesh when world_size == 1
@@ -53,8 +54,8 @@ class ParallelDims:
         assert self.world_size % self.sp == 0, "world_size must be divisible by sp"
         mesh = init_device_mesh(
             device_type,
-            [self.world_size // self.sp, self.sp],
-            mesh_dim_names=["dp", "sp"],
+            (self.world_size // self.sp, self.sp),
+            mesh_dim_names=("dp", "sp"),
         )
         self.world_mesh = mesh
         return mesh
@@ -86,7 +87,7 @@ class ParallelDims:
         """Local SP rank, or global rank / 0 when SP is off."""
 
         if self.sp_enabled:
-            return self.world_mesh["sp"].get_local_rank()
+            return cast(DeviceMesh, self.world_mesh)["sp"].get_local_rank()
         if dist.is_initialized():
             return dist.get_rank()
         return 0

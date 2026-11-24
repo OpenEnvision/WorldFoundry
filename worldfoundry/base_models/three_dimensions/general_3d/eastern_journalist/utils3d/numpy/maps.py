@@ -1,50 +1,49 @@
-
-"""Module for base_models -> three_dimensions -> general_3d -> eastern_journalist -> utils3d -> numpy -> maps.py functionality."""
-
-from typing import *
-from typing_extensions import Unpack
+# ruff: noqa: F405 - Names come from the upstream star import.
 import math
+from typing import *  # noqa: F403 - Upstream star import kept as written.
+
 import numpy as np
 from numpy import ndarray
+from typing_extensions import Unpack
 
-from ..helpers import no_warnings, timeit
-from .utils import max_pool_2d, sliding_window, pooling, lite_sum, lite_prod, lite_dot, lite_norm
+from ..helpers import no_warnings
+from .mesh import remove_unused_vertices, triangulate_mesh
 from .transforms import angle_between, unproject_cv
-from .mesh import triangulate_mesh, remove_unused_vertices
+from .utils import lite_dot, lite_norm, lite_prod, max_pool_2d, pooling, sliding_window
 
 __all__ = [
-    'uv_map',
-    'image_uv',
-    'pixel_coord_map',
-    'screen_coord_map',
-    'build_mesh_from_map',
-    'build_mesh_from_depth_map',
-    'depth_map_edge',
-    'depth_map_aliasing',
-    'normal_map_edge',
-    'point_map_to_normal_map',
-    'depth_to_points',
-    'depth_map_to_point_map',
-    'depth_map_to_normal_map',
-    'chessboard',
-    'masked_nearest_resize',
-    'masked_area_resize',
-    'colorize_depth_map',
-    'colorize_normal_map',
-    'flood_fill',
-    'perlin_noise',
-    'perlin_noise_map',
-    'fractal_perlin_noise_map'
+    "build_mesh_from_depth_map",
+    "build_mesh_from_map",
+    "chessboard",
+    "colorize_depth_map",
+    "colorize_normal_map",
+    "depth_map_aliasing",
+    "depth_map_edge",
+    "depth_map_to_normal_map",
+    "depth_map_to_point_map",
+    "depth_to_points",
+    "flood_fill",
+    "fractal_perlin_noise_map",
+    "image_uv",
+    "masked_area_resize",
+    "masked_nearest_resize",
+    "normal_map_edge",
+    "perlin_noise",
+    "perlin_noise_map",
+    "pixel_coord_map",
+    "point_map_to_normal_map",
+    "screen_coord_map",
+    "uv_map",
 ]
 
 
 def uv_map(
     *size: Union[int, Tuple[int, int]],
-    top: float = 0.,
-    left: float = 0.,
-    bottom: float = 1.,
-    right: float = 1.,
-    dtype: np.dtype = np.float32
+    top: float = 0.0,
+    left: float = 0.0,
+    bottom: float = 1.0,
+    right: float = 1.0,
+    dtype: np.dtype = np.float32,
 ) -> ndarray:
     """
     Get image UV space coordinate map, where (0., 0.) is the top-left corner of the image, and (1., 1.) is the bottom-right corner of the image.
@@ -75,7 +74,7 @@ def uv_map(
         height, width = size
     u = np.linspace(left + 0.5 / width * (right - left), right - 0.5 / width * (right - left), width, dtype=dtype)
     v = np.linspace(top + 0.5 / height * (bottom - top), bottom - 0.5 / height * (bottom - top), height, dtype=dtype)
-    u, v = np.meshgrid(u, v, indexing='xy')
+    u, v = np.meshgrid(u, v, indexing="xy")
     return np.stack([u, v], axis=-1)
 
 
@@ -85,11 +84,6 @@ def image_uv(
     height: Optional[int] = None,
     **kwargs,
 ) -> ndarray:
-    """Image uv.
-
-    Returns:
-        The return value.
-    """
     if width is not None or height is not None:
         if width is None or height is None:
             raise ValueError("Both width and height must be provided.")
@@ -101,8 +95,8 @@ def pixel_coord_map(
     *size: Union[int, Tuple[int, int]],
     top: int = 0,
     left: int = 0,
-    convention: Literal['integer-center', 'integer-corner'] = 'integer-center',
-    dtype: np.dtype = np.float32
+    convention: Literal["integer-center", "integer-corner"] = "integer-center",
+    dtype: np.dtype = np.float32,
 ) -> ndarray:
     """
     Get image pixel coordinates map, where (0, 0) is the top-left corner of the top-left pixel, and (width, height) is the bottom-right corner of the bottom-right pixel.
@@ -112,7 +106,7 @@ def pixel_coord_map(
     - `top`: `int`, optional top boundary of the pixel coord map. Defaults to 0.
     - `left`: `int`, optional left boundary of the pixel coord map. Defaults to 0.
     - `convention`: `str`, optional `'integer-center'` or `'integer-corner'`, whether integer coordinates correspond to pixel centers or corners. Defaults to 'integer-center'.
-        - `'integer-center'`: `pixel[i][j]` has integer coordinates `(j, i)` as its center, and occupies square area `[j - 0.5, j + 0.5) × [i - 0.5, i + 0.5)`. 
+        - `'integer-center'`: `pixel[i][j]` has integer coordinates `(j, i)` as its center, and occupies square area `[j - 0.5, j + 0.5) × [i - 0.5, i + 0.5)`.
             The top-left corner of the top-left pixel is `(-0.5, -0.5)`, and the bottom-right corner of the bottom-right pixel is `(width - 0.5, height - 0.5)`.
         - `'integer-corner'`: `pixel[i][j]` has coordinates `(j + 0.5, i + 0.5)` as its center, and occupies square area `[j, j + 1) × [i, i + 1)`.
             The top-left corner of the top-left pixel is `(0, 0)`, and the bottom-right corner of the bottom-right pixel is `(width, height)`.
@@ -120,7 +114,7 @@ def pixel_coord_map(
 
     ## Returns
         ndarray: shape (height, width, 2)
-    
+
     >>> pixel_coord_map(10, 10, convention='integer-center', dtype=int):
     [[[0, 0], [1, 0], ..., [9, 0]],
      [[0, 1], [1, 1], ..., [9, 1]],
@@ -139,21 +133,23 @@ def pixel_coord_map(
         height, width = size
     u = np.arange(left, left + width, dtype=dtype)
     v = np.arange(top, top + height, dtype=dtype)
-    if convention == 'integer-corner':
-        assert np.issubdtype(dtype, np.floating), "dtype should be a floating point type when convention is 'integer-corner'"
+    if convention == "integer-corner":
+        assert np.issubdtype(dtype, np.floating), (
+            "dtype should be a floating point type when convention is 'integer-corner'"
+        )
         u = u + 0.5
         v = v + 0.5
-    u, v = np.meshgrid(u, v, indexing='xy')
+    u, v = np.meshgrid(u, v, indexing="xy")
     return np.stack([u, v], axis=2)
 
 
 def screen_coord_map(
     *size: Union[int, Tuple[int, int]],
-    top: float = 1.,
-    left: float = 0.,
-    bottom: float = 0.,
-    right: float = 1.,
-    dtype: np.dtype = np.float32
+    top: float = 1.0,
+    left: float = 0.0,
+    bottom: float = 0.0,
+    right: float = 1.0,
+    dtype: np.dtype = np.float32,
 ) -> ndarray:
     """
     Get screen space coordinate map, where (0., 0.) is the bottom-left corner of the image, and (1., 1.) is the top-right corner of the image.
@@ -176,7 +172,7 @@ def screen_coord_map(
         height, width = size
     x = np.linspace(left + 0.5 / width, right - 0.5 / width, width, dtype=dtype)
     y = np.linspace(top - 0.5 / height, bottom - 0.5 / height, height, dtype=dtype)
-    x, y = np.meshgrid(x, y, indexing='xy')
+    x, y = np.meshgrid(x, y, indexing="xy")
     return np.stack([x, y], axis=2)
 
 
@@ -200,8 +196,18 @@ def build_mesh_from_map(
     height, width = maps[0].shape[:2] if mask is None else mask.shape
     assert all(x.shape[:2] == (height, width) for x in maps), "All maps should have the same shape"
 
-    row_faces = np.stack([np.arange(0, width - 1, dtype=np.int32), np.arange(width, 2 * width - 1, dtype=np.int32), np.arange(1 + width, 2 * width, dtype=np.int32), np.arange(1, width, dtype=np.int32)], axis=1)
-    faces = (np.arange(0, (height - 1) * width, width, dtype=np.int32)[:, None, None] + row_faces[None, :, :]).reshape((-1, 4))
+    row_faces = np.stack(
+        [
+            np.arange(0, width - 1, dtype=np.int32),
+            np.arange(width, 2 * width - 1, dtype=np.int32),
+            np.arange(1 + width, 2 * width, dtype=np.int32),
+            np.arange(1, width, dtype=np.int32),
+        ],
+        axis=1,
+    )
+    faces = (np.arange(0, (height - 1) * width, width, dtype=np.int32)[:, None, None] + row_faces[None, :, :]).reshape(
+        (-1, 4)
+    )
     attributes = tuple(x.reshape(-1, *x.shape[2:]) for x in maps)
     if mask is not None:
         quad_mask = (mask[:-1, :-1] & mask[1:, :-1] & mask[1:, 1:] & mask[:-1, 1:]).ravel()
@@ -249,23 +255,23 @@ def build_mesh_from_depth_map(
     uv, depth, other_attrs, faces = build_mesh_from_map(uv, depth, *other_maps, mask=mask)
     pts = unproject_cv(uv, depth, intrinsics, extrinsics)
     if tri:
-        faces = triangulate_mesh(faces, vertices=pts, method='diagonal')
+        faces = triangulate_mesh(faces, vertices=pts, method="diagonal")
         faces, pts, *other_attrs = remove_unused_vertices(faces, pts, *other_attrs)
     return faces, pts, *other_attrs
 
 
 @no_warnings(category=RuntimeWarning)
 def depth_map_edge(
-    depth: ndarray, 
-    atol: Optional[float] = None, 
-    rtol: Optional[float] = None, 
+    depth: ndarray,
+    atol: Optional[float] = None,
+    rtol: Optional[float] = None,
     ltol: Optional[float] = None,
-    kernel_size: int = 3, 
-    mask: ndarray = None
+    kernel_size: int = 3,
+    mask: ndarray = None,
 ) -> ndarray:
     """
     Compute the edge mask from depth map. The edge is defined as the pixels whose neighbors have large difference in depth.
-    
+
     ## Parameters
         depth (ndarray): shape (..., height, width), linear depth map
         atol (float): absolute tolerance
@@ -277,12 +283,14 @@ def depth_map_edge(
     """
     if mask is not None:
         depth = np.where(mask, depth, np.nan)
-    
+
     if atol is not None or rtol is not None:
-        diff = (max_pool_2d(depth, kernel_size, stride=1, padding=kernel_size // 2) + max_pool_2d(-depth, kernel_size, stride=1, padding=kernel_size // 2))
-    
+        diff = max_pool_2d(depth, kernel_size, stride=1, padding=kernel_size // 2) + max_pool_2d(
+            -depth, kernel_size, stride=1, padding=kernel_size // 2
+        )
+
     edge = np.zeros_like(depth, dtype=bool)
-    
+
     if atol is not None:
         edge |= diff > atol
     if rtol is not None:
@@ -290,17 +298,23 @@ def depth_map_edge(
 
     if ltol is not None:
         disp = 1 / depth
-        disp_mean_pooling = pooling(disp, kernel_size, stride=1, padding=kernel_size // 2, axis=(-2, -1), mode='mean')
+        disp_mean_pooling = pooling(disp, kernel_size, stride=1, padding=kernel_size // 2, axis=(-2, -1), mode="mean")
         laplacian = (disp - disp_mean_pooling) / disp
-        laplacian_window_max = pooling(laplacian, kernel_size, stride=1, padding=kernel_size // 2, axis=(-2, -1), mode='max')
-        laplacian_window_min = pooling(laplacian, kernel_size, stride=1, padding=kernel_size // 2, axis=(-2, -1), mode='min')
+        laplacian_window_max = pooling(
+            laplacian, kernel_size, stride=1, padding=kernel_size // 2, axis=(-2, -1), mode="max"
+        )
+        laplacian_window_min = pooling(
+            laplacian, kernel_size, stride=1, padding=kernel_size // 2, axis=(-2, -1), mode="min"
+        )
         edge |= (laplacian_window_max > ltol) & (laplacian_window_min < -ltol)
 
     return edge
 
 
 @no_warnings(category=RuntimeWarning)
-def depth_map_aliasing(depth: ndarray, atol: float = None, rtol: float = None, kernel_size: int = 3, mask: ndarray = None) -> ndarray:
+def depth_map_aliasing(
+    depth: ndarray, atol: float | None = None, rtol: float | None = None, kernel_size: int = 3, mask: ndarray = None
+) -> ndarray:
     """
     Compute the map that indicates the aliasing of x depth map, identifying pixels which neither close to the maximum nor the minimum of its neighbors.
     ## Parameters
@@ -335,30 +349,34 @@ def normal_map_edge(normals: ndarray, tol: float, kernel_size: int = 3, mask: nd
     ## Parameters
         normal (ndarray): shape (..., height, width, 3), normal map
         tol (float): tolerance in degrees
-   
+
     ## Returns
         edge (ndarray): shape (..., height, width) of dtype torch.bool
     """
     assert normals.ndim >= 3 and normals.shape[-1] == 3, "normal should be of shape (..., height, width, 3)"
     normals = normals / (np.linalg.norm(normals, axis=-1, keepdims=True) + 1e-12)
-    
+
     padding = kernel_size // 2
     normals_window = sliding_window(
-        np.pad(normals, (*([(0, 0)] * (normals.ndim - 3)), (padding, padding), (padding, padding), (0, 0)), mode='edge'), 
-        window_size=kernel_size, 
-        stride=1, 
-        axis=(-3, -2)
+        np.pad(
+            normals, (*([(0, 0)] * (normals.ndim - 3)), (padding, padding), (padding, padding), (0, 0)), mode="edge"
+        ),
+        window_size=kernel_size,
+        stride=1,
+        axis=(-3, -2),
     )
     if mask is None:
         angle_diff = np.arccos((normals[..., None, None] * normals_window).sum(axis=-3)).max(axis=(-2, -1))
     else:
         mask_window = sliding_window(
-            np.pad(mask, (*([(0, 0)] * (mask.ndim - 3)), (padding, padding), (padding, padding)), mode='edge'), 
-            window_size=kernel_size, 
-            stride=1, 
-            axis=(-3, -2)
+            np.pad(mask, (*([(0, 0)] * (mask.ndim - 3)), (padding, padding), (padding, padding)), mode="edge"),
+            window_size=kernel_size,
+            stride=1,
+            axis=(-3, -2),
         )
-        angle_diff = np.where(mask_window, np.arccos((normals[..., None, None] * normals_window).sum(axis=-3)), 0).max(axis=(-2, -1))
+        angle_diff = np.where(mask_window, np.arccos((normals[..., None, None] * normals_window).sum(axis=-3)), 0).max(
+            axis=(-2, -1)
+        )
 
     angle_diff = max_pool_2d(angle_diff, kernel_size, stride=1, padding=kernel_size // 2)
     edge = angle_diff > np.deg2rad(tol)
@@ -366,8 +384,8 @@ def normal_map_edge(normals: ndarray, tol: float, kernel_size: int = 3, mask: nd
 
 
 @no_warnings(category=RuntimeWarning)
-def point_map_to_normal_map(point: ndarray, mask: ndarray = None, edge_threshold: float = None) -> ndarray:
-    """Calculate normal map from point map. Value range is [-1, 1]. 
+def point_map_to_normal_map(point: ndarray, mask: ndarray = None, edge_threshold: float | None = None) -> ndarray:
+    """Calculate normal map from point map. Value range is [-1, 1].
 
     ## Parameters
         point (ndarray): shape (height, width, 3), point map
@@ -375,7 +393,7 @@ def point_map_to_normal_map(point: ndarray, mask: ndarray = None, edge_threshold
         edge_threshold (optional, float): threshold for the angle (in degrees) between the normal and the view direction. Defaults to None.
 
     ## Returns
-        normal (ndarray): shape (height, width, 3), normal map. 
+        normal (ndarray): shape (height, width, 3), normal map.
     """
     height, width = point.shape[-3:-1]
     has_mask = mask is not None
@@ -392,37 +410,46 @@ def point_map_to_normal_map(point: ndarray, mask: ndarray = None, edge_threshold
     left = pts[1:-1, :-2, :] - pts[1:-1, 1:-1, :]
     down = pts[2:, 1:-1, :] - pts[1:-1, 1:-1, :]
     right = pts[1:-1, 2:, :] - pts[1:-1, 1:-1, :]
-    normal = np.stack([
-        np.cross(up, left, axis=-1),
-        np.cross(left, down, axis=-1),
-        np.cross(down, right, axis=-1),
-        np.cross(right, up, axis=-1),
-    ])
+    normal = np.stack(
+        [
+            np.cross(up, left, axis=-1),
+            np.cross(left, down, axis=-1),
+            np.cross(down, right, axis=-1),
+            np.cross(right, up, axis=-1),
+        ]
+    )
     normal = normal / (np.linalg.norm(normal, axis=-1, keepdims=True) + 1e-12)
-    
-    valid = np.stack([
-        mask[:-2, 1:-1] & mask[1:-1, :-2],
-        mask[1:-1, :-2] & mask[2:, 1:-1],
-        mask[2:, 1:-1] & mask[1:-1, 2:],
-        mask[1:-1, 2:] & mask[:-2, 1:-1],
-    ]) & mask[None, 1:-1, 1:-1]
+
+    valid = (
+        np.stack(
+            [
+                mask[:-2, 1:-1] & mask[1:-1, :-2],
+                mask[1:-1, :-2] & mask[2:, 1:-1],
+                mask[2:, 1:-1] & mask[1:-1, 2:],
+                mask[1:-1, 2:] & mask[:-2, 1:-1],
+            ]
+        )
+        & mask[None, 1:-1, 1:-1]
+    )
     if edge_threshold is not None:
         view_angle = angle_between(pts[None, 1:-1, 1:-1, :], normal)
         view_angle = np.minimum(view_angle, np.pi - view_angle)
         valid = valid & (view_angle < np.deg2rad(edge_threshold))
-    
+
     normal = (normal * valid[..., None]).sum(axis=0)
     normal = normal / (np.linalg.norm(normal, axis=-1, keepdims=True) + 1e-12)
-    
+
     if has_mask:
-        normal_mask =  valid.any(axis=0)
+        normal_mask = valid.any(axis=0)
         normal = np.where(normal_mask[..., None], normal, 0)
         return normal, normal_mask
     else:
         return normal
 
 
-def depth_map_to_normal_map(depth: ndarray, intrinsics: ndarray, mask: ndarray = None, edge_threshold: float = None) -> ndarray:
+def depth_map_to_normal_map(
+    depth: ndarray, intrinsics: ndarray, mask: ndarray = None, edge_threshold: float | None = None
+) -> ndarray:
     """Calculate normal map from depth map. Value range is [-1, 1]. Normal direction in OpenCV identity camera's coordinate system.
 
     ## Parameters
@@ -432,7 +459,7 @@ def depth_map_to_normal_map(depth: ndarray, intrinsics: ndarray, mask: ndarray =
         edge_threshold (optional, float): threshold for the angle (in degrees) between the normal and the view direction. Defaults to None.
 
     ## Returns
-        normal (ndarray): shape (height, width, 3), normal map. 
+        normal (ndarray): shape (height, width, 3), normal map.
     """
     points = depth_map_to_point_map(depth, intrinsics)
     normals = point_map_to_normal_map(points, mask, edge_threshold)
@@ -457,10 +484,10 @@ def depth_map_to_point_map(
     assert intrinsics is not None, "intrinsics matrix is required"
     uv = uv_map(depth.shape[-2:], dtype=depth.dtype)
     points = unproject_cv(
-        uv, 
-        depth, 
-        intrinsics=intrinsics[..., None, :, :], 
-        extrinsics=extrinsics[..., None, :, :] if extrinsics is not None else None
+        uv,
+        depth,
+        intrinsics=intrinsics[..., None, :, :],
+        extrinsics=extrinsics[..., None, :, :] if extrinsics is not None else None,
     )
     return points
 
@@ -470,16 +497,6 @@ def depth_to_points(
     intrinsics: ndarray,
     extrinsics: ndarray = None,
 ) -> ndarray:
-    """Depth to points.
-
-    Args:
-        depth: The depth.
-        intrinsics: The intrinsics.
-        extrinsics: The extrinsics.
-
-    Returns:
-        The return value.
-    """
     return depth_map_to_point_map(depth, intrinsics, extrinsics)
 
 
@@ -507,10 +524,7 @@ def chessboard(*size: Union[int, Tuple[int, int]], grid_size: int, color_a: ndar
 
 
 def masked_nearest_resize(
-    *image: ndarray,
-    mask: ndarray, 
-    size: Tuple[int, int], 
-    return_index: bool = False
+    *image: ndarray, mask: ndarray, size: Tuple[int, int], return_index: bool = False
 ) -> Tuple[Unpack[Tuple[ndarray, ...]], ndarray, Tuple[ndarray, ...]]:
     """
     Resize image(s) by nearest sampling with mask awareness. Suitable for sparse maps. ![masked_nearest_resize.png](doc/masked_nearest_resize.png)
@@ -518,7 +532,7 @@ def masked_nearest_resize(
     - Upsampling: Assign the valid pixel to only the nearest pixel in the resized map.
 
     ### Parameters
-    - `*image`: Input image(s) of shape `(..., H, W, C)` or `(... , H, W)` 
+    - `*image`: Input image(s) of shape `(..., H, W, C)` or `(... , H, W)`
         - You can pass multiple images to be resized at the same time for efficiency.
     - `mask`: input mask of shape `(..., H, W)`, dtype=bool
     - `size`: target size `(H', W')`
@@ -538,9 +552,9 @@ def masked_nearest_resize(
     filter_shape = (filter_h_i, filter_w_i)
     padding_h, padding_w = filter_h_i // 2 + 1, filter_w_i // 2 + 1
     padding_shape = ((padding_h, padding_h), (padding_w, padding_w))
-    
+
     # Window the original mask and uv
-    pixels = pixel_coord_map(height, width, convention='integer-corner', dtype=np.float32)
+    pixels = pixel_coord_map(height, width, convention="integer-corner", dtype=np.float32)
     indices = np.arange(height * width, dtype=np.int32).reshape(height, width)
     window_pixels = sliding_window(pixels, window_size=filter_shape, pad_size=padding_shape, axis=(0, 1))
     window_indices = sliding_window(indices, window_size=filter_shape, pad_size=padding_shape, axis=(0, 1))
@@ -551,32 +565,44 @@ def masked_nearest_resize(
     target_lefttop = target_centers - np.array((filter_w_f / 2, filter_h_f / 2), dtype=np.float32)
     target_window = np.round(target_lefttop).astype(np.int32) + np.array((padding_w, padding_h), dtype=np.int32)
 
-    target_window_pixels = window_pixels[target_window[..., 1], target_window[..., 0], :, :, :].reshape(target_height, target_width, 2, filter_size)                  # (target_height, tgt_width, 2, filter_size)
-    target_window_mask = window_mask[..., target_window[..., 1], target_window[..., 0], :, :].reshape(*mask.shape[:-2], target_height, target_width, filter_size)     # (..., target_height, tgt_width, filter_size)
-    target_window_indices = window_indices[target_window[..., 1], target_window[..., 0], :, :].reshape(target_height, target_width, filter_size)                      # (target_height, tgt_width, filter_size)
+    target_window_pixels = window_pixels[target_window[..., 1], target_window[..., 0], :, :, :].reshape(
+        target_height, target_width, 2, filter_size
+    )  # (target_height, tgt_width, 2, filter_size)
+    target_window_mask = window_mask[..., target_window[..., 1], target_window[..., 0], :, :].reshape(
+        *mask.shape[:-2], target_height, target_width, filter_size
+    )  # (..., target_height, tgt_width, filter_size)
+    target_window_indices = window_indices[target_window[..., 1], target_window[..., 0], :, :].reshape(
+        target_height, target_width, filter_size
+    )  # (target_height, tgt_width, filter_size)
 
-    # Compute nearest neighbor in the local window for each pixel 
+    # Compute nearest neighbor in the local window for each pixel
     delta = target_window_pixels - target_centers[..., None]
-    eps = np.finfo(np.float32).eps * max(height, width) # Shift a small epsilon to avoid numerical issues when the pixel is exactly on the border
-    target_window_mask &= (-filter_w_f / 2 + eps < delta[..., 0, :]) & (delta[..., 0, :] <= filter_w_f / 2 + eps) & (-filter_h_f / 2 + eps < delta[..., 1, :]) & (delta[..., 1, :] <= filter_h_f / 2 + eps)
-    dist = np.where(target_window_mask, np.square(delta[..., 0, :]) + np.square(delta[..., 1, :]), np.inf)      # (..., target_height, tgt_width, filter_size)
-    nearest_in_window = np.argmin(dist, axis=-1, keepdims=True)                                                 # (..., target_height, tgt_width, 1)
+    eps = np.finfo(np.float32).eps * max(
+        height, width
+    )  # Shift a small epsilon to avoid numerical issues when the pixel is exactly on the border
+    target_window_mask &= (
+        (-filter_w_f / 2 + eps < delta[..., 0, :])
+        & (delta[..., 0, :] <= filter_w_f / 2 + eps)
+        & (-filter_h_f / 2 + eps < delta[..., 1, :])
+        & (delta[..., 1, :] <= filter_h_f / 2 + eps)
+    )
+    dist = np.where(
+        target_window_mask, np.square(delta[..., 0, :]) + np.square(delta[..., 1, :]), np.inf
+    )  # (..., target_height, tgt_width, filter_size)
+    nearest_in_window = np.argmin(dist, axis=-1, keepdims=True)  # (..., target_height, tgt_width, 1)
     nearest_idx = np.take_along_axis(
-        np.broadcast_to(target_window_indices, dist.shape),
-        nearest_in_window, 
-        axis=-1
-    ).squeeze(-1)     # (..., target_height, tgt_width)
+        np.broadcast_to(target_window_indices, dist.shape), nearest_in_window, axis=-1
+    ).squeeze(-1)  # (..., target_height, tgt_width)
     nearest_i, nearest_j = nearest_idx // width, nearest_idx % width
     target_mask = np.any(target_window_mask, axis=-1)
-    batch_indices = [np.arange(n).reshape([1] * i + [n] + [1] * (mask.ndim - i - 1)) for i, n in enumerate(mask.shape[:-2])]
+    batch_indices = [
+        np.arange(n).reshape([1] * i + [n] + [1] * (mask.ndim - i - 1)) for i, n in enumerate(mask.shape[:-2])
+    ]
 
     nearest_indices = (*batch_indices, nearest_i, nearest_j)
     outputs = tuple(x[nearest_indices] for x in image)
 
-    if return_index:
-        ret = (*outputs, target_mask, nearest_indices)
-    else:
-        ret = (*outputs, target_mask)
+    ret = (*outputs, target_mask, nearest_indices) if return_index else (*outputs, target_mask)
 
     if len(ret) == 1:
         return ret[0]
@@ -585,9 +611,7 @@ def masked_nearest_resize(
 
 
 def masked_area_resize(
-    *image: ndarray,
-    mask: ndarray, 
-    size: Tuple[int, int]
+    *image: ndarray, mask: ndarray, size: Tuple[int, int]
 ) -> Tuple[Unpack[Tuple[ndarray, ...]], ndarray]:
     """
     Resize 2D map by area sampling with mask awareness.
@@ -611,23 +635,31 @@ def masked_area_resize(
     filter_shape = (filter_h_i, filter_w_i)
     padding_h, padding_w = filter_h_i // 2 + 1, filter_w_i // 2 + 1
     padding_shape = ((padding_h, padding_h), (padding_w, padding_w))
-    
+
     # Window the original mask and uv (non-copy)
-    pixels = pixel_coord_map((height, width), convention='integer-corner', dtype=np.float32)
+    pixels = pixel_coord_map((height, width), convention="integer-corner", dtype=np.float32)
     indices = np.arange(height * width, dtype=np.int32).reshape(height, width)
     window_pixels = sliding_window(pixels, window_size=filter_shape, pad_size=padding_shape, axis=(0, 1))
     window_indices = sliding_window(indices, window_size=filter_shape, pad_size=padding_shape, axis=(0, 1))
     window_mask = sliding_window(mask, window_size=filter_shape, pad_size=padding_shape, axis=(-2, -1))
 
     # Gather the target pixels's local window
-    target_center = uv_map((target_height, target_width), dtype=np.float32) * np.array([width, height], dtype=np.float32)
+    target_center = uv_map((target_height, target_width), dtype=np.float32) * np.array(
+        [width, height], dtype=np.float32
+    )
     target_lefttop = target_center - np.array((filter_w_f / 2, filter_h_f / 2), dtype=np.float32)
     target_bottomright = target_center + np.array((filter_w_f / 2, filter_h_f / 2), dtype=np.float32)
     target_window = np.floor(target_lefttop).astype(np.int32) + np.array((padding_w, padding_h), dtype=np.int32)
 
-    target_window_centers = window_pixels[target_window[..., 1], target_window[..., 0], :, :, :].reshape(target_height, target_width, 2, filter_size)                 # (target_height, tgt_width, 2, filter_size)
-    target_window_mask = window_mask[..., target_window[..., 1], target_window[..., 0], :, :].reshape(*mask.shape[:-2], target_height, target_width, filter_size)     # (..., target_height, tgt_width, filter_size)
-    target_window_indices = window_indices[target_window[..., 1], target_window[..., 0], :, :].reshape(target_height, target_width, filter_size)                      # (target_height, tgt_width, filter_size)
+    target_window_centers = window_pixels[target_window[..., 1], target_window[..., 0], :, :, :].reshape(
+        target_height, target_width, 2, filter_size
+    )  # (target_height, tgt_width, 2, filter_size)
+    target_window_mask = window_mask[..., target_window[..., 1], target_window[..., 0], :, :].reshape(
+        *mask.shape[:-2], target_height, target_width, filter_size
+    )  # (..., target_height, tgt_width, filter_size)
+    target_window_indices = window_indices[target_window[..., 1], target_window[..., 0], :, :].reshape(
+        target_height, target_width, filter_size
+    )  # (target_height, tgt_width, filter_size)
 
     # Compute pixel area in the local windows
     # (..., target_height, tgt_width, filter_size)
@@ -636,19 +668,23 @@ def masked_area_resize(
     target_window_area = (target_window_rightbottom - target_window_lefttop).clip(0, None)
     target_window_area = np.where(target_window_mask, target_window_area[..., 0, :] * target_window_area[..., 1, :], 0)
 
-    target_area = np.sum(target_window_area, axis=-1)   # (..., target_height, tgt_width)
+    target_area = np.sum(target_window_area, axis=-1)  # (..., target_height, tgt_width)
     target_mask = target_area >= 0
 
     # Weighted sum by area
-    outputs = [] 
+    outputs = []
     for x in image:
-        assert x.shape[:mask.ndim] == mask.shape, "Image and mask should have the same batch shape and spatial shape"
+        assert x.shape[: mask.ndim] == mask.shape, "Image and mask should have the same batch shape and spatial shape"
         expand_channels = (slice(None),) * (x.ndim - mask.ndim)
         x = np.where(mask[(..., *expand_channels)], x, 0)
-        x = x.reshape(*x.shape[:mask.ndim - 2], height * width, *x.shape[mask.ndim:])[(*((slice(None),) * (mask.ndim - 2)), target_window_indices)]                   # (..., target_height, tgt_width, filter_size, ...)
-        x = (x * target_window_area[(..., *expand_channels)]).sum(axis=mask.ndim) / np.maximum(target_area[(..., *expand_channels)], np.finfo(np.float32).eps)          # (..., target_height, tgt_width, ...)
+        x = x.reshape(*x.shape[: mask.ndim - 2], height * width, *x.shape[mask.ndim :])[
+            (*((slice(None),) * (mask.ndim - 2)), target_window_indices)
+        ]  # (..., target_height, tgt_width, filter_size, ...)
+        x = (x * target_window_area[(..., *expand_channels)]).sum(axis=mask.ndim) / np.maximum(
+            target_area[(..., *expand_channels)], np.finfo(np.float32).eps
+        )  # (..., target_height, tgt_width, ...)
         outputs.append(x)
-    
+
     ret = *outputs, target_mask
 
     if len(ret) == 1:
@@ -657,7 +693,7 @@ def masked_area_resize(
         return ret
 
 
-from worldfoundry.core.media.artifacts import (
+from worldfoundry.core.media.artifacts import (  # noqa: E402 - Follows module-level definitions, as upstream.
     colorize_depth_map,
     colorize_normal_map,
 )
@@ -666,7 +702,7 @@ from worldfoundry.core.media.artifacts import (
 def flood_fill(*image: ndarray, mask: ndarray, return_index: bool = False) -> ndarray:
     """
     Flooding fill the holes in the image(s) according to the mask. ![doc/flood_fill.png](doc/flood_fill.png)
-    
+
     Parameters
     ----
     - `*image` (ndarray): shape (..., height, width, [C]), input image(s)
@@ -680,11 +716,7 @@ def flood_fill(*image: ndarray, mask: ndarray, return_index: bool = False) -> nd
     """
     *batch_shape, height, width = mask.shape
 
-    self_i, self_j = np.meshgrid(
-        np.arange(height, dtype=np.float32),
-        np.arange(width, dtype=np.float32),
-        indexing='ij'
-    )
+    self_i, self_j = np.meshgrid(np.arange(height, dtype=np.float32), np.arange(width, dtype=np.float32), indexing="ij")
     nearest_i, nearest_j = np.broadcast_to(self_i, mask.shape), np.broadcast_to(self_j, mask.shape)
 
     filled_mask = mask.copy()
@@ -696,11 +728,21 @@ def flood_fill(*image: ndarray, mask: ndarray, return_index: bool = False) -> nd
         step = step // 2
     steps += [1, 1]
     for step in steps:
-        sliding_window_i = sliding_window(nearest_i, window_size=3, dilation=step, pad_size=step, axis=(-2, -1)).reshape(*batch_shape, height, width, 9)
-        sliding_window_j = sliding_window(nearest_j, window_size=3, dilation=step, pad_size=step, axis=(-2, -1)).reshape(*batch_shape, height, width, 9)
-        sliding_window_mask = sliding_window(filled_mask, window_size=3, dilation=step, pad_size=step, axis=(-2, -1)).reshape(*batch_shape, height, width, 9)
+        sliding_window_i = sliding_window(
+            nearest_i, window_size=3, dilation=step, pad_size=step, axis=(-2, -1)
+        ).reshape(*batch_shape, height, width, 9)
+        sliding_window_j = sliding_window(
+            nearest_j, window_size=3, dilation=step, pad_size=step, axis=(-2, -1)
+        ).reshape(*batch_shape, height, width, 9)
+        sliding_window_mask = sliding_window(
+            filled_mask, window_size=3, dilation=step, pad_size=step, axis=(-2, -1)
+        ).reshape(*batch_shape, height, width, 9)
         filled_mask |= sliding_window_mask.any(axis=-1)
-        dist = np.where(sliding_window_mask, np.square(sliding_window_i - self_i[..., None]) + np.square(sliding_window_j - self_j[..., None]), np.inf)
+        dist = np.where(
+            sliding_window_mask,
+            np.square(sliding_window_i - self_i[..., None]) + np.square(sliding_window_j - self_j[..., None]),
+            np.inf,
+        )
         nearest_in_window = np.argmin(dist, axis=-1)
         nearest_i = np.take_along_axis(sliding_window_i, nearest_in_window[..., None], axis=-1)[..., 0]
         nearest_j = np.take_along_axis(sliding_window_j, nearest_in_window[..., None], axis=-1)[..., 0]
@@ -711,11 +753,8 @@ def flood_fill(*image: ndarray, mask: ndarray, return_index: bool = False) -> nd
 
     outputs = tuple(x[nearest_indices] for x in image)
 
-    if return_index:
-        ret = *outputs, nearest_indices
-    else:
-        ret = outputs
-    
+    ret = (*outputs, nearest_indices) if return_index else outputs
+
     if len(ret) == 1:
         return ret[0]
     else:
@@ -724,7 +763,7 @@ def flood_fill(*image: ndarray, mask: ndarray, return_index: bool = False) -> nd
 
 def perlin_noise(x: ndarray, seed: Optional[int] = None) -> ndarray:
     """Generate Perlin noise for the given coordinates.
-    
+
     Parameters
     ----
     - `x` (ndarray): shape (*batch_shape, N_1, ..., N_D, D), coordinates to sample Perlin.
@@ -741,19 +780,16 @@ def perlin_noise(x: ndarray, seed: Optional[int] = None) -> ndarray:
 
     # Prepare gradient set and hash permutation
     rng = np.random.default_rng(seed)
-    hash_set_size = min(16 ** D, x.size // D)
+    hash_set_size = min(16**D, x.size // D)
     perm = rng.permutation(hash_set_size)
     gradient_set = rng.standard_normal((hash_set_size, D)).astype(x.dtype)
     gradient_set = gradient_set / (lite_norm(gradient_set, axis=-1)[..., None] + np.finfo(x.dtype).tiny)
-    
+
     # Get corner coordinates
-    unit_grid = np.stack(
-        np.meshgrid(*([[0, 1]] * D), indexing='ij'), 
-        axis=-1
-    ).reshape(-1, D)  # (2 ** D, D)
+    unit_grid = np.stack(np.meshgrid(*([[0, 1]] * D), indexing="ij"), axis=-1).reshape(-1, D)  # (2 ** D, D)
     x_corners = xi[..., None, :].repeat(unit_grid.shape[0], axis=-2)
     x_corners += unit_grid
-    
+
     # Hash corner coordinates
     hash_idx = perm[x_corners[..., 0] % hash_set_size]
     for i in range(1, x.shape[-1]):
@@ -764,14 +800,18 @@ def perlin_noise(x: ndarray, seed: Optional[int] = None) -> ndarray:
     # Batch hashing
     if x.ndim > D + 1:
         # If batch dimensions exist, instances have different noise patterns
-        batch_idx = np.arange(math.prod(x.shape[:x.ndim - D - 1]))
-        batch_idx = batch_idx.reshape(*x.shape[:x.ndim - D - 1], *([1] * (D + 1)))
+        batch_idx = np.arange(math.prod(x.shape[: x.ndim - D - 1]))
+        batch_idx = batch_idx.reshape(*x.shape[: x.ndim - D - 1], *([1] * (D + 1)))
         hash_idx = perm[(hash_idx + batch_idx) % hash_set_size]
 
     # Compute dot products of each corner's gradient and the direction to the point
-    gradients = gradient_set.view(f'<S{gradient_set.itemsize * D}').ravel()[hash_idx].view(x.dtype).reshape(*hash_idx.shape, D) # NOTE: equivalent to `gradients = gradient_set[hash_idx]`, but 6x faster. Flattened fancy indexing is faster.
+    gradients = (
+        gradient_set.view(f"<S{gradient_set.itemsize * D}").ravel()[hash_idx].view(x.dtype).reshape(*hash_idx.shape, D)
+    )  # NOTE: equivalent to `gradients = gradient_set[hash_idx]`, but 6x faster. Flattened fancy indexing is faster.
     direction = xf[..., None, :].repeat(unit_grid.shape[0], axis=-2)
-    direction -= unit_grid.astype(x.dtype)      # NOTE: equivalent to `direction = xf[..., None, :] - unit_grid.astype(x.dtype)`, but 3x faster. Repeating is faster than broadcasting here.
+    direction -= unit_grid.astype(
+        x.dtype
+    )  # NOTE: equivalent to `direction = xf[..., None, :] - unit_grid.astype(x.dtype)`, but 3x faster. Repeating is faster than broadcasting here.
     dot = lite_dot(gradients, direction, axis=-1)
 
     # Smooth interpolation
@@ -780,20 +820,25 @@ def perlin_noise(x: ndarray, seed: Optional[int] = None) -> ndarray:
     w -= unit_grid.astype(x.dtype)
     np.abs(w, out=w)
     w *= -1
-    w += 1          # NOTE: equivalent to `w = 1 - np.abs(u[..., None, :] - unit_grid.astype(x.dtype))`, but 3x faster
+    w += 1  # NOTE: equivalent to `w = 1 - np.abs(u[..., None, :] - unit_grid.astype(x.dtype))`, but 3x faster
     w = lite_prod(w, axis=-1)
     y = lite_dot(dot, w, axis=-1)
 
     return y
 
 
-def perlin_noise_map(size: Tuple[int, ...], frequency: Union[float, ndarray], seed: Optional[int] = None, dtype: Optional[np.dtype] = np.float32) -> ndarray:
+def perlin_noise_map(
+    size: Tuple[int, ...],
+    frequency: Union[float, ndarray],
+    seed: Optional[int] = None,
+    dtype: Optional[np.dtype] = np.float32,
+) -> ndarray:
     """Generate Perlin noise map.
 
     Parameters
     ----
     - `size` (Tuple[int, ...]): size of the noise map (..., H, W)
-    - `frequency` (float | ndarray): frequency relative to map's larger dimension max(H, W) of the Perlin noise. 
+    - `frequency` (float | ndarray): frequency relative to map's larger dimension max(H, W) of the Perlin noise.
         Represents how many periods of noise fit in the larger dimension of the map.
     - `seed` (int, optional): random seed. The same seed will generate the same noise pattern(s). Defaults to None.
 
@@ -802,21 +847,23 @@ def perlin_noise_map(size: Tuple[int, ...], frequency: Union[float, ndarray], se
     - `noise_map` (ndarray): shape (..., H, W), Perlin noise map. Value range is approximately [-1, 1]
     """
     height, width = size[-2:]
-    uv = uv_map(size[-2:], dtype=dtype) 
-    frequency_uv = np.asarray(frequency, dtype=dtype)[..., None] * (np.array([width, height], dtype=dtype) / max(size[-2:]))
-    x = np.broadcast_to(uv * frequency_uv[..., None, None, :], (*size, 2)) 
+    uv = uv_map(size[-2:], dtype=dtype)
+    frequency_uv = np.asarray(frequency, dtype=dtype)[..., None] * (
+        np.array([width, height], dtype=dtype) / max(size[-2:])
+    )
+    x = np.broadcast_to(uv * frequency_uv[..., None, None, :], (*size, 2))
     noise_map = perlin_noise(x, seed=seed)
     return noise_map
 
 
 def fractal_perlin_noise_map(
-    size: Tuple[int, ...], 
-    base_frequency: Union[float, ndarray], 
-    octaves: int = 4, 
-    lacunarity: float = 2.0, 
-    gain: float = 0.5, 
-    seed: Optional[int] = None, 
-    dtype: Optional[np.dtype] = np.float32
+    size: Tuple[int, ...],
+    base_frequency: Union[float, ndarray],
+    octaves: int = 4,
+    lacunarity: float = 2.0,
+    gain: float = 0.5,
+    seed: Optional[int] = None,
+    dtype: Optional[np.dtype] = np.float32,
 ) -> ndarray:
     """Generate fractal Perlin noise map. ![fractal_perlin_base_frequeny2_octaves7_gain0.7.png](doc/fractal_perlin_base_frequeny2_octaves7_gain0.7.png)
 
@@ -836,10 +883,12 @@ def fractal_perlin_noise_map(
     """
     noise_map = np.zeros(size, dtype=dtype)
     amplitude = 1.0
-    frequency_uv = np.asarray(base_frequency, dtype=dtype).copy()[..., None] * (np.array([size[-1], size[-2]], dtype=dtype) / max(size[-2:]))
-    uv = uv_map(size[-2:], dtype=dtype) 
+    frequency_uv = np.asarray(base_frequency, dtype=dtype).copy()[..., None] * (
+        np.array([size[-1], size[-2]], dtype=dtype) / max(size[-2:])
+    )
+    uv = uv_map(size[-2:], dtype=dtype)
     for octave in range(octaves):
-        x = np.broadcast_to(uv * frequency_uv[..., None, None, :], (*size, 2)) 
+        x = np.broadcast_to(uv * frequency_uv[..., None, None, :], (*size, 2))
         noise_map += amplitude * perlin_noise(x, seed=seed + octave if seed is not None else None)
         amplitude *= gain
         frequency_uv *= lacunarity

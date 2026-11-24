@@ -3,12 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.catalog.dispatch import CLI_RUNNERS, VIDEO_RUNNER_REGISTRY
-from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
-from worldfoundry.evaluation.tasks.execution.runners.worldolympiad import (
+from worldfoundry.evals.tasks.catalog.dispatch import CLI_RUNNERS, VIDEO_RUNNER_REGISTRY
+from worldfoundry.evals.tasks.contracts.external import get_external_benchmark_contract
+from worldfoundry.evals.tasks.execution.runners.worldolympiad import (
     run_worldolympiad_official_runner as runner,
 )
-from worldfoundry.evaluation.tasks.execution.runners.worldolympiad.worldolympiad_metrics import (
+from worldfoundry.evals.tasks.execution.runners.worldolympiad.worldolympiad_metrics import (
     METRIC_ORDER,
     WorldOlympiadResultError,
     normalize_results,

@@ -18,8 +18,6 @@ Conversion from the TrigFlow (sCM paper) parameterization trigflow_t to
 the four c_xxx scaling coefficients as in EDM fomulation.
 """
 
-from typing import Tuple
-
 import torch
 
 
@@ -29,22 +27,9 @@ class EDM_sCMWrapper:
     """S cm wrapper implementation."""
 
     def __init__(self, sigma_data: float = 1.0):
-        """Init.
-
-        Args:
-            sigma_data: The sigma data.
-        """
         self.sigma_data = sigma_data
 
-    def __call__(self, trigflow_t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Call.
-
-        Args:
-            trigflow_t: The trigflow t.
-
-        Returns:
-            The return value.
-        """
+    def __call__(self, trigflow_t: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         dtype = trigflow_t.dtype
         trigflow_t = trigflow_t.to(torch.float64)
         sigma = torch.tan(trigflow_t) * self.sigma_data
@@ -59,25 +44,10 @@ class EDM_sCMWrapper:
 
 
 class RectifiedFlow_sCMWrapper:
-    """Rectified flow s cm wrapper implementation."""
-
     def __init__(self, sigma_data: float = 1.0):
-        """Init.
-
-        Args:
-            sigma_data: The sigma data.
-        """
         self.sigma_data = sigma_data
 
-    def __call__(self, trigflow_t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Call.
-
-        Args:
-            trigflow_t: The trigflow t.
-
-        Returns:
-            The return value.
-        """
+    def __call__(self, trigflow_t: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         dtype = trigflow_t.dtype
         trigflow_t = trigflow_t.to(torch.float64)
         # sigma = torch.tan(trigflow_t) * self.sigma_data

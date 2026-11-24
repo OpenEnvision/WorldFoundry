@@ -1,21 +1,20 @@
-"""Module for base_models -> three_dimensions -> general_3d -> eastern_journalist -> utils3d -> torch -> rasterization.py functionality."""
-
-from typing import *
+# ruff: noqa: F405 - Names come from the upstream star import.
 import threading
+from typing import *  # noqa: F403 - Upstream star import kept as written.
 
-import torch
-from torch import Tensor
-import torch.nn.functional as F
 import nvdiffrast.torch as dr
+import torch
+import torch.nn.functional as F
+from torch import Tensor
 
 from .transforms import extrinsics_to_view, intrinsics_to_perspective
 
 __all__ = [
-    'RastContext',
-    'rasterize_triangles', 
-    'rasterize_triangles_peeling',
-    'sample_texture',
-    'texture_composite',
+    "RastContext",
+    "rasterize_triangles",
+    "rasterize_triangles_peeling",
+    "sample_texture",
+    "texture_composite",
 ]
 
 
@@ -24,35 +23,36 @@ class RastContext:
     Create a rasterization context. Nothing but a wrapper of nvdiffrast.torch.RasterizeCudaContext or nvdiffrast.torch.RasterizeGLContext.
     """
 
-    default_backend: Literal['cuda', 'gl'] = 'cuda'
+    default_backend: Literal["cuda", "gl"] = "cuda"
     "Default backend for the default context."
 
     _threading_local: threading.local = threading.local()
     "Thread-local static variable to store default context."
 
-    def __init__(self, nvd_ctx: Union[dr.RasterizeCudaContext, dr.RasterizeGLContext] = None, *, backend: Literal['cuda', 'gl'] = 'cuda',  device: Union[str, torch.device] = None):
-        """Init.
-
-        Args:
-            nvd_ctx: The nvd ctx.
-        """
+    def __init__(
+        self,
+        nvd_ctx: Union[dr.RasterizeCudaContext, dr.RasterizeGLContext] = None,
+        *,
+        backend: Literal["cuda", "gl"] = "cuda",
+        device: Union[str, torch.device] = None,
+    ):
         if nvd_ctx is not None:
             self.nvd_ctx = nvd_ctx
-            return 
-        
-        if backend == 'gl':
+            return
+
+        if backend == "gl":
             self.nvd_ctx = dr.RasterizeGLContext(device=device)
-        elif backend == 'cuda':
+        elif backend == "cuda":
             self.nvd_ctx = dr.RasterizeCudaContext(device=device)
         else:
-            raise ValueError(f'Unknown backend: {backend}')
-    
+            raise ValueError(f"Unknown backend: {backend}")
+
     @staticmethod
-    def get_default_context() -> 'RastContext':
+    def get_default_context() -> "RastContext":
         """
         Get the thread-local default rasterization context.
         """
-        if not hasattr(RastContext._threading_local, 'default_context'):
+        if not hasattr(RastContext._threading_local, "default_context"):
             RastContext._threading_local.default_context = RastContext(backend=RastContext.default_backend)
         return RastContext._threading_local.default_context
 
@@ -68,7 +68,7 @@ def rasterize_triangles(
     extrinsics: Tensor = None,
     intrinsics: Tensor = None,
     near: float = 0.01,
-    far: float = float('inf'),
+    far: float = float("inf"),
     return_image_derivatives: bool = False,
     return_depth: bool = False,
     return_interpolation: bool = False,
@@ -76,8 +76,6 @@ def rasterize_triangles(
     ctx: Optional[RastContext] = None,
 ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
     """
-    Rasterize triangles.
-
     Parameters
     ----
         size (Tuple[int, int]): (height, width) of the output image
@@ -112,14 +110,16 @@ def rasterize_triangles(
     assert faces.ndim == 2
 
     if vertices.shape[-1] == 2:
-        vertices = torch.cat([vertices, torch.zeros_like(vertices[..., :1]), torch.ones_like(vertices[..., :1])], dim=-1)
+        vertices = torch.cat(
+            [vertices, torch.zeros_like(vertices[..., :1]), torch.ones_like(vertices[..., :1])], dim=-1
+        )
     elif vertices.shape[-1] == 3:
         vertices = torch.cat([vertices, torch.ones_like(vertices[..., :1])], dim=-1)
     elif vertices.shape[-1] == 4:
         pass
     else:
-        raise ValueError(f'Wrong shape of vertices: {vertices.shape}')
-    
+        raise ValueError(f"Wrong shape of vertices: {vertices.shape}")
+
     if intrinsics is not None:
         assert projection is None, "Cannot specify both intrinsics and projection."
         projection = intrinsics_to_perspective(intrinsics, near=near, far=far)
@@ -143,15 +143,14 @@ def rasterize_triangles(
     mask = (rast_out[..., 3] > 0).flip(1)
 
     if attributes is not None:
-        image, image_dr = dr.interpolate(attributes, rast_out, faces, rast_db, diff_attrs='all' if return_image_derivatives else None)
+        image, image_dr = dr.interpolate(
+            attributes, rast_out, faces, rast_db, diff_attrs="all" if return_image_derivatives else None
+        )
         if antialiasing:
             image = dr.antialias(image, rast_out, pos_clip, faces)
         image = image.flip(1)
-        
-        if return_image_derivatives is not None:
-            image_dr = image_dr.flip(1)
-        else:
-            image_dr = None
+
+        image_dr = image_dr.flip(1) if return_image_derivatives is not None else None
     else:
         image = None
         image_dr = None
@@ -164,15 +163,18 @@ def rasterize_triangles(
         interpolation_uv = None
 
     if return_depth:
-        ndc_coord_map = torch.cat([
-            F.affine_grid(
-                torch.tensor([[[1., 0., 0.], [0., -1., 0.]]], device=rast_out.device, dtype=rast_out.dtype), 
-                (rast_out.shape[0], 1, size[0], size[1]), 
-                align_corners=False
-            ), 
-            rast_out[..., 2:3].flip(1),
-            torch.ones((*rast_out.shape[:3], 1), device=rast_out.device, dtype=rast_out.dtype)
-        ], dim=-1)
+        ndc_coord_map = torch.cat(
+            [
+                F.affine_grid(
+                    torch.tensor([[[1.0, 0.0, 0.0], [0.0, -1.0, 0.0]]], device=rast_out.device, dtype=rast_out.dtype),
+                    (rast_out.shape[0], 1, size[0], size[1]),
+                    align_corners=False,
+                ),
+                rast_out[..., 2:3].flip(1),
+                torch.ones((*rast_out.shape[:3], 1), device=rast_out.device, dtype=rast_out.dtype),
+            ],
+            dim=-1,
+        )
         view_coord_map = ndc_coord_map @ torch.linalg.inv(projection[..., None, :, :]).mT
         depth = -view_coord_map[..., 2] / view_coord_map[..., 3]
         depth = torch.where(mask, depth, torch.inf)
@@ -180,12 +182,12 @@ def rasterize_triangles(
         depth = None
 
     output = {
-        'image': image,
-        'image_dr': image_dr,
-        'depth': depth,
-        'mask': mask,
-        'interpolation_id': interpolation_id,
-        'interpolation_uv': interpolation_uv,
+        "image": image,
+        "image_dr": image_dr,
+        "depth": depth,
+        "mask": mask,
+        "interpolation_id": interpolation_id,
+        "interpolation_uv": interpolation_uv,
     }
 
     output = {k: v for k, v in output.items() if v is not None}
@@ -204,7 +206,7 @@ def rasterize_triangles_peeling(
     extrinsics: Tensor = None,
     intrinsics: Tensor = None,
     near: float = 0.01,
-    far: float = float('inf'),
+    far: float = float("inf"),
     return_image_derivatives: bool = False,
     return_depth: bool = False,
     return_interpolation: bool = False,
@@ -240,16 +242,16 @@ def rasterize_triangles_peeling(
         - depth: (List[Tensor]): (B, H, W) linear depth. Empty pixels have depth inf.
         - interpolation_id: (List[Tensor]): (B, H, W) triangle ID map. For empty pixels, the value is -1.
         - interpolation_uv: (List[Tensor]): (B, H, W, 2) triangle UV (first two channels of barycentric coordinates)
-    
+
     The last layer yielded will be empty, then the generator will stop.
 
     Example
     ----
     ```
     for i, layer_output in enumerate(rasterize_triangles_peeling(
-        (512, 512), 
-        vertices=vertices, 
-        faces=faces, 
+        (512, 512),
+        vertices=vertices,
+        faces=faces,
         attributes=attributes,
         view=view,
         projection=projection
@@ -268,14 +270,16 @@ def rasterize_triangles_peeling(
     assert faces.ndim == 2
 
     if vertices.shape[-1] == 2:
-        vertices = torch.cat([vertices, torch.zeros_like(vertices[..., :1]), torch.ones_like(vertices[..., :1])], dim=-1)
+        vertices = torch.cat(
+            [vertices, torch.zeros_like(vertices[..., :1]), torch.ones_like(vertices[..., :1])], dim=-1
+        )
     elif vertices.shape[-1] == 3:
         vertices = torch.cat([vertices, torch.ones_like(vertices[..., :1])], dim=-1)
     elif vertices.shape[-1] == 4:
         pass
     else:
-        raise ValueError(f'Wrong shape of vertices: {vertices.shape}')
-    
+        raise ValueError(f"Wrong shape of vertices: {vertices.shape}")
+
     if intrinsics is not None:
         assert projection is None, "Cannot specify both intrinsics and projection."
         projection = intrinsics_to_perspective(intrinsics, near=near, far=far)
@@ -291,25 +295,24 @@ def rasterize_triangles_peeling(
     faces = faces.contiguous()
     if attributes is not None:
         attributes = attributes.contiguous()
-        
+
     with dr.DepthPeeler(ctx.nvd_ctx, pos_clip, faces, resolution=size) as peeler:
         while True:
             # Rasterize
             rast_out, rast_db = peeler.rasterize_next_layer()
-            
+
             # Process outputs
             mask = (rast_out[..., 3] > 0).flip(1)
 
             if attributes is not None:
-                image, image_dr = dr.interpolate(attributes, rast_out, faces, rast_db, diff_attrs='all' if return_image_derivatives else None)
+                image, image_dr = dr.interpolate(
+                    attributes, rast_out, faces, rast_db, diff_attrs="all" if return_image_derivatives else None
+                )
                 if antialiasing:
                     image = dr.antialias(image, rast_out, pos_clip, faces)
                 image = image.flip(1).permute(0, 3, 1, 2)
-                    
-                if return_image_derivatives is not None:
-                    image_dr = image_dr.flip(1).permute(0, 3, 1, 2)
-                else:
-                    image_dr = None
+
+                image_dr = image_dr.flip(1).permute(0, 3, 1, 2) if return_image_derivatives is not None else None
             else:
                 image = None
                 image_dr = None
@@ -322,15 +325,20 @@ def rasterize_triangles_peeling(
                 interpolation_uv = None
 
             if return_depth:
-                ndc_coord_map = torch.cat([
-                    F.affine_grid(
-                        torch.tensor([[[1., 0., 0.], [0., -1., 0.]]], device=rast_out.device, dtype=rast_out.dtype), 
-                        (rast_out.shape[0], 1, size[0], size[1]), 
-                        align_corners=False
-                    ), 
-                    rast_out[..., 2:3].flip(1),
-                    torch.ones((*rast_out.shape[:3], 1), device=rast_out.device, dtype=rast_out.dtype)
-                ], dim=-1)
+                ndc_coord_map = torch.cat(
+                    [
+                        F.affine_grid(
+                            torch.tensor(
+                                [[[1.0, 0.0, 0.0], [0.0, -1.0, 0.0]]], device=rast_out.device, dtype=rast_out.dtype
+                            ),
+                            (rast_out.shape[0], 1, size[0], size[1]),
+                            align_corners=False,
+                        ),
+                        rast_out[..., 2:3].flip(1),
+                        torch.ones((*rast_out.shape[:3], 1), device=rast_out.device, dtype=rast_out.dtype),
+                    ],
+                    dim=-1,
+                )
                 view_coord_map = ndc_coord_map @ torch.linalg.inv(projection[..., None, :, :]).mT
                 depth = -view_coord_map[..., 2] / view_coord_map[..., 3]
                 depth = torch.where(mask, depth, torch.inf)
@@ -338,18 +346,19 @@ def rasterize_triangles_peeling(
                 depth = None
 
             output = {
-                'image': image,
-                'image_dr': image_dr,
-                'depth': depth,
-                'mask': mask,
-                'interpolation_id': interpolation_id,
-                'interpolation_uv': interpolation_uv,
+                "image": image,
+                "image_dr": image_dr,
+                "depth": depth,
+                "mask": mask,
+                "interpolation_id": interpolation_id,
+                "interpolation_uv": interpolation_uv,
             }
             output = {k: v for k, v in output.items() if v is not None}
             yield output
 
             if not mask.any():
                 break
+
 
 def sample_texture(
     texture: Tensor,
@@ -358,19 +367,19 @@ def sample_texture(
 ) -> Tensor:
     """
     Interpolate texture using uv coordinates.
-    
+
     ## Parameters
         texture (Tensor): (B, H, W, C) texture
         uv (Tensor): (B, H, W, 2) uv coordinates
         uv_dr (Tensor): (B, H, W, 4) uv derivatives
-        
+
     ## Returns
         Tensor: (B, H, W, C) interpolated texture
     """
     texture = texture.flip(2).contiguous()
     return dr.texture(texture, uv, uv_dr).flip(1)
-    
-    
+
+
 def texture_composite(
     texture: Tensor,
     uv: List[Tensor],
@@ -379,14 +388,14 @@ def texture_composite(
 ) -> Tuple[Tensor, Tensor]:
     """
     Composite textures with depth peeling output.
-    
+
     ## Parameters
         texture (Tensor): (B, C+1, H, W) texture
             NOTE: the last channel is alpha channel
         uv (List[Tensor]): list of (B, H, W, 2) uv coordinates
         uv_da (List[Tensor]): list of (B, H, W, 4) uv derivatives
         background (Optional[Tensor], optional): (B, C, H, W) background image. Defaults to None (black).
-        
+
     ## Returns
         image: (Tensor): (B, C, H, W) rendered image
         alpha: (Tensor): (B, H, W) alpha channel
@@ -394,7 +403,7 @@ def texture_composite(
     assert len(uv) == len(uv_da)
     if background is not None:
         assert texture.shape[1] == background.shape[1] + 1
-    
+
     C = texture.shape[1] - 1
     B, H, W = uv[0].shape[:3]
     texture = texture.flip(2).permute(0, 2, 3, 1).contiguous()
@@ -402,13 +411,13 @@ def texture_composite(
     if background is None:
         image = torch.zeros(B, H, W, C, device=texture.device)
     else:
-        image = background.clone().permute(0, 2, 3, 1)      # [B, H, W, C]
+        image = background.clone().permute(0, 2, 3, 1)  # [B, H, W, C]
     for i in range(len(uv)):
-        texture_map = dr.texture(texture, uv[i], uv_da[i])      # [B, H, W, C+1]
-        _alpha = texture_map[..., -1]                           # [B, H, W]
-        _weight = _alpha * (1 - alpha)                          # [B, H, W]
-        image = image + texture_map[..., :-1] * _weight.unsqueeze(-1)   # [B, H, W, C]
-        alpha = alpha + _weight                         # [B, H, W]
+        texture_map = dr.texture(texture, uv[i], uv_da[i])  # [B, H, W, C+1]
+        _alpha = texture_map[..., -1]  # [B, H, W]
+        _weight = _alpha * (1 - alpha)  # [B, H, W]
+        image = image + texture_map[..., :-1] * _weight.unsqueeze(-1)  # [B, H, W, C]
+        alpha = alpha + _weight  # [B, H, W]
     return image.flip(1).permute(0, 3, 1, 2), alpha.flip(1)
 
 
@@ -433,7 +442,7 @@ def texture_composite(
 #     ctx: Optional[RastContext] = None,
 # ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.BoolTensor, Optional[torch.FloatTensor], Optional[torch.FloatTensor]]:
 #     """
-#     Warp image by depth. 
+#     Warp image by depth.
 #     NOTE: if batch size is 1, image mesh will be triangulated aware of the depth, yielding less distorted results.
 #     Otherwise, image mesh will be triangulated simply for batch rendering.
 
@@ -446,7 +455,7 @@ def texture_composite(
 #         extrinsics_tgt (Tensor, optional): (B, 4, 4) extrinsics matrix for target. None to use identity. Defaults to None.
 #         intrinsics_src (Tensor, optional): (B, 3, 3) intrinsics matrix for source. None to use the same as target. Defaults to None.
 #         intrinsics_tgt (Tensor, optional): (B, 3, 3) intrinsics matrix for target. None to use the same as source. Defaults to None.
-#         near (float, optional): near plane. Defaults to 0.1. 
+#         near (float, optional): near plane. Defaults to 0.1.
 #         far (float, optional): far plane. Defaults to 100.0.
 #         antialiasing (bool, optional): whether to perform antialiasing. Defaults to True.
 #         backslash (bool, optional): whether to use backslash triangulation. Defaults to False.
@@ -454,7 +463,7 @@ def texture_composite(
 #         return_uv (bool, optional): whether to return the uv. Defaults to False.
 #         return_dr (bool, optional): whether to return the image-space derivatives of uv. Defaults to False.
 #         ctx (RastContext): rasterization context
-    
+
 #     ## Returns
 #         image: (torch.FloatTensor): (B, C, H, W) rendered image
 #         depth: (torch.FloatTensor): (B, H, W) linear depth, ranging from 0 to inf
@@ -483,7 +492,7 @@ def texture_composite(
 #         intrinsics_src = intrinsics_tgt
 #     if intrinsics_tgt is None:
 #         intrinsics_tgt = intrinsics_src
-    
+
 #     assert all(x is not None for x in [extrinsics_src, extrinsics_tgt, intrinsics_src, intrinsics_tgt]), "Make sure you have provided all the necessary camera parameters."
 
 #     view_tgt = transforms.extrinsics_to_view(extrinsics_tgt)
@@ -508,7 +517,7 @@ def texture_composite(
 #             extrinsics_src,
 #             intrinsics_src,
 #         )
-#     else:    
+#     else:
 #         uv, faces = utils.image_mesh(width=depth.shape[-1], height=depth.shape[-2])
 #         if mask is not None:
 #             depth = torch.where(mask, depth, Tensor(far, dtype=depth.dtype, device=depth.device))
@@ -606,14 +615,14 @@ def texture_composite(
 #         depth (Tensor, optional): (B, H, W) linear depth. If None, will use the same for all pixels. Defaults to None.
 #         antialiasing (bool, optional): whether to perform antialiasing. Defaults to True.
 #         backslash (bool, optional): whether to use backslash triangulation. Defaults to False.
-    
+
 #     ## Returns
 #         image: (torch.FloatTensor): (B, C, H, W) rendered image
 #         mask: (torch.BoolTensor): (B, H, W) mask of valid pixels
 #     """
 #     if ctx is None:
 #         ctx = RastContext.get_default_context()
-        
+
 #     assert image.ndim == 4, f'Wrong shape of image: {image.shape}'
 #     batch_size, _, height, width = image.shape
 
@@ -622,8 +631,8 @@ def texture_composite(
 
 #     extrinsics = torch.eye(4).to(image)
 #     fov = torch.deg2rad(Tensor([45.0], device=image.device))
-#     intrinsics = transforms.intrinsics_from_fov(fov, width, height, normalize=True)[0] 
-   
+#     intrinsics = transforms.intrinsics_from_fov(fov, width, height, normalize=True)[0]
+
 #     view = transforms.extrinsics_to_view(extrinsics)
 #     perspective = transforms.intrinsics_to_perspective(intrinsics, near=0.1, far=100)
 

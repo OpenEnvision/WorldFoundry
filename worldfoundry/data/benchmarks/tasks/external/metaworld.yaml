@@ -27,7 +27,7 @@ metadata:
   source_kind: benchmark_zoo
   benchmark_id: metaworld
   status: integrated
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id metaworld --mode contract --output-dir
+  contract_validation_command: wf zoo benchmark-run --benchmark-id metaworld --mode contract --output-dir
     tmp/benchmark_zoo/benchmark_contract/metaworld --json
   release_status: normalizer_only
   maturity: contract_ready
@@ -48,10 +48,10 @@ metadata:
   blockers:
   - Meta-World task-suite mapping and official-style policy result validation must be validated before integrated 
     status.
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:MetaWorldContract
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:metaworld
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:MetaWorldContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:metaworld
     runner_script_available: false
     task_yaml_available: true
     runtime_verified: false
@@ -70,7 +70,7 @@ metadata:
     results_path_env: WORLDFOUNDRY_METAWORLD_RESULTS_PATH
     preflight_profile: metaworld
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -82,9 +82,9 @@ metadata:
     - --output-dir
     - <out>
     - --json
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.embodied.normalizer:normalize_results
+    target: worldfoundry.evals.tasks.embodied.normalizer:normalize_results
     status: implemented
     protocol: official_embodied_result_normalizer
     official_result_normalization:
@@ -100,7 +100,7 @@ metadata:
   data_refs:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/metaworld.yaml
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -173,4 +173,4 @@ tasks:
       - task_success
       - reward
       - normalized_return
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:MetaWorldContract
+      runner_target: worldfoundry.evals.tasks.contracts.external:metaworld

@@ -13,7 +13,6 @@ _OPERATOR_MODULES = {
     "AstraOperator": "astra_operator",
     "BaseOperator": "base_operator",
     "BeingH05Operator": "being_h05_operator",
-    "CausalForcingOperator": "forcing_operator",
     "CUT3ROperator": "cut3r_operator",
     "CameraCtrlOperator": "cameractrl_operator",
     "CosmosPredict2p5Operator": "cosmos_predict2p5_operator",
@@ -25,22 +24,24 @@ _OPERATOR_MODULES = {
     "DreamDojoOperator": "dreamdojo_operator",
     "DreamZeroOperator": "dreamzero_operator",
     "DualCamCtrlOperator": "dualcamctrl_operator",
-    "DVLTOperator": "dvlt_operator",
     "EmbodiedActionOperator": "embodied_action_operator",
     "FantasyWorldOperator": "fantasy_world_operator",
+    "FastFramesOperator": "fastframes_operator",
     "FlashWorldOperator": "flash_world_operator",
     "GigaBrain0Operator": "giga_brain_0_operator",
     "GR00TOperator": "gr00t_operator",
     "Gen3COperator": "gen3c_operator",
     "GeometryPriorOperator": "geometry_prior_operator",
+    "H3TinyOperator": "h3_tiny_operator",
     "Hailuo2p3Operator": "hailuo_2p3_operator",
     "HunyuanGameCraftOperator": "hunyuan_game_craft_operator",
     "HunyuanMirrorOperator": "hunyuan_mirror_operator",
     "HunyuanWorldPlayOperator": "hunyuan_worldplay_operator",
-    "HunyuanWorldVoyagerOperator": "hunyuan_world_voyager_operator",
     "InfiniteVGGTOperator": "infinite_vggt_operator",
     "InfiniteWorldOperator": "infinite_world_operator",
+    "InteractiveWorldOperator": "interactive_world_operator",
     "KairosOperator": "kairos_operator",
+    "Kandinsky6Operator": "kandinsky6_operator",
     "KlingApiOperator": "kling_api_operator",
     "LAPAOperator": "lapa_operator",
     "LingBotOperator": "lingbot_world_operator",
@@ -52,6 +53,7 @@ _OPERATOR_MODULES = {
     "LyraOperator": "lyra_operator",
     "MatrixGame2Operator": "matrix_game_2_operator",
     "MatrixGame3Operator": "matrix_game_3_operator",
+    "MatrixGame4Operator": "matrix_game4_operator",
     "MMEVLAOperator": "vla_native_operator",
     "MoVerseOperator": "moverse_operator",
     "MolmoAct2Operator": "molmoact2_operator",
@@ -65,6 +67,8 @@ _OPERATOR_MODULES = {
     "OpenVLAOFTOperator": "vla_native_operator",
     "OpenVLAOperator": "openvla_operator",
     "Pi3Operator": "pi3_operator",
+    "Pi4Operator": "pi4_operator",
+    "PiH3Operator": "pi_h3_operator",
     "PixelSplatOperator": "pixelsplat_operator",
     "RT1Operator": "rt1_operator",
     "ReCamMasterOperator": "recammaster_operator",
@@ -74,8 +78,6 @@ _OPERATOR_MODULES = {
     "RuntimeVideoOperator": "runtime_video_operator",
     "ShowOOperator": "show_o_operator",
     "Sora2Operator": "sora2_operator",
-    "SelfForcingOperator": "forcing_operator",
-    "Splatt3ROperator": "splatt3r_operator",
     "StarVLAOperator": "starvla_operator",
     "StepVideoT2VOperator": "step_video_t2v_operator",
     "ThreeDFourDRuntimeOperator": "three_d_four_d_runtime_operator",
@@ -90,6 +92,7 @@ _OPERATOR_MODULES = {
     "Wan2p6Operator": "wan_2p6_operator",
     "Wan2p7Operator": "wan_2p7_operator",
     "WoWOperator": "wow_operator",
+    "WonderWorldOperator": "wonderworld_operator",
     "WorldCamOperator": "worldcam_operator",
     "WorldFMOperator": "worldfm_operator",
     "WorldLabsOperator": "worldlabs_operator",
@@ -104,7 +107,6 @@ __all__ = sorted(_OPERATOR_MODULES)
 
 
 def __getattr__(name):
-    """Getattr   implementation."""
     if name not in _OPERATOR_MODULES:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
@@ -115,5 +117,4 @@ def __getattr__(name):
 
 
 def __dir__():
-    """Dir   implementation."""
     return sorted([*globals(), *__all__])

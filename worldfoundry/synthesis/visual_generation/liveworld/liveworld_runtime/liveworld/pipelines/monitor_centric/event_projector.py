@@ -3,18 +3,19 @@
 This module converts event videos into event point clouds and supports
 projection of those point clouds into arbitrary camera views.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Tuple
 
 import numpy as np
 
-from liveworld.geometry_utils import transform_points
-from worldfoundry.base_models.three_dimensions.point_clouds.projection import render_projection
+# isort: split
 from .video_projection import merge_video_foregrounds
 
-from .event_types import EventVideo, EventPointCloud
+# isort: split
+
+from .event_types import EventPointCloud, EventVideo
 
 
 class EventProjector:

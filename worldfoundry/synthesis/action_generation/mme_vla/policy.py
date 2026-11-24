@@ -1,5 +1,5 @@
-from collections.abc import Sequence
 import time
+from collections.abc import Sequence
 from typing import Any
 
 import jax
@@ -8,7 +8,6 @@ import numpy as np
 
 from ..openpi import nnx_utils
 from ..openpi import transforms as _transforms
-
 from .memory import MemoryBuffer, MemoryBufferRecurrent
 from .modeling.model import HistoryPi0
 from .modeling.observation import HistAugObservation
@@ -37,7 +36,6 @@ class MMEVLAPolicy:
         self._sample_actions = nnx_utils.module_jit(model.sample_actions)
         self._vision_encode = nnx_utils.module_jit(model.vision_encode)
 
-
         self.config = model.history_config
         self.mem_buffer = None
 
@@ -47,7 +45,6 @@ class MMEVLAPolicy:
         self.use_quantiles = use_quantiles
 
         self.reset()
-
 
     def _prepare_mem_buffer(self):
         if self.config is None or self.config.representation_type == "symbolic":
@@ -75,15 +72,13 @@ class MMEVLAPolicy:
             )
 
     def infer(self, obs: dict) -> dict:
-        if self.config is not None and self.config.representation_type != "symbolic":
+        if self.config is not None and self.config.representation_type != "symbolic":  # noqa: SIM102 - Statement form kept for readability.
             if self.mem_buffer is None or not self.mem_buffer.has_history:
                 raise ValueError("MME-VLA requires at least one buffered history observation")
 
         inputs = self._prepare_history(dict(obs))
         inputs = self._input_transform(inputs)
-        observation = HistAugObservation.from_dict(
-            jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
-        )
+        observation = HistAugObservation.from_dict(jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs))
         self._rng, sample_rng = jax.random.split(self._rng)
 
         start_time = time.monotonic()
@@ -104,22 +99,23 @@ class MMEVLAPolicy:
         self.exec_start_idx = 0
         self._rng = jax.random.key(self._seed)
 
-
     def add_buffer(self, obs: dict) -> None:
         if self.mem_buffer is None:
             return
         images = obs["images"]
         states = obs["state"]
-        if obs.get("exec_start_idx", 0) > 0: # has video
+        if obs.get("exec_start_idx", 0) > 0:  # has video
             self.exec_start_idx = obs["exec_start_idx"]
 
-        step_idx_list = list(range(self.step_idx+1, self.step_idx + len(images) + 1))
+        step_idx_list = list(range(self.step_idx + 1, self.step_idx + len(images) + 1))
         self.mem_buffer.add_buffer(images, states, step_idx_list)
         self.step_idx += len(images)
 
     def _normalize_state(self, state):
         if self.use_quantiles:
-            return (state - self.state_norm_stats.q01) / (self.state_norm_stats.q99 - self.state_norm_stats.q01 + 1e-6) * 2.0 - 1.0
+            return (state - self.state_norm_stats.q01) / (
+                self.state_norm_stats.q99 - self.state_norm_stats.q01 + 1e-6
+            ) * 2.0 - 1.0
         else:
             return (state - self.state_norm_stats.mean) / (self.state_norm_stats.std + 1e-6)
 
@@ -129,9 +125,9 @@ class MMEVLAPolicy:
 
         if self.config.representation_type == "recurrent":
             history_feats_gather_fn = self.mem_buffer.default_history_feats_gather_fn
-            recur_image_emb, recur_pos_emb, recur_state_emb, recur_mask = \
-                self.mem_buffer.prepare_token_recurrent(
-                    self.step_idx, self.exec_start_idx, history_feats_gather_fn)
+            recur_image_emb, recur_pos_emb, recur_state_emb, recur_mask = self.mem_buffer.prepare_token_recurrent(
+                self.step_idx, self.exec_start_idx, history_feats_gather_fn
+            )
             inputs["recur_image_emb"] = recur_image_emb
             inputs["recur_pos_emb"] = recur_pos_emb
             inputs["recur_state_emb"] = self._normalize_state(recur_state_emb)
@@ -141,14 +137,16 @@ class MMEVLAPolicy:
             token_budget = self.config.budget
 
             if self.config.perceptual_memory.type == "token_dropping":
-                static_image_emb, static_pos_emb, static_state_emb, static_mask = \
-                    self.mem_buffer.prepare_token_dropping(
-                        self.step_idx, token_budget, history_feats_gather_fn)
+                static_image_emb, static_pos_emb, static_state_emb, static_mask = (
+                    self.mem_buffer.prepare_token_dropping(self.step_idx, token_budget, history_feats_gather_fn)
+                )
             else:
                 token_per_image = self.config.token_per_image
-                static_image_emb, static_pos_emb, static_state_emb, static_mask = \
+                static_image_emb, static_pos_emb, static_state_emb, static_mask = (
                     self.mem_buffer.prepare_frame_sampling(
-                        self.step_idx, token_budget, token_per_image, history_feats_gather_fn)
+                        self.step_idx, token_budget, token_per_image, history_feats_gather_fn
+                    )
+                )
 
             inputs["static_image_emb"] = static_image_emb
             inputs["static_pos_emb"] = static_pos_emb
@@ -156,7 +154,6 @@ class MMEVLAPolicy:
             inputs["static_mask"] = static_mask
         else:
             raise ValueError(f"Not supported representation type: {self.config.representation_type}")
-
 
         return inputs
 

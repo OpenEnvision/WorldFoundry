@@ -1,7 +1,7 @@
 import torch
 from scipy import integrate
 
-from vwm.util import append_dims
+from worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.util import append_dims
 
 
 def linear_multistep_coeff(order, t, i, j, epsrel=1e-4):
@@ -23,11 +23,8 @@ def get_ancestral_step(sigma_from, sigma_to, eta=1.0):
     if not eta:
         return sigma_to, 0.0
     else:
-        sigma_up = torch.minimum(
-            sigma_to,
-            eta * (sigma_to ** 2 * (sigma_from ** 2 - sigma_to ** 2) / sigma_from ** 2) ** 0.5
-        )
-        sigma_down = (sigma_to ** 2 - sigma_up ** 2) ** 0.5
+        sigma_up = torch.minimum(sigma_to, eta * (sigma_to**2 * (sigma_from**2 - sigma_to**2) / sigma_from**2) ** 0.5)
+        sigma_down = (sigma_to**2 - sigma_up**2) ** 0.5
         return sigma_down, sigma_up
 
 

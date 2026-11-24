@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     completed_action_result,
@@ -16,6 +17,7 @@ from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     option_int,
     runtime_options_cache_key,
 )
+
 
 @dataclass(frozen=True)
 class FastWAMRuntimeConfig:
@@ -58,6 +60,7 @@ class FastWAMRuntimeConfig:
     action_infer_mode: str = "first_frame"
     num_video_frames: int = 5
     video_infer_shift: float = 5.0
+
 
 class FastWAMRuntime:
     """Persistent released-checkpoint FastWAM runtime."""
@@ -132,9 +135,7 @@ class FastWAMRuntime:
             )
             checkpoint = root / self.config.checkpoint_file
         if not checkpoint.is_file():
-            raise FileNotFoundError(
-                f"FastWAM {self.config.variant} checkpoint is missing: {checkpoint}"
-            )
+            raise FileNotFoundError(f"FastWAM {self.config.variant} checkpoint is missing: {checkpoint}")
         self._release_root = root
         self._checkpoint_file = checkpoint
         return root, checkpoint
@@ -161,7 +162,10 @@ class FastWAMRuntime:
 
     @staticmethod
     def _reset_rope(video_expert: Any, action_expert: Any) -> None:
-        from .wan_video_dit import precompute_freqs_cis, precompute_freqs_cis_3d
+        from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.multiagent_rope import (
+            precompute_freqs_cis,
+            precompute_freqs_cis_3d,
+        )
 
         video_expert.freqs = precompute_freqs_cis_3d(int(video_expert.attn_head_dim))
         action_expert.freqs = precompute_freqs_cis(int(action_expert.attn_head_dim), end=1024)
@@ -182,8 +186,8 @@ class FastWAMRuntime:
         from torch import nn
 
         from worldfoundry.core.model_loading.checkpoints.assignment import assign_state_dict_strict
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
         from worldfoundry.core.model_loading.checkpoints.file import load_state_dict, load_torch_checkpoint
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .action_dit import ActionDiT
         from .mot import MoT
@@ -268,10 +272,11 @@ class FastWAMRuntime:
             return self._tokenizer, self._text_encoder
         import torch
 
+        from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import WanTextEncoder
         from worldfoundry.core.model_loading.checkpoints.assignment import assign_state_dict_strict
         from worldfoundry.core.model_loading.checkpoints.file import load_state_dict
 
-        from .wan_video_text_encoder import HuggingfaceTokenizer, WanTextEncoder
+        from .wan_video_text_encoder import HuggingfaceTokenizer
 
         self._load_policy()
         assets = self._component_root(
@@ -342,9 +347,7 @@ class FastWAMRuntime:
         if self.config.statistics_path:
             path = self._existing_path(self.config.statistics_path)
             if path is None or not path.is_file():
-                raise FileNotFoundError(
-                    f"FastWAM statistics path does not exist: {self.config.statistics_path}"
-                )
+                raise FileNotFoundError(f"FastWAM statistics path does not exist: {self.config.statistics_path}")
             return path
         root, _ = self._resolve_release()
         path = root / self.config.statistics_file
@@ -363,8 +366,7 @@ class FastWAMRuntime:
         values = np.asarray(state, dtype=np.float32)
         if values.shape != (self.config.proprio_dim,):
             raise ValueError(
-                f"FastWAM {self.config.variant} expects {self.config.proprio_dim} state values, "
-                f"got {values.shape}"
+                f"FastWAM {self.config.variant} expects {self.config.proprio_dim} state values, got {values.shape}"
             )
         stats = self._load_statistics()["state"]["default"]
         if self.config.normalization == "z-score":
@@ -389,9 +391,9 @@ class FastWAMRuntime:
         values = np.asarray(actions, dtype=np.float32)
         stats = self._load_statistics()["action"]["default"]
         if self.config.normalization == "z-score":
-            values = values * (
-                np.asarray(stats["global_std"], dtype=np.float32) + 1e-8
-            ) + np.asarray(stats["global_mean"], dtype=np.float32)
+            values = values * (np.asarray(stats["global_std"], dtype=np.float32) + 1e-8) + np.asarray(
+                stats["global_mean"], dtype=np.float32
+            )
         else:
             minimum = np.asarray(stats["global_min"], dtype=np.float32)
             maximum = np.asarray(stats["global_max"], dtype=np.float32)
@@ -486,9 +488,7 @@ class FastWAMRuntime:
 
         image_mapping = image if isinstance(image, Mapping) else {}
         image_sequence = (
-            list(image)
-            if isinstance(image, Sequence) and not isinstance(image, (str, bytes, bytearray))
-            else []
+            list(image) if isinstance(image, Sequence) and not isinstance(image, (str, bytes, bytearray)) else []
         )
         combined = first_present(observation, "combined_image", "model_image")
         if combined is None:
@@ -531,16 +531,9 @@ class FastWAMRuntime:
         # is a pre-composed model image only when no explicit auxiliary camera
         # views were supplied; otherwise it is the primary view and must be
         # combined with the wrist/head views below.
-        if combined is None and len(image_sequence) == 1 and not any(
-            value is not None for value in explicit_views
-        ):
+        if combined is None and len(image_sequence) == 1 and not any(value is not None for value in explicit_views):
             combined = image_sequence[0]
-        if (
-            combined is None
-            and image is not None
-            and not isinstance(image, Mapping)
-            and not image_sequence
-        ):
+        if combined is None and image is not None and not isinstance(image, Mapping) and not image_sequence:
             combined = image
         if combined is not None:
             source = load_pil_image(combined, first_sequence_item=False)
@@ -585,16 +578,38 @@ class FastWAMRuntime:
             right = right if right is not None else first_present(observation, "cam_right_wrist", "right_cam", "image2")
             images = observation.get("images")
             if isinstance(images, Mapping):
-                head = head if head is not None else first_present(images, "head_camera", "cam_high", "head_cam", "image0")
-                left = left if left is not None else first_present(images, "left_camera", "cam_left_wrist", "left_cam", "image1")
-                right = right if right is not None else first_present(images, "right_camera", "cam_right_wrist", "right_cam", "image2")
+                head = (
+                    head if head is not None else first_present(images, "head_camera", "cam_high", "head_cam", "image0")
+                )
+                left = (
+                    left
+                    if left is not None
+                    else first_present(images, "left_camera", "cam_left_wrist", "left_cam", "image1")
+                )
+                right = (
+                    right
+                    if right is not None
+                    else first_present(images, "right_camera", "cam_right_wrist", "right_cam", "image2")
+                )
             elif isinstance(images, Sequence) and not isinstance(images, (str, bytes, bytearray)):
                 head = head if head is not None else (images[0] if len(images) > 0 else None)
                 left = left if left is not None else (images[1] if len(images) > 1 else None)
                 right = right if right is not None else (images[2] if len(images) > 2 else None)
-            head = head if head is not None else first_present(image_mapping, "head_camera", "cam_high", "head_cam", "image0")
-            left = left if left is not None else first_present(image_mapping, "left_camera", "cam_left_wrist", "left_cam", "image1")
-            right = right if right is not None else first_present(image_mapping, "right_camera", "cam_right_wrist", "right_cam", "image2")
+            head = (
+                head
+                if head is not None
+                else first_present(image_mapping, "head_camera", "cam_high", "head_cam", "image0")
+            )
+            left = (
+                left
+                if left is not None
+                else first_present(image_mapping, "left_camera", "cam_left_wrist", "left_cam", "image1")
+            )
+            right = (
+                right
+                if right is not None
+                else first_present(image_mapping, "right_camera", "cam_right_wrist", "right_cam", "image2")
+            )
             head = head if head is not None else (image_sequence[0] if len(image_sequence) > 0 else None)
             left = left if left is not None else (image_sequence[1] if len(image_sequence) > 1 else None)
             right = right if right is not None else (image_sequence[2] if len(image_sequence) > 2 else None)
@@ -648,24 +663,22 @@ class FastWAMRuntime:
         policy = self._load_policy()
         state = self._state(observation)
         if state is None:
-            raise ValueError(
-                f"FastWAM {self.config.variant} requires a {self.config.proprio_dim}D state vector"
-            )
+            raise ValueError(f"FastWAM {self.config.variant} requires a {self.config.proprio_dim}D state vector")
         proprio = torch.as_tensor(
             self._normalize_state(state),
             dtype=torch.float32,
         ).unsqueeze(0)
         image_tensor = self._image_tensor(observation, image)
         context, context_mask = self._context(instruction, observation)
-        infer = (
-            policy.infer_action_idm
-            if self.config.action_infer_mode == "idm"
-            else policy.infer_action
-        )
+        infer = policy.infer_action_idm if self.config.action_infer_mode == "idm" else policy.infer_action
         action = infer(
             input_image=image_tensor,
             action_horizon=int(self.config.action_horizon),
-            **({"num_video_frames": int(self.config.num_video_frames)} if self.config.action_infer_mode == "idm" else {}),
+            **(
+                {"num_video_frames": int(self.config.num_video_frames)}
+                if self.config.action_infer_mode == "idm"
+                else {}
+            ),
             proprio=proprio,
             context=context,
             context_mask=context_mask,
@@ -703,9 +716,7 @@ _RUNTIME_CACHE: dict[tuple[str, str], FastWAMRuntime] = {}
 def _required_option(options: Mapping[str, Any], name: str) -> Any:
     value = options.get(name)
     if value in (None, ""):
-        raise ValueError(
-            f"FastWAM runtime option {name!r} is required; load the model's data runtime config"
-        )
+        raise ValueError(f"FastWAM runtime option {name!r} is required; load the model's data runtime config")
     return value
 
 
@@ -729,16 +740,10 @@ def predict_action(
     if isinstance(variants, Mapping):
         selected = variants.get(variant_name)
         if not isinstance(selected, Mapping):
-            raise ValueError(
-                f"FastWAM variant {variant_name!r} has no entry in the data runtime config"
-            )
+            raise ValueError(f"FastWAM variant {variant_name!r} has no entry in the data runtime config")
         variant_options = selected
     effective = {**dict(variant_options), **options}
-    checkpoint = (
-        checkpoint_path
-        or str(effective.get("checkpoint_ref") or "")
-        or str(effective.get("repo_id") or "")
-    )
+    checkpoint = checkpoint_path or str(effective.get("checkpoint_ref") or "") or str(effective.get("repo_id") or "")
     if not checkpoint:
         raise ValueError("FastWAM checkpoint_path or checkpoint_ref is required")
     # The Optional IDM release was trained/evaluated with shift 1.0, while the
@@ -766,9 +771,7 @@ def predict_action(
             if "action_infer_shift" in variant_options
             else _required_option(effective, "action_infer_shift")
         ),
-        action_num_train_timesteps=int(
-            _required_option(effective, "action_num_train_timesteps")
-        ),
+        action_num_train_timesteps=int(_required_option(effective, "action_num_train_timesteps")),
         vae_tile_size=tuple(_required_option(effective, "vae_tile_size")),
         vae_tile_stride=tuple(_required_option(effective, "vae_tile_stride")),
         device=device,
@@ -780,18 +783,14 @@ def predict_action(
         wan_assets_path=str(effective["wan_assets_path"]) if effective.get("wan_assets_path") else None,
         tokenizer_path=str(effective["tokenizer_path"]) if effective.get("tokenizer_path") else None,
         text_encoder_device=(
-            str(effective["text_encoder_device"])
-            if effective.get("text_encoder_device") not in (None, "")
-            else "cpu"
+            str(effective["text_encoder_device"]) if effective.get("text_encoder_device") not in (None, "") else "cpu"
         ),
         action_horizon=option_int(effective.get("action_horizon"), 32),
         num_inference_steps=option_int(
             effective.get("num_inference_steps") or effective.get("denoising_steps"),
             10,
         ),
-        sigma_shift=(
-            None if sigma_value in (None, "", "none", "null") else option_float(sigma_value, 5.0)
-        ),
+        sigma_shift=(None if sigma_value in (None, "", "none", "null") else option_float(sigma_value, 5.0)),
         seed=option_int(effective.get("seed"), 42),
         rand_device=str(effective.get("rand_device") or "cpu"),
         tiled=option_bool(effective.get("tiled"), False),

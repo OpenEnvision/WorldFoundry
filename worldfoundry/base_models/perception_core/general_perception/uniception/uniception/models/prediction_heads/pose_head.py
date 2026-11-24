@@ -9,12 +9,14 @@ https://github.com/ffrivera0/reloc3r/blob/main/reloc3r/pose_head.py
 import copy
 
 import torch
-
-from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 import torch.nn as nn
 import torch.nn.functional as F
 
-from uniception.models.prediction_heads.base import PredictionHeadInput, SummaryTaskOutput
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.prediction_heads.base import (
+    PredictionHeadInput,
+    SummaryTaskOutput,
+)
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 
 class ResConvBlock(nn.Module):
@@ -60,7 +62,7 @@ class PoseHead(nn.Module):
         input_feature_dim: int,
         num_resconv_block: int = 2,
         rot_representation_dim: int = 4,
-        pretrained_checkpoint_path: str = None,
+        pretrained_checkpoint_path: str | None = None,
         *args,
         **kwargs,
     ):
@@ -131,9 +133,9 @@ class PoseHead(nn.Module):
         feat = feature_input.last_feature  # (B, C, H, W)
 
         # Check the input dimensions
-        assert (
-            feat.shape[1] == self.input_feature_dim
-        ), f"Input feature dimension {feat.shape[1]} does not match expected dimension {self.input_feature_dim}"
+        assert feat.shape[1] == self.input_feature_dim, (
+            f"Input feature dimension {feat.shape[1]} does not match expected dimension {self.input_feature_dim}"
+        )
 
         # Apply the projection layer to the patch-level features
         feat = self.proj(feat)  # (B, PC, H, W)

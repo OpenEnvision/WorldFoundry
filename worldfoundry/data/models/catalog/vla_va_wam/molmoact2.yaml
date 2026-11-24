@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 aliases:
 - molmo-act2
 - molmoact
@@ -25,6 +25,7 @@ official_sources:
   github:
     head_sha: c2282820f9b188b60e66ea1636b3efd81c45cbb4
     url: https://github.com/allenai/molmoact2
+    revision: 40ac992dd4b5e4f31a37b3aa26cfbb5c9fb2cf05
   huggingface:
   - license: apache-2.0
     repo_id: allenai/MolmoAct2
@@ -124,16 +125,16 @@ docs:
   publisher: Allen Institute for AI (AI2)
   publisher_kind: lab
   publisher_zh: 艾伦人工智能研究所（AI2）
-  overview: 'MolmoAct2 is AI2''s second-generation action reasoning model with an unusually broad Apache-2.0 checkpoint zoo: base, Think (depth-reasoning), DROID (Franka), Bimanual YAM, SO100/101, and LIBERO variants are all confirmed. WorldFoundry ports the official DROID/YAM predict_action server contracts into an in-tree action_trace pipeline with no external checkout dependency.'
-  overview_zh: MolmoAct2 是 AI2 的第二代动作推理模型，Apache-2.0 checkpoint 阵容异常齐全：base、 Think（深度推理）、DROID（Franka）、双臂 YAM、SO100/101 与 LIBERO 变体均已确认。WorldFoundry 将官方 DROID/YAM predict_action 服务契约移植为树内 action_trace pipeline，无外部 checkout 依赖。
-  architecture: MolmoAct2 builds on the Molmo open VLM line with action-reasoning heads; the Think variant adds depth-based reasoning before acting. Configured DROID, YAM, SO100, LIBERO, and Think-LIBERO profiles expose checkpoint-backed action_trace routes.
-  architecture_zh: MolmoAct2 基于 Molmo 开放 VLM 线并加动作推理头；Think 变体在行动前增加基于深度的推理。已配置的 DROID、YAM、SO100、LIBERO 与 Think-LIBERO profile 暴露 checkpoint 驱动的 action_trace 路由。
-  usage_notes: 'Pick the checkpoint per embodiment: DROID for Franka arms, BimanualYAM for dual-arm YAM, SO100_101 for SO-ARM, LIBERO/Think-LIBERO for simulation. Integration is statically verified.'
-  usage_notes_zh: 按本体选择 checkpoint：Franka 机械臂用 DROID，双臂 YAM 用 BimanualYAM，SO-ARM 用 SO100_101，仿真用 LIBERO/Think-LIBERO。集成已通过静态验证。
+  overview: "MolmoAct2 is AI2's second-generation action reasoning model with a broad Apache-2.0 checkpoint zoo: base, Think (depth-reasoning), DROID (Franka), Bimanual YAM, SO100/101, and LIBERO checkpoints. WorldFoundry runs the official DROID/YAM predict_action contracts as an action_trace pipeline; no external source checkout is needed."
+  overview_zh: MolmoAct2 是 AI2 的第二代动作推理模型，Apache-2.0 checkpoint 阵容齐全：base、Think（深度推理）、DROID（Franka）、双臂 YAM、SO100/101 与 LIBERO。WorldFoundry 将官方 DROID/YAM predict_action 契约作为 action_trace pipeline 运行，无需外部源码检出。
+  architecture: MolmoAct2 builds on the Molmo open VLM line with action-reasoning heads; the Think variant adds depth-based reasoning before acting. The DROID, YAM, SO100, LIBERO, and Think-LIBERO variants each run their own checkpoint and return an action trace.
+  architecture_zh: MolmoAct2 基于 Molmo 开放 VLM 线并加动作推理头；Think 变体在行动前增加基于深度的推理。DROID、YAM、SO100、LIBERO 与 Think-LIBERO 变体各自加载对应 checkpoint 并返回动作轨迹。
+  usage_notes: 'Pick the checkpoint per embodiment: DROID for Franka arms, BimanualYAM for dual-arm YAM, SO100_101 for SO-ARM, LIBERO/Think-LIBERO for simulation. Camera and state inputs differ by variant: DROID uses external_cam, external_cam_2, and wrist_cam with an 8-D state; YAM uses top_cam, left_cam, and right_cam with a 14-D state; SO100/SO101 uses top_cam and side_cam with a 6-D state; LIBERO and Think-LIBERO use agentview and wrist RGB.'
+  usage_notes_zh: 按本体选择 checkpoint：Franka 机械臂用 DROID，双臂 YAM 用 BimanualYAM，SO-ARM 用 SO100_101，仿真用 LIBERO/Think-LIBERO。各变体的相机与状态输入不同：DROID 使用 external_cam、external_cam_2、wrist_cam 与 8 维状态；YAM 使用 top_cam、left_cam、right_cam 与 14 维状态；SO100/SO101 使用 top_cam、side_cam 与 6 维状态；LIBERO 与 Think-LIBERO 使用 agentview 与腕部 RGB。
   limitations:
-  - GPU rollout validation is not recorded in this repository (static verification only).
+  - GPU policy rollouts are not yet validated; validation covers checkpoint loading for all five variants.
   limitations_zh:
-  - 仓库未记录 GPU rollout 验证（仅静态验证）。
+  - 尚未验证 GPU 策略 rollout；已验证的是全部五个变体的 checkpoint 加载。
   recommended_benchmarks:
   - id: libero
     reason: Dedicated LIBERO and Think-LIBERO checkpoints.

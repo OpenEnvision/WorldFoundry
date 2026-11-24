@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from worldfoundry.evaluation.tasks.execution.framework.video_quality_contract import (
+from worldfoundry.evals.tasks.execution.framework.video_quality_contract import (
     LOCAL_METRIC_IDS,
     evaluate_video_quality_contract_file,
 )
@@ -289,8 +289,8 @@ def test_video_quality_task_yaml_declares_local_evaluator(benchmark_id: str, blo
 def test_video_quality_checked_in_sample_fixture_runs(benchmark_id: str, tmp_path: Path) -> None:
     import importlib.util
 
-    from worldfoundry.evaluation.tasks.catalog.dispatch import VIDEO_RUNNER_REGISTRY
-    from worldfoundry.evaluation.utils import REPO_ROOT, benchmark_task_sample_path
+    from worldfoundry.evals.tasks.catalog.dispatch import VIDEO_RUNNER_REGISTRY
+    from worldfoundry.evals.utils import REPO_ROOT, benchmark_task_sample_path
 
     assert benchmark_task_sample_path(benchmark_id) is not None
     fixture_path = benchmark_task_sample_path(benchmark_id)

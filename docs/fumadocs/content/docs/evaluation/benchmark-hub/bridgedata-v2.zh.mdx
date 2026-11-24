@@ -1,20 +1,20 @@
 ---
 title: BridgeData V2
-description: "伯克利 RAIL 真机集合：24 个环境、60096 条 WidowX 轨迹。WorldFoundry 导入策略评测；不遥操作机械臂。"
+description: "伯克利 RAIL 真机集合：24 个环境、60096 条 WidowX 轨迹。WorldFoundry 导入策略评测导出。"
 ---
 
-BridgeData V2（加州大学伯克利分校 RAIL）是面向开放词表、多任务策略的**真机**操作数据集。官方数字：**WidowX 250** 六自由度、**24** 个环境、**13** 种技能、**60096** 条轨迹——其中 **50365** 条 VR 遥操作演示、**9731** 条脚本抓放。七个玩具厨房占主体，其余为桌面、水槽等。控制频率 **5 Hz**（平均约 38 步）。感知为 640×480：固定肩上 RGB-D、两个随机 RGB 视角、腕部相机。每条轨迹带语言标签；评测分**语言条件**（`eval_lc`）与**目标图像条件**（`eval_gc`）。
+BridgeData V2（加州大学伯克利分校 RAIL）是面向开放词表、多任务策略的**真机**操作数据集。官方公布的规模为：**WidowX 250** 六自由度、**24** 个环境、**13** 种技能、**60096** 条轨迹——其中 **50365** 条 VR 遥操作演示、**9731** 条脚本抓放。数据以七个玩具厨房为主，其余场景包括桌面、水槽等。控制频率 **5 Hz**（平均约 38 步）。感知为 640×480：固定肩上 RGB-D、两个随机 RGB 视角、腕部相机。每条轨迹带语言标签；评测分**语言条件**（`eval_lc`）与**目标图像条件**（`eval_gc`）。
 
-论文：[BridgeData V2](https://arxiv.org/abs/2308.12952)。项目：[rail-berkeley.github.io/bridgedata](https://rail-berkeley.github.io/bridgedata/)。代码：[rail-berkeley/bridge_data_v2](https://github.com/rail-berkeley/bridge_data_v2)（MIT）。官方媒体走 HTTP / 项目页下载，不是单一 Hugging Face 表。
+论文：[BridgeData V2](https://arxiv.org/abs/2308.12952)。项目：[rail-berkeley.github.io/bridgedata](https://rail-berkeley.github.io/bridgedata/)。代码：[rail-berkeley/bridge_data_v2](https://github.com/rail-berkeley/bridge_data_v2)（MIT）。官方媒体通过 HTTP / 项目页下载，并非单一 Hugging Face 表。
 
-WorldFoundry **导入**策略评测导出（任务 / 目标成功率、离线动作准确率、rollout 成功率）。它**不**落地整套数据、不跑 WidowX 推理、也不执行真机 rollout。若需本地数据，就位在 `${WORLDFOUNDRY_DATA_DIR}/datasets/bridgedata-v2`。
+WorldFoundry **导入**策略评测导出（任务 / 目标成功率、离线动作准确率、rollout 成功率）。它**不**下载数据集、不跑 WidowX 推理，也不执行真机 rollout。若需本地数据，请放在 `${WORLDFOUNDRY_DATA_DIR}/datasets/bridgedata-v2`。
 
 <BenchmarkPageSections id="bridgedata-v2" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id bridgedata-v2 \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -22,6 +22,6 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-默认导入路径：`WORLDFOUNDRY_BRIDGEDATA_V2_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/bridgedata-v2.yaml`。请在导出上声明语言 vs 目标图像（以及遥操作 vs 脚本）。产物：`scorecard.json`（主键 `success_rate`；另有 `goal_success`、`action_accuracy`、`rollout_success`）与 `raw_results.jsonl`。
+默认导入路径：`WORLDFOUNDRY_BRIDGEDATA_V2_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/bridgedata-v2.yaml`。请在导出中声明语言 vs 目标图像（以及遥操作 vs 脚本）。产物：`scorecard.json`（主键 `success_rate`；另有 `goal_success`、`action_accuracy`、`rollout_success`）与 `raw_results.jsonl`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

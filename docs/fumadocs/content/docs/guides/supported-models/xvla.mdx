@@ -5,7 +5,7 @@ modelId: "xvla"
 pageSource: authored
 ---
 
-X-VLA is a cross-embodiment VLA built on a Florence-2 backbone with soft-prompt domain conditioning (paper: arXiv 2510.10274, Apache-2.0). It is one of the most thoroughly validated entries in this catalog: all nine released checkpoints restored strictly and produced finite 30x20 actions through real A100 inference with explicit domain IDs, and the in-tree action head matches upstream within 5e-7.
+X-VLA is a cross-embodiment VLA built on a Florence-2 backbone with soft-prompt domain conditioning (paper: arXiv 2510.10274, Apache-2.0). Validated on an A100: all nine released checkpoints load strictly and produce finite 30x20 actions with explicit domain IDs, and the action head matches upstream outputs.
 
 <ModelPaperFigures modelId="xvla" locale="en" />
 
@@ -15,18 +15,18 @@ The paper is [X-VLA: Soft-Prompted Transformer as Scalable Cross-Embodiment Visi
 
 ## What it is for
 
-Roll out a cross-embodiment VLA. WorldFoundry validated all nine released checkpoints on A100: each emits a finite 30×20 action with an explicit `domain_id`.
+Roll out a cross-embodiment VLA policy. All nine released checkpoints are validated on an A100: each emits a finite 30×20 action with an explicit `domain_id`.
 
-Launch `worldfoundry-eval run xvla`. Required: `image`, `prompt`, `state`, `domain_id`, and `denoising_steps`. Artifacts: `action_trace` and `xvla_action_trace.json`.
+Launch `wf run xvla`. Required: `image`, `prompt`, `state`, `domain_id`, and `denoising_steps`. Artifacts: `action_trace` and `xvla_action_trace.json`.
 
-Match `domain_id` to the checkpoint (WidowX, Google Robot, LIBERO, CALVIN, RoboTwin2, …). The foundation `2toINF/X-VLA-Pt` card still needs that ID. Related suite: [BridgeData V2](/docs/evaluation/benchmark-hub/bridgedata-v2).
+Match `domain_id` to the checkpoint (WidowX, Google Robot, LIBERO, CALVIN, RoboTwin2, …). The foundation `2toINF/X-VLA-Pt` checkpoint also needs that ID. Related suite: [BridgeData V2](/docs/evaluation/benchmark-hub/bridgedata-v2).
 
 ## Runtime contract
 
-Required: `image`, `prompt`, `state`, `domain_id`, `denoising_steps`. Optional cameras: `image0`, `image1`, `image2`. Default decode is float32; bf16/fp16 are explicit performance flags. Artifact: `xvla_action_trace.json` (plus `action_trace`). Status: **Verified**. Runtime forces `trust_remote_code=false` and never imports an upstream checkout.
+Required: `image`, `prompt`, `state`, `domain_id`, `denoising_steps`. Optional cameras: `image0`, `image1`, `image2`. Default decode is float32; bf16/fp16 are explicit performance flags. Artifact: `xvla_action_trace.json` (plus `action_trace`). Runtime forces `trust_remote_code=false` and never imports an upstream checkout.
 
 ## Running in WorldFoundry
 
-Dedicated environment `worldfoundry-vla-xvla` (Python 3.10, CUDA 12.1 or newer, torch>=2.2). Stage a matching snapshot such as `2toINF/X-VLA-WidowX`, `2toINF/X-VLA-Google-Robot`, or `2toINF/X-VLA-Libero` — the runtime does not download weights. Launch `worldfoundry-eval run xvla`. License: Apache-2.0.
+Dedicated environment `worldfoundry-vla-xvla` (Python 3.10, CUDA 12.1 or newer, torch>=2.2). Stage a matching snapshot such as `2toINF/X-VLA-WidowX`, `2toINF/X-VLA-Google-Robot`, or `2toINF/X-VLA-Libero`, then launch `wf run xvla`. License: Apache-2.0.
 
 <ModelRelatedRecipes modelId="xvla" locale="en" />

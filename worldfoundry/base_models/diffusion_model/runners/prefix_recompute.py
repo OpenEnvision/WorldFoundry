@@ -9,6 +9,7 @@ active-chunk refinement.
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
@@ -66,8 +67,7 @@ def prefix_chunk_boundaries(total_frames: int, chunk_size: int) -> tuple[int, ..
     active_frames = total_frames - 1
     if active_frames % chunk_size:
         raise ValueError(
-            "active latent frames must divide prefix chunk_size: "
-            f"active={active_frames}, chunk_size={chunk_size}"
+            f"active latent frames must divide prefix chunk_size: active={active_frames}, chunk_size={chunk_size}"
         )
     boundaries = [0, chunk_size + 1]
     while boundaries[-1] < total_frames:
@@ -198,9 +198,7 @@ def slice_prefix_conditioning(
     # Every retained history frame is clean context, even if the initializer
     # only named the anchor in its absolute condition_frame_info mapping.
     frame_info = dict(result.get("condition_frame_info", {}))
-    frame_info.update(
-        {local: 0.0 for local in range(len(frame_indices)) if not active_start <= local < active_end}
-    )
+    frame_info.update({local: 0.0 for local in range(len(frame_indices)) if not active_start <= local < active_end})
     result["condition_frame_info"] = frame_info
     result["chunk_index"] = chunk_index_from_chunk_size(
         len(frame_indices),
@@ -265,9 +263,7 @@ class PrefixRecomputeRunner(NativeDiffusionRunner):
         for extension in self.extensions:
             context.conditioning = extension.prepare_conditioning(context, context.conditioning)
             if not isinstance(context.conditioning, Conditioning):
-                raise TypeError(
-                    f"{extension.extension_id}.prepare_conditioning must return Conditioning"
-                )
+                raise TypeError(f"{extension.extension_id}.prepare_conditioning must return Conditioning")
 
         initializer = self.components.latent_initializer
         encoder = self.components.latent_encoder
@@ -322,9 +318,7 @@ class PrefixRecomputeRunner(NativeDiffusionRunner):
                 active_end - active_start,
             )
         elif current.shape != (batch_size, 1, active_end - active_start):
-            raise ValueError(
-                "prefix scheduler timestep must be scalar, [B], or [B,1,active_T]"
-            )
+            raise ValueError("prefix scheduler timestep must be scalar, [B], or [B,1,active_T]")
         result = torch.zeros(
             batch_size,
             1,
@@ -365,13 +359,9 @@ class PrefixRecomputeRunner(NativeDiffusionRunner):
         )
         scale = context.request.sampling.guidance_scale
         if self.guidance_mode == "positive":
-            guided = positive_output.sample + scale * (
-                positive_output.sample - negative_output.sample
-            )
+            guided = positive_output.sample + scale * (positive_output.sample - negative_output.sample)
         else:
-            guided = negative_output.sample + scale * (
-                positive_output.sample - negative_output.sample
-            )
+            guided = negative_output.sample + scale * (positive_output.sample - negative_output.sample)
         return DenoiserOutput(
             sample=guided,
             extras={"positive": positive_output.extras, "negative": negative_output.extras},
@@ -421,9 +411,7 @@ class PrefixRecomputeRunner(NativeDiffusionRunner):
             use_negative = self._use_negative_branch(context)
             shared = dict(context.conditioning.shared)
             positive_base = {**shared, **context.conditioning.positive}
-            negative_base = (
-                {**shared, **context.conditioning.negative} if use_negative else None
-            )
+            negative_base = {**shared, **context.conditioning.negative} if use_negative else None
             refiner_conditioning: Mapping[str, object] | None = None
             refiner_generator: torch.Generator | None = None
             if self.refiner_conditioner is not None:
@@ -441,7 +429,7 @@ class PrefixRecomputeRunner(NativeDiffusionRunner):
             stage1_state = initial_noise.clone()
             refined_state = initial_noise.clone()
             anchor = initial_noise[:, :, : self.sink_frames].clone()
-            for chunk_number, (start, end) in enumerate(zip(boundaries, boundaries[1:])):
+            for _chunk_number, (start, end) in enumerate(itertools.pairwise(boundaries)):
                 absolute_active_start = self.sink_frames if start == 0 else start
                 window = prefix_recompute_window(
                     start=start,
@@ -505,9 +493,7 @@ class PrefixRecomputeRunner(NativeDiffusionRunner):
                         positive=positive,
                         negative=negative,
                     )
-                    active_prediction = prediction.sample[
-                        :, :, window.active_start : window.active_end
-                    ]
+                    active_prediction = prediction.sample[:, :, window.active_start : window.active_end]
                     context.step = step
                     active = self.components.scheduler.step(
                         active_prediction,
@@ -520,9 +506,7 @@ class PrefixRecomputeRunner(NativeDiffusionRunner):
                     for extension in self.extensions:
                         active = extension.after_step(context, active)
                         if not isinstance(active, Tensor):
-                            raise TypeError(
-                                f"{extension.extension_id}.after_step must return a tensor"
-                            )
+                            raise TypeError(f"{extension.extension_id}.after_step must return a tensor")
                     stage1_state[:, :, absolute_active_start:end] = active
                     stage1_state[:, :, : self.sink_frames] = anchor
 
@@ -564,9 +548,7 @@ class PrefixRecomputeRunner(NativeDiffusionRunner):
             for extension in self.extensions:
                 sample = extension.after_decode(context, sample)
                 if not isinstance(sample, Tensor):
-                    raise TypeError(
-                        f"{extension.extension_id}.after_decode must return a tensor"
-                    )
+                    raise TypeError(f"{extension.extension_id}.after_decode must return a tensor")
             output = DiffusionOutput(
                 sample=sample,
                 latents=refined_state,

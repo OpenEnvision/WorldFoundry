@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Mapping
 
 import torch
 from einops import rearrange
@@ -53,8 +53,7 @@ def resolve_vggt_1b_root(path: str | Path | None = None) -> Path:
     )
     for candidate in candidates:
         if (candidate / "config.json").is_file() and any(
-            (candidate / filename).is_file()
-            for filename in ("model.safetensors", "model.pt", "pytorch_model.bin")
+            (candidate / filename).is_file() for filename in ("model.safetensors", "model.pt", "pytorch_model.bin")
         ):
             return candidate.resolve()
     if path is not None and str(path).strip():
@@ -74,7 +73,7 @@ def _vggt_aggregator_state(
     if safetensors_path.is_file():
         state: dict[str, torch.Tensor] = {}
         with safe_open(str(safetensors_path), framework="pt", device="cpu") as checkpoint:
-            for name in checkpoint.keys():
+            for name in checkpoint.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 if name.startswith("aggregator."):
                     state[name] = checkpoint.get_tensor(name).to(dtype=torch_dtype)
         return state

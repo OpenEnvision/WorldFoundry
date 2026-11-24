@@ -1,22 +1,21 @@
-"""Module for base_models -> perception_core -> detection -> grounding_dino -> util -> inference.py functionality."""
-
 from __future__ import annotations
 
+import bisect
 import os
-from typing import Tuple, List
 
 import cv2
 import numpy as np
 import torch
 from PIL import Image
 from torchvision.ops import box_convert
-import bisect
 
 from worldfoundry.base_models.perception_core.detection.grounding_dino.models import build_model
-from worldfoundry.base_models.perception_core.detection.grounding_dino.util.misc import clean_state_dict
-from worldfoundry.base_models.perception_core.detection.grounding_dino.util.slconfig import SLConfig
 from worldfoundry.base_models.perception_core.detection.grounding_dino.util import transforms as T
-from worldfoundry.base_models.perception_core.detection.grounding_dino.util.misc import get_phrases_from_posmap
+from worldfoundry.base_models.perception_core.detection.grounding_dino.util.misc import (
+    clean_state_dict,
+    get_phrases_from_posmap,
+)
+from worldfoundry.base_models.perception_core.detection.grounding_dino.util.slconfig import SLConfig
 
 # ----------------------------------------------------------------------------------------------------------------------
 # OLD API
@@ -24,14 +23,6 @@ from worldfoundry.base_models.perception_core.detection.grounding_dino.util.misc
 
 
 def preprocess_caption(caption: str) -> str:
-    """Preprocess caption.
-
-    Args:
-        caption: The caption.
-
-    Returns:
-        The return value.
-    """
     result = caption.lower().strip()
     if result.endswith("."):
         return result
@@ -39,13 +30,6 @@ def preprocess_caption(caption: str) -> str:
 
 
 def load_model(model_config_path: str, model_checkpoint_path: str, device: str = "cuda"):
-    """Load model.
-
-    Args:
-        model_config_path: The model config path.
-        model_checkpoint_path: The model checkpoint path.
-        device: The device.
-    """
     args = SLConfig.fromfile(model_config_path)
     args.device = device
     local_text_encoder = os.environ.get("WORLDFOUNDRY_GROUNDING_DINO_TEXT_ENCODER_DIR")
@@ -58,15 +42,7 @@ def load_model(model_config_path: str, model_checkpoint_path: str, device: str =
     return model
 
 
-def load_image(image_path: str) -> Tuple[np.array, torch.Tensor]:
-    """Load image.
-
-    Args:
-        image_path: The image path.
-
-    Returns:
-        The return value.
-    """
+def load_image(image_path: str) -> tuple[np.array, torch.Tensor]:
     transform = T.Compose(
         [
             T.RandomResize([800], max_size=1333),
@@ -81,28 +57,14 @@ def load_image(image_path: str) -> Tuple[np.array, torch.Tensor]:
 
 
 def predict(
-        model,
-        image: torch.Tensor,
-        caption: str,
-        box_threshold: float,
-        text_threshold: float,
-        device: str = "cuda",
-        remove_combined: bool = False
-) -> Tuple[torch.Tensor, torch.Tensor, List[str]]:
-    """Predict.
-
-    Args:
-        model: The model.
-        image: The image.
-        caption: The caption.
-        box_threshold: The box threshold.
-        text_threshold: The text threshold.
-        device: The device.
-        remove_combined: The remove combined.
-
-    Returns:
-        The return value.
-    """
+    model,
+    image: torch.Tensor,
+    caption: str,
+    box_threshold: float,
+    text_threshold: float,
+    device: str = "cuda",
+    remove_combined: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor, list[str]]:
     caption = preprocess_caption(caption=caption)
 
     model = model.to(device)
@@ -120,29 +82,31 @@ def predict(
 
     tokenizer = model.tokenizer
     tokenized = tokenizer(caption)
-    
+
     if remove_combined:
-        sep_idx = [i for i in range(len(tokenized['input_ids'])) if tokenized['input_ids'][i] in [101, 102, 1012]]
-        
+        sep_idx = [i for i in range(len(tokenized["input_ids"])) if tokenized["input_ids"][i] in [101, 102, 1012]]
+
         phrases = []
         for logit in logits:
             max_idx = logit.argmax()
             insert_idx = bisect.bisect_left(sep_idx, max_idx)
             right_idx = sep_idx[insert_idx]
             left_idx = sep_idx[insert_idx - 1]
-            phrases.append(get_phrases_from_posmap(logit > text_threshold, tokenized, tokenizer, left_idx, right_idx).replace('.', ''))
+            phrases.append(
+                get_phrases_from_posmap(logit > text_threshold, tokenized, tokenizer, left_idx, right_idx).replace(
+                    ".", ""
+                )
+            )
     else:
         phrases = [
-            get_phrases_from_posmap(logit > text_threshold, tokenized, tokenizer).replace('.', '')
-            for logit
-            in logits
+            get_phrases_from_posmap(logit > text_threshold, tokenized, tokenizer).replace(".", "") for logit in logits
         ]
 
     return boxes, logits.max(dim=1)[0], phrases
 
 
-def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor, phrases: List[str]) -> np.ndarray:
-    """    
+def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor, phrases: list[str]) -> np.ndarray:
+    """
     This function annotates an image with bounding boxes and labels.
 
     Parameters:
@@ -157,7 +121,7 @@ def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor
     h, w, _ = image_source.shape
     boxes = boxes * torch.Tensor([w, h, w, h])
     xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy").numpy()
-    from worldfoundry.studio.visualization.plugins.perception.render import render_detections
+    from worldfoundry.base_models.perception_core.visualization.render import render_detections
 
     rendered = render_detections(image_source, xyxy, labels=phrases, scores=logits.tolist())
     return cv2.cvtColor(rendered, cv2.COLOR_RGB2BGR)
@@ -169,35 +133,15 @@ def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor
 
 
 class Model:
-    """Model implementation."""
-
-    def __init__(
-        self,
-        model_config_path: str,
-        model_checkpoint_path: str,
-        device: str = "cuda"
-    ):
-        """Init.
-
-        Args:
-            model_config_path: The model config path.
-            model_checkpoint_path: The model checkpoint path.
-            device: The device.
-        """
+    def __init__(self, model_config_path: str, model_checkpoint_path: str, device: str = "cuda"):
         self.model = load_model(
-            model_config_path=model_config_path,
-            model_checkpoint_path=model_checkpoint_path,
-            device=device
+            model_config_path=model_config_path, model_checkpoint_path=model_checkpoint_path, device=device
         ).to(device)
         self.device = device
 
     def predict_with_caption(
-        self,
-        image: np.ndarray,
-        caption: str,
-        box_threshold: float = 0.35,
-        text_threshold: float = 0.25
-    ) -> Tuple[sv.Detections, List[str]]:
+        self, image: np.ndarray, caption: str, box_threshold: float = 0.35, text_threshold: float = 0.25
+    ) -> tuple[sv.Detections, list[str]]:  # noqa: F821 - Postponed annotation; supervision is imported inside the methods.
         """
         import cv2
 
@@ -222,23 +166,16 @@ class Model:
             image=processed_image,
             caption=caption,
             box_threshold=box_threshold,
-            text_threshold=text_threshold, 
-            device=self.device)
+            text_threshold=text_threshold,
+            device=self.device,
+        )
         source_h, source_w, _ = image.shape
-        detections = Model.post_process_result(
-            source_h=source_h,
-            source_w=source_w,
-            boxes=boxes,
-            logits=logits)
+        detections = Model.post_process_result(source_h=source_h, source_w=source_w, boxes=boxes, logits=logits)
         return detections, phrases
 
     def predict_with_classes(
-        self,
-        image: np.ndarray,
-        classes: List[str],
-        box_threshold: float,
-        text_threshold: float
-    ) -> sv.Detections:
+        self, image: np.ndarray, classes: list[str], box_threshold: float, text_threshold: float
+    ) -> sv.Detections:  # noqa: F821 - Postponed annotation; supervision is imported inside the methods.
         """
         import cv2
 
@@ -266,27 +203,16 @@ class Model:
             caption=caption,
             box_threshold=box_threshold,
             text_threshold=text_threshold,
-            device=self.device)
+            device=self.device,
+        )
         source_h, source_w, _ = image.shape
-        detections = Model.post_process_result(
-            source_h=source_h,
-            source_w=source_w,
-            boxes=boxes,
-            logits=logits)
+        detections = Model.post_process_result(source_h=source_h, source_w=source_w, boxes=boxes, logits=logits)
         class_id = Model.phrases2classes(phrases=phrases, classes=classes)
         detections.class_id = class_id
         return detections
 
     @staticmethod
     def preprocess_image(image_bgr: np.ndarray) -> torch.Tensor:
-        """Preprocess image.
-
-        Args:
-            image_bgr: The image bgr.
-
-        Returns:
-            The return value.
-        """
         transform = T.Compose(
             [
                 T.RandomResize([800], max_size=1333),
@@ -299,23 +225,7 @@ class Model:
         return image_transformed
 
     @staticmethod
-    def post_process_result(
-            source_h: int,
-            source_w: int,
-            boxes: torch.Tensor,
-            logits: torch.Tensor
-    ) -> sv.Detections:
-        """Post process result.
-
-        Args:
-            source_h: The source h.
-            source_w: The source w.
-            boxes: The boxes.
-            logits: The logits.
-
-        Returns:
-            The return value.
-        """
+    def post_process_result(source_h: int, source_w: int, boxes: torch.Tensor, logits: torch.Tensor) -> sv.Detections:  # noqa: F821 - Postponed annotation; supervision is imported inside the methods.
         import supervision as sv
 
         boxes = boxes * torch.Tensor([source_w, source_h, source_w, source_h])
@@ -324,16 +234,7 @@ class Model:
         return sv.Detections(xyxy=xyxy, confidence=confidence)
 
     @staticmethod
-    def phrases2classes(phrases: List[str], classes: List[str]) -> np.ndarray:
-        """Phrases2classes.
-
-        Args:
-            phrases: The phrases.
-            classes: The classes.
-
-        Returns:
-            The return value.
-        """
+    def phrases2classes(phrases: list[str], classes: list[str]) -> np.ndarray:
         class_ids = []
         for phrase in phrases:
             for class_ in classes:

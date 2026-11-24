@@ -11,6 +11,8 @@ patch coordinates.  LTX-2.x changed both, so inheriting the newer values
 would produce valid-shaped but semantically corrupt attention.
 """
 
+from typing import Any
+
 import torch
 
 from worldfoundry.base_models.diffusion_model.models.networks.ltx.model import LTXModel, LTXModelType
@@ -24,6 +26,17 @@ class LTXModelConfigurator:
     """Build the LTX-2 joint audio-video transformer from a config dict."""
 
     MODEL_CLS = LTXModel
+
+    @classmethod
+    def from_metadata(cls, metadata: dict[str, Any], ops: TransformerOpsConfig | None = None) -> LTXModel:
+        """Build a joint transformer with the split-checkpoint execution policy."""
+        from worldfoundry.base_models.diffusion_model.optimizations.ltx.attention import (
+            split_checkpoint_transformer_ops,
+        )
+
+        if ops is None:
+            ops = split_checkpoint_transformer_ops()
+        return cls.from_config(metadata.get("config", {}), ops=ops)
 
     @classmethod
     def from_config(cls, config: dict, ops: TransformerOpsConfig = DEFAULT_TRANSFORMER_OPS) -> LTXModel:
@@ -80,6 +93,10 @@ class LTXModelConfigurator:
             caption_projection=caption_projection,
             audio_caption_projection=audio_caption_projection,
             cross_attention_adaln=config.get("cross_attention_adaln", False),
+            use_prompt_adaln_single=config.get("use_prompt_adaln_single", True),
+            ff_bias=config.get("ff_bias", True),
+            audio_ff_bias=config.get("audio_ff_bias", True),
+            use_keyframes_abs_pos_embedding=config.get("use_keyframes_abs_pos_embedding", False),
         )
 
 
@@ -142,6 +159,9 @@ class LTXVideoOnlyModelConfigurator:
             apply_gated_attention=config.get("apply_gated_attention", False),
             caption_projection=caption_projection,
             cross_attention_adaln=config.get("cross_attention_adaln", False),
+            use_prompt_adaln_single=config.get("use_prompt_adaln_single", True),
+            ff_bias=config.get("ff_bias", True),
+            use_keyframes_abs_pos_embedding=config.get("use_keyframes_abs_pos_embedding", False),
         )
 
 

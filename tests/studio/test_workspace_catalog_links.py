@@ -1,4 +1,4 @@
-from worldfoundry.studio.serving.workspace import (
+from worldfoundry.studio.workspace.app import (
     _normalize_official_links,
     _official_links_from_catalog_entry,
     _official_links_from_sources,

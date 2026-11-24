@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import sys
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
+from pathlib import Path
 
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
-
 
 DEFAULT_FANTASY_WORLD_WAN21_REPO = "acvlab/FantasyWorld-Wan2.1-I2V-14B-480P"
 DEFAULT_FANTASY_WORLD_WAN22_REPO = "acvlab/FantasyWorld-Wan2.2-Fun-A14B-Control-Camera"
@@ -172,9 +171,7 @@ def ensure_moge2_runtime(moge_path=None) -> None:
     """Bind MoGe to the in-tree utils3d implementation; no external source runtime."""
 
     if moge_path:
-        raise RuntimeError(
-            "FantasyWorld no longer accepts an external MoGe checkout; pass moge_pretrained weights"
-        )
+        raise RuntimeError("FantasyWorld no longer accepts an external MoGe checkout; pass moge_pretrained weights")
     from worldfoundry.base_models.three_dimensions.general_3d.eastern_journalist import (
         utils3d as vendored_utils3d,
     )

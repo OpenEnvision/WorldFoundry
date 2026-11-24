@@ -7,6 +7,7 @@ groups:
 - video
 source_repos:
 - url: https://github.com/nvidia-cosmos/cosmos-predict2.5
+  revision: a2c298b0a3df3778b973fe65e9e58877b292d8a7
 checkpoints:
 - repo_id: nvidia/Cosmos-Predict2.5-14B
   revision: 71ebf3e8af30ecfe440bf0481115975fcc052b46

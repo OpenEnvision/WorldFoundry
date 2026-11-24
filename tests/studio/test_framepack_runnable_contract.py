@@ -1,10 +1,8 @@
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 from worldfoundry.cli.model_run import load_model_run_schema
-from worldfoundry.synthesis.visual_generation.framepack.worldfoundry_runner import (
-    DEFAULT_RUNTIME_ROOT,
-    _patched_script,
-)
 
 
 def test_framepack_in_tree_runner_is_exposed_as_runnable() -> None:
@@ -16,28 +14,64 @@ def test_framepack_in_tree_runner_is_exposed_as_runnable() -> None:
     assert schema.runner_entry_kind == "runnable_runner"
     assert schema.runnable is True
     assert schema.blocked_reason == ""
-    assert schema.runner_target == "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner"
+    assert schema.runner_target == "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner"
 
 
-def test_framepack_local_hunyuan_tokenizer_bypasses_invalid_root_config(tmp_path) -> None:
-    output_dir = tmp_path / "output"
-    output_dir.mkdir()
-    checkpoint_path = tmp_path / "checkpoint"
-    checkpoint_path.mkdir()
-    hf_home = tmp_path / "hf"
-    hf_home.mkdir()
+def test_framepack_local_hunyuan_tokenizer_bypasses_invalid_root_config(tmp_path, monkeypatch) -> None:
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "current_device", lambda: 0)
+    from worldfoundry.synthesis.visual_generation.framepack.framepack_runtime import inference
+
+    for name in (
+        "f1_mode",
+        "high_vram",
+        "text_encoder",
+        "text_encoder_2",
+        "tokenizer",
+        "tokenizer_2",
+        "vae",
+        "feature_extractor",
+        "image_encoder",
+        "transformer",
+        "stream",
+        "outputs_folder",
+    ):
+        monkeypatch.setattr(inference, name, None, raising=False)
+    loaders = {}
+    for name in (
+        "LlamaModel",
+        "CLIPTextModel",
+        "LlamaTokenizerFast",
+        "CLIPTokenizer",
+        "AutoencoderKLHunyuanVideo",
+        "SiglipImageProcessor",
+        "SiglipVisionModel",
+        "HunyuanVideoTransformer3DModelPacked",
+    ):
+        loader = Mock()
+        loader.from_pretrained.return_value.cpu.return_value = Mock()
+        monkeypatch.setattr(inference, name, loader)
+        loaders[name] = loader.from_pretrained
+    monkeypatch.setattr(inference, "enable_framepack_global_patches", lambda: None)
+    monkeypatch.setattr(inference, "get_cuda_free_memory_gb", lambda _: 24)
+    monkeypatch.setattr(inference.DynamicSwapInstaller, "install_model", Mock())
+    monkeypatch.setattr(inference, "AsyncStream", Mock())
+
     hunyuan_root = tmp_path / "hunyuan"
-    (hunyuan_root / "tokenizer").mkdir(parents=True)
-
-    script = _patched_script(
-        DEFAULT_RUNTIME_ROOT,
-        output_dir,
-        checkpoint_path,
-        hf_home,
-        str(hunyuan_root),
-        None,
+    checkpoint_path = tmp_path / "checkpoint"
+    redux_root = tmp_path / "redux"
+    output_dir = tmp_path / "output"
+    inference.initialize(
+        checkpoint_path=checkpoint_path,
+        output_dir=output_dir,
+        hunyuan_root=str(hunyuan_root),
+        flux_redux_root=str(redux_root),
     )
 
-    text = script.read_text(encoding="utf-8")
-    expected = f"LlamaTokenizerFast.from_pretrained({str(hunyuan_root / 'tokenizer')!r})"
-    assert expected in text
+    loaders["LlamaTokenizerFast"].assert_called_once_with(str(hunyuan_root / "tokenizer"))
+    loaders["HunyuanVideoTransformer3DModelPacked"].assert_called_once_with(
+        str(checkpoint_path), torch_dtype=torch.bfloat16
+    )
+    loaders["SiglipImageProcessor"].assert_called_once_with(str(redux_root), subfolder="feature_extractor")
+    assert inference.outputs_folder == str(output_dir / ".framepack_outputs")

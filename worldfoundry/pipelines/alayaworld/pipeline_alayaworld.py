@@ -26,14 +26,14 @@ class AlayaWorldPipeline(PipelineABC):
         self.generation_type = "i2v"
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: Any = None,
         required_components: Mapping[str, Any] | None = None,
         device: str = "cuda",
         lazy: bool = True,
         **kwargs: Any,
-    ) -> "AlayaWorldPipeline":
+    ) -> AlayaWorldPipeline:
         options: dict[str, Any] = {}
         checkpoint_path = model_path
         if isinstance(model_path, Mapping):
@@ -43,7 +43,7 @@ class AlayaWorldPipeline(PipelineABC):
             checkpoint_path = None
         options.update(required_components or {})
         options.update(kwargs)
-        synthesis_model = cls.SYNTHESIS_CLS.from_pretrained(
+        synthesis_model = cls._component("SYNTHESIS_CLS").from_pretrained(
             pretrained_model_path=checkpoint_path,
             device=device,
             lazy=lazy,

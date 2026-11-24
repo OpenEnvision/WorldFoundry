@@ -1,19 +1,32 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 import warnings
+from typing import ClassVar
 
 import torch
 import torch.nn.functional as F
+
 from ...common.registry import registry
+
+# isort: split
 from .blip import BlipBase
+
+# isort: split
 from .blip_outputs import BlipOutputFeatures
+
+# isort: split
 from ..med import XBertEncoder
+
+# isort: split
+# isort: split
 from ..vit import VisionTransformerEncoder
+
+# isort: split
 from torch import nn
 
 
@@ -30,7 +43,7 @@ class BlipFeatureExtractor(BlipBase):
         >>> model = load_model("blip_feature_extractor", "base")
     """
 
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "base": "configs/models/blip_feature_extractor_base.yaml",
         # "large": "configs/models/blip_feature_extractor_large.yaml",
     }
@@ -126,9 +139,7 @@ class BlipFeatureExtractor(BlipBase):
         image_features, text_features = None, None
 
         if mode == "image":
-            assert (
-                image is not None
-            ), "Image is not provided for mode 'image' or 'multimodal'"
+            assert image is not None, "Image is not provided for mode 'image' or 'multimodal'"
             # return image features
             image_embeds = self.visual_encoder.forward_features(image)
 
@@ -136,13 +147,9 @@ class BlipFeatureExtractor(BlipBase):
             image_features = F.normalize(image_features, dim=-1)
 
         elif mode == "text":
-            assert (
-                caption is not None
-            ), "text input is None for mode 'text' or 'multimodal'"
+            assert caption is not None, "text input is None for mode 'text' or 'multimodal'"
 
-            text = self.tokenizer(caption, return_tensors="pt", padding=True).to(
-                self.device
-            )
+            text = self.tokenizer(caption, return_tensors="pt", padding=True).to(self.device)
 
             # return text features
             text_output = self.text_encoder(
@@ -159,13 +166,9 @@ class BlipFeatureExtractor(BlipBase):
         elif mode == "multimodal":
             # return multimodel features
             image_embeds = self.visual_encoder.forward_features(image)
-            image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-                self.device
-            )
+            image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(self.device)
 
-            text = self.tokenizer(caption, return_tensors="pt", padding=True).to(
-                self.device
-            )
+            text = self.tokenizer(caption, return_tensors="pt", padding=True).to(self.device)
             text.input_ids[:, 0] = self.tokenizer.enc_token_id
 
             output = self.text_encoder(
@@ -205,8 +208,8 @@ class BlipFeatureExtractor(BlipBase):
         # load pre-trained weights
         pretrain_path = cfg.get("pretrained", None)
         if pretrain_path is not None:
-            msg = model.load_from_pretrained(url_or_filename=pretrain_path)
+            _msg = model.load_from_pretrained(url_or_filename=pretrain_path)
         else:
-            warnings.warn("No pretrained weights are loaded.")
+            warnings.warn("No pretrained weights are loaded.", stacklevel=1)
 
         return model

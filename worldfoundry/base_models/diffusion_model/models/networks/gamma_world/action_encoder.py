@@ -36,6 +36,7 @@ class RMS_norm(nn.Module):
 
 class SolarisActionEncoder(nn.Module):
     """Encode a single agent's action sequence into DiT-width temporal tokens."""
+
     def __init__(
         self,
         keyboard_dim=23,
@@ -230,6 +231,7 @@ class MultiAgentActionControlModule(nn.Module):
 
 class MultiAgentActionControlNAgentsModule(MultiAgentActionControlModule):
     """Per-agent encoder pool selected by ``agent_pool_indices``."""
+
     def __init__(
         self,
         keyboard_dim: int = 23,
@@ -317,6 +319,7 @@ class MultiAgentActionControlNAgentsModule(MultiAgentActionControlModule):
 
 class MultiAgentActionControlSharedEncoderModule(MultiAgentActionControlModule):
     """All agents share one action encoder; views are tiled along latent time."""
+
     def __init__(
         self,
         keyboard_dim: int = 23,
@@ -382,6 +385,7 @@ class MultiAgentActionControlSharedEncoderModule(MultiAgentActionControlModule):
 
 class MultiAgentActionControlSpatialConcatModule(MultiAgentActionControlModule):
     """Tile per-agent action bias along width instead of packing views in time."""
+
     def __init__(
         self,
         keyboard_dim: int = 23,

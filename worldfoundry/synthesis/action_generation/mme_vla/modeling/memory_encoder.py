@@ -1,3 +1,4 @@
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 import jax.numpy as jnp
 from flax import nnx
 

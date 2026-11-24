@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import GenieEnvisionerPipeline
+from worldfoundry.synthesis.visual_generation import runtime_manifest
 from worldfoundry.synthesis.visual_generation.genie_envisioner import infer
 from worldfoundry.synthesis.visual_generation.genie_envisioner import worldfoundry_runtime as runtime
-from worldfoundry.synthesis.visual_generation import runtime_manifest
 
 
 def _write_fixture(path: Path) -> None:
@@ -26,12 +29,7 @@ def _stage_runtime(tmp_path: Path) -> tuple[Path, Path, Path, Path, list[Path]]:
     ):
         _write_fixture(source / relative)
 
-    checkpoint = (
-        tmp_path
-        / "ckpts"
-        / "agibot-world--Genie-Envisioner"
-        / "GE_base_fast_v0.1.safetensors"
-    )
+    checkpoint = tmp_path / "ckpts" / "agibot-world--Genie-Envisioner" / "GE_base_fast_v0.1.safetensors"
     _write_fixture(checkpoint)
     base = tmp_path / "ckpts" / "Lightricks--LTX-Video"
     for relative in (
@@ -56,7 +54,7 @@ def _stage_runtime(tmp_path: Path) -> tuple[Path, Path, Path, Path, list[Path]]:
 def test_runtime_spec_uses_executable_genie_envisioner_adapter() -> None:
     spec = runtime_manifest.runtime_spec("genie-envisioner")
 
-    assert spec.runtime_module.endswith("genie_envisioner.worldfoundry_runtime")
+    assert spec.runtime_module == "worldfoundry.synthesis.visual_generation.genie_envisioner.worldfoundry_runtime"
     assert spec.runtime_root_func == "runtime_root"
     assert spec.blocked_reason == ""
     assert spec.input_schema["video"] is False
@@ -117,14 +115,15 @@ def test_build_command_expands_paths_and_plan_options(tmp_path, monkeypatch) -> 
             "device": "cuda",
             "options": {
                 "checkpoint_path": (
-                    "${WORLDFOUNDRY_CKPT_DIR}/agibot-world--Genie-Envisioner/"
-                    "GE_base_fast_v0.1.safetensors"
+                    "${WORLDFOUNDRY_CKPT_DIR}/agibot-world--Genie-Envisioner/GE_base_fast_v0.1.safetensors"
                 ),
                 "base_model_dir": "${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-Video",
             },
         }
     )
 
+    assert command[:3] == ["python", "-m", runtime.ENTRYPOINT_MODULE]
+    infer._parser().parse_args(command[3:])
     assert command[command.index("--checkpoint-path") + 1] == str(checkpoint)
     assert command[command.index("--base-model-dir") + 1] == str(base)
     view_index = command.index("--input-views")
@@ -180,15 +179,21 @@ def test_explicit_views_preserve_three_distinct_camera_inputs(tmp_path) -> None:
     assert [int(view.mean()) for view in views] == [20, 100, 220]
 
 
-def test_launcher_imports_current_diffusers_runtime() -> None:
+@pytest.mark.unit
+def test_launcher_imports_current_diffusers_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     import importlib
 
-    infer._ensure_vendored_runtime_importable()
-    pipeline_module = importlib.import_module("models.pipeline.custom_pipeline")
-    transformer_module = importlib.import_module("models.ltx_models.transformer_ltx_multiview")
+    namespaces = {name: ModuleType(name) for name in ("models", "utils")}
+    for name, module in namespaces.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    runtime_package = "worldfoundry.synthesis.visual_generation.genie_envisioner.genie_envisioner_runtime"
+    pipeline_module = importlib.import_module(f"{runtime_package}.models.pipeline.custom_pipeline")
+    transformer_module = importlib.import_module(f"{runtime_package}.models.ltx_models.transformer_ltx_multiview")
 
     assert pipeline_module.CustomPipeline.__name__ == "CustomPipeline"
     assert transformer_module.LTXVideoTransformer3DModel.__name__ == "LTXVideoTransformer3DModel"
+    assert str(runtime.RUNTIME_DIR) not in sys.path
+    assert all(sys.modules[name] is module for name, module in namespaces.items())
 
 
 def test_launcher_rejects_cpu_execution(tmp_path) -> None:

@@ -21,7 +21,7 @@ from html import escape
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from worldfoundry.studio.inference.catalog import CatalogEntry
 from worldfoundry.studio.inference.config import env_first
@@ -29,6 +29,7 @@ from worldfoundry.studio.serving import (
     StudioServiceTelemetry,
     StudioThreadingHTTPServer,
     bind_security_warning,
+    is_loopback_host,
     path_allowed,
     public_url_for_bind,
     request_token_valid,
@@ -37,32 +38,30 @@ from worldfoundry.studio.serving import (
     send_json_response,
     send_text_response,
 )
-from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
-from worldfoundry.studio.ui.vendor_assets import (
-    SPARK_MODULE_PATH,
-    THREE_CORE_MODULE_PATH,
-    THREE_MODULE_PATH,
-    VENDOR_ASSET_INSTALL_COMMAND,
-    VENDOR_ROOT,
-    VendorAssetError,
-    require_vendor_assets,
-)
-from worldfoundry.studio.visualization.core.artifacts import (
+from worldfoundry.studio.visualization.artifacts import (
     StudioVisualizationArtifact,
     infer_visualization_artifact,
 )
-from worldfoundry.studio.visualization.core.registry import (
+from worldfoundry.studio.visualization.launch_config import StudioLaunchConfig
+from worldfoundry.studio.visualization.registry import (
     EMBODIED_VISUALIZATION,
     INTERACTIVE_WORLD_VISUALIZATION,
     MEDIA_VISUALIZATION,
     RERUN_VISUALIZATION,
     SPARK_VISUALIZATION,
     VISER_VISUALIZATION,
-    BackendCapabilities,
     StudioVisualizationBackend,
     StudioVisualizationLaunch,
     StudioVisualizationRegistry,
     model_visualization_profile,
+)
+from worldfoundry.studio.visualization.vendor_assets import (
+    SPARK_MODULE_PATH,
+    THREE_CORE_MODULE_PATH,
+    THREE_MODULE_PATH,
+    VENDOR_ASSET_INSTALL_COMMAND,
+    VendorAssetError,
+    require_vendor_assets,
 )
 
 WORLD_FRONTEND = INTERACTIVE_WORLD_VISUALIZATION
@@ -88,7 +87,6 @@ def _world_backend(request) -> StudioVisualizationLaunch | None:
         access_printer=print_remote_access,
     )
     return None
-
 
 
 def _points_backend(request) -> StudioVisualizationLaunch | None:
@@ -125,7 +123,6 @@ STUDIO_VISUALIZATIONS = StudioVisualizationRegistry(
             aliases=("interactive-world", "world-model"),
             match=_profile_mode(WORLD_FRONTEND),
             serve=_world_backend,
-            capabilities=BackendCapabilities(frozenset({"image", "video"}), score=50),
         ),
         StudioVisualizationBackend(
             mode=POINTS_FRONTEND,
@@ -134,7 +131,6 @@ STUDIO_VISUALIZATIONS = StudioVisualizationRegistry(
             aliases=("viser", "geometry", "pointcloud", "point-cloud"),
             match=_profile_mode(POINTS_FRONTEND),
             serve=_points_backend,
-            capabilities=BackendCapabilities(frozenset({"point_cloud", "mesh", "camera", "trajectory", "depth"}), score=80),
         ),
         StudioVisualizationBackend(
             mode=SPARK_FRONTEND,
@@ -143,7 +139,6 @@ STUDIO_VISUALIZATIONS = StudioVisualizationRegistry(
             aliases=("3dgs", "splat", "gaussian-splat"),
             match=_profile_mode(SPARK_FRONTEND),
             serve=_spark_backend,
-            capabilities=BackendCapabilities(frozenset({"gaussian_splat"}), partial=False, score=90),
         ),
         StudioVisualizationBackend(
             mode=EMBODIED_FRONTEND,
@@ -152,7 +147,6 @@ STUDIO_VISUALIZATIONS = StudioVisualizationRegistry(
             aliases=("sim", "simulator"),
             match=_profile_mode(EMBODIED_FRONTEND),
             serve=_embodied_backend,
-            capabilities=BackendCapabilities(frozenset({"action_trace", "trajectory", "video"}), score=75),
         ),
         StudioVisualizationBackend(
             mode=RERUN_FRONTEND,
@@ -161,7 +155,6 @@ STUDIO_VISUALIZATIONS = StudioVisualizationRegistry(
             aliases=("rrd",),
             match=_profile_mode(RERUN_FRONTEND),
             serve=_rerun_backend,
-            capabilities=BackendCapabilities(frozenset({"timeline", "image", "video", "point_cloud", "mesh", "camera", "trajectory"}), score=70),
         ),
         StudioVisualizationBackend(
             mode=MEDIA_FRONTEND,
@@ -170,7 +163,6 @@ STUDIO_VISUALIZATIONS = StudioVisualizationRegistry(
             aliases=("preview", "video", "image"),
             match=_profile_mode(MEDIA_FRONTEND),
             serve=_media_backend,
-            capabilities=BackendCapabilities(frozenset({"image", "video", "audio", "optical_flow"}), score=60),
         ),
     )
 )
@@ -178,11 +170,38 @@ STUDIO_VISUALIZATIONS = StudioVisualizationRegistry(
 NATIVE_FRONTENDS = STUDIO_VISUALIZATIONS.native_modes
 DEFAULT_FRONTEND_PORTS = STUDIO_VISUALIZATIONS.default_ports
 SPARK_ASSET_EXTS = {".ply", ".spz", ".splat", ".ksplat", ".sog"}
-MEDIA_ASSET_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".mp4", ".mov", ".webm", ".mkv", ".avi", ".wav", ".mp3", ".flac", ".ogg"}
-STUDIO_ASSET_DIR = VENDOR_ROOT.parent
-VENDOR_DIR = VENDOR_ROOT
-SPARK_VENDOR_DIR = SPARK_MODULE_PATH.parent
-THREE_VENDOR_DIR = THREE_MODULE_PATH.parent
+MEDIA_ASSET_EXTS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".bmp",
+    ".mp4",
+    ".mov",
+    ".webm",
+    ".mkv",
+    ".avi",
+    ".wav",
+    ".mp3",
+    ".flac",
+    ".ogg",
+}
+_MEDIA_MIME_FALLBACKS: dict[str, str] = {
+    ".webp": "image/webp",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
+    ".mkv": "video/x-matroska",
+}
+
+
+def _media_mime_type(path: Path) -> str:
+    """Return the MIME type for a media asset, with explicit container-safe fallbacks."""
+
+    guessed = mimetypes.guess_type(path.name)[0]
+    if guessed:
+        return guessed
+    return _MEDIA_MIME_FALLBACKS.get(path.suffix.lower(), "application/octet-stream")
 
 
 def resolve_frontend_mode(
@@ -205,11 +224,7 @@ def serve_native_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig
 def host_for_frontend(launch_config: StudioLaunchConfig) -> str:
     """Return the bind host for standalone frontends."""
 
-    return (
-        launch_config.host
-        or env_first("WORLDFOUNDRY_STUDIO_HOST")
-        or "127.0.0.1"
-    ).strip() or "127.0.0.1"
+    return (launch_config.host or env_first("WORLDFOUNDRY_STUDIO_HOST") or "127.0.0.1").strip() or "127.0.0.1"
 
 
 def port_for_frontend(launch_config: StudioLaunchConfig, mode: str) -> int:
@@ -220,6 +235,7 @@ def port_for_frontend(launch_config: StudioLaunchConfig, mode: str) -> int:
     env_port = (
         env_first(
             f"WORLDFOUNDRY_STUDIO_{mode.upper()}_PORT",
+            "WORLDFOUNDRY_STUDIO_PORT",
         )
         or ""
     ).strip()
@@ -231,10 +247,7 @@ def port_for_frontend(launch_config: StudioLaunchConfig, mode: str) -> int:
 def print_remote_access(mode: str, host: str, port: int) -> None:
     """Emit concise SSH-tunnel instructions for local browser access."""
 
-    ssh_host = (
-        env_first("WORLDFOUNDRY_STUDIO_SSH_HOST")
-        or "remote-host"
-    )
+    ssh_host = env_first("WORLDFOUNDRY_STUDIO_SSH_HOST") or "remote-host"
     remote_host = "127.0.0.1" if host in {"", "0.0.0.0", "127.0.0.1", "localhost"} else host
     local_url = f"http://127.0.0.1:{port}"
     print(f"WorldFoundry Studio frontend: {mode}", flush=True)
@@ -278,10 +291,7 @@ def serve_points_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig
 def serve_embodied_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig) -> None:
     """Keep embodied simulator UX native by advertising its own URL."""
 
-    simulator_url = (
-        launch_config.simulator_url
-        or env_first("WORLDFOUNDRY_STUDIO_SIMULATOR_URL")
-    ).strip()
+    simulator_url = (launch_config.simulator_url or env_first("WORLDFOUNDRY_STUDIO_SIMULATOR_URL")).strip()
     if not simulator_url:
         model = entry.display_name or entry.model_id
         raise SystemExit(
@@ -368,21 +378,35 @@ def serve_media_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig)
         httpd.server_close()
 
 
+def _rerun_bind_host(host: str) -> str:
+    """Normalize a loopback host string to an IP address accepted by ``rerun --bind``."""
+
+    value = (host or "").strip()
+    if value.lower() == "localhost":
+        return "127.0.0.1"
+    if value.startswith("[") and value.endswith("]"):
+        return value[1:-1]
+    return value or "127.0.0.1"
+
+
 def serve_rerun_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig) -> None:
     """Launch or advertise a Rerun viewer for ``.rrd`` timelines."""
 
     host = host_for_frontend(launch_config)
     port = port_for_frontend(launch_config, RERUN_FRONTEND)
-    rerun_url = (
-        launch_config.simulator_url
-        or env_first("WORLDFOUNDRY_STUDIO_RERUN_URL")
-    ).strip()
+    rerun_url = (launch_config.simulator_url or env_first("WORLDFOUNDRY_STUDIO_RERUN_URL")).strip()
     if rerun_url:
         print(f"WorldFoundry Studio frontend: {RERUN_FRONTEND}", flush=True)
         print(f"Rerun URL: {rerun_url}", flush=True)
         _print_tunnel_for_url(rerun_url)
         _wait_forever()
         return
+
+    if not is_loopback_host(host):
+        raise SystemExit(
+            f"Rerun frontend refuses to bind non-loopback host {host!r} because the Rerun CLI "
+            "does not support Studio bearer token authentication. Bind --host 127.0.0.1 and use an SSH tunnel."
+        )
 
     asset_path = _required_existing_asset(
         launch_config.asset_path,
@@ -392,6 +416,7 @@ def serve_rerun_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig)
     if asset_path.suffix.lower() != ".rrd":
         raise SystemExit(f"Rerun frontend expects a .rrd asset; got {asset_path.suffix or 'no suffix'}.")
 
+    bind_host = _rerun_bind_host(host)
     command_template = env_first("WORLDFOUNDRY_STUDIO_RERUN_COMMAND") or _default_rerun_command_template()
     grpc_port_text = (env_first("WORLDFOUNDRY_STUDIO_RERUN_GRPC_PORT") or "").strip()
     grpc_port = int(grpc_port_text) if grpc_port_text else port + 1
@@ -400,23 +425,35 @@ def serve_rerun_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig)
     command = command_template.format(
         asset=shlex.quote(str(asset_path)),
         host=shlex.quote(host),
+        bind_host=shlex.quote(bind_host),
         port=port,
         grpc_port=grpc_port,
         ws_port=ws_port,
         model=shlex.quote(entry.model_id),
     )
-    print_remote_access(RERUN_FRONTEND, host, port)
+    ssh_host = env_first("WORLDFOUNDRY_STUDIO_SSH_HOST") or "remote-host"
+    browser_host = f"[{bind_host}]" if ":" in bind_host else bind_host
+    print(f"WorldFoundry Studio frontend: {RERUN_FRONTEND}", flush=True)
+    print(f"Remote bind: http://{browser_host}:{port}", flush=True)
+    print(
+        f"Local tunnel: ssh -N -L {port}:{browser_host}:{port} -L {ws_port}:{browser_host}:{ws_port} {ssh_host}",
+        flush=True,
+    )
+    print(f"Browser URL: http://{browser_host}:{port}/?url=ws://{browser_host}:{ws_port}", flush=True)
     print(f"Rerun asset: {asset_path}", flush=True)
     print(f"Rerun command: {command}", flush=True)
     # Template placeholders are shlex.quote()d above, so splitting the rendered
     # command is equivalent to the previous shell=True invocation without a shell.
     process = subprocess.Popen(shlex.split(command))
     try:
-        process.wait()
+        rc = process.wait()
     except KeyboardInterrupt:
         process.terminate()
         with contextlib.suppress(Exception):
             process.wait(timeout=5)
+        return
+    if rc != 0:
+        raise SystemExit(rc)
 
 
 def _default_rerun_command_template() -> str:
@@ -425,7 +462,7 @@ def _default_rerun_command_template() -> str:
     sibling = Path(sys.executable).with_name("rerun")
     executable = sibling if sibling.exists() else Path(shutil.which("rerun") or "rerun")
     return (
-        f"{shlex.quote(str(executable))} --web-viewer --port {{grpc_port}} "
+        f"{shlex.quote(str(executable))} --serve-web --bind {{bind_host}} --port {{grpc_port}} "
         "--ws-server-port {ws_port} --web-viewer-port {port} {asset}"
     )
 
@@ -468,36 +505,45 @@ class MediaViewerHandler(BaseHTTPRequestHandler):
         self.auth_token = auth_token
         super().__init__(*args, **kwargs)
 
-    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API.
+    def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if not _handler_request_authorized(self, parsed, self.auth_token):
             return
         with self.telemetry.track(parsed.path):
-            self._handle_get(parsed.path)
+            self._handle_get(parsed)
 
-    def _handle_get(self, path: str) -> None:
+    def _handle_get(self, parsed) -> None:
+        path = parsed.path
         if path in {"", "/"}:
-            self._send_html(media_viewer_html(title=self.title, asset_path=self.asset_path))
+            query_token = (parse_qs(parsed.query).get("token") or [""])[0] if self.auth_token else ""
+            self._send_html(
+                media_viewer_html(
+                    title=self.title,
+                    asset_path=self.asset_path,
+                    asset_query_token=query_token,
+                    auth_required=bool(self.auth_token),
+                )
+            )
             return
         if path == "/healthz":
             self._send_json(
                 self.telemetry.snapshot(
                     frontend=MEDIA_FRONTEND,
                     asset=str(self.asset_path),
-                    asset_exists=self.asset_path.exists(),
+                    asset_exists=self.asset_path.is_file(),
                 )
             )
             return
         if path == "/__worldfoundry__/asset":
-            if not self.asset_path.exists() or not path_allowed(self.asset_path, self.allowed_roots):
+            if not self.asset_path.is_file() or not path_allowed(self.asset_path, self.allowed_roots):
                 self.send_error(HTTPStatus.NOT_FOUND, "Asset not found or not allowed.")
                 return
-            self._send_file(self.asset_path, mimetypes.guess_type(self.asset_path.name)[0] or "application/octet-stream")
+            self._send_file(self.asset_path, _media_mime_type(self.asset_path))
             return
         self.send_error(HTTPStatus.NOT_FOUND, "Not found.")
 
-    def log_message(self, fmt: str, *args) -> None:
-        print(f"[media] {self.address_string()} - {fmt % args}", flush=True)
+    def log_message(self, format: str, *args) -> None:
+        print(f"[media] {self.address_string()} - {format % args}", flush=True)
 
     def _send_html(self, html: str) -> None:
         send_text_response(self, html, "text/html; charset=utf-8")
@@ -541,11 +587,9 @@ class SparkViewerHandler(BaseHTTPRequestHandler):
         self.auth_token = auth_token
         super().__init__(*args, **kwargs)
 
-    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API.
+    def do_GET(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path not in self.AUTH_EXEMPT_PATHS and not _handler_request_authorized(
-            self, parsed, self.auth_token
-        ):
+        if parsed.path not in self.AUTH_EXEMPT_PATHS and not _handler_request_authorized(self, parsed, self.auth_token):
             return
         with self.telemetry.track(parsed.path):
             self._handle_get(parsed)
@@ -590,19 +634,26 @@ class SparkViewerHandler(BaseHTTPRequestHandler):
                 f"Vendored Three core module missing. Run {VENDOR_ASSET_INSTALL_COMMAND}.",
             )
             return
-        if parsed.path == "/__worldfoundry__/asset":
+        if parsed.path == "/__worldfoundry__/asset" or parsed.path.startswith("/__worldfoundry__/asset/"):
             query = parse_qs(parsed.query)
             raw_path = (query.get("path") or [""])[0]
-            path = Path(unquote(raw_path)).expanduser().resolve()
-            if not path.exists() or not path_allowed(path, self.allowed_roots):
+            if not raw_path:
+                self.send_error(HTTPStatus.NOT_FOUND, "Asset not found or not allowed.")
+                return
+            try:
+                path = Path(raw_path).expanduser().resolve()
+            except OSError:
+                self.send_error(HTTPStatus.NOT_FOUND, "Asset not found or not allowed.")
+                return
+            if not path.is_file() or not path_allowed(path, self.allowed_roots):
                 self.send_error(HTTPStatus.NOT_FOUND, "Asset not found or not allowed.")
                 return
             self._send_file(path, mimetypes.guess_type(path.name)[0] or "application/octet-stream")
             return
         self.send_error(HTTPStatus.NOT_FOUND, "Not found.")
 
-    def log_message(self, fmt: str, *args) -> None:
-        print(f"[spark] {self.address_string()} - {fmt % args}", flush=True)
+    def log_message(self, format: str, *args) -> None:
+        print(f"[spark] {self.address_string()} - {format % args}", flush=True)
 
     def _send_html(self, html: str) -> None:
         send_text_response(self, html, "text/html; charset=utf-8")
@@ -677,18 +728,54 @@ def spark_viewer_html(*, title: str, default_asset: str) -> str:
     const status = document.getElementById("status");
     const input = document.getElementById("asset");
     const loadButton = document.getElementById("load");
+    const controls = new Spark.SparkControls({{ canvas }});
     let viewer = null;
+    let loadSeq = 0;
 
     const setStatus = (message) => {{ status.textContent = message; }};
     const pixelRatio = () => Math.min(Math.max(1, window.devicePixelRatio || 1), 1.5);
     const AUTH_TOKEN = new URLSearchParams(window.location.search).get("token") || "";
     const assetFromLocation = () => new URLSearchParams(window.location.search).get("asset") || DEFAULT_ASSET || "";
+    const fileName = (path) => {{
+      const clean = (path || "").split(/[?#]/, 1)[0];
+      return clean.split(/[\\\\/]/).pop() || "world.splat";
+    }};
+    const fileTypeForPath = (path) => {{
+      const name = fileName(path).toLowerCase();
+      const dot = name.lastIndexOf(".");
+      if (dot <= 0 || dot === name.length - 1) return undefined;
+      const ext = name.slice(dot + 1);
+      const map = {{
+        ply: Spark.SplatFileType.PLY,
+        spz: Spark.SplatFileType.SPZ,
+        splat: Spark.SplatFileType.SPLAT,
+        ksplat: Spark.SplatFileType.KSPLAT,
+        sog: Spark.SplatFileType.PCSOGSZIP,
+      }};
+      return map[ext];
+    }};
     const assetUrl = (path) => {{
       if (/^https?:\\/\\//i.test(path)) return path;
       const tokenParam = AUTH_TOKEN ? `&token=${{encodeURIComponent(AUTH_TOKEN)}}` : "";
-      return `/__worldfoundry__/asset?path=${{encodeURIComponent(path)}}${{tokenParam}}`;
+      const name = encodeURIComponent(fileName(path));
+      return `/__worldfoundry__/asset/${{name}}?path=${{encodeURIComponent(path)}}${{tokenParam}}`;
     }};
-    const fileName = (path) => (path.split("/").pop() || "world.splat").split("?")[0];
+    const isEditableTarget = (target) => {{
+      if (!(target instanceof HTMLElement)) return false;
+      return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+    }};
+    const clearFpsKeys = () => {{
+      controls.fpsMovement.keydown = {{}};
+      controls.fpsMovement.keycode = {{}};
+    }};
+    const resetControlsState = () => {{
+      controls.lastTime = 0;
+      clearFpsKeys();
+      controls.fpsMovement.enable = document.activeElement !== input;
+      controls.pointerControls.scroll.set(0, 0, 0);
+      controls.pointerControls.rotateVelocity.set(0, 0, 0);
+      controls.pointerControls.moveVelocity.set(0, 0, 0);
+    }};
 
     const disposeViewer = () => {{
       if (!viewer) return;
@@ -698,6 +785,7 @@ def spark_viewer_html(*, title: str, default_asset: str) -> str:
       viewer.spark?.dispose?.();
       viewer.renderer.dispose();
       viewer = null;
+      resetControlsState();
     }};
 
     const pauseViewer = () => {{
@@ -709,6 +797,7 @@ def spark_viewer_html(*, title: str, default_asset: str) -> str:
     const resumeViewer = () => {{
       if (!viewer || viewer.running || document.visibilityState === "hidden") return;
       viewer.running = true;
+      controls.lastTime = 0;
       viewer.renderer.setAnimationLoop(() => {{
         if (document.visibilityState === "hidden") {{
           pauseViewer();
@@ -739,6 +828,7 @@ def spark_viewer_html(*, title: str, default_asset: str) -> str:
     }};
 
     const loadAsset = async (path) => {{
+      const seq = ++loadSeq;
       path = (path || "").trim();
       input.value = path;
       if (!path) {{
@@ -748,29 +838,48 @@ def spark_viewer_html(*, title: str, default_asset: str) -> str:
       }}
       disposeViewer();
       setStatus(`Loading ${{path}}`);
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
-      camera.position.set(0, 0, 1);
-      const renderer = new THREE.WebGLRenderer({{ canvas, antialias: true, powerPreference: "high-performance" }});
-      const spark = new Spark.SparkRenderer({{ renderer }});
-      scene.add(spark);
-      const controls = new Spark.SparkControls({{ canvas }});
-      const splat = new Spark.SplatMesh({{
-        url: assetUrl(path),
-        fileName: fileName(path),
-        onProgress: (event) => {{
+      try {{
+        const loader = new Spark.SplatLoader();
+        const detectedType = fileTypeForPath(path);
+        if (detectedType) {{
+          loader.fileType = detectedType;
+        }}
+        const packedSplats = await loader.loadAsync(assetUrl(path), (event) => {{
+          if (seq !== loadSeq) return;
           const loaded = Number(event?.loaded || 0);
           const total = Number(event?.total || 0);
           setStatus(total > 0 ? `Loading ${{Math.round((loaded / total) * 100)}}%\\n${{path}}` : `Loading...\\n${{path}}`);
-        }},
-      }});
-      splat.quaternion.set(1, 0, 0, 0);
-      scene.add(splat);
-      viewer = {{ scene, camera, renderer, spark, controls, splat, running: false, width: 0, height: 0, pixelRatio: 0 }};
-      resize();
-      await splat.initialized;
-      setStatus(`Spark ready\n${{path}}`);
-      resumeViewer();
+        }});
+        if (seq !== loadSeq) {{
+          packedSplats?.dispose?.();
+          return;
+        }}
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
+        camera.position.set(0, 0, 1);
+        const renderer = new THREE.WebGLRenderer({{ canvas, antialias: true, powerPreference: "high-performance" }});
+        const spark = new Spark.SparkRenderer({{ renderer }});
+        scene.add(spark);
+        const splat = new Spark.SplatMesh({{ packedSplats }});
+        splat.quaternion.set(1, 0, 0, 0);
+        scene.add(splat);
+        resetControlsState();
+        viewer = {{ scene, camera, renderer, spark, controls, splat, running: false, width: 0, height: 0, pixelRatio: 0 }};
+        resize();
+        await splat.initialized;
+        if (seq !== loadSeq) {{
+          disposeViewer();
+          return;
+        }}
+        setStatus(`Spark ready\\n${{path}}`);
+        resumeViewer();
+      }} catch (error) {{
+        if (seq !== loadSeq) return;
+        disposeViewer();
+        console.error(error);
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(`Failed to load ${{path}}\\n${{message}}`);
+      }}
     }};
 
     loadButton.addEventListener("click", () => {{
@@ -778,6 +887,13 @@ def spark_viewer_html(*, title: str, default_asset: str) -> str:
       url.searchParams.set("asset", input.value.trim());
       window.history.replaceState(null, "", url.toString());
       void loadAsset(input.value);
+    }});
+    input.addEventListener("focus", () => {{
+      controls.fpsMovement.enable = false;
+      clearFpsKeys();
+    }});
+    input.addEventListener("blur", () => {{
+      controls.fpsMovement.enable = true;
     }});
     input.addEventListener("keydown", (event) => {{
       if (event.key === "Enter") loadButton.click();
@@ -788,33 +904,44 @@ def spark_viewer_html(*, title: str, default_asset: str) -> str:
       else resumeViewer();
     }});
     window.addEventListener("keydown", (event) => {{
+      if (event.ctrlKey || event.metaKey || event.altKey || isEditableTarget(event.target)) return;
       if (event.key.toLowerCase() === "r" && viewer) {{
         viewer.camera.position.set(0, 0, 1);
         viewer.camera.lookAt(0, 0, 0);
         setStatus(`Camera reset\\n${{input.value}}`);
       }}
     }});
-    void loadAsset(assetFromLocation()).catch((error) => {{
-      console.error(error);
-      setStatus(error instanceof Error ? error.message : String(error));
-    }});
+    void loadAsset(assetFromLocation());
   </script>
 </body>
 </html>"""
 
 
-def media_viewer_html(*, title: str, asset_path: Path) -> str:
+def media_viewer_html(
+    *,
+    title: str,
+    asset_path: Path,
+    asset_query_token: str = "",
+    auth_required: bool = False,
+) -> str:
     """Return the standalone media viewer HTML."""
 
     safe_title = escape(title)
     safe_name = escape(asset_path.name)
-    mime = mimetypes.guess_type(asset_path.name)[0] or "application/octet-stream"
-    if mime.startswith("image/"):
-        viewer = '<img class="asset asset-image" src="/__worldfoundry__/asset" alt="">'
-    elif mime.startswith("audio/"):
-        viewer = '<audio class="asset asset-audio" src="/__worldfoundry__/asset" controls autoplay></audio>'
+    mime = _media_mime_type(asset_path)
+    if asset_query_token:
+        asset_url = f"/__worldfoundry__/asset?token={quote(asset_query_token, safe='')}"
+        source_attr = f'src="{escape(asset_url, quote=True)}"'
+    elif auth_required:
+        source_attr = 'data-src="/__worldfoundry__/asset"'
     else:
-        viewer = '<video class="asset asset-video" src="/__worldfoundry__/asset" controls autoplay muted playsinline loop></video>'
+        source_attr = 'src="/__worldfoundry__/asset"'
+    if mime.startswith("image/"):
+        viewer = f'<img class="asset asset-image" {source_attr} alt="">'
+    elif mime.startswith("audio/"):
+        viewer = f'<audio class="asset asset-audio" {source_attr} controls autoplay></audio>'
+    else:
+        viewer = f'<video class="asset asset-video" {source_attr} controls autoplay muted playsinline loop></video>'
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -841,13 +968,18 @@ def media_viewer_html(*, title: str, asset_path: Path) -> str:
   <main>{viewer}</main>
   <script>
     (() => {{
-      const token = new URLSearchParams(window.location.search).get("token");
-      if (!token) return;
       const asset = document.querySelector(".asset");
       if (!asset) return;
-      const url = new URL(asset.getAttribute("src"), window.location.origin);
-      url.searchParams.set("token", token);
-      asset.src = url.toString();
+      const token = new URLSearchParams(window.location.search).get("token");
+      const rawSrc = asset.getAttribute("src") || asset.getAttribute("data-src");
+      if (!rawSrc) return;
+      const url = new URL(rawSrc, window.location.origin);
+      if (token && !url.searchParams.has("token")) {{
+        url.searchParams.set("token", token);
+        asset.src = url.toString();
+      }} else if (!asset.getAttribute("src")) {{
+        asset.src = url.toString();
+      }}
     }})();
   </script>
 </body>
@@ -855,10 +987,14 @@ def media_viewer_html(*, title: str, asset_path: Path) -> str:
 
 
 def _spark_allowed_roots(asset_path: Path | None) -> tuple[Path, ...]:
-    # Only explicit workspace/artifact/model directories and the selected
-    # asset's parent are servable. The process cwd (often the repo root) is
+    # Only workspace/artifact/model directories and the selected asset's
+    # parent are servable. The process cwd (often the repo root) is
     # intentionally not an allowed root.
+    from worldfoundry.studio.inference.paths import studio_workspace_root
+
     roots: list[Path] = []
+    with contextlib.suppress(OSError):
+        roots.append(studio_workspace_root().expanduser().resolve())
     for raw in (
         os.getenv("WORLDFOUNDRY_STUDIO_WORKSPACE_DIR"),
         os.getenv("WORLDFOUNDRY_ARTIFACT_DIR"),
@@ -880,7 +1016,11 @@ def _explicit_points_port(launch_config: StudioLaunchConfig) -> int | None:
     if launch_config.port is not None:
         return int(launch_config.port)
     raw_port = (
-        env_first("WORLDFOUNDRY_STUDIO_POINTS_PORT", "WORLDFOUNDRY_STUDIO_VISER_PORT")
+        env_first(
+            "WORLDFOUNDRY_STUDIO_POINTS_PORT",
+            "WORLDFOUNDRY_STUDIO_VISER_PORT",
+            "WORLDFOUNDRY_STUDIO_PORT",
+        )
         or ""
     ).strip()
     return int(raw_port) if raw_port else None
@@ -894,22 +1034,6 @@ def _port_from_url(url: str) -> int | None:
         return int(parsed.port) if parsed.port is not None else None
     except ValueError:
         return None
-
-
-def _pick_sidecar_port(host: str, preferred: int, *, avoid: set[int] | None = None) -> int:
-    """Return a free auxiliary TCP port for viewers with a sidecar service."""
-
-    avoid = avoid or set()
-    for offset in range(64):
-        port = preferred + offset
-        if port in avoid:
-            continue
-        if _tcp_port_available(host, port):
-            return port
-    bind_host = "127.0.0.1" if host in {"", "0.0.0.0", "::", "localhost"} else host
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind((bind_host, 0))
-        return int(sock.getsockname()[1])
 
 
 def _tcp_port_available(host: str, port: int) -> bool:
@@ -943,10 +1067,7 @@ def _print_tunnel_for_url(url: str) -> None:
     parsed = urlparse(url)
     if not parsed.hostname or not parsed.port:
         return
-    ssh_host = (
-        env_first("WORLDFOUNDRY_STUDIO_SSH_HOST")
-        or "remote-host"
-    )
+    ssh_host = env_first("WORLDFOUNDRY_STUDIO_SSH_HOST") or "remote-host"
     remote_host = "127.0.0.1" if parsed.hostname in {"localhost", "127.0.0.1", "0.0.0.0"} else parsed.hostname
     print(f"Local tunnel: ssh -N -L {parsed.port}:{remote_host}:{parsed.port} {ssh_host}", flush=True)
     print(f"Browser URL: http://127.0.0.1:{parsed.port}", flush=True)
@@ -954,10 +1075,8 @@ def _print_tunnel_for_url(url: str) -> None:
 
 def _wait_forever() -> None:
     stop = threading.Event()
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         stop.wait()
-    except KeyboardInterrupt:
-        pass
 
 
 def _strip_html(value: str) -> str:

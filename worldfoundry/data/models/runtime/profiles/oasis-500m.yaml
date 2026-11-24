@@ -7,6 +7,7 @@ groups:
 - minecraft
 source_repos:
 - url: https://github.com/etched-ai/open-oasis
+  revision: f59deef2c019c212bd0c5a3a5b986a51f3701847
 checkpoints:
 - repo_id: Etched/oasis-500m
   role: oasis_checkpoint

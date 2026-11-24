@@ -1,0 +1,88 @@
+# Evaluation datasets for spatial-perception models.
+# Schema and templates: see the module docstring of worldfoundry/base_models/capabilities.py.
+
+coco2017_detection_segmentation_assets:
+  family: perception_data_asset
+  gpu_required: false
+  assets:
+    - id: coco2017_detection_segmentation_assets_dir
+      kind: dir
+      role: perception_eval_dataset
+      env: [WORLDFOUNDRY_COCO2017_ROOT]
+      local_path: ${WORLDFOUNDRY_DATA_DIR}/perception/coco2017
+      alternate_paths:
+        - ${WORLDFOUNDRY_REPO_ROOT}/data/perception/coco2017
+        - ${WORLDFOUNDRY_BENCH_ROOT}/data/coco2017
+        - ${WORLDFOUNDRY_HFD_DATASET_ROOT}/coco2017
+      download_command_template: COCO_ROOT=${WORLDFOUNDRY_COCO2017_ROOT:-${WORLDFOUNDRY_DATA_DIR}/perception/coco2017};
+        mkdir -p "$COCO_ROOT" && cd "$COCO_ROOT"; if [ ! -d val2017 ]; then curl -L --fail --retry 5 --retry-delay
+        2 http://images.cocodataset.org/zips/val2017.zip -o val2017.zip && python -m zipfile -e val2017.zip .; fi;
+        if [ ! -f annotations/instances_val2017.json ]; then curl -L --fail --retry 5 --retry-delay 2 http://images.cocodataset.org/annotations/annotations_trainval2017.zip
+        -o annotations_trainval2017.zip && python -m zipfile -e annotations_trainval2017.zip .; fi
+      min_file_count: 10
+      required_paths: [val2017, annotations/instances_val2017.json]
+      note: COCO 2017 val images and instance annotations shared by detection and segmentation evaluator validation
+        runs.
+
+davis2017_video_segmentation_assets:
+  family: perception_data_asset
+  gpu_required: false
+  assets:
+    - id: davis2017_video_segmentation_assets_dir
+      kind: dir
+      role: perception_eval_dataset
+      env: [WORLDFOUNDRY_DAVIS2017_ROOT]
+      local_path: ${WORLDFOUNDRY_DATA_DIR}/perception/davis2017/DAVIS
+      alternate_paths:
+        - ${WORLDFOUNDRY_REPO_ROOT}/data/perception/davis2017/DAVIS
+        - ${WORLDFOUNDRY_REPO_ROOT}/data/perception/DAVIS
+        - ${WORLDFOUNDRY_BENCH_ROOT}/data/DAVIS
+      download_command_template: DAVIS_ROOT=${WORLDFOUNDRY_DAVIS2017_ROOT:-${WORLDFOUNDRY_DATA_DIR}/perception/davis2017/DAVIS};
+        DAVIS_PARENT=$(dirname "$DAVIS_ROOT"); mkdir -p "$DAVIS_PARENT"; if [ ! -d "$DAVIS_ROOT/JPEGImages/480p"
+        ]; then curl -L --fail --retry 5 --retry-delay 2 https://data.vision.ee.ethz.ch/csergi/share/davis/DAVIS-2017-trainval-480p.zip
+        -o "$DAVIS_PARENT/DAVIS-2017-trainval-480p.zip" && python -m zipfile -e "$DAVIS_PARENT/DAVIS-2017-trainval-480p.zip"
+        "$DAVIS_PARENT"; fi
+      min_file_count: 20
+      required_paths: [JPEGImages/480p, Annotations/480p, ImageSets/2017/val.txt]
+      note: DAVIS 2017 trainval 480p bundle for video object segmentation and tracking metric validation.
+
+tum_rgbd_slam_sample_assets:
+  family: perception_data_asset
+  gpu_required: false
+  assets:
+    - id: tum_rgbd_slam_sample_assets_dir
+      kind: dir
+      role: perception_eval_dataset
+      env: [WORLDFOUNDRY_TUM_RGBD_SLAM_SAMPLE_ROOT]
+      local_path: ${WORLDFOUNDRY_DATA_DIR}/perception/tum_rgbd/rgbd_dataset_freiburg1_desk
+      alternate_paths:
+        - ${WORLDFOUNDRY_REPO_ROOT}/data/perception/tum_rgbd/rgbd_dataset_freiburg1_desk
+        - ${WORLDFOUNDRY_BENCH_ROOT}/data/tum_rgbd/rgbd_dataset_freiburg1_desk
+      download_command_template: TUM_ROOT=${WORLDFOUNDRY_TUM_RGBD_SLAM_SAMPLE_ROOT:-${WORLDFOUNDRY_DATA_DIR}/perception/tum_rgbd/rgbd_dataset_freiburg1_desk};
+        TUM_PARENT=$(dirname "$TUM_ROOT"); mkdir -p "$TUM_PARENT"; if [ ! -f "$TUM_ROOT/rgb.txt" ]; then curl -L
+        --fail --retry 5 --retry-delay 2 https://vision.in.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_desk.tgz
+        -o "$TUM_PARENT/rgbd_dataset_freiburg1_desk.tgz" && tar -xzf "$TUM_PARENT/rgbd_dataset_freiburg1_desk.tgz"
+        -C "$TUM_PARENT"; fi
+      min_file_count: 10
+      required_files: [rgb.txt, depth.txt, groundtruth.txt]
+      required_paths: [rgb, depth]
+      note: Small official TUM RGB-D Freiburg1 desk sequence for SLAM/depth validation and trajectory sanity checks.
+
+kitti_depth_slam_assets:
+  family: perception_data_asset
+  gpu_required: false
+  assets:
+    - id: kitti_depth_slam_assets_dir
+      kind: dir
+      role: perception_eval_dataset
+      env: [WORLDFOUNDRY_KITTI_ROOT]
+      local_path: ${WORLDFOUNDRY_DATA_DIR}/perception/kitti
+      alternate_paths:
+        - ${WORLDFOUNDRY_REPO_ROOT}/data/perception/kitti
+        - ${WORLDFOUNDRY_BENCH_ROOT}/data/kitti
+      manual_action: Stage KITTI odometry/depth assets under $WORLDFOUNDRY_KITTI_ROOT. Accepted markers include
+        sequences/, dataset/sequences/, data_odometry_gray/, or data_depth_annotated/. Use the official KITTI download
+        pages because the full assets require their terms/download flow.
+      min_file_count: 10
+      required_any_paths: [sequences, dataset/sequences, data_odometry_gray, data_depth_annotated]
+      note: KITTI odometry/depth staging root for outdoor SLAM, depth, and driving perception evaluations.

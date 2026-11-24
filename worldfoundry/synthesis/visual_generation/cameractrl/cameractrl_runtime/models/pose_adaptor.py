@@ -1,56 +1,13 @@
 import math
+
 import torch
 import torch.nn as nn
 from einops import rearrange
+
+from worldfoundry.base_models.diffusion_model.models.encoders.lvdm.adapter import Downsample
+from worldfoundry.core.nn.blocks.module_properties import get_parameter_dtype as get_parameter_dtype
+
 from .motion_module import TemporalTransformerBlock
-
-
-def get_parameter_dtype(parameter: torch.nn.Module):
-    try:
-        params = tuple(parameter.parameters())
-        if len(params) > 0:
-            return params[0].dtype
-
-        buffers = tuple(parameter.buffers())
-        if len(buffers) > 0:
-            return buffers[0].dtype
-
-    except StopIteration:
-        # For torch.nn.DataParallel compatibility in PyTorch 1.5
-
-        def find_tensor_attributes(module: torch.nn.Module) -> List[Tuple[str, Tensor]]:
-            tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-            return tuples
-
-        gen = parameter._named_members(get_members_fn=find_tensor_attributes)
-        first_tuple = next(gen)
-        return first_tuple[1].dtype
-
-
-def conv_nd(dims, *args, **kwargs):
-    """
-    Create a 1D, 2D, or 3D convolution module.
-    """
-    if dims == 1:
-        return nn.Conv1d(*args, **kwargs)
-    elif dims == 2:
-        return nn.Conv2d(*args, **kwargs)
-    elif dims == 3:
-        return nn.Conv3d(*args, **kwargs)
-    raise ValueError(f"unsupported dimensions: {dims}")
-
-
-def avg_pool_nd(dims, *args, **kwargs):
-    """
-    Create a 1D, 2D, or 3D average pooling module.
-    """
-    if dims == 1:
-        return nn.AvgPool1d(*args, **kwargs)
-    elif dims == 2:
-        return nn.AvgPool2d(*args, **kwargs)
-    elif dims == 3:
-        return nn.AvgPool3d(*args, **kwargs)
-    raise ValueError(f"unsupported dimensions: {dims}")
 
 
 class PoseAdaptor(nn.Module):
@@ -61,67 +18,37 @@ class PoseAdaptor(nn.Module):
 
     def forward(self, noisy_latents, timesteps, encoder_hidden_states, pose_embedding):
         assert pose_embedding.ndim == 5
-        bs = pose_embedding.shape[0]            # b c f h w
-        pose_embedding_features = self.pose_encoder(pose_embedding)      # bf c h w
-        pose_embedding_features = [rearrange(x, '(b f) c h w -> b c f h w', b=bs)
-                                   for x in pose_embedding_features]
-        noise_pred = self.unet(noisy_latents,
-                               timesteps,
-                               encoder_hidden_states,
-                               pose_embedding_features=pose_embedding_features).sample
+        bs = pose_embedding.shape[0]  # b c f h w
+        pose_embedding_features = self.pose_encoder(pose_embedding)  # bf c h w
+        pose_embedding_features = [rearrange(x, "(b f) c h w -> b c f h w", b=bs) for x in pose_embedding_features]
+        noise_pred = self.unet(
+            noisy_latents, timesteps, encoder_hidden_states, pose_embedding_features=pose_embedding_features
+        ).sample
         return noise_pred
 
 
-class Downsample(nn.Module):
-    """
-    A downsampling layer with an optional convolution.
-    :param channels: channels in the inputs and outputs.
-    :param use_conv: a bool determining if a convolution is applied.
-    :param dims: determines if the signal is 1D, 2D, or 3D. If 3D, then
-                 downsampling occurs in the inner-two dimensions.
-    """
-
-    def __init__(self, channels, use_conv, dims=2, out_channels=None, padding=1):
-        super().__init__()
-        self.channels = channels
-        self.out_channels = out_channels or channels
-        self.use_conv = use_conv
-        self.dims = dims
-        stride = 2 if dims != 3 else (1, 2, 2)
-        if use_conv:
-            self.op = conv_nd(dims, self.channels, self.out_channels, 3, stride=stride, padding=padding)
-        else:
-            assert self.channels == self.out_channels
-            self.op = avg_pool_nd(dims, kernel_size=stride, stride=stride)
-
-    def forward(self, x):
-        assert x.shape[1] == self.channels
-        return self.op(x)
-
-
 class ResnetBlock(nn.Module):
-
     def __init__(self, in_c, out_c, down, ksize=3, sk=False, use_conv=True):
         super().__init__()
         ps = ksize // 2
-        if in_c != out_c or sk == False:
+        if in_c != out_c or sk == False:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             self.in_conv = nn.Conv2d(in_c, out_c, ksize, 1, ps)
         else:
             self.in_conv = None
         self.block1 = nn.Conv2d(out_c, out_c, 3, 1, 1)
         self.act = nn.ReLU()
         self.block2 = nn.Conv2d(out_c, out_c, ksize, 1, ps)
-        if sk == False:
+        if sk == False:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             self.skep = nn.Conv2d(in_c, out_c, ksize, 1, ps)
         else:
             self.skep = None
 
         self.down = down
-        if self.down == True:
+        if self.down == True:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             self.down_opt = Downsample(in_c, use_conv=use_conv)
 
     def forward(self, x):
-        if self.down == True:
+        if self.down == True:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             x = self.down_opt(x)
         if self.in_conv is not None:  # edit
             x = self.in_conv(x)
@@ -137,10 +64,10 @@ class ResnetBlock(nn.Module):
 
 class PositionalEncoding(nn.Module):
     def __init__(
-            self,
-            d_model,
-            dropout=0.,
-            max_len=32,
+        self,
+        d_model,
+        dropout=0.0,
+        max_len=32,
     ):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
@@ -150,30 +77,31 @@ class PositionalEncoding(nn.Module):
         pe[0, :, 0::2, ...] = torch.sin(position * div_term)
         pe[0, :, 1::2, ...] = torch.cos(position * div_term)
         pe.unsqueeze_(-1).unsqueeze_(-1)
-        self.register_buffer('pe', pe)
+        self.register_buffer("pe", pe)
 
     def forward(self, x):
-        x = x + self.pe[:, :x.size(1), ...]
+        x = x + self.pe[:, : x.size(1), ...]
         return self.dropout(x)
 
 
 class CameraPoseEncoder(nn.Module):
-
-    def __init__(self,
-                 downscale_factor,
-                 channels=[320, 640, 1280, 1280],
-                 nums_rb=3,
-                 cin=64,
-                 ksize=3,
-                 sk=False,
-                 use_conv=True,
-                 compression_factor=1,
-                 temporal_attention_nhead=8,
-                 attention_block_types=("Temporal_Self", ),
-                 temporal_position_encoding=False,
-                 temporal_position_encoding_max_len=16,
-                 rescale_output_factor=1.0):
-        super(CameraPoseEncoder, self).__init__()
+    def __init__(
+        self,
+        downscale_factor,
+        channels=[320, 640, 1280, 1280],  # noqa: B006 - Keeps the upstream default object and signature.
+        nums_rb=3,
+        cin=64,
+        ksize=3,
+        sk=False,
+        use_conv=True,
+        compression_factor=1,
+        temporal_attention_nhead=8,
+        attention_block_types=("Temporal_Self",),
+        temporal_position_encoding=False,
+        temporal_position_encoding_max_len=16,
+        rescale_output_factor=1.0,
+    ):
+        super().__init__()
         self.unshuffle = nn.PixelUnshuffle(downscale_factor)
         self.channels = channels
         self.nums_rb = nums_rb
@@ -199,15 +127,17 @@ class CameraPoseEncoder(nn.Module):
                     in_dim = int(channels[i] / compression_factor)
                     out_dim = int(channels[i] / compression_factor)
                     conv_layer = ResnetBlock(in_dim, out_dim, down=False, ksize=ksize, sk=sk, use_conv=use_conv)
-                temporal_attention_layer = TemporalTransformerBlock(dim=out_dim,
-                                                                    num_attention_heads=temporal_attention_nhead,
-                                                                    attention_head_dim=int(out_dim / temporal_attention_nhead),
-                                                                    attention_block_types=attention_block_types,
-                                                                    dropout=0.0,
-                                                                    cross_attention_dim=None,
-                                                                    temporal_position_encoding=temporal_position_encoding,
-                                                                    temporal_position_encoding_max_len=temporal_position_encoding_max_len,
-                                                                    rescale_output_factor=rescale_output_factor)
+                temporal_attention_layer = TemporalTransformerBlock(
+                    dim=out_dim,
+                    num_attention_heads=temporal_attention_nhead,
+                    attention_head_dim=int(out_dim / temporal_attention_nhead),
+                    attention_block_types=attention_block_types,
+                    dropout=0.0,
+                    cross_attention_dim=None,
+                    temporal_position_encoding=temporal_position_encoding,
+                    temporal_position_encoding_max_len=temporal_position_encoding_max_len,
+                    rescale_output_factor=rescale_output_factor,
+                )
                 conv_layers.append(conv_layer)
                 temporal_attention_layers.append(temporal_attention_layer)
             self.encoder_down_conv_blocks.append(conv_layers)
@@ -230,12 +160,14 @@ class CameraPoseEncoder(nn.Module):
         # extract features
         features = []
         x = self.encoder_conv_in(x)
-        for res_block, attention_block in zip(self.encoder_down_conv_blocks, self.encoder_down_attention_blocks):
-            for res_layer, attention_layer in zip(res_block, attention_block):
+        for res_block, attention_block in zip(
+            self.encoder_down_conv_blocks, self.encoder_down_attention_blocks, strict=False
+        ):
+            for res_layer, attention_layer in zip(res_block, attention_block, strict=False):
                 x = res_layer(x)
                 h, w = x.shape[-2:]
-                x = rearrange(x, '(b f) c h w -> (b h w) f c', b=bs)
+                x = rearrange(x, "(b f) c h w -> (b h w) f c", b=bs)
                 x = attention_layer(x)
-                x = rearrange(x, '(b h w) f c -> (b f) c h w', h=h, w=w)
+                x = rearrange(x, "(b h w) f c -> (b f) c h w", h=h, w=w)
             features.append(x)
         return features

@@ -4,7 +4,7 @@ description: Camera-controlled, joint audio/video generation with the shared Min
 pageSource: authored
 ---
 
-`xgen-jing` runs the released **JING-Flash-v1 four-step bidirectional** model. Its transformer inherits WorldFoundry's MiniMax-H3 implementation: attention, projections, RoPE, AdaLN, MLPs and output heads remain shared. The extension adds camera FiLM, independent text refinement per slice and global-media/slice-local-text attention. Qwen3-VL conditioning, latent geometry, Euler updates and media export reuse existing components; the H3 video/audio codecs come from Diffusers.
+`xgen-jing` runs the released **JING-Flash-v1 four-step bidirectional** model, a camera-controlled audio/video extension of MiniMax-H3. On top of the H3 transformer it adds camera FiLM, independent text refinement per slice and global-media/slice-local-text attention. Conditioning uses Qwen3-VL, and the H3 video/audio codecs come from Diffusers.
 
 ```python
 from worldfoundry.pipelines.xgen_jing import XGENJINGPipeline
@@ -39,6 +39,6 @@ With `first_chunk_size=2` (default), `N` slices produce `17*N+5` pixel frames; `
 
 The runtime processes text, transformer and codecs sequentially. Default transformer CPU offload avoids the upstream six-GPU requirement, at a transfer-time cost; `cpu_offload=False` keeps the transformer on the selected GPU. This route does not implement distributed sequence parallelism. `save_latents=True` also saves generated video/audio rows alongside the MP4. Numerical checks run before output clipping.
 
-The released JING-Flash-v1 and MiniMax-H3 checkpoints passed single-GPU, text-only tests at 448×256 with `cpu_offload=False` and at the default 960×544 canvas with `cpu_offload=True`; both used 22 frames and four steps. The public pipeline produced fully decodable 24 FPS H.264 video with 32 kHz stereo AAC audio. Both outputs show a coherent golden retriever running across grass. These runs do not establish image-reference behavior, camera-control accuracy, longer-generation quality or general prompt quality. The causal model and streaming observation-history inference are not released and are not exposed here.
+Validated on a single GPU with the released JING-Flash-v1 and MiniMax-H3 checkpoints: text-only generation produces coherent 22-frame, 24 FPS H.264 video with 32 kHz stereo AAC audio at 448×256 (`cpu_offload=False`) and at the default 960×544 canvas (`cpu_offload=True`). Image references, camera-control accuracy, longer generations and general prompt quality are not yet validated. The causal model and streaming observation-history inference are not released.
 
 Sources: [XGEN-JING](https://github.com/XGEN-Labs/XGEN-JING), revision `cbeec31630d63a981a8e40d6e79c71a188a7d8c9`; [weights](https://huggingface.co/XGENlabs/XGEN-JING), revision `8153db624fa4fa573d2e0c5335b515882efff30d`. Attribution and the MiniMax H3 Community License are recorded in root `THIRD-PARTY-NOTICES`.

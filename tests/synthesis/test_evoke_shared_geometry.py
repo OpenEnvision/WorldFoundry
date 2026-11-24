@@ -40,17 +40,18 @@ def test_vigeo_shared_loader_and_stream_reset(monkeypatch, tmp_path):
     model.reset_cache_state.assert_called_once_with()
 
 
-def test_vigeo_preflight_checks_shared_source_and_weights(tmp_path):
+def test_vigeo_preflight_checks_only_weights(tmp_path):
     with pytest.raises(FileNotFoundError, match="ViGeo weights"):
         vigeo_cloud.check_assets(weights=tmp_path)
     (tmp_path / "vigeo.pt").touch()
     vigeo_cloud.check_assets(weights=tmp_path)
-    with pytest.raises(ValueError, match="shared ViGeo"):
-        vigeo_cloud.check_assets(src=tmp_path, weights=tmp_path)
+    with pytest.raises(TypeError, match="src"):
+        getattr(vigeo_cloud, "check_assets")(src=tmp_path, weights=tmp_path)
 
 
 def test_vigeo_local_checkpoint_loader(tmp_path):
     import torch
+
     from worldfoundry.base_models.three_dimensions.depth.vigeo import ViGeo, ViGeoModel
 
     assert ViGeoModel is ViGeo
@@ -70,6 +71,7 @@ def test_vigeo_local_checkpoint_loader(tmp_path):
 
 def test_vigeo_capability_points_to_shared_package():
     from pathlib import Path
+
     from worldfoundry.base_models.capabilities import get_base_model_capability
     from worldfoundry.base_models.three_dimensions.depth import vigeo
 

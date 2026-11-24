@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from ..native_diffusion import NativeVisualDiffusionPipeline
 
@@ -32,9 +32,9 @@ class WorldPlay2Pipeline(NativeVisualDiffusionPipeline):
     )
     OUTPUT_LAYOUT = "FHWC"
     OUTPUT_VALUE_RANGE = "0,1"
-    DEFAULT_SCHEDULER_OPTIONS = {"shift": 7.0}
-    SCHEDULER_OPTION_ALIASES = {"sample_shift": "shift"}
-    REQUEST_INPUT_DEFAULTS = {
+    DEFAULT_SCHEDULER_OPTIONS: Mapping[str, object] = {"shift": 7.0}
+    SCHEDULER_OPTION_ALIASES: ClassVar[Mapping[str, str]] = {"sample_shift": "shift"}
+    REQUEST_INPUT_DEFAULTS: Mapping[str, object] = {
         "actions": None,
         "perspective": "tps",
         "prompts": None,
@@ -45,7 +45,7 @@ class WorldPlay2Pipeline(NativeVisualDiffusionPipeline):
         "yaw_rotation_speed_deg": 3.0,
         "pitch_rotation_speed_deg": 1.0,
     }
-    REQUEST_INPUT_ALIASES = {"action": "actions"}
+    REQUEST_INPUT_ALIASES: ClassVar[Mapping[str, str]] = {"action": "actions"}
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

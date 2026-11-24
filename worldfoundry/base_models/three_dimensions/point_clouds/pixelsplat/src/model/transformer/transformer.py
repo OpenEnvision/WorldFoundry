@@ -22,8 +22,6 @@
 
 # This file comes from https://github.com/stelzner/srt
 
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> transformer -> transformer.py functionality."""
-
 from torch import nn
 
 from .attention import Attention
@@ -32,7 +30,6 @@ from .pre_norm import PreNorm
 
 
 class Transformer(nn.Module):
-    """Transformer implementation."""
     def __init__(
         self,
         dim,
@@ -45,19 +42,6 @@ class Transformer(nn.Module):
         kv_dim=None,
         feed_forward_layer=FeedForward,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            depth: The depth.
-            heads: The heads.
-            dim_head: The dim head.
-            mlp_dim: The mlp dim.
-            dropout: The dropout.
-            selfatt: The selfatt.
-            kv_dim: The kv dim.
-            feed_forward_layer: The feed forward layer.
-        """
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(depth):
@@ -81,12 +65,6 @@ class Transformer(nn.Module):
             )
 
     def forward(self, x, z=None, **kwargs):
-        """Forward.
-
-        Args:
-            x: The x.
-            z: The z.
-        """
         for attn, ff in self.layers:
             x = attn(x, z=z) + x
             x = ff(x, **kwargs) + x

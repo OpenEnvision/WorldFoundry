@@ -83,9 +83,7 @@ def select_profile_checkpoint(
         for record in checkpoints
     )
     if not matches:
-        raise ValueError(
-            f"unknown checkpoint variant {selector!r}; available checkpoint roles: {', '.join(available)}"
-        )
+        raise ValueError(f"unknown checkpoint variant {selector!r}; available checkpoint roles: {', '.join(available)}")
     raise ValueError(
         f"ambiguous checkpoint variant {selector!r}; matched {len(matches)} records: {', '.join(available)}"
     )

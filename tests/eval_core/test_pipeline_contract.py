@@ -5,17 +5,20 @@ from typing import Any, Mapping
 
 import pytest
 
-from worldfoundry.evaluation.api import WorldModelConfig
-from worldfoundry.evaluation.models.pipelines import build_pipeline_runner_spec, import_pipeline_target
-from worldfoundry.evaluation.models.pipelines.aliases import build_alias_mapping, load_pipeline_alias_registry
-from worldfoundry.evaluation.models.pipelines.bindings import (
+from worldfoundry.evals.api import WorldModelConfig
+from worldfoundry.evals.models.pipelines.loading import (
+    build_pipeline_runner_spec,
+    import_pipeline_target,
+    load_pipeline_from_config,
+)
+from worldfoundry.evals.models.runners.pipeline import WorldFoundryPipelineRunner
+from worldfoundry.pipelines.pipeline_utils import PipelineABC
+from worldfoundry.zoo.aliases import build_alias_mapping, load_pipeline_alias_registry
+from worldfoundry.zoo.bindings import (
     load_pipeline_binding,
     resolve_pipeline_binding,
     resolve_pipeline_route,
 )
-from worldfoundry.evaluation.models.pipelines.loading import load_pipeline_from_config
-from worldfoundry.evaluation.models.runners.pipeline import WorldFoundryPipelineRunner
-from worldfoundry.pipelines.pipeline_utils import PipelineABC
 
 
 class DummyPipeline(PipelineABC):
@@ -219,7 +222,7 @@ def test_pipeline_loader_and_runner_from_config_use_resolved_target() -> None:
 
 
 def test_pipeline_facade_exports_path_a_only() -> None:
-    import worldfoundry.evaluation.models.pipelines as pipelines
+    import worldfoundry.evals.models.pipelines as pipelines
 
     assert pipelines.build_pipeline_runner_spec is build_pipeline_runner_spec
     assert pipelines.import_pipeline_target is import_pipeline_target

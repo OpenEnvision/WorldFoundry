@@ -3,7 +3,7 @@ title: RoboMME
 description: "ICML 2026 memory-augmented manipulation: 16 tasks in Counting, Permanence, Reference, and Imitation. WorldFoundry imports suite success; it does not run the sim."
 ---
 
-RoboMME (University of Michigan with Stanford and Figure AI; ICML 2026) is a standardized bench for **memory-augmented** VLAs. **16** long-horizon tasks sit in four cognitive suites — **Counting** (temporal: exact event counts), **Permanence** (spatial: occlusion and swaps), **Reference** (object identity from an earlier cue), **Imitation** (procedural: copy a demonstrated trajectory) — four tasks each. The release includes **1,600** demonstrations and **770k** training timesteps, plus **14** memory-augmented variants on a **π0.5** backbone. The paper reports per-suite success, not a single pick-and-place bit.
+RoboMME (University of Michigan with Stanford and Figure AI; ICML 2026) is a standardized bench for **memory-augmented** VLAs. **16** long-horizon tasks sit in four cognitive suites — **Counting** (temporal: exact event counts), **Permanence** (spatial: occlusion and swaps), **Reference** (object identity from an earlier cue), **Imitation** (procedural: copy a demonstrated trajectory) — four tasks each. The release includes **1,600** demonstrations and **770k** training timesteps, plus **14** memory-augmented variants on a **π0.5** backbone. The paper reports per-suite success.
 
 Paper: [RoboMME](https://arxiv.org/abs/2603.04639). Project: [robomme.github.io](https://robomme.github.io/). Code: [RoboMME/robomme_policy_learning](https://github.com/RoboMME/robomme_policy_learning).
 
@@ -14,7 +14,7 @@ WorldFoundry **imports** official rollout exports and normalizes overall plus pe
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id robomme \
   --mode official-validation \
   --official-results-path <official_results.json> \

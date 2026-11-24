@@ -12,23 +12,18 @@ Key features:
 - Support for camera trajectories and Gaussian parameter sequences
 """
 
-import logging
 import argparse
-import os
 import json
+import logging
 from pathlib import Path
-from typing import Optional, Tuple, Dict, List
-from time import time
 
-import torch
-import numpy as np
 import cv2
-import matplotlib
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import imageio.v2 as imageio
-from tqdm import tqdm
+import matplotlib
+import numpy as np
+import torch
 from kornia.geometry.depth import depth_to_3d_v2
+from tqdm import tqdm
 
 from worldfoundry.base_models.three_dimensions.three_d_four_d.pytorch3d_compat import (
     configure_pytorch3d_extension,
@@ -36,22 +31,25 @@ from worldfoundry.base_models.three_dimensions.three_d_four_d.pytorch3d_compat i
 
 configure_pytorch3d_extension()
 
-from pytorch3d.structures import Pointclouds, Meshes, join_meshes_as_batch
-from pytorch3d.renderer import (
-    PerspectiveCameras,
-    PointsRasterizationSettings,
-    PointsRenderer,
-    PointsRasterizer,
+from pytorch3d.renderer import (  # noqa: E402 - Follows a module-level setup call, as upstream.
     AlphaCompositor,
-    MeshRenderer,
-    MeshRasterizer,
-    RasterizationSettings,
     HardPhongShader,
-    TexturesVertex,
+    MeshRasterizer,
+    MeshRenderer,
+    PerspectiveCameras,
     PointLights,
+    PointsRasterizationSettings,
+    PointsRasterizer,
+    PointsRenderer,
+    RasterizationSettings,
+    TexturesVertex,
 )
-from pytorch3d.utils import ico_sphere
-import torchvision.transforms.functional as TF
+from pytorch3d.structures import (  # noqa: E402 - Follows a module-level setup call, as upstream.
+    Meshes,
+    Pointclouds,
+    join_meshes_as_batch,
+)
+from pytorch3d.utils import ico_sphere  # noqa: E402 - Follows a module-level setup call, as upstream.
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -62,15 +60,24 @@ logging.basicConfig(level=logging.INFO)
 # OpenCV coordinate system: X=right, Y=down, Z=forward
 # Blender world coordinate system (Z-up): X=right, Y=forward, Z=up
 # Transform: Blender_X = OpenCV_X, Blender_Y = OpenCV_Z, Blender_Z = -OpenCV_Y
-COORD_TRANSFORM_CV2BLENDER = np.array([
-    [1,  0,  0],  # Blender X = OpenCV X (right)
-    [0,  0,  1],  # Blender Y = OpenCV Z (forward)
-    [0, -1,  0],  # Blender Z = -OpenCV Y (up; OpenCV Y points down)
-], dtype=np.float32)
+COORD_TRANSFORM_CV2BLENDER = np.array(
+    [
+        [1, 0, 0],  # Blender X = OpenCV X (right)
+        [0, 0, 1],  # Blender Y = OpenCV Z (forward)
+        [0, -1, 0],  # Blender Z = -OpenCV Y (up; OpenCV Y points down)
+    ],
+    dtype=np.float32,
+)
 
 
-def make_ellipsoid_mesh(mean: torch.Tensor, cov: torch.Tensor, scale_factor: float = 2.0, subdivisions: int = 3,
-                        color_rgb255: Optional[torch.Tensor] = None, device: str = 'cuda') -> Meshes:
+def make_ellipsoid_mesh(
+    mean: torch.Tensor,
+    cov: torch.Tensor,
+    scale_factor: float = 2.0,
+    subdivisions: int = 3,
+    color_rgb255: torch.Tensor | None = None,
+    device: str = "cuda",
+) -> Meshes:
     """Create an ellipsoid mesh from a 3D Gaussian (mean and covariance).
 
     Uses eigendecomposition of the covariance matrix to determine ellipsoid shape,
@@ -92,14 +99,8 @@ def make_ellipsoid_mesh(mean: torch.Tensor, cov: torch.Tensor, scale_factor: flo
     verts = sphere.verts_list()[0]  # (V,3)
     faces = sphere.faces_list()[0]  # (F,3)
 
-    if isinstance(mean, np.ndarray):
-        mean_t = torch.from_numpy(mean).float().to(device)
-    else:
-        mean_t = mean.to(device).float()
-    if isinstance(cov, np.ndarray):
-        cov_t = torch.from_numpy(cov).float().to(device)
-    else:
-        cov_t = cov.to(device).float()
+    mean_t = torch.from_numpy(mean).float().to(device) if isinstance(mean, np.ndarray) else mean.to(device).float()
+    cov_t = torch.from_numpy(cov).float().to(device) if isinstance(cov, np.ndarray) else cov.to(device).float()
 
     # Eigendecomposition of covariance: cov = U @ diag(evals) @ U^T
     evals, evecs = torch.linalg.eigh(cov_t)
@@ -117,7 +118,8 @@ def make_ellipsoid_mesh(mean: torch.Tensor, cov: torch.Tensor, scale_factor: flo
 
     return Meshes(verts=[verts_world], faces=[faces], textures=textures)
 
-def combine_meshes_for_scene(mesh_list: List[Meshes]) -> Optional[Meshes]:
+
+def combine_meshes_for_scene(mesh_list: list[Meshes]) -> Meshes | None:
     """Combine multiple meshes into a single batch for rendering.
 
     Merges vertices, faces, and colors from all meshes with proper face indexing.
@@ -153,14 +155,15 @@ def combine_meshes_for_scene(mesh_list: List[Meshes]) -> Optional[Meshes]:
     textures = TexturesVertex(verts_features=colors_cat.unsqueeze(0))
     return Meshes(verts=[verts_cat], faces=[faces_cat], textures=textures).to(device)
 
+
 def render_meshes_pytorch3d_batch(
-    meshes_list: List[Optional[Meshes]],
+    meshes_list: list[Meshes | None],
     Ks: torch.Tensor,
     Ts: torch.Tensor,
-    image_size: Tuple[int, int],
-    background_color: Tuple[float, float, float] = (0.0, 0.0, 0.0),
-    use_fp16: bool = False
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    image_size: tuple[int, int],
+    background_color: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    use_fp16: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Render multiple meshes in batch using PyTorch3D.
 
     Args:
@@ -198,19 +201,13 @@ def render_meshes_pytorch3d_batch(
     # Half`` inside ``rasterize_meshes``.
     compute_dtype = torch.float32
 
-    cameras = _build_cam_from_extrinsics(
-        valid_Ks.to(compute_dtype), valid_Ts.to(compute_dtype), image_size
-    )
+    cameras = _build_cam_from_extrinsics(valid_Ks.to(compute_dtype), valid_Ts.to(compute_dtype), image_size)
 
     merged_meshes = join_meshes_as_batch(valid_meshes)
 
     # Rasterization settings
     raster_settings = RasterizationSettings(
-        image_size=(H, W),
-        blur_radius=0.0,
-        faces_per_pixel=1,
-        bin_size=None,
-        max_faces_per_bin=None
+        image_size=(H, W), blur_radius=0.0, faces_per_pixel=1, bin_size=None, max_faces_per_bin=None
     )
 
     lights = PointLights(location=[[0.0, 0.0, 0.0]], device=device)
@@ -232,10 +229,7 @@ def render_meshes_pytorch3d_batch(
         depth_valid[~mask_valid] = 0.0
 
     # Fill background color for non-rendered pixels
-    bg_color_uint8 = torch.tensor(
-        [int(c * 255) for c in background_color],
-        dtype=torch.uint8, device=device
-    )
+    bg_color_uint8 = torch.tensor([int(c * 255) for c in background_color], dtype=torch.uint8, device=device)
     rgb_valid[~mask_valid] = bg_color_uint8
 
     # Fill output batch
@@ -246,16 +240,17 @@ def render_meshes_pytorch3d_batch(
 
     return rgb_batch, depth_batch, mask_batch
 
+
 def render_point_cloud_pytorch3d_batch(
     points_3d: torch.Tensor,
     colors: torch.Tensor,
     Ks: torch.Tensor,
     Ts: torch.Tensor,
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     point_size: float = 0.01,
-    background_color: Tuple[float, float, float] = (0.5, 0.5, 0.5),
-    use_fp16: bool = False
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    background_color: tuple[float, float, float] = (0.5, 0.5, 0.5),
+    use_fp16: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Render point cloud in batch using PyTorch3D.
 
     Args:
@@ -280,7 +275,7 @@ def render_point_cloud_pytorch3d_batch(
         return (
             torch.full((B, H, W, 3), int(background_color[0] * 255), dtype=torch.uint8, device=device),
             torch.zeros((B, H, W), dtype=torch.float32, device=device),
-            torch.zeros((B, H, W), dtype=torch.bool, device=device)
+            torch.zeros((B, H, W), dtype=torch.bool, device=device),
         )
 
     # Validate point cloud data - filter out NaN/Inf values
@@ -295,7 +290,7 @@ def render_point_cloud_pytorch3d_batch(
             return (
                 torch.full((B, H, W, 3), int(background_color[0] * 255), dtype=torch.uint8, device=device),
                 torch.zeros((B, H, W), dtype=torch.float32, device=device),
-                torch.zeros((B, H, W), dtype=torch.bool, device=device)
+                torch.zeros((B, H, W), dtype=torch.bool, device=device),
             )
 
     # Keep geometry, camera parameters, and point features on the dtype
@@ -304,17 +299,14 @@ def render_point_cloud_pytorch3d_batch(
     # on peak end-to-end memory.
     compute_dtype = torch.float32
 
-    cameras = _build_cam_from_extrinsics(
-        Ks.to(compute_dtype), Ts.to(compute_dtype), image_size
-    )
+    cameras = _build_cam_from_extrinsics(Ks.to(compute_dtype), Ts.to(compute_dtype), image_size)
 
     colors_normalized = colors.to(compute_dtype) / 255.0
     points_3d_compute = points_3d.to(compute_dtype)
 
     # Create point cloud repeated for each frame
     point_cloud = Pointclouds(
-        points=[points_3d_compute for _ in range(B)],
-        features=[colors_normalized for _ in range(B)]
+        points=[points_3d_compute for _ in range(B)], features=[colors_normalized for _ in range(B)]
     )
 
     # Use bin_size=None to let PyTorch3D auto-select, which is more robust
@@ -338,13 +330,14 @@ def render_point_cloud_pytorch3d_batch(
 
         # Extract depth and mask from rasterizer
         fragments = rasterizer(point_cloud)
-        masks = (fragments.idx[..., 0] != -1)  # (B, H, W)
+        masks = fragments.idx[..., 0] != -1  # (B, H, W)
         depth_maps = fragments.zbuf[..., 0].float().clone()  # (B, H, W)
         depth_maps[~masks] = 0.0
 
     return rendered_rgb, depth_maps, masks
 
-def _build_cam_from_extrinsics(Ks: torch.Tensor, Ts: torch.Tensor, image_size: Tuple[int, int]):
+
+def _build_cam_from_extrinsics(Ks: torch.Tensor, Ts: torch.Tensor, image_size: tuple[int, int]):
     """Build PyTorch3D camera objects from intrinsics and extrinsics.
 
     Args:
@@ -398,9 +391,10 @@ def _build_cam_from_extrinsics(Ks: torch.Tensor, Ts: torch.Tensor, image_size: T
         R=R_cameras,
         T=T_cameras,
         in_ndc=False,
-        image_size=[(H, W)] * B
+        image_size=[(H, W)] * B,
     )
     return cameras
+
 
 def composite_by_depth_batch(
     bg_rgb: torch.Tensor,
@@ -408,8 +402,7 @@ def composite_by_depth_batch(
     fg_rgb: torch.Tensor,
     fg_depth: torch.Tensor,
     fg_mask: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-
+) -> tuple[torch.Tensor, torch.Tensor]:
     take_fg = fg_mask & ((bg_depth <= 0) | ((fg_depth > 0) & (fg_depth < bg_depth - 1e-6)))
     out_rgb = bg_rgb.clone()
     out_rgb[take_fg] = fg_rgb[take_fg]
@@ -419,20 +412,20 @@ def composite_by_depth_batch(
 
 
 def merge_bg_and_fg_sequences(
-    bg_rgb_frames: List[torch.Tensor],
-    bg_depth_frames: List[torch.Tensor],
-    bg_masks: List[torch.Tensor],
-    fg_rgb_frames: List[torch.Tensor],
-    fg_depth_frames: List[torch.Tensor],
-    fg_masks: List[torch.Tensor],
-) -> Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:
+    bg_rgb_frames: list[torch.Tensor],
+    bg_depth_frames: list[torch.Tensor],
+    bg_masks: list[torch.Tensor],
+    fg_rgb_frames: list[torch.Tensor],
+    fg_depth_frames: list[torch.Tensor],
+    fg_masks: list[torch.Tensor],
+) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
     assert len(bg_rgb_frames) == len(fg_rgb_frames), "Background and foreground frame counts must match"
 
     rgb_frames = []
     depth_frames = []
 
-    for bg_rgb, bg_depth, bg_mask, fg_rgb, fg_depth, fg_mask in zip(
-        bg_rgb_frames, bg_depth_frames, bg_masks, fg_rgb_frames, fg_depth_frames, fg_masks
+    for bg_rgb, bg_depth, _bg_mask, fg_rgb, fg_depth, fg_mask in zip(
+        bg_rgb_frames, bg_depth_frames, bg_masks, fg_rgb_frames, fg_depth_frames, fg_masks, strict=False
     ):
         rgb_out, depth_out = composite_by_depth(bg_rgb, bg_depth, fg_rgb, fg_depth, fg_mask)
         rgb_frames.append(rgb_out)
@@ -447,11 +440,10 @@ def composite_by_depth(
     fg_rgb: torch.Tensor,
     fg_depth: torch.Tensor,
     fg_mask: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-
+) -> tuple[torch.Tensor, torch.Tensor]:
     assert bg_rgb.shape[:2] == bg_depth.shape and fg_rgb.shape[:2] == fg_depth.shape
     H, W, _ = bg_rgb.shape
-    device = bg_rgb.device
+    _device = bg_rgb.device
     take_fg = fg_mask & ((bg_depth <= 0) | (fg_depth > 0) & (fg_depth < bg_depth - 1e-6))
     out_rgb = bg_rgb.clone()
     out_rgb[take_fg] = fg_rgb[take_fg]
@@ -459,11 +451,8 @@ def composite_by_depth(
     out_depth[take_fg] = fg_depth[take_fg]
     return out_rgb, out_depth
 
-def save_video_from_frames(
-    frames: List[torch.Tensor],
-    output_path: Path,
-    fps: int = 10
-):
+
+def save_video_from_frames(frames: list[torch.Tensor], output_path: Path, fps: int = 10):
     """Save a list of image frames as an MP4 video.
 
     Args:
@@ -499,11 +488,10 @@ def save_video_from_frames(
         macro_block_size=1,
     )
 
+
 def visualize_depth_as_grayscale(
-    depth_frames: List[torch.Tensor],
-    global_min_depth: Optional[float] = None,
-    global_max_depth: Optional[float] = None
-) -> List[torch.Tensor]:
+    depth_frames: list[torch.Tensor], global_min_depth: float | None = None, global_max_depth: float | None = None
+) -> list[torch.Tensor]:
     grayscale_frames = []
 
     # Determine depth range if not provided. Sample if dataset is large.
@@ -553,9 +541,8 @@ def visualize_depth_as_grayscale(
 
     return grayscale_frames
 
-def compute_global_depth_range(
-    depth_frames_list: List[List[torch.Tensor]]
-) -> Tuple[float, float]:
+
+def compute_global_depth_range(depth_frames_list: list[list[torch.Tensor]]) -> tuple[float, float]:
     all_valid_depths = []
 
     for depth_frames in depth_frames_list:
@@ -585,15 +572,16 @@ def compute_global_depth_range(
 
     return min_depth, max_depth
 
+
 def project_3d_gaussians_to_2d(
-    gaussian_params_per_frame: List[Dict[int, Tuple[torch.Tensor, torch.Tensor]]],
-    obj_id_to_color_idx: Dict[int, int],
-    intrinsics: List[np.ndarray],
-    extrinsics: List[np.ndarray],
-    image_size: Tuple[int, int],
+    gaussian_params_per_frame: list[dict[int, tuple[torch.Tensor, torch.Tensor]]],
+    obj_id_to_color_idx: dict[int, int],
+    intrinsics: list[np.ndarray],
+    extrinsics: list[np.ndarray],
+    image_size: tuple[int, int],
     threshold: float = 0.05,
-    device: str = 'cuda'
-) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
+    device: str = "cuda",
+) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
     """Project 3D Gaussians to 2D image plane for each frame.
 
     Renders 3D Gaussian density maps to 2D using perspective projection,
@@ -635,25 +623,14 @@ def project_3d_gaussians_to_2d(
         translation_vector = extrinsic_matrix[:3, 3:4]
 
         # Initialize output buffers
-        rgb_frame = torch.zeros(
-            (image_height, image_width, 3),
-            dtype=torch.float32,
-            device=device
-        )
-        alpha_frame = torch.zeros(
-            (image_height, image_width),
-            dtype=torch.float32,
-            device=device
-        )
+        rgb_frame = torch.zeros((image_height, image_width, 3), dtype=torch.float32, device=device)
+        alpha_frame = torch.zeros((image_height, image_width), dtype=torch.float32, device=device)
 
         gaussian_list = []
 
         # Project each Gaussian to 2D
         for obj_id, (mean, covariance) in gaussian_params.items():
-            if not isinstance(mean, torch.Tensor):
-                mean = torch.from_numpy(mean).float().to(device)
-            else:
-                mean = mean.to(device)
+            mean = torch.from_numpy(mean).float().to(device) if not isinstance(mean, torch.Tensor) else mean.to(device)
 
             if not isinstance(covariance, torch.Tensor):
                 covariance = torch.from_numpy(covariance).float().to(device)
@@ -662,21 +639,15 @@ def project_3d_gaussians_to_2d(
 
             # Project Gaussian to 2D image plane
             density_map, depth_z = project_gaussian_to_2d_gpu(
-                mean, covariance, intrinsic_matrix, rotation_matrix,
-                translation_vector, image_size, device
+                mean, covariance, intrinsic_matrix, rotation_matrix, translation_vector, image_size, device
             )
 
             # Only keep Gaussians in front of the camera
             if depth_z > 0:
-                color_rgb = get_object_color(
-                    obj_id, obj_id_to_color_idx, device, return_float=True
-                )
+                color_rgb = get_object_color(obj_id, obj_id_to_color_idx, device, return_float=True)
 
                 max_density = density_map.max()
-                if max_density > 0:
-                    normalized_density = density_map / (max_density + 1e-8)
-                else:
-                    normalized_density = density_map
+                normalized_density = density_map / (max_density + 1e-08) if max_density > 0 else density_map
 
                 gaussian_list.append((normalized_density, color_rgb, depth_z, obj_id))
 
@@ -684,19 +655,16 @@ def project_3d_gaussians_to_2d(
         gaussian_list.sort(key=lambda x: x[2], reverse=True)
 
         # Composite Gaussians
-        for normalized_density, color_rgb, depth_z, obj_id in gaussian_list:
+        for normalized_density, color_rgb, depth_z, obj_id in gaussian_list:  # noqa: B007 - The loop variable is read outside the loop.
             alpha_new = torch.where(
                 normalized_density > threshold,
                 (normalized_density - threshold) / (1.0 - threshold + 1e-8),
-                torch.zeros_like(normalized_density)
+                torch.zeros_like(normalized_density),
             ).clamp(0.0, 1.0)
 
             # RGB blending: C_out = C_fg * alpha_fg + C_bg * (1 - alpha_fg)
             alpha_expanded = alpha_new.unsqueeze(-1)
-            rgb_frame = (
-                color_rgb.view(1, 1, 3) * alpha_expanded +
-                rgb_frame * (1 - alpha_expanded)
-            )
+            rgb_frame = color_rgb.view(1, 1, 3) * alpha_expanded + rgb_frame * (1 - alpha_expanded)
 
             # Alpha blending: alpha_out = alpha_fg + alpha_bg * (1 - alpha_fg)
             alpha_frame = alpha_new + alpha_frame * (1 - alpha_new)
@@ -709,11 +677,12 @@ def project_3d_gaussians_to_2d(
 
     return rgb_frames, alpha_frames
 
+
 def blend_gaussian_projection_with_bg(
-    gaussian_rgb_frames: List[torch.Tensor],
-    gaussian_alpha_frames: List[torch.Tensor],
-    background_frames: List[torch.Tensor]
-) -> List[torch.Tensor]:
+    gaussian_rgb_frames: list[torch.Tensor],
+    gaussian_alpha_frames: list[torch.Tensor],
+    background_frames: list[torch.Tensor],
+) -> list[torch.Tensor]:
     """Blend Gaussian RGB projections with background using alpha compositing.
 
     Performs over operation: C_out = C_fg * alpha_fg + C_bg * (1 - alpha_fg)
@@ -726,12 +695,13 @@ def blend_gaussian_projection_with_bg(
     Returns:
         List of blended RGB frames
     """
-    assert len(gaussian_rgb_frames) == len(gaussian_alpha_frames) == len(background_frames), \
+    assert len(gaussian_rgb_frames) == len(gaussian_alpha_frames) == len(background_frames), (
         "All input lists must have the same length"
+    )
 
     merged_frames = []
 
-    for gaussian_rgb, alpha, bg_rgb in zip(gaussian_rgb_frames, gaussian_alpha_frames, background_frames):
+    for gaussian_rgb, alpha, bg_rgb in zip(gaussian_rgb_frames, gaussian_alpha_frames, background_frames, strict=False):
         device = gaussian_rgb.device
         bg_rgb = bg_rgb.to(device)
 
@@ -748,18 +718,18 @@ def blend_gaussian_projection_with_bg(
 
     return merged_frames
 
-def merge_bg_and_fg_mask(
-    background_depth_frames: List[torch.Tensor],
-    foreground_depth_frames: List[torch.Tensor],
-    background_masks: List[torch.Tensor],
-    foreground_masks: List[torch.Tensor],
-    device: str = 'cuda'
-) -> List[torch.Tensor]:
 
+def merge_bg_and_fg_mask(
+    background_depth_frames: list[torch.Tensor],
+    foreground_depth_frames: list[torch.Tensor],
+    background_masks: list[torch.Tensor],
+    foreground_masks: list[torch.Tensor],
+    device: str = "cuda",
+) -> list[torch.Tensor]:
     mask_frames = []
 
     for bg_depth, fg_depth, bg_mask, fg_mask in zip(
-        background_depth_frames, foreground_depth_frames, background_masks, foreground_masks
+        background_depth_frames, foreground_depth_frames, background_masks, foreground_masks, strict=False
     ):
         # Foreground visible condition: has foreground mask AND (background has no depth OR foreground is closer)
         take_fg = fg_mask & ((bg_depth <= 0) | ((fg_depth > 0) & (fg_depth < bg_depth - 1e-6)))
@@ -777,15 +747,16 @@ def merge_bg_and_fg_mask(
 
     return mask_frames
 
+
 def project_gaussian_to_2d_gpu(
     mean: torch.Tensor,
     cov: torch.Tensor,
     K: torch.Tensor,
     R: torch.Tensor,
     t: torch.Tensor,
-    image_size: Tuple[int, int],
-    device='cuda'
-) -> Tuple[torch.Tensor, float]:
+    image_size: tuple[int, int],
+    device="cuda",
+) -> tuple[torch.Tensor, float]:
     if isinstance(mean, np.ndarray):
         mean = torch.from_numpy(mean).float().to(device)
     if isinstance(cov, np.ndarray):
@@ -800,18 +771,14 @@ def project_gaussian_to_2d_gpu(
     means_3d = mean.unsqueeze(0)
     covs_3d = cov.unsqueeze(0)
 
-    if t.dim() == 2:
-        t_vec = t.squeeze()
-    else:
-        t_vec = t
+    t_vec = t.squeeze() if t.dim() == 2 else t
     mean_3d_cam = R @ mean + t_vec
 
-    density = compute_probability_density_map_gpu(
-        means_3d, covs_3d, K, R, t, image_size, device
-    )
+    density = compute_probability_density_map_gpu(means_3d, covs_3d, K, R, t, image_size, device)
     density = torch.nan_to_num(density, nan=0.0, posinf=0.0, neginf=0.0)
 
     return density, mean_3d_cam[2].item()
+
 
 def compute_probability_density_map_gpu(
     means_3d: torch.Tensor,
@@ -819,14 +786,14 @@ def compute_probability_density_map_gpu(
     K: torch.Tensor,
     R: torch.Tensor,
     t: torch.Tensor,
-    image_size: Tuple[int, int],
-    device='cuda'
+    image_size: tuple[int, int],
+    device="cuda",
 ) -> torch.Tensor:
     width, height = image_size
 
     u_coords = torch.arange(width, device=device, dtype=torch.float32)
     v_coords = torch.arange(height, device=device, dtype=torch.float32)
-    u_grid, v_grid = torch.meshgrid(u_coords, v_coords, indexing='xy')
+    u_grid, v_grid = torch.meshgrid(u_coords, v_coords, indexing="xy")
     pixel_coords = torch.stack([u_grid, v_grid], dim=-1)  # (H, W, 2)
 
     density_map = torch.zeros((height, width), device=device, dtype=torch.float32)
@@ -840,10 +807,7 @@ def compute_probability_density_map_gpu(
         mean_3d_world = means_3d[i]
         cov_3d_world = covs_3d[i]
 
-        if t.dim() == 2:
-            t_vec = t.squeeze()
-        else:
-            t_vec = t
+        t_vec = t.squeeze() if t.dim() == 2 else t
         mean_3d_cam = R @ mean_3d_world + t_vec
         cov_3d_cam = R @ cov_3d_world @ R.T
 
@@ -854,16 +818,12 @@ def compute_probability_density_map_gpu(
             continue
 
         # Jacobian of the projection
-        J = torch.tensor([
-            [fx / z, 0, -fx * x / (z * z)],
-            [0, fy / z, -fy * y / (z * z)]
-        ], device=device, dtype=torch.float32)
+        J = torch.tensor(
+            [[fx / z, 0, -fx * x / (z * z)], [0, fy / z, -fy * y / (z * z)]], device=device, dtype=torch.float32
+        )
 
         # 2D projected mean
-        mean_2d = torch.tensor([
-            fx * x / z + cx,
-            fy * y / z + cy
-        ], device=device, dtype=torch.float32)
+        mean_2d = torch.tensor([fx * x / z + cx, fy * y / z + cy], device=device, dtype=torch.float32)
 
         cov_2d = J @ cov_3d_cam @ J.T
         cov_2d += torch.eye(2, device=device) * 1e-6
@@ -897,8 +857,10 @@ def compute_probability_density_map_gpu(
 
     return density_map
 
-def get_object_color(obj_id: int, obj_id_to_color_idx: Dict[int, int], device: str = 'cuda',
-                     return_float: bool = False) -> torch.Tensor:
+
+def get_object_color(
+    obj_id: int, obj_id_to_color_idx: dict[int, int], device: str = "cuda", return_float: bool = False
+) -> torch.Tensor:
     """Get distinct color for an object using tab20 colormap.
 
     Args:
@@ -910,7 +872,7 @@ def get_object_color(obj_id: int, obj_id_to_color_idx: Dict[int, int], device: s
     Returns:
         Color tensor
     """
-    cmap = matplotlib.colormaps['tab20']
+    cmap = matplotlib.colormaps["tab20"]
     color_idx = obj_id_to_color_idx.get(obj_id, 0)
     color_rgb = cmap(color_idx % 20)[:3]  # 0~1
 
@@ -920,14 +882,15 @@ def get_object_color(obj_id: int, obj_id_to_color_idx: Dict[int, int], device: s
         color_255 = torch.tensor([c * 255 for c in color_rgb], dtype=torch.uint8, device=device)
         return color_255
 
+
 def build_background(
     png_path: str,
     npz_path: str,
     mask_dir: str,
-    device: str = 'cuda',
-    target_height: int = None,
-    target_width: int = None
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int, int]:
+    device: str = "cuda",
+    target_height: int | None = None,
+    target_width: int | None = None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int, int]:
     """Load background RGB, depth, masks and return 3D point cloud.
 
     Args:
@@ -958,8 +921,8 @@ def build_background(
 
     # Load depth and intrinsics
     data = np.load(npz_path)
-    depth_orig = torch.from_numpy(data['depth'].astype(np.float32)).to(device)
-    intrinsic = torch.from_numpy(data['intrinsic'].astype(np.float32)).to(device)
+    depth_orig = torch.from_numpy(data["depth"].astype(np.float32)).to(device)
+    intrinsic = torch.from_numpy(data["intrinsic"].astype(np.float32)).to(device)
 
     # Resize depth map if needed
     if target_height is not None and target_width is not None:
@@ -980,10 +943,10 @@ def build_background(
     # Assume camera at origin with identity extrinsic by default
     extrinsic = torch.eye(4, dtype=torch.float32, device=device)
     logger.info(f"Loaded NPZ data: depth={depth.shape}, intrinsic={intrinsic.shape}")
-    logger.info(f"Intrinsic converted to pixel coordinates (fx={intrinsic[0,0]:.2f}, fy={intrinsic[1,1]:.2f})")
+    logger.info(f"Intrinsic converted to pixel coordinates (fx={intrinsic[0, 0]:.2f}, fy={intrinsic[1, 1]:.2f})")
 
     # Load and combine all masks
-    mask_files = sorted(Path(mask_dir).glob('*.png'))
+    mask_files = sorted(Path(mask_dir).glob("*.png"))
     combined_mask = torch.zeros((H, W), dtype=torch.bool, device=device)
 
     for mask_file in mask_files:
@@ -1006,9 +969,7 @@ def build_background(
     # camera dimension even for a single image.  Keep an explicit batch axis
     # here so both depth and intrinsics follow its documented ``(*, ...)``
     # contract instead of being interpreted as three separate cameras.
-    pts3d_cam = depth_to_3d_v2(
-        depth.unsqueeze(0), intrinsic.unsqueeze(0), normalize_points=False
-    ).reshape(-1, 3)
+    pts3d_cam = depth_to_3d_v2(depth.unsqueeze(0), intrinsic.unsqueeze(0), normalize_points=False).reshape(-1, 3)
     c2w = torch.linalg.inv(extrinsic)
     pts3d_hom = torch.cat([pts3d_cam, torch.ones(len(pts3d_cam), 1, device=pts3d_cam.device)], dim=1)
     pts3d_world_opencv = (c2w @ pts3d_hom.T).T[:, :3]
@@ -1016,7 +977,7 @@ def build_background(
     # Convert point cloud from OpenCV coordinates to Blender coordinates
     coord_transform = torch.from_numpy(COORD_TRANSFORM_CV2BLENDER).to(device)
     pts3d_world = (coord_transform @ pts3d_world_opencv.T).T
-    logger.info(f"Point cloud coordinates converted from OpenCV to Blender convention")
+    logger.info("Point cloud coordinates converted from OpenCV to Blender convention")
 
     # Extract background point cloud (inverse of combined mask)
     bg_mask = ~combined_mask
@@ -1040,52 +1001,50 @@ def build_background(
     return bg_points, bg_colors, intrinsic, extrinsic, H, W
 
 
-def load_camera_trajectory(trajectory_npz: str, device: str = 'cuda') -> torch.Tensor:
+def load_camera_trajectory(trajectory_npz: str, device: str = "cuda") -> torch.Tensor:
     data = np.load(trajectory_npz)
-    c2w_blender = torch.from_numpy(data['extrinsics'].astype(np.float32)).to(device)
+    c2w_blender = torch.from_numpy(data["extrinsics"].astype(np.float32)).to(device)
 
     # Convert to OpenCV world-to-camera (w2c) convention
-    c2w_blender[:,:3,1:3] *= -1
+    c2w_blender[:, :3, 1:3] *= -1
     extrinsics = torch.linalg.inv(c2w_blender)
 
     return extrinsics
 
 
 def load_ellipsoid_parameters(
-    json_path: str,
-    device: str = 'cuda'
-) -> Tuple[List[Dict[int, Tuple[torch.Tensor, torch.Tensor]]], Dict[int, int], Dict[int, Dict[int, torch.Tensor]]]:
-
-    with open(json_path, 'r') as f:
+    json_path: str, device: str = "cuda"
+) -> tuple[list[dict[int, tuple[torch.Tensor, torch.Tensor]]], dict[int, int], dict[int, dict[int, torch.Tensor]]]:
+    with open(json_path) as f:
         data = json.load(f)
 
-    num_frames = data['metadata']['num_frames']
-    num_objects = data['metadata']['num_objects']
+    _num_frames = data["metadata"]["num_frames"]
+    _num_objects = data["metadata"]["num_objects"]
 
     obj_id_to_color_idx = {}
-    for key, value in data['metadata']['obj_id_to_color_idx'].items():
+    for key, value in data["metadata"]["obj_id_to_color_idx"].items():
         obj_id_to_color_idx[key] = value
 
     gaussian_params_per_frame = []
     center_points_per_frame = {}
 
-    for frame_data in data['frames']:
-        frame_idx = frame_data['frame_index']
+    for frame_data in data["frames"]:
+        frame_idx = frame_data["frame_index"]
         frame_params = {}
 
         if frame_idx not in center_points_per_frame:
             center_points_per_frame[frame_idx] = {}
 
-        for obj_data in frame_data['objects']:
-            obj_id = obj_data['object_id']
+        for obj_data in frame_data["objects"]:
+            obj_id = obj_data["object_id"]
 
-            mean = torch.tensor(obj_data['gaussian_3d']['mean'], dtype=torch.float32, device=device)
-            cov = torch.tensor(obj_data['gaussian_3d']['covariance'], dtype=torch.float32, device=device)
+            mean = torch.tensor(obj_data["gaussian_3d"]["mean"], dtype=torch.float32, device=device)
+            cov = torch.tensor(obj_data["gaussian_3d"]["covariance"], dtype=torch.float32, device=device)
             frame_params[obj_id] = (mean, cov)
 
-            if obj_data['gaussian_3d']['mean'] is not None:
+            if obj_data["gaussian_3d"]["mean"] is not None:
                 center_points_per_frame[frame_idx][obj_id] = torch.tensor(
-                    obj_data['gaussian_3d']['mean'], dtype=torch.float32, device=device
+                    obj_data["gaussian_3d"]["mean"], dtype=torch.float32, device=device
                 )
 
         gaussian_params_per_frame.append(frame_params)
@@ -1096,17 +1055,17 @@ def load_ellipsoid_parameters(
 def render_video_with_bg_and_fg(
     background_points: torch.Tensor,
     background_colors: torch.Tensor,
-    foreground_meshes_per_frame: List[Optional[Meshes]],
+    foreground_meshes_per_frame: list[Meshes | None],
     intrinsics: torch.Tensor,
     extrinsics: torch.Tensor,
-    image_size: Tuple[int, int],
-    mode: str = 'full',
+    image_size: tuple[int, int],
+    mode: str = "full",
     point_size: float = 0.01,
-    device: str = 'cuda',
+    device: str = "cuda",
     batch_size: int = 1,
     use_fp16: bool = False,
-    pin_memory: bool = False
-) -> Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:
+    pin_memory: bool = False,
+) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
     num_frames = len(foreground_meshes_per_frame)
     rgb_frames = [None] * num_frames
     depth_frames = [None] * num_frames
@@ -1115,10 +1074,9 @@ def render_video_with_bg_and_fg(
 
     H, W = image_size
 
-    if background_points is not None:
-        if pin_memory and not background_points.is_pinned():
-            background_points = background_points.pin_memory()
-            background_colors = background_colors.pin_memory()
+    if background_points is not None and pin_memory and not background_points.is_pinned():
+        background_points = background_points.pin_memory()
+        background_colors = background_colors.pin_memory()
 
     num_batches = (num_frames + batch_size - 1) // batch_size
 
@@ -1130,11 +1088,11 @@ def render_video_with_bg_and_fg(
         Ks_batch = intrinsics[start_idx:end_idx]
         Ts_batch = extrinsics[start_idx:end_idx]
 
-        # 渲染背景
+        # Render the background.
         rgb_bg_batch = None
         depth_bg_batch = None
         mask_bg_batch = None
-        if mode in ('full', 'background') and background_points is not None:
+        if mode in ("full", "background") and background_points is not None:
             rgb_bg_batch, depth_bg_batch, mask_bg_batch = render_point_cloud_pytorch3d_batch(
                 background_points, background_colors, Ks_batch, Ts_batch, image_size, point_size, use_fp16=use_fp16
             )
@@ -1144,9 +1102,9 @@ def render_video_with_bg_and_fg(
             depth_bg_batch = torch.zeros((current_batch_size, H, W), dtype=torch.float32, device=device)
             mask_bg_batch = torch.zeros((current_batch_size, H, W), dtype=torch.bool, device=device)
 
-        # 渲染前景
+        # Render the foreground.
         rgb_fg_batch = None
-        if mode in ('full', 'foreground'):
+        if mode in ("full", "foreground"):
             meshes_batch = foreground_meshes_per_frame[start_idx:end_idx]
             rgb_fg_batch, depth_fg_batch, mask_fg_batch = render_meshes_pytorch3d_batch(
                 meshes_batch, Ks_batch, Ts_batch, image_size, use_fp16=use_fp16
@@ -1156,11 +1114,11 @@ def render_video_with_bg_and_fg(
             depth_fg_batch = torch.zeros((current_batch_size, H, W), dtype=torch.float32, device=device)
             mask_fg_batch = torch.zeros((current_batch_size, H, W), dtype=torch.bool, device=device)
 
-        # 合成
-        if mode == 'foreground':
+        # Composite.
+        if mode == "foreground":
             rgb_out_batch = rgb_fg_batch
             depth_out_batch = depth_fg_batch
-        elif mode == 'background':
+        elif mode == "background":
             rgb_out_batch = rgb_bg_batch
             depth_out_batch = depth_bg_batch
         else:
@@ -1178,37 +1136,34 @@ def render_video_with_bg_and_fg(
         del rgb_bg_batch, depth_bg_batch, mask_bg_batch
         del rgb_fg_batch, depth_fg_batch, mask_fg_batch
         del rgb_out_batch, depth_out_batch
-        if device == 'cuda':
+        if device == "cuda":
             torch.cuda.empty_cache()
 
     return rgb_frames, depth_frames, background_masks, foreground_masks
 
 
-
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Inference mode: Render video from pre-computed parameters"
-    )
-    parser.add_argument('--png_path', type=str, required=False, help='Path to first frame PNG image (optional)')
-    parser.add_argument('--video_path', type=str, required=False, help='Path to input MP4 video (optional)')
-    parser.add_argument('--npz_path', type=str, required=True, help='Path to NPZ file with depth and camera pose')
-    parser.add_argument('--mask_dir', type=str, required=False, help='Directory containing mask images')
-    parser.add_argument('--mask_video', type=str, required=False, help='Path to mask video (mp4)')
-    parser.add_argument('--trajectory_npz', type=str, required=True, help='Path to camera trajectory NPZ file')
-    parser.add_argument('--ellipsoid_json', type=str, required=True, help='Path to ellipsoid parameters JSON file')
-    parser.add_argument('--output_dir', type=str, default='outputs/inference', help='Output directory')
-    parser.add_argument('--device', type=str, default='cuda', help='Device to use')
-    parser.add_argument('--point_size', type=float, default=0.005, help='Point size for rendering')
-    parser.add_argument('--fps', type=int, default=10, help='Output video FPS')
-    parser.add_argument('--render_batch_size', type=int, default=27, help='Batch size for rendering')
-    parser.add_argument('--use_fp16', action='store_true', help='Use FP16 for rendering')
-    parser.add_argument('--pin_memory', action='store_true', help='Use pinned memory')
-    parser.add_argument('--ellipsoid_subdiv', type=int, default=3, help='Icosphere subdivisions for ellipsoid mesh')
-    parser.add_argument('--trajectory_radius', type=float, default=0.03, help='Trajectory line radius')
-    parser.add_argument('--gaussian_mask_threshold', type=float, default=0.003, help='Gaussian projection threshold')
-    parser.add_argument('--sample_frames', type=int, default=10, help='Number of frames to sample')
-    parser.add_argument('--target_height', type=int, default=720, help='Target rendering height')
-    parser.add_argument('--target_width', type=int, default=1280, help='Target rendering width')
+    parser = argparse.ArgumentParser(description="Inference mode: Render video from pre-computed parameters")
+    parser.add_argument("--png_path", type=str, required=False, help="Path to first frame PNG image (optional)")
+    parser.add_argument("--video_path", type=str, required=False, help="Path to input MP4 video (optional)")
+    parser.add_argument("--npz_path", type=str, required=True, help="Path to NPZ file with depth and camera pose")
+    parser.add_argument("--mask_dir", type=str, required=False, help="Directory containing mask images")
+    parser.add_argument("--mask_video", type=str, required=False, help="Path to mask video (mp4)")
+    parser.add_argument("--trajectory_npz", type=str, required=True, help="Path to camera trajectory NPZ file")
+    parser.add_argument("--ellipsoid_json", type=str, required=True, help="Path to ellipsoid parameters JSON file")
+    parser.add_argument("--output_dir", type=str, default="outputs/inference", help="Output directory")
+    parser.add_argument("--device", type=str, default="cuda", help="Device to use")
+    parser.add_argument("--point_size", type=float, default=0.005, help="Point size for rendering")
+    parser.add_argument("--fps", type=int, default=10, help="Output video FPS")
+    parser.add_argument("--render_batch_size", type=int, default=27, help="Batch size for rendering")
+    parser.add_argument("--use_fp16", action="store_true", help="Use FP16 for rendering")
+    parser.add_argument("--pin_memory", action="store_true", help="Use pinned memory")
+    parser.add_argument("--ellipsoid_subdiv", type=int, default=3, help="Icosphere subdivisions for ellipsoid mesh")
+    parser.add_argument("--trajectory_radius", type=float, default=0.03, help="Trajectory line radius")
+    parser.add_argument("--gaussian_mask_threshold", type=float, default=0.003, help="Gaussian projection threshold")
+    parser.add_argument("--sample_frames", type=int, default=10, help="Number of frames to sample")
+    parser.add_argument("--target_height", type=int, default=720, help="Target rendering height")
+    parser.add_argument("--target_width", type=int, default=1280, help="Target rendering width")
     return parser.parse_args()
 
 
@@ -1236,9 +1191,12 @@ def main():
     # Step 1: Load background point cloud
     logger.info("Step 1: Loading background point cloud")
     bg_points, bg_colors, first_intrinsics, first_extrinsic, image_height, image_width = build_background(
-        args.png_path, args.npz_path, args.mask_dir, device,
+        args.png_path,
+        args.npz_path,
+        args.mask_dir,
+        device,
         target_height=args.target_height,
-        target_width=args.target_width
+        target_width=args.target_width,
     )
 
     # Step 2: Load camera trajectory
@@ -1262,10 +1220,7 @@ def main():
     ellipsoid_meshes_per_frame = []
 
     for frame_idx in range(num_frames):
-        if frame_idx < len(gaussian_params_per_frame):
-            gaussian_params = gaussian_params_per_frame[frame_idx]
-        else:
-            gaussian_params = {}
+        gaussian_params = gaussian_params_per_frame[frame_idx] if frame_idx < len(gaussian_params_per_frame) else {}
 
         ellipsoid_meshes = []
 
@@ -1275,11 +1230,12 @@ def main():
             ellipsoid_scale_factor = 2.5  # default value
 
             mesh = make_ellipsoid_mesh(
-                mean, cov,
+                mean,
+                cov,
                 scale_factor=ellipsoid_scale_factor,
                 subdivisions=args.ellipsoid_subdiv,
                 color_rgb255=obj_color,
-                device=device
+                device=device,
             )
             ellipsoid_meshes.append(mesh)
 
@@ -1292,15 +1248,18 @@ def main():
     # Step 5: Render background
     logger.info("Step 5: Rendering background")
     bg_rgb_frames, bg_depth_frames, bg_masks, _ = render_video_with_bg_and_fg(
-        bg_points, bg_colors,
+        bg_points,
+        bg_colors,
         ellipsoid_meshes_per_frame,
-        intrinsics, extrinsics, (image_height, image_width),
-        mode='background',
+        intrinsics,
+        extrinsics,
+        (image_height, image_width),
+        mode="background",
         point_size=args.point_size,
         device=device,
         batch_size=args.render_batch_size,
         use_fp16=args.use_fp16,
-        pin_memory=args.pin_memory
+        pin_memory=args.pin_memory,
     )
 
     save_video_from_frames(bg_rgb_frames, output_dir / "background_RGB.mp4", args.fps)
@@ -1309,28 +1268,30 @@ def main():
     logger.info("Rendering ellipsoid foreground")
 
     fg_rgb_frames, fg_depth_frames, _, fg_masks = render_video_with_bg_and_fg(
-        bg_points, bg_colors,
+        bg_points,
+        bg_colors,
         ellipsoid_meshes_per_frame,
-        intrinsics, extrinsics, (image_height, image_width),
-        mode='foreground',
+        intrinsics,
+        extrinsics,
+        (image_height, image_width),
+        mode="foreground",
         point_size=args.point_size,
         device=device,
         batch_size=args.render_batch_size,
         use_fp16=args.use_fp16,
-        pin_memory=args.pin_memory
+        pin_memory=args.pin_memory,
     )
 
     # 7. Background and foreground depth
     logger.info("Computing background and foreground depth")
 
     _, combined_depth_frames, _, _ = merge_bg_and_fg_sequences(
-        bg_rgb_frames, bg_depth_frames, bg_masks,
-        fg_rgb_frames, fg_depth_frames, fg_masks
+        bg_rgb_frames, bg_depth_frames, bg_masks, fg_rgb_frames, fg_depth_frames, fg_masks
     )
 
-    global_min_depth, global_max_depth = compute_global_depth_range([
-        bg_depth_frames, fg_depth_frames, combined_depth_frames
-    ])
+    global_min_depth, global_max_depth = compute_global_depth_range(
+        [bg_depth_frames, fg_depth_frames, combined_depth_frames]
+    )
 
     logger.info(f"Global depth range: min={global_min_depth:.4f}, max={global_max_depth:.4f}")
 
@@ -1341,11 +1302,8 @@ def main():
     save_video_from_frames(fg_depth_grayscale, output_dir / "3D_gaussian_depth.mp4", args.fps)
 
     # 8. Generate merged masks for background and foreground
-    merged_mask_frames = merge_bg_and_fg_mask(
-        bg_depth_frames, fg_depth_frames, bg_masks, fg_masks, device=device
-    )
+    merged_mask_frames = merge_bg_and_fg_mask(bg_depth_frames, fg_depth_frames, bg_masks, fg_masks, device=device)
     save_video_from_frames(merged_mask_frames, output_dir / "merged_mask.mp4", args.fps)
-
 
     # 9. Generate 3D Gaussian RGB projections
     logger.info("Generating 3D Gaussian RGB projections")
@@ -1361,62 +1319,44 @@ def main():
             extrinsics.cpu().numpy(),
             (image_width, image_height),
             threshold=args.gaussian_mask_threshold,
-            device=device
+            device=device,
         )
 
         gaussian_projection_frames = []
-        for rgb, alpha in zip(gaussian_rgb_frames, gaussian_alpha_frames):
+        for rgb, alpha in zip(gaussian_rgb_frames, gaussian_alpha_frames, strict=False):
             alpha_3d = alpha.unsqueeze(-1)  # (H, W, 1)
             rgb_normalized = rgb.float() / 255.0
             masked_gaussian_rgb = (rgb_normalized * alpha_3d * 255).to(torch.uint8)
             gaussian_projection_frames.append(masked_gaussian_rgb)
 
-        save_video_from_frames(
-            gaussian_projection_frames,
-            output_dir / "3D_gaussian_RGB.mp4",
-            args.fps
-        )
+        save_video_from_frames(gaussian_projection_frames, output_dir / "3D_gaussian_RGB.mp4", args.fps)
     else:
         gaussian_rgb_frames = [
-            torch.zeros((image_height, image_width, 3), dtype=torch.uint8, device=device)
-            for _ in range(num_frames)
+            torch.zeros((image_height, image_width, 3), dtype=torch.uint8, device=device) for _ in range(num_frames)
         ]
         gaussian_alpha_frames = [
-            torch.zeros((image_height, image_width), dtype=torch.float32, device=device)
-            for _ in range(num_frames)
+            torch.zeros((image_height, image_width), dtype=torch.float32, device=device) for _ in range(num_frames)
         ]
         gaussian_projection_frames = [
-            torch.zeros((image_height, image_width, 3), dtype=torch.uint8, device=device)
-            for _ in range(num_frames)
+            torch.zeros((image_height, image_width, 3), dtype=torch.uint8, device=device) for _ in range(num_frames)
         ]
-        save_video_from_frames(
-            gaussian_projection_frames,
-            output_dir / "3D_gaussian_RGB.mp4",
-            args.fps
-        )
+        save_video_from_frames(gaussian_projection_frames, output_dir / "3D_gaussian_RGB.mp4", args.fps)
         logger.info("No objects detected; generated empty Gaussian projection video")
 
     # 10. Composite 3D Gaussian RGB with background RGB
     logger.info("Generating background + 3D Gaussian composite video")
 
     gaussian_with_bg_frames = blend_gaussian_projection_with_bg(
-        gaussian_rgb_frames,
-        gaussian_alpha_frames,
-        bg_rgb_frames
+        gaussian_rgb_frames, gaussian_alpha_frames, bg_rgb_frames
     )
 
     gaussian_visibility_masks = [alpha > 0.001 for alpha in gaussian_alpha_frames]
 
     gaussian_with_bg_frames, _, _, _ = merge_bg_and_fg_sequences(
-        bg_rgb_frames, bg_depth_frames, bg_masks,
-        gaussian_with_bg_frames, fg_depth_frames, gaussian_visibility_masks
+        bg_rgb_frames, bg_depth_frames, bg_masks, gaussian_with_bg_frames, fg_depth_frames, gaussian_visibility_masks
     )
 
-    save_video_from_frames(
-        gaussian_with_bg_frames,
-        output_dir / "background_and_3D_gaussian.mp4",
-        args.fps
-    )
+    save_video_from_frames(gaussian_with_bg_frames, output_dir / "background_and_3D_gaussian.mp4", args.fps)
 
     logger.info("=" * 80)
     logger.info("Rendering complete!")

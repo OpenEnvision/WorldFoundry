@@ -5,18 +5,13 @@
 # LICENSE file in the root directory of this source tree.
 
 
-"""Module for base_models -> perception_core -> segment -> sam3 -> model -> multiplex_mask_decoder.py functionality."""
-
-from typing import List, Optional, Type
-
 import torch
-from worldfoundry.core.nn.blocks.layers import LayerNorm2d, SamHeadMLP
 from torch import nn
-from torch.nn import functional as F
+
+from worldfoundry.core.nn.blocks.layers import LayerNorm2d, SamHeadMLP
 
 
 class MultiplexMaskDecoder(nn.Module):
-    """Multiplex mask decoder implementation."""
     def __init__(
         self,
         *,
@@ -24,7 +19,7 @@ class MultiplexMaskDecoder(nn.Module):
         transformer: nn.Module,
         multiplex_count: int,
         num_multimask_outputs: int = 3,
-        activation: Type[nn.Module] = nn.GELU,
+        activation: type[nn.Module] = nn.GELU,
         iou_head_depth: int = 3,
         iou_head_hidden_dim: int = 256,
         use_high_res_features: bool = False,
@@ -62,14 +57,10 @@ class MultiplexMaskDecoder(nn.Module):
         self.num_multimask_outputs = num_multimask_outputs
         self.multimask_outputs_only = multimask_outputs_only
         self.decode_mask_with_shared_tokens = decode_mask_with_shared_tokens
-        self.decode_mask_attribute_with_shared_tokens = (
-            decode_mask_attribute_with_shared_tokens
-        )
+        self.decode_mask_attribute_with_shared_tokens = decode_mask_attribute_with_shared_tokens
 
         if self.decode_mask_with_shared_tokens:
-            assert multimask_outputs_only, (
-                "multimask_outputs_only must be True if decode_mask_with_shared_tokens"
-            )
+            assert multimask_outputs_only, "multimask_outputs_only must be True if decode_mask_with_shared_tokens"
 
         if self.multimask_outputs_only:
             self.num_mask_output_per_object = num_multimask_outputs
@@ -92,29 +83,19 @@ class MultiplexMaskDecoder(nn.Module):
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
 
         self.output_upscaling = nn.Sequential(
-            nn.ConvTranspose2d(
-                transformer_dim, transformer_dim // 4, kernel_size=2, stride=2
-            ),
+            nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
             LayerNorm2d(transformer_dim // 4),
             activation(),
-            nn.ConvTranspose2d(
-                transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2
-            ),
+            nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2),
             activation(),
         )
         self.use_high_res_features = use_high_res_features
         if use_high_res_features:
-            self.conv_s0 = nn.Conv2d(
-                transformer_dim, transformer_dim // 8, kernel_size=1, stride=1
-            )
-            self.conv_s1 = nn.Conv2d(
-                transformer_dim, transformer_dim // 4, kernel_size=1, stride=1
-            )
+            self.conv_s0 = nn.Conv2d(transformer_dim, transformer_dim // 8, kernel_size=1, stride=1)
+            self.conv_s1 = nn.Conv2d(transformer_dim, transformer_dim // 4, kernel_size=1, stride=1)
 
         if self.num_multimask_outputs == 0:
-            self.output_hypernetworks_mlp = SamHeadMLP(
-                transformer_dim, transformer_dim, transformer_dim // 8, 3
-            )
+            self.output_hypernetworks_mlp = SamHeadMLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
         else:
             self.output_hypernetworks_mlps = nn.ModuleList(
                 [
@@ -128,10 +109,7 @@ class MultiplexMaskDecoder(nn.Module):
             iou_head_hidden_dim,
             (
                 1
-                if (
-                    self.decode_mask_attribute_with_shared_tokens
-                    and not self.decode_mask_with_shared_tokens
-                )
+                if (self.decode_mask_attribute_with_shared_tokens and not self.decode_mask_with_shared_tokens)
                 else self.num_mask_output_per_object
             ),
             iou_head_depth,
@@ -154,8 +132,8 @@ class MultiplexMaskDecoder(nn.Module):
         image_embeddings: torch.Tensor,
         image_pe: torch.Tensor,
         multimask_output: bool,
-        high_res_features: Optional[List[torch.Tensor]] = None,
-        extra_per_object_embeddings: Optional[torch.Tensor] = None,
+        high_res_features: list[torch.Tensor] | None = None,
+        extra_per_object_embeddings: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
@@ -172,14 +150,10 @@ class MultiplexMaskDecoder(nn.Module):
         """
 
         if self.num_multimask_outputs <= 0:
-            assert not multimask_output, (
-                f"multimask_output must be False with {self.num_multimask_outputs=}"
-            )
+            assert not multimask_output, f"multimask_output must be False with {self.num_multimask_outputs=}"
 
         if self.multimask_outputs_only:
-            assert multimask_output, (
-                f"multimask_output must be True with {self.multimask_outputs_only=}"
-            )
+            assert multimask_output, f"multimask_output must be True with {self.multimask_outputs_only=}"
 
         out = self.predict_masks(
             image_embeddings=image_embeddings,
@@ -190,9 +164,7 @@ class MultiplexMaskDecoder(nn.Module):
 
         masks = out["masks"]  # [B, M, (self.num_mask_token_per_object), H, W]
         iou_pred = out["iou_pred"]  # [B, M, (self.num_mask_token_per_object)]
-        mask_tokens_out = out[
-            "mask_tokens_out"
-        ]  # [B, M, (self.num_mask_token_per_object), C]
+        mask_tokens_out = out["mask_tokens_out"]  # [B, M, (self.num_mask_token_per_object), C]
 
         # Select the correct mask or masks for output
         if multimask_output:
@@ -206,12 +178,10 @@ class MultiplexMaskDecoder(nn.Module):
             iou_pred = iou_pred[:, :, 0:1]
 
         if multimask_output and self.use_multimask_token_for_obj_ptr:
-            if self.multimask_outputs_only:
+            if self.multimask_outputs_only:  # noqa: SIM108 - Branches carry per-case comments.
                 sam_tokens_out = mask_tokens_out
             else:
-                sam_tokens_out = mask_tokens_out[
-                    :, :, 1:
-                ]  # [B, M, num_multimask_outputs, C] shape
+                sam_tokens_out = mask_tokens_out[:, :, 1:]  # [B, M, num_multimask_outputs, C] shape
         else:
             # Take the mask output token. Here we *always* use the token for single mask output.
             # At test time, even if we track after 1-click (and using multimask_output=True),
@@ -250,10 +220,8 @@ class MultiplexMaskDecoder(nn.Module):
         self,
         image_embeddings: torch.Tensor,
         image_pe: torch.Tensor,
-        high_res_features: Optional[List[torch.Tensor]] = None,
-        extra_per_object_embeddings: Optional[
-            torch.Tensor
-        ] = None,  # num_buckets, multiplex_count, C
+        high_res_features: list[torch.Tensor] | None = None,
+        extra_per_object_embeddings: torch.Tensor | None = None,  # num_buckets, multiplex_count, C
     ) -> dict[str, torch.Tensor]:
         """Predicts masks. See 'forward' for more details."""
         # Concatenate output tokens
@@ -281,9 +249,7 @@ class MultiplexMaskDecoder(nn.Module):
 
         src = image_embeddings
 
-        assert image_pe.size(0) == 1, (
-            "image_pe should have size 1 in batch dim (from `get_dense_pe()`)"
-        )
+        assert image_pe.size(0) == 1, "image_pe should have size 1 in batch dim (from `get_dense_pe()`)"
         pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
         b, c, h, w = src.shape
 
@@ -292,9 +258,7 @@ class MultiplexMaskDecoder(nn.Module):
 
         # Parse transformer outputs based on token sharing configuration
         if self.decode_mask_attribute_with_shared_tokens:
-            assert hs.shape[1] == self.num_mask_tokens, (
-                f"{hs.shape=}, {self.num_mask_tokens=}"
-            )
+            assert hs.shape[1] == self.num_mask_tokens, f"{hs.shape=}, {self.num_mask_tokens=}"
             iou_token_out = mask_tokens_out = hs[:, 0 : self.num_mask_tokens]
             if self.pred_obj_scores:
                 obj_score_token_out = mask_tokens_out
@@ -308,9 +272,7 @@ class MultiplexMaskDecoder(nn.Module):
             iou_token_out = hs[:, s : s + self.multiplex_count, :]
             s += self.multiplex_count
             mask_tokens_out = hs[:, s : s + self.num_mask_tokens, :]
-            assert hs.shape[1] == s + self.num_mask_tokens, (
-                f"{hs.shape=}, {s=}, {self.num_mask_tokens=}"
-            )
+            assert hs.shape[1] == s + self.num_mask_tokens, f"{hs.shape=}, {s=}, {self.num_mask_tokens=}"
 
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)
@@ -325,32 +287,24 @@ class MultiplexMaskDecoder(nn.Module):
         if self.decode_mask_with_shared_tokens:
             mask_tokens_out = mask_tokens_out.view(B, self.multiplex_count, 1, -1)
         else:
-            mask_tokens_out = mask_tokens_out.view(
-                B, self.multiplex_count, self.num_mask_output_per_object, -1
-            )
+            mask_tokens_out = mask_tokens_out.view(B, self.multiplex_count, self.num_mask_output_per_object, -1)
         if self.num_multimask_outputs == 0:
-            hyper_in = self.output_hypernetworks_mlp(
-                mask_tokens_out[:, :, 0, :]
-            ).unsqueeze(2)  # [B, M, 1, C]
+            hyper_in = self.output_hypernetworks_mlp(mask_tokens_out[:, :, 0, :]).unsqueeze(2)  # [B, M, 1, C]
         else:
-            hyper_in_list: List[torch.Tensor] = []
+            hyper_in_list: list[torch.Tensor] = []
             for i in range(self.num_mask_output_per_object):
                 if self.decode_mask_with_shared_tokens:
-                    hyper_in_list.append(
-                        self.output_hypernetworks_mlps[i](mask_tokens_out[:, :, 0, :])
-                    )
+                    hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, :, 0, :]))
                 else:
-                    hyper_in_list.append(
-                        self.output_hypernetworks_mlps[i](mask_tokens_out[:, :, i, :])
-                    )
+                    hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, :, i, :]))
             # hyper_in: [B, M, num_multimask_outputs+1, C]
             hyper_in = torch.stack(hyper_in_list, dim=2)
 
         # generate the masks
         b, c, h, w = upscaled_embedding.shape
-        masks = torch.bmm(
-            hyper_in.flatten(1, 2), upscaled_embedding.view(b, c, h * w)
-        ).view(b, self.multiplex_count, self.num_mask_output_per_object, h, w)
+        masks = torch.bmm(hyper_in.flatten(1, 2), upscaled_embedding.view(b, c, h * w)).view(
+            b, self.multiplex_count, self.num_mask_output_per_object, h, w
+        )
 
         # Generate mask quality predictions, with shape b * multiplex_count * (num_multimask_outputs+1)
         iou_pred = self.iou_prediction_head(iou_token_out).view(
@@ -359,10 +313,7 @@ class MultiplexMaskDecoder(nn.Module):
 
         if self.pred_obj_scores:
             # Generate mask quality predictions, with shape b * (num_multimask_outputs+1)
-            if (
-                self.decode_mask_attribute_with_shared_tokens
-                and not self.decode_mask_with_shared_tokens
-            ):
+            if self.decode_mask_attribute_with_shared_tokens and not self.decode_mask_with_shared_tokens:
                 object_score_logits = (
                     self.pred_obj_score_head(obj_score_token_out)
                     .view(b, self.multiplex_count, self.num_mask_output_per_object)
@@ -372,9 +323,7 @@ class MultiplexMaskDecoder(nn.Module):
                 object_score_logits = self.pred_obj_score_head(obj_score_token_out)
         else:
             # Obj scores logits - default to 10.0, i.e. assuming the object is present, sigmoid(10)=1
-            object_score_logits = 10.0 * iou_pred.new_ones(
-                iou_pred.shape[0], iou_pred.shape[1]
-            )
+            object_score_logits = 10.0 * iou_pred.new_ones(iou_pred.shape[0], iou_pred.shape[1])
 
         outputs = {
             "masks": masks,
@@ -413,9 +362,7 @@ class MultiplexMaskDecoder(nn.Module):
         multimask_logits = all_mask_logits[:, 1:, :, :]
         multimask_iou_scores = all_iou_scores[:, 1:]
         best_scores_inds = torch.argmax(multimask_iou_scores, dim=-1)
-        batch_inds = torch.arange(
-            multimask_iou_scores.size(0), device=all_iou_scores.device
-        )
+        batch_inds = torch.arange(multimask_iou_scores.size(0), device=all_iou_scores.device)
         best_multimask_logits = multimask_logits[batch_inds, best_scores_inds]
         best_multimask_logits = best_multimask_logits.unsqueeze(1)
         best_multimask_iou_scores = multimask_iou_scores[batch_inds, best_scores_inds]
@@ -447,4 +394,4 @@ class MultiplexMaskDecoder(nn.Module):
 
 
 # Lightly adapted from
-# https://github.com/facebookresearch/MaskFormer/blob/main/mask_former/modeling/transformer/transformer_predictor.py # noqa
+# https://github.com/facebookresearch/MaskFormer/blob/main/mask_former/modeling/transformer/transformer_predictor.py

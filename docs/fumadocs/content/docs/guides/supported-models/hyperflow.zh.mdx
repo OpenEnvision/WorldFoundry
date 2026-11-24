@@ -1,44 +1,75 @@
 ---
 title: "HyperFlow for MiniMax-H3"
-description: "HyperFlow for MiniMax-H3（Video Rebirth）：文生视频、图生视频；Runner 一致性待确认; 独立环境 `hyperflow`。"
+description: "复用规范树内 MiniMax-H3 组件的八步联合音视频生成；Runner 一致性待确认。"
 modelId: "hyperflow"
-pageSource: generated
+pageSource: authored
 ---
 
-MiniMax-H3 的八步推理适配器，支持联合音视频、首尾帧条件与有序多模态参考。
+HyperFlow 用八步生成带立体声音轨的视频。树内实现复用规范 MiniMax-H3 Transformer、文本细化器、Qwen3-VL 特征编码器及视频/音频 VAE。H3 变体负责双时间条件、未合并的 LoRA、Sol-Attn 策略和固定采样网格。
 
 <ModelPaperFigures modelId="hyperflow" locale="zh" />
 
-代码：[Video-Rebirth/hyperflow](https://github.com/Video-Rebirth/hyperflow)。
+源码：[Video-Rebirth/hyperflow](https://github.com/Video-Rebirth/hyperflow/tree/1dd2f342aba5ab51da02b62885939655e8e268da)，采用 Apache-2.0。基础模型和适配器权重单独下载，采用 MiniMax H3 Community License。
 
 <ModelCommandBuilder modelId="hyperflow" locale="zh" />
 
-## 用来做什么
-
-用 `hyperflow` 跑本系列联合 T2V/I2V 推理路径。本页记录了这两种任务 profile。
-
-该模型由Video Rebirth发布。
-
-catalog 记录的任务包括 文生视频、图生视频、参考图生成视频、音视频联合生成。别名包括 `hyperflow-h3`、`minimax-h3-hyperflow`。模态上，它接受文本、图像，输出视频。
-
 ## 运行时契约
 
-可选 `prompt`、`num_frames`、`height`、`width`、`seed`；产物 `generated_video`、`hyperflow.mp4`。
+公开模型 ID 为 `hyperflow`，别名为 `hyperflow-h3`、`minimax-h3-hyperflow`；pipeline 目标仍为 `HyperFlowPipeline`。
 
-CLI task profile：`t2va`、`fl2va`、`ref2va`。绑定的 pipeline 类是 `HyperFlowPipeline`。
+- `t2va`：文本生成音视频。
+- `fl2va`：首帧、尾帧或首尾帧条件。传入 `image` / `last_image`，或在 `images` 中传入一个/两个路径。
+- `ref2va`：有序 `references`，每项是本地路径或 `{"kind": "image|video|audio", "path": "..."}` 映射。顺序决定提示标签和旋转位置编码；视频参考会保留自身音轨。
 
-系列状态：**Runner 一致性待确认**。
+提示词必填。`num_inference_steps=8` 和 `fps=24` 固定。`num_frames` 向上对齐到 `17n+5`，支持对齐后的 124–345 帧。`height` 和 `width` 必须同时提供，且均为 32 的正整数倍；否则画布按首个提供的关键帧或默认 16:9 规则确定。产物为包含视频和立体声音轨的 `hyperflow.mp4`。
 
-`t2va` 记录默认值：seed=42；`fl2va` 记录默认值：seed=42。
+## 环境和本地权重
 
-提供完整的本地 Diffusers 格式 MiniMax-H3 权重快照、weights_path 和专用 Python 可执行文件。 上游加载器使用固定网格；num_inference_steps 必须为 8，输出帧率必须为 24 fps。
+使用 Linux、NVIDIA GPU 和兼容 CUDA 12.8 的驱动。准备独立环境并检查本地资产：
 
-## 在 WorldFoundry 中运行
+```bash
+bash scripts/inference/prepare_model_infer.sh hyperflow
+wf run hyperflow --model-status
+```
 
-启动 `worldfoundry-eval run hyperflow --pipeline.task-profile t2va` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+在准备命令后添加 `--download` 可下载缺失权重；推理本身离线运行。`model_path` 指向完整的本地 `MiniMaxAI/MiniMax-H3` **Diffusers 格式权重快照**；`weights_path` 指向适配器目录或 `minimax_h3_hyperflow_8step_v1.0.safetensors`。Ref2VA 使用快照的 `transformer_ref` 分区，T2VA/FL2VA 使用 `transformer`。
 
-记录的权重仓库包括 `videorebirth/hyperflow`、`MiniMaxAI/MiniMax-H3`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh hyperflow`；下载缺失的公开权重时加 `--download`。
+独立环境 `hyperflow` 使用 Python 3.11、CUDA 12.8、PyTorch 2.11、Transformers 5.12.1 和 Diffusers 0.40.0。用 `wf run hyperflow --pipeline.task-profile t2va` 生成视频；上方命令构建器可切换任务。
 
-状态：**Runner 一致性待确认**。
+```python
+from worldfoundry.pipelines.hyperflow.pipeline_hyperflow import HyperFlowPipeline
+
+pipe = HyperFlowPipeline.from_pretrained(
+    model_path="/local/MiniMaxAI--MiniMax-H3",
+    weights_path="/local/videorebirth--hyperflow",
+    python_executable="/envs/hyperflow/bin/python",
+    device="cuda",
+    gpus=1,
+)
+result = pipe(
+    prompt="A red fox trotting through a snowy pine forest",
+    images=["/local/first.png", "/local/last.png"],
+    num_frames=124,
+    seed=42,
+    output_path="/local/output/hyperflow.mp4",
+    return_dict=True,
+)
+```
+
+Ref2VA 将 `images` 替换为 `references`；两种条件模式不能混用。最多允许九张图像、三个视频、三个音频片段，总计十二项参考。音频参考必须伴随图像或视频参考。
+
+## 执行选项
+
+`gpus` 支持 1、2、4。多卡执行通过 core 集合通信实现 Ulysses 序列并行。默认 `offload=True`、`memory_reserve_margin="24GB"` 保留发布版本的自动 CPU 卸载策略；关闭卸载时，设备内存需容纳全部组件。
+
+默认 `attention_backend="sdpa"`。`"fa3"` 选择 Hub FA3 内核，需要可选 `kernels` 包，离线运行还需本地内核。其余已接受的后端名称仅支持单卡。`sol_attn=True` 需要可选的固定版本 [Sol-Attn 包](https://github.com/NVlabs/Sana/tree/9bfca5c4bf35774a1d44c27b0c3c91041fb8dad0/techniques/sparse_backends)；前两步和前两个 DiT block 始终使用稠密注意力。
+
+## 验证与限制
+
+已记录的单张 H100 验证覆盖 T2VA、单图 FL2VA 和图像参考 Ref2VA，以 8 步生成 640×384、124 帧，包含完整视频与立体声音频解码。
+
+发布权重头信息与规范基础模型、适配器之间的键映射为双射。针对固定上游版本的小型随机权重 FP32 比较覆盖条件、应用 LoRA 后的 block、编解码器、文本特征、布局、随机数顺序，以及 T2VA、FL2VA、Ref2VA 的八步去噪，结果完全一致。现有规范 H3 输出保持逐位一致。
+
+CUDA 内核一致性、多卡执行、自动卸载放置和完整发布权重输出回放仍待验证。CPU 组件检查不代表 GPU 生成或质量证据。GPU 推理需要大量设备和主机内存；Runner 一致性仍待确认。
 
 <ModelRelatedRecipes modelId="hyperflow" locale="zh" />

@@ -2,16 +2,18 @@
 This file contains code that is adapted from
 https://github.com/thomasjpfan/pytorch_refinenet/blob/master/pytorch_refinenet/refinenet/refinenet_4cascade.py
 """
+
 import torch
 import torch.nn as nn
 
+from worldfoundry.base_models.three_dimensions.depth.midas.fusion import Interpolate
+
 from .base_model import BaseModel
-from .blocks import FeatureFusionBlock, Interpolate, _make_encoder
+from .blocks import FeatureFusionBlock, _make_encoder
 
 
 class MidasNet(BaseModel):
-    """Network for monocular depth estimation.
-    """
+    """Network for monocular depth estimation."""
 
     def __init__(self, path=None, features=256, non_negative=True):
         """Init.
@@ -23,11 +25,13 @@ class MidasNet(BaseModel):
         """
         print("Loading weights: ", path)
 
-        super(MidasNet, self).__init__()
+        super().__init__()
 
-        use_pretrained = False if path is None else True
+        use_pretrained = path is not None
 
-        self.pretrained, self.scratch = _make_encoder(backbone="resnext101_wsl", features=features, use_pretrained=use_pretrained)
+        self.pretrained, self.scratch = _make_encoder(
+            backbone="resnext101_wsl", features=features, use_pretrained=use_pretrained
+        )
 
         self.scratch.refinenet4 = FeatureFusionBlock(features)
         self.scratch.refinenet3 = FeatureFusionBlock(features)

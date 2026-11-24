@@ -8,6 +8,7 @@ groups:
 - skyreels
 source_repos:
 - url: https://github.com/SkyworkAI/SkyReels-V3
+  revision: 28c771e8456341be6a213e3d1133ed1fd19bf75d
 checkpoints:
 - repo_id: Skywork/SkyReels-V3-R2V-14B
   role: reference_to_video_checkpoint

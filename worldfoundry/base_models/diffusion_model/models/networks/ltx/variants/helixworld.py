@@ -42,17 +42,24 @@ class VideoControlCondition:
         return True
 
     def token_slice(self, start: int, end: int) -> VideoControlCondition:
-        return replace(self, **{
-            item.name: getattr(self, item.name)[:, start:end]
-            for item in fields(self) if getattr(self, item.name) is not None
-        })
+        return replace(
+            self,
+            **{
+                item.name: getattr(self, item.name)[:, start:end]
+                for item in fields(self)
+                if getattr(self, item.name) is not None
+            },
+        )
 
     def split(self, sizes: list[int]) -> list[VideoControlCondition]:
         chunks = {
             item.name: getattr(self, item.name).split(sizes)
-            for item in fields(self) if getattr(self, item.name) is not None
+            for item in fields(self)
+            if getattr(self, item.name) is not None
         }
-        return [replace(self, **{name: values[index] for name, values in chunks.items()}) for index in range(len(sizes))]
+        return [
+            replace(self, **{name: values[index] for name, values in chunks.items()}) for index in range(len(sizes))
+        ]
 
     def with_projective_matrices(self) -> VideoControlCondition:
         valid = self.camera_valid_mask[..., None, None]
@@ -78,7 +85,10 @@ class ActionTimestepEmbedder(torch.nn.Module):
 
     def forward(self, action_ids, action_valid_mask, *, hidden_dtype):
         projected = get_timestep_embedding(
-            action_ids.flatten(), 256, flip_sin_to_cos=True, downscale_freq_shift=0,
+            action_ids.flatten(),
+            256,
+            flip_sin_to_cos=True,
+            downscale_freq_shift=0,
         )
         embedded = self.mlp(projected.to(hidden_dtype)).view(*action_ids.shape, -1)
         return embedded * action_valid_mask.to(embedded.dtype).unsqueeze(-1)

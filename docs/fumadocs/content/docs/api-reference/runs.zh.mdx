@@ -5,7 +5,7 @@ description: Existing artifact、模型推理、单个 model × benchmark cell �
 
 `run_worldfoundry` 是宽入口。它检查一个 typed request，再分发到 existing-results、模型生成、单个 model × benchmark 或 suite runner。若生成 artifact 已经存在，只需要运行 official evaluator 或 normalizer，则应使用更窄的 benchmark facade。
 
-本页 symbol 均从 `worldfoundry.evaluation.public` 导入。
+本页 symbol 均从 `worldfoundry.evals.public` 导入。
 
 ## 一个完整的无 GPU run
 
@@ -14,8 +14,8 @@ description: Existing artifact、模型推理、单个 model × benchmark cell �
 ```python
 from pathlib import Path
 
-from worldfoundry.evaluation.api import ArtifactRef, GenerationRequest, GenerationResult
-from worldfoundry.evaluation.public import WorldFoundryRunRequest, run_worldfoundry
+from worldfoundry.evals.api import ArtifactRef, GenerationRequest, GenerationResult
+from worldfoundry.evals.public import WorldFoundryRunRequest, run_worldfoundry
 
 root = Path("tmp/python_api_example")
 trace_path = root / "artifacts" / "trajectory.json"
@@ -55,25 +55,25 @@ print(outcome.to_dict()["scorecard_path"])
 
 这个 request 刻意覆盖多个 mode。`results_path` 选择 existing-results；只有 model ID 时选择模型执行；model 与 benchmark ID 同时存在时选择一个 benchmark cell；多个选择或 suite ID 会进入矩阵 runner。`execute=False` 可以先规划兼容 cell，不立即消耗计算资源。
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.WorldFoundryRunRequest" locale="zh" />
+<PythonApiReference symbol="worldfoundry.evals.public.WorldFoundryRunRequest" locale="zh" />
 
 ## `WorldFoundryRunResult`
 
 Wrapper 提供共同的 status、exit code、输出目录与 mode-specific delegate。`to_dict()` 会把常用 manifest 和 scorecard 路径提升到顶层，因此自动化代码不必为每种 run kind 单独分支。
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.WorldFoundryRunResult" locale="zh" />
+<PythonApiReference symbol="worldfoundry.evals.public.WorldFoundryRunResult" locale="zh" />
 
 ## `run_worldfoundry`
 
 可以传 typed request、mapping 或 keyword arguments。推荐 typed request，因为编辑器能补全字段，拼错字段也能在执行前暴露。
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.run_worldfoundry" locale="zh" />
+<PythonApiReference symbol="worldfoundry.evals.public.run_worldfoundry" locale="zh" />
 
 ## `list_video_benchmarks`
 
-这个发现 helper 返回仓库 video benchmark catalog 中的 ID。返回列表并不表示所有 benchmark 都已在本机可运行；readiness 与资产需要单独检查。
+这个发现 helper 返回仓库 video benchmark catalog 中的 ID。返回列表并不表示所有 benchmark 都能在本机运行；readiness 与资产需要单独检查。
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.list_video_benchmarks" locale="zh" />
+<PythonApiReference symbol="worldfoundry.evals.public.list_video_benchmarks" locale="zh" />
 
 ## `run_benchmark`
 
@@ -88,20 +88,20 @@ result = run_benchmark(
 )
 ```
 
-上面是实际 API 形态，但运行需要满足当前 VBench manifest 报告的资产、依赖、prompt 覆盖率与环境。Runner 可用不代表 leaderboard ready。
+运行这个调用需要满足 VBench benchmark manifest 列出的资产、依赖、prompt 覆盖率与环境。Runner 可用不代表结果具备 leaderboard 资格。
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.run_benchmark" locale="zh" />
+<PythonApiReference symbol="worldfoundry.evals.public.run_benchmark" locale="zh" />
 
 ## `normalize_upstream_results`
 
 上游 evaluator 已经生成结果文件时使用这个函数。它会围绕该文件创建 WorldFoundry 证据，但不会反过来证明 WorldFoundry 曾执行官方 evaluator。
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.normalize_upstream_results" locale="zh" />
+<PythonApiReference symbol="worldfoundry.evals.public.normalize_upstream_results" locale="zh" />
 
 ## `benchmark_integration_spec`
 
-当 in-tree integration specification 存在时，这个 lookup 会返回它。Catalog 条目可以先于 integration spec 存在，所以返回 `None` 是正常的发现结果。
+当 in-tree integration specification 存在时，这个 lookup 会返回它。Catalog 条目存在时，integration spec 可能尚未存在，因此返回 `None` 是正常的查询结果。
 
-<PythonApiReference symbol="worldfoundry.evaluation.public.benchmark_integration_spec" locale="zh" />
+<PythonApiReference symbol="worldfoundry.evals.public.benchmark_integration_spec" locale="zh" />
 
-调用 official runtime 前，请先在 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)查看 protocol 专属输入与 blocker。
+调用 official runtime 前，请先在 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub) 查看 protocol 专属输入与 blocker。

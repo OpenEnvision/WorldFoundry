@@ -20,11 +20,12 @@ so a guardrail runner can attribute a failure to a specific file.
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 import imageio
 import numpy as np
 
-from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.observability.rank_logging import log
 
 # ──────────────────────────────────────────────────────────────────────────
 # Decode / encode — imageio ffmpeg only; odd resolutions stay unpadded
@@ -62,14 +63,16 @@ def read_video(filepath: str | Path) -> VideoData:
     """
     path = str(filepath)
     try:
-        reader = imageio.get_reader(path, "ffmpeg")
+        # ImageIO accepts plugin names; older v2 stubs require a Format object instead.
+        reader = imageio.get_reader(path, cast(Any, "ffmpeg"))
     except Exception as error:
         raise ValueError(f"Failed to read video file: {path}") from error
 
     try:
         metadata = reader.get_meta_data()
         try:
-            frame_count = reader.count_frames()
+            # count_frames belongs to the FFmpeg plugin, not the generic Reader stub.
+            frame_count = reader.count_frames()  # ty: ignore[unresolved-attribute]
         except (AttributeError, NotImplementedError, RuntimeError):
             frame_count = round(float(metadata.get("duration", 0.0)) * float(metadata.get("fps", 0.0)))
         if frame_count <= 0:

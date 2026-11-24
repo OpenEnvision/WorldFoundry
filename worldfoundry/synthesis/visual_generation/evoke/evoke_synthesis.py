@@ -17,7 +17,7 @@ class EvokeSynthesis(BaseSynthesis):
         self.runtime = runtime
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> "EvokeSynthesis":
+    def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> EvokeSynthesis:
         return cls(EvokeRuntime.from_pretrained(pretrained_model_path, **kwargs))
 
     def predict(self, **kwargs: Any) -> Any:

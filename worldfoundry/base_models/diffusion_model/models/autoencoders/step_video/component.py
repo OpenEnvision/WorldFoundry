@@ -21,10 +21,7 @@ from .model import AutoencoderKL
 
 
 def _vae_state_dict(state_dict: Mapping[str, object]) -> Mapping[str, object]:
-    return {
-        key.replace("decoder.conv_out.", "decoder.conv_out.conv."): value
-        for key, value in state_dict.items()
-    }
+    return {key.replace("decoder.conv_out.", "decoder.conv_out.conv."): value for key, value in state_dict.items()}
 
 
 class StepVideoDecoder:

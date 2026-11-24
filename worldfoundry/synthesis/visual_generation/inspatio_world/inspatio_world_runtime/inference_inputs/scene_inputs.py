@@ -53,9 +53,20 @@ class SceneInputs:
     MIN_ANGLE_PER_FRAME = 0.3
     MAX_ANGLE_PER_FRAME = 0.8
 
-    def __init__(self, sample_size, sample_n_frames, cam_idx=1, traj_txt_path=None, relative_to_source=False, rotation_only=False, adaptive_frame=True, freeze_repeat=0, freeze_frame=None):
+    def __init__(
+        self,
+        sample_size,
+        sample_n_frames,
+        cam_idx=1,
+        traj_txt_path=None,
+        relative_to_source=False,
+        rotation_only=False,
+        adaptive_frame=True,
+        freeze_repeat=0,
+        freeze_frame=None,
+    ):
         self.sample_n_frames = sample_n_frames
-        self.sample_size = sample_size   # h, w
+        self.sample_size = sample_size  # h, w
         self.cam_idx = cam_idx
         self.traj_txt_path = traj_txt_path
         self.relative_to_source = relative_to_source
@@ -65,11 +76,11 @@ class SceneInputs:
         self.freeze_frame = freeze_frame
 
     def read_matrix(self, file_path):
-        with open(file_path, 'r') as file:
+        with open(file_path) as file:
             data = file.read()
 
         parsed_data = []
-        for line in data.strip().split('\n'):
+        for line in data.strip().split("\n"):
             if line.strip():
                 parsed_data.append(ast.literal_eval(line.strip()))
 
@@ -78,26 +89,28 @@ class SceneInputs:
     def get_data(self, source_conf):
         data = {}
 
-        data['text'] = source_conf['text']
-        source_video = read_frames(source_conf['video_path']) # t c h w
+        data["text"] = source_conf["text"]
+        source_video = read_frames(source_conf["video_path"])  # t c h w
         if source_video.shape[0] > 1000:
             source_video = source_video[:1000]
-        source_video_name = Path(source_conf['video_path']).stem
-        data['source_video_name'] = source_video_name
+        source_video_name = Path(source_conf["video_path"]).stem
+        data["source_video_name"] = source_video_name
         n_frames, c, h, w = source_video.shape
 
         # ===================== source_video: resize + normalize to [-1, 1] =====================
         target_height, target_width = self.sample_size
-        pixel_transforms = transforms.Compose([
-            transforms.Resize((target_height, target_width)),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
-        ])
+        pixel_transforms = transforms.Compose(
+            [
+                transforms.Resize((target_height, target_width)),
+                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
+            ]
+        )
         source_video = pixel_transforms(source_video)
 
         # ===================== load pre-rendered render/mask videos =====================
-        render_dir = os.path.join(source_conf["vggt_depth_path"], 'render')
-        render_video_path = os.path.join(render_dir, 'render_offline.mp4')
-        mask_video_path = os.path.join(render_dir, 'mask_offline.mp4')
+        render_dir = os.path.join(source_conf["vggt_depth_path"], "render")
+        render_video_path = os.path.join(render_dir, "render_offline.mp4")
+        mask_video_path = os.path.join(render_dir, "mask_offline.mp4")
 
         # render_video: [T, C, H, W] in [0, 1] -> normalized to [-1, 1]
         render_video = read_frames(render_video_path)  # t c h w, [0, 1]
@@ -114,14 +127,19 @@ class SceneInputs:
             freeze_idx = self.freeze_frame if self.freeze_frame is not None else n_src // 2
             freeze_idx = max(0, min(freeze_idx, n_src - 1))
             insert_pos = freeze_idx + 1
-            frozen_frame = source_video[freeze_idx:freeze_idx+1]  # (1, C, H, W)
-            source_video = torch.cat([
-                source_video[:insert_pos],
-                frozen_frame.expand(self.freeze_repeat, -1, -1, -1),
-                source_video[insert_pos:],
-            ], dim=0)
-            print(f'[Time-freeze] source_video: repeated frame {freeze_idx} x{self.freeze_repeat}, '
-                  f'{n_src} -> {source_video.shape[0]} frames')
+            frozen_frame = source_video[freeze_idx : freeze_idx + 1]  # (1, C, H, W)
+            source_video = torch.cat(
+                [
+                    source_video[:insert_pos],
+                    frozen_frame.expand(self.freeze_repeat, -1, -1, -1),
+                    source_video[insert_pos:],
+                ],
+                dim=0,
+            )
+            print(
+                f"[Time-freeze] source_video: repeated frame {freeze_idx} x{self.freeze_repeat}, "
+                f"{n_src} -> {source_video.shape[0]} frames"
+            )
 
         # Align frame counts: render/mask may differ slightly from source_video
         min_frames = min(source_video.shape[0], render_video.shape[0], mask_video.shape[0])
@@ -131,21 +149,21 @@ class SceneInputs:
         n_frames = min_frames
 
         # ===================== load depth for radius computation =====================
-        depth_path = os.path.join(source_conf["vggt_depth_path"], 'depth')
+        depth_path = os.path.join(source_conf["vggt_depth_path"], "depth")
         depth_files_list = os.listdir(depth_path)
         depth_files = sorted(depth_files_list, key=lambda x: int(os.path.splitext(x)[0]))
         # Only need the first depth frame for radius estimation
         first_depth = np.array(Image.open(os.path.join(depth_path, depth_files[0]))).astype(np.uint16)
-        with open(os.path.join(source_conf["vggt_depth_path"], 'metadata.txt'), 'r') as f:
-            depths_min, depths_max = tuple([float(t) for t in f.readline().strip().split(' ')])
+        with open(os.path.join(source_conf["vggt_depth_path"], "metadata.txt")) as f:
+            depths_min, depths_max = tuple([float(t) for t in f.readline().strip().split(" ")])
         first_depth = (first_depth / 65535.0) * (depths_max - depths_min) + depths_min
         first_depth_min = float(first_depth.min())
 
         # ===================== frame-adaptive traj logic =====================
         if self.traj_txt_path is not None:
-            radius = first_depth_min * source_conf['radius_ratio']
-            print('Foreground mean (radius):', radius)
-            with open(self.traj_txt_path, 'r') as file:
+            radius = first_depth_min * source_conf["radius_ratio"]
+            print("Foreground mean (radius):", radius)
+            with open(self.traj_txt_path) as file:
                 lines = file.readlines()
                 x_up_angle = [float(i) for i in lines[0].split()]
                 y_left_angle = [float(i) for i in lines[1].split()]
@@ -167,9 +185,11 @@ class SceneInputs:
                     max_needed = n_frames
 
                 angle_per_frame = total_angle / max(n_frames - 1, 1) if total_angle > 1e-3 else 0
-                print(f'[Traj adaptive] total_angle={total_angle:.1f}, n_frames={n_frames}, '
-                      f'angle_per_frame={angle_per_frame:.3f}, '
-                      f'needed_range=[{min_needed}, {max_needed}]')
+                print(
+                    f"[Traj adaptive] total_angle={total_angle:.1f}, n_frames={n_frames}, "
+                    f"angle_per_frame={angle_per_frame:.3f}, "
+                    f"needed_range=[{min_needed}, {max_needed}]"
+                )
 
                 # Expand target: at least min_needed and at least 121 frames
                 expand_target = max(min_needed, 121)
@@ -179,11 +199,13 @@ class SceneInputs:
                     target_n_frames = expand_target
                     reason = []
                     if n_frames < min_needed:
-                        reason.append(f'too fast ({angle_per_frame:.2f}/frame > {self.MAX_ANGLE_PER_FRAME}/frame)')
+                        reason.append(f"too fast ({angle_per_frame:.2f}/frame > {self.MAX_ANGLE_PER_FRAME}/frame)")
                     if n_frames < 121:
-                        reason.append('below minimum 121 frames')
-                    print(f'[Traj adaptive] {", ".join(reason)}, '
-                          f'expanding source from {n_frames} to {target_n_frames} frames (bounce)')
+                        reason.append("below minimum 121 frames")
+                    print(
+                        f"[Traj adaptive] {', '.join(reason)}, "
+                        f"expanding source from {n_frames} to {target_n_frames} frames (bounce)"
+                    )
                     expand_indices = bounce_indices(n_frames, target_n_frames)
                     source_video = source_video[expand_indices]
                     render_video = render_video[expand_indices]
@@ -191,31 +213,37 @@ class SceneInputs:
                     n_frames = target_n_frames
                 elif n_frames > max_needed:
                     target_n_frames = max_needed
-                    print(f'[Traj adaptive] Too slow ({angle_per_frame:.2f}/frame < {self.MIN_ANGLE_PER_FRAME}/frame), '
-                          f'subsampling source from {n_frames} to {target_n_frames} frames')
+                    print(
+                        f"[Traj adaptive] Too slow ({angle_per_frame:.2f}/frame < {self.MIN_ANGLE_PER_FRAME}/frame), "
+                        f"subsampling source from {n_frames} to {target_n_frames} frames"
+                    )
                     subsample_indices = np.linspace(0, n_frames - 1, target_n_frames).astype(int).tolist()
                     source_video = source_video[subsample_indices]
                     render_video = render_video[subsample_indices]
                     mask_video = mask_video[subsample_indices]
                     n_frames = target_n_frames
                 else:
-                    print('[Traj adaptive] Frame count OK, no adjustment needed')
+                    print("[Traj adaptive] Frame count OK, no adjustment needed")
             else:
-                print(f'[Traj adaptive] Disabled, using original {n_frames} frames')
+                print(f"[Traj adaptive] Disabled, using original {n_frames} frames")
 
             # Generate target extrinsics from trajectory (for saving/reference)
-            target_extrinsics = generate_traj_txt(x_up_angle, y_left_angle, r, r_zoom, n_frames, is_translation=self.rotation_only)  # Twc
+            target_extrinsics = generate_traj_txt(
+                x_up_angle, y_left_angle, r, r_zoom, n_frames, is_translation=self.rotation_only
+            )  # Twc
             target_extrinsics = torch.tensor(target_extrinsics).inverse()  # Tcw
-            data['target_extrinsics'] = target_extrinsics
+            data["target_extrinsics"] = target_extrinsics
         else:
             print("no traj txt path")
 
-        data['source_video'] = source_video
-        data['render_video'] = render_video
-        data['mask_video'] = mask_video
+        data["source_video"] = source_video
+        data["render_video"] = render_video
+        data["mask_video"] = mask_video
 
-        print(f"data['source_video'].shape {data['source_video'].shape}, "
-              f"data['render_video'].shape {data['render_video'].shape}, "
-              f"data['mask_video'].shape {data['mask_video'].shape}")
+        print(
+            f"data['source_video'].shape {data['source_video'].shape}, "
+            f"data['render_video'].shape {data['render_video'].shape}, "
+            f"data['mask_video'].shape {data['mask_video'].shape}"
+        )
 
         return data

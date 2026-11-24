@@ -7,7 +7,7 @@ import json
 import logging
 import math
 import os
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, cast
 
 import numpy as np
 from PIL import Image
@@ -29,8 +29,7 @@ def _default_output_dir(name: str = "loger_output") -> str:
     return str(artifact_root_path() / name)
 
 
-def _apply_camera_delta(c2w: np.ndarray, delta: List[float]) -> np.ndarray:
-    """Apply camera delta helper function."""
+def _apply_camera_delta(c2w: np.ndarray, delta: list[float]) -> np.ndarray:
     dx, dy, dz, theta_x, theta_z = delta
     result = c2w.copy()
 
@@ -52,15 +51,15 @@ def _apply_camera_delta(c2w: np.ndarray, delta: List[float]) -> np.ndarray:
 
 
 class LoGeRResult:
-
     """Result container representing outputs of LoGeR pipeline execution."""
+
     def __init__(
         self,
-        depth_images: List[Image.Image],
-        numpy_data: Dict[str, np.ndarray],
-        camera_params: List[Dict[str, Any]],
-        camera_range: Dict[str, Any],
-        input_images: Optional[List[np.ndarray]] = None,
+        depth_images: list[Image.Image],
+        numpy_data: dict[str, np.ndarray],
+        camera_params: list[dict[str, Any]],
+        camera_range: dict[str, Any],
+        input_images: list[np.ndarray] | None = None,
         data_type: str = "image",
     ):
         """Initialize the pipeline and configure runtime components."""
@@ -82,26 +81,36 @@ class LoGeRResult:
             "camera_params": self.camera_params[idx] if idx < len(self.camera_params) else None,
         }
 
-    def save(self, output_dir: Optional[str] = None) -> List[str]:
+    def save(self, output_dir: str | None = None) -> list[str]:
         """Save for LoGeRResult."""
         if output_dir is None:
             output_dir = _default_output_dir()
         os.makedirs(output_dir, exist_ok=True)
-        saved_files: List[str] = []
+        saved_files: list[str] = []
 
         ply_dir = os.path.join(output_dir, "point_cloud")
         os.makedirs(ply_dir, exist_ok=True)
         if "points" in self.numpy_data and "masks" in self.numpy_data and self.input_images is not None:
             try:
                 from plyfile import PlyData, PlyElement
+
                 pts = self.numpy_data["points"][0][self.numpy_data["masks"][0].astype(bool)].astype(np.float32)
                 colors_all = np.stack(self.input_images, axis=0)
                 col = (colors_all[self.numpy_data["masks"][0].astype(bool)] * 255).clip(0, 255).astype(np.uint8)
-                vertices = np.zeros(pts.shape[0], dtype=[
-                    ("x", "f4"), ("y", "f4"), ("z", "f4"),
-                    ("nx", "f4"), ("ny", "f4"), ("nz", "f4"),
-                    ("red", "u1"), ("green", "u1"), ("blue", "u1"),
-                ])
+                vertices = np.zeros(
+                    pts.shape[0],
+                    dtype=[
+                        ("x", "f4"),
+                        ("y", "f4"),
+                        ("z", "f4"),
+                        ("nx", "f4"),
+                        ("ny", "f4"),
+                        ("nz", "f4"),
+                        ("red", "u1"),
+                        ("green", "u1"),
+                        ("blue", "u1"),
+                    ],
+                )
                 vertices["x"], vertices["y"], vertices["z"] = pts[:, 0], pts[:, 1], pts[:, 2]
                 vertices["nx"], vertices["ny"], vertices["nz"] = 0.0, 0.0, 0.0
                 vertices["red"], vertices["green"], vertices["blue"] = col[:, 0], col[:, 1], col[:, 2]
@@ -149,8 +158,7 @@ class LoGeRResult:
         return saved_files
 
 
-def _build_camera_range(camera_params: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Build camera range helper function."""
+def _build_camera_range(camera_params: list[dict[str, Any]]) -> dict[str, Any]:
     n = len(camera_params)
     if n == 0:
         return {}
@@ -165,33 +173,33 @@ def _build_camera_range(camera_params: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 class LoGeRPipeline(PipelineABC):
-
     """Pipeline implementation for LoGeR visual generation."""
+
     def __init__(
         self,
         representation_model=None,
-        reasoning_model: Optional[Any] = None,
-        synthesis_model: Optional[Any] = None,
-        operator: Optional[Pi3Operator] = None,
+        reasoning_model: Any | None = None,
+        synthesis_model: Any | None = None,
+        operator: Pi3Operator | None = None,
     ) -> None:
         """Initialize the pipeline and configure runtime components."""
         self.representation_model = representation_model
         self.reasoning_model = reasoning_model
         self.synthesis_model = synthesis_model
         self.operator = operator or Pi3Operator()
-        self._cached_result: Optional[LoGeRResult] = None
-        self._current_camera: Optional[np.ndarray] = None
+        self._cached_result: LoGeRResult | None = None
+        self._current_camera: np.ndarray | None = None
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[str] = None,
-        required_components: Optional[Dict[str, str]] = None,
+        model_path: str | None = None,
+        required_components: dict[str, str] | None = None,
         mode: str = "loger",
-        device: Optional[str] = None,
-        weight_dtype: Optional[str] = None,
-        representation_path: Optional[str] = None,
-        model_type: Optional[str] = None,
+        device: str | None = None,
+        weight_dtype: str | None = None,
+        representation_path: str | None = None,
+        model_type: str | None = None,
         **kwargs,
     ) -> "LoGeRPipeline":
         """Load the pipeline from pretrained checkpoints and configurations."""
@@ -203,7 +211,10 @@ class LoGeRPipeline(PipelineABC):
         if m in ("loger", "loger_star"):
             subfolder = "LoGeR" if m == "loger" else "LoGeR_star"
             representation_model = LoGeRRepresentation.from_pretrained(
-                pretrained_model_path=path, device=device, subfolder=subfolder, **kwargs,
+                pretrained_model_path=path,
+                device=device,
+                subfolder=subfolder,
+                **kwargs,
             )
         else:
             raise ValueError(f"Unknown mode: {m}. Choose 'loger' or 'loger_star'.")
@@ -211,10 +222,10 @@ class LoGeRPipeline(PipelineABC):
 
     def process(
         self,
-        images: Union[str, np.ndarray, List[str], List[np.ndarray], None] = None,
-        interactions: Optional[List[str]] = None,
+        images: str | np.ndarray | list[str] | list[np.ndarray] | None = None,
+        interactions: list[str] | None = None,
         interval: int = -1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Operator-level processing: perception preprocessing + interaction delta.
 
         Args:
@@ -232,7 +243,7 @@ class LoGeRPipeline(PipelineABC):
                 "delta"        – [dx,dy,dz,theta_x,theta_z] from process_interaction()
                                   (or None when no interactions given)
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "images_data": None,
             "imgs_tensor": None,
             "resized_images": None,
@@ -245,12 +256,9 @@ class LoGeRPipeline(PipelineABC):
             if not isinstance(images_data, list):
                 images_data = [images_data]
 
-            device = self.representation_model.device
+            device = cast(LoGeRRepresentation, self.representation_model).device
             imgs_tensor = self.operator.images_to_tensor(images_data, device=device)
-            resized_images = [
-                imgs_tensor[0, i].permute(1, 2, 0).cpu().numpy()
-                for i in range(imgs_tensor.shape[1])
-            ]
+            resized_images = [imgs_tensor[0, i].permute(1, 2, 0).cpu().numpy() for i in range(imgs_tensor.shape[1])]
 
             result["images_data"] = images_data
             result["imgs_tensor"] = imgs_tensor
@@ -266,7 +274,7 @@ class LoGeRPipeline(PipelineABC):
 
     def _run_inference(
         self,
-        processed: Dict[str, Any],
+        processed: dict[str, Any],
         **kwargs,
     ) -> LoGeRResult:
         """Run representation model with already-processed operator outputs."""
@@ -283,9 +291,15 @@ class LoGeRPipeline(PipelineABC):
         }
 
         _LOGER_KEYS = (
-            "window_size", "overlap_size", "num_iterations",
-            "sim3", "se3", "reset_every",
-            "turn_off_ttt", "turn_off_swa", "sim3_scale_mode",
+            "window_size",
+            "overlap_size",
+            "num_iterations",
+            "sim3",
+            "se3",
+            "reset_every",
+            "turn_off_ttt",
+            "turn_off_swa",
+            "sim3_scale_mode",
         )
         for k in _LOGER_KEYS:
             if k in kwargs:
@@ -294,6 +308,7 @@ class LoGeRPipeline(PipelineABC):
         conditions_path = kwargs.get("conditions_path")
         if conditions_path is not None and os.path.exists(conditions_path):
             import torch as _torch
+
             cond_data = np.load(conditions_path, allow_pickle=True)
             if "poses" in cond_data:
                 data["poses"] = _torch.from_numpy(cond_data["poses"]).float().unsqueeze(0)
@@ -336,9 +351,9 @@ class LoGeRPipeline(PipelineABC):
 
     def render_view(
         self,
-        result: Optional[LoGeRResult] = None,
+        result: LoGeRResult | None = None,
         camera_view=None,
-        camera_to_world: Optional[np.ndarray] = None,
+        camera_to_world: np.ndarray | None = None,
     ) -> Image.Image:
         """Render view for LoGeRPipeline."""
         res = result or self._cached_result
@@ -373,8 +388,7 @@ class LoGeRPipeline(PipelineABC):
 
         return render_point_cloud(pts, cols, c2w, h, w)
 
-    def _render_trajectory(self, n_interp: int = 15, **kwargs) -> List[Image.Image]:
-
+    def _render_trajectory(self, n_interp: int = 15, **kwargs) -> list[Image.Image]:
         """Render trajectory for LoGeRPipeline."""
         res = self._cached_result
         if res is None:
@@ -382,7 +396,7 @@ class LoGeRPipeline(PipelineABC):
 
         pts_all = res.numpy_data["points"][0]
         masks = res.numpy_data["masks"][0].astype(bool)
-        colors_all = np.stack(res.input_images, axis=0)
+        colors_all = np.stack(cast(list[np.ndarray], res.input_images), axis=0)
         pts = pts_all[masks].astype(np.float64)
         cols = (colors_all[masks] * 255).clip(0, 255).astype(np.uint8)
         h, w = pts_all.shape[1], pts_all.shape[2]
@@ -401,12 +415,12 @@ class LoGeRPipeline(PipelineABC):
 
     def __call__(
         self,
-        images: Optional[Union[str, np.ndarray, List[str], List[np.ndarray]]] = None,
-        videos: Optional[Union[str, List[str]]] = None,
-        image_path: Optional[str] = None,
-        video_path: Optional[str] = None,
+        images: str | np.ndarray | list[str] | list[np.ndarray] | None = None,
+        videos: str | list[str] | None = None,
+        image_path: str | None = None,
+        video_path: str | None = None,
         task_type: str = "reconstruction",
-        interactions: Optional[List[str]] = None,
+        interactions: list[str] | None = None,
         camera_view=None,
         visualize_ops: bool = True,
         **kwargs,
@@ -436,14 +450,12 @@ class LoGeRPipeline(PipelineABC):
                 n_hold = kwargs.get("hold_frames", 10)
                 frames = []
                 if self._current_camera is None:
-                    self._current_camera = np.array(
-                        self._cached_result.camera_params[0]["camera_to_world"]
-                    )
+                    self._current_camera = np.array(self._cached_result.camera_params[0]["camera_to_world"])
                 for sig in interactions:
                     hold_img = self.render_view(camera_to_world=self._current_camera)
                     frames.extend([hold_img] * n_hold)
 
-                    # operator 层：单条交互信号 → delta
+                    # The operator turns each interaction signal into a camera delta.
                     processed = self.process(interactions=[sig])
                     delta = processed["delta"]
                     sub_delta = [d / n_move for d in delta]
@@ -465,18 +477,17 @@ class LoGeRPipeline(PipelineABC):
 
         else:
             raise ValueError(
-                f"Unknown task_type: {task_type}. "
-                "Choose 'reconstruction', 'render_view', or 'render_trajectory'."
+                f"Unknown task_type: {task_type}. Choose 'reconstruction', 'render_view', or 'render_trajectory'."
             )
 
     def stream(
         self,
-        images: Optional[Union[str, np.ndarray, List[str], List[np.ndarray]]] = None,
-        videos: Optional[Union[str, List[str]]] = None,
-        image_path: Optional[str] = None,
-        video_path: Optional[str] = None,
+        images: str | np.ndarray | list[str] | list[np.ndarray] | None = None,
+        videos: str | list[str] | None = None,
+        image_path: str | None = None,
+        video_path: str | None = None,
         task_type: str = "render_view",
-        interactions: Optional[Union[str, List[str]]] = None,
+        interactions: str | list[str] | None = None,
         camera_view=None,
         visualize_ops: bool = True,
         **kwargs,
@@ -484,7 +495,7 @@ class LoGeRPipeline(PipelineABC):
         """Stream visual generation outputs chunk by chunk."""
         visual_input = videos or video_path or images or image_path
 
-        # ── 有新输入：先做重建 ──
+        # New visual input: reconstruct the scene first.
         if visual_input is not None:
             logger.info("--- Stream: reconstructing scene ---")
             processed = self.process(images=visual_input, interval=kwargs.get("interval", -1))
@@ -494,18 +505,14 @@ class LoGeRPipeline(PipelineABC):
                 self._current_camera = np.array(result.camera_params[0]["camera_to_world"])
 
         if self._cached_result is None:
-            raise RuntimeError(
-                "No scene available. Provide images/videos on the first stream() call."
-            )
+            raise RuntimeError("No scene available. Provide images/videos on the first stream() call.")
 
         if self._current_camera is None:
             if not self._cached_result.camera_params:
                 raise RuntimeError("No camera parameters available in cached result.")
-            self._current_camera = np.array(
-                self._cached_result.camera_params[0]["camera_to_world"]
-            )
+            self._current_camera = np.array(self._cached_result.camera_params[0]["camera_to_world"])
 
-        # ── 无交互：直接渲染当前视角 ──
+        # No interaction: render the current view.
         if interactions is None:
             return self.render_view(
                 result=self._cached_result,
@@ -513,7 +520,7 @@ class LoGeRPipeline(PipelineABC):
                 camera_to_world=self._current_camera,
             )
 
-        # ── 有交互：operator 层处理，更新相机，渲染 ──
+        # Interactions: the operator computes a camera delta, then the updated view is rendered.
         if isinstance(interactions, str):
             interactions = [interactions]
 

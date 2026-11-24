@@ -3,26 +3,36 @@
 import asyncio
 import concurrent.futures
 import os
+from collections.abc import Iterator
 from queue import Queue
 from threading import Thread
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any
 
 from tqdm import tqdm
 
-from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm import InferRequest, ProcessorMixin, get_template
+from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm import (
+    InferRequest,
+    ProcessorMixin,
+    get_template,
+)
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm.template import Template
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm.utils import get_ckpt_dir
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.plugin import Metric
 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.utils import get_logger
-from ..protocol import (ChatCompletionMessageToolCall, ChatCompletionResponse, ChatCompletionStreamResponse,
-                        RequestConfig, UsageInfo)
+
+from ..protocol import (
+    ChatCompletionMessageToolCall,
+    ChatCompletionResponse,
+    ChatCompletionStreamResponse,
+    RequestConfig,
+    UsageInfo,
+)
 from .base import BaseInferEngine
 
 logger = get_logger()
 
 
 class InferEngine(BaseInferEngine, ProcessorMixin):
-
     def _post_init(self, template=None):
         processor = self.processor
         self.model_info = processor.model_info
@@ -32,10 +42,11 @@ class InferEngine(BaseInferEngine, ProcessorMixin):
         self.max_model_len = self.model_info.max_model_len
         self.config = self.model_info.config
         if template is None:
-            ckpt_dir = get_ckpt_dir(self.model_dir, getattr(self, 'adapters', None))
-            logger.info('Create the default_template for the infer_engine')
+            ckpt_dir = get_ckpt_dir(self.model_dir, getattr(self, "adapters", None))
+            logger.info("Create the default_template for the infer_engine")
             if ckpt_dir:
                 from worldfoundry.base_models.llm_mllm_core.mllm.modelscope_swift.swift.llm import BaseArguments
+
                 args = BaseArguments.from_pretrained(ckpt_dir)
                 self.default_template = args.get_template(self.processor)
             else:
@@ -46,8 +57,8 @@ class InferEngine(BaseInferEngine, ProcessorMixin):
 
         self._adapters_pool = {}
 
-    def _get_stop_words(self, stop_words: List[Union[str, List[int], None]]) -> List[str]:
-        stop: List[str] = []
+    def _get_stop_words(self, stop_words: list[str | list[int] | None]) -> list[str]:
+        stop: list[str] = []
         for stop_word in stop_words:
             if stop_word is None:
                 continue
@@ -66,7 +77,7 @@ class InferEngine(BaseInferEngine, ProcessorMixin):
                 async for item in await async_iter:
                     queue.put(item)
             except Exception as e:
-                if getattr(self, 'strict', True):
+                if getattr(self, "strict", True):
                     raise
                 queue.put(e)
             else:
@@ -89,13 +100,8 @@ class InferEngine(BaseInferEngine, ProcessorMixin):
         return await asyncio.gather(*tasks)
 
     def _batch_infer_stream(
-        self,
-        tasks,
-        stream: bool = True,
-        use_tqdm: bool = True,
-        metrics: Optional[List[Metric]] = None
-    ) -> List[Union[ChatCompletionResponse, Iterator[ChatCompletionStreamResponse]]]:
-
+        self, tasks, stream: bool = True, use_tqdm: bool = True, metrics: list[Metric] | None = None
+    ) -> list[ChatCompletionResponse | Iterator[ChatCompletionStreamResponse]]:
         prog_bar = tqdm(total=len(tasks), dynamic_ncols=True, disable=not use_tqdm)
         if stream:
             return [self.async_iter_to_iter(task, prog_bar, metrics) for task in tasks]
@@ -105,7 +111,7 @@ class InferEngine(BaseInferEngine, ProcessorMixin):
                 try:
                     res = await task
                 except Exception as e:
-                    if getattr(self, 'strict', True):
+                    if getattr(self, "strict", True):
                         raise
                     res = e
                 prog_bar.update()
@@ -132,7 +138,7 @@ class InferEngine(BaseInferEngine, ProcessorMixin):
         )
 
     @staticmethod
-    def _update_metrics(result, metrics: Optional[List[Metric]] = None):
+    def _update_metrics(result, metrics: list[Metric] | None = None):
         if metrics is None:
             return result
         result_origin = result
@@ -145,13 +151,15 @@ class InferEngine(BaseInferEngine, ProcessorMixin):
                 metric.update(response)
         return result_origin
 
-    def infer(self,
-              infer_requests: List[InferRequest],
-              request_config: Optional[RequestConfig] = None,
-              metrics: Optional[List[Metric]] = None,
-              *,
-              use_tqdm: Optional[bool] = None,
-              **kwargs) -> List[Union[ChatCompletionResponse, Iterator[ChatCompletionStreamResponse]]]:
+    def infer(
+        self,
+        infer_requests: list[InferRequest],
+        request_config: RequestConfig | None = None,
+        metrics: list[Metric] | None = None,
+        *,
+        use_tqdm: bool | None = None,
+        **kwargs,
+    ) -> list[ChatCompletionResponse | Iterator[ChatCompletionStreamResponse]]:
         if request_config is None:
             request_config = RequestConfig()
         tasks = [self.infer_async(infer_request, request_config, **kwargs) for infer_request in infer_requests]
@@ -160,7 +168,7 @@ class InferEngine(BaseInferEngine, ProcessorMixin):
         return self._batch_infer_stream(tasks, request_config.stream, use_tqdm, metrics)
 
     @staticmethod
-    def _get_toolcall(response: str, template: Template) -> Optional[List[ChatCompletionMessageToolCall]]:
+    def _get_toolcall(response: str, template: Template) -> list[ChatCompletionMessageToolCall] | None:
         try:
             functions = template.agent_template.get_toolcall(response)
         except Exception:
@@ -169,18 +177,18 @@ class InferEngine(BaseInferEngine, ProcessorMixin):
             return [ChatCompletionMessageToolCall(function=function) for function in functions]
 
     @staticmethod
-    def _get_num_tokens(inputs: Dict[str, Any]) -> int:
-        if 'input_ids' in inputs:  # 1d or 2d
-            input_ids = inputs['input_ids']
+    def _get_num_tokens(inputs: dict[str, Any]) -> int:
+        if "input_ids" in inputs:  # 1d or 2d
+            input_ids = inputs["input_ids"]
             if isinstance(input_ids, list):
                 return len(input_ids)
             else:
                 return input_ids.shape[-1]
-        elif 'inputs_embeds' in inputs:  # 2d or 3d
-            return inputs['inputs_embeds'].shape[-2]
-        raise ValueError(f'Unable to retrieve input_ids and inputs_embeds. inputs: {inputs}')
+        elif "inputs_embeds" in inputs:  # 2d or 3d
+            return inputs["inputs_embeds"].shape[-2]
+        raise ValueError(f"Unable to retrieve input_ids and inputs_embeds. inputs: {inputs}")
 
-    def set_default_max_tokens(self, request_config: RequestConfig, inputs: Dict[str, Any]) -> None:
+    def set_default_max_tokens(self, request_config: RequestConfig, inputs: dict[str, Any]) -> None:
         max_model_len = self.max_model_len
         if isinstance(inputs, dict):
             inputs = [inputs]
@@ -192,48 +200,44 @@ class InferEngine(BaseInferEngine, ProcessorMixin):
         if max_model_len is None:
             max_model_len = 8192
             logger.warning(
-                'The current model is unable to retrieve `max_model_len`. It is set to the default value of 8192.')
+                "The current model is unable to retrieve `max_model_len`. It is set to the default value of 8192."
+            )
         max_max_tokens = max_model_len - num_tokens
         if max_tokens is None:
             request_config.max_tokens = max_max_tokens
         elif max_max_tokens < request_config.max_tokens:
-            logger.warning(f'max_model_len({max_model_len}) - num_tokens({num_tokens}) < max_tokens({max_tokens}). '
-                           f'Setting max_tokens: {max_model_len - num_tokens}')
+            logger.warning(
+                f"max_model_len({max_model_len}) - num_tokens({num_tokens}) < max_tokens({max_tokens}). "
+                f"Setting max_tokens: {max_model_len - num_tokens}"
+            )
             request_config.max_tokens = max_max_tokens
 
-    def _get_logprobs(self,
-                      logprobs_list: Optional[List[Dict[int, float]]],
-                      token_ids: List[int],
-                      top_logprobs: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    def _get_logprobs(
+        self, logprobs_list: list[dict[int, float]] | None, token_ids: list[int], top_logprobs: int | None = None
+    ) -> dict[str, Any] | None:
         if logprobs_list is None or len(token_ids) == 0:
             return None
         if len(token_ids) > 0:
-            logprobs_list = logprobs_list[-len(token_ids):]
+            logprobs_list = logprobs_list[-len(token_ids) :]
         res = []
-        for logprobs, token_id in zip(logprobs_list, token_ids):
+        for logprobs, token_id in zip(logprobs_list, token_ids, strict=False):
             token = self.tokenizer.decode(token_id)
-            _res = {'token': token, 'logprob': logprobs[token_id], 'bytes': list(token.encode('utf8'))}
+            _res = {"token": token, "logprob": logprobs[token_id], "bytes": list(token.encode("utf8"))}
             if top_logprobs is not None:
                 logprobs = {k: logprobs[k] for k in sorted(logprobs, key=lambda k: -logprobs[k])[:top_logprobs]}
                 res_top_logprobs = []
                 for k, logprob in logprobs.items():
-                    if logprob == float('-inf'):
+                    if logprob == float("-inf"):
                         continue
                     token = self.tokenizer.decode(k)
-                    res_top_logprobs.append({'token': token, 'logprob': logprob, 'bytes': list(token.encode('utf8'))})
-                _res['top_logprobs'] = res_top_logprobs
+                    res_top_logprobs.append({"token": token, "logprob": logprob, "bytes": list(token.encode("utf8"))})
+                _res["top_logprobs"] = res_top_logprobs
             res.append(_res)
-        return {'content': res}
+        return {"content": res}
 
     @staticmethod
     def _get_finish_reason(max_tokens: int, num_prompt_tokens: int, is_finished: bool):
-        if is_finished:
-            if num_prompt_tokens >= max_tokens:
-                finish_reason = 'length'
-            else:
-                finish_reason = 'stop'
-        else:
-            finish_reason = None
+        finish_reason = ("length" if num_prompt_tokens >= max_tokens else "stop") if is_finished else None
         return finish_reason
 
     @staticmethod
@@ -257,10 +261,10 @@ class InferEngine(BaseInferEngine, ProcessorMixin):
 
     @staticmethod
     def safe_asyncio_run(coro):
-        return InferEngine.thread_run(asyncio.run, args=(coro, ))
+        return InferEngine.thread_run(asyncio.run, args=(coro,))
 
     @staticmethod
-    def _batch_encode(infer_requests: List[InferRequest], template: Template, strict: bool):
+    def _batch_encode(infer_requests: list[InferRequest], template: Template, strict: bool):
         max_workers = max(min(32, os.cpu_count(), len(infer_requests)), 1)
         error_list = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:

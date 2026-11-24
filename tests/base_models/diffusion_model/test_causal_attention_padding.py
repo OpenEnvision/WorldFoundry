@@ -13,7 +13,6 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-
 VARIANTS = "worldfoundry.base_models.diffusion_model.models.networks.wan.variants"
 
 
@@ -65,8 +64,12 @@ def test_uncached_causal_attention_matches_unpadded_sdpa(monkeypatch, variant, t
         key = module.rope_apply(key, grid, freqs).type_as(value)
         expected = attention.o(_unpadded_attention(query, key, value).flatten(2))
         actual = attention(
-            hidden, seq_lens=torch.tensor([tokens]), grid_sizes=grid,
-            freqs=freqs, block_mask="causal-test-mask", kv_cache=None,
+            hidden,
+            seq_lens=torch.tensor([tokens]),
+            grid_sizes=grid,
+            freqs=freqs,
+            block_mask="causal-test-mask",
+            kv_cache=None,
         )
 
     assert len(calls) == 1
@@ -95,8 +98,12 @@ def test_teacher_forcing_retains_both_rope_segments(monkeypatch, variant, clean_
         key = torch.cat([module.rope_apply(part, grid, freqs) for part in key.chunk(2, dim=1)], dim=1)
         expected = attention.o(_unpadded_attention(query.type_as(value), key.type_as(value), value).flatten(2))
         actual = attention(
-            hidden, seq_lens=torch.tensor([clean_tokens]), grid_sizes=grid,
-            freqs=freqs, block_mask="causal-test-mask", kv_cache=None,
+            hidden,
+            seq_lens=torch.tensor([clean_tokens]),
+            grid_sizes=grid,
+            freqs=freqs,
+            block_mask="causal-test-mask",
+            kv_cache=None,
         )
 
     assert len(calls) == 1
@@ -111,8 +118,13 @@ def test_uncached_action_attention_retains_aligned_frames(monkeypatch, channel, 
     calls = _cpu_flex(monkeypatch, module, frames, 32)
     torch.manual_seed(59)
     action = module.ActionModule(
-        hidden_size=4, img_hidden_size=8, mouse_hidden_dim=64, keyboard_hidden_dim=64,
-        heads_num=1, windows_size=1, enable_mouse=channel == "mouse",
+        hidden_size=4,
+        img_hidden_size=8,
+        mouse_hidden_dim=64,
+        keyboard_hidden_dim=64,
+        heads_num=1,
+        windows_size=1,
+        enable_mouse=channel == "mouse",
         enable_keyboard=channel == "keyboard",
     ).eval()
     spatial_tokens = 880  # This action graph requires its real spatial geometry.
@@ -123,9 +135,15 @@ def test_uncached_action_attention_retains_aligned_frames(monkeypatch, channel, 
 
     with torch.no_grad():
         actual = action(
-            hidden, frames, 1, spatial_tokens, mouse_condition=mouse,
-            keyboard_condition=keyboard, block_mask_mouse="causal-test-mask",
-            block_mask_keyboard="causal-test-mask", is_causal=True,
+            hidden,
+            frames,
+            1,
+            spatial_tokens,
+            mouse_condition=mouse,
+            keyboard_condition=keyboard,
+            block_mask_mouse="causal-test-mask",
+            block_mask_keyboard="causal-test-mask",
+            is_causal=True,
             num_frame_per_block=frames,
         )
         assert len(calls) == 1

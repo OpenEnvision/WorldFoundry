@@ -11,16 +11,16 @@ from worldfoundry.core.execution.graphs.cuda_graph_dispatch import (
     CUDAGraphDispatch,
     cuda_graph_capture_ar_index,
 )
-from worldfoundry.core.vram.encoder_lifecycle import (
-    move_tensors_to_cpu,
-    release_one_shot_encoder_references,
-    run_one_shot_encoder_stage,
-)
 from worldfoundry.core.execution.realtime.overlap import HostThreadOverlap
 from worldfoundry.core.execution.realtime.prewarm import (
     PrewarmTimeoutError,
     run_async_prewarm_sequence,
     run_prewarm_sequence,
+)
+from worldfoundry.core.vram.encoder_lifecycle import (
+    move_tensors_to_cpu,
+    release_one_shot_encoder_references,
+    run_one_shot_encoder_stage,
 )
 
 

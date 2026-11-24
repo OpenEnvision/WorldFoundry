@@ -14,7 +14,7 @@ notes:
 - Full evaluation needs all seven categories and 200 generated videos per category. The MLLM and DOT/tracking paths
   still need their compatible runtime/checkpoint assets.
 preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile t2v-compbench --manifest 
+  worldfoundry.evals.tasks.execution.orchestration.runtime_preflight --profile t2v-compbench --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/t2v-compbench.yaml --output-dir 
   tmp/worldfoundry_preflight/t2v-compbench --json
 python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
@@ -23,7 +23,7 @@ pythonpath_roots:
 required_assets:
   prompt_assets: worldfoundry/data/benchmarks/assets/t2v-compbench
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
+  - worldfoundry/evals/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
   task_yaml: worldfoundry/data/benchmarks/tasks/external/t2v-compbench.yaml
 required_env:
 - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -48,11 +48,11 @@ required_packages:
 - transformers
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/t2v-compbench.yaml
 - id: in_tree_runtime
-  path: worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
+  path: worldfoundry/evals/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
 - id: prompt_assets
   path: worldfoundry/data/benchmarks/assets/t2v-compbench
 - id: generated_artifacts
@@ -72,7 +72,7 @@ base_model_dependency_preflight:
   ready_env:
     WORLDFOUNDRY_GROUNDING_DINO_CKPT: ${WORLDFOUNDRY_T2V_COMPBENCH_GROUNDINGDINO_CKPT}
   runtime_env:
-    WORLDFOUNDRY_T2V_COMPBENCH_ROOT: worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
+    WORLDFOUNDRY_T2V_COMPBENCH_ROOT: worldfoundry/evals/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
   profile_blockers:
   - Full suite requires 1,400 generated videos and the LLaVA, depth/SAM, and DOT evaluator assets.
   missing: []
@@ -98,7 +98,7 @@ official_validation:
   leaderboard_valid: false
   scorecard: tmp/eval_chain_smoke/t2v_compbench_numeracy_official/scorecard.json
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id

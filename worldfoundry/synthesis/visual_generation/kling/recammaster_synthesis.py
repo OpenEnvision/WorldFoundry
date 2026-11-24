@@ -3,6 +3,7 @@ This module provides the ReCamMasterSynthesis class for generating videos based 
 source videos, and camera trajectories using the ReCamMaster model integrated with the Wan model pipeline.
 It handles model loading, initialization, and video generation through a standardized interface.
 """
+
 import os
 
 import torch
@@ -26,11 +27,8 @@ class ReCamMasterSynthesis(BaseSynthesis):
     to generate videos conditioned on text prompts, source videos, and camera trajectories.
     It includes preprocessing steps for input frames.
     """
-    def __init__(self,
-                 pipeline,
-                 height=480,
-                 width=832,
-                 device="cuda"):
+
+    def __init__(self, pipeline, height=480, width=832, device="cuda"):
         """
         Initializes the ReCamMasterSynthesis instance.
 
@@ -40,25 +38,29 @@ class ReCamMasterSynthesis(BaseSynthesis):
             width (int, optional): The target width for video frames. Defaults to 832.
             device (str, optional): The device to run the model on (e.g., "cuda", "cpu"). Defaults to "cuda".
         """
-        super(ReCamMasterSynthesis, self).__init__()
+        super().__init__()
         self.pipeline = pipeline
         self.device = device
 
         # Define the image transformation pipeline for input frames
-        self.frame_process = v2.Compose([
-            v2.CenterCrop(size=(height, width)),  # Crop the input frame to the specified dimensions
-            v2.Resize(size=(height, width), antialias=True),  # Resize to ensure consistency, applying antialiasing
-            v2.ToTensor(),  # Convert the image to a PyTorch Tensor (HWC to CHW, values in [0, 1])
-            v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),  # Normalize pixel values to the range [-1, 1]
-        ])
+        self.frame_process = v2.Compose(
+            [
+                v2.CenterCrop(size=(height, width)),  # Crop the input frame to the specified dimensions
+                v2.Resize(size=(height, width), antialias=True),  # Resize to ensure consistency, applying antialiasing
+                v2.ToTensor(),  # Convert the image to a PyTorch Tensor (HWC to CHW, values in [0, 1])
+                v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),  # Normalize pixel values to the range [-1, 1]
+            ]
+        )
 
     @classmethod
-    def from_pretrained(cls,
-                        pretrained_model_path="Wan-AI/Wan2.1-T2V-1.3B",
-                        recammaster_ckpt_path="KlingTeam/ReCamMaster-Wan2.1",
-                        device="cuda",
-                        weight_dtype = torch.bfloat16,
-                        **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_path="Wan-AI/Wan2.1-T2V-1.3B",
+        recammaster_ckpt_path="KlingTeam/ReCamMaster-Wan2.1",
+        device="cuda",
+        weight_dtype=torch.bfloat16,
+        **kwargs,
+    ):
         """
         Loads a pre-trained ReCamMaster model and its components.
 
@@ -89,47 +91,53 @@ class ReCamMasterSynthesis(BaseSynthesis):
                 "ReCamMaster requires a local Wan checkpoint directory. "
                 f"Runtime downloads are disabled for strict in-tree execution: {pretrained_model_path}"
             )
-        
+
         # Initialize ModelManager to handle loading of base Wan model components
         model_manager = ModelManager(torch_dtype=weight_dtype, device="cpu")
-        model_manager.load_models([
-            os.path.join(model_root, "diffusion_pytorch_model.safetensors"),  # Main diffusion model weights
-            os.path.join(model_root, "models_t5_umt5-xxl-enc-bf16.pth"),    # T5 text encoder weights
-            os.path.join(model_root, "Wan2.1_VAE.pth"),                     # VAE model weights
-        ])
+        model_manager.load_models(
+            [
+                os.path.join(model_root, "diffusion_pytorch_model.safetensors"),  # Main diffusion model weights
+                os.path.join(model_root, "models_t5_umt5-xxl-enc-bf16.pth"),  # T5 text encoder weights
+                os.path.join(model_root, "Wan2.1_VAE.pth"),  # VAE model weights
+            ]
+        )
         # Create the WanVideoReCamMasterPipeline instance from the loaded models
         pipe = WanVideoReCamMasterPipeline.from_model_manager(model_manager, device=device)
 
         # Initialize additional modules introduced in ReCamMaster within each DIT block of the pipeline
         # These modules enhance the DIT's ability to incorporate camera trajectory information.
-        dim = pipe.dit.blocks[0].self_attn.q.weight.shape[0] # Infer the hidden dimension from the DIT block's attention layer
+        dim = pipe.dit.blocks[0].self_attn.q.weight.shape[
+            0
+        ]  # Infer the hidden dimension from the DIT block's attention layer
         for block in pipe.dit.blocks:
-            block.cam_encoder = nn.Linear(12, dim) # Linear layer to encode 12-dim camera trajectory features
+            block.cam_encoder = nn.Linear(12, dim)  # Linear layer to encode 12-dim camera trajectory features
             block.projector = nn.Linear(dim, dim)  # Linear layer for feature projection within the block
             # Initialize weights and biases for the new modules
-            block.cam_encoder.weight.data.zero_()     # Zero-initialize cam_encoder weights for a neutral starting point
-            block.cam_encoder.bias.data.zero_()        # Zero-initialize cam_encoder bias
+            block.cam_encoder.weight.data.zero_()  # Zero-initialize cam_encoder weights for a neutral starting point
+            block.cam_encoder.bias.data.zero_()  # Zero-initialize cam_encoder bias
             block.projector.weight = nn.Parameter(torch.eye(dim))  # Initialize projector weight as an identity matrix
             block.projector.bias = nn.Parameter(torch.zeros(dim))  # Zero-initialize projector bias
 
         # Load ReCamMaster specific checkpoint state dictionary
         recammaster_ckpt_path = os.path.join(recammaster_ckpt_path, "step20000.ckpt")
         state_dict = load_tensor_state_dict(recammaster_ckpt_path)
-        pipe.dit.load_state_dict(state_dict, strict=True) # Load checkpoint into the DIT model with strict key matching
-        pipe.to(device) # Move the entire pipeline to the specified device
-        pipe.to(dtype=weight_dtype) # Set the data type for the pipeline's tensors
+        pipe.dit.load_state_dict(state_dict, strict=True)  # Load checkpoint into the DIT model with strict key matching
+        pipe.to(device)  # Move the entire pipeline to the specified device
+        pipe.to(dtype=weight_dtype)  # Set the data type for the pipeline's tensors
         return cls(pipeline=pipe, device=device)
 
     @torch.no_grad()
-    def predict(self,
-                input_text,
-                input_video,
-                camera_trajotry,
-                num_frames=81,
-                height=480,
-                width=832,
-                num_inference_steps=50,
-                cfg_scale=5.0):
+    def predict(
+        self,
+        input_text,
+        input_video,
+        camera_trajotry,
+        num_frames=81,
+        height=480,
+        width=832,
+        num_inference_steps=50,
+        cfg_scale=5.0,
+    ):
         """
         Generates a video based on a text prompt, an input video, and a camera trajectory.
 
@@ -157,6 +165,7 @@ class ReCamMasterSynthesis(BaseSynthesis):
             width=width,
             num_frames=num_frames,
             num_inference_steps=num_inference_steps,
-            seed=0, tiled=True
+            seed=0,
+            tiled=True,
         )
         return video

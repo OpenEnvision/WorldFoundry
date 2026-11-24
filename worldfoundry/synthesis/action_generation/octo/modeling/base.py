@@ -18,9 +18,7 @@ class TokenGroup:
     mask: jax.typing.ArrayLike
 
     @classmethod
-    def create(
-        cls, tokens: jax.typing.ArrayLike, mask: jax.typing.ArrayLike = None, **kwargs
-    ):
+    def create(cls, tokens: jax.typing.ArrayLike, mask: jax.typing.ArrayLike = None, **kwargs):
         if mask is None:
             mask = jnp.ones(tokens.shape[:-1])
         assert mask.ndim == tokens.ndim - 1

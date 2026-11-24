@@ -49,10 +49,7 @@ def extract_yes_no_answer(value: Any, *, default: str = "no") -> str:
         if not value:
             return default
         value = value[0]
-    if isinstance(value, bytes):
-        text = value.decode("utf-8", errors="replace")
-    else:
-        text = str(value)
+    text = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else str(value)
 
     structured: list[tuple[int, str]] = []
     for pattern in _STRUCTURED_YES_NO_PATTERNS:

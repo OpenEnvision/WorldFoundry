@@ -1,4 +1,3 @@
-schema_version: 2
 id: worldcrafter-base
 name: WorldCrafter Base
 tasks: [text-to-video, image-to-video, camera-controlled-video, world-model]
@@ -9,7 +8,7 @@ source:
   license: worldcrafter-academic-only
 checkpoint: TencentARC/WorldCrafter-Base
 runtime_profile: runtime-profile:worldcrafter-base
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: worldcrafter-base
 official_sources:
   project_page: https://drexubery.github.io/WorldCrafter/
@@ -26,7 +25,9 @@ runner_parity:
   - Shared-transformer upstream numerical checks passed; Base resume matched continuous pre-clamp outputs exactly. Long-horizon quality is not established.
 docs:
   limitations_zh:
-  - 原生 Demo 证据未记录。
-  - 已在本地 H100 上使用发布权重验证 640×384 的双片段图生视频和文生视频推理，包含严格权重加载、裁剪前输出有限性检查、完整解码与画面检查。
-  - 共享 Transformer 的上游数值检查已通过；Base 从中断点恢复的裁剪前输出与连续运行完全一致。长时程画面质量尚未确立。
+  - 已用发布权重验证：640×384 的双片段图生视频与文生视频推理可完整生成并解码。
+  - 长时程画面质量尚未确立。
+  limitations:
+  - 'Validated with the released weights: two-segment 640×384 image-to-video and text-to-video inference generates and decodes completely.'
+  - Long-horizon visual quality is not yet established.
 catalog_category: world_models

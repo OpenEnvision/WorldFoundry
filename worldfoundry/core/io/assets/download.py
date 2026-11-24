@@ -35,14 +35,14 @@ from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from loguru import logger
-
 from worldfoundry.core.io.filesystem.disk import (
     CACHE_MIN_FREE_ENV,
     cache_min_free_bytes,
     ensure_free_disk,
     raise_if_disk_space_error,
 )
+
+logger = __import__("loguru", fromlist=["logger"]).logger
 
 __all__ = ["download_to_cache"]
 
@@ -120,25 +120,21 @@ def download_to_cache(
     tmp_fd, tmp_path_str = tempfile.mkstemp(prefix=f".{filename}.", suffix=".part", dir=cache_dir)
     tmp_path = Path(tmp_path_str)
     try:
-        with os.fdopen(tmp_fd, "wb") as out:
-            with urllib.request.urlopen(url, timeout=timeout) as resp:
-                shutil.copyfileobj(resp, out)
-                content_length = resp.headers.get("Content-Length")
-                if content_length is not None:
-                    try:
-                        expected_bytes = int(content_length)
-                    except (TypeError, ValueError) as exc:
-                        raise ValueError(f"Invalid Content-Length header: {content_length!r}") from exc
-                    received_bytes = out.tell()
-                    if expected_bytes < 0 or received_bytes != expected_bytes:
-                        raise OSError(
-                            f"Incomplete download: expected {expected_bytes} bytes, received {received_bytes}"
-                        )
-        if validator is not None:
-            # Run the caller-provided decoder check before publishing so
-            # the cache only ever contains files the consumer accepts.
-            if validator(tmp_path) is False:
-                raise ValueError("download validator rejected the response")
+        with os.fdopen(tmp_fd, "wb") as out, urllib.request.urlopen(url, timeout=timeout) as resp:
+            shutil.copyfileobj(resp, out)
+            content_length = resp.headers.get("Content-Length")
+            if content_length is not None:
+                try:
+                    expected_bytes = int(content_length)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"Invalid Content-Length header: {content_length!r}") from exc
+                received_bytes = out.tell()
+                if expected_bytes < 0 or received_bytes != expected_bytes:
+                    raise OSError(f"Incomplete download: expected {expected_bytes} bytes, received {received_bytes}")
+        # Run the caller-provided decoder check before publishing so
+        # the cache only ever contains files the consumer accepts.
+        if validator is not None and validator(tmp_path) is False:
+            raise ValueError("download validator rejected the response")
     except Exception as exc:
         tmp_path.unlink(missing_ok=True)
         raise_if_disk_space_error(

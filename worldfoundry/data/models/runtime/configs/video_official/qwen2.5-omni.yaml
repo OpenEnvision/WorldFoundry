@@ -5,7 +5,6 @@ runtime:
   backend_quality: official_hf_transformers_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_HFD_ROOT/Qwen--Qwen2.5-Omni-7B
-  trust_remote_code: true
   torch_dtype: bfloat16
 notes:
 - Qwen2.5-Omni is integrated through the official Hugging Face transformers route.

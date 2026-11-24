@@ -9,9 +9,7 @@ class ABotM0Pipeline(ComponentPipeline):
     MODEL_ID = "abot-m0"
     OPERATOR_TARGET = "worldfoundry.operators.official_policy_operator:OfficialPolicyOperator"
     MEMORY_TARGET = "worldfoundry.synthesis.action_generation.memory:ActionTraceMemory"
-    SYNTHESIS_TARGET = (
-        "worldfoundry.synthesis.action_generation.abot_m0.abot_m0_synthesis:ABotM0Synthesis"
-    )
+    SYNTHESIS_TARGET = "worldfoundry.synthesis.action_generation.abot_m0.abot_m0_synthesis:ABotM0Synthesis"
     generation_type = "vla_policy"
 
 

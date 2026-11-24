@@ -1,11 +1,12 @@
 """Module for the InfiniteVGGT operator implementation."""
 
 import os
+from pathlib import Path
+from typing import Any
+
 import cv2
 import numpy as np
 import torch
-from typing import List, Optional, Union, Dict, Any
-from pathlib import Path
 
 from .base_operator import BaseOperator
 
@@ -35,16 +36,16 @@ class InfiniteVGGTOperator(BaseOperator):
                 "zoom_in",
                 "zoom_out",
             ]
-        super(InfiniteVGGTOperator, self).__init__(operation_types=operation_types)
+        super().__init__(operation_types=operation_types)
         self.interaction_template = interaction_template
         self.interaction_template_init()
 
-    def collect_paths(self, path: Union[str, Path]) -> List[str]:
+    def collect_paths(self, path: str | Path) -> list[str]:
         """Collect file paths from a file, directory, or txt list."""
         path = str(path)
         if os.path.isfile(path):
             if path.lower().endswith(".txt"):
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     files = [line.strip() for line in f.readlines() if line.strip()]
             else:
                 files = [path]
@@ -60,8 +61,8 @@ class InfiniteVGGTOperator(BaseOperator):
 
     def process_perception(
         self,
-        input_signal: Union[str, np.ndarray, torch.Tensor, List[str]],
-    ) -> Union[np.ndarray, List[np.ndarray], List[str]]:
+        input_signal: str | np.ndarray | torch.Tensor | list[str],
+    ) -> np.ndarray | list[np.ndarray] | list[str]:
         """
         Process visual signal: load image(s) or video frames.
         Video/image/audio loading is done here; do not put file loading in process_interaction.
@@ -98,7 +99,11 @@ class InfiniteVGGTOperator(BaseOperator):
                 input_signal = (input_signal / 255.0).astype(np.float32)
             return input_signal
         if isinstance(input_signal, torch.Tensor):
-            arr = input_signal.permute(1, 2, 0).cpu().numpy() if input_signal.dim() == 3 else input_signal[0].permute(1, 2, 0).cpu().numpy()
+            arr = (
+                input_signal.permute(1, 2, 0).cpu().numpy()
+                if input_signal.dim() == 3
+                else input_signal[0].permute(1, 2, 0).cpu().numpy()
+            )
             if arr.max() > 1.0:
                 arr = arr / 255.0
             return arr
@@ -107,10 +112,7 @@ class InfiniteVGGTOperator(BaseOperator):
     def check_interaction(self, interaction):
         """Check if interaction is in self.interaction_template."""
         if interaction not in self.interaction_template:
-            raise ValueError(
-                f"'{interaction}' not in interaction_template. "
-                f"Available: {self.interaction_template}"
-            )
+            raise ValueError(f"'{interaction}' not in interaction_template. Available: {self.interaction_template}")
         return True
 
     def get_interaction(self, interaction):
@@ -118,7 +120,7 @@ class InfiniteVGGTOperator(BaseOperator):
         self.check_interaction(interaction)
         self.current_interaction.append(interaction)
 
-    def process_interaction(self, num_frames: Optional[int] = None) -> Dict[str, Any]:
+    def process_interaction(self, num_frames: int | None = None) -> dict[str, Any]:
         """
         Turn self.current_interaction into a form usable by representation/synthesis.
         Only handles text or camera controls (e.g. export_ply, export_glb, move_left).

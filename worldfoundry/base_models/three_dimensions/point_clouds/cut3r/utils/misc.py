@@ -4,18 +4,10 @@
 # --------------------------------------------------------
 # modified from DUSt3R
 
-"""Module for base_models -> three_dimensions -> point_clouds -> cut3r -> utils -> misc.py functionality."""
-
 import torch
 
 
 def fill_default_args(kwargs, func):
-    """Fill default args.
-
-    Args:
-        kwargs: The kwargs.
-        func: The func.
-    """
     import inspect  # a bit hacky but it works reliably
 
     signature = inspect.signature(func)
@@ -29,12 +21,6 @@ def fill_default_args(kwargs, func):
 
 
 def is_symmetrized(gt1, gt2):
-    """Is symmetrized.
-
-    Args:
-        gt1: The gt1.
-        gt2: The gt2.
-    """
     x = gt1["instance"]
     y = gt2["instance"]
     if len(x) == len(y) and len(x) == 1:
@@ -51,12 +37,6 @@ def flip(tensor):
 
 
 def interleave(tensor1, tensor2):
-    """Interleave.
-
-    Args:
-        tensor1: The tensor1.
-        tensor2: The tensor2.
-    """
     res1 = torch.stack((tensor1, tensor2), dim=1).flatten(0, 1)
     res2 = torch.stack((tensor2, tensor1), dim=1).flatten(0, 1)
     return res1, res2
@@ -69,12 +49,6 @@ def transpose_to_landscape(head, activate=True):
     """
 
     def wrapper_no(decout, true_shape, **kwargs):
-        """Wrapper no.
-
-        Args:
-            decout: The decout.
-            true_shape: The true shape.
-        """
         len(true_shape)
         assert true_shape[0:1].allclose(true_shape), "true_shape must be all identical"
         H, W = true_shape[0].cpu().tolist()
@@ -82,12 +56,6 @@ def transpose_to_landscape(head, activate=True):
         return res
 
     def wrapper_yes(decout, true_shape, **kwargs):
-        """Wrapper yes.
-
-        Args:
-            decout: The decout.
-            true_shape: The true shape.
-        """
         B = len(true_shape)
 
         H, W = int(true_shape.min()), int(true_shape.max())
@@ -102,11 +70,6 @@ def transpose_to_landscape(head, activate=True):
             return transposed(head(decout, (W, H), **kwargs))
 
         def selout(ar):
-            """Selout.
-
-            Args:
-                ar: The ar.
-            """
             return [d[ar] for d in decout]
 
         if "pos" in kwargs:
@@ -130,38 +93,10 @@ def transpose_to_landscape(head, activate=True):
 
 
 def transposed(dic):
-    """Transposed.
-
-    Args:
-        dic: The dic.
-    """
     return {k: v.swapaxes(1, 2) if v.ndim > 2 else v for k, v in dic.items()}
 
 
-def invalid_to_nans(arr, valid_mask, ndim=999):
-    """Invalid to nans.
-
-    Args:
-        arr: The arr.
-        valid_mask: The valid mask.
-        ndim: The ndim.
-    """
-    if valid_mask is not None:
-        arr = arr.clone()
-        arr[~valid_mask] = float("nan")
-    if arr.ndim > ndim:
-        arr = arr.flatten(-2 - (arr.ndim - ndim), -2)
-    return arr
-
-
 def invalid_to_zeros(arr, valid_mask, ndim=999):
-    """Invalid to zeros.
-
-    Args:
-        arr: The arr.
-        valid_mask: The valid mask.
-        ndim: The ndim.
-    """
     if valid_mask is not None:
         arr = arr.clone()
         arr[~valid_mask] = 0

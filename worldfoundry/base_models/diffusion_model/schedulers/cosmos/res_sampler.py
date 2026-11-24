@@ -23,7 +23,8 @@ Most of sampling algorihtm, Runge-Kutta, Multi-step, etc, can be impl in this fr
 """
 
 import math
-from typing import Any, Callable, List, Literal, Optional, Tuple, Union
+from collections.abc import Callable
+from typing import Any, Literal
 
 import attrs
 import torch
@@ -44,8 +45,6 @@ COMMON_SOLVER_OPTIONS = Literal["2ab", "2mid", "1euler"]
 @make_freezable
 @attrs.define(slots=False)
 class SolverConfig:
-    """Solver config implementation."""
-
     is_multi: bool = False
     rk: str = "2mid"
     multistep: str = "2ab"
@@ -60,8 +59,6 @@ class SolverConfig:
 @make_freezable
 @attrs.define(slots=False)
 class SolverTimestampConfig:
-    """Solver timestamp config implementation."""
-
     nfe: int = 50
     t_min: float = 0.002
     t_max: float = 80.0
@@ -72,15 +69,13 @@ class SolverTimestampConfig:
 @make_freezable
 @attrs.define(slots=False)
 class SamplerConfig:
-    """Sampler config implementation."""
-
     solver: SolverConfig = attrs.field(factory=SolverConfig)
     timestamps: SolverTimestampConfig = attrs.field(factory=SolverTimestampConfig)
     sample_clean: bool = True  # whether run one last step to generate clean image
 
 
 def get_rev_ts(
-    t_min: float, t_max: float, num_steps: int, ts_order: Union[int, float], is_forward: bool = False
+    t_min: float, t_max: float, num_steps: int, ts_order: int | float, is_forward: bool = False
 ) -> torch.Tensor:
     """
     Generate a sequence of reverse time steps.
@@ -117,14 +112,7 @@ def get_rev_ts(
 
 
 class Sampler(torch.nn.Module):
-    """Sampler implementation."""
-
-    def __init__(self, cfg: Optional[SamplerConfig] = None):
-        """Init.
-
-        Args:
-            cfg: The cfg.
-        """
+    def __init__(self, cfg: SamplerConfig | None = None):
         super().__init__()
         if cfg is None:
             cfg = SamplerConfig()
@@ -145,36 +133,9 @@ class Sampler(torch.nn.Module):
         S_noise: float = 1,
         solver_option: str = "2ab",
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x0_fn: The x0 fn.
-            x_sigma_max: The x sigma max.
-            num_steps: The num steps.
-            sigma_min: The sigma min.
-            sigma_max: The sigma max.
-            rho: The rho.
-            S_churn: The s churn.
-            S_min: The s min.
-            S_max: The s max.
-            S_noise: The s noise.
-            solver_option: The solver option.
-
-        Returns:
-            The return value.
-        """
         in_dtype = x_sigma_max.dtype
 
         def float64_x0_fn(x_B_StateShape: torch.Tensor, t_B: torch.Tensor) -> torch.Tensor:
-            """Float64 x0 fn.
-
-            Args:
-                x_B_StateShape: The x b stateshape.
-                t_B: The t b.
-
-            Returns:
-                The return value.
-            """
             return x0_fn(x_B_StateShape.to(in_dtype), t_B.to(in_dtype)).to(torch.float64)
 
         is_multistep = is_multi_step_fn_supported(solver_option)
@@ -200,8 +161,8 @@ class Sampler(torch.nn.Module):
         self,
         denoiser_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         noisy_input_B_StateShape: torch.Tensor,
-        sampler_cfg: Optional[SamplerConfig] = None,
-        callback_fns: Optional[List[Callable]] = None,
+        sampler_cfg: SamplerConfig | None = None,
+        callback_fns: list[Callable] | None = None,
     ) -> torch.Tensor:
         """
         Internal implementation of the forward pass.
@@ -258,7 +219,7 @@ def differential_equation_solver(
     x0_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     sigmas_L: torch.Tensor,
     solver_cfg: SolverConfig,
-    callback_fns: Optional[List[Callable]] = None,
+    callback_fns: list[Callable] | None = None,
 ) -> Callable[[torch.Tensor], torch.Tensor]:
     """
     Creates a differential equation solver function.
@@ -294,17 +255,8 @@ def differential_equation_solver(
         ones_B = torch.ones(input_xT_B_StateShape.size(0), device=input_xT_B_StateShape.device, dtype=torch.float64)
 
         def step_fn(
-            i_th: int, state: Tuple[torch.Tensor, Optional[List[torch.Tensor]]]
-        ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]]]:
-            """Step fn.
-
-            Args:
-                i_th: The i th.
-                state: The state.
-
-            Returns:
-                The return value.
-            """
+            i_th: int, state: tuple[torch.Tensor, list[torch.Tensor] | None]
+        ) -> tuple[torch.Tensor, list[torch.Tensor] | None]:
             input_x_B_StateShape, x0_preds = state
             sigma_cur_0, sigma_next_0 = sigmas_L[i_th], sigmas_L[i_th + 1]
 

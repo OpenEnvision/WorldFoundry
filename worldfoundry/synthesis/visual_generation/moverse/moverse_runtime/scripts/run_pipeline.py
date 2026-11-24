@@ -5,78 +5,54 @@ import math
 import os
 import shutil
 import subprocess
-import sys
 import time
 from pathlib import Path
 
 import numpy as np
 import torch
-
-# ── Path setup ──────────────────────────────────────────────────────────
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
-# Add scripts/ to path for traj_to_extrinsics import
-SCRIPTS_DIR = os.path.join(ROOT_DIR, "scripts")
-if SCRIPTS_DIR not in sys.path:
-    sys.path.insert(0, SCRIPTS_DIR)
-
 from omegaconf import OmegaConf
 from PIL import Image
 
-from rendering.gaussian_renderer import GaussianRenderer, load_gaussians
-from pipeline import CausalInferencePipeline
-from traj_to_extrinsics import load_trajectory, trajectory_to_w2cs
+from ..pipeline import CausalInferencePipeline
+from ..rendering.gaussian_renderer import GaussianRenderer, load_gaussians
+from .traj_to_extrinsics import load_trajectory, trajectory_to_w2cs
 
 
 def parse_args():
-    p = argparse.ArgumentParser(
-        description="Headless video generation pipeline (reuses server pipeline)"
-    )
+    p = argparse.ArgumentParser(description="Headless video generation pipeline (reuses server pipeline)")
     # Pipeline config
-    p.add_argument("--config_path", type=str, required=True,
-                   help="Inference config file (YAML)")
-    p.add_argument("--default_config_path", type=str, required=True,
-                   help="Base inference config file (YAML)")
-    p.add_argument("--checkpoint_path", type=str, default=None,
-                   help="Model checkpoint path (overrides config)")
+    p.add_argument("--config_path", type=str, required=True, help="Inference config file (YAML)")
+    p.add_argument("--default_config_path", type=str, required=True, help="Base inference config file (YAML)")
+    p.add_argument("--checkpoint_path", type=str, default=None, help="Model checkpoint path (overrides config)")
     p.add_argument("--use_ema", action="store_true")
     p.add_argument("--fp8", action="store_true")
-    p.add_argument("--taehv", action="store_true", default=True,
-                   help="Use TAEHV lightweight VAE decoder (default: True)")
-    p.add_argument("--taehv_checkpoint", type=str,
-                   default="checkpoints/taew2_1.pth",
-                   help="TAEHV checkpoint path")
+    p.add_argument(
+        "--taehv", action="store_true", default=True, help="Use TAEHV lightweight VAE decoder (default: True)"
+    )
+    p.add_argument("--taehv_checkpoint", type=str, default="checkpoints/taew2_1.pth", help="TAEHV checkpoint path")
 
     # Scene
-    p.add_argument("--scene", type=str, required=True,
-                   help="Path to 3DGS PLY or .pt file")
-    p.add_argument("--prompt", type=str, required=True,
-                   help="Video generation text prompt")
-    p.add_argument("--radius", type=float, default=1.0,
-                   help="Scene radius for trajectory scaling")
+    p.add_argument("--scene", type=str, required=True, help="Path to 3DGS PLY or .pt file")
+    p.add_argument("--prompt", type=str, required=True, help="Video generation text prompt")
+    p.add_argument("--radius", type=float, default=1.0, help="Scene radius for trajectory scaling")
 
     # Trajectory
-    p.add_argument("--traj", type=str, required=True,
-                   help="Trajectory file path")
-    p.add_argument("--num_frames", type=int, default=161,
-                   help="Number of output frames")
+    p.add_argument("--traj", type=str, required=True, help="Trajectory file path")
+    p.add_argument("--num_frames", type=int, default=161, help="Number of output frames")
 
     # Render settings
-    p.add_argument("--render_fov_deg", type=float, default=70.0,
-                   help="Render horizontal FOV (degrees)")
+    p.add_argument("--render_fov_deg", type=float, default=70.0, help="Render horizontal FOV (degrees)")
     p.add_argument("--near_plane", type=float, default=0.01)
     p.add_argument("--far_plane", type=float, default=1000.0)
-    p.add_argument("--gaussian_scale", type=float, default=1.0,
-                   help="Gaussian scale factor (default 1.0)")
+    p.add_argument("--gaussian_scale", type=float, default=1.0, help="Gaussian scale factor (default 1.0)")
 
     # Output
-    p.add_argument("--output", type=str, default="output/video.mp4",
-                   help="Output video path")
-    p.add_argument("--fps", type=int, default=16,
-                   help="Output video FPS")
-    p.add_argument("--save_frames_dir", type=str, default=None,
-                   help="Directory to save individual frames (default: temp)")
+    p.add_argument("--output", type=str, default="output/video.mp4", help="Output video path")
+    p.add_argument("--fps", type=int, default=16, help="Output video FPS")
+    p.add_argument("--seed", type=int, default=None)
+    p.add_argument(
+        "--save_frames_dir", type=str, default=None, help="Directory to save individual frames (default: temp)"
+    )
 
     return p.parse_args()
 
@@ -96,12 +72,12 @@ def load_pipeline(args, config):
     print("[init] Loading CausalInferencePipeline ...")
     t0 = time.perf_counter()
     pipeline = CausalInferencePipeline(config, device=device)
-    print(f"[init] Pipeline loaded ({(time.perf_counter()-t0)*1000:.0f} ms)")
+    print(f"[init] Pipeline loaded ({(time.perf_counter() - t0) * 1000:.0f} ms)")
 
     # Load checkpoint
     ckpt_path = args.checkpoint_path
     if ckpt_path is None and hasattr(config, "checkpoint_paths"):
-        ckpt_path = list(config.checkpoint_paths)[0]
+        ckpt_path = list(config.checkpoint_paths)[0]  # noqa: RUF015 - Keeps eager list construction and IndexError.
         print(f"[init] Reading checkpoint from config.checkpoint_paths: {ckpt_path}")
 
     if ckpt_path:
@@ -131,7 +107,7 @@ def load_pipeline(args, config):
             pipeline.generator.load_state_dict(sd)
             print("[init] Flat format weights loaded.")
 
-        print(f"[init] Checkpoint loaded ({(time.perf_counter()-t0)*1000:.0f} ms)")
+        print(f"[init] Checkpoint loaded ({(time.perf_counter() - t0) * 1000:.0f} ms)")
 
     pipeline = pipeline.to(dtype=dtype)
     pipeline.generator.eval()
@@ -141,8 +117,8 @@ def load_pipeline(args, config):
     # FP8 quantization
     if args.fp8:
         try:
-            from torchao.quantization.quant_api import (
-                quantize_, Float8DynamicActivationFloat8WeightConfig)
+            from torchao.quantization.quant_api import Float8DynamicActivationFloat8WeightConfig, quantize_
+
             quantize_(pipeline.generator, Float8DynamicActivationFloat8WeightConfig())
             print("[init] FP8 quantization enabled")
         except Exception as e:
@@ -151,18 +127,13 @@ def load_pipeline(args, config):
     # TAEHV lightweight VAE decoder
     if args.taehv:
         import types
+
         from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.taehv import TAEHV
 
         taehv_ckpt = args.taehv_checkpoint
         print(f"[init] Loading TAEHV lightweight VAE decoder: {taehv_ckpt} ...")
         t0 = time.perf_counter()
-        taehv_model = (
-            TAEHV(checkpoint_path=taehv_ckpt)
-            .to(dtype=torch.float16)
-            .eval()
-            .requires_grad_(False)
-            .to(device)
-        )
+        taehv_model = TAEHV(checkpoint_path=taehv_ckpt).to(dtype=torch.float16).eval().requires_grad_(False).to(device)
 
         taehv_latent_cache = []
         _TAEHV_MAX_CACHE = 3
@@ -171,8 +142,7 @@ def load_pipeline(args, config):
             nonlocal taehv_latent_cache
 
             if not use_cache:
-                pixels = taehv_model.decode_video(
-                    latent.to(dtype=torch.float16), parallel=False)
+                pixels = taehv_model.decode_video(latent.to(dtype=torch.float16), parallel=False)
                 return pixels.mul(2).sub(1).float()
 
             T_new = latent.shape[1]
@@ -185,19 +155,17 @@ def load_pipeline(args, config):
                 decode_input = torch.cat([cache_tensor, latent], dim=1)
                 skip_frames = cache_tensor.shape[1] * 4
 
-            all_pixels = taehv_model.decode_video(
-                decode_input.to(dtype=torch.float16), parallel=False)
+            all_pixels = taehv_model.decode_video(decode_input.to(dtype=torch.float16), parallel=False)
             new_pixels = all_pixels[:, skip_frames:]
 
             for t in range(T_new):
-                taehv_latent_cache.append(latent[:, t:t + 1].detach())
+                taehv_latent_cache.append(latent[:, t : t + 1].detach())
             if len(taehv_latent_cache) > _TAEHV_MAX_CACHE:
                 taehv_latent_cache = taehv_latent_cache[-_TAEHV_MAX_CACHE:]
 
             return new_pixels.mul(2).sub(1).float()
 
-        pipeline.vae.decode_to_pixel = types.MethodType(
-            _taehv_decode_to_pixel, pipeline.vae)
+        pipeline.vae.decode_to_pixel = types.MethodType(_taehv_decode_to_pixel, pipeline.vae)
 
         _original_clear_cache = pipeline.vae.model.clear_cache
 
@@ -208,8 +176,7 @@ def load_pipeline(args, config):
 
         pipeline.vae.model.clear_cache = _taehv_aware_clear_cache
 
-        print(f"[init] TAEHV VAE decoder activated (streaming cache mode) "
-              f"({(time.perf_counter()-t0)*1000:.0f} ms)")
+        print(f"[init] TAEHV VAE decoder activated (streaming cache mode) ({(time.perf_counter() - t0) * 1000:.0f} ms)")
 
     return pipeline, device, dtype
 
@@ -223,10 +190,7 @@ def encode_prompt(pipeline, prompt, device, dtype):
     pipeline.text_encoder.to(device=device)
     with torch.no_grad():
         cond_dict = pipeline.text_encoder([prompt])
-    cond_dict = {
-        k: v.to(dtype=dtype, device=device).clone()
-        for k, v in cond_dict.items()
-    }
+    cond_dict = {k: v.to(dtype=dtype, device=device).clone() for k, v in cond_dict.items()}
     pipeline.text_encoder.to("cpu")
     torch.cuda.empty_cache()
     print("[encode] Prompt encoding complete")
@@ -262,9 +226,9 @@ def run_pipeline_step_headless(
 
     # ── 1. Gaussian rendering ─────────────────────────────────────────────
     with torch.no_grad():
-        viewmats = torch.stack(frame_w2cs)                                   # (T, 4, 4)
-        Ks = intrinsics.unsqueeze(0).expand(frames_per_step, -1, -1)       # (T, 3, 3)
-        rendered_rgb = renderer.render_batch(viewmats, Ks)                  # (T, H, W, 3)
+        viewmats = torch.stack(frame_w2cs)  # (T, 4, 4)
+        Ks = intrinsics.unsqueeze(0).expand(frames_per_step, -1, -1)  # (T, 3, 3)
+        rendered_rgb = renderer.render_batch(viewmats, Ks)  # (T, H, W, 3)
 
     if torch.cuda.is_available():
         torch.cuda.synchronize()
@@ -298,8 +262,7 @@ def run_pipeline_step_headless(
 
     dit_ms = _step_timing.get("dit_ms", 0.0)
     vae_dec_ms = _step_timing.get("vae_dec_ms", 0.0)
-    print(f"  [pipeline] DiT: {dit_ms:.0f} ms, VAE dec: {vae_dec_ms:.0f} ms, "
-          f"frames out: {gen_pixel.shape[1]}")
+    print(f"  [pipeline] DiT: {dit_ms:.0f} ms, VAE dec: {vae_dec_ms:.0f} ms, frames out: {gen_pixel.shape[1]}")
 
     return gen_pixel, render_pixel
 
@@ -351,12 +314,18 @@ def save_render_frames(render_pixel, frame_idx, output_dir):
 def frames_to_video(frames_dir, output_path, fps=16):
     """Compile frames into a video using ffmpeg."""
     cmd = [
-        "ffmpeg", "-y",
-        "-framerate", str(fps),
-        "-i", os.path.join(frames_dir, "frame_%05d.png"),
-        "-c:v", "libx264",
-        "-pix_fmt", "yuv420p",
-        "-crf", "18",
+        "ffmpeg",
+        "-y",
+        "-framerate",
+        str(fps),
+        "-i",
+        os.path.join(frames_dir, "frame_%05d.png"),
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-crf",
+        "18",
         output_path,
     ]
     print(f"[ffmpeg] Running: {' '.join(cmd)}")
@@ -370,17 +339,19 @@ def frames_to_video(frames_dir, output_path, fps=16):
 
 def main():
     args = parse_args()
+    if args.seed is not None:
+        from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
+
+        set_seed_everywhere(args.seed)
 
     # ── Load config ───────────────────────────────────────────────────────
-    print(f"[init] ROOT_DIR = {ROOT_DIR}")
     print(f"[init] Loading config: {args.config_path}")
     config = OmegaConf.load(args.config_path)
     default_cfg = OmegaConf.load(args.default_config_path)
     config = OmegaConf.merge(default_cfg, config)
 
     if hasattr(config, "denoising_step_lists") and not hasattr(config, "denoising_step_list"):
-        OmegaConf.update(config, "denoising_step_list",
-                         list(config.denoising_step_lists[0]))
+        OmegaConf.update(config, "denoising_step_list", list(config.denoising_step_lists[0]))
 
     # ── Load pipeline ─────────────────────────────────────────────────────
     pipeline, device, dtype = load_pipeline(args, config)
@@ -394,8 +365,7 @@ def main():
     with torch.no_grad():
         gs_data = load_gaussians(args.scene, str(device))
     dt = (time.perf_counter() - t0) * 1000
-    print(f"[init] Gaussian load complete ({dt:.0f} ms, "
-          f"{gs_data['means'].shape[0]:,} Gaussians)")
+    print(f"[init] Gaussian load complete ({dt:.0f} ms, {gs_data['means'].shape[0]:,} Gaussians)")
 
     # ── Create GaussianRenderer ───────────────────────────────────────────
     target_h, target_w = 480, 832
@@ -425,11 +395,15 @@ def main():
     fy = fx
     cx = target_w / 2.0
     cy = target_h / 2.0
-    intrinsics = torch.tensor([
-        [fx,  0.0, cx],
-        [0.0, fy,  cy],
-        [0.0, 0.0, 1.0],
-    ], dtype=torch.float32, device=device)
+    intrinsics = torch.tensor(
+        [
+            [fx, 0.0, cx],
+            [0.0, fy, cy],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=torch.float32,
+        device=device,
+    )
     print(f"[init] Intrinsics: FOV={fov_h_deg:.0f}°, fx={fx:.1f}")
 
     # ── Load trajectory → w2c matrices ────────────────────────────────────
@@ -438,16 +412,17 @@ def main():
 
     # VAE cached_encode only supports T=1 (step 1) or T=4 (subsequent steps).
     # Round num_frames up to nearest valid count: 1 + 4*N.
-    if args.num_frames == 1:
-        total_frames_padded = 1
-    else:
-        total_frames_padded = 1 + 4 * ((args.num_frames - 1 + 3) // 4)
+    total_frames_padded = 1 if args.num_frames == 1 else 1 + 4 * ((args.num_frames - 1 + 3) // 4)
     if total_frames_padded != args.num_frames:
-        print(f"[traj] Padding {args.num_frames} → {total_frames_padded} frames "
-              f"(VAE requires 1+4N pattern; extra frames will be discarded)")
+        print(
+            f"[traj] Padding {args.num_frames} → {total_frames_padded} frames "
+            f"(VAE requires 1+4N pattern; extra frames will be discarded)"
+        )
 
     w2c_matrices = trajectory_to_w2cs(
-        theta_seq, phi_seq, r_seq,
+        theta_seq,
+        phi_seq,
+        r_seq,
         num_frames=total_frames_padded,
         radius=args.radius,
     )
@@ -473,20 +448,16 @@ def main():
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
-    frames_dir = args.save_frames_dir or os.path.join(
-        output_dir or ".", "_frames_tmp"
-    )
+    frames_dir = args.save_frames_dir or os.path.join(output_dir or ".", "_frames_tmp")
     os.makedirs(frames_dir, exist_ok=True)
 
     # Render frames directory (for side-by-side comparison)
-    render_frames_dir = os.path.join(
-        output_dir or ".", "_render_frames_tmp"
-    )
+    render_frames_dir = os.path.join(output_dir or ".", "_render_frames_tmp")
     os.makedirs(render_frames_dir, exist_ok=True)
 
     # ── Run pipeline ──────────────────────────────────────────────────────
     print(f"\n{'=' * 60}")
-    print(f"  Headless Video Generation")
+    print("  Headless Video Generation")
     print(f"  Scene:    {args.scene}")
     print(f"  Prompt:   {args.prompt[:60]}...")
     print(f"  Frames:   {args.num_frames}")
@@ -504,13 +475,12 @@ def main():
         frames_per_step = 1 if step_idx == 1 else 4
 
         # Get w2c matrices for this step (padded total guarantees enough frames)
-        step_w2cs = [
-            w2c_matrices[frame_idx + i]
-            for i in range(frames_per_step)
-        ]
+        step_w2cs = [w2c_matrices[frame_idx + i] for i in range(frames_per_step)]
 
-        print(f"[step {step_idx}] Rendering {frames_per_step} frame(s) "
-              f"(frames {frame_idx}-{frame_idx + frames_per_step - 1})...")
+        print(
+            f"[step {step_idx}] Rendering {frames_per_step} frame(s) "
+            f"(frames {frame_idx}-{frame_idx + frames_per_step - 1})..."
+        )
 
         t0 = time.perf_counter()
         gen_pixel, render_pixel = run_pipeline_step_headless(
@@ -522,8 +492,7 @@ def main():
             dtype=dtype,
         )
         dt = (time.perf_counter() - t0) * 1000
-        print(f"[step {step_idx}] Done ({dt:.0f} ms, "
-              f"{gen_pixel.shape[1]} frames generated)")
+        print(f"[step {step_idx}] Done ({dt:.0f} ms, {gen_pixel.shape[1]} frames generated)")
 
         # Save generated frames
         frame_idx = save_frames(gen_pixel, frame_idx, frames_dir)
@@ -532,32 +501,35 @@ def main():
 
     # Truncate to requested num_frames (discard padded extra frames)
     actual_frames = min(frame_idx, args.num_frames)
-    print(f"\n[done] Generated {frame_idx} frames in {step_idx} steps "
-          f"(keeping {actual_frames}, requested {args.num_frames})")
+    print(
+        f"\n[done] Generated {frame_idx} frames in {step_idx} steps "
+        f"(keeping {actual_frames}, requested {args.num_frames})"
+    )
 
     # Remove excess frames beyond requested count
     if frame_idx > args.num_frames:
         for d in [frames_dir, render_frames_dir]:
             dir_path = Path(d)
-            for f in sorted(dir_path.glob("frame_*.png"), reverse=True)[:frame_idx - args.num_frames]:
+            for f in sorted(dir_path.glob("frame_*.png"), reverse=True)[: frame_idx - args.num_frames]:
                 f.unlink()
                 print(f"  [cleanup] Removed excess frame: {f.name}")
 
     # ── Compile gen video ──────────────────────────────────────────────────
-    print(f"[ffmpeg] Compiling gen video...")
+    print("[ffmpeg] Compiling gen video...")
     gen_success = frames_to_video(frames_dir, args.output, fps=args.fps)
 
     # ── Compile render video ───────────────────────────────────────────────
     render_video = args.output.replace(".mp4", "_render.mp4")
-    print(f"[ffmpeg] Compiling render video...")
+    print("[ffmpeg] Compiling render video...")
     render_success = frames_to_video(render_frames_dir, render_video, fps=args.fps)
 
     # ── Create side-by-side comparison (numpy + imageio, same as UI) ───────
     combined_video = args.output.replace(".mp4", "_side_by_side.mp4")
     if gen_success and render_success:
-        print(f"[combine] Creating side-by-side comparison...")
+        print("[combine] Creating side-by-side comparison...")
         try:
             import imageio
+
             render_imgs = [imageio.imread(p) for p in sorted(Path(render_frames_dir).glob("frame_*.png"))]
             gen_imgs = [imageio.imread(p) for p in sorted(Path(frames_dir).glob("frame_*.png"))]
 
@@ -576,24 +548,31 @@ def main():
                 scale = target_h / gen_imgs[0].shape[0]
                 target_w_gen = int(gen_imgs[0].shape[1] * scale)
                 import cv2 as _cv2
+
                 gen_imgs = [_cv2.resize(img, (target_w_gen, target_h)) for img in gen_imgs]
 
             # Concatenate horizontally: [render | gen]
             combined_imgs = []
-            for r_img, g_img in zip(render_imgs, gen_imgs):
-                combined = np.zeros((target_h, target_w_render + target_w_gen, 3),
-                                    dtype=np.uint8)
+            for r_img, g_img in zip(render_imgs, gen_imgs, strict=False):
+                combined = np.zeros((target_h, target_w_render + target_w_gen, 3), dtype=np.uint8)
                 combined[:, :target_w_render] = r_img
                 combined[:, target_w_render:] = g_img
                 combined_imgs.append(combined)
 
-            imageio.mimsave(combined_video, combined_imgs, fps=args.fps,
-                            codec="libx264", quality=8, macro_block_size=None,
-                            ffmpeg_params=['-movflags', 'faststart', '-pix_fmt', 'yuv420p'])
+            imageio.mimsave(
+                combined_video,
+                combined_imgs,
+                fps=args.fps,
+                codec="libx264",
+                quality=8,
+                macro_block_size=None,
+                ffmpeg_params=["-movflags", "faststart", "-pix_fmt", "yuv420p"],
+            )
             print(f"[combine] Side-by-side saved: {combined_video} ({len(combined_imgs)} frames)")
         except Exception as e:
             print(f"[combine] Error: {e}")
             import traceback
+
             traceback.print_exc()
     else:
         print(f"[warning] Skipping side-by-side (gen_success={gen_success}, render_success={render_success})")
@@ -601,12 +580,12 @@ def main():
     # ── Clean up temporary frames ───────────────────────────────────────────
     if gen_success and args.save_frames_dir is None:
         shutil.rmtree(frames_dir)
-        print(f"[cleanup] Removed gen frames directory")
+        print("[cleanup] Removed gen frames directory")
     if render_success:
         shutil.rmtree(render_frames_dir)
-        print(f"[cleanup] Removed render frames directory")
+        print("[cleanup] Removed render frames directory")
 
-    print(f"\n[complete] Outputs:")
+    print("\n[complete] Outputs:")
     print(f"  Gen video:       {args.output}")
     print(f"  Render video:    {render_video}")
     if os.path.exists(combined_video):

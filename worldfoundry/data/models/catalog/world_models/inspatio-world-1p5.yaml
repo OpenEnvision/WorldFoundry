@@ -13,6 +13,7 @@ official_sources:
   project_page: https://inspatio.github.io/inspatio-world-1.5/
   github:
     url: https://github.com/inspatio/inspatio-world-v1.5
+    revision: dd3561f544053fe22d739b6b2f8461c9c97bf8cb
     head_sha: dd3561f544053fe22d739b6b2f8461c9c97bf8cb
   huggingface:
   - repo_id: inspatio/world-1.5
@@ -23,7 +24,7 @@ checkpoints:
 - repo_id: inspatio/world-1.5
   revision: 6a5cf5e27b8a05930911a5416fa8c68eabdda414
 runtime_profile: runtime-profile:inspatio-world-1p5
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: inspatio-world-1p5
 catalog_category: world_models
 integration:

@@ -12,8 +12,8 @@ Compatibility wrapper only.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import torch
 from torch import nn
@@ -24,6 +24,7 @@ from .reference import umt5_xxl
 
 class WanTextEncoder(nn.Module):
     """Path-loaded UMT5 wrapper used by resident Wan 2.1 processes."""
+
     def __init__(
         self,
         model_root: str | Path | None = None,
@@ -39,18 +40,20 @@ class WanTextEncoder(nn.Module):
             tokenizer_path = tokenizer_path or root / "google" / "umt5-xxl"
         if text_encoder_path is None or tokenizer_path is None:
             raise ValueError("WanTextEncoder requires model_root or explicit checkpoint paths")
-        self.text_encoder = umt5_xxl(
-            encoder_only=True,
-            return_tokenizer=False,
-            dtype=dtype,
-            device=torch.device("cpu"),
-        ).eval().requires_grad_(False)
+        self.text_encoder = (
+            umt5_xxl(
+                encoder_only=True,
+                return_tokenizer=False,
+                dtype=dtype,
+                device=torch.device("cpu"),
+            )
+            .eval()
+            .requires_grad_(False)
+        )
         # The UMT5 encoder checkpoint is a pure tensor state dict, so the safe
         # weights-only deserialization path is sufficient
         # (plan/code_review/11_vendored_integration.md [VI-23]).
-        self.text_encoder.load_state_dict(
-            torch.load(text_encoder_path, map_location="cpu", weights_only=True)
-        )
+        self.text_encoder.load_state_dict(torch.load(text_encoder_path, map_location="cpu", weights_only=True))
         self.tokenizer = HuggingfaceTokenizer(
             name=str(tokenizer_path),
             seq_len=512,
@@ -70,7 +73,7 @@ class WanTextEncoder(nn.Module):
         ids, mask = ids.to(self.device), mask.to(self.device)
         lengths = mask.gt(0).sum(dim=1).long()
         context = self.text_encoder(ids, mask)
-        for embedding, length in zip(context, lengths):
+        for embedding, length in zip(context, lengths, strict=False):
             embedding[length:] = 0.0
         return {"prompt_embeds": context}
 

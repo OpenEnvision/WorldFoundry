@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> config -> pipeline.py functionality."""
-
 from __future__ import annotations
 
 from typing import Annotated, Literal
@@ -67,7 +65,7 @@ class PostConfig(BaseConfigSchema):
 
     depth_align_model: str | None = Field(
         description="Depth model or alignment recipe used after SLAM. Examples include adaptive_unidepth-l, "
-        "adaptive_unidepth-l_svda, adaptive_moge_vda, mvd_dav3, dap, and unik3d. Set to null for pose-only output."
+        "adaptive_unidepth-l_svda, adaptive_moge_vda, mvd_dav3, and dap. Set to null for pose-only output."
     )
 
 

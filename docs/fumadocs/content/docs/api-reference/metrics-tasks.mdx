@@ -5,32 +5,32 @@ description: Metric outputs, metric implementations, task contracts, evaluation 
 
 Task contracts describe what should be generated. Metric contracts describe how compatible results are scored. Keeping them separate allows one generated artifact set to be evaluated by more than one metric without rerunning the model.
 
-Import the symbols on this page from `worldfoundry.evaluation.api`.
+Import the symbols on this page from `worldfoundry.evals.api`.
 
 ## `MetricSpec`
 
 `MetricSpec` is declarative metadata: identity, aliases, required artifact kinds, output unit, aggregation policy, and score direction. The `implementation` field may point to code, but the spec itself does not execute it.
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.MetricSpec" />
+<PythonApiReference symbol="worldfoundry.evals.api.MetricSpec" />
 
 ## `MetricResult`
 
 One `MetricResult` belongs to one sample and one metric. Use `valid=False` with `skip_reason` when the metric cannot score the sample. `coverage` makes partial evaluation visible instead of silently averaging only the successful subset.
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.MetricResult" />
+<PythonApiReference symbol="worldfoundry.evals.api.MetricResult" />
 
 ## `AggregateResult`
 
 An aggregate records total, valid, and skipped counts together with summary statistics. It is the metric-level result; leaderboard eligibility is decided later by benchmark and scorecard evidence.
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.AggregateResult" />
+<PythonApiReference symbol="worldfoundry.evals.api.AggregateResult" />
 
 ## `Metric`
 
 Metric implementations satisfy this protocol structurally. The following deliberately simple metric counts artifact references; it shows the API shape, not a benchmark-quality video metric.
 
 ```python
-from worldfoundry.evaluation.api import AggregateResult, MetricResult
+from worldfoundry.evals.api import AggregateResult, MetricResult
 
 class ArtifactCountMetric:
     name = "artifact_count_example"
@@ -61,20 +61,20 @@ class ArtifactCountMetric:
         )
 ```
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.Metric" />
+<PythonApiReference symbol="worldfoundry.evals.api.Metric" />
 
 ## `EvaluationProtocolSpec`
 
 A protocol groups metric IDs and metric groups under a named evaluation behavior. Extra protocol-specific keys loaded from a catalog are preserved in `metadata`.
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.EvaluationProtocolSpec" />
+<PythonApiReference symbol="worldfoundry.evals.api.EvaluationProtocolSpec" />
 
 ## `WorldTaskConfig`
 
 This object describes one task's input keys, output keys, generation defaults, and intended metric set. For an action-conditioned video task, inputs might contain an initial image, controls might carry actions, and the output key would be `generated_video`.
 
 ```python
-from worldfoundry.evaluation.api import WorldTaskConfig
+from worldfoundry.evals.api import WorldTaskConfig
 
 task = WorldTaskConfig(
     name="action-conditioned-video",
@@ -86,14 +86,14 @@ task = WorldTaskConfig(
 )
 ```
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.WorldTaskConfig" />
+<PythonApiReference symbol="worldfoundry.evals.api.WorldTaskConfig" />
 
 ## `BenchmarkSpec`
 
 `BenchmarkSpec` collects tasks, metrics, splits, and dataset metadata into an in-process benchmark description. A checked-in benchmark catalog entry can be richer; this public DTO is the execution-facing form.
 
 ```python
-from worldfoundry.evaluation.api import BenchmarkSpec, MetricSpec
+from worldfoundry.evals.api import BenchmarkSpec, MetricSpec
 
 benchmark = BenchmarkSpec(
     name="navigation-smoke-test",
@@ -103,6 +103,6 @@ benchmark = BenchmarkSpec(
 )
 ```
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.BenchmarkSpec" />
+<PythonApiReference symbol="worldfoundry.evals.api.BenchmarkSpec" />
 
 For an official benchmark integration, these contracts are necessary but not sufficient. The [add a benchmark guide](/docs/guides/add-benchmark) covers datasets, official runners, normalizers, runtime profiles, coverage, and evidence gates.

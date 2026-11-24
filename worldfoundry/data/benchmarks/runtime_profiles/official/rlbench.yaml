@@ -17,7 +17,7 @@ needs_new_env: true
 notes:
 - RLBench 需要 CoppeliaSim/PyRep 组合环境；当前只记录 env vars 和 task manifest，不启动 simulator。
 preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python -m 
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile rlbench --manifest 
+  worldfoundry.evals.tasks.execution.orchestration.runtime_preflight --profile rlbench --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/rlbench.yaml --output-dir tmp/worldfoundry_preflight/rlbench 
   --json
 python_path: ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python
@@ -31,7 +31,7 @@ required_packages:
 - numpy
 required_paths:
 - id: official_result_normalizer
-  path: worldfoundry/evaluation/tasks/embodied/normalizer.py
+  path: worldfoundry/evals/tasks/embodied/normalizer.py
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/rlbench.yaml
 requires_cuda_visibility: false
@@ -41,7 +41,7 @@ optional_imports:
 optional_base_model_dependencies:
 - spatial_perception_core_stack
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id

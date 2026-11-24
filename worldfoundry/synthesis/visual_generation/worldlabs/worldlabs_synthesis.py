@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import mimetypes
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..api_video_client import REQUEST_TIMEOUT, ApiVideoSynthesis
 
@@ -24,9 +24,9 @@ class WorldLabsSynthesis(ApiVideoSynthesis):
         self,
         file_name: str,
         kind: str,
-        extension: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        extension: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Reserve an upload slot and return the pre-signed ``upload_info``.
 
         Args:
@@ -35,7 +35,7 @@ class WorldLabsSynthesis(ApiVideoSynthesis):
             extension: File extension; inferred by the API when omitted.
             metadata: Arbitrary metadata to attach to the asset.
         """
-        payload: Dict[str, Any] = {"file_name": file_name, "kind": kind}
+        payload: dict[str, Any] = {"file_name": file_name, "kind": kind}
         if extension is not None:
             payload["extension"] = extension
         if metadata is not None:
@@ -46,7 +46,7 @@ class WorldLabsSynthesis(ApiVideoSynthesis):
         self,
         file_path: str,
         upload_url: str,
-        required_headers: Optional[Dict[str, str]] = None,
+        required_headers: dict[str, str] | None = None,
         method: str = "PUT",
     ) -> None:
         """Send the file at ``file_path`` to a pre-signed ``upload_url``."""
@@ -68,7 +68,7 @@ class WorldLabsSynthesis(ApiVideoSynthesis):
         self,
         file_path: str,
         kind: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Reserve a slot, upload the file, and return the new media asset ID.
 
@@ -97,15 +97,15 @@ class WorldLabsSynthesis(ApiVideoSynthesis):
 
     def generate_world(
         self,
-        world_prompt: Dict[str, Any],
+        world_prompt: dict[str, Any],
         model: str = "marble-1.1",
-        display_name: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        display_name: str | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Start a world generation and return the long-running ``Operation``."""
-        payload: Dict[str, Any] = {"model": model, "world_prompt": world_prompt}
+        payload: dict[str, Any] = {"model": model, "world_prompt": world_prompt}
         if display_name is not None:
             payload["display_name"] = display_name
         if tags is not None:
@@ -115,16 +115,16 @@ class WorldLabsSynthesis(ApiVideoSynthesis):
         payload.update(kwargs)
         return self._post("/marble/v1/worlds:generate", payload)
 
-    def get_operation(self, operation_id: str) -> Dict[str, Any]:
+    def get_operation(self, operation_id: str) -> dict[str, Any]:
         """Return the status and result of a long-running operation."""
         return self._get(f"/marble/v1/operations/{operation_id}", headers=self._auth_headers())
 
-    def get_world(self, world_id: str) -> Dict[str, Any]:
+    def get_world(self, world_id: str) -> dict[str, Any]:
         """Return a generated world's properties and assets."""
         return self._get(f"/marble/v1/worlds/{world_id}", headers=self._auth_headers())
 
     @staticmethod
-    def save_json(payload: Dict[str, Any], save_path: str) -> str:
+    def save_json(payload: dict[str, Any], save_path: str) -> str:
         """Write ``payload`` as indented UTF-8 JSON and return the path."""
         output_path = Path(save_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)

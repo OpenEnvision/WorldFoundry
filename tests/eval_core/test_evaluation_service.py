@@ -4,19 +4,19 @@ import json
 from pathlib import Path
 
 from worldfoundry.cli import main
-from worldfoundry.cli.tui_discovery import build_model_benchmark_command
-from worldfoundry.evaluation.api import ArtifactRef, GenerationResult
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_generation import (
-    BENCHMARK_GENERATION_ADAPTERS,
+from worldfoundry.cli.command_builders import build_model_benchmark_command
+from worldfoundry.evals.api import ArtifactRef, GenerationResult
+from worldfoundry.evals.tasks.execution.orchestration.benchmark_generation import (
+    list_benchmark_generation_adapters,
     materialize_vbench_generation_requests,
 )
-from worldfoundry.evaluation.tasks.execution.orchestration.fidelity import EvaluationFidelity
-from worldfoundry.evaluation.tasks.execution.orchestration.model_benchmark import (
+from worldfoundry.evals.tasks.execution.orchestration.fidelity import EvaluationFidelity
+from worldfoundry.evals.tasks.execution.orchestration.model_benchmark import (
     ModelBenchmarkRunRequest,
     _materialize_generated_artifacts,
     _model_benchmark_run_summary,
 )
-from worldfoundry.evaluation.tasks.execution.orchestration.service import (
+from worldfoundry.evals.tasks.execution.orchestration.service import (
     ModelBenchmarkIntent,
     ReproduceIntent,
     ScoreArtifactsIntent,
@@ -24,23 +24,24 @@ from worldfoundry.evaluation.tasks.execution.orchestration.service import (
     execute_prepared_evaluation,
     prepare_evaluation,
 )
-from worldfoundry.evaluation.utils import write_jsonl
+from worldfoundry.evals.utils import write_jsonl
 
 
 def test_generation_adapters_are_declarative_and_include_wrbench() -> None:
-    assert "wrbench" in BENCHMARK_GENERATION_ADAPTERS
-    assert "ipv-bench" in BENCHMARK_GENERATION_ADAPTERS
-    assert BENCHMARK_GENERATION_ADAPTERS["wrbench"].artifact_materializer == (
-        "worldfoundry.evaluation.tasks.execution.runners.wrbench.wrbench_prompts:copy_wrbench_generated_videos"
+    adapters = list_benchmark_generation_adapters()
+    assert "wrbench" in adapters
+    assert "ipv-bench" in adapters
+    assert adapters["wrbench"].artifact_materializer == (
+        "worldfoundry.evals.tasks.execution.runners.wrbench.wrbench_prompts:copy_wrbench_generated_videos"
     )
-    assert BENCHMARK_GENERATION_ADAPTERS["videophy"].artifact_materializer is not None
-    assert "vbench" in BENCHMARK_GENERATION_ADAPTERS
+    assert adapters["videophy"].artifact_materializer is not None
+    assert "vbench" in adapters
 
 
 def test_vbench_generation_provider_deduplicates_official_prompts() -> None:
     requests = materialize_vbench_generation_requests()
 
-    from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import (
+    from worldfoundry.evals.tasks.execution.runners.vbench.vbench_official_impl import (
         _expected_standard_prompt_video_names,
     )
 
@@ -130,7 +131,7 @@ def test_diagnostic_artifacts_cannot_self_promote_to_leaderboard_candidate(tmp_p
 
     assert prepared.ready
     assert prepared.leaderboard_candidate is False
-    assert prepared.request is not None
+    assert isinstance(prepared.request, ModelBenchmarkRunRequest)
     assert prepared.request.leaderboard_candidate is False
     assert any(issue.code == "leaderboard_candidate_downgraded" for issue in prepared.issues)
 

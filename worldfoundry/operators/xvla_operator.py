@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, ClassVar
 
 from worldfoundry.operators.embodied_action_operator import (
     _compact_dict,
@@ -20,7 +21,7 @@ class XVLAOperator(OfficialPolicyOperator):
     POLICY_FAMILY = "xvla_cross_embodiment_policy"
     ACTION_REPRESENTATION = "30_step_xvla_action_chunk"
     OBSERVATION_LAYOUT = "up_to_three_rgb_views_language_proprio_domain"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "model_id": "xvla",
         "prompt": True,
         "image": True,
@@ -57,7 +58,9 @@ class XVLAOperator(OfficialPolicyOperator):
         for key in camera_keys:
             if kwargs.get(key) is not None:
                 views[key] = kwargs[key]
-        existing = kwargs.get("observation") if isinstance(kwargs.get("observation"), Mapping) else {}
+        existing = kwargs.get("observation")
+        if not isinstance(existing, Mapping):
+            existing = {}
         observation = _compact_dict(
             {
                 **dict(existing),

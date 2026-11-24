@@ -2,44 +2,48 @@
 
 This module keeps LiveWorld-specific logic isolated from the event-centric flow.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import numpy as np
 import torch
 from PIL import Image
 
-from liveworld.pipelines.pipeline_unified_backbone import UnifiedBackbonePipeline
+from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.pipelines.pipeline_unified_backbone import (
+    UnifiedBackbonePipeline,
+)
 
 
 @dataclass
 class ObserverIterationInput:
     """Inputs for a single observer iteration."""
+
     # Preceding frames used for P1/P9 conditioning (required).
     preceding_frames: np.ndarray
     prompt: str
     num_frames: int
     infer_steps: int
     target_scene_proj: torch.Tensor
-    guidance_scale: Optional[float] = None
+    guidance_scale: float | None = None
     cpu_offload: bool = False
-    preceding_scene_proj: Optional[torch.Tensor] = None
-    reference_frames: Optional[np.ndarray] = None
-    instance_reference_frames: Optional[np.ndarray] = None  # [R_inst, H, W, 3]
-    target_fg_proj: Optional[torch.Tensor] = None
-    preceding_fg_proj: Optional[torch.Tensor] = None
-    seed: Optional[int] = None
+    preceding_scene_proj: torch.Tensor | None = None
+    reference_frames: np.ndarray | None = None
+    instance_reference_frames: np.ndarray | None = None  # [R_inst, H, W, 3]
+    target_fg_proj: torch.Tensor | None = None
+    preceding_fg_proj: torch.Tensor | None = None
+    seed: int | None = None
     sp_context_scale: float = 1.0
 
 
 @dataclass
 class ObserverIterationOutput:
     """Outputs from a single observer iteration."""
+
     frames: torch.Tensor
     # Optional static point cloud update (points, colors).
-    static_update: Optional[Tuple[np.ndarray, np.ndarray]]
+    static_update: tuple[np.ndarray, np.ndarray] | None
 
 
 class ObserverAdapter:

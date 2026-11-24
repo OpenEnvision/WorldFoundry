@@ -63,10 +63,7 @@ def _load_checkpoint(path: Path, device: str | torch.device) -> dict[str, torch.
     opacities = splats["opacities"].float().to(device).sigmoid()
     sh0 = splats["sh0"].float().to(device)
     shn = splats.get("shN")
-    if shn is None:
-        shn = sh0.new_zeros((*sh0.shape[:-2], 0, 3))
-    else:
-        shn = shn.float().to(device)
+    shn = sh0.new_zeros((*sh0.shape[:-2], 0, 3)) if shn is None else shn.float().to(device)
     colors = torch.cat([sh0, shn], dim=-2)
     return {
         "means": means,

@@ -14,32 +14,34 @@
 # limitations under the License.
 
 import math
+
+import einops
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-import random
-import json
-import einops
-from typing import Tuple
 
-from src.models.utils.attention import Block
-from src.models.utils.mamba2 import Mamba2Block
-from src.models.utils.cosmos_1_tokenizer import load_cosmos_1_tokenizer
+from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.utils.attention import Block
+from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.utils.cosmos_1_tokenizer import (
+    load_cosmos_1_tokenizer,
+)
+
 
 def load_vae(vae_backbone, vae_path):
-    if vae_backbone == 'cosmos1':
+    if vae_backbone == "cosmos1":
         vae = load_cosmos_1_tokenizer(vae_path, load_decoder=True, load_jit=True)
     return vae
-    
+
+
 def encode_cosmos1(vae, video):
     sample = vae.encode(video)[0]
     return sample
 
+
 def encode_video_model(vae, video, vae_backbone):
-    if vae_backbone == 'cosmos1':
+    if vae_backbone == "cosmos1":
         encode_func = encode_cosmos1
     return encode_func(vae, video)
+
 
 def encode_video(vae, video, vae_backbone):
     chunk_size = get_encoder_chunk_size(video)
@@ -47,12 +49,13 @@ def encode_video(vae, video, vae_backbone):
         video = video.permute(0, 2, 1, 3, 4)  # [B, C, F, H, W]
         samples = []
         for chunk_idx in range(0, video.shape[0], chunk_size):
-            video_batch = video[chunk_idx: chunk_idx + chunk_size]
+            video_batch = video[chunk_idx : chunk_idx + chunk_size]
             sample = encode_video_model(vae, video_batch, vae_backbone)
             samples.append(sample)
         samples = torch.cat(samples, 0)
-        samples = samples.permute(0, 2, 1, 3, 4) # [B, F, C, H, W]
+        samples = samples.permute(0, 2, 1, 3, 4)  # [B, F, C, H, W]
     return samples
+
 
 def get_encoder_chunk_size(video, encoder=True):
     if encoder:
@@ -67,48 +70,53 @@ def get_encoder_chunk_size(video, encoder=True):
             chunk_size = encoder_chunk_sizes_T[H]
     return chunk_size
 
+
 def encode_multi_view_video(vae, video, num_input_multi_views, vae_backbone):
     if num_input_multi_views != 1:
-        video = einops.rearrange(video, 'b (v t) c h w -> (b v) t c h w', v=num_input_multi_views)
+        video = einops.rearrange(video, "b (v t) c h w -> (b v) t c h w", v=num_input_multi_views)
     model_input = encode_video(vae, video, vae_backbone)
     if num_input_multi_views != 1:
-        model_input = einops.rearrange(model_input, '(b v) t c h w -> b (v t) c h w', v=num_input_multi_views)
+        model_input = einops.rearrange(model_input, "(b v) t c h w -> b (v t) c h w", v=num_input_multi_views)
     return model_input
+
 
 def decode_multi_view_latents(vae, latents: torch.Tensor, num_input_multi_views: int, vae_backbone: str):
     if num_input_multi_views != 1:
-        latents = einops.rearrange(latents, 'b (v t) c h w -> (b v) t c h w', v=num_input_multi_views)
+        latents = einops.rearrange(latents, "b (v t) c h w -> (b v) t c h w", v=num_input_multi_views)
     chunk_size = get_encoder_chunk_size(latents, encoder=False)
     video = []
     for chunk_idx in range(0, latents.shape[0], chunk_size):
-        latents_batch = latents[chunk_idx: chunk_idx + chunk_size]
+        latents_batch = latents[chunk_idx : chunk_idx + chunk_size]
         video_batch = decode_video_model(vae, latents_batch, vae_backbone)
         video.append(video_batch)
     video = torch.cat(video, 0)
     if num_input_multi_views != 1:
-        video = einops.rearrange(video, '(b v) c t h w -> b c (v t) h w', v=num_input_multi_views)
+        video = einops.rearrange(video, "(b v) c t h w -> b c (v t) h w", v=num_input_multi_views)
     video = video.transpose(1, 2)
     video = video.clip(-1, 1)
     return video
-    
+
+
 def decode_cosmos1(vae, video):
-    video = einops.rearrange(video, 'b t c h w -> b c t h w')
+    video = einops.rearrange(video, "b t c h w -> b c t h w")
     sample = vae.decode(video)
     return sample
 
+
 def decode_video_model(vae, video, vae_backbone):
-    if vae_backbone == 'cosmos1':
+    if vae_backbone == "cosmos1":
         decode_func = decode_cosmos1
     return decode_func(vae, video)
 
-def encode_plucker_vae(batch, encode_video, plucker_key='plucker_embedding'):
-    batch[plucker_key] = torch.cat((
-        encode_video(batch[plucker_key][:, :, :3]),
-        encode_video(batch[plucker_key][:, :, 3:])), 
-        2)
+
+def encode_plucker_vae(batch, encode_video, plucker_key="plucker_embedding"):
+    batch[plucker_key] = torch.cat(
+        (encode_video(batch[plucker_key][:, :, :3]), encode_video(batch[plucker_key][:, :, 3:])), 2
+    )
     return batch
 
-def encode_latent_time_vae(batch, encode_video, img_size, time_keys=['time_embeddings', 'time_embeddings_target']):
+
+def encode_latent_time_vae(batch, encode_video, img_size, time_keys=["time_embeddings", "time_embeddings_target"]):  # noqa: B006 - Keeps the upstream default object and signature.
     time_embeddings_out = []
     for k in time_keys:
         batch[k] = repeat_time_spatially(batch[k], img_size)
@@ -117,32 +125,61 @@ def encode_latent_time_vae(batch, encode_video, img_size, time_keys=['time_embed
     del batch[time_keys[1]]
     return batch
 
-def repeat_time_spatially(time_embeddings: torch.Tensor, img_size: Tuple[int, int]):
-    return einops.repeat(time_embeddings, 'b t c -> b t c h w', h=img_size[0], w=img_size[1])
 
-def get_model_blocks(enc_embed_dim, enc_depth, enc_num_heads, mlp_ratio, use_mamba, llrm_7m1t, norm_layer, use_qk_norm, index_transformer_block=8):
+def repeat_time_spatially(time_embeddings: torch.Tensor, img_size: tuple[int, int]):
+    return einops.repeat(time_embeddings, "b t c -> b t c h w", h=img_size[0], w=img_size[1])
+
+
+def get_model_blocks(
+    enc_embed_dim,
+    enc_depth,
+    enc_num_heads,
+    mlp_ratio,
+    use_mamba,
+    llrm_7m1t,
+    norm_layer,
+    use_qk_norm,
+    index_transformer_block=8,
+):
     if use_mamba:
-        # Mix of mamba2 and transformer        
+        from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.utils.mamba2 import Mamba2Block
+
+        # Mix of mamba2 and transformer
         if llrm_7m1t:
             enc_blocks = []
             for i in range(enc_depth):
                 if (i + 1) % index_transformer_block == 0:
-                    block_mamba = Block(enc_embed_dim, enc_num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer, use_qk_norm=use_qk_norm)
+                    block_mamba = Block(
+                        enc_embed_dim,
+                        enc_num_heads,
+                        mlp_ratio,
+                        qkv_bias=True,
+                        norm_layer=norm_layer,
+                        use_qk_norm=use_qk_norm,
+                    )
                 else:
                     block_mamba = Mamba2Block(enc_embed_dim)
                 enc_blocks.append(block_mamba)
             enc_blocks = nn.ModuleList(enc_blocks)
         # Only mamba2
         else:
-            enc_blocks = nn.ModuleList([
-                Mamba2Block(enc_embed_dim)
-            for i in range(enc_depth)])
+            enc_blocks = nn.ModuleList([Mamba2Block(enc_embed_dim) for i in range(enc_depth)])
     else:
         enc_blocks = nn.ModuleList(
-            [Block(enc_embed_dim, enc_num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer, use_qk_norm=use_qk_norm)
-            for i in range(enc_depth)]
-            )
+            [
+                Block(
+                    enc_embed_dim,
+                    enc_num_heads,
+                    mlp_ratio,
+                    qkv_bias=True,
+                    norm_layer=norm_layer,
+                    use_qk_norm=use_qk_norm,
+                )
+                for i in range(enc_depth)
+            ]
+        )
     return enc_blocks
+
 
 def forward_checkpointing(layer, *args, gradient_checkpoint=False):
     if not gradient_checkpoint:
@@ -150,15 +187,16 @@ def forward_checkpointing(layer, *args, gradient_checkpoint=False):
 
     # Identify tensor positions and values
     tensor_positions = [(i, arg) for i, arg in enumerate(args) if isinstance(arg, torch.Tensor)]
-    tensor_indices, tensor_args = zip(*tensor_positions) if tensor_positions else ([], [])
+    tensor_indices, tensor_args = zip(*tensor_positions, strict=False) if tensor_positions else ([], [])
 
     def wrapped(*tensors_in):
         args_copy = list(args)
-        for i, t in zip(tensor_indices, tensors_in):
+        for i, t in zip(tensor_indices, tensors_in, strict=False):
             args_copy[i] = t
         return layer(*args_copy)
 
     return torch.utils.checkpoint.checkpoint(wrapped, *tensor_args, use_reentrant=False)
+
 
 def timestep_embedding(timesteps, dim, max_period=10000, use_orig=False):
     """
@@ -172,25 +210,31 @@ def timestep_embedding(timesteps, dim, max_period=10000, use_orig=False):
     if use_orig:
         dim -= 1
     half = dim // 2
-    freqs = torch.exp(
-        -math.log(max_period)
-        * torch.arange(start=0, end=half, dtype=torch.float32)
-        / half
-    ).to(device=timesteps.device)
+    freqs = torch.exp(-math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half).to(
+        device=timesteps.device
+    )
     args = timesteps[:, None] * freqs[None]
     embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
     if dim % 2:
-        embedding = torch.cat(
-            [embedding, torch.zeros_like(embedding[:, :1])], dim=-1
-        )
+        embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
     if use_orig:
         embedding = torch.cat([timesteps[:, None], embedding], dim=-1)
 
     return embedding
 
+
 class ConvTranspose3dFactorized(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, 
-                 upsample_mode='trilinear', use_channel_reduction=True, gradient_checkpoint=True):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride,
+        padding,
+        upsample_mode="trilinear",
+        use_channel_reduction=True,
+        gradient_checkpoint=True,
+    ):
         super().__init__()
 
         self.scale_factor = stride
@@ -204,19 +248,14 @@ class ConvTranspose3dFactorized(nn.Module):
         else:
             conv_in_channels = in_channels
 
-        self.conv = nn.Conv3d(
-            conv_in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            padding=padding
-        )
+        self.conv = nn.Conv3d(conv_in_channels, out_channels, kernel_size=kernel_size, padding=padding)
 
     def _interpolate(self, x):
         return F.interpolate(
             x,
             scale_factor=self.scale_factor,
             mode=self.upsample_mode,
-            align_corners=False if self.upsample_mode in ['linear', 'bilinear', 'trilinear'] else None
+            align_corners=False if self.upsample_mode in ["linear", "bilinear", "trilinear"] else None,
         )
 
     def _conv(self, x):
@@ -232,9 +271,19 @@ class ConvTranspose3dFactorized(nn.Module):
         x = forward_checkpointing(self._conv, x, gradient_checkpoint=self.gradient_checkpoint)
         return x
 
-class ConvTranspose3dFactorized(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, 
-                 upsample_mode='trilinear', use_channel_reduction=True, gradient_checkpoint=True):
+
+class ConvTranspose3dFactorized(nn.Module):  # noqa: F811 - Later definition replaces the earlier one, as upstream.
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride,
+        padding,
+        upsample_mode="trilinear",
+        use_channel_reduction=True,
+        gradient_checkpoint=True,
+    ):
         super().__init__()
 
         self.scale_factor = stride
@@ -248,19 +297,14 @@ class ConvTranspose3dFactorized(nn.Module):
         else:
             conv_in_channels = in_channels
 
-        self.conv = nn.Conv3d(
-            conv_in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            padding=padding
-        )
+        self.conv = nn.Conv3d(conv_in_channels, out_channels, kernel_size=kernel_size, padding=padding)
 
     def _interpolate(self, x):
         return F.interpolate(
             x,
             scale_factor=self.scale_factor,
             mode=self.upsample_mode,
-            align_corners=False if self.upsample_mode in ['linear', 'bilinear', 'trilinear'] else None
+            align_corners=False if self.upsample_mode in ["linear", "bilinear", "trilinear"] else None,
         )
 
     def _conv(self, x):
@@ -275,10 +319,19 @@ class ConvTranspose3dFactorized(nn.Module):
         x = forward_checkpointing(self._interpolate, x, gradient_checkpoint=self.gradient_checkpoint)
         x = forward_checkpointing(self._conv, x, gradient_checkpoint=self.gradient_checkpoint)
         return x
+
 
 class ConvTranspose3dReduced(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, 
-                 hidden_channels: int = None, use_channel_reduction: bool = True):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride,
+        padding,
+        hidden_channels: int | None = None,
+        use_channel_reduction: bool = True,
+    ):
         super().__init__()
         if hidden_channels is None:
             hidden_channels = out_channels
@@ -309,6 +362,7 @@ class ConvTranspose3dReduced(nn.Module):
         x = forward_checkpointing(self._conv, x, gradient_checkpoint=gradient_checkpoint)
         return x
 
+
 class MultiStageConvTranspose3d(nn.Module):
     def __init__(
         self,
@@ -319,7 +373,7 @@ class MultiStageConvTranspose3d(nn.Module):
         padding,
         multi_stage=True,
         norm_layer=None,
-        activation=nn.ReLU(inplace=True),
+        activation=nn.ReLU(inplace=True),  # noqa: B008 - Default evaluated once at definition, as upstream.
         gradient_checkpoint=False,
     ):
         super().__init__()
@@ -349,34 +403,38 @@ class MultiStageConvTranspose3d(nn.Module):
             self.temporal_blocks = nn.ModuleList()
             for i in range(temporal_stages):
                 in_ch = in_channels if i == 0 else out_channels
-                self.temporal_blocks.append(nn.Sequential(
-                    nn.ConvTranspose3d(
-                        in_ch,
-                        out_channels,
-                        kernel_size=(3, 1, 1),
-                        stride=(2, 1, 1),
-                        padding=(1, 0, 0),
-                        output_padding=(1, 0, 0),
-                    ),
-                    *( [norm_layer(out_channels)] if norm_layer else [] ),
-                    *( [activation] if activation else [] )
-                ))
+                self.temporal_blocks.append(
+                    nn.Sequential(
+                        nn.ConvTranspose3d(
+                            in_ch,
+                            out_channels,
+                            kernel_size=(3, 1, 1),
+                            stride=(2, 1, 1),
+                            padding=(1, 0, 0),
+                            output_padding=(1, 0, 0),
+                        ),
+                        *([norm_layer(out_channels)] if norm_layer else []),
+                        *([activation] if activation else []),
+                    )
+                )
 
             self.spatial_blocks = nn.ModuleList()
             for i in range(spatial_stages):
                 in_ch = in_channels if (i == 0 and temporal_stages == 0) else out_channels
-                self.spatial_blocks.append(nn.Sequential(
-                    nn.ConvTranspose3d(
-                        in_ch,
-                        out_channels,
-                        kernel_size=(1, 3, 3),
-                        stride=(1, 2, 2),
-                        padding=(0, 1, 1),
-                        output_padding=(0, 1, 1),
-                    ),
-                    *( [norm_layer(out_channels)] if norm_layer else [] ),
-                    *( [activation] if activation else [] )
-                ))
+                self.spatial_blocks.append(
+                    nn.Sequential(
+                        nn.ConvTranspose3d(
+                            in_ch,
+                            out_channels,
+                            kernel_size=(1, 3, 3),
+                            stride=(1, 2, 2),
+                            padding=(0, 1, 1),
+                            output_padding=(0, 1, 1),
+                        ),
+                        *([norm_layer(out_channels)] if norm_layer else []),
+                        *([activation] if activation else []),
+                    )
+                )
 
             self.pre_pad = None
 
@@ -386,7 +444,7 @@ class MultiStageConvTranspose3d(nn.Module):
         kD, kH, kW = self.target_kernel_size
         pD, pH, pW = self.target_padding
 
-        target_D = (D - 1) * sD - 2 * pD + kD
+        _target_D = (D - 1) * sD - 2 * pD + kD
         spatial_out_H = (H - 1) * sH - 2 * pH + kH
         spatial_out_W = (W - 1) * sW - 2 * pW + kW
 
@@ -414,6 +472,7 @@ class MultiStageConvTranspose3d(nn.Module):
         for block in self.spatial_blocks:
             x = forward_checkpointing(block, x, gradient_checkpoint=self.gradient_checkpoint)
         return x
+
 
 class PositionalEmbedding(nn.Module):
     def __init__(self, dim: int, max_seq_length: int):

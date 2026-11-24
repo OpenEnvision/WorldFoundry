@@ -17,13 +17,13 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-from worldfoundry.evaluation.tasks.metrics.jedi.JEDi import JEDiMetric
-from worldfoundry.evaluation.tasks.metrics.jedi.jedi_runtime import (
+from worldfoundry.evals.tasks.metrics.distribution.jedi.JEDi import JEDiMetric
+from worldfoundry.evals.tasks.metrics.distribution.jedi.jedi_runtime import (
     JEDiScorerConfig,
     run_jedi_scorer,
     score_from_feature_payload,
 )
-from worldfoundry.evaluation.tasks.metrics.jedi.wrapper import bundled_config_path, compute_jedi_from_features
+from worldfoundry.evals.tasks.metrics.distribution.jedi.wrapper import bundled_config_path, compute_jedi_from_features
 
 
 class TinyExtractor:
@@ -78,7 +78,7 @@ class JediRuntimeTests(unittest.TestCase):
     def test_mock_seed_reproduces_features_and_score_across_processes(self):
         program = """
 import json
-from worldfoundry.evaluation.tasks.metrics.jedi.wrapper import deterministic_feature_matrix, compute_mock_jedi
+from worldfoundry.evals.tasks.metrics.distribution.jedi.wrapper import deterministic_feature_matrix, compute_mock_jedi
 features = deterministic_feature_matrix(seed='jedi-train', num_samples=3, feature_dim=4)
 score = compute_mock_jedi(num_samples=8, feature_dim=4)
 print(json.dumps({'features': features.tolist(), 'score': score}))
@@ -107,8 +107,8 @@ print(json.dumps({'features': features.tolist(), 'score': score}))
         np.save(self.root / "train.npy", train)
         np.save(self.root / "test.npy", test)
         cached = JEDiMetric(feature_path=str(self.root)).load_features(num_samples=2)
-        extractor_module = types.ModuleType("worldfoundry.evaluation.tasks.metrics.jedi.V_JEPA")
-        extractor_module.VJEPA = TinyExtractor
+        extractor_module = types.ModuleType("worldfoundry.evals.tasks.metrics.distribution.jedi.V_JEPA")
+        setattr(extractor_module, "VJEPA", TinyExtractor)
         with patch.dict(sys.modules, {extractor_module.__name__: extractor_module}):
             fresh = JEDiMetric(feature_path=str(self.root / "fresh")).load_features(
                 self.loader(train), self.loader(test), num_samples=2
@@ -127,8 +127,8 @@ print(json.dumps({'features': features.tolist(), 'score': score}))
             extractor_refs.append(weakref.ref(extractor))
             return extractor
 
-        extractor_module = types.ModuleType("worldfoundry.evaluation.tasks.metrics.jedi.V_JEPA")
-        extractor_module.VJEPA = create_extractor
+        extractor_module = types.ModuleType("worldfoundry.evals.tasks.metrics.distribution.jedi.V_JEPA")
+        setattr(extractor_module, "VJEPA", create_extractor)
         metric = JEDiMetric(feature_path=str(self.root))
         features = np.ones((4, 3))
         with patch.dict(sys.modules, {extractor_module.__name__: extractor_module}):
@@ -148,19 +148,20 @@ print(json.dumps({'features': features.tolist(), 'score': score}))
                 "vjepa.models.attentive_pooler",
                 "vjepa.utils",
                 "vjepa.utils.distributed",
-                "worldfoundry.evaluation.tasks.metrics.jedi.V_JEPA_utils",
+                "worldfoundry.evals.tasks.metrics.distribution.jedi.V_JEPA_utils",
             )
         }
         for size in ("tiny", "small", "base", "large", "huge", "giant", "gigantic"):
             setattr(modules["vjepa.models"], f"vit_{size}", TinyEncoder)
-        modules["vjepa.models.attentive_pooler"].AttentiveClassifier = TinyProbe
-        modules["vjepa.utils.distributed"].init_distributed = lambda: (1, 0)
-        helpers = modules["worldfoundry.evaluation.tasks.metrics.jedi.V_JEPA_utils"]
-        helpers.FrameAggregation = helpers.ClipAggregation = TinyAggregation
+        setattr(modules["vjepa.models.attentive_pooler"], "AttentiveClassifier", TinyProbe)
+        setattr(modules["vjepa.utils.distributed"], "init_distributed", lambda: (1, 0))
+        helpers = modules["worldfoundry.evals.tasks.metrics.distribution.jedi.V_JEPA_utils"]
+        setattr(helpers, "FrameAggregation", TinyAggregation)
+        setattr(helpers, "ClipAggregation", TinyAggregation)
         module_patch = patch.dict(sys.modules, modules)
         module_patch.start()
         self.addCleanup(module_patch.stop)
-        return importlib.import_module("worldfoundry.evaluation.tasks.metrics.jedi.V_JEPA")
+        return importlib.import_module("worldfoundry.evals.tasks.metrics.distribution.jedi.V_JEPA")
 
     def test_vjepa_probe_loading_and_inference_do_not_manage_process_groups(self):
         # Substitute the optional network package, exercising real checkpoint loading.

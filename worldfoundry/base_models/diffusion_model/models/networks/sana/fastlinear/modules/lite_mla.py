@@ -23,7 +23,6 @@ context before the associative ``VK`` accumulation.  The Triton module
 """
 
 import os
-from typing import Optional, Tuple
 
 import torch
 from torch import nn
@@ -39,31 +38,16 @@ class LiteMLA(nn.Module):
         self,
         in_dim: int,
         out_dim: int,
-        heads: Optional[int] = None,
+        heads: int | None = None,
         heads_ratio: float = 1.0,
         dim=32,
         kernel_func="relu",
-        scales: Optional[Tuple[int]] = (5,),
+        scales: tuple[int] | None = (5,),
         eps=1e-15,
         use_bias=False,
         norm=(None, "bn2d"),
         act=(None, None),
     ):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            heads: The heads.
-            heads_ratio: The heads ratio.
-            dim: The dim.
-            kernel_func: The kernel func.
-            scales: The scales.
-            eps: The eps.
-            use_bias: The use bias.
-            norm: The norm.
-            act: The act.
-        """
         heads = heads or int(out_dim // dim * heads_ratio)
         super().__init__()
 
@@ -83,16 +67,6 @@ class LiteMLA(nn.Module):
 
     @torch.cuda.amp.autocast(enabled=os.environ.get("AUTOCAST_LINEAR_ATTN", False) == "true")
     def attn_matmul(self, q, k, v: torch.Tensor) -> torch.Tensor:
-        """Attn matmul.
-
-        Args:
-            q: The q.
-            k: The k.
-            v: The v.
-
-        Returns:
-            The return value.
-        """
         # lightweight linear attention
         q = self.kernel_func(q)  # B, h, h_d, N
         k = self.kernel_func(k)
@@ -110,14 +84,6 @@ class LiteMLA(nn.Module):
         return out
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, C).permute(0, 2, 3, 1)
         # B, 3, C, N --> B, C, N
@@ -137,16 +103,10 @@ class LiteMLA(nn.Module):
 
     @property
     def module_str(self) -> str:
-        """Module str.
-
-        Returns:
-            The return value.
-        """
         _str = type(self).__name__ + "("
         eps = f"{self.eps:.1E}"
         _str += f"i={self.in_dim},o={self.out_dim},h={self.heads},d={self.dim},eps={eps}"
         return _str
 
     def __repr__(self):
-        """Repr."""
         return f"EPS{self.eps}-" + super().__repr__()

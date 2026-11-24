@@ -1,23 +1,27 @@
-artifact_filename: scope.mp4
-artifact_kind: generated_video
-backend_stage: native_wan_runtime
+schema_version: 2
+model_id: scope
+display_name: SCOPE
+task_family: world_model
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/SCOPE
   repo_id: zizhaotong/SCOPE
   role: unified_scope_dit_t5_vae_tokenizer_checkpoint
-display_name: SCOPE
-id: scope
 input_schema:
   actions:
   - action_parquet
   image: true
   prompt: true
   video: false
-integration_status: verified
+artifact_kind: generated_video
+artifact_filename: scope.mp4
+execution:
+  backend_stage: native_wan_runtime
+  runtime_status: in_tree_scope_runtime_checkpoint_pending
+  integration_status: verified
+integration:
+  status: verified
 notes:
 - SCOPE reuses the canonical Wan encoder, VAE, loader, scheduler, and staged runner;
   only its checkpoint-shaped action-conditioned network remains model-specific.
 - SCOPEPipeline fails fast unless execute=True is supplied, then invokes the in-tree
   native assembly with staged z2tong/SCOPE weights.
-runtime_status: in_tree_scope_runtime_checkpoint_pending
-task_family: world_model

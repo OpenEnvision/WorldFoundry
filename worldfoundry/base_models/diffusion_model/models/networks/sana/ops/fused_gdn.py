@@ -33,8 +33,6 @@ Precision knob: env var ``FUSED_GDN_PRECISION`` or ``PRECISION_OVERRIDE``:
   0=IEEE fp32 dots, 1=TF32, 2=bf16 TC + fp32 state [default], 3=bf16 TC + bf16 state.
 """
 
-# ruff: noqa: E501
-
 from __future__ import annotations
 
 import os
@@ -70,7 +68,6 @@ _KCFG = None
 
 
 def _kcfg():
-    """Helper function to kcfg."""
     global _KCFG
     if _KCFG is None:
         _KCFG = _get_kernel_config()
@@ -82,15 +79,7 @@ def _kcfg():
 # precision=2 → bf16  dots   + fp32 state    (DOT_PRECISION=0, STATE_FP32=1) [default]
 # precision=3 → bf16  dots   + bf16 state    (DOT_PRECISION=0, STATE_FP32=0)
 def _precision_params(precision: int) -> tuple:
-    """Helper function to precision params.
-
-    Args:
-        precision: The precision.
-
-    Returns:
-        The return value.
-    """
-    if precision == 0:
+    if precision == 0:  # noqa: SIM116 - Branch chain kept as upstream.
         return 2, True
     elif precision == 1:
         return 1, True
@@ -184,17 +173,6 @@ def _fused_qk_inv_rms_kernel(
     eps,
     BLOCK_C: tl.constexpr,
 ):
-    """Helper function to fused qk inv rms kernel.
-
-    Args:
-        qkv_ptr: The qkv ptr.
-        q_inv_rms_ptr: The q inv rms ptr.
-        k_inv_rms_ptr: The k inv rms ptr.
-        N: The n.
-        C: The c.
-        eps: The eps.
-        BLOCK_C: The block c.
-    """
     bn_id = tl.program_id(0)
     qkv_row_stride = 3 * C
     row_base = bn_id * qkv_row_stride

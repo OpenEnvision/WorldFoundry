@@ -5,13 +5,13 @@ from datetime import datetime
 
 def str2bool(v):
     if isinstance(v, bool):
-       return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return v
+    if v.lower() in ("yes", "true", "t", "y", "1"):
         return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+    elif v.lower() in ("no", "false", "f", "n", "0"):
         return False
     else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
+        raise argparse.ArgumentTypeError("Boolean value expected.")
 
 
 class BaseOptions:
@@ -28,7 +28,7 @@ class BaseOptions:
         parser.add_argument("--sim_tracks", type=int, default=2048)
         parser.add_argument("--alpha_thresh", type=float, default=0.8)
         # Parallelization
-        parser.add_argument('--worker_idx', type=int, default=0)
+        parser.add_argument("--worker_idx", type=int, default=0)
         parser.add_argument("--num_workers", type=int, default=2)
 
         # Optical flow estimator
@@ -60,12 +60,12 @@ class BaseOptions:
         if args.datetime is None:
             args.datetime = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         name = f"{args.datetime}_{args.name}_{args.model}"
-        if hasattr(args, 'split'):
+        if hasattr(args, "split"):
             name += f"_{args.split}"
         args.checkpoint_path = f"checkpoints/{name}"
         args.log_path = f"logs/{name}"
         args.result_path = f"results/{name}"
-        if hasattr(args, 'world_size'):
+        if hasattr(args, "world_size"):
             args.batch_size = args.batch_size // args.world_size
-            args.master_port = f'{10000 + random.randrange(1, 10000)}'
+            args.master_port = f"{10000 + random.randrange(1, 10000)}"
         return args

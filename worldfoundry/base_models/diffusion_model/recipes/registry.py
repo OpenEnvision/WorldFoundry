@@ -170,6 +170,7 @@ class NativeDiffusionRegistry:
 
 def _lazy_recipe(module_name: str, factory_name: str) -> Callable[[], NativeDiffusionRecipe]:
     """Import ``module_name`` relative to this package, then call ``factory_name()``."""
+
     def load() -> NativeDiffusionRecipe:
         module = import_module(module_name, __package__)
         return getattr(module, factory_name)()
@@ -179,6 +180,7 @@ def _lazy_recipe(module_name: str, factory_name: str) -> Callable[[], NativeDiff
 
 def _lazy_echo_recipe(model_id: str) -> Callable[[], NativeDiffusionRecipe]:
     """Echo-Memory variant: fetch the denoiser spec, then call echo_memory_recipe."""
+
     def load() -> NativeDiffusionRecipe:
         module = import_module(".echo_memory", __package__)
         specs = import_module("..models.denoisers.echo_memory_spec", __package__)
@@ -189,6 +191,7 @@ def _lazy_echo_recipe(model_id: str) -> Callable[[], NativeDiffusionRecipe]:
 
 def _lazy_sana_recipe(model_id: str) -> Callable[[], NativeDiffusionRecipe]:
     """Table-driven lazy SANA provider so the full weight stack is not imported before freeze."""
+
     def load() -> NativeDiffusionRecipe:
         module = import_module(".sana", __package__)
         return module.sana_recipe(model_id)
@@ -203,6 +206,8 @@ def default_native_diffusion_registry() -> NativeDiffusionRegistry:
 
     entries = (
         ("dreamdojo", ".dreamdojo", "dreamdojo_recipe", ("nvidia/DreamDojo",)),
+        ("hy-nomas", ".hy_nomas", "hy_nomas_recipe", ("hynomas", "tencent/Hy-Nomas")),
+        ("hy-nomas-low-memory", ".hy_nomas", "hy_nomas_low_memory_recipe", ()),
         ("dreamdojo-student", ".dreamdojo", "dreamdojo_student_recipe", ()),
         ("worldplay2", ".worldplay2", "worldplay2_recipe", ("worldplay2-fast", "aejion/WorldPlay2-Fast")),
         ("worldplay2-ar", ".worldplay2", "worldplay2_ar_recipe", ("aejion/WorldPlay2-AR",)),
@@ -280,6 +285,16 @@ def default_native_diffusion_registry() -> NativeDiffusionRegistry:
             "fastvideo_causal_wan22_i2v_14b_recipe",
             ("FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers",),
         ),
+        (
+            "self-forcing",
+            ".wan",
+            "self_forcing_wan21_t2v_1p3b_recipe",
+            ("gdhe17/Self-Forcing", "self-forcing-dmd"),
+        ),
+        ("causal-forcing-chunkwise", ".wan", "causal_forcing_chunkwise_recipe", ("causal-forcing",)),
+        ("causal-forcing-framewise", ".wan", "causal_forcing_framewise_recipe", ()),
+        ("causal-forcing-framewise-1step", ".wan", "causal_forcing_framewise_1step_recipe", ()),
+        ("causal-forcing-framewise-2step", ".wan", "causal_forcing_framewise_2step_recipe", ()),
         ("sd2-inpaint", ".stable_diffusion", "sd2_inpaint_recipe", ()),
         ("wonderworld-marigold-depth", ".stable_diffusion", "wonderworld_depth_recipe", ()),
         ("marigold-normals-v0-1", ".stable_diffusion", "marigold_normals_recipe", ()),
@@ -339,13 +354,15 @@ def default_native_diffusion_registry() -> NativeDiffusionRegistry:
         ("ltx-2-t2v", ".ltx", "ltx2_t2v_recipe", ("ltx2-t2v",)),
         ("ltx-2.3-i2v", ".ltx", "ltx23_i2v_recipe", ("ltx2.3-i2v", "ltx2_3_i2v")),
         ("ltx-2.3-t2v", ".ltx", "ltx23_t2v_recipe", ("ltx2.3-t2v", "ltx2_3_t2v")),
+        ("ltx-2-v2v", ".ltx", "ltx2_v2v_recipe", ()),
+        ("ltx-2.3-v2v", ".ltx", "ltx23_v2v_recipe", ()),
+        ("ltx-2.5", ".ltx", "ltx25_distilled_recipe", ("ltx2.5", "ltx25", "ltx-2.5-distilled")),
         ("ltx-video-i2v", ".ltx", "ltx_video_i2v_recipe", ("ltx-video",)),
-        ("helixworld", ".helixworld", "helixworld_recipe", ("helixworld-preview", "helix-world", "NoizAI/HelixWorld-preview")),
         (
-            "hello-world",
-            ".hello_world",
-            "hello_world_recipe",
-            ("helloworld", "AlayaLab/HelloWorld"),
+            "helixworld",
+            ".helixworld",
+            "helixworld_recipe",
+            ("helixworld-preview", "helix-world", "NoizAI/HelixWorld-preview"),
         ),
         (
             "hunyuanvideo-t2v",
@@ -455,25 +472,27 @@ def default_native_diffusion_registry() -> NativeDiffusionRegistry:
 
     sana_variants = import_module(".sana_variants", __package__)
     for model_id in sana_variants.SANA_VARIANTS:
-        aliases = tuple(
-            alias
-            for alias, target in sana_variants.SANA_ALIASES.items()
-            if target == model_id
-        )
+        aliases = tuple(alias for alias, target in sana_variants.SANA_ALIASES.items() if target == model_id)
         registry.register_lazy(model_id, _lazy_sana_recipe(model_id), aliases=aliases)
 
-    echo_entries = (
-        ("echo-memory-context-k1", ("echo-context-k1",)),
-    )
+    echo_entries = (("echo-memory-context-k1", ("echo-context-k1",)),)
     for model_id, aliases in echo_entries:
         registry.register_lazy(model_id, _lazy_echo_recipe(model_id), aliases=aliases)
     for checkpoint_name in ("pro-distill", "pro", "pro-pretrain", "lite", "lite-distill", "lite-pretrain"):
+
         def provider(name=checkpoint_name):
             from .kandinsky6 import kandinsky6_recipe
+
             return kandinsky6_recipe(name)
-        repo = "kandinskylab/Kandinsky-6.0-" + checkpoint_name.replace("pro", "Pro", 1).replace("lite", "Lite", 1) + "-5s-Diffusers"
+
+        repo = (
+            "kandinskylab/Kandinsky-6.0-"
+            + checkpoint_name.replace("pro", "Pro", 1).replace("lite", "Lite", 1)
+            + "-5s-Diffusers"
+        )
         registry.register_lazy(
-            "kandinsky6-" + checkpoint_name, provider,
+            "kandinsky6-" + checkpoint_name,
+            provider,
             aliases=("kandinsky6", "kandinsky-6", repo) if checkpoint_name == "pro-distill" else (repo,),
         )
     registry.freeze()

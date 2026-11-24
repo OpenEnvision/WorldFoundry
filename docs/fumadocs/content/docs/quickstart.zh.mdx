@@ -12,7 +12,7 @@ description: 配置环境、准备资产、使用 TUI 或 CLI，然后运行推�
 - [推理](#5-推理)
 - [评测](#6-评测)
 
-换了模型或 benchmark，大多数 run 的形状仍然一样：先让 Python 环境可 import，再发现稳定 ID，只准备必要的 checkpoint 与 benchmark 资产，生成并检查 artifact，最后才对 artifact 打分。
+更换模型或 benchmark 后，大多数 run 的流程仍然相同：先确保 Python 环境可以导入所需包，再发现稳定 ID，只准备必要的 checkpoint 与 benchmark 资产，生成并检查 artifact，最后才对 artifact 打分。
 
 <Callout type="idea" title="提示">
   下载模型权重前，先检查环境和 catalog，阅读报告中的 blocker，只准备第一次 GPU 运行需要的资产。
@@ -31,7 +31,7 @@ description: 配置环境、准备资产、使用 TUI 或 CLI，然后运行推�
     想交互式选模型和 benchmark 就用 TUI；脚本化运行就用下面的 CLI 命令。
   </Step>
   <Step>
-    先跑推理生成产物。只有产物目录符合 benchmark layout 后，再启动评测。
+    先跑推理生成产物。只有产物目录符合 benchmark layout 后，才启动评测。
   </Step>
 </Steps>
 
@@ -55,7 +55,7 @@ description: 配置环境、准备资产、使用 TUI 或 CLI，然后运行推�
 <Tabs items={['默认安装', '共享路径', '运行前检查']}>
   <Tab>
 
-在仓库根目录执行。模型演示视频由 GitHub CDN 提供，文档开发不需要执行 `git lfs pull`。
+在仓库根目录执行。文档开发不需要执行 `git lfs pull`。
 
 ```bash
 GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenEnvision/WorldFoundry.git
@@ -86,7 +86,7 @@ bash scripts/setup/bootstrap_worldfoundry.sh \
 
 ```bash
 bash scripts/setup/bootstrap_worldfoundry.sh --verify-only
-worldfoundry-eval --help
+wf --help
 ```
 
   </Tab>
@@ -110,7 +110,7 @@ WorldFoundry 只把可执行代码放在仓库里。Checkpoint、dataset、metri
 ```bash
 bash scripts/inference/prepare_model_infer.sh <model-id> --verify-env-only
 bash scripts/inference/prepare_model_infer.sh <model-id> --download
-worldfoundry-eval zoo model-download --model-id <model-id> --check-local --json
+wf zoo model-download --model-id <model-id> --check-local --json
 ```
 
   </Tab>
@@ -147,13 +147,13 @@ export HF_TOKEN=<your-huggingface-token>
 不想记 model ID、benchmark ID 和命令参数时，用 TUI。它读取的就是 CLI 使用的同一套 manifest，会展示可选项，并且可以在真正启动昂贵任务前打印最终命令。
 
 ```bash
-worldfoundry-eval tui
+wf tui
 ```
 
 只生成命令、不进入交互界面：
 
 ```bash
-worldfoundry-eval tui \
+wf tui \
   --model-id <model-id> \
   --benchmark-id <benchmark-id> \
   --print-command
@@ -168,20 +168,20 @@ worldfoundry-eval tui \
 CLI 适合脚本、批量任务和可复现记录。不要靠猜 ID，先跑 discovery 命令：
 
 ```bash
-worldfoundry-eval zoo models --json
-worldfoundry-eval zoo benchmarks --json
-worldfoundry-eval zoo model-download --model-id <model-id> --check-local --json
+wf zoo models --json
+wf zoo benchmarks --json
+wf zoo model-download --model-id <model-id> --check-local --json
 ```
 
-可复现、写进文档的第一次推理命令是 `worldfoundry-eval run <id> --pipeline.task-profile …`。`<id>` 和 task profile 从模型页复制；`worldfoundry-eval run <id> --help` 会列出该模型的 typed flag。
+可复现、写进文档的第一次推理命令是 `wf run <id> --pipeline.task-profile …`。`<id>` 和 task profile 从模型页复制；`wf run <id> --help` 会列出该模型的 typed flag。
 
 ```bash
-worldfoundry-eval run <model-id> \
+wf run <model-id> \
   --pipeline.task-profile <task-profile> \
   --output-dir tmp/worldfoundry_infer/<model-id>
 ```
 
-**选哪条命令。** 日常可复现运行、以及模型页上的命令，用 `worldfoundry-eval run`。只有 Workspace 视觉冒烟才用 `python -m worldfoundry.studio.workspace_job infer`。入口对照见 [CLI 命令入口](/zh/docs/reference/cli#命令入口)。
+**选哪条命令。** 日常可复现运行、以及模型页上的命令，用 `wf run`。只有 Workspace 视觉冒烟才用 `python -m worldfoundry.studio.workspace_job infer`。入口对照见 [CLI 命令入口](/zh/docs/reference/cli#命令入口)。
 
 Workspace 视觉冒烟（与 Studio UI 提交的是同一条 job 路径）：
 
@@ -233,7 +233,7 @@ find tmp/worldfoundry_infer/<model-id> -maxdepth 2 -type f | head
 如果已有官方结果文件，直接导入：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --mode official-validation \
   --official-results-path /path/to/official/results-or-report \
@@ -248,7 +248,7 @@ worldfoundry-eval zoo benchmark-run \
 如果生成产物已经准备好，并且仓内 runner 能计算指标：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --mode official-run \
   --generated-artifact-dir /path/to/generated/artifacts \
@@ -262,7 +262,7 @@ worldfoundry-eval zoo benchmark-run \
 如果 model-zoo 和 benchmark-zoo 支持一条命令完成生成加评分：
 
 ```bash
-worldfoundry-eval run \
+wf run \
   --benchmark <benchmark-id> \
   --model <model-id> \
   --mode official-run \

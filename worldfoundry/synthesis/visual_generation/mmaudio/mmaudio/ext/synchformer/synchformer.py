@@ -1,22 +1,23 @@
-import logging
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 import torch
 from torch import nn
 
-from mmaudio.ext.synchformer.motionformer import MotionFormer
+from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.ext.synchformer.motionformer import MotionFormer
 
 
 class Synchformer(nn.Module):
-
     def __init__(self):
         super().__init__()
 
-        self.vfeat_extractor = MotionFormer(extract_features=True,
-                                            factorize_space_time=True,
-                                            agg_space_module='TransformerEncoderLayer',
-                                            agg_time_module='torch.nn.Identity',
-                                            add_global_repr=False)
+        self.vfeat_extractor = MotionFormer(
+            extract_features=True,
+            factorize_space_time=True,
+            agg_space_module="TransformerEncoderLayer",
+            agg_time_module="torch.nn.Identity",
+            add_global_repr=False,
+        )
 
         # self.vfeat_extractor = instantiate_from_config(vfeat_extractor)
         # self.afeat_extractor = instantiate_from_config(afeat_extractor)
@@ -36,14 +37,14 @@ class Synchformer(nn.Module):
 
     def load_state_dict(self, sd: Mapping[str, Any], strict: bool = True):
         # discard all entries except vfeat_extractor
-        sd = {k: v for k, v in sd.items() if k.startswith('vfeat_extractor')}
+        sd = {k: v for k, v in sd.items() if k.startswith("vfeat_extractor")}
 
         return super().load_state_dict(sd, strict)
 
 
 if __name__ == "__main__":
     model = Synchformer().cuda().eval()
-    sd = torch.load('./ext_weights/synchformer_state_dict.pth', weights_only=True)
+    sd = torch.load("./ext_weights/synchformer_state_dict.pth", weights_only=True)
     model.load_state_dict(sd)
 
     vid = torch.randn(2, 7, 16, 3, 224, 224).cuda()

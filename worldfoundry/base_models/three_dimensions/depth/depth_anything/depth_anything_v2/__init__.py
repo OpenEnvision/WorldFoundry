@@ -6,14 +6,6 @@ __all__ = ["DepthAnythingDepthModel", "DepthAnythingV2"]
 
 
 def __getattr__(name: str) -> Any:
-    """Getattr.
-
-    Args:
-        name: The name.
-
-    Returns:
-        The return value.
-    """
     if name == "DepthAnythingDepthModel":
         from .adapter import DepthAnythingDepthModel
 

@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> detector.py functionality."""
-
 import numpy as np
 import PIL
 import torch
@@ -22,14 +20,7 @@ from worldfoundry.base_models.perception_core.detection.grounding_dino.util.slco
 
 
 class Detector:
-    """Detector implementation."""
     def __init__(self, device, checkpoint_path: str | None = None):
-        """Init.
-
-        Args:
-            device: The device.
-            checkpoint_path: The checkpoint path.
-        """
         if isinstance(device, int):
             device = f"cuda:{device}" if torch.cuda.is_available() else "cpu"
         else:
@@ -51,11 +42,6 @@ class Detector:
         self.gd.eval()
 
     def image_transform_grounding(self, init_image):
-        """Image transform grounding.
-
-        Args:
-            init_image: The init image.
-        """
         transform = T.Compose(
             [
                 T.RandomResize([800], max_size=1333),
@@ -67,11 +53,6 @@ class Detector:
         return init_image, image
 
     def image_transform_grounding_for_vis(self, init_image):
-        """Image transform grounding for vis.
-
-        Args:
-            init_image: The init image.
-        """
         transform = T.Compose(
             [
                 T.RandomResize([800], max_size=1333),
@@ -81,13 +62,6 @@ class Detector:
         return image
 
     def transfer_boxes_format(self, boxes, height, width):
-        """Transfer boxes format.
-
-        Args:
-            boxes: The boxes.
-            height: The height.
-            width: The width.
-        """
         boxes = boxes * torch.Tensor([width, height, width, height])
         boxes = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy")
 

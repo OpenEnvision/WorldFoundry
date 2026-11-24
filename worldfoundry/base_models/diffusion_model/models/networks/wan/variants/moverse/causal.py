@@ -4,25 +4,28 @@ Causal self-attention + KV cache for MoVerse.  Dual-stream MMDiT
 inference is :mod:`.mmdit`.
 """
 
+import math
+from typing import ClassVar
+
+import torch
+import torch.nn as nn
+
 from worldfoundry.base_models.diffusion_model.models.networks.wan.mixins import (
     WanTransformerMethodsMixin,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import (
+    MLPProj,
+    WanRMSNorm,
+    rope_params,
+    sinusoidal_embedding_1d,
 )
 from worldfoundry.core.attention.sequence.varlen import (
     attention,
 )
-from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import (
-    WanRMSNorm,
-    rope_params,
-    MLPProj,
-    sinusoidal_embedding_1d
-)
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
-import torch.nn as nn
-import torch
-import math
 
-from .normalization import WanLayerNorm
 from .attention import WAN_CROSSATTENTION_CLASSES
+from .normalization import WanLayerNorm
 
 
 def causal_rope_apply(x, grid_sizes, freqs, start_frame=0, compute_dtype=torch.float64):
@@ -39,14 +42,15 @@ def causal_rope_apply(x, grid_sizes, freqs, start_frame=0, compute_dtype=torch.f
 
         # precompute multipliers. compute_dtype controls RoPE precision (float64 default,
         # float32 ~2x faster with a tiny precision change — see rope_precision config).
-        x_i = torch.view_as_complex(x[i, :seq_len].to(compute_dtype).reshape(
-            seq_len, n, -1, 2))
-        freqs_i = torch.cat([
-            freqs[0][start_frame:start_frame + f].view(f, 1, 1, -1).expand(f, h, w, -1),
-            freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
-            freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1)
-        ],
-            dim=-1).reshape(seq_len, 1, -1)
+        x_i = torch.view_as_complex(x[i, :seq_len].to(compute_dtype).reshape(seq_len, n, -1, 2))
+        freqs_i = torch.cat(
+            [
+                freqs[0][start_frame : start_frame + f].view(f, 1, 1, -1).expand(f, h, w, -1),
+                freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
+                freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1),
+            ],
+            dim=-1,
+        ).reshape(seq_len, 1, -1)
 
         # apply rotary embedding
         x_i = torch.view_as_real(x_i * freqs_i.to(x_i.dtype)).flatten(2)
@@ -85,16 +89,17 @@ def causal_rope_apply_shared_height(x, grid_sizes, freqs, start_frame=0, compute
         seq_len = f * h * w
         sh = h // 2  # original height patch count before doubling
 
-        x_i = torch.view_as_complex(
-            x[i, :seq_len].to(compute_dtype).reshape(seq_len, n, -1, 2)
-        )
+        x_i = torch.view_as_complex(x[i, :seq_len].to(compute_dtype).reshape(seq_len, n, -1, 2))
 
         # Build freqs for one half: [f, sh, w, C_freq]
-        single_half_freqs = torch.cat([
-            freqs[0][start_frame:start_frame + f].view(f, 1, 1, -1).expand(f, sh, w, -1),
-            freqs[1][:sh].view(1, sh, 1, -1).expand(f, sh, w, -1),
-            freqs[2][:w].view(1, 1, w, -1).expand(f, sh, w, -1),
-        ], dim=-1)  # [f, sh, w, C_freq]
+        single_half_freqs = torch.cat(
+            [
+                freqs[0][start_frame : start_frame + f].view(f, 1, 1, -1).expand(f, sh, w, -1),
+                freqs[1][:sh].view(1, sh, 1, -1).expand(f, sh, w, -1),
+                freqs[2][:w].view(1, 1, w, -1).expand(f, sh, w, -1),
+            ],
+            dim=-1,
+        )  # [f, sh, w, C_freq]
 
         # Duplicate along height: both halves get identical positions 0..sh-1
         shared_freqs = torch.cat([single_half_freqs, single_half_freqs], dim=1)  # [f, 2*sh, w, C_freq]
@@ -105,7 +110,6 @@ def causal_rope_apply_shared_height(x, grid_sizes, freqs, start_frame=0, compute
         output.append(x_i)
 
     return torch.stack(output).type_as(x)
-
 
 
 def parse_memrope_cfg(raw):
@@ -125,7 +129,7 @@ def parse_memrope_cfg(raw):
 
     def _get(d, key, default):
         try:
-            val = d[key] if key in d else default
+            val = d[key] if key in d else default  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
         except TypeError:
             val = getattr(d, key, default)
         return default if val is None else val
@@ -141,8 +145,9 @@ def parse_memrope_cfg(raw):
         local = int(_get(h, "local", 5))
         assert local >= 1, "memrope: local window must be >= 1 frame"
         assert sink >= 0, "memrope: sink must be >= 0"
-        assert long_mem in (0, 1) and short_mem in (0, 1), \
+        assert long_mem in (0, 1) and short_mem in (0, 1), (
             "memrope: long_mem/short_mem must be 0 or 1 (full-frame EMA streams)"
+        )
         return {
             "sink": sink,
             "long_mem": long_mem,
@@ -163,16 +168,16 @@ def parse_memrope_cfg(raw):
 
 
 class CausalWanSelfAttention(nn.Module):
-
-    def __init__(self,
-                 dim,
-                 num_heads,
-                 local_attn_size=-1,
-                 sink_size=0,
-                 qk_norm=True,
-                 eps=1e-6,
-                 causal_rope_fn=None,
-                 ):
+    def __init__(
+        self,
+        dim,
+        num_heads,
+        local_attn_size=-1,
+        sink_size=0,
+        qk_norm=True,
+        eps=1e-6,
+        causal_rope_fn=None,
+    ):
         assert dim % num_heads == 0
         super().__init__()
         self.dim = dim
@@ -201,7 +206,9 @@ class CausalWanSelfAttention(nn.Module):
         self.rope_compute_dtype = torch.float64
         # This will be reset to depend on actual input sequence length, see pipeline/causal_base.py
         self.max_attention_size = 32760 if local_attn_size == -1 else local_attn_size * 1560
-        print(f"Initialized CausalWanSelfAttention with max_attention_size={self.max_attention_size} (local_attn_size={local_attn_size}), sink_size={sink_size}")
+        print(
+            f"Initialized CausalWanSelfAttention with max_attention_size={self.max_attention_size} (local_attn_size={local_attn_size}), sink_size={sink_size}"
+        )
         self.causal_rope_fn = causal_rope_fn if causal_rope_fn is not None else causal_rope_apply
 
         # layers
@@ -254,11 +261,11 @@ class CausalWanSelfAttention(nn.Module):
             x = self.o(x)
             return x
         # AR generation with KV cache. Mask not needed and can theoretically support infinite rollout
-        frame_seqlen = math.prod(grid_sizes[0][1:]).item() # 1560 (3120 in height-concat)
-        current_start_frame = current_start // frame_seqlen # 0
-        num_new_tokens = q.shape[1] # 1560/3120/...
+        frame_seqlen = math.prod(grid_sizes[0][1:]).item()  # 1560 (3120 in height-concat)
+        current_start_frame = current_start // frame_seqlen  # 0
+        num_new_tokens = q.shape[1]  # 1560/3120/...
         current_end = current_start + num_new_tokens
-        sink_tokens = self.sink_size * frame_seqlen # frame_seqlen * sink_size
+        sink_tokens = self.sink_size * frame_seqlen  # frame_seqlen * sink_size
 
         if self.online_rope_indexing:
             # MemRoPE Online RoPE Indexing: store RAW keys; RoPE is (re)applied at
@@ -268,38 +275,51 @@ class CausalWanSelfAttention(nn.Module):
         else:
             # Original behavior: rope with the absolute frame index and store roped.
             roped_query = self.causal_rope_fn(
-                q, grid_sizes, freqs, start_frame=current_start_frame,
-                compute_dtype=self.rope_compute_dtype).type_as(v)
+                q, grid_sizes, freqs, start_frame=current_start_frame, compute_dtype=self.rope_compute_dtype
+            ).type_as(v)
             key_to_store = self.causal_rope_fn(
-                k, grid_sizes, freqs, start_frame=current_start_frame,
-                compute_dtype=self.rope_compute_dtype).type_as(v)
+                k, grid_sizes, freqs, start_frame=current_start_frame, compute_dtype=self.rope_compute_dtype
+            ).type_as(v)
 
         # If we are using local attention and the current KV cache size is larger than the local attention size, we need to truncate the KV cache
-        kv_cache_size = kv_cache["k"].shape[1] # kv_cache_size, 32760 for full attn, 1560*local_attn_size for local attn
+        kv_cache_size = kv_cache["k"].shape[
+            1
+        ]  # kv_cache_size, 32760 for full attn, 1560*local_attn_size for local attn
         # kv_cache["local_end_index"] and kv_cache["global_end_index"] initialized to 0
-        if self.local_attn_size != -1 and (current_end > kv_cache["global_end_index"].item()) and (
-                num_new_tokens + kv_cache["local_end_index"].item() > kv_cache_size):
+        if (
+            self.local_attn_size != -1
+            and (current_end > kv_cache["global_end_index"].item())
+            and (num_new_tokens + kv_cache["local_end_index"].item() > kv_cache_size)
+        ):
             # KV eviction and rolling when local attention is enabled
             # Calculate the number of new tokens added in this step
             # Shift existing cache content left to discard oldest tokens
             # Clone the source slice to avoid overlapping memory error
-            num_evicted_tokens = num_new_tokens + kv_cache["local_end_index"].item() - kv_cache_size # always 1560
-            num_rolled_tokens = kv_cache["local_end_index"].item() - num_evicted_tokens - sink_tokens # always 1560
-            kv_cache["k"][:, sink_tokens:sink_tokens + num_rolled_tokens] = \
-                kv_cache["k"][:, sink_tokens + num_evicted_tokens:sink_tokens + num_evicted_tokens + num_rolled_tokens].clone()
-            kv_cache["v"][:, sink_tokens:sink_tokens + num_rolled_tokens] = \
-                kv_cache["v"][:, sink_tokens + num_evicted_tokens:sink_tokens + num_evicted_tokens + num_rolled_tokens].clone()
+            num_evicted_tokens = num_new_tokens + kv_cache["local_end_index"].item() - kv_cache_size  # always 1560
+            num_rolled_tokens = kv_cache["local_end_index"].item() - num_evicted_tokens - sink_tokens  # always 1560
+            kv_cache["k"][:, sink_tokens : sink_tokens + num_rolled_tokens] = kv_cache["k"][
+                :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
+            ].clone()
+            kv_cache["v"][:, sink_tokens : sink_tokens + num_rolled_tokens] = kv_cache["v"][
+                :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
+            ].clone()
             # Insert the new keys/values at the end
-            local_end_index = kv_cache["local_end_index"].item() + current_end - \
-                kv_cache["global_end_index"].item() - num_evicted_tokens
+            local_end_index = (
+                kv_cache["local_end_index"].item()
+                + current_end
+                - kv_cache["global_end_index"].item()
+                - num_evicted_tokens
+            )
             local_start_index = local_end_index - num_new_tokens
             kv_cache["k"][:, local_start_index:local_end_index] = key_to_store
             kv_cache["v"][:, local_start_index:local_end_index] = v
         else:
             # Assign new keys/values directly up to current_end
-            local_end_index = kv_cache["local_end_index"].item() + current_end - kv_cache["global_end_index"].item() # 1560, 3120, ...
-            local_start_index = local_end_index - num_new_tokens # 0, 1560, ...
-            kv_cache["k"][:, local_start_index:local_end_index] = key_to_store # this is current layer's kvcache
+            local_end_index = (
+                kv_cache["local_end_index"].item() + current_end - kv_cache["global_end_index"].item()
+            )  # 1560, 3120, ...
+            local_start_index = local_end_index - num_new_tokens  # 0, 1560, ...
+            kv_cache["k"][:, local_start_index:local_end_index] = key_to_store  # this is current layer's kvcache
             kv_cache["v"][:, local_start_index:local_end_index] = v
 
         if self.online_rope_indexing:
@@ -311,22 +331,22 @@ class CausalWanSelfAttention(nn.Module):
             grid_window = grid_sizes.clone()
             grid_window[:, 0] = n_cached_frames
             cached_k = self.causal_rope_fn(
-                kv_cache["k"][:, 0:local_end_index], grid_window, freqs, start_frame=0,
-                compute_dtype=self.rope_compute_dtype).type_as(v)
+                kv_cache["k"][:, 0:local_end_index],
+                grid_window,
+                freqs,
+                start_frame=0,
+                compute_dtype=self.rope_compute_dtype,
+            ).type_as(v)
             # The current block sits at the end of the window: compact start frame =
             # number of frames already present before this block's tokens.
             q_start_frame = (local_end_index - num_new_tokens) // frame_seqlen
             roped_query = self.causal_rope_fn(
-                q, grid_sizes, freqs, start_frame=q_start_frame,
-                compute_dtype=self.rope_compute_dtype).type_as(v)
+                q, grid_sizes, freqs, start_frame=q_start_frame, compute_dtype=self.rope_compute_dtype
+            ).type_as(v)
         else:
             cached_k = kv_cache["k"][:, 0:local_end_index]
 
-        x = attention(
-            roped_query,
-            cached_k,
-            kv_cache["v"][:, 0:local_end_index]
-        )
+        x = attention(roped_query, cached_k, kv_cache["v"][:, 0:local_end_index])
         kv_cache["global_end_index"].fill_(current_end)
         kv_cache["local_end_index"].fill_(local_end_index)
 
@@ -349,12 +369,10 @@ class CausalWanSelfAttention(nn.Module):
         Args mirror the AR branch; returns x of shape [B, S, n_heads, head_dim].
         """
         b, s, n, d = q.shape
-        f_full, h_full, w = (int(grid_sizes[0][0].item()),
-                             int(grid_sizes[0][1].item()),
-                             int(grid_sizes[0][2].item()))
-        fs_full = h_full * w           # tokens per full (gen+cond) frame, e.g. 3120
-        fs = fs_full // 2              # tokens per half-frame, e.g. 1560
-        sh = h_full // 2              # single-half height patch count
+        f_full, h_full, w = (int(grid_sizes[0][0].item()), int(grid_sizes[0][1].item()), int(grid_sizes[0][2].item()))  # noqa: F841 - Upstream assignment kept.
+        fs_full = h_full * w  # tokens per full (gen+cond) frame, e.g. 3120
+        fs = fs_full // 2  # tokens per half-frame, e.g. 1560
+        sh = h_full // 2  # single-half height patch count
         num_new_frames = s // fs_full
         cur_frame = current_start // fs_full
         cfg = self.memrope_cfg
@@ -370,26 +388,28 @@ class CausalWanSelfAttention(nn.Module):
         v_gen, v_cond = split_half(v)
 
         is_new = cur_frame > kv_cache["committed_frame"]
-        self._memrope_update_half(kv_cache["gen"], cfg["gen"], k_gen, v_gen, fs,
-                                  num_new_frames, cur_frame, is_new)
-        self._memrope_update_half(kv_cache["cond"], cfg["cond"], k_cond, v_cond, fs,
-                                  num_new_frames, cur_frame, is_new)
+        self._memrope_update_half(kv_cache["gen"], cfg["gen"], k_gen, v_gen, fs, num_new_frames, cur_frame, is_new)
+        self._memrope_update_half(kv_cache["cond"], cfg["cond"], k_cond, v_cond, fs, num_new_frames, cur_frame, is_new)
         if is_new:
             kv_cache["committed_frame"] = cur_frame + num_new_frames - 1
 
         keys_gen, vals_gen, q_start_gen = self._memrope_assemble(
-            kv_cache["gen"], cfg["gen"], fs, sh, w, freqs, grid_sizes, num_new_frames, v.dtype)
+            kv_cache["gen"], cfg["gen"], fs, sh, w, freqs, grid_sizes, num_new_frames, v.dtype
+        )
         keys_cond, vals_cond, q_start_cond = self._memrope_assemble(
-            kv_cache["cond"], cfg["cond"], fs, sh, w, freqs, grid_sizes, num_new_frames, v.dtype)
+            kv_cache["cond"], cfg["cond"], fs, sh, w, freqs, grid_sizes, num_new_frames, v.dtype
+        )
 
         # RoPE the query halves with single-height grid + per-half compact temporal index.
         grid_q = grid_sizes.clone()
         grid_q[:, 0] = num_new_frames
         grid_q[:, 1] = sh
-        roped_q_gen = causal_rope_apply(q_gen, grid_q, freqs, start_frame=q_start_gen,
-                                        compute_dtype=self.rope_compute_dtype).type_as(v)
-        roped_q_cond = causal_rope_apply(q_cond, grid_q, freqs, start_frame=q_start_cond,
-                                         compute_dtype=self.rope_compute_dtype).type_as(v)
+        roped_q_gen = causal_rope_apply(
+            q_gen, grid_q, freqs, start_frame=q_start_gen, compute_dtype=self.rope_compute_dtype
+        ).type_as(v)
+        roped_q_cond = causal_rope_apply(
+            q_cond, grid_q, freqs, start_frame=q_start_cond, compute_dtype=self.rope_compute_dtype
+        ).type_as(v)
         # Re-interleave back to the original per-frame [gen | cond] token order so the
         # attention output matches the input token layout.
         roped_q = q.new_empty(b, num_new_frames, fs_full, n, d)
@@ -412,14 +432,14 @@ class CausalWanSelfAttention(nn.Module):
         has_muL, has_muS = cfg["long_mem"] > 0, cfg["short_mem"] > 0
         aL, aS = cfg["alpha_long"], cfg["alpha_short"]
         for j in range(nf):
-            kf = k_half[:, j * fs:(j + 1) * fs]
-            vf = v_half[:, j * fs:(j + 1) * fs]
+            kf = k_half[:, j * fs : (j + 1) * fs]
+            vf = v_half[:, j * fs : (j + 1) * fs]
             f_idx = cur_frame + j
             if is_new:
                 if hc["sink_count"] < S:
                     slot = hc["sink_count"]
-                    hc["sink_k"][:, slot * fs:(slot + 1) * fs] = kf
-                    hc["sink_v"][:, slot * fs:(slot + 1) * fs] = vf
+                    hc["sink_k"][:, slot * fs : (slot + 1) * fs] = kf
+                    hc["sink_v"][:, slot * fs : (slot + 1) * fs] = vf
                     hc["sink_count"] += 1
                 else:
                     if hc["local_count"] == L:
@@ -428,34 +448,38 @@ class CausalWanSelfAttention(nn.Module):
                         ev = hc["local_v"][:, 0:fs].clone()
                         if has_muL:
                             if not hc["muL_init"]:
-                                hc["muL_k"].copy_(ek); hc["muL_v"].copy_(ev); hc["muL_init"] = True
+                                hc["muL_k"].copy_(ek)
+                                hc["muL_v"].copy_(ev)
+                                hc["muL_init"] = True
                             else:
                                 hc["muL_k"].mul_(1 - aL).add_(ek, alpha=aL)
                                 hc["muL_v"].mul_(1 - aL).add_(ev, alpha=aL)
                         if has_muS:
                             if not hc["muS_init"]:
-                                hc["muS_k"].copy_(ek); hc["muS_v"].copy_(ev); hc["muS_init"] = True
+                                hc["muS_k"].copy_(ek)
+                                hc["muS_v"].copy_(ev)
+                                hc["muS_init"] = True
                             else:
                                 hc["muS_k"].mul_(1 - aS).add_(ek, alpha=aS)
                                 hc["muS_v"].mul_(1 - aS).add_(ev, alpha=aS)
                         # Shift local window left by one frame to discard the evicted slot.
-                        hc["local_k"][:, 0:(L - 1) * fs] = hc["local_k"][:, fs:L * fs].clone()
-                        hc["local_v"][:, 0:(L - 1) * fs] = hc["local_v"][:, fs:L * fs].clone()
+                        hc["local_k"][:, 0 : (L - 1) * fs] = hc["local_k"][:, fs : L * fs].clone()
+                        hc["local_v"][:, 0 : (L - 1) * fs] = hc["local_v"][:, fs : L * fs].clone()
                         hc["local_count"] = L - 1
                     slot = hc["local_count"]
-                    hc["local_k"][:, slot * fs:(slot + 1) * fs] = kf
-                    hc["local_v"][:, slot * fs:(slot + 1) * fs] = vf
+                    hc["local_k"][:, slot * fs : (slot + 1) * fs] = kf
+                    hc["local_v"][:, slot * fs : (slot + 1) * fs] = vf
                     hc["local_count"] += 1
             else:
                 # Overwrite the current frame's existing slot (re-denoise / clean rerun).
                 if f_idx < S:
                     slot = f_idx
-                    hc["sink_k"][:, slot * fs:(slot + 1) * fs] = kf
-                    hc["sink_v"][:, slot * fs:(slot + 1) * fs] = vf
+                    hc["sink_k"][:, slot * fs : (slot + 1) * fs] = kf
+                    hc["sink_v"][:, slot * fs : (slot + 1) * fs] = vf
                 else:
                     slot = hc["local_count"] - nf + j
-                    hc["local_k"][:, slot * fs:(slot + 1) * fs] = kf
-                    hc["local_v"][:, slot * fs:(slot + 1) * fs] = vf
+                    hc["local_k"][:, slot * fs : (slot + 1) * fs] = kf
+                    hc["local_v"][:, slot * fs : (slot + 1) * fs] = vf
 
     def _memrope_assemble(self, hc, cfg, fs, sh, w, freqs, grid_sizes, nf, dtype):
         """Concatenate one half's filled tiers, RoPE them compact-from-0, return keys/vals.
@@ -467,23 +491,26 @@ class CausalWanSelfAttention(nn.Module):
         """
         parts_k, parts_v = [], []
         if hc["sink_count"] > 0:
-            parts_k.append(hc["sink_k"][:, 0:hc["sink_count"] * fs])
-            parts_v.append(hc["sink_v"][:, 0:hc["sink_count"] * fs])
+            parts_k.append(hc["sink_k"][:, 0 : hc["sink_count"] * fs])
+            parts_v.append(hc["sink_v"][:, 0 : hc["sink_count"] * fs])
         if cfg["long_mem"] > 0 and hc["muL_init"]:
-            parts_k.append(hc["muL_k"]); parts_v.append(hc["muL_v"])
+            parts_k.append(hc["muL_k"])
+            parts_v.append(hc["muL_v"])
         if cfg["short_mem"] > 0 and hc["muS_init"]:
-            parts_k.append(hc["muS_k"]); parts_v.append(hc["muS_v"])
+            parts_k.append(hc["muS_k"])
+            parts_v.append(hc["muS_v"])
         if hc["local_count"] > 0:
-            parts_k.append(hc["local_k"][:, 0:hc["local_count"] * fs])
-            parts_v.append(hc["local_v"][:, 0:hc["local_count"] * fs])
+            parts_k.append(hc["local_k"][:, 0 : hc["local_count"] * fs])
+            parts_v.append(hc["local_v"][:, 0 : hc["local_count"] * fs])
         keys_raw = torch.cat(parts_k, dim=1)
         vals = torch.cat(parts_v, dim=1)
         n_frames = keys_raw.shape[1] // fs
         grid_win = grid_sizes.clone()
         grid_win[:, 0] = n_frames
         grid_win[:, 1] = sh
-        keys = causal_rope_apply(keys_raw, grid_win, freqs, start_frame=0,
-                                 compute_dtype=self.rope_compute_dtype).to(dtype)
+        keys = causal_rope_apply(keys_raw, grid_win, freqs, start_frame=0, compute_dtype=self.rope_compute_dtype).to(
+            dtype
+        )
         q_start = n_frames - nf
         return keys, vals, q_start
 
@@ -502,10 +529,10 @@ class CausalWanSelfAttention(nn.Module):
         """
         s = q.shape[1]
         h_full, w = int(grid_sizes[0][1].item()), int(grid_sizes[0][2].item())
-        ffs = h_full * w               # full-frame token count (gen+cond), e.g. 3120
+        ffs = h_full * w  # full-frame token count (gen+cond), e.g. 3120
         num_new = s // ffs
         cur_frame = current_start // ffs
-        cfg = self.memrope_cfg["gen"]   # gen == cond in fused mode
+        cfg = self.memrope_cfg["gen"]  # gen == cond in fused mode
         rope_dt = self.rope_compute_dtype
 
         is_new = cur_frame > kv_cache["committed_frame"]
@@ -513,8 +540,9 @@ class CausalWanSelfAttention(nn.Module):
         if is_new:
             kv_cache["committed_frame"] = cur_frame + num_new - 1
 
-        n_mem = (1 if (cfg["long_mem"] > 0 and kv_cache["muL_init"]) else 0) \
-              + (1 if (cfg["short_mem"] > 0 and kv_cache["muS_init"]) else 0)
+        n_mem = (1 if (cfg["long_mem"] > 0 and kv_cache["muL_init"]) else 0) + (
+            1 if (cfg["short_mem"] > 0 and kv_cache["muS_init"]) else 0
+        )
         n_frames = kv_cache["sink_count"] + n_mem + kv_cache["local_count"]
         end = n_frames * ffs
         static_end = (n_frames - num_new) * ffs
@@ -525,20 +553,26 @@ class CausalWanSelfAttention(nn.Module):
         # block's denoising steps / clean rerun, which are the non-is_new forwards).
         if is_new and static_end > 0:
             static_k, static_v = self._memrope_gather_static(kv_cache, cfg, ffs, num_new, cur_frame)
-            grid_s = grid_sizes.clone(); grid_s[:, 0] = n_frames - num_new
+            grid_s = grid_sizes.clone()
+            grid_s[:, 0] = n_frames - num_new
             rk[:, :static_end] = causal_rope_apply_shared_height(
-                static_k, grid_s, freqs, start_frame=0, compute_dtype=rope_dt).to(v.dtype)
+                static_k, grid_s, freqs, start_frame=0, compute_dtype=rope_dt
+            ).to(v.dtype)
             vb[:, :static_end] = static_v
 
         # Current frame(s): the input k/v IS the current frame — rope fresh every step.
-        grid_c = grid_sizes.clone(); grid_c[:, 0] = num_new
+        grid_c = grid_sizes.clone()
+        grid_c[:, 0] = num_new
         rk[:, static_end:end] = causal_rope_apply_shared_height(
-            k, grid_c, freqs, start_frame=n_frames - num_new, compute_dtype=rope_dt).to(v.dtype)
+            k, grid_c, freqs, start_frame=n_frames - num_new, compute_dtype=rope_dt
+        ).to(v.dtype)
         vb[:, static_end:end] = v
 
-        grid_q = grid_sizes.clone(); grid_q[:, 0] = num_new
+        grid_q = grid_sizes.clone()
+        grid_q[:, 0] = num_new
         roped_q = causal_rope_apply_shared_height(
-            q, grid_q, freqs, start_frame=n_frames - num_new, compute_dtype=rope_dt).to(v.dtype)
+            q, grid_q, freqs, start_frame=n_frames - num_new, compute_dtype=rope_dt
+        ).to(v.dtype)
         return attention(roped_q, rk[:, :end], vb[:, :end])
 
     def _memrope_gather_static(self, hc, cfg, ffs, num_new, cur_frame):
@@ -549,35 +583,40 @@ class CausalWanSelfAttention(nn.Module):
             # Still filling sink → static is the earlier sink frames only.
             upto = (hc["sink_count"] - num_new) * ffs
             if upto > 0:
-                pk.append(hc["sink_k"][:, :upto]); pv.append(hc["sink_v"][:, :upto])
+                pk.append(hc["sink_k"][:, :upto])
+                pv.append(hc["sink_v"][:, :upto])
         else:
             if hc["sink_count"] > 0:
                 e = hc["sink_count"] * ffs
-                pk.append(hc["sink_k"][:, :e]); pv.append(hc["sink_v"][:, :e])
+                pk.append(hc["sink_k"][:, :e])
+                pv.append(hc["sink_v"][:, :e])
             if cfg["long_mem"] > 0 and hc["muL_init"]:
-                pk.append(hc["muL_k"]); pv.append(hc["muL_v"])
+                pk.append(hc["muL_k"])
+                pv.append(hc["muL_v"])
             if cfg["short_mem"] > 0 and hc["muS_init"]:
-                pk.append(hc["muS_k"]); pv.append(hc["muS_v"])
+                pk.append(hc["muS_k"])
+                pv.append(hc["muS_v"])
             upto = (hc["local_count"] - num_new) * ffs
             if upto > 0:
-                pk.append(hc["local_k"][:, :upto]); pv.append(hc["local_v"][:, :upto])
+                pk.append(hc["local_k"][:, :upto])
+                pv.append(hc["local_v"][:, :upto])
         return torch.cat(pk, dim=1), torch.cat(pv, dim=1)
 
 
 class CausalWanAttentionBlock(nn.Module):
-
-    def __init__(self,
-                 cross_attn_type,
-                 dim,
-                 ffn_dim,
-                 num_heads,
-                 local_attn_size=-1,
-                 sink_size=0,
-                 qk_norm=True,
-                 cross_attn_norm=True,
-                 eps=1e-6,
-                 causal_rope_fn=None,
-                 ):
+    def __init__(
+        self,
+        cross_attn_type,
+        dim,
+        ffn_dim,
+        num_heads,
+        local_attn_size=-1,
+        sink_size=0,
+        qk_norm=True,
+        cross_attn_norm=True,
+        eps=1e-6,
+        causal_rope_fn=None,
+    ):
         super().__init__()
         self.dim = dim
         self.ffn_dim = ffn_dim
@@ -590,20 +629,12 @@ class CausalWanAttentionBlock(nn.Module):
         # layers
         self.norm1 = WanLayerNorm(dim, eps)
         self.self_attn = CausalWanSelfAttention(
-            dim, num_heads, local_attn_size, sink_size, qk_norm, eps,
-            causal_rope_fn=causal_rope_fn)
-        self.norm3 = WanLayerNorm(
-            dim, eps,
-            elementwise_affine=True) if cross_attn_norm else nn.Identity()
-        self.cross_attn = WAN_CROSSATTENTION_CLASSES[cross_attn_type](dim,
-                                                                      num_heads,
-                                                                      (-1, -1),
-                                                                      qk_norm,
-                                                                      eps)
+            dim, num_heads, local_attn_size, sink_size, qk_norm, eps, causal_rope_fn=causal_rope_fn
+        )
+        self.norm3 = WanLayerNorm(dim, eps, elementwise_affine=True) if cross_attn_norm else nn.Identity()
+        self.cross_attn = WAN_CROSSATTENTION_CLASSES[cross_attn_type](dim, num_heads, (-1, -1), qk_norm, eps)
         self.norm2 = WanLayerNorm(dim, eps)
-        self.ffn = nn.Sequential(
-            nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'),
-            nn.Linear(ffn_dim, dim))
+        self.ffn = nn.Sequential(nn.Linear(dim, ffn_dim), nn.GELU(approximate="tanh"), nn.Linear(ffn_dim, dim))
 
         # modulation
         self.modulation = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
@@ -638,23 +669,24 @@ class CausalWanAttentionBlock(nn.Module):
         # self-attention
         y = self.self_attn(
             (self.norm1(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0]).flatten(1, 2),
-            seq_lens, grid_sizes,
-            freqs, kv_cache, current_start)
+            seq_lens,
+            grid_sizes,
+            freqs,
+            kv_cache,
+            current_start,
+        )
 
         # with amp.autocast(dtype=torch.float32):
         x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[2]).flatten(1, 2)
 
         # cross-attention & ffn function
         def cross_attn_ffn(x, context, context_lens, e, crossattn_cache=None):
-            x = x + self.cross_attn(self.norm3(x), context,
-                                    context_lens, crossattn_cache=crossattn_cache)
+            x = x + self.cross_attn(self.norm3(x), context, context_lens, crossattn_cache=crossattn_cache)
             y = self.ffn(
-                (self.norm2(x).unflatten(dim=1, sizes=(num_frames,
-                 frame_seqlen)) * (1 + e[4]) + e[3]).flatten(1, 2)
+                (self.norm2(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[4]) + e[3]).flatten(1, 2)
             )
             # with amp.autocast(dtype=torch.float32):
-            x = x + (y.unflatten(dim=1, sizes=(num_frames,
-                     frame_seqlen)) * e[5]).flatten(1, 2)
+            x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[5]).flatten(1, 2)
             return x
 
         x = cross_attn_ffn(x, context, context_lens, e, crossattn_cache)
@@ -662,7 +694,6 @@ class CausalWanAttentionBlock(nn.Module):
 
 
 class CausalHead(nn.Module):
-
     def __init__(self, dim, out_dim, patch_size, eps=1e-6):
         super().__init__()
         self.dim = dim
@@ -688,39 +719,43 @@ class CausalHead(nn.Module):
         # with amp.autocast(dtype=torch.float32):
         num_frames, frame_seqlen = e.shape[1], x.shape[1] // e.shape[1]
         e = (self.modulation.unsqueeze(1) + e).chunk(2, dim=2)
-        x = (self.head(self.norm(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0]))
+        x = self.head(self.norm(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0])
         return x
 
 
 class CausalWanModel(WanTransformerMethodsMixin, nn.Module, NativeConfigMixin):
     r"""MoVerse causal Wan 2.x rollout graph."""
 
-    ignore_for_config = [
-        'patch_size', 'cross_attn_norm', 'qk_norm', 'text_dim',
-        'causal_rope_fn',
+    ignore_for_config: ClassVar[list] = [
+        "patch_size",
+        "cross_attn_norm",
+        "qk_norm",
+        "text_dim",
+        "causal_rope_fn",
     ]
-    _no_split_modules = ['WanAttentionBlock']
+    _no_split_modules: ClassVar[list] = ["WanAttentionBlock"]
 
     @register_to_config
-    def __init__(self,
-                 model_type='t2v',
-                 patch_size=(1, 2, 2),
-                 text_len=512,
-                 in_dim=16,
-                 dim=2048,
-                 ffn_dim=8192,
-                 freq_dim=256,
-                 text_dim=4096,
-                 out_dim=16,
-                 num_heads=16,
-                 num_layers=32,
-                 local_attn_size=-1,
-                 sink_size=0,
-                 qk_norm=True,
-                 cross_attn_norm=True,
-                 eps=1e-6,
-                 causal_rope_fn=None,
-                 ):
+    def __init__(
+        self,
+        model_type="t2v",
+        patch_size=(1, 2, 2),
+        text_len=512,
+        in_dim=16,
+        dim=2048,
+        ffn_dim=8192,
+        freq_dim=256,
+        text_dim=4096,
+        out_dim=16,
+        num_heads=16,
+        num_layers=32,
+        local_attn_size=-1,
+        sink_size=0,
+        qk_norm=True,
+        cross_attn_norm=True,
+        eps=1e-6,
+        causal_rope_fn=None,
+    ):
         r"""
         Initialize the diffusion model backbone.
 
@@ -761,7 +796,7 @@ class CausalWanModel(WanTransformerMethodsMixin, nn.Module, NativeConfigMixin):
 
         super().__init__()
 
-        assert model_type in ['t2v', 'i2v']
+        assert model_type in ["t2v", "i2v"]
         self.model_type = model_type
 
         self.patch_size = patch_size
@@ -781,25 +816,31 @@ class CausalWanModel(WanTransformerMethodsMixin, nn.Module, NativeConfigMixin):
         self.eps = eps
 
         # embeddings
-        self.patch_embedding = nn.Conv3d(
-            in_dim, dim, kernel_size=patch_size, stride=patch_size)
-        self.text_embedding = nn.Sequential(
-            nn.Linear(text_dim, dim), nn.GELU(approximate='tanh'),
-            nn.Linear(dim, dim))
+        self.patch_embedding = nn.Conv3d(in_dim, dim, kernel_size=patch_size, stride=patch_size)
+        self.text_embedding = nn.Sequential(nn.Linear(text_dim, dim), nn.GELU(approximate="tanh"), nn.Linear(dim, dim))
 
-        self.time_embedding = nn.Sequential(
-            nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
-        self.time_projection = nn.Sequential(
-            nn.SiLU(), nn.Linear(dim, dim * 6))
+        self.time_embedding = nn.Sequential(nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
+        self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(dim, dim * 6))
 
         # blocks
-        cross_attn_type = 't2v_cross_attn' if model_type == 't2v' else 'i2v_cross_attn'
-        self.blocks = nn.ModuleList([
-            CausalWanAttentionBlock(cross_attn_type, dim, ffn_dim, num_heads,
-                                    local_attn_size, sink_size, qk_norm, cross_attn_norm, eps,
-                                    causal_rope_fn=causal_rope_fn)
-            for _ in range(num_layers)
-        ])
+        cross_attn_type = "t2v_cross_attn" if model_type == "t2v" else "i2v_cross_attn"
+        self.blocks = nn.ModuleList(
+            [
+                CausalWanAttentionBlock(
+                    cross_attn_type,
+                    dim,
+                    ffn_dim,
+                    num_heads,
+                    local_attn_size,
+                    sink_size,
+                    qk_norm,
+                    cross_attn_norm,
+                    eps,
+                    causal_rope_fn=causal_rope_fn,
+                )
+                for _ in range(num_layers)
+            ]
+        )
 
         # head
         self.head = CausalHead(dim, out_dim, patch_size, eps)
@@ -807,14 +848,12 @@ class CausalWanModel(WanTransformerMethodsMixin, nn.Module, NativeConfigMixin):
         # buffers (don't use register_buffer otherwise dtype will be changed in to())
         assert (dim % num_heads) == 0 and (dim // num_heads) % 2 == 0
         d = dim // num_heads
-        self.freqs = torch.cat([
-            rope_params(1024, d - 4 * (d // 6)),
-            rope_params(1024, 2 * (d // 6)),
-            rope_params(1024, 2 * (d // 6))
-        ],
-            dim=1)
+        self.freqs = torch.cat(
+            [rope_params(1024, d - 4 * (d // 6)), rope_params(1024, 2 * (d // 6)), rope_params(1024, 2 * (d // 6))],
+            dim=1,
+        )
 
-        if model_type == 'i2v':
+        if model_type == "i2v":
             self.img_emb = MLPProj(1280, dim)
 
         # initialize weights
@@ -831,8 +870,8 @@ class CausalWanModel(WanTransformerMethodsMixin, nn.Module, NativeConfigMixin):
         seq_len,
         clip_fea=None,
         y=None,
-        kv_cache: dict = None,
-        crossattn_cache: dict = None,
+        kv_cache: dict | None = None,
+        crossattn_cache: dict | None = None,
         current_start: int = 0,
     ):
         r"""
@@ -860,7 +899,7 @@ class CausalWanModel(WanTransformerMethodsMixin, nn.Module, NativeConfigMixin):
                 List of denoised video tensors with original input shapes [C_out, F, H / 8, W / 8]
         """
 
-        if self.model_type == 'i2v':
+        if self.model_type == "i2v":
             assert clip_fea is not None and y is not None
         # params
         device = self.patch_embedding.weight.device
@@ -868,12 +907,11 @@ class CausalWanModel(WanTransformerMethodsMixin, nn.Module, NativeConfigMixin):
             self.freqs = self.freqs.to(device)
 
         if y is not None:
-            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y)]
+            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y, strict=False)]
 
         # embeddings
         x = [self.patch_embedding(u.unsqueeze(0)) for u in x]
-        grid_sizes = torch.stack(
-            [torch.tensor(u.shape[2:], dtype=torch.long) for u in x])
+        grid_sizes = torch.stack([torch.tensor(u.shape[2:], dtype=torch.long) for u in x])
         x = [u.flatten(2).transpose(1, 2) for u in x]
         seq_lens = torch.tensor([u.size(1) for u in x], dtype=torch.long)
         assert seq_lens.max() <= seq_len
@@ -893,34 +931,29 @@ class CausalWanModel(WanTransformerMethodsMixin, nn.Module, NativeConfigMixin):
 
         # time embeddings
         # with amp.autocast(dtype=torch.float32):
-        e = self.time_embedding(
-            sinusoidal_embedding_1d(self.freq_dim, t.flatten()).type_as(x))
-        e0 = self.time_projection(e).unflatten(
-            1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
+        e = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, t.flatten()).type_as(x))
+        e0 = self.time_projection(e).unflatten(1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
         # assert e.dtype == torch.float32 and e0.dtype == torch.float32
 
         # context
         context_lens = None
         context = self.text_embedding(
-            torch.stack([
-                torch.cat(
-                    [u, u.new_zeros(self.text_len - u.size(0), u.size(1))])
-                for u in context
-            ]))
+            torch.stack([torch.cat([u, u.new_zeros(self.text_len - u.size(0), u.size(1))]) for u in context])
+        )
 
         if clip_fea is not None:
             context_clip = self.img_emb(clip_fea)  # bs x 257 x dim
             context = torch.concat([context_clip, context], dim=1)
 
         # arguments
-        kwargs = dict(
-            e=e0,
-            seq_lens=seq_lens,
-            grid_sizes=grid_sizes,
-            freqs=self.freqs,
-            context=context,
-            context_lens=context_lens,
-        )
+        kwargs = {
+            "e": e0,
+            "seq_lens": seq_lens,
+            "grid_sizes": grid_sizes,
+            "freqs": self.freqs,
+            "context": context,
+            "context_lens": context_lens,
+        }
 
         for block_index, block in enumerate(self.blocks):
             kwargs.update(
@@ -938,14 +971,11 @@ class CausalWanModel(WanTransformerMethodsMixin, nn.Module, NativeConfigMixin):
         x = self.unpatchify(x, grid_sizes)
         return torch.stack(x)
 
-    def forward(
-        self,
-        *args,
-        **kwargs
-    ):
-        if kwargs.get('kv_cache', None) is None:
+    def forward(self, *args, **kwargs):
+        if kwargs.get("kv_cache") is None:
             raise ValueError("CausalWanModel inference requires a KV cache")
         return self._forward_inference(*args, **kwargs)
+
     def set_rope_fn(self, causal_rope_fn=None):
         """Replace the causal RoPE function used by every self-attention block.
 
@@ -987,7 +1017,8 @@ class CausalWanModel(WanTransformerMethodsMixin, nn.Module, NativeConfigMixin):
         ``precision`` is "fp64" (default, exact) or "fp32" (~2x faster rope, tiny precision
         change). Affects the online and MemRoPE inference paths.
         """
-        dt = {"fp64": torch.float64, "fp32": torch.float32,
-              "float64": torch.float64, "float32": torch.float32}[str(precision).lower()]
+        dt = {"fp64": torch.float64, "fp32": torch.float32, "float64": torch.float64, "float32": torch.float32}[
+            str(precision).lower()
+        ]
         for block in self.blocks:
             block.self_attn.rope_compute_dtype = dt

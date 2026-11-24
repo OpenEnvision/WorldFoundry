@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional, Tuple, TYPE_CHECKING, Union
+
 import torch
 
 
@@ -41,7 +41,7 @@ def masked_gather(points: torch.Tensor, idx: torch.Tensor) -> torch.Tensor:
         # Farthest point sampling where idx is of shape (N, K)
         idx_expanded = idx[..., None].expand(-1, -1, D)
     else:
-        raise ValueError("idx format is not supported %s" % repr(idx.shape))
+        raise ValueError("idx format is not supported %s" % repr(idx.shape))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
     idx_expanded_mask = idx_expanded.eq(-1)
     idx_expanded = idx_expanded.clone()

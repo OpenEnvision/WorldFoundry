@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> config -> streams.py functionality."""
-
 from __future__ import annotations
 
 from typing import Annotated, Literal
@@ -33,14 +31,6 @@ class BaseStreamListConfig(BaseConfigSchema):
     @field_validator("frame_end")
     @classmethod
     def validate_frame_end(cls, value: int) -> int:
-        """Validate frame end.
-
-        Args:
-            value: The value.
-
-        Returns:
-            The return value.
-        """
         if value == -1 or value >= 0:
             return value
         raise ValueError("frame_end must be -1 or a non-negative frame index")

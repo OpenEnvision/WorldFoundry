@@ -70,7 +70,10 @@ class CsgoDenoiser(Denoiser):
 
     def compute_model_output(self, noisy_next_obs, obs, act, cs):
         return self.inner_model(
-            noisy_next_obs * cs.c_in, cs.c_noise, obs / self.cfg.sigma_data, act,
+            noisy_next_obs * cs.c_in,
+            cs.c_noise,
+            obs / self.cfg.sigma_data,
+            act,
             c_noise_cond=cs.c_noise_cond,
         )
 

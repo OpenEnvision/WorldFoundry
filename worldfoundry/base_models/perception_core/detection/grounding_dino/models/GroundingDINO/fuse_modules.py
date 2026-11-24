@@ -5,8 +5,6 @@
 # Licensed under the Apache License, Version 2.0 [see LICENSE for details]
 # ------------------------------------------------------------------------
 
-"""Module for base_models -> perception_core -> detection -> grounding_dino -> models -> GroundingDINO -> fuse_modules.py functionality."""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -20,14 +18,6 @@ class FeatureResizer(nn.Module):
     """
 
     def __init__(self, input_feat_size, output_feat_size, dropout, do_ln=True):
-        """Init.
-
-        Args:
-            input_feat_size: The input feat size.
-            output_feat_size: The output feat size.
-            dropout: The dropout.
-            do_ln: The do ln.
-        """
         super().__init__()
         self.do_ln = do_ln
         # Object feature encoding
@@ -36,11 +26,6 @@ class FeatureResizer(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, encoder_features):
-        """Forward.
-
-        Args:
-            encoder_features: The encoder features.
-        """
         x = self.fc(encoder_features)
         if self.do_ln:
             x = self.layer_norm(x)
@@ -67,7 +52,7 @@ def func_attention(query, context, smooth=1, raw_feature_norm="softmax", eps=1e-
     query: (n_context, queryL, d)
     context: (n_context, sourceL, d)
     """
-    batch_size_q, queryL = query.size(0), query.size(1)
+    batch_size_q, queryL = query.size(0), query.size(1)  # noqa: F841 - Upstream assignment kept.
     batch_size, sourceL = context.size(0), context.size(1)
 
     # Get attention
@@ -112,19 +97,8 @@ def func_attention(query, context, smooth=1, raw_feature_norm="softmax", eps=1e-
 
 
 class BiMultiHeadAttention(nn.Module):
-    """Bi multi head attention implementation."""
     def __init__(self, v_dim, l_dim, embed_dim, num_heads, dropout=0.1, cfg=None):
-        """Init.
-
-        Args:
-            v_dim: The v dim.
-            l_dim: The l dim.
-            embed_dim: The embed dim.
-            num_heads: The num heads.
-            dropout: The dropout.
-            cfg: The cfg.
-        """
-        super(BiMultiHeadAttention, self).__init__()
+        super().__init__()
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -132,9 +106,9 @@ class BiMultiHeadAttention(nn.Module):
         self.v_dim = v_dim
         self.l_dim = l_dim
 
-        assert (
-            self.head_dim * self.num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+        assert self.head_dim * self.num_heads == self.embed_dim, (
+            f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+        )
         self.scale = self.head_dim ** (-0.5)
         self.dropout = dropout
 
@@ -153,17 +127,9 @@ class BiMultiHeadAttention(nn.Module):
         self._reset_parameters()
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        """Helper function to shape.
-
-        Args:
-            tensor: The tensor.
-            seq_len: The seq len.
-            bsz: The bsz.
-        """
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def _reset_parameters(self):
-        """Helper function to reset parameters."""
         nn.init.xavier_uniform_(self.v_proj.weight)
         self.v_proj.bias.data.fill_(0)
         nn.init.xavier_uniform_(self.l_proj.weight)
@@ -177,17 +143,17 @@ class BiMultiHeadAttention(nn.Module):
         nn.init.xavier_uniform_(self.out_l_proj.weight)
         self.out_l_proj.bias.data.fill_(0)
 
-    def forward(self, v, l, attention_mask_v=None, attention_mask_l=None):
-        """_summary_
+    def forward(self, v, l, attention_mask_v=None, attention_mask_l=None):  # noqa: E741 - Ambiguous upstream name kept as written.
+        """Attend from image to text and from text to image.
 
         Args:
-            v (_type_): bs, n_img, dim
-            l (_type_): bs, n_text, dim
-            attention_mask_v (_type_, optional): _description_. bs, n_img
-            attention_mask_l (_type_, optional): _description_. bs, n_text
+            v: Image features, (bs, n_img, dim).
+            l: Text features, (bs, n_text, dim).
+            attention_mask_v: Optional image padding mask, (bs, n_img); True entries are masked.
+            attention_mask_l: Optional text padding mask, (bs, n_text); True entries are masked.
 
         Returns:
-            _type_: _description_
+            Updated image and text features with the input shapes.
         """
         # if os.environ.get('IPDB_SHILONG_DEBUG', None) == 'INFO':
         #     import ipdb; ipdb.set_trace()
@@ -237,18 +203,14 @@ class BiMultiHeadAttention(nn.Module):
 
         # mask vison for language
         if attention_mask_v is not None:
-            attention_mask_v = (
-                attention_mask_v[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
-            )
+            attention_mask_v = attention_mask_v[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
             attn_weights_l.masked_fill_(attention_mask_v, float("-inf"))
 
         attn_weights_l = attn_weights_l.softmax(dim=-1)
 
         # mask language for vision
         if attention_mask_l is not None:
-            attention_mask_l = (
-                attention_mask_l[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
-            )
+            attention_mask_l = attention_mask_l[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
             attn_weights.masked_fill_(attention_mask_l, float("-inf"))
         attn_weights_v = attn_weights.softmax(dim=-1)
 
@@ -284,7 +246,6 @@ class BiMultiHeadAttention(nn.Module):
 
 # Bi-Direction MHA (text->image, image->text)
 class BiAttentionBlock(nn.Module):
-    """Bi attention block implementation."""
     def __init__(
         self,
         v_dim,
@@ -304,7 +265,7 @@ class BiAttentionBlock(nn.Module):
             num_heads - Number of heads to use in the Multi-Head Attention block
             dropout - Amount of dropout to apply in the feed-forward network
         """
-        super(BiAttentionBlock, self).__init__()
+        super().__init__()
 
         # pre layer norm
         self.layer_norm_v = nn.LayerNorm(v_dim)
@@ -315,26 +276,16 @@ class BiAttentionBlock(nn.Module):
 
         # add layer scale for training stability
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.gamma_v = nn.Parameter(init_values * torch.ones((v_dim)), requires_grad=True)
-        self.gamma_l = nn.Parameter(init_values * torch.ones((l_dim)), requires_grad=True)
+        self.gamma_v = nn.Parameter(init_values * torch.ones(v_dim), requires_grad=True)
+        self.gamma_l = nn.Parameter(init_values * torch.ones(l_dim), requires_grad=True)
 
-    def forward(self, v, l, attention_mask_v=None, attention_mask_l=None):
-        """Forward.
-
-        Args:
-            v: The v.
-            l: The l.
-            attention_mask_v: The attention mask v.
-            attention_mask_l: The attention mask l.
-        """
+    def forward(self, v, l, attention_mask_v=None, attention_mask_l=None):  # noqa: E741 - Ambiguous upstream name kept as written.
         v = self.layer_norm_v(v)
-        l = self.layer_norm_l(l)
-        delta_v, delta_l = self.attn(
-            v, l, attention_mask_v=attention_mask_v, attention_mask_l=attention_mask_l
-        )
+        l = self.layer_norm_l(l)  # noqa: E741 - Ambiguous upstream name kept as written.
+        delta_v, delta_l = self.attn(v, l, attention_mask_v=attention_mask_v, attention_mask_l=attention_mask_l)
         # v, l = v + delta_v, l + delta_l
         v = v + self.drop_path(self.gamma_v * delta_v)
-        l = l + self.drop_path(self.gamma_l * delta_l)
+        l = l + self.drop_path(self.gamma_l * delta_l)  # noqa: E741 - Ambiguous upstream name kept as written.
         return v, l
 
     # def forward(self, v:List[torch.Tensor], l, attention_mask_v=None, attention_mask_l=None)

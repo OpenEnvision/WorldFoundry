@@ -1,8 +1,6 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> encoder -> epipolar -> epipolar_transformer.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from dataclasses import dataclass
 from functools import partial
-from typing import Optional
 
 import torch
 from einops import rearrange
@@ -20,7 +18,6 @@ from .image_self_attention import ImageSelfAttention, ImageSelfAttentionCfg
 
 @dataclass
 class EpipolarTransformerCfg:
-    """Epipolar transformer cfg implementation."""
     self_attention: ImageSelfAttentionCfg
     num_octaves: int
     num_layers: int
@@ -32,29 +29,19 @@ class EpipolarTransformerCfg:
 
 
 class EpipolarTransformer(nn.Module):
-    """Epipolar transformer implementation."""
     cfg: EpipolarTransformerCfg
     epipolar_sampler: EpipolarSampler
     depth_encoding: nn.Sequential
     transformer: Transformer
-    downscaler: Optional[nn.Conv2d]
-    upscaler: Optional[nn.ConvTranspose2d]
-    upscale_refinement: Optional[nn.Sequential]
+    downscaler: nn.Conv2d | None
+    upscaler: nn.ConvTranspose2d | None
+    upscale_refinement: nn.Sequential | None
 
     def __init__(
         self,
         cfg: EpipolarTransformerCfg,
         d_in: int,
     ) -> None:
-        """Init.
-
-        Args:
-            cfg: The cfg.
-            d_in: The d in.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         num_context_views = get_cfg().dataset.view_sampler.num_context_views
 
@@ -97,18 +84,6 @@ class EpipolarTransformer(nn.Module):
         near: Float[Tensor, "batch view"],
         far: Float[Tensor, "batch view"],
     ) -> tuple[Float[Tensor, "batch view channel height width"], EpipolarSampling]:
-        """Forward.
-
-        Args:
-            features: The features.
-            extrinsics: The extrinsics.
-            intrinsics: The intrinsics.
-            near: The near.
-            far: The far.
-
-        Returns:
-            The return value.
-        """
         b, v, _, h, w = features.shape
 
         # If needed, apply downscaling.
@@ -118,9 +93,7 @@ class EpipolarTransformer(nn.Module):
             features = rearrange(features, "(b v) c h w -> b v c h w", b=b, v=v)
 
         # Get the samples used for epipolar attention.
-        sampling = self.epipolar_sampler.forward(
-            features, extrinsics, intrinsics, near, far
-        )
+        sampling = self.epipolar_sampler.forward(features, extrinsics, intrinsics, near, far)
 
         if self.cfg.num_octaves > 0:
             # Compute positionally encoded depths for the features.
@@ -150,9 +123,7 @@ class EpipolarTransformer(nn.Module):
         # Add randomly permuted per-view embeddings to the other views.
         if v > 2:
             shuffle = torch.randperm(v - 1, device=kv.device)
-            view_embeddings = rearrange(
-                self.view_embeddings(shuffle), "ov c -> () () ov () () c"
-            )
+            view_embeddings = rearrange(self.view_embeddings(shuffle), "ov c -> () () ov () () c")
             kv = kv + view_embeddings
 
         # Run the transformer.
@@ -185,7 +156,6 @@ class EpipolarTransformer(nn.Module):
 
 
 class ImageSelfAttentionWrapper(nn.Module):
-    """Image self attention wrapper implementation."""
     def __init__(
         self,
         self_attention_cfg: ImageSelfAttentionCfg,
@@ -193,17 +163,6 @@ class ImageSelfAttentionWrapper(nn.Module):
         d_hidden: int,
         dropout: float,
     ) -> None:
-        """Init.
-
-        Args:
-            self_attention_cfg: The self attention cfg.
-            d_in: The d in.
-            d_hidden: The d hidden.
-            dropout: The dropout.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.layers = nn.Sequential(
             nn.Conv2d(d_in, d_hidden, 7, 1, 3),
@@ -221,18 +180,6 @@ class ImageSelfAttentionWrapper(nn.Module):
         h: int,
         w: int,
     ) -> Float[Tensor, "batch token dim"]:
-        """Forward.
-
-        Args:
-            x: The x.
-            b: The b.
-            v: The v.
-            h: The h.
-            w: The w.
-
-        Returns:
-            The return value.
-        """
         x = rearrange(x, "(b v h w) () c -> (b v) c h w", b=b, v=v, h=h, w=w)
         # The published convolutional checkpoints apply attention before the MLP.
         x = self.layers(self.self_attention(x) + x)

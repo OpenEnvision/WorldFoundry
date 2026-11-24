@@ -34,21 +34,18 @@ def test_official_video_variant_prefers_its_runtime_model_id(monkeypatch) -> Non
 
 
 def test_official_video_runtime_checks_nested_required_paths(tmp_path: Path, monkeypatch) -> None:
-    repo_root = tmp_path / "runtime"
     checkpoint_root = tmp_path / "ckpt"
-    repo_root.mkdir()
     checkpoint_root.mkdir()
 
     config = {
         "runtime": {
             "kind": "official_cli",
-            "repo_root_candidates": [str(repo_root)],
             "checkpoint_candidates": [str(checkpoint_root)],
             "required_paths": [
                 {"id": "text_encoder", "path": "text_encoder/llm/config.json"},
-                {"id": "entrypoint", "base": "repo", "path": "generate.py"},
             ],
-            "command": ["{python}", "{repo_root}/generate.py", "--model_path", "{checkpoint_path}"],
+            "module": "worldfoundry.synthesis.visual_generation.helios.infer_helios",
+            "args": ["--model_path", "{checkpoint_path}"],
         }
     }
     monkeypatch.setattr(OfficialVideoRuntime, "_load_config", staticmethod(lambda _: config))
@@ -58,11 +55,9 @@ def test_official_video_runtime_checks_nested_required_paths(tmp_path: Path, mon
 
     assert missing_plan["ready"] is False
     assert any("text_encoder" in item for item in missing_plan["missing"])
-    assert any("entrypoint" in item for item in missing_plan["missing"])
 
     (checkpoint_root / "text_encoder" / "llm").mkdir(parents=True)
     (checkpoint_root / "text_encoder" / "llm" / "config.json").write_text("{}", encoding="utf-8")
-    (repo_root / "generate.py").write_text("print('ok')\n", encoding="utf-8")
 
     ready_plan = runtime.runtime_plan(output_path=tmp_path / "out.mp4", prompt="demo")
 
@@ -180,17 +175,15 @@ def test_official_cli_resolves_prefixed_wan_flat_mirror(tmp_path: Path) -> None:
 
 
 def test_official_cli_plan_exposes_selected_checkpoint_parent(tmp_path: Path, monkeypatch) -> None:
-    repo_root = tmp_path / "runtime"
     checkpoint_root = tmp_path / "checkpoints"
     checkpoint = checkpoint_root / "krea--krea-realtime-video"
-    repo_root.mkdir()
     checkpoint.mkdir(parents=True)
     config = {
         "runtime": {
             "kind": "official_cli",
-            "repo_root_candidates": [str(repo_root)],
             "checkpoint_candidates": [str(checkpoint)],
-            "command": ["runner", "--model-folder", "{checkpoint_parent}"],
+            "module": "worldfoundry.synthesis.visual_generation.krea_realtime.worldfoundry_runner",
+            "args": ["--model-folder", "{checkpoint_parent}"],
         }
     }
     monkeypatch.setattr(OfficialVideoRuntime, "_load_config", staticmethod(lambda _: config))

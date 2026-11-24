@@ -41,7 +41,7 @@ from .env import (
 LOCAL_ASSET_MANIFEST_ENV = "WORLDFOUNDRY_LOCAL_ASSET_MANIFEST"
 
 # Same values evaluation.utils derives; resolved from core so the runtime
-# layer never imports worldfoundry.evaluation (SA-10).
+# layer never imports worldfoundry.evals (SA-10).
 REPO_ROOT = project_root()
 BENCHMARKS_DATA_ROOT = package_data_root() / "benchmarks"
 
@@ -128,7 +128,7 @@ class LocalAsset:
         *,
         benchmark_id: str | None = None,
         env: EnvMapping | None = None,
-    ) -> "LocalAsset":
+    ) -> LocalAsset:
         """Build a local asset view from a manifest item.
 
         Args:
@@ -203,18 +203,20 @@ def worldfoundry_path_tokens(env: EnvMapping | None = None) -> dict[str, str]:
     environ = os.environ if env is None else env
     repo_root = _repo_root()
     tokens = core_worldfoundry_path_tokens(environ)
-    tokens.update({
-        "WORLDFOUNDRY_BENCH_ROOT": str(Path(environ.get("WORLDFOUNDRY_BENCH_ROOT") or repo_root).expanduser()),
-        "WORLDFOUNDRY_REPO_ROOT": str(Path(environ.get("WORLDFOUNDRY_REPO_ROOT") or repo_root).expanduser()),
-        "WORLDFOUNDRY_CACHE_DIR": str(resolve_cache_dir(environ)),
-        "WORLDFOUNDRY_DATA_DIR": str(resolve_data_dir(environ)),
-        "WORLDFOUNDRY_MODEL_DIR": str(resolve_model_dir(environ)),
-        "WORLDFOUNDRY_ARTIFACT_DIR": str(resolve_artifact_dir(environ)),
-        "WORLDFOUNDRY_CKPT_DIR": str(resolve_ckpt_dir(environ)),
-        "WORLDFOUNDRY_HFD_ROOT": str(resolve_hfd_root(environ)),
-        "WORLDFOUNDRY_HFD_DATASET_ROOT": str(hfd_dataset_root_path(env=environ)),
-        "WORLDFOUNDRY_BENCHMARK_REPO_ROOT": str(benchmark_repo_cache_root(environ)),
-    })
+    tokens.update(
+        {
+            "WORLDFOUNDRY_BENCH_ROOT": str(Path(environ.get("WORLDFOUNDRY_BENCH_ROOT") or repo_root).expanduser()),
+            "WORLDFOUNDRY_REPO_ROOT": str(Path(environ.get("WORLDFOUNDRY_REPO_ROOT") or repo_root).expanduser()),
+            "WORLDFOUNDRY_CACHE_DIR": str(resolve_cache_dir(environ)),
+            "WORLDFOUNDRY_DATA_DIR": str(resolve_data_dir(environ)),
+            "WORLDFOUNDRY_MODEL_DIR": str(resolve_model_dir(environ)),
+            "WORLDFOUNDRY_ARTIFACT_DIR": str(resolve_artifact_dir(environ)),
+            "WORLDFOUNDRY_CKPT_DIR": str(resolve_ckpt_dir(environ)),
+            "WORLDFOUNDRY_HFD_ROOT": str(resolve_hfd_root(environ)),
+            "WORLDFOUNDRY_HFD_DATASET_ROOT": str(hfd_dataset_root_path(env=environ)),
+            "WORLDFOUNDRY_BENCHMARK_REPO_ROOT": str(benchmark_repo_cache_root(environ)),
+        }
+    )
     return tokens
 
 

@@ -4,10 +4,6 @@
 # https://github.com/bmaltais/kohya_ss
 
 import math
-import functools
-from collections import defaultdict
-
-from typing import Optional
 
 import torch
 
@@ -29,20 +25,13 @@ class LoRAModule(torch.nn.Module):
     replaces forward method of the original Linear, instead of replacing the original Linear module.
     """
 
-    def __init__(
-        self,
-        lora_name,
-        org_module: torch.nn.Module,
-        multiplier=1.0,
-        lora_dim=4,
-        alpha=1,
-        n_seperate=1
-    ):
+    def __init__(self, lora_name, org_module: torch.nn.Module, multiplier=1.0, lora_dim=4, alpha=1, n_seperate=1):
         super().__init__()
         self.lora_name = lora_name
-        
-        assert org_module.__class__.__name__ in ("Linear", "QuantizedLinear"), \
+
+        assert org_module.__class__.__name__ in ("Linear", "QuantizedLinear"), (
             f"LoRA target must be Linear or QuantizedLinear, got {org_module.__class__.__name__}"
+        )
         in_dim = org_module.in_features
         out_dim = org_module.out_features
 
@@ -52,12 +41,14 @@ class LoRAModule(torch.nn.Module):
         self.lora_dim = lora_dim
         if n_seperate > 1:
             self.lora_down = torch.nn.Linear(in_dim, n_seperate * self.lora_dim, bias=False)
-            self.lora_up = LoRAUPParallel([torch.nn.Linear(self.lora_dim, out_dim // n_seperate, bias=False) for _ in range(n_seperate)])
+            self.lora_up = LoRAUPParallel(
+                [torch.nn.Linear(self.lora_dim, out_dim // n_seperate, bias=False) for _ in range(n_seperate)]
+            )
         else:
             self.lora_down = torch.nn.Linear(in_dim, self.lora_dim, bias=False)
             self.lora_up = torch.nn.Linear(self.lora_dim, out_dim, bias=False)
 
-        if type(alpha) == torch.Tensor:
+        if type(alpha) is torch.Tensor:
             alpha = alpha.detach().float().numpy()  # without casting, bf16 causes error
         alpha = self.lora_dim if alpha is None or alpha == 0 else alpha
         alpha_scale = alpha / self.lora_dim
@@ -70,19 +61,18 @@ class LoRAModule(torch.nn.Module):
                 torch.nn.init.zeros_(block.weight)
         else:
             torch.nn.init.zeros_(self.lora_up.weight)
-            
+
         self.multiplier = multiplier
         self.use_lora = True
-    
+
     def set_use_lora(self, use_lora):
         self.use_lora = use_lora
 
 
 class LoRANetwork(torch.nn.Module):
-    
     LORA_PREFIX = "lora"
     LORA_HYPHEN = "___lorahyphen___"
-    
+
     def __init__(
         self,
         model,
@@ -100,19 +90,18 @@ class LoRANetwork(torch.nn.Module):
         print(f"create LoRA network. base dim (rank): {lora_dim}, alpha: {alpha}")
 
         lora_module_names = set()
-        for key in lora_network_state_dict_loaded.keys():
+        for key in lora_network_state_dict_loaded.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if key.endswith("lora_down.weight"):
                 lora_name = key.split(".lora_down.weight")[0]
                 lora_module_names.add(lora_name)
 
         loras = []
         for lora_name in lora_module_names:
-            # 还原为模型中的真实模块名
+            # Recover the module path in the model.
             module_name = lora_name.replace("lora___lorahyphen___", "").replace("___lorahyphen___", ".")
-            # 查找模块
             try:
                 module = model
-                for part in module_name.split('.'):
+                for part in module_name.split("."):
                     module = getattr(module, part)
             except Exception as e:
                 print(f"Cannot find module: {module_name}, error: {e}")
@@ -120,7 +109,7 @@ class LoRANetwork(torch.nn.Module):
             if module.__class__.__name__ not in ("Linear", "QuantizedLinear"):
                 continue
 
-            # 推断 n_seperate
+            # Number of lora_up.blocks keys; 1 when lora_up is not split into blocks.
             n_seperate = 1
             prefix = lora_name + ".lora_up.blocks"
             n_blocks = sum(1 for k in lora_network_state_dict_loaded if k.startswith(prefix))
@@ -130,16 +119,9 @@ class LoRANetwork(torch.nn.Module):
             dim = self.lora_dim
             alpha = self.alpha
 
-            lora = LoRAModule(
-                lora_name,
-                module,
-                self.multiplier,
-                dim,
-                alpha,
-                n_seperate=n_seperate
-            )
+            lora = LoRAModule(lora_name, module, self.multiplier, dim, alpha, n_seperate=n_seperate)
             loras.append(lora)
-            
+
         self.loras = loras
         for lora in self.loras:
             self.add_module(lora.lora_name, lora)
@@ -184,8 +166,8 @@ def create_lora_network(
     transformer,
     lora_network_state_dict_loaded,
     multiplier: float,
-    network_dim: Optional[int],
-    network_alpha: Optional[float],
+    network_dim: int | None,
+    network_alpha: float | None,
 ):
     network = LoRANetwork(
         transformer,

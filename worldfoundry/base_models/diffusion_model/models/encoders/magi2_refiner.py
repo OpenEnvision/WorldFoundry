@@ -29,7 +29,7 @@ class Magi2RefinerDataProxy:
         self.shape = shape
         frames, height, width = shape
         sizes = (8, 4, 4)
-        grid = tuple((length + size - 1) // size for length, size in zip(shape, sizes))
+        grid = tuple((length + size - 1) // size for length, size in zip(shape, sizes, strict=False))
         indices = torch.arange(frames * height * width, device=device).reshape(shape)
         blocks = []
         bounds = [0]
@@ -44,7 +44,8 @@ class Magi2RefinerDataProxy:
         k_ranges: list[list[int]] = []
         for index, coords in enumerate(product(*(range(length) for length in grid))):
             neighbours = (
-                range(max(0, coordinate - 2), min(length, coordinate + 3)) for coordinate, length in zip(coords, grid)
+                range(max(0, coordinate - 2), min(length, coordinate + 3))
+                for coordinate, length in zip(coords, grid, strict=False)
             )
             for t, h, w in product(*neighbours):
                 neighbour = (t * grid[1] + h) * grid[2] + w

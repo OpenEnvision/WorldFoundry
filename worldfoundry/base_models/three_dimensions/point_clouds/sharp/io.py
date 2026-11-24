@@ -30,14 +30,10 @@ def save_panorama_ply(
     positions = gaussians.mean_vectors.flatten(0, 1)
     scales = torch.log(gaussians.singular_values.clamp_min(1e-8)).flatten(0, 1)
     rotations = gaussians.quaternions.flatten(0, 1)
-    colors = _rgb_to_spherical_harmonics(
-        linear_to_srgb(gaussians.colors.flatten(0, 1))
-    )
+    colors = _rgb_to_spherical_harmonics(linear_to_srgb(gaussians.colors.flatten(0, 1)))
     opacities = gaussians.opacities.flatten(0, 1).clamp(1e-4, 1.0 - 1e-4)
     opacity_logits = torch.log(opacities / (1.0 - opacities)).unsqueeze(-1)
-    attributes = torch.cat(
-        (positions, colors, opacity_logits, scales, rotations), dim=1
-    )
+    attributes = torch.cat((positions, colors, opacity_logits, scales, rotations), dim=1)
     names = (
         ["x", "y", "z"]
         + [f"f_dc_{index}" for index in range(3)]
@@ -57,33 +53,41 @@ def save_panorama_ply(
     focal = float(np.hypot(image_width, image_height)) / 2.0
     metadata = [
         ("extrinsic", element("extrinsic", "f4", np.eye(4, dtype=np.float32).ravel())),
-        ("intrinsic", element(
+        (
             "intrinsic",
-            "f4",
-            np.asarray(
-                [
-                    focal,
-                    0,
-                    image_width * 0.5,
-                    0,
-                    focal,
-                    image_height * 0.5,
-                    0,
-                    0,
-                    1,
-                ],
-                dtype=np.float32,
+            element(
+                "intrinsic",
+                "f4",
+                np.asarray(
+                    [
+                        focal,
+                        0,
+                        image_width * 0.5,
+                        0,
+                        focal,
+                        image_height * 0.5,
+                        0,
+                        0,
+                        1,
+                    ],
+                    dtype=np.float32,
+                ),
             ),
-        )),
+        ),
         ("image_size", element("image_size", "u4", np.asarray([image_width, image_height], dtype=np.uint32))),
         ("frame", element("frame", "i4", np.asarray([1, len(positions)], dtype=np.int32))),
     ]
     radius = torch.linalg.vector_norm(gaussians.mean_vectors[0], dim=-1)
     disparity = 1.0 / radius.clamp_min(1e-4)
-    quantiles = torch.quantile(
-        disparity,
-        torch.tensor([0.1, 0.9], device=disparity.device),
-    ).float().cpu().numpy()
+    quantiles = (
+        torch.quantile(
+            disparity,
+            torch.tensor([0.1, 0.9], device=disparity.device),
+        )
+        .float()
+        .cpu()
+        .numpy()
+    )
     metadata.extend(
         [
             ("disparity", element("disparity", "f4", quantiles)),

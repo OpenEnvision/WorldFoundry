@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ..api_video_client import CredentialedSynthesis
 from ._dashscope import RUNTIME_STATUS
@@ -27,10 +27,7 @@ def _dashscope_video_synthesis(endpoint: str):
 
 
 class Wan2p5Synthesis(CredentialedSynthesis):
-    """Wan2.5 生成合成类，提供统一的接口用于音视频生成。
-
-    负责 API 调用和模型推理相关的工作。
-    """
+    """Wan2.5 audio-video generation through the DashScope API."""
 
     DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1"
 
@@ -42,31 +39,30 @@ class Wan2p5Synthesis(CredentialedSynthesis):
     def generate_t2av(
         self,
         input_prompt: str,
-        size: str = '832*480',
+        size: str = "832*480",
         duration: int = 10,
         negative_prompt: str = "",
         audio: bool = True,
         prompt_extend: bool = True,
         watermark: bool = False,
-        seed: Optional[int] = None,
-        **kwargs
+        seed: int | None = None,
+        **kwargs,
     ):
-        """文本到音视频生成。
+        """Generate audio and video from text.
 
         Args:
-            input_prompt: 输入提示词。
-            size: 视频尺寸，格式为 'width*height'。
-            duration: 视频时长（秒）。
-            negative_prompt: 负面提示词。
-            audio: 是否生成音频。
-            prompt_extend: 是否扩展提示词。
-            watermark: 是否添加水印。
-            seed: 随机种子；为 None 时使用 ``DEFAULT_SEED``。
-            kwargs: 其他透传参数。
+            input_prompt: Text prompt.
+            size: Video size as 'width*height'.
+            duration: Video length in seconds.
+            audio: Generate audio.
+            prompt_extend: Let the service extend the prompt.
+            watermark: Add a watermark.
+            seed: Random seed; ``DEFAULT_SEED`` when None.
+            kwargs: Extra arguments passed to the API.
         """
         return _dashscope_video_synthesis(self.endpoint).call(
             api_key=self.api_key,
-            model='wan2.5-t2v-preview',
+            model="wan2.5-t2v-preview",
             prompt=input_prompt,
             size=size,
             duration=duration,
@@ -75,39 +71,38 @@ class Wan2p5Synthesis(CredentialedSynthesis):
             prompt_extend=prompt_extend,
             watermark=watermark,
             seed=seed if seed is not None else DEFAULT_SEED,
-            **kwargs
+            **kwargs,
         )
 
     def generate_i2av(
         self,
         encoded_image: str,
         input_prompt: str,
-        resolution: str = '480P',
+        resolution: str = "480P",
         duration: int = 10,
         negative_prompt: str = "",
         audio: bool = True,
         prompt_extend: bool = True,
         watermark: bool = False,
-        seed: Optional[int] = None,
-        **kwargs
+        seed: int | None = None,
+        **kwargs,
     ):
-        """图像到音视频生成。
+        """Generate audio and video from an image and text.
 
         Args:
-            encoded_image: 编码后的图像（base64 格式）。
-            input_prompt: 输入提示词。
-            resolution: 视频分辨率。
-            duration: 视频时长（秒）。
-            negative_prompt: 负面提示词。
-            audio: 是否生成音频。
-            prompt_extend: 是否扩展提示词。
-            watermark: 是否添加水印。
-            seed: 随机种子；为 None 时使用 ``DEFAULT_SEED``。
-            kwargs: 其他透传参数。
+            encoded_image: Base64-encoded image.
+            input_prompt: Text prompt.
+            resolution: Video resolution, for example "480P".
+            duration: Video length in seconds.
+            audio: Generate audio.
+            prompt_extend: Let the service extend the prompt.
+            watermark: Add a watermark.
+            seed: Random seed; ``DEFAULT_SEED`` when None.
+            kwargs: Extra arguments passed to the API.
         """
         return _dashscope_video_synthesis(self.endpoint).call(
             api_key=self.api_key,
-            model='wan2.5-i2v-preview',
+            model="wan2.5-i2v-preview",
             prompt=input_prompt,
             img_url=encoded_image,
             resolution=resolution,
@@ -117,40 +112,39 @@ class Wan2p5Synthesis(CredentialedSynthesis):
             prompt_extend=prompt_extend,
             watermark=watermark,
             seed=seed if seed is not None else DEFAULT_SEED,
-            **kwargs
+            **kwargs,
         )
 
     def predict(
         self,
-        processed_data: Dict[str, Any],
+        processed_data: dict[str, Any],
         task_type: str = "auto",
-        size: str = '832*480',
-        resolution: str = '480P',
+        size: str = "832*480",
+        resolution: str = "480P",
         duration: int = 10,
         negative_prompt: str = "",
         audio: bool = True,
         prompt_extend: bool = True,
         watermark: bool = False,
-        seed: Optional[int] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """生成预测结果。
+        seed: int | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """Submit a generation, choosing the route from what ``processed_data`` carries.
 
         Args:
-            processed_data: 处理后的数据（来自 operator），含 ``prompt``，
-                可选 ``encoded_image``。
-            task_type: "auto" 自动判断，"t2av" 文本到视频，"i2av" 图像到视频。
-            size: t2av 任务的视频尺寸。
-            resolution: i2av 任务的分辨率。
+            processed_data: Operator output with ``prompt`` and an optional ``encoded_image``.
+            task_type: "auto" (i2av when ``encoded_image`` is present, else t2av), "t2av" or "i2av".
+            size: Video size of t2av tasks.
+            resolution: Resolution of i2av tasks.
 
         Returns:
-            含 ``task_type``、``prompt`` 与 ``response`` 的字典。
+            Dict with ``task_type``, ``prompt`` and ``response``.
 
         Raises:
-            ValueError: 任务类型不支持，或 i2av 缺少 ``encoded_image``。
+            ValueError: On an unknown ``task_type`` or an ``i2av`` request without ``encoded_image``.
         """
         prompt = processed_data.get("prompt", "")
-        encoded_image = processed_data.get("encoded_image", None)
+        encoded_image = processed_data.get("encoded_image")
 
         if task_type == "auto":
             task_type = "i2av" if encoded_image is not None else "t2av"
@@ -163,23 +157,15 @@ class Wan2p5Synthesis(CredentialedSynthesis):
             prompt_extend=prompt_extend,
             watermark=watermark,
             seed=seed,
-            **kwargs
+            **kwargs,
         )
         if task_type == "i2av":
             if encoded_image is None:
-                raise ValueError("i2av 任务需要提供 encoded_image 参数")
-            response = self.generate_i2av(
-                encoded_image=encoded_image,
-                resolution=resolution,
-                **common
-            )
+                raise ValueError("i2av task requires encoded_image input.")
+            response = self.generate_i2av(encoded_image=encoded_image, resolution=resolution, **common)
         elif task_type == "t2av":
             response = self.generate_t2av(size=size, **common)
         else:
-            raise ValueError(f"不支持的任务类型: {task_type}")
+            raise ValueError(f"Unsupported task_type: {task_type}")
 
-        return {
-            "task_type": task_type,
-            "prompt": prompt,
-            "response": response
-        }
+        return {"task_type": task_type, "prompt": prompt, "response": response}

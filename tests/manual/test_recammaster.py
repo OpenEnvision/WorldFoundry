@@ -1,7 +1,7 @@
-import imageio, os
+import imageio
 import numpy as np
-from PIL import Image
 from tqdm import tqdm
+
 from worldfoundry.pipelines.kling.pipeline_recammaster import ReCamMasterPipeline
 
 
@@ -11,6 +11,7 @@ def save_video(frames, save_path, fps, quality=9, ffmpeg_params=None):
         frame = np.array(frame)
         writer.append_data(frame)
     writer.close()
+
 
 pretrained_model_path = "Wan-AI/Wan2.1-T2V-1.3B"
 recammaster_ckpt_path = "KlingTeam/ReCamMaster-Wan2.1"
@@ -30,8 +31,9 @@ expressions. He occasionally shifts his body slightly, but his primary actions i
 his right hand and changing his facial expressions. The background remains static throughout the video.
 """
 
-pipeline = ReCamMasterPipeline.from_pretrained(model_path=recammaster_ckpt_path,
-                                               required_components={"wan_model_path": pretrained_model_path})
+pipeline = ReCamMasterPipeline.from_pretrained(
+    model_path=recammaster_ckpt_path, required_components={"wan_model_path": pretrained_model_path}
+)
 
 output_video = pipeline(interaction, video_path, textual_prompt)
 save_video(output_video, "./recammaster_output.mp4", fps=30, quality=5)

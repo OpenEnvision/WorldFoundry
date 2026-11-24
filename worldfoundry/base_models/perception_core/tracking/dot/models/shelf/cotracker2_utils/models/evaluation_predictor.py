@@ -4,11 +4,16 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+
 import torch
 import torch.nn.functional as F
-from typing import Tuple
 
-from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracker2_utils.models.core.cotracker.cotracker import CoTracker2
+# isort: split
+from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracker2_utils.models.core.cotracker.cotracker import (
+    CoTracker2,
+)
+
+# isort: split
 from worldfoundry.base_models.perception_core.tracking.cotracker.models.core.model_utils import get_points_on_a_grid
 
 
@@ -16,13 +21,13 @@ class EvaluationPredictor(torch.nn.Module):
     def __init__(
         self,
         cotracker_model: CoTracker2,
-        interp_shape: Tuple[int, int] = (384, 512),
+        interp_shape: tuple[int, int] = (384, 512),
         grid_size: int = 5,
         local_grid_size: int = 8,
         single_point: bool = True,
         n_iters: int = 6,
     ) -> None:
-        super(EvaluationPredictor, self).__init__()
+        super().__init__()
         self.grid_size = grid_size
         self.local_grid_size = local_grid_size
         self.single_point = single_point
@@ -51,7 +56,7 @@ class EvaluationPredictor(torch.nn.Module):
         if self.single_point:
             traj_e = torch.zeros((B, T, N, 2), device=device)
             vis_e = torch.zeros((B, T, N), device=device)
-            for pind in range((N)):
+            for pind in range(N):
                 query = queries[:, pind : pind + 1]
 
                 t = query[0, 0, 0].long()
@@ -86,9 +91,7 @@ class EvaluationPredictor(torch.nn.Module):
                 [query[0, 0, 2].item(), query[0, 0, 1].item()],
             )
 
-            xy_target = torch.cat([torch.zeros_like(xy_target[:, :, :1]), xy_target], dim=2).to(
-                device
-            )  #
+            xy_target = torch.cat([torch.zeros_like(xy_target[:, :, :1]), xy_target], dim=2).to(device)  #
             query = torch.cat([query, xy_target], dim=1)  #
 
         if self.grid_size > 0:
@@ -97,8 +100,6 @@ class EvaluationPredictor(torch.nn.Module):
             query = torch.cat([query, xy], dim=1)  #
         # crop the video to start from the queried frame
         query[0, 0, 0] = 0
-        traj_e_pind, vis_e_pind, __ = self.model(
-            video=video[:, t:], queries=query, iters=self.n_iters
-        )
+        traj_e_pind, vis_e_pind, __ = self.model(video=video[:, t:], queries=query, iters=self.n_iters)
 
         return traj_e_pind, vis_e_pind

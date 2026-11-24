@@ -5,26 +5,31 @@ The DPT head implementation is based on DUSt3R and CroCoV2
 References: https://github.com/naver/dust3r
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Tuple, Union
 
-import torch
-
-from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils
 from torch import Tensor
 from torch.utils.checkpoint import checkpoint
 
-from uniception.models.libs.croco.dpt_block import make_fusion_block, make_nonlinearity, make_scratch, pair
-from uniception.models.prediction_heads.base import PixelTaskOutput, PredictionHeadLayeredInput
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.libs.croco.dpt_block import (
+    make_fusion_block,
+    make_nonlinearity,
+    make_scratch,
+    pair,
+)
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.prediction_heads.base import (
+    PixelTaskOutput,
+    PredictionHeadLayeredInput,
+)
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 
 @dataclass
 class DPTFeatureInput:
     features_upsampled_8x: Tensor
-    target_output_shape: Tuple[int, int]
+    target_output_shape: tuple[int, int]
 
 
 # -------------------------------------------------------- DPT Feature --------------------------------------------------------
@@ -43,15 +48,15 @@ class DPTFeature(nn.Module):
 
     def __init__(
         self,
-        patch_size: Union[int, Tuple[int, int]] = 16,
+        patch_size: int | tuple[int, int] = 16,
         main_tasks: Iterable[str] = ("rgb",),
-        hooks: List[int] = [2, 5, 8, 11],
-        input_feature_dims: Optional[Union[int, List[int]]] = 768,
-        layer_dims: List[int] = [96, 192, 384, 768],
+        hooks: list[int] = [2, 5, 8, 11],  # noqa: B006 - Keeps the upstream default object and signature.
+        input_feature_dims: int | list[int] | None = 768,
+        layer_dims: list[int] = [96, 192, 384, 768],  # noqa: B006 - Keeps the upstream default object and signature.
         feature_dim: int = 256,
         use_bn: bool = False,
         output_width_ratio=1,
-        pretrained_checkpoint_path: str = None,
+        pretrained_checkpoint_path: str | None = None,
         checkpoint_gradient: bool = False,
         nonlinearity: str = "relu",
         *args,
@@ -69,7 +74,7 @@ class DPTFeature(nn.Module):
             input_feature_dims = 4 * [input_feature_dims]
         else:
             input_feature_dims = input_feature_dims
-            assert isinstance(input_feature_dims, List) and len(input_feature_dims) == 4
+            assert isinstance(input_feature_dims, list) and len(input_feature_dims) == 4
 
         self.input_feature_dims = input_feature_dims
 
@@ -92,7 +97,7 @@ class DPTFeature(nn.Module):
             state_dict = load_tensor_state_dict(self.pretrained_checkpoint_path, wrapper_keys=("model",))
             print(self.load_state_dict(state_dict))
 
-    def init(self, input_feature_dims: Union[int, List[int]] = 768):
+    def init(self, input_feature_dims: int | list[int] = 768):
         """
         Initialize parts of decoder that are dependent on dimension of encoder tokens.
 
@@ -175,7 +180,10 @@ class DPTFeature(nn.Module):
         act_postprocess = [act_1_postprocess, act_2_postprocess, act_3_postprocess, act_4_postprocess]
 
         self.input_process = nn.ModuleList(
-            [nn.Sequential(act_, layer_rn_) for act_, layer_rn_ in zip(act_postprocess, self.scratch.layer_rn)]
+            [
+                nn.Sequential(act_, layer_rn_)
+                for act_, layer_rn_ in zip(act_postprocess, self.scratch.layer_rn, strict=False)
+            ]
         )
 
     def forward(self, dpt_input: PredictionHeadLayeredInput) -> DPTFeatureInput:
@@ -197,9 +205,9 @@ class DPTFeature(nn.Module):
 
         # check input dimensions
         for hook_idx, hook in enumerate(self.hooks):
-            assert (
-                layered_feats[hook].shape[1] == self.input_feature_dims[hook_idx]
-            ), f"Input feature dimension mismatch at hook {hook}. Expected BCHW"
+            assert layered_feats[hook].shape[1] == self.input_feature_dims[hook_idx], (
+                f"Input feature dimension mismatch at hook {hook}. Expected BCHW"
+            )
 
         if not self.checkpoint_gradient:
             # Hook decoder onto 4 layers from specified ViT layers
@@ -208,7 +216,7 @@ class DPTFeature(nn.Module):
             # layers = [self.act_postprocess[idx](l) for idx, l in enumerate(layers)]
             # # Project layers to chosen feature dim
             # layers = [self.scratch.layer_rn[idx](l) for idx, l in enumerate(layers)]
-            layers = [self.input_process[idx](l) for idx, l in enumerate(layers)]
+            layers = [self.input_process[idx](l) for idx, l in enumerate(layers)]  # noqa: E741 - Ambiguous upstream name kept as written.
 
             # Fuse layers using refinement stages
             path_4 = self.scratch.refinenet4(layers[3])[:, :, : layers[2].shape[2], : layers[2].shape[3]]
@@ -219,7 +227,7 @@ class DPTFeature(nn.Module):
             # Hook decoder onto 4 layers from specified ViT layers
             layers = [layered_feats[hook] for hook in self.hooks]
 
-            layers = [checkpoint(self.input_process[idx], l, use_reentrant=False) for idx, l in enumerate(layers)]
+            layers = [checkpoint(self.input_process[idx], l, use_reentrant=False) for idx, l in enumerate(layers)]  # noqa: E741 - Ambiguous upstream name kept as written.
 
             path_4 = checkpoint(self.scratch.refinenet4, layers[3], use_reentrant=False)[
                 :, :, : layers[2].shape[2], : layers[2].shape[3]
@@ -241,8 +249,8 @@ class DPTRegressionProcessor(nn.Module):
         self,
         input_feature_dim: int,
         output_dim: int,
-        hidden_dims: Optional[List[int]] = None,  # when not given, use input_feature_dim//2
-        pretrained_checkpoint_path: str = None,
+        hidden_dims: list[int] | None = None,  # when not given, use input_feature_dim//2
+        pretrained_checkpoint_path: str | None = None,
         checkpoint_gradient: bool = False,
         nonlinearity: str = "relu",
         *args,
@@ -265,7 +273,7 @@ class DPTRegressionProcessor(nn.Module):
         if hidden_dims is None:
             hidden_dims = [input_feature_dim // 2] * 2
         else:
-            assert isinstance(hidden_dims, List) and len(hidden_dims) == 2
+            assert isinstance(hidden_dims, list) and len(hidden_dims) == 2
 
         self.checkpoint_gradient = checkpoint_gradient
 
@@ -317,9 +325,9 @@ class DPTSegmentationProcessor(nn.Module):
         self,
         input_feature_dim: int,
         output_dim: int,
-        hidden_dim: Optional[int] = None,  # when not given, use input_feature_dim
+        hidden_dim: int | None = None,  # when not given, use input_feature_dim
         use_bn: bool = False,
-        pretrained_checkpoint_path: str = None,
+        pretrained_checkpoint_path: str | None = None,
         *args,
         **kwargs,
     ):
@@ -394,15 +402,15 @@ class DPTFeatureDoubleUpsampling(nn.Module):
 
     def __init__(
         self,
-        patch_size: Union[int, Tuple[int, int]] = 16,
+        patch_size: int | tuple[int, int] = 16,
         main_tasks: Iterable[str] = ("rgb",),
-        hooks: List[int] = [0, 1],
-        input_feature_dims: Optional[Union[int, List[int]]] = 768,
-        layer_dims: List[int] = [384, 768],
+        hooks: list[int] = [0, 1],  # noqa: B006 - Keeps the upstream default object and signature.
+        input_feature_dims: int | list[int] | None = 768,
+        layer_dims: list[int] = [384, 768],  # noqa: B006 - Keeps the upstream default object and signature.
         feature_dim: int = 256,
         use_bn: bool = False,
         output_width_ratio=1,
-        pretrained_checkpoint_path: str = None,
+        pretrained_checkpoint_path: str | None = None,
         checkpoint_gradient: bool = False,
         *args,
         **kwargs,
@@ -419,7 +427,7 @@ class DPTFeatureDoubleUpsampling(nn.Module):
             input_feature_dims = 2 * [input_feature_dims]
         else:
             input_feature_dims = input_feature_dims
-            assert isinstance(input_feature_dims, List) and len(input_feature_dims) == 2
+            assert isinstance(input_feature_dims, list) and len(input_feature_dims) == 2
 
         self.input_feature_dims = input_feature_dims
 
@@ -445,7 +453,7 @@ class DPTFeatureDoubleUpsampling(nn.Module):
 
         out_shape3 = out_shape
         out_shape4 = out_shape
-        if expand == True:
+        if expand == True:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             out_shape3 = out_shape * 4
             out_shape4 = out_shape * 8
 
@@ -477,7 +485,7 @@ class DPTFeatureDoubleUpsampling(nn.Module):
 
         return scratch
 
-    def init(self, input_feature_dims: Union[int, List[int]] = 768):
+    def init(self, input_feature_dims: int | list[int] = 768):
         """
         Initialize parts of decoder that are dependent on dimension of encoder tokens.
 
@@ -520,7 +528,10 @@ class DPTFeatureDoubleUpsampling(nn.Module):
         act_postprocess = [act_3_postprocess, act_4_postprocess]
 
         self.input_process = nn.ModuleList(
-            [nn.Sequential(act_, layer_rn_) for act_, layer_rn_ in zip(act_postprocess, self.scratch.layer_rn)]
+            [
+                nn.Sequential(act_, layer_rn_)
+                for act_, layer_rn_ in zip(act_postprocess, self.scratch.layer_rn, strict=False)
+            ]
         )
 
     def forward(self, dpt_input: PredictionHeadLayeredInput) -> DPTFeatureInput:
@@ -542,9 +553,9 @@ class DPTFeatureDoubleUpsampling(nn.Module):
 
         # check input dimensions
         for hook_idx, hook in enumerate(self.hooks):
-            assert (
-                layered_feats[hook].shape[1] == self.input_feature_dims[hook_idx]
-            ), f"Input feature dimension mismatch at hook {hook}. Expected BCHW"
+            assert layered_feats[hook].shape[1] == self.input_feature_dims[hook_idx], (
+                f"Input feature dimension mismatch at hook {hook}. Expected BCHW"
+            )
 
         if not self.checkpoint_gradient:
             # Hook decoder onto 4 layers from specified ViT layers
@@ -553,7 +564,7 @@ class DPTFeatureDoubleUpsampling(nn.Module):
             # layers = [self.act_postprocess[idx](l) for idx, l in enumerate(layers)]
             # # Project layers to chosen feature dim
             # layers = [self.scratch.layer_rn[idx](l) for idx, l in enumerate(layers)]
-            layers = [self.input_process[idx](l) for idx, l in enumerate(layers)]
+            layers = [self.input_process[idx](l) for idx, l in enumerate(layers)]  # noqa: E741 - Ambiguous upstream name kept as written.
 
             # Fuse layers using refinement stages
             path_4 = self.scratch.refinenet4(layers[1])[:, :, : layers[0].shape[2], : layers[0].shape[3]]
@@ -562,7 +573,7 @@ class DPTFeatureDoubleUpsampling(nn.Module):
             # Hook decoder onto 4 layers from specified ViT layers
             layers = [layered_feats[hook] for hook in self.hooks]
 
-            layers = [checkpoint(self.input_process[idx], l, use_reentrant=False) for idx, l in enumerate(layers)]
+            layers = [checkpoint(self.input_process[idx], l, use_reentrant=False) for idx, l in enumerate(layers)]  # noqa: E741 - Ambiguous upstream name kept as written.
 
             path_4 = checkpoint(self.scratch.refinenet4, layers[1], use_reentrant=False)[
                 :, :, : layers[0].shape[2], : layers[0].shape[3]

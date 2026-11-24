@@ -7,6 +7,7 @@ is performed only when :func:`capture_runtime_fingerprint` is called.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import importlib.metadata
 import json
@@ -160,7 +161,7 @@ class RuntimeFingerprint:
 
     def compatibility_mismatches(
         self,
-        other: "RuntimeFingerprint",
+        other: RuntimeFingerprint,
         *,
         fields: Sequence[str] = FINGERPRINT_COMPATIBILITY_FIELDS,
     ) -> dict[str, tuple[JsonScalar, JsonScalar]]:
@@ -183,7 +184,7 @@ class RuntimeFingerprint:
 
     def is_compatible_with(
         self,
-        other: "RuntimeFingerprint",
+        other: RuntimeFingerprint,
         *,
         fields: Sequence[str] = FINGERPRINT_COMPATIBILITY_FIELDS,
     ) -> bool:
@@ -191,20 +192,19 @@ class RuntimeFingerprint:
 
     def assert_compatible_with(
         self,
-        other: "RuntimeFingerprint",
+        other: RuntimeFingerprint,
         *,
         fields: Sequence[str] = FINGERPRINT_COMPATIBILITY_FIELDS,
     ) -> None:
         mismatches = self.compatibility_mismatches(other, fields=fields)
         if mismatches:
             details = ", ".join(
-                f"{name}={baseline!r}/{candidate!r}"
-                for name, (baseline, candidate) in mismatches.items()
+                f"{name}={baseline!r}/{candidate!r}" for name, (baseline, candidate) in mismatches.items()
             )
             raise ValueError(f"incompatible runtime fingerprints: {details}")
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "RuntimeFingerprint":
+    def from_dict(cls, data: Mapping[str, Any]) -> RuntimeFingerprint:
         known = frozenset(
             {
                 "platform",
@@ -291,7 +291,7 @@ class PerformanceMetrics:
         return _with_extensions(payload, self.extensions)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PerformanceMetrics":
+    def from_dict(cls, data: Mapping[str, Any]) -> PerformanceMetrics:
         known = frozenset(
             {
                 "timings_ms",
@@ -369,7 +369,7 @@ class SampleDistribution:
         *,
         name: str = "samples",
         require_positive: bool = False,
-    ) -> "SampleDistribution":
+    ) -> SampleDistribution:
         samples = _finite_samples(values, name=name, require_positive=require_positive)
         median = statistics.median(samples)
         mad = statistics.median(abs(value - median) for value in samples)
@@ -381,7 +381,7 @@ class SampleDistribution:
             mad_over_median=mad / abs(median) if median else None,
         )
 
-    def to_dict(self) -> dict[str, float | None]:
+    def to_dict(self) -> dict[str, JsonValue]:
         return {
             "median": self.median,
             "p10": self.p10,
@@ -489,7 +489,7 @@ class PerformanceManifest:
         return _with_extensions(payload, self.extensions)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PerformanceManifest":
+    def from_dict(cls, data: Mapping[str, Any]) -> PerformanceManifest:
         known = frozenset(
             {
                 "schema_version",
@@ -524,14 +524,14 @@ class PerformanceManifest:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent, sort_keys=True, allow_nan=False)
 
     @classmethod
-    def from_json(cls, value: str | bytes | bytearray) -> "PerformanceManifest":
+    def from_json(cls, value: str | bytes | bytearray) -> PerformanceManifest:
         payload = json.loads(value)
         if not isinstance(payload, Mapping):
             raise TypeError("performance manifest JSON must contain an object")
         return cls.from_dict(payload)
 
     @classmethod
-    def read_json(cls, path: str | Path) -> "PerformanceManifest":
+    def read_json(cls, path: str | Path) -> PerformanceManifest:
         return cls.from_json(Path(path).read_bytes())
 
     def write_json(self, path: str | Path) -> Path:
@@ -552,10 +552,8 @@ class PerformanceManifest:
                 os.fsync(handle.fileno())
             os.replace(temporary, destination)
         except BaseException:
-            try:
+            with contextlib.suppress(OSError):
                 os.close(fd)
-            except OSError:
-                pass
             temporary.unlink(missing_ok=True)
             raise
         return destination

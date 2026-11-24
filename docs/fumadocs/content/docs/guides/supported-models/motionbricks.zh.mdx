@@ -1,29 +1,27 @@
 ---
 title: "MotionBricks"
-description: "MotionBricks（NVIDIA）：motion-generation、世界模型；Runner 一致性待确认。"
+description: "MotionBricks，英伟达（NVIDIA）：motion-generation、世界模型等 3 项任务；Runner 一致性待确认。"
 modelId: "motionbricks"
 pageSource: authored
 ---
 
-MotionBricks 属于英伟达 GR00T-WholeBodyControl 栈：生成人形机器人全身运动——具身世界建模的动作侧，产物是动作轨迹而非视频（论文 arXiv 2604.24833）。本 catalog 中官方源码路径已注册；运动/机器人资产保持运行时限制。
+MotionBricks 属于英伟达 GR00T-WholeBodyControl 栈：用于生成人形机器人全身运动，属于具身世界建模的动作侧，产物是动作轨迹而非视频（论文 arXiv 2604.24833）。
 
 <ModelPaperFigures modelId="motionbricks" locale="zh" />
 
-记录论文为[MotionBricks: Scalable Real-Time Motions with Modular Latent Generative Model and Smart Primitives](https://arxiv.org/abs/2604.24833)（SIGGRAPH 2026, 2026）。
+论文：[MotionBricks: Scalable Real-Time Motions with Modular Latent Generative Model and Smart Primitives](https://arxiv.org/abs/2604.24833)（SIGGRAPH 2026, 2026）。
 
 项目页：[nvlabs.github.io/motionbricks](https://nvlabs.github.io/motionbricks/)。代码：[NVlabs/GR00T-WholeBodyControl](https://github.com/NVlabs/GR00T-WholeBodyControl)。
-
-论文是 [MotionBricks: Scalable Real-Time Motions with Modular Latent Generative Model and Smart Primitives](https://arxiv.org/pdf/2604.24833)。项目页：[nvlabs.github.io/motionbricks](https://nvlabs.github.io/motionbricks)。代码：[NVlabs/GR00T-WholeBodyControl](https://github.com/NVlabs/GR00T-WholeBodyControl)。
 
 <ModelCommandBuilder modelId="motionbricks" locale="zh" />
 
 ## 用来做什么
 
-`motionbricks` 是记录的交互世界线。要用动作推进世界时从这里起步。
+用 `motionbricks` 以动作推进世界并渲染出相应画面。
 
-除已记录任务外的架构内部细节仓库未存（apache-2.0）；源码从 GR00T-WholeBodyControl 仓库以固定 commit 绑定。记录的产物类型为 action_trace。该模型由英伟达（NVIDIA）发布。
+WorldFoundry 以固定 commit 运行 GR00T-WholeBodyControl 仓库中 Apache-2.0 许可的官方 MotionBricks 源码，产物为 action_trace。该模型由英伟达（NVIDIA）发布。
 
-catalog 记录的任务包括 human-action-generation、motion-generation、世界模型。
+任务：human-action-generation、motion-generation、世界模型。
 
 ## 运行时契约
 
@@ -33,20 +31,18 @@ CLI task profile：`default`。绑定的 pipeline 类是 `MotionBricksPipeline`�
 
 系列状态：**Runner 一致性待确认**。
 
-配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。 缺失资产由计划报告，不视为 catalog 阻塞。
+将官方源码放在 $\{WORLDFOUNDRY_MODEL_SOURCE_DIR\}/GR00T-WholeBodyControl/motionbricks，并准备 MotionBricks checkpoint 与机器人资产。资产准备好之前，运行只会写出列出缺失资产的运行时计划（motionbricks_runtime_plan.json），不会生成运动。
 
-WorldFoundry tracks upstream source and checkpoint 计划中; no runnable pipeline is registered.
+产物是动作轨迹，不是视频。
 
 必填 `prompt`、`video`；可选 `image`；`actions`：whole_body_motion, control_sequence；产物 `action_trace`、`motionbricks_runtime_plan.json`。
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run motionbricks --pipeline.task-profile default` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+用 `wf run motionbricks --pipeline.task-profile default` 推进世界。
 
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+运行环境：统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-本卡片未记录公开 checkpoint id；按使用说明就位权重。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh motionbricks`；下载缺失的公开权重时加 `--download`。
-
-状态：**Runner 一致性待确认**。
+该模型未登记公开的 checkpoint；请按使用说明准备权重。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh motionbricks`；下载缺失的公开权重时加 `--download`。
 
 <ModelRelatedRecipes modelId="motionbricks" locale="zh" />

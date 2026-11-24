@@ -23,28 +23,46 @@ INFER_TENSOR_MANIFEST ?= tmp/inference-cpu-selection.json
 INFER_TENSOR_JUNIT ?= tmp/inference-cpu-contracts.xml
 STRICT_TEST_RUNNER = $(PYTHON) tests/manual/validate_junit_contract.py run
 PUBLIC_GATE_CONTRACTS = \
+	tests/evaluation/execution/test_stevo_bench_eval_utils.py \
+	tests/evaluation/test_source_cache.py \
+	tests/eval_core/test_videoverse_local_vlm.py \
+	tests/eval_core/test_libero_mem_recording.py \
 	tests/eval_core/test_model_benchmark_resume_controls.py \
 	tests/eval_core/test_run_manifest.py \
 	tests/runtime/test_geometry_regression_lazy_dispatch.py \
 	tests/runtime/test_native_coverage_policy.py \
+	tests/runtime/test_geometry_regression_declarations.py \
 	tests/runtime/test_junit_contract_validator.py \
 	tests/core/test_repository_policies.py \
+	tests/core/test_inference_gate_selection.py \
 	tests/scripts/test_pr_checks.py \
+	tests/scripts/test_model_env_install_shell_compatibility.py \
+	tests/runtime/test_conda_setup_commands.py \
 	tests/core/test_docs_toolchain.py \
 	tests/core/test_agent_skills.py \
 	tests/core/test_inference_validation_guidance.py \
 	tests/cli/test_mcp_content_conversion.py \
+	tests/cli/test_config_run.py \
+	tests/cli/test_mcp_run_results.py \
+	tests/cli/test_zoo_benchmark_fetch.py \
 	tests/runtime/test_inference_actions_evidence.py \
 	tests/synthesis/test_matrix_game_2_historical_reference.py \
 	tests/studio/test_canonical_catalog_lookup.py \
+	tests/studio/test_ltx25_workspace_contract.py \
+	tests/eval_core/test_ltx25_integration.py::test_ltx25_catalog_binding_profile_and_environment_are_wired \
+	tests/eval_core/test_ltx25_integration.py::test_ltx25_pipeline_loads_from_standard_runner_spec \
+	tests/studio/test_catalog_class_constants.py \
 	tests/base_models/diffusion_model/test_module_boundaries.py \
 	tests/studio/test_pipeline_owned_stream_state.py \
 	tests/studio/test_dispatch_lifecycle.py \
 	tests/studio/test_stream_init.py \
 	tests/studio/test_stream_step.py \
+	tests/studio_visualization/test_viser_initial_camera.py \
 	tests/core/utils/python/test_functional_utils.py \
+	tests/core/utils/python/test_pattern_filters.py \
 	tests/core/utils/python/test_tree_utils.py
 VIDEO_TENSOR_CONTRACTS = \
+	tests/base_models/three_dimensions/point_clouds/hyworldmirror_2p0/comm/test_padding.py \
 	tests/core/test_video_tensor_regression.py \
 	tests/core/test_video_codec_contracts.py \
 	tests/core/test_causal_video_cache.py \
@@ -58,22 +76,34 @@ STREAMING_CPU_CONTRACTS = \
 	tests/operators/test_matrix_game_2_perception.py \
 	tests/base_models/test_flashdreams_sana_wm_streaming.py \
 	tests/base_models/test_flashdreams_fastvideo_causal_wan.py \
+	tests/base_models/test_self_forcing_native.py \
+	tests/base_models/test_self_forcing_long_rollout.py \
+	tests/base_models/test_causal_forcing_native.py \
 	tests/base_models/diffusion_model/test_causal_attention_padding.py \
 	tests/base_models/diffusion_model/test_causal_cache_positions.py \
 	tests/base_models/diffusion_model/optimizations/test_causal_qkv_fusion.py \
+	tests/base_models/diffusion_model/test_autoregressive_window_runner.py \
 	tests/base_models/diffusion_model/models/autoencoders/test_wan_vae_acceleration_policy.py \
+	tests/base_models/diffusion_model/models/autoencoders/test_wan_streaming_chunk.py \
+	tests/base_models/diffusion_model/models/autoencoders/test_wan21_tae_preview.py \
 	tests/core/acceleration/test_fused_fp8_ffn.py \
 	tests/core/acceleration/test_convolution_layout.py \
 	tests/core/attention/test_native_cudnn_fp8.py \
+	tests/core/attention/test_native_causal_bias.py \
 	tests/core/attention/test_triton_tma.py \
 	tests/core/test_streaming_step_control.py \
 	tests/synthesis/test_matrix_game_2_optimizations.py \
 	tests/synthesis/test_matrix_game_2_decode_overlap.py \
 	tests/synthesis/test_matrix_game_2_realtime.py \
+	tests/synthesis/test_sana_wm_realtime.py \
 	tests/studio_visualization/test_realtime_nvenc.py \
 	tests/studio_visualization/test_realtime_presentation.py \
 	tests/studio_visualization/test_realtime_shutdown_ownership.py \
 	tests/studio_visualization/test_world_realtime.py \
+	tests/studio_visualization/test_realtime_postprocess_presets.py \
+	tests/studio_visualization/test_realtime_input.py \
+	tests/studio_visualization/test_realtime_input_consumers.py \
+	tests/studio_visualization/test_realtime_input_golden.py \
 	tests/runtime/test_inference_benchmark_correctness.py \
 	tests/studio_visualization/test_realtime_delivery.py \
 	tests/runtime/test_realtime_replay.py \
@@ -84,7 +114,7 @@ DIFFUSION_ACCELERATION_CPU_CONTRACTS = \
 	tests/core/acceleration/test_easycache.py \
 	tests/core/acceleration/test_fp8_conv.py \
 	tests/core/acceleration/test_svdquant.py \
-	tests/core/attention/test_mha_schedule.py \
+	tests/core/acceleration/test_mha_schedule.py \
 	tests/core/test_sol_attention.py \
 	tests/base_models/diffusion_model/test_camera_attention_dispatch.py \
 	tests/base_models/diffusion_model/optimizations/test_calibrated_plugins.py \
@@ -114,16 +144,189 @@ DIFFUSION_ACCELERATION_CPU_CONTRACTS = \
 	tests/base_models/diffusion_model/test_image_request_batching.py \
 	tests/base_models/diffusion_model/loaders/test_module_compile_wiring.py
 INFER_TENSOR_CONTRACTS = \
+	tests/base_models/test_transnetv2_unsupported_options.py \
+	tests/base_models/test_device_coefficient_flow_unipc_scheduler.py \
+	tests/base_models/diffusion_model/models/autoencoders/wan/test_shared_leaves.py \
+	tests/base_models/diffusion_model/models/autoencoders/wan/test_diffusers_blocks.py \
+	tests/base_models/diffusion_model/models/encoders/wan/test_clip_bindings.py \
+	tests/synthesis/test_navigation_input_contracts.py \
+	tests/synthesis/test_wan_camera_component_reuse.py \
+	tests/synthesis/test_open_magvit2_component_reuse.py \
+	tests/synthesis/test_conditioning_component_reuse.py \
+	tests/synthesis/test_perception_component_reuse.py \
+	tests/synthesis/test_mmaudio_component_reuse.py \
+	tests/core/test_sharded_safetensors.py \
+	tests/synthesis/test_go1_checkpoint_loading.py \
+	tests/synthesis/test_lda_1b_checkpoint_loading.py \
+	tests/synthesis/test_galaxea_vla_mixture.py \
+	tests/core/attention/test_qk_rotary_embedding.py \
+	tests/base_models/llm_mllm_core/test_qwen_layers.py \
+	tests/base_models/llm_mllm_core/test_qwen_rotary.py \
+	tests/base_models/llm_mllm_core/test_qwen_vision.py \
+	tests/base_models/llm_mllm_core/test_action_tensor_ops.py \
+	tests/base_models/llm_mllm_core/test_lingbot_components.py \
+	tests/base_models/llm_mllm_core/test_rms_norm_variants.py \
+	tests/base_models/llm_mllm_core/test_diffusion_policy_components.py \
+	tests/base_models/llm_mllm_core/test_cogact_components.py \
+	tests/base_models/llm_mllm_core/test_molmo_preprocessing.py \
+	tests/base_models/llm_mllm_core/test_mllm_sampling.py \
+	tests/base_models/llm_mllm_core/test_action_transformer.py \
+	tests/base_models/llm_mllm_core/test_rdt.py \
+	tests/base_models/diffusion_model/models/networks/dit/test_token.py \
+	tests/base_models/diffusion_model/models/representations/ltx/test_conditioning_helpers.py \
+	tests/base_models/perception_core/optical_flow/test_raft_features.py \
+	tests/base_models/diffusion_model/models/networks/helios/test_shared_components.py \
+	tests/core/nn/blocks/test_volume.py \
+	tests/base_models/three_dimensions/point_clouds/pi3_inference/test_conv_head.py \
+	tests/core/nn/blocks/test_module_properties.py \
+	tests/core/nn/blocks/test_layers.py \
+	tests/core/attention/rotary/test_rope_2d.py \
+	tests/base_models/llm_mllm_core/test_prismatic.py \
+	tests/base_models/diffusion_model/models/autoencoders/test_alias_free.py \
+	tests/base_models/llm_mllm_core/action/gr00t/test_dit_components.py \
+	tests/base_models/diffusion_model/models/networks/lvdm/test_shared_feedforward.py \
+	tests/core/nn/diffusion/test_schedulers.py \
+	tests/core/nn/blocks/test_normalization.py \
+	tests/core/nn/diffusion/test_utils.py \
+	tests/core/attention/rotary/test_interleaved.py \
+	tests/core/attention/rotary/test_rope_nd.py \
+	tests/core/attention/rotary/test_embedding.py \
+	tests/base_models/three_dimensions/point_clouds/pi3_inference/test_prope.py \
+	tests/base_models/three_dimensions/point_clouds/hyworldmirror_2p0/test_inference_helpers.py \
+	tests/base_models/diffusion_model/models/networks/gamma_world/test_multiagent_rope.py \
+	tests/base_models/diffusion_model/models/networks/wan/test_varlen_cross_attention.py \
+	tests/core/media/processing/test_video_transforms.py \
+	tests/base_models/test_hyperflow_components.py \
+	tests/synthesis/test_hyperflow_runtime.py \
+	tests/base_models/test_minimax_h3_dit.py \
+	tests/pipelines/test_pika_h3_flex.py \
+	tests/pipelines/test_h3_world.py \
+	tests/base_models/test_h3_tiny_components.py \
+	tests/pipelines/test_h3_tiny_pipeline.py \
+	tests/base_models/test_pi_h3_components.py \
+	tests/pipelines/test_pi_h3_pipeline.py \
+	tests/base_models/test_fastframes_components.py \
+	tests/pipelines/test_fastframes_pipeline.py \
+	tests/base_models/test_pi4_components.py \
+	tests/pipelines/test_pi4_pipeline.py \
+	tests/base_models/diffusion_model/models/initializers/test_easyanimate_conditioning.py \
+	tests/synthesis/test_easyanimate_runtime.py \
+	tests/synthesis/test_lyra1_attention_reuse.py \
+	tests/synthesis/test_adaworld_component_reuse.py \
+	tests/base_models/diffusion_model/models/networks/animatediff/test_resnet.py \
+	tests/synthesis/test_wan_text_encoder_reuse.py \
+	tests/synthesis/test_wan_vae_component_reuse.py \
+	tests/synthesis/test_wan_transformer_component_reuse.py \
+	tests/synthesis/test_wan_family_components.py \
+	tests/synthesis/test_rcm_wan_components.py \
+	tests/synthesis/test_gr00t_preprocessing.py \
+	tests/synthesis/test_being_h05_components.py \
+	tests/base_models/test_omnivinci_components.py \
+	tests/synthesis/test_omnivinci_runtime.py \
+	tests/synthesis/test_spatia_runtime.py \
+	tests/synthesis/test_versecrafter_runtime.py \
+	tests/synthesis/test_uni3c_synthesis.py \
+	tests/synthesis/test_minwm_runtime.py \
+	tests/synthesis/test_evoke_runtime.py \
+	tests/synthesis/test_evoke_shared_geometry.py \
+	tests/synthesis/test_official_runtime_launches.py \
+	tests/synthesis/test_unianimate_worldfoundry_runner.py \
+	tests/synthesis/test_kairos_config.py \
+	tests/synthesis/test_moverse_runtime.py \
+	tests/synthesis/test_mira_dino.py \
+	tests/base_models/test_mosaic_gpt.py \
+	tests/synthesis/test_roboflamingo_factory.py \
+	tests/synthesis/test_official_policy_runtime.py \
+	tests/synthesis/test_official_policy_dispatch.py \
+	tests/synthesis/test_molmobot_runtime.py \
+	tests/synthesis/test_molmobot_llm.py \
+	tests/synthesis/test_lingbot_va_runtime.py \
+	tests/synthesis/test_tesseract_runtime.py \
+	tests/synthesis/test_dreamzero_runtime.py \
+	tests/synthesis/test_lyra2_imports.py \
+	tests/synthesis/test_starwm_runtime.py \
+	tests/synthesis/test_pusa_vidgen_adapter.py \
+	tests/synthesis/test_open_oasis_runtime.py \
+	tests/synthesis/test_open_magvit2_runtime.py \
+	tests/synthesis/test_nwm_runtime.py \
+	tests/synthesis/test_le_wm_runtime.py \
+	tests/synthesis/test_hunyuan_worldplay_runtime.py \
+	tests/synthesis/test_giga_world_0_runtime.py \
+	tests/synthesis/test_easyanimate_runtime.py \
+	tests/synthesis/test_bernini_runtime.py \
+	tests/synthesis/test_allegro_runtime.py \
+	tests/synthesis/test_adaworld_runtime.py \
+	tests/synthesis/test_show_o_runtime.py \
+	tests/synthesis/test_mineworld_runtime.py \
+	tests/synthesis/test_diamond_runtime.py \
+	tests/synthesis/test_dino_wm_runtime.py \
+	tests/synthesis/test_scope_runtime.py \
+	tests/synthesis/test_scope_device_routing.py \
+	tests/synthesis/test_hydra_runtime.py \
+	tests/synthesis/test_vmem_runtime.py \
+	tests/synthesis/test_neoverse_runtime.py \
+	tests/synthesis/test_longvie_runtime.py \
+	tests/synthesis/test_animatediff_runtime.py \
+	tests/synthesis/test_liveworld_runtime.py \
+	tests/synthesis/test_ctrl_world_runtime.py \
+	tests/synthesis/test_warp_as_history_runtime.py \
+	tests/synthesis/test_magic_world_runtime.py \
+	tests/synthesis/test_video_x_fun_runtime.py \
+	tests/synthesis/test_solaris_runtime.py \
+	tests/synthesis/test_longcat_video_runtime.py \
+	tests/synthesis/test_ac3d_controlnet_pipeline.py \
+	tests/pipelines/test_ac3d_integration.py \
+	tests/synthesis/test_genie_envisioner_runtime.py \
+	tests/synthesis/test_wan2pt1_t2v_causal_infer.py \
+	tests/base_models/test_vqascore_llama32_molmo_gemini.py \
 	tests/pipelines/test_kandinsky6_replay_recipes.py \
 	tests/base_models/diffusion_model/test_build_purpose.py \
 	tests/synthesis/test_inspatio_v15_tensors.py \
 	tests/synthesis/test_inspatio_reproducibility.py \
 	tests/synthesis/test_inspatio_python_orchestration.py \
+	tests/synthesis/test_inspatio_world_runtime.py \
 	tests/core/execution \
+	tests/core/platform \
 	tests/core/model_loading/test_checkpoint_roundtrip.py \
+	tests/core/model_loading/test_checkpoint_transforms.py \
+	tests/core/acceleration/test_checkpoint_quantization.py \
+	tests/core/test_bt709_audio_video.py \
+	tests/base_models/test_ltx25_canonical_components.py \
+	tests/base_models/test_ltx_attention_masks.py \
+	tests/base_models/test_ltx_sigma_schedules.py \
+	tests/base_models/test_ltx25_native_recipe.py \
+	tests/base_models/test_ltx_ic_lora.py \
+	tests/pipelines/test_ltx2_v2v.py \
+	tests/base_models/diffusion_model/test_joint_multistage_hooks.py \
+	tests/eval_core/test_ltx25_integration.py \
 	tests/core/geometry/test_geometry_conventions.py \
+	tests/core/geometry/test_shared_rotation_transforms.py \
+	tests/core/geometry/test_projection.py \
+	tests/base_models/three_dimensions/depth/midas/test_fusion.py \
+	tests/base_models/three_dimensions/depth/depth_anything/test_geometry_bindings.py \
+	tests/base_models/three_dimensions/depth/test_temporal.py \
+	tests/base_models/perception_core/general_perception/dinov2/test_shared_vision_leaves.py \
+	tests/base_models/perception_core/general_perception/dinov3/test_omega_components.py \
+	tests/base_models/three_dimensions/point_clouds/vggt/test_shared_blocks.py \
+	tests/base_models/three_dimensions/point_clouds/vggt/test_head_utils.py \
+	tests/core/attention/test_indexed_2d.py \
+	tests/base_models/perception_core/segment/sam_components/test_heads.py \
+	tests/base_models/perception_core/segment/sam_components/test_mask_ops.py \
+	tests/base_models/perception_core/segment/sam_components/test_memory.py \
+	tests/base_models/perception_core/segment/sam_components/test_transformer.py \
+	tests/core/attention/test_window.py \
+	tests/core/geometry/test_boxes.py \
 	tests/runtime/test_geometry_regression.py \
+	tests/runtime/test_geometry_regression_declarations.py \
 	tests/synthesis/test_dreamx_world_backend_policy.py \
+	tests/synthesis/test_solarwm_component_reuse.py \
+	tests/synthesis/test_solarwm_inference_only.py \
+	tests/synthesis/test_solarwm_ltx_component_reuse.py \
+	tests/synthesis/test_solarwm_wan_network_reuse.py \
+	tests/synthesis/test_joyai_ltx_component_reuse.py \
+	tests/synthesis/test_ltx_media_reuse.py \
+	tests/synthesis/test_joyai_ltx_transformer_reuse.py \
+	tests/synthesis/test_alayaworld_v11_ltx_reuse.py \
 	tests/core/test_diffusion_rounding.py \
 	tests/core/test_kernel_dispatch_receipt.py \
 	tests/core/test_diffusion_mutating_kernel.py \
@@ -143,6 +346,7 @@ INFER_TENSOR_CONTRACTS = \
 	tests/core/test_video_window.py \
 	tests/core/test_video_postprocess.py \
 	tests/core/test_video_postprocess_rtx.py \
+	tests/core/test_postprocess_presets.py \
 	tests/pipelines/test_native_output_contracts.py \
 	tests/pipelines/test_non_native_output_contracts.py \
 	tests/pipelines/test_non_native_batch_outputs.py \
@@ -155,6 +359,7 @@ INFER_TENSOR_CONTRACTS = \
 	tests/pipelines/test_reason1_runtime_options.py \
 	tests/pipelines/test_cosmos_inference_parallel_options.py \
 	tests/pipelines/test_hunyuan_video_checkpoint_paths.py \
+	tests/pipelines/test_hunyuan_mirror_masks.py \
 	tests/studio/test_cosmos_predict25_local_overrides.py \
 	tests/studio/test_cosmos_predict2_workspace_defaults.py \
 	tests/studio/test_hunyuan_safe_checkpoint_overrides.py \
@@ -165,6 +370,7 @@ INFER_TENSOR_CONTRACTS = \
 	tests/pipelines/test_gen3c_workspace_contract.py \
 	tests/studio/test_trajectory_output_dispatch.py \
 	tests/studio/test_lyra1_catalog.py \
+	tests/eval_core/test_lyra1_reconstruction.py \
 	tests/synthesis/test_lyra2_output_contracts.py \
 	tests/synthesis/test_lyra2_runtime_paths.py \
 	tests/synthesis/test_visual_frame_memory_outputs.py \
@@ -175,23 +381,36 @@ INFER_TENSOR_CONTRACTS = \
 	tests/synthesis/test_dreamx_world_ar_realtime.py \
 	tests/synthesis/test_helios_realtime.py \
 	tests/pipelines/test_native_diffusion_runtime_policy.py \
+	tests/pipelines/test_native_diffusion_policy_normalization.py \
+	tests/base_models/diffusion_model/test_hy_nomas.py \
+	tests/pipelines/test_hy_nomas.py \
+	tests/pipelines/test_forcing_runtime.py \
+	tests/pipelines/test_forcing_integration.py \
+	tests/studio/test_forcing_catalog_defaults.py \
 	tests/pipelines/test_native_product_batching.py \
 	tests/studio/test_native_request_batching.py \
+	tests/studio/test_inference_requests_attention.py \
 	tests/studio/test_matrix_game3_torchrun_bridge.py \
 	tests/synthesis/test_lingbot_world_realtime.py \
 	tests/synthesis/test_lingbot_realtime_policy.py \
 	tests/synthesis/test_lingbot_decoder_contracts.py \
 	tests/synthesis/test_lingbot_world_v2_realtime.py \
 	tests/synthesis/test_lingbot_world_v2_small.py \
+	tests/synthesis/test_lingbot_world_v2_runtime.py \
+	tests/synthesis/test_lingbot_video_runtime.py \
+	tests/synthesis/test_lingbot_video_checkpoint_loading.py \
 	tests/synthesis/test_hunyuan_worldplay_realtime.py \
 	tests/synthesis/test_hunyuan_worldplay_state.py \
 	tests/synthesis/test_lingbot_realtime_cache_cursors.py \
 	tests/synthesis/test_lingbot_i2v_condition_reuse.py \
 	tests/synthesis/test_lingbot_static_inputs.py \
 	tests/core/attention/test_complex_rotary_preparation.py \
+	tests/core/attention/test_rotary_imports.py \
 	tests/pipelines/test_sana_integration.py \
 	tests/operators/test_worldfm_operator.py \
 	tests/pipelines/test_matrix_game_batch_outputs.py \
+	tests/pipelines/test_matrix_game_1.py \
+	tests/synthesis/test_matrix_game_3p5_runtime_assets.py \
 	tests/pipelines/test_matrix_game_2_seed_repro.py \
 	tests/pipelines/test_worldfm_contracts.py \
 	tests/pipelines/test_lingbot_distributed_loading.py \
@@ -199,9 +418,17 @@ INFER_TENSOR_CONTRACTS = \
 	tests/base_models/test_sd2_marigold_components.py \
 	tests/base_models/test_decoded_depth_guidance.py \
 	tests/base_models/test_scene_segmentation.py \
+	tests/base_models/test_moge_uniworld_variant.py \
+	tests/base_models/test_metric3d_config.py \
+	tests/base_models/test_midas_checkpoint_compat.py \
+	tests/base_models/test_vggsfm_dino_loading.py \
+	tests/base_models/test_open_flamingo_imports.py \
+	tests/base_models/test_vipe_native_extension.py \
+	tests/core/test_vit_qkv.py \
 	tests/synthesis/test_wonderworld_stages.py \
 	tests/core/test_gaussian_surfels.py \
 	tests/base_models/diffusion_model/models/encoders/test_wan_animate_pose_render.py \
+	tests/base_models/diffusion_model/models/encoders/test_wan_animate_pose_sequence.py \
 	tests/core/distributed \
 	tests/core/test_compile_cache_layering.py \
 	tests/core/test_cache_atomicity.py \
@@ -223,18 +450,33 @@ INFER_TENSOR_CONTRACTS = \
 	tests/eval_core/test_catalog_integration_status.py \
 	$(EVALUATION_CPU_CONTRACTS)
 EVALUATION_CPU_CONTRACTS = \
+	tests/evaluation/execution/test_videobench_text_alignment.py \
+	tests/evaluation/execution/test_wbench_sam2_tracking_summary.py \
+	tests/evaluation/execution/test_stevo_bench_eval_utils.py \
+	tests/evaluation/execution/test_t2vworldbench_evaluator_imports.py \
+	tests/evaluation/execution/test_t2v_compbench_mllm_metric_imports.py \
+	tests/evaluation/execution/test_fetv_blip_modes.py \
+	tests/evaluation/execution/test_fetv_video_frames.py \
+	tests/evaluation/execution/test_vmbench_qalign_helpers.py \
+	tests/evaluation/execution/test_vmbench_cas_writer.py \
+	tests/evaluation/execution/test_vbench_sampling.py \
+	tests/evaluation/execution/test_vbench_metadata_errors.py \
+	tests/eval_core/test_worldmembench_official_runner.py \
+	tests/eval_core/test_worldmembench_runtime.py \
 	tests/evaluation/execution/test_resume_options.py \
 	tests/evaluation/execution/test_result_integrity.py \
 	tests/evaluation/execution/test_helper_reuse.py \
 	tests/evaluation/execution/test_pipeline_boundaries.py \
 	tests/evaluation/execution/test_generation_artifact_materialization.py \
 	tests/evaluation/execution/test_shared_scoring_backend.py \
+	tests/evaluation/execution/test_shared_quality.py \
+	tests/evaluation/execution/test_worldmembench_camera.py \
 	tests/evaluation/execution/test_vbench_appearance_reduction.py \
 	tests/evaluation/execution/test_worldscore_evaluator_lifecycle.py \
 	tests/evaluation/metrics/test_scalar_aggregation.py \
 	tests/evaluation/metrics/test_worldscore_aggregation.py \
 	tests/evaluation/metrics/test_fvd_batch_preprocessing.py \
-	tests/evaluation/metrics/test_artscore_loader.py \
+	tests/evaluation/metrics/test_fvd_spatial_squeeze.py \
 	tests/cli/test_cli_mcp_contracts.py \
 	tests/cli/test_cli_mcp_usage_context.py \
 	tests/cli/test_mcp_content_conversion.py \
@@ -242,6 +484,7 @@ EVALUATION_CPU_CONTRACTS = \
 
 # Select numerical CUDA nodes explicitly: older CUDA tests do not all carry the gpu marker.
 INFER_CUDA_CONTRACTS = \
+	tests/base_models/diffusion_model/test_action_attention_dispatch.py \
 	tests/synthesis/test_inspatio_renderer_gpu.py::test_strict_renderer_matches_cpu_and_repeats \
 	tests/core/execution/test_cuda_frame_transfer.py::test_cuda_host_pixels_wait_for_producer_and_preserve_frame_order \
 	tests/core/execution/test_cuda_frame_transfer.py::test_cuda_prefetch_failure_uses_the_correct_blocking_fallback \
@@ -256,18 +499,22 @@ INFER_CUDA_CONTRACTS = \
 	tests/base_models/diffusion_model/optimizations/test_acceleration_plugins.py::test_sana_cuda_default_fusion_keeps_native_strides_and_output \
 	tests/core/acceleration/test_fp8_conv.py::test_fp8_implicit_gemm_matches_reference \
 	tests/core/acceleration/test_svdquant.py::test_packed_integer_kernel_matches_independent_groupwise_reference \
-	tests/core/attention/test_mha_schedule.py::test_pointer_fa2_executes_unequal_sequence_lengths \
-	tests/core/attention/test_mha_schedule.py::test_pointer_fa2_wan_head_width_and_fused_projection_strides \
-	tests/core/attention/test_mha_schedule.py::test_optional_schedule_provider_matches_torch \
-	tests/core/attention/test_mha_schedule.py::test_scheduled_projection_uses_real_low_precision_kernel \
-	tests/core/attention/test_mha_schedule.py::test_e5m2_masked_gemm_matches_independent_quantized_reference \
+	tests/core/acceleration/test_mha_schedule.py::test_pointer_fa2_executes_unequal_sequence_lengths \
+	tests/core/acceleration/test_mha_schedule.py::test_pointer_fa2_wan_head_width_and_fused_projection_strides \
+	tests/core/acceleration/test_mha_schedule.py::test_optional_schedule_provider_matches_torch \
+	tests/core/acceleration/test_mha_schedule.py::test_scheduled_projection_uses_real_low_precision_kernel \
+	tests/core/acceleration/test_mha_schedule.py::test_e5m2_masked_gemm_matches_independent_quantized_reference \
 	tests/core/attention/test_kv_arena.py::test_cuda_long_sequence_attention_and_stream_ownership \
 	tests/core/attention/test_kv_arena.py::test_cuda_graph_replay_reads_updated_current_segment \
 	tests/core/attention/test_gqa_storage.py::test_efficient_cuda_gqa_matches_math \
+	tests/core/attention/test_native_causal_bias.py::test_varlen_packed_causal_automatically_uses_symbolic_bias \
+	tests/base_models/diffusion_model/models/autoencoders/test_wan_streaming_chunk.py::test_small_chunk_compile_and_channels_last_match_eager \
+	tests/base_models/diffusion_model/test_hy_nomas_cuda.py \
 	tests/runtime/test_inference_benchmark_correctness.py::test_denoise_benchmark_checks_every_step_before_timing \
 	tests/runtime/test_inference_benchmark_correctness.py::test_full_stack_actual_fp8_cache_or_graph_execution \
 	tests/core/execution/test_cuda_nvenc_transport.py \
 	tests/core/execution/test_cuda_nvenc_generation.py \
+	tests/synthesis/test_lingbot_cuda_frames.py \
 	tests/studio_visualization/test_realtime_nvenc.py::test_abgr_conversion_channel_order_and_alpha \
 	tests/core/acceleration/test_fused_fp8_ffn.py::test_fused_gelu_quantization_matches_materialized_activation \
 	tests/core/acceleration/test_fused_fp8_ffn.py::test_fused_ffn_real_fp8_graph_and_policy_fallback \
@@ -337,15 +584,11 @@ CANONICAL_DIFFUSION_SOURCES ?= \
 	worldfoundry/base_models/diffusion_model/recipes \
 	worldfoundry/base_models/diffusion_model/runners \
 	worldfoundry/base_models/diffusion_model/schedulers
-RUFF_SOURCES ?= \
-	worldfoundry/cli \
-	worldfoundry/evaluation/api \
-	worldfoundry/evaluation/models/runtime \
-	worldfoundry/evaluation/tasks/catalog \
-	worldfoundry/evaluation/tasks/execution/orchestration \
-	worldfoundry/mcp \
-	worldfoundry/runtime \
-	scripts/model_zoo
+# Ruff reads tracked Python sources from Git's index: a directory walk would also visit local
+# license-gated runtimes and skip tracked sources below ignored names such as checkpoints/.
+RUFF_SOURCES ?= worldfoundry scripts/model_zoo
+RUFF_FORMAT_SOURCES ?= worldfoundry
+ruff_tracked_files = git ls-files -z -- $(foreach path,$(1),'$(path)/*.py' '$(path)/*.pyi' '$(path)/*.ipynb')
 
 help:
 	@printf '%s\n' \
@@ -483,7 +726,6 @@ test-eval-core:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m pytest -q tests/eval_core $(TEST_ARGS)
 
 docs-check:
-	npm --prefix docs/fumadocs run api:check
 	npm --prefix docs/fumadocs run models:check
 	npm --prefix docs/fumadocs run models:homes:check
 	npm --prefix docs/fumadocs run benchmarks:check
@@ -509,10 +751,11 @@ cli-entrypoint-check:
 lint: ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check
 
 ruff-check:
-	$(PYTHON) -m ruff check $(RUFF_SOURCES)
+	$(call ruff_tracked_files,$(RUFF_SOURCES)) | xargs -0 -r $(PYTHON) -m ruff check --force-exclude
 
 format-check:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m compileall -q $(CANONICAL_DIFFUSION_SOURCES) worldfoundry/evaluation scripts
+	$(call ruff_tracked_files,$(RUFF_FORMAT_SOURCES)) | xargs -0 -r $(PYTHON) -m ruff format --check --force-exclude
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m compileall -q $(CANONICAL_DIFFUSION_SOURCES) worldfoundry/evals scripts
 
 # BeeGFS: enumerate the bounded tracked paths from Git's index, not a recursive filesystem walk.
 shell-check:
@@ -527,10 +770,10 @@ data-check:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m worldfoundry.cli zoo benchmarks --json >/dev/null
 
 runtime-registry-check:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -c 'from worldfoundry.evaluation.models.runtime.validate import validate_runtime_registry; errors = [issue for issue in validate_runtime_registry() if issue.severity == "error"]; assert not errors, "\\n".join(f"[{issue.code}] {issue.message}" for issue in errors)'
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -c 'from worldfoundry.evals.models.validate import validate_runtime_registry; errors = [issue for issue in validate_runtime_registry() if issue.severity == "error"]; assert not errors, "\\n".join(f"[{issue.code}] {issue.message}" for issue in errors)'
 
 workspace-registry-check:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -c 'from worldfoundry.evaluation.tasks.catalog.integrity import catalog_runner_table_issues, video_catalog_dispatch_issues; from worldfoundry.evaluation.tasks.catalog.workspace_registry import validate_workspace_registry; issues = [*validate_workspace_registry(), *video_catalog_dispatch_issues(), *catalog_runner_table_issues()]; assert not issues, "\n".join(issues); print("workspace registry OK")'
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -c 'from worldfoundry.evals.tasks.catalog.integrity import catalog_runner_table_issues, video_catalog_dispatch_issues; from worldfoundry.evals.tasks.catalog.workspace_registry import validate_workspace_registry; issues = [*validate_workspace_registry(), *video_catalog_dispatch_issues(), *catalog_runner_table_issues()]; assert not issues, "\n".join(issues); print("workspace registry OK")'
 
 check-cuda-constraints:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/setup/check_cuda_torch_constraints.py
@@ -540,7 +783,7 @@ packaging-check:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/setup/check_packaging_license_gate.py $(if $(WHEEL),--wheel $(WHEEL),) $(if $(SDIST),--sdist $(SDIST),)
 
 compile-eval:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m compileall -q worldfoundry/evaluation scripts
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m compileall -q worldfoundry/evals scripts
 
 cli-check:
 	rm -rf $(CLI_CHECK_OUTPUT)

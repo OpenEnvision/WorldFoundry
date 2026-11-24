@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -24,7 +24,7 @@ class HFTokenizer(TextProcessor):
     def __init__(
         self,
         tokenizer_name: str,
-        tokenizer_kwargs: Optional[dict] = {
+        tokenizer_kwargs: dict | None = {  # noqa: B006 - Keeps the upstream default object and signature.
             "max_length": 64,
             "padding": "max_length",
             "truncation": True,
@@ -38,15 +38,11 @@ class HFTokenizer(TextProcessor):
             tokenizer_name,
             required_files=("tokenizer.json",),
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            str(source), local_files_only=True
-        )
+        self.tokenizer = AutoTokenizer.from_pretrained(str(source), local_files_only=True)
         self.tokenizer_kwargs = tokenizer_kwargs
         self.encode_with_model = encode_with_model
         if self.encode_with_model:
-            self.model = FlaxAutoModel.from_pretrained(
-                str(source), local_files_only=True
-            )
+            self.model = FlaxAutoModel.from_pretrained(str(source), local_files_only=True)
 
     def encode(self, strings: Sequence[str]):
         # this creates another nested layer with "input_ids", "attention_mask", etc.
@@ -63,15 +59,13 @@ class HFTokenizer(TextProcessor):
 class MuseEmbedding(TextProcessor):
     def __init__(self, model_path: str | None = None):
         import tensorflow_hub as hub  # lazy import
-        import tensorflow_text  # noqa: F401
+        import tensorflow_text  # noqa: F401 - Registers the TF Text ops the Hub model uses.
 
         from worldfoundry.core.io.paths import resolve_worldfoundry_path
 
         source = resolve_worldfoundry_path(model_path or str(_TEXT_ASSETS["muse_model_path"]))
         if not source.exists():
-            raise FileNotFoundError(
-                f"Octo MUSE text encoder is not staged locally: {source}"
-            )
+            raise FileNotFoundError(f"Octo MUSE text encoder is not staged locally: {source}")
         self.muse_model = hub.load(str(source))
 
     def encode(self, strings: Sequence[str]):
@@ -85,7 +79,7 @@ class CLIPTextProcessor(TextProcessor):
     def __init__(
         self,
         processor_path: str | None = None,
-        tokenizer_kwargs: Optional[dict] = {
+        tokenizer_kwargs: dict | None = {  # noqa: B006 - Keeps the upstream default object and signature.
             "max_length": 64,
             "padding": "max_length",
             "truncation": True,
@@ -110,7 +104,7 @@ class CLIPTextProcessor(TextProcessor):
             text=strings,
             **self.kwargs,
         )
-        inputs["position_ids"] = np.expand_dims(
-            np.arange(inputs["input_ids"].shape[1]), axis=0
-        ).repeat(inputs["input_ids"].shape[0], axis=0)
+        inputs["position_ids"] = np.expand_dims(np.arange(inputs["input_ids"].shape[1]), axis=0).repeat(
+            inputs["input_ids"].shape[0], axis=0
+        )
         return inputs

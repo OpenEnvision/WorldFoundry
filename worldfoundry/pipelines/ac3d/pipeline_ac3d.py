@@ -30,7 +30,7 @@ class AC3DPipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "AC3DPipeline":
+    ) -> AC3DPipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         options = cls._runtime_options(model_path, required_components, kwargs)
         resolved_model_id = cls._resolve_model_id(options, model_id=model_id)

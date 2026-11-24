@@ -61,7 +61,10 @@ def test_public_pipeline_forwards_seed_and_deterministic():
             return kwargs
 
     result = InspatioWorldPipeline(synthesis_model=Synthesis())(
-        videos="input.mp4", seed=1730, deterministic=True, return_dict=True,
+        videos="input.mp4",
+        seed=1730,
+        deterministic=True,
+        return_dict=True,
     )
     assert result["seed"] == 1730 and result["deterministic"] is True
 
@@ -80,9 +83,17 @@ def test_public_predict_propagates_reproducibility(monkeypatch, tmp_path, seed, 
     monkeypatch.setattr(runtime, "_resolve_snapshot_dir", lambda source: str(tmp_path))
     calls = []
     monkeypatch.setattr(subprocess, "run", lambda argv, **kw: calls.append((argv, kw)))
-    result = runtime.predict(video, traj_txt_path=str(trajectory), config_path=str(config), prompt="scene",
-                             output_root=str(tmp_path / "output"), skip_step3=True,
-                             seed=seed, deterministic=deterministic, return_dict=True)
+    result = runtime.predict(
+        video,
+        traj_txt_path=str(trajectory),
+        config_path=str(config),
+        prompt="scene",
+        output_root=str(tmp_path / "output"),
+        skip_step3=True,
+        seed=seed,
+        deterministic=deterministic,
+        return_dict=True,
+    )
     command, options = calls[0]
     assert options["env"][SEED_ENV] == str(expected)
     assert options["env"]["PYTHONHASHSEED"] == str(expected)
@@ -94,7 +105,7 @@ def test_public_predict_propagates_reproducibility(monkeypatch, tmp_path, seed, 
 
 
 def test_leaf_rng_initialization_is_reproducible_across_processes():
-    probe = '''
+    probe = """
 import json, random
 import numpy as np
 import torch
@@ -104,13 +115,12 @@ print(json.dumps({"python": [random.random() for _ in range(4)],
                   "numpy": np.random.choice(100, 10, replace=False).tolist(),
                   "torch": torch.randn(12).tolist(),
                   "strict": torch.are_deterministic_algorithms_enabled()}))
-'''
+"""
     env = reproducibility_env(os.environ, seed=1730, deterministic=True)
     env["PYTHONPATH"] = str(ROOT)
     env["CUDA_VISIBLE_DEVICES"] = ""
     env.pop("WORLDFOUNDRY_REPLAY_BOOTSTRAP", None)
-    values = [json.loads(subprocess.check_output([sys.executable, "-c", probe], env=env, text=True))
-              for _ in range(2)]
+    values = [json.loads(subprocess.check_output([sys.executable, "-c", probe], env=env, text=True)) for _ in range(2)]
     assert values[0] == values[1] and values[0]["strict"] is True
     env = reproducibility_env(env, seed=42)
     different = json.loads(subprocess.check_output([sys.executable, "-c", probe], env=env, text=True))
@@ -121,10 +131,11 @@ print(json.dumps({"python": [random.random() for _ in range(4)],
 def test_unrequested_leaf_initialization_preserves_rng(monkeypatch):
     monkeypatch.delenv(SEED_ENV, raising=False)
     monkeypatch.delenv("WORLDFOUNDRY_DETERMINISTIC", raising=False)
-    before_numpy = np.random.get_state()
+    before_numpy = np.random.get_state(legacy=True)
     before_torch = torch.get_rng_state()
     initialize_reproducibility()
-    after_numpy = np.random.get_state()
+    after_numpy = np.random.get_state(legacy=True)
+    assert isinstance(before_numpy, tuple) and isinstance(after_numpy, tuple)
     assert before_numpy[0] == after_numpy[0]
     np.testing.assert_array_equal(before_numpy[1], after_numpy[1])
     assert before_numpy[2:] == after_numpy[2:]
@@ -145,7 +156,11 @@ def test_leaf_entrypoints_initialize_before_work(monkeypatch, tmp_path, leaf):
         argv = [str(source), "--root_dir", str(tmp_path)]
     elif leaf == "depth":
         source = RUNTIME / "depth/depth_predict_da3_cli.py"
-        depth = types.ModuleType("depth.depth_predict_da3")
+        module_name = (
+            "worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.depth.depth_predict_da3_cli"
+        )
+        depth_module_name = module_name.removesuffix("_cli")
+        depth = types.ModuleType(depth_module_name)
 
         class FakeDepth:
             def __init__(self, config):
@@ -154,20 +169,23 @@ def test_leaf_entrypoints_initialize_before_work(monkeypatch, tmp_path, leaf):
             def run(self, files, output):
                 return True
 
-        depth.DepthPredictDA3 = FakeDepth
-        monkeypatch.setitem(sys.modules, "depth.depth_predict_da3", depth)
+        monkeypatch.setattr(depth, "DepthPredictDA3", FakeDepth, raising=False)
+        monkeypatch.setitem(sys.modules, depth_module_name, depth)
         video = tmp_path / "input.mp4"
         video.touch()
         argv = [str(source), "--input", str(video), "--output", str(tmp_path / "output")]
     else:
         source = RUNTIME / "scripts/render_point_cloud.py"
         monkeypatch.setitem(sys.modules, "open3d", types.ModuleType("open3d"))
-        trajectory_name = "worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.trajectory"
+        trajectory_name = (
+            "worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.trajectory"
+        )
         trajectory = types.ModuleType(trajectory_name)
-        trajectory.generate_traj_txt = None
+        monkeypatch.setattr(trajectory, "generate_traj_txt", None, raising=False)
         monkeypatch.setitem(sys.modules, trajectory_name, trajectory)
         argv = [str(source), "--da3_dir", str(tmp_path), "--traj_txt_path", "camera.txt", "--output_dir", str(tmp_path)]
     spec = importlib.util.spec_from_file_location(module_name, source)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "initialize_reproducibility", lambda: calls.append("initialize"))

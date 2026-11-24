@@ -8,16 +8,27 @@ Inputs: MultiStageComponents, stage_steps matching the scheduler count.
 Output: DiffusionOutput whose artifacts come from decode_modalities (must include ``video``).
 Must not: skip the latent processor between stages, or accept a request whose
 num_inference_steps does not equal sum(stage_steps).
+
+Opt-in component hooks: a conditioner with ``resolve_request(request, conditioning)``
+may update the request after prompt encoding (for example a predicted frame
+count); a scheduler with ``step_state(denoised, step, state, *, generator)``
+returns the next latent including its own conditioning-mask projection; a decoder
+with ``uses_run_generator = True`` receives the run generator.  The execution
+option ``step_noise_seed_offset`` gives scheduler steps a per-stage generator
+seeded ``seed + offset`` instead of the run generator.
 """
 
 from __future__ import annotations
 
 import copy
+import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import torch
 from torch import Tensor
+
+from worldfoundry.core.execution.deadline import check_deadline
 
 from ..contracts import (
     ConditionEncoder,
@@ -69,8 +80,12 @@ class MultiModalLatentDecoder:
     """Runtime surface for decoders that emit more than one artifact.
 
     ``decode`` returns only the ``video`` artifact for DiffusionOutput.sample.
-    :meth:`decode_modalities` must be implemented by the recipe decoder.
+    :meth:`decode_modalities` must be implemented by the recipe decoder.  A
+    decoder that sets ``uses_run_generator`` continues the run's noise generator
+    and receives it as the ``generator`` keyword.
     """
+
+    uses_run_generator: bool = False
 
     def decode(self, latents, request):
         return self.decode_modalities(latents, request)["video"]
@@ -93,6 +108,7 @@ class MultiStageComponents:
     schedulers: tuple[DiffusionScheduler, ...]
     processor: LatentProcessor | None
     decoder: MultiModalLatentDecoder
+    stage_denoisers: tuple[object, ...] = ()
 
 
 class JointMultiStageDiffusionRunner:
@@ -112,16 +128,20 @@ class JointMultiStageDiffusionRunner:
         stage_steps: Sequence[int],
         device: str | torch.device,
         dtype: torch.dtype,
+        step_noise_seed_offset: int | None = None,
     ) -> None:
         if len(components.schedulers) != len(stage_steps):
             raise ValueError("joint multi-stage execution requires one scheduler per stage")
         if any(int(steps) <= 0 for steps in stage_steps):
             raise ValueError("joint multi-stage stage_steps must be positive")
+        if components.stage_denoisers and len(components.stage_denoisers) != len(stage_steps):
+            raise ValueError("joint multi-stage execution requires one denoiser per stage")
         self.model_id = str(model_id)
         self.components = components
         self.stage_steps = tuple(int(steps) for steps in stage_steps)
         self.device = torch.device(device)
         self.dtype = dtype
+        self.step_noise_seed_offset = None if step_noise_seed_offset is None else int(step_noise_seed_offset)
 
     def _generator(self, seed: int) -> torch.Generator:
         try:
@@ -131,10 +151,46 @@ class JointMultiStageDiffusionRunner:
         return generator.manual_seed(seed)
 
     @staticmethod
-    def _conditioning(conditioning: Conditioning, branch: str = "positive") -> Mapping[str, object]:
+    def _conditioning(
+        conditioning: Conditioning,
+        branch: str = "positive",
+        *,
+        request_id: str | None = None,
+    ) -> Mapping[str, object]:
         values = dict(conditioning.shared)
         values.update(conditioning.positive if branch == "positive" else conditioning.negative)
+        if request_id is not None:
+            existing = values.get("request_id")
+            if not (isinstance(existing, str) and existing.strip()):
+                values["request_id"] = request_id
         return values
+
+    def _end_denoiser_requests(
+        self,
+        request_id: str,
+        *,
+        error: BaseException | None,
+    ) -> None:
+        """Finalize request-owned denoiser caches without masking a run failure."""
+        seen: set[int] = set()
+        denoisers = [self.components.denoiser, *self.components.stage_denoisers]
+        for denoiser in denoisers:
+            if denoiser is None or id(denoiser) in seen:
+                continue
+            seen.add(id(denoiser))
+            end_fn = getattr(denoiser, "end_request", None)
+            if not callable(end_fn):
+                end_fn = getattr(denoiser, "end_feature_cache_request", None)
+            if not callable(end_fn):
+                continue
+            try:
+                end_fn(request_id, error=error)
+            except BaseException as cleanup_error:
+                if error is None:
+                    raise
+                add_note = getattr(error, "add_note", None)
+                if callable(add_note):
+                    add_note(f"denoiser request cleanup failed: {type(cleanup_error).__name__}: {cleanup_error}")
 
     def _predict(
         self,
@@ -145,14 +201,23 @@ class JointMultiStageDiffusionRunner:
         step_index: int,
         total_steps: int,
         guidance_scale: float,
+        stage_index: int = 0,
+        request_id: str | None = None,
     ) -> MultiModalDenoiserOutput:
         """Per-modality CFG. At scale==1 or without negative, return the positive branch only."""
+
+        denoiser = (
+            self.components.stage_denoisers[stage_index]
+            if self.components.stage_denoisers
+            else self.components.denoiser
+        )
+
         def call(branch: str) -> MultiModalDenoiserOutput:
-            output = self.components.denoiser(
+            output = denoiser(
                 MultiModalDenoiserInput(
                     modalities=states,
                     timestep=timestep,
-                    conditioning=self._conditioning(conditioning, branch),
+                    conditioning=self._conditioning(conditioning, branch, request_id=request_id),
                     step_index=step_index,
                     total_steps=total_steps,
                     branch=branch,
@@ -202,6 +267,9 @@ class JointMultiStageDiffusionRunner:
                 "joint multi-stage request step count must match the recipe stages: "
                 f"{request.sampling.num_inference_steps} != {expected_steps}"
             )
+        deadline_value = request.inputs.get("deadline_monotonic")
+        deadline = float(deadline_value) if deadline_value is not None else None
+        check_deadline(deadline, stage="prompt conditioning")
         generator = self._generator(request.sampling.seed)
         conditioning = self.components.conditioner.encode(
             request,
@@ -210,76 +278,118 @@ class JointMultiStageDiffusionRunner:
         )
         if not isinstance(conditioning, Conditioning):
             raise TypeError("conditioner.encode must return Conditioning")
+        check_deadline(deadline, stage="conditioned request resolution")
+        resolve_request = getattr(self.components.conditioner, "resolve_request", None)
+        if callable(resolve_request):
+            request = resolve_request(request, conditioning)
+            if not isinstance(request, DiffusionRequest):
+                raise TypeError("conditioner.resolve_request must return DiffusionRequest")
+
+        raw_request_id = request.inputs.get("request_id")
+        if isinstance(raw_request_id, str) and raw_request_id.strip():
+            request_id = raw_request_id.strip()
+        else:
+            request_id = f"{self.model_id}-{uuid.uuid4().hex}"
 
         previous_latents: Mapping[str, Tensor] = {}
         states: dict[str, ModalityState] = {}
-        for stage_index, (scheduler, step_count) in enumerate(
-            zip(self.components.schedulers, self.stage_steps, strict=True)
-        ):
-            schedule = tuple(
-                scheduler.schedule(
-                    self._sampling(request, step_count),
-                    device=self.device,
-                    dtype=self.dtype,
-                )
-            )
-            if len(schedule) != step_count:
-                raise ValueError(f"stage {stage_index} scheduler returned {len(schedule)} steps; expected {step_count}")
-            noise_scale = float(schedule[0].timestep.item())
-            states = self._validate_states(
-                self.components.latent_initializer.initialize_stage(
-                    request,
-                    stage_index=stage_index,
-                    previous_latents=previous_latents,
-                    noise_scale=noise_scale,
-                    generator=generator,
-                    device=self.device,
-                    dtype=self.dtype,
-                )
-            )
-            modality_schedulers = {name: copy.deepcopy(scheduler) for name in states}
-
-            for expected_index, step in enumerate(schedule):
-                if step.index != expected_index:
-                    raise ValueError("scheduler step indices must be contiguous and zero-based")
-                model_states = {
-                    name: state.with_updates(latent=modality_schedulers[name].scale_model_input(state.latent, step))
-                    for name, state in states.items()
-                }
-                prediction = self._predict(
-                    states=model_states,
-                    conditioning=conditioning,
-                    timestep=step.timestep,
-                    step_index=step.index,
-                    total_steps=step_count,
-                    guidance_scale=request.sampling.guidance_scale,
-                )
-                if set(prediction.samples) != set(states):
-                    raise ValueError("joint denoiser output modalities must match initialized states")
-
-                next_states: dict[str, ModalityState] = {}
-                for name, state in states.items():
-                    denoised = prediction.samples[name]
-                    if denoised.shape != state.latent.shape:
-                        raise ValueError(f"{name} denoiser output shape does not match its latent state")
-                    latent = modality_schedulers[name].step(
-                        denoised,
-                        step,
-                        state.latent,
-                        generator=generator,
+        run_error: BaseException | None = None
+        try:
+            for stage_index, (scheduler, step_count) in enumerate(
+                zip(self.components.schedulers, self.stage_steps, strict=True)
+            ):
+                check_deadline(deadline, stage=f"stage {stage_index + 1} initialization")
+                schedule = tuple(
+                    scheduler.schedule(
+                        self._sampling(request, step_count),
+                        device=self.device,
+                        dtype=self.dtype,
                     )
-                    # A scheduler may consume velocity, noise, or clean-sample predictions.
-                    # Anchor conditioning in latent space after the solver update.
-                    latent = latent * state.denoise_mask + state.clean_latent * (1 - state.denoise_mask)
-                    next_states[name] = state.with_updates(latent=latent)
-                states = next_states
+                )
+                if len(schedule) != step_count:
+                    raise ValueError(
+                        f"stage {stage_index} scheduler returned {len(schedule)} steps; expected {step_count}"
+                    )
+                noise_scale = float(schedule[0].timestep.item())
+                states = self._validate_states(
+                    self.components.latent_initializer.initialize_stage(
+                        request,
+                        stage_index=stage_index,
+                        previous_latents=previous_latents,
+                        noise_scale=noise_scale,
+                        generator=generator,
+                        device=self.device,
+                        dtype=self.dtype,
+                    )
+                )
+                modality_schedulers = {name: copy.deepcopy(scheduler) for name in states}
+                step_generator = (
+                    generator
+                    if self.step_noise_seed_offset is None
+                    else self._generator(request.sampling.seed + self.step_noise_seed_offset)
+                )
 
-            if stage_index + 1 < len(self.stage_steps):
-                if self.components.processor is None:
-                    raise ValueError("multi-stage execution requires a latent processor between stages")
-                previous_latents = self.components.processor.process(states, request)
+                for expected_index, step in enumerate(schedule):
+                    check_deadline(deadline, stage=f"stage {stage_index + 1} step {expected_index + 1}")
+                    if step.index != expected_index:
+                        raise ValueError("scheduler step indices must be contiguous and zero-based")
+                    model_states = {
+                        name: state.with_updates(latent=modality_schedulers[name].scale_model_input(state.latent, step))
+                        for name, state in states.items()
+                    }
+                    prediction = self._predict(
+                        states=model_states,
+                        conditioning=conditioning,
+                        timestep=step.timestep,
+                        step_index=step.index,
+                        total_steps=step_count,
+                        guidance_scale=request.sampling.guidance_scale,
+                        stage_index=stage_index,
+                        request_id=request_id,
+                    )
+                    if set(prediction.samples) != set(states):
+                        raise ValueError("joint denoiser output modalities must match initialized states")
 
-        artifacts = dict(self.components.decoder.decode_modalities(states, request))
+                    next_states: dict[str, ModalityState] = {}
+                    for name, state in states.items():
+                        denoised = prediction.samples[name]
+                        if denoised.shape != state.latent.shape:
+                            raise ValueError(f"{name} denoiser output shape does not match its latent state")
+                        step_state = getattr(modality_schedulers[name], "step_state", None)
+                        if callable(step_state):
+                            # The scheduler owns the conditioning-mask projection of this update.
+                            latent = step_state(denoised, step, state, generator=step_generator)
+                        else:
+                            latent = modality_schedulers[name].step(
+                                denoised,
+                                step,
+                                state.latent,
+                                generator=step_generator,
+                            )
+                            # A scheduler may consume velocity, noise, or clean-sample predictions.
+                            # Anchor conditioning in latent space after the solver update.
+                            latent = latent * state.denoise_mask + state.clean_latent * (1 - state.denoise_mask)
+                        next_states[name] = state.with_updates(latent=latent)
+                    states = next_states
+
+                if stage_index + 1 < len(self.stage_steps):
+                    if self.components.processor is None:
+                        raise ValueError("multi-stage execution requires a latent processor between stages")
+                    check_deadline(deadline, stage=f"stage {stage_index + 1} latent processing")
+                    previous_latents = self.components.processor.process(states, request)
+        except BaseException as exc:
+            run_error = exc
+            raise
+        finally:
+            self._end_denoiser_requests(request_id, error=run_error)
+
+        check_deadline(deadline, stage="media decoding")
+        decoder = self.components.decoder
+        if getattr(decoder, "uses_run_generator", False):
+            artifacts = dict(decoder.decode_modalities(states, request, generator=generator))
+        else:
+            artifacts = dict(decoder.decode_modalities(states, request))
+        check_deadline(deadline, stage="decoded output delivery")
         try:
             sample = artifacts["video"]
         except KeyError as error:

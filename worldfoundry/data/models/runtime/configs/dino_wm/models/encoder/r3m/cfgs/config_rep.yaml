@@ -15,7 +15,7 @@ alpha: 0.2
 dataset: ego4d
 doaug: none
 agent:
-  _target_: r3m.R3M
+  _target_: worldfoundry.synthesis.visual_generation.dino_wm.models.encoder.r3m.R3M
   device: ${device}
   lr: ${lr}
   hidden_dim: 1024

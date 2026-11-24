@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any
 
-from ..pipeline_utils import PipelineABC
 from ...synthesis.visual_generation.matrix_game.matrix_game_1_synthesis import (
     MatrixGame1Synthesis,
 )
+from ..pipeline_utils import PipelineABC
 
 
 class MatrixGame1Pipeline(PipelineABC):
@@ -19,7 +20,7 @@ class MatrixGame1Pipeline(PipelineABC):
 
     def __init__(
         self,
-        synthesis_model: Optional[MatrixGame1Synthesis] = None,
+        synthesis_model: MatrixGame1Synthesis | None = None,
         device: str = "cuda",
         model_id: str | None = None,
     ) -> None:
@@ -38,11 +39,11 @@ class MatrixGame1Pipeline(PipelineABC):
     def from_pretrained(
         cls,
         model_path: Any = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "MatrixGame1Pipeline":
+    ) -> MatrixGame1Pipeline:
         """Create the Matrix-Game-1 wrapper and preserve local resource paths.
 
         Args:
@@ -52,7 +53,7 @@ class MatrixGame1Pipeline(PipelineABC):
             model_id: Optional catalog/runtime identifier override.
             **kwargs: Additional preflight metadata.
         """
-        options: Dict[str, Any] = {}
+        options: dict[str, Any] = {}
         if isinstance(model_path, dict):
             options.update(model_path)
             checkpoint_dir = (

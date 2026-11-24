@@ -20,14 +20,14 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: vbench-plus-plus
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id vbench-plus-plus --mode contract 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id vbench-plus-plus --mode contract 
     --output-dir tmp/benchmark_zoo/benchmark_contract/vbench-plus-plus --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:VBenchPlusPlusContract
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:vbench-plus-plus
   official_runner_script: 
-    worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
+    worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
   prompt_suite:
     mode: vbench_plus_plus
-    root: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
+    root: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
     override_root_env: WORLDFOUNDRY_VBENCH_PLUS_PLUS_ROOT
     variants:
     - i2v
@@ -41,7 +41,7 @@ metadata:
     kind: in_tree_official_source
     repo_url: https://github.com/Vchitect/VBench.git
     revision: 45e79ec14e69a2187202c675d2dbce1a71843d53
-    root: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
+    root: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
     root_env: WORLDFOUNDRY_VBENCH_PLUS_PLUS_ROOT
     override_root_env: WORLDFOUNDRY_VBENCH_PLUS_PLUS_ROOT
   release_status: experimental
@@ -63,7 +63,7 @@ metadata:
     full_suite_verified: false
     runtime_env: conda/envs/worldfoundry-unified-cu128
     python: ${WORLDFOUNDRY_UNIFIED_PYTHON}
-    vbench_root: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
+    vbench_root: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
     videos_path: ${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}
     scope: bounded_official_gpu_validation
     scorecard: 
@@ -85,13 +85,13 @@ metadata:
     missing: []
   data_refs:
     in_tree_source_paths:
-    - worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
+    - worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
     task_yaml: worldfoundry/data/benchmarks/tasks/external/vbench-plus-plus.yaml
     generated_artifact_examples:
     - ${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:VBenchPlusPlusContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:vbench-plus-plus
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
@@ -101,7 +101,7 @@ metadata:
     surface: bounded_official_gpu_validation
   validation_command:
   - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-  - worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
   - --benchmark-id
   - vbench-plus-plus
   - --variant
@@ -154,7 +154,7 @@ tasks:
       manifest: vbench-plus-plus/prompts.json
       split: standard
     runtime_requirements:
-      in_tree_source: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
+      in_tree_source: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
       optional_in_tree_root_override_env: WORLDFOUNDRY_VBENCH_PLUS_PLUS_ROOT
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
       results_path_env: WORLDFOUNDRY_VBENCH_PLUS_PLUS_RESULTS_PATH
@@ -172,6 +172,6 @@ tasks:
       - vbench_plus_plus_long_average
       - vbench_plus_plus_trustworthiness_average
       - vbench_plus_plus_average
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:VBenchPlusPlusContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:vbench-plus-plus
+      runner_script: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
       default_mode: vbench_plus_plus

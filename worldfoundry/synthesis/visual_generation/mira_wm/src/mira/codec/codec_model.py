@@ -1,9 +1,9 @@
 """The RAEv2 temporal-downsampling video codec: encode/decode plus checkpoint loading.
 
 :class:`VideoCodec` wraps the frozen-DINOv3 :class:`RAEEncoder` and the :class:`ViTVideoDecoder`.
-It is video-only (no audio). The frozen DINOv3 backbone is loaded via ``torch.hub`` (see
-:mod:`mira.codec.dino`); :meth:`VideoCodec.load_from_checkpoint` restores the backbone
-weights from the checkpoint, so a deployment environment does not need a separate DINO weights path.
+It is video-only (no audio). The frozen backbone uses the canonical in-tree DINOv3 implementation.
+:meth:`VideoCodec.load_from_checkpoint` restores the backbone weights from the checkpoint,
+so a deployment environment does not need a separate DINO weights path.
 """
 
 from __future__ import annotations
@@ -16,11 +16,14 @@ import torch
 from einops import rearrange
 from torch import Tensor, nn
 
-from mira.codec.config import VideoCodecConfig
-from mira.codec.rae_encoder import RAEEncoder, RAEEncoderOutputs
-from mira.codec.vit_decoder import ViTVideoDecoder
-from mira.data.batch import VideoActionBatch
-from mira.ml.config_loading import drop_removed_fields, strip_hydra_targets
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.codec.config import VideoCodecConfig
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.codec.rae_encoder import RAEEncoder, RAEEncoderOutputs
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.codec.vit_decoder import ViTVideoDecoder
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.data.batch import VideoActionBatch
+from worldfoundry.synthesis.visual_generation.mira_wm.src.mira.ml.config_loading import (
+    drop_removed_fields,
+    strip_hydra_targets,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +151,7 @@ class VideoCodec(nn.Module):
         checkpoint = {"state_dict": self.state_dict()}
 
         if extra_data is not None:
-            for key in extra_data.keys():
+            for key in extra_data.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 if key in checkpoint:
                     raise ValueError(f"Key {key} already exists in checkpoint, cannot overwrite")
 
@@ -166,7 +169,7 @@ class VideoCodec(nn.Module):
         # restores tensors to the device they were saved from (typically cuda:0), which
         # causes every DDP rank to materialise the codec on cuda:0 and silently leaks
         # several GiB onto rank 0's GPU. Callers that want GPU loading pass device explicitly.
-        from omegaconf import OmegaConf  # noqa: PLC0415 -- optional dep, used only here
+        from omegaconf import OmegaConf  # optional dep, used only here
 
         config_path = _find_codec_config(checkpoint_path)
 
@@ -181,9 +184,7 @@ class VideoCodec(nn.Module):
 
         # _target_ keys may exist at any nesting if saved from hydra instantiation; strip them all,
         # then drop fields removed from the schema since the checkpoint was written.
-        raw_dict = strip_hydra_targets(
-            OmegaConf.to_container(config_raw.model.architecture.config, resolve=True)
-        )
+        raw_dict = strip_hydra_targets(OmegaConf.to_container(config_raw.model.architecture.config, resolve=True))
         raw_dict = drop_removed_fields(raw_dict, REMOVED_CONFIG_FIELDS)
         assert isinstance(raw_dict, dict), "expected dict at architecture.config"
         config = VideoCodecConfig.model_validate(raw_dict)

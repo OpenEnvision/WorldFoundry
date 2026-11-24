@@ -31,14 +31,10 @@ def to_device(batch, device, callback=None, non_blocking=False):
         batch = callback(batch)
 
     if isinstance(batch, dict):
-        return {
-            k: to_device(v, device, non_blocking=non_blocking) for k, v in batch.items()
-        }
+        return {k: to_device(v, device, non_blocking=non_blocking) for k, v in batch.items()}
 
     if isinstance(batch, (tuple, list)):
-        return type(batch)(
-            to_device(x, device, non_blocking=non_blocking) for x in batch
-        )
+        return type(batch)(to_device(x, device, non_blocking=non_blocking) for x in batch)
 
     x = batch
     if device == "numpy":

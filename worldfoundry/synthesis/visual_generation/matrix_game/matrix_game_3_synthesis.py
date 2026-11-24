@@ -7,7 +7,7 @@ without directly importing the runtime module, acting as an abstraction layer.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from ...base_synthesis import BaseSynthesis
 
@@ -58,9 +58,9 @@ class MatrixGame3Synthesis(BaseSynthesis):
         runtime_path: str | None = None,
         checkpoint_dir: str | None = None,
         device: str = "cuda",
-        defaults: Optional[dict] = None,
+        defaults: dict | None = None,
         *,
-        runtime: "MatrixGame3Runtime | None" = None,
+        runtime: MatrixGame3Runtime | None = None,
     ):
         """
         Initializes a new instance of MatrixGame3Synthesis.
@@ -127,7 +127,7 @@ class MatrixGame3Synthesis(BaseSynthesis):
         device: str | None = None,
         checkpoint_dir: str | None = None,
         **kwargs: Any,
-    ) -> "MatrixGame3Synthesis":
+    ) -> MatrixGame3Synthesis:
         """
         Creates a MatrixGame3Synthesis instance by loading a pretrained model.
 
@@ -170,18 +170,17 @@ class MatrixGame3Synthesis(BaseSynthesis):
         return _runtime_module().resolve_checkpoint_dir(path_value)
 
     @staticmethod
-    def build_subprocess_env(runtime_path: str, device: str | None = None) -> dict:
+    def build_subprocess_env(device: str | None = None) -> dict:
         """
         Builds the environment variables necessary for a subprocess using the runtime's logic.
 
         Args:
-            runtime_path (str): The path to the runtime configuration or model.
             device (str | None): The device string (e.g., "cuda", "cpu") to include in the environment.
 
         Returns:
             dict: A dictionary of environment variables suitable for a subprocess.
         """
-        return _runtime_module().build_subprocess_env(runtime_path, device)
+        return _runtime_module().build_subprocess_env(device)
 
     def predict(self, *args: Any, **kwargs: Any):
         """

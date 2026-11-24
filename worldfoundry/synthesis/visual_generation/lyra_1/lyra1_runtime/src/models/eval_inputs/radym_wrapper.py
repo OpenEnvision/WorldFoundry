@@ -13,46 +13,55 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 import os
-from typing import Any, List, Optional
-from src.models.eval_inputs.radym import Radym
+
+import torch
+
+from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.models.eval_inputs.radym import Radym
+
 
 class RadymWrapper(Radym):
     def __init__(self, is_static: bool = True, is_multi_view: bool = False, **kwargs):
         super().__init__(**kwargs)
-    
+
         # For recon code base
         self.is_static = is_static
         self.sample_list = self.mp4_file_paths
-        self.num_cameras = len([camera_name for camera_name in os.listdir(self.root_path) if camera_name != 'flag']) if is_multi_view else 1
+        self.num_cameras = (
+            len([camera_name for camera_name in os.listdir(self.root_path) if camera_name != "flag"])
+            if is_multi_view
+            else 1
+        )
         if is_multi_view:
             self.n_views = self.num_cameras
-    
+
     def __len__(self):
         return len(self.sample_list)
-    
+
     def count_frames(self, video_idx: int):
         return self.num_frames(video_idx)
-    
+
     def count_cameras(self, video_idx: int):
         return self.num_cameras
-    
+
     def get_data(
         self,
         idx,
-        data_fields: List[str],
-        frame_indices: Optional[List[int]] = None,
-        view_indices: Optional[List[int]] = None,
+        data_fields: list[str],
+        frame_indices: list[int] | None = None,
+        view_indices: list[int] | None = None,
         camera_convention: str = "opencv",
     ):
-        assert camera_convention == 'opencv', f"No support for camera convention {camera_convention}"
+        assert camera_convention == "opencv", f"No support for camera convention {camera_convention}"
         if view_indices is None or len(view_indices) == 0:
             view_indices = list(range(self.count_cameras(idx)))
         final_dict = None
         for view_idx in view_indices:
             output_dict = self._read_data(
-                idx, frame_indices, [view_idx], data_fields,
+                idx,
+                frame_indices,
+                [view_idx],
+                data_fields,
             )
             if final_dict is None:
                 final_dict = output_dict

@@ -23,7 +23,6 @@ owner's user avatar.
 
 Outputs:
 - lib/model-logo-map.json          (orgs + modelLogos + benchmarkLogos)
-- lib/model-org-src.ts             (canonical org src paths for runtime guards)
 - lib/benchmark-catalog-status.json (rewrites each `logoKey` to an org id)
 - public/org-logos/SOURCES.md       (per-file provenance / license manifest)
 
@@ -42,7 +41,6 @@ from typing import cast
 DOCS_ROOT = Path(__file__).resolve().parents[1]
 LOGO_DIR = DOCS_ROOT / "public" / "org-logos"
 MAP_PATH = DOCS_ROOT / "lib" / "model-logo-map.json"
-ORG_SRC_PATH = DOCS_ROOT / "lib" / "model-org-src.ts"
 BENCH_STATUS_PATH = DOCS_ROOT / "lib" / "benchmark-catalog-status.json"
 SOURCES_PATH = LOGO_DIR / "SOURCES.md"
 
@@ -64,7 +62,6 @@ SIMPLE_ICON_BRAND_HEX: dict[str, str] = {
     "meituan.svg": "FFD100",
     "meta.svg": "0467DF",
     "minimax.svg": "E73562",
-    "naver.svg": "03C75A",
     "nvidia.svg": "76B900",
     "openai.svg": "412991",
     "oppo.svg": "2D683D",
@@ -188,6 +185,9 @@ def recolor_university_seals() -> int:
 # --------------------------------------------------------------------------
 # Institution registry. `abbr` is shown when no logo file is available.
 # `logo=None` means the identity mark renders the abbreviation.
+# Wide logos stay legible in compact catalog marks through `mark`, a square
+# symbol cropped from the official logo, or `wordmark=True`, which renders the
+# abbreviation for text-only wordmarks. Page titles always show `logo`.
 # --------------------------------------------------------------------------
 ORGS: dict[str, dict] = {
     # -- Companies / industrial labs -------------------------------------
@@ -195,6 +195,7 @@ ORGS: dict[str, dict] = {
         "name": "Tencent",
         "abbr": "TC",
         "logo": "tencent.svg",
+        "wordmark": True,
         "source": commons("Tencent Logo.svg"),
         "license": "Public domain (text logo)",
     },
@@ -202,6 +203,7 @@ ORGS: dict[str, dict] = {
         "name": "Tencent Hunyuan",
         "abbr": "HY",
         "logo": "tencent-hunyuan.png",
+        "mark": "tencent-hunyuan-mark.png",
         "source": "Official Hunyuan header mark from hunyuan.tencent.com (https://hunyuan-blog-web-prod-1258344703.cos.ap-guangzhou.myqcloud.com/assets/hy-blog-logo-zh-DxX4P937.png)",
         "license": "Organization brand mark",
     },
@@ -209,6 +211,7 @@ ORGS: dict[str, dict] = {
         "name": "Alibaba",
         "abbr": "AL",
         "logo": "alibaba.svg",
+        "wordmark": True,
         "source": commons("Alibaba en logo.svg"),
         "license": "Public domain (text logo)",
     },
@@ -240,13 +243,6 @@ ORGS: dict[str, dict] = {
         "source": "GitHub organization brand avatar (github.com/GalaxyGeneralRobotics)",
         "license": "Organization brand mark",
     },
-    "reactor": {
-        "name": "Reactor",
-        "abbr": "RC",
-        "logo": "reactor.jpg",
-        "source": "GitHub organization brand avatar (github.com/reactor-team)",
-        "license": "Organization brand mark",
-    },
     "dexora": {
         "name": "Dexora",
         "abbr": "DX",
@@ -265,6 +261,7 @@ ORGS: dict[str, dict] = {
         "name": "Amap (Alibaba)",
         "abbr": "AM",
         "logo": "alibaba.svg",
+        "wordmark": True,
         "source": commons("Alibaba en logo.svg"),
         "license": "Public domain (text logo)",
     },
@@ -300,6 +297,7 @@ ORGS: dict[str, dict] = {
         "name": "Google DeepMind",
         "abbr": "GDM",
         "logo": "google-deepmind.svg",
+        "mark": "google-deepmind-mark.svg",
         "source": commons("Google DeepMind logo.svg"),
         "license": "Public domain (simple geometry)",
     },
@@ -344,13 +342,6 @@ ORGS: dict[str, dict] = {
         "logo": "physical-intelligence.png",
         "source": "GitHub organization brand avatar (github.com/Physical-Intelligence), pre-existing repo asset",
         "license": "Organization brand mark",
-    },
-    "naver": {
-        "name": "NAVER",
-        "abbr": "NA",
-        "logo": "naver.svg",
-        "source": SIMPLE_ICONS,
-        "license": "CC0-1.0",
     },
     "sony": {
         "name": "Sony AI",
@@ -405,6 +396,7 @@ ORGS: dict[str, dict] = {
         "name": "Zhipu AI",
         "abbr": "ZP",
         "logo": "zhipu.png",
+        "mark": "zhipu-mark.png",
         "source": commons("Zhipu AI.png"),
         "license": "Public domain (text logo)",
     },
@@ -412,6 +404,7 @@ ORGS: dict[str, dict] = {
         "name": "SenseTime",
         "abbr": "ST",
         "logo": "sensetime.png",
+        "mark": "sensetime-mark.png",
         "source": commons("SenseTime logo.png"),
         "license": "CC BY-SA 4.0",
     },
@@ -562,13 +555,6 @@ ORGS: dict[str, dict] = {
         "source": "GitHub organization brand avatar (github.com/BeingBeyond), pre-existing repo asset",
         "license": "Organization brand mark",
     },
-    "x-square": {
-        "name": "X Square Robot",
-        "abbr": "XS",
-        "logo": "x-square.png",
-        "source": "GitHub organization brand avatar (github.com/X-Square-Robot), pre-existing repo asset",
-        "license": "Organization brand mark",
-    },
     "x-humanoid": {
         "name": "X-Humanoid (Beijing Humanoid Robot Innovation Center)",
         "abbr": "XH",
@@ -596,13 +582,6 @@ ORGS: dict[str, dict] = {
         "logo": "shanda.svg",
         "source": "Original simple wordmark rendition for the identity mark",
         "license": "Public domain (text logo)",
-    },
-    "exla": {
-        "name": "Exla AI",
-        "abbr": "EX",
-        "logo": "exla.png",
-        "source": "GitHub organization brand avatar (github.com/exla-ai), pre-existing repo asset",
-        "license": "Organization brand mark",
     },
     "createai": {
         "name": "CreateAI",
@@ -857,13 +836,6 @@ ORGS: dict[str, dict] = {
         "source": commons("KAIST logo.svg"),
         "license": "Public domain",
     },
-    "snu": {
-        "name": "Seoul National University",
-        "abbr": "SNU",
-        "logo": "snu.svg",
-        "source": commons("서울대학교.svg"),
-        "license": "Public domain (simple shield rendition)",
-    },
     "oxford": {
         "name": "University of Oxford",
         "abbr": "OX",
@@ -882,6 +854,7 @@ ORGS: dict[str, dict] = {
         "name": "ETH Zurich",
         "abbr": "ETH",
         "logo": "eth.svg",
+        "wordmark": True,
         "source": commons("ETH Zürich Logo black.svg"),
         "license": "Public domain (text logo)",
     },
@@ -889,6 +862,7 @@ ORGS: dict[str, dict] = {
         "name": "University of Geneva",
         "abbr": "UNIGE",
         "logo": "unige.svg",
+        "mark": "unige-mark.svg",
         "source": commons("Uni GE logo.svg"),
         "license": "Public domain",
     },
@@ -896,6 +870,7 @@ ORGS: dict[str, dict] = {
         "name": "University of Freiburg",
         "abbr": "UFR",
         "logo": "freiburg.png",
+        "wordmark": True,
         "source": commons("Wortmarke-grundform-universitaet freiburg blau rgb.png"),
         "license": "CC BY-SA 4.0",
     },
@@ -931,6 +906,7 @@ ORGS: dict[str, dict] = {
         "name": "University of Michigan",
         "abbr": "UM",
         "logo": "umich.svg",
+        "mark": "umich-mark.svg",
         "source": commons("University of Michigan logo.svg"),
         "license": "Public domain (simple geometry)",
     },
@@ -987,6 +963,7 @@ ORGS: dict[str, dict] = {
         "name": "Johns Hopkins University",
         "abbr": "JHU",
         "logo": "jhu.png",
+        "wordmark": True,
         "source": commons("Johns Hopkins University logo.png"),
         "license": "Public domain (text logo)",
     },
@@ -994,6 +971,7 @@ ORGS: dict[str, dict] = {
         "name": "Carnegie Mellon University",
         "abbr": "CMU",
         "logo": "cmu.svg",
+        "wordmark": True,
         "source": commons("Carnegie Mellon wordmark.svg"),
         "license": "Public domain (text logo)",
     },
@@ -1001,6 +979,7 @@ ORGS: dict[str, dict] = {
         "name": "Simon Fraser University",
         "abbr": "SFU",
         "logo": "sfu.png",
+        "mark": "sfu-mark.png",
         "source": commons("SFU logo.png"),
         "license": "Public domain (text logo)",
     },
@@ -1036,6 +1015,7 @@ ORGS: dict[str, dict] = {
         "name": "Koç University",
         "abbr": "KU",
         "logo": "koc.svg",
+        "mark": "koc-mark.svg",
         "source": commons("Koç University logo.svg"),
         "license": "Public domain",
     },
@@ -1043,6 +1023,7 @@ ORGS: dict[str, dict] = {
         "name": "San José State University",
         "abbr": "SJSU",
         "logo": "sjsu.svg",
+        "wordmark": True,
         "source": commons("San Jose State University logo.svg"),
         "license": "Public domain",
     },
@@ -1051,6 +1032,7 @@ ORGS: dict[str, dict] = {
         "name": "Allen Institute for AI (Ai2)",
         "abbr": "AI2",
         "logo": "ai2.svg",
+        "mark": "ai2-mark.svg",
         "source": commons("Allen Institute for Artificial Intelligence.svg"),
         "license": "Public domain (text logo)",
     },
@@ -1089,13 +1071,6 @@ ORGS: dict[str, dict] = {
         "source": "GitHub organization brand avatar (github.com/BenchCouncil), pre-existing repo asset",
         "license": "Organization brand mark",
     },
-    "cau": {
-        "name": "Chung-Ang University (HAI Lab)",
-        "abbr": "CAU",
-        "logo": "cau.svg",
-        "source": "Original simple circular-seal rendition of the CAU monogram",
-        "license": "Public domain (simple seal rendition)",
-    },
     "nu-lab": {
         "name": "Northeastern University (World Model & Embodied AI Lab)",
         "abbr": "NU",
@@ -1116,20 +1091,6 @@ ORGS: dict[str, dict] = {
         "logo": "ucla.svg",
         "source": "Original simple circular-seal rendition of the UCLA wordmark",
         "license": "Public domain (simple seal rendition)",
-    },
-    "openenvision": {
-        "name": "OpenEnvision",
-        "abbr": "OE",
-        "logo": "openenvision.svg",
-        "source": "WorldFoundry / OpenEnvision site mark (docs/fumadocs/public/logo.svg)",
-        "license": "Project brand mark",
-    },
-    "worldfoundry": {
-        "name": "WorldFoundry",
-        "abbr": "WF",
-        "logo": "worldfoundry.svg",
-        "source": "WorldFoundry site mark (docs/fumadocs/public/logo.svg)",
-        "license": "Project brand mark",
     },
 }
 
@@ -1186,9 +1147,6 @@ MODEL_ORGS: dict[str, str] = {
     "dreamx-world-5b-cam": "amap",
     "dreamzero": "nvidia",
     "dualcamctrl": "hkust",
-    "dust3r": "naver",
-    "dust3r-base-model": "naver",
-    "dvlt": "nvidia",
     "dynamicrafter": "tencent",
     "easyanimate": "alibaba",
     "echo-infinity": "jd",
@@ -1203,7 +1161,6 @@ MODEL_ORGS: dict[str, str] = {
     "echo-memory-ssm-ctx5-every1-hint21": "jd",
     "echo-memory-ssm-ctx5-every4-hint81": "jd",
     "echo-memory-videossm-hybrid": "jd",
-    "egowm": "cmu",
     "emu3.5": "baai",
     "eventvla": "shanghai-ai-lab",
     "evoke": "alayalab",
@@ -1236,11 +1193,9 @@ MODEL_ORGS: dict[str, str] = {
     "hunyuanvideo-1.5": "tencent-hunyuan",
     "hunyuanworld-1": "tencent-hunyuan",
     "hunyuanworld-mirror": "tencent-hunyuan",
-    "hunyuanworld-voyager": "tencent-hunyuan",
     "hy-world-2.0": "tencent-hunyuan",
     "hy-worldplay": "tencent-hunyuan",
     "hydra": "hust",
-    "hyworld-worldgen": "tencent-hunyuan",
     "i2vgen-xl": "alibaba",
     "infinite-vggt": "berkeley",
     "infinite-world": "meigen",
@@ -1298,7 +1253,6 @@ MODEL_ORGS: dict[str, str] = {
     "moverse": "alibaba",
     "molmoact2": "ai2",
     "molmobot": "ai2",
-    "monst3r": "google-deepmind",
     "mosaicmem": "starkware",
     "motionbricks": "nvidia",
     "motionctrl": "tencent",
@@ -1310,7 +1264,6 @@ MODEL_ORGS: dict[str, str] = {
     "octo": "berkeley",
     "omnivinci": "nvidia",
     "omniforcing": "omniforcing",
-    "open-dreamer": "reactor",
     "open-magvit2": "tencent",
     "open-sora": "hpcaitech",
     "open-sora-plan": "pku",
@@ -1344,7 +1297,6 @@ MODEL_ORGS: dict[str, str] = {
     "simworld": "simworld",
     "spatial-forcing": "openhelix",
     "shape-of-motion": "berkeley",
-    "shotstream": "kuaishou",
     "show-o": "nus",
     "skyreels-v2": "skywork",
     "skyreels-v3": "skywork",
@@ -1356,9 +1308,7 @@ MODEL_ORGS: dict[str, str] = {
     "spatial-ladder": "zju",
     "spatial-reasoner": "jhu",
     "spirit-v1.5": "spirit-ai",
-    "splatt3r": "oxford",
     "stable-video-infinity": "epfl",
-    "stable-virtual-camera": "stability",
     "starvla": "starvla",
     "starwm": "cas",
     "step-video-t2v": "stepfun",
@@ -1370,7 +1320,6 @@ MODEL_ORGS: dict[str, str] = {
     "uni3c": "alibaba",
     "unianimate-dit": "alibaba",
     "unidepth-v2-prior": "eth",
-    "unik3d-prior": "eth",
     "uwm": "uwash",
     "vchitect-2-t2v": "shanghai-ai-lab",
     "veo3": "google-deepmind",
@@ -1397,7 +1346,6 @@ MODEL_ORGS: dict[str, str] = {
     "wan22-fun-5b-cam": "wan",
     "wan22-fun-a14b-cam": "wan",
     "warp-as-history": "sjtu",
-    "wilddet3d": "ai2",
     "wildworld": "shanda",
     "wonderjourney": "stanford",
     "wonderworld": "stanford",
@@ -1520,6 +1468,13 @@ def build_org_entries() -> dict[str, dict]:
             if not path.is_file():
                 raise SystemExit(f"missing logo asset for {org_id}: {path}")
             entry["src"] = f"/org-logos/{logo}"
+        mark = meta.get("mark")
+        if mark:
+            if not (LOGO_DIR / mark).is_file():
+                raise SystemExit(f"missing compact mark for {org_id}: {LOGO_DIR / mark}")
+            entry["markSrc"] = f"/org-logos/{mark}"
+        if meta.get("wordmark"):
+            entry["wordmark"] = True
         if meta.get("source"):
             entry["source"] = meta["source"]
         if meta.get("license"):
@@ -1552,20 +1507,6 @@ def write_map(orgs: dict[str, dict]) -> None:
     }
     MAP_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     print(f"wrote {MAP_PATH}")
-
-
-def write_org_src_ts(orgs: dict[str, dict]) -> None:
-    lines = [
-        "// Generated by docs/fumadocs/scripts/generate-org-logos.py — do not edit.",
-        "export const modelOrgSrc: Record<string, string> = {",
-    ]
-    for key, entry in sorted(orgs.items()):
-        src = entry.get("src")
-        if src:
-            lines.append(f'  "{key}": "{src}",')
-    lines.extend(["};", ""])
-    ORG_SRC_PATH.write_text("\n".join(lines))
-    print(f"wrote {ORG_SRC_PATH}")
 
 
 def rewrite_benchmark_status() -> None:
@@ -1610,6 +1551,12 @@ def write_sources(orgs: dict[str, dict]) -> None:
         license_ = entry.get("license", "-")
         usage = ", ".join(sorted(used_by.get(org_id, []))) or "-"
         lines.append(f"| `{fname}` | {entry['name']} | {source} | {license_} | {usage} |")
+        if "markSrc" in entry:
+            mark = entry["markSrc"].split("/")[-1]
+            lines.append(
+                f"| `{mark}` | {entry['name']} | Symbol cropped from `{fname}` for compact catalog marks "
+                f"| {license_} | {usage} |"
+            )
     lines.append("")
     lines.append("Institutions without a committed logo render their abbreviation instead:")
     abbr_only = [
@@ -1618,6 +1565,10 @@ def write_sources(orgs: dict[str, dict]) -> None:
         if "src" not in entry
     ]
     lines.append(", ".join(abbr_only) + ".")
+    lines.append("")
+    lines.append("Text-only wordmarks render their abbreviation in compact catalog marks:")
+    wordmarks = [f'`{org_id}` ("{entry["abbr"]}")' for org_id, entry in sorted(orgs.items()) if entry.get("wordmark")]
+    lines.append(", ".join(wordmarks) + ".")
     lines.append("")
     SOURCES_PATH.write_text("\n".join(lines))
     print(f"wrote {SOURCES_PATH}")
@@ -1630,16 +1581,16 @@ def main() -> None:
     validate()
     orgs = build_org_entries()
     write_map(orgs)
-    write_org_src_ts(orgs)
     rewrite_benchmark_status()
     write_sources(orgs)
     total_models = len(MODEL_ORGS) + len(UNRESOLVED_MODELS)
     total_benches = len(BENCHMARK_ORGS) + len(UNRESOLVED_BENCHMARKS)
     with_logo = {k for k, v in ORGS.items() if v.get("logo")}
+    with_mark = {k for k, v in ORGS.items() if v.get("mark")}
     print(
         f"models: {len(MODEL_ORGS)}/{total_models} mapped, "
         f"benchmarks: {len(BENCHMARK_ORGS)}/{total_benches} mapped, "
-        f"orgs: {len(ORGS)} ({len(with_logo)} with logo files), "
+        f"orgs: {len(ORGS)} ({len(with_logo)} with logo files, {len(with_mark)} compact marks), "
         f"simple-icon fills: {colored}, university seals: {seals}"
     )
 

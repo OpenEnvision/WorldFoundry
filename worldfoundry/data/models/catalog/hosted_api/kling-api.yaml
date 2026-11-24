@@ -1,0 +1,49 @@
+id: kling-api
+name: Kling API
+tasks:
+- text-to-video
+- image-to-video
+- hosted-api
+provider: api
+source:
+  status: api
+  official_repo_url: https://app.klingai.com/
+official_sources:
+  project_page: https://app.klingai.com/
+integration:
+  status: integrated
+  notes:
+  - Hosted API Studio pipeline is available; users must provide their own provider
+    API key.
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: kling-api
+runner_parity:
+  status: not_applicable
+demo_parity:
+  status: not_applicable
+docs:
+  publisher: Kuaishou
+  publisher_kind: company
+  publisher_zh: 快手（Kuaishou）
+  overview: Kling API is the hosted endpoint for Kuaishou's Kling video generation family, covering text-to-video and image-to-video. Prompts or reference images are submitted to Kuaishou's service and the rendered clips come back as WorldFoundry artifacts. Hosted Kling runs use the same Studio result format as locally run open models, so you can compare them side by side.
+  overview_zh: Kling API 是快手「可灵」视频生成系列的托管接入点，覆盖文生视频与图生视频。提示词或参考图会提交到快手的服务端，渲染好的视频以 WorldFoundry 产物的形式返回。托管的可灵结果与本地运行的开源模型共用同一套 Studio 结果格式，方便直接对比。
+  architecture: 'This is a hosted, provider-operated model: the vendor has not published its architecture, parameter count, or training recipe. WorldFoundry provides a Studio pipeline that submits requests to the provider endpoint and collects the returned video artifacts.'
+  architecture_zh: 这是由服务方托管运行的模型：厂商未公开其架构、参数规模或训练细节。WorldFoundry 提供一条 Studio pipeline，向服务方端点提交请求并回收生成的视频产物。
+  usage_notes: The hosted-API Studio pipeline is available; supply your own provider API key and account. No weights are downloaded and no local GPU environment is needed — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Credentials come from the Kling open platform (app.klingai.com).
+  usage_notes_zh: 托管 API 的 Studio pipeline 已可用，需自备服务方的 API key 与账号。本地不下载权重，也不需要 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。凭据需在可灵开放平台（app.klingai.com）申请。
+  limitations:
+  - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+  - The provider controls model versioning, so outputs can change over time without any change in WorldFoundry.
+  - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+  limitations_zh:
+  - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+  - 模型版本由服务方控制，即使 WorldFoundry 未变化，输出也可能随时间改变。
+  - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video
+      outputs.
+    reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+  - id: physics-iq
+    reason: Probes whether provider-side video models respect basic physical plausibility.
+    reason_zh: 检验服务方视频模型是否遵循基本物理合理性。

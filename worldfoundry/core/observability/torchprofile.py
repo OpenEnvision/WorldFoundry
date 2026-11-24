@@ -215,7 +215,7 @@ def profile_torch_module(
 
     model_class = f"{type(model).__module__}.{type(model).__qualname__}"
     try:
-        import torchprofile
+        torchprofile = __import__("torchprofile")
     except Exception as exc:  # Optional dependency may be absent or broken.
         result = TorchProfileResult(status="unavailable", model_class=model_class, error=str(exc))
         _emit_result(

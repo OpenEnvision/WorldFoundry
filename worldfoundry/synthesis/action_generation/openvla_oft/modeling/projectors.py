@@ -1,4 +1,5 @@
 """Implementation of additional projectors for additional inputs to the VLA models."""
+
 import torch
 import torch.nn as nn
 
@@ -7,6 +8,7 @@ class ProprioProjector(nn.Module):
     """
     Projects proprio state inputs into the LLM's embedding space.
     """
+
     def __init__(self, llm_dim: int, proprio_dim: int) -> None:
         super().__init__()
         self.llm_dim = llm_dim
@@ -32,6 +34,7 @@ class NoisyActionProjector(nn.Module):
     than having 1 token per action), each noisy action token will have dimension 1
     instead of 7.
     """
+
     def __init__(self, llm_dim: int) -> None:
         super().__init__()
         self.llm_dim = llm_dim

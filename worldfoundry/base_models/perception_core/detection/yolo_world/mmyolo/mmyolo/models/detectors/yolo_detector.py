@@ -29,15 +29,17 @@ class YOLODetector(SingleStageDetector):
         use_syncbn (bool): whether to use SyncBatchNorm. Defaults to True.
     """
 
-    def __init__(self,
-                 backbone: ConfigType,
-                 neck: ConfigType,
-                 bbox_head: ConfigType,
-                 train_cfg: OptConfigType = None,
-                 test_cfg: OptConfigType = None,
-                 data_preprocessor: OptConfigType = None,
-                 init_cfg: OptMultiConfig = None,
-                 use_syncbn: bool = True):
+    def __init__(
+        self,
+        backbone: ConfigType,
+        neck: ConfigType,
+        bbox_head: ConfigType,
+        train_cfg: OptConfigType = None,
+        test_cfg: OptConfigType = None,
+        data_preprocessor: OptConfigType = None,
+        init_cfg: OptMultiConfig = None,
+        use_syncbn: bool = True,
+    ):
         super().__init__(
             backbone=backbone,
             neck=neck,
@@ -45,9 +47,10 @@ class YOLODetector(SingleStageDetector):
             train_cfg=train_cfg,
             test_cfg=test_cfg,
             data_preprocessor=data_preprocessor,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
 
         # TODO： Waiting for mmengine support
         if use_syncbn and get_world_size() > 1:
             torch.nn.SyncBatchNorm.convert_sync_batchnorm(self)
-            print_log('Using SyncBatchNorm()', 'current')
+            print_log("Using SyncBatchNorm()", "current")

@@ -1,24 +1,25 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 # This code is from https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/utils.py
 import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 __all__ = [
-    "window_partition",
-    "window_unpartition",
+    "PatchEmbed",
     "add_decomposed_rel_pos",
     "get_abs_pos",
-    "PatchEmbed",
+    "window_partition",
+    "window_unpartition",
 ]
+
 
 def window_partition(x, window_size):
     """
     Partition into non-overlapping windows with padding if needed.
     Args:
         x (tensor): input tokens with [B, H, W, C].
-        window_size (int): window size.
 
     Returns:
         windows: windows after partition with [B * num_windows, window_size, window_size, C].
@@ -42,7 +43,6 @@ def window_unpartition(windows, window_size, pad_hw, hw):
     Window unpartition into original sequences and removing padding.
     Args:
         x (tensor): input tokens with [B * num_windows, window_size, window_size, C].
-        window_size (int): window size.
         pad_hw (Tuple): padded height and width (Hp, Wp).
         hw (Tuple): original height and width (H, W) before padding.
 
@@ -118,9 +118,9 @@ def add_decomposed_rel_pos(attn, q, rel_pos_h, rel_pos_w, q_size, k_size):
     rel_h = torch.einsum("bhwc,hkc->bhwk", r_q, Rh)
     rel_w = torch.einsum("bhwc,wkc->bhwk", r_q, Rw)
 
-    attn = (
-        attn.view(B, q_h, q_w, k_h, k_w) + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
-    ).view(B, q_h * q_w, k_h * k_w)
+    attn = (attn.view(B, q_h, q_w, k_h, k_w) + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]).view(
+        B, q_h * q_w, k_h * k_w
+    )
 
     return attn
 
@@ -162,9 +162,7 @@ class PatchEmbed(nn.Module):
     Image to Patch Embedding.
     """
 
-    def __init__(
-        self, kernel_size=(16, 16), stride=(16, 16), padding=(0, 0), in_chans=3, embed_dim=768
-    ):
+    def __init__(self, kernel_size=(16, 16), stride=(16, 16), padding=(0, 0), in_chans=3, embed_dim=768):
         """
         Args:
             kernel_size (Tuple): kernel size of the projection layer.
@@ -175,9 +173,7 @@ class PatchEmbed(nn.Module):
         """
         super().__init__()
 
-        self.proj = nn.Conv2d(
-            in_chans, embed_dim, kernel_size=kernel_size, stride=stride, padding=padding
-        )
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=kernel_size, stride=stride, padding=padding)
 
     def forward(self, x):
         x = self.proj(x)

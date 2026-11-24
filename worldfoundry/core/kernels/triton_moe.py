@@ -19,7 +19,6 @@ import triton.language as tl
 
 from worldfoundry.core.kernels.capabilities import triton_tensor_eligible
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Workspace init / pack — atomic counts so experts do not share a token twice
 # ──────────────────────────────────────────────────────────────────────────
@@ -65,7 +64,6 @@ def _moe_pack_selected_kernel(
     slots = tl.arange(0, BLOCK_K)
     mask = slots < TOPK
     experts = tl.load(selected_ptr + row * TOPK + slots, mask=mask, other=0).to(tl.int32)
-    routes = tl.load(route_ptr + row * TOPK + slots, mask=mask, other=0.0).to(tl.float32)
     pos = tl.atomic_add(counts_ptr + experts, 1, sem="relaxed", mask=mask)
     store_mask = mask & (pos < MAX_ROUTES)
     tl.store(rows_ptr + experts * MAX_ROUTES + pos, row, mask=store_mask)
@@ -86,7 +84,7 @@ def _moe_gate_up_grouped_kernel(
     D: tl.constexpr,
     E: tl.constexpr,
     TOPK: tl.constexpr,
-    I: tl.constexpr,
+    I: tl.constexpr,  # noqa: E741  # I is the intermediate size in the T/D/E/I shape notation
     MAX_ROUTES: tl.constexpr,
     BLOCK_M: tl.constexpr,
     BLOCK_I: tl.constexpr,
@@ -154,7 +152,7 @@ def _moe_down_grouped_kernel(
     D: tl.constexpr,
     E: tl.constexpr,
     TOPK: tl.constexpr,
-    I: tl.constexpr,
+    I: tl.constexpr,  # noqa: E741  # I is the intermediate size in the T/D/E/I shape notation
     MAX_ROUTES: tl.constexpr,
     BLOCK_M: tl.constexpr,
     BLOCK_D: tl.constexpr,
@@ -238,7 +236,7 @@ def routed_swiglu_moe_triton(
         raise ValueError("routing tensors and hidden_states must contain the same number of tokens")
 
     T, D = hidden_states.shape
-    E, I, weight_d = gate_weight.shape
+    E, I, weight_d = gate_weight.shape  # noqa: E741  # I is the intermediate size in the T/D/E/I shape notation
     top_k = selected_experts.shape[1]
     if weight_d != D or up_weight.shape != gate_weight.shape or down_weight.shape != (E, D, I):
         raise ValueError(
@@ -297,9 +295,7 @@ def routed_swiglu_moe_triton(
         BLOCK_K=triton.next_power_of_2(top_k),
         num_warps=1,
     )
-    _moe_gate_up_grouped_kernel[
-        (E, triton.cdiv(max_routes, 16), triton.cdiv(I, 32))
-    ](
+    _moe_gate_up_grouped_kernel[(E, triton.cdiv(max_routes, 16), triton.cdiv(I, 32))](
         hidden_states,
         gate_weight,
         up_weight,
@@ -325,9 +321,7 @@ def routed_swiglu_moe_triton(
         BLOCK=1024,
         num_warps=4,
     )
-    _moe_down_grouped_kernel[
-        (E, triton.cdiv(max_routes, 16), triton.cdiv(D, 64))
-    ](
+    _moe_down_grouped_kernel[(E, triton.cdiv(max_routes, 16), triton.cdiv(D, 64))](
         inter,
         down_weight,
         counts,

@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> moge -> adapter.py functionality."""
-
 import torch
 
 try:
@@ -39,11 +37,6 @@ class MogeModel(DepthEstimationModel):
     """https://github.com/microsoft/MoGe"""
 
     def __init__(self) -> None:
-        """Init.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         if MoGeModel is None:
             raise RuntimeError(
@@ -54,22 +47,9 @@ class MogeModel(DepthEstimationModel):
 
     @property
     def depth_type(self) -> DepthType:
-        """Depth type.
-
-        Returns:
-            The return value.
-        """
         return DepthType.MODEL_METRIC_DEPTH
 
     def estimate(self, src: DepthEstimationInput) -> DepthEstimationResult:
-        """Estimate.
-
-        Args:
-            src: The src.
-
-        Returns:
-            The return value.
-        """
         rgb: torch.Tensor = unpack_optional(src.rgb)
         assert rgb.dtype == torch.float32, "Input image should be float32"
         assert src.camera_type == CameraType.PINHOLE, "MoGe only supports pinhole cameras"

@@ -1,17 +1,16 @@
-from collections import defaultdict, namedtuple
 import math
+from collections import defaultdict, namedtuple
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pygame
 import torch
 from torch import Tensor
 
-from agent import Agent
-from eval_inputs import Dataset, Episode
-from game.keymap import ActionNames, Keymap
-from envs import WorldModelEnv
-
+from worldfoundry.synthesis.visual_generation.diamond.agent import Agent
+from worldfoundry.synthesis.visual_generation.diamond.envs import WorldModelEnv
+from worldfoundry.synthesis.visual_generation.diamond.eval_inputs import Dataset, Episode
+from worldfoundry.synthesis.visual_generation.diamond.game.keymap import ActionNames, Keymap
 
 NamedEnv = namedtuple("NamedEnv", "name env")
 OneStepData = namedtuple("OneStepData", "obs act rew end trunc")
@@ -21,7 +20,7 @@ class PlayEnv:
     def __init__(
         self,
         agent: Agent,
-        envs: List[NamedEnv],
+        envs: list[NamedEnv],
         action_names: ActionNames,
         keymap: Keymap,
         recording_mode: bool,
@@ -102,7 +101,7 @@ class PlayEnv:
         self.rec_dataset = Dataset(dir)
         self.rec_dataset.load_from_default_path()
 
-    def reset(self) -> Tuple[Tensor, None]:
+    def reset(self) -> tuple[Tensor, None]:
         self.obs, _ = self.env.reset()
         self.t, self.return_, self.hx_cx = 0, 0, None
         if self.recording_mode:
@@ -110,7 +109,7 @@ class PlayEnv:
         return self.obs, None
 
     @torch.no_grad()
-    def step(self, act: int) -> Tuple[Tensor, Tensor, Tensor, Tensor, Dict[str, Any]]:
+    def step(self, act: int) -> tuple[Tensor, Tensor, Tensor, Tensor, dict[str, Any]]:
         if self.is_human_player:
             act = torch.tensor([act], device=self.agent.device)
         else:
@@ -155,7 +154,7 @@ class PlayEnv:
             if self.store_denoising_trajectory and "denoising_trajectory" in env_info:
                 self.buffer["info"]["denoising_trajectory"].append(env_info["denoising_trajectory"])
             if self.store_original_obs and "original_obs" in env_info:
-                original_obs = (torch.tensor(env_info["original_obs"][0]).permute(2, 0, 1).unsqueeze(0).contiguous())
+                original_obs = torch.tensor(env_info["original_obs"][0]).permute(2, 0, 1).unsqueeze(0).contiguous()
                 self.buffer["info"]["original_obs"].append(original_obs)
             if end or trunc:
                 ep_dict = {k: torch.cat(v, dim=0) for k, v in self.buffer.items() if k != "info"}

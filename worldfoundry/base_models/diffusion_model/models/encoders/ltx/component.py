@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from functools import lru_cache
+from dataclasses import replace
+from functools import lru_cache, partial
 
 import torch
 from transformers import AutoModel, Gemma3Config, Gemma3ForConditionalGeneration
@@ -26,7 +27,7 @@ from ....loaders import (
     NativeModuleLoader,
     safetensors_json_metadata,
 )
-from ....optimizations import RuntimePolicy
+from ....optimizations import OffloadMode, OffloadPolicy, QuantizationPolicy, RuntimePolicy
 from .embeddings_connector import (
     AudioEmbeddings1DConnectorConfigurator,
     Embeddings1DConnector,
@@ -48,12 +49,21 @@ class LTXGemmaModule(torch.nn.Module):
 class LTXEmbeddingProcessorModule(torch.nn.Module):
     """Checkpoint-compatible LTX feature projection and connector stack."""
 
-    def __init__(self, checkpoint_config: Mapping[str, object]) -> None:
+    def __init__(
+        self,
+        checkpoint_config: Mapping[str, object],
+        *,
+        gemma_config: Mapping[str, object] | None = None,
+    ) -> None:
         super().__init__()
         config = dict(checkpoint_config)
         transformer = dict(config.get("transformer", {}))
         hidden_size = int(transformer.get("caption_channels", 3840))
         hidden_layers = int(transformer.get("caption_hidden_layers", 48)) + 1
+        if gemma_config is not None:
+            text_config = gemma_config["text_config"]
+            hidden_size = int(text_config["hidden_size"])
+            hidden_layers = int(text_config["num_hidden_layers"]) + 1
         flat_dim = hidden_size * hidden_layers
         if transformer.get("caption_proj_before_connector", False):
             video_dim = int(transformer["num_attention_heads"]) * int(transformer["attention_head_dim"])
@@ -70,8 +80,16 @@ class LTXEmbeddingProcessorModule(torch.nn.Module):
             )
         self.processor = EmbeddingsProcessor(
             feature_extractor=feature_extractor,
-            video_connector=Embeddings1DConnectorConfigurator.from_config(config),
-            audio_connector=AudioEmbeddings1DConnectorConfigurator.from_config(config),
+            video_connector=(
+                Embeddings1DConnectorConfigurator.from_config(config)
+                if gemma_config is None
+                else Embeddings1DConnectorConfigurator.from_metadata({"config": config})
+            ),
+            audio_connector=(
+                AudioEmbeddings1DConnectorConfigurator.from_config(config)
+                if gemma_config is None
+                else AudioEmbeddings1DConnectorConfigurator.from_metadata({"config": config})
+            ),
         )
 
 
@@ -132,8 +150,17 @@ def _gemma_vision_has_wrapper() -> bool:
     return hasattr(vision, "vision_model")
 
 
-def convert_ltx_gemma_state_dict(state_dict: Mapping[str, object]) -> Mapping[str, object]:
+def convert_ltx_gemma_state_dict(
+    state_dict: Mapping[str, object],
+    *,
+    lazy: bool = False,
+) -> Mapping[str, object]:
     """Map official Gemma weights to the installed Transformers module layout."""
+    if lazy:
+        from worldfoundry.core.model_loading.checkpoints.transforms import TransformedStateDict
+
+        keys = convert_ltx_gemma_state_dict({key: key for key in state_dict})
+        return TransformedStateDict(state_dict, keys)
 
     converted: dict[str, object] = {}
     for key in state_dict:
@@ -157,7 +184,14 @@ def convert_ltx_gemma_state_dict(state_dict: Mapping[str, object]) -> Mapping[st
 
 def convert_ltx_embedding_processor_state_dict(
     state_dict: Mapping[str, object],
+    *,
+    lazy: bool = False,
 ) -> Mapping[str, object]:
+    if lazy:
+        from worldfoundry.core.model_loading.checkpoints.transforms import TransformedStateDict
+
+        keys = convert_ltx_embedding_processor_state_dict({key: key for key in state_dict})
+        return TransformedStateDict(state_dict, keys)
     prefixes = {
         "text_embedding_projection.aggregate_embed.": "processor.feature_extractor.aggregate_embed.",
         "text_embedding_projection.video_aggregate_embed.": ("processor.feature_extractor.video_aggregate_embed."),
@@ -323,13 +357,14 @@ class LTXPromptConditioner:
 
 
 def build_ltx_prompt_conditioner(context: ComponentBuildContext) -> LTXPromptConditioner:
+    policy = replace(context.policy, quantization=QuantizationPolicy())
     gemma = load_ltx_gemma_module(
         context.require_checkpoint("gemma"),
-        context.policy,
+        policy,
     )
     processor = load_ltx_embedding_processor_module(
         context.require_checkpoint("weights"),
-        context.policy,
+        policy,
     )
     tokenizer_checkpoint = NativeCheckpointResolver().materialize(context.require_checkpoint("tokenizer"))
     tokenizer_root = tokenizer_checkpoint.root / "tokenizer"
@@ -361,3 +396,241 @@ __all__ = [
     "load_ltx_embedding_processor_module",
     "load_ltx_gemma_module",
 ]
+
+
+class LTXSplitGemmaModule(torch.nn.Module):
+    """Construct the canonical Gemma encoder with local assets and derived buffers."""
+
+    def __init__(self, assets: object, execution_device: torch.device) -> None:
+        super().__init__()
+        from transformers import AutoModelForImageTextToText
+
+        from .gemma import (
+            LTXGemmaTextEncoder,
+            build_gemma_hf_config,
+            build_gemma_processor,
+            build_gemma_tokenizer,
+            populate_gemma3_buffers,
+            populate_gemma4_dense_buffers,
+            populate_gemma4_unified_buffers,
+        )
+
+        config = build_gemma_hf_config(assets)
+        with torch.device("meta"):
+            model = AutoModelForImageTextToText.from_config(config)
+        tokenizer = build_gemma_tokenizer(assets)
+        self.encoder = LTXGemmaTextEncoder(
+            model=model,
+            tokenizer=tokenizer,
+            processor=build_gemma_processor(assets, tokenizer.tokenizer),
+            execution_device=execution_device,
+        )
+        populate = {
+            "gemma3": populate_gemma3_buffers,
+            "gemma4": populate_gemma4_dense_buffers,
+            "gemma4_unified": populate_gemma4_unified_buffers,
+        }[config.model_type]
+        populate(self.encoder)
+
+
+def _convert_split_gemma_state_dict(
+    state_dict: Mapping[str, torch.Tensor],
+    *,
+    model_type: str,
+) -> Mapping[str, torch.Tensor]:
+    from worldfoundry.core.model_loading.checkpoints.transforms import TransformedStateDict
+
+    from .gemma import convert_gemma4_state_dict
+
+    converted = (
+        convert_ltx_gemma_state_dict(state_dict, lazy=True)
+        if model_type == "gemma3"
+        else convert_gemma4_state_dict(state_dict, model_type=model_type)
+    )
+    return TransformedStateDict(converted, {f"encoder.{key}": key for key in converted})
+
+
+def _load_split_gemma(checkpoint: CheckpointSpec, policy: RuntimePolicy) -> tuple[torch.nn.Module, object]:
+    from worldfoundry.core.vram import AutoWrappedModule, AutoWrappedNonRecurseModule
+
+    from .gemma import GemmaAssets
+
+    materialized = NativeCheckpointResolver().materialize(checkpoint)
+    source = materialized.paths[0] if len(materialized.paths) == 1 else materialized.root
+    assets = GemmaAssets.load(source)
+    module_map = _ltx_text_module_map()
+    config_type = str(assets.config_dict["model_type"])
+    if config_type == "gemma4_unified":
+        try:
+            from transformers.models.gemma4_unified.modeling_gemma4_unified import (
+                Gemma4UnifiedRMSNorm,
+                Gemma4UnifiedVisionEmbedder,
+            )
+        except ModuleNotFoundError:
+            from .gemma4_unified import load_native_gemma4_unified_encoder
+
+            return load_native_gemma4_unified_encoder(
+                source,
+                device=policy.device,
+                dtype=policy.dtype,
+                offload_to_cpu=policy.offload.mode is not OffloadMode.NONE,
+            )
+
+        module_map[Gemma4UnifiedRMSNorm] = AutoWrappedModule
+        module_map[Gemma4UnifiedVisionEmbedder] = AutoWrappedNonRecurseModule
+    elif config_type == "gemma4":
+        from transformers.models.gemma4.modeling_gemma4 import (
+            Gemma4AudioAttention,
+            Gemma4RMSNorm,
+            Gemma4VisionPatchEmbedder,
+        )
+
+        module_map[Gemma4RMSNorm] = AutoWrappedModule
+        module_map[Gemma4VisionPatchEmbedder] = AutoWrappedNonRecurseModule
+        module_map[Gemma4AudioAttention] = AutoWrappedNonRecurseModule
+    module = NativeModuleLoader().load(
+        ModuleLoadSpec(
+            module_class=LTXSplitGemmaModule,
+            config={"assets": assets, "execution_device": policy.device},
+            state_dict_converter=partial(_convert_split_gemma_state_dict, model_type=config_type),
+            vram_module_map=module_map,
+            layer_container="encoder.model.model.language_model.layers",
+            lazy_state_dict=True,
+            buffer_aware_offload=True,
+        ),
+        CheckpointSpec(source=assets.weight_paths),
+        policy,
+    )
+    if not isinstance(module, LTXSplitGemmaModule):
+        raise TypeError("LTX split Gemma construction returned an unexpected module")
+    return module, assets
+
+
+class LTXGemmaPromptConditioner:
+    """Gemma-4 split encoder, projection/connectors and optional duration prediction."""
+
+    def __init__(
+        self,
+        gemma: torch.nn.Module,
+        processor: LTXEmbeddingProcessorModule,
+        *,
+        duration_head: torch.nn.Module | None = None,
+        enhancer: torch.nn.Module | None = None,
+        supports_generated_keyframes: bool = False,
+    ) -> None:
+        self.gemma = gemma
+        self.processor = processor
+        self.duration_head = duration_head
+        self.enhancer = enhancer
+        self.supports_generated_keyframes = supports_generated_keyframes
+
+    def encode(self, request: DiffusionRequest, *, device: torch.device, dtype: torch.dtype) -> Conditioning:
+        if request.inputs.get("num_generated_keyframes", 0) and not self.supports_generated_keyframes:
+            raise ValueError("LTX generated keyframes require a transformer trained with keyframe position embeddings")
+        if request.inputs.get("auto_duration") is not None and self.duration_head is None:
+            raise ValueError("LTX auto_duration requires the duration_head checkpoint")
+        prompts = list(request.prompts)
+        if request.inputs.get("enhance_prompt", False):
+            if self.enhancer is None:
+                raise ValueError("LTX prompt enhancement requires a local instruct Gemma checkpoint")
+            from ...initializers.ltx import enhance_ltx_prompt
+
+            prompts[0] = enhance_ltx_prompt(self.enhancer.encoder, prompts[0], request.inputs.get("images", ()))
+        encoded = [
+            self.processor.processor.process_hidden_states(hidden, mask)
+            for hidden, mask in self.gemma.encoder.encode(prompts)
+        ]
+        return Conditioning(
+            positive={
+                "video_context": torch.cat([value.video_encoding for value in encoded]).to(device=device, dtype=dtype),
+                "audio_context": torch.cat([value.audio_encoding for value in encoded]).to(device=device, dtype=dtype),
+            }
+        )
+
+    def resolve_request(self, request: DiffusionRequest, conditioning: Conditioning) -> DiffusionRequest:
+        bounds = request.inputs.get("auto_duration")
+        if bounds is None:
+            return request
+        fps = float(request.inputs.get("frame_rate", 24.0))
+        seconds = self.duration_head(conditioning.positive["video_context"], conditioning.positive["audio_context"])
+        if seconds.shape != (1,):
+            raise ValueError("LTX auto_duration supports a single prompt")
+        minimum, maximum = (round(float(value) * fps) for value in bounds)
+        frames = max(minimum, min(round(seconds.item() * fps), maximum))
+        frames = ((frames - 1) // 8) * 8 + 1
+        if frames < minimum:
+            frames = min(-(-(minimum - 1) // 8) * 8 + 1, maximum)
+        return replace(request, num_frames=frames)
+
+
+class LTXDurationHeadModule(torch.nn.Module):
+    """Native-loader wrapper for the connector-conditioned duration head."""
+
+    def __init__(self, checkpoint_config: Mapping[str, object]) -> None:
+        super().__init__()
+        from ...networks.ltx.duration_head import DurationHeadConfigurator
+
+        self.head = DurationHeadConfigurator.from_config(dict(checkpoint_config))
+
+    def forward(self, video: torch.Tensor, audio: torch.Tensor) -> torch.Tensor:
+        return self.head(video, audio)
+
+
+def convert_ltx_duration_head_state_dict(state_dict: Mapping[str, object]) -> Mapping[str, object]:
+    return {
+        f"head.{key.removeprefix('duration_head.')}": state_dict[key]
+        for key in state_dict
+        if key.startswith("duration_head.")
+    }
+
+
+def build_ltx_gemma_prompt_conditioner(context: ComponentBuildContext) -> LTXGemmaPromptConditioner:
+    """Load split text/projector weights, transformer connectors and duration head."""
+    # Quantization is a DiT policy; text and codec components retain checkpoint precision.
+    policy = replace(context.policy, quantization=QuantizationPolicy())
+    text_checkpoint = context.require_checkpoint("text_encoder")
+    gemma, assets = _load_split_gemma(text_checkpoint, policy)
+    if assets.config_dict["model_type"] not in {"gemma3", "gemma4_unified"}:
+        raise ValueError("LTX encoding requires Gemma-3 or Gemma-4 unified")
+    transformer = NativeCheckpointResolver().materialize(context.require_checkpoint("weights"))
+    config = safetensors_json_metadata(transformer)
+    processor = NativeModuleLoader().load(
+        ModuleLoadSpec(
+            module_class=LTXEmbeddingProcessorModule,
+            config={"checkpoint_config": config, "gemma_config": assets.config_dict},
+            state_dict_converter=partial(convert_ltx_embedding_processor_state_dict, lazy=True),
+            vram_module_map=_ltx_text_module_map(),
+            layer_container="processor.video_connector.transformer_1d_blocks",
+            lazy_state_dict=True,
+            buffer_aware_offload=True,
+        ),
+        CheckpointSpec(source=tuple(str(path) for path in (*transformer.paths, *assets.weight_paths))),
+        policy,
+    )
+    duration = (
+        context.checkpoint("duration_head") if context.component_options.get("load_duration_head", True) else None
+    )
+    head = (
+        None
+        if duration is None
+        else NativeModuleLoader().load(
+            ModuleLoadSpec(
+                module_class=LTXDurationHeadModule,
+                config_resolver=lambda checkpoint: {"checkpoint_config": safetensors_json_metadata(checkpoint)},
+                state_dict_converter=convert_ltx_duration_head_state_dict,
+            ),
+            duration,
+            replace(policy, offload=OffloadPolicy()),
+        )
+    )
+    enhancer_checkpoint = context.component_options.get("prompt_enhancer_checkpoint")
+    if enhancer_checkpoint is not None and not isinstance(enhancer_checkpoint, CheckpointSpec):
+        raise TypeError("prompt_enhancer_checkpoint must be an explicit CheckpointSpec")
+    enhancer = None if enhancer_checkpoint is None else _load_split_gemma(enhancer_checkpoint, policy)[0]
+    return LTXGemmaPromptConditioner(
+        gemma,
+        processor,
+        duration_head=head,
+        enhancer=enhancer,
+        supports_generated_keyframes=bool(config.get("transformer", {}).get("use_keyframes_abs_pos_embedding", False)),
+    )

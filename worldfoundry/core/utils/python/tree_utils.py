@@ -17,7 +17,8 @@ Public surface
     :func:`broadcast_structures`.
 """
 
-from typing import Any, Iterable, List, Tuple, TypeVar
+from collections.abc import Iterable
+from typing import Any, TypeVar
 
 import numpy as np
 
@@ -27,7 +28,7 @@ from worldfoundry.core.utils.python.functional_utils import (  # noqa: F401 - co
 )
 
 try:
-    import tree as _tree
+    _tree = __import__("tree")
 except ImportError as exc:
     _tree = None
     # Cache a diagnostic cause without retaining the importing caller's frames.
@@ -50,7 +51,7 @@ def _require_tree():
     return _tree
 
 
-def tree_value_at_path(obj, paths: Tuple):
+def tree_value_at_path(obj, paths: tuple):
     """Index ``obj`` along ``paths``; wrap index errors with the full path.
 
     Failure: :exc:`ValueError` naming the path and object so a bad nested
@@ -64,7 +65,7 @@ def tree_value_at_path(obj, paths: Tuple):
         raise ValueError(f"{e}\n\n-- Incorrect nested path {paths} for object: {obj}.") from e
 
 
-def tree_assign_at_path(obj, paths: Tuple, value):
+def tree_assign_at_path(obj, paths: tuple, value):
     """Write ``value`` at ``paths`` without copying ancestor containers.
 
     Empty ``paths`` is a no-op (there is no leaf to replace). Failure:
@@ -116,7 +117,7 @@ def fast_map_structure(func, *structure):
     """Faster map_structure implementation which skips some error checking."""
     tree = _require_tree()
     flat_structure = (tree.flatten(s) for s in structure)
-    entries = zip(*flat_structure)
+    entries = zip(*flat_structure, strict=False)
     # Arbitrarily choose one of the structures of the original sequence (the last)
     # to match the structure for the flattened sequence.
     return tree.unflatten_as(structure[-1], [func(*x) for x in entries])
@@ -169,8 +170,8 @@ def stack_sequence_fields(sequence: Iterable[ElementType]) -> ElementType:
     Raises:
       ValueError: If `sequence` is an empty sequence.
     """
-    # Handle empty input sequences.
-    if not sequence:
+    # Leave iterables unconsumed; only falsy containers trigger the empty-input guard.
+    if not sequence:  # ty: ignore[truthiness-test-of-iterable]
         raise ValueError("Input sequence must not be empty")
 
     # Default to asarray when arrays don't have the same shape to be compatible
@@ -181,7 +182,7 @@ def stack_sequence_fields(sequence: Iterable[ElementType]) -> ElementType:
         return fast_map_structure(lambda *values: np.asarray(values), *sequence)
 
 
-def unstack_sequence_fields(struct: ElementType, batch_size: int) -> List[ElementType]:
+def unstack_sequence_fields(struct: ElementType, batch_size: int) -> list[ElementType]:
     """Converts a struct of batched arrays to a list of structs.
 
     This is effectively the inverse of `stack_sequence_fields`.

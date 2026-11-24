@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 
 @dataclass
@@ -39,7 +40,7 @@ class InternVLAA1Config:
         defaults: Mapping[str, Any],
         dtype: str,
         num_inference_steps: int | None = None,
-    ) -> "InternVLAA1Config":
+    ) -> InternVLAA1Config:
         values = {**dict(defaults), **dict(payload)}
         required = (
             "qwen3_vl_variant",
@@ -68,9 +69,7 @@ class InternVLAA1Config:
             max_state_dim=int(values["max_state_dim"]),
             max_action_dim=int(values["max_action_dim"]),
             num_inference_steps=int(
-                num_inference_steps
-                if num_inference_steps is not None
-                else values["num_inference_steps"]
+                num_inference_steps if num_inference_steps is not None else values["num_inference_steps"]
             ),
             time_sampling_beta_alpha=float(values["time_sampling_beta_alpha"]),
             time_sampling_beta_beta=float(values["time_sampling_beta_beta"]),

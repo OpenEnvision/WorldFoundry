@@ -1,9 +1,8 @@
-"""Module for base_models -> perception_core -> segment -> sam3 -> model -> sam3_multiplex_detector_utils.py functionality."""
-
 import logging
 
 import numpy as np
 import torch
+
 from worldfoundry.base_models.perception_core.segment.sam3 import perflib
 
 try:
@@ -15,8 +14,8 @@ try:
 except ImportError:
     GENERIC_NMS_AVAILABLE = False
 
-from worldfoundry.base_models.perception_core.segment.sam3.perflib.masks_ops import mask_iou
 from worldfoundry.base_models.perception_core.segment.sam3.masks_ops import mask_iom
+from worldfoundry.base_models.perception_core.segment.sam3.perflib.masks_ops import mask_iou
 
 
 def nms_masks(
@@ -49,13 +48,9 @@ def nms_masks(
             fullgraph=True,
             # dynamic=False,
         )
-        return compiled_fn(
-            pred_probs, pred_masks, prob_threshold, iou_threshold, nms_use_iom
-        )
+        return compiled_fn(pred_probs, pred_masks, prob_threshold, iou_threshold, nms_use_iom)
     else:
-        return _nms_masks_core(
-            pred_probs, pred_masks, prob_threshold, iou_threshold, nms_use_iom
-        )
+        return _nms_masks_core(pred_probs, pred_masks, prob_threshold, iou_threshold, nms_use_iom)
 
 
 def _nms_masks_core(
@@ -78,14 +73,10 @@ def _nms_masks_core(
     is_batched = pred_probs.dim() == 2
 
     if is_batched:
-        return _nms_masks_core_batched(
-            pred_probs, pred_masks, prob_threshold, iou_threshold, nms_use_iom
-        )
+        return _nms_masks_core_batched(pred_probs, pred_masks, prob_threshold, iou_threshold, nms_use_iom)
     else:
         # Single-frame input: use original logic
-        return _nms_masks_core_single(
-            pred_probs, pred_masks, prob_threshold, iou_threshold, nms_use_iom
-        )
+        return _nms_masks_core_single(pred_probs, pred_masks, prob_threshold, iou_threshold, nms_use_iom)
 
 
 def _nms_masks_core_batched(
@@ -108,14 +99,14 @@ def _nms_masks_core_batched(
       - keep: (B, num_det) bool Tensor
     """
     B, num_det, H, W = pred_masks.shape
-    device = pred_masks.device
+    _device = pred_masks.device
 
     is_valid = pred_probs > prob_threshold  # (B, num_det)
     masks_binary = pred_masks > 0  # (B, num_det, H, W)
 
     if perflib.is_enabled:
         # Compute batched pairwise IoU/IoM
-        if nms_use_iom:
+        if nms_use_iom:  # noqa: SIM108 - Branches carry per-case comments.
             overlaps = _batched_mask_iom(masks_binary)  # (B, num_det, num_det)
         else:
             overlaps = _batched_mask_iou(masks_binary)  # (B, num_det, num_det)
@@ -123,7 +114,7 @@ def _nms_masks_core_batched(
         return keep
 
     # Non-perflib path: compute batched IoU/IoM
-    if nms_use_iom:
+    if nms_use_iom:  # noqa: SIM108 - Branches carry per-case comments.
         overlaps = _batched_mask_iom(masks_binary)  # (B, num_det, num_det)
     else:
         overlaps = _batched_mask_iou(masks_binary)  # (B, num_det, num_det)
@@ -226,9 +217,7 @@ def _batched_generic_nms_mask(
     for i in range(N):
         # For each position i, suppress later detections with high overlap
         # Only suppress if current detection is kept
-        suppress = (
-            threshold_mask[:, i, :] & triu[i].unsqueeze(0) & keep[:, i].unsqueeze(1)
-        )
+        suppress = threshold_mask[:, i, :] & triu[i].unsqueeze(0) & keep[:, i].unsqueeze(1)
         keep = keep & ~suppress
 
     # Return keep mask in original order: (B, N)
@@ -260,7 +249,7 @@ def _nms_masks_core_single(
 
     if perflib.is_enabled:
         masks_binary = pred_masks > 0  # (num_det, H_mask, W_mask)
-        if nms_use_iom:
+        if nms_use_iom:  # noqa: SIM108 - Branches carry per-case comments.
             ious = perf_mask_iom(masks_binary, masks_binary)  # (num_det, num_det)
         else:
             ious = perf_mask_iou(masks_binary, masks_binary)  # (num_det, num_det)
@@ -272,7 +261,7 @@ def _nms_masks_core_single(
     if probs.numel() == 0:
         return is_valid  # no valid detection, return empty keep mask
 
-    if nms_use_iom:
+    if nms_use_iom:  # noqa: SIM108 - Branches carry per-case comments.
         overlaps = mask_iom(masks_binary, masks_binary)  # (num_valid, num_valid)
     else:
         overlaps = mask_iou(masks_binary, masks_binary)  # (num_valid, num_valid)
@@ -292,9 +281,7 @@ def _nms_masks_core_single(
     return keep
 
 
-def generic_nms_cpu(
-    ious: torch.Tensor, scores: torch.Tensor, iou_threshold=0.5
-) -> torch.Tensor:
+def generic_nms_cpu(ious: torch.Tensor, scores: torch.Tensor, iou_threshold=0.5) -> torch.Tensor:
     """
     A generic version of `torchvision.ops.nms` that takes a pairwise IoU matrix. (CPU implementation
     based on https://github.com/jwyang/faster-rcnn.pytorch/blob/master/lib/model/nms/nms_cpu.py)
@@ -365,15 +352,6 @@ def perf_mask_iou(pred_masks: torch.Tensor, gt_masks: torch.Tensor) -> torch.Ten
 
 
 def perf_mask_iom(pred_masks: torch.Tensor, gt_masks: torch.Tensor) -> torch.Tensor:
-    """Perf mask iom.
-
-    Args:
-        pred_masks: The pred masks.
-        gt_masks: The gt masks.
-
-    Returns:
-        The return value.
-    """
     assert pred_masks.dtype == gt_masks.dtype == torch.bool
     from worldfoundry.base_models.perception_core.segment.sam3.perflib.iou import pairwise_iom
 

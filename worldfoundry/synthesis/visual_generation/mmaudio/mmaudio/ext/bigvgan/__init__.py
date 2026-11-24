@@ -1,1 +1,1 @@
-from .bigvgan import BigVGAN
+from .bigvgan import BigVGAN as BigVGAN

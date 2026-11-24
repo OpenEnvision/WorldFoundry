@@ -9,18 +9,18 @@ WorldFoundry exposes two related extension boundaries. `WorldModelRunner` is the
 
 The public manifest is a compact DTO for model identity and capability. It is not the full catalog YAML and it is not runtime proof; it carries the fields that runner resolution and evaluation need after catalog loading.
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.WorldModelManifest" />
+<PythonApiReference symbol="worldfoundry.evals.api.WorldModelManifest" />
 
 ## `WorldModelConfig`
 
 `WorldModelConfig` is the construction payload passed to a runner. Put model-native knobs in `parameters`, execution placement or endpoint settings in `runtime`, and preserve the resolved public manifest when one is available.
 
 ```python
-from worldfoundry.evaluation.api import WorldModelConfig
+from worldfoundry.evals.api import WorldModelConfig
 
 config = WorldModelConfig(
     model_id="matrix-game-2",
-    runner="worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+    runner="worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner",
     variant="matrix-game-2-universal-action-validation",
     parameters={"num_output_frames": 15, "fps": 12},
     runtime={"device": "cuda:0"},
@@ -28,16 +28,16 @@ config = WorldModelConfig(
 )
 ```
 
-The target above is the current Matrix-Game 2 catalog binding. Runtime bindings can evolve, so production code should still resolve the current model manifest rather than hard-coding a documentation example.
+The runner target and variant above match the Matrix-Game 2 catalog. Production code should resolve them from the model manifest instead of hard-coding them.
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.WorldModelConfig" />
+<PythonApiReference symbol="worldfoundry.evals.api.WorldModelConfig" />
 
 ## `WorldModelRunner`
 
 This runtime-checkable protocol is intentionally small. A local checkpoint class, hosted API client, simulator policy, or subprocess bridge can all satisfy it without sharing an inheritance hierarchy.
 
 ```python
-from worldfoundry.evaluation.api import GenerationResult, WorldModelRunner
+from worldfoundry.evals.api import GenerationResult, WorldModelRunner
 
 class ExistingArtifactRunner:
     model_id = "existing-artifact"
@@ -66,7 +66,7 @@ assert isinstance(ExistingArtifactRunner(), WorldModelRunner)
 
 The example returns explicit failures to demonstrate the contract; a real runner must materialize artifacts and populate them in each successful result.
 
-<PythonApiReference symbol="worldfoundry.evaluation.api.WorldModelRunner" />
+<PythonApiReference symbol="worldfoundry.evals.api.WorldModelRunner" />
 
 ## `PipelineABC`
 

@@ -11,18 +11,17 @@ import pytest
 
 pytest.importorskip("torch")
 
-from worldfoundry.evaluation.api import GenerationRequest
-from worldfoundry.evaluation.models import resolve_model_zoo_runner
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
+from worldfoundry.evals.api import GenerationRequest
+from worldfoundry.evals.models.runners.resolver import resolve_model_zoo_runner
 from worldfoundry.pipelines.longcat_video.pipeline_longcat_video import LongCatVideoPipeline
-from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime import video_io
-from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime import tokenizer_loading
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime import tokenizer_loading, video_io
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.pipeline_longcat_video import (
     LongCatVideoPipeline as RuntimeLongCatVideoPipeline,
 )
 from worldfoundry.synthesis.visual_generation.longcat_video.worldfoundry_runtime import (
     LongCatVideoRuntime,
 )
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODEL_CATALOG_DIR = REPO_ROOT / "worldfoundry" / "data" / "models" / "catalog"
@@ -111,9 +110,7 @@ def test_longcat_inference_contract_honors_hfd_root(tmp_path: Path) -> None:
         text=True,
     )
 
-    assert json.loads(result.stdout)["primary"] == str(
-        hfd_root / "meituan-longcat--LongCat-Video"
-    )
+    assert json.loads(result.stdout)["primary"] == str(hfd_root / "meituan-longcat--LongCat-Video")
 
 
 def test_longcat_video_writer_falls_back_when_torchvision_pyav_is_incompatible(
@@ -167,37 +164,8 @@ def test_longcat_runner_fails_without_execute(tmp_path: Path) -> None:
     )
 
 
-def test_longcat_inference_inputs_live_in_data_test_cases() -> None:
-    runtime_root = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/longcat_video/longcat_video_runtime"
-    )
-    wrapper_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/longcat_video"
-    test_case_root = REPO_ROOT / "worldfoundry/data/test_cases"
-
-    assert (test_case_root / "dualcamctrl/demo_pic/route66.jpg").is_file()
-    assert (test_case_root / "longcat_video/motorcycle.mp4").is_file()
-    assert wrapper_root.is_dir()
-    assert not (wrapper_root / "LICENSE").exists()
-    assert not (wrapper_root / "run_demo_text_to_video.py").exists()
-    assert not (wrapper_root / "longcat_video").exists()
-    assert not (runtime_root / "assets").exists()
-    assert not (runtime_root / "girl.png").exists()
-    assert not (runtime_root / "motorcycle.mp4").exists()
-
-    image_inference = (runtime_root / "run_inference_image_to_video.py").read_text(encoding="utf-8")
-    video_inference = (runtime_root / "run_inference_video_continuation.py").read_text(encoding="utf-8")
-
-    assert '"data" / "test_cases"' in image_inference
-    assert '"dualcamctrl" / "demo_pic" / "route66.jpg"' in image_inference
-    assert '"data" / "test_cases" / "longcat_video"' in video_inference
-
-
 def test_longcat_runtime_keeps_only_catalog_supported_inference_scripts() -> None:
-    runtime_root = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/longcat_video/longcat_video_runtime"
-    )
+    runtime_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/longcat_video/longcat_video_runtime"
     removed = [
         "run_streamlit.py",
         "run_demo_interactive_video.py",
@@ -256,7 +224,7 @@ def test_longcat_t2v_cpu_offload_transitions_between_refine_stages() -> None:
     pipeline._t2v_cpu_offload = True
     pipeline.device = pytest.importorskip("torch").device("cuda:0")
     moves: list[tuple[str, str]] = []
-    pipeline._move_module = lambda name, device: moves.append((name, str(device)))
+    setattr(pipeline, "_move_module", lambda name, device: moves.append((name, str(device))))
 
     pipeline._transition_t2v_modules(
         activate="vae",

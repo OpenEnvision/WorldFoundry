@@ -79,15 +79,6 @@ type BenchmarkPageFile = {
 
 const data = pageData as BenchmarkPageFile;
 
-export const benchmarkPageEntries = data.pages;
-
-export const benchmarkLeaderboardStats = {
-  ingestedIds: data.leaderboardIngestedIds,
-  ingestedCount: data.leaderboardIngestedIds.length,
-  placeholderCount: data.leaderboardPlaceholderCount,
-  total: data.benchmarkCount,
-};
-
 export function getBenchmarkPageEntry(id: string): BenchmarkPageEntry | undefined {
   return data.pages[id];
 }

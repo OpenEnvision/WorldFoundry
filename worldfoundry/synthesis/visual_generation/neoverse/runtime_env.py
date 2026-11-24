@@ -1,17 +1,17 @@
 """Utilities for resolving NeoVerse model and checkpoint paths.
 
 This module provides functions to locate the project root, cache directories,
-and ensure the NeoVerse runtime environment is correctly set up. It also
+and NeoVerse runtime metadata. It also
 includes robust mechanisms for finding NeoVerse model directories,
 reconstructor checkpoints, and LoRA files, supporting both local paths
 and downloading from Hugging Face Hub.
 """
+
 from __future__ import annotations
 
 import os
-import sys
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
 
 DEFAULT_NEOVERSE_REPO = "Yuppie1204/NeoVerse"
 DEFAULT_NEOVERSE_LORA_NAME = "Wan21_T2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors"
@@ -74,29 +74,7 @@ def runtime_root() -> Path:
     return Path(__file__).resolve().parent / "neoverse_runtime"
 
 
-def ensure_neoverse_runtime() -> Path:
-    """Ensures the NeoVerse runtime directory is added to sys.path.
-
-    This makes sure that modules within the NeoVerse runtime directory
-    are discoverable by the Python interpreter. It adds the runtime root
-    to the beginning of `sys.path` to give it precedence,
-    removing it first if already present.
-
-    Returns:
-        Path: The absolute path to the NeoVerse runtime directory.
-    """
-    root = runtime_root().resolve()
-
-    # Ensure the runtime root is at the beginning of sys.path for module discovery.
-    for import_root in (root,):
-        root_str = str(import_root)
-        if root_str in sys.path:
-            sys.path.remove(root_str)
-        sys.path.insert(0, root_str)
-    return root
-
-
-def _iter_candidate_paths(source_value: Optional[str | os.PathLike]) -> Iterable[Path]:
+def _iter_candidate_paths(source_value: str | os.PathLike | None) -> Iterable[Path]:
     """Iterates through potential paths for a given source value.
 
     This function first checks if the source value directly refers to an
@@ -205,7 +183,7 @@ def _resolve_file_from_source(
     source_value: str | os.PathLike,
     *,
     expected_names: Sequence[str],
-    allow_patterns: Optional[Sequence[str]] = None,
+    allow_patterns: Sequence[str] | None = None,
 ) -> Path:
     """Resolves a specific file from a given source, which can be a local path or a Hugging Face repo ID.
 
@@ -243,9 +221,7 @@ def _resolve_file_from_source(
             matches.extend(sorted(candidate.glob(pattern)))
         if matches:
             return matches[0].resolve()
-        raise FileNotFoundError(
-            f"Unable to find any of {list(expected_names)} under {candidate}."
-        )
+        raise FileNotFoundError(f"Unable to find any of {list(expected_names)} under {candidate}.")
 
     # If local path doesn't exist, try downloading from Hugging Face Hub.
     snapshot_root = _download_snapshot(
@@ -262,12 +238,10 @@ def _resolve_file_from_source(
         matches.extend(sorted(snapshot_root.glob(pattern)))
     if matches:
         return matches[0].resolve()
-    raise FileNotFoundError(
-        f"Unable to find any of {list(expected_names)} in snapshot for {source_value}."
-    )
+    raise FileNotFoundError(f"Unable to find any of {list(expected_names)} in snapshot for {source_value}.")
 
 
-def resolve_neoverse_model_dir(source_value: Optional[str | os.PathLike]) -> Path:
+def resolve_neoverse_model_dir(source_value: str | os.PathLike | None) -> Path:
     """Resolves the absolute path to a valid NeoVerse model directory.
 
     This function searches for a NeoVerse model directory in several locations:
@@ -299,9 +273,7 @@ def resolve_neoverse_model_dir(source_value: Optional[str | os.PathLike]) -> Pat
 
     # If a source value was provided but nothing was found locally, raise an error.
     if source_value and Path(str(source_value)).expanduser().exists():
-        raise FileNotFoundError(
-            f"Unable to locate a valid NeoVerse model directory under {source_value}."
-        )
+        raise FileNotFoundError(f"Unable to locate a valid NeoVerse model directory under {source_value}.")
 
     # If no local or cached directory is found, attempt to download from Hugging Face Hub.
     repo_id = str(source_value) if source_value else DEFAULT_NEOVERSE_REPO
@@ -312,14 +284,12 @@ def resolve_neoverse_model_dir(source_value: Optional[str | os.PathLike]) -> Pat
     nested = snapshot_root / "NeoVerse"
     if _looks_like_neoverse_model_dir(nested):
         return nested.resolve()
-    raise FileNotFoundError(
-        f"Unable to locate a valid NeoVerse checkpoint directory in snapshot for {repo_id}."
-    )
+    raise FileNotFoundError(f"Unable to locate a valid NeoVerse checkpoint directory in snapshot for {repo_id}.")
 
 
 def resolve_neoverse_reconstructor_path(
     model_dir: str | os.PathLike,
-    override: Optional[str | os.PathLike] = None,
+    override: str | os.PathLike | None = None,
 ) -> Path:
     """Resolves the absolute path to the NeoVerse reconstructor checkpoint.
 
@@ -350,10 +320,10 @@ def resolve_neoverse_reconstructor_path(
 
 def resolve_neoverse_lora_path(
     model_dir: str | os.PathLike,
-    override: Optional[str | os.PathLike] = None,
+    override: str | os.PathLike | None = None,
     *,
     use_lora: bool = True,
-) -> Optional[Path]:
+) -> Path | None:
     """Resolves the absolute path to a NeoVerse LoRA checkpoint.
 
     Args:

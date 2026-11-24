@@ -4,14 +4,16 @@
 # worldfoundry/core/attention/sparse/block_pattern.py so every causal video runtime
 # shares one chunk-schedule definition. They are re-exported here unchanged so
 # upstream call sites keep working.
+import os
 from dataclasses import replace
 from functools import partial
-import os
-from typing import Optional, Literal, Dict, Tuple, List
+from typing import Literal
+
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn.attention.flex_attention import flex_attention as torch_flex_attention, create_block_mask
+from torch.nn.attention.flex_attention import create_block_mask
+from torch.nn.attention.flex_attention import flex_attention as torch_flex_attention
 
 from worldfoundry.core.attention.sparse.block_pattern import AttnMaskSpec, BlockPattern, build_mask_fn
 from worldfoundry.synthesis.visual_generation.rcm.rcm_runtime.utils.attention import attention
@@ -27,14 +29,18 @@ def _compile_flex_attention():
         # PyTorch FlexAttention uses BACKEND="FLASH" for the FA4/CuTe backend.
         flex_fn = partial(torch_flex_attention, kernel_options={"BACKEND": backend.upper()})
 
-    return torch.compile(flex_fn, dynamic=False, mode=os.environ.get("RCM_FLEX_COMPILE_MODE", "max-autotune-no-cudagraphs"))
+    return torch.compile(
+        flex_fn, dynamic=False, mode=os.environ.get("RCM_FLEX_COMPILE_MODE", "max-autotune-no-cudagraphs")
+    )
 
 
 flex_attention = _compile_flex_attention()
 
 
 def flex_attention_op(q_B_S_H_D, k_B_S_H_D, v_B_S_H_D, block_mask):
-    return flex_attention(q_B_S_H_D.transpose(1, 2), k_B_S_H_D.transpose(1, 2), v_B_S_H_D.transpose(1, 2), block_mask=block_mask).transpose(1, 2)
+    return flex_attention(
+        q_B_S_H_D.transpose(1, 2), k_B_S_H_D.transpose(1, 2), v_B_S_H_D.transpose(1, 2), block_mask=block_mask
+    ).transpose(1, 2)
 
 
 def _call_magi_flex_flash(q, k, v, q_ranges, k_ranges):
@@ -61,16 +67,16 @@ def _call_magi_flex_flash(q, k, v, q_ranges, k_ranges):
     q_flat = q.reshape(B * Q, H, D).contiguous()
     k_flat = k.reshape(B * KV, H, D).contiguous()
     v_flat = v.reshape(B * KV, H, D).contiguous()
-    kwargs = dict(
-        q=q_flat,
-        k=k_flat,
-        v=v_flat,
-        q_ranges=q_ranges,
-        k_ranges=k_ranges,
-        attn_type_map=attn_type_map,
-        softmax_scale=None,
-        softcap=0,
-    )
+    kwargs = {
+        "q": q_flat,
+        "k": k_flat,
+        "v": v_flat,
+        "q_ranges": q_ranges,
+        "k_ranges": k_ranges,
+        "attn_type_map": attn_type_map,
+        "softmax_scale": None,
+        "softcap": 0,
+    }
 
     out, _meta = flex_flash_attn_func(num_heads_q=H, num_heads_kv=H, head_dim=D, **kwargs)
     return out.reshape(B, Q, H, D)
@@ -87,7 +93,7 @@ def _cuda_compute_capability(device: torch.device) -> int:
     return 0
 
 
-def _flex_block_size(mask_block_size, device: torch.device) -> Tuple[int, int]:
+def _flex_block_size(mask_block_size, device: torch.device) -> tuple[int, int]:
     if isinstance(mask_block_size, tuple):
         return mask_block_size
     if os.environ.get("RCM_FLEX_BACKEND", "auto").lower() == "flash" and _cuda_compute_capability(device) >= 100:
@@ -109,7 +115,7 @@ class FlexOrSdpaLocalAttention(nn.Module):
         flex_attn=flex_attention_op,
         mask_block_size: int = 128,
         compile_block_mask: bool = True,
-        backend: Optional[Literal["flex", "magi"]] = None,
+        backend: Literal["flex", "magi"] | None = None,
     ):
         super().__init__()
         self.attn = attn
@@ -119,8 +125,8 @@ class FlexOrSdpaLocalAttention(nn.Module):
         self.backend = (backend or os.environ.get("RCM_ATTENTION_BACKEND", "flex")).lower()
         if self.backend not in {"flex", "magi"}:
             raise ValueError(f"Unsupported attention backend {self.backend!r}; expected flex or magi")
-        self._bm_cache: Dict[Tuple, object] = {}
-        self._magi_cache: Dict[Tuple, Tuple[torch.Tensor, torch.Tensor]] = {}
+        self._bm_cache: dict[tuple, object] = {}
+        self._magi_cache: dict[tuple, tuple[torch.Tensor, torch.Tensor]] = {}
 
     def clear_mask_cache(self):
         self._bm_cache.clear()
@@ -131,7 +137,9 @@ class FlexOrSdpaLocalAttention(nn.Module):
         # training masks, streaming inference, and extrapolation share one definition.
         return build_mask_fn(spec, q_real=Q_real, kv_real=KV_real)
 
-    def _get_block_mask(self, spec: AttnMaskSpec, Q_real: int, KV_real: int, Q_pad: int, KV_pad: int, device: torch.device, block_size):
+    def _get_block_mask(
+        self, spec: AttnMaskSpec, Q_real: int, KV_real: int, Q_pad: int, KV_pad: int, device: torch.device, block_size
+    ):
         mask_fn, sig = self._make_mask_fn(spec, Q_real=Q_real, KV_real=KV_real)
         key = (sig, Q_pad, KV_pad, device.type, device.index, block_size, self.compile_block_mask)
 
@@ -160,7 +168,7 @@ class FlexOrSdpaLocalAttention(nn.Module):
             self._magi_cache[key] = cached
         return cached
 
-    def forward(self, q, k, v, attn_meta: Optional[AttnMaskSpec] = None, **_ignored):
+    def forward(self, q, k, v, attn_meta: AttnMaskSpec | None = None, **_ignored):
         # q,k,v: [B, S, H, D]
         B, Q, H, D = q.shape
         KV = k.shape[1]
@@ -176,7 +184,7 @@ class FlexOrSdpaLocalAttention(nn.Module):
             pat = spec.pattern
             q_blk = spec.q_block_offset
 
-            if (Q == pat.get_block_tokens(q_blk)) and (KV <= pat.blocks_to_tokens(q_blk + 1)):
+            if (pat.get_block_tokens(q_blk) == Q) and (pat.blocks_to_tokens(q_blk + 1) >= KV):
                 return self.attn(q, k, v)
 
         if self.backend == "magi":
@@ -188,14 +196,17 @@ class FlexOrSdpaLocalAttention(nn.Module):
         KV_pad = _ceil_to_multiple(KV, kv_block_size)
 
         block_mask = self._get_block_mask(
-            spec, Q_real=Q, KV_real=KV, Q_pad=Q_pad, KV_pad=KV_pad, device=q.device, block_size=(q_block_size, kv_block_size)
+            spec,
+            Q_real=Q,
+            KV_real=KV,
+            Q_pad=Q_pad,
+            KV_pad=KV_pad,
+            device=q.device,
+            block_size=(q_block_size, kv_block_size),
         )
 
         # right-pad q to Q_pad
-        if Q_pad != Q:
-            q_pad = torch.cat([q, q.new_zeros((B, Q_pad - Q, H, D))], dim=1)
-        else:
-            q_pad = q
+        q_pad = torch.cat([q, q.new_zeros((B, Q_pad - Q, H, D))], dim=1) if Q_pad != Q else q
 
         # right-pad kv to KV_pad
         if KV_pad != KV:
@@ -210,11 +221,11 @@ class FlexOrSdpaLocalAttention(nn.Module):
 def visualize_attn_mask_spec(
     local_attn,
     spec,
-    q_blocks: Optional[int] = None,
-    kv_blocks: Optional[int] = None,
+    q_blocks: int | None = None,
+    kv_blocks: int | None = None,
     figsize=(7, 7),
-    ax: Optional[object] = None,
-    title: Optional[str] = None,
+    ax: object | None = None,
+    title: str | None = None,
     show_block_grid: bool = True,
 ):
     import matplotlib.pyplot as plt

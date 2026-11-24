@@ -10,10 +10,20 @@ from timm.models.layers import DropPath
 from timm.models.vision_transformer import Mlp
 from transformers import PretrainedConfig, PreTrainedModel
 
-from opensora.acceleration.checkpoint import auto_grad_checkpoint
-from opensora.acceleration.communications import gather_forward_split_backward, split_forward_gather_backward
-from opensora.acceleration.parallel_states import get_sequence_parallel_group
-from opensora.models.layers.blocks import (
+from worldfoundry.base_models.diffusion_model.models.networks.sana.variants.cpu_frequency import (
+    CpuFrequencySizeEmbedder as SizeEmbedder,
+)
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.acceleration.checkpoint import (
+    auto_grad_checkpoint,
+)
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.acceleration.communications import (
+    gather_forward_split_backward,
+    split_forward_gather_backward,
+)
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.acceleration.parallel_states import (
+    get_sequence_parallel_group,
+)
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.models.layers.blocks import (
     Attention,
     CaptionEmbedder,
     MultiHeadCrossAttention,
@@ -21,15 +31,16 @@ from opensora.models.layers.blocks import (
     PositionEmbedding2D,
     SeqParallelAttention,
     SeqParallelMultiHeadCrossAttention,
-    SizeEmbedder,
     T2IFinalLayer,
     TimestepEmbedder,
     approx_gelu,
     get_layernorm,
     t2i_modulate,
 )
-from opensora.registry import MODELS
-from opensora.utils.ckpt_utils import load_checkpoint
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import MODELS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.utils.ckpt_utils import (
+    load_checkpoint,
+)
 
 
 class STDiT3Block(nn.Module):
@@ -400,7 +411,7 @@ class STDiT3(PreTrainedModel):
         x = rearrange(x, "B T S C -> B (T S) C", T=T, S=S)
 
         # === blocks ===
-        for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks):
+        for spatial_block, temporal_block in zip(self.spatial_blocks, self.temporal_blocks, strict=False):
             x = auto_grad_checkpoint(spatial_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S)
             x = auto_grad_checkpoint(temporal_block, x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S)
 

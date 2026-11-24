@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from collections import Counter
 from dataclasses import dataclass
-import logging
 from pathlib import Path
 
 import torch
@@ -31,7 +31,6 @@ from worldfoundry.core.model_loading import (
     load_state_dict,
     merge_flattened_path_lora_,
 )
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -87,8 +86,7 @@ def load_fantasy_world_overlay(
     actual_groups = dict(Counter(key.split(".", 1)[0] for key in state_dict))
     if actual_groups != expected_groups:
         raise RuntimeError(
-            f"FantasyWorld {label} checkpoint schema mismatch: "
-            f"expected={expected_groups}, actual={actual_groups}"
+            f"FantasyWorld {label} checkpoint schema mismatch: expected={expected_groups}, actual={actual_groups}"
         )
 
     model_state = model.state_dict()
@@ -105,10 +103,7 @@ def load_fantasy_world_overlay(
         )
     messages = model.load_state_dict(state_dict, strict=False)
     if messages.unexpected_keys:
-        raise RuntimeError(
-            f"FantasyWorld {label} restore produced unexpected keys: "
-            f"{messages.unexpected_keys[:8]}"
-        )
+        raise RuntimeError(f"FantasyWorld {label} restore produced unexpected keys: {messages.unexpected_keys[:8]}")
     LOGGER.info(
         "restored FantasyWorld %s overlay: %d tensors; %d shared base tensors retained",
         label,
@@ -181,9 +176,7 @@ def _merge_reward_lora(
         scale=scale,
     )
     if updated != expected:
-        raise RuntimeError(
-            f"FantasyWorld reward LoRA matched {updated}/{expected} native Wan modules"
-        )
+        raise RuntimeError(f"FantasyWorld reward LoRA matched {updated}/{expected} native Wan modules")
 
 
 def _build_wan22_dit(
@@ -282,9 +275,9 @@ def build_fantasy_world_wan22_models(
 
 
 __all__ = [
-    "FantasyWorldWan22Models",
     "WAN21_OVERLAY_GROUPS",
     "WAN22_OVERLAY_GROUPS",
+    "FantasyWorldWan22Models",
     "build_fantasy_world_wan21_model",
     "build_fantasy_world_wan22_models",
     "load_fantasy_world_overlay",

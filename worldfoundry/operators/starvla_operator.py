@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,7 +16,7 @@ class StarVLAOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "vision_language_action_and_world_action_model"
     ACTION_REPRESENTATION = "robot_or_world_action_sequence"
     OBSERVATION_LAYOUT = "visual_language_world_state"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "image": True,
         "video": True,
@@ -23,9 +24,13 @@ class StarVLAOperator(EmbodiedActionOperator):
         "actions": ["robot_actions", "world_actions", "latent_actions"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
-        instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "instruction", "task_instruction", "world_model_prompt")
+        instruction = (
+            prompt
+            if prompt not in (None, "")
+            else _first_present(kwargs, "instruction", "task_instruction", "world_model_prompt")
+        )
         instruction = "" if instruction is None else str(instruction)
         return {
             "prompt": instruction,
@@ -43,7 +48,7 @@ class StarVLAOperator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         world_state = _first_present(kwargs, "world_state", "initial_world_state", "latent_world_state")
         observation = _compact_dict(
@@ -69,7 +74,7 @@ class StarVLAOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(raw, "robot_actions", "world_actions", "latent_actions")

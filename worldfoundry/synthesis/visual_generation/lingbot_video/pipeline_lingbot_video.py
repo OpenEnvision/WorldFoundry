@@ -2,24 +2,28 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import torch
 import torch.distributed as dist
-from torchvision.transforms.functional import normalize as normalize_image_tensor
-
 from diffusers import DiffusionPipeline
 from diffusers.utils import BaseOutput
 from diffusers.utils.torch_utils import randn_tensor
+from torchvision.transforms.functional import normalize as normalize_image_tensor
 
+from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc_compat import FlowUniPCMultistepScheduler
+
+from .acceleration import (
+    LingBotAccelerationConfig,
+    accelerate_lingbot_video,
+    lingbot_runtime_receipt,
+)
 from .utils import (
     LOW_NOISE_TAIL_V1_DEFAULT_STEPS,
     batch_cfg_prompt_inputs,
     compute_refiner_sigmas,
 )
-from .scheduling_flow_unipc import FlowUniPCMultistepScheduler
-
 
 TOKEN_LENGTH = 37698
 HIDDEN_STATE_SKIP_LAYER = 0
@@ -27,7 +31,7 @@ HIDDEN_STATE_SKIP_LAYER = 0
 PROMPT_TEMPLATE = (
     "<|im_start|>system\nGiven a user input that may include a text prompt alone, "
     "a text prompt with an image reference, or a text prompt with a video reference "
-    "or a video reference alone, generate an \"Enhanced prompt\" that provides detailed "
+    'or a video reference alone, generate an "Enhanced prompt" that provides detailed '
     "visual descriptions suitable for video generation. Evaluate the level of detail "
     "in the user's input: if it is simple, enrich it by adding specifics about colors, "
     "shapes, sizes, textures, lighting, motion dynamics, camera movement, temporal "
@@ -40,20 +44,16 @@ PROMPT_TEMPLATE = (
 IMG_PROMPT_TEMPLATE = "<|vision_start|><|image_pad|><|vision_end|>"
 VIDEO_PROMPT_TEMPLATE = "<|vision_start|><|video_pad|><|vision_end|>"
 
-DEFAULT_NEGATIVE_PROMPT = (
-    '{"universal_negative": {"visual_quality": ["low quality", "worst quality", "blurry", "pixelated", "jpeg artifacts", "low resolution", "unstable color", "color flicker", "underexposed", "overexposed", "invisible subject", "subject hidden in darkness"], "artistic_style": ["painting", "illustration", "drawing", "cartoon", "3d render", "cgi", "sketch", "digital art"], "composition_and_content": ["text", "watermark", "signature", "logo", "subtitles", "pillarboxed", "side bars", "portrait image in landscape frame"], "temporal_and_motion_stability": ["flickering", "jittery", "motion blur", "temporal inconsistency", "warping", "morphing", "incoherent motion", "unnatural movement", "static object with sudden jump", "frame-to-frame inconsistency"], "material_and_structure": ["plastic-like glass", "unrealistic texture", "deformed bottle", "liquid freezing improperly", "distorted reflections"]}}'
-)
+DEFAULT_NEGATIVE_PROMPT = '{"universal_negative": {"visual_quality": ["low quality", "worst quality", "blurry", "pixelated", "jpeg artifacts", "low resolution", "unstable color", "color flicker", "underexposed", "overexposed", "invisible subject", "subject hidden in darkness"], "artistic_style": ["painting", "illustration", "drawing", "cartoon", "3d render", "cgi", "sketch", "digital art"], "composition_and_content": ["text", "watermark", "signature", "logo", "subtitles", "pillarboxed", "side bars", "portrait image in landscape frame"], "temporal_and_motion_stability": ["flickering", "jittery", "motion blur", "temporal inconsistency", "warping", "morphing", "incoherent motion", "unnatural movement", "static object with sudden jump", "frame-to-frame inconsistency"], "material_and_structure": ["plastic-like glass", "unrealistic texture", "deformed bottle", "liquid freezing improperly", "distorted reflections"]}}'
 
 # Still-image default (t2i): drops the whole temporal/motion block and the video-only
 # codec/temporal terms that cannot apply to a single frame.
-DEFAULT_NEGATIVE_PROMPT_IMAGE = (
-    '{"universal_negative": {"visual_quality": ["low quality", "worst quality", "blurry", "pixelated", "jpeg artifacts", "low resolution", "underexposed", "overexposed", "invisible subject", "subject hidden in darkness"], "artistic_style": ["painting", "illustration", "drawing", "cartoon", "3d render", "cgi", "sketch", "digital art"], "composition_and_content": ["text", "watermark", "signature", "logo", "pillarboxed", "side bars", "portrait image in landscape frame"], "material_and_structure": ["plastic-like glass", "unrealistic texture", "deformed bottle", "distorted reflections"]}}'
-)
+DEFAULT_NEGATIVE_PROMPT_IMAGE = '{"universal_negative": {"visual_quality": ["low quality", "worst quality", "blurry", "pixelated", "jpeg artifacts", "low resolution", "underexposed", "overexposed", "invisible subject", "subject hidden in darkness"], "artistic_style": ["painting", "illustration", "drawing", "cartoon", "3d render", "cgi", "sketch", "digital art"], "composition_and_content": ["text", "watermark", "signature", "logo", "pillarboxed", "side bars", "portrait image in landscape frame"], "material_and_structure": ["plastic-like glass", "unrealistic texture", "deformed bottle", "distorted reflections"]}}'
 
 
 @dataclass
 class LingBotVideoPipelineOutput(BaseOutput):
-    frames: Union[List[np.ndarray], torch.Tensor]
+    frames: list[np.ndarray] | torch.Tensor
 
 
 def _module_dtype(module: torch.nn.Module) -> torch.dtype:
@@ -83,7 +83,7 @@ def _module_device(module: torch.nn.Module) -> torch.device:
         return torch.device("cpu")
 
 
-def _group_global_rank(group: Optional[Any], group_rank: int) -> int:
+def _group_global_rank(group: Any | None, group_rank: int) -> int:
     if group is None:
         return group_rank
     get_global_rank = getattr(dist, "get_global_rank", None)
@@ -101,14 +101,26 @@ class LingBotVideoPipeline(DiffusionPipeline):
 
     model_cpu_offload_seq = "text_encoder->transformer->vae"
 
+    @classmethod
+    def extract_init_dict(
+        cls, config_dict: dict[str, Any], **kwargs: Any
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        """Resolve the released model-index component names inside this package."""
+        config = dict(config_dict)
+        if config.get("transformer") == ["lingbot_video.transformer_lingbot_video", "LingBotVideoTransformer3DModel"]:
+            config["transformer"] = [f"{__package__}.transformer_lingbot_video", "LingBotVideoTransformer3DModel"]
+        if config.get("scheduler") in (
+            ["lingbot_video.scheduling_flow_unipc", "FlowUniPCMultistepScheduler"],
+            [f"{__package__}.scheduling_flow_unipc", "FlowUniPCMultistepScheduler"],
+        ):
+            config["scheduler"] = [FlowUniPCMultistepScheduler.__module__, FlowUniPCMultistepScheduler.__name__]
+        return super().extract_init_dict(config, **kwargs)
+
     def __init__(self, transformer, vae, text_encoder, processor, scheduler):
         super().__init__()
-        if (
-            scheduler is not None
-            and scheduler.__class__.__name__ != FlowUniPCMultistepScheduler.__name__
-        ):
+        if scheduler is not None and scheduler.__class__.__name__ != FlowUniPCMultistepScheduler.__name__:
             raise TypeError(
-                "LingBotVideoPipeline requires vendored FlowUniPCMultistepScheduler; "
+                "LingBotVideoPipeline requires canonical FlowUniPCMultistepScheduler; "
                 f"got {scheduler.__class__.__name__}."
             )
         self.register_modules(
@@ -125,7 +137,31 @@ class LingBotVideoPipeline(DiffusionPipeline):
         self.prompt_template = PROMPT_TEMPLATE
         self.img_prompt_template = IMG_PROMPT_TEMPLATE
         self.video_prompt_template = VIDEO_PROMPT_TEMPLATE
-        self._crop_start: Optional[int] = None
+        self._crop_start: int | None = None
+        self._sol_acceleration_receipt: dict[str, Any] | None = None
+
+    def apply_sol_engine(
+        self,
+        config: LingBotAccelerationConfig | str = "sol_balanced",
+        *,
+        accelerate_vae: bool = True,
+    ) -> dict[str, Any]:
+        """Install the LingBot-Video SOL-Engine stack (kernel fusion + PISA + EasyCache + piecewise graph)."""
+        if self.transformer is None:
+            raise RuntimeError("LingBotVideoPipeline requires a loaded transformer before applying SOL-Engine.")
+        receipt = accelerate_lingbot_video(
+            self.transformer,
+            config,
+            vae=self.vae if accelerate_vae and isinstance(self.vae, torch.nn.Module) else None,
+        )
+        self._sol_acceleration_receipt = receipt
+        return receipt
+
+    def sol_engine_report(self) -> dict[str, Any]:
+        """Return live SOL-Engine execution telemetry and zero-fallback audit receipt."""
+        if self.transformer is None:
+            return {"installed": [], "fallbacks": []}
+        return lingbot_runtime_receipt(self.transformer)
 
     @staticmethod
     def check_inputs(height: int, width: int, num_frames: int) -> None:
@@ -163,16 +199,13 @@ class LingBotVideoPipeline(DiffusionPipeline):
 
     def _build_prompt_inputs(
         self,
-        prompt: Union[str, List[str]],
-        images: Optional[Any] = None,
-        videos: Optional[Any] = None,
-        video_metadata: Optional[Any] = None,
-        video_kwargs: Optional[Dict[str, Any]] = None,
+        prompt: str | list[str],
+        images: Any | None = None,
+        videos: Any | None = None,
+        video_metadata: Any | None = None,
+        video_kwargs: dict[str, Any] | None = None,
     ):
-        if isinstance(prompt, str):
-            prompts = [prompt]
-        else:
-            prompts = list(prompt)
+        prompts = [prompt] if isinstance(prompt, str) else list(prompt)
 
         visual_template = ""
         if images is not None:
@@ -180,10 +213,7 @@ class LingBotVideoPipeline(DiffusionPipeline):
         elif videos is not None:
             visual_template = self.video_prompt_template
 
-        texts = [
-            self.apply_text_to_template(visual_template + text, self.prompt_template)
-            for text in prompts
-        ]
+        texts = [self.apply_text_to_template(visual_template + text, self.prompt_template) for text in prompts]
         kwargs = dict(video_kwargs or {})
         return self.processor(
             text=texts,
@@ -201,13 +231,13 @@ class LingBotVideoPipeline(DiffusionPipeline):
     @torch.no_grad()
     def encode_prompt(
         self,
-        prompt: Union[str, List[str]],
+        prompt: str | list[str],
         *,
-        images: Optional[Any] = None,
-        videos: Optional[Any] = None,
-        video_metadata: Optional[Any] = None,
-        video_kwargs: Optional[Dict[str, Any]] = None,
-        device: Optional[Union[str, torch.device]] = None,
+        images: Any | None = None,
+        videos: Any | None = None,
+        video_metadata: Any | None = None,
+        video_kwargs: dict[str, Any] | None = None,
+        device: str | torch.device | None = None,
         return_inputs: bool = False,
     ):
         if self.text_encoder is None or self.processor is None:
@@ -252,8 +282,8 @@ class LingBotVideoPipeline(DiffusionPipeline):
         num_frames: int,
         height: int,
         width: int,
-        generator: Optional[torch.Generator],
-        latents: Optional[torch.Tensor],
+        generator: torch.Generator | None,
+        latents: torch.Tensor | None,
         device: torch.device,
     ) -> torch.Tensor:
         latent_frames = (num_frames - 1) // self.vae_scale_factor_temporal + 1
@@ -274,18 +304,14 @@ class LingBotVideoPipeline(DiffusionPipeline):
 
     def _dit_latent_to_vae(self, latents: torch.Tensor) -> torch.Tensor:
         mean = torch.tensor(self.vae.config.latents_mean, device=latents.device, dtype=torch.float32)
-        std_inv = 1.0 / torch.tensor(
-            self.vae.config.latents_std, device=latents.device, dtype=torch.float32
-        )
+        std_inv = 1.0 / torch.tensor(self.vae.config.latents_std, device=latents.device, dtype=torch.float32)
         mean = mean.view(1, -1, 1, 1, 1)
         std_inv = std_inv.view(1, -1, 1, 1, 1)
         return latents.float() / std_inv + mean
 
     def _vae_latent_to_dit(self, latents: torch.Tensor) -> torch.Tensor:
         mean = torch.tensor(self.vae.config.latents_mean, device=latents.device, dtype=torch.float32)
-        std_inv = 1.0 / torch.tensor(
-            self.vae.config.latents_std, device=latents.device, dtype=torch.float32
-        )
+        std_inv = 1.0 / torch.tensor(self.vae.config.latents_std, device=latents.device, dtype=torch.float32)
         mean = mean.view(1, -1, 1, 1, 1)
         std_inv = std_inv.view(1, -1, 1, 1, 1)
         return (latents.float() - mean) * std_inv
@@ -294,7 +320,7 @@ class LingBotVideoPipeline(DiffusionPipeline):
     def encode_video_latent(
         self,
         video: torch.Tensor,
-        generator: Optional[torch.Generator] = None,
+        generator: torch.Generator | None = None,
     ) -> torch.Tensor:
         if self.vae is None:
             raise ValueError("`vae` is required to encode video latents.")
@@ -308,11 +334,7 @@ class LingBotVideoPipeline(DiffusionPipeline):
             [0.5, 0.5, 0.5],
             inplace=False,
         )
-        norm_video = (
-            norm_flat_video.reshape(bsz, frames, channels, height, width)
-            .permute(0, 2, 1, 3, 4)
-            .contiguous()
-        )
+        norm_video = norm_flat_video.reshape(bsz, frames, channels, height, width).permute(0, 2, 1, 3, 4).contiguous()
         with torch.autocast(
             "cuda",
             dtype=torch.bfloat16,
@@ -329,16 +351,14 @@ class LingBotVideoPipeline(DiffusionPipeline):
     def _decode_latents(
         self,
         latents: torch.Tensor,
-    ) -> List[np.ndarray]:
+    ) -> list[np.ndarray]:
         vae_device = _module_device(self.vae)
         vae_dtype = _module_dtype(self.vae)
         vae_latents = self._dit_latent_to_vae(latents).to(device=vae_device, dtype=torch.float32)
         if vae_latents.ndim == 5:
             vae_latents = vae_latents.contiguous(memory_format=torch.channels_last_3d)
         autocast_dtype = (
-            vae_dtype
-            if vae_device.type == "cuda" and vae_dtype in {torch.bfloat16, torch.float16}
-            else None
+            vae_dtype if vae_device.type == "cuda" and vae_dtype in {torch.bfloat16, torch.float16} else None
         )
         with torch.autocast(
             "cuda",
@@ -350,7 +370,7 @@ class LingBotVideoPipeline(DiffusionPipeline):
         frames = frames.float().clamp_(-1, 1)
         frames = (frames + 1.0) / 2.0
         frames = frames.permute(0, 2, 3, 4, 1).cpu().numpy()
-        return [video for video in frames]
+        return list(frames)
 
     @torch.no_grad()
     def __call__(
@@ -363,22 +383,22 @@ class LingBotVideoPipeline(DiffusionPipeline):
         num_inference_steps: int = 40,
         guidance_scale: float = 6.0,
         shift: float = 3.0,
-        generator: Optional[torch.Generator] = None,
-        latents: Optional[torch.Tensor] = None,
-        cond_latent: Optional[torch.Tensor] = None,
-        prompt_embeds: Optional[torch.Tensor] = None,
-        prompt_mask: Optional[torch.Tensor] = None,
-        negative_prompt_embeds: Optional[torch.Tensor] = None,
-        negative_prompt_mask: Optional[torch.Tensor] = None,
+        generator: torch.Generator | None = None,
+        latents: torch.Tensor | None = None,
+        cond_latent: torch.Tensor | None = None,
+        prompt_embeds: torch.Tensor | None = None,
+        prompt_mask: torch.Tensor | None = None,
+        negative_prompt_embeds: torch.Tensor | None = None,
+        negative_prompt_mask: torch.Tensor | None = None,
         output_type: str = "np",
-        cfg_parallel_group: Optional[Any] = None,
+        cfg_parallel_group: Any | None = None,
         batch_cfg: bool = False,
         null_cond_clone_zero: bool = False,
-        t_thresh: Optional[float] = None,
+        t_thresh: float | None = None,
         refiner_sigma_tail_steps: int = LOW_NOISE_TAIL_V1_DEFAULT_STEPS,
         offload_vae_during_denoise: bool = False,
         return_dict: bool = True,
-    ) -> Union[LingBotVideoPipelineOutput, Tuple[Union[List[np.ndarray], torch.Tensor]]]:
+    ) -> LingBotVideoPipelineOutput | tuple[list[np.ndarray] | torch.Tensor]:
         self.check_inputs(height, width, num_frames)
         if self.transformer is None or self.scheduler is None:
             raise ValueError("`transformer` and `scheduler` are required for generation.")
@@ -405,9 +425,7 @@ class LingBotVideoPipeline(DiffusionPipeline):
             cfg_parallel_rank = dist.get_rank(cfg_parallel_group)
             cfg_parallel_world_size = dist.get_world_size(cfg_parallel_group)
             if cfg_parallel_world_size != 2:
-                raise ValueError(
-                    f"CFG parallel currently requires exactly 2 ranks, got {cfg_parallel_world_size}."
-                )
+                raise ValueError(f"CFG parallel currently requires exactly 2 ranks, got {cfg_parallel_world_size}.")
 
         if prompt_embeds is not None:
             if prompt_mask is None:
@@ -416,9 +434,7 @@ class LingBotVideoPipeline(DiffusionPipeline):
             prompt_mask = prompt_mask.to(device=device)
         if negative_prompt_embeds is not None:
             if negative_prompt_mask is None:
-                raise ValueError(
-                    "`negative_prompt_mask` is required when `negative_prompt_embeds` is provided."
-                )
+                raise ValueError("`negative_prompt_mask` is required when `negative_prompt_embeds` is provided.")
             negative_prompt_embeds = negative_prompt_embeds.to(device=device)
             negative_prompt_mask = negative_prompt_mask.to(device=device)
 
@@ -466,7 +482,7 @@ class LingBotVideoPipeline(DiffusionPipeline):
                 shift=1.0,
             )
         transformer_dtype = _module_dtype(self.transformer)
-        vae_restore_device: Optional[torch.device] = None
+        vae_restore_device: torch.device | None = None
         vae_offloaded = False
         if offload_vae_during_denoise and output_type == "np" and self.vae is not None:
             vae_device = _module_device(self.vae)
@@ -477,7 +493,11 @@ class LingBotVideoPipeline(DiffusionPipeline):
                 vae_offloaded = True
         cfg_latent_src = _group_global_rank(cfg_parallel_group, 0)
         cfg_uncond_src = _group_global_rank(cfg_parallel_group, 1)
-        for i, timestep in enumerate(self.progress_bar(self.scheduler.timesteps)):
+        reset_sol = getattr(self.transformer, "reset_sol_caches", None)
+        if callable(reset_sol):
+            reset_sol()
+        total_steps = len(self.scheduler.timesteps)
+        for _i, timestep in enumerate(self.progress_bar(self.scheduler.timesteps)):
             if cfg_parallel:
                 dist.broadcast(latents, src=cfg_latent_src, group=cfg_parallel_group)
             timestep_batch = _transformer_timestep(timestep, transformer_dtype).expand(1).to(device)
@@ -486,11 +506,11 @@ class LingBotVideoPipeline(DiffusionPipeline):
                 if cfg_parallel_rank == 0:
                     branch_embeds = prompt_embeds
                     branch_mask = prompt_mask
-                    branch_name = "transformer.cond"
+                    branch_name = "positive"
                 else:
                     branch_embeds = negative_embeds
                     branch_mask = negative_mask
-                    branch_name = "transformer.uncond"
+                    branch_name = "negative"
                 branch_model_input = branch_embeds.to(transformer_dtype)
                 with _transformer_autocast(device, transformer_dtype):
                     branch_noise_pred = self.transformer(
@@ -499,6 +519,9 @@ class LingBotVideoPipeline(DiffusionPipeline):
                         branch_model_input,
                         encoder_attention_mask=branch_mask,
                         return_dict=False,
+                        step_index=_i,
+                        total_steps=total_steps,
+                        cache_branch=branch_name,
                     )[0].float()
                 if cfg_parallel_rank == 0:
                     noise_pred = branch_noise_pred
@@ -529,11 +552,12 @@ class LingBotVideoPipeline(DiffusionPipeline):
                             cfg_embeds,
                             encoder_attention_mask=cfg_mask,
                             return_dict=False,
+                            step_index=_i,
+                            total_steps=total_steps,
+                            cache_branch="batched_cfg",
                         )[0].float()
                     noise_pred, noise_pred_uncond = noise_batched.chunk(2, dim=0)
-                    noise_pred = noise_pred_uncond + guidance_scale * (
-                        noise_pred - noise_pred_uncond
-                    )
+                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred - noise_pred_uncond)
                 else:
                     with _transformer_autocast(device, transformer_dtype):
                         noise_pred = self.transformer(
@@ -542,6 +566,9 @@ class LingBotVideoPipeline(DiffusionPipeline):
                             prompt_model_input,
                             encoder_attention_mask=prompt_mask,
                             return_dict=False,
+                            step_index=_i,
+                            total_steps=total_steps,
+                            cache_branch="positive",
                         )[0].float()
 
                 if do_cfg and not effective_batch_cfg:
@@ -553,6 +580,9 @@ class LingBotVideoPipeline(DiffusionPipeline):
                             negative_model_input,
                             encoder_attention_mask=negative_mask,
                             return_dict=False,
+                            step_index=_i,
+                            total_steps=total_steps,
+                            cache_branch="negative",
                         )[0].float()
                     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred - noise_pred_uncond)
 

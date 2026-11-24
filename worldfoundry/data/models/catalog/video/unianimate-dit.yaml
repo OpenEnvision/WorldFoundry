@@ -1,6 +1,6 @@
 id: unianimate-dit
 name: UniAnimate-DiT
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: unianimate-dit
 tasks:
 - human-image-animation
@@ -15,6 +15,7 @@ official_sources:
   paper: https://arxiv.org/abs/2504.11289
   github:
     url: https://github.com/ali-vilab/unianimate-dit
+    revision: 61d882c25385042f0cf5bcdaf6853238d9756d68
   huggingface:
   - repo_id: ZheWang123/UniAnimate-DiT
     status: confirmed
@@ -38,17 +39,15 @@ docs:
   publisher: Alibaba (Tongyi Lab)
   publisher_kind: company
   publisher_zh: 阿里巴巴（通义实验室）
-  overview: 'UniAnimate-DiT is Alibaba ali-vilab''s human image animation model built on Wan2.1-I2V: it animates a person photo to follow a driving pose sequence. The in-tree route is wired with local checkpoint assets and exposes max_frames, resolution, step count, and seed controls.'
-  overview_zh: UniAnimate-DiT 是阿里 ali-vilab 基于 Wan2.1-I2V 的人物图像动画模型：让人物照片按驱动姿态序列动起来。树内路径已配好本地 checkpoint 资产，暴露 max_frames、分辨率、步数与 seed 控制。
-  architecture: 'Built on the Wan2.1 image-to-video diffusion transformer with pose-sequence conditioning for human animation (checkpoint: ZheWang123/UniAnimate-DiT). Deeper conditioning internals are not recorded in this repository.'
-  architecture_zh: 构建在 Wan2.1 图生视频扩散 Transformer 之上，以姿态序列为条件驱动人物动画（checkpoint： ZheWang123/UniAnimate-DiT）。更深的条件机制细节仓库未记录。
-  usage_notes: A checkpoint-backed short GPU smoke test passed; full runner parity is pending. Prepare a clean subject photo and a driving pose sequence for best results.
-  usage_notes_zh: 已通过真实权重的短片 GPU 冒烟验证；完整 runner parity 仍待验证。为获得最佳效果，请准备干净的人物照片与驱动姿态序列。
+  overview: "UniAnimate-DiT is Alibaba ali-vilab's human image animation model built on Wan2.1-I2V: it animates a person photo to follow a driving pose sequence. The in-tree route runs with local checkpoint assets and exposes max_frames, resolution, step count, and seed controls."
+  overview_zh: UniAnimate-DiT 是阿里 ali-vilab 基于 Wan2.1-I2V 的人物图像动画模型：让人物照片按驱动姿态序列动起来。树内路径使用本地 checkpoint 资产运行，暴露 max_frames、分辨率、步数与 seed 控制。
+  architecture: 'Built on the Wan2.1 image-to-video diffusion transformer with pose-sequence conditioning for human animation (checkpoint: ZheWang123/UniAnimate-DiT).'
+  architecture_zh: 构建在 Wan2.1 图生视频扩散 Transformer 之上，以姿态序列为条件驱动人物动画（checkpoint：ZheWang123/UniAnimate-DiT）。
+  usage_notes: Prepare a clean subject photo and a driving pose sequence for best results.
+  usage_notes_zh: 为获得最佳效果，请准备干净的人物照片与驱动姿态序列。
   limitations:
-  - A nine-frame, four-step GPU smoke artifact has been verified; official 81-frame, 50-step quality and pose-control parity have not been measured.
-  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - Only a short 9-frame, 4-step GPU run has been validated; quality and pose-control fidelity at the official 81-frame, 50-step setting have not been measured.
   - Specialized for human subjects — not a general I2V model.
   limitations_zh:
-  - 已验证 9 帧、4 步的 GPU 冒烟产物；官方 81 帧、50 步的质量与姿态控制一致性尚未测量。
-  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - 仅验证了 9 帧、4 步的短片 GPU 运行；官方 81 帧、50 步设置下的质量与姿态控制一致性尚未测量。
   - 专精人物主体——不是通用图生视频模型。

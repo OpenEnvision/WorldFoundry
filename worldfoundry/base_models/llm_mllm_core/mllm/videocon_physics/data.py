@@ -150,7 +150,9 @@ class MultiModalDataset(Dataset):
 def batchify(batch: list[dict[str, object]]) -> dict[str, object]:
     videos = [data["video"] for data in batch if data["video"] is not None]
     video = torch.cat(videos, dim=0) if videos else None
-    num_videos_per_sample = torch.LongTensor([data["video"].size(0) if data["video"] is not None else 0 for data in batch])
+    num_videos_per_sample = torch.LongTensor(
+        [data["video"].size(0) if data["video"] is not None else 0 for data in batch]
+    )
     text = torch.stack([torch.LongTensor(data["text"]["input_ids"]) for data in batch], dim=0)
     non_padding_mask = torch.stack([torch.LongTensor(data["text"]["non_padding_mask"]) for data in batch], dim=0)
     non_media_mask = torch.stack([torch.LongTensor(data["text"]["non_media_mask"]) for data in batch], dim=0)

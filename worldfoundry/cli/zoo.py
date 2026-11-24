@@ -5,16 +5,17 @@ from __future__ import annotations
 import argparse
 import json
 import shlex
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Mapping
+from typing import Any
 
 from worldfoundry.core.io.paths import (
     hfd_root_path,
     resolve_worldfoundry_path,
 )
-from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import BENCHMARK_RUN_PUBLIC_MODES
-from worldfoundry.evaluation.utils import (
+from worldfoundry.evals.tasks.execution.orchestration.interfaces import BENCHMARK_RUN_PUBLIC_MODES
+from worldfoundry.evals.utils import (
     BENCHMARK_ZOO_DIR,
     MODEL_ZOO_DIR,
     REPO_ROOT,
@@ -38,9 +39,7 @@ _BENCHMARK_RUN_MODE_CHOICES = tuple(sorted(BENCHMARK_RUN_PUBLIC_MODES))
 
 # These catalog entries route through WorldModelRuntimeSynthesis, whose plan is
 # the authority for local source, checkpoint, and dataset readiness.
-_WORLD_MODEL_RUNTIME_READINESS_IDS = frozenset(
-    {"mira", "simworld", "uwm", "vggt-world", "vid2world"}
-)
+_WORLD_MODEL_RUNTIME_READINESS_IDS = frozenset({"mira", "simworld", "uwm", "vggt-world", "vid2world"})
 
 # ── Script path constants ───────────────────────────────────────
 
@@ -52,7 +51,7 @@ _SCRIPT_SETUP_DOWNLOAD_EMBODIED_ACTION_ASSETS = "scripts/setup/download_embodied
 
 def _iter_manifest_files(root: Path) -> list[Path]:
     """Enumerate manifest YAML/JSON files under a directory."""
-    from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import (
+    from worldfoundry.evals.tasks.catalog.benchmark_catalog import (
         is_catalog_metadata_manifest,
         is_default_benchmark_catalog_root,
         iter_benchmark_catalog_manifest_paths,
@@ -64,11 +63,7 @@ def _iter_manifest_files(root: Path) -> list[Path]:
         return [resolved]
     if is_default_benchmark_catalog_root(resolved):
         return list(iter_benchmark_catalog_manifest_paths(resolved))
-    return [
-        path
-        for path in manifest_paths(resolved)
-        if not is_catalog_metadata_manifest(path)
-    ]
+    return [path for path in manifest_paths(resolved) if not is_catalog_metadata_manifest(path)]
 
 
 def _dash(value: object | None) -> str:
@@ -83,11 +78,10 @@ def _compact_list(values: object, *, limit: int = 2) -> str:
         items: list[str] = []
     elif isinstance(values, str):
         items = [values]
+    elif isinstance(values, Iterable):
+        items = [str(item) for item in values if str(item)]
     else:
-        try:
-            items = [str(item) for item in values if str(item)]
-        except TypeError:
-            items = [str(values)]
+        items = [str(values)]
     if not items:
         return "-"
     if len(items) <= limit:
@@ -95,7 +89,7 @@ def _compact_list(values: object, *, limit: int = 2) -> str:
     return ", ".join(items[:limit]) + f" +{len(items) - limit}"
 
 
-def _print_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
+def _print_table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> None:
     """Print a left-aligned text table with header underline."""
     if terminal_enabled():
         print_table("Catalog", headers, rows)
@@ -115,7 +109,7 @@ def _print_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
 
 def _model_manifest_paths(manifest_dir: Path) -> dict[str, str]:
     """Map each model id to its manifest file path under *manifest_dir*."""
-    from worldfoundry.evaluation.models.catalog.schema import load_entries
+    from worldfoundry.zoo.catalog.schema import load_entries
 
     paths: dict[str, str] = {}
     for path in _iter_manifest_files(manifest_dir):
@@ -126,7 +120,7 @@ def _model_manifest_paths(manifest_dir: Path) -> dict[str, str]:
 
 def _benchmark_manifest_paths(manifest_dir: Path) -> dict[str, str]:
     """Map each benchmark id to its manifest file path under *manifest_dir*."""
-    from worldfoundry.evaluation.tasks.catalog.schema import load_entries
+    from worldfoundry.evals.tasks.catalog.schema import load_entries
 
     paths: dict[str, str] = {}
     for path in _iter_manifest_files(manifest_dir):
@@ -274,7 +268,7 @@ def _model_next_action(entry) -> str:
     if entry.integration_status == "blocked":
         return "review blocker notes before integration"
     if entry.runner_entry_kind == "runnable_runner":
-        return f"run with worldfoundry-eval run --model {entry.model_id}"
+        return f"run with wf run --model {entry.model_id}"
     if entry.runner_entry_kind == "runner_candidate":
         return "add runtime profile and runner evidence"
     return "add runner manifest, runtime profile, and tests"
@@ -289,19 +283,19 @@ def _model_user_commands(entry) -> dict[str, str]:
     """Build the suggested CLI commands dictionary for a model entry."""
     model_id = entry.model_id
     commands = {
-        "show": f"worldfoundry-eval zoo model-show --model-id {model_id} --json",
-        "manifest": f"worldfoundry-eval zoo model-specs --model-id {model_id} --json",
+        "show": f"wf zoo model-show --model-id {model_id} --json",
+        "manifest": f"wf zoo model-specs --model-id {model_id} --json",
     }
     if entry.hf_repo_ids:
-        commands["checkpoint_check"] = f"worldfoundry-eval zoo model-download --model-id {model_id} --check-local --json"
+        commands["checkpoint_check"] = f"wf zoo model-download --model-id {model_id} --check-local --json"
     if entry.is_runnable_runner_entry:
         commands["run"] = (
-            f"worldfoundry-eval run --model {model_id} --benchmark <benchmark-id> "
+            f"wf run --model {model_id} --benchmark <benchmark-id> "
             f"--mode official-run --output-dir tmp/model_benchmark/{model_id}/<benchmark-id> --json"
         )
     elif _model_has_runner_target(entry):
         commands["plan"] = (
-            f"worldfoundry-eval run --model {model_id} --benchmark <benchmark-id> "
+            f"wf run --model {model_id} --benchmark <benchmark-id> "
             f"--mode official-run --plan-only --output-dir tmp/model_benchmark/{model_id}/<benchmark-id> --json"
         )
     return commands
@@ -364,7 +358,7 @@ def _model_discovery(entry) -> dict[str, Any]:
         if _model_has_runner_target(entry):
             model_id = entry.model_id
             commands["plan"] = (
-                f"worldfoundry-eval run --model {model_id} --benchmark <benchmark-id> "
+                f"wf run --model {model_id} --benchmark <benchmark-id> "
                 f"--mode official-run --plan-only --output-dir tmp/model_benchmark/{model_id}/<benchmark-id> --json"
             )
         missing = plan.get("missing_assets") or []
@@ -397,7 +391,7 @@ def _benchmark_next_action(entry) -> str:
             return f"resolve blocker: {entry.blockers[0]}"
         return "resolve blocker before integration"
     if _benchmark_official_runner_ready(entry):
-        return f"run with worldfoundry-eval run --benchmark {entry.benchmark_id}"
+        return f"run with wf run --benchmark {entry.benchmark_id}"
     if _benchmark_bounded_official_component_ready(entry):
         return f"run bounded official component with {commands['official_run']}"
     if _benchmark_official_runtime_declared(entry) or _benchmark_bounded_official_validation_ready(entry):
@@ -406,7 +400,7 @@ def _benchmark_next_action(entry) -> str:
         validation_command = commands.get("official_validation") or commands.get("validate")
         if validation_command:
             return f"run official validation with {validation_command}"
-        return "run official validation with worldfoundry-eval zoo benchmark-run --mode official-validation"
+        return "run official validation with wf zoo benchmark-run --mode official-validation"
     if entry.runner_target:
         return "connect the runner to official-validation or official-run evidence"
     return "add catalog entry, task YAML, runnable evaluator, and validation evidence"
@@ -520,9 +514,7 @@ def _benchmark_official_evidence_ready(entry) -> bool:
         return True
     asset = _benchmark_verified_official_validation_asset(entry)
     return bool(
-        asset
-        and asset.get("official_benchmark_verified") is True
-        and asset.get("integration_evidence") is True
+        asset and asset.get("official_benchmark_verified") is True and asset.get("integration_evidence") is True
     )
 
 
@@ -538,7 +530,7 @@ def _benchmark_user_commands(entry) -> dict[str, str]:
         commands["official_run"] = _shell_command_text(entry.run_command)
     if entry.benchmark_id == "videoscore" and "normalizer_run" not in commands:
         commands["normalizer_run"] = (
-            "worldfoundry-eval zoo benchmark-run --benchmark-id videoscore "
+            "wf zoo benchmark-run --benchmark-id videoscore "
             "--mode official-validation --official-results-path '<eval_*_videoscore.json>' "
             "--output-dir '<out>' --json"
         )
@@ -624,7 +616,7 @@ def _add_repeated_args(argv: list[str], flag: str, values: list[str] | None) -> 
 
 
 def _handle_zoo_models_list(args: argparse.Namespace) -> int:
-    from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
+    from worldfoundry.zoo.catalog import load_model_zoo_registry
 
     registry = load_model_zoo_registry(args.manifest_dir)
     entries = registry.list()
@@ -644,7 +636,7 @@ def _handle_zoo_models_list(args: argparse.Namespace) -> int:
             ("Model", "Integration", "Runnable", "Needs"),
             [
                 (entry.model_id, entry.integration_status, item["runnable"], item["needs"])
-                for entry, item in zip(entries, payload)
+                for entry, item in zip(entries, payload, strict=False)
             ],
             hint=f"Inspect a model: {cli_prog_name()} zoo model-show --model-id <id>",
         )
@@ -652,7 +644,7 @@ def _handle_zoo_models_list(args: argparse.Namespace) -> int:
 
     manifest_paths = _model_manifest_paths(args.manifest_dir)
     rows = []
-    for entry, item in zip(entries, payload):
+    for entry, item in zip(entries, payload, strict=False):
         rows.append(
             (
                 entry.model_id,
@@ -674,17 +666,14 @@ def _handle_zoo_models_list(args: argparse.Namespace) -> int:
 
 def _handle_zoo_model_specs(args: argparse.Namespace) -> int:
     """Export model-zoo entries as public WorldFoundry ``WorldModelManifest`` objects."""
-    from worldfoundry.evaluation.models.catalog.manifest import model_zoo_entries_to_world_model_manifests
-    from worldfoundry.evaluation.models.catalog.schema import load_entries
+    from worldfoundry.zoo.catalog.manifest import model_zoo_entries_to_world_model_manifests
+    from worldfoundry.zoo.catalog.schema import load_entries
 
     entries = []
     for path in _iter_manifest_files(args.manifest_dir):
         entries.extend(load_entries(path))
     if args.model_id:
-        selected = {
-            canonical_model_zoo_id(model_id, args.manifest_dir)
-            for model_id in args.model_id
-        }
+        selected = {canonical_model_zoo_id(model_id, args.manifest_dir) for model_id in args.model_id}
         entries = [entry for entry in entries if entry.model_id in selected]
     if args.integration_status:
         entries = [entry for entry in entries if entry.integration_status == args.integration_status]
@@ -703,10 +692,7 @@ def _handle_zoo_model_specs(args: argparse.Namespace) -> int:
 
     for manifest in manifests:
         checkpoint_count = len(manifest.metadata.get("hf_repo_ids", ()))
-        print(
-            f"{manifest.model_id}: capabilities={len(manifest.capabilities)} "
-            f"checkpoints={checkpoint_count}"
-        )
+        print(f"{manifest.model_id}: capabilities={len(manifest.capabilities)} checkpoints={checkpoint_count}")
     if args.output_json:
         print(f"wrote: {args.output_json}")
     return 0
@@ -714,7 +700,7 @@ def _handle_zoo_model_specs(args: argparse.Namespace) -> int:
 
 def _handle_zoo_model_show(args: argparse.Namespace) -> int:
     """Show one model-zoo entry with discovery, readiness, and command metadata."""
-    from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
+    from worldfoundry.zoo.catalog import load_model_zoo_registry
 
     registry = load_model_zoo_registry(args.manifest_dir)
     entry = registry.get(args.model_id)
@@ -830,12 +816,11 @@ def _handle_zoo_embodied_assets(args: argparse.Namespace) -> int:
     return module.main(argv)
 
 
-
 # ── Zoo benchmarks command handlers ─────────────────────────────
 
 
 def _handle_zoo_benchmarks_list(args: argparse.Namespace) -> int:
-    from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
+    from worldfoundry.evals.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
 
     registry = load_benchmark_zoo_registry(args.manifest_dir)
     entries = registry.list()
@@ -916,8 +901,8 @@ def _benchmark_list_payload(entry) -> dict[str, Any]:
 
 def _handle_zoo_benchmark_specs(args: argparse.Namespace) -> int:
     """Export benchmark-zoo entries as public WorldFoundry ``BenchmarkSpec`` objects."""
-    from worldfoundry.evaluation.tasks.catalog.schema import load_entries
-    from worldfoundry.evaluation.tasks.catalog.specs import (
+    from worldfoundry.evals.tasks.catalog.schema import load_entries
+    from worldfoundry.evals.tasks.catalog.specs import (
         benchmark_zoo_entries_to_benchmark_specs,
     )
 
@@ -925,10 +910,7 @@ def _handle_zoo_benchmark_specs(args: argparse.Namespace) -> int:
     for path in _iter_manifest_files(args.manifest_dir):
         entries.extend(load_entries(path))
     if args.benchmark_id:
-        selected = {
-            canonical_benchmark_zoo_id(benchmark_id, args.manifest_dir)
-            for benchmark_id in args.benchmark_id
-        }
+        selected = {canonical_benchmark_zoo_id(benchmark_id, args.manifest_dir) for benchmark_id in args.benchmark_id}
         entries = [entry for entry in entries if entry.benchmark_id in selected]
     if args.integration_status:
         entries = [entry for entry in entries if _benchmark_public_integration_status(entry) == args.integration_status]
@@ -956,8 +938,8 @@ def _handle_zoo_benchmark_specs(args: argparse.Namespace) -> int:
 
 def _handle_zoo_benchmark_show(args: argparse.Namespace) -> int:
     """Show one benchmark-zoo entry with discovery, readiness, and command metadata."""
-    from worldfoundry.evaluation.tasks.catalog.specs import benchmark_zoo_entries_to_benchmark_specs
-    from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
+    from worldfoundry.evals.tasks.catalog.specs import benchmark_zoo_entries_to_benchmark_specs
+    from worldfoundry.evals.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
 
     registry = load_benchmark_zoo_registry(args.manifest_dir)
     entry = registry.get(args.benchmark_id)
@@ -965,7 +947,7 @@ def _handle_zoo_benchmark_show(args: argparse.Namespace) -> int:
     payload.pop("contract_validation_command", None)
     payload["integration_status"] = _benchmark_public_integration_status(entry)
     payload["registry_aliases"] = list(registry.aliases_for(args.benchmark_id))
-    discovery = {
+    discovery: dict[str, Any] = {
         "runnable": entry.runner_target is not None and entry.integration_status != "blocked",
         "needs": list(_benchmark_needs(entry)),
         "surface": _benchmark_maturity(entry),
@@ -1077,7 +1059,7 @@ def _benchmark_run_cli_success(result: Any) -> bool:
 
 def _handle_zoo_benchmark_run(args: argparse.Namespace) -> int:
     """Run a benchmark-zoo manifest benchmark evaluation."""
-    from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import run_benchmark_execution
+    from worldfoundry.evals.tasks.execution.orchestration.benchmark_runner import run_benchmark_execution
 
     benchmark_id = canonical_benchmark_zoo_id(args.benchmark_id, args.manifest_dir)
     env_overrides = parse_key_value_mapping(args.env)
@@ -1111,10 +1093,35 @@ def _handle_zoo_benchmark_run(args: argparse.Namespace) -> int:
     return 0 if _benchmark_run_cli_success(result) else 1
 
 
+def _handle_zoo_benchmark_fetch(args: argparse.Namespace) -> int:
+    """Fetch the official upstream sources a benchmark runtime pins into the source cache."""
+    from worldfoundry.evals.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
+    from worldfoundry.evals.tasks.execution.framework.official_sources import benchmark_source_spec
+    from worldfoundry.evals.tasks.execution.framework.source_cache import ensure_source
+
+    entry = load_benchmark_zoo_registry(args.manifest_dir).get(args.benchmark_id)
+    spec = benchmark_source_spec(entry.benchmark_id, entry.runner_runtime or {})
+    path = ensure_source(spec)
+    payload = {
+        "benchmark_id": entry.benchmark_id,
+        "url": spec.url,
+        "revision": spec.revision,
+        "subdir": spec.subdir,
+        "path": str(path),
+    }
+    if args.json:
+        json_dump(payload)
+    elif terminal_enabled():
+        print_details(entry.name or entry.benchmark_id, payload)
+    else:
+        print(path)
+    return 0
+
+
 # ── Parser registration ─────────────────────────────────────────
 
 
-def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def register_zoo_subparser(subparsers: argparse._SubParsersAction) -> None:
     """Register model-zoo and benchmark-zoo CLI commands.
 
     Args:
@@ -1240,6 +1247,15 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
     zoo_benchmark_show_parser.add_argument("--include-spec", action="store_true")
     zoo_benchmark_show_parser.add_argument("--json", action="store_true")
     zoo_benchmark_show_parser.set_defaults(func=_handle_zoo_benchmark_show)
+
+    zoo_benchmark_fetch_parser = zoo_subparsers.add_parser(
+        "benchmark-fetch",
+        help="Fetch the official upstream sources a benchmark pins into the WorldFoundry source cache",
+    )
+    zoo_benchmark_fetch_parser.add_argument("--manifest-dir", type=Path, default=DEFAULT_BENCHMARK_ZOO_DIR)
+    zoo_benchmark_fetch_parser.add_argument("--benchmark-id", required=True)
+    zoo_benchmark_fetch_parser.add_argument("--json", action="store_true")
+    zoo_benchmark_fetch_parser.set_defaults(func=_handle_zoo_benchmark_fetch)
 
     zoo_benchmark_run_parser = zoo_subparsers.add_parser(
         "benchmark-run",

@@ -1,26 +1,26 @@
 ---
 title: VideoPhy
-description: "UCLA / Google 的 T2V 物理常识评测：VideoCon-Physics 打 SA、PC 与 Joint。WorldFoundry 提供裁判路径，不编造榜单。"
+description: "UCLA / Google 的 T2V 物理常识评测：VideoCon-Physics 打 SA、PC 与 Joint。WorldFoundry 提供裁判路径。"
 ---
 
-VideoPhy（UCLA 与 Google Research）检验文本生成视频模型在材料交互（固-固、固-流、流-流）上是否遵守 **物理常识**。每条 prompt 描述一种物理交互。官方裁判是微调的视频语言模型 **VideoCon-Physics**。三个分数：
+VideoPhy（UCLA 与 Google Research）检验文本生成视频模型在材料交互（固-固、固-流、流-流）上是否遵守**物理常识**。每条 prompt 描述一种物理交互。官方裁判是微调的视频语言模型 **VideoCon-Physics**。三个分数：
 
-- **语义遵守** — 片段是否匹配 prompt？
-- **物理常识** — 运动是否服从物理？
-- **联合分** — 两者同时成立。
+- **语义遵守**：片段是否匹配 prompt？
+- **物理常识**：运动是否符合物理规律？
+- **联合分**：两者同时成立。
 
-`videophy_average` 是 WorldFoundry 对已有分面的均值。官方打分路径在仓内；**完整 688 条 prompt 复现仍待完成**。
+`videophy_average` 是 WorldFoundry 对已有分面的均值。完整 688 条 prompt 的复现尚未在 WorldFoundry 中验证。
 
 论文：[VideoPhy](https://arxiv.org/abs/2406.03520)。项目：[videophy.github.io](https://videophy.github.io/)。代码：[Hritikbansal/videophy](https://github.com/Hritikbansal/videophy)。
 
-WorldFoundry **捆绑 prompt 列表**，可跑仓内 VideoCon-Physics AutoEvaluator（`--videocon-checkpoint`、`--sa-threshold` / `--pc-threshold`），或导入官方 JSON。权重要调用方提供，不内置。
+WorldFoundry **捆绑 prompt 列表**，可跑仓内 VideoCon-Physics AutoEvaluator（`--videocon-checkpoint`、`--sa-threshold` / `--pc-threshold`），或导入官方 JSON。权重需由调用方提供，不内置。
 
 <BenchmarkPageSections id="videophy" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id videophy \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -31,7 +31,7 @@ worldfoundry-eval zoo benchmark-run \
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/videophy/run_videophy_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/videophy/run_videophy_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --videocon-checkpoint /path/to/videocon_physics \
@@ -41,7 +41,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 环境变量：`WORLDFOUNDRY_VIDEOPHY_RESULTS_PATH`、`WORLDFOUNDRY_VIDEOPHY_JUDGE_BACKEND`。Prompt 列表：`worldfoundry/data/benchmarks/assets/videophy/prompts.json`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/videophy.yaml`，`worldfoundry/evaluation/tasks/execution/runners/videophy`。
+清单与运行器：`worldfoundry/data/benchmarks/tasks/external/videophy.yaml`、`worldfoundry/evals/tasks/execution/runners/videophy`。
 
 产物包括 `scorecard.json`（主键 `videophy_average`）。
 

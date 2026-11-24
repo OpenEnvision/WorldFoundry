@@ -4,7 +4,6 @@ import importlib.util
 import types
 from pathlib import Path
 
-
 SETTINGS_PATH = (
     Path(__file__).resolve().parents[2]
     / "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/settings.py"
@@ -28,11 +27,14 @@ def test_krea_resolves_hf_downloader_wan_directory(monkeypatch, tmp_path: Path) 
     monkeypatch.setattr(settings, "MODEL_FOLDER", str(tmp_path))
 
     assert settings.resolve_model_path("Wan2.1-T2V-1.3B") == model_root.resolve()
-    assert settings.resolve_model_asset(
-        "Wan2.1-T2V-1.3B",
-        "models_t5_umt5-xxl-enc-bf16.safetensors",
-        "models_t5_umt5-xxl-enc-bf16.pth",
-    ) == weight
+    assert (
+        settings.resolve_model_asset(
+            "Wan2.1-T2V-1.3B",
+            "models_t5_umt5-xxl-enc-bf16.safetensors",
+            "models_t5_umt5-xxl-enc-bf16.pth",
+        )
+        == weight
+    )
 
 
 def test_krea_explicit_model_root_has_priority(monkeypatch, tmp_path: Path) -> None:

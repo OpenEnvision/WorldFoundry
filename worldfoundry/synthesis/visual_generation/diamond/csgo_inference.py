@@ -13,7 +13,10 @@ import yaml
 
 from worldfoundry.core.media.codecs.video import save_video_h264
 from worldfoundry.synthesis.visual_generation.diamond.models.diffusion.csgo import (
-    CsgoDenoiser, CsgoDenoiserConfig, CsgoSampler, CsgoSamplerConfig,
+    CsgoDenoiser,
+    CsgoDenoiserConfig,
+    CsgoSampler,
+    CsgoSamplerConfig,
 )
 from worldfoundry.synthesis.visual_generation.diamond.models.diffusion.inner_model import InnerModelConfig
 
@@ -55,7 +58,7 @@ def load_models(root: Path, checkpoint: Path, device: torch.device):
         inner["num_actions"] = 51
         model = CsgoDenoiser(CsgoDenoiserConfig(inner_model=InnerModelConfig(**inner), **values))
         prefix = name + "."
-        subset = {key[len(prefix):]: value for key, value in state.items() if key.startswith(prefix)}
+        subset = {key[len(prefix) :]: value for key, value in state.items() if key.startswith(prefix)}
         covered.update(key for key in state if key.startswith(prefix))
         model.load_state_dict(subset, strict=True)
         models[name] = model.eval().to(device)
@@ -77,10 +80,18 @@ def run(args):
     fast = args.sampler == "fast"
     samplers = (
         CsgoSampler(models["denoiser"], CsgoSamplerConfig(num_steps_denoising=1 if fast else 3, s_cond=0.005)),
-        CsgoSampler(models["upsampler"], CsgoSamplerConfig(
-            num_steps_denoising=1 if fast else 10, sigma_min=1, order=2 if fast else 1,
-            s_churn=10, s_tmin=1, s_tmax=5, s_noise=0.9,
-        )),
+        CsgoSampler(
+            models["upsampler"],
+            CsgoSamplerConfig(
+                num_steps_denoising=1 if fast else 10,
+                sigma_min=1,
+                order=2 if fast else 1,
+                s_churn=10,
+                s_tmin=1,
+                s_tmax=5,
+                s_noise=0.9,
+            ),
+        ),
     )
 
     def pixels(name, shape):
@@ -92,7 +103,11 @@ def run(args):
     obs = pixels("low_res.npy", (3, 30, 56))
     full = pixels("full_res.npy", (3, 150, 280))
     history = torch.as_tensor(np.load(spawn / "act.npy", allow_pickle=False), device=device).unsqueeze(0)
-    if history.shape != (1, obs.shape[1], 51) or full.shape[1] != obs.shape[1] or not bool(((history == 0) | (history == 1)).all()):
+    if (
+        history.shape != (1, obs.shape[1], 51)
+        or full.shape[1] != obs.shape[1]
+        or not bool(((history == 0) | (history == 1)).all())
+    ):
         raise ValueError("CS:GO spawn history must contain aligned frames and 51D binary actions")
     history = history.long()
     torch.manual_seed(args.seed)
@@ -114,11 +129,21 @@ def run(args):
     output = Path(args.output_path).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     save_video_h264(((video.clamp(-1, 1) + 1) * 127.5).byte().permute(0, 2, 3, 1).numpy(), output, fps=args.fps)
-    output.with_suffix(".inference.json").write_text(json.dumps({
-        "variant": "csgo", "checkpoint": str(checkpoint), "spawn": str(spawn),
-        "sampler": args.sampler, "seed": args.seed, "frames": len(frames),
-        "shape": list(video.shape), "actions": actions.cpu().tolist(),
-    }, indent=2))
+    output.with_suffix(".inference.json").write_text(
+        json.dumps(
+            {
+                "variant": "csgo",
+                "checkpoint": str(checkpoint),
+                "spawn": str(spawn),
+                "sampler": args.sampler,
+                "seed": args.seed,
+                "frames": len(frames),
+                "shape": list(video.shape),
+                "actions": actions.cpu().tolist(),
+            },
+            indent=2,
+        )
+    )
 
 
 def main():

@@ -11,7 +11,7 @@ Encode is not on this role (T2V draws noise with 17-frame packing).
 This is StepVideo's own VAE, not SD / Wan / Hunyuan.
 """
 
-from .model import AutoencoderKL
 from .component import StepVideoDecoder, build_step_video_decoder
+from .model import AutoencoderKL
 
 __all__ = ["AutoencoderKL", "StepVideoDecoder", "build_step_video_decoder"]

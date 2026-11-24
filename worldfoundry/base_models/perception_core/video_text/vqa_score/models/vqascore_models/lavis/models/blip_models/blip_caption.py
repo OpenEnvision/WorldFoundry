@@ -1,19 +1,30 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
+from typing import ClassVar
+
 import torch
+
 from ...common.registry import registry
 
+# isort: split
 from .blip import BlipBase
+
+# isort: split
 from .blip_outputs import (
-    BlipOutput,
     BlipIntermediateOutput,
+    BlipOutput,
 )
+
+# isort: split
 from ..med import XBertLMHeadDecoder
+
+# isort: split
+# isort: split
 from ..vit import VisionTransformerEncoder
 
 
@@ -32,7 +43,7 @@ class BlipCaption(BlipBase):
         >>> model = load_model("blip_caption", "large_coco")
     """
 
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "base_coco": "configs/models/blip_caption_base_coco.yaml",
         "large_coco": "configs/models/blip_caption_large_coco.yaml",
     }
@@ -67,15 +78,11 @@ class BlipCaption(BlipBase):
         text.input_ids[:, 0] = self.tokenizer.bos_token_id
 
         # prepare targets for forwarding decoder
-        decoder_targets = text.input_ids.masked_fill(
-            text.input_ids == self.tokenizer.pad_token_id, -100
-        )
+        decoder_targets = text.input_ids.masked_fill(text.input_ids == self.tokenizer.pad_token_id, -100)
         decoder_targets[:, : self.prompt_length] = -100
 
         # forward decoder
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            self.device
-        )
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(self.device)
         decoder_output = self.text_decoder(
             input_ids=text.input_ids,
             attention_mask=text.attention_mask,

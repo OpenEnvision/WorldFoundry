@@ -4,22 +4,20 @@ References:
     - MAE: https://github.com/facebookresearch/mae
 """
 
-import numpy as np
-import math
 import functools
-from collections import namedtuple
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange
 from timm.models.vision_transformer import Mlp
-from timm.layers.helpers import to_2tuple
-from rotary_embedding_torch import RotaryEmbedding, apply_rotary_emb
-from dit import PatchEmbed
+
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+from worldfoundry.core.attention.rotary.interleaved import apply_rotary_emb
+from worldfoundry.synthesis.visual_generation.open_oasis.dit import PatchEmbed
+from worldfoundry.synthesis.visual_generation.open_oasis.rotary_embedding_torch import RotaryEmbedding
 
 
-class DiagonalGaussianDistribution(object):
+class DiagonalGaussianDistribution:
     def __init__(self, parameters, deterministic=False, dim=1):
         self.parameters = parameters
         self.mean, self.logvar = torch.chunk(parameters, 2, dim=dim)
@@ -71,7 +69,7 @@ class Attention(nn.Module):
 
     def forward(self, x):
         B, N, C = x.shape
-        assert N == self.frame_height * self.frame_width
+        assert self.frame_height * self.frame_width == N
 
         q, k, v = self.qkv(x).chunk(3, dim=-1)
 
@@ -161,7 +159,7 @@ class AutoencoderKL(nn.Module):
         dec_depth=6,
         dec_heads=12,
         mlp_ratio=4.0,
-        norm_layer=functools.partial(nn.LayerNorm, eps=1e-6),
+        norm_layer=functools.partial(nn.LayerNorm, eps=1e-6),  # noqa: B008 - Default evaluated once at definition, as upstream.
         use_variational=True,
         **kwargs,
     ):
@@ -262,7 +260,9 @@ class AutoencoderKL(nn.Module):
     def unpatchify(self, x):
         bsz = x.shape[0]
         # unpatchify
-        x = x.reshape(bsz, self.seq_h, self.seq_w, self.patch_dim).permute([0, 3, 1, 2])  # [b, h, w, cxpxp] --> [b, cxpxp, h, w]
+        x = x.reshape(bsz, self.seq_h, self.seq_w, self.patch_dim).permute(
+            [0, 3, 1, 2]
+        )  # [b, h, w, cxpxp] --> [b, cxpxp, h, w]
         x = x.reshape(
             bsz,
             3,
@@ -313,10 +313,7 @@ class AutoencoderKL(nn.Module):
 
     def autoencode(self, input, sample_posterior=True):
         posterior = self.encode(input)
-        if self.use_variational and sample_posterior:
-            z = posterior.sample()
-        else:
-            z = posterior.mode()
+        z = posterior.sample() if self.use_variational and sample_posterior else posterior.mode()
         dec = self.decode(z)
         return dec, posterior, z
 
@@ -336,10 +333,7 @@ class AutoencoderKL(nn.Module):
 
 
 def ViT_L_20_Shallow_Encoder(**kwargs):
-    if "latent_dim" in kwargs:
-        latent_dim = kwargs.pop("latent_dim")
-    else:
-        latent_dim = 16
+    latent_dim = kwargs.pop("latent_dim") if "latent_dim" in kwargs else 16
     return AutoencoderKL(
         latent_dim=latent_dim,
         patch_size=20,

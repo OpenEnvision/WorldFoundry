@@ -4,12 +4,11 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> general_3d -> lagernvs -> lagernvs_runtime -> models -> layers -> renderer_blocks.py functionality."""
-
 import torch.nn as nn
-from models.layers.attention import Attention
+
 from worldfoundry.core.nn.blocks.layers import Mlp
 
+from .attention import Attention
 
 #################################################################################
 #                             Renderer Block Classes                            #
@@ -35,21 +34,6 @@ class FullAttentionBlock(nn.Module):
         mlp_dropout=0.0,
         use_qk_norm=True,
     ):
-        """Init.
-
-        Args:
-            hidden_dim: The hidden dim.
-            num_heads: The num heads.
-            ln_bias: The ln bias.
-            attn_qkv_bias: The attn qkv bias.
-            attn_dropout: The attn dropout.
-            attn_fc_bias: The attn fc bias.
-            attn_fc_dropout: The attn fc dropout.
-            mlp_ratio: The mlp ratio.
-            mlp_bias: The mlp bias.
-            mlp_dropout: The mlp dropout.
-            use_qk_norm: The use qk norm.
-        """
         super().__init__()
 
         self.norm1 = nn.LayerNorm(hidden_dim, bias=ln_bias)
@@ -71,11 +55,6 @@ class FullAttentionBlock(nn.Module):
         )
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         x = x + self.attn(self.norm1(x))
         x = x + self.mlp(self.norm2(x))
         return x
@@ -101,21 +80,6 @@ class CrossAttentionBlock(nn.Module):
         mlp_dropout=0.0,
         use_qk_norm=True,
     ):
-        """Init.
-
-        Args:
-            hidden_dim: The hidden dim.
-            num_heads: The num heads.
-            ln_bias: The ln bias.
-            attn_qkv_bias: The attn qkv bias.
-            attn_dropout: The attn dropout.
-            attn_fc_bias: The attn fc bias.
-            attn_fc_dropout: The attn fc dropout.
-            mlp_ratio: The mlp ratio.
-            mlp_bias: The mlp bias.
-            mlp_dropout: The mlp dropout.
-            use_qk_norm: The use qk norm.
-        """
         super().__init__()
 
         self.norm1 = nn.LayerNorm(hidden_dim, bias=ln_bias)
@@ -149,17 +113,9 @@ class CrossAttentionBlock(nn.Module):
         )
 
     def forward(self, x, cond_tokens):
-        """Forward.
-
-        Args:
-            x: The x.
-            cond_tokens: The cond tokens.
-        """
         # x: (B v_target) x P x C
         # cond_tokens: (B v_target) x (P v_input) x C
-        assert (
-            x.ndim == 3 and cond_tokens.ndim == 3
-        ), f"Unexpected number of dimensions, {x.ndim}, {cond_tokens.ndim}"
+        assert x.ndim == 3 and cond_tokens.ndim == 3, f"Unexpected number of dimensions, {x.ndim}, {cond_tokens.ndim}"
 
         # self-attention
         y = self.norm1(x)
@@ -199,21 +155,6 @@ class BidirectionalCrossAttentionBlock(nn.Module):
         mlp_dropout=0.0,
         use_qk_norm=True,
     ):
-        """Init.
-
-        Args:
-            hidden_dim: The hidden dim.
-            num_heads: The num heads.
-            ln_bias: The ln bias.
-            attn_qkv_bias: The attn qkv bias.
-            attn_dropout: The attn dropout.
-            attn_fc_bias: The attn fc bias.
-            attn_fc_dropout: The attn fc dropout.
-            mlp_ratio: The mlp ratio.
-            mlp_bias: The mlp bias.
-            mlp_dropout: The mlp dropout.
-            use_qk_norm: The use qk norm.
-        """
         super().__init__()
 
         self.norm1_x = nn.LayerNorm(hidden_dim, bias=ln_bias)
@@ -265,17 +206,9 @@ class BidirectionalCrossAttentionBlock(nn.Module):
         )
 
     def forward(self, x, cond_tokens):
-        """Forward.
-
-        Args:
-            x: The x.
-            cond_tokens: The cond tokens.
-        """
         # x: (B v_target) x P x C
         # cond_tokens: (B v_target) x (P v_input) x C
-        assert (
-            x.ndim == 3 and cond_tokens.ndim == 3
-        ), f"Unexpected number of dimensions, {x.ndim}, {cond_tokens.ndim}"
+        assert x.ndim == 3 and cond_tokens.ndim == 3, f"Unexpected number of dimensions, {x.ndim}, {cond_tokens.ndim}"
 
         # self-attention
         x = x + self.self_attn(self.norm1_x(x), kv=None)

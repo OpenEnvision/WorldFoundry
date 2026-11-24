@@ -5,9 +5,9 @@ References: DUSt3R, MoGe
 """
 
 from numbers import Number
-from typing import Tuple, Union
 
 import numpy as np
+
 from .warnings import no_warnings
 
 
@@ -51,15 +51,11 @@ def angle_diff_vec3_numpy(v1: np.ndarray, v2: np.ndarray, eps: float = 1e-12):
     Returns:
         np.ndarray: Angle differences in radians
     """
-    return np.arctan2(
-        np.linalg.norm(np.cross(v1, v2, axis=-1), axis=-1) + eps, (v1 * v2).sum(axis=-1)
-    )
+    return np.arctan2(np.linalg.norm(np.cross(v1, v2, axis=-1), axis=-1) + eps, (v1 * v2).sum(axis=-1))
 
 
 @no_warnings(category=RuntimeWarning)
-def points_to_normals(
-    point: np.ndarray, mask: np.ndarray = None, edge_threshold: float = None
-) -> np.ndarray:
+def points_to_normals(point: np.ndarray, mask: np.ndarray = None, edge_threshold: float | None = None) -> np.ndarray:
     """
     Calculate normal map from point map. Value range is [-1, 1].
 
@@ -151,9 +147,7 @@ def sliding_window_1d(x: np.ndarray, window_size: int, stride: int, axis: int = 
         array([[1, 2, 3],
                [3, 4, 5]])
     """
-    assert x.shape[axis] >= window_size, (
-        f"kernel_size ({window_size}) is larger than axis_size ({x.shape[axis]})"
-    )
+    assert x.shape[axis] >= window_size, f"kernel_size ({window_size}) is larger than axis_size ({x.shape[axis]})"
     axis = axis % x.ndim
     shape = (
         *x.shape[:axis],
@@ -173,9 +167,9 @@ def sliding_window_1d(x: np.ndarray, window_size: int, stride: int, axis: int = 
 
 def sliding_window_nd(
     x: np.ndarray,
-    window_size: Tuple[int, ...],
-    stride: Tuple[int, ...],
-    axis: Tuple[int, ...],
+    window_size: tuple[int, ...],
+    stride: tuple[int, ...],
+    axis: tuple[int, ...],
 ) -> np.ndarray:
     """
     Create sliding windows along multiple dimensions of the input array.
@@ -210,9 +204,9 @@ def sliding_window_nd(
 
 def sliding_window_2d(
     x: np.ndarray,
-    window_size: Union[int, Tuple[int, int]],
-    stride: Union[int, Tuple[int, int]],
-    axis: Tuple[int, int] = (-2, -1),
+    window_size: int | tuple[int, int],
+    stride: int | tuple[int, int],
+    axis: tuple[int, int] = (-2, -1),
 ) -> np.ndarray:
     """
     Create 2D sliding windows over the input array.
@@ -245,9 +239,7 @@ def sliding_window_2d(
     return sliding_window_nd(x, window_size, stride, axis)
 
 
-def max_pool_1d(
-    x: np.ndarray, kernel_size: int, stride: int, padding: int = 0, axis: int = -1
-):
+def max_pool_1d(x: np.ndarray, kernel_size: int, stride: int, padding: int = 0, axis: int = -1):
     """
     Perform 1D max pooling on the input array.
 
@@ -291,10 +283,10 @@ def max_pool_1d(
 
 def max_pool_nd(
     x: np.ndarray,
-    kernel_size: Tuple[int, ...],
-    stride: Tuple[int, ...],
-    padding: Tuple[int, ...],
-    axis: Tuple[int, ...],
+    kernel_size: tuple[int, ...],
+    stride: tuple[int, ...],
+    padding: tuple[int, ...],
+    axis: tuple[int, ...],
 ) -> np.ndarray:
     """
     Perform N-dimensional max pooling on the input array.
@@ -330,10 +322,10 @@ def max_pool_nd(
 
 def max_pool_2d(
     x: np.ndarray,
-    kernel_size: Union[int, Tuple[int, int]],
-    stride: Union[int, Tuple[int, int]],
-    padding: Union[int, Tuple[int, int]],
-    axis: Tuple[int, int] = (-2, -1),
+    kernel_size: int | tuple[int, int],
+    stride: int | tuple[int, int],
+    padding: int | tuple[int, int],
+    axis: tuple[int, int] = (-2, -1),
 ):
     """
     Perform 2D max pooling on the input array.
@@ -373,8 +365,8 @@ def max_pool_2d(
 @no_warnings(category=RuntimeWarning)
 def depth_edge(
     depth: np.ndarray,
-    atol: float = None,
-    rtol: float = None,
+    atol: float | None = None,
+    rtol: float | None = None,
     kernel_size: int = 3,
     mask: np.ndarray = None,
 ) -> np.ndarray:
@@ -390,9 +382,9 @@ def depth_edge(
         edge (np.ndarray): shape (..., height, width) of dtype torch.bool
     """
     if mask is None:
-        diff = max_pool_2d(
-            depth, kernel_size, stride=1, padding=kernel_size // 2
-        ) + max_pool_2d(-depth, kernel_size, stride=1, padding=kernel_size // 2)
+        diff = max_pool_2d(depth, kernel_size, stride=1, padding=kernel_size // 2) + max_pool_2d(
+            -depth, kernel_size, stride=1, padding=kernel_size // 2
+        )
     else:
         diff = max_pool_2d(
             np.where(mask, depth, -np.inf),
@@ -417,8 +409,8 @@ def depth_edge(
 
 def depth_aliasing(
     depth: np.ndarray,
-    atol: float = None,
-    rtol: float = None,
+    atol: float | None = None,
+    rtol: float | None = None,
     kernel_size: int = 3,
     mask: np.ndarray = None,
 ) -> np.ndarray:
@@ -433,12 +425,8 @@ def depth_aliasing(
         edge (np.ndarray): shape (..., height, width) of dtype torch.bool
     """
     if mask is None:
-        diff_max = (
-            max_pool_2d(depth, kernel_size, stride=1, padding=kernel_size // 2) - depth
-        )
-        diff_min = (
-            max_pool_2d(-depth, kernel_size, stride=1, padding=kernel_size // 2) + depth
-        )
+        diff_max = max_pool_2d(depth, kernel_size, stride=1, padding=kernel_size // 2) - depth
+        diff_min = max_pool_2d(-depth, kernel_size, stride=1, padding=kernel_size // 2) + depth
     else:
         diff_max = (
             max_pool_2d(
@@ -469,9 +457,7 @@ def depth_aliasing(
 
 
 @no_warnings(category=RuntimeWarning)
-def normals_edge(
-    normals: np.ndarray, tol: float, kernel_size: int = 3, mask: np.ndarray = None
-) -> np.ndarray:
+def normals_edge(normals: np.ndarray, tol: float, kernel_size: int = 3, mask: np.ndarray = None) -> np.ndarray:
     """
     Compute the edge mask from normal map.
 
@@ -482,9 +468,7 @@ def normals_edge(
     Returns:
         edge (np.ndarray): shape (..., height, width) of dtype torch.bool
     """
-    assert normals.ndim >= 3 and normals.shape[-1] == 3, (
-        "normal should be of shape (..., height, width, 3)"
-    )
+    assert normals.ndim >= 3 and normals.shape[-1] == 3, "normal should be of shape (..., height, width, 3)"
     normals = normals / (np.linalg.norm(normals, axis=-1, keepdims=True) + 1e-12)
 
     padding = kernel_size // 2
@@ -504,9 +488,7 @@ def normals_edge(
         axis=(-3, -2),
     )
     if mask is None:
-        angle_diff = np.arccos(
-            (normals[..., None, None] * normals_window).sum(axis=-3)
-        ).max(axis=(-2, -1))
+        angle_diff = np.arccos((normals[..., None, None] * normals_window).sum(axis=-3)).max(axis=(-2, -1))
     else:
         mask_window = sliding_window_2d(
             np.pad(
@@ -524,8 +506,6 @@ def normals_edge(
             0,
         ).max(axis=(-2, -1))
 
-    angle_diff = max_pool_2d(
-        angle_diff, kernel_size, stride=1, padding=kernel_size // 2
-    )
+    angle_diff = max_pool_2d(angle_diff, kernel_size, stride=1, padding=kernel_size // 2)
     edge = angle_diff > np.deg2rad(tol)
     return edge

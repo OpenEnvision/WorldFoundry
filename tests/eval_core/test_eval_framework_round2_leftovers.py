@@ -7,51 +7,50 @@ are frozen), and EF-21 (intentional catalog status literals are registered).
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.api.metrics import MetricSpec
-from worldfoundry.evaluation.api.registry import (
+from worldfoundry.core.world_model_manifest import WorldModelManifest
+from worldfoundry.evals.api.metrics import MetricSpec
+from worldfoundry.evals.api.registry import (
     AliasRegistryStore,
     DuplicateRegistryKeyError,
     MetricSpecRegistry,
     ModelManifestRegistry,
 )
-from worldfoundry.evaluation.api.world_model_manifest import WorldModelManifest
-from worldfoundry.evaluation.models.catalog import schema as catalog_schema
-from worldfoundry.evaluation.models.catalog.registry import (
-    clear_model_registry_cache,
-    discover_model_registry,
-)
-from worldfoundry.evaluation.models.catalog.schema import (
-    ModelZooEntry,
-    _normalize_demo_status,
-    _normalize_integration_status,
-    _normalize_source_status,
-)
-from worldfoundry.evaluation.models.catalog.zoo_registry import (
-    ModelZooRegistry,
-    clear_model_zoo_registry_cache,
-    load_model_zoo_registry,
-)
-from worldfoundry.evaluation.models.pipelines.aliases import (
+from worldfoundry.zoo.aliases import (
     PipelineAliasGroup,
     PipelineAliasRegistry,
     clear_pipeline_alias_registry_cache,
     load_pipeline_alias_registry,
 )
-from worldfoundry.evaluation.models.pipelines.bindings import (
+from worldfoundry.zoo.bindings import (
     PipelineBinding,
-    PipelineBindingRegistry,
     clear_pipeline_binding_registry_cache,
     load_pipeline_binding_registry,
-    merge_pipeline_binding_plugins,
+)
+from worldfoundry.zoo.catalog import schema as catalog_schema
+from worldfoundry.zoo.catalog.registry import (
+    clear_model_registry_cache,
+    discover_model_registry,
+)
+from worldfoundry.zoo.catalog.schema import (
+    ModelZooEntry,
+    _normalize_demo_status,
+    _normalize_integration_status,
+    _normalize_source_status,
+)
+from worldfoundry.zoo.catalog.zoo_registry import (
+    ModelZooRegistry,
+    clear_model_zoo_registry_cache,
+    load_model_zoo_registry,
 )
 
 
 @pytest.fixture(autouse=True)
-def _reset_status_warning_dedupe() -> None:
+def _reset_status_warning_dedupe() -> Iterator[None]:
     catalog_schema._WARNED_UNKNOWN_STATUSES.clear()
     yield
     catalog_schema._WARNED_UNKNOWN_STATUSES.clear()
@@ -73,9 +72,7 @@ def test_typed_registry_is_backed_by_alias_store() -> None:
 
 def test_typed_registry_wrapper_keeps_self_and_cross_collision_errors() -> None:
     with pytest.raises(DuplicateRegistryKeyError, match="own canonical key"):
-        ModelManifestRegistry().register(
-            WorldModelManifest(model_id="alpha", name="alpha", aliases=("ALPHA",))
-        )
+        ModelManifestRegistry().register(WorldModelManifest(model_id="alpha", name="alpha", aliases=("ALPHA",)))
 
     registry = ModelManifestRegistry()
     registry.register(WorldModelManifest(model_id="model-a", aliases=("shared",)))
@@ -148,10 +145,6 @@ def test_cached_pipeline_binding_registry_is_frozen(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="cached PipelineBindingRegistry"):
         cached.register(extra)
 
-    merged = merge_pipeline_binding_plugins(cached, {"extra": extra})
-    assert merged.get("extra").binding_id == "extra"
-    with pytest.raises(KeyError):
-        cached.get("extra")
     clear_pipeline_binding_registry_cache()
 
 
@@ -180,7 +173,7 @@ def test_clear_model_registry_cache_empties_lru() -> None:
 
 
 def test_registered_catalog_statuses_do_not_warn(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.evaluation.models.catalog.schema"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.zoo.catalog.schema"):
         assert _normalize_integration_status("runtime_ported") == "integrated"
         assert _normalize_integration_status("verified") == "integrated"
         assert _normalize_integration_status("route_ready") == "integrated"
@@ -192,17 +185,17 @@ def test_registered_catalog_statuses_do_not_warn(caplog: pytest.LogCaptureFixtur
 
 
 def test_unknown_status_still_warns_once(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.evaluation.models.catalog.schema"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.zoo.catalog.schema"):
         assert _normalize_integration_status("typo_integarted") == "planned"
     assert any("typo_integarted" in record.getMessage() for record in caplog.records)
 
     caplog.clear()
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.evaluation.models.catalog.schema"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.zoo.catalog.schema"):
         assert _normalize_integration_status("typo_integarted") == "planned"
     assert not caplog.records
 
 
 def test_unknown_source_status_warns(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.WARNING, logger="worldfoundry.evaluation.models.catalog.schema"):
+    with caplog.at_level(logging.WARNING, logger="worldfoundry.zoo.catalog.schema"):
         assert _normalize_source_status("totally_made_up_source") == "unknown"
     assert any("totally_made_up_source" in record.getMessage() for record in caplog.records)

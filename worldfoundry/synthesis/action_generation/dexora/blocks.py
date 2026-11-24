@@ -18,8 +18,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from worldfoundry.core.attention import QKNormRopeSelfAttention, scaled_dot_product_attention
+from worldfoundry.core.attention import scaled_dot_product_attention
 from worldfoundry.core.nn import Mlp
+from worldfoundry.core.nn.transformer.vit_qkv import QKNormRopeSelfAttention
 
 
 class RmsNorm(nn.Module):
@@ -241,7 +242,7 @@ def get_nd_sincos_pos_embed_from_grid(embed_dim, grid_sizes):
     num_sizes = len(grid_sizes)
     # For grid size of 1, we do not need to add any positional embedding
     num_valid_sizes = len([x for x in grid_sizes if x > 1])
-    emb = np.zeros(grid_sizes + (embed_dim,))
+    emb = np.zeros(grid_sizes + (embed_dim,))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     # Uniformly divide the embedding dimension for each grid size
     dim_for_each_grid = embed_dim // num_valid_sizes
     # To make it even
@@ -288,11 +289,11 @@ def get_multimodal_cond_pos_embed(embed_dim, mm_cond_lens: OrderedDict, embed_mo
     # Get embeddings for positions inside each modality
     c_pos_emb = np.zeros((0, embed_dim))
     for idx, (modality, cond_len) in enumerate(mm_cond_lens.items()):
-        if modality == "image" and (isinstance(cond_len, tuple) or isinstance(cond_len, list)):
+        if modality == "image" and (isinstance(cond_len, (tuple, list))):
             all_grid_sizes = tuple([abs(x) for x in cond_len])
             embed_grid_sizes = tuple([x if x > 0 else 1 for x in cond_len])
             cond_sincos_embed = get_nd_sincos_pos_embed_from_grid(pos_embed_dim, embed_grid_sizes)
-            cond_pos_embed = np.zeros(all_grid_sizes + (embed_dim,))
+            cond_pos_embed = np.zeros(all_grid_sizes + (embed_dim,))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             cond_pos_embed[..., -pos_embed_dim:] += cond_sincos_embed
             cond_pos_embed = cond_pos_embed.reshape((-1, embed_dim))
         else:

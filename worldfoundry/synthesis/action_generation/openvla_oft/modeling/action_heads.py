@@ -36,6 +36,7 @@ class SinusoidalPositionalEncoding(nn.Module):
 
 class MLPResNetBlock(nn.Module):
     """One MLP ResNet block with a residual connection."""
+
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
@@ -57,6 +58,7 @@ class MLPResNetBlock(nn.Module):
 
 class MLPResNet(nn.Module):
     """MLP with residual connection blocks."""
+
     def __init__(self, num_blocks, input_dim, hidden_dim, output_dim):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(input_dim)
@@ -82,6 +84,7 @@ class MLPResNet(nn.Module):
 
 class L1RegressionActionHead(nn.Module):
     """Simple MLP-based action head that generates continuous actions via L1 regression."""
+
     def __init__(
         self,
         input_dim=4096,
@@ -91,14 +94,14 @@ class L1RegressionActionHead(nn.Module):
         super().__init__()
         self.action_dim = action_dim
         self.model = MLPResNet(
-            num_blocks=2, input_dim=input_dim*ACTION_DIM, hidden_dim=hidden_dim, output_dim=action_dim
+            num_blocks=2, input_dim=input_dim * ACTION_DIM, hidden_dim=hidden_dim, output_dim=action_dim
         )
 
     def predict_action(self, actions_hidden_states):
         # actions_hidden_states: last hidden states of Transformer corresponding to action tokens in sequence
         # - shape: (batch_size, chunk_len * action_dim, hidden_dim)
         batch_size = actions_hidden_states.shape[0]
-        device = actions_hidden_states.device
+        _device = actions_hidden_states.device
         rearranged_actions_hidden_states = actions_hidden_states.reshape(batch_size, NUM_ACTIONS_CHUNK, -1)
         action = self.model(rearranged_actions_hidden_states)
         return action
@@ -155,12 +158,14 @@ class DiffusionActionHead(nn.Module):
         super().__init__()
         self.action_dim = action_dim
         self.noise_predictor = NoisePredictionModel(
-            transformer_hidden_dim=hidden_dim*ACTION_DIM, hidden_dim=hidden_dim, action_dim=action_dim
+            transformer_hidden_dim=hidden_dim * ACTION_DIM, hidden_dim=hidden_dim, action_dim=action_dim
         )
         self.num_diffusion_steps_train = num_diffusion_steps_train
         from diffusers.schedulers.scheduling_ddim import DDIMScheduler
 
-        self.noise_scheduler = DDIMScheduler(num_train_timesteps=num_diffusion_steps_train, beta_schedule="squaredcos_cap_v2")
+        self.noise_scheduler = DDIMScheduler(
+            num_train_timesteps=num_diffusion_steps_train, beta_schedule="squaredcos_cap_v2"
+        )
         self.time_encoder = SinusoidalPositionalEncoding(dim=hidden_dim)
 
     def predict_noise(self, actions_hidden_states):
@@ -171,8 +176,10 @@ class DiffusionActionHead(nn.Module):
         # actions_hidden_states: last hidden states of Transformer corresponding to action tokens in sequence
         # - shape: (batch_size, chunk_len * action_dim, hidden_dim)
         batch_size = actions_hidden_states.shape[0]
-        device = actions_hidden_states.device
-        rearranged_actions_hidden_states = actions_hidden_states.reshape(batch_size, NUM_ACTIONS_CHUNK, -1)  # (batch_size, chunk_len, action_dim * hidden_dim)
+        _device = actions_hidden_states.device
+        rearranged_actions_hidden_states = actions_hidden_states.reshape(
+            batch_size, NUM_ACTIONS_CHUNK, -1
+        )  # (batch_size, chunk_len, action_dim * hidden_dim)
         # Get diffusion model's noise prediction.
         noise_pred = self.noise_predictor(rearranged_actions_hidden_states)
         return noise_pred

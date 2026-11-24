@@ -43,11 +43,12 @@ def select_tier(img_width: int) -> dict:
 # Panorama camera helpers (ported from infer_panorama_fov.py)
 # ---------------------------------------------------------------------------
 
+
 def _fibonacci_sphere(n: int) -> np.ndarray:
     i = np.arange(n, dtype=np.float32)
-    phi = (1 + 5 ** 0.5) / 2
+    phi = (1 + 5**0.5) / 2
     y = 1 - 2 * (i + 0.5) / n
-    r = np.sqrt(np.maximum(0.0, 1.0 - y ** 2))
+    r = np.sqrt(np.maximum(0.0, 1.0 - y**2))
     theta = 2 * np.pi * i / phi
     x = np.cos(theta) * r
     z = np.sin(theta) * r
@@ -56,12 +57,16 @@ def _fibonacci_sphere(n: int) -> np.ndarray:
 
 def _get_panorama_cameras(n_views: int, fov: float):
     import utils3d
+
     targets = _fibonacci_sphere(n_views)
     intr = utils3d.numpy.intrinsics_from_fov(
-        fov_x=np.deg2rad(fov), fov_y=np.deg2rad(fov),
+        fov_x=np.deg2rad(fov),
+        fov_y=np.deg2rad(fov),
     ).astype(np.float32)
     extr = utils3d.numpy.extrinsics_look_at(
-        [0, 0, 0], targets, [0, 0, 1],
+        [0, 0, 0],
+        targets,
+        [0, 0, 1],
     ).astype(np.float32)
     return extr, [intr] * n_views
 

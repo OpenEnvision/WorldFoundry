@@ -1,17 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import Any, Dict, Optional, Sequence
+from typing import Any
 
 import numpy as np
 import torch
 from PIL import Image
 
-from worldfoundry.synthesis.visual_generation.vmem.runtime_env import (
-    default_config_path,
-    ensure_vmem_runtime,
-)
-
+from worldfoundry.synthesis.visual_generation.vmem.runtime_env import default_config_path
 
 DEFAULT_VMEM_REPO = "liguang0115/vmem"
 DEFAULT_VMEM_SURFEL_REPO = "liguang0115/cut3r"
@@ -28,10 +25,7 @@ def _to_pil_image(data: Any) -> Image.Image:
             array = array[0]
         if array.dtype in (np.float16, np.float32, np.float64):
             if array.min() >= -1.0 and array.max() <= 1.0:
-                if array.min() < 0.0:
-                    array = (array + 1.0) * 127.5
-                else:
-                    array = array * 255.0
+                array = (array + 1.0) * 127.5 if array.min() < 0.0 else array * 255.0
             array = np.clip(array, 0.0, 255.0).astype(np.uint8)
         elif array.dtype != np.uint8:
             array = np.clip(array, 0, 255).astype(np.uint8)
@@ -76,21 +70,20 @@ class VMemRuntime:
     @classmethod
     def from_pretrained(
         cls,
-        pretrained_model_path: Optional[str] = None,
+        pretrained_model_path: str | None = None,
         args=None,
-        device: Optional[str] = None,
+        device: str | None = None,
         weight_dtype: torch.dtype = torch.float32,
-        config_path: Optional[str] = None,
-        surfel_model_path: Optional[str] = None,
+        config_path: str | None = None,
+        surfel_model_path: str | None = None,
         step_size: float = 0.1,
         num_interpolation_frames: int = 4,
-        runtime_root: Optional[str] = None,
-        visualization_dir: Optional[str] = None,
+        runtime_root: str | None = None,
+        visualization_dir: str | None = None,
         **kwargs,
-    ) -> "VMemRuntime":
-        ensure_vmem_runtime(runtime_root)
-
+    ) -> VMemRuntime:
         from omegaconf import OmegaConf
+
         from worldfoundry.synthesis.visual_generation.vmem.vmem_runtime.modeling.pipeline import (
             VMemPipeline as RuntimeVMemPipeline,
         )
@@ -245,9 +238,7 @@ class VMemRuntime:
             alpha = (frame_idx + 1) / num_frames
             pose = np.eye(4, dtype=np.float32)
             pose[:3, :3] = slerp(alpha).as_matrix().astype(np.float32)
-            pose[:3, 3] = (
-                (1.0 - alpha) * start_translation + alpha * end_translation
-            ).astype(np.float32)
+            pose[:3, 3] = ((1.0 - alpha) * start_translation + alpha * end_translation).astype(np.float32)
             interpolated.append(pose)
         return interpolated
 
@@ -329,12 +320,12 @@ class VMemRuntime:
     def predict(
         self,
         *,
-        image: Optional[Any] = None,
-        actions: Optional[Sequence[str]] = None,
+        image: Any | None = None,
+        actions: Sequence[str] | None = None,
         reset_state: bool = False,
         return_dict: bool = True,
         **kwargs,
-    ) -> Dict[str, Any] | np.ndarray:
+    ) -> dict[str, Any] | np.ndarray:
         del kwargs
 
         if reset_state:

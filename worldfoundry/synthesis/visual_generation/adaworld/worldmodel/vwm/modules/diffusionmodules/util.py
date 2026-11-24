@@ -8,14 +8,11 @@ https://github.com/openai/guided-diffusion/blob/0ba878e517b276c45d1195eb29f6f5f7
 """
 
 import math
+from typing import ClassVar
 
 import torch
 import torch.nn as nn
 from einops import rearrange, repeat
-
-
-
-
 
 
 def timestep_embedding(timesteps, dim, max_period=10000, repeat_only=False):
@@ -32,26 +29,14 @@ def timestep_embedding(timesteps, dim, max_period=10000, repeat_only=False):
         embedding = repeat(timesteps, "b -> b d", d=dim)
     else:
         half = dim // 2
-        freqs = torch.exp(
-            -math.log(max_period)
-            * torch.arange(start=0, end=half, dtype=torch.float32)
-            / half
-        ).to(device=timesteps.device)
+        freqs = torch.exp(-math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half).to(
+            device=timesteps.device
+        )
         args = timesteps[:, None].float() * freqs[None]
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
         if dim % 2:
             embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
     return embedding
-
-
-def zero_module(module):
-    """
-    Zero out the parameters of a module and return it.
-    """
-
-    for p in module.parameters():
-        p.detach().zero_()
-    return module
 
 
 def scale_module(module, scale):
@@ -92,14 +77,6 @@ def conv_nd(dims, *args, **kwargs):
         raise ValueError(f"Unsupported dimensions: {dims}")
 
 
-def linear(*args, **kwargs):
-    """
-    Create a linear module.
-    """
-
-    return nn.Linear(*args, **kwargs)
-
-
 def avg_pool_nd(dims, *args, **kwargs):
     """
     Create a 1D, 2D, or 3D average pooling module.
@@ -116,15 +93,10 @@ def avg_pool_nd(dims, *args, **kwargs):
 
 
 class AlphaBlender(nn.Module):
-    strategies = ["learned", "fixed", "learned_with_images"]
+    strategies: ClassVar[list] = ["learned", "fixed", "learned_with_images"]
 
-    def __init__(
-            self,
-            alpha: float,
-            merge_strategy: str,
-            rearrange_pattern: str
-    ):
-        super(AlphaBlender, self).__init__()
+    def __init__(self, alpha: float, merge_strategy: str, rearrange_pattern: str):
+        super().__init__()
         self.merge_strategy = merge_strategy
         self.rearrange_pattern = rearrange_pattern
 
@@ -149,11 +121,7 @@ class AlphaBlender(nn.Module):
             raise NotImplementedError
         return alpha
 
-    def forward(
-            self,
-            x_spatial: torch.Tensor,
-            x_temporal: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, x_spatial: torch.Tensor, x_temporal: torch.Tensor) -> torch.Tensor:
         alpha = self.get_alpha()
         x = alpha.to(x_spatial.dtype) * x_spatial + (1.0 - alpha).to(x_spatial.dtype) * x_temporal
         return x

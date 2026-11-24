@@ -1,20 +1,18 @@
-from pathlib import Path
-import struct
-from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.utils.geometry import (
-    closed_form_inverse_se3,
-)
-from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.variants.fantasy_world.utils.pose_enc import (
-    pose_encoding_to_extri_intri,
-)
 import math
 import os
+import struct
+from pathlib import Path
 
 import cv2
 import numpy as np
-from PIL import Image
 import PIL
-
 import torch
+from PIL import Image
+
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.variants.fantasy_world.utils.pose_enc import (
+    pose_encoding_to_extri_intri,
+)
+from worldfoundry.core.geometry.transforms import closed_form_inverse_se3
 
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 
@@ -78,15 +76,13 @@ def crop_image_depth_and_intrinsic_by_pp(
     intrinsic = np.copy(intrinsic)
     if original_size[0] < target_shape[0]:
         error_message = (
-            f"Width check failed: original width {original_size[0]} "
-            f"is less than target width {target_shape[0]}."
+            f"Width check failed: original width {original_size[0]} is less than target width {target_shape[0]}."
         )
         print(error_message)
         raise AssertionError(error_message)
     if original_size[1] < target_shape[1]:
         error_message = (
-            f"Height check failed: original height {original_size[1]} "
-            f"is less than target height {target_shape[1]}."
+            f"Height check failed: original height {original_size[1]} is less than target height {target_shape[1]}."
         )
         print(error_message)
         raise AssertionError(error_message)
@@ -133,38 +129,37 @@ def crop_image_depth_and_intrinsic_by_pp(
         track[:, 0] = track[:, 0] - start_y
 
     # If strict, zero-pad if the new shape is smaller than target_shape
-    if strict:
-        if (image.shape[:2] != target_shape).any():
-            current_h, current_w = image.shape[:2]
-            target_h, target_w = target_shape[0], target_shape[1]
-            pad_h = target_h - current_h
-            pad_w = target_w - current_w
-            if pad_h < 0 or pad_w < 0:
-                raise ValueError(
-                    f"The cropped image is bigger than the target shape: "
-                    f"cropped=({current_h},{current_w}), "
-                    f"target=({target_h},{target_w})."
-                )
-            image = np.pad(
-                image,
-                pad_width=((0, pad_h), (0, pad_w), (0, 0)),
+    if strict and (image.shape[:2] != target_shape).any():
+        current_h, current_w = image.shape[:2]
+        target_h, target_w = target_shape[0], target_shape[1]
+        pad_h = target_h - current_h
+        pad_w = target_w - current_w
+        if pad_h < 0 or pad_w < 0:
+            raise ValueError(
+                f"The cropped image is bigger than the target shape: "
+                f"cropped=({current_h},{current_w}), "
+                f"target=({target_h},{target_w})."
+            )
+        image = np.pad(
+            image,
+            pad_width=((0, pad_h), (0, pad_w), (0, 0)),
+            mode="constant",
+            constant_values=0,
+        )
+        if depth_map is not None:
+            depth_map = np.pad(
+                depth_map,
+                pad_width=((0, pad_h), (0, pad_w)),
                 mode="constant",
                 constant_values=0,
             )
-            if depth_map is not None:
-                depth_map = np.pad(
-                    depth_map,
-                    pad_width=((0, pad_h), (0, pad_w)),
-                    mode="constant",
-                    constant_values=0,
-                )
-            if conf_map is not None:
-                conf_map = np.pad(
-                    conf_map,
-                    pad_width=((0, pad_h), (0, pad_w)),
-                    mode="constant",
-                    constant_values=0,
-                )
+        if conf_map is not None:
+            conf_map = np.pad(
+                conf_map,
+                pad_width=((0, pad_h), (0, pad_w)),
+                mode="constant",
+                constant_values=0,
+            )
 
     return image, depth_map, intrinsic, track, conf_map
 
@@ -188,14 +183,14 @@ def normalize_scene(
     extrinsics_homog[:, :, -1, -1] = 1.0
 
     first_cam_extrinsic_inv = closed_form_inverse_se3(extrinsics_homog[:, 0])
-    new_extrinsics = torch.matmul(
-        extrinsics_homog, first_cam_extrinsic_inv.unsqueeze(1)
-    )  # (B,N,4,4)
+    new_extrinsics = torch.matmul(extrinsics_homog, first_cam_extrinsic_inv.unsqueeze(1))  # (B,N,4,4)
 
     R = extrinsics[:, 0, :3, :3]
     t = extrinsics[:, 0, :3, 3]
     first_moge_world = first_moge_world.to(torch.float32)
-    first_moge_world = (first_moge_world @ R.transpose(-1, -2).unsqueeze(1).unsqueeze(2)) + t.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+    first_moge_world = (first_moge_world @ R.transpose(-1, -2).unsqueeze(1).unsqueeze(2)) + t.unsqueeze(1).unsqueeze(
+        2
+    ).unsqueeze(3)
 
     point_masks = first_moge_mask.to(torch.bool).to(first_moge_world.device)
     final_mask = torch.zeros_like(point_masks)
@@ -308,8 +303,8 @@ def resize_by_short_side_and_update_intrinsics(
     intrinsic = np.copy(intrinsic)
 
     image_pil = Image.fromarray(image)
-    new_w = int(round(original_w * scale))
-    new_h = int(round(original_h * scale))
+    new_w = int(round(original_w * scale))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+    new_h = int(round(original_h * scale))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     output_resolution = (new_w, new_h)
     resample_filter = lanczos if scale < 1 else bicubic
     image_pil = image_pil.resize(output_resolution, resample=resample_filter)
@@ -340,8 +335,7 @@ def resize_by_short_side_and_update_intrinsics(
 
     if depth_map is not None:
         assert image.shape[:2] == depth_map.shape[:2], (
-            f"Resized image shape {image.shape[:2]} "
-            f"does not match depth shape {depth_map.shape[:2]}"
+            f"Resized image shape {image.shape[:2]} does not match depth shape {depth_map.shape[:2]}"
         )
 
     return image, depth_map, intrinsic, track, conf_map
@@ -415,9 +409,7 @@ def resize_image_depth_and_intrinsic(
     image = Image.fromarray(image)
     input_resolution = np.array(image.size)
     output_resolution = np.floor(input_resolution * max_resize_scale).astype(int)
-    image = image.resize(
-        tuple(output_resolution), resample=lanczos if max_resize_scale < 1 else bicubic
-    )
+    image = image.resize(tuple(output_resolution), resample=lanczos if max_resize_scale < 1 else bicubic)
     image = np.array(image)
 
     if depth_map is not None:
@@ -489,12 +481,8 @@ def threshold_depth_map(
         depth_map[depth_map > max_depth] = 0.0
 
     # Percentile-based thresholds
-    depth_max_thres = (
-        np.nanpercentile(depth_map, max_percentile) if max_percentile > 0 else None
-    )
-    depth_min_thres = (
-        np.nanpercentile(depth_map, min_percentile) if min_percentile > 0 else None
-    )
+    depth_max_thres = np.nanpercentile(depth_map, max_percentile) if max_percentile > 0 else None
+    depth_min_thres = np.nanpercentile(depth_map, min_percentile) if min_percentile > 0 else None
 
     # Apply the thresholds if they are > 0
     if depth_max_thres is not None and depth_max_thres > 0:
@@ -590,9 +578,7 @@ def depth_to_cam_coords_points(depth_map: np.ndarray, intrinsic: np.ndarray) -> 
     return np.stack((x_cam, y_cam, z_cam), axis=-1).astype(np.float32)
 
 
-def rotate_90_degrees(
-    image, depth_map, extri_opencv, intri_opencv, clockwise=True, track=None
-):
+def rotate_90_degrees(image, depth_map, extri_opencv, intri_opencv, clockwise=True, track=None):
     """
     Rotates the input image, depth map, and camera parameters by 90 degrees.
 
@@ -632,18 +618,11 @@ def rotate_90_degrees(
     image_height, image_width = image.shape[:2]
 
     # Rotate the image and depth map
-    rotated_image, rotated_depth_map = rotate_image_and_depth_rot90(
-        image, depth_map, clockwise
-    )
+    rotated_image, rotated_depth_map = rotate_image_and_depth_rot90(image, depth_map, clockwise)
     # Adjust the intrinsic matrix
-    new_intri_opencv = adjust_intrinsic_matrix_rot90(
-        intri_opencv, image_width, image_height, clockwise
-    )
+    new_intri_opencv = adjust_intrinsic_matrix_rot90(intri_opencv, image_width, image_height, clockwise)
 
-    if track is not None:
-        new_track = adjust_track_rot90(track, image_width, image_height, clockwise)
-    else:
-        new_track = None
+    new_track = adjust_track_rot90(track, image_width, image_height, clockwise) if track is not None else None
 
     # Adjust the extrinsic matrix
     new_extri_opencv = adjust_extrinsic_matrix_rot90(extri_opencv, clockwise)
@@ -825,10 +804,7 @@ def read_image_cv2(path: str, rgb: bool = True) -> np.ndarray:
             return None
 
     if rgb:
-        if len(img.shape) == 2:
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        else:
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR) if len(img.shape) == 2 else cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     return img
 
@@ -961,7 +937,7 @@ def cameras_json_to_camera_list(data, image_size=None, K=None):
         c2w = np.asarray(c2w, dtype=np.float64).reshape(4, 4)
         w2c = np.linalg.inv(c2w)
         w2c_3x4 = w2c[:3, :]
-        entry = [idx, fx, fy, cx, cy, 0.0, 0.0] + w2c_3x4.flatten().tolist()
+        entry = [idx, fx, fy, cx, cy, 0.0, 0.0] + w2c_3x4.flatten().tolist()  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         cam_list.append(Camera(entry))
     return cam_list
 
@@ -1036,6 +1012,7 @@ def save_colored_pointcloud_ply(
         for (x, y, z), (r, g, b) in zip(
             pts.astype(np.float32),
             cols.astype(np.uint8),
+            strict=False,
         ):
             f.write(
                 struct.pack(

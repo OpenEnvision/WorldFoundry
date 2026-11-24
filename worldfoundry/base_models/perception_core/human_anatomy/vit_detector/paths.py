@@ -8,4 +8,6 @@ from worldfoundry.core.io.paths import package_data_path
 
 
 def config_path() -> Path:
-    return package_data_path('models', 'runtime', 'configs', 'vit_detector', 'simmim_finetune__vit_base__img224__800ep.yaml')
+    return package_data_path(
+        "models", "runtime", "configs", "vit_detector", "simmim_finetune__vit_base__img224__800ep.yaml"
+    )

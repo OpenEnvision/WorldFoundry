@@ -1,8 +1,14 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved
 
 # pyre-unsafe
-"""Module for base_models -> perception_core -> segment -> sam3 -> sam -> __init__.py functionality."""
+from worldfoundry.base_models.perception_core.segment.sam_components.mask_decoder import (
+    MaskDecoder as MaskDecoder,
+)
+from worldfoundry.base_models.perception_core.segment.sam_components.prompt_encoder import (
+    PromptEncoder as PromptEncoder,
+)
+from worldfoundry.base_models.perception_core.segment.sam_components.transformer import (
+    Sam3TwoWayTransformer as TwoWayTransformer,
+)
 
-from .mask_decoder import MaskDecoder
-from .prompt_encoder import PromptEncoder
-from .transformer import TwoWayTransformer
+__all__ = ["MaskDecoder", "PromptEncoder", "TwoWayTransformer"]

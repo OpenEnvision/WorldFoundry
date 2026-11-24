@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
 import re
 import tarfile
 import zipfile
@@ -12,6 +11,7 @@ from typing import Any
 import pytest
 
 from scripts.setup.check_packaging_license_gate import (
+    LICENSE_GATED_PATHS,
     REQUIRED_RUNTIME_RESOURCES,
     REQUIRED_WHEEL_PACKAGES,
     audit_license_bundle,
@@ -20,11 +20,14 @@ from scripts.setup.check_packaging_license_gate import (
     audit_wheel,
     dead_exclude_patterns,
     discover_packages,
+    gitignore_gate_errors,
     leaked_packages,
     license_bundle_errors,
     license_gated_paths,
     load_find_config,
+    load_pyproject,
     main,
+    manifest_gate_errors,
     misplaced_license_files,
     missing_core_sources,
     missing_required_wheel_packages,
@@ -106,6 +109,23 @@ def test_data_channel_gate_requires_an_exact_retained_parent() -> None:
     )
 
 
+@pytest.mark.parametrize("populated", [False, True])
+def test_dvlt_runtime_data_is_excluded_with_or_without_its_local_namespace(tmp_path: Path, populated: bool) -> None:
+    depth = tmp_path / "worldfoundry/base_models/three_dimensions/depth"
+    depth.mkdir(parents=True)
+    if populated:
+        (depth / "dvlt/dvlt_runtime").mkdir(parents=True)
+    config = load_find_config()
+    kept = selected_packages(discover_packages(config, repo_root=tmp_path), config["exclude"])
+    data_excludes = load_pyproject()["tool"]["setuptools"]["exclude-package-data"]
+    assert (
+        package_data_exclusion_gaps(
+            ["worldfoundry/base_models/three_dimensions/depth/dvlt/dvlt_runtime"], kept, data_excludes
+        )
+        == []
+    )
+
+
 def _write_wheel(path: Path, entries: list[str]) -> None:
     with zipfile.ZipFile(path, "w") as wheel:
         for entry in entries:
@@ -173,6 +193,44 @@ def test_repository_license_gate_uses_narrow_hunyuan_excludes() -> None:
         package = f"worldfoundry.synthesis.visual_generation.hunyuan_world.{subtree}"
         assert selected_packages([package, f"{package}.child"], sorted(excludes)) == []
         assert package.replace(".", "/") in gated_paths
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "package",
+    [
+        "worldfoundry.synthesis.visual_generation.alayaworld_v11.alayaworld_v11_runtime.alaya",
+        "worldfoundry.synthesis.visual_generation.astronex_world.astronex_world_runtime",
+        "worldfoundry.synthesis.visual_generation.joyai_echo.echo_wm_runtime",
+        "worldfoundry.synthesis.visual_generation.joyai_echo.echo_longvideo_runtime",
+        "worldfoundry.synthesis.visual_generation.solarwm.solarwm_runtime.solarwm",
+        "worldfoundry.synthesis.visual_generation.hma.hma_runtime",
+        "worldfoundry.synthesis.visual_generation.emu35.emu35_runtime",
+        "worldfoundry.synthesis.visual_generation.uniworld_view.uniworld_view_runtime",
+        "worldfoundry.synthesis.visual_generation.vmem.vmem_runtime",
+        "worldfoundry.synthesis.action_generation.gr00t.legacy_n1_runtime",
+        "worldfoundry.base_models.three_dimensions.slam.mega_sam_runtime",
+    ],
+)
+def test_in_tree_runtime_namespaces_are_discovered(package: str) -> None:
+    config = load_find_config()
+    packages = discover_packages(config)
+    assert package in selected_packages(packages, config["exclude"])
+
+
+def test_gate_list_must_match_manifest_and_gitignore() -> None:
+    manifest = (REPO_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+    gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+    gated = "thirdparty/simple-knn"
+    assert gated in LICENSE_GATED_PATHS
+
+    assert manifest_gate_errors(manifest) == []
+    assert gitignore_gate_errors(gitignore) == []
+    assert manifest_gate_errors(manifest.replace(f"prune {gated}\n", "prune thirdparty/other\n")) == [
+        f"MANIFEST.in lacks 'prune {gated}'",
+        "MANIFEST.in prunes ungated path thirdparty/other",
+    ]
+    assert gitignore_gate_errors(gitignore.replace(f"/{gated}/\n", "")) == [f".gitignore lacks '/{gated}/'"]
 
 
 def test_repository_static_packaging_license_gate() -> None:
@@ -291,19 +349,17 @@ def test_distribution_requires_exact_license_text(
 
 @pytest.mark.parametrize("format_name", ["wheel", "sdist"])
 @pytest.mark.parametrize("damage", ["none", "missing", "changed"])
-def test_model_runtime_resource_gate_detects_missing_or_changed_statistics(
+def test_model_runtime_resource_gate_detects_missing_or_changed_resources(
     tmp_path: Path,
     format_name: str,
     damage: str,
 ) -> None:
     payloads = {name: (REPO_ROOT / name).read_bytes() for name in REQUIRED_RUNTIME_RESOURCES}
-    statistics = next(name for name in payloads if name.endswith("nav_25dof_stats.json"))
+    split = next(name for name in payloads if name.endswith("csgo_utils/test_split.txt"))
     if damage == "missing":
-        payloads.pop(statistics)
+        payloads.pop(split)
     elif damage == "changed":
-        changed = json.loads(payloads[statistics])
-        changed["state_stats"]["min"][0] += 0.01
-        payloads[statistics] = json.dumps(changed).encode()
+        payloads[split] += b"extra_episode\n"
     artifact = tmp_path / ("worldfoundry.whl" if format_name == "wheel" else "worldfoundry.tar.gz")
     if format_name == "wheel":
         with zipfile.ZipFile(artifact, "w") as archive:

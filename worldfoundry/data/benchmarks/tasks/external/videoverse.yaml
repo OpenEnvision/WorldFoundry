@@ -26,10 +26,10 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: videoverse
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id videoverse --mode contract 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id videoverse --mode contract 
     --output-dir tmp/benchmark_zoo/benchmark_contract/videoverse --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoVerseContract
-  official_runner_command: worldfoundry-eval zoo benchmark-run
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:videoverse
+  official_runner_command: wf zoo benchmark-run
   prompt_suite:
     source: bundled_official_assets
     repo_url: https://github.com/Zeqing-Wang/VideoVerse.git
@@ -43,7 +43,7 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_judge_runtime
-    root: worldfoundry/evaluation/tasks/execution/runners/videoverse
+    root: worldfoundry/evals/tasks/execution/runners/videoverse
     results_path_env: WORLDFOUNDRY_VIDEOVERSE_RESULTS_PATH
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   release_status: experimental
@@ -76,7 +76,7 @@ metadata:
     - worldfoundry/data/benchmarks/assets/videoverse/prompt/prompts_of_VideoVerse_decomposed.json
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoVerseContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:videoverse
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
@@ -86,7 +86,7 @@ metadata:
     normalizer_verified: false
   open_source_status: in_tree_runtime
   local_evaluator:
-    target: worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py
+    target: worldfoundry/evals/tasks/execution/runners/videoverse/run_videoverse_official_runner.py
     status: implemented
     protocol: videoverse_official_in_tree
     official_result_normalization:
@@ -100,14 +100,14 @@ metadata:
       - jsonl
       - csv
       provenance: runs in-tree VideoVerse judge or normalizes caller-provided eval_res JSON
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py --run-official 
+    worldfoundry/evals/tasks/execution/runners/videoverse/run_videoverse_official_runner.py --run-official 
     --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --output-dir 
     "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   runner:
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -124,11 +124,11 @@ metadata:
     runtime:
       results_path_env: WORLDFOUNDRY_VIDEOVERSE_RESULTS_PATH
       strict_env: WORLDFOUNDRY_VIDEOVERSE_STRICT
-    official_validation_command: WORLDFOUNDRY_VIDEOVERSE_STRICT=1 worldfoundry-eval zoo benchmark-run --benchmark-id 
+    official_validation_command: WORLDFOUNDRY_VIDEOVERSE_STRICT=1 wf zoo benchmark-run --benchmark-id 
       videoverse --mode official-validation --official-results-path <eval_res.json> --generated-artifact-dir 
       <generated_videos> --output-dir <out> --json
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -143,7 +143,7 @@ metadata:
   - <out>
   - --json
   integration_status: integrated
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/videoverse/run_videoverse_official_runner.py
   status: integrated
   checkpoint_refs: []
 tasks:
@@ -197,8 +197,8 @@ tasks:
       - static_scene_consistency
       - dynamic_event_consistency
       - videoverse_average
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoVerseContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:videoverse
+      runner_script: worldfoundry/evals/tasks/execution/runners/videoverse/run_videoverse_official_runner.py
     - name: in_tree_official_runner
       metric_ids:
       - qa_accuracy
@@ -208,9 +208,9 @@ tasks:
       - static_scene_consistency
       - dynamic_event_consistency
       - videoverse_average
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoVerseContract
-      runner_script: worldfoundry-eval zoo benchmark-run
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id videoverse --mode 
+      runner_target: worldfoundry.evals.tasks.contracts.external:videoverse
+      runner_script: wf zoo benchmark-run
+      official_validation_command: wf zoo benchmark-run --benchmark-id videoverse --mode 
         official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
         --output-dir <out> --json
       required_inputs:
@@ -220,4 +220,4 @@ tasks:
       framework_acceptance:
       - Set WORLDFOUNDRY_VIDEOVERSE_STRICT=1 for formal integration checks.
       - scorecard.normalization_ok, scorecard.integration_evidence, and eligibility.full_suite_valid must all be true.
-      official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+      official_result_entrypoint: wf zoo benchmark-run

@@ -18,7 +18,7 @@ import torch
 import torch.nn.functional as functional
 
 from worldfoundry.core.media.codecs.video import coerce_video_frames
-from worldfoundry.core.utils import load_pil_image
+from worldfoundry.core.media.processing.image_utils import load_pil_image
 
 from ...components import ComponentBuildContext
 from ...contracts import DiffusionRequest, ModalityState

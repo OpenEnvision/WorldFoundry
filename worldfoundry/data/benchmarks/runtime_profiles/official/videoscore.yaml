@@ -27,13 +27,13 @@ notes:
   weights.
 - Runner patches the transformers DynamicCache API mismatch locally; full-suite leaderboard remains pending.
 preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile videoscore --manifest 
+  worldfoundry.evals.tasks.execution.orchestration.runtime_preflight --profile videoscore --manifest 
   worldfoundry/data/benchmarks/runtime_profiles/official/videoscore.yaml --output-dir 
   tmp/worldfoundry_preflight/videoscore --json
 python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
 - .
-- worldfoundry/evaluation/tasks/execution/runners/videoscore/runtime/videoscore
+- worldfoundry/evals/tasks/execution/runners/videoscore/runtime/videoscore
 required_assets:
   local_dataset_paths:
   - cache/worldfoundry/data/hfd_datasets/TIGER-Lab/VideoFeedback
@@ -42,7 +42,7 @@ required_assets:
   - cache/worldfoundry/data/hfd_datasets/TIGER-Lab__VideoScore-Bench
   - cache/worldfoundry/data/hfd_datasets/TIGER-Lab__VideoScore-Bench
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/videoscore/runtime/videoscore
+  - worldfoundry/evals/tasks/execution/runners/videoscore/runtime/videoscore
   task_yaml: worldfoundry/data/benchmarks/tasks/external/videoscore.yaml
   scorecard_paths:
   - tmp/local_open_eval/videoscore_bounded_official_gpu_validation_cachefix_20260525/scorecard.json
@@ -72,11 +72,11 @@ required_packages:
 - pillow
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/videoscore/run_videoscore_official_runner.py
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/videoscore.yaml
 - id: in_tree_runtime
-  path: worldfoundry/evaluation/tasks/execution/runners/videoscore/runtime/videoscore
+  path: worldfoundry/evals/tasks/execution/runners/videoscore/runtime/videoscore
 - id: local_dataset_1
   env: WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT
   path: cache/worldfoundry/data/hfd_datasets/TIGER-Lab__VideoFeedback
@@ -108,5 +108,5 @@ base_model_dependency_preflight:
   missing: []
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-- worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/videoscore/run_videoscore_official_runner.py
 - --json

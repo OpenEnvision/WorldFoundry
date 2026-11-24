@@ -7,12 +7,14 @@ and prediction.
 It also includes a compatibility layer for PyTorch, allowing the module to be imported
 and used even in environments where PyTorch is not installed.
 """
+
 from abc import ABC
 from functools import wraps
 
 
 def _lazy_no_grad(func):
     """Retain Torch's decorator semantics without loading Torch for discovery."""
+
     @wraps(func)
     def predict_without_grad(*args, **kwargs):
         try:
@@ -25,7 +27,8 @@ def _lazy_no_grad(func):
 
     return predict_without_grad
 
-class BaseSynthesis(ABC):
+
+class BaseSynthesis(ABC):  # noqa: B024 - Keeps the ABCMeta base shared by its subclasses.
     """
     Abstract Base Class (ABC) defining the fundamental contract for various synthesis backends.
 
@@ -34,14 +37,13 @@ class BaseSynthesis(ABC):
     that must be implemented by concrete subclasses.
     """
 
-    def __init__(self):
+    def __init__(self):  # noqa: B027 - Optional hook with a no-op default.
         """
         Initializes the BaseSynthesis instance.
 
         While the base class constructor is empty, subclasses may implement
         their own initialization logic.
         """
-        pass
 
     @classmethod
     def from_pretrained(cls, pretrained_model_path, args, device=None, **kwargs):

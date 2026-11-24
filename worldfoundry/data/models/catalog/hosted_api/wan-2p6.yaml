@@ -1,0 +1,51 @@
+id: wan-2p6
+name: Wan 2.6 API
+aliases:
+- wan2.6
+- wan-2.6
+tasks:
+- image-to-video
+- hosted-api
+provider: api
+source:
+  status: api
+  official_repo_url: https://dashscope.aliyun.com/
+official_sources:
+  project_page: https://dashscope.aliyun.com/
+integration:
+  status: integrated
+  notes:
+  - Hosted DashScope API Studio pipeline is available; users must provide their own
+    provider API key.
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: wan-2p6
+runner_parity:
+  status: not_applicable
+demo_parity:
+  status: not_applicable
+docs:
+  publisher: Alibaba (Tongyi Lab)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（通义实验室）
+  overview: "Wan 2.6 API is the DashScope-hosted image-to-video endpoint for Alibaba's Wan 2.6 model. You provide a start image and receive a rendered clip from Alibaba Cloud; WorldFoundry stores the request and the result in its standard artifact layout. Aliases: wan2.6 and wan-2.6. Choose it when you want the newer hosted Wan generation without local GPU setup."
+  overview_zh: Wan 2.6 API 是阿里 Wan 2.6 模型的 DashScope 托管图生视频接入点。你提供起始图，阿里云返回渲染好的视频；WorldFoundry 按标准产物布局保存请求与结果。别名：wan2.6、wan-2.6。想在无本地 GPU 的情况下使用较新的托管 Wan 版本时选择它。
+  architecture: Wan 2.6 continues the Wan diffusion-transformer video family from Tongyi Lab; the API-served revision's precise architecture and parameters are not published.
+  architecture_zh: Wan 2.6 延续通义实验室 Wan 系列扩散 Transformer 视频模型的脉络；API 所服务修订版的确切架构与参数未公开。
+  usage_notes: The hosted-API Studio pipeline is available; supply your own provider API key and account. No weights are downloaded and no local GPU environment is needed — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Keys are issued via Alibaba Cloud DashScope (dashscope.aliyun.com).
+  usage_notes_zh: 托管 API 的 Studio pipeline 已可用，需自备服务方的 API key 与账号。本地不下载权重，也不需要 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。API key 通过阿里云 DashScope（dashscope.aliyun.com）开通。
+  limitations:
+  - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+  - The provider controls model versioning, so outputs can change over time without any change in WorldFoundry.
+  - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+  limitations_zh:
+  - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+  - 模型版本由服务方控制，即使 WorldFoundry 未变化，输出也可能随时间改变。
+  - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video
+      outputs.
+    reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+  - id: physics-iq
+    reason: Probes whether provider-side video models respect basic physical plausibility.
+    reason_zh: 检验服务方视频模型是否遵循基本物理合理性。

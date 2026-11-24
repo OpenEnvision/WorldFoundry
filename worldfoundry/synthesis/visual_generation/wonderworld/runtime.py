@@ -28,7 +28,7 @@ from worldfoundry.base_models.diffusion_model.extensions.depth_guidance import D
 from worldfoundry.base_models.perception_core.segment.scene_segmentation import SceneSegmenter
 from worldfoundry.core.geometry.surfels import GaussianSurfels
 from worldfoundry.core.io.paths import checkpoint_root_path
-from worldfoundry.runtime.wonderworld_inference_spec import WONDERWORLD_NEGATIVE_PROMPT
+from worldfoundry.runtime.inference_specs.wonderworld import WONDERWORLD_NEGATIVE_PROMPT
 from worldfoundry.synthesis.base_synthesis import BaseSynthesis
 
 
@@ -200,9 +200,7 @@ class WonderWorldSynthesis(BaseSynthesis):
                 self.models[mode] = NativeDiffusionPipeline.from_pretrained(
                     model_id,
                     policy=policy,
-                    checkpoint_overrides={
-                        key: root for key in ("unet", "text_encoder", "tokenizer", "vae", "scheduler")
-                    },
+                    checkpoint_overrides=dict.fromkeys(("unet", "text_encoder", "tokenizer", "vae", "scheduler"), root),
                     extensions=(DecodedDepthGuidance(),) if mode == "depth" else (),
                 )
             self.segmenter = SceneSegmenter.from_pretrained(

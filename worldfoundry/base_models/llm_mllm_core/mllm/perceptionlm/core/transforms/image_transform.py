@@ -1,9 +1,10 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import math
+from collections.abc import Callable
 from functools import reduce
 from logging import getLogger
-from typing import Any, Callable, Tuple
+from typing import Any
 
 import numpy as np
 import torch
@@ -24,8 +25,7 @@ def get_image_transform(
     image_res: int = 336,
     max_num_tiles: int = 1,
     normalize_img: bool = True,
-) -> Tuple[Callable, int]:
-
+) -> tuple[Callable, int]:
     if vision_input_type == "thumb+tile":
         transforms = VariableSizeImageTransform(
             size=image_res,
@@ -46,7 +46,7 @@ def get_image_transform(
     return transforms
 
 
-class ImageTransform(object):
+class ImageTransform:
     """
     Image transform will resize the longer edge to a given size and pad the shorter edge with mean pixel value of the image.
     """
@@ -75,9 +75,7 @@ class ImageTransform(object):
 
     def __call__(self, image: Image.Image):
         w, h = image.size
-        image = F.resize(
-            image, (self.size, self.size), interpolation=InterpolationMode.BICUBIC
-        )
+        image = F.resize(image, (self.size, self.size), interpolation=InterpolationMode.BICUBIC)
         image = self.to_tensor(image)
         image = self.normalize(image)
 
@@ -87,17 +85,13 @@ class ImageTransform(object):
 
     def _transform_torch_tensor(self, image: torch.Tensor):
         h, w = image.shape[-2:]  # Image shape (C, H, W) or (N, C, H, W)
-        image = F.resize(
-            image, size=(self.size, self.size), interpolation=InterpolationMode.BICUBIC
-        )
-        image = (
-            image.to(torch.float32) / 255.0
-        )  # Convert to float and scale to [0, 1] range
+        image = F.resize(image, size=(self.size, self.size), interpolation=InterpolationMode.BICUBIC)
+        image = image.to(torch.float32) / 255.0  # Convert to float and scale to [0, 1] range
         image = self.normalize(image)
         return image, (w, h)
 
 
-class VariableSizeImageTransform(object):
+class VariableSizeImageTransform:
     """
     The variable size image transform will resize the image dynamically
     based on the image aspect ratio and the number of image chunks we allow.
@@ -194,17 +188,17 @@ class VariableSizeImageTransform(object):
                     asp_dict[k].append(ratio)
         return asp_dict
 
-    def _find_closest_aspect_ratio(self, img_width: int, img_height: int) -> Tuple:
+    def _find_closest_aspect_ratio(self, img_width: int, img_height: int) -> tuple:
         """
         Given an image width, height and target number of chunks
         this function will find the closest supported aspect ratio.
         """
         tgt_ar = img_width / img_height
         asp_dict = self._find_supported_aspect_ratios()
-        cl_d, cl_p = 1e23, None
+        cl_d, cl_p = 1e23, None  # noqa: F841 - Upstream assignment kept.
         if tgt_ar >= 1:
             cl_p = min(
-                [k for k in asp_dict.keys() if k <= tgt_ar],
+                [k for k in asp_dict.keys() if k <= tgt_ar],  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 key=lambda x: abs(x - tgt_ar),
             )
             v = asp_dict[cl_p]
@@ -213,7 +207,7 @@ class VariableSizeImageTransform(object):
             tgt_idx = max(widths, key=lambda x: x[1])[0]
         else:
             cl_p = min(
-                [k for k in asp_dict.keys() if k > tgt_ar],
+                [k for k in asp_dict.keys() if k > tgt_ar],  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 key=lambda x: abs(1 / x - 1 / tgt_ar),
             )
             v = asp_dict[cl_p]
@@ -223,9 +217,7 @@ class VariableSizeImageTransform(object):
         out = v[tgt_idx]
         return out
 
-    def _resize(
-        self, image: Image.Image, target_width: int, target_height: int
-    ) -> Image.Image:
+    def _resize(self, image: Image.Image, target_width: int, target_height: int) -> Image.Image:
         # Resize longer edge to given size.
         w, h = image.size
         scale = w / h
@@ -243,9 +235,7 @@ class VariableSizeImageTransform(object):
         return image
 
     def _pad(self, image: Image.Image, new_width: int, new_height: int) -> Image.Image:
-        mean_per_channel = tuple(
-            np.clip(np.array(image).mean(axis=(0, 1)), 0, 255).astype(np.uint8)
-        )
+        _mean_per_channel = tuple(np.clip(np.array(image).mean(axis=(0, 1)), 0, 255).astype(np.uint8))
         new_im = Image.new(mode="RGB", size=(new_width, new_height), color=(0, 0, 0))  # type: ignore
         new_im.paste(image)
         return new_im
@@ -262,7 +252,7 @@ class VariableSizeImageTransform(object):
 
     def _get_image_height_width(
         self, image_width: int, image_height: int, target_width: int, target_height: int
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         """
         Given image width, height and target width, height for the canvas, return the dimensions of how the image would be resized
         with aspect ratio preservation.
@@ -273,9 +263,7 @@ class VariableSizeImageTransform(object):
             # Width is larger than height
 
             # Rescaling factor is the minimum of the two scaling factors. Else one side would be outside of the canvas.
-            rescaling_factor = min(
-                target_width / image_width, target_height / image_height
-            )
+            rescaling_factor = min(target_width / image_width, target_height / image_height)
 
             # Set new width to target width and height to the rescaled height.
             new_w = rescaling_factor * image_width
@@ -285,9 +273,7 @@ class VariableSizeImageTransform(object):
             # Height is larger than width
 
             # Rescaling factor is the minimum of the two scaling factors. Else one side would be outside of the canvas.
-            rescaling_factor = min(
-                target_width / image_width, target_height / image_height
-            )
+            rescaling_factor = min(target_width / image_width, target_height / image_height)
 
             # Set new height to target height and width to the rescaled width.
             new_h = rescaling_factor * image_height
@@ -295,9 +281,7 @@ class VariableSizeImageTransform(object):
 
         return new_w, new_h
 
-    def _fit_image_to_canvas(
-        self, img_width: int, img_height: int, area_limit: bool
-    ) -> Any:
+    def _fit_image_to_canvas(self, img_width: int, img_height: int, area_limit: bool) -> Any:
         """
         Given an image width, height and target number of chunks this function will see if the image
         can be fit into any of the canvases that can be build from arranging the tiles in a grid.
@@ -313,11 +297,7 @@ class VariableSizeImageTransform(object):
         scale = img_width / img_height
 
         # Gather all potential supported image resolutions and iterate through them to find best match
-        potential_arrangements = [
-            item
-            for sublist in self._find_supported_aspect_ratios().values()
-            for item in sublist
-        ]
+        potential_arrangements = [item for sublist in self._find_supported_aspect_ratios().values() for item in sublist]
         for n_w, n_h in potential_arrangements:
             # Compute the canvas size
             canvas_width, canvas_height = n_w * self.size, n_h * self.size
@@ -346,46 +326,34 @@ class VariableSizeImageTransform(object):
                     if area_limit:
                         # Prioritize aspect ratio, and choose best within area limit when tied.
                         curr_scale = image_width_height[0] / image_width_height[1]
-                        optim_scale = (
-                            optimal_image_width_height[0]
-                            / optimal_image_width_height[1]
-                        )
+                        optim_scale = optimal_image_width_height[0] / optimal_image_width_height[1]
                         if abs(scale - curr_scale) < abs(scale - optim_scale):
                             # 1. optimize aspect ratio
                             optimal_canvas = (n_w, n_h)
                             optimal_image_width_height = image_width_height
                         elif abs(scale - curr_scale) == abs(scale - optim_scale):
                             # 2. optimize area
-                            if (
-                                image_width_height[0] * image_width_height[1]
-                                < 2 * img_width * img_height
-                            ):
+                            if image_width_height[0] * image_width_height[1] < 2 * img_width * img_height:
                                 # 2.1 area is less than 2x the original area
                                 optimal_canvas = (n_w, n_h)
                                 optimal_image_width_height = image_width_height
                     else:
                         # NOTE: L3V dynamic tiling. Prioritize biggest canvas.
-                        if (
-                            scale < 1.0
-                            and (image_width_height[0] >= optimal_image_width_height[0])
-                        ) or (
-                            scale >= 1.0
-                            and (image_width_height[1] >= optimal_image_width_height[1])
+                        if (scale < 1.0 and (image_width_height[0] >= optimal_image_width_height[0])) or (
+                            scale >= 1.0 and (image_width_height[1] >= optimal_image_width_height[1])
                         ):
                             optimal_canvas = (n_w, n_h)
                             optimal_image_width_height = image_width_height
         return optimal_canvas
 
-    def __call__(self, image: Image.Image) -> Tuple[Any, Any]:
+    def __call__(self, image: Image.Image) -> tuple[Any, Any]:
         assert isinstance(image, Image.Image), type(image)
         if self.use_thumbnail != "no":
             thumbnail = self.thumbnail_transform(image)[0]
 
         w, h = image.size
         # Check if the image can be fit to the canvas without downsampling
-        ar = self._fit_image_to_canvas(
-            img_width=w, img_height=h, area_limit=self.area_limit
-        )
+        ar = self._fit_image_to_canvas(img_width=w, img_height=h, area_limit=self.area_limit)
         if ar is None:
             # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
             ar = self._find_closest_aspect_ratio(img_width=w, img_height=h)

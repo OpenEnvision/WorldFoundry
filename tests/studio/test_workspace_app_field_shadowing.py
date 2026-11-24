@@ -14,9 +14,7 @@ from pathlib import Path
 
 import pytest
 
-WORKSPACE_APP_PATH = (
-    Path(__file__).resolve().parents[2] / "worldfoundry" / "studio" / "serving" / "workspace.py"
-)
+WORKSPACE_APP_PATH = Path(__file__).resolve().parents[2] / "worldfoundry" / "studio" / "workspace" / "app.py"
 
 
 def test_no_python_binding_shadows_dataclasses_field() -> None:
@@ -36,5 +34,5 @@ def test_no_python_binding_shadows_dataclasses_field() -> None:
 
 def test_module_level_field_is_dataclasses_field() -> None:
     pytest.importorskip("fastapi")
-    workspace_app = pytest.importorskip("worldfoundry.studio.serving.workspace")
+    workspace_app = pytest.importorskip("worldfoundry.studio.workspace.app")
     assert workspace_app.field is dataclasses.field

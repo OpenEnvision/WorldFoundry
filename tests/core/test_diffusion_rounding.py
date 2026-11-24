@@ -37,12 +37,15 @@ def test_eager_rounding_and_explicit_model_backend(monkeypatch, dtype, update_dt
 
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
-@pytest.mark.parametrize("shape,modulation_shape", [
-    ((3, 2240), (1, 2240)),
-    ((2, 3, 2240), (2, 1, 2240)),
-    ((2, 3, 4, 2240), (1, 3, 1, 2240)),
-    ((2, 3, 4, 2, 2240), (2, 1, 4, 1, 2240)),
-])
+@pytest.mark.parametrize(
+    "shape,modulation_shape",
+    [
+        ((3, 2240), (1, 2240)),
+        ((2, 3, 2240), (2, 1, 2240)),
+        ((2, 3, 4, 2240), (1, 3, 1, 2240)),
+        ((2, 3, 4, 2, 2240), (2, 1, 4, 1, 2240)),
+    ],
+)
 def test_rounding_with_strided_modulation_across_supported_ranks(shape, modulation_shape):
     torch.manual_seed(205)
     x = torch.randn(shape, dtype=torch.float16, device="cuda")

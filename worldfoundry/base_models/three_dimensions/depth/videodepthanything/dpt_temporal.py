@@ -11,51 +11,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Module for base_models -> three_dimensions -> depth -> videodepthanything -> dpt_temporal.py functionality."""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v2.dpt import DPTHead
-
-from .motion_module.motion_module import TemporalModule
+from worldfoundry.base_models.three_dimensions.depth.temporal.motion import TemporalModule
 
 
 class DPTHeadTemporal(DPTHead):
-    """Dpt head temporal implementation."""
     def __init__(
         self,
         in_channels,
         features=256,
         use_bn=False,
-        out_channels=[256, 512, 1024, 1024],
+        out_channels=[256, 512, 1024, 1024],  # noqa: B006 - Keeps the upstream default object and signature.
         use_clstoken=False,
         num_frames=32,
         pe="ape",
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            features: The features.
-            use_bn: The use bn.
-            out_channels: The out channels.
-            use_clstoken: The use clstoken.
-            num_frames: The num frames.
-            pe: The pe.
-        """
         super().__init__(in_channels, features, use_bn, out_channels, use_clstoken)
 
         assert num_frames > 0
-        motion_module_kwargs = dict(
-            num_attention_heads=8,
-            num_transformer_block=1,
-            num_attention_blocks=2,
-            temporal_max_len=num_frames,
-            zero_initialize=True,
-            pos_embedding_type=pe,
-        )
+        motion_module_kwargs = {
+            "num_attention_heads": 8,
+            "num_transformer_block": 1,
+            "num_attention_blocks": 2,
+            "temporal_max_len": num_frames,
+            "zero_initialize": True,
+            "pos_embedding_type": pe,
+        }
 
         self.motion_modules = nn.ModuleList(
             [
@@ -67,15 +52,6 @@ class DPTHeadTemporal(DPTHead):
         )
 
     def forward(self, out_features, patch_h, patch_w, frame_length, micro_batch_size: int = 4):
-        """Forward.
-
-        Args:
-            out_features: The out features.
-            patch_h: The patch h.
-            patch_w: The patch w.
-            frame_length: The frame length.
-            micro_batch_size: The micro batch size.
-        """
         out = []
         for i, x in enumerate(out_features):
             if self.use_clstoken:

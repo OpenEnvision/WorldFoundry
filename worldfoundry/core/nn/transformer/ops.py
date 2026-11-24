@@ -24,7 +24,7 @@ Public surface:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 import torch
 from torch import nn
@@ -35,9 +35,8 @@ from worldfoundry.core.attention.backends.model_backends import (
     MaskedAttentionCallable,
     MaskedAttentionFunction,
 )
-from worldfoundry.core.kernels import residual_gate_add, rms_norm_scale_shift
+from worldfoundry.core.kernels import rms_norm_scale_shift
 from worldfoundry.core.nn.blocks.normalization import rms_norm
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Hook protocols — fused kernels must match these signatures
@@ -130,8 +129,10 @@ class PytorchPreAttention:
         """
 
         del mask
-        query = attention_module.q_norm(query)
-        key = attention_module.k_norm(key)
+        # Attention modules contribute model-specific norms and rotary helpers beyond nn.Module.
+        module = cast(Any, attention_module)
+        query = module.q_norm(query)
+        key = module.k_norm(key)
         if query_position is not None:
             apply_rotary = getattr(attention_module, "apply_rotary_embedding", None)
             if not callable(apply_rotary):
@@ -142,7 +143,13 @@ class PytorchPreAttention:
 
 
 class PytorchAdaZeroFunction:
-    """Portable AdaLN-zero implemented with :func:`rms_norm_scale_shift`."""
+    """Portable AdaLN-zero implemented with :func:`rms_norm_scale_shift`.
+
+    ``backend`` pins kernel dispatch; ``"torch"`` keeps eager PyTorch rounding.
+    """
+
+    def __init__(self, backend: str | None = None) -> None:
+        self.backend = backend
 
     def __call__(
         self,
@@ -153,11 +160,11 @@ class PytorchAdaZeroFunction:
     ) -> torch.Tensor:
         """Same math as fused AdaLN-zero; last-dim RMS then ``x*(1+scale)+shift``."""
 
-        return rms_norm_scale_shift(value, scale, shift, eps=eps)
+        return rms_norm_scale_shift(value, scale, shift, eps=eps, backend=self.backend)
 
 
 class PytorchPostSAFunction:
-    """Portable residual-gate add plus RMSNorm after self-attention."""
+    """Residual-gate add plus RMSNorm after self-attention in eager PyTorch arithmetic."""
 
     def __call__(
         self,
@@ -169,7 +176,7 @@ class PytorchPostSAFunction:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """``residual + value * gate``, then RMSNorm for the following FFN."""
 
-        output = residual_gate_add(residual, value, gate)
+        output = residual + value * gate
         return output, rms_norm(output, norm_weights, eps=eps)
 
 
@@ -184,14 +191,15 @@ class PytorchGatedAttention:
     ) -> torch.Tensor:
         """``2·σ(to_gate_logits(residual))`` per head; 2× keeps the gate mean near 1."""
 
-        gate_logits = attention_module.to_gate_logits(residual)
+        module = cast(Any, attention_module)
+        gate_logits = module.to_gate_logits(residual)
         batch, tokens, _ = attention_output.shape
-        output = attention_output.view(batch, tokens, attention_module.heads, attention_module.dim_head)
+        output = attention_output.view(batch, tokens, module.heads, module.dim_head)
         gates = 2.0 * torch.sigmoid(gate_logits)
         return (output * gates.unsqueeze(-1)).view(
             batch,
             tokens,
-            attention_module.heads * attention_module.dim_head,
+            module.heads * module.dim_head,
         )
 
 
@@ -245,9 +253,7 @@ class TransformerOpsConfig:
                 attention_function=attention_callable,
                 masked_attention_function=masked_callable,
                 preattention_function=preattention if preattention is not None else PytorchPreAttention(),
-                gated_attention_function=(
-                    gated_attention if gated_attention is not None else PytorchGatedAttention()
-                ),
+                gated_attention_function=(gated_attention if gated_attention is not None else PytorchGatedAttention()),
             ),
             ada_zero_function=ada_zero if ada_zero is not None else PytorchAdaZeroFunction(),
             post_sa_function=post_sa if post_sa is not None else PytorchPostSAFunction(),
@@ -258,8 +264,8 @@ DEFAULT_TRANSFORMER_OPS = TransformerOpsConfig()
 
 
 __all__ = [
-    "AdaZeroCallable",
     "DEFAULT_TRANSFORMER_OPS",
+    "AdaZeroCallable",
     "GatedAttentionCallable",
     "PostSACallable",
     "PreAttentionCallable",

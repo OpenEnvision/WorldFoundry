@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
+from worldfoundry.synthesis.action_generation.gr00t.runtime import (
+    GR00TRuntime,
+    GR00TRuntimeConfig,
+    select_gr00t_checkpoint,
+)
 from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config, variant_defaults
-from worldfoundry.synthesis.action_generation.gr00t.runtime import GR00TRuntime, GR00TRuntimeConfig, select_gr00t_checkpoint
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
+
 from ..base_action_synthesis import ActionModelSynthesis
 
 
@@ -19,6 +25,7 @@ class GR00TSynthesis(ActionModelSynthesis):
     action prediction, handling model initialization, runtime configuration,
     and prediction execution. It manages model caching and plan generation.
     """
+
     MODEL_ID = "gr00t"
 
     def __init__(
@@ -66,7 +73,7 @@ class GR00TSynthesis(ActionModelSynthesis):
         hf_models_root: str | Path | None = None,
         command_template: Sequence[str] | None = None,
         **kwargs: Any,
-    ) -> "GR00TSynthesis":
+    ) -> GR00TSynthesis:
         """
         Create a lazy in-tree GR00T synthesis wrapper from profile/runtime options.
 
@@ -151,11 +158,7 @@ class GR00TSynthesis(ActionModelSynthesis):
         merged = {**runtime_defaults, **variant_config, **self.runtime_options, **dict(options)}
 
         # Resolve the checkpoint directory, checking multiple possible keys
-        checkpoint_dir = (
-            merged.get("checkpoint_dir")
-            or merged.get("ckpt_path")
-            or merged.get("pretrained_model_path")
-        )
+        checkpoint_dir = merged.get("checkpoint_dir") or merged.get("ckpt_path") or merged.get("pretrained_model_path")
         # Select the final GR00T checkpoint path based on the resolved directory and variant
         checkpoint = select_gr00t_checkpoint(
             checkpoint_dir=checkpoint_dir,
@@ -328,7 +331,9 @@ class GR00TSynthesis(ActionModelSynthesis):
             "architecture": runtime_spec,
         }
         # Write the plan to a JSON file
-        plan_path.write_text(json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        plan_path.write_text(
+            json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
         if plan_only:
             # If only a plan is requested, return the plan details
@@ -367,7 +372,6 @@ class GR00TSynthesis(ActionModelSynthesis):
             n1_options = {**self.runtime_options, **kwargs}
             result = predict_n1_action(
                 checkpoint_dir=runtime_config.checkpoint_dir,
-                source_dir=n1_options.get("n1_source_dir"),
                 python_executable=n1_options.get("n1_python"),
                 data_config_name=str(n1_options.get("n1_data_config_name") or "gr1_arms_only"),
                 embodiment_tag=runtime_config.embodiment_tag,

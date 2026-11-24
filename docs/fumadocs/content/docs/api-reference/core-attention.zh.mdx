@@ -9,7 +9,7 @@ WorldFoundry 把投影层和模型语义留在模型代码中，由 Core 负责�
 
 当 Q、K、V 已经是标准的拆头形状时，使用 `scaled_dot_product_attention`。它遵循 PyTorch SDPA 契约，同时增加显式后端上下文、兼容的 GQA 扩展以及精确的 matmul fallback。
 
-当张量是 `(batch, sequence, hidden)`、只缺少 head 拆分时，使用 `flattened_multihead_attention`，让拆头和合头留在一个公共位置。当模型接入有 einops 风格的 QKV 布局，或者需要通过策略选择可选 provider 时，使用 `attention_forward`。传入 mask 或设置 `compatibility_mode=True` 会有意回到 PyTorch 路径。
+当张量是 `(batch, sequence, hidden)`、只缺少 head 拆分时，使用 `flattened_multihead_attention`，将拆头和合头集中在同一处实现。当模型接入有 einops 风格的 QKV 布局，或者需要通过策略选择可选 provider 时，使用 `attention_forward`。传入 mask 或设置 `compatibility_mode=True` 会有意回到 PyTorch 路径。
 
 `NativeAttention` 把 SDPA 封装成 module，也可以绑定上下文并行 group。`ContextParallelAttention`、`UlyssesScheduler` 和 `CSOHelper` 是更底层的分布式机制，只有在模型 runtime 同时掌握对应 split metadata 时才应该直接使用。
 
@@ -39,7 +39,7 @@ assert output.shape == (2, 8, 32, 96)
 
 ## Block KV cache 的调用顺序
 
-`BlockKVCache` 不是可以随意更新的字典。每个 chunk 都必须遵循 `before_update → update → cached_k/cached_v → after_update`。重复当前 `chunk_idx` 会覆盖同一个逻辑 chunk；递增一会追加或滚动本地窗口；跳过编号会报错。
+`BlockKVCache` 不是可以随意更新的字典。每个 chunk 都必须遵循 `before_update → update → cached_k/cached_v → after_update`。重复当前 `chunk_idx` 会覆盖同一个逻辑 chunk；编号递增时会追加或滚动本地窗口；跳过编号会报错。
 
 ```python
 import torch

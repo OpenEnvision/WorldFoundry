@@ -1,9 +1,9 @@
 ---
 title: PhyGround
-description: "准则锚定的 TI2V：250 条 prompt 覆盖 13 条定律，由 PhyJudge 或人工按 1–5 分评定。WorldFoundry 导入 scores.json，不跑 judge。"
+description: "准则锚定的 TI2V：250 条 prompt 覆盖 13 条定律，由 PhyJudge 或人工按 1–5 分评定。WorldFoundry 导入 judge 的 scores.json。"
 ---
 
-PhyGround（美国东北大学）是**准则锚定**，不是实拍续写，也不是 PhyGenEval。**250** 条文本+图像转视频 prompt 各带预期物理结果，以及 **13 条**定律分类（固体、流体、光学）中适用的 **2–4** 条。Judge（PhyJudge-9B 或人工）按 **1–5** 分评语义符合、物理时序有效性、持久性与各适用定律。这更像量表，而不是 [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq) 的 mask IoU。
+PhyGround（美国东北大学）采用**准则锚定**的评测，不是实拍续写，也不是 PhyGenEval。**250** 条文本+图像转视频 prompt 各带预期物理结果，以及 **13 条**定律分类（固体、流体、光学）中适用的 **2–4** 条。Judge（PhyJudge-9B 或人工）按 **1–5** 分评语义符合、物理时序有效性、持久性与各适用定律。这更像量表，而不是 [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq) 的 mask IoU。
 
 [PhyGenBench](/zh/docs/evaluation/benchmark-hub/phygenbench) 是 T2V *生成*常识套件（160 条 / 27 条定律 / PhyGenEval）。PhyGround 是 TI2V *定律准则*打分（250 条 / 13 条定律）。
 
@@ -15,12 +15,12 @@ WorldFoundry **导入** PhyJudge/vLLM 或云端 judge 的 `scores.json`。它**�
 
 ## 如何运行
 
-就位数据根（`prompts/`、`first_images/`、`annotations/`、`videos/<model_id>/`）并导入 judge 输出：
+准备数据根目录（`prompts/`、`first_images/`、`annotations/`、`videos/<model_id>/`）并导入 judge 输出：
 
 ```bash
 hf download NU-World-Model-Embodied-AI/phyground --repo-type dataset --local-dir <phyground_data_root>
 
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id phyground \
   --mode official-validation \
   --benchmark-data-root <phyground_data_root> \
@@ -30,6 +30,6 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-也可把 `--official-results-path` 指到 `scores.json` / `annotations/`。`--prompt-manifest` 可校验 prompt 覆盖。产物包括 `scorecard.json`（主键 `phyground_overall`）。
+也可将 `--official-results-path` 指向 `scores.json` / `annotations/`。`--prompt-manifest` 可校验 prompt 覆盖。产物包括 `scorecard.json`（主键 `phyground_overall`）。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -6,8 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_metrics import compute_aigcbench_metrics
-from worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_prompts import (
+from worldfoundry.evals.tasks.execution.runners.aigcbench.aigcbench_metrics import compute_aigcbench_metrics
+from worldfoundry.evals.tasks.execution.runners.aigcbench.aigcbench_prompts import (
     CANONICAL_PROMPT_COUNT,
     load_prompt_records,
     materialize_aigcbench_generation_requests,
@@ -64,7 +64,7 @@ def test_aigcbench_metrics_from_summary_csv() -> None:
 
 
 def test_aigcbench_official_runner_normalizes_sample_results(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.utils import benchmark_task_sample_path
+    from worldfoundry.evals.utils import benchmark_task_sample_path
 
     sample_path = benchmark_task_sample_path("aigcbench")
     assert sample_path is not None
@@ -74,7 +74,7 @@ def test_aigcbench_official_runner_normalizes_sample_results(tmp_path: Path) -> 
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py",
             "--official-results-path",
             str(sample_path),
             "--output-dir",
@@ -93,7 +93,7 @@ def test_aigcbench_official_runner_normalizes_sample_results(tmp_path: Path) -> 
 
 
 def test_aigcbench_official_run_imports_workspace_artifact(tmp_path: Path) -> None:
-    from worldfoundry.evaluation.utils import benchmark_task_sample_path
+    from worldfoundry.evals.utils import benchmark_task_sample_path
 
     manifest = tmp_path / "prompt_suite.json"
     manifest.write_text(
@@ -123,7 +123,7 @@ def test_aigcbench_official_run_imports_workspace_artifact(tmp_path: Path) -> No
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py",
             "--run-official",
             "--generated-artifact-dir",
             str(generated_dir),

@@ -104,7 +104,7 @@ def fp8_convolution(input, weight, input_scale, weight_scale, bias, *, stride, p
     n = weight.shape[0]
     geometry = tuple(
         (dim + 2 * pad - dil * (size - 1) - 1) // step + 1
-        for dim, size, step, pad, dil in zip((t, h, w), kernel, strides, pads, dilations)
+        for dim, size, step, pad, dil in zip((t, h, w), kernel, strides, pads, dilations, strict=False)
     )
     if min(geometry) <= 0:
         raise ValueError("FP8 convolution has an empty output geometry")

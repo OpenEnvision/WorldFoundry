@@ -13,14 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> utils -> io.py functionality."""
-
 import logging
 import tempfile
 import zipfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, cast
+from typing import cast
 
 import cv2
 import imageio
@@ -30,112 +29,61 @@ import OpenEXR
 import torch
 
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext.lietorch import SE3
-from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base import FrameAttribute, VideoFrame, VideoStream
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base import (
+    FrameAttribute,
+    VideoFrame,
+    VideoStream,
+)
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.cameras import CameraType
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.geometry import se3_matrix_to_se3
-from worldfoundry.studio.visualization.plugins.scene3d.projection import VideoWriter
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.visualization import VideoWriter
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class ArtifactPath:
-    """Artifact path implementation."""
     base_path: Path
     artifact_name: str
 
     @property
     def rgb_path(self) -> Path:
-        """Rgb path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "rgb" / f"{self.artifact_name}.mp4"
 
     @property
     def pose_path(self) -> Path:
-        """Pose path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "pose" / f"{self.artifact_name}.npz"
 
     @property
     def depth_path(self) -> Path:
-        """Depth path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "depth" / f"{self.artifact_name}.zip"
 
     @property
     def intrinsics_path(self) -> Path:
-        """Intrinsics path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "intrinsics" / f"{self.artifact_name}.npz"
 
     @property
     def camera_type_path(self) -> Path:
-        """Camera type path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "intrinsics" / f"{self.artifact_name}_camera.txt"
 
     @property
     def flow_path(self) -> Path:
-        """Flow path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "flow" / f"{self.artifact_name}.zip"
 
     @property
     def mask_path(self) -> Path:
-        """Mask path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "mask" / f"{self.artifact_name}.zip"
 
     @property
     def mask_phrase_path(self) -> Path:
-        """Mask phrase path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "mask" / f"{self.artifact_name}.txt"
 
     @property
     def meta_info_path(self) -> Path:
-        """Meta info path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "vipe" / f"{self.artifact_name}_info.pkl"
 
     @classmethod
     def glob_artifacts(cls, base_path: Path, use_video: bool = False) -> Iterator["ArtifactPath"]:
-        """Glob artifacts.
-
-        Args:
-            base_path: The base path.
-            use_video: The use video.
-
-        Returns:
-            The return value.
-        """
         if use_video:
             for artifact_path in (base_path / "rgb").glob("*.mp4"):
                 artifact_name = artifact_path.stem
@@ -147,29 +95,14 @@ class ArtifactPath:
 
     @property
     def meta_vis_path(self) -> Path:
-        """Meta vis path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "vipe" / f"{self.artifact_name}_vis.mp4"
 
     @property
     def slam_map_path(self) -> Path:
-        """Slam map path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "vipe" / f"{self.artifact_name}_slam_map.pt"
 
     @property
     def essential_paths(self) -> list[Path]:
-        """Essential paths.
-
-        Returns:
-            The return value.
-        """
         return [
             self.rgb_path,
             self.pose_path,
@@ -184,88 +117,38 @@ class ArtifactPath:
 
     @property
     def eval_metrics_path(self) -> Path:
-        """Eval metrics path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "eval" / f"{self.artifact_name}_metrics.pkl"
 
     @property
     def eval_traj_vis_path(self) -> Path:
-        """Eval traj vis path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "eval" / f"{self.artifact_name}_trajectory_vis.png"
 
     @property
     def eval_gt_pose_path(self) -> Path:
-        """Eval gt pose path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "eval" / f"{self.artifact_name}_pose_gt.npz"
 
     @property
     def eval_gt_intrinsics_path(self) -> Path:
-        """Eval gt intrinsics path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "eval" / f"{self.artifact_name}_intrinsics_gt.npz"
 
     @property
     def eval_gt_camera_type_path(self) -> Path:
-        """Eval gt camera type path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "eval" / f"{self.artifact_name}_camera_gt.txt"
 
     @property
     def eval_gt_depth_path(self) -> Path:
-        """Eval gt depth path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "eval" / f"{self.artifact_name}_depth_gt.zip"
 
     @property
     def aux_vis_plot_path(self) -> Path:
-        """Aux vis plot path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "vipe_aux_vis" / f"{self.artifact_name}_plot.png"
 
     @property
     def aux_vis_traj_path(self) -> Path:
-        """Aux vis traj path.
-
-        Returns:
-            The return value.
-        """
         return self.base_path / "vipe_aux_vis" / f"{self.artifact_name}_traj.mp4"
 
 
 def save_pose_artifacts(out_path: ArtifactPath, cached_final_stream: VideoStream, gt: bool = False) -> None:
-    """Save pose artifacts.
-
-    Args:
-        out_path: The out path.
-        cached_final_stream: The cached final stream.
-        gt: The gt.
-
-    Returns:
-        The return value.
-    """
     # Save OpenCV cam2world matrices as 4x4 matrix in npz file
     if gt:
         pose_list = cached_final_stream.get_gt_stream_attribute(FrameAttribute.POSE)
@@ -287,48 +170,22 @@ def save_pose_artifacts(out_path: ArtifactPath, cached_final_stream: VideoStream
 
 
 def read_pose_artifacts(npz_file_path: Path) -> tuple[np.ndarray, SE3]:
-    """Read pose artifacts.
-
-    Args:
-        npz_file_path: The npz file path.
-
-    Returns:
-        The return value.
-    """
     data = np.load(npz_file_path)
     return data["inds"], se3_matrix_to_se3(data["data"])
 
 
 def read_pose_artifacts_benchmark(npz_file_path: Path) -> dict:
-    """Read pose artifacts benchmark.
-
-    Args:
-        npz_file_path: The npz file path.
-
-    Returns:
-        The return value.
-    """
     data = np.load(npz_file_path)
-    return dict(
-        ids=data["inds"],
-        trajectory=se3_matrix_to_se3(data["data"]),
-        runtime=data.get("runtime", None),
-        keyframe_ids=data.get("keyframe_ids", None),
-        frame_num=len(data["inds"]),
-    )
+    return {
+        "ids": data["inds"],
+        "trajectory": se3_matrix_to_se3(data["data"]),
+        "runtime": data.get("runtime", None),
+        "keyframe_ids": data.get("keyframe_ids", None),
+        "frame_num": len(data["inds"]),
+    }
 
 
 def save_intrinsics_artifacts(out_path: ArtifactPath, cached_final_stream: VideoStream, gt: bool = False) -> None:
-    """Save intrinsics artifacts.
-
-    Args:
-        out_path: The out path.
-        cached_final_stream: The cached final stream.
-        gt: The gt.
-
-    Returns:
-        The return value.
-    """
     # Save intrinsics as [fx, fy, cx, cy] in npz file
     if gt:
         intrinsics_list = cached_final_stream.get_gt_stream_attribute(FrameAttribute.INTRINSICS)
@@ -367,15 +224,6 @@ def save_intrinsics_artifacts(out_path: ArtifactPath, cached_final_stream: Video
 def read_intrinsics_artifacts(
     intr_file_path: Path, camera_file_path: Path | None = None
 ) -> tuple[np.ndarray, torch.Tensor, list[CameraType]]:
-    """Read intrinsics artifacts.
-
-    Args:
-        intr_file_path: The intr file path.
-        camera_file_path: The camera file path.
-
-    Returns:
-        The return value.
-    """
     data = np.load(intr_file_path)
     inds, intrinsics = data["inds"], torch.from_numpy(data["data"])
     if camera_file_path is None or not camera_file_path.exists():
@@ -390,15 +238,6 @@ def read_intrinsics_artifacts(
 
 
 def save_rgb_artifacts(out_path: ArtifactPath, cached_final_stream: VideoStream) -> None:
-    """Save rgb artifacts.
-
-    Args:
-        out_path: The out path.
-        cached_final_stream: The cached final stream.
-
-    Returns:
-        The return value.
-    """
     # Save original RGB as H264-encoded video.
     with VideoWriter(out_path.rgb_path, cached_final_stream.fps()) as rgb_writer:
         for frame_data in cached_final_stream:
@@ -416,16 +255,6 @@ def read_rgb_artifacts(rgb_file_path: Path) -> Iterator[tuple[int, torch.Tensor]
 
 
 def save_depth_artifacts(out_path: ArtifactPath, cached_final_stream: VideoStream, gt: bool = False) -> None:
-    """Save depth artifacts.
-
-    Args:
-        out_path: The out path.
-        cached_final_stream: The cached final stream.
-        gt: The gt.
-
-    Returns:
-        The return value.
-    """
     # Save metric depth as zipped exr files.
     if gt:
         metric_depth_list = cached_final_stream.get_gt_stream_attribute(FrameAttribute.METRIC_DEPTH)

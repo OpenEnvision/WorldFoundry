@@ -1,6 +1,7 @@
 import logging
 
 import torch
+
 try:
     from pytorch3d.ops import sample_farthest_points
     from pytorch3d.renderer import (
@@ -39,7 +40,7 @@ def _render_torch_zbuffer(
         points, colors = points[keep], colors[keep]
     points_h = torch.cat((points, torch.ones_like(points[:, :1])), dim=1)
     fx, fy, cx, cy = (float(value) for value in intrinsics)
-    splat_radius = max(1, int(round(float(radius) * min(height, width) / 2)))
+    splat_radius = max(1, int(round(float(radius) * min(height, width) / 2)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     offset = torch.arange(-splat_radius, splat_radius + 1, device=points.device)
     delta_y, delta_x = torch.meshgrid(offset, offset, indexing="ij")
     disk = delta_x.square() + delta_y.square() <= splat_radius * splat_radius
@@ -100,7 +101,9 @@ def opencv_to_pytorch3d_transform(w2c_opencv):
         T_opencv.unsqueeze(-1),
     ).squeeze(-1)
 
-    c2w_pytorch3d = torch.eye(4, device=w2c_opencv.device, dtype=w2c_opencv.dtype)[None].repeat(R_pytorch3d.shape[0], 1, 1)
+    c2w_pytorch3d = torch.eye(4, device=w2c_opencv.device, dtype=w2c_opencv.dtype)[None].repeat(
+        R_pytorch3d.shape[0], 1, 1
+    )
     c2w_pytorch3d[:, :3, :3] = R_pytorch3d
     c2w_pytorch3d[:, :3, 3] = T_pytorch3d
     w2c_pytorch3d = torch.inverse(c2w_pytorch3d)
@@ -116,7 +119,7 @@ def render_multi_view_pointcloud(
     point_radius: float = 0.01,
     batch_size: int = 64,
     max_retry_attempts: int = 3,
-    max_points_to_render: int = None,
+    max_points_to_render: int | None = None,
     verbose: bool = False,
     downsample_points: bool = False,
     voxel_size: float = 0.01,

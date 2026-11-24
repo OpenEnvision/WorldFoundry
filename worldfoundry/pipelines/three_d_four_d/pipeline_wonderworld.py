@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from worldfoundry.runtime.wonderworld_inference_spec import WONDERWORLD_NEGATIVE_PROMPT
+from worldfoundry.runtime.inference_specs.wonderworld import WONDERWORLD_NEGATIVE_PROMPT
 
 from ..pipeline_utils import PipelineABC
 

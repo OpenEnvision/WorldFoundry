@@ -5,7 +5,7 @@ modelId: "hma"
 pageSource: authored
 ---
 
-HMA (Heterogeneous Masked Autoregression) predicts robot observations from a short image history and two-dimensional actions. WorldFoundry binds the [official HMA code](https://github.com/liruiw/HMA) and local checkpoints through `HMAPipeline`; it does not bundle the weights. The recorded variants are continuous MAR (`hma-mar-1b`) and discrete MAGVIT (`hma-magvit-362m`). See the [paper](https://arxiv.org/abs/2502.04296) and [project page](https://liruiw.github.io/hma).
+HMA (Heterogeneous Masked Autoregression) predicts robot observations from a short image history and two-dimensional actions. WorldFoundry runs the [HMA model code](https://github.com/liruiw/HMA), vendored at revision `e3c89088`, with local checkpoints through `HMAPipeline`; it does not bundle the weights. The variants are continuous MAR (`hma-mar-1b`) and discrete MAGVIT (`hma-magvit-362m`). See the [paper](https://arxiv.org/abs/2502.04296) and [project page](https://liruiw.github.io/hma).
 
 <ModelPaperFigures modelId="hma" locale="en" />
 
@@ -28,6 +28,6 @@ The default LangTable route repeats one image across the history and applies a c
 
 The example matches the default three history frames and six generated frames: `prompt_horizon - 1 + generated_frames` gives eight finite `[delta_y, delta_x]` rows. For eight generated frames, provide ten rows instead. Frame paths are relative to the JSON file unless absolute. The checkpoint normalizes these raw actions internally, so do not normalize them before submission. The output begins with the final history frame, followed by the requested generated frames. When using the command builder, set its initial observation to the final history frame; `trajectory_path` provides the actual multi-frame history.
 
-The continuous checkpoint uses the local Stable Video Diffusion temporal VAE. The discrete checkpoint uses the official MAGVIT2 tokenizer and requires its checkpoint (`hma_magvit_checkpoint`). Both require a staged official checkout and the corresponding HMA checkpoint. The public runtime has completed real GPU inference for both variants on one paired LangTable sequence. In that sequence the discrete model responded visibly to the real action track; the continuous model did not reproduce the late gripper motion. This is a single configuration check, not a general control-quality score.
+The continuous checkpoint uses the local Stable Video Diffusion temporal VAE. The discrete checkpoint uses the MAGVIT2 tokenizer and requires its checkpoint, `1x-technologies/worldmodel` `magvit2.ckpt` under `${WORLDFOUNDRY_CKPT_DIR}/1x-technologies--worldmodel` or `hma_magvit_checkpoint`. Both require the corresponding HMA checkpoint. The public runtime has completed real GPU inference for both variants on one paired LangTable sequence. In that sequence the discrete model responded visibly to the real action track; the continuous model did not reproduce the late gripper motion. This is a single configuration check, not a general control-quality score.
 
 <ModelRelatedRecipes modelId="hma" locale="en" />

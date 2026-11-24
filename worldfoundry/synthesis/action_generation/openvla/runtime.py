@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
-from worldfoundry.evaluation.tasks.embodied.adapters.runtime_bridge import first_image
+from worldfoundry.evals.tasks.embodied.adapters.runtime_bridge import first_image
 from worldfoundry.synthesis.action_generation.openvla.engine import (
     OpenVLARuntime,
     OpenVLARuntimeConfig,
     select_openvla_checkpoint,
 )
 from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
-
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
 
 _RUNTIME_CACHE: dict[tuple[Any, ...], OpenVLARuntime] = {}
 
@@ -90,10 +90,7 @@ def predict_action(
     )
     checkpoint = select_openvla_checkpoint(
         checkpoint_dir=(
-            checkpoint_path
-            or merged.get("checkpoint_dir")
-            or merged.get("checkpoint_path")
-            or merged.get("ckpt_path")
+            checkpoint_path or merged.get("checkpoint_dir") or merged.get("checkpoint_path") or merged.get("ckpt_path")
         ),
         checkpoints=profile.checkpoints,
         unnorm_key=unnorm_key,

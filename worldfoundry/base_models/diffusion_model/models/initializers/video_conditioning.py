@@ -19,7 +19,7 @@ import torch
 import torch.nn.functional as functional
 
 from worldfoundry.core.media.codecs.video import coerce_video_frames
-from worldfoundry.core.utils import load_pil_image
+from worldfoundry.core.media.processing.image_utils import load_pil_image
 
 from ...contracts import DiffusionRequest
 
@@ -59,17 +59,14 @@ def prepare_video_conditioning_pixels(
         latent_frames = int(request.inputs.get("num_latent_conditional_frames", 1))
         if latent_frames not in allowed_latent_frames:
             raise ValueError(
-                "num_latent_conditional_frames must be one of "
-                f"{list(allowed_latent_frames)}, got {latent_frames}"
+                f"num_latent_conditional_frames must be one of {list(allowed_latent_frames)}, got {latent_frames}"
             )
         physical_frames = temporal_compression * (latent_frames - 1) + 1
-        frames = torch.from_numpy(
-            coerce_video_frames(video, max_frames=physical_frames, from_end=True)
-        ).permute(0, 3, 1, 2)
+        frames = torch.from_numpy(coerce_video_frames(video, max_frames=physical_frames, from_end=True)).permute(
+            0, 3, 1, 2
+        )
         if len(frames) < physical_frames:
-            raise ValueError(
-                f"{owner} video conditioning requires at least {physical_frames} input frames"
-            )
+            raise ValueError(f"{owner} video conditioning requires at least {physical_frames} input frames")
         frames = frames[-physical_frames:]
 
     frames = functional.interpolate(
@@ -85,9 +82,7 @@ def prepare_video_conditioning_pixels(
             if image is not None and zero_pad_image
             else frames[-1:].expand(padding_frames, -1, -1, -1)
         )
-        frames = torch.cat(
-            (frames, padding)
-        )
+        frames = torch.cat((frames, padding))
     frames = frames[: request.num_frames]
     pixels = frames.permute(1, 0, 2, 3).unsqueeze(0).div(127.5).sub(1.0)
     return pixels.to(device=device, dtype=dtype), physical_frames

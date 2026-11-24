@@ -25,7 +25,7 @@ Every runnable method needs both a pipeline and an operator. Operators may be th
             <code>PipelineABC</code>
           </div>
         </div>
-        <p>The minimal public entrypoint: <code>from_pretrained()</code> <code>:118</code>, <code>process()</code> <code>:173</code>, and <code>stream()</code> when incremental output is supported. Owns model construction, checkpoint loading, device placement, normalized execution, and <code>GenerationResult</code> artifact semantics.</p>
+        <p>The minimal public entrypoint: <code>from_pretrained()</code> <code>:124</code>, <code>process()</code> <code>:178</code>, and <code>stream()</code> when incremental output is supported. Owns model construction, checkpoint loading, device placement, normalized execution, and <code>GenerationResult</code> artifact semantics.</p>
         <p className="pi-kv-read"><span>First file</span> <code>pipelines/pipeline_utils.py:11</code></p>
       </li>
       <li className="pi-kv-row">
@@ -35,7 +35,7 @@ Every runnable method needs both a pipeline and an operator. Operators may be th
           </div>
         </div>
         <p>Input and interaction shaping only: <code>interaction_template_init</code>, <code>get_interaction</code>, <code>check_interaction</code>, <code>process_interaction</code>, <code>process_perception</code>. Must not own generation or scoring.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>operators/base_operator.py:4</code></p>
+        <p className="pi-kv-read"><span>First file</span> <code>operators/base_operator.py:6</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -43,8 +43,8 @@ Every runnable method needs both a pipeline and an operator. Operators may be th
             <code>BaseSynthesis</code>
           </div>
         </div>
-        <p>Connects public artifact handling to either a local native runtime or a hosted API: <code>from_pretrained</code> <code>:57</code>, <code>api_init</code> <code>:76</code>, <code>predict</code> <code>:93</code>.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>synthesis/base_synthesis.py:38</code></p>
+        <p>Connects public artifact handling to either a local native runtime or a hosted API: <code>from_pretrained</code> <code>:49</code>, <code>api_init</code> <code>:68</code>, <code>predict</code> <code>:85</code>.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>synthesis/base_synthesis.py:31</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -53,7 +53,7 @@ Every runnable method needs both a pipeline and an operator. Operators may be th
           </div>
         </div>
         <p>Embodied-action synthesis surface (extends <code>RuntimeProfileSynthesis</code>); used by VLA-style action policies.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>synthesis/action_generation/base_action_synthesis.py:14</code></p>
+        <p className="pi-kv-read"><span>First file</span> <code>synthesis/action_generation/base_action_synthesis.py:15</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -62,7 +62,7 @@ Every runnable method needs both a pipeline and an operator. Operators may be th
           </div>
         </div>
         <p>Stores and transforms prior multimodal state for streaming, long-context, or interactive flows. Defined in <code>core</code>, implemented per-family in <code>{"synthesis/*/memory"}</code>.</p>
-        <p className="pi-kv-read"><span>First file</span> <code>core/memory/base.py:9</code></p>
+        <p className="pi-kv-read"><span>First file</span> <code>core/memory/base.py:28</code></p>
       </li>
     </ul>
   </section>
@@ -71,14 +71,14 @@ Every runnable method needs both a pipeline and an operator. Operators may be th
 ## Directory roles
 
 ### `worldfoundry/pipelines/`
-One thin public wrapper per model family (`pipelines/<family>/pipeline_*.py`). `from_pretrained()` stages checkpoints or initializes API clients; `process()` / `__call__()` turns user input into artifacts; `stream()` is implemented only when Studio live controls or incremental output require it. 88 family directories. Hosted-provider wrappers (Wan hosted, Kling, Runway, Luma, Hailuo, Sora/Veo, World Labs) live separately from local checkpoint runtimes.
+One thin public wrapper per model family (`pipelines/<family>/pipeline_*.py`). `from_pretrained()` stages checkpoints or initializes API clients; `process()` / `__call__()` turns user input into artifacts; `stream()` is implemented only when Studio live controls or incremental output require it. 107 family directories. Hosted-provider wrappers (Wan hosted, Kling, Runway, Luma, Hailuo, Sora/Veo, World Labs) live separately from local checkpoint runtimes.
 
 ### `worldfoundry/operators/`
 Per-family `*_operator.py` files that own validation, image/video loading, camera/action parsing, interaction shaping, and perception preprocessing. Inspect here first when inputs fail before model execution. Shared media helpers live in `operators/_media.py`.
 
 ### `worldfoundry/synthesis/`
-In-tree runtime implementation only. External repos or checkpoints remain metadata until ported.
-- `synthesis/visual_generation/**` — visual and world-generation checkpoint calls, hosted APIs, subprocess bridges, runtime env helpers, and per-family `synthesis.py` (for example `cameractrl/synthesis.py`, `motionctrl/synthesis.py`, `echo_memory/`, `openvla/`).
+In-tree runtime implementation only. External repos and checkpoints are metadata, not runtime dependencies.
+- `synthesis/visual_generation/**` — visual and world-generation checkpoint calls, hosted APIs, subprocess bridges, runtime env helpers, and per-family `synthesis.py` (for example `cameractrl/synthesis.py`, `motionctrl/synthesis.py`, and `echo_memory/`).
 - `synthesis/action_generation/**` — embodied-action surfaces, including the OpenVLA runtime, `_native_policy_runtime.py`, `_official_action_trace.py`, and `base_action_synthesis.py`.
 
 CameraCtrl and MotionCtrl do not share one synthesis package; they live in their own `synthesis.py` files, while shared camera-control YAML lives under `data/models/runtime/configs/camera_control`.

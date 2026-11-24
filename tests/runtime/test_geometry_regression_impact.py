@@ -12,8 +12,56 @@ import pytest
 
 TOOLS = Path(__file__).resolve().parents[1] / "manual"
 spec = importlib.util.spec_from_file_location("impact_under_test", TOOLS / "geometry_regression_impact.py")
+assert spec is not None and spec.loader is not None
 impact = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(impact)
+
+
+@pytest.mark.parametrize("change", ["approved", "edited", "restored_source", "restored_binding"])
+def test_retirement_requires_the_approved_git_deletion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    def git(*args: str) -> str:
+        return subprocess.check_output(
+            ["git", "-C", str(tmp_path), "-c", "user.name=Test", "-c", "user.email=test@example.com", *args],
+            text=True,
+        ).strip()
+
+    def commit(label: str) -> str:
+        git("add", "-A")
+        git("commit", "-qm", label)
+        return git("rev-parse", "HEAD")
+
+    git("init", "-q")
+    source = "worldfoundry/retired.py"
+    unrelated = "worldfoundry/unrelated.py"
+    binding = "worldfoundry/data/models/bindings/pipelines/retired.yaml"
+    for path in (source, unrelated, binding):
+        file = tmp_path / path
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text("original\n")
+    base = commit("Initial binding and sources")
+    if change == "edited":
+        (tmp_path / source).write_text("new implementation\n")
+        commit("Edit before retirement")
+    for path in (source, unrelated, binding):
+        (tmp_path / path).unlink()
+    deletion = commit("Retire model")
+    head = deletion
+    if change.startswith("restored"):
+        restored = tmp_path / (source if change == "restored_source" else binding)
+        restored.parent.mkdir(parents=True, exist_ok=True)
+        restored.write_text("new\n")
+        head = commit("Restore a source or binding")
+    monkeypatch.setattr(impact, "_APPROVED_RUNTIME_RETIREMENTS", {"retired": (deletion, (source,))})
+
+    proofs = impact.retirement_proofs(tmp_path, [source, unrelated], base=base, head=head)
+    if change == "approved":
+        assert len(proofs) == 1
+        assert proofs[0]["path"] == source and proofs[0]["removal_revision"] == deletion
+        assert proofs[0]["base_blob"] == git("rev-parse", f"{base}:{source}")
+    else:
+        assert proofs == []
 
 
 @pytest.mark.parametrize(
@@ -32,7 +80,10 @@ def test_mg2_numerical_contract_changes_require_real_model_replay(path):
         [path],
     )
     assert plan["status"] == "planned"
-    assert plan["selected_cases"] == ["matrix-game2-controls-short"]
+    assert plan["selected_cases"] == [
+        "matrix-game2-controls-short",
+        "matrix-game-2-universal-ref-image-seed42-15f-checkpoint-replay",
+    ]
     assert not plan["uncovered_paths"]
 
 
@@ -132,6 +183,212 @@ def test_model_owned_input_and_loading_paths_keep_checkpoint_replays(
     assert {case for case, components in policy["cases"].items() if owners.intersection(components)} == expected_cases
 
 
+DECLARED_REPLAY_OWNERS = {
+    "cogact": (
+        (
+            "worldfoundry/base_models/llm_mllm_core/action/cogact.py",
+            "worldfoundry/base_models/llm_mllm_core/action/cogact_diffusion.py",
+        ),
+        {"cogact-action-short", "db-cogact-action-short"},
+    ),
+    "lingbot-vla": (
+        (
+            "worldfoundry/base_models/llm_mllm_core/action/lingbot/__init__.py",
+            "worldfoundry/base_models/llm_mllm_core/action/lingbot/modeling.py",
+            "worldfoundry/base_models/llm_mllm_core/action/lingbot/preprocessing.py",
+        ),
+        {"lingbot-vla-action-short", "lingbot-vla-v2-action-short"},
+    ),
+    "go1-rdt-embedder": (
+        ("worldfoundry/base_models/llm_mllm_core/action/rdt.py",),
+        {"go1-action-short"},
+    ),
+    "tinyvla-transformer": (
+        ("worldfoundry/base_models/llm_mllm_core/action/transformer.py",),
+        {"tinyvla-action-short"},
+    ),
+    "da3-dinov2": (
+        (
+            "worldfoundry/base_models/perception_core/general_perception/dinov2/variants/depth_anything_v3/vision_transformer.py",
+            "worldfoundry/base_models/perception_core/general_perception/dinov2/variants/depth_anything_v3/layers/attention.py",
+        ),
+        {
+            "da3-large-1.1",
+            "da3metric-large",
+            "da3nested-giant-large-1.1",
+            "lyra2-forward",
+            "alayaworld-spatial-two-chunks-short",
+        },
+    ),
+    "krea-worker": (
+        (
+            "worldfoundry/synthesis/visual_generation/krea_realtime/worldfoundry_runner.py",
+            "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/sample.py",
+            "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/release_server.py",
+            "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/pipeline/causal_inference.py",
+            "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/runtime_utils/memory.py",
+            "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/runtime_utils/vae_block3.py",
+            "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/utils/wan_wrapper.py",
+        ),
+        {"krea-realtime-two-blocks-short"},
+    ),
+    "uniworld-entrypoint": (
+        ("worldfoundry/pipelines/uniworld_view/upstream_entry.py",),
+        {"uniworld-view-single-view-short"},
+    ),
+    "wonderworld-repvit": (
+        ("worldfoundry/base_models/perception_core/segment/sam_v1/modeling/transformer.py",),
+        {"wonderworld-scene-short"},
+    ),
+    "spatia-mapanything": (
+        (
+            "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/models/mapanything/model.py",
+            "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/geometry.py",
+            "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/inference.py",
+            "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/image.py",
+            "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/multiview_confidence.py",
+            "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/misc.py",
+        ),
+        {"spatia-checkpoint-replay"},
+    ),
+    "spatia-uniception": (
+        (
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/encoders/dense_rep_encoder.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/encoders/dinov2.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/encoders/global_rep_encoder.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/info_sharing/alternating_attention_transformer.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/info_sharing/cross_attention_transformer.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/info_sharing/global_attention_transformer.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/__init__.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/adaptors.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/dpt.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/linear.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/mlp_head.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/pose_head.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/utils/transformer_blocks.py",
+        ),
+        {"spatia-checkpoint-replay"},
+    ),
+    "evoke-vigeo": (
+        (
+            "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/mlp.py",
+            "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/patch_embed.py",
+            "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/rope.py",
+            "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/swiglu_ffn.py",
+        ),
+        {"evoke-checkpoint-replay"},
+    ),
+}
+
+INFERENCE_GUIDE_PATHS = (
+    "skills/index.md",
+    "skills/worldfoundry-studio-serving/SKILL.md",
+    "skills/worldfoundry-studio-serving/references/realtime-contract.md",
+    "worldfoundry/base_models/README.md",
+    "worldfoundry/base_models/three_dimensions/README.md",
+)
+
+EVALUATOR_CPU_PATHS = (
+    "worldfoundry/base_models/perception_core/frame_interpolation/amt/motion_smoothness.py",
+    "worldfoundry/base_models/perception_core/frame_interpolation/amt/networks/AMT-S.py",
+    "worldfoundry/base_models/perception_core/frame_interpolation/amt/networks/blocks/feat_enc.py",
+    "worldfoundry/base_models/perception_core/optical_flow/flowformerplusplus/core/FlowFormer/PerCostFormer3/cnn.py",
+)
+
+TRACKING_SCORER_PATHS = (
+    "worldfoundry/base_models/perception_core/tracking/cotracker/models/core/cotracker/blocks.py",
+    "worldfoundry/base_models/perception_core/tracking/dot/models/shelf/"
+    "cotracker2_utils/models/core/cotracker/blocks.py",
+    "worldfoundry/base_models/perception_core/tracking/dot/models/shelf/"
+    "cotracker3_utils/models/core/cotracker/blocks.py",
+)
+
+UNREPRESENTED_REPLAY_PATHS = (
+    "worldfoundry/base_models/three_dimensions/point_clouds/pi3_source.py",
+    "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/prior_dinov2.py",
+    "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/drop_path.py",
+    "worldfoundry/operators/wow_operator.py",
+    "worldfoundry/synthesis/action_generation/rdt_1b/modeling.py",
+    "worldfoundry/base_models/perception_core/general_perception/dinov2/variants/vipe_dav3/vision_transformer.py",
+    "worldfoundry/data/models/runtime/environments/three_d/geometry-priors.yaml",
+    "worldfoundry/data/models/runtime/environments/video/studio_verified_unified.yaml",
+)
+
+
+@pytest.fixture(scope="module")
+def declared_replay_ownership_plan() -> dict:
+    paths = [path for owned, _ in DECLARED_REPLAY_OWNERS.values() for path in owned]
+    return impact.select_cases(
+        TOOLS / "geometry_regression_cases.json",
+        TOOLS / "geometry_regression_dependencies.json",
+        TOOLS.parents[1],
+        [*paths, *INFERENCE_GUIDE_PATHS, *UNREPRESENTED_REPLAY_PATHS, *EVALUATOR_CPU_PATHS, *TRACKING_SCORER_PATHS],
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("paths,expected_cases", DECLARED_REPLAY_OWNERS.values(), ids=DECLARED_REPLAY_OWNERS)
+def test_configured_and_historical_dependencies_have_exact_replay_owners(
+    declared_replay_ownership_plan: dict,
+    paths: tuple[str, ...],
+    expected_cases: set[str],
+) -> None:
+    plan = declared_replay_ownership_plan
+    assert not plan["graph_errors"]
+    for path in paths:
+        assert path not in plan["uncovered_paths"]
+        owners = {
+            case
+            for case, reasons in plan["reasons"].items()
+            if any(reason.get("path") == path and "declared_component" in reason["kind"] for reason in reasons)
+        }
+        assert owners == expected_cases
+
+
+@pytest.mark.unit
+def test_inference_guides_are_documentation_not_replay_dependencies(declared_replay_ownership_plan: dict) -> None:
+    plan = declared_replay_ownership_plan
+    assert set(INFERENCE_GUIDE_PATHS) <= set(plan["ignored_paths"])
+    assert not set(INFERENCE_GUIDE_PATHS).intersection(plan["uncovered_paths"])
+    assert all(
+        reason.get("path") not in INFERENCE_GUIDE_PATHS for reasons in plan["reasons"].values() for reason in reasons
+    )
+
+
+@pytest.mark.unit
+def test_exact_evaluator_changes_require_cpu_contracts(declared_replay_ownership_plan: dict) -> None:
+    plan = declared_replay_ownership_plan
+    assert set(EVALUATOR_CPU_PATHS).isdisjoint(plan["uncovered_paths"])
+    proofs = {item["path"]: item["required_cpu_contracts"] for item in plan["cpu_only_changes"]}
+    for path in EVALUATOR_CPU_PATHS:
+        assert set(proofs[path]) == {
+            "tests/base_models/perception_core/optical_flow/test_raft_features.py",
+            "tests/evaluation/execution/test_vbench_sampling.py",
+        }
+
+
+@pytest.mark.unit
+def test_tracking_scorer_changes_require_cpu_contracts(declared_replay_ownership_plan: dict) -> None:
+    plan = declared_replay_ownership_plan
+    assert set(TRACKING_SCORER_PATHS).isdisjoint(plan["uncovered_paths"])
+    proofs = {item["path"]: item["required_cpu_contracts"] for item in plan["cpu_only_changes"]}
+    for path in TRACKING_SCORER_PATHS:
+        assert proofs[path] == ["tests/evaluation/execution/test_vbench_sampling.py"]
+
+
+@pytest.mark.unit
+def test_unrepresented_modes_and_environment_variants_remain_uncovered(declared_replay_ownership_plan: dict) -> None:
+    plan = declared_replay_ownership_plan
+    assert plan["status"] == "uncovered"
+    assert set(UNREPRESENTED_REPLAY_PATHS) <= set(plan["uncovered_paths"])
+    assert not set(UNREPRESENTED_REPLAY_PATHS).intersection(plan["ignored_paths"])
+    assert all(
+        reason.get("path") not in UNREPRESENTED_REPLAY_PATHS or "declared_component" not in reason["kind"]
+        for reasons in plan["reasons"].values()
+        for reason in reasons
+    )
+
+
 def git(root, *args):
     return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
 
@@ -196,6 +453,25 @@ def test_conditional_relative_lazy_and_declared_dynamic_dependencies_select_mode
     plan = impact.select_cases(matrix, policy, root, [path])
     assert plan["status"] == "planned"
     assert plan["selected_cases"] == ["a"]
+
+
+def test_evaluation_only_paths_yield_to_inference_imports(project):
+    root, matrix, policy = project
+    path = "worldfoundry/models/scorer.py"
+    (root / path).write_text("")
+    git(root, "add", path)
+    declarations = json.loads(policy.read_text())
+    declarations["evaluation_only_paths"] = [path]
+    policy.write_text(json.dumps(declarations))
+    evaluation = impact.select_cases(matrix, policy, root, [path])
+    assert evaluation["status"] == "no_inference_changes"
+    assert evaluation["ignored_paths"] == [path]
+    assert impact.select_cases(matrix, policy, root, ["worldfoundry/models/other.py"])["status"] == "uncovered"
+
+    (root / "worldfoundry/models/b.py").write_text("from . import scorer\n")
+    inference = impact.select_cases(matrix, policy, root, [path])
+    assert inference["ignored_paths"] == []
+    assert inference["selected_cases"] == ["b"]
 
 
 @pytest.mark.parametrize(
@@ -420,6 +696,142 @@ def test_public_matrix_still_rejects_an_unintegrated_world_model():
     )
     assert plan["status"] == "uncovered"
     assert plan["uncovered_paths"] == [path]
+
+
+REALTIME_CONTRACTS = "worldfoundry/core/execution/realtime/contracts.py"
+REALTIME_FLOW_SAMPLING = "worldfoundry/core/execution/realtime/flow_sampling.py"
+STUDIO_REALTIME_WEBRTC = "worldfoundry/studio/serving/realtime/webrtc.py"
+MEDIA_PROCESSING_RTX = "worldfoundry/core/media/processing/rtx.py"
+CORE_ATTENTION = "worldfoundry/core/attention/__init__.py"
+NEW_REALTIME_MODULE = "worldfoundry/core/execution/realtime/unimported_session.py"
+NEW_CORE_SUBPACKAGE = "worldfoundry/core/unlisted_subsystem/module.py"
+
+
+@pytest.fixture(scope="module")
+def realtime_layer_plan() -> dict:
+    """Plan every realtime-layer probe path together; reasons stay attributed per path."""
+    return impact.select_cases(
+        TOOLS / "geometry_regression_cases.json",
+        TOOLS / "geometry_regression_dependencies.json",
+        TOOLS.parents[1],
+        [
+            REALTIME_CONTRACTS,
+            REALTIME_FLOW_SAMPLING,
+            STUDIO_REALTIME_WEBRTC,
+            MEDIA_PROCESSING_RTX,
+            CORE_ATTENTION,
+            NEW_REALTIME_MODULE,
+            NEW_CORE_SUBPACKAGE,
+        ],
+    )
+
+
+def cases_selected_by(plan: dict, path: str) -> dict[str, list[dict]]:
+    """Return the selection reasons recorded for one changed path, keyed by case."""
+    selected = {}
+    for case, reasons in plan["reasons"].items():
+        matched = [reason for reason in reasons if reason.get("path") == path]
+        if matched:
+            selected[case] = matched
+    return selected
+
+
+@pytest.mark.parametrize("path", [REALTIME_CONTRACTS, MEDIA_PROCESSING_RTX])
+def test_realtime_layer_paths_select_cases_through_their_dependencies(realtime_layer_plan: dict, path: str) -> None:
+    root = TOOLS.parents[1]
+    assert (root / path).is_file()
+    assert not realtime_layer_plan["graph_errors"]
+    selected = cases_selected_by(realtime_layer_plan, path)
+    assert selected
+    for reasons in selected.values():
+        for reason in reasons:
+            assert reason["kind"] != "shared_component_or_case_matrix"
+            assert set(reason["kind"].split("+")) <= {"declared_component", "static_import", "recorded_import"}
+
+
+def test_studio_realtime_serving_changes_select_their_importers_or_cpu_contracts(realtime_layer_plan: dict) -> None:
+    """A serving file selects exactly the cases that import it; with no importer its CPU contracts apply."""
+    root = TOOLS.parents[1]
+    assert (root / STUDIO_REALTIME_WEBRTC).is_file()
+    cases, _ = impact.load_definitions(
+        TOOLS / "geometry_regression_cases.json",
+        TOOLS / "geometry_regression_dependencies.json",
+    )
+    graph = impact.ImportGraph(root)
+    importers = {name for name, case in cases.items() if STUDIO_REALTIME_WEBRTC in graph.closure(case["target"])}
+    selected = cases_selected_by(realtime_layer_plan, STUDIO_REALTIME_WEBRTC)
+    assert set(selected) == importers
+    for reasons in selected.values():
+        assert [reason["kind"] for reason in reasons] == ["static_import"]
+    assert STUDIO_REALTIME_WEBRTC not in realtime_layer_plan["uncovered_paths"]
+    contracts = [
+        item["required_cpu_contracts"]
+        for item in realtime_layer_plan["cpu_only_changes"]
+        if item["path"] == STUDIO_REALTIME_WEBRTC
+    ]
+    declared = [
+        "tests/studio_visualization/test_realtime_delivery.py",
+        "tests/studio_visualization/test_realtime_presentation.py",
+    ]
+    assert contracts == ([] if importers else [declared])
+    if not importers:
+        assert set(declared) <= set(realtime_layer_plan["required_cpu_contracts"])
+
+
+def test_realtime_contracts_select_their_offline_importers_only(realtime_layer_plan: dict) -> None:
+    selected = cases_selected_by(realtime_layer_plan, REALTIME_CONTRACTS)
+    for case in ("self-forcing-t2v-short", "matrix-game2-controls-short"):
+        assert any("static_import" in reason["kind"] for reason in selected[case])
+    assert set(selected) < set(realtime_layer_plan["reasons"])
+
+
+def test_realtime_flow_sampling_selects_only_lingbot_cases(realtime_layer_plan: dict) -> None:
+    _, policy = impact.load_definitions(
+        TOOLS / "geometry_regression_cases.json",
+        TOOLS / "geometry_regression_dependencies.json",
+    )
+    lingbot_cases = {
+        case
+        for case, components in policy["cases"].items()
+        if {"lingbot-world", "lingbot-world-v2"}.intersection(components)
+    }
+    selected = cases_selected_by(realtime_layer_plan, REALTIME_FLOW_SAMPLING)
+    assert selected
+    assert set(selected) <= lingbot_cases
+
+
+def test_other_core_subtrees_remain_shared_by_every_case(realtime_layer_plan: dict) -> None:
+    selected = cases_selected_by(realtime_layer_plan, CORE_ATTENTION)
+    assert set(selected) == set(realtime_layer_plan["reasons"])
+    assert len(selected) == len(json.loads((TOOLS / "geometry_regression_cases.json").read_text()))
+    for reasons in selected.values():
+        assert [reason["kind"] for reason in reasons] == ["shared_component_or_case_matrix"]
+
+
+def test_base_model_geometry_registry_data_selects_checkpoint_replays() -> None:
+    matrix = TOOLS / "geometry_regression_cases.json"
+    paths = ["worldfoundry/data/base_models/capabilities/geometry.yaml", "worldfoundry/data/base_models/stacks.yaml"]
+    plan = impact.select_cases(matrix, TOOLS / "geometry_regression_dependencies.json", TOOLS.parents[1], paths)
+
+    assert plan["status"] == "planned"
+    assert not plan["uncovered_paths"]
+    assert set(plan["selected_cases"]) == set(json.loads(matrix.read_text()))
+    for reasons in plan["reasons"].values():
+        assert reasons == [{"path": path, "kind": "shared_component_or_case_matrix"} for path in paths]
+
+
+def test_unimported_realtime_or_unlisted_core_files_keep_conservative_fallback(realtime_layer_plan: dict) -> None:
+    assert realtime_layer_plan["status"] == "uncovered"
+    assert realtime_layer_plan["uncovered_paths"] == sorted([NEW_REALTIME_MODULE, NEW_CORE_SUBPACKAGE])
+    for reasons in realtime_layer_plan["reasons"].values():
+        fallback = [reason for reason in reasons if reason["kind"] == "conservative_fallback"]
+        assert fallback == [
+            {
+                "kind": "conservative_fallback",
+                "paths": sorted([NEW_REALTIME_MODULE, NEW_CORE_SUBPACKAGE]),
+                "graph_errors": [],
+            }
+        ]
 
 
 VERIFICATION_SUITE = "tests/manual/geometry_regression_suite.py"
@@ -934,3 +1346,53 @@ def test_added_case_cannot_hide_independently_committed_runtime_changes(verifica
     plan = impact.select_cases(matrix, dependencies, root, changes, base=base, head=head)
     assert set(plan["selected_cases"]) == {"a", "b", "extra", MG2_CASE}
     assert not plan["cpu_only_changes"]
+
+
+def test_exact_environment_mapping_precedes_shared_metadata_rule(project: tuple[Path, Path, Path]) -> None:
+    root, matrix, dependencies = project
+    path = "worldfoundry/data/models/runtime/environments/video/a.yaml"
+    policy = json.loads(dependencies.read_text())
+    policy["shared_paths"].append("worldfoundry/data/models/**")
+    policy["environment_variants"] = {path: ["a@a"]}
+    dependencies.write_text(json.dumps(policy))
+    plan = impact.select_cases(matrix, dependencies, root, [path])
+    assert plan["status"] == "planned"
+    assert plan["selected_cases"] == ["a"]
+    assert plan["reasons"]["a"][0]["kind"] == "declared_environment"
+    plan = impact.select_cases(matrix, dependencies, root, [path, "worldfoundry/core/attention/shared.py"])
+    assert plan["selected_cases"] == ["a", "b"]
+    policy["environment_variants"][path].append("missing@missing")
+    dependencies.write_text(json.dumps(policy))
+    plan = impact.select_cases(matrix, dependencies, root, [path])
+    assert plan["status"] == "uncovered"
+    assert plan["selected_cases"] == ["a", "b"]
+    assert plan["uncovered_paths"] == [path]
+
+
+@pytest.mark.parametrize(
+    "mappings",
+    [
+        {"worldfoundry/data/models/runtime/environments/video/*.yaml": ["a@a"]},
+        {"worldfoundry/data/models/runtime/environments/video/a.yaml": []},
+        {"worldfoundry/data/models/runtime/environments/video/a.yaml": ["a"]},
+    ],
+)
+def test_environment_ownership_requires_exact_paths_and_variants(mappings: dict[str, list[str]]) -> None:
+    with pytest.raises(ValueError, match="Environment ownership"):
+        impact.environment_variants({"environment_variants": mappings})
+
+
+@pytest.mark.unit
+def test_openai_clip_scoring_requires_cpu_contracts() -> None:
+    module = "worldfoundry/base_models/perception_core/general_perception/openai_clip_runtime/clip"
+    paths = {f"{module}/{name}.py" for name in ("clip", "model", "simple_tokenizer")}
+    plan = impact.select_cases(
+        TOOLS / "geometry_regression_cases.json",
+        TOOLS / "geometry_regression_dependencies.json",
+        TOOLS.parents[1],
+        sorted(paths),
+    )
+    assert plan["status"] == "no_inference_changes", plan["uncovered_paths"]
+    assert plan["selected_cases"] == []
+    assert {row["path"] for row in plan["cpu_only_changes"]} == paths
+    assert plan["required_cpu_contracts"] == ["tests/evaluation/execution/test_openai_clip_scoring.py"]

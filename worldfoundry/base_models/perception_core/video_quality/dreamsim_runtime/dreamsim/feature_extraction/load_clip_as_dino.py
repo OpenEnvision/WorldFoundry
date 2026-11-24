@@ -1,25 +1,28 @@
-import torch
-from .vision_transformer import vit_base, VisionTransformer
 import os
+
+import torch
+
+from .vision_transformer import VisionTransformer, vit_base
 
 
 class QuickGELU(torch.nn.Module):
-
     def forward(self, x: torch.Tensor):
         return x * torch.sigmoid(1.702 * x)
 
 
 def load_clip_as_dino(patch_size, load_dir="./models", l14=False):
     if l14:
-        sd = torch.load(os.path.join(load_dir, 'clipl14_as_dino_vitl.pth.tar'), map_location='cpu', weights_only=True)
-        dino_vit = VisionTransformer(**sd['kwargs'])
-        sd = sd['state_dict']
+        sd = torch.load(os.path.join(load_dir, "clipl14_as_dino_vitl.pth.tar"), map_location="cpu", weights_only=True)
+        dino_vit = VisionTransformer(**sd["kwargs"])
+        sd = sd["state_dict"]
     else:
-        sd = torch.load(os.path.join(load_dir, f'clip_vitb{patch_size}_pretrain.pth.tar'), weights_only=True)['state_dict']
+        sd = torch.load(os.path.join(load_dir, f"clip_vitb{patch_size}_pretrain.pth.tar"), weights_only=True)[
+            "state_dict"
+        ]
         dino_vit = vit_base(patch_size=patch_size)
 
     dino_vit.pos_drop = torch.nn.LayerNorm(dino_vit.embed_dim)
-    proj = sd.pop('proj')
+    proj = sd.pop("proj")
     dino_vit.load_state_dict(sd)
 
     # GeLU -> QuickGeLU

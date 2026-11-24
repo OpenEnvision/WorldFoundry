@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, ClassVar
 
 from ..native_diffusion import NativeVisualDiffusionPipeline
 
@@ -26,7 +26,7 @@ class HelixWorldPipeline(NativeVisualDiffusionPipeline):
     DEFAULT_FPS = 24
     OUTPUT_LAYOUT = "FHWC"
     OUTPUT_VALUE_RANGE = "0,1"
-    REQUEST_INPUT_DEFAULTS = {
+    REQUEST_INPUT_DEFAULTS: Mapping[str, object] = {
         "actions": "W",
         "perspective": "first_person",
         "audio_prompt": None,
@@ -34,7 +34,7 @@ class HelixWorldPipeline(NativeVisualDiffusionPipeline):
         "control_path": None,
         "frame_rate": 24.0,
     }
-    REQUEST_INPUT_ALIASES = {"action_plan": "actions"}
+    REQUEST_INPUT_ALIASES: ClassVar[Mapping[str, str]] = {"action_plan": "actions"}
 
     @classmethod
     def _checkpoint_overrides(

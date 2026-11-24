@@ -32,6 +32,7 @@ Public surface
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 from collections import OrderedDict
@@ -112,11 +113,11 @@ def _signature_key(args: Sequence[Any], kwargs: Mapping[str, Any], extra_key: st
 class _CapturedGraph:
     """One captured Graph plus the static buffers replay must copy into."""
 
-    __slots__ = ("graph", "static_inputs", "static_outputs", "input_indices")
+    __slots__ = ("graph", "input_indices", "static_inputs", "static_outputs")
 
     def __init__(
         self,
-        graph: "torch.cuda.CUDAGraph",
+        graph: torch.cuda.CUDAGraph,
         static_inputs: list[torch.Tensor],
         static_outputs: Any,
         input_indices: list[int],
@@ -309,7 +310,7 @@ class InferenceCUDAGraphRunner:
         leaves, spec = tree_flatten((args, {name: kwargs[name] for name in sorted(kwargs)}))
         input_indices = [index for index, leaf in enumerate(leaves) if isinstance(leaf, torch.Tensor)]
         static_inputs = [leaves[index].clone() for index in input_indices]
-        for index, buffer in zip(input_indices, static_inputs):
+        for index, buffer in zip(input_indices, static_inputs, strict=False):
             leaves[index] = buffer
         call_args, call_kwargs = tree_unflatten(leaves, spec)
 
@@ -344,27 +345,32 @@ class InferenceCUDAGraphRunner:
             self._pool = graph_pool_handle()
         graph = torch.cuda.CUDAGraph()
         inference_mode = torch.is_inference_mode_enabled()
+        gc_was_enabled = gc.isenabled()
+        if gc_was_enabled:
+            gc.disable()
         try:
             # CUDA Graph control updates process-owned generator tensors, which
             # compilation may have created in inference mode. Keep those updates
             # inference-safe while preserving the caller's mode for compute.
-            with torch.cuda.device(device), torch.inference_mode(), torch.cuda.graph(graph, pool=self._pool):
-                with (
-                    torch.inference_mode(inference_mode),
-                    torch.no_grad(),
-                    torch.autocast(
-                        "cuda",
-                        enabled=torch.is_autocast_enabled("cuda"),
-                        cache_enabled=False,
-                    ),
-                ):
-                    static_outputs = self._fn(*call_args, **call_kwargs)
+            with (
+                torch.cuda.device(device),
+                torch.inference_mode(),
+                torch.cuda.graph(graph, pool=self._pool),
+                # Inside the capture, compute runs in the caller's inference mode.
+                torch.inference_mode(inference_mode),
+                torch.no_grad(),
+                torch.autocast("cuda", enabled=torch.is_autocast_enabled("cuda"), cache_enabled=False),
+            ):
+                static_outputs = self._fn(*call_args, **call_kwargs)
         except RuntimeError as error:
             if is_accelerator_out_of_memory(error):
                 raise
             self.stats["capture_failed"] += 1
             self._disabled_keys.add(key)
             return None
+        finally:
+            if gc_was_enabled:
+                gc.enable()
 
         captured = _CapturedGraph(graph, static_inputs, static_outputs, input_indices)
         self._graphs[key] = captured
@@ -374,7 +380,7 @@ class InferenceCUDAGraphRunner:
     def _replay(self, captured: _CapturedGraph, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
         """``copy_`` fresh tensor leaves, replay, then materialize owned outputs."""
         leaves, _ = tree_flatten((args, {name: kwargs[name] for name in sorted(kwargs)}))
-        for buf, index in zip(captured.static_inputs, captured.input_indices):
+        for buf, index in zip(captured.static_inputs, captured.input_indices, strict=False):
             buf.copy_(leaves[index])
         with torch.inference_mode():
             captured.graph.replay()

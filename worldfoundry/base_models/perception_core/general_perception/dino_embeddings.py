@@ -61,6 +61,25 @@ def load_dino_vitb16_feature_model(
     return model.eval()
 
 
+def load_dinov2_feature_model(
+    checkpoint: str | Path,
+    *,
+    device: str | torch.device | None = None,
+    use_pooler_output: bool = False,
+    local_files_only: bool = True,
+) -> HFVisionEmbeddingModel:
+    """Load a selected DINOv2 checkpoint with explicit CLS/pooler semantics."""
+    from transformers import AutoModel
+
+    model = HFVisionEmbeddingModel(
+        AutoModel.from_pretrained(str(checkpoint), local_files_only=local_files_only),
+        use_pooler_output=use_pooler_output,
+    )
+    if device is not None:
+        model = model.to(device)
+    return model.eval()
+
+
 def load_dinov2_base_feature_model(
     *,
     env: Mapping[str, str] | None = None,

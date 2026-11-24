@@ -22,20 +22,19 @@ class ActionModule(nnx.Module):
         vae_time_compression_ratio=4,
         windows_size=3,
         heads_num=16,
-        patch_size=[1, 2, 2],
+        patch_size=[1, 2, 2],  # noqa: B006 - Keeps the upstream default object and signature.
         qk_norm=True,
         qkv_bias=False,
-        rope_dim_list=[8, 28, 28],
+        rope_dim_list=[8, 28, 28],  # noqa: B006 - Keeps the upstream default object and signature.
         rope_theta=256,
-        mouse_qk_dim_list=[8, 28, 28],
+        mouse_qk_dim_list=[8, 28, 28],  # noqa: B006 - Keeps the upstream default object and signature.
         enable_mouse=True,
         enable_keyboard=True,
         local_attn_size=6,
-        blocks=[],
-        rngs=nnx.Rngs(0),
+        blocks=[],  # noqa: B006 - Keeps the upstream default object and signature.
+        rngs=nnx.Rngs(0),  # noqa: B008 - Default evaluated once at definition, as upstream.
         left_action_padding=11,
     ):
-
         super().__init__()
         self.local_attn_size = local_attn_size
         self.enable_mouse = enable_mouse
@@ -74,8 +73,7 @@ class ActionModule(nnx.Module):
             c = mouse_hidden_dim
             self.mouse_mlp = nnx.Sequential(
                 nnx.Linear(
-                    mouse_dim_in * vae_time_compression_ratio * windows_size
-                    + img_hidden_size,
+                    mouse_dim_in * vae_time_compression_ratio * windows_size + img_hidden_size,
                     c,
                     use_bias=True,
                     rngs=rngs,
@@ -83,9 +81,7 @@ class ActionModule(nnx.Module):
                     dtype=jnp.bfloat16,
                 ),
                 partial(nnx.gelu, approximate=True),
-                nnx.Linear(
-                    c, c, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-                ),
+                nnx.Linear(c, c, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16),
                 nnx.LayerNorm(
                     c,
                     rngs=rngs,
@@ -107,18 +103,10 @@ class ActionModule(nnx.Module):
                 dtype=jnp.bfloat16,
             )
             self.img_attn_q_norm = (
-                WanRMSNorm(
-                    head_dim, eps=1e-6, param_dtype=jnp.float32, dtype=jnp.bfloat16
-                )
-                if qk_norm
-                else lambda x: x
+                WanRMSNorm(head_dim, eps=1e-6, param_dtype=jnp.float32, dtype=jnp.bfloat16) if qk_norm else lambda x: x
             )
             self.img_attn_k_norm = (
-                WanRMSNorm(
-                    head_dim, eps=1e-6, param_dtype=jnp.float32, dtype=jnp.bfloat16
-                )
-                if qk_norm
-                else lambda x: x
+                WanRMSNorm(head_dim, eps=1e-6, param_dtype=jnp.float32, dtype=jnp.bfloat16) if qk_norm else lambda x: x
             )
             self.proj_mouse = nnx.Linear(
                 c,
@@ -131,16 +119,12 @@ class ActionModule(nnx.Module):
         if self.enable_keyboard:
             head_dim_key = keyboard_hidden_dim // heads_num
             self.key_attn_q_norm = (
-                WanRMSNorm(
-                    head_dim_key, eps=1e-6, param_dtype=jnp.float32, dtype=jnp.bfloat16
-                )
+                WanRMSNorm(head_dim_key, eps=1e-6, param_dtype=jnp.float32, dtype=jnp.bfloat16)
                 if qk_norm
                 else lambda x: x
             )
             self.key_attn_k_norm = (
-                WanRMSNorm(
-                    head_dim_key, eps=1e-6, param_dtype=jnp.float32, dtype=jnp.bfloat16
-                )
+                WanRMSNorm(head_dim_key, eps=1e-6, param_dtype=jnp.float32, dtype=jnp.bfloat16)
                 if qk_norm
                 else lambda x: x
             )
@@ -188,7 +172,6 @@ class ActionModule(nnx.Module):
 
         latents_size = [video_length + start_offset, height, width]
 
-
         if isinstance(self.patch_size, int):
             assert all(s % self.patch_size == 0 for s in latents_size), (
                 f"Latent size(last {ndim} dimensions) should be divisible by patch size({self.patch_size}), "
@@ -197,25 +180,18 @@ class ActionModule(nnx.Module):
             rope_sizes = [s // self.patch_size for s in latents_size]
 
         else:
-            assert all(
-                s % self.patch_size[idx] == 0 for idx, s in enumerate(latents_size)
-            ), (
+            assert all(s % self.patch_size[idx] == 0 for idx, s in enumerate(latents_size)), (
                 f"Latent size(last {ndim} dimensions) should be divisible by patch size({self.patch_size}), "
                 f"but got {latents_size}."
             )
-            rope_sizes = [
-                s // self.patch_size[idx] for idx, s in enumerate(latents_size)
-            ]
-
+            rope_sizes = [s // self.patch_size[idx] for idx, s in enumerate(latents_size)]
 
         if len(rope_sizes) != target_ndim:
-            rope_sizes = [1] * (target_ndim - len(rope_sizes)) + rope_sizes 
+            rope_sizes = [1] * (target_ndim - len(rope_sizes)) + rope_sizes
 
         if rope_dim_list is None:
             rope_dim_list = [head_dim // target_ndim for _ in range(target_ndim)]
-        assert (
-            sum(rope_dim_list) == head_dim
-        ), "sum(rope_dim_list) should equal to head_dim of attention layer"
+        assert sum(rope_dim_list) == head_dim, "sum(rope_dim_list) should equal to head_dim of attention layer"
 
         freqs_cos, freqs_sin = get_nd_rotary_pos_embed(
             rope_dim_list,
@@ -225,12 +201,8 @@ class ActionModule(nnx.Module):
             theta_rescale_factor=1,
         )
         return (
-            freqs_cos[
-                -video_length * rope_sizes[1] * rope_sizes[2] // self.patch_size[0] :
-            ],
-            freqs_sin[
-                -video_length * rope_sizes[1] * rope_sizes[2] // self.patch_size[0] :
-            ],
+            freqs_cos[-video_length * rope_sizes[1] * rope_sizes[2] // self.patch_size[0] :],
+            freqs_sin[-video_length * rope_sizes[1] * rope_sizes[2] // self.patch_size[0] :],
         )
 
     def __call__(
@@ -267,9 +239,7 @@ class ActionModule(nnx.Module):
 
         if self.enable_mouse and mouse_condition is not None:
             hidden_states = (
-                x.reshape(B, tt, th * tw, x.shape[-1])
-                .transpose(0, 2, 1, 3)
-                .reshape(B * th * tw, tt, x.shape[-1])
+                x.reshape(B, tt, th * tw, x.shape[-1]).transpose(0, 2, 1, 3).reshape(B * th * tw, tt, x.shape[-1])
             )
         else:
             hidden_states = x
@@ -281,10 +251,7 @@ class ActionModule(nnx.Module):
                 group_mouse = [
                     mouse_condition[
                         :,
-                        i
-                        * self.vae_time_compression_ratio : i
-                        * self.vae_time_compression_ratio
-                        + frames_window_size,
+                        i * self.vae_time_compression_ratio : i * self.vae_time_compression_ratio + frames_window_size,
                         :,
                     ]
                     for i in range(num_frame_per_block)
@@ -294,9 +261,7 @@ class ActionModule(nnx.Module):
                     group_mouse = [
                         mouse_condition[
                             :,
-                            i
-                            * self.vae_time_compression_ratio : i
-                            * self.vae_time_compression_ratio
+                            i * self.vae_time_compression_ratio : i * self.vae_time_compression_ratio
                             + frames_window_size,
                             :,
                         ]
@@ -307,18 +272,14 @@ class ActionModule(nnx.Module):
                     group_mouse = [
                         mouse_condition[
                             :,
-                            i
-                            * self.vae_time_compression_ratio : i
-                            * self.vae_time_compression_ratio
+                            i * self.vae_time_compression_ratio : i * self.vae_time_compression_ratio
                             + frames_window_size,
                             :,
                         ]
                         for i in range(tt)
                     ]
             group_mouse_btwd = jnp.stack(group_mouse, axis=1)  # w = window_size
-            group_mouse_btd = rearrange(
-                group_mouse_btwd, "B T W D -> B T (W D)"
-            )  # group windows together
+            group_mouse_btd = rearrange(group_mouse_btwd, "B T W D -> B T (W D)")  # group windows together
             group_mouse_btd = einops.repeat(group_mouse_btd, "B T D -> (B S) T D", S=S)
 
             group_mouse_btd = jnp.concatenate([hidden_states, group_mouse_btd], axis=-1)
@@ -374,8 +335,8 @@ class ActionModule(nnx.Module):
                 group_keyboard = [
                     keyboard_condition[
                         :,
-                        self.vae_time_compression_ratio * (i - self.latents_window_size)
-                        + frames_window_size : i * self.vae_time_compression_ratio
+                        self.vae_time_compression_ratio * (i - self.latents_window_size) + frames_window_size : i
+                        * self.vae_time_compression_ratio
                         + frames_window_size,
                         :,
                     ]
@@ -386,9 +347,8 @@ class ActionModule(nnx.Module):
                     group_keyboard = [
                         keyboard_condition[
                             :,
-                            self.vae_time_compression_ratio
-                            * (i - self.latents_window_size)
-                            + frames_window_size : i * self.vae_time_compression_ratio
+                            self.vae_time_compression_ratio * (i - self.latents_window_size) + frames_window_size : i
+                            * self.vae_time_compression_ratio
                             + frames_window_size,
                             :,
                         ]
@@ -399,9 +359,8 @@ class ActionModule(nnx.Module):
                     group_keyboard = [
                         keyboard_condition[
                             :,
-                            self.vae_time_compression_ratio
-                            * (i - self.latents_window_size)
-                            + frames_window_size : i * self.vae_time_compression_ratio
+                            self.vae_time_compression_ratio * (i - self.latents_window_size) + frames_window_size : i
+                            * self.vae_time_compression_ratio
                             + frames_window_size,
                             :,
                         ]
@@ -409,9 +368,7 @@ class ActionModule(nnx.Module):
                     ]
 
             group_keyboard = jnp.stack(group_keyboard, axis=1)
-            group_keyboard = group_keyboard.reshape(
-                group_keyboard.shape[0], group_keyboard.shape[1], -1
-            )
+            group_keyboard = group_keyboard.reshape(group_keyboard.shape[0], group_keyboard.shape[1], -1)
 
             mouse_q = self.mouse_attn_q(hidden_states)
             keyboard_kv = self.keyboard_attn_kv(group_keyboard)
@@ -422,9 +379,7 @@ class ActionModule(nnx.Module):
             q_blhd = mouse_q.reshape(B, L, self.heads_num, D)
 
             B, L, KHD = keyboard_kv.shape
-            k_blhd, v_blhd = jnp.split(
-                keyboard_kv.reshape(B, L, 2, self.heads_num, D), 2, axis=2
-            )
+            k_blhd, v_blhd = jnp.split(keyboard_kv.reshape(B, L, 2, self.heads_num, D), 2, axis=2)
             k_blhd = k_blhd.squeeze(2)
             v_blhd = v_blhd.squeeze(2)
             q_blhd = self.key_attn_q_norm(q_blhd).astype(v_blhd.dtype)
@@ -435,13 +390,7 @@ class ActionModule(nnx.Module):
             T_ = TS // S
             assert S == 880 or S == 1760  # if using mp method
 
-            q_blhd = (
-                q_blhd.reshape(B, T_, S, H, D)
-                .transpose(0, 2, 1, 3, 4)
-                .reshape(B * S, T_, H, D)
-            )
-
-
+            q_blhd = q_blhd.reshape(B, T_, S, H, D).transpose(0, 2, 1, 3, 4).reshape(B * S, T_, H, D)
 
             if teacher_forcing:
                 q_blhd = rearrange(q_blhd, "b (r s) n d -> (b r) s n d", r=2)

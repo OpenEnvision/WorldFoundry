@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Union
 
 import numpy as np
 
 
 @dataclass
 class SegmentId:
-    episode_id: Union[int, str]
+    episode_id: int | str
     start: int
     stop: int
 
@@ -18,7 +17,7 @@ class SegmentId:
 
 @dataclass
 class SegmentIdMultiplayer:
-    episode_id: Union[int, str]
+    episode_id: int | str
     bot1_start: int
     bot1_stop: int
     bot2_start: int

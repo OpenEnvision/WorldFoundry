@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     collect_images,
@@ -16,6 +17,7 @@ from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     option_int,
     runtime_options_cache_key,
 )
+
 
 @dataclass(frozen=True)
 class HRDTRuntimeConfig:
@@ -89,10 +91,7 @@ class HRDTRuntime:
         )
 
         location = self.config.checkpoint_location
-        root_files = tuple(
-            str(Path(self.config.model_relative_dir) / name)
-            for name in self.config.model_files
-        )
+        root_files = tuple(str(Path(self.config.model_relative_dir) / name) for name in self.config.model_files)
         direct = resolve_worldfoundry_path(location)
         if direct.exists():
             direct = direct.resolve()
@@ -102,7 +101,7 @@ class HRDTRuntime:
                     f"H-RDT checkpoint directory {direct} does not contain "
                     f"{tuple(self.config.model_files)} or {self.config.model_relative_dir}"
                 )
-            snapshot = direct if model_dir != direct else direct
+            snapshot = direct
         else:
             try:
                 snapshot = resolve_local_hf_model_path(location, required_files=root_files)
@@ -128,8 +127,8 @@ class HRDTRuntime:
         import torch
 
         from worldfoundry.core.model_loading.checkpoints.assignment import assign_state_dict_strict
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
         from worldfoundry.core.model_loading.checkpoints.file import load_torch_state_dict
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .modeling import HRDTRunner
 
@@ -212,8 +211,7 @@ class HRDTRuntime:
         if self.config.text_encoder_ref:
             return self.config.text_encoder_ref
         raise ValueError(
-            "H-RDT needs language_tokens/language_embeddings in the observation or "
-            "a text_encoder_path/text_encoder_ref"
+            "H-RDT needs language_tokens/language_embeddings in the observation or a text_encoder_path/text_encoder_ref"
         )
 
     def _load_text_encoder(self) -> tuple[Any, Any]:
@@ -240,21 +238,23 @@ class HRDTRuntime:
         has_safetensors = any(location.glob("model*.safetensors")) or any(
             location.glob("model*.safetensors.index.json")
         )
-        has_pytorch = any(location.glob("pytorch_model*.bin")) or any(
-            location.glob("pytorch_model*.bin.index.json")
-        )
+        has_pytorch = any(location.glob("pytorch_model*.bin")) or any(location.glob("pytorch_model*.bin.index.json"))
         if not has_safetensors and not has_pytorch:
             raise FileNotFoundError(f"H-RDT text encoder has no local weight files: {location}")
         text_device = self.config.text_encoder_device or str(self._device)
         encoder_dtype = torch.float32 if torch.device(text_device).type == "cpu" else self._dtype
-        encoder = T5EncoderModel.from_pretrained(
-            location,
-            torch_dtype=encoder_dtype,
-            low_cpu_mem_usage=True,
-            local_files_only=True,
-            trust_remote_code=False,
-            use_safetensors=has_safetensors,
-        ).to(text_device).eval()
+        encoder = (
+            T5EncoderModel.from_pretrained(
+                location,
+                torch_dtype=encoder_dtype,
+                low_cpu_mem_usage=True,
+                local_files_only=True,
+                trust_remote_code=False,
+                use_safetensors=has_safetensors,
+            )
+            .to(text_device)
+            .eval()
+        )
         self._tokenizer = tokenizer
         self._text_encoder = encoder
         return tokenizer, encoder
@@ -369,14 +369,9 @@ class HRDTRuntime:
         if tokens.shape[0] != 1:
             raise ValueError(f"H-RDT runtime expects one language batch, got {tokens.shape[0]}")
         if tokens.shape[-1] != model.language_feature_dim:
-            raise ValueError(
-                f"H-RDT language tokens must end in {model.language_feature_dim}, "
-                f"got {tokens.shape[-1]}"
-            )
+            raise ValueError(f"H-RDT language tokens must end in {model.language_feature_dim}, got {tokens.shape[-1]}")
         if tokens.shape[1] > model.max_lang_len:
-            raise ValueError(
-                f"H-RDT language token length {tokens.shape[1]} exceeds {model.max_lang_len}"
-            )
+            raise ValueError(f"H-RDT language token length {tokens.shape[1]} exceeds {model.max_lang_len}")
         if mask is None:
             mask = torch.ones(tokens.shape[:2], device=self._device, dtype=torch.bool)
         else:
@@ -478,14 +473,18 @@ class HRDTRuntime:
         language_tokens, language_mask = self._language_inputs(instruction, observation)
         generator = torch.Generator(device=torch.device(self._device))
         generator.manual_seed(int(self.config.seed))
-        actions = model.predict_action(
-            state_tokens=state_tensor,
-            image_tokens=image_tokens,
-            lang_tokens=language_tokens,
-            lang_attn_mask=language_mask,
-            generator=generator,
-            num_inference_timesteps=int(self.config.num_inference_timesteps),
-        )[0].float().cpu()
+        actions = (
+            model.predict_action(
+                state_tokens=state_tensor,
+                image_tokens=image_tokens,
+                lang_tokens=language_tokens,
+                lang_attn_mask=language_mask,
+                generator=generator,
+                num_inference_timesteps=int(self.config.num_inference_timesteps),
+            )[0]
+            .float()
+            .cpu()
+        )
 
         if self.config.denormalize_action:
             action_range = self._range_from_stats(stats, "action")
@@ -522,9 +521,7 @@ _RUNTIME_CACHE: dict[tuple[str, str], HRDTRuntime] = {}
 def _required_option(options: Mapping[str, Any], name: str) -> Any:
     value = options.get(name)
     if value in (None, ""):
-        raise ValueError(
-            f"H-RDT runtime option {name!r} is required; load the model's data runtime config"
-        )
+        raise ValueError(f"H-RDT runtime option {name!r} is required; load the model's data runtime config")
     return value
 
 
@@ -542,11 +539,7 @@ def predict_action(
 
     del action_context
     options = dict(runtime_options or {})
-    checkpoint = (
-        checkpoint_path
-        or str(options.get("checkpoint_ref") or "")
-        or str(options.get("repo_id") or "")
-    )
+    checkpoint = checkpoint_path or str(options.get("checkpoint_ref") or "") or str(options.get("repo_id") or "")
     if not checkpoint:
         raise ValueError("H-RDT checkpoint_path or checkpoint_ref is required")
     config = HRDTRuntimeConfig(
@@ -568,28 +561,14 @@ def predict_action(
             options.get("num_inference_timesteps") or options.get("denoising_steps"),
             5,
         ),
-        vision_encoder_path=(
-            str(options["vision_encoder_path"]) if options.get("vision_encoder_path") else None
-        ),
-        text_encoder_path=(
-            str(options["text_encoder_path"]) if options.get("text_encoder_path") else None
-        ),
-        text_encoder_ref=(
-            str(options["text_encoder_ref"])
-            if options.get("text_encoder_ref") is not None
-            else None
-        ),
-        text_encoder_device=(
-            str(options["text_encoder_device"]) if options.get("text_encoder_device") else None
-        ),
+        vision_encoder_path=(str(options["vision_encoder_path"]) if options.get("vision_encoder_path") else None),
+        text_encoder_path=(str(options["text_encoder_path"]) if options.get("text_encoder_path") else None),
+        text_encoder_ref=(str(options["text_encoder_ref"]) if options.get("text_encoder_ref") is not None else None),
+        text_encoder_device=(str(options["text_encoder_device"]) if options.get("text_encoder_device") else None),
         max_language_length=option_int(options.get("max_language_length"), 120),
         image_resize_strategy=str(options.get("image_resize_strategy") or "letterbox"),
-        statistics_path=(
-            str(options["statistics_path"]) if options.get("statistics_path") else None
-        ),
-        statistics_key=(
-            str(options["statistics_key"]) if options.get("statistics_key") else None
-        ),
+        statistics_path=(str(options["statistics_path"]) if options.get("statistics_path") else None),
+        statistics_key=(str(options["statistics_key"]) if options.get("statistics_key") else None),
         normalize_state=option_bool(options.get("normalize_state"), False),
         denormalize_action=option_bool(options.get("denormalize_action"), False),
     )

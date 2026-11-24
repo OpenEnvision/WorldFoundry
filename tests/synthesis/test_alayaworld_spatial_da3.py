@@ -5,12 +5,12 @@ import torch
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.api import (
     DepthAnything3,
 )
-from worldfoundry.synthesis.visual_generation.alayaworld.spatial import AlayaSpatialMemory
-from worldfoundry.synthesis.visual_generation.alayaworld.runtime import AlayaWorldRuntime
 from worldfoundry.synthesis.visual_generation.alayaworld.ltx_compiling import (
     _SeqDynamicMarkingProcessor,
     _supported_config_options,
 )
+from worldfoundry.synthesis.visual_generation.alayaworld.runtime import AlayaWorldRuntime
+from worldfoundry.synthesis.visual_generation.alayaworld.spatial import AlayaSpatialMemory
 
 
 def test_alayaworld_loads_direct_da3_checkpoint_with_nested_giant_preset(
@@ -98,7 +98,7 @@ def test_alayaworld_can_offload_da3_without_discarding_it(monkeypatch) -> None:
         depth_backend="constant",
     )
     model = DummyModel()
-    memory._da3 = model
+    memory._da3 = model  # ty: ignore[invalid-assignment]
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
 
     memory.offload_depth_model()
@@ -112,7 +112,7 @@ def test_da3_cpu_forward_keeps_fp32_when_cuda_supports_bfloat16(monkeypatch) -> 
     seen = []
 
     class DummyNetwork(torch.nn.Module):
-        def forward(self, image, *_args):
+        def forward(self, image, *_args, **_kwargs):
             seen.append(image.dtype)
             return {"depth": image[:, :, :1]}
 
@@ -130,9 +130,7 @@ def test_alayaworld_filters_unsupported_torch_compile_options() -> None:
     class Config:
         _config = {"available": False}
 
-    assert _supported_config_options(
-        Config(), {"available": True, "newer_torch_only": True}
-    ) == {"available": True}
+    assert _supported_config_options(Config(), {"available": True, "newer_torch_only": True}) == {"available": True}
 
 
 def test_alayaworld_static_compile_does_not_mark_dynamic(monkeypatch) -> None:
@@ -144,22 +142,20 @@ def test_alayaworld_static_compile_does_not_mark_dynamic(monkeypatch) -> None:
         return "processed"
 
     monkeypatch.setattr(torch._dynamo, "mark_dynamic", lambda *args: marker_calls.append(args))
-    processor = _SeqDynamicMarkingProcessor(inner=inner, enabled=False)
+    processor = _SeqDynamicMarkingProcessor(inner=inner, enabled=False)  # ty: ignore[invalid-argument-type]
     arguments = object()
     perturbations = object()
     self_attention_type = object()
     cross_attention_type = object()
 
     result = processor(
-        arguments,
-        perturbations,
+        arguments,  # ty: ignore[invalid-argument-type]
+        perturbations,  # ty: ignore[invalid-argument-type]
         3,
-        self_attention_type,
-        cross_attention_type,
+        self_attention_type,  # ty: ignore[invalid-argument-type]
+        cross_attention_type,  # ty: ignore[invalid-argument-type]
     )
 
     assert result == "processed"
-    assert calls == [
-        (arguments, perturbations, 3, self_attention_type, cross_attention_type)
-    ]
+    assert calls == [(arguments, perturbations, 3, self_attention_type, cross_attention_type)]
     assert marker_calls == []

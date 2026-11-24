@@ -9,18 +9,17 @@ pipeline, and handling input/output for video generation.
 from __future__ import annotations
 
 import os
-import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
-
-from worldfoundry.evaluation.utils import REPO_ROOT, worldfoundry_data_path
+from worldfoundry.core.io.paths import REPO_ROOT, package_data_path
 from worldfoundry.runtime.env import resolve_hfd_root
 
 # Default paths for AnimateDiff repository, integrated assets, configurations, and models.
 DEFAULT_ANIMATEDIFF_REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_ANIMATEDIFF_INTEGRATED_ROOT = REPO_ROOT / "cache" / "generative_taxonomy" / "integrated" / "animatediff"
-DEFAULT_ANIMATEDIFF_CONFIG_ROOT = worldfoundry_data_path("models", "runtime", "configs", "animatediff")
+DEFAULT_ANIMATEDIFF_CONFIG_ROOT = package_data_path("models", "runtime", "configs", "animatediff")
 DEFAULT_SHARED_HFD_ROOT = resolve_hfd_root()
 DEFAULT_SD15_ROOT = Path(
     os.environ.get(
@@ -91,7 +90,7 @@ class AnimateDiffRuntime:
         self._pipe = None  # Internal variable to hold the initialized AnimateDiff pipeline
 
     @classmethod
-    def from_synthesis(cls, synthesis: Any) -> "AnimateDiffRuntime":
+    def from_synthesis(cls, synthesis: Any) -> AnimateDiffRuntime:
         """
         Builds an AnimateDiffRuntime instance from a RuntimeProfileSynthesis adapter.
 
@@ -119,7 +118,6 @@ class AnimateDiffRuntime:
             negative_prompt=synthesis.negative_prompt,
         )
 
-
     def ensure_pipe(self):
         """
         Ensures the AnimateDiff `AnimationPipeline` is initialized and ready.
@@ -127,8 +125,6 @@ class AnimateDiffRuntime:
         If the pipeline (`_pipe`) is not already created, this method
         initializes it by loading models, tokenizers, and schedulers,
         and then loads the specified motion module and DreamBooth weights.
-        It also ensures the `src` directory of the repository is in `sys.path`
-        for module imports.
 
         Returns:
             The initialized `AnimationPipeline` instance.
@@ -142,11 +138,6 @@ class AnimateDiffRuntime:
             return self._pipe
         if not self.motion_module_path:
             raise ValueError("AnimateDiffRuntime requires a local motion_module_path.")
-
-        # Add the repository's 'src' directory to Python path to enable local module imports
-        src_root = REPO_ROOT
-        if str(src_root) not in sys.path:
-            sys.path.insert(0, str(src_root))
 
         import torch
         from diffusers import AutoencoderKL, DDIMScheduler
@@ -191,8 +182,8 @@ class AnimateDiffRuntime:
             pipe,
             motion_module_path=self.motion_module_path,
             dreambooth_model_path=self.dreambooth_model_path,
-        ).to("cuda") # Ensure pipeline is moved to cuda after weights are loaded
-        pipe = pipe.to(device) # Final move to the specified device
+        ).to("cuda")  # Ensure pipeline is moved to cuda after weights are loaded
+        pipe = pipe.to(device)  # Final move to the specified device
         self.device = device
         self._pipe = pipe
         return pipe
@@ -249,18 +240,12 @@ class AnimateDiffRuntime:
         Prepares the environment variables required for running the official
         AnimateDiff repository's scripts (e.g., via subprocess).
 
-        This includes setting `PYTHONPATH` and Hugging Face Hub cache paths,
-        and setting offline flags.
+        This sets Hugging Face Hub cache paths and offline flags.
 
         Returns:
             A dictionary of environment variables.
         """
         env = os.environ.copy()
-        pythonpath = [str(REPO_ROOT)]
-        # Append existing PYTHONPATH if it exists
-        if env.get("PYTHONPATH"):
-            pythonpath.append(env["PYTHONPATH"])
-        env["PYTHONPATH"] = os.pathsep.join(pythonpath)
         # Set Hugging Face cache directories, resolving and expanding paths
         env["HF_HOME"] = str(Path(self.hf_hub_cache).expanduser().resolve().parent)
         env["HUGGINGFACE_HUB_CACHE"] = str(Path(self.hf_hub_cache).expanduser().resolve())
@@ -292,7 +277,7 @@ class AnimateDiffRuntime:
         Raises:
             RuntimeError: Always, as this method is explicitly blocked.
         """
-        del config_path, output_path, timeout_seconds # Acknowledge unused parameters
+        del config_path, output_path, timeout_seconds  # Acknowledge unused parameters
         raise RuntimeError(
             "AnimateDiff config execution is blocked because this path previously used a subprocess. "
             "Use the in-process AnimationPipeline path after staging the required checkpoints."
@@ -338,15 +323,13 @@ class AnimateDiffRuntime:
             ValueError: If `images` or `video` inputs are provided (as this is text-to-video).
             RuntimeError: If `official_config_path` is used, triggering the blocked legacy path.
         """
-        del interactions # Acknowledge unused parameter
+        del interactions  # Acknowledge unused parameter
         if images is not None or video is not None:
             raise ValueError("AnimateDiff text-to-video does not accept image/video inputs in this integration.")
 
         # Check for legacy official config path and raise error if used
         official_config_path = (
-            kwargs.pop("official_config_path", None)
-            or kwargs.pop("config_path", None)
-            or kwargs.pop("config", None)
+            kwargs.pop("official_config_path", None) or kwargs.pop("config_path", None) or kwargs.pop("config", None)
         )
         if official_config_path:
             return self.run_official_config(

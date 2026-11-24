@@ -32,7 +32,7 @@ hybrids live in sibling modules and reuse these blocks.
 """
 
 import os
-from typing import Optional
+import weakref
 
 import torch
 import torch.nn as nn
@@ -83,16 +83,11 @@ from worldfoundry.core.nn.blocks.layers import DropPath
 
 _triton_modules_available = False
 if is_triton_module_available():
-    from worldfoundry.base_models.diffusion_model.models.networks.sana.fastlinear.modules import (
-        TritonLiteMLA,
-        TritonMBConvPreGLU,
-    )
-
     _triton_modules_available = True
 
 _xformers_available = False if os.environ.get("DISABLE_XFORMERS", "0") == "1" else is_xformers_available()
 if _xformers_available:
-    import xformers.ops
+    pass
 
 
 class SanaVideoMSBlock(nn.Module):
@@ -118,24 +113,6 @@ class SanaVideoMSBlock(nn.Module):
         flash_attn_window_count=None,
         **block_kwargs,
     ):
-        """Init.
-
-        Args:
-            hidden_size: The hidden size.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            drop_path: The drop path.
-            qk_norm: The qk norm.
-            attn_type: The attn type.
-            ffn_type: The ffn type.
-            mlp_acts: The mlp acts.
-            linear_head_dim: The linear head dim.
-            cross_norm: The cross norm.
-            cross_attn_image_embeds: The cross attn image embeds.
-            t_kernel_size: The t kernel size.
-            additional_flash_attn: The additional flash attn.
-            flash_attn_window_count: The flash attn window count.
-        """
         super().__init__()
         self.hidden_size = hidden_size
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
@@ -240,7 +217,10 @@ class SanaVideoMSBlock(nn.Module):
                 t_kernel_size=t_kernel_size,
             )
         elif ffn_type == "mlp":
-            approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+            def approx_gelu():
+                return nn.GELU(approximate="tanh")
+
             self.mlp = Mlp(
                 in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0
             )
@@ -249,20 +229,9 @@ class SanaVideoMSBlock(nn.Module):
 
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
-        self.block_hook: Optional[BlockHook] = None
+        self.block_hook: BlockHook | None = None
 
     def forward_frame_aware(self, x, y, t, mask=None, THW=None, rotary_emb=None, chunk_index=None, **kwargs):
-        """Forward frame aware.
-
-        Args:
-            x: The x.
-            y: The y.
-            t: The t.
-            mask: The mask.
-            THW: The thw.
-            rotary_emb: The rotary emb.
-            chunk_index: The chunk index.
-        """
         B, N, C = x.shape
         num_frames = t.shape[2]
 
@@ -289,7 +258,7 @@ class SanaVideoMSBlock(nn.Module):
             x = x + self.flash_attn_additional(x, HW=THW)
 
         if self.cross_attn_image_embeds:
-            x = x + self.cross_attn(x, y, mask=mask, image_embeds=kwargs.get("image_embeds", None))
+            x = x + self.cross_attn(x, y, mask=mask, image_embeds=kwargs.get("image_embeds"))
         else:
             x = x + self.cross_attn(x, y, mask=mask)
 
@@ -309,17 +278,6 @@ class SanaVideoMSBlock(nn.Module):
         return x
 
     def forward(self, x, y, t, mask=None, THW=None, rotary_emb=None, chunk_index=None, **kwargs):
-        """Forward.
-
-        Args:
-            x: The x.
-            y: The y.
-            t: The t.
-            mask: The mask.
-            THW: The thw.
-            rotary_emb: The rotary emb.
-            chunk_index: The chunk index.
-        """
         if len(t.shape) > 2:
             return self.forward_frame_aware(
                 x,
@@ -331,12 +289,17 @@ class SanaVideoMSBlock(nn.Module):
                 chunk_index=chunk_index,
                 **kwargs,
             )
-        intermediate_feats = {
-            "x_in": x,
-            "x_self_attn": None,
-            "x_cross_attn": None,
-            "x_ffn": None,
-        }
+        has_hook = self.block_hook is not None
+        intermediate_feats = (
+            {
+                "x_in": x,
+                "x_self_attn": None,
+                "x_cross_attn": None,
+                "x_ffn": None,
+            }
+            if has_hook
+            else None
+        )
         B, N, C = x.shape
 
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -349,17 +312,18 @@ class SanaVideoMSBlock(nn.Module):
         }
         if chunk_index is not None:
             self_attn_kwargs["chunk_index"] = chunk_index[:]  # NOTE: important, copy the list
-        save_kv_cache = kwargs.get("save_kv_cache", None)
+        save_kv_cache = kwargs.get("save_kv_cache")
         if save_kv_cache is not None:
             self_attn_kwargs["save_kv_cache"] = save_kv_cache
-        kv_cache = kwargs.get("kv_cache", None)
+        kv_cache = kwargs.get("kv_cache")
         if kv_cache is not None:
             self_attn_kwargs["kv_cache"] = kv_cache
         x_sa = self.attn(x_sa_in, **self_attn_kwargs)
         if kv_cache is not None:
             x_sa, kv_cache = x_sa
 
-        intermediate_feats["x_self_attn"] = x_sa
+        if intermediate_feats is not None:
+            intermediate_feats["x_self_attn"] = x_sa
 
         if self.flash_attn_additional:
             x_sa = x_sa + self.learnable_fa_scale * self.flash_attn_additional(x_sa_in, rotary_emb=rotary_emb, HW=THW)
@@ -367,11 +331,12 @@ class SanaVideoMSBlock(nn.Module):
         x = gated_residual(x, x_sa, gate_msa, self.drop_path, policy=self._worldfoundry_block_fusion)
 
         if self.cross_attn_image_embeds:
-            x = x + self.cross_attn(x, y, mask=mask, image_embeds=kwargs.get("image_embeds", None))
+            x = x + self.cross_attn(x, y, mask=mask, image_embeds=kwargs.get("image_embeds"))
         else:
             x = x + self.cross_attn(x, y, mask=mask)
 
-        intermediate_feats["x_cross_attn"] = x
+        if intermediate_feats is not None:
+            intermediate_feats["x_cross_attn"] = x
 
         mlp_kwargs = {
             "HW": THW,
@@ -390,9 +355,8 @@ class SanaVideoMSBlock(nn.Module):
             mlp_out, kv_cache = mlp_out
         x = gated_residual(x, mlp_out, gate_mlp, self.drop_path, policy=self._worldfoundry_block_fusion)
 
-        intermediate_feats["x_ffn"] = x
-
-        if self.block_hook is not None:
+        if intermediate_feats is not None and self.block_hook is not None:
+            intermediate_feats["x_ffn"] = x
             self.block_hook(**intermediate_feats)
 
         if kv_cache is not None:
@@ -445,44 +409,6 @@ class SanaMSVideo(Sana):
         pack_latents=False,
         **kwargs,
     ):
-        """Init.
-
-        Args:
-            input_size: The input size.
-            patch_size: The patch size.
-            in_channels: The in channels.
-            hidden_size: The hidden size.
-            depth: The depth.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            class_dropout_prob: The class dropout prob.
-            learn_sigma: The learn sigma.
-            pred_sigma: The pred sigma.
-            drop_path: The drop path.
-            caption_channels: The caption channels.
-            pe_interpolation: The pe interpolation.
-            config: The config.
-            model_max_length: The model max length.
-            qk_norm: The qk norm.
-            y_norm: The y norm.
-            norm_eps: The norm eps.
-            attn_type: The attn type.
-            ffn_type: The ffn type.
-            use_pe: The use pe.
-            y_norm_scale_factor: The y norm scale factor.
-            patch_embed_kernel: The patch embed kernel.
-            mlp_acts: The mlp acts.
-            linear_head_dim: The linear head dim.
-            cross_norm: The cross norm.
-            cross_attn_type: The cross attn type.
-            cross_attn_image_embeds: The cross attn image embeds.
-            image_embed_channels: The image embed channels.
-            pos_embed_type: The pos embed type.
-            rope_fhw_dim: The rope fhw dim.
-            t_kernel_size: The t kernel size.
-            flash_attn_window_count: The flash attn window count.
-            pack_latents: The pack latents.
-        """
         super().__init__(
             input_size=input_size,
             patch_size=patch_size,
@@ -516,7 +442,10 @@ class SanaMSVideo(Sana):
         )
         self.patch_size = patch_size
         self.h = self.w = 0
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
         self.t_block = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 6 * hidden_size, bias=True))
         self.pos_embed_ms = None
         self.pack_latents = pack_latents
@@ -544,10 +473,7 @@ class SanaMSVideo(Sana):
         else:
             self.image_embedder = None
 
-        if attn_type in ["flash"]:
-            attention_head_dim = hidden_size // num_heads
-        else:
-            attention_head_dim = linear_head_dim
+        attention_head_dim = hidden_size // num_heads if attn_type in ["flash"] else linear_head_dim
         if self.use_pe:
             self.rope = self.get_rope(pos_embed_type, attention_head_dim, patch_size, rope_fhw_dim)
         else:
@@ -580,21 +506,176 @@ class SanaMSVideo(Sana):
 
         self.final_layer = T2IFinalLayer(hidden_size, patch_size, self.out_channels)
 
-        if get_rank() == 0:
-            if ffn_type == "GLUMBConvTemp":
-                self.logger(f"{ffn_type} Temporal kernal: {t_kernel_size}")
+        if get_rank() == 0 and ffn_type == "GLUMBConvTemp":
+            self.logger(f"{ffn_type} Temporal kernal: {t_kernel_size}")
 
         self.initialize()
+        self._fast_litela_rope: bool = False
+        self._rope_real_dtype: torch.dtype = torch.float64
+        self._cross_attn_fa3_mask_pack: bool = False
+        self._mask_prefix_cache: list[
+            tuple[weakref.ref[torch.Tensor], int, int, torch.Tensor, bool, bool, torch.Tensor | None]
+        ] = []
+        self._last_mask_prefix_by_shape: dict[tuple[tuple[int, ...], torch.device], tuple[bool, bool]] = {}
+        self._static_caption_cache_enabled: bool = False
+        self._static_caption_cache: list[tuple[weakref.ref[torch.Tensor], int, int, torch.Tensor, torch.Tensor]] = []
+        self._fa3_cross_attn_steps: int = 0
+
+    def reset_sol_caches(self) -> None:
+        """Clear per-request cached caption embeddings, mask analyses, and static cross-KV."""
+        self._static_caption_cache.clear()
+        self._mask_prefix_cache.clear()
+        self._last_mask_prefix_by_shape.clear()
+        for module in self.modules():
+            if isinstance(module, MultiHeadCrossAttention):
+                module.reset_static_cross_kv()
+
+    def _embed_caption_cached(self, y: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
+        use_caption_cache = (
+            self._static_caption_cache_enabled
+            and not self.training
+            and not torch.is_grad_enabled()
+            and not torch.compiler.is_compiling()
+            and not (y.is_cuda and torch.cuda.is_current_stream_capturing())
+        )
+        if use_caption_cache:
+            is_inf = y.is_inference()
+            y_ver = -1 if is_inf else int(y._version)
+            y_ptr = int(y.data_ptr())
+            for ref, saved_ptr, saved_ver, snapshot, cached_y in self._static_caption_cache:
+                if (
+                    not is_inf
+                    and saved_ver >= 0
+                    and ref() is y
+                    and saved_ptr == y_ptr
+                    and saved_ver == y_ver
+                    and snapshot.shape == y.shape
+                    and snapshot.dtype == y.dtype
+                    and snapshot.device == y.device
+                ):
+                    return cached_y
+                if (
+                    snapshot.shape == y.shape
+                    and snapshot.dtype == y.dtype
+                    and snapshot.device == y.device
+                    and torch.equal(snapshot, y)
+                ):
+                    return cached_y
+            y_in = y
+            y_out = self.y_embedder(y_in, self.training, mask=mask)
+            if self.y_norm:
+                y_out = self.attention_y_norm(y_out)
+            if len(self._static_caption_cache) >= 4:
+                self._static_caption_cache.pop(0)
+            self._static_caption_cache.append(
+                (
+                    weakref.ref(y_in),
+                    y_ptr,
+                    y_ver,
+                    y_in.detach().clone(),
+                    y_out.detach(),
+                )
+            )
+            return y_out
+        y_out = self.y_embedder(y, self.training, mask=mask)
+        if self.y_norm:
+            y_out = self.attention_y_norm(y_out)
+        return y_out
+
+    def _prepare_cross_attn_mask(
+        self,
+        raw_mask: torch.Tensor | None,
+        y: torch.Tensor,
+        x: torch.Tensor,
+    ) -> tuple[torch.Tensor, object]:
+        if raw_mask is not None:
+            mask = raw_mask.to(torch.int16)
+            mask = mask.repeat(y.shape[0] // mask.shape[0], 1) if mask.shape[0] != y.shape[0] else mask
+            mask = mask.squeeze(1).squeeze(1)
+            if _xformers_available:
+                y = y.squeeze(1).masked_select(mask.unsqueeze(-1) != 0).view(1, -1, x.shape[-1])
+                y_lens: object = mask.sum(dim=1).tolist()
+            elif self._cross_attn_fa3_mask_pack and not self.training and mask.ndim == 2 and mask.is_cuda:
+                shape_key = (tuple(mask.shape), mask.device)
+                if torch.cuda.is_current_stream_capturing() or torch.compiler.is_compiling():
+                    validated = self._last_mask_prefix_by_shape.get(shape_key)
+                    if validated is not None and validated[0]:
+                        y_lens = None if validated[1] else mask.sum(dim=1).to(torch.int32).contiguous()
+                    else:
+                        # Fail closed when mask was not validated as a right-padded prefix on warmup.
+                        y_lens = mask
+                else:
+                    is_inf = raw_mask.is_inference()
+                    m_ver = -1 if is_inf else int(raw_mask._version)
+                    m_ptr = int(raw_mask.data_ptr())
+                    matched = None
+                    for (
+                        ref,
+                        saved_ptr,
+                        saved_ver,
+                        snapshot,
+                        is_prefix,
+                        all_ones,
+                        cached_ylens,
+                    ) in self._mask_prefix_cache:
+                        if (
+                            not is_inf
+                            and saved_ver >= 0
+                            and ref() is raw_mask
+                            and saved_ptr == m_ptr
+                            and saved_ver == m_ver
+                            and snapshot.shape == mask.shape
+                            and snapshot.device == mask.device
+                        ):
+                            matched = (is_prefix, all_ones, cached_ylens)
+                            break
+                        if (
+                            snapshot.shape == mask.shape
+                            and snapshot.dtype == mask.dtype
+                            and snapshot.device == mask.device
+                            and torch.equal(snapshot, mask)
+                        ):
+                            matched = (is_prefix, all_ones, cached_ylens)
+                            break
+                    if matched is not None:
+                        is_prefix, all_ones, y_lens = matched
+                        self._last_mask_prefix_by_shape[shape_key] = (is_prefix, all_ones)
+                    else:
+                        is_binary = bool(((mask == 0) | (mask == 1)).all().item())
+                        is_prefix = is_binary and (
+                            mask.shape[1] <= 1 or bool((mask[:, 1:] <= mask[:, :-1]).all().item())
+                        )
+                        all_ones = bool(is_prefix and (mask == 1).all().item())
+                        if is_prefix:
+                            y_lens = None if all_ones else mask.sum(dim=1).to(torch.int32).contiguous()
+                        else:
+                            y_lens = mask
+                        if len(self._mask_prefix_cache) >= 8:
+                            self._mask_prefix_cache.pop(0)
+                        self._mask_prefix_cache.append(
+                            (
+                                weakref.ref(raw_mask),
+                                m_ptr,
+                                m_ver,
+                                mask.detach().clone(),
+                                is_prefix,
+                                all_ones,
+                                y_lens,
+                            )
+                        )
+                        self._last_mask_prefix_by_shape[shape_key] = (is_prefix, all_ones)
+            else:
+                y_lens = mask
+        elif _xformers_available:
+            y_lens = [y.shape[2]] * y.shape[0]
+            y = y.squeeze(1).view(1, -1, x.shape[-1])
+        elif self._cross_attn_fa3_mask_pack and not self.training:
+            y_lens = None
+        else:
+            raise ValueError(f"Attention type is not available due to _xformers_available={_xformers_available}.")
+        return y, y_lens
 
     def get_rope(self, pos_embed_type, attention_head_dim, patch_size, rope_fhw_dim):
-        """Get rope.
-
-        Args:
-            pos_embed_type: The pos embed type.
-            attention_head_dim: The attention head dim.
-            patch_size: The patch size.
-            rope_fhw_dim: The rope fhw dim.
-        """
         if pos_embed_type == "wan_rope":
             rope = WanRotaryPosEmbed(
                 attention_head_dim=attention_head_dim, patch_size=patch_size, max_seq_len=1024, fhw_dim=rope_fhw_dim
@@ -614,16 +695,6 @@ class SanaMSVideo(Sana):
 
     @staticmethod
     def _pack_latents(latents, batch_size, num_channels_latents, height, width, frame):
-        """Helper function to pack latents.
-
-        Args:
-            latents: The latents.
-            batch_size: The batch size.
-            num_channels_latents: The num channels latents.
-            height: The height.
-            width: The width.
-            frame: The frame.
-        """
         latents = latents.view(batch_size, num_channels_latents, frame, height // 2, 2, width // 2, 2)
         latents = latents.permute(0, 1, 4, 6, 2, 3, 5)
         latents = latents.reshape(batch_size, num_channels_latents * 4, frame, height // 2, width // 2)
@@ -632,14 +703,6 @@ class SanaMSVideo(Sana):
 
     @staticmethod
     def _unpack_latents(latents, height, width, frame):
-        """Helper function to unpack latents.
-
-        Args:
-            latents: The latents.
-            height: The height.
-            width: The width.
-            frame: The frame.
-        """
         batch_size, channels, frame, H, W = latents.shape
 
         assert height % 2 == 0 and width % 2 == 0
@@ -652,14 +715,6 @@ class SanaMSVideo(Sana):
 
     @staticmethod
     def _unpack_latents_additional_layers(latents, height, width, frame):
-        """Helper function to unpack latents additional layers.
-
-        Args:
-            latents: The latents.
-            height: The height.
-            width: The width.
-            frame: The frame.
-        """
         batch_size, num_patches, channels = latents.shape
 
         # latent height and width to be divisible by 2.
@@ -710,7 +765,12 @@ class SanaMSVideo(Sana):
             image_pos_embed = self.pos_embed_ms(latent_image_ids)
 
         elif self.pos_embed_type == "wan_rope":
-            image_pos_embed = self.rope((self.f, self.h, self.w), x.device)
+            if self._fast_litela_rope and not self.training and hasattr(self.rope, "forward_real"):
+                image_pos_embed = self.rope.forward_real(
+                    (self.f, self.h, self.w), x.device, dtype=self._rope_real_dtype
+                )
+            else:
+                image_pos_embed = self.rope((self.f, self.h, self.w), x.device)
 
         elif self.pos_embed_type == "casual_wan_rope":
             assert start_f is not None and end_f is not None
@@ -744,7 +804,7 @@ class SanaMSVideo(Sana):
             x.shape[-1] // self.patch_size[2],
         )
 
-        data_info = kwargs.get("data_info", {})
+        data_info = kwargs.pop("data_info", None) or {}
         if data_info.get("image_vae_embeds", None) is not None:
             x = torch.cat([x, data_info["image_vae_embeds"].to(self.dtype)], dim=1)
         if data_info.get("image_embeds", None) is not None:
@@ -768,27 +828,36 @@ class SanaMSVideo(Sana):
         t0 = self.t_block(t)
         t = t.unflatten(dim=0, sizes=timestep.shape)
         t0 = t0.unflatten(dim=0, sizes=timestep.shape)
-        y = self.y_embedder(y, self.training, mask=mask)  # (N, D)
-        if self.y_norm:
-            y = self.attention_y_norm(y)
+        y = self._embed_caption_cached(y, mask)
+        y, y_lens = self._prepare_cross_attn_mask(mask, y, x)
 
-        if mask is not None:
-            mask = mask.to(torch.int16)
-            mask = mask.repeat(y.shape[0] // mask.shape[0], 1) if mask.shape[0] != y.shape[0] else mask
-            mask = mask.squeeze(1).squeeze(1)
-            if _xformers_available:
-                y = y.squeeze(1).masked_select(mask.unsqueeze(-1) != 0).view(1, -1, x.shape[-1])
-                y_lens = mask.sum(dim=1).tolist()
-            else:
-                y_lens = mask
-        elif _xformers_available:
-            y_lens = [y.shape[2]] * y.shape[0]
-            y = y.squeeze(1).view(1, -1, x.shape[-1])
-        else:
-            raise ValueError(f"Attention type is not available due to _xformers_available={_xformers_available}.")
+        fa3_step_eligible = (
+            self._cross_attn_fa3_mask_pack
+            and not self.training
+            and not torch.is_grad_enabled()
+            and x.is_cuda
+            and x.dtype in {torch.bfloat16, torch.float16}
+            and y.dtype == x.dtype
+            and (
+                y_lens is None
+                or (isinstance(y_lens, torch.Tensor) and y_lens.ndim == 1 and y_lens.dtype == torch.int32)
+            )
+        )
+
+        def _on_stack_execute() -> None:
+            if fa3_step_eligible and not torch.compiler.is_compiling():
+                self._fa3_cross_attn_steps += 1
 
         x = run_sana_blocks(
-            self.blocks, x, y, t0, y_lens, (self.f, self.h, self.w), image_pos_embed, **kwargs,
+            self.blocks,
+            x,
+            y,
+            t0,
+            y_lens,
+            (self.f, self.h, self.w),
+            image_pos_embed,
+            on_stack_execute=_on_stack_execute if fa3_step_eligible else None,
+            **kwargs,
         )
 
         x = self.final_layer(x, t)  # (N, T, patch_size ** 2 * out_channels)
@@ -813,8 +882,8 @@ class SanaMSVideo(Sana):
         else:
             timestep = timestep.long().to(torch.float32)
         y = y.to(self.dtype)
-        start_f = kwargs.get("start_f", None)
-        end_f = kwargs.get("end_f", None)
+        start_f = kwargs.get("start_f")
+        end_f = kwargs.get("end_f")
         kv_cache = kwargs.pop("kv_cache", None)
         if start_f is not None and end_f is not None:
             assert self.pos_embed_type == "casual_wan_rope"
@@ -827,7 +896,7 @@ class SanaMSVideo(Sana):
             x.shape[-1] // self.patch_size[2],
         )
 
-        data_info = kwargs.get("data_info", {})
+        data_info = kwargs.pop("data_info", None) or {}
         if data_info.get("image_vae_embeds", None) is not None:
             x = torch.cat([x, data_info["image_vae_embeds"].to(self.dtype)], dim=1)
         if data_info.get("image_embeds", None) is not None:
@@ -851,28 +920,26 @@ class SanaMSVideo(Sana):
         t0 = self.t_block(t)
         t = t.unflatten(dim=0, sizes=timestep.shape)
         t0 = t0.unflatten(dim=0, sizes=timestep.shape)
-        y = self.y_embedder(y, self.training, mask=mask)  # (N, D)
-        if self.y_norm:
-            y = self.attention_y_norm(y)
-
-        if mask is not None:
-            mask = mask.to(torch.int16)
-            mask = mask.repeat(y.shape[0] // mask.shape[0], 1) if mask.shape[0] != y.shape[0] else mask
-            mask = mask.squeeze(1).squeeze(1)
-            if _xformers_available:
-                y = y.squeeze(1).masked_select(mask.unsqueeze(-1) != 0).view(1, -1, x.shape[-1])
-                y_lens = mask.sum(dim=1).tolist()
-            else:
-                y_lens = mask
-        elif _xformers_available:
-            y_lens = [y.shape[2]] * y.shape[0]
-            y = y.squeeze(1).view(1, -1, x.shape[-1])
-        else:
-            raise ValueError(f"Attention type is not available due to _xformers_available={_xformers_available}.")
+        y = self._embed_caption_cached(y, mask)
+        y, y_lens = self._prepare_cross_attn_mask(mask, y, x)
 
         assert kv_cache is not None and len(kv_cache) == len(self.blocks), (
             "kv_cache must be a list of the same length as the number of blocks"
         )
+        if (
+            self._cross_attn_fa3_mask_pack
+            and not self.training
+            and not torch.is_grad_enabled()
+            and x.is_cuda
+            and x.dtype in {torch.bfloat16, torch.float16}
+            and y.dtype == x.dtype
+            and (
+                y_lens is None
+                or (isinstance(y_lens, torch.Tensor) and y_lens.ndim == 1 and y_lens.dtype == torch.int32)
+            )
+            and not torch.compiler.is_compiling()
+        ):
+            self._fa3_cross_attn_steps += 1
         for i, block in enumerate(self.blocks):
             x, kv_cache_i = torch.utils.checkpoint.checkpoint(
                 block,
@@ -929,16 +996,10 @@ class SanaMSVideo(Sana):
         return imgs
 
     def initialize(self):
-        """Initialize."""
         super().initialize_weights()
 
         # Initialize transformer layers:
         def _basic_init(module):
-            """Helper function to basic init.
-
-            Args:
-                module: The module.
-            """
             if isinstance(module, nn.Linear):
                 torch.nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
@@ -1024,13 +1085,7 @@ class SanaMSVideo(Sana):
                     new_param[2 * new_hidden_size : 2 * new_hidden_size + old_hidden_size] = checkpoint_param[
                         2 * old_hidden_size :
                     ]
-                elif "q_norm.weight" in key:
-                    new_param[: checkpoint_param.shape[0]] = checkpoint_param
-                elif "q_norm.bias" in key:
-                    new_param[: checkpoint_param.shape[0]] = checkpoint_param
-                elif "k_norm.weight" in key:
-                    new_param[: checkpoint_param.shape[0]] = checkpoint_param
-                elif "k_norm.bias" in key:
+                elif "q_norm.weight" in key or "q_norm.bias" in key or "k_norm.weight" in key or "k_norm.bias" in key:
                     new_param[: checkpoint_param.shape[0]] = checkpoint_param
                 elif "cross_attn.q_linear.weight" in key:
                     new_param[: checkpoint_param.shape[0], : checkpoint_param.shape[1]] = checkpoint_param
@@ -1052,11 +1107,11 @@ class SanaMSVideo(Sana):
                     new_param[:, :old_hidden_size] = checkpoint_param
                 elif "final_layer.linear.weight" in key:
                     new_param[:, : checkpoint_param.shape[1]] = checkpoint_param
-                elif "final_layer.linear.bias" in key:
-                    new_param[: checkpoint_param.shape[0]] = checkpoint_param
-                elif "t_embedder.mlp.0.weight" in key:
-                    new_param[: checkpoint_param.shape[0]] = checkpoint_param
-                elif "t_embedder.mlp.0.bias" in key:
+                elif (
+                    "final_layer.linear.bias" in key
+                    or "t_embedder.mlp.0.weight" in key
+                    or "t_embedder.mlp.0.bias" in key
+                ):
                     new_param[: checkpoint_param.shape[0]] = checkpoint_param
                 elif "t_embedder.mlp.2.weight" in key:
                     new_param[: checkpoint_param.shape[0], : checkpoint_param.shape[1]] = checkpoint_param
@@ -1086,9 +1141,7 @@ class SanaMSVideo(Sana):
                         ]
                 elif "t_block.2.weight" in key:
                     new_param[: checkpoint_param.shape[0], : checkpoint_param.shape[1]] = checkpoint_param
-                elif "y_embedder.y_proj.fc1.weight" in key:
-                    new_param[: checkpoint_param.shape[0]] = checkpoint_param
-                elif "y_embedder.y_proj.fc1.bias" in key:
+                elif "y_embedder.y_proj.fc1.weight" in key or "y_embedder.y_proj.fc1.bias" in key:
                     new_param[: checkpoint_param.shape[0]] = checkpoint_param
                 elif "y_embedder.y_proj.fc2.weight" in key:
                     new_param[: checkpoint_param.shape[0], : checkpoint_param.shape[1]] = checkpoint_param
@@ -1153,20 +1206,11 @@ class SanaMSVideo(Sana):
         return super().load_state_dict(new_state_dict, strict=strict, assign=assign)
 
     def register_block_hook(self, layers=None, device="cpu", detach=True, score_only=True):
-        """Register block hook.
-
-        Args:
-            layers: The layers.
-            device: The device.
-            detach: The detach.
-            score_only: The score only.
-        """
         for i, block in enumerate(self.blocks):
             if layers is None or i in layers:
                 block.block_hook = BlockHook(device, detach, score_only)
 
     def get_block_output(self):
-        """Get block output."""
         block_outputs = {}
         for i, block in enumerate(self.blocks):
             if block.block_hook is not None:
@@ -1181,29 +1225,24 @@ class SanaMSVideo(Sana):
 
 
 def SanaMSVideo_600M_P1_D28(**kwargs):
-    """Sanamsvideo 600m p1 d28."""
     return SanaMSVideo(depth=28, hidden_size=1152, patch_size=(1, 1, 1), num_heads=16, **kwargs)
 
 
 def SanaMSVideo_600M_P2_D28(**kwargs):
-    """Sanamsvideo 600m p2 d28."""
     return SanaMSVideo(depth=28, hidden_size=1152, patch_size=(1, 2, 2), num_heads=16, **kwargs)
 
 
 def SanaMSVideo_2000M_P1_D20(**kwargs):
-    """Sanamsvideo 2000m p1 d20."""
     # 20 layers, 1648.48M
     return SanaMSVideo(depth=20, hidden_size=2240, patch_size=(1, 1, 1), num_heads=20, **kwargs)
 
 
 def SanaMSVideo_2000M_P2_D20(**kwargs):
-    """Sanamsvideo 2000m p2 d20."""
     # 20 layers, 1648.48M
     return SanaMSVideo(depth=20, hidden_size=2240, patch_size=(1, 2, 2), num_heads=20, **kwargs)
 
 
 def SanaMSVideo_2000M_P2S1_D20(**kwargs):
-    """Sanamsvideo 2000m p2s1 d20."""
     # 20 layers, 1648.48M
     return SanaMSVideo(
         depth=20, hidden_size=2240, patch_size=(1, 1, 1), num_heads=20, patch_embed_kernel=(1, 2, 2), **kwargs
@@ -1211,18 +1250,15 @@ def SanaMSVideo_2000M_P2S1_D20(**kwargs):
 
 
 def SanaMSVideo_4000M_P2_D28(**kwargs):
-    """Sanamsvideo 4000m p2 d28."""
     # 28 layers, 3459.49M
     return SanaMSVideo(depth=28, hidden_size=2560, patch_size=(1, 2, 2), num_heads=20, **kwargs)
 
 
 def SanaMSVideo_4800M_P1_D60(**kwargs):
-    """Sanamsvideo 4800m p1 d60."""
     # 60 layers, 4800M
     return SanaMSVideo(depth=60, hidden_size=2240, patch_size=(1, 1, 1), num_heads=20, **kwargs)
 
 
 def SanaMSVideo_4800M_P2_D60(**kwargs):
-    """Sanamsvideo 4800m p2 d60."""
     # 60 layers, 4800M
     return SanaMSVideo(depth=60, hidden_size=2240, patch_size=(1, 2, 2), num_heads=20, **kwargs)

@@ -1,5 +1,7 @@
 import numpy as np
-from utils import aggregate_dct
+
+from worldfoundry.synthesis.visual_generation.dino_wm.utils import aggregate_dct
+
 
 # for debugging environments, and envs that are not compatible with SubprocVectorEnv
 class SerialVectorEnv:
@@ -16,13 +18,15 @@ class SerialVectorEnv:
         self.num_envs = len(envs)
 
     def sample_random_init_goal_states(self, seed):
-        init_state, goal_state = zip(*(self.envs[i].sample_random_init_goal_states(seed[i]) for i in range(self.num_envs)))
+        init_state, goal_state = zip(
+            *(self.envs[i].sample_random_init_goal_states(seed[i]) for i in range(self.num_envs)), strict=False
+        )
         return np.stack(init_state), np.stack(goal_state)
-    
+
     def update_env(self, env_info):
         [self.envs[i].update_env(env_info[i]) for i in range(self.num_envs)]
-    
-    def eval_state(self, goal_state, cur_state): 
+
+    def eval_state(self, goal_state, cur_state):
         eval_result = []
         for i in range(self.num_envs):
             env = self.envs[i]

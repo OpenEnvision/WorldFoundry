@@ -69,7 +69,18 @@ class SinkMemory:
         return (self.memory_k[block_idx], self.memory_v[block_idx])
 
     @torch.no_grad()
-    def update(self, blocks, evicted_kv_all, e0, context, context_lens, freqs, grid_sizes, crossattn_cache_template=None, evicted_k_is_pre_rope=False):
+    def update(
+        self,
+        blocks,
+        evicted_kv_all,
+        e0,
+        context,
+        context_lens,
+        freqs,
+        grid_sizes,
+        crossattn_cache_template=None,
+        evicted_k_is_pre_rope=False,
+    ):
         """Re-run the sink tokens through each block against evicted KV."""
         if not self.initialized or self.sink_hidden is None:
             return
@@ -99,18 +110,22 @@ class SinkMemory:
             y = block.self_attn.o(attn_out.flatten(2))
             x_mem = x_mem + (y.unflatten(1, (Q_frames, tpf)) * e_block[2]).flatten(1, 2)
             x_mem = x_mem + block.cross_attn(block.norm3(x_mem), context, context_lens)
-            y_ffn = block.ffn((block.norm2(x_mem).unflatten(1, (Q_frames, tpf)) * (1 + e_block[4]) + e_block[3]).flatten(1, 2))
+            y_ffn = block.ffn(
+                (block.norm2(x_mem).unflatten(1, (Q_frames, tpf)) * (1 + e_block[4]) + e_block[3]).flatten(1, 2)
+            )
             x_mem = x_mem + (y_ffn.unflatten(1, (Q_frames, tpf)) * e_block[5]).flatten(1, 2)
             if i < self.num_blocks - 1:
                 next_block = blocks[i + 1]
                 next_e = (next_block.modulation.unsqueeze(1) + e0).chunk(6, dim=2)
                 h_next = next_block.norm1(x_mem)
                 h_next_mod = (h_next.unflatten(1, (Q_frames, tpf)) * (1 + next_e[1]) + next_e[0]).flatten(1, 2)
-                self.memory_k[i + 1] = next_block.self_attn.norm_k(next_block.self_attn.k(h_next_mod)).view(B, self.M, n, d)
+                self.memory_k[i + 1] = next_block.self_attn.norm_k(next_block.self_attn.k(h_next_mod)).view(
+                    B, self.M, n, d
+                )
                 self.memory_v[i + 1] = next_block.self_attn.v(h_next_mod).view(B, self.M, n, d)
         self.has_history = True
         self._update_count += 1
         if self._update_count <= 100 or self._update_count % 10 == 0:
             sample_layers = [0, self.num_blocks // 2, self.num_blocks - 1]
-            norms_k = [f'L{i}={self.memory_k[i].norm().item():.1f}' for i in sample_layers]
-            norms_v = [f'L{i}={self.memory_v[i].norm().item():.1f}' for i in sample_layers]
+            _norms_k = [f"L{i}={self.memory_k[i].norm().item():.1f}" for i in sample_layers]
+            _norms_v = [f"L{i}={self.memory_v[i].norm().item():.1f}" for i in sample_layers]

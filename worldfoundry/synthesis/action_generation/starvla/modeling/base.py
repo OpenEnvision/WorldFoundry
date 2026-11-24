@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -21,13 +22,12 @@ class StarVLAInferenceModel(nn.Module):
 
 
 def _validate_tensor_state_dict(payload: Any, checkpoint: Path) -> dict[str, torch.Tensor]:
-    if not isinstance(payload, Mapping) or not payload or not all(
-        isinstance(key, str) and isinstance(value, torch.Tensor)
-        for key, value in payload.items()
+    if (
+        not isinstance(payload, Mapping)
+        or not payload
+        or not all(isinstance(key, str) and isinstance(value, torch.Tensor) for key, value in payload.items())
     ):
-        raise TypeError(
-            f"StarVLA checkpoint must contain a non-empty string-to-tensor state dict: {checkpoint}"
-        )
+        raise TypeError(f"StarVLA checkpoint must contain a non-empty string-to-tensor state dict: {checkpoint}")
     return dict(payload)
 
 

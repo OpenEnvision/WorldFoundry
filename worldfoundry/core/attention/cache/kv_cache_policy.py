@@ -151,7 +151,7 @@ def _frame_positions(
 ) -> Tensor:
     """Expand per-block frame starts into a per-token frame index vector."""
     chunks = []
-    for position, frame_start in zip(sorted(positions), frame_starts):
+    for position, frame_start in zip(sorted(positions), frame_starts, strict=False):
         block = state.blocks[position]
         frames = torch.arange(frame_start, frame_start + block.frame_count, dtype=torch.long, device=device)
         chunks.append(frames.repeat_interleave(state.frame_tokens))

@@ -1,25 +1,17 @@
 """Action diffusion transformer used by the local AHA-WAM runtime."""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
 
-from .wan_video_dit import DiTBlock, precompute_freqs_cis, sinusoidal_embedding_1d
+from worldfoundry.base_models.diffusion_model.models.networks.gamma_world.multiagent_rope import (
+    precompute_freqs_cis,
+    sinusoidal_embedding_1d,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.wam import WamDiTBlock
 
-
-class ActionHead(nn.Module):
-    def __init__(self, hidden_dim: int, out_dim: int, eps: float):
-        super().__init__()
-        self.norm = nn.LayerNorm(hidden_dim, eps=eps, elementwise_affine=False)
-        self.proj = nn.Linear(hidden_dim, out_dim)
-        self.modulation = nn.Parameter(torch.randn(1, 2, hidden_dim) / hidden_dim**0.5)
-
-    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        shift, scale = (self.modulation.to(dtype=t.dtype, device=t.device) + t.unsqueeze(1)).chunk(2, dim=1)
-        shift = shift.squeeze(1)
-        scale = scale.squeeze(1)
-        return self.proj(self.norm(x) * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1))
+from .wan_video_dit import flash_attention, rope_apply
 
 
 class ActionDiT(nn.Module):
@@ -84,12 +76,14 @@ class ActionDiT(nn.Module):
         self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(hidden_dim, hidden_dim * 6))
         self.blocks = nn.ModuleList(
             [
-                DiTBlock(
+                WamDiTBlock(
                     hidden_dim=hidden_dim,
                     attn_head_dim=attn_head_dim,
                     num_heads=num_heads,
                     ffn_dim=ffn_dim,
                     eps=eps,
+                    attention_fn=flash_attention,
+                    rope_fn=rope_apply,
                 )
                 for _ in range(num_layers)
             ]
@@ -138,9 +132,9 @@ class ActionDiT(nn.Module):
         context: torch.Tensor,
         context_mask: torch.Tensor,
         batch_size: int,
-        obs_context: Optional[torch.Tensor],
-        obs_context_mask: Optional[torch.Tensor],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], int, int]:
+        obs_context: torch.Tensor | None,
+        obs_context_mask: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, int, int]:
         """Validate and merge chunk-aligned obs_context into the text context.
 
         Returns (context, flat_obs_context_mask, obs_num_chunks, obs_tokens_per_chunk).
@@ -252,13 +246,13 @@ class ActionDiT(nn.Module):
         seq_len: int,
         effective_chunk_size: int,
         noisy_position_offset: int,
-        flat_obs_context_mask: Optional[torch.Tensor],
+        flat_obs_context_mask: torch.Tensor | None,
         obs_num_chunks: int,
         obs_tokens_per_chunk: int,
         obs_chunk_offset: int = 0,
         obs_context_causal: bool = False,
         obs_proprio_tokens_per_chunk: int = 0,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ) -> torch.Tensor:
         """Build the cross-attention mask over merged (text + obs) context tokens.
 
@@ -362,11 +356,11 @@ class ActionDiT(nn.Module):
         clean_seq_len: int,
         timestep: torch.Tensor,
         timestep_is_tokenwise: bool,
-        clean_timestep: Optional[torch.Tensor],
+        clean_timestep: torch.Tensor | None,
         noisy_position_offset: int,
         effective_chunk_size: int,
         device: torch.device,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
         """Compute t, t_mod, freqs, self_attn_mask for teacher-forced mode.
 
         Requires ``clean_seq_len > 0``.
@@ -431,7 +425,7 @@ class ActionDiT(nn.Module):
         effective_chunk_size: int,
         single_branch_chunk_causal: bool,
         device: torch.device,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
         """Compute t, t_mod, freqs, self_attn_mask for single-branch (no teacher forcing) mode."""
         if timestep_is_tokenwise:
             t = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, timestep.reshape(-1))).view(
@@ -458,19 +452,19 @@ class ActionDiT(nn.Module):
         action_tokens: torch.Tensor,
         timestep: torch.Tensor,
         context: torch.Tensor,
-        context_mask: Optional[torch.Tensor] = None,
-        obs_context: Optional[torch.Tensor] = None,
-        obs_context_mask: Optional[torch.Tensor] = None,
-        clean_action_tokens: Optional[torch.Tensor] = None,
-        clean_timestep: Optional[torch.Tensor] = None,
-        chunk_size: Optional[int] = None,
+        context_mask: torch.Tensor | None = None,
+        obs_context: torch.Tensor | None = None,
+        obs_context_mask: torch.Tensor | None = None,
+        clean_action_tokens: torch.Tensor | None = None,
+        clean_timestep: torch.Tensor | None = None,
+        chunk_size: int | None = None,
         noisy_position_offset: int = 0,
         single_branch_chunk_causal: bool = False,
         obs_chunk_offset: int = 0,
         obs_context_causal: bool = False,
         obs_proprio_tokens_per_chunk: int = 0,
         skip_context_embedding: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         predit mainly do following things:
         - MUSTDO:
@@ -619,7 +613,7 @@ class ActionDiT(nn.Module):
             },
         }
 
-    def post_dit(self, tokens: torch.Tensor, pre_state: Dict[str, Any]) -> torch.Tensor:
+    def post_dit(self, tokens: torch.Tensor, pre_state: dict[str, Any]) -> torch.Tensor:
         clean_seq_len = int(pre_state["meta"].get("clean_seq_len", 0))
         if clean_seq_len > 0:
             tokens = tokens[:, clean_seq_len:]
@@ -691,12 +685,12 @@ class ActionDiT(nn.Module):
         action_tokens: torch.Tensor,
         timestep: torch.Tensor,
         context: torch.Tensor,
-        context_mask: Optional[torch.Tensor] = None,
-        obs_context: Optional[torch.Tensor] = None,
-        obs_context_mask: Optional[torch.Tensor] = None,
-        clean_action_tokens: Optional[torch.Tensor] = None,
-        clean_timestep: Optional[torch.Tensor] = None,
-        chunk_size: Optional[int] = None,
+        context_mask: torch.Tensor | None = None,
+        obs_context: torch.Tensor | None = None,
+        obs_context_mask: torch.Tensor | None = None,
+        clean_action_tokens: torch.Tensor | None = None,
+        clean_timestep: torch.Tensor | None = None,
+        chunk_size: int | None = None,
         noisy_position_offset: int = 0,
         single_branch_chunk_causal: bool = False,
     ) -> torch.Tensor:

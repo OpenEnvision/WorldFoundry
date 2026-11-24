@@ -1,26 +1,16 @@
-"""Module for base_models -> perception_core -> optical_flow -> sea_raft -> core -> extractor.py functionality."""
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from worldfoundry.base_models.perception_core.optical_flow.sea_raft.core.layer import BasicBlock, conv1x1, conv3x3
+
+from worldfoundry.base_models.perception_core.optical_flow.sea_raft.core.layer import BasicBlock, conv1x1
+
 
 class ResNetFPN(nn.Module):
     """
     ResNet18, output resolution is 1/8.
     Each block has 2 layers.
     """
-    def __init__(self, args, input_dim=3, output_dim=256, ratio=1.0, norm_layer=nn.BatchNorm2d, init_weight=False):
-        """Init.
 
-        Args:
-            args: The args.
-            input_dim: The input dim.
-            output_dim: The output dim.
-            ratio: The ratio.
-            norm_layer: The norm layer.
-            init_weight: The init weight.
-        """
+    def __init__(self, args, input_dim=3, output_dim=256, ratio=1.0, norm_layer=nn.BatchNorm2d, init_weight=False):
         super().__init__()
         # Config
         block = BasicBlock
@@ -36,12 +26,12 @@ class ResNetFPN(nn.Module):
         self.conv1 = nn.Conv2d(input_dim, initial_dim, kernel_size=7, stride=2, padding=3)
         self.bn1 = norm_layer(initial_dim)
         self.relu = nn.ReLU(inplace=True)
-        if args.pretrain == 'resnet34':
+        if args.pretrain == "resnet34":
             n_block = [3, 4, 6]
-        elif args.pretrain == 'resnet18':
+        elif args.pretrain == "resnet18":
             n_block = [2, 2, 2]
         else:
-            raise NotImplementedError       
+            raise NotImplementedError
         self.layer1 = self._make_layer(block, block_dims[0], stride=1, norm_layer=norm_layer, num=n_block[0])  # 1/2
         self.layer2 = self._make_layer(block, block_dims[1], stride=2, norm_layer=norm_layer, num=n_block[1])  # 1/4
         self.layer3 = self._make_layer(block, block_dims[2], stride=2, norm_layer=norm_layer, num=n_block[2])  # 1/8
@@ -49,15 +39,9 @@ class ResNetFPN(nn.Module):
         self._init_weights(args)
 
     def _init_weights(self, args):
-        """Helper function to init weights.
-
-        Args:
-            args: The args.
-        """
-
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
             elif isinstance(m, (nn.BatchNorm2d, nn.InstanceNorm2d, nn.GroupNorm)):
@@ -67,8 +51,9 @@ class ResNetFPN(nn.Module):
                     nn.init.constant_(m.bias, 0)
 
         if self.init_weight and not getattr(args, "skip_pretrained_init", False):
-            from torchvision.models import resnet18, ResNet18_Weights, resnet34, ResNet34_Weights
-            if args.pretrain == 'resnet18':
+            from torchvision.models import ResNet18_Weights, ResNet34_Weights, resnet18, resnet34
+
+            if args.pretrain == "resnet18":
                 pretrained_dict = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1).state_dict()
             else:
                 pretrained_dict = resnet34(weights=ResNet34_Weights.IMAGENET1K_V1).state_dict()
@@ -76,35 +61,20 @@ class ResNetFPN(nn.Module):
             pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
             if self.input_dim == 6:
                 for k, v in pretrained_dict.items():
-                    if k == 'conv1.weight':
+                    if k == "conv1.weight":
                         pretrained_dict[k] = torch.cat((v, v), dim=1)
             model_dict.update(pretrained_dict)
             self.load_state_dict(model_dict, strict=False)
-        
 
     def _make_layer(self, block, dim, stride=1, norm_layer=nn.BatchNorm2d, num=2):
-        """Helper function to make layer.
-
-        Args:
-            block: The block.
-            dim: The dim.
-            stride: The stride.
-            norm_layer: The norm layer.
-            num: The num.
-        """
         layers = []
         layers.append(block(self.in_planes, dim, stride=stride, norm_layer=norm_layer))
-        for i in range(num - 1):
+        for _i in range(num - 1):
             layers.append(block(dim, dim, stride=1, norm_layer=norm_layer))
         self.in_planes = dim
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         # ResNet Backbone
         x = self.relu(self.bn1(self.conv1(x)))
         for i in range(len(self.layer1)):

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.core.io.paths import (
     resolve_data_path,
@@ -174,7 +175,7 @@ class EventVLARuntime:
         import torch
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .modeling import restore_eventvla_policy
 
@@ -230,16 +231,11 @@ class EventVLARuntime:
         # exact mode only in qwen_memory_injection.mode.  RoboTwin-MeM carries
         # both fields.  Accept those two released, checkpoint-authored modes
         # while still rejecting an ambiguous or inconsistent configuration.
-        memory_mode = (
-            injection_mode
-            if raw_memory_mode is None
-            else str(raw_memory_mode).strip().lower()
-        )
+        memory_mode = injection_mode if raw_memory_mode is None else str(raw_memory_mode).strip().lower()
         released_modes = {self.config.supported_memory_mode, "raw_anchors_only"}
         if memory_mode not in released_modes or injection_mode != memory_mode:
             raise ValueError(
-                f"unsupported EventVLA memory mode {memory_mode!r}; "
-                f"released modes={sorted(released_modes)}"
+                f"unsupported EventVLA memory mode {memory_mode!r}; released modes={sorted(released_modes)}"
             )
         keyframe_position = (
             str(
@@ -364,7 +360,9 @@ class EventVLARuntime:
             device_name,
         )
         device = torch.device(device_name)
-        effective_max_keyframes = self.config.max_keyframe_images if memory_mode == self.config.supported_memory_mode else 0
+        effective_max_keyframes = (
+            self.config.max_keyframe_images if memory_mode == self.config.supported_memory_mode else 0
+        )
         model = restore_eventvla_policy(
             checkpoint,
             base_vlm=base_vlm,
@@ -402,9 +400,7 @@ class EventVLARuntime:
 
     def _step_and_episode(self, observation: Mapping[str, Any]) -> int:
         episode = first_present(observation, "episode_id", "episode", "trajectory_id")
-        if option_bool(observation.get("reset"), False):
-            self.reset(episode)
-        elif episode is not None and str(episode) != self._episode_id:
+        if option_bool(observation.get("reset"), False) or (episode is not None and str(episode) != self._episode_id):
             self.reset(episode)
         raw_step = first_present(observation, "timestep", "step", "frame_index")
         step = int(raw_step) if raw_step is not None else self._implicit_step

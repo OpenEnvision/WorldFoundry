@@ -1,4 +1,4 @@
-_target_: models.vqvae.VQVAE
+_target_: worldfoundry.synthesis.visual_generation.dino_wm.models.vqvae.VQVAE
 channel: 384 
 n_embed: 2048
 n_res_block: 4

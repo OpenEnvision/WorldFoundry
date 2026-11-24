@@ -1,5 +1,5 @@
 """Forcing visual generation pipeline module."""
 
-from .pipeline_forcing import CausalForcingPipeline, RollingForcingPipeline, SelfForcingPipeline
+from .pipeline_forcing import RollingForcingPipeline
 
-__all__ = ["CausalForcingPipeline", "RollingForcingPipeline", "SelfForcingPipeline"]
+__all__ = ["RollingForcingPipeline"]

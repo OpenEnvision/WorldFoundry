@@ -7,7 +7,7 @@ description: Where to look up sources, where to download, and which commands to 
 
 Use this page when a command says that a checkpoint, dataset, metric weight, generated output, or official result file is missing. WorldFoundry keeps these large or licensed files outside git; the repository holds code and manifests, while your machine or shared storage holds the assets those manifests reference.
 
-Typical path: inspect the model or benchmark ID with `worldfoundry-eval zoo ... --json`, generate a per-benchmark asset plan when evaluating, then stage only what the next run needs. You do not need every benchmark asset before using the framework. For the unified conda env, see [Environments](/docs/reference/environments).
+Typical path: inspect the model or benchmark ID with `wf zoo ... --json`, generate a per-benchmark asset plan when evaluating, then stage only what the next run needs. You do not need every benchmark asset before using the framework. For the unified conda env, see [Environments](/docs/reference/environments).
 
 Install the Hugging Face Hub package. The optional CLI (`hf` / `huggingface-cli`) is used when available; download scripts fall back to `huggingface_hub.snapshot_download` otherwise:
 
@@ -98,7 +98,7 @@ bash scripts/workspace/run_workspace.sh \
 - **HF dataset `org/name`** — local directory `org__name`. Example: `lerobot/libero` → `lerobot__libero`.
 - **GitHub `owner/repo`** — often `owner--repo`. Example: `Lifelong-Robot-Learning/LIBERO` → `Lifelong-Robot-Learning--LIBERO`.
 
-**Follow the `path` field in catalog YAML or `local_assets.example.yaml`.** Some embodied benchmarks still use legacy paths such as `cache/vla_va_wam/hf_datasets/org--name`; mirror that layout or override the path in your manifest.
+**Follow the `path` field in catalog YAML or `local_assets.example.yaml`.** Some embodied benchmarks use paths such as `cache/vla_va_wam/hf_datasets/org--name`; mirror that layout or override the path in your manifest.
 
 ## 2. Where to look up required assets
 
@@ -131,7 +131,7 @@ official_sources:
 `checkpoints` / `checkpoint.repos[].id` is what you download; `sha` pins the revision; `runtime_profile` points at expected local paths and env. Same facts via CLI:
 
 ```bash
-worldfoundry-eval zoo model-show --model-id matrix-game-2 --json
+wf zoo model-show --model-id matrix-game-2 --json
 ```
 
 Local layout after staging:
@@ -175,7 +175,7 @@ runner:
 `dataset_refs[].repo_id` is the HF download; `path` is the expected relative layout under your data root; `required_assets` / `*_env` name the rest. Merge catalog + task + profile into one checklist:
 
 ```bash
-worldfoundry-eval zoo benchmark-show --benchmark-id libero --json
+wf zoo benchmark-show --benchmark-id libero --json
 
 python scripts/setup/prepare_benchmark_assets.py \
   --benchmark-id libero \
@@ -206,19 +206,6 @@ These in-tree runtimes keep checkpoint locations in the shared base-model asset 
         </div>
         <p>Official source: HF <a href="https://huggingface.co/facebook/sam2.1-hiera-base-plus">facebook/sam2.1-hiera-base-plus</a>. Expected file: <code>sam2.1_hiera_base_plus.pt</code></p>
         <p className="pi-kv-read"><span>Default location</span> <code>{'${WORLDFOUNDRY_HFD_ROOT}/facebook--sam2.1-hiera-base-plus/'}</code></p>
-      </li>
-      <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>mobile_sam</code>
-          </div>
-          <span className="pi-kv-default">
-            <span>Override</span>
-            <code>WORLDFOUNDRY_MOBILE_SAM_CKPT</code>
-          </span>
-        </div>
-        <p>Official source: GitHub <a href="https://github.com/ChaoningZhang/MobileSAM/tree/master/weights">ChaoningZhang/MobileSAM</a> <code>weights/</code>. Expected file: <code>mobile_sam.pt</code></p>
-        <p className="pi-kv-read"><span>Default location</span> <code>{'${WORLDFOUNDRY_CKPT_DIR}/MobileSAM/'}</code></p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -259,62 +246,45 @@ These in-tree runtimes keep checkpoint locations in the shared base-model asset 
         <p>Official source: HF <a href="https://huggingface.co/lpiccinelli/unidepth-v2-vitl14">lpiccinelli/unidepth-v2-vitl14</a>. Expected files: <code>config.json</code>, <code>model.safetensors</code></p>
         <p className="pi-kv-read"><span>Default location</span> <code>{'${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unidepth-v2-vitl14/'}</code></p>
       </li>
-      <li className="pi-kv-row">
-        <div className="pi-kv-head">
-          <div className="pi-kv-names">
-            <code>unik3d_vitl</code>
-          </div>
-          <span className="pi-kv-default">
-            <span>Override</span>
-            <code>WORLDFOUNDRY_UNIK3D_VITL_MODEL_DIR</code>
-          </span>
-        </div>
-        <p>Official source: HF <a href="https://huggingface.co/lpiccinelli/unik3d-vitl">lpiccinelli/unik3d-vitl</a>. Expected files: <code>config.json</code>, <code>model.safetensors</code></p>
-        <p className="pi-kv-read"><span>Default location</span> <code>{'${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unik3d-vitl/'}</code></p>
-      </li>
     </ul>
   </section>
 </div>
 
-UniDepth V2 and UniK3D are released under CC-BY-NC-4.0. Review the upstream non-commercial terms before downloading or redistributing their weights.
+UniDepth V2 is released under CC-BY-NC-4.0. Review the upstream non-commercial terms before downloading or redistributing its weights.
 
 Inspect the exact URLs, resolved paths, size checks, and export commands without downloading:
 
 ```bash
-worldfoundry-eval models assets \
+wf models assets \
   --capability sam2 \
-  --capability mobile_sam \
   --capability repvit_sam \
   --capability midas_v21_small_256 \
   --capability unidepth_v2_vitl14 \
-  --capability unik3d_vitl \
   --json
 ```
 
-To materialize missing files, add `--execute-downloads`. `HF_ENDPOINT` is honored for the SAM2, UniDepth V2, and UniK3D Hugging Face assets. MobileSAM, RepViT-SAM, and MiDaS are downloaded from their official GitHub repository or release URLs:
+To materialize missing files, add `--execute-downloads`. `HF_ENDPOINT` is honored for the SAM2 and UniDepth V2 Hugging Face assets. RepViT-SAM and MiDaS are downloaded from their official GitHub repository or release URLs:
 
 ```bash
 export HF_ENDPOINT=https://hf-mirror.com
-worldfoundry-eval models assets \
+wf models assets \
   --capability sam2 \
-  --capability mobile_sam \
   --capability repvit_sam \
   --capability midas_v21_small_256 \
   --capability unidepth_v2_vitl14 \
-  --capability unik3d_vitl \
   --execute-downloads
 ```
 
 Plan only, then execute after you accept storage and license:
 
 ```bash
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id matrix-game-2 \
   --cache-dir "${WORLDFOUNDRY_HFD_ROOT}" \
   --check-local \
   --json
 
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id matrix-game-2 \
   --cache-dir "${WORLDFOUNDRY_HFD_ROOT}" \
   --execute \
@@ -322,6 +292,8 @@ worldfoundry-eval zoo model-download \
   --check-local \
   --json
 ```
+
+When a checkpoint declares a commit SHA, the local check inspects that snapshot in the Hugging Face cache. The cached `main` ref can point to a different commit.
 
 Alternatives:
 
@@ -336,13 +308,11 @@ hf download Skywork/Matrix-Game-2.0 \
 ### Worked example: Echo-Memory
 
 Echo recipes share the Wan2.1 T2V 1.3B backbone but require different files
-under `Echo-Team/Echo-Memory`. As of 2026-07-20, only
-`context_k1/epoch-0.safetensors` remains on the official HF `main` branch.
-Other Echo model IDs stay in the catalog with exact expected filenames, but
-their upstream state is `unreleased_by_upstream` or
-`retracted_misaligned_by_upstream`; do not substitute K=1 weights for them.
+under `Echo-Team/Echo-Memory`. Only `context_k1/epoch-0.safetensors` is
+published on the official HF `main` branch. The other Echo model IDs are
+unreleased or retracted upstream; do not substitute K=1 weights for them.
 
-Stage the currently public recipe and its pinned backbone into the runtime
+Stage the public recipe and its pinned backbone into the runtime
 layout, then create the normal HFD aliases without copying tensors:
 
 ```bash
@@ -367,7 +337,7 @@ repository, so a cache containing only K=1 cannot make a K=20 or SSM model look
 ready:
 
 ```bash
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id echo-memory-context-k1 \
   --check-local \
   --json
@@ -412,12 +382,12 @@ hf download depth-anything/DA3NESTED-GIANT-LARGE-1.1 \
 Verify both recipes without loading model tensors:
 
 ```bash
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id matrix-game-3.5-first-person \
   --check-local \
   --json
 
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id matrix-game-3.5-third-person \
   --check-local \
   --json
@@ -460,7 +430,7 @@ for GEN3C as declared in its runtime profile. For Predict2 14B, switch to
 
 Cosmos Predict and Transfer share the Predict 2B `tokenizer.pth` Wan codec and
 the Reason1 language model. Download only the selected transformer plus those
-shared assets. Transfer currently uses the exact official `general/edge`
+shared assets. Transfer uses the exact official `general/edge`
 checkpoint revision; directory presence without that file is not readiness.
 Set `HF_ENDPOINT=https://hf-mirror.com` when the mirror is required.
 

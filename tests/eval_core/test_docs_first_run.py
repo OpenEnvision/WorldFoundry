@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-CANONICAL_MODEL_RUN = "worldfoundry-eval run <model-id>"
-CANONICAL_EVALUATE = "worldfoundry-eval evaluate"
+CANONICAL_MODEL_RUN = "wf run <model-id>"
+CANONICAL_EVALUATE = "wf evaluate"
 
 
 def test_quickstart_docs_share_model_first_run_command() -> None:
@@ -44,5 +44,5 @@ def test_evaluation_docs_expose_task_materialize_command() -> None:
 
     for path in doc_paths:
         text = path.read_text(encoding="utf-8")
-        assert "worldfoundry-eval task materialize" in text or "`task materialize`" in text
+        assert "wf task materialize" in text or "`task materialize`" in text
         assert "GenerationRequest" in text

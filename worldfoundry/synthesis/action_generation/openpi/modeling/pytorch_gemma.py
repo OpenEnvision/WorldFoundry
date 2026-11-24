@@ -2,7 +2,8 @@ from typing import Literal
 
 import torch
 from torch import nn
-from transformers.models.auto import AutoModel, CONFIG_MAPPING
+from transformers.models.auto import CONFIG_MAPPING, AutoModel
+
 from . import hf_gemma as modeling_gemma
 from .hf_gemma_config import GemmaConfig
 
@@ -71,7 +72,7 @@ class PaliGemmaWithExpertModel(nn.Module):
         super().__init__()
 
         vlm_config_hf = CONFIG_MAPPING["paligemma"]()
-        vlm_config_hf._vocab_size = 257152  # noqa: SLF001
+        vlm_config_hf._vocab_size = 257152
         vlm_config_hf.image_token_index = 257152
         vlm_config_hf.text_config.hidden_size = vlm_config.width
         vlm_config_hf.text_config.intermediate_size = vlm_config.mlp_dim
@@ -201,9 +202,7 @@ class PaliGemmaWithExpertModel(nn.Module):
                 key_states = []
                 value_states = []
                 gates = []
-                for model, hidden_states, cond in zip(
-                    models, inputs_embeds, adarms_cond, strict=True
-                ):
+                for model, hidden_states, cond in zip(models, inputs_embeds, adarms_cond, strict=True):
                     layer = model.layers[layer_idx]
                     hidden_states, gate = layer.input_layernorm(hidden_states, cond=cond)
                     gates.append(gate)
@@ -212,21 +211,9 @@ class PaliGemmaWithExpertModel(nn.Module):
                         -1,
                         layer.self_attn.head_dim,
                     )
-                    query_states.append(
-                        layer.self_attn.q_proj(hidden_states)
-                        .view(hidden_shape)
-                        .transpose(1, 2)
-                    )
-                    key_states.append(
-                        layer.self_attn.k_proj(hidden_states)
-                        .view(hidden_shape)
-                        .transpose(1, 2)
-                    )
-                    value_states.append(
-                        layer.self_attn.v_proj(hidden_states)
-                        .view(hidden_shape)
-                        .transpose(1, 2)
-                    )
+                    query_states.append(layer.self_attn.q_proj(hidden_states).view(hidden_shape).transpose(1, 2))
+                    key_states.append(layer.self_attn.k_proj(hidden_states).view(hidden_shape).transpose(1, 2))
+                    value_states.append(layer.self_attn.v_proj(hidden_states).view(hidden_shape).transpose(1, 2))
 
                 query_states = torch.cat(query_states, dim=2)
                 key_states = torch.cat(key_states, dim=2)
@@ -258,9 +245,7 @@ class PaliGemmaWithExpertModel(nn.Module):
 
                 next_embeds = []
                 start_pos = 0
-                for model, hidden_states, gate, cond in zip(
-                    models, inputs_embeds, gates, adarms_cond, strict=True
-                ):
+                for model, hidden_states, gate, cond in zip(models, inputs_embeds, gates, adarms_cond, strict=True):
                     layer = model.layers[layer_idx]
                     end_pos = start_pos + hidden_states.shape[1]
                     layer_attention = attention_output[:, start_pos:end_pos]
@@ -284,9 +269,7 @@ class PaliGemmaWithExpertModel(nn.Module):
 
             outputs_embeds = [
                 model.norm(hidden_states, cond=cond)[0]
-                for model, hidden_states, cond in zip(
-                    models, inputs_embeds, adarms_cond, strict=True
-                )
+                for model, hidden_states, cond in zip(models, inputs_embeds, adarms_cond, strict=True)
             ]
             prefix_output, suffix_output = outputs_embeds
             prefix_past_key_values = None

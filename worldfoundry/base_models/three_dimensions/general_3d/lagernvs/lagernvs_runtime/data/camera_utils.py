@@ -72,9 +72,7 @@ def get_ray_dirs_local(uv_hom, raymap_Ks):
     uv_hom_T = uv_hom.transpose(-2, -1)  # v x 3 x hw
     K_inv = torch.linalg.inv(raymap_Ks).float()  # v x 3 x 3
     ray_dirs_local = torch.bmm(K_inv, uv_hom_T).transpose(-2, -1)  # v x hw x 3
-    ray_dirs_local = ray_dirs_local / torch.linalg.norm(
-        ray_dirs_local, dim=-1, keepdim=True
-    )
+    ray_dirs_local = ray_dirs_local / torch.linalg.norm(ray_dirs_local, dim=-1, keepdim=True)
     return ray_dirs_local
 
 
@@ -87,11 +85,7 @@ def get_ray_dirs_global(c2w, ray_dirs_local):
     Returns:
         ray_dirs_global: [V, H*W, 3]
     """
-    ray_dirs_global = torch.bmm(
-        c2w[:, :3, :3], ray_dirs_local.transpose(-2, -1)
-    ).transpose(
-        -2, -1
-    )  # b x hw x 3
+    ray_dirs_global = torch.bmm(c2w[:, :3, :3], ray_dirs_local.transpose(-2, -1)).transpose(-2, -1)  # b x hw x 3
     return ray_dirs_global
 
 
@@ -120,21 +114,15 @@ def compute_plucker_rays(c2w, raymap_Ks, raymap_hw):
     return plucker_rays
 
 
-def adjust_intrinsics_for_crop_and_resize(
-    fxfycxcy_orig, im_hw_orig, crop_hw_in_orig, tgt_hw
-):
+def adjust_intrinsics_for_crop_and_resize(fxfycxcy_orig, im_hw_orig, crop_hw_in_orig, tgt_hw):
     """Adjust intrinsics for center-crop at original resolution then resize to tgt_hw.
 
     Assumes crop_hw_in_orig preserves the target aspect ratio.
     """
     fx_orig, fy_orig, cx_orig, cy_orig = fxfycxcy_orig
     cx, cy = (
-        (cx_orig - (im_hw_orig[1] - crop_hw_in_orig[1]) // 2)
-        * tgt_hw[1]
-        / crop_hw_in_orig[1],
-        (cy_orig - (im_hw_orig[0] - crop_hw_in_orig[0]) // 2)
-        * tgt_hw[0]
-        / crop_hw_in_orig[0],
+        (cx_orig - (im_hw_orig[1] - crop_hw_in_orig[1]) // 2) * tgt_hw[1] / crop_hw_in_orig[1],
+        (cy_orig - (im_hw_orig[0] - crop_hw_in_orig[0]) // 2) * tgt_hw[0] / crop_hw_in_orig[0],
     )
     fx = fx_orig * tgt_hw[1] / crop_hw_in_orig[1]
     fy = fy_orig * tgt_hw[0] / crop_hw_in_orig[0]

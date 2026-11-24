@@ -85,18 +85,18 @@ runner:
   scoring:
     engines: [in_tree]
     hooks:
-      in_tree: worldfoundry.evaluation.tasks.execution.runners.ewmbench.ewmbench_in_tree_evaluator:IN_TREE_CONFIG
+      in_tree: worldfoundry.evals.tasks.execution.runners.ewmbench.ewmbench_in_tree_evaluator:IN_TREE_CONFIG
   normalization:
     pass_generated_artifact_dir: true
-  official_script: worldfoundry/evaluation/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.ewmbench.run_ewmbench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.ewmbench.run_ewmbench_official_runner
     generated_arg: null
     limit_arg: --limit
     supports_fixture: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:EWMBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:ewmbench
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -112,7 +112,7 @@ runner:
   - --json
   runtime:
     kind: in_tree_official_source
-    root: worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench
+    root: worldfoundry/evals/tasks/execution/runners/ewmbench/runtime/ewmbench
     repo_url: https://github.com/AgibotTech/EWMBench.git
     repo_revision: 3a5531c0e6b6be51431251ed5617b9e48c852098
     results_path_env: WORLDFOUNDRY_EWMBENCH_RESULTS_PATH
@@ -134,7 +134,7 @@ integration:
   status: integrated
   tier: in_tree
   evidence:
-    framework_validation: worldfoundry-eval zoo benchmark-run --benchmark-id ewmbench --mode official-validation
+    framework_validation: wf zoo benchmark-run --benchmark-id ewmbench --mode official-validation
       --official-results-path <official_results.json> --generated-artifact-dir <generated_frames_or_videos> --output-dir
       <out> --json
     runtime_surface: ewmbench_official_in_tree
@@ -155,11 +155,11 @@ blockers:
 data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/ewmbench.yaml
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench
-official_runner_script: worldfoundry/evaluation/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/ewmbench/runtime/ewmbench
+official_runner_script: worldfoundry/evals/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:EWMBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:ewmbench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
@@ -170,7 +170,7 @@ base_model_dependencies:
 optional_base_model_dependencies:
 - spatial_perception_core_stack
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -189,3 +189,21 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - generated_frame_dir
+  - ewmbench_task_manifest
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_scores
+  - benchmark_contract
+  notes:
+  - Contract covers EWMBench scene, motion, and semantic quality evaluation for embodied world models.
+  - Official execution requires the upstream evaluator, generated frames/videos, and benchmark assets.
+generation:
+  request_provider: worldfoundry.evals.tasks.execution.runners.ewmbench.ewmbench_prompts:materialize_ewmbench_generation_requests
+  artifact_materializer: worldfoundry.evals.tasks.execution.runners.ewmbench.ewmbench_prompts:copy_ewmbench_generated_videos
+  split_parameter: split
+  missing_requests_hint: restore the bundled EWMBench task_manifest.json asset

@@ -1,6 +1,6 @@
 ---
 title: "Astronex-World"
-description: "Astronex-World from Astronex-Robotics: text-to-video and image-to-video; Runner parity pending; dedicated `astronex-world`."
+description: "Astronex-World from Astronex-Robotics: text-to-video, image-to-video, and 2 more tasks; Runner parity pending; dedicated `astronex-world`."
 modelId: "astronex-world"
 pageSource: generated
 ---
@@ -15,30 +15,30 @@ Code: [Astronex-Robotics/Astronex-World](https://github.com/Astronex-Robotics/As
 
 ## What it is for
 
-Use `astronex-world` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+`astronex-world` conditions video generation on camera poses.
 
-Wan2.2 TI2V-5B with PRoPE camera conditioning, 64-dimensional actions and embodiment conditioning. The official sampler remains external; no Wan backbone is copied into this integration. It is published by Astronex-Robotics.
+Wan2.2 TI2V-5B with PRoPE camera conditioning, 64-dimensional actions and embodiment conditioning. The causal and bidirectional samplers are adapted from Astronex-Robotics/Astronex-World at 27584bf1; the network is a WorldFoundry Wan variant on the shared Wan, UMT5 and Wan2.2 VAE modules. It is published by Astronex-Robotics.
 
-Catalog tasks include text-to-video, image-to-video, camera-controlled-video, and interactive-world-model. Catalog aliases include `astronex`. Documented modalities: text and image in, video out.
+Tasks: text-to-video, image-to-video, camera-controlled video, and interactive world model. Aliases: `astronex`. Modalities: text and image in, video out.
 
 ## Runtime contract
 
-Optional `prompt`, `input_path`, `load.checkpoint_dir`, `latent_frames`, and `trajectory`; artifacts `generated_world` and `astronex-world.mp4`.
+Inputs `prompt`, `input-path`, and `load.checkpoint-dir` (bundled samples are used when omitted); options `fps`, `seed`, `execute`, and `timeout-seconds`; artifacts `generated_world` and `astronex-world.mp4`.
 
 CLI task profiles: `interactive-world-model`. WorldFoundry binds `AstronexWorldPipeline`.
 
 Family status: **Runner parity pending**.
 
-Recorded `interactive-world-model` defaults: fps=24, seed=0.
+Defaults for `interactive-world-model`: fps=24, seed=0.
 
-Select mode=causal or bidirectional; supply source_root and checkpoint_dir. execute=True runs inference. latent_frames counts generated latent frames, not video frames; causal blocks require (latent_frames + reference_count) % 8 == 0.
+Select mode=causal or bidirectional and supply checkpoint_dir. execute=True runs inference. latent_frames counts generated latent frames, not video frames; causal blocks require (latent_frames + reference_count) % 8 == 0.
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run astronex-world --pipeline.task-profile interactive-world-model`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Run `wf run astronex-world --pipeline.task-profile interactive-world-model` to follow the camera path.
 
-Recorded weight repositories include `Astronex-Lab/Astronex-World`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh astronex-world`. Add `--download` to fetch missing public checkpoints.
+It runs in the dedicated environment `astronex-world` (Python 3.11, CUDA 12.8, torch>=2.6).
 
-Status: **Runner parity pending**.
+Weights: `Astronex-Lab/Astronex-World`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh astronex-world`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="astronex-world" locale="en" />

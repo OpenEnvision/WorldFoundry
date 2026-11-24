@@ -8,6 +8,7 @@ groups:
 - allegro
 source_repos:
 - url: https://github.com/rhymes-ai/Allegro
+  revision: f395a54b015f7e3296c52f59a45b78acf9dd07f6
 checkpoints:
 - repo_id: rhymes-ai/Allegro-TI2V
   revision: eaac4927c4f42eb20cd21d0c2c4e58a8af34cd62

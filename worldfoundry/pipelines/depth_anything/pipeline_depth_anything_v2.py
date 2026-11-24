@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Literal, overload
 
 import cv2
 import numpy as np
@@ -15,7 +15,7 @@ from tqdm import tqdm
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.runtime_v2 import (
     DepthAnything2Representation,
 )
-from worldfoundry.core.io import read_video
+from worldfoundry.core.media.codecs.video import read_video
 
 from ...operators.depth_anything_operator import DepthAnythingOperator
 from ..pipeline_utils import PipelineABC
@@ -29,10 +29,10 @@ class DepthAnything2Pipeline(PipelineABC):
 
     def __init__(
         self,
-        representation: Optional[DepthAnything2Representation] = None,
-        operator: Optional[DepthAnythingOperator] = None,
+        representation: DepthAnything2Representation | None = None,
+        operator: DepthAnythingOperator | None = None,
         encoder: str = "vitl",
-        device: Optional[str] = None,
+        device: str | None = None,
         data_type: str = "image",
         default_input_size: int = 518,
     ) -> None:
@@ -48,26 +48,24 @@ class DepthAnything2Pipeline(PipelineABC):
         self.operator = operator or DepthAnythingOperator()
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[str] = None,
-        required_components: Optional[Dict[str, Any]] = None,
-        pretrained_model_path: Optional[str] = None,
+        model_path: str | None = None,
+        required_components: dict[str, Any] | None = None,
+        pretrained_model_path: str | None = None,
         encoder: str = "vitl",
-        device: Optional[str] = None,
+        device: str | None = None,
         data_type: str = "image",
         default_input_size: int = 518,
         **kwargs,
-    ) -> "DepthAnything2Pipeline":
+    ) -> DepthAnything2Pipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         component_options = dict(required_components or {})
         if isinstance(model_path, dict):
             component_options.update(model_path)
             model_path = component_options.pop("model_path", None)
         pretrained_model_path = (
-            pretrained_model_path
-            or model_path
-            or component_options.pop("pretrained_model_path", None)
+            pretrained_model_path or model_path or component_options.pop("pretrained_model_path", None)
         )
         encoder = component_options.pop("encoder", encoder)
         data_type = component_options.pop("data_type", data_type)
@@ -92,7 +90,7 @@ class DepthAnything2Pipeline(PipelineABC):
 
     def _resolve_raw_bgr(
         self,
-        input_image: Union[str, Path, np.ndarray, torch.Tensor],
+        input_image: str | Path | np.ndarray | torch.Tensor,
         color_order: str = "rgb",
     ) -> np.ndarray:
         """Resolve raw bgr for DepthAnything2Pipeline."""
@@ -106,14 +104,34 @@ class DepthAnything2Pipeline(PipelineABC):
             color_order=color_order,
         )
 
+    @overload
     def process(
         self,
-        input_image: Union[str, Path, np.ndarray, torch.Tensor],
+        input_image: str | Path | np.ndarray | torch.Tensor,
+        return_visualization: Literal[True],
+        grayscale: bool = False,
+        input_size: int | None = None,
+        color_order: str = "rgb",
+    ) -> np.ndarray: ...
+
+    @overload
+    def process(
+        self,
+        input_image: str | Path | np.ndarray | torch.Tensor,
         return_visualization: bool = False,
         grayscale: bool = False,
-        input_size: Optional[int] = None,
+        input_size: int | None = None,
         color_order: str = "rgb",
-    ) -> Union[torch.Tensor, np.ndarray]:
+    ) -> torch.Tensor | np.ndarray: ...
+
+    def process(
+        self,
+        input_image: str | Path | np.ndarray | torch.Tensor,
+        return_visualization: bool = False,
+        grayscale: bool = False,
+        input_size: int | None = None,
+        color_order: str = "rgb",
+    ) -> torch.Tensor | np.ndarray:
         """Process and normalize input arguments and conditions for inference."""
         if self.representation is None:
             raise RuntimeError("Representation not loaded. Use from_pretrained() first.")
@@ -135,10 +153,10 @@ class DepthAnything2Pipeline(PipelineABC):
         self,
         img_path: str,
         grayscale: bool = False,
-        input_size: Optional[int] = None,
+        input_size: int | None = None,
     ) -> DepthResult:
         """Run image for DepthAnything2Pipeline."""
-        results: List[Dict] = []
+        results: list[dict] = []
 
         for filename in tqdm(self.operator.collect_paths(img_path), desc="DepthAnythingV2-Image"):
             try:
@@ -161,10 +179,10 @@ class DepthAnything2Pipeline(PipelineABC):
         self,
         video_path: str,
         grayscale: bool = False,
-        input_size: Optional[int] = None,
+        input_size: int | None = None,
     ) -> DepthResult:
         """Run video for DepthAnything2Pipeline."""
-        results: List[Dict] = []
+        results: list[dict] = []
 
         for index, filename in enumerate(self.operator.collect_paths(video_path), start=1):
             try:
@@ -179,7 +197,7 @@ class DepthAnything2Pipeline(PipelineABC):
             basename = os.path.basename(filename)
             stem = basename[: basename.rfind(".")] if "." in basename else basename
 
-            frames: List[np.ndarray] = []
+            frames: list[np.ndarray] = []
             with tqdm(
                 total=len(raw_frames),
                 desc=f"Video {index}",
@@ -213,7 +231,7 @@ class DepthAnything2Pipeline(PipelineABC):
         self,
         data_path: str,
         grayscale: bool = False,
-        input_size: Optional[int] = None,
+        input_size: int | None = None,
         **kwargs,
     ) -> DepthResult:
         """Execute the complete pipeline generation flow."""

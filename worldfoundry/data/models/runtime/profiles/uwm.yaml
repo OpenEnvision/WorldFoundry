@@ -1,15 +1,22 @@
-artifact_filename: uwm_runtime_plan.json
-artifact_kind: generated_video
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: uwm
 display_name: Unified World Models
-id: uwm
+task_family: robot_world_model
 input_schema:
   actions:
   - robot_action
   image: true
   prompt: true
   video: true
-integration_status: runtime_ported
+artifact_kind: generated_video
+artifact_filename: uwm_runtime_plan.json
+execution:
+  pipeline_binding: uwm
+  backend_stage: worldfoundry_runtime_plan
+  runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - UWM official evaluation route is registered; checkpoints/datasets are runtime-gated.
 - Missing checkpoints/assets are reported by the runtime plan and are not catalog
@@ -17,9 +24,3 @@ notes:
 - WorldFoundry tracks upstream source and checkpoint metadata only; no runnable pipeline
   is registered.
 - Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/uwm at b7d4067c8859775e5b08f681e76d538015cdd445.
-runtime_status: route_ready_assets_pending
-task_family: robot_world_model
-execution:
-  pipeline_binding: uwm
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending

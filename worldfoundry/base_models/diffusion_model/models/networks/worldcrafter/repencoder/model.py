@@ -54,12 +54,8 @@ class RepEncoder(nn.Module):
         self.dino_tail.to(dtype=torch.bfloat16)
         self.vggt.to(dtype=torch.bfloat16)
         self.repfeature.to(dtype=torch.bfloat16)
-        self.dino_tail.latent_cls_token.data = (
-            self.dino_tail.latent_cls_token.data.float()
-        )
-        self.dino_tail.latent_register_tokens.data = (
-            self.dino_tail.latent_register_tokens.data.float()
-        )
+        self.dino_tail.latent_cls_token.data = self.dino_tail.latent_cls_token.data.float()
+        self.dino_tail.latent_register_tokens.data = self.dino_tail.latent_register_tokens.data.float()
         for module in self.modules():
             if isinstance(module, (LowRankLinear, LowRankConv2d)):
                 module.low_rank_a.data = module.low_rank_a.data.float()
@@ -97,7 +93,7 @@ class RepEncoder(nn.Module):
         compute_dtype: str | torch.dtype = torch.bfloat16,
         target_microbatch: int = 4,
         near_zero_baseline_m: float = DEFAULT_NEAR_ZERO_BASELINE_M,
-    ) -> "RepEncoder":
+    ) -> RepEncoder:
         model_path, config, manifest = read_checkpoint_metadata(path)
         model = cls(
             config,
@@ -124,11 +120,7 @@ class RepEncoder(nn.Module):
         *,
         near_zero_baseline_m: float | None = None,
     ) -> RepEncoderCameraConditioning:
-        epsilon = (
-            self.near_zero_baseline_m
-            if near_zero_baseline_m is None
-            else float(near_zero_baseline_m)
-        )
+        epsilon = self.near_zero_baseline_m if near_zero_baseline_m is None else float(near_zero_baseline_m)
         return prepare_repencoder_camera_conditioning(
             source_c2w_metric,
             target_c2w_metric,
@@ -162,15 +154,12 @@ class RepEncoder(nn.Module):
             self.config.ray_width,
         ):
             raise ValueError("target_rays must be [B,4,6,384,640]")
-        if {source_latents.device, source_camera_tokens.device, target_rays.device} != {
-            self.device
-        }:
+        if {source_latents.device, source_camera_tokens.device, target_rays.device} != {self.device}:
             raise ValueError("all RepEncoder inputs must be on the model device")
 
         if self.device.type != "cuda":
             raise RuntimeError(
-                "RepEncoder exact inference requires CUDA BF16 autocast; "
-                "CPU forward is not a supported runtime"
+                "RepEncoder exact inference requires CUDA BF16 autocast; CPU forward is not a supported runtime"
             )
         autocast_context = torch.autocast(device_type="cuda", dtype=torch.bfloat16)
 

@@ -12,26 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> flash_world -> transformer_wan.py functionality."""
-
 import math
 import os
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, ClassVar
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.loaders import FromOriginalModelMixin, PeftAdapterMixin
-from diffusers.utils import USE_PEFT_BACKEND, logging, scale_lora_layers, unscale_lora_layers
-from diffusers.utils.torch_utils import maybe_allow_in_graph
 from diffusers.models.attention import FeedForward
 from diffusers.models.attention_processor import Attention
 from diffusers.models.cache_utils import CacheMixin
 from diffusers.models.embeddings import PixArtAlphaTextProjection, TimestepEmbedding, Timesteps, get_1d_rotary_pos_embed
 from diffusers.models.modeling_outputs import Transformer2DModelOutput
 from diffusers.models.modeling_utils import ModelMixin
+from diffusers.utils import USE_PEFT_BACKEND, logging, scale_lora_layers, unscale_lora_layers
+from diffusers.utils.torch_utils import maybe_allow_in_graph
+
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.image_embedding import (
+    WanImageEmbedding as CanonicalWanImageEmbedding,
+)
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
 _disable_sageattention = os.getenv("WORLDFOUNDRY_DISABLE_SAGEATTENTION", "").strip().lower() in {
@@ -45,8 +46,9 @@ try:
     if _disable_sageattention:
         raise ImportError("disabled by WORLDFOUNDRY_DISABLE_SAGEATTENTION")
     from sageattention import sageattn
+
     print("SageAttention is available")
-except ImportError as exc:
+except ImportError:
     sageattn = None
     if _disable_sageattention:
         print("SageAttention disabled by WORLDFOUNDRY_DISABLE_SAGEATTENTION")
@@ -55,17 +57,11 @@ except ImportError as exc:
 
 # sageattn = None
 
+
 class FP32LayerNorm(nn.LayerNorm):
     """Layer norm implementation."""
+
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            inputs: The inputs.
-
-        Returns:
-            The return value.
-        """
         return F.layer_norm(
             inputs,
             self.normalized_shape,
@@ -73,13 +69,15 @@ class FP32LayerNorm(nn.LayerNorm):
             self.bias if self.bias is not None else None,
             self.eps,
         ).to(inputs.dtype)
-    
+
+
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
 
 class WanAttnProcessor2_0:
     """Wan attn processor implementation."""
+
     def __init__(self):
-        """Init."""
         if not hasattr(F, "scaled_dot_product_attention"):
             raise ImportError("WanAttnProcessor2_0 requires PyTorch 2.0. To use it, please upgrade PyTorch to 2.0.")
 
@@ -87,22 +85,10 @@ class WanAttnProcessor2_0:
         self,
         attn: Attention,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        rotary_emb: Optional[torch.Tensor] = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        rotary_emb: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Call.
-
-        Args:
-            attn: The attn.
-            hidden_states: The hidden states.
-            encoder_hidden_states: The encoder hidden states.
-            attention_mask: The attention mask.
-            rotary_emb: The rotary emb.
-
-        Returns:
-            The return value.
-        """
         encoder_hidden_states_img = None
         if attn.add_k_proj is not None:
             # 512 is the context length of the text encoder, hardcoded for now
@@ -132,13 +118,6 @@ class WanAttnProcessor2_0:
                 freqs_cos: torch.Tensor,
                 freqs_sin: torch.Tensor,
             ):
-                """Apply rotary emb.
-
-                Args:
-                    hidden_states: The hidden states.
-                    freqs_cos: The freqs cos.
-                    freqs_sin: The freqs sin.
-                """
                 x = hidden_states.view(*hidden_states.shape[:-1], -1, 2)
                 x1, x2 = x[..., 0], x[..., 1]
                 cos = freqs_cos[..., 0::2]
@@ -168,14 +147,12 @@ class WanAttnProcessor2_0:
                     query = query.to(target_dtype)
                     key_img = key_img.to(target_dtype)
                     value_img = value_img.to(target_dtype)
-                hidden_states_img = sageattn(
-                    query, key_img, value_img, attn_mask=None, dropout_p=0.0, is_causal=False
-                )
+                hidden_states_img = sageattn(query, key_img, value_img, attn_mask=None, dropout_p=0.0, is_causal=False)
             else:
                 hidden_states_img = _worldfoundry_scaled_dot_product_attention(
                     query, key_img, value_img, attn_mask=None, dropout_p=0.0, is_causal=False
                 )
-            
+
             hidden_states_img = hidden_states_img.transpose(1, 2).flatten(2, 3)
             hidden_states_img = hidden_states_img.type_as(query)
 
@@ -187,14 +164,12 @@ class WanAttnProcessor2_0:
                 query = query.to(target_dtype)
                 key = key.to(target_dtype)
                 value = value.to(target_dtype)
-            hidden_states = sageattn(
-                query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
-            )
+            hidden_states = sageattn(query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False)
         else:
             hidden_states = _worldfoundry_scaled_dot_product_attention(
                 query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
             )
-        
+
         hidden_states = hidden_states.transpose(1, 2).flatten(2, 3)
         hidden_states = hidden_states.type_as(query)
 
@@ -206,67 +181,23 @@ class WanAttnProcessor2_0:
         return hidden_states
 
 
-class WanImageEmbedding(torch.nn.Module):
-    """Wan image embedding implementation."""
-    def __init__(self, in_features: int, out_features: int, pos_embed_seq_len=None):
-        """Init.
+class WanImageEmbedding(CanonicalWanImageEmbedding):
+    """Image conditioning with FlashWorld's native-precision normalization."""
 
-        Args:
-            in_features: The in features.
-            out_features: The out features.
-            pos_embed_seq_len: The pos embed seq len.
-        """
-        super().__init__()
-
-        self.norm1 = FP32LayerNorm(in_features)
-        self.ff = FeedForward(in_features, out_features, mult=1, activation_fn="gelu")
-        self.norm2 = FP32LayerNorm(out_features)
-        if pos_embed_seq_len is not None:
-            self.pos_embed = nn.Parameter(torch.zeros(1, pos_embed_seq_len, in_features))
-        else:
-            self.pos_embed = None
-
-    def forward(self, encoder_hidden_states_image: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            encoder_hidden_states_image: The encoder hidden states image.
-
-        Returns:
-            The return value.
-        """
-        if self.pos_embed is not None:
-            batch_size, seq_len, embed_dim = encoder_hidden_states_image.shape
-            encoder_hidden_states_image = encoder_hidden_states_image.view(-1, 2 * seq_len, embed_dim)
-            encoder_hidden_states_image = encoder_hidden_states_image + self.pos_embed
-
-        hidden_states = self.norm1(encoder_hidden_states_image)
-        hidden_states = self.ff(hidden_states)
-        hidden_states = self.norm2(hidden_states)
-        return hidden_states
+    def __init__(self, in_features: int, out_features: int, pos_embed_seq_len: int | None = None) -> None:
+        super().__init__(in_features, out_features, pos_embed_seq_len, norm_layer=FP32LayerNorm)
 
 
 class WanTimeTextImageEmbedding(nn.Module):
-    """Wan time text image embedding implementation."""
     def __init__(
         self,
         dim: int,
         time_freq_dim: int,
         time_proj_dim: int,
         text_embed_dim: int,
-        image_embed_dim: Optional[int] = None,
-        pos_embed_seq_len: Optional[int] = None,
+        image_embed_dim: int | None = None,
+        pos_embed_seq_len: int | None = None,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            time_freq_dim: The time freq dim.
-            time_proj_dim: The time proj dim.
-            text_embed_dim: The text embed dim.
-            image_embed_dim: The image embed dim.
-            pos_embed_seq_len: The pos embed seq len.
-        """
         super().__init__()
 
         self.timesteps_proj = Timesteps(num_channels=time_freq_dim, flip_sin_to_cos=True, downscale_freq_shift=0)
@@ -283,17 +214,9 @@ class WanTimeTextImageEmbedding(nn.Module):
         self,
         timestep: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
-        encoder_hidden_states_image: Optional[torch.Tensor] = None,
-        timestep_seq_len: Optional[int] = None,
+        encoder_hidden_states_image: torch.Tensor | None = None,
+        timestep_seq_len: int | None = None,
     ):
-        """Forward.
-
-        Args:
-            timestep: The timestep.
-            encoder_hidden_states: The encoder hidden states.
-            encoder_hidden_states_image: The encoder hidden states image.
-            timestep_seq_len: The timestep seq len.
-        """
         timestep = self.timesteps_proj(timestep)
         if timestep_seq_len is not None:
             timestep = timestep.unflatten(0, (1, timestep_seq_len))
@@ -312,22 +235,13 @@ class WanTimeTextImageEmbedding(nn.Module):
 
 
 class WanRotaryPosEmbed(nn.Module):
-    """Wan rotary pos embed implementation."""
     def __init__(
         self,
         attention_head_dim: int,
-        patch_size: Tuple[int, int, int],
+        patch_size: tuple[int, int, int],
         max_seq_len: int,
         theta: float = 10000.0,
     ):
-        """Init.
-
-        Args:
-            attention_head_dim: The attention head dim.
-            patch_size: The patch size.
-            max_seq_len: The max seq len.
-            theta: The theta.
-        """
         super().__init__()
 
         self.attention_head_dim = attention_head_dim
@@ -357,14 +271,6 @@ class WanRotaryPosEmbed(nn.Module):
         self.register_buffer("freqs_sin", torch.cat(freqs_sin, dim=1), persistent=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            hidden_states: The hidden states.
-
-        Returns:
-            The return value.
-        """
         batch_size, num_channels, num_frames, height, width = hidden_states.shape
         p_t, p_h, p_w = self.patch_size
         ppf, pph, ppw = num_frames // p_t, height // p_h, width // p_w
@@ -394,7 +300,6 @@ class WanRotaryPosEmbed(nn.Module):
 
 @maybe_allow_in_graph
 class WanTransformerBlock(nn.Module):
-    """Wan transformer block implementation."""
     def __init__(
         self,
         dim: int,
@@ -403,19 +308,8 @@ class WanTransformerBlock(nn.Module):
         qk_norm: str = "rms_norm_across_heads",
         cross_attn_norm: bool = False,
         eps: float = 1e-6,
-        added_kv_proj_dim: Optional[int] = None,
+        added_kv_proj_dim: int | None = None,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            ffn_dim: The ffn dim.
-            num_heads: The num heads.
-            qk_norm: The qk norm.
-            cross_attn_norm: The cross attn norm.
-            eps: The eps.
-            added_kv_proj_dim: The added kv proj dim.
-        """
         super().__init__()
 
         # 1. Self-attention
@@ -463,17 +357,6 @@ class WanTransformerBlock(nn.Module):
         temb: torch.Tensor,
         rotary_emb: torch.Tensor,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            hidden_states: The hidden states.
-            encoder_hidden_states: The encoder hidden states.
-            temb: The temb.
-            rotary_emb: The rotary emb.
-
-        Returns:
-            The return value.
-        """
         if temb.ndim == 4:
             # temb: batch_size, seq_len, 6, inner_dim (wan2.2 ti2v)
             shift_msa, scale_msa, gate_msa, c_shift_msa, c_scale_msa, c_gate_msa = (
@@ -495,7 +378,7 @@ class WanTransformerBlock(nn.Module):
         # print(hidden_states.dtype)
 
         # 1. Self-attention
-        norm_hidden_states = (self.norm1(hidden_states).mul_(1 + scale_msa).add_(shift_msa))
+        norm_hidden_states = self.norm1(hidden_states).mul_(1 + scale_msa).add_(shift_msa)
         attn_output = self.attn1(hidden_states=norm_hidden_states, rotary_emb=rotary_emb)
         hidden_states += attn_output.mul_(gate_msa)
         # hidden_states = hidden_states.type_as(hidden_states)
@@ -510,7 +393,7 @@ class WanTransformerBlock(nn.Module):
         # print(hidden_states.dtype)
 
         # 3. Feed-forward
-        norm_hidden_states = (self.norm3(hidden_states).mul_(1 + c_scale_msa).add_(c_shift_msa))
+        norm_hidden_states = self.norm3(hidden_states).mul_(1 + c_scale_msa).add_(c_shift_msa)
         ff_output = self.ffn(norm_hidden_states)
         hidden_states += ff_output.mul_(c_gate_msa)
         # hidden_states = hidden_states.type_as(hidden_states)
@@ -556,16 +439,16 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrigi
     """
 
     _supports_gradient_checkpointing = True
-    _skip_layerwise_casting_patterns = ["patch_embedding", "condition_embedder", "norm"]
-    _no_split_modules = ["WanTransformerBlock"]
-    _keep_in_fp32_modules = ["time_embedder", "scale_shift_table", "norm1", "norm2", "norm3"]
-    _keys_to_ignore_on_load_unexpected = ["norm_added_q"]
-    _repeated_blocks = ["WanTransformerBlock"]
+    _skip_layerwise_casting_patterns: ClassVar[list] = ["patch_embedding", "condition_embedder", "norm"]
+    _no_split_modules: ClassVar[list] = ["WanTransformerBlock"]
+    _keep_in_fp32_modules: ClassVar[list] = ["time_embedder", "scale_shift_table", "norm1", "norm2", "norm3"]
+    _keys_to_ignore_on_load_unexpected: ClassVar[list] = ["norm_added_q"]
+    _repeated_blocks: ClassVar[list] = ["WanTransformerBlock"]
 
     @register_to_config
     def __init__(
         self,
-        patch_size: Tuple[int] = (1, 2, 2),
+        patch_size: tuple[int] = (1, 2, 2),
         num_attention_heads: int = 40,
         attention_head_dim: int = 128,
         in_channels: int = 16,
@@ -575,36 +458,13 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrigi
         ffn_dim: int = 13824,
         num_layers: int = 40,
         cross_attn_norm: bool = True,
-        qk_norm: Optional[str] = "rms_norm_across_heads",
+        qk_norm: str | None = "rms_norm_across_heads",
         eps: float = 1e-6,
-        image_dim: Optional[int] = None,
-        added_kv_proj_dim: Optional[int] = None,
+        image_dim: int | None = None,
+        added_kv_proj_dim: int | None = None,
         rope_max_seq_len: int = 1024,
-        pos_embed_seq_len: Optional[int] = None,
+        pos_embed_seq_len: int | None = None,
     ) -> None:
-        """Init.
-
-        Args:
-            patch_size: The patch size.
-            num_attention_heads: The num attention heads.
-            attention_head_dim: The attention head dim.
-            in_channels: The in channels.
-            out_channels: The out channels.
-            text_dim: The text dim.
-            freq_dim: The freq dim.
-            ffn_dim: The ffn dim.
-            num_layers: The num layers.
-            cross_attn_norm: The cross attn norm.
-            qk_norm: The qk norm.
-            eps: The eps.
-            image_dim: The image dim.
-            added_kv_proj_dim: The added kv proj dim.
-            rope_max_seq_len: The rope max seq len.
-            pos_embed_seq_len: The pos embed seq len.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         inner_dim = num_attention_heads * attention_head_dim
@@ -647,23 +507,10 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrigi
         hidden_states: torch.Tensor,
         timestep: torch.LongTensor,
         encoder_hidden_states: torch.Tensor,
-        encoder_hidden_states_image: Optional[torch.Tensor] = None,
+        encoder_hidden_states_image: torch.Tensor | None = None,
         return_dict: bool = True,
-        attention_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
-        """Forward.
-
-        Args:
-            hidden_states: The hidden states.
-            timestep: The timestep.
-            encoder_hidden_states: The encoder hidden states.
-            encoder_hidden_states_image: The encoder hidden states image.
-            return_dict: The return dict.
-            attention_kwargs: The attention kwargs.
-
-        Returns:
-            The return value.
-        """
+        attention_kwargs: dict[str, Any] | None = None,
+    ) -> torch.Tensor | dict[str, torch.Tensor]:
         if attention_kwargs is not None:
             attention_kwargs = attention_kwargs.copy()
             lora_scale = attention_kwargs.pop("scale", 1.0)
@@ -675,9 +522,7 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrigi
             scale_lora_layers(self, lora_scale)
         else:
             if attention_kwargs is not None and attention_kwargs.get("scale", None) is not None:
-                logger.warning(
-                    "Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective."
-                )
+                logger.warning("Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective.")
 
         batch_size, num_channels, num_frames, height, width = hidden_states.shape
         p_t, p_h, p_w = self.config.patch_size

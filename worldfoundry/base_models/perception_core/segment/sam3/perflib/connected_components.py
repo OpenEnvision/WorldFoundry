@@ -1,8 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved
 
 # pyre-unsafe
-"""Module for base_models -> perception_core -> segment -> sam3 -> perflib -> connected_components.py functionality."""
-
 import logging
 
 import torch
@@ -20,11 +18,6 @@ except ImportError:
 
 
 def connected_components_cpu_single(values: torch.Tensor):
-    """Connected components cpu single.
-
-    Args:
-        values: The values.
-    """
     assert values.dim() == 2
     from skimage.measure import label
 
@@ -39,18 +32,11 @@ def connected_components_cpu_single(values: torch.Tensor):
 
 
 def connected_components_cpu(input_tensor: torch.Tensor):
-    """Connected components cpu.
-
-    Args:
-        input_tensor: The input tensor.
-    """
     out_shape = input_tensor.shape
     if input_tensor.dim() == 4 and input_tensor.shape[1] == 1:
         input_tensor = input_tensor.squeeze(1)
     else:
-        assert input_tensor.dim() == 3, (
-            "Input tensor must be (B, H, W) or (B, 1, H, W)."
-        )
+        assert input_tensor.dim() == 3, "Input tensor must be (B, H, W) or (B, 1, H, W)."
 
     batch_size = input_tensor.shape[0]
     labels_list = []
@@ -79,9 +65,7 @@ def connected_components(input_tensor: torch.Tensor):
     if input_tensor.dim() == 3:
         input_tensor = input_tensor.unsqueeze(1)
 
-    assert input_tensor.dim() == 4 and input_tensor.shape[1] == 1, (
-        "Input tensor must be (B, H, W) or (B, 1, H, W)."
-    )
+    assert input_tensor.dim() == 4 and input_tensor.shape[1] == 1, "Input tensor must be (B, H, W) or (B, 1, H, W)."
 
     if input_tensor.is_cuda:
         if HAS_CC_TORCH:

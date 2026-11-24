@@ -6,7 +6,7 @@ import re
 from contextlib import nullcontext
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, ClassVar
 
 import loguru
 import numpy as np
@@ -71,8 +71,8 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 @dataclass
 class HunyuanVideoPipelineOutput(BaseOutput):
-    videos: Union[torch.Tensor, np.ndarray]
-    sr_videos: Optional[Union[torch.Tensor, np.ndarray]] = None
+    videos: torch.Tensor | np.ndarray
+    sr_videos: torch.Tensor | np.ndarray | None = None
 
 
 class HunyuanWorldPlayRuntime:
@@ -86,11 +86,11 @@ class HunyuanWorldPlayRuntime:
         text_encoder: TextEncoder = None,
         transformer: HunyuanVideo_1_5_DiffusionTransformer = None,
         scheduler: KarrasDiffusionSchedulers = None,
-        text_encoder_2: Optional[TextEncoder] = None,
+        text_encoder_2: TextEncoder | None = None,
         flow_shift: float = 7.0,
         guidance_scale: float = 6.0,
-        embedded_guidance_scale: Optional[float] = None,
-        progress_bar_config: Dict[str, Any] = None,
+        embedded_guidance_scale: float | None = None,
+        progress_bar_config: dict[str, Any] | None = None,
         vision_num_semantic_tokens: int = 729,
         vision_states_dim: int = 1152,
         glyph_byT5_v2: bool = True,
@@ -132,24 +132,23 @@ class HunyuanWorldPlayRuntime:
         **kwargs,
     ):
         """
-        从预训练模型加载并创建 HunyuanWorldPlayRuntime 实例
+        Load a pretrained pipeline and wrap it in a HunyuanWorldPlayRuntime.
 
         Args:
-            pretrained_model_name_or_path: 预训练模型路径或 HuggingFace 模型名称
-            transformer_version: transformer 版本（如 "480p_i2v"）
-            args: 额外参数（可选）
-            device: 设备（如 "cuda"）
-            create_sr_pipeline: 是否创建超分辨率 pipeline
-            force_sparse_attn: 是否强制使用稀疏注意力
-            transformer_dtype: transformer 数据类型
-            enable_offloading: 是否启用 offloading
-            enable_group_offloading: 是否启用 group offloading
-            overlap_group_offloading: 是否重叠 group offloading
-            action_ckpt: action 模型检查点路径
-            **kwargs: 其他参数
+            pretrained_model_name_or_path: Local model path or HuggingFace model name.
+            transformer_version: Transformer variant, for example "480p_i2v".
+            args: Unused.
+            device: Target device, for example "cuda".
+            create_sr_pipeline: Whether to create the super-resolution pipeline.
+            force_sparse_attn: Whether to force sparse attention.
+            enable_offloading: Whether to enable model offloading.
+            enable_group_offloading: Whether to enable group offloading.
+            overlap_group_offloading: Whether to overlap group offloading with compute.
+            action_ckpt: Path of the action model checkpoint.
+            **kwargs: Unused.
 
         Returns:
-            HunyuanWorldPlayRuntime: 合成类实例
+            HunyuanWorldPlayRuntime: The runtime instance.
         """
         pipeline = _HunyuanWorldPlayInternalPipeline.create_pipeline(
             pretrained_model_name_or_path,
@@ -194,34 +193,33 @@ class HunyuanWorldPlayRuntime:
 
     def api_init(self, *, api_key, endpoint):
         """
-        API 初始化（可选）
+        No-op; this runtime runs locally and needs no API setup.
         """
-        pass
 
     @torch.no_grad()
     def predict(self, *, data):
         """
-        推理方法
+        Run inference with the pipeline.
 
         Args:
-            data: 包含推理所需参数的字典，包括：
-                - prompt: 文本提示
-                - aspect_ratio: 宽高比
-                - video_length: 视频长度
-                - reference_image: 参考图像（可选）
-                - viewmats: 视角矩阵
-                - Ks: 相机内参
-                - action: 动作信号
-                - 其他参数...
+            data: Keyword arguments of the pipeline call, including:
+                - prompt: text prompt
+                - aspect_ratio: aspect ratio
+                - video_length: video length
+                - reference_image: reference image (optional)
+                - viewmats: view matrices
+                - Ks: camera intrinsics
+                - action: action signal
+                - other pipeline arguments
 
         Returns:
-            HunyuanVideoPipelineOutput: 包含生成的视频帧
+            HunyuanVideoPipelineOutput: The generated video frames.
         """
         return self.model(**data)
 
     def __call__(self, *args, **kwargs):
         """
-        直接调用 model 的 __call__ 方法
+        Call the underlying pipeline directly.
         """
         return self.model(*args, **kwargs)
 
@@ -240,7 +238,7 @@ class HunyuanWorldPlayRuntime:
 
 class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeline):
     model_cpu_offload_seq = "text_encoder->text_encoder_2->byt5_model->transformer->vae"
-    _optional_components = ["text_encoder_2", "byt5_model", "byt5_tokenizer"]
+    _optional_components: ClassVar[list] = ["text_encoder_2", "byt5_model", "byt5_tokenizer"]
 
     def __init__(
         self,
@@ -248,11 +246,11 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
         text_encoder: TextEncoder,
         transformer: HunyuanVideo_1_5_DiffusionTransformer,
         scheduler: KarrasDiffusionSchedulers,
-        text_encoder_2: Optional[TextEncoder] = None,
+        text_encoder_2: TextEncoder | None = None,
         flow_shift: float = 7.0,
         guidance_scale: float = 6.0,
-        embedded_guidance_scale: Optional[float] = None,
-        progress_bar_config: Dict[str, Any] = None,
+        embedded_guidance_scale: float | None = None,
+        progress_bar_config: dict[str, Any] | None = None,
         vision_num_semantic_tokens=729,
         vision_states_dim=1152,
         glyph_byT5_v2=True,
@@ -346,13 +344,13 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
         num_videos_per_prompt,
         do_classifier_free_guidance,
         negative_prompt=None,
-        prompt_embeds: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        negative_prompt_embeds: Optional[torch.Tensor] = None,
-        negative_attention_mask: Optional[torch.Tensor] = None,
-        clip_skip: Optional[int] = None,
-        text_encoder: Optional[TextEncoder] = None,
-        data_type: Optional[str] = "image",
+        prompt_embeds: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        negative_prompt_embeds: torch.Tensor | None = None,
+        negative_attention_mask: torch.Tensor | None = None,
+        clip_skip: int | None = None,
+        text_encoder: TextEncoder | None = None,
+        data_type: str | None = "image",
     ):
         r"""
         Encodes the prompt into text encoder hidden states.
@@ -449,7 +447,7 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
 
         # get unconditional embeddings for classifier free guidance
         if do_classifier_free_guidance and negative_prompt_embeds is None:
-            uncond_tokens: List[str]
+            uncond_tokens: list[str]
             if negative_prompt is None:
                 uncond_tokens = [""] * batch_size
             elif prompt is not None and type(prompt) is not type(negative_prompt):
@@ -640,7 +638,6 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
         Tokenize text prompt for byT5 model.
 
         Args:
-            byt5_tokenizer: The byT5 tokenizer.
             byt5_max_length: Maximum sequence length for tokenization.
             text_prompt: Text prompt string to tokenize.
 
@@ -700,7 +697,7 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
                     "Prompt contains quoted glyph text, but Glyph-SDXL-v2 is not "
                     "available. Expected text_encoder/Glyph-SDXL-v2 with "
                     "assets/color_idx.json, assets/multilingual_10-lang_idx.json, "
-                    "and checkpoints/byt5_model.pt."
+                    "and checkpoints/model.safetensors."
                 )
             text_styles = [{"color": None, "font-family": None} for _ in range(len(glyph_texts))]
             formatted_text = self.prompt_format.format_prompt(glyph_texts, text_styles)
@@ -947,8 +944,8 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
             original_width, original_height = origin_size
 
             scale_factor = max(target_width / original_width, target_height / original_height)
-            resize_width = int(round(original_width * scale_factor))
-            resize_height = int(round(original_height * scale_factor))
+            resize_width = int(round(original_width * scale_factor))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+            resize_height = int(round(original_height * scale_factor))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
             ref_image_transform = transforms.Compose(
                 [
@@ -1007,7 +1004,7 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
         self._kv_cache = []
         self._kv_cache_neg = []
         transformer_num_layers = len(self.transformer.double_blocks)
-        for i in range(transformer_num_layers):
+        for _i in range(transformer_num_layers):
             self._kv_cache.append({"k_vision": None, "v_vision": None, "k_txt": None, "v_txt": None})
             self._kv_cache_neg.append({"k_vision": None, "v_vision": None, "k_txt": None, "v_txt": None})
 
@@ -1135,22 +1132,22 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
             ),
             auto_offload_model(self.transformer, self.execution_device, enabled=self.enable_offloading),
         ):
-            common = dict(
-                bi_inference=False,
-                ar_txt_inference=False,
-                ar_vision_inference=True,
-                hidden_states=context_input,
-                timestep=context_timestep,
-                timestep_r=None,
-                mask_type=task_type,
-                return_dict=False,
-                viewmats=viewmats[:, selected_frame_indices].to(device=device, dtype=self.target_dtype),
-                Ks=Ks[:, selected_frame_indices].to(device=device, dtype=self.target_dtype),
-                action=action[:, selected_frame_indices].to(device=device, dtype=self.target_dtype),
-                cache_vision=True,
-                rope_temporal_size=context_input.shape[2],
-                start_rope_start_idx=0,
-            )
+            common = {
+                "bi_inference": False,
+                "ar_txt_inference": False,
+                "ar_vision_inference": True,
+                "hidden_states": context_input,
+                "timestep": context_timestep,
+                "timestep_r": None,
+                "mask_type": task_type,
+                "return_dict": False,
+                "viewmats": viewmats[:, selected_frame_indices].to(device=device, dtype=self.target_dtype),
+                "Ks": Ks[:, selected_frame_indices].to(device=device, dtype=self.target_dtype),
+                "action": action[:, selected_frame_indices].to(device=device, dtype=self.target_dtype),
+                "cache_vision": True,
+                "rope_temporal_size": context_input.shape[2],
+                "start_rope_start_idx": 0,
+            }
             self._kv_cache = self.transformer(kv_cache=self._kv_cache, **common)
             if self.do_classifier_free_guidance:
                 self._kv_cache_neg = self.transformer(kv_cache=self._kv_cache_neg, **common)
@@ -1193,22 +1190,22 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
                 action_input = action[:, start_idx:end_idx].to(device)
                 model_input = torch.concat([latent_model_input, condition_input], dim=1)
                 model_input = self.scheduler.scale_model_input(model_input, timestep)
-                transformer_kwargs = dict(
-                    bi_inference=False,
-                    ar_txt_inference=False,
-                    ar_vision_inference=True,
-                    hidden_states=model_input,
-                    timestep=timestep_input,
-                    timestep_r=None,
-                    mask_type=task_type,
-                    return_dict=False,
-                    viewmats=viewmats_input.to(self.target_dtype),
-                    Ks=intrinsics_input.to(self.target_dtype),
-                    action=action_input.to(self.target_dtype),
-                    cache_vision=False,
-                    rope_temporal_size=model_input.shape[2] + len(selected_frame_indices),
-                    start_rope_start_idx=len(selected_frame_indices),
-                )
+                transformer_kwargs = {
+                    "bi_inference": False,
+                    "ar_txt_inference": False,
+                    "ar_vision_inference": True,
+                    "hidden_states": model_input,
+                    "timestep": timestep_input,
+                    "timestep_r": None,
+                    "mask_type": task_type,
+                    "return_dict": False,
+                    "viewmats": viewmats_input.to(self.target_dtype),
+                    "Ks": intrinsics_input.to(self.target_dtype),
+                    "action": action_input.to(self.target_dtype),
+                    "cache_vision": False,
+                    "rope_temporal_size": model_input.shape[2] + len(selected_frame_indices),
+                    "start_rope_start_idx": len(selected_frame_indices),
+                }
                 with torch.autocast(
                     device_type="cuda",
                     dtype=self.target_dtype,
@@ -1325,7 +1322,7 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
                         device=device,
                     )
                     selected_frame_indices = selected_frame_indices + selected_history_frame_id
-                selected_frame_indices = sorted(list(set(selected_frame_indices)))
+                selected_frame_indices = sorted(set(selected_frame_indices))
                 to_remove = list(range(current_frame_idx, current_frame_idx + chunk_size))
                 selected_frame_indices = [x for x in selected_frame_indices if x not in to_remove]
 
@@ -1439,41 +1436,41 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
                     latents[:, :, start_idx:end_idx] = latent_model_input[:, :, -chunk_size:]
 
                     # Update progress bar
-                    if i == len(timesteps) - 1 or (
-                        (i + 1) > self.num_warmup_steps and (i + 1) % self.scheduler.order == 0
-                    ):
-                        if progress_bar is not None:
-                            progress_bar.update()
+                    if (
+                        i == len(timesteps) - 1
+                        or ((i + 1) > self.num_warmup_steps and (i + 1) % self.scheduler.order == 0)
+                    ) and progress_bar is not None:
+                        progress_bar.update()
         return latents
 
     @torch.no_grad()
     def __call__(
         self,
-        prompt: Union[str, List[str]],
+        prompt: str | list[str],
         aspect_ratio: str,
         video_length: int,
-        prompt_rewrite: bool = True,
+        prompt_rewrite: bool = False,
         num_inference_steps: int = 50,
-        guidance_scale: Optional[float] = None,
+        guidance_scale: float | None = None,
         enable_sr: bool = True,
-        sr_num_inference_steps: Optional[int] = None,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-        seed: Optional[int] = None,
-        flow_shift: Optional[float] = None,
-        embedded_guidance_scale: Optional[float] = None,
+        sr_num_inference_steps: int | None = None,
+        negative_prompt: str | list[str] | None = None,
+        generator: torch.Generator | list[torch.Generator] | None = None,
+        seed: int | None = None,
+        flow_shift: float | None = None,
+        embedded_guidance_scale: float | None = None,
         reference_image=None,  # For i2v tasks: PIL Image or path to image file
-        output_type: Optional[str] = "pt",
+        output_type: str | None = "pt",
         return_dict: bool = True,
         return_pre_sr_video: bool = False,
-        viewmats: Optional[torch.Tensor] = None,
-        Ks: Optional[torch.Tensor] = None,
-        action: Optional[torch.Tensor] = None,
+        viewmats: torch.Tensor | None = None,
+        Ks: torch.Tensor | None = None,
+        action: torch.Tensor | None = None,
         few_step: bool = False,
         chunk_latent_frames: int = 4,
         model_type: str = "ar",
-        user_height: Optional[int] = None,
-        user_width: Optional[int] = None,
+        user_height: int | None = None,
+        user_width: int | None = None,
         **kwargs,
     ):
         r"""
@@ -1582,16 +1579,11 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
             semantic_images_np = None
 
         if prompt_rewrite:
-            from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_worldplay.utils.rewrite.rewrite_utils import (
-                run_prompt_rewrite,
-            )
-
             if not dist.is_initialized() or get_parallel_state().sp_rank == 0:
-                try:
-                    prompt = run_prompt_rewrite(user_prompt, reference_image, task_type)
-                except Exception as e:
-                    loguru.logger.warning(f"Failed to rewrite prompt: {e}")
-                    prompt = user_prompt
+                loguru.logger.warning(
+                    "HY-WorldPlay prompt rewriting is unavailable in this build; using the raw prompt"
+                )
+                prompt = user_prompt
 
             if dist.is_initialized() and get_parallel_state().sp_enabled:
                 obj_list = [prompt]
@@ -1668,7 +1660,7 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
 
         self._guidance_scale = guidance_scale
         self._guidance_rescale = kwargs.get("guidance_rescale", 0.0)
-        self._clip_skip = kwargs.get("clip_skip", None)
+        self._clip_skip = kwargs.get("clip_skip")
 
         if prompt is not None and isinstance(prompt, str):
             batch_size = 1
@@ -1996,7 +1988,7 @@ class _HunyuanWorldPlayInternalPipeline(HunyuanVideo15Resources, DiffusionPipeli
             if device is None:
                 device = torch.device("cuda")
 
-        if enable_group_offloading:
+        if enable_group_offloading:  # noqa: SIM108 - Branches carry per-case comments.
             # Assuming the user does not have sufficient GPU memory, we initialize the models on CPU
             transformer_init_device = torch.device("cpu")
         else:

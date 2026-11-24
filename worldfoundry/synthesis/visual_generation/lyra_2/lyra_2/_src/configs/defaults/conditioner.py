@@ -1,29 +1,28 @@
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 import torch
 from hydra.core.config_store import ConfigStore
-from lyra_2._src.models.lyra2_model import WAN2PT1_I2V_COND_LATENT_KEY
-from lyra_2._src.modules.conditioner import (
+
+from worldfoundry.core.configuration.lazy_config import LazyCall as L
+from worldfoundry.core.configuration.lazy_config import LazyDict
+from worldfoundry.core.distributed.model_parallel.context import broadcast
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.models.lyra2_model import WAN2PT1_I2V_COND_LATENT_KEY
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.modules.conditioner import (
     BaseCondition,
     GeneralConditioner,
     ReMapkey,
     T2VCondition,
     TextAttrEmptyStringDrop,
 )
-from lyra_2._src.networks.clip_lyra2 import Wan2pt1CLIPEmbLyra2
-
-from worldfoundry.core.configuration.lazy_config import LazyCall as L
-from worldfoundry.core.configuration.lazy_config import LazyDict
-from worldfoundry.core.distributed.model_parallel.context import broadcast
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.networks.clip_lyra2 import Wan2pt1CLIPEmbLyra2
 
 
 @dataclass(frozen=True)
 class Img2VidWan2pt1ConditionLyra2(T2VCondition):
-    frame_cond_crossattn_emb_B_L_D: Optional[torch.Tensor] = None
-    y_B_C_T_H_W: Optional[torch.Tensor] = None
-    y_buffer_B_C_T_H_W: Optional[torch.Tensor] = None
+    frame_cond_crossattn_emb_B_L_D: torch.Tensor | None = None
+    y_B_C_T_H_W: torch.Tensor | None = None
+    y_buffer_B_C_T_H_W: torch.Tensor | None = None
 
     def broadcast(self, process_group: torch.distributed.ProcessGroup) -> BaseCondition:
         if self.is_broadcasted:
@@ -41,8 +40,8 @@ class Img2VidWan2pt1ConditionLyra2(T2VCondition):
 class Img2VidWan2pt1ConditionerLyra2(GeneralConditioner):
     def forward(
         self,
-        batch: Dict,
-        override_dropout_rate: Optional[Dict[str, float]] = None,
+        batch: dict,
+        override_dropout_rate: dict[str, float] | None = None,
     ) -> Img2VidWan2pt1ConditionLyra2:
         output = super()._forward(batch, override_dropout_rate)
         return Img2VidWan2pt1ConditionLyra2(**output)

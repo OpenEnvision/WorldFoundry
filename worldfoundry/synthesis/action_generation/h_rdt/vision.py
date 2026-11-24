@@ -3,9 +3,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from functools import partial
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 
 def _first_sequence(value: Any) -> Any:
@@ -58,9 +59,7 @@ class DinoSigLIPEncoder:
         )
         self.dino.eval()
         self.siglip.eval()
-        self.dino.forward = self._unpack(
-            partial(self.dino.get_intermediate_layers, n={len(self.dino.blocks) - 2})
-        )
+        self.dino.forward = self._unpack(partial(self.dino.get_intermediate_layers, n={len(self.dino.blocks) - 2}))
         self.siglip.forward = self._unpack(
             partial(self.siglip.get_intermediate_layers, n={len(self.siglip.blocks) - 2})
         )

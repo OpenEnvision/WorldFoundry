@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -18,10 +18,10 @@ class MultimodalPreprocessor:
     text_preprocessor: InterleavedTextPreprocessor
     image_preprocessor: Any = None
     multi_image_preprocessor: Any = None
-    _output_shapes: Optional[Dict[str, TensorSpec]] = None
+    _output_shapes: dict[str, TensorSpec] | None = None
 
     @classmethod
-    def build(cls, *args, text_seq_len=None, **kwargs) -> "MultimodalPreprocessor":
+    def build(cls, *args, text_seq_len=None, **kwargs) -> MultimodalPreprocessor:
         preprocessor = cls(*args, **kwargs)
         if text_seq_len is not None and preprocessor.text_preprocessor.max_sequence_length is None:
             visual = [
@@ -37,18 +37,18 @@ class MultimodalPreprocessor:
 
     def __call__(
         self,
-        messages: List[str],
+        messages: list[str],
         *,
         image=None,
         image_group=None,
         is_training: bool = False,
-    ) -> Dict[str, np.ndarray]:
+    ) -> dict[str, np.ndarray]:
         if is_training:
             raise ValueError("MolmoBot's in-tree preprocessor supports inference only.")
         if image is not None and image_group is not None:
             raise ValueError("Provide either a single image or an image group, not both.")
 
-        tokenized: TokenizedVisionData | List[TokenizedVisionData] | None
+        tokenized: TokenizedVisionData | list[TokenizedVisionData] | None
         if image is not None:
             if self.image_preprocessor is None:
                 raise ValueError("This checkpoint does not support single-image input.")
@@ -63,11 +63,7 @@ class MultimodalPreprocessor:
         if tokenized is None:
             return self.text_preprocessor.tokenize_and_interleave(messages, [])
         if isinstance(tokenized, list):
-            position_ids = (
-                None
-                if tokenized[0].position_ids is None
-                else [item.position_ids for item in tokenized]
-            )
+            position_ids = None if tokenized[0].position_ids is None else [item.position_ids for item in tokenized]
             example = self.text_preprocessor.tokenize_and_interleave(
                 messages,
                 [item.tokens for item in tokenized],
@@ -80,9 +76,7 @@ class MultimodalPreprocessor:
                 pooling = []
                 for item in tokenized:
                     offset = sum(np.prod(previous.shape[:2]) for previous in images)
-                    pooling.append(
-                        np.where(item.token_pooling >= 0, item.token_pooling + offset, item.token_pooling)
-                    )
+                    pooling.append(np.where(item.token_pooling >= 0, item.token_pooling + offset, item.token_pooling))
                     images.append(item.images)
                 example["images"] = np.concatenate(images)
                 example["token_pooling"] = np.concatenate(pooling)
@@ -105,14 +99,10 @@ class MultimodalPreprocessor:
             example.update(tokenized.other_data)
         return example
 
-    def get_output_shapes(self) -> Dict[str, TensorSpec]:
+    def get_output_shapes(self) -> dict[str, TensorSpec]:
         if self._output_shapes is not None:
             return self._output_shapes
-        preprocessors = [
-            item
-            for item in (self.image_preprocessor, self.multi_image_preprocessor)
-            if item is not None
-        ]
+        preprocessors = [item for item in (self.image_preprocessor, self.multi_image_preprocessor) if item is not None]
         if not preprocessors:
             raise ValueError("MolmoBot requires at least one image preprocessor.")
         spec = TensorSpec.max_dictionaries(*(item.get_output_shapes() for item in preprocessors))
@@ -141,7 +131,7 @@ class ExamplePreprocessor:
         if self.is_training or not self.for_inference:
             raise ValueError("MolmoBot's in-tree ExamplePreprocessor supports inference only.")
 
-    def get_output_shapes(self) -> Dict[str, TensorSpec]:
+    def get_output_shapes(self) -> dict[str, TensorSpec]:
         return self.preprocessor.get_output_shapes()
 
     @property

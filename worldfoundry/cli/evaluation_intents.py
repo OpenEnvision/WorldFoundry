@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from worldfoundry.evaluation.utils import BENCHMARK_ZOO_DIR, MODEL_ZOO_DIR, TMP_ROOT
+from worldfoundry.evals.utils import BENCHMARK_ZOO_DIR, MODEL_ZOO_DIR, TMP_ROOT
 
 from .presentation import print_details, print_notice
 from .utils import CliUsageError, json_dump, parse_key_value_mapping
@@ -29,7 +29,7 @@ def _print_prepared(prepared, *, as_json: bool) -> None:
 
 
 def _finish(prepared, args: argparse.Namespace) -> int:
-    from worldfoundry.evaluation.tasks.execution.orchestration.service import execute_prepared_evaluation
+    from worldfoundry.evals.tasks.execution.orchestration.service import execute_prepared_evaluation
 
     if args.plan_only or not prepared.ready:
         _print_prepared(prepared, as_json=args.json)
@@ -56,7 +56,7 @@ def _handle_score(args: argparse.Namespace) -> int:
     elif args.results is None or not args.metric:
         raise CliUsageError("score without --benchmark requires --results and at least one --metric")
 
-    from worldfoundry.evaluation.tasks.execution.orchestration.service import (
+    from worldfoundry.evals.tasks.execution.orchestration.service import (
         ScoreArtifactsIntent,
         ScoreResultsIntent,
         prepare_evaluation,
@@ -92,7 +92,7 @@ def _handle_score(args: argparse.Namespace) -> int:
 
 
 def _handle_reproduce(args: argparse.Namespace) -> int:
-    from worldfoundry.evaluation.tasks.execution.orchestration.service import (
+    from worldfoundry.evals.tasks.execution.orchestration.service import (
         ReproduceIntent,
         prepare_evaluation,
     )
@@ -109,7 +109,7 @@ def _handle_reproduce(args: argparse.Namespace) -> int:
 
 
 def _handle_generate_score(args: argparse.Namespace) -> int:
-    from worldfoundry.evaluation.tasks.execution.orchestration.service import (
+    from worldfoundry.evals.tasks.execution.orchestration.service import (
         GenerateAndScoreIntent,
         prepare_evaluation,
     )
@@ -140,7 +140,7 @@ def _handle_generate_score(args: argparse.Namespace) -> int:
 
 
 def register_evaluation_intent_subparsers(
-    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+    subparsers: argparse._SubParsersAction,
 ) -> None:
     """Register user-oriented scoring and reproduction commands."""
 

@@ -1,7 +1,5 @@
-_base_ = ('mmyolo/configs/yolov8/'
-          'yolov8_x_syncbn_fast_8xb16-500e_coco.py')
-custom_imports = dict(imports=['yolo_world'],
-                      allow_failed_imports=False)
+_base_ = "mmyolo/configs/yolov8/yolov8_x_syncbn_fast_8xb16-500e_coco.py"
+custom_imports = {"imports": ["yolo_world"], "allow_failed_imports": False}
 
 # hyper-parameters
 num_classes = 1203
@@ -15,59 +13,64 @@ neck_num_heads = [4, 8, _base_.last_stage_out_channels // 2 // 32]
 base_lr = 2e-3
 weight_decay = 0.05 / 2
 train_batch_size_per_gpu = 16
-text_model_name = '../pretrained_models/clip-vit-base-patch32-projection'
-text_model_name = 'openai/clip-vit-base-patch32'
+text_model_name = "../pretrained_models/clip-vit-base-patch32-projection"
+text_model_name = "openai/clip-vit-base-patch32"
 
 # scaling model from X to XL
 deepen_factor = 1.0
 widen_factor = 1.5
 
 backbone = _base_.model.backbone
-backbone.update(
-    deepen_factor=deepen_factor,
-    widen_factor=widen_factor
-)
+backbone.update(deepen_factor=deepen_factor, widen_factor=widen_factor)
 
 # model settings
-model = dict(
-    type='YOLOWorldDetector',
-    mm_neck=True,
-    num_train_classes=num_training_classes,
-    num_test_classes=num_classes,
-    data_preprocessor=dict(type='YOLOWDetDataPreprocessor'),
-    backbone=dict(
-        _delete_=True,
-        type='MultiModalYOLOBackbone',
-        image_model=backbone,
-        text_model=dict(
-            type='HuggingCLIPLanguageBackbone',
-            model_name=text_model_name,
-            frozen_modules=['all'])),
-    neck=dict(type='YOLOWorldPAFPN',
-              deepen_factor=deepen_factor,
-              widen_factor=widen_factor,
-              guide_channels=text_channels,
-              embed_channels=neck_embed_channels,
-              num_heads=neck_num_heads,
-              block_cfg=dict(type='MaxSigmoidCSPLayerWithTwoConv')),
-    bbox_head=dict(type='YOLOWorldHead',
-                   head_module=dict(type='YOLOWorldHeadModule',
-                                    widen_factor=widen_factor,
-                                    use_bn_head=True,
-                                    embed_dims=text_channels,
-                                    num_classes=num_training_classes)),
-    train_cfg=dict(assigner=dict(num_classes=num_training_classes)))
+model = {
+    "type": "YOLOWorldDetector",
+    "mm_neck": True,
+    "num_train_classes": num_training_classes,
+    "num_test_classes": num_classes,
+    "data_preprocessor": {"type": "YOLOWDetDataPreprocessor"},
+    "backbone": {
+        "_delete_": True,
+        "type": "MultiModalYOLOBackbone",
+        "image_model": backbone,
+        "text_model": {"type": "HuggingCLIPLanguageBackbone", "model_name": text_model_name, "frozen_modules": ["all"]},
+    },
+    "neck": {
+        "type": "YOLOWorldPAFPN",
+        "deepen_factor": deepen_factor,
+        "widen_factor": widen_factor,
+        "guide_channels": text_channels,
+        "embed_channels": neck_embed_channels,
+        "num_heads": neck_num_heads,
+        "block_cfg": {"type": "MaxSigmoidCSPLayerWithTwoConv"},
+    },
+    "bbox_head": {
+        "type": "YOLOWorldHead",
+        "head_module": {
+            "type": "YOLOWorldHeadModule",
+            "widen_factor": widen_factor,
+            "use_bn_head": True,
+            "embed_dims": text_channels,
+            "num_classes": num_training_classes,
+        },
+    },
+    "train_cfg": {"assigner": {"num_classes": num_training_classes}},
+}
 
 # dataset settings
 text_transform = [
-    dict(type='RandomLoadText',
-         num_neg_samples=(num_classes, num_classes),
-         max_num_samples=num_training_classes,
-         padding_to_max=True,
-         padding_value=''),
-    dict(type='mmdet.PackDetInputs',
-         meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape', 'flip',
-                    'flip_direction', 'texts'))
+    {
+        "type": "RandomLoadText",
+        "num_neg_samples": (num_classes, num_classes),
+        "max_num_samples": num_training_classes,
+        "padding_to_max": True,
+        "padding_value": "",
+    },
+    {
+        "type": "mmdet.PackDetInputs",
+        "meta_keys": ("img_id", "img_path", "ori_shape", "img_shape", "flip", "flip_direction", "texts"),
+    },
 ]
 # train_pipeline = [
 #     *_base_.pre_transform,
@@ -125,23 +128,27 @@ text_transform = [
 
 test_pipeline = [
     *_base_.test_pipeline[:-1],
-    dict(type='LoadText'),
-    dict(type='mmdet.PackDetInputs',
-         meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
-                    'scale_factor', 'pad_param', 'texts'))
+    {"type": "LoadText"},
+    {
+        "type": "mmdet.PackDetInputs",
+        "meta_keys": ("img_id", "img_path", "ori_shape", "img_shape", "scale_factor", "pad_param", "texts"),
+    },
 ]
-coco_val_dataset = dict(
-    _delete_=True,
-    type='MultiModalDataset',
-    dataset=dict(type='YOLOv5LVISV1Dataset',
-                 data_root='data/coco/',
-                 test_mode=True,
-                 ann_file='lvis/lvis_v1_minival_inserted_image_name.json',
-                 data_prefix=dict(img=''),
-                 batch_shapes_cfg=None),
-    class_text_path='data/texts/lvis_v1_class_texts.json',
-    pipeline=test_pipeline)
-val_dataloader = dict(dataset=coco_val_dataset)
+coco_val_dataset = {
+    "_delete_": True,
+    "type": "MultiModalDataset",
+    "dataset": {
+        "type": "YOLOv5LVISV1Dataset",
+        "data_root": "data/coco/",
+        "test_mode": True,
+        "ann_file": "lvis/lvis_v1_minival_inserted_image_name.json",
+        "data_prefix": {"img": ""},
+        "batch_shapes_cfg": None,
+    },
+    "class_text_path": "data/texts/lvis_v1_class_texts.json",
+    "pipeline": test_pipeline,
+}
+val_dataloader = {"dataset": coco_val_dataset}
 test_dataloader = val_dataloader
 
 # val_evaluator = dict(type='mmdet.LVISMetric',
@@ -150,9 +157,10 @@ test_dataloader = val_dataloader
 # test_evaluator = val_evaluator
 
 # training settings
-default_hooks = dict(param_scheduler=dict(max_epochs=max_epochs),
-                     checkpoint=dict(interval=save_epoch_intervals,
-                                     rule='greater'))
+default_hooks = {
+    "param_scheduler": {"max_epochs": max_epochs},
+    "checkpoint": {"interval": save_epoch_intervals, "rule": "greater"},
+}
 # custom_hooks = [
 #     dict(type='EMAHook',
 #          ema_type='ExpMomentumEMA',

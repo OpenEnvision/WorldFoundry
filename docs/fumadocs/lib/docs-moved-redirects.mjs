@@ -1,4 +1,4 @@
-/** Old docs URLs that must bounce to a live page. Keep next.config, serve-static, and DocsPage in sync. */
+/** Old docs URLs that must bounce to a live page; read by next.config (dev) and serve-static. */
 
 export const docsMovedRedirects = [
   ['/docs/overview', '/docs'],

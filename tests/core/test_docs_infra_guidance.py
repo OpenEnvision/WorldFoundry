@@ -15,7 +15,7 @@ def _text(path: Path) -> str:
 def test_environment_and_cli_docs_cover_compile_cache_and_logging() -> None:
     for name in ("environments.mdx", "environments.zh.mdx"):
         text = _text(DOCS_ROOT / "reference" / name)
-        assert "worldfoundry.core.execution.compile_cache" in text
+        assert "worldfoundry.core.platform.compile_cache" in text
         assert "WORLDFOUNDRY_COMPILE_CACHE_DIR" in text
         assert "TORCHINDUCTOR_AUTOTUNE_REMOTE_CACHE" in text
         assert "WORLDFOUNDRY_LOG_CONTEXT" in text

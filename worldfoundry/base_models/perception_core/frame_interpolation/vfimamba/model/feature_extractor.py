@@ -1,13 +1,12 @@
+import math
+from collections.abc import Callable
+
 import torch
 import torch.nn as nn
-import math
-from timm.models.layers import DropPath, to_2tuple, trunc_normal_
-from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
-from einops import rearrange, repeat
-from typing import Optional, Callable
-from functools import partial
-
 import torch.nn.functional as F
+from einops import repeat
+from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
+from timm.models.layers import to_2tuple, trunc_normal_
 
 
 class ChannelAttention(nn.Module):
@@ -18,13 +17,14 @@ class ChannelAttention(nn.Module):
     """
 
     def __init__(self, num_feat, squeeze_factor=16):
-        super(ChannelAttention, self).__init__()
+        super().__init__()
         self.attention = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(num_feat, num_feat // squeeze_factor, 1, padding=0),
             nn.ReLU(inplace=True),
             nn.Conv2d(num_feat // squeeze_factor, num_feat, 1, padding=0),
-            nn.Sigmoid())
+            nn.Sigmoid(),
+        )
 
     def forward(self, x):
         y = self.attention(x)
@@ -32,13 +32,13 @@ class ChannelAttention(nn.Module):
 
 
 class CAB(nn.Module):
-    def __init__(self, num_feat, is_light_sr= False, compress_ratio=3,squeeze_factor=30):
-        super(CAB, self).__init__()
+    def __init__(self, num_feat, is_light_sr=False, compress_ratio=3, squeeze_factor=30):
+        super().__init__()
         self.cab = nn.Sequential(
             nn.Conv2d(num_feat, num_feat // compress_ratio, 3, 1, 1),
             nn.GELU(),
             nn.Conv2d(num_feat // compress_ratio, num_feat, 3, 1, 1),
-            ChannelAttention(num_feat, squeeze_factor)
+            ChannelAttention(num_feat, squeeze_factor),
         )
 
     def forward(self, x):
@@ -47,14 +47,15 @@ class CAB(nn.Module):
 
 def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1):
     return nn.Sequential(
-        nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
-                  padding=padding, dilation=dilation, bias=True),
-        nn.PReLU(out_planes)
+        nn.Conv2d(
+            in_planes, out_planes, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation, bias=True
+        ),
+        nn.PReLU(out_planes),
     )
 
 
 class Mlp(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -74,23 +75,23 @@ class Mlp(nn.Module):
 
 class SS2D(nn.Module):
     def __init__(
-            self,
-            d_model,
-            d_state=16,
-            d_conv=3,
-            expand=2.,
-            dt_rank="auto",
-            dt_min=0.001,
-            dt_max=0.1,
-            dt_init="random",
-            dt_scale=1.0,
-            dt_init_floor=1e-4,
-            dropout=0.,
-            conv_bias=True,
-            bias=False,
-            device=None,
-            dtype=None,
-            **kwargs,
+        self,
+        d_model,
+        d_state=16,
+        d_conv=3,
+        expand=2.0,
+        dt_rank="auto",
+        dt_min=0.001,
+        dt_max=0.1,
+        dt_init="random",
+        dt_scale=1.0,
+        dt_init_floor=1e-4,
+        dropout=0.0,
+        conv_bias=True,
+        bias=False,
+        device=None,
+        dtype=None,
+        **kwargs,
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
@@ -123,14 +124,18 @@ class SS2D(nn.Module):
         del self.x_proj
 
         self.dt_projs = (
-            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
-                         **factory_kwargs),
-            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
-                         **factory_kwargs),
-            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
-                         **factory_kwargs),
-            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
-                         **factory_kwargs),
+            self.dt_init(
+                self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor, **factory_kwargs
+            ),
+            self.dt_init(
+                self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor, **factory_kwargs
+            ),
+            self.dt_init(
+                self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor, **factory_kwargs
+            ),
+            self.dt_init(
+                self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor, **factory_kwargs
+            ),
         )
         self.dt_projs_weight = nn.Parameter(torch.stack([t.weight for t in self.dt_projs], dim=0))
         self.dt_projs_bias = nn.Parameter(torch.stack([t.bias for t in self.dt_projs], dim=0))
@@ -143,14 +148,15 @@ class SS2D(nn.Module):
 
         self.out_norm = nn.LayerNorm(self.d_inner)
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
-        self.dropout = nn.Dropout(dropout) if dropout > 0. else None
+        self.dropout = nn.Dropout(dropout) if dropout > 0.0 else None
 
     @staticmethod
-    def dt_init(dt_rank, d_inner, dt_scale=1.0, dt_init="random", dt_min=0.001, dt_max=0.1, dt_init_floor=1e-4,
-                **factory_kwargs):
+    def dt_init(
+        dt_rank, d_inner, dt_scale=1.0, dt_init="random", dt_min=0.001, dt_max=0.1, dt_init_floor=1e-4, **factory_kwargs
+    ):
         dt_proj = nn.Linear(dt_rank, d_inner, bias=True, **factory_kwargs)
 
-        dt_init_std = dt_rank ** -0.5 * dt_scale
+        dt_init_std = dt_rank**-0.5 * dt_scale
         if dt_init == "constant":
             nn.init.constant_(dt_proj.weight, dt_init_std)
         elif dt_init == "random":
@@ -158,10 +164,8 @@ class SS2D(nn.Module):
         else:
             raise NotImplementedError
 
-
         dt = torch.exp(
-            torch.rand(d_inner, **factory_kwargs) * (math.log(dt_max) - math.log(dt_min))
-            + math.log(dt_min)
+            torch.rand(d_inner, **factory_kwargs) * (math.log(dt_max) - math.log(dt_min)) + math.log(dt_min)
         ).clamp(min=dt_init_floor)
         inv_dt = dt + torch.log(-torch.expm1(-dt))
         with torch.no_grad():
@@ -197,12 +201,12 @@ class SS2D(nn.Module):
         D = nn.Parameter(D)
         D._no_weight_decay = True
         return D
-    
-    def merge_x(self, x): 
+
+    def merge_x(self, x):
         B, C, H, W = x.shape
         L = 2 * H * W
-        x = x.view(B, -1, L//2).transpose(1, 2)
-        x = torch.cat([x[:B//2], x[B//2:]], dim=-1).reshape(B//2, L, C)
+        x = x.view(B, -1, L // 2).transpose(1, 2)
+        x = torch.cat([x[: B // 2], x[B // 2 :]], dim=-1).reshape(B // 2, L, C)
         return x.transpose(1, 2).contiguous()
 
     def forward_core(self, x: torch.Tensor):
@@ -210,7 +214,9 @@ class SS2D(nn.Module):
         L = 2 * H * W
         K = 4
         B = B // 2
-        x_hwwh = torch.stack([self.merge_x(x), self.merge_x(torch.transpose(x, dim0=2, dim1=3).contiguous())], dim=1).view(B, 2, -1, L)
+        x_hwwh = torch.stack(
+            [self.merge_x(x), self.merge_x(torch.transpose(x, dim0=2, dim1=3).contiguous())], dim=1
+        ).view(B, 2, -1, L)
         xs = torch.cat([x_hwwh, torch.flip(x_hwwh, dims=[-1])], dim=1)
         x_dbl = torch.einsum("b k d l, k c d -> b k c l", xs.view(B, K, -1, L), self.x_proj_weight)
         dts, Bs, Cs = torch.split(x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=2)
@@ -223,8 +229,13 @@ class SS2D(nn.Module):
         As = -torch.exp(self.A_logs.float()).view(-1, self.d_state)
         dt_projs_bias = self.dt_projs_bias.float().view(-1)
         out_y = self.selective_scan(
-            xs, dts,
-            As, Bs, Cs, Ds, z=None,
+            xs,
+            dts,
+            As,
+            Bs,
+            Cs,
+            Ds,
+            z=None,
             delta_bias=dt_projs_bias,
             delta_softplus=True,
             return_last_state=False,
@@ -249,9 +260,8 @@ class SS2D(nn.Module):
         assert y1.dtype == torch.float32
         y = y1 + y2 + y3 + y4
         # print(y.shape)
-        y = torch.transpose(y, dim0=1, dim1=2).contiguous().view(B//2, H*W, 2, int(self.expand*C))
-        y = torch.cat([y[:, :, 0], y[:, :, 1]], 0).view(B, H, W, int(self.expand*C))#.view(B//2, 2*H, 2*W, -1)
-        
+        y = torch.transpose(y, dim0=1, dim1=2).contiguous().view(B // 2, H * W, 2, int(self.expand * C))
+        y = torch.cat([y[:, :, 0], y[:, :, 1]], 0).view(B, H, W, int(self.expand * C))  # .view(B//2, 2*H, 2*W, -1)
 
         y = self.out_norm(y)
         y = y * F.silu(z)
@@ -264,53 +274,52 @@ class SS2D(nn.Module):
 
 class VSSBlock(nn.Module):
     def __init__(
-            self,
-            hidden_dim: int = 0,
-            drop_path: float = 0,
-            norm_layer: Callable[..., torch.nn.Module] = nn.LayerNorm,
-            attn_drop_rate: float = 0,
-            d_state: int = 16,
-            mlp_ratio: float = 2.,
-            **kwargs,
+        self,
+        hidden_dim: int = 0,
+        drop_path: float = 0,
+        norm_layer: Callable[..., torch.nn.Module] = nn.LayerNorm,
+        attn_drop_rate: float = 0,
+        d_state: int = 16,
+        mlp_ratio: float = 2.0,
+        **kwargs,
     ):
         super().__init__()
         self.ln_1 = norm_layer(hidden_dim)
-        self.self_attention = SS2D(d_model=hidden_dim, d_state=d_state,expand=mlp_ratio,dropout=attn_drop_rate, **kwargs)
-        self.skip_scale= nn.Parameter(torch.ones(hidden_dim))
+        self.self_attention = SS2D(
+            d_model=hidden_dim, d_state=d_state, expand=mlp_ratio, dropout=attn_drop_rate, **kwargs
+        )
+        self.skip_scale = nn.Parameter(torch.ones(hidden_dim))
         self.conv_blk = CAB(hidden_dim)
         self.ln_2 = nn.LayerNorm(hidden_dim)
         self.skip_scale2 = nn.Parameter(torch.ones(hidden_dim))
-
 
     def forward(self, input):
         input = input.permute(0, 2, 3, 1).contiguous()
         x = self.ln_1(input)
 
         x = input * self.skip_scale + self.self_attention(x)
-        x = x * self.skip_scale2 + self.conv_blk(self.ln_2(x).permute(0, 3, 1, 2).contiguous()).permute(0, 2, 3, 1).contiguous()
+        x = (
+            x * self.skip_scale2
+            + self.conv_blk(self.ln_2(x).permute(0, 3, 1, 2).contiguous()).permute(0, 2, 3, 1).contiguous()
+        )
 
         return x.permute(0, 3, 1, 2).contiguous()
 
 
 class BiMambaBlock(nn.Module):
-    def __init__(self,
-                 dim,
-                 depth,
-                 norm_layer=nn.LayerNorm,
-                 downsample=None,
-                 use_checkpoint=False):
-
+    def __init__(self, dim, depth, norm_layer=nn.LayerNorm, downsample=None, use_checkpoint=False):
         super().__init__()
         self.dim = dim
         self.depth = depth
         self.blocks = nn.ModuleList()
         for _ in range(depth):
-            self.blocks.append(VSSBlock(
-                hidden_dim=dim,
-                norm_layer=nn.LayerNorm,
-                d_state=16,
-            ))
-
+            self.blocks.append(
+                VSSBlock(
+                    hidden_dim=dim,
+                    norm_layer=nn.LayerNorm,
+                    d_state=16,
+                )
+            )
 
     def forward(self, x):
         for blk in self.blocks:
@@ -324,15 +333,16 @@ class OverlapPatchEmbed(nn.Module):
         patch_size = to_2tuple(patch_size)
 
         self.patch_size = patch_size
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride,
-                              padding=(patch_size[0] // 2, patch_size[1] // 2))
+        self.proj = nn.Conv2d(
+            in_chans, embed_dim, kernel_size=patch_size, stride=stride, padding=(patch_size[0] // 2, patch_size[1] // 2)
+        )
         self.norm = nn.LayerNorm(in_chans)
 
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
@@ -354,17 +364,19 @@ class OverlapPatchEmbed(nn.Module):
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_dim, out_dim, depths=2,act_layer=nn.PReLU):
+    def __init__(self, in_dim, out_dim, depths=2, act_layer=nn.PReLU):
         super().__init__()
         layers = []
         for i in range(depths):
             if i == 0:
-                layers.append(nn.Conv2d(in_dim, out_dim, 3,1,1))
+                layers.append(nn.Conv2d(in_dim, out_dim, 3, 1, 1))
             else:
-                layers.append(nn.Conv2d(out_dim, out_dim, 3,1,1))
-            layers.extend([
-                act_layer(out_dim),
-            ])
+                layers.append(nn.Conv2d(out_dim, out_dim, 3, 1, 1))
+            layers.extend(
+                [
+                    act_layer(out_dim),
+                ]
+            )
         self.conv = nn.Sequential(*layers)
 
     def _init_weights(self, m):
@@ -381,16 +393,18 @@ class ConvBlock(nn.Module):
 
 
 class MambaFeature(nn.Module):
-    def __init__(self,
-                 img_size=64,
-                 patch_size=1,
-                 in_chans=3,
-                 embed_dims=[16, 32, 64, 128, 256],
-                 depths=(2, 2, 2, 2, 2),
-                 conv_stages=2,
-                 norm_layer=nn.LayerNorm,
-                 **kwargs):
-        super(MambaFeature, self).__init__()
+    def __init__(
+        self,
+        img_size=64,
+        patch_size=1,
+        in_chans=3,
+        embed_dims=[16, 32, 64, 128, 256],  # noqa: B006 - Keeps the upstream default object and signature.
+        depths=(2, 2, 2, 2, 2),
+        conv_stages=2,
+        norm_layer=nn.LayerNorm,
+        **kwargs,
+    ):
+        super().__init__()
 
         self.num_stages = len(embed_dims)
 
@@ -398,20 +412,18 @@ class MambaFeature(nn.Module):
 
         for i in range(self.num_stages):
             if i == 0:
-                block = ConvBlock(in_chans,embed_dims[i],depths[i])
+                block = ConvBlock(in_chans, embed_dims[i], depths[i])
             else:
                 if i < self.conv_stages:
                     patch_embed = nn.Sequential(
-                        nn.Conv2d(embed_dims[i-1], embed_dims[i], 3,2,1),
-                        nn.PReLU(embed_dims[i])
+                        nn.Conv2d(embed_dims[i - 1], embed_dims[i], 3, 2, 1), nn.PReLU(embed_dims[i])
                     )
-                    block = ConvBlock(embed_dims[i],embed_dims[i],depths[i])
+                    block = ConvBlock(embed_dims[i], embed_dims[i], depths[i])
                 else:
                     block = BiMambaBlock(embed_dims[i], depths[i])
-                    patch_embed = OverlapPatchEmbed(patch_size=3,
-                                                    stride=2,
-                                                    in_chans=embed_dims[i - 1],
-                                                    embed_dim=embed_dims[i])
+                    patch_embed = OverlapPatchEmbed(
+                        patch_size=3, stride=2, in_chans=embed_dims[i - 1], embed_dim=embed_dims[i]
+                    )
                 setattr(self, f"patch_embed{i}", patch_embed)
             setattr(self, f"block{i}", block)
 
@@ -419,7 +431,7 @@ class MambaFeature(nn.Module):
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
@@ -433,7 +445,7 @@ class MambaFeature(nn.Module):
                 m.bias.data.zero_()
 
     def forward(self, x1, x2):
-        B = x1.shape[0] 
+        _B = x1.shape[0]
         x = torch.cat([x1, x2], 0)
 
         features = []
@@ -444,7 +456,7 @@ class MambaFeature(nn.Module):
 
             if i > 0:
                 x = patch_embed(x)
-            
+
             x = block(x)
 
             features.append(x)

@@ -12,8 +12,6 @@ causal attention, or linear-attention processors.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
 import torch
 from einops import rearrange
 from torch import nn
@@ -37,7 +35,7 @@ class WanControlNet(WanModel):
         text_dim: int,
         freq_dim: int,
         eps: float,
-        patch_size: Tuple[int, int, int],
+        patch_size: tuple[int, int, int],
         num_heads: int,
         num_layers: int,
         has_image_input: bool,
@@ -81,7 +79,7 @@ class WanControlNet(WanModel):
         self.rgb_inject_blocks = rgb_inject_blocks
         self.depth_inject_blocks = depth_inject_blocks
         if self.control_adapter is not None:
-            print(f"Adding camera into input using addition.")
+            print("Adding camera into input using addition.")
 
         self.control_block_index = control_block_index
         num_control_block = len(control_block_index)
@@ -91,9 +89,7 @@ class WanControlNet(WanModel):
         num_depth_inject_blocks = len(depth_inject_blocks)
         self.num_depth_inject_blocks = num_depth_inject_blocks
         if num_control_block >= 0:
-            print(
-                f"Using {num_control_block} control blocks, for layers {self.control_block_index}"
-            )
+            print(f"Using {num_control_block} control blocks, for layers {self.control_block_index}")
             # Control blocks
             self.control_blocks = nn.ModuleList(
                 [
@@ -111,43 +107,25 @@ class WanControlNet(WanModel):
             if use_gate_3d_linear:
                 if update:
                     self.control_zero_inits = nn.ModuleList(
-                        [
-                            ResidualFusion3D_Stack(C=dim)
-                            for _ in range(num_depth_inject_blocks)
-                        ]
+                        [ResidualFusion3D_Stack(C=dim) for _ in range(num_depth_inject_blocks)]
                     )
                     self.rgb_zero_inits = nn.ModuleList(
-                        [
-                            ResidualFusion3D_Stack(C=dim)
-                            for _ in range(num_rgb_inject_blocks)
-                        ]
+                        [ResidualFusion3D_Stack(C=dim) for _ in range(num_rgb_inject_blocks)]
                     )
                 else:
                     self.control_zero_inits = nn.ModuleList(
-                        [
-                            ResidualFusion3D_Gating(C=dim)
-                            for _ in range(num_depth_inject_blocks)
-                        ]
+                        [ResidualFusion3D_Gating(C=dim) for _ in range(num_depth_inject_blocks)]
                     )
                     self.rgb_zero_inits = nn.ModuleList(
-                        [
-                            ResidualFusion3D_Gating(C=dim)
-                            for _ in range(num_rgb_inject_blocks)
-                        ]
+                        [ResidualFusion3D_Gating(C=dim) for _ in range(num_rgb_inject_blocks)]
                     )
 
             else:
                 self.control_zero_inits = nn.ModuleList(
-                    [
-                        nn.Linear(dim, dim, bias=False)
-                        for _ in range(num_depth_inject_blocks)
-                    ]
+                    [nn.Linear(dim, dim, bias=False) for _ in range(num_depth_inject_blocks)]
                 )
                 self.rgb_zero_inits = nn.ModuleList(
-                    [
-                        nn.Linear(dim, dim, bias=False)
-                        for _ in range(num_rgb_inject_blocks)
-                    ]
+                    [nn.Linear(dim, dim, bias=False) for _ in range(num_rgb_inject_blocks)]
                 )
 
                 for idx in range(num_depth_inject_blocks):
@@ -160,9 +138,7 @@ class WanControlNet(WanModel):
                         self.rgb_zero_inits[idx].bias.data.zero_()
 
         else:
-            print(
-                f"No control blocks used, control_block_index is empty: {control_block_index}"
-            )
+            print(f"No control blocks used, control_block_index is empty: {control_block_index}")
             self.control_blocks = None
 
     def copy_weights_from_main_branch(self):
@@ -170,15 +146,11 @@ class WanControlNet(WanModel):
         # print(f"Start copying weights from main branch to control blocks.")
         if self.control_blocks is None:
             return
-        miss_keys = []
-        unexpected_keys = []
         for idx, block in enumerate(self.blocks):
             if idx in self.control_block_index:
                 c_block_id = self.control_block_index.index(idx)
                 # print(f"copy main block {idx} to control block {c_block_id}")
-                state = self.control_blocks[c_block_id].load_state_dict(
-                    block.state_dict(), strict=True
-                )
+                _state = self.control_blocks[c_block_id].load_state_dict(block.state_dict(), strict=True)
         return
 
     # def zero_init_linear(self):
@@ -189,9 +161,7 @@ class WanControlNet(WanModel):
     #             if self.control_zero_inits[idx].bias is not None:
     #                 self.control_zero_inits[idx].bias.data.zero_()
 
-    def patchify(
-        self, x: torch.Tensor, control_camera_latents_input: torch.Tensor = None
-    ):
+    def patchify(self, x: torch.Tensor, control_camera_latents_input: torch.Tensor = None):
         """Use shared Wan camera-adapter projection and residual arithmetic."""
         return super().patchify(x, control_camera_latents_input)
 
@@ -212,12 +182,12 @@ class WanControlNet(WanModel):
         x: torch.Tensor,
         timestep: torch.Tensor,
         context: torch.Tensor,
-        clip_feature: Optional[torch.Tensor] = None,
-        control_video: Optional[torch.Tensor] = None,
-        y: Optional[torch.Tensor] = None,
+        clip_feature: torch.Tensor | None = None,
+        control_video: torch.Tensor | None = None,
+        y: torch.Tensor | None = None,
         use_gradient_checkpointing: bool = False,
         use_gradient_checkpointing_offload: bool = False,
-        camera_pose_embedding: Optional[torch.Tensor] = None,
+        camera_pose_embedding: torch.Tensor | None = None,
         **kwargs,
     ):
         """Denoise ``x`` while running the control video through fused inject layers."""
@@ -281,9 +251,7 @@ class WanControlNet(WanModel):
                             use_reentrant=False,
                         )
                 else:
-                    control_latents = self.control_blocks[idx](
-                        control_latents, context, t_mod, freqs
-                    )
+                    control_latents = self.control_blocks[idx](control_latents, context, t_mod, freqs)
 
                 x = x + self.control_zero_inits[idx](control_video)
 
@@ -310,9 +278,7 @@ class WanControlNet(WanModel):
                         use_reentrant=False,
                     )
             else:
-                x = block(
-                    x, context, t_mod, freqs, camera_pose_embedding=camera_pose_embedding
-                )
+                x = block(x, context, t_mod, freqs, camera_pose_embedding=camera_pose_embedding)
 
         x = self.head(x, t)
         x = self.unpatchify(x, (f, h, w))

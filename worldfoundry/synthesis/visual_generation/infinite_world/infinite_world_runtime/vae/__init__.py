@@ -1,14 +1,14 @@
-from einops import rearrange
 import torch
+from einops import rearrange
 from torch import nn
 
-# Standalone: only Wan VAE (used by data/models/runtime/configs/infinite_world.yaml)
+# Standalone: only Wan VAE (used by data/models/runtime/configs/infinite_world/inference.yaml)
 from .vae import WanVAE
 
 
 class WanVAEModelWrapper(nn.Module):
     def __init__(self, vae_pth, dtype=torch.float, device="cuda", patch_size=(4, 8, 8)):
-        super(WanVAEModelWrapper, self).__init__()
+        super().__init__()
         self.module = WanVAE(
             vae_pth=vae_pth,
             dtype=dtype,

@@ -6,11 +6,17 @@ import jax.numpy as jnp
 from einops import rearrange
 from flax import nnx
 
-from src.models.kv_cache import KVCache, KVCacheDict
-from src.models.transformer import Conv3d, MLPProj
-from src.models.transformer import WanI2VCrossAttention as WanI2VCrossAttention
-from src.models.transformer import WanLayerNorm, WanRMSNorm
-from src.models.transformer_utils import (
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.models.kv_cache import KVCache, KVCacheDict
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.models.transformer import (
+    Conv3d,
+    MLPProj,
+    WanLayerNorm,
+    WanRMSNorm,
+)
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.models.transformer import (
+    WanI2VCrossAttention as WanI2VCrossAttention,
+)
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.models.transformer_utils import (
     rope_apply,
     rope_params,
     sinusoidal_embedding_1d,
@@ -35,7 +41,7 @@ class SelfAttention(nnx.Module):
         sink_size=0,
         qk_norm=True,
         eps=1e-6,
-        rngs=nnx.Rngs(0),
+        rngs=nnx.Rngs(0),  # noqa: B008 - Default evaluated once at definition, as upstream.
         platform="tpu",
     ):
         super().__init__()
@@ -49,22 +55,12 @@ class SelfAttention(nnx.Module):
         self.qk_norm = qk_norm
         self.eps = eps
         self.platform = platform
-        self.max_attention_size = (
-            15 * 1 * 880 if local_attn_size == -1 else local_attn_size * 880
-        )
+        self.max_attention_size = 15 * 1 * 880 if local_attn_size == -1 else local_attn_size * 880
 
-        self.q = nnx.Linear(
-            dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-        )
-        self.k = nnx.Linear(
-            dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-        )
-        self.v = nnx.Linear(
-            dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-        )
-        self.o = nnx.Linear(
-            dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-        )
+        self.q = nnx.Linear(dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16)
+        self.k = nnx.Linear(dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16)
+        self.v = nnx.Linear(dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16)
+        self.o = nnx.Linear(dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16)
 
         self.norm_q = WanRMSNorm(dim, eps) if qk_norm else lambda x: x
         self.norm_k = WanRMSNorm(dim, eps) if qk_norm else lambda x: x
@@ -72,12 +68,12 @@ class SelfAttention(nnx.Module):
     def __call__(
         self,
         x_BTD,
-        _seq_lens, 
-        grid_sizes, 
+        _seq_lens,
+        grid_sizes,
         freqs,
         block_mask=None,
         kv_cache=None,
-        current_start=0,  
+        current_start=0,
         mesh=None,
         bidirectional=False,
         teacher_forcing=False,
@@ -94,36 +90,24 @@ class SelfAttention(nnx.Module):
             current_start: Current position in sequence
             cache_start: Cache start position
         """
-        q_BTHD = rearrange(
-            self.norm_q(self.q(x_BTD)), "b s (n d) -> b s n d", n=self.num_heads
-        )
-        k_BTHD = rearrange(
-            self.norm_k(self.k(x_BTD)), "b s (n d) -> b s n d", n=self.num_heads
-        )
+        q_BTHD = rearrange(self.norm_q(self.q(x_BTD)), "b s (n d) -> b s n d", n=self.num_heads)
+        k_BTHD = rearrange(self.norm_k(self.k(x_BTD)), "b s (n d) -> b s n d", n=self.num_heads)
         v_BTHD = rearrange(self.v(x_BTD), "b s (n d) -> b s n d", n=self.num_heads)
 
         if bidirectional:
             if teacher_forcing or kv_cache is not None:
-                raise ValueError(
-                    "bidirectional=True is incompatible with teacher_forcing=True or kv_cache!=None"
-                )
+                raise ValueError("bidirectional=True is incompatible with teacher_forcing=True or kv_cache!=None")
 
-            roped_query_BTHD = rope_apply(q_BTHD, grid_sizes, freqs).astype(
-                v_BTHD.dtype
-            )
+            roped_query_BTHD = rope_apply(q_BTHD, grid_sizes, freqs).astype(v_BTHD.dtype)
             roped_key_BTHD = rope_apply(k_BTHD, grid_sizes, freqs).astype(v_BTHD.dtype)
-            x_BTHD = jax.nn.dot_product_attention(
-                roped_query_BTHD, roped_key_BTHD, v_BTHD, mask=block_mask
-            )
+            x_BTHD = jax.nn.dot_product_attention(roped_query_BTHD, roped_key_BTHD, v_BTHD, mask=block_mask)
             new_kv_cache = None
 
         elif teacher_forcing:
             # we apply rope to the keys and queries in the same way.
             new_kv_cache = None
             grid_sizes = (grid_sizes[0] // 2, grid_sizes[1], grid_sizes[2])
-            s_tf = (
-                grid_sizes[1] * grid_sizes[2]
-            )  # spatial size per frame (single player)
+            _s_tf = grid_sizes[1] * grid_sizes[2]  # spatial size per frame (single player)
             roped_query_BTHD = rearrange(
                 rope_apply(
                     rearrange(q_BTHD, "b (r s) n d -> (b r) s n d", r=2),
@@ -144,28 +128,18 @@ class SelfAttention(nnx.Module):
                 "(b r) s n d -> b (r s) n d",
                 r=2,
             )
-            x_BTHD = jax.nn.dot_product_attention(
-                roped_query_BTHD, roped_key_BTHD, v_BTHD, mask=block_mask
-            )
+            x_BTHD = jax.nn.dot_product_attention(roped_query_BTHD, roped_key_BTHD, v_BTHD, mask=block_mask)
 
         elif kv_cache is None:
-            roped_query_BTHD = rope_apply(q_BTHD, grid_sizes, freqs).astype(
-                v_BTHD.dtype
-            )
+            roped_query_BTHD = rope_apply(q_BTHD, grid_sizes, freqs).astype(v_BTHD.dtype)
             roped_key_BTHD = rope_apply(k_BTHD, grid_sizes, freqs).astype(v_BTHD.dtype)
             new_kv_cache = None
-            s0 = grid_sizes[1] * grid_sizes[2]  # spatial size per frame (single player)
-            x_BTHD = jax.nn.dot_product_attention(
-                roped_query_BTHD, roped_key_BTHD, v_BTHD, mask=block_mask
-            )
+            _s0 = grid_sizes[1] * grid_sizes[2]  # spatial size per frame (single player)
+            x_BTHD = jax.nn.dot_product_attention(roped_query_BTHD, roped_key_BTHD, v_BTHD, mask=block_mask)
 
         else:
-            roped_query_BTHD = rope_apply(
-                q_BTHD, grid_sizes, freqs, start_frame=current_start
-            ).astype(v_BTHD.dtype)
-            roped_key_BTHD = rope_apply(
-                k_BTHD, grid_sizes, freqs, start_frame=current_start
-            ).astype(v_BTHD.dtype)
+            roped_query_BTHD = rope_apply(q_BTHD, grid_sizes, freqs, start_frame=current_start).astype(v_BTHD.dtype)
+            roped_key_BTHD = rope_apply(k_BTHD, grid_sizes, freqs, start_frame=current_start).astype(v_BTHD.dtype)
             new_kv_cache = kv_cache.update(roped_key_BTHD, v_BTHD)
             kv_len = new_kv_cache.k.shape[1]
 
@@ -193,10 +167,10 @@ class SolarisSPBlock(nnx.Module):
         sink_size=0,
         qk_norm=True,
         cross_attn_norm=False,
-        action_config={},
+        action_config={},  # noqa: B006 - Keeps the upstream default object and signature.
         action_module=False,
         eps=1e-6,
-        rngs=nnx.Rngs(0),
+        rngs=nnx.Rngs(0),  # noqa: B008 - Default evaluated once at definition, as upstream.
         platform="tpu",
     ):
         super().__init__()
@@ -211,9 +185,7 @@ class SolarisSPBlock(nnx.Module):
 
         # Action module if configured
         if len(action_config) != 0 and action_module:
-            self.action_model = ActionModule(
-                **action_config, local_attn_size=self.local_attn_size, rngs=rngs
-            )
+            self.action_model = ActionModule(**action_config, local_attn_size=self.local_attn_size, rngs=rngs)
         else:
             self.action_model = None
 
@@ -228,28 +200,15 @@ class SolarisSPBlock(nnx.Module):
             rngs=rngs,
             platform=platform,
         )
-        self.norm3 = (
-            WanLayerNorm(dim, eps, elementwise_affine=True, rngs=rngs)
-            if cross_attn_norm
-            else lambda x: x
-        )
-        self.cross_attn = WanI2VCrossAttention(
-            dim, num_heads, (-1, -1), qk_norm, eps, rngs=rngs
-        )
+        self.norm3 = WanLayerNorm(dim, eps, elementwise_affine=True, rngs=rngs) if cross_attn_norm else lambda x: x
+        self.cross_attn = WanI2VCrossAttention(dim, num_heads, (-1, -1), qk_norm, eps, rngs=rngs)
         self.norm2 = WanLayerNorm(dim, eps, rngs=rngs)
         self.ffn = nnx.Sequential(
-            nnx.Linear(
-                dim, ffn_dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-            ),
+            nnx.Linear(dim, ffn_dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16),
             nnx.gelu,
-            nnx.Linear(
-                ffn_dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-            ),
+            nnx.Linear(ffn_dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16),
         )
-        self.modulation = nnx.Param(
-            jax.random.normal(rngs.params(), (1, 6, dim)).astype(jnp.float32)
-            / math.sqrt(dim)
-        )
+        self.modulation = nnx.Param(jax.random.normal(rngs.params(), (1, 6, dim)).astype(jnp.float32) / math.sqrt(dim))
 
     def __call__(
         self,
@@ -270,7 +229,7 @@ class SolarisSPBlock(nnx.Module):
         kv_cache_keyboard=None,
         crossattn_cache=None,
         current_start=0,
-        use_action_module=jnp.array([True]),
+        use_action_module=jnp.array([True]),  # noqa: B008 - Default evaluated once at definition, as upstream.
         mesh=None,
         teacher_forcing=False,
         bidirectional=False,
@@ -279,8 +238,12 @@ class SolarisSPBlock(nnx.Module):
         assert e.ndim == 4
 
         num_frames = e.shape[1]
-        pack = lambda x: rearrange(x, "b f p c -> b (f p) c", f=num_frames)
-        unpack = lambda x: rearrange(x, "b (f p) c -> b f p c", f=num_frames)
+
+        def pack(x):
+            return rearrange(x, "b f p c -> b (f p) c", f=num_frames)
+
+        def unpack(x):
+            return rearrange(x, "b (f p) c -> b f p c", f=num_frames)
 
         # for the duration of the function, keep x in unpacked format (i.e. separate the frames from the time)
         # only convert to packed format for self-attention.
@@ -305,11 +268,7 @@ class SolarisSPBlock(nnx.Module):
         y = unpack(y_packed)
         x = x + y * e[2]
 
-        x = x + unpack(
-            self.cross_attn(
-                pack(self.norm3(x.astype(jnp.float32)).astype(x.dtype)), context
-            )
-        )
+        x = x + unpack(self.cross_attn(pack(self.norm3(x.astype(jnp.float32)).astype(x.dtype)), context))
 
         if kv_cache_mouse is not None:
 
@@ -365,19 +324,13 @@ class SolarisSPBlock(nnx.Module):
             new_kv_cache_mouse = None
             new_kv_cache_keyboard = None
 
-        y = (
-            self.ffn(
-                self.norm2(x.astype(jnp.float32)).astype(x.dtype) * (1 + e[4]) + e[3]
-            )
-            * e[5]
-        )
+        y = self.ffn(self.norm2(x.astype(jnp.float32)).astype(x.dtype) * (1 + e[4]) + e[3]) * e[5]
         x = x + y
 
         return pack(x), new_kv_cache, new_kv_cache_mouse, new_kv_cache_keyboard
 
 
 class OutputHead(nnx.Module):
-
     def __init__(
         self,
         dim,
@@ -401,9 +354,7 @@ class OutputHead(nnx.Module):
             dtype=jnp.bfloat16,
         )
         key = jax.random.PRNGKey(42)
-        self.modulation = nnx.Param(
-            jax.random.normal(key, (1, 2, dim)).astype(jnp.float32) / math.sqrt(dim)
-        )
+        self.modulation = nnx.Param(jax.random.normal(key, (1, 2, dim)).astype(jnp.float32) / math.sqrt(dim))
 
     def __call__(self, x, e):
         num_frames = e.shape[1]
@@ -436,10 +387,10 @@ class SolarisSPModel(nnx.Module):
         sink_size=0,
         qk_norm=True,
         cross_attn_norm=True,
-        action_config={},
+        action_config={},  # noqa: B006 - Keeps the upstream default object and signature.
         inject_sample_info=False,
         eps=1e-6,
-        rngs=nnx.Rngs(0),
+        rngs=nnx.Rngs(0),  # noqa: B008 - Default evaluated once at definition, as upstream.
         platform="tpu",
     ):
         super().__init__()
@@ -466,25 +417,17 @@ class SolarisSPModel(nnx.Module):
         self.platform = platform
 
         # Patch embedding /
-        self.patch_embedding = Conv3d(
-            in_dim, dim, kernel_size=patch_size, strides=patch_size, rngs=rngs
-        )
+        self.patch_embedding = Conv3d(in_dim, dim, kernel_size=patch_size, strides=patch_size, rngs=rngs)
 
         # Time embeddings /
         self.time_embedding = nnx.Sequential(
-            nnx.Linear(
-                freq_dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-            ),
+            nnx.Linear(freq_dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16),
             nnx.silu,
-            nnx.Linear(
-                dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-            ),
+            nnx.Linear(dim, dim, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16),
         )
         self.time_projection = nnx.Sequential(
             nnx.silu,
-            nnx.Linear(
-                dim, dim * 6, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16
-            ),
+            nnx.Linear(dim, dim * 6, rngs=rngs, param_dtype=jnp.float32, dtype=jnp.bfloat16),
         )
 
         # Transformer blocks
@@ -517,9 +460,7 @@ class SolarisSPModel(nnx.Module):
         # Image embedding for i2v mode
         self.img_emb = MLPProj(1280, dim)
         self.num_frame_per_block = 1
-        assert (
-            self.num_frame_per_block == 1
-        ), "num_frame_per_block other than 1 is not supported!"
+        assert self.num_frame_per_block == 1, "num_frame_per_block other than 1 is not supported!"
 
     @staticmethod
     def get_causal_attn_mask(
@@ -533,13 +474,8 @@ class SolarisSPModel(nnx.Module):
         # currently we decode 1 frame at a time.
         i = jnp.arange(num_q_blocks)[:, None]  # (num_q_blocks, 1)
         j = jnp.arange(num_k_blocks)[None, :]  # (1, num_k_blocks)
-        if sliding_block_size == -1:
-            block_mask = j <= i
-        else:
-            block_mask = (j >= i - sliding_block_size + 1) & (j <= i)
-        block_mask = einops.repeat(
-            block_mask, "q k -> (q p1) (k p2)", p1=q_block_size, p2=k_block_size
-        )
+        block_mask = j <= i if sliding_block_size == -1 else (j >= i - sliding_block_size + 1) & (j <= i)
+        block_mask = einops.repeat(block_mask, "q k -> (q p1) (k p2)", p1=q_block_size, p2=k_block_size)
         return block_mask
 
     # get a causal attention mask that does not have diagonals
@@ -555,13 +491,8 @@ class SolarisSPModel(nnx.Module):
         # currently we decode 1 frame at a time.
         i = jnp.arange(num_q_blocks)[:, None]  # (num_q_blocks, 1)
         j = jnp.arange(num_k_blocks)[None, :]  # (1, num_k_blocks)
-        if sliding_block_size == -1:
-            block_mask = j < i
-        else:
-            block_mask = (j >= i - sliding_block_size + 1) & (j < i)
-        block_mask = einops.repeat(
-            block_mask, "q k -> (q p1) (k p2)", p1=q_block_size, p2=k_block_size
-        )
+        block_mask = j < i if sliding_block_size == -1 else (j >= i - sliding_block_size + 1) & (j < i)
+        block_mask = einops.repeat(block_mask, "q k -> (q p1) (k p2)", p1=q_block_size, p2=k_block_size)
         return block_mask
 
     @staticmethod
@@ -587,12 +518,8 @@ class SolarisSPModel(nnx.Module):
         )
         clean_unclean_block_mask = jnp.zeros_like(unclean_clean_block_mask)
 
-        top_rows = jnp.concatenate(
-            [clean_clean_block_mask, clean_unclean_block_mask], axis=1
-        )
-        bottom_rows = jnp.concatenate(
-            [unclean_clean_block_mask, unclean_unclean_block_mask], axis=1
-        )
+        top_rows = jnp.concatenate([clean_clean_block_mask, clean_unclean_block_mask], axis=1)
+        bottom_rows = jnp.concatenate([unclean_clean_block_mask, unclean_unclean_block_mask], axis=1)
         block_mask = jnp.concatenate([top_rows, bottom_rows], axis=0)
         return block_mask
 
@@ -621,12 +548,8 @@ class SolarisSPModel(nnx.Module):
         grid_sizes = x_BFHWC.shape[1:4]
         x_BFC = rearrange(x_BFHWC, "b f h w c -> b (f h w) c")
         seq_lens = jnp.array([x_BFC.shape[1]], dtype=jnp.int64)
-        e_BD = self.time_embedding(
-            sinusoidal_embedding_1d(self.freq_dim, t_BT.flatten()).astype(x_BFC.dtype)
-        )
-        e0 = rearrange(
-            self.time_projection(e_BD), "(b f) (r d) -> b f r d", b=t_BT.shape[0], r=6
-        )
+        e_BD = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, t_BT.flatten()).astype(x_BFC.dtype))
+        e0 = rearrange(self.time_projection(e_BD), "(b f) (r d) -> b f r d", b=t_BT.shape[0], r=6)
         context = self.img_emb(visual_context)
 
         n_frames = grid_sizes[0]
@@ -738,10 +661,7 @@ class SolarisSPModel(nnx.Module):
                 bidirectional=bidirectional,
             )
 
-        if matrix_game_forward:
-            action_module_zipper = jnp.array([True] * 15 + [False] * 15)
-        else:
-            action_module_zipper = jnp.array([True] * 30)
+        action_module_zipper = jnp.array([True] * 15 + [False] * 15) if matrix_game_forward else jnp.array([True] * 30)
 
         if kv_cache is not None:
 
@@ -758,9 +678,7 @@ class SolarisSPModel(nnx.Module):
                 action_module,
                 x,
             ):
-                x, kv_cache, kv_cache_mouse, kv_cache_keyboard = nnx.remat(
-                    apply_block_fn, static_argnums=(4, 12)
-                )(
+                x, kv_cache, kv_cache_mouse, kv_cache_keyboard = nnx.remat(apply_block_fn, static_argnums=(4, 12))(
                     model,  # 0
                     x,  # 1
                     e0,  # 2
@@ -819,9 +737,7 @@ class SolarisSPModel(nnx.Module):
             x_BFC = layers(self.blocks, action_module_zipper, x_BFC)
             new_kv_cache, new_kv_cache_mouse, new_kv_cache_keyboard = None, None, None
 
-        x_BFPC = self.head(
-            x_BFC, rearrange(e_BD, "(b f) (r d) -> b f r d", b=t_BT.shape[0], r=1)
-        )
+        x_BFPC = self.head(x_BFC, rearrange(e_BD, "(b f) (r d) -> b f r d", b=t_BT.shape[0], r=1))
         x = self.unpatchify(x_BFPC, grid_sizes)
         return x, new_kv_cache, new_kv_cache_mouse, new_kv_cache_keyboard
 

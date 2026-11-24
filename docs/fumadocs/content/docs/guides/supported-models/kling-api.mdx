@@ -1,11 +1,11 @@
 ---
 title: "Kling API"
-description: "Kling API from Kuaishou: text-to-video and image-to-video; Runner parity pending."
+description: "Kling API from Kuaishou: text-to-video, image-to-video, and 1 more task."
 modelId: "kling-api"
 pageSource: generated
 ---
 
-Kling API is the hosted endpoint for Kuaishou's Kling video generation family, recorded here for text-to-video and image-to-video. Prompts or reference images are submitted to Kuaishou's service and the rendered clips come back as WorldFoundry artifacts. This entry exists so hosted Kling runs sit next to locally-run open models in the same Studio result format, making side-by-side comparison practical.
+Kling API is the hosted endpoint for Kuaishou's Kling video generation family, covering text-to-video and image-to-video. Prompts or reference images are submitted to Kuaishou's service and the rendered clips come back as WorldFoundry artifacts. Hosted Kling runs use the same Studio result format as locally run open models, so you can compare them side by side.
 
 <ModelPaperFigures modelId="kling-api" locale="en" />
 
@@ -15,32 +15,30 @@ Project page: [app.klingai.com](https://app.klingai.com/).
 
 ## What it is for
 
-`kling-api` is the hosted inference line. Start here when no local checkpoint is recorded on the card.
+Use `kling-api` to call the hosted model through WorldFoundry.
 
-Catalog tasks include text-to-video, image-to-video, and hosted-api. Documented modalities: text and image in, video out.
+Tasks: text-to-video, image-to-video, and hosted api. Modalities: text and image in, video out.
 
-Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs), [Physics-IQ Original](/docs/evaluation/benchmark-hub/physics-iq) (Probes whether provider-side video models respect basic physical plausibility).
+Suggested benchmarks: [VBench](/docs/evaluation/benchmark-hub/vbench) (Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs), [Physics-IQ Original](/docs/evaluation/benchmark-hub/physics-iq) (Probes whether provider-side video models respect basic physical plausibility).
 
 ## Runtime contract
 
-Optional `prompt`, `negative_prompt`, `input_path`, `image_field`, and `task_type`.
+Inputs `prompt` and `input-path` (bundled samples are used when omitted).
 
 CLI task profiles: `default`. WorldFoundry binds `KlingApiPipeline`.
 
-Family status: **Runner parity pending**.
+The hosted-API Studio pipeline is available; supply your own provider API key and account. No weights are downloaded and no local GPU environment is needed — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Credentials come from the Kling open platform (app.klingai.com).
 
-The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Credentials come from the Kling open platform (app.klingai.com).
+Requires a paid provider account and API key; WorldFoundry does not ship credentials.
 
-Hosted API Studio pipeline is available; users must provide their own provider API key.
+The provider controls model versioning, so outputs can change over time without any change in WorldFoundry.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run kling-api --pipeline.task-profile default` to call the hosted route. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Call the hosted model with `wf run kling-api --pipeline.task-profile default`.
 
-The environment profile is not recorded.
+No runtime environment is recorded for this model.
 
 Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh kling-api`. Add `--download` to fetch missing public checkpoints.
-
-Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="kling-api" locale="en" />

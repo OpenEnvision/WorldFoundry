@@ -8,16 +8,16 @@ import tempfile
 import unittest
 from unittest import mock
 
-from worldfoundry.evaluation.api import GenerationRequest
-from worldfoundry.evaluation.tasks.embodied.config_loader import load_canonical_embodied_config
-from worldfoundry.evaluation.tasks.embodied.docker_runner import build_docker_run_command, write_docker_config
-from worldfoundry.evaluation.tasks.embodied.materialize_rollouts import materialize_embodied_rollout_requests
-from worldfoundry.evaluation.tasks.embodied.model_server.protocol import Message, MessageType, pack_message, unpack_message
-from worldfoundry.evaluation.tasks.embodied.merge_results import merge_embodied_results
-from worldfoundry.evaluation.tasks.embodied.orchestrator import run_embodied_eval_sync
-from worldfoundry.evaluation.tasks.embodied.policy_adapter import normalize_action_payload
-from worldfoundry.evaluation.tasks.embodied.rollout_runner import EmbodiedClosedLoopRunner
-from worldfoundry.evaluation.tasks.embodied.simulators import specs
+from worldfoundry.evals.api import GenerationRequest
+from worldfoundry.evals.tasks.embodied.config_loader import load_canonical_embodied_config
+from worldfoundry.evals.tasks.embodied.docker_runner import build_docker_run_command, write_docker_config
+from worldfoundry.evals.tasks.embodied.materialize_rollouts import materialize_embodied_rollout_requests
+from worldfoundry.evals.tasks.embodied.model_server.protocol import Message, MessageType, pack_message, unpack_message
+from worldfoundry.evals.tasks.embodied.merge_results import merge_embodied_results
+from worldfoundry.evals.tasks.embodied.orchestrator import run_embodied_eval_sync
+from worldfoundry.evals.tasks.embodied.policy_adapter import normalize_action_payload
+from worldfoundry.evals.tasks.embodied.rollout_runner import EmbodiedClosedLoopRunner
+from worldfoundry.evals.tasks.embodied.simulators import specs
 
 
 @dataclass
@@ -77,8 +77,8 @@ class _FakeBenchmark:
 
 @contextmanager
 def _fake_simulator_registry():
-    import worldfoundry.evaluation.tasks.embodied.rollout_runner as rollout_runner
-    import worldfoundry.evaluation.tasks.embodied.simulators.registry as registry
+    import worldfoundry.evals.tasks.embodied.rollout_runner as rollout_runner
+    import worldfoundry.evals.tasks.embodied.simulators.registry as registry
 
     entry = registry.SimulatorEntry("fake", "tests.fake", "FakeBenchmark")
     with (

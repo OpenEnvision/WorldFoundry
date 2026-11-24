@@ -101,21 +101,6 @@ class SanaBlock(nn.Module):
         cross_attn_type="flash",
         **block_kwargs,
     ):
-        """Init.
-
-        Args:
-            hidden_size: The hidden size.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            drop_path: The drop path.
-            qk_norm: The qk norm.
-            cross_norm: The cross norm.
-            attn_type: The attn type.
-            ffn_type: The ffn type.
-            mlp_acts: The mlp acts.
-            linear_head_dim: The linear head dim.
-            cross_attn_type: The cross attn type.
-        """
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         if attn_type == "flash":
@@ -156,6 +141,7 @@ class SanaBlock(nn.Module):
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         # to be compatible with lower version pytorch
         if ffn_type == "dwmlp":
+
             def approx_gelu():
                 return nn.GELU(approximate="tanh")
 
@@ -180,6 +166,7 @@ class SanaBlock(nn.Module):
                 dilation=2,
             )
         elif ffn_type == "mlp":
+
             def approx_gelu():
                 return nn.GELU(approximate="tanh")
 
@@ -193,14 +180,6 @@ class SanaBlock(nn.Module):
         self.scale_shift_table = nn.Parameter(torch.randn(6, hidden_size) / hidden_size**0.5)
 
     def forward(self, x, y, t, mask=None, **kwargs):
-        """Forward.
-
-        Args:
-            x: The x.
-            y: The y.
-            t: The t.
-            mask: The mask.
-        """
         B, N, C = x.shape
 
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -257,40 +236,6 @@ class Sana(nn.Module):
         null_embed_path=None,
         **kwargs,
     ):
-        """Init.
-
-        Args:
-            input_size: The input size.
-            patch_size: The patch size.
-            in_channels: The in channels.
-            hidden_size: The hidden size.
-            depth: The depth.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            class_dropout_prob: The class dropout prob.
-            pred_sigma: The pred sigma.
-            drop_path: The drop path.
-            caption_channels: The caption channels.
-            pe_interpolation: The pe interpolation.
-            config: The config.
-            model_max_length: The model max length.
-            qk_norm: The qk norm.
-            y_norm: The y norm.
-            norm_eps: The norm eps.
-            attn_type: The attn type.
-            cross_attn_type: The cross attn type.
-            ffn_type: The ffn type.
-            use_pe: The use pe.
-            y_norm_scale_factor: The y norm scale factor.
-            patch_embed_kernel: The patch embed kernel.
-            mlp_acts: The mlp acts.
-            linear_head_dim: The linear head dim.
-            cross_norm: The cross norm.
-            pos_embed_type: The pos embed type.
-            cfg_embed: The cfg embed.
-            timestep_norm_scale_factor: The timestep norm scale factor.
-            null_embed_path: The null embed path.
-        """
         super().__init__()
         self.pred_sigma = pred_sigma
         self.in_channels = in_channels
@@ -336,10 +281,7 @@ class Sana(nn.Module):
         if self.y_norm:
             self.attention_y_norm = RMSNorm(hidden_size, scale_factor=y_norm_scale_factor, eps=norm_eps)
         drop_path = [x.item() for x in torch.linspace(0, drop_path, depth)]  # stochastic depth decay rule
-        if attn_type == "flash":
-            attention_head_dim = hidden_size // num_heads
-        else:
-            attention_head_dim = linear_head_dim
+        attention_head_dim = hidden_size // num_heads if attn_type == "flash" else linear_head_dim
         self.blocks = nn.ModuleList(
             [
                 SanaBlock(
@@ -470,15 +412,8 @@ class Sana(nn.Module):
         return imgs
 
     def initialize_weights(self):
-        """Initialize weights."""
-
         # Initialize transformer layers:
         def _basic_init(module):
-            """Helper function to basic init.
-
-            Args:
-                module: The module.
-            """
             if isinstance(module, nn.Linear):
                 torch.nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
@@ -526,7 +461,6 @@ class Sana(nn.Module):
 
     @property
     def dtype(self):
-        """Dtype."""
         execution_dtype = getattr(self, "_worldfoundry_execution_dtype", None)
         if isinstance(execution_dtype, torch.dtype):
             return execution_dtype
@@ -554,12 +488,6 @@ def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False, extra_tokens=
 
 
 def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
-    """Get 2d sincos pos embed from grid.
-
-    Args:
-        embed_dim: The embed dim.
-        grid: The grid.
-    """
     assert embed_dim % 2 == 0
 
     # use half of dimensions to encode grid_h

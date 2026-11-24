@@ -37,9 +37,9 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: worldarena
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldarena --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/worldarena --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldArenaContract
-  official_runner_command: worldfoundry-eval zoo benchmark-run
+  contract_validation_command: wf zoo benchmark-run --benchmark-id worldarena --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/worldarena --json
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:worldarena
+  official_runner_command: wf zoo benchmark-run
   name: WorldArena
   domain:
   - embodied-world-model
@@ -77,7 +77,7 @@ metadata:
   - Use WorldArena perceptual metrics across six sub-dimensions and three embodied task utility tracks.
   - Compute video-quality metrics through the checked-in WorldArena runtime; embodied utility tracks require the corresponding official task artifacts or normalized full-suite evidence.
   requires:
-  - In-tree WorldArena video-quality runtime under worldfoundry/evaluation/tasks/execution/runners/worldarena
+  - In-tree WorldArena video-quality runtime under worldfoundry/evals/tasks/execution/runners/worldarena
   - WORLDFOUNDRY_WORLDARENA_ROOT optional override for caller-provided runtime assets
   - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   - Official benchmark assets and generated artifacts
@@ -90,11 +90,11 @@ metadata:
   data_refs:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/worldarena.yaml
     in_tree_runtime_paths:
-    - worldfoundry/evaluation/tasks/execution/runners/worldarena
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py
+    - worldfoundry/evals/tasks/execution/runners/worldarena
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/worldarena/run_worldarena_official_runner.py
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldArenaContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:worldarena
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
@@ -106,7 +106,7 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_official_runtime
-    root: worldfoundry/evaluation/tasks/execution/runners/worldarena
+    root: worldfoundry/evals/tasks/execution/runners/worldarena
     root_env: WORLDFOUNDRY_WORLDARENA_ROOT
     optional_root_env: WORLDFOUNDRY_WORLDARENA_ROOT
     repo_url: https://github.com/tsinghua-fib-lab/WorldArena.git
@@ -132,7 +132,7 @@ metadata:
     - official_scorecard_normalization
     - artifact_presence_format
   local_evaluator:
-    target: worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py
+    target: worldfoundry/evals/tasks/execution/runners/worldarena/run_worldarena_official_runner.py
     status: implemented
     protocol: official_runtime_or_result_normalization
     official_result_normalization:
@@ -146,10 +146,10 @@ metadata:
       - jsonl
       - csv
     provenance: normalizes caller-provided official outputs or in-tree video-quality runtime outputs without external repo checkouts
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   runner:
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -165,10 +165,10 @@ metadata:
     - --json
     runtime:
       results_path_env: WORLDFOUNDRY_WORLDARENA_RESULTS_PATH
-    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldarena --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
+    official_validation_command: wf zoo benchmark-run --benchmark-id worldarena --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
   validation_command:
   - python
-  - worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/worldarena/run_worldarena_official_runner.py
   - --run-official
   - --dimension
   - action_following
@@ -259,8 +259,8 @@ tasks:
           kind: video
     evaluation_protocol:
     - name: external_official_runner
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldArenaContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:worldarena
+      runner_script: worldfoundry/evals/tasks/execution/runners/worldarena/run_worldarena_official_runner.py
       metric_ids:
       - visual_quality
       - motion_quality
@@ -273,12 +273,12 @@ tasks:
       - action_planner_success
       - human_quality
       - ewm_score
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldarena --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
+      official_validation_command: wf zoo benchmark-run --benchmark-id worldarena --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
       required_inputs:
       - official_results_path or official_results
       - generated_video artifacts for the official prompt/task suite
       - official scorer or judge assets for leaderboard parity
-      official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+      official_result_entrypoint: wf zoo benchmark-run
     - name: in_tree_local_quality_evaluator
       metric_ids:
       - visual_quality
@@ -292,7 +292,7 @@ tasks:
       - action_planner_success
       - human_quality
       - ewm_score
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.worldarena.worldarena_in_tree_evaluator:WorldarenaInTreeEvaluator
+      evaluator_target: worldfoundry.evals.tasks.execution.runners.worldarena.worldarena_in_tree_evaluator:WorldarenaInTreeEvaluator
       status: available_for_structured_evidence
       metadata:
         scoring_modes:
@@ -308,7 +308,7 @@ tasks:
         - simulator/downstream-task outputs for data engine, policy evaluator, and action planner metrics
         - human annotation or official human-quality summary for human_quality
     runtime_requirements:
-      in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/worldarena
+      in_tree_runtime: worldfoundry/evals/tasks/execution/runners/worldarena
       optional_root_env: WORLDFOUNDRY_WORLDARENA_ROOT
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
       results_path_env: WORLDFOUNDRY_WORLDARENA_RESULTS_PATH

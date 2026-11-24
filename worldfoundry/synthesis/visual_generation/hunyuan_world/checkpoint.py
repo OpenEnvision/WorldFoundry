@@ -68,7 +68,7 @@ def load_hunyuan_world_state_dict(
         map_location=lambda storage, loc: storage,
         weights_only=True,
     )
-    
+
     # Identify the key under which the actual model state dictionary is stored within the checkpoint.
     # This handles cases where the checkpoint might contain other metadata or be wrapped.
     load_key = getattr(args, "load_key", "module")

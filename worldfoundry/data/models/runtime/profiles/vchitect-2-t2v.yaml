@@ -1,21 +1,26 @@
-artifact_filename: vchitect_2_t2v_public_runner.mp4
-artifact_kind: generated_video
-backend_stage: native_diffusion
+schema_version: 2
+model_id: vchitect-2-t2v
+display_name: Vchitect-2.0 T2V
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Vchitect--Vchitect-2.0-2B
   repo_id: Vchitect/Vchitect-2.0-2B
   revision: 37936818734242d8e75685b9ee43d2d2e447f98c
   role: official_t2v_checkpoint
   status: official_demo_parity_pending
-display_name: Vchitect-2.0 T2V
-id: vchitect-2-t2v
 input_schema:
   image: false
   prompt: true
-integration_status: integrated
+artifact_kind: generated_video
+artifact_filename: vchitect_2_t2v_public_runner.mp4
+execution:
+  backend_stage: native_diffusion
+  runtime_status: integrated
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - Official Vchitect-2.0 source is https://github.com/Vchitect/Vchitect-2.0 at be56767f1107b4fd6ba7652fe92ec0e7032878fe.
-- The native Vchitect recipe uses role-based DiT, conditioner, scheduler, initializer, and decoder components.
-- The default path loads the shared WorldFoundry native diffusion pipeline and does not emit
-  blocked plan artifacts.
-runtime_status: integrated
+- The native Vchitect recipe uses role-based DiT, conditioner, scheduler, initializer,
+  and decoder components.
+- The default path loads the shared WorldFoundry native diffusion pipeline and does
+  not emit blocked plan artifacts.

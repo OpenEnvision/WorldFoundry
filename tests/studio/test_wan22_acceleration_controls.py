@@ -4,7 +4,7 @@ import pytest
 
 import worldfoundry.studio.inference.requests as inference_requests
 from worldfoundry.studio.inference.requests import InferenceRequestError
-from worldfoundry.studio.serving import workspace as workspace_app
+from worldfoundry.studio.workspace import app as workspace_app
 
 
 def test_wan22_studio_exposes_audited_acceleration_controls() -> None:

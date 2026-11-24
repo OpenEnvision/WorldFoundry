@@ -11,6 +11,7 @@ except Exception:  # pragma: no cover - Triton is optional outside GPU deploymen
 
 
 if triton is not None and tl is not None:
+
     @triton.jit
     def _moe_restore_weighted_sum_kernel(
         expert_output,

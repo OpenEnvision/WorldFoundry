@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.models.catalog import (
+from worldfoundry.zoo.catalog import (
     ModelZooEntry,
     ModelZooRegistry,
     UnknownModelZooKeyError,
     load_entries,
     load_model_zoo_registry,
 )
-from worldfoundry.evaluation.models.catalog.manifest import model_zoo_entry_to_world_model_manifest
+from worldfoundry.zoo.catalog.manifest import model_zoo_entry_to_world_model_manifest
 
 
 def _model_zoo_dir() -> Path:

@@ -28,7 +28,7 @@ assert pipeline.synthesis_model.runtime.rollout is None
 
 
 def test_v15_catalog_has_distinct_checkpoint_and_route():
-    from worldfoundry.evaluation.models.runtime import validate_catalog_references
+    from worldfoundry.evals.models.validate import validate_catalog_references
     from worldfoundry.studio.inference.catalog import find_entry
 
     old = find_entry("inspatio-world")
@@ -56,8 +56,13 @@ def test_v15_plan_requires_components_without_loading(tmp_path):
     runtime = InspatioWorldV15Runtime(str(tmp_path), wan_model_path=str(tmp_path))
     with pytest.raises(FileNotFoundError, match="config.json"):
         runtime.plan()
-    for name in ("config.json", "Wan2.1_VAE.pth", "models_t5_umt5-xxl-enc-bf16.pth",
-                 "google/umt5-xxl/tokenizer_config.json", "google/umt5-xxl/spiece.model"):
+    for name in (
+        "config.json",
+        "Wan2.1_VAE.pth",
+        "models_t5_umt5-xxl-enc-bf16.pth",
+        "google/umt5-xxl/tokenizer_config.json",
+        "google/umt5-xxl/spiece.model",
+    ):
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.touch()
@@ -80,15 +85,21 @@ def test_v15_checkpoint_symlink_retains_safetensors_format(tmp_path):
 
 def test_v15_unified_invocation_preserves_camera_and_artifact(tmp_path):
     seen = {}
+
     class Backend:
         def predict(self, **kwargs):
             seen.update(kwargs)
             Path(kwargs["output_path"]).write_bytes(b"encoded-result")
             return {"artifact_path": kwargs["output_path"]}
+
     pipeline = InspatioWorldV15Pipeline(synthesis_model=Backend())
-    invocation = SimpleNamespace(image="a.png", video=None, prompt="room",
-                                 output_path=tmp_path / "result.mp4",
-                                 pipeline_kwargs={"scene_dir": "/prepared", "traj_txt_path": "camera.txt", "seed": 17})
+    invocation = SimpleNamespace(
+        image="a.png",
+        video=None,
+        prompt="room",
+        output_path=tmp_path / "result.mp4",
+        pipeline_kwargs={"scene_dir": "/prepared", "traj_txt_path": "camera.txt", "seed": 17},
+    )
     result = pipeline.run_pipeline_invocation(invocation)
     assert result["status"] == "succeeded"
     assert seen["scene_dir"] == "/prepared" and seen["traj_txt_path"] == "camera.txt"
@@ -98,11 +109,16 @@ def test_v15_unified_invocation_preserves_camera_and_artifact(tmp_path):
 
 def test_v15_has_replay_recipes_for_each_source_type():
     matrix = Path(__file__).resolve().parents[1] / "manual/geometry_regression_cases.json"
-    cases = [case for case in json.loads(matrix.read_text()).values()
-             if case.get("model_id") == "inspatio-world-1p5"]
+    cases = [case for case in json.loads(matrix.read_text()).values() if case.get("model_id") == "inspatio-world-1p5"]
     assert len(cases) == 3
     assert {case["call"]["scene_dir"].rsplit("/", 1)[-1] for case in cases} == {
-        "image_example_00", "multiview_example_00", "video_example_00",
+        "image_example_00",
+        "multiview_example_00",
+        "video_example_00",
     }
-    assert all(case["deterministic"] and case["call"]["return_latents"]
-               and case["required_outputs"] == ["result.latents", "result.video"] for case in cases)
+    assert all(
+        case["deterministic"]
+        and case["call"]["return_latents"]
+        and case["required_outputs"] == ["result.latents", "result.video"]
+        for case in cases
+    )

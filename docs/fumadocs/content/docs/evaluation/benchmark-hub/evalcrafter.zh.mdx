@@ -1,6 +1,6 @@
 ---
 title: EvalCrafter
-description: "700 条 prompt 的 T2V 质量评测：视觉、对齐、运动、时序（17 项指标汇总为 Total）。WorldFoundry 可重算 CLIP 子集或导入，不编造榜单。"
+description: "700 条 prompt 的 T2V 质量评测：视觉、对齐、运动、时序（17 项指标汇总为 Total）。WorldFoundry 可重算 CLIP 子集或导入官方结果。"
 ---
 
 EvalCrafter（腾讯 AI Lab 与香港城市大学）是 **700 条 prompt** 的文生视频质量套件。17 项客观指标汇总为四个分面加 `evalcrafter_total`：
@@ -12,7 +12,7 @@ EvalCrafter（腾讯 AI Lab 与香港城市大学）是 **700 条 prompt** 的�
 
 论文：[EvalCrafter](https://arxiv.org/abs/2310.11440)。项目：[evalcrafter.github.io](http://evalcrafter.github.io)。代码：[evalcrafter/EvalCrafter](https://github.com/evalcrafter/EvalCrafter)。Prompt：[`RaphaelLiu/EvalCrafter_T2V_Dataset`](https://huggingface.co/datasets/RaphaelLiu/EvalCrafter_T2V_Dataset)。仓内列表：`worldfoundry/data/benchmarks/assets/evalcrafter/prompt700.txt`。
 
-WorldFoundry 保留 **仓内 CLIP 子集**（`clip_score`、`clip_temp_score`、`face_consistency_score`），以及官方 `final_result.txt` 的归一化器。视频必须按 prompt 序号命名（`0000.mp4` … `0699.mp4`）。内置 `sample_results.txt` 可供导入冒烟。主键：`evalcrafter_total`。
+WorldFoundry 提供**仓内 CLIP 子集**（`clip_score`、`clip_temp_score`、`face_consistency_score`），以及官方 `final_result.txt` 的归一化器。视频必须按 prompt 序号命名（`0000.mp4` … `0699.mp4`）。内置 `sample_results.txt` 可用于导入冒烟测试。主键：`evalcrafter_total`。
 
 <BenchmarkPageSections id="evalcrafter" locale="zh" />
 
@@ -21,7 +21,7 @@ WorldFoundry 保留 **仓内 CLIP 子集**（`clip_score`、`clip_temp_score`、
 导入官方聚合（冒烟用内置样本）：
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id evalcrafter \
   --mode official-validation \
   --official-results-path worldfoundry/data/benchmarks/assets/evalcrafter/sample_results.txt \
@@ -33,7 +33,7 @@ worldfoundry-eval zoo benchmark-run \
 
 ```bash
 export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/evalcrafter/generated_videos
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id evalcrafter \
   --mode official-run \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
@@ -47,7 +47,7 @@ CLIP ViT-B/32 通过 `WORLDFOUNDRY_CLIP_VIT_B32_MODEL_DIR` 或 `--clip-model` �
 
 ```text
 worldfoundry/data/benchmarks/tasks/external/evalcrafter.yaml
-worldfoundry/evaluation/tasks/execution/runners/evalcrafter/
+worldfoundry/evals/tasks/execution/runners/evalcrafter/
 worldfoundry/data/benchmarks/assets/evalcrafter
 ```
 

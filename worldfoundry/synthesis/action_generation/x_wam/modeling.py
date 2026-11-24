@@ -2,7 +2,7 @@
 # X-WAM joint world-action extensions copyright the X-WAM contributors.
 # WorldFoundry modifications: inference-only path, core attention, and explicit mixed-dtype boundaries.
 import math
-from typing import Optional
+from typing import ClassVar
 
 import torch
 import torch.nn as nn
@@ -11,21 +11,14 @@ from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.modeling_utils import ModelMixin
 from einops import rearrange
 
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import (
+    WanRMSNorm,
+    sinusoidal_embedding_1d,
+)
+
 from .attention import attention
 
 __all__ = ["XWAMModel"]
-
-
-def sinusoidal_embedding_1d(dim, position):
-    # preprocess
-    assert dim % 2 == 0
-    half = dim // 2
-    position = position.type(torch.float64)
-
-    # calculation
-    sinusoid = torch.outer(position, torch.pow(10000, -torch.arange(half).to(position).div(half)))
-    x = torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1)
-    return x
 
 
 @torch.amp.autocast("cuda", enabled=False)
@@ -51,24 +44,6 @@ def rope_apply_1d(x, freqs):
     x_complex = torch.view_as_complex(x.to(torch.float64).reshape(B, L, H, D // 2, 2))
 
     return torch.view_as_real(x_complex * freqs).flatten(3).float()
-
-
-class WanRMSNorm(nn.Module):
-    def __init__(self, dim, eps=1e-5):
-        super().__init__()
-        self.dim = dim
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
-
-    def forward(self, x):
-        r"""
-        Args:
-            x(Tensor): Shape [B, L, C]
-        """
-        return self._norm(x.float()).type_as(x) * self.weight
-
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
 
 
 class WanLayerNorm(nn.LayerNorm):
@@ -286,8 +261,8 @@ class XWAMModel(ModelMixin, ConfigMixin):
     optional extra modality branches (e.g. depth).
     """
 
-    ignore_for_config = ["patch_size", "cross_attn_norm", "qk_norm", "text_dim"]
-    _no_split_modules = ["WanAttentionBlock"]
+    ignore_for_config: ClassVar[list] = ["patch_size", "cross_attn_norm", "qk_norm", "text_dim"]
+    _no_split_modules: ClassVar[list] = ["WanAttentionBlock"]
 
     @register_to_config
     def __init__(
@@ -485,10 +460,10 @@ class XWAMModel(ModelMixin, ConfigMixin):
         x: torch.Tensor,
         t: torch.Tensor,
         context: torch.Tensor,
-        actions: Optional[torch.Tensor] = None,
-        t_actions: Optional[torch.Tensor] = None,
-        proprios: Optional[torch.Tensor] = None,
-        t_proprios: Optional[torch.Tensor] = None,
+        actions: torch.Tensor | None = None,
+        t_actions: torch.Tensor | None = None,
+        proprios: torch.Tensor | None = None,
+        t_proprios: torch.Tensor | None = None,
         cfg: float = 0.0,
         run_depth: bool = True,
     ):

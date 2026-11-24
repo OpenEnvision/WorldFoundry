@@ -11,8 +11,9 @@ configuration options and fallback mechanisms.
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.synthesis.visual_generation.animatediff.worldfoundry_runtime import (
     DEFAULT_ANIMATEDIFF_HF_HUB_CACHE,
@@ -23,7 +24,7 @@ from worldfoundry.synthesis.visual_generation.animatediff.worldfoundry_runtime i
     DEFAULT_SD15_ROOT,
     AnimateDiffRuntime,
 )
-from worldfoundry.evaluation.models.runtime.profiles import RuntimeProfileSynthesis
+from worldfoundry.zoo.runtime.profiles import RuntimeProfileSynthesis
 
 
 def _resolve_sd15_path(value: str | Path) -> Path:
@@ -59,7 +60,7 @@ class AnimateDiffSynthesis(RuntimeProfileSynthesis):
         device: str | None = None,
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "AnimateDiffSynthesis":
+    ) -> AnimateDiffSynthesis:
         """
         Initializes an AnimateDiffSynthesis instance from a pretrained model path or configuration.
 
@@ -113,9 +114,7 @@ class AnimateDiffSynthesis(RuntimeProfileSynthesis):
         # Set various instance attributes, prioritizing explicit options, then inferred values, then defaults.
         instance.motion_module_path = str(motion_module_path or DEFAULT_ANIMATEDIFF_MOTION_MODULE)
         instance.base_model_path = str(
-            _resolve_sd15_path(
-                options.get("sd15_path") or options.get("base_model_path") or DEFAULT_SD15_ROOT
-            )
+            _resolve_sd15_path(options.get("sd15_path") or options.get("base_model_path") or DEFAULT_SD15_ROOT)
         )
         instance.dreambooth_model_path = str(
             options.get("dreambooth_model_path")

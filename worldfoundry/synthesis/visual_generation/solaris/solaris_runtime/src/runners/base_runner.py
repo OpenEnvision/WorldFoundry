@@ -1,25 +1,25 @@
 import abc
-import functools
 import os
 import time
-from collections import defaultdict
 
 import jax
 import jax.experimental
 import jax.experimental.multihost_utils
-import jax.numpy as jnp
 import orbax.checkpoint as ocp
 import torch.multiprocessing as mp
 from absl import logging
 from flax import nnx
-from tqdm import tqdm
 
-import src.utils.sharding as sharding_utils
-from src.data.dataset import VideoReadError
-from src.models.model_loaders import get_jax_clip_model, get_vae_model
-from src.utils.config import get_obj_from_str, instantiate_from_config
-
-
+import worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.utils.sharding as sharding_utils
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.data.dataset import VideoReadError
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.models.model_loaders import (
+    get_jax_clip_model,
+    get_vae_model,
+)
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.utils.config import (
+    get_obj_from_str,
+    instantiate_from_config,
+)
 
 
 def ensure_torch_spawn_start_method():
@@ -35,7 +35,7 @@ def init_rngs(base_seed):
 
 
 def _is_optional_none_variable(value):
-    return hasattr(value, "value") and getattr(value, "value") is None
+    return hasattr(value, "value") and value.value is None
 
 
 def _strip_optional_none_variables(tree, path=()):
@@ -44,7 +44,7 @@ def _strip_optional_none_variables(tree, path=()):
         return placeholders
     for key in list(tree.keys()):
         value = tree[key]
-        next_path = path + (key,)
+        next_path = path + (key,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         if _is_optional_none_variable(value):
             placeholders.append((next_path, value))
             del tree[key]
@@ -59,7 +59,7 @@ def _strip_empty_mappings(tree, path=()):
         return placeholders
     for key in list(tree.keys()):
         value = tree[key]
-        next_path = path + (key,)
+        next_path = path + (key,)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         placeholders.extend(_strip_empty_mappings(value, next_path))
         if hasattr(value, "keys") and len(value) == 0:
             placeholders.append((next_path, value))
@@ -154,9 +154,7 @@ def build_eval_dataloaders(
         eval_dataset_cls = get_obj_from_str(eval_dataset_config["class"])
         eval_dataset_name = eval_dataset_config["name"]
         dataset_kwargs = {
-            "data_dir": os.path.join(
-                eval_data_dir, eval_dataset_config["test_dataset_name"]
-            ),
+            "data_dir": os.path.join(eval_data_dir, eval_dataset_config["test_dataset_name"]),
             "dataset_name": eval_dataset_name,
             "obs_resize": obs_resolution,
             "converters": converters,
@@ -165,9 +163,7 @@ def build_eval_dataloaders(
             dataset_kwargs.update(eval_dataset_config.get("additional_params", {}))
 
         eval_dataset = eval_dataset_cls(**dataset_kwargs)
-        eval_dataloader, eval_local_num_batches = instantiate_from_config(
-            eval_dataloader_config, dataset=eval_dataset
-        )
+        eval_dataloader, eval_local_num_batches = instantiate_from_config(eval_dataloader_config, dataset=eval_dataset)
         eval_dataloaders[eval_dataset_name] = {
             "dataloader": eval_dataloader,
             "local_num_batches": eval_local_num_batches,
@@ -176,7 +172,6 @@ def build_eval_dataloaders(
 
 
 class BaseRunner(abc.ABC):
-
     def __init__(
         self,
         base_seed,
@@ -202,13 +197,9 @@ class BaseRunner(abc.ABC):
         self.pretrained_model_dir = pretrained_model_dir
         self.experiment_name = experiment_name
 
-        self.left_action_padding = (
-            network_config.params.action_config.left_action_padding
-        )
+        self.left_action_padding = network_config.params.action_config.left_action_padding
 
-        (self.mesh, self.ddp_sharding, self.repl_sharding) = instantiate_from_config(
-            sharding_config
-        )
+        (self.mesh, self.ddp_sharding, self.repl_sharding) = instantiate_from_config(sharding_config)
 
         self.pretrained_checkpointer = ocp.StandardCheckpointer()
         self.rngs, self.rngs_eval, self.rngs_test = init_rngs(base_seed)
@@ -229,7 +220,6 @@ class BaseRunner(abc.ABC):
         )
 
     def robust_batch_sample(self, loader_iter, num_retries=5):
-
         for _ in range(num_retries):
             try:
                 return next(loader_iter)
@@ -239,9 +229,7 @@ class BaseRunner(abc.ABC):
 
     def globalize_batch(self, batch):
         return jax.tree.map(
-            lambda x: sharding_utils.make_fsarray_from_local_slice(
-                x, self.mesh.devices.flatten()
-            ),
+            lambda x: sharding_utils.make_fsarray_from_local_slice(x, self.mesh.devices.flatten()),
             batch,
         )
 
@@ -258,7 +246,7 @@ class BaseRunner(abc.ABC):
         vae_graph,
         clip_state,
         clip_graph,
-        video,  
+        video,
         mouse_actions,
         keyboard_actions,
         real_lengths,
@@ -280,8 +268,8 @@ class BaseRunner(abc.ABC):
         eval_dataloader_info,
         eval_dir_name,
     ):
-        _, video_unprocessed, actions_mouse, actions_keyboard, real_lengths = (
-            self._get_curr_batch(iter(eval_dataloader_info["dataloader"]))
+        _, video_unprocessed, actions_mouse, actions_keyboard, real_lengths = self._get_curr_batch(
+            iter(eval_dataloader_info["dataloader"])
         )
 
         evaluation_output_directory = os.path.join(self.eval_save_dir, eval_dir_name)

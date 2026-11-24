@@ -13,56 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> ba -> kernel.py functionality."""
-
 from abc import ABC, abstractmethod
 
 import torch
 
 
 class RobustKernel(ABC):
-    """Robust kernel implementation."""
     @abstractmethod
     def apply(self, x: torch.Tensor) -> torch.Tensor:
         """Return a per-residual weight of the same shape as ``x``."""
 
     def is_gnc(self) -> bool:
-        """Is gnc.
-
-        Returns:
-            The return value.
-        """
         return False
 
-    def set_mu(self, mu: float) -> None:
-        """Set mu.
-
-        Args:
-            mu: The mu.
-
-        Returns:
-            The return value.
-        """
+    def set_mu(self, mu: float) -> None:  # noqa: B027 - Optional hook with a no-op default.
         pass
 
     def update_mu(self, mu: float) -> float:
-        """Update mu.
-
-        Args:
-            mu: The mu.
-
-        Returns:
-            The return value.
-        """
         return mu
 
     @property
     def mu_max(self) -> float:
-        """Mu max.
-
-        Returns:
-            The return value.
-        """
         return float("inf")
 
 
@@ -70,25 +41,9 @@ class HuberRobustKernel(RobustKernel):
     """``w(r) = 1`` if ``|r| <= k`` else ``k / |r|``."""
 
     def __init__(self, threshold: float = 1.0) -> None:
-        """Init.
-
-        Args:
-            threshold: The threshold.
-
-        Returns:
-            The return value.
-        """
         self.threshold = float(threshold)
 
     def apply(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         abs_x = x.abs()
         k = self.threshold
         return torch.where(abs_x <= k, torch.ones_like(x), k / abs_x.clamp_min(1e-8))
@@ -98,25 +53,9 @@ class TukeyRobustKernel(RobustKernel):
     """``w(r) = (1 - (r/c)^2)^2`` if ``|r| <= c`` else ``0``."""
 
     def __init__(self, c: float = 2.0) -> None:
-        """Init.
-
-        Args:
-            c: The c.
-
-        Returns:
-            The return value.
-        """
         self.c = float(c)
 
     def apply(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         c = self.c
         u = (x / c) ** 2
         return (1.0 - u).clamp(min=0.0) ** 2
@@ -151,17 +90,6 @@ class TLSGncRobustKernel(RobustKernel):
         mu_init: float = 1.0,
         mu_max: float = 1.0e6,
     ) -> None:
-        """Init.
-
-        Args:
-            threshold: The threshold.
-            mu_step: The mu step.
-            mu_init: The mu init.
-            mu_max: The mu max.
-
-        Returns:
-            The return value.
-        """
         self.c_bar = float(threshold)
         self.c_bar_sq = self.c_bar * self.c_bar
         self.mu_step = float(mu_step)
@@ -170,53 +98,19 @@ class TLSGncRobustKernel(RobustKernel):
         self._mu: float | None = None
 
     def is_gnc(self) -> bool:
-        """Is gnc.
-
-        Returns:
-            The return value.
-        """
         return True
 
     @property
     def mu_max(self) -> float:
-        """Mu max.
-
-        Returns:
-            The return value.
-        """
         return self._mu_max
 
     def set_mu(self, mu: float) -> None:
-        """Set mu.
-
-        Args:
-            mu: The mu.
-
-        Returns:
-            The return value.
-        """
         self._mu = float(mu)
 
     def update_mu(self, mu: float) -> float:
-        """Update mu.
-
-        Args:
-            mu: The mu.
-
-        Returns:
-            The return value.
-        """
         return min(mu * self.mu_step, self._mu_max)
 
     def apply(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         mu = self._mu
         c_sq = self.c_bar_sq
         r2 = x * x

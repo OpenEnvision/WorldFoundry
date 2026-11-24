@@ -1,15 +1,15 @@
 ---
-title: "SAMA"
-description: "SAMA: video-editing; Runner parity pending."
+title: "SAMA-14B"
+description: "SAMA-14B: video editing; Runner parity pending."
 modelId: "sama-14b"
 pageSource: generated
 ---
 
-SAMA 14B is an open instruction-guided video editing model: it takes a source video and a text instruction. The released inference route does not accept a spatial mask or separate reference image. WorldFoundry reports missing checkpoints at runtime; weights are apache-2.0 at syxbb/SAMA-14B.
+SAMA 14B is an open instruction-guided video editing model: it takes a source video and a text instruction. The released inference route does not accept a spatial mask or separate reference image. Weights are apache-2.0 at syxbb/SAMA-14B.
 
 <ModelPaperFigures modelId="sama-14b" locale="en" />
 
-The recorded paper is [arXiv 2603.19228](https://arxiv.org/abs/2603.19228).
+Paper: [arXiv 2603.19228](https://arxiv.org/abs/2603.19228).
 
 Project page: [cynthiazxy123.github.io/SAMA](https://cynthiazxy123.github.io/SAMA/). Code: [Cynthiazxy123/SAMA](https://github.com/Cynthiazxy123/SAMA).
 
@@ -17,32 +17,32 @@ Project page: [cynthiazxy123.github.io/SAMA](https://cynthiazxy123.github.io/SAM
 
 ## What it is for
 
-Use `sama-14b` for catalog video-to-video inference. Start here when the input is already a video.
+`sama-14b` is a video-to-video model for editing and transforming clips.
 
-The catalog records a 14B-parameter editing model with a prompt/image/video input contract; the publishing institution and architecture internals are not recorded in this repository — consult the upstream GitHub (Cynthiazxy123/SAMA) for details.
+A 14B-parameter editing model with a prompt/image/video input contract. See the upstream GitHub (Cynthiazxy123/SAMA) for architecture details.
 
-Catalog tasks include video-editing.
+Tasks: video editing.
 
 ## Runtime contract
 
-Optional `prompt`, `negative_prompt`, `input_path`, `frames`, and `fps`; artifacts `sama-14b.mp4`.
+Inputs `prompt` and `input-path` (bundled samples are used when omitted); options `fps`, `height`, `width`, `seed`, `max-frames`, `tiled`, and 1 more; artifacts `sama-14b.mp4`.
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `SAMA14BPipeline`.
 
 Family status: **Runner parity pending**.
 
-Recorded `interactive-video` defaults: fps=16, height=480, width=832, seed=1.
+Defaults for `interactive-video`: fps=16, height=480, width=832, seed=1.
 
-Supply a source video and edit instruction. A checkpoint-backed 17-frame run was compared with the official implementation; broader editing quality remains unverified.
+Supply a source video and an edit instruction. A 17-frame edit with the released checkpoint was checked against the official implementation.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run sama-14b --pipeline.task-profile interactive-video` to edit the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Edit a clip with `wf run sama-14b --pipeline.task-profile interactive-video`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `syxbb/SAMA-14B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh sama-14b`. Add `--download` to fetch missing public checkpoints.
+Weights: `syxbb/SAMA-14B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh sama-14b`. Add `--download` to fetch missing public checkpoints.
 
-Recorded licenses include apache-2.0; status: **Runner parity pending**.
+License: Apache-2.0.
 
 <ModelRelatedRecipes modelId="sama-14b" locale="en" />

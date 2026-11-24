@@ -1,20 +1,20 @@
 ---
 title: MiKASA-Robo
-description: "ICLR 2026 tabletop memory suite: 32 RL tasks, later 90 language-conditioned VLA tasks. WorldFoundry imports official results; it does not run ManiSkill."
+description: "ICLR 2026 tabletop memory suite: 32 RL tasks, later 90 language-conditioned VLA tasks. WorldFoundry imports official results."
 ---
 
 MiKASA-Robo is the tabletop half of **MIKASA** (Memory-Intensive Skills Assessment Suite for Agents) from AIRI, MIPT, and HSE. The ICLR 2026 paper is **32** ManiSkill RL tasks in **12** groups across four memory types: **object**, **spatial**, **sequential**, and **capacity** (occlusion recall, prior layouts, long action orders). The later **MIKASA-Robo-VLA** release grows to **90** language-conditioned tasks (**10** memory types), Short / Medium / Long horizons (25–2160 steps), and **22,500** oracle trajectories. Those two releases are **not** interchangeable.
 
 Paper: [Memory, Benchmark & Robots](https://arxiv.org/abs/2502.10550) ([OpenReview](https://openreview.net/forum?id=9cLPurIZMj)). VLA docs: [mikasarobo.github.io](https://mikasarobo.github.io/). Code: [CognitiveAISystems/MIKASA-Robo](https://github.com/CognitiveAISystems/MIKASA-Robo).
 
-WorldFoundry **imports** official result exports. It does **not** run ManiSkill, collect PPO/oracle trajectories, or pick RL vs VLA for you — declare that on the export.
+WorldFoundry **imports** official result exports. It does **not** run ManiSkill or collect PPO/oracle trajectories. Declare RL or VLA on the export.
 
 <BenchmarkPageSections id="mikasa" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id mikasa \
   --mode official-validation \
   --official-results-path <official_results.json> \

@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -70,7 +71,8 @@ def test_native_pipeline_writes_muxed_artifact_and_report(tmp_path):
 
 
 @pytest.mark.parametrize("distilled", [False, True])
-def test_joint_sampling_with_small_native_transformer(distilled):
+@pytest.mark.parametrize("sample_audio", [True, False])
+def test_joint_sampling_with_small_native_transformer(distilled, sample_audio):
     from worldfoundry.base_models.diffusion_model.models.networks.kandinsky6.dit import DiffusionTransformer3D
     from worldfoundry.base_models.diffusion_model.models.networks.kandinsky6.piflow_dit import (
         PiFlowDiffusionTransformer3D,
@@ -110,7 +112,7 @@ def test_joint_sampling_with_small_native_transformer(distilled):
         def __call__(self, x):
             return x[:, :1].mean(dim=1)
 
-    common = dict(
+    common: dict[str, Any] = dict(
         in_visual_dim=4,
         out_visual_dim=4,
         in_text_dim=8,
@@ -153,11 +155,15 @@ def test_joint_sampling_with_small_native_transformer(distilled):
             width=16,
             num_frames=5,
             sampling=SamplingConfig(num_inference_steps=2, guidance_scale=1.0 if distilled else 2.0, seed=42),
+            inputs={"sample_audio": sample_audio},
         )
     )
     assert output.sample.shape == (1, 3, 2, 2, 2)
-    assert len(output.artifacts["audio"]) == 1
-    assert output.artifacts["audio"][0].dtype == np.int16
+    if sample_audio:
+        assert len(output.artifacts["audio"]) == 1
+        assert output.artifacts["audio"][0].dtype == np.int16
+    else:
+        assert output.artifacts["audio"] is None
 
 
 def test_spatial_vae_tiles_cover_partial_bottom_and_right_edges():
@@ -172,10 +178,11 @@ def test_spatial_vae_tiles_cover_partial_bottom_and_right_edges():
     vae.tile_sample_min_width = 4
     vae.tile_sample_stride_height = 3
     vae.tile_sample_stride_width = 3
-    vae.post_quant_conv = torch.nn.Identity()
-    vae.decoder = torch.nn.Identity()
+    vae_any: Any = vae
+    vae_any.post_quant_conv = torch.nn.Identity()
+    vae_any.decoder = torch.nn.Identity()
     latents = torch.arange(64, dtype=torch.float32).reshape(1, 1, 1, 8, 8)
-    decoded = vae.tiled_decode(latents).sample
+    decoded = vae_any.tiled_decode(latents).sample
     torch.testing.assert_close(decoded, latents)
 
 
@@ -206,8 +213,8 @@ def test_checkpoint_config_binds_local_snapshot_without_mutating_defaults(tmp_pa
 
 
 def test_standard_evaluation_invocation(tmp_path):
-    from worldfoundry.evaluation.api.generation import GenerationRequest
-    from worldfoundry.evaluation.models.pipelines.invocation import build_pipeline_invocation, invoke_pipeline
+    from worldfoundry.evals.api.generation import GenerationRequest
+    from worldfoundry.evals.models.pipelines.invocation import build_pipeline_invocation, invoke_pipeline
 
     class Native:
         model_id = "kandinsky6-pro-distill"
@@ -233,7 +240,7 @@ def test_meta_transformer_checkpoint_roundtrip(tmp_path):
     from worldfoundry.base_models.diffusion_model.models.networks.kandinsky6.dit import DiffusionTransformer3D
     from worldfoundry.base_models.diffusion_model.recipes.kandinsky6_config import PipelineConfig
 
-    settings = dict(
+    settings: dict[str, Any] = dict(
         in_visual_dim=4,
         out_visual_dim=4,
         in_text_dim=8,

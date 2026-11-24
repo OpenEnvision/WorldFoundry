@@ -10,6 +10,7 @@ bash "${SCRIPT_DIR}/ssd-cache.sh" setup
 cd "${DOCS_ROOT}"
 
 export WF_DOCS_CACHE_ROOT="${DOCS_ROOT}/tmp"
+export WF_DOCS_WEBPACK_CACHE_DIR="$(readlink -f "${DOCS_ROOT}/tmp/webpack")"
 export WF_DOCS_KEEP_DIST=1
 export WF_DOCS_SKIP_MDX=1
 

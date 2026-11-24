@@ -27,7 +27,7 @@ import warnings
 from collections.abc import Mapping, Sequence
 from importlib import import_module
 from types import ModuleType
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 # ──────────────────────────────────────────────────────────────────────────
 # Type tests — strings are scalars here, never walked as sequences
@@ -69,7 +69,7 @@ def state_dict_class(keys: list[str]):
             """Snapshot the configured attribute names; missing attrs raise :exc:`AttributeError`."""
             return {k: getattr(self, k) for k in keys}
 
-        def load_state_dict(self, states: Dict[str, Any]):
+        def load_state_dict(self, states: dict[str, Any]):
             """Restore every configured key; extra keys in ``states`` are ignored.
 
             Failure: :exc:`ValueError` when any configured key is absent.
@@ -205,7 +205,7 @@ def deprecated(func, msg="", action="warning", type=""):
     def _deprecated(*args, **kwargs):
         """Warn / raise / no-op on each call, then forward to ``func``."""
         if action in ["warning", "warn"]:
-            warnings.warn(msg, WarningExceptionCls)
+            warnings.warn(msg, WarningExceptionCls, stacklevel=1)
         elif action == "raise":
             raise WarningExceptionCls(msg)
         return func(*args, **kwargs)
@@ -237,7 +237,7 @@ def call_once(func, on_second_call: Literal["noop", "raise", "warn"] = "noop"):
             if on_second_call == "raise":
                 raise RuntimeError(f"{func.__name__} has already been called. Can only call once.")
             elif on_second_call == "warn":
-                warnings.warn(f"{func.__name__} has already been called. Should only call once.")
+                warnings.warn(f"{func.__name__} has already been called. Should only call once.", stacklevel=1)
         else:
             called = True
             return func(*args, **kwargs)
@@ -260,7 +260,6 @@ class NoopObject:
 
         def _func(*args, **kwargs):
             """Swallow the call; used as a stand-in for optional loggers / hooks."""
-            pass
 
         return _func
 
@@ -293,7 +292,6 @@ class NoopContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Do not suppress exceptions; just leave the placeholder."""
-        pass
 
 
 class ClassRegistry:
@@ -423,7 +421,7 @@ def pack_kwargs(args, kwargs):
         return kwargs
 
 
-def merge_kwargs(args, kwargs) -> Dict:
+def merge_kwargs(args, kwargs) -> dict:
     """
     Merge all dicts in `args` and keywords in kwargs.
 

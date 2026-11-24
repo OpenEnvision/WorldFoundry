@@ -17,14 +17,14 @@ from worldfoundry.base_models.diffusion_model.contracts import DiffusionOutput, 
 from worldfoundry.base_models.diffusion_model.recipes.matrix_game import MATRIX_GAME4_EGYPT_PROMPT
 from worldfoundry.base_models.diffusion_model.recipes.registry import default_native_diffusion_registry
 from worldfoundry.core.contracts import PipelineInvocation
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, WorldModelConfig
-from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
-from worldfoundry.evaluation.models.pipelines.loading import build_pipeline_runner_spec, import_pipeline_target
-from worldfoundry.evaluation.models.pipelines.results import PipelineResultContext, generation_result_from_pipeline
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile_manifest
-from worldfoundry.evaluation.models.runtime.validate import validate_runtime_profile_references
+from worldfoundry.evals.api import GenerationRequest, GenerationResult, WorldModelConfig
+from worldfoundry.evals.models.pipelines.loading import build_pipeline_runner_spec, import_pipeline_target
+from worldfoundry.evals.models.pipelines.results import PipelineResultContext, generation_result_from_pipeline
+from worldfoundry.evals.models.validate import validate_runtime_profile_references
 from worldfoundry.pipelines.matrix_game.pipeline_matrix_game4 import MatrixGame4EgyptPipeline
 from worldfoundry.runtime.inference_catalog import get_model_inference_spec
+from worldfoundry.zoo.catalog import load_model_zoo_registry
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile_manifest
 
 MODEL_DATA = Path(__file__).resolve().parents[2] / "worldfoundry/data/models"
 TARGET = "worldfoundry.pipelines.matrix_game.pipeline_matrix_game4:MatrixGame4EgyptPipeline"
@@ -34,7 +34,7 @@ def test_egypt_catalog_binding_recipe_and_cli_agree() -> None:
     entry = load_model_zoo_registry().get("matrix-game-4-ancient-egypt")
     assert entry.model_id == "matrix-game-4-egypt"
     assert entry.integration_status == "integrated"
-    assert entry.runner_target == "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner"
+    assert entry.runner_target == "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner"
     assert entry.hf_repo_id == "Skywork/Matrix-Game-4.0"
     assert entry.demo_parity.status == entry.runner_parity.status == "pending"
     binding = build_pipeline_runner_spec(WorldModelConfig(model_id=entry.model_id, runner="worldfoundry.pipeline"))

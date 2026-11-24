@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -26,7 +26,9 @@ STRICT_IMPORT_MODULES = frozenset({"pkg_resources", "droid_backends", "grounding
 TORCH_FIRST_STRICT_IMPORT_MODULES = frozenset({"droid_backends", "groundingdino._C", "sam2._C"})
 
 
-def python_module_probe(python: Path, modules: tuple[str, ...], *, pythonpath: list[Path], timeout: int) -> dict[str, Any]:
+def python_module_probe(
+    python: Path, modules: tuple[str, ...], *, pythonpath: list[Path], timeout: int
+) -> dict[str, Any]:
     """Probe module importability in an isolated subprocess under a given Python.
 
     Args:
@@ -40,7 +42,12 @@ def python_module_probe(python: Path, modules: tuple[str, ...], *, pythonpath: l
         ``stderr`` keys describing the importability status.
     """
     if not python.is_file():
-        return {"python": str(python), "ok": False, "error": "python_not_found", "modules": {module: False for module in modules}}
+        return {
+            "python": str(python),
+            "ok": False,
+            "error": "python_not_found",
+            "modules": dict.fromkeys(modules, False),
+        }
     code = (
         "import importlib,importlib.util,json;"
         f"mods={json.dumps(list(modules))};"
@@ -73,7 +80,12 @@ def python_module_probe(python: Path, modules: tuple[str, ...], *, pythonpath: l
             env=env,
         )
     except subprocess.TimeoutExpired:
-        return {"python": str(python), "ok": False, "error": "timeout", "modules": {module: False for module in modules}}
+        return {
+            "python": str(python),
+            "ok": False,
+            "error": "timeout",
+            "modules": dict.fromkeys(modules, False),
+        }
     modules_result: dict[str, bool]
     module_errors: dict[str, str]
     try:
@@ -81,7 +93,7 @@ def python_module_probe(python: Path, modules: tuple[str, ...], *, pythonpath: l
         modules_result = parsed.get("modules", {}) if isinstance(parsed, dict) else {}
         module_errors = parsed.get("errors", {}) if isinstance(parsed, dict) else {}
     except json.JSONDecodeError:
-        modules_result = {module: False for module in modules}
+        modules_result = dict.fromkeys(modules, False)
         module_errors = {"__probe__": "json_decode_error"}
     return {
         "python": str(python),
@@ -254,7 +266,9 @@ def cuda_driver_probe(*, device_index: int = 0, allocation_bytes: int = 16 * 102
     }
 
 
-def build_gpu_report(conda_root: Path, conda_envs_root: Path, timeout: int, *, probe_all: bool = False) -> dict[str, Any]:
+def build_gpu_report(
+    conda_root: Path, conda_envs_root: Path, timeout: int, *, probe_all: bool = False
+) -> dict[str, Any]:
     """Run Torch CUDA probes across known benchmark environments.
 
     Args:
@@ -305,6 +319,14 @@ def build_gpu_report(conda_root: Path, conda_envs_root: Path, timeout: int, *, p
     }
 
 
+class _EnvironmentProbeSpec(TypedDict):
+    """Interpreter, required modules, and ``PYTHONPATH`` for one environment probe."""
+
+    python: Path
+    modules: tuple[str, ...]
+    pythonpath: list[Path]
+
+
 def build_environment_report(conda_root: Path, conda_envs_root: Path, model_root: Path, timeout: int) -> dict[str, Any]:
     """Build a module-importability report for all benchmark conda environments.
 
@@ -319,7 +341,7 @@ def build_environment_report(conda_root: Path, conda_envs_root: Path, model_root
         ``envs`` entries describing module import status.
     """
     vbench_root = model_root / "VBench"
-    specs = {
+    specs: dict[str, _EnvironmentProbeSpec] = {
         "base_current": {
             "python": Path(sys.executable),
             "modules": ("numpy", "torch", "cv2", "decord"),
@@ -327,7 +349,17 @@ def build_environment_report(conda_root: Path, conda_envs_root: Path, model_root
         },
         "worldplay_vbench": {
             "python": conda_root / "worldplay" / "bin" / "python",
-            "modules": ("torch", "torchvision", "numpy", "cv2", "decord", "sentencepiece", "vbench", "pkg_resources", "clip"),
+            "modules": (
+                "torch",
+                "torchvision",
+                "numpy",
+                "cv2",
+                "decord",
+                "sentencepiece",
+                "vbench",
+                "pkg_resources",
+                "clip",
+            ),
             "pythonpath": [vbench_root, REPO_ROOT],
         },
         "worldscore": {
@@ -408,7 +440,22 @@ def build_environment_report(conda_root: Path, conda_envs_root: Path, model_root
         },
         "benchmark_cu113": {
             "python": conda_envs_root / "worldfoundry-zeroscope-cu113" / "bin" / "python",
-            "modules": ("torch", "torchvision", "numpy", "cv2", "decord", "sentencepiece", "vbench", "pkg_resources", "clip", "fire", "mmengine", "omegaconf", "structlog", "submitit"),
+            "modules": (
+                "torch",
+                "torchvision",
+                "numpy",
+                "cv2",
+                "decord",
+                "sentencepiece",
+                "vbench",
+                "pkg_resources",
+                "clip",
+                "fire",
+                "mmengine",
+                "omegaconf",
+                "structlog",
+                "submitit",
+            ),
             "pythonpath": [vbench_root, model_root / "WorldScore", REPO_ROOT],
         },
     }

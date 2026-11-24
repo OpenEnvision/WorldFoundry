@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 from functools import partial
+from typing import Any, cast
 
 import torch
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
@@ -70,7 +71,7 @@ def possible_fsdp_scope(model: torch.nn.Module):
         handle = model._handle
         args, kwargs = [0], {"dummy": 0}
         with torch.autograd.profiler.record_function("FullyShardedDataParallel.possible_fsdp_scope"):
-            args, kwargs = _root_pre_forward(model, model, args, kwargs)
+            args, kwargs = cast(tuple[Any, Any], _root_pre_forward(model, model, args, kwargs))
             unused = None
             args, kwargs = _pre_forward(
                 model,

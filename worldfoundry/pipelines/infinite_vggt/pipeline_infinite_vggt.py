@@ -1,17 +1,12 @@
-"""Infinite Vggt visual generation pipeline module."""
+"""Infinite Vggt visual generation pipeline module.
 
-from ..pipeline_utils import PipelineABC
-
-"""
 InfiniteVGGT pipeline: operators + representation / reasoning / synthesis.
 Output is saveable (PIL.Image, video frame list); pipeline does not save — user saves in test.
 """
 
+from collections.abc import Generator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Union
-
-if TYPE_CHECKING:
-    import torch
+from typing import Any
 
 import numpy as np
 from PIL import Image
@@ -26,6 +21,7 @@ from worldfoundry.core.media.artifacts import (
 )
 
 from ...operators.infinite_vggt_operator import InfiniteVGGTOperator
+from ..pipeline_utils import PipelineABC
 
 
 def _default_output_dir(name: str = "infinite_vggt_output") -> str:
@@ -43,13 +39,13 @@ class InfiniteVGGTResult:
         self,
         point_map: np.ndarray,
         depth_map: np.ndarray,
-        colors: List[np.ndarray],
+        colors: list[np.ndarray],
         extrinsic: np.ndarray,
-        intrinsic: Optional[np.ndarray],
+        intrinsic: np.ndarray | None,
         point_conf: np.ndarray,
         output_format: str = "ply",
-        depth_images: Optional[List[Image.Image]] = None,
-        video_frames: Optional[List[Union[np.ndarray, Image.Image]]] = None,
+        depth_images: list[Image.Image] | None = None,
+        video_frames: list[np.ndarray | Image.Image] | None = None,
     ):
         """Initialize the pipeline and configure runtime components."""
         self.point_map = point_map
@@ -62,11 +58,11 @@ class InfiniteVGGTResult:
         self.depth_images = depth_images or []
         self.video_frames = video_frames or []
 
-    def save(self, output_dir: Optional[str] = None) -> List[str]:
+    def save(self, output_dir: str | None = None) -> list[str]:
         """Export to ply, glb, or depth images. User calls this; pipeline does not save."""
         output_root = Path(output_dir or _default_output_dir()).expanduser()
         output_root.mkdir(parents=True, exist_ok=True)
-        saved: List[str] = []
+        saved: list[str] = []
 
         fmt = self.output_format.lower()
         world_points = self.point_map
@@ -82,6 +78,7 @@ class InfiniteVGGTResult:
         if fmt == "ply":
             try:
                 import open3d as o3d
+
                 pcd = o3d.geometry.PointCloud()
                 pcd.points = o3d.utility.Vector3dVector(pts_flat.astype(np.float64))
                 pcd.colors = o3d.utility.Vector3dVector(rgb_flat.astype(np.float64))
@@ -94,6 +91,7 @@ class InfiniteVGGTResult:
         elif fmt == "glb":
             try:
                 import trimesh
+
                 pcd = trimesh.PointCloud(pts_flat, colors=np.clip(rgb_flat, 0, 1))
                 out_path = output_root / "scene.glb"
                 pcd.export(str(out_path))
@@ -105,14 +103,13 @@ class InfiniteVGGTResult:
             for i in range(N):
                 d = self.depth_map[i] if self.depth_map.ndim == 3 else self.depth_map[i].squeeze()
                 out_path = output_root / f"depth_{i:04d}.png"
-                if save_depth_colormap(d, out_path) is not None:
+                if save_depth_colormap(d, str(out_path)) is not None:
                     saved.append(str(out_path))
 
         return saved
 
 
 def _write_ascii_pointcloud(out_path: Path, points: np.ndarray, colors: np.ndarray) -> Path:
-    """Write ascii pointcloud helper function."""
     lines = [
         "ply",
         "format ascii 1.0",
@@ -139,10 +136,10 @@ class InfiniteVGGTPipeline(PipelineABC):
 
     def __init__(
         self,
-        representation_model: Optional[InfiniteVGGTRepresentation] = None,
-        reasoning_model: Optional[Any] = None,
-        synthesis_model: Optional[Any] = None,
-        operator: Optional[InfiniteVGGTOperator] = None,
+        representation_model: InfiniteVGGTRepresentation | None = None,
+        reasoning_model: Any | None = None,
+        synthesis_model: Any | None = None,
+        operator: InfiniteVGGTOperator | None = None,
     ):
         """Initialize the pipeline and configure runtime components."""
         self.representation_model = representation_model
@@ -151,19 +148,19 @@ class InfiniteVGGTPipeline(PipelineABC):
         self.operator = operator or InfiniteVGGTOperator()
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[Union[str, Dict[str, Any]]] = None,
-        required_components: Optional[Dict[str, Any]] = None,
-        device: Optional[str] = None,
-        representation_path: Optional[str] = None,
-        reasoning_path: Optional[str] = None,
-        synthesis_path: Optional[str] = None,
-        pretrained_model_path: Optional[str] = None,
+        model_path: str | dict[str, Any] | None = None,
+        required_components: dict[str, Any] | None = None,
+        device: str | None = None,
+        representation_path: str | None = None,
+        reasoning_path: str | None = None,
+        synthesis_path: str | None = None,
+        pretrained_model_path: str | None = None,
         **kwargs,
     ) -> "InfiniteVGGTPipeline":
         """
-        在这里对 representation, reasoning, synthesis 模型进行权重加载。
+        Load the representation, reasoning and synthesis model weights.
         Returns cls(representation_model, reasoning_model, synthesis_model).
         """
         component_options = dict(required_components or {})
@@ -200,11 +197,11 @@ class InfiniteVGGTPipeline(PipelineABC):
 
     def process(
         self,
-        input_: Union[str, np.ndarray, List[str]],
-        interaction: Optional[Dict[str, Any]] = None,
+        input_: str | np.ndarray | list[str],
+        interaction: dict[str, Any] | None = None,
     ) -> InfiniteVGGTResult:
         """
-        input_: 图片、视频等输入 (image path, video path, image dir, or list of paths).
+        input_: Image or video input (image path, video path, image dir, or list of paths).
         interaction: from operator.process_interaction().
         Returns result with PIL.Image / video frame list (no save).
         """
@@ -227,7 +224,7 @@ class InfiniteVGGTPipeline(PipelineABC):
             output_format = interaction.get("output_format", "ply")
 
         # Build saveable outputs: PIL.Image list for depth, frame list for video
-        depth_images: List[Image.Image] = []
+        depth_images: list[Image.Image] = []
         depth_map = rep["depth_map"]
         N = depth_map.shape[0] if getattr(depth_map, "shape", None) is not None else len(rep["colors"])
         for i in range(N):
@@ -235,7 +232,9 @@ class InfiniteVGGTPipeline(PipelineABC):
             depth_image = depth_to_colormap_pil(np.asarray(d).squeeze())
             if depth_image is not None:
                 depth_images.append(depth_image)
-        video_frames = [Image.fromarray((np.clip(c, 0, 1) * 255).astype(np.uint8)) for c in rep["colors"]]
+        video_frames: list[np.ndarray | Image.Image] = [
+            Image.fromarray((np.clip(c, 0, 1) * 255).astype(np.uint8)) for c in rep["colors"]
+        ]
 
         return InfiniteVGGTResult(
             point_map=rep["point_map"],
@@ -252,12 +251,12 @@ class InfiniteVGGTPipeline(PipelineABC):
     def __call__(
         self,
         data_path: str,
-        interaction: Optional[Dict[str, Any]] = None,
+        interaction: dict[str, Any] | None = None,
         **kwargs,
     ) -> InfiniteVGGTResult:
         """
-        Pipeline 调用入口。不在此处 save；返回可保存对象 (PIL.Image, video frame list)，
-        由用户在 test 中保存或后续处理。
+        Run the pipeline without saving; return savable objects (PIL.Image, video frame list)
+        that callers save or post-process.
         """
         if interaction is None and self.operator.current_interaction:
             interaction = self.operator.process_interaction()
@@ -269,12 +268,13 @@ class InfiniteVGGTPipeline(PipelineABC):
         self,
         *args,
         **kwds,
-    ) -> "Generator[Any, List[str], None]":
+    ) -> "Generator[Any, list[str], None]":
         """
         Stream pipeline outputs: yields (tensor, frame_ids) for incremental processing.
         Yield type: tensor (e.g. point_map or depth); Send type: List[str] (frame ids).
         """
         import torch
+
         input_ = args[0] if args else kwds.get("input_") or kwds.get("data_path")
         interaction = kwds.get("interaction")
         if not input_:

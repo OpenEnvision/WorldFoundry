@@ -1,0 +1,160 @@
+experiment_name: cosmos3dgs
+output_dir: outputs/training/cosmos3dgs
+data_mode: [['lyra_static', 1]]
+img_size: [704, 1280]
+resume_from_checkpoint: latest
+resume_from_checkpoint_dir: null
+seed: 42
+checkpointing_steps: 100
+permanent_checkpointing_steps: 2500
+checkpoints_total_limit: 5
+max_train_steps: 100000000
+num_workers: 16
+batch_size: 4
+local_rank: -1
+
+log_with: null
+pretrained_model_name_or_path: null
+save_multi_random_states: false
+find_unused_parameters: false
+use_ema: false
+job_stop_steps: null
+resume_pretrained_model_ckpt: null
+
+# Main blocks
+use_mamba: true
+llrm_7m1t: true
+llrm_7m1t_index: 8
+llrm_7m1t_index_residual: 8
+enc_depth: 16
+enc_embed_dim: 512
+enc_num_heads: 8
+mlp_ratio: 4
+patch_size: 2
+patch_size_temporal: 1
+num_block_channels_reduce: null
+use_pos_embedding: false
+gradient_checkpoint_transformer: true
+
+# Tokenizer
+vae_backbone: cosmos1
+vae_path: ./checkpoints/cosmos_predict1/Cosmos-Tokenize1-CV8x8x8-720p
+
+# Latent decoding
+use_rgb_decoder: false
+use_patch_embeddings_encoder: true
+use_cosmos_decoder: false
+transposed_conv_type: null # [None, 'factorized']
+transposed_conv_hidden_channels: null
+num_latent_c: 16
+latent_time_compression: 8
+latent_spat_compression: 8
+patch_size_out_factor: [1, 8, 8]
+gradient_checkpoint_conv: true
+
+# Camera conditioning
+use_plucker: true
+relative_translation_scale: true
+plucker_embedding_vae: true
+compute_plucker_cuda: true
+compute_plucker_dtype: bfloat16
+plucker_embedding_vae_fuse_type: concat
+
+# Frame sampling
+num_views: 130
+num_input_views: 121
+gs_view_chunk_size: 1
+num_input_multi_views: 1
+fuse_multi_views: true
+process_multi_views: true
+static_view_indices_sampling: random
+deferred_bp: true
+static_frame_sampling: uniform
+# sample a variable number of input multi views
+sample_num_input_multi_views: True
+static_view_indices_fixed: ['0']
+# patch-based training
+gs_render_patch_size: null
+
+# subsample gaussians
+sub_sample_gaussians_factor: null # e.g., [t, h, w] = [1, 2, 2], if null = no subsampling
+sub_sample_gaussians: true
+sub_sample_gaussians_type: null  # [None, 'learned']
+sub_sample_gaussians_type_tokens: 'global' # [None, 'global', 'local']
+sub_sample_gaussians_temperature: 1.0
+
+# freely moving gaussians
+gaussians_predict_offset: false
+use_gaussians_predict_offset: true
+gaussians_predict_offset_range: [-1, 1]
+gaussians_predict_offset_act: 'clamp'
+
+# general rendering config
+use_3dgut: true
+znear: 0.1
+zfar: 500
+dnear: 0.1
+dfar: 500
+output_dims: 12
+gaussian_scale_cap: 0.3
+pre_sigmoid_distance_shift: -1.65
+
+# Training setup
+workspace: ./workspace
+logging_dir: logs
+resume: null
+gradient_accumulation_steps: 1
+gradient_clip: 1.0
+mixed_precision: bf16
+use_deepspeed: true
+deepspeed_type: null
+use_fsdp: false
+learning_rate: 1e-4
+scale_lr: false
+lr_scheduler: constant_with_warmup
+lr_warmup_steps: 100
+lr_overwrite: false
+use_8bit_adam: false
+allow_tf32: true
+adam_beta1: 0.9
+adam_beta2: 0.999
+adam_weight_decay: 1e-2
+adam_epsilon: 1e-8
+max_grad_norm: 1.0
+autocast_cache_enabled: false
+set_transformer_dtype: true
+compile_frozen_modules: false
+use_flex_attention: false
+use_qk_norm: false
+grad_norm_cap: 5000
+
+# Additional losses
+lambda_lpips: 0.5
+lpips_img_size_min: 704
+lpips_chunk_size: 32
+lambda_ssim: 0.0
+use_depth: true
+lambda_depth: 0.05
+lambda_opacity: 0.0
+gaussians_prune_ratio: 0.0
+gaussians_random_ratio: 0.0
+
+# Dynamic
+use_time_embedding: false
+use_interp_target: false
+static_time: false
+time_embedding: true
+time_embedding_dim: 3
+time_embedding_vae: true
+time_embedding_use_orig: true
+timesteps_eps: 0.
+select_target_views_input_dynamic: true
+
+# Data
+num_test_scenes: 16
+subsample_data_train_val: true
+mirror_static: true
+mirror_dynamic: true
+set_manual_time_idx: false
+load_latents: true
+subsample_target: null

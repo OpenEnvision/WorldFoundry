@@ -1,49 +1,62 @@
 """Module for the Pi3 operator implementation."""
 
-import os
 import math
+import os
+from pathlib import Path
+from typing import cast
+
 import cv2
 import numpy as np
 import torch
-from typing import List, Optional, Union, Dict, Any
-from pathlib import Path
 
 from .base_operator import BaseOperator
 
-
 NAVIGATION_TEMPLATE = [
-    "forward", "backward", "left", "right",
-    "forward_left", "forward_right", "backward_left", "backward_right",
-    "camera_up", "camera_down", "camera_l", "camera_r",
-    "camera_ul", "camera_ur", "camera_dl", "camera_dr",
-    "camera_zoom_in", "camera_zoom_out",
+    "forward",
+    "backward",
+    "left",
+    "right",
+    "forward_left",
+    "forward_right",
+    "backward_left",
+    "backward_right",
+    "camera_up",
+    "camera_down",
+    "camera_l",
+    "camera_r",
+    "camera_ul",
+    "camera_ur",
+    "camera_dl",
+    "camera_dr",
+    "camera_zoom_in",
+    "camera_zoom_out",
 ]
 
 NAVIGATION_DELTAS = {
-    "forward":        [0.0,  0.0, -0.5, 0.0,  0.0],
-    "backward":       [0.0,  0.0,  0.5, 0.0,  0.0],
-    "left":           [-0.5, 0.0,  0.0, 0.0,  0.0],
-    "right":          [0.5,  0.0,  0.0, 0.0,  0.0],
-    "forward_left":   [-0.35, 0.0, -0.35, 0.0, 0.0],
-    "forward_right":  [0.35,  0.0, -0.35, 0.0, 0.0],
-    "backward_left":  [-0.35, 0.0,  0.35, 0.0, 0.0],
-    "backward_right": [0.35,  0.0,  0.35, 0.0, 0.0],
-    "camera_up":      [0.0,  0.0,  0.0, -0.15, 0.0],
-    "camera_down":    [0.0,  0.0,  0.0,  0.15, 0.0],
-    "camera_l":       [0.0,  0.0,  0.0,  0.0, -0.15],
-    "camera_r":       [0.0,  0.0,  0.0,  0.0,  0.15],
-    "camera_ul":      [0.0,  0.0,  0.0, -0.1, -0.1],
-    "camera_ur":      [0.0,  0.0,  0.0, -0.1,  0.1],
-    "camera_dl":      [0.0,  0.0,  0.0,  0.1, -0.1],
-    "camera_dr":      [0.0,  0.0,  0.0,  0.1,  0.1],
-    "camera_zoom_in": [0.0,  0.0, -0.3,  0.0,  0.0],
-    "camera_zoom_out":[0.0,  0.0,  0.3,  0.0,  0.0],
+    "forward": [0.0, 0.0, -0.5, 0.0, 0.0],
+    "backward": [0.0, 0.0, 0.5, 0.0, 0.0],
+    "left": [-0.5, 0.0, 0.0, 0.0, 0.0],
+    "right": [0.5, 0.0, 0.0, 0.0, 0.0],
+    "forward_left": [-0.35, 0.0, -0.35, 0.0, 0.0],
+    "forward_right": [0.35, 0.0, -0.35, 0.0, 0.0],
+    "backward_left": [-0.35, 0.0, 0.35, 0.0, 0.0],
+    "backward_right": [0.35, 0.0, 0.35, 0.0, 0.0],
+    "camera_up": [0.0, 0.0, 0.0, -0.15, 0.0],
+    "camera_down": [0.0, 0.0, 0.0, 0.15, 0.0],
+    "camera_l": [0.0, 0.0, 0.0, 0.0, -0.15],
+    "camera_r": [0.0, 0.0, 0.0, 0.0, 0.15],
+    "camera_ul": [0.0, 0.0, 0.0, -0.1, -0.1],
+    "camera_ur": [0.0, 0.0, 0.0, -0.1, 0.1],
+    "camera_dl": [0.0, 0.0, 0.0, 0.1, -0.1],
+    "camera_dr": [0.0, 0.0, 0.0, 0.1, 0.1],
+    "camera_zoom_in": [0.0, 0.0, -0.3, 0.0, 0.0],
+    "camera_zoom_out": [0.0, 0.0, 0.3, 0.0, 0.0],
 }
 
 
 class Pi3Operator(BaseOperator):
-
     """Operator class for the Pi3 model integration."""
+
     PATCH_SIZE = 14
     PIXEL_LIMIT = 255000
 
@@ -57,18 +70,18 @@ class Pi3Operator(BaseOperator):
             operation_types = ["visual_instruction", "action_instruction"]
         if interaction_template is None:
             interaction_template = list(NAVIGATION_TEMPLATE)
-        super(Pi3Operator, self).__init__(operation_types=operation_types)
+        super().__init__(operation_types=operation_types)
         self.interaction_template = interaction_template
         self.interaction_template_init()
 
-    def collect_paths(self, path: Union[str, Path]) -> List[str]:
+    def collect_paths(self, path: str | Path) -> list[str]:
         """Collect image file paths from a file, directory, or txt list."""
         path = str(path)
-        SUPPORTED_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp'}
+        SUPPORTED_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
 
         if os.path.isfile(path):
             if path.lower().endswith(".txt"):
-                with open(path, "r", encoding="utf-8") as handle:
+                with open(path, encoding="utf-8") as handle:
                     files = [line.strip() for line in handle.readlines() if line.strip()]
             else:
                 files = [path]
@@ -84,12 +97,10 @@ class Pi3Operator(BaseOperator):
 
     @staticmethod
     def _is_video(path: str) -> bool:
-        """Is video implementation."""
-        VIDEO_EXTS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv'}
+        VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv"}
         return os.path.splitext(path)[1].lower() in VIDEO_EXTS
 
-    def _load_video_frames(self, video_path: str, interval: int = 10) -> List[np.ndarray]:
-        """Load video frames implementation."""
+    def _load_video_frames(self, video_path: str, interval: int = 10) -> list[np.ndarray]:
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise ValueError(f"Could not open video: {video_path}")
@@ -110,7 +121,6 @@ class Pi3Operator(BaseOperator):
         return frames
 
     def _load_single_image(self, image_path: str) -> np.ndarray:
-        """Load single image implementation."""
         raw_image = cv2.imread(image_path)
         if raw_image is None:
             raise ValueError(f"Could not read image from {image_path}")
@@ -118,9 +128,11 @@ class Pi3Operator(BaseOperator):
 
     @staticmethod
     def _compute_target_size(
-        W_orig: int, H_orig: int, patch_size: int = 14, pixel_limit: int = 255000,
+        W_orig: int,
+        H_orig: int,
+        patch_size: int = 14,
+        pixel_limit: int = 255000,
     ) -> tuple:
-        """Compute target size implementation."""
         scale = math.sqrt(pixel_limit / (W_orig * H_orig)) if W_orig * H_orig > 0 else 1
         W_target, H_target = W_orig * scale, H_orig * scale
         k, m = round(W_target / patch_size), round(H_target / patch_size)
@@ -131,8 +143,16 @@ class Pi3Operator(BaseOperator):
                 m -= 1
         return max(1, k) * patch_size, max(1, m) * patch_size
 
-    def images_to_tensor(self, images: List[np.ndarray], device: str = "cuda") -> torch.Tensor:
-        """Images to tensor implementation."""
+    def images_to_tensor(self, images: list[np.ndarray], device: str = "cuda") -> torch.Tensor:
+        """Resize images with Lanczos to one patch-aligned size and stack them as a ``[1, N, 3, H, W]`` tensor.
+
+        The target size comes from the first image: multiples of ``PATCH_SIZE`` per side, close to its
+        aspect ratio, with at most ``PIXEL_LIMIT`` pixels. Non-uint8 images are taken as values in
+        [0, 1]; grayscale images are replicated to three channels. The result lies in [0, 1].
+
+        Raises:
+            ValueError: ``images`` is empty.
+        """
         if len(images) == 0:
             raise ValueError("No images provided")
 
@@ -143,6 +163,7 @@ class Pi3Operator(BaseOperator):
 
         from PIL import Image as PILImage
         from torchvision import transforms
+
         to_tensor = transforms.ToTensor()
 
         tensors = []
@@ -161,10 +182,10 @@ class Pi3Operator(BaseOperator):
 
     def process_perception(
         self,
-        input_signal: Union[str, np.ndarray, torch.Tensor, List[str], List[np.ndarray]],
+        input_signal: str | np.ndarray | torch.Tensor | list[str] | list[np.ndarray],
         interval: int = -1,
         **kwargs,
-    ) -> List[np.ndarray]:
+    ) -> list[np.ndarray]:
         """Process perception inputs like images, videos, and reference frames."""
         if isinstance(input_signal, (str, Path)):
             input_signal = str(input_signal)
@@ -178,19 +199,16 @@ class Pi3Operator(BaseOperator):
                     raise ValueError(f"No images found in: {input_signal}")
                 if interval < 0:
                     interval = 1
-                return [
-                    self._load_single_image(image_paths[i])
-                    for i in range(0, len(image_paths), interval)
-                ]
+                return [self._load_single_image(image_paths[i]) for i in range(0, len(image_paths), interval)]
             else:
                 return [self._load_single_image(input_signal)]
         elif isinstance(input_signal, list):
             if len(input_signal) == 0:
                 raise ValueError("Empty input list")
             if isinstance(input_signal[0], str):
-                return [self._load_single_image(p) for p in input_signal]
+                return [self._load_single_image(p) for p in cast(list[str], input_signal)]
             elif isinstance(input_signal[0], np.ndarray):
-                return list(input_signal)
+                return list(cast(list[np.ndarray], input_signal))
             else:
                 raise ValueError(f"Unsupported list element type: {type(input_signal[0])}")
         elif isinstance(input_signal, torch.Tensor):
@@ -232,7 +250,7 @@ class Pi3Operator(BaseOperator):
             self.check_interaction(interaction)
             self.current_interaction.append(interaction)
 
-    def process_interaction(self, num_frames: Optional[int] = None) -> List[float]:
+    def process_interaction(self, num_frames: int | None = None) -> list[float]:
         """Process navigation interactions and return accumulated camera delta [dx,dy,dz,theta_x,theta_z]."""
         if len(self.current_interaction) == 0:
             raise ValueError("No interaction to process. Use get_interaction() first.")
@@ -247,7 +265,7 @@ class Pi3Operator(BaseOperator):
         self.current_interaction = []
         return delta
 
-    def process_interaction_single(self, interaction: str) -> List[float]:
+    def process_interaction_single(self, interaction: str) -> list[float]:
         """Return delta for a single interaction without modifying current_interaction state."""
         self.check_interaction(interaction)
         self.interaction_history.append(interaction)

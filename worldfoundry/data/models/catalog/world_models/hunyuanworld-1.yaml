@@ -22,6 +22,7 @@ official_sources:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
     url: https://github.com/Tencent-Hunyuan/HunyuanWorld-1.0
+    revision: 57fa9f3a79eae1079c279968cdb9d82c75fa7c86
   huggingface:
   - confirmed_by: https://huggingface.co/api/models/tencent/HunyuanWorld-1
     repo_id: tencent/HunyuanWorld-1
@@ -39,7 +40,7 @@ catalog_policy:
   open_source_rule: Only mark open_source when an official GitHub repository or official
     Hugging Face model page was confirmed. Do not infer checkpoint availability from
     papers, demos, or third-party mirrors.
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: hunyuanworld-1
 runtime_profile: runtime-profile:hunyuanworld-1
 runner_parity:
@@ -53,17 +54,15 @@ docs:
   publisher: Tencent (Hunyuan)
   publisher_kind: company
   publisher_zh: 腾讯（混元）
-  overview: HunyuanWorld 1.0 generates immersive, explorable 3D worlds from text or an image — the first generation of Tencent's open world-generation stack, exporting layered panoramas and mesh scenes. In this catalog the official source route is registered; checkpoints and third-party assets stay runtime-gated.
-  overview_zh: HunyuanWorld 1.0 从文本或一张图生成沉浸式、可探索的 3D 世界——腾讯开源世界生成栈的第一代，导出分层全景与网格场景。本 catalog 中官方源码路径已注册；checkpoint 与第三方资产保持运行时限制。
-  architecture: 'Per the upstream release, generation goes panorama-first: a panoramic proxy is generated, semantically layered, and lifted to a 3D world representation. Architecture internals beyond this are not recorded in this repository.'
-  architecture_zh: 按上游发布，生成以全景为先：先生成全景代理图，再做语义分层并提升为 3D 世界表示。除此之外的架构内部细节仓库未记录。
-  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. For the newer component-verified stack, see the hy-world-2.0 entry.
-  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。较新的组件已验证栈请见 hy-world-2.0 条目。
+  overview: HunyuanWorld 1.0 generates immersive, explorable 3D worlds from text or an image — the first generation of Tencent's open world-generation stack, exporting layered panoramas and mesh scenes. WorldFoundry runs the official source route; checkpoints and third-party assets must be staged before generation.
+  overview_zh: HunyuanWorld 1.0 从文本或一张图生成沉浸式、可探索的 3D 世界——腾讯开源世界生成栈的第一代，导出分层全景与网格场景。WorldFoundry 运行官方源码路径；生成前需就位 checkpoint 与第三方资产。
+  architecture: 'Per the upstream release, generation goes panorama-first: a panoramic proxy is generated, semantically layered, and lifted to a 3D world representation.'
+  architecture_zh: 按上游发布，生成以全景为先：先生成全景代理图，再做语义分层并提升为 3D 世界表示。
+  usage_notes: Until the required checkpoints and assets are staged, a run returns a runtime plan that lists the missing assets instead of generating. For the newer stack, see hy-world-2.0.
+  usage_notes_zh: 所需 checkpoint 与资产就位前，运行只输出列出缺失资产的运行时计划，不会生成内容。较新的栈请见 hy-world-2.0。
   limitations:
-  - Real generation is checkpoint/asset gated.
   - Superseded by HY-World 2.0 for most world-generation use.
   limitations_zh:
-  - 真实生成受 checkpoint/资产限制。
   - 多数世界生成用途已被 HY-World 2.0 取代。
   recommended_benchmarks:
   - id: worldscore

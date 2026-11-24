@@ -1,17 +1,18 @@
 """Infinite World visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
 import math
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any
 
 from PIL import Image
 
-from worldfoundry.core.io import write_video
+from worldfoundry.core.media.codecs.video import write_video
 
-from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
 from ...operators.infinite_world_operator import InfiniteWorldOperator
 from ...synthesis.visual_generation.infinite_world.infinite_world_synthesis import InfiniteWorldSynthesis
+from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
+from ..pipeline_utils import PipelineABC
 
 
 class InfiniteWorldPipeline(PipelineABC):
@@ -19,9 +20,9 @@ class InfiniteWorldPipeline(PipelineABC):
 
     def __init__(
         self,
-        operators: Optional[InfiniteWorldOperator] = None,
-        synthesis_model: Optional[InfiniteWorldSynthesis] = None,
-        memory_module: Optional[Any] = None,
+        operators: InfiniteWorldOperator | None = None,
+        synthesis_model: InfiniteWorldSynthesis | None = None,
+        memory_module: Any | None = None,
         device: str = "cuda",
         weight_dtype=None,
     ):
@@ -33,10 +34,10 @@ class InfiniteWorldPipeline(PipelineABC):
         self.weight_dtype = weight_dtype
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[str] = None,
-        required_components: Optional[dict] = None,
+        model_path: str | None = None,
+        required_components: dict | None = None,
         device: str = "cuda",
         weight_dtype=None,
         **kwargs,
@@ -58,8 +59,8 @@ class InfiniteWorldPipeline(PipelineABC):
 
     def _resolve_num_chunks(
         self,
-        num_chunks: Optional[int],
-        num_frames: Optional[int],
+        num_chunks: int | None,
+        num_frames: int | None,
         action_count: int,
         condition_frames: int,
     ) -> int:
@@ -85,7 +86,7 @@ class InfiniteWorldPipeline(PipelineABC):
         return 1 + math.ceil(extra_actions / output_stride)
 
     @staticmethod
-    def _trim_result_frames(result: Dict[str, Any], num_frames: int) -> Dict[str, Any]:
+    def _trim_result_frames(result: dict[str, Any], num_frames: int) -> dict[str, Any]:
         """Trim a generated chunk sequence to the public decoded-frame target."""
         target = max(int(num_frames), 1)
         video = result.get("video")
@@ -139,7 +140,7 @@ class InfiniteWorldPipeline(PipelineABC):
     def process(
         self,
         images,
-        interactions: Sequence[Union[str, Dict[str, str]]],
+        interactions: Sequence[str | dict[str, str]],
         prompt: str = "",
     ):
         """Process and normalize input arguments and conditions for inference."""
@@ -169,12 +170,12 @@ class InfiniteWorldPipeline(PipelineABC):
     def __call__(
         self,
         images,
-        interactions: Sequence[Union[str, Dict[str, str]]],
+        interactions: Sequence[str | dict[str, str]],
         prompt: str = "",
-        num_chunks: Optional[int] = None,
-        num_frames: Optional[int] = None,
-        negative_prompt: Optional[str] = None,
-        seed: Optional[int] = None,
+        num_chunks: int | None = None,
+        num_frames: int | None = None,
+        negative_prompt: str | None = None,
+        seed: int | None = None,
         output_path: str | Path | None = None,
         output_dir: str | Path | None = None,
         fps: int = 30,
@@ -239,13 +240,13 @@ class InfiniteWorldPipeline(PipelineABC):
 
     def stream(
         self,
-        images: Optional[Union[Image.Image, Any]],
-        interactions: Sequence[Union[str, Dict[str, str]]],
+        images: Image.Image | Any | None,
+        interactions: Sequence[str | dict[str, str]],
         prompt: str = "",
-        num_chunks: Optional[int] = None,
-        num_frames: Optional[int] = None,
-        negative_prompt: Optional[str] = None,
-        seed: Optional[int] = None,
+        num_chunks: int | None = None,
+        num_frames: int | None = None,
+        negative_prompt: str | None = None,
+        seed: int | None = None,
         reset_memory: bool = False,
         return_dict: bool = False,
         **kwargs,

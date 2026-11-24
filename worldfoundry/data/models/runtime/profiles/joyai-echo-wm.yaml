@@ -11,8 +11,7 @@ groups:
 source_repos:
 - url: https://github.com/jd-opensource/JoyAI-Echo
   revision: a08f1274573d7cd6ec66719f204951f4227a5173
-  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/jd-opensource--JoyAI-Echo
-  subdir: echo_wm
+  in_tree_path: worldfoundry/synthesis/visual_generation/joyai_echo/echo_wm_runtime
 checkpoints:
 - repo_id: Echo-Team/Echo-WM
   revision: 04efdf813648f698680c10024f22f351a0273163
@@ -33,7 +32,7 @@ artifact_kind: generated_world
 artifact_filename: joyai-echo-wm.mp4
 execution:
   environment: joyai-echo-wm
-  backend_stage: official_external_runtime
+  backend_stage: official_in_tree_runtime
   runtime_status: command_contract_validated_checkpoint_gpu_pending
   integration_status: integrated
   pipeline_binding: joyai-echo-wm
@@ -46,7 +45,7 @@ execution:
 integration:
   status: integrated
 notes:
-- variant=base routes to inference_wm.py; variant=flash routes to inference_wm_causal.py.
-- Prediction never clones source or downloads checkpoints; source_root, checkpoint_dir, and gemma_path are preflighted.
+- variant=base runs the vendored inference_wm module; variant=flash runs inference_wm_causal.
+- Prediction never downloads checkpoints; the interpreter, configuration, checkpoint, and gemma_path are preflighted.
 - Director Agent, local-server, Gradio, training, and evaluation surfaces are outside this inference-only integration.
 - The upstream license marks this release for academic research and non-commercial use.

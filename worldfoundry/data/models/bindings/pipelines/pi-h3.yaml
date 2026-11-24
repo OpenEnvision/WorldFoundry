@@ -1,0 +1,20 @@
+schema_version: 2
+binding_id: pi-h3
+model_id: pi-h3
+aliases:
+- pi_h3
+- pih3
+- pi-h3-dwd
+- pi-h3-2step-dwd
+- pi-h3-4step-dwd
+- pi-h3-2step
+- pi-h3-4step
+- minimax-h3-pi
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.pi_h3.pipeline_pi_h3:PiH3Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

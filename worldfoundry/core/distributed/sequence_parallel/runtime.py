@@ -13,7 +13,8 @@ import datetime
 import os
 import threading
 from collections import OrderedDict
-from typing import Any, Optional, Tuple
+from collections.abc import Callable
+from typing import Any, cast
 
 import torch
 import torch.distributed as dist
@@ -80,13 +81,13 @@ def get_sequence_parallel_collective_counters() -> dict[str, int]:
         return dict(_COLLECTIVE_COUNTERS)
 
 
-def _resolve_group(group: Optional[dist.ProcessGroup] = None):
+def _resolve_group(group: dist.ProcessGroup | None = None):
     """Use the caller group, or fall back to the native SP group."""
 
     return group if group is not None else get_sequence_parallel_group()
 
 
-def _rank_in_group(group: Optional[dist.ProcessGroup] = None):
+def _rank_in_group(group: dist.ProcessGroup | None = None):
     """Group-local rank; WORLD rank when ``group`` is ``None``."""
 
     if group is None:
@@ -110,7 +111,7 @@ def _collective_shape_cache_enabled() -> bool:
 
 def _gather_shapes_cached(
     local_shape: torch.Size | tuple[int, ...],
-    group: Optional[dist.ProcessGroup],
+    group: dist.ProcessGroup | None,
     device: torch.device,
 ) -> tuple[tuple[int, ...], ...]:
     """Gather shape metadata on-device, optionally caching fixed workloads."""
@@ -192,7 +193,7 @@ def set_sequence_parallel_group(group: dist.ProcessGroup) -> None:
     nccl_info.rank_within_group = dist.get_rank(group)
 
 
-def get_sequence_parallel_group() -> Optional[dist.ProcessGroup]:
+def get_sequence_parallel_group() -> dist.ProcessGroup | None:
     """Return the native SP group, or ``None`` when SP is not initialized."""
 
     return _SEQUENCE_PARALLEL_GROUPS.get("sequence", nccl_info.group)
@@ -205,10 +206,7 @@ def initialize_cfg_parallel_group(sp_size: int, cfg_size: int) -> None:
         raise ValueError("cfg parallel size must be positive")
     world_size = dist.get_world_size()
     if world_size != int(sp_size) * int(cfg_size):
-        raise ValueError(
-            f"world size {world_size} must equal sp_size*cfg_size="
-            f"{int(sp_size) * int(cfg_size)}"
-        )
+        raise ValueError(f"world size {world_size} must equal sp_size*cfg_size={int(sp_size) * int(cfg_size)}")
     rank = dist.get_rank()
     for sequence_rank in range(int(sp_size)):
         ranks = [cfg_rank * int(sp_size) + sequence_rank for cfg_rank in range(int(cfg_size))]
@@ -217,7 +215,7 @@ def initialize_cfg_parallel_group(sp_size: int, cfg_size: int) -> None:
             _CFG_PARALLEL_GROUPS["cfg"] = group
 
 
-def get_cfg_parallel_group() -> Optional[dist.ProcessGroup]:
+def get_cfg_parallel_group() -> dist.ProcessGroup | None:
     """Return the CFG replica group, or ``None`` when CFG parallel is off."""
 
     return _CFG_PARALLEL_GROUPS.get("cfg")
@@ -292,7 +290,7 @@ def initialize_distributed(seed):
     initialize_sequence_parallel_state(world_size)
 
 
-def broadcast(input_: torch.Tensor, group: Optional[dist.ProcessGroup] = None):
+def broadcast(input_: torch.Tensor, group: dist.ProcessGroup | None = None):
     """Broadcast from group-local rank 0; return a contiguous view."""
 
     group = _resolve_group(group)
@@ -307,13 +305,13 @@ def broadcast(input_: torch.Tensor, group: Optional[dist.ProcessGroup] = None):
 
 
 def _all_to_all_4D(
-    input: torch.tensor,
+    input: torch.Tensor,
     scatter_idx: int = 2,
     gather_idx: int = 1,
     group=None,
     *,
     assume_even: bool = False,
-) -> torch.tensor:
+) -> torch.Tensor:
     """
     all-to-all for QKV
 
@@ -338,12 +336,7 @@ def _all_to_all_4D(
         seq_lens = (
             (int(input.shape[1]),) * seq_world_size
             if assume_even
-            else tuple(
-                shape[0]
-                for shape in _gather_shapes_cached(
-                    (input.shape[1],), group, input.device
-                )
-            )
+            else tuple(shape[0] for shape in _gather_shapes_cached((input.shape[1],), group, input.device))
         )
         # uneven
         if seq_lens[-1] != seq_lens[0]:
@@ -481,9 +474,7 @@ class SeqAllToAll4D(torch.autograd.Function):
         )
 
     @staticmethod
-    def backward(
-        ctx: Any, *grad_output: torch.Tensor
-    ) -> Tuple[None, torch.Tensor, None, None, None]:
+    def backward(ctx: Any, *grad_output: torch.Tensor) -> tuple[None, torch.Tensor, None, None, None]:
         """Invert the 4D exchange by swapping scatter and gather indices."""
 
         return (
@@ -503,7 +494,7 @@ class SeqAllToAll4D(torch.autograd.Function):
 
 def all_to_all_4D(
     input_: torch.Tensor,
-    group: Optional[dist.ProcessGroup] = None,
+    group: dist.ProcessGroup | None = None,
     scatter_dim: int = 2,
     gather_dim: int = 1,
     *,
@@ -523,7 +514,7 @@ def all_to_all_4D(
 
 def all_to_all_4d_many(
     tensors: tuple[torch.Tensor, ...] | list[torch.Tensor],
-    group: Optional[dist.ProcessGroup] = None,
+    group: dist.ProcessGroup | None = None,
     scatter_dim: int = 2,
     gather_dim: int = 1,
     *,
@@ -536,10 +527,7 @@ def all_to_all_4d_many(
         return values
     first = values[0]
     compatible = all(
-        value.ndim == 4
-        and value.shape == first.shape
-        and value.dtype == first.dtype
-        and value.device == first.device
+        value.ndim == 4 and value.shape == first.shape and value.dtype == first.dtype and value.device == first.device
         for value in values[1:]
     )
     try:
@@ -595,8 +583,9 @@ class _AllToAll(torch.autograd.Function):
         output = all_to_all_tensor(input_, ctx.world_size, process_group, scatter_dim, gather_dim)
         return output
 
+    # Autograd supplies one gradient for this forward's single tensor output.
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output):  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
         """Invert the hop by swapping scatter and gather dimensions."""
 
         grad_output = all_to_all_tensor(
@@ -616,7 +605,7 @@ class _AllToAll(torch.autograd.Function):
 
 def all_to_all(
     input_: torch.Tensor,
-    group: Optional[dist.ProcessGroup] = None,
+    group: dist.ProcessGroup | None = None,
     scatter_dim: int = 2,
     gather_dim: int = 1,
 ):
@@ -653,8 +642,9 @@ class _AllGather(torch.autograd.Function):
         output = torch.cat(tensor_list, dim=dim)
         return output
 
+    # Autograd supplies one gradient for this forward's single tensor output.
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output):  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
         """Keep this rank's slice of the concatenated gradient."""
 
         group = ctx.group
@@ -680,7 +670,7 @@ def all_gather(input_: torch.Tensor, dim: int = 1, group=None):
     return _AllGather.apply(input_, dim, _resolve_group(group))
 
 
-def _split(input_: torch.Tensor, dim: int, group: Optional[dist.ProcessGroup]) -> torch.Tensor:
+def _split(input_: torch.Tensor, dim: int, group: dist.ProcessGroup | None) -> torch.Tensor:
     """Keep this rank's even slice along ``dim``; ``dim`` must divide by world size."""
 
     group = _resolve_group(group)
@@ -694,7 +684,7 @@ def _split(input_: torch.Tensor, dim: int, group: Optional[dist.ProcessGroup]) -
     return output_list[rank].contiguous()
 
 
-def _gather(input_: torch.Tensor, dim: int, group: Optional[dist.ProcessGroup]) -> torch.Tensor:
+def _gather(input_: torch.Tensor, dim: int, group: dist.ProcessGroup | None) -> torch.Tensor:
     """All-gather equal tensors and concatenate along ``dim``."""
 
     group = _resolve_group(group)
@@ -709,15 +699,16 @@ class _SplitForwardGatherBackward(torch.autograd.Function):
     """Keep a local shard in forward; all-gather grads so the full tensor trains."""
 
     @staticmethod
-    def forward(ctx, input_: torch.Tensor, dim: int, group: Optional[dist.ProcessGroup]):
+    def forward(ctx, input_: torch.Tensor, dim: int, group: dist.ProcessGroup | None):
         """Split ``input_`` along ``dim`` to this rank's shard."""
 
         ctx.dim = dim
         ctx.group = group
         return _split(input_, dim, group)
 
+    # Autograd supplies one gradient for this forward's single tensor output.
     @staticmethod
-    def backward(ctx, grad_output: torch.Tensor):
+    def backward(ctx, grad_output: torch.Tensor):  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
         """All-gather local grads to reconstruct the full-tensor gradient."""
 
         return _gather(grad_output, ctx.dim, ctx.group), None, None
@@ -727,15 +718,16 @@ class _GatherForwardSplitBackward(torch.autograd.Function):
     """Assemble the full tensor in forward; split grads back to this shard."""
 
     @staticmethod
-    def forward(ctx, input_: torch.Tensor, dim: int, group: Optional[dist.ProcessGroup]):
+    def forward(ctx, input_: torch.Tensor, dim: int, group: dist.ProcessGroup | None):
         """All-gather shards along ``dim`` for decode / loss."""
 
         ctx.dim = dim
         ctx.group = group
         return _gather(input_, dim, group)
 
+    # Autograd supplies one gradient for this forward's single tensor output.
     @staticmethod
-    def backward(ctx, grad_output: torch.Tensor):
+    def backward(ctx, grad_output: torch.Tensor):  # ty: ignore[invalid-method-override]  # torch declares backward(ctx, *grad_outputs); this function has a single output gradient.
         """Keep this rank's slice of the full-tensor gradient."""
 
         return _split(grad_output, ctx.dim, ctx.group), None, None
@@ -744,7 +736,7 @@ class _GatherForwardSplitBackward(torch.autograd.Function):
 def split_forward_gather_backward(
     input_: torch.Tensor,
     dim: int,
-    group: Optional[dist.ProcessGroup] = None,
+    group: dist.ProcessGroup | None = None,
 ) -> torch.Tensor:
     """Public split-forward / gather-backward used by Ulysses residual paths."""
 
@@ -754,7 +746,7 @@ def split_forward_gather_backward(
 def gather_forward_split_backward(
     input_: torch.Tensor,
     dim: int,
-    group: Optional[dist.ProcessGroup] = None,
+    group: dist.ProcessGroup | None = None,
 ) -> torch.Tensor:
     """Public gather-forward / split-backward used by decode / loss."""
 
@@ -771,28 +763,29 @@ def gather_forward_split_backward(
 try:
     import importlib.util as _importlib_util
 
-    if _importlib_util.find_spec("paifuser") is not None:
-        from paifuser.xfuser.core.distributed import (
-            get_sequence_parallel_rank,
-            get_sequence_parallel_world_size,
-            get_sp_group,
-            get_world_group,
-            init_distributed_environment,
-            initialize_model_parallel,
-            model_parallel_is_initialized,
-        )
-        from paifuser.xfuser.core.long_ctx_attention import xFuserLongContextAttention
-    else:
-        from xfuser.core.distributed import (
-            get_sequence_parallel_rank,
-            get_sequence_parallel_world_size,
-            get_sp_group,
-            get_world_group,
-            init_distributed_environment,
-            initialize_model_parallel,
-            model_parallel_is_initialized,
-        )
-        from xfuser.core.long_ctx_attention import xFuserLongContextAttention
+    _xfuser_package = "paifuser.xfuser" if _importlib_util.find_spec("paifuser") is not None else "xfuser"
+    _xfuser_api = __import__(
+        f"{_xfuser_package}.core.distributed",
+        fromlist=[
+            "get_sequence_parallel_rank",
+            "get_sequence_parallel_world_size",
+            "get_sp_group",
+            "get_world_group",
+            "init_distributed_environment",
+            "initialize_model_parallel",
+            "model_parallel_is_initialized",
+        ],
+    )
+    get_sequence_parallel_rank = _xfuser_api.get_sequence_parallel_rank
+    get_sequence_parallel_world_size = _xfuser_api.get_sequence_parallel_world_size
+    get_sp_group = _xfuser_api.get_sp_group
+    get_world_group = _xfuser_api.get_world_group
+    init_distributed_environment = _xfuser_api.init_distributed_environment
+    initialize_model_parallel = _xfuser_api.initialize_model_parallel
+    model_parallel_is_initialized = _xfuser_api.model_parallel_is_initialized
+    xFuserLongContextAttention = __import__(
+        f"{_xfuser_package}.core.long_ctx_attention", fromlist=["xFuserLongContextAttention"]
+    ).xFuserLongContextAttention
 except Exception:
     get_sequence_parallel_world_size = None
     get_sequence_parallel_rank = None
@@ -830,27 +823,24 @@ def set_multi_gpus_devices(
                 "nccl",
                 device_id=torch.device("cuda", local_rank),
             )
-        expected_world_size = (
-            int(ring_degree)
-            * int(ulysses_degree)
-            * int(classifier_free_guidance_degree)
-        )
+        expected_world_size = int(ring_degree) * int(ulysses_degree) * int(classifier_free_guidance_degree)
         if dist.get_world_size() != expected_world_size:
             raise ValueError(
-                f"world size {dist.get_world_size()} does not match requested "
-                f"parallel degree {expected_world_size}"
+                f"world size {dist.get_world_size()} does not match requested parallel degree {expected_world_size}"
             )
         if ring_degree != 1:
             if get_sp_group is None:
                 raise RuntimeError("ring parallelism requires xFuser")
-            init_distributed_environment(rank=dist.get_rank(), world_size=dist.get_world_size())
-            initialize_model_parallel(
+            cast(Callable[..., Any], init_distributed_environment)(
+                rank=dist.get_rank(), world_size=dist.get_world_size()
+            )
+            cast(Callable[..., Any], initialize_model_parallel)(
                 sequence_parallel_degree=ring_degree * ulysses_degree,
                 classifier_free_guidance_degree=classifier_free_guidance_degree,
                 ring_degree=ring_degree,
                 ulysses_degree=ulysses_degree,
             )
-            return torch.device(f"cuda:{get_world_group().local_rank}")
+            return torch.device(f"cuda:{cast(Callable[[], Any], get_world_group)().local_rank}")
         initialize_sequence_parallel_group(int(ulysses_degree))
         initialize_cfg_parallel_group(
             int(ulysses_degree),
@@ -877,9 +867,7 @@ def ensure_sequence_parallel_runtime(sp_degree: int) -> torch.device:
     if xfuser_active:
         actual = int(get_sequence_parallel_world_size())
         if actual != degree:
-            raise ValueError(
-                f"sequence_parallel={degree} but active xFuser group has size {actual}"
-            )
+            raise ValueError(f"sequence_parallel={degree} but active xFuser group has size {actual}")
         local_rank = int(os.getenv("LOCAL_RANK", dist.get_rank()))
         torch.cuda.set_device(local_rank)
         return torch.device("cuda", local_rank)
@@ -888,9 +876,7 @@ def ensure_sequence_parallel_runtime(sp_degree: int) -> torch.device:
     if dist.is_initialized() and native_group is not None:
         actual = int(dist.get_world_size(native_group))
         if actual != degree:
-            raise ValueError(
-                f"sequence_parallel={degree} but active native group has size {actual}"
-            )
+            raise ValueError(f"sequence_parallel={degree} but active native group has size {actual}")
         local_rank = int(os.getenv("LOCAL_RANK", dist.get_rank()))
         torch.cuda.set_device(local_rank)
         return torch.device("cuda", local_rank)
@@ -898,8 +884,7 @@ def ensure_sequence_parallel_runtime(sp_degree: int) -> torch.device:
     declared_world_size = int(os.getenv("WORLD_SIZE", "1"))
     if declared_world_size != degree:
         raise RuntimeError(
-            f"sequence_parallel={degree} requires torchrun --nproc_per_node={degree}; "
-            f"WORLD_SIZE={declared_world_size}"
+            f"sequence_parallel={degree} requires torchrun --nproc_per_node={degree}; WORLD_SIZE={declared_world_size}"
         )
     return set_multi_gpus_devices(degree, 1)
 
@@ -946,7 +931,7 @@ def sequence_parallel_chunk(x: torch.Tensor, dim: int = 1) -> torch.Tensor:
     native_active = dist.is_initialized() and group is not None
     if xfuser_active:
         world_size = int(get_sequence_parallel_world_size())
-        rank = int(get_sequence_parallel_rank())
+        rank = int(cast(Callable[[], int], get_sequence_parallel_rank)())
     elif native_active:
         world_size = int(dist.get_world_size(group))
         rank = int(dist.get_rank(group))
@@ -956,8 +941,7 @@ def sequence_parallel_chunk(x: torch.Tensor, dim: int = 1) -> torch.Tensor:
         return x
     if x.size(dim) % world_size:
         raise ValueError(
-            f"dimension {dim} ({x.size(dim)}) must be divisible by "
-            f"sequence-parallel world size {world_size}"
+            f"dimension {dim} ({x.size(dim)}) must be divisible by sequence-parallel world size {world_size}"
         )
     return torch.chunk(x, world_size, dim=dim)[rank]
 
@@ -974,7 +958,7 @@ def sequence_parallel_all_gather(x: torch.Tensor, dim: int = 1) -> torch.Tensor:
         if int(get_sequence_parallel_world_size()) <= 1:
             return x
         _increment_collective_counter("sequence_output_all_gather_calls")
-        return get_sp_group().all_gather(x, dim=dim)
+        return cast(Callable[[], Any], get_sp_group)().all_gather(x, dim=dim)
     group = get_sequence_parallel_group()
     if not dist.is_initialized() or group is None or dist.get_world_size(group) <= 1:
         return x

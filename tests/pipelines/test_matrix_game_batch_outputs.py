@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -131,12 +133,15 @@ def _mg3(
     monkeypatch.setenv("RANK", str(rank))
     monkeypatch.setenv("LOCAL_RANK", str(rank))
     monkeypatch.setenv("WORLD_SIZE", "2")
-    runtime = mg3.MatrixGame3Runtime(runtime_path=str(tmp_path), checkpoint_dir=str(tmp_path), device="cpu")
+    runtime = mg3.MatrixGame3Runtime(checkpoint_dir=str(tmp_path), device="cpu")
     monkeypatch.setattr(runtime, "_ensure_checkpoint_layout", lambda path: None)
     monkeypatch.setattr(mg3, "_wait_for_video_readable", lambda path: None)
 
     def run(command: list[str], **kwargs: Any) -> None:
         assert kwargs["check"] is True
+        assert command[:3] == [sys.executable, "-m", mg3.RUNNER_MODULE]
+        assert "--runtime_root" not in command
+        assert kwargs["env"].get("PYTHONPATH") == os.environ.get("PYTHONPATH")
         commands.append(command)
         root = Path(command[command.index("--output_dir") + 1])
         name = command[command.index("--save_name") + 1]

@@ -3,9 +3,11 @@
 Agent-wise self-attention, action RoPE, and a custom DiT block that
 cross-attends pooled agent tokens.  Adds action / multi-agent hooks.
 """
+
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -26,9 +28,7 @@ class MultiAgentActionRoPE1D(nn.Module):
         super().__init__()
         if dim % 2:
             raise ValueError("MultiWorld action RoPE requires an even hidden dimension")
-        frequencies = 1.0 / (
-            float(base) ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim)
-        )
+        frequencies = 1.0 / (float(base) ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
         positions = torch.arange(max_agents, dtype=torch.float32)
         angles = torch.outer(positions, frequencies)
         # Released MultiWorld checkpoints contain trainable parameters only.
@@ -44,8 +44,7 @@ class MultiAgentActionRoPE1D(nn.Module):
         batch, agents, frames, _ = value.shape
         if agents > self.freqs_cos_n.shape[0]:
             raise ValueError(
-                f"MultiWorld received {agents} agents, but action RoPE supports "
-                f"at most {self.freqs_cos_n.shape[0]}"
+                f"MultiWorld received {agents} agents, but action RoPE supports at most {self.freqs_cos_n.shape[0]}"
             )
         flat = rearrange(value, "b n f d -> (b f) n d")
         cos = self.freqs_cos_n[:agents].to(flat).repeat_interleave(2, dim=-1)
@@ -180,9 +179,7 @@ class ItTakesTwoActionEncoder(nn.Module):
             discrete = action["discrete_action"]
             continuous = action["continuous_action"]
         except KeyError as error:
-            raise KeyError(
-                "ItTakesTwo actions require discrete_action and continuous_action"
-            ) from error
+            raise KeyError("ItTakesTwo actions require discrete_action and continuous_action") from error
         if discrete.ndim != 4 or continuous.ndim != 4:
             raise ValueError("ItTakesTwo actions must have shape [B,F,2,D]")
         if discrete.shape[:3] != continuous.shape[:3] or discrete.shape[2] != 2:
@@ -193,9 +190,7 @@ class ItTakesTwoActionEncoder(nn.Module):
         token_ids = torch.arange(self.discrete_dim, device=discrete.device).view(1, 1, 1, -1)
         token_ids = token_ids * 2 + discrete.to(dtype=torch.long)
         discrete_token = self.discrete_embedding(token_ids).sum(dim=3)
-        continuous_token = self.continuous_projection(
-            continuous.to(dtype=self.continuous_projection[1].weight.dtype)
-        )
+        continuous_token = self.continuous_projection(continuous.to(dtype=self.continuous_projection[1].weight.dtype))
         action_token = (discrete_token + continuous_token).permute(0, 2, 1, 3)
         return self.output_projection(self.agent_pooling(action_token))
 
@@ -319,6 +314,7 @@ class MultiWorldDiTBlock(DiTBlock):
         # WanModel forwards its exact-RoPE policy through every block. Keep
         # that policy when MultiWorld replaces the standard Wan cross-attn.
         kwargs.pop("_worldfoundry_inplace_residual", None)
+        kwargs.pop("_worldfoundry_fused_adaln", None)
         sequence_timestep = t_mod.ndim == 4
         chunk_dim = 2 if sequence_timestep else 1
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
@@ -326,8 +322,7 @@ class MultiWorldDiTBlock(DiTBlock):
         ).chunk(6, dim=chunk_dim)
         if sequence_timestep:
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-                item.squeeze(2)
-                for item in (shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp)
+                item.squeeze(2) for item in (shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp)
             )
         x = self.gate(
             x,
@@ -390,10 +385,7 @@ class MultiWorldWanModel(WanModel):
         if env_context is None:
             raise ValueError("MultiWorld inference requires VGGT environment context")
         if env_context.shape[-1] != self.dim:
-            raise ValueError(
-                f"MultiWorld environment context width must be {self.dim}; "
-                f"got {env_context.shape[-1]}"
-            )
+            raise ValueError(f"MultiWorld environment context width must be {self.dim}; got {env_context.shape[-1]}")
         return env_context
 
     def block_forward_kwargs(

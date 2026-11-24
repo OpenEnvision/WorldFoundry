@@ -21,12 +21,13 @@ native packed graph in :mod:`.model`.
 """
 
 import math
+from typing import ClassVar
 
 import torch
 import torch.nn as nn
-from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 
 from worldfoundry.core.attention.sequence.varlen import flash_attention
+from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 
 __all__ = ["WanModel"]
 
@@ -113,8 +114,8 @@ class WanRMSNorm(nn.Module):
 
     def __init__(self, dim, eps=1e-5):
         """Args:
-            dim: Channel width of the last dimension.
-            eps: Stabilizer added inside the rsqrt.
+        dim: Channel width of the last dimension.
+        eps: Stabilizer added inside the rsqrt.
         """
         super().__init__()
         self.dim = dim
@@ -138,9 +139,9 @@ class WanLayerNorm(nn.LayerNorm):
 
     def __init__(self, dim, eps=1e-6, elementwise_affine=False):
         """Args:
-            dim: Normalized width.
-            eps: LayerNorm epsilon.
-            elementwise_affine: Official Wan uses affine only on some norms.
+        dim: Normalized width.
+        eps: LayerNorm epsilon.
+        elementwise_affine: Official Wan uses affine only on some norms.
         """
         super().__init__(dim, elementwise_affine=elementwise_affine, eps=eps)
 
@@ -157,11 +158,11 @@ class WanSelfAttention(nn.Module):
 
     def __init__(self, dim, num_heads, window_size=(-1, -1), qk_norm=True, eps=1e-6):
         """Args:
-            dim: Hidden size (must be divisible by ``num_heads``).
-            num_heads: Attention heads.
-            window_size: Flash-attention local window; ``(-1, -1)`` is global.
-            qk_norm: If true, RMSNorm query and key before RoPE.
-            eps: RMSNorm epsilon.
+        dim: Hidden size (must be divisible by ``num_heads``).
+        num_heads: Attention heads.
+        window_size: Flash-attention local window; ``(-1, -1)`` is global.
+        qk_norm: If true, RMSNorm query and key before RoPE.
+        eps: RMSNorm epsilon.
         """
         assert dim % num_heads == 0
         super().__init__()
@@ -340,14 +341,14 @@ class WanAttentionBlock(nn.Module):
         eps=1e-6,
     ):
         """Args:
-            cross_attn_type: Key into ``WAN_CROSSATTENTION_CLASSES``.
-            dim: Hidden size.
-            ffn_dim: Feed-forward inner width.
-            num_heads: Attention heads.
-            window_size: Local window for self-attention.
-            qk_norm: RMSNorm Q/K in both attentions.
-            cross_attn_norm: If true, affine LayerNorm before cross-attn.
-            eps: Norm epsilon.
+        cross_attn_type: Key into ``WAN_CROSSATTENTION_CLASSES``.
+        dim: Hidden size.
+        ffn_dim: Feed-forward inner width.
+        num_heads: Attention heads.
+        window_size: Local window for self-attention.
+        qk_norm: RMSNorm Q/K in both attentions.
+        cross_attn_norm: If true, affine LayerNorm before cross-attn.
+        eps: Norm epsilon.
         """
         super().__init__()
         self.dim = dim
@@ -419,10 +420,10 @@ class Head(nn.Module):
 
     def __init__(self, dim, out_dim, patch_size, eps=1e-6):
         """Args:
-            dim: Hidden size.
-            out_dim: VAE latent channels after unpatchify.
-            patch_size: ``(t, h, w)`` used to expand each token.
-            eps: LayerNorm epsilon.
+        dim: Hidden size.
+        out_dim: VAE latent channels after unpatchify.
+        patch_size: ``(t, h, w)`` used to expand each token.
+        eps: LayerNorm epsilon.
         """
         super().__init__()
         self.dim = dim
@@ -456,9 +457,9 @@ class MLPProj(torch.nn.Module):
 
     def __init__(self, in_dim, out_dim, flf_pos_emb=False):
         """Args:
-            in_dim: CLIP width (officially 1280).
-            out_dim: DiT hidden size.
-            flf_pos_emb: Add the 514-token first/last-frame position table.
+        in_dim: CLIP width (officially 1280).
+        out_dim: DiT hidden size.
+        flf_pos_emb: Add the 514-token first/last-frame position table.
         """
         super().__init__()
 
@@ -485,8 +486,8 @@ class MLPProj(torch.nn.Module):
 class WanModel(nn.Module, NativeConfigMixin):
     r"""Official-layout Wan 2.1 T2V / I2V / FLF2V DiT (list-of-videos packing)."""
 
-    ignore_for_config = ["patch_size", "cross_attn_norm", "qk_norm", "text_dim", "window_size"]
-    _no_split_modules = ["WanAttentionBlock"]
+    ignore_for_config: ClassVar[list] = ["patch_size", "cross_attn_norm", "qk_norm", "text_dim", "window_size"]
+    _no_split_modules: ClassVar[list] = ["WanAttentionBlock"]
 
     @register_to_config
     def __init__(
@@ -638,7 +639,7 @@ class WanModel(nn.Module, NativeConfigMixin):
             self.freqs = self.freqs.to(device)
 
         if y is not None:
-            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y)]
+            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y, strict=False)]
 
         # embeddings
         x = [self.patch_embedding(u.unsqueeze(0)) for u in x]
@@ -675,15 +676,15 @@ class WanModel(nn.Module, NativeConfigMixin):
             )
 
         # arguments
-        kwargs = dict(
-            e=e0,
-            seq_lens=seq_lens,
-            grid_sizes=grid_sizes,
-            freqs=self.freqs,
-            context=context,
-            context_lens=context_lens,
-            memory_context=memory_context,
-        )
+        kwargs = {
+            "e": e0,
+            "seq_lens": seq_lens,
+            "grid_sizes": grid_sizes,
+            "freqs": self.freqs,
+            "context": context,
+            "context_lens": context_lens,
+            "memory_context": memory_context,
+        }
 
         for block in self.blocks:
             x = block(x, **kwargs)
@@ -713,10 +714,10 @@ class WanModel(nn.Module, NativeConfigMixin):
 
         c = self.out_dim
         out = []
-        for u, v in zip(x, grid_sizes.tolist()):
+        for u, v in zip(x, grid_sizes.tolist(), strict=False):
             u = u[: math.prod(v)].view(*v, *self.patch_size, c)
             u = torch.einsum("fhwpqrc->cfphqwr", u)
-            u = u.reshape(c, *[i * j for i, j in zip(v, self.patch_size)])
+            u = u.reshape(c, *[i * j for i, j in zip(v, self.patch_size, strict=False)])
             out.append(u)
         return out
 

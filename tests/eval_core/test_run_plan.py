@@ -3,14 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_MODEL_ID, CONTRACT_FIXTURE_RUNNER_TARGET
-from worldfoundry.evaluation.runner import (
+from worldfoundry.evals.tasks.datasets import build_dataset_manifest, write_dataset_manifest
+from worldfoundry.evals.tasks.execution.orchestration.evaluate import execute_evaluate_run
+from worldfoundry.evals.tasks.execution.orchestration.plan import (
     build_run_plan,
     build_run_plan_from_task_registry,
     evaluate_request_from_run_plan,
-    execute_evaluate_run,
     validate_run_plan,
 )
-from worldfoundry.evaluation.tasks.datasets import build_dataset_manifest, write_dataset_manifest
 
 
 def _write_plan_fixture(tmp_path: Path) -> tuple[Path, Path]:
@@ -33,8 +33,7 @@ generation_defaults:
         encoding="utf-8",
     )
     (data_root / "samples.jsonl").write_text(
-        '{"sample_id": "sample-a", "prompt": "a small room"}\n'
-        '{"sample_id": "sample-b", "prompt": "a large room"}\n',
+        '{"sample_id": "sample-a", "prompt": "a small room"}\n{"sample_id": "sample-b", "prompt": "a large room"}\n',
         encoding="utf-8",
     )
     return task_root, data_root

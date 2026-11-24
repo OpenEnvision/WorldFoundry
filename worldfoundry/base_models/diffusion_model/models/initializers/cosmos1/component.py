@@ -128,26 +128,16 @@ class Cosmos1Gen3CInitializer:
         if (explicit_cameras is None) != (explicit_intrinsics is None):
             raise ValueError("GEN3C camera_to_world and camera_intrinsics must be provided together")
         if explicit_cameras is not None:
-            camera_to_world = torch.as_tensor(
-                explicit_cameras, device=device, dtype=torch.float32
-            )
-            intrinsics = torch.as_tensor(
-                explicit_intrinsics, device=device, dtype=torch.float32
-            )
+            camera_to_world = torch.as_tensor(explicit_cameras, device=device, dtype=torch.float32)
+            intrinsics = torch.as_tensor(explicit_intrinsics, device=device, dtype=torch.float32)
             if camera_to_world.ndim == 3:
                 camera_to_world = camera_to_world.unsqueeze(0)
             if intrinsics.ndim == 3:
                 intrinsics = intrinsics.unsqueeze(0)
             if camera_to_world.shape != (request.batch_size, request.num_frames, 4, 4):
-                raise ValueError(
-                    "GEN3C explicit cameras must be [B,T,4,4], got "
-                    f"{tuple(camera_to_world.shape)}"
-                )
+                raise ValueError(f"GEN3C explicit cameras must be [B,T,4,4], got {tuple(camera_to_world.shape)}")
             if intrinsics.shape != (request.batch_size, request.num_frames, 3, 3):
-                raise ValueError(
-                    "GEN3C explicit intrinsics must be [B,T,3,3], got "
-                    f"{tuple(intrinsics.shape)}"
-                )
+                raise ValueError(f"GEN3C explicit intrinsics must be [B,T,3,3], got {tuple(intrinsics.shape)}")
         else:
             initial_view = torch.eye(4, device=device, dtype=torch.float32)
             center_depth = float(request.inputs.get("center_depth", 1.0))
@@ -283,9 +273,9 @@ class Cosmos1Gen3CInitializer:
             flat_images = functional.interpolate(
                 flat_images.float(), (request.height, request.width), mode="bilinear", align_corners=False
             ).to(dtype)
-            flat_masks = functional.interpolate(
-                flat_masks.float(), (request.height, request.width), mode="nearest"
-            ).to(dtype)
+            flat_masks = functional.interpolate(flat_masks.float(), (request.height, request.width), mode="nearest").to(
+                dtype
+            )
             if flat_images.max() > 1.5:
                 flat_images = flat_images.div(127.5).sub(1.0)
             elif flat_images.min() >= 0:
@@ -293,9 +283,7 @@ class Cosmos1Gen3CInitializer:
             warp_images = flat_images.reshape(batch, frames, buffers, 3, request.height, request.width)
             warp_masks = flat_masks.reshape(batch, frames, buffers, 1, request.height, request.width).clamp(0, 1)
             artifacts = {
-                key: request.inputs[key]
-                for key in ("camera_to_world", "camera_intrinsics")
-                if key in request.inputs
+                key: request.inputs[key] for key in ("camera_to_world", "camera_intrinsics") if key in request.inputs
             }
 
         pose_parts: list[torch.Tensor] = []
@@ -315,9 +303,7 @@ class Cosmos1Gen3CInitializer:
         if pose.shape != (request.batch_size, 64, *shape[2:]):
             raise ValueError(f"GEN3C encoded 3D-cache geometry is invalid: {tuple(pose.shape)}")
 
-        indicator = torch.zeros(
-            request.batch_size, 1, latent_frames, 1, 1, device=device, dtype=dtype
-        )
+        indicator = torch.zeros(request.batch_size, 1, latent_frames, 1, 1, device=device, dtype=dtype)
         indicator[:, :, :1] = 1.0
         input_mask = indicator.expand(-1, -1, -1, shape[-2], shape[-1])
         condition_noise = torch.randn(shape, generator=generator, device=device, dtype=dtype)
@@ -329,9 +315,7 @@ class Cosmos1Gen3CInitializer:
                 "condition_video_input_mask": input_mask,
                 "condition_video_pose": pose,
                 "condition_noise": condition_noise,
-                "condition_augment_sigma": float(
-                    request.inputs.get("condition_augment_sigma", self.augment_sigma)
-                ),
+                "condition_augment_sigma": float(request.inputs.get("condition_augment_sigma", self.augment_sigma)),
                 "padding_mask": torch.zeros(
                     request.batch_size,
                     1,

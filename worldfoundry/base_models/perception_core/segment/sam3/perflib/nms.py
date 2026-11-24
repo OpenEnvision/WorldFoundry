@@ -2,14 +2,12 @@
 
 # pyre-unsafe
 
-"""Module for base_models -> perception_core -> segment -> sam3 -> perflib -> nms.py functionality."""
-
 import logging
 
 import numpy as np
 import torch
-from worldfoundry.base_models.perception_core.segment.sam3.perflib.masks_ops import mask_iou
 
+from worldfoundry.base_models.perception_core.segment.sam3.perflib.masks_ops import mask_iou
 
 try:
     from torch_generic_nms import generic_nms as generic_nms_cuda
@@ -55,9 +53,7 @@ def nms_masks(
     return keep
 
 
-def generic_nms(
-    ious: torch.Tensor, scores: torch.Tensor, iou_threshold=0.5
-) -> torch.Tensor:
+def generic_nms(ious: torch.Tensor, scores: torch.Tensor, iou_threshold=0.5) -> torch.Tensor:
     """A generic version of `torchvision.ops.nms` that takes a pairwise IoU matrix."""
 
     assert ious.dim() == 2 and ious.size(0) == ious.size(1)
@@ -74,9 +70,7 @@ def generic_nms(
     return generic_nms_cpu(ious, scores, iou_threshold)
 
 
-def generic_nms_cpu(
-    ious: torch.Tensor, scores: torch.Tensor, iou_threshold=0.5
-) -> torch.Tensor:
+def generic_nms_cpu(ious: torch.Tensor, scores: torch.Tensor, iou_threshold=0.5) -> torch.Tensor:
     """
     A generic version of `torchvision.ops.nms` that takes a pairwise IoU matrix. (CPU implementation
     based on https://github.com/jwyang/faster-rcnn.pytorch/blob/master/lib/model/nms/nms_cpu.py)

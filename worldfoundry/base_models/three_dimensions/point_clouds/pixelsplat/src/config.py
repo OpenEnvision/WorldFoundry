@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Type, TypeVar
+from typing import TypeVar
 
 try:
     from dacite import Config, from_dict
@@ -35,7 +35,7 @@ class InferenceCfg:
 T = TypeVar("T")
 
 
-def load_typed_config(cfg: DictConfig, data_class: Type[T]) -> T:
+def load_typed_config(cfg: DictConfig, data_class: type[T]) -> T:
     return from_dict(
         data_class,
         OmegaConf.to_container(cfg),

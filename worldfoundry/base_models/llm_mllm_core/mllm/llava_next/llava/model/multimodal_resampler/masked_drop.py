@@ -1,7 +1,7 @@
+import random
+
 import torch
 import torch.nn as nn
-
-import random
 
 
 class MaskedDrop(nn.Module):
@@ -15,7 +15,6 @@ class MaskedDrop(nn.Module):
         self.ratio_lower = model_args.mm_mask_drop_ratio_lower
 
     def forward(self, image_features, *args, **kwargs):
-
         if not self.training:
             return image_features
 

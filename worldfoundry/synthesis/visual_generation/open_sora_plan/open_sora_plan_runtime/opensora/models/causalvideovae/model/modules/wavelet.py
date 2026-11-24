@@ -1,17 +1,25 @@
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
+import torch.nn.functional as F
+from einops import rearrange
+
 from ..modules import CausalConv3d
 from ..modules.ops import video_to_image
 
-from einops import rearrange
 try:
     import torch_npu
-    from opensora.npu_config import npu_config, set_run_dtype
-except Exception as e:
+
+    from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.npu_config import (
+        npu_config,
+    )
+    from worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.npu_config import (
+        set_run_dtype as set_run_dtype,
+    )
+except Exception:
     torch_npu = None
     npu_config = None
-    
+
+
 class HaarWaveletTransform3D(nn.Module):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -60,12 +68,12 @@ class HaarWaveletTransform3D(nn.Module):
 
     def forward(self, x):
         assert x.dim() == 5
-        
+
         if torch_npu is not None:
             dtype = x.dtype
             x = x.to(npu_config.conv_dtype)
             self.to(npu_config.conv_dtype)
-        
+
         b = x.shape[0]
         x = rearrange(x, "b c t h w -> (b c) 1 t h w")
         low_low_low = self.h_conv(x)
@@ -84,7 +92,7 @@ class HaarWaveletTransform3D(nn.Module):
         high_high_low = rearrange(high_high_low, "(b c) 1 t h w -> b c t h w", b=b)
         high_high_high = self.gh_v_conv(x)
         high_high_high = rearrange(high_high_high, "(b c) 1 t h w -> b c t h w", b=b)
-        
+
         output = torch.cat(
             [
                 low_low_low,
@@ -98,48 +106,37 @@ class HaarWaveletTransform3D(nn.Module):
             ],
             dim=1,
         )
-        
+
         if torch_npu is not None:
             x = x.to(dtype)
             output = output.to(dtype)
             self.to(dtype)
-        
+
         return output
+
 
 class InverseHaarWaveletTransform3D(nn.Module):
     def __init__(self, enable_cached=False, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        self.register_buffer('h', 
-            torch.tensor([[[1, 1], [1, 1]], [[1, 1], [1, 1]]]).view(1, 1, 2, 2, 2) * 0.3536
+        self.register_buffer("h", torch.tensor([[[1, 1], [1, 1]], [[1, 1], [1, 1]]]).view(1, 1, 2, 2, 2) * 0.3536)
+        self.register_buffer("g", torch.tensor([[[1, -1], [1, -1]], [[1, -1], [1, -1]]]).view(1, 1, 2, 2, 2) * 0.3536)
+        self.register_buffer("hh", torch.tensor([[[1, 1], [-1, -1]], [[1, 1], [-1, -1]]]).view(1, 1, 2, 2, 2) * 0.3536)
+        self.register_buffer("gh", torch.tensor([[[1, -1], [-1, 1]], [[1, -1], [-1, 1]]]).view(1, 1, 2, 2, 2) * 0.3536)
+        self.register_buffer("h_v", torch.tensor([[[1, 1], [1, 1]], [[-1, -1], [-1, -1]]]).view(1, 1, 2, 2, 2) * 0.3536)
+        self.register_buffer("g_v", torch.tensor([[[1, -1], [1, -1]], [[-1, 1], [-1, 1]]]).view(1, 1, 2, 2, 2) * 0.3536)
+        self.register_buffer(
+            "hh_v", torch.tensor([[[1, 1], [-1, -1]], [[-1, -1], [1, 1]]]).view(1, 1, 2, 2, 2) * 0.3536
         )
-        self.register_buffer('g', 
-            torch.tensor([[[1, -1], [1, -1]], [[1, -1], [1, -1]]]).view(1, 1, 2, 2, 2) * 0.3536
-        )
-        self.register_buffer('hh', 
-            torch.tensor([[[1, 1], [-1, -1]], [[1, 1], [-1, -1]]]).view(1, 1, 2, 2, 2) * 0.3536
-        )
-        self.register_buffer('gh', 
-            torch.tensor([[[1, -1], [-1, 1]], [[1, -1], [-1, 1]]]).view(1, 1, 2, 2, 2) * 0.3536
-        )
-        self.register_buffer('h_v', 
-            torch.tensor([[[1, 1], [1, 1]], [[-1, -1], [-1, -1]]]).view(1, 1, 2, 2, 2) * 0.3536
-        )
-        self.register_buffer('g_v', 
-            torch.tensor([[[1, -1], [1, -1]], [[-1, 1], [-1, 1]]]).view(1, 1, 2, 2, 2) * 0.3536
-        )
-        self.register_buffer('hh_v', 
-            torch.tensor([[[1, 1], [-1, -1]], [[-1, -1], [1, 1]]]).view(1, 1, 2, 2, 2) * 0.3536
-        )
-        self.register_buffer('gh_v', 
-            torch.tensor([[[1, -1], [-1, 1]], [[-1, 1], [1, -1]]]).view(1, 1, 2, 2, 2) * 0.3536
+        self.register_buffer(
+            "gh_v", torch.tensor([[[1, -1], [-1, 1]], [[-1, 1], [1, -1]]]).view(1, 1, 2, 2, 2) * 0.3536
         )
         self.enable_cached = enable_cached
         self.is_first_chunk = True
 
     def forward(self, coeffs):
         assert coeffs.dim() == 5
-        
+
         if torch_npu is not None:
             dtype = coeffs.dtype
             coeffs = coeffs.to(npu_config.conv_dtype)
@@ -151,8 +148,7 @@ class InverseHaarWaveletTransform3D(nn.Module):
             self.g_v = self.g_v.to(npu_config.conv_dtype)
             self.hh_v = self.hh_v.to(npu_config.conv_dtype)
             self.gh_v = self.gh_v.to(npu_config.conv_dtype)
-            
-        
+
         b = coeffs.shape[0]
 
         (
@@ -183,7 +179,7 @@ class InverseHaarWaveletTransform3D(nn.Module):
         high_low_high = F.conv_transpose3d(high_low_high, self.g_v, stride=2)
         high_high_low = F.conv_transpose3d(high_high_low, self.hh_v, stride=2)
         high_high_high = F.conv_transpose3d(high_high_high, self.gh_v, stride=2)
-        
+
         if self.enable_cached and not self.is_first_chunk:
             reconstructed = (
                 low_low_low
@@ -206,9 +202,9 @@ class InverseHaarWaveletTransform3D(nn.Module):
                 + high_high_low[:, :, 1:]
                 + high_high_high[:, :, 1:]
             )
-            
+
         reconstructed = rearrange(reconstructed, "(b c) 1 t h w -> b c t h w", b=b)
-        
+
         if torch_npu is not None:
             coeffs = coeffs.to(dtype)
             reconstructed = reconstructed.to(dtype)
@@ -220,17 +216,17 @@ class InverseHaarWaveletTransform3D(nn.Module):
             self.g_v = self.g_v.to(dtype)
             self.hh_v = self.hh_v.to(dtype)
             self.gh_v = self.gh_v.to(dtype)
-        
+
         return reconstructed
 
 
 class HaarWaveletTransform2D(nn.Module):
     def __init__(self):
         super().__init__()
-        self.register_buffer('aa', torch.tensor([[1, 1], [1, 1]]).view(1, 1, 2, 2) / 2)
-        self.register_buffer('ad', torch.tensor([[1, 1], [-1, -1]]).view(1, 1, 2, 2) / 2)
-        self.register_buffer('da', torch.tensor([[1, -1], [1, -1]]).view(1, 1, 2, 2) / 2)
-        self.register_buffer('dd', torch.tensor([[1, -1], [-1, 1]]).view(1, 1, 2, 2) / 2)
+        self.register_buffer("aa", torch.tensor([[1, 1], [1, 1]]).view(1, 1, 2, 2) / 2)
+        self.register_buffer("ad", torch.tensor([[1, 1], [-1, -1]]).view(1, 1, 2, 2) / 2)
+        self.register_buffer("da", torch.tensor([[1, -1], [1, -1]]).view(1, 1, 2, 2) / 2)
+        self.register_buffer("dd", torch.tensor([[1, -1], [-1, 1]]).view(1, 1, 2, 2) / 2)
 
     @video_to_image
     def forward(self, x):
@@ -243,13 +239,14 @@ class HaarWaveletTransform2D(nn.Module):
         coeffs = torch.cat([low_low, low_high, high_low, high_high], dim=1)
         return coeffs
 
+
 class InverseHaarWaveletTransform2D(nn.Module):
     def __init__(self):
         super().__init__()
-        self.register_buffer('aa', torch.tensor([[1, 1], [1, 1]]).view(1, 1, 2, 2) / 2)
-        self.register_buffer('ad', torch.tensor([[1, 1], [-1, -1]]).view(1, 1, 2, 2) / 2)
-        self.register_buffer('da', torch.tensor([[1, -1], [1, -1]]).view(1, 1, 2, 2) / 2)
-        self.register_buffer('dd', torch.tensor([[1, -1], [-1, 1]]).view(1, 1, 2, 2) / 2)
+        self.register_buffer("aa", torch.tensor([[1, 1], [1, 1]]).view(1, 1, 2, 2) / 2)
+        self.register_buffer("ad", torch.tensor([[1, 1], [-1, -1]]).view(1, 1, 2, 2) / 2)
+        self.register_buffer("da", torch.tensor([[1, -1], [1, -1]]).view(1, 1, 2, 2) / 2)
+        self.register_buffer("dd", torch.tensor([[1, -1], [-1, 1]]).view(1, 1, 2, 2) / 2)
 
     @video_to_image
     def forward(self, coeffs):
@@ -258,17 +255,9 @@ class InverseHaarWaveletTransform2D(nn.Module):
         height = height_half * 2
         width = width_half * 2
 
-        low_low = F.conv_transpose2d(
-            low_low.reshape(b * c, 1, height_half, width_half), self.aa, stride=2
-        )
-        low_high = F.conv_transpose2d(
-            low_high.reshape(b * c, 1, height_half, width_half), self.ad, stride=2
-        )
-        high_low = F.conv_transpose2d(
-            high_low.reshape(b * c, 1, height_half, width_half), self.da, stride=2
-        )
-        high_high = F.conv_transpose2d(
-            high_high.reshape(b * c, 1, height_half, width_half), self.dd, stride=2
-        )
+        low_low = F.conv_transpose2d(low_low.reshape(b * c, 1, height_half, width_half), self.aa, stride=2)
+        low_high = F.conv_transpose2d(low_high.reshape(b * c, 1, height_half, width_half), self.ad, stride=2)
+        high_low = F.conv_transpose2d(high_low.reshape(b * c, 1, height_half, width_half), self.da, stride=2)
+        high_high = F.conv_transpose2d(high_high.reshape(b * c, 1, height_half, width_half), self.dd, stride=2)
 
         return (low_low + low_high + high_low + high_high).reshape(b, c, height, width)

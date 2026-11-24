@@ -5,7 +5,7 @@ Input: operator-processed features. Output: 3D scene, depth map, point cloud (st
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -25,8 +25,8 @@ class InfiniteVGGTRepresentation:
 
     def __init__(
         self,
-        model: Optional[StreamVGGT] = None,
-        device: Optional[str] = None,
+        model: StreamVGGT | None = None,
+        device: str | None = None,
         total_budget: int = 1200000,
     ):
         """Initialize representation model. self.model = model."""
@@ -50,7 +50,7 @@ class InfiniteVGGTRepresentation:
     def from_pretrained(
         cls,
         pretrained_model_path: str,
-        device: Optional[str] = None,
+        device: str | None = None,
         total_budget: int = 1200000,
         **kwargs,
     ) -> "InfiniteVGGTRepresentation":
@@ -89,7 +89,6 @@ class InfiniteVGGTRepresentation:
         instance.resolution = kwargs.get("resolution", 518)
         return instance
 
-
     def _prepare_images(self, images_input: Any) -> torch.Tensor:
         """Build batched image tensor (N, C, H, W) from paths or arrays."""
         if isinstance(images_input, list):
@@ -127,9 +126,7 @@ class InfiniteVGGTRepresentation:
                 new_h = round(h * (target / w) / 14) * 14
                 if new_h > target and self.preprocess_mode == "crop":
                     new_h = target
-                images = F.interpolate(
-                    images, size=(new_h, new_w), mode="bilinear", align_corners=False
-                )
+                images = F.interpolate(images, size=(new_h, new_w), mode="bilinear", align_corners=False)
             if images.shape[-2] > target or images.shape[-1] > target:
                 start_h = (images.shape[-2] - target) // 2
                 start_w = (images.shape[-1] - target) // 2
@@ -137,7 +134,7 @@ class InfiniteVGGTRepresentation:
 
         return images
 
-    def get_representation(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def get_representation(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Run streaming inference and return point maps, depth, and cameras.
 
@@ -160,9 +157,9 @@ class InfiniteVGGTRepresentation:
             raise RuntimeError("Model not loaded. Use from_pretrained() first.")
 
         images_input = data["images"]
-        predict_cameras = data.get("predict_cameras", True)
-        predict_depth = data.get("predict_depth", True)
-        predict_points = data.get("predict_points", True)
+        _predict_cameras = data.get("predict_cameras", True)
+        _predict_depth = data.get("predict_depth", True)
+        _predict_points = data.get("predict_points", True)
         self.preprocess_mode = data.get("preprocess_mode", self.preprocess_mode)
         self.resolution = data.get("resolution", self.resolution)
 
@@ -172,7 +169,7 @@ class InfiniteVGGTRepresentation:
 
         frames = [{"img": images[i].unsqueeze(0)} for i in range(images.shape[0])]
 
-        with torch.no_grad():
+        with torch.no_grad():  # noqa: SIM117 - Branches carry per-case comments.
             # Use legacy autocast API for compatibility with older PyTorch (no device_type)
             with torch.cuda.amp.autocast(dtype=self.dtype, enabled=(self.device == "cuda")):
                 output = self.model.inference(
@@ -196,9 +193,7 @@ class InfiniteVGGTRepresentation:
         depth_conf = torch.stack(all_depth_conf, dim=0)
         pose_enc = torch.stack(all_camera_pose, dim=0)
 
-        extrinsic, intrinsic = pose_encoding_to_extri_intri(
-            pose_enc.unsqueeze(0), images.shape[-2:]
-        )
+        extrinsic, intrinsic = pose_encoding_to_extri_intri(pose_enc.unsqueeze(0), images.shape[-2:])
         extrinsic = extrinsic.squeeze(0).cpu().numpy()
         intrinsic = intrinsic.squeeze(0).cpu().numpy() if intrinsic is not None else None
 

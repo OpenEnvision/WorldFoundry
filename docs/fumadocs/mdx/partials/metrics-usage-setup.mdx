@@ -1,10 +1,10 @@
 Three steps:
 
 1. `source WorldFoundry/tmp/worldfoundry_unified_env.sh` and `pip install -e ".[distribution_metrics]"`
-2. `worldfoundry-eval metric show <id>` to resolve ids and aliases
+2. `wf metric show <id>` to resolve ids and aliases
 3. Open the metric page below and copy the recipe for your id
 
-Only **built-in existing-results** metrics use `worldfoundry-eval evaluate`; everything else is Python (`compute_*` or scorer classes).
+Only **built-in existing-results** metrics use `wf evaluate`; everything else is Python (`compute_*` or scorer classes).
 
 Metric imports are lazy: checkpoints are required only when a metric loads a feature extractor, multimodal scorer, or API judge. Default caches follow Hugging Face / Torch / torchvision layout:
 

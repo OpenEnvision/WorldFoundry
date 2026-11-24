@@ -20,15 +20,15 @@ import os
 import torch
 import torch.distributed.checkpoint as dcp
 
+from worldfoundry.core.configuration.hydra import get_config_module, override
+from worldfoundry.core.configuration.lazy_config import instantiate
+from worldfoundry.core.execution import inference_runtime as misc
 from worldfoundry.core.model_loading.checkpoints.dcp import (
     DefaultLoadPlanner,
     DistributedCheckpointer,
     ModelWrapper,
 )
-from worldfoundry.core.configuration.hydra import get_config_module, override
-from worldfoundry.core.configuration.lazy_config import instantiate
-from worldfoundry.core.distributed.runtime.logging import log
-from worldfoundry.core.execution import inference_runtime as misc
+from worldfoundry.core.observability.rank_logging import log
 from worldfoundry.data.io import easy_io
 
 
@@ -38,7 +38,7 @@ def load_model_from_checkpoint(
     config_file="lyra_2/_src/configs/t2v_wan/config.py",
     enable_fsdp=False,
     seed=0,
-    experiment_opts: list[str] = [],
+    experiment_opts: list[str] = [],  # noqa: B006 - Keeps the upstream default object and signature.
     strict=True,
 ):
     """
@@ -50,7 +50,7 @@ def load_model_from_checkpoint(
     """
     config_module = get_config_module(config_file)
     config = importlib.import_module(config_module).make_config()
-    config = override(config, ["--", f"experiment={experiment_name}"] + experiment_opts)
+    config = override(config, ["--", f"experiment={experiment_name}"] + experiment_opts)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
     # Check that the config is valid
     config.validate()

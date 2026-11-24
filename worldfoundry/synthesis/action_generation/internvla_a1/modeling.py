@@ -17,20 +17,23 @@
 # limitations under the License.
 
 import logging
-import math
 from typing import Literal
 
 import torch
-import torch.nn.functional as F  # noqa: N812
-from torch import Tensor, nn
 import torch._dynamo as dynamo
+import torch.nn.functional as F
 from einops import rearrange
-
+from torch import Tensor, nn
 from transformers.models.auto import CONFIG_MAPPING
-from . import qwen3_vl as modeling_qwen3_vl
-from .qwen3_vl import Qwen3VLForConditionalGeneration, Qwen3VLTextModel
 
+from worldfoundry.base_models.llm_mllm_core.action.tensor_ops import (
+    create_sinusoidal_pos_embedding,
+    make_att_2d_masks,
+)
+
+from . import qwen3_vl as modeling_qwen3_vl
 from .configuration import InternVLAA1Config
+from .qwen3_vl import Qwen3VLForConditionalGeneration, Qwen3VLTextModel
 
 OPENPI_ATTENTION_MASK_VALUE = -2.3819763e38
 _QWEN3_VL_ROPE_THETA = 5_000_000.0
@@ -59,76 +62,11 @@ def _configure_qwen3_vl_mrope(config):
     return config
 
 
-def get_safe_dtype(target_dtype, device_type):
-    """Get a safe dtype for the given device type."""
-    if device_type == "mps" and target_dtype == torch.float64:
-        return torch.float32
-    if device_type == "cpu":
-        # CPU doesn't support bfloat16, use float32 instead
-        if target_dtype == torch.bfloat16:
-            return torch.float32
-        if target_dtype == torch.float64:
-            return torch.float64
-    return target_dtype
-
-
-def create_sinusoidal_pos_embedding(  # see openpi `create_sinusoidal_pos_embedding` (exact copy)
-    time: torch.Tensor, dimension: int, min_period: float, max_period: float, device="cpu"
-) -> Tensor:
-    """Computes sine-cosine positional embedding vectors for scalar positions."""
-    if dimension % 2 != 0:
-        raise ValueError(f"dimension ({dimension}) must be divisible by 2")
-
-    if time.ndim != 1:
-        raise ValueError("The time tensor is expected to be of shape `(batch_size, )`.")
-
-    dtype = get_safe_dtype(torch.float64, device.type)
-    fraction = torch.linspace(0.0, 1.0, dimension // 2, dtype=dtype, device=device)
-    period = min_period * (max_period / min_period) ** fraction
-
-    # Compute the outer product
-    scaling_factor = 1.0 / period * 2 * math.pi
-    sin_input = scaling_factor[None, :] * time[:, None]
-    return torch.cat([torch.sin(sin_input), torch.cos(sin_input)], dim=1)
-
-
 def sample_beta(alpha, beta, bsize, device):  # see openpi `sample_beta` (exact copy)
     alpha_t = torch.as_tensor(alpha, dtype=torch.float32, device=device)
     beta_t = torch.as_tensor(beta, dtype=torch.float32, device=device)
     dist = torch.distributions.Beta(alpha_t, beta_t)
     return dist.sample((bsize,))
-
-
-def make_att_2d_masks(pad_masks, att_masks):  # see openpi `make_att_2d_masks` (exact copy)
-    """Copied from big_vision.
-
-    Tokens can attend to valid inputs tokens which have a cumulative mask_ar
-    smaller or equal to theirs. This way `mask_ar` int[B, N] can be used to
-    setup several types of attention, for example:
-
-      [[1 1 1 1 1 1]]: pure causal attention.
-
-      [[0 0 0 1 1 1]]: prefix-lm attention. The first 3 tokens can attend between
-          themselves and the last 3 tokens have a causal attention. The first
-          entry could also be a 1 without changing behaviour.
-
-      [[1 0 1 0 1 0 0 1 0 0]]: causal attention between 4 blocks. Tokens of a
-          block can attend all previous blocks and all tokens on the same block.
-
-    Args:
-      input_mask: bool[B, N] true if its part of the input, false if padding.
-      mask_ar: int32[B, N] mask that's 1 where previous tokens cannot depend on
-        it and 0 where it shares the same attention mask as the previous token.
-    """
-    if att_masks.ndim != 2:
-        raise ValueError(att_masks.ndim)
-    if pad_masks.ndim != 2:
-        raise ValueError(pad_masks.ndim)
-
-    cumsum = torch.cumsum(att_masks, dim=1)
-    att_2d_masks = cumsum[:, None, :] <= cumsum[:, :, None]
-    pad_2d_masks = pad_masks[:, None, :] * pad_masks[:, :, None]
-    return att_2d_masks & pad_2d_masks
 
 
 def pad_vector(vector, new_dim):
@@ -143,16 +81,14 @@ def pad_vector(vector, new_dim):
 
 
 # Define the complete layer computation function for gradient checkpointing
-def compute_layer_complete(
-    layer_idx, inputs_embeds, attention_mask, position_ids, und_expert, gen_expert, act_expert
-):
+def compute_layer_complete(layer_idx, inputs_embeds, attention_mask, position_ids, und_expert, gen_expert, act_expert):
     models = [und_expert.language_model, gen_expert, act_expert]
     query_states = []
     key_states = []
     value_states = []
     for i, hidden_states in enumerate(inputs_embeds):
         layer = models[i].layers[layer_idx]
-        hidden_states = layer.input_layernorm(hidden_states)  # noqa: PLW2901
+        hidden_states = layer.input_layernorm(hidden_states)
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, layer.self_attn.head_dim)
         projection_dtype = layer.self_attn.q_proj.weight.dtype
@@ -222,7 +158,9 @@ def compute_layer_complete(
 class QwenConfig:
     """Configuration for Qwen model variants."""
 
-    def __init__(self, head_dim, hidden_size, intermediate_size, num_attention_heads, num_hidden_layers, num_key_value_heads):
+    def __init__(
+        self, head_dim, hidden_size, intermediate_size, num_attention_heads, num_hidden_layers, num_key_value_heads
+    ):
         self.head_dim = head_dim
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -233,7 +171,7 @@ class QwenConfig:
 
 def get_qwen_config(variant: str) -> QwenConfig:  # see openpi `gemma.py: get_config`
     """Returns config for specified gemma variant."""
-    num_hidden_layers = int(variant.split('_')[-1][:-1])  # pattern: qwen3_vl_28l or qwen3_xxl
+    num_hidden_layers = int(variant.split("_")[-1][:-1])  # pattern: qwen3_vl_28l or qwen3_xxl
     if variant.startswith("qwen3_vl"):
         return QwenConfig(
             head_dim=128,
@@ -256,9 +194,7 @@ def get_qwen_config(variant: str) -> QwenConfig:  # see openpi `gemma.py: get_co
         raise ValueError(f"Unknown variant: {variant}")
 
 
-class Qwen3VLWithExpertModel(
-    nn.Module
-):
+class Qwen3VLWithExpertModel(nn.Module):
     """Qwen3_VL model with action expert for QwenA1."""
 
     def __init__(
@@ -280,11 +216,11 @@ class Qwen3VLWithExpertModel(
         _configure_qwen3_vl_mrope(vlm_config_hf.text_config)
         vlm_config_hf.text_config.tie_word_embeddings = True
         vlm_config_hf.tie_word_embeddings = True
-        vlm_config_hf.vision_config.deepstack_visual_indexes=[5, 11, 17]
-        vlm_config_hf.vision_config.depth=24
-        vlm_config_hf.vision_config.hidden_size=1024
-        vlm_config_hf.vision_config.intermediate_size=4096
-        vlm_config_hf.vision_config.out_hidden_size=2048
+        vlm_config_hf.vision_config.deepstack_visual_indexes = [5, 11, 17]
+        vlm_config_hf.vision_config.depth = 24
+        vlm_config_hf.vision_config.hidden_size = 1024
+        vlm_config_hf.vision_config.intermediate_size = 4096
+        vlm_config_hf.vision_config.out_hidden_size = 2048
 
         # self.und_expert = Qwen3VLForConditionalGeneration(config=vlm_config_hf)
         # The released policy checkpoint contains the full Qwen3-VL weights.
@@ -292,12 +228,12 @@ class Qwen3VLWithExpertModel(
         self.und_expert = Qwen3VLForConditionalGeneration(config=vlm_config_hf)
 
         gen_expert_config_hf = CONFIG_MAPPING["qwen3_vl_text"]()
-        gen_expert_config_hf.head_dim=action_expert_config.head_dim
-        gen_expert_config_hf.hidden_size=action_expert_config.hidden_size
-        gen_expert_config_hf.intermediate_size=action_expert_config.intermediate_size
-        gen_expert_config_hf.num_attention_heads=action_expert_config.num_attention_heads
-        gen_expert_config_hf.num_hidden_layers=action_expert_config.num_hidden_layers
-        gen_expert_config_hf.num_key_value_heads=action_expert_config.num_key_value_heads
+        gen_expert_config_hf.head_dim = action_expert_config.head_dim
+        gen_expert_config_hf.hidden_size = action_expert_config.hidden_size
+        gen_expert_config_hf.intermediate_size = action_expert_config.intermediate_size
+        gen_expert_config_hf.num_attention_heads = action_expert_config.num_attention_heads
+        gen_expert_config_hf.num_hidden_layers = action_expert_config.num_hidden_layers
+        gen_expert_config_hf.num_key_value_heads = action_expert_config.num_key_value_heads
         gen_expert_config_hf.max_position_embeddings = self.und_expert.config.text_config.max_position_embeddings
         _configure_qwen3_vl_mrope(gen_expert_config_hf)
         self.gen_expert = Qwen3VLTextModel(config=gen_expert_config_hf)
@@ -305,12 +241,12 @@ class Qwen3VLWithExpertModel(
         self.gen_expert.lm_head = None
 
         action_expert_config_hf = CONFIG_MAPPING["qwen3_vl_text"]()
-        action_expert_config_hf.head_dim=action_expert_config.head_dim
-        action_expert_config_hf.hidden_size=action_expert_config.hidden_size
-        action_expert_config_hf.intermediate_size=action_expert_config.intermediate_size
-        action_expert_config_hf.num_attention_heads=action_expert_config.num_attention_heads
-        action_expert_config_hf.num_hidden_layers=action_expert_config.num_hidden_layers
-        action_expert_config_hf.num_key_value_heads=action_expert_config.num_key_value_heads
+        action_expert_config_hf.head_dim = action_expert_config.head_dim
+        action_expert_config_hf.hidden_size = action_expert_config.hidden_size
+        action_expert_config_hf.intermediate_size = action_expert_config.intermediate_size
+        action_expert_config_hf.num_attention_heads = action_expert_config.num_attention_heads
+        action_expert_config_hf.num_hidden_layers = action_expert_config.num_hidden_layers
+        action_expert_config_hf.num_key_value_heads = action_expert_config.num_key_value_heads
         action_expert_config_hf.max_position_embeddings = self.und_expert.config.text_config.max_position_embeddings
         _configure_qwen3_vl_mrope(action_expert_config_hf)
         self.act_expert = Qwen3VLTextModel(config=action_expert_config_hf)
@@ -460,7 +396,6 @@ class Qwen3VLWithExpertModel(
 
 
 class QwenA1(nn.Module):
-
     def __init__(self, config: InternVLAA1Config, *, cosmos: nn.Module | None = None):
         super().__init__()
         self.config = config
@@ -484,12 +419,18 @@ class QwenA1(nn.Module):
         # self.cosmos_out_proj = nn.Conv2d(in_channels=vlm_config.hidden_size, out_channels=gen_proj_dim, kernel_size=1, stride=1, padding=0) # junhao
         # self.upsample_conv = nn.ConvTranspose2d(in_channels=gen_proj_dim, out_channels=vae_dim, kernel_size=ds, stride=ds, padding=0, output_padding=0) # junhao
 
-        self.cosmos_in_proj = nn.Conv2d(in_channels=vae_dim, out_channels=gen_proj_dim, kernel_size=1, stride=1, padding=0) # jia
-        self.downsample_conv = nn.Conv2d(in_channels=gen_proj_dim, out_channels=gen_proj_dim, kernel_size=ds, stride=ds, padding=0) # jia
-        self.upsample_conv = nn.ConvTranspose2d(in_channels=gen_proj_dim, out_channels=gen_proj_dim, kernel_size=ds, stride=ds, padding=0, output_padding=0) # jia
+        self.cosmos_in_proj = nn.Conv2d(
+            in_channels=vae_dim, out_channels=gen_proj_dim, kernel_size=1, stride=1, padding=0
+        )  # jia
+        self.downsample_conv = nn.Conv2d(
+            in_channels=gen_proj_dim, out_channels=gen_proj_dim, kernel_size=ds, stride=ds, padding=0
+        )  # jia
+        self.upsample_conv = nn.ConvTranspose2d(
+            in_channels=gen_proj_dim, out_channels=gen_proj_dim, kernel_size=ds, stride=ds, padding=0, output_padding=0
+        )  # jia
         # self.cosmos_out_proj = nn.Conv2d(in_channels=gen_proj_dim, out_channels=vae_dim, kernel_size=1, stride=1, padding=0) # jia
         self.cosmos_out_proj = nn.Linear(gen_proj_dim, vae_dim)
-        self.cosmos_out_layer_norm = nn.LayerNorm(gen_proj_dim) # jia
+        self.cosmos_out_layer_norm = nn.LayerNorm(gen_proj_dim)  # jia
 
         self.action_in_proj = nn.Linear(config.max_action_dim, action_expert_config.hidden_size)
         self.action_out_proj = nn.Linear(action_expert_config.hidden_size, config.max_action_dim)
@@ -631,18 +572,18 @@ class QwenA1(nn.Module):
         features = self.get_cosmos_features(images)
 
         B, N_view, T = features.shape[:3]
-        features = rearrange(features, 'b n t c h w -> (b n t) c h w')
+        features = rearrange(features, "b n t c h w -> (b n t) c h w")
         features = self.cosmos_in_proj(features)
         features = self.downsample_conv(features)
-        features = rearrange(features, '(b n t) c h w -> b n t c h w', b=B, n=N_view, t=T)
+        features = rearrange(features, "(b n t) c h w -> b n t c h w", b=B, n=N_view, t=T)
         self.cosmos_feat_shape = features.shape
 
         B, N_view, T, _, H, W = features.shape
-        embs = rearrange(features, 'b n t c h w -> b (n t h w) c', b=B, n=N_view, t=T)
+        embs = rearrange(features, "b n t c h w -> b (n t h w) c", b=B, n=N_view, t=T)
         # pad_masks = torch.ones((B, embs.shape[1]), dtype=torch.bool, device=device)
         pad_masks = torch.zeros((B, N_view, T, H, W), dtype=torch.bool, device=device)
         pad_masks[img_masks] = True
-        pad_masks = rearrange(pad_masks, 'b n t h w -> b (n t h w)', b=B, n=N_view, t=T)
+        pad_masks = rearrange(pad_masks, "b n t h w -> b (n t h w)", b=B, n=N_view, t=T)
 
         att_masks = [1] + [0] * (embs.shape[1] - 1)
         att_masks = torch.tensor(att_masks, dtype=torch.bool, device=pad_masks.device)
@@ -677,6 +618,7 @@ class QwenA1(nn.Module):
             min_period=self.config.min_period,
             max_period=self.config.max_period,
             device=timestep.device,
+            dtype=torch.float64,
         )
         time_emb = time_emb.type(dtype=timestep.dtype)
 
@@ -727,22 +669,32 @@ class QwenA1(nn.Module):
         return position_ids, rope_deltas
 
     def decode_cosmos(self, features):
-        b, n, t, c, h, w =self.cosmos_feat_shape
-        features = rearrange(features, 'b (n t h w) c -> b n t c h w', b=b, n=n, t=t, h=h, w=w)
+        b, n, t, c, h, w = self.cosmos_feat_shape
+        features = rearrange(features, "b (n t h w) c -> b n t c h w", b=b, n=n, t=t, h=h, w=w)
         features = features.mean(2)  # b n c h w
-        features = rearrange(features, 'b n c h w -> (b n) c h w')
+        features = rearrange(features, "b n c h w -> (b n) c h w")
 
-        features = self.upsample_conv(features) # dtype: torch.float32
+        features = self.upsample_conv(features)  # dtype: torch.float32
         h_upsampled, w_upsampled = features.shape[-2:]
         features = features.permute(0, 2, 3, 1)
         features = features.reshape(b * n, -1, c)
-        features = self.cosmos_out_proj(self.cosmos_out_layer_norm(features)) # dtype: torch.float32
+        features = self.cosmos_out_proj(self.cosmos_out_layer_norm(features))  # dtype: torch.float32
         features = features.view(b, n, h_upsampled, w_upsampled, features.shape[-1])
         features = features.permute(0, 1, 4, 2, 3)
         return features
 
     def forward(
-        self, images, img_masks, pixel_values, image_grid_thw, lang_tokens, lang_masks, state, actions, noise=None, time=None
+        self,
+        images,
+        img_masks,
+        pixel_values,
+        image_grid_thw,
+        lang_tokens,
+        lang_masks,
+        state,
+        actions,
+        noise=None,
+        time=None,
     ) -> Tensor:
         """Do a full training forward pass and compute the loss."""
         if noise is None:
@@ -759,14 +711,12 @@ class QwenA1(nn.Module):
             pixel_values, image_grid_thw, lang_tokens, lang_masks
         )
         middle_embs, middle_pad_masks, middle_att_masks = self.embed_middle(
-            images[:, :, :2], img_masks,  # remove the future observation
+            images[:, :, :2],
+            img_masks,  # remove the future observation
         )
         suffix_embs, suffix_pad_masks, suffix_att_masks = self.embed_suffix(state, x_t, time)
 
-        inference_dtype = (
-            self.qwen3_vl_with_expert.und_expert.language_model.layers[0]
-            .self_attn.q_proj.weight.dtype
-        )
+        inference_dtype = self.qwen3_vl_with_expert.und_expert.language_model.layers[0].self_attn.q_proj.weight.dtype
         suffix_embs = suffix_embs.to(dtype=inference_dtype)
         middle_embs = middle_embs.to(dtype=inference_dtype)
         prefix_embs = prefix_embs.to(dtype=inference_dtype)
@@ -815,7 +765,17 @@ class QwenA1(nn.Module):
 
     @torch.no_grad()  # see openpi `sample_actions` (slightly adapted)
     def sample_actions(
-        self, images, img_masks, pixel_values, image_grid_thw, lang_tokens, lang_masks, state, noise=None, num_steps=None, decode_image=False
+        self,
+        images,
+        img_masks,
+        pixel_values,
+        image_grid_thw,
+        lang_tokens,
+        lang_masks,
+        state,
+        noise=None,
+        num_steps=None,
+        decode_image=False,
     ) -> Tensor:
         """Do a full inference forward and compute the action."""
         if num_steps is None:
@@ -841,7 +801,7 @@ class QwenA1(nn.Module):
         prefix_position_ids, rope_deltas = self.get_position_ids(lang_tokens, image_grid_thw, prefix_pad_masks)
 
         prefix_att_2d_masks_4d = self._prepare_attention_masks_4d(prefix_att_2d_masks)
-        self.qwen3_vl_with_expert.und_expert.language_model.config._attn_implementation = "eager"  # noqa: SLF001
+        self.qwen3_vl_with_expert.und_expert.language_model.config._attn_implementation = "eager"
 
         _, past_key_values = self.qwen3_vl_with_expert.forward(
             attention_mask=prefix_att_2d_masks_4d,
@@ -853,7 +813,8 @@ class QwenA1(nn.Module):
         max_prefix_position_ids = prefix_position_ids.max(dim=-1, keepdim=True).values
 
         middle_embs, middle_pad_masks, middle_att_masks = self.embed_middle(
-            images[:, :, :2], img_masks,
+            images[:, :, :2],
+            img_masks,
         )
 
         middle_len = middle_pad_masks.shape[1]
@@ -863,10 +824,12 @@ class QwenA1(nn.Module):
         middle_att_2d_masks = make_att_2d_masks(middle_pad_masks, middle_att_masks)
         full_att_2d_masks = torch.cat([prefix_pad_2d_masks, middle_att_2d_masks], dim=2)
 
-        middle_position_ids = torch.arange(1, middle_len + 1).repeat(3, 1, 1).to(max_prefix_position_ids) + max_prefix_position_ids
+        middle_position_ids = (
+            torch.arange(1, middle_len + 1).repeat(3, 1, 1).to(max_prefix_position_ids) + max_prefix_position_ids
+        )
 
         full_att_2d_masks_4d = self._prepare_attention_masks_4d(full_att_2d_masks)
-        self.qwen3_vl_with_expert.gen_expert.config._attn_implementation = "eager"  # noqa: SLF001
+        self.qwen3_vl_with_expert.gen_expert.config._attn_implementation = "eager"
 
         (_, middle_out, _), past_key_values = self.qwen3_vl_with_expert.forward(
             attention_mask=full_att_2d_masks_4d,
@@ -898,8 +861,10 @@ class QwenA1(nn.Module):
             time += dt
 
         if decode_image:
+
             def cosmos_out_func(middle_out):
                 return self.decode_cosmos(middle_out)
+
             pred_cosmos_features = self._apply_checkpoint(
                 cosmos_out_func,
                 middle_out.to(dtype=self.cosmos.dtype),
@@ -931,10 +896,12 @@ class QwenA1(nn.Module):
         suffix_att_2d_masks = make_att_2d_masks(suffix_pad_masks, suffix_att_masks)
         full_att_2d_masks = torch.cat([prefix_pad_2d_masks, suffix_att_2d_masks], dim=2)
 
-        position_ids = torch.arange(1, suffix_len + 1).repeat(3, 1, 1).to(max_prefix_position_ids) + max_prefix_position_ids
+        position_ids = (
+            torch.arange(1, suffix_len + 1).repeat(3, 1, 1).to(max_prefix_position_ids) + max_prefix_position_ids
+        )
 
         full_att_2d_masks_4d = self._prepare_attention_masks_4d(full_att_2d_masks)
-        self.qwen3_vl_with_expert.act_expert.config._attn_implementation = "eager"  # noqa: SLF001
+        self.qwen3_vl_with_expert.act_expert.config._attn_implementation = "eager"
 
         outputs_embeds, _ = self.qwen3_vl_with_expert.forward(
             attention_mask=full_att_2d_masks_4d,

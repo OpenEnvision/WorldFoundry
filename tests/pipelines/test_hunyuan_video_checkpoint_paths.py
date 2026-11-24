@@ -27,10 +27,13 @@ def test_resolve_hunyuan_keeps_existing_explicit_path(tmp_path, monkeypatch) -> 
     (explicit / "hunyuan-video-t2v-720p/transformers/mp_rank_00_model_states.pt").touch()
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path))
 
-    assert _resolve_hunyuan_checkpoint_source(
-        explicit,
-        model_id="hunyuanvideo-t2v",
-    ) == explicit
+    assert (
+        _resolve_hunyuan_checkpoint_source(
+            explicit,
+            model_id="hunyuanvideo-t2v",
+        )
+        == explicit
+    )
 
 
 def test_resolve_hunyuan15_rejects_existing_but_incomplete_stale_path(tmp_path, monkeypatch) -> None:
@@ -41,10 +44,13 @@ def test_resolve_hunyuan15_rejects_existing_but_incomplete_stale_path(tmp_path, 
     (checkpoint / "transformer/720p_t2v/diffusion_pytorch_model.safetensors").touch()
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path))
 
-    assert _resolve_hunyuan_checkpoint_source(
-        stale,
-        model_id="hunyuanvideo-1.5-t2v",
-    ) == checkpoint
+    assert (
+        _resolve_hunyuan_checkpoint_source(
+            stale,
+            model_id="hunyuanvideo-1.5-t2v",
+        )
+        == checkpoint
+    )
 
 
 def test_hunyuan15_explicit_component_roles_override_the_primary_root(tmp_path, monkeypatch) -> None:

@@ -24,7 +24,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: vbench-2.0
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id vbench-2.0 --mode contract 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id vbench-2.0 --mode contract 
     --output-dir tmp/benchmark_zoo/benchmark_contract/vbench-2.0 --json
   open_source_status: experimental
   official_benchmark_verified: false
@@ -59,12 +59,12 @@ metadata:
     - The VBench-2.0 runner has no runner-local foundation-model fork; dimension code resolves checkpoints through 
       base-model/cache paths.
     missing: []
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:VBench2Contract
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:vbench-2.0
   official_runner_script: 
-    worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
+    worldfoundry/evals/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
   prompt_suite:
     mode: vbench2
-    root: worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime
+    root: worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime
     override_root_env: WORLDFOUNDRY_VBENCH2_ROOT
     path: VBench-2.0
   real_data:
@@ -82,7 +82,7 @@ metadata:
     kind: in_tree_official_source
     repo_url: https://github.com/Vchitect/VBench.git
     revision: 45e79ec14e69a2187202c675d2dbce1a71843d53
-    root: worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime
+    root: worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime
     root_env: WORLDFOUNDRY_VBENCH2_ROOT
     override_root_env: WORLDFOUNDRY_VBENCH2_ROOT
   release_status: experimental
@@ -96,11 +96,11 @@ metadata:
     - cache/worldfoundry/data/hfd_datasets/Vchitect/VBench-2.0_human_anomaly
     - cache/worldfoundry/data/hfd_datasets/Vchitect__VBench-2.0_human_anomaly
     in_tree_source_paths:
-    - worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime
+    - worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime
     task_yaml: worldfoundry/data/benchmarks/tasks/external/vbench-2.0.yaml
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:VBench2Contract
+    runner_target: worldfoundry.evals.tasks.contracts.external:vbench-2.0
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
@@ -114,7 +114,7 @@ metadata:
     surface: bounded_official_gpu_validation
   validation_command:
   - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-  - worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
   - --benchmark-id
   - vbench-2.0
   - --variant
@@ -165,7 +165,7 @@ tasks:
       - Vchitect/VBench-2.0_sampled_videos
       - Vchitect/VBench-2.0_human_anomaly
     runtime_requirements:
-      in_tree_source: worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime
+      in_tree_source: worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime
       optional_in_tree_root_override_env: WORLDFOUNDRY_VBENCH2_ROOT
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
       results_path_env: WORLDFOUNDRY_VBENCH2_RESULTS_PATH
@@ -184,6 +184,6 @@ tasks:
       - vbench2_human_fidelity
       - vbench2_physics
       - vbench2_total
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:VBench2Contract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:vbench-2.0
+      runner_script: worldfoundry/evals/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
       default_mode: vbench2

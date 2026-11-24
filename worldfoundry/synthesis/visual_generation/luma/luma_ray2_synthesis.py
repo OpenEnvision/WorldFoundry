@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ..api_video_client import ApiVideoSynthesis
 
@@ -18,12 +18,12 @@ class LumaRay2Synthesis(ApiVideoSynthesis):
         model: str = "ray-2",
         resolution: str = "720p",
         duration: str = "5s",
-        aspect_ratio: Optional[str] = "16:9",
+        aspect_ratio: str | None = "16:9",
         loop: bool = False,
-        concepts: Optional[Any] = None,
-        callback_url: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        concepts: Any | None = None,
+        callback_url: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Start a generation from a text prompt alone."""
         payload = self._payload(
             input_prompt=input_prompt,
@@ -40,17 +40,17 @@ class LumaRay2Synthesis(ApiVideoSynthesis):
 
     def generate_i2av(
         self,
-        keyframes: Dict[str, Any],
+        keyframes: dict[str, Any],
         input_prompt: str,
         model: str = "ray-2",
         resolution: str = "720p",
         duration: str = "5s",
-        aspect_ratio: Optional[str] = "16:9",
+        aspect_ratio: str | None = "16:9",
         loop: bool = False,
-        concepts: Optional[Any] = None,
-        callback_url: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        concepts: Any | None = None,
+        callback_url: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Start a generation anchored on ``keyframes``."""
         payload = self._payload(
             input_prompt=input_prompt,
@@ -73,14 +73,14 @@ class LumaRay2Synthesis(ApiVideoSynthesis):
         model: str,
         resolution: str,
         duration: str,
-        aspect_ratio: Optional[str],
+        aspect_ratio: str | None,
         loop: bool,
-        concepts: Optional[Any],
-        callback_url: Optional[str],
-        **kwargs
-    ) -> Dict[str, Any]:
+        concepts: Any | None,
+        callback_url: str | None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Build the request body shared by both generation routes."""
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "prompt": input_prompt,
             "model": model,
             "resolution": resolution,
@@ -96,23 +96,23 @@ class LumaRay2Synthesis(ApiVideoSynthesis):
         payload.update(kwargs)
         return payload
 
-    def get_generation(self, generation_id: str) -> Dict[str, Any]:
+    def get_generation(self, generation_id: str) -> dict[str, Any]:
         """Return the status and output of a generation task."""
         return self._get(f"/generations/{generation_id}")
 
     def predict(
         self,
-        processed_data: Dict[str, Any],
+        processed_data: dict[str, Any],
         task_type: str = "auto",
         model: str = "ray-2",
         resolution: str = "720p",
         duration: str = "5s",
-        aspect_ratio: Optional[str] = "16:9",
+        aspect_ratio: str | None = "16:9",
         loop: bool = False,
-        concepts: Optional[Any] = None,
-        callback_url: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        concepts: Any | None = None,
+        callback_url: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Start a generation, choosing the route from the presence of keyframes.
 
         Args:
@@ -124,7 +124,7 @@ class LumaRay2Synthesis(ApiVideoSynthesis):
                 no keyframes.
         """
         prompt = processed_data.get("prompt", "")
-        keyframes = processed_data.get("keyframes", None)
+        keyframes = processed_data.get("keyframes")
 
         if task_type == "auto":
             task_type = "i2av" if keyframes else "t2av"

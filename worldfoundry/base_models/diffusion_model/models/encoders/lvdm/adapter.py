@@ -26,15 +26,6 @@ class Downsample(nn.Module):
     """
 
     def __init__(self, channels, use_conv, dims=2, out_channels=None, padding=1):
-        """Init.
-
-        Args:
-            channels: The channels.
-            use_conv: The use conv.
-            dims: The dims.
-            out_channels: The out channels.
-            padding: The padding.
-        """
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -42,39 +33,21 @@ class Downsample(nn.Module):
         self.dims = dims
         stride = 2 if dims != 3 else (1, 2, 2)
         if use_conv:
-            self.op = conv_nd(
-                dims, self.channels, self.out_channels, 3, stride=stride, padding=padding
-            )
+            self.op = conv_nd(dims, self.channels, self.out_channels, 3, stride=stride, padding=padding)
         else:
             assert self.channels == self.out_channels
             self.op = avg_pool_nd(dims, kernel_size=stride, stride=stride)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         assert x.shape[1] == self.channels
         return self.op(x)
 
 
 class ResnetBlock(nn.Module):
-    """Resnet block implementation."""
     def __init__(self, in_c, out_c, down, ksize=3, sk=False, use_conv=True):
-        """Init.
-
-        Args:
-            in_c: The in c.
-            out_c: The out c.
-            down: The down.
-            ksize: The ksize.
-            sk: The sk.
-            use_conv: The use conv.
-        """
         super().__init__()
         ps = ksize // 2
-        if in_c != out_c or sk == False:
+        if in_c != out_c or sk == False:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             self.in_conv = nn.Conv2d(in_c, out_c, ksize, 1, ps)
         else:
             # print('n_in')
@@ -82,23 +55,18 @@ class ResnetBlock(nn.Module):
         self.block1 = nn.Conv2d(out_c, out_c, 3, 1, 1)
         self.act = nn.ReLU()
         self.block2 = nn.Conv2d(out_c, out_c, ksize, 1, ps)
-        if sk == False:
+        if sk == False:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             # self.skep = nn.Conv2d(in_c, out_c, ksize, 1, ps) # edit by zhouxiawang
             self.skep = nn.Conv2d(out_c, out_c, ksize, 1, ps)
         else:
             self.skep = None
 
         self.down = down
-        if self.down == True:
+        if self.down == True:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             self.down_opt = Downsample(in_c, use_conv=use_conv)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        if self.down == True:
+        if self.down == True:  # noqa: E712 - Keeps `==` for operands that may compare elementwise.
             x = self.down_opt(x)
         if self.in_conv is not None:  # edit
             x = self.in_conv(x)
@@ -113,19 +81,8 @@ class ResnetBlock(nn.Module):
 
 
 class Adapter(nn.Module):
-    """Adapter implementation."""
-    def __init__(self, channels=[320, 640, 1280, 1280], nums_rb=3, cin=64, ksize=3, sk=False, use_conv=True):
-        """Init.
-
-        Args:
-            channels: The channels.
-            nums_rb: The nums rb.
-            cin: The cin.
-            ksize: The ksize.
-            sk: The sk.
-            use_conv: The use conv.
-        """
-        super(Adapter, self).__init__()
+    def __init__(self, channels=[320, 640, 1280, 1280], nums_rb=3, cin=64, ksize=3, sk=False, use_conv=True):  # noqa: B006 - Keeps the upstream default object and signature.
+        super().__init__()
         self.unshuffle = nn.PixelUnshuffle(8)
         self.channels = channels
         self.nums_rb = nums_rb
@@ -134,19 +91,16 @@ class Adapter(nn.Module):
             for j in range(nums_rb):
                 if (i != 0) and (j == 0):
                     self.body.append(
-                        ResnetBlock(channels[i - 1], channels[i], down=True, ksize=ksize, sk=sk, use_conv=use_conv))
+                        ResnetBlock(channels[i - 1], channels[i], down=True, ksize=ksize, sk=sk, use_conv=use_conv)
+                    )
                 else:
                     self.body.append(
-                        ResnetBlock(channels[i], channels[i], down=False, ksize=ksize, sk=sk, use_conv=use_conv))
+                        ResnetBlock(channels[i], channels[i], down=False, ksize=ksize, sk=sk, use_conv=use_conv)
+                    )
         self.body = nn.ModuleList(self.body)
         self.conv_in = nn.Conv2d(cin, channels[0], 3, 1, 1)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         # unshuffle
         x = self.unshuffle(x)
         # extract features

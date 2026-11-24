@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 from collections import OrderedDict
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import torch
@@ -18,8 +19,7 @@ DEFAULT_NEGATIVE_PROMPT = (
     "floating limbs, disconnected limbs, mutation, mutated, ugly, disgusting, amputation"
 )
 POST_PROMPT = (
-    "Ultra-detail, masterpiece, best quality, cinematic lighting, 8k uhd, dslr, "
-    "soft lighting, film grain, Fujifilm XT3"
+    "Ultra-detail, masterpiece, best quality, cinematic lighting, 8k uhd, dslr, soft lighting, film grain, Fujifilm XT3"
 )
 
 
@@ -27,7 +27,9 @@ def _normalize_checkpoint_state(checkpoint: Any) -> Any:
     if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
         return checkpoint["state_dict"]
     if isinstance(checkpoint, dict) and "module" in checkpoint and isinstance(checkpoint["module"], dict):
-        return OrderedDict((key[16:] if key.startswith("module.") else key, value) for key, value in checkpoint["module"].items())
+        return OrderedDict(
+            (key[16:] if key.startswith("module.") else key, value) for key, value in checkpoint["module"].items()
+        )
     return checkpoint
 
 
@@ -52,7 +54,9 @@ def _resolve_traj_file(cond_dir: str | Path, traj: str) -> Path:
     raise FileNotFoundError(f"MotionCtrl trajectory fixture is missing for {traj}: tried {candidates}")
 
 
-def _trajectory_from_control_points(traj_file: Path, *, frames: int = 16, height: int = 256, width: int = 256) -> np.ndarray:
+def _trajectory_from_control_points(
+    traj_file: Path, *, frames: int = 16, height: int = 256, width: int = 256
+) -> np.ndarray:
     points: list[tuple[float, float]] = []
     for line in traj_file.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
@@ -66,10 +70,7 @@ def _trajectory_from_control_points(traj_file: Path, *, frames: int = 16, height
     source = np.asarray(points, dtype=np.float32)
     sample_positions = np.linspace(0, len(source) - 1, num=frames, dtype=np.float32)
     resampled = np.stack(
-        [
-            np.interp(sample_positions, np.arange(len(source), dtype=np.float32), source[:, axis])
-            for axis in range(2)
-        ],
+        [np.interp(sample_positions, np.arange(len(source), dtype=np.float32), source[:, axis]) for axis in range(2)],
         axis=1,
     ).astype(np.float32)
     origin = resampled[0]

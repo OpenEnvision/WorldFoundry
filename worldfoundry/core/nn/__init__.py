@@ -15,7 +15,6 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Lazy export table — resolve symbols only on first attribute access
 # ──────────────────────────────────────────────────────────────────────────
@@ -24,7 +23,6 @@ from typing import Any
 _EXPORT_MODULES = {
     "AdaLayerNorm": "worldfoundry.core.nn.transformer.dit",
     "CheckpointMode": "worldfoundry.core.nn.checkpointing.activation_checkpointing",
-    "AttentionBackendInfo": "worldfoundry.core.attention.backends.native",
     "AdaZeroCallable": "worldfoundry.core.nn.transformer.ops",
     "DEFAULT_TRANSFORMER_OPS": "worldfoundry.core.nn.transformer.ops",
     "DropPath": "worldfoundry.core.nn.blocks.layers",
@@ -86,8 +84,6 @@ _EXPORT_MODULES = {
     "apply_gate": "worldfoundry.core.nn.transformer.dit",
     "apply_gate_with_prefix": "worldfoundry.core.nn.transformer.dit",
     "apply_prenorm_transformer_residuals": "worldfoundry.core.nn.transformer.vit",
-    "apply_rotary_embedding": "worldfoundry.core.attention.rotary.rope",
-    "attention_backend_info": "worldfoundry.core.attention.backends.native",
     "attention_head_dim": "worldfoundry.core.nn.transformer.shape",
     "causal_attention_mask": "worldfoundry.core.nn.transformer.shape",
     "drop_add_residual_stochastic_depth": "worldfoundry.core.nn.blocks.stochastic_depth",
@@ -106,10 +102,7 @@ _EXPORT_MODULES = {
     "normalization_layer": "worldfoundry.core.nn.transformer.dit",
     "patchify_image": "worldfoundry.core.nn.blocks.patching",
     "rms_norm": "worldfoundry.core.nn.blocks.normalization",
-    "rotary_frequencies": "worldfoundry.core.attention.rotary.rope",
     "scale_shift": "worldfoundry.core.nn.transformer.dit",
-    "rotate_half": "worldfoundry.core.attention.rotary.rope",
-    "scaled_dot_product_attention": "worldfoundry.core.attention.backends.native",
     "sinusoidal_embedding_1d": "worldfoundry.core.nn.transformer.shape",
     "split_attention_heads": "worldfoundry.core.nn.transformer.shape",
     "transformer_shape_spec": "worldfoundry.core.nn.transformer.shape",
@@ -122,6 +115,7 @@ _EXPORT_MODULES = {
     "chunked_interpolate": "worldfoundry.core.nn.blocks.volume",
     "pixel_shuffle_3d": "worldfoundry.core.nn.blocks.volume",
     "pixel_unshuffle_3d": "worldfoundry.core.nn.blocks.volume",
+    "denoised_to_velocity": "worldfoundry.core.nn.transformer.dit",
     "velocity_to_denoised": "worldfoundry.core.nn.transformer.dit",
     "zero_module": "worldfoundry.core.nn.blocks.layers",
 }

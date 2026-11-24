@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
 from worldfoundry.synthesis.action_generation.xiaomi_robotics_0 import XiaomiRobotics0Synthesis
@@ -32,7 +33,7 @@ class XiaomiRobotics0Pipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "XiaomiRobotics0Pipeline":
+    ) -> XiaomiRobotics0Pipeline:
         """Resolve profile/checkpoint options without loading model weights."""
 
         options = dict(model_path) if isinstance(model_path, Mapping) else {}

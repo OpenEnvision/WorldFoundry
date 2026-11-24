@@ -15,9 +15,9 @@ Must not provide a runner or pipeline factory, or perform loading / sampling her
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Mapping
 
 from ..components import ComponentSpec, ExecutionSpec
 from ..loaders import CheckpointSpec
@@ -48,7 +48,7 @@ class NativeDiffusionRecipe:
 
     model_id: str
     components: tuple[ComponentSpec, ...]
-    execution: ExecutionSpec = ExecutionSpec()
+    execution: ExecutionSpec = ExecutionSpec()  # noqa: RUF009 - ExecutionSpec is frozen and stores read-only mappings.
     checkpoints: Mapping[str, CheckpointSpec] = field(default_factory=dict)
     aliases: tuple[str, ...] = ()
     capabilities: frozenset[str] = field(default_factory=frozenset)

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import load_benchmark_catalog_shard_entries
-from worldfoundry.evaluation.tasks.execution.framework.normalizers import NormalizerSpecError, apply_normalizer, parse_normalizer
+from worldfoundry.evals.tasks.catalog.benchmark_catalog import load_benchmark_catalog_shard_entries
+from worldfoundry.evals.tasks.execution.framework.normalizers import (
+    NormalizerSpecError,
+    apply_normalizer,
+    parse_normalizer,
+)
 
 
 def test_benchmark_zoo_normalizers_apply_common_specs() -> None:

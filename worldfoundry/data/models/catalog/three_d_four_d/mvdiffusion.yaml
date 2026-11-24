@@ -22,12 +22,12 @@ integration:
   status: integrated
   notes:
   - WorldFoundry exposes an in-tree runtime subprocess adapter for MVDiffusion.
-  - Missing source checkout, checkpoints, or CUDA dependencies are reported at inference time.
+  - Missing checkpoints or CUDA dependencies are reported at inference time.
 confirmation: Upstream project page links code/demo; no license file was confirmed in the repo, so this is not marked open_source.
 output_artifacts:
 - generated_image
 runtime_profile: runtime-profile:mvdiffusion
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: mvdiffusion
 runner_parity:
   status: local_gpu_quality_concern
@@ -51,17 +51,17 @@ docs:
   publisher: Simon Fraser University
   publisher_kind: university
   publisher_zh: 西蒙菲莎大学（Simon Fraser University）
-  overview: MVDiffusion generates multi-view images and panoramas with correspondence-aware attention. The in-tree image-outpainting route produced eight views and a panorama locally, with visible consistency defects in generated regions.
-  overview_zh: MVDiffusion 利用对应感知注意力生成多视角图像和全景。树内图像扩展路线已在本地生成八张视角图及全景，但生成区域存在明显一致性问题。
-  architecture: Per the NeurIPS 2023 paper (arXiv 2307.01097), parallel diffusion-model branches generate all views simultaneously with correspondence-aware attention keeping them globally consistent. Missing source checkout, checkpoints, or CUDA dependencies are reported at inference time.
-  architecture_zh: 按 NeurIPS 2023 论文（arXiv 2307.01097），多个并行扩散分支借助「对应感知注意力」同时生成所有视图并保持全局一致。源码、checkpoint 或 CUDA 依赖缺失会在推理时报告。
-  usage_notes: Provide one image for the validated outpainting route. The default artifact is a panorama PNG; the optional spin video and full upstream parity have not been validated.
-  usage_notes_zh: 已验证的图像扩展路线需要一张输入图像，默认产物为全景 PNG；可选旋转视频和完整上游一致性尚未验证。
+  overview: MVDiffusion generates multi-view images and panoramas with correspondence-aware attention. In WorldFoundry, the image-outpainting route turns one input image into eight views and a panorama; generated regions can show visible consistency defects.
+  overview_zh: MVDiffusion 利用对应感知注意力生成多视角图像和全景。在 WorldFoundry 中，图像扩展路线把一张输入图像扩展为八张视角图及全景，但生成区域可能出现明显一致性问题。
+  architecture: Per the NeurIPS 2023 paper (arXiv 2307.01097), parallel diffusion-model branches generate all views simultaneously with correspondence-aware attention keeping them globally consistent.
+  architecture_zh: 按 NeurIPS 2023 论文（arXiv 2307.01097），多个并行扩散分支借助「对应感知注意力」同时生成所有视图并保持全局一致。
+  usage_notes: Provide one image for the outpainting route. The default artifact is a panorama PNG.
+  usage_notes_zh: 图像扩展路线需要一张输入图像，默认产物为全景 PNG。
   limitations:
   - Generated wall regions and objects can diverge visibly from the input scene across views.
-  - The optional spin video and upstream checkpoint digest remain unverified.
+  - The optional spin video and full upstream parity are not validated.
   - 'Panorama-oriented training: free-form camera trajectories are out of scope.'
   limitations_zh:
   - 各视角生成的墙面和物体可能明显偏离输入场景。
-  - 可选旋转视频与上游 checkpoint 摘要尚未验证。
+  - 可选旋转视频与完整上游一致性尚未验证。
   - 训练面向全景场景：自由相机轨迹不在其范围内。

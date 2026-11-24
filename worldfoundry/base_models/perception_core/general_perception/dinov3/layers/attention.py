@@ -3,10 +3,7 @@
 # This software may be used and distributed in accordance with
 # the terms of the DINOv3 License Agreement.
 
-"""Module for base_models -> perception_core -> general_perception -> dinov3 -> layers -> attention.py functionality."""
-
 import math
-from typing import List, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -17,36 +14,16 @@ from ..utils import cat_keep_shapes, uncat_with_shapes
 
 # RoPE-related functions:
 def rope_rotate_half(x: Tensor) -> Tensor:
-    """Rope rotate half.
-
-    Args:
-        x: The x.
-
-    Returns:
-        The return value.
-    """
     x1, x2 = x.chunk(2, dim=-1)
     return torch.cat([-x2, x1], dim=-1)
 
 
 def rope_apply(x: Tensor, sin: Tensor, cos: Tensor) -> Tensor:
-    """Rope apply.
-
-    Args:
-        x: The x.
-        sin: The sin.
-        cos: The cos.
-
-    Returns:
-        The return value.
-    """
     return (x * cos) + (rope_rotate_half(x) * sin)
 
 
 class LinearKMaskedBias(nn.Linear):
-    """Linear k masked bias implementation."""
     def __init__(self, *args, **kwargs):
-        """Init."""
         super().__init__(*args, **kwargs)
         o = self.out_features
         assert o % 3 == 0
@@ -54,20 +31,11 @@ class LinearKMaskedBias(nn.Linear):
             self.register_buffer("bias_mask", torch.full_like(self.bias, fill_value=math.nan))
 
     def forward(self, input: Tensor) -> Tensor:
-        """Forward.
-
-        Args:
-            input: The input.
-
-        Returns:
-            The return value.
-        """
         masked_bias = self.bias * self.bias_mask.to(self.bias.dtype) if self.bias is not None else None
         return F.linear(input, self.weight, masked_bias)
 
 
 class SelfAttention(nn.Module):
-    """Self attention implementation."""
     def __init__(
         self,
         dim: int,
@@ -78,26 +46,20 @@ class SelfAttention(nn.Module):
         proj_drop: float = 0.0,
         mask_k_bias: bool = False,
         device=None,
+        *,
+        use_qk_norm: bool = False,
     ) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            qkv_bias: The qkv bias.
-            proj_bias: The proj bias.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-            mask_k_bias: The mask k bias.
-            device: The device.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
         self.scale = head_dim**-0.5
+        self.use_qk_norm = use_qk_norm
+        if self.use_qk_norm:
+            self.q_norm = nn.LayerNorm(head_dim, eps=1e-5)
+            self.k_norm = nn.LayerNorm(head_dim, eps=1e-5)
+        else:
+            self.q_norm = None
+            self.k_norm = None
 
         linear_class = LinearKMaskedBias if mask_k_bias else nn.Linear
         self.qkv = linear_class(dim, dim * 3, bias=qkv_bias, device=device)
@@ -105,17 +67,7 @@ class SelfAttention(nn.Module):
         self.proj = nn.Linear(dim, dim, bias=proj_bias, device=device)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def apply_rope(self, q: Tensor, k: Tensor, rope: Tensor | Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tensor]:
-        """Apply rope.
-
-        Args:
-            q: The q.
-            k: The k.
-            rope: The rope.
-
-        Returns:
-            The return value.
-        """
+    def apply_rope(self, q: Tensor, k: Tensor, rope: Tensor | tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
         q_dtype = q.dtype
         k_dtype = k.dtype
         sin, cos = rope
@@ -136,55 +88,25 @@ class SelfAttention(nn.Module):
         return q, k
 
     def forward(self, x: Tensor, attn_bias=None, rope: Tensor = None) -> Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            attn_bias: The attn bias.
-            rope: The rope.
-
-        Returns:
-            The return value.
-        """
         qkv = self.qkv(x)
         attn_v = self.compute_attention(qkv=qkv, attn_bias=attn_bias, rope=rope)
         x = self.proj(attn_v)
         x = self.proj_drop(x)
         return x
 
-    def forward_list(self, x_list, attn_bias=None, rope_list=None) -> List[Tensor]:
-        """Forward list.
-
-        Args:
-            x_list: The x list.
-            attn_bias: The attn bias.
-            rope_list: The rope list.
-
-        Returns:
-            The return value.
-        """
+    def forward_list(self, x_list, attn_bias=None, rope_list=None) -> list[Tensor]:
         assert len(x_list) == len(rope_list)
         x_flat, shapes, num_tokens = cat_keep_shapes(x_list)
         qkv_flat = self.qkv(x_flat)
         qkv_list = uncat_with_shapes(qkv_flat, shapes, num_tokens)
         att_out = []
-        for _, (qkv, _, rope) in enumerate(zip(qkv_list, shapes, rope_list)):
+        for _, (qkv, _, rope) in enumerate(zip(qkv_list, shapes, rope_list, strict=False)):
             att_out.append(self.compute_attention(qkv, attn_bias=attn_bias, rope=rope))
         x_flat, shapes, num_tokens = cat_keep_shapes(att_out)
         x_flat = self.proj(x_flat)
         return uncat_with_shapes(x_flat, shapes, num_tokens)
 
     def compute_attention(self, qkv: Tensor, attn_bias=None, rope=None) -> Tensor:
-        """Compute attention.
-
-        Args:
-            qkv: The qkv.
-            attn_bias: The attn bias.
-            rope: The rope.
-
-        Returns:
-            The return value.
-        """
         assert attn_bias is None
         B, N, _ = qkv.shape
         C = self.qkv.in_features
@@ -192,6 +114,9 @@ class SelfAttention(nn.Module):
         qkv = qkv.reshape(B, N, 3, self.num_heads, C // self.num_heads)
         q, k, v = torch.unbind(qkv, 2)
         q, k, v = [t.transpose(1, 2) for t in [q, k, v]]
+        if self.use_qk_norm:
+            q = self.q_norm(q)
+            k = self.k_norm(k)
         if rope is not None:
             q, k = self.apply_rope(q, k, rope)
         x = torch.nn.functional.scaled_dot_product_attention(q, k, v)
@@ -200,7 +125,6 @@ class SelfAttention(nn.Module):
 
 
 class CausalSelfAttention(nn.Module):
-    """Causal self attention implementation."""
     def __init__(
         self,
         dim: int,
@@ -210,19 +134,6 @@ class CausalSelfAttention(nn.Module):
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
     ) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            qkv_bias: The qkv bias.
-            proj_bias: The proj bias.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.dim = dim
         self.num_heads = num_heads
@@ -237,16 +148,6 @@ class CausalSelfAttention(nn.Module):
     def init_weights(
         self, init_attn_std: float | None = None, init_proj_std: float | None = None, factor: float = 1.0
     ) -> None:
-        """Init weights.
-
-        Args:
-            init_attn_std: The init attn std.
-            init_proj_std: The init proj std.
-            factor: The factor.
-
-        Returns:
-            The return value.
-        """
         init_attn_std = init_attn_std or (self.dim**-0.5)
         init_proj_std = init_proj_std or init_attn_std * factor
         nn.init.normal_(self.qkv.weight, std=init_attn_std)
@@ -257,15 +158,6 @@ class CausalSelfAttention(nn.Module):
             nn.init.zeros_(self.proj.bias)
 
     def forward(self, x: Tensor, is_causal: bool = True) -> Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            is_causal: The is causal.
-
-        Returns:
-            The return value.
-        """
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads)
         q, k, v = torch.unbind(qkv, 2)

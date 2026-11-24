@@ -1,0 +1,44 @@
+schema_version: 2
+model_id: ltx-2.3-v2v
+env_name: ltx-2.5
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+driver_status: compatible
+conda_packages:
+- python=3.11
+- pip>=25
+- ffmpeg>=6
+pip_extra_index_url: https://download.pytorch.org/whl/cu128
+pip_packages:
+- torch==2.11.0+cu128
+- torchaudio==2.11.0+cu128
+- torchvision==0.26.0+cu128
+- transformers>=5.8.0,<5.15
+- accelerate>=1.10
+- safetensors>=0.6
+- einops>=0.8
+- numpy>=2.0
+- scipy>=1.14
+- av>=14
+- tqdm>=4.66
+- pillow>=10
+validation_imports:
+- torch
+- torchaudio
+- torchvision
+- transformers
+- accelerate
+- safetensors
+- einops
+- numpy
+- scipy
+- av
+- PIL
+notes:
+- Native IC-LoRA V2V runs in-process on the canonical LTX recipe with Gemma 3, reference-video conditioning, and
+  shared loading/offload and H.264/AAC media encoding.
+- The canonical split-Gemma loader requires Transformers 5.x; this route shares the ltx-2.5 environment and its
+  explicit CUDA 12.8 wheel pins. T2V/I2V keep their unified environment.
+- CPU FP32 component and tiny denoise/decode parity ran in this environment. Released-checkpoint GPU/MPS and offload
+  validation remain pending.

@@ -1,35 +1,38 @@
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 import torch.nn as nn
 
-from mmaudio.ext.autoencoder.vae import VAE, get_my_vae
-from mmaudio.ext.bigvgan import BigVGAN
-from mmaudio.ext.bigvgan_v2.bigvgan import BigVGAN as BigVGANv2
-from mmaudio.model.utils.distributions import DiagonalGaussianDistribution
 from worldfoundry.synthesis.visual_generation.mmaudio.checkpoints import (
     resolve_bigvgan_v2_checkpoint,
+)
+from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.ext.autoencoder.vae import VAE, get_my_vae
+from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.ext.bigvgan import BigVGAN
+from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.ext.bigvgan_v2.bigvgan import BigVGAN as BigVGANv2
+from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.model.utils.distributions import (
+    DiagonalGaussianDistribution,
 )
 
 
 class AutoEncoderModule(nn.Module):
-
-    def __init__(self,
-                 *,
-                 vae_ckpt_path,
-                 vocoder_ckpt_path: Optional[str] = None,
-                 mode: Literal['16k', '44k'],
-                 need_vae_encoder: bool = True):
+    def __init__(
+        self,
+        *,
+        vae_ckpt_path,
+        vocoder_ckpt_path: str | None = None,
+        mode: Literal["16k", "44k"],
+        need_vae_encoder: bool = True,
+    ):
         super().__init__()
         self.vae: VAE = get_my_vae(mode).eval()
-        vae_state_dict = torch.load(vae_ckpt_path, weights_only=True, map_location='cpu')
+        vae_state_dict = torch.load(vae_ckpt_path, weights_only=True, map_location="cpu")
         self.vae.load_state_dict(vae_state_dict)
         self.vae.remove_weight_norm()
 
-        if mode == '16k':
+        if mode == "16k":
             assert vocoder_ckpt_path is not None
             self.vocoder = BigVGAN(vocoder_ckpt_path).eval()
-        elif mode == '44k':
+        elif mode == "44k":
             self.vocoder = BigVGANv2.from_pretrained(
                 str(resolve_bigvgan_v2_checkpoint()),
                 local_files_only=True,
@@ -37,7 +40,7 @@ class AutoEncoderModule(nn.Module):
             )
             self.vocoder.remove_weight_norm()
         else:
-            raise ValueError(f'Unknown mode: {mode}')
+            raise ValueError(f"Unknown mode: {mode}")
 
         for param in self.parameters():
             param.requires_grad = False

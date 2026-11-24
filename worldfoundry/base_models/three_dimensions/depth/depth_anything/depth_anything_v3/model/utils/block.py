@@ -13,16 +13,16 @@
 # limitations under the License.
 
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> model -> utils -> block.py functionality."""
+from collections.abc import Callable
 
-from typing import Callable
 from torch import Tensor, nn
 
-from .attention import Attention, LayerScale, Mlp
+from worldfoundry.core.nn.blocks.layers import LayerScale, Mlp
+
+from .attention import Attention
 
 
 class Block(nn.Module):
-    """Block implementation."""
     def __init__(
         self,
         dim: int,
@@ -42,29 +42,6 @@ class Block(nn.Module):
         qk_norm: bool = False,
         rope=None,
     ) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            qkv_bias: The qkv bias.
-            proj_bias: The proj bias.
-            ffn_bias: The ffn bias.
-            drop: The drop.
-            attn_drop: The attn drop.
-            init_values: The init values.
-            drop_path: The drop path.
-            act_layer: The act layer.
-            norm_layer: The norm layer.
-            attn_class: The attn class.
-            ffn_layer: The ffn layer.
-            qk_norm: The qk norm.
-            rope: The rope.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         self.norm1 = norm_layer(dim)
@@ -95,38 +72,10 @@ class Block(nn.Module):
         self.sample_drop_ratio = 0.0  # Equivalent to always having drop_path=0
 
     def forward(self, x: Tensor, pos=None, attn_mask=None) -> Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            pos: The pos.
-            attn_mask: The attn mask.
-
-        Returns:
-            The return value.
-        """
         def attn_residual_func(x: Tensor, pos=None, attn_mask=None) -> Tensor:
-            """Attn residual func.
-
-            Args:
-                x: The x.
-                pos: The pos.
-                attn_mask: The attn mask.
-
-            Returns:
-                The return value.
-            """
             return self.ls1(self.attn(self.norm1(x), pos=pos, attn_mask=attn_mask))
 
         def ffn_residual_func(x: Tensor) -> Tensor:
-            """Ffn residual func.
-
-            Args:
-                x: The x.
-
-            Returns:
-                The return value.
-            """
             return self.ls2(self.mlp(self.norm2(x)))
 
         # drop_path is always 0, so always take the else branch

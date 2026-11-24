@@ -85,6 +85,13 @@ class PackedSVDQuantLinear(nn.Module):
     """Strict inference provider; no dense-weight fallback is advertised as INT4."""
 
     _worldfoundry_quantization_layer = True
+    _source: nn.Linear
+    smooth: torch.Tensor
+    qweight: torch.Tensor
+    scales: torch.Tensor
+    down: torch.Tensor
+    up: torch.Tensor
+    bias: torch.Tensor | None
 
     def __init__(self, source: nn.Linear, state: dict):
         super().__init__()

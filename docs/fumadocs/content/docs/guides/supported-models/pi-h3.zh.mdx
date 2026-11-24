@@ -1,0 +1,34 @@
+---
+title: "pi-H3"
+description: "LakonLab pi-H3 两步与四步 MiniMax-H3 联合音视频生成，支持可选的 Sol-H3 DWD 无解码器直出像素。"
+modelId: "pi-h3"
+pageSource: authored
+---
+
+pi-H3 将 MiniMax-H3 联合视频与 32 kHz 立体声音频生成加速至 2 步或 4 步 FlowEulerODE 采样，并支持可选的 DWD（Decoding Without a Decoder）模式：通过 Sol-H3 像素精炼头直接从最后一步 Transformer 特征预测 RGB 像素帧，无需运行视频 VAE 解码器。
+
+代码：[Lakonik/LakonLab](https://github.com/Lakonik/LakonLab)（`2ee2b334374ec91b7cee371a85a524bf4ba644d3`）。
+权重：[Lakonik/pi-H3](https://huggingface.co/Lakonik/pi-H3) 与 [multimodalart/MiniMax-H3-Pruned](https://huggingface.co/multimodalart/MiniMax-H3-Pruned)。
+
+## 运行时契约
+
+pi-H3 支持四个适配器变体：
+
+| 变体 | 适配器子目录 | 步数 | 视频解码方式 |
+| --- | --- | --- | --- |
+| `4step-dwd`（默认） | `pi_h3_4step_dwd_adapter` | 4 | `SolH3DWDHead` + `RGBColorEncoder` |
+| `2step-dwd` | `pi_h3_2step_dwd_adapter` | 2 | `SolH3DWDHead` + `RGBColorEncoder` |
+| `4step` | `pi_h3_4step_adapter` | 4 | MiniMax-H3 视频 VAE |
+| `2step` | `pi_h3_2step_adapter` | 2 | MiniMax-H3 视频 VAE |
+
+支持任务包括 `t2va`（文本生成音视频）、`i2va`（首帧）、`l2va`（末帧）与 `fl2va`（首尾帧）。输出为 24 FPS MP4 视频及同步混流的 32 kHz 立体声音频，帧数向上对齐至 `17n + 5`，空间分辨率为 32 的倍数。
+
+```bash
+wf run pi-h3 --pipeline.task-profile t2va --json
+```
+
+运行前需准备 `multimodalart/MiniMax-H3-Pruned` 与所选 `Lakonik/pi-H3` 适配器子目录。两个仓库均非受限仓库，模型权重遵循 MiniMax H3 Community License。
+
+## 限制
+
+DWD 变体在生成阶段跳过视频 VAE 解码，但关键帧任务（`i2va`、`l2va`、`fl2va`）仍需视频 VAE 编码器编码条件图像。已在 H200 上配合 `multimodalart/MiniMax-H3-Pruned` 完成全部 4 个官方适配器变体（`4step-dwd`、`2step-dwd`、`4step`、`2step` 含 `i2va` 关键帧，1376×768、124 帧 24 fps、32 kHz 立体声 AAC）的真实权重端到端验证。可选的 FP8 W8A8 量化及 Sol 稀疏注意力内核暂未接入当前 BF16 集成。

@@ -1,27 +1,19 @@
+import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any
 
 import torch
-import torch.nn.functional as F
+from diffusers.models.attention import FeedForward
+from diffusers.models.attention_processor import Attention
+from diffusers.utils import BaseOutput
+from einops import rearrange
 from torch import nn
 
-from diffusers.utils import BaseOutput
-from diffusers.models.attention_processor import Attention
-from diffusers.models.attention import FeedForward
+from worldfoundry.base_models.diffusion_model.models.networks.animatediff.resnet import InflatedGroupNorm
+from worldfoundry.core.nn.blocks.layers import zero_module as zero_module
 
-from typing import Dict, Any
-from .resnet import InflatedGroupNorm
 from .attention_processor import PoseAdaptorAttnProcessor
-
-from einops import rearrange
-import math
-
-
-def zero_module(module):
-    # Zero out the parameters of a module and return it.
-    for p in module.parameters():
-        p.detach().zero_()
-    return module
 
 
 @dataclass
@@ -29,11 +21,7 @@ class TemporalTransformer3DModelOutput(BaseOutput):
     sample: torch.FloatTensor
 
 
-def get_motion_module(
-        in_channels,
-        motion_module_type: str,
-        motion_module_kwargs: dict
-):
+def get_motion_module(in_channels, motion_module_type: str, motion_module_kwargs: dict):
     if motion_module_type == "Vanilla":
         return VanillaTemporalModule(in_channels=in_channels, **motion_module_kwargs)
     else:
@@ -42,22 +30,22 @@ def get_motion_module(
 
 class VanillaTemporalModule(nn.Module):
     def __init__(
-            self,
-            in_channels,
-            num_attention_heads=8,
-            num_transformer_block=2,
-            attention_block_types=("Temporal_Self",),
-            temporal_position_encoding=True,
-            temporal_position_encoding_max_len=32,
-            temporal_attention_dim_div=1,
-            cross_attention_dim=320,
-            zero_initialize=True,
-            encoder_hidden_states_query=(False, False),
-            attention_activation_scale=1.0,
-            attention_processor_kwargs: Dict = {},
-            causal_temporal_attention=False,
-            causal_temporal_attention_mask_type="",
-            rescale_output_factor=1.0
+        self,
+        in_channels,
+        num_attention_heads=8,
+        num_transformer_block=2,
+        attention_block_types=("Temporal_Self",),
+        temporal_position_encoding=True,
+        temporal_position_encoding_max_len=32,
+        temporal_attention_dim_div=1,
+        cross_attention_dim=320,
+        zero_initialize=True,
+        encoder_hidden_states_query=(False, False),
+        attention_activation_scale=1.0,
+        attention_processor_kwargs: dict = {},  # noqa: B006 - Keeps the upstream default object and signature.
+        causal_temporal_attention=False,
+        causal_temporal_attention_mask_type="",
+        rescale_output_factor=1.0,
     ):
         super().__init__()
 
@@ -75,15 +63,23 @@ class VanillaTemporalModule(nn.Module):
             attention_processor_kwargs=attention_processor_kwargs,
             causal_temporal_attention=causal_temporal_attention,
             causal_temporal_attention_mask_type=causal_temporal_attention_mask_type,
-            rescale_output_factor=rescale_output_factor
+            rescale_output_factor=rescale_output_factor,
         )
 
         if zero_initialize:
             self.temporal_transformer.proj_out = zero_module(self.temporal_transformer.proj_out)
 
-    def forward(self, hidden_states, temb=None, encoder_hidden_states=None, attention_mask=None,
-                cross_attention_kwargs: Dict[str, Any] = {}):
-        hidden_states = self.temporal_transformer(hidden_states, encoder_hidden_states, attention_mask, cross_attention_kwargs=cross_attention_kwargs)
+    def forward(
+        self,
+        hidden_states,
+        temb=None,
+        encoder_hidden_states=None,
+        attention_mask=None,
+        cross_attention_kwargs: dict[str, Any] = {},  # noqa: B006 - Keeps the upstream default object and signature.
+    ):
+        hidden_states = self.temporal_transformer(
+            hidden_states, encoder_hidden_states, attention_mask, cross_attention_kwargs=cross_attention_kwargs
+        )
 
         output = hidden_states
         return output
@@ -91,27 +87,29 @@ class VanillaTemporalModule(nn.Module):
 
 class TemporalTransformer3DModel(nn.Module):
     def __init__(
-            self,
-            in_channels,
-            num_attention_heads,
-            attention_head_dim,
-            num_layers,
-            attention_block_types=("Temporal_Self", "Temporal_Self",),
-            dropout=0.0,
-            norm_num_groups=32,
-            cross_attention_dim=320,
-            activation_fn="geglu",
-            attention_bias=False,
-            upcast_attention=False,
-            temporal_position_encoding=False,
-            temporal_position_encoding_max_len=32,
-            encoder_hidden_states_query=(False, False),
-            attention_activation_scale=1.0,
-            attention_processor_kwargs: Dict = {},
-
-            causal_temporal_attention=None,
-            causal_temporal_attention_mask_type="",
-            rescale_output_factor=1.0
+        self,
+        in_channels,
+        num_attention_heads,
+        attention_head_dim,
+        num_layers,
+        attention_block_types=(
+            "Temporal_Self",
+            "Temporal_Self",
+        ),
+        dropout=0.0,
+        norm_num_groups=32,
+        cross_attention_dim=320,
+        activation_fn="geglu",
+        attention_bias=False,
+        upcast_attention=False,
+        temporal_position_encoding=False,
+        temporal_position_encoding_max_len=32,
+        encoder_hidden_states_query=(False, False),
+        attention_activation_scale=1.0,
+        attention_processor_kwargs: dict = {},  # noqa: B006 - Keeps the upstream default object and signature.
+        causal_temporal_attention=None,
+        causal_temporal_attention_mask_type="",
+        rescale_output_factor=1.0,
     ):
         super().__init__()
         assert causal_temporal_attention is not None
@@ -155,7 +153,10 @@ class TemporalTransformer3DModel(nn.Module):
         batch_size, sequence_length, dim = hidden_states.shape
 
         if self.causal_temporal_attention_mask is None or self.causal_temporal_attention_mask.shape != (
-        batch_size, sequence_length, sequence_length):
+            batch_size,
+            sequence_length,
+            sequence_length,
+        ):
             if self.causal_temporal_attention_mask_type == "causal":
                 # 1. vanilla causal mask
                 mask = torch.tril(torch.ones(sequence_length, sequence_length))
@@ -163,8 +164,8 @@ class TemporalTransformer3DModel(nn.Module):
             elif self.causal_temporal_attention_mask_type == "2-seq":
                 # 2. 2-seq
                 mask = torch.zeros(sequence_length, sequence_length)
-                mask[:sequence_length // 2, :sequence_length // 2] = 1
-                mask[-sequence_length // 2:, -sequence_length // 2:] = 1
+                mask[: sequence_length // 2, : sequence_length // 2] = 1
+                mask[-sequence_length // 2 :, -sequence_length // 2 :] = 1
 
             elif self.causal_temporal_attention_mask_type == "0-prev":
                 # attn to the previous frame
@@ -172,8 +173,8 @@ class TemporalTransformer3DModel(nn.Module):
                 indices_prev = indices - 1
                 indices_prev[0] = 0
                 mask = torch.zeros(sequence_length, sequence_length)
-                mask[:, 0] = 1.
-                mask[indices, indices_prev] = 1.
+                mask[:, 0] = 1.0
+                mask[indices, indices_prev] = 1.0
 
             elif self.causal_temporal_attention_mask_type == "0":
                 # only attn to first frame
@@ -198,7 +199,7 @@ class TemporalTransformer3DModel(nn.Module):
                 raise ValueError
 
             # generate attention mask fron binary values
-            mask = mask.masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+            mask = mask.masked_fill(mask == 0, float("-inf")).masked_fill(mask == 1, 0.0)
             mask = mask.unsqueeze(0)
             mask = mask.repeat(batch_size, 1, 1)
 
@@ -206,8 +207,13 @@ class TemporalTransformer3DModel(nn.Module):
 
         return self.causal_temporal_attention_mask
 
-    def forward(self, hidden_states, encoder_hidden_states=None, attention_mask=None,
-                cross_attention_kwargs: Dict[str, Any] = {},):
+    def forward(
+        self,
+        hidden_states,
+        encoder_hidden_states=None,
+        attention_mask=None,
+        cross_attention_kwargs: dict[str, Any] = {},  # noqa: B006 - Keeps the upstream default object and signature.
+    ):
         residual = hidden_states
 
         assert hidden_states.dim() == 5, f"Expected hidden_states to have ndim=5, but got ndim={hidden_states.dim()}."
@@ -217,13 +223,18 @@ class TemporalTransformer3DModel(nn.Module):
         hidden_states = rearrange(hidden_states, "b c f h w -> (b h w) f c")
         hidden_states = self.proj_in(hidden_states)
 
-        attention_mask = self.get_causal_temporal_attention_mask(
-            hidden_states) if self.causal_temporal_attention else attention_mask
+        attention_mask = (
+            self.get_causal_temporal_attention_mask(hidden_states) if self.causal_temporal_attention else attention_mask
+        )
 
         # Transformer Blocks
         for block in self.transformer_blocks:
-            hidden_states = block(hidden_states, encoder_hidden_states=encoder_hidden_states,
-                                  attention_mask=attention_mask, cross_attention_kwargs=cross_attention_kwargs)
+            hidden_states = block(
+                hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
+                attention_mask=attention_mask,
+                cross_attention_kwargs=cross_attention_kwargs,
+            )
         hidden_states = self.proj_out(hidden_states)
 
         hidden_states = rearrange(hidden_states, "(b h w) f c -> b c f h w", h=height, w=width)
@@ -235,23 +246,26 @@ class TemporalTransformer3DModel(nn.Module):
 
 class TemporalTransformerBlock(nn.Module):
     def __init__(
-            self,
-            dim,
-            num_attention_heads,
-            attention_head_dim,
-            attention_block_types=("Temporal_Self", "Temporal_Self",),
-            dropout=0.0,
-            norm_num_groups=32,
-            cross_attention_dim=768,
-            activation_fn="geglu",
-            attention_bias=False,
-            upcast_attention=False,
-            temporal_position_encoding=False,
-            temporal_position_encoding_max_len=32,
-            encoder_hidden_states_query=(False, False),
-            attention_activation_scale=1.0,
-            attention_processor_kwargs: Dict = {},
-            rescale_output_factor=1.0
+        self,
+        dim,
+        num_attention_heads,
+        attention_head_dim,
+        attention_block_types=(
+            "Temporal_Self",
+            "Temporal_Self",
+        ),
+        dropout=0.0,
+        norm_num_groups=32,
+        cross_attention_dim=768,
+        activation_fn="geglu",
+        attention_bias=False,
+        upcast_attention=False,
+        temporal_position_encoding=False,
+        temporal_position_encoding_max_len=32,
+        encoder_hidden_states_query=(False, False),
+        attention_activation_scale=1.0,
+        attention_processor_kwargs: dict = {},  # noqa: B006 - Keeps the upstream default object and signature.
+        rescale_output_factor=1.0,
     ):
         super().__init__()
 
@@ -259,11 +273,13 @@ class TemporalTransformerBlock(nn.Module):
         norms = []
         self.attention_block_types = attention_block_types
 
-        for block_idx, block_name in enumerate(attention_block_types):
+        for _block_idx, block_name in enumerate(attention_block_types):
             attention_blocks.append(
                 TemporalSelfAttention(
                     attention_mode=block_name,
-                    cross_attention_dim=cross_attention_dim if block_name in ['Temporal_Cross', 'Temporal_Pose_Adaptor'] else None,
+                    cross_attention_dim=cross_attention_dim
+                    if block_name in ["Temporal_Cross", "Temporal_Pose_Adaptor"]
+                    else None,
                     query_dim=dim,
                     heads=num_attention_heads,
                     dim_head=attention_head_dim,
@@ -283,15 +299,28 @@ class TemporalTransformerBlock(nn.Module):
         self.ff = FeedForward(dim, dropout=dropout, activation_fn=activation_fn)
         self.ff_norm = nn.LayerNorm(dim)
 
-    def forward(self, hidden_states, encoder_hidden_states=None, attention_mask=None, cross_attention_kwargs: Dict[str, Any] = {}):
-        for attention_block, norm, attention_block_type in zip(self.attention_blocks, self.norms, self.attention_block_types):
+    def forward(
+        self,
+        hidden_states,
+        encoder_hidden_states=None,
+        attention_mask=None,
+        cross_attention_kwargs: dict[str, Any] = {},  # noqa: B006 - Keeps the upstream default object and signature.
+    ):
+        for attention_block, norm, attention_block_type in zip(
+            self.attention_blocks, self.norms, self.attention_block_types, strict=False
+        ):
             norm_hidden_states = norm(hidden_states)
-            hidden_states = attention_block(
-                norm_hidden_states,
-                encoder_hidden_states=norm_hidden_states if attention_block_type == 'Temporal_Self' else encoder_hidden_states,
-                attention_mask=attention_mask,
-                **cross_attention_kwargs
-            ) + hidden_states
+            hidden_states = (
+                attention_block(
+                    norm_hidden_states,
+                    encoder_hidden_states=norm_hidden_states
+                    if attention_block_type == "Temporal_Self"
+                    else encoder_hidden_states,
+                    attention_mask=attention_mask,
+                    **cross_attention_kwargs,
+                )
+                + hidden_states
+            )
 
         hidden_states = self.ff(self.ff_norm(hidden_states)) + hidden_states
 
@@ -301,10 +330,10 @@ class TemporalTransformerBlock(nn.Module):
 
 class PositionalEncoding(nn.Module):
     def __init__(
-            self,
-            d_model,
-            dropout=0.,
-            max_len=32,
+        self,
+        d_model,
+        dropout=0.0,
+        max_len=32,
     ):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
@@ -313,33 +342,35 @@ class PositionalEncoding(nn.Module):
         pe = torch.zeros(1, max_len, d_model)
         pe[0, :, 0::2] = torch.sin(position * div_term)
         pe[0, :, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
+        self.register_buffer("pe", pe)
 
     def forward(self, x):
-        x = x + self.pe[:, :x.size(1)]
+        x = x + self.pe[:, : x.size(1)]
         return self.dropout(x)
 
 
 class TemporalSelfAttention(Attention):
     def __init__(
-            self,
-            attention_mode=None,
-            temporal_position_encoding=False,
-            temporal_position_encoding_max_len=32,
-            rescale_output_factor=1.0,
-            *args, **kwargs
+        self,
+        attention_mode=None,
+        temporal_position_encoding=False,
+        temporal_position_encoding_max_len=32,
+        rescale_output_factor=1.0,
+        *args,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         assert attention_mode == "Temporal_Self"
 
-        self.pos_encoder = PositionalEncoding(
-            kwargs["query_dim"],
-            max_len=temporal_position_encoding_max_len
-        ) if temporal_position_encoding else None
+        self.pos_encoder = (
+            PositionalEncoding(kwargs["query_dim"], max_len=temporal_position_encoding_max_len)
+            if temporal_position_encoding
+            else None
+        )
         self.rescale_output_factor = rescale_output_factor
 
     def set_use_memory_efficient_attention_xformers(
-            self, use_memory_efficient_attention_xformers: bool, attention_op: Optional[Callable] = None
+        self, use_memory_efficient_attention_xformers: bool, attention_op: Callable | None = None
     ):
         # disable motion module efficient xformers to avoid bad results, don't know why
         # TODO: fix this bug
@@ -361,23 +392,23 @@ class TemporalSelfAttention(Attention):
                 assert pose_feature.ndim == 3
             cross_attention_kwargs["pose_feature"] = pose_feature
 
-        if isinstance(self.processor,  PoseAdaptorAttnProcessor):
+        if isinstance(self.processor, PoseAdaptorAttnProcessor):
             return self.processor(
                 self,
                 hidden_states,
-                cross_attention_kwargs.pop('pose_feature'),
+                cross_attention_kwargs.pop("pose_feature"),
                 encoder_hidden_states=None,
                 attention_mask=attention_mask,
                 **cross_attention_kwargs,
             )
-        elif hasattr(self.processor, "__call__"):
+        elif callable(self.processor):
             return self.processor.__call__(
-                    self,
-                    hidden_states,
-                    encoder_hidden_states=None,
-                    attention_mask=attention_mask,
-                    **cross_attention_kwargs,
-                )
+                self,
+                hidden_states,
+                encoder_hidden_states=None,
+                attention_mask=attention_mask,
+                **cross_attention_kwargs,
+            )
         else:
             return self.processor(
                 self,

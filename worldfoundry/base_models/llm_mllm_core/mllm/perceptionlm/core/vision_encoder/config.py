@@ -6,19 +6,15 @@ Include all available vision encoder configurations.
 
 from dataclasses import dataclass, replace
 
-from functools import partial
-from typing import Callable, Optional, Sequence, Tuple, List
-
 from huggingface_hub import hf_hub_download
 
 
-
-def fetch_pe_checkpoint(name: str, path: Optional[str] = None):
+def fetch_pe_checkpoint(name: str, path: str | None = None):
     path = path or f"hf://facebook/{name}:{name}.pt"
 
     if path.startswith("hf://"):
         # Load from huggingface
-        path = path[len("hf://"):]
+        path = path[len("hf://") :]
         repo, file = path.split(":")
 
         return hf_hub_download(repo_id=repo, filename=file)
@@ -26,22 +22,21 @@ def fetch_pe_checkpoint(name: str, path: Optional[str] = None):
         return path
 
 
-
-
 @dataclass
 class PEConfig:
-    """ Vision Tower Config. """
+    """Vision Tower Config."""
+
     patch_size: int
     width: int
     layers: int
     heads: int
     mlp_ratio: float
-    output_dim: Optional[int]
+    output_dim: int | None
 
     ls_init_value: float = None
     drop_path: float = 0.0
 
-    image_size: int = 224,
+    image_size: int = (224,)
     use_abs_posemb: bool = True
     use_cls_token: bool = False
     use_rope2d: bool = True
@@ -55,7 +50,8 @@ class PEConfig:
 
 @dataclass
 class PETextConfig:
-    """ Text Tower Config. """
+    """Text Tower Config."""
+
     context_length: int
     width: int
     heads: int
@@ -67,11 +63,8 @@ class PETextConfig:
     vocab_size: int = 49408
 
 
-
-
 PE_VISION_CONFIG = {}
 PE_TEXT_CONFIG = {}
-
 
 
 #########################################
@@ -89,13 +82,7 @@ PE_VISION_CONFIG["PE-Core-G14-448"] = PEConfig(
     output_dim=1280,
     use_cls_token=False,
 )
-PE_TEXT_CONFIG["PE-Core-G14-448"] = PETextConfig(
-    context_length=72,
-    width=1280,
-    heads=20,
-    layers=24,
-    output_dim=1280
-)
+PE_TEXT_CONFIG["PE-Core-G14-448"] = PETextConfig(context_length=72, width=1280, heads=20, layers=24, output_dim=1280)
 
 
 PE_VISION_CONFIG["PE-Core-L14-336"] = PEConfig(
@@ -109,13 +96,7 @@ PE_VISION_CONFIG["PE-Core-L14-336"] = PEConfig(
     output_dim=1024,
     use_cls_token=True,
 )
-PE_TEXT_CONFIG["PE-Core-L14-336"] = PETextConfig(
-    context_length=32,
-    width=1024,
-    heads=16,
-    layers=24,
-    output_dim=1024
-)
+PE_TEXT_CONFIG["PE-Core-L14-336"] = PETextConfig(context_length=32, width=1024, heads=16, layers=24, output_dim=1024)
 
 
 PE_VISION_CONFIG["PE-Core-B16-224"] = PEConfig(
@@ -132,8 +113,6 @@ PE_VISION_CONFIG["PE-Core-B16-224"] = PEConfig(
 PE_TEXT_CONFIG["PE-Core-B16-224"] = PE_TEXT_CONFIG["PE-Core-L14-336"]
 
 
-
-
 PE_VISION_CONFIG["PE-Core-S16-384"] = PEConfig(
     image_size=384,
     patch_size=16,
@@ -145,14 +124,7 @@ PE_VISION_CONFIG["PE-Core-S16-384"] = PEConfig(
     output_dim=512,
     use_cls_token=True,
 )
-PE_TEXT_CONFIG["PE-Core-S16-384"] = PETextConfig(
-    context_length=32,
-    width=512,
-    heads=8,
-    layers=12,
-    output_dim=512
-)
-
+PE_TEXT_CONFIG["PE-Core-S16-384"] = PETextConfig(context_length=32, width=512, heads=8, layers=12, output_dim=512)
 
 
 PE_VISION_CONFIG["PE-Core-T16-384"] = PEConfig(
@@ -167,11 +139,6 @@ PE_VISION_CONFIG["PE-Core-T16-384"] = PEConfig(
     use_cls_token=True,
 )
 PE_TEXT_CONFIG["PE-Core-T16-384"] = PE_TEXT_CONFIG["PE-Core-S16-384"]
-
-
-
-
-
 
 
 #########################################
@@ -195,7 +162,7 @@ PE_VISION_CONFIG["PE-Lang-L14-448"] = replace(
     use_ln_post=False,
     output_dim=None,
     ls_init_value=0.1,
-    layers=23
+    layers=23,
 )
 
 
@@ -203,12 +170,6 @@ PE_VISION_CONFIG["PE-Lang-L14-448"] = replace(
 # Use these checkpoints if you're building a model that uses tiling downstream!
 PE_VISION_CONFIG["PE-Lang-G14-448-Tiling"] = PE_VISION_CONFIG["PE-Lang-G14-448"]
 PE_VISION_CONFIG["PE-Lang-L14-448-Tiling"] = PE_VISION_CONFIG["PE-Lang-L14-448"]
-
-
-
-
-
-
 
 
 #########################################

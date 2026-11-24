@@ -19,8 +19,9 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field, fields
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ class DiTArchConfig(ArchConfig):
 class DiTConfig(ModelConfig):
     """Runtime configuration common to diffusion transformers."""
 
-    arch_config: DiTArchConfig = field(default_factory=DiTArchConfig)
+    arch_config: DiTArchConfig = field(default_factory=DiTArchConfig)  # ty: ignore[invalid-mutable-override]  # DiT configs always carry a DiTArchConfig
     prefix: str = ""
     quant_config: Any | None = None
 

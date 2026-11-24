@@ -26,8 +26,6 @@ pip_packages:
 - av>=14
 - tqdm>=4.66
 - pillow>=10
-- openimageio>=3.0
-- cloudpickle>=3.1
 validation_imports:
 - torch
 - torchaudio
@@ -41,7 +39,12 @@ validation_imports:
 - av
 - PIL
 notes:
-- The external checkout supplies ltx-core and ltx-pipelines through PYTHONPATH at runtime; prediction does not install or mutate it.
+- NativeDiffusionPipeline runs the ltx-2.5 joint-multistage recipe in-process in this environment.
+  Canonical components live in worldfoundry/base_models/diffusion_model; shared loading, offload,
+  quantization and SDR H.264/AAC media encoding live in worldfoundry/core.
 - PyTorch is pinned to an explicit cu128 build so PyPI cannot silently replace the requested CUDA tier with a newer CUDA 13 wheel.
-- The recorded upstream revision currently uses its own uv CUDA 13.2 indexes; production environments should sync that checkout when CUDA 13.2 is available. This manifest retains the repository's broadly deployable CUDA 12.8 environment tier.
-- The optional diffusion VAE natten acceleration and Blackwell ltx-kernels build are deployment-specific and are not required for command-contract validation.
+- The recorded upstream revision pins its own uv CUDA 13.2 indexes; this manifest retains the repository's broadly deployable CUDA 12.8 environment tier.
+- Diffusion VAE natten acceleration and the Blackwell ltx-kernels build are deployment-specific.
+  NVFP4 modes require ltx-kernels; unquantized execution and control-plane imports do not.
+- CPU random-checkpoint tensor parity is validated. Released-checkpoint GPU/MPS, quantization,
+  offload and complete encoded-artifact parity remain pending.

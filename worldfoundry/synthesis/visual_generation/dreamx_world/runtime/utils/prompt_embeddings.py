@@ -29,14 +29,10 @@ def validate_prompt_embedding_pair(positive: Any, negative: Any) -> None:
         return
     if len(positive) != len(negative):
         raise ValueError("Positive and negative prompt embedding batches must be equal.")
-    for positive_item, negative_item in zip(positive, negative):
+    for positive_item, negative_item in zip(positive, negative, strict=False):
         positive_shape = _embedding_shape(positive_item)
         negative_shape = _embedding_shape(negative_item)
-        if (
-            len(positive_shape) != len(negative_shape)
-            or not positive_shape
-            or positive_shape[-1] != negative_shape[-1]
-        ):
+        if len(positive_shape) != len(negative_shape) or not positive_shape or positive_shape[-1] != negative_shape[-1]:
             raise ValueError("Prompt embedding rank and hidden width must match.")
 
 

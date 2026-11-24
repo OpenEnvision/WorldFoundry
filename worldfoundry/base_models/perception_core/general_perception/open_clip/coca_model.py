@@ -1,28 +1,26 @@
-"""Module for base_models -> perception_core -> general_perception -> open_clip -> coca_model.py functionality."""
-
-from typing import Dict, List, Optional, Union
-
 import logging
+from dataclasses import dataclass
+
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
-import numpy as np
-from dataclasses import dataclass
 
 _logger = logging.getLogger(__name__)
 
-from .transformer import (
-    LayerNormFp32,
-    LayerNorm,
-    QuickGELU,
-    MultimodalTransformer,
+from worldfoundry.core.nn.blocks.layers import QuickGELU  # noqa: E402 - Follows the logging setup.
+
+from .model import (  # noqa: E402 - Follows the logging setup.
+    CLIPTextCfg,
+    CLIPVisionCfg,
+    _build_text_tower,
+    _build_vision_tower,
 )
-from .model import CLIPTextCfg, CLIPVisionCfg, _build_vision_tower, _build_text_tower
+from .transformer import LayerNorm, LayerNormFp32, MultimodalTransformer  # noqa: E402 - Follows the logging setup.
 
 
 @dataclass
 class MultimodalCfg(CLIPTextCfg):
-    """Multimodal cfg implementation."""
     mlp_ratio: int = 4
     dim_head: int = 64
     heads: int = 8
@@ -31,24 +29,14 @@ class MultimodalCfg(CLIPTextCfg):
 
 
 def _build_text_decoder_tower(
-        embed_dim,
-        multimodal_cfg,
-        quick_gelu: bool = False,
-        cast_dtype: Optional[torch.dtype] = None,
+    embed_dim,
+    multimodal_cfg,
+    quick_gelu: bool = False,
+    cast_dtype: torch.dtype | None = None,
 ):
-    """Helper function to build text decoder tower.
-
-    Args:
-        embed_dim: The embed dim.
-        multimodal_cfg: The multimodal cfg.
-        quick_gelu: The quick gelu.
-        cast_dtype: The cast dtype.
-    """
     multimodal_cfg = MultimodalCfg(**multimodal_cfg) if isinstance(multimodal_cfg, dict) else multimodal_cfg
     act_layer = QuickGELU if quick_gelu else nn.GELU
-    norm_layer = (
-        LayerNormFp32 if cast_dtype in (torch.float16, torch.bfloat16) else LayerNorm
-    )
+    norm_layer = LayerNormFp32 if cast_dtype in (torch.float16, torch.bfloat16) else LayerNorm
 
     decoder = MultimodalTransformer(
         context_length=multimodal_cfg.context_length,
@@ -65,34 +53,19 @@ def _build_text_decoder_tower(
 
 
 class CoCa(nn.Module):
-    """Co ca implementation."""
     def __init__(
-            self,
-            embed_dim,
-            multimodal_cfg: MultimodalCfg,
-            text_cfg: CLIPTextCfg,
-            vision_cfg: CLIPVisionCfg,
-            quick_gelu: bool = False,
-            init_logit_scale: float = np.log(1 / 0.07),
-            init_logit_bias: Optional[float] = None,
-            nonscalar_logit_scale: bool = False,
-            cast_dtype: Optional[torch.dtype] = None,
-            pad_id: int = 0,
+        self,
+        embed_dim,
+        multimodal_cfg: MultimodalCfg,
+        text_cfg: CLIPTextCfg,
+        vision_cfg: CLIPVisionCfg,
+        quick_gelu: bool = False,
+        init_logit_scale: float = np.log(1 / 0.07),
+        init_logit_bias: float | None = None,
+        nonscalar_logit_scale: bool = False,
+        cast_dtype: torch.dtype | None = None,
+        pad_id: int = 0,
     ):
-        """Init.
-
-        Args:
-            embed_dim: The embed dim.
-            multimodal_cfg: The multimodal cfg.
-            text_cfg: The text cfg.
-            vision_cfg: The vision cfg.
-            quick_gelu: The quick gelu.
-            init_logit_scale: The init logit scale.
-            init_logit_bias: The init logit bias.
-            nonscalar_logit_scale: The nonscalar logit scale.
-            cast_dtype: The cast dtype.
-            pad_id: The pad id.
-        """
         super().__init__()
         multimodal_cfg = MultimodalCfg(**multimodal_cfg) if isinstance(multimodal_cfg, dict) else multimodal_cfg
         text_cfg = CLIPTextCfg(**text_cfg) if isinstance(text_cfg, dict) else text_cfg
@@ -105,11 +78,7 @@ class CoCa(nn.Module):
             cast_dtype=cast_dtype,
         )
 
-        vocab_size = (
-            text_cfg.vocab_size  # for hf models
-            if hasattr(text_cfg, "hf_model_name") and text_cfg.hf_model_name is not None
-            else text_cfg.vocab_size
-        )
+        vocab_size = text_cfg.vocab_size
 
         self.visual = _build_vision_tower(
             embed_dim=embed_dim,
@@ -135,77 +104,47 @@ class CoCa(nn.Module):
 
         self.context_length = multimodal_cfg.context_length
 
-    def set_grad_checkpointing(self, enable: bool = True, impl: str = 'inline'):
-        """Set grad checkpointing.
-
-        Args:
-            enable: The enable.
-            impl: The impl.
-        """
+    def set_grad_checkpointing(self, enable: bool = True, impl: str = "inline"):
         self.visual.set_grad_checkpointing(enable, impl=impl)
         self.text.set_grad_checkpointing(enable, impl=impl)
         self.text_decoder.set_grad_checkpointing(enable, impl=impl)
 
     def _encode_image(self, images, normalize: bool = True):
-        """Helper function to encode image.
-
-        Args:
-            images: The images.
-            normalize: The normalize.
-        """
         image_latent, tokens_embs = self.visual(images)
         image_latent = F.normalize(image_latent, dim=-1) if normalize else image_latent
         return image_latent, tokens_embs
 
     def _encode_text(self, text, normalize: bool = True):
-        """Helper function to encode text.
-
-        Args:
-            text: The text.
-            normalize: The normalize.
-        """
         text_latent, token_emb = self.text(text)
         text_latent = F.normalize(text_latent, dim=-1) if normalize else text_latent
         return text_latent, token_emb
 
     def encode_image(self, images, normalize: bool = True):
-        """Encode image.
-
-        Args:
-            images: The images.
-            normalize: The normalize.
-        """
         image_latent, _ = self._encode_image(images, normalize=normalize)
         return image_latent
 
     def encode_text(self, text, normalize: bool = True):
-        """Encode text.
-
-        Args:
-            text: The text.
-            normalize: The normalize.
-        """
         text_latent, _ = self._encode_text(text, normalize=normalize)
         return text_latent
 
     def forward_intermediates(
-            self,
-            image: Optional[torch.Tensor] = None,
-            text: Optional[torch.Tensor] = None,
-            image_indices: Optional[Union[int, List[int]]] = None,
-            text_indices: Optional[Union[int, List[int]]] = None,
-            stop_early: bool = False,
-            normalize: bool = True,
-            normalize_intermediates: bool = False,
-            intermediates_only: bool = False,
-            image_output_fmt: str = 'NCHW',
-            image_output_extra_tokens: bool = False,
-            text_output_fmt: str = 'NLC',
-            text_output_extra_tokens: bool = False,
-            output_logits: bool = False,
-            output_logit_scale_bias: bool = False,
-    ) -> Dict[str, Union[torch.Tensor, List[torch.Tensor]]]:
-        """ Forward features that returns intermediates.
+        self,
+        image: torch.Tensor | None = None,
+        text: torch.Tensor | None = None,
+        image_indices: int | list[int] | None = None,
+        text_indices: int | list[int] | None = None,
+        stop_early: bool = False,
+        normalize: bool = True,
+        normalize_intermediates: bool = False,
+        intermediates_only: bool = False,
+        image_output_fmt: str = "NCHW",
+        image_output_extra_tokens: bool = False,
+        text_output_fmt: str = "NLC",
+        text_output_extra_tokens: bool = False,
+        output_logits: bool = False,
+        output_logit_scale_bias: bool = False,
+    ) -> dict[str, torch.Tensor | list[torch.Tensor]]:
+        """Forward features that returns intermediates.
 
         Args:
             image: Input image tensor
@@ -231,7 +170,7 @@ class CoCa(nn.Module):
             normalize = False
             output_logits = False
         if output_logits:
-            assert False, 'FIXME, needs implementing'
+            assert False, "FIXME, needs implementing"  # noqa: B011 - Keeps the assertion semantics under -O.
 
         if image is not None:
             image_output = self.visual.forward_intermediates(
@@ -266,25 +205,17 @@ class CoCa(nn.Module):
         if output_logit_scale_bias:
             output["logit_scale"] = logit_scale_exp
             if self.logit_bias is not None:
-                output['logit_bias'] = self.logit_bias
+                output["logit_bias"] = self.logit_bias
 
         return output
 
     def forward(
-            self,
-            image: Optional[torch.Tensor] = None,
-            text: Optional[torch.Tensor] = None,
-            image_latent: Optional[torch.Tensor] = None,
-            image_embs: Optional[torch.Tensor] = None,
+        self,
+        image: torch.Tensor | None = None,
+        text: torch.Tensor | None = None,
+        image_latent: torch.Tensor | None = None,
+        image_embs: torch.Tensor | None = None,
     ):
-        """Forward.
-
-        Args:
-            image: The image.
-            text: The text.
-            image_latent: The image latent.
-            image_embs: The image embs.
-        """
         if image is not None and (image_latent is None or image_embs is None):
             image_latent, image_embs = self._encode_image(image)
 
@@ -314,7 +245,7 @@ class CoCa(nn.Module):
         text=None,
         seq_len=30,
         max_seq_len=77,
-        temperature=1.,
+        temperature=1.0,
         generation_type="beam_search",
         top_p=0.1,
         top_k=1,
@@ -329,31 +260,10 @@ class CoCa(nn.Module):
         fixed_output_length=False,
         generation_config=None,
     ):
-        """Generate.
-
-        Args:
-            image: The image.
-            text: The text.
-            seq_len: The seq len.
-            max_seq_len: The max seq len.
-            temperature: The temperature.
-            generation_type: The generation type.
-            top_p: The top p.
-            top_k: The top k.
-            pad_token_id: The pad token id.
-            eos_token_id: The eos token id.
-            sot_token_id: The sot token id.
-            num_beams: The num beams.
-            num_beam_groups: The num beam groups.
-            min_seq_len: The min seq len.
-            stopping_criteria: The stopping criteria.
-            repetition_penalty: The repetition penalty.
-            fixed_output_length: The fixed output length.
-            generation_config: The generation config.
-        """
         assert seq_len > min_seq_len, "seq_len must be larger than min_seq_len"
         if stopping_criteria is not None:
             import warnings
+
             warnings.warn(
                 "stopping_criteria is deprecated and ignored. Use "
                 "generation_config=GenerationConfig(...) for full control.",
@@ -361,12 +271,12 @@ class CoCa(nn.Module):
                 stacklevel=2,
             )
         try:
-            from .generation import MultimodalGenerationWrapper
             from transformers import GenerationConfig as GC
+
+            from .generation import MultimodalGenerationWrapper
         except (ImportError, Exception) as e:
             raise RuntimeError(
-                "Please install transformers for generate functionality. "
-                "`pip install transformers`."
+                "Please install transformers for generate functionality. `pip install transformers`."
             ) from e
 
         device = image.device
@@ -380,8 +290,10 @@ class CoCa(nn.Module):
             squeeze_output = False
             if text is None:
                 text = torch.full(
-                    (image.shape[0], 1), sot_token_id,
-                    device=device, dtype=torch.long,
+                    (image.shape[0], 1),
+                    sot_token_id,
+                    device=device,
+                    dtype=torch.long,
                 )
             elif text.dim() == 1:
                 text = text.unsqueeze(0)
@@ -404,14 +316,14 @@ class CoCa(nn.Module):
             if generation_config is None:
                 # seq_len / min_seq_len are *total* sequence lengths (including
                 # the prompt) to match the original API semantics.
-                gen_kwargs = dict(
-                    max_length=seq_len,
-                    min_length=min_seq_len,
-                    repetition_penalty=repetition_penalty,
-                    eos_token_id=eos_token_id,
-                    pad_token_id=pad_token_id,
-                    use_cache=False,
-                )
+                gen_kwargs = {
+                    "max_length": seq_len,
+                    "min_length": min_seq_len,
+                    "repetition_penalty": repetition_penalty,
+                    "eos_token_id": eos_token_id,
+                    "pad_token_id": pad_token_id,
+                    "use_cache": False,
+                }
                 if generation_type == "beam_search":
                     if num_beam_groups > 1:
                         _logger.warning(
@@ -431,8 +343,7 @@ class CoCa(nn.Module):
                     gen_kwargs.update(do_sample=True, top_k=top_k, temperature=temperature)
                 else:
                     raise ValueError(
-                        f"generation_type must be one of 'beam_search', 'top_p', 'top_k', "
-                        f"got {generation_type!r}"
+                        f"generation_type must be one of 'beam_search', 'top_p', 'top_k', got {generation_type!r}"
                     )
                 generation_config = GC(**gen_kwargs)
             else:
@@ -449,10 +360,15 @@ class CoCa(nn.Module):
             if fixed_output_length and output.shape[1] < seq_len:
                 pad_len = seq_len - output.shape[1]
                 output = torch.cat(
-                    (output, torch.full(
-                        (output.shape[0], pad_len), pad_token_id,
-                        device=device, dtype=output.dtype,
-                    )),
+                    (
+                        output,
+                        torch.full(
+                            (output.shape[0], pad_len),
+                            pad_token_id,
+                            device=device,
+                            dtype=output.dtype,
+                        ),
+                    ),
                     dim=1,
                 )
 

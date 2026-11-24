@@ -37,14 +37,14 @@ class WebsocketPolicyServer:
 
     async def run(self):
         async with _server.serve(
-                self._handler,
-                self._host,
-                self._port,
-                compression=None,
-                max_size=None,
-                process_request=_health_check,
-                ping_interval=None,
-                ping_timeout=None,
+            self._handler,
+            self._host,
+            self._port,
+            compression=None,
+            max_size=None,
+            process_request=_health_check,
+            ping_interval=None,
+            ping_timeout=None,
         ) as server:
             await server.serve_forever()
 
@@ -69,28 +69,24 @@ class WebsocketPolicyServer:
                 }
                 if prev_total_time is not None:
                     # We can only record the last total time since we also want to include the send time.
-                    action["server_timing"][
-                        "prev_total_ms"] = prev_total_time * 1000
+                    action["server_timing"]["prev_total_ms"] = prev_total_time * 1000
 
                 await websocket.send(packer.pack(action))
                 prev_total_time = time.monotonic() - start_time
 
             except websockets.ConnectionClosed:
-                logger.info(
-                    f"Connection from {websocket.remote_address} closed")
+                logger.info(f"Connection from {websocket.remote_address} closed")
                 break
             except Exception:
                 await websocket.send(traceback.format_exc())
                 await websocket.close(
                     code=websockets.frames.CloseCode.INTERNAL_ERROR,
-                    reason=
-                    "Internal server error. Traceback included in previous frame.",
+                    reason="Internal server error. Traceback included in previous frame.",
                 )
                 raise
 
 
-def _health_check(connection: _server.ServerConnection,
-                  request: _server.Request) -> _server.Response | None:
+def _health_check(connection: _server.ServerConnection, request: _server.Request) -> _server.Response | None:
     if request.path == "/healthz":
         return connection.respond(http.HTTPStatus.OK, "OK\n")
     # Continue with the normal request handling.

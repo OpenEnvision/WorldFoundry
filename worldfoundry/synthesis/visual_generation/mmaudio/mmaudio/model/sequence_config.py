@@ -26,9 +26,9 @@ class SequenceConfig:
 
     @property
     def latent_seq_len(self) -> int:
-        return int(
-            math.ceil(self.duration * self.sampling_rate / self.spectrogram_frame_rate /
-                      self.latent_downsample_rate))
+        return int(  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+            math.ceil(self.duration * self.sampling_rate / self.spectrogram_frame_rate / self.latent_downsample_rate)
+        )
 
     @property
     def clip_seq_len(self) -> int:
@@ -44,7 +44,7 @@ class SequenceConfig:
 CONFIG_16K = SequenceConfig(duration=8.0, sampling_rate=16000, spectrogram_frame_rate=256)
 CONFIG_44K = SequenceConfig(duration=8.0, sampling_rate=44100, spectrogram_frame_rate=512)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     assert CONFIG_16K.latent_seq_len == 250
     assert CONFIG_16K.clip_seq_len == 64
     assert CONFIG_16K.sync_seq_len == 192
@@ -55,4 +55,4 @@ if __name__ == '__main__':
     assert CONFIG_44K.sync_seq_len == 192
     assert CONFIG_44K.num_audio_frames == 353280
 
-    print('Passed')
+    print("Passed")

@@ -21,25 +21,10 @@ import random
 import numpy as np
 import torch
 
-
-def _is_tensor_video_clip(clip):
-    if not torch.is_tensor(clip):
-        raise TypeError("clip should be Tensor. Got %s" % type(clip))
-
-    if not clip.ndimension() == 4:
-        raise ValueError("clip should be 4D. Got %dD" % clip.dim())
-
-    return True
-
-
-def crop(clip, i, j, h, w):
-    """
-    Args:
-        clip (torch.tensor): Video clip to be cropped. Size is (T, C, H, W)
-    """
-    if len(clip.size()) != 4:
-        raise ValueError("clip should be a 4D tensor")
-    return clip[..., i : i + h, j : j + w]
+from worldfoundry.core.media.processing.video_transforms import crop as crop
+from worldfoundry.core.media.processing.video_transforms import is_tensor_video_clip as _is_tensor_video_clip
+from worldfoundry.core.media.processing.video_transforms import normalize as normalize
+from worldfoundry.core.media.processing.video_transforms import to_tensor as to_tensor
 
 
 def resize(clip, target_size, interpolation_mode):
@@ -84,8 +69,8 @@ def center_crop(clip, crop_size):
     if h < th or w < tw:
         raise ValueError("height and width must be no smaller than crop_size")
 
-    i = int(round((h - th) / 2.0))
-    j = int(round((w - tw) / 2.0))
+    i = int(round((h - th) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+    j = int(round((w - tw) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     return crop(clip, i, j, th, tw)
 
 
@@ -96,10 +81,10 @@ def center_crop_using_short_edge(clip):
     if h < w:
         th, tw = h, h
         i = 0
-        j = int(round((w - tw) / 2.0))
+        j = int(round((w - tw) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     else:
         th, tw = w, w
-        i = int(round((h - th) / 2.0))
+        i = int(round((h - th) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         j = 0
     return crop(clip, i, j, th, tw)
 
@@ -132,52 +117,13 @@ def random_shift_crop(clip):
         raise ValueError("clip should be a 4D torch.tensor")
     h, w = clip.size(-2), clip.size(-1)
 
-    if h <= w:
-        short_edge = h
-    else:
-        short_edge = w
+    short_edge = h if h <= w else w
 
     th, tw = short_edge, short_edge
 
     i = torch.randint(0, h - th + 1, size=(1,)).item()
     j = torch.randint(0, w - tw + 1, size=(1,)).item()
     return crop(clip, i, j, th, tw)
-
-
-def to_tensor(clip):
-    """
-    Convert tensor data type from uint8 to float, divide value by 255.0 and
-    permute the dimensions of clip tensor
-    Args:
-        clip (torch.tensor, dtype=torch.uint8): Size is (T, C, H, W)
-    Return:
-        clip (torch.tensor, dtype=torch.float): Size is (T, C, H, W)
-    """
-    _is_tensor_video_clip(clip)
-    if not clip.dtype == torch.uint8:
-        raise TypeError("clip tensor should have data type uint8. Got %s" % str(clip.dtype))
-    # return clip.float().permute(3, 0, 1, 2) / 255.0
-    return clip.float() / 255.0
-
-
-def normalize(clip, mean, std, inplace=False):
-    """
-    Args:
-        clip (torch.tensor): Video clip to be normalized. Size is (T, C, H, W)
-        mean (tuple): pixel RGB mean. Size is (3)
-        std (tuple): pixel standard deviation. Size is (3)
-    Returns:
-        normalized clip (torch.tensor): Size is (T, C, H, W)
-    """
-    if not _is_tensor_video_clip(clip):
-        raise ValueError("clip should be a 4D torch.tensor")
-    if not inplace:
-        clip = clip.clone()
-    mean = torch.as_tensor(mean, dtype=clip.dtype, device=clip.device)
-    # print(mean)
-    std = torch.as_tensor(std, dtype=clip.dtype, device=clip.device)
-    clip.sub_(mean[:, None, None, None]).div_(std[:, None, None, None])
-    return clip
 
 
 def hflip(clip):
@@ -448,7 +394,7 @@ class RandomHorizontalFlipVideo:
 #  ------------------------------------------------------------
 #  ---------------------  Sampling  ---------------------------
 #  ------------------------------------------------------------
-class TemporalRandomCrop(object):
+class TemporalRandomCrop:
     """Temporally crop the given frame indices at a random location.
 
     Args:
@@ -516,5 +462,8 @@ if __name__ == "__main__":
 
     for i in range(target_video_len):
         save_image(
-            select_vframes_trans[i], os.path.join("./test000", "%04d.png" % i), normalize=True, value_range=(-1, 1)
+            select_vframes_trans[i],
+            os.path.join("./test000", "%04d.png" % i),  # noqa: UP031 - Keeps printf conversions that depend on argument types.
+            normalize=True,
+            value_range=(-1, 1),
         )

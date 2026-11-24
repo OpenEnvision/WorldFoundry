@@ -5,9 +5,10 @@ from __future__ import annotations
 import bisect
 import gc
 import io
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
@@ -180,8 +181,7 @@ def _torch_load_checkpoint(root: Path, config: Mem0RuntimeConfig) -> tuple[Any, 
     parts = sorted(root.glob(config.checkpoint_parts_glob))
     if not parts:
         raise FileNotFoundError(
-            f"Mem-0 checkpoint is missing {checkpoint} and split parts "
-            f"matching {config.checkpoint_parts_glob!r}"
+            f"Mem-0 checkpoint is missing {checkpoint} and split parts matching {config.checkpoint_parts_glob!r}"
         )
     expected = [f".part{index:02d}" for index in range(len(parts))]
     suffixes = [part.name[-7:] for part in parts]
@@ -189,7 +189,7 @@ def _torch_load_checkpoint(root: Path, config: Mem0RuntimeConfig) -> tuple[Any, 
         raise ValueError(f"Mem-0 checkpoint parts are not contiguous: {suffixes}")
     raw = _SplitCheckpointReader(parts)
     try:
-        with io.BufferedReader(raw, buffer_size=8 * 1024 * 1024) as reader:
+        with io.BufferedReader(raw, buffer_size=8 * 1024 * 1024) as reader:  # noqa: SIM117 - Keeps the nested context managers.
             with torch.serialization.safe_globals(safe_numpy_globals):
                 payload = torch.load(reader, map_location="cpu", weights_only=True)
     finally:
@@ -217,7 +217,7 @@ class Mem0Runtime:
         import torch
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .modeling import Mem0Policy
         from .normalization import load_stats
@@ -257,8 +257,7 @@ class Mem0Runtime:
         if not isinstance(state_dict, Mapping):
             raise TypeError("Mem-0 checkpoint does not contain a model state dictionary")
         if not state_dict or not all(
-            isinstance(key, str) and isinstance(value, torch.Tensor)
-            for key, value in state_dict.items()
+            isinstance(key, str) and isinstance(value, torch.Tensor) for key, value in state_dict.items()
         ):
             raise TypeError("Mem-0 checkpoint state dictionary must contain tensor values only")
         model.load_state_dict(state_dict, strict=self.config.strict_checkpoint)
@@ -328,9 +327,7 @@ class Mem0Runtime:
         layout = str(observation.get("state_layout", self.config.state_layout)).lower()
         if layout == "model":
             if values.size != self.config.model_state_dim:
-                raise ValueError(
-                    f"Mem-0 model-layout state requires {self.config.model_state_dim} values"
-                )
+                raise ValueError(f"Mem-0 model-layout state requires {self.config.model_state_dim} values")
             model_values = values
         else:
             if values.size == self.config.model_state_dim:
@@ -352,9 +349,13 @@ class Mem0Runtime:
             stats=self._stats,
             inverse=False,
         )
-        return torch.from_numpy(model_values).view(1, 1, -1).to(
-            device=self._device,
-            dtype=self._dtype,
+        return (
+            torch.from_numpy(model_values)
+            .view(1, 1, -1)
+            .to(
+                device=self._device,
+                dtype=self._dtype,
+            )
         )
 
     def predict_action(

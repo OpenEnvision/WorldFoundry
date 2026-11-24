@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import logging
 
-from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.kernels.flash_attention_2 import flash_attention_2
-from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.kernels.flash_attention_3 import flash_attention_3
+from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.kernels.flash_attention_2 import (
+    flash_attention_2,
+)
+from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.kernels.flash_attention_3 import (
+    flash_attention_3,
+)
 from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.kernels.sage import sage
 from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.kernels.sdpa import sdpa
 

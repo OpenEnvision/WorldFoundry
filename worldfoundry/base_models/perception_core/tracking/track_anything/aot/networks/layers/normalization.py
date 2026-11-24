@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> aot -> networks -> layers -> normalization.py functionality."""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,13 +14,7 @@ class FrozenBatchNorm2d(nn.Module):
     """
 
     def __init__(self, n, epsilon=1e-5):
-        """Init.
-
-        Args:
-            n: The n.
-            epsilon: The epsilon.
-        """
-        super(FrozenBatchNorm2d, self).__init__()
+        super().__init__()
         self.register_buffer("weight", torch.ones(n))
         self.register_buffer("bias", torch.zeros(n))
         self.register_buffer("running_mean", torch.zeros(n))

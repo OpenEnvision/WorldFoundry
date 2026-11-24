@@ -16,16 +16,15 @@
 import gc
 import os
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import torch
 
 import worldfoundry.core.distributed.model_parallel.groups as mpu
-from inference.common.config import MagiConfig
-from inference.model.t5 import T5Embedder
 from worldfoundry.core import env_is_true, is_last_tp_cp_rank
-from worldfoundry.core.distributed.runtime.logging import distributed_logger as magi_logger
+from worldfoundry.core.observability.rank_logging import distributed_logger as magi_logger
+from worldfoundry.synthesis.visual_generation.magi.magi_runtime.inference.common.config import MagiConfig
+from worldfoundry.synthesis.visual_generation.magi.magi_runtime.inference.model.t5 import T5Embedder
 
 try:
     from worldfoundry.core.io.paths import resolve_data_path
@@ -35,7 +34,13 @@ try:
     )
 except ImportError:  # pragma: no cover - upstream-only checkout
     _DEFAULT_SPECIAL_TOKEN_PATH = str(
-        Path(__file__).resolve().parents[6] / "data" / "test_cases" / "magi" / "example" / "assets" / "special_tokens.npz"
+        Path(__file__).resolve().parents[6]
+        / "data"
+        / "test_cases"
+        / "magi"
+        / "example"
+        / "assets"
+        / "special_tokens.npz"
     )
 SPECIAL_TOKEN_PATH = os.getenv("SPECIAL_TOKEN_PATH", _DEFAULT_SPECIAL_TOKEN_PATH)
 SPECIAL_TOKEN = np.load(SPECIAL_TOKEN_PATH)
@@ -46,7 +51,9 @@ HQ_TOKEN = torch.tensor(SPECIAL_TOKEN["other_tokens"][1:2].astype(np.float16))
 STATIC_FIRST_FRAMES_TOKEN = torch.tensor(SPECIAL_TOKEN["other_tokens"][2:3].astype(np.float16))  # static first frames
 DYNAMIC_FIRST_FRAMES_TOKEN = torch.tensor(SPECIAL_TOKEN["other_tokens"][3:4].astype(np.float16))  # dynamic first frames
 BORDERNESS_TOKEN = torch.tensor(SPECIAL_TOKEN["other_tokens"][4:5].astype(np.float16))
-DURATION_TOKEN_LIST = [torch.tensor(SPECIAL_TOKEN["other_tokens"][i : i + 1].astype(np.float16)) for i in range(0 + 7, 8 + 7)]
+DURATION_TOKEN_LIST = [
+    torch.tensor(SPECIAL_TOKEN["other_tokens"][i : i + 1].astype(np.float16)) for i in range(0 + 7, 8 + 7)
+]
 THREE_D_MODEL_TOKEN = torch.tensor(SPECIAL_TOKEN["other_tokens"][15:16].astype(np.float16))
 TWO_D_ANIME_TOKEN = torch.tensor(SPECIAL_TOKEN["other_tokens"][16:17].astype(np.float16))
 
@@ -64,19 +71,19 @@ SPECIAL_TOKEN_DICT = {
 
 for i, token in enumerate(DURATION_TOKEN_LIST):
     # DURATION_TOKEN_N represents N chunk(s) remain in the future
-    SPECIAL_TOKEN_DICT[f"DURATION_TOKEN_{i+1}"] = token
+    SPECIAL_TOKEN_DICT[f"DURATION_TOKEN_{i + 1}"] = token
 
 
-def pad_duration_token_keys(special_token_keys: List[str]) -> List[str]:
+def pad_duration_token_keys(special_token_keys: list[str]) -> list[str]:
     if "DURATION_TOKEN" in set(special_token_keys):
         return special_token_keys
 
     if env_is_true("PAD_DURATION"):
-        return special_token_keys + ["DURATION_TOKEN"]
+        return special_token_keys + ["DURATION_TOKEN"]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     return special_token_keys
 
 
-def get_special_token_keys() -> List[str]:
+def get_special_token_keys() -> list[str]:
     special_token_keys = []
     if env_is_true("PAD_STATIC"):
         special_token_keys.append("STATIC_FIRST_FRAMES_TOKEN")
@@ -95,7 +102,7 @@ def get_special_token_keys() -> List[str]:
     return special_token_keys
 
 
-def get_negative_special_token_keys() -> List[str]:
+def get_negative_special_token_keys() -> list[str]:
     if env_is_true("NEG_PROMPT"):
         return ["CAPTION_TOKEN", "LOGO_TOKEN", "TRANS_TOKEN", "BORDERNESS_TOKEN"]
     return None
@@ -113,7 +120,7 @@ def _pad_special_token(special_token: torch.Tensor, txt_feat: torch.Tensor, attn
     return txt_feat, attn_mask
 
 
-def pad_special_token(special_token_keys: List[str], caption_embs: torch.Tensor, emb_masks: torch.Tensor):
+def pad_special_token(special_token_keys: list[str], caption_embs: torch.Tensor, emb_masks: torch.Tensor):
     device = f"cuda:{torch.cuda.current_device()}"
     if not special_token_keys:
         return caption_embs, emb_masks
@@ -157,7 +164,7 @@ def _t5(model_cache_dir, model_device, model_max_length) -> T5Embedder:
     return _t5_cache
 
 
-def prepare_prompt_embeddings(prompts: List[str], model_cache_dir, model_device, model_max_length):
+def prepare_prompt_embeddings(prompts: list[str], model_cache_dir, model_device, model_max_length):
     magi_logger.info("Precompute validation prompt embeddings")
     cur_rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
     magi_logger.debug(

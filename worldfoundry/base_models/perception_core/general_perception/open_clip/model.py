@@ -1,64 +1,68 @@
-""" CLIP Model
+"""CLIP Model
 
 Adapted from https://github.com/openai/CLIP. Originally MIT License, Copyright (c) 2021 OpenAI.
 """
+
 import copy
 import logging
 import math
 
 _logger = logging.getLogger(__name__)
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from dataclasses import dataclass  # noqa: E402 - Follows the logging setup.
+from functools import partial  # noqa: E402 - Follows the logging setup.
+from typing import Any  # noqa: E402 - Follows the logging setup.
 
-import numpy as np
-import torch
-import torch.nn.functional as F
-from torch import nn
-from torch.utils.checkpoint import checkpoint
-from functools import partial
+import numpy as np  # noqa: E402 - Follows the logging setup.
+import torch  # noqa: E402 - Follows the logging setup.
+import torch.nn.functional as F  # noqa: E402 - Follows the logging setup.
+from torch import nn  # noqa: E402 - Follows the logging setup.
 
-from .hf_model import HFTextEncoder
-from .modified_resnet import ModifiedResNet
-from .timm_model import TimmModel
-from .transformer import (
-    LayerNormFp32,
-    LayerNorm,
-    QuickGELU,
+from worldfoundry.core.nn.blocks.layers import QuickGELU  # noqa: E402 - Follows the logging setup.
+
+from .hf_model import HFTextEncoder  # noqa: E402 - Follows the logging setup.
+from .modified_resnet import ModifiedResNet  # noqa: E402 - Follows the logging setup.
+from .timm_model import TimmModel  # noqa: E402 - Follows the logging setup.
+from .transformer import (  # noqa: E402 - Follows the logging setup.
     Attention,
-    VisionTransformer,
+    LayerNorm,
+    LayerNormFp32,
     TextTransformer,
-    text_global_pool,
+    VisionTransformer,
     lock_text_tower,
+    text_global_pool,
 )
-from .utils import to_2tuple
+from .utils import to_2tuple  # noqa: E402 - Follows the logging setup.
 
 
 @dataclass
 class CLIPVisionCfg:
-    """Clip vision cfg implementation."""
-    layers: Union[Tuple[int, int, int, int], int] = 12
+    layers: tuple[int, int, int, int] | int = 12
     width: int = 768
     head_width: int = 64
     mlp_ratio: float = 4.0
     patch_size: int = 16
-    image_size: Union[Tuple[int, int], int] = 224
-    image_seq_len: Optional[int] = None
+    image_size: tuple[int, int] | int = 224
+    image_seq_len: int | None = None
 
-    ls_init_value: Optional[float] = None  # layer scale initial value
-    patch_dropout: float = 0.  # what fraction of patches to dropout during training (0 would mean disabled and no patches dropped) - 0.5 to 0.75 recommended in the paper for optimal results
-    attentional_pool: bool = False  # whether to use attentional pooler in the last embedding layer (overrides pool_type)
+    ls_init_value: float | None = None  # layer scale initial value
+    patch_dropout: float = 0.0  # what fraction of patches to dropout during training (0 would mean disabled and no patches dropped) - 0.5 to 0.75 recommended in the paper for optimal results
+    attentional_pool: bool = (
+        False  # whether to use attentional pooler in the last embedding layer (overrides pool_type)
+    )
     attn_pooler_queries: int = 256  # n_queries for attentional pooler
     attn_pooler_heads: int = 8  # n heads for attentional_pooling
     no_ln_pre: bool = False  # disable pre transformer LayerNorm
-    pos_embed_type: str = 'learnable'
+    pos_embed_type: str = "learnable"
     final_ln_after_pool: bool = False  # apply final LayerNorm after pooling
-    pool_type: str = 'tok'
+    pool_type: str = "tok"
     output_tokens: bool = False
-    act_kwargs: Optional[dict] = None
-    norm_kwargs: Optional[dict] = None
+    act_kwargs: dict | None = None
+    norm_kwargs: dict | None = None
 
     # Custom attention block settings
-    block_type: Optional[str] = None  # attention block type ('default', 'custom'), auto-selects 'custom' if any below features enabled
+    block_type: str | None = (
+        None  # attention block type ('default', 'custom'), auto-selects 'custom' if any below features enabled
+    )
     qk_norm: bool = False  # apply layer norm to q and k in attention
     scaled_cosine_attn: bool = False  # use scaled cosine attention
     scale_heads: bool = False  # learnable head-specific scale applied to attention logits
@@ -66,44 +70,45 @@ class CLIPVisionCfg:
     scale_attn: bool = False  # apply layer norm after full attention block
     scale_fc: bool = False  # apply layer norm in MLP block
 
-    timm_model_name: Optional[str] = None  # a valid model name overrides layers, width, patch_size
+    timm_model_name: str | None = None  # a valid model name overrides layers, width, patch_size
     timm_model_pretrained: bool = False  # use (imagenet) pretrained weights for named model
-    timm_pool: str = 'avg'  # feature pooling for timm model ('abs_attn', 'rot_attn', 'avg', '')
-    timm_proj: str = 'linear'  # linear projection for timm model output ('linear', 'mlp', '')
+    timm_pool: str = "avg"  # feature pooling for timm model ('abs_attn', 'rot_attn', 'avg', '')
+    timm_proj: str = "linear"  # linear projection for timm model output ('linear', 'mlp', '')
     timm_proj_bias: bool = False  # enable bias final projection
-    timm_drop: float = 0.  # head dropout
-    timm_drop_path: Optional[float] = None  # backbone stochastic depth
-    timm_model_kwargs: Optional[dict] = None  # additional kwargs forwarded to timm.create_model()
+    timm_drop: float = 0.0  # head dropout
+    timm_drop_path: float | None = None  # backbone stochastic depth
+    timm_model_kwargs: dict | None = None  # additional kwargs forwarded to timm.create_model()
 
 
 @dataclass
 class CLIPTextCfg:
-    """Clip text cfg implementation."""
     context_length: int = 77
     vocab_size: int = 49408
-    hf_tokenizer_name: Optional[str] = None
-    tokenizer_mode: Optional[str] = None
-    tokenizer_kwargs: Optional[dict] = None
+    hf_tokenizer_name: str | None = None
+    tokenizer_mode: str | None = None
+    tokenizer_kwargs: dict | None = None
 
     width: int = 512
     heads: int = 8
     layers: int = 12
     mlp_ratio: float = 4.0
-    ls_init_value: Optional[float] = None  # layer scale initial value
+    ls_init_value: float | None = None  # layer scale initial value
     embed_cls: bool = False
     pad_id: int = 0
     eos_id: int = 2  # only used for when pool_type == 'eos', must match tokenizer eos
     no_causal_mask: bool = False  # disable causal masking
     final_ln_after_pool: bool = False  # apply final LayerNorm after pooling
-    pool_type: str = 'argmax'
+    pool_type: str = "argmax"
     proj_bias: bool = False
-    proj_type: str = 'linear'  # control final text projection, 'none' forces no projection
+    proj_type: str = "linear"  # control final text projection, 'none' forces no projection
     output_tokens: bool = False
     act_kwargs: dict = None
     norm_kwargs: dict = None
 
     # Custom attention block settings
-    block_type: Optional[str] = None  # attention block type ('default', 'custom'), auto-selects 'custom' if any custom features enabled
+    block_type: str | None = (
+        None  # attention block type ('default', 'custom'), auto-selects 'custom' if any custom features enabled
+    )
     qk_norm: bool = False  # apply layer norm to q and k in attention
     scaled_cosine_attn: bool = False  # use scaled cosine attention
     scale_heads: bool = False  # learnable head-specific scale applied to attention logits
@@ -112,54 +117,33 @@ class CLIPTextCfg:
     scale_fc: bool = False  # apply layer norm in MLP block
 
     # HuggingFace specific text tower config
-    hf_model_name: Optional[str] = None
+    hf_model_name: str | None = None
     hf_model_pretrained: bool = True
-    hf_proj_type: str = 'mlp'
-    hf_pooler_type: str = 'mean_pooler'  # attentional pooling for HF models
+    hf_proj_type: str = "mlp"
+    hf_pooler_type: str = "mean_pooler"  # attentional pooling for HF models
 
 
 def get_cast_dtype(precision: str):
-    """Get cast dtype.
-
-    Args:
-        precision: The precision.
-    """
     cast_dtype = None
-    if precision == 'bf16':
+    if precision == "bf16":
         cast_dtype = torch.bfloat16
-    elif precision == 'fp16':
+    elif precision == "fp16":
         cast_dtype = torch.float16
     return cast_dtype
 
 
 def get_input_dtype(precision: str):
-    """Get input dtype.
-
-    Args:
-        precision: The precision.
-    """
     input_dtype = None
-    if precision in ('bf16', 'pure_bf16'):
+    if precision in ("bf16", "pure_bf16"):
         input_dtype = torch.bfloat16
-    elif precision in ('fp16', 'pure_fp16'):
+    elif precision in ("fp16", "pure_fp16"):
         input_dtype = torch.float16
     return input_dtype
 
 
 def _build_vision_tower(
-        embed_dim: int,
-        vision_cfg: CLIPVisionCfg,
-        quick_gelu: bool = False,
-        cast_dtype: Optional[torch.dtype] = None
+    embed_dim: int, vision_cfg: CLIPVisionCfg, quick_gelu: bool = False, cast_dtype: torch.dtype | None = None
 ):
-    """Helper function to build vision tower.
-
-    Args:
-        embed_dim: The embed dim.
-        vision_cfg: The vision cfg.
-        quick_gelu: The quick gelu.
-        cast_dtype: The cast dtype.
-    """
     if isinstance(vision_cfg, dict):
         vision_cfg = CLIPVisionCfg(**vision_cfg)
 
@@ -235,19 +219,11 @@ def _build_vision_tower(
 
 
 def _build_text_tower(
-        embed_dim: int,
-        text_cfg: CLIPTextCfg,
-        quick_gelu: bool = False,
-        cast_dtype: Optional[torch.dtype] = None,
+    embed_dim: int,
+    text_cfg: CLIPTextCfg,
+    quick_gelu: bool = False,
+    cast_dtype: torch.dtype | None = None,
 ):
-    """Helper function to build text tower.
-
-    Args:
-        embed_dim: The embed dim.
-        text_cfg: The text cfg.
-        quick_gelu: The quick gelu.
-        cast_dtype: The cast dtype.
-    """
     if isinstance(text_cfg, dict):
         text_cfg = CLIPTextCfg(**text_cfg)
 
@@ -299,33 +275,18 @@ def _build_text_tower(
 
 
 class CLIP(nn.Module):
-    """Clip implementation."""
-
     def __init__(
-            self,
-            embed_dim: int,
-            vision_cfg: CLIPVisionCfg,
-            text_cfg: CLIPTextCfg,
-            quick_gelu: bool = False,
-            init_logit_scale: float = np.log(1 / 0.07),
-            init_logit_bias: Optional[float] = None,
-            nonscalar_logit_scale: bool = False,
-            cast_dtype: Optional[torch.dtype] = None,
-            output_dict: bool = False,
+        self,
+        embed_dim: int,
+        vision_cfg: CLIPVisionCfg,
+        text_cfg: CLIPTextCfg,
+        quick_gelu: bool = False,
+        init_logit_scale: float = np.log(1 / 0.07),
+        init_logit_bias: float | None = None,
+        nonscalar_logit_scale: bool = False,
+        cast_dtype: torch.dtype | None = None,
+        output_dict: bool = False,
     ):
-        """Init.
-
-        Args:
-            embed_dim: The embed dim.
-            vision_cfg: The vision cfg.
-            text_cfg: The text cfg.
-            quick_gelu: The quick gelu.
-            init_logit_scale: The init logit scale.
-            init_logit_bias: The init logit bias.
-            nonscalar_logit_scale: The nonscalar logit scale.
-            cast_dtype: The cast dtype.
-            output_dict: The output dict.
-        """
         super().__init__()
         self.output_dict = output_dict
 
@@ -341,7 +302,7 @@ class CLIP(nn.Module):
         self.text_projection = text.text_projection
         self.text_pool_type = text.pool_type
         self.text_eos_id = text.eos_id
-        self.register_buffer('attn_mask', text.attn_mask, persistent=False)
+        self.register_buffer("attn_mask", text.attn_mask, persistent=False)
 
         lshape = [1] if nonscalar_logit_scale else []
         self.logit_scale = nn.Parameter(torch.ones(lshape) * init_logit_scale)
@@ -351,70 +312,33 @@ class CLIP(nn.Module):
             self.logit_bias = None
 
     def lock_image_tower(self, unlocked_groups=0, freeze_bn_stats=False):
-        """Lock image tower.
-
-        Args:
-            unlocked_groups: The unlocked groups.
-            freeze_bn_stats: The freeze bn stats.
-        """
         # lock image tower as per LiT - https://arxiv.org/abs/2111.07991
         self.visual.lock(unlocked_groups=unlocked_groups, freeze_bn_stats=freeze_bn_stats)
 
     def lock_text_tower(self, unlocked_layers: int = 0, freeze_layer_norm: bool = True):
-        """Lock text tower.
-
-        Args:
-            unlocked_layers: The unlocked layers.
-            freeze_layer_norm: The freeze layer norm.
-        """
-        assert freeze_layer_norm, 'Unfreezing LayerNorm is not supported. LayerNorm treated like other weights.'
+        assert freeze_layer_norm, "Unfreezing LayerNorm is not supported. LayerNorm treated like other weights."
         lock_text_tower(self, unlocked_layers)
 
-    def set_grad_checkpointing(self, enable: bool = True, impl: str = 'inline'):
-        """Set grad checkpointing.
-
-        Args:
-            enable: The enable.
-            impl: The impl.
-        """
+    def set_grad_checkpointing(self, enable: bool = True, impl: str = "inline"):
         self.visual.set_grad_checkpointing(enable, impl=impl)
         self.transformer.set_grad_checkpointing(enable, impl=impl)
 
     def no_weight_decay(self):
-        """No weight decay."""
         # for timm optimizers, 1d params like logit_scale, logit_bias, ln/bn scale, biases are excluded by default
-        no_wd = {'positional_embedding'}
-        if hasattr(self.visual, 'no_weight_decay'):
+        no_wd = {"positional_embedding"}
+        if hasattr(self.visual, "no_weight_decay"):
             for n in self.visual.no_weight_decay():
-                no_wd.add('visual.' + n)
+                no_wd.add("visual." + n)
         return no_wd
 
     def _encode_image(self, image, normalize: bool = False):
-        """Helper function to encode image.
-
-        Args:
-            image: The image.
-            normalize: The normalize.
-        """
         features = self.visual(image)
         return F.normalize(features, dim=-1) if normalize else features
 
     def encode_image(self, image, normalize: bool = False):
-        """Encode image.
-
-        Args:
-            image: The image.
-            normalize: The normalize.
-        """
         return self._encode_image(image, normalize=normalize)
 
     def _encode_text(self, text, normalize: bool = False):
-        """Helper function to encode text.
-
-        Args:
-            text: The text.
-            normalize: The normalize.
-        """
         cast_dtype = self.transformer.get_cast_dtype()
 
         x = self.token_embedding(text).to(cast_dtype)  # [batch_size, n_ctx, d_model]
@@ -424,29 +348,14 @@ class CLIP(nn.Module):
         x = self.ln_final(x)  # [batch_size, n_ctx, transformer.width]
         x = text_global_pool(x, text, self.text_pool_type, eos_token_id=getattr(self, "text_eos_id", None))
         if self.text_projection is not None:
-            if isinstance(self.text_projection, nn.Linear):
-                x = self.text_projection(x)
-            else:
-                x = x @ self.text_projection
+            x = self.text_projection(x) if isinstance(self.text_projection, nn.Linear) else x @ self.text_projection
 
         return F.normalize(x, dim=-1) if normalize else x
 
     def encode_text(self, text, normalize: bool = False):
-        """Encode text.
-
-        Args:
-            text: The text.
-            normalize: The normalize.
-        """
         return self._encode_text(text, normalize=normalize)
 
     def get_logits(self, image, text):
-        """Get logits.
-
-        Args:
-            image: The image.
-            text: The text.
-        """
         image_features = self._encode_image(image, normalize=True)
         text_features = self._encode_text(text, normalize=True)
         image_logits = self.logit_scale.exp() * image_features @ text_features.T
@@ -456,23 +365,23 @@ class CLIP(nn.Module):
         return image_logits, text_logits
 
     def forward_intermediates(
-            self,
-            image: Optional[torch.Tensor] = None,
-            text: Optional[torch.Tensor] = None,
-            image_indices: Optional[Union[int, List[int]]] = None,
-            text_indices: Optional[Union[int, List[int]]] = None,
-            stop_early: bool = False,
-            normalize: bool = True,
-            normalize_intermediates: bool = False,
-            intermediates_only: bool = False,
-            image_output_fmt: str = 'NCHW',
-            image_output_extra_tokens: bool = False,
-            text_output_fmt: str = 'NLC',
-            text_output_extra_tokens: bool = False,
-            output_logits: bool = False,
-            output_logit_scale_bias: bool = False,
-    ) -> Dict[str, Union[torch.Tensor, List[torch.Tensor]]]:
-        """ Forward features that returns intermediates.
+        self,
+        image: torch.Tensor | None = None,
+        text: torch.Tensor | None = None,
+        image_indices: int | list[int] | None = None,
+        text_indices: int | list[int] | None = None,
+        stop_early: bool = False,
+        normalize: bool = True,
+        normalize_intermediates: bool = False,
+        intermediates_only: bool = False,
+        image_output_fmt: str = "NCHW",
+        image_output_extra_tokens: bool = False,
+        text_output_fmt: str = "NLC",
+        text_output_extra_tokens: bool = False,
+        output_logits: bool = False,
+        output_logit_scale_bias: bool = False,
+    ) -> dict[str, torch.Tensor | list[torch.Tensor]]:
+        """Forward features that returns intermediates.
 
         Args:
             image: Input image tensor
@@ -498,7 +407,7 @@ class CLIP(nn.Module):
             normalize = False
             output_logits = False
         if output_logits:
-            assert image is not None and text is not None, 'Both image and text inputs are required to compute logits'
+            assert image is not None and text is not None, "Both image and text inputs are required to compute logits"
 
         if image is not None:
             image_output = self.visual.forward_intermediates(
@@ -518,11 +427,7 @@ class CLIP(nn.Module):
             cast_dtype = self.transformer.get_cast_dtype()
             x = self.token_embedding(text).to(cast_dtype)  # [batch_size, n_ctx, d_model]
             x = x + self.positional_embedding.to(cast_dtype)
-            x, intermediates = self.transformer.forward_intermediates(
-                x,
-                attn_mask=self.attn_mask,
-                indices=text_indices
-            )
+            x, intermediates = self.transformer.forward_intermediates(x, attn_mask=self.attn_mask, indices=text_indices)
             if normalize_intermediates:
                 intermediates = [self.ln_final(xi) for xi in intermediates]
 
@@ -554,21 +459,15 @@ class CLIP(nn.Module):
         if output_logit_scale_bias:
             output["logit_scale"] = logit_scale_exp
             if self.logit_bias is not None:
-                output['logit_bias'] = self.logit_bias.clone()
+                output["logit_bias"] = self.logit_bias.clone()
 
         return output
 
     def forward(
-            self,
-            image: Optional[torch.Tensor] = None,
-            text: Optional[torch.Tensor] = None,
+        self,
+        image: torch.Tensor | None = None,
+        text: torch.Tensor | None = None,
     ):
-        """Forward.
-
-        Args:
-            image: The image.
-            text: The text.
-        """
         image_features = self._encode_image(image, normalize=True) if image is not None else None
         text_features = self._encode_text(text, normalize=True) if text is not None else None
 
@@ -576,10 +475,10 @@ class CLIP(nn.Module):
             out_dict = {
                 "image_features": image_features,
                 "text_features": text_features,
-                "logit_scale": self.logit_scale.exp()
+                "logit_scale": self.logit_scale.exp(),
             }
             if self.logit_bias is not None:
-                out_dict['logit_bias'] = self.logit_bias.clone()
+                out_dict["logit_bias"] = self.logit_bias.clone()
             return out_dict
 
         if self.logit_bias is not None:
@@ -588,33 +487,18 @@ class CLIP(nn.Module):
 
 
 class CustomTextCLIP(nn.Module):
-    """Custom text clip implementation."""
-
     def __init__(
-            self,
-            embed_dim: int,
-            vision_cfg: CLIPVisionCfg,
-            text_cfg: CLIPTextCfg,
-            quick_gelu: bool = False,
-            init_logit_scale: float = np.log(1 / 0.07),
-            init_logit_bias: Optional[float] = None,
-            nonscalar_logit_scale: bool = False,
-            cast_dtype: Optional[torch.dtype] = None,
-            output_dict: bool = False,
+        self,
+        embed_dim: int,
+        vision_cfg: CLIPVisionCfg,
+        text_cfg: CLIPTextCfg,
+        quick_gelu: bool = False,
+        init_logit_scale: float = np.log(1 / 0.07),
+        init_logit_bias: float | None = None,
+        nonscalar_logit_scale: bool = False,
+        cast_dtype: torch.dtype | None = None,
+        output_dict: bool = False,
     ):
-        """Init.
-
-        Args:
-            embed_dim: The embed dim.
-            vision_cfg: The vision cfg.
-            text_cfg: The text cfg.
-            quick_gelu: The quick gelu.
-            init_logit_scale: The init logit scale.
-            init_logit_bias: The init logit bias.
-            nonscalar_logit_scale: The nonscalar logit scale.
-            cast_dtype: The cast dtype.
-            output_dict: The output dict.
-        """
         super().__init__()
         self.output_dict = output_dict
         self.visual = _build_vision_tower(embed_dim, vision_cfg, quick_gelu, cast_dtype)
@@ -630,91 +514,42 @@ class CustomTextCLIP(nn.Module):
             self.logit_bias = None
 
     def lock_image_tower(self, unlocked_groups=0, freeze_bn_stats=False):
-        """Lock image tower.
-
-        Args:
-            unlocked_groups: The unlocked groups.
-            freeze_bn_stats: The freeze bn stats.
-        """
         # lock image tower as per LiT - https://arxiv.org/abs/2111.07991
         self.visual.lock(unlocked_groups=unlocked_groups, freeze_bn_stats=freeze_bn_stats)
 
     def lock_text_tower(self, unlocked_layers: int = 0, freeze_layer_norm: bool = True):
-        """Lock text tower.
-
-        Args:
-            unlocked_layers: The unlocked layers.
-            freeze_layer_norm: The freeze layer norm.
-        """
         self.text.lock(unlocked_layers, freeze_layer_norm)
 
-    def set_grad_checkpointing(self, enable: bool = True, impl: str = 'inline'):
-        """Set grad checkpointing.
-
-        Args:
-            enable: The enable.
-            impl: The impl.
-        """
+    def set_grad_checkpointing(self, enable: bool = True, impl: str = "inline"):
         self.visual.set_grad_checkpointing(enable, impl=impl)
         self.text.set_grad_checkpointing(enable, impl=impl)
 
     def no_weight_decay(self):
-        """No weight decay."""
         # for timm optimizers, 1d params like logit_scale, logit_bias, ln/bn scale, biases are excluded by default
         no_wd = set()
-        if hasattr(self.visual, 'no_weight_decay'):
+        if hasattr(self.visual, "no_weight_decay"):
             for n in self.visual.no_weight_decay():
-                no_wd.add('visual.' + n)
-        if hasattr(self.text, 'no_weight_decay'):
+                no_wd.add("visual." + n)
+        if hasattr(self.text, "no_weight_decay"):
             for n in self.text.no_weight_decay():
-                no_wd.add('text.' + n)
+                no_wd.add("text." + n)
         return no_wd
 
     def _encode_image(self, image, normalize: bool = False):
-        """Helper function to encode image.
-
-        Args:
-            image: The image.
-            normalize: The normalize.
-        """
         features = self.visual(image)
         return F.normalize(features, dim=-1) if normalize else features
 
     def encode_image(self, image, normalize: bool = False):
-        """Encode image.
-
-        Args:
-            image: The image.
-            normalize: The normalize.
-        """
         return self._encode_image(image, normalize=normalize)
 
     def _encode_text(self, text, normalize: bool = False):
-        """Helper function to encode text.
-
-        Args:
-            text: The text.
-            normalize: The normalize.
-        """
         features = self.text(text)
         return F.normalize(features, dim=-1) if normalize else features
 
     def encode_text(self, text, normalize: bool = False):
-        """Encode text.
-
-        Args:
-            text: The text.
-            normalize: The normalize.
-        """
         return self._encode_text(text, normalize=normalize)
 
     def get_logits(self, image, text):
-        """Get logits.
-
-        Args:
-            image: The image.
-            text: The text.
-        """
         image_features = self._encode_image(image, normalize=True)
         text_features = self._encode_text(text, normalize=True)
         image_logits = self.logit_scale.exp() * image_features @ text_features.T
@@ -724,23 +559,23 @@ class CustomTextCLIP(nn.Module):
         return image_logits, text_logits
 
     def forward_intermediates(
-            self,
-            image: Optional[torch.Tensor] = None,
-            text: Optional[torch.Tensor] = None,
-            image_indices: Optional[Union[int, List[int]]] = None,
-            text_indices: Optional[Union[int, List[int]]] = None,
-            stop_early: bool = False,
-            normalize: bool = True,
-            normalize_intermediates: bool = False,
-            intermediates_only: bool = False,
-            image_output_fmt: str = 'NCHW',
-            image_output_extra_tokens: bool = False,
-            text_output_fmt: str = 'NLC',
-            text_output_extra_tokens: bool = False,
-            output_logits: bool = False,
-            output_logit_scale_bias: bool = False,
-    ) -> Dict[str, Union[torch.Tensor, List[torch.Tensor]]]:
-        """ Forward features that returns intermediates.
+        self,
+        image: torch.Tensor | None = None,
+        text: torch.Tensor | None = None,
+        image_indices: int | list[int] | None = None,
+        text_indices: int | list[int] | None = None,
+        stop_early: bool = False,
+        normalize: bool = True,
+        normalize_intermediates: bool = False,
+        intermediates_only: bool = False,
+        image_output_fmt: str = "NCHW",
+        image_output_extra_tokens: bool = False,
+        text_output_fmt: str = "NLC",
+        text_output_extra_tokens: bool = False,
+        output_logits: bool = False,
+        output_logit_scale_bias: bool = False,
+    ) -> dict[str, torch.Tensor | list[torch.Tensor]]:
+        """Forward features that returns intermediates.
 
         Args:
             image: Input image tensor
@@ -766,7 +601,7 @@ class CustomTextCLIP(nn.Module):
             normalize = False
             output_logits = False
         if output_logits:
-            assert image is not None and text is not None, 'Both image and text inputs are required to compute logits'
+            assert image is not None and text is not None, "Both image and text inputs are required to compute logits"
 
         if image is not None:
             image_output = self.visual.forward_intermediates(
@@ -809,21 +644,15 @@ class CustomTextCLIP(nn.Module):
         if output_logit_scale_bias:
             output["logit_scale"] = logit_scale_exp
             if self.logit_bias is not None:
-                output['logit_bias'] = self.logit_bias.clone()
+                output["logit_bias"] = self.logit_bias.clone()
 
         return output
 
     def forward(
-            self,
-            image: Optional[torch.Tensor] = None,
-            text: Optional[torch.Tensor] = None,
+        self,
+        image: torch.Tensor | None = None,
+        text: torch.Tensor | None = None,
     ):
-        """Forward.
-
-        Args:
-            image: The image.
-            text: The text.
-        """
         image_features = self._encode_image(image, normalize=True) if image is not None else None
         text_features = self._encode_text(text, normalize=True) if text is not None else None
 
@@ -831,10 +660,10 @@ class CustomTextCLIP(nn.Module):
             out_dict = {
                 "image_features": image_features,
                 "text_features": text_features,
-                "logit_scale": self.logit_scale.exp()
+                "logit_scale": self.logit_scale.exp(),
             }
             if self.logit_bias is not None:
-                out_dict['logit_bias'] = self.logit_bias.clone()
+                out_dict["logit_bias"] = self.logit_bias.clone()
             return out_dict
 
         if self.logit_bias is not None:
@@ -845,12 +674,7 @@ class CustomTextCLIP(nn.Module):
 def convert_weights_to_lp(model: nn.Module, dtype=torch.float16):
     """Convert applicable model parameters to low-precision (bf16 or fp16)"""
 
-    def _convert_weights(l):
-        """Helper function to convert weights.
-
-        Args:
-            l: The l.
-        """
+    def _convert_weights(l):  # noqa: E741 - Ambiguous upstream name kept as written.
         if isinstance(l, (nn.Conv1d, nn.Conv2d, nn.Linear)):
             l.weight.data = l.weight.data.to(dtype)
             if l.bias is not None:
@@ -882,40 +706,30 @@ convert_weights_to_fp16 = convert_weights_to_lp  # backwards compat
 
 # used to maintain checkpoint compatibility
 def convert_to_custom_text_state_dict(state_dict: dict):
-    """Convert to custom text state dict.
-
-    Args:
-        state_dict: The state dict.
-    """
-    if 'text_projection' in state_dict:
+    if "text_projection" in state_dict:
         # old format state_dict, move text tower -> .text
         new_state_dict = {}
         for k, v in state_dict.items():
-            if any(k.startswith(p) for p in (
-                'text_projection',
-                'positional_embedding',
-                'token_embedding',
-                'transformer',
-                'ln_final',
-            )):
-                k = 'text.' + k
+            if any(
+                k.startswith(p)
+                for p in (
+                    "text_projection",
+                    "positional_embedding",
+                    "token_embedding",
+                    "transformer",
+                    "ln_final",
+                )
+            ):
+                k = "text." + k
             new_state_dict[k] = v
         return new_state_dict
     return state_dict
 
 
-def resize_pos_embed(state_dict, model, interpolation: str = 'bicubic', antialias: bool = True):
-    """Resize pos embed.
-
-    Args:
-        state_dict: The state dict.
-        model: The model.
-        interpolation: The interpolation.
-        antialias: The antialias.
-    """
+def resize_pos_embed(state_dict, model, interpolation: str = "bicubic", antialias: bool = True):
     # Rescale the grid of position embeddings when loading from state_dict
-    old_pos_embed = state_dict.get('visual.positional_embedding', None)
-    if old_pos_embed is None or not hasattr(model.visual, 'grid_size'):
+    old_pos_embed = state_dict.get("visual.positional_embedding", None)
+    if old_pos_embed is None or not hasattr(model.visual, "grid_size"):
         return
     grid_size = to_2tuple(model.visual.grid_size)
     extra_tokens = 1  # FIXME detect different token configs (ie no class token, or more)
@@ -929,7 +743,7 @@ def resize_pos_embed(state_dict, model, interpolation: str = 'bicubic', antialia
         pos_emb_tok, pos_emb_img = None, old_pos_embed
     old_grid_size = to_2tuple(int(math.sqrt(len(pos_emb_img))))
 
-    _logger.info('Resizing position embedding grid-size from %s to %s', old_grid_size, grid_size)
+    _logger.info("Resizing position embedding grid-size from %s to %s", old_grid_size, grid_size)
     pos_emb_img = pos_emb_img.reshape(1, old_grid_size[0], old_grid_size[1], -1).permute(0, 3, 1, 2)
     pos_emb_img = F.interpolate(
         pos_emb_img,
@@ -939,40 +753,29 @@ def resize_pos_embed(state_dict, model, interpolation: str = 'bicubic', antialia
         align_corners=False,
     )
     pos_emb_img = pos_emb_img.permute(0, 2, 3, 1).reshape(1, grid_size[0] * grid_size[1], -1)[0]
-    if pos_emb_tok is not None:
-        new_pos_embed = torch.cat([pos_emb_tok, pos_emb_img], dim=0)
-    else:
-        new_pos_embed = pos_emb_img
-    state_dict['visual.positional_embedding'] = new_pos_embed
+    new_pos_embed = torch.cat([pos_emb_tok, pos_emb_img], dim=0) if pos_emb_tok is not None else pos_emb_img
+    state_dict["visual.positional_embedding"] = new_pos_embed
 
 
-def resize_text_pos_embed(state_dict, model, interpolation: str = 'linear', antialias: bool = False):
-    """Resize text pos embed.
-
-    Args:
-        state_dict: The state dict.
-        model: The model.
-        interpolation: The interpolation.
-        antialias: The antialias.
-    """
-    pos_embed_key = 'positional_embedding' if 'positional_embedding' in state_dict else 'text.positional_embedding'
+def resize_text_pos_embed(state_dict, model, interpolation: str = "linear", antialias: bool = False):
+    pos_embed_key = "positional_embedding" if "positional_embedding" in state_dict else "text.positional_embedding"
     old_pos_embed = state_dict.get(pos_embed_key, None)
     if old_pos_embed is None:
         return
     # FIXME add support for text cls_token
-    model_pos_embed = getattr(model, 'positional_embedding', None)
+    model_pos_embed = getattr(model, "positional_embedding", None)
     if model_pos_embed is None:
-        model_pos_embed = getattr(model.text, 'positional_embedding', None)
+        model_pos_embed = getattr(model.text, "positional_embedding", None)
 
     old_num_pos = old_pos_embed.shape[0]
     old_width = old_pos_embed.shape[1]
     num_pos = model_pos_embed.shape[0]
     width = model_pos_embed.shape[1]
-    assert old_width == width, 'text pos_embed width changed!'
+    assert old_width == width, "text pos_embed width changed!"
     if old_num_pos == num_pos:
         return
 
-    _logger.info('Resizing text position embedding num_pos from %s to %s', old_num_pos, num_pos)
+    _logger.info("Resizing text position embedding num_pos from %s to %s", old_num_pos, num_pos)
     old_pos_embed = old_pos_embed.reshape(1, old_num_pos, old_width).permute(0, 2, 1)
     old_pos_embed = F.interpolate(
         old_pos_embed,
@@ -988,52 +791,36 @@ def resize_text_pos_embed(state_dict, model, interpolation: str = 'linear', anti
 
 
 def get_model_preprocess_cfg(model):
-    """Get model preprocess cfg.
-
-    Args:
-        model: The model.
-    """
-    module = getattr(model, 'visual', model)
-    preprocess_cfg = getattr(module, 'preprocess_cfg', {})
+    module = getattr(model, "visual", model)
+    preprocess_cfg = getattr(module, "preprocess_cfg", {})
     if not preprocess_cfg:
         # use separate legacy attributes if preprocess_cfg dict not found
-        size = getattr(module, 'image_size')
+        size = module.image_size
         if size is not None:
-            preprocess_cfg['size'] = size
-        mean = getattr(module, 'image_mean', None)
+            preprocess_cfg["size"] = size
+        mean = getattr(module, "image_mean", None)
         if mean is not None:
-            preprocess_cfg['mean'] = mean
-        std = getattr(module, 'image_std', None)
+            preprocess_cfg["mean"] = mean
+        std = getattr(module, "image_std", None)
         if std is not None:
-            preprocess_cfg['std'] = std
+            preprocess_cfg["std"] = std
     return preprocess_cfg
 
 
-def set_model_preprocess_cfg(model, preprocess_cfg: Dict[str, Any]):
-    """Set model preprocess cfg.
-
-    Args:
-        model: The model.
-        preprocess_cfg: The preprocess cfg.
-    """
-    module = getattr(model, 'visual', model)
-    module.image_mean = preprocess_cfg['mean']  # legacy attribute, keeping for bwd compat
-    module.image_std = preprocess_cfg['std']  # legacy attribute, keeping for bwd compat
+def set_model_preprocess_cfg(model, preprocess_cfg: dict[str, Any]):
+    module = getattr(model, "visual", model)
+    module.image_mean = preprocess_cfg["mean"]  # legacy attribute, keeping for bwd compat
+    module.image_std = preprocess_cfg["std"]  # legacy attribute, keeping for bwd compat
     module.preprocess_cfg = copy.deepcopy(preprocess_cfg)  # new attr, package all pp cfg as dict
 
 
 def get_model_tokenize_cfg(model):
-    """Get model tokenize cfg.
-
-    Args:
-        model: The model.
-    """
-    module = getattr(model, 'text', model)
+    module = getattr(model, "text", model)
     cfg = {}
-    context_length = getattr(module, 'context_length', None)
+    context_length = getattr(module, "context_length", None)
     if context_length is not None:
-        cfg['context_length'] = context_length
-    vocab_size = getattr(module, 'vocab_size', None)
+        cfg["context_length"] = context_length
+    vocab_size = getattr(module, "vocab_size", None)
     if vocab_size is not None:
-        cfg['vocab_size'] = vocab_size
+        cfg["vocab_size"] = vocab_size
     return cfg

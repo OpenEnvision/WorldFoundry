@@ -1,0 +1,196 @@
+---
+title: VideoGen & World Model Acceleration Benchmarks
+description: Objective, 100% zero-contention NVIDIA H200 inference speedups, quality receipts, and honest cross-framework comparisons across 15 foundation models.
+---
+
+<Callout type="info" title="Evidence Contract: 100% Exclusive H200 + Zero Silent Fallbacks">
+Every speedup below was measured on **dedicated idle bare-metal NVIDIA H200 SXM GPUs** (`external_gpu_contention = false`) with auditable execution receipts (`fallbacks: []`, `capture_failed: 0`, `dense_fallback_calls: 0`), direct 4-frame RGB visual inspection, and full regression passes (**335/335 unified GPU+CPU tests** and **222/222 CPU-only CI tests**).
+</Callout>
+
+WorldFoundry ships one unified open-source inference acceleration stack across **15 foundation models** — **11 flagship video generation models** and **4 real-time streaming / interactive world models**. For runtime switch contracts and composition rules, see [Inference optimization](/docs/guides/inference-optimization) and [Pluggable diffusion acceleration](/docs/guides/diffusion-acceleration).
+
+## Key Highlights
+
+<KvCatalog heading="Headline Verified Results (Exclusive NVIDIA H200 SXM)" rows={[
+  {
+    name: "Flagship Video Generation (11 Models)",
+    hintLabel: "Speedup",
+    hint: "2.25× – 53.22×",
+    description: "Every single one of the 11 flagship video generation models achieves verified end-to-end speedup with zero silent fallbacks across single-GPU and multi-GPU (Ulysses SP / CFG-Parallel) tiers.",
+    reads: [
+      { label: "Top single-GPU", value: "MiniMax-H3 Super Accel 53.22× (10s 768p: 1,054.84s → 19.82s), HunyuanVideo-13B 5.19× (71.66s), Wan2.1-14B 4.33× (71.99s)" },
+      { label: "Top multi-GPU", value: "Wan2.1-14B 4× 480p 13.86× vs 1× (22.50s), HunyuanVideo-13B 2× SP=2 8.85× vs 1× (42.00s), MiniMax-H3 2× SP=2 7.42× (41.88s), LTX-2.5 2× CFG=2 5.56× (5.99s)" }
+    ]
+  },
+  {
+    name: "Real-Time Streaming World Models (4 Models)",
+    hintLabel: "Throughput",
+    hint: "20.8 – 67.55 FPS",
+    description: "Lossless BF16 CUDA Graph + FlashAttention-3 + overlapped VAE pipelines sustain real-time interactive rollouts with O(1) constant graph segments and zero prompt-switch invalidations.",
+    reads: [
+      { label: "Measured FPS", value: "Matrix-Game-2.0 up to 67.55 FPS (57.72–60.52 FPS lossless BF16), LongLive-1.3B 30.16 FPS, Self-Forcing 1.3B 28.16 FPS (TTFT 313 ms), HY-WorldPlay 20.84 FPS AR / 4.73× Bi" },
+      { label: "Graph stability", value: "capture=1, eager=0, recompiles=0, O(1) 4–5 segments forever" }
+    ]
+  },
+  {
+    name: "Memory & Precision Engineering",
+    hintLabel: "VRAM / Precision",
+    hint: "-56.2 GiB · FP32 Accum",
+    description: "Bitwise-exact static KV caching on Cosmos3-Super cuts peak VRAM from 122.8 GiB to 66.6 GiB (-56.2 GiB). All deep DiT FP8 presets enforce full FP32 accumulation (use_fast_accum=False) and FP64 Triton RoPE (13.63×).",
+    reads: [
+      { label: "Quality guardrails", value: "Distilled LTX-2.3 token pruning (< 6 steps) and HunyuanVideo tau=1.25 are actively blocked after failing RGB inspection" }
+    ]
+  },
+  {
+    name: "Verification & Open-Source Hygiene",
+    hintLabel: "Test Gates",
+    hint: "335 GPU + 222 CPU Pass",
+    description: "All 211 changed Python modules pass Ruff lint, Ruff format, ty type-checking, DCO sign-off, and path/credential hygiene scans with zero failures.",
+    reads: [
+      { label: "Reproducibility", value: "Full CLI commands and raw receipts live in benchmarks/videogen/BENCHMARK_REPORT.md" }
+    ]
+  }
+]} />
+
+## Methodology and Hardware Disclosures
+
+<Callout type="warn" title="Hardware Precision Disclosure (Hopper H200 FP8 vs Blackwell B200 NVFP4)">
+Where NVIDIA SOL Engine reports **Blackwell B200 SM100 NVFP4** numbers, WorldFoundry executes **Hopper SM90 Rowwise FP8 W8A8 (`use_fast_accum=False`, full FP32 WGMMA accumulation)** on bare-metal **NVIDIA H200 SXM (141 GiB HBM3e, SM90, NVSwitch)**. SM100 NVFP4 weight packing and dispatch are implemented and unit-tested in-tree, pending physical B200 hardware benchmarking.
+</Callout>
+
+<KvCatalog heading="Measurement Environment" vars rows={[
+  { name: "GPU & Interconnect", hint: "8× NVIDIA H200 SXM", description: "141 GiB HBM3e per GPU, Hopper SM90, NVSwitch. All timed runs execute on dedicated idle GPUs with zero competing processes (external_gpu_contention = false)." },
+  { name: "Runtime & Kernels", hint: "PyTorch 2.11 + CUDA 12.8", description: "PyTorch 2.11.0+cu128, Triton 3.6.0, Hopper FlashAttention-3 3.0.1, SM90 CUTLASS sol_attn, and in-tree Hopper TMA PISA." },
+  { name: "Acceptance Gate", hint: "Receipts + RGB QA", description: "No preset is accepted on latency alone. Every tier requires fallbacks: [], capture_failed: 0, dense_fallback_calls: 0, quantitative latent/RGB metrics, and 4-frame RGB visual review." }
+]} />
+
+## Flagship Video Generation Models (11 Models)
+
+All latencies below are warm steady-state exclusive H200 measurements on the identical workload geometry. Reference figures from NVIDIA SOL Engine are listed strictly as architectural context (different hardware/precision where noted above).
+
+| # | Model | Workload | Baseline → Optimized (Exclusive H200) | Speedup (vs Ref) | Key Techniques & Quality Receipts |
+| ---: | --- | --- | --- | --- | --- |
+| 1 | **Cosmos3-Super (64B)** | `704×1280×33f`, 35 steps | 1× `77.94s` → **`33.02s`** | **`2.36×`** (`~2.27×` ref) | Bitwise-exact `und` static KV (**`-56.2 GiB` VRAM** `122.8→66.6 GiB`), step-selective FP8, FA3 GQA, TeaCache, Piecewise Graph · `20.35 dB / 0.9286` (`fp8_und_kv`), `16.42 dB / 0.8255` (`sol_balanced`), `fallbacks=[]` |
+| 2 | **LTX-2.3 (22B A+V)** | `768×1280×65f`, 8+3 steps | 1× `4.648s` → **`1.974s`** (default) / **`1.782s`** (TeaCache) | **`2.35×`** / **`2.61×`** (`2.86×` DiT; `~2.38×` ref) | FP8 + PISA (`90/90`) + FBCache default (`audio_rms=0.839`, I2V `39.19 dB`); TeaCache tier without pruning (`1.782s`) · `fallbacks=[]` |
+| 3 | **SANA-Video (2B)** | `480×832×81f`, 50 steps | 1× `55.76s` → `27.19s` (lossless) → **`19.66s`** | **`2.84×`** (`2.05×` lossless; `~2.77×` ref) | EasyCache (`0.08`) + compiled FA3 (`80/80` verified) · **`27.43 dB / SSIM 0.9891`** (`27.99 dB` lossless), `fallbacks=[]` |
+| 4 | **Wan2.2-TI2V-5B** | `704×1280×121f`, 50 steps | 1× `112.06s` → **`38.50s`** (BF16) / **`37.48s`** (FP8) | **`2.91×`** BF16 / **`2.99×`** FP8 (`3.03×` DiT; `~2.89×` ref) | EasyCache + PISA + compiled VideoVAE38 (no-PISA FP8 `compile_fullgraph`: `40.25s / 2.78×`) · real TI2V I2V (`per-token`) verified, `fallbacks=[]` |
+| 5 | **Wan2.2-T2V-A14B (28B)** | `480×832×81f`, 40 steps | 1× `253.33s` → **`112.47s`**; 2× `CFG=2` `130.19s` → **`59.00s`** | **`2.25×`** 1× / **`4.29×`** 2× vs 1× (`2.21×` vs 2×; `~2.17×` ref) | Dual-expert fusion + EasyCache + PISA (`wan22_a14b_sol`) · `SSIM 0.711`, `1` clean expert boundary reset, zero bleed, `fallbacks=[]` |
+| 6 | **LingBot-Video (1.3B)** | `480×832×121f`, 40 steps | 1× `114.59s` → `67.33s` (PISA) → **`37.03s`** | **`3.10×`** E2E / **`3.22×`** DiT (`~2.60×` ref) | Fusion + refiner PISA + EasyCache · `19.39 dB / SSIM 0.9207`, `fallbacks=[]` |
+| 7 | **HunyuanVideo-13B** | `720×1280×65f`, 50 steps | 1× `371.69s` → `85.49s` (bal) → **`71.66s`**; 2× `SP=2` **`42.00s`** | **`5.19×`** 1× DiT / **`8.85×`** 2× SP=2 (`~5.03×` ref) | Sol-Attn (`tau=1.0`, `dense_single=(0,-2,-1)`) + TeaCache + FP8 + Ulysses SP (`27.13 GiB/GPU`, `sp-sync`) · **`22.51 dB / 0.9097`** (`25.98 dB` balanced), BF16 VAE `1.29×`, `fallbacks=[]` |
+| 8 | **Wan2.1-T2V-14B** | `480p` & `720p`, 81f, 50 steps | 1× 480p `311.81s` → **`71.99s`**; 4× 480p **`22.50s`**; 4× 720p `316.90s` → **`71.59s`** | **`4.33×`** 1× / **`13.86×`** 4× 480p / **`4.43×`** 4× 720p (`~3.48×` ref) | FP64 Triton RoPE (`13.63×`) + EasyCache + Sol-Attn + FP8 (`use_fast_accum=False`) + 2×2 VAE (`3.26s`) · `31.53 GiB` (1×), `20.40 dB` (720p), `fallbacks=[]` |
+| 9 | **LTX-2.5 (22B)** | `768×1280×65f`, 24-step CFG=3 / 8+3 | 1× `dev` `30.38s` → **`13.34s`**; 2× `CFG=2` `33.26s` → **`5.99s`** | **`2.28×`** 1× / **`5.56×`** 2× E2E (`5.55×` DiT; `~4.68×` ref) | Parallel CFG=2 + FBCache + fusion (`distilled` 1×: `3.68s → 2.29s / 1.61×`, `39.29 GiB/GPU`) · **`26.26 dB / SSIM 0.9907`**, `zero_fallbacks_verified=True` |
+| 10 | **MiniMax-H3 (31B)** | `512p 4s` & `768p 5s` | 1× 768p 20s **`38.64s`**; 2× `SP=2` 768p 20s **`20.97s`**, 50s **`41.88s`**, 512p **`14.36s`** | **`3.22×`** 1× / **`5.93×`–`7.42×`** 2× 768p / **`4.20×`** 512p (`~3.95×` ref) | 36L VAE **`10.97×`** (`58.36 dB`), `kv_splits=4`, Sol-Attn + FBCache + SP=2 · Rank0/Rank1 max diff **`0.0`**, keyframe `fl2va` `25.53 dB`, `fallbacks=[]` |
+| 11 | **MiniMax-H3 Super Accel** | `5s` & `10s` `768p` | 1× **5s** `361.41s` → **`8.92s`**; **10s** `1,054.84s` → **`19.82s`** | **`40.54×`** (5s) / **`53.22×`** (10s) (`22.2×` / `27.7×` ref) | 4-step H3 draft + 3-step LTX-2.5 refine + stereo audio muxing + stage offload (`57.14 GiB`, `cos=1.000000`) · warm E2E uses cached text embeddings; 5s baseline ran all 50 full steps |
+
+## Real-Time Streaming World Models (4 Models)
+
+All four interactive world models are measured on exclusive H200 with lossless BF16 defaults (`O(1)` graph segments, zero recompiles) plus optional FlashAttention-3 / multi-GPU SP tiers.
+
+| Model | Workload | Reference | Exclusive H200 Result | Speedup / Throughput | Quality & Graph Receipts |
+| --- | --- | --- | --- | --- | --- |
+| **Matrix-Game-2.0** | `universal` (69f) / `templerun` (117f) | ~25 FPS (H100) | Lossless BF16: **`57.72–60.52 FPS`**; FA3: **`67.55 FPS`** | Up to **`67.55 FPS`** | `65.9–67.0 dB` (latent `PSNR=inf`), `capture=1, eager=0, recompiles=0, fallbacks=[]` |
+| **LongLive-1.3B** | 81f / 153f / 3-prompt switch | 24.8 FPS (FP8) | Lossless BF16: **`27.17 FPS`**; FA3: **`30.09–30.16 FPS`** | Up to **`30.16 FPS`** | `PSNR=inf` eager / `55.84 dB` compiled, **`O(1)` 4 segments forever**, `0` prompt-switch invalidations |
+| **Self-Forcing 1.3B** | 81f / 153f streaming | ~17 FPS official; ~20–24 FPS peer | Lossless BF16 + FA3 + overlap: 81f **`27.90 FPS`**, 153f **`28.16 FPS`** | **`28.16 FPS`** (`TTFT 313 ms`) | **`O(1)` 5 segments forever**, overlapped VAE bitwise-equal to serial |
+| **HY-WorldPlay (34 GB)** | Bi 12-lat (45f) & AR 8ctx | Eager `2,853 ms` Bi / `701 ms` AR | Bi 2× SP=2 Full FP8: **`603.4 ms`**; AR 2× SP=2: **`191.9 ms`** | **`4.73×`** Bi / **`20.84 FPS`** (`3.65×`) AR | RGB VAE verified (`54.9 dB` BF16+FA3, `37.1 dB` Full FP8) |
+
+## Quality Engineering & Blocked Presets
+
+<Callout type="idea" title="Quality First: Faster Presets Are Rejected When Visual Artifacts Appear">
+WorldFoundry blocks or fixes configurations that show visual degradation during 4-frame RGB review even when they post higher raw speedups.
+</Callout>
+
+<KvCatalog heading="Active Guardrails & Fixes" rows={[
+  {
+    name: "LTX-2.3 Distilled Stage-2 Token Pruning",
+    hintLabel: "Status",
+    hint: "Auto-bypassed (< 6 steps)",
+    description: "Pruning 20–25% of Stage-2 tokens on 3-step distilled LTX-2.3 achieved 1.60s (2.91×) but dropped PSNR to 15.4 dB with sky/canopy rainbow blotches.",
+    reads: [{ label: "Safe default", value: "Automatically bypassed when total_steps < 6; PISA + FBCache (1.974s / 2.35×) or PISA + TeaCache (1.782s / 2.61×) run artifact-free" }]
+  },
+  {
+    name: "HunyuanVideo-13B Aggressive Sparse Threshold (tau=1.25)",
+    hintLabel: "Status",
+    hint: "Rejected",
+    description: "Setting Sol-Attn tau=1.25 lowered PSNR to 20.80 dB and introduced late-frame subject drift.",
+    reads: [{ label: "Safe default", value: "Replaced with tau=1.0 + dense_single=(0,-2,-1): 71.66s (5.19×) on 1× H200 and 42.00s (8.85×) on 2× H200 SP=2 at 22.51 dB" }]
+  },
+  {
+    name: "Hopper FP22 WGMMA Drift & FP32 RoPE Drift",
+    hintLabel: "Status",
+    hint: "Fixed globally",
+    description: "Fast-accum FP8 WGMMA (FP22 internal accumulation) and FP32 complex RoPE accumulate subtle drift on deep 30–60 layer DiTs.",
+    reads: [{ label: "Safe default", value: "Enforce use_fast_accum=False (< 3% latency cost) and register-resident FP64 Triton RoPE (13.63× faster than PyTorch complex128)" }]
+  }
+]} />
+
+## Cross-Framework Comparison
+
+<KvCatalog heading="Objective Strengths & Open Gaps" rows={[
+  {
+    name: "Where WorldFoundry Leads",
+    hint: "Breadth · Streaming · Auditability",
+    description: "One open-source runtime covering all 15 models; lossless BF16 streaming world models at 28–67.55 FPS with O(1) graph segments; mandatory zero-fallback receipts, FP32-accumulated FP8, FP64 Triton RoPE, and RGB visual QA."
+  },
+  {
+    name: "NVIDIA SOL Engine",
+    hint: "Hardware B200 NVFP4",
+    description: "Publishes hardware-validated Blackwell B200 SM100 NVFP4 measurements. WorldFoundry implements SM100 NVFP4 packing and dispatch with unit tests, but hardware benchmarks so far are Hopper H200 FP8."
+  },
+  {
+    name: "SGLang-Diffusion",
+    hint: "Multi-tenant Serving Plane",
+    description: "More mature continuous multi-tenant request batching, scheduler queuing, and OpenAI-compatible HTTP serving endpoints."
+  },
+  {
+    name: "Learned Latent Cascade Adapter",
+    hint: "Future Work",
+    description: "In MiniMax-H3 Super Acceleration, replacing the 1.72s decoded-frame upscale + LTX VAE re-encode handoff with a learned latent bridge can further cut end-to-end latency."
+  }
+]} />
+
+## Verification & Reproduction
+
+Full per-model benchmark scripts, preset flags, and raw receipt paths are maintained in `benchmarks/videogen/BENCHMARK_REPORT.md`.
+
+<Tabs items={['Runtime Receipts', 'Regression Gates', 'Full Report']}>
+  <Tab>
+
+Inspect execution receipts after any accelerated forward to verify zero silent fallbacks:
+
+```python
+dit_report = pipe.native_pipeline.components.denoiser.runtime_optimization_report()
+vae_report = pipe.native_pipeline.components.decoder.runtime_optimization_report()
+assert dit_report["fallbacks"] == []
+assert vae_report["fallbacks"] == []
+print(dit_report["effective"])
+```
+
+  </Tab>
+  <Tab>
+
+Run the public CPU-only and CUDA contract gates from the repository root:
+
+```bash
+# Public CPU-only suite (222 tests)
+CUDA_VISIBLE_DEVICES="" pytest -q tests/core/acceleration/
+
+# Static lint, format, type-check, and DCO sign-off gate
+make pr-check BASE_REF=HEAD~1
+```
+
+  </Tab>
+  <Tab>
+
+See `benchmarks/videogen/BENCHMARK_REPORT.md` in the repository for exact per-model reproduction commands, multi-GPU `torchrun` invocations, and raw timing breakdowns.
+
+  </Tab>
+</Tabs>
+
+## Next
+
+<Cards>
+  <Card title="Inference optimization" description="Every wired load flag, rejected combination, and receipt check." href="/docs/guides/inference-optimization" />
+  <Card title="Pluggable diffusion acceleration" description="Native SANA/Wan plugins, lifecycle guards, and calibrated kernels." href="/docs/guides/diffusion-acceleration" />
+  <Card title="Models" description="Model IDs, task profiles, and checkpoint readiness." href="/docs/guides/supported-models" />
+  <Card title="Evaluation" description="Official benchmark protocols, metrics, and scorecards." href="/docs/evaluation" />
+</Cards>

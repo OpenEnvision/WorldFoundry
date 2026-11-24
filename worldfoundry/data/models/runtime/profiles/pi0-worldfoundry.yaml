@@ -1,6 +1,7 @@
-artifact_filename: pi0_worldfoundry_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: pi0-worldfoundry
+display_name: PI0
+task_family: vla_policy
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi/openpi-assets/checkpoints/pi0_droid
   path: gs://openpi-assets/checkpoints/pi0_droid
@@ -8,10 +9,6 @@ checkpoints:
 - local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi/openpi-assets/checkpoints/pi0_base
   path: gs://openpi-assets/checkpoints/pi0_base
   role: pi0_base_checkpoint
-display_name: PI0
-execution:
-  environment: openpi
-id: pi0-worldfoundry
 input_schema:
   actions:
   - continuous_robot_action_chunk
@@ -20,10 +17,16 @@ input_schema:
   instruction: true
   state: true
   video: false
-integration_status: runtime_ported
+artifact_kind: action_trace
+artifact_filename: pi0_worldfoundry_action_trace.json
+execution:
+  environment: openpi
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_openpi_pi0_worldfoundry_runtime_ported_checkpoint_asset_gated
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - WorldFoundry-native PI0 is backed by the flattened in-tree runtime under worldfoundry/synthesis/action_generation/openpi.
 - Default runtime config uses pi0_droid; real checkpoint-backed execution requires
   local checkpoint, tokenizer, and normalization assets.
-runtime_status: in_tree_openpi_pi0_worldfoundry_runtime_ported_checkpoint_asset_gated
-task_family: vla_policy

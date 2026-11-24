@@ -1,4 +1,5 @@
 import warnings
+
 import torch
 
 try:
@@ -6,10 +7,7 @@ try:
 except ModuleNotFoundError:
     torch3d = None
 
-if torch3d:
-    TORCH3D_AVAILABLE = True
-else:
-    TORCH3D_AVAILABLE = False
+TORCH3D_AVAILABLE = bool(torch3d)
 
 
 def interpolate(src_points, tgt_points, grid, version="torch3d"):
@@ -25,8 +23,8 @@ def interpolate(src_points, tgt_points, grid, version="torch3d"):
                 "Torch3D is not available. For optimal speed and memory consumption, consider setting it up.",
                 stacklevel=2,
             )
-        dis = (grid ** 2).sum(-1)[:, None] + (src_pos ** 2).sum(-1)[:, :, None] - 2 * src_pos @ grid.permute(0, 2, 1)
-        dis[src_alpha == 0] = float('inf')
+        dis = (grid**2).sum(-1)[:, None] + (src_pos**2).sum(-1)[:, :, None] - 2 * src_pos @ grid.permute(0, 2, 1)
+        dis[src_alpha == 0] = float("inf")
         _, idx = dis.min(dim=1)
         idx = idx.view(B, H * W, 1)
     elif version == "torch3d":

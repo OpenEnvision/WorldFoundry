@@ -149,7 +149,9 @@ def attention(
         return output[0] if isinstance(output, tuple) else output
 
     if deterministic:
-        raise NotImplementedError("Deterministic mode in attention is only supported when Flash Attention 3 is available.")
+        raise NotImplementedError(
+            "Deterministic mode in attention is only supported when Flash Attention 3 is available."
+        )
 
     q = q.transpose(1, 2)
     k = k.transpose(1, 2)

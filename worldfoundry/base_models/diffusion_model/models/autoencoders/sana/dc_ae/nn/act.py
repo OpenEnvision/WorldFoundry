@@ -27,7 +27,6 @@ This is DC-AE graph math, not a runner Protocol adapter.
 """
 
 from functools import partial
-from typing import Optional
 
 import torch.nn as nn
 
@@ -46,15 +45,7 @@ REGISTERED_ACT_DICT: dict[str, type] = {
 }
 
 
-def build_act(name: str, **kwargs) -> Optional[nn.Module]:
-    """Build act.
-
-    Args:
-        name: The name.
-
-    Returns:
-        The return value.
-    """
+def build_act(name: str, **kwargs) -> nn.Module | None:
     if name in REGISTERED_ACT_DICT:
         act_cls = REGISTERED_ACT_DICT[name]
         args = build_kwargs_from_config(kwargs, act_cls)

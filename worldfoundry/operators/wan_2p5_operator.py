@@ -1,48 +1,45 @@
 """Module for the Wan2p5 operator implementation."""
 
-from PIL import Image
-from typing import Optional, Dict, Any
+from typing import Any
 
-from .base_operator import BaseOperator
+from PIL import Image
+
 from ._media import pil_to_png_data_url
+from .base_operator import BaseOperator
 
 
 class Wan2p5Operator(BaseOperator):
+    """Prepare prompts and base64-encoded reference images for Wan2.5 requests.
+
+    The operator only preprocesses inputs; it runs no model inference and makes no API calls.
     """
-    Wan2.5 数据处理 Operator
-    
-    负责图像编码、数据预处理等数据预处理工作
-    不涉及模型推理和API调用
-    """
-    
-    def __init__(
-        self,
-        operation_types: list = None
-    ):
+
+    def __init__(self, operation_types: list | None = None):
         """
-        初始化 Wan25Operator
-        
+        Initialize the Wan2.5 operator.
+
         Args:
-            operation_types: 操作类型列表
+            operation_types: Operation types handled by the operator.
         """
         if operation_types is None:
             operation_types = ["image_processing", "prompt_processing"]
-        super(Wan2p5Operator, self).__init__(operation_types)
-        
-        # 初始化交互模板
+        super().__init__(operation_types)
+
         self.interaction_template = ["text_prompt", "image_prompt", "multimodal_prompt"]
         self.interaction_template_init()
-    
+
     def process_image(self, image_input: Image.Image) -> str:
         """
-        编码图像为base64格式
+        Encode an image as a base64 PNG data URL.
+
         Args:
-            image_input: PIL.Image 对象
+            image_input: Reference image.
+
         Returns:
-            base64编码的图像字符串
+            Base64 PNG data URL.
         """
         return pil_to_png_data_url(image_input)
-    
+
     def get_interaction(self, interaction):
         """Process and append the interaction to the current sequence."""
         if self.check_interaction(interaction):
@@ -54,42 +51,36 @@ class Wan2p5Operator(BaseOperator):
             raise TypeError(f"Interaction must be a string, got {type(interaction)}")
         return True
 
-    def process_interaction(self,**kwargs) -> Dict[str, Any]:
+    def process_interaction(self, **kwargs) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         if len(self.current_interaction) == 0:
             raise ValueError("No interaction to process")
         now_interaction = self.current_interaction[-1]
         self.interaction_history.append(now_interaction)
-        return {
-            "processed_prompt": now_interaction
-        }
-    
-    def process_perception(
-        self,
-        images: Optional[Image.Image] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        return {"processed_prompt": now_interaction}
+
+    def process_perception(self, images: Image.Image | None = None, **kwargs) -> dict[str, Any]:
         """
-        处理交互输入，生成模型所需的输入格式
-        
+        Prepare the optional reference image for a request.
+
         Args:
-            images: 参考图像（PIL.Image，可选）
-            **kwargs: 其他参数
-            
+            images: Optional PIL reference image.
+            **kwargs: Ignored.
+
         Returns:
-            Dict 包含处理后的输入数据：
-                - encoded_image: 编码后的图像（如果有）
-                - images: 原始参考图像（如果有）
+            Dict with:
+                - encoded_image: Base64 PNG data URL, or None without an image.
+                - images: The reference image, or None.
+
+        Raises:
+            TypeError: ``images`` is not a PIL image.
         """
-        result: Dict[str, Any] = {
-            "encoded_image": None,
-            "images": None
-        }
-        
+        result: dict[str, Any] = {"encoded_image": None, "images": None}
+
         if images is not None:
             if not isinstance(images, Image.Image):
                 raise TypeError(f"images must be PIL.Image, got {type(images)}")
             result["encoded_image"] = self.process_image(images)
             result["images"] = images
-        
+
         return result

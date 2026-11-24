@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import MutableMapping
 from logging import LoggerAdapter
-from typing import Any, ClassVar, MutableMapping
+from typing import Any, ClassVar
 
 from PIL import Image
 

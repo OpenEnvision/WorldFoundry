@@ -11,7 +11,7 @@ import json
 from worldfoundry.runtime.inference_catalog import get_model_inference_spec
 from worldfoundry.studio.inference.catalog import find_entry
 from worldfoundry.studio.inference.requests import JobCreateRequest, build_inference_run_kwargs
-from worldfoundry.studio.serving.workspace import _model_payload
+from worldfoundry.studio.workspace.app import _model_payload
 from worldfoundry.synthesis.visual_generation.official_video_runtime import OfficialVideoRuntime
 
 
@@ -64,6 +64,9 @@ def test_helios_aliases_do_not_create_duplicate_variants() -> None:
 def test_helios_runtime_does_not_shadow_the_external_kernels_package() -> None:
     runtime = OfficialVideoRuntime.from_model_id("helios")
 
-    assert runtime.runtime["cwd"].endswith("WorldFoundry")
-    assert runtime.runtime["prepend_repo_root_to_pythonpath"] is False
-    assert "--master_port={master_port}" in runtime.runtime["command"]
+    assert "cwd" not in runtime.runtime
+    assert "prepend_repo_root_to_pythonpath" not in runtime.runtime
+    plan = runtime.runtime_plan(output_path="/tmp/helios/output.mp4", prompt="demo")
+    command = plan["command"]
+    assert command[1:4] == ["-m", "torch.distributed.run", "--standalone"]
+    assert command[7] == "worldfoundry.synthesis.visual_generation.helios.infer_helios"

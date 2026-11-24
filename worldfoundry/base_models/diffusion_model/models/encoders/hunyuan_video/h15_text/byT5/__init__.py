@@ -28,8 +28,8 @@ License header above is Tencent Hunyuan; keep it intact.
 """
 
 import json
+
 import torch
-import torch.nn as nn
 from transformers import AutoTokenizer, T5ForConditionalGeneration
 
 from worldfoundry.core.model_loading.checkpoints import load_weights_only, tensor_state_dict
@@ -66,16 +66,16 @@ def create_byt5(args, device):
     Returns:
         tuple: (byt5_tokenizer, byt5_model, byt5_max_length)
     """
-    byt5_max_length = args['byt5_max_length']
-    byt5_config = dict(
-        byt5_name=args['byT5_google_path'],
-        special_token=True,
-        color_special_token=True,
-        font_special_token=True,
-        color_ann_path=args['multilingual_prompt_format_color_path'],
-        font_ann_path=args['multilingual_prompt_format_font_path'],
-        multilingual=True,
-    )
+    byt5_max_length = args["byt5_max_length"]
+    byt5_config = {
+        "byt5_name": args["byT5_google_path"],
+        "special_token": True,
+        "color_special_token": True,
+        "font_special_token": True,
+        "color_ann_path": args["multilingual_prompt_format_color_path"],
+        "font_ann_path": args["multilingual_prompt_format_font_path"],
+        "multilingual": True,
+    }
     huggingface_cache_dir = None
     byt5_model, byt5_tokenizer = load_byt5_and_byt5_tokenizer(
         **byt5_config,
@@ -84,18 +84,18 @@ def create_byt5(args, device):
     )
 
     # Load custom checkpoint if provided
-    if args['byT5_ckpt_path'] is not None:
-        byt5_state_dict = load_weights_only(args['byT5_ckpt_path'], map_location=device)
-        if 'state_dict' in byt5_state_dict:
+    if args["byT5_ckpt_path"] is not None:
+        byt5_state_dict = load_weights_only(args["byT5_ckpt_path"], map_location=device)
+        if "state_dict" in byt5_state_dict:
             sd = byt5_state_dict["state_dict"]
             newsd = {}
             for k, v in sd.items():
-                if k.startswith('module.text_tower.encoder.'):
-                    newsd[k[len('module.text_tower.encoder.'):]] = v
+                if k.startswith("module.text_tower.encoder."):
+                    newsd[k[len("module.text_tower.encoder.") :]] = v
             byt5_state_dict = newsd
         byt5_state_dict = tensor_state_dict(
             byt5_state_dict,
-            source=args['byT5_ckpt_path'],
+            source=args["byT5_ckpt_path"],
             wrapper_keys=(),
         )
         byt5_model.load_state_dict(byt5_state_dict)
@@ -124,16 +124,16 @@ def add_special_token(
         font_ann_path (str): Path to font annotation JSON.
         multilingual (bool): Whether to use multilingual font tokens.
     """
-    with open(font_ann_path, 'r') as f:
+    with open(font_ann_path) as f:
         idx_font_dict = json.load(f)
-    with open(color_ann_path, 'r') as f:
+    with open(color_ann_path) as f:
         idx_color_dict = json.load(f)
 
     if multilingual:
-        font_token = [f'<{font_code[:2]}-font-{idx_font_dict[font_code]}>' for font_code in idx_font_dict]
+        font_token = [f"<{font_code[:2]}-font-{idx_font_dict[font_code]}>" for font_code in idx_font_dict]
     else:
-        font_token = [f'<font-{i}>' for i in range(len(idx_font_dict))]
-    color_token = [f'<color-{i}>' for i in range(len(idx_color_dict))]
+        font_token = [f"<font-{i}>" for i in range(len(idx_font_dict))]
+    color_token = [f"<color-{i}>" for i in range(len(idx_color_dict))]
     additional_special_tokens = []
     if add_color:
         additional_special_tokens += color_token
@@ -146,12 +146,12 @@ def add_special_token(
 
 
 def load_byt5_and_byt5_tokenizer(
-    byt5_name='google/byt5-small',
+    byt5_name="google/byt5-small",
     special_token=False,
     color_special_token=False,
     font_special_token=False,
-    color_ann_path='assets/color_idx.json',
-    font_ann_path='assets/font_idx_512.json',
+    color_ann_path="assets/color_idx.json",
+    font_ann_path="assets/font_idx_512.json",
     huggingface_cache_dir=None,
     multilingual=False,
     device=None,
@@ -182,10 +182,7 @@ def load_byt5_and_byt5_tokenizer(
         cache_dir=huggingface_cache_dir,
     ).get_encoder()
 
-    if "cuda" not in str(device):
-        device = torch.device(device)
-    else:
-        device = torch.device(device)
+    device = torch.device(device)
     byt5_text_encoder = byt5_text_encoder.to(device)
 
     if special_token:

@@ -1,17 +1,11 @@
 import json
-import logging
-import os
-import pathlib
 import re
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
-
-import torch
 
 from worldfoundry.core.io.paths import package_data_path
 
-_MODEL_CONFIG_PATHS = [package_data_path('models', 'runtime', 'configs', 'llava_next/eva_clip')]
+_MODEL_CONFIG_PATHS = [package_data_path("models", "runtime", "configs", "llava_next/eva_clip")]
 _MODEL_CONFIGS = {}  # directory (model_name: config) of model architecture configs
 
 
@@ -32,7 +26,7 @@ def _rescan_model_configs():
                 config_files.extend(config_path.glob(f"*{ext}"))
 
     for cf in config_files:
-        with open(cf, "r", encoding="utf8") as f:
+        with open(cf, encoding="utf8") as f:
             model_cfg = json.load(f)
             if all(a in model_cfg for a in ("embed_dim", "vision_cfg", "text_cfg")):
                 _MODEL_CONFIGS[cf.stem] = model_cfg

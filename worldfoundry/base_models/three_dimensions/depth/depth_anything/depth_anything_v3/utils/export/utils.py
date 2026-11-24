@@ -12,20 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> export -> utils.py functionality."""
-
 import numpy as np
 import torch
 
 
 def _denorm_and_to_uint8(image_tensor: torch.Tensor) -> np.ndarray:
     """Denormalize to [0,255] and output (N, H, W, 3) uint8."""
-    resnet_mean = torch.tensor(
-        [0.485, 0.456, 0.406], dtype=image_tensor.dtype, device=image_tensor.device
-    )
-    resnet_std = torch.tensor(
-        [0.229, 0.224, 0.225], dtype=image_tensor.dtype, device=image_tensor.device
-    )
+    resnet_mean = torch.tensor([0.485, 0.456, 0.406], dtype=image_tensor.dtype, device=image_tensor.device)
+    resnet_std = torch.tensor([0.229, 0.224, 0.225], dtype=image_tensor.dtype, device=image_tensor.device)
     img = image_tensor * resnet_std[None, :, None, None] + resnet_mean[None, :, None, None]
     img = torch.clamp(img, 0.0, 1.0)
     img = (img.permute(0, 2, 3, 1).cpu().numpy() * 255.0).round().astype(np.uint8)  # (N,H,W,3)

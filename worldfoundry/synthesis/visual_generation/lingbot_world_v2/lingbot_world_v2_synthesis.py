@@ -26,7 +26,7 @@ class LingBotWorldV2Synthesis(BaseSynthesis):
         args: Any = None,
         device: str = "cuda",
         **kwargs: Any,
-    ) -> "LingBotWorldV2Synthesis":
+    ) -> LingBotWorldV2Synthesis:
         del args
         return cls(
             LingBotWorldV2Runtime.from_pretrained(

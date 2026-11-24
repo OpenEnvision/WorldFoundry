@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Literal, TypeAlias
+from typing import Literal
 
 import einops
 import flax.linen as nn
@@ -10,11 +10,7 @@ from ...openpi import array_typing as at
 from ...openpi.modeling import lora
 from ...openpi.modeling.gemma import Config, _apply_rope, _name
 
-
-
-Variant = Literal[
-    "dummy", "gemma_300m", "gemma_300m_lora", "gemma_2b", "gemma_2b_lora", "gemma_150m"
-]
+Variant = Literal["dummy", "gemma_300m", "gemma_300m_lora", "gemma_2b", "gemma_2b_lora", "gemma_150m"]
 
 
 def get_config(variant: Variant) -> Config:
@@ -28,7 +24,7 @@ def get_config(variant: Variant) -> Config:
             num_kv_heads=1,
             head_dim=16,
         )
-    if variant == "gemma_300m": # This is the action expert in pi05
+    if variant == "gemma_300m":  # This is the action expert in pi05
         # 311M params
         return Config(
             width=1024,
@@ -38,7 +34,7 @@ def get_config(variant: Variant) -> Config:
             num_kv_heads=1,
             head_dim=256,
         )
-    if variant == "gemma_2b": # This is the VLM expert in pi05
+    if variant == "gemma_2b":  # This is the VLM expert in pi05
         return Config(
             width=2048,
             depth=18,
@@ -87,13 +83,12 @@ def get_config(variant: Variant) -> Config:
     raise ValueError(f"Unknown variant: {variant}")
 
 
-def _name(name, i):
+def _name(name, i):  # noqa: F811 - Later definition replaces the earlier one, as upstream.
     if i == -1:
         return f"{name}_mem"
     elif i == 0:
         return name
     return f"{name}_{i}"
-
 
 
 @at.typecheck
@@ -120,7 +115,7 @@ class Attention_with_MemoryExpert(nn.Module):
             if config.num_kv_heads == config.num_heads:
                 qkv_einsum = lora.Einsum(
                     shape=(3, config.num_heads, config.width, config.head_dim),
-                    name=_name("qkv_einsum", i-1),
+                    name=_name("qkv_einsum", i - 1),
                     init_fn=nn.initializers.lecun_normal(in_axis=-2, out_axis=-1, batch_axis=(0, 1)),
                     lora_config=config.lora_configs.get("attn"),
                 )
@@ -128,14 +123,14 @@ class Attention_with_MemoryExpert(nn.Module):
             else:
                 q_einsum = lora.Einsum(
                     shape=(config.num_heads, config.width, config.head_dim),
-                    name=_name("q_einsum", i-1),
+                    name=_name("q_einsum", i - 1),
                     init_fn=nn.initializers.lecun_normal(in_axis=-2, out_axis=-1, batch_axis=(0,)),
                     lora_config=config.lora_configs.get("attn"),
                 )
                 q = q_einsum("BTD,NDH->BTNH", x)
                 kv_einsum = lora.Einsum(
                     shape=(2, config.num_kv_heads, config.width, config.head_dim),
-                    name=_name("kv_einsum", i-1),
+                    name=_name("kv_einsum", i - 1),
                     init_fn=nn.initializers.lecun_normal(in_axis=-2, out_axis=-1, batch_axis=(0, 1)),
                     lora_config=config.lora_configs.get("attn"),
                 )
@@ -181,7 +176,7 @@ class Attention_with_MemoryExpert(nn.Module):
                 end = start + x.shape[1]
                 out_einsum = lora.Einsum(
                     shape=(config.num_heads, config.head_dim, config.width),
-                    name=_name("attn_vec_einsum", i-1),
+                    name=_name("attn_vec_einsum", i - 1),
                     init_fn=nn.initializers.lecun_normal(in_axis=(-3, -2), out_axis=-1),
                     lora_config=config.lora_configs.get("attn"),
                 )

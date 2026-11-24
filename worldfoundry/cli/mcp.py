@@ -1,4 +1,4 @@
-"""worldfoundry mcp - start the MCP evaluation server."""
+"""``wf mcp`` — start the WorldFoundry MCP server."""
 
 from __future__ import annotations
 
@@ -6,37 +6,24 @@ import argparse
 
 
 def add_mcp_parser(subparsers: argparse._SubParsersAction) -> None:
-    """Register the ``mcp`` sub-command on the root CLI parser.
+    """Register ``wf mcp`` on the root CLI parser."""
 
-    Args:
-        subparsers: The subparser collection from the root
-            ``worldfoundry`` command.
-    """
+    from worldfoundry.mcp import add_server_arguments
+
     parser = subparsers.add_parser(
         "mcp",
         help="Start the MCP server for agent-driven WorldFoundry evaluation",
     )
-    parser.add_argument(
-        "--transport",
-        choices=("stdio", "sse"),
-        default="stdio",
-        help="MCP transport type.",
-    )
+    add_server_arguments(parser)
     parser.set_defaults(func=run_mcp)
 
 
 def run_mcp(args: argparse.Namespace) -> int:
-    """Start the MCP evaluation server with the requested transport.
+    """Run the MCP server with the parsed transport options."""
 
-    Args:
-        args: Parsed CLI namespace with ``transport`` selection.
-
-    Returns:
-        Exit code from the MCP server process.
-    """
     from worldfoundry.mcp.server import run_server
 
-    return run_server(args.transport)
+    return run_server(args.transport, host=args.host, port=args.port)
 
 
 __all__ = ["add_mcp_parser", "run_mcp"]

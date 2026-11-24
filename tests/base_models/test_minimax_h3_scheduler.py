@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import math
-
 import pytest
 import torch
 
@@ -23,9 +21,7 @@ def test_euler_eta0_step_ratio_rule() -> None:
     denoised = torch.randn(4, 4)
     sigma_curr, sigma_next = 0.8, 0.5
     ratio = sigma_next / sigma_curr
-    out = sched.minimax_h3_euler_eta0_step(
-        state, denoised, sigma_curr=sigma_curr, sigma_next=sigma_next
-    )
+    out = sched.minimax_h3_euler_eta0_step(state, denoised, sigma_curr=sigma_curr, sigma_next=sigma_next)
     assert torch.allclose(out, ratio * state + (1.0 - ratio) * denoised, atol=1e-6)
 
 

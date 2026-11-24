@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import functools
 import math
-from typing import Any, Mapping
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
+from typing import Any
 
 import msgpack
 import numpy as np
@@ -18,7 +19,7 @@ class BasePolicy(ABC):
     def infer(self, observation: Mapping[str, Any]) -> Any:
         """Return an action for one decoded observation."""
 
-    def reset(self, reset_info: Mapping[str, Any]) -> None:
+    def reset(self, reset_info: Mapping[str, Any]) -> None:  # noqa: B027 - Optional hook with a no-op default.
         """Reset optional episode-local state."""
 
 
@@ -67,9 +68,7 @@ def unpack_array(value: dict[Any, Any]) -> Any:
             raise TypeError("DreamZero ndarray payload must contain bytes")
         expected = math.prod(shape) * dtype.itemsize
         if expected != len(data):
-            raise ValueError(
-                f"DreamZero ndarray payload length mismatch: expected {expected}, got {len(data)}"
-            )
+            raise ValueError(f"DreamZero ndarray payload length mismatch: expected {expected}, got {len(data)}")
         return np.frombuffer(data, dtype=dtype).reshape(shape)
     if value.get(b"__npgeneric__") is True:
         dtype = _safe_dtype(value[b"dtype"])

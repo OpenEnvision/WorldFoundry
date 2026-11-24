@@ -2,8 +2,9 @@
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 import imageio
 import numpy as np
@@ -50,9 +51,7 @@ class AstraOperator(BaseOperator):
         )
 
     def check_interaction(self, interaction):
-        """
-        检验输入是否符合astra输入格式
-        """
+        """Check that the interaction is one of the Astra interaction template entries."""
         if interaction not in self.interaction_template:
             raise ValueError(f"Invalid interaction: {interaction}. Allowed: {self.interaction_template}")
         return True
@@ -113,9 +112,7 @@ class AstraOperator(BaseOperator):
         return camera_embedding_full.to(self.device, dtype=model_dtype)
 
     def process_perception(self, condition_video=None, condition_image=None):
-        """
-        加载图像或视频文件，预处理为 Tensor Frames，供 Synthesis 编码使用。
-        """
+        """Load an image or video file and preprocess it into tensor frames for the synthesis encoder."""
         frames = None
 
         if condition_video:
@@ -151,12 +148,11 @@ class AstraOperator(BaseOperator):
 
     @staticmethod
     def _crop_and_resize(image: Image.Image) -> Image.Image:
-        """Crop and resize implementation."""
         target_w, target_h = 832, 480
         resize = cast(Callable[..., Image.Image], v2.functional.resize)
         return resize(
             image,
-            [round(target_h), round(target_w)],
+            [target_h, target_w],
             interpolation=v2.InterpolationMode.BILINEAR,
         )
 
@@ -183,13 +179,11 @@ class AstraOperator(BaseOperator):
 
     @staticmethod
     def _needed_frame_count(start_frame, initial_condition_frames, new_frames):
-        """Needed frame count implementation."""
         framepack_needed_frames = FRAMEPACK_CONTEXT_FRAMES + new_frames
         return max(start_frame + initial_condition_frames + new_frames, framepack_needed_frames, 30)
 
     @staticmethod
     def _camera_embedding_from_rows(rows, start_frame, condition_end):
-        """Camera embedding from rows implementation."""
         pose_embedding = torch.stack(rows, dim=0)
         if pose_embedding.dim() == 3:
             pose_embedding = rearrange(pose_embedding, "b c d -> b (c d)")
@@ -200,7 +194,6 @@ class AstraOperator(BaseOperator):
 
     @staticmethod
     def _relative_pose_rows_from_extrinsics(cam_extrinsic, max_needed_frames, time_compression_ratio):
-        """Relative pose rows from extrinsics implementation."""
         relative_poses = []
         for i in range(max_needed_frames):
             frame_idx = i * time_compression_ratio
@@ -216,7 +209,6 @@ class AstraOperator(BaseOperator):
 
     @staticmethod
     def _apply_yaw(pose, yaw_per_frame):
-        """Apply yaw implementation."""
         pose[0, 0] = np.cos(yaw_per_frame)
         pose[0, 2] = np.sin(yaw_per_frame)
         pose[2, 0] = -np.sin(yaw_per_frame)
@@ -224,7 +216,6 @@ class AstraOperator(BaseOperator):
 
     @classmethod
     def _sekai_synthetic_pose(cls, frame_idx, condition_frames, stage_1, stage_2, direction):
-        """Sekai synthetic pose implementation."""
         active_start = condition_frames
         active_end = condition_frames + stage_1 + stage_2
         pose = np.eye(4, dtype=np.float32)
@@ -259,7 +250,6 @@ class AstraOperator(BaseOperator):
 
     @staticmethod
     def _openx_synthetic_pose():
-        """Openx synthetic pose implementation."""
         roll_per_frame = 0.02
         pitch_per_frame = 0.01
         yaw_per_frame = 0.015
@@ -380,7 +370,7 @@ class AstraOperator(BaseOperator):
             if len(keyframe_poses) == 0:
                 pose_sequence = torch.zeros(max_needed_frames, 7, dtype=torch.float32)
                 return self._camera_embedding_from_rows(
-                    [row for row in pose_sequence],
+                    list(pose_sequence),
                     start_frame,
                     start_frame + initial_condition_frames,
                 )

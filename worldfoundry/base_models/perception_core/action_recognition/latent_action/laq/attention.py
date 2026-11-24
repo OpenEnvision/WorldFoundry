@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import torch
 import torch.nn.functional as F
 from einops import rearrange
@@ -43,9 +41,7 @@ class PEG(nn.Module):
         self.causal = causal
         self.dsconv = nn.Conv3d(dim, dim, 3, groups=dim)
 
-    def forward(
-        self, x: Tensor, shape: Tuple[int, int, int, int] | None = None
-    ) -> Tensor:
+    def forward(self, x: Tensor, shape: tuple[int, int, int, int] | None = None) -> Tensor:
         needs_shape = x.ndim == 3
         if needs_shape and shape is None:
             raise ValueError("Flattened PEG input requires its video shape")
@@ -86,22 +82,15 @@ class Attention(nn.Module):
         self.k_scale = nn.Parameter(torch.ones(dim_head))
         self.to_out = nn.Linear(inner_dim, dim, bias=False)
 
-    def forward(
-        self, x: Tensor, attn_bias: Tensor | None = None
-    ) -> Tensor:
+    def forward(self, x: Tensor, attn_bias: Tensor | None = None) -> Tensor:
         kv_input = x
         query = self.to_q(self.norm(x))
         key, value = self.to_kv(kv_input).chunk(2, dim=-1)
-        query, key, value = (
-            rearrange(item, "b n (h d) -> b h n d", h=self.heads)
-            for item in (query, key, value)
-        )
+        query, key, value = (rearrange(item, "b n (h d) -> b h n d", h=self.heads) for item in (query, key, value))
 
         query = F.normalize(query, dim=-1) * self.q_scale
         key = F.normalize(key, dim=-1) * self.k_scale
-        similarity = einsum(
-            "b h i d, b h j d -> b h i j", query, key
-        ) * self.scale
+        similarity = einsum("b h i d, b h j d -> b h i j", query, key) * self.scale
         if attn_bias is not None:
             similarity = similarity + attn_bias
 
@@ -124,31 +113,19 @@ class ContinuousPositionBias(nn.Module):
         self.num_dims = num_dims
         self.log_dist = log_dist
 
-        modules: list[nn.Module] = [
-            nn.Sequential(nn.Linear(num_dims, dim), nn.LeakyReLU(0.1))
-        ]
-        modules.extend(
-            nn.Sequential(nn.Linear(dim, dim), nn.LeakyReLU(0.1))
-            for _ in range(layers - 1)
-        )
+        modules: list[nn.Module] = [nn.Sequential(nn.Linear(num_dims, dim), nn.LeakyReLU(0.1))]
+        modules.extend(nn.Sequential(nn.Linear(dim, dim), nn.LeakyReLU(0.1)) for _ in range(layers - 1))
         modules.append(nn.Linear(dim, heads))
         self.net = nn.ModuleList(modules)
         self.register_buffer("rel_pos", None, persistent=False)
 
-    def forward(
-        self, *dimensions: int, device: torch.device | str = "cpu"
-    ) -> Tensor:
+    def forward(self, *dimensions: int, device: torch.device | str = "cpu") -> Tensor:
         positions = [torch.arange(dimension, device=device) for dimension in dimensions]
         grid = torch.stack(torch.meshgrid(*positions, indexing="ij"))
         grid = rearrange(grid, "c ... -> (...) c")
-        relative_position = (
-            rearrange(grid, "i c -> i 1 c") - rearrange(grid, "j c -> 1 j c")
-        )
+        relative_position = rearrange(grid, "i c -> i 1 c") - rearrange(grid, "j c -> 1 j c")
         if self.log_dist:
-            relative_position = (
-                torch.sign(relative_position)
-                * torch.log(relative_position.abs() + 1)
-            )
+            relative_position = torch.sign(relative_position) * torch.log(relative_position.abs() + 1)
         self.rel_pos = relative_position
 
         bias = relative_position.float()
@@ -196,7 +173,7 @@ class Transformer(nn.Module):
     def forward(
         self,
         x: Tensor,
-        video_shape: Tuple[int, int, int, int] | None = None,
+        video_shape: tuple[int, int, int, int] | None = None,
         attn_bias: Tensor | None = None,
         **_: object,
     ) -> Tensor:

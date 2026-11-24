@@ -1,17 +1,17 @@
 ---
 title: STEVO-Bench
-description: "Caltech state-evolution-out-of-sight bench: 225 tasks, VLM judges. WorldFoundry vendors the official evaluator; it does not invent a board."
+description: "Caltech state-evolution-out-of-sight bench: 225 tasks, VLM judges. WorldFoundry vendors the official evaluator."
 ---
 
-STEVO-Bench (Caltech GLab) asks whether a video world model **keeps simulating state while it is unobserved**. Each task applies an observation control (in-scene occlusion, camera lookaway, or illumination dimming) plus a trigger action. VLM judges check that the hidden process kept progressing and stayed physically plausible. Official size: **225 tasks across 6 world-change categories**. License: MIT (retained in the vendored tree, pin `680fb6ee2733…`).
+STEVO-Bench (Caltech GLab) asks whether a video world model **keeps simulating state while it is unobserved**. Each task applies an observation control (in-scene occlusion, camera lookaway, or illumination dimming) plus a trigger action. VLM judges check that the hidden process kept progressing and stayed physically plausible. Official size: **225 tasks across 6 world-change categories**. License: MIT.
 
-Three executable criteria (pinned `eval/eval_cli.py`): `control` (`occlusion_done`, `trigger_applied`), `physics` (`physical_inaccuracy`), `state` (`state_evol`). The pinned CLI does **not** define `--artifact` or `--coherence`. Aggregation matches `eval/summarize_results.py`: `control_success = occlusion_done AND trigger_applied`, `task_success = state_evol AND NOT physical_inaccuracy` (primary).
+Three executable criteria (official `eval/eval_cli.py`): `control` (`occlusion_done`, `trigger_applied`), `physics` (`physical_inaccuracy`), `state` (`state_evol`). Aggregation matches `eval/summarize_results.py`: `control_success = occlusion_done AND trigger_applied`, `task_success = state_evol AND NOT physical_inaccuracy` (primary).
 
 Paper: [STEVO-Bench](http://arxiv.org/abs/2603.13215). Site: [glab-caltech.github.io/STEVOBench](https://glab-caltech.github.io/STEVOBench/). Tasks: [`JhanLiufu/StEvo-Bench`](https://huggingface.co/datasets/JhanLiufu/StEvo-Bench). Upstream: [jhanliufu-personal/STEVO-Bench](https://github.com/jhanliufu-personal/STEVO-Bench).
 
-WorldFoundry **vendors the official judge code**. Judges are remote VLM APIs (Gemini by default; `GOOGLE_API_KEY`). Paper config: `--ensemble-size 3`. `--run-fixture` is a synthetic normalizer sample only.
+WorldFoundry **vendors the official judge code**. Judges are remote VLM APIs (Gemini by default; `GOOGLE_API_KEY`). Paper config: `--ensemble-size 3`. `--run-fixture` runs a synthetic sample that only checks normalization and produces no real scores.
 
-`worldfoundry/data/benchmarks/assets/stevo-bench/sample_run/` mirrors the official evaluator layout (`eval/eval_cli.py` plus `eval/summarize_results.py` at the pinned revision): `summary.json` plus `per_task/<task_id>/se_report__<provider>__<model>.json`. It has **no** upstream tasks, prompts, videos, or real judge outputs. The real 225-task suite is `JhanLiufu/StEvo-Bench`; real verdicts come from hosted VLM APIs during `--run-official`. `per_task/candle_burn_01/` deliberately carries a verdict that is missing from `summary.json` so the report-merge path stays covered.
+`worldfoundry/data/benchmarks/assets/stevo-bench/sample_run/` is a synthetic example of the official evaluator output layout (`eval/eval_cli.py` plus `eval/summarize_results.py`): `summary.json` plus `per_task/<task_id>/se_report__<provider>__<model>.json`. It has **no** upstream tasks, prompts, videos, or real judge outputs. The real 225-task suite is `JhanLiufu/StEvo-Bench`; real verdicts come from hosted VLM APIs during `--run-official`.
 
 <BenchmarkPageSections id="stevo-bench" locale="en" />
 
@@ -24,7 +24,7 @@ export WORLDFOUNDRY_STEVO_BENCH_VLM_PROVIDER=gemini
 export GOOGLE_API_KEY=<your-key>
 
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py \
   --run-official \
   --generated-artifact-dir /path/to/generated \
   --task-root "${WORLDFOUNDRY_STEVO_BENCH_TASK_ROOT}" \
@@ -39,7 +39,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 Import `summary.json`, a run directory, a `runs/` parent, or a bare `per_task/` tree without an API key:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id stevo-bench \
   --mode official-validation \
   --official-results-path /path/to/runs/<output_map_stem> \
@@ -51,7 +51,7 @@ Pass `--output-map` when stems are ambiguous. Filename-derived maps, sub-3 ensem
 
 Generated videos should sit in one directory as `<task_id>.mp4` plus exactly one `output_map.json` that maps each task YAML `id` to a filename relative to that directory. Extra vendor Python deps (judge APIs, OpenCV) live in `worldfoundry/data/benchmarks/requirements/stevo-bench.txt`; the cross-model ensemble extras are in `worldfoundry/data/benchmarks/requirements/stevo-bench-eval-se.txt`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/stevo-bench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench`.
+Manifest and vendored runtime: `worldfoundry/data/benchmarks/tasks/external/stevo-bench.yaml`, `worldfoundry/evals/tasks/execution/runners/stevo_bench/runtime/stevo_bench`.
 
 Outputs include `scorecard.json` (primary `task_success`) with `leaderboard_blockers` / `comparability_blockers`.
 
@@ -72,7 +72,7 @@ outputs/my_model_my_run/
 }
 ```
 
-Task ids must match the `id` field in the task YAML under `--task-root`. The official runner calls vendored `eval.eval_cli` (paper ensemble `--ensemble-size 3`, majority). Do **not** use deleted vendor shells (`run_eval.sh`) or the older `--artifact` / `--coherence` flags — they are not on the pinned CLI.
+Task ids must match the `id` field in the task YAML under `--task-root`. The official runner calls vendored `eval.eval_cli` (paper ensemble `--ensemble-size 3`, majority). Do **not** pass `--artifact` or `--coherence`; the official CLI does not define them.
 
 A finished official run directory looks like:
 
@@ -87,7 +87,7 @@ runs/<output_map_stem>/
 
 `--summarize` refreshes `summary.json` the same way as `eval.summarize_results`. `--official-results-path` can point at that run dir, its parent `runs/`, `summary.json`, or a bare `per_task/` tree.
 
-The vendored tree also has a **generation** helper (`generation.run_world_models`) that writes `outputs/{model}_{run_name}/` plus an output map. Models register in `generation/configs/models.yaml` as `type: api` (Veo / Sora adapters, `prompt_field`, `api_key_env`, RPM / timeout) or `type: local` (wrapper `run_single.sh` with `--prompt`, `--output`, optional `--init_frame` / `--camera_control`; large models can add `daemon_script` + `--tasks_json`). WorldFoundry generation still goes through integrated WorldFoundry models; that helper is optional vendor tooling.
+The vendored tree also has a **generation** helper (`generation.run_world_models`) that writes `outputs/{model}_{run_name}/` plus an output map. Models register in `generation/configs/models.yaml` as `type: api` (Veo / Sora adapters, `prompt_field`, `api_key_env`, RPM / timeout) or `type: local` (wrapper `run_single.sh` with `--prompt`, `--output`, optional `--init_frame` / `--camera_control`; large models can add `daemon_script` + `--tasks_json`). Generate with integrated WorldFoundry models; the helper is optional upstream tooling.
 
 ## Optional `eval_se` research scripts
 
@@ -97,6 +97,6 @@ The vendored tree also has a **generation** helper (`generation.run_world_models
 - Cross-model Gemini+GPT unanimous voting: `gemini_gpt_evaluator.py` (install `worldfoundry/data/benchmarks/requirements/stevo-bench-eval-se.txt`).
 - Default filter in those scripts: level-4 tasks whose id does not end in `_00`, with initial image + video + YAML present.
 
-Use them only for analysis. Reportable WorldFoundry scores come from `run_stevo_bench_official_runner.py` / `worldfoundry-eval zoo benchmark-run --benchmark-id stevo-bench`.
+Use them only for analysis. Reportable WorldFoundry scores come from `run_stevo_bench_official_runner.py` / `wf zoo benchmark-run --benchmark-id stevo-bench`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

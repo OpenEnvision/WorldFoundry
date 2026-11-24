@@ -1,6 +1,7 @@
 """Convert a PyTorch .pth file to .safetensors format."""
 
 import argparse
+
 import torch
 from safetensors.torch import save_file
 

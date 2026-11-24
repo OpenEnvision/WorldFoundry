@@ -13,12 +13,13 @@
 #    limitations under the License.
 
 
-from typing import Optional, Tuple
-
 import torch
+from transformers import AutoConfig, AutoModelForCausalLM, GenerationConfig, MptConfig, MptForCausalLM, MptModel
 
-from transformers import AutoConfig, AutoModelForCausalLM, MptConfig, MptForCausalLM, MptModel, GenerationConfig
-from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.model.llava_arch import LlavaMetaModel, LlavaMetaForCausalLM
+from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.model.llava_arch import (
+    LlavaMetaForCausalLM,
+    LlavaMetaModel,
+)
 
 
 class LlavaMptConfig(MptConfig):
@@ -30,7 +31,7 @@ class LlavaMptModel(LlavaMetaModel, MptModel):
 
     def __init__(self, config: MptConfig):
         config.hidden_size = config.d_model
-        super(LlavaMptModel, self).__init__(config)
+        super().__init__(config)
 
     def embed_tokens(self, x):
         return self.wte(x)
@@ -67,20 +68,21 @@ class LlavaMptForCausalLM(MptForCausalLM, LlavaMetaForCausalLM):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        past_key_values: tuple[tuple[torch.Tensor, torch.Tensor], ...] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         cache_position=None,
         images=None,
     ):
-
-        input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(input_ids, attention_mask, past_key_values, labels, images)
+        input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(
+            input_ids, attention_mask, past_key_values, labels, images
+        )
 
         return super().forward(
             input_ids,
@@ -96,7 +98,9 @@ class LlavaMptForCausalLM(MptForCausalLM, LlavaMetaForCausalLM):
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
         images = kwargs.pop("images", None)
-        _inputs = super().prepare_inputs_for_generation(input_ids, past_key_values=past_key_values, inputs_embeds=inputs_embeds, **kwargs)
+        _inputs = super().prepare_inputs_for_generation(
+            input_ids, past_key_values=past_key_values, inputs_embeds=inputs_embeds, **kwargs
+        )
         _inputs["images"] = images
         return _inputs
 

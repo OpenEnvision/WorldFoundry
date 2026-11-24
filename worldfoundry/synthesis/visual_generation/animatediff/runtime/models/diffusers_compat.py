@@ -5,12 +5,14 @@ import torch
 try:
     from diffusers.models.modeling_utils import ModelMixin, load_state_dict
 except ImportError:  # diffusers < 0.20
-    from diffusers.modeling_utils import ModelMixin, load_state_dict
+    from diffusers.modeling_utils import ModelMixin as ModelMixin
+    from diffusers.modeling_utils import load_state_dict as load_state_dict
 
 try:
     from diffusers.models.attention import AdaLayerNorm, CrossAttention, FeedForward
 except ImportError:  # diffusers >= 0.38 renamed CrossAttention to Attention.
-    from diffusers.models.attention import AdaLayerNorm, FeedForward
+    from diffusers.models.attention import AdaLayerNorm as AdaLayerNorm
+    from diffusers.models.attention import FeedForward as FeedForward
     from diffusers.models.attention_processor import Attention
 
     class CrossAttention(Attention):

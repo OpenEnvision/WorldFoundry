@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> __init__.py functionality."""
-
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -35,11 +33,6 @@ def __getattr__(name: str) -> Any:
 
 
 def make_depth_model(model: str):
-    """Make depth model.
-
-    Args:
-        model: The model.
-    """
     if "-" not in model:
         model_name, model_sub = model, ""
     else:

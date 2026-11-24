@@ -1,18 +1,18 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import Sequence, Tuple, Union
+from collections.abc import Sequence
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from mmdet.models.utils import multi_apply
-from mmdet.utils import (ConfigType, OptConfigType, OptInstanceList,
-                         OptMultiConfig, reduce_mean)
+from mmdet.utils import ConfigType, OptConfigType, OptInstanceList, OptMultiConfig, reduce_mean
 from mmengine import MessageHub
 from mmengine.model import BaseModule, bias_init_with_prob
 from mmengine.structures import InstanceData
 from torch import Tensor
 
 from mmyolo.registry import MODELS
+
 from ..layers.yolo_bricks import PPYOLOESELayer
 from ..utils import gt_instances_preprocess
 from .yolov6_head import YOLOv6Head
@@ -44,17 +44,18 @@ class PPYOLOEHeadModule(BaseModule):
             Defaults to None.
     """
 
-    def __init__(self,
-                 num_classes: int,
-                 in_channels: Union[int, Sequence],
-                 widen_factor: float = 1.0,
-                 num_base_priors: int = 1,
-                 featmap_strides: Sequence[int] = (8, 16, 32),
-                 reg_max: int = 16,
-                 norm_cfg: ConfigType = dict(
-                     type='BN', momentum=0.1, eps=1e-5),
-                 act_cfg: ConfigType = dict(type='SiLU', inplace=True),
-                 init_cfg: OptMultiConfig = None):
+    def __init__(
+        self,
+        num_classes: int,
+        in_channels: int | Sequence,
+        widen_factor: float = 1.0,
+        num_base_priors: int = 1,
+        featmap_strides: Sequence[int] = (8, 16, 32),
+        reg_max: int = 16,
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.1, "eps": 1e-5},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "SiLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
+        init_cfg: OptMultiConfig = None,
+    ):
         super().__init__(init_cfg=init_cfg)
 
         self.num_classes = num_classes
@@ -66,8 +67,7 @@ class PPYOLOEHeadModule(BaseModule):
         self.reg_max = reg_max
 
         if isinstance(in_channels, int):
-            self.in_channels = [int(in_channels * widen_factor)
-                                ] * self.num_levels
+            self.in_channels = [int(in_channels * widen_factor)] * self.num_levels
         else:
             self.in_channels = [int(i * widen_factor) for i in in_channels]
 
@@ -78,11 +78,11 @@ class PPYOLOEHeadModule(BaseModule):
         super().init_weights()
         for conv in self.cls_preds:
             conv.bias.data.fill_(bias_init_with_prob(prior_prob))
-            conv.weight.data.fill_(0.)
+            conv.weight.data.fill_(0.0)
 
         for conv in self.reg_preds:
             conv.bias.data.fill_(1.0)
-            conv.weight.data.fill_(0.)
+            conv.weight.data.fill_(0.0)
 
     def _init_layers(self):
         """initialize conv layers in PPYOLOE head."""
@@ -92,24 +92,18 @@ class PPYOLOEHeadModule(BaseModule):
         self.reg_stems = nn.ModuleList()
 
         for in_channel in self.in_channels:
-            self.cls_stems.append(
-                PPYOLOESELayer(
-                    in_channel, norm_cfg=self.norm_cfg, act_cfg=self.act_cfg))
-            self.reg_stems.append(
-                PPYOLOESELayer(
-                    in_channel, norm_cfg=self.norm_cfg, act_cfg=self.act_cfg))
+            self.cls_stems.append(PPYOLOESELayer(in_channel, norm_cfg=self.norm_cfg, act_cfg=self.act_cfg))
+            self.reg_stems.append(PPYOLOESELayer(in_channel, norm_cfg=self.norm_cfg, act_cfg=self.act_cfg))
 
         for in_channel in self.in_channels:
-            self.cls_preds.append(
-                nn.Conv2d(in_channel, self.num_classes, 3, padding=1))
-            self.reg_preds.append(
-                nn.Conv2d(in_channel, 4 * (self.reg_max + 1), 3, padding=1))
+            self.cls_preds.append(nn.Conv2d(in_channel, self.num_classes, 3, padding=1))
+            self.reg_preds.append(nn.Conv2d(in_channel, 4 * (self.reg_max + 1), 3, padding=1))
 
         # init proj
         proj = torch.arange(self.reg_max + 1, dtype=torch.float)
-        self.register_buffer('proj', proj, persistent=False)
+        self.register_buffer("proj", proj, persistent=False)
 
-    def forward(self, x: Tuple[Tensor]) -> Tensor:
+    def forward(self, x: tuple[Tensor]) -> Tensor:
         """Forward features from the upstream network.
 
         Args:
@@ -121,22 +115,24 @@ class PPYOLOEHeadModule(BaseModule):
         """
         assert len(x) == self.num_levels
 
-        return multi_apply(self.forward_single, x, self.cls_stems,
-                           self.cls_preds, self.reg_stems, self.reg_preds)
+        return multi_apply(self.forward_single, x, self.cls_stems, self.cls_preds, self.reg_stems, self.reg_preds)
 
-    def forward_single(self, x: Tensor, cls_stem: nn.ModuleList,
-                       cls_pred: nn.ModuleList, reg_stem: nn.ModuleList,
-                       reg_pred: nn.ModuleList) -> Tensor:
+    def forward_single(
+        self,
+        x: Tensor,
+        cls_stem: nn.ModuleList,
+        cls_pred: nn.ModuleList,
+        reg_stem: nn.ModuleList,
+        reg_pred: nn.ModuleList,
+    ) -> Tensor:
         """Forward feature of a single scale level."""
         b, _, h, w = x.shape
         avg_feat = F.adaptive_avg_pool2d(x, (1, 1))
         cls_logit = cls_pred(cls_stem(x, avg_feat) + x)
         bbox_dist_preds = reg_pred(reg_stem(x, avg_feat))
         if self.reg_max > 1:
-            bbox_dist_preds = bbox_dist_preds.reshape(
-                [-1, 4, self.reg_max + 1, h * w]).permute(0, 3, 1, 2)
-            bbox_preds = bbox_dist_preds.softmax(3).matmul(
-                self.proj.view([-1, 1])).squeeze(-1)
+            bbox_dist_preds = bbox_dist_preds.reshape([-1, 4, self.reg_max + 1, h * w]).permute(0, 3, 1, 2)
+            bbox_preds = bbox_dist_preds.softmax(3).matmul(self.proj.view([-1, 1])).squeeze(-1)
             bbox_preds = bbox_preds.transpose(1, 2).reshape(b, -1, h, w)
         else:
             bbox_preds = bbox_dist_preds
@@ -170,35 +166,33 @@ class PPYOLOEHead(YOLOv6Head):
             Defaults to None.
     """
 
-    def __init__(self,
-                 head_module: ConfigType,
-                 prior_generator: ConfigType = dict(
-                     type='mmdet.MlvlPointGenerator',
-                     offset=0.5,
-                     strides=[8, 16, 32]),
-                 bbox_coder: ConfigType = dict(type='DistancePointBBoxCoder'),
-                 loss_cls: ConfigType = dict(
-                     type='mmdet.VarifocalLoss',
-                     use_sigmoid=True,
-                     alpha=0.75,
-                     gamma=2.0,
-                     iou_weighted=True,
-                     reduction='sum',
-                     loss_weight=1.0),
-                 loss_bbox: ConfigType = dict(
-                     type='IoULoss',
-                     iou_mode='giou',
-                     bbox_format='xyxy',
-                     reduction='mean',
-                     loss_weight=2.5,
-                     return_iou=False),
-                 loss_dfl: ConfigType = dict(
-                     type='mmdet.DistributionFocalLoss',
-                     reduction='mean',
-                     loss_weight=0.5 / 4),
-                 train_cfg: OptConfigType = None,
-                 test_cfg: OptConfigType = None,
-                 init_cfg: OptMultiConfig = None):
+    def __init__(
+        self,
+        head_module: ConfigType,
+        prior_generator: ConfigType = {"type": "mmdet.MlvlPointGenerator", "offset": 0.5, "strides": [8, 16, 32]},  # noqa: B006 - Keeps the upstream default object and signature.
+        bbox_coder: ConfigType = {"type": "DistancePointBBoxCoder"},  # noqa: B006 - Keeps the upstream default object and signature.
+        loss_cls: ConfigType = {  # noqa: B006 - Keeps the upstream default object and signature.
+            "type": "mmdet.VarifocalLoss",
+            "use_sigmoid": True,
+            "alpha": 0.75,
+            "gamma": 2.0,
+            "iou_weighted": True,
+            "reduction": "sum",
+            "loss_weight": 1.0,
+        },
+        loss_bbox: ConfigType = {  # noqa: B006 - Keeps the upstream default object and signature.
+            "type": "IoULoss",
+            "iou_mode": "giou",
+            "bbox_format": "xyxy",
+            "reduction": "mean",
+            "loss_weight": 2.5,
+            "return_iou": False,
+        },
+        loss_dfl: ConfigType = {"type": "mmdet.DistributionFocalLoss", "reduction": "mean", "loss_weight": 0.5 / 4},  # noqa: B006 - Keeps the upstream default object and signature.
+        train_cfg: OptConfigType = None,
+        test_cfg: OptConfigType = None,
+        init_cfg: OptMultiConfig = None,
+    ):
         super().__init__(
             head_module=head_module,
             prior_generator=prior_generator,
@@ -207,19 +201,21 @@ class PPYOLOEHead(YOLOv6Head):
             loss_bbox=loss_bbox,
             train_cfg=train_cfg,
             test_cfg=test_cfg,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
         self.loss_dfl = MODELS.build(loss_dfl)
         # ppyoloe doesn't need loss_obj
         self.loss_obj = None
 
     def loss_by_feat(
-            self,
-            cls_scores: Sequence[Tensor],
-            bbox_preds: Sequence[Tensor],
-            bbox_dist_preds: Sequence[Tensor],
-            batch_gt_instances: Sequence[InstanceData],
-            batch_img_metas: Sequence[dict],
-            batch_gt_instances_ignore: OptInstanceList = None) -> dict:
+        self,
+        cls_scores: Sequence[Tensor],
+        bbox_preds: Sequence[Tensor],
+        bbox_dist_preds: Sequence[Tensor],
+        batch_gt_instances: Sequence[InstanceData],
+        batch_img_metas: Sequence[dict],
+        batch_gt_instances_ignore: OptInstanceList = None,
+    ) -> dict:
         """Calculate the loss based on the features extracted by the detection
         head.
 
@@ -247,26 +243,21 @@ class PPYOLOEHead(YOLOv6Head):
 
         # get epoch information from message hub
         message_hub = MessageHub.get_current_instance()
-        current_epoch = message_hub.get_info('epoch')
+        current_epoch = message_hub.get_info("epoch")
 
         num_imgs = len(batch_img_metas)
 
-        current_featmap_sizes = [
-            cls_score.shape[2:] for cls_score in cls_scores
-        ]
+        current_featmap_sizes = [cls_score.shape[2:] for cls_score in cls_scores]
         # If the shape does not equal, generate new one
         if current_featmap_sizes != self.featmap_sizes_train:
             self.featmap_sizes_train = current_featmap_sizes
 
             mlvl_priors_with_stride = self.prior_generator.grid_priors(
-                self.featmap_sizes_train,
-                dtype=cls_scores[0].dtype,
-                device=cls_scores[0].device,
-                with_stride=True)
+                self.featmap_sizes_train, dtype=cls_scores[0].dtype, device=cls_scores[0].device, with_stride=True
+            )
 
             self.num_level_priors = [len(n) for n in mlvl_priors_with_stride]
-            self.flatten_priors_train = torch.cat(
-                mlvl_priors_with_stride, dim=0)
+            self.flatten_priors_train = torch.cat(mlvl_priors_with_stride, dim=0)
             self.stride_tensor = self.flatten_priors_train[..., [2]]
 
         # gt info
@@ -277,18 +268,12 @@ class PPYOLOEHead(YOLOv6Head):
 
         # pred info
         flatten_cls_preds = [
-            cls_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1,
-                                                 self.num_classes)
-            for cls_pred in cls_scores
+            cls_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, self.num_classes) for cls_pred in cls_scores
         ]
-        flatten_pred_bboxes = [
-            bbox_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, 4)
-            for bbox_pred in bbox_preds
-        ]
+        flatten_pred_bboxes = [bbox_pred.permute(0, 2, 3, 1).reshape(num_imgs, -1, 4) for bbox_pred in bbox_preds]
         # (bs, reg_max+1, n, 4) -> (bs, n, 4, reg_max+1)
         flatten_pred_dists = [
-            bbox_pred_org.permute(0, 2, 3, 1).reshape(
-                num_imgs, -1, (self.head_module.reg_max + 1) * 4)
+            bbox_pred_org.permute(0, 2, 3, 1).reshape(num_imgs, -1, (self.head_module.reg_max + 1) * 4)
             for bbox_pred_org in bbox_dist_preds
         ]
 
@@ -296,24 +281,32 @@ class PPYOLOEHead(YOLOv6Head):
         flatten_cls_preds = torch.cat(flatten_cls_preds, dim=1)
         flatten_pred_bboxes = torch.cat(flatten_pred_bboxes, dim=1)
         flatten_pred_bboxes = self.bbox_coder.decode(
-            self.flatten_priors_train[..., :2], flatten_pred_bboxes,
-            self.stride_tensor[..., 0])
+            self.flatten_priors_train[..., :2], flatten_pred_bboxes, self.stride_tensor[..., 0]
+        )
         pred_scores = torch.sigmoid(flatten_cls_preds)
 
         if current_epoch < self.initial_epoch:
             assigned_result = self.initial_assigner(
-                flatten_pred_bboxes.detach(), self.flatten_priors_train,
-                self.num_level_priors, gt_labels, gt_bboxes, pad_bbox_flag)
+                flatten_pred_bboxes.detach(),
+                self.flatten_priors_train,
+                self.num_level_priors,
+                gt_labels,
+                gt_bboxes,
+                pad_bbox_flag,
+            )
         else:
-            assigned_result = self.assigner(flatten_pred_bboxes.detach(),
-                                            pred_scores.detach(),
-                                            self.flatten_priors_train,
-                                            gt_labels, gt_bboxes,
-                                            pad_bbox_flag)
+            assigned_result = self.assigner(
+                flatten_pred_bboxes.detach(),
+                pred_scores.detach(),
+                self.flatten_priors_train,
+                gt_labels,
+                gt_bboxes,
+                pad_bbox_flag,
+            )
 
-        assigned_bboxes = assigned_result['assigned_bboxes']
-        assigned_scores = assigned_result['assigned_scores']
-        fg_mask_pre_prior = assigned_result['fg_mask_pre_prior']
+        assigned_bboxes = assigned_result["assigned_bboxes"]
+        assigned_scores = assigned_result["assigned_scores"]
+        fg_mask_pre_prior = assigned_result["fg_mask_pre_prior"]
 
         # cls loss
         with torch.cuda.amp.autocast(enabled=False):
@@ -325,8 +318,7 @@ class PPYOLOEHead(YOLOv6Head):
 
         assigned_scores_sum = assigned_scores.sum()
         # reduce_mean between all gpus
-        assigned_scores_sum = torch.clamp(
-            reduce_mean(assigned_scores_sum), min=1)
+        assigned_scores_sum = torch.clamp(reduce_mean(assigned_scores_sum), min=1)
         loss_cls /= assigned_scores_sum
 
         # select positive samples mask
@@ -336,39 +328,34 @@ class PPYOLOEHead(YOLOv6Head):
             # will not report an error
             # iou loss
             prior_bbox_mask = fg_mask_pre_prior.unsqueeze(-1).repeat([1, 1, 4])
-            pred_bboxes_pos = torch.masked_select(
-                flatten_pred_bboxes, prior_bbox_mask).reshape([-1, 4])
-            assigned_bboxes_pos = torch.masked_select(
-                assigned_bboxes, prior_bbox_mask).reshape([-1, 4])
-            bbox_weight = torch.masked_select(
-                assigned_scores.sum(-1), fg_mask_pre_prior).unsqueeze(-1)
+            pred_bboxes_pos = torch.masked_select(flatten_pred_bboxes, prior_bbox_mask).reshape([-1, 4])
+            assigned_bboxes_pos = torch.masked_select(assigned_bboxes, prior_bbox_mask).reshape([-1, 4])
+            bbox_weight = torch.masked_select(assigned_scores.sum(-1), fg_mask_pre_prior).unsqueeze(-1)
             loss_bbox = self.loss_bbox(
-                pred_bboxes_pos,
-                assigned_bboxes_pos,
-                weight=bbox_weight,
-                avg_factor=assigned_scores_sum)
+                pred_bboxes_pos, assigned_bboxes_pos, weight=bbox_weight, avg_factor=assigned_scores_sum
+            )
 
             # dfl loss
-            dist_mask = fg_mask_pre_prior.unsqueeze(-1).repeat(
-                [1, 1, (self.head_module.reg_max + 1) * 4])
+            dist_mask = fg_mask_pre_prior.unsqueeze(-1).repeat([1, 1, (self.head_module.reg_max + 1) * 4])
 
-            pred_dist_pos = torch.masked_select(
-                flatten_dist_preds,
-                dist_mask).reshape([-1, 4, self.head_module.reg_max + 1])
+            pred_dist_pos = torch.masked_select(flatten_dist_preds, dist_mask).reshape(
+                [-1, 4, self.head_module.reg_max + 1]
+            )
             assigned_ltrb = self.bbox_coder.encode(
                 self.flatten_priors_train[..., :2] / self.stride_tensor,
                 assigned_bboxes,
                 max_dis=self.head_module.reg_max,
-                eps=0.01)
-            assigned_ltrb_pos = torch.masked_select(
-                assigned_ltrb, prior_bbox_mask).reshape([-1, 4])
+                eps=0.01,
+            )
+            assigned_ltrb_pos = torch.masked_select(assigned_ltrb, prior_bbox_mask).reshape([-1, 4])
             loss_dfl = self.loss_dfl(
                 pred_dist_pos.reshape(-1, self.head_module.reg_max + 1),
                 assigned_ltrb_pos.reshape(-1),
                 weight=bbox_weight.expand(-1, 4).reshape(-1),
-                avg_factor=assigned_scores_sum)
+                avg_factor=assigned_scores_sum,
+            )
         else:
             loss_bbox = flatten_pred_bboxes.sum() * 0
             loss_dfl = flatten_pred_bboxes.sum() * 0
 
-        return dict(loss_cls=loss_cls, loss_bbox=loss_bbox, loss_dfl=loss_dfl)
+        return {"loss_cls": loss_cls, "loss_bbox": loss_bbox, "loss_dfl": loss_dfl}

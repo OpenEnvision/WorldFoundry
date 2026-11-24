@@ -3,6 +3,7 @@
 import json
 import time
 from pathlib import Path
+from typing import cast
 
 from worldfoundry.operators.kandinsky6_operator import Kandinsky6Operator
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
@@ -10,6 +11,7 @@ from worldfoundry.pipelines.pipeline_utils import PipelineABC
 
 class Kandinsky6Pipeline(PipelineABC):
     MODEL_ID = "kandinsky6-pro-distill"
+    model_id: str
 
     def __init__(self, native_pipeline, device="cuda"):
         super().__init__(model_id=native_pipeline.model_id, operator=Kandinsky6Operator(), device=device)
@@ -34,7 +36,7 @@ class Kandinsky6Pipeline(PipelineABC):
             from worldfoundry.base_models.diffusion_model.recipes.registry import default_native_diffusion_registry
 
             recipe = default_native_diffusion_registry().resolve(resolved_id)
-            repo = recipe.checkpoints["denoiser"].repo_id
+            repo = cast(str, recipe.checkpoints["denoiser"].repo_id)
             root = Path(options["hf_models_root"]) / repo.replace("/", "--")
         overrides = options.get("checkpoint_overrides")
         if overrides is None and root is not None:

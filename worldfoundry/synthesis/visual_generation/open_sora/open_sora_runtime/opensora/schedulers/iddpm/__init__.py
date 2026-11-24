@@ -2,11 +2,11 @@ from functools import partial
 
 import torch
 
-from opensora.registry import SCHEDULERS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import SCHEDULERS
 
 from . import gaussian_diffusion as gd
 from .respace import SpacedDiffusion, space_timesteps
-from .speed import SpeeDiffusion
+from .speed import SpeeDiffusion as SpeeDiffusion
 
 
 @SCHEDULERS.register_module("iddpm")
@@ -89,9 +89,8 @@ def forward_with_cfg(model, x, timestep, y, cfg_scale, cfg_channel=None, **kwarg
     # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
     half = x[: len(x) // 2]
     combined = torch.cat([half, half], dim=0)
-    if "x_mask" in kwargs and kwargs["x_mask"] is not None:
-        if len(kwargs["x_mask"]) != len(x):
-            kwargs["x_mask"] = torch.cat([kwargs["x_mask"], kwargs["x_mask"]], dim=0)
+    if "x_mask" in kwargs and kwargs["x_mask"] is not None and len(kwargs["x_mask"]) != len(x):
+        kwargs["x_mask"] = torch.cat([kwargs["x_mask"], kwargs["x_mask"]], dim=0)
     model_out = model.forward(combined, timestep, y, **kwargs)
     model_out = model_out["x"] if isinstance(model_out, dict) else model_out
     if cfg_channel is None:

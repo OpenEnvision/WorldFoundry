@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from ..pipeline_utils import PipelineABC
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
-from ...synthesis.visual_generation.multiworld.multiworld_ittakestwo_synthesis import (
-    MultiWorldItTakesTwoSynthesis,
-)
 from ...synthesis.visual_generation.multiworld.ittakestwo_runtime import (
     load_ittakestwo_action_csv,
 )
+from ...synthesis.visual_generation.multiworld.multiworld_ittakestwo_synthesis import (
+    MultiWorldItTakesTwoSynthesis,
+)
+from ..pipeline_utils import PipelineABC
 
 
 class MultiWorldItTakesTwoPipeline(PipelineABC):
@@ -20,7 +20,7 @@ class MultiWorldItTakesTwoPipeline(PipelineABC):
 
     def __init__(
         self,
-        synthesis_model: Optional[MultiWorldItTakesTwoSynthesis] = None,
+        synthesis_model: MultiWorldItTakesTwoSynthesis | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype=torch.bfloat16,
@@ -31,15 +31,15 @@ class MultiWorldItTakesTwoPipeline(PipelineABC):
         self.weight_dtype = weight_dtype
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[str] = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        model_path: str | None = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype=torch.bfloat16,
         **kwargs,
-    ) -> "MultiWorldItTakesTwoPipeline":
+    ) -> MultiWorldItTakesTwoPipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         required_components = required_components or {}
         synthesis_model = MultiWorldItTakesTwoSynthesis.from_pretrained(
@@ -64,11 +64,11 @@ class MultiWorldItTakesTwoPipeline(PipelineABC):
     def process(
         self,
         images,
-        action: Optional[Dict[str, Any]] = None,
-        action_path: Optional[str] = None,
+        action: dict[str, Any] | None = None,
+        action_path: str | None = None,
         num_frames: int = 81,
         env_obv: Any = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
         if images is None:
             raise ValueError("MultiWorld ItTakesTwo requires `images` as the first-frame input.")
@@ -85,10 +85,10 @@ class MultiWorldItTakesTwoPipeline(PipelineABC):
     def __call__(
         self,
         images,
-        action: Optional[Dict[str, Any]] = None,
-        action_path: Optional[str] = None,
+        action: dict[str, Any] | None = None,
+        action_path: str | None = None,
         env_obv: Any = None,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         save_name: str = "multiworld_ittakestwo",
         return_dict: bool = False,
         **kwargs,

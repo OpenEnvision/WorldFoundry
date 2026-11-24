@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> maths -> vector.py functionality."""
-
 from dataclasses import dataclass
 
 import torch
@@ -24,7 +22,6 @@ from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext.scatter impor
 
 @dataclass(kw_only=True)
 class RavelMapping:
-    """Ravel mapping implementation."""
     mapping: torch.Tensor  # From i/j_inds to ravel index
     back_mapping: torch.Tensor  # From ravel index to i/j_inds
     n_variables: int
@@ -33,38 +30,22 @@ class RavelMapping:
 
 @dataclass(kw_only=True)
 class SparseBlockVector:
-    """Sparse block vector implementation."""
     inds: torch.Tensor
     data: torch.Tensor
 
     def __post_init__(self):
-        """Post init."""
         assert self.inds.shape[0] == self.data.shape[0]
         assert len(self.data.shape) == 2
 
     def element_shape(self) -> int:
-        """Element shape.
-
-        Returns:
-            The return value.
-        """
         return self.data.shape[1]
 
     def coalesce(self):
-        """Coalesce."""
         inds, inverse = torch.unique(self.inds, return_inverse=True)
         data = scatter_add(self.data, inverse, dim=0)
         return SparseBlockVector(inds=inds, data=data)
 
     def __sub__(self, other: "SparseBlockVector") -> "SparseBlockVector":
-        """Sub.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         if isinstance(other, SparseNullVector):
             return self
         return SparseBlockVector(
@@ -73,14 +54,6 @@ class SparseBlockVector:
         ).coalesce()
 
     def __add__(self, other: "SparseBlockVector") -> "SparseBlockVector":
-        """Add.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         if isinstance(other, SparseNullVector):
             return self
         return SparseBlockVector(
@@ -91,24 +64,13 @@ class SparseBlockVector:
 
 @dataclass(kw_only=True)
 class SparseNullVector(SparseBlockVector):
-    """Sparse null vector implementation."""
     def __init__(self):
-        """Init."""
         super().__init__(inds=torch.tensor([]), data=torch.tensor([]).reshape(0, 1))
 
     def __add__(self, other: SparseBlockVector) -> SparseBlockVector:
-        """Add.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         return other
 
     def coalesce(self):
-        """Coalesce."""
         return self
 
 
@@ -117,24 +79,13 @@ SparseVectorDict = dict[str, SparseBlockVector]
 
 @dataclass
 class SparseVectorSubview:
-    """Sparse vector subview implementation."""
     vectors: SparseVectorDict
     group_names: list[str]
 
     def get_dict(self) -> SparseVectorDict:
-        """Get dict.
-
-        Returns:
-            The return value.
-        """
         return {name: self.vectors[name] for name in self.group_names}
 
     def get_ravel_mapping(self) -> list[RavelMapping]:
-        """Get ravel mapping.
-
-        Returns:
-            The return value.
-        """
         # Will return for each group the mapping from its indices to a ravel index.
         mapping = []
         for name in self.group_names:
@@ -159,14 +110,6 @@ class SparseVectorSubview:
         return mapping
 
     def ravel(self, ravel_mapping: list[RavelMapping]) -> torch.Tensor:
-        """Ravel.
-
-        Args:
-            ravel_mapping: The ravel mapping.
-
-        Returns:
-            The return value.
-        """
         assert len(ravel_mapping) == len(self.group_names)
 
         data = []
@@ -187,14 +130,6 @@ class SparseVectorSubview:
         return torch.cat(data)
 
     def __sub__(self, other: "SparseVectorSubview") -> "SparseVectorSubview":
-        """Sub.
-
-        Args:
-            other: The other.
-
-        Returns:
-            The return value.
-        """
         assert self.group_names == other.group_names
         return SparseVectorSubview(
             vectors={name: self.vectors[name] - other.vectors[name] for name in self.group_names},
@@ -202,15 +137,6 @@ class SparseVectorSubview:
         )
 
     def unravel(self, res: torch.Tensor, ravel_mapping: list[RavelMapping]) -> "SparseVectorSubview":
-        """Unravel.
-
-        Args:
-            res: The res.
-            ravel_mapping: The ravel mapping.
-
-        Returns:
-            The return value.
-        """
         vectors = {}
 
         start_indices = torch.cumsum(torch.tensor([0] + [r.n_variables for r in ravel_mapping]), dim=0)
@@ -226,6 +152,5 @@ class SparseVectorSubview:
 
     @property
     def F(self):
-        """F."""
         assert len(self.group_names) == 1
         return self.vectors[self.group_names[0]]

@@ -10,6 +10,7 @@ stream. Each session/layer needs its own arena.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import torch
 from torch import Tensor
@@ -69,7 +70,7 @@ class KVSegmentArena:
             raise ValueError("KV arena requires materialized tensors")
         self.seq_dim = seq_dim
         if memory is None:
-            memory = tuple(t.narrow(seq_dim, 0, 0) for t in static)
+            memory = cast(KVPair, tuple(t.narrow(seq_dim, 0, 0) for t in static))
         _validate_pair(memory, "memory")
         shape = list(static[0].shape)
         expected_memory = list(shape)
@@ -80,13 +81,13 @@ class KVSegmentArena:
             raise ValueError("static and memory K/V must agree on dtype and device")
         self.layout = KVSegmentLayout(shape[seq_dim], current_tokens, memory[0].shape[seq_dim])
         shape[seq_dim] = self.layout.total_tokens
-        self._kv = tuple(t.new_empty(shape) for t in static)
+        self._kv = cast(KVPair, tuple(t.new_empty(shape) for t in static))
         self._device = static[0].device
         self._stream = self._current_stream()
         self.static = self._segment(0, self.layout.static_tokens)
         self.memory = self._segment(self.layout.static_tokens + current_tokens, self.layout.memory_tokens)
         self._current = self._segment(self.layout.static_tokens, current_tokens)
-        for destination, source in zip(self.static + self.memory, static + memory):
+        for destination, source in zip(self.static + self.memory, static + memory, strict=False):
             destination.copy_(source)
         self.stage_count = 0
 
@@ -94,7 +95,7 @@ class KVSegmentArena:
         return torch.cuda.current_stream(self._device).cuda_stream if self._device.type == "cuda" else None
 
     def _segment(self, start: int, length: int) -> KVPair:
-        return tuple(t.narrow(self.seq_dim, start, length) for t in self._kv)
+        return cast(KVPair, tuple(t.narrow(self.seq_dim, start, length) for t in self._kv))
 
     @property
     def nbytes(self) -> int:
@@ -115,7 +116,7 @@ class KVSegmentArena:
                     continue
                 raise ValueError(f"{name} views are required")
             _validate_pair(supplied, name)
-            for actual, wanted in zip(supplied, expected):
+            for actual, wanted in zip(supplied, expected, strict=False):
                 if (
                     actual.device != wanted.device
                     or actual.dtype != wanted.dtype
@@ -143,7 +144,7 @@ class KVSegmentArena:
         storage = {t.untyped_storage().data_ptr() for t in self._kv}
         if any(t.untyped_storage().data_ptr() in storage for t in current):
             raise ValueError("current K/V must not alias arena storage")
-        for destination, source in zip(self._current, current):
+        for destination, source in zip(self._current, current, strict=False):
             destination.copy_(source)
         self.stage_count += 1
         return self._kv

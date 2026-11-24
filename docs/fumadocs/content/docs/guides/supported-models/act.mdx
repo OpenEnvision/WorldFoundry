@@ -9,19 +9,19 @@ ACT (Action Chunking Transformer) is the ALOHA imitation policy: instead of one 
 
 <ModelPaperFigures modelId="act" locale="en" />
 
-WorldFoundry keeps the full inference stack — DETR-VAE, transformer encoder-decoder, ResNet-18 backbone, preprocessing, and temporal aggregation — under `worldfoundry/synthesis/action_generation/act`. There is **no catalog variant and no official weight file**. Checkpoint-backed `predict_action` is implemented; it stays gated on a caller-staged `policy_best.ckpt` plus matching `dataset_stats.pkl`. Static and CPU contract checks pass. Alias `action-chunking-transformer` resolves here.
+WorldFoundry runs the full inference stack — DETR-VAE, transformer encoder-decoder, ResNet-18 backbone, preprocessing, and temporal aggregation. There are **no variants and no official weight file**: checkpoint-backed `predict_action` needs a caller-staged `policy_best.ckpt` plus matching `dataset_stats.pkl`. Static and CPU contract checks pass. The alias `action-chunking-transformer` resolves to `act`.
 
 <ModelCommandBuilder modelId="act" locale="en" />
 
 ## What it is for
 
-Use ACT as a fixed-embodiment **action-chunking** baseline — not an open-vocabulary VLA. Recorded inputs are RGB (`image`) and `instruction`; `prompt` is unused. The pipeline is `ACTPipeline`; the artifact is `act_action_trace.json`. The natural local target in this catalog is a scripted sim transfer-cube policy you train or stage yourself, then replay against held-out demonstrations.
+Use ACT as a fixed-embodiment **action-chunking** baseline — not an open-vocabulary VLA. Recorded inputs are RGB (`image`) and `instruction`; `prompt` is unused. The pipeline is `ACTPipeline`; the artifact is `act_action_trace.json`. The natural local target is a scripted sim transfer-cube policy you train or stage yourself, then replay against held-out demonstrations.
 
-This is the page for runner parity, checkpoint staging, and the chunk contract before you move to larger language-conditioned stacks.
+Use it to check checkpoint staging and the chunk contract before you move to larger language-conditioned stacks.
 
 ## Runtime contract
 
-In-tree defaults (not a downloaded checkpoint):
+In-tree defaults:
 
 - Cameras: `cam_head`, `cam_right_wrist`, `cam_left_wrist`
 - Proprioception: **`state_dim` 14** (two 7-DoF arms)
@@ -38,12 +38,12 @@ plus the matching `dataset_stats.pkl` beside it. PyTorch loads with `weights_onl
 
 ## Running in WorldFoundry
 
-Dedicated environment `worldfoundry-act` (Python 3.10, CUDA 11.8 or newer). No package or checkpoint is downloaded at runtime. After staging:
+Dedicated environment `worldfoundry-act` (Python 3.10, CUDA 11.8 or newer). After staging the checkpoint and statistics:
 
 ```
-worldfoundry-eval run act
+wf run act
 ```
 
-No license is recorded in this repository. Confirm the upstream ACT / ALOHA terms before production use.
+No license is recorded for ACT. Confirm the upstream ACT / ALOHA terms before production use.
 
 <ModelRelatedRecipes modelId="act" locale="en" />

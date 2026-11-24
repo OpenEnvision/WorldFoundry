@@ -6,7 +6,6 @@ from PIL import Image
 
 from worldfoundry.pipelines.matrix_game.pipeline_matrix_game_3 import MatrixGame3Pipeline
 
-
 REPO_ROOT = os.getenv(
     "MATRIX_GAME3_REPO_ROOT",
     str(Path(__file__).resolve().parents[2] / "thirdparty" / "Matrix-Game-3"),

@@ -4,12 +4,10 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> utils -> load_fn.py functionality."""
-
+import numpy as np
 import torch
 from PIL import Image
 from torchvision import transforms as TF
-import numpy as np
 
 
 def load_and_preprocess_images_square(image_path_list, target_size=1024):
@@ -88,10 +86,9 @@ def load_and_preprocess_images_square(image_path_list, target_size=1024):
     original_coords = torch.from_numpy(np.array(original_coords)).float()
 
     # Add additional dimension if single image to ensure correct shape
-    if len(image_path_list) == 1:
-        if images.dim() == 3:
-            images = images.unsqueeze(0)
-            original_coords = original_coords.unsqueeze(0)
+    if len(image_path_list) == 1 and images.dim() == 3:
+        images = images.unsqueeze(0)
+        original_coords = original_coords.unsqueeze(0)
 
     return images, original_coords
 
@@ -224,7 +221,7 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
     images = torch.stack(images)  # concatenate images
 
     # Ensure correct shape when single image
-    if len(image_path_list) == 1:
+    if len(image_path_list) == 1:  # noqa: SIM102 - Branches carry per-case comments.
         # Verify shape is (1, C, H, W)
         if images.dim() == 3:
             images = images.unsqueeze(0)

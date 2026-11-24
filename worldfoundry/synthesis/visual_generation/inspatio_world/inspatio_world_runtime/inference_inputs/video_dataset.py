@@ -8,7 +8,8 @@ from .scene_inputs import SceneInputs
 decord_available = False
 try:
     import decord
-    decord.bridge.set_bridge('torch')
+
+    decord.bridge.set_bridge("torch")
     decord_available = True
 except ImportError:
     pass
@@ -16,23 +17,23 @@ except ImportError:
 
 class VideoDataset(torch.utils.data.Dataset):
     def __init__(self, json_path, **kwargs):
-        self.num_frames = kwargs['min_num_frames']
-        self.sample_size = kwargs['video_size']
-        self.traj_txt_path = kwargs.get('traj_txt_path', None)
-        self.relative_to_source = kwargs.get('relative_to_source', False)
-        self.rotation_only = kwargs.get('rotation_only', False)
-        self.adaptive_frame = kwargs.get('adaptive_frame', True)
-        self.freeze_repeat = kwargs.get('freeze_repeat', 0)
-        self.freeze_frame = kwargs.get('freeze_frame', None)
+        self.num_frames = kwargs["min_num_frames"]
+        self.sample_size = kwargs["video_size"]
+        self.traj_txt_path = kwargs.get("traj_txt_path")
+        self.relative_to_source = kwargs.get("relative_to_source", False)
+        self.rotation_only = kwargs.get("rotation_only", False)
+        self.adaptive_frame = kwargs.get("adaptive_frame", True)
+        self.freeze_repeat = kwargs.get("freeze_repeat", 0)
+        self.freeze_frame = kwargs.get("freeze_frame")
 
         if not isinstance(json_path, str):
             json_path = json_path[0]
         assert isinstance(json_path, str), f"json_path must be a string, got {type(json_path)}"
 
-        self.metadata_list = json.load(open(json_path, 'r'))
-        self.dataset = {entry['video_path']: entry for entry in self.metadata_list}
+        self.metadata_list = json.load(open(json_path))  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
+        self.dataset = {entry["video_path"]: entry for entry in self.metadata_list}
         for entry in self.metadata_list:
-            entry['dataset_type'] = 'test'
+            entry["dataset_type"] = "test"
 
         self.scene_inputs = SceneInputs(
             self.sample_size,
@@ -53,11 +54,11 @@ class VideoDataset(torch.utils.data.Dataset):
             data = self._temporal_sampling(data)
         except Exception as exc:
             raise RuntimeError(f"Failed to load inference input {source_data_key}") from exc
-        data['index'] = index
+        data["index"] = index
         return data
 
     def _temporal_sampling(self, data):
-        current_frames = data['source_video'].shape[0]
+        current_frames = data["source_video"].shape[0]
         target_frames = self.num_frames
         if target_frames < current_frames:
             indices = torch.linspace(0, current_frames - 1, target_frames).long()

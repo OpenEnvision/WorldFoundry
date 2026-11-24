@@ -34,7 +34,6 @@ SHARE_FROM: dict[str, str] = {
     "cosmos-transfer-2.5": "cosmos-predict-2.5",
     "lingbot-world-act": "lingbot-world",
     "longvie-1": "longvie-2",
-    "hyworld-worldgen": "hy-world-2.0",
     "depth-anything-v3": "depth-anything-v3-prior",
     "db-cogact": "dm0",
     "joyai-echo-longvideo": "joyai-echo-wm",
@@ -316,26 +315,6 @@ CAPTIONS: dict[str, dict[str, tuple[str, str]]] = {
             "论文方法总览：DualCamCtrl 的双分支框架联合生成对齐的 RGB 与深度视频潜变量。",
         ),
     },
-    "dust3r": {
-        "teaser": (
-            "Official paper teaser: DUSt3R reconstructs a kitchen pointmap and cameras from four uncalibrated frames.",
-            "论文官方 Teaser：DUSt3R 用四张未标定帧重建厨房点图与相机。",
-        ),
-        "overview": (
-            "Method overview: shared ViT encoders and interacting decoders predict dense pointmaps in camera-1 coordinates.",
-            "论文方法总览：共享 ViT 编码器与交互解码器，在相机 1 坐标系下预测密集点图。",
-        ),
-    },
-    "dvlt": {
-        "teaser": (
-            "Official paper teaser: DéjàView. Given multiple input views (top-left) , DéjàView reconstructs camera poses and consistent depth by repeatedly applying the same transformer block, with the number of refinement steps K K exposed as an.",
-            "论文官方 Teaser：Déjà View Looping Transformer 的几何与深度论文配图。",
-        ),
-        "overview": (
-            "Method overview: Method overview. V V input images are encoded by a shared DINOv2 ( Oquab et al., 2024 ) backbone. A single looped transformer block with frame-wise and global attention sub-blocks is then applied recurrently to the.",
-            "论文方法总览：Déjà View Looping Transformer 的方法架构。",
-        ),
-    },
     "dynamicrafter": {
         "overview": (
             "Method overview: Flowchart of the proposed DynamiCrafter . During training, we randomly select a video frame as the image condition of the denoising process through the proposed dual-stream image injection mechanism to inherit visual.",
@@ -550,12 +529,6 @@ CAPTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "overview": (
             "Method overview: Overview of WorldMirror . Our framework employs Multi-modal Tokenization to encode all inputs (images, optional priors including intrinsics, camera poses, and depth maps) into a unified token sequence. The merged.",
             "论文方法总览：HunyuanWorld-Mirror 的几何与深度架构。",
-        ),
-    },
-    "hunyuanworld-voyager": {
-        "teaser": (
-            "Official paper teaser: Loading Balancing for SP-Ring.",
-            "论文官方 Teaser：HunyuanWorld-Voyager 的方法论文配图。",
         ),
     },
     "hy-embodied-vla": {
@@ -844,12 +817,6 @@ CAPTIONS: dict[str, dict[str, tuple[str, str]]] = {
             "论文官方 Teaser：MolmoBot 的机器人操作论文配图。",
         ),
     },
-    "monst3r": {
-        "teaser": (
-            "Official paper teaser: Watch the video.",
-            "论文官方 Teaser：MonST3R 的视频生成论文配图。",
-        ),
-    },
     "mosaicmem": {
         "teaser": (
             "Official paper teaser: Left: Memory mechanism comparison and visualization. MoscaicMem is a hybrid approach, unifies the strengths of explicit and implicit memory. Right: (A) MosaicMem achieves more accurate camera motion than implicit.",
@@ -910,12 +877,6 @@ CAPTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "overview": (
             "Method overview: OmniForcing breaks the latency barrier for joint audio-visual generation. Top: Our framework achieves real-time streaming at ∼ 25 FPS with an ultra-low Time-To-First-Chunk (TTFC) of ∼ 0.7s. Bottom: The bidirectional.",
             "论文方法总览：OmniForcing 的方法架构。",
-        ),
-    },
-    "open-dreamer": {
-        "teaser": (
-            "Official paper teaser: Dreamer 4 learns to solve complex control tasks by reinforcement learning inside of its world model. We decode the imagined training sequences for visualization, showing that the world model has learned to simulate a.",
-            "论文官方 Teaser：Open Dreamer 的交互世界模型论文配图。",
         ),
     },
     "open-magvit2": {
@@ -1118,16 +1079,6 @@ CAPTIONS: dict[str, dict[str, tuple[str, str]]] = {
             "论文方法总览：Self-Forcing 的视频生成架构。",
         ),
     },
-    "shotstream": {
-        "teaser": (
-            "Official paper teaser: Overview of the ShotStream workflow, which enables real-time, long, multi-shot video generation from streaming prompts.",
-            "论文官方 Teaser：ShotStream 的视频生成论文配图。",
-        ),
-        "overview": (
-            "Method overview: Architecture of the Bidirectional Next-Shot Teacher Model. To realize ShotStream, we first fine-tune a text-to-video model into a bidirectional next-shot model, which generates subsequent shots conditioned on sparse.",
-            "论文方法总览：ShotStream 的视频生成架构。",
-        ),
-    },
     "show-o": {
         "overview": (
             "Method overview: Show-o unifies autoregressive language with diffusion vision in one LLM block.",
@@ -1182,12 +1133,6 @@ CAPTIONS: dict[str, dict[str, tuple[str, str]]] = {
             "论文方法总览：Spatia 的视频生成架构。",
         ),
     },
-    "splatt3r": {
-        "overview": (
-            "Method overview: Method overview. We encode the two uncalibrated images using MASt3R’s pretrained ViT encoder and cross-attention transformers, which we freeze during training. In addition to MASt3R’s prediction head for point.",
-            "论文方法总览：Splatt3R 的视频生成架构。",
-        ),
-    },
     "stable-video-infinity": {
         "teaser": (
             "Official paper teaser: Comparison among (a) video generative DiT, (b) restoration DiT, and (c) our Stable Video Infinity regarding the scheme ( row 1 ), training-test hypothesis gap ( row 2 ), and outcome ( row 3 ).",
@@ -1196,12 +1141,6 @@ CAPTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "overview": (
             "Method overview: Stable Video Infinity . We (a) inject errors into clean latent to break the error-free hypothesis, (b) approximate predictions via one-step integration to calculate bidirectional errors, and (c) dynamically bank and.",
             "论文方法总览：Stable Video Infinity 2.0 的视频生成架构。",
-        ),
-    },
-    "stable-virtual-camera": {
-        "overview": (
-            "Method overview: Method. Seva is trained with fixed sequence length as a “ M M -in N N -out” multi-view diffusion model with standard architecture. It conditions on CLIP embeddings, VAE latents of the input views, and their.",
-            "论文方法总览：Stable Virtual Camera 的相机控制架构。",
         ),
     },
     "starvla": {
@@ -1268,16 +1207,6 @@ CAPTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "overview": (
             "Method overview: Fig. 2: Model Architecture. UniDepthV2 utilizes solely the input image to generate the 3D output ( 𝐎 {O} ). It bootstraps a dense camera prediction ( 𝐂 {C} ) from the Camera Module, injecting prior knowledge on scene.",
             "论文方法总览：UniDepth V2 的几何与深度架构。",
-        ),
-    },
-    "unik3d-prior": {
-        "teaser": (
-            "Official paper teaser: UniK3D introduces a novel and versatile approach that delivers precise metric 3D geometry estimation from a single image and for any camera type, ranging from pinhole to panoramic, without requiring any camera.",
-            "论文官方 Teaser：UniK3D 的几何与深度论文配图。",
-        ),
-        "overview": (
-            "Method overview: Model architecture. UniK3D utilizes solely the single input image to generate the 3D output point cloud ( 𝐎 {O} ) for any camera. The projective geometry of the camera is predicted by the Angular Module. The camera.",
-            "论文方法总览：UniK3D 的几何与深度架构。",
         ),
     },
     "uwm": {
@@ -1508,16 +1437,6 @@ CAPTIONS: dict[str, dict[str, tuple[str, str]]] = {
             "论文方法总览：轨迹指令模块把点路径注入 Wan DiT 潜变量，做可控图生视频。",
         ),
     },
-    "egowm": {
-        "teaser": (
-            "Official paper teaser: EgoWM predicts future frames that follow robot actions for quadruped navigation and humanoid interaction.",
-            "论文官方 Teaser：EgoWM 按机器人动作预测未来帧，覆盖四足导航与人形交互。",
-        ),
-        "overview": (
-            "Method overview: an action-projection module conditions a trainable U-Net or DiT on a frozen VAE latent of the first frame.",
-            "论文方法总览：动作投影模块在冻结 VAE 的首帧潜变量上条件化可训练的 U-Net 或 DiT。",
-        ),
-    },
     "emu3.5": {
         "overview": (
             "Method overview: Emu3.5 trains with next-token prediction and infers visual tokens in parallel via discrete diffusion.",
@@ -1636,16 +1555,6 @@ CAPTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "overview": (
             "Method overview: DINO tokens plus camera tokens go through alternating global and frame attention, then camera, depth, point-map, and track heads.",
             "论文方法总览：DINO token 与相机 token 交替做全局与帧内注意力，再接到相机、深度、点图与轨迹头。",
-        ),
-    },
-    "wilddet3d": {
-        "teaser": (
-            "Official paper teaser: WildDet3D does open-vocabulary 3D detection from any image, device, and prompt.",
-            "论文官方 Teaser：WildDet3D 从任意图像、设备与提示做开放词汇三维检测。",
-        ),
-        "overview": (
-            "Method overview: an image encoder and RGBD encoder fuse depth latents into a promptable detector with 2D and 3D heads.",
-            "论文方法总览：图像编码器与 RGBD 编码器融合深度潜变量，再进入带 2D/3D 头的可提示检测器。",
         ),
     },
 }

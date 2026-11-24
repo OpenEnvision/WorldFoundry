@@ -1,1 +1,1 @@
-from .pipeline_unified_backbone import UnifiedBackbonePipeline
+from .pipeline_unified_backbone import UnifiedBackbonePipeline as UnifiedBackbonePipeline

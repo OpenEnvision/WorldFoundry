@@ -13,10 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> priorda -> __init__.py functionality."""
-
 import torch
-from einops import rearrange
 
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.misc import unpack_optional
 
@@ -30,15 +27,6 @@ class PriorDAModel(DepthEstimationModel):
     """
 
     def __init__(self, weights_dir: str | None = None, device: str = "cuda") -> None:
-        """Init.
-
-        Args:
-            weights_dir: The weights dir.
-            device: The device.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.model = PriorDepthAnything(
             device=device,
@@ -49,22 +37,9 @@ class PriorDAModel(DepthEstimationModel):
 
     @property
     def depth_type(self) -> DepthType:
-        """Depth type.
-
-        Returns:
-            The return value.
-        """
         return DepthType.METRIC_DEPTH
 
     def estimate(self, src: DepthEstimationInput, *, pattern: str | None = None) -> DepthEstimationResult:
-        """Estimate.
-
-        Args:
-            src: The src.
-
-        Returns:
-            The return value.
-        """
         rgb: torch.Tensor = unpack_optional(src.rgb)
         prompt_metric_depth: torch.Tensor = unpack_optional(src.prompt_metric_depth)
 

@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import torch
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Packed offsets — keep construction on-device to avoid a host sync
 # ──────────────────────────────────────────────────────────────────────────

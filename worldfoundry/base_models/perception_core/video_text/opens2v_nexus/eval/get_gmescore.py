@@ -1,12 +1,12 @@
-import os
-import json
-import numpy as np
-from PIL import Image
 import argparse
-from utils.gme.gme_model import GmeQwen2VL
-from tqdm import tqdm
+import json
+import os
 
 import decord
+import numpy as np
+from PIL import Image
+from tqdm import tqdm
+from utils.gme.gme_model import GmeQwen2VL
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -71,7 +71,7 @@ def main():
         print("continue")
         return
 
-    with open(input_json_file, "r") as f:
+    with open(input_json_file) as f:
         prompts = json.load(f)
     gme = GmeQwen2VL(model_path, attn_model="flash_attention_2", device=device)
 
@@ -81,7 +81,7 @@ def main():
     for video_filename in tqdm(video_files, desc="Processing videos"):
         video_name = os.path.splitext(video_filename)[0]
 
-        if video_name in prompts.keys():
+        if video_name in prompts.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             text_prompt = prompts[video_name].get("prompt", "")
         else:
             print(f"No prompt found for video: {video_name}. Skipping.")
@@ -94,9 +94,7 @@ def main():
             texts=[text_prompt] * len(frames),
             instruction="Find an image that matches the given text.",
         )
-        e_corpus = gme.get_image_embeddings(
-            images=frames, is_query=False, show_progress_bar=False
-        )
+        e_corpus = gme.get_image_embeddings(images=frames, is_query=False, show_progress_bar=False)
         gme_scores = (e_query * e_corpus).sum(-1)
         gme_score = gme_scores.mean().detach().item()
 

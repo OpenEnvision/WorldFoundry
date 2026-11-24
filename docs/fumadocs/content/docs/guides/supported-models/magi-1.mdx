@@ -1,15 +1,15 @@
 ---
 title: "MAGI-1"
-description: "MAGI-1 from Sand AI: image-to-video and video-generation; Runner parity pending; dedicated `magi-official-cu124`."
+description: "MAGI-1 from Sand AI: image-to-video and video generation; Runner parity pending; dedicated `magi-official-cu124`."
 modelId: "magi-1"
 pageSource: authored
 ---
 
-MAGI-1 is Sand AI's open autoregressive video generation model, cataloged for image-to-video and general video generation and tracked as a high-priority open candidate with Apache-2.0 HF metadata. The WorldFoundry route is complete and reports missing checkpoint assets at runtime.
+MAGI-1 is Sand AI's open autoregressive video generation model for image-to-video and general video generation, released under Apache-2.0.
 
 <ModelPaperFigures modelId="magi-1" locale="en" />
 
-The recorded paper is [arXiv 2505.13211](https://arxiv.org/abs/2505.13211).
+Paper: [arXiv 2505.13211](https://arxiv.org/abs/2505.13211).
 
 Code: [SandAI-org/MAGI-1](https://github.com/SandAI-org/MAGI-1).
 
@@ -17,36 +17,36 @@ Code: [SandAI-org/MAGI-1](https://github.com/SandAI-org/MAGI-1).
 
 ## What it is for
 
-`magi-1` is the recorded text/image-to-video line. Use it when you want both prompt and still conditioning on the same catalog card.
+Use `magi-1` to generate a video that starts from a reference image.
 
-Upstream describes MAGI-1 as a large autoregressive video model generating chunk-by-chunk with causal attention, enabling streaming-style continuation. This repository records only the prompt+image input contract and the generated_video artifact; scale and internals are not recorded here.
+Upstream describes MAGI-1 as a large autoregressive video model generating chunk-by-chunk with causal attention, enabling streaming-style continuation. WorldFoundry takes a prompt and an input image and writes a generated_video artifact.
 
-Catalog tasks include image-to-video and video-generation. Documented modalities: image in, video out.
+Tasks: image-to-video and video generation. Modalities: image in, video out.
 
-Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Baseline video generation quality suite).
+Suggested benchmarks: [VBench](/docs/evaluation/benchmark-hub/vbench) (Baseline video generation quality suite).
 
 ## Runtime contract
 
-Optional `prompt`, `negative_prompt`, `input_path`, `frames`, and `fps`; artifacts `magi-1.mp4`.
+Inputs `prompt` and `input-path` (bundled samples are used when omitted); artifacts `magi-1.mp4`.
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `MAGI1Pipeline`.
 
 Family status: **Runner parity pending**.
 
-No runner-parity record exists yet — treat GPU validation as not done. Stage the MAGI-1 weights first; the route fails informatively when they are missing.
+Stage the `sand-ai/MAGI-1` weights before running.
 
-Added as a high-priority open video generation candidate with Apache-2.0 HF metadata.
+Generated output has not yet been validated on GPU with the released checkpoint.
 
-The in-tree MAGI-1 I2V route is wired with the official example image/config assets, local sand-ai/MAGI-1 checkpoint, 4.5B distill profile, sampling controls, fps, and seed.
+The MAGI-1 image-to-video route uses the official example image and config, the local `sand-ai/MAGI-1` checkpoint with the 4.5B distill profile, and exposes sampling controls, fps, and seed.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run magi-1 --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Animate a still image with `wf run magi-1 --pipeline.task-profile interactive-video`.
 
 It runs in the dedicated environment `magi-official-cu124` (Python 3.10.12, CUDA 12.4).
 
-Recorded weight repositories include `sand-ai/MAGI-1` and `sand-ai/MAGI-1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh magi-1`. Add `--download` to fetch missing public checkpoints.
+Weights come from `sand-ai/MAGI-1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh magi-1`. Add `--download` to fetch missing public checkpoints.
 
-Recorded licenses include apache-2.0; status: **Runner parity pending**.
+License: Apache-2.0.
 
 <ModelRelatedRecipes modelId="magi-1" locale="en" />

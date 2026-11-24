@@ -7,7 +7,7 @@ pageSource: authored
 
 WorldFoundry integrates DreamDojo's **2B GR-1 self-forcing student** with causal action conditioning, **1–4 TrigFlow steps**, isolated offline rollouts, and a resident streaming API. The DiT, Reason1 text conditioning, and Wan video codec reuse canonical Cosmos components. The [teacher route](./dreamdojo) remains separate.
 
-Source: [NVIDIA/DreamDojo](https://github.com/NVIDIA/DreamDojo/tree/02f119b759d5c7f84a399fdeea3c6e82e7ed6cff), including [the distillation workflow](https://github.com/NVIDIA/DreamDojo/blob/02f119b759d5c7f84a399fdeea3c6e82e7ed6cff/docs/DISTILL.md). Integration status: **Integrated**.
+Source: [NVIDIA/DreamDojo](https://github.com/NVIDIA/DreamDojo/tree/02f119b759d5c7f84a399fdeea3c6e82e7ed6cff), including [the distillation workflow](https://github.com/NVIDIA/DreamDojo/blob/02f119b759d5c7f84a399fdeea3c6e82e7ed6cff/docs/DISTILL.md).
 
 ## Inputs and cadence
 
@@ -35,7 +35,7 @@ Provide an explicit **distilled student** checkpoint via `student_checkpoint_pat
 
 ## Public community checkpoint
 
-[PencilHu/DreamDojo-Jokeru-2B-SelfForcing](https://huggingface.co/PencilHu/DreamDojo-Jokeru-2B-SelfForcing/tree/c99e38c158c853113e1148078f4730aabde7b4ed) publishes a community **Jokeru** student at `checkpoints/iter_000000700`. Its training configuration uses the 2B causal architecture, 384-D actions, four released TrigFlow times, and 480×640 geometry. The EMA metadata maps to all **577** native model keys without missing keys or shape mismatches. This is not NVIDIA's official GR-1 student.
+[PencilHu/DreamDojo-Jokeru-2B-SelfForcing](https://huggingface.co/PencilHu/DreamDojo-Jokeru-2B-SelfForcing/tree/c99e38c158c853113e1148078f4730aabde7b4ed) publishes a community **Jokeru** student at `checkpoints/iter_000000700`. Its training configuration uses the 2B causal architecture, 384-D actions, four released TrigFlow times, and 480×640 geometry, and its EMA weights map onto the native student without missing keys or shape mismatches. This is not NVIDIA's official GR-1 student.
 
 ```bash
 hf download PencilHu/DreamDojo-Jokeru-2B-SelfForcing \
@@ -45,7 +45,7 @@ hf download PencilHu/DreamDojo-Jokeru-2B-SelfForcing \
   --local-dir /weights/DreamDojo-Jokeru-2B-SelfForcing
 ```
 
-The model shards total about **17.2 GB**, including training-side networks. Pass `/weights/DreamDojo-Jokeru-2B-SelfForcing/checkpoints/iter_000000700` as `student_checkpoint_path`; the packaged converter selects EMA weights for inference. Retain the upstream NVIDIA model terms alongside the uploader's stated Apache-2.0 license. Full download and checkpoint-backed replay are pending; metadata compatibility does not establish output quality or throughput.
+The model shards total about **17.2 GB**, including training-side networks. Pass `/weights/DreamDojo-Jokeru-2B-SelfForcing/checkpoints/iter_000000700` as `student_checkpoint_path`; the packaged converter selects EMA weights for inference. Retain the upstream NVIDIA model terms alongside the uploader's stated Apache-2.0 license.
 
 ## Resident streaming
 
@@ -94,15 +94,12 @@ python tests/manual/dreamdojo_inference.py \
 
 ## Validation
 
-Weight-free small-DiT contracts cover cached causal versus dense temporal-mask outputs, TrigFlow coefficients and renoising, action/history alignment, A/B/A repeatability, interleaved sessions, failed/cancelled requests, reset/reuse, isolated offline export, and public loading. CUDA contracts cover FP32/BF16 cache attention with the same MATH backend and BF16 action-conditioned repeatability.
-
-A shared-tokenizer checkpoint replay on H100 exercised both initial one-frame and continuation nine-frame windows at 480×640. Both encodings matched direct canonical Wan encoding exactly; decoded outputs were finite `[1,3,13,480,640]` tensors. This is shared-codec evidence, not a student DiT checkpoint replay.
+Tests with a small weight-free DiT confirm that cached causal sampling matches dense temporal-mask outputs and that action/history alignment, repeatability, interleaved sessions, reset, and isolated offline export behave correctly. With the released Cosmos tokenizer, the initial and continuation windows at 480×640 encode identically to direct Wan encoding; no student DiT checkpoint has been replayed.
 
 ## Limitations
 
 - The pinned DreamDojo Hub snapshot `89d029e10816d2995d700cb8ba06f171e0504203` contains no distilled student checkpoint. Student weights must be supplied; the loader does not substitute post-trained teacher weights.
 - Student checkpoint-backed output quality, official numerical/visual parity, closed-loop robot success, and measured **10-fps generation throughput** remain unvalidated. Ten fps above is the playback cadence.
-- Weight-free pipeline tests use a toy codec; they do not establish checkpoint-backed Wan or student output quality.
 - Dataset normalization and teleoperation mapping remain caller-owned. The API consumes normalized robot-action arrays; the stock WASD browser controls are not mapped to this action space. Student WebRTC end-to-end replay has not been executed.
 
 <ModelRelatedRecipes modelId="dreamdojo-student" locale="en" />

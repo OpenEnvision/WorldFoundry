@@ -5,7 +5,7 @@ description: >-
   image-to-video route. The implemented path uses the official spatial
   upscaler between two denoising stages; broader upstream task support is not
   yet exposed as a WorldFoundry runner.
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: ltx-video
 runtime_profile: runtime-profile:ltx-video-i2v
 tasks:
@@ -89,7 +89,7 @@ variants:
   - id: ltx-video-i2v
     task: image-to-video
     runtime_profile: ltx-video-i2v
-    runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+    runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
     pipeline_binding: ltx-video-i2v
     integration:
       status: integrated
@@ -102,22 +102,16 @@ docs:
   publisher: Lightricks
   publisher_kind: company
   publisher_zh: Lightricks
-  overview: LTX-Video is Lightricks' earlier fast video generation model; this entry integrates the 0.9.8 distilled image-to-video route natively. Like LTX-2.x it runs a two-stage denoise with the official spatial upscaler in between. The single runnable variant is ltx-video-i2v; family-level T2V labels describe upstream capability, not a current local route.
-  overview_zh: LTX-Video 是 Lightricks 较早的高速视频生成模型；本条目原生集成其 0.9.8 蒸馏图生视频路径。与 LTX-2.x 一样采用两段去噪、中间接官方空间上采样器。唯一可运行 variant 是 ltx-video-i2v；系列级的 T2V 标签描述的是上游能力，并非当前本地路径。
-  architecture: Uses the same native transformer, VAE, scheduler, loader, and joint-state runner as LTX-2.x. The T5 text encoder is loaded as a Transformers architecture through NativeModuleLoader; Diffusers is not an inference backend. The spatial upscaler runs automatically between the two denoising stages.
-  architecture_zh: 与 LTX-2.x 共用同一套原生 Transformer、VAE、调度器、加载器与联合状态 runner。T5 文本编码器通过 NativeModuleLoader 以 Transformers 架构加载；Diffusers 不是推理后端。空间上采样器在两段去噪之间自动运行。
-  usage_notes: Runner parity is pending — the native I2V target is registered, but full checkpoint-backed parity with the upstream pipeline has not been recorded. The official HF cards report license 'other'; review before commercial use.
-  usage_notes_zh: Runner parity 为 pending——原生 I2V target 已注册，但与上游 pipeline 的完整 checkpoint 一致性尚未记录。官方 HF 卡片许可为“other”，商用前请审阅。
+  overview: LTX-Video is Lightricks' earlier fast video generation model. WorldFoundry runs its 0.9.8 distilled image-to-video route natively; like LTX-2.x it runs a two-stage denoise with the official spatial upscaler in between. The only runnable variant is ltx-video-i2v; the family's text-to-video label describes upstream capability.
+  overview_zh: LTX-Video 是 Lightricks 较早的高速视频生成模型。WorldFoundry 原生运行其 0.9.8 蒸馏图生视频路径；与 LTX-2.x 一样采用两段去噪，中间接官方空间上采样器。唯一可运行的 variant 是 ltx-video-i2v；系列级的文生视频标签描述的是上游能力。
+  architecture: Uses the same native transformer, VAE, scheduler, loader, and joint-state runner as LTX-2.x. The T5 text encoder loads as a Transformers model; Diffusers is not an inference backend. The spatial upscaler runs automatically between the two denoising stages.
+  architecture_zh: 与 LTX-2.x 共用同一套原生 Transformer、VAE、调度器、加载器与联合状态 runner。T5 文本编码器以 Transformers 模型加载；Diffusers 不是推理后端。空间上采样器在两段去噪之间自动运行。
+  usage_notes: The distilled recipe is fixed at 10 Euler steps (7 + 3) with guidance 1.0; the runtime rejects other step counts or CFG values. The official Hugging Face cards report license 'other'; review them before commercial use.
+  usage_notes_zh: 蒸馏配方固定为 10 步 Euler（先 7 后 3）、guidance 1.0，运行时会拒绝其他步数或 CFG。官方 Hugging Face 卡片许可为“other”，商用前请审阅。
   limitations:
-  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
-  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
-  - License is 'other' per the official HF cards.
-  - Only the 0.9.8 I2V route is runnable locally.
+  - Only the 0.9.8 image-to-video route runs locally; text-to-video requests are rejected.
   limitations_zh:
-  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
-  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
-  - 官方 HF 卡片许可为“other”。
-  - 本地仅 0.9.8 I2V 路径可运行。
+  - 本地仅 0.9.8 图生视频路径可运行；文生视频请求会被拒绝。
   recommended_benchmarks:
   - id: aigcbench
     reason: I2V benchmark for the runnable route.

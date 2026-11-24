@@ -2,8 +2,6 @@
 # https://github.com/z-x-yang/Segment-and-Track-Anything
 # Licensed under the AGPL-3.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
-"""Module for base_models -> perception_core -> tracking -> track_anything -> __init__.py functionality."""
-
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +13,6 @@ from .seg_tracker import SegTracker
 
 
 class TrackAnythingPipeline:
-    """Track anything pipeline implementation."""
     def __init__(
         self,
         mask_phrases: list[str],
@@ -26,22 +23,10 @@ class TrackAnythingPipeline:
         grounding_dino_ckpt_path: str | None = None,
         gpu_id: int = 0,
     ) -> None:
-        """Init.
-
-        Args:
-            mask_phrases: The mask phrases.
-            sam_points_per_side: The sam points per side.
-            sam_run_gap: The sam run gap.
-            sam_ckpt_path: The sam ckpt path.
-            aot_ckpt_path: The aot ckpt path.
-            grounding_dino_ckpt_path: The grounding dino ckpt path.
-            gpu_id: The gpu id.
-
-        Returns:
-            The return value.
-        """
         # Prepare checkpoints.
-        sam_ckpt_path = Path(sam_ckpt_path) if sam_ckpt_path else Path(torch.hub.get_dir()) / "sam" / "sam_vit_b_01ec64.pth"
+        sam_ckpt_path = (
+            Path(sam_ckpt_path) if sam_ckpt_path else Path(torch.hub.get_dir()) / "sam" / "sam_vit_b_01ec64.pth"
+        )
         if not sam_ckpt_path.exists():
             sam_ckpt_path.parent.mkdir(parents=True, exist_ok=True)
             torch.hub.download_url_to_file(
@@ -49,7 +34,9 @@ class TrackAnythingPipeline:
                 dst=str(sam_ckpt_path),
             )
 
-        aot_ckpt_path = Path(aot_ckpt_path) if aot_ckpt_path else Path(torch.hub.get_dir()) / "aot" / "R50_DeAOTL_PRE_YTB_DAV.pth"
+        aot_ckpt_path = (
+            Path(aot_ckpt_path) if aot_ckpt_path else Path(torch.hub.get_dir()) / "aot" / "R50_DeAOTL_PRE_YTB_DAV.pth"
+        )
         if not aot_ckpt_path.exists():
             aot_ckpt_path.parent.mkdir(parents=True, exist_ok=True)
             gdown.download(

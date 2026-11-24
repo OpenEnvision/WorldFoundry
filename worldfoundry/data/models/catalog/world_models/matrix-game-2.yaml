@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 availability: open_source
 checkpoint:
   repos:
@@ -37,6 +37,7 @@ official_sources:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
     url: https://github.com/SkyworkAI/Matrix-Game
+    revision: 5446525c80da2a4a2f87801addbbc7faa8d2486e
   huggingface:
   - confirmed_by: https://huggingface.co/api/models/Skywork/Matrix-Game-2.0
     repo_id: Skywork/Matrix-Game-2.0
@@ -147,16 +148,18 @@ docs:
   publisher: Skywork AI (Kunlun Tech)
   publisher_kind: company
   publisher_zh: 昆仑万维（Skywork AI）
-  overview: 'Matrix-Game 2.0 is Skywork''s real-time-oriented interactive world model generation: an auto-regressive diffusion design that follows keyboard/mouse actions across game scenes. The in-tree runner was checked with a 15-latent-frame short run at 12 fps and 352x640 using official bench actions; full 150-frame parity remains unverified.'
-  overview_zh: Matrix-Game 2.0 是昆仑万维面向实时的交互式世界模型：自回归扩散设计，在游戏场景中跟随键鼠动作。树内 runner 已用官方 bench 动作在 12 fps、352x640 下完成 15 个 latent 帧的短流程验证；完整 150 帧一致性仍未验证。
-  architecture: The in-tree runtime has no external repo_root dependency and supports official benchmark actions through the in-tree Bench_actions_* condition generator. The official 150-latent-frame default is supported, but the recorded comparison used 15 latent frames. A universal-action-validation variant is recorded for benchmarking action fidelity.
-  architecture_zh: 树内运行时无外部 repo_root 依赖，并通过树内 Bench_actions_* 条件生成器支持官方 bench 动作。运行时支持官方默认的 150 个 latent 帧，但已记录的对照只运行了 15 个 latent 帧。另记录一个 universal-action-validation variant 用于动作保真度基准测试。
-  usage_notes: The official default is 150 latent frames at 12 fps, seed=42, 352x640, with bench actions. The recorded parity check used 15 latent frames; per-run artifacts are tracked outside the catalog.
-  usage_notes_zh: 官方默认设置为 150 个 latent 帧、12 fps、seed=42、352x640，并使用 bench 动作。已记录的一致性检查只运行了 15 个 latent 帧；每次运行的产物在 catalog 外跟踪。
+  overview: "Matrix-Game 2.0 is Skywork's real-time-oriented interactive world model generation: an auto-regressive diffusion design that follows keyboard/mouse actions across game scenes. Validated against the official universal mode with a 15-latent-frame run at 12 fps and 352x640 using official bench actions."
+  overview_zh: Matrix-Game 2.0 是昆仑万维面向实时的交互式世界模型：自回归扩散设计，在游戏场景中跟随键鼠动作。已使用官方 bench 动作，在 12 fps、352x640 下以 15 个 latent 帧的短流程对照官方 universal 模式验证。
+  architecture: The in-tree runtime needs no external source checkout and generates the official benchmark action trajectories (Bench_actions_*) itself. The `matrix-game-2-universal-action-validation` variant runs the official universal mode for checking action fidelity.
+  architecture_zh: 树内运行时不需要外部源码检出，并自带官方 bench 动作轨迹（Bench_actions_*）生成器。`matrix-game-2-universal-action-validation` variant 运行官方 universal 模式，用于检验动作保真度。
+  usage_notes: Start with the `matrix-game-2-universal-action-validation` variant. The official default is 150 latent frames at 12 fps, seed=42, 352x640, with bench actions. Needs at least 24 GB of VRAM.
+  usage_notes_zh: 从 `matrix-game-2-universal-action-validation` variant 起步。官方默认设置为 150 个 latent 帧、12 fps、seed=42、352x640，并使用 bench 动作。显存至少需要 24 GB。
   limitations:
   - 352x640 default resolution targets real-time interaction, not cinematic quality.
+  - Validation covers a 15-latent-frame run; the full 150-latent-frame default has not been compared with the official implementation.
   limitations_zh:
   - 默认 352x640 分辨率面向实时交互，而非影视级画质。
+  - 验证只覆盖 15 个 latent 帧的短流程；官方默认的完整 150 个 latent 帧尚未与官方实现对照。
   recommended_benchmarks:
   - id: worldmodelbench
     reason: Action-conditioned game-world rollout quality.

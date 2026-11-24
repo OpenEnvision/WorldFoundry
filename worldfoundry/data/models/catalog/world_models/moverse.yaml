@@ -47,7 +47,7 @@ integration:
   - Runtime planning and missing-asset diagnostics work without importing the heavyweight model stack.
 runtime_profile: runtime-profile:moverse
 pipeline_binding: moverse
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 runner_parity:
   status: implemented
   notes:
@@ -63,20 +63,20 @@ docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: 'MoVerse turns one image into a navigable world: it builds a panoramic Gaussian scaffold from the input and generates camera-controlled video as you move through it. In this catalog the headless inference closure is in-tree with local-only checkpoint resolution; a local H100 run verifies the complete 161-frame path. Full upstream artifact parity and calibrated camera accuracy remain unverified.'
-  overview_zh: MoVerse 把一张图变成可游走的世界：从输入构建全景高斯脚手架，并在移动过程中生成相机可控视频。本 catalog 中其无头推理闭包已在树内、checkpoint 仅本地解析；本地 H100 已验证完整 161 帧路径；完整上游产物一致性及标定相机精度仍未验证。
-  architecture: The recorded assembly reuses WorldFoundry's shared GeoCalib AutoLevel, Depth Anything 3, SHARP panorama, Wan (Wan2.1-T2V-1.3B video base), and TAEHV components, plus FLUX.1-Fill-dev as panorama base and MoVerse's own component weights. Upstream has no license file — review before downstream use.
-  architecture_zh: 记录的组装复用 WorldFoundry 共享的 GeoCalib AutoLevel、Depth Anything 3、SHARP 全景、 Wan（视频基座 Wan2.1-T2V-1.3B）与 TAEHV 组件，另加作为全景基座的 FLUX.1-Fill-dev 与 MoVerse 自有组件权重。上游无许可文件——下游使用前请审查。
-  usage_notes: Execution is offline and needs four pre-staged Hugging Face snapshots plus ffmpeg, gsplat, and compatible CUDA kernels. Runtime planning and missing-asset diagnostics work without importing the heavy model stack.
-  usage_notes_zh: 执行为离线模式，需要预先就位四个 Hugging Face snapshot，另加 ffmpeg、gsplat 与兼容的 CUDA 内核。运行时规划与缺失资产诊断无需导入重量级模型栈。
+  overview: 'MoVerse turns one image into a navigable world: it builds a panoramic Gaussian scaffold from the input and generates camera-controlled video as you move through it. Validated on an H100: the pipeline runs the complete 161-frame path.'
+  overview_zh: MoVerse 把一张图变成可游走的世界：从输入构建全景高斯脚手架，并在移动过程中生成相机可控视频。已在 H100 上验证：pipeline 可跑通完整的 161 帧路径。
+  architecture: Assembles GeoCalib AutoLevel, Depth Anything 3, SHARP panorama, Wan (Wan2.1-T2V-1.3B video base), and TAEHV components, plus FLUX.1-Fill-dev as the panorama base and MoVerse's own component weights.
+  architecture_zh: 组合 GeoCalib AutoLevel、Depth Anything 3、SHARP 全景、Wan（视频基座 Wan2.1-T2V-1.3B）与 TAEHV 组件，另加作为全景基座的 FLUX.1-Fill-dev 与 MoVerse 自有组件权重。
+  usage_notes: Execution is offline and needs four pre-staged Hugging Face snapshots (`Orange-3DV-Team/MoVerse`, `black-forest-labs/FLUX.1-Fill-dev`, `depth-anything/DA3NESTED-GIANT-LARGE-1.1`, `Wan-AI/Wan2.1-T2V-1.3B`) plus ffmpeg, gsplat, and compatible CUDA kernels.
+  usage_notes_zh: 执行为离线模式，需要预先就位四个 Hugging Face snapshot（`Orange-3DV-Team/MoVerse`、`black-forest-labs/FLUX.1-Fill-dev`、`depth-anything/DA3NESTED-GIANT-LARGE-1.1`、`Wan-AI/Wan2.1-T2V-1.3B`），另加 ffmpeg、gsplat 与兼容的 CUDA 内核。
   limitations:
   - 'No upstream license file: legal review required.'
   - Needs gated FLUX access and ≥24 GB VRAM.
-  - The publishing institution is not recorded in this repository.
+  - Outputs have not been compared against upstream artifacts, and camera accuracy is not calibrated.
   limitations_zh:
   - 上游无许可文件：需要法律审查。
   - 需要 gated FLUX 权限与 ≥24 GB 显存。
-  - 发表机构在本仓库中未记录。
+  - 输出尚未与上游产物对照，相机精度未经标定。
   recommended_benchmarks:
   - id: worldscore
     reason: Navigable generated-world quality.

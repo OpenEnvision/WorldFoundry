@@ -4,11 +4,8 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> perception_core -> segment -> sam2 -> modeling -> backbones -> hieradet.py functionality."""
-
 import logging
 from functools import partial
-from typing import List, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -17,25 +14,18 @@ from iopath.common.file_io import g_pathmgr
 
 from worldfoundry.base_models.perception_core.segment.sam2.modeling.backbones.utils import (
     PatchEmbed,
-    window_partition,
-    window_unpartition,
 )
-
+from worldfoundry.core.attention import (
+    scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention,
+)
+from worldfoundry.core.attention.window import (
+    window_partition_padded as window_partition,
+)
+from worldfoundry.core.attention.window import window_unpartition
 from worldfoundry.core.nn.blocks.layers import DropPath, SamHeadMLP
-from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
 
 def do_pool(x: torch.Tensor, pool: nn.Module, norm: nn.Module = None) -> torch.Tensor:
-    """Do pool.
-
-    Args:
-        x: The x.
-        pool: The pool.
-        norm: The norm.
-
-    Returns:
-        The return value.
-    """
     if pool is None:
         return x
     # (B, H, W, C) -> (B, C, H, W)
@@ -50,7 +40,6 @@ def do_pool(x: torch.Tensor, pool: nn.Module, norm: nn.Module = None) -> torch.T
 
 
 class MultiScaleAttention(nn.Module):
-    """Multi scale attention implementation."""
     def __init__(
         self,
         dim: int,
@@ -58,14 +47,6 @@ class MultiScaleAttention(nn.Module):
         num_heads: int,
         q_pool: nn.Module = None,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            dim_out: The dim out.
-            num_heads: The num heads.
-            q_pool: The q pool.
-        """
         super().__init__()
 
         self.dim = dim
@@ -76,14 +57,6 @@ class MultiScaleAttention(nn.Module):
         self.proj = nn.Linear(dim_out, dim_out)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         B, H, W, _ = x.shape
         # qkv with shape (B, H * W, 3, nHead, C)
         qkv = self.qkv(x).reshape(B, H * W, 3, self.num_heads, -1)
@@ -112,7 +85,6 @@ class MultiScaleAttention(nn.Module):
 
 
 class MultiScaleBlock(nn.Module):
-    """Multi scale block implementation."""
     def __init__(
         self,
         dim: int,
@@ -120,24 +92,11 @@ class MultiScaleBlock(nn.Module):
         num_heads: int,
         mlp_ratio: float = 4.0,
         drop_path: float = 0.0,
-        norm_layer: Union[nn.Module, str] = "LayerNorm",
-        q_stride: Tuple[int, int] = None,
+        norm_layer: nn.Module | str = "LayerNorm",
+        q_stride: tuple[int, int] | None = None,
         act_layer: nn.Module = nn.GELU,
         window_size: int = 0,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            dim_out: The dim out.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            drop_path: The drop path.
-            norm_layer: The norm layer.
-            q_stride: The q stride.
-            act_layer: The act layer.
-            window_size: The window size.
-        """
         super().__init__()
 
         if isinstance(norm_layer, str):
@@ -151,9 +110,7 @@ class MultiScaleBlock(nn.Module):
 
         self.pool, self.q_stride = None, q_stride
         if self.q_stride:
-            self.pool = nn.MaxPool2d(
-                kernel_size=q_stride, stride=q_stride, ceil_mode=False
-            )
+            self.pool = nn.MaxPool2d(kernel_size=q_stride, stride=q_stride, ceil_mode=False)
 
         self.attn = MultiScaleAttention(
             dim,
@@ -176,14 +133,6 @@ class MultiScaleBlock(nn.Module):
             self.proj = nn.Linear(dim, dim_out)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         shortcut = x  # B, H, W, C
         x = self.norm1(x)
 
@@ -229,20 +178,20 @@ class Hiera(nn.Module):
         num_heads: int = 1,  # initial number of heads
         drop_path_rate: float = 0.0,  # stochastic depth
         q_pool: int = 3,  # number of q_pool stages
-        q_stride: Tuple[int, int] = (2, 2),  # downsample stride bet. stages
-        stages: Tuple[int, ...] = (2, 3, 16, 3),  # blocks per stage
+        q_stride: tuple[int, int] = (2, 2),  # downsample stride bet. stages
+        stages: tuple[int, ...] = (2, 3, 16, 3),  # blocks per stage
         dim_mul: float = 2.0,  # dim_mul factor at stage shift
         head_mul: float = 2.0,  # head_mul factor at stage shift
-        window_pos_embed_bkg_spatial_size: Tuple[int, int] = (14, 14),
+        window_pos_embed_bkg_spatial_size: tuple[int, int] = (14, 14),
         # window size per stage, when not using global att.
-        window_spec: Tuple[int, ...] = (
+        window_spec: tuple[int, ...] = (
             8,
             4,
             14,
             7,
         ),
         # global attn in these blocks
-        global_att_blocks: Tuple[int, ...] = (
+        global_att_blocks: tuple[int, ...] = (
             12,
             16,
             20,
@@ -250,23 +199,6 @@ class Hiera(nn.Module):
         weights_path=None,
         return_interm_layers=True,  # return feats from every stage
     ):
-        """Init.
-
-        Args:
-            embed_dim: The embed dim.
-            num_heads: The num heads.
-            drop_path_rate: The drop path rate.
-            q_pool: The q pool.
-            q_stride: The q stride.
-            stages: The stages.
-            dim_mul: The dim mul.
-            head_mul: The head mul.
-            window_pos_embed_bkg_spatial_size: The window pos embed bkg spatial size.
-            window_spec: The window spec.
-            global_att_blocks: The global att blocks.
-            weights_path: The weights path.
-            return_interm_layers: The return interm layers.
-        """
         super().__init__()
 
         assert len(stages) == len(window_spec)
@@ -287,16 +219,10 @@ class Hiera(nn.Module):
 
         # Windowed positional embedding (https://arxiv.org/abs/2311.05613)
         self.window_pos_embed_bkg_spatial_size = window_pos_embed_bkg_spatial_size
-        self.pos_embed = nn.Parameter(
-            torch.zeros(1, embed_dim, *self.window_pos_embed_bkg_spatial_size)
-        )
-        self.pos_embed_window = nn.Parameter(
-            torch.zeros(1, embed_dim, self.window_spec[0], self.window_spec[0])
-        )
+        self.pos_embed = nn.Parameter(torch.zeros(1, embed_dim, *self.window_pos_embed_bkg_spatial_size))
+        self.pos_embed_window = nn.Parameter(torch.zeros(1, embed_dim, self.window_spec[0], self.window_spec[0]))
 
-        dpr = [
-            x.item() for x in torch.linspace(0, drop_path_rate, depth)
-        ]  # stochastic depth decay rule
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
         cur_stage = 1
         self.blocks = nn.ModuleList()
@@ -339,33 +265,17 @@ class Hiera(nn.Module):
                 chkpt = torch.load(f, map_location="cpu")
             logging.info("loading Hiera", self.load_state_dict(chkpt, strict=False))
 
-    def _get_pos_embed(self, hw: Tuple[int, int]) -> torch.Tensor:
-        """Helper function to get pos embed.
-
-        Args:
-            hw: The hw.
-
-        Returns:
-            The return value.
-        """
+    def _get_pos_embed(self, hw: tuple[int, int]) -> torch.Tensor:
         h, w = hw
         window_embed = self.pos_embed_window
         pos_embed = F.interpolate(self.pos_embed, size=(h, w), mode="bicubic")
         pos_embed = pos_embed + window_embed.tile(
-            [x // y for x, y in zip(pos_embed.shape, window_embed.shape)]
+            [x // y for x, y in zip(pos_embed.shape, window_embed.shape, strict=False)]
         )
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
-    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
+    def forward(self, x: torch.Tensor) -> list[torch.Tensor]:
         x = self.patch_embed(x)
         # x: (B, H, W, C)
 
@@ -375,28 +285,19 @@ class Hiera(nn.Module):
         outputs = []
         for i, blk in enumerate(self.blocks):
             x = blk(x)
-            if (i == self.stage_ends[-1]) or (
-                i in self.stage_ends and self.return_interm_layers
-            ):
+            if (i == self.stage_ends[-1]) or (i in self.stage_ends and self.return_interm_layers):
                 feats = x.permute(0, 3, 1, 2)
                 outputs.append(feats)
 
         return outputs
 
     def get_layer_id(self, layer_name):
-        """Get layer id.
-
-        Args:
-            layer_name: The layer name.
-        """
         # https://github.com/microsoft/unilm/blob/master/beit/optim_factory.py#L33
         num_layers = self.get_num_layers()
 
         if layer_name.find("rel_pos") != -1:
             return num_layers + 1
-        elif layer_name.find("pos_embed") != -1:
-            return 0
-        elif layer_name.find("patch_embed") != -1:
+        elif layer_name.find("pos_embed") != -1 or layer_name.find("patch_embed") != -1:
             return 0
         elif layer_name.find("blocks") != -1:
             return int(layer_name.split("blocks")[1].split(".")[1]) + 1
@@ -404,9 +305,4 @@ class Hiera(nn.Module):
             return num_layers + 1
 
     def get_num_layers(self) -> int:
-        """Get num layers.
-
-        Returns:
-            The return value.
-        """
         return len(self.blocks)

@@ -21,7 +21,6 @@ import torch.distributed
 
 from .parallel_state import get_sp_group, get_tp_group
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Tensor-parallel collectives — restore a column/row-sharded Linear
 # ──────────────────────────────────────────────────────────────────────────

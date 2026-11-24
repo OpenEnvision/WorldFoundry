@@ -1,24 +1,50 @@
 ---
 title: 指标
-description: 树内 metric registry 与分布/感知类 compute API。
+description: 树内 metric registry 与按 distribution、perceptual、scorer 分类的 compute API。
 ---
 
 import MetricsSetup from '../../../../mdx/partials/metrics-usage-setup.zh.mdx';
 
-WorldFoundry 提供树内 metric 层——由 registry 管理的 scorer 与分布/感知 compute 例程，runner 通过稳定契约调用。Benchmark 决定*在什么数据上测什么*；metric 决定*如何把预测变成数字*。每条注册项声明输入、可选 checkpoint 依赖与输出形态；runner 引用 metric ID，registry 解析别名、校验可用性并路由到对应 `compute_*`，使模型代码不接触打分细节、打分却在跨机器时保持可复现。本 hub 只记录仓库实际实现了什么，并非已发表指标的综述。
+WorldFoundry 提供树内 metric 层——由 registry 管理的分类 compute 例程与多模态 scorer，runner 通过稳定契约调用。Benchmark 决定*在什么数据上测什么*；metric 决定*如何把预测变成数字*。每条注册项声明输入、可选 checkpoint 依赖与输出形态；runner 引用 metric ID，registry 解析别名、校验可用性并路由到对应 `compute_*`，使模型代码不接触打分细节、打分却在跨机器时保持可复现。本 hub 只记录仓库实际实现了什么，并非已发表指标的综述。
 
-树内目录按四个家族组织：**scorer 与质量**（CLIP、VQA、ITM、人脸、艺术、S2V judge）、**分布**（FID、IS、KID、FVD、JEDi、CMMD、Clean-FID）、**感知成对**（LPIPS、SSIM、DINO、mask、layout）、**编辑与 layout**（SemSR、IRS、CAS、manipulation）。依赖预训练 backbone 的 metric 显式声明依赖，缺失 checkpoint 时明确失败，绝不静默替换代理。第五页 [Registry 与参考](/zh/docs/evaluation/metrics/reference) 说明发现方式（`worldfoundry-eval metric list`）、参数化 id、checkpoint 落盘与包结构。每个 benchmark 的 evaluator asset 与运行命令见 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)；各页会标注近似与须使用官方脚本而非通用 compute API 的情形。
+树内目录按与 `worldfoundry/evals/tasks/metrics/{distribution,perceptual,scorer}/` 一致的三个计算家族组织：**scorer**（CLIP、VQA、ITM、LAION 美学、FaceScore、ArtScore、OpenS2V、编辑与语义对齐）、**分布**（FID、IS、KID、CMMD、Clean-FID、多样性/覆盖度、FVD、FVMD、JEDi）与**感知**（LPIPS、SSIM、MS-SSIM、PSNR、DINO、DreamSim、FSIM、CPBD、IRS、mask、检测与布局）。依赖预训练 backbone 的 metric 显式声明依赖，缺失 checkpoint 时明确失败，绝不静默替换代理。[Registry 与参考](/zh/docs/evaluation/metrics/reference) 说明发现方式（`wf metric list`）、参数化 id、checkpoint 落盘与包结构。每个 benchmark 的 evaluator asset 与运行命令见 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)；各页会标注近似与须使用官方脚本而非通用 compute API 的情形。
 
 ## 快速开始
 
 <MetricsSetup />
 
+## 内置 existing-results 指标
+
+这些指标用 `wf evaluate` 对已有的 `GenerationResult` JSON/JSONL 打分，不加载任何模型 checkpoint。
+
+| 指标 | 每条 result 的取值 |
+| --- | --- |
+| `artifact_count` | 输出 artifact 数量。 |
+| `required_artifacts_present` | 所有 `--required-artifact` 都存在时为 `1`，否则为 `0`。 |
+| `has_artifact:<name>` | 指定 artifact 存在时为 `1`，否则为 `0`。 |
+| `numeric` | result 上记录的全部数值型 metrics、scores 与 timings。 |
+| `numeric:<name>` | result 上记录的单个命名数值，如 `numeric:reward`。 |
+
+```bash
+wf evaluate \
+  --mode existing-results \
+  --results-path runs/results.jsonl \
+  --output-dir runs/eval/builtin \
+  --required-artifact video \
+  --metric artifact_count \
+  --metric required_artifacts_present \
+  --metric has_artifact:video \
+  --metric numeric:reward \
+  --json
+```
+
+scorecard JSON 写入 `--output-dir`。
+
 ## 子页面
 
-- [多模态 scorer 与质量](/zh/docs/evaluation/metrics/scorers) — CLIPScore、VQAScore、ITMScore、FaceScore、ArtScore、OpenS2V reward 指标。
-- [分布指标](/zh/docs/evaluation/metrics/distribution) — FID、IS、KID、FVD、JEDi、CMMD、Clean-FID 及特征数组类指标。
-- [感知成对](/zh/docs/evaluation/metrics/perceptual) — LPIPS、SSIM、DINO 相似度、mask accuracy、layout quality。
-- [编辑与 layout](/zh/docs/evaluation/metrics/editing) — SemSR、IRS、CAS、编辑方向、object-wise consistency。
+- [Scorer 指标](/zh/docs/evaluation/metrics/scorers) — CLIPScore、VQAScore、ITMScore、LAION 美学、FaceScore、ArtScore、OpenS2V 与编辑/对齐 scorer（`family=scorer`）。
+- [分布指标](/zh/docs/evaluation/metrics/distribution) — FID、IS、KID、CMMD、Clean-FID、多样性/覆盖度、条件分布、FVD、FVMD 与 JEDi（`family=distribution`）。
+- [感知指标](/zh/docs/evaluation/metrics/perceptual) — LPIPS、SSIM、MS-SSIM、PSNR、DINO 相似度、DreamSim、FSIM、CPBD、IRS、mask accuracy、目标检测与布局（`family=perceptual`）。
 - [Registry 与参考](/zh/docs/evaluation/metrics/reference) — `MetricRegistry`、已注册指标表、CLI、checkpoint、架构说明。
 
 ## 相关页面

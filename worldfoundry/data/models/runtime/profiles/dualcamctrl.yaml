@@ -10,6 +10,7 @@ groups:
 - depth_conditioned
 source_repos:
 - url: https://github.com/EnVision-Research/DualCamCtrl
+  revision: f4f064f39c84b0e9597e99979ec56361570d8bef
 checkpoints:
 - repo_id: FayeHongfeiZhang/DualCamCtrl
   role: dualcamctrl_checkpoint

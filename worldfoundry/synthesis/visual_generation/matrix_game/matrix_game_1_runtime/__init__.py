@@ -18,10 +18,10 @@ __all__ = [
     "DEFAULT_CONDA_DIR",
     "DEFAULT_RUNTIME_CONFIG_ROOT",
     "EXPECTED_CHECKPOINT_FILES",
-    "MatrixGame1Runtime",
-    "MatrixGame1RuntimePlan",
     "OPTIONAL_CHECKPOINT_FILES",
     "REQUIRED_RUNTIME_CONFIG_FILES",
     "REQUIRED_RUNTIME_FILES",
     "RUNTIME_ROOT",
+    "MatrixGame1Runtime",
+    "MatrixGame1RuntimePlan",
 ]

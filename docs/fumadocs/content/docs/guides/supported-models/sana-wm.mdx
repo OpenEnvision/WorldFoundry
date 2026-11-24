@@ -1,54 +1,79 @@
 ---
 title: "SANA-WM"
-description: "SANA-WM from NVIDIA: world-model and camera-controlled-video; Runner parity pending; dedicated `sana`."
+description: "SANA-WM from NVIDIA: native world-model and camera-controlled-video recipes; runner parity pending; unified `worldfoundry-unified-cu128`."
 modelId: "sana-wm"
 pageSource: authored
 ---
 
-SANA-WM is a world model built on NVIDIA's efficient Sana architecture: a two-stage design (interactive stage plus LTX-2 refiner) that generates camera-controlled world video with a resident multi-GPU pipeline. A real Workspace run partitioned the components across four A100s and generated eight finite, decodable 1280x704 frames from a nine-frame native window.
+SANA-WM is a world model built on NVIDIA's efficient Sana architecture. WorldFoundry provides native bidirectional and streaming recipes for camera-controlled video; the streaming recipe includes an LTX-2 refiner.
 
 <ModelPaperFigures modelId="sana-wm" locale="en" />
 
-The recorded paper is [SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear Diffusion Transformer](https://arxiv.org/abs/2605.15178) (2026).
+Paper: [SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear Diffusion Transformer](https://arxiv.org/abs/2605.15178) (2026).
 
 Project page: [nvlabs.github.io/Sana/WM](https://nvlabs.github.io/Sana/WM/). Code: [NVlabs/Sana](https://github.com/NVlabs/Sana).
-
-The paper is [SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear Diffusion Transformer](https://arxiv.org/abs/2605.15178). Project page: [nvlabs.github.io/Sana/WM](https://nvlabs.github.io/Sana/WM). Code: [NVlabs/Sana](https://github.com/NVlabs/Sana).
 
 <ModelCommandBuilder modelId="sana-wm" locale="en" />
 
 ## What it is for
 
-Use `sana-wm-streaming` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+`sana-wm-streaming` conditions video generation on camera poses.
 
-Camera actions follow the current official SANA-WM controls: `w/s` move forward/back, `a/d` yaw left/right, `j/l` strafe left/right, and `i/k` pitch up/down. Held actions use the official default speeds of 0.025 units and 0.6° per frame, with a gradual stop after release. Pass one action for each transition after the initial image, or provide explicit `camera_to_world` poses.
+Camera actions follow the official SANA-WM controls: `w/s` move forward/back, `a/d` yaw left/right, `j/l` strafe left/right, and `i/k` pitch up/down. Held actions use the official default speeds of 0.025 units and 0.6° per frame, with a gradual stop after release. Pass one action for each transition after the initial image, or provide explicit `camera_to_world` poses.
 
-SANA-WM reuses the canonical Sana network, encoder, autoencoder, scheduler, and recipe roles — no modality-owned Sana runtime remains (paper arXiv 2605.15178, apache-2.0). The interactive pipeline keeps its two-stage model resident and advances with native 8k+1 temporal windows; the quality profile keeps the bidirectional stage and LTX-2 refiner enabled.
+SANA-WM reuses WorldFoundry's shared Sana network, encoder, autoencoder, scheduler, and recipe components (paper arXiv 2605.15178, apache-2.0). The resident adapters use native 8k+1 temporal windows. The streaming recipe owns its camera-conditioned stage and LTX-2 refiner; component placement and offload follow the shared `RuntimePolicy`.
 
-Catalog tasks include world-model, camera-controlled-video, and controllable-world-generation. Catalog aliases include `sana world model`, `sana-wm-2.6b`, `sana-wm-streaming`, and `Efficient-Large-Model/SANA-WM_streaming`.
+Tasks: world model, camera-controlled video, and controllable world generation. Aliases: `sana world model`, `sana-wm-2.6b`, `sana-wm-streaming`, and `Efficient-Large-Model/SANA-WM_streaming`.
 
-Recorded evaluation entry points include [SANA-WM 80-Scene Benchmark](/docs/evaluation/benchmark-hub/sana-wm-bench) (The dedicated SANA-WM benchmark recorded in this repository), [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-control adherence of world rollouts).
+Suggested benchmarks: [SANA-WM 80-Scene Benchmark](/docs/evaluation/benchmark-hub/sana-wm-bench) (The dedicated SANA-WM 80-scene benchmark), [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-control adherence of world rollouts).
 
-Not [SANA](/docs/guides/supported-models/sana). Score on [SANA-WM 80-Scene Benchmark](/docs/evaluation/benchmark-hub/sana-wm-bench) and [CameraBench](/docs/evaluation/benchmark-hub/camerabench).
+SANA-WM is a separate model from [SANA](/docs/guides/supported-models/sana). Score on [SANA-WM 80-Scene Benchmark](/docs/evaluation/benchmark-hub/sana-wm-bench) and [CameraBench](/docs/evaluation/benchmark-hub/camerabench).
 
 ## Runtime contract
 
-Optional `prompt`, `input_path`, `interactions`, `fps`, and `guidance_scale`; artifacts `sana-wm-streaming.mp4`.
+CLI inputs `prompt` and `input-path`; options `fps`, `guidance-scale`, `seed`, `window-frames`, and `step`; artifacts `sana-wm-streaming.mp4`.
 
-CLI task profiles: `interactive-video`. WorldFoundry binds `SanaWMPipeline`.
+CLI task profiles: `interactive-video`. `sana-wm` binds `SanaWMPipeline`;
+`sana-wm-streaming` binds `SanaWMStreamingPipeline`. `from_pretrained` assembles the
+native model and loads its weights; `plan` is the weight-free construction preview.
 
-Family status: **Runner parity pending**.
+The realtime API requires a user-supplied image and prompt. `configure_realtime`
+validates them, snapshots the image,
+and reports the configured FPS and window in `RealtimeSpec`. A window of N output
+frames consumes N−1 action transitions after the reference image. `stream_realtime`
+accepts frame-rate interactions or Studio's `realtime_segments`, which are
+resampled into those transitions before the native request is built.
 
-The validated four-A100 run is a four-stage smoke that confirms execution and coherent conditioning — it does not claim the default 60-step quality recipe. Component placement across GPUs is configurable.
+A generated prompt update is committed only after native execution succeeds.
+Failures retain the preceding committed prompt, and subsequent requests reuse the
+same model. `reset_realtime` clears the session configuration and requires a new
+configuration before generation; it does not reload the weights.
 
-WorldFoundry registers an in-tree resident pipeline with configurable multi-GPU component placement.
+**Validation:** runner parity is pending. The bidirectional profile records a
+single-H100 stage-one run producing 33 decodable 1280x704 frames at 60 sampling
+steps. Visual review recorded dark, coarse output and initial-frame artifacts;
+the LTX-2 refinement stage was not executed. A separate four-A100 smoke produced
+eight finite, decodable 1280x704 frames from a nine-frame window. These records do
+not establish full refined parity or acceptance of the current realtime changes.
+Weight-free realtime tests replace model execution and cover native loading
+delegation, Studio dispatch, controls, request state and reset; generation
+acceptance still requires checkpoint replay.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run sana-wm-streaming --pipeline.task-profile interactive-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Generate a clip from your first-frame image and prompt:
 
-Recorded weight repositories include `Efficient-Large-Model/SANA-WM_streaming` and `Efficient-Large-Model/SANA-WM_bidirectional`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh sana-wm-streaming`. Add `--download` to fetch missing public checkpoints.
+```bash
+wf run sana-wm-streaming \
+  --pipeline.task-profile interactive-video \
+  --pipeline.input-path /path/to/first-frame.png \
+  --pipeline.prompt "A sunlit forest."
+```
 
-Recorded licenses include apache-2.0; status: **Runner parity pending**.
+Use `scripts/setup/bootstrap_worldfoundry.sh` to prepare the unified `worldfoundry-unified-cu128` environment (Python 3.11, CUDA 12.8).
+
+Weights: `Efficient-Large-Model/SANA-WM_streaming` and `Efficient-Large-Model/SANA-WM_bidirectional`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh sana-wm-streaming`. Add `--download` to fetch missing public checkpoints.
+
+License: Apache-2.0.
 
 <ModelRelatedRecipes modelId="sana-wm" locale="en" />

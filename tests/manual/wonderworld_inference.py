@@ -38,10 +38,10 @@ def main() -> None:
     torch.use_deterministic_algorithms(True, warn_only=True)
     torch.backends.cudnn.benchmark = False
 
-    from worldfoundry.evaluation.api import GenerationRequest
-    from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
-    from worldfoundry.evaluation.models.pipelines.invocation import build_pipeline_invocation, invoke_pipeline
-    from worldfoundry.evaluation.models.pipelines.loading import PipelineRunnerSpec, load_pipeline_from_spec
+    from worldfoundry.evals.api import GenerationRequest
+    from worldfoundry.evals.models.pipelines.invocation import build_pipeline_invocation, invoke_pipeline
+    from worldfoundry.evals.models.pipelines.loading import PipelineRunnerSpec, load_pipeline_from_spec
+    from worldfoundry.zoo.catalog import load_model_zoo_registry
 
     entry = load_model_zoo_registry().get("wonderworld")
     assert entry.pipeline_target is not None

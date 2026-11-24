@@ -6,22 +6,31 @@ Architecture decisions:
 - forward() takes explicit x_video / x_audio kwargs so denoise_loop stays clean.
 - No distributed primitives — prod-level TP is layered externally.
 """
+
 from __future__ import annotations
 
 import math
 
 import torch
 import torch.nn.functional as F
-from torch import nn, Tensor
+from torch import Tensor, nn
 
-from worldfoundry.base_models.diffusion_model.models.networks.kandinsky6.tensors import get_freqs, apply_scale_shift_norm, apply_gate_sum, apply_rotary
-from worldfoundry.base_models.diffusion_model.models.networks.kandinsky6.attention.dispatch import SelfAttentionEngine, _sdpa
+from worldfoundry.base_models.diffusion_model.models.networks.kandinsky6.attention.dispatch import (
+    SelfAttentionEngine,
+    _sdpa,
+)
 from worldfoundry.base_models.diffusion_model.models.networks.kandinsky6.rope import RoPE1D, RoPE3D
-
+from worldfoundry.base_models.diffusion_model.models.networks.kandinsky6.tensors import (
+    apply_gate_sum,
+    apply_rotary,
+    apply_scale_shift_norm,
+    get_freqs,
+)
 
 # ---------------------------------------------------------------------------
 # Small embedding / projection modules
 # ---------------------------------------------------------------------------
+
 
 class _TimestepEmbedder(nn.Module):
     """MLP after the sinusoidal timestep. Names match Diffusers ``TimestepEmbedding``."""
@@ -94,17 +103,9 @@ class VisualEmbeddings(nn.Module):
         T, H, W, C = shape[offset:]
         pT, pH, pW = self.patch_size
         if batched:
-            x = (
-                x.view(shape[0], T // pT, pT, H // pH, pH, W // pW, pW, C)
-                .permute(0, 1, 3, 5, 2, 4, 6, 7)
-                .flatten(4, 7)
-            )
+            x = x.view(shape[0], T // pT, pT, H // pH, pH, W // pW, pW, C).permute(0, 1, 3, 5, 2, 4, 6, 7).flatten(4, 7)
         else:
-            x = (
-                x.view(T // pT, pT, H // pH, pH, W // pW, pW, C)
-                .permute(0, 2, 4, 1, 3, 5, 6)
-                .flatten(3, 6)
-            )
+            x = x.view(T // pT, pT, H // pH, pH, W // pW, pW, C).permute(0, 2, 4, 1, 3, 5, 6).flatten(3, 6)
         return self.in_layer(x.to(dtype=self.in_layer.weight.dtype))
 
 
@@ -145,11 +146,13 @@ class FeedForward(nn.Module):
     def __init__(self, dim: int, ff_dim: int):
         super().__init__()
         # Dropout keeps the output linear at index 2, matching Diffusers ``FeedForward.net``.
-        self.net = nn.ModuleList([
-            _GELUProjection(dim, ff_dim),
-            nn.Dropout(0.0),
-            nn.Linear(ff_dim, dim, bias=False),
-        ])
+        self.net = nn.ModuleList(
+            [
+                _GELUProjection(dim, ff_dim),
+                nn.Dropout(0.0),
+                nn.Linear(ff_dim, dim, bias=False),
+            ]
+        )
 
     def forward(self, x: Tensor) -> Tensor:
         for module in self.net:
@@ -160,6 +163,7 @@ class FeedForward(nn.Module):
 # ---------------------------------------------------------------------------
 # Attention modules
 # ---------------------------------------------------------------------------
+
 
 class MultiheadSelfAttentionEnc(nn.Module):
     """Self-attention for text encoder blocks (text_token_padding-aware)."""
@@ -172,9 +176,9 @@ class MultiheadSelfAttentionEnc(nn.Module):
         self.to_value = nn.Linear(dim, dim)
         self.query_norm = nn.RMSNorm(head_dim)
         self.key_norm = nn.RMSNorm(head_dim)
-        self.out_layer    = nn.Linear(dim, dim)
+        self.out_layer = nn.Linear(dim, dim)
         self.force_sdpa = text_token_padding
-        self.attn   = SelfAttentionEngine("sdpa" if text_token_padding else engine)
+        self.attn = SelfAttentionEngine("sdpa" if text_token_padding else engine)
 
     def forward(self, x: Tensor, rope: Tensor, attn_mask=None) -> Tensor:
         shape = x.shape[:-1]
@@ -209,8 +213,8 @@ class MultiheadSelfAttentionDec(nn.Module):
         self.to_value = nn.Linear(dim, dim)
         self.query_norm = nn.RMSNorm(head_dim)
         self.key_norm = nn.RMSNorm(head_dim)
-        self.out_layer    = nn.Linear(dim, dim)
-        self.attn   = SelfAttentionEngine(engine)
+        self.out_layer = nn.Linear(dim, dim)
+        self.attn = SelfAttentionEngine(engine)
 
     def forward(self, x: Tensor, rope: Tensor) -> Tensor:
         shape = x.shape[:-1]
@@ -236,7 +240,14 @@ class MultiheadSelfAttentionDec(nn.Module):
 
 
 class MultiheadCrossAttention(nn.Module):
-    def __init__(self, q_dim: int, head_dim: int, kv_dim: int | None = None, engine: str = "auto", text_token_padding: bool = False):
+    def __init__(
+        self,
+        q_dim: int,
+        head_dim: int,
+        kv_dim: int | None = None,
+        engine: str = "auto",
+        text_token_padding: bool = False,
+    ):
         super().__init__()
         kv_dim = kv_dim or q_dim
         self.num_heads = q_dim // head_dim
@@ -245,26 +256,31 @@ class MultiheadCrossAttention(nn.Module):
         self.to_value = nn.Linear(kv_dim, q_dim)
         self.query_norm = nn.RMSNorm(head_dim)
         self.key_norm = nn.RMSNorm(head_dim)
-        self.out_layer    = nn.Linear(q_dim, q_dim)
+        self.out_layer = nn.Linear(q_dim, q_dim)
         self.force_sdpa = text_token_padding
-        self.attn   = SelfAttentionEngine("sdpa" if text_token_padding else engine)
+        self.attn = SelfAttentionEngine("sdpa" if text_token_padding else engine)
 
-    def forward(self, x: Tensor, cond: Tensor, attn_mask=None, rope_q: Tensor | None = None, rope_kv: Tensor | None = None) -> Tensor:
+    def forward(
+        self, x: Tensor, cond: Tensor, attn_mask=None, rope_q: Tensor | None = None, rope_kv: Tensor | None = None
+    ) -> Tensor:
         sq, sk = x.shape[:-1], cond.shape[:-1]
         q = self.to_query(x).reshape(*sq, self.num_heads, -1)
         k = self.to_key(cond).reshape(*sk, self.num_heads, -1)
         v = self.to_value(cond).reshape(*sk, self.num_heads, -1)
         q = self.query_norm(q)
         k = self.key_norm(k)
-        if rope_q  is not None: q = apply_rotary(q, rope_q).type_as(q)
-        if rope_kv is not None: k = apply_rotary(k, rope_kv).type_as(k)
+        if rope_q is not None:
+            q = apply_rotary(q, rope_q).type_as(q)
+        if rope_kv is not None:
+            k = apply_rotary(k, rope_kv).type_as(k)
         query_was_batched = q.dim() == 4
         if not query_was_batched:
             q = q.unsqueeze(0)
         if k.dim() < q.dim():
             k, v = k.unsqueeze(0), v.unsqueeze(0)
         args = {"q": q, "k": k, "v": v}
-        if attn_mask is not None: args["attn_mask"] = attn_mask
+        if attn_mask is not None:
+            args["attn_mask"] = attn_mask
         out = (_sdpa if attn_mask is not None else self.attn.get_attention())(**args)
         if not query_was_batched:
             out = out[0]
@@ -275,13 +291,14 @@ class MultiheadCrossAttention(nn.Module):
 # Output layers
 # ---------------------------------------------------------------------------
 
+
 class OutLayer(nn.Module):
     """Projects model_dim → pixel patches for the video output."""
 
     def __init__(self, model_dim: int, time_dim: int, visual_dim: int, patch_size: tuple):
         super().__init__()
         self.patch_size = patch_size
-        self.modulation  = Modulation(time_dim, model_dim, 2)
+        self.modulation = Modulation(time_dim, model_dim, 2)
         self.norm = nn.LayerNorm(model_dim, elementwise_affine=False)
         self.out_layer = nn.Linear(model_dim, math.prod(patch_size) * visual_dim)
 
@@ -309,11 +326,7 @@ class OutLayer(nn.Module):
 
         T, H, W, _ = x.shape
         pT, pH, pW = self.patch_size
-        return (
-            x.view(T, H, W, -1, pT, pH, pW)
-            .permute(0, 4, 1, 5, 2, 6, 3)
-            .flatten(0, 1).flatten(1, 2).flatten(2, 3)
-        )
+        return x.view(T, H, W, -1, pT, pH, pW).permute(0, 4, 1, 5, 2, 6, 3).flatten(0, 1).flatten(1, 2).flatten(2, 3)
 
     def reset_parameters(self) -> None:
         self.modulation.reset_parameters()
@@ -326,7 +339,7 @@ class OutLayerAudio(nn.Module):
 
     def __init__(self, model_dim: int, time_dim: int, audio_dim: int):
         super().__init__()
-        self.modulation  = Modulation(time_dim, model_dim, 2)
+        self.modulation = Modulation(time_dim, model_dim, 2)
         self.norm = nn.LayerNorm(model_dim, elementwise_affine=False)
         self.out_layer = nn.Linear(model_dim, audio_dim)
 
@@ -346,16 +359,25 @@ class OutLayerAudio(nn.Module):
 # Transformer blocks
 # ---------------------------------------------------------------------------
 
+
 class TransformerEncoderBlock(nn.Module):
     """Text-only self-attention + FFN block."""
 
-    def __init__(self, model_dim: int, time_dim: int, ff_dim: int, head_dim: int, engine: str = "auto", text_token_padding: bool = False):
+    def __init__(
+        self,
+        model_dim: int,
+        time_dim: int,
+        ff_dim: int,
+        head_dim: int,
+        engine: str = "auto",
+        text_token_padding: bool = False,
+    ):
         super().__init__()
-        self.text_modulation  = Modulation(time_dim, model_dim, 6)
+        self.text_modulation = Modulation(time_dim, model_dim, 6)
         self.attn_norm = nn.LayerNorm(model_dim, elementwise_affine=False)
         self.attn = MultiheadSelfAttentionEnc(model_dim, head_dim, engine, text_token_padding)
         self.feed_forward_norm = nn.LayerNorm(model_dim, elementwise_affine=False)
-        self.feed_forward      = FeedForward(model_dim, ff_dim)
+        self.feed_forward = FeedForward(model_dim, ff_dim)
 
     def forward(self, x: Tensor, time_embed: Tensor, rope: Tensor, attn_mask=None) -> Tensor:
         sa_p, ff_p = torch.chunk(self.text_modulation(time_embed), 2, dim=-1)
@@ -374,24 +396,42 @@ class TransformerEncoderBlock(nn.Module):
 class TransformerDecoderBlock(nn.Module):
     """Visual self-attention + cross-attention to text + FFN block."""
 
-    def __init__(self, model_dim: int, time_dim: int, ff_dim: int, head_dim: int, engine: str = "auto", text_token_padding: bool = False):
+    def __init__(
+        self,
+        model_dim: int,
+        time_dim: int,
+        ff_dim: int,
+        head_dim: int,
+        engine: str = "auto",
+        text_token_padding: bool = False,
+    ):
         super().__init__()
-        self.visual_modulation      = Modulation(time_dim, model_dim, 9)
+        self.visual_modulation = Modulation(time_dim, model_dim, 9)
         self.self_attention_norm = nn.LayerNorm(model_dim, elementwise_affine=False)
-        self.self_attention       = MultiheadSelfAttentionDec(model_dim, head_dim, engine)
+        self.self_attention = MultiheadSelfAttentionDec(model_dim, head_dim, engine)
         self.cross_attention_norm = nn.LayerNorm(model_dim, elementwise_affine=False)
-        self.cross_attention       = MultiheadCrossAttention(model_dim, head_dim, engine=engine, text_token_padding=text_token_padding)
+        self.cross_attention = MultiheadCrossAttention(
+            model_dim, head_dim, engine=engine, text_token_padding=text_token_padding
+        )
         self.feed_forward_norm = nn.LayerNorm(model_dim, elementwise_affine=False)
-        self.feed_forward       = FeedForward(model_dim, ff_dim)
+        self.feed_forward = FeedForward(model_dim, ff_dim)
 
     def forward(self, vis: Tensor, text: Tensor, time_embed: Tensor, rope: Tensor, attn_mask=None) -> Tensor:
         sa_p, ca_p, ff_p = torch.chunk(self.visual_modulation(time_embed), 3, dim=-1)
         shift, scale, gate = torch.chunk(sa_p, 3, dim=-1)
-        vis = apply_gate_sum(vis, self.self_attention(apply_scale_shift_norm(self.self_attention_norm, vis, scale, shift), rope), gate)
+        vis = apply_gate_sum(
+            vis, self.self_attention(apply_scale_shift_norm(self.self_attention_norm, vis, scale, shift), rope), gate
+        )
         shift, scale, gate = torch.chunk(ca_p, 3, dim=-1)
-        vis = apply_gate_sum(vis, self.cross_attention(apply_scale_shift_norm(self.cross_attention_norm, vis, scale, shift), text, attn_mask), gate)
+        vis = apply_gate_sum(
+            vis,
+            self.cross_attention(apply_scale_shift_norm(self.cross_attention_norm, vis, scale, shift), text, attn_mask),
+            gate,
+        )
         shift, scale, gate = torch.chunk(ff_p, 3, dim=-1)
-        vis = apply_gate_sum(vis, self.feed_forward(apply_scale_shift_norm(self.feed_forward_norm, vis, scale, shift)), gate)
+        vis = apply_gate_sum(
+            vis, self.feed_forward(apply_scale_shift_norm(self.feed_forward_norm, vis, scale, shift)), gate
+        )
         return vis
 
     def reset_parameters(self) -> None:
@@ -405,28 +445,45 @@ class FusedTransformerDecoderBlock(nn.Module):
 
     def __init__(
         self,
-        model_dim:   int, time_dim:   int, ff_dim:   int, head_dim:   int,
-        model_dim_a: int, time_dim_a: int, ff_dim_a: int, head_dim_a: int,
-        engine: str = "auto", text_token_padding: bool = False,
-        ca_rope: bool = False, cross_gates: bool = False, fix_modulation: bool = False,
+        model_dim: int,
+        time_dim: int,
+        ff_dim: int,
+        head_dim: int,
+        model_dim_a: int,
+        time_dim_a: int,
+        ff_dim_a: int,
+        head_dim_a: int,
+        engine: str = "auto",
+        text_token_padding: bool = False,
+        ca_rope: bool = False,
+        cross_gates: bool = False,
+        fix_modulation: bool = False,
     ):
         super().__init__()
-        self.video_dec_block = TransformerDecoderBlock(model_dim,   time_dim,   ff_dim,   head_dim,   engine, text_token_padding)
-        self.audio_dec_block = TransformerDecoderBlock(model_dim_a, time_dim_a, ff_dim_a, head_dim_a, engine, text_token_padding)
+        self.video_dec_block = TransformerDecoderBlock(
+            model_dim, time_dim, ff_dim, head_dim, engine, text_token_padding
+        )
+        self.audio_dec_block = TransformerDecoderBlock(
+            model_dim_a, time_dim_a, ff_dim_a, head_dim_a, engine, text_token_padding
+        )
 
-        self.va_cross_attention = MultiheadCrossAttention(model_dim,   head_dim,   model_dim_a, engine)
-        self.av_cross_attention = MultiheadCrossAttention(model_dim_a, head_dim_a, model_dim,   engine)
+        self.va_cross_attention = MultiheadCrossAttention(model_dim, head_dim, model_dim_a, engine)
+        self.av_cross_attention = MultiheadCrossAttention(model_dim_a, head_dim_a, model_dim, engine)
 
-        self.va_modulation  = Modulation(time_dim,   model_dim   if not cross_gates else model_dim * 2 + model_dim_a, 1 if cross_gates else 3)
-        self.av_modulation  = Modulation(time_dim_a, model_dim_a if not cross_gates else model_dim_a * 2 + model_dim, 1 if cross_gates else 3)
-        self.va_normalization = nn.LayerNorm(model_dim,   elementwise_affine=False)
+        self.va_modulation = Modulation(
+            time_dim, model_dim if not cross_gates else model_dim * 2 + model_dim_a, 1 if cross_gates else 3
+        )
+        self.av_modulation = Modulation(
+            time_dim_a, model_dim_a if not cross_gates else model_dim_a * 2 + model_dim, 1 if cross_gates else 3
+        )
+        self.va_normalization = nn.LayerNorm(model_dim, elementwise_affine=False)
         self.av_normalization = nn.LayerNorm(model_dim_a, elementwise_affine=False)
 
-        self.ca_rope       = ca_rope
-        self.cross_gates   = cross_gates
+        self.ca_rope = ca_rope
+        self.cross_gates = cross_gates
         self.fix_modulation = fix_modulation
-        self.model_dim     = model_dim
-        self.model_dim_a   = model_dim_a
+        self.model_dim = model_dim
+        self.model_dim_a = model_dim_a
 
     def forward(
         self,
@@ -434,7 +491,7 @@ class FusedTransformerDecoderBlock(nn.Module):
         aud: Tensor,
         text_v: Tensor,
         text_a: Tensor,
-        time_embed,           # (video_time, audio_time) tuple
+        time_embed,  # (video_time, audio_time) tuple
         vis_rope: Tensor,
         aud_rope: Tensor,
         attn_mask=None,
@@ -451,22 +508,40 @@ class FusedTransformerDecoderBlock(nn.Module):
             sa_p, ca_p, ff_p = torch.chunk(self.video_dec_block.visual_modulation(t_v), 3, dim=-1)
 
             shift, scale, gate = torch.chunk(sa_p, 3, dim=-1)
-            vis = apply_gate_sum(vis, self.video_dec_block.self_attention(apply_scale_shift_norm(self.video_dec_block.self_attention_norm, vis, scale, shift), vis_rope), gate).type_as(vis)
+            vis = apply_gate_sum(
+                vis,
+                self.video_dec_block.self_attention(
+                    apply_scale_shift_norm(self.video_dec_block.self_attention_norm, vis, scale, shift), vis_rope
+                ),
+                gate,
+            ).type_as(vis)
 
             shift, scale, gate_v = torch.chunk(ca_p, 3, dim=-1)
-            vis_pre_ca = apply_scale_shift_norm(self.video_dec_block.cross_attention_norm, vis, scale, shift).type_as(vis)
-            vis_out_t  = self.video_dec_block.cross_attention(vis_pre_ca, text_v, attn_mask)  # text CA (saved for cross-modal)
+            vis_pre_ca = apply_scale_shift_norm(self.video_dec_block.cross_attention_norm, vis, scale, shift).type_as(
+                vis
+            )
+            vis_out_t = self.video_dec_block.cross_attention(
+                vis_pre_ca, text_v, attn_mask
+            )  # text CA (saved for cross-modal)
 
         # ---- audio backbone ----
         if aud is not None:
             sa_p, ca_p, ff_p_a = torch.chunk(self.audio_dec_block.visual_modulation(t_a), 3, dim=-1)
 
             shift, scale, gate = torch.chunk(sa_p, 3, dim=-1)
-            aud = apply_gate_sum(aud, self.audio_dec_block.self_attention(apply_scale_shift_norm(self.audio_dec_block.self_attention_norm, aud, scale, shift), aud_rope), gate).type_as(aud)
+            aud = apply_gate_sum(
+                aud,
+                self.audio_dec_block.self_attention(
+                    apply_scale_shift_norm(self.audio_dec_block.self_attention_norm, aud, scale, shift), aud_rope
+                ),
+                gate,
+            ).type_as(aud)
 
             shift, scale, gate_a = torch.chunk(ca_p, 3, dim=-1)
-            aud_pre_ca = apply_scale_shift_norm(self.audio_dec_block.cross_attention_norm, aud, scale, shift).type_as(aud)
-            aud_out_t  = self.audio_dec_block.cross_attention(aud_pre_ca, text_a, attn_mask)
+            aud_pre_ca = apply_scale_shift_norm(self.audio_dec_block.cross_attention_norm, aud, scale, shift).type_as(
+                aud
+            )
+            aud_out_t = self.audio_dec_block.cross_attention(aud_pre_ca, text_a, attn_mask)
             aud = apply_gate_sum(aud, aud_out_t, gate_a).type_as(aud)
 
             # ---- cross-modal attention ----
@@ -477,8 +552,12 @@ class FusedTransformerDecoderBlock(nn.Module):
                 av_params = self.av_modulation(t_av_mod)
 
                 if self.cross_gates:
-                    va_shift, va_scale, va_gate = torch.split(va_params, [self.model_dim, self.model_dim, self.model_dim_a], dim=-1)
-                    av_shift, av_scale, av_gate = torch.split(av_params, [self.model_dim_a, self.model_dim_a, self.model_dim], dim=-1)
+                    va_shift, va_scale, va_gate = torch.split(
+                        va_params, [self.model_dim, self.model_dim, self.model_dim_a], dim=-1
+                    )
+                    av_shift, av_scale, av_gate = torch.split(
+                        av_params, [self.model_dim_a, self.model_dim_a, self.model_dim], dim=-1
+                    )
                 else:
                     va_shift, va_scale, va_gate = torch.chunk(va_params, 3, dim=-1)
                     av_shift, av_scale, av_gate = torch.chunk(av_params, 3, dim=-1)
@@ -490,8 +569,16 @@ class FusedTransformerDecoderBlock(nn.Module):
                 # V→A and A→V attention
                 rq_v = vis_rope if self.ca_rope else None
                 rk_a = aud_rope if self.ca_rope else None
-                vis_from_aud = self.va_cross_attention(vis_for_va, aud_pre_ca, rope_q=rq_v, rope_kv=rk_a) * (1 - fake_audio) * (1 - fake_video)
-                aud_from_vis = self.av_cross_attention(aud_for_av, vis_pre_ca, rope_q=rk_a, rope_kv=rq_v) * (1 - fake_audio) * (1 - fake_video)
+                vis_from_aud = (
+                    self.va_cross_attention(vis_for_va, aud_pre_ca, rope_q=rq_v, rope_kv=rk_a)
+                    * (1 - fake_audio)
+                    * (1 - fake_video)
+                )
+                aud_from_vis = (
+                    self.av_cross_attention(aud_for_av, vis_pre_ca, rope_q=rk_a, rope_kv=rq_v)
+                    * (1 - fake_audio)
+                    * (1 - fake_video)
+                )
 
                 va_g = (va_gate if not self.cross_gates else av_gate) * va_gate_scale
                 av_g = (av_gate if not self.cross_gates else va_gate) * av_gate_scale
@@ -503,11 +590,23 @@ class FusedTransformerDecoderBlock(nn.Module):
         # ---- FFN ----
         if vis is not None:
             shift, scale, gate = torch.chunk(ff_p, 3, dim=-1)
-            vis = apply_gate_sum(vis, self.video_dec_block.feed_forward(apply_scale_shift_norm(self.video_dec_block.feed_forward_norm, vis, scale, shift)), gate).type_as(vis)
+            vis = apply_gate_sum(
+                vis,
+                self.video_dec_block.feed_forward(
+                    apply_scale_shift_norm(self.video_dec_block.feed_forward_norm, vis, scale, shift)
+                ),
+                gate,
+            ).type_as(vis)
 
         if aud is not None:
             shift, scale, gate = torch.chunk(ff_p_a, 3, dim=-1)
-            aud = apply_gate_sum(aud, self.audio_dec_block.feed_forward(apply_scale_shift_norm(self.audio_dec_block.feed_forward_norm, aud, scale, shift)), gate).type_as(aud)
+            aud = apply_gate_sum(
+                aud,
+                self.audio_dec_block.feed_forward(
+                    apply_scale_shift_norm(self.audio_dec_block.feed_forward_norm, aud, scale, shift)
+                ),
+                gate,
+            ).type_as(aud)
 
         return vis, aud
 
@@ -521,6 +620,7 @@ class FusedTransformerDecoderBlock(nn.Module):
 # Unified DiffusionTransformer3D
 # ---------------------------------------------------------------------------
 
+
 class DiffusionTransformer3D(nn.Module):
     """Kandinsky 6 DiT — handles T2V (is_multimodal=False) and T2VA (is_multimodal=True).
 
@@ -530,42 +630,42 @@ class DiffusionTransformer3D(nn.Module):
 
     def __init__(
         self,
-        in_visual_dim:  int   = 16,
-        out_visual_dim: int   = 16,
-        in_text_dim:    int   = 3584,
-        in_text_dim2:   int   = 768,
-        time_dim:       int   = 1024,
-        patch_size:     tuple = (1, 2, 2),
-        model_dim:      int   = 4096,
-        ff_dim:         int   = 16384,
-        num_text_blocks:   int = 4,
+        in_visual_dim: int = 16,
+        out_visual_dim: int = 16,
+        in_text_dim: int = 3584,
+        in_text_dim2: int = 768,
+        time_dim: int = 1024,
+        patch_size: tuple = (1, 2, 2),
+        model_dim: int = 4096,
+        ff_dim: int = 16384,
+        num_text_blocks: int = 4,
         num_visual_blocks: int = 60,
-        axes_dims:      tuple = (32, 48, 48),
-        visual_cond:    bool  = True,
-        is_multimodal:  bool  = False,
+        axes_dims: tuple = (32, 48, 48),
+        visual_cond: bool = True,
+        is_multimodal: bool = False,
         # Audio (T2VA only)
-        in_audio_dim:    int   = 20,
-        out_audio_dim:   int | None = None,
-        model_dim_a:     int | None = None,
-        time_dim_a:      int | None = None,
-        ff_dim_a:        int | None = None,
-        axes_dims_a:     tuple | None = None,
+        in_audio_dim: int = 20,
+        out_audio_dim: int | None = None,
+        model_dim_a: int | None = None,
+        time_dim_a: int | None = None,
+        ff_dim_a: int | None = None,
+        axes_dims_a: tuple | None = None,
         audio_freqs_scaling: float = 1.0,
         # Misc
-        attention_engine:    str  = "auto",
-        text_token_padding:  bool = False,
-        ca_rope:             bool = False,
-        cross_gates:         bool = False,
-        fix_modulation:      bool = False,
+        attention_engine: str = "auto",
+        text_token_padding: bool = False,
+        ca_rope: bool = False,
+        cross_gates: bool = False,
+        fix_modulation: bool = False,
         # I2VA: 0 = off; 2 = generated vs reference frame (tail_cond_first_frame)
         visual_token_type_num_embeddings: int = 0,
     ):
         super().__init__()
-        self.patch_size     = patch_size
-        self.visual_cond    = visual_cond
-        self.is_multimodal  = is_multimodal
-        self.in_visual_dim  = in_visual_dim
-        self.in_audio_dim   = in_audio_dim
+        self.patch_size = patch_size
+        self.visual_cond = visual_cond
+        self.is_multimodal = is_multimodal
+        self.in_visual_dim = in_visual_dim
+        self.in_audio_dim = in_audio_dim
         self.text_token_padding = text_token_padding
         self.visual_token_type_num_embeddings = int(visual_token_type_num_embeddings or 0)
         # Time-independent text/pooled projections (cleared each generation).
@@ -574,66 +674,83 @@ class DiffusionTransformer3D(nn.Module):
         head_dim = sum(axes_dims)
 
         # Effective audio dims (default to video dims)
-        model_dim_a  = model_dim_a  or model_dim
-        time_dim_a   = time_dim_a   or time_dim
-        ff_dim_a     = ff_dim_a     or ff_dim
-        axes_dims_a  = axes_dims_a  or axes_dims
-        head_dim_a   = sum(axes_dims_a)
+        model_dim_a = model_dim_a or model_dim
+        time_dim_a = time_dim_a or time_dim
+        ff_dim_a = ff_dim_a or ff_dim
+        axes_dims_a = axes_dims_a or axes_dims
+        head_dim_a = sum(axes_dims_a)
 
         # ---- visual backbone (shared) ----
         vis_in_dim = (2 * in_visual_dim + 1) if visual_cond else in_visual_dim
-        self.visual_embeddings   = VisualEmbeddings(vis_in_dim, model_dim, patch_size)
+        self.visual_embeddings = VisualEmbeddings(vis_in_dim, model_dim, patch_size)
         if self.visual_token_type_num_embeddings > 0:
-            self.visual_token_type_embeddings = nn.Embedding(
-                self.visual_token_type_num_embeddings, model_dim
-            )
-        self.visual_rope         = RoPE3D(axes_dims)
-        self.out_layer           = OutLayer(model_dim, time_dim, out_visual_dim, patch_size)
+            self.visual_token_type_embeddings = nn.Embedding(self.visual_token_type_num_embeddings, model_dim)
+        self.visual_rope = RoPE3D(axes_dims)
+        self.out_layer = OutLayer(model_dim, time_dim, out_visual_dim, patch_size)
 
         if not is_multimodal:
             # T2V: single text/time embedding branch
-            self.time_embeddings         = TimeEmbeddings(model_dim, time_dim)
-            self.text_embeddings         = TextEmbeddings(in_text_dim, model_dim)
-            self.pooled_text_embeddings  = TextEmbeddings(in_text_dim2, time_dim)
-            self.text_rope               = RoPE1D(head_dim)
-            self.text_blocks             = nn.ModuleList([
-                TransformerEncoderBlock(model_dim, time_dim, ff_dim, head_dim, attention_engine, text_token_padding)
-                for _ in range(num_text_blocks)
-            ])
-            self.visual_transformer_blocks           = nn.ModuleList([
-                TransformerDecoderBlock(model_dim, time_dim, ff_dim, head_dim, attention_engine, text_token_padding)
-                for _ in range(num_visual_blocks)
-            ])
+            self.time_embeddings = TimeEmbeddings(model_dim, time_dim)
+            self.text_embeddings = TextEmbeddings(in_text_dim, model_dim)
+            self.pooled_text_embeddings = TextEmbeddings(in_text_dim2, time_dim)
+            self.text_rope = RoPE1D(head_dim)
+            self.text_blocks = nn.ModuleList(
+                [
+                    TransformerEncoderBlock(model_dim, time_dim, ff_dim, head_dim, attention_engine, text_token_padding)
+                    for _ in range(num_text_blocks)
+                ]
+            )
+            self.visual_transformer_blocks = nn.ModuleList(
+                [
+                    TransformerDecoderBlock(model_dim, time_dim, ff_dim, head_dim, attention_engine, text_token_padding)
+                    for _ in range(num_visual_blocks)
+                ]
+            )
         else:
             # T2VA: dual (video / audio) text+time branches + fused blocks
-            self.audio_embeddings       = TextEmbeddings(in_audio_dim, model_dim_a)
-            self.audio_rope             = RoPE1D(head_dim_a, freqs_scaling=audio_freqs_scaling)
-            self.audio_out_layer        = OutLayerAudio(
-                model_dim_a, time_dim_a, out_audio_dim or in_audio_dim
-            )
+            self.audio_embeddings = TextEmbeddings(in_audio_dim, model_dim_a)
+            self.audio_rope = RoPE1D(head_dim_a, freqs_scaling=audio_freqs_scaling)
+            self.audio_out_layer = OutLayerAudio(model_dim_a, time_dim_a, out_audio_dim or in_audio_dim)
 
             for prefix, md, td, fd, hd in [
-                ("video", model_dim,   time_dim,   ff_dim,   head_dim),
+                ("video", model_dim, time_dim, ff_dim, head_dim),
                 ("audio", model_dim_a, time_dim_a, ff_dim_a, head_dim_a),
             ]:
-                setattr(self, f"{prefix}_time_embeddings",        TimeEmbeddings(md, td))
-                setattr(self, f"{prefix}_text_embeddings",        TextEmbeddings(in_text_dim, md))
+                setattr(self, f"{prefix}_time_embeddings", TimeEmbeddings(md, td))
+                setattr(self, f"{prefix}_text_embeddings", TextEmbeddings(in_text_dim, md))
                 setattr(self, f"{prefix}_pooled_text_embeddings", TextEmbeddings(in_text_dim2, td))
-                setattr(self, f"{prefix}_text_rope",              RoPE1D(hd))
-                setattr(self, f"{prefix}_text_transformer_blocks", nn.ModuleList([
-                    TransformerEncoderBlock(md, td, fd, hd, attention_engine, text_token_padding)
-                    for _ in range(num_text_blocks)
-                ]))
-
-            self.visual_transformer_blocks = nn.ModuleList([
-                FusedTransformerDecoderBlock(
-                    model_dim, time_dim, ff_dim, head_dim,
-                    model_dim_a, time_dim_a, ff_dim_a, head_dim_a,
-                    attention_engine, text_token_padding,
-                    ca_rope=ca_rope, cross_gates=cross_gates, fix_modulation=fix_modulation,
+                setattr(self, f"{prefix}_text_rope", RoPE1D(hd))
+                setattr(
+                    self,
+                    f"{prefix}_text_transformer_blocks",
+                    nn.ModuleList(
+                        [
+                            TransformerEncoderBlock(md, td, fd, hd, attention_engine, text_token_padding)
+                            for _ in range(num_text_blocks)
+                        ]
+                    ),
                 )
-                for _ in range(num_visual_blocks)
-            ])
+
+            self.visual_transformer_blocks = nn.ModuleList(
+                [
+                    FusedTransformerDecoderBlock(
+                        model_dim,
+                        time_dim,
+                        ff_dim,
+                        head_dim,
+                        model_dim_a,
+                        time_dim_a,
+                        ff_dim_a,
+                        head_dim_a,
+                        attention_engine,
+                        text_token_padding,
+                        ca_rope=ca_rope,
+                        cross_gates=cross_gates,
+                        fix_modulation=fix_modulation,
+                    )
+                    for _ in range(num_visual_blocks)
+                ]
+            )
 
     # ------------------------------------------------------------------
     # Stage helpers (shared by DiffusionTransformer3D.forward / MagCache)
@@ -656,7 +773,10 @@ class DiffusionTransformer3D(nn.Module):
         return pe
 
     def _project_text_tokens(
-        self, prefix: str | None, text_embed: Tensor, pooled: Tensor,
+        self,
+        prefix: str | None,
+        text_embed: Tensor,
+        pooled: Tensor,
     ) -> tuple[Tensor, Tensor]:
         """Time-independent token + pooled Linears (cached within a generation)."""
         key = (
@@ -758,9 +878,12 @@ class DiffusionTransformer3D(nn.Module):
                     f"type_ids={tuple(visual_token_type_ids.shape)}, "
                     f"visual={tuple(vis_embed.shape)}"
                 )
-            vis_embed = vis_embed + self.visual_token_type_embeddings(
-                visual_token_type_ids.to(device=vis_embed.device)
-            )[:, :, None, None, :]
+            vis_embed = (
+                vis_embed
+                + self.visual_token_type_embeddings(visual_token_type_ids.to(device=vis_embed.device))[
+                    :, :, None, None, :
+                ]
+            )
         vis_shape = vis_embed.shape[-4:-1]
         vis_rope = visual_rope.flatten(0, 2)
         vis_embed = vis_embed.flatten(1, 3)
@@ -786,11 +909,25 @@ class DiffusionTransformer3D(nn.Module):
             if self.is_multimodal:
                 if vis_embed is not None and aud_embed is None:
                     vis_embed, _ = blk(
-                        vis_embed, None, te, te, (tm, tm), vis_rope, None, attn_mask,
+                        vis_embed,
+                        None,
+                        te,
+                        te,
+                        (tm, tm),
+                        vis_rope,
+                        None,
+                        attn_mask,
                     )
                 elif aud_embed is not None and vis_embed is None:
                     _, aud_embed = blk(
-                        None, aud_embed, te, te, (tm, tm), None, aud_rope, attn_mask,
+                        None,
+                        aud_embed,
+                        te,
+                        te,
+                        (tm, tm),
+                        None,
+                        aud_rope,
+                        attn_mask,
                     )
                 else:
                     raise RuntimeError("single-modality fused path expects exactly one of video/audio")
@@ -815,10 +952,13 @@ class DiffusionTransformer3D(nn.Module):
     ) -> tuple[Tensor, Tensor]:
         for blk in self.visual_transformer_blocks:
             vis_embed, aud_embed = blk(
-                vis_embed, aud_embed,
-                video_te, audio_te,
+                vis_embed,
+                aud_embed,
+                video_te,
+                audio_te,
                 (video_tm, audio_tm),
-                vis_rope, aud_rope,
+                vis_rope,
+                aud_rope,
                 attn_mask,
             )
         return vis_embed, aud_embed
@@ -881,29 +1021,38 @@ class DiffusionTransformer3D(nn.Module):
 
             if x_video is not None:
                 vis_embed, vis_shape, vis_rope = self._embed_visual(
-                    x_video, visual_rope,
+                    x_video,
+                    visual_rope,
                     visual_token_type_ids=visual_token_type_ids,
                 )
                 vis_embed, _ = self._run_visual_blocks_single(
-                    vis_embed, None, te, tm, vis_rope, None, attn_mask,
+                    vis_embed,
+                    None,
+                    te,
+                    tm,
+                    vis_rope,
+                    None,
+                    attn_mask,
                 )
                 return self._project_video(vis_embed, vis_shape, tm)
 
             aud_embed, aud_rope = self._embed_audio(x_audio, audio_rope)
             _, aud_embed = self._run_visual_blocks_single(
-                None, aud_embed, te, tm, None, aud_rope, attn_mask,
+                None,
+                aud_embed,
+                te,
+                tm,
+                None,
+                aud_rope,
+                attn_mask,
             )
             return self._project_audio(aud_embed, tm)
 
         te_v, pe_v = (
-            (text_embed[0], pooled_text_embed[0])
-            if isinstance(text_embed, list)
-            else (text_embed, pooled_text_embed)
+            (text_embed[0], pooled_text_embed[0]) if isinstance(text_embed, list) else (text_embed, pooled_text_embed)
         )
         te_a, pe_a = (
-            (text_embed[1], pooled_text_embed[1])
-            if isinstance(text_embed, list)
-            else (text_embed, pooled_text_embed)
+            (text_embed[1], pooled_text_embed[1]) if isinstance(text_embed, list) else (text_embed, pooled_text_embed)
         )
         if isinstance(text_rope, list):
             rope_v, rope_a = text_rope[0], text_rope[1]
@@ -915,18 +1064,29 @@ class DiffusionTransformer3D(nn.Module):
         audio_te, audio_tm = self._encode_text("audio", te_a, pe_a, t_a, rope_a, attn_mask)
 
         vis_embed, vis_shape, vis_rope = self._embed_visual(
-            x_video, visual_rope,
+            x_video,
+            visual_rope,
             visual_token_type_ids=visual_token_type_ids,
         )
         aud_embed, aud_rope = self._embed_audio(x_audio, audio_rope)
 
         vis_embed, aud_embed = self._run_visual_blocks_fused(
-            vis_embed, aud_embed,
-            video_te, audio_te, video_tm, audio_tm,
-            vis_rope, aud_rope, attn_mask,
+            vis_embed,
+            aud_embed,
+            video_te,
+            audio_te,
+            video_tm,
+            audio_tm,
+            vis_rope,
+            aud_rope,
+            attn_mask,
         )
         return self._project_fused(
-            vis_embed, aud_embed, vis_shape, video_tm, audio_tm,
+            vis_embed,
+            aud_embed,
+            vis_shape,
+            video_tm,
+            audio_tm,
         )
 
     def reset_parameters(self) -> None:

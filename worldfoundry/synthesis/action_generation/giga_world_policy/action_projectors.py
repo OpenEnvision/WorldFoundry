@@ -1,5 +1,4 @@
 import math
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -19,7 +18,7 @@ class EmbodimentSpecificLinear(nn.Module):
         nn.init.uniform_(self.weight, -k, k)
         nn.init.uniform_(self.bias, -k, k)
 
-    def _normalize_embodiment_id(self, embodiment_id: Optional[torch.Tensor], batch_size: int) -> torch.Tensor:
+    def _normalize_embodiment_id(self, embodiment_id: torch.Tensor | None, batch_size: int) -> torch.Tensor:
         if embodiment_id is None:
             embodiment_id = torch.zeros(batch_size, dtype=torch.long, device=self.weight.device)
         elif not isinstance(embodiment_id, torch.Tensor):
@@ -33,12 +32,16 @@ class EmbodimentSpecificLinear(nn.Module):
         if embodiment_id.numel() == 1 and batch_size != 1:
             embodiment_id = embodiment_id.expand(batch_size)
         if embodiment_id.numel() != batch_size:
-            raise ValueError(f"embodiment_id batch size mismatch: got {tuple(embodiment_id.shape)}, expected batch={batch_size}")
+            raise ValueError(
+                f"embodiment_id batch size mismatch: got {tuple(embodiment_id.shape)}, expected batch={batch_size}"
+            )
         if torch.any((embodiment_id < 0) | (embodiment_id >= self.num_categories)):
-            raise ValueError(f"embodiment_id out of range for num_categories={self.num_categories}: {embodiment_id.detach().cpu().tolist()}")
+            raise ValueError(
+                f"embodiment_id out of range for num_categories={self.num_categories}: {embodiment_id.detach().cpu().tolist()}"
+            )
         return embodiment_id
 
-    def forward(self, x: torch.Tensor, embodiment_id: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, embodiment_id: torch.Tensor | None = None) -> torch.Tensor:
         embodiment_id = self._normalize_embodiment_id(embodiment_id, batch_size=x.shape[0])
         one_hot = F.one_hot(embodiment_id, num_classes=self.num_categories).to(dtype=self.weight.dtype)
         selected_weight = torch.einsum("bc,cij->bij", one_hot, self.weight)
@@ -48,8 +51,7 @@ class EmbodimentSpecificLinear(nn.Module):
 
     def extra_repr(self):
         return (
-            f"num_categories={self.num_categories}, "
-            f"input_dim={self.weight.shape[1]}, output_dim={self.weight.shape[2]}"
+            f"num_categories={self.num_categories}, input_dim={self.weight.shape[1]}, output_dim={self.weight.shape[2]}"
         )
 
 
@@ -64,7 +66,7 @@ class EmbodimentSpecificActionEncoder(nn.Module):
         self.act2 = nn.GELU()
         self.out_proj = nn.Linear(256, inner_dim)
 
-    def forward(self, action: torch.Tensor, embodiment_id: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, action: torch.Tensor, embodiment_id: torch.Tensor | None = None) -> torch.Tensor:
         x = self.in_proj(action, embodiment_id=embodiment_id)
         x = self.act1(x)
         x = self.mid_proj(x)
@@ -83,7 +85,7 @@ class EmbodimentSpecificActionDecoder(nn.Module):
         self.act2 = nn.GELU()
         self.out_proj = EmbodimentSpecificLinear(128, action_dim, num_categories=num_embodiments, dtype=dtype)
 
-    def forward(self, action_states: torch.Tensor, embodiment_id: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, action_states: torch.Tensor, embodiment_id: torch.Tensor | None = None) -> torch.Tensor:
         x = self.in_proj(action_states)
         x = self.act1(x)
         x = self.mid_proj(x)

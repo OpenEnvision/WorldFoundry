@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import (
+from worldfoundry.evals.tasks.execution.orchestration.interfaces import (
     BenchmarkRunner,
     BenchmarkSample,
     DatasetMaterializationPlan,
+    OfficialBenchmarkRunner,
     OfficialRunResult,
     OfficialRunStage,
-    OfficialBenchmarkRunner,
 )
 
 

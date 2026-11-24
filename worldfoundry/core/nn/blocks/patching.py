@@ -16,8 +16,9 @@ Public surface:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
 ImageLayout = Literal["nchw", "nhwc"]
 

@@ -1,6 +1,6 @@
 ---
 title: WorldReasonBench
-description: "Tsinghua world-state prediction bench: 436 cases, process-aware QA plus quality. WorldFoundry hosts the protocol; restricted assets and no complete official judge run."
+description: "Tsinghua world-state prediction bench: 436 cases, process-aware QA plus quality. WorldFoundry hosts the protocol runtime; upstream assets are license-restricted."
 ---
 
 WorldReasonBench (Tsinghua, with NTU and Waterloo) reframes video-generation eval as **world-state prediction**: given an initial state and an action, can the model generate a future whose evolution stays physically, socially, logically, and informationally consistent? Official size: **436 curated cases** with structured QA across **four reasoning dimensions / 22 subcategories**. Companion **WorldRewardBench** adds ~6K expert preference pairs.
@@ -12,14 +12,14 @@ Two protocols:
 
 Paper: [WorldReasonBench](https://arxiv.org/abs/2605.10434). Project: [unix-ai-lab.github.io/WorldReasonBench](https://unix-ai-lab.github.io/WorldReasonBench/). Code: [UniX-AI-Lab/WorldReasonBench](https://github.com/UniX-AI-Lab/WorldReasonBench). Upstream README **prohibits redistribution, modification, and commercial use** without approval despite also referring to MIT.
 
-WorldFoundry **hosts the protocol runtime** with an OpenAI-compatible multimodal judge. Result normalization / QA component code exists; **no complete official judge run is claimed**.
+WorldFoundry **hosts the protocol runtime** with an OpenAI-compatible multimodal judge. A complete official judge run has not been validated.
 
 <BenchmarkPageSections id="worldreasonbench" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id worldreasonbench \
   --mode official-validation \
   --official-results-path <official_results_dir> \
@@ -29,7 +29,7 @@ worldfoundry-eval zoo benchmark-run \
 
 `--protocol` selects the protocol. QA / pair files: `--qa-json`, `--pairs-json`. Judge: `--base-url`, `--api-key`, `--model`, `--judge-model`. Default import: `WORLDFOUNDRY_WORLDREASONBENCH_RESULTS_PATH`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/worldreasonbench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/worldreasonbench`.
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/worldreasonbench.yaml`, `worldfoundry/evals/tasks/execution/runners/worldreasonbench`.
 
 Outputs include `scorecard.json` (primary `score_pr`) and `protocol_results.json`.
 

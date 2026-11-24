@@ -1,15 +1,15 @@
 ---
 title: "VGGT-Omega"
-description: "VGGT-Omega from Meta AI: 3d-reconstruction and gaussian-splatting; Verified."
+description: "VGGT-Omega from Meta AI: 3D reconstruction, gaussian splatting, and 1 more task; Verified."
 modelId: "vggt-omega"
 pageSource: authored
 ---
 
-VGGT-Omega is the extended VGGT release published under facebook/VGGT-Omega, covering 3D reconstruction, Gaussian splatting, and novel view synthesis. In this catalog it is verified with unusually strong evidence: single-image GPU parity against the pinned upstream commit passed with max_abs_diff=0.0 for comparable outputs, and the in-tree runner supports the official scene-export route.
+VGGT-Omega is the extended VGGT release published under facebook/VGGT-Omega, covering 3D reconstruction, Gaussian splatting, and novel view synthesis. Validated on GPU: single-image outputs match the pinned upstream commit exactly, and the official scene-export route runs end to end.
 
 <ModelPaperFigures modelId="vggt-omega" locale="en" />
 
-The recorded paper is [arXiv 2605.15195](https://arxiv.org/abs/2605.15195).
+Paper: [arXiv 2605.15195](https://arxiv.org/abs/2605.15195).
 
 Project page: [vggt-omega.github.io](https://vggt-omega.github.io/). Code: [facebookresearch/vggt-omega](https://github.com/facebookresearch/vggt-omega).
 
@@ -17,34 +17,34 @@ Project page: [vggt-omega.github.io](https://vggt-omega.github.io/). Code: [face
 
 ## What it is for
 
-`vggt-omega` is the recorded reconstruction line. Start here to emit geometry from the documented views.
+Use `vggt-omega` for feed-forward 3D reconstruction from the input views.
 
-It uses an official-architecture representation runner plus the existing WorldFoundry VGGTResult/save interface, emitting predictions.npz plus GLB scene artifacts. Weights stay under assets/checkpoints and are never committed into source files; the checkpoint license is CC-BY-NC-4.0. It is published by Meta AI.
+It runs the official VGGT-Omega architecture and writes predictions.npz plus GLB scene artifacts through the WorldFoundry VGGT result interface. Weights are staged under assets/checkpoints. It is published by Meta AI.
 
-Catalog tasks include 3d-reconstruction, gaussian-splatting, and novel-view-synthesis. Catalog aliases include `vggt_omega` and `facebook/VGGT-Omega`.
+Tasks: 3D reconstruction, gaussian splatting, and novel view synthesis. Aliases: `vggt_omega` and `facebook/VGGT-Omega`.
 
-Not [VGGT](/docs/guides/supported-models/vggt) and [VGGT-World](/docs/guides/supported-models/vggt-world).
+VGGT-Omega is a different model from [VGGT](/docs/guides/supported-models/vggt) and [VGGT-World](/docs/guides/supported-models/vggt-world).
 
 ## Runtime contract
 
-Optional `input_path`, `interactions`, `camera_view`, `task_type`, and `image_resolution`; artifacts `scene_conf20.0_blackFalse_whiteFalse_camTrue_skyFalse_max200k.glb`.
+Inputs `input-path` (bundled samples are used when omitted); options `task-type`, `image-resolution`, `preprocess-mode`, `video-sample-fps`, and `max-points-k`; artifacts `scene_conf20.0_blackFalse_whiteFalse_camTrue_skyFalse_max200k.glb`.
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `VGGTOmegaPipeline`.
 
 Family status: **Verified**.
 
-Use this entry for the verified official scene-export route with WorldFoundry representation artifacts. It is distinct from the vggt (base) and vggt-world entries — pick by route, not by name.
+Use vggt-omega for the official scene-export route with predictions.npz and GLB outputs. It is a different model from vggt (base) and vggt-world — pick by route, not by name.
 
-VGGT-Omega uses an official-architecture representation runner plus the existing WorldFoundry VGGTResult/save interface.
+CC-BY-NC-4.0 checkpoint: non-commercial license terms apply downstream.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run vggt-omega --pipeline.task-profile interactive-video` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Reconstruct the scene with `wf run vggt-omega --pipeline.task-profile interactive-video`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `facebook/VGGT-Omega`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh vggt-omega`. Add `--download` to fetch missing public checkpoints.
+Weights: `facebook/VGGT-Omega`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh vggt-omega`. Add `--download` to fetch missing public checkpoints.
 
-Recorded licenses include cc-by-nc-4.0; status: **Verified**.
+License: CC BY-NC 4.0.
 
 <ModelRelatedRecipes modelId="vggt-omega" locale="en" />

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     collect_images,
@@ -13,7 +14,6 @@ from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     runtime_options_cache_key,
     to_numpy_image,
 )
-
 
 _RUNTIME_CACHE: dict[tuple[Any, ...], Any] = {}
 
@@ -30,7 +30,12 @@ def _is_pi0(location: str, options: Mapping[str, Any]) -> bool:
 
 
 def _pi0_camera_keys(options: Mapping[str, Any], observation: Mapping[str, Any] | None = None) -> tuple[str, str]:
-    keys = tuple(str(key) for key in (options.get("camera_keys") or (observation or {}).get("camera_keys") or ("exo_camera_1", "wrist_camera")))
+    keys = tuple(
+        str(key)
+        for key in (
+            options.get("camera_keys") or (observation or {}).get("camera_keys") or ("exo_camera_1", "wrist_camera")
+        )
+    )
     if len(keys) != 2 or keys[0] == keys[1]:
         raise ValueError("MolmoBot-Pi0 requires two distinct camera keys: exterior and wrist.")
     return keys
@@ -43,7 +48,11 @@ def _pi0_runtime_for(location: str, device: str, options: Mapping[str, Any]) -> 
     config_file = checkpoint / "assets" / "train_config.pkl"
     if not checkpoint.is_dir() or not config_file.is_file():
         raise FileNotFoundError(f"MolmoBot-Pi0 checkpoint is missing assets/train_config.pkl: {checkpoint}")
-    tokenizer = Path(os.environ.get("OPENPI_DATA_HOME", "~/.cache/openpi")).expanduser() / "big_vision" / "paligemma_tokenizer.model"
+    tokenizer = (
+        Path(os.environ.get("OPENPI_DATA_HOME", "~/.cache/openpi")).expanduser()
+        / "big_vision"
+        / "paligemma_tokenizer.model"
+    )
     if not tokenizer.is_file():
         raise FileNotFoundError(
             "MolmoBot-Pi0 requires the PaliGemma tokenizer at "
@@ -65,8 +74,7 @@ def _pi0_runtime_for(location: str, device: str, options: Mapping[str, Any]) -> 
         )
     except ModuleNotFoundError as exc:
         raise RuntimeError(
-            "MolmoBot-Pi0 needs the pinned official molmobot-pi0 and OpenPI "
-            "dependencies in a dedicated environment."
+            "MolmoBot-Pi0 needs the pinned official molmobot-pi0 and OpenPI dependencies in a dedicated environment."
         ) from exc
     agent.prepare_model()
     _RUNTIME_CACHE[key] = agent
@@ -95,7 +103,9 @@ def _runtime_for(location: str, device: str, options: Mapping[str, Any]) -> Any:
     agent = SynthManipMolmoInferenceWrapper(
         checkpoint_path=location,
         device=device,
-        num_flow_steps=None if options.get("num_flow_steps") in (None, "") else option_int(options.get("num_flow_steps"), 10),
+        num_flow_steps=None
+        if options.get("num_flow_steps") in (None, "")
+        else option_int(options.get("num_flow_steps"), 10),
         max_seq_len=None if options.get("max_seq_len") in (None, "") else option_int(options.get("max_seq_len"), 0),
         norm_repo_id=str(options.get("norm_repo_id") or "synthmanip"),
         use_bfloat16=option_bool(options.get("use_bfloat16"), True),
@@ -186,7 +196,10 @@ def predict_action(
             },
         )
     agent = _runtime_for(location, device, options)
-    camera_keys = tuple(str(item) for item in options.get("camera_keys") or observation.get("camera_keys") or ("exo_camera_1", "wrist_camera"))
+    camera_keys = tuple(
+        str(item)
+        for item in options.get("camera_keys") or observation.get("camera_keys") or ("exo_camera_1", "wrist_camera")
+    )
     images = collect_images(observation, image, camera_keys)
     if not images:
         raise ValueError("MolmoBot requires one or more camera images for get_action_chunk.")

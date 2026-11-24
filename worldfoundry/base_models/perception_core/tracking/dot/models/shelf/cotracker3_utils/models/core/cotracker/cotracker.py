@@ -8,19 +8,22 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracker3_utils.models.core.model_utils import sample_features4d, sample_features5d
 from worldfoundry.base_models.perception_core.tracking.cotracker.models.core.embeddings import (
-    get_2d_embedding,
     get_1d_sincos_pos_embed_from_grid,
+    get_2d_embedding,
     get_2d_sincos_pos_embed,
+)
+from worldfoundry.base_models.perception_core.tracking.dot.models.shelf.cotracker3_utils.models.core.model_utils import (
+    sample_features4d,
+    sample_features5d,
 )
 
 from .blocks import (
-    Mlp,
-    BasicEncoder,
-    AttnBlock,
-    CorrBlock,
     Attention,
+    AttnBlock,
+    BasicEncoder,
+    CorrBlock,
+    Mlp,
 )
 
 torch.manual_seed(0)
@@ -35,7 +38,7 @@ class CoTracker2(nn.Module):
         num_virtual_tracks=64,
         model_resolution=(384, 512),
     ):
-        super(CoTracker2, self).__init__()
+        super().__init__()
         self.window_len = window_len
         self.stride = stride
         self.hidden_dim = 256
@@ -56,13 +59,9 @@ class CoTracker2(nn.Module):
             num_virtual_tracks=num_virtual_tracks,
         )
 
-        time_grid = torch.linspace(0, window_len - 1, window_len).reshape(
-            1, window_len, 1
-        )
+        time_grid = torch.linspace(0, window_len - 1, window_len).reshape(1, window_len, 1)
 
-        self.register_buffer(
-            "time_emb", get_1d_sincos_pos_embed_from_grid(self.input_dim, time_grid[0])
-        )
+        self.register_buffer("time_emb", get_1d_sincos_pos_embed_from_grid(self.input_dim, time_grid[0]))
 
         self.register_buffer(
             "pos_emb",
@@ -110,11 +109,7 @@ class CoTracker2(nn.Module):
         B, S, *_ = fmaps.shape
 
         track_mask = F.pad(track_mask, (0, 0, 0, 0, 0, S - S_init), "constant")
-        track_mask_vis = (
-            torch.cat([track_mask, vis], dim=-1)
-            .permute(0, 2, 1, 3)
-            .reshape(B * N, S, 2)
-        )
+        track_mask_vis = torch.cat([track_mask, vis], dim=-1).permute(0, 2, 1, 3).reshape(B * N, S, 2)
 
         corr_block = CorrBlock(
             fmaps,
@@ -124,9 +119,7 @@ class CoTracker2(nn.Module):
         )
 
         sampled_pos_emb = (
-            sample_features4d(self.pos_emb.repeat(B, 1, 1, 1), coords[:, 0])
-            .reshape(B * N, self.input_dim)
-            .unsqueeze(1)
+            sample_features4d(self.pos_emb.repeat(B, 1, 1, 1), coords[:, 0]).reshape(B * N, self.input_dim).unsqueeze(1)
         )  # B E N -> (B N) 1 E
 
         coord_preds = []
@@ -141,13 +134,9 @@ class CoTracker2(nn.Module):
             flows = (coords - coords[:, 0:1]).permute(0, 2, 1, 3).reshape(B * N, S, 2)
             flow_emb = get_2d_embedding(flows, 64, cat_coords=True)  # N S E
 
-            track_feat_ = track_feat.permute(0, 2, 1, 3).reshape(
-                B * N, S, self.latent_dim
-            )
+            track_feat_ = track_feat.permute(0, 2, 1, 3).reshape(B * N, S, self.latent_dim)
 
-            transformer_input = torch.cat(
-                [flow_emb, fcorrs, track_feat_, track_mask_vis], dim=2
-            )
+            transformer_input = torch.cat([flow_emb, fcorrs, track_feat_, track_mask_vis], dim=2)
             x = transformer_input + sampled_pos_emb + self.time_emb
             x = x.view(B, N, S, -1)  # (B N) S D -> B N S D
 
@@ -161,13 +150,9 @@ class CoTracker2(nn.Module):
             coord_preds.append(coords * self.stride)
 
             delta_feats_ = delta[..., 2:].reshape(B * N * S, self.latent_dim)
-            track_feat_ = track_feat.permute(0, 2, 1, 3).reshape(
-                B * N * S, self.latent_dim
-            )
+            track_feat_ = track_feat.permute(0, 2, 1, 3).reshape(B * N * S, self.latent_dim)
             track_feat_ = self.track_feat_updater(self.norm(delta_feats_)) + track_feat_
-            track_feat = track_feat_.reshape(B, N, S, self.latent_dim).permute(
-                0, 2, 1, 3
-            )  # (B N S) C -> B S N C
+            track_feat = track_feat_.reshape(B, N, S, self.latent_dim).permute(0, 2, 1, 3)  # (B N S) C -> B S N C
 
         vis_pred = self.vis_predictor(track_feat).reshape(B, S, N)
         return coord_preds, vis_pred
@@ -230,9 +215,7 @@ class CoTracker2(nn.Module):
         assert S >= 2  # A tracker needs at least two frames to track something
         if is_online:
             assert T <= S, "Online mode: video chunk must be <= window size."
-            assert (
-                self.online_ind is not None
-            ), "Call model.init_video_online_processing() first."
+            assert self.online_ind is not None, "Call model.init_video_online_processing() first."
             assert not is_train, "Training not supported in online mode."
         step = S // 2  # How much the sliding window moves at every step
         video = 2 * (video / 255.0) - 1.0
@@ -255,20 +238,14 @@ class CoTracker2(nn.Module):
             else:
                 # Pad online predictions with zeros for the current window
                 pad = min(step, T - step)
-                coords_predicted = F.pad(
-                    self.online_coords_predicted, (0, 0, 0, 0, 0, pad), "constant"
-                )
-                vis_predicted = F.pad(
-                    self.online_vis_predicted, (0, 0, 0, pad), "constant"
-                )
+                coords_predicted = F.pad(self.online_coords_predicted, (0, 0, 0, 0, 0, pad), "constant")
+                vis_predicted = F.pad(self.online_vis_predicted, (0, 0, 0, pad), "constant")
         all_coords_predictions, all_vis_predictions = [], []
 
         # Pad the video so that an integer number of sliding windows fit into it
         # TODO: we may drop this requirement because the transformer should not care
         # TODO: pad the features instead of the video
-        pad = (
-            S - T if is_online else (S - T % S) % S
-        )  # We don't want to pad if T % S == 0
+        pad = S - T if is_online else (S - T % S) % S  # We don't want to pad if T % S == 0
         video = video.reshape(B, 1, T, C * H * W)
         video_pad = video[:, :, -1:].repeat(1, 1, pad, 1)
         video = torch.cat([video, video_pad], dim=2)
@@ -307,9 +284,7 @@ class CoTracker2(nn.Module):
             # by the end of the previous window, which is ind + overlap
             if ind > 0:
                 overlap = S - step
-                copy_over = (queried_frames < ind + overlap)[
-                    :, None, :, None
-                ]  # B 1 N 1
+                copy_over = (queried_frames < ind + overlap)[:, None, :, None]  # B 1 N 1
                 coords_prev = torch.nn.functional.pad(
                     coords_predicted[:, ind : ind + overlap] / self.stride,
                     (0, 0, 0, 0, 0, step),
@@ -320,25 +295,18 @@ class CoTracker2(nn.Module):
                     (0, 0, 0, 0, 0, step),
                     "replicate",
                 )  # B S N 1
-                coords_init = torch.where(
-                    copy_over.expand_as(coords_init), coords_prev, coords_init
-                )
-                vis_init = torch.where(
-                    copy_over.expand_as(vis_init), vis_prev, vis_init
-                )
+                coords_init = torch.where(copy_over.expand_as(coords_init), coords_prev, coords_init)
+                vis_init = torch.where(copy_over.expand_as(vis_init), vis_prev, vis_init)
 
             # The attention mask is 1 for the spatio-temporal points within
             # a track which is updated in the current window
-            attention_mask = (
-                (queried_frames < ind + S).reshape(B, 1, N).repeat(1, S, 1)
-            )  # B S N
+            attention_mask = (queried_frames < ind + S).reshape(B, 1, N).repeat(1, S, 1)  # B S N
 
             # The track mask is 1 for the spatio-temporal points that actually
             # need updating: only after begin queried, and not if contained
             # in a previous window
             track_mask = (
-                queried_frames[:, None, :, None]
-                <= torch.arange(ind, ind + S, device=device)[None, :, None, None]
+                queried_frames[:, None, :, None] <= torch.arange(ind, ind + S, device=device)[None, :, None, None]
             ).contiguous()  # B S N 1
 
             if ind > 0:
@@ -355,15 +323,11 @@ class CoTracker2(nn.Module):
                 iters=iters,
             )
 
-            S_trimmed = (
-                T if is_online else min(T - ind, S)
-            )  # accounts for last window duration
+            S_trimmed = T if is_online else min(T - ind, S)  # accounts for last window duration
             coords_predicted[:, ind : ind + S] = coords[-1][:, :S_trimmed]
             vis_predicted[:, ind : ind + S] = vis[:, :S_trimmed]
             if is_train:
-                all_coords_predictions.append(
-                    [coord[:, :S_trimmed] for coord in coords]
-                )
+                all_coords_predictions.append([coord[:, :S_trimmed] for coord in coords])
                 all_vis_predictions.append(torch.sigmoid(vis[:, :S_trimmed]))
 
         if is_online:
@@ -373,10 +337,7 @@ class CoTracker2(nn.Module):
         vis_predicted = torch.sigmoid(vis_predicted)
 
         if is_train:
-            mask = (
-                queried_frames[:, None]
-                <= torch.arange(0, T, device=device)[None, :, None]
-            )
+            mask = queried_frames[:, None] <= torch.arange(0, T, device=device)[None, :, None]
             train_data = (all_coords_predictions, all_vis_predictions, mask)
         else:
             train_data = None
@@ -413,9 +374,7 @@ class EfficientUpdateFormer(nn.Module):
         else:
             self.flow_head = torch.nn.Linear(hidden_size, output_dim, bias=True)
         self.num_virtual_tracks = num_virtual_tracks
-        self.virual_tracks = nn.Parameter(
-            torch.randn(1, num_virtual_tracks, 1, hidden_size)
-        )
+        self.virual_tracks = nn.Parameter(torch.randn(1, num_virtual_tracks, 1, hidden_size))
         self.add_space_attn = add_space_attn
         self.linear_layer_for_vis_conf = linear_layer_for_vis_conf
         self.time_blocks = nn.ModuleList(
@@ -443,20 +402,10 @@ class EfficientUpdateFormer(nn.Module):
                 ]
             )
             self.space_point2virtual_blocks = nn.ModuleList(
-                [
-                    CrossAttnBlock(
-                        hidden_size, hidden_size, num_heads, mlp_ratio=mlp_ratio
-                    )
-                    for _ in range(space_depth)
-                ]
+                [CrossAttnBlock(hidden_size, hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(space_depth)]
             )
             self.space_virtual2point_blocks = nn.ModuleList(
-                [
-                    CrossAttnBlock(
-                        hidden_size, hidden_size, num_heads, mlp_ratio=mlp_ratio
-                    )
-                    for _ in range(space_depth)
-                ]
+                [CrossAttnBlock(hidden_size, hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(space_depth)]
             )
             assert len(self.time_blocks) >= len(self.space_virtual2point_blocks)
         self.initialize_weights()
@@ -489,7 +438,6 @@ class EfficientUpdateFormer(nn.Module):
 
         _, N, _, _ = tokens.shape
         j = 0
-        layers = []
         for i in range(len(self.time_blocks)):
             time_tokens = tokens.contiguous().view(B * N, T, -1)  # B N T C -> (B N) T C
             time_tokens = self.time_blocks[i](time_tokens)
@@ -500,26 +448,18 @@ class EfficientUpdateFormer(nn.Module):
                 and hasattr(self, "space_virtual_blocks")
                 and (i % (len(self.time_blocks) // len(self.space_virtual_blocks)) == 0)
             ):
-                space_tokens = (
-                    tokens.permute(0, 2, 1, 3).contiguous().view(B * T, N, -1)
-                )  # B N T C -> (B T) N C
+                space_tokens = tokens.permute(0, 2, 1, 3).contiguous().view(B * T, N, -1)  # B N T C -> (B T) N C
 
                 point_tokens = space_tokens[:, : N - self.num_virtual_tracks]
                 virtual_tokens = space_tokens[:, N - self.num_virtual_tracks :]
 
-                virtual_tokens = self.space_virtual2point_blocks[j](
-                    virtual_tokens, point_tokens, mask=mask
-                )
+                virtual_tokens = self.space_virtual2point_blocks[j](virtual_tokens, point_tokens, mask=mask)
 
                 virtual_tokens = self.space_virtual_blocks[j](virtual_tokens)
-                point_tokens = self.space_point2virtual_blocks[j](
-                    point_tokens, virtual_tokens, mask=mask
-                )
+                point_tokens = self.space_point2virtual_blocks[j](point_tokens, virtual_tokens, mask=mask)
 
                 space_tokens = torch.cat([point_tokens, virtual_tokens], dim=1)
-                tokens = space_tokens.view(B, T, N, -1).permute(
-                    0, 2, 1, 3
-                )  # (B T) N C -> B N T C
+                tokens = space_tokens.view(B, T, N, -1).permute(0, 2, 1, 3)  # (B T) N C -> B N T C
                 j += 1
         tokens = tokens[:, : N - self.num_virtual_tracks]
 
@@ -532,23 +472,20 @@ class EfficientUpdateFormer(nn.Module):
 
 
 class CrossAttnBlock(nn.Module):
-    def __init__(
-        self, hidden_size, context_dim, num_heads=1, mlp_ratio=4.0, **block_kwargs
-    ):
+    def __init__(self, hidden_size, context_dim, num_heads=1, mlp_ratio=4.0, **block_kwargs):
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.norm_context = nn.LayerNorm(hidden_size)
         self.cross_attn = Attention(
-            hidden_size,
-            context_dim=context_dim,
-            num_heads=num_heads,
-            qkv_bias=True,
-            **block_kwargs
+            hidden_size, context_dim=context_dim, num_heads=num_heads, qkv_bias=True, **block_kwargs
         )
 
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
         self.mlp = Mlp(
             in_features=hidden_size,
             hidden_features=mlp_hidden_dim,
@@ -560,18 +497,12 @@ class CrossAttnBlock(nn.Module):
         attn_bias = None
         if mask is not None:
             if mask.shape[1] == x.shape[1]:
-                mask = mask[:, None, :, None].expand(
-                    -1, self.cross_attn.heads, -1, context.shape[1]
-                )
+                mask = mask[:, None, :, None].expand(-1, self.cross_attn.heads, -1, context.shape[1])
             else:
-                mask = mask[:, None, None].expand(
-                    -1, self.cross_attn.heads, x.shape[1], -1
-                )
+                mask = mask[:, None, None].expand(-1, self.cross_attn.heads, x.shape[1], -1)
 
             max_neg_value = -torch.finfo(x.dtype).max
             attn_bias = (~mask) * max_neg_value
-        x = x + self.cross_attn(
-            self.norm1(x), context=self.norm_context(context), attn_bias=attn_bias
-        )
+        x = x + self.cross_attn(self.norm1(x), context=self.norm_context(context), attn_bias=attn_bias)
         x = x + self.mlp(self.norm2(x))
         return x

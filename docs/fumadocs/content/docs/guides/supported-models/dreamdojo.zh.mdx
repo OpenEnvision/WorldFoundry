@@ -13,7 +13,7 @@ DreamDojo 从初始图像与归一化机器人动作预测机器人视角视频�
 
 ## 运行时契约
 
-集成状态：**已集成**。此模型是机器人世界模型，不是输出动作的 VLA 策略。
+此模型是机器人世界模型，不是输出动作的 VLA 策略。
 
 提供一幅初始图像与已经归一化的动作，形状为 `[N,384]` 或 `[1,N,384]`，其中 `N` 是 12 的正整数倍。每块在 480×640、5 fps 下生成 13 帧。续接使用上一块最终生成帧作为新观测，并移除重复的边界帧。动作文件支持 `.npy`、`.json` 与 PyTorch tensor。
 
@@ -22,6 +22,8 @@ DreamDojo 从初始图像与归一化机器人动作预测机器人视角视频�
 ## 在 WorldFoundry 中运行
 
 准备 GR-1 EMA 权重、Cosmos-Predict2.5 视频 tokenizer 与 Cosmos-Reason1-7B 文本编码器。需要时，公共加载入口会自动将分布式 checkpoint 分片转换为 `model_ema_bf16.pt`。
+
+运行环境：独立环境 `dreamdojo`（Python 3.10，CUDA 12.8，torch==2.7.0）。
 
 ```python
 from worldfoundry.pipelines.component_pipelines import DreamDojoPipeline
@@ -46,11 +48,11 @@ pipeline(
 
 如已准备官方 Reason1 特征，可用 `text_embeddings_path` 替代 `text_encoder_path`。特征形状必须为 `[1,S,100352]`；该路径使用实际提供的文本 embedding，不再加载文本编码器。
 
-可复现公共入口命令见 `python tests/manual/dreamdojo_inference.py --help`。权重、输入与生成视频保持为外部资产。
+命令行运行方式见 `python tests/manual/dreamdojo_inference.py --help`。权重、输入与生成视频存放在仓库之外。
 
-## 已执行证据
+## 验证
 
-H100 上的真实权重公共入口检查使用归一化零动作、35 步采样与 seed 42，生成并导出 480×640、5 fps 的 13 帧视频。两块动作的 A/B/A 回放每次使用 24 步动作生成 25 帧；重复 A 的像素完全一致，改变动作会改变生成像素。
+已使用发布的 GR-1 权重验证：pipeline 每块在 480×640、5 fps 下生成 13 帧（35 步，seed 42），重复使用相同动作会得到完全一致的帧，改变动作会改变生成视频。
 
 ## 限制
 

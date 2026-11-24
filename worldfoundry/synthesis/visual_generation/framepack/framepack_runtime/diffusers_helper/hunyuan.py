@@ -1,7 +1,12 @@
-import torch
+from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+import torch
 from diffusers.pipelines.hunyuan_video.pipeline_hunyuan_video import DEFAULT_PROMPT_TEMPLATE
-from diffusers_helper.utils import crop_or_pad_yield_mask
+
+if TYPE_CHECKING:
+    from diffusers.models.autoencoders.autoencoder_kl_hunyuan_video import AutoencoderKLHunyuanVideo
 
 
 @torch.no_grad()
@@ -76,12 +81,14 @@ def vae_decode_fake(latents):
         [-0.2315, -0.1920, -0.1355],
         [-0.0270, 0.0401, -0.0821],
         [-0.0616, -0.0997, -0.0727],
-        [0.0249, -0.0469, -0.1703]
+        [0.0249, -0.0469, -0.1703],
     ]  # From comfyui
 
     latent_rgb_factors_bias = [0.0259, -0.0192, -0.0761]
 
-    weight = torch.tensor(latent_rgb_factors, device=latents.device, dtype=latents.dtype).transpose(0, 1)[:, :, None, None, None]
+    weight = torch.tensor(latent_rgb_factors, device=latents.device, dtype=latents.dtype).transpose(0, 1)[
+        :, :, None, None, None
+    ]
     bias = torch.tensor(latent_rgb_factors_bias, device=latents.device, dtype=latents.dtype)
 
     images = torch.nn.functional.conv3d(latents, weight, bias=bias, stride=1, padding=0, dilation=1, groups=1)
@@ -98,14 +105,16 @@ def vae_decode(latents, vae, image_mode=False):
         image = vae.decode(latents.to(device=vae.device, dtype=vae.dtype)).sample
     else:
         latents = latents.to(device=vae.device, dtype=vae.dtype).unbind(2)
-        image = [vae.decode(l.unsqueeze(2)).sample for l in latents]
+        image = [vae.decode(l.unsqueeze(2)).sample for l in latents]  # noqa: E741 - Ambiguous upstream name kept as written.
         image = torch.cat(image, dim=2)
 
     return image
 
 
 @torch.no_grad()
-def vae_encode(image, vae):
-    latents = vae.encode(image.to(device=vae.device, dtype=vae.dtype)).latent_dist.sample()
-    latents = latents * vae.config.scaling_factor
+def vae_encode(image: torch.Tensor, vae: AutoencoderKLHunyuanVideo, *, seed: int) -> torch.Tensor:
+    (posterior,) = vae.encode(image.to(device=vae.device, dtype=vae.dtype), return_dict=False)
+    generator = torch.Generator(device=vae.device).manual_seed(seed)
+    latents = posterior.sample(generator=generator)
+    latents = latents * vae.config["scaling_factor"]
     return latents

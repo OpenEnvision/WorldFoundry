@@ -5,7 +5,7 @@ description: 代码、文档、runner 和 benchmark facade 的发布门禁。
 
 ## 介绍
 
-验证证据应和改动 surface 成比例：足够小，可以本地运行；足够具体，可以抓到回归；对跳过的重型阶段要明确说明。
+验证证据的规模应与改动 surface 相匹配：足够小，可以本地运行；足够具体，可以抓到回归；对跳过的重型阶段要明确说明。
 
 ## 按变更类型选择证据
 
@@ -13,13 +13,13 @@ description: 代码、文档、runner 和 benchmark facade 的发布门禁。
 - **CLI 或 runner** — 公开 CLI 目录检查加代表性 evaluate 命令。提升状态时的额外证据：如果输出契约变化，再跑 existing-results 和 model-mode runs。
 - **Model manifest** — `zoo model-show`、`zoo model-download --check-local`。提升状态时的额外证据：Clone、checkpoint、demo parity、runner parity、benchmark run。
 - **Model runtime integration** — 仓内 runtime import、无机器本地 source checkout 依赖、带 `backend_stage` 的 runtime profile，以及聚焦回归。提升状态时的额外证据：Checkpoint-backed run 和一份 normalized benchmark scorecard。
-- **Benchmark manifest** — `zoo benchmark-show`、`preflight runtime --profile <benchmark-id>`。提升状态时的额外证据：Clone、dataset、official runtime、normalized scorecard。
+- **Benchmark manifest** — `zoo benchmark-show`、`preflight runtime --profile <benchmark-id> --output-dir <dir>`。提升状态时的额外证据：Clone、dataset、official runtime、normalized scorecard。
 - **Benchmark runner** — `zoo benchmark-run --mode official-validation` 或 `--mode official-run`。提升状态时的额外证据：Official result import、official runtime 和 full-suite fairness gate。
 - **Suite 或 matrix** — `run --all-benchmarks --plan-only --json`。提升状态时的额外证据：规划选中的 cells，然后用可运行 benchmark 路径验证 artifacts。
 
 ## 公开测试
 
-一方测试源码统一存放在 `tests/`，随仓库和 sdist 发布，采用仓库的 Apache-2.0 许可证。wheel 只包含运行时包。
+第一方测试源码统一存放在 `tests/`，随仓库和 sdist 发布，采用仓库的 Apache-2.0 许可证。wheel 只包含运行时包。
 
 在统一 GPU 环境中，从仓库根目录运行不加载权重的快速门禁：
 
@@ -32,7 +32,11 @@ make test
 python -m pytest -q tests/runtime/test_geometry_regression_impact.py
 ```
 
+生成的环境文件会将 Conda CUDA toolkit 中与当前架构对应的头文件目录加入主机编译器搜索路径。gsplat 等 PyTorch 扩展编译 C++ 源码时会用到这些头文件。
+
 默认 CPU 门禁覆盖进程日志、模拟 GPU 租约、checkpoint staging、任务持久化、Conda dispatch、推理取消与超时、worker 退出和打包边界。它不需要 CUDA、模型下载、Torch 或 API 凭据，CI 使用同一选择。`make test-infer` 是别名；系统的 `python` 仍为 Python 2 时，使用 `make test PYTHON=python3`。
+
+公共门禁仅依赖不含 Torch 的 `test` extra；PyAV、Protobuf 与 SoundFile 支持其中的实际 artifact reader。需要导入模型 runtime 或张量 metric 的契约属于 `test-infer-tensors`。
 
 `make test` 还包含覆盖策略、官方推理证据、固定历史参考和 JUnit 验证器的测试。Make 门禁先独立收集完整节点清单，再执行测试，拒绝 skip、collection error、少跑、多跑、重复节点、源码改变和旧报告。`TEST_ARGS` 只影响执行阶段，使用 `-k` 或 `-m` 漏跑节点仍会失败。CI 发布完整清单及 JUnit。标准库成功 subtest 保留父节点，失败或跳过的 subtest 仍使门禁失败。
 
@@ -68,42 +72,24 @@ WORLDFOUNDRY_DOCKER_EXTRAS=test,eval_core tests/run_tests_docker.sh make:test-ev
 
 ### 框架派发与媒体覆盖
 
-`tests/studio/test_dispatch_lifecycle.py` 检查所有发现的 catalog 条目能否路由到
-所属 runtime driver，并通过 frame memory、模型自管状态、原生实时、无状态、
+`tests/studio/test_dispatch_lifecycle.py` 检查所有发现的 catalog 条目能否路由到所属 runtime driver，并通过 frame memory、模型自管状态、原生实时、无状态、
 action 与几何契约覆盖共享的普通、实时、torchrun 状态转换。API client/cache
 隔离仍由 `tests/studio/test_pipeline_cache.py` 验证。
 
-CPU Torch 门禁纳入 `tests/pipelines/test_native_output_contracts.py`，检查所有
-发现的 native visual 子类；`tests/core/test_video_chunk_transport.py` 验证显式
+CPU Torch 门禁纳入 `tests/pipelines/test_native_output_contracts.py`，检查所有发现的 native visual 子类；`tests/core/test_video_chunk_transport.py` 验证显式
 layout、像素值域、chunk 顺序与帧数。Codec 测试覆盖成功/失败路径的 reader
 释放、有限帧解码、ImageIO 编码一致性和后端 fallback。这些 CPU 测试需要
-Torch/torchvision、PyAV、ImageIO/FFmpeg 与 OpenCV；托管张量 CI 单独安装
-这些依赖，不改变无 Torch 公共门禁。扩展组件选择另行安装 Diffusers 0.39、
-EasyDict、Loguru、Matplotlib、dm-tree、timm 和 aiortc，用于 scheduler、
-日志、姿态渲染、tensor tree、感知和 WebRTC 契约。
-RTX adapter 测试使用 fake effect，不能
-证明专有 runtime 已执行。Bridge 和实时集成测试与这些共享契约一并进入门禁。`tests/core/execution/test_cuda_nvenc_transport.py` 属于 CUDA 门禁；
-其设备所有权/event 检查与 checkpoint 回放、编码吞吐证据分开。Catalog 覆盖不
-代表列出的每个模型均已成功生成。
+Torch/torchvision、PyAV、ImageIO/FFmpeg 与 OpenCV；托管张量 CI 单独安装这些依赖，不改变无 Torch 公共门禁。扩展组件选择另行安装 Diffusers 0.39、
+EasyDict、Loguru、Matplotlib、dm-tree、timm 和 aiortc，用于 scheduler、日志、姿态渲染、tensor tree、感知和 WebRTC 契约。Hydra、Trimesh、Kornia、Lightning utilities、Lightning/PyTorch Lightning、msgspec、OpenCLIP、einops-exts、Beautiful Soup、gdown 和 Decord 提供所选配置、几何、encoder 与视频 reader 契约的依赖。
+RTX adapter 测试使用 fake effect，不能证明专有 runtime 已执行。Bridge 和实时集成测试与这些共享契约一并进入门禁。`tests/core/execution/test_cuda_nvenc_transport.py` 属于 CUDA 门禁；其设备所有权/event 检查与 checkpoint 回放、编码吞吐证据分开。Catalog 覆盖不代表列出的每个模型均已成功生成。
 
-Workspace evaluation 的准备流程将 `resume` 和 `metric_batch_size` 传入普通生成与
-任务 registry 生成，默认值分别为 `false` 和 `32`；非正数 metric batch size 在准备和
-执行阶段均会于生成前被拒绝。POSIX `PWD` 保持目录上下文语义，不被当成密码，
-使图片 warmup 仍可进入驻留批处理；`pwd` 字段和 `SERVICE_PWD` 凭据继续脱敏。
+Workspace evaluation 的准备流程将 `resume` 和 `metric_batch_size` 传入普通生成与任务 registry 生成，默认值分别为 `false` 和 `32`；非正数 metric batch size 在准备和执行阶段均会于生成前被拒绝。POSIX `PWD` 保持目录上下文语义，不被当成密码，使图片 warmup 仍可进入驻留批处理；`pwd` 字段和 `SERVICE_PWD` 凭据继续脱敏。
 
 非 native 输出契约使用替代生成调用和真实小型像素数组，覆盖
-`RuntimeVideoSynthesis`、ABot-World、仅返回 artifact 的 pipeline，以及普通/实时
-请求转发。它们比较声明式像素经过产物规范化与 transport 后的结果，保留原始返回值，
-并检查 A/B/A 图片条件。驻留 session 测试覆盖 Matrix-Game 2/3、DreamX camera/AR、
-LingBot 变体和 Helios，包含原生 chunk 帧数与非输出 rank 结果。Batch/续段契约
-进一步通过 pipeline/synthesis 边界覆盖 WorldFM、LingBot 与 LongVie，精确比较像素，
-验证 PIL 帧列表后处理、原始返回、history/noise 连续性，以及 Studio 的帧数/帧率
-传递。WorldFM PNG 实际写入并读回；LongVie 与 LingBot 编码接线使用 recording
+`RuntimeVideoSynthesis`、ABot-World、仅返回 artifact 的 pipeline，以及普通/实时请求转发。它们比较声明式像素经过产物规范化与 transport 后的结果，保留原始返回值，并检查 A/B/A 图片条件。驻留 session 测试覆盖 Matrix-Game 2/3、DreamX camera/AR、
+LingBot 变体和 Helios，包含原生 chunk 帧数与非输出 rank 结果。Batch/续段契约进一步通过 pipeline/synthesis 边界覆盖 WorldFM、LingBot 与 LongVie，精确比较像素，验证 PIL 帧列表后处理、原始返回、history/noise 连续性，以及 Studio 的帧数/帧率传递。WorldFM PNG 实际写入并读回；LongVie 与 LingBot 编码接线使用 recording
 writer。LingBot V2 在替代子进程和已有进程组路径上保留编码产物，并声明解码后的帧。
-Matrix-Game batch 测试实际执行 MG2 小型 CPU 解码转换与操作可视化规范化，比较
-声明、传输和导出的像素，并验证滚动帧 memory 与 Studio 派发。MG3 测试保留产物
-字节、检查 rank-local 产物归属，并保持非输出 rank 无帧、不尝试复制产物。
-模型、decoder、子进程执行和分布式计时/通信调用使用替代实现，因此不证明 checkpoint、CUDA
+Matrix-Game batch 测试实际执行 MG2 小型 CPU 解码转换与操作可视化规范化，比较声明、传输和导出的像素，并验证滚动帧 memory 与 Studio 派发。MG3 测试保留产物字节、检查 rank-local 产物归属，并保持非输出 rank 无帧、不尝试复制产物。模型、decoder、子进程执行和分布式计时/通信调用使用替代实现，因此不证明 checkpoint、CUDA
 或多 rank 已执行。
 `make test-infer-tensors` 将它们与共享 transport 契约一并选入。
 
@@ -111,47 +97,32 @@ Matrix-Game batch 测试实际执行 MG2 小型 CPU 解码转换与操作可视�
 Lyra-1/2 与 Astra，保留原始视频、相机、latent 和重建字段，检查全为正数的 signed
 像素、易混淆轴、非均匀 RGB/时间顺序、FP16/BF16 和裁剪后的帧数，并区分
 planned/blocked、latent 与已生成 RGB。Lyra-1 的相机及 latent 文件实际序列化；
-Astra 执行解码转换和 latent-memory 编排，去噪调用使用替代实现。Lyra-2 的深度、
-采样调用以及重建模型和视频 writer 使用替代实现。CPU 张量门禁同时选入这些
-契约和既有 catalog、workspace、runtime-path 测试。小型替代输出验证边界帧数，
-不代表增加原生采样长度，也不代表真实 checkpoint 已生成。
+Astra 执行解码转换和 latent-memory 编排，去噪调用使用替代实现。Lyra-2 的深度、采样调用以及重建模型和视频 writer 使用替代实现。CPU 张量门禁同时选入这些契约和既有 catalog、workspace、runtime-path 测试。小型替代输出验证边界帧数，不代表增加原生采样长度，也不代表真实 checkpoint 已生成。
 
 `tests/synthesis/test_astra_state.py` 与
 `tests/pipelines/test_astra_request_isolation.py` 检查历史逐出后的绝对相机进度、
-chunk-local FramePack 索引、共享权重的 A/B/A 和交错请求，以及 reset 后复用。
-它们用精确解析预测验证 FP32/FP16/BF16 下的真实 FlowMatch Euler scheduler，
-保持权重对象与全局 RNG，并检查 VAE 缓存清理。公共请求案例使用替代编码、去噪与解码
+chunk-local FramePack 索引、共享权重的 A/B/A 和交错请求，以及 reset 后复用。它们用精确解析预测验证 FP32/FP16/BF16 下的真实 FlowMatch Euler scheduler，保持权重对象与全局 RNG，并检查 VAE 缓存清理。公共请求案例使用替代编码、去噪与解码
 forward；另用真实小型 BF16 Wan VAE 精确对比规范组件的分块编码/解码，覆盖 A/B/A
 请求及时间缓存释放。中断检查在计算/导出边界抛出 `CancelledError`。CPU tensor 门禁将这两个文件与既有
 Astra 输出及 Studio 派发契约一并选入。
 
-`tests/synthesis/test_lingbot_decoder_contracts.py` 与 realtime policy 测试检查
-归一化/原始 TAE 输入、显式覆盖、实际读取小型 PyTorch 和 safetensors checkpoint，
-以及源 latent 保持不变。真实随机初始化 BF16 TAE 将 streaming 像素与直接顺序解码
-精确对比；独立 stream wrapper 共享权重、不共享时间记忆，同时覆盖 LingBot 的
+`tests/synthesis/test_lingbot_decoder_contracts.py` 与 realtime policy 测试检查归一化/原始 TAE 输入、显式覆盖、实际读取小型 PyTorch 和 safetensors checkpoint，以及源 latent 保持不变。真实随机初始化 BF16 TAE 将 streaming 像素与直接顺序解码精确对比；独立 stream wrapper 共享权重、不共享时间记忆，同时覆盖 LingBot 的
 9/12 帧和 V2 的 13/16 帧节奏。
 
 `tests/synthesis/test_hunyuan_worldplay_state.py` 与公共 realtime 测试执行既有 AR
 缓存操作和规范 Euler scheduler，以 FP32/FP16/BF16 解析 forward 检查精确更新、
-A/B/A、chunk 边界交错、owner 锁准入、请求局部几何 RNG、reset、非输出 rank，
-以及失败和注入 `CancelledError` 后恢复。真实小型随机权重 Hunyuan 1.5 VAE 用
-FP32/BF16 将前缀/后缀像素转换与直接规范解码精确对比。Text/image/vision 条件及
-公共 denoiser forward 使用替代实现。这些文件与受影响的 LingBot V2 测试纳入 CPU
+A/B/A、chunk 边界交错、owner 锁准入、请求局部几何 RNG、reset、非输出 rank，以及失败和注入 `CancelledError` 后恢复。真实小型随机权重 Hunyuan 1.5 VAE 用
+FP32/BF16 将前缀/后缀像素转换与直接规范解码精确对比。Text/image/vision 条件及公共 denoiser forward 使用替代实现。这些文件与受影响的 LingBot V2 测试纳入 CPU
 tensor 门禁，不代表 checkpoint、CUDA 并发、实际服务取消或有界解码成本验收。
 
 `tests/pipelines/test_independent_native_outputs.py` 与
 `tests/studio/test_independent_output_dispatch.py` 覆盖 Cosmos Predict2/2.5、
-Transfer2.5、Cosmos3、HunyuanVideo/1.5、T2V-Turbo 和 Vchitect。它们在预览、传输和
-导出之间比较纯正值 signed 与单位值域像素，检查 FP32/FP16/BF16、1/3/4/5 帧，实际写入
-单帧 PNG，并保留 raw/latent/audio/action 引用。Stream 派发检查 FPS、帧数，以及 worker
-和 realtime 路径的显式 A/B/A 条件图片传递。Latent 结果不导出 RGB、不替换产物历史；
-显式无 RGB 或缓冲声明阻止回退读取原始别名。Codec 编排使用替代 VAE，执行 Hunyuan
-现有单位值域转换、Cosmos 裁剪和 Turbo 逐帧解码。采样、视频编码和并行通信使用替代实现；
-公共 loader 委托与 rank-local 产物归属属于连线证据，不代表 checkpoint 或实际多 rank
+Transfer2.5、Cosmos3、HunyuanVideo/1.5、T2V-Turbo 和 Vchitect。它们在预览、传输和导出之间比较纯正值 signed 与单位值域像素，检查 FP32/FP16/BF16、1/3/4/5 帧，实际写入单帧 PNG，并保留 raw/latent/audio/action 引用。Stream 派发检查 FPS、帧数，以及 worker
+和 realtime 路径的显式 A/B/A 条件图片传递。Latent 结果不导出 RGB、不替换产物历史；显式无 RGB 或缓冲声明阻止回退读取原始别名。Codec 编排使用替代 VAE，执行 Hunyuan
+现有单位值域转换、Cosmos 裁剪和 Turbo 逐帧解码。采样、视频编码和并行通信使用替代实现；公共 loader 委托与 rank-local 产物归属属于连线证据，不代表 checkpoint 或实际多 rank
 验收。这些测试与受影响的既有 loading/catalog 测试纳入 CPU tensor 门禁。
 
-`tests/core/execution/test_compile_numerics_registration.py` 验证归一化算子注册、
-可选 affine 张量、shape 列表、FP32/FP16/BF16 CPU 算术的精确一致性，以及 fake-tensor
+`tests/core/execution/test_compile_numerics_registration.py` 验证归一化算子注册、可选 affine 张量、shape 列表、FP32/FP16/BF16 CPU 算术的精确一致性，以及 fake-tensor
 的 shape/dtype 派发。既有 CUDA regional compile 选集通过真实编译 kernel 和 CUDA
 图检查原生舍入行为，与传输、checkpoint 和吞吐证据保持独立。
 
@@ -198,11 +169,8 @@ python -m pytest -q tests/pipelines/test_pi3x_real_inference.py
 
 ### 视频 reader 所有权
 
-`make test-infer-tensors` 包含 `tests/core/test_video_codec_contracts.py`。
-这些 CPU 契约验证 `read_video()` 在成功解码、解码失败、元数据读取失败时，
-都先关闭 ImageIO reader，再释放本地输入租约。契约同时覆盖 ImageIO 数组与
-format 参数透传、与直接后端解码所得像素及 fps 的精确一致、图像条件输入、
-物化目录和 OpenCV writer 释放，不需要模型权重或 GPU。
+`make test-infer-tensors` 包含 `tests/core/test_video_codec_contracts.py`。这些 CPU 契约验证 `read_video()` 在成功解码、解码失败、元数据读取失败时，都先关闭 ImageIO reader，再释放本地输入租约。契约同时覆盖 ImageIO 数组与
+format 参数透传、与直接后端解码所得像素及 fps 的精确一致、图像条件输入、物化目录和 OpenCV writer 释放，不需要模型权重或 GPU。
 
 ### Video generation 与 world model
 
@@ -210,7 +178,7 @@ LTX 的 timestep-conditioned VAE 在解码时也会注入噪声。视频、音�
 
 `make test-infer-tensors` 同时运行视频共享组件的数值测试；只运行这一部分可用 `make test-infer-video-tensors`。它用小型真实 Wan 网络比较融合 QKV、静态 cross-KV 缓存与原始网络，覆盖不同 batch、时间/空间 shape、非连续 layout、换 prompt 和重复请求。VAE 因果卷积与独立全序列卷积对比，并检查未来帧不会改变过去输出。采样与 CFG 使用已知解析结果，检查 UniPC 的状态重置、失败请求清理及全局 RNG 隔离。显式传入零或负数的尺寸、帧数、步数和 fps 必须在模型推理前失败，只有 `None` 使用默认值。
 
-同一个 `tests/manual/geometry_regression_cases.json` 现在包含几何、视频和世界模型案例。原有脚本和 `GEOMETRY_*` 名称继续可用；`plan-inference`、`replay-inference` 和 `verify-inference` 是覆盖更广的入口。新增短案例分别声明 Wan 2.1 1.3B、Wan 2.2 TI2V 5B、LTX 0.9.8 I2V、CogVideoX 2B、Cosmos Predict 2.5 2B、Matrix Game 2 和 DreamX World 5B AR。LTX 保留原生两阶段十步配方，其他采样参数也由案例显式固定。这些短案例比较 latent、原始帧、导出的 RGB 像素和 fps，检查换条件后输出变化、A/B/A 请求、失败恢复，以及因果块的延续、reset 与重放。它们验证具体输入下的集成和请求隔离，不验证完整 demo 的生成质量。
+`tests/manual/geometry_regression_cases.json` 包含几何、视频和世界模型案例。几何脚本和 `GEOMETRY_*` 名称继续可用；`plan-inference`、`replay-inference` 和 `verify-inference` 是覆盖更广的入口。短案例分别声明 Wan 2.1 1.3B、Wan 2.2 TI2V 5B、LTX 0.9.8 I2V、CogVideoX 2B、Cosmos Predict 2.5 2B、Matrix Game 2 和 DreamX World 5B AR。LTX 保留原生两阶段十步配方，其他采样参数也由案例显式固定。这些短案例比较 latent、原始帧、导出的 RGB 像素和 fps，检查换条件后输出变化、A/B/A 请求、失败恢复，以及因果块的延续、reset 与重放。它们验证具体输入下的集成和请求隔离，不验证完整 demo 的生成质量。
 
 额外案例声明 Cosmos Transfer 2.5 的 general/edge 2B 权重、Gamma 已发布的四步因果权重，以及 Oasis 500M 的视频 prompt 入口。Gamma 按权重要求固定每视角 189 帧，检查两个 320×480 视角，以及拒绝短请求后重放。Transfer 先采样最小 93 帧窗口（24 个 latent 帧），再裁剪出请求的 17 个 RGB 帧。请在 `WORLDFOUNDRY_REGRESSION_INPUT_ROOT` 下准备至少 17 帧的 `control.mp4`（更长的视频还可检查条件读取是否有界）；在 `gamma-world/buildHouse_flat` 下放置官方样本的 `first_frame.png`、`prompt.txt`、`action_left.json`、`action_right.json`。Oasis 使用多帧 `open-oasis/context.mp4` 和两行、每行 25 列的 `open-oasis/forward.one_hot_actions.json`：第 11 列（从 0 开始，`forward`）为 1，其余列为 0。适配器读取一个 prompt 帧，将末行动作延续到六帧输出。各案例显式列出权重及编码器、tokenizer 路径。这些声明用于选择待执行的回归，不代表 GPU 已运行或其他变体已覆盖。
 
@@ -218,14 +186,95 @@ LTX 的 timestep-conditioned VAE 在解码时也会注入噪声。视频、音�
 
 只返回视频路径的生成器可以用 `output_arrays` 选择运行目录内的 MP4、WebM、MOV 或 MKV。回归工具完整解码后，将 `artifact.<相对路径>.frames` 和 `.fps` 保存到 `arrays.npz`，因此路径或计划本身不能满足必需数值输出。还应在 `export_artifacts` 中声明视频，比较导出文件解码后的像素及帧率。Oasis 的子进程只返回 MP4，没有内存张量，因此使用此入口；生成器的随机种子固定为 0。
 
+Pi4 的 `projected_tracks` 将待比较的 XYZ 数组映射到对应的密集 XY 轨迹。回放根据像素坐标和画面尺寸判断有效位置，要求画面内的 XYZ 为有限值、画面外为 NaN 标记，并逐项比较画面内坐标与有效位置掩码。
+
+需要 GPU 的用例设置 `requires_gpu: true`；CUDA 不可用时，执行器在加载权重前失败。声明不代表 GPU 已运行。原生 LTX-2.5、LTX-2/2.3 IC-LoRA V2V 和 HyperFlow 用例使用显式权重及控制输入，比较解码后的视频和 FPS。
+
+文本生成模型通过 `text_outputs` 将 JSON 产物的相对文件名映射到明确的输出字段路径，例如 `{"prediction.json": ["text"]}`。执行器将所选字符串编码为 UTF-8 `uint8` 数组，键名为 `text.prediction.json.text`，并在 `required_outputs` 中要求该键。审计会重新读取所选字段，即使提供浮点容差，也要求字节完全一致。输入路径及其他 JSON 字符串不参与捕获。OmniVinci 音视频用例通过此契约比较生成的描述；原有数值用例行为不变。
+
+Emu3.5 输出使用仓库内的 Story protobuf（`.pb`）。回放导出器按照该 schema
+将生成 clip 的文本与 PNG 图像读取为 `export.<file>.text.*` 和
+`export.<file>.images.*` 数组。两种生成模态都必须存在，只有问题的响应不能通过。
+即使设置数值容差，文本字节与图像像素也要求完全一致。问题和参考图像不是生成输出。
+
+MMAudio FLAC 产物通过延迟导入的 SoundFile 无损解码为 `int32` PCM 数组，
+在 `export.<file>.samples`、`.sample_rate` 和 `.channels` 下记录采样值、采样率与
+通道数。即使设置浮点容差，也要求采样值和元数据完全一致；容器标签不影响比较。
+空音频验证失败。16k 与 44k 路线分别声明 GPU 用例。
+两个用例均固定实际加载的权重文件，包括本地 OpenCLIP 导出文件。
+将 OpenCLIP 和 44 kHz BigVGAN 导出文件放在 `WORLDFOUNDRY_CKPT_DIR` 下，
+以便回放核验运行时实际加载的文件。
+
+Show-o 的短回放固定 Show-o 和 MAGVIT 的配置与权重，以及加载发布模型所需的
+Phi-1.5 配置和 tokenizer 文件。这些文件分别放在各自的本地 checkpoint 目录。
+
+AnimateDiff V3 固定回放读取的 SD1.5 文件、运动模块、RealisticVision checkpoint
+及 OpenAI CLIP ViT-L/14 的配置和权重。将两份 CLIP 文件放在
+`WORLDFOUNDRY_CKPT_DIR/openai--clip-vit-large-patch14` 下。
+
+Echo-Infinity 固定从 `wan_models/Wan2.1-T2V-1.3B` 加载的去噪器配置和权重、
+VAE、T5 编码器以及 tokenizer 文件。生成器 checkpoint 的 SHA256 由回放配置提供。
+这个明确的文件清单需要使用同一配方记录的已验收参考。
+
+生成视频音轨通过 `audio_outputs: ["video.mp4"]` 显式选择。PyAV 将所选音轨
+解码为 `audio.<file>.samples` 下的 float32 PCM，同时记录采样率、通道数与通道布局。
+即使设置浮点容差，也要求 PCM 完全一致；缺失或空音轨验证失败。HyperFlow 同时
+要求解码视频与生成音轨。未声明 `audio_outputs` 的用例保持原有采集内容。
+
+NWM 和 MineWorld 将加载参数中的可选种子传递给树内子进程，通过规范运行时辅助函数为
+Python、NumPy 和 Torch 设置种子。不设置种子时，原有随机数行为保持不变。
+NWM 记录生成的 PNG 帧而不是请求计划；回放严格比较解码后的预测像素。
+
+动作用例可以从 UTF-8 JSON 数据读取与发布权重匹配的相机及状态观测。
+`input_json` 将具体调用参数映射到 `assets` 中明确列出的文件及必需的 SHA256 pin：
+
+```json
+{
+  "input_json": {
+    "official_policy_observation": {
+      "path": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/go1/observation.json",
+      "sha256": "${WORLDFOUNDRY_REGRESSION_GO1_OBSERVATION_SHA256}"
+    }
+  }
+}
+```
+
+私有已接受参考 profile 提供 64 位小写十六进制 pin。未设置、格式错误或内容不匹配的
+pin、未声明的输入文件，以及与显式 `call` 参数冲突的条目，均在加载模型前失败。
+观测内容中的环境变量使用现有用例展开规则。权重、种子、推理调用与必需动作输出仍在
+用例中声明，只有观测数据来自外部。将观测 bundle 同时列入 `assets`，以固定其引用的
+相机媒体。JSON 输入用于单次调用用例，原有用例无需修改。实际观测数据和已接受参考
+凭证仍须在 GPU 主机上准备。
+
+如果已上传的观测包包含原主机的绝对路径，在用例环境中将
+`WORLDFOUNDRY_REGRESSION_ORIGINAL_INPUT_ROOT` 设为原输入根目录，将
+`WORLDFOUNDRY_REGRESSION_INPUT_ROOT` 设为复制后的根目录。执行器验证 JSON pin 后，
+会将匹配的路径解析为已声明的本地文件。观测 JSON 及随附资源的哈希保持有效。
+
+原生文件输入使用 `asset_sha256`，将已声明的 `assets` 名称映射到必需的小写 SHA256
+pin 或操作者提供的 pin 变量。工具在计算权重哈希和加载模型前验证这些 pin，
+不改写输入内容。单次调用可用 `result_outputs`（例如 `["actions"]`）只选择生成字段，
+排除计时和显存元数据。选中的媒体路径通过现有数值解码器读取。
+`result_outputs: []` 只比较显式导出结果；必需输出检查仍会拒绝计划或空结果。
+省略这两项配置时，保留原有用例行为。
+
+模型用例保留各自的原生权重与输入契约。DIAMOND 的公开 `model_path` 选择
+`pretrained_dir`；Atari 回放使用 `pretrained=True`、指定游戏和已固定的预采集非空
+初始化数据集，而不是重新采集模拟器观测。LeWorldModel 的 `model_path` 选择已学习的
+`policy` 权重；DINO-WM 比较实际计算的 `planned_actions.npy`，LaST-R1 只选择生成的
+动作字段，不比较 value 或运行时元数据。模型的 seed 与命令测试不加载权重，不能当作
+checkpoint 生成证据。
+
+StarWM 的公开 `model_path` 选择 `served_model_id`，而不是本地 checkpoint。
+其待完成的 endpoint 声明要求匹配且已设定 seed 的 vLLM 服务、已固定的服务来源记录
+以及真实生成的状态文本。该声明仍不满足本地 checkpoint 覆盖策略，公开 runtime 的
+endpoint 就绪门禁也仍处于阻塞状态。服务可重复性与已接受参考回放需要分别验证。
+
 Kandinsky6 Lite/Pro 及各自的蒸馏、预训练变体均有独立的
 `kandinsky6-<variant>-video-short` 用例。将匹配的 Diffusers 发布权重放在
-`WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT` 下的用例 `assets.checkpoint` 路径。
-每个纯视频用例固定 seed 42、121 帧、480×864、24 FPS，比较完整解码的 RGB
-帧及帧率。蒸馏变体使用 10 步、guidance 1，其余变体使用 50 步、guidance 5。
-音频需要独立回放证据。CPU 张量门禁包含
-`tests/pipelines/test_kandinsky6_replay_recipes.py`，检查具体加载入口、权重路由
-和请求接线；该测试不执行这些真实权重。
+`WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT` 下的用例 `assets.checkpoint` 路径。每个纯视频用例固定 seed 42、121 帧、480×864、24 FPS，比较完整解码的 RGB
+帧及帧率。蒸馏变体使用 10 步、guidance 1，其余变体使用 50 步、guidance 5。音频需要独立回放证据。CPU 张量门禁包含
+`tests/pipelines/test_kandinsky6_replay_recipes.py`，检查具体加载入口、权重路由和请求接线；该测试不执行这些真实权重。
 
 ```bash
 make coverage-inference PYTHON=python3
@@ -239,62 +288,68 @@ make verify-inference PYTHON=python3 \
 
 覆盖报告按 catalog 的 native binding 和同一 pipeline class 下注册的 variant 列出缺口。相同 class、模型家族、alias 或历史 `verified` 状态都不会自动给另一个 model ID 分配案例。`case_defined` 只表示有测试配方；报告不会将其提升成 reference 已验收或 GPU 已通过。固定基线保留既有缺口，同时 CI 拒绝新增未覆盖身份、既有配方退化，以及实际受影响却没有可执行数值回放的 native 变体。需要完整覆盖的发布可添加 `--require-complete`，存在缺口时退出码为 2。
 
-2026-10-16 的计划下线策略将 BiWM Wan2.1（`biwm-wan21@biwm-wan21`）、
+按提交差异检查覆盖率时，`--head` 必须解析为当前检查的提交。报告记录比较基线、候选提交和源码树。
+此模式使用候选提交的案例矩阵、模型 YAML、依赖声明和 Python 源码。盘点模式可以检查工作区中的修改。
+
+按 2026-10-16 的模型下线策略，BiWM Wan2.1（`biwm-wan21@biwm-wan21`）、
 BiWM Wan2.2（`biwm-wan22@biwm-wan22`）、IRASim（`irasim@irasim`）和
-Pandora（`pandora@pandora`）移出支持范围。冻结基线中的历史记录保持不变；
-`tests/manual/native_coverage_policy.py` 显式列出这四个完整身份，允许其按计划移除，
-并通过 `retired_native_variants` 报告，不计为回放覆盖或 GPU 成功。删除其他冻结变体
-仍会失败。重新引入已下线身份时，需要像新增变体一样提供独立的 checkpoint 回放配方，
+Pandora（`pandora@pandora`）已移出支持范围。冻结基线中的历史记录保持不变；
+`tests/manual/native_coverage_policy.py` 显式列出这些完整身份，允许其移除，
+并通过 `retired_native_variants` 报告，不计为回放覆盖或 GPU 成功。
+EgoWM（`egowm@egowm`）、HunyuanWorld-Voyager（`hunyuanworld-voyager@hunyuanworld-voyager`）、HY-World 2.0
+世界生成（`hyworld-worldgen@hyworld-worldgen`）、Open Dreamer（`open-dreamer@open-dreamer`）、
+ShotStream（`shotstream@shotstream`）与 WildDet3D（`wilddet3d@wilddet3d`）以同样方式下线：它们的运行时依赖
+license-gated 本地检出、无法 vendor 的外部源码检出或仅能从外部源码构建的依赖，而所有模型运行时都必须在仓库内运行。
+删除其他冻结变体仍会失败。重新引入已下线身份时，需要像新增变体一样提供独立的 checkpoint 回放配方，
 不能沿用历史未覆盖缺口的豁免。
+
+对于这六项集成，计划器在候选历史含已批准的退役提交、基线文件与该提交移除的 Git 对象一致、
+且当前源码路径和绑定均已删除时记录 `cpu_only_changes`。公开注册表由 CPU 测试核验。
+其余运行时路径仍按常规受影响用例选择。
 
 Runtime profile 按声明的 model ID 和 pipeline binding 识别归属，并纳入 `source_repos[].in_tree_path`，覆盖静态 import 图无法发现的子进程代码。这些声明补充静态依赖；未知路径仍保守扩大选择，受影响的 native 变体没有真实权重回放时仍失败。
 
+`evaluation_only_paths` 逐项登记评测所用的文件。推理 import 或已声明运行时依赖命中这些路径时，仍会选中受影响的案例或变体。
+
 追加案例及组件声明时，只有实际提交前后的定义能证明全部既有配方、归属和全局规则未变，才只选择新增案例。测试编排工具改动还要求提交中的 runtime、环境和 assets 不变，工作文件与提交一致，并通过对应 CPU 契约和真实 MG2 smoke 回放。生产代码变更仍独立加入选择；未提交定义、删除或重新分类都会保留完整回放范围。
 
-旧 InSpatio、LingBot Cam/Act/V2 和 ATI 案例分别加载各自发布的 checkpoint。`WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` 指向含 `video_example_00/input/{video.mp4,target_tcw.txt}` 的已验收场景；`WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS` 包含 21 帧的 `poses.npy`、`intrinsics.npy`，Act 还使用 `action.npy`。ATI 的固定量化 packed-NPZ tracks 文件由 `WORLDFOUNDRY_REGRESSION_ATI_TRACKS` 指定。输入与权重均保存哈希；这些短数值案例不代表完整 demo 质量或其他 variant 已通过。
+InSpatio、LingBot Cam/Act/V2 和 ATI 案例分别加载各自发布的 checkpoint。`WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` 指向含 `video_example_00/input/{video.mp4,target_tcw.txt}` 的已验收场景；`WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS` 包含 21 帧的 `poses.npy`、`intrinsics.npy`，Act 还使用 `action.npy`。ATI 的固定量化 packed-NPZ tracks 文件由 `WORLDFOUNDRY_REGRESSION_ATI_TRACKS` 指定。输入与权重均保存哈希；这些短数值案例不代表完整 demo 质量或其他 variant 已通过。
 
 `verify-inference` 检查可信 GPU 主机生成的报告与当前 commit、源码 tree、案例矩阵、依赖声明和固定 reference index 一致，选中案例全部执行，且所有数值字段完全一致。预检查、过期 commit、少跑案例、放宽容差和失败结果不能通过。公开 CPU 与张量门禁仍必须分别通过。
+案例矩阵、依赖声明和导入图使用的已跟踪 Python 源文件必须与候选提交一致。
 
-Hosted CI 的 `inference-replay` 必须读取维护者通过控制 workflow dispatch 发布的官方 Actions artifact；缺失、过期、外部来源或旧提交的证据都会失败。专用 dispatch 检查候选 commit、tree、比较基线及固定 reference index 后发布 `trusted-inference-evidence`，只运行 attestation，普通 CI 再消费它。真实回放在已准备的可信 GPU 主机执行。仓库须配置 `INFERENCE_EVIDENCE_CONTROL_REF`、`INFERENCE_EVIDENCE_WORKFLOW_PATH` 和 `INFERENCE_REFERENCE_INDEX_SHA256`，并在合并分支保护中要求 `inference-replay` 及 CPU 检查；仅添加 workflow 不会自动启用分支保护。未覆盖或未执行的变体仍是缺口。
+可选的 `Inference Evidence`（`.github/workflows/inference-evidence.yml`）在维护者配置了仓库变量 `INFERENCE_EVIDENCE_CONTROL_REF`、`INFERENCE_REFERENCE_INDEX_SHA256`（以及可选的 `INFERENCE_EVIDENCE_WORKFLOW_PATH`）后启用，`inference-replay` job 读取维护者通过控制 workflow dispatch 发布的官方 Actions artifact；启用时，缺失、过期、外部来源或旧提交的证据都会失败。专用 dispatch 检查候选 commit、tree、比较基线及固定 reference index 后发布 `trusted-inference-evidence`；未配置这些变量的开源仓库/Fork PR 仅运行 `CI` 的无权重公开检查，不会在 `inference-replay` 上误报失败。另可通过 `.github/workflows/gpu-contracts.yml` 在 `[self-hosted, linux, gpu]` runner 上手动触发 CUDA 契约测试。真实回放在已准备的可信 GPU 主机执行，可在合并分支保护中先启用公开 CPU 检查，待可信主机就绪后再加入 `inference-replay`；仅添加 workflow 不会自动启用分支保护。未覆盖或未执行的变体仍是缺口。
 
 MG2 改动及其数值契约改动还必须通过六条真实图像、12-block 轨迹的固定历史参考检查。门禁锁定已验收报告的完整 digest，逐步精确比较 flow/x0、全部滚动缓存、条件、latent/video/RGB 像素、VAE 状态和连续 RNG。两条当前路径互相一致不足以通过。此独立检查与公开 pipeline 的 A/B/A 回放都必须完成，不能互相代替，也不会自动更新参考。
 
-先提交候选再跑两项 GPU 门禁，用 `tests/manual/inference_actions_evidence.py compact` 传入 `--base`、`--head`、`--conditioned-report`、`--junit`、`--generic-replay` 和 `--output`，环境中设置固定的 `INFERENCE_REFERENCE_INDEX_SHA256`。在控制分支 dispatch `CI`，三个输入为候选 `source_revision`、比较 `base_revision` 及压缩报告 `evidence_json`。官方 dispatch 成功后重试该候选的 `inference-replay` job。配套 `inference-evidence-verified.yml` 部署到默认分支后会自动重试；部署前需要显式重试。
+先提交候选再跑两项 GPU 门禁，用 `tests/manual/inference_actions_evidence.py compact` 传入 `--base`、`--head`、`--conditioned-report`、`--junit`、`--generic-replay` 和 `--output`，环境中设置固定的 `INFERENCE_REFERENCE_INDEX_SHA256`。在控制分支 dispatch `Inference Evidence`，三个输入为候选 `source_revision`、比较 `base_revision` 及压缩报告 `evidence_json`。官方 dispatch 成功后重试该候选的 `inference-replay` job。配套 `inference-evidence-verified.yml` 部署到默认分支后会自动重试；部署前需要显式重试。
 
 验证门禁要求使用 `--base` 生成的 commit diff 计划，并重新计算实际变更路径。手工列举或遗漏变更文件的计划无法绕过受影响案例检查。
 
 ## 组件对齐与首个数值分歧
 
-移植模型或修改张量计算时，先比较组件，再组合完整采样循环。使用相同来源的权重和输入，
-分别比较 denoiser、条件编码器、latent codec 和 scheduler。checkpoint 转换与直接构造
-分开验证：检查缺失/多余键、键映射、融合投影、归一化、latent 缩放和 dtype。
+移植模型或修改张量计算时，先比较组件，再组合完整采样循环。使用相同来源的权重和输入，分别比较 denoiser、条件编码器、latent codec 和 scheduler。checkpoint 转换与直接构造分开验证：检查缺失/多余键、键映射、融合投影、归一化、latent 缩放和 dtype。
 shape 一致或成功加载不代表数值对齐。
 
 固定 checkpoint 变体、seed 和 generator、prompt 或 controls、尺寸、帧数、采样时间表、
 guidance、精度与 attention backend。先比较初始噪声和条件，再比较每步预测与 scheduler
-更新，最后比较有损编码之前的解码帧。出现差异时，找到首个数值不同的边界，先核对其输入，
-再分析后续输出。支持时使用小型 FP32 组件定位问题，随后覆盖部署精度与代表性 shape。
-容差由对应案例决定，不能放宽容差或替换已验收参考来掩盖差异。
+更新，最后比较有损编码之前的解码帧。出现差异时，找到首个数值不同的边界，先核对其输入，再分析后续输出。支持时使用小型 FP32 组件定位问题，随后覆盖部署精度与代表性 shape。容差由对应案例决定，不能放宽容差或替换已验收参考来掩盖差异。
 
-临时诊断保持在实例内，用完移除插桩，捕获数据放在 Git 之外的 `tmp/`。
-组件比较补充公开 loader 与 accepted-reference 回放，不能替代这两条验证路径。
+临时诊断保持在实例内，用完移除插桩，捕获数据放在 Git 之外的 `tmp/`。组件比较补充公开 loader 与 accepted-reference 回放，不能替代这两条验证路径。
 
 ## 请求隔离与证据范围
 
-复用模型时执行 A/B/A：第一、第三次请求完全相同，B 只改变预期条件。覆盖 reset、失败请求
-和随后的复用，检查 scheduler、cache、decoder 与 memory 的可变状态，不复制可复用的模型权重。
-比较 eager、compile、graph 或 offload 路径时，保持相同状态和 shape。
+复用模型时执行 A/B/A：第一、第三次请求完全相同，B 只改变预期条件。覆盖 reset、失败请求和随后的复用，检查 scheduler、cache、decoder 与 memory 的可变状态，不复制可复用的模型权重。比较 eager、compile、graph 或 offload 路径时，保持相同状态和 shape。
 
 每项结果都写明实际执行范围：
 
 - Mock 契约验证 dispatch 与请求转发。
 - 小型真实组件验证实际执行的计算与状态处理。
 - CUDA 检查验证选定设备上的 kernel、stream 和精度路径。
-- 已发布 checkpoint 的抽样验证实际权重和请求；数值回归仍需与已验收参考比较。
+- 已发布 checkpoint 的抽样验证实际权重加载和请求处理；数值回归仍需与已验收参考比较。
 - 服务验收还需运行真实取消、worker 复用、同时会话及声明的 rank 拓扑。
 
-注入取消与确定性交错只证明有界清理和隔离，不证明真实服务或 CUDA 并发。
-功能、数值与性能结果分开报告：独立测量加载、冷编译、warmup、稳态采样、decode、transfer
+注入取消与确定性交错只证明有界清理和隔离，不证明真实服务或 CUDA 并发。功能、数值与性能结果分开报告：独立测量加载、冷编译、warmup、稳态采样、decode、transfer
 和编码。用 CUDA event 或显式同步测量已完成的 GPU 工作，profiler 归因与延迟测量分开。
 
 ## 持续优化时如何验证
@@ -320,15 +375,17 @@ python3 tests/manual/geometry_regression_impact.py --base <comparison-commit> \
   --evidence /absolute/path/to/successful-runs --output tmp/3d-regression-plan.json
 ```
 
-选例结合 `tests/manual/geometry_regression_dependencies.json` 中的组件声明、条件和相对导入、字符串形式的 lazy import、父包初始化文件及可选的实际导入记录。Git rename 和删除会保留旧路径。共享 infra 或案例矩阵变化选择全部案例；新增案例必须声明依赖。未知路径或无法解析的导入图会扩展到全部案例，并以 `uncovered` 非零退出，需要补上覆盖缺口。只有文档变化时可以返回 `no_inference_changes`，CPU 门禁仍需通过。
+选例结合 `tests/manual/geometry_regression_dependencies.json` 中的组件声明、条件和相对导入、字符串形式的 lazy import、父包初始化文件及可选的实际导入记录。Git rename 和删除会保留旧路径。共享 infra 或案例矩阵变化选择全部案例；新增案例必须声明依赖。实时层 `worldfoundry/core/execution/realtime/`、`worldfoundry/studio/serving/realtime/` 和 `worldfoundry/core/media/processing/` 不属于共享路径：其中的改动只选择导入闭包、组件声明或实际导入记录包含该文件的案例。`core/media/processing` 仍通过 `worldfoundry.core` 的 lazy facade 表覆盖全部案例。`studio/serving/realtime/` 中的文件同时声明为仅 CPU 组件：任何案例的导入闭包都不包含的服务文件，改动时不触发回放，而是需要通过依赖文件列出的 Studio 实时 CPU 契约。未知路径或无法解析的导入图会扩展到全部案例，并以 `uncovered` 非零退出，需要补上覆盖缺口。只有文档变化时可以返回 `no_inference_changes`，CPU 门禁仍需通过。
 
 只有 planner 和源码快照编排工具具有较窄的验证规则：不可变 Git entries 必须证明全部运行时代码、环境、assets、案例及依赖定义完全不变，完整 diff 及检查的工具文件也必须与提交 blob 一致。此类改动仍要求完整 CPU 契约和 MG2 两项 GPU 门禁，验证完整工具链。缺少历史、案例定义变化或混入任何生产改动，仍保留原来的全量保守模型选择。
 
 CI 即使选例失败也会上传 `geometry-impact`，其中是必须执行的回归计划，不能当作 GPU 推理通过的证据。执行器拒绝源码树或规则哈希过期、状态与空选例矛盾，以及漏掉当前规则和导入图要求的案例的计划。
 
+环境归属在 `geometry_regression_dependencies.json` 的 `environment_variants` 中声明：精确的环境 YAML 路径映射到明确的 `model_id@binding_id` 列表。原生覆盖策略与回放 planner 优先使用该归属，再应用宽泛的元数据规则。profile 的 `execution.environment` 同样标识消费者，包括使用 LTX-2.5 的两个 V2V profile。环境映射不接受通配符。缺少用例定义仍报告 uncovered；未知 manifest 和共享 core 改动保留保守选例。冻结的原生覆盖记录保持不变。
+
 ### 在模型主机上定时执行 GPU 回归
 
-使用与参考结果相同的模型 Python、已验收 assets 和环境。先将明确验收过的结果复制到持久化的私有目录：
+使用与参考结果相同的模型 Python、已验收 assets 和运行环境。先将明确验收过的结果复制到持久化的私有目录：
 
 ```bash
 python3 tests/manual/geometry_regression_schedule.py import-reference \
@@ -362,6 +419,8 @@ python3 tests/manual/geometry_regression_schedule.py import-reference \
 }
 ```
 
+跨主机复制已接受的参考归档时，索引文件及其记录的文件均逐字节保留，即可继续使用原索引的 SHA-256。定时回放先核对完整索引，再根据同一个原输出目录解析所有绝对导出路径，每条路径都须对应索引内的文件。
+
 可选的 `gpu_holder` 配置指定原有 `gg` 脚本的绝对 `script`、字符串列表 `start_args`、包括 `GG_PYTHON` 的 `env`，以及可选的日志就绪标记 `ready_patterns`。回放期间停止该脚本；成功、失败、超时或中断后，以独立 session 恢复。若推理子进程无法清理或 GPU 租约无法释放，执行器报告失败，并推迟占卡脚本恢复，直到残留资源清理完成。
 
 将必要的 `LD_LIBRARY_PATH`、`CUDA_HOME` 等运行变量保存在私有 profile 的 `env` 中。cron 任务保留已准备的工具 PATH。CUDA 预检查会在加载权重和停止占卡脚本前，逐项检查 Python、Torch、CUDA、cuDNN、GPU 和包版本是否与全部选中基准一致；环境变化直接失败，不放宽比较条件。
@@ -383,11 +442,13 @@ python3 tests/manual/geometry_regression_schedule.py remove \
   --profile ~/.config/worldfoundry/geometry-regression.json
 ```
 
-安装保留其他 cron 条目，时区为 `Asia/Shanghai`。控制脚本来自已提交版本；控制脚本变化后需要重新安装。每次运行从指定的本地已提交 ref 生成隔离快照，不自动 pull/reset，也不执行工作区未提交代码。案例各自使用独立模型进程，共用主机上的物理 GPU 租约锁，有单案例和整套超时，并接受严格数值和导入源码审计。每日运行完整短矩阵；按需执行时可传 `--plan` 使用受影响案例计划。
+安装保留其他 cron 条目，时区为 `Asia/Shanghai`。控制脚本来自已提交版本；控制脚本变化后需要重新安装。每次运行从指定的本地已提交 ref 生成隔离快照，不自动 pull/reset，也不执行工作区未提交代码。CUDA 预检和回放进程使用快照中的回放脚本。案例各自使用独立模型进程，共用主机上的物理 GPU 租约锁，有单案例和整套超时，并接受严格数值和导入源码审计。每日运行完整短矩阵；按需执行时可传 `--plan` 使用受影响案例计划。
+
+保存的计划必须指向配置的 ref 当前解析到的确切提交。
 
 `latest.json` 在开始时记录 `running`，结束时记录最终结果；`runs/` 保存日志、源码版本和比较报告。默认保留最近七次运行目录，更早的简要报告归档到 `history/`。已验收基准必须位于可清理的运行目录之外，执行器不会重新生成或覆盖它。profile、本地 assets、权重和数值证据不进入 Git。
 
-`--preflight-only` 检查全部选中案例的 assets 和环境，不加载模型权重；其 `preflight_passed` 状态不能当作数值推理通过的证据。
+`--preflight-only` 对照已验收基准检查选中案例的资源文件清单和运行环境。资源检查失败时会在获取 GPU 租约前将受影响的案例记录到 `asset_preflight_failures`。正式回放还会在加载模型权重前核对资源的 SHA-256。对于回放脚本尚无已验收清单参数的旧快照，控制器在启动快照中的回放脚本前核对摘要。数值推理证据来自完成的回放。
 
 主机 profile 还应固定数值环境配置，包括 `OMP_NUM_THREADS` 和 `MKL_NUM_THREADS`；即使所有包版本一致，CPU 深度重建也可能随线程数改变。为不同 Python/Torch/CUDA/C++ ABI 使用独立的 `TORCH_EXTENSIONS_DIR`，并保证扩展编译器采用 Torch 的 C++ ABI；单独新建缓存无法纠正编译器的 ABI 默认值。DreamX 在调用者显式启用确定性算法时关闭 cuDNN 自动选算法，避免不同进程选择不同卷积算法。确定性策略变化后的参考结果须另存，附上与受控原实现的数值对齐证明；不能覆盖旧参考或放宽阈值掩盖差异。
 
@@ -396,25 +457,18 @@ python3 tests/manual/geometry_regression_schedule.py remove \
 ### 新增模型短回放资产
 
 短矩阵为 Kandinsky 6 的六种 checkpoint、DreamDojo 学生的两个具体身份、
-LingBot-World-V2 1.3B、Matrix-Game 4 Egypt 和原生 WonderWorld 分别声明回放配方。
-这些配方要求真实权重及数值产物，不代表已完成 GPU 或已验收参考回放。
+LingBot-World-V2 1.3B、Matrix-Game 4 Egypt 和原生 WonderWorld 分别声明回放配方。这些配方要求真实权重及数值产物，不代表已完成 GPU 或已验收参考回放。
 Kandinsky 案例显式指定各自的模型 ID 与权重根目录，比较 121 帧、480×864、24 FPS
 的纯视频输出；音频需要独立验收。
 
-DreamDojo 通过 `WORLDFOUNDRY_REGRESSION_DREAMDOJO_STUDENT_CHECKPOINT` 指定操作者
-提供的蒸馏学生权重。在 `WORLDFOUNDRY_REGRESSION_INPUT_ROOT` 下准备
-`dreamdojo/text-embeddings.pt`（真实 `[1,S,100352]` Reason1 特征），以及两组不同的
-归一化 `[16,384]` 动作文件 `dreamdojo/actions-a.npy` 和 `dreamdojo/actions-b.npy`。
-视频 tokenizer 位于 checkpoint 根目录下的
-`nvidia--Cosmos-Predict2.5-2B/tokenizer.pth`。每次 A/B/A 独立回放输出 17 帧、10 FPS，
-不会用教师权重替代学生权重。LingBot 小模型案例使用其独立的六分片 1.3B 权重、
-共享 Wan 1.3B 文本/VAE 资产及既有的 21 帧 `WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS`。
+DreamDojo 通过 `WORLDFOUNDRY_REGRESSION_DREAMDOJO_STUDENT_CHECKPOINT` 指定操作者提供的蒸馏学生权重。在 `WORLDFOUNDRY_REGRESSION_INPUT_ROOT` 下准备
+`dreamdojo/text-embeddings.pt`（真实 `[1,S,100352]` Reason1 特征），以及两组不同的归一化 `[16,384]` 动作文件 `dreamdojo/actions-a.npy` 和 `dreamdojo/actions-b.npy`。视频 tokenizer 位于 checkpoint 根目录下的
+`nvidia--Cosmos-Predict2.5-2B/tokenizer.pth`。每次 A/B/A 独立回放输出 17 帧、10 FPS，不会用教师权重替代学生权重。LingBot 小模型案例使用其独立的六分片 1.3B 权重、共享 Wan 1.3B 文本/VAE 资产及既有的 21 帧 `WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS`。
 
 Matrix-Game 4 在输入根目录下使用两个不同的 17 帧、480×864 低多边形视频：
 `matrix-game4/low-poly-a.mp4` 和 `matrix-game4/low-poly-b.mp4`。Transformer 与 sink
 来自 `Skywork--Matrix-Game-4.0/fps-egypt`，文本/tokenizer/VAE 来自
-`alibaba-pai--Wan2.2-Fun-5B-Control`。WonderWorld 使用案例声明的组件目录及第二幅
-已验收图像 `wonderworld/image-b.png`；其 A/B/A 初始场景比较深度、渲染预览及完整
+`alibaba-pai--Wan2.2-Fun-5B-Control`。WonderWorld 使用案例声明的组件目录及第二幅已验收图像 `wonderworld/image-b.png`；其 A/B/A 初始场景比较深度、渲染预览及完整
 `.splat` 导出字节，而非仅比较元数据或点数。新视角与官方光栅器一致性仍需独立验收。
 
 ## 准备扩展 eval-core 测试
@@ -489,8 +543,8 @@ make lint
 make compile-eval
 make cli-entrypoint-check
 make cli-check
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval evaluate --results-path tmp/results.jsonl --output-dir tmp/worldfoundry_evaluate --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmarks --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf evaluate --results-path tmp/results.jsonl --output-dir tmp/worldfoundry_evaluate --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo benchmarks --json
 ```
 
   </Tab>
@@ -501,26 +555,27 @@ cd docs/fumadocs
 npm run models:check
 npm run types:check
 npm run build
-curl -I http://localhost:8013/docs
-curl -I http://localhost:8013/zh/docs
+npm start &
+curl -I http://localhost:3000/docs
+curl -I http://localhost:3000/zh/docs
 ```
 
   </Tab>
   <Tab>
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-show --model-id <model-id> --include-manifest --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-download --model-id <model-id> --check-local --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo model-show --model-id <model-id> --include-manifest --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo model-download --model-id <model-id> --check-local --json
 ```
 
   </Tab>
   <Tab>
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmark-show --benchmark-id <benchmark-id> --include-spec --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmarks --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval preflight runtime --profile <benchmark-id> --manifest worldfoundry/data/benchmarks/runtime_profiles/official/<benchmark-id>.yaml --output-dir tmp/preflight/runtime/<benchmark-id> --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmark-run --benchmark-id <benchmark-id> --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_artifacts> --output-dir tmp/benchmark_zoo/official_validation/<benchmark-id> --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo benchmark-show --benchmark-id <benchmark-id> --include-spec --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo benchmarks --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf preflight runtime --profile <benchmark-id> --manifest worldfoundry/data/benchmarks/runtime_profiles/official/<benchmark-id>.yaml --output-dir tmp/preflight/runtime/<benchmark-id> --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo benchmark-run --benchmark-id <benchmark-id> --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_artifacts> --output-dir tmp/benchmark_zoo/official_validation/<benchmark-id> --json
 ```
 
   </Tab>
@@ -568,36 +623,35 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmar
 - **Pass** — 必需阶段已运行，并产出预期产物。发布处理：可以支撑对应 claim。
 - **Partial** — 有阶段因为 network、credentials、data、GPU 或 license review 被跳过。发布处理：可用于开发，不能支撑更强公开 claim。
 - **Blocked** — 必需 source、dataset、license、dependency、checkpoint 或 API 条件不可用。发布处理：Manifest 保持 blocked 或 planned。
-- **Stale** — Report hash、manifest hash、git commit、validator script 或 timestamp 不再匹配。发布处理：重新运行验证后才能计入。
+- **Stale** — 证据产生时的 commit、manifest 或验证脚本与当前审查的改动不一致。发布处理：重新运行验证后才能计入。
 - **Runner-only** — Schema 和 runner path 通过，但 official runtime 未运行。发布处理：不是 leaderboard evidence。
 
 ## Validation matrix
 
-Matrix 是 model-zoo 和 benchmark-zoo readiness 的 release gate。它会合并 manifest entries 和 staged validation reports，并重新计算 integration status。
+Plan matrix 在不加载模型的前提下检查发布清单：它把正式文档清单里每个 model × benchmark 格子解析到 `suite_manifest.json`，再由 `validate-artifact` 按 schema 校验。
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval run \
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf run \
   --all-benchmarks \
-    --plan-only \
+  --plan-only \
   --output-dir tmp/worldfoundry_plan_matrix \
   --json
 
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-artifact \
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf validate-artifact \
   tmp/worldfoundry_plan_matrix/suite_manifest.json \
   --kind suite-manifest \
   --strict \
   --json
 ```
 
-- **`accepted_integrated`** — Fresh report 通过所有必需阶段，manifest 也声明 integrated。Maintainer action: 保持证据 fresh。
-- **`accepted_variant_integrated`** — 一个或多个 scoped variants 通过，但 parent family 仍是 planned。Maintainer action: 继续验证剩余 variants。
-- **`validated_but_manifest_not_promoted`** — Report 通过，但 manifest 仍是 planned 或 blocked。Maintainer action: Artifact review 后再提升。
-- **`manifest_integrated_without_report`** — Manifest 声称 integrated，但没有 fresh validation report。Maintainer action: 运行 staged validation 或降级。
-- **`manifest_overclaims_integration`** — Manifest 声称 integrated，但 computed stages 不通过。Maintainer action: 降级或重新运行 full validation。
-- **`report_overclaims_integration`** — Report 声称 integrated，但 staged evidence 不完整。Maintainer action: 丢弃或重跑 report。
-- **`stale_report`** — Report hash、script、git commit、schema 或 manifest entry 改变。Maintainer action: 重新运行验证。
-- **`partial_or_blocked`** — Report 存在，但 stages 失败或被跳过。Maintainer action: 按 `next_action` 处理。
-- **`not_validated`** — Manifest entry 没有 report。Maintainer action: 运行对应 runtime preflight 和 official validation run。
+每个格子记录 `status`、`exit_code` 和 `reason`：
+
+- **`planned`** — 模型输出满足 benchmark 输入，资产就绪后即可执行。
+- **`skipped`** — 组合不兼容或 benchmark 不可用，`reason` 说明原因。`--fail-on-skipped` 会把跳过变成失败退出码。
+- **`blocked`** — 在 plan 运行中加 `--no-skip-incompatible` 时，不兼容的组合会以 blocked 格子保留在 matrix 中，退出码为 1。
+- **`failed`** 和 **`succeeded`** — 去掉 `--plan-only` 真正执行时，格子的执行结果。
+
+Readiness 标签来自 catalog，不来自 matrix。`wf zoo models` 只对同时声明 `runner_target` 且 `integration.status: integrated` 的条目报告 `runnable_runner`；`wf zoo benchmarks` 的 `--ready-now` 和 `--official-ready` 由 benchmark 的证据字段计算。提升 catalog 状态时必须同时给出它引用的实际执行证据；manifest 的改动影响实际运行内容时，要重跑这些证据。
 
 ## 清单
 

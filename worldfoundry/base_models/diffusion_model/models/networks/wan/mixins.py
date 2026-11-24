@@ -28,7 +28,7 @@ class WanTransformerMethodsMixin:
         """
         channels = self.out_dim if channels is None else channels
         output = []
-        for value, grid in zip(values, grid_sizes.tolist()):
+        for value, grid in zip(values, grid_sizes.tolist(), strict=False):
             value = value[: math.prod(grid)].view(
                 *grid,
                 *self.patch_size,
@@ -37,10 +37,7 @@ class WanTransformerMethodsMixin:
             value = torch.einsum("fhwpqrc->cfphqwr", value)
             value = value.reshape(
                 channels,
-                *[
-                    grid_size * patch_size
-                    for grid_size, patch_size in zip(grid, self.patch_size)
-                ],
+                *[grid_size * patch_size for grid_size, patch_size in zip(grid, self.patch_size, strict=False)],
             )
             output.append(value)
         return output

@@ -1,16 +1,13 @@
-"""Module for base_models -> perception_core -> general_perception -> open_clip -> utils.py functionality."""
-
 import collections.abc
 from itertools import repeat
-from typing import List, Optional, Tuple, Union
 
 import torch
-from torch import nn as nn
 from torch import _assert
+from torch import nn as nn
 from torchvision.ops.misc import FrozenBatchNorm2d
 
 
-def freeze_batch_norm_2d(module, module_match={}, name=''):
+def freeze_batch_norm_2d(module, module_match={}, name=""):  # noqa: B006 - Keeps the upstream default object and signature.
     """
     Converts all `BatchNorm2d` and `SyncBatchNorm` layers of provided module into `FrozenBatchNorm2d`. If `module` is
     itself an instance of either `BatchNorm2d` or `SyncBatchNorm`, it is converted into `FrozenBatchNorm2d` and
@@ -42,7 +39,7 @@ def freeze_batch_norm_2d(module, module_match={}, name=''):
         res.eps = module.eps
     else:
         for child_name, child in module.named_children():
-            full_child_name = '.'.join([name, child_name]) if name else child_name
+            full_child_name = ".".join([name, child_name]) if name else child_name
             new_child = freeze_batch_norm_2d(child, module_match, full_child_name)
             if new_child is not child:
                 res.add_module(child_name, new_child)
@@ -51,20 +48,11 @@ def freeze_batch_norm_2d(module, module_match={}, name=''):
 
 # From PyTorch internals
 def _ntuple(n):
-    """Helper function to ntuple.
-
-    Args:
-        n: The n.
-    """
     def parse(x):
-        """Parse.
-
-        Args:
-            x: The x.
-        """
         if isinstance(x, collections.abc.Iterable):
             return x
         return tuple(repeat(x, n))
+
     return parse
 
 
@@ -72,19 +60,15 @@ to_1tuple = _ntuple(1)
 to_2tuple = _ntuple(2)
 to_3tuple = _ntuple(3)
 to_4tuple = _ntuple(4)
-to_ntuple = lambda n, x: _ntuple(n)(x)
+
+
+def to_ntuple(n, x):
+    return _ntuple(n)(x)
+
 
 # Replaces all linear layers with linear_replacement
 # TODO: add int8 support for other linear layers including attn and convnets
-def replace_linear(model, linear_replacement, include_modules=['c_fc', 'c_proj'], copy_weights=True):
-    """Replace linear.
-
-    Args:
-        model: The model.
-        linear_replacement: The linear replacement.
-        include_modules: The include modules.
-        copy_weights: The copy weights.
-    """
+def replace_linear(model, linear_replacement, include_modules=["c_fc", "c_proj"], copy_weights=True):  # noqa: B006 - Keeps the upstream default object and signature.
     for name, module in model.named_children():
         if len(list(module.children())) > 0:
             replace_linear(module, linear_replacement, include_modules, copy_weights)
@@ -103,25 +87,21 @@ def replace_linear(model, linear_replacement, include_modules=['c_fc', 'c_proj']
 
     return model
 
-def convert_int8_model_to_inference_mode(model):
-    """Convert int8 model to inference mode.
 
-    Args:
-        model: The model.
-    """
+def convert_int8_model_to_inference_mode(model):
     for m in model.modules():
-        if hasattr(m, 'prepare_for_eval'):
+        if hasattr(m, "prepare_for_eval"):
             int8_original_dtype = m.weight.dtype
             m.prepare_for_eval()
             m.int8_original_dtype = int8_original_dtype
 
 
 def feature_take_indices(
-        num_features: int,
-        indices: Optional[Union[int, List[int]]] = None,
-        as_set: bool = False,
-) -> Tuple[List[int], int]:
-    """ Determine the absolute feature indices to 'take' from.
+    num_features: int,
+    indices: int | list[int] | None = None,
+    as_set: bool = False,
+) -> tuple[list[int], int]:
+    """Determine the absolute feature indices to 'take' from.
 
     Args:
         num_features: total number of features to select from
@@ -139,13 +119,13 @@ def feature_take_indices(
 
     if isinstance(indices, int):
         # convert int -> last n indices
-        _assert(0 < indices <= num_features, f'last-n ({indices}) is out of range (1 to {num_features})')
+        _assert(0 < indices <= num_features, f"last-n ({indices}) is out of range (1 to {num_features})")
         take_indices = [num_features - indices + i for i in range(indices)]
     else:
-        take_indices: List[int] = []
+        take_indices: list[int] = []
         for i in indices:
             idx = num_features + i if i < 0 else i
-            _assert(0 <= idx < num_features, f'feature index {idx} is out of range (0 to {num_features - 1})')
+            _assert(0 <= idx < num_features, f"feature index {idx} is out of range (0 to {num_features - 1})")
             take_indices.append(idx)
 
     if as_set:
@@ -154,15 +134,7 @@ def feature_take_indices(
     return take_indices, max(take_indices)
 
 
-def _out_indices_as_tuple(x: Union[int, Tuple[int, ...]]) -> Tuple[int, ...]:
-    """Helper function to out indices as tuple.
-
-    Args:
-        x: The x.
-
-    Returns:
-        The return value.
-    """
+def _out_indices_as_tuple(x: int | tuple[int, ...]) -> tuple[int, ...]:
     if isinstance(x, int):
         # if indices is an int, take last N features
         return tuple(range(-x, 0))

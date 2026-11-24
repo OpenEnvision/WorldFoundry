@@ -1,8 +1,8 @@
 """Stateless normalization helpers for tensor-like arrays.
 
-These are *functions*, not ``nn.Module``s: no registered parameters, so they
-can run on numpy or torch and sit next to fused kernels that already own
-weights. :func:`rms_norm` prefers ``F.rms_norm`` when the value is a Tensor
+These are *functions*, not ``nn.Module``s: no registered parameters.
+:func:`rms_norm_tensor` exposes the tensor-only positional-epsilon contract;
+:func:`rms_norm` supports NumPy and prefers ``F.rms_norm`` when the value is a Tensor
 (keeps AMP/kernel selection) and otherwise uses a portable mean-square path.
 :func:`layer_scale` is the affine ``x * γ + β`` used after residual blocks
 without constructing a :class:`~worldfoundry.core.nn.blocks.layers.LayerScale`.
@@ -10,8 +10,10 @@ without constructing a :class:`~worldfoundry.core.nn.blocks.layers.LayerScale`.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    import torch
 
 # ──────────────────────────────────────────────────────────────────────────
 # Stateless ops — no registered parameters; pair with fused kernels that own γ
@@ -39,6 +41,13 @@ def rms_norm(value: Any, weight: Any = None, *, eps: float = 1e-6) -> Any:
     return normalized if weight is None else normalized * weight
 
 
+def rms_norm_tensor(x: torch.Tensor, weight: torch.Tensor | None = None, eps: float = 1e-6) -> torch.Tensor:
+    """Apply native tensor RMS normalization with positional weight and epsilon arguments."""
+    import torch.nn.functional as F
+
+    return F.rms_norm(x, (x.shape[-1],), weight=weight, eps=eps)
+
+
 def layer_scale(value: Any, scale: Any, *, bias: Any = None) -> Any:
     """Apply a stateless elementwise layer-scale transform."""
 
@@ -46,4 +55,4 @@ def layer_scale(value: Any, scale: Any, *, bias: Any = None) -> Any:
     return output if bias is None else output + bias
 
 
-__all__ = ["layer_scale", "rms_norm"]
+__all__ = ["layer_scale", "rms_norm", "rms_norm_tensor"]

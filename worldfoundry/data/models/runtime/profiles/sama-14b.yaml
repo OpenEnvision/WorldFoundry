@@ -5,6 +5,7 @@ task_family: video_generation
 groups: [video, video_editing]
 source_repos:
 - url: https://github.com/Cynthiazxy123/SAMA
+  revision: 85441d5d42e6335f66282b92016eae7266df436e
 checkpoints:
 - repo_id: syxbb/SAMA-14B
   role: editing_checkpoint

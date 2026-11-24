@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from worldfoundry.core.memory.media import extract_last_frame, infer_content_type, to_pil_image
 
@@ -22,7 +22,7 @@ class VideoArtifactMemory(ModelScopedMemory):
     def record(
         self,
         data: Any,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         *,
         video_chunk: VideoChunk | None = None,
         **kwargs: Any,
@@ -66,7 +66,7 @@ class VideoArtifactMemory(ModelScopedMemory):
             metadata=entry_metadata,
         )
 
-    def select(self, context_query: Optional[Any] = None, prefer_type: str = "image", **kwargs: Any):
+    def select(self, context_query: Any | None = None, prefer_type: str = "image", **kwargs: Any):
         """Return the newest artifact matching ``prefer_type``, or None.
 
         When an image is wanted, a stored video's last frame counts as a match.

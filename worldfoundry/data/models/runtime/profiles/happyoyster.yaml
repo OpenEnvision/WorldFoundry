@@ -1,23 +1,24 @@
-artifact_filename: happyoyster_runtime_plan.json
-artifact_kind: generated_world
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: happyoyster
 display_name: HappyOyster
-id: happyoyster
+task_family: world_model
 input_schema:
   actions:
   - api_request
   image: true
   prompt: true
   video: true
-integration_status: runtime_ported
+artifact_kind: generated_world
+artifact_filename: happyoyster_runtime_plan.json
+execution:
+  pipeline_binding: happyoyster
+  backend_stage: worldfoundry_runtime_plan
+  runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - HappyOyster API route is registered; API credentials/endpoint are runtime-gated.
 - This hosted API route does not use local model weights.
 - WorldFoundry tracks HappyOyster metadata only; no runnable API client or generation
   pipeline is registered.
-runtime_status: route_ready_assets_pending
-task_family: world_model
-execution:
-  pipeline_binding: happyoyster
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending

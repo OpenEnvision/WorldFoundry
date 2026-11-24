@@ -1,12 +1,12 @@
 ---
-title: 感知成对
-description: LPIPS、SSIM、DINO 相似度、mask accuracy、目标检测与 layout quality 指标。
+title: 感知指标
+description: LPIPS、SSIM、MS-SSIM、PSNR、DINO 相似度、DreamSim、FSIM、CPBD、IRS、mask accuracy、目标检测与布局一致性指标。
 ---
 
 import MetricPrinciples from '../../../../mdx/partials/metrics-principles-notation.zh.mdx';
 import MetricRecipes from '../../../../mdx/partials/metrics-usage-perceptual.zh.mdx';
 
-参考图与生成图之间的成对相似度（条件一致性、重建质量）。
+感知家族指标（`family=perceptual`，位于 `tasks/metrics/perceptual/`），覆盖成对重建与感知相似度、无参考锐度与真实感、分割 mask、目标检测成功率及边界框布局一致性。
 
 <MetricPrinciples />
 

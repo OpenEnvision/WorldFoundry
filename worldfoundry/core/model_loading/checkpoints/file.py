@@ -142,12 +142,14 @@ def load_state_dict_from_folder(file_path, torch_dtype=None, device="cpu", pin_m
 def load_state_dict_from_safetensors(file_path, torch_dtype=None, device="cpu"):
     """Load one safetensors file, optionally casting tensors to ``torch_dtype``."""
     state_dict = {}
-    with local_path_for_uri(file_path) as local_path:
-        with safe_open(str(local_path), framework="pt", device=str(device)) as f:
-            for k in f.keys():
-                state_dict[k] = f.get_tensor(k)
-                if torch_dtype is not None:
-                    state_dict[k] = state_dict[k].to(torch_dtype)
+    with (
+        local_path_for_uri(file_path) as local_path,
+        safe_open(str(local_path), framework="pt", device=str(device)) as f,
+    ):
+        for k in f.keys():  # noqa: SIM118  # safetensors handles are not iterable
+            state_dict[k] = f.get_tensor(k)
+            if torch_dtype is not None:
+                state_dict[k] = state_dict[k].to(torch_dtype)
     return state_dict
 
 
@@ -163,11 +165,9 @@ def load_state_dict_from_gguf(file_path, torch_dtype=None, device="cpu"):
     """
 
     try:
-        import gguf
+        gguf = __import__("gguf")
     except ImportError as error:
-        raise RuntimeError(
-            "loading GGUF checkpoints requires the optional 'gguf' package"
-        ) from error
+        raise RuntimeError("loading GGUF checkpoints requires the optional 'gguf' package") from error
 
     state_dict = {}
     with local_path_for_uri(file_path) as local_path:
@@ -177,9 +177,7 @@ def load_state_dict_from_gguf(file_path, torch_dtype=None, device="cpu"):
             if not name:
                 raise ValueError(f"GGUF checkpoint {file_path!r} contains an empty tensor name")
             if name in state_dict:
-                raise ValueError(
-                    f"GGUF checkpoint {file_path!r} contains duplicate tensor {name!r}"
-                )
+                raise ValueError(f"GGUF checkpoint {file_path!r} contains duplicate tensor {name!r}")
             try:
                 array = gguf.dequantize(entry.data, entry.tensor_type)
             except NotImplementedError:
@@ -452,7 +450,7 @@ def load_keys_dict_from_safetensors(file_path):
     """Read tensor shapes from a safetensors file without materializing values."""
     keys_dict = {}
     with safe_open(file_path, framework="pt", device="cpu") as f:
-        for k in f.keys():
+        for k in f.keys():  # noqa: SIM118  # safetensors handles are not iterable
             keys_dict[k] = f.get_slice(k).get_shape()
     return keys_dict
 
@@ -461,11 +459,9 @@ def load_keys_dict_from_gguf(file_path):
     """Read GGUF tensor names and logical shapes without dequantizing values."""
 
     try:
-        import gguf
+        gguf = __import__("gguf")
     except ImportError as error:
-        raise RuntimeError(
-            "reading GGUF checkpoint keys requires the optional 'gguf' package"
-        ) from error
+        raise RuntimeError("reading GGUF checkpoint keys requires the optional 'gguf' package") from error
     keys_dict = {}
     with local_path_for_uri(file_path) as local_path:
         reader = gguf.GGUFReader(str(local_path))
@@ -518,6 +514,7 @@ def hash_model_file(path, with_shape=True):
 
 
 __all__ = [
+    "build_rename_dict",
     "convert_keys_dict_to_single_str",
     "convert_state_dict_keys_to_single_str",
     "convert_state_dict_to_keys_dict",
@@ -534,7 +531,6 @@ __all__ = [
     "load_state_dict_from_safetensors",
     "load_torch_checkpoint",
     "load_torch_state_dict",
-    "build_rename_dict",
     "search_for_embeddings",
     "search_for_files",
     "search_parameter",

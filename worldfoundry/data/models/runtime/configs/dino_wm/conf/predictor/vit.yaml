@@ -1,4 +1,4 @@
-_target_: models.vit.ViTPredictor
+_target_: worldfoundry.synthesis.visual_generation.dino_wm.models.vit.ViTPredictor
 depth: 6
 heads: 16
 mlp_dim: 2048

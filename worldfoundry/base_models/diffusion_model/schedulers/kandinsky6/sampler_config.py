@@ -9,7 +9,6 @@ from torch import nn
 
 from worldfoundry.base_models.diffusion_model.models.networks.kandinsky6.dit import DiffusionTransformer3D
 from worldfoundry.base_models.diffusion_model.models.networks.kandinsky6.piflow_dit import PiFlowDiffusionTransformer3D
-
 from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.base import ConfigModel
 
 

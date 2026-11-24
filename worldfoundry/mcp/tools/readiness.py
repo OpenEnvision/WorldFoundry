@@ -3,26 +3,40 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from worldfoundry.evaluation.tasks.datasets import check_local_dataset
+from pydantic import Field
+
+from worldfoundry.evals.tasks.datasets import check_local_dataset
 
 from .context import MCPToolContext, get_default_context
+from .responses import ToolNotFoundError
+from .spec import mcp_tool
 
 
+@mcp_tool("check_benchmark_datasets", title="Check benchmark datasets", read_only=True)
 def check_benchmark_datasets_payload(
     *,
-    benchmark_id: str,
-    data_root: str | Path | None = None,
+    benchmark_id: Annotated[str, Field(description="Benchmark id from list_benchmarks.")],
+    data_root: Annotated[
+        str | None, Field(description="Dataset cache root; defaults to the WorldFoundry data root.")
+    ] = None,
     context: MCPToolContext | None = None,
 ) -> dict[str, Any]:
-    """Check local Hugging Face dataset readiness for one benchmark."""
+    """Check whether a benchmark's Hugging Face datasets are present locally before running evaluate.
 
-    from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
+    Returns one entry per dataset with ``ready``/``status``/``reason`` and a ``summary`` count.
+    """
+
+    from worldfoundry.evals.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
 
     ctx = context or get_default_context()
     registry = load_benchmark_zoo_registry(ctx.benchmark_manifest_dir)
-    entry = registry.get(benchmark_id)
+    try:
+        entry = registry.get(benchmark_id)
+    except LookupError as exc:
+        known = [item.benchmark_id for item in registry.list()]
+        raise ToolNotFoundError.for_id("benchmark", benchmark_id, known) from exc
     cache_dir = Path(data_root).expanduser() if data_root else _default_dataset_root()
     refs = [entry.dataset, *entry.dataset_refs]
     seen: set[tuple[str | None, str | None, str | None, str | None]] = set()

@@ -20,7 +20,7 @@ public functions (``group_norm_silu``, ``qk_rmsnorm_rope``, ``routed_swiglu_moe`
 
 Not this package:
     Attention backends live in :mod:`worldfoundry.core.attention`. Persistent
-    compile-cache roots live in :mod:`worldfoundry.core.execution.compile_cache`.
+    compile-cache roots live in :mod:`worldfoundry.core.platform.compile_cache`.
     NVFP4 / weight-only quantization lives in
     :mod:`worldfoundry.core.acceleration`.
 
@@ -42,13 +42,17 @@ CPU-only environment does not fail on ``import``.
 from worldfoundry.core.kernels.capabilities import KernelDeviceProfile, kernel_device_profile
 from worldfoundry.core.kernels.diffusion import (
     clear_kernel_dispatch_cache,
+    fused_layer_norm_scale_shift,
     group_norm_silu,
     hidden_qk_rmsnorm_rope_3d,
+    hidden_qk_rmsnorm_rope_freqs,
     kernel_dispatch_report,
     layer_norm_scale_shift,
     qk_rmsnorm_rope,
+    residual_add_layer_norm_scale_shift,
     residual_gate_add,
     residual_gate_add_,
+    residual_gate_layer_norm,
     rms_norm_scale_shift,
     scale_shift,
     silu_and_mul,
@@ -71,22 +75,27 @@ def __getattr__(name: str):
         return routed_swiglu_moe_triton
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
+
 __all__ = [
+    "KernelDeviceProfile",
     "clear_kernel_dispatch_cache",
+    "fused_layer_norm_scale_shift",
     "group_norm_silu",
     "hidden_qk_rmsnorm_rope_3d",
-    "KernelDeviceProfile",
+    "hidden_qk_rmsnorm_rope_freqs",
     "kernel_device_profile",
     "kernel_dispatch_report",
     "layer_norm_scale_shift",
     "qk_rmsnorm_rope",
+    "residual_add_layer_norm_scale_shift",
     "residual_gate_add",
     "residual_gate_add_",
+    "residual_gate_layer_norm",
     "rms_norm_scale_shift",
-    "scale_shift",
-    "routed_swiglu_moe_pytorch",
     "routed_swiglu_moe",
+    "routed_swiglu_moe_pytorch",
     "routed_swiglu_moe_triton",
+    "scale_shift",
     "silu_and_mul",
     "silu_mul",
 ]

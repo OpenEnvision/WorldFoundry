@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 id: xvla
 name: X-VLA
 aliases:
@@ -11,6 +11,7 @@ official_sources:
   github:
     head_sha: 6bc2513f5f1cbec715cc668b414392a6cae5c671
     url: https://github.com/2toinf/X-VLA
+    revision: 6bc2513f5f1cbec715cc668b414392a6cae5c671
   huggingface:
   - repo_id: 2toINF/X-VLA-WidowX
     revision: 8d7ea1aaa948665d44129a3ff488629b955fc0f9
@@ -47,12 +48,12 @@ docs:
   publisher: Tsinghua University (AIR)
   publisher_kind: university
   publisher_zh: 清华大学智能产业研究院（AIR）
-  overview: 'X-VLA is a cross-embodiment VLA built on a Florence-2 backbone with soft-prompt domain conditioning (paper: arXiv 2510.10274, Apache-2.0). It is one of the most thoroughly validated entries in this catalog: all nine released checkpoints restored strictly and produced finite 30x20 actions through real A100 inference with explicit domain IDs, and the in-tree action head matches upstream within 5e-7.'
-  overview_zh: X-VLA 是跨本体 VLA，基于 Florence-2 骨干与软提示域条件（论文：arXiv 2510.10274， Apache-2.0）。它是本 catalog 验证最充分的条目之一：九个已发布 checkpoint 全部严格恢复，并以显式域 ID 经真实 A100 推理产出有限的 30x20 动作，树内动作头与上游最大绝对差低于 5e-7。
-  architecture: A Florence-2 vision-language backbone, the X-VLA processor, and a soft-prompted transformer whose domain-specific soft prompts switch embodiments; the in-tree action head has exactly the same 300 state keys, tensor shapes, and parameter count as upstream.
-  architecture_zh: Florence-2 视觉-语言骨干、X-VLA processor 与软提示 transformer——域专用软提示切换本体；树内动作头与上游拥有完全相同的 300 个状态键、张量形状与参数量。
-  usage_notes: Always pass the explicit domain ID matching your embodiment/checkpoint. Runtime forces trust_remote_code=false and never imports a source checkout; training, FastAPI serving, simulator clients, and robot drivers are excluded.
-  usage_notes_zh: 务必传入与本体/checkpoint 匹配的显式域 ID。运行时强制 trust_remote_code=false 且绝不导入源码 checkout；训练、FastAPI 服务、模拟器客户端与机器人驱动被排除。
+  overview: 'X-VLA is a cross-embodiment VLA built on a Florence-2 backbone with soft-prompt domain conditioning (paper: arXiv 2510.10274, Apache-2.0). Validated on an A100: all nine released checkpoints load strictly and produce finite 30x20 actions with explicit domain IDs, and the action head matches upstream outputs.'
+  overview_zh: X-VLA 是跨本体 VLA，基于 Florence-2 骨干与软提示域条件（论文：arXiv 2510.10274，Apache-2.0）。已在 A100 上验证：九个已发布 checkpoint 均可严格加载，并在显式域 ID 下产出有限的 30x20 动作，动作头输出与上游一致。
+  architecture: A Florence-2 vision-language backbone, the X-VLA processor, and a soft-prompted transformer whose domain-specific soft prompts switch embodiments.
+  architecture_zh: Florence-2 视觉-语言骨干、X-VLA processor 与软提示 transformer——域专用软提示切换本体。
+  usage_notes: Always pass the explicit domain ID matching your embodiment/checkpoint. The runtime forces trust_remote_code=false and covers inference only; training, FastAPI serving, simulator clients, and robot drivers are not included.
+  usage_notes_zh: 务必传入与本体/checkpoint 匹配的显式域 ID。运行时强制 trust_remote_code=false，只覆盖推理；不包含训练、FastAPI 服务、模拟器客户端与机器人驱动。
   limitations:
   - Domain IDs must be supplied explicitly; a wrong ID silently changes the embodiment prior.
   limitations_zh:

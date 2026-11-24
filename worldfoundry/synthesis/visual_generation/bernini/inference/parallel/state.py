@@ -36,10 +36,7 @@ class ParallelState:
         self.world_size = int(os.environ.get("WORLD_SIZE", "1"))
         self.rank = int(os.environ.get("RANK", "0"))
         if self.world_size % ulysses_size != 0:
-            raise ValueError(
-                f"world_size ({self.world_size}) must be divisible by "
-                f"ulysses_size ({ulysses_size})"
-            )
+            raise ValueError(f"world_size ({self.world_size}) must be divisible by ulysses_size ({ulysses_size})")
         self.ulysses_size = ulysses_size
         self.dp_size = self.world_size // ulysses_size
         self.ulysses_rank = self.rank % ulysses_size

@@ -4,8 +4,6 @@
 # --------------------------------------------------------
 # modified from DUSt3R
 
-"""Module for base_models -> three_dimensions -> point_clouds -> cut3r -> heads -> __init__.py functionality."""
-
 from .dpt_head import DPTPts3dPose
 from .linear_head import LinearPts3d, LinearPts3d_Desc, LinearPts3dPose
 

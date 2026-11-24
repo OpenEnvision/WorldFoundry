@@ -1,11 +1,10 @@
 import os
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
-from huggingface_hub import snapshot_download
 from PIL import Image
 
 from worldfoundry.base_models.three_dimensions.point_clouds.flash_world.render import (
@@ -85,14 +84,14 @@ def _look_at_c2w_opengl(look_at: np.ndarray, eye: np.ndarray) -> np.ndarray:
 
 class VGGTRepresentation:
     """VGGT Representation model for 3D scene reconstruction."""
-    
-    def __init__(self, model: Optional[VGGT] = None, device: Optional[str] = None):
+
+    def __init__(self, model: VGGT | None = None, device: str | None = None):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model
-        
+
         if self.model is not None:
             self.model = self.model.to(self.device).eval()
-            
+
             if self.device == "cuda" and torch.cuda.is_available():
                 compute_capability = torch.cuda.get_device_capability()[0]
                 self.dtype = torch.bfloat16 if compute_capability >= 8 else torch.float16
@@ -100,14 +99,9 @@ class VGGTRepresentation:
                 self.dtype = torch.float32
         else:
             self.dtype = torch.float32
-    
+
     @classmethod
-    def from_pretrained(
-        cls,
-        pretrained_model_path: str,
-        device: Optional[str] = None,
-        **kwargs
-    ) -> 'VGGTRepresentation':
+    def from_pretrained(cls, pretrained_model_path: str, device: str | None = None, **kwargs) -> "VGGTRepresentation":
         try:
             local_model_path = None
             if os.path.isdir(pretrained_model_path):
@@ -126,27 +120,26 @@ class VGGTRepresentation:
             else:
                 model = VGGT.from_pretrained(pretrained_model_path)
         except Exception as e:
-            raise RuntimeError(f"Failed to load VGGT model: {e}")
-        
+            raise RuntimeError(f"Failed to load VGGT model: {e}")  # noqa: B904 - Keeps the implicit exception context.
+
         instance = cls(model=model, device=device)
-        instance.preprocess_mode = kwargs.get('preprocess_mode', 'crop')
-        instance.resolution = kwargs.get('resolution', 518)
+        instance.preprocess_mode = kwargs.get("preprocess_mode", "crop")
+        instance.resolution = kwargs.get("resolution", 518)
         return instance
-    
-    
-    def get_representation(self, data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def get_representation(self, data: dict[str, Any]) -> dict[str, Any]:
         """Get representation from input data using VGGT model."""
         if self.model is None:
             raise RuntimeError("Model not loaded. Use from_pretrained() first.")
-        
-        images_input = data['images']
-        predict_cameras = data.get('predict_cameras', True)
-        predict_depth = data.get('predict_depth', True)
-        predict_points = data.get('predict_points', True)
-        predict_tracks = data.get('predict_tracks', False)
-        query_points = data.get('query_points', None)
-        preprocess_mode = data.get('preprocess_mode', self.preprocess_mode)
-        resolution = data.get('resolution', self.resolution)
+
+        images_input = data["images"]
+        predict_cameras = data.get("predict_cameras", True)
+        predict_depth = data.get("predict_depth", True)
+        predict_points = data.get("predict_points", True)
+        predict_tracks = data.get("predict_tracks", False)
+        query_points = data.get("query_points")
+        preprocess_mode = data.get("preprocess_mode", self.preprocess_mode)
+        resolution = data.get("resolution", self.resolution)
         if isinstance(images_input, list):
             image_list = images_input
         elif isinstance(images_input, np.ndarray):
@@ -161,9 +154,9 @@ class VGGTRepresentation:
                 image_list = [images_input]
             else:
                 image_list = images_input if isinstance(images_input, list) else [images_input]
-        
+
         has_paths = any(isinstance(img, str) for img in image_list)
-        
+
         if has_paths:
             if preprocess_mode == "square":
                 images, _ = load_and_preprocess_images_square(image_list, target_size=resolution)
@@ -175,7 +168,7 @@ class VGGTRepresentation:
                 if isinstance(img_array, np.ndarray):
                     if img_array.max() > 1.0:
                         img_array = img_array / 255.0
-                    
+
                     if img_array.ndim == 3 and img_array.shape[2] == 3:
                         img_tensor = torch.from_numpy(img_array).permute(2, 0, 1).float()
                     elif img_array.ndim == 2:
@@ -192,9 +185,9 @@ class VGGTRepresentation:
                     image_tensors.append(img_tensor)
                 else:
                     raise ValueError(f"Unsupported image type: {type(img_array)}")
-            
+
             images = torch.stack(image_tensors)
-        
+
         images = images.to(self.device)
         if images.dim() == 3:
             images = images.unsqueeze(0)
@@ -204,54 +197,44 @@ class VGGTRepresentation:
                 query_points_tensor = torch.FloatTensor(query_points).to(self.device)
             elif isinstance(query_points, torch.Tensor):
                 query_points_tensor = query_points.to(self.device)
-        
+
         results = {}
-        with torch.no_grad():
-            with torch.amp.autocast('cuda', dtype=self.dtype, enabled=(self.device == "cuda")):
-                images_batch = images[None]
-                aggregated_tokens_list, ps_idx = self.model.aggregator(images_batch)
-                
-                if predict_cameras:
-                    pose_enc = self.model.camera_head(aggregated_tokens_list)[-1]
-                    extrinsic, intrinsic = pose_encoding_to_extri_intri(
-                        pose_enc, images_batch.shape[-2:]
-                    )
-                    results['extrinsic'] = extrinsic.squeeze(0).cpu().numpy()
-                    results['intrinsic'] = intrinsic.squeeze(0).cpu().numpy()
-                
-                if predict_depth:
-                    depth_map, depth_conf = self.model.depth_head(
-                        aggregated_tokens_list, images_batch, ps_idx
-                    )
-                    results['depth_map'] = depth_map.squeeze(0).cpu().numpy()
-                    results['depth_conf'] = depth_conf.squeeze(0).cpu().numpy()
-                
-                if predict_points:
-                    point_map, point_conf = self.model.point_head(
-                        aggregated_tokens_list, images_batch, ps_idx
-                    )
-                    results['point_map'] = point_map.squeeze(0).cpu().numpy()
-                    results['point_conf'] = point_conf.squeeze(0).cpu().numpy()
-                
-                if predict_tracks and query_points_tensor is not None:
-                    if query_points_tensor.dim() == 2:
-                        query_points_tensor = query_points_tensor.unsqueeze(0)
-                    track, vis_score, conf_score = self.model.track_head(
-                        aggregated_tokens_list, images_batch, ps_idx,
-                        query_points=query_points_tensor
-                    )
-                    results['tracks'] = track.squeeze(0).cpu().numpy()
-                    results['track_vis_score'] = vis_score.squeeze(0).cpu().numpy()
-                    results['track_conf_score'] = conf_score.squeeze(0).cpu().numpy()
-                
-                if predict_depth and predict_cameras and predict_points:
-                    point_map_from_depth = unproject_depth_map_to_point_map(
-                        results['depth_map'],
-                        results['extrinsic'],
-                        results['intrinsic']
-                    )
-                    results['point_map_from_depth'] = point_map_from_depth
-        
+        with torch.no_grad(), torch.amp.autocast("cuda", dtype=self.dtype, enabled=(self.device == "cuda")):
+            images_batch = images[None]
+            aggregated_tokens_list, ps_idx = self.model.aggregator(images_batch)
+
+            if predict_cameras:
+                pose_enc = self.model.camera_head(aggregated_tokens_list)[-1]
+                extrinsic, intrinsic = pose_encoding_to_extri_intri(pose_enc, images_batch.shape[-2:])
+                results["extrinsic"] = extrinsic.squeeze(0).cpu().numpy()
+                results["intrinsic"] = intrinsic.squeeze(0).cpu().numpy()
+
+            if predict_depth:
+                depth_map, depth_conf = self.model.depth_head(aggregated_tokens_list, images_batch, ps_idx)
+                results["depth_map"] = depth_map.squeeze(0).cpu().numpy()
+                results["depth_conf"] = depth_conf.squeeze(0).cpu().numpy()
+
+            if predict_points:
+                point_map, point_conf = self.model.point_head(aggregated_tokens_list, images_batch, ps_idx)
+                results["point_map"] = point_map.squeeze(0).cpu().numpy()
+                results["point_conf"] = point_conf.squeeze(0).cpu().numpy()
+
+            if predict_tracks and query_points_tensor is not None:
+                if query_points_tensor.dim() == 2:
+                    query_points_tensor = query_points_tensor.unsqueeze(0)
+                track, vis_score, conf_score = self.model.track_head(
+                    aggregated_tokens_list, images_batch, ps_idx, query_points=query_points_tensor
+                )
+                results["tracks"] = track.squeeze(0).cpu().numpy()
+                results["track_vis_score"] = vis_score.squeeze(0).cpu().numpy()
+                results["track_conf_score"] = conf_score.squeeze(0).cpu().numpy()
+
+            if predict_depth and predict_cameras and predict_points:
+                point_map_from_depth = unproject_depth_map_to_point_map(
+                    results["depth_map"], results["extrinsic"], results["intrinsic"]
+                )
+                results["point_map_from_depth"] = point_map_from_depth
+
         return results
 
     @staticmethod
@@ -286,10 +269,10 @@ class VGGTRepresentation:
     def render_with_3dgs(
         self,
         ply_path: str,
-        camera_config: Dict[str, Any],
+        camera_config: dict[str, Any],
         image_width: int = 704,
         image_height: int = 480,
-        device: Optional[str] = None,
+        device: str | None = None,
         near_plane: float = 0.01,
         far_plane: float = 1000.0,
     ) -> Image.Image:
@@ -347,7 +330,9 @@ class VGGTRepresentation:
 
         def render_candidate():
             c2w_local = _look_at_c2w_opengl(look_at=center_norm, eye=cam_pos)
-            test_c2ws_local = torch.from_numpy(c2w_local).unsqueeze(0).unsqueeze(0).to(device=device, dtype=torch.float32)
+            test_c2ws_local = (
+                torch.from_numpy(c2w_local).unsqueeze(0).unsqueeze(0).to(device=device, dtype=torch.float32)
+            )
             rgb_local, _ = gaussian_render(
                 gaussian_params,
                 test_c2ws_local,
@@ -420,7 +405,7 @@ class VGGTRepresentation:
                 z = z[order]
                 c_proj = c_proj[order]
 
-                for uu, vv, zz, cc in zip(u, v, z, c_proj):
+                for uu, vv, zz, cc in zip(u, v, z, c_proj, strict=False):
                     if zz < depth_buf[vv, uu]:
                         depth_buf[vv, uu] = zz
                         img_fallback[vv, uu] = np.clip(cc, 0.0, 1.0)
@@ -434,12 +419,5 @@ class VGGTRepresentation:
 
                 rgb_img = torch.from_numpy(img_fallback).permute(2, 0, 1).to(torch.float32)
 
-        rgb_np = (
-            rgb_img.mul(255.0)
-            .permute(1, 2, 0)
-            .detach()
-            .cpu()
-            .numpy()
-            .astype(np.uint8)
-        )
+        rgb_np = rgb_img.mul(255.0).permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
         return Image.fromarray(rgb_np)

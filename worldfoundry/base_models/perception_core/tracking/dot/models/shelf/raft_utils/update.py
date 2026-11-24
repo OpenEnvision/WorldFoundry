@@ -89,7 +89,7 @@ class BasicUpdateBlock(nn.Module):
         self.mask = nn.Sequential(
             nn.Conv2d(128, 256, 3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, patch_size * patch_size * 9, 1, padding=0)
+            nn.Conv2d(256, patch_size * patch_size * 9, 1, padding=0),
         )
 
         if refine_alpha:
@@ -97,7 +97,7 @@ class BasicUpdateBlock(nn.Module):
             self.alpha_mask = nn.Sequential(
                 nn.Conv2d(128, 256, 3, padding=1),
                 nn.ReLU(inplace=True),
-                nn.Conv2d(256, patch_size * patch_size * 9, 1, padding=0)
+                nn.Conv2d(256, patch_size * patch_size * 9, 1, padding=0),
             )
 
     def forward(self, net, inp, corr, flow, alpha):
@@ -106,11 +106,11 @@ class BasicUpdateBlock(nn.Module):
         net = self.gru(net, inp)
 
         delta_flow = self.flow_head(net)
-        mask = .25 * self.mask(net)
+        mask = 0.25 * self.mask(net)
 
         delta_alpha, mask_alpha = None, None
         if self.refine_alpha:
             delta_alpha = self.alpha_head(net)
-            mask_alpha = .25 * self.alpha_mask(net)
+            mask_alpha = 0.25 * self.alpha_mask(net)
 
         return net, mask, delta_flow, mask_alpha, delta_alpha

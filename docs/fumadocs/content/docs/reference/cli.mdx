@@ -1,9 +1,9 @@
 ---
 title: CLI reference
-description: Complete command map, execution modes, output contracts, and automation conventions for worldfoundry-eval.
+description: Complete command map, execution modes, output contracts, and automation conventions for wf.
 ---
 
-`worldfoundry-eval` is the canonical command-line entrypoint for WorldFoundry. It covers catalog discovery, readiness checks, typed model inference, benchmark execution, result normalization, reporting, and validation. Use the [Quickstart](/docs/quickstart) for the first clone-to-run walkthrough; use this page when choosing a command or checking its contract.
+`wf` is the canonical command-line entrypoint for WorldFoundry. It covers catalog discovery, readiness checks, typed model inference, benchmark execution, result normalization, reporting, and validation. Use the [Quickstart](/docs/quickstart) for the first clone-to-run walkthrough; use this page when choosing a command or checking its contract.
 
 <Callout type="info" title="Safe to inspect">
   Help, catalog discovery, `--model-status`, `--print-config`, `--plan-only`, and local asset checks do not load model weights. They are the right place to start on a CPU-only machine or before allocating a GPU job.
@@ -20,7 +20,7 @@ Run commands from the repository root after activating the unified environment.
 bash scripts/setup/bootstrap_worldfoundry.sh
 source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
-worldfoundry-eval --help
+wf --help
 ```
 
 `bootstrap_worldfoundry.sh` is the official first-clone script used in the [Quickstart](/docs/quickstart), TUI, and Studio pages.
@@ -53,34 +53,42 @@ python -m worldfoundry zoo models --json
   </Tab>
 </Tabs>
 
-Running `worldfoundry-eval` with no arguments prints a short first-run banner. Add `--help` for the complete top-level command list.
+Running `wf` with no arguments prints a short first-run banner. Add `--help` for the complete top-level command list.
 
 ## Entrypoints
 
-- **`worldfoundry-eval`** — Canonical CLI used throughout the documentation.
-- **`worldfoundry`** — Alias of `worldfoundry-eval`; it dispatches to the same `main()` function.
+- **`wf`** — Canonical CLI used throughout the documentation.
+- **`wf tui`** — Terminal UI.
+- **`wf mcp`** — MCP server.
+- **`wf-studio`** — Separate Studio launcher. See the [Studio guide](/docs/guides/studio).
 - **`python -m worldfoundry`** — Module fallback when an editable install or console-script `PATH` is unavailable.
-- **`worldfoundry-tui`** — Dedicated alias for the terminal UI; equivalent to `worldfoundry-eval tui`.
-- **`worldfoundry-mcp`** — Dedicated MCP server entrypoint; `worldfoundry-eval mcp` reaches the same surface.
-- **`worldfoundry-studio`** — Separate Studio launcher. See the [Studio guide](/docs/guides/studio).
 - **`python -m worldfoundry.studio.workspace_job infer`** — Workspace visual smoke (the same job path the Studio UI submits). Not the documented first-run command.
 
-**Which command.** Everyday reproducible / model-page commands use `worldfoundry-eval run <id> --pipeline.task-profile …`. Use `python -m worldfoundry.studio.workspace_job infer` only for Workspace visual smoke.
+**Which command.** Everyday reproducible / model-page commands use `wf run <id> --pipeline.task-profile …`. Use `python -m worldfoundry.studio.workspace_job infer` only for Workspace visual smoke.
 
-Examples below use `worldfoundry-eval` so shell history, job scripts, and bug reports share one spelling.
+Within one Workspace process, `WORLDFOUNDRY_STUDIO_BATCH_MAX_SIZE` (default `1`)
+and `WORLDFOUNDRY_STUDIO_BATCH_DELAY_MS` (default `5`) configure compatible native
+Wan T2V and 5B TI2V resident-worker batches. Admission requires parallel job
+slots, resident weights and compatible Torch attention; compiled batches use
+regional scope. Configuration takes effect before worker startup and does not
+combine independent CLI processes. See the
+[batch admission, warmup and cancellation contracts](/docs/guides/inference-optimization#studio-resident-queue-batching)
+for precision and input requirements.
+
+Examples below use `wf` so shell history, job scripts, and bug reports share one spelling.
 
 ## Help at every level
 
 Append `--help` after the command whose flags you need. Options belong to the leaf command, so `--json` is written after `zoo models`, not before it.
 
 ```bash
-worldfoundry-eval --help
-worldfoundry-eval zoo --help
-worldfoundry-eval zoo model-show --help
-worldfoundry-eval run --help
+wf --help
+wf zoo --help
+wf zoo model-show --help
+wf run --help
 ```
 
-![Terminal output of worldfoundry-eval --help](/images/cli/worldfoundry-eval-help.png)
+![Terminal output of wf --help](/images/cli/worldfoundry-eval-help.png)
 
 <div className="text-sm text-fd-muted-foreground">
 
@@ -93,9 +101,9 @@ Captured from the current CLI. The screenshot can be regenerated with `npm run c
 The positional form `run MODEL` loads that model's inference schema and adds typed `--pipeline.*`, `--pipeline.load.*`, and `--runtime.*` options to its help page.
 
 ```bash
-worldfoundry-eval run self-forcing --help
-worldfoundry-eval run self-forcing --model-status
-worldfoundry-eval run self-forcing --print-config --json
+wf run self-forcing --help
+wf run self-forcing --model-status
+wf run self-forcing --print-config --json
 ```
 
 - `--pipeline.*` controls request inputs and generation defaults.
@@ -140,7 +148,7 @@ Several commands can reach the evaluation core, but they start from different us
             <code>zoo</code>
           </div>
         </div>
-        <p><code>models</code>, <code>model-specs</code>, <code>model-show</code>, <code>model-download</code>, <code>embodied-assets</code>, <code>benchmarks</code>, <code>benchmark-specs</code>, <code>benchmark-show</code>, <code>benchmark-run</code>.</p>
+        <p><code>models</code>, <code>model-specs</code>, <code>model-show</code>, <code>model-download</code>, <code>embodied-assets</code>, <code>benchmarks</code>, <code>benchmark-specs</code>, <code>benchmark-show</code>, <code>benchmark-fetch</code>, <code>benchmark-run</code>.</p>
       </li>
       <li className="pi-kv-row">
         <div className="pi-kv-head">
@@ -316,7 +324,7 @@ Several commands can reach the evaluation core, but they start from different us
             <code>mcp</code>
           </div>
         </div>
-        <p>Start the MCP server (<code>--transport stdio|sse</code>, default <code>stdio</code>).</p>
+        <p>Start the MCP server (<code>--transport stdio|streamable-http|sse</code>, default <code>stdio</code>; <code>--host</code>/<code>--port</code> for HTTP).</p>
       </li>
     </ul>
   </section>
@@ -324,14 +332,45 @@ Several commands can reach the evaluation core, but they start from different us
 
 ### MCP tools
 
-`worldfoundry-eval mcp` and `worldfoundry-mcp` start the same FastMCP server (`worldfoundry/mcp/server.py`). After `python -m pip install -e ".[mcp]"`:
+`wf mcp` starts the FastMCP server (`worldfoundry/mcp/server.py`). After `python -m pip install -e ".[mcp]"`:
 
 ```bash
-worldfoundry-eval mcp --transport stdio
-worldfoundry-eval mcp --transport sse
+wf mcp                                              # stdio, for local agent clients
+wf mcp --transport streamable-http --port 8000      # HTTP endpoint at http://127.0.0.1:8000/mcp
+wf mcp --transport sse                              # legacy SSE clients
 ```
 
-The server registers 27 tools: `server_info`; discovery (`list_models`, `get_model_info`, `list_benchmarks`, `get_benchmark_info`, `list_tasks`, `get_task_info`, `list_metrics`, `show_metric`, `check_benchmark_datasets`); run lifecycle (`preview_run`, `evaluate`, `list_runs`, `get_run_status`, `get_run_result`, `get_run_samples`, `cancel_run`); and Studio workspace (`list_studio_models`, `get_studio_model_info`, `submit_studio_inference`, `list_studio_jobs`, `get_studio_job`, `wait_for_studio_job`, `stop_studio_job`, `get_studio_job_logs`, `list_studio_artifacts`, `get_studio_manifest`). Studio tools default to `WORLDFOUNDRY_STUDIO_WORKSPACE_URL` (typically `http://127.0.0.1:7870`). Run files land under `WORLDFOUNDRY_MCP_RUN_ROOT`, or `runs/mcp` when that variable is unset.
+HTTP transports bind to `127.0.0.1` unless `--host` is given. Call `server_info` first: it returns paths, the tool list
+with behaviour hints, and the recommended workflow.
+
+| Group | Tools |
+| --- | --- |
+| Server | `server_info` |
+| Discovery | `list_models`, `get_model_info`, `list_benchmarks`, `get_benchmark_info`, `list_tasks`, `get_task_info`, `list_metrics`, `show_metric`, `check_benchmark_datasets` |
+| Runs | `preview_run`, `evaluate`, `list_runs`, `get_run_status`, `get_run_result`, `get_run_samples`, `cancel_run` |
+| Studio workspace | `list_studio_models`, `get_studio_model_info`, `submit_studio_inference`, `list_studio_jobs`, `get_studio_job`, `wait_for_studio_job`, `stop_studio_job`, `get_studio_job_logs`, `list_studio_artifacts`, `get_studio_manifest` |
+
+Tool contracts:
+
+- Every parameter carries a description in the tool's JSON schema, and fixed choices are enums
+  (`wait`: `auto|async|sync`; `generation_cache_mode`: `off|read|write|read-write|refresh`; `mode`; `detail`; run `status`).
+- Each tool declares MCP annotations. Discovery and status tools are read-only; `evaluate` and
+  `submit_studio_inference` start work; `cancel_run` and `stop_studio_job` are destructive; Studio tools are marked
+  open-world because they call the Studio HTTP API.
+- `list_*` tools return one page in a `summary` view: pass `offset`/`limit` to page (`next_offset` is `null` on the
+  last page) and `detail="full"` for every field. `get_*_info` always returns the full entry.
+- `preview_run` and `evaluate` take `model` plus `benchmarks` (a list) or `suite_ids`, and forward `mode`, `plan_only`,
+  `resume`, `generation_cache_dir`, `generation_cache_mode`, `model_variant`, `requests_path`, `task_name`,
+  `generated_artifact_dir`, `output_artifact`, and `metrics` to `wf run`. `preview_run` returns the exact command
+  without starting it.
+- `evaluate` returns a `run_id`. With `wait="auto"` it waits up to `wait_timeout_s` and then returns the running
+  status; follow up with `get_run_status`, `get_run_result`, and `get_run_samples`.
+- Results are `{"ok": true, ...}`. Failures are `{"ok": false, "error": ..., "error_type": ...}` where `error_type` is
+  `not_found` (unknown id; the message suggests close matches), `invalid_argument`, `unavailable` (for example, Studio
+  is not running), `runtime`, or `internal`.
+
+Studio tools default to `WORLDFOUNDRY_STUDIO_WORKSPACE_URL` (typically `http://127.0.0.1:7870`). Run files land under
+`WORLDFOUNDRY_MCP_RUN_ROOT`, or `runs/mcp` when that variable is unset.
 
 Python clients can use `worldfoundry.mcp.client.MCPClient` and
 `convert_result_to_openai_format()` to adapt tool results to OpenAI Chat content.
@@ -340,28 +379,38 @@ Audio uses an `input_audio` block with base64 `data` and `format` set to `wav` o
 other audio formats. Text and image blocks retain their content and data URIs.
 Conversion is local and does not call an API provider.
 
-The parser is the source of truth for flags. Use `worldfoundry-eval <command> [<subcommand>] --help` instead of copying flags from an unrelated model or benchmark recipe.
+### Job completion and cancellation
+
+Durable command jobs preserve the original termination reason in completion
+receipts and restored status. Timeouts remain `failed` with their timeout error;
+user cancellations remain `cancelled`.
+
+On POSIX, bounded benchmark commands clean up their owned process group before
+returning or propagating an interruption. Timeout payloads record `timed_out`
+and `kill_stuck`; the latter indicates that teardown did not finish.
+
+The parser is the source of truth for flags. Use `wf <command> [<subcommand>] --help` instead of copying flags from an unrelated model or benchmark recipe.
 
 ## Common workflows
 
 ### 1. Discover and check readiness
 
 ```bash
-worldfoundry-eval zoo models
-worldfoundry-eval zoo benchmarks --ready-now
+wf zoo models
+wf zoo benchmarks --ready-now
 
-worldfoundry-eval zoo model-show \
+wf zoo model-show \
   --model-id <model-id> \
   --include-manifest \
   --json
 
-worldfoundry-eval zoo benchmark-show \
+wf zoo benchmark-show \
   --benchmark-id <benchmark-id> \
   --include-spec \
   --json
 
 # Checks the local cache; it does not download.
-worldfoundry-eval zoo model-download \
+wf zoo model-download \
   --model-id <model-id> \
   --check-local \
   --json
@@ -374,18 +423,18 @@ Use human tables while exploring. Add `--json` only when another program will co
 Inspect the resolved fields before allocating GPU resources:
 
 ```bash
-worldfoundry-eval run self-forcing --model-status
-worldfoundry-eval run self-forcing --print-config --json
+wf run self-forcing --model-status
+wf run self-forcing --print-config --json
 ```
 
 Then provide only the overrides for this run:
 
 ```bash
-worldfoundry-eval run self-forcing \
+wf run self-forcing \
   --pipeline.prompt "A paper boat moving down a forest stream" \
-  --pipeline.num-output-frames 33 \
+  --pipeline.frames 33 \
   --pipeline.seed 7 \
-  --pipeline.load.ckpt-path /path/to/self_forcing_dmd.pt \
+  --pipeline.load.checkpoint-path /path/to/self_forcing_dmd.pt \
   --runtime.device cuda \
   --output-dir tmp/self_forcing_run
 ```
@@ -397,7 +446,7 @@ Entries marked `runnable_runner` can execute directly. `runner_candidate` and `l
 Plan a potentially large matrix first:
 
 ```bash
-worldfoundry-eval run \
+wf run \
   --all-benchmarks \
   --model <model-id> \
   --plan-only \
@@ -408,7 +457,7 @@ worldfoundry-eval run \
 Execute one cell after its assets and environment pass readiness checks:
 
 ```bash
-worldfoundry-eval run \
+wf run \
   --benchmark <benchmark-id> \
   --model <model-id> \
   --mode official-run \
@@ -423,7 +472,7 @@ Repeat `--model` or `--benchmark` to create a matrix, or use `--suite <suite-id>
 For a benchmark-owned artifact layout:
 
 ```bash
-worldfoundry-eval score \
+wf score \
   --benchmark <benchmark-id> \
   --artifacts /path/to/generated-artifacts \
   --mode official-run \
@@ -437,7 +486,7 @@ Remove `--plan-only` after the prepared intent reports `ready: true`.
 For already materialized WorldFoundry result rows:
 
 ```bash
-worldfoundry-eval score \
+wf score \
   --results tmp/results.jsonl \
   --metric artifact_count \
   --metric required_artifacts_present \
@@ -459,7 +508,7 @@ these in-process scoring flags.
 `evaluate` exposes the same deterministic core with lower-level request, task, runner, cache, and model-mode fields:
 
 ```bash
-worldfoundry-eval evaluate \
+wf evaluate \
   --results-path tmp/results.jsonl \
   --metric artifact_count \
   --required-artifact video \
@@ -470,7 +519,7 @@ worldfoundry-eval evaluate \
 ### 5. Import official-shaped benchmark results
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --mode official-validation \
   --official-results-path /path/to/official-results.json \
@@ -481,7 +530,39 @@ worldfoundry-eval zoo benchmark-run \
 
 Benchmark-specific inputs such as data roots, score directories, prompt manifests, judge credentials, and metric subsets live on the corresponding [Benchmark Hub](/docs/evaluation/benchmark-hub) page.
 
+Some official runners execute upstream code pinned by the catalog (`repo_url`, `repo_revision`, `repo_subdir`) instead of a vendored copy. The runner fetches that revision into `${WORLDFOUNDRY_CACHE_DIR}/sources/<benchmark-id>/<revision>` on first use; prefetch it while online with:
+
+```bash
+wf zoo benchmark-fetch \
+  --benchmark-id camerabench \
+  --json
+```
+
+To run an existing checkout of that revision instead, point the benchmark's `runtime_root_env` variable, such as `WORLDFOUNDRY_CAMERABENCH_RUNTIME_ROOT`, at its `repo_subdir` directory.
+
 For HarnessEval-W, `--result-model-id` selects a model without changing the official common-case cohort. See [HarnessEval-W](/docs/evaluation/benchmark-hub/harnesseval-w) for Python execution, cached scoring and model prerequisites.
+
+### 6. Replay native Wan execution and request batches
+
+From a checkout with local checkpoints:
+
+```bash
+python -m benchmarks.inference.wan_execution_preparation \
+  --checkpoint /path/to/Wan2.1-T2V-1.3B \
+  --output-dir tmp/wan-execution --request-batching
+```
+
+`--request-batching` adds A/B, B/A, A/B batches to the singleton comparison.
+Select `wan2.1-t2v-1.3b`, `wan2.2-t2v-a14b`, `wan2.2-ti2v-5b` or
+`wan2.2-i2v-a14b` with `--model-id`. Image-conditioned replays require
+`--images IMAGE_A IMAGE_B`.
+
+Dense references are mandatory and the latent/RGB quality limits apply.
+Reports include warmup time/memory and matched two-request diagnostic
+throughput comparisons. Require both `complete` and `passed` in `report.json`;
+timing is diagnostic, not an isolated performance result. See
+[Inference optimization](/docs/guides/inference-optimization) for compile,
+Graph, precision and batch compatibility.
 
 ## Benchmark modes
 
@@ -501,7 +582,7 @@ the corresponding environment values described in
 [Environments → Logging](/docs/reference/environments#logging):
 
 ```bash
-worldfoundry-eval --log-level DEBUG --log-json \
+wf --log-level DEBUG --log-json \
   --log-file tmp/worldfoundry.log zoo models --json
 ```
 
@@ -571,7 +652,7 @@ Keep the command, environment/profile identity, catalog revision, and output dir
 For deterministic model outputs, configure the generation cache explicitly:
 
 ```bash
-worldfoundry-eval run \
+wf run \
   --suite <suite-id> \
   --generation-cache-dir tmp/generation-cache \
   --generation-cache-mode read-write \
@@ -583,7 +664,7 @@ The cache uses SQLite plus `audit.jsonl`; hits are recorded in the run manifest.
 
 ## Automation conventions
 
-- Put `--json` on the leaf command: `worldfoundry-eval zoo models --json`.
+- Put `--json` on the leaf command: `wf zoo models --json`.
 - Repeat list flags instead of comma-joining unless that command explicitly accepts comma-separated values: for example, `--metric a --metric b` and `--model a --model b`.
 - `KEY=VALUE` flags such as `--model-parameter`, `--model-runtime`, `--benchmark-parameter`, and `--env` parse JSON-compatible values where documented by `--help`.
 - Use stable catalog IDs in scripts. Aliases are convenient interactively, but canonical IDs make stored commands easier to audit.

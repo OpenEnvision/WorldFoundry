@@ -21,10 +21,11 @@ from __future__ import annotations
 import logging
 import os
 import warnings
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Any, Callable, Iterator, Mapping
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -337,7 +338,7 @@ def install_worldfoundry_inference_infra(
 
 
 @contextmanager
-def worldfoundry_inference_context() -> Iterator[None]:
+def worldfoundry_inference_context() -> Generator[None, None, None]:
     """Run model inference under the shared WorldFoundry core runtime policy.
 
     Installs process-wide infra if needed, then yields inside
@@ -401,7 +402,7 @@ def compile_module_if_enabled(
     ``_STRICT`` env vars when the explicit kwargs are omitted. Already
     compiled wrappers (``_worldfoundry_core_compiled``) are returned
     unchanged. Delegates to
-    :func:`worldfoundry.core.execution.compile_cache.compile_module_cached`.
+    :func:`worldfoundry.core.platform.compile_cache.compile_module_cached`.
     """
 
     should_compile = _env_flag("WORLDFOUNDRY_TORCH_COMPILE", default=False) if enabled is None else bool(enabled)
@@ -423,7 +424,7 @@ def compile_module_if_enabled(
     else:
         selected_dynamic = None
 
-    from worldfoundry.core.execution.compile_cache import CompilePolicy, compile_module_cached
+    from worldfoundry.core.platform.compile_cache import CompilePolicy, compile_module_cached
 
     compiled = compile_module_cached(
         module,
@@ -441,9 +442,9 @@ def compile_module_if_enabled(
         return module
 
     try:
-        setattr(compiled, "_worldfoundry_core_compiled", True)
+        compiled._worldfoundry_core_compiled = True
         if label is not None:
-            setattr(compiled, "_worldfoundry_core_compile_label", label)
+            compiled._worldfoundry_core_compile_label = label
     except Exception:
         pass
     return compiled
@@ -472,8 +473,8 @@ def wrap_runner_for_worldfoundry_core(runner: Any) -> Any:
             return generate(*args, **kwargs)
 
     try:
-        setattr(runner, "generate", generate_with_worldfoundry_core)
-        setattr(runner, "_worldfoundry_core_infra_wrapped", True)
+        runner.generate = generate_with_worldfoundry_core
+        runner._worldfoundry_core_infra_wrapped = True
     except Exception:
         return runner
     return runner
@@ -513,7 +514,9 @@ def _capture_pre_install_torch_state() -> None:
         snapshot["matmul_precision"] = None
     matmul_backend = getattr(getattr(torch.backends, "cuda", None), "matmul", None)
     snapshot["matmul_allow_tf32"] = (
-        bool(matmul_backend.allow_tf32) if matmul_backend is not None and hasattr(matmul_backend, "allow_tf32") else None
+        bool(matmul_backend.allow_tf32)
+        if matmul_backend is not None and hasattr(matmul_backend, "allow_tf32")
+        else None
     )
     cudnn_backend = getattr(torch.backends, "cudnn", None)
     snapshot["cudnn_allow_tf32"] = (
@@ -547,10 +550,7 @@ def _configure_torch_backends(*, matmul_precision: str, enable_tf32: bool) -> No
         if enable_tf32 and matmul_precision == "highest":
             # An explicit full-precision request wins over the TF32 default;
             # forcing allow_tf32=True would silently demote "highest" to "high".
-            logger.info(
-                "matmul_precision='highest' requested; leaving matmul TF32 disabled "
-                "despite enable_tf32=True."
-            )
+            logger.info("matmul_precision='highest' requested; leaving matmul TF32 disabled despite enable_tf32=True.")
         else:
             previous = bool(matmul_backend.allow_tf32)
             matmul_backend.allow_tf32 = bool(enable_tf32)
@@ -591,8 +591,9 @@ def _patch_torch_sdpa() -> None:
         """Replacement SDPA: honour the installed backend policy and normalize fully-masked rows."""
         return _call_sdpa_with_backend(query, key, value, *args, **kwargs)
 
-    setattr(worldfoundry_core_sdpa, "_worldfoundry_core_sdpa", True)
-    F.scaled_dot_product_attention = worldfoundry_core_sdpa
+    # The process-wide patch marks its wrapper so later installs and restores can recognize it.
+    cast(Any, worldfoundry_core_sdpa)._worldfoundry_core_sdpa = True
+    cast(Any, F).scaled_dot_product_attention = worldfoundry_core_sdpa
     _STATE.sdpa_patched = True
     logger.info(
         "Patched torch.nn.functional.scaled_dot_product_attention process-wide with the "
@@ -614,7 +615,7 @@ def _unpatch_torch_sdpa() -> bool:
     if _ORIGINAL_SDPA is None or not getattr(current, "_worldfoundry_core_sdpa", False):
         _STATE.sdpa_patched = False
         return False
-    F.scaled_dot_product_attention = _ORIGINAL_SDPA
+    cast(Any, F).scaled_dot_product_attention = _ORIGINAL_SDPA
     _STATE.sdpa_patched = False
     logger.info("Restored the original torch.nn.functional.scaled_dot_product_attention.")
     return True
@@ -652,7 +653,7 @@ def uninstall_worldfoundry_inference_infra() -> WorldFoundryInferenceInfraState:
 
 
 @contextmanager
-def worldfoundry_inference_infra_disabled() -> Iterator[None]:
+def worldfoundry_inference_infra_disabled() -> Generator[None, None, None]:
     """Temporarily restore vanilla torch behavior inside the scope.
 
     Useful for A/B numerical comparisons against the unpatched SDPA. On exit

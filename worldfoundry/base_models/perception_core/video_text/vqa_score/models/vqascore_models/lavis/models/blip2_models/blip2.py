@@ -1,28 +1,33 @@
 """
- Copyright (c) 2023, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2023, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
+
 import contextlib
+import datetime
 import logging
 import os
 import time
-import datetime
 
 import torch
-import torch.nn as nn
 import torch.distributed as dist
+import torch.nn as nn
 import torch.nn.functional as F
 
 from ...common import dist_utils
 from ...common.dist_utils import download_cached_file
-from ...common.utils import is_url
 from ...common.logger import MetricLogger
+from ...common.utils import is_url
 from ..base_model import BaseModel
-from .Qformer import BertConfig, BertLMHeadModel
 from ..eva_vit import create_eva_vit_g
+from .Qformer import BertConfig, BertLMHeadModel
+
+# isort: split
 from ..clip_vit import create_clip_vit_L
+
+# isort: split
 from transformers import BertTokenizer
 
 
@@ -51,27 +56,19 @@ class Blip2Base(BaseModel):
         encoder_config.add_cross_attention = True
         encoder_config.cross_attention_freq = cross_attention_freq
         encoder_config.query_length = num_query_token
-        Qformer = BertLMHeadModel.from_pretrained(
-            "bert-base-uncased", config=encoder_config
-        )
-        query_tokens = nn.Parameter(
-            torch.zeros(1, num_query_token, encoder_config.hidden_size)
-        )
+        Qformer = BertLMHeadModel.from_pretrained("bert-base-uncased", config=encoder_config)
+        query_tokens = nn.Parameter(torch.zeros(1, num_query_token, encoder_config.hidden_size))
         query_tokens.data.normal_(mean=0.0, std=encoder_config.initializer_range)
         return Qformer, query_tokens
 
     @classmethod
-    def init_vision_encoder(
-        cls, model_name, img_size, drop_path_rate, use_grad_checkpoint, precision
-    ):
+    def init_vision_encoder(cls, model_name, img_size, drop_path_rate, use_grad_checkpoint, precision):
         assert model_name in [
             "eva_clip_g",
             "clip_L",
         ], "vit model must be eva_clip_g or clip_L"
         if model_name == "eva_clip_g":
-            visual_encoder = create_eva_vit_g(
-                img_size, drop_path_rate, use_grad_checkpoint, precision
-            )
+            visual_encoder = create_eva_vit_g(img_size, drop_path_rate, use_grad_checkpoint, precision)
         elif model_name == "clip_L":
             visual_encoder = create_clip_vit_L(img_size, use_grad_checkpoint, precision)
         ln_vision = LayerNorm(visual_encoder.num_features)
@@ -79,9 +76,7 @@ class Blip2Base(BaseModel):
 
     def load_from_pretrained(self, url_or_filename):
         if is_url(url_or_filename):
-            cached_file = download_cached_file(
-                url_or_filename, check_hash=False, progress=True
-            )
+            cached_file = download_cached_file(url_or_filename, check_hash=False, progress=True)
             checkpoint = torch.load(cached_file, map_location="cpu")
         elif os.path.isfile(url_or_filename):
             checkpoint = torch.load(url_or_filename, map_location="cpu")
@@ -93,7 +88,7 @@ class Blip2Base(BaseModel):
         msg = self.load_state_dict(state_dict, strict=False)
 
         # logging.info("Missing keys {}".format(msg.missing_keys))
-        logging.info("load checkpoint from %s" % url_or_filename)
+        logging.info("load checkpoint from %s" % url_or_filename)  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
         return msg
 
@@ -170,9 +165,7 @@ def compute_sim_matrix(model, data_loader, **kwargs):
         sims_matrix.append(sim_i2t)
     sims_matrix = torch.stack(sims_matrix, dim=0)
 
-    score_matrix_i2t = torch.full(
-        (len(data_loader.dataset.image), len(texts)), -100.0
-    ).to(model.device)
+    score_matrix_i2t = torch.full((len(data_loader.dataset.image), len(texts)), -100.0).to(model.device)
 
     num_tasks = dist_utils.get_world_size()
     rank = dist_utils.get_rank()
@@ -180,9 +173,7 @@ def compute_sim_matrix(model, data_loader, **kwargs):
     start = rank * step
     end = min(sims_matrix.size(0), start + step)
 
-    for i, sims in enumerate(
-        metric_logger.log_every(sims_matrix[start:end], 50, header)
-    ):
+    for i, sims in enumerate(metric_logger.log_every(sims_matrix[start:end], 50, header)):
         topk_sim, topk_idx = sims.topk(k=k_test, dim=0)
         image_inputs = vit_feats[start + i].repeat(k_test, 1, 1).to(model.device)
         score = model.compute_itm(
@@ -193,17 +184,13 @@ def compute_sim_matrix(model, data_loader, **kwargs):
         score_matrix_i2t[start + i, topk_idx] = score + topk_sim
 
     sims_matrix = sims_matrix.t()
-    score_matrix_t2i = torch.full(
-        (len(texts), len(data_loader.dataset.image)), -100.0
-    ).to(model.device)
+    score_matrix_t2i = torch.full((len(texts), len(data_loader.dataset.image)), -100.0).to(model.device)
 
     step = sims_matrix.size(0) // num_tasks + 1
     start = rank * step
     end = min(sims_matrix.size(0), start + step)
 
-    for i, sims in enumerate(
-        metric_logger.log_every(sims_matrix[start:end], 50, header)
-    ):
+    for i, sims in enumerate(metric_logger.log_every(sims_matrix[start:end], 50, header)):
         topk_sim, topk_idx = sims.topk(k=k_test, dim=0)
         image_inputs = vit_feats[topk_idx.cpu()].to(model.device)
         score = model.compute_itm(
@@ -215,15 +202,11 @@ def compute_sim_matrix(model, data_loader, **kwargs):
 
     if dist_utils.is_dist_avail_and_initialized():
         dist.barrier()
-        torch.distributed.all_reduce(
-            score_matrix_i2t, op=torch.distributed.ReduceOp.SUM
-        )
-        torch.distributed.all_reduce(
-            score_matrix_t2i, op=torch.distributed.ReduceOp.SUM
-        )
+        torch.distributed.all_reduce(score_matrix_i2t, op=torch.distributed.ReduceOp.SUM)
+        torch.distributed.all_reduce(score_matrix_t2i, op=torch.distributed.ReduceOp.SUM)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-    logging.info("Evaluation time {}".format(total_time_str))
+    logging.info(f"Evaluation time {total_time_str}")
 
     return score_matrix_i2t.cpu().numpy(), score_matrix_t2i.cpu().numpy()

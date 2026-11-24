@@ -31,6 +31,7 @@ from .triton_lite_mla_kernels.vk_q_mm_divide_fwd import vk_q_mm_divide_fwd
 
 class TritonLiteMLAFwdFunction(torch.autograd.Function):
     """Forward-only autograd Function wrapping fused LiteMLA kernels."""
+
     @staticmethod
     def forward(
         ctx,
@@ -42,21 +43,6 @@ class TritonLiteMLAFwdFunction(torch.autograd.Function):
         head_dim: int,
         eps: float,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            ctx: The ctx.
-            x: The x.
-            qkv_weight: The qkv weight.
-            proj_weight: The proj weight.
-            proj_bias: The proj bias.
-            num_heads: The num heads.
-            head_dim: The head dim.
-            eps: The eps.
-
-        Returns:
-            The return value.
-        """
         B, N, C = x.shape
         qkv, relu_mask = linear_relu_fwd(x, qkv_weight)  # .view(B, N, 3, C) # B, N, 3, C
         qkv, relu_mask = qkv.view(B, N, 3, C), relu_mask.view(B, N, 3, C)
@@ -74,12 +60,6 @@ class TritonLiteMLAFwdFunction(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_y: torch.Tensor):
-        """Backward.
-
-        Args:
-            ctx: The ctx.
-            grad_y: The grad y.
-        """
         x, qkv_weight, relu_mask, v, k, vk, q, vk_q, proj_input, proj_weight = ctx.saved_tensors
         B, N, H, C1 = vk_q.shape
         C = C1 - 1
@@ -112,6 +92,7 @@ class TritonLiteMLAFwdFunction(torch.autograd.Function):
 
 class TritonLiteMLAFwd(nn.Module):
     """Inference-only LiteLA using the fused Triton forward kernels."""
+
     def __init__(
         self,
         dim: int,
@@ -119,49 +100,24 @@ class TritonLiteMLAFwd(nn.Module):
         eps=1e-15,
         use_bias=False,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            eps: The eps.
-            use_bias: The use bias.
-        """
         super().__init__()
         self.dim, self.num_heads, self.head_dim, self.eps = dim, num_heads, dim // num_heads, eps
         if use_bias:
-            raise NotImplementedError(f"use_bias is not supported for TritonLiteMLA")
+            raise NotImplementedError("use_bias is not supported for TritonLiteMLA")
         self.qkv = nn.Linear(dim, dim * 3, bias=use_bias)
         self.proj = nn.Linear(dim, dim)
 
     def forward(self, x: torch.Tensor, mask=None, HW=None, block_id=None) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            block_id: The block id.
-
-        Returns:
-            The return value.
-        """
         return TritonLiteMLAFwdFunction.apply(
             x, self.qkv.weight, self.proj.weight, self.proj.bias, self.num_heads, self.head_dim, self.eps
         )
 
     @property
     def module_str(self) -> str:
-        """Module str.
-
-        Returns:
-            The return value.
-        """
         _str = type(self).__name__ + "("
         eps = f"{self.eps:.1E}"
         _str += f"i={self.in_dim},o={self.out_dim},h={self.heads},d={self.dim},eps={eps}"
         return _str
 
     def __repr__(self):
-        """Repr."""
         return f"EPS{self.eps}-" + super().__repr__()

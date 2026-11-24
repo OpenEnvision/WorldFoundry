@@ -15,8 +15,8 @@ export const source = loader({
   plugins: [],
 });
 
-function getLocalizedSegments(page: (typeof source)['$inferPage'], leaf?: string) {
-  const segments = leaf ? [...page.slugs, leaf] : [...page.slugs];
+function getLocalizedSegments(page: (typeof source)['$inferPage'], leaf: string) {
+  const segments = [...page.slugs, leaf];
 
   if (!isDefaultLocale(page.locale)) {
     segments.unshift(page.locale ?? defaultLocale);
@@ -34,43 +34,33 @@ export function getPageImage(page: (typeof source)['$inferPage']) {
   };
 }
 
+/**
+ * Segments of the public markdown path `${page.url}.md`, e.g. `zh/docs/quickstart.md`.
+ * The /llms.mdx route serves this layout so the build can move its static
+ * output onto the public paths unchanged.
+ */
 export function getPageMarkdownSlugs(page: (typeof source)['$inferPage']) {
-  const segments = getLocalizedSegments(page);
-  // A static export cannot write a page as a file and its descendants as a
-  // directory at the same path. Give every markdown route a .md leaf.
-  if (page.slugs.length === 0) segments.push('index.md');
-  else segments[segments.length - 1] += '.md';
+  const segments = page.url.split('/').filter(Boolean);
+  segments[segments.length - 1] += '.md';
   return segments;
 }
 
 export function getPageMarkdownUrl(page: (typeof source)['$inferPage']) {
-  // Public fumadocs Next.js URL: append `.md` to the page path.
-  // next.config rewrites this to /llms.mdx/docs/... in `next dev`.
   const url = `${page.url}.md`;
-
-  return {
-    segments: getPageMarkdownSlugs(page),
-    url: withBasePath(url) ?? url,
-  };
+  return { url: withBasePath(url) ?? url };
 }
 
-export function resolveMarkdownSlug(slug: string[] | undefined) {
-  const segments = [...(slug ?? [])];
+/** Inverse of `getPageMarkdownSlugs`; `.mdx` leaves are accepted as aliases. */
+export function resolveMarkdownSlug(slug: readonly string[]) {
+  const [first, ...rest] = slug;
+  const locale = isLocale(first) ? first : defaultLocale;
+  const segments = isLocale(first) ? rest : [...slug];
+  const last = segments.at(-1);
+  if (!last || !/\.mdx?$/i.test(last)) return undefined;
 
-  if (segments.at(-1) === 'index.md' || segments.at(-1) === 'content.md') {
-    segments.pop();
-  } else {
-    const last = segments.at(-1);
-    if (last && /\.mdx?$/i.test(last)) {
-      segments[segments.length - 1] = last.replace(/\.mdx?$/i, '');
-    }
-  }
-
-  const maybeLocale = segments[0];
-  const locale = isLocale(maybeLocale) ? maybeLocale : defaultLocale;
-  const pageSlugs = isLocale(maybeLocale) ? segments.slice(1) : segments;
-
-  return { locale, pageSlugs };
+  segments[segments.length - 1] = last.replace(/\.mdx?$/i, '');
+  const [root, ...pageSlugs] = segments;
+  return `/${root}` === docsRoute ? { locale, pageSlugs } : undefined;
 }
 
 export async function getPageSourceMarkdown(page: (typeof source)['$inferPage']) {

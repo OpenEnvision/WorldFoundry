@@ -1,1 +1,3 @@
-"""Inference-only HyperFlow adapter over the official MiniMax-H3 components."""
+# SPDX-FileCopyrightText: 2026 OpenEnvision
+# SPDX-License-Identifier: Apache-2.0
+"""Inference-only HyperFlow orchestration over canonical MiniMax-H3 components."""

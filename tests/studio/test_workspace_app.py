@@ -15,9 +15,9 @@ from typing import Iterator
 from fastapi.testclient import TestClient
 
 import worldfoundry.studio.inference.requests as inference_requests
-import worldfoundry.studio.serving.workspace as workspace_app
-from worldfoundry.studio.serving.jobs import StudioJobStore
-from worldfoundry.studio.serving.workspace import WORKSPACE_HTML, create_app
+import worldfoundry.studio.workspace.app as workspace_app
+from worldfoundry.studio.workspace.app import WORKSPACE_HTML, create_app
+from worldfoundry.studio.workspace.jobs import StudioJobStore
 
 
 @pytest.fixture(autouse=True)
@@ -100,7 +100,7 @@ def test_workspace_token_protects_api_routes(transport: str) -> None:
 
 def test_workspace_refuses_remote_bind_without_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("WORLDFOUNDRY_STUDIO_AUTH_TOKEN", raising=False)
-    monkeypatch.setattr(workspace_app, "create_app", lambda **kwargs: pytest.fail("server must not start"))
+    monkeypatch.setattr(workspace_app, "create_app", lambda **kwargs: pytest.fail("server must not start"))  # ty: ignore[invalid-argument-type]  # ty 0.0.99 misreads pytest.fail's signature
 
     with pytest.raises(SystemExit, match="non-loopback host .*without authentication"):
         workspace_app.main(["--host", "0.0.0.0", "--port", "9999"])
@@ -173,7 +173,7 @@ def test_workspace_rejects_removed_visualizer(monkeypatch) -> None:
     monkeypatch.setattr(
         workspace_app.subprocess,
         "Popen",
-        lambda *args, **kwargs: pytest.fail("a removed visualizer must not start a process"),
+        lambda *args, **kwargs: pytest.fail("a removed visualizer must not start a process"),  # ty: ignore[invalid-argument-type]  # ty 0.0.99 misreads pytest.fail's signature
     )
 
     with TestClient(create_app()) as client:
@@ -207,9 +207,6 @@ def test_workspace_catalog_models_expose_official_links() -> None:
     assert fantasyworld["github"] == "https://github.com/Fantasy-AMAP/fantasy-world"
     assert fantasyworld["project"] == "https://fantasy-amap.github.io/fantasy-world/"
     assert fantasyworld["paper"] == "https://arxiv.org/abs/2509.21657"
-
-    voyager = models["hunyuan-world-voyager"]["links"]
-    assert voyager["github"] == "https://github.com/Tencent-Hunyuan/HunyuanWorld-Voyager"
 
     sana = models["sana"]["links"]
     assert sana["github"] == "https://github.com/NVlabs/Sana"
@@ -470,6 +467,7 @@ def test_workspace_routes_inference_artifacts_to_visualizers(tmp_path: Path) -> 
     )
 
     payload = workspace_app._job_result_payload(record)
+    assert payload is not None
     assert "visualizations" not in payload
     actions = workspace_app._result_visualization_actions(record)
     by_mode = {item["mode"]: item for item in actions}
@@ -888,7 +886,7 @@ def test_workspace_api_runs_real_evaluation_job(tmp_path: Path) -> None:
 
 def test_workspace_rejects_unsupported_job_type(monkeypatch: pytest.MonkeyPatch) -> None:
     def launch(*args: object, **kwargs: object) -> object:
-        pytest.fail("unsupported jobs must not start a subprocess")
+        pytest.fail("unsupported jobs must not start a subprocess")  # ty: ignore[invalid-argument-type]  # ty 0.0.99 misreads pytest.fail's signature
 
     monkeypatch.setattr(workspace_app.subprocess, "Popen", launch)
     with TestClient(create_app()) as client:
@@ -896,3 +894,881 @@ def test_workspace_rejects_unsupported_job_type(monkeypatch: pytest.MonkeyPatch)
 
     assert response.status_code == 400
     assert response.json()["detail"] == "unsupported job type: training"
+
+
+def test_wait_for_visualizer_sends_bearer_token_and_requires_2xx_3xx(monkeypatch: pytest.MonkeyPatch) -> None:
+    import email.message
+    import urllib.error
+    import urllib.request
+
+    seen_headers: list[dict[str, str]] = []
+    attempts = {"count": 0}
+
+    class _FakeResponse:
+        status = 200
+
+        def __enter__(self) -> _FakeResponse:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    def fake_urlopen(req: urllib.request.Request, timeout: float = 2) -> _FakeResponse:
+        seen_headers.append(dict(req.header_items()))
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", email.message.Message(), None)
+        if attempts["count"] == 2:
+            raise urllib.error.HTTPError(req.full_url, 404, "Not Found", email.message.Message(), None)
+        return _FakeResponse()
+
+    monkeypatch.setattr(workspace_app.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(workspace_app.time, "sleep", lambda _s: None)
+
+    assert workspace_app._wait_for_visualizer("http://127.0.0.1:8765/healthz", timeout=5.0, auth_token="secret-tok")
+    assert attempts["count"] == 3
+    assert all(headers.get("Authorization") == "Bearer secret-tok" for headers in seen_headers)
+
+
+def test_wait_for_visualizer_returns_false_immediately_when_process_exits(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+    from typing import cast
+
+    class _DeadProcess:
+        def poll(self) -> int:
+            return 1
+
+    def fail_urlopen(*args: object, **kwargs: object) -> object:
+        pytest.fail("urlopen should not be called after process exited")  # ty: ignore[invalid-argument-type]
+
+    monkeypatch.setattr(workspace_app.urllib.request, "urlopen", fail_urlopen)
+    started = time.monotonic()
+    ready = workspace_app._wait_for_visualizer(
+        "http://127.0.0.1:8765/healthz",
+        timeout=60.0,
+        process=cast(subprocess.Popen[str], _DeadProcess()),
+    )
+    elapsed = time.monotonic() - started
+    assert ready is False
+    assert elapsed < 1.0
+
+
+def test_launch_visualizer_supports_legacy_wait_monkeypatch_and_validates_rerun(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(workspace_app, "VISUALIZER_MANAGED", {})
+    monkeypatch.setattr(
+        workspace_app.subprocess,
+        "Popen",
+        lambda *args, **kwargs: pytest.fail("rerun without asset or URL must not spawn a process"),  # ty: ignore[invalid-argument-type]
+    )
+    with TestClient(create_app()) as client:
+        missing = client.post("/api/visualizers/rerun/launch", json={"model_id": "vggt-omega"})
+    assert missing.status_code == 400
+    assert "asset path or simulator URL" in missing.json()["detail"]
+
+    media_file = tmp_path / "preview.png"
+    media_file.write_bytes(b"png")
+
+    class _AliveProcess:
+        pid = 12345
+
+        def poll(self) -> None:
+            return None
+
+    probed: list[tuple[str, float]] = []
+
+    def legacy_wait(url: str, *, timeout: float = 35.0) -> bool:
+        probed.append((url, timeout))
+        return True
+
+    monkeypatch.setattr(workspace_app.subprocess, "Popen", lambda *args, **kwargs: _AliveProcess())
+    monkeypatch.setattr(workspace_app, "_wait_for_visualizer", legacy_wait)
+    monkeypatch.setattr(workspace_app, "_tcp_port_available", lambda host, port: True)
+    monkeypatch.setattr(workspace_app, "_workspace_visualizer_dir", lambda: tmp_path)
+
+    with TestClient(create_app()) as client:
+        launched = client.post(
+            "/api/visualizers/media/launch",
+            json={"model_id": "vggt-omega", "asset_path": str(media_file)},
+        )
+
+    assert launched.status_code == 200
+    assert launched.json()["running"] is True
+    assert len(probed) == 1
+    assert probed[0][0].endswith("/healthz")
+
+
+def test_visualizer_reusable_checks_simulator_url_host_and_port() -> None:
+    import subprocess
+    from typing import cast
+
+    class _AliveProcess:
+        def poll(self) -> None:
+            return None
+
+    local_record = workspace_app.ManagedVisualizer(
+        mode="media",
+        title="Media Preview",
+        url="http://127.0.0.1:18720/",
+        health_url="http://127.0.0.1:18720/healthz",
+        host="127.0.0.1",
+        port=18720,
+        model_id="vggt-omega",
+        asset_path="/tmp/a.png",
+        command=[],
+        log_path=None,
+        started_at=time.time(),
+        params={},
+        process=cast(subprocess.Popen[str], _AliveProcess()),
+        external=False,
+    )
+    assert workspace_app._visualizer_reusable(
+        local_record,
+        model_id="vggt-omega",
+        asset_path="/tmp/a.png",
+        params={},
+        simulator_url="",
+        host="127.0.0.1",
+        port=None,
+    )
+    assert workspace_app._visualizer_reusable(
+        local_record,
+        model_id="vggt-omega",
+        asset_path="/tmp/a.png",
+        params={},
+        simulator_url="",
+        host="127.0.0.1",
+        port=18720,
+    )
+    assert not workspace_app._visualizer_reusable(
+        local_record,
+        model_id="vggt-omega",
+        asset_path="/tmp/a.png",
+        params={},
+        simulator_url="",
+        host="0.0.0.0",
+        port=None,
+    )
+    assert not workspace_app._visualizer_reusable(
+        local_record,
+        model_id="vggt-omega",
+        asset_path="/tmp/a.png",
+        params={},
+        simulator_url="",
+        host="127.0.0.1",
+        port=18721,
+    )
+    assert not workspace_app._visualizer_reusable(
+        local_record,
+        model_id="vggt-omega",
+        asset_path="/tmp/a.png",
+        params={},
+        simulator_url="http://127.0.0.1:9999/",
+        host="127.0.0.1",
+        port=None,
+    )
+
+    ext_record = workspace_app.ManagedVisualizer(
+        mode="rerun",
+        title="Rerun",
+        url="http://127.0.0.1:9876/",
+        health_url="http://127.0.0.1:9876/",
+        host="127.0.0.1",
+        port=9876,
+        model_id="vggt-omega",
+        asset_path="",
+        command=[],
+        log_path=None,
+        started_at=time.time(),
+        params={},
+        process=None,
+        external=True,
+    )
+    assert workspace_app._visualizer_reusable(
+        ext_record,
+        model_id="vggt-omega",
+        asset_path="",
+        params={},
+        simulator_url="http://127.0.0.1:9876/",
+        host="127.0.0.1",
+        port=None,
+    )
+    assert not workspace_app._visualizer_reusable(
+        ext_record,
+        model_id="vggt-omega",
+        asset_path="",
+        params={},
+        simulator_url="http://127.0.0.1:9877/",
+        host="127.0.0.1",
+        port=None,
+    )
+    assert not workspace_app._visualizer_reusable(
+        ext_record,
+        model_id="vggt-omega",
+        asset_path="",
+        params={},
+        simulator_url="",
+        host="127.0.0.1",
+        port=None,
+    )
+
+
+def test_non_loopback_workspace_bind_host_defaults_visualizers_except_viser(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(workspace_app, "VISUALIZER_MANAGED", {})
+    monkeypatch.setattr(workspace_app, "_tcp_port_available", lambda host, port: True)
+    monkeypatch.setattr(workspace_app, "_workspace_visualizer_dir", lambda: tmp_path)
+
+    spawned_commands: list[list[str]] = []
+    probed_tokens: list[str] = []
+
+    class _AliveProcess:
+        pid = 54321
+
+        def poll(self) -> None:
+            return None
+
+    def fake_popen(cmd: list[str], **kwargs: object) -> _AliveProcess:
+        spawned_commands.append(list(cmd))
+        return _AliveProcess()
+
+    def fake_wait(
+        url: str,
+        *,
+        timeout: float = 35.0,
+        process: object = None,
+        auth_token: str = "",
+    ) -> bool:
+        probed_tokens.append(auth_token)
+        return True
+
+    monkeypatch.setattr(workspace_app.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(workspace_app, "_wait_for_visualizer", fake_wait)
+
+    asset_img = tmp_path / "img.png"
+    asset_img.write_bytes(b"png")
+    asset_ply = tmp_path / "cloud.ply"
+    asset_ply.write_text("ply\nformat ascii 1.0\nelement vertex 0\nend_header\n", encoding="utf-8")
+
+    headers = {"Authorization": "Bearer remote-secret"}
+    with TestClient(create_app(auth_token="remote-secret", bind_host="0.0.0.0")) as client:
+        rows = {row["mode"]: row for row in client.get("/api/visualizers", headers=headers).json()}
+        assert rows["media"]["default_host"] == "0.0.0.0"
+        assert rows["spark"]["default_host"] == "0.0.0.0"
+        assert rows["world"]["default_host"] == "0.0.0.0"
+        assert rows["points"]["default_host"] == "127.0.0.1"
+
+        media_res = client.post(
+            "/api/visualizers/media/launch",
+            headers=headers,
+            json={"model_id": "vggt-omega", "asset_path": str(asset_img)},
+        )
+        points_res = client.post(
+            "/api/visualizers/points/launch",
+            headers=headers,
+            json={"model_id": "vggt-omega", "asset_path": str(asset_ply)},
+        )
+
+    assert media_res.status_code == 200
+    assert media_res.json()["host"] == "0.0.0.0"
+    assert points_res.status_code == 200
+    assert points_res.json()["host"] == "127.0.0.1"
+    assert spawned_commands[0][spawned_commands[0].index("--host") + 1] == "0.0.0.0"
+    assert spawned_commands[1][spawned_commands[1].index("--host") + 1] == "127.0.0.1"
+    assert probed_tokens == ["remote-secret", "remote-secret"]
+
+
+def test_job_payload_exposes_logs_total_past_200_lines() -> None:
+    job = workspace_app.JOBS.submit_run(
+        title="Long Log Job",
+        model_id="vggt-omega",
+        display_name="VGGT-Omega",
+        action="inference",
+        job_type="inference",
+        metadata={},
+        run_callable=lambda current: (
+            [current.append_log("stdout", f"line-{i}\n") for i in range(250)],
+            {"status": "completed"},
+        )[1],
+    )
+    with TestClient(create_app()) as client:
+        payload = _wait_for_job(client, job.job_id)
+        delta = client.get(f"/api/jobs/{job.job_id}/logs", params={"after": 200}).json()
+
+    assert len(payload["logs"]) == 200
+    assert payload["logs_total"] > 200
+    assert delta["offset"] == payload["logs_total"]
+    assert len(delta["logs"]) == payload["logs_total"] - 200
+
+
+def test_models_filter_matches_variant_workloads_and_ui_has_image_and_v2a() -> None:
+    assert '<option value="image">Image</option>' in WORKSPACE_HTML
+    assert '<option value="v2a">Video to Audio</option>' in WORKSPACE_HTML
+    with TestClient(create_app()) as client:
+        i2v_ids = {row["id"] for row in client.get("/api/models", params={"workload_type": "i2v"}).json()}
+        image_ids = {row["id"] for row in client.get("/api/models", params={"workload_type": "image"}).json()}
+        v2a_ids = {row["id"] for row in client.get("/api/models", params={"workload_type": "v2a"}).json()}
+
+    assert "cogvideox_5b_t2v" in i2v_ids
+    assert "open-magvit2" in image_ids
+    assert "mmaudio" in v2a_ids
+
+
+def test_load_settings_from_disk_ignores_invalid_values_and_save_failure_preserves_memory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings_path = tmp_path / "studio-settings.json"
+    settings_path.write_text(
+        json.dumps(
+            {
+                "fps": 24,
+                "num_frames": "not-an-int",
+                "attention_backend": "unsupported-backend",
+                "guidance_scale": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("WORLDFOUNDRY_STUDIO_SETTINGS_FILE", str(settings_path))
+    workspace_app.SETTINGS.clear()
+    workspace_app.SETTINGS.update(workspace_app.DEFAULT_SETTINGS)
+    try:
+        with TestClient(create_app()) as client:
+            loaded = client.get("/api/settings").json()
+            assert loaded["fps"] == 24
+            assert loaded["num_frames"] == workspace_app.DEFAULT_SETTINGS["num_frames"]
+            assert loaded["attention_backend"] == workspace_app.DEFAULT_SETTINGS["attention_backend"]
+            assert loaded["guidance_scale"] == workspace_app.DEFAULT_SETTINGS["guidance_scale"]
+
+            def fail_save(_values: object = None) -> None:
+                raise OSError("read-only filesystem")
+
+            monkeypatch.setattr(workspace_app, "_save_settings_to_disk", fail_save)
+            failed = client.post("/api/settings", json={"values": {"fps": 60}})
+            assert failed.status_code == 500
+            assert client.get("/api/settings").json()["fps"] == 24
+    finally:
+        workspace_app.SETTINGS.clear()
+        workspace_app.SETTINGS.update(workspace_app.DEFAULT_SETTINGS)
+
+
+def test_create_job_prepared_evaluation_value_error_returns_400(tmp_path: Path) -> None:
+    artifacts = tmp_path / "videos"
+    artifacts.mkdir()
+    (artifacts / "sample.mp4").write_bytes(b"video")
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/jobs",
+            json={
+                "job_type": "evaluation",
+                "eval_mode": "score-artifacts",
+                "benchmark_id": "vbench",
+                "dataset_root": str(artifacts),
+                "resume": True,
+                "output_dir": str(tmp_path / "out"),
+            },
+        )
+    assert response.status_code == 400
+    assert "resume/metric_batch_size" in response.json()["detail"]
+
+
+def test_initial_studio_job_counter_scans_runtime_jobs_and_evaluations(tmp_path: Path) -> None:
+    (tmp_path / "runtime_jobs" / "studio-00003").mkdir(parents=True)
+    (tmp_path / "evaluations" / "studio-00009").mkdir(parents=True)
+    (tmp_path / "evaluations" / "studio-not-a-number").mkdir(parents=True)
+    assert workspace_app._initial_studio_job_counter(str(tmp_path)) == 9
+
+
+def test_evaluation_report_md_is_registered_and_served_with_markdown_media_type(tmp_path: Path) -> None:
+    eval_dir = tmp_path / "eval_out"
+    eval_dir.mkdir()
+    report_path = eval_dir / "report.md"
+    report_path.write_text("# Evaluation Report\n\nAll good.\n", encoding="utf-8")
+    scorecard_path = eval_dir / "scorecard.json"
+    scorecard_path.write_text('{"schema_version": "worldfoundry-scorecard"}\n', encoding="utf-8")
+
+    job = workspace_app.JOBS.submit_run(
+        title="Eval Report Job",
+        model_id="materialized-results",
+        display_name="Evaluation",
+        action="evaluation",
+        job_type="evaluation",
+        metadata={"output_dir": str(eval_dir)},
+        run_callable=lambda _job: {
+            "status": "completed",
+            "output_dir": str(eval_dir),
+            "scorecard_path": str(scorecard_path),
+        },
+    )
+    with TestClient(create_app()) as client:
+        _wait_for_job(client, job.job_id)
+        artifact_paths = {row["path"] for row in client.get("/api/artifacts").json() if row["job_id"] == job.job_id}
+        assert str(report_path) in artifact_paths
+        res = client.get("/api/artifacts/file", params={"path": str(report_path)})
+
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("text/markdown")
+    assert "# Evaluation Report" in res.text
+
+
+def test_media_types_cover_extended_formats() -> None:
+    expected = {
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
+        ".mov": "video/quicktime",
+        ".mkv": "video/x-matroska",
+        ".avi": "video/x-msvideo",
+        ".wav": "audio/wav",
+        ".mp3": "audio/mpeg",
+        ".flac": "audio/flac",
+        ".ogg": "audio/ogg",
+        ".json": "application/json; charset=utf-8",
+        ".md": "text/markdown; charset=utf-8",
+        ".txt": "text/plain; charset=utf-8",
+    }
+    for ext, mime in expected.items():
+        assert workspace_app._file_media_type(Path(f"sample{ext}")) == mime
+
+
+def test_workspace_accepts_unremapped_call_kwargs_for_wow_and_gen3c() -> None:
+    wow_entry = workspace_app.find_entry("wow")
+    wow_task = inference_requests._entry_inference_spec(wow_entry).task()
+    inference_requests._validate_inference_payload(
+        wow_entry,
+        wow_task,
+        inference_requests.JobCreateRequest(
+            model_id="wow",
+            call_kwargs={"steps": 50, "num_frames": 41, "seed": 42},
+        ),
+    )
+
+    gen3c_entry = workspace_app.find_entry("gen3c")
+    gen3c_task = inference_requests._entry_inference_spec(gen3c_entry).task()
+    inference_requests._validate_inference_payload(
+        gen3c_entry,
+        gen3c_task,
+        inference_requests.JobCreateRequest(
+            model_id="gen3c",
+            call_kwargs={"guidance": 1.0, "num_steps": 35, "num_video_frames": 121},
+        ),
+    )
+
+
+def test_workspace_html_js_behaviors_with_node() -> None:
+    import shutil
+    import subprocess
+
+    node_bin = shutil.which("node") or str(Path.home() / ".cache" / "worldfoundry" / "node22" / "bin" / "node")
+    if not Path(node_bin).is_file():
+        pytest.skip("node runtime not available")  # ty: ignore[too-many-positional-arguments]  # ty 0.0.99 misreads pytest.skip's signature
+
+    html_path = Path(workspace_app.__file__).resolve().parents[1] / "assets" / "web" / "workspace.html"
+    script = r"""
+const assert = require("assert");
+const fs = require("fs");
+const vm = require("vm");
+
+const html = fs.readFileSync(process.argv[1], "utf8");
+const match = html.match(/<script>([\s\S]*?)<\/script>/);
+assert.ok(match, "inline script missing");
+const source = match[1];
+
+// Extract helper functions without running page bootstrap side effects.
+const initIdx = source.indexOf("initResizableSplits();");
+assert.ok(initIdx > 0, "bootstrap marker missing");
+const headlessSource = source.slice(0, initIdx) + "\nglobalThis.__state = state;\n";
+
+function makeElement(id, tag = "div") {
+  const attrs = new Map();
+  const classes = new Set();
+  const el = {
+    id,
+    tagName: tag.toUpperCase(),
+    value: "",
+    defaultValue: "",
+    checked: false,
+    type: tag === "input" ? "text" : "",
+    dataset: {},
+    innerHTML: "",
+    textContent: "",
+    options: [],
+    children: [],
+    scrollTop: 0,
+    scrollHeight: 100,
+    clientHeight: 100,
+    classList: {
+      add: (...c) => c.forEach(x => classes.add(x)),
+      remove: (...c) => c.forEach(x => classes.delete(x)),
+      toggle: (c, force) => {
+        if (force === undefined) {
+          if (classes.has(c)) classes.delete(c);
+          else classes.add(c);
+        } else if (force) classes.add(c);
+        else classes.delete(c);
+      },
+      contains: c => classes.has(c),
+    },
+    setAttribute(k, v) {
+      attrs.set(k, String(v));
+      if (k === "src") {
+        this._src = String(v);
+        this._srcSets = (this._srcSets || 0) + 1;
+      }
+    },
+    getAttribute(k) {
+      return attrs.has(k) ? attrs.get(k) : null;
+    },
+    removeAttribute(k) {
+      attrs.delete(k);
+      if (k === "src") this._src = "";
+    },
+    get src() {
+      return this._src || "";
+    },
+    set src(v) {
+      this.setAttribute("src", v);
+    },
+    closest() {
+      return this;
+    },
+    appendChild(opt) {
+      this.options.push(opt);
+    },
+    querySelectorAll(sel) {
+      if (sel === ":scope > .muted" && this._hasMuted) {
+        return [{ remove: () => { this._hasMuted = false; this.innerHTML = this.innerHTML.replace(/<span class="muted">[^<]*<\/span>/g, ""); } }];
+      }
+      return [];
+    },
+    insertAdjacentHTML(_pos, chunk) {
+      this.innerHTML += chunk;
+    },
+    showModal() {},
+    close() {},
+  };
+  return el;
+}
+
+const elements = new Map();
+const getEl = (id) => {
+  if (!elements.has(id)) elements.set(id, makeElement(id));
+  return elements.get(id);
+};
+
+const sandbox = {
+  URL,
+  URLSearchParams,
+  Set,
+  Map,
+  JSON,
+  Number,
+  Boolean,
+  String,
+  Array,
+  Object,
+  Date,
+  Math,
+  Promise,
+  CSS: { escape: s => s },
+  console,
+  setTimeout,
+  clearTimeout,
+  window: {
+    location: { href: "http://10.20.30.40:7870/?token=tok123", origin: "http://10.20.30.40:7870", hostname: "10.20.30.40", search: "?token=tok123" },
+    open: () => {},
+    addEventListener: () => {},
+  },
+  document: {
+    getElementById: getEl,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    createElement: (tag) => makeElement("", tag),
+  },
+  alert: (msg) => { throw new Error("unexpected alert: " + msg); },
+  fetch: async () => ({ ok: true, json: async () => ({}) }),
+  Headers: class { set() {} },
+};
+
+vm.createContext(sandbox);
+vm.runInContext(headlessSource, sandbox);
+const state = sandbox.__state;
+
+// 1. applyInferValue: do not remap call_kwargs/load_kwargs, only params.
+const p = { params: {}, call_kwargs: {}, load_kwargs: {} };
+sandbox.applyInferValue("call_kwargs", "steps", 50, p);
+sandbox.applyInferValue("call_kwargs", "guidance", 1.0, p);
+sandbox.applyInferValue("load_kwargs", "steps", 20, p);
+sandbox.applyInferValue("params", "steps", 30, p);
+sandbox.applyInferValue("params", "frames", 81, p);
+assert.strictEqual(p.call_kwargs.steps, 50);
+assert.strictEqual(p.call_kwargs.num_inference_steps, undefined);
+assert.strictEqual(p.call_kwargs.guidance, 1.0);
+assert.strictEqual(p.call_kwargs.guidance_scale, undefined);
+assert.strictEqual(p.load_kwargs.steps, 20);
+assert.strictEqual(p.params.num_inference_steps, 30);
+assert.strictEqual(p.params.num_frames, 81);
+
+// 2. viewerUrlForBrowser: non-loopback token append + Rerun nested url rewrite + no third-party token leak.
+assert.strictEqual(
+  sandbox.viewerUrlForBrowser("http://127.0.0.1:8765/"),
+  "http://10.20.30.40:8765/?token=tok123"
+);
+assert.strictEqual(
+  sandbox.viewerUrlForBrowser("http://127.0.0.1:8765/?token=existing"),
+  "http://10.20.30.40:8765/?token=existing"
+);
+const rerunUrl = new URL(
+  sandbox.viewerUrlForBrowser("http://127.0.0.1:9876/?url=ws%3A%2F%2F127.0.0.1%3A9877&renderer=webgpu")
+);
+assert.strictEqual(rerunUrl.hostname, "10.20.30.40");
+assert.strictEqual(rerunUrl.searchParams.get("url"), "ws://10.20.30.40:9877");
+assert.strictEqual(rerunUrl.searchParams.get("token"), "tok123");
+assert.strictEqual(
+  sandbox.viewerUrlForBrowser("https://external.example.com:8080/"),
+  "https://external.example.com:8080/"
+);
+
+// 3. visualizerHostForLaunch keeps points on loopback even on non-loopback browser.
+state.visualizers = [
+  { mode: "points", title: "Viser", default_host: "127.0.0.1", default_port: 18590, default_model: "vggt-omega", aliases: [], status: null },
+  { mode: "media", title: "Media", default_host: "0.0.0.0", default_port: 18720, default_model: "vggt-omega", aliases: [], status: null },
+];
+assert.strictEqual(sandbox.visualizerHostForLaunch("points"), "127.0.0.1");
+assert.strictEqual(sandbox.visualizerHostForLaunch("media"), "0.0.0.0");
+
+// 4. syncVisualizerPreview reloads iframe when started_at or asset_path changes even with identical URL.
+const frame = getEl("visualizerPreviewFrame");
+state.visualizers = [
+  {
+    mode: "media",
+    title: "Media",
+    status: { running: true, url: "http://127.0.0.1:18720/", started_at: 100, asset_path: "/tmp/a.png" },
+  },
+  {
+    mode: "spark",
+    title: "Spark",
+    status: { running: true, url: "http://127.0.0.1:8765/", started_at: 200, asset_path: "/tmp/s.splat" },
+  },
+];
+sandbox.syncVisualizerPreview("media");
+assert.strictEqual(frame._srcSets, 1);
+sandbox.syncVisualizerPreview("media");
+assert.strictEqual(frame._srcSets, 1);
+state.visualizers[0].status.started_at = 101;
+state.visualizers[0].status.asset_path = "/tmp/b.png";
+sandbox.syncVisualizerPreview("media");
+assert.strictEqual(frame._srcSets, 2);
+sandbox.syncVisualizerPreview("spark");
+assert.strictEqual(state.visualizerPreviewMode, "spark");
+
+// 5. visualizerCard populates inputs from status and preserves user drafts.
+const cardHtml = sandbox.visualizerCard({
+  mode: "media",
+  title: "Media",
+  default_model: "vggt-omega",
+  default_port: 18720,
+  aliases: ["preview"],
+  requires_asset: true,
+  accepts_external_url: false,
+  status: { running: true, model_id: "cosmos-predict2.5", port: 18725, asset_path: "/tmp/out.mp4", url: "http://127.0.0.1:18725/", external: false, params: {} },
+});
+assert.ok(cardHtml.includes('value="cosmos-predict2.5"'));
+assert.ok(cardHtml.includes('value="18725"'));
+assert.ok(cardHtml.includes('value="/tmp/out.mp4"'));
+state.visualizerDrafts.media = { asset: "/tmp/user-edited.mp4" };
+const draftCardHtml = sandbox.visualizerCard({
+  mode: "media",
+  title: "Media",
+  default_model: "vggt-omega",
+  default_port: 18720,
+  aliases: ["preview"],
+  requires_asset: true,
+  accepts_external_url: false,
+  status: { running: true, model_id: "cosmos-predict2.5", port: 18725, asset_path: "/tmp/out.mp4", url: "http://127.0.0.1:18725/", external: false, params: {} },
+});
+assert.ok(draftCardHtml.includes('value="/tmp/user-edited.mp4"'));
+
+// 6. updateJobLogs accepts bare array, removes stale muted placeholder, and updates past 200 lines.
+const logPanel = getEl("jobLogPanel");
+state.logStreamFilter = "all";
+state.detailLogCount = 0;
+state.detailLogTotal = 0;
+logPanel.dataset.logFilter = "all";
+logPanel.dataset.activeFilter = "all";
+logPanel.innerHTML = '<span class="muted">No logs yet.</span>';
+logPanel._hasMuted = true;
+const initialRows = [{ stream: "stdout", text: "hello\n" }, { stream: "stderr", text: "warn\n" }];
+assert.strictEqual(sandbox.updateJobLogs({ logs: initialRows, logs_total: 2, status: "running" }), true);
+assert.ok(!logPanel.innerHTML.includes("No logs yet."));
+assert.ok(logPanel.innerHTML.includes("hello"));
+assert.ok(logPanel.innerHTML.includes("warn"));
+state.logStreamFilter = "stderr";
+assert.strictEqual(sandbox.updateJobLogs(initialRows, { forceRebuild: true }), true);
+assert.ok(!logPanel.innerHTML.includes("hello"));
+assert.ok(logPanel.innerHTML.includes("warn"));
+
+// Windowed >200 lines rebuild check.
+state.logStreamFilter = "all";
+const rows200 = Array.from({ length: 200 }, (_, i) => ({ stream: "stdout", text: `line-${i}\n` }));
+sandbox.updateJobLogs({ logs: rows200, logs_total: 200, status: "running" }, { forceRebuild: true });
+const shifted200 = Array.from({ length: 200 }, (_, i) => ({ stream: "stdout", text: `line-${i + 5}\n` }));
+assert.strictEqual(sandbox.updateJobLogs({ logs: shifted200, logs_total: 205, status: "running" }), true);
+assert.ok(logPanel.innerHTML.includes("line-204"));
+assert.strictEqual(state.detailLogTotal, 205);
+
+// 7. refineFromRecord populates standard/dynamic fields and keeps only unmapped kwargs in callJson/loadJson.
+(async () => {
+  const dynNoTiled = makeElement("inferDyn_no_tiled", "input");
+  dynNoTiled.type = "checkbox";
+  dynNoTiled.dataset = { inferFieldId: "no-tiled", target: "call_kwargs", kind: "boolean", required: "false" };
+  sandbox.document.querySelectorAll = (sel) => {
+    if (sel === "[data-infer-field-id]") return [dynNoTiled];
+    return [];
+  };
+  state.models = [
+    {
+      id: "wow",
+      name: "WoW",
+      category: "World",
+      workload_type: "world",
+      backend: "from_pretrained",
+      supports_from_pretrained: true,
+      supports_api_init: false,
+      supports_attention_backend: false,
+      default_variant_id: "default",
+      default_task_id: "official",
+      runtime_options: {},
+      variants: [{ variant_id: "default", label: "Default", model_ref: "wow-ref", call_kwargs: { steps: 50, num_frames: 41, seed: 42 }, load_kwargs: {} }],
+      tasks: [{
+        task_id: "official",
+        label: "Official",
+        inputs: [
+          { field_id: "prompt", target: "prompt", default: "default prompt" },
+          { field_id: "input_path", target: "input_path", default: "/tmp/default.png" },
+          { field_id: "steps", target: "call_kwargs", kind: "integer", default: 50 },
+          { field_id: "num_frames", target: "call_kwargs", kind: "integer", default: 41 },
+          { field_id: "seed", target: "call_kwargs", kind: "integer", default: 42 },
+          { field_id: "no_tiled", target: "call_kwargs", kind: "boolean", default: false },
+        ],
+        outputs: [],
+      }],
+    },
+    {
+      id: "cogvideox_5b_t2v",
+      name: "CogVideoX",
+      category: "Video",
+      workload_type: "t2v",
+      default_variant_id: "cogvideox_5b_t2v",
+      default_task_id: "default",
+      runtime_options: {},
+      variants: [
+        { variant_id: "cogvideox_5b_t2v", label: "5B T2V", workload_type: "t2v" },
+        { variant_id: "cogvideox_5b_i2v", label: "5B I2V", workload_type: "i2v" },
+      ],
+      tasks: [{ task_id: "default", label: "Default", inputs: [{ field_id: "input_path", target: "input_path" }], outputs: [] }],
+    },
+  ];
+  sandbox.fetch = async (url) => {
+    const text = String(url);
+    if (text.includes("/api/jobs/studio-00001")) {
+      return {
+        ok: true,
+        json: async () => ({
+          id: "studio-00001",
+          model_id: "wow",
+          status: "completed",
+          metadata: {
+            variant_id: "default",
+            task_profile_id: "official",
+            prompt: "prior prompt",
+            device: "cuda",
+            request: {
+              call_kwargs: { steps: 30, num_frames: 25, seed: 7, no_tiled: true, custom_extra: "keep-me" },
+              load_kwargs: { custom_load: 99 },
+            },
+          },
+          result: { preview_video: "/tmp/out.mp4" },
+        }),
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+  await sandbox.refineFromRecord("studio-00001", "");
+  assert.strictEqual(getEl("steps").value, "30");
+  assert.strictEqual(getEl("numFrames").value, "25");
+  assert.strictEqual(getEl("seed").value, "7");
+  assert.strictEqual(dynNoTiled.checked, true);
+  assert.deepStrictEqual(JSON.parse(getEl("callJson").value), { custom_extra: "keep-me" });
+  assert.deepStrictEqual(JSON.parse(getEl("loadJson").value), { custom_load: 99 });
+
+  // 8. populateModelSelect matches variant-level workload_type override.
+  getEl("workloadType").value = "i2v";
+  sandbox.populateModelSelect();
+  assert.ok(getEl("modelSelect").innerHTML.includes("cogvideox_5b_t2v"));
+
+  // 9. renderDetail ignores stale async response when activeJob changed mid-flight.
+  state.jobs = [
+    { id: "job-a", status: "completed", model_name: "A", job_type: "inference", logs: [] },
+    { id: "job-b", status: "completed", model_name: "B", job_type: "inference", logs: [] },
+  ];
+  state.activeJob = "job-a";
+  state.detailRenderKey = "";
+  let releaseJobA;
+  sandbox.fetch = (url) => {
+    if (String(url).includes("job-a")) {
+      return new Promise(resolve => {
+        releaseJobA = () => resolve({
+          ok: true,
+          json: async () => ({ id: "job-a", status: "completed", model_name: "ModelA", job_type: "inference", logs: [], logs_total: 0 }),
+        });
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({ id: "job-b", status: "completed", model_name: "ModelB", job_type: "inference", logs: [], logs_total: 0 }),
+    });
+  };
+  const pendingA = sandbox.renderDetail();
+  state.activeJob = "job-b";
+  await sandbox.renderDetail();
+  assert.ok(getEl("jobDetail").innerHTML.includes("ModelB"));
+  releaseJobA();
+  await pendingA;
+  assert.ok(getEl("jobDetail").innerHTML.includes("ModelB"));
+  assert.ok(!getEl("jobDetail").innerHTML.includes("ModelA"));
+
+  // 10. initializeWorkspace awaits loadSettings() before loadModels().
+  const order = [];
+  let releaseSettings;
+  sandbox.fetch = (url) => {
+    const text = String(url);
+    if (text.includes("/api/settings")) {
+      return new Promise(resolve => {
+        releaseSettings = () => {
+          order.push("settings-resolved");
+          resolve({ ok: true, json: async () => ({ fps: 16, num_frames: 81, height: 720, width: 1280, num_inference_steps: 30, guidance_scale: 7.5, seed: -1, device: "cuda", attention_backend: "auto", backend: "auto" }) });
+        };
+      });
+    }
+    if (text.includes("/api/models")) {
+      order.push("models-requested");
+      return Promise.resolve({ ok: true, json: async () => state.models });
+    }
+    if (text.includes("/api/jobs")) {
+      return Promise.resolve({ ok: true, json: async () => [] });
+    }
+    return Promise.resolve({ ok: true, json: async () => ({ benchmarks: [], metrics: [], models: [], examples: [] }) });
+  };
+  const initPromise = sandbox.initializeWorkspace();
+  await new Promise(r => setTimeout(r, 10));
+  assert.deepStrictEqual(order, []);
+  releaseSettings();
+  await initPromise;
+  assert.deepStrictEqual(order, ["settings-resolved", "models-requested"]);
+})().catch(err => { console.error(err); process.exit(1); });
+"""
+
+    result = subprocess.run([node_bin, "-e", script, str(html_path)], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, f"JS behavior test failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"

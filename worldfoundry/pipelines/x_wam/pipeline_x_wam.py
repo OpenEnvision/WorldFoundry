@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, ClassVar
 
 from worldfoundry.operators.embodied_action_operator import (
     EmbodiedActionOperator,
@@ -21,7 +22,7 @@ class XWAMOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "wan2p2_joint_4d_world_action_model"
     ACTION_REPRESENTATION = "32_step_relative_end_effector_action_chunk"
     OBSERVATION_LAYOUT = "three_view_rgb_language_absolute_end_effector_state"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "instruction": True,
         "image": True,

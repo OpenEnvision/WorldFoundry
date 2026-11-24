@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import torch
 from torch import nn
@@ -19,14 +19,14 @@ class BasicImageEncoder(BaseEncoder):
     def __init__(
         self,
         parent: torch.nn.Module,
-        start_tokens: Optional[str] = None,
-        end_tokens: Optional[str] = "\n",
+        start_tokens: str | None = None,
+        end_tokens: str | None = "\n",
     ) -> None:
         super().__init__(parent)
         self.start_tokens = start_tokens
         self.end_tokens = end_tokens
 
-    def embed_tokens(self, tokens: Optional[str]) -> Optional[torch.Tensor]:
+    def embed_tokens(self, tokens: str | None) -> torch.Tensor | None:
         if tokens is None:
             return None
         token_ids = self.parent.tokenizer(tokens).input_ids
@@ -36,8 +36,8 @@ class BasicImageEncoder(BaseEncoder):
     def _process_features(
         self,
         features: torch.Tensor,
-        start_token_embeds: Optional[torch.Tensor],
-        end_token_embeds: Optional[torch.Tensor],
+        start_token_embeds: torch.Tensor | None,
+        end_token_embeds: torch.Tensor | None,
     ) -> torch.Tensor:
         if start_token_embeds is not None:
             features = torch.cat([start_token_embeds, features], dim=0)
@@ -45,7 +45,7 @@ class BasicImageEncoder(BaseEncoder):
             features = torch.cat([features, end_token_embeds], dim=0)
         return features
 
-    def forward(self, images: List[torch.Tensor], config: Dict[str, Any]) -> List[torch.Tensor]:
+    def forward(self, images: list[torch.Tensor], config: dict[str, Any]) -> list[torch.Tensor]:
         images = torch.stack(images, dim=0)
         features = self.parent.encode_images(images, block_sizes=config.get("block_sizes"))
         process_features = partial(
@@ -60,14 +60,14 @@ class BasicVideoEncoder(BaseEncoder):
     def __init__(
         self,
         parent: torch.nn.Module,
-        start_tokens: Optional[str] = None,
-        end_tokens: Optional[str] = "\n",
+        start_tokens: str | None = None,
+        end_tokens: str | None = "\n",
     ) -> None:
         super().__init__(parent)
         self.start_tokens = start_tokens
         self.end_tokens = end_tokens
 
-    def embed_tokens(self, tokens: Optional[str]) -> Optional[torch.Tensor]:
+    def embed_tokens(self, tokens: str | None) -> torch.Tensor | None:
         if tokens is None:
             return None
         token_ids = self.parent.tokenizer(tokens).input_ids
@@ -77,8 +77,8 @@ class BasicVideoEncoder(BaseEncoder):
     def _process_features(
         self,
         features: torch.Tensor,
-        start_token_embeds: Optional[torch.Tensor],
-        end_token_embeds: Optional[torch.Tensor],
+        start_token_embeds: torch.Tensor | None,
+        end_token_embeds: torch.Tensor | None,
     ) -> torch.Tensor:
         if start_token_embeds is not None:
             start_embeds = torch.stack([start_token_embeds] * features.shape[0], dim=0)
@@ -88,7 +88,7 @@ class BasicVideoEncoder(BaseEncoder):
             features = torch.cat([features, end_embeds], dim=1)
         return features.flatten(0, 1)
 
-    def forward(self, videos: List[torch.Tensor], config: Dict[str, Any]) -> List[torch.Tensor]:
+    def forward(self, videos: list[torch.Tensor], config: dict[str, Any]) -> list[torch.Tensor]:
         num_frames = [video.shape[0] for video in videos]
         images = torch.cat(videos, dim=0)
         features = self.parent.encode_images(images)

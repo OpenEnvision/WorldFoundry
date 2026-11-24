@@ -1,7 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 # Modified by Jialian Wu from https://github.com/facebookresearch/detectron2/blob/main/detectron2/utils/visualizer.py
 import torch
-
 from detectron2.engine.defaults import DefaultPredictor
 from detectron2.utils.visualizer import ColorMode, Visualizer
 
@@ -29,7 +28,8 @@ class BatchDefaultPredictor(DefaultPredictor):
                 batch_inputs.append(inputs)
             predictions = self.model(batch_inputs)[0]
             return predictions
-        
+
+
 class SingleDefaultPredictor(DefaultPredictor):
     def __call__(self, original_image):
         """
@@ -50,24 +50,22 @@ class SingleDefaultPredictor(DefaultPredictor):
             inputs = {"image": image, "height": height, "width": width}
             predictions = self.model([inputs])[0]
             return predictions
-    
-        
+
+
 class Visualizer_GRiT(Visualizer):
     def __init__(self, image, instance_mode=None):
         super().__init__(image, instance_mode=instance_mode)
 
     def draw_instance_predictions(self, predictions):
         boxes = predictions.pred_boxes if predictions.has("pred_boxes") else None
-        scores = predictions.scores if predictions.has("scores") else None
+        _scores = predictions.scores if predictions.has("scores") else None
         classes = predictions.pred_classes.tolist() if predictions.has("pred_classes") else None
         object_description = predictions.pred_object_descriptions.data
         # uncomment to output scores in visualized images
         # object_description = [c + '|' + str(round(s.item(), 1)) for c, s in zip(object_description, scores)]
 
         if self._instance_mode == ColorMode.SEGMENTATION and self.metadata.get("thing_colors"):
-            colors = [
-                self._jitter([x / 255 for x in self.metadata.thing_colors[c]]) for c in classes
-            ]
+            colors = [self._jitter([x / 255 for x in self.metadata.thing_colors[c]]) for c in classes]
             alpha = 0.8
         else:
             colors = None
@@ -76,9 +74,7 @@ class Visualizer_GRiT(Visualizer):
         if self._instance_mode == ColorMode.IMAGE_BW:
             self.output.reset_image(
                 self._create_grayscale_image(
-                    (predictions.pred_masks.any(dim=0) > 0).numpy()
-                    if predictions.has("pred_masks")
-                    else None
+                    (predictions.pred_masks.any(dim=0) > 0).numpy() if predictions.has("pred_masks") else None
                 )
             )
             alpha = 0.3
@@ -94,7 +90,7 @@ class Visualizer_GRiT(Visualizer):
         return self.output
 
 
-class VisualizationDemo(object):
+class VisualizationDemo:
     def __init__(self, cfg, instance_mode=ColorMode.IMAGE):
         self.cpu_device = torch.device("cpu")
         self.instance_mode = instance_mode

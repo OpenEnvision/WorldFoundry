@@ -2,7 +2,8 @@
 
 import logging
 import os
-from typing import Any, Dict, Generator, List, Optional, Union
+from collections.abc import Generator, Iterable
+from typing import Any
 
 import numpy as np
 import torch
@@ -11,13 +12,14 @@ from PIL import Image
 from worldfoundry.base_models.three_dimensions.point_clouds.cut3r.runtime import (
     CUT3RRepresentation,
 )
-from worldfoundry.core.io import artifact_root_path, write_video
+from worldfoundry.core.io import artifact_root_path
 from worldfoundry.core.media.artifacts import (
     COLORMAP_VIRIDIS,
     depth_to_colormap_pil,
     save_depth_colormap,
     squeeze_depth_to_2d,
 )
+from worldfoundry.core.media.codecs.video import write_video
 
 from ...base_models.three_dimensions.point_clouds.ply_io import (
     write_point_cloud as storePly,
@@ -35,18 +37,18 @@ def _default_output_dir(name: str = "cut3r_output") -> str:
 
 class CUT3RResult:
     """Container class for CUT3R results."""
-    
+
     def __init__(
-        self, 
-        images: List[Image.Image],
-        point_clouds: Optional[List[np.ndarray]] = None,
-        depth_maps: Optional[List[np.ndarray]] = None,
-        camera_poses: Optional[List[np.ndarray]] = None,
-        data_type: str = "image"
+        self,
+        images: list[Image.Image],
+        point_clouds: list[np.ndarray] | None = None,
+        depth_maps: list[np.ndarray] | None = None,
+        camera_poses: list[np.ndarray] | None = None,
+        data_type: str = "image",
     ):
         """
         Initialize CUT3R result container.
-        
+
         Args:
             images: List of PIL Images (rendered point clouds or depth visualizations)
             point_clouds: List of point cloud arrays (optional)
@@ -59,29 +61,29 @@ class CUT3RResult:
         self.depth_maps = depth_maps
         self.camera_poses = camera_poses
         self.data_type = data_type
-    
-    def save(self, output_dir: Optional[str] = None) -> List[str]:
+
+    def save(self, output_dir: str | None = None) -> list[str]:
         """
         Save results to files.
-        
+
         Args:
             output_dir: Output directory. If None, uses default.
-            
+
         Returns:
             List of saved file paths
         """
         if output_dir is None:
             output_dir = _default_output_dir()
-        
+
         os.makedirs(output_dir, exist_ok=True)
-        saved_files: List[str] = []
-        
+        saved_files: list[str] = []
+
         # Save images
         for i, img in enumerate(self.images):
             output_path = os.path.join(output_dir, f"frame_{i:06d}.png")
             img.save(output_path)
             saved_files.append(output_path)
-        
+
         # Save point clouds if available
         if self.point_clouds is not None:
             pc_dir = os.path.join(output_dir, "point_clouds")
@@ -90,7 +92,7 @@ class CUT3RResult:
                 output_path = os.path.join(pc_dir, f"pc_{i:06d}.npy")
                 np.save(output_path, pc)
                 saved_files.append(output_path)
-        
+
         # Save depth maps if available
         if self.depth_maps is not None:
             depth_dir = os.path.join(output_dir, "depth_maps")
@@ -103,13 +105,13 @@ class CUT3RResult:
                 output_path = os.path.join(depth_dir, f"depth_{i:06d}.png")
                 if save_depth_colormap(depth_2d, output_path) is not None:
                     saved_files.append(output_path)
-        
+
         return saved_files
-    
+
     def __len__(self):
         """Len for CUT3RResult."""
         return len(self.images)
-    
+
     def __getitem__(self, idx):
         """Getitem for CUT3RResult."""
         return self.images[idx]
@@ -117,17 +119,17 @@ class CUT3RResult:
 
 class CUT3RPipeline(PipelineABC):
     """Pipeline for CUT3R 3D scene reconstruction."""
-    
+
     def __init__(
         self,
-        representation_model: Optional[CUT3RRepresentation] = None,
-        reasoning_model: Optional[Any] = None,
-        synthesis_model: Optional[Any] = None,
-        operator: Optional[CUT3ROperator] = None,
+        representation_model: CUT3RRepresentation | None = None,
+        reasoning_model: Any | None = None,
+        synthesis_model: Any | None = None,
+        operator: CUT3ROperator | None = None,
     ):
         """
         Initialize CUT3R pipeline.
-        
+
         Args:
             representation_model: Pre-loaded CUT3RRepresentation instance (optional)
             reasoning_model: Reasoning model (not used for CUT3R, kept for compatibility)
@@ -138,27 +140,27 @@ class CUT3RPipeline(PipelineABC):
         self.reasoning_model = reasoning_model
         self.synthesis_model = synthesis_model
         self.operator = operator or CUT3ROperator()
-    
+
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[Union[str, Dict[str, Any]]] = None,
-        required_components: Optional[Dict[str, Any]] = None,
-        device: Optional[str] = None,
-        representation_path: Optional[str] = None,
-        reasoning_path: Optional[str] = None,
-        synthesis_path: Optional[str] = None,
-        **kwargs
-    ) -> 'CUT3RPipeline':
+        model_path: str | dict[str, Any] | None = None,
+        required_components: dict[str, Any] | None = None,
+        device: str | None = None,
+        representation_path: str | None = None,
+        reasoning_path: str | None = None,
+        synthesis_path: str | None = None,
+        **kwargs,
+    ) -> "CUT3RPipeline":
         """
         Create pipeline instance from pretrained models.
-        
+
         Args:
             representation_path: HuggingFace repo ID for representation model
             reasoning_path: Not used for CUT3R (kept for compatibility)
             synthesis_path: Not used for CUT3R (kept for compatibility)
             **kwargs: Additional arguments passed to representation.from_pretrained()
-            
+
         Returns:
             CUT3RPipeline instance
         """
@@ -175,30 +177,28 @@ class CUT3RPipeline(PipelineABC):
             raise ValueError("CUT3RPipeline.from_pretrained requires model_path or representation_path.")
 
         representation_model = CUT3RRepresentation.from_pretrained(
-            pretrained_model_path=representation_path,
-            device=device,
-            **kwargs
+            pretrained_model_path=representation_path, device=device, **kwargs
         )
-        
+
         # CUT3R doesn't use reasoning or synthesis models, but keep for compatibility
         reasoning_model = None
         synthesis_model = None
-        
+
         return cls(
             representation_model=representation_model,
             reasoning_model=reasoning_model,
             synthesis_model=synthesis_model,
         )
-    
+
     def process(
         self,
-        input_: Union[str, Image.Image, np.ndarray, List[str], List[Image.Image], List[np.ndarray]],
-        interaction: Optional[Union[str, Dict[str, Any], List[str]]] = None,
-        **kwargs
+        input_: str | Image.Image | np.ndarray | list[str] | list[Image.Image] | list[np.ndarray],
+        interaction: str | dict[str, Any] | list[str] | None = None,
+        **kwargs,
     ) -> CUT3RResult:
         """
         Process input and generate 3D scene representation.
-        
+
         Args:
             input_: Input image(s) - can be:
                 - Image file path (str)
@@ -215,66 +215,60 @@ class CUT3RPipeline(PipelineABC):
                 - return_point_clouds: If True, include point clouds in result (default: True)
                 - return_depth_maps: If True, include depth maps in result (default: True)
                 - return_camera_poses: If True, include camera poses in result (default: True)
-                
+
         Returns:
             CUT3RResult object containing processed results
         """
         if self.representation_model is None:
             raise RuntimeError("Representation model not loaded. Use from_pretrained() first.")
-        
+
         # Process input using operator's process_perception
         images_data = self.operator.process_perception(input_)
         if not isinstance(images_data, list):
             images_data = [images_data]
-        
+
         # Process interaction
         # Base mode may pass `interactions` as a list[str] (template-aligned).
         # CUT3R's operator only consumes the latest interaction token, so we
         # treat list inputs by taking the last non-empty token.
         if isinstance(interaction, list):
-            if len(interaction) == 0:
-                interaction = None
-            else:
-                interaction = str(interaction[-1])
+            interaction = None if len(interaction) == 0 else str(interaction[-1])
 
         if interaction is None:
-            interaction_dict = {
-                "data_type": "image",
-                "output_type": "all"
-            }
+            interaction_dict = {"data_type": "image", "output_type": "all"}
         elif isinstance(interaction, str):
             self.operator.get_interaction(interaction)
             interaction_dict = self.operator.process_interaction()
         else:
             interaction_dict = interaction
-        
+
         # Prepare data for representation
         # Get size from kwargs or use representation model's default size
-        size = kwargs.get('size', None)
+        size = kwargs.get("size")
         if size is None and self.representation_model is not None:
-            size = getattr(self.representation_model, 'size', 224)
+            size = getattr(self.representation_model, "size", 224)
         elif size is None:
             size = 224
-        
+
         data = {
-            'images': images_data,
-            'output_type': interaction_dict.get('output_type', kwargs.get('output_type', 'all')),
-            'size': size,
-            'vis_threshold': kwargs.get('vis_threshold', 1.0),
+            "images": images_data,
+            "output_type": interaction_dict.get("output_type", kwargs.get("output_type", "all")),
+            "size": size,
+            "vis_threshold": kwargs.get("vis_threshold", 1.0),
         }
-        
+
         # Get representation
         results = self.representation_model.get_representation(data)
-        
+
         output_images = []
-        if 'depth_map' in results and results['depth_map']:
-            for depth in results['depth_map']:
+        if results.get("depth_map"):
+            for depth in results["depth_map"]:
                 depth_image = depth_to_colormap_pil(depth)
                 if depth_image is None:
                     raise ValueError(f"Unexpected depth shape: {np.asarray(depth).shape}")
                 output_images.append(depth_image)
-        elif 'point_cloud' in results and results['point_cloud']:
-            for pc, _color in zip(results['point_cloud'], results.get('colors', [])):
+        elif results.get("point_cloud"):
+            for pc, _color in zip(results["point_cloud"], results.get("colors", []), strict=False):
                 pc_2d = pc.reshape(-1, 3) if pc.ndim == 3 else pc
                 depth = pc_2d[:, 2]
                 num_points = len(pc_2d)
@@ -287,35 +281,37 @@ class CUT3RPipeline(PipelineABC):
                     )
                     if depth_image is not None:
                         output_images.append(depth_image)
-        
+
         # If no visualization was created, use input images as fallback
         if len(output_images) == 0:
             for img_data in images_data:
                 if isinstance(img_data, np.ndarray):
-                    img_uint8 = (img_data * 255).astype(np.uint8) if img_data.max() <= 1.0 else img_data.astype(np.uint8)
+                    img_uint8 = (
+                        (img_data * 255).astype(np.uint8) if img_data.max() <= 1.0 else img_data.astype(np.uint8)
+                    )
                     output_images.append(Image.fromarray(img_uint8))
-        
+
         # Determine data type
         data_type = "image" if len(images_data) == 1 else "video"
-        
+
         # Create result object
         result = CUT3RResult(
             images=output_images,
-            point_clouds=results.get('point_cloud') if kwargs.get('return_point_clouds', True) else None,
-            depth_maps=results.get('depth_map') if kwargs.get('return_depth_maps', True) else None,
-            camera_poses=results.get('camera_pose') if kwargs.get('return_camera_poses', True) else None,
-            data_type=data_type
+            point_clouds=results.get("point_cloud") if kwargs.get("return_point_clouds", True) else None,
+            depth_maps=results.get("depth_map") if kwargs.get("return_depth_maps", True) else None,
+            camera_poses=results.get("camera_pose") if kwargs.get("return_camera_poses", True) else None,
+            data_type=data_type,
         )
-        
+
         return result
 
     def reconstruct_ply(
         self,
-        input_: Union[str, Image.Image, np.ndarray, List[str], List[Image.Image], List[np.ndarray]],
-        ply_path: Optional[str] = None,
-        size: Optional[int] = None,
+        input_: str | Image.Image | np.ndarray | list[str] | list[Image.Image] | list[np.ndarray],
+        ply_path: str | None = None,
+        size: int | None = None,
         vis_threshold: float = 1.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Stage 1: Run CUT3R to reconstruct a point cloud and export it as a PLY file,
         together with a simple camera parameter range for downstream 3DGS rendering.
@@ -343,28 +339,25 @@ class CUT3RPipeline(PipelineABC):
             images_data = [images_data]
 
         if size is None:
-            if self.representation_model is not None:
-                size = getattr(self.representation_model, 'size', 224)
-            else:
-                size = 224
+            size = getattr(self.representation_model, "size", 224) if self.representation_model is not None else 224
 
         data = {
-            'images': images_data,
-            'output_type': 'all',
-            'size': size,
-            'vis_threshold': vis_threshold,
+            "images": images_data,
+            "output_type": "all",
+            "size": size,
+            "vis_threshold": vis_threshold,
         }
 
         results = self.representation_model.get_representation(data)
 
-        point_clouds = results.get('point_cloud', None)
-        colors = results.get('colors', None)
+        point_clouds = results.get("point_cloud", None)
+        colors = results.get("colors", None)
         if not point_clouds or not colors:
             raise RuntimeError("CUT3R representation did not return point clouds and colors.")
 
         pcs_flat = []
         colors_flat = []
-        for pc, color in zip(point_clouds, colors):
+        for pc, color in zip(point_clouds, colors, strict=False):
             pc_arr = pc.reshape(-1, 3)
             color_arr = color.reshape(-1, 3)
             if pc_arr.shape[0] != color_arr.shape[0]:
@@ -463,7 +456,7 @@ class CUT3RPipeline(PipelineABC):
         colors = colors[unique_idx]
 
         return points, colors
-    
+
     @staticmethod
     def _estimate_gaussian_scale(points: np.ndarray, scene_center: np.ndarray) -> float:
         """
@@ -492,10 +485,10 @@ class CUT3RPipeline(PipelineABC):
     def render_with_3dgs(
         self,
         ply_path: str,
-        camera_config: Dict[str, Any],
+        camera_config: dict[str, Any],
         image_width: int = 640,
         image_height: int = 352,
-        device: Optional[str] = None,
+        device: str | None = None,
         near_plane: float = 0.01,
         far_plane: float = 1000.0,
     ) -> Image.Image:
@@ -513,18 +506,18 @@ class CUT3RPipeline(PipelineABC):
             near_plane=near_plane,
             far_plane=far_plane,
         )
-    
+
     def render_orbit_video_with_3dgs(
         self,
         ply_path: str,
-        base_camera_config: Dict[str, Any],
+        base_camera_config: dict[str, Any],
         num_frames: int = 16,
         yaw_step: float = 5.0,
         image_width: int = 640,
         image_height: int = 352,
         fps: int = 12,
-        output_path: Optional[str] = None,
-    ) -> List[Image.Image]:
+        output_path: str | None = None,
+    ) -> list[Image.Image]:
         """
         Convenience helper: render a short orbit video around the scene using 3DGS.
 
@@ -545,7 +538,7 @@ class CUT3RPipeline(PipelineABC):
         Returns:
             List of PIL.Image frames.
         """
-        frames: List[Image.Image] = []
+        frames: list[Image.Image] = []
 
         center = base_camera_config.get("center")
         radius = float(base_camera_config.get("radius", 4.0))
@@ -576,14 +569,14 @@ class CUT3RPipeline(PipelineABC):
     def render_interaction_video_with_3dgs(
         self,
         ply_path: str,
-        camera_range: Dict[str, Any],
-        base_camera_config: Dict[str, Any],
-        interaction_sequence: List[str],
+        camera_range: dict[str, Any],
+        base_camera_config: dict[str, Any],
+        interaction_sequence: list[str],
         image_width: int = 640,
         image_height: int = 352,
         fps: int = 12,
-        output_path: Optional[str] = None,
-    ) -> List[Image.Image]:
+        output_path: str | None = None,
+    ) -> list[Image.Image]:
         """
         Render a 3DGS video by applying a sequence of high-level interaction
         signals (e.g. ['move_left', 'zoom_in']) to the camera.
@@ -593,9 +586,9 @@ class CUT3RPipeline(PipelineABC):
         2) Call this method with the resulting ``camera_range`` and a base
            camera configuration.
         """
-        frames: List[Image.Image] = []
+        frames: list[Image.Image] = []
 
-        camera_cfg: Dict[str, Any] = {
+        camera_cfg: dict[str, Any] = {
             "center": base_camera_config.get("center", camera_range["center"]),
             "radius": float(base_camera_config.get("radius", 4.0)),
             "yaw": float(base_camera_config.get("yaw", 0.0)),
@@ -624,12 +617,12 @@ class CUT3RPipeline(PipelineABC):
 
     def run_two_stage_3dgs_video(
         self,
-        image_path: Union[str, Image.Image, np.ndarray, List[str], List[Image.Image], List[np.ndarray]],
-        interactions: Optional[Union[str, List[str]]] = None,
+        image_path: str | Image.Image | np.ndarray | list[str] | list[Image.Image] | list[np.ndarray],
+        interactions: str | Iterable[str] | None = None,
         frames_per_interaction: int = 10,
-        size: Optional[int] = None,
+        size: int | None = None,
         vis_threshold: float = 1.5,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         camera_radius: float = 4.0,
         camera_yaw: float = 0.0,
         camera_pitch: float = 0.0,
@@ -674,7 +667,7 @@ class CUT3RPipeline(PipelineABC):
         ply_path = recon_info["ply_path"]
         camera_range = recon_info["camera_range"]
 
-        base_camera_config: Dict[str, Any] = {
+        base_camera_config: dict[str, Any] = {
             "center": camera_range["center"],
             "radius": camera_radius,
             "yaw": camera_yaw,
@@ -685,9 +678,7 @@ class CUT3RPipeline(PipelineABC):
 
         interaction_sequence = self.operator.normalize_interaction_sequence(interactions)
         if interaction_sequence and frames_per_interaction > 1:
-            interaction_sequence = [
-                a for a in interaction_sequence for _ in range(frames_per_interaction)
-            ]
+            interaction_sequence = [a for a in interaction_sequence for _ in range(frames_per_interaction)]
 
         if interaction_sequence:
             self.render_interaction_video_with_3dgs(
@@ -712,15 +703,15 @@ class CUT3RPipeline(PipelineABC):
 
     def run_official_export(
         self,
-        image_path: Union[str, List[str]],
-        output_dir: Optional[str] = None,
-        size: Optional[int] = None,
+        image_path: str | list[str],
+        output_dir: str | None = None,
+        size: int | None = None,
         revisit: int = 1,
         update: bool = True,
         use_pose: bool = True,
         vis_threshold: float = 1.5,
         **_unused: Any,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Run official export for CUT3RPipeline."""
         if self.representation_model is None or self.representation_model.model is None:
             raise RuntimeError("Representation model not loaded. Use from_pretrained() first.")
@@ -741,15 +732,15 @@ class CUT3RPipeline(PipelineABC):
             use_pose=use_pose,
             vis_threshold=vis_threshold,
         )
-    
+
     def __call__(
         self,
-        image_path: Optional[Union[str, List[str]]] = None,
+        image_path: str | list[str] | None = None,
         images: Any = None,
-        interactions: Optional[Union[str, List[str]]] = None,
-        task_type: Optional[str] = None,
+        interactions: str | list[str] | None = None,
+        task_type: str | None = None,
         **kwargs,
-    ) -> Union[CUT3RResult, str, Dict[str, str]]:
+    ) -> CUT3RResult | str | dict[str, str]:
         """
         Main call interface.
         - Base mode (task_type is None or "cut3r_base"): direct CUT3R representation/process.
@@ -776,28 +767,28 @@ class CUT3RPipeline(PipelineABC):
             interaction=interactions,
             **kwargs,
         )
-    
+
     def stream(
         self,
-        image_path: Optional[Union[str, List[str]]] = None,
+        image_path: str | list[str] | None = None,
         images: Any = None,
-        interactions: Optional[Union[str, List[str]]] = None,
-        task_type: Optional[str] = None,
+        interactions: str | list[str] | None = None,
+        task_type: str | None = None,
         # Backward-compatible aliases
         input_: Any = None,
-        interaction: Optional[Union[str, Dict[str, Any]]] = None,
+        interaction: str | dict[str, Any] | None = None,
         **kwargs,
-    ) -> Union[str, Generator[Union[torch.Tensor, List[str]], None, None]]:
+    ) -> str | Generator[torch.Tensor | list[str], None, None]:
         """
         Stream processing interface for real-time interactive updates.
-        
+
         Args:
             image_path/images: template-aligned input (preferred)
             interactions: template-aligned control list (preferred)
             task_type: if "cut3r_two_stage_3dgs", runs two-stage and returns output_video_path
             input_/interaction: backward-compatible aliases
             **kwargs: Additional arguments
-            
+
         Yields:
             Processed results as torch.Tensor or List[str] (for compatibility with diffusers-style streaming)
         """
@@ -828,7 +819,7 @@ class CUT3RPipeline(PipelineABC):
             interaction=interactions_arg,
             **kwargs,
         )
-        
+
         # Yield images as tensors for streaming compatibility
         for img in result.images:
             # Convert PIL Image to tensor

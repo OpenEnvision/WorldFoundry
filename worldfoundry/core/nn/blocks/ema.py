@@ -1,15 +1,15 @@
 """Exponential moving-average module shared by model implementations.
 
 Shadow weights for eval without a second optimizer. Updates stay on
-the same device as the source; FSDP2 uses
-``DTensorFastEmaModelUpdater`` in ``device_mesh_collectives`` instead.
+the same device as the source.
 """
+
+from typing import Any, cast
 
 import torch
 from torch import nn
 
 from worldfoundry.core.distributed.collectives.device_mesh import get_local_tensor_if_dtensor
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Shadow buffers — dots stripped from names; decay stays FP32 (BF16 would freeze)
@@ -17,42 +17,42 @@ from worldfoundry.core.distributed.collectives.device_mesh import get_local_tens
 
 
 class LitEma(nn.Module):
-    """Lit ema implementation."""
+    """Exponential moving average of a model's trainable parameters, stored as module buffers.
+
+    With ``use_num_upates`` the effective decay warms up as ``min(decay, (1 + n) / (10 + n))`` over the
+    update count ``n``.
+
+    Raises:
+        ValueError: ``decay`` is outside [0, 1].
+    """
+
+    decay: torch.Tensor
+    num_updates: torch.Tensor
 
     def __init__(self, model, decay=0.9999, use_num_upates=True):
-        """Init.
-
-        Args:
-            model: The model.
-            decay: The decay.
-            use_num_upates: The use num upates.
-        """
         super().__init__()
         if decay < 0.0 or decay > 1.0:
-            raise ValueError('Decay must be between 0 and 1')
+            raise ValueError("Decay must be between 0 and 1")
 
         self.m_name2s_name = {}
         # Keep the coefficient in FP32, matching the released LVDM EMA. In
         # BF16, 0.9999 rounds to 1.0 and the long-run average stops updating.
-        self.register_buffer('decay', torch.tensor(decay, dtype=torch.float32))
-        self.register_buffer('num_updates', torch.tensor(0,dtype=torch.int) if use_num_upates
-                             else torch.tensor(-1,dtype=torch.int))
+        self.register_buffer("decay", torch.tensor(decay, dtype=torch.float32))
+        self.register_buffer(
+            "num_updates", torch.tensor(0, dtype=torch.int) if use_num_upates else torch.tensor(-1, dtype=torch.int)
+        )
 
         for name, p in model.named_parameters():
             if p.requires_grad:
-                #remove as '.'-character is not allowed in buffers
-                s_name = name.replace('.','')
-                self.m_name2s_name.update({name:s_name})
-                self.register_buffer(s_name,p.clone().detach().data)
+                # remove as '.'-character is not allowed in buffers
+                s_name = name.replace(".", "")
+                self.m_name2s_name.update({name: s_name})
+                self.register_buffer(s_name, p.clone().detach().data)
 
         self.collected_params = []
 
-    def forward(self,model):
-        """Forward.
-
-        Args:
-            model: The model.
-        """
+    def forward(self, model):
+        """Move the shadow weights one EMA step toward the trainable parameters of ``model``."""
         updates_enabled = self.num_updates.ge(0)
         self.num_updates.add_(updates_enabled.to(dtype=self.num_updates.dtype))
         scheduled_decay = (1 + self.num_updates) / (10 + self.num_updates)
@@ -85,18 +85,15 @@ class LitEma(nn.Module):
             for (device, dtype), (shadows, parameters) in grouped.items():
                 del dtype
                 weight = one_minus_decay.to(device=device)
-                torch._foreach_lerp_(shadows, parameters, weight)
+                # The runtime accepts a 0-dim tensor weight; the stubs list scalar and per-tensor weights.
+                torch._foreach_lerp_(shadows, parameters, cast(Any, weight))
 
     # ──────────────────────────────────────────────────────────────────────
     # Eval copy / store-restore — swap shadows in without a second optimizer
     # ──────────────────────────────────────────────────────────────────────
 
     def copy_to(self, model):
-        """Copy to.
-
-        Args:
-            model: The model.
-        """
+        """Copy the shadow weights into the trainable parameters of ``model`` in place."""
         m_param = dict(model.named_parameters())
         shadow_params = dict(self.named_buffers())
         for key in m_param:

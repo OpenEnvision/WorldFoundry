@@ -8,6 +8,7 @@ groups:
 - official_repo
 source_repos:
 - url: https://github.com/Tangshitao/MVDiffusion
+  revision: 4cd4e513e259be07a6c5e6a813258f77374afa59
 input_schema:
   prompt: true
   image: true
@@ -24,5 +25,5 @@ execution:
 integration:
   status: integrated
 notes:
-- Uses an in-tree subprocess adapter for upstream MVDiffusion source when available.
+- Runs the vendored MVDiffusion demo entrypoint as a package module through the in-tree subprocess adapter.
 - The default image-outpainting route produces eight perspective PNGs and a panorama PNG; the 720-frame spin video is optional.

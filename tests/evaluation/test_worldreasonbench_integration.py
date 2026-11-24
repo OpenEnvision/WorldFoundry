@@ -10,9 +10,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.catalog.dispatch import VIDEO_RUNNER_REGISTRY
-from worldfoundry.evaluation.tasks.contracts import get_external_benchmark_contract
-from worldfoundry.evaluation.tasks.execution.runners.worldreasonbench.worldreasonbench_metrics import (
+from worldfoundry.evals.tasks.catalog.dispatch import VIDEO_RUNNER_REGISTRY
+from worldfoundry.evals.tasks.contracts import get_external_benchmark_contract
+from worldfoundry.evals.tasks.execution.runners.worldreasonbench.worldreasonbench_metrics import (
     normalize_pairwise,
     normalize_pointwise,
     normalize_qa,
@@ -21,8 +21,7 @@ from worldfoundry.evaluation.tasks.execution.runners.worldreasonbench.worldreaso
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ASSETS = REPO_ROOT / "worldfoundry/data/benchmarks/assets/worldreasonbench"
 RUNNER = (
-    REPO_ROOT
-    / "worldfoundry/evaluation/tasks/execution/runners/worldreasonbench/run_worldreasonbench_official_runner.py"
+    REPO_ROOT / "worldfoundry/evals/tasks/execution/runners/worldreasonbench/run_worldreasonbench_official_runner.py"
 )
 
 

@@ -13,6 +13,8 @@ notes:
 - The local validated profile uses Python 3.10.20, torch 2.12.0+cu126, mmengine 0.10.7, transformers 4.57.1, and
   sageattention 20260228. Use this dedicated environment when the unified CUDA environment does not provide the
   Kairos native attention stack.
+- Build the pinned Kairos SageAttention 20260228 fork after installing torch, with --no-build-isolation
+  and the host CUDA toolkit, using the setup command in this manifest.
 pip_packages:
 - torch==2.12.0
 - torchvision
@@ -30,6 +32,8 @@ pip_packages:
 - autoawq
 python: '3.10'
 source_requirement_files: []
+setup_commands:
+- python -m pip install --no-build-isolation 'sageattention @ git+https://github.com/kairos-agi/kairos-sensenova.git@40d3fcb518c3ff894501bf4b080ccaa589363adc#subdirectory=kairos/third_party/SageAttention'
 validation_imports:
 - torch
 - mmengine

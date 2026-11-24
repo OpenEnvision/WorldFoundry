@@ -21,8 +21,6 @@ def resize_letterbox(image, desired_height, desired_width):
     if h == desired_height and w == desired_width:
         return image
 
-    resized = cv2.resize(
-        image, (desired_width, desired_height), interpolation=cv2.INTER_AREA
-    )
+    resized = cv2.resize(image, (desired_width, desired_height), interpolation=cv2.INTER_AREA)
     letterboxed = resized
     return letterboxed

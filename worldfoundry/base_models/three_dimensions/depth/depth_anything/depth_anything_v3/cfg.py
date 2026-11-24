@@ -17,9 +17,11 @@ Configuration utility functions
 """
 
 import importlib
-from pathlib import Path
-from typing import Any, Callable, List, Union
+from collections.abc import Callable
+from typing import Any
+
 from omegaconf import DictConfig, ListConfig, OmegaConf
+
 from worldfoundry.core.io.paths import resolve_data_path
 
 try:
@@ -32,7 +34,7 @@ except Exception as e:
 CONFIG_ROOT = resolve_data_path("models", "runtime", "configs", "depth_anything_v3", "configs")
 
 
-def load_config(path: str, argv: List[str] = None) -> Union[DictConfig, ListConfig]:
+def load_config(path: str, argv: list[str] | None = None) -> DictConfig | ListConfig:
     """
     Load a configuration. Will resolve inheritance.
     Supports both file paths and module paths (e.g., worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.configs.giant).
@@ -71,20 +73,11 @@ def load_config(path: str, argv: List[str] = None) -> Union[DictConfig, ListConf
 
 def resolve_recursive(
     config: Any,
-    resolver: Callable[[Union[DictConfig, ListConfig]], Union[DictConfig, ListConfig]],
+    resolver: Callable[[DictConfig | ListConfig], DictConfig | ListConfig],
 ) -> Any:
-    """Resolve recursive.
-
-    Args:
-        config: The config.
-        resolver: The resolver.
-
-    Returns:
-        The return value.
-    """
     config = resolver(config)
     if isinstance(config, DictConfig):
-        for k in config.keys():
+        for k in config.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             v = config.get(k)
             if isinstance(v, (DictConfig, ListConfig)):
                 config[k] = resolve_recursive(v, resolver)
@@ -96,7 +89,7 @@ def resolve_recursive(
     return config
 
 
-def resolve_inheritance(config: Union[DictConfig, ListConfig]) -> Any:
+def resolve_inheritance(config: DictConfig | ListConfig) -> Any:
     """
     Recursively resolve inheritance if the config contains:
     __inherit__: path/to/parent.yaml or a ListConfig of such paths.
@@ -116,10 +109,7 @@ def resolve_inheritance(config: Union[DictConfig, ListConfig]) -> Any:
                     else OmegaConf.merge(parent_config, load_config(parent_path))
                 )
 
-            if len(config.keys()) > 0:
-                config = OmegaConf.merge(parent_config, config)
-            else:
-                config = parent_config
+            config = OmegaConf.merge(parent_config, config) if len(config.keys()) > 0 else parent_config
     return config
 
 
@@ -162,11 +152,6 @@ def create_dataset(path: str, *args, **kwargs) -> Any:
 
 
 def to_dict_recursive(config_obj):
-    """To dict recursive.
-
-    Args:
-        config_obj: The config obj.
-    """
     if isinstance(config_obj, DictConfig):
         return {k: to_dict_recursive(v) for k, v in config_obj.items()}
     elif isinstance(config_obj, ListConfig):

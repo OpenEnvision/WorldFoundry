@@ -1,9 +1,11 @@
-import torch
-from torch.utils.data import Dataset, DataLoader
-import random
 import json
 import os
+import random
+
+import torch
+from torch.utils.data import Dataset
 from tqdm import tqdm
+
 
 class PairwiseOriginalDataset(Dataset):
     def __init__(
@@ -14,7 +16,7 @@ class PairwiseOriginalDataset(Dataset):
     ):
         self.samples = []
         for json_file in json_list:
-            with open(json_file, "r") as f:
+            with open(json_file) as f:
                 data = json.load(f)
             self.samples.extend(data)
 
@@ -23,9 +25,7 @@ class PairwiseOriginalDataset(Dataset):
 
         if confidence_threshold is not None:
             new_samples = []
-            for sample in tqdm(
-                self.samples, desc="Filtering samples according to confidence threshold"
-            ):
+            for sample in tqdm(self.samples, desc="Filtering samples according to confidence threshold"):
                 if sample.get("confidence", float("inf")) >= confidence_threshold:
                     new_samples.append(sample)
             self.samples = new_samples
@@ -41,6 +41,7 @@ class PairwiseOriginalDataset(Dataset):
             except Exception as e:
                 print(f"Error processing sample at index {idx}: {e}")
                 import traceback
+
                 traceback.print_exc()
                 index = random.randint(0, len(self.samples) - 1)
                 if index == idx:
@@ -52,16 +53,14 @@ class PairwiseOriginalDataset(Dataset):
         # Load image paths
         image_1 = sample["path1"]
         image_2 = sample["path2"]
-        assert os.path.exists(image_1) and os.path.exists(image_2), f'{image_1} or {image_2}'
+        assert os.path.exists(image_1) and os.path.exists(image_2), f"{image_1} or {image_2}"
         text_1 = sample["prompt"]
         text_2 = sample["prompt"]
 
         # Process Label
         if self.soft_label:
             choice_dist = sorted(sample["choice_dist"], reverse=True)
-            assert (
-                torch.sum(torch.tensor(choice_dist)) > 0
-            ), "Choice distribution cannot be zero."
+            assert torch.sum(torch.tensor(choice_dist)) > 0, "Choice distribution cannot be zero."
             label = torch.tensor(choice_dist[0]) / torch.sum(torch.tensor(choice_dist))
         else:
             label = torch.tensor(1).float()

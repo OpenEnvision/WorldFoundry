@@ -1,6 +1,6 @@
 import torch
 
-from opensora.registry import MODELS
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.registry import MODELS
 
 
 @MODELS.register_module("classes")
@@ -14,7 +14,7 @@ class ClassEncoder:
         self.device = device
 
     def encode(self, text):
-        return dict(y=torch.tensor([int(t) for t in text]).to(self.device))
+        return {"y": torch.tensor([int(t) for t in text]).to(self.device)}
 
     def null(self, n):
         return torch.tensor([self.num_classes] * n).to(self.device)

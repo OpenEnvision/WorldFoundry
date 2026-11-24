@@ -1,30 +1,28 @@
-""" CLIP tokenizer
+"""CLIP tokenizer
 
 Copied from https://github.com/openai/CLIP. Originally MIT License, Copyright (c) 2021 OpenAI.
 """
 
 import gzip
 import html
+
+# https://stackoverflow.com/q/62691279
 import os
 from functools import lru_cache
-from typing import Union, List
 
 import ftfy
 import regex as re
 import torch
 
-# https://stackoverflow.com/q/62691279
-import os
-
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-@lru_cache()
+@lru_cache
 def default_bpe():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "bpe_simple_vocab_16e6.txt.gz")
 
 
-@lru_cache()
+@lru_cache
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a corresponding list of unicode strings.
@@ -44,7 +42,7 @@ def bytes_to_unicode():
             cs.append(2**8 + n)
             n += 1
     cs = [chr(n) for n in cs]
-    return dict(zip(bs, cs))
+    return dict(zip(bs, cs, strict=False))
 
 
 def get_pairs(word):
@@ -71,11 +69,11 @@ def whitespace_clean(text):
     return text
 
 
-class SimpleTokenizer(object):
+class SimpleTokenizer:
     def __init__(self, bpe_path: str = default_bpe(), special_tokens=None):
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        merges = gzip.open(bpe_path).read().decode("utf-8").split("\n")
+        merges = gzip.open(bpe_path).read().decode("utf-8").split("\n")  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
         merges = merges[1 : 49152 - 256 - 2 + 1]
         merges = [tuple(merge.split()) for merge in merges]
         vocab = list(bytes_to_unicode().values())
@@ -85,14 +83,16 @@ class SimpleTokenizer(object):
         if not special_tokens:
             special_tokens = ["<start_of_text>", "<end_of_text>"]
         else:
-            special_tokens = ["<start_of_text>", "<end_of_text>"] + special_tokens
+            special_tokens = ["<start_of_text>", "<end_of_text>"] + special_tokens  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         vocab.extend(special_tokens)
-        self.encoder = dict(zip(vocab, range(len(vocab))))
+        self.encoder = dict(zip(vocab, range(len(vocab)), strict=False))
         self.decoder = {v: k for k, v in self.encoder.items()}
-        self.bpe_ranks = dict(zip(merges, range(len(merges))))
+        self.bpe_ranks = dict(zip(merges, range(len(merges)), strict=False))
         self.cache = {t: t for t in special_tokens}
         special = "|".join(special_tokens)
-        self.pat = re.compile(special + r"""|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""", re.IGNORECASE)
+        self.pat = re.compile(
+            special + r"""|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""", re.IGNORECASE
+        )
 
         self.vocab_size = len(self.encoder)
         self.all_special_ids = [self.encoder[t] for t in special_tokens]
@@ -100,7 +100,7 @@ class SimpleTokenizer(object):
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
-        word = tuple(token[:-1]) + (token[-1] + "</w>",)
+        word = tuple(token[:-1]) + (token[-1] + "</w>",)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         pairs = get_pairs(word)
 
         if not pairs:
@@ -118,7 +118,7 @@ class SimpleTokenizer(object):
                     j = word.index(first, i)
                     new_word.extend(word[i:j])
                     i = j
-                except:
+                except BaseException:
                     new_word.extend(word[i:])
                     break
 
@@ -155,7 +155,7 @@ class SimpleTokenizer(object):
 _tokenizer = SimpleTokenizer()
 
 
-def tokenize(texts: Union[str, List[str]], context_length: int = 77) -> torch.LongTensor:
+def tokenize(texts: str | list[str], context_length: int = 77) -> torch.LongTensor:
     """
     Returns the tokenized representation of given input string(s)
 
@@ -175,7 +175,7 @@ def tokenize(texts: Union[str, List[str]], context_length: int = 77) -> torch.Lo
 
     sot_token = _tokenizer.encoder["<start_of_text>"]
     eot_token = _tokenizer.encoder["<end_of_text>"]
-    all_tokens = [[sot_token] + _tokenizer.encode(text) + [eot_token] for text in texts]
+    all_tokens = [[sot_token] + _tokenizer.encode(text) + [eot_token] for text in texts]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     result = torch.zeros(len(all_tokens), context_length, dtype=torch.long)
 
     for i, tokens in enumerate(all_tokens):
@@ -195,11 +195,13 @@ class HFTokenizer:
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
-    def __call__(self, texts: Union[str, List[str]], context_length: int = 77) -> torch.Tensor:
+    def __call__(self, texts: str | list[str], context_length: int = 77) -> torch.Tensor:
         # same cleaning as for default tokenizer, except lowercasing
         # adding lower (for case-sensitive tokenizers) will make it more robust but less sensitive to nuance
         if isinstance(texts, str):
             texts = [texts]
         texts = [whitespace_clean(basic_clean(text)) for text in texts]
-        input_ids = self.tokenizer(texts, return_tensors="pt", max_length=context_length, padding="max_length", truncation=True).input_ids
+        input_ids = self.tokenizer(
+            texts, return_tensors="pt", max_length=context_length, padding="max_length", truncation=True
+        ).input_ids
         return input_ids

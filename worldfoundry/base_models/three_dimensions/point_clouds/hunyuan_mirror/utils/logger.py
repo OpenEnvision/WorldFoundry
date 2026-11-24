@@ -1,7 +1,5 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> hunyuan_mirror -> utils -> logger.py functionality."""
-
 import logging
-from typing import Mapping, Optional
+from collections.abc import Mapping
 
 from lightning_utilities.core.rank_zero import rank_prefixed_message, rank_zero_only
 
@@ -13,7 +11,7 @@ class RankedLogger(logging.LoggerAdapter):
         self,
         name: str = __name__,
         rank_zero_only: bool = False,
-        extra: Optional[Mapping[str, object]] = None,
+        extra: Mapping[str, object] | None = None,
     ) -> None:
         """Initializes a multi-GPU-friendly python command line logger that logs on all processes
         with their rank prefixed in the log message.
@@ -26,7 +24,7 @@ class RankedLogger(logging.LoggerAdapter):
         super().__init__(logger=logger, extra=extra)
         self.rank_zero_only = rank_zero_only
 
-    def log(self, level: int, msg: str, rank: Optional[int] = None, *args, **kwargs) -> None:
+    def log(self, level: int, msg: str, rank: int | None = None, *args, **kwargs) -> None:
         """Delegate a log call to the underlying logger, after prefixing its message with the rank
         of the process it's being logged from. If `'rank'` is provided, then the log will only
         occur on that rank/process.
@@ -47,9 +45,7 @@ class RankedLogger(logging.LoggerAdapter):
                 if current_rank == 0:
                     self.logger.log(level, msg, *args, **kwargs)
             else:
-                if rank is None:
-                    self.logger.log(level, msg, *args, **kwargs)
-                elif current_rank == rank:
+                if rank is None or current_rank == rank:
                     self.logger.log(level, msg, *args, **kwargs)
 
 
@@ -57,12 +53,12 @@ def setup_logging():
     """Configure logging levels to suppress redundant output"""
     import logging
     import warnings
-    
+
     # Suppress Lightning's distributed initialization logs
     logging.getLogger("lightning.pytorch.utilities.rank_zero").setLevel(logging.WARNING)
     logging.getLogger("lightning.pytorch.strategies").setLevel(logging.WARNING)
     logging.getLogger("lightning.pytorch.accelerators").setLevel(logging.WARNING)
     logging.getLogger("lightning.fabric.utilities.distributed").setLevel(logging.WARNING)
-    
+
     # Suppress all warnings
     warnings.filterwarnings("ignore")

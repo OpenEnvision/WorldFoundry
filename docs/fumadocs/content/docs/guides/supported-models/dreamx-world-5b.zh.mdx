@@ -1,25 +1,25 @@
 ---
 title: "DreamX-World 5B"
-description: "高德因果 AR 世界：常驻 KV/VAE 缓存，4 步 AR-Forcing。A100 验证过一块 1280×704 九帧。Apache-2.0。不是长时程 scorecard。"
+description: "高德因果 AR 世界：常驻 KV/VAE 缓存，4 步 AR-Forcing，1280×704 九帧块已在 A100 上验证。Apache-2.0。"
 modelId: "dreamx-world-5b"
 pageSource: authored
 ---
 
-DreamX-World 5B AR 是高德的**因果自回归**世界：潜变量、注意力、交叉注意力和 VAE 缓存保持**常驻**，视频在相机动作下按**三潜帧**块往前滚。解码 RGB **只出不回**——从不作为条件再喂回去。蒸馏 **4 步 AR-Forcing**。Pipeline：`DreamXWorld5BARPipeline`。别名 `dreamx-world-5b-ar` 解析到这里。
+DreamX-World 5B AR 是高德的**因果自回归**世界模型：潜变量、注意力、交叉注意力和 VAE 缓存保持**常驻**，视频在相机动作控制下按**三潜帧**块滚动生成。解码后的 RGB **仅用于输出**，不会作为条件重新输入。蒸馏 **4 步 AR-Forcing**。Pipeline：`DreamXWorld5BARPipeline`。别名 `dreamx-world-5b-ar` 解析到这里。
 
 <ModelPaperFigures modelId="dreamx-world-5b" locale="zh" />
 
-论文：[arXiv 2606.16993](https://arxiv.org/abs/2606.16993)。项目页：[amap-ml.github.io/DreamX_World](https://amap-ml.github.io/DreamX_World)。代码：[AMAP-ML/DreamX-World](https://github.com/AMAP-ML/DreamX-World)。许可证：**apache-2.0**。
+论文：[arXiv 2606.16993](https://arxiv.org/abs/2606.16993)。项目页：[amap-ml.github.io/DreamX_World](https://amap-ml.github.io/DreamX_World)。代码：[AMAP-ML/DreamX-World](https://github.com/AMAP-ML/DreamX-World)。许可证：**Apache-2.0**。
 
-**2026-07-28** 单卡 A100 用官方示例图产出一块可解码的 **1280×704 九帧**（已验证）。那是**两次控制**的常驻路径检查，不是长时程质量对齐。
+已在单卡 A100 上验证：从官方示例图出发，经过**两次控制**滚动，生成一个数值有限且可解码的 **1280×704 九帧**块。长时程质量尚未评估。
 
 <ModelCommandBuilder modelId="dreamx-world-5b" locale="zh" />
 
 ## 用来做什么
 
-滚一块常驻因果 AR 世界，不是长时程分数卡。
+在相机动作下逐块向前滚动因果 AR 世界。
 
-启动 `worldfoundry-eval run dreamx-world-5b`。
+启动 `wf run dreamx-world-5b`。
 
 评测入口：[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（世界滚动生成的总体质量）。
 
@@ -29,15 +29,15 @@ DreamX-World 5B AR 是高德的**因果自回归**世界：潜变量、注意力
 
 | 旋钮 | 记录值 |
 | --- | --- |
-| 已验证块 | **1280×704**、**9** 帧，单卡 A100，**2026-07-28** |
+| 已验证块 | **1280×704**、**9** 帧，单卡 A100 |
 | 调度 | 蒸馏 **4 步** AR-Forcing |
 | 块 | **三**潜帧；KV / 交叉注意力 / VAE 缓存常驻 |
-| RGB | 只作输出——从不回灌 |
+| RGB | 仅作输出，不作为条件重新输入 |
 | 因果权重 | `GD-ML/DreamX-World-5B`（`config.json`、`model.safetensors`） |
 | 配套 | `Wan-AI/Wan2.2-TI2V-5B`（VAE、T5、tokenizer） |
 
 ## 在 WorldFoundry 中运行
 
-状态：**已验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `GD-ML/DreamX-World-5B`、`Wan-AI/Wan2.2-TI2V-5B` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run dreamx-world-5b`。catalog 未记录 VRAM。
+统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。先把 `GD-ML/DreamX-World-5B`、`Wan-AI/Wan2.2-TI2V-5B` 就位到本地，再在该环境执行 `wf run dreamx-world-5b`。
 
 <ModelRelatedRecipes modelId="dreamx-world-5b" locale="zh" />

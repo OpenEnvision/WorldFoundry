@@ -7,4 +7,4 @@ from .moverse_synthesis import (
     runtime_root,
 )
 
-__all__ = ["MoVerseSynthesis", "OFFICIAL_SOURCE_REPO", "UPSTREAM_REVISION", "runtime_root"]
+__all__ = ["OFFICIAL_SOURCE_REPO", "UPSTREAM_REVISION", "MoVerseSynthesis", "runtime_root"]

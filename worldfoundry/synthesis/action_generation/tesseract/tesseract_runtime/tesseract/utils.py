@@ -1,14 +1,11 @@
 import gc
+
 import cv2
 import numpy as np
-
-from typing import Optional, Tuple, Union
-
 import torch
 import torch.nn as nn
 from accelerate.logging import get_logger
 from diffusers.models.embeddings import get_3d_rotary_pos_embed
-
 
 logger = get_logger(__name__)
 
@@ -21,13 +18,13 @@ def get_resize_crop_region_for_grid(src, tgt_width, tgt_height):
     r = h / w
     if r > (th / tw):
         resize_height = th
-        resize_width = int(round(th / h * w))
+        resize_width = int(round(th / h * w))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
     else:
         resize_width = tw
-        resize_height = int(round(tw / w * h))
+        resize_height = int(round(tw / w * h))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
-    crop_top = int(round((th - resize_height) / 2.0))
-    crop_left = int(round((tw - resize_width) / 2.0))
+    crop_top = int(round((th - resize_height) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+    crop_left = int(round((tw - resize_width) / 2.0))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
     return (crop_top, crop_left), (crop_top + resize_height, crop_left + resize_width)
 
@@ -38,12 +35,12 @@ def prepare_rotary_positional_embeddings(
     num_frames: int,
     vae_scale_factor_spatial: int = 8,
     patch_size: int = 2,
-    patch_size_t: int = None,
+    patch_size_t: int | None = None,
     attention_head_dim: int = 64,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
     base_height: int = 480,
     base_width: int = 720,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     grid_height = height // (vae_scale_factor_spatial * patch_size)
     grid_width = width // (vae_scale_factor_spatial * patch_size)
     base_size_width = base_width // (vae_scale_factor_spatial * patch_size)
@@ -78,14 +75,14 @@ def prepare_rotary_positional_embeddings(
     return freqs_cos, freqs_sin
 
 
-def reset_memory(device: Union[str, torch.device]) -> None:
+def reset_memory(device: str | torch.device) -> None:
     gc.collect()
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats(device)
     torch.cuda.reset_accumulated_memory_stats(device)
 
 
-def print_memory(device: Union[str, torch.device]) -> None:
+def print_memory(device: str | torch.device) -> None:
     memory_allocated = torch.cuda.memory_allocated(device) / 1024**3
     max_memory_allocated = torch.cuda.max_memory_allocated(device) / 1024**3
     max_memory_reserved = torch.cuda.max_memory_reserved(device) / 1024**3
@@ -103,7 +100,7 @@ def modify_transformer(model, add_in_channels, add_out_channels=0):
     old_in_channels = old_proj.in_channels
     old_out_channels = old_proj.out_channels
 
-    if type(old_proj) == nn.Conv2d:
+    if type(old_proj) is nn.Conv2d:
         new_proj = nn.Conv2d(
             old_in_channels + add_in_channels,
             old_out_channels,
@@ -112,7 +109,7 @@ def modify_transformer(model, add_in_channels, add_out_channels=0):
             padding=old_proj.padding,
             bias=old_proj.bias is not None,
         ).to(device, dtype)
-    elif type(old_proj) == nn.Linear:
+    elif type(old_proj) is nn.Linear:
         new_proj = nn.Linear(old_in_channels + add_in_channels, old_out_channels).to(device, dtype)
 
     with torch.no_grad():
@@ -125,7 +122,7 @@ def modify_transformer(model, add_in_channels, add_out_channels=0):
     if add_out_channels > 0:
         old_proj = model.proj_out
         patch_size = model.config.patch_size
-        out_channels = model.config.out_channels
+        _out_channels = model.config.out_channels
         new_proj = nn.Linear(
             old_proj.in_features, old_proj.out_features + add_out_channels * patch_size * patch_size
         ).to(device, dtype)
@@ -141,7 +138,7 @@ def crop_and_resize_frames(frames, target_size, interpolation="bilinear"):
     target_height, target_width = target_size
     original_height, original_width = frames[0].shape[:2]
     if original_height == target_height and original_width == target_width:
-        return [frame for frame in frames]
+        return list(frames)
 
     # ==== interpolation method ====
     if interpolation == "bilinear":

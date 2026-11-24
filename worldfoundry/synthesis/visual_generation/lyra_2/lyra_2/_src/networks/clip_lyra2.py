@@ -1,10 +1,9 @@
 import os
-from typing import Dict, List, Optional
 
 import torch
-from lyra_2._src.modules.conditioner import AbstractEmbModel
 
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.clip import CLIPModel
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.modules.conditioner import AbstractEmbModel
 
 
 class Wan2pt1CLIPEmbLyra2(AbstractEmbModel):
@@ -12,7 +11,7 @@ class Wan2pt1CLIPEmbLyra2(AbstractEmbModel):
 
     def __init__(
         self,
-        input_key: List[str],
+        input_key: list[str],
         dropout_rate: float = 0.0,
         num_token: int = 257,
         dtype: str = "bfloat16",
@@ -48,12 +47,12 @@ class Wan2pt1CLIPEmbLyra2(AbstractEmbModel):
 
     def forward(
         self,
-        image_tensor: Optional[torch.Tensor] = None,
-        video_tensor: Optional[torch.Tensor] = None,
-        media_latents: Optional[torch.Tensor] = None,
-        mask: Optional[torch.Tensor] = None,
-        buffer_latents: Optional[torch.Tensor] = None,
-    ) -> Dict[str, torch.Tensor]:
+        image_tensor: torch.Tensor | None = None,
+        video_tensor: torch.Tensor | None = None,
+        media_latents: torch.Tensor | None = None,
+        mask: torch.Tensor | None = None,
+        buffer_latents: torch.Tensor | None = None,
+    ) -> dict[str, torch.Tensor]:
         assert media_latents is not None, "media_latents is required"
         assert mask is not None, "mask is required"
         with torch.no_grad():

@@ -18,7 +18,7 @@ import os
 import os.path as osp
 
 from huggingface_hub import repo_exists, snapshot_download
-from huggingface_hub.utils import HFValidationError, validate_repo_id
+from huggingface_hub.utils import HFValidationError
 from transformers import AutoTokenizer, PretrainedConfig
 
 from .configuration_vila import VILAConfig
@@ -72,7 +72,7 @@ def get_model_config(config):
     if root_path is not None and not osp.exists(root_path):
         try:
             valid_hf_repo = repo_exists(root_path)
-        except HFValidationError as e:
+        except HFValidationError:
             valid_hf_repo = False
         if valid_hf_repo:
             root_path = snapshot_download(root_path)
@@ -83,12 +83,11 @@ def get_model_config(config):
         if isinstance(cfg, dict):
             try:
                 return_list.append(os.path.join(root_path, key[:-4]))
-            except:
-                raise ValueError(f"Cannot find resume path in config for {key}!")
+            except BaseException:
+                raise ValueError(f"Cannot find resume path in config for {key}!")  # noqa: B904 - Keeps the implicit exception context.
         elif isinstance(cfg, PretrainedConfig):
             return_list.append(os.path.join(root_path, key[:-4]))
         elif isinstance(cfg, str):
             return_list.append(cfg)
 
     return return_list
-

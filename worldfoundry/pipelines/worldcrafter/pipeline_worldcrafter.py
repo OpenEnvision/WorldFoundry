@@ -2,6 +2,7 @@
 # Source revision: 7e57e4d0448e8661eb6ae078f53e19638bd07102
 # Academic-use terms: THIRD-PARTY-NOTICES (WorldCrafter)
 """Public WorldCrafter Base/Fast pipeline using shared base-model components."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -27,9 +28,13 @@ class WorldCrafterPipeline(PipelineABC):
 
     @classmethod
     def from_pretrained(
-        cls, model_path: Any = None, required_components: Mapping | None = None,
-        device: str = "cuda", model_id: str | None = None, **kwargs: Any,
-    ) -> "WorldCrafterPipeline":
+        cls,
+        model_path: Any = None,
+        required_components: Mapping | None = None,
+        device: str = "cuda",
+        model_id: str | None = None,
+        **kwargs: Any,
+    ) -> WorldCrafterPipeline:
         from worldfoundry.core.io.paths import resolve_local_hf_model_path
 
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
@@ -43,11 +48,22 @@ class WorldCrafterPipeline(PipelineABC):
         model_type = options.pop("model_type", "fast" if model_id == "worldcrafter-fast" else "base")
         if model_type not in {"base", "fast"}:
             raise ValueError("WorldCrafter model_type must be 'base' or 'fast'")
-        checkpoint = options.pop("checkpoint_path", options.pop("model_path", options.pop("pretrained_model_path", None)))
+        checkpoint = options.pop(
+            "checkpoint_path", options.pop("model_path", options.pop("pretrained_model_path", None))
+        )
         checkpoint = checkpoint or f"TencentARC/WorldCrafter-{model_type.title()}"
         path = Path(resolve_local_hf_model_path(str(checkpoint), required_files=("inference_config.json",)))
-        allowed = {"height", "width", "seed", "memory_fov_h_deg", "memory_fov_v_deg",
-                   "memory_fov_samples_per_axis", "attention_backend", "enable_compile", "shared_model_path"}
+        allowed = {
+            "height",
+            "width",
+            "seed",
+            "memory_fov_h_deg",
+            "memory_fov_v_deg",
+            "memory_fov_samples_per_axis",
+            "attention_backend",
+            "enable_compile",
+            "shared_model_path",
+        }
         unknown = set(options) - allowed
         if unknown:
             raise TypeError(f"Unsupported WorldCrafter loading options: {sorted(unknown)}")
@@ -56,15 +72,26 @@ class WorldCrafterPipeline(PipelineABC):
         return cls(path, model_type=model_type, device=device, options=options)
 
     def __call__(
-        self, prompt: str = "", images: Any = None, video: Any = None,
-        output_path: Any = None, return_dict: bool = False, *,
-        camera_path: Any = None, actions: str | None = None, actions_file: Any = None,
-        mode: str | None = None, **kwargs: Any,
+        self,
+        prompt: str = "",
+        images: Any = None,
+        video: Any = None,
+        output_path: Any = None,
+        return_dict: bool = False,
+        *,
+        camera_path: Any = None,
+        actions: str | None = None,
+        actions_file: Any = None,
+        mode: str | None = None,
+        **kwargs: Any,
     ) -> Any:
         import numpy as np
+
         from worldfoundry.core.media.processing.image_utils import load_pil_image
         from worldfoundry.synthesis.visual_generation.worldcrafter.camera import (
-            parse_trajectory, build_trajectory, save_trajectory,
+            build_trajectory,
+            parse_trajectory,
+            save_trajectory,
         )
         from worldfoundry.synthesis.visual_generation.worldcrafter.runtime import WorldCrafter, load_camera
 
@@ -122,11 +149,20 @@ class WorldCrafterPipeline(PipelineABC):
             raise ValueError("Select model_type when loading the pipeline")
         if int(kwargs.get("fps", 16)) < 1:
             raise ValueError("fps must be positive")
-        if self.model_type == "fast":
-            if kwargs.get("num_inference_steps", 6) != 6 or kwargs.get("guidance_scale", 1.0) != 1.0:
-                raise ValueError("Fast requires six contract-owned steps and CFG=1")
+        if self.model_type == "fast" and (
+            kwargs.get("num_inference_steps", 6) != 6 or kwargs.get("guidance_scale", 1.0) != 1.0
+        ):
+            raise ValueError("Fast requires six contract-owned steps and CFG=1")
         import inspect
-        allowed = set(inspect.signature(WorldCrafter.generate).parameters) - {"self", "mode", "camera_path", "image_path", "prompt", "output_path"}
+
+        allowed = set(inspect.signature(WorldCrafter.generate).parameters) - {
+            "self",
+            "mode",
+            "camera_path",
+            "image_path",
+            "prompt",
+            "output_path",
+        }
         unknown = set(kwargs) - allowed
         if unknown:
             raise TypeError(f"Unsupported WorldCrafter generation options: {sorted(unknown)}")
@@ -134,15 +170,27 @@ class WorldCrafterPipeline(PipelineABC):
         kwargs.setdefault("seed", self.options.get("seed", 42))
         if self._runtime is None:
             self._runtime = WorldCrafter.from_pretrained(
-                self.model_path, model_type=self.model_type, device=self.device, **self.options,
+                self.model_path,
+                model_type=self.model_type,
+                device=self.device,
+                **self.options,
             )
         result = self._runtime.generate(
-            mode=mode, camera_path=camera_path, image_path=images,
-            prompt=prompt, output_path=output, **kwargs,
+            mode=mode,
+            camera_path=camera_path,
+            image_path=images,
+            prompt=prompt,
+            output_path=output,
+            **kwargs,
         )
-        payload = {"status": "success", "model_id": f"worldcrafter-{self.model_type}",
-                   "video": str(result.video_path), "artifact_path": str(result.video_path),
-                   "metadata_path": str(result.summary_path), "metadata": result.summary}
+        payload = {
+            "status": "success",
+            "model_id": f"worldcrafter-{self.model_type}",
+            "video": str(result.video_path),
+            "artifact_path": str(result.video_path),
+            "metadata_path": str(result.summary_path),
+            "metadata": result.summary,
+        }
         return payload if return_dict else payload["video"]
 
 

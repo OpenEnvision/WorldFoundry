@@ -13,10 +13,10 @@ checkpoint path.  Use :func:`get_echo_memory_recipe` to resolve ids.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
-from typing import Mapping
 
 
 class EchoMemoryMechanism(str, Enum):

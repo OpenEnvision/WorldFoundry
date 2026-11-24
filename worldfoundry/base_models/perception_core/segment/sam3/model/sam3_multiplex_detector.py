@@ -1,17 +1,16 @@
-"""Module for base_models -> perception_core -> segment -> sam3 -> model -> sam3_multiplex_detector.py functionality."""
-
 import os
 
 import torch
+
 from worldfoundry.base_models.perception_core.segment.sam3.model.vl_combiner import SAM3VLBackbone
 
 try:
     from worldfoundry.base_models.perception_core.segment.sam3.model.vl_combiner import SAM3VLBackboneTri
 except ImportError:
     SAM3VLBackboneTri = None
-from typing import Dict, List, Optional
 
 import numpy as np
+
 from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import BatchedDatapoint, FindStage
 from worldfoundry.base_models.perception_core.segment.sam3.model.geometry_encoders import Prompt
 from worldfoundry.base_models.perception_core.segment.sam3.model.model_misc import SAM3Output
@@ -29,7 +28,6 @@ class Sam3MultiplexImageBase(Sam3Image):
         offload_outputs_to_cpu_for_eval: bool = False,
         **kwargs,
     ):
-        """Init."""
         super().__init__(*args, **kwargs)
         self.tracking_score_thresh = tracking_score_thresh
         self.offload_outputs_to_cpu_for_eval = offload_outputs_to_cpu_for_eval
@@ -40,15 +38,7 @@ class Sam3MultiplexImageBase(Sam3Image):
         input: BatchedDatapoint,
         is_inference=False,  # (a dummy parameter not used anymore)
     ):
-        """Forward.
-
-        Args:
-            input: The input.
-            is_inference: The is inference.
-        """
-        assert not self.training, (
-            "Sam3MultiplexImageBase should only be used in eval mode."
-        )
+        assert not self.training, "Sam3MultiplexImageBase should only be used in eval mode."
 
         device = self.device
         backbone_out = {"img_batch_all_stages": input.img_batch}
@@ -56,9 +46,7 @@ class Sam3MultiplexImageBase(Sam3Image):
         backbone_out.update(text_outputs)
         num_frames = len(input.find_inputs)
 
-        previous_stages_out = SAM3Output(
-            iter_mode=SAM3Output.IterMode.LAST_STEP_PER_STAGE
-        )
+        previous_stages_out = SAM3Output(iter_mode=SAM3Output.IterMode.LAST_STEP_PER_STAGE)
         for frame_idx in range(num_frames):
             find_input = input.find_inputs[frame_idx]
             find_target = input.find_targets[frame_idx]
@@ -86,14 +74,6 @@ class Sam3MultiplexImageBase(Sam3Image):
         geometric_prompt: Prompt,
         **kwargs,
     ):
-        """Forward video grounding.
-
-        Args:
-            backbone_out: The backbone out.
-            find_input: The find input.
-            find_target: The find target.
-            geometric_prompt: The geometric prompt.
-        """
         # route this to the image grounding forward method
         out = self.forward_grounding(
             backbone_out=backbone_out,
@@ -121,12 +101,12 @@ class Sam3MultiplexImageBase(Sam3Image):
         return dummy_obj_ids
 
     def _trim_outputs(self, *args, **kwargs):
-        """Helper function to trim outputs."""
-        pass  # not needed for image-on-video
+        pass
+        # not needed for image-on-video
 
     def _batch_find_inputs(
         self,
-        find_inputs: List[FindStage],
+        find_inputs: list[FindStage],
         chunk_start: int,
         chunk_end: int,
     ) -> FindStage:
@@ -146,19 +126,14 @@ class Sam3MultiplexImageBase(Sam3Image):
         Returns:
             A single FindStage with batched tensors.
         """
-        chunk_find_inputs = [
-            find_inputs[i % len(find_inputs)] for i in range(chunk_start, chunk_end)
-        ]
+        chunk_find_inputs = [find_inputs[i % len(find_inputs)] for i in range(chunk_start, chunk_end)]
 
         # Generate img_ids based on chunk frame indices
         # Each frame in the chunk gets its corresponding frame index
         # The modulo for circular buffer access is handled in _get_img_feats
         device = chunk_find_inputs[0].img_ids.device
         dtype = chunk_find_inputs[0].img_ids.dtype
-        img_ids_list = [
-            torch.tensor([i], device=device, dtype=dtype)
-            for i in range(chunk_start, chunk_end)
-        ]
+        img_ids_list = [torch.tensor([i], device=device, dtype=dtype) for i in range(chunk_start, chunk_end)]
         batched_img_ids = torch.cat(img_ids_list, dim=0)
 
         # Generate img_ids_np to match
@@ -171,61 +146,39 @@ class Sam3MultiplexImageBase(Sam3Image):
 
         # Concatenate input_boxes
         input_boxes_list = [fi.input_boxes for fi in chunk_find_inputs]
-        batched_input_boxes = (
-            torch.cat(input_boxes_list, dim=0)
-            if input_boxes_list[0] is not None
-            else None
-        )
+        batched_input_boxes = torch.cat(input_boxes_list, dim=0) if input_boxes_list[0] is not None else None
 
         # Concatenate input_boxes_mask
         input_boxes_mask_list = [fi.input_boxes_mask for fi in chunk_find_inputs]
         batched_input_boxes_mask = (
-            torch.cat(input_boxes_mask_list, dim=0)
-            if input_boxes_mask_list[0] is not None
-            else None
+            torch.cat(input_boxes_mask_list, dim=0) if input_boxes_mask_list[0] is not None else None
         )
 
         # Concatenate input_boxes_label
         input_boxes_label_list = [fi.input_boxes_label for fi in chunk_find_inputs]
         batched_input_boxes_label = (
-            torch.cat(input_boxes_label_list, dim=0)
-            if input_boxes_label_list[0] is not None
-            else None
+            torch.cat(input_boxes_label_list, dim=0) if input_boxes_label_list[0] is not None else None
         )
 
         # Concatenate input_points
         input_points_list = [fi.input_points for fi in chunk_find_inputs]
-        batched_input_points = (
-            torch.cat(input_points_list, dim=0)
-            if input_points_list[0] is not None
-            else None
-        )
+        batched_input_points = torch.cat(input_points_list, dim=0) if input_points_list[0] is not None else None
 
         # Concatenate input_points_mask
         input_points_mask_list = [fi.input_points_mask for fi in chunk_find_inputs]
         batched_input_points_mask = (
-            torch.cat(input_points_mask_list, dim=0)
-            if input_points_mask_list[0] is not None
-            else None
+            torch.cat(input_points_mask_list, dim=0) if input_points_mask_list[0] is not None else None
         )
 
         # Handle optional fields
-        input_boxes_before_embed_list = [
-            fi.input_boxes_before_embed for fi in chunk_find_inputs
-        ]
+        input_boxes_before_embed_list = [fi.input_boxes_before_embed for fi in chunk_find_inputs]
         batched_input_boxes_before_embed = (
-            torch.cat(input_boxes_before_embed_list, dim=0)
-            if input_boxes_before_embed_list[0] is not None
-            else None
+            torch.cat(input_boxes_before_embed_list, dim=0) if input_boxes_before_embed_list[0] is not None else None
         )
 
-        input_points_before_embed_list = [
-            fi.input_points_before_embed for fi in chunk_find_inputs
-        ]
+        input_points_before_embed_list = [fi.input_points_before_embed for fi in chunk_find_inputs]
         batched_input_points_before_embed = (
-            torch.cat(input_points_before_embed_list, dim=0)
-            if input_points_before_embed_list[0] is not None
-            else None
+            torch.cat(input_points_before_embed_list, dim=0) if input_points_before_embed_list[0] is not None else None
         )
 
         # Create batched FindStage
@@ -249,7 +202,7 @@ class Sam3MultiplexImageBase(Sam3Image):
 
     def _batch_geometric_prompts(
         self,
-        geometric_prompts: List[Prompt],
+        geometric_prompts: list[Prompt],
         chunk_start: int,
         chunk_end: int,
     ) -> Prompt:
@@ -269,7 +222,7 @@ class Sam3MultiplexImageBase(Sam3Image):
 
     def _batch_geometric_prompts_from_list(
         self,
-        chunk_prompts: List[Prompt],
+        chunk_prompts: list[Prompt],
     ) -> Prompt:
         """
         Batch a list of Prompt objects into a single batched Prompt.
@@ -291,12 +244,6 @@ class Sam3MultiplexImageBase(Sam3Image):
 
         # Helper function to batch tensors along specified dimension
         def batch_tensors(tensors, dim):
-            """Batch tensors.
-
-            Args:
-                tensors: The tensors.
-                dim: The dim.
-            """
             if tensors[0] is None:
                 return None
             return torch.cat(tensors, dim=dim)
@@ -340,6 +287,7 @@ class Sam3MultiplexImageBase(Sam3Image):
 
 class Sam3MultiplexDetector(Sam3MultiplexImageBase):
     """Sam multiplex detector implementation."""
+
     def __init__(
         self,
         *args,
@@ -348,7 +296,6 @@ class Sam3MultiplexDetector(Sam3MultiplexImageBase):
         is_multiplex=False,
         **kwargs,
     ):
-        """Init."""
         super().__init__(*args, **kwargs)
         self.rank = int(os.getenv("RANK", "0"))
         self.world_size = int(os.getenv("WORLD_SIZE", "1"))
@@ -357,8 +304,7 @@ class Sam3MultiplexDetector(Sam3MultiplexImageBase):
         # if gather_backbone is not set, default to gathering only for `SAM3VLBackbone`
         if gather_backbone_out is None:
             gather_backbone_out = isinstance(self.backbone, SAM3VLBackbone) or (
-                SAM3VLBackboneTri is not None
-                and isinstance(self.backbone, SAM3VLBackboneTri)
+                SAM3VLBackboneTri is not None and isinstance(self.backbone, SAM3VLBackboneTri)
             )
         self.gather_backbone_out = gather_backbone_out
         self.is_multiplex = is_multiplex
@@ -446,8 +392,7 @@ class Sam3MultiplexDetector(Sam3MultiplexImageBase):
         for k, (v, handle) in multigpu_buffer[frame_idx].items():
             if self.is_multiplex:
                 if (
-                    k.startswith("interactive_backbone_")
-                    or k.startswith("propagation_backbone_")
+                    k.startswith(("interactive_backbone_", "propagation_backbone_"))
                 ) and not return_sam2_backbone_feats:
                     continue
             else:
@@ -477,13 +422,9 @@ class Sam3MultiplexDetector(Sam3MultiplexImageBase):
         if not track_in_reverse and frame_idx_curr_e < valid_frame_end:
             frame_idx_next_b = frame_idx_curr_e
             frame_idx_next_e = min(frame_idx_next_b + self.world_size, valid_frame_end)
-        elif (
-            track_in_reverse and frame_idx_curr_b - self.world_size >= valid_frame_start
-        ):
+        elif track_in_reverse and frame_idx_curr_b - self.world_size >= valid_frame_start:
             frame_idx_next_e = frame_idx_curr_b
-            frame_idx_next_b = max(
-                frame_idx_curr_b - self.world_size, valid_frame_start
-            )
+            frame_idx_next_b = max(frame_idx_curr_b - self.world_size, valid_frame_start)
         else:
             frame_idx_next_b = frame_idx_next_e = None
         if frame_idx_next_b is not None and frame_idx_next_b not in multigpu_buffer:
@@ -561,28 +502,16 @@ class Sam3MultiplexDetector(Sam3MultiplexImageBase):
                 # TODO: rooms for optimization
 
                 # Interaction features
-                inte_feats = out_local["prev_encoder_out"]["backbone_out"][
-                    "interactive"
-                ]
+                inte_feats = out_local["prev_encoder_out"]["backbone_out"]["interactive"]
                 assert inte_feats["vision_mask"] is None
-                assert (
-                    len(inte_feats["backbone_fpn"]) == 3
-                )  # SAM2 backbone always have 3 levels
+                assert len(inte_feats["backbone_fpn"]) == 3  # SAM2 backbone always have 3 levels
                 assert all(x.mask is None for x in inte_feats["backbone_fpn"])
                 # cast the SAM2 backbone features to bfloat16 for all-gather (this is usually
                 # a no-op, SAM2 backbone features are likely already in bfloat16 due to AMP)
-                inte_backbone_fpn_bf16 = [
-                    x.to(torch.bfloat16) for x in inte_feats["backbone_fpn"]
-                ]
-                inte_fpn0, inte_fpn_handle0 = self._gather_tensor(
-                    inte_backbone_fpn_bf16[0].tensors
-                )
-                inte_fpn1, inte_fpn_handle1 = self._gather_tensor(
-                    inte_backbone_fpn_bf16[1].tensors
-                )
-                inte_fpn2, inte_fpn_handle2 = self._gather_tensor(
-                    inte_backbone_fpn_bf16[2].tensors
-                )
+                inte_backbone_fpn_bf16 = [x.to(torch.bfloat16) for x in inte_feats["backbone_fpn"]]
+                inte_fpn0, inte_fpn_handle0 = self._gather_tensor(inte_backbone_fpn_bf16[0].tensors)
+                inte_fpn1, inte_fpn_handle1 = self._gather_tensor(inte_backbone_fpn_bf16[1].tensors)
+                inte_fpn2, inte_fpn_handle2 = self._gather_tensor(inte_backbone_fpn_bf16[2].tensors)
                 # vision_pos_enc is the same on all frames, so no need to all-gather them
                 inte_vision_pos_enc = inte_feats["vision_pos_enc"]
 
@@ -615,9 +544,7 @@ class Sam3MultiplexDetector(Sam3MultiplexImageBase):
             frame_idx_to_save = frame_idx_begin + rank
             if frame_idx_to_save >= num_frames:
                 continue
-            frame_buffer = {
-                k: (v[rank], handle) for k, (v, handle) in out_gathered.items()
-            }
+            frame_buffer = {k: (v[rank], handle) for k, (v, handle) in out_gathered.items()}
             if self.gather_backbone_out:
                 # also add gathered SAM 2 backbone features to frame_buffer
                 if self.is_multiplex:
@@ -645,11 +572,6 @@ class Sam3MultiplexDetector(Sam3MultiplexImageBase):
             multigpu_buffer[frame_idx_to_save] = frame_buffer
 
     def _gather_tensor(self, x):
-        """Helper function to gather tensor.
-
-        Args:
-            x: The x.
-        """
         if self.world_size == 1:
             return [x], None
 
@@ -723,17 +645,12 @@ class Sam3MultiplexDetector(Sam3MultiplexImageBase):
             if propagate_in_video_start_frame_idx is None:
                 propagate_in_video_start_frame_idx = 0
             if track_in_reverse:
-                valid_frame_start = (
-                    propagate_in_video_start_frame_idx - max_frame_num_to_track + 1
-                )
+                valid_frame_start = propagate_in_video_start_frame_idx - max_frame_num_to_track + 1
                 valid_frame_end = propagate_in_video_start_frame_idx
             else:
-                valid_frame_start = propagate_in_video_start_frame_idx
-                valid_frame_end = (
-                    propagate_in_video_start_frame_idx + max_frame_num_to_track
-                )
+                valid_frame_start = propagate_in_video_start_frame_idx  # noqa: F841 - Upstream assignment kept.
+                valid_frame_end = propagate_in_video_start_frame_idx + max_frame_num_to_track
         else:
-            valid_frame_start = 0
             valid_frame_end = num_frames
 
         # Initialize grounding_buffer if not present
@@ -747,9 +664,7 @@ class Sam3MultiplexDetector(Sam3MultiplexImageBase):
 
         # Process chunk if not already cached
         if chunk_key not in grounding_cache["grounding_buffer"]:
-            with torch.profiler.record_function(
-                "forward_grounding_batched.process_chunk"
-            ):
+            with torch.profiler.record_function("forward_grounding_batched.process_chunk"):
                 chunk_outputs = self._process_grounding_chunk_batched(
                     backbone_out=backbone_out,
                     find_inputs=find_inputs,
@@ -778,9 +693,7 @@ class Sam3MultiplexDetector(Sam3MultiplexImageBase):
         local_idx = frame_idx - chunk_start
 
         # Slice out the output for this specific frame
-        out = self._slice_batched_output(
-            chunk_outputs, local_idx, return_sam2_backbone_feats
-        )
+        out = self._slice_batched_output(chunk_outputs, local_idx, return_sam2_backbone_feats)
 
         return out, backbone_out
 
@@ -809,14 +722,10 @@ class Sam3MultiplexDetector(Sam3MultiplexImageBase):
         ]
 
         # Batch the find_inputs for this chunk
-        batched_find_input = self._batch_find_inputs(
-            find_inputs, chunk_start, chunk_end
-        )
+        batched_find_input = self._batch_find_inputs(find_inputs, chunk_start, chunk_end)
 
         # Batch the geometric prompts
-        batched_geometric_prompt = self._batch_geometric_prompts_from_list(
-            chunk_geo_prompts
-        )
+        batched_geometric_prompt = self._batch_geometric_prompts_from_list(chunk_geo_prompts)
 
         # Run forward_grounding on the batched input
         with torch.profiler.record_function("forward_grounding_batched.forward"):
@@ -915,33 +824,17 @@ class Sam3MultiplexDetector(Sam3MultiplexImageBase):
         if return_sam2_backbone_feats:
             if "_sam2_backbone" in chunk_outputs:
                 sam2_bb = chunk_outputs["_sam2_backbone"]
-                out["sam2_backbone_fpn_0"] = sam2_bb["backbone_fpn"][0].tensors[
-                    local_idx : local_idx + 1
-                ]
-                out["sam2_backbone_fpn_1"] = sam2_bb["backbone_fpn"][1].tensors[
-                    local_idx : local_idx + 1
-                ]
-                out["sam2_backbone_fpn_2"] = sam2_bb["backbone_fpn"][2].tensors[
-                    local_idx : local_idx + 1
-                ]
-                out["sam2_backbone_pos_enc"] = [
-                    x[local_idx : local_idx + 1] for x in sam2_bb["vision_pos_enc"]
-                ]
+                out["sam2_backbone_fpn_0"] = sam2_bb["backbone_fpn"][0].tensors[local_idx : local_idx + 1]
+                out["sam2_backbone_fpn_1"] = sam2_bb["backbone_fpn"][1].tensors[local_idx : local_idx + 1]
+                out["sam2_backbone_fpn_2"] = sam2_bb["backbone_fpn"][2].tensors[local_idx : local_idx + 1]
+                out["sam2_backbone_pos_enc"] = [x[local_idx : local_idx + 1] for x in sam2_bb["vision_pos_enc"]]
 
             if self.is_multiplex and "_interactive_backbone" in chunk_outputs:
                 inte_bb = chunk_outputs["_interactive_backbone"]
-                out["interactive_backbone_fpn_0"] = inte_bb["backbone_fpn"][0].tensors[
-                    local_idx : local_idx + 1
-                ]
-                out["interactive_backbone_fpn_1"] = inte_bb["backbone_fpn"][1].tensors[
-                    local_idx : local_idx + 1
-                ]
-                out["interactive_backbone_fpn_2"] = inte_bb["backbone_fpn"][2].tensors[
-                    local_idx : local_idx + 1
-                ]
-                out["interactive_backbone_pos_enc"] = [
-                    x[local_idx : local_idx + 1] for x in inte_bb["vision_pos_enc"]
-                ]
+                out["interactive_backbone_fpn_0"] = inte_bb["backbone_fpn"][0].tensors[local_idx : local_idx + 1]
+                out["interactive_backbone_fpn_1"] = inte_bb["backbone_fpn"][1].tensors[local_idx : local_idx + 1]
+                out["interactive_backbone_fpn_2"] = inte_bb["backbone_fpn"][2].tensors[local_idx : local_idx + 1]
+                out["interactive_backbone_pos_enc"] = [x[local_idx : local_idx + 1] for x in inte_bb["vision_pos_enc"]]
 
         return out
 

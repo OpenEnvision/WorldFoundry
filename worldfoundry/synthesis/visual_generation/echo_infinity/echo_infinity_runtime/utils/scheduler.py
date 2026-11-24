@@ -1,40 +1,22 @@
-from abc import abstractmethod, ABC
 import torch
 
-class SchedulerInterface(ABC):
-    alphas_cumprod: torch.Tensor
+from worldfoundry.core.nn.diffusion.schedulers import (
+    SchedulerInterface as SchedulerInterface,
+)
 
-    @abstractmethod
-    def add_noise(self, clean_latent: torch.Tensor, noise: torch.Tensor, timestep: torch.Tensor):
-        pass
-
-    def convert_x0_to_noise(self, x0: torch.Tensor, xt: torch.Tensor, timestep: torch.Tensor) -> torch.Tensor:
-        original_dtype = x0.dtype
-        x0, xt, alphas_cumprod = map(lambda x: x.double().to(x0.device), [x0, xt, self.alphas_cumprod])
-        alpha_prod_t = alphas_cumprod[timestep].reshape(-1, 1, 1, 1)
-        beta_prod_t = 1 - alpha_prod_t
-        noise_pred = (xt - alpha_prod_t ** 0.5 * x0) / beta_prod_t ** 0.5
-        return noise_pred.to(original_dtype)
-
-    def convert_noise_to_x0(self, noise: torch.Tensor, xt: torch.Tensor, timestep: torch.Tensor) -> torch.Tensor:
-        original_dtype = noise.dtype
-        noise, xt, alphas_cumprod = map(lambda x: x.double().to(noise.device), [noise, xt, self.alphas_cumprod])
-        alpha_prod_t = alphas_cumprod[timestep].reshape(-1, 1, 1, 1)
-        beta_prod_t = 1 - alpha_prod_t
-        x0_pred = (xt - beta_prod_t ** 0.5 * noise) / alpha_prod_t ** 0.5
-        return x0_pred.to(original_dtype)
-
-    def convert_velocity_to_x0(self, velocity: torch.Tensor, xt: torch.Tensor, timestep: torch.Tensor) -> torch.Tensor:
-        original_dtype = velocity.dtype
-        velocity, xt, alphas_cumprod = map(lambda x: x.double().to(velocity.device), [velocity, xt, self.alphas_cumprod])
-        alpha_prod_t = alphas_cumprod[timestep].reshape(-1, 1, 1, 1)
-        beta_prod_t = 1 - alpha_prod_t
-        x0_pred = alpha_prod_t ** 0.5 * xt - beta_prod_t ** 0.5 * velocity
-        return x0_pred.to(original_dtype)
 
 class FlowMatchScheduler:
-
-    def __init__(self, num_inference_steps=100, num_train_timesteps=1000, shift=3.0, sigma_max=1.0, sigma_min=0.003 / 1.002, inverse_timesteps=False, extra_one_step=False, reverse_sigmas=False):
+    def __init__(
+        self,
+        num_inference_steps=100,
+        num_train_timesteps=1000,
+        shift=3.0,
+        sigma_max=1.0,
+        sigma_min=0.003 / 1.002,
+        inverse_timesteps=False,
+        extra_one_step=False,
+        reverse_sigmas=False,
+    ):
         self.num_train_timesteps = num_train_timesteps
         self.shift = shift
         self.sigma_max = sigma_max

@@ -1,6 +1,6 @@
 ---
 title: CameraBench
-description: "CMU camera-motion bench: binary classification, VQA, retrieval, and captioning. WorldFoundry aggregates official scores; it does not invent a board."
+description: "CMU camera-motion bench: binary classification, VQA, retrieval, and captioning. WorldFoundry aggregates official scores."
 ---
 
 CameraBench (Carnegie Mellon) asks whether a video model **understands camera motion** — pan, tilt, dolly, and the rest of a cinematographer-designed taxonomy, refined by expert annotation. Four families:
@@ -10,7 +10,7 @@ CameraBench (Carnegie Mellon) asks whether a video model **understands camera mo
 - **Retrieval** — text, image, and group retrieval of matching motions.
 - **Caption** — caption quality. GPT judging is opt-in (`OPENAI_API_KEY`, disable with `--no-gpt`).
 
-`camerabench_average` is the mean over available official families. In WorldFoundry the same labels can also seed camera-control generation prompts; that is a downstream use, not a hidden leaderboard.
+`camerabench_average` is the mean over available official families. In WorldFoundry the same labels can also seed camera-control generation prompts.
 
 Paper: [CameraBench](https://arxiv.org/abs/2504.15376). Project: [linzhiqiu.github.io/papers/camerabench](https://linzhiqiu.github.io/papers/camerabench/). Code: [sy77777en/CameraBench](https://github.com/sy77777en/CameraBench), scoring stack [linzhiqiu/t2v_metrics](https://github.com/linzhiqiu/t2v_metrics). Data: [`syCen/CameraBench`](https://huggingface.co/datasets/syCen/CameraBench) (CC-BY-4.0).
 
@@ -23,7 +23,7 @@ WorldFoundry **aggregates prepared `score_dir` files** or imports official JSON.
 Import official JSON (strict coverage):
 
 ```bash
-WORLDFOUNDRY_CAMERABENCH_STRICT=1 worldfoundry-eval zoo benchmark-run \
+WORLDFOUNDRY_CAMERABENCH_STRICT=1 wf zoo benchmark-run \
   --benchmark-id camerabench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -35,7 +35,7 @@ WORLDFOUNDRY_CAMERABENCH_STRICT=1 worldfoundry-eval zoo benchmark-run \
 Aggregate a prepared score directory:
 
 ```bash
-WORLDFOUNDRY_CAMERABENCH_STRICT=1 worldfoundry-eval zoo benchmark-run \
+WORLDFOUNDRY_CAMERABENCH_STRICT=1 wf zoo benchmark-run \
   --benchmark-id camerabench \
   --mode official-validation \
   --score-dir <score_dir> \
@@ -51,7 +51,7 @@ hf download syCen/CameraBench --repo-type dataset \
 
 `--task` restricts to one family. Env: `WORLDFOUNDRY_CAMERABENCH_DATA_ROOT`, `WORLDFOUNDRY_CAMERABENCH_RESULTS_PATH`, `WORLDFOUNDRY_CAMERABENCH_SCORE_DIR`.
 
-In-tree pointer: `worldfoundry/data/benchmarks/tasks/external/camerabench.yaml`.
+Manifest: `worldfoundry/data/benchmarks/tasks/external/camerabench.yaml`.
 
 Outputs include `scorecard.json` (primary `camerabench_average`), `camera_predictions.jsonl` when present, and `raw_metric_table.jsonl`.
 

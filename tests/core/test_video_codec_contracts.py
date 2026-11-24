@@ -147,15 +147,18 @@ def test_image_conditioning_preserves_resize_crop_and_zero_tail(tmp_path: Path) 
 
 
 @pytest.mark.parametrize("fail_write", [False, True])
+@pytest.mark.parametrize("as_bfloat16", [False, True])
 def test_opencv_fallback_uses_fourcc_and_releases_writer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     fail_write: bool,
+    as_bfloat16: bool,
 ) -> None:
     import cv2
     import torchvision.io
 
     frames = np.arange(2 * 4 * 6 * 3, dtype=np.uint8).reshape(2, 4, 6, 3)
+    source_frames = torch.as_tensor(frames, dtype=torch.bfloat16) if as_bfloat16 else frames
     path = tmp_path / "output.mp4"
     original_fourcc = cv2.VideoWriter.fourcc
     written: list[np.ndarray] = []
@@ -181,12 +184,12 @@ def test_opencv_fallback_uses_fourcc_and_releases_writer(
         def release(self) -> None:
             closed.append(True)
 
-    monkeypatch.delattr(torchvision.io, "write_video")
+    monkeypatch.delattr(torchvision.io, "write_video", raising=False)
     monkeypatch.setattr(cv2, "VideoWriter", Writer)
     if fail_write:
         with pytest.raises(RuntimeError, match="write failed"):
-            video.write_video_torchvision(path, frames, 12)
+            video.write_video_torchvision(path, source_frames, 12)
     else:
-        video.write_video_torchvision(path, frames, 12)
+        video.write_video_torchvision(path, source_frames, 12)
         np.testing.assert_array_equal(np.stack(written), frames[..., ::-1])
     assert closed == [True]

@@ -1,12 +1,12 @@
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import torch
-from torch import Tensor
 import torch.nn as nn
+from torch import Tensor
+
+from worldfoundry.synthesis.visual_generation.diamond.utils import init_lstm
 
 from .blocks import Conv3x3, Downsample, ResBlocks
-from utils import init_lstm
 
 
 @dataclass
@@ -15,10 +15,10 @@ class RewEndModelConfig:
     img_channels: int
     img_size: int
     cond_channels: int
-    depths: List[int]
-    channels: List[int]
-    attn_depths: List[int]
-    num_actions: Optional[int] = None
+    depths: list[int]
+    channels: list[int]
+    attn_depths: list[int]
+    num_actions: int | None = None
 
 
 class RewEndModel(nn.Module):
@@ -41,8 +41,8 @@ class RewEndModel(nn.Module):
         obs: Tensor,
         act: Tensor,
         next_obs: Tensor,
-        hx_cx: Optional[Tuple[Tensor, Tensor]] = None,
-    ) -> Tuple[Tensor, Tensor, Tuple[Tensor, Tensor]]:
+        hx_cx: tuple[Tensor, Tensor] | None = None,
+    ) -> tuple[Tensor, Tensor, tuple[Tensor, Tensor]]:
         b, t, c, h, w = obs.shape
         obs, act, next_obs = obs.reshape(b * t, c, h, w), act.reshape(b * t), next_obs.reshape(b * t, c, h, w)
         x = self.encoder(torch.cat((obs, next_obs), dim=1), self.act_emb(act))
@@ -52,15 +52,14 @@ class RewEndModel(nn.Module):
         return logits[:, :, :-2], logits[:, :, -2:], hx_cx
 
 
-
 class RewEndEncoder(nn.Module):
     def __init__(
         self,
         in_channels: int,
         cond_channels: int,
-        depths: List[int],
-        channels: List[int],
-        attn_depths: List[int],
+        depths: list[int],
+        channels: list[int],
+        attn_depths: list[int],
     ) -> None:
         super().__init__()
         assert len(depths) == len(channels) == len(attn_depths)
@@ -90,7 +89,7 @@ class RewEndEncoder(nn.Module):
 
     def forward(self, x: Tensor, cond: Tensor) -> Tensor:
         x = self.conv_in(x)
-        for block, down in zip(self.blocks, self.downsamples):
+        for block, down in zip(self.blocks, self.downsamples, strict=False):
             x = down(x)
             x, _ = block(x, cond)
         return x

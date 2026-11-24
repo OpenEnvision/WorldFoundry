@@ -1,5 +1,3 @@
-"""Module for base_models -> llm_mllm_core -> mllm -> open_flamingo -> src -> utils.py functionality."""
-
 def extend_instance(obj, mixin):
     """Apply mixins to a class instance after creation"""
     base_cls = obj.__class__
@@ -33,26 +31,12 @@ def setattr_recursive(obj, att, val):
     setattr(obj, att.split(".")[-1], val)
 
 
-def apply_with_stopping_condition(
-    module, apply_fn, apply_condition=None, stopping_condition=None, **other_args
-):
-    """Apply with stopping condition.
-
-    Args:
-        module: The module.
-        apply_fn: The apply fn.
-        apply_condition: The apply condition.
-        stopping_condition: The stopping condition.
-    """
+def apply_with_stopping_condition(module, apply_fn, apply_condition=None, stopping_condition=None, **other_args):
     if stopping_condition(module):
         return
     if apply_condition(module):
         apply_fn(module, **other_args)
     for child in module.children():
         apply_with_stopping_condition(
-            child,
-            apply_fn,
-            apply_condition=apply_condition,
-            stopping_condition=stopping_condition,
-            **other_args
+            child, apply_fn, apply_condition=apply_condition, stopping_condition=stopping_condition, **other_args
         )

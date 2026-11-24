@@ -1,7 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import math
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import List, Sequence, Tuple, Union
 
 import cv2
 import mmcv
@@ -15,12 +15,12 @@ from mmdet.datasets.transforms import LoadAnnotations as MMDET_LoadAnnotations
 from mmdet.datasets.transforms import RandomAffine as MMDET_RandomAffine
 from mmdet.datasets.transforms import RandomFlip as MMDET_RandomFlip
 from mmdet.datasets.transforms import Resize as MMDET_Resize
-from mmdet.structures.bbox import (HorizontalBoxes, autocast_box_type,
-                                   get_box_type)
+from mmdet.structures.bbox import HorizontalBoxes, autocast_box_type, get_box_type
 from mmdet.structures.mask import PolygonMasks, polygon_to_bitmap
 from numpy import random
 
 from mmyolo.registry import TRANSFORMS
+
 from .keypoint_structure import Keypoints
 
 # TODO: Waiting for MMCV support
@@ -54,16 +54,12 @@ class YOLOv5KeepRatioResize(MMDET_Resize):
         scale (Union[int, Tuple[int, int]]): Images scales for resizing.
     """
 
-    def __init__(self,
-                 scale: Union[int, Tuple[int, int]],
-                 keep_ratio: bool = True,
-                 **kwargs):
+    def __init__(self, scale: int | tuple[int, int], keep_ratio: bool = True, **kwargs):
         assert keep_ratio is True
         super().__init__(scale=scale, keep_ratio=True, **kwargs)
 
     @staticmethod
-    def _get_rescale_ratio(old_size: Tuple[int, int],
-                           scale: Union[float, Tuple[int]]) -> float:
+    def _get_rescale_ratio(old_size: tuple[int, int], scale: float | tuple[int]) -> float:
         """Calculate the ratio for rescaling.
 
         Args:
@@ -80,16 +76,14 @@ class YOLOv5KeepRatioResize(MMDET_Resize):
         w, h = old_size
         if isinstance(scale, (float, int)):
             if scale <= 0:
-                raise ValueError(f'Invalid scale {scale}, must be positive.')
+                raise ValueError(f"Invalid scale {scale}, must be positive.")
             scale_factor = scale
         elif isinstance(scale, tuple):
             max_long_edge = max(scale)
             max_short_edge = min(scale)
-            scale_factor = min(max_long_edge / max(h, w),
-                               max_short_edge / min(h, w))
+            scale_factor = min(max_long_edge / max(h, w), max_short_edge / min(h, w))
         else:
-            raise TypeError('Scale must be a number or tuple of int, '
-                            f'but got {type(scale)}')
+            raise TypeError(f"Scale must be a number or tuple of int, but got {type(scale)}")
 
         return scale_factor
 
@@ -97,11 +91,10 @@ class YOLOv5KeepRatioResize(MMDET_Resize):
         """Resize images with ``results['scale']``."""
         assert self.keep_ratio is True
 
-        if results.get('img', None) is not None:
-            image = results['img']
+        if results.get("img") is not None:
+            image = results["img"]
             original_h, original_w = image.shape[:2]
-            ratio = self._get_rescale_ratio((original_h, original_w),
-                                            self.scale)
+            ratio = self._get_rescale_ratio((original_h, original_w), self.scale)
 
             if ratio != 1:
                 # resize image according to the shape
@@ -112,17 +105,18 @@ class YOLOv5KeepRatioResize(MMDET_Resize):
                 image = mmcv.imresize(
                     img=image,
                     size=(int(original_w * ratio), int(original_h * ratio)),
-                    interpolation='area' if ratio < 1 else 'bilinear',
-                    backend=self.backend)
+                    interpolation="area" if ratio < 1 else "bilinear",
+                    backend=self.backend,
+                )
 
             resized_h, resized_w = image.shape[:2]
             scale_ratio_h = resized_h / original_h
             scale_ratio_w = resized_w / original_w
             scale_factor = (scale_ratio_w, scale_ratio_h)
 
-            results['img'] = image
-            results['img_shape'] = image.shape[:2]
-            results['scale_factor'] = scale_factor
+            results["img"] = image
+            results["img_shape"] = image.shape[:2]
+            results["scale_factor"] = scale_factor
 
 
 @TRANSFORMS.register_module()
@@ -158,21 +152,22 @@ class LetterResize(MMDET_Resize):
             Default to False.
     """
 
-    def __init__(self,
-                 scale: Union[int, Tuple[int, int]],
-                 pad_val: dict = dict(img=0, mask=0, seg=255),
-                 use_mini_pad: bool = False,
-                 stretch_only: bool = False,
-                 allow_scale_up: bool = True,
-                 half_pad_param: bool = False,
-                 **kwargs):
+    def __init__(
+        self,
+        scale: int | tuple[int, int],
+        pad_val: dict = {"img": 0, "mask": 0, "seg": 255},  # noqa: B006 - Keeps the upstream default object and signature.
+        use_mini_pad: bool = False,
+        stretch_only: bool = False,
+        allow_scale_up: bool = True,
+        half_pad_param: bool = False,
+        **kwargs,
+    ):
         super().__init__(scale=scale, keep_ratio=True, **kwargs)
 
         self.pad_val = pad_val
         if isinstance(pad_val, (int, float)):
-            pad_val = dict(img=pad_val, seg=255)
-        assert isinstance(
-            pad_val, dict), f'pad_val must be dict, but got {type(pad_val)}'
+            pad_val = {"img": pad_val, "seg": 255}
+        assert isinstance(pad_val, dict), f"pad_val must be dict, but got {type(pad_val)}"
 
         self.use_mini_pad = use_mini_pad
         self.stretch_only = stretch_only
@@ -181,13 +176,13 @@ class LetterResize(MMDET_Resize):
 
     def _resize_img(self, results: dict):
         """Resize images with ``results['scale']``."""
-        image = results.get('img', None)
+        image = results.get("img")
         if image is None:
             return
 
         # Use batch_shape if a batch_shape policy is configured
-        if 'batch_shape' in results:
-            scale = tuple(results['batch_shape'])  # hw
+        if "batch_shape" in results:  # noqa: SIM108 - Branches carry per-case comments.
+            scale = tuple(results["batch_shape"])  # hw
         else:
             scale = self.scale[::-1]  # wh -> hw
 
@@ -203,13 +198,10 @@ class LetterResize(MMDET_Resize):
         ratio = [ratio, ratio]  # float -> (float, float) for (height, width)
 
         # compute the best size of the image
-        no_pad_shape = (int(round(image_shape[0] * ratio[0])),
-                        int(round(image_shape[1] * ratio[1])))
+        no_pad_shape = (int(round(image_shape[0] * ratio[0])), int(round(image_shape[1] * ratio[1])))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
         # padding height & width
-        padding_h, padding_w = [
-            scale[0] - no_pad_shape[0], scale[1] - no_pad_shape[1]
-        ]
+        padding_h, padding_w = [scale[0] - no_pad_shape[0], scale[1] - no_pad_shape[1]]
         if self.use_mini_pad:
             # minimum rectangle padding
             padding_w, padding_h = np.mod(padding_w, 32), np.mod(padding_h, 32)
@@ -218,115 +210,100 @@ class LetterResize(MMDET_Resize):
             # stretch to the specified size directly
             padding_h, padding_w = 0.0, 0.0
             no_pad_shape = (scale[0], scale[1])
-            ratio = [scale[0] / image_shape[0],
-                     scale[1] / image_shape[1]]  # height, width ratios
+            ratio = [scale[0] / image_shape[0], scale[1] / image_shape[1]]  # height, width ratios
 
         if image_shape != no_pad_shape:
             # compare with no resize and padding size
             image = mmcv.imresize(
-                image, (no_pad_shape[1], no_pad_shape[0]),
-                interpolation=self.interpolation,
-                backend=self.backend)
+                image, (no_pad_shape[1], no_pad_shape[0]), interpolation=self.interpolation, backend=self.backend
+            )
 
-        scale_factor = (no_pad_shape[1] / image_shape[1],
-                        no_pad_shape[0] / image_shape[0])
+        scale_factor = (no_pad_shape[1] / image_shape[1], no_pad_shape[0] / image_shape[0])
 
-        if 'scale_factor' in results:
-            results['scale_factor_origin'] = results['scale_factor']
-        results['scale_factor'] = scale_factor
+        if "scale_factor" in results:
+            results["scale_factor_origin"] = results["scale_factor"]
+        results["scale_factor"] = scale_factor
 
         # padding
-        top_padding, left_padding = int(round(padding_h // 2 - 0.1)), int(
-            round(padding_w // 2 - 0.1))
+        top_padding, left_padding = int(round(padding_h // 2 - 0.1)), int(round(padding_w // 2 - 0.1))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         bottom_padding = padding_h - top_padding
         right_padding = padding_w - left_padding
 
-        padding_list = [
-            top_padding, bottom_padding, left_padding, right_padding
-        ]
-        if top_padding != 0 or bottom_padding != 0 or \
-                left_padding != 0 or right_padding != 0:
-
-            pad_val = self.pad_val.get('img', 0)
+        padding_list = [top_padding, bottom_padding, left_padding, right_padding]
+        if top_padding != 0 or bottom_padding != 0 or left_padding != 0 or right_padding != 0:
+            pad_val = self.pad_val.get("img", 0)
             if isinstance(pad_val, int) and image.ndim == 3:
                 pad_val = tuple(pad_val for _ in range(image.shape[2]))
 
             image = mmcv.impad(
                 img=image,
-                padding=(padding_list[2], padding_list[0], padding_list[3],
-                         padding_list[1]),
+                padding=(padding_list[2], padding_list[0], padding_list[3], padding_list[1]),
                 pad_val=pad_val,
-                padding_mode='constant')
+                padding_mode="constant",
+            )
 
-        results['img'] = image
-        results['img_shape'] = image.shape
-        if 'pad_param' in results:
-            results['pad_param_origin'] = results['pad_param'] * \
-                                          np.repeat(ratio, 2)
+        results["img"] = image
+        results["img_shape"] = image.shape
+        if "pad_param" in results:
+            results["pad_param_origin"] = results["pad_param"] * np.repeat(ratio, 2)
 
         if self.half_pad_param:
-            results['pad_param'] = np.array(
-                [padding_h / 2, padding_h / 2, padding_w / 2, padding_w / 2],
-                dtype=np.float32)
+            results["pad_param"] = np.array(
+                [padding_h / 2, padding_h / 2, padding_w / 2, padding_w / 2], dtype=np.float32
+            )
         else:
             # We found in object detection, using padding list with
             # int type can get higher mAP.
-            results['pad_param'] = np.array(padding_list, dtype=np.float32)
+            results["pad_param"] = np.array(padding_list, dtype=np.float32)
 
     def _resize_masks(self, results: dict):
         """Resize masks with ``results['scale']``"""
-        if results.get('gt_masks', None) is None:
+        if results.get("gt_masks") is None:
             return
 
-        gt_masks = results['gt_masks']
-        assert isinstance(
-            gt_masks, PolygonMasks
-        ), f'Only supports PolygonMasks, but got {type(gt_masks)}'
+        gt_masks = results["gt_masks"]
+        assert isinstance(gt_masks, PolygonMasks), f"Only supports PolygonMasks, but got {type(gt_masks)}"
 
         # resize the gt_masks
-        gt_mask_h = results['gt_masks'].height * results['scale_factor'][1]
-        gt_mask_w = results['gt_masks'].width * results['scale_factor'][0]
-        gt_masks = results['gt_masks'].resize(
-            (int(round(gt_mask_h)), int(round(gt_mask_w))))
+        gt_mask_h = results["gt_masks"].height * results["scale_factor"][1]
+        gt_mask_w = results["gt_masks"].width * results["scale_factor"][0]
+        gt_masks = results["gt_masks"].resize((int(round(gt_mask_h)), int(round(gt_mask_w))))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
-        top_padding, _, left_padding, _ = results['pad_param']
+        top_padding, _, left_padding, _ = results["pad_param"]
         if int(left_padding) != 0:
             gt_masks = gt_masks.translate(
-                out_shape=results['img_shape'][:2],
-                offset=int(left_padding),
-                direction='horizontal')
+                out_shape=results["img_shape"][:2], offset=int(left_padding), direction="horizontal"
+            )
         if int(top_padding) != 0:
             gt_masks = gt_masks.translate(
-                out_shape=results['img_shape'][:2],
-                offset=int(top_padding),
-                direction='vertical')
-        results['gt_masks'] = gt_masks
+                out_shape=results["img_shape"][:2], offset=int(top_padding), direction="vertical"
+            )
+        results["gt_masks"] = gt_masks
 
     def _resize_bboxes(self, results: dict):
         """Resize bounding boxes with ``results['scale_factor']``."""
-        if results.get('gt_bboxes', None) is None:
+        if results.get("gt_bboxes") is None:
             return
-        results['gt_bboxes'].rescale_(results['scale_factor'])
+        results["gt_bboxes"].rescale_(results["scale_factor"])
 
-        if len(results['pad_param']) != 4:
+        if len(results["pad_param"]) != 4:
             return
-        results['gt_bboxes'].translate_(
-            (results['pad_param'][2], results['pad_param'][0]))
+        results["gt_bboxes"].translate_((results["pad_param"][2], results["pad_param"][0]))
 
         if self.clip_object_border:
-            results['gt_bboxes'].clip_(results['img_shape'])
+            results["gt_bboxes"].clip_(results["img_shape"])
 
     def transform(self, results: dict) -> dict:
         results = super().transform(results)
-        if 'scale_factor_origin' in results:
-            scale_factor_origin = results.pop('scale_factor_origin')
-            results['scale_factor'] = (results['scale_factor'][0] *
-                                       scale_factor_origin[0],
-                                       results['scale_factor'][1] *
-                                       scale_factor_origin[1])
-        if 'pad_param_origin' in results:
-            pad_param_origin = results.pop('pad_param_origin')
-            results['pad_param'] += pad_param_origin
+        if "scale_factor_origin" in results:
+            scale_factor_origin = results.pop("scale_factor_origin")
+            results["scale_factor"] = (
+                results["scale_factor"][0] * scale_factor_origin[0],
+                results["scale_factor"][1] * scale_factor_origin[1],
+            )
+        if "pad_param_origin" in results:
+            pad_param_origin = results.pop("pad_param_origin")
+            results["pad_param"] += pad_param_origin
         return results
 
 
@@ -349,10 +326,12 @@ class YOLOv5HSVRandomAug(BaseTransform):
         value_delta ([int, float]): delta of value. Defaults to 0.4.
     """
 
-    def __init__(self,
-                 hue_delta: Union[int, float] = 0.015,
-                 saturation_delta: Union[int, float] = 0.7,
-                 value_delta: Union[int, float] = 0.4):
+    def __init__(
+        self,
+        hue_delta: int | float = 0.015,
+        saturation_delta: int | float = 0.7,
+        value_delta: int | float = 0.4,
+    ):
         self.hue_delta = hue_delta
         self.saturation_delta = saturation_delta
         self.value_delta = value_delta
@@ -366,28 +345,23 @@ class YOLOv5HSVRandomAug(BaseTransform):
         Returns:
             dict: The result dict.
         """
-        hsv_gains = \
-            random.uniform(-1, 1, 3) * \
-            [self.hue_delta, self.saturation_delta, self.value_delta] + 1
-        hue, sat, val = cv2.split(
-            cv2.cvtColor(results['img'], cv2.COLOR_BGR2HSV))
+        hsv_gains = random.uniform(-1, 1, 3) * [self.hue_delta, self.saturation_delta, self.value_delta] + 1
+        hue, sat, val = cv2.split(cv2.cvtColor(results["img"], cv2.COLOR_BGR2HSV))
 
         table_list = np.arange(0, 256, dtype=hsv_gains.dtype)
         lut_hue = ((table_list * hsv_gains[0]) % 180).astype(np.uint8)
         lut_sat = np.clip(table_list * hsv_gains[1], 0, 255).astype(np.uint8)
         lut_val = np.clip(table_list * hsv_gains[2], 0, 255).astype(np.uint8)
 
-        im_hsv = cv2.merge(
-            (cv2.LUT(hue, lut_hue), cv2.LUT(sat,
-                                            lut_sat), cv2.LUT(val, lut_val)))
-        results['img'] = cv2.cvtColor(im_hsv, cv2.COLOR_HSV2BGR)
+        im_hsv = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val)))
+        results["img"] = cv2.cvtColor(im_hsv, cv2.COLOR_HSV2BGR)
         return results
 
     def __repr__(self) -> str:
         repr_str = self.__class__.__name__
-        repr_str += f'(hue_delta={self.hue_delta}, '
-        repr_str += f'saturation_delta={self.saturation_delta}, '
-        repr_str += f'value_delta={self.value_delta})'
+        repr_str += f"(hue_delta={self.hue_delta}, "
+        repr_str += f"saturation_delta={self.saturation_delta}, "
+        repr_str += f"value_delta={self.value_delta})"
         return repr_str
 
 
@@ -408,19 +382,13 @@ class LoadAnnotations(MMDET_LoadAnnotations):
             multiple polygons. Defaults to True.
     """
 
-    def __init__(self,
-                 mask2bbox: bool = False,
-                 poly2mask: bool = False,
-                 merge_polygons: bool = True,
-                 **kwargs):
+    def __init__(self, mask2bbox: bool = False, poly2mask: bool = False, merge_polygons: bool = True, **kwargs):
         self.mask2bbox = mask2bbox
         self.merge_polygons = merge_polygons
-        assert not poly2mask, 'Does not support BitmapMasks considering ' \
-                              'that bitmap consumes more memory.'
+        assert not poly2mask, "Does not support BitmapMasks considering that bitmap consumes more memory."
         super().__init__(poly2mask=poly2mask, **kwargs)
         if self.mask2bbox:
-            assert self.with_mask, 'Using mask2bbox requires ' \
-                                   'with_mask is True.'
+            assert self.with_mask, "Using mask2bbox requires with_mask is True."
         self._mask_ignore_flag = None
 
     def transform(self, results: dict) -> dict:
@@ -438,33 +406,28 @@ class LoadAnnotations(MMDET_LoadAnnotations):
             if self.with_label:
                 self._load_labels(results)
                 self._update_mask_ignore_data(results)
-            gt_bboxes = results['gt_masks'].get_bboxes(dst_type='hbox')
-            results['gt_bboxes'] = gt_bboxes
+            gt_bboxes = results["gt_masks"].get_bboxes(dst_type="hbox")
+            results["gt_bboxes"] = gt_bboxes
         elif self.with_keypoints:
             self._load_kps(results)
             _, box_type_cls = get_box_type(self.box_type)
-            results['gt_bboxes'] = box_type_cls(
-                results.get('bbox', []), dtype=torch.float32)
+            results["gt_bboxes"] = box_type_cls(results.get("bbox", []), dtype=torch.float32)
         else:
             results = super().transform(results)
             self._update_mask_ignore_data(results)
         return results
 
     def _update_mask_ignore_data(self, results: dict) -> None:
-        if 'gt_masks' not in results:
+        if "gt_masks" not in results:
             return
 
-        if 'gt_bboxes_labels' in results and len(
-                results['gt_bboxes_labels']) != len(results['gt_masks']):
-            assert len(results['gt_bboxes_labels']) == len(
-                self._mask_ignore_flag)
-            results['gt_bboxes_labels'] = results['gt_bboxes_labels'][
-                self._mask_ignore_flag]
+        if "gt_bboxes_labels" in results and len(results["gt_bboxes_labels"]) != len(results["gt_masks"]):
+            assert len(results["gt_bboxes_labels"]) == len(self._mask_ignore_flag)
+            results["gt_bboxes_labels"] = results["gt_bboxes_labels"][self._mask_ignore_flag]
 
-        if 'gt_bboxes' in results and len(results['gt_bboxes']) != len(
-                results['gt_masks']):
-            assert len(results['gt_bboxes']) == len(self._mask_ignore_flag)
-            results['gt_bboxes'] = results['gt_bboxes'][self._mask_ignore_flag]
+        if "gt_bboxes" in results and len(results["gt_bboxes"]) != len(results["gt_masks"]):
+            assert len(results["gt_bboxes"]) == len(self._mask_ignore_flag)
+            results["gt_bboxes"] = results["gt_bboxes"][self._mask_ignore_flag]
 
     def _load_bboxes(self, results: dict):
         """Private function to load bounding box annotations.
@@ -477,18 +440,17 @@ class LoadAnnotations(MMDET_LoadAnnotations):
         """
         gt_bboxes = []
         gt_ignore_flags = []
-        for instance in results.get('instances', []):
-            if instance['ignore_flag'] == 0:
-                gt_bboxes.append(instance['bbox'])
-                gt_ignore_flags.append(instance['ignore_flag'])
-        results['gt_ignore_flags'] = np.array(gt_ignore_flags, dtype=bool)
+        for instance in results.get("instances", []):
+            if instance["ignore_flag"] == 0:
+                gt_bboxes.append(instance["bbox"])
+                gt_ignore_flags.append(instance["ignore_flag"])
+        results["gt_ignore_flags"] = np.array(gt_ignore_flags, dtype=bool)
 
         if self.box_type is None:
-            results['gt_bboxes'] = np.array(
-                gt_bboxes, dtype=np.float32).reshape((-1, 4))
+            results["gt_bboxes"] = np.array(gt_bboxes, dtype=np.float32).reshape((-1, 4))
         else:
             _, box_type_cls = get_box_type(self.box_type)
-            results['gt_bboxes'] = box_type_cls(gt_bboxes, dtype=torch.float32)
+            results["gt_bboxes"] = box_type_cls(gt_bboxes, dtype=torch.float32)
 
     def _load_labels(self, results: dict):
         """Private function to load label annotations.
@@ -500,11 +462,10 @@ class LoadAnnotations(MMDET_LoadAnnotations):
             dict: The dict contains loaded label annotations.
         """
         gt_bboxes_labels = []
-        for instance in results.get('instances', []):
-            if instance['ignore_flag'] == 0:
-                gt_bboxes_labels.append(instance['bbox_label'])
-        results['gt_bboxes_labels'] = np.array(
-            gt_bboxes_labels, dtype=np.int64)
+        for instance in results.get("instances", []):
+            if instance["ignore_flag"] == 0:
+                gt_bboxes_labels.append(instance["bbox_label"])
+        results["gt_bboxes_labels"] = np.array(gt_bboxes_labels, dtype=np.int64)
 
     def _load_masks(self, results: dict) -> None:
         """Private function to load mask annotations.
@@ -515,14 +476,13 @@ class LoadAnnotations(MMDET_LoadAnnotations):
         gt_masks = []
         gt_ignore_flags = []
         self._mask_ignore_flag = []
-        for instance in results.get('instances', []):
-            if instance['ignore_flag'] == 0:
-                if 'mask' in instance:
-                    gt_mask = instance['mask']
+        for instance in results.get("instances", []):
+            if instance["ignore_flag"] == 0:
+                if "mask" in instance:
+                    gt_mask = instance["mask"]
                     if isinstance(gt_mask, list):
                         gt_mask = [
-                            np.array(polygon) for polygon in gt_mask
-                            if len(polygon) % 2 == 0 and len(polygon) >= 6
+                            np.array(polygon) for polygon in gt_mask if len(polygon) % 2 == 0 and len(polygon) >= 6
                         ]
                         if len(gt_mask) == 0:
                             # ignore
@@ -531,25 +491,22 @@ class LoadAnnotations(MMDET_LoadAnnotations):
                             if len(gt_mask) > 1 and self.merge_polygons:
                                 gt_mask = self.merge_multi_segment(gt_mask)
                             gt_masks.append(gt_mask)
-                            gt_ignore_flags.append(instance['ignore_flag'])
+                            gt_ignore_flags.append(instance["ignore_flag"])
                             self._mask_ignore_flag.append(1)
                     else:
-                        raise NotImplementedError(
-                            'Only supports mask annotations in polygon '
-                            'format currently')
+                        raise NotImplementedError("Only supports mask annotations in polygon format currently")
                 else:
                     # TODO: Actually, gt with bbox and without mask needs
                     #  to be retained
                     self._mask_ignore_flag.append(0)
         self._mask_ignore_flag = np.array(self._mask_ignore_flag, dtype=bool)
-        results['gt_ignore_flags'] = np.array(gt_ignore_flags, dtype=bool)
+        results["gt_ignore_flags"] = np.array(gt_ignore_flags, dtype=bool)
 
-        h, w = results['ori_shape']
-        gt_masks = PolygonMasks([mask for mask in gt_masks], h, w)
-        results['gt_masks'] = gt_masks
+        h, w = results["ori_shape"]
+        gt_masks = PolygonMasks(list(gt_masks), h, w)
+        results["gt_masks"] = gt_masks
 
-    def merge_multi_segment(self,
-                            gt_masks: List[np.ndarray]) -> List[np.ndarray]:
+    def merge_multi_segment(self, gt_masks: list[np.ndarray]) -> list[np.ndarray]:
         """Merge multi segments to one list.
 
         Find the coordinates with min distance between each segment,
@@ -587,8 +544,7 @@ class LoadAnnotations(MMDET_LoadAnnotations):
                         segments[i] = segments[i][::-1, :]
                     # add the idx[0] point for connect next segment
                     segments[i] = np.roll(segments[i], -idx[0], axis=0)
-                    segments[i] = np.concatenate(
-                        [segments[i], segments[i][:1]])
+                    segments[i] = np.concatenate([segments[i], segments[i][:1]])
                     # deal with the first segment and the last one
                     if i in [0, len(idx_list) - 1]:
                         s.append(segments[i])
@@ -597,7 +553,7 @@ class LoadAnnotations(MMDET_LoadAnnotations):
                     # are appended.
                     else:
                         idx = [0, idx[1] - idx[0]]
-                        s.append(segments[i][idx[0]:idx[1] + 1])
+                        s.append(segments[i][idx[0] : idx[1] + 1])
             # forward second round
             else:
                 for i in range(len(idx_list) - 1, -1, -1):
@@ -607,9 +563,13 @@ class LoadAnnotations(MMDET_LoadAnnotations):
                         idx = idx_list[i]
                         nidx = abs(idx[1] - idx[0])
                         s.append(segments[i][nidx:])
-        return [np.concatenate(s).reshape(-1, )]
+        return [
+            np.concatenate(s).reshape(
+                -1,
+            )
+        ]
 
-    def min_index(self, arr1: np.ndarray, arr2: np.ndarray) -> Tuple[int, int]:
+    def min_index(self, arr1: np.ndarray, arr2: np.ndarray) -> tuple[int, int]:
         """Find a pair of indexes with the shortest distance.
 
         Args:
@@ -618,7 +578,7 @@ class LoadAnnotations(MMDET_LoadAnnotations):
         Return:
             tuple: a pair of indexes.
         """
-        dis = ((arr1[:, None, :] - arr2[None, :, :])**2).sum(-1)
+        dis = ((arr1[:, None, :] - arr2[None, :, :]) ** 2).sum(-1)
         return np.unravel_index(np.argmin(dis, axis=None), dis.shape)
 
     def _load_kps(self, results: dict) -> None:
@@ -631,36 +591,34 @@ class LoadAnnotations(MMDET_LoadAnnotations):
         Returns:
             dict: The dict contains loaded keypoints annotations.
         """
-        results['height'] = results['img_shape'][0]
-        results['width'] = results['img_shape'][1]
-        num_instances = len(results.get('bbox', []))
+        results["height"] = results["img_shape"][0]
+        results["width"] = results["img_shape"][1]
+        num_instances = len(results.get("bbox", []))
 
         if num_instances == 0:
-            results['keypoints'] = np.empty(
-                (0, len(results['flip_indices']), 2), dtype=np.float32)
-            results['keypoints_visible'] = np.empty(
-                (0, len(results['flip_indices'])), dtype=np.int32)
-            results['category_id'] = []
+            results["keypoints"] = np.empty((0, len(results["flip_indices"]), 2), dtype=np.float32)
+            results["keypoints_visible"] = np.empty((0, len(results["flip_indices"])), dtype=np.int32)
+            results["category_id"] = []
 
-        results['gt_keypoints'] = Keypoints(
-            keypoints=results['keypoints'],
-            keypoints_visible=results['keypoints_visible'],
-            flip_indices=results['flip_indices'],
+        results["gt_keypoints"] = Keypoints(
+            keypoints=results["keypoints"],
+            keypoints_visible=results["keypoints_visible"],
+            flip_indices=results["flip_indices"],
         )
 
-        results['gt_ignore_flags'] = np.array([False] * num_instances)
-        results['gt_bboxes_labels'] = np.array(results['category_id']) - 1
+        results["gt_ignore_flags"] = np.array([False] * num_instances)
+        results["gt_bboxes_labels"] = np.array(results["category_id"]) - 1
 
     def __repr__(self) -> str:
         repr_str = self.__class__.__name__
-        repr_str += f'(with_bbox={self.with_bbox}, '
-        repr_str += f'with_label={self.with_label}, '
-        repr_str += f'with_mask={self.with_mask}, '
-        repr_str += f'with_seg={self.with_seg}, '
-        repr_str += f'mask2bbox={self.mask2bbox}, '
-        repr_str += f'poly2mask={self.poly2mask}, '
+        repr_str += f"(with_bbox={self.with_bbox}, "
+        repr_str += f"with_label={self.with_label}, "
+        repr_str += f"with_mask={self.with_mask}, "
+        repr_str += f"with_seg={self.with_seg}, "
+        repr_str += f"mask2bbox={self.mask2bbox}, "
+        repr_str += f"poly2mask={self.poly2mask}, "
         repr_str += f"imdecode_backend='{self.imdecode_backend}', "
-        repr_str += f'backend_args={self.backend_args})'
+        repr_str += f"backend_args={self.backend_args})"
         return repr_str
 
 
@@ -726,19 +684,21 @@ class YOLOv5RandomAffine(BaseTransform):
         resample_num (int): Number of poly to resample to.
     """
 
-    def __init__(self,
-                 max_rotate_degree: float = 10.0,
-                 max_translate_ratio: float = 0.1,
-                 scaling_ratio_range: Tuple[float, float] = (0.5, 1.5),
-                 max_shear_degree: float = 2.0,
-                 border: Tuple[int, int] = (0, 0),
-                 border_val: Tuple[int, int, int] = (114, 114, 114),
-                 bbox_clip_border: bool = True,
-                 min_bbox_size: int = 2,
-                 min_area_ratio: float = 0.1,
-                 use_mask_refine: bool = False,
-                 max_aspect_ratio: float = 20.,
-                 resample_num: int = 1000):
+    def __init__(
+        self,
+        max_rotate_degree: float = 10.0,
+        max_translate_ratio: float = 0.1,
+        scaling_ratio_range: tuple[float, float] = (0.5, 1.5),
+        max_shear_degree: float = 2.0,
+        border: tuple[int, int] = (0, 0),
+        border_val: tuple[int, int, int] = (114, 114, 114),
+        bbox_clip_border: bool = True,
+        min_bbox_size: int = 2,
+        min_area_ratio: float = 0.1,
+        use_mask_refine: bool = False,
+        max_aspect_ratio: float = 20.0,
+        resample_num: int = 1000,
+    ):
         assert 0 <= max_translate_ratio <= 1
         assert scaling_ratio_range[0] <= scaling_ratio_range[1]
         assert scaling_ratio_range[0] > 0
@@ -766,7 +726,7 @@ class YOLOv5RandomAffine(BaseTransform):
         Returns:
             dict: The result dict.
         """
-        img = results['img']
+        img = results["img"]
         # self.border is wh format
         height = img.shape[0] + self.border[1] * 2
         width = img.shape[1] + self.border[0] * 2
@@ -776,42 +736,35 @@ class YOLOv5RandomAffine(BaseTransform):
         center_matrix[0, 2] = -img.shape[1] / 2
         center_matrix[1, 2] = -img.shape[0] / 2
 
-        warp_matrix, scaling_ratio = self._get_random_homography_matrix(
-            height, width)
+        warp_matrix, scaling_ratio = self._get_random_homography_matrix(height, width)
         warp_matrix = warp_matrix @ center_matrix
 
-        img = cv2.warpPerspective(
-            img,
-            warp_matrix,
-            dsize=(width, height),
-            borderValue=self.border_val)
-        results['img'] = img
-        results['img_shape'] = img.shape
+        img = cv2.warpPerspective(img, warp_matrix, dsize=(width, height), borderValue=self.border_val)
+        results["img"] = img
+        results["img_shape"] = img.shape
         img_h, img_w = img.shape[:2]
 
-        bboxes = results['gt_bboxes']
+        bboxes = results["gt_bboxes"]
         num_bboxes = len(bboxes)
         if num_bboxes:
             orig_bboxes = bboxes.clone()
             orig_bboxes.rescale_([scaling_ratio, scaling_ratio])
-            if 'gt_masks' in results:
+            if "gt_masks" in results:
                 # If the dataset has annotations of mask,
                 # the mask will be used to refine bbox.
-                gt_masks = results['gt_masks']
+                gt_masks = results["gt_masks"]
 
                 gt_masks_resample = self.resample_masks(gt_masks)
-                gt_masks = self.warp_mask(gt_masks_resample, warp_matrix,
-                                          img_h, img_w)
+                gt_masks = self.warp_mask(gt_masks_resample, warp_matrix, img_h, img_w)
 
                 # refine bboxes by masks
                 bboxes = self.segment2box(gt_masks, height, width)
                 # filter bboxes outside image
-                valid_index = self.filter_gt_bboxes(orig_bboxes,
-                                                    bboxes).numpy()
+                valid_index = self.filter_gt_bboxes(orig_bboxes, bboxes).numpy()
                 if self.bbox_clip_border:
                     bboxes.clip_([height - 1e-3, width - 1e-3])
                     gt_masks = self.clip_polygons(gt_masks, height, width)
-                results['gt_masks'] = gt_masks[valid_index]
+                results["gt_masks"] = gt_masks[valid_index]
             else:
                 bboxes.project_(warp_matrix)
                 if self.bbox_clip_border:
@@ -820,22 +773,18 @@ class YOLOv5RandomAffine(BaseTransform):
                 # filter bboxes
                 # Be careful: valid_index must convert to numpy,
                 # otherwise it will raise out of bounds when len(valid_index)=1
-                valid_index = self.filter_gt_bboxes(orig_bboxes,
-                                                    bboxes).numpy()
+                valid_index = self.filter_gt_bboxes(orig_bboxes, bboxes).numpy()
 
-            results['gt_bboxes'] = bboxes[valid_index]
-            results['gt_bboxes_labels'] = results['gt_bboxes_labels'][
-                valid_index]
-            results['gt_ignore_flags'] = results['gt_ignore_flags'][
-                valid_index]
+            results["gt_bboxes"] = bboxes[valid_index]
+            results["gt_bboxes_labels"] = results["gt_bboxes_labels"][valid_index]
+            results["gt_ignore_flags"] = results["gt_ignore_flags"][valid_index]
         else:
-            if 'gt_masks' in results:
-                results['gt_masks'] = PolygonMasks([], img_h, img_w)
+            if "gt_masks" in results:
+                results["gt_masks"] = PolygonMasks([], img_h, img_w)
 
         return results
 
-    def segment2box(self, gt_masks: PolygonMasks, height: int,
-                    width: int) -> HorizontalBoxes:
+    def segment2box(self, gt_masks: PolygonMasks, height: int, width: int) -> HorizontalBoxes:
         """
         Convert 1 segment label to 1 box label, applying inside-image
         constraint i.e. (xy1, xy2, ...) to (xyxy)
@@ -864,17 +813,13 @@ class YOLOv5RandomAffine(BaseTransform):
 
                 xy_min = np.minimum(xy_min, np.min(xy, axis=0))
                 xy_max = np.maximum(xy_max, np.max(xy, axis=0))
-            if xy_max[0] == -1:
-                bbox = np.zeros(4, dtype=np.float32)
-            else:
-                bbox = np.concatenate([xy_min, xy_max], axis=0)
+            bbox = np.zeros(4, dtype=np.float32) if xy_max[0] == -1 else np.concatenate([xy_min, xy_max], axis=0)
             bboxes.append(bbox)
 
         return HorizontalBoxes(np.stack(bboxes, axis=0))
 
     # TODO: Move to mmdet
-    def clip_polygons(self, gt_masks: PolygonMasks, height: int,
-                      width: int) -> PolygonMasks:
+    def clip_polygons(self, gt_masks: PolygonMasks, height: int, width: int) -> PolygonMasks:
         """Function to clip points of polygons with height and width.
 
         Args:
@@ -901,8 +846,7 @@ class YOLOv5RandomAffine(BaseTransform):
         return clipped_masks
 
     @staticmethod
-    def warp_poly(poly: np.ndarray, warp_matrix: np.ndarray, img_w: int,
-                  img_h: int) -> np.ndarray:
+    def warp_poly(poly: np.ndarray, warp_matrix: np.ndarray, img_w: int, img_h: int) -> np.ndarray:
         """Function to warp one mask and filter points outside image.
 
         Args:
@@ -917,17 +861,14 @@ class YOLOv5RandomAffine(BaseTransform):
         #  semantic segmentation training, which is same as official
         #  implementation.
         poly = poly.reshape((-1, 2))
-        poly = np.concatenate((poly, np.ones(
-            (len(poly), 1), dtype=poly.dtype)),
-                              axis=-1)
+        poly = np.concatenate((poly, np.ones((len(poly), 1), dtype=poly.dtype)), axis=-1)
         # transform poly
         poly = poly @ warp_matrix.T
         poly = poly[:, :2] / poly[:, 2:3]
 
         return poly.reshape(-1)
 
-    def warp_mask(self, gt_masks: PolygonMasks, warp_matrix: np.ndarray,
-                  img_w: int, img_h: int) -> PolygonMasks:
+    def warp_mask(self, gt_masks: PolygonMasks, warp_matrix: np.ndarray, img_w: int, img_h: int) -> PolygonMasks:
         """Warp masks by warp_matrix and retain masks inside image after
         warping.
 
@@ -955,9 +896,7 @@ class YOLOv5RandomAffine(BaseTransform):
             # add [0, 0, 0, 0, 0, 0,] here.
             if not warpped_poly_per_obj:
                 # This will be filtered in function `filter_gt_bboxes`.
-                warpped_poly_per_obj = [
-                    np.zeros(6, dtype=poly_per_obj[0].dtype)
-                ]
+                warpped_poly_per_obj = [np.zeros(6, dtype=poly_per_obj[0].dtype)]
             new_masks.append(warpped_poly_per_obj)
 
         gt_masks = PolygonMasks(new_masks, img_h, img_w)
@@ -979,21 +918,13 @@ class YOLOv5RandomAffine(BaseTransform):
                 poly = np.concatenate((poly, poly[0:1, :]), axis=0)
                 x = np.linspace(0, len(poly) - 1, self.resample_num)
                 xp = np.arange(len(poly))
-                poly = np.concatenate([
-                    np.interp(x, xp, poly[:, i]) for i in range(2)
-                ]).reshape(2, -1).T.reshape(-1)
+                poly = np.concatenate([np.interp(x, xp, poly[:, i]) for i in range(2)]).reshape(2, -1).T.reshape(-1)
                 resample_poly_per_obj.append(poly)
             new_masks.append(resample_poly_per_obj)
         return PolygonMasks(new_masks, gt_masks.height, gt_masks.width)
 
-    def filter_gt_bboxes(self, origin_bboxes: HorizontalBoxes,
-                         wrapped_bboxes: HorizontalBoxes) -> torch.Tensor:
-        """Filter gt bboxes.
-
-        Args:
-            origin_bboxes (HorizontalBoxes): Origin bboxes.
-            wrapped_bboxes (HorizontalBoxes): Wrapped bboxes
-
+    def filter_gt_bboxes(self, origin_bboxes: HorizontalBoxes, wrapped_bboxes: HorizontalBoxes) -> torch.Tensor:
+        """
         Returns:
             dict: The result dict.
         """
@@ -1001,21 +932,16 @@ class YOLOv5RandomAffine(BaseTransform):
         origin_h = origin_bboxes.heights
         wrapped_w = wrapped_bboxes.widths
         wrapped_h = wrapped_bboxes.heights
-        aspect_ratio = np.maximum(wrapped_w / (wrapped_h + 1e-16),
-                                  wrapped_h / (wrapped_w + 1e-16))
+        aspect_ratio = np.maximum(wrapped_w / (wrapped_h + 1e-16), wrapped_h / (wrapped_w + 1e-16))
 
-        wh_valid_idx = (wrapped_w > self.min_bbox_size) & \
-                       (wrapped_h > self.min_bbox_size)
-        area_valid_idx = wrapped_w * wrapped_h / (origin_w * origin_h +
-                                                  1e-16) > self.min_area_ratio
+        wh_valid_idx = (wrapped_w > self.min_bbox_size) & (wrapped_h > self.min_bbox_size)
+        area_valid_idx = wrapped_w * wrapped_h / (origin_w * origin_h + 1e-16) > self.min_area_ratio
         aspect_ratio_valid_idx = aspect_ratio < self.max_aspect_ratio
         return wh_valid_idx & area_valid_idx & aspect_ratio_valid_idx
 
     @cache_randomness
-    def _get_random_homography_matrix(self, height: int,
-                                      width: int) -> Tuple[np.ndarray, float]:
-        """Get random homography matrix.
-
+    def _get_random_homography_matrix(self, height: int, width: int) -> tuple[np.ndarray, float]:
+        """
         Args:
             height (int): Image height.
             width (int): Image width.
@@ -1025,87 +951,63 @@ class YOLOv5RandomAffine(BaseTransform):
             scaling_ratio.
         """
         # Rotation
-        rotation_degree = random.uniform(-self.max_rotate_degree,
-                                         self.max_rotate_degree)
+        rotation_degree = random.uniform(-self.max_rotate_degree, self.max_rotate_degree)
         rotation_matrix = self._get_rotation_matrix(rotation_degree)
 
         # Scaling
-        scaling_ratio = random.uniform(self.scaling_ratio_range[0],
-                                       self.scaling_ratio_range[1])
+        scaling_ratio = random.uniform(self.scaling_ratio_range[0], self.scaling_ratio_range[1])
         scaling_matrix = self._get_scaling_matrix(scaling_ratio)
 
         # Shear
-        x_degree = random.uniform(-self.max_shear_degree,
-                                  self.max_shear_degree)
-        y_degree = random.uniform(-self.max_shear_degree,
-                                  self.max_shear_degree)
+        x_degree = random.uniform(-self.max_shear_degree, self.max_shear_degree)
+        y_degree = random.uniform(-self.max_shear_degree, self.max_shear_degree)
         shear_matrix = self._get_shear_matrix(x_degree, y_degree)
 
         # Translation
-        trans_x = random.uniform(0.5 - self.max_translate_ratio,
-                                 0.5 + self.max_translate_ratio) * width
-        trans_y = random.uniform(0.5 - self.max_translate_ratio,
-                                 0.5 + self.max_translate_ratio) * height
+        trans_x = random.uniform(0.5 - self.max_translate_ratio, 0.5 + self.max_translate_ratio) * width
+        trans_y = random.uniform(0.5 - self.max_translate_ratio, 0.5 + self.max_translate_ratio) * height
         translate_matrix = self._get_translation_matrix(trans_x, trans_y)
-        warp_matrix = (
-            translate_matrix @ shear_matrix @ rotation_matrix @ scaling_matrix)
+        warp_matrix = translate_matrix @ shear_matrix @ rotation_matrix @ scaling_matrix
         return warp_matrix, scaling_ratio
 
     @staticmethod
     def _get_rotation_matrix(rotate_degrees: float) -> np.ndarray:
-        """Get rotation matrix.
-
-        Args:
-            rotate_degrees (float): Rotate degrees.
-
+        """
         Returns:
             np.ndarray: The rotation matrix.
         """
         radian = math.radians(rotate_degrees)
         rotation_matrix = np.array(
-            [[np.cos(radian), -np.sin(radian), 0.],
-             [np.sin(radian), np.cos(radian), 0.], [0., 0., 1.]],
-            dtype=np.float32)
+            [[np.cos(radian), -np.sin(radian), 0.0], [np.sin(radian), np.cos(radian), 0.0], [0.0, 0.0, 1.0]],
+            dtype=np.float32,
+        )
         return rotation_matrix
 
     @staticmethod
     def _get_scaling_matrix(scale_ratio: float) -> np.ndarray:
-        """Get scaling matrix.
-
-        Args:
-            scale_ratio (float): Scale ratio.
-
+        """
         Returns:
             np.ndarray: The scaling matrix.
         """
-        scaling_matrix = np.array(
-            [[scale_ratio, 0., 0.], [0., scale_ratio, 0.], [0., 0., 1.]],
-            dtype=np.float32)
+        scaling_matrix = np.array([[scale_ratio, 0.0, 0.0], [0.0, scale_ratio, 0.0], [0.0, 0.0, 1.0]], dtype=np.float32)
         return scaling_matrix
 
     @staticmethod
-    def _get_shear_matrix(x_shear_degrees: float,
-                          y_shear_degrees: float) -> np.ndarray:
-        """Get shear matrix.
-
-        Args:
-            x_shear_degrees (float): X shear degrees.
-            y_shear_degrees (float): Y shear degrees.
-
+    def _get_shear_matrix(x_shear_degrees: float, y_shear_degrees: float) -> np.ndarray:
+        """
         Returns:
             np.ndarray: The shear matrix.
         """
         x_radian = math.radians(x_shear_degrees)
         y_radian = math.radians(y_shear_degrees)
-        shear_matrix = np.array([[1, np.tan(x_radian), 0.],
-                                 [np.tan(y_radian), 1, 0.], [0., 0., 1.]],
-                                dtype=np.float32)
+        shear_matrix = np.array(
+            [[1, np.tan(x_radian), 0.0], [np.tan(y_radian), 1, 0.0], [0.0, 0.0, 1.0]], dtype=np.float32
+        )
         return shear_matrix
 
     @staticmethod
     def _get_translation_matrix(x: float, y: float) -> np.ndarray:
-        """Get translation matrix.
-
+        """
         Args:
             x (float): X translation.
             y (float): Y translation.
@@ -1113,19 +1015,18 @@ class YOLOv5RandomAffine(BaseTransform):
         Returns:
             np.ndarray: The translation matrix.
         """
-        translation_matrix = np.array([[1, 0., x], [0., 1, y], [0., 0., 1.]],
-                                      dtype=np.float32)
+        translation_matrix = np.array([[1, 0.0, x], [0.0, 1, y], [0.0, 0.0, 1.0]], dtype=np.float32)
         return translation_matrix
 
     def __repr__(self) -> str:
         repr_str = self.__class__.__name__
-        repr_str += f'(max_rotate_degree={self.max_rotate_degree}, '
-        repr_str += f'max_translate_ratio={self.max_translate_ratio}, '
-        repr_str += f'scaling_ratio_range={self.scaling_ratio_range}, '
-        repr_str += f'max_shear_degree={self.max_shear_degree}, '
-        repr_str += f'border={self.border}, '
-        repr_str += f'border_val={self.border_val}, '
-        repr_str += f'bbox_clip_border={self.bbox_clip_border})'
+        repr_str += f"(max_rotate_degree={self.max_rotate_degree}, "
+        repr_str += f"max_translate_ratio={self.max_translate_ratio}, "
+        repr_str += f"scaling_ratio_range={self.scaling_ratio_range}, "
+        repr_str += f"max_shear_degree={self.max_shear_degree}, "
+        repr_str += f"border={self.border}, "
+        repr_str += f"border_val={self.border_val}, "
+        repr_str += f"bbox_clip_border={self.bbox_clip_border})"
         return repr_str
 
 
@@ -1154,81 +1055,73 @@ class PPYOLOERandomDistort(BaseTransform):
             to 4.
     """
 
-    def __init__(self,
-                 hue_cfg: dict = dict(min=-18, max=18, prob=0.5),
-                 saturation_cfg: dict = dict(min=0.5, max=1.5, prob=0.5),
-                 contrast_cfg: dict = dict(min=0.5, max=1.5, prob=0.5),
-                 brightness_cfg: dict = dict(min=0.5, max=1.5, prob=0.5),
-                 num_distort_func: int = 4):
+    def __init__(
+        self,
+        hue_cfg: dict = {"min": -18, "max": 18, "prob": 0.5},  # noqa: B006 - Keeps the upstream default object and signature.
+        saturation_cfg: dict = {"min": 0.5, "max": 1.5, "prob": 0.5},  # noqa: B006 - Keeps the upstream default object and signature.
+        contrast_cfg: dict = {"min": 0.5, "max": 1.5, "prob": 0.5},  # noqa: B006 - Keeps the upstream default object and signature.
+        brightness_cfg: dict = {"min": 0.5, "max": 1.5, "prob": 0.5},  # noqa: B006 - Keeps the upstream default object and signature.
+        num_distort_func: int = 4,
+    ):
         self.hue_cfg = hue_cfg
         self.saturation_cfg = saturation_cfg
         self.contrast_cfg = contrast_cfg
         self.brightness_cfg = brightness_cfg
         self.num_distort_func = num_distort_func
-        assert 0 < self.num_distort_func <= 4, \
-            'num_distort_func must > 0 and <= 4'
-        for cfg in [
-                self.hue_cfg, self.saturation_cfg, self.contrast_cfg,
-                self.brightness_cfg
-        ]:
-            assert 0. <= cfg['prob'] <= 1., 'prob must >=0 and <=1'
+        assert 0 < self.num_distort_func <= 4, "num_distort_func must > 0 and <= 4"
+        for cfg in [self.hue_cfg, self.saturation_cfg, self.contrast_cfg, self.brightness_cfg]:
+            assert 0.0 <= cfg["prob"] <= 1.0, "prob must >=0 and <=1"
 
     def transform_hue(self, results):
         """Transform hue randomly."""
-        if random.uniform(0., 1.) >= self.hue_cfg['prob']:
+        if random.uniform(0.0, 1.0) >= self.hue_cfg["prob"]:
             return results
-        img = results['img']
-        delta = random.uniform(self.hue_cfg['min'], self.hue_cfg['max'])
+        img = results["img"]
+        delta = random.uniform(self.hue_cfg["min"], self.hue_cfg["max"])
         u = np.cos(delta * np.pi)
         w = np.sin(delta * np.pi)
         delta_iq = np.array([[1.0, 0.0, 0.0], [0.0, u, -w], [0.0, w, u]])
-        rgb2yiq_matrix = np.array([[0.114, 0.587, 0.299],
-                                   [-0.321, -0.274, 0.596],
-                                   [0.311, -0.523, 0.211]])
-        yiq2rgb_matric = np.array([[1.0, -1.107, 1.705], [1.0, -0.272, -0.647],
-                                   [1.0, 0.956, 0.621]])
+        rgb2yiq_matrix = np.array([[0.114, 0.587, 0.299], [-0.321, -0.274, 0.596], [0.311, -0.523, 0.211]])
+        yiq2rgb_matric = np.array([[1.0, -1.107, 1.705], [1.0, -0.272, -0.647], [1.0, 0.956, 0.621]])
         t = np.dot(np.dot(yiq2rgb_matric, delta_iq), rgb2yiq_matrix).T
         img = np.dot(img, t)
-        results['img'] = img
+        results["img"] = img
         return results
 
     def transform_saturation(self, results):
         """Transform saturation randomly."""
-        if random.uniform(0., 1.) >= self.saturation_cfg['prob']:
+        if random.uniform(0.0, 1.0) >= self.saturation_cfg["prob"]:
             return results
-        img = results['img']
-        delta = random.uniform(self.saturation_cfg['min'],
-                               self.saturation_cfg['max'])
+        img = results["img"]
+        delta = random.uniform(self.saturation_cfg["min"], self.saturation_cfg["max"])
 
         # convert bgr img to gray img
         gray = img * np.array([[[0.114, 0.587, 0.299]]], dtype=np.float32)
         gray = gray.sum(axis=2, keepdims=True)
-        gray *= (1.0 - delta)
+        gray *= 1.0 - delta
         img *= delta
         img += gray
-        results['img'] = img
+        results["img"] = img
         return results
 
     def transform_contrast(self, results):
         """Transform contrast randomly."""
-        if random.uniform(0., 1.) >= self.contrast_cfg['prob']:
+        if random.uniform(0.0, 1.0) >= self.contrast_cfg["prob"]:
             return results
-        img = results['img']
-        delta = random.uniform(self.contrast_cfg['min'],
-                               self.contrast_cfg['max'])
+        img = results["img"]
+        delta = random.uniform(self.contrast_cfg["min"], self.contrast_cfg["max"])
         img *= delta
-        results['img'] = img
+        results["img"] = img
         return results
 
     def transform_brightness(self, results):
         """Transform brightness randomly."""
-        if random.uniform(0., 1.) >= self.brightness_cfg['prob']:
+        if random.uniform(0.0, 1.0) >= self.brightness_cfg["prob"]:
             return results
-        img = results['img']
-        delta = random.uniform(self.brightness_cfg['min'],
-                               self.brightness_cfg['max'])
+        img = results["img"]
+        delta = random.uniform(self.brightness_cfg["min"], self.brightness_cfg["max"])
         img += delta
-        results['img'] = img
+        results["img"] = img
         return results
 
     def transform(self, results: dict) -> dict:
@@ -1240,24 +1133,21 @@ class PPYOLOERandomDistort(BaseTransform):
         Returns:
             dict: The result dict.
         """
-        results['img'] = results['img'].astype(np.float32)
+        results["img"] = results["img"].astype(np.float32)
 
-        functions = [
-            self.transform_brightness, self.transform_contrast,
-            self.transform_saturation, self.transform_hue
-        ]
-        distortions = random.permutation(functions)[:self.num_distort_func]
+        functions = [self.transform_brightness, self.transform_contrast, self.transform_saturation, self.transform_hue]
+        distortions = random.permutation(functions)[: self.num_distort_func]
         for func in distortions:
             results = func(results)
         return results
 
     def __repr__(self) -> str:
         repr_str = self.__class__.__name__
-        repr_str += f'(hue_cfg={self.hue_cfg}, '
-        repr_str += f'saturation_cfg={self.saturation_cfg}, '
-        repr_str += f'contrast_cfg={self.contrast_cfg}, '
-        repr_str += f'brightness_cfg={self.brightness_cfg}, '
-        repr_str += f'num_distort_func={self.num_distort_func})'
+        repr_str += f"(hue_cfg={self.hue_cfg}, "
+        repr_str += f"saturation_cfg={self.saturation_cfg}, "
+        repr_str += f"contrast_cfg={self.contrast_cfg}, "
+        repr_str += f"brightness_cfg={self.brightness_cfg}, "
+        repr_str += f"num_distort_func={self.num_distort_func})"
         return repr_str
 
 
@@ -1300,13 +1190,15 @@ class PPYOLOERandomCrop(BaseTransform):
             Default to False.
     """
 
-    def __init__(self,
-                 aspect_ratio: List[float] = [.5, 2.],
-                 thresholds: List[float] = [.0, .1, .3, .5, .7, .9],
-                 scaling: List[float] = [.3, 1.],
-                 num_attempts: int = 50,
-                 allow_no_crop: bool = True,
-                 cover_all_box: bool = False):
+    def __init__(
+        self,
+        aspect_ratio: list[float] = [0.5, 2.0],  # noqa: B006 - Keeps the upstream default object and signature.
+        thresholds: list[float] = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9],  # noqa: B006 - Keeps the upstream default object and signature.
+        scaling: list[float] = [0.3, 1.0],  # noqa: B006 - Keeps the upstream default object and signature.
+        num_attempts: int = 50,
+        allow_no_crop: bool = True,
+        cover_all_box: bool = False,
+    ):
         self.aspect_ratio = aspect_ratio
         self.thresholds = thresholds
         self.scaling = scaling
@@ -1314,8 +1206,7 @@ class PPYOLOERandomCrop(BaseTransform):
         self.allow_no_crop = allow_no_crop
         self.cover_all_box = cover_all_box
 
-    def _crop_data(self, results: dict, crop_box: Tuple[int, int, int, int],
-                   valid_inds: np.ndarray) -> Union[dict, None]:
+    def _crop_data(self, results: dict, crop_box: tuple[int, int, int, int], valid_inds: np.ndarray) -> dict | None:
         """Function to randomly crop images, bounding boxes, masks, semantic
         segmentation maps.
 
@@ -1332,43 +1223,40 @@ class PPYOLOERandomCrop(BaseTransform):
                 be returned when there is no valid bbox after cropping.
         """
         # crop the image
-        img = results['img']
+        img = results["img"]
         crop_x1, crop_y1, crop_x2, crop_y2 = crop_box
         img = img[crop_y1:crop_y2, crop_x1:crop_x2, ...]
-        results['img'] = img
+        results["img"] = img
         img_shape = img.shape
-        results['img_shape'] = img.shape
+        results["img_shape"] = img.shape
 
         # crop bboxes accordingly and clip to the image boundary
-        if results.get('gt_bboxes', None) is not None:
-            bboxes = results['gt_bboxes']
+        if results.get("gt_bboxes") is not None:
+            bboxes = results["gt_bboxes"]
             bboxes.translate_([-crop_x1, -crop_y1])
             bboxes.clip_(img_shape[:2])
 
-            results['gt_bboxes'] = bboxes[valid_inds]
+            results["gt_bboxes"] = bboxes[valid_inds]
 
-            if results.get('gt_ignore_flags', None) is not None:
-                results['gt_ignore_flags'] = \
-                    results['gt_ignore_flags'][valid_inds]
+            if results.get("gt_ignore_flags") is not None:
+                results["gt_ignore_flags"] = results["gt_ignore_flags"][valid_inds]
 
-            if results.get('gt_bboxes_labels', None) is not None:
-                results['gt_bboxes_labels'] = \
-                    results['gt_bboxes_labels'][valid_inds]
+            if results.get("gt_bboxes_labels") is not None:
+                results["gt_bboxes_labels"] = results["gt_bboxes_labels"][valid_inds]
 
-            if results.get('gt_masks', None) is not None:
-                results['gt_masks'] = results['gt_masks'][
-                    valid_inds.nonzero()[0]].crop(
-                        np.asarray([crop_x1, crop_y1, crop_x2, crop_y2]))
+            if results.get("gt_masks") is not None:
+                results["gt_masks"] = results["gt_masks"][valid_inds.nonzero()[0]].crop(
+                    np.asarray([crop_x1, crop_y1, crop_x2, crop_y2])
+                )
 
         # crop semantic seg
-        if results.get('gt_seg_map', None) is not None:
-            results['gt_seg_map'] = results['gt_seg_map'][crop_y1:crop_y2,
-                                                          crop_x1:crop_x2]
+        if results.get("gt_seg_map") is not None:
+            results["gt_seg_map"] = results["gt_seg_map"][crop_y1:crop_y2, crop_x1:crop_x2]
 
         return results
 
     @autocast_box_type()
-    def transform(self, results: dict) -> Union[dict, None]:
+    def transform(self, results: dict) -> dict | None:
         """The random crop transform function.
 
         Args:
@@ -1377,29 +1265,27 @@ class PPYOLOERandomCrop(BaseTransform):
         Returns:
             dict: The result dict.
         """
-        if results.get('gt_bboxes', None) is None or len(
-                results['gt_bboxes']) == 0:
+        if results.get("gt_bboxes") is None or len(results["gt_bboxes"]) == 0:
             return results
 
-        orig_img_h, orig_img_w = results['img'].shape[:2]
-        gt_bboxes = results['gt_bboxes']
+        orig_img_h, orig_img_w = results["img"].shape[:2]
+        gt_bboxes = results["gt_bboxes"]
 
         thresholds = list(self.thresholds)
         if self.allow_no_crop:
-            thresholds.append('no_crop')
+            thresholds.append("no_crop")
         random.shuffle(thresholds)
 
         for thresh in thresholds:
             # Determine the coordinates for cropping
-            if thresh == 'no_crop':
+            if thresh == "no_crop":
                 return results
 
             found = False
-            for i in range(self.num_attempts):
+            for _i in range(self.num_attempts):
                 crop_h, crop_w = self._get_crop_size((orig_img_h, orig_img_w))
-                if self.aspect_ratio is None:
-                    if crop_h / crop_w < 0.5 or crop_h / crop_w > 2.0:
-                        continue
+                if self.aspect_ratio is None and (crop_h / crop_w < 0.5 or crop_h / crop_w > 2.0):
+                    continue
 
                 # get image crop_box
                 margin_h = max(orig_img_h - crop_h, 0)
@@ -1410,8 +1296,7 @@ class PPYOLOERandomCrop(BaseTransform):
 
                 crop_box = [crop_x1, crop_y1, crop_x2, crop_y2]
                 # Calculate the iou between gt_bboxes and crop_boxes
-                iou = self._iou_matrix(gt_bboxes,
-                                       np.array([crop_box], dtype=np.float32))
+                iou = self._iou_matrix(gt_bboxes, np.array([crop_box], dtype=np.float32))
                 # If the maximum value of the iou is less than thresh,
                 # the current crop_box is considered invalid.
                 if iou.max() < thresh:
@@ -1424,8 +1309,7 @@ class PPYOLOERandomCrop(BaseTransform):
                     continue
 
                 # Get which gt_bboxes to keep after cropping.
-                valid_inds = self._get_valid_inds(
-                    gt_bboxes, np.array(crop_box, dtype=np.float32))
+                valid_inds = self._get_valid_inds(gt_bboxes, np.array(crop_box, dtype=np.float32))
                 if valid_inds.size > 0:
                     found = True
                     break
@@ -1436,7 +1320,7 @@ class PPYOLOERandomCrop(BaseTransform):
         return results
 
     @cache_randomness
-    def _rand_offset(self, margin: Tuple[int, int]) -> Tuple[int, int]:
+    def _rand_offset(self, margin: tuple[int, int]) -> tuple[int, int]:
         """Randomly generate crop offset.
 
         Args:
@@ -1453,7 +1337,7 @@ class PPYOLOERandomCrop(BaseTransform):
         return (offset_h, offset_w)
 
     @cache_randomness
-    def _get_crop_size(self, image_size: Tuple[int, int]) -> Tuple[int, int]:
+    def _get_crop_size(self, image_size: tuple[int, int]) -> tuple[int, int]:
         """Randomly generates the crop size based on `image_size`.
 
         Args:
@@ -1466,8 +1350,7 @@ class PPYOLOERandomCrop(BaseTransform):
         scale = random.uniform(*self.scaling)
         if self.aspect_ratio is not None:
             min_ar, max_ar = self.aspect_ratio
-            aspect_ratio = random.uniform(
-                max(min_ar, scale**2), min(max_ar, scale**-2))
+            aspect_ratio = random.uniform(max(min_ar, scale**2), min(max_ar, scale**-2))
             h_scale = scale / np.sqrt(aspect_ratio)
             w_scale = scale * np.sqrt(aspect_ratio)
         else:
@@ -1477,10 +1360,7 @@ class PPYOLOERandomCrop(BaseTransform):
         crop_w = w * w_scale
         return int(crop_h), int(crop_w)
 
-    def _iou_matrix(self,
-                    gt_bbox: HorizontalBoxes,
-                    crop_bbox: np.ndarray,
-                    eps: float = 1e-10) -> np.ndarray:
+    def _iou_matrix(self, gt_bbox: HorizontalBoxes, crop_bbox: np.ndarray, eps: float = 1e-10) -> np.ndarray:
         """Calculate iou between gt and image crop box.
 
         Args:
@@ -1495,16 +1375,13 @@ class PPYOLOERandomCrop(BaseTransform):
         lefttop = np.maximum(gt_bbox[:, np.newaxis, :2], crop_bbox[:, :2])
         rightbottom = np.minimum(gt_bbox[:, np.newaxis, 2:], crop_bbox[:, 2:])
 
-        overlap = np.prod(
-            rightbottom - lefttop,
-            axis=2) * (lefttop < rightbottom).all(axis=2)
+        overlap = np.prod(rightbottom - lefttop, axis=2) * (lefttop < rightbottom).all(axis=2)
         area_gt_bbox = np.prod(gt_bbox[:, 2:] - gt_bbox[:, :2], axis=1)
         area_crop_bbox = np.prod(crop_bbox[:, 2:] - crop_bbox[:, :2], axis=1)
-        area_o = (area_gt_bbox[:, np.newaxis] + area_crop_bbox - overlap)
+        area_o = area_gt_bbox[:, np.newaxis] + area_crop_bbox - overlap
         return overlap / (area_o + eps)
 
-    def _get_valid_inds(self, gt_bbox: HorizontalBoxes,
-                        img_crop_bbox: np.ndarray) -> np.ndarray:
+    def _get_valid_inds(self, gt_bbox: HorizontalBoxes, img_crop_bbox: np.ndarray) -> np.ndarray:
         """Get which Bboxes to keep at the current cropping coordinates.
 
         Args:
@@ -1524,21 +1401,19 @@ class PPYOLOERandomCrop(BaseTransform):
         cropped_box[:, 2:] -= img_crop_bbox[:2]
 
         centers = (gt_bbox[:, :2] + gt_bbox[:, 2:]) / 2
-        valid = np.logical_and(img_crop_bbox[:2] <= centers,
-                               centers < img_crop_bbox[2:]).all(axis=1)
-        valid = np.logical_and(
-            valid, (cropped_box[:, :2] < cropped_box[:, 2:]).all(axis=1))
+        valid = np.logical_and(img_crop_bbox[:2] <= centers, centers < img_crop_bbox[2:]).all(axis=1)
+        valid = np.logical_and(valid, (cropped_box[:, :2] < cropped_box[:, 2:]).all(axis=1))
 
         return np.where(valid)[0]
 
     def __repr__(self) -> str:
         repr_str = self.__class__.__name__
-        repr_str += f'(aspect_ratio={self.aspect_ratio}, '
-        repr_str += f'thresholds={self.thresholds}, '
-        repr_str += f'scaling={self.scaling}, '
-        repr_str += f'num_attempts={self.num_attempts}, '
-        repr_str += f'allow_no_crop={self.allow_no_crop}, '
-        repr_str += f'cover_all_box={self.cover_all_box})'
+        repr_str += f"(aspect_ratio={self.aspect_ratio}, "
+        repr_str += f"thresholds={self.thresholds}, "
+        repr_str += f"scaling={self.scaling}, "
+        repr_str += f"num_attempts={self.num_attempts}, "
+        repr_str += f"allow_no_crop={self.allow_no_crop}, "
+        repr_str += f"cover_all_box={self.cover_all_box})"
         return repr_str
 
 
@@ -1576,7 +1451,7 @@ class YOLOv5CopyPaste(BaseTransform):
         self.prob = prob
 
     @autocast_box_type()
-    def transform(self, results: dict) -> Union[dict, None]:
+    def transform(self, results: dict) -> dict | None:
         """The YOLOv5 and YOLOv8 Copy-Paste transform function.
 
         Args:
@@ -1585,15 +1460,15 @@ class YOLOv5CopyPaste(BaseTransform):
         Returns:
             dict: The result dict.
         """
-        if len(results.get('gt_masks', [])) == 0:
+        if len(results.get("gt_masks", [])) == 0:
             return results
-        gt_masks = results['gt_masks']
-        assert isinstance(gt_masks, PolygonMasks), \
-            'only support type of PolygonMasks,' \
-            ' but get type: %s' % type(gt_masks)
-        gt_bboxes = results['gt_bboxes']
-        gt_bboxes_labels = results.get('gt_bboxes_labels', None)
-        img = results['img']
+        gt_masks = results["gt_masks"]
+        assert isinstance(gt_masks, PolygonMasks), "only support type of PolygonMasks, but get type: %s" % type(  # noqa: UP031 - Keeps printf conversions that depend on argument types.
+            gt_masks
+        )
+        gt_bboxes = results["gt_bboxes"]
+        gt_bboxes_labels = results.get("gt_bboxes_labels")
+        img = results["img"]
         img_h, img_w = img.shape[:2]
 
         # calculate ioa
@@ -1603,15 +1478,13 @@ class YOLOv5CopyPaste(BaseTransform):
         ioa = self.bbox_ioa(gt_bboxes_flip, gt_bboxes)
         indexes = torch.nonzero((ioa < self.ioa_thresh).all(1))[:, 0]
         n = len(indexes)
-        valid_inds = random.choice(
-            indexes, size=round(self.prob * n), replace=False)
+        valid_inds = random.choice(indexes, size=round(self.prob * n), replace=False)
         if len(valid_inds) == 0:
             return results
 
         if gt_bboxes_labels is not None:
             # prepare labels
-            gt_bboxes_labels = np.concatenate(
-                (gt_bboxes_labels, gt_bboxes_labels[valid_inds]), axis=0)
+            gt_bboxes_labels = np.concatenate((gt_bboxes_labels, gt_bboxes_labels[valid_inds]), axis=0)
 
         # prepare bboxes
         copypaste_bboxes = gt_bboxes_flip[valid_inds]
@@ -1631,38 +1504,34 @@ class YOLOv5CopyPaste(BaseTransform):
         copypaste_mask = np.zeros((img_h, img_w), dtype=np.uint8)
         for poly in copypaste_gt_masks.masks:
             poly = [i.reshape((-1, 1, 2)).astype(np.int32) for i in poly]
-            cv2.drawContours(copypaste_mask, poly, -1, (1, ), cv2.FILLED)
+            cv2.drawContours(copypaste_mask, poly, -1, (1,), cv2.FILLED)
 
         copypaste_mask = copypaste_mask.astype(bool)
 
         # copy objects, and paste to the mirror position of the image
-        copypaste_mask_flip = mmcv.imflip(
-            copypaste_mask, direction='horizontal')
-        copypaste_img = mmcv.imflip(img, direction='horizontal')
+        copypaste_mask_flip = mmcv.imflip(copypaste_mask, direction="horizontal")
+        copypaste_img = mmcv.imflip(img, direction="horizontal")
         img[copypaste_mask_flip] = copypaste_img[copypaste_mask_flip]
 
         # prepare masks
         gt_masks = copypaste_gt_masks.cat([gt_masks, copypaste_gt_masks_flip])
 
-        if 'gt_ignore_flags' in results:
+        if "gt_ignore_flags" in results:
             # prepare gt_ignore_flags
-            gt_ignore_flags = results['gt_ignore_flags']
-            gt_ignore_flags = np.concatenate(
-                [gt_ignore_flags, gt_ignore_flags[valid_inds]], axis=0)
-            results['gt_ignore_flags'] = gt_ignore_flags
+            gt_ignore_flags = results["gt_ignore_flags"]
+            gt_ignore_flags = np.concatenate([gt_ignore_flags, gt_ignore_flags[valid_inds]], axis=0)
+            results["gt_ignore_flags"] = gt_ignore_flags
 
-        results['img'] = img
-        results['gt_bboxes'] = gt_bboxes
+        results["img"] = img
+        results["gt_bboxes"] = gt_bboxes
         if gt_bboxes_labels is not None:
-            results['gt_bboxes_labels'] = gt_bboxes_labels
-        results['gt_masks'] = gt_masks
+            results["gt_bboxes_labels"] = gt_bboxes_labels
+        results["gt_masks"] = gt_masks
 
         return results
 
     @staticmethod
-    def bbox_ioa(gt_bboxes_flip: HorizontalBoxes,
-                 gt_bboxes: HorizontalBoxes,
-                 eps: float = 1e-7) -> np.ndarray:
+    def bbox_ioa(gt_bboxes_flip: HorizontalBoxes, gt_bboxes: HorizontalBoxes, eps: float = 1e-7) -> np.ndarray:
         """Calculate ioa between gt_bboxes_flip and gt_bboxes.
 
         Args:
@@ -1681,12 +1550,9 @@ class YOLOv5CopyPaste(BaseTransform):
         b2_x1, b2_y1, b2_x2, b2_y2 = gt_bboxes.T
 
         # Intersection area
-        inter_area = (torch.minimum(b1_x2[:, None],
-                                    b2_x2) - torch.maximum(b1_x1[:, None],
-                                                           b2_x1)).clip(0) * \
-                     (torch.minimum(b1_y2[:, None],
-                                    b2_y2) - torch.maximum(b1_y1[:, None],
-                                                           b2_y1)).clip(0)
+        inter_area = (torch.minimum(b1_x2[:, None], b2_x2) - torch.maximum(b1_x1[:, None], b2_x1)).clip(0) * (
+            torch.minimum(b1_y2[:, None], b2_y2) - torch.maximum(b1_y1[:, None], b2_y1)
+        ).clip(0)
 
         # box2 area
         box2_area = (b2_x2 - b2_x1) * (b2_y2 - b2_y1) + eps
@@ -1696,8 +1562,8 @@ class YOLOv5CopyPaste(BaseTransform):
 
     def __repr__(self) -> str:
         repr_str = self.__class__.__name__
-        repr_str += f'(ioa_thresh={self.ioa_thresh},'
-        repr_str += f'prob={self.prob})'
+        repr_str += f"(ioa_thresh={self.ioa_thresh},"
+        repr_str += f"prob={self.prob})"
         return repr_str
 
 
@@ -1709,7 +1575,7 @@ class RemoveDataElement(BaseTransform):
         keys (Union[str, Sequence[str]]): Keys need to be removed.
     """
 
-    def __init__(self, keys: Union[str, Sequence[str]]):
+    def __init__(self, keys: str | Sequence[str]):
         self.keys = [keys] if isinstance(keys, str) else keys
 
     def transform(self, results: dict) -> dict:
@@ -1719,7 +1585,7 @@ class RemoveDataElement(BaseTransform):
 
     def __repr__(self) -> str:
         repr_str = self.__class__.__name__
-        repr_str += f'(keys={self.keys})'
+        repr_str += f"(keys={self.keys})"
         return repr_str
 
 
@@ -1754,20 +1620,20 @@ class RegularizeRotatedBox(BaseTransform):
             'le90', or 'le135'. Defaults to 'le90.
     """
 
-    def __init__(self, angle_version='le90') -> None:
+    def __init__(self, angle_version="le90") -> None:
         self.angle_version = angle_version
         try:
             from mmrotate.structures.bbox import RotatedBoxes
+
             self.box_type = RotatedBoxes
         except ImportError:
-            raise ImportError(
-                'Please run "mim install -r requirements/mmrotate.txt" '
-                'to install mmrotate first for rotated detection.')
+            raise ImportError(  # noqa: B904 - Keeps the implicit exception context.
+                'Please run "mim install -r requirements/mmrotate.txt" to install mmrotate first for rotated detection.'
+            )
 
     def transform(self, results: dict) -> dict:
-        assert isinstance(results['gt_bboxes'], self.box_type)
-        results['gt_bboxes'] = self.box_type(
-            results['gt_bboxes'].regularize_boxes(self.angle_version))
+        assert isinstance(results["gt_bboxes"], self.box_type)
+        results["gt_bboxes"] = self.box_type(results["gt_bboxes"].regularize_boxes(self.angle_version))
         return results
 
 
@@ -1788,18 +1654,12 @@ class Polygon2Mask(BaseTransform):
             improvement in training speed and we recommend setting it to False.
     """
 
-    def __init__(self,
-                 downsample_ratio: int = 4,
-                 mask_overlap: bool = True,
-                 coco_style: bool = False):
+    def __init__(self, downsample_ratio: int = 4, mask_overlap: bool = True, coco_style: bool = False):
         self.downsample_ratio = downsample_ratio
         self.mask_overlap = mask_overlap
         self.coco_style = coco_style
 
-    def polygon2mask(self,
-                     img_shape: Tuple[int, int],
-                     polygons: np.ndarray,
-                     color: int = 1) -> np.ndarray:
+    def polygon2mask(self, img_shape: tuple[int, int], polygons: np.ndarray, color: int = 1) -> np.ndarray:
         """
         Args:
             img_shape (tuple): The image size.
@@ -1809,8 +1669,7 @@ class Polygon2Mask(BaseTransform):
         Return:
             np.ndarray: the overlap mask.
         """
-        nh, nw = (img_shape[0] // self.downsample_ratio,
-                  img_shape[1] // self.downsample_ratio)
+        nh, nw = (img_shape[0] // self.downsample_ratio, img_shape[1] // self.downsample_ratio)
         if self.coco_style:
             # This practice can lead to the loss of small objects
             # polygons = polygons.resize((nh, nw)).masks
@@ -1818,8 +1677,7 @@ class Polygon2Mask(BaseTransform):
             # mask = polygon_to_bitmap([polygons], nh, nw)
 
             polygons = np.asarray(polygons).reshape(-1)
-            mask = polygon_to_bitmap([polygons], img_shape[0],
-                                     img_shape[1]).astype(np.uint8)
+            mask = polygon_to_bitmap([polygons], img_shape[0], img_shape[1]).astype(np.uint8)
             mask = mmcv.imresize(mask, (nw, nh))
         else:
             mask = np.zeros(img_shape, dtype=np.uint8)
@@ -1833,10 +1691,7 @@ class Polygon2Mask(BaseTransform):
             mask = mmcv.imresize(mask, (nw, nh))
         return mask
 
-    def polygons2masks(self,
-                       img_shape: Tuple[int, int],
-                       polygons: PolygonMasks,
-                       color: int = 1) -> np.ndarray:
+    def polygons2masks(self, img_shape: tuple[int, int], polygons: PolygonMasks, color: int = 1) -> np.ndarray:
         """Return a list of bitmap masks.
 
         Args:
@@ -1847,8 +1702,7 @@ class Polygon2Mask(BaseTransform):
             List[np.ndarray]: the list of masks in bitmaps.
         """
         if self.coco_style:
-            nh, nw = (img_shape[0] // self.downsample_ratio,
-                      img_shape[1] // self.downsample_ratio)
+            nh, nw = (img_shape[0] // self.downsample_ratio, img_shape[1] // self.downsample_ratio)
             masks = polygons.resize((nh, nw)).to_ndarray()
             return masks
         else:
@@ -1859,8 +1713,8 @@ class Polygon2Mask(BaseTransform):
             return np.array(masks)
 
     def polygons2masks_overlap(
-            self, img_shape: Tuple[int, int],
-            polygons: PolygonMasks) -> Tuple[np.ndarray, np.ndarray]:
+        self, img_shape: tuple[int, int], polygons: PolygonMasks
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Return a overlap mask and the sorted idx of area.
 
         Args:
@@ -1871,9 +1725,10 @@ class Polygon2Mask(BaseTransform):
             Tuple[np.ndarray, np.ndarray]:
                 the overlap mask and the sorted idx of area.
         """
-        masks = np.zeros((img_shape[0] // self.downsample_ratio,
-                          img_shape[1] // self.downsample_ratio),
-                         dtype=np.int32 if len(polygons) > 255 else np.uint8)
+        masks = np.zeros(
+            (img_shape[0] // self.downsample_ratio, img_shape[1] // self.downsample_ratio),
+            dtype=np.int32 if len(polygons) > 255 else np.uint8,
+        )
         areas = []
         ms = []
         for si in range(len(polygons)):
@@ -1890,26 +1745,22 @@ class Polygon2Mask(BaseTransform):
         return masks, index
 
     def transform(self, results: dict) -> dict:
-        gt_masks = results['gt_masks']
+        gt_masks = results["gt_masks"]
         assert isinstance(gt_masks, PolygonMasks)
 
         if self.mask_overlap:
-            masks, sorted_idx = self.polygons2masks_overlap(
-                (gt_masks.height, gt_masks.width), gt_masks)
-            results['gt_bboxes'] = results['gt_bboxes'][sorted_idx]
-            results['gt_bboxes_labels'] = results['gt_bboxes_labels'][
-                sorted_idx]
+            masks, sorted_idx = self.polygons2masks_overlap((gt_masks.height, gt_masks.width), gt_masks)
+            results["gt_bboxes"] = results["gt_bboxes"][sorted_idx]
+            results["gt_bboxes_labels"] = results["gt_bboxes_labels"][sorted_idx]
 
             # In this case we put gt_masks in gt_panoptic_seg
-            results.pop('gt_masks')
-            results['gt_panoptic_seg'] = torch.from_numpy(masks[None])
+            results.pop("gt_masks")
+            results["gt_panoptic_seg"] = torch.from_numpy(masks[None])
         else:
-            masks = self.polygons2masks((gt_masks.height, gt_masks.width),
-                                        gt_masks,
-                                        color=1)
+            masks = self.polygons2masks((gt_masks.height, gt_masks.width), gt_masks, color=1)
             masks = torch.from_numpy(masks)
             # Consistent logic with mmdet
-            results['gt_masks'] = masks
+            results["gt_masks"] = masks
         return results
 
 
@@ -1928,7 +1779,7 @@ class FilterAnnotations(FilterDetAnnotations):
         self.by_keypoints = by_keypoints
 
     @autocast_box_type()
-    def transform(self, results: dict) -> Union[dict, None]:
+    def transform(self, results: dict) -> dict | None:
         """Transform function to filter annotations.
 
         Args:
@@ -1936,37 +1787,35 @@ class FilterAnnotations(FilterDetAnnotations):
         Returns:
             dict: Updated result dict.
         """
-        assert 'gt_bboxes' in results
-        gt_bboxes = results['gt_bboxes']
+        assert "gt_bboxes" in results
+        gt_bboxes = results["gt_bboxes"]
         if gt_bboxes.shape[0] == 0:
             return results
 
         tests = []
         if self.by_box:
             tests.append(
-                ((gt_bboxes.widths > self.min_gt_bbox_wh[0]) &
-                 (gt_bboxes.heights > self.min_gt_bbox_wh[1])).numpy())
+                ((gt_bboxes.widths > self.min_gt_bbox_wh[0]) & (gt_bboxes.heights > self.min_gt_bbox_wh[1])).numpy()
+            )
 
         if self.by_mask:
-            assert 'gt_masks' in results
-            gt_masks = results['gt_masks']
+            assert "gt_masks" in results
+            gt_masks = results["gt_masks"]
             tests.append(gt_masks.areas >= self.min_gt_mask_area)
 
         if self.by_keypoints:
-            assert 'gt_keypoints' in results
-            num_keypoints = results['gt_keypoints'].num_keypoints
+            assert "gt_keypoints" in results
+            num_keypoints = results["gt_keypoints"].num_keypoints
             tests.append((num_keypoints > 0).numpy())
 
         keep = tests[0]
         for t in tests[1:]:
             keep = keep & t
 
-        if not keep.any():
-            if self.keep_empty:
-                return None
+        if not keep.any() and self.keep_empty:
+            return None
 
-        keys = ('gt_bboxes', 'gt_bboxes_labels', 'gt_masks', 'gt_ignore_flags',
-                'gt_keypoints')
+        keys = ("gt_bboxes", "gt_bboxes_labels", "gt_masks", "gt_ignore_flags", "gt_keypoints")
         for key in keys:
             if key in results:
                 results[key] = results[key][keep]
@@ -1977,27 +1826,22 @@ class FilterAnnotations(FilterDetAnnotations):
 # TODO: Check if it can be merged with mmdet.YOLOXHSVRandomAug
 @TRANSFORMS.register_module()
 class RandomAffine(MMDET_RandomAffine):
-
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
     @autocast_box_type()
     def transform(self, results: dict) -> dict:
-        img = results['img']
+        img = results["img"]
         height = img.shape[0] + self.border[1] * 2
         width = img.shape[1] + self.border[0] * 2
 
         warp_matrix = self._get_random_homography_matrix(height, width)
 
-        img = cv2.warpPerspective(
-            img,
-            warp_matrix,
-            dsize=(width, height),
-            borderValue=self.border_val)
-        results['img'] = img
-        results['img_shape'] = img.shape
+        img = cv2.warpPerspective(img, warp_matrix, dsize=(width, height), borderValue=self.border_val)
+        results["img"] = img
+        results["img_shape"] = img.shape
 
-        bboxes = results['gt_bboxes']
+        bboxes = results["gt_bboxes"]
         num_bboxes = len(bboxes)
         if num_bboxes:
             bboxes.project_(warp_matrix)
@@ -2005,62 +1849,56 @@ class RandomAffine(MMDET_RandomAffine):
                 bboxes.clip_([height, width])
             # remove outside bbox
             valid_index = bboxes.is_inside([height, width]).numpy()
-            results['gt_bboxes'] = bboxes[valid_index]
-            results['gt_bboxes_labels'] = results['gt_bboxes_labels'][
-                valid_index]
-            results['gt_ignore_flags'] = results['gt_ignore_flags'][
-                valid_index]
+            results["gt_bboxes"] = bboxes[valid_index]
+            results["gt_bboxes_labels"] = results["gt_bboxes_labels"][valid_index]
+            results["gt_ignore_flags"] = results["gt_ignore_flags"][valid_index]
 
-            if 'gt_masks' in results:
-                raise NotImplementedError('RandomAffine only supports bbox.')
+            if "gt_masks" in results:
+                raise NotImplementedError("RandomAffine only supports bbox.")
 
-            if 'gt_keypoints' in results:
-                keypoints = results['gt_keypoints']
+            if "gt_keypoints" in results:
+                keypoints = results["gt_keypoints"]
                 keypoints.project_(warp_matrix)
                 if self.bbox_clip_border:
                     keypoints.clip_([height, width])
-                results['gt_keypoints'] = keypoints[valid_index]
+                results["gt_keypoints"] = keypoints[valid_index]
 
         return results
 
     def __repr__(self) -> str:
         repr_str = self.__class__.__name__
-        repr_str += f'(hue_delta={self.hue_delta}, '
-        repr_str += f'saturation_delta={self.saturation_delta}, '
-        repr_str += f'value_delta={self.value_delta})'
+        repr_str += f"(hue_delta={self.hue_delta}, "
+        repr_str += f"saturation_delta={self.saturation_delta}, "
+        repr_str += f"value_delta={self.value_delta})"
         return repr_str
 
 
 # TODO: Check if it can be merged with mmdet.YOLOXHSVRandomAug
 @TRANSFORMS.register_module()
 class RandomFlip(MMDET_RandomFlip):
-
     @autocast_box_type()
     def _flip(self, results: dict) -> None:
         """Flip images, bounding boxes, and semantic segmentation map."""
         # flip image
-        results['img'] = mmcv.imflip(
-            results['img'], direction=results['flip_direction'])
+        results["img"] = mmcv.imflip(results["img"], direction=results["flip_direction"])
 
-        img_shape = results['img'].shape[:2]
+        img_shape = results["img"].shape[:2]
 
         # flip bboxes
-        if results.get('gt_bboxes', None) is not None:
-            results['gt_bboxes'].flip_(img_shape, results['flip_direction'])
+        if results.get("gt_bboxes") is not None:
+            results["gt_bboxes"].flip_(img_shape, results["flip_direction"])
 
         # flip keypoints
-        if results.get('gt_keypoints', None) is not None:
-            results['gt_keypoints'].flip_(img_shape, results['flip_direction'])
+        if results.get("gt_keypoints") is not None:
+            results["gt_keypoints"].flip_(img_shape, results["flip_direction"])
 
         # flip masks
-        if results.get('gt_masks', None) is not None:
-            results['gt_masks'] = results['gt_masks'].flip(
-                results['flip_direction'])
+        if results.get("gt_masks") is not None:
+            results["gt_masks"] = results["gt_masks"].flip(results["flip_direction"])
 
         # flip segs
-        if results.get('gt_seg_map', None) is not None:
-            results['gt_seg_map'] = mmcv.imflip(
-                results['gt_seg_map'], direction=results['flip_direction'])
+        if results.get("gt_seg_map") is not None:
+            results["gt_seg_map"] = mmcv.imflip(results["gt_seg_map"], direction=results["flip_direction"])
 
         # record homography matrix for flip
         self._record_homography_matrix(results)
@@ -2068,13 +1906,12 @@ class RandomFlip(MMDET_RandomFlip):
 
 @TRANSFORMS.register_module()
 class Resize(MMDET_Resize):
-
     def _resize_keypoints(self, results: dict) -> None:
         """Resize bounding boxes with ``results['scale_factor']``."""
-        if results.get('gt_keypoints', None) is not None:
-            results['gt_keypoints'].rescale_(results['scale_factor'])
+        if results.get("gt_keypoints") is not None:
+            results["gt_keypoints"].rescale_(results["scale_factor"])
             if self.clip_object_border:
-                results['gt_keypoints'].clip_(results['img_shape'])
+                results["gt_keypoints"].clip_(results["img_shape"])
 
     @autocast_box_type()
     def transform(self, results: dict) -> dict:
@@ -2089,10 +1926,10 @@ class Resize(MMDET_Resize):
             are updated in result dict.
         """
         if self.scale:
-            results['scale'] = self.scale
+            results["scale"] = self.scale
         else:
-            img_shape = results['img'].shape[:2]
-            results['scale'] = _scale_size(img_shape[::-1], self.scale_factor)
+            img_shape = results["img"].shape[:2]
+            results["scale"] = _scale_size(img_shape[::-1], self.scale_factor)
         self._resize_img(results)
         self._resize_bboxes(results)
         self._resize_keypoints(results)

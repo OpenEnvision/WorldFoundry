@@ -1,0 +1,79 @@
+id: pika-h3-flex
+name: Pika H3 Flex
+aliases:
+- pika-h3
+- pika-h3-flex-fl2va
+- pika-h3-flex-ref2va
+tasks:
+- text-to-video
+- image-to-video
+- reference-to-video
+- audio-video-generation
+output_artifacts:
+- generated_video
+provider: Pika Labs
+source:
+  status: open_source
+  official_repo_url: https://github.com/Pika-Labs/Pika-H3-Flex
+  revision: 0ddf55ad7067ca1e76812253bd7b4600df87f759
+  license: minimax-h3-community
+  requires_auth: false
+official_sources:
+  github:
+    url: https://github.com/Pika-Labs/Pika-H3-Flex
+    revision: 0ddf55ad7067ca1e76812253bd7b4600df87f759
+  huggingface:
+  - repo_id: Pika-Labs/Pika-H3-Flex
+    type: model
+checkpoints:
+- repo_id: Pika-Labs/Pika-H3-Flex
+  revision: 0ddf55ad7067ca1e76812253bd7b4600df87f759
+  subfolder: fl2va
+  role: fl2va_lora_adapter
+  files:
+  - adapter.safetensors
+  - manifest.json
+- repo_id: Pika-Labs/Pika-H3-Flex
+  revision: 0ddf55ad7067ca1e76812253bd7b4600df87f759
+  subfolder: ref2va
+  role: ref2va_lora_adapter
+  files:
+  - adapter.safetensors
+  - manifest.json
+- repo_id: MiniMaxAI/MiniMax-H3
+  revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+  role: shared_h3_base
+integration:
+  status: integrated
+  backend_stage: shared_base_model_runtime
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+runtime_profile: runtime-profile:pika-h3-flex
+pipeline_binding: pika-h3-flex
+runner_parity:
+  status: pending_gpu_validation
+  expected_artifacts:
+  - pika-h3-flex.mp4
+  notes:
+  - The in-tree route reuses the canonical MiniMax-H3 DiT, Qwen3-VL conditioner, geometry,
+    VAEs and media writer.
+  - Pika's six-knot re-noising schedule and task-specific LoRA loading are implemented.
+  - Full-checkpoint artifact parity and the complete video/audio reference matrix
+    remain unvalidated.
+catalog_category: video
+docs:
+  publisher: Pika Labs
+  overview: Six-step MiniMax-H3 adapter for joint video/audio generation with endpoint
+    and multimodal image references.
+  overview_zh: 基于 MiniMax-H3 的六步联合音视频适配器，支持首尾帧与多模态图像参考。
+  usage_notes: Stage the Pika H3 Flex fl2va or ref2va adapter together with the pinned
+    MiniMax-H3 base snapshot. Use adapter_task=ref2va for reference generation.
+  usage_notes_zh: 将 Pika H3 Flex 的 fl2va 或 ref2va 适配器与固定版本 MiniMax-H3 基础快照一起准备；参考图生成使用
+    adapter_task=ref2va。
+  limitations:
+  - Native output is 24 fps with 32 kHz stereo audio and six generator evaluations.
+  - Reference generation accepts image references only; video and standalone-audio references are not supported.
+  - Multi-GPU execution, the full 480p/768p bucket set, and checkpoint-backed outputs are not validated.
+  limitations_zh:
+  - 原生输出为 24 fps、32 kHz 立体声，并执行六次生成评估。
+  - 参考生成仅接受图像参考；不支持视频与独立音频参考。
+  - 多卡执行、完整 480p/768p bucket 以及真实权重输出尚未验证。

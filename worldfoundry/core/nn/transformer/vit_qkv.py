@@ -29,12 +29,11 @@ Public surface:
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from torch import Tensor, nn
 
 from worldfoundry.core.attention.backends.native import scaled_dot_product_attention
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Shared ViT blocks — projections stay here; kernels stay in native SDPA
@@ -43,6 +42,8 @@ from worldfoundry.core.attention.backends.native import scaled_dot_product_atten
 
 class QKVSelfAttention(nn.Module):
     """Linear QKV projection, scaled dot-product attention, and output projection."""
+
+    fused_attn: bool = True
 
     def __init__(
         self,
@@ -66,7 +67,10 @@ class QKVSelfAttention(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
 
     def forward(self, x: Tensor, attn_bias: Any = None) -> Tensor:
-        """Self-attend ``[B, N, C]`` tokens; ``attn_bias`` is the SDPA mask slot."""
+        """Self-attend tokens; ``fused_attn=False`` selects unmasked eager attention."""
+
+        if not self.fused_attn:
+            return self._forward(x)
 
         b, n, c = x.shape
         qkv = self.qkv(x).reshape(b, n, 3, self.num_heads, c // self.num_heads).permute(2, 0, 3, 1, 4)
@@ -86,6 +90,23 @@ class QKVSelfAttention(nn.Module):
         x = self.proj_drop(x)
         return x
 
+    def _forward(self, x: Tensor) -> Tensor:
+        """Use explicit scaled-query matmuls, preserving eager checkpoint arithmetic."""
+
+        b, n, c = x.shape
+        qkv = self.qkv(x).reshape(b, n, 3, self.num_heads, c // self.num_heads).permute(2, 0, 3, 1, 4)
+
+        q, k, v = qkv[0] * self.scale, qkv[1], qkv[2]
+        attn = q @ k.transpose(-2, -1)
+
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(b, n, c)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
 
 class QKNormRopeSelfAttention(QKVSelfAttention):
     """Self-attention with optional Q/K layer-norm and 2D rotary position embeddings."""
@@ -101,7 +122,7 @@ class QKNormRopeSelfAttention(QKVSelfAttention):
         norm_layer: type[nn.Module] = nn.LayerNorm,
         qk_norm: bool = False,
         fused_attn: bool = True,
-        rope: Optional[nn.Module] = None,
+        rope: nn.Module | None = None,
     ) -> None:
         """Optionally attach per-head Q/K norm and a 2D RoPE module."""
 
@@ -120,7 +141,8 @@ class QKNormRopeSelfAttention(QKVSelfAttention):
         self.k_norm = norm_layer(head_dim) if qk_norm else nn.Identity()
         self.rope = rope
 
-    def forward(self, x: Tensor, pos: Any = None, attn_mask: Any = None) -> Tensor:
+    # RoPE attention takes token positions where the base class takes an attention bias.
+    def forward(self, x: Tensor, pos: Any = None, attn_mask: Any = None) -> Tensor:  # ty: ignore[invalid-method-override]
         """Self-attend with optional RoPE; ``fused_attn=False`` keeps the matmul path.
 
         The mask is repeated over heads because callers pass a 2-D token
@@ -154,25 +176,8 @@ class QKNormRopeSelfAttention(QKVSelfAttention):
         x = self.proj_drop(x)
         return x
 
-    def _forward(self, x: Tensor) -> Tensor:
-        """Legacy manual-attention path kept for compatibility."""
-
-        b, n, c = x.shape
-        qkv = self.qkv(x).reshape(b, n, 3, self.num_heads, c // self.num_heads).permute(2, 0, 3, 1, 4)
-
-        q, k, v = qkv[0] * self.scale, qkv[1], qkv[2]
-        attn = q @ k.transpose(-2, -1)
-
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-
-        x = (attn @ v).transpose(1, 2).reshape(b, n, c)
-        x = self.proj(x)
-        x = self.proj_drop(x)
-        return x
-
 
 __all__ = [
-    "QKVSelfAttention",
     "QKNormRopeSelfAttention",
+    "QKVSelfAttention",
 ]

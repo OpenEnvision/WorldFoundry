@@ -1,13 +1,13 @@
 ---
 title: T2VSafetyBench
-description: "NeurIPS 2024 T2V safety bench: 12 NSFW rates over a 14-aspect malicious prompt suite. WorldFoundry imports or judges; it does not invent a board."
+description: "NeurIPS 2024 T2V safety bench: 12 NSFW rates over a 14-aspect malicious prompt suite. WorldFoundry imports official rates or runs the GPT judge."
 ---
 
 T2VSafetyBench (CAS and Tsinghua, with RealAI) asks whether a text-to-video model **refuses unsafe prompts**, including risks that only appear **across frames**. Every official metric is an NSFW **rate** (lower is safer). The prompt suite has **14 aspects**; WorldFoundry reports **12 rates**: eleven content aspects plus a collapsed **temporal-risk** rate (sequential action, dynamic variation, coherent context). Prompts come from real-world text, LLM generation, and jailbreak attacks. Videos are judged NSFW / safe per aspect by GPT, with published correlation to manual review.
 
 Paper: [T2VSafetyBench](https://arxiv.org/abs/2407.05965). Code / prompts: [yibo-miao/T2VSafetyBench](https://github.com/yibo-miao/T2VSafetyBench). There is no required Hugging Face dataset.
 
-WorldFoundry **vendors the judge runtime** and an importer. Import mode only normalizes official result files. Judge mode stages generated videos against a selected prompt class and calls the checked-in GPT evaluation prompt. A mocked API is never treated as metric evidence. Primary key: `nsfw_average`.
+WorldFoundry **bundles the judge runtime** and an importer. Import mode only normalizes official result files. Judge mode stages generated videos against a selected prompt class and calls the bundled GPT evaluation prompt. Primary key: `nsfw_average`.
 
 <BenchmarkPageSections id="t2v-safety-bench" locale="en" />
 
@@ -16,7 +16,7 @@ WorldFoundry **vendors the judge runtime** and an importer. Import mode only nor
 Import official aspect rates:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id t2v-safety-bench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -25,13 +25,13 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-Judge mode needs `OPENAI_API_KEY` or `WORLDFOUNDRY_T2V_SAFETY_BENCH_GPT_API_KEY`, plus generated videos under `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`. Optional: `WORLDFOUNDRY_T2V_SAFETY_BENCH_ROOT`, `WORLDFOUNDRY_T2V_SAFETY_BENCH_GPT_MODEL`, `--classes` / `--prompt-path`, `--limit` for bounded wiring runs. Default import path: `WORLDFOUNDRY_T2V_SAFETY_BENCH_RESULTS_PATH`.
+Judge mode needs `OPENAI_API_KEY` or `WORLDFOUNDRY_T2V_SAFETY_BENCH_GPT_API_KEY`, plus generated videos under `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`. Optional: `WORLDFOUNDRY_T2V_SAFETY_BENCH_ROOT`, `WORLDFOUNDRY_T2V_SAFETY_BENCH_GPT_MODEL`, `--classes` / `--prompt-path`, `--limit` for small test runs. Default import path: `WORLDFOUNDRY_T2V_SAFETY_BENCH_RESULTS_PATH`.
 
-In-tree pointers:
+Manifest, judge runtime, and prompt assets:
 
 ```text
 worldfoundry/data/benchmarks/tasks/external/t2v-safety-bench.yaml
-worldfoundry/evaluation/tasks/execution/runners/t2v_safety_bench/runtime/t2v_safety_bench
+worldfoundry/evals/tasks/execution/runners/t2v_safety_bench/runtime/t2v_safety_bench
 worldfoundry/data/benchmarks/assets/t2v-safety-bench/
 ```
 

@@ -17,6 +17,7 @@ pip_packages:
 - peft==0.17.1
 - huggingface-hub==0.36.2
 - safetensors==0.5.3
+- ftfy==6.3.1
 - imageio[ffmpeg]>=2.34.0
 - numpy>=1.26.0,<2.0
 - opencv-python>=4.8.0
@@ -26,8 +27,9 @@ validation_imports:
 - torch
 - diffusers
 - transformers
+- ftfy
 - imageio
-- warp_as_history
+- worldfoundry.synthesis.visual_generation.warp_as_history.warp_as_history_runtime.warp_as_history
 notes:
 - Route Warp-as-History to its dedicated upstream-compatible environment; the local env has torch 2.5.0+cu121 and the runtime
   code is vendored in tree under worldfoundry/synthesis/visual_generation/warp_as_history.

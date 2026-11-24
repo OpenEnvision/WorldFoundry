@@ -1,9 +1,9 @@
 ---
 title: VMBench
-description: "阿里高德 ICCV 2025 运动评测：1050 条 prompt、五个本地指标。WorldFoundry 内置打分器，不编造榜单。"
+description: "阿里高德 ICCV 2025 运动评测：1050 条 prompt、五个本地指标。WorldFoundry 内置打分器。"
 ---
 
-VMBench（AMAP-ML；ICCV 2025）用五个对齐感知的本地指标评 **运动生成**——没有托管裁判 API：
+VMBench（AMAP-ML；ICCV 2025）使用五个感知对齐的本地指标评估**运动生成**，不依赖托管裁判 API：
 
 - **PAS** — 可感知幅度
 - **OIS** — 运动中的物体完整性
@@ -15,14 +15,14 @@ VMBench（AMAP-ML；ICCV 2025）用五个对齐感知的本地指标评 **运动
 
 论文：[VMBench（ICCV 2025）](https://openaccess.thecvf.com/content/ICCV2025/html/Ling_VMBench_A_Benchmark_for_Perception-Aligned_Video_Motion_Generation_ICCV_2025_paper.html)。项目：[amap-ml.github.io/VMBench-Website](https://amap-ml.github.io/VMBench-Website/)。代码：[AMAP-ML/VMBench](https://github.com/AMAP-ML/VMBench)。
 
-WorldFoundry **仓内内置官方指标代码**，并捆绑 prompt 套件（`worldfoundry/data/benchmarks/assets/vmbench/prompts/prompts.json`）。接入时官方 HF 数据集端点 **尚未公开**。结果 / runtime 接线存在；**完整 CUDA 指标重算未验证**。完整重算需要 MMDetection / MMPose / DeepSpeed 与检测 / 跟踪权重。
+WorldFoundry **仓内内置官方指标代码**，并捆绑 prompt 套件（`worldfoundry/data/benchmarks/assets/vmbench/prompts/prompts.json`）。完整重算需要 MMDetection / MMPose / DeepSpeed 与检测 / 跟踪权重；**完整 CUDA 指标重算尚未验证**。
 
 <BenchmarkPageSections id="vmbench" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id vmbench \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -33,7 +33,7 @@ worldfoundry-eval zoo benchmark-run \
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/vmbench/run_vmbench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/vmbench/run_vmbench_official_runner.py \
   --run-official \
   --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --prompt-manifest "${WORLDFOUNDRY_VMBENCH_PROMPT_MANIFEST}" \
@@ -43,7 +43,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 环境变量：`WORLDFOUNDRY_VMBENCH_PROMPT_MANIFEST`（默认仓内套件）、`WORLDFOUNDRY_VMBENCH_RESULTS_PATH`。共享栈：`motion_stack`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/vmbench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/vmbench/runtime/official`。
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/vmbench.yaml`，`worldfoundry/evals/tasks/execution/runners/vmbench/runtime/official`。
 
 产物包括 `scorecard.json`（主键 `vmbench_average`，榜单键 `Avg`）。
 

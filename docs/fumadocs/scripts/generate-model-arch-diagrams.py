@@ -49,7 +49,10 @@ def main() -> int:
                     continue
                 if figure_src.lower().endswith("/paper.png"):
                     continue
-                if any(figure_src.lower().endswith(name) for name in ("/teaser.png", "/teaser.jpg", "/teaser.webp", "/fig1.png")):
+                if any(
+                    figure_src.lower().endswith(name)
+                    for name in ("/teaser.png", "/teaser.jpg", "/teaser.webp", "/fig1.png")
+                ):
                     continue
                 overview = figure_src
                 break

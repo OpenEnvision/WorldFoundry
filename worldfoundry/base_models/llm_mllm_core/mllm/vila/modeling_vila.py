@@ -1,9 +1,10 @@
+# ruff: noqa: F405 - Names come from the upstream star import.
 import copy
 import logging
 import os
 import os.path
 from collections import defaultdict, deque
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, ClassVar
 
 import torch
 import torch.nn as nn
@@ -17,11 +18,10 @@ from transformers import (
 )
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-from .auto_processor import VILAProcessor
 from .base_projector import MultimodalProjector, MultimodalProjectorConfig
 from .builder import build_llm_and_tokenizer
 from .configuration_vila import VILAConfig
-from .constants import *
+from .constants import *  # noqa: F403 - Upstream star import kept as written.
 from .media import extract_media
 from .media_encoder import BasicImageEncoder, BasicVideoEncoder
 from .mm_utils import process_image, process_images
@@ -92,7 +92,7 @@ class VILAPretrainedModel(PreTrainedModel):
     main_input_name = "input_embeds"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
-    _no_split_modules = ["Qwen2DecoderLayer", "SiglipEncoderLayer"]
+    _no_split_modules: ClassVar[list] = ["Qwen2DecoderLayer", "SiglipEncoderLayer"]
 
     def __init__(self, config: VILAConfig, *args, **kwargs):
         super().__init__(config)
@@ -121,23 +121,23 @@ class VILAPretrainedModel(PreTrainedModel):
         self.post_config()
         self.is_loaded = True
 
-        assert (
-            self.llm is not None or self.vision_tower is not None or self.mm_projector is not None
-        ), "At least one of the components must be instantiated."
+        assert self.llm is not None or self.vision_tower is not None or self.mm_projector is not None, (
+            "At least one of the components must be instantiated."
+        )
 
     @classmethod
     def from_pretrained(
         cls,
-        pretrained_model_name_or_path: Optional[str] = None,
+        pretrained_model_name_or_path: str | None = None,
         *model_args,
-        config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None,
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        config: PretrainedConfig | str | os.PathLike | None = None,
+        cache_dir: str | os.PathLike | None = None,
         ignore_mismatched_sizes: bool = False,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
-        use_safetensors: Optional[bool] = None,
+        use_safetensors: bool | None = None,
         weights_only: bool = True,
         **kwargs,
     ):
@@ -206,6 +206,7 @@ class VILAPretrainedModel(PreTrainedModel):
         if type(mm_projector) is list:
             mm_projector = mm_projector[0]
         return mm_projector
+
 
 class VILAForCausalLM(VILAPretrainedModel):
     def __init__(self, config: VILAConfig, *args, **kwargs):
@@ -277,7 +278,7 @@ class VILAForCausalLM(VILAPretrainedModel):
 
         return image_features_each_image, new_block_sizes
 
-    def encode_images(self, images, block_sizes: Optional[Optional[Tuple[int, ...]]] = None):
+    def encode_images(self, images, block_sizes: tuple[int, ...] | None = None):
         if block_sizes is None:
             block_sizes = [None] * len(images)
         if getattr(self.config, "dynamic_s2", False):
@@ -286,7 +287,7 @@ class VILAForCausalLM(VILAPretrainedModel):
 
             image_features = [
                 self.split_chessboard(x, block_size[0], block_size[1])
-                for x, block_size in zip(image_features, new_block_sizes)
+                for x, block_size in zip(image_features, new_block_sizes, strict=False)
             ]  # list of B * C * H * W tensors
             image_features = torch.cat(
                 [rearrange(x, "b c h w -> b (h w) c") for x in image_features], dim=0
@@ -297,10 +298,10 @@ class VILAForCausalLM(VILAPretrainedModel):
             )
             image_features = [
                 self.merge_chessboard(x, block_size[0], block_size[1])
-                for x, block_size in zip(image_features, new_block_sizes)
+                for x, block_size in zip(image_features, new_block_sizes, strict=False)
             ]  # list of 1 * C * H * W tensors
             image_features = [rearrange(x, "1 c h w -> (h w) c") for x in image_features]  # list of N * C tensors
-            if all([feature.shape[0] == image_features[0].shape[0] for feature in image_features]):
+            if all([feature.shape[0] == image_features[0].shape[0] for feature in image_features]):  # noqa: C419 - Evaluates every element before testing, as upstream.
                 image_features = torch.stack(image_features, dim=0)
         else:
             image_features = self.get_vision_tower()(images)
@@ -314,11 +315,11 @@ class VILAForCausalLM(VILAPretrainedModel):
     def _embed(
         self,
         input_ids: torch.Tensor,
-        media: Dict[str, List[torch.Tensor]],
-        media_config: Dict[str, Dict[str, Any]],
-        labels: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        media: dict[str, list[torch.Tensor]],
+        media_config: dict[str, dict[str, Any]],
+        labels: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # NOTE(ligeng): deep copy to avoid modifying the original media and media_config
         media = copy.deepcopy(media)
         media_config = copy.deepcopy(media_config)
@@ -333,7 +334,7 @@ class VILAForCausalLM(VILAPretrainedModel):
 
         # Extract text and media embeddings
         text_embeds = self.llm.model.embed_tokens(input_ids)
-        if media is not None:
+        if media is not None:  # noqa: SIM108 - Branches carry per-case comments.
             media_embeds = self.__embed_media_tokens(media, media_config)
         else:
             # no media was provided, so we just return an empty dict
@@ -394,25 +395,25 @@ class VILAForCausalLM(VILAPretrainedModel):
 
     def __embed_media_tokens(
         self,
-        media: Dict[str, List[torch.Tensor]],
-        media_config: Dict[str, Dict[str, Any]],
-    ) -> Dict[str, List[torch.Tensor]]:
+        media: dict[str, list[torch.Tensor]],
+        media_config: dict[str, dict[str, Any]],
+    ) -> dict[str, list[torch.Tensor]]:
         embeds = defaultdict(deque)
         for name in media:
             embeds[name] = deque(self.encoders[name](media[name], media_config[name]))
         return embeds
 
     def __truncate_sequence(
-        self, inputs: List[torch.Tensor], labels: List[torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        self, inputs: list[torch.Tensor], labels: list[torch.Tensor]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if any(len(input) > self.tokenizer.model_max_length for input in inputs):
             inputs = [input[: self.tokenizer.model_max_length] for input in inputs]
             labels = [label[: self.tokenizer.model_max_length] for label in labels]
         return inputs, labels
 
     def __batchify_sequence(
-        self, inputs: List[torch.Tensor], labels: List[torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        self, inputs: list[torch.Tensor], labels: list[torch.Tensor]
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size = len(inputs)
         device = inputs[0].device
         hidden_size = inputs[0].shape[1]
@@ -442,17 +443,17 @@ class VILAForCausalLM(VILAPretrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        media: Optional[Dict[str, List[torch.Tensor]]] = None,
-        images: Optional[torch.FloatTensor] = None,
-        media_config: Optional[List] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        media: dict[str, list[torch.Tensor]] | None = None,
+        images: torch.FloatTensor | None = None,
+        media_config: list | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> tuple | CausalLMOutputWithPast:
         if images is not None:
             if media is not None:
                 raise ValueError("Both 'media' and 'images' are provided. Please provide only one.")
@@ -480,10 +481,10 @@ class VILAForCausalLM(VILAPretrainedModel):
     # @torch.inference_mode()
     def generate(
         self,
-        input_ids: Optional[torch.FloatTensor] = None,
-        media: Optional[Dict[str, List[torch.Tensor]]] = None,
-        media_config: Dict[str, Dict[str, Any]] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        input_ids: torch.FloatTensor | None = None,
+        media: dict[str, list[torch.Tensor]] | None = None,
+        media_config: dict[str, dict[str, Any]] | None = None,
+        attention_mask: torch.LongTensor | None = None,
         return_output_ids_only: bool = False,
         **generation_kwargs,
     ) -> torch.LongTensor:
@@ -506,7 +507,7 @@ class VILAForCausalLM(VILAPretrainedModel):
             return_value = output_ids
         else:
             # by default, return the input_ids and output_ids concatenated to keep consistency with the community VLMs like qwen
-            generation_config = generation_kwargs.get("generation_config", None)
+            generation_config = generation_kwargs.get("generation_config")
             if generation_config is not None:
                 num_generations = generation_config.num_return_sequences
                 repeat_input_ids = input_ids.repeat_interleave(num_generations, dim=0)
@@ -519,8 +520,8 @@ class VILAForCausalLM(VILAPretrainedModel):
     @torch.inference_mode()
     def generate_content(
         self,
-        prompt: Union[str, List],
-        generation_config: Optional[GenerationConfig] = None,
+        prompt: str | list,
+        generation_config: GenerationConfig | None = None,
         response_format=None,
     ) -> str:
         # TODO(zhijianl): Support directly taking conversation as input
@@ -555,7 +556,7 @@ class VILAForCausalLM(VILAPretrainedModel):
                         media_config[name]["block_sizes"] = [block_sizes]
                 else:
                     images = process_images(media["image"], self.vision_tower.image_processor, self.config).half()
-                media[name] = [image for image in images]
+                media[name] = list(images)
             elif name == "video":
                 if self.config.image_aspect_ratio == "dynamic" and self.config.video_max_tiles > 1:
                     media[name] = [

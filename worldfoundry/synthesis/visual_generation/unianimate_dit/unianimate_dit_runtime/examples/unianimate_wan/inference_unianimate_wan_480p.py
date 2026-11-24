@@ -1,214 +1,234 @@
+from __future__ import annotations
+
+import argparse
 import os
 import random
 
-import cv2
-import numpy as np
-import torch
-import torchvision
-from PIL import Image
-
-from worldfoundry.core.io import save_video
-from worldfoundry.synthesis.visual_generation.unianimate_dit.native_pipeline import (
-    load_unianimate_pipeline,
-)
-
-# define hight and width
-height = 832
-width = 480
-seed = 0
-max_frames = 81
-use_teacache = False
-
-test_list_path= [
-    # Format: [frame_interval, reference image, driving pose sequence]
-    [1, "data/images/WOMEN-Blouses_Shirts-id_00004955-01_4_full.jpg", "data/saved_pose/WOMEN-Blouses_Shirts-id_00004955-01_4_full"],
-    [1, "data/images/musk.jpg", "data/saved_pose/musk"],
-    [1, "data/images/WOMEN-Blouses_Shirts-id_00005125-03_4_full.jpg", "data/saved_pose/WOMEN-Blouses_Shirts-id_00005125-03_4_full"],
-    [1, "data/images/IMG_20240514_104337.jpg", "data/saved_pose/IMG_20240514_104337"],
-    [1, "data/images/10.jpg", "data/saved_pose/10"],
-    [1, "data/images/taiyi2.jpg", "data/saved_pose/taiyi2"],
-]
-
-misc_size = [height,width]
-
-use_usp = os.getenv("WORLDFOUNDRY_UNIANIMATE_USE_USP", "0") == "1"
-device = "cuda"
-if use_usp:
-    import torch.distributed as dist
-    from xfuser.core.distributed import init_distributed_environment, initialize_model_parallel
-
-    dist.init_process_group(backend="nccl", init_method="env://")
-    init_distributed_environment(rank=dist.get_rank(), world_size=dist.get_world_size())
-    initialize_model_parallel(
-        sequence_parallel_degree=dist.get_world_size(),
-        ring_degree=1,
-        ulysses_degree=dist.get_world_size(),
-    )
-    torch.cuda.set_device(dist.get_rank())
-    device = f"cuda:{dist.get_rank()}"
-
-pipe = load_unianimate_pipeline(
-    "./Wan2.1-I2V-14B-720P",
-    "./checkpoints/UniAnimate-Wan2.1-14B-Lora-12000.ckpt",
-    device=device,
-    use_usp=use_usp,
+from worldfoundry.synthesis.visual_generation.unianimate_dit.worldfoundry_runner import (
+    DEFAULT_POSE_DIR,
+    DEFAULT_REF_IMAGE,
 )
 
 
-def resize(image):
-    
-    image = torchvision.transforms.functional.resize(
-        image,
-        (height, width),
-        interpolation=torchvision.transforms.InterpolationMode.BILINEAR
+def run_inference(
+    *,
+    prompt: str = "a person is dancing",
+    reference_image: str = DEFAULT_REF_IMAGE,
+    max_frames: int = 81,
+    steps: int = 50,
+    height: int = 832,
+    width: int = 480,
+    seed: int = 0,
+) -> None:
+    """Animate the reference image with the staged driving pose sequence."""
+    import cv2
+    import numpy as np
+    import torch
+    import torchvision
+    from PIL import Image
+
+    from worldfoundry.core.io import save_video
+    from worldfoundry.synthesis.visual_generation.unianimate_dit.native_pipeline import (
+        load_unianimate_pipeline,
     )
-    return torch.from_numpy(np.array(image))
 
+    use_teacache = False
+    test_list_path: list[tuple[int, str, str]] = [(1, reference_image, DEFAULT_POSE_DIR)]
 
-for path_dir_per in test_list_path:
-    sample_fps = path_dir_per[0] # frame interval for sampling
-    pose_file_path = path_dir_per[2]
-    ref_image_path = path_dir_per[1]
+    misc_size = [height, width]
 
-    dwpose_all = {}
-    frames_all = {}
-    
-    for ii_index in sorted(os.listdir(pose_file_path)):
-        if ii_index != "pose.jpg":
-            dwpose_all[ii_index] = Image.open(os.path.join(pose_file_path, ii_index))
-            frames_all[ii_index] = Image.fromarray(cv2.cvtColor(cv2.imread(ref_image_path), cv2.COLOR_BGR2RGB))
+    use_usp = os.getenv("WORLDFOUNDRY_UNIANIMATE_USE_USP", "0") == "1"
+    device = "cuda"
+    if use_usp:
+        import torch.distributed as dist
+        from xfuser.core.distributed import init_distributed_environment, initialize_model_parallel
 
-    frames_pose_ref = Image.open(os.path.join(pose_file_path, "pose.jpg"))
-
-    stride = sample_fps
-    _total_frame_num = len(frames_all)
-    cover_frame_num = (stride * max_frames)
-    
-    if _total_frame_num < cover_frame_num + 1:
-        start_frame = 0
-        end_frame = _total_frame_num-1
-        stride = max((_total_frame_num//max_frames),1)
-        end_frame = min(stride*max_frames, _total_frame_num)
-    else:
-        start_frame = random.randint(0, _total_frame_num-cover_frame_num-1)
-        end_frame = start_frame + cover_frame_num
-    frame_list = []
-    dwpose_list = []
-
-    random_ref_frame = frames_all[list(frames_all.keys())[0]]
-    if random_ref_frame.mode != 'RGB':
-        random_ref_frame = random_ref_frame.convert('RGB')
-    random_ref_dwpose = frames_pose_ref
-    if random_ref_dwpose.mode != 'RGB':
-        random_ref_dwpose = random_ref_dwpose.convert('RGB')
-    
-    # sample pose sequence
-    for i_index in range(start_frame, end_frame, stride):
-        if i_index < len(frames_all):  # Check index within bounds
-            i_key = list(frames_all.keys())[i_index]
-            i_frame = frames_all[i_key]
-            if i_frame.mode != 'RGB':
-                i_frame = i_frame.convert('RGB')
-            
-            i_dwpose = dwpose_all[i_key]
-            if i_dwpose.mode != 'RGB':
-                i_dwpose = i_dwpose.convert('RGB')
-            frame_list.append(i_frame)
-            dwpose_list.append(i_dwpose)
-    
-    if (end_frame-start_frame) < max_frames:
-        for _ in range(max_frames-(end_frame-start_frame)):
-            i_key = list(frames_all.keys())[end_frame-1]
-            
-            i_frame = frames_all[i_key]
-            if i_frame.mode != 'RGB':
-                i_frame = i_frame.convert('RGB')
-            i_dwpose = dwpose_all[i_key]
-            
-    
-            frame_list.append(i_frame)
-            dwpose_list.append(i_dwpose)
-
-    have_frames = len(frame_list)>0
-    middle_indix = 0
-
-    if have_frames:
-
-        l_hight = random_ref_frame.size[1]
-        l_width = random_ref_frame.size[0]
-        
-        ref_frame = random_ref_frame 
-        
-        random_ref_frame_tmp = torchvision.transforms.functional.resize(
-            random_ref_frame,
-            (height, width),
-            interpolation=torchvision.transforms.InterpolationMode.BILINEAR
+        dist.init_process_group(backend="nccl", init_method="env://")
+        init_distributed_environment(rank=dist.get_rank(), world_size=dist.get_world_size())
+        initialize_model_parallel(
+            sequence_parallel_degree=dist.get_world_size(),
+            ring_degree=1,
+            ulysses_degree=dist.get_world_size(),
         )
-        random_ref_dwpose_tmp = resize(random_ref_dwpose) 
-        
-        dwpose_data_tmp = torch.stack([resize(ss).permute(2,0,1) for ss in dwpose_list], dim=0)
+        torch.cuda.set_device(dist.get_rank())
+        device = f"cuda:{dist.get_rank()}"
 
-    
-    dwpose_data = torch.zeros(max_frames, 3, misc_size[0], misc_size[1])
-
-    if have_frames:
-        
-        dwpose_data[:len(frame_list), ...] = dwpose_data_tmp
-        
-    
-    dwpose_data = dwpose_data.permute(1,0,2,3)
-
-    def image_compose_width(imag, imag_1):
-        # read the size of image1
-        rom_image = imag
-        width, height = imag.size
-        # read the size of image2
-        rom_image_1 = imag_1
-        
-        width1 = rom_image_1.size[0]
-        # create a new image
-        to_image = Image.new('RGB', (width+width1, height))
-        # paste old images
-        to_image.paste(rom_image, (0, 0))
-        to_image.paste(rom_image_1, (width, 0))
-        return to_image
-
-    caption = "a person is dancing"
-    video_out_condition = []
-    for ii in range(dwpose_data_tmp.shape[0]):
-        ss = dwpose_list[ii]
-        video_out_condition.append(image_compose_width(random_ref_frame_tmp, torchvision.transforms.functional.resize(
-            ss,
-            (height, width),
-            interpolation=torchvision.transforms.InterpolationMode.BILINEAR
-        )))
-
-    # Image-to-video
-    video = pipe(
-        prompt="a person is dancing",
-        negative_prompt="细节模糊不清，字幕，作品，画作，画面，静止，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，杂乱的背景，三条腿，背景人很多，倒着走",
-        input_image=ref_frame,
-        num_inference_steps=50,
-        cfg_scale=1.5, # slow
-        # cfg_scale=1.0, # fast
-        seed=seed, tiled=True,
-        dwpose_data=dwpose_data,
-        random_ref_dwpose=random_ref_dwpose_tmp,
-        height=height,
-        width=width,
-        tea_cache_l1_thresh=0.3 if use_teacache else None,
-        tea_cache_model_id="Wan2.1-I2V-14B-720P" if use_teacache else None,
-
+    pipe = load_unianimate_pipeline(
+        "./Wan2.1-I2V-14B-720P",
+        "./checkpoints/UniAnimate-Wan2.1-14B-Lora-12000.ckpt",
+        device=device,
+        use_usp=use_usp,
     )
 
-    video_out = []
-    for ii in range(len(video)):
-        ss = video[ii]
-        video_out.append(image_compose_width(video_out_condition[ii], ss))
-    is_writer = not use_usp or torch.distributed.get_rank() == 0
-    if is_writer:
-        os.makedirs("./outputs", exist_ok=True)
-        save_video(video_out, "outputs/video_480P_{}_{}.mp4".format(ref_image_path.split('/')[-1], pose_file_path.split('/')[-1]), fps=15, quality=5)
+    def resize(image: Image.Image) -> torch.Tensor:
+        image = torchvision.transforms.functional.resize(
+            image, (height, width), interpolation=torchvision.transforms.InterpolationMode.BILINEAR
+        )
+        return torch.from_numpy(np.array(image))
+
+    for path_dir_per in test_list_path:
+        sample_fps = path_dir_per[0]  # frame interval for sampling
+        pose_file_path = path_dir_per[2]
+        ref_image_path = path_dir_per[1]
+
+        dwpose_all = {}
+        frames_all = {}
+
+        for ii_index in sorted(os.listdir(pose_file_path)):
+            if ii_index != "pose.jpg":
+                dwpose_all[ii_index] = Image.open(os.path.join(pose_file_path, ii_index))
+                frames_all[ii_index] = Image.fromarray(cv2.cvtColor(cv2.imread(ref_image_path), cv2.COLOR_BGR2RGB))
+
+        frames_pose_ref = Image.open(os.path.join(pose_file_path, "pose.jpg"))
+
+        stride = sample_fps
+        _total_frame_num = len(frames_all)
+        cover_frame_num = stride * max_frames
+
+        if _total_frame_num < cover_frame_num + 1:
+            start_frame = 0
+            end_frame = _total_frame_num - 1
+            stride = max((_total_frame_num // max_frames), 1)
+            end_frame = min(stride * max_frames, _total_frame_num)
+        else:
+            start_frame = random.randint(0, _total_frame_num - cover_frame_num - 1)
+            end_frame = start_frame + cover_frame_num
+        frame_list = []
+        dwpose_list = []
+
+        random_ref_frame = frames_all[list(frames_all.keys())[0]]  # noqa: RUF015 - Keeps eager list construction and IndexError.
+        if random_ref_frame.mode != "RGB":
+            random_ref_frame = random_ref_frame.convert("RGB")
+        random_ref_dwpose = frames_pose_ref
+        if random_ref_dwpose.mode != "RGB":
+            random_ref_dwpose = random_ref_dwpose.convert("RGB")
+
+        # sample pose sequence
+        for i_index in range(start_frame, end_frame, stride):
+            if i_index < len(frames_all):  # Check index within bounds
+                i_key = list(frames_all.keys())[i_index]
+                i_frame = frames_all[i_key]
+                if i_frame.mode != "RGB":
+                    i_frame = i_frame.convert("RGB")
+
+                i_dwpose = dwpose_all[i_key]
+                if i_dwpose.mode != "RGB":
+                    i_dwpose = i_dwpose.convert("RGB")
+                frame_list.append(i_frame)
+                dwpose_list.append(i_dwpose)
+
+        if (end_frame - start_frame) < max_frames:
+            for _ in range(max_frames - (end_frame - start_frame)):
+                i_key = list(frames_all.keys())[end_frame - 1]
+
+                i_frame = frames_all[i_key]
+                if i_frame.mode != "RGB":
+                    i_frame = i_frame.convert("RGB")
+                i_dwpose = dwpose_all[i_key]
+
+                frame_list.append(i_frame)
+                dwpose_list.append(i_dwpose)
+
+        have_frames = len(frame_list) > 0
+
+        if have_frames:
+            ref_frame = random_ref_frame
+
+            random_ref_frame_tmp = torchvision.transforms.functional.resize(
+                random_ref_frame, (height, width), interpolation=torchvision.transforms.InterpolationMode.BILINEAR
+            )
+            random_ref_dwpose_tmp = resize(random_ref_dwpose)
+
+            dwpose_data_tmp = torch.stack([resize(ss).permute(2, 0, 1) for ss in dwpose_list], dim=0)
+
+        dwpose_data = torch.zeros(max_frames, 3, misc_size[0], misc_size[1])
+
+        if have_frames:
+            dwpose_data[: len(frame_list), ...] = dwpose_data_tmp
+
+        dwpose_data = dwpose_data.permute(1, 0, 2, 3)
+
+        def image_compose_width(imag: Image.Image, imag_1: Image.Image) -> Image.Image:
+            # read the size of image1
+            rom_image = imag
+            width, height = imag.size
+            # read the size of image2
+            rom_image_1 = imag_1
+
+            width1 = rom_image_1.size[0]
+            # create a new image
+            to_image = Image.new("RGB", (width + width1, height))
+            # paste old images
+            to_image.paste(rom_image, (0, 0))
+            to_image.paste(rom_image_1, (width, 0))
+            return to_image
+
+        video_out_condition = []
+        for ii in range(dwpose_data_tmp.shape[0]):
+            ss = dwpose_list[ii]
+            video_out_condition.append(
+                image_compose_width(
+                    random_ref_frame_tmp,
+                    torchvision.transforms.functional.resize(
+                        ss, (height, width), interpolation=torchvision.transforms.InterpolationMode.BILINEAR
+                    ),
+                )
+            )
+
+        # Image-to-video
+        video = pipe(
+            prompt=prompt,
+            negative_prompt="细节模糊不清，字幕，作品，画作，画面，静止，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，杂乱的背景，三条腿，背景人很多，倒着走",
+            input_image=ref_frame,
+            num_frames=max_frames,
+            num_inference_steps=steps,
+            cfg_scale=1.5,  # slow
+            # cfg_scale=1.0, # fast
+            seed=seed,
+            tiled=True,
+            dwpose_data=dwpose_data,
+            random_ref_dwpose=random_ref_dwpose_tmp,
+            height=height,
+            width=width,
+            tea_cache_l1_thresh=0.3 if use_teacache else None,
+            tea_cache_model_id="Wan2.1-I2V-14B-720P" if use_teacache else None,
+        )
+
+        video_out = []
+        for ii in range(len(video)):
+            ss = video[ii]
+            video_out.append(image_compose_width(video_out_condition[ii], ss))
+        is_writer = not use_usp or torch.distributed.get_rank() == 0
+        if is_writer:
+            os.makedirs("./outputs", exist_ok=True)
+            save_video(
+                video_out,
+                "outputs/video_480P_{}_{}.mp4".format(ref_image_path.split("/")[-1], pose_file_path.split("/")[-1]),
+                fps=15,
+                quality=5,
+            )
 
 
-    # CUDA_VISIBLE_DEVICES="0" python examples/unianimate_wan/inference_unianimate_wan_480p.py
+def main() -> None:
+    parser = argparse.ArgumentParser(description="UniAnimate-DiT inference worker")
+    parser.add_argument("--prompt", default="a person is dancing")
+    parser.add_argument("--image-path", default=DEFAULT_REF_IMAGE)
+    parser.add_argument("--max-frames", type=int, default=81)
+    parser.add_argument("--num-inference-steps", type=int, default=50)
+    parser.add_argument("--height", type=int, default=832)
+    parser.add_argument("--width", type=int, default=480)
+    parser.add_argument("--seed", type=int, default=0)
+    args = parser.parse_args()
+    run_inference(
+        prompt=args.prompt,
+        reference_image=args.image_path,
+        max_frames=args.max_frames,
+        steps=args.num_inference_steps,
+        height=args.height,
+        width=args.width,
+        seed=args.seed,
+    )
+
+
+if __name__ == "__main__":
+    main()

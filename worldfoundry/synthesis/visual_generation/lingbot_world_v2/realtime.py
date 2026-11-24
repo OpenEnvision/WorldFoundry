@@ -66,7 +66,9 @@ class LingBotWorldV2SmallRealtimeSession(LingBotWorldV2RealtimeSession):
         if self.sp_size != 1 or _is_fsdp_module(self.model) or hasattr(self.model, "_orig_mod"):
             return None
         return self.raw_model.prepare_rotary_frequencies(
-            [latent], current_start=current_start, frame_seqlen=self.frame_sequence_length,
+            [latent],
+            current_start=current_start,
+            frame_seqlen=self.frame_sequence_length,
         )
 
     def _new_condition_cache(self) -> WanZeroConditionCache | None:
@@ -84,17 +86,19 @@ class LingBotWorldV2SmallRealtimeSession(LingBotWorldV2RealtimeSession):
 
         convert_convolution_weight_layouts(self.core.vae.model, conv2d=True, conv3d=True)
         self._decoder_model = self.core.vae.model.decoder
-        self._decoder = StreamingWanDecoder(self.core.vae, channels_last_3d=True,
-                                            compile_decoder=self.core.vae_streaming_compile)
+        self._decoder = StreamingWanDecoder(
+            self.core.vae, channels_last_3d=True, compile_decoder=self.core.vae_streaming_compile
+        )
 
-    def _decode(self, latent):
+    def _decode_pixels(self, latent: torch.Tensor) -> torch.Tensor:
+        """Decode native Wan pixels without transferring or changing their rounding."""
         import torch
 
         decoder = cast("StreamingWanDecoder", self._decoder)
         video = decoder.decode(latent.unsqueeze(0))[0]
         if video.shape[1] != self.next_output_frames():
             raise RuntimeError(f"Wan decoder produced {video.shape[1]} frames; expected {self.next_output_frames()}")
-        return video.permute(1, 2, 3, 0).add_(1.).mul_(127.5).round_().clamp_(0, 255).to(torch.uint8).cpu().numpy()
+        return video.permute(1, 2, 3, 0).add_(1.0).mul_(127.5).round_().clamp_(0, 255).to(torch.uint8)
 
 
 __all__ = ["LingBotWorldV2RealtimeSession", "LingBotWorldV2SmallRealtimeSession"]

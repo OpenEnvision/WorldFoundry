@@ -3,12 +3,11 @@
 # Academic-use terms: THIRD-PARTY-NOTICES (WorldCrafter)
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import math
-from typing import Sequence
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
 
 import torch
-
 
 DEFAULT_HORIZONTAL_FOV_DEGREES = 100.0
 DEFAULT_VERTICAL_FOV_DEGREES = 71.13349068444832
@@ -56,16 +55,10 @@ def target_frustum_visibility_masks(
     far_m: float,
     samples_per_axis: int = FRUSTUM_SAMPLES_PER_AXIS,
 ) -> torch.Tensor:
-
     targets = _validate_pose_batch(target_c2w, name="target_c2w")
-    sources = _validate_pose_batch(source_c2w, name="source_c2w").to(
-        device=targets.device, dtype=targets.dtype
-    )
+    sources = _validate_pose_batch(source_c2w, name="source_c2w").to(device=targets.device, dtype=targets.dtype)
     if int(samples_per_axis) != FRUSTUM_SAMPLES_PER_AXIS:
-        raise ValueError(
-            "trajectory FOV selection requires "
-            f"samples_per_axis={FRUSTUM_SAMPLES_PER_AXIS}"
-        )
+        raise ValueError(f"trajectory FOV selection requires samples_per_axis={FRUSTUM_SAMPLES_PER_AXIS}")
     if not (math.isfinite(near_m) and math.isfinite(far_m) and 0.0 < near_m < far_m):
         raise ValueError("near_m and far_m must be finite with 0 < near_m < far_m")
     if not 0.0 < float(horizontal_fov_degrees) < 180.0:
@@ -104,9 +97,7 @@ def target_frustum_visibility_masks(
     py = points_in_source[:, :, 1]
     pz = points_in_source[:, :, 2]
     yaw = torch.atan2(px, pz.clamp_min(1e-6)).abs()
-    pitch = torch.atan2(
-        py, torch.sqrt(px.square() + pz.square()).clamp_min(1e-6)
-    ).abs()
+    pitch = torch.atan2(py, torch.sqrt(px.square() + pz.square()).clamp_min(1e-6)).abs()
     return (
         (pz >= float(near_m))
         & (pz <= float(far_m))
@@ -125,7 +116,6 @@ def ordered_target_frontier_masks(
     far_m: float,
     samples_per_axis: int = FRUSTUM_SAMPLES_PER_AXIS,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-
     targets = _validate_pose_batch(target_c2w, name="target_c2w")
     anchor = torch.as_tensor(anchor_c2w, device=targets.device, dtype=targets.dtype)
     if anchor.shape != (4, 4) or not bool(torch.isfinite(anchor).all()):
@@ -211,11 +201,8 @@ def select_trajectory_fov_history(
     frustum_samples_per_axis: int = FRUSTUM_SAMPLES_PER_AXIS,
     latents_per_chunk: int = 9,
 ) -> TrajectoryFovSelection:
-
     poses = _validate_pose_batch(controller_c2w, name="controller_c2w")
-    targets = _validate_pose_batch(target_c2w, name="target_c2w").to(
-        device=poses.device, dtype=poses.dtype
-    )
+    targets = _validate_pose_batch(target_c2w, name="target_c2w").to(device=poses.device, dtype=poses.dtype)
     candidates = tuple(sorted({int(value) for value in candidate_latents}))
     fixed = tuple(int(value) for value in fixed_context_latents)
     if int(budget) <= 0:
@@ -235,9 +222,7 @@ def select_trajectory_fov_history(
     if minimum_index < 0:
         raise ValueError("latent indices must be non-negative")
     if maximum_index >= poses.shape[0]:
-        raise ValueError(
-            f"latent index {maximum_index} exceeds controller pose count {poses.shape[0]}"
-        )
+        raise ValueError(f"latent index {maximum_index} exceeds controller pose count {poses.shape[0]}")
 
     combined = (*fixed, *candidates)
     pose_index = torch.tensor(combined, device=poses.device, dtype=torch.long)
@@ -330,46 +315,31 @@ def select_trajectory_fov_history(
                 "parent_chunk": candidates[chosen] // int(latents_per_chunk),
                 "kind": kind,
                 "bridge_fraction": bridge,
-                "raw_new_fov_cells_per_target": [
-                    int(value) for value in new_fov_per_target[chosen].cpu().tolist()
-                ],
+                "raw_new_fov_cells_per_target": [int(value) for value in new_fov_per_target[chosen].cpu().tolist()],
                 "raw_new_frontier_cells_per_target": [
                     int(value) for value in new_frontier_per_target[chosen].cpu().tolist()
                 ],
-                "absolute_fov_coverage_per_target": [
-                    float(value) for value in _coverage_ratio(covered).cpu().tolist()
-                ],
+                "absolute_fov_coverage_per_target": [float(value) for value in _coverage_ratio(covered).cpu().tolist()],
                 "frontier_coverage_per_target": [
-                    float(value)
-                    for value in _frontier_ratio(covered, frontier_fov).cpu().tolist()
+                    float(value) for value in _frontier_ratio(covered, frontier_fov).cpu().tolist()
                 ],
             }
         )
 
     selected = tuple(candidates[position] for position in selected_positions)
     if len(selected) != int(budget) or len(set(selected)) != int(budget):
-        raise RuntimeError(
-            f"trajectory FOV retrieval did not produce {budget} unique sources: {selected}"
-        )
+        raise RuntimeError(f"trajectory FOV retrieval did not produce {budget} unique sources: {selected}")
     return TrajectoryFovSelection(
         selected_latents=selected,
-        selected_parent_chunks=tuple(
-            sorted({value // int(latents_per_chunk) for value in selected})
-        ),
+        selected_parent_chunks=tuple(sorted({value // int(latents_per_chunk) for value in selected})),
         selection_kinds=tuple(selection_kinds),
-        initial_fov_coverage_per_target=tuple(
-            float(value) for value in _coverage_ratio(anchor_fov).cpu().tolist()
-        ),
-        final_fov_coverage_per_target=tuple(
-            float(value) for value in _coverage_ratio(covered).cpu().tolist()
-        ),
+        initial_fov_coverage_per_target=tuple(float(value) for value in _coverage_ratio(anchor_fov).cpu().tolist()),
+        final_fov_coverage_per_target=tuple(float(value) for value in _coverage_ratio(covered).cpu().tolist()),
         initial_frontier_coverage_per_target=tuple(
-            float(value)
-            for value in _frontier_ratio(anchor_fov, frontier_fov).cpu().tolist()
+            float(value) for value in _frontier_ratio(anchor_fov, frontier_fov).cpu().tolist()
         ),
         final_frontier_coverage_per_target=tuple(
-            float(value)
-            for value in _frontier_ratio(covered, frontier_fov).cpu().tolist()
+            float(value) for value in _frontier_ratio(covered, frontier_fov).cpu().tolist()
         ),
         minimum_bridge_fraction=min(bridge_values),
         mean_bridge_fraction=sum(bridge_values) / len(bridge_values),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from typing import Any
 
@@ -50,13 +51,13 @@ class WanExpertSchedule:
                 raise ValueError("expert schedule must decrease monotonically")
             high = bool(torch.tensor(timestep, dtype=torch.float32) / num_train_timesteps >= boundary_ratio)
             values.append((timestep, next_timestep, "high-noise" if high else "low-noise"))
-        for previous, current in zip(values, values[1:]):
+        for previous, current in itertools.pairwise(values):
             if previous[0] < current[0] or previous[1] != current[0]:
                 raise ValueError("expert schedule must decrease monotonically with matching next timesteps")
             if previous[2] == "low-noise" and current[2] == "high-noise":
                 raise ValueError("expert schedule permits only one high-to-low transition")
         counts = {expert: sum(row[2] == expert for row in values) for expert in ("high-noise", "low-noise")}
-        seen = {expert: 0 for expert in counts}
+        seen = dict.fromkeys(counts, 0)
         steps = []
         for index, (timestep, next_timestep, expert) in enumerate(values):
             steps.append(ExpertScheduleStep(index, timestep, next_timestep, expert, seen[expert], counts[expert]))

@@ -27,7 +27,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import partial
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -38,7 +37,6 @@ from .ops import (
     compute_topk_probs_and_indices,
     flash_mh_moe_fwd,
     flash_mh_moe_global_sort,
-    swiglu7_split,
 )
 from .preview_layers import (
     ElementWiseFourierEmbed,
@@ -87,9 +85,7 @@ class Attention(nn.Module):
     def __init__(self, config: AttentionConfig) -> None:
         super().__init__()
         self.config = config
-        self.pre_norm = MultiModalityRMSNorm(
-            config.hidden_size, eps=1e-6, num_modality=config.num_modality
-        )
+        self.pre_norm = MultiModalityRMSNorm(config.hidden_size, eps=1e-6, num_modality=config.num_modality)
 
         self.head_dim = config.head_dim
         self.num_heads_q = config.num_heads_q
@@ -124,16 +120,10 @@ class Attention(nn.Module):
             num_layers=config.num_layers,
         )
         # Per-head sink logit(s); fp32. Shape (max(1, sink_token_num), num_heads_q).
-        self.sinks = nn.Parameter(
-            torch.empty(max(1, config.sink_token_num), config.num_heads_q, dtype=_FP32)
-        )
+        self.sinks = nn.Parameter(torch.empty(max(1, config.sink_token_num), config.num_heads_q, dtype=_FP32))
 
-        self.q_norm = MultiModalityRMSNorm(
-            config.head_dim, num_modality=config.num_modality, out_dtype=_FP32
-        )
-        self.k_norm = MultiModalityRMSNorm(
-            config.head_dim, num_modality=config.num_modality, out_dtype=_FP32
-        )
+        self.q_norm = MultiModalityRMSNorm(config.head_dim, num_modality=config.num_modality, out_dtype=_FP32)
+        self.k_norm = MultiModalityRMSNorm(config.head_dim, num_modality=config.num_modality, out_dtype=_FP32)
 
     def forward(
         self,
@@ -171,9 +161,7 @@ class Attention(nn.Module):
         q = q.squeeze(0).to(_BF16)
         k = k.squeeze(0).to(_BF16)
         v = v.squeeze(0).to(_BF16)
-        out = attention_with_sink(
-            q, k, v, self.sinks, cu_seqlens=varlen_handler.cu_seqlens_q
-        )
+        out = attention_with_sink(q, k, v, self.sinks, cu_seqlens=varlen_handler.cu_seqlens_q)
 
         # Back to modality order for the (modality-order) gate + projection.
         out = modality_dispatcher._permute(out)
@@ -204,12 +192,8 @@ class MLP(nn.Module):
     def __init__(self, config: MLPConfig) -> None:
         super().__init__()
         self.config = config
-        self.pre_norm = MultiModalityRMSNorm(
-            config.hidden_size, num_modality=config.num_modality
-        )
-        intermediate_size_up = (
-            config.intermediate_size * 2 if config.gated_act else config.intermediate_size
-        )
+        self.pre_norm = MultiModalityRMSNorm(config.hidden_size, num_modality=config.num_modality)
+        intermediate_size_up = config.intermediate_size * 2 if config.gated_act else config.intermediate_size
         self.up_gate_proj = create_linear(
             config.hidden_size,
             intermediate_size_up,
@@ -228,9 +212,7 @@ class MLP(nn.Module):
         )
         self.activation_func = create_activation_func(config.activation_type)
 
-    def forward(
-        self, x: torch.Tensor, modality_dispatcher: ModalityDispatcher
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, modality_dispatcher: ModalityDispatcher) -> torch.Tensor:
         x = self.pre_norm(x, modality_dispatcher=modality_dispatcher)
         x = self.up_gate_proj(x, modality_dispatcher=modality_dispatcher)
         x = self.activation_func(x)
@@ -285,9 +267,7 @@ class CoreMultiHeadMoE(nn.Module):
         self.local_num_heads = self.num_heads
         self.local_flatten_num_experts = self.local_num_heads * self.num_experts
 
-        self.gate = nn.Parameter(
-            torch.empty(self.local_flatten_num_experts, self.d_head, dtype=_FP32)
-        )
+        self.gate = nn.Parameter(torch.empty(self.local_flatten_num_experts, self.d_head, dtype=_FP32))
         self.W_gate = nn.Parameter(
             torch.empty(
                 self.local_flatten_num_experts,
@@ -313,12 +293,8 @@ class CoreMultiHeadMoE(nn.Module):
             )
         )
         self.router = nn.Module()
-        self.router.register_buffer(
-            "expert_bias", torch.zeros(self.local_flatten_num_experts, dtype=_FP32)
-        )
-        self.router.register_buffer(
-            "expert_bias_ema", torch.zeros(self.local_flatten_num_experts, dtype=_FP32)
-        )
+        self.router.register_buffer("expert_bias", torch.zeros(self.local_flatten_num_experts, dtype=_FP32))
+        self.router.register_buffer("expert_bias_ema", torch.zeros(self.local_flatten_num_experts, dtype=_FP32))
 
     def _route(self, x_heads: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         num_heads = x_heads.size(1)
@@ -376,7 +352,7 @@ class MultiHeadMoELayerConfig:
     shared_expert_intermediate_sizes: int
     modality_specific_expert_intermediate_sizes: int
     shared_expert_params_dtype: torch.dtype
-    split_merge_intermediate_size: Optional[int]
+    split_merge_intermediate_size: int | None
     moe_config: MoEConfig
 
 
@@ -420,9 +396,7 @@ class MultiHeadMoELayer(nn.Module):
             config.modality_specific_expert_intermediate_sizes,
             num_modality=config.num_modality,
         )
-        self.pre_norm = MultiModalityRMSNorm(
-            config.hidden_size, num_modality=config.num_modality
-        )
+        self.pre_norm = MultiModalityRMSNorm(config.hidden_size, num_modality=config.num_modality)
         mid = config.split_merge_intermediate_size or config.hidden_size
         self.split_linear = create_linear(
             config.hidden_size,
@@ -466,9 +440,7 @@ class MultiHeadMoELayer(nn.Module):
         self, norm_output: torch.Tensor, modality_dispatcher: ModalityDispatcher
     ) -> torch.Tensor:
         x1 = self.shared_expert_fc1(norm_output)
-        x2 = self.modality_specific_shared_expert_fc1(
-            norm_output, modality_dispatcher=modality_dispatcher
-        )
+        x2 = self.modality_specific_shared_expert_fc1(norm_output, modality_dispatcher=modality_dispatcher)
         x = torch.concat([x1, x2], dim=-1)
         x = self.activation_func(x)
         x1, x2 = x.split(
@@ -479,14 +451,10 @@ class MultiHeadMoELayer(nn.Module):
             dim=-1,
         )
         x1 = self.shared_expert_fc2(x1)
-        x2 = self.modality_specific_shared_expert_fc2(
-            x2.contiguous(), modality_dispatcher=modality_dispatcher
-        )
+        x2 = self.modality_specific_shared_expert_fc2(x2.contiguous(), modality_dispatcher=modality_dispatcher)
         return x1 + x2
 
-    def forward(
-        self, hidden_states: torch.Tensor, modality_dispatcher: ModalityDispatcher
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, modality_dispatcher: ModalityDispatcher) -> torch.Tensor:
         norm_output = self.pre_norm(hidden_states, modality_dispatcher=modality_dispatcher)
         moe_input = self.split_linear(norm_output)
         moe_out = self.moe_mlp(moe_input)
@@ -521,15 +489,9 @@ class PreAdapter(nn.Module):
         super().__init__()
         self.config = config
         self.adapter_dim = config.hidden_size * config.virtual_width_factor
-        self.video_embedder = nn.Linear(
-            config.video_in_channels, self.adapter_dim, bias=True, dtype=_FP32
-        )
-        self.text_embedder = nn.Linear(
-            config.text_in_channels, self.adapter_dim, bias=True, dtype=_FP32
-        )
-        self.audio_embedder = nn.Linear(
-            config.audio_in_channels, self.adapter_dim, bias=True, dtype=_FP32
-        )
+        self.video_embedder = nn.Linear(config.video_in_channels, self.adapter_dim, bias=True, dtype=_FP32)
+        self.text_embedder = nn.Linear(config.text_in_channels, self.adapter_dim, bias=True, dtype=_FP32)
+        self.audio_embedder = nn.Linear(config.audio_in_channels, self.adapter_dim, bias=True, dtype=_FP32)
         self.rope = ElementWiseFourierEmbed(
             config.hidden_size // config.num_attention_heads,
             in_pixels=False,
@@ -546,32 +508,24 @@ class PreAdapter(nn.Module):
         time_idx: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         rope = self.rope(coords_mapping)
-        output_x = torch.zeros(
-            x.shape[0], self.adapter_dim, device=x.device, dtype=_FP32
-        )
+        output_x = torch.zeros(x.shape[0], self.adapter_dim, device=x.device, dtype=_FP32)
         if text_idx.numel() > 0:
             output_x.index_copy_(
                 0,
                 text_idx,
-                self.text_embedder(
-                    x.index_select(0, text_idx)[:, : self.config.text_in_channels]
-                ),
+                self.text_embedder(x.index_select(0, text_idx)[:, : self.config.text_in_channels]),
             )
         if audio_idx.numel() > 0:
             output_x.index_copy_(
                 0,
                 audio_idx,
-                self.audio_embedder(
-                    x.index_select(0, audio_idx)[:, : self.config.audio_in_channels]
-                ),
+                self.audio_embedder(x.index_select(0, audio_idx)[:, : self.config.audio_in_channels]),
             )
         if video_idx.numel() > 0:
             output_x.index_copy_(
                 0,
                 video_idx,
-                self.video_embedder(
-                    x.index_select(0, video_idx)[:, : self.config.video_in_channels]
-                ),
+                self.video_embedder(x.index_select(0, video_idx)[:, : self.config.video_in_channels]),
             )
         return output_x, rope
 
@@ -585,30 +539,18 @@ class PostAdapter(nn.Module):
         self.adapter_dim = config.hidden_size * config.virtual_width_factor
         self.final_norm_video = MultiModalityRMSNorm(self.adapter_dim)
         self.final_norm_audio = MultiModalityRMSNorm(self.adapter_dim)
-        self.final_linear_video = nn.Linear(
-            self.adapter_dim, config.video_in_channels, bias=False, dtype=_FP32
-        )
-        self.final_linear_audio = nn.Linear(
-            self.adapter_dim, config.audio_in_channels, bias=False, dtype=_FP32
-        )
+        self.final_linear_video = nn.Linear(self.adapter_dim, config.video_in_channels, bias=False, dtype=_FP32)
+        self.final_linear_audio = nn.Linear(self.adapter_dim, config.audio_in_channels, bias=False, dtype=_FP32)
         self.final_out_dim = max(config.video_in_channels, config.audio_in_channels)
 
-    def forward(
-        self, x: torch.Tensor, video_idx: torch.Tensor, audio_idx: torch.Tensor
-    ) -> torch.Tensor:
-        x_out = torch.zeros(
-            x.shape[0], self.final_out_dim, device=x.device, dtype=_FP32
-        )
+    def forward(self, x: torch.Tensor, video_idx: torch.Tensor, audio_idx: torch.Tensor) -> torch.Tensor:
+        x_out = torch.zeros(x.shape[0], self.final_out_dim, device=x.device, dtype=_FP32)
         if video_idx.numel() > 0:
-            x_video = self.final_norm_video(
-                x.index_select(0, video_idx).to(self.final_norm_video.weight.dtype)
-            )
+            x_video = self.final_norm_video(x.index_select(0, video_idx).to(self.final_norm_video.weight.dtype))
             x_video = self.final_linear_video(x_video).to(_FP32)
             x_out[:, : self.config.video_in_channels].index_copy_(0, video_idx, x_video)
         if audio_idx.numel() > 0:
-            x_audio = self.final_norm_audio(
-                x.index_select(0, audio_idx).to(self.final_norm_audio.weight.dtype)
-            )
+            x_audio = self.final_norm_audio(x.index_select(0, audio_idx).to(self.final_norm_audio.weight.dtype))
             x_audio = self.final_linear_audio(x_audio).to(_FP32)
             x_out[:, : self.config.audio_in_channels].index_copy_(0, audio_idx, x_audio)
         return x_out
@@ -664,9 +606,7 @@ class TransformerLayer(nn.Module):
             )
         else:
             intermediate_size = (
-                int(model_config.hidden_size * model_config.intermediate_factor * 2 / 3)
-                // 128
-                * 128
+                int(model_config.hidden_size * model_config.intermediate_factor * 2 / 3) // 128 * 128
                 if gated_act
                 else int(model_config.hidden_size * model_config.intermediate_factor)
             )
@@ -687,42 +627,22 @@ class TransformerLayer(nn.Module):
         n = self.config_mhc.num_stream
         c = model_config.hidden_size
         dtype = _FP32
-        self.mhc_alpha_pre_attn = nn.Parameter(
-            torch.full((1,), float(self.config_mhc.alpha_init), dtype=dtype)
-        )
-        self.mhc_alpha_post_attn = nn.Parameter(
-            torch.full((1,), float(self.config_mhc.alpha_init), dtype=dtype)
-        )
-        self.mhc_alpha_res_attn = nn.Parameter(
-            torch.full((1,), float(self.config_mhc.alpha_init), dtype=dtype)
-        )
-        self.mhc_alpha_pre_mlp = nn.Parameter(
-            torch.full((1,), float(self.config_mhc.alpha_init), dtype=dtype)
-        )
-        self.mhc_alpha_post_mlp = nn.Parameter(
-            torch.full((1,), float(self.config_mhc.alpha_init), dtype=dtype)
-        )
-        self.mhc_alpha_res_mlp = nn.Parameter(
-            torch.full((1,), float(self.config_mhc.alpha_init), dtype=dtype)
-        )
+        self.mhc_alpha_pre_attn = nn.Parameter(torch.full((1,), float(self.config_mhc.alpha_init), dtype=dtype))
+        self.mhc_alpha_post_attn = nn.Parameter(torch.full((1,), float(self.config_mhc.alpha_init), dtype=dtype))
+        self.mhc_alpha_res_attn = nn.Parameter(torch.full((1,), float(self.config_mhc.alpha_init), dtype=dtype))
+        self.mhc_alpha_pre_mlp = nn.Parameter(torch.full((1,), float(self.config_mhc.alpha_init), dtype=dtype))
+        self.mhc_alpha_post_mlp = nn.Parameter(torch.full((1,), float(self.config_mhc.alpha_init), dtype=dtype))
+        self.mhc_alpha_res_mlp = nn.Parameter(torch.full((1,), float(self.config_mhc.alpha_init), dtype=dtype))
         self.mhc_bias_pre_attn = nn.Parameter(torch.empty(n, dtype=dtype))
         self.mhc_bias_post_attn = nn.Parameter(torch.empty(n, dtype=dtype))
         self.mhc_bias_pre_mlp = nn.Parameter(torch.empty(n, dtype=dtype))
         self.mhc_bias_post_mlp = nn.Parameter(torch.empty(n, dtype=dtype))
         self.mhc_bias_res_attn = nn.Parameter(torch.empty(n, n, dtype=dtype))
         self.mhc_bias_res_mlp = nn.Parameter(torch.empty(n, n, dtype=dtype))
-        self.mhc_phi_fused_attn = nn.Parameter(
-            torch.empty(n * c, n + n + (n * n), dtype=dtype)
-        )
-        self.mhc_phi_fused_mlp = nn.Parameter(
-            torch.empty(n * c, n + n + (n * n), dtype=dtype)
-        )
-        self.mhc_norm = MultiModalityRMSNorm(
-            c * n, num_modality=num_modality, out_dtype=dtype
-        )
-        self.mhc_handler = MHCHandler(
-            n_stream=n, hidden_size=c, num_sk_iters=20, sk_eps=1e-12, dtype=dtype
-        )
+        self.mhc_phi_fused_attn = nn.Parameter(torch.empty(n * c, n + n + (n * n), dtype=dtype))
+        self.mhc_phi_fused_mlp = nn.Parameter(torch.empty(n * c, n + n + (n * n), dtype=dtype))
+        self.mhc_norm = MultiModalityRMSNorm(c * n, num_modality=num_modality, out_dtype=dtype)
+        self.mhc_handler = MHCHandler(n_stream=n, hidden_size=c, num_sk_iters=20, sk_eps=1e-12, dtype=dtype)
 
     def forward(
         self,
@@ -736,12 +656,8 @@ class TransformerLayer(nn.Module):
         s = hidden_states.reshape(hidden_states.shape[0], n, -1)
         assert s.is_contiguous()
 
-        h_post_attn_, h_res_attn_, attn_in = self._forward_mhc_pre_attn(
-            s, modality_dispatcher
-        )
-        attn_out = self.attention(
-            attn_in, rope, varlen_handler, modality_dispatcher, cp_split_sizes
-        )
+        h_post_attn_, h_res_attn_, attn_in = self._forward_mhc_pre_attn(s, modality_dispatcher)
+        attn_out = self.attention(attn_in, rope, varlen_handler, modality_dispatcher, cp_split_sizes)
 
         s_, h_post_mlp_, h_res_mlp_, mlp_in = self._forward_mhc_attn_to_mlp(
             s, attn_out, h_post_attn_, h_res_attn_, modality_dispatcher
@@ -780,9 +696,7 @@ class TransformerLayer(nn.Module):
             abh_res=(self.mhc_alpha_res_attn, self.mhc_bias_res_attn, h_res_attn_),
             out_dtype=s.dtype,
         )
-        s_ = self.mhc_handler.apply_hpost_and_hres(
-            res=s, out=attn_out, h_post=h_post_attn, h_res=h_res_attn
-        )
+        s_ = self.mhc_handler.apply_hpost_and_hres(res=s, out=attn_out, h_post=h_post_attn, h_res=h_res_attn)
         s_flat = self.mhc_handler.flatten_mstream(s_)
         h_pre_mlp_, h_post_mlp_, h_res_mlp_ = self.mhc_handler.apply_norm_and_compute_h_(
             x=s_flat,
@@ -808,9 +722,7 @@ class TransformerLayer(nn.Module):
             abh_res=(self.mhc_alpha_res_mlp, self.mhc_bias_res_mlp, h_res_mlp_),
             out_dtype=s_.dtype,
         )
-        return self.mhc_handler.apply_hpost_and_hres(
-            res=s_, out=mlp_out, h_post=h_post_mlp, h_res=h_res_mlp
-        )
+        return self.mhc_handler.apply_hpost_and_hres(res=s_, out=mlp_out, h_post=h_post_mlp, h_res=h_res_mlp)
 
 
 class TransformerBlock(nn.Module):
@@ -818,14 +730,67 @@ class TransformerBlock(nn.Module):
 
     def __init__(self, model_config: Magi2PreviewConfig) -> None:
         super().__init__()
-        self.layers = nn.ModuleList(
-            [TransformerLayer(model_config, i) for i in range(model_config.num_layers)]
-        )
+        self.layers = nn.ModuleList([TransformerLayer(model_config, i) for i in range(model_config.num_layers)])
         # Layer-by-layer CPU offload: when set to a compute device, each layer is
-        # streamed CPU->device just before it runs and moved back after, so the
+        # streamed CPU->device just before it runs and restored to CPU after, so the
         # 228GB preview MoE never has more than one layer resident on the GPU.
         # Weights otherwise live in CPU RAM. Off by default (all-resident path).
         self.layer_offload_device: torch.device | None = None
+        self._offload_cpu_cache: dict[
+            int,
+            tuple[list[tuple[nn.Parameter, torch.Tensor]], list[tuple[nn.Module, str, torch.Tensor]]],
+        ] = {}
+        self._pin_disabled = False
+
+    def _get_offload_cpu_entries(
+        self,
+        layer_idx: int,
+        layer: nn.Module,
+        offload: torch.device,
+    ) -> tuple[list[tuple[nn.Parameter, torch.Tensor]], list[tuple[nn.Module, str, torch.Tensor]]]:
+        cached = self._offload_cpu_cache.get(layer_idx)
+        if cached is not None:
+            param_entries, buf_entries = cached
+            if all(param.data is cpu_t for param, cpu_t in param_entries) and all(
+                mod._buffers.get(name) is cpu_b for mod, name, cpu_b in buf_entries
+            ):
+                return cached
+
+        cpu_by_src: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
+
+        def _to_pinned_cpu(tensor: torch.Tensor) -> torch.Tensor:
+            src_id = id(tensor)
+            existing = cpu_by_src.get(src_id)
+            if existing is not None:
+                return existing[1]
+            cpu_t = tensor if tensor.device.type == "cpu" else tensor.to("cpu")
+            if offload.type == "cuda" and not self._pin_disabled and not cpu_t.is_pinned():
+                try:
+                    cpu_t = cpu_t.pin_memory()
+                except RuntimeError:
+                    self._pin_disabled = True
+            # Keep original wrapper referenced until the loop ends so its Python id cannot be reused.
+            cpu_by_src[src_id] = (tensor, cpu_t)
+            return cpu_t
+
+        param_entries: list[tuple[nn.Parameter, torch.Tensor]] = []
+        for param in layer.parameters():
+            cpu_t = _to_pinned_cpu(param.data)
+            param.data = cpu_t
+            param_entries.append((param, cpu_t))
+
+        buf_entries: list[tuple[nn.Module, str, torch.Tensor]] = []
+        for mod in layer.modules():
+            for name, buf in mod._buffers.items():
+                if buf is None:
+                    continue
+                cpu_b = _to_pinned_cpu(buf)
+                mod._buffers[name] = cpu_b
+                buf_entries.append((mod, name, cpu_b))
+
+        entries = (param_entries, buf_entries)
+        self._offload_cpu_cache[layer_idx] = entries
+        return entries
 
     def forward(
         self,
@@ -838,12 +803,28 @@ class TransformerBlock(nn.Module):
         x = x.to(_BF16)
         x = modality_dispatcher._permute(x)
         offload = self.layer_offload_device
-        for layer in self.layers:
-            if offload is not None:
+        if offload is None:
+            for layer in self.layers:
+                x = layer(x, rope, varlen_handler, modality_dispatcher, cp_split_sizes)
+        elif torch.is_grad_enabled():
+            for layer in self.layers:
                 layer.to(offload)
-            x = layer(x, rope, varlen_handler, modality_dispatcher, cp_split_sizes)
-            if offload is not None:
+                x = layer(x, rope, varlen_handler, modality_dispatcher, cp_split_sizes)
                 layer.to("cpu")
+        else:
+            for layer_idx, layer in enumerate(self.layers):
+                param_entries, buf_entries = self._get_offload_cpu_entries(layer_idx, layer, offload)
+                try:
+                    for param, cpu_t in param_entries:
+                        param.data = cpu_t.to(offload, non_blocking=True)
+                    for mod, name, cpu_b in buf_entries:
+                        mod._buffers[name] = cpu_b.to(offload, non_blocking=True)
+                    x = layer(x, rope, varlen_handler, modality_dispatcher, cp_split_sizes)
+                finally:
+                    for param, cpu_t in param_entries:
+                        param.data = cpu_t
+                    for mod, name, cpu_b in buf_entries:
+                        mod._buffers[name] = cpu_b
         x = modality_dispatcher._inv_permute(x)
         return x
 
@@ -891,7 +872,7 @@ class Transformer(nn.Module):
         coords_mapping: torch.Tensor,
         modality_mapping: torch.Tensor,
         varlen_handler: VarlenHandler,
-        time_token_sequence: Optional[torch.Tensor] = None,
+        time_token_sequence: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # Single-GPU: no Ulysses dispatch; the whole packed stream is one CP shard.
         total_tokens = x.shape[0]
@@ -906,9 +887,7 @@ class Transformer(nn.Module):
         text_idx = (modality_mapping == Modality.TEXT).nonzero().flatten()
         time_idx = time_mask.nonzero().flatten()
 
-        x, rope = self.pre_adapter(
-            x, coords_mapping, video_idx, audio_idx, text_idx, time_idx
-        )
+        x, rope = self.pre_adapter(x, coords_mapping, video_idx, audio_idx, text_idx, time_idx)
         if time_token_sequence is not None and time_token_sequence.shape[-1] > 0:
             x[:, : time_token_sequence.shape[-1]] = time_token_sequence.to(x.dtype)
 
@@ -924,12 +903,12 @@ class Transformer(nn.Module):
 
 
 __all__ = [
+    "MLP",
     "AdapterConfig",
     "Attention",
     "AttentionConfig",
     "CoreMultiHeadMoE",
     "CoreMultiHeadMoEConfig",
-    "MLP",
     "MLPConfig",
     "MultiHeadMoELayer",
     "MultiHeadMoELayerConfig",
@@ -943,16 +922,15 @@ __all__ = [
 
 def _smoke() -> None:
     """Tiny-config CPU forward smoke: assert output shape + finiteness."""
-    from dataclasses import replace
 
     from .config import (
-        AttentionSinksConfig,
-        MHCConfig,
-        Magi2PreviewConfig,
-        MoEConfig,
         MAGI2_MODALITY_AUDIO,
         MAGI2_MODALITY_TEXT,
         MAGI2_MODALITY_VIDEO,
+        AttentionSinksConfig,
+        Magi2PreviewConfig,
+        MHCConfig,
+        MoEConfig,
     )
     from .preview_layers import get_coords, seqlens2cu_seqlens
 
@@ -992,9 +970,7 @@ def _smoke() -> None:
     x = torch.randn(total, in_ch, dtype=_FP32)
 
     modality = torch.tensor(
-        [MAGI2_MODALITY_VIDEO] * n_video
-        + [MAGI2_MODALITY_AUDIO] * n_audio
-        + [MAGI2_MODALITY_TEXT] * n_text,
+        [MAGI2_MODALITY_VIDEO] * n_video + [MAGI2_MODALITY_AUDIO] * n_audio + [MAGI2_MODALITY_TEXT] * n_text,
         dtype=torch.long,
     )
 

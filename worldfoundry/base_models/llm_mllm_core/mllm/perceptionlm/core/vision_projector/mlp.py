@@ -11,7 +11,7 @@ from worldfoundry.base_models.llm_mllm_core.mllm.perceptionlm.core.vision_projec
 
 class AdaptiveAvgPooling(nn.Module):
     def __init__(self, pooling_ratio=2):
-        super(AdaptiveAvgPooling, self).__init__()
+        super().__init__()
         self.pooling_ratio = pooling_ratio
 
     def forward(self, x):

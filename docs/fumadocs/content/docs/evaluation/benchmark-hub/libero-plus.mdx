@@ -13,18 +13,18 @@ LIBERO-Plus (CVPR 2026, Fudan / FudanNLP) is a **test-only** robustness overlay 
 - **Background texture** — scene / surface look (1,076).
 - **Sensor noise** — photometric degradation (1,601).
 
-Instances are binned into **L1–L5** by how many of four reference models solved them (L1 = all four, L5 = none). The paper's scan of ten VLAs reports drops from about **95%** on clean LIBERO to **below 30%** under modest camera or initial-state shifts — an upstream finding, not a hub score.
+Instances are binned into **L1–L5** by how many of four reference models solved them (L1 = all four, L5 = none). The paper's scan of ten VLAs reports drops from about **95%** on clean LIBERO to **below 30%** under modest camera or initial-state shifts.
 
 Paper: [LIBERO-Plus](https://arxiv.org/abs/2510.13626). Project: [sylvestf.github.io/LIBERO-plus](https://sylvestf.github.io/LIBERO-plus/). Code: [sylvestf/LIBERO-plus](https://github.com/sylvestf/LIBERO-plus) (MIT; drop-in `libero` fork).
 
-WorldFoundry is **official-results only**. You run the upstream fork, then `official-validation` normalizes the export. No in-tree robosuite, no Plus assets. [Base LIBERO](/docs/evaluation/benchmark-hub/libero) can wire closed-loop execution; this card cannot.
+WorldFoundry is **official-results only**. You run the upstream fork, then `official-validation` normalizes the export. WorldFoundry does not ship robosuite or the Plus assets; closed-loop execution in WorldFoundry is available only for [base LIBERO](/docs/evaluation/benchmark-hub/libero).
 
 <BenchmarkPageSections id="libero-plus" locale="en" />
 
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id libero-plus \
   --mode official-validation \
   --official-results-path <official_results.json> \

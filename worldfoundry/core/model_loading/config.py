@@ -13,7 +13,7 @@ This is placement and download policy, not the file deserializer
 import glob
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional, Union
+from typing import cast
 
 import torch
 
@@ -51,22 +51,22 @@ class ModelConfig:
         state_dict: Optional already-loaded weights, bypassing file loading.
     """
 
-    path: Optional[Union[str, list[str]]] = None
-    model_id: Optional[str] = None
-    origin_file_pattern: Optional[Union[str, list[str]]] = None
-    download_source: Optional[str] = None
-    local_model_path: Optional[str] = None
-    skip_download: Optional[bool] = None
-    offload_device: Optional[Union[str, torch.device]] = None
-    offload_dtype: Optional[torch.dtype] = None
-    onload_device: Optional[Union[str, torch.device]] = None
-    onload_dtype: Optional[torch.dtype] = None
-    preparing_device: Optional[Union[str, torch.device]] = None
-    preparing_dtype: Optional[torch.dtype] = None
-    computation_device: Optional[Union[str, torch.device]] = None
-    computation_dtype: Optional[torch.dtype] = None
+    path: str | list[str] | None = None
+    model_id: str | None = None
+    origin_file_pattern: str | None = None
+    download_source: str | None = None
+    local_model_path: str | None = None
+    skip_download: bool | None = None
+    offload_device: str | torch.device | None = None
+    offload_dtype: torch.dtype | None = None
+    onload_device: str | torch.device | None = None
+    onload_dtype: torch.dtype | None = None
+    preparing_device: str | torch.device | None = None
+    preparing_dtype: torch.dtype | None = None
+    computation_device: str | torch.device | None = None
+    computation_dtype: torch.dtype | None = None
     clear_parameters: bool = False
-    state_dict: Optional[Dict[str, torch.Tensor]] = None
+    state_dict: dict[str, torch.Tensor] | None = None
 
     def check_input(self):
         """Require either a concrete path or a model-hub identifier."""
@@ -112,31 +112,33 @@ class ModelConfig:
         if value in {"", "0", "false", "no", "n", "off"}:
             return False
         raise ValueError(
-            "WORLDFOUNDRY_SKIP_MODEL_DOWNLOAD must be a boolean value "
-            f"(true/false, 1/0, yes/no, on/off); got {raw!r}"
+            f"WORLDFOUNDRY_SKIP_MODEL_DOWNLOAD must be a boolean value (true/false, 1/0, yes/no, on/off); got {raw!r}"
         )
 
     def download(self):
         """Download missing repository files into ``local_model_path``."""
         origin_file_pattern = self.parse_original_file_pattern()
-        downloaded_files = glob.glob(origin_file_pattern, root_dir=os.path.join(self.local_model_path, self.model_id))
+        # download_if_necessary() validates model_id and resolves local_model_path first.
+        model_id = cast(str, self.model_id)
+        local_dir = os.path.join(cast(str, self.local_model_path), model_id)
+        downloaded_files = glob.glob(origin_file_pattern, root_dir=local_dir)
         download_source = self.parse_download_source()
         if download_source.lower() == "modelscope":
-            from modelscope import snapshot_download
+            snapshot_download = __import__("modelscope", fromlist=["snapshot_download"]).snapshot_download
 
             snapshot_download(
-                self.model_id,
-                local_dir=os.path.join(self.local_model_path, self.model_id),
+                model_id,
+                local_dir=local_dir,
                 allow_file_pattern=origin_file_pattern,
                 ignore_file_pattern=downloaded_files,
                 local_files_only=False,
             )
         elif download_source.lower() == "huggingface":
-            from huggingface_hub import snapshot_download as hf_snapshot_download
+            hf_snapshot_download = __import__("huggingface_hub", fromlist=["snapshot_download"]).snapshot_download
 
             hf_snapshot_download(
-                self.model_id,
-                local_dir=os.path.join(self.local_model_path, self.model_id),
+                model_id,
+                local_dir=local_dir,
                 allow_patterns=origin_file_pattern,
                 ignore_patterns=downloaded_files,
                 local_files_only=False,
@@ -187,10 +189,12 @@ class ModelConfig:
             else:
                 dist.barrier()
         if self.path is None:
+            # check_input() guarantees model_id when no path was given.
+            local_dir = os.path.join(cast(str, self.local_model_path), cast(str, self.model_id))
             if self.origin_file_pattern in [None, "", "./"]:
-                self.path = os.path.join(self.local_model_path, self.model_id)
+                self.path = local_dir
             else:
-                self.path = glob.glob(os.path.join(self.local_model_path, self.model_id, self.origin_file_pattern))
+                self.path = glob.glob(os.path.join(local_dir, cast(str, self.origin_file_pattern)))
         if isinstance(self.path, list) and len(self.path) == 1:
             self.path = self.path[0]
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -14,6 +15,7 @@ from typing import Any, Literal
 
 from worldfoundry.core.observability.realtime_timing import TimingDistribution
 from worldfoundry.runtime.performance import (
+    JsonValue,
     OptimizationSnapshot,
     PerformanceManifest,
     PerformanceMetrics,
@@ -102,7 +104,7 @@ class RealtimeRegressionThresholds:
             object.__setattr__(self, name, _threshold_map(getattr(self, name), name=name))
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "RealtimeRegressionThresholds":
+    def from_dict(cls, data: Mapping[str, Any]) -> RealtimeRegressionThresholds:
         return cls(
             min_chunks=data.get("min_chunks", 1),
             min_output_frames=data.get("min_output_frames", 1),
@@ -152,7 +154,7 @@ class RealtimeRegressionCase:
         )
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "RealtimeRegressionCase":
+    def from_dict(cls, data: Mapping[str, Any]) -> RealtimeRegressionCase:
         selectors = data.get("selectors")
         selectors = selectors if isinstance(selectors, Mapping) else {}
         thresholds = data.get("thresholds")
@@ -193,7 +195,7 @@ class RealtimeRegressionManifest:
             raise ValueError("Realtime regression case names must be unique.")
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "RealtimeRegressionManifest":
+    def from_dict(cls, data: Mapping[str, Any]) -> RealtimeRegressionManifest:
         raw_cases = data.get("cases")
         if not isinstance(raw_cases, Sequence) or isinstance(raw_cases, (str, bytes, bytearray)):
             raise TypeError("Realtime regression manifest 'cases' must be a JSON list.")
@@ -206,14 +208,14 @@ class RealtimeRegressionManifest:
         )
 
     @classmethod
-    def from_json(cls, value: str | bytes | bytearray) -> "RealtimeRegressionManifest":
+    def from_json(cls, value: str | bytes | bytearray) -> RealtimeRegressionManifest:
         payload = json.loads(value)
         if not isinstance(payload, Mapping):
             raise TypeError("Realtime regression manifest JSON must contain an object.")
         return cls.from_dict(payload)
 
     @classmethod
-    def read_json(cls, path: str | Path) -> "RealtimeRegressionManifest":
+    def read_json(cls, path: str | Path) -> RealtimeRegressionManifest:
         return cls.from_json(Path(path).read_bytes())
 
     def to_dict(self) -> dict[str, Any]:
@@ -239,10 +241,8 @@ class RealtimeRegressionManifest:
                 os.fsync(handle.fileno())
             temporary.replace(destination)
         except BaseException:
-            try:
+            with contextlib.suppress(OSError):
                 os.close(fd)
-            except OSError:
-                pass
             temporary.unlink(missing_ok=True)
             raise
         return destination
@@ -265,7 +265,7 @@ class RealtimeTraceSample:
     gauges: Mapping[str, float]
 
     @classmethod
-    def from_event(cls, event: Mapping[str, Any]) -> "RealtimeTraceSample":
+    def from_event(cls, event: Mapping[str, Any]) -> RealtimeTraceSample:
         fields = event.get("fields")
         fields = fields if isinstance(fields, Mapping) else event
         stage_ms = fields.get("stage_ms")
@@ -401,10 +401,10 @@ class RealtimeRegressionResult:
         optimization: OptimizationSnapshot | None = None,
     ) -> PerformanceManifest:
         summary = self.summary
-        timings = (
+        timings: dict[str, JsonValue] = (
             {}
             if summary is None
-            else {name: distribution.to_payload() for name, distribution in summary.stages.items()}
+            else {name: dict(distribution.to_payload()) for name, distribution in summary.stages.items()}
         )
         return PerformanceManifest(
             model={"model_id": self.case.model_id or "unknown"},
@@ -487,9 +487,7 @@ def _sample_matches(case: RealtimeRegressionCase, sample: RealtimeTraceSample) -
     if case.transport is not None and sample.transport != case.transport:
         return False
     # Older timing traces did not always bind model_id into the log context.
-    if case.model_id is not None and sample.model_id is not None and sample.model_id != case.model_id:
-        return False
-    return True
+    return not (case.model_id is not None and sample.model_id is not None and sample.model_id != case.model_id)
 
 
 def _summarize(

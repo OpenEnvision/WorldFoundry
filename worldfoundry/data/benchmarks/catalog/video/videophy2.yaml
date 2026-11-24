@@ -79,25 +79,25 @@ runner:
   scoring:
     engines: [physics_contract]
     hooks:
-      physics_contract: worldfoundry.evaluation.tasks.execution.runners.videophy2.videophy2_contract_evaluator:write_videophy2_evaluation
+      physics_contract: worldfoundry.evals.tasks.execution.runners.videophy2.videophy2_contract_evaluator:write_videophy2_evaluation
   normalization:
     pass_generated_artifact_dir: true
-  official_script: worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/videophy2/run_videophy2_official_runner.py
   pass_benchmark_id: false
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.videophy2.run_videophy2_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.videophy2.run_videophy2_official_runner
     limit_arg: --limit
     supports_official_runtime: true
     accepts_generated_artifacts: true
     supports_fixture: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoPhy2Contract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py
+  runner_target: worldfoundry.evals.tasks.contracts.external:videophy2
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/videophy2/run_videophy2_official_runner.py
   run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
-    worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py --run-official
+    worldfoundry/evals/tasks/execution/runners/videophy2/run_videophy2_official_runner.py --run-official
     --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --output-dir
     "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -113,7 +113,7 @@ runner:
   - --json
   runtime:
     kind: in_tree_official_judge_runtime
-    root: worldfoundry/evaluation/tasks/execution/runners/videophy2
+    root: worldfoundry/evals/tasks/execution/runners/videophy2
     root_env: WORLDFOUNDRY_VIDEOPHY2_ROOT
     judge_model_id: videophysics/videophy_2_auto
     judge_backend_env: WORLDFOUNDRY_VIDEOPHY2_JUDGE_BACKEND
@@ -158,21 +158,21 @@ data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/videophy2.yaml
   bundled_asset_paths:
   - worldfoundry/data/benchmarks/assets/videophy2/prompts.json
-official_runner_script: worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py
+official_runner_script: worldfoundry/evals/tasks/execution/runners/videophy2/run_videophy2_official_runner.py
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoPhy2Contract
+  runner_target: worldfoundry.evals.tasks.contracts.external:videophy2
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: false
   surface: videophy2_official_in_tree
   normalizer_verified: false
 base_model_dependencies:
-- videophy2_dataset_assets
+- videophy2_autoeval_metric_stack
 optional_base_model_dependencies:
 - grounded_depth_segmentation_stack
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id
@@ -191,3 +191,22 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - videophy2_prompt_manifest
+  - generated_video_dir
+  - autoeval_checkpoint
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - per_sample_scores
+  - benchmark_contract
+  notes:
+  - Contract covers VideoPhy2 action-centric physical commonsense evaluation.
+  - Official auto-evaluator checkpoint and HF test data are external acquisition stages.
+generation:
+  request_provider: worldfoundry.evals.tasks.execution.runners.videophy2.videophy2_prompts:materialize_videophy2_generation_requests
+  artifact_materializer: worldfoundry.evals.tasks.execution.runners.videophy2.videophy2_prompts:copy_videophy2_generated_videos
+  split_parameter: split
+  missing_requests_hint: restore the bundled VideoPhy2 prompt assets

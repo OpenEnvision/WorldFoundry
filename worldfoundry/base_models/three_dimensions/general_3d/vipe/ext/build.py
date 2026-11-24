@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import importlib.machinery
 import importlib.util
 import json
 import os
@@ -103,7 +104,10 @@ def _architecture_key(torch) -> str:
         return explicit
     if torch.cuda.is_available():
         capabilities = sorted(
-            {".".join(str(value) for value in torch.cuda.get_device_capability(index)) for index in range(torch.cuda.device_count())}
+            {
+                ".".join(str(value) for value in torch.cuda.get_device_capability(index))
+                for index in range(torch.cuda.device_count())
+            }
         )
         return ";".join(capabilities)
     return "unset"
@@ -155,7 +159,8 @@ def _validate_module(module: ModuleType) -> ModuleType:
 
 def _load_cached(build_dir: Path) -> ModuleType | None:
     for library in _candidate_shared_objects(build_dir):
-        spec = importlib.util.spec_from_file_location("vipe_ext", library)
+        loader = importlib.machinery.ExtensionFileLoader("vipe_ext", str(library))
+        spec = importlib.util.spec_from_loader("vipe_ext", loader)
         if spec is None or spec.loader is None:
             continue
         module = importlib.util.module_from_spec(spec)

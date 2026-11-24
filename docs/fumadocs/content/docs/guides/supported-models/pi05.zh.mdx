@@ -1,11 +1,11 @@
 ---
 title: "pi0.5"
-description: "pi0.5 策略绑定已用 pi05_libero 权重和合成输入验证动作推理。"
+description: "pi0.5：Physical Intelligence 的开放世界 flow-matching VLA 策略，通过官方 OpenPI 运行时使用 `pi05_libero` 权重运行。"
 modelId: "pi05"
 pageSource: authored
 ---
 
-pi0.5 是 Physical Intelligence 对 pi0 的开放世界泛化升级：基于 PaliGemma 的 VLA 与 flow-matching 动作专家。独立的 `pi05` 绑定复用 WorldFoundry 树内 OpenPI 运行时，并已使用官方 `pi05_libero` 权重生成动作。
+pi0.5 是 Physical Intelligence 为提升 pi0 的开放世界泛化能力而推出的升级版本：基于 PaliGemma 的 VLA 与 flow-matching 动作专家。WorldFoundry 通过官方 OpenPI 运行时，使用官方 `pi05_libero` 权重运行它。
 
 <ModelPaperFigures modelId="pi05" locale="zh" />
 
@@ -13,7 +13,7 @@ pi0.5 是 Physical Intelligence 对 pi0 的开放世界泛化升级：基于 Pal
 
 ## 用来做什么
 
-就位 `pi05_libero` 权重后可运行 `worldfoundry-eval run pi05`。该公共绑定已在 GPU 上用合成双相机图像及权重均值状态产出有限的 10×7 动作。这只证明动作推理结构，不代表 [LIBERO](/zh/docs/evaluation/benchmark-hub/libero) 任务成功。不要走 LeRobot policy-zoo。
+准备好 `pi05_libero` 权重后运行 `wf run pi05`。已在 GPU 上验证：pipeline 使用合成双相机图像及权重均值状态生成 10×7 动作块；[LIBERO](/zh/docs/evaluation/benchmark-hub/libero) 任务成功率尚未测量。请通过官方 OpenPI 运行时运行，不要使用 LeRobot policy-zoo。
 
 ## 运行时契约
 
@@ -21,8 +21,8 @@ pi0.5 是 Physical Intelligence 对 pi0 的开放世界泛化升级：基于 Pal
 
 ## 在 WorldFoundry 中运行
 
-使用支持 JAX GPU 和 `requirements/worldfoundry-unified.txt` 所列依赖的 OpenPI 环境。用 gsutil 就位 `gs://openpi-assets`，或显式传入权重路径。许可证见 [OpenPI](/zh/docs/guides/supported-models/openpi)（Apache-2.0）。状态：`pi05_libero` 指定配置 **已验证权重驱动的推理**；任务表现及 `pi05_base`/`pi05_droid` 权重尚未验证。
+使用支持 JAX GPU 和 `requirements/worldfoundry-unified.txt` 所列依赖的 OpenPI 环境。使用 gsutil 准备 `gs://openpi-assets`，或显式传入权重路径。许可证随 [OpenPI](/zh/docs/guides/supported-models/openpi)（Apache-2.0）。任务表现及 `pi05_base`/`pi05_droid` 权重尚未验证。
 
-`pi05_libero` 是已验证的 `get_action` 参照。用 `worldfoundry-eval zoo benchmark-run --benchmark-id libero --mode official-validation` 导入官方结果，读 `success_rate`。套件导入仅 normalizer——不是 leaderboard。
+用 `wf zoo benchmark-run --benchmark-id libero --mode official-validation` 导入官方 LIBERO 结果，读取 `success_rate`；导入仅对已发布结果进行归一化，并非 leaderboard。
 
 <ModelRelatedRecipes modelId="pi05" locale="zh" />

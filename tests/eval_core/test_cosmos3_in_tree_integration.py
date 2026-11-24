@@ -17,17 +17,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from worldfoundry.runtime.inference_catalog import (
+from worldfoundry.evals.models.pipelines.loading import build_pipeline_runner_spec
+from worldfoundry.evals.models.runners.resolver import resolve_model_zoo_config
+from worldfoundry.runtime.inference_catalog import get_model_inference_spec
+from worldfoundry.runtime.inference_specs.cosmos3 import (
     COSMOS3_NANO_REPO_ID,
     COSMOS3_NANO_REVISION,
     COSMOS3_SUPER_REPO_ID,
     COSMOS3_SUPER_REVISION,
-    get_model_inference_spec,
 )
-from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
-from worldfoundry.evaluation.models.pipelines.loading import build_pipeline_runner_spec
-from worldfoundry.evaluation.models.runners.resolver import resolve_model_zoo_config
-
+from worldfoundry.zoo.catalog import load_model_zoo_registry
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CATALOG_ROOT = REPO_ROOT / "worldfoundry/data/models/catalog"
@@ -133,7 +132,7 @@ def test_cosmos3_catalog_metadata_matches_in_tree_runtime() -> None:
     entry = registry.get("cosmos3")
 
     assert entry.integration_status == "integrated"
-    assert entry.runner_target == "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner"
+    assert entry.runner_target == "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner"
     assert entry.pipeline_target == "worldfoundry.pipelines.cosmos.pipeline_cosmos3:Cosmos3Pipeline"
     assert entry.runtime_profile == "runtime-profile:cosmos3"
     variants = {variant.variant_id: variant for variant in entry.variants}

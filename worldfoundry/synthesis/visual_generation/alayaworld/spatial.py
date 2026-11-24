@@ -95,11 +95,15 @@ class AlayaSpatialMemory:
         )
 
         if path.is_file():
-            self._da3 = DepthAnything3.from_pretrained(
-                "depth-anything/DA3NESTED-GIANT-LARGE-1.1",
-                model_name="da3nested-giant-large",
-                weights_path=str(path),
-            ).to(self.device).eval()
+            self._da3 = (
+                DepthAnything3.from_pretrained(
+                    "depth-anything/DA3NESTED-GIANT-LARGE-1.1",
+                    model_name="da3nested-giant-large",
+                    weights_path=str(path),
+                )
+                .to(self.device)
+                .eval()
+            )
         else:
             self._da3 = DepthAnything3.from_pretrained(str(path)).to(self.device).eval()
         return self._da3
@@ -272,7 +276,7 @@ class AlayaSpatialMemory:
             view_indices = [target_indices[-1]]
         else:
             offsets = torch.linspace(0, len(target_indices) - 1, self.retrieval_views)
-            view_indices = [target_indices[int(round(float(offset)))] for offset in offsets]
+            view_indices = [target_indices[int(round(float(offset)))] for offset in offsets]  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         target_world_to_camera = torch.stack([safe_inverse(camera[:, index]) for index in view_indices], dim=1)
         target_intrinsic = torch.stack(
             [self._intrinsic_at(intrinsic, index, camera.shape[0]) for index in view_indices],

@@ -5,12 +5,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_predict import (
+from worldfoundry.evals.tasks.execution.runners.phyfps_bench_gen.phyfps_predict import (
     mock_predict_directory,
     parse_results_csv,
     write_results_csv,
 )
-from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.visual_chronometer_metrics import (
+from worldfoundry.evals.tasks.execution.runners.phyfps_bench_gen.visual_chronometer_metrics import (
     compute_visual_chronometer_metrics,
 )
 
@@ -41,7 +41,7 @@ def test_visual_chronometer_official_run_with_mock_backend_writes_scorecard(tmp_
     completed = subprocess.run(
         [
             sys.executable,
-            "worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_visual_chronometer_official_runner.py",
+            "worldfoundry/evals/tasks/execution/runners/phyfps_bench_gen/run_visual_chronometer_official_runner.py",
             "--run-official",
             "--generated-artifact-dir",
             str(generated_dir),

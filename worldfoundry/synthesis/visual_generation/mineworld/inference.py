@@ -1,97 +1,103 @@
 import os
-import cv2
 import shutil
-import torch
 import time
-import numpy as np
-from tqdm import tqdm
-from rich import print
-from pathlib import Path
-from torch import autocast
-from einops import rearrange
-from action_tokenizer import MinecraftActionTokenizer
-from omegaconf import OmegaConf
-from torchvision import transforms
 from argparse import ArgumentParser
-from utils import load_model, tensor_to_uint8
+from pathlib import Path
+
+import cv2
+import numpy as np
+import torch
+from einops import rearrange
+from omegaconf import OmegaConf
+from rich import print
+from torch import autocast
+from torchvision import transforms
+from tqdm import tqdm
+
+from worldfoundry.synthesis.visual_generation.mineworld.action_tokenizer import (
+    MinecraftActionTokenizer,
+)
+from worldfoundry.synthesis.visual_generation.mineworld.utils import load_model
+
 torch.backends.cuda.matmul.allow_tf32 = False
 
-ACCELERATE_ALGO = [
-    'naive','image_diagd'
-]
+ACCELERATE_ALGO = ["naive", "image_diagd"]
 
-TARGET_SIZE=(224,384)
-TOKEN_PER_IMAGE = 347 # IMAGE = PIX+ACTION
+TARGET_SIZE = (224, 384)
+TOKEN_PER_IMAGE = 347  # IMAGE = PIX+ACTION
 TOKEN_PER_PIX = 336
 
 safe_globals = {"array": np.array}
 
 
-def token2video(code_list, tokenizer, save_path, fps, device = 'cuda'):
+def token2video(code_list, tokenizer, save_path, fps, device="cuda"):
     """
     change log:  we don't perform path processing inside functions to enable extensibility
     save_path: str, path to save the video, expect to endwith .mp4
-    
+
     """
     if len(code_list) % TOKEN_PER_PIX != 0:
         print(f"code_list length {len(code_list)} is not multiple of {TOKEN_PER_PIX}")
         return
     num_images = len(code_list) // TOKEN_PER_PIX
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     video = cv2.VideoWriter(save_path, fourcc, fps, (384, 224))
     for i in range(num_images):
-        code = code_list[i*TOKEN_PER_PIX:(i+1)*TOKEN_PER_PIX]
+        code = code_list[i * TOKEN_PER_PIX : (i + 1) * TOKEN_PER_PIX]
         code = torch.tensor([int(x) for x in code], dtype=torch.long).to(device)
-        img = tokenizer.token2image(code) # pixel
+        img = tokenizer.token2image(code)  # pixel
         frame = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         video.write(frame)
     video.release()
 
+
 def get_args():
     parser = ArgumentParser()
-    parser.add_argument('--data_root', type=str, required=True)
-    parser.add_argument('--model_ckpt', type=str, required=True)
-    parser.add_argument('--config', type=str, required=True)
-    parser.add_argument('--output_dir', type=str, required=True)
-    parser.add_argument('--demo_num', type=int, default=1)
-    parser.add_argument('--frames', type=int, required=True)
-    parser.add_argument('--window_size', type=int, default=2)
-    parser.add_argument('--accelerate-algo', type=str, default='naive', help=f"Accelerate Algorithm Option: {ACCELERATE_ALGO}")
-    parser.add_argument('--fps', type=int, default=6)
+    parser.add_argument("--data_root", type=str, required=True)
+    parser.add_argument("--model_ckpt", type=str, required=True)
+    parser.add_argument("--config", type=str, required=True)
+    parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--demo_num", type=int, default=1)
+    parser.add_argument("--frames", type=int, required=True)
+    parser.add_argument("--window_size", type=int, default=2)
+    parser.add_argument(
+        "--accelerate-algo", type=str, default="naive", help=f"Accelerate Algorithm Option: {ACCELERATE_ALGO}"
+    )
+    parser.add_argument("--fps", type=int, default=6)
+    parser.add_argument("--seed", type=int, default=None)
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--top_k', type=int, help='Use top-k sampling')
-    group.add_argument('--top_p', type=float, help='Use top-p (nucleus) sampling')
-    parser.add_argument('--val_data_num', type=int, default=500, help="number of validation data")
+    group.add_argument("--top_k", type=int, help="Use top-k sampling")
+    group.add_argument("--top_p", type=float, help="Use top-p (nucleus) sampling")
+    parser.add_argument("--val_data_num", type=int, default=500, help="number of validation data")
     args = parser.parse_args()
     return args
 
 
 def lvm_generate(args, model, output_dir, demo_video):
-    """
-    """
+    """ """
     ### 1. set video input/output path
     input_mp4_path = os.path.join(args.data_root, demo_video)
-    input_action_path = os.path.join(args.data_root, demo_video.replace('mp4','jsonl'))
+    input_action_path = os.path.join(args.data_root, demo_video.replace("mp4", "jsonl"))
 
     output_mp4_path = str(output_dir / demo_video)
-    output_action_path = output_mp4_path.replace('.mp4', '.jsonl')
+    output_action_path = output_mp4_path.replace(".mp4", ".jsonl")
     output_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(input_action_path, output_action_path)
     if os.path.exists(output_mp4_path):
         print(f"output path {output_mp4_path} exist")
         return {}
-    
+
     device = model.transformer.device
-    ### 2. load action into list 
+    ### 2. load action into list
     action_list = []
     action_tokenizer = MinecraftActionTokenizer()
-    with open(input_action_path, 'r') as f:
+    with open(input_action_path) as f:
         for line in f:
             line = eval(line.strip(), {"__builtins__": None}, safe_globals)
-            line['camera'] = np.array(line['camera'])
+            line["camera"] = np.array(line["camera"])
             act_index = action_tokenizer.get_action_index_from_actiondict(line, action_vocab_offset=8192)
             action_list.append(act_index)
-    ### 3. load video frames 
+    ### 3. load video frames
     cap = cv2.VideoCapture(input_mp4_path)
     start_frame = 0
     end_frame = args.demo_num
@@ -111,42 +117,62 @@ def lvm_generate(args, model, output_dir, demo_video):
     frames = frames.float() / 255.0
     normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     frames = normalize(frames)
-    
+
     with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.float16):
         img_index = model.tokenizer.tokenize_images(frames)
-    img_index = rearrange(img_index, '(b t) h w -> b t (h w)', b=1)
-     
+    img_index = rearrange(img_index, "(b t) h w -> b t (h w)", b=1)
+
     all_generated_tokens = []
 
-    action_all = action_list[end_frame: end_frame + args.frames]
+    action_all = action_list[end_frame : end_frame + args.frames]
     action_all = torch.tensor(action_all).unsqueeze(1).to(device)
-    image_input = rearrange(img_index, 'b t c -> b (t c)')
-    
+    image_input = rearrange(img_index, "b t c -> b (t c)")
 
-    start_t = time.time() 
-    with torch.no_grad(), torch.autocast(device_type='cuda', dtype=torch.float16):
-        if args.accelerate_algo == 'naive':
-            outputs = model.transformer.naive_generate( input_ids=image_input, max_new_tokens=TOKEN_PER_PIX*args.frames, action_all=action_all, top_k=args.top_k, top_p=args.top_p)
-        elif args.accelerate_algo == 'image_diagd':
-            outputs = model.transformer.img_diagd_generate(input_ids=image_input, max_new_tokens=TOKEN_PER_PIX*args.frames, action_all=action_all,windowsize = args.window_size, top_k=args.top_k, top_p=args.top_p)
+    start_t = time.time()
+    with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.float16):
+        if args.accelerate_algo == "naive":
+            outputs = model.transformer.naive_generate(
+                input_ids=image_input,
+                max_new_tokens=TOKEN_PER_PIX * args.frames,
+                action_all=action_all,
+                top_k=args.top_k,
+                top_p=args.top_p,
+            )
+        elif args.accelerate_algo == "image_diagd":
+            outputs = model.transformer.img_diagd_generate(
+                input_ids=image_input,
+                max_new_tokens=TOKEN_PER_PIX * args.frames,
+                action_all=action_all,
+                windowsize=args.window_size,
+                top_k=args.top_k,
+                top_p=args.top_p,
+            )
         else:
             raise ValueError(f"Unknown accelerate algorithm {args.accelerate_algo}")
     end_t = time.time()
     all_generated_tokens.extend(outputs.tolist()[0])
     new_length = len(all_generated_tokens)
-    time_costed = end_t - start_t 
+    time_costed = end_t - start_t
     token_per_sec = new_length / time_costed
     frame_per_sec = token_per_sec / TOKEN_PER_PIX
-    print(f"{new_length} token generated; cost {time_costed:.3f} second; {token_per_sec:.3f} token/sec {frame_per_sec:.3f} fps")
+    print(
+        f"{new_length} token generated; cost {time_costed:.3f} second; {token_per_sec:.3f} token/sec {frame_per_sec:.3f} fps"
+    )
     token2video(all_generated_tokens, model.tokenizer, str(output_dir / demo_video), args.fps, device)
-    # return for evaluation 
+    # return for evaluation
     return_item = {
         "time_costed": time_costed,
         "token_num": new_length,
     }
     return return_item
-if __name__ == '__main__':
+
+
+if __name__ == "__main__":
     args = get_args()
+    if args.seed is not None:
+        from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
+
+        set_seed_everywhere(args.seed)
     config = OmegaConf.load(args.config)
     output_path = Path(args.output_dir)
     precision_scope = autocast
@@ -158,14 +184,16 @@ if __name__ == '__main__':
     args.accelerate_algo = args.accelerate_algo.lower()
     if args.accelerate_algo not in ACCELERATE_ALGO:
         print(f"[bold red][Warning][/bold red] {args.accelerate_algo} is not in {ACCELERATE_ALGO}, use naive")
-        args.accelerate_algo = 'naive'
+        args.accelerate_algo = "naive"
     num_item = 0
-    for root, _, files in os.walk(args.data_root):
-        files = [f for f in files  if f.endswith('.mp4')] # mp4 would not influence progress bar 
-        files = sorted(files, key=lambda x: int(x.split('_')[1].split('.')[0]))
+    for root, _, files in os.walk(args.data_root):  # noqa: B007 - Loop target name kept as upstream.
+        files = [f for f in files if f.endswith(".mp4")]  # mp4 would not influence progress bar
+        files = sorted(files, key=lambda x: int(x.split("_")[1].split(".")[0]))
         for file in tqdm(files):
-            return_item = lvm_generate(args, model, output_path,file)
+            return_item = lvm_generate(args, model, output_path, file)
             num_item += 1
-            if num_item  >= args.val_data_num:
-                print(f"[bold magenta][MINEWORLD][INFERENCE][/bold magenta]  reach val data num limit {args.val_data_num}")
+            if num_item >= args.val_data_num:
+                print(
+                    f"[bold magenta][MINEWORLD][INFERENCE][/bold magenta]  reach val data num limit {args.val_data_num}"
+                )
                 break

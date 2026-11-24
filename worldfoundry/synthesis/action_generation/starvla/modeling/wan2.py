@@ -27,8 +27,6 @@ Key differences from CosmoPredict2:
   - No condition_mask / padding_mask (those are Cosmos-specific)
 """
 
-from typing import Optional
-
 import torch
 import torch.nn as nn
 
@@ -52,7 +50,7 @@ class Wan2Interface(nn.Module):
       head can consume — analogous to VLM hidden_states.
     """
 
-    def __init__(self, config: Optional[dict] = None, **kwargs):
+    def __init__(self, config: dict | None = None, **kwargs):
         super().__init__()
 
         wm_cfg = config.framework.get("world_model", {})
@@ -62,15 +60,11 @@ class Wan2Interface(nn.Module):
         )
         self.config = config
 
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
         from worldfoundry.core.io.paths import resolve_local_hf_model_path
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
-        probe_device = resolve_inference_device(
-            str(wm_cfg.get("device", "cuda")), allow_cpu_fallback=True
-        )
-        self.inference_dtype = resolve_inference_dtype(
-            probe_device, str(wm_cfg.get("torch_dtype", "auto"))
-        )
+        probe_device = resolve_inference_device(str(wm_cfg.get("device", "cuda")), allow_cpu_fallback=True)
+        self.inference_dtype = resolve_inference_dtype(probe_device, str(wm_cfg.get("torch_dtype", "auto")))
         model_name = str(
             resolve_local_hf_model_path(
                 model_name,
@@ -119,6 +113,7 @@ class Wan2Interface(nn.Module):
 
         # Use diffusers' VideoProcessor for image/video preprocessing (resize, normalize, etc.)
         from diffusers.video_processor import VideoProcessor
+
         self.vae_scale_factor_spatial = 2 ** len(self.vae.temperal_downsample)
         self.vae_scale_factor_temporal = 2 ** sum(self.vae.temperal_downsample)
         self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor_spatial)
@@ -128,10 +123,7 @@ class Wan2Interface(nn.Module):
         # self.text_encoder.requires_grad_(False)
 
         # DiT: 24 heads × 128 dim = 3072
-        self._hidden_size = (
-            self.transformer.config.num_attention_heads
-            * self.transformer.config.attention_head_dim
-        )
+        self._hidden_size = self.transformer.config.num_attention_heads * self.transformer.config.attention_head_dim
 
         # Config-like shim for framework to read hidden_size
         class _FakeConfig:
@@ -269,11 +261,8 @@ class Wan2Interface(nn.Module):
             .view(1, self.vae.config.z_dim, 1, 1, 1)
             .to(latents.device, latents.dtype)
         )
-        latents_std = (
-            1.0
-            / torch.tensor(self.vae.config.latents_std)
-            .view(1, self.vae.config.z_dim, 1, 1, 1)
-            .to(latents.device, latents.dtype)
+        latents_std = 1.0 / torch.tensor(self.vae.config.latents_std).view(1, self.vae.config.z_dim, 1, 1, 1).to(
+            latents.device, latents.dtype
         )
         latents = (latents - latents_mean) * latents_std
 
@@ -328,7 +317,7 @@ class Wan2Interface(nn.Module):
         Runs a single-step forward to extract rich spatiotemporal features.
         Returns an output object with .hidden_states for compatibility.
         """
-        kwargs.pop("_is_wm_input", False) # pop internal routing flags from kwargs to avoid passing them downstream
+        kwargs.pop("_is_wm_input", False)  # pop internal routing flags from kwargs to avoid passing them downstream
         kwargs.pop("output_hidden_states", False)
         kwargs.pop("return_dict", True)
         kwargs.pop("output_attentions", None)
@@ -372,5 +361,6 @@ class Wan2Interface(nn.Module):
                 self.hidden_states = hidden_states_tuple
 
         return _WMOutput(hidden_states_tuple=tuple(extracted))
+
 
 __all__ = ["Wan2Interface"]

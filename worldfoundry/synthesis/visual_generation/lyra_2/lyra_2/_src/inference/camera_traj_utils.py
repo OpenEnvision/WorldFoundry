@@ -4,10 +4,10 @@
 # -----------------------------------------------------------------------------
 
 import argparse
-from typing import Optional, Tuple
 
 import torch
-from lyra_2._src.inference.camera_utils import (  # type: ignore
+
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.inference.camera_utils import (  # type: ignore
     create_back_trajectory,
     create_dolly_zoom_trajectory,
     create_horizontal_trajectory,
@@ -23,7 +23,7 @@ from lyra_2._src.inference.camera_utils import (  # type: ignore
 )
 
 # Canonical list of supported camera trajectories shared across inference scripts.
-CAMERA_TRAJECTORY_CHOICES: Tuple[str, ...] = (
+CAMERA_TRAJECTORY_CHOICES: tuple[str, ...] = (
     "original",
     "spiral",
     "spiral_center",
@@ -60,7 +60,7 @@ def add_camera_traj_args(
     with_video_len: bool = True,
     video_len_flag: str = "video_len",
     video_len_default: int = 93,
-    video_len_help: Optional[str] = None,
+    video_len_help: str | None = None,
     with_fps: bool = True,
     fps_default: int = 16,
     trajectory_default: str = "original",
@@ -111,7 +111,7 @@ def build_camera_trajectory(
     trajectory: str,
     direction: str,
     strength: float,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Shared camera-trajectory builder.
 
     Returns:

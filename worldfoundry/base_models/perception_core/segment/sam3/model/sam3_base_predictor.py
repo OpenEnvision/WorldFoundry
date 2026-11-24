@@ -12,9 +12,9 @@ Subclasses only need to override methods where their behavior differs.
 import gc
 import time
 import uuid
-from typing import Dict, List, Optional
 
 import torch
+
 from worldfoundry.base_models.perception_core.segment.sam3.logger import get_logger
 
 logger = get_logger(__name__)
@@ -40,10 +40,9 @@ class Sam3BasePredictor:
     """
 
     def __init__(self):
-        """Init."""
         # Subclasses must populate these
         self.model = None
-        self._all_inference_states: Dict[str, dict] = {}
+        self._all_inference_states: dict[str, dict] = {}
 
     # ── Request dispatch ──────────────────────────────────────────────
 
@@ -90,9 +89,7 @@ class Sam3BasePredictor:
             return self.close_session(
                 session_id=request["session_id"],
                 run_gc_collect=request.get("run_gc_collect", True),
-                clear_cache_threshold=int(
-                    request.get("clear_cache_threshold", _CLEAR_CACHE_THRESHOLD)
-                ),
+                clear_cache_threshold=int(request.get("clear_cache_threshold", _CLEAR_CACHE_THRESHOLD)),
             )
         else:
             raise RuntimeError(f"invalid request type: {request_type}")
@@ -125,11 +122,11 @@ class Sam3BasePredictor:
         offload_state_to_cpu=False,
     ):
         """Start a new inference session on a video directory or path."""
-        init_kwargs = dict(
-            resource_path=resource_path,
-            offload_video_to_cpu=offload_video_to_cpu,
-            offload_state_to_cpu=offload_state_to_cpu,
-        )
+        init_kwargs = {
+            "resource_path": resource_path,
+            "offload_video_to_cpu": offload_video_to_cpu,
+            "offload_state_to_cpu": offload_state_to_cpu,
+        }
         if hasattr(self, "async_loading_frames"):
             init_kwargs["async_loading_frames"] = self.async_loading_frames
         if hasattr(self, "video_loader_type"):
@@ -151,7 +148,7 @@ class Sam3BasePredictor:
         self,
         session_id: str,
         frame_idx: int,
-        text: Optional[str] = None,
+        text: str | None = None,
         points=None,
         point_labels=None,
         clear_old_points: bool = True,
@@ -159,7 +156,7 @@ class Sam3BasePredictor:
         bounding_box_labels=None,
         clear_old_boxes: bool = True,
         output_prob_thresh: float = 0.5,
-        obj_id: Optional[int] = None,
+        obj_id: int | None = None,
         rel_coordinates: bool = True,
     ):
         """Add text, box and/or point prompt on a specific video frame."""
@@ -174,24 +171,22 @@ class Sam3BasePredictor:
             point_labels = torch.tensor(point_labels, dtype=torch.int32)
         if bounding_boxes is not None and not isinstance(bounding_boxes, torch.Tensor):
             bounding_boxes = torch.tensor(bounding_boxes, dtype=torch.float32)
-        if bounding_box_labels is not None and not isinstance(
-            bounding_box_labels, torch.Tensor
-        ):
+        if bounding_box_labels is not None and not isinstance(bounding_box_labels, torch.Tensor):
             bounding_box_labels = torch.tensor(bounding_box_labels, dtype=torch.int32)
 
-        kwargs = dict(
-            inference_state=inference_state,
-            frame_idx=frame_idx,
-            text_str=text,
-            points=points,
-            point_labels=point_labels,
-            clear_old_points=clear_old_points,
-            boxes_xywh=bounding_boxes,
-            box_labels=bounding_box_labels,
-            clear_old_boxes=clear_old_boxes,
-            output_prob_thresh=output_prob_thresh,
-            rel_coordinates=rel_coordinates,
-        )
+        kwargs = {
+            "inference_state": inference_state,
+            "frame_idx": frame_idx,
+            "text_str": text,
+            "points": points,
+            "point_labels": point_labels,
+            "clear_old_points": clear_old_points,
+            "boxes_xywh": bounding_boxes,
+            "box_labels": bounding_box_labels,
+            "clear_old_boxes": clear_old_boxes,
+            "output_prob_thresh": output_prob_thresh,
+            "rel_coordinates": rel_coordinates,
+        }
         if obj_id is not None:
             kwargs["obj_id"] = obj_id
 
@@ -219,13 +214,9 @@ class Sam3BasePredictor:
         inference_state = session["state"]
         self._extend_expiration_time(session)
 
-        result = self.model.remove_object(
-            inference_state, obj_id, frame_idx=frame_idx, is_user_action=is_user_action
-        )
+        result = self.model.remove_object(inference_state, obj_id, frame_idx=frame_idx, is_user_action=is_user_action)
         # Handle both return conventions
         if result is None or (isinstance(result, tuple) and result[1] is None):
-            import numpy as np
-
             out_obj_ids = torch.zeros(0, dtype=torch.int64)
             out_binary_masks = torch.zeros(
                 0,
@@ -269,15 +260,13 @@ class Sam3BasePredictor:
             inference_state = session["state"]
             self._extend_expiration_time(session)
             if propagation_direction not in ["both", "forward", "backward"]:
-                raise ValueError(
-                    f"invalid propagation direction: {propagation_direction}"
-                )
+                raise ValueError(f"invalid propagation direction: {propagation_direction}")
 
-            propagate_kwargs = dict(
-                inference_state=inference_state,
-                start_frame_idx=start_frame_idx,
-                max_frame_num_to_track=max_frame_num_to_track,
-            )
+            propagate_kwargs = {
+                "inference_state": inference_state,
+                "start_frame_idx": start_frame_idx,
+                "max_frame_num_to_track": max_frame_num_to_track,
+            }
             # Only pass output_prob_thresh / extra kwargs if the model supports them
             import inspect
 
@@ -452,12 +441,8 @@ class Sam3BasePredictor:
         # bookkeeping reads (no CUDA sync) and complement
         # ``mem_get_info`` by exposing the caching-allocator pool size
         # vs the actual live tensor footprint.
-        allocated_bytes = (
-            torch.cuda.memory_allocated() if torch.cuda.is_available() else 0
-        )
-        reserved_bytes = (
-            torch.cuda.memory_reserved() if torch.cuda.is_available() else 0
-        )
+        allocated_bytes = torch.cuda.memory_allocated() if torch.cuda.is_available() else 0
+        reserved_bytes = torch.cuda.memory_reserved() if torch.cuda.is_available() else 0
         return {
             "free_bytes": free_bytes,
             "total_bytes": total_bytes,
@@ -468,16 +453,9 @@ class Sam3BasePredictor:
         }
 
     def _get_session(self, session_id):
-        """Helper function to get session.
-
-        Args:
-            session_id: The session id.
-        """
         session = self._all_inference_states.get(session_id, None)
         if session is None:
-            raise RuntimeError(
-                f"Cannot find session {session_id}; it might have expired"
-            )
+            raise RuntimeError(f"Cannot find session {session_id}; it might have expired")
         return session
 
     def _extend_expiration_time(self, session):

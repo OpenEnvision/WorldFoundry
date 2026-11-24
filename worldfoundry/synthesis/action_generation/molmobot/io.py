@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import tempfile
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from pathlib import Path
+from typing import Union
 
-PathOrStr = Union[str, os.PathLike]
+PathOrStr = Union[str, os.PathLike]  # noqa: UP007 - Runtime type alias kept as typing.Union.
 
 
 def normalize_path(path: PathOrStr) -> str:
@@ -29,12 +30,10 @@ def _local_read_path(path: PathOrStr) -> Path:
     normalized = normalize_path(path)
     if not is_url(normalized):
         return Path(normalized)
-    raise FileNotFoundError(
-        f"Remote reads are disabled for MolmoBot inference; stage this asset locally: {normalized}"
-    )
+    raise FileNotFoundError(f"Remote reads are disabled for MolmoBot inference; stage this asset locally: {normalized}")
 
 
-def get_bytes_range(path: PathOrStr, bytes_start: int, num_bytes: Optional[int]) -> bytes:
+def get_bytes_range(path: PathOrStr, bytes_start: int, num_bytes: int | None) -> bytes:
     if bytes_start < 0 or (num_bytes is not None and num_bytes < 0):
         raise ValueError("Byte ranges must be non-negative.")
     local_path = _local_read_path(path)
@@ -66,7 +65,7 @@ def file_exists(path: PathOrStr) -> bool:
 def write_file(
     directory: PathOrStr,
     fname: str,
-    contents: Union[str, bytes, Callable],
+    contents: str | bytes | Callable,
     save_overwrite: bool = False,
 ) -> Path:
     if is_url(directory):

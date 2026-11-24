@@ -9,7 +9,7 @@ OpenVLA is a 7B vision-language-action policy: a Prismatic VLM that turns one RG
 
 <ModelPaperFigures modelId="openvla" locale="en" />
 
-WorldFoundry vendors the Hugging Face architecture (`configuration_prismatic.py`, `modeling_prismatic.py`, `processing_prismatic.py`) under `worldfoundry/synthesis/action_generation/openvla` so inference does not depend on remote code. Two catalog variants: `openvla-7b` and `openvla-libero-10`. The in-tree runner is **verified** on the base card with `unnorm_key=bridge_orig`. The LIBERO-10 fine-tune is a pinned, staged checkpoint on the same runner; its dedicated zoo parameters are still marked planned.
+WorldFoundry ships the Hugging Face Prismatic model code (`configuration_prismatic.py`, `modeling_prismatic.py`, `processing_prismatic.py`) in-tree, so inference does not depend on remote code. Two variants: `openvla-7b` and `openvla-libero-10`. The base route is **validated** on `openvla-7b` with `unnorm_key=bridge_orig`. The LIBERO-10 fine-tune runs on the same pipeline but has not been validated separately.
 
 <ModelCommandBuilder modelId="openvla" locale="en" />
 
@@ -17,11 +17,11 @@ WorldFoundry vendors the Hugging Face architecture (`configuration_prismatic.py`
 
 Start on `openvla-7b`. Required inputs are `image`, `instruction`, and `prompt`. `OpenVLAPipeline` writes `openvla_action_trace.json` (also `actions` / `rollout_metrics`). Default unnorm key is `bridge_orig` — that is the verified Bridge-style route. The matching evaluation page is [BridgeData V2](/docs/evaluation/benchmark-hub/bridgedata-v2).
 
-Switch to `openvla-libero-10` and `unnorm_key=libero_10` only when the target suite is [LIBERO](/docs/evaluation/benchmark-hub/libero). For the faster continuous / chunked OpenVLA line, use the sibling [OpenVLA-OFT](/docs/guides/supported-models/openvla-oft) card — do not treat this page as that runtime.
+Switch to `openvla-libero-10` and `unnorm_key=libero_10` only when the target suite is [LIBERO](/docs/evaluation/benchmark-hub/libero). For the faster continuous / chunked OpenVLA line, use [OpenVLA-OFT](/docs/guides/supported-models/openvla-oft).
 
 ## Runtime contract
 
-Default vision backbone is **SigLIP 224px** fused with DINOv2; language side is Llama-2 7B. Action tokens use **256 bins** on \([-1, 1]\), then dataset-specific de-normalization into 7-DoF. This host runs **fp16** because the recorded CUDA 11.3 / torch 1.12 stack does not expose the needed bf16 ops. `video` is optional and unused on the recorded predict.
+Default vision backbone is **SigLIP 224px** fused with DINOv2; language side is Llama-2 7B. Action tokens use **256 bins** on \([-1, 1]\), then dataset-specific de-normalization into 7-DoF. Inference runs in **fp16**. `video` is optional and unused.
 
 Pinned revisions:
 
@@ -30,12 +30,12 @@ Pinned revisions:
 
 ## Running in WorldFoundry
 
-Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 11.3). Stage both Hugging Face trees locally, then:
+Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage both Hugging Face trees locally, then:
 
 ```
-worldfoundry-eval run openvla-7b
+wf run openvla-7b
 ```
 
-`unnorm_key` must match the checkpoint’s data contract. License on both recorded repos is **MIT**.
+`unnorm_key` must match the checkpoint’s data contract. Both checkpoints are **MIT**-licensed.
 
 <ModelRelatedRecipes modelId="openvla" locale="en" />

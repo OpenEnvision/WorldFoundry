@@ -1,12 +1,14 @@
 import math
 from abc import abstractmethod
-from typing import Dict, Tuple, Union
 
 import torch
 import torch.nn as nn
 from pytorch_lightning import LightningModule
-from vwm.modules.autoencoding.regularizer import AbstractRegularizer
-from vwm.util import instantiate_from_config
+
+from worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.autoencoding.regularizer import (
+    AbstractRegularizer,
+)
+from worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.util import instantiate_from_config
 
 
 class AbstractAutoencoder(LightningModule):
@@ -16,11 +18,8 @@ class AbstractAutoencoder(LightningModule):
     (e.g. discriminator training, encoding, decoding) must be implemented in subclasses.
     """
 
-    def __init__(
-            self,
-            input_key: str = "img"
-    ):
-        super(AbstractAutoencoder, self).__init__()
+    def __init__(self, input_key: str = "img"):
+        super().__init__()
         self.input_key = input_key
 
     @abstractmethod
@@ -43,20 +42,13 @@ class AutoencodingEngine(AbstractAutoencoder):
     Regularizations such as KL or VQ are moved to the regularizer class.
     """
 
-    def __init__(
-            self,
-            *args,
-            encoder_config: Dict,
-            decoder_config: Dict,
-            regularizer_config: Dict,
-            **kwargs
-    ):
-        super(AutoencodingEngine, self).__init__(*args, **kwargs)
+    def __init__(self, *args, encoder_config: dict, decoder_config: dict, regularizer_config: dict, **kwargs):
+        super().__init__(*args, **kwargs)
         self.encoder: nn.Module = instantiate_from_config(encoder_config)
         self.decoder: nn.Module = instantiate_from_config(decoder_config)
         self.regularization: AbstractRegularizer = instantiate_from_config(regularizer_config)
 
-    def get_input(self, batch: Dict) -> torch.Tensor:
+    def get_input(self, batch: dict) -> torch.Tensor:
         # Image tensors should be scaled to -1 ... 1 and in channels-first format (e.g., bchw instead if bhwc)
         return batch[self.input_key]
 
@@ -64,11 +56,8 @@ class AutoencodingEngine(AbstractAutoencoder):
         return self.decoder.get_last_layer()
 
     def encode(
-            self,
-            x: torch.Tensor,
-            return_reg_log: bool = False,
-            unregularized: bool = False
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, dict]]:
+        self, x: torch.Tensor, return_reg_log: bool = False, unregularized: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, dict]:
         z = self.encoder(x)
         if unregularized:
             return z, {}
@@ -83,9 +72,7 @@ class AutoencodingEngine(AbstractAutoencoder):
         x = self.decoder(z, **kwargs)
         return x
 
-    def forward(
-            self, x: torch.Tensor, **additional_decode_kwargs
-    ) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
+    def forward(self, x: torch.Tensor, **additional_decode_kwargs) -> tuple[torch.Tensor, torch.Tensor, dict]:
         z, reg_log = self.encode(x, return_reg_log=True)
         dec = self.decode(z, **additional_decode_kwargs)
         return z, dec, reg_log
@@ -95,34 +82,32 @@ class AutoencodingEngineLegacy(AutoencodingEngine):
     def __init__(self, embed_dim: int, **kwargs):
         self.max_batch_size = kwargs.pop("max_batch_size", None)
         ddconfig = kwargs.pop("ddconfig")
-        super(AutoencodingEngineLegacy, self).__init__(
+        super().__init__(
             encoder_config={
-                "target": "vwm.modules.diffusionmodules.model.Encoder",
-                "params": ddconfig
+                "target": "worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.diffusionmodules.model.Encoder",
+                "params": ddconfig,
             },
             decoder_config={
-                "target": "vwm.modules.diffusionmodules.model.Decoder",
-                "params": ddconfig
+                "target": "worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.diffusionmodules.model.Decoder",
+                "params": ddconfig,
             },
-            **kwargs
+            **kwargs,
         )
         self.quant_conv = nn.Conv2d(2 * ddconfig["z_channels"], 2 * embed_dim, 1)
         self.post_quant_conv = nn.Conv2d(embed_dim, ddconfig["z_channels"], 1)
         self.embed_dim = embed_dim
 
-    def encode(
-            self, x: torch.Tensor, return_reg_log: bool = False
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, dict]]:
+    def encode(self, x: torch.Tensor, return_reg_log: bool = False) -> torch.Tensor | tuple[torch.Tensor, dict]:
         if self.max_batch_size is None:
             z = self.encoder(x)
             z = self.quant_conv(z)
         else:
             N = x.shape[0]
             bs = self.max_batch_size
-            n_batches = int(math.ceil(N / bs))
+            n_batches = int(math.ceil(N / bs))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
             z = []
             for i_batch in range(n_batches):
-                z_batch = self.encoder(x[i_batch * bs: (i_batch + 1) * bs])
+                z_batch = self.encoder(x[i_batch * bs : (i_batch + 1) * bs])
                 z_batch = self.quant_conv(z_batch)
                 z.append(z_batch)
             z = torch.cat(z, 0)
@@ -140,10 +125,10 @@ class AutoencodingEngineLegacy(AutoencodingEngine):
         else:
             N = z.shape[0]
             bs = self.max_batch_size
-            n_batches = int(math.ceil(N / bs))
+            n_batches = int(math.ceil(N / bs))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
             dec = []
             for i_batch in range(n_batches):
-                dec_batch = self.post_quant_conv(z[i_batch * bs: (i_batch + 1) * bs])
+                dec_batch = self.post_quant_conv(z[i_batch * bs : (i_batch + 1) * bs])
                 dec_batch = self.decoder(dec_batch, **decoder_kwargs)
                 dec.append(dec_batch)
             dec = torch.cat(dec, 0)
@@ -152,24 +137,24 @@ class AutoencodingEngineLegacy(AutoencodingEngine):
 
 class AutoencoderKL(AutoencodingEngineLegacy):
     def __init__(self, **kwargs):
-        super(AutoencoderKL, self).__init__(
+        super().__init__(
             regularizer_config={
                 "target": (
-                    "vwm.modules.autoencoding.regularizer.DiagonalGaussianRegularizer"
+                    "worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.autoencoding.regularizer.DiagonalGaussianRegularizer"
                 )
             },
-            **kwargs
+            **kwargs,
         )
 
 
 class AutoencoderKLModeOnly(AutoencodingEngineLegacy):
     def __init__(self, **kwargs):
-        super(AutoencoderKLModeOnly, self).__init__(
+        super().__init__(
             regularizer_config={
                 "target": (
-                    "vwm.modules.autoencoding.regularizer.DiagonalGaussianRegularizer"
+                    "worldfoundry.synthesis.visual_generation.adaworld.worldmodel.vwm.modules.autoencoding.regularizer.DiagonalGaussianRegularizer"
                 ),
                 "params": {"sample": False},
             },
-            **kwargs
+            **kwargs,
         )

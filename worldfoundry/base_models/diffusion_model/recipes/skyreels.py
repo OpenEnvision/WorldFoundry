@@ -30,7 +30,6 @@ from ..schedulers import build_wan_flow_unipc_scheduler
 from .spec import NativeDiffusionRecipe
 from .wan import WAN_TOKENIZER_FILES
 
-
 SKYREELS_V2_MODEL_ID = "skyreels-v2"
 SKYREELS_V2_REPO_ID = "Skywork/SkyReels-V2-DF-1.3B-540P"
 SKYREELS_V2_REVISION = "1100111771ba2d921f10e76991f54db9f73edb3d"
@@ -189,9 +188,7 @@ def skyreels_v3_recipe() -> NativeDiffusionRecipe:
             },
         ),
         checkpoints=checkpoints,
-        capabilities=frozenset(
-            {"reference-to-video", "classifier-free-guidance", "dual-condition-guidance"}
-        ),
+        capabilities=frozenset({"reference-to-video", "classifier-free-guidance", "dual-condition-guidance"}),
         options={"latent_channels": 16, "spatial_compression": 8, "temporal_compression": 4},
         metadata={
             "architecture": "skyreels-v3-wan-r2v-14b",

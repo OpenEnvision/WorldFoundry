@@ -3,7 +3,6 @@ Base Prediction Head Class for UniCeption
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
 
 import torch
 import torch.nn as nn
@@ -17,8 +16,8 @@ class PredictionHeadInput:
 
 @dataclass
 class PredictionHeadLayeredInput:
-    list_features: List[Tensor]
-    target_output_shape: Tuple[int, int]
+    list_features: list[Tensor]
+    target_output_shape: tuple[int, int]
 
 
 @dataclass
@@ -48,7 +47,7 @@ class SummaryTaskOutput:
 @dataclass
 class AdaptorInput:
     adaptor_feature: Tensor
-    output_shape_hw: Tuple[int, int]
+    output_shape_hw: tuple[int, int]
 
 
 @dataclass
@@ -58,7 +57,7 @@ class AdaptorOutput:
 
 @dataclass
 class PredictionHeadOutput:
-    adaptor_output: Dict[str, AdaptorOutput]
+    adaptor_output: dict[str, AdaptorOutput]
 
 
 @dataclass
@@ -184,7 +183,7 @@ class AdaptorMap(nn.Module):
     def forward(
         self,
         adaptor_input: AdaptorInput,
-    ) -> Dict[str, AdaptorOutput]:
+    ) -> dict[str, AdaptorOutput]:
         """
         Run the input through the adaptors and return the output.
 

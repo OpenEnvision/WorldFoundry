@@ -10,10 +10,9 @@ import shutil
 import subprocess
 import threading
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 _DISABLED_DEVICE_VALUES = frozenset({"", "-1", "none", "void"})
 _ALL_DEVICE_VALUES = frozenset({"all"})
@@ -23,7 +22,7 @@ _ALL_DEVICE_VALUES = frozenset({"all"})
 class CudaDeviceLease:
     """A reversible reservation of one or more physical CUDA device tokens."""
 
-    _pool: "CudaDeviceLeasePool" = field(repr=False)
+    _pool: CudaDeviceLeasePool = field(repr=False)
     tokens: tuple[str, ...]
     _released: bool = field(default=False, init=False, repr=False)
     _process_group_id: int | None = field(default=None, init=False, repr=False)
@@ -67,7 +66,7 @@ class CudaDeviceLease:
         self._released = True
         self._pool.release(self.tokens)
 
-    def __enter__(self) -> "CudaDeviceLease":
+    def __enter__(self) -> CudaDeviceLease:
         return self
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
@@ -179,8 +178,8 @@ class CudaDeviceLeasePool:
                     if self._previous_group_alive(fd):
                         raise BlockingIOError("GPU's previous worker descendants are still alive")
         except BaseException as exc:
-            for descriptors in acquired.values():
-                for fd in descriptors:
+            for opened in acquired.values():
+                for fd in opened:
                     os.close(fd)
             if isinstance(exc, BlockingIOError):
                 return False

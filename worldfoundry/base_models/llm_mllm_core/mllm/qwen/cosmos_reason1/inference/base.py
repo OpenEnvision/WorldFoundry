@@ -1,7 +1,7 @@
 """Inference-only base for the bundled Reason1/Qwen text encoder."""
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 from torch._utils import _get_available_device_type, _get_device_module
@@ -27,14 +27,14 @@ class VLMBaseModel(torch.nn.Module):
     def get_num_params(self) -> int:
         return sum(parameter.numel() for parameter in self.parameters())
 
-    def load_state_dict(self, state_dict: Dict[str, Any], strict: bool = True, assign: bool = False):
+    def load_state_dict(self, state_dict: dict[str, Any], strict: bool = True, assign: bool = False):
         missing, unexpected = super().load_state_dict(state_dict, strict=False, assign=assign)
         if strict and (missing or unexpected):
             raise ValueError(f"Missing keys: {missing}\n\nUnexpected keys: {unexpected}")
         return _IncompatibleKeys(missing, unexpected)
 
     @torch.no_grad()
-    def init_weights(self, buffer_device: Optional[torch.device] = None):
+    def init_weights(self, buffer_device: torch.device | None = None):
         if self.config.model_type == "qwen2_5":
             for module in self.model.modules():
                 if hasattr(module, "rope_init_fn"):

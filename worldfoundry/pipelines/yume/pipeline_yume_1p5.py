@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any
 
 from worldfoundry.runtime.env import resolve_ckpt_dir
 
 from ..pipeline_utils import PipelineABC
-
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _DEFAULT_CKPT_ROOT = resolve_ckpt_dir()
@@ -32,8 +32,7 @@ def _resolve_local_checkpoint(value: Any, default_path: Path) -> str:
         if not missing:
             return str(path.resolve())
         raise FileNotFoundError(
-            f"Incomplete Yume 1.5 checkpoint directory: {path}. "
-            f"Missing required files: {', '.join(missing)}"
+            f"Incomplete Yume 1.5 checkpoint directory: {path}. Missing required files: {', '.join(missing)}"
         )
     raise FileNotFoundError(
         "Yume 1.5 requires a local checkpoint directory. "
@@ -44,17 +43,17 @@ def _resolve_local_checkpoint(value: Any, default_path: Path) -> str:
 
 
 def _normalise_request(
-    interactions: Optional[Union[str, List[str]]],
-    interaction_speeds: Optional[Union[float, List[float]]],
-    interaction_distances: Optional[Union[float, List[float]]],
+    interactions: str | list[str] | None,
+    interaction_speeds: float | list[float] | None,
+    interaction_distances: float | Sequence[float | None] | None,
     *,
-    task_type: Optional[str],
-    size: Optional[str],
-    num_euler_timesteps: Optional[int],
-    images: Optional[Any],
-    videos: Optional[List[Any]],
+    task_type: str | None,
+    size: str | None,
+    num_euler_timesteps: int | None,
+    images: Any | None,
+    videos: list[Any] | None,
     require_conditioning_input: bool = True,
-) -> tuple[List[str], List[float], List[Optional[float]], str, str, int]:
+) -> tuple[list[str], list[float], list[float | None], str, str, int]:
     """Validate lightweight request geometry before entering the YUME runtime."""
     if isinstance(interactions, str):
         normalised_interactions = [interactions]
@@ -73,19 +72,15 @@ def _normalise_request(
         normalised_speeds = [float(value) for value in interaction_speeds]
 
     if isinstance(interaction_distances, (float, int)):
-        normalised_distances: List[Optional[float]] = [float(interaction_distances)] * len(normalised_interactions)
+        normalised_distances: list[float | None] = [float(interaction_distances) for _ in normalised_interactions]
     elif interaction_distances is None:
         normalised_distances = [None if "camera_" in action else 4.0 for action in normalised_interactions]
     else:
         normalised_distances = [None if value is None else float(value) for value in interaction_distances]
 
-    if not (
-        len(normalised_interactions) == len(normalised_speeds) == len(normalised_distances)
-    ):
-        raise ValueError(
-            "interactions, interaction_speeds, and interaction_distances must have the same length."
-        )
-    for action, distance in zip(normalised_interactions, normalised_distances):
+    if not (len(normalised_interactions) == len(normalised_speeds) == len(normalised_distances)):
+        raise ValueError("interactions, interaction_speeds, and interaction_distances must have the same length.")
+    for action, distance in zip(normalised_interactions, normalised_distances, strict=False):
         if "camera_" not in action and distance is None:
             raise ValueError(f"Movement interaction {action!r} requires a numeric distance.")
 
@@ -99,10 +94,7 @@ def _normalise_request(
 
     normalised_size = str(size or "704*1280")
     if normalised_size not in _SUPPORTED_YUME_1P5_SIZES:
-        raise ValueError(
-            f"Unsupported Yume 1.5 size {normalised_size!r}; "
-            f"choose one of {_SUPPORTED_YUME_1P5_SIZES}."
-        )
+        raise ValueError(f"Unsupported Yume 1.5 size {normalised_size!r}; choose one of {_SUPPORTED_YUME_1P5_SIZES}.")
     if isinstance(num_euler_timesteps, bool) or not isinstance(num_euler_timesteps, int):
         raise ValueError("num_euler_timesteps must be a positive integer.")
     if num_euler_timesteps < 1:
@@ -119,18 +111,17 @@ def _normalise_request(
 
 
 class Yume1p5Pipeline(PipelineABC):
-
     """Pipeline implementation for Yume1p5 visual generation."""
+
     def __init__(
         self,
-        synthesis_model: Optional[Any] = None,
-        operators: Optional[Any] = None,
-        memory_module: Optional[Any] = None,
+        synthesis_model: Any | None = None,
+        operators: Any | None = None,
+        memory_module: Any | None = None,
         device: str = "cuda",
         weight_dtype: Any = None,
         checkpoint_root: str | Path = _DEFAULT_CKPT_ROOT,
     ) -> None:
-        
         """Initialize the pipeline and configure runtime components."""
         self.operators = operators
         self.synthesis_model = synthesis_model
@@ -141,15 +132,15 @@ class Yume1p5Pipeline(PipelineABC):
         self.checkpoint_root = Path(checkpoint_root).expanduser().resolve()
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: Any = None,
-        required_components: Optional[dict[str, Any]] = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
         weight_dtype: Any = None,
         fsdp: bool = False,
         **kwargs: Any,
-    ) -> "Yume1p5Pipeline":
+    ) -> Yume1p5Pipeline:
         """
         Load Yume 1.5 from local official repo metadata and staged checkpoints.
 
@@ -175,17 +166,14 @@ class Yume1p5Pipeline(PipelineABC):
 
         import torch
 
-        from ...synthesis.visual_generation.memory.stream import VisualContextMemory
         from ...operators.yume_1p5_operator import Yume1p5Operator
+        from ...synthesis.visual_generation.memory.stream import VisualContextMemory
         from ...synthesis.visual_generation.yume.yume_1p5_synthesis import Yume1p5Synthesis
 
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype = weight_dtype or torch.bfloat16
         synthesis_model = Yume1p5Synthesis.from_pretrained(
-            pretrained_model_path=synthesis_model_path,
-            device=device,
-            weight_dtype=weight_dtype,
-            fsdp=fsdp
+            pretrained_model_path=synthesis_model_path, device=device, weight_dtype=weight_dtype, fsdp=fsdp
         )
         operators = Yume1p5Operator()
         memory_module = VisualContextMemory(model_id="yume-1.5")
@@ -208,7 +196,7 @@ class Yume1p5Pipeline(PipelineABC):
             return torch.distributed.get_rank()
         return 0
 
-    def _to_pil_frames(self, video: Any) -> List[Any]:
+    def _to_pil_frames(self, video: Any) -> list[Any]:
         """To pil frames for Yume1p5Pipeline."""
         import numpy as np
         import torch
@@ -269,7 +257,7 @@ class Yume1p5Pipeline(PipelineABC):
 
         raise TypeError(f"Unsupported video type: {type(video)}")
 
-    def _materialise_video_frames(self, video: Any) -> Optional[List[Any]]:
+    def _materialise_video_frames(self, video: Any) -> list[Any] | None:
         """Convert a runner video input into the 33-frame YUME context contract."""
         if video is None:
             return None
@@ -332,38 +320,33 @@ class Yume1p5Pipeline(PipelineABC):
 
     def process(
         self,
-        interactions: Union[str, List[str]],
-        images: Optional[Any] = None,
-        videos: Optional[List[Any]] = None,
-        size: Optional[str] = None
-    ) -> Dict[str, Any]:
-        
+        interactions: str | list[str],
+        images: Any | None = None,
+        videos: list[Any] | None = None,
+        size: str | None = None,
+    ) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
         self.operators.get_interaction(interactions)
         operator_condition = self.operators.process_interaction()
         self.operators.delete_last_interaction()
-        
+
         visual_context = self.operators.process_perception(images=images, videos=videos, size=size)
 
-        return {
-            "operator_condition": operator_condition,
-            "visual_context": visual_context
-        }
+        return {"operator_condition": operator_condition, "visual_context": visual_context}
 
     def __call__(
         self,
-        prompt: Optional[str] = "",
-        interactions: Optional[Union[str, List[str]]] = None,
-        interaction_speeds: Optional[Union[float, List[float]]] = None,
-        interaction_distances: Optional[Union[float, List[float]]] = None,
-        images: Optional[Any] = None,
-        videos: Optional[List[Any]] = None,
-        size: Optional[str] = "704*1280",
-        seed: Optional[int] = None,
-        task_type: Optional[str] = "i2v",
-        num_euler_timesteps: Optional[int] = 100,
+        prompt: str | None = "",
+        interactions: str | list[str] | None = None,
+        interaction_speeds: float | list[float] | None = None,
+        interaction_distances: float | Sequence[float | None] | None = None,
+        images: Any | None = None,
+        videos: list[Any] | None = None,
+        size: str | None = "704*1280",
+        seed: int | None = None,
+        task_type: str | None = "i2v",
+        num_euler_timesteps: int | None = 100,
     ) -> Any:
-
         """Execute the complete pipeline generation flow."""
         (
             interactions,
@@ -382,42 +365,39 @@ class Yume1p5Pipeline(PipelineABC):
             images=images,
             videos=videos,
         )
-        output_dict = self.process(
-            interactions=interactions,
-            images=images,
-            videos=videos,
-            size=size
-        )
+        output_dict = self.process(interactions=interactions, images=images, videos=videos, size=size)
         seed = -1 if seed is None else int(seed)
 
         output_video = self.synthesis_model.predict(
             prompt=prompt,
             image=output_dict["visual_context"]["ref_images"],
-            video=output_dict["visual_context"]["ref_videos"], # pixel values of the video frames
-            interactions=interactions, # list of interaction strings, e.g., ["forward", "camera_l"]
-            interaction_captions=output_dict["operator_condition"], # list of interaction captions, e.g., ["The camera pushes forward (W).", "The camera pans to the left (←)."]
+            video=output_dict["visual_context"]["ref_videos"],  # pixel values of the video frames
+            interactions=interactions,  # list of interaction strings, e.g., ["forward", "camera_l"]
+            interaction_captions=output_dict[
+                "operator_condition"
+            ],  # list of interaction captions, e.g., ["The camera pushes forward (W).", "The camera pans to the left (←)."]
             interaction_speeds=interaction_speeds,
             interaction_distances=interaction_distances,
             task_type=task_type,
             size=size,
             seed=seed,
-            num_euler_timesteps=num_euler_timesteps
+            num_euler_timesteps=num_euler_timesteps,
         )
 
         return output_video
 
     def stream(
         self,
-        prompt: Optional[str] = "",
-        interactions: Optional[Union[str, List[str]]] = None,
-        interaction_speeds: Optional[Union[float, List[float]]] = None,
-        interaction_distances: Optional[Union[float, List[float]]] = None,
-        images: Optional[Any] = None,
-        videos: Optional[List[Any]] = None,
-        size: Optional[str] = "704*1280",
-        seed: Optional[int] = None,
-        task_type: Optional[str] = "i2v",
-        num_euler_timesteps: Optional[int] = 100,
+        prompt: str | None = "",
+        interactions: str | list[str] | None = None,
+        interaction_speeds: float | list[float] | None = None,
+        interaction_distances: float | Sequence[float | None] | None = None,
+        images: Any | None = None,
+        videos: list[Any] | None = None,
+        size: str | None = "704*1280",
+        seed: int | None = None,
+        task_type: str | None = "i2v",
+        num_euler_timesteps: int | None = 100,
     ) -> Any:
         """Stream visual generation outputs chunk by chunk."""
         from PIL import Image
@@ -446,7 +426,9 @@ class Yume1p5Pipeline(PipelineABC):
             require_conditioning_input=False,
         )
 
-        if videos is not None and not (isinstance(videos, list) and (len(videos) == 0 or isinstance(videos[0], Image.Image))):
+        if videos is not None and not (
+            isinstance(videos, list) and (len(videos) == 0 or isinstance(videos[0], Image.Image))
+        ):
             videos = self._to_pil_frames(videos)
 
         if images is not None or videos is not None:
@@ -500,9 +482,7 @@ class Yume1p5Pipeline(PipelineABC):
         if len(output_video_frames) == 0:
             raise RuntimeError("Synthesis returned an empty video in stream().")
         output_visual_context = self.operators.process_perception(
-            images=output_video_frames[-1],
-            videos=output_video_frames,
-            size=size
+            images=output_video_frames[-1], videos=output_video_frames, size=size
         )
         self.memory_module.record(
             output_video_frames,

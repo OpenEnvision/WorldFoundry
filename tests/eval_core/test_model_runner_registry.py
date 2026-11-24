@@ -5,17 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.api import WorldModelConfig
-from worldfoundry.evaluation.models import (
-    ModelRunnerRegistry,
-    model_runner_registry_report,
-    model_runner_registry_snapshot,
-    resolve_model_zoo_config,
-    resolve_world_model_runner,
-)
 from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_RUNNER_TARGET, ContractFixtureRunner
+from worldfoundry.evals.api import WorldModelConfig
+from worldfoundry.evals.models.runners.registry import ModelRunnerRegistry
+from worldfoundry.evals.models.runners.resolver import resolve_model_zoo_config, resolve_world_model_runner
 
-PIPELINE_RUNNER_TARGET = "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner"
+PIPELINE_RUNNER_TARGET = "worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner"
 
 
 def _write_model_zoo_manifest(manifest_dir: Path, models: list[dict[str, object]]) -> None:
@@ -97,34 +92,6 @@ def test_model_runner_registry_replace_drops_stale_aliases() -> None:
     assert registry.get("new-alias").runner_target == "worldfoundry.new:Runner"
     with pytest.raises(KeyError):
         registry.get("old-alias")
-
-
-def test_model_runner_registry_discovers_env_plugins_without_importing_target(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("WORLDFOUNDRY_MODEL_RUNNERS", "plugin-runner=missing_plugin_module:PluginRunner")
-
-    registry = model_runner_registry_snapshot()
-    entry = registry.get("plugin-runner")
-
-    assert entry.runner_target == "missing_plugin_module:PluginRunner"
-    assert entry.source == "plugin"
-    assert entry.origin == "WORLDFOUNDRY_MODEL_RUNNERS entry 'plugin-runner=missing_plugin_module:PluginRunner'"
-    assert entry.runner_class is None
-    with pytest.raises(ModuleNotFoundError):
-        registry.resolve_runner_class("plugin-runner")
-
-
-def test_model_runner_registry_reports_plugin_collisions_without_shadowing_builtin(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("WORLDFOUNDRY_MODEL_RUNNERS", "worldfoundry:pipeline=missing_plugin_module:PluginRunner")
-
-    report = model_runner_registry_report()
-    entry = next(item for item in report.entries if item.name == "worldfoundry.pipeline")
-
-    assert entry.source == "builtin"
-    assert entry.runner_class.__name__ == "WorldFoundryPipelineRunner"
-    assert {issue.code for issue in report.issues} == {"plugin_runner_collision"}
-    assert report.issues[0].severity == "warning"
 
 
 def test_world_model_resolver_uses_model_runner_registry_for_builtins() -> None:

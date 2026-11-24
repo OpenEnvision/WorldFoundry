@@ -12,8 +12,6 @@ Tensors are BCTHW video maps.  Audio uses
 This is LTX video graph math consumed by :mod:`.resnet`.
 """
 
-from typing import Tuple, Union
-
 import torch
 from einops import rearrange
 from torch import nn
@@ -22,8 +20,8 @@ from torch.nn import functional as F
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.enums import PaddingModeType
 
 
-def make_conv_nd(  # noqa: PLR0913
-    dims: Union[int, Tuple[int, int]],
+def make_conv_nd(
+    dims: int | tuple[int, int],
     in_channels: int,
     out_channels: int,
     kernel_size: int,
@@ -105,19 +103,20 @@ def make_linear_nd(
 
 class DualConv3d(nn.Module):
     """Factorized 2-D + 1-D convolution used by some LTX checkpoints."""
+
     def __init__(
         self,
         in_channels: int,
         out_channels: int,
         kernel_size: int,
-        stride: Union[int, Tuple[int, int, int]] = 1,
-        padding: Union[int, Tuple[int, int, int]] = 0,
-        dilation: Union[int, Tuple[int, int, int]] = 1,
+        stride: int | tuple[int, int, int] = 1,
+        padding: int | tuple[int, int, int] = 0,
+        dilation: int | tuple[int, int, int] = 1,
         groups: int = 1,
         bias: bool = True,
         padding_mode: str = "zeros",
     ) -> None:
-        super(DualConv3d, self).__init__()
+        super().__init__()
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -282,12 +281,13 @@ class DualConv3d(nn.Module):
 
 class CausalConv3d(nn.Module):
     """3-D convolution that pads time so future frames do not leak."""
+
     def __init__(
         self,
         in_channels: int,
         out_channels: int,
         kernel_size: int = 3,
-        stride: Union[int, Tuple[int]] = 1,
+        stride: int | tuple[int] = 1,
         dilation: int = 1,
         groups: int = 1,
         bias: bool = True,
@@ -321,11 +321,11 @@ class CausalConv3d(nn.Module):
 
     def forward(self, x: torch.Tensor, causal: bool = True) -> torch.Tensor:
         if causal:
-            first_frame_pad = x[:, :, :1, :, :].repeat((1, 1, self.time_kernel_size - 1, 1, 1))
+            first_frame_pad = x[:, :, :1, :, :].expand(-1, -1, self.time_kernel_size - 1, -1, -1)
             x = torch.concatenate((first_frame_pad, x), dim=2)
         else:
-            first_frame_pad = x[:, :, :1, :, :].repeat((1, 1, (self.time_kernel_size - 1) // 2, 1, 1))
-            last_frame_pad = x[:, :, -1:, :, :].repeat((1, 1, (self.time_kernel_size - 1) // 2, 1, 1))
+            first_frame_pad = x[:, :, :1, :, :].expand(-1, -1, (self.time_kernel_size - 1) // 2, -1, -1)
+            last_frame_pad = x[:, :, -1:, :, :].expand(-1, -1, (self.time_kernel_size - 1) // 2, -1, -1)
             x = torch.concatenate((first_frame_pad, x, last_frame_pad), dim=2)
         x = self.conv(x)
         return x

@@ -16,7 +16,7 @@ WorldFoundry **ships the scoring runtime** in tree (`run_physics_iq_official_run
 Import an existing `raw_metrics.csv`:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id physics-iq-verified \
   --mode official-validation \
   --official-results-path <raw_metrics.csv> \
@@ -34,7 +34,7 @@ hf download Anates-Labs-Research/Physics-IQ-Verified \
 export WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT=/path/to/physics-iq-verified
 export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/physics-iq-verified/generated_videos
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py \
   --benchmark-id physics-iq-verified \
   --protocol verified \
   --run-official \

@@ -10,17 +10,19 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
-from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
-from ..base_action_synthesis import ActionModelSynthesis
 from worldfoundry.synthesis.action_generation.openpi.runtime import (
     OpenPIRuntime,
     OpenPIRuntimeConfig,
     select_openpi_checkpoint,
 )
+from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
+
+from ..base_action_synthesis import ActionModelSynthesis
 
 
 class OpenPISynthesis(ActionModelSynthesis):
@@ -79,7 +81,7 @@ class OpenPISynthesis(ActionModelSynthesis):
         hf_models_root: str | Path | None = None,
         command_template: Sequence[str] | None = None,
         **kwargs: Any,
-    ) -> "OpenPISynthesis":
+    ) -> OpenPISynthesis:
         """
         Creates a lazy OpenPISynthesis wrapper from profile and runtime options.
 
@@ -154,14 +156,11 @@ class OpenPISynthesis(ActionModelSynthesis):
         config_name = str(merged["config_name"])
         data_family = config_name.rsplit("_", 1)[-1].lower()
         if data_family not in {"aloha", "droid", "libero"}:
-            raise ValueError(
-                f"OpenPI config {config_name!r} does not identify a supported data family"
-            )
+            raise ValueError(f"OpenPI config {config_name!r} does not identify a supported data family")
         configured_family = str(merged.get("data_family") or data_family).lower()
         if configured_family != data_family:
             raise ValueError(
-                f"OpenPI config {config_name!r} implies data family {data_family!r}, "
-                f"not {configured_family!r}"
+                f"OpenPI config {config_name!r} implies data family {data_family!r}, not {configured_family!r}"
             )
         # Resolve the checkpoint directory from multiple possible keys in explicit_options.
         checkpoint_dir = (
@@ -324,7 +323,9 @@ class OpenPISynthesis(ActionModelSynthesis):
             },
         }
         # Write the plan payload to a JSON file.
-        plan_path.write_text(json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        plan_path.write_text(
+            json.dumps(plan_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
         if plan_only:
             return {

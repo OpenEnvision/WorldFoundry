@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...operators.forcing_operator import CausalForcingOperator, RollingForcingOperator, SelfForcingOperator
-from ...synthesis.visual_generation.forcing import CausalForcingSynthesis, SelfForcingSynthesis
+from ...operators.forcing_operator import RollingForcingOperator
 from ...synthesis.visual_generation.rolling_forcing import RollingForcingSynthesis
 from ..pipeline_utils import PipelineABC
 
@@ -15,8 +14,8 @@ class _BaseForcingPipeline(PipelineABC):
 
     MODEL_ID = ""
     MODEL_PATH_OPTION = "checkpoint_path"
-    OPERATOR_CLS = SelfForcingOperator
-    SYNTHESIS_CLS = SelfForcingSynthesis
+    OPERATOR_CLS = RollingForcingOperator
+    SYNTHESIS_CLS = RollingForcingSynthesis
     MEMORY_TARGET = None
 
     @classmethod
@@ -32,19 +31,19 @@ class _BaseForcingPipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "_BaseForcingPipeline":
+    ) -> _BaseForcingPipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         options = cls._runtime_options(model_path, required_components, kwargs)
         resolved_model_id = cls._resolve_model_id(options, model_id=model_id)
         if resolved_model_id != cls.MODEL_ID:
             raise ValueError(f"{cls.__name__} cannot load {resolved_model_id!r}.")
-        synthesis_model = cls.SYNTHESIS_CLS.from_pretrained(
+        synthesis_model = cls._component("SYNTHESIS_CLS").from_pretrained(
             {**options, "model_id": resolved_model_id},
             device=device,
         )
         return cls(
             model_id=resolved_model_id,
-            operators=cls.OPERATOR_CLS(),
+            operators=cls._component("OPERATOR_CLS")(),
             synthesis_model=synthesis_model,
             memory_module=None,
             device=device,
@@ -85,22 +84,6 @@ class _BaseForcingPipeline(PipelineABC):
         return super().__call__(*args, return_dict=return_dict, **kwargs)
 
 
-class SelfForcingPipeline(_BaseForcingPipeline):
-    """WorldFoundry pipeline for Self-Forcing video generation."""
-
-    MODEL_ID = "self-forcing"
-    OPERATOR_CLS = SelfForcingOperator
-    SYNTHESIS_CLS = SelfForcingSynthesis
-
-
-class CausalForcingPipeline(_BaseForcingPipeline):
-    """WorldFoundry pipeline for Causal-Forcing video generation."""
-
-    MODEL_ID = "causal-forcing"
-    OPERATOR_CLS = CausalForcingOperator
-    SYNTHESIS_CLS = CausalForcingSynthesis
-
-
 class RollingForcingPipeline(_BaseForcingPipeline):
     """WorldFoundry pipeline for RollingForcing long-video generation."""
 
@@ -109,4 +92,4 @@ class RollingForcingPipeline(_BaseForcingPipeline):
     SYNTHESIS_CLS = RollingForcingSynthesis
 
 
-__all__ = ["CausalForcingPipeline", "RollingForcingPipeline", "SelfForcingPipeline"]
+__all__ = ["RollingForcingPipeline"]

@@ -10,8 +10,8 @@ import dataclasses
 import logging
 import math
 from abc import abstractmethod
-from dataclasses import field, dataclass
-from typing import Callable, Optional, Sequence, Tuple, Union
+from collections.abc import Callable, Sequence
+from dataclasses import field
 
 import torch
 import torch.backends.cuda
@@ -21,8 +21,7 @@ from torch import einsum
 
 from ..config import BaseConfig, StrEnum
 from ..tokenizer import TokenizerConfig
-from ..torch_utils import ensure_finite_, BufferCache
-
+from ..torch_utils import BufferCache, ensure_finite_
 
 log = logging.getLogger(__name__)
 
@@ -148,6 +147,7 @@ class LlmActivationCheckpointMode(StrEnum):
 
 class AttentionType(StrEnum):
     """Attention to use"""
+
     sdpa = "sdpa"
     direct = "direct"
     flash = "flash"
@@ -180,11 +180,11 @@ class RopeType(StrEnum):
 
 def init_weights(
     config: LlmConfig,
-    module: Union[nn.Linear, nn.Embedding],
-    d: Optional[int] = None,
-    layer_id: Optional[int] = None,
+    module: nn.Linear | nn.Embedding,
+    d: int | None = None,
+    layer_id: int | None = None,
     std_factor: float = 1.0,
-    type_of_module: Optional[ModuleType] = None,
+    type_of_module: ModuleType | None = None,
 ) -> None:
     """
     Initialize weights of a linear or embedding module.
@@ -223,9 +223,9 @@ def init_weights(
 
 
 def init_normal(
-    module: Union[nn.Linear, nn.Embedding],
+    module: nn.Linear | nn.Embedding,
     std: float,
-    init_cutoff_factor: Optional[float] = None,
+    init_cutoff_factor: float | None = None,
 ):
     # weights
     if init_cutoff_factor is not None:
@@ -258,7 +258,7 @@ class LlmConfig(BaseConfig):
     The number of self-attention heads.
     """
 
-    n_kv_heads: Optional[int] = None
+    n_kv_heads: int | None = None
     """
     The number of heads to use for keys and values. Defaults to `n_heads`.
     Set this to ``None`` or ``n_heads`` for normal multi-head attention.
@@ -266,7 +266,7 @@ class LlmConfig(BaseConfig):
     Set it to some in-between value for Llama2-style grouped query attention.
     """
 
-    head_dim: Optional[int] = None
+    head_dim: int | None = None
     """
     The head dimensionality for the attention mechanism.
     """
@@ -276,7 +276,7 @@ class LlmConfig(BaseConfig):
     Do QKV projection a bias
     """
 
-    clip_qkv: Optional[float] = None
+    clip_qkv: float | None = None
     """
     Clip QKV to this value when set.
     """
@@ -292,7 +292,7 @@ class LlmConfig(BaseConfig):
     This is only used when ``mlp_hidden_size`` is not set.
     """
 
-    mlp_hidden_size: Optional[int] = None
+    mlp_hidden_size: int | None = None
     """
     Set the exact hidden size for the MLP. Otherwise the inner MLP hidden size will be set to `mlp_ratio * d_model`.
     """
@@ -318,7 +318,7 @@ class LlmConfig(BaseConfig):
     apply RoPE at the precision of the input.
     """
 
-    rope_theta: float = 10000.
+    rope_theta: float = 10000.0
     """
     RoPE theta parameter.
     """
@@ -328,47 +328,47 @@ class LlmConfig(BaseConfig):
     RoPE type to use. Default is the original RoPE, llama3 is the new RoPE used in Llama3.
     """
 
-    rope_factor: Optional[float] = None
+    rope_factor: float | None = None
     """
     RoPE scaling factor. Used for Llama3/YaRN style RoPE.
     """
 
-    rope_high_freq_factor: Optional[float] = None
+    rope_high_freq_factor: float | None = None
     """
     RoPE high frequency scaling factor. Used for Llama3 style RoPE.
     """
 
-    rope_low_freq_factor: Optional[float] = None
+    rope_low_freq_factor: float | None = None
     """
     RoPE low frequency scaling factor. Used for Llama3 style RoPE.
     """
 
-    rope_original_max_position_embeddings: Optional[int] = None
+    rope_original_max_position_embeddings: int | None = None
     """
     The original max position embeddings used during pretraining.
     Used for Llama3/YaRN style RoPE.
     """
 
-    rope_attention_factor: Optional[float] = None
+    rope_attention_factor: float | None = None
     """
     RoPE scaling factor to be applied to the computed cos/sin.
     If None, the value is inferred from `factor`, `mscale`, and `mscale_all_dim` as avaialble.
     Used for YaRN style RoPE.
     """
 
-    rope_beta_fast: Optional[float] = None
+    rope_beta_fast: float | None = None
     """
     RoPE parameter to set the boundary for extrapolation (only) in the linear ramp function.
     Used for YaRN style RoPE.
     """
 
-    rope_beta_slow: Optional[float] = None
+    rope_beta_slow: float | None = None
     """
     RoPE parameter to set the boundary for interpolation (only) in the linear ramp function.
     Used for YaRN style RoPE.
     """
 
-    rope_mscale: Optional[float] = None
+    rope_mscale: float | None = None
     """
     Used for YaRN style RoPE.
     If `rope_attention_factor` is None and both `rope_mscale` and `rope_mscale_all_dim` are provided,
@@ -377,7 +377,7 @@ class LlmConfig(BaseConfig):
     `factor` only.
     """
 
-    rope_mscale_all_dim: Optional[float] = None
+    rope_mscale_all_dim: float | None = None
     """
     Used for YaRN style RoPE.
     If `rope_attention_factor` is None and both `rope_mscale` and `rope_mscale_all_dim` are provided,
@@ -386,7 +386,7 @@ class LlmConfig(BaseConfig):
     calculated based on `factor` only.
     """
 
-    rope_truncate: Optional[bool] = None
+    rope_truncate: bool | None = None
     """
     Whether to truncate the correction range. Used for YaRN style RoPE.
     """
@@ -396,7 +396,7 @@ class LlmConfig(BaseConfig):
     Attention implementation to use.
     """
 
-    full_attention_layers: Optional[Tuple[int]] = None
+    full_attention_layers: tuple[int] | None = None
     """
     If provided, apply full attention to the layers in the list while applying sliding attention to the rest.
     """
@@ -450,7 +450,7 @@ class LlmConfig(BaseConfig):
     to ``False``.
     """
 
-    layer_norm_eps: Optional[float] = None
+    layer_norm_eps: float | None = None
     """
     epsilon for layer norms
     """
@@ -465,7 +465,7 @@ class LlmConfig(BaseConfig):
     The maximum input sequence length supported by the model.
     """
 
-    max_position_embeddings: Optional[int] = None
+    max_position_embeddings: int | None = None
     """
     Max positional embeddings to use in RoPE cache
     """
@@ -475,7 +475,7 @@ class LlmConfig(BaseConfig):
     Whether or not to include bias parameters in linear layers.
     """
 
-    bias_for_layer_norm: Optional[bool] = None
+    bias_for_layer_norm: bool | None = None
     """
     Whether or not to include bias parameters in layer norm.
     When this is None (the default), it inherits the setting from include_bias.
@@ -483,57 +483,57 @@ class LlmConfig(BaseConfig):
 
     norm_after: bool = False
 
-    moe_num_experts: Optional[int] = 8
+    moe_num_experts: int | None = 8
     """
     The number of experts to use in the MoE block.
     """
 
-    moe_top_k: Optional[int] = 2
+    moe_top_k: int | None = 2
     """
     The number of experts to select for each token.
     """
 
-    moe_mlp_impl: Optional[str] = "sparse"
+    moe_mlp_impl: str | None = "sparse"
     """
     Choose "grouped" for grouped GEMM installable via `pip install git+https://git@github.com/tgale96/grouped_gemm.git@66c7195e35e8c4f22fa6a014037ef511bfa397cb`.
     """
 
-    moe_log_expert_assignment: Optional[bool] = False
+    moe_log_expert_assignment: bool | None = False
     """
     Whether to log the expert assignment.
     """
 
-    moe_shared_expert: Optional[bool] = False
+    moe_shared_expert: bool | None = False
     """
     Whether to have an always-used expert like in [DeepSeekMoE](https://arxiv.org/abs/2401.06066).
     """
 
-    moe_lbl_in_fp32: Optional[bool] = False
+    moe_lbl_in_fp32: bool | None = False
     """
     Whether to perform load balancing in FP32.
     """
 
-    moe_interleave: Optional[bool] = False
+    moe_interleave: bool | None = False
     """
     Interleave sequential with MoE blocks starting with sequential.
     """
 
-    moe_loss_weight: Optional[float] = 0.1
+    moe_loss_weight: float | None = 0.1
     """
     The weight to use for the MoE load balancing loss.
     """
 
-    moe_zloss_weight: Optional[float] = None
+    moe_zloss_weight: float | None = None
     """
     Weight for MoE router z-loss where None means no router z-loss. 0.001 is a common value.
     """
 
-    moe_dropless: Optional[bool] = True
+    moe_dropless: bool | None = True
     """
     Whether to use [dMoE](https://arxiv.org/abs/2211.15841).
     """
 
-    moe_capacity_factor: Optional[float] = 1.25
+    moe_capacity_factor: float | None = 1.25
     """
     The capacity factor to use in the MoE block. Only applies if not using dMoE.
     """
@@ -547,13 +547,13 @@ class LlmConfig(BaseConfig):
     vocab_size: int = 50257
     """Vocabulary size of the model."""
 
-    additional_vocab_size: Optional[int] = 128
+    additional_vocab_size: int | None = 128
     """Number of additional tokens to have the input embeddings for"""
 
     weight_tying: bool = True
     """Whether to tie output linear weights to the input embedding"""
 
-    embedding_size: Optional[int] = 50304
+    embedding_size: int | None = 50304
     """
     The number of embeddings, i.e. the number of tokens. If set to ``None`` it will default
     to ``vocab_size``. If ``vocab_size`` is not a multiple of 128, setting this to the
@@ -572,10 +572,10 @@ class LlmConfig(BaseConfig):
     Tokenizer configuration.
     """
 
-    init_path: Optional[str] = None
+    init_path: str | None = None
     """Path to initial the LLM with"""
 
-    init_incremental: Optional[int] = None
+    init_incremental: int | None = None
 
     new_embedding_init_range: float = 0.02
     """How to initialize embedding for new tokens"""
@@ -590,12 +590,12 @@ class LlmConfig(BaseConfig):
     Normalize input embeddings (both for text and images) before
     """
 
-    activation_checkpoint: Optional[LlmActivationCheckpointMode] = LlmActivationCheckpointMode.whole_layer
+    activation_checkpoint: LlmActivationCheckpointMode | None = LlmActivationCheckpointMode.whole_layer
     """
     Where to use activation checkpoint if activation_checkpoint is enabled
     """
 
-    compile: Optional[str] = "blocks"
+    compile: str | None = "blocks"
     """
     How to compile the transformer if compilation is requested
     """
@@ -605,22 +605,19 @@ class LlmConfig(BaseConfig):
     Use embedding_size instead of vocab_size for padding the tokenizer
     """
 
-    init_std: Optional[float] = 0.02
+    init_std: float | None = 0.02
     init_fn: InitFnType = InitFnType.normal
-    init_cutoff_factor: Optional[float] = None
+    init_cutoff_factor: float | None = None
 
     def __post_init__(self):
         if self.full_attention_layers is not None:
             self.full_attention_layers = tuple(self.full_attention_layers)  # type: ignore[assignment]
 
-    def build(self, cache, device=None) -> 'Llm':
+    def build(self, cache, device=None) -> Llm:
         return Llm(self, cache, device)
 
     def build_tokenizer(self):
-        if self.fix_pad_tokenizer:
-            pad_tokenizer_to = self.embedding_size or self.vocab_size
-        else:
-            pad_tokenizer_to = self.vocab_size
+        pad_tokenizer_to = self.embedding_size or self.vocab_size if self.fix_pad_tokenizer else self.vocab_size
         return self.tokenizer.build(pad_tokenizer_to=pad_tokenizer_to)
 
     @property
@@ -634,17 +631,14 @@ class LlmConfig(BaseConfig):
         strategy = self.activation_checkpoint
         if strategy is None:
             return False
-        elif (
+        return bool(
             (strategy == LlmActivationCheckpointMode.whole_layer)
             or (strategy == LlmActivationCheckpointMode.one_in_two and block_idx % 2 == 0)
             or (strategy == LlmActivationCheckpointMode.one_in_three and block_idx % 3 == 0)
             or (strategy == LlmActivationCheckpointMode.one_in_four and block_idx % 4 == 0)
             or (strategy == LlmActivationCheckpointMode.two_in_three and block_idx % 3 != 0)
             or (strategy == LlmActivationCheckpointMode.three_in_four and block_idx % 4 != 0)
-        ):
-            return True
-        else:
-            return False
+        )
 
     @classmethod
     def update_legacy_settings(cls, config):
@@ -656,6 +650,7 @@ class LlmConfig(BaseConfig):
                 log.warning(f"Removing deprecated '{key}' key from {cls.__name__}.")
                 del config[key]
         return config
+
 
 class Llm(nn.Module):
     def __init__(self, config: LlmConfig, cache, device):
@@ -671,11 +666,10 @@ class Llm(nn.Module):
                 config.d_model,
                 device=device,
                 initializer_range=config.initializer_range,
-                new_embed_initializer_range=config.new_embedding_init_range
+                new_embed_initializer_range=config.new_embedding_init_range,
             )
         else:
-            self.wte = nn.Embedding(
-                config.embedding_size or config.vocab_size, config.d_model, device=device)
+            self.wte = nn.Embedding(config.embedding_size or config.vocab_size, config.d_model, device=device)
         if not config.weight_tying:
             self.ff_out = nn.Linear(
                 config.d_model,
@@ -724,7 +718,7 @@ class Embedding(nn.Module):
         num_embeddings: int,
         num_new_embeddings: int,
         features: int,
-        device: Union[str, torch.device],
+        device: str | torch.device,
         initializer_range: float = 0.02,
         new_embed_initializer_range: float = 0.02,
     ):
@@ -762,7 +756,7 @@ class Dropout(nn.Dropout):
         self.mask_p = mask_p
         self.broadcast_dims = broadcast_dims
 
-    def forward(self, input: torch.Tensor, drop_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, input: torch.Tensor, drop_mask: torch.Tensor | None = None) -> torch.Tensor:
         """
         :param input: A tensor of shape `(batch_size, seq_len, embed_dim)`
         :param drop_mask: A tensor of shape `(batch_size, seq_len)` with values of zero or one.
@@ -770,7 +764,7 @@ class Dropout(nn.Dropout):
         if self.p == 0.0 and (self.mask_p is None or self.mask_p == 0.0):
             return input
         else:
-            if self.mask_p > 0. and self.training:
+            if self.mask_p > 0.0 and self.training:
                 assert drop_mask is not None
                 drop_mask = drop_mask.to(input.dtype)
                 keep_prob = 1.0 - self.p
@@ -782,7 +776,7 @@ class Dropout(nn.Dropout):
                 multiplier = input.new_empty(dropout_shape).bernoulli_(keep_prob)
                 multiplier.div_(keep_prob)
                 return input * multiplier
-            elif self.p > 0. and len(self.broadcast_dims) > 0 and self.training:
+            elif self.p > 0.0 and len(self.broadcast_dims) > 0 and self.training:
                 keep_prob = 1.0 - self.p
                 dropout_shape = list(input.shape)
                 for dim in self.broadcast_dims:
@@ -800,12 +794,12 @@ class LayerNormBase(nn.Module):
         self,
         config: LlmConfig,
         *,
-        size: Optional[int] = None,
-        elementwise_affine: Optional[bool] = True,
+        size: int | None = None,
+        elementwise_affine: bool | None = True,
         eps: float = 1e-05,
-        weight_initializer: Optional[Callable] = torch.ones,
-        bias_initializer: Optional[Callable] = torch.zeros,
-        device=None
+        weight_initializer: Callable | None = torch.ones,
+        bias_initializer: Callable | None = torch.zeros,
+        device=None,
     ):
         super().__init__()
         self.config = config
@@ -829,7 +823,7 @@ class LayerNormBase(nn.Module):
         raise NotImplementedError
 
     @classmethod
-    def build(cls, config: LlmConfig, size: Optional[int] = None, **kwargs) -> LayerNormBase:
+    def build(cls, config: LlmConfig, size: int | None = None, **kwargs) -> LayerNormBase:
         if config.layer_norm_type == LayerNormType.default:
             return LayerNorm(config, size=size, low_precision=False, **kwargs)
         elif config.layer_norm_type == LayerNormType.low_precision:
@@ -839,7 +833,7 @@ class LayerNormBase(nn.Module):
         else:
             raise NotImplementedError(f"Unknown LayerNorm type: '{config.layer_norm_type}'")
 
-    def _cast_if_autocast_enabled(self, tensor: torch.Tensor, dtype: Optional[torch.dtype] = None) -> torch.Tensor:
+    def _cast_if_autocast_enabled(self, tensor: torch.Tensor, dtype: torch.dtype | None = None) -> torch.Tensor:
         # NOTE: `is_autocast_enabled()` only checks for CUDA autocast, so we use the separate function
         # `is_autocast_cpu_enabled()` for CPU autocast.
         # See https://github.com/pytorch/pytorch/issues/110966.
@@ -865,9 +859,9 @@ class LayerNorm(LayerNormBase):
     def __init__(
         self,
         config: LlmConfig,
-        size: Optional[int] = None,
+        size: int | None = None,
         low_precision: bool = False,
-        elementwise_affine: Optional[bool] = None,
+        elementwise_affine: bool | None = None,
         eps: float = 1e-05,
     ):
         super().__init__(config, size=size, elementwise_affine=elementwise_affine, eps=eps)
@@ -877,9 +871,7 @@ class LayerNorm(LayerNormBase):
         if self.low_precision:
             module_device = x.device
             downcast_x = self._cast_if_autocast_enabled(x)
-            downcast_weight = (
-                self._cast_if_autocast_enabled(self.weight) if self.weight is not None else self.weight
-            )
+            downcast_weight = self._cast_if_autocast_enabled(self.weight) if self.weight is not None else self.weight
             downcast_bias = self._cast_if_autocast_enabled(self.bias) if self.bias is not None else self.bias
             with torch.autocast(enabled=False, device_type=module_device.type):
                 return F.layer_norm(
@@ -897,8 +889,8 @@ class RMSLayerNorm(LayerNormBase):
     def __init__(
         self,
         config: LlmConfig,
-        size: Optional[int] = None,
-        elementwise_affine: Optional[bool] = None,
+        size: int | None = None,
+        elementwise_affine: bool | None = None,
         eps: float = 1e-5,
     ):
         super().__init__(config, size=size, elementwise_affine=elementwise_affine, eps=eps)
@@ -925,7 +917,7 @@ class RotaryEmbedding(nn.Module):
     [Rotary positional embeddings (RoPE)](https://arxiv.org/abs/2104.09864).
     """
 
-    def __init__(self, config: LlmConfig, cache: BufferCache, device=None, rope_type: Optional[RopeType] = None):
+    def __init__(self, config: LlmConfig, cache: BufferCache, device=None, rope_type: RopeType | None = None):
         super().__init__()
         self.config = config
         self.__cache = cache
@@ -956,7 +948,6 @@ class RotaryEmbedding(nn.Module):
         return inv_freq_llama
 
     def compute_yarn_inv_freq(self, seq_len: int, dim: int, device: torch.device) -> torch.Tensor:
-
         def get_mscale(scale, mscale=1):
             if scale <= 1:
                 return 1.0
@@ -1003,9 +994,7 @@ class RotaryEmbedding(nn.Module):
 
         # Note on variable naming: "interpolation" comes from the original technique, where we interpolate the position IDs
         # to expand the possible context length. In other words, interpolation = apply scaling factor.
-        pos_freqs = (
-            self.config.rope_theta ** (torch.arange(0, dim, 2, device=device, dtype=torch.float) / dim)
-        )
+        pos_freqs = self.config.rope_theta ** (torch.arange(0, dim, 2, device=device, dtype=torch.float) / dim)
         inv_freq_extrapolation = 1.0 / pos_freqs
         inv_freq_interpolation = 1.0 / (factor * pos_freqs)
 
@@ -1020,9 +1009,7 @@ class RotaryEmbedding(nn.Module):
         )
 
         # Get n-dimensional rotational scaling corrected for extrapolation
-        inv_freq_extrapolation_factor = (
-            1 - linear_ramp_factor(low, high, dim // 2).to(device=device, dtype=torch.float)
-        )
+        inv_freq_extrapolation_factor = 1 - linear_ramp_factor(low, high, dim // 2).to(device=device, dtype=torch.float)
         inv_freq = (
             inv_freq_interpolation * (1 - inv_freq_extrapolation_factor)
             + inv_freq_extrapolation * inv_freq_extrapolation_factor
@@ -1057,10 +1044,10 @@ class RotaryEmbedding(nn.Module):
         self,
         seq_len: int,
         device: torch.device,
-        rope_type: Optional[RopeType] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        rope_type: RopeType | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         rope_type = rope_type or self.rope_type
-        prefix = f"{str(rope_type)}_" if rope_type != RopeType.default else ""
+        prefix = f"{rope_type!s}_" if rope_type != RopeType.default else ""
         sin_key = f"{prefix}rope_pos_sin"
         cos_key = f"{prefix}rope_pos_cos"
         if (
@@ -1083,7 +1070,9 @@ class RotaryEmbedding(nn.Module):
             return pos_sin[:, :, :seq_len, :], pos_cos[:, :, :seq_len, :]
 
         with torch.autocast(device.type, enabled=False):
-            dim = self.config.head_dim if self.config.head_dim is not None else self.config.d_model // self.config.n_heads
+            dim = (
+                self.config.head_dim if self.config.head_dim is not None else self.config.d_model // self.config.n_heads
+            )
             inv_freq, attention_factor = self.compute_rope_parameters(seq_len, dim, device, rope_type)
             seq = torch.arange(seq_len, device=device, dtype=torch.float)
             freqs = einsum("i , j -> i j", seq, inv_freq)
@@ -1114,8 +1103,8 @@ class RotaryEmbedding(nn.Module):
         self,
         q: torch.Tensor,
         k: torch.Tensor,
-        position_ids: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        position_ids: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Apply rotary position embeddings on the ordinary inference path."""
         if self.config.rope_full_precision:
             q_, k_ = q.float(), k.float()
@@ -1135,15 +1124,9 @@ class RotaryEmbedding(nn.Module):
             pos_cos = pos_cos.type_as(q_)
             if position_ids is not None:
                 if query_len != key_len:
-                    raise ValueError(
-                        "Query and key lengths must match when position_ids are provided."
-                    )
-                pos_sin = pos_sin[0, 0][position_ids].view(
-                    batch_size, 1, key_len, pos_sin.shape[-1]
-                )
-                pos_cos = pos_cos[0, 0][position_ids].view(
-                    batch_size, 1, key_len, pos_cos.shape[-1]
-                )
+                    raise ValueError("Query and key lengths must match when position_ids are provided.")
+                pos_sin = pos_sin[0, 0][position_ids].view(batch_size, 1, key_len, pos_sin.shape[-1])
+                pos_cos = pos_cos[0, 0][position_ids].view(batch_size, 1, key_len, pos_cos.shape[-1])
             q_ = self.apply_rotary_pos_emb(
                 pos_sin[:, :, key_len - query_len : key_len],
                 pos_cos[:, :, key_len - query_len : key_len],
@@ -1278,14 +1261,14 @@ class OLMoBlock(nn.Module):
         self.dropout = Dropout(config.residual_dropout, mask_p=config.response_residual_dropout)
 
         # Layer norms.
-        self.k_norm: Optional[LayerNormBase] = None
-        self.q_norm: Optional[LayerNormBase] = None
+        self.k_norm: LayerNormBase | None = None
+        self.q_norm: LayerNormBase | None = None
         if config.attention_layer_norm:
             assert config.effective_n_kv_heads is not None
             k_norm_size = (
                 self.head_dim
-                if config.attention_layer_norm_type == AttentionLayerNormType.qwen3 else
-                self.head_dim * config.effective_n_kv_heads
+                if config.attention_layer_norm_type == AttentionLayerNormType.qwen3
+                else self.head_dim * config.effective_n_kv_heads
             )
             self.k_norm = LayerNormBase.build(
                 config,
@@ -1293,7 +1276,9 @@ class OLMoBlock(nn.Module):
                 elementwise_affine=config.attention_layer_norm_with_affine,
             )
             q_norm_size = self.head_dim if config.attention_layer_norm_type == AttentionLayerNormType.qwen3 else None
-            self.q_norm = LayerNormBase.build(config, size=q_norm_size, elementwise_affine=config.attention_layer_norm_with_affine)
+            self.q_norm = LayerNormBase.build(
+                config, size=q_norm_size, elementwise_affine=config.attention_layer_norm_with_affine
+            )
 
         # Make sure QKV clip coefficient is positive, otherwise it's not well-defined.
         if config.clip_qkv is not None:
@@ -1305,11 +1290,7 @@ class OLMoBlock(nn.Module):
 
         # Attention output projection.
         input_dim = config.head_dim * config.n_heads if config.head_dim is not None else config.d_model
-        self.attn_out = nn.Linear(
-            input_dim, config.d_model,
-            bias=config.include_bias,
-            device=device
-        )
+        self.attn_out = nn.Linear(input_dim, config.d_model, bias=config.include_bias, device=device)
 
         if self.config.block_type != BlockType.moe:
             # Feed-forward output projection.
@@ -1323,20 +1304,12 @@ class OLMoBlock(nn.Module):
 
         # Rotary embeddings.
         if self.config.rope:
-            rope_type: Optional[RopeType] = None
+            rope_type: RopeType | None = None
             if config.full_attention_layers is not None:
                 if config.sliding_attention_rope_scaling:
-                    rope_type = (
-                        RopeType.default
-                        if layer_id in config.full_attention_layers
-                        else config.rope_type
-                    )
+                    rope_type = RopeType.default if layer_id in config.full_attention_layers else config.rope_type
                 else:
-                    rope_type = (
-                        config.rope_type
-                        if layer_id in config.full_attention_layers
-                        else RopeType.default
-                    )
+                    rope_type = config.rope_type if layer_id in config.full_attention_layers else RopeType.default
             self.rotary_emb = RotaryEmbedding(config, self.__cache, device, rope_type=rope_type)
 
     def reset_parameters(self):
@@ -1379,8 +1352,8 @@ class OLMoBlock(nn.Module):
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
-        drop_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
+        drop_mask: torch.Tensor | None = None,
         dropout_p: float = 0.0,
         is_causal: bool = False,
     ) -> torch.Tensor:
@@ -1392,10 +1365,7 @@ class OLMoBlock(nn.Module):
             attn_mask = attn_mask.to(q.device)
 
         if k.size(1) != v.size(1) or q.size(1) % k.size(1) != 0:
-            raise ValueError(
-                f"Invalid grouped-query attention heads: q={q.size(1)}, "
-                f"k={k.size(1)}, v={v.size(1)}."
-            )
+            raise ValueError(f"Invalid grouped-query attention heads: q={q.size(1)}, k={k.size(1)}, v={v.size(1)}.")
         return F.scaled_dot_product_attention(
             q,
             k,
@@ -1411,18 +1381,22 @@ class OLMoBlock(nn.Module):
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
-        attention_bias: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        drop_mask: Optional[torch.Tensor] = None,
-        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_bias: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        drop_mask: torch.Tensor | None = None,
+        layer_past: tuple[torch.Tensor, torch.Tensor] | None = None,
         use_cache: bool = False,
-        value_scaling=None
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+        value_scaling=None,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         B, T, C = q.size()  # batch size, sequence length, d_model
         dtype = k.dtype
 
         # Optionally apply layer norm to keys and queries.
-        if self.q_norm is not None and self.k_norm is not None and self.config.attention_layer_norm_type != AttentionLayerNormType.qwen3:
+        if (
+            self.q_norm is not None
+            and self.k_norm is not None
+            and self.config.attention_layer_norm_type != AttentionLayerNormType.qwen3
+        ):
             q = self.q_norm(q).to(dtype=dtype)
             k = self.k_norm(k).to(dtype=dtype)
 
@@ -1431,7 +1405,11 @@ class OLMoBlock(nn.Module):
         q = q.view(B, T, self.config.n_heads, self.head_dim)
         # shape: (B, n_kv_h, T, hs)
         k = k.view(B, T, self.config.effective_n_kv_heads, self.head_dim)
-        if self.q_norm is not None and self.k_norm is not None and self.config.attention_layer_norm_type == AttentionLayerNormType.qwen3:
+        if (
+            self.q_norm is not None
+            and self.k_norm is not None
+            and self.config.attention_layer_norm_type == AttentionLayerNormType.qwen3
+        ):
             q = self.q_norm(q).to(dtype=dtype)
             k = self.k_norm(k).to(dtype=dtype)
         q = q.transpose(1, 2)
@@ -1460,9 +1438,7 @@ class OLMoBlock(nn.Module):
             # run in if AMP is enabled, and this can be a problem if some tokens are masked out due to padding
             # as down-casting the attention bias to the autocast precision will result in -infs, which will
             # cause the SDP attn function to produce NaNs.
-            attention_bias = self._cast_attn_bias(
-                attention_bias[:, :, key_len - query_len : key_len, :key_len], dtype
-            )
+            attention_bias = self._cast_attn_bias(attention_bias[:, :, key_len - query_len : key_len, :key_len], dtype)
 
         # Get the attention scores.
         # shape: (B, nh, T, hs)
@@ -1486,12 +1462,12 @@ class OLMoBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        attention_bias: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        drop_mask: Optional[torch.Tensor] = None,
-        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_bias: torch.FloatTensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        drop_mask: torch.Tensor | None = None,
+        layer_past: tuple[torch.Tensor, torch.Tensor] | None = None,
         use_cache: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         raise NotImplementedError
 
     @classmethod
@@ -1500,167 +1476,9 @@ class OLMoBlock(nn.Module):
             module = OLMoSequentialBlock(layer_id, config, cache, device)
         elif config.block_type == BlockType.llama:
             module = OLMoLlamaBlock(layer_id, config, cache, device)
-        elif config.block_type == BlockType.moe:
-            module = OLMoEBlock(layer_id, config, cache, device)
         else:
             raise NotImplementedError(f"Unknown block type: '{config.block_type}'")
         return module
-
-class OLMoEBlock(OLMoBlock):
-    """
-    This is a transformer MoE block where the output is computed as ``MoE(LN(x + Attention(LN(x))))``
-    (plus another skip connection).
-    """
-
-    def __init__(self, layer_id: int, config: LlmConfig, cache: BufferCache, device=None):
-        try:
-            from megablocks.layers.dmoe import dMoE
-            from megablocks.layers.moe import MoE
-        except ImportError:
-            raise ImportError(
-                "To train MoEs, run `pip install git+https://github.com/Muennighoff/megablocks.git@olmoe`"
-            )
-        from .train_config import config_to_moe_args
-
-        super().__init__(layer_id, config, cache, device)
-
-        self.moe_args = config_to_moe_args(config)
-        self.ffn = dMoE(self.moe_args) if self.config.moe_dropless else MoE(self.moe_args)
-
-        self.attn_norm = LayerNorm.build(config)
-        self.ff_norm = LayerNorm.build(config)
-
-        # Attention input projection. Projects x -> (q, k, v)
-        self.fused_dims = (
-            config.n_heads * self.head_dim,
-            config.effective_n_kv_heads * self.head_dim,
-            config.effective_n_kv_heads * self.head_dim,
-        )
-        self.att_proj = nn.Linear(
-            config.d_model, sum(self.fused_dims), bias=config.include_bias, device=device
-        )
-
-    def reset_parameters(self):
-        if self.k_norm is not None:
-            self.k_norm.reset_parameters()
-        if self.q_norm is not None:
-            self.q_norm.reset_parameters()
-
-        if self.config.init_fn == InitFnType.normal:
-            attn_out_std = ff_out_std = in_std = self.config.init_std
-            cutoff_factor = self.config.init_cutoff_factor
-        elif self.config.init_fn == InitFnType.mitchell:
-            in_std = 1 / math.sqrt(self.config.d_model)
-            attn_out_std = 1 / (math.sqrt(2 * self.config.d_model * (self.layer_id + 1)))
-            ff_out_std = 1 / (math.sqrt(2 * self.ff_out.in_features * (self.layer_id + 1)))
-            cutoff_factor = self.config.init_cutoff_factor or 3.0
-        elif self.config.init_fn == InitFnType.full_megatron:
-            in_std = self.config.init_std
-            attn_out_std = ff_out_std = self.config.init_std / math.sqrt(2.0 * self.config.n_layers)
-            cutoff_factor = self.config.init_cutoff_factor or 3.0
-        else:
-            raise NotImplementedError(self.config.init_fn)
-
-        init_normal(self.att_proj, std=in_std, init_cutoff_factor=cutoff_factor)
-        init_normal(self.attn_out, std=attn_out_std, init_cutoff_factor=cutoff_factor)
-        self.attn_norm.reset_parameters()
-        self.ff_norm.reset_parameters()
-        init_normal(self.ffn.experts.mlp.w1, std=in_std, init_cutoff_factor=cutoff_factor)
-        init_normal(self.ffn.experts.mlp.w2, std=ff_out_std, init_cutoff_factor=cutoff_factor)
-        if hasattr(self.ffn.experts.mlp, "v1"):
-            init_normal(self.ffn.experts.mlp.v1, std=in_std, init_cutoff_factor=cutoff_factor)
-        if self.ffn.experts.bias is not None:
-            torch.nn.init.zeros_(self.ffn.experts.bias)
-        init_normal(self.ffn.router.layer, std=in_std, init_cutoff_factor=cutoff_factor)
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        attention_bias: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        drop_mask: Optional[torch.Tensor] = None,
-        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        use_cache: bool = False,
-        max_doc_len: Optional[int] = None,
-        cu_doc_lens: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
-        # Get query, key, value projections.
-        # shape:
-        #  - for regular attn q, k, v: (batch_size, seq_len, d_model)
-        #  - for multi-query attn q: (batch_size, seq_len, d_model)
-        #                      k, v: (batch_size, seq_len, d_model // n_heads)
-        #  - for group query attn q: (batch_size, seq_len, d_model)
-        #                      k, v: (batch_size, seq_len, d_model // n_kv_heads)
-        if not self.config.norm_after:
-            if self.fine_grained_checkpoint_fn is not None:
-                qkv = self.att_proj(self.fine_grained_checkpoint_fn(self.attn_norm, x))
-            else:
-                qkv = self.att_proj(self.attn_norm(x))
-        else:
-            qkv = self.att_proj(x)
-
-        if self.config.clip_qkv is not None:
-            qkv.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
-
-        q, k, v = qkv.split(self.fused_dims, dim=-1)
-
-        # Get attention scores.
-        if self.fine_grained_checkpoint_fn is not None:
-            att, cache = self.fine_grained_checkpoint_fn(  # type: ignore
-                self.attention,
-                q,
-                k,
-                v,
-                attention_bias,
-                position_ids=position_ids,
-                drop_mask=drop_mask,
-                layer_past=layer_past,
-                use_cache=use_cache,
-                # max_doc_len=max_doc_len,
-                # cu_doc_lens=cu_doc_lens,
-            )
-        else:
-            att, cache = self.attention(
-                q,
-                k,
-                v,
-                attention_bias,
-                position_ids=position_ids,
-                drop_mask=drop_mask,
-                layer_past=layer_past,
-                use_cache=use_cache,
-                # max_doc_len=max_doc_len,
-                # cu_doc_lens=cu_doc_lens,
-            )
-
-        if self.config.norm_after:
-            if self.fine_grained_checkpoint_fn is not None:
-                att = self.fine_grained_checkpoint_fn(self.attn_norm, att)
-            else:
-                att = self.attn_norm(att)
-
-        # Add attention scores.
-        # shape: (B, T, C)
-        x = x + self.dropout(att, drop_mask=drop_mask)
-
-        # Add feed-forward projection.
-        # shape: (batch_size, seq_len, d_model)
-        og_x = x
-
-        if self.config.norm_after:
-            x = self.ffn(x)
-            if self.fine_grained_checkpoint_fn is not None:
-                x = self.fine_grained_checkpoint_fn(self.ff_norm, x)  # type: ignore
-            else:
-                x = self.ff_norm(x)
-            return og_x + self.dropout(x, drop_mask=drop_mask), cache
-        else:
-            if self.fine_grained_checkpoint_fn is not None:
-                x = self.fine_grained_checkpoint_fn(self.ff_norm, x)  # type: ignore
-            else:
-                x = self.ff_norm(x)
-            # Activation checkpointing for the MoE FFN is not supported
-            return og_x + self.dropout(self.ffn(x), drop_mask=drop_mask), cache
 
 
 class OLMoSequentialBlock(OLMoBlock):
@@ -1682,13 +1500,10 @@ class OLMoSequentialBlock(OLMoBlock):
             config.effective_n_kv_heads * self.head_dim,
         )
         self.att_proj = nn.Linear(
-            config.d_model, sum(self.fused_dims),
-            bias=config.include_bias or config.qkv_bias,
-            device=device
+            config.d_model, sum(self.fused_dims), bias=config.include_bias or config.qkv_bias, device=device
         )
         # Feed-forward input projection.
-        self.ff_proj = nn.Linear(
-            config.d_model, self.hidden_size, bias=config.include_bias, device=device)
+        self.ff_proj = nn.Linear(config.d_model, self.hidden_size, bias=config.include_bias, device=device)
 
     def reset_parameters(self):
         super().reset_parameters()
@@ -1705,13 +1520,13 @@ class OLMoSequentialBlock(OLMoBlock):
     def forward(
         self,
         x: torch.Tensor,
-        attention_bias: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        drop_mask: Optional[torch.Tensor] = None,
-        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        value_scaling: Optional[torch.Tensor] = None,
+        attention_bias: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        drop_mask: torch.Tensor | None = None,
+        layer_past: tuple[torch.Tensor, torch.Tensor] | None = None,
+        value_scaling: torch.Tensor | None = None,
         use_cache: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         # Get query, key, value projections.
         # shape:
         #  - for regular attn q, k, v: (batch_size, seq_len, d_model)
@@ -1737,14 +1552,29 @@ class OLMoSequentialBlock(OLMoBlock):
         # part of the in-tree action inference runtime.
         if self.fine_grained_checkpoint_fn is not None:
             att, cache = self.fine_grained_checkpoint_fn(  # type: ignore
-                self.attention, q, k, v, attention_bias, position_ids=position_ids,
-                drop_mask=drop_mask, layer_past=layer_past, use_cache=use_cache,
-                value_scaling=value_scaling
+                self.attention,
+                q,
+                k,
+                v,
+                attention_bias,
+                position_ids=position_ids,
+                drop_mask=drop_mask,
+                layer_past=layer_past,
+                use_cache=use_cache,
+                value_scaling=value_scaling,
             )
         else:
             att, cache = self.attention(
-                q, k, v, attention_bias, position_ids=position_ids, drop_mask=drop_mask,
-                layer_past=layer_past, use_cache=use_cache, value_scaling=value_scaling)
+                q,
+                k,
+                v,
+                attention_bias,
+                position_ids=position_ids,
+                drop_mask=drop_mask,
+                layer_past=layer_past,
+                use_cache=use_cache,
+                value_scaling=value_scaling,
+            )
 
         if self.config.norm_after:
             if self.fine_grained_checkpoint_fn is not None:
@@ -1767,7 +1597,7 @@ class OLMoSequentialBlock(OLMoBlock):
                 x = self.ff_norm(x)
 
         x = self.ff_proj(x)
-        if self.fine_grained_checkpoint_fn is not None:
+        if self.fine_grained_checkpoint_fn is not None:  # noqa: SIM108 - Branches carry per-case comments.
             x = self.fine_grained_checkpoint_fn(self.act, x)  # type: ignore
         else:
             x = self.act(x)
@@ -1805,23 +1635,13 @@ class OLMoLlamaBlock(OLMoBlock):
         k_proj_out_dim = config.effective_n_kv_heads * self.head_dim
         v_proj_out_dim = config.effective_n_kv_heads * self.head_dim
 
-        self.q_proj = nn.Linear(
-            config.d_model, q_proj_out_dim, bias=config.qkv_bias, device=device
-        )
-        self.k_proj = nn.Linear(
-            config.d_model, k_proj_out_dim, bias=config.qkv_bias, device=device
-        )
-        self.v_proj = nn.Linear(
-            config.d_model, v_proj_out_dim, bias=config.qkv_bias, device=device
-        )
+        self.q_proj = nn.Linear(config.d_model, q_proj_out_dim, bias=config.qkv_bias, device=device)
+        self.k_proj = nn.Linear(config.d_model, k_proj_out_dim, bias=config.qkv_bias, device=device)
+        self.v_proj = nn.Linear(config.d_model, v_proj_out_dim, bias=config.qkv_bias, device=device)
 
         # Feed-forward input projection.
-        self.ff_proj1 = nn.Linear(
-            config.d_model, self.hidden_size // 2, bias=False, device=device
-        )
-        self.ff_proj2 = nn.Linear(
-            config.d_model, self.hidden_size // 2, bias=False, device=device
-        )
+        self.ff_proj1 = nn.Linear(config.d_model, self.hidden_size // 2, bias=False, device=device)
+        self.ff_proj2 = nn.Linear(config.d_model, self.hidden_size // 2, bias=False, device=device)
         if self.config.norm_after:
             raise NotImplementedError()
 
@@ -1841,8 +1661,8 @@ class OLMoLlamaBlock(OLMoBlock):
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
-        drop_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
+        drop_mask: torch.Tensor | None = None,
         dropout_p: float = 0.0,
         response_dropout_p: float = 0.0,
         is_causal: bool = False,
@@ -1903,12 +1723,12 @@ class OLMoLlamaBlock(OLMoBlock):
     def forward(
         self,
         x: torch.Tensor,
-        attention_bias: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        drop_mask: Optional[torch.Tensor] = None,
-        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_bias: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        drop_mask: torch.Tensor | None = None,
+        layer_past: tuple[torch.Tensor, torch.Tensor] | None = None,
         use_cache: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         # Get query, key, value projections.
         # shape:
         #  - for regular attn q, k, v: (batch_size, seq_len, d_model)
@@ -1927,10 +1747,27 @@ class OLMoLlamaBlock(OLMoBlock):
         # Get attention scores.
         if self.fine_grained_checkpoint_fn is not None:
             att, cache = self.fine_grained_checkpoint_fn(  # type: ignore
-                self.attention, q, k, v, attention_bias, position_ids=position_ids, drop_mask=drop_mask, layer_past=layer_past, use_cache=use_cache
+                self.attention,
+                q,
+                k,
+                v,
+                attention_bias,
+                position_ids=position_ids,
+                drop_mask=drop_mask,
+                layer_past=layer_past,
+                use_cache=use_cache,
             )
         else:
-            att, cache = self.attention(q, k, v, attention_bias, position_ids=position_ids, drop_mask=drop_mask, layer_past=layer_past, use_cache=use_cache)
+            att, cache = self.attention(
+                q,
+                k,
+                v,
+                attention_bias,
+                position_ids=position_ids,
+                drop_mask=drop_mask,
+                layer_past=layer_past,
+                use_cache=use_cache,
+            )
 
         # Add attention scores.
         # shape: (B, T, C)

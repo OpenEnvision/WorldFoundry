@@ -1,6 +1,7 @@
-artifact_filename: giga_brain_0_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: giga-brain-0
+display_name: GigaBrain-0
+task_family: vla_policy
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/open-gigaai--GigaBrain-0-3.5B-Base
   repo_id: open-gigaai/GigaBrain-0-3.5B-Base
@@ -18,19 +19,6 @@ checkpoints:
   repo_id: physical-intelligence/fast
   role: fast_tokenizer
   status: local_tokenizer_staged
-display_name: GigaBrain-0
-gpu_readiness:
-  artifact_kind: action_trace
-  gpu_device: 80GB CUDA GPU
-  max_memory_allocated_bytes: 20843683840
-  official_score_ready: false
-  runtime_seconds: 54.7
-  scope: public_pipeline_checkpoint_backed_robotwin_converted_lerobot_stats_predict_action
-  source_stats_path: cache/worldfoundry/data/hfd_datasets/lerobot__robotwin_unified/meta/stats.json
-  status: ready
-  torch_cuda: '11.8'
-  torch_version: 2.5.1+cu118
-id: giga-brain-0
 input_schema:
   action_chunk: 50
   actions:
@@ -47,14 +35,30 @@ input_schema:
   prompt: true
   state: true
   video: false
-integration_status: integrated
+artifact_kind: action_trace
+artifact_filename: giga_brain_0_action_trace.json
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_giga_brain_0_runtime_converted_lerobot_stats_predict_gpu_ready_non_leaderboard
+  integration_status: integrated
+integration:
+  status: integrated
+gpu_readiness:
+  artifact_kind: action_trace
+  gpu_device: 80GB CUDA GPU
+  max_memory_allocated_bytes: 20843683840
+  official_score_ready: false
+  runtime_seconds: 54.7
+  scope: public_pipeline_checkpoint_backed_robotwin_converted_lerobot_stats_predict_action
+  source_stats_path: cache/worldfoundry/data/hfd_datasets/lerobot__robotwin_unified/meta/stats.json
+  status: ready
+  torch_cuda: '11.8'
+  torch_version: 2.5.1+cu118
 notes:
-- GigaBrain-0 is a world-model-powered VLA policy. WorldFoundry routes it through embodied
-  action profiles and emits action_trace artifacts, not generated video.
+- GigaBrain-0 is a world-model-powered VLA policy. WorldFoundry routes it through
+  embodied action profiles and emits action_trace artifacts, not generated video.
 - WorldFoundry vendors the required GigaBrain-0 model runtime under worldfoundry/synthesis/action_generation/giga_brain_0/giga_brain_0_runtime.
 - This is non-leaderboard runtime readiness. Official GigaBrain task-score parity
   still requires authorized official task data and task-specific norm_stats/delta_mask
   assets.
-runtime_status: in_tree_giga_brain_0_runtime_converted_lerobot_stats_predict_gpu_ready_non_leaderboard
-task_family: vla_policy
 verification_status: converted_lerobot_stats_action_trace_gpu_ready_non_leaderboard

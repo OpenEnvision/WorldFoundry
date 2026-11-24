@@ -34,10 +34,9 @@ python -m pip install -e ".[dev,test]"
 pre-commit install
 ```
 
-Model demo videos are served from GitHub CDN; docs development does not need
-`git lfs pull`. Checkpoints, datasets, caches, credentials, and generated run
-artifacts stay outside git. Use a model-specific environment only for a
-documented ABI or simulator conflict.
+Docs development does not need `git lfs pull`. Checkpoints, datasets, caches,
+credentials, and generated run artifacts stay outside git. Use a model-specific
+environment only for a documented ABI or simulator conflict.
 
 ## Coding Conventions
 
@@ -106,12 +105,15 @@ merge with a descriptive PR title and retain contributor DCO trailers in the
 squash commit. Resolve review conversations before merging.
 
 Repository administrators configure `main` rulesets to require pull requests,
-code-owner approval, resolved conversations, and the `DCO`, `Python quality`,
-`public-surface`, `cpu-tests`, `inference-tensors`, `geometry-impact`,
-`inference-replay`, and `packaging-license-gate` checks. Documentation changes
-also need the applicable `docs-build` result. Hosted CPU checks are fast
-weight-free validation; inference changes additionally require the existing
-trusted GPU evidence gates.
+code-owner approval, resolved conversations, and the weight-free public CI checks
+(`DCO`, `Python quality`, `public-surface`, `cpu-tests`, `inference-tensors`,
+and `packaging-license-gate`, plus `docs-build` for documentation changes).
+`geometry-impact` publishes PR replay impact plans and advisory coverage reports.
+Trusted GPU evidence (`Inference Evidence` / `inference-replay`) and
+`GPU Contracts` (`.github/workflows/gpu-contracts.yml`) are opt-in maintainer
+workflows enabled when repository GPU variables or self-hosted GPU runners are
+configured; inference changes still require local CUDA/checkpoint verification
+before merge.
 
 ## Change Checklists
 
@@ -141,6 +143,12 @@ trusted GPU evidence gates.
 
 - Use the GPU bootstrap as the default first-run path; state hardware, asset, and authentication requirements.
 - Link complex environment, official runtime, and API paths to reference docs.
+- Put user and developer guides in paired English/Chinese Fumadocs pages. Besides the root
+  `README.md`, `worldfoundry/`, each top-level package (`worldfoundry/<package>/`), and each
+  `worldfoundry/base_models/<subpackage>/` keep one short `README.md` as a package map:
+  purpose, layout, entry points, and links to Fumadocs. Update it when you add, move, or
+  remove a module. Deeper source directories, vendor trees, fixtures, model networks, and
+  benchmark runners stay README-free.
 - Run the docs build and docs checks.
 
 ### Add Or Update A CLI Argument
@@ -177,9 +185,9 @@ belong in `synthesis` and `base_models`, respectively.
 
 - training launchers, dataset builders, finetune scripts, or benchmark-only tooling
 - demo media, generated outputs, checkpoints, or downloaded datasets
-- notebooks, README files, or other documentation inside the synthesis tree.
-  The only `README.md` allowed in this repository is the root file; put
-  operational notes in fumadocs instead.
+- notebooks, README files, or other documentation inside the synthesis tree (other than
+  the `worldfoundry/synthesis/README.md` package map); put operational notes in fumadocs
+  instead.
 
 Keep local demo assets in `testcase/` and reference them through explicit input paths; they are not part of the public source distribution.
 

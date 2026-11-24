@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-
 _TARGET_PREFIXES = (
     (
         "groot.vla.model.n1_5.modules.cross_attention_dit",
-        "worldfoundry.synthesis.action_generation.gr00t.modeling.dit",
+        "worldfoundry.base_models.llm_mllm_core.action.gr00t.modeling.dit",
     ),
     (
         "groot.vla.model.dreamzero.modules.wan_video_dit_action_casual_chunk",
@@ -71,7 +70,7 @@ _TARGET_PREFIXES = (
 
 _ALLOWED_INFERENCE_TARGET_PREFIXES = (
     "worldfoundry.synthesis.action_generation.dreamzero.",
-    "worldfoundry.synthesis.action_generation.gr00t.modeling.dit.",
+    "worldfoundry.base_models.llm_mllm_core.action.gr00t.modeling.dit.",
     "worldfoundry.base_models.diffusion_model.models.networks.wan.",
     "worldfoundry.base_models.diffusion_model.models.encoders.wan.",
     "worldfoundry.base_models.diffusion_model.models.autoencoders.wan.",
@@ -122,17 +121,13 @@ def validate_inference_targets(value, *, path: str = "config") -> None:
             try:
                 child = value[key]
             except Exception as error:
-                raise TypeError(
-                    f"DreamZero configuration value is not inspectable at {path}.{key}"
-                ) from error
+                raise TypeError(f"DreamZero configuration value is not inspectable at {path}.{key}") from error
             child_path = f"{path}.{key}"
             if key == "_target_":
                 if not isinstance(child, str):
                     raise TypeError(f"DreamZero Hydra target must be a string at {child_path}")
                 if "${" in child or not child.startswith(_ALLOWED_INFERENCE_TARGET_PREFIXES):
-                    raise ValueError(
-                        f"DreamZero Hydra target is not allowlisted at {child_path}: {child}"
-                    )
+                    raise ValueError(f"DreamZero Hydra target is not allowlisted at {child_path}: {child}")
             else:
                 validate_inference_targets(child, path=child_path)
     elif isinstance(value, list) or value.__class__.__name__ == "ListConfig":

@@ -1,14 +1,15 @@
 from collections.abc import Callable
+
 """NNX runtime helpers used for compiled OpenPI sampling."""
 
-import dataclasses
-import functools
-import inspect
-import re
-from typing import Any, ParamSpec, TypeVar
+import dataclasses  # noqa: E402 - Follows a module-level setup call, as upstream.
+import functools  # noqa: E402 - Follows a module-level setup call, as upstream.
+import inspect  # noqa: E402 - Follows a module-level setup call, as upstream.
+import re  # noqa: E402 - Follows a module-level setup call, as upstream.
+from typing import Any, ParamSpec, TypeVar  # noqa: E402 - Follows a module-level setup call, as upstream.
 
-import flax.nnx as nnx
-import jax
+import flax.nnx as nnx  # noqa: E402 - Follows a module-level setup call, as upstream.
+import jax  # noqa: E402 - Follows a module-level setup call, as upstream.
 
 P = ParamSpec("P")
 R = TypeVar("R")

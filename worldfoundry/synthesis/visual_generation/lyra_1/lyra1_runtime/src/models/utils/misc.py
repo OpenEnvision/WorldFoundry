@@ -13,18 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
 from omegaconf import OmegaConf
-from typing import List
 
-def load_and_merge_configs(config_paths: List[str]):
+
+def load_and_merge_configs(config_paths: list[str]):
     """
     Load and merge multiple OmegaConf configs in order.
     Later configs override earlier ones.
     Any missing keys in later configs are added to the schema as None.
 
     Args:
-        config_paths (List[str]): List of paths to config files. 
+        config_paths (List[str]): List of paths to config files.
                                   The first config acts as the base schema.
 
     Returns:
@@ -52,27 +53,30 @@ def load_and_merge_configs(config_paths: List[str]):
 
 
 def seed_everything(seed: int):
-    import random, os
+    import os
+    import random
+
     import numpy as np
     import torch
-    
+
     random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     # torch.backends.cudnn.deterministic = True
     # torch.backends.cudnn.benchmark = True
 
+
 dtype_map = {
-    'float32': torch.float32,
-    'float': torch.float32,
-    'float64': torch.float64,
-    'double': torch.float64,
-    'float16': torch.float16,
-    'half': torch.float16,
-    'bfloat16': torch.bfloat16,
-    'int32': torch.int32,
-    'int64': torch.int64,
-    'long': torch.int64,
+    "float32": torch.float32,
+    "float": torch.float32,
+    "float64": torch.float64,
+    "double": torch.float64,
+    "float16": torch.float16,
+    "half": torch.float16,
+    "bfloat16": torch.bfloat16,
+    "int32": torch.int32,
+    "int64": torch.int64,
+    "long": torch.int64,
 }

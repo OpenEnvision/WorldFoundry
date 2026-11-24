@@ -15,6 +15,7 @@ official_sources:
   paper: https://arxiv.org/pdf/2603.12655
   github:
     url: https://github.com/SimonSun0810/VGGT-World
+    revision: c90f5ee289036277fe75a69aa96418c04ccd5cc7
     head_sha: c90f5ee289036277fe75a69aa96418c04ccd5cc7
 runtime_profile: runtime-profile:vggt-world
 integration:
@@ -29,24 +30,22 @@ runner_parity:
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry
   runtimes; blocked entries retain upstream provenance without runnable backends.
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: vggt-world
 docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: 'VGGT-World builds a world model on top of VGGT-style 3D scene understanding: it couples geometry-grounded scene perception with video generation so rollouts stay consistent with the underlying 3D structure. WorldFoundry registers the official source route in-tree (paper: arXiv 2603.12655); checkpoints and assets are runtime-gated.'
-  overview_zh: VGGT-World 在 VGGT 式 3D 场景理解之上构建世界模型：将几何锚定的场景感知与视频生成耦合，使滚动生成与底层 3D 结构保持一致。WorldFoundry 树内注册了官方源码路由（论文：arXiv 2603.12655）； checkpoint 与资产为运行时门控。
-  architecture: Beyond the recorded official repository (SimonSun0810/VGGT-World, pinned head c90f5ee2) and the arXiv paper pointer, architecture internals are not recorded in this repository.
-  architecture_zh: 除记录的官方仓库（SimonSun0810/VGGT-World，锁定 head c90f5ee2）与 arXiv 论文指针外，架构内部细节仓库未记录。
-  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
-  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。
+  overview: 'VGGT-World builds a world model on top of VGGT-style 3D scene understanding: it couples geometry-grounded scene perception with video generation so rollouts stay consistent with the underlying 3D structure. WorldFoundry binds the official source (paper: arXiv 2603.12655); generation needs the checkpoints and assets staged locally.'
+  overview_zh: VGGT-World 在 VGGT 式 3D 场景理解之上构建世界模型：将几何锚定的场景感知与视频生成耦合，使滚动生成与底层 3D 结构保持一致。WorldFoundry 接入官方源码（论文：arXiv 2603.12655）；生成前需在本地就位 checkpoint 与资产。
+  architecture: Per the paper (arXiv 2603.12655), VGGT is turned into an autoregressive geometry world model.
+  architecture_zh: 按论文（arXiv 2603.12655），VGGT 被改造为自回归几何世界模型。
+  usage_notes: Stage the required checkpoints and assets first. Until they are in place, a run writes `vggt_world_runtime_plan.json` listing the missing assets instead of generating a world.
+  usage_notes_zh: 先就位所需 checkpoint 与资产。资产就位前，运行只写出列出缺失资产的 `vggt_world_runtime_plan.json`，不会生成世界。
   limitations:
-  - Root license is under manual review (missing root license upstream).
-  - Checkpoints/assets are runtime-gated; no GPU validation is recorded in this repository.
+  - 'The upstream repository has no root license: legal review is required before use.'
   limitations_zh:
-  - 根许可证处于人工审查状态（上游缺失根 LICENSE）。
-  - checkpoint/资产为运行时门控；仓库未记录 GPU 验证。
+  - 上游仓库缺少根许可文件：使用前需要法律审查。
   recommended_benchmarks:
   - id: worldscore
     reason: Unified world-generation quality across 3D-grounded rollouts.

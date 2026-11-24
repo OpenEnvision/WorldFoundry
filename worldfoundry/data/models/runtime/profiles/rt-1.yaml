@@ -1,10 +1,9 @@
-artifact_filename: rt1_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: rt-1
+task_family: vla_policy
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/rt-1/rt1main
   role: official_repo_savedmodel_rt1main
-id: rt-1
 input_schema:
   actions:
   - robot_action
@@ -15,16 +14,22 @@ input_schema:
   language_embedding: true
   prompt: true
   video: false
-integration_status: runtime_ported
+artifact_kind: action_trace
+artifact_filename: rt1_action_trace.json
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_savedmodel_action_inference_gpu_verified_embedding_required
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - RT-1/Robotics Transformer is modeled as a language-conditioned robot policy.
 - The profile expects an RT-1 TensorFlow SavedModel directory at ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/rt-1/rt1main.
 - Pass a checkpoint-compatible 512-D language_embedding with each inference request;
-  the released SavedModel does not encode prompt strings, and text-only calls fail explicitly.
+  the released SavedModel does not encode prompt strings, and text-only calls fail
+  explicitly.
 - The profile emits action_trace artifacts; benchmark wrappers are responsible for
   environment replay and success metrics.
 - The in-tree RT-1 SavedModel adapter completed offline GPU action inference with
   rt1main, rt1multirobot, and rt1simreal official checkpoints and supplied embeddings.
-runtime_status: in_tree_savedmodel_action_inference_gpu_verified_embedding_required
-task_family: vla_policy
 verification_status: checkpoint_backed_action_inference_embedding_required

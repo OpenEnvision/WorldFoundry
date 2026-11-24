@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.runtime.env import resolve_hfd_root
 from worldfoundry.synthesis.visual_generation.pusa_vidgen.adapter import PusaVidGenRuntime
 
 from ..pipeline_utils import PipelineABC
-
 
 _HF_ROOT = resolve_hfd_root()
 _DEFAULT_CKPT_ROOT = _HF_ROOT / "RaphaelLiu--Pusa-Wan2.2-V1"
@@ -18,7 +18,9 @@ _DEFAULT_BASE_MODEL_ROOT = _HF_ROOT / "Wan-AI--Wan2.2-T2V-A14B"
 _DEFAULT_LIGHTX2V_ROOT = _HF_ROOT / "lightx2v--Wan2.2-Lightning"
 
 
-def _options_from(model_path: Any, required_components: dict[str, Any] | None, kwargs: dict[str, Any]) -> dict[str, Any]:
+def _options_from(
+    model_path: Any, required_components: dict[str, Any] | None, kwargs: dict[str, Any]
+) -> dict[str, Any]:
     """Merge shared loader inputs into model-specific adapter options."""
     options: dict[str, Any] = {}
     if isinstance(model_path, dict):
@@ -70,7 +72,7 @@ class PusaVidGenPipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "PusaVidGenPipeline":
+    ) -> PusaVidGenPipeline:
         """
         Build Pusa VidGen from internal code and local checkpoint metadata only.
 
@@ -149,14 +151,26 @@ class PusaVidGenPipeline(PipelineABC):
         if not execute:
             raise RuntimeError("Pusa VidGen requires execute=True; request-plan artifacts are no longer emitted.")
 
-        target = Path(output_path).expanduser().resolve() if output_path is not None else Path.cwd() / "pusa_vidgen_public_runner_result.json"
+        target = (
+            Path(output_path).expanduser().resolve()
+            if output_path is not None
+            else Path.cwd() / "pusa_vidgen_public_runner_result.json"
+        )
         if target.suffix.lower() == ".mp4":
             artifact_path = target
             report_path = target.with_suffix(".json")
-            run_output_dir = Path(requested_output_dir).expanduser().resolve() if requested_output_dir is not None else artifact_path.parent
+            run_output_dir = (
+                Path(requested_output_dir).expanduser().resolve()
+                if requested_output_dir is not None
+                else artifact_path.parent
+            )
         else:
             report_path = target
-            run_output_dir = Path(requested_output_dir).expanduser().resolve() if requested_output_dir is not None else report_path.parent / "outputs"
+            run_output_dir = (
+                Path(requested_output_dir).expanduser().resolve()
+                if requested_output_dir is not None
+                else report_path.parent / "outputs"
+            )
             artifact_path = run_output_dir / "pusa_vidgen_public_runner.mp4"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         run_output_dir.mkdir(parents=True, exist_ok=True)
@@ -179,14 +193,16 @@ class PusaVidGenPipeline(PipelineABC):
             "artifact_kind": "generated_video",
             "artifact_path": resolved_artifact_path,
             "artifact_files": generated_files,
-            "runtime": "worldfoundry.synthesis.visual_generation.pusa_vidgen.official_runner",
+            "runtime": "worldfoundry.synthesis.visual_generation.pusa_vidgen.pusa_v1_runner",
             "backend_quality": "public_runner_official_runner",
             "metadata_path": run_result.get("metadata_path") or str(report_path),
             "request": request,
             "runtime_result": run_result,
         }
         result = _json_safe(result)
-        report_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        report_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         result["report_path"] = str(report_path)
         self.history.append(result)
         if return_dict:

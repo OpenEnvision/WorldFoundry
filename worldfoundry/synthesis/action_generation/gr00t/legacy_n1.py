@@ -1,8 +1,9 @@
 """Isolated adapter for NVIDIA's original GR00T-N1 checkpoint format.
 
 The in-tree GR00T policy implements N1.7. Original N1 uses a different Eagle2
-backbone and modality transform, so its pinned official source runs in a
-separate Python environment instead of sharing the N1.7 import graph.
+backbone and modality transform, so its pinned official n1-release code, vendored
+under ``legacy_n1_runtime``, runs in a separate Python environment instead of
+sharing the N1.7 import graph.
 """
 
 from __future__ import annotations
@@ -12,12 +13,14 @@ import os
 import subprocess
 import tempfile
 import time
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
-
+from worldfoundry.core.execution.process import package_module_command
 
 N1_RELEASE_COMMIT = "755876a9afdb41ca6eb6383b36f4a0adb085c73f"
+WORKER_MODULE = "worldfoundry.synthesis.action_generation.gr00t.legacy_n1_worker"
 
 
 def describe_n1_checkpoint(checkpoint_dir: str | Path) -> dict[str, Any]:
@@ -39,39 +42,6 @@ def describe_n1_checkpoint(checkpoint_dir: str | Path) -> dict[str, Any]:
         "action_dim": config.get("action_dim"),
         "source_revision": N1_RELEASE_COMMIT,
     }
-
-
-def _official_source(path: str | Path | None) -> Path:
-    chosen = path or os.environ.get("WORLDFOUNDRY_GR00T_N1_SOURCE")
-    if not chosen:
-        raise FileNotFoundError(
-            "Original GR00T-N1 requires the NVIDIA Isaac-GR00T n1-release checkout; "
-            "pass n1_source_dir or set WORLDFOUNDRY_GR00T_N1_SOURCE."
-        )
-    root = Path(chosen).expanduser().resolve()
-    for name in ("gr00t/model/gr00t_n1.py", "gr00t/model/policy.py"):
-        if not (root / name).is_file():
-            raise FileNotFoundError(f"GR00T-N1 official source file is missing: {root / name}")
-    result = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    revision = result.stdout.strip()
-    if revision != N1_RELEASE_COMMIT:
-        raise ValueError(
-            f"GR00T-N1 source revision is {revision}; expected n1-release {N1_RELEASE_COMMIT}"
-        )
-    dirty = subprocess.run(
-        ["git", "-C", str(root), "status", "--porcelain", "--", "gr00t"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    if dirty:
-        raise ValueError(f"GR00T-N1 official source has local changes under {root / 'gr00t'}")
-    return root
 
 
 def _input_state(observation: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -113,7 +83,6 @@ def _input_images(image: Any, observation: Mapping[str, Any] | None) -> Any:
 def predict_n1_action(
     *,
     checkpoint_dir: str | Path,
-    source_dir: str | Path | None,
     python_executable: str | Path | None,
     data_config_name: str,
     embodiment_tag: str,
@@ -127,12 +96,11 @@ def predict_n1_action(
     extra_metadata: Mapping[str, Any] | None = None,
     timeout_seconds: int = 21600,
 ) -> dict[str, Any]:
-    """Run official N1 in a version-pinned subprocess and return its action trace."""
+    """Run the vendored official N1 release in a subprocess and return its action trace."""
     import numpy as np
 
     from worldfoundry.synthesis.action_generation.gr00t.runtime import _load_image_array
 
-    source = _official_source(source_dir)
     python = python_executable or os.environ.get("WORLDFOUNDRY_GR00T_N1_PYTHON")
     if not python:
         raise ValueError(
@@ -180,13 +148,12 @@ def predict_n1_action(
     request_path = work / "request.json"
     request_path.write_text(json.dumps(request, ensure_ascii=False, default=str, indent=2) + "\n")
     env = dict(os.environ)
-    env.update(PYTHONPATH=str(source), HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
-    worker = Path(__file__).with_name("legacy_n1_worker.py")
+    env.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
     started = time.monotonic()
     with (work / "worker.log").open("w") as log:
         completed = subprocess.run(
-            [str(python), str(worker), str(request_path)],
-            cwd=source,
+            package_module_command(WORKER_MODULE, [request_path], python_executable=python),
+            cwd=work,
             env=env,
             stdout=log,
             stderr=subprocess.STDOUT,

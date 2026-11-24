@@ -19,7 +19,7 @@ import torch
 
 
 class VideoTokenizerInterface(ABC):
-    def __init__(self):  # noqa: B027
+    def __init__(self):  # noqa: B027 - Optional hook with a no-op default.
         pass
 
     @abstractmethod
@@ -27,7 +27,6 @@ class VideoTokenizerInterface(ABC):
         """
         Reset the dtype of the model to the dtype its weights were trained with or quantized to.
         """
-        pass
 
     @abstractmethod
     def encode(self, state: torch.Tensor) -> torch.Tensor:

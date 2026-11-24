@@ -134,16 +134,16 @@ metrics:
 runner:
   workspace:
     dispatch: vbench_series
-  official_script: worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VBench2Contract
+  official_script: worldfoundry/evals/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
+  runner_target: worldfoundry.evals.tasks.contracts.external:vbench-2.0
   validation_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py --benchmark-id 
+    worldfoundry/evals/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py --benchmark-id 
     vbench-2.0 --variant vbench2 --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --vbench2-dataset-root 
     "${WORLDFOUNDRY_VBENCH2_DATASET_ROOT}" --dimension "${WORLDFOUNDRY_VBENCH2_DIMENSION:-Diversity}" --mode 
     "${WORLDFOUNDRY_VBENCH2_MODE:-custom_input}" --python "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" --timeout 
     "${WORLDFOUNDRY_VBENCH2_TIMEOUT:-1800}" --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" --json
   run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py --benchmark-id 
+    worldfoundry/evals/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py --benchmark-id 
     vbench-2.0 --variant vbench2 --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --vbench2-dataset-root 
     "${WORLDFOUNDRY_VBENCH2_DATASET_ROOT}" --dimension "${WORLDFOUNDRY_VBENCH2_DIMENSION:-Diversity}" --mode 
     "${WORLDFOUNDRY_VBENCH2_MODE:-custom_input}" --python "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" --timeout 
@@ -154,14 +154,14 @@ runner:
     kind: in_tree_official_source
     repo_url: https://github.com/Vchitect/VBench.git
     revision: 45e79ec14e69a2187202c675d2dbce1a71843d53
-    root: worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime
+    root: worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime
     override_root_env: WORLDFOUNDRY_VBENCH2_ROOT
     results_path_env: WORLDFOUNDRY_VBENCH2_RESULTS_PATH
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
     dataset_root_env: WORLDFOUNDRY_VBENCH2_DATASET_ROOT
     hf_cache_env: WORLDFOUNDRY_HF_CACHE_DIR
     official_entrypoints:
-      evaluate: python -m worldfoundry.evaluation.tasks.execution.runners.vbench_2_0.runtime.entrypoints.vbench2 
+      evaluate: python -m worldfoundry.evals.tasks.execution.runners.vbench_2_0.runtime.entrypoints.vbench2 
         --videos_path <generated_video_dir>
   expected_artifacts:
   - scorecard.json
@@ -216,11 +216,11 @@ data_refs:
   - cache/worldfoundry/data/hfd_datasets/Vchitect/VBench-2.0_human_anomaly
   - cache/worldfoundry/data/hfd_datasets/Vchitect__VBench-2.0_human_anomaly
   in_tree_source_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/runtime
+  - worldfoundry/evals/tasks/execution/runners/vbench_2_0/runtime
   task_yaml: worldfoundry/data/benchmarks/tasks/external/vbench-2.0.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VBench2Contract
+  runner_target: worldfoundry.evals.tasks.contracts.external:vbench-2.0
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
@@ -234,7 +234,7 @@ runner_availability:
   surface: bounded_official_gpu_validation
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-- worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
 - --benchmark-id
 - vbench-2.0
 - --variant
@@ -244,3 +244,15 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - generated_video_dir
+  - prompt_suite_json
+  - official_results_path
+  output_keys:
+  - scorecard
+  - dimension_scores
+  - raw_metric_table
+  notes:
+  - Contract maps official VBench-2.0 dimension outputs into the five published category groups.
+  - Full runtime validation requires the upstream VBench-2.0 environment and checkpoint cache.

@@ -21,45 +21,15 @@ import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
 
+from worldfoundry.core.execution.process import package_module_command
+
 # Output hidden dim of the selected layer; matches the DiT ``text_in_channels``.
 MAGI2_QWEN35_HIDDEN_DIM = 5120
-_DEFAULT_TRANSFORMERS_OVERLAY = "magi2-transformers-5.5.0"
-
-
-def resolve_magi2_transformers_overlay(
-    configured_path: str | Path | None = None,
-) -> Path:
-    """Resolve the process-local Transformers 5.5 overlay used by MAGI-2.
-
-    MAGI-2 needs ``Qwen3_5TextModel`` from Transformers 5.5, while the shared
-    WorldFoundry process intentionally stays on Transformers 4.x for other
-    video runtimes.  The newer package is therefore visible only to a short
-    text-encoding subprocess.
-    """
-
-    source_root = Path(__file__).resolve().parents[5]
-    candidates = [
-        configured_path,
-        os.environ.get("WORLDFOUNDRY_MAGI2_TRANSFORMERS_OVERLAY"),
-        source_root / "artifacts" / "runtime_overlays" / _DEFAULT_TRANSFORMERS_OVERLAY,
-    ]
-    for candidate in candidates:
-        if not candidate:
-            continue
-        path = Path(candidate).expanduser().resolve()
-        if (path / "transformers").is_dir() and (path / "huggingface_hub").is_dir():
-            return path
-    raise RuntimeError(
-        "MAGI-2 requires a process-local Transformers 5.5 overlay containing "
-        "transformers/ and huggingface_hub/. Set "
-        "WORLDFOUNDRY_MAGI2_TRANSFORMERS_OVERLAY or materialize "
-        f"artifacts/runtime_overlays/{_DEFAULT_TRANSFORMERS_OVERLAY}."
-    )
 
 
 def strip_empty(obj):
@@ -93,26 +63,15 @@ def _as_list(value: Any) -> list:
 
 
 def _pick(values: dict, keys: Iterable[str]) -> list[tuple[str, Any]]:
-    return [
-        (key, values[key])
-        for key in keys
-        if key in values and values[key] not in (None, [], {})
-    ]
+    return [(key, values[key]) for key in keys if key in values and values[key] not in (None, [], {})]
 
 
 def json_to_compact_markdown(raw_json: str | dict[str, Any]) -> str:
-    if isinstance(raw_json, str):
-        obj = json.loads(raw_json.strip())
-    else:
-        obj = raw_json
+    obj = json.loads(raw_json.strip()) if isinstance(raw_json, str) else raw_json
 
     obj = strip_empty(obj)
     if not isinstance(obj, dict) or "global_layer" not in obj:
-        return (
-            raw_json
-            if isinstance(raw_json, str)
-            else json.dumps(raw_json, ensure_ascii=False)
-        )
+        return raw_json if isinstance(raw_json, str) else json.dumps(raw_json, ensure_ascii=False)
 
     global_layer = _as_dict(obj.get("global_layer"))
     dynamic_layer = _as_dict(obj.get("dynamic_layer"))
@@ -218,9 +177,7 @@ def json_to_compact_markdown(raw_json: str | dict[str, Any]) -> str:
                 text = _one_line(dialogue_line.get("text"))
                 timestamp = _one_line(dialogue_line.get("timestamp"))
                 if text:
-                    prefix = (
-                        f"   - dialogue {speaker}: " if speaker else "   - dialogue: "
-                    )
+                    prefix = f"   - dialogue {speaker}: " if speaker else "   - dialogue: "
                     line = prefix + text
                     if timestamp:
                         line += f" ({timestamp})"
@@ -311,21 +268,17 @@ class Magi2Qwen35TextEncoder(nn.Module):
             behavior="isolated",
         )
         original_pre_tokenizer = self.tokenizer.backend_tokenizer.pre_tokenizer
-        self.tokenizer.backend_tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [cjk_split, original_pre_tokenizer]
-        )
+        self.tokenizer.backend_tokenizer.pre_tokenizer = pre_tokenizers.Sequence([cjk_split, original_pre_tokenizer])
 
         from transformers import Qwen3_5TextModel
 
-        self.text_model = Qwen3_5TextModel.from_pretrained(
-            model_path, torch_dtype=precision
-        )
+        self.text_model = Qwen3_5TextModel.from_pretrained(model_path, torch_dtype=precision)
         self.to(device)
         self.text_model.eval()
         self.text_model.requires_grad_(False)
 
     @classmethod
-    def from_config(cls, config: Magi2Qwen35Config) -> "Magi2Qwen35TextEncoder":
+    def from_config(cls, config: Magi2Qwen35Config) -> Magi2Qwen35TextEncoder:
         """Build the encoder from a :class:`Magi2Qwen35Config`."""
         return cls(
             model_path=config.model_path,
@@ -343,7 +296,7 @@ class Magi2Qwen35TextEncoder(nn.Module):
         precision: torch.dtype = torch.bfloat16,
         max_length: int = 7000,
         skip_layer: int = 0,
-    ) -> "Magi2Qwen35TextEncoder":
+    ) -> Magi2Qwen35TextEncoder:
         """Thin alias for the constructor, mirroring repo encoder conventions."""
         return cls(
             model_path,
@@ -371,9 +324,7 @@ class Magi2Qwen35TextEncoder(nn.Module):
             pass
         return prompt
 
-    def get_target_token_indices(
-        self, prompt: str, target_str: Optional[str]
-    ) -> Optional[list[int]]:
+    def get_target_token_indices(self, prompt: str, target_str: str | None) -> list[int] | None:
         if not target_str:
             return None
         prompt = self._normalize_prompt(prompt)
@@ -399,9 +350,7 @@ class Magi2Qwen35TextEncoder(nn.Module):
                 indices.append(index)
         return indices
 
-    def get_special_token(
-        self, prompt: str, target_strs: list[str], text_feature: torch.Tensor
-    ) -> torch.Tensor:
+    def get_special_token(self, prompt: str, target_strs: list[str], text_feature: torch.Tensor) -> torch.Tensor:
         embeddings = []
         for target_str in target_strs:
             indices = self.get_target_token_indices(prompt, target_str)
@@ -442,10 +391,9 @@ class Magi2Qwen35TextEncoder(nn.Module):
 class Magi2Qwen35SubprocessTextEncoder:
     """Encode prompts in an isolated Transformers-5.5 subprocess.
 
-    The subprocess deliberately uses the same Python executable as the parent
-    WorldFoundry job.  Only ``PYTHONPATH`` is prepended with the two-package
-    overlay, so the shared environment and its CUDA/PyTorch stack remain
-    unchanged and other runtimes continue to import Transformers 4.x.
+    ``python_executable`` selects the MAGI-2 environment containing Transformers
+    5.5 and the installed WorldFoundry package. The parent can keep its shared
+    Transformers 4.x environment.
     """
 
     def __init__(
@@ -457,7 +405,6 @@ class Magi2Qwen35SubprocessTextEncoder:
         max_length: int = 7000,
         skip_layer: int = 0,
         python_executable: str | Path | None = None,
-        transformers_overlay: str | Path | None = None,
     ) -> None:
         self.model_path = str(Path(model_path).expanduser())
         self.device = str(device)
@@ -465,9 +412,6 @@ class Magi2Qwen35SubprocessTextEncoder:
         self.max_length = int(max_length)
         self.skip_layer = int(skip_layer)
         self.python_executable = str(python_executable or sys.executable)
-        self.transformers_overlay = resolve_magi2_transformers_overlay(
-            transformers_overlay
-        )
 
     @torch.inference_mode()
     def encode(self, prompt: str) -> torch.Tensor:
@@ -478,33 +422,31 @@ class Magi2Qwen35SubprocessTextEncoder:
             request_path.write_text(json.dumps({"prompt": prompt}, ensure_ascii=False))
 
             env = os.environ.copy()
-            pythonpath = [str(self.transformers_overlay)]
-            if env.get("PYTHONPATH"):
-                pythonpath.append(env["PYTHONPATH"])
-            env["PYTHONPATH"] = os.pathsep.join(pythonpath)
             env["PYTHONNOUSERSITE"] = "1"
             env["HF_HUB_OFFLINE"] = "1"
             env["TRANSFORMERS_OFFLINE"] = "1"
 
-            command = [
-                self.python_executable,
-                str(Path(__file__).resolve()),
-                "--worker",
-                "--model-path",
-                self.model_path,
-                "--request",
-                str(request_path),
-                "--output",
-                str(output_path),
-                "--device",
-                self.device,
-                "--precision",
-                str(self.precision).removeprefix("torch."),
-                "--max-length",
-                str(self.max_length),
-                "--skip-layer",
-                str(self.skip_layer),
-            ]
+            command = package_module_command(
+                "worldfoundry.base_models.diffusion_model.models.encoders.magi2_qwen35",
+                [
+                    "--worker",
+                    "--model-path",
+                    self.model_path,
+                    "--request",
+                    str(request_path),
+                    "--output",
+                    str(output_path),
+                    "--device",
+                    self.device,
+                    "--precision",
+                    str(self.precision).removeprefix("torch."),
+                    "--max-length",
+                    str(self.max_length),
+                    "--skip-layer",
+                    str(self.skip_layer),
+                ],
+                python_executable=self.python_executable,
+            )
             completed = subprocess.run(
                 command,
                 env=env,
@@ -515,8 +457,7 @@ class Magi2Qwen35SubprocessTextEncoder:
             if completed.returncode != 0:
                 details = (completed.stderr or completed.stdout).strip()
                 raise RuntimeError(
-                    "MAGI-2 Qwen3.5 subprocess failed with the shared Python "
-                    f"{self.python_executable}: {details[-4000:]}"
+                    f"MAGI-2 Qwen3.5 subprocess failed with Python {self.python_executable}: {details[-4000:]}"
                 )
             if not output_path.is_file():
                 raise RuntimeError("MAGI-2 Qwen3.5 subprocess produced no prompt context")

@@ -17,8 +17,9 @@ from __future__ import annotations
 import importlib.util
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from worldfoundry.core.io.paths import checkpoint_root_path
 from worldfoundry.synthesis.visual_generation.runtime_manifest import command_settings
@@ -150,10 +151,7 @@ def _checkpoint_missing_reason(label: str, path: Path) -> str | None:
         return f"{label} checkpoint does not exist"
     expected_size = PUBLIC_CHECKPOINT_SIZES.get(path.name)
     if expected_size is not None and path.stat().st_size != expected_size:
-        return (
-            f"{label} checkpoint is incomplete: expected {expected_size} bytes, "
-            f"found {path.stat().st_size} bytes"
-        )
+        return f"{label} checkpoint is incomplete: expected {expected_size} bytes, found {path.stat().st_size} bytes"
     return None
 
 
@@ -215,7 +213,9 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile) -> list[
 
     image_path = _image_path(settings)
     if image_path is not None and not image_path.is_file():
-        missing.append({"kind": "asset", "path": str(image_path), "reason": "Causal-rCM I2V conditioning image does not exist"})
+        missing.append(
+            {"kind": "asset", "path": str(image_path), "reason": "Causal-rCM I2V conditioning image does not exist"}
+        )
 
     # Only meaningful when the rollout runs in this interpreter. A configured
     # python_executable points at the dedicated causal-rcm environment, whose
@@ -256,7 +256,9 @@ def build_command(context) -> list[str]:
 
     dit_path = _dit_path(settings)
     if dit_path is None:
-        raise ValueError("Causal-rCM requires dit_path (or checkpoint_path) pointing at a distilled causal DiT checkpoint.")
+        raise ValueError(
+            "Causal-rCM requires dit_path (or checkpoint_path) pointing at a distilled causal DiT checkpoint."
+        )
 
     command = [
         _python_executable(settings),
@@ -328,7 +330,10 @@ def build_command(context) -> list[str]:
     if _as_bool(_option(settings, "context_from_last_step", default=False)):
         command.append("--context_from_last_step")
         command.extend(
-            ["--context_from_last_step_start_chunk", str(int(_option(settings, "context_from_last_step_start_chunk", default=0)))]
+            [
+                "--context_from_last_step_start_chunk",
+                str(int(_option(settings, "context_from_last_step_start_chunk", default=0))),
+            ]
         )
 
     # The upstream cache remains the default. A bounded sliding window is the
@@ -343,12 +348,12 @@ def build_command(context) -> list[str]:
         )
     if kv_cache_policy != "keep_all":
         command.extend(["--kv_cache_policy", kv_cache_policy])
-        command.extend(
-            ["--kv_cache_window_blocks", str(int(_option(settings, "kv_cache_window_blocks", default=6)))]
-        )
-        command.extend(
-            ["--kv_cache_sink_blocks", str(int(_option(settings, "kv_cache_sink_blocks", default=0)))]
-        )
+        command.extend(["--kv_cache_window_blocks", str(int(_option(settings, "kv_cache_window_blocks", default=6)))])
+        command.extend(["--kv_cache_sink_blocks", str(int(_option(settings, "kv_cache_sink_blocks", default=0)))])
+
+    tokenizer_path = _option(settings, "tokenizer_path")
+    if tokenizer_path is not None:
+        command.extend(["--tokenizer_path", str(Path(str(tokenizer_path)).expanduser())])
 
     warmup_iters = int(_option(settings, "warmup_iters", default=0))
     num_runs = int(_option(settings, "num_runs", default=1))
@@ -366,8 +371,8 @@ __all__ = [
     "OFFICIAL_REPO_URL",
     "PUBLIC_CHECKPOINT_SIZES",
     "REQUIRED_MODULES",
-    "RUNTIME_ENV_NAME",
     "RUNTIME_DIR",
+    "RUNTIME_ENV_NAME",
     "build_command",
     "missing_requirements",
 ]

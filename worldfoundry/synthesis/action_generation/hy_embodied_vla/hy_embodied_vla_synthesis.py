@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.core.io.formats.serialization import write_json
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
 from worldfoundry.synthesis.action_generation.base_action_synthesis import ActionModelSynthesis
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
 
 from .runtime import (
     DEFAULT_ALLOW_CHECKPOINT_DOWNLOAD,
@@ -71,7 +72,7 @@ class HyEmbodiedVLASynthesis(ActionModelSynthesis):
         hf_models_root: str | Path | None = None,
         command_template: Sequence[str] | None = None,
         **kwargs: Any,
-    ) -> "HyEmbodiedVLASynthesis":
+    ) -> HyEmbodiedVLASynthesis:
         del args
         options = dict(pretrained_model_path) if isinstance(pretrained_model_path, Mapping) else {}
         if pretrained_model_path is not None and not isinstance(pretrained_model_path, Mapping):
@@ -97,9 +98,7 @@ class HyEmbodiedVLASynthesis(ActionModelSynthesis):
         merged = {**self.runtime_options, **dict(options)}
         variant = str(merged.get("variant") or merged.get("variant_id") or DEFAULT_VARIANT)
         checkpoint = select_hy_embodied_vla_checkpoint(
-            checkpoint=merged.get("checkpoint")
-            or merged.get("checkpoint_dir")
-            or merged.get("ckpt_path"),
+            checkpoint=merged.get("checkpoint") or merged.get("checkpoint_dir") or merged.get("ckpt_path"),
             checkpoints=self.profile.checkpoints,
             variant=variant,
         )
@@ -115,14 +114,10 @@ class HyEmbodiedVLASynthesis(ActionModelSynthesis):
                 merged.get("allow_checkpoint_download"), DEFAULT_ALLOW_CHECKPOINT_DOWNLOAD
             ),
             history_size=int(history_size) if history_size is not None else None,
-            replicate_single_image=_as_bool(
-                merged.get("replicate_single_image"), DEFAULT_REPLICATE_SINGLE_IMAGE
-            ),
+            replicate_single_image=_as_bool(merged.get("replicate_single_image"), DEFAULT_REPLICATE_SINGLE_IMAGE),
             state_format=str(merged.get("state_format") or DEFAULT_STATE_FORMAT),
             blend_mode=str(merged.get("blend_mode") or DEFAULT_BLEND_MODE),
-            strict_checkpoint=_as_bool(
-                merged.get("strict_checkpoint"), DEFAULT_STRICT_CHECKPOINT
-            ),
+            strict_checkpoint=_as_bool(merged.get("strict_checkpoint"), DEFAULT_STRICT_CHECKPOINT),
         )
 
     def _runtime_for(self, config: HyEmbodiedVLARuntimeConfig) -> HyEmbodiedVLARuntime:

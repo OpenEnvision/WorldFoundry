@@ -10,7 +10,7 @@ Section 1 is 2–4 short paragraphs: the job in WorldFoundry, method/context
 from the catalog ``docs:`` block / paper, recorded tasks, and real benchmark
 ids only. Runtime contract covers inputs, task profiles, variants with
 reader status labels, and usage notes / blockers from the manifest. Running
-leads with ``worldfoundry-eval run``.
+leads with ``wf run``.
 
 Never emit a "What this page does not claim" / "Limits" / "本页不声称" heading.
 License, VRAM, and status belong in one short in-body clause under
@@ -18,7 +18,7 @@ Running in WorldFoundry.
 
 Bias every section toward the *inference contract*: which variant to launch,
 required/optional inputs, artifacts, resolution / frames / steps / guidance,
-env / prepare / one ``worldfoundry-eval run``, and gated license.
+env / prepare / one ``wf run``, and gated license.
 
 Training facts from the catalog (pretraining hours, datasets used to train the
 weights, optimizer, LR, “how the authors trained it”) are omitted. Keep at
@@ -38,6 +38,7 @@ import json
 import re
 import sys
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,8 @@ from model_home_status import (
     reader_label,
     sanitize_manifest_dialect,
     status_label,
+)
+from model_home_status import (
     status_sentence as mapped_status_sentence,
 )
 from model_paper_figures import has_paper_figures
@@ -168,7 +171,6 @@ HEADINGS = {
     },
 }
 
-ARCH_DIAGRAM_MARKERS = ("ModelArchDiagram",)
 PAPER_FIGURES_MARKERS = ("ModelPaperFigures",)
 PAPER_COVER_SUFFIX = "/paper.png"
 ARCH_FILE_NAMES = (
@@ -179,8 +181,6 @@ ARCH_FILE_NAMES = (
     "architecture.png",
     "arch.png",
 )
-ARCH_ASSET_SUFFIXES = tuple(f"/{name}" for name in ARCH_FILE_NAMES)
-
 MODALITY_ZH = {
     "text": "文本",
     "image": "图像",
@@ -193,8 +193,8 @@ MODALITY_ZH = {
     "depth": "深度",
     "point cloud": "点云",
     "trajectory": "轨迹",
-    "3D scene": "3D 场景",
-    "4D scene": "4D 场景",
+    "3d scene": "3D 场景",
+    "4d scene": "4D 场景",
     "world state": "世界状态",
     "mesh": "网格",
 }
@@ -239,6 +239,7 @@ TASK_PHRASES_ZH = {
     "embodied_benchmark": "具身评测",
     "action_tokenization": "动作分词",
     "3d-reconstruction": "3D 重建",
+    "three_dimension": "3D 重建",
     "geometry-prior": "几何先验",
     "novel-view-synthesis": "新视角合成",
     "gaussian-splatting": "高斯泼溅",
@@ -393,7 +394,43 @@ def join_zh(items: Any) -> str:
     return "、".join(cleaned)
 
 
-def unique_keep(items: list[str]) -> list[str]:
+CJK_LATIN_GAP_RE = re.compile(r"(?<=[\u4e00-\u9fff])(?=[A-Za-z0-9])|(?<=[A-Za-z0-9])(?=[\u4e00-\u9fff])")
+
+
+def space_cjk_latin(text: str) -> str:
+    """Insert one space wherever a Chinese character meets a Latin letter or digit."""
+    return CJK_LATIN_GAP_RE.sub(" ", text)
+
+
+LICENSE_NAMES = {
+    "apache-2.0": ("Apache-2.0", "Apache-2.0"),
+    "mit": ("MIT", "MIT"),
+    "cc-by-4.0": ("CC BY 4.0", "CC BY 4.0"),
+    "cc-by-nc-4.0": ("CC BY-NC 4.0", "CC BY-NC 4.0"),
+    "gemma": ("Gemma Terms of Use", "Gemma 使用条款"),
+    "other": ("a custom license (see the model card)", "自定义许可（见模型卡）"),
+    "other:nvidia-open-model-license": ("NVIDIA Open Model License", "NVIDIA Open Model License"),
+    "other:openmdw-1.1": ("OpenMDW 1.1", "OpenMDW 1.1"),
+    "nvidia-noncommercial-research-evaluation": (
+        "NVIDIA non-commercial research and evaluation license",
+        "NVIDIA 非商用研究与评测许可",
+    ),
+    "rollingforcing-academic-only": (
+        "academic use only (Rolling Forcing license)",
+        "仅限学术用途（Rolling Forcing 许可）",
+    ),
+    "s-lab-1.0": ("S-Lab License 1.0", "S-Lab License 1.0"),
+}
+
+
+def license_name(value: str, locale: str) -> str:
+    names = LICENSE_NAMES.get(value.strip().lower())
+    if not names:
+        return value
+    return names[1] if locale == "zh" else names[0]
+
+
+def unique_keep(items: Iterable[str]) -> list[str]:
     seen: set[str] = set()
     output: list[str] = []
     for item in items:
@@ -421,7 +458,7 @@ TRAINING_PROSE_RE = re.compile(
     r"\boptimizer\b|\blearning rate\b|\bfinetun(?:e|ing)\b|"
     r"data-in-the-loop|reward backpropagation|UniHand|"
     r"预训练.{0,24}(小时|数据|数据集|本体)|"
-    r"训练数据|训练配方|训练环|优化器|学习率|后训练"
+    r"训练数据|训练配方|训练环|优化器|学习率"
     r")"
 )
 INFERENCE_KEEP_RE = re.compile(
@@ -463,8 +500,29 @@ def drop_training_prose(items: list[str]) -> list[str]:
     return [item for item in items if item and not is_training_heavy(item)]
 
 
+TASK_ACRONYMS_EN = {"vla": "VLA", "wam": "WAM", "vlm": "VLM", "umi": "UMI", "3d": "3D", "4d": "4D", "rgb": "RGB"}
+TASK_COMPOUND_SUFFIXES_EN = {"controlled", "conditioned", "guided", "based", "driven", "aware"}
+
+
+TASK_PHRASES_EN = {"three_dimension": "3D reconstruction"}
+
+
 def task_phrase_en(task: str) -> str:
-    return task.replace("_", " ").replace(".", " ").strip()
+    """Readable English for a catalog task tag: `3d-reconstruction` -> `3D reconstruction`."""
+
+    if task.lower() in TASK_PHRASES_EN:
+        return TASK_PHRASES_EN[task.lower()]
+    words: list[str] = []
+    for word in task.replace("_", " ").replace(".", " ").split():
+        parts = [TASK_ACRONYMS_EN.get(part.lower(), part) for part in word.split("-")]
+        if "to" in parts[1:-1]:
+            words.append("-".join(parts))
+            continue
+        phrase = parts[0]
+        for part in parts[1:]:
+            phrase += ("-" if part.lower() in TASK_COMPOUND_SUFFIXES_EN else " ") + part
+        words.append(phrase)
+    return " ".join(words)
 
 
 def task_phrase_zh(task: str) -> str:
@@ -568,18 +626,22 @@ def _contract_rows(recipe: dict[str, Any]) -> list[dict[str, Any]]:
     if tasks:
         run_id, task_id = run_identity(recipe)
         task = next(
-            (item for item in tasks if item.get("id") == task_id
-             and (not item.get("variantIds") or run_id in item["variantIds"])),
+            (
+                item
+                for item in tasks
+                if item.get("id") == task_id and (not item.get("variantIds") or run_id in item["variantIds"])
+            ),
             tasks[0],
         )
         return [
             {
                 **item,
-                "field": str(item.get("field") or "").replace("-", "_"),
-                "required": bool(item.get("required")) and item.get("default") in (None, ""),
-                "detail": "Required" if item.get("required") and item.get("default") in (None, "") else "Optional",
+                "field": str(item.get("field") or ""),
+                "required": bool(item.get("required")),
+                "detail": "Required" if item.get("required") else "Optional",
             }
-            for item in task.get("inputs") or [] if isinstance(item, dict)
+            for item in task.get("inputs") or []
+            if isinstance(item, dict)
         ]
     return [item for item in recipe.get("inputContract") or [] if isinstance(item, dict)]
 
@@ -604,7 +666,7 @@ def pipeline_class(recipe: dict[str, Any]) -> str:
 def run_identity(recipe: dict[str, Any]) -> tuple[str, str]:
     run = str((recipe.get("commands") or {}).get("run") or "")
     joined = " ".join(line.strip().rstrip("\\").strip() for line in run.splitlines())
-    match_id = re.search(r"worldfoundry-eval run\s+(\S+)", joined)
+    match_id = re.search(r"wf run\s+(\S+)", joined)
     match_task = re.search(
         r"--pipeline\.task-profile\s+(?:'([^']+)'|\"([^\"]+)\"|(\S+))",
         joined,
@@ -622,27 +684,6 @@ def run_identity(recipe: dict[str, Any]) -> tuple[str, str]:
     return run_id, task
 
 
-def _contract_fields(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
-    required: list[str] = []
-    optional: list[str] = []
-    rows = _contract_rows(recipe)
-    for item in rows:
-        field = str(item.get("field") or "").strip()
-        if not field:
-            continue
-        detail = str(item.get("detail") or "").strip().lower()
-        if item.get("required") is True or detail == "required":
-            required.append(field)
-        else:
-            optional.append(field)
-    return unique_keep(required), unique_keep(optional)
-
-
-def required_fields(recipe: dict[str, Any]) -> list[str]:
-    required, _ = _contract_fields(recipe)
-    return required
-
-
 def preferred_variant(recipe: dict[str, Any]) -> str:
     variants = [item for item in (recipe.get("variants") or []) if isinstance(item, dict) and item.get("id")]
     run_id, _ = run_identity(recipe)
@@ -650,18 +691,19 @@ def preferred_variant(recipe: dict[str, Any]) -> str:
         return run_id or str(recipe.get("id") or "")
 
     def score(item: dict[str, Any]) -> int:
-        blob = " ".join(
-            str(item.get(key) or "") for key in ("status", "runtimeStatus", "runner")
-        ).lower()
-        if any(
-            token in blob
-            for token in (
-                "parity_recorded",
-                "demo_and_runner",
-                "gpu_validated",
-                "runner_verified",
+        blob = " ".join(str(item.get(key) or "") for key in ("status", "runtimeStatus", "runner")).lower()
+        if (
+            any(
+                token in blob
+                for token in (
+                    "parity_recorded",
+                    "demo_and_runner",
+                    "gpu_validated",
+                    "runner_verified",
+                )
             )
-        ) or blob == "verified":
+            or blob == "verified"
+        ):
             return 3
         if "verified" in blob and "pending" not in blob:
             return 2
@@ -688,8 +730,11 @@ def artifact_names(recipe: dict[str, Any]) -> list[str]:
     names: list[str] = []
     run_id, task_id = run_identity(recipe)
     task = next(
-        (item for item in recipe.get("inferenceTasks") or []
-         if item.get("id") == task_id and (not item.get("variantIds") or run_id in item["variantIds"])),
+        (
+            item
+            for item in recipe.get("inferenceTasks") or []
+            if item.get("id") == task_id and (not item.get("variantIds") or run_id in item["variantIds"])
+        ),
         None,
     )
     artifacts = task.get("artifacts", []) if task is not None else recipe.get("artifacts") or []
@@ -706,11 +751,7 @@ def artifact_names(recipe: dict[str, Any]) -> list[str]:
 
 
 def variant_ids(recipe: dict[str, Any]) -> list[str]:
-    return [
-        str(item.get("id"))
-        for item in (recipe.get("variants") or [])
-        if isinstance(item, dict) and item.get("id")
-    ]
+    return [str(item.get("id")) for item in (recipe.get("variants") or []) if isinstance(item, dict) and item.get("id")]
 
 
 _HF_WEIGHTS_RE = re.compile(
@@ -720,9 +761,7 @@ _HF_WEIGHTS_RE = re.compile(
 
 def checkpoint_ids(recipe: dict[str, Any]) -> list[str]:
     ids = [
-        str(item.get("id"))
-        for item in (recipe.get("checkpoints") or [])
-        if isinstance(item, dict) and item.get("id")
+        str(item.get("id")) for item in (recipe.get("checkpoints") or []) if isinstance(item, dict) and item.get("id")
     ]
     if ids:
         return unique_keep(ids)
@@ -784,15 +823,15 @@ def modality_sentence(docs: dict[str, Any], locale: str) -> str:
         return ""
     if locale == "zh":
         if inputs and outputs:
-            return f"模态上，它接受{join_zh(inputs)}，输出{join_zh(outputs)}。"
+            return space_cjk_latin(f"模态上，它接受{join_zh(inputs)}，输出{join_zh(outputs)}。")
         if inputs:
-            return f"输入模态包括{join_zh(inputs)}。"
-        return f"输出模态为{join_zh(outputs)}。"
+            return space_cjk_latin(f"输入模态包括{join_zh(inputs)}。")
+        return space_cjk_latin(f"输出模态为{join_zh(outputs)}。")
     if inputs and outputs:
-        return f"Documented modalities: {join_en(inputs)} in, {join_en(outputs)} out."
+        return f"Modalities: {join_en(inputs)} in, {join_en(outputs)} out."
     if inputs:
-        return f"Documented inputs include {join_en(inputs)}."
-    return f"Documented outputs include {join_en(outputs)}."
+        return f"Input modalities: {join_en(inputs)}."
+    return f"Output modalities: {join_en(outputs)}."
 
 
 def paper_sentence(docs: dict[str, Any], locale: str, recipe: dict[str, Any] | None = None) -> str:
@@ -810,8 +849,8 @@ def paper_sentence(docs: dict[str, Any], locale: str, recipe: dict[str, Any] | N
         cite = f"[arXiv {arxiv_id}]({href})" if href else f"arXiv {arxiv_id}"
     extra = ", ".join(str(part) for part in (paper.get("venue"), paper.get("year")) if part)
     if locale == "zh":
-        return f"记录论文为{cite}" + (f"（{mdx_escape(extra)}）。" if extra else "。")
-    return f"The recorded paper is {cite}" + (f" ({mdx_escape(extra)})." if extra else ".")
+        return f"论文：{cite}" + (f"（{mdx_escape(extra)}）。" if extra else "。")
+    return f"Paper: {cite}" + (f" ({mdx_escape(extra)})." if extra else ".")
 
 
 def _source_link_text(url: str, label: str) -> str:
@@ -851,8 +890,7 @@ def sources_sentence(recipe: dict[str, Any], locale: str) -> str:
     github_urls = [
         str(item.get("url") or "").strip()
         for item in items
-        if str(item.get("kind") or "").strip().lower() in {"source", "code"}
-        and str(item.get("url") or "").strip()
+        if str(item.get("kind") or "").strip().lower() in {"source", "code"} and str(item.get("url") or "").strip()
     ]
     bits: list[str] = []
     seen: set[str] = set()
@@ -891,8 +929,8 @@ def alias_sentence(recipe: dict[str, Any], locale: str) -> str:
     extra = " 等" if locale == "zh" and len(aliases) > 4 else (" among others" if len(aliases) > 4 else "")
     joined = join_zh([f"`{item}`" for item in shown]) if locale == "zh" else join_en([f"`{item}`" for item in shown])
     if locale == "zh":
-        return f"别名包括 {joined}{extra}。"
-    return f"Catalog aliases include {joined}{extra}."
+        return f"别名：{joined}{extra}。"
+    return f"Aliases: {joined}{extra}."
 
 
 def environment_sentence(recipe: dict[str, Any], locale: str) -> str:
@@ -900,7 +938,7 @@ def environment_sentence(recipe: dict[str, Any], locale: str) -> str:
     env = str(runtime.get("environmentName") or "").strip()
     kind = str(runtime.get("environmentKind") or "")
     if not env or kind in {"unrecorded", "none"}:
-        return "The environment profile is not recorded." if locale == "en" else "运行环境未记录。"
+        return "No runtime environment is recorded for this model." if locale == "en" else "该模型未记录运行环境。"
     kind_en = "dedicated" if kind == "dedicated" else "unified"
     kind_zh = "独立" if kind == "dedicated" else "统一"
     details: list[str] = []
@@ -914,31 +952,8 @@ def environment_sentence(recipe: dict[str, Any], locale: str) -> str:
     detail = f" ({', '.join(details)})" if details else ""
     detail_zh = f"（{'，'.join(details)}）" if details else ""
     if locale == "zh":
-        return f"运行环境是{kind_zh} profile `{env}`{detail_zh}。"
+        return f"运行环境：{kind_zh}环境 `{env}`{detail_zh}。"
     return f"It runs in the {kind_en} environment `{env}`{detail}."
-
-
-def hardware_paragraphs(docs: dict[str, Any], locale: str) -> list[str]:
-    hardware = docs.get("hardware") or {}
-    min_vram = hardware.get("minVramGb")
-    recommended = hardware.get("recommended")
-    notes = [str(item).strip() for item in hardware.get("notes") or [] if str(item).strip()]
-    parts: list[str] = []
-    if min_vram is not None:
-        parts.append(
-            f"Minimum VRAM is recorded at {min_vram} GB."
-            if locale == "en"
-            else f"记录的最低显存为 {min_vram} GB。"
-        )
-    if recommended:
-        parts.append(
-            f"Recommended hardware: {recommended}."
-            if locale == "en"
-            else f"推荐配置：{recommended}。"
-        )
-    parts.extend(notes)
-    text = join_prose(parts)
-    return [text] if text else []
 
 
 def benchmarks_paragraph(docs: dict[str, Any], locale: str) -> str:
@@ -963,16 +978,12 @@ def benchmarks_paragraph(docs: dict[str, Any], locale: str) -> str:
     if not links:
         return ""
     if locale == "zh":
-        return f"记录的评测入口包括{join_zh(links)}。"
-    return f"Recorded evaluation entry points include {', '.join(links)}."
+        return f"推荐评测：{join_zh(links)}。"
+    return f"Suggested benchmarks: {', '.join(links)}."
 
 
 def variants_paragraph(recipe: dict[str, Any], locale: str) -> str:
-    variants = [
-        item
-        for item in (recipe.get("variants") or [])
-        if isinstance(item, dict) and item.get("id")
-    ]
+    variants = [item for item in (recipe.get("variants") or []) if isinstance(item, dict) and item.get("id")]
     if len(variants) <= 1:
         return ""
     preferred = preferred_variant(recipe)
@@ -987,9 +998,13 @@ def variants_paragraph(recipe: dict[str, Any], locale: str) -> str:
         all_checkpoints_verified = runtime_status.startswith(
             ("all_released_checkpoints_gpu_validated", "all_declared_variants_checkpoint_gpu_validated")
         )
-        raw = runtime_status or str(item.get("status") or "")
+        status = str(item.get("status") or "")
+        raw = runtime_status or status
         if shared_profile and not all_checkpoints_verified:
-            raw = str(item.get("status") or "")
+            raw = status
+        elif classify_token(status) == "verified":
+            # A variant recorded as verified keeps that label; its runtime status may only name the contract.
+            raw = status
         label = reader_label(classify_token(raw), locale) if raw and raw != "not_recorded" else ""
         if locale == "zh":
             piece = f"`{vid}`"
@@ -1007,23 +1022,18 @@ def variants_paragraph(recipe: dict[str, Any], locale: str) -> str:
     extra = " 等" if locale == "zh" and len(variants) > 5 else (" among others" if len(variants) > 5 else "")
     joined = join_zh(bits) if locale == "zh" else "; ".join(bits)
     if locale == "zh":
-        start = f"起步 variant 是 `{preferred}`。" if preferred else ""
-        return (
-            f"{start}catalog 登记了 {len(variants)} 个 variant（上方卡片）：{joined}{extra}。"
-        )
-    start = f"Start on `{preferred}`. " if preferred else ""
-    return (
-        f"{start}The family registers {len(variants)} catalog variants (cards above): {joined}{extra}."
-    )
+        start = f"建议从 `{preferred}` 开始。" if preferred else ""
+        return f"{start}该系列共有 {len(variants)} 个 variant，可在上方命令构建器中切换：{joined}{extra}。"
+    start = f"Start with `{preferred}`. " if preferred else ""
+    return f"{start}The family has {len(variants)} variants, selectable in the command builder above: {joined}{extra}."
 
 
 def task_profile_sentence(recipe: dict[str, Any], locale: str) -> str:
     ids = unique_keep(
-        str(item["id"]) for item in recipe.get("inferenceTasks") or []
-        if isinstance(item, dict) and item.get("id")
+        str(item["id"]) for item in recipe.get("inferenceTasks") or [] if isinstance(item, dict) and item.get("id")
     )
     if not ids:
-        return "No task profiles are recorded on this card." if locale == "en" else "本卡片未记录任务 profile。"
+        return "No task profile is recorded for this model." if locale == "en" else "该模型未记录任务 profile。"
     shown = ids[:6]
     extra = " 等" if locale == "zh" and len(ids) > 6 else (" among others" if len(ids) > 6 else "")
     joined = join_zh(f"`{item}`" for item in shown) if locale == "zh" else join_en(f"`{item}`" for item in shown)
@@ -1039,7 +1049,15 @@ def task_profile_sentence(recipe: dict[str, Any], locale: str) -> str:
     return text
 
 
+def hosted_route(recipe: dict[str, Any]) -> bool:
+    """Provider-hosted models have no local runner, so runner parity does not apply."""
+
+    return str(recipe.get("category") or "") == "hosted_api"
+
+
 def family_status_sentence(recipe: dict[str, Any], locale: str) -> str:
+    if hosted_route(recipe):
+        return ""
     label = status_label(recipe, locale)
     if locale == "zh":
         return f"系列状态：**{label}**。"
@@ -1047,14 +1065,7 @@ def family_status_sentence(recipe: dict[str, Any], locale: str) -> str:
 
 
 def usage_and_blocker_paragraphs(recipe: dict[str, Any], docs: dict[str, Any], locale: str) -> list[str]:
-    runtime = recipe.get("runtime") or {}
-    extra_notes: list[str] = []
-    for item in recipe.get("notes") or []:
-        extra_notes.append(str(item))
-    for item in runtime.get("notes") or []:
-        extra_notes.append(str(item))
     items = drop_training_prose(locale_paragraphs(docs, "usageNotes", locale))
-    items.extend(drop_training_prose(extra_notes))
     items.extend(drop_training_prose(locale_paragraphs(docs, "limitations", locale)))
     cleaned: list[str] = []
     for item in items:
@@ -1096,7 +1107,7 @@ def usage_and_blocker_paragraphs(recipe: dict[str, Any], docs: dict[str, Any], l
             if any(marker.lower() in part.lower() for marker in STATUS_RESTATE_MARKERS):
                 continue
             kept.append(part)
-        text = " ".join(kept).strip()
+        text = ("" if locale == "zh" else " ").join(kept).strip()
         if locale == "zh" and text and not re.search(r"[\u4e00-\u9fff]", text):
             continue
         if text and text not in cleaned:
@@ -1112,7 +1123,7 @@ def method_paragraph(recipe: dict[str, Any], docs: dict[str, Any], locale: str, 
     publisher = publisher_name(docs, locale)
     extra = ""
     if is_real_publisher(publisher) and not mentions(lead, publisher, str(recipe.get("provider") or "")):
-        extra = f"该模型由{publisher}发布。" if locale == "zh" else f"It is published by {publisher}."
+        extra = space_cjk_latin(f"该模型由{publisher}发布。") if locale == "zh" else f"It is published by {publisher}."
     parts = [part for part in (text, extra) if part]
     return join_prose(parts, locale)
 
@@ -1127,13 +1138,15 @@ def prepare_sentence(recipe: dict[str, Any], locale: str) -> str:
     return f"Prepare the environment and check local assets with `{cmd}`. Add `--download` to fetch missing public checkpoints."
 
 
-def builder_sentence(locale: str) -> str:
+def builder_sentence(recipe: dict[str, Any], locale: str) -> str:
+    profiles = {
+        str(item.get("id")) for item in recipe.get("inferenceTasks") or [] if isinstance(item, dict) and item.get("id")
+    }
+    if len(profiles) < 2:
+        return ""
     if locale == "zh":
-        return "上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。"
-    return (
-        "The command builder above switches `--pipeline.task-profile` among recorded tasks "
-        "and still emits `worldfoundry-eval run`."
-    )
+        return "在上方命令构建器中切换任务，即可改变 `--pipeline.task-profile`。"
+    return "Switch tasks in the command builder above to change `--pipeline.task-profile`."
 
 
 def inference_defaults_paragraph(recipe: dict[str, Any], locale: str) -> str:
@@ -1163,34 +1176,44 @@ def inference_defaults_paragraph(recipe: dict[str, Any], locale: str) -> str:
         task_id = str(task.get("id") or task.get("task") or "").strip()
         joined = ", ".join(defaults[:6])
         if locale == "zh":
-            bits.append(f"`{task_id}` 记录默认值：{joined}" if task_id else f"记录默认值：{joined}")
+            bits.append(f"`{task_id}` 的默认值：{joined}" if task_id else f"默认值：{joined}")
         else:
-            bits.append(
-                f"Recorded `{task_id}` defaults: {joined}" if task_id else f"Recorded defaults: {joined}"
-            )
+            bits.append(f"Defaults for `{task_id}`: {joined}" if task_id else f"Defaults: {joined}")
     if not bits:
         return ""
     return "；".join(bits) + "。" if locale == "zh" else " ".join(bits) + ("." if not bits[-1].endswith(".") else "")
 
 
+CONTRACT_OPTION_LIMIT = 6
+
+
 def contract_paragraph(recipe: dict[str, Any], locale: str) -> str:
-    """Inputs, knobs, artifacts once. No lead, no suite disclaimer."""
+    """Inputs, options with defaults, and artifacts, matching the task contract panel."""
 
     rows = _contract_rows(recipe)
     required_tokens: list[str] = []
-    optional_tokens: list[str] = []
+    input_tokens: list[str] = []
+    option_tokens: list[str] = []
+    sampled = False
     for item in rows:
         field = str(item.get("field") or "").strip()
         if not field:
             continue
         token = format_field_token(item, locale)
-        detail = str(item.get("detail") or "").strip().lower()
-        if item.get("required") is True or detail == "required":
+        has_default = item.get("default") not in (None, "", [], {})
+        required = item.get("required") is True or str(item.get("detail") or "").strip().lower() == "required"
+        if required and not has_default:
             required_tokens.append(token)
-        else:
-            optional_tokens.append(token)
+        elif required or item.get("target") == "input":
+            input_tokens.append(token)
+            sampled = sampled or has_default
+        elif has_default or not item.get("target"):
+            option_tokens.append(token)
     required_tokens = unique_keep(required_tokens)
-    optional_tokens = unique_keep(optional_tokens)
+    input_tokens = unique_keep(input_tokens)
+    option_tokens = unique_keep(option_tokens)
+    shown = option_tokens[:CONTRACT_OPTION_LIMIT]
+    rest = len(option_tokens) - len(shown)
     field_names = {str(item.get("field") or "") for item in rows}
     artifacts = artifact_names(recipe)
     action = action_detail(recipe)
@@ -1198,43 +1221,31 @@ def contract_paragraph(recipe: dict[str, Any], locale: str) -> str:
     if locale == "zh":
         if required_tokens:
             bits.append(f"必填 {join_zh(required_tokens)}")
-        if optional_tokens:
-            bits.append(f"可选 {join_zh(optional_tokens[:5])}")
+        if input_tokens:
+            bits.append(f"输入 {join_zh(input_tokens)}" + ("（不传时使用内置示例）" if sampled else ""))
+        if shown:
+            bits.append(f"参数 {join_zh(shown)}" + (f" 等 {len(option_tokens)} 项" if rest > 0 else ""))
         if action and "actions" not in field_names:
             bits.append(f"`actions` 为 {action}")
         if artifacts:
             bits.append(f"产物 {join_zh(f'`{item}`' for item in artifacts[:3])}")
         if not bits:
-            return "本卡片未记录输入、旋钮或产物。"
+            return "该模型未记录输入或产物契约。"
         return "；".join(bits) + "。"
     if required_tokens:
         bits.append(f"required {join_en(required_tokens)}")
-    if optional_tokens:
-        bits.append(f"optional {join_en(optional_tokens[:5])}")
+    if input_tokens:
+        bits.append(f"inputs {join_en(input_tokens)}" + (" (bundled samples are used when omitted)" if sampled else ""))
+    if shown:
+        bits.append(f"options {join_en(shown + ([f'{rest} more'] if rest > 0 else []))}")
     if action and "actions" not in field_names:
         bits.append(f"`actions` is {action}")
     if artifacts:
         bits.append(f"artifacts {join_en(f'`{item}`' for item in artifacts[:3])}")
     if not bits:
-        return "Inputs, knobs, and artifacts are not recorded on this card."
+        return "No input or artifact contract is recorded for this model."
     text = "; ".join(bits)
     return text[0].upper() + text[1:] + "."
-
-
-def license_sentence(recipe: dict[str, Any], locale: str) -> str:
-    licenses = checkpoint_licenses(recipe)
-    if not licenses:
-        return ""
-    gated = gated_checkpoints(recipe)
-    if locale == "zh":
-        text = f"记录的权重 license 包括 {join_zh(licenses)}。"
-        if gated:
-            text += f" gated 仓库：{join_zh(f'`{item}`' for item in gated[:3])}，下载前需在上游接受条款。"
-        return text
-    text = f"Recorded checkpoint licenses include {join_en(licenses)}."
-    if gated:
-        text += f" Gated repositories: {join_en(f'`{item}`' for item in gated[:3])}; accept upstream terms before download."
-    return text
 
 
 def checkpoint_sentence(recipe: dict[str, Any], locale: str) -> str:
@@ -1245,23 +1256,23 @@ def checkpoint_sentence(recipe: dict[str, Any], locale: str) -> str:
         blob = notes + " " + usage
         if mentions(blob, "gs://", "GCS", "gsutil"):
             return (
-                "No Hugging Face checkpoint is recorded; stage GCS assets as the usage notes describe."
+                "The weights are not on Hugging Face; stage the GCS assets as described in the usage notes."
                 if locale == "en"
-                else "本条目未记录 Hugging Face checkpoint；按使用说明用 GCS 就位权重。"
+                else "权重不在 Hugging Face 上；请按使用说明准备 GCS 中的权重。"
             )
         if mentions(blob, "stage", "checkpoint", "missing"):
             return (
-                "No public checkpoint id is recorded on this card; follow the usage notes for staging."
+                "No public checkpoint is listed for this model; stage the weights as described in the usage notes."
                 if locale == "en"
-                else "本卡片未记录公开 checkpoint id；按使用说明就位权重。"
+                else "该模型未登记公开的 checkpoint；请按使用说明准备权重。"
             )
         return ""
     shown = ids[:3]
     extra = " among others" if len(ids) > 3 else ""
     extra_zh = " 等" if len(ids) > 3 else ""
     if locale == "zh":
-        return f"记录的权重仓库包括 {join_zh(f'`{item}`' for item in shown)}{extra_zh}。"
-    return f"Recorded weight repositories include {join_en(f'`{item}`' for item in shown)}{extra}."
+        return f"权重仓库：{join_zh(f'`{item}`' for item in shown)}{extra_zh}。"
+    return f"Weights: {join_en(f'`{item}`' for item in shown)}{extra}."
 
 
 def run_command_sentence(recipe: dict[str, Any], locale: str) -> str:
@@ -1312,13 +1323,13 @@ def for_what_paragraphs(recipe: dict[str, Any], locale: str) -> list[str]:
         phrases = unique_keep([task_phrase(item, locale) for item in tasks[:4]])
         joined = join_zh(phrases) if locale == "zh" else join_en(phrases)
         if locale == "zh":
-            extra_bits.append(f"catalog 记录的任务包括 {joined}。")
+            extra_bits.append(f"任务：{joined}。")
         else:
-            extra_bits.append(f"Catalog tasks include {joined}.")
+            extra_bits.append(f"Tasks: {joined}.")
     alias_text = alias_sentence(recipe, locale)
     if alias_text and aliases:
         extra_bits.append(alias_text)
-    if modality and not mentions(opening + " " + method, "modality", "模态", "Documented"):
+    if modality and not mentions(opening + " " + method, "modality", "模态", "Documented", "Modalities"):
         extra_bits.append(modality)
     ids = variant_ids(recipe)
     others = [item for item in ids if item != (preferred_variant(recipe) or model_id)][:3]
@@ -1328,7 +1339,7 @@ def for_what_paragraphs(recipe: dict[str, Any], locale: str) -> list[str]:
         if locale == "zh":
             extra_bits.append(f"同系列还有 {joined_zh}。")
         else:
-            extra_bits.append(f"Also recorded: {joined_en}.")
+            extra_bits.append(f"Other variants: {joined_en}.")
     extra = join_prose(extra_bits, locale)
     if extra:
         parts.append(extra)
@@ -1346,11 +1357,7 @@ def contract_paragraphs(recipe: dict[str, Any], locale: str) -> list[str]:
     docs = recipe.get("docs") or {}
     exemplar = drop_training_prose(exemplar_block(model_id, "contract_extra", locale))
     if exemplar:
-        return [
-            item
-            for item in exemplar[:4]
-            if not any(marker in item for marker in SUITE_SCORECARD_MARKERS)
-        ]
+        return [item for item in exemplar[:4] if not any(marker in item for marker in SUITE_SCORECARD_MARKERS)]
 
     parts: list[str] = []
     contract = contract_paragraph(recipe, locale)
@@ -1372,10 +1379,10 @@ def contract_paragraphs(recipe: dict[str, Any], locale: str) -> list[str]:
     return unique_keep(parts)[:5]
 
 
-def limits_clause(recipe: dict[str, Any], docs: dict[str, Any], locale: str) -> str:
+def limits_clause(recipe: dict[str, Any], docs: dict[str, Any], locale: str, *, include_status: bool = True) -> str:
     """One in-body sentence — never an h2 named Limits / What this page does not claim."""
 
-    licenses = checkpoint_licenses(recipe)
+    licenses = unique_keep(license_name(item, locale) for item in checkpoint_licenses(recipe))
     gated = gated_checkpoints(recipe)
     hardware = docs.get("hardware") or {}
     min_vram = hardware.get("minVramGb")
@@ -1383,20 +1390,24 @@ def limits_clause(recipe: dict[str, Any], docs: dict[str, Any], locale: str) -> 
     bits: list[str] = []
     if locale == "zh":
         if licenses:
-            bits.append(f"记录 license 为 {join_zh(licenses)}")
+            bits.append(f"许可证：{join_zh(licenses)}")
         if gated:
-            bits.append(f"gated `{gated[0]}`，下载前需在上游接受条款")
+            bits.append(f"gated 权重：`{gated[0]}`（下载前需在上游接受条款）")
         if min_vram is not None:
-            bits.append(f"catalog 显存 {min_vram} GB")
-        bits.append(f"状态：**{label}**")
-        return "；".join(bits) + "。"
+            bits.append(f"最低显存 {min_vram} GB")
+        if include_status:
+            bits.append(f"状态：**{label}**")
+        return "；".join(bits) + "。" if bits else ""
     if licenses:
-        bits.append(f"recorded licenses include {join_en(licenses)}")
+        bits.append(f"{'licenses' if len(licenses) > 1 else 'license'}: {join_en(licenses)}")
     if gated:
-        bits.append(f"gated `{gated[0]}` — accept upstream terms before download")
+        bits.append(f"gated weights: `{gated[0]}` (accept the upstream terms before downloading)")
     if min_vram is not None:
-        bits.append(f"catalog VRAM {min_vram} GB")
-    bits.append(f"status: **{label}**")
+        bits.append(f"minimum VRAM {min_vram} GB")
+    if include_status:
+        bits.append(f"status: **{label}**")
+    if not bits:
+        return ""
     text = "; ".join(bits)
     return text[0].upper() + text[1:] + "."
 
@@ -1421,14 +1432,18 @@ def run_paragraphs(recipe: dict[str, Any], docs: dict[str, Any], locale: str) ->
         add(item)
 
     launch = run_command_sentence(recipe, locale)
-    builder = builder_sentence(locale)
-    if launch and not mentions(blob, "worldfoundry-eval run"):
-        add(join_prose([launch, builder], locale))
+    builder = builder_sentence(recipe, locale)
+    launch_prose = join_prose([launch, builder], locale)
+    launch_added = False
+    if launch and not mentions(blob, "wf run"):
+        add(launch_prose)
+        launch_added = launch_prose in parts
     elif not mentions(blob, "command builder", "命令构建器"):
         add(builder)
 
     env = environment_sentence(recipe, locale)
-    if env and not mentions(blob, str((recipe.get("runtime") or {}).get("environmentName") or "___never___")):
+    env_name = str((recipe.get("runtime") or {}).get("environmentName") or "")
+    if env and not (env_name and f"`{env_name}`" in blob):
         add(env)
 
     ckpt = checkpoint_sentence(recipe, locale)
@@ -1443,7 +1458,11 @@ def run_paragraphs(recipe: dict[str, Any], docs: dict[str, Any], locale: str) ->
         *checkpoint_ids(recipe)[:3],
     )
     ckpt_parts: list[str] = []
-    if ckpt and not mentions(blob, *ckpt_needles):
+    checkpoint_blob = blob
+    if launch_added:
+        fallback_launch = launch_prose.replace(launch_command(recipe), _fallback_launch_command(recipe))
+        checkpoint_blob = blob.replace(launch_prose, fallback_launch)
+    if ckpt and not mentions(checkpoint_blob, *ckpt_needles):
         ckpt_parts.append(ckpt)
     if prepare and not mentions(blob, "prepare_model_infer"):
         ckpt_parts.append(prepare)
@@ -1459,8 +1478,10 @@ def run_paragraphs(recipe: dict[str, Any], docs: dict[str, Any], locale: str) ->
         if env:
             add(env)
 
-    limits = limits_clause(recipe, docs, locale)
-    if limits and not mentions(blob, "license", "VRAM", "显存", "Status:", "状态"):
+    # The runtime contract section states the family status unless an exemplar replaces it.
+    status_elsewhere = not exemplar_block(model_id, "contract_extra", locale)
+    limits = limits_clause(recipe, docs, locale, include_status=not status_elsewhere and not hosted_route(recipe))
+    if limits and not mentions(blob, "license", "VRAM", "显存", "Status:", "状态", "许可证"):
         add(limits)
     return parts[:4]
 
@@ -1473,14 +1494,8 @@ def classify_tasks(tasks: list[str]) -> dict[str, bool]:
         return any(needle in lowered or needle in blob for needle in needles)
 
     return {
-        "t2v": has(
-            "text-to-video",
-            "video-generation",
-            "video_generation",
-            "long-video-generation",
-            "autoregressive-video-generation",
-        ),
-        "i2v": has("image-to-video", "text-image-to-video", "image-to-world-video"),
+        "t2v": has("text-to-video"),
+        "i2v": has("image-to-video", "text-image-to-video", "image-to-world-video", "reference-to-video"),
         "v2v": has("video-to-video", "video-editing", "reference-video-to-video"),
         "vla": has(
             "vla",
@@ -1515,11 +1530,35 @@ def classify_tasks(tasks: list[str]) -> dict[str, bool]:
             "camera-pose-estimation",
         ),
         "action_video": has("action-conditioned-video", "action-conditioned-generation"),
-        "depth": "depth" in blob,
+        "depth": any(
+            "depth" in task and not any(word in task for word in ("control", "conditioned", "guided"))
+            for task in lowered
+        ),
+        "recon": has(
+            "3d-reconstruction", "novel-view-synthesis", "gaussian-splatting", "point-cloud", "three_dimension"
+        )
+        or "reconstruction" in blob
+        or "splatting" in blob,
         "geom": has("3d-reconstruction", "geometry-prior", "novel-view-synthesis", "gaussian-splatting", "point-cloud")
         or "geometry" in blob
         or "reconstruction" in blob
-        or "splatting" in blob,
+        or "splatting" in blob
+        or "three_dimension" in blob,
+        "action_world": any(
+            word in blob
+            for word in (
+                "interactive",
+                "action",
+                "game",
+                "navigation",
+                "robot",
+                "embodied",
+                "minecraft",
+                "multi-agent",
+                "playable",
+                "driving",
+            )
+        ),
         "hosted": has("hosted-api") or "hosted" in blob,
         "eval": has("embodied_benchmark"),
         "audio": has("text-to-audio", "video-to-audio", "audio-generation", "audio-video-generation"),
@@ -1528,18 +1567,26 @@ def classify_tasks(tasks: list[str]) -> dict[str, bool]:
     }
 
 
-def launch_command(recipe: dict[str, Any]) -> str:
+def _fallback_launch_command(recipe: dict[str, Any]) -> str:
     run_id, task = run_identity(recipe)
     launch = run_id or preferred_variant(recipe) or str(recipe.get("id") or "")
     if not launch:
         return ""
-    cmd = f"worldfoundry-eval run {launch}"
+    cmd = f"wf run {launch}"
     if task:
         if re.search(r"\s", task):
             cmd += f" --pipeline.task-profile '{task}'"
         else:
             cmd += f" --pipeline.task-profile {task}"
     return cmd
+
+
+def launch_command(recipe: dict[str, Any]) -> str:
+    run = str((recipe.get("commands") or {}).get("run") or "")
+    if run.strip():
+        joined = " ".join(line.strip().rstrip("\\").strip() for line in run.splitlines())
+        return re.sub(r"\s+--json$", "", joined)
+    return _fallback_launch_command(recipe)
 
 
 def voice_index(model_id: str, n: int) -> int:
@@ -1563,6 +1610,8 @@ def job_family(recipe: dict[str, Any]) -> str:
         return "wam"
     if flags["visuomotor"]:
         return "visuomotor"
+    if flags["depth"] and not flags["recon"]:
+        return "depth"
     if flags["geom"]:
         return "geom"
     if flags["depth"]:
@@ -1570,7 +1619,9 @@ def job_family(recipe: dict[str, Any]) -> str:
     if flags["camera"]:
         return "camera"
     if flags["world"] or flags["action_video"]:
-        return "world"
+        return "world" if flags["action_video"] or flags["action_world"] else "worldgen"
+    if flags["t2i"] and (flags["t2v"] or flags["i2v"] or flags["v2v"]):
+        return "multi"
     if flags["i2v"] and flags["t2v"]:
         return "ti2v"
     if flags["i2v"]:
@@ -1584,7 +1635,7 @@ def job_family(recipe: dict[str, Any]) -> str:
     if flags["t2i"]:
         return "t2i"
     if category == "world_models":
-        return "world"
+        return "worldgen"
     if flags["reasoning"]:
         return "reasoning"
     if category == "vla_va_wam":
@@ -1599,218 +1650,242 @@ def job_family(recipe: dict[str, Any]) -> str:
 # First-section openings: task, I/O, why pick this family. Command lives in Running.
 _OPENINGS_EN: dict[str, tuple[str, ...]] = {
     "t2v": (
-        "Pick `{variant}` when you want this family's text-to-video line in WorldFoundry: a prompt in, a generated clip out. Use it as the catalog T2V start rather than an editor or a world-model stepper.",
-        "`{variant}` is the recorded prompt-to-video route — not image editing and not a policy. Start here when the job is a clip from text.",
-        "Use `{variant}` for catalog text-to-video inference. The recipe exists so you can launch a recorded T2V profile without assembling an upstream demo.",
+        "`{variant}` generates a video clip from a text prompt.",
+        "Use `{variant}` to turn a text prompt into a short video.",
+        "`{variant}` is a text-to-video model: a prompt in, a video clip out.",
     ),
     "i2v": (
-        "Pick `{variant}` when you need still-to-video in this catalog: a reference image in, a generated clip out. Choose it over a text-only sibling when the first frame is given.",
-        "`{variant}` is the recorded image-to-video start. Condition on a still; the catalog route writes the clip.",
-        "Use `{variant}` to animate a still under the recorded I2V profile. It is an inference recipe, not a training walkthrough.",
+        "`{variant}` animates a still image into a video clip.",
+        "Use `{variant}` to generate a video that starts from a reference image.",
+        "`{variant}` is an image-to-video model: a still image in, a video clip out.",
     ),
     "ti2v": (
-        "Pick `{variant}` when one recipe covers text-to-video and image-to-video: a prompt in, an optional still, a clip out. Start here instead of wiring two upstream demos.",
-        "`{variant}` is the recorded text/image-to-video line. Use it when you want both prompt and still conditioning on the same catalog card.",
-        "Use `{variant}` for the family's joint T2V/I2V inference path. The catalog records both task profiles on this page.",
+        "`{variant}` generates video from a text prompt, optionally conditioned on a still image.",
+        "Use `{variant}` for both text-to-video and image-to-video generation.",
+        "`{variant}` covers text-to-video and image-to-video: a prompt and an optional still image in, a clip out.",
     ),
     "v2v": (
-        "Pick `{variant}` when you need to edit or restyle an existing clip: source video in, edited video out. It is not a from-scratch T2V generator.",
-        "`{variant}` is the recorded video-to-video route. Feed a source clip when the job is transformation rather than generation from noise.",
-        "Use `{variant}` for catalog video-to-video inference. Start here when the input is already a video.",
+        "`{variant}` transforms an existing video: a source clip in, an edited clip out.",
+        "Use `{variant}` to edit or restyle a source video.",
+        "`{variant}` is a video-to-video model for editing and transforming clips.",
     ),
     "vla": (
-        "Pick `{variant}` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.",
-        "`{variant}` is the recorded instruction-to-action line. Start here when you need a WorldFoundry VLA rollout rather than a video generator.",
-        "Use `{variant}` for vision-language-action inference on this card. The recipe exists so you can launch the recorded policy profile.",
+        "`{variant}` is a vision-language-action policy: an instruction and observations in, actions out.",
+        "Use `{variant}` to predict robot actions from observations and a language instruction.",
+        "`{variant}` maps camera observations and an instruction to an action trajectory.",
     ),
     "visuomotor": (
-        "Pick `{variant}` for closed-loop visuomotor chunks: observation in, an action chunk out. Choose it when you need the recorded imitation/diffusion policy rather than a VLM chat model.",
-        "`{variant}` is the recorded visuomotor policy. Start here for observation-to-action-chunk inference.",
-        "Use `{variant}` when the job is visuomotor control on the catalog action contract.",
+        "`{variant}` is a visuomotor policy: observations in, an action chunk out.",
+        "Use `{variant}` for closed-loop control from robot observations.",
+        "`{variant}` predicts action chunks from observations.",
     ),
     "wam": (
-        "Pick `{variant}` for world-action modeling: world-conditioned observations in, predicted actions out. Use it when the catalog marks a WAM route rather than a pure VLA or video model.",
-        "`{variant}` is the recorded world-action line. Start here to predict actions conditioned on world state.",
-        "Use `{variant}` for the catalog WAM inference path. It is not a pixel world simulator unless this card also records that task.",
+        "`{variant}` is a world-action model: it predicts actions conditioned on world observations.",
+        "Use `{variant}` to predict actions together with how the world evolves.",
+        "`{variant}` models the world and the actions taken in it jointly.",
     ),
     "world": (
-        "Pick `{variant}` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.",
-        "`{variant}` is the recorded interactive world line. Start here when the job is stepping a world with actions.",
-        "Use `{variant}` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.",
+        "`{variant}` is an action-conditioned world model: actions and a starting frame in, a rollout out.",
+        "Use `{variant}` to step a world forward with actions and render the resulting frames.",
+        "`{variant}` generates future frames conditioned on actions.",
+    ),
+    "worldgen": (
+        "`{variant}` generates a 3D-consistent world rather than a single clip.",
+        "Use `{variant}` to generate an explorable world.",
+        "`{variant}` is a world generation model.",
+    ),
+    "multi": (
+        "`{variant}` covers both image and video generation and editing tasks.",
+        "Use `{variant}` when one model should handle image and video generation tasks.",
+        "`{variant}` is a multi-task model for image and video generation and editing.",
     ),
     "camera": (
-        "Pick `{variant}` when you need camera-controlled video: a camera trajectory in, a steered clip out. Use it instead of unconstrained T2V when viewpoint must follow a path.",
-        "`{variant}` is the recorded camera-control route. Start here to follow a catalog camera path.",
-        "Use `{variant}` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.",
+        "`{variant}` generates camera-controlled video: a camera trajectory in, a clip that follows it out.",
+        "Use `{variant}` when the viewpoint must follow a given camera path.",
+        "`{variant}` conditions video generation on camera poses.",
     ),
     "geom": (
-        "Pick `{variant}` for feed-forward geometry: views in, reconstruction / trajectory / point cloud out. Use it when you need the catalog 3D route rather than a depth-only prior.",
-        "`{variant}` is the recorded reconstruction line. Start here to emit geometry from the documented views.",
-        "Use `{variant}` for catalog geometry inference. Choose it when the artifact is a reconstruction, not a generated video.",
+        "`{variant}` recovers 3D geometry from images: views in, a reconstruction, camera trajectory, or point cloud out.",
+        "Use `{variant}` for feed-forward 3D reconstruction from the input views.",
+        "`{variant}` estimates scene geometry from the input views.",
     ),
     "depth": (
-        "Pick `{variant}` to estimate depth from the recorded inputs: images in, a depth map out. Use it as the catalog depth line, not a full scene reconstructor unless that task is also recorded.",
-        "`{variant}` is the recorded depth route. Start here when you need depth maps from the documented inputs.",
-        "Use `{variant}` for catalog depth inference. The recipe writes depth under the recorded profile.",
+        "`{variant}` estimates depth: images in, depth maps out.",
+        "Use `{variant}` to predict depth maps from the input images.",
+        "`{variant}` is a depth estimation model.",
     ),
     "hosted": (
-        "Pick `{variant}` when this card is a hosted API rather than a local checkpoint: call the recorded provider route instead of staging weights.",
-        "`{variant}` is the hosted inference line. Start here when no local checkpoint is recorded on the card.",
-        "Use `{variant}` to hit the catalog hosted route. Local GPU artifacts are not what this page records.",
+        "`{variant}` runs on the provider's hosted API; no local checkpoint is needed.",
+        "Use `{variant}` to call the hosted model through WorldFoundry.",
+        "`{variant}` is served by its provider's API rather than local weights.",
     ),
     "eval": (
-        "Pick `{variant}` as a benchmark or dataset entry, not as a new policy architecture. Use it to run the recorded suite around this card.",
-        "`{variant}` is an evaluation row in the catalog. Start here when you need the recorded suite, not a generator.",
-        "Use `{variant}` for the catalog eval entry. It does not introduce a separate policy family.",
+        "`{variant}` is an evaluation entry rather than a new model architecture.",
+        "Use `{variant}` to run its evaluation suite.",
+        "`{variant}` provides an evaluation entry in WorldFoundry.",
     ),
     "audio": (
-        "Pick `{variant}` when you need catalog audio generation: the recorded inputs in, audio out. Use it instead of a video-only sibling.",
-        "`{variant}` is the recorded audio line. Start here to write audio from the documented inputs.",
-        "Use `{variant}` for audio inference on this card. The recipe follows the recorded audio profile.",
+        "`{variant}` generates audio from its inputs.",
+        "Use `{variant}` for audio generation.",
+        "`{variant}` writes audio from the given inputs.",
     ),
     "t2i": (
-        "Pick `{variant}` for text-to-image on this card: a prompt in, an image out. Use it when the catalog task is a still, not a clip.",
-        "`{variant}` is the recorded image-generation line. Start here for prompt-to-image inference.",
-        "Use `{variant}` when the job is a catalog still image rather than video.",
+        "`{variant}` generates an image from a text prompt.",
+        "Use `{variant}` for text-to-image generation.",
+        "`{variant}` turns a text prompt into a still image.",
     ),
     "reasoning": (
-        "Pick `{variant}` for the recorded multimodal reasoning route: documented inputs in, a reasoning artifact out. Use it when the card is a reasoner, not a generator.",
-        "`{variant}` is the catalog reasoning line. Start here for the recorded reasoning profile.",
-        "Use `{variant}` for multimodal reasoning inference on this card.",
+        "`{variant}` is a multimodal reasoning model.",
+        "Use `{variant}` for multimodal reasoning.",
+        "`{variant}` answers questions about multimodal inputs.",
     ),
     "generic": (
-        "Pick `{variant}` as the catalog starting variant for this family. Use it when you need the recorded WorldFoundry inference path rather than an upstream demo checkout.",
-        "`{variant}` is the recorded catalog path. Start here for the inference contract on this page.",
-        "Use `{variant}` to launch the recorded recipe. The card exists so you can run the catalog profile in WorldFoundry.",
+        "Use `{variant}` to run this model in WorldFoundry.",
+        "`{variant}` is the default variant of this model in WorldFoundry.",
+        "Start with `{variant}` to run this model in WorldFoundry.",
     ),
 }
 
 _OPENINGS_ZH: dict[str, tuple[str, ...]] = {
     "t2v": (
-        "需要本系列的文生视频时选 `{variant}`：prompt 进、生成视频出。它是 catalog 上的 T2V 起步线，不是编辑器，也不是世界模型步进器。",
-        "`{variant}` 是记录的 prompt 到视频路由——不是图像编辑，也不是策略。只要任务是文生视频，从这里起步。",
-        "在 WorldFoundry 里用 `{variant}` 做 catalog 文生视频推理。这条配方让你按已记录的 T2V profile 启动，而不用自己拼上游 demo。",
+        "`{variant}` 根据文本提示词生成视频。",
+        "用 `{variant}` 把一段文本提示词变成短视频。",
+        "`{variant}` 是文生视频模型：输入提示词，输出视频。",
     ),
     "i2v": (
-        "需要把静帧变成视频时选 `{variant}`：参考图进、生成视频出。已有第一帧时，优先于纯文本兄弟条目。",
-        "`{variant}` 是记录的图生视频起步线。用静帧做条件，catalog 路由写出视频。",
-        "用 `{variant}` 按记录的 I2V profile 给静帧加运动。这是推理配方，不是训练教程。",
+        "`{variant}` 把一张静态图转化为视频。",
+        "用 `{variant}` 以参考图为起点生成视频。",
+        "`{variant}` 是图生视频模型：输入静态图，输出视频。",
     ),
     "ti2v": (
-        "一条配方同时覆盖文生视频与图生视频时选 `{variant}`：prompt 进、可选静帧、视频出。不必再拼两条上游 demo。",
-        "`{variant}` 是记录的文本/图像到视频线。需要同一张卡片上同时有 prompt 与静帧条件时用它。",
-        "用 `{variant}` 跑本系列联合 T2V/I2V 推理路径。本页记录了这两种任务 profile。",
+        "`{variant}` 根据文本提示词生成视频，也可以额外用一张静态图做条件。",
+        "用 `{variant}` 同时完成文生视频和图生视频。",
+        "`{variant}` 同时支持文生视频与图生视频：输入提示词和可选的静态图，输出视频。",
     ),
     "v2v": (
-        "需要改已有视频时选 `{variant}`：源视频进、编辑后视频出。它不是从噪声开始的 T2V 生成器。",
-        "`{variant}` 是记录的视频到视频路由。任务是变换而不是从噪声生成时，喂入源视频。",
-        "用 `{variant}` 做 catalog 视频到视频推理。输入已经是视频时从这里起步。",
+        "`{variant}` 对已有视频做变换：输入源视频，输出编辑后的视频。",
+        "用 `{variant}` 编辑或重新风格化源视频。",
+        "`{variant}` 是视频到视频模型，用于编辑和变换视频。",
     ),
     "vla": (
-        "需要 catalog 上的 VLA 策略时选 `{variant}`：指令与观测进、动作轨迹出。用来滚动已记录策略，不是用来训练新策略。",
-        "`{variant}` 是记录的指令到动作线。需要 WorldFoundry VLA rollout 而不是视频生成时从这里起步。",
-        "用 `{variant}` 做本卡的视觉-语言-动作推理。这条配方用来启动已记录的策略 profile。",
+        "`{variant}` 是视觉-语言-动作（VLA）策略：输入指令和观测，输出动作。",
+        "用 `{variant}` 根据观测和语言指令预测机器人动作。",
+        "`{variant}` 把相机观测和指令映射为动作轨迹。",
     ),
     "visuomotor": (
-        "需要闭环视觉运动块时选 `{variant}`：观测进、动作块出。要的是记录的模仿/扩散策略，而不是 VLM 对话模型。",
-        "`{variant}` 是记录的 visuomotor 策略。从观测到动作块的推理从这里起步。",
-        "任务是 catalog 动作契约上的视觉运动控制时，用 `{variant}`。",
+        "`{variant}` 是视觉运动策略：输入观测，输出动作块。",
+        "用 `{variant}` 根据机器人观测做闭环控制。",
+        "`{variant}` 根据观测预测动作块。",
     ),
     "wam": (
-        "做世界-动作建模时选 `{variant}`：世界条件观测进、预测动作出。catalog 标成 WAM 路由、而不是纯 VLA 或视频模型时用它。",
-        "`{variant}` 是记录的世界-动作线。按世界状态预测动作时从这里起步。",
-        "用 `{variant}` 跑 catalog 的 WAM 推理路径。除非本卡还记录了像素世界仿真任务，否则它不是像素世界模拟器。",
+        "`{variant}` 是世界-动作模型：以世界观测为条件预测动作。",
+        "用 `{variant}` 同时预测动作和世界的演化。",
+        "`{variant}` 对世界与其中执行的动作联合建模。",
     ),
     "world": (
-        "需要动作条件世界步进时选 `{variant}`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。",
-        "`{variant}` 是记录的交互世界线。要用动作推进世界时从这里起步。",
-        "用 `{variant}` 做 catalog 世界模型推理。需要动作条件未来帧、而不是独立片段生成器时选它。",
+        "`{variant}` 是动作条件世界模型：输入动作和起始帧，输出推演结果。",
+        "用 `{variant}` 以动作推进世界并渲染出相应画面。",
+        "`{variant}` 以动作为条件生成未来帧。",
+    ),
+    "worldgen": (
+        "`{variant}` 生成 3D 一致的世界，而不只是一段视频。",
+        "用 `{variant}` 生成可探索的世界。",
+        "`{variant}` 是世界生成模型。",
+    ),
+    "multi": (
+        "`{variant}` 同时覆盖图像与视频的生成和编辑任务。",
+        "需要用一个模型完成图像和视频生成任务时，用 `{variant}`。",
+        "`{variant}` 是面向图像与视频生成、编辑的多任务模型。",
     ),
     "camera": (
-        "需要相机可控视频时选 `{variant}`：相机轨迹进、受控视频出。视角必须跟随路径时，用它而不是无约束 T2V。",
-        "`{variant}` 是记录的相机控制路由。按 catalog 相机路径推进时从这里起步。",
-        "用 `{variant}` 做相机条件视频推理。配方绑定了已记录的相机控制 profile。",
+        "`{variant}` 生成相机可控视频：输入相机轨迹，输出沿轨迹运动的视频。",
+        "视角需要沿指定相机路径运动时，用 `{variant}`。",
+        "`{variant}` 以相机位姿为条件生成视频。",
     ),
     "geom": (
-        "做前馈几何时选 `{variant}`：视图进、重建/轨迹/点云出。需要 catalog 的 3D 路由、而不是仅深度先验时用它。",
-        "`{variant}` 是记录的重建线。从记录的视图写出几何时从这里起步。",
-        "用 `{variant}` 做 catalog 几何推理。产物是重建而不是生成视频时选它。",
+        "`{variant}` 从图像恢复 3D 几何：输入多视图，输出重建结果、相机轨迹或点云。",
+        "用 `{variant}` 从输入视图做前馈 3D 重建。",
+        "`{variant}` 根据输入视图估计场景几何。",
     ),
     "depth": (
-        "按记录输入估计深度时选 `{variant}`：图像进、深度图出。它是 catalog 深度线；除非还记录了重建任务，否则不是完整场景重建器。",
-        "`{variant}` 是记录的深度路由。需要从记录输入出深度图时从这里起步。",
-        "用 `{variant}` 做 catalog 深度推理。配方按记录 profile 写出深度。",
+        "`{variant}` 估计深度：输入图像，输出深度图。",
+        "用 `{variant}` 从输入图像预测深度图。",
+        "`{variant}` 是深度估计模型。",
     ),
     "hosted": (
-        "本卡是托管 API 而不是本地 checkpoint 时选 `{variant}`：走记录的提供商路由，而不是就位权重。",
-        "`{variant}` 是托管推理线。卡片上没有本地 checkpoint 时从这里起步。",
-        "用 `{variant}` 打到 catalog 托管路由。本页记录的不是本地 GPU 产物。",
+        "`{variant}` 通过提供商的托管 API 运行，无需本地 checkpoint。",
+        "用 `{variant}` 在 WorldFoundry 中调用托管模型。",
+        "`{variant}` 由提供商的 API 提供服务，而不是本地权重。",
     ),
     "eval": (
-        "把 `{variant}` 当评测或数据集条目，而不是新的策略架构。用它跑本卡记录的套件。",
-        "`{variant}` 是 catalog 里的评测行。需要记录套件而不是生成器时从这里起步。",
-        "用 `{variant}` 跑 catalog 评测条目。它不引入单独的策略家族。",
+        "`{variant}` 是评测条目，而不是新的模型架构。",
+        "用 `{variant}` 运行它的评测套件。",
+        "`{variant}` 在 WorldFoundry 中提供评测入口。",
     ),
     "audio": (
-        "需要 catalog 音频生成时选 `{variant}`：记录输入进、音频出。用它而不是纯视频兄弟条目。",
-        "`{variant}` 是记录的音频线。按记录输入写出音频时从这里起步。",
-        "用 `{variant}` 做本卡音频推理。配方走记录的音频 profile。",
+        "`{variant}` 根据输入生成音频。",
+        "用 `{variant}` 生成音频。",
+        "`{variant}` 根据给定输入写出音频。",
     ),
     "t2i": (
-        "本卡做文生图时选 `{variant}`：prompt 进、图像出。catalog 任务是静帧而不是视频时用它。",
-        "`{variant}` 是记录的图像生成线。prompt 到图像的推理从这里起步。",
-        "任务是 catalog 静帧而不是视频时，用 `{variant}`。",
+        "`{variant}` 根据文本提示词生成图像。",
+        "用 `{variant}` 做文生图。",
+        "`{variant}` 把文本提示词变成一张静态图。",
     ),
     "reasoning": (
-        "走记录的多模态推理路由时选 `{variant}`：记录输入进、推理产物出。本卡是推理器而不是生成器时用它。",
-        "`{variant}` 是 catalog 推理线。按记录的推理 profile 从这里起步。",
-        "用 `{variant}` 做本卡的多模态推理。",
+        "`{variant}` 是多模态推理模型。",
+        "用 `{variant}` 做多模态推理。",
+        "`{variant}` 回答关于多模态输入的问题。",
     ),
     "generic": (
-        "把 `{variant}` 当本系列在 catalog 上的起步 variant。需要 WorldFoundry 里已记录的推理路径、而不是检出上游 demo 时用它。",
-        "`{variant}` 是记录的 catalog 路径。本页的推理契约从这里起步。",
-        "用 `{variant}` 启动已记录配方。这张卡片用来在 WorldFoundry 里跑 catalog profile。",
+        "用 `{variant}` 在 WorldFoundry 中运行该模型。",
+        "`{variant}` 是该模型在 WorldFoundry 中的默认 variant。",
+        "从 `{variant}` 开始在 WorldFoundry 中运行该模型。",
     ),
 }
 
 _RUN_CMD_EN: dict[str, tuple[str, ...]] = {
-    "t2v": ("Launch `{cmd}` to sample the clip.", "The catalog launch is `{cmd}`."),
-    "i2v": ("Launch `{cmd}` to animate the still.", "The catalog launch is `{cmd}`."),
-    "ti2v": ("Launch `{cmd}` to sample the clip.", "The catalog launch is `{cmd}`."),
-    "v2v": ("Launch `{cmd}` to edit the clip.", "The catalog launch is `{cmd}`."),
-    "vla": ("Launch `{cmd}` to execute the policy.", "The catalog launch is `{cmd}`."),
-    "visuomotor": ("Launch `{cmd}` to run the visuomotor policy.", "The catalog launch is `{cmd}`."),
-    "wam": ("Launch `{cmd}` to run the world-action route.", "The catalog launch is `{cmd}`."),
-    "world": ("Launch `{cmd}` to step the world.", "The catalog launch is `{cmd}`."),
-    "camera": ("Launch `{cmd}` to follow the camera path.", "The catalog launch is `{cmd}`."),
-    "geom": ("Launch `{cmd}` to write geometry.", "The catalog launch is `{cmd}`."),
-    "depth": ("Launch `{cmd}` to write depth.", "The catalog launch is `{cmd}`."),
-    "hosted": ("Launch `{cmd}` to call the hosted route.", "The catalog launch is `{cmd}`."),
-    "eval": ("Launch `{cmd}` to run the eval entry.", "The catalog launch is `{cmd}`."),
-    "audio": ("Launch `{cmd}` to write audio.", "The catalog launch is `{cmd}`."),
-    "t2i": ("Launch `{cmd}` to write the image.", "The catalog launch is `{cmd}`."),
-    "reasoning": ("Launch `{cmd}` to run the reasoning route.", "The catalog launch is `{cmd}`."),
-    "generic": ("The catalog command is `{cmd}`.", "Issue `{cmd}` after weights are staged."),
+    "t2v": ("Generate a clip with `{cmd}`.", "Run `{cmd}` to generate the video."),
+    "i2v": ("Animate a still image with `{cmd}`.", "Run `{cmd}` to generate the video."),
+    "ti2v": ("Generate a clip with `{cmd}`.", "Run `{cmd}` to generate the video."),
+    "v2v": ("Edit a clip with `{cmd}`.", "Run `{cmd}` to transform the source video."),
+    "vla": ("Run the policy with `{cmd}`.", "Run `{cmd}` to predict actions."),
+    "visuomotor": ("Run the policy with `{cmd}`.", "Run `{cmd}` to predict action chunks."),
+    "wam": ("Run the model with `{cmd}`.", "Run `{cmd}` to predict actions."),
+    "world": ("Step the world with `{cmd}`.", "Run `{cmd}` to roll out the world model."),
+    "worldgen": ("Generate a world with `{cmd}`.", "Run `{cmd}` to generate the world."),
+    "multi": ("Run the default task with `{cmd}`.", "Run `{cmd}` for the default task."),
+    "camera": ("Generate a camera-controlled clip with `{cmd}`.", "Run `{cmd}` to follow the camera path."),
+    "geom": ("Reconstruct the scene with `{cmd}`.", "Run `{cmd}` to write the geometry."),
+    "depth": ("Estimate depth with `{cmd}`.", "Run `{cmd}` to write the depth maps."),
+    "hosted": ("Call the hosted model with `{cmd}`.", "Run `{cmd}` to call the provider API."),
+    "eval": ("Run the evaluation with `{cmd}`.", "Run `{cmd}` to start the evaluation."),
+    "audio": ("Generate audio with `{cmd}`.", "Run `{cmd}` to write the audio."),
+    "t2i": ("Generate an image with `{cmd}`.", "Run `{cmd}` to write the image."),
+    "reasoning": ("Run the model with `{cmd}`.", "Run `{cmd}` to produce the answer."),
+    "generic": ("Run `{cmd}`.", "Once the weights are in place, run `{cmd}`."),
 }
 
 _RUN_CMD_ZH: dict[str, tuple[str, ...]] = {
-    "t2v": ("启动 `{cmd}` 采样视频。", "catalog 启动命令是 `{cmd}`。"),
-    "i2v": ("启动 `{cmd}` 给静帧加运动。", "catalog 启动命令是 `{cmd}`。"),
-    "ti2v": ("启动 `{cmd}` 采样视频。", "catalog 启动命令是 `{cmd}`。"),
-    "v2v": ("启动 `{cmd}` 改视频。", "catalog 启动命令是 `{cmd}`。"),
-    "vla": ("启动 `{cmd}` 执行策略。", "catalog 启动命令是 `{cmd}`。"),
-    "visuomotor": ("启动 `{cmd}` 跑 visuomotor 策略。", "catalog 启动命令是 `{cmd}`。"),
-    "wam": ("启动 `{cmd}` 跑世界-动作路由。", "catalog 启动命令是 `{cmd}`。"),
-    "world": ("启动 `{cmd}` 推进世界。", "catalog 启动命令是 `{cmd}`。"),
-    "camera": ("启动 `{cmd}` 跟随相机路径。", "catalog 启动命令是 `{cmd}`。"),
-    "geom": ("启动 `{cmd}` 写出几何。", "catalog 启动命令是 `{cmd}`。"),
-    "depth": ("启动 `{cmd}` 写出深度。", "catalog 启动命令是 `{cmd}`。"),
-    "hosted": ("启动 `{cmd}` 调托管接口。", "catalog 启动命令是 `{cmd}`。"),
-    "eval": ("启动 `{cmd}` 跑评测条目。", "catalog 启动命令是 `{cmd}`。"),
-    "audio": ("启动 `{cmd}` 写出音频。", "catalog 启动命令是 `{cmd}`。"),
-    "t2i": ("启动 `{cmd}` 出图。", "catalog 启动命令是 `{cmd}`。"),
-    "reasoning": ("启动 `{cmd}` 跑推理路由。", "catalog 启动命令是 `{cmd}`。"),
-    "generic": ("catalog 命令是 `{cmd}`。", "权重就位后执行 `{cmd}`。"),
+    "t2v": ("用 `{cmd}` 生成视频。", "运行 `{cmd}` 生成视频。"),
+    "i2v": ("用 `{cmd}` 把静态图转化为视频。", "运行 `{cmd}` 生成视频。"),
+    "ti2v": ("用 `{cmd}` 生成视频。", "运行 `{cmd}` 生成视频。"),
+    "v2v": ("用 `{cmd}` 编辑视频。", "运行 `{cmd}` 变换源视频。"),
+    "vla": ("用 `{cmd}` 运行策略。", "运行 `{cmd}` 预测动作。"),
+    "visuomotor": ("用 `{cmd}` 运行策略。", "运行 `{cmd}` 预测动作块。"),
+    "wam": ("用 `{cmd}` 运行模型。", "运行 `{cmd}` 预测动作。"),
+    "world": ("用 `{cmd}` 推进世界。", "运行 `{cmd}` 推演世界模型。"),
+    "worldgen": ("用 `{cmd}` 生成世界。", "运行 `{cmd}` 生成世界。"),
+    "multi": ("用 `{cmd}` 运行默认任务。", "运行 `{cmd}` 执行默认任务。"),
+    "camera": ("用 `{cmd}` 生成相机可控视频。", "运行 `{cmd}` 沿相机路径生成视频。"),
+    "geom": ("用 `{cmd}` 重建场景。", "运行 `{cmd}` 写出几何结果。"),
+    "depth": ("用 `{cmd}` 估计深度。", "运行 `{cmd}` 写出深度图。"),
+    "hosted": ("用 `{cmd}` 调用托管模型。", "运行 `{cmd}` 调用提供商 API。"),
+    "eval": ("用 `{cmd}` 运行评测。", "运行 `{cmd}` 开始评测。"),
+    "audio": ("用 `{cmd}` 生成音频。", "运行 `{cmd}` 写出音频。"),
+    "t2i": ("用 `{cmd}` 生成图像。", "运行 `{cmd}` 写出图像。"),
+    "reasoning": ("用 `{cmd}` 运行模型。", "运行 `{cmd}` 得到推理结果。"),
+    "generic": ("运行 `{cmd}`。", "权重就位后运行 `{cmd}`。"),
 }
 
 
@@ -1826,7 +1901,7 @@ def family_opening(recipe: dict[str, Any], locale: str) -> str:
     if not variant:
         return ""
     if not cmd:
-        cmd = f"worldfoundry-eval run {variant}"
+        cmd = f"wf run {variant}"
     table = _OPENINGS_ZH if locale == "zh" else _OPENINGS_EN
     selected = next(
         (item for item in recipe.get("variants") or [] if item.get("id") == variant),
@@ -1838,203 +1913,6 @@ def family_opening(recipe: dict[str, Any], locale: str) -> str:
     return _fill_template(voices[voice_index(model_id, len(voices))], variant, cmd)
 
 
-def infer_use_cases(recipe: dict[str, Any], docs: dict[str, Any], locale: str) -> list[str]:
-    explicit = locale_paragraphs(docs, "useCases", locale)
-    if explicit:
-        return explicit[:3]
-    exemplar = exemplar_block(str(recipe.get("id") or ""), "use_cases", locale)
-    if exemplar:
-        return exemplar[:3]
-
-    name = str(recipe.get("name") or recipe.get("id") or "")
-    tasks = [str(item) for item in recipe.get("tasks") or [] if item]
-    flags = classify_tasks(tasks)
-    fields = required_fields(recipe)
-    artifacts = artifact_names(recipe)
-    pipe = pipeline_class(recipe)
-    run_id, run_task = run_identity(recipe)
-    action = action_detail(recipe)
-    ids = variant_ids(recipe)
-    artifacts_s = join_en(f"`{item}`" for item in artifacts[:2]) if locale == "en" else join_zh(f"`{item}`" for item in artifacts[:2])
-    fields_s = join_en(f"`{item}`" for item in fields[:4]) if locale == "en" else join_zh(f"`{item}`" for item in fields[:4])
-    cases: list[str] = []
-
-    if locale == "zh":
-        if flags["eval"] and not flags["vla"]:
-            cases.append(
-                f"把 {name} 当作评测/数据集条目使用"
-                + (f"，经 `{pipe}`" if pipe else "")
-                + (f" 写出 {artifacts_s}" if artifacts_s else "")
-                + "；它本身不是新的策略架构。"
-            )
-        elif flags["vla"] or flags["visuomotor"]:
-            cases.append(
-                f"滚动 {name} 的{task_phrase(tasks[0], 'zh') if tasks else '策略'}："
-                + (f"必填 {fields_s}" if fields_s else "按记录的观测/指令输入")
-                + (f"，产物为 {artifacts_s}" if artifacts_s else "")
-                + (f"。启动 `worldfoundry-eval run {run_id}`" if run_id else "")
-                + "。"
-            )
-        elif flags["camera"]:
-            cases.append(
-                f"用 {name} 做相机可控生成"
-                + (f"，`actions` 记录为 {action}" if action else "")
-                + (f"，产物 {artifacts_s}" if artifacts_s else "")
-                + (f"。任务 profile 为 `{run_task}`" if run_task else "")
-                + "。"
-            )
-        elif flags["world"] or flags["action_video"]:
-            cases.append(
-                f"驱动 {name} 的交互/动作条件世界路径"
-                + (f"：{action}" if action else "")
-                + (f"，写出 {artifacts_s}" if artifacts_s else "")
-                + (f"。记录命令为 `worldfoundry-eval run {run_id}`" if run_id else "")
-                + "。"
-            )
-        elif flags["geom"] or flags["depth"]:
-            cases.append(
-                f"用 {name} 跑{task_phrase(tasks[0], 'zh') if tasks else '几何/深度'}："
-                + (f"输入 {fields_s}" if fields_s else "按记录输入")
-                + (f"，产物 {artifacts_s}" if artifacts_s else "")
-                + "。"
-            )
-        elif flags["hosted"]:
-            cases.append(
-                f"在本地权重不可用时通过托管路径调用 {name}"
-                + (f"（`worldfoundry-eval run {run_id}`）" if run_id else "")
-                + (f"。记录任务：{join_zh(task_phrase(item, 'zh') for item in tasks[:3])}" if tasks else "")
-                + "。"
-            )
-        elif flags["i2v"] or flags["t2v"] or flags["v2v"]:
-            mode = "、".join(
-                label
-                for flag, label in (
-                    (flags["t2v"], "文生视频"),
-                    (flags["i2v"], "图生视频"),
-                    (flags["v2v"], "视频到视频/编辑"),
-                )
-                if flag
-            )
-            cases.append(
-                f"用 {name} 做{mode or '视频生成'}"
-                + (f"：必填 {fields_s}" if fields_s else "")
-                + (f"，经 `{pipe}`" if pipe else "")
-                + (f" 写出 {artifacts_s}" if artifacts_s else "")
-                + "。"
-            )
-        elif tasks:
-            cases.append(
-                f"覆盖 {name} 已记录的{join_zh(task_phrase(item, 'zh') for item in tasks[:3])}任务"
-                + (f"，启动 `worldfoundry-eval run {run_id}`" if run_id else "")
-                + (f"，产物 {artifacts_s}" if artifacts_s else "")
-                + "。"
-            )
-    else:
-        if flags["eval"] and not flags["vla"]:
-            cases.append(
-                f"Treat {name} as an evaluation/dataset entry"
-                + (f" through `{pipe}`" if pipe else "")
-                + (f" that writes {artifacts_s}" if artifacts_s else "")
-                + " — it is not a new policy architecture."
-            )
-        elif flags["vla"] or flags["visuomotor"]:
-            cases.append(
-                f"Roll out {name} for {task_phrase(tasks[0], 'en') if tasks else 'policy inference'}:"
-                + (f" required {fields_s}" if fields_s else " use the recorded observation/instruction fields")
-                + (f", writing {artifacts_s}" if artifacts_s else "")
-                + (f". Launch `worldfoundry-eval run {run_id}`" if run_id else "")
-                + "."
-            )
-        elif flags["camera"]:
-            cases.append(
-                f"Steer camera motion with {name}"
-                + (f"; `actions` is recorded as {action}" if action else "")
-                + (f", writing {artifacts_s}" if artifacts_s else "")
-                + (f". Task profile `{run_task}`" if run_task else "")
-                + "."
-            )
-        elif flags["world"] or flags["action_video"]:
-            cases.append(
-                f"Drive {name} as an action-conditioned world route"
-                + (f" ({action})" if action else "")
-                + (f" that emits {artifacts_s}" if artifacts_s else "")
-                + (f". Recorded launch: `worldfoundry-eval run {run_id}`" if run_id else "")
-                + "."
-            )
-        elif flags["geom"] or flags["depth"]:
-            cases.append(
-                f"Run {name} for {task_phrase(tasks[0], 'en') if tasks else 'geometry or depth'}:"
-                + (f" inputs {fields_s}" if fields_s else " recorded inputs")
-                + (f", producing {artifacts_s}" if artifacts_s else "")
-                + "."
-            )
-        elif flags["hosted"]:
-            cases.append(
-                f"Call {name} through the hosted provider route"
-                + (f" (`worldfoundry-eval run {run_id}`)" if run_id else "")
-                + (f". Recorded tasks: {join_en(task_phrase(item, 'en') for item in tasks[:3])}" if tasks else "")
-                + "."
-            )
-        elif flags["i2v"] or flags["t2v"] or flags["v2v"]:
-            mode = join_en(
-                [
-                    label
-                    for flag, label in (
-                        (flags["t2v"], "text-to-video"),
-                        (flags["i2v"], "image-to-video"),
-                        (flags["v2v"], "video-to-video or editing"),
-                    )
-                    if flag
-                ]
-            )
-            cases.append(
-                f"Use {name} for {mode or 'video generation'}"
-                + (f": required {fields_s}" if fields_s else "")
-                + (f" through `{pipe}`" if pipe else "")
-                + (f", writing {artifacts_s}" if artifacts_s else "")
-                + "."
-            )
-        elif tasks:
-            cases.append(
-                f"Cover {name}'s recorded {join_en(task_phrase(item, 'en') for item in tasks[:3])} tasks"
-                + (f" via `worldfoundry-eval run {run_id}`" if run_id else "")
-                + (f", writing {artifacts_s}" if artifacts_s else "")
-                + "."
-            )
-
-    if len(ids) > 1:
-        shown = ids[:4]
-        more = len(ids) - 4
-        joined = join_zh(f"`{item}`" for item in shown) if locale == "zh" else ", ".join(f"`{item}`" for item in shown)
-        if locale == "zh":
-            cases.append(f"按 variant 选择路线：{joined}" + (f" 等共 {len(ids)} 个" if more > 0 else "") + "。")
-        else:
-            cases.append(
-                f"Choose a recorded variant — {joined}"
-                + (f" ({len(ids)} total)" if more > 0 else "")
-                + "."
-            )
-    else:
-        ckpts = checkpoint_ids(recipe)[:2]
-        if ckpts:
-            joined = join_zh(f"`{item}`" for item in ckpts) if locale == "zh" else join_en(f"`{item}`" for item in ckpts)
-            if locale == "zh":
-                cases.append(f"先就位记录的权重 {joined}，再跑上述命令。")
-            else:
-                cases.append(f"Stage the recorded weights {joined} before launching the command above.")
-
-    bench = benchmarks_paragraph(docs, locale)
-    if bench:
-        cases.append(bench)
-
-    cleaned = []
-    for item in cases:
-        text = re.sub(r"\s+", " ", item).replace("。.", "。").replace("..", ".").strip()
-        if text and text not in cleaned:
-            cleaned.append(text)
-    return cleaned[:3]
-
-
 def description_text(recipe: dict[str, Any], locale: str) -> str:
     model_id = str(recipe.get("id") or "")
     exemplar = exemplar_block(model_id, "description", locale)
@@ -2043,7 +1921,12 @@ def description_text(recipe: dict[str, Any], locale: str) -> str:
 
     docs = recipe.get("docs") or {}
     name = str(recipe.get("name") or model_id)
-    provider = str(recipe.get("provider") or publisher_name(docs, locale) or "").strip()
+    provider = str(
+        (publisher_name(docs, "zh") if locale == "zh" else "")
+        or recipe.get("provider")
+        or publisher_name(docs, locale)
+        or ""
+    ).strip()
     if not is_real_publisher(provider):
         provider = ""
     tasks: list[str] = []
@@ -2065,7 +1948,7 @@ def description_text(recipe: dict[str, Any], locale: str) -> str:
     env_kind = str(runtime.get("environmentKind") or "")
     overview0 = (locale_paragraphs(docs, "overview", locale) or [""])[0]
 
-    extras: list[str] = [status_label(recipe, locale)]
+    extras: list[str] = [] if hosted_route(recipe) else [status_label(recipe, locale)]
     if len(ids) > 1:
         extras.append(f"{len(ids)} variants" if locale == "en" else f"{len(ids)} 个 variant")
     if env_kind == "dedicated" and runtime.get("environmentName"):
@@ -2079,10 +1962,16 @@ def description_text(recipe: dict[str, Any], locale: str) -> str:
         if short and short.lower() not in name.lower():
             extras.append(short)
 
-    task_bit = join_en(tasks) if locale == "en" else join_zh(tasks)
-    extra_bit = "; ".join(extras[:2])
+    total_tasks = len(unique_keep(str(item) for item in recipe.get("tasks") or [] if item))
+    more = total_tasks - len(tasks) if len(tasks) == 2 else 0
+    if locale == "en":
+        task_bit = f"{', '.join(tasks)}, and {more} more task{'s' if more > 1 else ''}" if more > 0 else join_en(tasks)
+    else:
+        task_bit = f"{join_zh(tasks)}等 {total_tasks} 项任务" if more > 0 else join_zh(tasks)
+    extra_bit = ("；" if locale == "zh" else "; ").join(extras[:2])
     if locale == "zh":
-        head = f"{name}" + (f"（{provider}）" if provider else "")
+        provider_bit = f"，{provider}" if "（" in provider else f"（{provider}）"
+        head = f"{name}" + (provider_bit if provider else "")
         desc = head + (f"：{task_bit}。" if task_bit else "。")
         if extra_bit:
             desc = desc.rstrip("。") + f"；{extra_bit}。"
@@ -2095,86 +1984,19 @@ def description_text(recipe: dict[str, Any], locale: str) -> str:
     if mentions(overview0, desc[:40]) or desc.rstrip(".") in overview0:
         run_id, _ = run_identity(recipe)
         if run_id and run_id not in desc:
-            suffix = f" Catalog variant `{run_id}`." if locale == "en" else f"catalog variant `{run_id}`。"
+            suffix = f" Variant `{run_id}`." if locale == "en" else f"variant `{run_id}`。"
             desc = desc.rstrip(".") + "." + suffix if locale == "en" else desc.rstrip("。") + "。" + suffix
     if locale == "zh" and not re.search(r"[\u4e00-\u9fff]", desc):
         category_zh = str(recipe.get("categoryLabelZh") or "").strip()
         if category_zh:
             desc = f"{desc.rstrip('。')}；{category_zh}。"
+    if locale == "zh":
+        desc = space_cjk_latin(desc)
     return clip_sentence(desc, 200)
-
-
-def intro_body(recipe: dict[str, Any], docs: dict[str, Any], locale: str, lead: str) -> list[str]:
-    overview = locale_paragraphs(docs, "overview", locale)
-    body = [item for item in overview[1:] if item and item != lead]
-    extras = list(exemplar_block(str(recipe.get("id") or ""), "intro_extra", locale))
-    paper = paper_sentence(docs, locale, recipe)
-    if paper and not mentions(lead, "arxiv", "paper", "论文"):
-        extras.append(paper)
-    aliases = [str(item) for item in recipe.get("aliases") or [] if item]
-    if aliases and not any(mentions(lead, alias) for alias in aliases[:3]):
-        extras.append(alias_sentence(recipe, locale))
-    if not body:
-        pipe = pipeline_class(recipe)
-        run_id, task = run_identity(recipe)
-        env = str((recipe.get("runtime") or {}).get("environmentName") or "").strip()
-        bits: list[str] = []
-        if locale == "zh":
-            if pipe:
-                bits.append(f"WorldFoundry 默认走 `{pipe}`")
-            if run_id:
-                bits.append(f"启动 `worldfoundry-eval run {run_id}`" + (f"（`{task}`）" if task else ""))
-            if env:
-                bits.append(f"环境 `{env}`")
-            if bits:
-                extras.insert(0, "；".join(bits) + "。")
-        else:
-            if pipe:
-                bits.append(f"WorldFoundry's default pipeline class is `{pipe}`")
-            if run_id:
-                bits.append(f"the recorded launch is `worldfoundry-eval run {run_id}`" + (f" (`{task}`)" if task else ""))
-            if env:
-                bits.append(f"the environment profile is `{env}`")
-            if bits:
-                text = "; ".join(bits)
-                extras.insert(0, text[0].upper() + text[1:] + ".")
-    publisher = publisher_name(docs, locale)
-    if (
-        publisher
-        and not mentions(lead, publisher, str(recipe.get("provider") or ""))
-        and not mentions(publisher, "发布", "institution not recorded", "not recorded")
-    ):
-        extras.append(f"该模型由{publisher}发布。" if locale == "zh" else f"It is published by {publisher}.")
-    modality = modality_sentence(docs, locale)
-    if modality and not mentions(lead, "modality", "模态", "takes ", "接受", "text", "image", "video"):
-        extras.append(modality)
-    status = status_sentence(recipe, locale)
-    if status and not mentions(
-        lead,
-        "verified",
-        "pending",
-        "blocked",
-        "validated",
-        "已验证",
-        "集成",
-        "parity",
-        "GPU-validated",
-        "runner",
-    ):
-        extras.append(status)
-    for item in extras:
-        if item and item not in body and not mentions(lead, item[:28]):
-            body.append(item)
-    return body
 
 
 def is_paper_cover_src(src: str) -> bool:
     return str(src or "").strip().lower().endswith(PAPER_COVER_SUFFIX)
-
-
-def is_arch_asset_src(src: str) -> bool:
-    normalized = str(src or "").strip().lower()
-    return any(normalized.endswith(suffix) for suffix in ARCH_ASSET_SUFFIXES)
 
 
 def body_arch_src(model_id: str, figures: list[dict[str, Any]]) -> str | None:
@@ -2191,61 +2013,12 @@ def body_arch_src(model_id: str, figures: list[dict[str, Any]]) -> str | None:
     return None
 
 
-def is_title_or_body_media_src(src: str, arch_src: str | None) -> bool:
-    if is_paper_cover_src(src) or is_arch_asset_src(src):
-        return True
-    return bool(arch_src) and src == arch_src
-
-
-def is_demo_video_figure(figure: dict[str, Any]) -> bool:
-    """Catalog / Studio demo clips — never emit these on model homes."""
-    kind = figure.get("kind") or "image"
-    src = str(figure.get("src") or "").strip().lower()
-    if kind == "video":
-        return True
-    return src.endswith((".mp4", ".webm", ".mov", ".m4v")) or "/demos/" in src
-
-
-def hero_figures(
-    figures: list[dict[str, Any]], arch_src: str | None = None
-) -> list[dict[str, Any]]:
-    """Never emit demo clips. Paper teasers come from ModelPaperFigures."""
-    return []
-
-
-def supplemental_figures(
-    figures: list[dict[str, Any]], arch_src: str | None = None
-) -> list[dict[str, Any]]:
-    """Never emit demo clips on model homes."""
-    return []
-
-
 def arch_diagram_block(model_id: str, locale: str) -> str:
     return f'<ModelArchDiagram modelId="{model_id}" locale="{locale}" />'
 
 
 def paper_figures_block(model_id: str, locale: str) -> str:
     return f'<ModelPaperFigures modelId="{model_id}" locale="{locale}" />'
-
-
-def figure_block(figure: dict[str, Any], locale: str) -> str | None:
-    src = str(figure.get("src") or "").strip()
-    if not src:
-        return None
-    caption = str(figure.get("captionZh") if locale == "zh" else figure.get("caption") or "").strip()
-    if not caption:
-        caption = str(figure.get("caption") or "").strip()
-    alt = mdx_escape(caption)
-    kind = figure.get("kind") or "image"
-    if is_demo_video_figure(figure) or kind == "video":
-        return None
-    image = f'<img src="{src}" alt="{alt}" />'
-    if caption:
-        return (
-            f'<figure className="wf-recipe-media is-diagram">\n  {image}\n  '
-            f"<figcaption>{alt}</figcaption>\n</figure>"
-        )
-    return f'<figure className="wf-recipe-media is-diagram">\n  {image}\n</figure>'
 
 
 def render_page(
@@ -2312,13 +2085,6 @@ def render_page(
             chunks.append("")
             already += " " + item
 
-    teaser_figures = hero_figures(figures, arch_src)
-    if teaser_figures:
-        teaser = figure_block(teaser_figures[0], locale)
-        if teaser:
-            chunks.append(teaser)
-            chunks.append("")
-
     chunks.append(f'<ModelCommandBuilder modelId="{model_id}" locale="{locale}" />')
     chunks.append("")
 
@@ -2331,9 +2097,7 @@ def render_page(
             what_blob += " " + item
     else:
         fallback = family_opening(recipe, locale) or (
-            f"The recorded path is `{name}`. Use the catalog `worldfoundry-eval run` command."
-            if locale == "en"
-            else f"记录路径是 `{name}`。用 catalog 的 `worldfoundry-eval run`。"
+            f"Run `{name}` with `wf run`." if locale == "en" else f"用 `wf run` 运行 `{name}`。"
         )
         chunks.append(emit_prose(fallback, locale))
         chunks.append("")
@@ -2353,9 +2117,9 @@ def render_page(
             contract_blob += " " + paragraph
     else:
         fallback = (
-            "Recorded inputs, knobs, and artifacts are unset on this card."
+            "No input or artifact contract is recorded for this model."
             if locale == "en"
-            else "本卡片未记录输入、旋钮或产物。"
+            else "该模型未记录输入或产物契约。"
         )
         chunks.append(emit_prose(fallback, locale))
         chunks.append("")
@@ -2369,12 +2133,6 @@ def render_page(
     if arch_src and not has_paper_figures(model_id):
         chunks.append(arch_diagram_block(model_id, locale))
         chunks.append("")
-
-    for figure in supplemental_figures(figures, arch_src):
-        block = figure_block(figure, locale)
-        if block:
-            chunks.append(block)
-            chunks.append("")
 
     chunks.extend([f"## {headings['run']}", ""])
     run_blob = ""
@@ -2431,12 +2189,16 @@ UNIQUE_KEEP_RE = re.compile(
 GENERIC_STUB_RE = re.compile(
     r"("
     r"Run the recorded .+ inference route"
-    r"|Launch `worldfoundry-eval run"
+    r"|Launch `wf run"
+    r"| with `wf run"
+    r"|^Run `wf run"
     r"|Run in the unified environment"
     r"|the runtime does not download weights"
     r"|missing files fail at load, nothing is downloaded"
     r"|跑在统一环境"
-    r"|启动 `worldfoundry-eval run"
+    r"|启动 `wf run"
+    r"|用 `wf run"
+    r"|^运行 `wf run"
     r"|运行时不代下权重"
     r"|缺文件加载失败"
     r"|把 `.+` 就位到本地"
@@ -2620,8 +2382,8 @@ def generated_page_violations(content: str, locale: str, label: str) -> list[str
     hits.extend(f"{label}: {hit}" for hit in boilerplate_hits(content))
     if re.search(r"<(Video|video)\b", content):
         hits.append(f"{label}: demo Video/video must not appear on model homes")
-    if re.search(r"worldfoundry-eval\s+evaluate", content):
-        hits.append(f"{label}: use worldfoundry-eval run, not evaluate")
+    if re.search(r"wf\s+evaluate", content):
+        hits.append(f"{label}: use wf run, not evaluate")
     if re.search(
         r"(?i)(?:Runner status is|Integration is|runner 状态为|集成为)\s+\*{0,2}['\"]?[a-z0-9]*_[a-z0-9_]+",
         content,
@@ -2729,10 +2491,7 @@ def main() -> int:
         return 1
 
     if args.check:
-        print(
-            f"generated model-home prose is clean "
-            f"({len(recipes)} models, {len(EXEMPLAR_PROSE)} exemplars)"
-        )
+        print(f"generated model-home prose is clean ({len(recipes)} models, {len(EXEMPLAR_PROSE)} exemplars)")
         return 0
 
     reason_bit = ""

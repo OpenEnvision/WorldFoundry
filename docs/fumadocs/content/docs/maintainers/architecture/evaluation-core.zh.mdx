@@ -5,9 +5,9 @@ description: evaluation 包内 requests、runners、metrics、catalog 与 report
 
 ## 简介
 
-本文从内部看 evaluation 包：哪些类型要保持稳定、一次运行由哪个函数接手、reviewer 可以信哪些文件。如果只想从 CLI 追到磁盘，先读 [工作流](/zh/docs/maintainers/architecture/workflow)。
+本文从内部看 evaluation 包：哪些类型要保持稳定、一次运行由哪个函数接手、reviewer 应以哪些文件为准。如果只想从 CLI 追到磁盘，先读 [工作流](/zh/docs/maintainers/architecture/workflow)。
 
-包内数据流是单向的：**公开契约**定义 JSON-safe 形状，**执行 runner** 产生副作用与 artifact，**catalog loader** 把 YAML 转为契约，**reporting** 把 metrics 变成 scorecard。API 模块应保持 import-light；重型 runtime 不应反向泄漏进 `evaluation/api/`。
+包内数据流是单向的：**公开契约**定义 JSON-safe 形状，**执行 runner** 产生副作用与 artifact，**catalog loader** 把 YAML 转为契约，**reporting** 把 metrics 变成 scorecard。API 模块应保持 import-light；重型 runtime 不应反向泄漏进 `evals/api/`。
 
 模块级查找见 [代码库地图](/zh/docs/maintainers/architecture/file-index)。
 
@@ -17,13 +17,13 @@ Evaluate 与仅模型运行进入 `evaluate.py` 的 `run_evaluate()`。Model mod
 
 <ArchDiagram id="evaluation-core" locale="zh" />
 
-面向用户的 CLI、TUI 与 Workspace 通过 `execution/orchestration/service.py` 编译成上述 request 类型。五种 intent dataclass、三个规划边界（`PreparedEvaluation`、`RunPlan`、`EvaluateRunRequest` / `ModelBenchmarkRunRequest`）以及编译入口见 [使用界面与编排](/zh/docs/maintainers/architecture/surfaces-orchestration)。前端不能重复实现 generation、artifact materialization、benchmark dispatch 或 metric execution；新增 UX 应增加 intent→request 映射，而非新增 runner。不要再包第四种 recipe executor。
+面向用户的 CLI、TUI 与 Workspace 通过 `execution/orchestration/service.py` 编译成上述 request 类型。五种 intent dataclass、三个规划边界（`PreparedEvaluation`、`RunPlan`、`EvaluateRunRequest` / `ModelBenchmarkRunRequest`）以及编译入口见 [使用界面与编排](/zh/docs/maintainers/architecture/surfaces-orchestration)。前端不能重复实现 generation、artifact materialization、benchmark dispatch 或 metric execution；新增 UX 应增加 intent→request 映射，而非新增 runner。不要再封装第四种 recipe executor。
 
 Prepared evaluation 分别记录 generation、data、evaluation、runtime 与 reference fidelity，再由这些字段推导 claim：完全锁定的官方运行才可能是 `exact_reproduction`；官方 data 与 evaluation 未修改时可为 `benchmark_comparable`；custom-data 或 metric-only 运行只能是 `diagnostic`。对于 model × benchmark 计划，仓内 benchmark evidence 还会继续限制 claim 上限：只验证过 bounded component 的 runner 仍然允许执行，但在 catalog 建立完整 official-suite evidence 前，计划必须降级为 `diagnostic`。调用方布尔参数只能收紧策略，不能把 diagnostic run 提升为榜单候选。`score_valid` 表示 evaluator 是否产出可用分数；`leaderboard_valid` 还必须满足可比 provenance 与 benchmark runner evidence。
 
 ## 公开契约
 
-`evaluation/api/` 模块定义 runner、CLI、tests、docs 导出与 validation 共用的形状。此处改动应视为 semver 敏感：下游假设 `to_dict()` / `from_dict()` 可往返且磁盘 field 名稳定。
+`evals/api/` 模块定义 runner、CLI、tests、docs 导出与 validation 共用的形状。此处改动应视为 semver 敏感：下游假设 `to_dict()` / `from_dict()` 可往返且磁盘 field 名稳定。
 
 样本级，**`GenerationRequest`** 携带 ids、task name、inputs、controls 与 expected output schema；对应的 **`GenerationResult`** 携带 artifacts、status、errors、timings 与 metadata。模型级，**`WorldModelRunner`** 是每个 backend 必须实现的最小接口：`from_config()`、`generate()`、`cleanup()`。Benchmark 级，**`BenchmarkSpec`** 聚合 tasks、metrics、splits、tags 与 dataset metadata。Metrics 通过 **`Metric`** 接口实现 `compute_sample()` 与 `aggregate()`。
 
@@ -33,7 +33,7 @@ Prepared evaluation 分别记录 generation、data、evaluation、runtime 与 re
 
 ## 执行路径
 
-三条执行路径覆盖常见形态。匹配任务选路径——不要在分发处堆条件分支，新增一条路径即可。
+三条执行路径覆盖常见形态。应根据任务选择路径——不要在分发处堆条件分支，新增一条路径即可。
 
 **ContractRunner**（`contract.py`）负责请求归一化、生成和可选的生成缓存复用；评分与报告输出统一委托给 `ExistingResultsRunner`。自定义指标在线、离线均使用相同的计算和聚合逻辑。
 
@@ -45,7 +45,7 @@ Prepared evaluation 分别记录 generation、data、evaluation、runtime 与 re
 
 `numeric` 通配选择在分批评分前，展开为已对齐成功结果中的字段并集。各字段随后使用与显式 `numeric:<field>` 相同的定义和缺失值处理。展开仅作用于本次运行，调用方可将原指标对象复用于其他数据集。
 
-**`run_model_benchmark()`**（`model_benchmark.py:825`）把 generation 与 benchmark-zoo runner 串联。没有名为 `ModelBenchmarkRunner` 的类。它解析 benchmark manifest、从 task registry 物化 requests、运行模型、为外部 evaluator 物化 artifact（`benchmark_runner.py:870` 的 `ManifestBenchmarkRunner`），再把归一化 metrics 交给 reporting。用于端到端 model-plus-benchmark。
+**`run_model_benchmark()`**（`model_benchmark.py`）把 generation 与 benchmark-zoo runner 串联。没有名为 `ModelBenchmarkRunner` 的类。它解析 benchmark manifest、从 task registry 物化 requests、运行模型、为外部 evaluator 物化 artifact（`benchmark_runner.py` 的 `ManifestBenchmarkRunner`），再把归一化 metrics 交给 reporting。用于端到端 model-plus-benchmark。
 
 Model mode 与直接调用 `ContractRunner` 均将生成结果交给同一个评分器。Python request 提供 `metric_batch_size`（默认 32）和 `resume`。每个指标批次完成后写入 `metrics/checkpoint.jsonl`；恢复时比较请求、结果、指标实现、版本及声明的 `parameters` / `config`。新增或修改指标独立补算，不要求重新生成。未声明版本的旧 callable 仍可执行，恢复时重新评分。生成复用包含 runner 的参数与配置，并检查本地输出是否存在；需要重新生成的样本同时清除旧评分 checkpoint。
 
@@ -59,19 +59,18 @@ Embodied 闭环评测在生成前保存全部计划请求，每条 rollout 完�
 
 Generation 开始前，task-driven run 通过 `plan.py` 中的 **`RunPlan`** 固定 sample ID、split 与 input keys。Plan 连接 task registry、可选 dataset manifest 与 evaluate facade：registry lookup → 物化 requests → `EvaluateRunRequest`。Plan 上的 fingerprint 使 rerun 与 cache 复用跨机器可预期。
 
-`materialize.py` 中的 materialization 把 dataset 行或 task sample 转为 `GenerationRequest` 行。耗 GPU 前用 `worldfoundry-eval task materialize` 证明此步——多数“本地可用、CI 失败”来自 sample ID 不一致，而非 model loading。
+`materialize.py` 中的 materialization 把 dataset 行或 task sample 转为 `GenerationRequest` 行。耗 GPU 前用 `wf task materialize` 证明此步——多数“本地可用、CI 失败”来自 sample ID 不一致，而非 model loading。
 
 ## 模型解析
 
-磁盘 YAML 经唯一 front door `resolver.py` 中的 `resolve_model_zoo_runner()` 变为可运行 model（`:386`）。CLI 的 `--model-id`、Python caller 与 Studio 预览都应在解释 checkpoint 路径前汇聚于此。
+磁盘 YAML 经唯一 front door `resolver.py` 中的 `resolve_model_zoo_runner()` 变为可运行 model。CLI 的 `--model-id`、Python caller 与 Studio 预览都应在解释 checkpoint 路径前汇聚于此。
 
 ```python
 # worldfoundry/data/models/catalog/*.yaml
-entry = parse_model_zoo_yaml(path)          # schema.py → ModelZooEntry
-entry = ModelZooRegistry().resolve(alias)   # alias lookup
-manifest = WorldModelManifest.from_entry(entry)
-runner = resolve_model_zoo_runner(manifest) # resolver.py
-# → WorldModelRunner instance
+registry = load_model_zoo_registry()        # zoo_registry.py → ModelZooRegistry
+entry = registry.get(alias)                 # alias or canonical id → ModelZooEntry
+resolved = resolve_model_zoo_runner(entry.model_id, manifest_dir=MODEL_ZOO_DIR)  # resolver.py
+runner = resolved.runner                    # → WorldModelRunner instance
 ```
 
 Built-in runner 经 `builtins.py` 与 `registry.py` 注册；custom target 从 catalog `runner_target` 字符串解析。`manifest.py` 与 `schema.py` 中的 catalog metadata 是 provenance 与 readiness——不能替代可运行 runner。
@@ -86,12 +85,11 @@ Benchmark metadata 走平行的 catalog 路径。Task YAML 描述 per-sample pro
 
 ```python
 # Benchmark-zoo YAML + task YAML registry
-entry = parse_benchmark_zoo_yaml(path)      # → BenchmarkZooEntry
-entry = BenchmarkZooRegistry().resolve(id)
-spec = BenchmarkSpec.from_catalog(entry, task_registry)
-raw = ManifestBenchmarkRunner(spec).run()   # external evaluator
-metrics = official_normalizers.normalize(raw)
-# → metrics/summary.json + scorecard.json
+registry = load_benchmark_zoo_registry()    # zoo_registry.py → BenchmarkZooRegistry
+entry = registry.get(benchmark_id)          # → BenchmarkZooEntry
+runner = ManifestBenchmarkRunner(entry)     # benchmark_runner.py
+result = runner.evaluate(output_dir=out, mode="official-validation")
+# prepare → run → collect → normalize → metrics/summary.json + scorecard.json
 ```
 
 External benchmark 留在 runner 边界之后：vendor evaluator 产出 raw output，normalizer 转为稳定 metrics，共享 reporting 层写 `metrics/summary.json` 与 `scorecard.json`。
@@ -109,16 +107,16 @@ scorecard = build_scorecard(summary)        # → scorecard.json
 write_report_md(scorecard)                  # → report.md（派生，非权威来源）
 ```
 
-Validation 脚本与 docs generator 会 import `reporting/validation.py`，并期望 scorecard field 稳定。在此重命名 field 会破坏 release gate。具体入口：`build_scorecard` 在 `reporting/scorecard.py:136`、`write_scorecard` 在 `:270`、`build_run_summary` 在 `reporting/run_report.py:208`、`_validate_scorecard` 在 `reporting/validation.py:207`。
+Validation 脚本与 docs generator 会 import `reporting/validation.py`，并期望 scorecard field 稳定。在此重命名 field 会破坏 release gate。具体入口：`build_scorecard` 与 `write_scorecard` 在 `reporting/scorecard.py`，`build_run_summary` 在 `reporting/run_report.py`，`_validate_scorecard` 在 `reporting/validation.py`。
 
 CLI/TUI/MCP 如何把用户意图编译为这些 runner 消费的 `EvaluateRunRequest` / `ModelBenchmarkRunRequest`，见 [使用界面与编排](/zh/docs/maintainers/architecture/surfaces-orchestration)。
 
 ## 改动规则
 
-改 evaluation 内部代码前先看此表。它列出其他团队与自动化依赖的兼容面；破坏它们需同步更新 validation、docs export 与示例 scorecard。
+改 evaluation 内部代码前先看此列表。它列出其他团队与自动化依赖的兼容面；破坏它们需同步更新 validation、docs export 与示例 scorecard。
 
 - `api/*` dataclasses — `to_dict()` / `from_dict()` JSON-safe payloads。
-- `evaluation/tasks/run_*` output writing — 文件名、JSONL row shape、`sample_id` 对齐、final manifest status。
-- `models/resolver.py` — Error messages、runner resolution、model-zoo variant selection。
-- `evaluation/tasks/official/*` schema — Manifest parsing 和 alias lookup behavior。
-- `reporting*.py` and `scorecard.py` — Validation、docs 和 release reports 使用的 scorecard fields。
+- `evals/tasks/execution/orchestration/` output writing — 文件名、JSONL row shape、`sample_id` 对齐、final manifest status。
+- `models/runners/resolver.py` — Error messages、runner resolution、model-zoo variant selection。
+- `evals/tasks/catalog/*` schema — Manifest parsing 和 alias lookup behavior。
+- `reporting/*.py`（含 `scorecard.py`）— Validation、docs 和 release reports 使用的 scorecard fields。

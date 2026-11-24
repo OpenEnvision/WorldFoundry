@@ -1,4 +1,3 @@
-# ruff: noqa
 # ==============================================================================
 # Attribution
 # ------------------------------------------------------------------------------
@@ -7,7 +6,6 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Dict, Tuple
 
 import numpy as np
 import torch
@@ -33,10 +31,10 @@ class PolicyFeature:
 
 
 def create_stats_buffers(
-    features: Dict[str, PolicyFeature],
-    norm_map: Dict[str, NormalizationMode],
-    stats: Optional[Dict[str, Dict[str, torch.Tensor]]] = None,
-) -> Dict[str, Dict[str, nn.ParameterDict]]:
+    features: dict[str, PolicyFeature],
+    norm_map: dict[str, NormalizationMode],
+    stats: dict[str, dict[str, torch.Tensor]] | None = None,
+) -> dict[str, dict[str, nn.ParameterDict]]:
     stats_buffers = {}
     for key, ft in features.items():
         norm_mode = norm_map.get(ft.type, NormalizationMode.IDENTITY)
@@ -79,10 +77,10 @@ def no_stats_error_str(name: str) -> str:
 
 
 def build_norm_state(
-    features: Dict[str, PolicyFeature],
-    norm_map: Dict[str, NormalizationMode],
-    stats: Optional[Dict[str, dict[str, torch.Tensor]]] = None,
-) -> Tuple[Dict[FeatureType, NormalizationMode], Dict[str, nn.ParameterDict]]:
+    features: dict[str, PolicyFeature],
+    norm_map: dict[str, NormalizationMode],
+    stats: dict[str, dict[str, torch.Tensor]] | None = None,
+) -> tuple[dict[FeatureType, NormalizationMode], dict[str, nn.ParameterDict]]:
     norm_mode_map: dict[FeatureType, NormalizationMode] = {}
     for k, v in (norm_map or {}).items():
         ft = k if isinstance(k, FeatureType) else FeatureType(k)

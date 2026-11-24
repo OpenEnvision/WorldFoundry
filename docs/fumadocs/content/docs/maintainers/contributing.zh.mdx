@@ -6,23 +6,16 @@ description: 面向维护者的范围、验证、文档和发布证据 checklist
 ## 仓库协作流程
 
 根目录 [CONTRIBUTING.md](https://github.com/OpenEnvision/WorldFoundry/blob/main/CONTRIBUTING.md)
-统一定义代码和 PR 规范。开发、推理、Studio 与评测使用同一个 GPU 环境。
-每个贡献 commit 都需要 [Developer Certificate of Origin](https://developercertificate.org/)
-签名确认，即 `git commit --signoff`。Commit subject 和 PR 标题统一使用 `[type]Description`，
-右括号后不加空格，描述使用英文祈使句，例如 `[test]Cover session cleanup`。
+统一定义代码和 PR 规范。开发、推理、Studio 与评测使用同一个 GPU 环境。每个贡献 commit 都需要 [Developer Certificate of Origin](https://developercertificate.org/)
+签名确认，即 `git commit --signoff`。Commit subject 和 PR 标题统一使用 `[type]Description`，右括号后不加空格，描述使用英文祈使句，例如 `[test]Cover session cleanup`。
 
-参与者遵守[行为准则](https://github.com/OpenEnvision/WorldFoundry/blob/main/CODE_OF_CONDUCT.md)。
-潜在漏洞通过[安全政策](https://github.com/OpenEnvision/WorldFoundry/blob/main/SECURITY.md)中的私密渠道报告。
-一方贡献采用 [Apache License 2.0](https://github.com/OpenEnvision/WorldFoundry/blob/main/LICENSE)，
-保留的上游许可条款记录在[第三方许可与来源](/zh/docs/reference/vendored-licenses)。
+参与者遵守[行为准则](https://github.com/OpenEnvision/WorldFoundry/blob/main/CODE_OF_CONDUCT.md)。潜在漏洞通过[安全政策](https://github.com/OpenEnvision/WorldFoundry/blob/main/SECURITY.md)中的私密渠道报告。第一方贡献采用 [Apache License 2.0](https://github.com/OpenEnvision/WorldFoundry/blob/main/LICENSE)，保留的上游许可条款记录在[第三方许可与来源](/zh/docs/reference/vendored-licenses)。
 
 新增 Python 函数和公开契约必须有类型注解。Ruff 统一格式和 import 顺序，ty 检查类型。
-pre-commit 检查 staged 文件，PR 的 `Python quality` 检查变更 Python 文件。
-保留上游署名及导入代码的检查排除规则。无权重的单元测试标记为 `unit`，CUDA 测试标记为
+pre-commit 检查 staged 文件，PR 的 `Python quality` 检查变更 Python 文件。保留上游署名及导入代码的检查排除规则。无权重的单元测试标记为 `unit`，CUDA 测试标记为
 `gpu`，手动推理脚本放在 `tests/manual/` 或 `tests/stream/`。
 
-CODEOWNERS 覆盖整个仓库。PR 需要适用的 CI 结果和维护者/code owner 的批准。
-使用 squash merge 和描述性 PR 标题，并保留 DCO trailers。管理员按 CONTRIBUTING.md
+CODEOWNERS 覆盖整个仓库。PR 需要适用的 CI 结果和维护者/code owner 的批准。使用 squash merge 和描述性 PR 标题，并保留 DCO trailers。管理员按 CONTRIBUTING.md
 配置 `main` 的 ruleset。
 
 ### 托管 CI 的依赖
@@ -33,24 +26,21 @@ MCP extra 单独使用 `python -m pip install -e ".[test,mcp]"` 安装。
 
 各个 CI job 独立安装依赖。CPU 张量 job 安装匹配的 Torch/Torchvision CPU
 wheel，以及 codec 契约使用的 PyAV、ImageIO、ImageIO-FFmpeg 后端。
-Python quality job 已安装的包不会出现在张量 job 中。必需测试选择与数值预算
-保持不变。
+Python quality job 已安装的包不会出现在张量 job 中。
 
 ## Agent Skills
 
 仓库维护的 [Agent Skills](https://agentskills.io/specification) 放在
 [`skills/`](https://github.com/OpenEnvision/WorldFoundry/tree/main/skills)。
 [技能索引](https://github.com/OpenEnvision/WorldFoundry/blob/main/skills/index.md)
-覆盖模型集成、benchmark 集成、推理优化、推理验证和仓库维护。
-每项技能使用 `SKILL.md`，包含 YAML `name`、`description` 和链接到当前框架契约的 Markdown 指令。
+覆盖模型推理、评测、模型集成、benchmark 集成、Studio 服务、推理优化、推理验证、PR 审查和仓库维护。每项技能使用 `SKILL.md`，包含 YAML `name`、`description`、`license`、`compatibility`
+和链接到当前框架契约的 Markdown 指令。
 
-工作流包括先做组件级数值对齐、校验 checkpoint 转换、定位首个数值偏差、确认实际执行后端，
-以及分别测量冷启动和稳态性能。Compile、CUDA graph、warmup 与 offload 任务按需加载执行生命周期参考，
-数值比较失败时加载 parity 参考。技能索引记录借鉴的上游工作流来源。
-所有命令和门禁仍由 WorldFoundry 的架构与验证契约统一定义；模型集成不代表服务可靠性已验证。
+每项技能先说明适用范围和负责契约的文档，再给出带仓库命令的工作流、易错点，以及完成标准或报告模板。参考文件只在对应任务中加载：修改 catalog 和 binding 时读取 route manifests，数值比较失败时读取
+numerical parity，登记 Make 门禁时读取 test selection，compile、CUDA graph、warmup 与 offload
+任务读取 execution lifecycle，Studio 会话读取 realtime contract，PR 审查读取 review checklist。技能索引记录借鉴的上游工作流来源。所有命令和门禁仍由 WorldFoundry 的架构与验证契约统一定义；模型集成不代表服务可靠性已验证。
 
-可以显式加载对应的 `SKILL.md`，也可以按需接入客户端的本地技能目录。
-从仓库根目录运行对应客户端的命令：
+可以显式加载对应的 `SKILL.md`，也可以按需接入客户端的本地技能目录。从仓库根目录运行对应客户端的命令：
 
 ```bash
 # 发现 .agents/skills 的客户端
@@ -70,9 +60,7 @@ mkdir -p .agents/skills
 ln -s ../../skills/worldfoundry-model-integration .agents/skills/worldfoundry-model-integration
 ```
 
-发现与启用方式取决于客户端配置。Skills 补充 `AGENTS.md` 和 CONTRIBUTING.md，
-仓库规则仍由这两份文件统一维护。目录索引使用 `skills/index.md`，
-仓库仍只保留根目录的一份 README。
+发现与启用方式取决于客户端配置。Skills 补充 `AGENTS.md` 和 CONTRIBUTING.md，仓库规则仍由这两份文件统一维护。目录索引是 `skills/index.md`。
 
 ### 编写与验证
 
@@ -80,19 +68,15 @@ ln -s ../../skills/worldfoundry-model-integration .agents/skills/worldfoundry-mo
 [编写最佳实践](https://agentskills.io/skill-creation/best-practices)。
 
 - `SKILL.md` 以 YAML frontmatter 开始。必需字段为 `name` 和 `description`，正文描述任务步骤。
-- 名称为 1–64 个小写字母、数字或连字符，不能有首尾或连续连字符，且必须与父目录名称一致。
-  仓库技能使用 `worldfoundry-` 前缀。
-- 描述非空且不超过 1024 字符，以 “Use this skill when…” 开头，说明用户意图及适用任务场景。
-- `license`、`compatibility`、`metadata` 和 `allowed-tools` 是标准中的可选字段。
-  仓库技能声明 `Apache-2.0`；有特定 checkout 或环境要求时使用 `compatibility`，最多 500 字符。
-- 每项技能保持聚焦，`SKILL.md` 少于 500 行。发现阶段只加载名称和描述，启用阶段加载指令，
-  执行阶段按需读取参考文件。说明何时加载参考内容，文件链接相对于技能目录解析，
-  仓库命令从仓库根目录执行。
+- 名称为 1–64 个小写字母、数字或连字符，不能有首尾或连续连字符，且必须与父目录名称一致。仓库技能使用 `worldfoundry-` 前缀。
+- 描述非空且不超过 1024 字符，以 “Use this skill when…” 开头，说明用户意图及适用任务场景，并写明相近任务应使用的兄弟技能。
+- `license`、`compatibility`、`metadata` 和 `allowed-tools` 是标准中的可选字段。仓库技能声明 `Apache-2.0`；有特定 checkout 或环境要求时使用 `compatibility`，最多 500 字符。
+- 每项技能保持聚焦，`SKILL.md` 少于 500 行。发现阶段只加载名称和描述，启用阶段加载指令，执行阶段按需读取参考文件。说明何时加载参考内容，文件链接相对于技能目录解析，仓库命令从仓库根目录执行并使用 `wf`；技能中写到的仓库路径、`make` 目标和 `python -m`
+  模块必须真实存在。
 - 按任务需要添加 `scripts/`、`references/` 或 `assets/`。脚本使用显式参数、声明依赖、提供
   `--help` 且非交互执行；新增随技能分发的资源需纳入 `MANIFEST.in`。
 
-安装官方 [skills-ref 参考 CLI](https://github.com/agentskills/agentskills/tree/main/skills-ref) 后，
-从仓库根目录验证格式和仓库引用：
+安装官方 [skills-ref 参考 CLI](https://github.com/agentskills/agentskills/tree/main/skills-ref) 后，从仓库根目录验证格式和仓库引用：
 
 ```bash
 skills-ref validate skills/worldfoundry-model-integration
@@ -100,10 +84,7 @@ python -m pytest -q tests/core/test_agent_skills.py
 ```
 
 格式通过不代表触发可靠性或任务效果已验证。
-[行为评测](https://agentskills.io/skill-creation/evaluating-skills)先选两三项代表性任务，
-再增加一个相近但不应触发技能的请求。分别在加载与不加载技能的干净上下文中执行，
-检查是否读取了对应 `SKILL.md`，并比较实际输出和命令。
-生成的评测产物放在 `tmp/`，不进入 Git。
+[行为评测](https://agentskills.io/skill-creation/evaluating-skills)先选两三项代表性任务，再增加一个相近但不应触发技能的请求。分别在加载与不加载技能的干净上下文中执行，检查是否读取了对应 `SKILL.md`，并比较实际输出和命令。生成的评测产物放在 `tmp/`，不进入 Git。
 
 ## PR 前检查
 
@@ -117,9 +98,9 @@ python -m pytest -q tests/core/test_agent_skills.py
 ## 代码要求
 
 - **Python** — 模型或 benchmark 有重依赖时保持 lazy import。
-- **公开入口** — 用户可见 runtime class 放在 `worldfoundry/pipelines/`；评测适配器放在 `worldfoundry/evaluation/`。
+- **公开入口** — 用户可见 runtime class 放在 `worldfoundry/pipelines/`；评测适配器放在 `worldfoundry/evals/`。
 - **Model runtimes** — `worldfoundry/synthesis/**` 下的 runtime integration 必须仓内实现。不要依赖机器本地的外部 checkout；外部仓库/checkpoint 在移植或 vendor review 前只能记录为 provenance 或 acquisition metadata。
-- **Vendored code** — 已 review 的 `thirdparty/` 代码按隔离代码处理。许可名称和上游 URL 记录在[第三方许可与来源](/zh/docs/reference/vendored-licenses)所链接的仓库声明与来源文件中，保留上游分发条款要求的组件许可文件，并在 package data 中声明；许可门禁记录已审查的例外。项目许可证放在根目录，来源记录保存在集中声明中，操作文档维护在 Fumadocs。大型、独立版本的上游优先用 git submodule；只有需要重度打补丁时才仓内拷贝。不要再复制已经在 `worldfoundry/base_models/` 或 `worldfoundry/synthesis/` 里的代码。当前树：FlashAttention 是外部安装（`scripts/setup/install_flash_attn.sh`）；`diff-gaussian-rasterization/` 是带深度的规范高斯光栅器；`simple-knn/` 是 CUDA KNN 扩展；`fastvideo-kernel/` 是可选的 STA / VSA / VMoBA / TurboDiffusion kernel 树（`CUDA_HOME` + `./build.sh`；ThunderKittens 只在非 aarch64 的 Hopper `sm_90a`；FP4 attention 只在 Blackwell `sm_120a` 且 CUDA ≥ 12.8）。
+- **Vendored code** — 已 review 的 `thirdparty/` 代码按隔离代码处理。许可名称和上游 URL 记录在[第三方许可与来源](/zh/docs/reference/vendored-licenses)所链接的仓库声明与来源文件中，保留上游分发条款要求的组件许可文件，并在 package data 中声明；许可门禁记录已审查的例外。项目许可证放在根目录，来源记录保存在集中声明中，操作文档维护在 Fumadocs。大型、独立版本的上游优先用 git submodule；只有需要重度打补丁时才仓内拷贝。不要再复制已经在 `worldfoundry/base_models/` 或 `worldfoundry/synthesis/` 里的代码。`thirdparty/UPSTREAM_PROVENANCE.md` 是全部组件的索引。仓内组件：`matrix-game/` 是可选 Git submodule，`gsplat/` 是 vendored 源码，`fastvideo-kernel/` 是可选的 STA / VSA / VMoBA / TurboDiffusion kernel 树（`CUDA_HOME` + `./build.sh`；ThunderKittens 只在非 aarch64 的 Hopper `sm_90a`；FP4 attention 只在 Blackwell `sm_120a` 且 CUDA ≥ 12.8）。不随仓库分发：FlashAttention（用 `scripts/setup/install_flash_attn.sh` 安装）、`diff-gaussian-rasterization`（pixelSplat 使用的带深度高斯光栅器）和 `simple-knn`（CUDA KNN 扩展），需在用到它们的环境中自行提供。
 - **Synthesis** — 保持 `worldfoundry/synthesis/**` 仅用于推理：runtime wrapper、推理所需模型代码、checkpoint/path helper 和最小 runtime config。不要添加 training launcher、dataset builder、demo 媒体、notebook 或生成输出。本地 demo 资产放在已被 Git 忽略的 `testcase/` 目录。
 - **Formatting** — 避免无关大规模格式化；除非任务需要，不重写生成文件或 vendored 文件。
 - **Naming** — 优先使用 canonical id 和直接 runner path；公开名称变化时，写 migration 说明，而不是长期保留 compatibility map。
@@ -136,7 +117,7 @@ python -m pytest -q tests/core/test_agent_skills.py
 
 ## 文档要求
 
-Fumadocs 是唯一维护的文档面。新增或修改页面时，在 `docs/fumadocs/content/docs` 下维护英文和中文成对页面。本仓库只允许根目录那一份 `README.md`。不要在源码、vendor 树、fixture 或模型网络旁再加 `README.md`、`readme.md` 或 `README_*`。
+用户与开发者指南统一维护在 Fumadocs。新增或修改页面时，在 `docs/fumadocs/content/docs` 下维护英文和中文成对页面。任何目录都可以用 `README.md` 说明自身代码或工具。包内的 `worldfoundry/`、每个一级子包以及每个 `worldfoundry/base_models/<子包>/` 各保留一份简短的 `README.md` 作为包地图（用途、目录结构、入口、指向本站页面的链接）；增删或移动模块时同步更新。
 
 行为变更时，更新对应 owning page：
 
@@ -146,14 +127,11 @@ Fumadocs 是唯一维护的文档面。新增或修改页面时，在 `docs/fuma
 - **内部 workflow** — `maintainers/architecture`（尤其是 workflow 与 evaluation-core）。
 
 基于 Python 的文档 codegen 与漂移检查（`api:*`、`models:*`、`coverage:*` 和
-`cli:screenshots`）统一经 `docs/fumadocs/scripts/run-python.sh` 调用解释器。需要覆盖时，
-解析顺序为 `WF_DOCS_PYTHON`、`PYTHON`、`python3`、`python`。
+`cli:screenshots`）统一经 `docs/fumadocs/scripts/run-python.sh` 调用解释器。需要覆盖时，解析顺序为 `WF_DOCS_PYTHON`、`PYTHON`、`python3`、`python`。
 
 ## 文档启动与发布
 
-文档应用使用 Next.js 16、React 19、Fumadocs 和 Tailwind CSS 4。
-准备 Node.js 22（见 `docs/fumadocs/.nvmrc`）、npm 和统一 Python 环境。
-在仓库根目录执行：
+文档应用使用 Next.js 16、React 19、Fumadocs 和 Tailwind CSS 4。准备 Node.js 22（见 `docs/fumadocs/.nvmrc`）、npm 和统一 Python 环境。在仓库根目录执行：
 
 ```bash
 npm --prefix docs/fumadocs ci
@@ -162,41 +140,33 @@ bash scripts/docs/build.sh
 npm --prefix docs/fumadocs start
 ```
 
-开发与静态预览地址均为 `http://localhost:3000`，包含 `/docs` 和 `/zh/docs`。
-依赖已安装时可给构建命令添加 `--skip-install`。构建先检查类型与生成数据，
-再导出至 `docs/fumadocs/out/`。
+开发与静态预览地址均为 `http://localhost:3000`，包含 `/docs` 和 `/zh/docs`。依赖已安装时可给构建命令添加 `--skip-install`。构建先检查类型与生成数据，再导出至 `docs/fumadocs/out/`。
 
 `docs/fumadocs/` 内，`app/` 管理路由，`components/` 管理共享 UI，
-`content/docs/` 保存双语页面，`content/blog/` 保存文章，`mdx/partials/`
-保存共享正文，`lib/` 保存工具与目录数据，`public/` 保存资源，`scripts/`
-保存工具脚本。`source.config.ts` 配置集合，`next.config.mjs` 配置静态导出与缓存。
-`.source/`、`generated/`、`tmp/`、`.next/` 和 `out/` 为生成目录。
-输入变化后运行 `api:generate`、`models:generate`、`benchmarks:generate` 或
-`coverage:generate`，再运行对应的 `*:check`。`models:homes:check` 检查模型页；
+`content/docs/` 保存双语页面，`mdx/partials/` 保存共享正文，`lib/`
+保存工具与目录数据，`public/` 保存资源，`scripts/` 保存工具脚本。`source.config.ts` 配置集合，`next.config.mjs` 配置静态导出与缓存。
+`.source/`、`generated/`、`tmp/`、`.next/` 和 `out/` 为生成目录。输入变化后运行 `api:generate`、`models:generate`、`benchmarks:generate` 或
+`coverage:generate`；后三者再运行对应的 `*:check`。`models:homes:check` 检查模型页；
 `types:check` 生成 MDX/类型并检查 TypeScript。
 
-`.github/workflows/deploy-docs.yml` 在匹配的 `main` 变更或手动触发时发布静态站点。
-部署构建前设置：
+`.github/workflows/deploy-docs.yml` 在匹配的 `main` 变更或手动触发时发布静态站点。部署构建前设置：
 
 | 变量 | 官方部署值 |
 | --- | --- |
 | `NEXT_PUBLIC_BASE_PATH` | `/WorldFoundry`；本地开发留空。 |
 | `NEXT_PUBLIC_SITE_URL` | `https://openenvision.github.io`。 |
-| `NEXT_PUBLIC_DEMO_ASSET_BASE_URL` | `docs/fumadocs/public` 对应的 GitHub media CDN。 |
-
-演示视频保留在 CDN，不放入 Pages 产物。
 
 ## 快速站点迭代
 
-模型演示视频由 GitHub CDN 提供，文档开发不需要执行 `git lfs pull`。
+文档开发不需要执行 `git lfs pull`。
 
 ```bash
 GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenEnvision/WorldFoundry.git
 ```
 
-WorldFoundry 目前只维护 **一个** Web 站点：`docs/fumadocs/` 下的 Fumadocs 文档应用。Homepage、benchmark hub、模型目录和 API 参考都是该应用内的路由，不是独立构建目标。Studio（`worldfoundry/studio/`）是 Python FastAPI 应用，不属于 Next.js 站点。
+WorldFoundry 只维护 **一个** Web 站点：`docs/fumadocs/` 下的 Fumadocs 文档应用。Homepage、benchmark hub、模型目录和 API 参考都是该应用内的路由，不是独立构建目标。Studio（`worldfoundry/studio/`）是 Python FastAPI 应用，不属于 Next.js 站点。
 
-每个站点都应在仓库内保留 **快速迭代** 的 npm 脚本。生产 CI 路径不变（`scripts/docs/build.sh` → `deploy-docs.yml`）。
+每个站点都应在仓库内保留 **快速迭代** 的 npm 脚本。生产 CI 通过 `deploy-docs.yml` 运行 `scripts/docs/build.sh`。
 
 <KvCatalog heading="站点" vars rows={[
     { name: "文档（Fumadocs）", reads: [{ label: "路径", value: <><code>docs/fumadocs/</code></> }, { label: "环境变量前缀", value: <><code>WF_DOCS_*</code></> }, { label: "dev:fast", value: <><code>npm run dev:fast</code></> }, { label: "dev:ssd", value: <><code>npm run dev:ssd</code></> }, { label: "dev:local", value: <><code>npm run dev:local</code></> }, { label: "build:fast", value: <><code>npm run build:fast</code></> }] }
@@ -331,7 +301,7 @@ SSD 缓存辅助命令：`npm run ssd:setup`、`npm run ssd:status`、`npm run s
 4. 若需从仓库根目录常用，添加对应的 `make docs-<site>-dev-fast` 目标。
 5. 在本节站点目录（中英文页面）中补充一条。
 
-生产部署速度是另一回事：CI 仍会跑完整的 `types:check`、目录漂移检查和全页静态导出，该路径未改动。
+生产部署速度是另一回事：CI 会跑完整的 `types:check`、目录漂移检查和全页静态导出。
 
 ## 本地验证
 
@@ -357,10 +327,10 @@ make cli-check cli-entrypoint-check packaging-check
 模型/profile audit：
 
 ```bash
-worldfoundry-eval run --all-benchmarks --plan-only \
+wf run --all-benchmarks --plan-only \
   --output-dir tmp/worldfoundry_plan_matrix \
   --json
-worldfoundry-eval validate-artifact tmp/worldfoundry_plan_matrix/suite_manifest.json \
+wf validate-artifact tmp/worldfoundry_plan_matrix/suite_manifest.json \
   --kind suite-manifest \
   --strict \
   --json
@@ -369,16 +339,15 @@ worldfoundry-eval validate-artifact tmp/worldfoundry_plan_matrix/suite_manifest.
 分阶段 zoo 验证：
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo models --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmarks --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval run --all-benchmarks --plan-only --output-dir tmp/worldfoundry_plan_matrix --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-artifact tmp/worldfoundry_plan_matrix/suite_manifest.json --kind suite-manifest --strict --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo models --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf zoo benchmarks --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf run --all-benchmarks --plan-only --output-dir tmp/worldfoundry_plan_matrix --json
+conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" wf validate-artifact tmp/worldfoundry_plan_matrix/suite_manifest.json --kind suite-manifest --strict --json
 ```
 
 ## PR 证据
 
-统一使用仓库的 [PR 模板](https://github.com/OpenEnvision/WorldFoundry/blob/main/.github/PULL_REQUEST_TEMPLATE.md)，
-提供命令、结果、硬件和资产要求、受影响文档及相关运行产物。提交签名后运行：
+统一使用仓库的 [PR 模板](https://github.com/OpenEnvision/WorldFoundry/blob/main/.github/PULL_REQUEST_TEMPLATE.md)，提供命令、结果、硬件和资产要求、受影响文档及相关运行产物。提交签名后运行：
 
 ```bash
 make pr-check BASE_REF="$(git merge-base origin/main HEAD)"
@@ -387,6 +356,5 @@ make pr-check BASE_REF="$(git merge-base origin/main HEAD)"
 <Callout title="Review 规则">
   PR 可以新增 planned 或 source-verified 条目而不提供 runnable 支持。但不能在没有匹配新鲜证据时声称 demo parity、checkpoint parity 或 benchmark readiness。
 </Callout>
-
 
 测试源码统一放在公开的 `tests/`；模型权重、测试媒体和生成的回放记录留在 git 之外。推理变更需回放受影响的真实权重案例，并针对已接受的基准通过 `make test-geometry`。数值比较及源码哈希检查见[验证指南](/zh/docs/reference/validation)。

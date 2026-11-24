@@ -1,6 +1,6 @@
 import torch
-import torchvision
 import torch.nn as nn
+import torchvision
 
 
 class resnet18(nn.Module):
@@ -14,9 +14,7 @@ class resnet18(nn.Module):
         self.resnet = nn.Sequential(*list(resnet.children())[:-1])
         self.flatten = nn.Flatten()
         self.pretrained = pretrained
-        self.normalize = torchvision.transforms.Normalize(
-            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-        )
+        self.normalize = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         self.unit_norm = unit_norm
 
         self.latent_ndim = 1
@@ -47,7 +45,7 @@ class resnet18(nn.Module):
 class resblock(nn.Module):
     # this implementation assumes square images
     def __init__(self, input_dim, output_dim, kernel_size, resample=None, hw=32):
-        super(resblock, self).__init__()
+        super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.kernel_size = kernel_size
@@ -60,9 +58,7 @@ class resblock(nn.Module):
                 nn.AvgPool2d(2, stride=2),
                 nn.Conv2d(input_dim, output_dim, kernel_size, padding=padding),
             )
-            self.conv1 = nn.Conv2d(
-                input_dim, input_dim, kernel_size, padding=padding, bias=False
-            )
+            self.conv1 = nn.Conv2d(input_dim, input_dim, kernel_size, padding=padding, bias=False)
             self.conv2 = nn.Sequential(
                 nn.Conv2d(input_dim, output_dim, kernel_size, padding=padding),
                 nn.MaxPool2d(2, stride=2),
@@ -71,9 +67,7 @@ class resblock(nn.Module):
             self.bn2 = nn.BatchNorm2d(output_dim)
         elif resample is None:
             self.skip = nn.Conv2d(input_dim, output_dim, 1)
-            self.conv1 = nn.Conv2d(
-                input_dim, output_dim, kernel_size, padding=padding, bias=False
-            )
+            self.conv1 = nn.Conv2d(input_dim, output_dim, kernel_size, padding=padding, bias=False)
             self.conv2 = nn.Conv2d(output_dim, output_dim, kernel_size, padding=padding)
             self.bn1 = nn.BatchNorm2d(output_dim)
             self.bn2 = nn.BatchNorm2d(output_dim)
@@ -82,10 +76,7 @@ class resblock(nn.Module):
         self.leakyrelu2 = nn.LeakyReLU()
 
     def forward(self, x):
-        if (self.input_dim == self.output_dim) and self.resample is None:
-            idnty = x
-        else:
-            idnty = self.skip(x)
+        idnty = x if self.input_dim == self.output_dim and self.resample is None else self.skip(x)
 
         residual = x
         residual = self.conv1(residual)
@@ -101,7 +92,7 @@ class resblock(nn.Module):
 
 class SmallResNet(nn.Module):
     def __init__(self, output_dim=512):
-        super(SmallResNet, self).__init__()
+        super().__init__()
 
         self.hw = 224
 

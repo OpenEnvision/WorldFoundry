@@ -1,9 +1,8 @@
-"""Module for base_models -> perception_core -> segment -> grounded_segment_anything -> pipeline.py functionality."""
-
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -33,12 +32,7 @@ class GroundedSegmentAnything:
         grounding_checkpoint_path: str,
         sam_predictor: Any,
         device: str = "cuda",
-    ) -> "GroundedSegmentAnything":
-        """From paths.
-
-        Returns:
-            The return value.
-        """
+    ) -> GroundedSegmentAnything:
         from worldfoundry.base_models.perception_core.detection.grounding_dino.util.inference import Model
 
         grounding_model = Model(
@@ -56,11 +50,6 @@ class GroundedSegmentAnything:
         box_threshold: float = 0.25,
         text_threshold: float = 0.25,
     ) -> Any:
-        """Predict.
-
-        Returns:
-            The return value.
-        """
         detections = self.grounding_model.predict_with_classes(
             image=image,
             classes=list(classes),

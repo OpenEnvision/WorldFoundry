@@ -25,8 +25,8 @@ LAYER_ORDER = {
 # evaluation.utils compatibility helpers.
 KNOWN_VIOLATIONS = frozenset(
     {
-        ("worldfoundry/runtime/assets.py", "worldfoundry.evaluation.utils"),
-        ("worldfoundry/runtime/conda.py", "worldfoundry.evaluation.utils"),
+        ("worldfoundry/runtime/assets.py", "worldfoundry.evals.utils"),
+        ("worldfoundry/runtime/conda.py", "worldfoundry.evals.utils"),
     }
 )
 

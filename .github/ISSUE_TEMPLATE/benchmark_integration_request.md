@@ -56,7 +56,7 @@ assignees: ""
 
 <!-- Required if available: provide command output paths. Use "Not available yet" for proposals. -->
 
-- `worldfoundry-eval prepare` or preflight report:
+- `wf prepare` or preflight report:
 - Contract or validation scorecard:
 - Expected `leaderboard_valid` value:
 - Known blockers before official validation:

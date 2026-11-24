@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 aliases:
 - spatial_forcing
 - spatial-forcing-openvla
@@ -20,6 +20,7 @@ official_sources:
   github:
     head_sha: 372819b31ba9a2c8fc5989edc7d525cb187cecd5
     url: https://github.com/OpenHelix-Team/Spatial-Forcing
+    revision: 372819b31ba9a2c8fc5989edc7d525cb187cecd5
   huggingface_collection:
     id: haofuly/spatial-forcing-68ea1bf0f1ac2c60e2ec6caa
     url: https://huggingface.co/collections/haofuly/spatial-forcing-68ea1bf0f1ac2c60e2ec6caa
@@ -103,8 +104,8 @@ docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: Spatial-Forcing aligns VLA internal representations with 3D geometry (via VGGT-style supervision) to boost manipulation precision on OpenVLA backbones. All four released OpenVLA-LIBERO checkpoints (spatial, object, goal, long; Apache-2.0) passed strict restoration and real A100 inference with finite 8x7 actions — the catalog status is all_released_checkpoints_gpu_validated.
-  overview_zh: Spatial-Forcing 将 VLA 内部表征与 3D 几何对齐（借助 VGGT 式监督），提升 OpenVLA 骨干的操作精度。四个已发布 OpenVLA-LIBERO checkpoint（spatial、object、goal、long；Apache-2.0）全部通过严格恢复与真实 A100 推理，输出有限 8x7 动作——catalog 状态为 all_released_checkpoints_gpu_validated。
+  overview: 'Spatial-Forcing aligns VLA internal representations with 3D geometry (via VGGT-style supervision) to boost manipulation precision on OpenVLA backbones. All four released OpenVLA-LIBERO checkpoints (spatial, object, goal, long; Apache-2.0) are validated: each restores strictly and returns finite 8x7 action chunks in A100 inference.'
+  overview_zh: Spatial-Forcing 将 VLA 内部表征与 3D 几何对齐（借助 VGGT 式监督），提升 OpenVLA 骨干的操作精度。四个已发布 OpenVLA-LIBERO checkpoint（spatial、object、goal、long；Apache-2.0）均已验证：严格恢复后在 A100 推理中输出有限的 8x7 动作块。
   architecture: Fine-tuned OpenVLA 7B checkpoints where spatial alignment was enforced during training; at inference the models run as standard OpenVLA-style policies. The inference-only runtime disables checkpoint-hosted remote code; VGGT, alignment projectors, and LoRA adapter copies are excluded.
   architecture_zh: 训练期施加空间对齐的 OpenVLA 7B 微调 checkpoint；推理时按标准 OpenVLA 式策略运行。推理专用运行时禁用 checkpoint 携带的远程代码；VGGT、对齐投影器与 LoRA 适配器副本被排除。
   usage_notes: Pick the LIBERO split checkpoint you need (spatial/object/goal/long) from the official collection; only locally staged snapshots are accepted.
@@ -115,5 +116,5 @@ docs:
   - 发布的 checkpoint 为 LIBERO 微调版；其他本体需重新训练。
   recommended_benchmarks:
   - id: libero
-    reason: All four LIBERO checkpoints are GPU-validated.
-    reason_zh: 四个 LIBERO checkpoint 全部通过 GPU 验证。
+    reason: The four released checkpoints are fine-tuned for the LIBERO spatial, object, goal, and long suites.
+    reason_zh: 四个发布的 checkpoint 分别针对 LIBERO 的 spatial、object、goal、long 套件微调。

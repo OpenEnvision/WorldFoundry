@@ -1,6 +1,6 @@
 ---
 title: WBench
-description: "Meituan LongCat multi-turn video world-model bench: 28 metrics, five axes. WorldFoundry ships the metric runtime; a one-video flicker run is not the 289-case protocol."
+description: "Meituan LongCat multi-turn video world-model bench: 28 metrics, five axes. WorldFoundry ships the metric runtime."
 ---
 
 WBench (Meituan LongCat) evaluates **multi-turn interactive video world models** along five axes that roll into `wbench_average`:
@@ -13,15 +13,21 @@ WBench (Meituan LongCat) evaluates **multi-turn interactive video world models**
 
 Paper: [WBench](https://arxiv.org/abs/2605.25874). Project: [meituan-longcat.github.io/WBench](https://meituan-longcat.github.io/WBench/). Code: [meituan-longcat/WBench](https://github.com/meituan-longcat/WBench). Data: [`meituan-longcat/WBench`](https://huggingface.co/datasets/meituan-longcat/WBench). Weights: [`meituan-longcat/WBench-weights`](https://huggingface.co/meituan-longcat/WBench-weights).
 
-WorldFoundry **checks in the metric runtime** (HPSv3, TransNetV2, PAVRM, DreamSim, MegaSAM pose precompute). A **real single-video `temporal_flickering` component is verified**; the **289-case multi-turn protocol is not**. `--official-results-path` imports `report.json` or per-metric directories.
+WorldFoundry **ships the metric runtime** (HPSv3, TransNetV2, PAVRM, DreamSim, MegaSAM pose precompute). `--official-results-path` imports `report.json` or per-metric directories.
 
 <BenchmarkPageSections id="wbench" locale="en" />
+
+Imaging quality uses the official PyIQA `musiq` variant (KonIQ), with its
+checkpoint resolved explicitly through `wbench_quality_metric_assets`.
+`WORLDFOUNDRY_WBENCH_MUSIQ_KONIQ_CKPT` can select an already staged checkpoint.
+Its preprocessing and per-frame normalization retain the official protocol;
+WorldMemBench's MUSIQ-SPAQ is a different metric backend profile.
 
 ## How to run
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/wbench/run_wbench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/wbench/run_wbench_official_runner.py \
   --run-official \
   --model-name <model_name> \
   --phase gpu \
@@ -32,9 +38,9 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
   --json
 ```
 
-`--submission-protocol text_multi_turn|camera_conditioned|action_conditioned` only when videos truly follow that official multi-turn interface. Env: `WORLDFOUNDRY_WBENCH_RESULTS_PATH`, `WORLDFOUNDRY_WBENCH_ROOT`. Shared stack: `video_world_perception_stack`.
+Pass `--submission-protocol text_multi_turn|camera_conditioned|action_conditioned` only when the videos follow that official multi-turn interface. Env: `WORLDFOUNDRY_WBENCH_RESULTS_PATH`, `WORLDFOUNDRY_WBENCH_ROOT`. Shared stack: `video_world_perception_stack`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/wbench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/wbench`.
+Manifest and runner: `worldfoundry/data/benchmarks/tasks/external/wbench.yaml`, `worldfoundry/evals/tasks/execution/runners/wbench`.
 
 Outputs include `scorecard.json` (primary `wbench_average`).
 

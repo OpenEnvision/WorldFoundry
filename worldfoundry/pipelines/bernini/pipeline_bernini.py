@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any
 
 from worldfoundry.core.io import artifact_root_path, copy_uri, is_remote_uri, local_path_for_uri, uri_to_local_path
-from worldfoundry.core.utils import load_pil_image, materialize_image_input
+from worldfoundry.core.media.processing.image_utils import load_pil_image, materialize_image_input
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
 from worldfoundry.synthesis.visual_generation.bernini.worldfoundry_runtime import (
     MODEL_CONFIG_KEYS,
@@ -58,14 +59,14 @@ class BerniniWorldFoundryPipeline(PipelineABC):
         self.runtime = runtime
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: Any = None,
         required_components: Mapping[str, Any] | None = None,
         device: str = "cuda",
         model_id: str = "bernini",
         **kwargs: Any,
-    ) -> "BerniniWorldFoundryPipeline":
+    ) -> BerniniWorldFoundryPipeline:
         options: dict[str, Any] = {}
         if isinstance(model_path, Mapping):
             options.update(model_path)
@@ -82,6 +83,8 @@ class BerniniWorldFoundryPipeline(PipelineABC):
             None,
         )
         model_config = {key: options[key] for key in MODEL_CONFIG_KEYS if key in options}
+        if "shift" not in model_config and options.get("flow_shift") is not None:
+            model_config["shift"] = float(options["flow_shift"])
         return cls(
             BerniniRuntime(
                 model_id=model_id,
@@ -242,4 +245,4 @@ class BerniniWorldFoundryPipeline(PipelineABC):
         return result["artifact_path"]
 
 
-__all__ = ["BerniniWorldFoundryPipeline", "GENERATION_KEYS"]
+__all__ = ["GENERATION_KEYS", "BerniniWorldFoundryPipeline"]

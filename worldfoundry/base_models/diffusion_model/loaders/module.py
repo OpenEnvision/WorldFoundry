@@ -11,8 +11,9 @@ already-constructed ``Denoiser`` / encoder / VAE.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Mapping
+from typing import TYPE_CHECKING, Any
 
 import torch
 
@@ -24,15 +25,26 @@ StateDictConverter = Callable[[Mapping[str, object]], Mapping[str, object]]
 CheckpointConfigResolver = Callable[[MaterializedCheckpoint], Mapping[str, object]]
 ApproximateAttentionStateResolver = Callable[[], Mapping[str, object]]
 PostLoadHook = Callable[[torch.nn.Module], None]
+CheckpointStateAdapter = Callable[[torch.nn.Module, Mapping[str, torch.Tensor]], Mapping[str, torch.Tensor]]
 
 if TYPE_CHECKING:
-    from worldfoundry.core.execution.compile_cache import CompilePolicy
+    from worldfoundry.core.platform.compile_cache import CompilePolicy
+
+
+def _cuda_graph_enabled(raw: object) -> bool:
+    """Return True when a ``cuda_graph`` policy option enables graph capture."""
+
+    if raw is None or raw is False:
+        return False
+    if isinstance(raw, str):
+        return raw.strip().casefold() not in {"", "off", "none", "false", "disabled"}
+    return bool(raw)
 
 
 def _compile_policy_from_runtime(policy: RuntimePolicy) -> tuple[CompilePolicy, dict[str, Any]]:
     """Resolve the public compile knobs and external CUDA-Graph interaction."""
 
-    from worldfoundry.core.execution.compile_cache import CompilePolicy
+    from worldfoundry.core.platform.compile_cache import CompilePolicy
 
     backend = str(policy.options.get("compile_backend", "inductor")).strip()
     if not backend:
@@ -42,12 +54,10 @@ def _compile_policy_from_runtime(policy: RuntimePolicy) -> tuple[CompilePolicy, 
         raise TypeError("compile_options must be a mapping")
     compile_options = dict(raw_options)
     configured_mode = policy.options.get("compile_mode")
-    cuda_graph = bool(policy.options.get("cuda_graph", False))
+    cuda_graph = _cuda_graph_enabled(policy.options.get("cuda_graph", False))
     regional = policy.options.get("compile_scope") == "regional"
     if compile_options and configured_mode is not None:
-        raise ValueError(
-            "compile_mode and compile_options are mutually exclusive in torch.compile"
-        )
+        raise ValueError("compile_mode and compile_options are mutually exclusive in torch.compile")
     if compile_options and cuda_graph and backend == "inductor":
         raise ValueError(
             "external cuda_graph cannot be combined with custom Inductor compile_options; "
@@ -66,11 +76,11 @@ def _compile_policy_from_runtime(policy: RuntimePolicy) -> tuple[CompilePolicy, 
         "max-autotune-no-cudagraphs",
     }
     if mode is not None and mode not in allowed_modes:
-        raise ValueError(
-            f"unsupported compile_mode {mode!r}; expected one of {sorted(allowed_modes)}"
-        )
+        raise ValueError(f"unsupported compile_mode {mode!r}; expected one of {sorted(allowed_modes)}")
     if (
-        cuda_graph and backend == "inductor" and mode != "max-autotune-no-cudagraphs"
+        cuda_graph
+        and backend == "inductor"
+        and mode != "max-autotune-no-cudagraphs"
         and not (regional and mode == "default")
     ):
         raise ValueError(
@@ -124,7 +134,8 @@ def _compile_policy_from_runtime(policy: RuntimePolicy) -> tuple[CompilePolicy, 
 
 
 def _audited_compile_call(
-    function: Callable[..., Any], runtime: dict[str, Any],
+    function: Callable[..., Any],
+    runtime: dict[str, Any],
 ) -> Callable[..., Any]:
     """Count calls outside the compiled region, preserving execution failures."""
     from worldfoundry.core.attention.backends.dispatch import attention_compile_receipt_scope
@@ -192,6 +203,10 @@ class ModuleLoadSpec:
     post_load_hook: PostLoadHook | None = None
     supports_acceleration_plugins: bool = False
     compile_regions: tuple[str, ...] = ()
+    # Tensor-transform converters return a lazy Mapping rather than a name-only map.
+    lazy_state_dict: bool = False
+    state_dict_adapter: CheckpointStateAdapter | None = None
+    buffer_aware_offload: bool = False
 
 
 class NativeModuleLoader:
@@ -218,7 +233,10 @@ class NativeModuleLoader:
             raise ValueError("compile_scope must be 'full' or 'regional'")
         if (
             policy.options.get("static_cross_kv")
-            and (policy.options.get("cuda_graph") or (policy.compile and compile_scope == "regional"))
+            and (
+                _cuda_graph_enabled(policy.options.get("cuda_graph"))
+                or (policy.compile and compile_scope == "regional")
+            )
             and (policy.offload.mode is not OffloadMode.NONE or policy.options.get("device_map"))
         ):
             raise ValueError("static cross-KV with Graph/regional compile requires resident unsharded weights")
@@ -237,7 +255,11 @@ class NativeModuleLoader:
                 raise ValueError(f"static and checkpoint-derived module config overlap: {overlap}")
             config.update(resolved_config)
 
-        if policy.offload.mode is OffloadMode.DISK and policy.quantization.mode is not QuantizationMode.NONE:
+        if (
+            policy.offload.mode is OffloadMode.DISK
+            and policy.quantization.mode is not QuantizationMode.NONE
+            and spec.state_dict_adapter is None
+        ):
             raise NotImplementedError(
                 "quantization with disk offload is not supported because the "
                 "load-time weight transform requires materialized parameters"
@@ -245,6 +267,7 @@ class NativeModuleLoader:
         if (
             policy.offload.mode is OffloadMode.BLOCK
             and policy.quantization.mode is not QuantizationMode.NONE
+            and not spec.buffer_aware_offload
         ):
             raise NotImplementedError(
                 "quantization with block offload is not certified: quantized "
@@ -276,20 +299,11 @@ class NativeModuleLoader:
 
         source: str | list[str]
         source = sources[0] if len(sources) == 1 else list(sources)
-        layerwise_cpu_offload = (
-            policy.offload.mode is OffloadMode.BLOCK
-            and bool(spec.layer_container)
-        )
+        layerwise_cpu_offload = policy.offload.mode is OffloadMode.BLOCK and bool(spec.layer_container)
         legacy_block_offload = (
-            policy.offload.mode is OffloadMode.BLOCK
-            and not layerwise_cpu_offload
-            and spec.vram_module_map is not None
+            policy.offload.mode is OffloadMode.BLOCK and not layerwise_cpu_offload and spec.vram_module_map is not None
         )
-        if (
-            policy.offload.mode is OffloadMode.BLOCK
-            and not layerwise_cpu_offload
-            and not legacy_block_offload
-        ):
+        if policy.offload.mode is OffloadMode.BLOCK and not layerwise_cpu_offload and not legacy_block_offload:
             raise ValueError(
                 "block offload requires ModuleLoadSpec.layer_container for "
                 "asynchronous prefetch, or vram_module_map for the explicitly "
@@ -298,11 +312,7 @@ class NativeModuleLoader:
         # Layerwise offload must be installed before the full checkpoint ever
         # reaches CUDA. Loading on CUDA and attaching hooks afterwards defeats
         # the low-VRAM contract and can OOM during checkpoint restoration.
-        load_device = (
-            torch.device("cpu")
-            if shard_across_gpus or layerwise_cpu_offload
-            else policy.device
-        )
+        load_device = torch.device("cpu") if shard_across_gpus or layerwise_cpu_offload else policy.device
         if policy.offload.mode is OffloadMode.DISK:
             if spec.post_load_hook is not None:
                 raise ValueError("post-load mutations are not supported with disk offload")
@@ -316,13 +326,29 @@ class NativeModuleLoader:
                 device=policy.device,
                 state_dict_converter=spec.state_dict_converter,
                 module_map=dict(spec.vram_module_map),
+                **(
+                    {
+                        "lazy_state_dict": True,
+                        "preparing_dtype": policy.dtype,
+                        "state_dict_adapter": spec.state_dict_adapter,
+                    }
+                    if spec.lazy_state_dict
+                    else {}
+                ),
+                **({"include_buffers": True} if spec.buffer_aware_offload else {}),
             )
+            if spec.state_dict_adapter is not None:
+                from worldfoundry.core.model_loading.optimize import AppliedOptimizations, apply_quantization_policy
+
+                applied = AppliedOptimizations()
+                applied.record_quantization(apply_quantization_policy(module, policy.quantization))
+                applied.record_offload(requested_mode="disk", effective="lazy-checkpoint-wrapper")
+                module._worldfoundry_applied_optimizations = applied
         else:
             vram_config = None
             module_map = None
             if spec.vram_module_map is not None and (
-                policy.offload.mode is OffloadMode.COMPONENT
-                or legacy_block_offload
+                policy.offload.mode is OffloadMode.COMPONENT or legacy_block_offload
             ):
                 module_map = dict(spec.vram_module_map)
                 vram_config = {
@@ -342,14 +368,17 @@ class NativeModuleLoader:
                 torch_dtype=policy.dtype,
                 device=load_device,
                 state_dict_converter=spec.state_dict_converter,
-                use_disk_map=all(
-                    str(path).endswith((".safetensors", ".safetensors.index.json"))
-                    for path in sources
-                ),
+                use_disk_map=all(str(path).endswith((".safetensors", ".safetensors.index.json")) for path in sources),
                 module_map=module_map,
                 vram_config=vram_config,
                 vram_limit=spec.vram_limit_gib,
                 post_load_hook=spec.post_load_hook,
+                **(
+                    {"lazy_state_dict": True, "state_dict_adapter": spec.state_dict_adapter}
+                    if spec.lazy_state_dict
+                    else {}
+                ),
+                **({"include_buffers": True} if spec.buffer_aware_offload else {}),
             )
 
             # Load-time transforms run after checkpoint restoration (and any
@@ -370,9 +399,7 @@ class NativeModuleLoader:
 
             fuse_qkv = bool(policy.options.get("fuse_qkv", False))
             qkv_strategy = str(policy.options.get("qkv_strategy", "auto"))
-            qkv_split_threshold = int(
-                policy.options.get("qkv_split_threshold", 8192)
-            )
+            qkv_split_threshold = int(policy.options.get("qkv_split_threshold", 8192))
             fused_blocks = 0
             if fuse_qkv:
                 from ..optimizations.qkv_fusion import fuse_qkv_projections
@@ -393,43 +420,31 @@ class NativeModuleLoader:
                 "sequence_parallel",
                 policy.options.get("sp_degree", False),
             )
-            if sequence_parallel_value:
+            has_sp_targets = bool(sequence_parallel_value) and any(
+                type(child).__name__ == "SelfAttention"
+                and hasattr(child, "set_processor")
+                and hasattr(child, "get_processor")
+                for child in module.modules()
+            )
+            if sequence_parallel_value and has_sp_targets:
                 if isinstance(sequence_parallel_value, bool):
                     import torch.distributed as dist
 
                     if not dist.is_initialized():
                         raise RuntimeError(
-                            "sequence_parallel=True cannot infer a degree before "
-                            "torchrun/NCCL initialization"
+                            "sequence_parallel=True cannot infer a degree before torchrun/NCCL initialization"
                         )
                     sequence_parallel_degree = int(dist.get_world_size())
                 else:
                     sequence_parallel_degree = int(sequence_parallel_value)
-                # Do not use a blanket incompatibility list. Fused 3D RoPE is
-                # safe because its kernel accepts the SP rank's global
-                # sequence_offset and padded-token boundary. The remaining
-                # combinations each lack a distinct correctness mechanism.
+                supports_sp_synced_cache = bool(getattr(module, "_worldfoundry_supports_sp_synced_cache", False))
                 conflict_reasons = {
-                    "adacache": (
-                        "cache hit/miss decisions must be synchronized across ranks before "
-                        "any rank may skip Ulysses collectives"
+                    "blocktaylorseer": (
+                        "block-selective phase caches are not yet synchronized across Ulysses SP ranks"
                     ),
-                    "feature_cache": (
-                        "cache hit/miss decisions must be synchronized across ranks and "
-                        "cached residuals need a shard-consistent lifecycle"
-                    ),
-                    "magcache": (
-                        "cache hit/miss decisions must be synchronized across ranks before "
-                        "any rank may skip Ulysses collectives"
-                    ),
-                    "taylorseer": (
-                        "cache/extrapolation decisions must be synchronized across ranks and "
-                        "history must remain shard-consistent"
-                    ),
-                    "teacache": (
-                        "cache hit/miss decisions must be synchronized across ranks before "
-                        "any rank may skip Ulysses collectives"
-                    ),
+                    "firstblock": ("block-selective caches are not yet synchronized across Ulysses SP ranks"),
+                    "dualblock": ("block-selective caches are not yet synchronized across Ulysses SP ranks"),
+                    "dynamicblock": ("block-selective caches are not yet synchronized across Ulysses SP ranks"),
                     "approximate_attention": (
                         "both features replace the Wan SelfAttention processor; sparse "
                         "metadata/routing must be rebuilt after Ulysses head exchange"
@@ -439,18 +454,58 @@ class NativeModuleLoader:
                         "and a graph-safe communicator path not provided by the current runner"
                     ),
                 }
+                if not supports_sp_synced_cache:
+                    # Generic modules do not broadcast step-skip decisions across SP ranks;
+                    # fail closed so per-rank cache state cannot diverge and deadlock NCCL.
+                    conflict_reasons.update(
+                        {
+                            "teacache": (
+                                "cache history must remain shard-consistent across Ulysses SP ranks "
+                                "and synchronized before collective skip decisions"
+                            ),
+                            "magcache": (
+                                "cache history must remain shard-consistent across Ulysses SP ranks "
+                                "and synchronized before collective skip decisions"
+                            ),
+                            "adacache": (
+                                "cache history must remain shard-consistent across Ulysses SP ranks "
+                                "and synchronized before collective skip decisions"
+                            ),
+                            "taylorseer": (
+                                "cache history must remain shard-consistent across Ulysses SP ranks "
+                                "and synchronized before collective skip decisions"
+                            ),
+                            "feature_cache": (
+                                "cache history must remain shard-consistent across Ulysses SP ranks "
+                                "and synchronized before collective skip decisions"
+                            ),
+                        }
+                    )
+                else:
+                    # Whole-stack residual caches (TeaCache / MagCache / AdaCache /
+                    # TaylorSeer) broadcast their decision signal from SP rank 0
+                    # inside the model forward so every rank agrees on skipping
+                    # Ulysses collectives. Block-selective caches still fail closed.
+                    raw_fc = policy.options.get("feature_cache")
+                    if isinstance(raw_fc, Mapping):
+                        fc_algo = str(raw_fc.get("algorithm", "")).strip().casefold()
+                        if fc_algo in {"firstblock", "dualblock", "dynamicblock", "blocktaylorseer"}:
+                            conflict_reasons["feature_cache"] = (
+                                f"block-selective feature_cache={fc_algo!r} is not yet synchronized "
+                                "across Ulysses SP ranks"
+                            )
                 active_conflicts = [
                     (name, reason)
                     for name, reason in conflict_reasons.items()
-                    if bool(policy.options.get(name))
+                    if (
+                        _cuda_graph_enabled(policy.options.get(name))
+                        if name == "cuda_graph"
+                        else bool(policy.options.get(name))
+                    )
                 ]
                 if active_conflicts:
-                    details = "; ".join(
-                        f"{name}: {reason}" for name, reason in active_conflicts
-                    )
-                    raise ValueError(
-                        "sequence_parallel combination is not yet correctness-safe; " + details
-                    )
+                    details = "; ".join(f"{name}: {reason}" for name, reason in active_conflicts)
+                    raise ValueError("sequence_parallel combination is not yet correctness-safe; " + details)
                 from ..optimizations.sequence_parallel import (
                     enable_sequence_parallel,
                     require_sequence_parallel_runtime,
@@ -460,6 +515,7 @@ class NativeModuleLoader:
                 sequence_parallel_state = enable_sequence_parallel(
                     module,
                     sequence_parallel_degree,
+                    allow_head_padding=bool(policy.options.get("sequence_parallel_pad_heads", False)),
                 )
                 module._worldfoundry_sequence_parallel = sequence_parallel_state
                 applied.record_sequence_parallel(
@@ -498,9 +554,7 @@ class NativeModuleLoader:
             # QKV fusion is already complete, and the sparse processor has an
             # explicit fused-QKV contract.
             approximate_option = (
-                policy.options.get("approximate_attention")
-                if spec.supports_approximate_attention
-                else None
+                policy.options.get("approximate_attention") if spec.supports_approximate_attention else None
             )
             if approximate_option:
                 from ..optimizations.approximate_attention import (
@@ -543,6 +597,7 @@ class NativeModuleLoader:
                     layer_container=spec.layer_container,
                     device=policy.device,
                     pin_memory=policy.offload.pin_memory,
+                    **({"include_buffers": True} if spec.buffer_aware_offload else {}),
                 )
                 if not offload_handle.enabled:
                     raise RuntimeError(
@@ -568,10 +623,7 @@ class NativeModuleLoader:
                 applied.record_offload(
                     requested_mode=policy.offload.mode.value,
                     effective="legacy-on-demand-wrapper",
-                    reason=(
-                        "no layer_container was declared, so copy/compute "
-                        "overlap cannot be proven"
-                    ),
+                    reason=("no layer_container was declared, so copy/compute overlap cannot be proven"),
                 )
             elif policy.offload.mode is OffloadMode.COMPONENT:
                 applied.record_offload(
@@ -623,7 +675,7 @@ class NativeModuleLoader:
             )
 
         if compile_setup is not None:
-            from worldfoundry.core.execution.compile_cache import compile_callable_cached
+            from worldfoundry.core.platform.compile_cache import compile_callable_cached
 
             compile_policy, compile_options = compile_setup
             targets = [("", module)]
@@ -675,10 +727,7 @@ class NativeModuleLoader:
             # Retain concrete modules and checkpoint keys. Placement hooks
             # remain outside the bound compute callable on each module.
             for (_, target, _, compiled), original in zip(prepared, original_forwards, strict=True):
-                target.forward = (
-                    _audited_compile_call(compiled, compile_runtime)
-                    if wrapper_installed else original
-                )
+                target.forward = _audited_compile_call(compiled, compile_runtime) if wrapper_installed else original
             module._worldfoundry_compile_runtime = compile_runtime
             compile_config: dict[str, Any] = {
                 "backend": compile_policy.backend,
@@ -689,7 +738,8 @@ class NativeModuleLoader:
             }
             if compile_scope == "regional":
                 compile_config.update(
-                    scope="regional", regions=[name for name, *_ in prepared],
+                    scope="regional",
+                    regions=[name for name, *_ in prepared],
                 )
             module._worldfoundry_compile_config = compile_config
             applied = getattr(module, "_worldfoundry_applied_optimizations", None)

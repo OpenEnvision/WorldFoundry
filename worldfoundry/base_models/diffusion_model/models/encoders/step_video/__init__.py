@@ -13,8 +13,8 @@ This is StepVideo's own stack, not Wan UMT5.
 """
 
 from .clip import HunyuanClip
-from .step_llm import STEP1TextEncoder
 from .component import StepVideoPromptConditioner, build_step_video_prompt_conditioner
+from .step_llm import STEP1TextEncoder
 
 __all__ = [
     "HunyuanClip",

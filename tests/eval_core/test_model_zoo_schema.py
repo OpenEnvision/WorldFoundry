@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.models.catalog import (
+from worldfoundry.zoo.catalog import (
     CheckpointRef,
     DemoParitySpec,
     ModelSource,
@@ -19,16 +19,15 @@ from worldfoundry.evaluation.models.catalog import (
     validate_in_tree_model_registry,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_ROOT = REPO_ROOT / "worldfoundry"
 DATA_ROOT = SOURCE_ROOT / "data"
 
 
 def test_model_zoo_schema_uses_catalog_schema_as_canonical() -> None:
-    import worldfoundry.evaluation.models.catalog.schema as catalog_schema
+    import worldfoundry.zoo.catalog.schema as catalog_schema
 
-    legacy_path = SOURCE_ROOT / "evaluation" / "models" / "zoo_schema.py"
+    legacy_path = SOURCE_ROOT / "evals" / "models" / "zoo_schema.py"
 
     assert catalog_schema.ModelZooEntry is ModelZooEntry
     assert catalog_schema.CheckpointRef is CheckpointRef
@@ -358,10 +357,7 @@ def test_model_zoo_repo_manifests_all_load() -> None:
     assert sum(count for path, count in loaded.items() if path.startswith("video/")) >= 10
     assert sum(count for path, count in loaded.items() if path.startswith("world_models/")) >= 10
     assert sum(count for path, count in loaded.items() if path.startswith("three_d_four_d/")) >= 10
-    assert all(
-        count == 1 or path == "hosted_api/video_world_apis.yaml"
-        for path, count in loaded.items()
-    )
+    assert all(count == 1 for count in loaded.values())
 
 
 def test_model_data_uses_per_model_yaml_manifests() -> None:
@@ -369,11 +365,7 @@ def test_model_data_uses_per_model_yaml_manifests() -> None:
     catalog_root = models_root / "catalog"
 
     assert sorted(path.relative_to(catalog_root) for path in catalog_root.rglob("*.json")) == []
-    assert all(
-        len(load_entries(path)) == 1 or path.relative_to(catalog_root) == Path("hosted_api/video_world_apis.yaml")
-        for path in catalog_root.rglob("*.yaml")
-        if not path.name.startswith("_")
-    )
+    assert all(len(load_entries(path)) == 1 for path in catalog_root.rglob("*.yaml") if not path.name.startswith("_"))
 
 
 def test_model_zoo_integrated_targets_are_in_tree() -> None:
@@ -675,9 +667,9 @@ def test_status_fields_validate_known_enum_strings(factory: object, kwargs: dict
         factory(**kwargs)  # type: ignore[operator]
 
 
-def test_model_zoo_schema_imports_are_stdlib_only() -> None:
-    schema_path = SOURCE_ROOT / "evaluation" / "models" / "catalog" / "schema.py"
-    allowed_modules = set(sys.stdlib_module_names) | {"__future__"}
+def test_model_zoo_schema_has_no_third_party_imports() -> None:
+    schema_path = SOURCE_ROOT / "zoo" / "catalog" / "schema.py"
+    allowed_modules = set(sys.stdlib_module_names) | {"__future__", "worldfoundry"}
 
     tree = ast.parse(schema_path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):

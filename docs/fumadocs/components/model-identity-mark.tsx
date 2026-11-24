@@ -1,6 +1,6 @@
 import { withBasePath } from '@/lib/site-path';
 
-import { resolveModelOrg } from '@/lib/model-org-identity';
+import { type IdentityMarkSize, orgMarkSrc, resolveModelOrg } from '@/lib/model-org-identity';
 
 export { resolveModelOrgKey } from '@/lib/model-org-identity';
 
@@ -9,7 +9,7 @@ type ModelIdentityMarkProps = {
   name: string;
   provider: string;
   category: string;
-  size?: 'small' | 'medium' | 'large';
+  size?: IdentityMarkSize;
 };
 
 function initials(value: string) {
@@ -38,7 +38,8 @@ export function ModelIdentityMark({
   size = 'medium',
 }: ModelIdentityMarkProps) {
   const org = resolveModelOrg(id, provider);
-  const hasLogo = Boolean(org?.src);
+  const src = orgMarkSrc(org, size);
+  const hasLogo = Boolean(src);
 
   return (
     <span
@@ -48,10 +49,10 @@ export function ModelIdentityMark({
       title={org?.name ?? name}
       aria-hidden="true"
     >
-      {org?.src ? (
+      {src ? (
         <img
           className="wf-model-mark-image"
-          src={withBasePath(org.src)}
+          src={withBasePath(src)}
           alt=""
           width={200}
           height={200}

@@ -1,50 +1,50 @@
 ---
 title: "I2VGen-XL"
-description: "I2VGen-XL from Alibaba (Tongyi Lab): image-to-video and text-to-video; Runner parity pending."
+description: "I2VGen-XL from Alibaba (Tongyi Lab): image-to-video; Runner parity pending."
 modelId: "i2vgen-xl"
 pageSource: generated
 ---
 
-I2VGen-XL is Alibaba ali-vilab's cascaded image-to-video model, one of the earlier high-resolution open I2V releases. It turns a still image (with optional text) into a short video through a two-stage generate-then-refine cascade. The WorldFoundry route is complete and reports missing checkpoint assets at runtime.
+I2VGen-XL is Alibaba's cascaded image-to-video model, one of the earlier high-resolution open I2V releases. It turns a still image and a text prompt into a short video through a two-stage generate-then-refine cascade.
 
 <ModelPaperFigures modelId="i2vgen-xl" locale="en" />
 
-The recorded paper is [arXiv 2311.04145](https://arxiv.org/abs/2311.04145).
+Paper: [arXiv 2311.04145](https://arxiv.org/abs/2311.04145).
 
-Project page: [i2vgen-xl.github.io](https://i2vgen-xl.github.io/). Code: [ali-vilab/i2vgen-xl](https://github.com/ali-vilab/i2vgen-xl).
+Project page: [i2vgen-xl.github.io](https://i2vgen-xl.github.io/). Code: [ali-vilab/VGen](https://github.com/ali-vilab/VGen).
 
 <ModelCommandBuilder modelId="i2vgen-xl" locale="en" />
 
 ## What it is for
 
-Use `i2vgen-xl` for the family's joint T2V/I2V inference path. The catalog records both task profiles on this page.
+`i2vgen-xl` is an image-to-video model: a still image in, a video clip out.
 
-Per the upstream publication, I2VGen-XL uses a base stage for semantic coherence and a refinement stage for detail/resolution, both latent diffusion models. This repository records the prompt+image contract and environment/checkpoint assumptions in the runtime profile; run readiness is kept in release run manifests, not here. It is published by Alibaba (Tongyi Lab).
+I2VGen-XL has two latent diffusion stages. The base stage keeps the semantics and content of the input image coherent through two hierarchical encoders; the refinement stage adds detail guided by a brief text prompt and raises the resolution to 1280×720. It is published by Alibaba (Tongyi Lab).
 
-Catalog tasks include image-to-video and text-to-video. Documented modalities: image and text in, video out.
+Tasks: image-to-video. Modalities: image and text in, video out.
 
-Recorded evaluation entry points include [AIGCBench](/docs/evaluation/benchmark-hub/aigcbench) (I2V-focused benchmark suite).
+Suggested benchmarks: [AIGCBench](/docs/evaluation/benchmark-hub/aigcbench) (I2V-focused benchmark suite).
 
 ## Runtime contract
 
-Optional `prompt`, `negative_prompt`, `input_path`, `frames`, and `fps`; artifacts `i2vgen-xl.mp4`.
+Inputs `prompt` and `input-path` (bundled samples are used when omitted); options `negative-prompt`, `frames`, `height`, `width`, `steps`, `guidance-scale`, and 2 more; artifacts `i2vgen-xl.mp4`.
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `I2VGenXLPipeline`.
 
 Family status: **Runner parity pending**.
 
-Recorded `interactive-video` defaults: frames=16, height=704, width=1280, seed=8888.
+Defaults for `interactive-video`: frames=16, height=704, width=1280, seed=8888.
 
-Integration is complete; no runner parity record exists yet in this manifest. Both the official GitHub and ali-vilab HF repos are confirmed reachable. Treat it as a legacy-quality baseline next to newer DiT-based I2V models in this catalog.
+WorldFoundry runs the Hugging Face diffusers I2VGenXLPipeline with the official ali-vilab weights in float16. The pipeline needs both an image and a prompt; `wf run` falls back to its bundled sample image and prompt when either is omitted.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run i2vgen-xl --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Animate a still image with `wf run i2vgen-xl --pipeline.task-profile interactive-video`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `ali-vilab/i2vgen-xl`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh i2vgen-xl`. Add `--download` to fetch missing public checkpoints.
+Weights: `ali-vilab/i2vgen-xl`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh i2vgen-xl`. Add `--download` to fetch missing public checkpoints.
 
-Recorded licenses include mit; status: **Runner parity pending**.
+License: MIT.
 
 <ModelRelatedRecipes modelId="i2vgen-xl" locale="en" />

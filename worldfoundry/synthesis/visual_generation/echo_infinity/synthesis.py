@@ -5,10 +5,12 @@ implementation of `RuntimeVideoSynthesis` specifically tailored for the
 EchoInfinity text-to-video generation model. It handles the dynamic loading
 of the EchoInfinity runtime and specifies its configuration parameters.
 """
+
 from __future__ import annotations
 
 import inspect
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from ..runtime_video_synthesis import RuntimeVideoSynthesis
 
@@ -58,7 +60,7 @@ class EchoInfinitySynthesis(RuntimeVideoSynthesis):
     RUNTIME_CONFIG_PATH = "models/runtime/configs/echo_infinity/runtime_defaults.yaml"
     RUNTIME_CONFIG_KEY = MODEL_NAME
 
-    def _prediction_runtime_overrides(self, kwargs: Mapping[str, Any], *, fps: Optional[int]):
+    def _prediction_runtime_overrides(self, kwargs: Mapping[str, Any], *, fps: int | None):
         overrides = super()._prediction_runtime_overrides(kwargs, fps=None)
         overrides.pop("fps", None)
         # The generic seed alias prefers ``base_seed`` for proxy runtimes with

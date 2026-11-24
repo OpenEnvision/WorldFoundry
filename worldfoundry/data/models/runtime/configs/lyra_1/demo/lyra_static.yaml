@@ -1,0 +1,14 @@
+# Lyra-1 static-scene reconstruction settings, adapted from the upstream configs/demo/lyra_static.yaml.
+# The runtime sets ckpt_path, dataset_name and out_dir_inference for each call.
+
+# Order of camera trajectory indices
+static_view_indices_fixed: ['5', '0', '1', '2', '3', '4']
+
+# Only render each 4. frame
+target_index_subsample: 4
+
+# For static scenes, do not set target time
+set_manual_time_idx: true
+
+# Model definition, relative to the lyra_1 runtime config directory
+config_path: [model/default.yaml, model/3dgs_res_704_1280_views_121_multi_6_prune.yaml]

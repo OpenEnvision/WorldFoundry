@@ -1,27 +1,28 @@
-import math
 import warnings
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import ClassVar
 
 import torch
 import torch.nn.functional as F
 import transformers
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
-from diffusers.schedulers.scheduling_dpmsolver_multistep import DPMSolverMultistepScheduler
+from diffusers.schedulers.scheduling_dpmsolver_multistep import (
+    DPMSolverMultistepScheduler,
+)
+from packaging.version import Version
 from timm.models.vision_transformer import Mlp
 from torch import nn
 from transformers.modeling_outputs import CausalLMOutputWithPast, ModelOutput
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
-from packaging.version import Version
-
-from .conversation import get_conv_template
-from .modeling_internlm2 import InternLM2RMSNorm
-from .modeling_intern_vit import InternVisionModel
+from worldfoundry.base_models.llm_mllm_core.action.rdt import TimestepEmbedder
 
 from .configuration_go1 import GO1ModelConfig
+from .conversation import get_conv_template
 from .modeling_action_expert import ActionExpertModel
+from .modeling_intern_vit import InternVisionModel
+from .modeling_internlm2 import InternLM2RMSNorm
 from .modeling_internlm2_go1 import InternLM2ForCausalLMGO1
 from .modeling_latent_action_expert import LatentPlannerModel
 
@@ -30,56 +31,15 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class ActionModelOutputWithPast(ModelOutput):
-    loss: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor = None
     labels: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    action_loss: Optional[torch.FloatTensor] = None
-    action_logits: Optional[torch.FloatTensor] = None
-    action_gts: Optional[torch.FloatTensor] = None
-
-
-class TimestepEmbedder(nn.Module):
-    """
-    Embeds scalar timesteps into vector representations.
-    """
-
-    def __init__(self, hidden_size, frequency_embedding_size=256, dtype=torch.bfloat16):
-        super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(frequency_embedding_size, hidden_size, bias=True),
-            nn.SiLU(),
-            nn.Linear(hidden_size, hidden_size, bias=True),
-        )
-        self.frequency_embedding_size = frequency_embedding_size
-        self.dtype = dtype
-
-    def timestep_embedding(self, t, dim, max_period=10000):
-        """
-        Create sinusoidal timestep embeddings.
-        :param t: a 1-D Tensor of N indices, one per batch element.
-                          These may be fractional.
-        :param dim: the dimension of the output.
-        :param max_period: controls the minimum frequency of the embeddings.
-        :return: an (N, D) Tensor of positional embeddings.
-        """
-        # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
-        half = dim // 2
-        freqs = torch.exp(
-            -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32, device=t.device) / half
-        )
-        args = t[:, None].float() * freqs[None]
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
-        return embedding.to(self.dtype)
-
-    def forward(self, t):
-        t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
-        t_emb = self.mlp(t_freq)
-        return t_emb
+    past_key_values: tuple[tuple[torch.FloatTensor]] | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    action_loss: torch.FloatTensor | None = None
+    action_logits: torch.FloatTensor | None = None
+    action_gts: torch.FloatTensor | None = None
 
 
 class FinalLayer(nn.Module):
@@ -90,7 +50,10 @@ class FinalLayer(nn.Module):
     def __init__(self, hidden_size, out_channels):
         super().__init__()
         self.norm_final = InternLM2RMSNorm(hidden_size)
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
         self.ffn_final = Mlp(
             in_features=hidden_size,
             hidden_features=hidden_size,
@@ -109,7 +72,7 @@ class GO1Model(PreTrainedModel):
     config_class = GO1ModelConfig
     main_input_name = "pixel_values"
     base_model_prefix = "language_model"
-    _no_split_modules = [
+    _no_split_modules: ClassVar[list] = [
         "InternVisionModel",
         "InternLM2DecoderLayerGO1",
         "ActionExpertDecoderLayer",
@@ -280,7 +243,7 @@ class GO1Model(PreTrainedModel):
 
     def init_linear_weights(self) -> None:
         # Initialize the kv cache projector
-        for k_linear, v_linear in zip(self.k_proj_layers, self.v_proj_layers):
+        for k_linear, v_linear in zip(self.k_proj_layers, self.v_proj_layers, strict=False):
             nn.init.xavier_uniform_(k_linear.weight)
             nn.init.xavier_uniform_(v_linear.weight)
             if k_linear.bias is not None:
@@ -314,7 +277,8 @@ class GO1Model(PreTrainedModel):
         if self.ps_version == "v1":
             warnings.warn(
                 "In ps_version 'v1', the height and width have not been swapped back, "
-                "which results in a transposed image."
+                "which results in a transposed image.",
+                stacklevel=1,
             )
         else:
             x = x.permute(0, 2, 1, 3).contiguous()
@@ -341,8 +305,8 @@ class GO1Model(PreTrainedModel):
     def calc_action_diffusion_loss(
         self,
         action_logits: torch.FloatTensor,
-        action_gts: Optional[torch.Tensor] = None,
-        noise: Optional[torch.FloatTensor] = None,
+        action_gts: torch.Tensor | None = None,
+        noise: torch.FloatTensor | None = None,
         pred_type: str = "sample",
     ) -> torch.Tensor:
         if pred_type == "epsilon":
@@ -396,11 +360,11 @@ class GO1Model(PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        image_flags: Optional[torch.LongTensor] = None,
-        return_dict: Optional[bool] = True,
-        labels: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        image_flags: torch.LongTensor | None = None,
+        return_dict: bool | None = True,
+        labels: torch.LongTensor | None = None,
     ) -> CausalLMOutputWithPast:
         # Align with original InternVL implementation style
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -421,7 +385,7 @@ class GO1Model(PreTrainedModel):
             input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
         except Exception as e:
             vit_embeds = vit_embeds.reshape(-1, C)
-            raise ValueError(
+            raise ValueError(  # noqa: B904 - Keeps the implicit exception context.
                 f"warning: {e}, input_embeds[selected].shape={input_embeds[selected].shape}, vit_embeds.shape={vit_embeds.shape}"
             )
 
@@ -440,16 +404,16 @@ class GO1Model(PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        image_flags: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        image_flags: torch.LongTensor | None = None,
         state: torch.Tensor = None,
-        ctrl_freqs: int = None,
+        ctrl_freqs: int | None = None,
         action_gts: torch.Tensor = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+        return_dict: bool | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[Tuple, ActionModelOutputWithPast]:
+    ) -> tuple | ActionModelOutputWithPast:
         vlm_outputs = self.common_process(
             pixel_values,
             input_ids,
@@ -463,7 +427,7 @@ class GO1Model(PreTrainedModel):
         vlm_key_values = vlm_outputs.past_key_values  # kv_cache(multi_head) of each decoder layer
 
         vlm_key_values_downsample = []
-        for vlm_key_value, k_proj, v_proj in zip(vlm_key_values, self.k_proj_layers, self.v_proj_layers):
+        for vlm_key_value, k_proj, v_proj in zip(vlm_key_values, self.k_proj_layers, self.v_proj_layers, strict=False):
             vlm_key_values_downsample.append((k_proj(vlm_key_value[0]), v_proj(vlm_key_value[1])))
 
         B = input_ids.shape[0]

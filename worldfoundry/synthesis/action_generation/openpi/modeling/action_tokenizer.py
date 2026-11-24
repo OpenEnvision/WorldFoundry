@@ -41,7 +41,7 @@ class UniversalActionTokenizer:
         self.called_time_horizon = time_horizon
 
     @classmethod
-    def from_pretrained(cls, location: str | Path) -> "UniversalActionTokenizer":
+    def from_pretrained(cls, location: str | Path) -> UniversalActionTokenizer:
         """Load tokenizer assets from WorldFoundry-local storage only."""
         local_dir = resolve_local_hf_model_path(
             location,

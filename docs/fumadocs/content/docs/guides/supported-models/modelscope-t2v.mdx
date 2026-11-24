@@ -1,54 +1,52 @@
 ---
 title: "ModelScopeT2V"
-description: "ModelScopeT2V from Alibaba (DAMO Academy / ModelScope): text-to-video; Runner parity pending."
+description: "Alibaba DAMO Academy's 1.7B U-Net text-to-video model, kept as a historical open T2V baseline; CC-BY-NC-4.0."
 modelId: "modelscope-t2v"
 pageSource: authored
 ---
 
-ModelScopeT2V is Alibaba DAMO Academy's original open text-to-video diffusion model — the 1.7B model that kicked off much of the open T2V ecosystem (ZeroScope in this catalog is a fine-tune of it). The WorldFoundry route is complete and reports missing checkpoints at runtime. It is kept mainly as a historical baseline.
+ModelScopeT2V is Alibaba DAMO Academy's original open text-to-video diffusion model — the 1.7B model that kicked off much of the open T2V ecosystem (ZeroScope is a fine-tune of it). It serves mainly as a historical baseline.
 
 <ModelPaperFigures modelId="modelscope-t2v" locale="en" />
 
-The recorded paper is [arXiv 2308.06571](https://arxiv.org/abs/2308.06571).
+Paper: [arXiv 2308.06571](https://arxiv.org/abs/2308.06571).
 
 Project page: [modelscope.cn](https://modelscope.cn/). Code: [modelscope/modelscope](https://github.com/modelscope/modelscope).
 
-Architecturally it is a **latent video U-Net**: temporal attention is inserted into a text-to-image diffusion backbone so a prompt becomes a short, low-resolution clip. That is why later DiT families (Wan, CogVideoX, HunyuanVideo) superseded it on quality and temporal consistency. The Hugging Face card is `ali-vilab/modelscope-damo-text-to-video-synthesis`. Recorded license is **CC-BY-NC-4.0** — the manifest says not to treat it as unrestricted open source.
+Architecturally it is a **latent video U-Net**: temporal attention is inserted into a text-to-image diffusion backbone so a prompt becomes a short, low-resolution clip. That is why later DiT families (Wan, CogVideoX, HunyuanVideo) superseded it on quality and temporal consistency. The Hugging Face checkpoint is `ali-vilab/modelscope-damo-text-to-video-synthesis`; stage that repo, not the similarly named `model-scope/text-to-video-synthesis`. The license is **CC-BY-NC-4.0** (non-commercial); do not treat it as unrestricted open source.
 
 <ModelCommandBuilder modelId="modelscope-t2v" locale="en" />
 
 ## What it is for
 
-`modelscope-t2v` is the recorded prompt-to-video route — not image editing and not a policy. Start here when the job is a clip from text.
+Use `modelscope-t2v` to turn a text prompt into a short video.
 
-A U-Net latent video diffusion model with temporal attention layers inserted into a text-to-image backbone (per the upstream publication). This repository records the prompt-only input contract and generated_video artifact. It is published by Alibaba (DAMO Academy / ModelScope).
+A U-Net latent video diffusion model with temporal attention layers inserted into a text-to-image backbone (per the upstream publication). It takes a text prompt only and writes a short video. It is published by Alibaba (DAMO Academy / ModelScope).
 
-Catalog tasks include text-to-video. Documented modalities: text in, video out.
+Tasks: text-to-video. Modalities: text in, video out.
 
-Recorded evaluation entry points include [FETV](/docs/evaluation/benchmark-hub/fetv) (Fine-grained T2V evaluation suited to legacy baselines).
+Suggested benchmarks: [FETV](/docs/evaluation/benchmark-hub/fetv) (Fine-grained T2V evaluation suited to legacy baselines).
 
-Reproduce a 2023-era open T2V baseline: required `prompt` in, `modelscope-t2v.mp4` out through `ModelScopeT2VPipeline`. The wired controls are text prompt, **fps**, and **seed**. Use it to compare against later entries or to explain ZeroScope's parent. For research-quality or production T2V, use the DiT cards. [FETV](/docs/evaluation/benchmark-hub/fetv) is the fine-grained suite this generation of models is usually discussed on.
+Reproduce a 2023-era open T2V baseline: required `prompt` in, `modelscope-t2v.mp4` out through `ModelScopeT2VPipeline`. The wired controls are text prompt, **fps**, and **seed**. Use it to compare against later entries or to explain ZeroScope's parent. For research-quality or production T2V, use the DiT models. [FETV](/docs/evaluation/benchmark-hub/fetv) is the fine-grained suite this generation of models is usually discussed on.
 
 ## Runtime contract
 
-Optional `prompt`, `negative_prompt`, `frames`, `fps`, and `height`; artifacts `modelscope-t2v.mp4`.
+Inputs `prompt` (bundled samples are used when omitted); options `fps` and `seed`; artifacts `modelscope-t2v.mp4`.
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `ModelScopeT2VPipeline`.
 
 Family status: **Runner parity pending**.
 
-The recorded license is non-commercial per HF cardData — the manifest says explicitly not to treat it as unrestricted open source. Use it for research comparisons only; for production-quality T2V use the DiT-based entries.
-
-Checkpoint license is non-commercial per HF cardData; do not treat as unrestricted open source.
+Use it for research comparisons only; for production-quality T2V use the DiT-based models.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run modelscope-t2v --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Generate a clip with `wf run modelscope-t2v --pipeline.task-profile interactive-video`.
 
 It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
 
-Recorded weight repositories include `ali-vilab/modelscope-damo-text-to-video-synthesis` and `ali-vilab/modelscope-damo-text-to-video-synthesis`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh modelscope-t2v`. Add `--download` to fetch missing public checkpoints.
+Weights: `ali-vilab/modelscope-damo-text-to-video-synthesis` and `ali-vilab/modelscope-damo-text-to-video-synthesis`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh modelscope-t2v`. Add `--download` to fetch missing public checkpoints.
 
-Recorded licenses include cc-by-nc-4.0; status: **Runner parity pending**.
+License: CC BY-NC 4.0.
 
 <ModelRelatedRecipes modelId="modelscope-t2v" locale="en" />

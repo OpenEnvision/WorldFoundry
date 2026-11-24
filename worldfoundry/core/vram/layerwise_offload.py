@@ -13,9 +13,10 @@ module — those expect resident shards.
 
 from __future__ import annotations
 
-from contextlib import contextmanager, nullcontext
+from collections.abc import Generator, Iterator
+from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass, field
-from typing import Any, Iterator
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -105,7 +106,7 @@ class LayerwiseOffloadHandle:
         for layer, state, hook_handles in self._layer_hooks:
             for hook_handle in hook_handles:
                 hook_handle.remove()
-            for name, param in layer.named_parameters(recurse=True):
+            for name, param in state.named_tensors():
                 cpu_tensor = state.cpu_named_parameters.get(name)
                 if cpu_tensor is not None:
                     param.data = cpu_tensor
@@ -150,8 +151,8 @@ class _LayerwiseOffloadMetrics:
     )
 
     def __post_init__(self) -> None:
-        self.lifetime = {name: 0 for name in self._COUNTERS}
-        self.request = {name: 0 for name in self._COUNTERS}
+        self.lifetime = dict.fromkeys(self._COUNTERS, 0)
+        self.request = dict.fromkeys(self._COUNTERS, 0)
 
     def count(self, name: str, amount: int = 1, *, request: bool = True) -> None:
         self.lifetime[name] = int(self.lifetime.get(name, 0)) + int(amount)
@@ -174,7 +175,7 @@ class _LayerwiseOffloadMetrics:
             self.active_layers.discard(state_id)
 
     def reset_request_window(self) -> None:
-        self.request = {name: 0 for name in self._COUNTERS}
+        self.request = dict.fromkeys(self._COUNTERS, 0)
         # One layer is deliberately kept warm across denoising calls.  The
         # request peak starts at the physical state rather than pretending
         # the cache is empty.
@@ -233,6 +234,7 @@ def enable_layerwise_cpu_offload(
     device: torch.device | str | None = None,
     pin_memory: bool = True,
     reuse_buffers: bool = False,
+    include_buffers: bool = False,
 ) -> LayerwiseOffloadHandle:
     """Attach hooks to a ModuleList or an explicitly named Sequential stack.
 
@@ -269,7 +271,9 @@ def enable_layerwise_cpu_offload(
     if any(getattr(layer, "_worldfoundry_layerwise_cpu_offload", False) for layer in layers):
         raise ValueError("one or more layers already belong to another offload handle")
 
-    packed = reuse_buffers and all(p.is_contiguous() for layer in layers for p in layer.parameters())
+    packed = (
+        reuse_buffers and not include_buffers and all(p.is_contiguous() for layer in layers for p in layer.parameters())
+    )
     if packed:
         storage_owners: dict[tuple[torch.device, int], int] = {}
         for index, layer in enumerate(layers):
@@ -298,6 +302,7 @@ def enable_layerwise_cpu_offload(
             metrics=metrics,
             state_id=index,
             pin_memory=pin_memory,
+            include_buffers=include_buffers,
             **({"pool": pool} if pool is not None else {}),
         )
         for index, layer in enumerate(layers)
@@ -326,12 +331,14 @@ def enable_layerwise_cpu_offload(
                     )
                 )
             layer_hooks.append((layer, state, handles))
-            setattr(layer, "_worldfoundry_layerwise_cpu_offload", True)
-            setattr(layer, "_worldfoundry_layerwise_cpu_offload_state", state)
+            marked = cast(Any, layer)
+            marked._worldfoundry_layerwise_cpu_offload = True
+            marked._worldfoundry_layerwise_cpu_offload_state = state
         if pool is not None:
-            pool.initialize(states)
+            # A pool is only created for packed offload, whose states are all packed.
+            pool.initialize(cast(list[_PackedLayerwiseOffloadState], states))
             metrics.device_buffer_bytes = pool.nbytes
-        setattr(model, "_worldfoundry_layerwise_cpu_offload", True)
+        cast(Any, model)._worldfoundry_layerwise_cpu_offload = True
         # Match the upstream double-buffer lifecycle: the first CUDA buffer is
         # populated before layer 0 is entered, so the first timed forward does not
         # fall back to a synchronous H2D copy.  The pre-hook waits on this stream,
@@ -363,7 +370,7 @@ def enable_layerwise_cpu_offload(
     )
 
 
-def layerwise_offload_mutation_scope(module: nn.Module) -> Iterator[None]:
+def layerwise_offload_mutation_scope(module: nn.Module) -> AbstractContextManager[None]:
     """Temporarily materialize offloaded parameters for in-place mutations."""
 
     state = getattr(module, "_worldfoundry_layerwise_cpu_offload_state", None)
@@ -394,6 +401,7 @@ class _LayerwiseOffloadState:
         metrics: _LayerwiseOffloadMetrics,
         state_id: int,
         pin_memory: bool,
+        include_buffers: bool = False,
     ) -> None:
         """Bind one module to a compute device and a shared prefetch stream."""
         self.module = module
@@ -402,9 +410,16 @@ class _LayerwiseOffloadState:
         self.metrics = metrics
         self.state_id = int(state_id)
         self.pin_memory = pin_memory
+        self.include_buffers = include_buffers
         self.cpu_named_parameters: dict[str, torch.Tensor] = {}
         self.gpu_named_parameters: dict[str, torch.Tensor] = {}
         self.next_state: _LayerwiseOffloadState | None = None
+
+    def named_tensors(self) -> Iterator[tuple[str, torch.Tensor]]:
+        """Select parameters, and optionally inference buffers, without changing defaults."""
+        yield from self.module.named_parameters(recurse=True)
+        if self.include_buffers:
+            yield from self.module.named_buffers(recurse=True)
 
     @_compiler_disable
     def offload_to_cpu(self) -> None:
@@ -413,13 +428,11 @@ class _LayerwiseOffloadState:
         ``pin_memory`` can raise on some allocators; the copy still lives on
         pageable CPU RAM so offload continues rather than aborting setup.
         """
-        for name, param in self.module.named_parameters(recurse=True):
+        for name, param in self.named_tensors():
             cpu_tensor = param.detach().to("cpu")
             if self.pin_memory:
-                try:
+                with suppress(RuntimeError):
                     cpu_tensor = cpu_tensor.pin_memory()
-                except RuntimeError:
-                    pass
             counter = "pinned_cpu_tensors" if cpu_tensor.is_pinned() else "pageable_cpu_tensors"
             # Setup inventory is lifetime evidence.  Request counters are
             # incremented when a copy actually consumes the CPU master.
@@ -432,7 +445,7 @@ class _LayerwiseOffloadState:
         """Block the compute stream on prefetch, then bind GPU copies to params."""
         torch.cuda.current_stream(self.device).wait_stream(self.async_copy_stream)
         self.metrics.count("wait_calls")
-        named_parameters = dict(self.module.named_parameters(recurse=True))
+        named_parameters = dict(self.named_tensors())
         for name, param in named_parameters.items():
             if name not in self.cpu_named_parameters:
                 continue
@@ -487,7 +500,7 @@ class _LayerwiseOffloadState:
     @_compiler_disable
     def release_gpu_params(self) -> None:
         """Drop GPU copies after forward so only the CPU master remains."""
-        named_parameters = dict(self.module.named_parameters(recurse=True))
+        named_parameters = dict(self.named_tensors())
         for name, param in named_parameters.items():
             if name not in self.cpu_named_parameters:
                 continue
@@ -499,7 +512,7 @@ class _LayerwiseOffloadState:
         self.metrics.count("release_calls")
 
     @contextmanager
-    def mutate_params_scope(self) -> Iterator[None]:
+    def mutate_params_scope(self) -> Generator[None, None, None]:
         """Materialize, yield for in-place writes, then refresh the CPU master.
 
         LoRA / optimizer updates must not race a swap. After the body the GPU
@@ -591,7 +604,7 @@ class _PackedLayerwiseOffloadState(_LayerwiseOffloadState):
                     host = torch.empty(size, dtype=dtype, device="cpu", pin_memory=self.pin_memory)
                 except RuntimeError:
                     host = torch.empty(size, dtype=dtype, device="cpu")
-                for (name, parameter), offset in zip(parameters, offsets):
+                for (name, parameter), offset in zip(parameters, offsets, strict=False):
                     view = host[offset : offset + parameter.numel()].view(parameter.shape)
                     view.copy_(parameter.detach())
                     masters[name] = view
@@ -662,7 +675,7 @@ class _PackedLayerwiseOffloadState(_LayerwiseOffloadState):
         super().release_gpu_params()
 
     @contextmanager
-    def mutate_params_scope(self) -> Iterator[None]:
+    def mutate_params_scope(self) -> Generator[None, None, None]:
         with torch.no_grad():
             self.wait_and_materialize()
         try:
@@ -682,9 +695,7 @@ def _reject_packed_serialization(*args, **kwargs) -> None:
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def _find_layer_container(
-    model: nn.Module, layer_container: str | None
-) -> nn.ModuleList | nn.Sequential | None:
+def _find_layer_container(model: nn.Module, layer_container: str | None) -> nn.ModuleList | nn.Sequential | None:
     """Resolve an explicit layer stack, or discover the first ModuleList.
 
     A dotted ``layer_container`` is required when the first ``ModuleList`` is

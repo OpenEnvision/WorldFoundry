@@ -2,8 +2,6 @@
 
 # pyre-unsafe
 
-"""Module for base_models -> perception_core -> segment -> sam3 -> perflib -> __init__.py functionality."""
-
 import os
 
 is_enabled = False

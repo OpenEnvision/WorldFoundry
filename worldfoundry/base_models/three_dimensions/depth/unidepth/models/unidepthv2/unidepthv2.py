@@ -37,7 +37,8 @@ def _check_ratio(image_ratio, ratio_bounds):
         warnings.warn(
             f"Input image ratio ({image_ratio:.3f}) is out of training "
             f"distribution: {ratio_bounds}. This may lead to unexpected results. "
-            f"Consider resizing/padding the image to match the training distribution."
+            f"Consider resizing/padding the image to match the training distribution.",
+            stacklevel=1,
         )
 
 
@@ -46,7 +47,8 @@ def _check_resolution(shape_constraints, resolution_level):
         warnings.warn(
             "Resolution level is not set. Using max resolution. "
             "You can tradeoff resolution for speed by setting a number in [0,10]. "
-            "This can be achieved by setting model's `resolution_level` attribute."
+            "This can be achieved by setting model's `resolution_level` attribute.",
+            stacklevel=1,
         )
         resolution_level = RESOLUTION_LEVELS
     pixel_bounds = sorted(shape_constraints["pixels_bounds_ori"])
@@ -55,7 +57,8 @@ def _check_resolution(shape_constraints, resolution_level):
     if clipped_resolution_level != resolution_level:
         warnings.warn(
             f"Resolution level {resolution_level} is out of bounds ([0,{RESOLUTION_LEVELS}]). "
-            f"Clipping to {clipped_resolution_level}."
+            f"Clipping to {clipped_resolution_level}.",
+            stacklevel=1,
         )
     shape_constraints["pixels_bounds"] = [
         pixel_bounds[0] + ceil(pixel_range * clipped_resolution_level / RESOLUTION_LEVELS),
@@ -225,9 +228,9 @@ class UniDepthV2(
         pixel_encoder_embed_dims = (
             pixel_encoder.embed_dims
             if hasattr(pixel_encoder, "embed_dims")
-            else [getattr(pixel_encoder, "embed_dim") * 2**i for i in range(4)]
+            else [pixel_encoder.embed_dim * 2**i for i in range(4)]
         )
-        config["model"]["pixel_encoder"]["embed_dim"] = getattr(pixel_encoder, "embed_dim")
+        config["model"]["pixel_encoder"]["embed_dim"] = pixel_encoder.embed_dim
         config["model"]["pixel_encoder"]["embed_dims"] = pixel_encoder_embed_dims
         config["model"]["pixel_encoder"]["depths"] = pixel_encoder.depths
 
@@ -239,7 +242,7 @@ class UniDepthV2(
         assert stacking_fn in STACKING_FNS, f"Stacking function {stacking_fn} not found in {STACKING_FNS.keys()}"
         self.stacking_fn = STACKING_FNS[stacking_fn]
 
-        self.slices_encoder_range = list(zip([0, *pixel_encoder.depths[:-1]], pixel_encoder.depths))
+        self.slices_encoder_range = list(zip([0, *pixel_encoder.depths[:-1]], pixel_encoder.depths, strict=False))
         self.shape_constraints = config["data"]["shape_constraints"]
         self.shape_constraints["pixels_bounds_ori"] = self.shape_constraints.get("pixels_bounds", [1400, 2400])
         self.interpolation_mode = "bilinear"

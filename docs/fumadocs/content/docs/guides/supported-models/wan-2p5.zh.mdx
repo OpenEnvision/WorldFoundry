@@ -1,11 +1,11 @@
 ---
 title: "Wan 2.5 API"
-description: "Wan 2.5 API（Alibaba (Tongyi Lab)）：托管 API，本地不跑权重，请求打到供应商端点。"
+description: "Wan 2.5 API（阿里巴巴通义实验室）：托管 API，本地不跑权重，请求发往服务方端点。"
 modelId: "wan-2p5"
 pageSource: authored
 ---
 
-Wan 2.5 API 是阿里巴巴通义万相 Wan 2.5 视频生成模型的 DashScope 托管接入点，记录文生视频与图生视频任务。与本 catalog 中可本地运行的开源 Wan 权重不同，本条目覆盖的是服务方托管的生成路径：请求发往阿里云 DashScope，成片以产物形式返回。别名 wan2.5、wan-2.5 同样解析到本条目。
+Wan 2.5 API 是阿里巴巴通义万相 Wan 2.5 视频生成模型的 DashScope 托管接入点，支持文生视频与图生视频。与 WorldFoundry 本地运行的开源 Wan 权重不同，它走服务方托管的生成路径：请求发往阿里云 DashScope，成片以产物形式返回。别名 wan2.5、wan-2.5 同样解析到该模型。
 
 <ModelPaperFigures modelId="wan-2p5" locale="zh" />
 
@@ -15,18 +15,20 @@ Wan 2.5 API 是阿里巴巴通义万相 Wan 2.5 视频生成模型的 DashScope 
 
 ## 用来做什么
 
-要阿里云 DashScope 托管成片、而不是本地 [Wan2.1](/zh/docs/guides/supported-models/wan2.1) 权重时，用 Wan 2.5。文生视频走 prompt，图生视频走起始图；成片以 WorldFoundry 产物返回。
+需要通过阿里云 DashScope 托管生成视频，而不是使用本地 [Wan2.1](/zh/docs/guides/supported-models/wan2.1) 权重时，请使用 Wan 2.5。文生视频使用 prompt，图生视频使用起始图；成片以 WorldFoundry 产物返回。
 
-启动 `worldfoundry-eval run wan-2p5`，任务 profile 为 `text-to-video`。别名 `wan2.5`、`wan-2.5` 解析到这里。后续托管卡：[Wan 2.6 API](/zh/docs/guides/supported-models/wan-2p6)、[Wan 2.7 API](/zh/docs/guides/supported-models/wan-2p7)。
+启动 `wf run wan-2p5`。别名 `wan2.5`、`wan-2.5` 解析到该模型。后续托管版本：[Wan 2.6 API](/zh/docs/guides/supported-models/wan-2p6)、[Wan 2.7 API](/zh/docs/guides/supported-models/wan-2p7)。
 
 相关套件：[VBench](/zh/docs/evaluation/benchmark-hub/vbench)、[Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)。
 
 ## 运行时契约
 
-本卡不钉本地 checkpoint、分辨率、帧数或步数——这些旋钮在 DashScope 请求里。记录任务：文生视频、图生视频。状态：**Runner parity pending**（托管路径，本地 runner 不适用）。自备服务方密钥。
+没有本地 checkpoint，也没有本地分辨率、帧数或步数表——这些设置在 DashScope 请求里。任务：文生视频、图生视频。自备服务方密钥。
+
+模型版本由服务方控制，即使 WorldFoundry 侧没有任何改动，输出也可能随时间变化。
 
 ## 在 WorldFoundry 中运行
 
-不创建本地 GPU 环境。在 dashscope.aliyun.com 开通 DashScope key，然后启动 `worldfoundry-eval run wan-2p5`，任务 profile 为 `text-to-video`。费用、配额与内容政策以阿里云账号为准。
+不创建本地 GPU 环境。在 dashscope.aliyun.com 开通 DashScope key，然后启动 `wf run wan-2p5`。费用、配额与内容政策以阿里云账号为准。
 
 <ModelRelatedRecipes modelId="wan-2p5" locale="zh" />

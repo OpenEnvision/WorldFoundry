@@ -3,8 +3,9 @@ from __future__ import annotations
 import contextlib
 import inspect
 import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -12,13 +13,11 @@ import torch
 from .runtime_env import (
     DEFAULT_NEOVERSE_LORA_NAME,
     DEFAULT_NEOVERSE_REPO,
-    ensure_neoverse_runtime,
     resolve_neoverse_lora_path,
     resolve_neoverse_model_dir,
     resolve_neoverse_reconstructor_path,
     runtime_root,
 )
-
 
 DEFAULT_PROMPT = (
     "A smooth video with complete scene content. Inpaint any missing regions or margins naturally "
@@ -40,7 +39,7 @@ class NeoVerseOfficialRuntime:
         *,
         model_dir: str,
         reconstructor_path: str,
-        lora_path: Optional[str],
+        lora_path: str | None,
         device: str = "cuda",
         weight_dtype: torch.dtype = torch.bfloat16,
         default_prompt: str = DEFAULT_PROMPT,
@@ -72,23 +71,22 @@ class NeoVerseOfficialRuntime:
         cls,
         pretrained_model_path: str = DEFAULT_NEOVERSE_REPO,
         args=None,
-        device: Optional[str] = None,
+        device: str | None = None,
         weight_dtype: torch.dtype = torch.bfloat16,
-        reconstructor_path: Optional[str] = None,
-        lora_path: Optional[str] = None,
+        reconstructor_path: str | None = None,
+        lora_path: str | None = None,
         disable_lora: bool = False,
         lora_alpha: float = 1.0,
         enable_vram_management: bool = False,
         default_prompt: str = DEFAULT_PROMPT,
         default_negative_prompt: str = "",
-        cfg_scale: Optional[float] = None,
-        num_inference_steps: Optional[int] = None,
+        cfg_scale: float | None = None,
+        num_inference_steps: int | None = None,
         height: int = 336,
         width: int = 560,
         **kwargs,
-    ) -> "NeoVerseOfficialRuntime":
+    ) -> NeoVerseOfficialRuntime:
         del args, kwargs
-        ensure_neoverse_runtime()
         from worldfoundry.base_models.diffusion_model.models.autoencoders.wan import (
             WanVideoVAE,
             WanVideoVAEStateDictConverter,
@@ -103,13 +101,17 @@ class NeoVerseOfficialRuntime:
             NeoVerseControlBranch,
             NeoVerseControlBranchDictConverter,
         )
+        from worldfoundry.core.model_loading import hash_state_dict_keys, load_model, load_state_dict
         from worldfoundry.synthesis.visual_generation.neoverse.native.worldmirror import (
             NeoVerseWorldMirror,
         )
-        from worldfoundry.core.model_loading import hash_state_dict_keys, load_model, load_state_dict
+
+        # isort: split
         from worldfoundry.synthesis.visual_generation.neoverse.native.depth_anything_reconstructor import (
             DepthAnything3Reconstructor,
         )
+
+        # isort: split
         from worldfoundry.synthesis.visual_generation.neoverse.native.pipeline import (
             WanVideoNeoVersePipeline,
         )
@@ -184,9 +186,7 @@ class NeoVerseOfficialRuntime:
         )
         reconstructor_config = dict(reconstructor_config)
         strict_reconstructor = bool(reconstructor_config.pop("strict_load", True))
-        reconstructor_dtype = (
-            torch.float32 if reconstructor_config.pop("upcast_to_float32", False) else weight_dtype
-        )
+        reconstructor_dtype = torch.float32 if reconstructor_config.pop("upcast_to_float32", False) else weight_dtype
         reconstructor = load_model(
             reconstructor_class,
             path=None,
@@ -221,7 +221,9 @@ class NeoVerseOfficialRuntime:
             default_prompt=default_prompt,
             default_negative_prompt=default_negative_prompt,
             default_cfg_scale=cfg_scale if cfg_scale is not None else (1.0 if resolved_lora_path else 5.0),
-            default_num_inference_steps=num_inference_steps if num_inference_steps is not None else (4 if resolved_lora_path else 50),
+            default_num_inference_steps=num_inference_steps
+            if num_inference_steps is not None
+            else (4 if resolved_lora_path else 50),
             height=height,
             width=width,
         )
@@ -253,19 +255,18 @@ class NeoVerseOfficialRuntime:
         self,
         *,
         keyframes=None,
-        predefined_trajectory: Optional[str] = None,
-        num_frames: Optional[int] = None,
-        trajectory_file: Optional[str] = None,
+        predefined_trajectory: str | None = None,
+        num_frames: int | None = None,
+        trajectory_file: str | None = None,
         trajectory_data=None,
         trajectory_mode: str = "relative",
         trajectory_name: str = "neoverse_trajectory",
         zoom_ratio: float = 1.0,
-        angle: Optional[float] = None,
-        distance: Optional[float] = None,
-        orbit_radius: Optional[float] = None,
+        angle: float | None = None,
+        distance: float | None = None,
+        orbit_radius: float | None = None,
         use_first_frame: bool = True,
     ):
-        ensure_neoverse_runtime()
         from worldfoundry.synthesis.visual_generation.neoverse.native.auxiliary import (
             CameraTrajectory,
         )
@@ -298,9 +299,7 @@ class NeoVerseOfficialRuntime:
                 )
 
             if not isinstance(trajectory_data, dict):
-                raise TypeError(
-                    f"trajectory_data must be a list or dict, got {type(trajectory_data)!r}."
-                )
+                raise TypeError(f"trajectory_data must be a list or dict, got {type(trajectory_data)!r}.")
 
             resolved_mode = trajectory_data.get("mode", trajectory_mode)
             resolved_name = trajectory_data.get("name", trajectory_name)
@@ -327,9 +326,7 @@ class NeoVerseOfficialRuntime:
             if "trajectory" in trajectory_data:
                 trajectory = trajectory_data["trajectory"]
                 if "frame_indices" not in trajectory or "frame_matrices" not in trajectory:
-                    raise ValueError(
-                        "trajectory_data['trajectory'] must contain frame_indices and frame_matrices."
-                    )
+                    raise ValueError("trajectory_data['trajectory'] must contain frame_indices and frame_matrices.")
                 cameras = CameraTrajectory._interpolate_sparse_matrices(
                     trajectory["frame_indices"],
                     trajectory["frame_matrices"],
@@ -366,29 +363,28 @@ class NeoVerseOfficialRuntime:
         images,
         prompt: str = "",
         keyframes=None,
-        predefined_trajectory: Optional[str] = None,
-        num_frames: Optional[int] = None,
-        trajectory_file: Optional[str] = None,
+        predefined_trajectory: str | None = None,
+        num_frames: int | None = None,
+        trajectory_file: str | None = None,
         trajectory_data=None,
         trajectory_mode: str = "relative",
         trajectory_name: str = "neoverse_trajectory",
         zoom_ratio: float = 1.0,
-        angle: Optional[float] = None,
-        distance: Optional[float] = None,
-        orbit_radius: Optional[float] = None,
+        angle: float | None = None,
+        distance: float | None = None,
+        orbit_radius: float | None = None,
         use_first_frame: bool = True,
-        negative_prompt: Optional[str] = None,
+        negative_prompt: str | None = None,
         alpha_threshold: float = 1.0,
         seed: int = 42,
-        cfg_scale: Optional[float] = None,
-        num_inference_steps: Optional[int] = None,
-        static_scene: Optional[bool] = None,
-        save_root: Optional[str] = None,
+        cfg_scale: float | None = None,
+        num_inference_steps: int | None = None,
+        static_scene: bool | None = None,
+        save_root: str | None = None,
         return_dict: bool = False,
         **kwargs,
     ):
         del kwargs
-        ensure_neoverse_runtime()
         from worldfoundry.synthesis.visual_generation.neoverse.native.auxiliary import (
             homo_matrix_inverse,
             load_video,
@@ -467,9 +463,7 @@ class NeoVerseOfficialRuntime:
                 intrinsics = intrinsics[:1].repeat(len(cam_traj), 1, 1)
                 timestamps = timestamps[:1].repeat(len(cam_traj))
             elif input_cam2world.shape[0] != len(cam_traj):
-                raise ValueError(
-                    "For non-static NeoVerse inputs, trajectory length must match the input-frame count."
-                )
+                raise ValueError("For non-static NeoVerse inputs, trajectory length must match the input-frame count.")
 
             ratio = torch.linspace(1.0, cam_traj.zoom_ratio, intrinsics.shape[0], device=self.device)
             zoomed_intrinsics = intrinsics.clone()
@@ -482,16 +476,14 @@ class NeoVerseOfficialRuntime:
 
             if isinstance(gaussians, list):
                 target_world2cam = homo_matrix_inverse(target_cam2world)
-                target_rgb, target_depth, target_alpha = (
-                    self.pipeline.reconstructor.gs_renderer.rasterizer.forward(
-                        gaussians,
-                        render_viewmats=[target_world2cam],
-                        render_Ks=[zoomed_intrinsics],
-                        render_timestamps=[timestamps],
-                        sh_degree=0,
-                        width=width,
-                        height=height,
-                    )
+                target_rgb, target_depth, target_alpha = self.pipeline.reconstructor.gs_renderer.rasterizer.forward(
+                    gaussians,
+                    render_viewmats=[target_world2cam],
+                    render_Ks=[zoomed_intrinsics],
+                    render_timestamps=[timestamps],
+                    sh_degree=0,
+                    width=width,
+                    height=height,
                 )
             else:
                 render_chunk_size = max(1, int(os.environ.get("NEOVERSE_RENDER_CHUNK_SIZE", "1")))
@@ -545,9 +537,7 @@ class NeoVerseOfficialRuntime:
                 num_frames=len(cam_traj),
                 cfg_scale=cfg_scale if cfg_scale is not None else self.default_cfg_scale,
                 num_inference_steps=(
-                    num_inference_steps
-                    if num_inference_steps is not None
-                    else self.default_num_inference_steps
+                    num_inference_steps if num_inference_steps is not None else self.default_num_inference_steps
                 ),
                 tiled=False,
                 **wrapped_data,

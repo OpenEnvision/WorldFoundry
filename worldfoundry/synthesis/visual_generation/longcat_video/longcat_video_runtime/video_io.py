@@ -6,7 +6,6 @@ from typing import Any
 import numpy as np
 import torch
 
-
 try:
     from torchvision.io import write_video as _torchvision_write_video
 except Exception:  # pragma: no cover - depends on torchvision build features.
@@ -14,10 +13,7 @@ except Exception:  # pragma: no cover - depends on torchvision build features.
 
 
 def _to_numpy(video_array: Any) -> np.ndarray:
-    if isinstance(video_array, torch.Tensor):
-        array = video_array.detach().cpu().numpy()
-    else:
-        array = np.asarray(video_array)
+    array = video_array.detach().cpu().numpy() if isinstance(video_array, torch.Tensor) else np.asarray(video_array)
     if array.dtype != np.uint8:
         array = np.clip(array, 0, 255).astype(np.uint8)
     return array

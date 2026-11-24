@@ -75,10 +75,10 @@ metrics:
 runner:
   workspace:
     dispatch: vbench_series
-  official_script: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VBenchPlusPlusContract
+  official_script: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
+  runner_target: worldfoundry.evals.tasks.contracts.external:vbench-plus-plus
   run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py --benchmark-id 
+    worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py --benchmark-id 
     vbench-plus-plus --variant "${WORLDFOUNDRY_VBENCH_PLUS_PLUS_VARIANT:-long}" --videos-path 
     "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --dimension 
     "${WORLDFOUNDRY_VBENCH_PLUS_PLUS_DIMENSION:-temporal_flickering}" --mode 
@@ -86,7 +86,7 @@ runner:
     --timeout "${WORLDFOUNDRY_VBENCH_PLUS_PLUS_TIMEOUT:-1200}" --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" 
     --json
   validation_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
-    worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py --benchmark-id 
+    worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py --benchmark-id 
     vbench-plus-plus --variant "${WORLDFOUNDRY_VBENCH_PLUS_PLUS_VARIANT:-long}" --videos-path 
     "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" --dimension 
     "${WORLDFOUNDRY_VBENCH_PLUS_PLUS_DIMENSION:-temporal_flickering}" --mode 
@@ -99,11 +99,11 @@ runner:
     kind: in_tree_official_source
     repo_url: https://github.com/Vchitect/VBench.git
     revision: 45e79ec14e69a2187202c675d2dbce1a71843d53
-    root: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
+    root: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
     override_root_env: WORLDFOUNDRY_VBENCH_PLUS_PLUS_ROOT
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
     official_entrypoints:
-      evaluate_long: python -m worldfoundry.evaluation.tasks.execution.runners.vbench_plus_plus.runtime.entrypoints.long
+      evaluate_long: python -m worldfoundry.evals.tasks.execution.runners.vbench_plus_plus.runtime.entrypoints.long
         --videos_path <generated_video_dir>
   expected_artifacts:
   - scorecard.json
@@ -132,7 +132,7 @@ runner:
       full_suite_verified: false
       runtime_env: conda/envs/worldfoundry-unified-cu128
       python: ${WORLDFOUNDRY_UNIFIED_PYTHON}
-      vbench_root: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
+      vbench_root: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
       videos_path: ${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}
       verified: true
       scope: bounded_official_gpu_validation
@@ -175,13 +175,13 @@ base_model_dependency_preflight:
   missing: []
 data_refs:
   in_tree_source_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
+  - worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
   task_yaml: worldfoundry/data/benchmarks/tasks/external/vbench-plus-plus.yaml
   generated_artifact_examples:
   - ${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:VBenchPlusPlusContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:vbench-plus-plus
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
@@ -202,14 +202,14 @@ official_gpu_validation:
   full_suite_verified: false
   runtime_env: conda/envs/worldfoundry-unified-cu128
   python: ${WORLDFOUNDRY_UNIFIED_PYTHON}
-  vbench_root: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime
+  vbench_root: worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/runtime
   videos_path: ${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}
   scope: bounded_official_gpu_validation
   scorecard: 
     tmp/worldfoundry_audit/remaining_benchmarks/vbenchpp_long_temporal_flickering_unified_20260621_002/scorecard.json
 validation_command:
 - ${WORLDFOUNDRY_UNIFIED_PYTHON}
-- worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
+- worldfoundry/evals/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
 - --benchmark-id
 - vbench-plus-plus
 - --variant
@@ -230,3 +230,16 @@ artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+contract:
+  input_keys:
+  - generated_video_dir
+  - prompt_suite_json
+  - reference_image_dir
+  - official_results_path
+  output_keys:
+  - scorecard
+  - dimension_scores
+  - raw_metric_table
+  notes:
+  - Contract covers VBench++ I2V, long-video, and trustworthiness variants through one scorecard surface.
+  - Official runtime remains variant-specific and requires the upstream VBench dependency stack.

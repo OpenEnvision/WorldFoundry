@@ -24,7 +24,6 @@ rest stay on bidirectional GDN.  See :mod:`sana_v2v_attn_blocks`.
 """
 
 import os
-from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -37,10 +36,14 @@ from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_blocks i
     PatchEmbedMS3D,
     T2IFinalLayer,
 )
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_multi_scale_video import (
     SanaMSVideo,
     SanaVideoMSBlock,
 )
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities import is_xformers_available
 from worldfoundry.base_models.diffusion_model.models.networks.sana.selection import (
     resolve_attention_block,
@@ -50,10 +53,10 @@ from worldfoundry.core.distributed.collectives.generic import get_rank
 
 _xformers_available = False if os.environ.get("DISABLE_XFORMERS", "0") == "1" else is_xformers_available()
 if _xformers_available:
-    import xformers.ops
+    pass
 
 
-def get_softmax_layer_indices(depth: int, softmax_ratio: float = 0.25) -> List[int]:
+def get_softmax_layer_indices(depth: int, softmax_ratio: float = 0.25) -> list[int]:
     """
     Calculate which layer indices should use softmax attention.
 
@@ -189,7 +192,7 @@ class SanaMSVideoV2V(SanaMSVideo):
         pack_latents=False,
         additional_inchannels=0,
         softmax_ratio: float = 0.0,
-        softmax_layer_indices: Optional[List[int]] = None,
+        softmax_layer_indices: list[int] | None = None,
         softmax_attn_type="GDNSoftmaxAttention",
         **kwargs,
     ):
@@ -234,7 +237,10 @@ class SanaMSVideoV2V(SanaMSVideo):
         )
         self.patch_size = patch_size
         self.h = self.w = 0
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+        def approx_gelu():
+            return nn.GELU(approximate="tanh")
+
         self.t_block = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 6 * hidden_size, bias=True))
         self.pos_embed_ms = None
         self.pack_latents = pack_latents
@@ -359,10 +365,7 @@ class SanaMSVideoV2V(SanaMSVideo):
         f, h, w = THW
         BLOCK_SIZE = 128
         chunk_id_map = torch.zeros(f, h, w, dtype=torch.long, device=x.device)
-        if chunk_index is None:
-            chunk_indices = range(f)
-        else:
-            chunk_indices = chunk_index
+        chunk_indices = range(f) if chunk_index is None else chunk_index
 
         for i, start_idx in enumerate(chunk_indices):
             chunk_id_map[start_idx:] = i
@@ -452,7 +455,7 @@ class SanaMSVideoV2V(SanaMSVideo):
 
         if self.use_flex_attention:
             block_mask = self.create_flexattention_chunkcausal_mask(
-                x, (self.f, self.h, self.w), kwargs.get("chunk_index", None)
+                x, (self.f, self.h, self.w), kwargs.get("chunk_index")
             )
         else:
             block_mask = None

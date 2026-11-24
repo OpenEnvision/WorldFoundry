@@ -12,9 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from typing import Optional
-
 import torch
 import torch.nn.functional as F
 from diffusers import ConfigMixin, ModelMixin
@@ -22,49 +19,11 @@ from diffusers.configuration_utils import register_to_config
 from diffusers.models.attention import Attention, FeedForward
 from diffusers.models.embeddings import (
     SinusoidalPositionalEmbedding,
-    TimestepEmbedding,
-    Timesteps,
 )
 from torch import nn
 
-
-class TimestepEncoder(nn.Module):
-    def __init__(self, embedding_dim, compute_dtype=torch.float32):
-        super().__init__()
-        self.time_proj = Timesteps(num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=1)
-        self.timestep_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=embedding_dim)
-
-    def forward(self, timesteps):
-        dtype = next(self.parameters()).dtype
-        timesteps_proj = self.time_proj(timesteps).to(dtype)
-        timesteps_emb = self.timestep_embedder(timesteps_proj)  # (N, D)
-        return timesteps_emb
-
-
-class AdaLayerNorm(nn.Module):
-    def __init__(
-        self,
-        embedding_dim: int,
-        norm_elementwise_affine: bool = False,
-        norm_eps: float = 1e-5,
-        chunk_dim: int = 0,
-    ):
-        super().__init__()
-        self.chunk_dim = chunk_dim
-        output_dim = embedding_dim * 2
-        self.silu = nn.SiLU()
-        self.linear = nn.Linear(embedding_dim, output_dim)
-        self.norm = nn.LayerNorm(output_dim // 2, norm_eps, norm_elementwise_affine)
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        temb: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        temb = self.linear(self.silu(temb))
-        scale, shift = temb.chunk(2, dim=1)
-        x = self.norm(x) * (1 + scale[:, None]) + shift[:, None]
-        return x
+from worldfoundry.base_models.llm_mllm_core.action.gr00t.modeling.dit import AdaLayerNorm as AdaLayerNorm
+from worldfoundry.base_models.llm_mllm_core.action.gr00t.modeling.dit import TimestepEncoder as TimestepEncoder
 
 
 class BasicTransformerBlock(nn.Module):
@@ -74,7 +33,7 @@ class BasicTransformerBlock(nn.Module):
         num_attention_heads: int,
         attention_head_dim: int,
         dropout=0.0,
-        cross_attention_dim: Optional[int] = None,
+        cross_attention_dim: int | None = None,
         activation_fn: str = "geglu",
         attention_bias: bool = False,
         upcast_attention: bool = False,
@@ -83,9 +42,9 @@ class BasicTransformerBlock(nn.Module):
         norm_eps: float = 1e-5,
         final_dropout: bool = False,
         attention_type: str = "default",
-        positional_embeddings: Optional[str] = None,
-        num_positional_embeddings: Optional[int] = None,
-        ff_inner_dim: Optional[int] = None,
+        positional_embeddings: str | None = None,
+        num_positional_embeddings: int | None = None,
+        ff_inner_dim: int | None = None,
         ff_bias: bool = True,
         attention_out_bias: bool = True,
     ):
@@ -108,9 +67,7 @@ class BasicTransformerBlock(nn.Module):
             )
 
         if positional_embeddings == "sinusoidal":
-            self.pos_embed = SinusoidalPositionalEmbedding(
-                dim, max_seq_length=num_positional_embeddings
-            )
+            self.pos_embed = SinusoidalPositionalEmbedding(dim, max_seq_length=num_positional_embeddings)
         else:
             self.pos_embed = None
 
@@ -150,12 +107,11 @@ class BasicTransformerBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        temb: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        temb: torch.LongTensor | None = None,
     ) -> torch.Tensor:
-
         # 0. Self-Attention
         if self.norm_type == "ada_norm":
             norm_hidden_states = self.norm1(hidden_states, temb)
@@ -165,8 +121,8 @@ class BasicTransformerBlock(nn.Module):
         if self.pos_embed is not None:
             norm_hidden_states = self.pos_embed(norm_hidden_states)
 
-        attn_output = self.attn1( #@BUG @JinhuiYE
-            norm_hidden_states, # 查看groot  为什么能够通过？
+        attn_output = self.attn1(  # @BUG @JinhuiYE
+            norm_hidden_states,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
             # encoder_attention_mask=encoder_attention_mask,
@@ -191,8 +147,8 @@ class BasicTransformerBlock(nn.Module):
 class DiT(ModelMixin, ConfigMixin):
     _supports_gradient_checkpointing = True
 
-    # register_to_config 的作用是创建类的时候会自动把传入的参数注册到 config 中，这样后续调用的时候可以通过 self.config.xxx 调用 还不是 self.xxx
-    @register_to_config # 去看一下这个的作用 --> 将传入的参数注册到配置中 TODO 改为我们的单例模式, 写一个 能够merge 的 @merge_pram_config
+    # register_to_config stores the constructor arguments in ``self.config``.
+    @register_to_config
     def __init__(
         self,
         num_attention_heads: int = 8,
@@ -202,7 +158,7 @@ class DiT(ModelMixin, ConfigMixin):
         dropout: float = 0.1,
         attention_bias: bool = True,
         activation_fn: str = "gelu-approximate",
-        num_embeds_ada_norm: Optional[int] = 1000,
+        num_embeds_ada_norm: int | None = 1000,
         upcast_attention: bool = False,
         norm_type: str = "ada_norm",
         norm_elementwise_affine: bool = False,
@@ -210,10 +166,10 @@ class DiT(ModelMixin, ConfigMixin):
         max_num_positional_embeddings: int = 512,
         compute_dtype=torch.float32,
         final_dropout: bool = True,
-        positional_embeddings: Optional[str] = "sinusoidal",
+        positional_embeddings: str | None = "sinusoidal",
         interleave_self_attention=False,
-        cross_attention_dim: Optional[int] = None,
-        **kwargs
+        cross_attention_dim: int | None = None,
+        **kwargs,
     ):
         super().__init__()
         self.attention_head_dim = attention_head_dim
@@ -221,15 +177,12 @@ class DiT(ModelMixin, ConfigMixin):
         self.gradient_checkpointing = False
 
         # Timestep encoder
-        #  self.config.compute_dtype 可能不存在，要提前处理
-        compute_dtype = getattr(self.config, 'compute_dtype', torch.float32)
-        self.timestep_encoder = TimestepEncoder( # TODO BUG, train 的时候 self.config.compute_dtype 不会报错， 但是 eval 的时候会
-            embedding_dim=self.inner_dim, compute_dtype=compute_dtype
-        )
+        # Configs loaded for evaluation can lack ``compute_dtype``.
+        compute_dtype = getattr(self.config, "compute_dtype", torch.float32)
+        self.timestep_encoder = TimestepEncoder(embedding_dim=self.inner_dim, compute_dtype=compute_dtype)
 
         all_blocks = []
         for idx in range(self.config.num_layers):
-
             use_self_attn = idx % 2 == 1 and interleave_self_attention
             curr_cross_attention_dim = cross_attention_dim if not use_self_attn else None
 
@@ -266,7 +219,7 @@ class DiT(ModelMixin, ConfigMixin):
         self,
         hidden_states: torch.Tensor,  # Shape: (B, T, D)
         encoder_hidden_states: torch.Tensor,  # Shape: (B, S, D)
-        timestep: Optional[torch.LongTensor] = None,
+        timestep: torch.LongTensor | None = None,
         return_all_hidden_states: bool = False,
     ):
         # Encode timesteps
@@ -306,7 +259,6 @@ class DiT(ModelMixin, ConfigMixin):
             return self.proj_out_2(hidden_states), all_hidden_states
         else:
             return self.proj_out_2(hidden_states)
-
 
 
 __all__ = ["DiT"]

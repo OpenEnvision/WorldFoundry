@@ -35,7 +35,14 @@ def replay_host(tmp_path):
     helper = source / "worldfoundry/core/execution/process.py"
     helper.parent.mkdir(parents=True)
     shutil.copyfile(TOOLS.parents[1] / "worldfoundry/core/execution/process.py", helper)
-    cases = {name: {"id": name, "target": f"worldfoundry.{name}:Model", "assets": {}} for name in ("a", "b")}
+    runner = source / "tests/manual/geometry_regression.py"
+    runner.parent.mkdir(parents=True)
+    shutil.copyfile(TOOLS / "geometry_regression.py", runner)
+    weights = tmp_path / "weights"
+    weights.mkdir()
+    (weights / "model.safetensors").write_bytes(b"fixture checkpoint")
+    assets = {"weights": str(weights)}
+    cases = {name: {"id": name, "target": f"worldfoundry.{name}:Model", "assets": assets} for name in ("a", "b")}
     (source / "matrix.json").write_text(json.dumps(cases))
     (source / "dependencies.json").write_text(
         json.dumps(
@@ -67,7 +74,7 @@ def replay_host(tmp_path):
             {
                 "case": case,
                 "status": "passed",
-                "assets": {},
+                "assets": suite.replay.hash_assets(assets),
                 "runtime": {},
                 "arrays_sha256": suite.replay.sha256(root / "arrays.npz"),
             },
@@ -99,12 +106,73 @@ def no_gpu(monkeypatch, *, failure=None):
     monkeypatch.setattr(
         suite.replay,
         "audit_matrix",
-        lambda matrix, *args: {
+        lambda matrix, *args, **kwargs: {
             "status": "passed",
             "cases": {name: {"status": "passed"} for name in json.loads(matrix.read_text())},
         },
     )
     return events, lease
+
+
+@pytest.mark.parametrize("layout", ["relocated", "ambiguous", "unindexed"])
+def test_replay_resolves_archived_exports_from_verified_inventory(
+    replay_host: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str
+) -> None:
+    reference = Path(replay_host["reference"])
+    accepted = reference / "a"
+    relative_export = Path("exports/depth.npy")
+    (accepted / relative_export).parent.mkdir()
+    np.save(accepted / relative_export, np.array([4.0, 5.0]))
+    manifest_path = accepted / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["exported_files"] = [str(tmp_path / "old-host" / relative_export)]
+    suite.write_json(manifest_path, manifest)
+    if layout == "ambiguous":
+        shutil.copyfile(accepted / relative_export, accepted / relative_export.name)
+    index_path = reference / "accepted-index.json"
+    index = json.loads(index_path.read_text())
+    files = index["cases"]["a"]["files"]
+    files["manifest.json"] = suite.replay.sha256(manifest_path)
+    if layout != "unindexed":
+        files[relative_export.as_posix()] = suite.replay.sha256(accepted / relative_export)
+    if layout == "ambiguous":
+        files[relative_export.name] = suite.replay.sha256(accepted / relative_export.name)
+    suite.write_json(index_path, index)
+    replay_host["reference_index_sha256"] = suite.replay.sha256(index_path)
+    original_manifest, original_index = manifest_path.read_bytes(), index_path.read_bytes()
+
+    def acquire(*args: object) -> SimpleNamespace:
+        assert layout == "relocated", "Invalid archived exports reached GPU acquisition"
+        return SimpleNamespace(release=lambda: None)
+
+    def run(command: list[str], env: dict, cwd: Path, log: Path, timeout: float, **options: object) -> int:
+        assert Path(command[command.index("--accepted-manifest") + 1]) == manifest_path
+        candidate = Path(command[command.index("--output-dir") + 1])
+        shutil.copytree(accepted, candidate)
+        source = "worldfoundry/a.py"
+        suite.write_json(
+            candidate / "manifest.json",
+            {
+                **manifest,
+                "exported_files": [str(candidate / relative_export)],
+                "source_hashes": {source: suite.replay.sha256(cwd / source)},
+            },
+        )
+        return 0
+
+    monkeypatch.setattr(suite, "acquire_gpu", acquire)
+    monkeypatch.setattr(suite, "probe_cuda", lambda *args, **kwargs: None)
+    monkeypatch.setattr(suite, "run_child", run)
+    report = suite.run_suite(replay_host, case_ids=["a"])
+    if layout == "relocated":
+        assert report["status"] == "passed", report
+        assert report["cases"]["a"]["outputs"]["export.exports/depth.npy"]["exact"]
+    else:
+        assert report["status"] == "failed"
+        expected = "one root" if layout == "ambiguous" else "file inventory changed"
+        assert expected in report["error"]
+    assert manifest_path.read_bytes() == original_manifest
+    assert index_path.read_bytes() == original_index
 
 
 def test_snapshot_is_committed_and_helpers_ignore_import_cache(replay_host, tmp_path):
@@ -240,16 +308,18 @@ def test_saved_plan_cannot_omit_affected_model_or_lie_about_empty_selection(repl
     source = Path(replay_host["source_root"])
     matrix, deps = source / "matrix.json", source / "dependencies.json"
     plan = suite.impact.select_cases(matrix, deps, source, ["worldfoundry/core/new.py"])
-    assert suite.validate_plan(plan, matrix, deps, source, plan["source_tree"]) == ["a", "b"]
+    assert suite.validate_plan(
+        plan, matrix, deps, source, plan["source_tree"], source_revision=plan["source_revision"]
+    ) == ["a", "b"]
     plan["selected_cases"] = ["a"]
     with pytest.raises(ValueError, match="omits required"):
-        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"])
+        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"], source_revision=plan["source_revision"])
     plan["selected_cases"] = []
     with pytest.raises(ValueError, match="contradicts"):
-        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"])
+        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"], source_revision=plan["source_revision"])
     plan["status"] = "no_inference_changes"
     with pytest.raises(ValueError, match="omits required"):
-        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"])
+        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"], source_revision=plan["source_revision"])
 
 
 def test_stale_policy_plan_is_rejected(replay_host):
@@ -258,7 +328,7 @@ def test_stale_policy_plan_is_rejected(replay_host):
     plan = suite.impact.select_cases(matrix, deps, source, ["worldfoundry/a.py"])
     deps.write_text(deps.read_text() + "\n")
     with pytest.raises(ValueError, match="stale"):
-        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"])
+        suite.validate_plan(plan, matrix, deps, source, plan["source_tree"], source_revision=plan["source_revision"])
 
 
 def test_only_documented_recipe_defaults_and_scope_can_change(replay_host):
@@ -271,6 +341,45 @@ def test_only_documented_recipe_defaults_and_scope_can_change(replay_host):
     assert suite.resolve_case("${ASSET}/${OUTPUT_DIR}", {"ASSET": "path"}) == "path/${OUTPUT_DIR}"
     with pytest.raises(ValueError, match="Missing regression"):
         suite.resolve_case("${MISSING}", {})
+
+
+def test_extra_checkpoint_asset_fails_preflight_before_gpu(replay_host: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    reference = Path(replay_host["reference"]) / "a" / "manifest.json"
+    weights = Path(json.loads(reference.read_text())["case"]["assets"]["weights"])
+    (weights / "extra.txt").write_text("extra local file")
+
+    def acquire(*args: object) -> None:
+        raise AssertionError("Unexpected file reached GPU acquisition")
+
+    monkeypatch.setattr(suite, "acquire_gpu", acquire)
+
+    report = suite.run_suite(replay_host, case_ids=["a"], preflight_only=True)
+
+    assert report["status"] == "failed"
+    assert "Replay asset inventory differs" in report["error"]
+    assert "weights/extra.txt" in report["error"]
+
+
+def test_reports_all_selected_asset_failures_before_gpu(replay_host: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    index_path = Path(replay_host["reference"]) / "accepted-index.json"
+    index = json.loads(index_path.read_text())
+    index["cases"].pop("b")
+    suite.write_json(index_path, index)
+    replay_host["reference_index_sha256"] = suite.replay.sha256(index_path)
+    manifest = json.loads((index_path.parent / "a" / "manifest.json").read_text())
+    (Path(manifest["case"]["assets"]["weights"]) / "unexpected.txt").touch()
+
+    def acquire(*args: object) -> None:
+        raise AssertionError("Incomplete resources reached GPU acquisition")
+
+    monkeypatch.setattr(suite, "acquire_gpu", acquire)
+    report = suite.run_suite(replay_host, case_ids=["a", "b"], preflight_only=True)
+
+    assert report["status"] == "failed"
+    assert report["cases"] == {}
+    assert set(report["asset_preflight_failures"]) == {"a", "b"}
+    assert "weights/unexpected.txt" in report["asset_preflight_failures"]["a"]
+    assert "Missing accepted reference" in report["asset_preflight_failures"]["b"]
 
 
 @pytest.mark.parametrize("name", ["manifest.json", "arrays.npz", "extra-export.png"])
@@ -476,6 +585,42 @@ def test_no_inference_plan_never_probes_gpu(replay_host, tmp_path, monkeypatch):
     assert suite.run_suite(replay_host, plan=plan_file)["status"] == "no_inference_changes"
 
 
+@pytest.mark.parametrize("advance_ref", [False, True])
+def test_suite_requires_exact_plan_commit_with_identical_trees(
+    replay_host: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, advance_ref: bool
+) -> None:
+    source = Path(replay_host["source_root"])
+    git = ["git", "-C", str(source)]
+    base = suite.impact.revision(source)
+    (source / "worldfoundry/a.py").write_text("class Model: changed = True\n")
+    subprocess.run([*git, "commit", "-qam", "candidate"], check=True)
+    planned = suite.impact.revision(source)
+    assert base and planned
+    changed_paths = suite.impact.changed_paths(source, base, planned)
+    plan = suite.impact.select_cases(
+        source / "matrix.json", source / "dependencies.json", source, changed_paths, base=base, head=planned
+    )
+    assert plan["status"] == "planned" and plan["selected_cases"] == ["a"]
+    plan.update(base_revision=base, head_revision=planned)
+    plan_file = tmp_path / "plan.json"
+    suite.write_json(plan_file, plan)
+    if advance_ref:
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "same tree on new commit"], check=True)
+        assert suite.impact.revision(source) != planned
+        assert suite.impact.revision(source, "HEAD^{tree}") == plan["source_tree"]
+
+    events, _ = no_gpu(monkeypatch)
+    report = suite.run_suite(replay_host, plan=plan_file)
+    assert report["source_revision"] == suite.impact.revision(source)
+    if advance_ref:
+        assert report["status"] == "failed", report
+        assert "stale for this snapshot" in report["error"]
+        assert "stop" not in events
+    else:
+        assert report["status"] == "passed", report
+        assert events == ["stop", "release", "restore"]
+
+
 @pytest.mark.parametrize("field", ["cudnn", "packages"])
 def test_preflight_rejects_changed_runtime_before_loading_weights(replay_host, tmp_path, monkeypatch, field):
     manifest = Path(replay_host["reference"]) / "a/manifest.json"
@@ -507,7 +652,8 @@ def test_preflight_accepts_exact_inventory_with_or_without_setuptools_vendor_act
     suite.write_json(tmp_path / "recipes.json", {"a": {}})
     monkeypatch.setattr(suite, "process_helpers", lambda source: None)
 
-    def fake_probe(*args, **kwargs):
+    def fake_probe(command, *args, **kwargs):
+        assert repr(str(tmp_path / "source/tests/manual/geometry_regression.py")) in command[2]
         suite.write_json(tmp_path / "cuda-preflight-metadata.json", activated)
         suite.write_json(tmp_path / "cuda-preflight-plain-metadata.json", plain)
         return 0
@@ -552,12 +698,18 @@ def test_each_case_uses_its_accepted_environment_and_groups_preflight(replay_hos
     replay_host["env"] = {"COMMON_ENV": "shared", "CASE_ENV": "default"}
     other_python = str(tmp_path / "other-model-env/bin/python")
     replay_host["case_environments"] = {"b": {"python": other_python, "env": {"CASE_ENV": "special"}}}
+    runner = Path(replay_host["source_root"]) / "tests/manual/geometry_regression.py"
+    committed_runner = runner.read_bytes()
+    runner.write_text("# uncommitted worker edit\n")
     probes, children = [], []
 
     def probe(profile, env, root, **kwargs):
         probes.append((profile["python"], kwargs["case_ids"], env["CASE_ENV"]))
 
-    def child(command, env, *args, **kwargs):
+    def child(command, env, cwd, *args, **kwargs):
+        runner = Path(command[1])
+        assert runner == cwd / "tests/manual/geometry_regression.py"
+        assert runner.read_bytes() == committed_runner
         children.append((command[0], env["CASE_ENV"], env["COMMON_ENV"]))
         return 0
 
@@ -568,6 +720,44 @@ def test_each_case_uses_its_accepted_environment_and_groups_preflight(replay_hos
     assert probes == [(sys.executable, ["a"], "default"), (other_python, ["b"], "special")]
     assert children == [(sys.executable, "default", "shared"), (other_python, "special", "shared")]
     assert replay_host["env"]["CASE_ENV"] == "default"
+
+
+@pytest.mark.parametrize("altered_asset", [False, True])
+def test_legacy_committed_worker_still_requires_accepted_asset_digests(
+    replay_host: dict, monkeypatch: pytest.MonkeyPatch, altered_asset: bool
+) -> None:
+    source = Path(replay_host["source_root"])
+    script = source / suite.REPLAY_SCRIPT
+    legacy_worker = script.read_text().replace('    run.add_argument("--accepted-manifest", type=Path)\n', "")
+    script.write_text(legacy_worker.replace("            accepted_manifest=args.accepted_manifest,\n", ""))
+    subprocess.run(["git", "-C", str(source), "commit", "-qam", "legacy worker"], check=True)
+
+    events, _ = no_gpu(monkeypatch)
+    if altered_asset:
+        manifest = Path(replay_host["reference"]) / "a/manifest.json"
+        weights = Path(json.loads(manifest.read_text())["case"]["assets"]["weights"])
+        (weights / "model.safetensors").write_bytes(b"modified checkpoint")
+
+    def run(command: list[str], env: dict, cwd: Path, *args: object, **kwargs: object) -> int:
+        assert not altered_asset, "Asset mismatch reached the worker"
+        worker = Path(command[1])
+        assert worker == cwd / suite.REPLAY_SCRIPT
+        assert worker.read_text() == script.read_text()
+        assert "--accepted-manifest" not in command
+        events.append("worker")
+        return 0
+
+    monkeypatch.setattr(suite, "run_child", run)
+    report = suite.run_suite(replay_host, case_ids=["a"])
+    if altered_asset:
+        assert report["status"] == "failed", report
+        assert (
+            "Replay asset SHA256 differs from accepted reference: weights/model.safetensors"
+            in report["cases"]["a"]["error"]
+        )
+    else:
+        assert report["status"] == "passed", report
+        assert "worker" in events
 
 
 def test_misspelled_case_environment_cannot_be_silently_ignored(replay_host, monkeypatch):

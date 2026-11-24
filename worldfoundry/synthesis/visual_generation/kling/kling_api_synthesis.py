@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ..api_video_client import ApiVideoSynthesis
 
 
 class KlingApiSynthesis(ApiVideoSynthesis):
-    """Kling API 合成类。
+    """Kling API video synthesis.
 
-    默认对接 `https://api.klingapi.com` 这一套通用 Kling 网关接口。
+    Uses the general Kling gateway at `https://api.klingapi.com` by default.
     """
 
     DEFAULT_ENDPOINT = "https://api.klingapi.com"
@@ -20,11 +20,11 @@ class KlingApiSynthesis(ApiVideoSynthesis):
         duration: int = 5,
         aspect_ratio: str = "16:9",
         mode: str = "professional",
-        negative_prompt: Optional[str] = None,
-        callback_url: Optional[str] = None,
-        external_task_id: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        negative_prompt: str | None = None,
+        callback_url: str | None = None,
+        external_task_id: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         payload = self._payload(
             input_prompt=input_prompt,
             model=model,
@@ -40,17 +40,17 @@ class KlingApiSynthesis(ApiVideoSynthesis):
 
     def generate_i2av(
         self,
-        image_payload: Dict[str, Any],
+        image_payload: dict[str, Any],
         input_prompt: str,
         model: str = "kling-v2.6-pro",
         duration: int = 5,
         aspect_ratio: str = "16:9",
         mode: str = "professional",
-        negative_prompt: Optional[str] = None,
-        callback_url: Optional[str] = None,
-        external_task_id: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        negative_prompt: str | None = None,
+        callback_url: str | None = None,
+        external_task_id: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         payload = self._payload(
             input_prompt=input_prompt,
             model=model,
@@ -73,13 +73,13 @@ class KlingApiSynthesis(ApiVideoSynthesis):
         duration: int,
         aspect_ratio: str,
         mode: str,
-        negative_prompt: Optional[str],
-        callback_url: Optional[str],
-        external_task_id: Optional[str],
-        **kwargs
-    ) -> Dict[str, Any]:
+        negative_prompt: str | None,
+        callback_url: str | None,
+        external_task_id: str | None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Build the request body shared by the text and image generation routes."""
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": model,
             "prompt": input_prompt,
             "duration": duration,
@@ -95,22 +95,22 @@ class KlingApiSynthesis(ApiVideoSynthesis):
         payload.update(kwargs)
         return payload
 
-    def get_task(self, task_id: str) -> Dict[str, Any]:
+    def get_task(self, task_id: str) -> dict[str, Any]:
         return self._get(f"/v1/videos/{task_id}")
 
     def predict(
         self,
-        processed_data: Dict[str, Any],
+        processed_data: dict[str, Any],
         task_type: str = "auto",
         model: str = "kling-v2.6-pro",
         duration: int = 5,
         aspect_ratio: str = "16:9",
         mode: str = "professional",
-        negative_prompt: Optional[str] = None,
-        callback_url: Optional[str] = None,
-        external_task_id: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        negative_prompt: str | None = None,
+        callback_url: str | None = None,
+        external_task_id: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         prompt = processed_data.get("prompt", "")
         image_payload = processed_data.get("image_payload")
 

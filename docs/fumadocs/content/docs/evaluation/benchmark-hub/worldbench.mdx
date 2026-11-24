@@ -1,15 +1,15 @@
 ---
 title: WorldBench
-description: "UCLA diagnostic physics bench: 425 Kubric scenes, SAM2 vs ground-truth physics, plus text QA. WorldFoundry implements an in-tree scorer; it does not invent a board."
+description: "UCLA diagnostic physics bench: 425 Kubric scenes, SAM2 vs ground-truth physics, plus text QA. WorldFoundry provides an in-tree scorer."
 ---
 
 WorldBench (UCLA, with Sony AI, Yale, and DEVCOM ARL) diagnoses how close world models are to **physics**. **Kubric** (PyBullet + Blender) renders **425** physically accurate scenes across four concepts — motion physics, object permanence, support relations, scale / perspective — with ground-truth depth, normals, segmentation, and flow. Models generate continuations from initial frames; **SAM2** tracks first-frame boxes and masks are compared to simulation (foreground mIoU, background RMSE). A textual subset adds multiple-choice and yes/no QA.
 
-The public evaluator calls Dice “mIoU”. WorldFoundry reports **conventional `foreground_miou`** and the release’s **`foreground_dice` compatibility value** separately. The inspected HF tree currently has **375** scene directories (15 scenarios × 25) versus the paper’s 425.
+The public evaluator calls Dice “mIoU”. WorldFoundry reports **conventional `foreground_miou`** and the release’s **`foreground_dice` compatibility value** separately. The public HF dataset has **375** scene directories (15 scenarios × 25) versus the paper’s 425.
 
 Paper: [WorldBench](https://arxiv.org/abs/2601.21282). Project: [world-bench.github.io](https://world-bench.github.io/). Data: [`worldbenchmark/IntuitivePhysics`](https://huggingface.co/datasets/worldbenchmark/IntuitivePhysics). Dataset and evaluator declare **no redistribution license**.
 
-WorldFoundry implements an in-tree, model-backed runner. Runtime environments still record: **no confirmed redistributable official raw-video evaluator**, and **`official-run` from videos is not a release claim**. Import via `WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH` is the supported compatibility path.
+WorldFoundry provides an in-tree, model-backed runner. There is **no confirmed redistributable official raw-video evaluator**, so **`official-run` scores from videos are not official results**. Import via `WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH` is the supported compatibility path.
 
 <BenchmarkPageSections id="worldbench" locale="en" />
 
@@ -20,7 +20,7 @@ hf download worldbenchmark/IntuitivePhysics --repo-type dataset \
   --local-dir cache/worldfoundry/data/hfd_datasets/worldbenchmark/IntuitivePhysics
 
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/worldbench/run_worldbench_official_runner.py \
   --run-official \
   --video-only \
   --dataset-root "${WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT}" \
@@ -32,13 +32,13 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 `--predicted-mask-dir` skips SAM2 when masks already exist. `--text-only` plus `--answer-manifest` covers QA. Frame knobs: `--ground-truth-start-frame`, `--generated-skip-frames`. Shared assets: `worldbench_dataset_assets`, `facebook/sam2.1-hiera-large`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/worldbench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/worldbench`.
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/worldbench.yaml`, `worldfoundry/evals/tasks/execution/runners/worldbench`.
 
 Outputs include `scorecard.json` (primary `foreground_miou`) and `worldbench_evaluation.json`.
 
 ## Dataset, videos, and frame alignment
 
-The in-tree runtime does **not** import an upstream checkout. SAM2 comes from `worldfoundry.base_models.perception_core.segment.sam2`. Dataset root must be the public HF layout:
+No upstream checkout is needed. SAM2 comes from `worldfoundry.base_models.perception_core.segment.sam2`. Dataset root must be the public HF layout:
 
 ```text
 <dataset>/
@@ -63,6 +63,6 @@ The bench uses **nine conditioning frames**. By default, generated frame 0 align
 
 Raw video scoring defaults to `facebook/sam2.1-hiera-large`. Set `WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT` to a local file, otherwise the HF cache resolver is used. Import-only path: `--official-results-path` without `--run-official`.
 
-Use `worldfoundry-unified-cu128`. A successful in-tree run is integration evidence, not `leaderboard_valid`, until full-dataset numerical parity is audited. The inspected upstream pin `WorldBenchmark/worldbench_eval@4575a164…` has no license file and a broken public evaluator; WorldFoundry keeps provenance in the catalog YAML, not a `SOURCE.json`.
+Use `worldfoundry-unified-cu128`. In-tree runs are not marked `leaderboard_valid` until full-dataset numerical parity is checked. The upstream evaluator `WorldBenchmark/worldbench_eval@4575a164…` has no license file and its public evaluator is broken.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

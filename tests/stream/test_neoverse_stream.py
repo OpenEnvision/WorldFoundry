@@ -3,7 +3,6 @@ from PIL import Image
 
 from worldfoundry.pipelines.neoverse.pipeline_neoverse import NeoVersePipeline
 
-
 image_path = "./data/test_cases/test_image_case1/ref_image.png"
 input_image = Image.open(image_path).convert("RGB")
 

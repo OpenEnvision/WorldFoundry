@@ -76,7 +76,7 @@ class ActionConditioner(nn.Module):
     ) -> torch.Tensor:
         states = self.frame_states(action).to(tokens.dtype)
         residuals = []
-        for sample_states, grid in zip(states, grid_sizes.tolist()):
+        for sample_states, grid in zip(states, grid_sizes.tolist(), strict=False):
             frames, height, width = (int(value) for value in grid)
             if sample_states.shape[0] < frames:
                 raise ValueError("action history is shorter than the latent block")

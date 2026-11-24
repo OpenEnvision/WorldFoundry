@@ -7,7 +7,7 @@ action expert and merged-attention sampler.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import torch
 import torch.nn as nn
@@ -81,7 +81,7 @@ class DM0ForCausalLM(DexboticForCausalLM):
     """Checkpoint-compatible DM0 model with Euler flow sampling only."""
 
     config_class = DM0Config
-    _tied_weights_keys = {"lm_head.weight": "model.llm.embed_tokens.weight"}
+    _tied_weights_keys: ClassVar[dict] = {"lm_head.weight": "model.llm.embed_tokens.weight"}
 
     def _real_init(self, config: DM0Config) -> None:
         self.model = DM0Model(config)

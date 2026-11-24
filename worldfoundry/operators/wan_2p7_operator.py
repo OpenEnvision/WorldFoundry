@@ -1,31 +1,29 @@
 """Module for the Wan2p7 operator implementation."""
 
-from typing import Optional, Dict, Any
+from typing import Any
 
-from .base_operator import BaseOperator
 from ._media import require_public_url
+from .base_operator import BaseOperator
 
 
 def _validate_public_url(url: str, field_name: str) -> str:
-    """Validate public url implementation."""
     return require_public_url(url, field_name, "Wan2.7")
 
 
 class Wan2p7Operator(BaseOperator):
-    """
-    Wan2.7 数据处理 Operator
+    """Prepare prompts and media inputs for Wan2.7 requests.
 
-    Wan2.7 仅支持公网可访问的媒体 URL。
+    Wan2.7 accepts only publicly reachable media URLs.
     """
 
     def __init__(
         self,
-        operation_types: list = None,
+        operation_types: list | None = None,
     ):
         """Initialize the operator with specific configurations."""
         if operation_types is None:
             operation_types = ["prompt_processing", "media_processing"]
-        super(Wan2p7Operator, self).__init__(operation_types)
+        super().__init__(operation_types)
 
         self.interaction_template = ["image_prompt", "video_prompt", "multimodal_prompt"]
         self.interaction_template_init()
@@ -41,24 +39,22 @@ class Wan2p7Operator(BaseOperator):
             raise TypeError(f"Interaction must be a string, got {type(interaction)}")
         return True
 
-    def process_interaction(self, **kwargs) -> Dict[str, Any]:
+    def process_interaction(self, **kwargs) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         if len(self.current_interaction) == 0:
             raise ValueError("No interaction to process")
         now_interaction = self.current_interaction[-1]
         self.interaction_history.append(now_interaction)
-        return {
-            "processed_prompt": now_interaction
-        }
+        return {"processed_prompt": now_interaction}
 
     def process_perception(
         self,
-        images: Optional[str] = None,
-        last_frame: Optional[str] = None,
-        audio_url: Optional[str] = None,
-        first_clip: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        images: str | None = None,
+        last_frame: str | None = None,
+        audio_url: str | None = None,
+        first_clip: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         if images is not None and first_clip is not None:
             raise ValueError("Wan2.7 expects either images or first_clip, not both.")
@@ -66,28 +62,36 @@ class Wan2p7Operator(BaseOperator):
         media = []
 
         if images is not None:
-            media.append({
-                "type": "first_frame",
-                "url": _validate_public_url(images, "images"),
-            })
+            media.append(
+                {
+                    "type": "first_frame",
+                    "url": _validate_public_url(images, "images"),
+                }
+            )
 
         if first_clip is not None:
-            media.append({
-                "type": "first_clip",
-                "url": _validate_public_url(first_clip, "first_clip"),
-            })
+            media.append(
+                {
+                    "type": "first_clip",
+                    "url": _validate_public_url(first_clip, "first_clip"),
+                }
+            )
 
         if last_frame is not None:
-            media.append({
-                "type": "last_frame",
-                "url": _validate_public_url(last_frame, "last_frame"),
-            })
+            media.append(
+                {
+                    "type": "last_frame",
+                    "url": _validate_public_url(last_frame, "last_frame"),
+                }
+            )
 
         if audio_url is not None:
-            media.append({
-                "type": "driving_audio",
-                "url": _validate_public_url(audio_url, "audio_url"),
-            })
+            media.append(
+                {
+                    "type": "driving_audio",
+                    "url": _validate_public_url(audio_url, "audio_url"),
+                }
+            )
 
         if not media:
             raise ValueError("Wan2.7 requires at least one media input URL.")

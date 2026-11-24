@@ -1,22 +1,45 @@
-import sys
-import os
 import argparse
 import logging
-import warnings
+import os
 import random
+import sys
+import warnings
+
 import torch
 import torch.distributed as dist
-warnings.filterwarnings('ignore')
-from PIL import Image
-from worldfoundry.base_models.diffusion_model.recipes.wan_configs.action_22 import MAX_AREA_CONFIGS, WAN_CONFIGS
-from worldfoundry.core.distributed.sequence_parallel.ops import init_distributed_group
-from pipeline.inference_interactive_pipeline import MatrixGame3Pipeline as MatrixGame3InteractivePipeline
-from pipeline.inference_pipeline import MatrixGame3Pipeline
-from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
+
+warnings.filterwarnings("ignore")
+from PIL import Image  # noqa: E402 - Follows the warnings configuration.
+
+from worldfoundry.base_models.diffusion_model.recipes.wan_configs.action_22 import (  # noqa: E402 - Follows the warnings configuration.
+    MAX_AREA_CONFIGS,
+    WAN_CONFIGS,
+)
+from worldfoundry.core.distributed.sequence_parallel.ops import (  # noqa: E402 - Follows the warnings configuration.
+    init_distributed_group,
+)
+
+# isort: split
+from .pipeline.inference_interactive_pipeline import (  # noqa: E402 - Follows the warnings configuration.
+    MatrixGame3Pipeline as MatrixGame3InteractivePipeline,
+)
+
+# isort: split
+# isort: split
+from .pipeline.inference_pipeline import MatrixGame3Pipeline  # noqa: E402 - Follows the warnings configuration.
+
+# isort: split
+from worldfoundry.core.utils.tensors.torch import (  # noqa: E402 - Follows the warnings configuration.
+    set_seed_everywhere,
+)
+
+
 def _validate_args(args):
-    if args.ulysses_size <= 1:
+    if args.ulysses_size <= 1:  # noqa: SIM102 - Statement form kept for readability.
         if args.t5_fsdp or args.dit_fsdp:
-            logging.info(f"Single GPU detected (ulysses_size={args.ulysses_size}). Automatically disabling FSDP (t5_fsdp and dit_fsdp).")
+            logging.info(
+                f"Single GPU detected (ulysses_size={args.ulysses_size}). Automatically disabling FSDP (t5_fsdp and dit_fsdp)."
+            )
             args.t5_fsdp = False
             args.dit_fsdp = False
 
@@ -32,8 +55,8 @@ def _validate_args(args):
     if args.sample_guide_scale is None:
         args.sample_guide_scale = cfg.sample_guide_scale
 
-    args.seed = args.seed if args.seed >= 0 else random.randint(
-        0, sys.maxsize)
+    args.seed = args.seed if args.seed >= 0 else random.randint(0, sys.maxsize)
+
 
 def _parse_args():
     parser = argparse.ArgumentParser(
@@ -41,7 +64,7 @@ def _parse_args():
     )
     # Core runtime
     parser.add_argument("--size", type=str, default="1280*704")
-    parser.add_argument("--ckpt_dir",type=str,default=None,help="The path to the checkpoint directory.")
+    parser.add_argument("--ckpt_dir", type=str, default=None, help="The path to the checkpoint directory.")
 
     # Distributed / parallel
     parser.add_argument("--ulysses_size", type=int, default=1, help="The size of the ulysses parallelism in DiT.")
@@ -53,41 +76,72 @@ def _parse_args():
     parser.add_argument("--prompt", type=str, default=None, help="The prompt to generate the video from.")
     parser.add_argument("--seed", type=int, default=42, help="The seed to use for generating the video.")
     parser.add_argument("--image", type=str, default=None, help="The image to generate the video from.")
-    parser.add_argument('--num_iterations', type=int, default=12)
-    parser.add_argument("--convert_model_dtype", action="store_true", default=False, help="Whether to convert model paramerters dtype.")
-    parser.add_argument('--output_dir', type=str, default="./output")
-    parser.add_argument('--save_name', type=str, default="generated_video")
+    parser.add_argument("--num_iterations", type=int, default=12)
+    parser.add_argument(
+        "--convert_model_dtype", action="store_true", default=False, help="Whether to convert model paramerters dtype."
+    )
+    parser.add_argument("--output_dir", type=str, default="./output")
+    parser.add_argument("--save_name", type=str, default="generated_video")
     # Sampling parameters
-    parser.add_argument("--sample_shift", type=float, default=None, help="Sampling shift factor for flow matching schedulers.")
+    parser.add_argument(
+        "--sample_shift", type=float, default=None, help="Sampling shift factor for flow matching schedulers."
+    )
     parser.add_argument("--sample_guide_scale", type=float, default=5.0, help="Classifier free guidance scale.")
-    parser.add_argument('--num_inference_steps', type=int, default=50)
+    parser.add_argument("--num_inference_steps", type=int, default=50)
 
     # VAE
-    parser.add_argument('--lightvae_pruning_rate', type=float, default=None, help='Pruning rate for lightvae_wan22. If unset, infer dynamically from checkpoint.')
-    parser.add_argument('--use_async_vae', action='store_true', help='Whether to use asynchronous VAE decoding.')
-    parser.add_argument('--async_vae_warmup_iters', type=int, default=0, help='Number of initial iterations to force sync VAE for warmup in async mode.')
-    parser.add_argument('--compile_vae', action='store_true', help='Whether to use torch.compile for VAE decoder.')
-    parser.add_argument('--vae_type', type=str, default='mg_lightvae_v2', choices=['wan', 'mg_lightvae', 'mg_lightvae_v2'], help='VAE type.')
-    
+    parser.add_argument(
+        "--lightvae_pruning_rate",
+        type=float,
+        default=None,
+        help="Pruning rate for lightvae_wan22. If unset, infer dynamically from checkpoint.",
+    )
+    parser.add_argument("--use_async_vae", action="store_true", help="Whether to use asynchronous VAE decoding.")
+    parser.add_argument(
+        "--async_vae_warmup_iters",
+        type=int,
+        default=0,
+        help="Number of initial iterations to force sync VAE for warmup in async mode.",
+    )
+    parser.add_argument("--compile_vae", action="store_true", help="Whether to use torch.compile for VAE decoder.")
+    parser.add_argument(
+        "--vae_type",
+        type=str,
+        default="mg_lightvae_v2",
+        choices=["wan", "mg_lightvae", "mg_lightvae_v2"],
+        help="VAE type.",
+    )
+
     # Quantization
-    parser.add_argument('--use_int8', action='store_true', help='Whether to use int8 quantization for DiT.')
-    parser.add_argument('--verify_quant', action='store_true', help='Whether to verify quantization accuracy by comparing with BF16.')
-    
-    parser.add_argument('--fa_version', type=str, default=None, choices=['0', '2', '3'], help='Flash Attention version (2 or 3). Set to 0 to disable.')
+    parser.add_argument("--use_int8", action="store_true", help="Whether to use int8 quantization for DiT.")
+    parser.add_argument(
+        "--verify_quant", action="store_true", help="Whether to verify quantization accuracy by comparing with BF16."
+    )
+
+    parser.add_argument(
+        "--fa_version",
+        type=str,
+        default=None,
+        choices=["0", "2", "3"],
+        help="Flash Attention version (2 or 3). Set to 0 to disable.",
+    )
     parser.add_argument("--interactive", action="store_true", help="Enable interactive inference.")
     parser.add_argument("--use_base_model", action="store_true", help="Enable base model inference.")
     args = parser.parse_args()
     _validate_args(args)
     return args
 
+
 def _init_logging(rank):
     if rank == 0:
         logging.basicConfig(
             level=logging.INFO,
             format="[%(asctime)s] %(levelname)s: %(message)s",
-            handlers=[logging.StreamHandler(stream=sys.stdout)])
+            handlers=[logging.StreamHandler(stream=sys.stdout)],
+        )
     else:
         logging.basicConfig(level=logging.ERROR)
+
 
 def generate(args):
     os.makedirs(args.output_dir, exist_ok=True)
@@ -100,28 +154,23 @@ def generate(args):
 
     if world_size > 1:
         torch.cuda.set_device(local_rank)
-        dist.init_process_group(
-            backend="nccl",
-            init_method="env://",
-            rank=rank,
-            world_size=world_size)
+        dist.init_process_group(backend="nccl", init_method="env://", rank=rank, world_size=world_size)
     else:
-        assert not (
-            args.t5_fsdp or args.dit_fsdp
-        ), f"t5_fsdp and dit_fsdp are not supported in non-distributed environments."
-        assert not (
-            args.ulysses_size > 1
-        ), f"sequence parallel are not supported in non-distributed environments."
+        assert not (args.t5_fsdp or args.dit_fsdp), (
+            "t5_fsdp and dit_fsdp are not supported in non-distributed environments."
+        )
+        assert not (args.ulysses_size > 1), "sequence parallel are not supported in non-distributed environments."
 
     if args.ulysses_size > 1:
-        assert args.ulysses_size == world_size, f"The number of ulysses_size should be equal to the world size."
+        assert args.ulysses_size == world_size, "The number of ulysses_size should be equal to the world size."
         init_distributed_group()
 
     cfg = WAN_CONFIGS["matrix_game3"]
     if args.ulysses_size > 1 and cfg.num_heads % args.ulysses_size != 0 and rank == 0:
         logging.warning(
             f"`{cfg.num_heads=}` is not divisible by `{args.ulysses_size=}`. "
-            "Ulysses attention will pad heads internally and trim back after communication.")
+            "Ulysses attention will pad heads internally and trim back after communication."
+        )
 
     logging.info(f"Generation job args: {args}")
     logging.info(f"Generation model config: {cfg}")
@@ -178,7 +227,8 @@ def generate(args):
         guide_scale=args.sample_guide_scale,
         seed=args.seed,
         use_base_model=args.use_base_model,
-        args=args)
+        args=args,
+    )
 
     torch.cuda.synchronize()
     if dist.is_initialized():

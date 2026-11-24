@@ -7,6 +7,7 @@ groups:
 - autoregressive_video
 source_repos:
 - url: https://github.com/Echo-Team-Joy-Future-Academy-JD/Echo-Infinity
+  revision: 7ed7eee09e7c7543ecfce42d2fe2ff6c0f9984ea
 - url: https://huggingface.co/Echo-Team/Echo-Infinity
 checkpoints:
 - role: echo_infinity_generator
@@ -25,7 +26,6 @@ execution:
   backend_stage: official_in_tree_runtime
   runtime_status: official_in_tree_runtime_ready
   integration_status: integrated
-  pipeline_binding: echo-infinity
   pipeline_binding: echo-infinity
 integration:
   status: integrated

@@ -2,11 +2,10 @@
 
 # pyre-unsafe
 
-"""Module for base_models -> perception_core -> segment -> sam3 -> model -> act_ckpt_utils.py functionality."""
-
 import inspect
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, TypeVar, Union
+from typing import TypeVar
 
 import torch
 import torch.nn as nn
@@ -18,7 +17,7 @@ T = TypeVar("T")
 Module = TypeVar("Module", bound=nn.Module)
 
 
-def activation_ckpt_wrapper(module: Union[nn.Module, Callable]) -> Callable:
+def activation_ckpt_wrapper(module: nn.Module | Callable) -> Callable:
     """
     Wraps a given module to enable or disable activation checkpointing.
 
@@ -48,32 +47,23 @@ def activation_ckpt_wrapper(module: Union[nn.Module, Callable]) -> Callable:
     """
 
     @wraps(module)
-    def act_ckpt_wrapper(
-        *args, act_ckpt_enable: bool = True, use_reentrant: bool = False, **kwargs
-    ):
-        """Act ckpt wrapper."""
+    def act_ckpt_wrapper(*args, act_ckpt_enable: bool = True, use_reentrant: bool = False, **kwargs):
         if act_ckpt_enable:
             if len(args) > 0:
-                raise ValueError(
-                    "This wrapper expects keyword arguments only when `act_ckpt_enable=True`"
-                )
+                raise ValueError("This wrapper expects keyword arguments only when `act_ckpt_enable=True`")
             # Get the signature of the target function/module
             callable_fn = module.forward if isinstance(module, nn.Module) else module
             sig = inspect.signature(callable_fn)
             # Create a mapping of parameter names to their default values
-            param_defaults = {
-                name: param.default for name, param in sig.parameters.items()
-            }
+            param_defaults = {name: param.default for name, param in sig.parameters.items()}
             args = []
-            for p_name in param_defaults.keys():
+            for p_name in param_defaults:
                 if p_name in kwargs:
                     args.append(kwargs.pop(p_name))
                 elif param_defaults[p_name] is not inspect.Parameter.empty:
                     # Set arg to default value if it's not in kwargs. Useful for primitive types or args that default to None
                     args.append(param_defaults[p_name])
-                elif (
-                    sig.parameters[p_name].kind is not inspect.Parameter.VAR_KEYWORD
-                ):  # Skip **kwargs parameter
+                elif sig.parameters[p_name].kind is not inspect.Parameter.VAR_KEYWORD:  # Skip **kwargs parameter
                     raise ValueError(f"Missing positional argument: {p_name}")
 
             # Scan remaining kwargs for torch.Tensor
@@ -84,9 +74,7 @@ def activation_ckpt_wrapper(module: Union[nn.Module, Callable]) -> Callable:
                     # If it is required, the module's signature should be modified to accept it as a positional or keyword argument.
                     kwargs[key] = "_REMOVED_BY_ACT_CKPT_WRAPPER_"
 
-            ret = checkpoint.checkpoint(
-                module, *args, use_reentrant=use_reentrant, **kwargs
-            )
+            ret = checkpoint.checkpoint(module, *args, use_reentrant=use_reentrant, **kwargs)
         else:
             ret = module(*args, **kwargs)
 
@@ -111,10 +99,7 @@ def clone_output_wrapper(f: Callable[..., T]) -> Callable[..., T]:
 
     @wraps(f)
     def wrapped(*args, **kwargs):
-        """Wrapped."""
         outputs = f(*args, **kwargs)
-        return tree_map_only(
-            torch.Tensor, lambda t: t.clone() if t.is_cuda else t, outputs
-        )
+        return tree_map_only(torch.Tensor, lambda t: t.clone() if t.is_cuda else t, outputs)
 
     return wrapped

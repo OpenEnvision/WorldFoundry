@@ -110,9 +110,7 @@ class MiniMaxH3TaskProfile(msgspec.Struct, frozen=True):
         for rule in self.condition_rules:
             if rule.role == role and rule.condition_type == condition_type:
                 return rule
-        raise ValueError(
-            f"task {self.task!r} does not allow condition role={role!r} type={condition_type!r}"
-        )
+        raise ValueError(f"task {self.task!r} does not allow condition role={role!r} type={condition_type!r}")
 
 
 _BASE_COMPONENTS = (
@@ -209,9 +207,7 @@ MINIMAX_H3_TASK_PROFILES: dict[str, MiniMaxH3TaskProfile] = {
 def minimax_h3_task_profile(task: str) -> MiniMaxH3TaskProfile:
     profile = MINIMAX_H3_TASK_PROFILES.get(task)
     if profile is None:
-        raise ValueError(
-            f"unknown minimax_h3 task {task!r}; supported: {sorted(MINIMAX_H3_TASK_PROFILES)}"
-        )
+        raise ValueError(f"unknown minimax_h3 task {task!r}; supported: {sorted(MINIMAX_H3_TASK_PROFILES)}")
     return profile
 
 

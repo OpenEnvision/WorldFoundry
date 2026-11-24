@@ -1,29 +1,42 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 from copy import deepcopy
+from typing import ClassVar
 
 import torch
 import torch.nn.functional as F
+
 from ...common.registry import registry
 from ..base_model import MomentumDistilationMixin
+
+# isort: split
 from .blip import BlipBase
+
+# isort: split
 from .blip_outputs import (
     BlipIntermediateOutput,
     BlipOutputWithLogits,
 )
+
+# isort: split
 from ..med import XBertEncoder
+
+# isort: split
+# isort: split
 from ..vit import VisionTransformerEncoder
+
+# isort: split
 from torch import nn
 
 
 @registry.register_model("blip_classification")
 class BlipClassification(BlipBase, MomentumDistilationMixin):
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "base": "configs/models/blip_classification_base.yaml",
     }
 
@@ -88,9 +101,7 @@ class BlipClassification(BlipBase, MomentumDistilationMixin):
         targets = samples["label"]
 
         image_embeds = self.visual_encoder.forward_features(samples["image"])
-        encoder_output = self.text_encoder.forward_automask(
-            samples["tokenized_text"], image_embeds
-        )
+        encoder_output = self.text_encoder.forward_automask(samples["tokenized_text"], image_embeds)
 
         prediction = self.cls_head(encoder_output.last_hidden_state[:, 0, :])
 
@@ -100,13 +111,9 @@ class BlipClassification(BlipBase, MomentumDistilationMixin):
                     self._momentum_update()
 
                     image_embeds_m = self.visual_encoder_m(samples["image"])
-                    encoder_output_m = self.text_encoder_m.forward_automask(
-                        samples["tokenized_text"], image_embeds_m
-                    )
+                    encoder_output_m = self.text_encoder_m.forward_automask(samples["tokenized_text"], image_embeds_m)
 
-                    prediction_m = self.cls_head_m(
-                        encoder_output_m.last_hidden_state[:, 0, :]
-                    )
+                    prediction_m = self.cls_head_m(encoder_output_m.last_hidden_state[:, 0, :])
 
                 alpha = self.alpha * self._rampup_factor(
                     epoch=samples["epoch"],
@@ -114,9 +121,7 @@ class BlipClassification(BlipBase, MomentumDistilationMixin):
                     num_iters_per_epoch=samples["num_iters_per_epoch"],
                 )
 
-                loss = (1 - alpha) * F.cross_entropy(
-                    prediction, targets
-                ) - alpha * torch.sum(
+                loss = (1 - alpha) * F.cross_entropy(prediction, targets) - alpha * torch.sum(
                     F.log_softmax(prediction, dim=1) * F.softmax(prediction_m, dim=1),
                     dim=1,
                 ).mean()
@@ -155,9 +160,7 @@ class BlipClassification(BlipBase, MomentumDistilationMixin):
         alpha = cfg.get("alpha", 0.4)
         max_txt_len = cfg.get("max_txt_len", 40)
 
-        assert num_classes > 1, "Invalid number of classes provided, found {}".format(
-            num_classes
-        )
+        assert num_classes > 1, f"Invalid number of classes provided, found {num_classes}"
 
         model = cls(
             image_encoder=image_encoder,
@@ -172,6 +175,6 @@ class BlipClassification(BlipBase, MomentumDistilationMixin):
         # load pre-trained weights
         pretrain_path = cfg.get("pretrained", None)
         if pretrain_path is not None:
-            msg = model.load_from_pretrained(url_or_filename=pretrain_path)
+            _msg = model.load_from_pretrained(url_or_filename=pretrain_path)
 
         return model

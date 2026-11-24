@@ -1,11 +1,10 @@
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
-
-from .raft_utils.update import BasicUpdateBlock
-from .raft_utils.extractor import BasicEncoder
 from .raft_utils.corr import CorrBlock
+from .raft_utils.extractor import BasicEncoder
+from .raft_utils.update import BasicUpdateBlock
 from .raft_utils.utils import coords_grid
 
 
@@ -33,7 +32,7 @@ class RAFT(nn.Module):
         return fmap, cmap
 
     def initialize_flow(self, fmap, coarse_flow):
-        """ Flow is represented as difference between two coordinate grids flow = coords1 - coords0"""
+        """Flow is represented as difference between two coordinate grids flow = coords1 - coords0"""
         N, _, h, w = fmap.shape
         src_pts = coords_grid(N, h, w, device=fmap.device)
 
@@ -48,10 +47,7 @@ class RAFT(nn.Module):
 
     def initialize_alpha(self, fmap, coarse_alpha):
         N, _, h, w = fmap.shape
-        if coarse_alpha is None:
-            alpha = torch.ones(N, 1, h, w, device=fmap.device)
-        else:
-            alpha = coarse_alpha[:, None]
+        alpha = torch.ones(N, 1, h, w, device=fmap.device) if coarse_alpha is None else coarse_alpha[:, None]
         return alpha.logit(eps=1e-5)
 
     def postprocess_alpha(self, alpha):
@@ -65,7 +61,7 @@ class RAFT(nn.Module):
         return flow
 
     def upsample_flow(self, flow, mask):
-        """ Upsample flow field [H/P, W/P, 2] -> [H, W, 2] using convex combination """
+        """Upsample flow field [H/P, W/P, 2] -> [H, W, 2] using convex combination"""
         N, _, H, W = flow.shape
         mask = mask.view(N, 1, 9, self.patch_size, self.patch_size, H, W)
         mask = torch.softmax(mask, dim=2)
@@ -78,7 +74,7 @@ class RAFT(nn.Module):
         return up_flow.reshape(N, 2, self.patch_size * H, self.patch_size * W)
 
     def upsample_alpha(self, alpha, mask):
-        """ Upsample alpha field [H/P, W/P, 1] -> [H, W, 1] using convex combination """
+        """Upsample alpha field [H/P, W/P, 1] -> [H, W, 1] using convex combination"""
         N, _, H, W = alpha.shape
         mask = mask.view(N, 1, 9, self.patch_size, self.patch_size, H, W)
         mask = torch.softmax(mask, dim=2)
@@ -90,8 +86,16 @@ class RAFT(nn.Module):
         up_alpha = up_alpha.permute(0, 1, 4, 2, 5, 3)
         return up_alpha.reshape(N, 1, self.patch_size * H, self.patch_size * W)
 
-    def forward(self, src_frame=None, tgt_frame=None, src_feats=None, tgt_feats=None, coarse_flow=None, coarse_alpha=None,
-                is_train=False):
+    def forward(
+        self,
+        src_frame=None,
+        tgt_frame=None,
+        src_feats=None,
+        tgt_feats=None,
+        coarse_flow=None,
+        coarse_alpha=None,
+        is_train=False,
+    ):
         src_fmap, src_cmap = self.initialize_feats(src_feats, src_frame)
         tgt_fmap, _ = self.initialize_feats(tgt_feats, tgt_frame)
 

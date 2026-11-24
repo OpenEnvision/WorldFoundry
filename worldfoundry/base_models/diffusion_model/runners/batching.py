@@ -41,7 +41,7 @@ def _merge_conditions(values: Sequence[Mapping[str, object]], sizes: tuple[int, 
         items = [item[key] for item in values]
         if isinstance(value, Tensor):
             tensors: list[Tensor] = []
-            for item, size in zip(items, sizes):
+            for item, size in zip(items, sizes, strict=False):
                 if not isinstance(item, Tensor) or item.ndim == 0 or item.shape[0] != size:
                     raise ValueError(f"request batch condition {key!r} must have a request batch dimension")
                 if item.shape[1:] != value.shape[1:] or item.dtype != value.dtype or item.device != value.device:
@@ -147,7 +147,7 @@ class _RequestBatch:
                 device=device,
                 dtype=dtype,
             )
-            for case, rng in zip(self.requests, self.generators)
+            for case, rng in zip(self.requests, self.generators, strict=False)
         ]
         if all(isinstance(value, Tensor) for value in values):
             self.artifacts = tuple({} for _ in values)
@@ -183,7 +183,7 @@ class _RequestBatch:
         return torch.cat(
             [
                 self.runner.components.scheduler.scale_model_input(part, schedule[step.index])
-                for part, schedule in zip(latents.split(self.sizes), self.schedules)
+                for part, schedule in zip(latents.split(self.sizes), self.schedules, strict=False)
             ]
         )
 
@@ -192,7 +192,11 @@ class _RequestBatch:
             [
                 self.runner.components.scheduler.step(prediction, schedule[step.index], part, generator=rng)
                 for prediction, part, schedule, rng in zip(
-                    model_output.split(self.sizes), latents.split(self.sizes), self.schedules, self.generators
+                    model_output.split(self.sizes),
+                    latents.split(self.sizes),
+                    self.schedules,
+                    self.generators,
+                    strict=False,
                 )
             ]
         )
@@ -200,7 +204,7 @@ class _RequestBatch:
     def decode(self, latents: Tensor, request: DiffusionRequest) -> Tensor:
         samples = [
             self.runner.components.decoder.decode(part, case)
-            for part, case in zip(latents.split(self.sizes), self.requests)
+            for part, case in zip(latents.split(self.sizes), self.requests, strict=False)
         ]
         return cast(Tensor, _merge_conditions([{"sample": sample} for sample in samples], self.sizes)["sample"])
 
@@ -242,7 +246,9 @@ def run_request_batch(
         or runner.cfg_parallel_degree != 1
         or runner.cfg_gate_step != 1.0
     ):
-        raise ValueError("request batching requires native guidance without custom extensions, CFG gating or CFG parallelism")
+        raise ValueError(
+            "request batching requires native guidance without custom extensions, CFG gating or CFG parallelism"
+        )
     if type(initializer) is not WanTextToVideoLatentInitializer and not image_initializer:
         raise ValueError("request batching requires a native Wan T2V, I2V or TI2V initializer")
     if image_initializer:
@@ -305,7 +311,7 @@ def run_request_batch(
     outputs: list[DiffusionOutput] = []
     offset = 0
     for index, (case, sample, latents) in enumerate(
-        zip(cases, result.sample.split(batch.sizes), result.latents.split(batch.sizes))
+        zip(cases, result.sample.split(batch.sizes), result.latents.split(batch.sizes), strict=False)
     ):
         metadata = dict(result.metadata)
         metadata.update(

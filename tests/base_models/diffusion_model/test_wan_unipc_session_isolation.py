@@ -14,7 +14,8 @@ from worldfoundry.base_models.diffusion_model.schedulers.wan import WanFlowUniPC
 def _schedule(scheduler, *, count=6, shift=5.0, karras=False, dtype=torch.float32):
     return scheduler.schedule(
         SamplingConfig(num_inference_steps=count, scheduler_options={"shift": shift, "use_karras_sigma": karras}),
-        device=torch.device("cpu"), dtype=dtype,
+        device=torch.device("cpu"),
+        dtype=dtype,
     )
 
 
@@ -30,8 +31,9 @@ def _advance(scheduler, latents, step, generator):
 @pytest.mark.parametrize("karras,intervals", [(False, False), (True, False), (True, True)])
 @pytest.mark.parametrize("other_count,other_shift", [(6, 5.0), (6, 2.0), (4, 2.0)])
 @pytest.mark.parametrize("interrupt_after", [0, 1, 2])
-def test_interleaved_unipc_requests_match_isolated_sampling(dtype, karras, intervals, other_count,
-                                                          other_shift, interrupt_after):
+def test_interleaved_unipc_requests_match_isolated_sampling(
+    dtype, karras, intervals, other_count, other_shift, interrupt_after
+):
     shared, isolated_a, isolated_b = (WanFlowUniPCScheduler(karras_steps_are_intervals=intervals) for _ in range(3))
     steps_a = _schedule(shared, karras=karras, dtype=dtype)
     expected_a = _schedule(isolated_a, karras=karras, dtype=dtype)
@@ -79,8 +81,9 @@ def test_serial_unipc_preserves_native_solver_math_and_evaluation_count(dtype, k
     for step, timestep in zip(steps, native.timesteps):
         assert torch.equal(step.timestep, timestep)
         actual = _advance(scheduler, actual, step, actual_rng)
-        expected = native.step(_prediction(expected, step), timestep, expected,
-                               generator=expected_rng, return_dict=False)[0]
+        expected = native.step(
+            _prediction(expected, step), timestep, expected, generator=expected_rng, return_dict=False
+        )[0]
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
         assert torch.isfinite(actual).all()
     assert torch.equal(torch.get_rng_state(), global_rng)
@@ -89,8 +92,7 @@ def test_serial_unipc_preserves_native_solver_math_and_evaluation_count(dtype, k
 
 def test_unipc_preserves_nondefault_template_configuration():
     scheduler = WanFlowUniPCScheduler()
-    scheduler.solver = FlowUniPCMultistepScheduler(num_train_timesteps=700, solver_order=1,
-                                                  disable_corrector=[1])
+    scheduler.solver = FlowUniPCMultistepScheduler(num_train_timesteps=700, solver_order=1, disable_corrector=[1])
     native = FlowUniPCMultistepScheduler(**dict(scheduler.solver.config))
     native.set_timesteps(6, device=torch.device("cpu"), shift=5.0)
     actual = torch.linspace(-1, 1, 24).reshape(1, 2, 3, 2, 2)

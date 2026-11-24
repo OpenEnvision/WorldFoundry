@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any
 
-from ...synthesis.action_generation.memory import RT1Memory
 from ...operators.rt1_operator import RT1Operator
+from ...synthesis.action_generation.memory import ActionTraceMemory, RT1Memory
 from ...synthesis.action_generation.rt1 import RT1Synthesis
 from ..pipeline_utils import PipelineABC
 
@@ -24,12 +25,12 @@ class RT1Pipeline(PipelineABC):
 
     def __init__(
         self,
-        operators: Optional[RT1Operator] = None,
-        synthesis_model: Optional[RT1Synthesis] = None,
-        memory_module: Optional[RT1Memory] = None,
+        operators: RT1Operator | None = None,
+        synthesis_model: RT1Synthesis | None = None,
+        memory_module: ActionTraceMemory | None = None,
         device: str = "cuda",
         model_id: str | None = None,
-        operator: Optional[RT1Operator] = None,
+        operator: RT1Operator | None = None,
     ) -> None:
         """Initialize the pipeline and configure runtime components."""
         resolved_operator = operators if operators is not None else operator
@@ -37,7 +38,7 @@ class RT1Pipeline(PipelineABC):
         self.synthesis_model = synthesis_model
         self.operators = resolved_operator
         self.operator = resolved_operator
-        self.memory_module = memory_module if memory_module is not None else self.MEMORY_CLS()
+        self.memory_module = memory_module if memory_module is not None else self._component("MEMORY_CLS")()
         self.device = device
 
     @classmethod
@@ -48,7 +49,7 @@ class RT1Pipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "RT1Pipeline":
+    ) -> RT1Pipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         options: dict[str, Any] = {}
         if isinstance(model_path, dict):
@@ -59,17 +60,17 @@ class RT1Pipeline(PipelineABC):
         options.update(kwargs)
 
         resolved_model_id = str(options.get("model_id") or options.get("profile_id") or model_id or cls.MODEL_ID)
-        synthesis_model = cls.SYNTHESIS_CLS.from_pretrained(
+        synthesis_model = cls._component("SYNTHESIS_CLS").from_pretrained(
             {**options, "model_id": resolved_model_id},
             device=device,
         )
         profile = getattr(synthesis_model, "profile", None)
-        operators = cls.OPERATOR_CLS(input_schema=dict(getattr(profile, "input_schema", {}) or {}))
+        operators = cls._component("OPERATOR_CLS")(input_schema=dict(getattr(profile, "input_schema", {}) or {}))
 
         return cls(
             operators=operators,
             synthesis_model=synthesis_model,
-            memory_module=cls.MEMORY_CLS(),
+            memory_module=cls._component("MEMORY_CLS")(),
             device=device,
             model_id=resolved_model_id,
         )
@@ -127,9 +128,7 @@ class RT1Pipeline(PipelineABC):
             ref_image_path=kwargs.pop("ref_image_path", None),
             **kwargs.pop("operator_kwargs", {}),
         )
-        model_specific = {
-            key: value for key, value in processed.items() if key not in self.RESERVED_SYNTHESIS_KEYS
-        }
+        model_specific = {key: value for key, value in processed.items() if key not in self.RESERVED_SYNTHESIS_KEYS}
         synthesis_kwargs = {**processed.get("extra_inputs", {}), **model_specific, **kwargs}
         result = self.synthesis_model.predict(
             prompt=processed["prompt"],

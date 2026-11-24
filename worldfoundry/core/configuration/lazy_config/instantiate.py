@@ -132,10 +132,7 @@ def instantiate(cfg, *args, **kwargs):
         # conceptually equivalent to hydra.utils.instantiate(cfg) with _convert_=all,
         # but faster: https://github.com/facebookresearch/hydra/issues/1200
         is_recursive = getattr(cfg, "_recursive_", True)
-        if is_recursive:
-            cfg = {k: instantiate(v) for k, v in cfg.items()}
-        else:
-            cfg = {k: v for k, v in cfg.items()}
+        cfg = {k: instantiate(v) for k, v in cfg.items()} if is_recursive else dict(cfg.items())
         # pop the _recursive_ key to avoid passing it as a parameter
         if "_recursive_" in cfg:
             cfg.pop("_recursive_")

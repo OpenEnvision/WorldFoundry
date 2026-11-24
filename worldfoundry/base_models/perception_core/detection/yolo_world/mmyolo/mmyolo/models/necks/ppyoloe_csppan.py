@@ -1,5 +1,4 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import List
 
 import torch.nn as nn
 from mmcv.cnn import ConvModule
@@ -44,23 +43,22 @@ class PPYOLOECSPPAFPN(BaseYOLONeck):
             Defaults to False.
     """
 
-    def __init__(self,
-                 in_channels: List[int] = [256, 512, 1024],
-                 out_channels: List[int] = [256, 512, 1024],
-                 deepen_factor: float = 1.0,
-                 widen_factor: float = 1.0,
-                 freeze_all: bool = False,
-                 num_csplayer: int = 1,
-                 num_blocks_per_layer: int = 3,
-                 block_cfg: ConfigType = dict(
-                     type='PPYOLOEBasicBlock', shortcut=False,
-                     use_alpha=False),
-                 norm_cfg: ConfigType = dict(
-                     type='BN', momentum=0.1, eps=1e-5),
-                 act_cfg: ConfigType = dict(type='SiLU', inplace=True),
-                 drop_block_cfg: ConfigType = None,
-                 init_cfg: OptMultiConfig = None,
-                 use_spp: bool = False):
+    def __init__(
+        self,
+        in_channels: list[int] = [256, 512, 1024],  # noqa: B006 - Keeps the upstream default object and signature.
+        out_channels: list[int] = [256, 512, 1024],  # noqa: B006 - Keeps the upstream default object and signature.
+        deepen_factor: float = 1.0,
+        widen_factor: float = 1.0,
+        freeze_all: bool = False,
+        num_csplayer: int = 1,
+        num_blocks_per_layer: int = 3,
+        block_cfg: ConfigType = {"type": "PPYOLOEBasicBlock", "shortcut": False, "use_alpha": False},  # noqa: B006 - Keeps the upstream default object and signature.
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.1, "eps": 1e-5},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "SiLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
+        drop_block_cfg: ConfigType = None,
+        init_cfg: OptMultiConfig = None,
+        use_spp: bool = False,
+    ):
         self.block_cfg = block_cfg
         self.num_csplayer = num_csplayer
         self.num_blocks_per_layer = round(num_blocks_per_layer * deepen_factor)
@@ -70,22 +68,18 @@ class PPYOLOECSPPAFPN(BaseYOLONeck):
         assert drop_block_cfg is None or isinstance(drop_block_cfg, dict)
 
         super().__init__(
-            in_channels=[
-                int(channel * widen_factor) for channel in in_channels
-            ],
-            out_channels=[
-                int(channel * widen_factor) for channel in out_channels
-            ],
+            in_channels=[int(channel * widen_factor) for channel in in_channels],
+            out_channels=[int(channel * widen_factor) for channel in out_channels],
             deepen_factor=deepen_factor,
             widen_factor=widen_factor,
             freeze_all=freeze_all,
             norm_cfg=norm_cfg,
             act_cfg=act_cfg,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
 
     def build_reduce_layer(self, idx: int):
-        """build reduce layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -106,7 +100,9 @@ class PPYOLOECSPPAFPN(BaseYOLONeck):
                     norm_cfg=self.norm_cfg,
                     act_cfg=self.act_cfg,
                     attention_cfg=None,
-                    use_spp=self.use_spp) for i in range(self.num_csplayer)
+                    use_spp=self.use_spp,
+                )
+                for i in range(self.num_csplayer)
             ]
 
             if self.drop_block_cfg:
@@ -118,7 +114,6 @@ class PPYOLOECSPPAFPN(BaseYOLONeck):
         return layer
 
     def build_upsample_layer(self, idx: int) -> nn.Module:
-        """build upsample layer."""
         # fpn_route
         in_channels = self.out_channels[idx]
         return nn.Sequential(
@@ -129,12 +124,13 @@ class PPYOLOECSPPAFPN(BaseYOLONeck):
                 stride=1,
                 padding=0,
                 norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg),
-            nn.Upsample(scale_factor=2, mode='nearest'))
+                act_cfg=self.act_cfg,
+            ),
+            nn.Upsample(scale_factor=2, mode="nearest"),
+        )
 
     def build_top_down_layer(self, idx: int) -> nn.Module:
-        """build top down layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -154,7 +150,9 @@ class PPYOLOECSPPAFPN(BaseYOLONeck):
                 norm_cfg=self.norm_cfg,
                 act_cfg=self.act_cfg,
                 attention_cfg=None,
-                use_spp=False) for i in range(self.num_csplayer)
+                use_spp=False,
+            )
+            for i in range(self.num_csplayer)
         ]
 
         if self.drop_block_cfg:
@@ -163,8 +161,7 @@ class PPYOLOECSPPAFPN(BaseYOLONeck):
         return nn.Sequential(*layer)
 
     def build_downsample_layer(self, idx: int) -> nn.Module:
-        """build downsample layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -179,11 +176,11 @@ class PPYOLOECSPPAFPN(BaseYOLONeck):
             stride=2,
             padding=1,
             norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
+            act_cfg=self.act_cfg,
+        )
 
     def build_bottom_up_layer(self, idx: int) -> nn.Module:
-        """build bottom up layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -203,7 +200,9 @@ class PPYOLOECSPPAFPN(BaseYOLONeck):
                 norm_cfg=self.norm_cfg,
                 act_cfg=self.act_cfg,
                 attention_cfg=None,
-                use_spp=False) for i in range(self.num_csplayer)
+                use_spp=False,
+            )
+            for i in range(self.num_csplayer)
         ]
 
         if self.drop_block_cfg:
@@ -212,5 +211,4 @@ class PPYOLOECSPPAFPN(BaseYOLONeck):
         return nn.Sequential(*layer)
 
     def build_out_layer(self, *args, **kwargs) -> nn.Module:
-        """build out layer."""
         return nn.Identity()

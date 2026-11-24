@@ -61,16 +61,12 @@ class ActionTensors:
     def __init__(self, config: ActionConfig, batch_size: int = 1):
         self.config = config
         self.batch_size = batch_size
-        self.key_presses: torch.Tensor = torch.zeros(
-            (self.batch_size, 0, len(config.valid_keys)), dtype=torch.int32
-        )
+        self.key_presses: torch.Tensor = torch.zeros((self.batch_size, 0, len(config.valid_keys)), dtype=torch.int32)
         self.mouse_movements: torch.Tensor = torch.zeros((self.batch_size, 0, 2), dtype=torch.float32)
 
         # Filled in externally from metadata; NaN means "unknown", which the encoder masks to a
         # learned token rather than reading the NaN.
-        self.game_mouse_sensitivity: torch.Tensor = torch.full(
-            (self.batch_size,), float("nan"), dtype=torch.float32
-        )
+        self.game_mouse_sensitivity: torch.Tensor = torch.full((self.batch_size,), float("nan"), dtype=torch.float32)
 
     @property
     def n_steps(self) -> int:
@@ -119,8 +115,7 @@ class ActionTensors:
         else:
             if not torch.allclose(self.game_mouse_sensitivity, other.game_mouse_sensitivity, equal_nan=True):
                 raise ValueError(
-                    "Mouse sensitivities do not match: "
-                    f"{self.game_mouse_sensitivity} vs {other.game_mouse_sensitivity}"
+                    f"Mouse sensitivities do not match: {self.game_mouse_sensitivity} vs {other.game_mouse_sensitivity}"
                 )
             result.game_mouse_sensitivity = self.game_mouse_sensitivity.clone()
 
@@ -193,7 +188,5 @@ def stack_action_tensors(action_tensors_list: list[ActionTensors]) -> ActionTens
     stacked = ActionTensors(config=config, batch_size=batch_size)
     stacked.key_presses = torch.cat([at.key_presses for at in action_tensors_list], dim=0)
     stacked.mouse_movements = torch.cat([at.mouse_movements for at in action_tensors_list], dim=0)
-    stacked.game_mouse_sensitivity = torch.cat(
-        [at.game_mouse_sensitivity for at in action_tensors_list], dim=0
-    )
+    stacked.game_mouse_sensitivity = torch.cat([at.game_mouse_sensitivity for at in action_tensors_list], dim=0)
     return stacked

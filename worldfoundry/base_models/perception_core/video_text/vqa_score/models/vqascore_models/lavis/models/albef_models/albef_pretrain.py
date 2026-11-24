@@ -1,26 +1,44 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 from copy import deepcopy
+from typing import ClassVar
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+
 from ...common.registry import registry
 from ...common.utils import get_abs_path
+
+# isort: split
 from ...models.albef_models import AlbefBase
+
+# isort: split
+# isort: split
 from ...models.albef_models.albef_outputs import (
     AlbefIntermediateOutput,
     AlbefOutput,
     AlbefSimilarity,
 )
+
+# isort: split
+# isort: split
 from ...models.base_model import MomentumDistilationMixin, SharedQueueMixin
+
+# isort: split
+# isort: split
 from ...models.med import BertForMaskedLM
+
+# isort: split
+# isort: split
 from ...models.vit import VisionTransformerEncoder
+
+# isort: split
 from torch import nn
 from transformers import BertConfig
 
@@ -34,7 +52,7 @@ class AlbefPretrain(AlbefBase, MomentumDistilationMixin, SharedQueueMixin):
         - base: ALBEF base model used for pretraining.
     """
 
-    PRETRAINED_MODEL_CONFIG_DICT = {
+    PRETRAINED_MODEL_CONFIG_DICT: ClassVar[dict] = {
         "base": "configs/models/albef_pretrain_base.yaml",
     }
 
@@ -139,9 +157,7 @@ class AlbefPretrain(AlbefBase, MomentumDistilationMixin, SharedQueueMixin):
             self.temp.clamp_(0.001, 0.5)
 
         image_embeds = self.visual_encoder.forward_features(image)
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            self.device
-        )
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(self.device)
 
         text = self.tokenizer(
             caption,
@@ -166,12 +182,8 @@ class AlbefPretrain(AlbefBase, MomentumDistilationMixin, SharedQueueMixin):
         with torch.no_grad():
             self._momentum_update()
             image_embeds_m = self.visual_encoder_m(image)
-            image_feat_m = F.normalize(
-                self.vision_proj_m(image_embeds_m[:, 0, :]), dim=-1
-            )
-            image_feat_all = torch.cat(
-                [image_feat_m.t(), self.image_queue.clone().detach()], dim=1
-            )
+            image_feat_m = F.normalize(self.vision_proj_m(image_embeds_m[:, 0, :]), dim=-1)
+            image_feat_all = torch.cat([image_feat_m.t(), self.image_queue.clone().detach()], dim=1)
             text_output_m = self.text_encoder_m.bert(
                 text.input_ids,
                 attention_mask=text.attention_mask,
@@ -180,9 +192,7 @@ class AlbefPretrain(AlbefBase, MomentumDistilationMixin, SharedQueueMixin):
             )
             text_embeds_m = text_output_m.last_hidden_state
             text_feat_m = F.normalize(self.text_proj_m(text_embeds_m[:, 0, :]), dim=-1)
-            text_feat_all = torch.cat(
-                [text_feat_m.t(), self.text_queue.clone().detach()], dim=1
-            )
+            text_feat_all = torch.cat([text_feat_m.t(), self.text_queue.clone().detach()], dim=1)
 
             sim_i2t_m = image_feat_m @ text_feat_all / self.temp
             sim_t2i_m = text_feat_m @ image_feat_all / self.temp
@@ -190,22 +200,14 @@ class AlbefPretrain(AlbefBase, MomentumDistilationMixin, SharedQueueMixin):
             sim_targets = torch.zeros(sim_i2t_m.size()).to(image.device)
             sim_targets.fill_diagonal_(1)
 
-            sim_i2t_targets = (
-                alpha * F.softmax(sim_i2t_m, dim=1) + (1 - alpha) * sim_targets
-            )
-            sim_t2i_targets = (
-                alpha * F.softmax(sim_t2i_m, dim=1) + (1 - alpha) * sim_targets
-            )
+            sim_i2t_targets = alpha * F.softmax(sim_i2t_m, dim=1) + (1 - alpha) * sim_targets
+            sim_t2i_targets = alpha * F.softmax(sim_t2i_m, dim=1) + (1 - alpha) * sim_targets
 
         sim_i2t = image_feat @ text_feat_all / self.temp
         sim_t2i = text_feat @ image_feat_all / self.temp
 
-        loss_i2t = -torch.sum(
-            F.log_softmax(sim_i2t, dim=1) * sim_i2t_targets, dim=1
-        ).mean()
-        loss_t2i = -torch.sum(
-            F.log_softmax(sim_t2i, dim=1) * sim_t2i_targets, dim=1
-        ).mean()
+        loss_i2t = -torch.sum(F.log_softmax(sim_i2t, dim=1) * sim_i2t_targets, dim=1).mean()
+        loss_t2i = -torch.sum(F.log_softmax(sim_t2i, dim=1) * sim_t2i_targets, dim=1).mean()
 
         loss_itc = (loss_i2t + loss_t2i) / 2
 
@@ -360,20 +362,12 @@ class AlbefPretrain(AlbefBase, MomentumDistilationMixin, SharedQueueMixin):
             targets[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = (
-            torch.bernoulli(torch.full(input_ids.shape, 0.8)).bool() & masked_indices
-        )
+        indices_replaced = torch.bernoulli(torch.full(input_ids.shape, 0.8)).bool() & masked_indices
         input_ids[indices_replaced] = self.tokenizer.mask_token_id
 
         # 10% of the time, we replace masked input tokens with random word
-        indices_random = (
-            torch.bernoulli(torch.full(input_ids.shape, 0.5)).bool()
-            & masked_indices
-            & ~indices_replaced
-        )
-        random_words = torch.randint(vocab_size, input_ids.shape, dtype=torch.long).to(
-            device
-        )
+        indices_random = torch.bernoulli(torch.full(input_ids.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+        random_words = torch.randint(vocab_size, input_ids.shape, dtype=torch.long).to(device)
         input_ids[indices_random] = random_words[indices_random]
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
 
@@ -385,13 +379,9 @@ class AlbefPretrain(AlbefBase, MomentumDistilationMixin, SharedQueueMixin):
     @classmethod
     def from_config(cls, cfg=None):
         image_encoder = VisionTransformerEncoder.from_config(cfg, from_pretrained=True)
-        config_text_encoder = BertConfig.from_json_file(
-            get_abs_path(cfg["med_config_path"])
-        )
+        config_text_encoder = BertConfig.from_json_file(get_abs_path(cfg["med_config_path"]))
         config_text_encoder.fusion_layer = 6
-        text_encoder = BertForMaskedLM.from_pretrained(
-            "bert-base-uncased", config=config_text_encoder
-        )
+        text_encoder = BertForMaskedLM.from_pretrained("bert-base-uncased", config=config_text_encoder)
 
         embed_dim = cfg.get("embed_dim", 256)
         momentum = cfg.get("momentum", 0.995)

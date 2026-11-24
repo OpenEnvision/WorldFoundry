@@ -22,8 +22,8 @@ from worldfoundry.base_models.diffusion_model.loaders import CheckpointSpec
 from worldfoundry.base_models.diffusion_model.models.denoisers import wan as wan_denoiser
 from worldfoundry.base_models.diffusion_model.models.networks.wan.model import WanModel
 from worldfoundry.base_models.diffusion_model.optimizations import RuntimePolicy
-from worldfoundry.evaluation.api import WorldModelConfig
-from worldfoundry.evaluation.models.pipelines.loading import (
+from worldfoundry.evals.api import WorldModelConfig
+from worldfoundry.evals.models.pipelines.loading import (
     build_pipeline_runner_spec,
     call_pipeline_from_pretrained,
 )
@@ -76,7 +76,7 @@ def test_benchmark_runner_config_executes_wan_peft_adapter_option(
     adapter_path = tmp_path / "policy"
     config = WorldModelConfig(
         model_id="wan2.1-t2v-1.3b",
-        runner="worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+        runner="worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner",
         parameters={
             "pipeline_target": ("worldfoundry.pipelines.wan.pipeline_wan_2p1_t2v:Wan2p1T2VPipeline"),
             "peft_adapter_path": str(adapter_path),

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from worldfoundry.evaluation.reporting import (
+from worldfoundry.evals.reporting import (
     has_official_runtime_evidence,
     inspect_scorecard_runtime_flags,
 )

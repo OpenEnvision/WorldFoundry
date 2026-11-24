@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import gc
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     completed_action_result,
@@ -58,9 +59,7 @@ class GalaxeaVLARuntime:
         if not config.local_files_only:
             raise ValueError("G0Plus is an in-tree runtime and requires local_files_only=true")
         if config.variant not in config.variants:
-            raise ValueError(
-                f"Unknown G0Plus variant {config.variant!r}; choose one of {sorted(config.variants)}"
-            )
+            raise ValueError(f"Unknown G0Plus variant {config.variant!r}; choose one of {sorted(config.variants)}")
         if len(config.image_mean) != 3 or len(config.image_std) != 3:
             raise ValueError("G0Plus image mean/std must each contain three values")
         self.config = config
@@ -122,13 +121,9 @@ class GalaxeaVLARuntime:
                 None,
             )
             if match is None:
-                expected = ", ".join(
-                    str(path.relative_to(snapshot))
-                    for _, path in candidates
-                )
+                expected = ", ".join(str(path.relative_to(snapshot)) for _, path in candidates)
                 raise FileNotFoundError(
-                    "G0Plus checkpoint is not staged: expected "
-                    f"one of [{expected}] under {snapshot}"
+                    f"G0Plus checkpoint is not staged: expected one of [{expected}] under {snapshot}"
                 )
             root, checkpoint = match
         if checkpoint.suffix != ".pt" or not checkpoint.is_file():
@@ -175,10 +170,9 @@ class GalaxeaVLARuntime:
         architecture["num_input_images"] = int(self.variant["num_input_images"])
         architecture["cond_steps"] = int(self.variant["observation_steps"])
         architecture["horizon_steps"] = int(self.variant["action_horizon"])
-        architecture["max_image_text_tokens"] = (
-            int(architecture["max_text_tokens"])
-            + int(self.variant["num_input_images"]) * int(architecture["vision"]["num_image_tokens"])
-        )
+        architecture["max_image_text_tokens"] = int(architecture["max_text_tokens"]) + int(
+            self.variant["num_input_images"]
+        ) * int(architecture["vision"]["num_image_tokens"])
         return as_config(architecture)
 
     def _load_model(self) -> Any:
@@ -186,7 +180,7 @@ class GalaxeaVLARuntime:
             return self._model
         import torch
 
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .modeling import GalaxeaZero
         from .preprocessing import PaliGemmaTokenizer
@@ -245,8 +239,7 @@ class GalaxeaVLARuntime:
             path = root / self.config.statistics_file
         if not path.is_file():
             raise FileNotFoundError(
-                "G0Plus requires the exact dataset_stats.json paired with its staged checkpoint: "
-                f"{path}"
+                f"G0Plus requires the exact dataset_stats.json paired with its staged checkpoint: {path}"
             )
         payload: Any = json.loads(path.read_text(encoding="utf-8"))
         if self.config.statistics_key:
@@ -288,7 +281,9 @@ class GalaxeaVLARuntime:
             array = np.asarray(value, dtype=np.float32)
             width = sum(dim for _, dim in parts)
             if array.shape[-1] != width:
-                raise ValueError(f"G0Plus variant {self.config.variant!r} expects {width} state values, got {array.shape}")
+                raise ValueError(
+                    f"G0Plus variant {self.config.variant!r} expects {width} state values, got {array.shape}"
+                )
             array = array.reshape(-1, width)
             offset = 0
             for key, dim in parts:
@@ -515,16 +510,12 @@ def predict_action(
         local_files_only=option_bool(options.get("local_files_only"), True),
         cache_dir=str(options["cache_dir"]) if options.get("cache_dir") else None,
         revision=str(options["revision"]) if options.get("revision") else None,
-        tokenizer_revision=(
-            str(options["tokenizer_revision"]) if options.get("tokenizer_revision") else None
-        ),
+        tokenizer_revision=(str(options["tokenizer_revision"]) if options.get("tokenizer_revision") else None),
         statistics_path=str(options["statistics_path"]) if options.get("statistics_path") else None,
         statistics_file=str(options.get("statistics_file") or "dataset_stats.json"),
         statistics_key=str(options["statistics_key"]) if options.get("statistics_key") else None,
         action_horizon=(
-            option_int(options.get("action_horizon"), 0)
-            if options.get("action_horizon") is not None
-            else None
+            option_int(options.get("action_horizon"), 0) if options.get("action_horizon") is not None else None
         ),
         seed=option_int(options.get("seed"), 0),
         compile_vision=option_bool(options.get("compile_vision"), False),

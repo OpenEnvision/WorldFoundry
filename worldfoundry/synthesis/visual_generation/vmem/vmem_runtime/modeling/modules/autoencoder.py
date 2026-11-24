@@ -4,7 +4,6 @@ from torch import nn
 
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
 
-
 DEFAULT_AUTOENCODER_REPO = "stabilityai/stable-diffusion-2-1-base"
 
 

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
 from worldfoundry.synthesis.visual_generation.hydra import HydraSynthesis
@@ -25,7 +26,7 @@ class HydraPipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "HydraPipeline":
+    ) -> HydraPipeline:
         del model_id
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
         if model_path and not isinstance(model_path, Mapping):

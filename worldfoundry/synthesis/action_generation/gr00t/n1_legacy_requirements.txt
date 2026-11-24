@@ -1,5 +1,13 @@
-# Install in an isolated N1 worker environment alongside NVIDIA Isaac-GR00T
-# n1-release (commit 755876a9afdb41ca6eb6383b36f4a0adb085c73f).
-# The official release also requires PyTorch 2.5.1 and its package dependencies.
+# Isolated worker environment for the original GR00T-N1 checkpoint. The worker runs the
+# NVIDIA Isaac-GR00T n1-release code (commit 755876a9afdb41ca6eb6383b36f4a0adb085c73f)
+# vendored under legacy_n1_runtime, with PyTorch 2.5.1, NumPy < 2 and WorldFoundry importable.
 transformers==4.45.2
 tokenizers==0.20.3
+diffusers==0.30.2
+albumentations==1.4.18
+dm_tree==0.1.8
+numpydantic==1.6.7
+pydantic==2.10.6
+# PyTorch3D (upstream pins pipablepytorch3d==0.7.6)
+pytorch3d
+opencv-python-headless

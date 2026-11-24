@@ -1,15 +1,16 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved
 
 # pyre-unsafe
-"""Module for base_models -> perception_core -> segment -> sam3 -> model -> sam3_image_processor.py functionality."""
-
-from typing import Dict, List
-
 import numpy as np
 import PIL
 import torch
+
 from worldfoundry.base_models.perception_core.segment.sam3.model import box_ops
+
+# isort: split
 from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import FindStage, interpolate
+
+# isort: split
 from torchvision.transforms import v2
 
 
@@ -17,14 +18,6 @@ class Sam3Processor:
     """ """
 
     def __init__(self, model, resolution=1008, device="cuda", confidence_threshold=0.5):
-        """Init.
-
-        Args:
-            model: The model.
-            resolution: The resolution.
-            device: The device.
-            confidence_threshold: The confidence threshold.
-        """
         self.model = model
         self.resolution = resolution
         self.device = device
@@ -70,20 +63,16 @@ class Sam3Processor:
         inst_interactivity_en = self.model.inst_interactive_predictor is not None
         if inst_interactivity_en and "sam2_backbone_out" in state["backbone_out"]:
             sam2_backbone_out = state["backbone_out"]["sam2_backbone_out"]
-            sam2_backbone_out["backbone_fpn"][0] = (
-                self.model.inst_interactive_predictor.model.sam_mask_decoder.conv_s0(
-                    sam2_backbone_out["backbone_fpn"][0]
-                )
+            sam2_backbone_out["backbone_fpn"][0] = self.model.inst_interactive_predictor.model.sam_mask_decoder.conv_s0(
+                sam2_backbone_out["backbone_fpn"][0]
             )
-            sam2_backbone_out["backbone_fpn"][1] = (
-                self.model.inst_interactive_predictor.model.sam_mask_decoder.conv_s1(
-                    sam2_backbone_out["backbone_fpn"][1]
-                )
+            sam2_backbone_out["backbone_fpn"][1] = self.model.inst_interactive_predictor.model.sam_mask_decoder.conv_s1(
+                sam2_backbone_out["backbone_fpn"][1]
             )
         return state
 
     @torch.inference_mode()
-    def set_image_batch(self, images: List[np.ndarray], state=None):
+    def set_image_batch(self, images: list[np.ndarray], state=None):
         """Sets the image batch on which we want to do predictions."""
         if state is None:
             state = {}
@@ -91,36 +80,27 @@ class Sam3Processor:
         if not isinstance(images, list):
             raise ValueError("Images must be a list of PIL images or tensors")
         assert len(images) > 0, "Images list must not be empty"
-        assert isinstance(images[0], PIL.Image.Image), (
-            "Images must be a list of PIL images"
-        )
+        assert isinstance(images[0], PIL.Image.Image), "Images must be a list of PIL images"
 
         state["original_heights"] = [image.height for image in images]
         state["original_widths"] = [image.width for image in images]
 
-        images = [
-            self.transform(v2.functional.to_image(image).to(self.device))
-            for image in images
-        ]
+        images = [self.transform(v2.functional.to_image(image).to(self.device)) for image in images]
         images = torch.stack(images, dim=0)
         state["backbone_out"] = self.model.backbone.forward_image(images)
         inst_interactivity_en = self.model.inst_interactive_predictor is not None
         if inst_interactivity_en and "sam2_backbone_out" in state["backbone_out"]:
             sam2_backbone_out = state["backbone_out"]["sam2_backbone_out"]
-            sam2_backbone_out["backbone_fpn"][0] = (
-                self.model.inst_interactive_predictor.model.sam_mask_decoder.conv_s0(
-                    sam2_backbone_out["backbone_fpn"][0]
-                )
+            sam2_backbone_out["backbone_fpn"][0] = self.model.inst_interactive_predictor.model.sam_mask_decoder.conv_s0(
+                sam2_backbone_out["backbone_fpn"][0]
             )
-            sam2_backbone_out["backbone_fpn"][1] = (
-                self.model.inst_interactive_predictor.model.sam_mask_decoder.conv_s1(
-                    sam2_backbone_out["backbone_fpn"][1]
-                )
+            sam2_backbone_out["backbone_fpn"][1] = self.model.inst_interactive_predictor.model.sam_mask_decoder.conv_s1(
+                sam2_backbone_out["backbone_fpn"][1]
             )
         return state
 
     @torch.inference_mode()
-    def set_text_prompt(self, prompt: str, state: Dict):
+    def set_text_prompt(self, prompt: str, state: dict):
         """Sets the text prompt and run the inference"""
 
         if "backbone_out" not in state:
@@ -135,7 +115,7 @@ class Sam3Processor:
         return self._forward_grounding(state)
 
     @torch.inference_mode()
-    def add_geometric_prompt(self, box: List, label: bool, state: Dict):
+    def add_geometric_prompt(self, box: list, label: bool, state: dict):
         """Adds a box prompt and run the inference.
         The image needs to be set, but not necessarily the text prompt.
         The box is assumed to be in [center_x, center_y, width, height] format and normalized in [0, 1] range.
@@ -146,9 +126,7 @@ class Sam3Processor:
 
         if "language_features" not in state["backbone_out"]:
             # Looks like we don't have a text prompt yet. This is allowed, but we need to set the text prompt to "visual" for the model to rely only on the geometric prompt
-            dummy_text_outputs = self.model.backbone.forward_text(
-                ["visual"], device=self.device
-            )
+            dummy_text_outputs = self.model.backbone.forward_text(["visual"], device=self.device)
             state["backbone_out"].update(dummy_text_outputs)
 
         if "geometric_prompt" not in state:
@@ -161,7 +139,7 @@ class Sam3Processor:
 
         return self._forward_grounding(state)
 
-    def reset_all_prompts(self, state: Dict):
+    def reset_all_prompts(self, state: dict):
         """Removes all the prompts and results"""
         if "backbone_out" in state:
             backbone_keys_to_del = [
@@ -175,8 +153,7 @@ class Sam3Processor:
 
         keys_to_del = ["geometric_prompt", "boxes", "masks", "masks_logits", "scores"]
         for key in keys_to_del:
-            if key in state:
-                del state[key]
+            state.pop(key, None)
 
     @torch.inference_mode()
     def set_confidence_threshold(self, threshold: float, state=None):
@@ -190,12 +167,7 @@ class Sam3Processor:
         return state
 
     @torch.inference_mode()
-    def _forward_grounding(self, state: Dict):
-        """Helper function to forward grounding.
-
-        Args:
-            state: The state.
-        """
+    def _forward_grounding(self, state: dict):
         outputs = self.model.forward_grounding(
             backbone_out=state["backbone_out"],
             find_input=self.find_stage,

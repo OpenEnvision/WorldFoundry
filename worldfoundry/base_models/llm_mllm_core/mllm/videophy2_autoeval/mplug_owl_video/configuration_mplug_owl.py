@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 x-plug and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,16 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MplugOwl model configuration """
+"""MplugOwl model configuration"""
+
 import copy
 import os
-from typing import Union
+from typing import Union as Union
 
 from transformers.configuration_utils import PretrainedConfig
+from transformers.models.auto import CONFIG_MAPPING
 from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from transformers.utils import logging
-from transformers.models.auto import CONFIG_MAPPING
-
 
 logger = logging.get_logger(__name__)
 
@@ -107,7 +106,7 @@ class MplugOwlVisionConfig(PretrainedConfig):
         self.use_flash_attn = use_flash_attn
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs) -> "PretrainedConfig":
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from MplugOwlConfig
@@ -149,7 +148,7 @@ class MplugOwlVisualAbstractorConfig(PretrainedConfig):
         self.encoder_hidden_size = encoder_hidden_size
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs) -> "PretrainedConfig":
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the visual_abstractor config dict if we are loading from MplugOwlConfig
@@ -217,6 +216,7 @@ class MplugOwlConfig(PretrainedConfig):
 
     >>> config = MplugOwlConfig.from_text_vision_configs(vision_config, visual_abstractor_config, text_config)
     ```"""
+
     model_type = "mplug-owl"
     is_composition = True
 
@@ -242,7 +242,7 @@ class MplugOwlConfig(PretrainedConfig):
         self.vision_config = MplugOwlVisionConfig(**vision_config)
         self.visual_abstractor_config = MplugOwlVisualAbstractorConfig(**visual_abstractor_config)
         # self.visual_abstractor_config.layer_norm_eps = 1e-6
-        text_model_type = text_config["model_type"] if "model_type" in text_config else "llama"
+        text_model_type = text_config["model_type"] if "model_type" in text_config else "llama"  # noqa: SIM401 - Keeps explicit lookup semantics for custom mappings.
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         self.tie_word_embeddings = self.text_config.tie_word_embeddings

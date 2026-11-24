@@ -15,7 +15,7 @@
 
 import torch
 
-from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.observability.rank_logging import log
 
 
 # based on https://github.com/huggingface/diffusers/blob/b793debd9d09225582943a1e9cb4ccdab30f1b37/src/diffusers/loaders/lora_conversion_utils.py#L1817
@@ -23,7 +23,7 @@ from worldfoundry.core.distributed.runtime.logging import log
 # 1. add adapter_name to the key, 2. change lora keys
 def _convert_non_diffusers_wan_lora_to_diffusers(state_dict, adapter_name="default"):
     converted_state_dict = {}
-    if any("diffusion_model." in k for k in state_dict.keys()):
+    if any("diffusion_model." in k for k in state_dict.keys()):  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
         original_state_dict = {k[len("diffusion_model.") :]: v for k, v in state_dict.items()}
     else:
         original_state_dict = state_dict
@@ -70,7 +70,7 @@ def _convert_non_diffusers_wan_lora_to_diffusers(state_dict, adapter_name="defau
 
     for i in range(min_block, max_block + 1):
         # Self-attention
-        for o, c in zip(["q", "k", "v", "o"], ["q", "k", "v", "o"]):
+        for o, c in zip(["q", "k", "v", "o"], ["q", "k", "v", "o"], strict=False):
             original_key = f"blocks.{i}.self_attn.{o}.{lora_down_key}.weight"
             converted_down_key = f"blocks.{i}.self_attn.{c}.lora_A.{adapter_name}.weight"
             if original_key in original_state_dict:
@@ -95,7 +95,7 @@ def _convert_non_diffusers_wan_lora_to_diffusers(state_dict, adapter_name="defau
                 converted_state_dict[converted_key] = original_state_dict.pop(original_key)
 
         # Cross-attention
-        for o, c in zip(["q", "k", "v", "o"], ["q", "k", "v", "o"]):
+        for o, c in zip(["q", "k", "v", "o"], ["q", "k", "v", "o"], strict=False):
             original_key = f"blocks.{i}.cross_attn.{o}.{lora_down_key}.weight"
             converted_down_key = f"blocks.{i}.cross_attn.{c}.lora_A.{adapter_name}.weight"
             if original_key in original_state_dict:
@@ -120,7 +120,7 @@ def _convert_non_diffusers_wan_lora_to_diffusers(state_dict, adapter_name="defau
                 converted_state_dict[converted_key] = original_state_dict.pop(original_key)
 
         if is_i2v_lora:
-            for o, c in zip(["k_img", "v_img"], ["k_img", "v_img"]):
+            for o, c in zip(["k_img", "v_img"], ["k_img", "v_img"], strict=False):
                 original_key = f"blocks.{i}.cross_attn.{o}.{lora_down_key}.weight"
                 converted_down_key = f"blocks.{i}.cross_attn.{c}.lora_A.{adapter_name}.weight"
                 if original_key in original_state_dict:
@@ -145,7 +145,7 @@ def _convert_non_diffusers_wan_lora_to_diffusers(state_dict, adapter_name="defau
                     converted_state_dict[converted_key] = original_state_dict.pop(original_key)
 
         # FFN
-        for o, c in zip(["ffn.0", "ffn.2"], ["ffn.0", "ffn.2"]):
+        for o, c in zip(["ffn.0", "ffn.2"], ["ffn.0", "ffn.2"], strict=False):
             original_key = f"blocks.{i}.{o}.{lora_down_key}.weight"
             converted_down_key = f"blocks.{i}.{c}.lora_A.{adapter_name}.weight"
             if original_key in original_state_dict:
@@ -386,7 +386,7 @@ def _convert_musubi_wan_lora_to_non_diffusers_wan(state_dict):
 
     for i in range(num_blocks):
         # Self-attention
-        for o, c in zip(["q", "k", "v", "o"], ["q", "k", "v", "o"]):
+        for o, c in zip(["q", "k", "v", "o"], ["q", "k", "v", "o"], strict=False):
             down_weight = original_state_dict.pop(f"blocks_{i}_self_attn_{o}.lora_down.weight")
             up_weight = original_state_dict.pop(f"blocks_{i}_self_attn_{o}.lora_up.weight")
             scale_down, scale_up = get_alpha_scales(down_weight, f"blocks_{i}_self_attn_{o}")
@@ -394,7 +394,7 @@ def _convert_musubi_wan_lora_to_non_diffusers_wan(state_dict):
             converted_state_dict[f"blocks.{i}.self_attn.{c}.lora_up.weight"] = up_weight * scale_up
 
         # Cross-attention
-        for o, c in zip(["q", "k", "v", "o"], ["q", "k", "v", "o"]):
+        for o, c in zip(["q", "k", "v", "o"], ["q", "k", "v", "o"], strict=False):
             down_weight = original_state_dict.pop(f"blocks_{i}_cross_attn_{o}.lora_down.weight")
             up_weight = original_state_dict.pop(f"blocks_{i}_cross_attn_{o}.lora_up.weight")
             scale_down, scale_up = get_alpha_scales(down_weight, f"blocks_{i}_cross_attn_{o}")
@@ -402,7 +402,7 @@ def _convert_musubi_wan_lora_to_non_diffusers_wan(state_dict):
             converted_state_dict[f"blocks.{i}.cross_attn.{c}.lora_up.weight"] = up_weight * scale_up
 
         if is_i2v_lora:
-            for o, c in zip(["k_img", "v_img"], ["k_img", "v_img"]):
+            for o, c in zip(["k_img", "v_img"], ["k_img", "v_img"], strict=False):
                 down_weight = original_state_dict.pop(f"blocks_{i}_cross_attn_{o}.lora_down.weight")
                 up_weight = original_state_dict.pop(f"blocks_{i}_cross_attn_{o}.lora_up.weight")
                 scale_down, scale_up = get_alpha_scales(down_weight, f"blocks_{i}_cross_attn_{o}")
@@ -410,7 +410,7 @@ def _convert_musubi_wan_lora_to_non_diffusers_wan(state_dict):
                 converted_state_dict[f"blocks.{i}.cross_attn.{c}.lora_up.weight"] = up_weight * scale_up
 
         # FFN
-        for o, c in zip(["ffn_0", "ffn_2"], ["ffn.0", "ffn.2"]):
+        for o, c in zip(["ffn_0", "ffn_2"], ["ffn.0", "ffn.2"], strict=False):
             down_weight = original_state_dict.pop(f"blocks_{i}_{o}.lora_down.weight")
             up_weight = original_state_dict.pop(f"blocks_{i}_{o}.lora_up.weight")
             scale_down, scale_up = get_alpha_scales(down_weight, f"blocks_{i}_{o}")

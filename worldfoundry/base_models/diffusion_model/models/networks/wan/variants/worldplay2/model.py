@@ -30,7 +30,10 @@ class WorldPlay2AttentionProcessor:
 
     def __call__(self, attention, x, freqs, **kwargs):
         q, k = apply_wan_qk_norm_rope(
-            attention, attention.q(x), attention.k(x), freqs,
+            attention,
+            attention.q(x),
+            attention.k(x),
+            freqs,
             precision=kwargs.get("_worldfoundry_rope_precision", "fp64"),
         )
         v = attention.v(x)
@@ -56,13 +59,10 @@ class WorldPlay2AttentionProcessor:
             mask[:sink, :sink] = True
         for start in range(0, compressed, group):
             end = min(start + group, compressed)
-            mask[sink + start:sink + end, :prefix + sink + end] = True
-        mask[sink + compressed:, :] = True
+            mask[sink + start : sink + end, : prefix + sink + end] = True
+        mask[sink + compressed :, :] = True
         heads = attention.num_heads
-        q, k_heads, v_heads = (
-            value.unflatten(-1, (heads, -1)).transpose(1, 2)
-            for value in (q, k, v)
-        )
+        q, k_heads, v_heads = (value.unflatten(-1, (heads, -1)).transpose(1, 2) for value in (q, k, v))
         output = F.scaled_dot_product_attention(q, k_heads, v_heads, attn_mask=mask)
         cache["k_vision"], cache["v_vision"] = k.detach(), v.detach()
         return attention.o(output.transpose(1, 2).flatten(2))
@@ -74,12 +74,19 @@ class WorldPlay2Block(DiTBlock):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.img_action_mlp = nn.Sequential(
-            nn.Linear(2 * self.dim, self.dim), nn.SiLU(), nn.Linear(self.dim, self.dim),
+            nn.Linear(2 * self.dim, self.dim),
+            nn.SiLU(),
+            nn.Linear(self.dim, self.dim),
         )
 
     def forward(self, x, context=None, t_mod=None, freqs=None, *, vec_action=None, **kwargs):
         x, modifiers = super().forward(
-            x, context, t_mod, freqs, return_partial=True, **kwargs,
+            x,
+            context,
+            t_mod,
+            freqs,
+            return_partial=True,
+            **kwargs,
         )
         if vec_action is not None:
             action_dtype = self.img_action_mlp[0].weight.dtype
@@ -104,13 +111,16 @@ class FixedPDDHead(Head):
             shift, scale = (self.modulation.float().unsqueeze(0) + t_mod.float().unsqueeze(2)).unbind(2)
             value = self.norm(x.float()) * (1 + scale) + shift
             value = F.linear(
-                value.to(self.block_weight.dtype), self.block_weight[block_index], self.block_bias[block_index],
+                value.to(self.block_weight.dtype),
+                self.block_weight[block_index],
+                self.block_bias[block_index],
             )
         first, second = value.chunk(2, dim=-1)
         patch_volume = math.prod(self.patch_size)
         # Unpatchify expects patch dimensions before channels.
-        return torch.cat((first.unflatten(-1, (patch_volume, -1)),
-                          second.unflatten(-1, (patch_volume, -1))), dim=-1).flatten(-2)
+        return torch.cat(
+            (first.unflatten(-1, (patch_volume, -1)), second.unflatten(-1, (patch_volume, -1))), dim=-1
+        ).flatten(-2)
 
 
 class WorldPlay2Model(WanModel):
@@ -121,12 +131,18 @@ class WorldPlay2Model(WanModel):
         self.text_len = int(text_len)
         self.fixed_pdd = bool(fixed_pdd)
         self.action_in_cont = nn.Sequential(
-            nn.Linear(2, 256), nn.SiLU(), nn.Linear(256, 1024), nn.SiLU(), nn.Linear(1024, self.dim),
+            nn.Linear(2, 256),
+            nn.SiLU(),
+            nn.Linear(256, 1024),
+            nn.SiLU(),
+            nn.Linear(1024, self.dim),
         )
         self.action_in_disc = nn.ModuleList(nn.Embedding(size, self.dim) for size in (3, 3, 2, 2))
         self.memory_compress = CausalMemCompressModel(
-            output_dim=self.dim, input_dim=self.in_dim,
-            spatial_down=(1, 1, 1, 0, 0, 0), temporal_down=(1, 0, 0, 0, 0, 0),
+            output_dim=self.dim,
+            input_dim=self.in_dim,
+            spatial_down=(1, 1, 1, 0, 0, 0),
+            temporal_down=(1, 0, 0, 0, 0, 0),
             **dict(compressor_options or {}),
         )
         for index, block in enumerate(self.blocks):
@@ -157,7 +173,7 @@ class WorldPlay2Model(WanModel):
         memory = kwargs.get("memory")
         if memory is not None:
             shift = int(memory["rope_shift_idx"])
-        freqs = self.rotary_frequencies((shift + frames, height, width), device=x.device)[-x.shape[1]:]
+        freqs = self.rotary_frequencies((shift + frames, height, width), device=x.device)[-x.shape[1] :]
         t = t[:, None].expand(-1, x.shape[1], -1).float() if t.ndim == 2 else t.float()
         t_mod = t_mod[:, None].expand(-1, x.shape[1], -1, -1).float() if t_mod.ndim == 3 else t_mod.float()
         target_tokens = x.shape[1]
@@ -186,7 +202,7 @@ class WorldPlay2Model(WanModel):
         return x[:, -token_state:], None
 
     def project_output(self, x, t, **kwargs):
-        t = t[:, -x.shape[1]:]
+        t = t[:, -x.shape[1] :]
         if self.fixed_pdd:
             return self.head(x, t, block_index=int(kwargs["pdd_block_index"]))
         return super().project_output(x, t)
@@ -201,8 +217,7 @@ class WorldPlay2Model(WanModel):
     def new_cache(self):
         return [{"k_vision": None, "v_vision": None} for _ in self.blocks]
 
-    def compress_memory(self, *, hr_input, lr_input, lr_actions, temporal_input,
-                        temporal_actions, sink_actions=None):
+    def compress_memory(self, *, hr_input, lr_input, lr_actions, temporal_input, temporal_actions, sink_actions=None):
         """Fuse HR compressor features with LR Wan tokens at temporal stride two."""
         batch, _, history_frames, _, _ = hr_input.shape
         lr_frames, lr_height, lr_width = lr_input.shape[2:]
@@ -210,14 +225,20 @@ class WorldPlay2Model(WanModel):
         cmp_spatial = cmp_height * cmp_width
         compressed, _ = self.patchify(lr_input)
         compressed = compressed + self.memory_compress(hr_input)
-        compressed_freqs = self.rotary_frequencies(
-            (history_frames, cmp_height, cmp_width), device=hr_input.device,
-        ).reshape(history_frames, cmp_spatial, 1, -1)[::2][:lr_frames].flatten(0, 1)
+        compressed_freqs = (
+            self.rotary_frequencies(
+                (history_frames, cmp_height, cmp_width),
+                device=hr_input.device,
+            )
+            .reshape(history_frames, cmp_spatial, 1, -1)[::2][:lr_frames]
+            .flatten(0, 1)
+        )
         temporal, temporal_grid = self.patchify(temporal_input)
         temporal_frames, temporal_height, temporal_width = temporal_grid
         temporal_freqs = self.rotary_frequencies(
-            (history_frames, temporal_height, temporal_width), device=hr_input.device,
-        )[-temporal.shape[1]:]
+            (history_frames, temporal_height, temporal_width),
+            device=hr_input.device,
+        )[-temporal.shape[1] :]
         token_parts, freq_parts, action_parts = [], [], []
         sink_tokens = 0
         if sink_actions is not None and sink_actions.shape[-2]:
@@ -229,21 +250,32 @@ class WorldPlay2Model(WanModel):
             sink_tokens = sink.shape[1]
         token_parts.extend((compressed, temporal))
         freq_parts.extend((compressed_freqs, temporal_freqs))
-        action_parts.extend((self._frame_features(lr_actions, batch, cmp_spatial),
-                             self._frame_features(temporal_actions, batch, temporal_height * temporal_width)))
+        action_parts.extend(
+            (
+                self._frame_features(lr_actions, batch, cmp_spatial),
+                self._frame_features(temporal_actions, batch, temporal_height * temporal_width),
+            )
+        )
         tokens = torch.cat(token_parts, dim=1)
         time, modulation = self._time_features(hr_input.new_zeros(1), batch, tokens.shape[1])
         return {
-            "tokens": tokens, "freqs": torch.cat(freq_parts), "e": time, "e0": modulation,
-            "vec_action": torch.cat(action_parts, dim=1), "rope_shift_idx": history_frames,
-            "sink_token_count": sink_tokens, "cmp_token_count": compressed.shape[1],
-            "cmp_chunk_token_count": 2 * cmp_spatial, "tmp_token_count": temporal.shape[1],
+            "tokens": tokens,
+            "freqs": torch.cat(freq_parts),
+            "e": time,
+            "e0": modulation,
+            "vec_action": torch.cat(action_parts, dim=1),
+            "rope_shift_idx": history_frames,
+            "sink_token_count": sink_tokens,
+            "cmp_token_count": compressed.shape[1],
+            "cmp_chunk_token_count": 2 * cmp_spatial,
+            "tmp_token_count": temporal.shape[1],
         }
 
     def prefill(self, memory, context, cache):
         """Append new compressed tokens and replace the previous temporal anchor."""
-        sink, compressed, recent = (int(memory[key]) for key in
-                                    ("sink_token_count", "cmp_token_count", "tmp_token_count"))
+        sink, compressed, recent = (
+            int(memory[key]) for key in ("sink_token_count", "cmp_token_count", "tmp_token_count")
+        )
         existing = cache[0]["k_vision"]
         prefix = 0
         cached_compressed = 0
@@ -259,14 +291,16 @@ class WorldPlay2Model(WanModel):
         freqs = memory["freqs"][indices]
         text = self.prepare_condition_context(context)
         attention_context = {
-            "cache": cache, "write": True, "prefix_tokens": prefix,
-            "sink_tokens": sink, "new_compressed_tokens": compressed - cached_compressed,
+            "cache": cache,
+            "write": True,
+            "prefix_tokens": prefix,
+            "sink_tokens": sink,
+            "new_compressed_tokens": compressed - cached_compressed,
             "compressed_chunk_tokens": int(memory["cmp_chunk_token_count"]),
         }
         for block in self.blocks:
-            x = block(x, text, modulation, freqs, vec_action=actions,
-                      _worldfoundry_attention_context=attention_context)
+            x = block(x, text, modulation, freqs, vec_action=actions, _worldfoundry_attention_context=attention_context)
         return cache
 
 
-__all__ = ["WorldPlay2Model", "FixedPDDHead"]
+__all__ = ["FixedPDDHead", "WorldPlay2Model"]

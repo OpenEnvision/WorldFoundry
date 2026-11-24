@@ -1,14 +1,16 @@
-import copy
-import random
+import copy as copy
+import random as random
+
+import numpy as np
 import torch
 from scipy.stats import truncnorm
-import numpy as np
+
 
 def normalize_images(img):
-    if img.dim() == 2: 
+    if img.dim() == 2:
         max_val = torch.max(img)
         return img / max_val
-    elif img.dim() == 5: 
+    elif img.dim() == 5:
         bs, T, _, H, W = img.shape
         normalized_img = torch.zeros_like(img)
         for b in range(bs):
@@ -19,7 +21,8 @@ def normalize_images(img):
         return normalized_img
     else:
         raise ValueError("Unsupported input shape. Expected either (h, w) or (bs, T, 1, h, w).")
-    
+
+
 def generate_wall_layouts(wall_config):
     """
     Generate possible layouts for train and validation
@@ -31,7 +34,7 @@ def generate_wall_layouts(wall_config):
     fix_wall = wall_config.fix_wall
     fix_door_location = wall_config.fix_door_location
     fix_wall_location = wall_config.fix_wall_location
-    num_train_layouts = wall_config.num_train_layouts
+    _num_train_layouts = wall_config.num_train_layouts
 
     def extract_min_max(code):
         vals = [int(x) for x in code.split("-") if x]
@@ -87,9 +90,7 @@ def generate_wall_layouts(wall_config):
         for door_pos in door_y_values:
             code = f"wall{wall_pos}_door{door_pos}"
 
-            to_exclude_for_train = (
-                wall_pos in exclude_wall_train and door_pos in exclude_door_train
-            )
+            to_exclude_for_train = wall_pos in exclude_wall_train and door_pos in exclude_door_train
             to_include_for_val = wall_pos in only_wall_val and door_pos in only_door_val
 
             if not to_exclude_for_train:
@@ -162,9 +163,7 @@ def sample_truncated_norm(upper_bound, lower_bound, mean, std=1.4):
     # Sample from the truncated normal distribution
     for i in range(len(mean_np)):
         # Calculate the bounds in terms of standard deviations
-        a, b = (lower_bound_np[i] - mean_np[i]) / std, (
-            upper_bound_np[i] - mean_np[i]
-        ) / std
+        a, b = (lower_bound_np[i] - mean_np[i]) / std, (upper_bound_np[i] - mean_np[i]) / std
         # Sample from truncnorm
         samples[i] = truncnorm.rvs(a, b, loc=mean_np[i], scale=std)
 

@@ -1,6 +1,6 @@
-# Copyright (c) OpenMMLab. All rights reserved.
-from typing import List, Tuple, Union
+from typing import ClassVar
 
+# Copyright (c) OpenMMLab. All rights reserved.
 import torch.nn as nn
 from mmcv.cnn import ConvModule
 from mmdet.utils import ConfigType, OptMultiConfig
@@ -49,39 +49,36 @@ class PPYOLOECSPResNet(BaseBackbone):
         use_large_stem (bool): Whether to use large stem layer.
             Defaults to False.
     """
+
     # From left to right:
     # in_channels, out_channels, num_blocks
-    arch_settings = {
-        'P5': [[64, 128, 3], [128, 256, 6], [256, 512, 6], [512, 1024, 3]]
-    }
+    arch_settings: ClassVar[dict] = {"P5": [[64, 128, 3], [128, 256, 6], [256, 512, 6], [512, 1024, 3]]}
 
-    def __init__(self,
-                 arch: str = 'P5',
-                 deepen_factor: float = 1.0,
-                 widen_factor: float = 1.0,
-                 input_channels: int = 3,
-                 out_indices: Tuple[int] = (2, 3, 4),
-                 frozen_stages: int = -1,
-                 plugins: Union[dict, List[dict]] = None,
-                 arch_ovewrite: dict = None,
-                 block_cfg: ConfigType = dict(
-                     type='PPYOLOEBasicBlock', shortcut=True, use_alpha=True),
-                 norm_cfg: ConfigType = dict(
-                     type='BN', momentum=0.1, eps=1e-5),
-                 act_cfg: ConfigType = dict(type='SiLU', inplace=True),
-                 attention_cfg: ConfigType = dict(
-                     type='EffectiveSELayer', act_cfg=dict(type='HSigmoid')),
-                 norm_eval: bool = False,
-                 init_cfg: OptMultiConfig = None,
-                 use_large_stem: bool = False):
+    def __init__(
+        self,
+        arch: str = "P5",
+        deepen_factor: float = 1.0,
+        widen_factor: float = 1.0,
+        input_channels: int = 3,
+        out_indices: tuple[int] = (2, 3, 4),
+        frozen_stages: int = -1,
+        plugins: dict | list[dict] | None = None,
+        arch_ovewrite: dict | None = None,
+        block_cfg: ConfigType = {"type": "PPYOLOEBasicBlock", "shortcut": True, "use_alpha": True},  # noqa: B006 - Keeps the upstream default object and signature.
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.1, "eps": 1e-5},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "SiLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
+        attention_cfg: ConfigType = {"type": "EffectiveSELayer", "act_cfg": {"type": "HSigmoid"}},  # noqa: B006 - Keeps the upstream default object and signature.
+        norm_eval: bool = False,
+        init_cfg: OptMultiConfig = None,
+        use_large_stem: bool = False,
+    ):
         arch_setting = self.arch_settings[arch]
         if arch_ovewrite:
             arch_setting = arch_ovewrite
-        arch_setting = [[
-            int(in_channels * widen_factor),
-            int(out_channels * widen_factor),
-            round(num_blocks * deepen_factor)
-        ] for in_channels, out_channels, num_blocks in arch_setting]
+        arch_setting = [
+            [int(in_channels * widen_factor), int(out_channels * widen_factor), round(num_blocks * deepen_factor)]
+            for in_channels, out_channels, num_blocks in arch_setting
+        ]
         self.block_cfg = block_cfg
         self.use_large_stem = use_large_stem
         self.attention_cfg = attention_cfg
@@ -97,7 +94,8 @@ class PPYOLOECSPResNet(BaseBackbone):
             norm_cfg=norm_cfg,
             act_cfg=act_cfg,
             norm_eval=norm_eval,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
 
     def build_stem_layer(self) -> nn.Module:
         """Build a stem layer."""
@@ -110,7 +108,8 @@ class PPYOLOECSPResNet(BaseBackbone):
                     stride=2,
                     padding=1,
                     act_cfg=self.act_cfg,
-                    norm_cfg=self.norm_cfg),
+                    norm_cfg=self.norm_cfg,
+                ),
                 ConvModule(
                     self.arch_setting[0][0] // 2,
                     self.arch_setting[0][0] // 2,
@@ -118,7 +117,8 @@ class PPYOLOECSPResNet(BaseBackbone):
                     stride=1,
                     padding=1,
                     norm_cfg=self.norm_cfg,
-                    act_cfg=self.act_cfg),
+                    act_cfg=self.act_cfg,
+                ),
                 ConvModule(
                     self.arch_setting[0][0] // 2,
                     self.arch_setting[0][0],
@@ -126,7 +126,9 @@ class PPYOLOECSPResNet(BaseBackbone):
                     stride=1,
                     padding=1,
                     norm_cfg=self.norm_cfg,
-                    act_cfg=self.act_cfg))
+                    act_cfg=self.act_cfg,
+                ),
+            )
         else:
             stem = nn.Sequential(
                 ConvModule(
@@ -136,7 +138,8 @@ class PPYOLOECSPResNet(BaseBackbone):
                     stride=2,
                     padding=1,
                     norm_cfg=self.norm_cfg,
-                    act_cfg=self.act_cfg),
+                    act_cfg=self.act_cfg,
+                ),
                 ConvModule(
                     self.arch_setting[0][0] // 2,
                     self.arch_setting[0][0],
@@ -144,7 +147,9 @@ class PPYOLOECSPResNet(BaseBackbone):
                     stride=1,
                     padding=1,
                     norm_cfg=self.norm_cfg,
-                    act_cfg=self.act_cfg))
+                    act_cfg=self.act_cfg,
+                ),
+            )
         return stem
 
     def build_stage_layer(self, stage_idx: int, setting: list) -> list:
@@ -165,5 +170,6 @@ class PPYOLOECSPResNet(BaseBackbone):
             norm_cfg=self.norm_cfg,
             act_cfg=self.act_cfg,
             attention_cfg=self.attention_cfg,
-            use_spp=False)
+            use_spp=False,
+        )
         return [cspres_layer]

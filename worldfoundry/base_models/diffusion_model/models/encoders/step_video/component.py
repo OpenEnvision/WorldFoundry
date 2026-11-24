@@ -13,7 +13,7 @@ from collections.abc import Sequence
 import torch
 
 from ....components import ComponentBuildContext
-from ....contracts import Conditioning, DiffusionRequest
+from ....contracts import Conditioning
 from ....loaders import NativeCheckpointResolver
 from ....optimizations import OffloadMode
 from .clip import HunyuanClip
@@ -64,14 +64,22 @@ def build_step_video_prompt_conditioner(context: ComponentBuildContext) -> StepV
         if context.policy.offload.mode is not OffloadMode.NONE
         else context.policy.device
     )
-    llm = STEP1TextEncoder(root / "step_llm", max_length=320).to(
-        device=encoder_device,
-        dtype=context.policy.dtype,
-    ).eval()
-    clip = HunyuanClip(root / "hunyuan_clip", max_length=77).to(
-        device=encoder_device,
-        dtype=context.policy.dtype,
-    ).eval()
+    llm = (
+        STEP1TextEncoder(root / "step_llm", max_length=320)
+        .to(
+            device=encoder_device,
+            dtype=context.policy.dtype,
+        )
+        .eval()
+    )
+    clip = (
+        HunyuanClip(root / "hunyuan_clip", max_length=77)
+        .to(
+            device=encoder_device,
+            dtype=context.policy.dtype,
+        )
+        .eval()
+    )
     return StepVideoPromptConditioner(llm, clip)
 
 

@@ -1,4 +1,3 @@
-import { movedDocsDestination } from '@/lib/docs-moved';
 import { getPageImage, source } from '@/lib/source';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -28,9 +27,6 @@ export function generateLocalizedDocsStaticParams() {
 
 export async function generateDocsMetadata(slug: string[] | undefined, locale: string): Promise<Metadata> {
   const normalized = normalizeLocale(locale);
-  if (movedDocsDestination(slug, normalized)) {
-    return { title: 'Moved' };
-  }
   const page = source.getPage(slug, normalized);
   if (!page) notFound();
 

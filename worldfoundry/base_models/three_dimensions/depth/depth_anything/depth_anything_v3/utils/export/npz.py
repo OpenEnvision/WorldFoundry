@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> export -> npz.py functionality."""
-
 import os
+
 import numpy as np
 
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.specs import Prediction
@@ -26,12 +25,6 @@ def export_to_npz(
     prediction: Prediction,
     export_dir: str,
 ):
-    """Export to npz.
-
-    Args:
-        prediction: The prediction.
-        export_dir: The export dir.
-    """
     output_file = os.path.join(export_dir, "exports", "npz", "results.npz")
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
@@ -63,12 +56,6 @@ def export_to_mini_npz(
     prediction: Prediction,
     export_dir: str,
 ):
-    """Export to mini npz.
-
-    Args:
-        prediction: The prediction.
-        export_dir: The export dir.
-    """
     output_file = os.path.join(export_dir, "exports", "mini_npz", "results.npz")
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
 

@@ -14,13 +14,10 @@
 # limitations under the License.
 
 import warnings
+
 import torch
-from torch import Tensor
-from torch import nn
-import torch.nn.functional as F
-from itertools import repeat
-import collections.abc
 from einops import rearrange
+from torch import Tensor, nn
 
 try:
     from flash_attn import flash_attn_func
@@ -38,57 +35,35 @@ def attention_func(q: Tensor, k: Tensor, v: Tensor) -> Tensor:
     x = _worldfoundry_scaled_dot_product_attention(q, k, v)
     return x.permute(0, 2, 1, 3)
 
+
 try:
     # Needed since changing args to function causes recompiles
     torch._dynamo.config.cache_size_limit = 1000
     from torch.nn.attention.flex_attention import flex_attention as flex_attn_func
+
     flex_attn_func_compiled = torch.compile(flex_attn_func)
-except:
-    warnings.warn("flex_attn is not available")
+except BaseException:
+    warnings.warn("flex_attn is not available", stacklevel=1)
 
-from timm.models.layers import DropPath, to_2tuple, trunc_normal_
-import math
-from functools import partial
-from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+import math  # noqa: E402 - Follows the warnings configuration.
+from functools import partial  # noqa: E402 - Follows the warnings configuration.
 
-def _ntuple(n):
-    def parse(x):
-        if isinstance(x, collections.abc.Iterable) and not isinstance(x, str):
-            return x
-        return tuple(repeat(x, n))
-    return parse
-to_2tuple = _ntuple(2)
-to_3tuple = _ntuple(3)
+from timm.layers import (  # noqa: E402 - Follows the warnings configuration.
+    DropPath,
+    to_2tuple,
+    to_3tuple,
+    trunc_normal_,
+)
 
-def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: bool = True):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-    """
-    if drop_prob == 0. or not training:
-        return x
-    keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
-    if keep_prob > 0.0 and scale_by_keep:
-        random_tensor.div_(keep_prob)
-    return x * random_tensor
+from worldfoundry.core.attention import (  # noqa: E402 - Follows the warnings configuration.
+    scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention,
+)
 
-class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
-    """
-    def __init__(self, drop_prob: float = 0., scale_by_keep: bool = True):
-        super(DropPath, self).__init__()
-        self.drop_prob = drop_prob
-        self.scale_by_keep = scale_by_keep
-
-    def forward(self, x):
-        return drop_path(x, self.drop_prob, self.training, self.scale_by_keep)
-
-    def extra_repr(self):
-        return f'drop_prob={round(self.drop_prob,3):0.3f}'
 
 class Mlp(nn.Module):
-    """ MLP as used in Vision Transformer, MLP-Mixer and related networks"""
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, bias=True, drop=0.):
+    """MLP as used in Vision Transformer, MLP-Mixer and related networks"""
+
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, bias=True, drop=0.0):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -103,10 +78,9 @@ class Mlp(nn.Module):
 
         self.apply(self._init_weights)
 
-
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
@@ -126,6 +100,7 @@ class Mlp(nn.Module):
         x = self.fc2(x)
         x = self.drop2(x)
         return x
+
 
 class Attention(nn.Module):
     def __init__(
@@ -150,7 +125,7 @@ class Attention(nn.Module):
 
         self.use_qk_norm = use_qk_norm
         if self.use_qk_norm:
-            norm_layer=partial(nn.RMSNorm, eps=1e-6)
+            norm_layer = partial(nn.RMSNorm, eps=1e-6)
             self.q_norm = norm_layer(head_dim)
             self.k_norm = norm_layer(head_dim)
 
@@ -158,7 +133,7 @@ class Attention(nn.Module):
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
@@ -186,6 +161,7 @@ class Attention(nn.Module):
         x = self.proj_drop(x)
         return x
 
+
 class CrossAttention(nn.Module):
     def __init__(
         self,
@@ -194,7 +170,7 @@ class CrossAttention(nn.Module):
         qkv_bias: bool = False,
         proj_bias: bool = True,
         attn_drop: float = 0.0,
-        proj_drop: float = 0.0, 
+        proj_drop: float = 0.0,
         use_qk_norm: bool = False,
     ) -> None:
         super().__init__()
@@ -210,15 +186,15 @@ class CrossAttention(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
         self.use_qk_norm = use_qk_norm
         if self.use_qk_norm:
-            norm_layer=partial(nn.RMSNorm, eps=1e-6)
+            norm_layer = partial(nn.RMSNorm, eps=1e-6)
             self.q_norm = norm_layer(head_dim)
             self.k_norm = norm_layer(head_dim)
 
         self.apply(self._init_weights)
-    
+
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
@@ -249,6 +225,7 @@ class CrossAttention(nn.Module):
         x = self.proj_drop(x)
         return x
 
+
 class MemEffAttentionFlash(Attention):
     def forward(self, x: Tensor, attn_bias=None) -> Tensor:
         B, N, C = x.shape
@@ -266,6 +243,7 @@ class MemEffAttentionFlash(Attention):
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
+
 
 class MemEffCrossAttentionFlash(CrossAttention):
     def forward(self, q: Tensor, k: torch.Tensor, v: torch.Tensor, attn_bias=None) -> Tensor:
@@ -286,6 +264,7 @@ class MemEffCrossAttentionFlash(CrossAttention):
         x = self.proj_drop(x)
         return x
 
+
 class MemEffAttentionFlex(nn.Module):
     def __init__(
         self,
@@ -295,7 +274,7 @@ class MemEffAttentionFlex(nn.Module):
         proj_bias: bool = True,
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
-        flex_attn_block_mask=None, 
+        flex_attn_block_mask=None,
         use_qk_norm=False,
     ) -> None:
         super().__init__()
@@ -310,7 +289,7 @@ class MemEffAttentionFlex(nn.Module):
 
         self.use_qk_norm = use_qk_norm
         if self.use_qk_norm:
-            norm_layer=partial(nn.RMSNorm, eps=1e-6)
+            norm_layer = partial(nn.RMSNorm, eps=1e-6)
             self.q_norm = norm_layer(head_dim)
             self.k_norm = norm_layer(head_dim)
 
@@ -320,7 +299,7 @@ class MemEffAttentionFlex(nn.Module):
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
@@ -343,12 +322,11 @@ class MemEffAttentionFlex(nn.Module):
             q = self.q_norm(q).to(v.dtype)
             k = self.k_norm(k).to(v.dtype)
 
-        q = q.permute(0,2,1,3)
-        k = k.permute(0,2,1,3)
-        v = v.permute(0,2,1,3)
+        q = q.permute(0, 2, 1, 3)
+        k = k.permute(0, 2, 1, 3)
+        v = v.permute(0, 2, 1, 3)
 
         x = flex_attn_func_compiled(q, k, v, block_mask=self.flex_attn_block_mask)
-
 
         x = x.permute(0, 2, 1, 3)
 
@@ -360,27 +338,53 @@ class MemEffAttentionFlex(nn.Module):
 
 
 class Block(nn.Module):
-
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, rope=None, 
-                 use_flex_attention=False, flex_attn_block_mask=None, use_qk_norm=False):
+    def __init__(
+        self,
+        dim,
+        num_heads,
+        mlp_ratio=4.0,
+        qkv_bias=False,
+        drop=0.0,
+        attn_drop=0.0,
+        drop_path=0.0,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        rope=None,
+        use_flex_attention=False,
+        flex_attn_block_mask=None,
+        use_qk_norm=False,
+    ):
         super().__init__()
         self.norm1 = norm_layer(dim)
         if use_flex_attention:
-            self.attn = MemEffAttentionFlex(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop, flex_attn_block_mask=flex_attn_block_mask, use_qk_norm=use_qk_norm)
+            self.attn = MemEffAttentionFlex(
+                dim,
+                num_heads=num_heads,
+                qkv_bias=qkv_bias,
+                attn_drop=attn_drop,
+                proj_drop=drop,
+                flex_attn_block_mask=flex_attn_block_mask,
+                use_qk_norm=use_qk_norm,
+            )
         else:
-            self.attn = MemEffAttentionFlash(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop, use_qk_norm=use_qk_norm)
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+            self.attn = MemEffAttentionFlash(
+                dim,
+                num_heads=num_heads,
+                qkv_bias=qkv_bias,
+                attn_drop=attn_drop,
+                proj_drop=drop,
+                use_qk_norm=use_qk_norm,
+            )
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
         self.apply(self._init_weights)
 
-
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
@@ -393,31 +397,44 @@ class Block(nn.Module):
             if m.bias is not None:
                 m.bias.data.zero_()
 
-
     def forward(self, x):
         x = x + self.drop_path(self.attn(self.norm1(x)))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
 
-class CrossAttentionBlock(nn.Module):
 
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, rope=None,
-                 flex_attn_block_mask=None, use_qk_norm=False):
+class CrossAttentionBlock(nn.Module):
+    def __init__(
+        self,
+        dim,
+        num_heads,
+        mlp_ratio=4.0,
+        qkv_bias=False,
+        drop=0.0,
+        attn_drop=0.0,
+        drop_path=0.0,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        rope=None,
+        flex_attn_block_mask=None,
+        use_qk_norm=False,
+    ):
         super().__init__()
         self.norm1 = norm_layer(dim)
-        self.attn = MemEffCrossAttentionFlash(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        self.attn = MemEffCrossAttentionFlash(
+            dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop
+        )
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
         self.norm_y = norm_layer(dim)
         self.apply(self._init_weights)
-    
+
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
@@ -437,11 +454,12 @@ class CrossAttentionBlock(nn.Module):
         return x
 
 
-
 class PatchEmbed(nn.Module):
-    """ just adding _init_weights + position getter compared to timm.models.layers.patch_embed.PatchEmbed"""
+    """just adding _init_weights + position getter compared to timm.models.layers.patch_embed.PatchEmbed"""
 
-    def __init__(self, patch_size=8, in_chans=3, embed_dim=1024, norm_layer=nn.LayerNorm, flatten=True, zero_init=False):
+    def __init__(
+        self, patch_size=8, in_chans=3, embed_dim=1024, norm_layer=nn.LayerNorm, flatten=True, zero_init=False
+    ):
         super().__init__()
         self.patch_size = patch_size
         self.flatten = flatten
@@ -453,23 +471,25 @@ class PatchEmbed(nn.Module):
         if zero_init:
             self.proj.weight.data.fill_(0.0)
             self.proj.bias.data.fill_(0.0)
-        
-        
+
     def forward(self, x):
         B, C, H, W = x.shape
-        assert H % self.patch_size[0] == 0, f"Input image height ({H}) is not a multiple of patch size ({self.patch_size[0]})."
-        assert W % self.patch_size[1] == 0, f"Input image width ({W}) is not a multiple of patch size ({self.patch_size[1]})."
-        
+        assert H % self.patch_size[0] == 0, (
+            f"Input image height ({H}) is not a multiple of patch size ({self.patch_size[0]})."
+        )
+        assert W % self.patch_size[1] == 0, (
+            f"Input image width ({W}) is not a multiple of patch size ({self.patch_size[1]})."
+        )
+
         x = self.proj(x)
         if self.flatten:
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
         x = self.norm(x)
         return x
-        
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
@@ -482,10 +502,21 @@ class PatchEmbed(nn.Module):
             if m.bias is not None:
                 m.bias.data.zero_()
 
-class PatchEmbed3D(nn.Module):
-    """ just adding _init_weights + position getter compared to timm.models.layers.patch_embed.PatchEmbed"""
 
-    def __init__(self, patch_size=8, in_chans=3, embed_dim=1024, norm_layer=nn.LayerNorm, flatten=True, zero_init=False, padding=0, stride=None):
+class PatchEmbed3D(nn.Module):
+    """just adding _init_weights + position getter compared to timm.models.layers.patch_embed.PatchEmbed"""
+
+    def __init__(
+        self,
+        patch_size=8,
+        in_chans=3,
+        embed_dim=1024,
+        norm_layer=nn.LayerNorm,
+        flatten=True,
+        zero_init=False,
+        padding=0,
+        stride=None,
+    ):
         super().__init__()
         patch_size = to_3tuple(patch_size)
         self.patch_size = patch_size
@@ -500,21 +531,19 @@ class PatchEmbed3D(nn.Module):
         if zero_init:
             self.proj.weight.data.fill_(0.0)
             self.proj.bias.data.fill_(0.0)
-        
-        
+
     def forward(self, x):
         B, T, C, H, W = x.shape
-        x = rearrange(x, 'b t c h w -> b c t h w')
+        x = rearrange(x, "b t c h w -> b c t h w")
         x = self.proj(x)
         if self.flatten:
-            x = rearrange(x, 'b c t h w -> b (t h w) c')
+            x = rearrange(x, "b c t h w -> b (t h w) c")
         x = self.norm(x)
         return x
-        
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):

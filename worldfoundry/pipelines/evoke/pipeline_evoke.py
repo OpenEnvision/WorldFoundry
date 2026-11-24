@@ -27,7 +27,7 @@ class EvokePipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "EvokePipeline":
+    ) -> EvokePipeline:
         del model_id
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
         if model_path is not None and not isinstance(model_path, Mapping):

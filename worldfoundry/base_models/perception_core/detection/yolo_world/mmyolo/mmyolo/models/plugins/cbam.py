@@ -10,8 +10,7 @@ from mmyolo.registry import MODELS
 
 
 class ChannelAttention(BaseModule):
-    """ChannelAttention.
-
+    """
     Args:
         channels (int): The input (and output) channels of the
             ChannelAttention.
@@ -21,10 +20,7 @@ class ChannelAttention(BaseModule):
             Defaults to dict(type='ReLU').
     """
 
-    def __init__(self,
-                 channels: int,
-                 reduce_ratio: int = 16,
-                 act_cfg: dict = dict(type='ReLU')):
+    def __init__(self, channels: int, reduce_ratio: int = 16, act_cfg: dict = {"type": "ReLU"}):  # noqa: B006 - Keeps the upstream default object and signature.
         super().__init__()
 
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
@@ -37,18 +33,20 @@ class ChannelAttention(BaseModule):
                 kernel_size=1,
                 stride=1,
                 conv_cfg=None,
-                act_cfg=act_cfg),
+                act_cfg=act_cfg,
+            ),
             ConvModule(
                 in_channels=int(channels / reduce_ratio),
                 out_channels=channels,
                 kernel_size=1,
                 stride=1,
                 conv_cfg=None,
-                act_cfg=None))
+                act_cfg=None,
+            ),
+        )
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward function."""
         avgpool_out = self.fc(self.avg_pool(x))
         maxpool_out = self.fc(self.max_pool(x))
         out = self.sigmoid(avgpool_out + maxpool_out)
@@ -56,7 +54,7 @@ class ChannelAttention(BaseModule):
 
 
 class SpatialAttention(BaseModule):
-    """SpatialAttention
+    """
     Args:
          kernel_size (int): The size of the convolution kernel in
             SpatialAttention. Defaults to 7.
@@ -72,10 +70,10 @@ class SpatialAttention(BaseModule):
             stride=1,
             padding=kernel_size // 2,
             conv_cfg=None,
-            act_cfg=dict(type='Sigmoid'))
+            act_cfg={"type": "Sigmoid"},
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward function."""
         avg_out = torch.mean(x, dim=1, keepdim=True)
         max_out, _ = torch.max(x, dim=1, keepdim=True)
         out = torch.cat([avg_out, max_out], dim=1)
@@ -100,20 +98,20 @@ class CBAM(BaseModule):
             Defaults to None.
     """
 
-    def __init__(self,
-                 in_channels: int,
-                 reduce_ratio: int = 16,
-                 kernel_size: int = 7,
-                 act_cfg: dict = dict(type='ReLU'),
-                 init_cfg: OptMultiConfig = None):
+    def __init__(
+        self,
+        in_channels: int,
+        reduce_ratio: int = 16,
+        kernel_size: int = 7,
+        act_cfg: dict = {"type": "ReLU"},  # noqa: B006 - Keeps the upstream default object and signature.
+        init_cfg: OptMultiConfig = None,
+    ):
         super().__init__(init_cfg)
-        self.channel_attention = ChannelAttention(
-            channels=in_channels, reduce_ratio=reduce_ratio, act_cfg=act_cfg)
+        self.channel_attention = ChannelAttention(channels=in_channels, reduce_ratio=reduce_ratio, act_cfg=act_cfg)
 
         self.spatial_attention = SpatialAttention(kernel_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward function."""
         out = self.channel_attention(x) * x
         out = self.spatial_attention(out) * out
         return out

@@ -14,7 +14,6 @@ import pickle
 from pathlib import Path
 from typing import Any
 
-
 EXO_INPUT_KEY = "observation/exterior_image_1_left"
 WRIST_INPUT_KEY = "observation/wrist_image_left"
 
@@ -43,7 +42,7 @@ class Pi0JointPositionPolicy:
     """Load the official Pi0 config and infer one joint-position action."""
 
     def __init__(self, checkpoint_dir: str, *, device: str, camera_keys: tuple[str, str]) -> None:
-        import molmobot_pi0.config_openpi as _molmobot_config  # noqa: F401
+        import molmobot_pi0.config_openpi as _molmobot_config  # noqa: F401 - Imported to register the MolmoBot training configs.
         from openpi.models.pi0_config import Pi0Config
         from openpi.training.config import TrainConfig
 
@@ -63,10 +62,10 @@ class Pi0JointPositionPolicy:
     def prepare_model(self) -> None:
         if self.model is not None:
             return
+        import numpy as np
         import openpi.models_pytorch.transformers_replace as replacements
         import transformers
         from openpi.policies.policy_config import create_trained_policy
-        import numpy as np
 
         source = Path(replacements.__path__[0])
         target = Path(transformers.__path__[0])
@@ -85,13 +84,15 @@ class Pi0JointPositionPolicy:
             self.checkpoint_dir,
             pytorch_device=self.device if ":" in self.device else None,
         )
-        self.model.infer({
-            EXO_INPUT_KEY: np.zeros((224, 224, 3), dtype=np.uint8),
-            WRIST_INPUT_KEY: np.zeros((224, 224, 3), dtype=np.uint8),
-            "observation/joint_position": np.zeros(7, dtype=np.float32),
-            "observation/gripper_position": np.zeros(1, dtype=np.float32),
-            "prompt": "place the red block on the green block",
-        })
+        self.model.infer(
+            {
+                EXO_INPUT_KEY: np.zeros((224, 224, 3), dtype=np.uint8),
+                WRIST_INPUT_KEY: np.zeros((224, 224, 3), dtype=np.uint8),
+                "observation/joint_position": np.zeros(7, dtype=np.float32),
+                "observation/gripper_position": np.zeros(1, dtype=np.float32),
+                "prompt": "place the red block on the green block",
+            }
+        )
 
     def reset(self) -> None:
         """Each WorldFoundry call infers a new first action; no episode buffer."""

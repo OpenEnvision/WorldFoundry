@@ -17,8 +17,6 @@ import torch
 
 
 class EDMSDE:
-    """Edmsde implementation."""
-
     def __init__(
         self,
         p_mean: float = -1.2,
@@ -26,27 +24,11 @@ class EDMSDE:
         sigma_max: float = 80.0,
         sigma_min: float = 0.002,
     ):
-        """Init.
-
-        Args:
-            p_mean: The p mean.
-            p_std: The p std.
-            sigma_max: The sigma max.
-            sigma_min: The sigma min.
-        """
         self.gaussian_dist = NormalDist(mu=p_mean, sigma=p_std)
         self.sigma_max = sigma_max
         self.sigma_min = sigma_min
 
     def sample_t(self, batch_size: int) -> torch.Tensor:
-        """Sample t.
-
-        Args:
-            batch_size: The batch size.
-
-        Returns:
-            The return value.
-        """
         cdf_vals = np.random.uniform(size=(batch_size))
         samples_interval_gaussian = [self.gaussian_dist.inv_cdf(cdf_val) for cdf_val in cdf_vals]
 

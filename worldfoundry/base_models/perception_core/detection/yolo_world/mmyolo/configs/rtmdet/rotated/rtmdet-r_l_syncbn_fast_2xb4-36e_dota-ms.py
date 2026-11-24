@@ -1,16 +1,16 @@
-_base_ = './rtmdet-r_l_syncbn_fast_2xb4-36e_dota.py'
+_base_ = "./rtmdet-r_l_syncbn_fast_2xb4-36e_dota.py"
 
 # ========================modified parameters======================
-data_root = 'data/split_ms_dota/'
+data_root = "data/split_ms_dota/"
 # Path of test images folder
-test_data_prefix = 'test/images/'
+test_data_prefix = "test/images/"
 # Submission dir for result submit
-submission_dir = './work_dirs/{{fileBasenameNoExtension}}/submission'
+submission_dir = "./work_dirs/{{fileBasenameNoExtension}}/submission"
 
 # =======================Unmodified in most cases==================
-train_dataloader = dict(dataset=dict(data_root=data_root))
+train_dataloader = {"dataset": {"data_root": data_root}}
 
-val_dataloader = dict(dataset=dict(data_root=data_root))
+val_dataloader = {"dataset": {"data_root": data_root}}
 
 # Inference on val dataset
 test_dataloader = val_dataloader

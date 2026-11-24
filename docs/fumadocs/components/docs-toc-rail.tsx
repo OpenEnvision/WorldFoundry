@@ -6,23 +6,20 @@ import { type ReactNode, useRef } from 'react';
 
 import { DocsTocLinks } from '@/components/docs-toc-links';
 import { DocsTocScrollSpyProvider } from '@/lib/docs-toc-scroll-spy';
-import { useDocsTocItems } from '@/lib/use-docs-toc-items';
 
 type DocsTocRailProps = {
   title: string;
   items: TOCItemType[];
-  slugs: readonly string[];
   pageKey: string;
   children?: ReactNode;
 };
 
-export function DocsTocRail({ title, items, slugs, pageKey, children }: DocsTocRailProps) {
+export function DocsTocRail({ title, items, pageKey, children }: DocsTocRailProps) {
   const linksRef = useRef<HTMLDivElement>(null);
-  const toc = useDocsTocItems(slugs, items);
 
-  if (toc.length === 0 && !children) return null;
+  if (items.length === 0 && !children) return null;
 
-  if (toc.length === 0) {
+  if (items.length === 0) {
     return (
       <aside className="pi-doc-right-rail" aria-label={title}>
         {children}
@@ -31,7 +28,7 @@ export function DocsTocRail({ title, items, slugs, pageKey, children }: DocsTocR
   }
 
   return (
-    <DocsTocScrollSpyProvider key={pageKey} items={toc}>
+    <DocsTocScrollSpyProvider key={pageKey} items={items}>
       <ScrollProvider containerRef={linksRef}>
         <aside className="pi-doc-right-rail" aria-label={title}>
           <nav className="pi-doc-toc">
@@ -39,7 +36,7 @@ export function DocsTocRail({ title, items, slugs, pageKey, children }: DocsTocR
               <AlignLeft aria-hidden="true" size={14} strokeWidth={1.8} />
               {title}
             </span>
-            <DocsTocLinks items={toc} linksRef={linksRef} />
+            <DocsTocLinks items={items} linksRef={linksRef} />
           </nav>
           {children}
         </aside>

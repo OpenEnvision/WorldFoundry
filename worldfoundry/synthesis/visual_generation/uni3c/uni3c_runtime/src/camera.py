@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 @torch.amp.autocast("cuda", enabled=False)
 def batch_sample_rays(intrinsic, extrinsic, image_h=None, image_w=None):
-    ''' get rays
+    """get rays
     Args:
         intrinsic: [BF, 3, 3],
         extrinsic: [BF, 4, 4],
@@ -13,7 +13,7 @@ def batch_sample_rays(intrinsic, extrinsic, image_h=None, image_w=None):
         # normalize: let the first camera R=I
     Returns:
         rays_o, rays_d: [BF, N, 3]
-    '''
+    """
 
     # FIXME: PPU does not support inverse in GPU
     device = intrinsic.device
@@ -22,8 +22,8 @@ def batch_sample_rays(intrinsic, extrinsic, image_h=None, image_w=None):
     c2w = torch.inverse(extrinsic)[:, :3, :4].to(device)  # [BF,3,4]
     x = torch.arange(image_w, device=device).float() - 0.5
     y = torch.arange(image_h, device=device).float() + 0.5
-    points = torch.stack(torch.meshgrid(x, y, indexing='ij'), -1)
-    points = einops.repeat(points, 'w h c -> b (h w) c', b=B)
+    points = torch.stack(torch.meshgrid(x, y, indexing="ij"), -1)
+    points = einops.repeat(points, "w h c -> b (h w) c", b=B)
     points = torch.cat([points, torch.ones_like(points)[:, :, 0:1]], dim=-1)
     directions = points @ intrinsic.inverse().to(device).transpose(-1, -2) * 1  # depth is 1
 

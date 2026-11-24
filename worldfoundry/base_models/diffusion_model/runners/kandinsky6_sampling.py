@@ -6,19 +6,35 @@ from pathlib import Path
 
 import torch
 
+from worldfoundry.base_models.diffusion_model.kandinsky6_types import Kandinsky6PipelineOutput, LatentBundle
+from worldfoundry.base_models.diffusion_model.models.encoders.kandinsky6.beautifier import NullBeautifier
+from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.cache import CacheDiT, CacheMode
+from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.offload import (
+    NoOpOffload,
+    OffloadHandle,
+)
+from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.profile import NoOpProfile
+from worldfoundry.base_models.diffusion_model.recipes.kandinsky6_config import (
+    CacheConfig,
+    MagCacheConfig,
+    NaviCacheConfig,
+)
 from worldfoundry.base_models.diffusion_model.runners.kandinsky6_algorithms.denoise_loop import denoise_loop
 from worldfoundry.base_models.diffusion_model.runners.kandinsky6_algorithms.mux import mux_video_audio
 from worldfoundry.base_models.diffusion_model.runners.kandinsky6_algorithms.piflow_sampler import piflow_denoise_loop
 from worldfoundry.base_models.diffusion_model.runners.kandinsky6_algorithms.postprocess_audio import postprocess_audio
 from worldfoundry.base_models.diffusion_model.runners.kandinsky6_algorithms.postprocess_video import postprocess_video
-from worldfoundry.base_models.diffusion_model.runners.kandinsky6_algorithms.prepare_latents import append_i2va_tail_condition, audio_latent_duration, encode_i2va_first_frame, prepare_audio_latents, prepare_video_latents
-from worldfoundry.base_models.diffusion_model.runners.kandinsky6_algorithms.prepare_ropes import VisualRopeCache, compute_rope1d
-from worldfoundry.base_models.diffusion_model.models.encoders.kandinsky6.beautifier import NullBeautifier
-from worldfoundry.base_models.diffusion_model.kandinsky6_types import Kandinsky6PipelineOutput, LatentBundle
-from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.cache import CacheDiT, CacheMode
-from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.offload import NoOpOffload, OffloadHandle, OffloadStrategy
-from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.profile import NoOpProfile
-from worldfoundry.base_models.diffusion_model.recipes.kandinsky6_config import CacheConfig, MagCacheConfig, NaviCacheConfig, PipelineConfig
+from worldfoundry.base_models.diffusion_model.runners.kandinsky6_algorithms.prepare_latents import (
+    append_i2va_tail_condition,
+    audio_latent_duration,
+    encode_i2va_first_frame,
+    prepare_audio_latents,
+    prepare_video_latents,
+)
+from worldfoundry.base_models.diffusion_model.runners.kandinsky6_algorithms.prepare_ropes import (
+    VisualRopeCache,
+    compute_rope1d,
+)
 from worldfoundry.base_models.diffusion_model.runners.kandinsky6_progress import denoising_progress
 
 logger = logging.getLogger("kandinsky")
@@ -244,7 +260,6 @@ class Kandinsky6Sampler:
 
         raise ValueError(f"Unknown cache mode: {mode!r}")
 
-
     @staticmethod
     def _generation_mode(*, do_audio: bool, image: object | None) -> str:
         """Same coeffs for t2v-t2va, i2v-i2va for now."""
@@ -332,8 +347,8 @@ class Kandinsky6Sampler:
 
         piflow_enabled = bool(getattr(self.piflow_conf, "enabled", False))
         if piflow_enabled:
-            if not do_audio:
-                raise ValueError("piflow.enabled requires sample_audio=True")
+            if not getattr(dit, "is_multimodal", False):
+                raise ValueError("piflow.enabled requires a multimodal transformer")
             if abs(guidance_weight - 1.0) > 1e-6:
                 raise ValueError("piflow.enabled requires guidance_weight=1.0")
 
@@ -341,9 +356,12 @@ class Kandinsky6Sampler:
 
         if images is not None and scheme == "pretrain" and not dit.visual_cond:
             raise ValueError("image conditioning requires dit.visual_cond=True")
-        if images is not None and scheme == "tail_cond_first_frame":
-            if getattr(dit, "visual_token_type_num_embeddings", 0) < 2:
-                raise ValueError("tail_cond_first_frame requires dit.visual_token_type_num_embeddings >= 2")
+        if (
+            images is not None
+            and scheme == "tail_cond_first_frame"
+            and getattr(dit, "visual_token_type_num_embeddings", 0) < 2
+        ):
+            raise ValueError("tail_cond_first_frame requires dit.visual_token_type_num_embeddings >= 2")
 
         if isinstance(self.dit, CacheDiT) and self.dit.mode != "none":
             # Keep cache step counters aligned with this generation's schedule.
@@ -488,7 +506,7 @@ class Kandinsky6Sampler:
             pass  # first_frames injected inside denoise_loop via visual_cond_scheme
 
         audio_len = None
-        if do_audio:
+        if do_audio or piflow_enabled:
             downsample = int(getattr(self.audio_vae, "downsample_factor", 1024))
             # Audio length follows generated frames only (exclude tail reference).
             audio_dur = audio_latent_duration(
@@ -623,4 +641,6 @@ class Kandinsky6Sampler:
                 write_expanded_prompt(saved, captions[index])
             path = paths[0] if batch_size == 1 else paths
 
-        return Kandinsky6PipelineOutput(frames=frames, audio=audio, path=path, prompts=list(captions), latents=result_bundle)
+        return Kandinsky6PipelineOutput(
+            frames=frames, audio=audio, path=path, prompts=list(captions), latents=result_bundle
+        )

@@ -48,9 +48,7 @@ class QwenvlOFT(StarVLAInferenceModel):
         self.action_horizon = int(self.config.framework.action_model.action_horizon)
         self.chunk_len = self.action_horizon
         self.action_token = "🔍"
-        token_ids = self.qwen_vl_interface.processor.tokenizer(
-            self.action_token, add_special_tokens=False
-        )["input_ids"]
+        token_ids = self.qwen_vl_interface.processor.tokenizer(self.action_token, add_special_tokens=False)["input_ids"]
         if len(token_ids) != 1:
             raise RuntimeError(
                 f"StarVLA action marker must tokenize to one ID, got {token_ids}. "

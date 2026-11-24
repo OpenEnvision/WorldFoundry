@@ -18,6 +18,7 @@ official_sources:
   worldarena_space: https://huggingface.co/spaces/WorldArena/WorldArena
   github:
     url: https://github.com/open-gigaai/giga-world-0
+    revision: f3fbdab0d6853a125cd0b898137e30a63aadbe7d
     head_sha: f3fbdab0d6853a125cd0b898137e30a63aadbe7d
     verified_by: official GitHub repository selected from WorldArena open-source result names
   huggingface:
@@ -36,7 +37,7 @@ integration:
   - WorldFoundry registers an executable GR1 image-to-video runtime using the released transformer, T5 encoder, and Wan Diffusers VAE.
   - The launcher accepts an explicit torch-attention compatibility backend for low-resolution checkpoint smoke while retaining the official NATTEN route.
 runtime_profile: runtime-profile:giga-world-0
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: giga-world-0
 runner_parity:
   status: implemented_checkpoint_required
@@ -51,18 +52,20 @@ docs:
   publisher_zh: 极佳科技（GigaAI）
   overview: 'GigaWorld-0 is GigaAI''s open robotics world-model series, with pretrain and GR1-specialized 2B video checkpoints. The integrated GR1 inference route generates video from an initial image and text prompt; it has no structured robot-action input.'
   overview_zh: GigaWorld-0 是极佳科技开源的机器人世界模型系列，包含预训练和 GR1 专用两个 2B 视频 checkpoint。当前接入的 GR1 推理入口根据首帧图像和文本提示生成视频，没有结构化机器人动作输入。
-  architecture: Two 2B video checkpoints are recorded — GigaWorld-0-Video-Pretrain-2b and GigaWorld-0-Video-GR1-2b under open-gigaai. Architecture internals beyond the recorded tasks are not stored in this repository.
-  architecture_zh: 记录两个 2B 视频 checkpoint——open-gigaai 下的 GigaWorld-0-Video-Pretrain-2b 与 GigaWorld-0-Video-GR1-2b。除已记录任务外的架构内部细节仓库未存。
+  architecture: 'Two 2B video checkpoints are available under open-gigaai: GigaWorld-0-Video-Pretrain-2b and GigaWorld-0-Video-GR1-2b. The GR1 route also uses a T5-11B text encoder and the Wan VAE.'
+  architecture_zh: open-gigaai 提供两个 2B 视频 checkpoint：GigaWorld-0-Video-Pretrain-2b 与 GigaWorld-0-Video-GR1-2b。GR1 入口还使用 T5-11B 文本编码器和 Wan VAE。
   usage_notes: Provide an initial image and text prompt with the local GR1, T5 and Wan VAE weights. Set the official frame count and resolution explicitly for evaluation. Structured robot actions are not consumed.
   usage_notes_zh: 提供首帧图像、文本提示以及本地 GR1、T5、Wan VAE 权重；评测时显式设置官方帧数与分辨率。它不消费结构化机器人动作。
   limitations:
-  - Execution is checkpoint and task-asset gated.
+  - Single-image, low-step runs confirm checkpoint execution only; they do not establish parity with official GR1 dataset or full-quality sampling.
+  - Official NATTEN attention quality needs a NATTEN wheel exposing `neighborhood_attention_generic`; the unified environment falls back to Torch SDPA.
   limitations_zh:
-  - 执行受 checkpoint 与任务资产限制。
+  - 单图低步数运行只确认 checkpoint 能执行，不代表与官方 GR1 数据或全质量采样一致。
+  - 官方 NATTEN 注意力质量需要暴露 `neighborhood_attention_generic` 的 NATTEN 轮子；统一环境回退到 Torch SDPA。
   recommended_benchmarks:
   - id: worldarena
-    reason: The entry is listed on WorldArena for robot world-model evaluation.
-    reason_zh: 该条目已收录于 WorldArena 的机器人世界模型评测。
+    reason: WorldArena lists GigaWorld-0 for robot world-model evaluation.
+    reason_zh: WorldArena 收录 GigaWorld-0 用于机器人世界模型评测。
   - id: ewmbench
     reason: Embodied world-model video prediction quality.
     reason_zh: 具身世界模型视频预测质量。

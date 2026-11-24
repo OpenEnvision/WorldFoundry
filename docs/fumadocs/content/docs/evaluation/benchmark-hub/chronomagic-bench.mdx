@@ -1,6 +1,6 @@
 ---
 title: ChronoMagic-Bench
-description: "NeurIPS 2024 D&B time-lapse T2V bench: 1,649 closed prompts, CHScore coherence and MTScore amplitude. WorldFoundry ships the runtime; no invented board."
+description: "NeurIPS 2024 D&B time-lapse T2V bench: 1,649 closed prompts, CHScore coherence and MTScore amplitude. WorldFoundry ships the official runtime."
 ---
 
 ChronoMagic-Bench (PKU Yuan Group, with University of Rochester) asks whether a text-to-video model can synthesize **metamorphic time-lapse**: large physical, biological, or chemical state change (ice melting, flowers blooming, construction) while staying temporally coherent. The official **close** split has **1,649 prompts**. Two core families:
@@ -8,11 +8,11 @@ ChronoMagic-Bench (PKU Yuan Group, with University of Rochester) asks whether a 
 - **CHScore** — tracking-point coherence via CoTracker.
 - **MTScore / GPT-4o-MTScore** — metamorphic amplitude (InternVideo2 or GPT-4o).
 
-The Hugging Face discovery table records **1,799** rows. Companion training sets ChronoMagic / Pro / ProH are listed upstream. Leaderboard parity additionally needs **UMT-FVD** and **UMTScore**, which WorldFoundry does not treat as complete.
+The Hugging Face dataset has **1,799** rows. Companion training sets ChronoMagic / Pro / ProH are listed upstream. Leaderboard-comparable results also need **UMT-FVD** and **UMTScore**, which the WorldFoundry component scripts do not compute.
 
 Paper: [ChronoMagic-Bench](https://arxiv.org/abs/2406.18522). Project: [pku-yuangroup.github.io/ChronoMagic-Bench](https://pku-yuangroup.github.io/ChronoMagic-Bench/). Code: [PKU-YuanGroup/ChronoMagic-Bench](https://github.com/PKU-YuanGroup/ChronoMagic-Bench). Data: [`BestWishYsh/ChronoMagic-Bench`](https://huggingface.co/datasets/BestWishYsh/ChronoMagic-Bench) (CC-BY-4.0).
 
-WorldFoundry **vendors the official runtime** and runs selected component scripts (`chscore`, `mtscore`, `gpt4o_mtscore`) then official JSON normalization. CHScore is the bounded official component verified in tree. Primary key: `chronomagic_score`.
+WorldFoundry **vendors the official runtime** and runs selected component scripts (`chscore`, `mtscore`, `gpt4o_mtscore`) then official JSON normalization. CHScore is the validated component. Primary key: `chronomagic_score`.
 
 <BenchmarkPageSections id="chronomagic-bench" locale="en" />
 
@@ -22,8 +22,8 @@ CHScore on generated close-split videos:
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py \
-  --chronomagic-root worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench \
+  worldfoundry/evals/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py \
+  --chronomagic-root worldfoundry/evals/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench \
   --components chscore \
   --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
   --model-name worldfoundry \
@@ -41,7 +41,7 @@ hf download BestWishYsh/ChronoMagic-Bench --repo-type dataset \
   --local-dir cache/worldfoundry/data/hfd_datasets/BestWishYsh/ChronoMagic-Bench
 ```
 
-In-tree pointer: `worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench`.
+In-tree pointer: `worldfoundry/evals/tasks/execution/runners/chronomagic_bench/runtime/chronomagic_bench`.
 
 Outputs include `scorecard.json` (primary `chronomagic_score`), `raw_metric_table.jsonl`, and captured upstream logs when the scorer runs.
 

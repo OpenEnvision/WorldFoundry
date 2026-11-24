@@ -6,6 +6,7 @@ groups:
 - video
 source_repos:
 - url: https://github.com/Wan-Video/Wan2.2
+  revision: 42bf4cfaa384bc21833865abc2f9e6c0e67233dc
 checkpoints:
 - repo_id: Wan-AI/Wan2.2-T2V-A14B
   revision: c8c270b13ee05bfa474194ac9fb07a5868a97cea

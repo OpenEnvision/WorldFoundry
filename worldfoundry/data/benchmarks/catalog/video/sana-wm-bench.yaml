@@ -47,19 +47,19 @@ metrics:
 - {id: cam_mc_rel, name: Camera motion consistency error, higher_is_better: false, aggregator: mean}
 - {id: delta_iq, name: Temporal imaging-quality degradation, higher_is_better: false, aggregator: mean}
 runner:
-  official_script: worldfoundry/evaluation/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py
+  official_script: worldfoundry/evals/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py
   workspace:
-    module: worldfoundry.evaluation.tasks.execution.runners.sana_wm_bench.run_sana_wm_bench_official_runner
+    module: worldfoundry.evals.tasks.execution.runners.sana_wm_bench.run_sana_wm_bench_official_runner
     dataset_root_arg: --dataset-root
     split_arg: --split
     supports_official_runtime: true
     accepts_generated_artifacts: true
     supports_fixture: true
     input_kind: sana_wm_bench_dataset_and_generated_videos
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:SanaWMBenchContract
-  runner_script: worldfoundry/evaluation/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py
+  runner_target: worldfoundry.evals.tasks.contracts.external:sana-wm-bench
+  runner_script: worldfoundry/evals/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py
   run_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -76,7 +76,7 @@ runner:
   expected_artifacts: [scorecard.json, raw_metric_table.jsonl]
   runtime:
     kind: in_tree_composite_evaluator
-    implementation: worldfoundry/evaluation/tasks/execution/runners/sana_wm_bench
+    implementation: worldfoundry/evals/tasks/execution/runners/sana_wm_bench
     upstream_checkout_required: false
 integration:
   status: integrated
@@ -104,8 +104,36 @@ data_refs:
   runtime_profile: worldfoundry/data/benchmarks/runtime_profiles/official/sana-wm-bench.yaml
 runner_availability:
   available: true
-  runner_target: worldfoundry.evaluation.tasks.contracts.external:SanaWMBenchContract
+  runner_target: worldfoundry.evals.tasks.contracts.external:sana-wm-bench
   runner_script_available: true
   task_yaml_available: true
   runtime_verified: true
   surface: in_tree_sana_wm_80scene_evaluator
+contract:
+  input_keys:
+  - dataset_root
+  - generated_video_dir
+  - scene_manifest
+  - camera_trajectory_npz
+  - pose_results_path
+  - official_results_path
+  output_keys:
+  - scorecard
+  - raw_metric_table
+  - vbench_scores
+  - revisit_consistency
+  - temporal_degradation
+  - eval_poses
+  requires_upstream_runtime: false
+  notes:
+  - The 80-scene, two-split SANA-WM evaluator is implemented in tree and reuses WorldFoundry VBench and
+    Pi3 surfaces.
+  - The public dataset and model-backed VBench/Pi3 weights remain explicit runtime assets.
+  - Fresh Pi3 pose estimation is a separately schedulable distributed stage; the in-tree evaluator consumes
+    its eval_poses.json output.
+generation:
+  request_provider: worldfoundry.evals.tasks.execution.runners.sana_wm_bench.sana_wm_bench_prompts:materialize_sana_wm_bench_generation_requests
+  artifact_materializer: worldfoundry.evals.tasks.execution.runners.sana_wm_bench.sana_wm_bench_prompts:copy_sana_wm_bench_generated_videos
+  dataset_root_parameter: dataset_root
+  split_parameter: split
+  missing_requests_hint: set WORLDFOUNDRY_SANA_WM_BENCH_DATASET_ROOT to the public Efficient-Large-Model/SANA-WM-Bench download

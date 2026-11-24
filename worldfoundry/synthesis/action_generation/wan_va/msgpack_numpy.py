@@ -20,9 +20,7 @@ import numpy as np
 
 
 def pack_array(obj):
-    if (isinstance(
-            obj,
-        (np.ndarray, np.generic))) and obj.dtype.kind in ("V", "O", "c"):
+    if (isinstance(obj, (np.ndarray, np.generic))) and obj.dtype.kind in ("V", "O", "c"):
         raise ValueError(f"Unsupported dtype: {obj.dtype}")
 
     if isinstance(obj, np.ndarray):
@@ -45,9 +43,7 @@ def pack_array(obj):
 
 def unpack_array(obj):
     if b"__ndarray__" in obj:
-        return np.ndarray(buffer=obj[b"data"],
-                          dtype=np.dtype(obj[b"dtype"]),
-                          shape=obj[b"shape"])
+        return np.ndarray(buffer=obj[b"data"], dtype=np.dtype(obj[b"dtype"]), shape=obj[b"shape"])
 
     if b"__npgeneric__" in obj:
         return np.dtype(obj[b"dtype"]).type(obj[b"data"])

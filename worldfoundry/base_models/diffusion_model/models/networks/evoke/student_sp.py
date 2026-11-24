@@ -25,7 +25,6 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 import torch
 import torch.distributed as dist
@@ -33,18 +32,18 @@ from torch.autograd import Function
 
 # ====== module-level state (written exactly once, by init_student_sp) ======
 _inited: bool = False
-_cp_enabled: bool = False          # mechanism A
-_G: int = 1                        # SP group size (= sf_critic_sp_world_size), does not touch anything of the teacher's
-_G_u: int = 1                      # Ulysses width (1 = mechanism B off)
-_G_p: int = 1                      # = G // G_u
+_cp_enabled: bool = False  # mechanism A
+_G: int = 1  # SP group size (= sf_critic_sp_world_size), does not touch anything of the teacher's
+_G_u: int = 1  # Ulysses width (1 = mechanism B off)
+_G_p: int = 1  # = G // G_u
 _sp_rank: int = 0
 _u_rank: int = 0
 _p_rank: int = 0
-_u_group: Optional[dist.ProcessGroup] = None
+_u_group: dist.ProcessGroup | None = None
 _diag: bool = False
-_skip_first_chunk: bool = False    # dmd_score_skip_first_chunk: g1's grad_output is structurally always 0
-_seq_counter: int = 0              # collective sequence counter
-_trace: bool = os.environ.get("SF_STUSP_TRACE", "0") == "1"   # trace every collective (to locate deadlocks)
+_skip_first_chunk: bool = False  # dmd_score_skip_first_chunk: g1's grad_output is structurally always 0
+_seq_counter: int = 0  # collective sequence counter
+_trace: bool = os.environ.get("SF_STUSP_TRACE", "0") == "1"  # trace every collective (to locate deadlocks)
 
 
 class UlyssesCtx:
@@ -53,7 +52,7 @@ class UlyssesCtx:
     holds only the things that "do not vary with token count"; the S-dependent shard plan is computed on the fly by model.forward (`ShardPlan`).
     """
 
-    __slots__ = ("group", "size", "rank")
+    __slots__ = ("group", "rank", "size")
 
     def __init__(self, group, size: int, rank: int):
         self.group = group
@@ -85,7 +84,7 @@ class ShardPlan:
     dropped exactly by `valid_index()`, not by assuming "pad is always at the very end".
     """
 
-    __slots__ = ("ctx", "S_real", "hist_global", "noise_global", "lh", "ln", "L", "_vidx")
+    __slots__ = ("L", "S_real", "_vidx", "ctx", "hist_global", "lh", "ln", "noise_global")
 
     def __init__(self, ctx: UlyssesCtx, S_real: int, hist_global: int):
         g = ctx.size
@@ -94,7 +93,8 @@ class ShardPlan:
         self.hist_global = int(hist_global)
         self.noise_global = int(S_real) - int(hist_global)
         assert self.noise_global >= g, (
-        f"[STU-SP] noise token count {self.noise_global} < G_u={g}: the dual-region split requires at least 1 noise token per rank")
+            f"[STU-SP] noise token count {self.noise_global} < G_u={g}: the dual-region split requires at least 1 noise token per rank"
+        )
         assert self.hist_global >= 0
         self.lh = (self.hist_global + g - 1) // g
         self.ln = (self.noise_global + g - 1) // g
@@ -143,10 +143,10 @@ def init_student_sp(
 ):
     """build the U-subgroups. **every rank must call this in the same order** (dist.new_group is a collective).
 
-: `new_group(timeout=None)` falls back to the 10-minute default (it does not inherit init_process_group's 1800s)
-            => timeout must be passed explicitly, same source as sp_runtime.py (NCCL_TIMEOUT, in milliseconds).
-: when G_u == world_size, reuse WORLD (do not build a subgroup, avoids crossing with the DeepSpeed PG);
-            when G_u == 1, mechanism B is off and no group is needed.
+    : `new_group(timeout=None)` falls back to the 10-minute default (it does not inherit init_process_group's 1800s)
+                => timeout must be passed explicitly, same source as sp_runtime.py (NCCL_TIMEOUT, in milliseconds).
+    : when G_u == world_size, reuse WORLD (do not build a subgroup, avoids crossing with the DeepSpeed PG);
+                when G_u == 1, mechanism B is off and no group is needed.
     """
     global _inited, _cp_enabled, _G, _G_u, _G_p, _sp_rank, _u_rank, _p_rank
     global _u_group, _diag, _skip_first_chunk, _seq_counter
@@ -267,7 +267,7 @@ def redundant_grad_div() -> int:
     return _G_u if is_ulysses_enabled() else 1
 
 
-def make_ulysses_ctx() -> Optional[UlyssesCtx]:
+def make_ulysses_ctx() -> UlyssesCtx | None:
     """created at the rollout call site (the only opt-in point). mechanism B off -> None => the transformer takes the original path."""
     if _G_u <= 1 or _u_group is None:
         return None
@@ -335,12 +335,16 @@ def bump_seq(n: int = 1, op: str = "", shape=None):
     _seq_counter += int(n)
     if _trace:
         import threading
+
         try:
             r = dist.get_rank()
         except Exception:
             r = -1
-        print(f"[STU-SP-TRACE r{r} u{_u_rank} #{_seq_counter} {op} {tuple(shape) if shape is not None else ''} "
-              f"thr={threading.current_thread().name}", flush=True)
+        print(
+            f"[STU-SP-TRACE r{r} u{_u_rank} #{_seq_counter} {op} {tuple(shape) if shape is not None else ''} "
+            f"thr={threading.current_thread().name}",
+            flush=True,
+        )
 
 
 def get_seq() -> int:
@@ -383,16 +387,19 @@ def selfcheck_report(got: torch.Tensor, ref: torch.Tensor, plan, tag: str = ""):
     d = (got.detach().float() - ref.detach().float()).abs()
     scale = ref.detach().float().abs().max().clamp_min(1e-12)
     b = plan.hist_global
-    print(f"[STU-SP SELFCHECK {tag}] single forward, sharded vs unsharded: max|delta|={d.max().item():.3e} "
-          f"rel={d.max().item() / scale.item():.3e} (history region {d[:, :b].max().item():.3e} / "
-          f"noise region {d[:, b:].max().item():.3e}); dtype={ref.dtype} "
-          f"lh={plan.lh} ln={plan.ln} L={plan.L} pad={plan.has_pad} "
-          f"=> {'bf16 noise magnitude, implementation correct' if d.max().item() / scale.item() < 3e-2 else '!! magnitude too large, implementation has a bug'}",
-          flush=True)
+    print(
+        f"[STU-SP SELFCHECK {tag}] single forward, sharded vs unsharded: max|delta|={d.max().item():.3e} "
+        f"rel={d.max().item() / scale.item():.3e} (history region {d[:, :b].max().item():.3e} / "
+        f"noise region {d[:, b:].max().item():.3e}); dtype={ref.dtype} "
+        f"lh={plan.lh} ln={plan.ln} L={plan.L} pad={plan.has_pad} "
+        f"=> {'bf16 noise magnitude, implementation correct' if d.max().item() / scale.item() < 3e-2 else '!! magnitude too large, implementation has a bug'}",
+        flush=True,
+    )
 
 
-def selfcheck_grad(run_fn, full_inputs, shard_inputs, plan, params, tag: str = "",
-                   depths=(1, 5, 10, 20), n_layers: int = 40):
+def selfcheck_grad(
+    run_fn, full_inputs, shard_inputs, plan, params, tag: str = "", depths=(1, 5, 10, 20), n_layers: int = 40
+):
     """NOTE: gradient-equivalence selfcheck: **the sharded gradient summed over the U-subgroup** vs **the unsharded gradient**, same cotangent, single forward.
 
     under the "bf16 + autoregression" constraints this is the only criterion that can really answer "are the gradients equivalent":
@@ -420,27 +427,32 @@ def selfcheck_grad(run_fn, full_inputs, shard_inputs, plan, params, tag: str = "
             _g = torch.Generator(device="cpu").manual_seed(20260725)
             cot = torch.randn(ref_out.shape, generator=_g, dtype=torch.float32).to(ref_out.device)
             assert_same_in_group(int(cot.sum().mul(1e6).item()), "cotangent fingerprint", plan.ctx.group)
-            g_ref = torch.autograd.grad((ref_out.float() * cot.float()).sum(), params,
-                                        allow_unused=True, retain_graph=False)
+            g_ref = torch.autograd.grad(
+                (ref_out.float() * cot.float()).sum(), params, allow_unused=True, retain_graph=False
+            )
             fwd_ref = ref_out.detach().float()
             sh_out = run_fn(*(t.detach() for t in shard_inputs), plan, upto)
-            g_sh = torch.autograd.grad((sh_out.float() * cot.float()).sum(), params,
-                                       allow_unused=True, retain_graph=False)
-            fwd_rel = ((sh_out.detach().float() - fwd_ref).norm()
-                       / fwd_ref.norm().clamp_min(1e-30)).item()
+            g_sh = torch.autograd.grad(
+                (sh_out.float() * cot.float()).sum(), params, allow_unused=True, retain_graph=False
+            )
+            fwd_rel = ((sh_out.detach().float() - fwd_ref).norm() / fwd_ref.norm().clamp_min(1e-30)).item()
         n_ok = n_bad = n_none = n_tiny = 0
         worst = (0.0, "", 0.0, 0.0)
         dot = nr = ns = 0.0
-        for (name, _), a, b in zip(params_named(params), g_ref, g_sh):
+        for (name, _), a, b in zip(params_named(params), g_ref, g_sh, strict=False):
             if a is None or b is None:
                 n_none += 1
                 continue
             bs = b.detach().float().clone()
-            dist.all_reduce(bs, group=plan.ctx.group)      # NOTE: partial sums => only the intra-group sum equals the reference
+            dist.all_reduce(
+                bs, group=plan.ctx.group
+            )  # NOTE: partial sums => only the intra-group sum equals the reference
             af = a.detach().float()
             na, dn = af.norm().item(), (bs - af).norm().item()
             rel = dn / max(na, 1e-30)
-            dot += float((af * bs).sum()); nr += float((af * af).sum()); ns += float((bs * bs).sum())
+            dot += float((af * bs).sum())
+            nr += float((af * af).sum())
+            ns += float((bs * bs).sum())
             # NOTE: when the reference itself is near 0 the relative error blows up into a false alarm => count it separately, keep it out of the verdict
             if na < 1e-6:
                 n_tiny += 1
@@ -450,10 +462,13 @@ def selfcheck_grad(run_fn, full_inputs, shard_inputs, plan, params, tag: str = "
                 n_bad += 1
             if rel > worst[0] and na >= 1e-6:
                 worst = (rel, name, na, dn)
-        cos = dot / max((nr ** 0.5) * (ns ** 0.5), 1e-30)
-        print(f"[STU-SP SELFCHECK-GRAD {tag} depth={upto:>3}] fwd_rel={fwd_rel:.3e} | "
-              f"ok={n_ok} bad={n_bad} tiny(|ref|<1e-6)={n_tiny} none={n_none} cos={cos:.8f} "
-              f"worst_rel={worst[0]:.3e}@{worst[1]} (|ref|={worst[2]:.3e} |delta|={worst[3]:.3e})", flush=True)
+        cos = dot / max((nr**0.5) * (ns**0.5), 1e-30)
+        print(
+            f"[STU-SP SELFCHECK-GRAD {tag} depth={upto:>3}] fwd_rel={fwd_rel:.3e} | "
+            f"ok={n_ok} bad={n_bad} tiny(|ref|<1e-6)={n_tiny} none={n_none} cos={cos:.8f} "
+            f"worst_rel={worst[0]:.3e}@{worst[1]} (|ref|={worst[2]:.3e} |delta|={worst[3]:.3e})",
+            flush=True,
+        )
         return cos, n_bad
 
     # depth sweep: 1 -> full depth. already bad at depth=1 => structural bug; monotone growth with depth => dtype accumulation.
@@ -461,7 +476,11 @@ def selfcheck_grad(run_fn, full_inputs, shard_inputs, plan, params, tag: str = "
         if d <= n_layers:
             _one(d)
     cos, n_bad = _one(n_layers)
-    verdict = "gradients equivalent (within bf16 precision)" if (n_bad == 0 and cos > 0.999) else "!! not equivalent (read the depth sweep to characterize it)"
+    verdict = (
+        "gradients equivalent (within bf16 precision)"
+        if (n_bad == 0 and cos > 0.999)
+        else "!! not equivalent (read the depth sweep to characterize it)"
+    )
     print(f"[STU-SP SELFCHECK-GRAD {tag}] verdict: {verdict}", flush=True)
 
 
@@ -527,20 +546,23 @@ def check_ipg_bucket_order(engine, tag: str = "") -> int:
     opt = getattr(engine, "optimizer", None)
     bucket = getattr(opt, "params_in_ipg_bucket", None)
     if bucket is None:
-        print("WARN: optimizer has no params_in_ipg_bucket (not ZeRO-1/2?), skipping the bucket-order check", flush=True)
+        print(
+            "WARN: optimizer has no params_in_ipg_bucket (not ZeRO-1/2?), skipping the bucket-order check", flush=True
+        )
         return -1
     # param_id is generated from the traversal order of self.bit16_groups => identical on all ranks for the same model => directly comparable across ranks
     seq = [int(e[2]) for e in bucket]
     h = zlib.crc32((",".join(map(str, seq))).encode()) & 0x7FFFFFFF
     if dist.is_available() and dist.is_initialized():
         t = torch.tensor([h, -h, len(seq), -len(seq)], dtype=torch.long, device=_diag_device())
-        dist.all_reduce(t, op=dist.ReduceOp.MAX)      # WORLD: that is exactly the communication domain of the DP reduction
+        dist.all_reduce(t, op=dist.ReduceOp.MAX)  # WORLD: that is exactly the communication domain of the DP reduction
         hi, lo, nhi, nlo = int(t[0]), -int(t[1]), int(t[2]), -int(t[3])
         assert hi == lo == h and nhi == nlo == len(seq), (
             f"[STU-SP §8-(6){(' ' + tag) if tag else ''}] param order inside the IPG bucket **differs across ranks**: "
             f"local hash={h} (min={lo} max={hi}), local len={len(seq)} (min={nlo} max={nhi}) => "
             f"average_tensor will add the gradients of different params together (silent scrambling). for the fix see "
-            f"the 'gradient-order anchor' in this function's docstring.")
+            f"the 'gradient-order anchor' in this function's docstring."
+        )
     return h
 
 
@@ -560,9 +582,11 @@ def _seq_to_head(x: torch.Tensor, group, gu: int) -> torch.Tensor:
     """[B, s, H, D] --all_to_all--> [B, gu*s, H//gu, D]. pure permutation."""
     B, s, H, D = x.shape
     hl = H // gu
-    t = x.view(B, s, gu, hl, D).permute(2, 0, 1, 3, 4).contiguous()   # [gu, B, s, hl, D] dim0=destination rank (head group)
+    t = (
+        x.view(B, s, gu, hl, D).permute(2, 0, 1, 3, 4).contiguous()
+    )  # [gu, B, s, hl, D] dim0=destination rank (head group)
     o = torch.empty_like(t)
-    dist.all_to_all_single(o, t, group=group)                          # o[j] = rank j's token slice x this rank's head group
+    dist.all_to_all_single(o, t, group=group)  # o[j] = rank j's token slice x this rank's head group
     bump_seq(op="a2a_s2h", shape=x.shape)
     return o.permute(1, 0, 2, 3, 4).reshape(B, gu * s, hl, D)
 
@@ -571,9 +595,11 @@ def _head_to_seq(y: torch.Tensor, group, gu: int) -> torch.Tensor:
     """[B, gu*s, H//gu, D] --all_to_all--> [B, s, H, D]. the exact inverse of `_seq_to_head`."""
     B, S, hl, D = y.shape
     s = S // gu
-    t = y.view(B, gu, s, hl, D).permute(1, 0, 2, 3, 4).contiguous()   # [gu, B, s, hl, D] dim0=destination rank (token slice)
+    t = (
+        y.view(B, gu, s, hl, D).permute(1, 0, 2, 3, 4).contiguous()
+    )  # [gu, B, s, hl, D] dim0=destination rank (token slice)
     o = torch.empty_like(t)
-    dist.all_to_all_single(o, t, group=group)                          # o[j] = this rank's token slice x rank j's head group
+    dist.all_to_all_single(o, t, group=group)  # o[j] = this rank's token slice x rank j's head group
     bump_seq(op="a2a_h2s", shape=y.shape)
     return o.permute(1, 2, 0, 3, 4).reshape(B, s, gu * hl, D)
 
@@ -610,8 +636,8 @@ def a2a_head_to_seq(x: torch.Tensor, ctx: UlyssesCtx) -> torch.Tensor:
 
 def _all_gather_tokens(x_local: torch.Tensor, group, gu: int) -> torch.Tensor:
     """[B, L, *rest] --all_gather--> [B, gu*L, *rest], concatenated in rank order (= the global token order)."""
-    xt = x_local.transpose(0, 1).contiguous()                          # [L, B, *rest]
-    out = torch.empty((gu * xt.shape[0],) + tuple(xt.shape[1:]), dtype=xt.dtype, device=xt.device)
+    xt = x_local.transpose(0, 1).contiguous()  # [L, B, *rest]
+    out = torch.empty((gu * xt.shape[0],) + tuple(xt.shape[1:]), dtype=xt.dtype, device=xt.device)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     dist.all_gather_into_tensor(out, xt, group=group)
     bump_seq(op="allgather", shape=x_local.shape)
     return out.transpose(0, 1).contiguous()
@@ -624,7 +650,7 @@ def _pad_tokens(x: torch.Tensor, n: int) -> torch.Tensor:
     if cur == n:
         return x
     assert cur < n, f"[STU-SP] _pad_tokens: current length {cur} > target {n}"
-    return torch.cat([x, x.new_zeros((x.shape[0], n - cur) + tuple(x.shape[2:]))], dim=1)
+    return torch.cat([x, x.new_zeros((x.shape[0], n - cur) + tuple(x.shape[2:]))], dim=1)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
 
 
 def _split_local(full: torch.Tensor, plan: ShardPlan) -> torch.Tensor:
@@ -637,11 +663,10 @@ def _split_local(full: torch.Tensor, plan: ShardPlan) -> torch.Tensor:
 
 def _merge_global(gathered: torch.Tensor, plan: ShardPlan) -> torch.Tensor:
     """[B, G_u*L, *] (the rank-concatenated permuted order [h_0|n_0|h_1|n_1|...]) -> [B, S_real, *] in true order."""
-    g, lh, ln, L = plan.ctx.size, plan.lh, plan.ln, plan.L
+    g, lh, ln, L = plan.ctx.size, plan.lh, plan.ln, plan.L  # noqa: F841 - Upstream assignment kept.
     hs = [gathered[:, u * L : u * L + lh] for u in range(g)]
     ns = [gathered[:, u * L + lh : (u + 1) * L] for u in range(g)]
-    return torch.cat([torch.cat(hs, dim=1)[:, : plan.hist_global],
-                      torch.cat(ns, dim=1)[:, : plan.noise_global]], dim=1)
+    return torch.cat([torch.cat(hs, dim=1)[:, : plan.hist_global], torch.cat(ns, dim=1)[:, : plan.noise_global]], dim=1)
 
 
 class _ScatterTokens(Function):
@@ -723,7 +748,7 @@ def drop_pad_tokens(x: torch.Tensor, plan: ShardPlan) -> torch.Tensor:
 def restore_pad_tokens(x: torch.Tensor, plan: ShardPlan) -> torch.Tensor:
     """after attention, put zeros back at the pad positions (so the head->seq all-to-all stays equal length)."""
     idx = plan.valid_index(x.device)
-    out = x.new_zeros((x.shape[0], plan.L * plan.ctx.size) + tuple(x.shape[2:]))
+    out = x.new_zeros((x.shape[0], plan.L * plan.ctx.size) + tuple(x.shape[2:]))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     return out.index_copy(1, idx, x)
 
 
@@ -753,4 +778,5 @@ def install_redundant_grad_hooks(model, log: bool = True) -> int:
     """
     raise AssertionError(
         "[STU-SP] install_redundant_grad_hooks is deprecated: /G_u is now done in _ScatterTokens.backward and in the tail's "
-        "_ScaleGrad pair (acting only on the sharded path, so text_embedder and GEO-REG are naturally unharmed). see this function's docstring.")
+        "_ScaleGrad pair (acting only on the sharded path, so text_embedder and GEO-REG are naturally unharmed). see this function's docstring."
+    )

@@ -19,6 +19,8 @@ bounded-memory numerical reference for CPU and environments without FA3.
 
 from __future__ import annotations
 
+import itertools
+
 import torch
 import torch.nn.functional as F
 
@@ -101,17 +103,13 @@ def swiglu7_interleaved(x: torch.Tensor, *, out_dtype: torch.dtype | None = None
     out_dtype = x.dtype if out_dtype is None else out_dtype
     feature_dim = x.shape[-1]
     flat_x = x.reshape(-1, feature_dim)
-    flat_out = torch.empty(
-        (flat_x.shape[0], feature_dim // 2), device=x.device, dtype=out_dtype
-    )
+    flat_out = torch.empty((flat_x.shape[0], feature_dim // 2), device=x.device, dtype=out_dtype)
     rows_per_chunk = max(1, _SWIGLU7_MAX_CHUNK_ELEMENTS // feature_dim)
     for start in range(0, flat_x.shape[0], rows_per_chunk):
         stop = min(start + rows_per_chunk, flat_x.shape[0])
         chunk = flat_x[start:stop].to(_FP32)
         gate = chunk[..., ::2].clamp(max=_SWIGLU7_LIMIT)
-        linear = chunk[..., 1::2].clamp(
-            min=-_SWIGLU7_LIMIT, max=_SWIGLU7_LIMIT
-        )
+        linear = chunk[..., 1::2].clamp(min=-_SWIGLU7_LIMIT, max=_SWIGLU7_LIMIT)
         gate.mul_(torch.sigmoid(_SWIGLU7_ALPHA * gate))
         gate.mul_(linear.add_(1.0))
         flat_out[start:stop].copy_(gate)
@@ -125,9 +123,7 @@ def swiglu7_split(gate: torch.Tensor, up: torch.Tensor, *, out_dtype: torch.dtyp
     """
 
     if gate.shape != up.shape:
-        raise ValueError(
-            f"SwiGLU7 gate/up shapes must match, got {gate.shape} and {up.shape}"
-        )
+        raise ValueError(f"SwiGLU7 gate/up shapes must match, got {gate.shape} and {up.shape}")
     out_dtype = gate.dtype if out_dtype is None else out_dtype
     feature_dim = gate.shape[-1]
     flat_gate = gate.reshape(-1, feature_dim)
@@ -137,9 +133,7 @@ def swiglu7_split(gate: torch.Tensor, up: torch.Tensor, *, out_dtype: torch.dtyp
     for start in range(0, flat_gate.shape[0], rows_per_chunk):
         stop = min(start + rows_per_chunk, flat_gate.shape[0])
         gate_c = flat_gate[start:stop].to(_FP32).clamp_(max=_SWIGLU7_LIMIT)
-        up_c = flat_up[start:stop].to(_FP32).clamp_(
-            min=-_SWIGLU7_LIMIT, max=_SWIGLU7_LIMIT
-        )
+        up_c = flat_up[start:stop].to(_FP32).clamp_(min=-_SWIGLU7_LIMIT, max=_SWIGLU7_LIMIT)
         gate_c.mul_(torch.sigmoid(_SWIGLU7_ALPHA * gate_c))
         gate_c.mul_(up_c.add_(1.0))
         flat_out[start:stop].copy_(gate_c)
@@ -249,9 +243,14 @@ def flash_mh_moe_fwd(
             else:
                 with torch.cuda.device(x.device):
                     return mh_moe_fwd_func(
-                        x=x, gather_ids=gather_ids, probs=probs,
-                        expert_offsets=expert_offsets, W_gate=W_gate,
-                        W_up=W_up, W_down=W_down, deterministic=True,
+                        x=x,
+                        gather_ids=gather_ids,
+                        probs=probs,
+                        expert_offsets=expert_offsets,
+                        W_gate=W_gate,
+                        W_up=W_up,
+                        W_down=W_down,
+                        deterministic=True,
                     )
         return _grouped_mh_moe_fwd(
             x=x,
@@ -333,9 +332,7 @@ def _grouped_mh_moe_fwd(
     offsets = expert_offsets.tolist()
     gather_ids_l = gather_ids.to(torch.long)
     active = [
-        (expert, offsets[expert], offsets[expert + 1])
-        for expert in range(HE)
-        if offsets[expert + 1] > offsets[expert]
+        (expert, offsets[expert], offsets[expert + 1]) for expert in range(HE) if offsets[expert + 1] > offsets[expert]
     ]
     # Similar-size experts minimize padding.  A few highly selected experts can
     # otherwise make an eight-expert group allocate several GiB even though the
@@ -350,13 +347,8 @@ def _grouped_mh_moe_fwd(
         rows = item[2] - item[1]
         next_max_rows = max(group_max_rows, rows)
         next_size = len(group) + 1
-        would_exceed_memory = (
-            next_size * next_max_rows * W_gate.shape[-1]
-            > _GROUPED_MOE_MAX_HIDDEN_ELEMENTS
-        )
-        if group and (
-            next_size > _GROUPED_MOE_EXPERTS_PER_BATCH or would_exceed_memory
-        ):
+        would_exceed_memory = next_size * next_max_rows * W_gate.shape[-1] > _GROUPED_MOE_MAX_HIDDEN_ELEMENTS
+        if group and (next_size > _GROUPED_MOE_EXPERTS_PER_BATCH or would_exceed_memory):
             groups.append(group)
             group = []
             group_max_rows = 0
@@ -367,12 +359,8 @@ def _grouped_mh_moe_fwd(
 
     for group in groups:
         max_rows = max(stop - start for _, start, stop in group)
-        expert_ids = torch.tensor(
-            [expert for expert, _, _ in group], device=x.device, dtype=torch.long
-        )
-        x_batch = torch.zeros(
-            len(group), max_rows, d_head, device=x.device, dtype=x.dtype
-        )
+        expert_ids = torch.tensor([expert for expert, _, _ in group], device=x.device, dtype=torch.long)
+        x_batch = torch.zeros(len(group), max_rows, d_head, device=x.device, dtype=x.dtype)
         row_sets: list[torch.Tensor] = []
         for local_idx, (expert, start, stop) in enumerate(group):
             rows = gather_ids_l[start:stop]
@@ -385,7 +373,7 @@ def _grouped_mh_moe_fwd(
         hidden = swiglu7_split(gate, up, out_dtype=W_down.dtype)
         projected = torch.bmm(hidden, W_down.index_select(0, expert_ids))
 
-        for local_idx, ((expert, start, stop), rows) in enumerate(zip(group, row_sets)):
+        for local_idx, ((expert, start, stop), rows) in enumerate(zip(group, row_sets, strict=False)):
             count = stop - start
             contribution = projected[local_idx, :count].to(_FP32)
             contribution.mul_(probs[start:stop].to(_FP32).unsqueeze(-1))
@@ -421,7 +409,7 @@ def attention_with_sink(
     T, num_heads, head_dim = q.shape
     scale = softmax_scale if softmax_scale is not None else head_dim**-0.5
     sink = sinks.to(_FP32)
-    if sink.ndim == 2:  # [sink_token_num, num_heads] -> reduce sink axis in logsumexp
+    if sink.ndim == 2:  # noqa: SIM108 - Branches carry per-case comments.  # [sink_token_num, num_heads] -> reduce sink axis in logsumexp
         sink_logits = torch.logsumexp(sink, dim=0)  # [num_heads]
     else:
         sink_logits = sink  # [num_heads]
@@ -449,9 +437,7 @@ def attention_with_sink(
         # FA3 returns log(sum_j exp(qk_j * scale)) as [num_heads, T].
         # A learned null-value sink contributes exp(sink) to that denominator,
         # so the ordinary attention output only needs this exact attenuation.
-        sink_weight = torch.sigmoid(
-            softmax_lse.transpose(0, 1).to(_FP32) - sink_logits.view(1, num_heads)
-        )
+        sink_weight = torch.sigmoid(softmax_lse.transpose(0, 1).to(_FP32) - sink_logits.view(1, num_heads))
         return (attended.to(_FP32) * sink_weight.unsqueeze(-1)).to(q.dtype)
 
     if (
@@ -468,14 +454,17 @@ def attention_with_sink(
         # for exact sink correction; public SDPA returns only the output.
         out = torch.empty_like(q)
         bounds = cu_seqlens.tolist()
-        for start, stop in zip(bounds[:-1], bounds[1:]):
+        for start, stop in itertools.pairwise(bounds):
             if stop <= start:
                 continue
             attended, lse, *_ = torch.ops.aten._scaled_dot_product_flash_attention(
                 q[start:stop].transpose(0, 1).unsqueeze(0),
                 k[start:stop].transpose(0, 1).unsqueeze(0),
                 v[start:stop].transpose(0, 1).unsqueeze(0),
-                dropout_p=0.0, is_causal=False, return_debug_mask=False, scale=scale,
+                dropout_p=0.0,
+                is_causal=False,
+                return_debug_mask=False,
+                scale=scale,
             )
             weight = torch.sigmoid(lse[0].float() - sink_logits[:, None])
             out[start:stop] = (attended[0].float() * weight[..., None]).transpose(0, 1)
@@ -483,7 +472,7 @@ def attention_with_sink(
 
     out = torch.empty_like(q, dtype=_FP32)
     bounds = cu_seqlens.tolist()
-    for start, stop in zip(bounds[:-1], bounds[1:]):
+    for start, stop in itertools.pairwise(bounds):
         length = int(stop) - int(start)
         if length <= 0:
             continue
@@ -497,9 +486,7 @@ def attention_with_sink(
             query_stop = min(length, query_start + query_chunk)
             qs = q[start + query_start : start + query_stop].to(_FP32).transpose(0, 1)
             scores = torch.matmul(qs, ks.transpose(-1, -2)) * scale
-            sink_col = sink_logits.view(num_heads, 1, 1).expand(
-                num_heads, query_stop - query_start, 1
-            )
+            sink_col = sink_logits.view(num_heads, 1, 1).expand(num_heads, query_stop - query_start, 1)
             full = torch.cat([scores, sink_col], dim=-1)
             probs = torch.softmax(full, dim=-1)[..., :length]
             attended = torch.matmul(probs, vs)

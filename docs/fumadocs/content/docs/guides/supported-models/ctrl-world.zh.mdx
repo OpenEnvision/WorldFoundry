@@ -1,52 +1,48 @@
 ---
 title: "Ctrl-World"
-description: "Ctrl-World（Tsinghua University / Stanford University）：交互式世界模型、游戏世界模型；Runner 一致性待确认。"
+description: "Ctrl-World（清华大学 / 斯坦福大学）：面向机器人操作的动作条件世界模型。"
 modelId: "ctrl-world"
 pageSource: authored
 ---
 
-Ctrl-World 是面向机器人操作的可控生成式世界模型：以机器人动作为条件预测未来观测视频，使策略可以在模型内被评估或改进。本 catalog 中其官方（WorldArena 收录的）源码已内置树内；执行待 Ctrl-World、Stable Video Diffusion 与 CLIP checkpoint 及任务资产就位。
+Ctrl-World 是面向机器人操作的可控生成式世界模型：以机器人动作为条件预测未来观测视频，可用于在模型内评估或改进策略。已使用发布权重验证：按官方默认的 25 步采样，五帧合成三视角推理的三个视角均保留了场景细节。
 
 <ModelPaperFigures modelId="ctrl-world" locale="zh" />
 
 代码：[Robert-gyj/Ctrl-World](https://github.com/Robert-gyj/Ctrl-World)。
 
-本卡片没有记录论文 URL。代码：[Robert-gyj/Ctrl-World](https://github.com/Robert-gyj/Ctrl-World)。权重：`yjguo/Ctrl-World`，外加 `stabilityai/stable-video-diffusion-img2vid` 和 `openai/clip-vit-base-patch32`。发布方：清华 / 斯坦福。catalog 未记许可证。
+权重：`yjguo/Ctrl-World`，外加 `stabilityai/stable-video-diffusion-img2vid` 和 `openai/clip-vit-base-patch32`。发布方：清华 / 斯坦福。未标明许可证。
 
-兼容启动器会用本地 SVD 和 CLIP 跑发布的 checkpoint。默认视角是同步的 **ALOHA** 高位 / 左腕 / 右腕——运行时**不会**合成相机。要动作质量对齐，仍需要与 checkpoint 匹配的 **DROID** 视角和动作。这些资产就位之前，pipeline 返回 **blocked** 诊断。
+包模块 `worldfoundry.synthesis.visual_generation.ctrl_world.infer` 使用本地 SVD 和 CLIP 组件运行发布的 checkpoint。默认输入是同步的 **ALOHA** 高位 / 左腕 / 右腕演示图像——运行时**不会**进行相机合成。要得到有物理意义的动作条件，需要与 checkpoint 匹配的 **DROID** 视角以及初始的七维 DROID 笛卡尔位姿。
 
 <ModelCommandBuilder modelId="ctrl-world" locale="zh" />
 
 ## 用来做什么
 
-用 `ctrl-world` 做 catalog 世界模型推理。需要动作条件未来帧、而不是独立片段生成器时选它。
+`ctrl-world` 以动作为条件生成未来帧。
 
-记录的 checkpoint 揭示其设计：Stable Video Diffusion 图生视频基座（stabilityai/stable-video-diffusion-img2vid）、CLIP 条件（openai/clip-vit-base-patch32），加上 Ctrl-World 自有的动作条件权重（yjguo/Ctrl-World）。除此之外的内部细节仓库未记录。该模型由清华大学 / 斯坦福大学发布。
+Ctrl-World 以 Stable Video Diffusion 图生视频模型（stabilityai/stable-video-diffusion-img2vid）为基座，使用 CLIP 条件（openai/clip-vit-base-patch32），并加入自有的动作条件权重（yjguo/Ctrl-World）。该模型由清华大学 / 斯坦福大学发布。
 
-catalog 记录的任务包括 交互式世界模型、游戏世界模型、动作条件视频。别名包括 `ctrl_world`、`ctrlworld`。
+任务：交互式世界模型、游戏世界模型、动作条件视频。别名：`ctrl_world`、`ctrlworld`。
 
-记录的评测入口包括[WorldArena](/zh/docs/evaluation/benchmark-hub/worldarena)（该条目已收录于 WorldArena 的机器人世界模型评测）。
+推荐评测：[WorldArena](/zh/docs/evaluation/benchmark-hub/worldarena)（Ctrl-World 已收录于 WorldArena 的机器人世界模型评测）。
 
 ## 运行时契约
 
-可选 `input_path`、`prompt`、`load.checkpoint_path`、`load.base_model_dir`、`load.clip_model_dir`；产物 `ctrl-world.mp4`。
+输入 `input-path`、`prompt`、`load.checkpoint-path`、`load.base-model-dir`、`load.clip-model-dir`、`input-views`（不传时使用内置示例）；参数 `input-mode`、`action-mode`、`action-direction`、`action-distance`、`action-scale`、`height` 等 16 项；产物 `ctrl-world.mp4`。
 
 CLI task profile：`robot-action-video`。绑定的 pipeline 类是 `CtrlWorldPipeline`。
 
-系列状态：**Runner 一致性待确认**。
+`robot-action-video` 默认值：height=192, width=320, num_frames=5, num_inference_steps=25, guidance_scale=1.0, fps=4。
 
-`robot-action-video` 记录默认值：height=192, width=320, num_frames=5, num_inference_steps=4, guidance_scale=1.0, fps=4。
-
-pipeline 解析内置的滚动生成入口，在 checkpoint 与任务资产就位前返回 blocked 运行时诊断。 提交任务前请就位全部三套记录的 checkpoint。
+提交任务前请准备好全部三套 checkpoint。
 
 ## 在 WorldFoundry 中运行
 
-启动 `worldfoundry-eval run ctrl-world --pipeline.task-profile robot-action-video` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+用 `wf run ctrl-world --pipeline.task-profile robot-action-video` 推进世界。
 
-运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+运行环境：统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
 
-记录的权重仓库包括 `yjguo/Ctrl-World`、`stabilityai/stable-video-diffusion-img2vid`、`openai/clip-vit-base-patch32`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh ctrl-world`；下载缺失的公开权重时加 `--download`。
-
-状态：**Runner 一致性待确认**。
+权重仓库：`yjguo/Ctrl-World`、`stabilityai/stable-video-diffusion-img2vid`、`openai/clip-vit-base-patch32`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh ctrl-world`；下载缺失的公开权重时加 `--download`。
 
 <ModelRelatedRecipes modelId="ctrl-world" locale="zh" />

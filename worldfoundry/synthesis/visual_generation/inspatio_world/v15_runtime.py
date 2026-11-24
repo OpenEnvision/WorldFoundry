@@ -31,9 +31,16 @@ def local_component(source):
 class InspatioWorldV15Runtime:
     """Local-only loading, independent request RNG and bounded VAE/video I/O."""
 
-    def __init__(self, checkpoint_source=DEFAULT_CHECKPOINT_REPO, *,
-                 wan_model_path=DEFAULT_WAN_MODEL_REPO, da3_model_path=DEFAULT_DA3_MODEL_REPO,
-                 device="cuda", weight_dtype=None, compile_dit=False):
+    def __init__(
+        self,
+        checkpoint_source=DEFAULT_CHECKPOINT_REPO,
+        *,
+        wan_model_path=DEFAULT_WAN_MODEL_REPO,
+        da3_model_path=DEFAULT_DA3_MODEL_REPO,
+        device="cuda",
+        weight_dtype=None,
+        compile_dit=False,
+    ):
         self.checkpoint_source = str(checkpoint_source)
         self.wan_model_path = str(wan_model_path)
         self.da3_model_path = str(da3_model_path)
@@ -57,19 +64,35 @@ class InspatioWorldV15Runtime:
     def plan(self):
         checkpoint = self._checkpoint()
         wan = local_component(self.wan_model_path)
-        required = ("config.json", "Wan2.1_VAE.pth", "google/umt5-xxl/tokenizer_config.json",
-                    "google/umt5-xxl/spiece.model")
+        required = (
+            "config.json",
+            "Wan2.1_VAE.pth",
+            "google/umt5-xxl/tokenizer_config.json",
+            "google/umt5-xxl/spiece.model",
+        )
         for name in required:
             if not (wan / name).is_file():
                 raise FileNotFoundError(f"Missing Wan component: {wan / name}")
-        text = next((wan / name for name in ("models_t5_umt5-xxl-enc-bf16.safetensors",
-                                             "models_t5_umt5-xxl-enc-bf16.pth") if (wan / name).is_file()), None)
+        text = next(
+            (
+                wan / name
+                for name in ("models_t5_umt5-xxl-enc-bf16.safetensors", "models_t5_umt5-xxl-enc-bf16.pth")
+                if (wan / name).is_file()
+            ),
+            None,
+        )
         if text is None:
             raise FileNotFoundError(f"Missing Wan UMT5 encoder under {wan}")
-        return {"model_id": "inspatio-world-1p5", "checkpoint_path": str(checkpoint),
-                "wan_model_path": str(wan), "text_encoder_path": str(text),
-                "resolution": [480, 832], "frames_per_block": 3,
-                "source_revision": SOURCE_REVISION, "checkpoint_revision": CHECKPOINT_REVISION}
+        return {
+            "model_id": "inspatio-world-1p5",
+            "checkpoint_path": str(checkpoint),
+            "wan_model_path": str(wan),
+            "text_encoder_path": str(text),
+            "resolution": [480, 832],
+            "frames_per_block": 3,
+            "source_revision": SOURCE_REVISION,
+            "checkpoint_revision": CHECKPOINT_REVISION,
+        }
 
     def _load_components(self):
         if self.rollout is not None:
@@ -87,12 +110,19 @@ class InspatioWorldV15Runtime:
             raise ValueError("The released InSpatio 1.5 inference path uses torch.bfloat16")
         wan = Path(plan["wan_model_path"])
         denoiser = WanCausalWorldDenoiser.from_pretrained(
-            plan["checkpoint_path"], wan, device=self.device, dtype=dtype,
+            plan["checkpoint_path"],
+            wan,
+            device=self.device,
+            dtype=dtype,
         )
         text_encoder = T5EncoderModel(
-            text_len=512, dtype=dtype, device="cpu",
-            checkpoint_path=plan["text_encoder_path"], tokenizer_path=str(wan / "google/umt5-xxl"),
-            load_with_core_loader=True, return_full_context=True,
+            text_len=512,
+            dtype=dtype,
+            device="cpu",
+            checkpoint_path=plan["text_encoder_path"],
+            tokenizer_path=str(wan / "google/umt5-xxl"),
+            load_with_core_loader=True,
+            return_full_context=True,
         )
         vae = WanVAE(vae_pth=str(wan / "Wan2.1_VAE.pth"), dtype=torch.float32, device="cpu")
         vae.model.to(device=self.device, dtype=dtype)
@@ -108,8 +138,9 @@ class InspatioWorldV15Runtime:
             finally:
                 text_encoder.to("cpu")
 
-        config = SimpleNamespace(denoising_step_list=[1000, 750, 500, 250],
-                                 warp_denoising_step=True, num_frame_per_block=3)
+        config = SimpleNamespace(
+            denoising_step_list=[1000, 750, 500, 250], warp_denoising_step=True, num_frame_per_block=3
+        )
         rollout = InspatioCausalRollout(config, generator=denoiser, text_encoder=encode_text).eval()
         if self.compile_dit:
             denoiser.model = torch.compile(denoiser.model, mode="max-autotune", fullgraph=False, dynamic=False)
@@ -131,9 +162,12 @@ class InspatioWorldV15Runtime:
         if record["views"] > 1000:
             raise ValueError("DA3 supports up to 1000 source frames here; supply a prepared scene for longer inputs")
         if record["kind"] == "image":
-            frames = [np.asarray(Image.open(path).convert("RGB")) for path in sorted((scene / "input").glob("view_*.png"))]
+            frames = [
+                np.asarray(Image.open(path).convert("RGB")) for path in sorted((scene / "input").glob("view_*.png"))
+            ]
         else:
             from worldfoundry.core.media.codecs.video import load_video_frames
+
             frames = [np.asarray(frame) for frame in load_video_frames(scene / "input/video.mp4")]
         depth_model = DepthAnything3.from_pretrained(str(local_component(self.da3_model_path))).to(self.device).eval()
         try:
@@ -168,7 +202,8 @@ class InspatioWorldV15Runtime:
         write_range(directory / "metadata.txt", minimum, maximum)
         if record["kind"] == "image":
             from .v15_io import image_depth_paths
-            for path, value in zip(image_depth_paths(directory, len(values)), values):
+
+            for path, value in zip(image_depth_paths(directory, len(values)), values, strict=False):
                 value = np.where(np.isfinite(value) & (value >= 0), value, 0)
                 Image.fromarray(encode_depth(value, minimum, maximum)).save(path)
         else:
@@ -185,10 +220,13 @@ class InspatioWorldV15Runtime:
 
         self.vae.model.clear_cache()
         try:
-            latents = [self.vae.model.cached_encode(
-                normalize_rgb(frames, self.device, self.vae.model.conv1.weight.dtype).permute(1, 0, 2, 3)[None],
-                self.vae.scale,
-            ) for frames in chunks]
+            latents = [
+                self.vae.model.cached_encode(
+                    normalize_rgb(frames, self.device, self.vae.model.conv1.weight.dtype).permute(1, 0, 2, 3)[None],
+                    self.vae.scale,
+                )
+                for frames in chunks
+            ]
             return torch.cat(latents, dim=2).permute(0, 2, 1, 3, 4)
         finally:
             chunks.close()
@@ -205,9 +243,15 @@ class InspatioWorldV15Runtime:
         self._load_components()
         valid = int(record["valid_frames"])
         padded = padded_frame_count(valid)
+
         def chunks(name):
-            return iter_video_chunks(Path(condition_dir) / f"{name}.mp4", valid, padded,
-                                     repeat_first=name == "source" and record["kind"] == "image" and record["views"] == 1)
+            return iter_video_chunks(
+                Path(condition_dir) / f"{name}.mp4",
+                valid,
+                padded,
+                repeat_first=name == "source" and record["kind"] == "image" and record["views"] == 1,
+            )
+
         # Retain the released order, including initial-noise and inter-step draws.
         render = self._encode_condition(chunks("render"))
         source = self._encode_condition(chunks("source"))
@@ -218,11 +262,30 @@ class InspatioWorldV15Runtime:
             mask_chunks.close()
         rng = torch.Generator(device=self.device).manual_seed(int(seed))
         noise = sample_noise_like(source, rng)
-        return self.rollout.inference(noise, [record["text"]], ref_latent=source,
-                                      render_latent=render, mask_latent=mask, decode=False, noise_generator=rng)
+        return self.rollout.inference(
+            noise,
+            [record["text"]],
+            ref_latent=source,
+            render_latent=render,
+            mask_latent=mask,
+            decode=False,
+            noise_generator=rng,
+        )
 
-    def predict(self, *, images=None, videos=None, scene_dir=None, prompt="", traj_txt_path=None,
-                output_dir=None, output_path=None, seed=0, return_frames=False, return_latents=False):
+    def predict(
+        self,
+        *,
+        images=None,
+        videos=None,
+        scene_dir=None,
+        prompt="",
+        traj_txt_path=None,
+        output_dir=None,
+        output_path=None,
+        seed=0,
+        return_frames=False,
+        return_latents=False,
+    ):
         import torch
 
         from .v15_io import video_writer
@@ -241,23 +304,32 @@ class InspatioWorldV15Runtime:
             if scene_dir is not None:
                 record = load_scene(scene_dir, prompt=prompt, traj_txt_path=traj_txt_path)
             else:
-                record = stage_direct_input(work / ".prepared", images=images, videos=videos,
-                                            prompt=prompt, traj_txt_path=traj_txt_path)
+                record = stage_direct_input(
+                    work / ".prepared", images=images, videos=videos, prompt=prompt, traj_txt_path=traj_txt_path
+                )
                 self._estimate_depth(record)
                 validate_scene(record)
             details = render_one(record, torch.device(self.device), work)
             latents = self._infer_record(record, work / record["id"], seed=seed)
-            destination = (Path(output_path).expanduser().resolve() if output_path is not None
-                           else work / record["id"] / "pred.mp4")
+            destination = (
+                Path(output_path).expanduser().resolve()
+                if output_path is not None
+                else work / record["id"] / "pred.mp4"
+            )
             valid, written = int(record["valid_frames"]), 0
             self.vae.model.clear_cache()
             try:
                 with video_writer(destination, record["fps"]) as writer:
                     for latent in latents.permute(0, 2, 1, 3, 4).split(1, dim=2):
-                        pixels = (self.vae.model.cached_decode(latent, self.vae.scale).float().clamp(-1, 1) * .5 + .5)
+                        pixels = self.vae.model.cached_decode(latent, self.vae.scale).float().clamp(-1, 1) * 0.5 + 0.5
                         count = min(pixels.shape[2], valid - written)
                         if count:
-                            rgb = (pixels[0, :, :count].permute(1, 2, 3, 0).clamp(0, 1) * 255).to(torch.uint8).cpu().numpy()
+                            rgb = (
+                                (pixels[0, :, :count].permute(1, 2, 3, 0).clamp(0, 1) * 255)
+                                .to(torch.uint8)
+                                .cpu()
+                                .numpy()
+                            )
                             writer.write(rgb.tobytes())
                             written += count
                         if written == valid:
@@ -266,13 +338,21 @@ class InspatioWorldV15Runtime:
                         raise RuntimeError(f"Generated {written} frames, expected {valid}")
             finally:
                 self.vae.model.clear_cache()
-            result = {"model_id": "inspatio-world-1p5", "artifact_path": str(destination),
-                      "video_path": str(destination), "videos": [str(destination)],
-                      "source_type": source_type_for(record), "valid_frames": valid,
-                      "fps": record["fps"], "seed": int(seed), "work_dir": str(work),
-                      "view_selection": details}
+            result = {
+                "model_id": "inspatio-world-1p5",
+                "artifact_path": str(destination),
+                "video_path": str(destination),
+                "videos": [str(destination)],
+                "source_type": source_type_for(record),
+                "valid_frames": valid,
+                "fps": record["fps"],
+                "seed": int(seed),
+                "work_dir": str(work),
+                "view_selection": details,
+            }
             if return_frames:
                 from worldfoundry.core.media.codecs.video import load_video_frames
+
                 result["video"] = load_video_frames(destination)
             if return_latents:
                 result["latents"] = latents.detach().cpu()

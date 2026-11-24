@@ -1,27 +1,14 @@
 import torch.nn as nn
 
-ACTIVATION_FUNCTIONS = {
-    "elu": nn.ELU(),
-    "swish": nn.SiLU(),
-    "silu": nn.SiLU(),
-    "mish": nn.Mish(),
-    "gelu": nn.GELU(),
-    "relu": nn.ReLU(),
-}
+from worldfoundry.base_models.diffusion_model.models.networks.step_video.normalization import (
+    get_activation as _get_activation,
+)
+
+_ELU = nn.ELU()
 
 
 def get_activation(act_fn: str) -> nn.Module:
-    """Helper function to get activation function from string.
-
-    Args:
-        act_fn (str): Name of activation function.
-
-    Returns:
-        nn.Module: Activation function.
-    """
-
-    act_fn = act_fn.lower()
-    if act_fn in ACTIVATION_FUNCTIONS:
-        return ACTIVATION_FUNCTIONS[act_fn]
-    else:
-        raise ValueError(f"Unsupported activation function: {act_fn}")
+    """Extend the shared activation registry with EasyAnimate's ELU option."""
+    if act_fn.lower() == "elu":
+        return _ELU
+    return _get_activation(act_fn)

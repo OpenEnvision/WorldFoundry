@@ -47,4 +47,4 @@ class LazyDict(DictConfig):  # NOTE: to differentiate between LazyDict & DictCon
         super().__init__(*args, **kwargs)
 
 
-__all__ = ["instantiate", "LazyCall", "LazyConfig", "PLACEHOLDER", "LazyDict"]
+__all__ = ["PLACEHOLDER", "LazyCall", "LazyConfig", "LazyDict", "instantiate"]

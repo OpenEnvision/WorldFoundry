@@ -5,13 +5,14 @@ The linear head implementation is based on DUSt3R and CroCoV2
 References: https://github.com/naver/dust3r
 """
 
-import torch
-
-from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 import torch.nn as nn
 import torch.nn.functional as F
 
-from uniception.models.prediction_heads.base import PixelTaskOutput, PredictionHeadInput
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.prediction_heads.base import (
+    PixelTaskOutput,
+    PredictionHeadInput,
+)
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 
 class LinearFeature(nn.Module):
@@ -25,7 +26,7 @@ class LinearFeature(nn.Module):
         input_feature_dim: int,
         output_dim: int,
         patch_size: int,
-        pretrained_checkpoint_path: str = None,
+        pretrained_checkpoint_path: str | None = None,
         *args,
         **kwargs,
     ):
@@ -76,9 +77,9 @@ class LinearFeature(nn.Module):
 
         x = feature_input.last_feature
 
-        assert (
-            x.shape[1] == self.input_feature_dim
-        ), f"Input feature dimension mismatch: {x.shape[1]} != {self.input_feature_dim}"
+        assert x.shape[1] == self.input_feature_dim, (
+            f"Input feature dimension mismatch: {x.shape[1]} != {self.input_feature_dim}"
+        )
 
         x = self.linear(x)
         x = F.pixel_shuffle(x, self.patch_size)

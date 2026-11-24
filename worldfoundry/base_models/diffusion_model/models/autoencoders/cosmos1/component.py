@@ -69,9 +69,7 @@ class Cosmos1VideoCodec:
         elif latent_frames == self.latent_chunk_duration:
             mean, std = self.video_mean, self.video_std
         else:
-            raise ValueError(
-                "Cosmos Tokenize1 supports one image latent or one 121-frame/16-latent video chunk"
-            )
+            raise ValueError("Cosmos Tokenize1 supports one image latent or one 121-frame/16-latent video chunk")
         return mean.to(device=value.device, dtype=value.dtype), std.to(device=value.device, dtype=value.dtype)
 
     @torch.no_grad()

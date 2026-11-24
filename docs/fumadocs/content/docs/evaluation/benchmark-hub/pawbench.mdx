@@ -1,6 +1,6 @@
 ---
 title: PAWBench
-description: "Distributional physics bench: 50 scenes × 50 rollouts. Calibration TVD and coverage stay separate. WorldFoundry vendors PAWEval; it does not invent a combined board."
+description: "Distributional physics bench: 50 scenes × 50 rollouts. Calibration TVD and coverage stay separate. WorldFoundry bundles the official PAWEval judge."
 ---
 
 PAWBench (SJTU, Shanghai AI Lab, Krea AI, Hugging Face, Shanghai Innovation Institute, Tongyi Lab, HKU) asks whether repeated generations recover the **distribution** of physically valid futures — not whether one clip looks plausible. Official size: **50 scenes** (25 calibration with reference outcome probabilities, 25 coverage). A complete run generates **50 independent rollouts per scene = 2,500 videos**.
@@ -12,7 +12,7 @@ The two tracks stay separate. Upstream defines **no combined scalar**.
 
 Paper: [PAWBench](https://arxiv.org/abs/2608.27345). Project: [pawbench.github.io](https://pawbench.github.io/). Code: [Andrew0613/PAWBench](https://github.com/Andrew0613/PAWBench) (Apache-2.0). Data: [`Andrew613/PAWBench`](https://huggingface.co/datasets/Andrew613/PAWBench).
 
-WorldFoundry **vendors the official PAWEval judge**. Fresh judging defaults to Gemini 3.5 Flash through OpenRouter; other OpenAI-compatible judges are analysis-only. Existing `metrics.json` or run directories import without network.
+WorldFoundry **bundles the official PAWEval judge**. Fresh judging defaults to Gemini 3.5 Flash through OpenRouter; other OpenAI-compatible judges are analysis-only. Existing `metrics.json` or run directories import without network.
 
 <BenchmarkPageSections id="pawbench" locale="en" />
 
@@ -22,7 +22,7 @@ WorldFoundry **vendors the official PAWEval judge**. Fresh judging defaults to G
 hf download Andrew613/PAWBench --repo-type dataset --local-dir /data/pawbench
 export OPENROUTER_API_KEY=<your-key>
 
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id pawbench \
   --mode official-run \
   --benchmark-data-root /data/pawbench \
@@ -34,7 +34,7 @@ worldfoundry-eval zoo benchmark-run \
 Import a prepared run:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id pawbench \
   --mode official-validation \
   --official-results-path /path/to/pawbench/run \
@@ -42,7 +42,7 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-Outputs include `scorecard.json`, `raw_metric_table.jsonl`, `per_sample_scores.jsonl`, and `benchmark_contract.json`. The checked-in sample is a normalizer fixture only.
+Outputs include `scorecard.json`, `raw_metric_table.jsonl`, `per_sample_scores.jsonl`, and `benchmark_contract.json`.
 
 ## Rollouts, judge, and `metrics.json`
 

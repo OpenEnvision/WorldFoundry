@@ -1,15 +1,14 @@
 # Copyright (c) Tencent Inc. All rights reserved.
-from typing import List
 
 import torch
 import torch.nn as nn
-from torch import Tensor
 import torch.nn.functional as F
 from mmcv.cnn import ConvModule, DepthwiseSeparableConvModule, Linear
 from mmdet.utils import ConfigType, OptConfigType, OptMultiConfig
 from mmengine.model import BaseModule
-from mmyolo.registry import MODELS
 from mmyolo.models.layers import CSPLayerWithTwoConv
+from mmyolo.registry import MODELS
+from torch import Tensor
 
 
 @MODELS.register_module()
@@ -28,7 +27,7 @@ class MaxSigmoidAttnBlock(BaseModule):
         use_depthwise: bool = False,
         with_scale: bool = False,
         conv_cfg: OptConfigType = None,
-        norm_cfg: ConfigType = dict(type="BN", momentum=0.03, eps=0.001),
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.03, "eps": 0.001},  # noqa: B006 - Keeps the upstream default object and signature.
         init_cfg: OptMultiConfig = None,
         use_einsum: bool = True,
     ) -> None:
@@ -120,7 +119,7 @@ class RepMatrixMaxSigmoidAttnBlock(BaseModule):
         use_depthwise: bool = False,
         with_scale: bool = False,
         conv_cfg: OptConfigType = None,
-        norm_cfg: ConfigType = dict(type="BN", momentum=0.03, eps=0.001),
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.03, "eps": 0.001},  # noqa: B006 - Keeps the upstream default object and signature.
         init_cfg: OptMultiConfig = None,
         use_einsum: bool = True,
     ) -> None:
@@ -147,9 +146,7 @@ class RepMatrixMaxSigmoidAttnBlock(BaseModule):
             else None
         )
         self.bias = nn.Parameter(torch.zeros(num_heads))
-        self.guide_weight = nn.Parameter(
-            torch.zeros(guide_channels, embed_channels // num_heads, num_heads)
-        )
+        self.guide_weight = nn.Parameter(torch.zeros(guide_channels, embed_channels // num_heads, num_heads))
         self.project_conv = conv(
             in_channels,
             out_channels,
@@ -204,7 +201,7 @@ class RepConvMaxSigmoidAttnBlock(BaseModule):
         use_depthwise: bool = False,
         with_scale: bool = False,
         conv_cfg: OptConfigType = None,
-        norm_cfg: ConfigType = dict(type="BN", momentum=0.03, eps=0.001),
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.03, "eps": 0.001},  # noqa: B006 - Keeps the upstream default object and signature.
         init_cfg: OptMultiConfig = None,
         use_einsum: bool = True,
     ) -> None:
@@ -234,8 +231,7 @@ class RepConvMaxSigmoidAttnBlock(BaseModule):
         self.num_heads = num_heads
         self.split_channels = embed_channels // num_heads
         self.guide_convs = nn.ModuleList(
-            nn.Conv2d(self.split_channels, guide_channels, 1, bias=False)
-            for _ in range(num_heads)
+            nn.Conv2d(self.split_channels, guide_channels, 1, bias=False) for _ in range(num_heads)
         )
         self.project_conv = conv(
             in_channels,
@@ -255,9 +251,7 @@ class RepConvMaxSigmoidAttnBlock(BaseModule):
         embed = self.embed_conv(x) if self.embed_conv is not None else x
         embed = list(embed.split(self.split_channels, 1))
         # Bx(MxN)xHxW (H*c=C, H: heads)
-        attn_weight = torch.cat(
-            [conv(x) for conv, x in zip(self.guide_convs, embed)], dim=1
-        )
+        attn_weight = torch.cat([conv(x) for conv, x in zip(self.guide_convs, embed, strict=False)], dim=1)
         # BxMxNxHxW
         attn_weight = attn_weight.view(B, self.num_heads, -1, H, W)
         # attn_weight = torch.stack(
@@ -292,8 +286,8 @@ class MaxSigmoidCSPLayerWithTwoConv(CSPLayerWithTwoConv):
         with_scale: bool = False,
         add_identity: bool = True,  # shortcut
         conv_cfg: OptConfigType = None,
-        norm_cfg: ConfigType = dict(type="BN", momentum=0.03, eps=0.001),
-        act_cfg: ConfigType = dict(type="SiLU", inplace=True),
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.03, "eps": 0.001},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "SiLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
         init_cfg: OptMultiConfig = None,
         use_einsum: bool = True,
     ) -> None:
@@ -355,8 +349,8 @@ class RepMaxSigmoidCSPLayerWithTwoConv(CSPLayerWithTwoConv):
         with_scale: bool = False,
         add_identity: bool = True,  # shortcut
         conv_cfg: OptConfigType = None,
-        norm_cfg: ConfigType = dict(type="BN", momentum=0.03, eps=0.001),
-        act_cfg: ConfigType = dict(type="SiLU", inplace=True),
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.03, "eps": 0.001},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "SiLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
         init_cfg: OptMultiConfig = None,
         use_einsum: bool = True,
     ) -> None:
@@ -418,8 +412,8 @@ class RepConvMaxSigmoidCSPLayerWithTwoConv(CSPLayerWithTwoConv):
         with_scale: bool = False,
         add_identity: bool = True,  # shortcut
         conv_cfg: OptConfigType = None,
-        norm_cfg: ConfigType = dict(type="BN", momentum=0.03, eps=0.001),
-        act_cfg: ConfigType = dict(type="SiLU", inplace=True),
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.03, "eps": 0.001},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "SiLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
         init_cfg: OptMultiConfig = None,
         use_einsum: bool = True,
     ) -> None:
@@ -469,7 +463,7 @@ class RepConvMaxSigmoidCSPLayerWithTwoConv(CSPLayerWithTwoConv):
 class ImagePoolingAttentionModule(nn.Module):
     def __init__(
         self,
-        image_channels: List[int],
+        image_channels: list[int],
         text_channels: int,
         embed_channels: int,
         with_scale: bool = False,
@@ -492,25 +486,14 @@ class ImagePoolingAttentionModule(nn.Module):
         else:
             self.scale = 1.0
         self.projections = nn.ModuleList(
-            [
-                ConvModule(in_channels, embed_channels, 1, act_cfg=None)
-                for in_channels in image_channels
-            ]
+            [ConvModule(in_channels, embed_channels, 1, act_cfg=None) for in_channels in image_channels]
         )
-        self.query = nn.Sequential(
-            nn.LayerNorm(text_channels), Linear(text_channels, embed_channels)
-        )
-        self.key = nn.Sequential(
-            nn.LayerNorm(embed_channels), Linear(embed_channels, embed_channels)
-        )
-        self.value = nn.Sequential(
-            nn.LayerNorm(embed_channels), Linear(embed_channels, embed_channels)
-        )
+        self.query = nn.Sequential(nn.LayerNorm(text_channels), Linear(text_channels, embed_channels))
+        self.key = nn.Sequential(nn.LayerNorm(embed_channels), Linear(embed_channels, embed_channels))
+        self.value = nn.Sequential(nn.LayerNorm(embed_channels), Linear(embed_channels, embed_channels))
         self.proj = Linear(embed_channels, text_channels)
 
-        self.image_pools = nn.ModuleList(
-            [nn.AdaptiveMaxPool2d((pool_size, pool_size)) for _ in range(num_feats)]
-        )
+        self.image_pools = nn.ModuleList([nn.AdaptiveMaxPool2d((pool_size, pool_size)) for _ in range(num_feats)])
 
     def forward(self, text_features, image_features):
         B = image_features[0].shape[0]
@@ -518,9 +501,7 @@ class ImagePoolingAttentionModule(nn.Module):
         num_patches = self.pool_size**2
         mlvl_image_features = [
             pool(proj(x)).view(B, -1, num_patches)
-            for (x, proj, pool) in zip(
-                image_features, self.projections, self.image_pools
-            )
+            for (x, proj, pool) in zip(image_features, self.projections, self.image_pools, strict=False)
         ]
         mlvl_image_features = torch.cat(mlvl_image_features, dim=-1).transpose(1, 2)
         q = self.query(text_features)
@@ -565,7 +546,7 @@ class VanillaSigmoidBlock(BaseModule):
         use_depthwise: bool = False,
         with_scale: bool = False,
         conv_cfg: OptConfigType = None,
-        norm_cfg: ConfigType = dict(type="BN", momentum=0.03, eps=0.001),
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.03, "eps": 0.001},  # noqa: B006 - Keeps the upstream default object and signature.
         init_cfg: OptMultiConfig = None,
     ) -> None:
         super().__init__(init_cfg=init_cfg)
@@ -612,8 +593,8 @@ class EfficientCSPLayerWithTwoConv(CSPLayerWithTwoConv):
         with_scale: bool = False,
         add_identity: bool = True,  # shortcut
         conv_cfg: OptConfigType = None,
-        norm_cfg: ConfigType = dict(type="BN", momentum=0.03, eps=0.001),
-        act_cfg: ConfigType = dict(type="SiLU", inplace=True),
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.03, "eps": 0.001},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "SiLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
         init_cfg: OptMultiConfig = None,
     ) -> None:
         super().__init__(

@@ -32,7 +32,7 @@ class BerniniRendererConfig(PretrainedConfig):
 
     def __init__(
         self,
-        wan22_base: str = None,
+        wan22_base: str | None = None,
         skip_transformer_1: bool = False,
         skip_transformer_2: bool = False,
         switch_dit_boundary: float = 0.875,
@@ -85,12 +85,9 @@ class BerniniRendererModel(PreTrainedModel):
         seq_lens = attention_mask.gt(0).sum(dim=1).long()
         with torch.no_grad():
             prompt_embeds = self.t5_text_encoder(input_ids, attention_mask).last_hidden_state
-        prompt_embeds = [u[: min(v, self.max_sequence_length)] for u, v in zip(prompt_embeds, seq_lens)]
+        prompt_embeds = [u[: min(v, self.max_sequence_length)] for u, v in zip(prompt_embeds, seq_lens, strict=False)]
         prompt_embeds = torch.stack(
-            [
-                torch.cat([u, u.new_zeros(self.max_sequence_length - u.size(0), u.size(1))])
-                for u in prompt_embeds
-            ],
+            [torch.cat([u, u.new_zeros(self.max_sequence_length - u.size(0), u.size(1))]) for u in prompt_embeds],
             dim=0,
         )
         return prompt_embeds
@@ -124,9 +121,7 @@ class BerniniRendererModel(PreTrainedModel):
         self.t5_text_encoder = self.t5_text_encoder.to(device)
         prompt_embeds = self.encode_prompt(input_ids, attention_mask)
         uncond_prompt_embeds = (
-            self.encode_prompt(uncond_input_ids, uncond_attention_mask)
-            if uncond_input_ids is not None
-            else None
+            self.encode_prompt(uncond_input_ids, uncond_attention_mask) if uncond_input_ids is not None else None
         )
         self.t5_text_encoder = self.t5_text_encoder.to("cpu")
         torch.cuda.empty_cache()

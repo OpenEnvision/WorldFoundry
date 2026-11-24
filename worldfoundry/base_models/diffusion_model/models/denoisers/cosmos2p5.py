@@ -7,6 +7,7 @@ sees the vendor checkpoint layout.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Mapping
 from dataclasses import replace
 
@@ -16,6 +17,8 @@ from ...components import BuildPurpose, ComponentBuildContext
 from ...contracts import DenoiserInput, DenoiserOutput
 from ...loaders import ModuleLoadSpec, NativeModuleLoader
 from ..networks.cosmos2p5.model import Cosmos25Transfer3DModel, Cosmos25Transformer3DModel
+from .cosmos2p5_parallel import validate_cosmos_parallel_policy
+from .graph_wrapped import GraphWrappedDenoiserMixin, resolve_cuda_graph_option
 
 _KEY_REPLACEMENTS = {
     "adaln_modulation_self_attn.1": "norm1.linear_1",
@@ -97,11 +100,16 @@ COSMOS25_TRANSFER_2B_CONFIG = {
 }
 
 
-class Cosmos25Denoiser:
+class Cosmos25Denoiser(GraphWrappedDenoiserMixin):
     """Predict 2.5 DiT adapter that returns a velocity-style ``DenoiserOutput``."""
 
-    def __init__(self, model: Cosmos25Transformer3DModel) -> None:
+    def __init__(self, model: Cosmos25Transformer3DModel, *, enable_cuda_graph: bool = False) -> None:
         self.model = model
+        self._init_graph_runner(
+            model,
+            enabled=enable_cuda_graph,
+            extra_key=f"cosmos25:{type(model).__module__}.{type(model).__qualname__}",
+        )
 
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
         values = model_input.conditioning
@@ -134,7 +142,7 @@ class Cosmos25Denoiser:
             indicator = condition_indicator[:, 0, :, 0, 0]
             timestep = indicator * (conditional_timestep / 1000.0) + (1 - indicator) * timestep
         padding_mask = values.get("padding_mask")
-        prediction = self.model(
+        prediction = self._run_network(
             model_latents.to(model_dtype),
             timestep.to(model_dtype),
             context.to(model_dtype),
@@ -200,7 +208,6 @@ def _build(context: ComponentBuildContext, config: Mapping[str, object]) -> Cosm
     from worldfoundry.core.distributed.model_parallel.inference_parallel import (
         InferenceParallelContext,
         build_inference_parallel_context,
-        validate_inference_parallel_policy,
         validate_parallel_degrees,
     )
     from worldfoundry.core.vram import AutoWrappedLinear, AutoWrappedModule
@@ -213,14 +220,16 @@ def _build(context: ComponentBuildContext, config: Mapping[str, object]) -> Cosm
     owns_context = False
     load_policy = context.policy
     if tp * cp > 1:
-        validate_inference_parallel_policy(context.policy)
+        validate_cosmos_parallel_policy(context.policy)
         if context.purpose is not BuildPurpose.INFERENCE:
             raise ValueError("Cosmos model parallelism supports inference builds only")
         if config["num_attention_heads"] % tp:
             raise ValueError("tensor_parallel must evenly divide Cosmos2.5 attention heads")
         if parallel is None:
             parallel = build_inference_parallel_context(
-                tensor_parallel=tp, context_parallel=cp, device=context.policy.device,
+                tensor_parallel=tp,
+                context_parallel=cp,
+                device=context.policy.device,
             )
             owns_context = True
         if not isinstance(parallel, InferenceParallelContext):
@@ -233,7 +242,9 @@ def _build(context: ComponentBuildContext, config: Mapping[str, object]) -> Cosm
 
     try:
         if parallel is not None:
-            parallel.agree(("cosmos25-load", dict(config), str(context.policy.dtype), str(context.require_checkpoint())))
+            parallel.agree(
+                ("cosmos25-load", dict(config), str(context.policy.dtype), str(context.require_checkpoint()))
+            )
         model = NativeModuleLoader().load(
             ModuleLoadSpec(
                 module_class=Cosmos25Transformer3DModel,
@@ -245,6 +256,7 @@ def _build(context: ComponentBuildContext, config: Mapping[str, object]) -> Cosm
                     torch.nn.RMSNorm: AutoWrappedModule,
                 },
                 layer_container="transformer_blocks",
+                compile_regions=("transformer_blocks",),
             ),
             context.require_checkpoint("weights"),
             load_policy,
@@ -255,12 +267,10 @@ def _build(context: ComponentBuildContext, config: Mapping[str, object]) -> Cosm
             model.parallelize(parallel).to(device=context.policy.device)
     except BaseException:
         if owns_context:
-            try:
+            with contextlib.suppress(Exception):
                 parallel.close()
-            except Exception:
-                pass
         raise
-    return Cosmos25Denoiser(model)
+    return Cosmos25Denoiser(model, enable_cuda_graph=resolve_cuda_graph_option(context) if parallel is None else False)
 
 
 def build_cosmos25_2b_denoiser(context: ComponentBuildContext) -> Cosmos25Denoiser:
@@ -276,7 +286,8 @@ def build_cosmos25_transfer_2b_denoiser(context: ComponentBuildContext) -> Cosmo
     from worldfoundry.core.vram import AutoWrappedLinear, AutoWrappedModule
 
     tp, cp = validate_parallel_degrees(
-        context.component_options.get("tensor_parallel", 1), context.component_options.get("context_parallel", 1),
+        context.component_options.get("tensor_parallel", 1),
+        context.component_options.get("context_parallel", 1),
     )
     if tp * cp > 1 or context.component_options.get("parallel_context") is not None:
         raise ValueError("multi-rank Cosmos Transfer inference is not supported")

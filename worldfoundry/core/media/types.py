@@ -7,10 +7,11 @@ opening the file. Not a codec — see ``video.py`` / ``audio.py``.
 from __future__ import annotations
 
 import mimetypes
+from collections.abc import Mapping
 from enum import Enum
 from pathlib import Path
-from typing import Mapping
-from urllib.parse import unquote, urlparse
+
+from worldfoundry.core.io.filesystem.storage import suffix_for_uri
 
 # ──────────────────────────────────────────────────────────────────────────
 # Suffix tables — classify without opening the file; not a codec
@@ -59,23 +60,6 @@ MIME_TYPES_BY_SUFFIX: Mapping[str, str] = {
     ".safetensors": "application/octet-stream",
     ".webp": "image/webp",
 }
-
-
-def suffix_for_uri(value: str | Path) -> str:
-    """Return the lower-case file suffix for local paths and URL-like strings."""
-
-    text = str(value).strip()
-    if not text:
-        return ""
-    parsed = urlparse(text)
-    path_text = unquote(parsed.path) if parsed.scheme else text
-    name = Path(path_text).name
-    suffixes = Path(name).suffixes
-    if not suffixes:
-        return ""
-    if len(suffixes) >= 2 and suffixes[-2].casefold() == ".tar":
-        return ".tar" + suffixes[-1].casefold()
-    return suffixes[-1].casefold()
 
 
 def infer_media_kind(value: str | Path) -> MediaKind:
@@ -133,5 +117,4 @@ __all__ = [
     "guess_mime_type",
     "infer_media_kind",
     "is_media_path",
-    "suffix_for_uri",
 ]

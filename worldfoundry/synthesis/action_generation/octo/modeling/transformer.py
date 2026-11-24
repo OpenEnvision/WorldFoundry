@@ -1,12 +1,12 @@
 # adapted from https://github.com/google-research/vision_transformer/blob/main/vit_jax/models_vit.py
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 
-from .base import TokenGroup
 from ..types import Dtype, PRNGKey, Shape, Union
+from .base import TokenGroup
 
 
 class AddPositionEmbs(nn.Module):
@@ -29,9 +29,7 @@ class AddPositionEmbs(nn.Module):
           Output tensor with shape `(bs, timesteps, in_dim)`.
         """
         # inputs.shape is (batch_size, seq_len, emb_dim).
-        assert inputs.ndim == 3, (
-            "Number of dimensions should be 3," " but it is: %d" % inputs.ndim
-        )
+        assert inputs.ndim == 3, "Number of dimensions should be 3, but it is: %d" % inputs.ndim  # noqa: UP031 - Keeps printf conversions that depend on argument types.
         pos_emb_shape = (1, inputs.shape[1], inputs.shape[2])
         pe = self.param("pos_embedding", self.posemb_init, pos_emb_shape)
         return inputs + pe
@@ -42,14 +40,10 @@ class MlpBlock(nn.Module):
 
     mlp_dim: int
     dtype: Dtype = jnp.float32
-    out_dim: Optional[int] = None
+    out_dim: int | None = None
     dropout_rate: float = 0.1
-    kernel_init: Callable[
-        [PRNGKey, Shape, Dtype], jax.Array
-    ] = nn.initializers.xavier_uniform()
-    bias_init: Callable[[PRNGKey, Shape, Dtype], jax.Array] = nn.initializers.normal(
-        stddev=1e-6
-    )
+    kernel_init: Callable[[PRNGKey, Shape, Dtype], jax.Array] = nn.initializers.xavier_uniform()
+    bias_init: Callable[[PRNGKey, Shape, Dtype], jax.Array] = nn.initializers.normal(stddev=1e-6)
 
     @nn.compact
     def __call__(self, inputs, *, deterministic):
@@ -79,7 +73,7 @@ class MAPHead(nn.Module):
     From https://github.com/google-research/big_vision/blob/main/big_vision/models/vit.py
     """
 
-    mlp_dim: Optional[int] = None  # Defaults to 4x input dim
+    mlp_dim: int | None = None  # Defaults to 4x input dim
     num_heads: int = 8
     num_readouts: int = 1
 
@@ -90,7 +84,7 @@ class MAPHead(nn.Module):
         else:
             mask = None
 
-        *batch_dims, l, d = x.shape
+        *batch_dims, l, d = x.shape  # noqa: E741 - Ambiguous upstream name kept as written.
         x = x.reshape(-1, l, d)
         batch_size = x.shape[0]
 
@@ -104,20 +98,16 @@ class MAPHead(nn.Module):
 
         if mask is not None:
             mask = mask.reshape(-1, l)
-            mask = jnp.broadcast_to(
-                mask[:, None, None, :], (batch_size, 1, self.num_readouts, l)
-            )
+            mask = jnp.broadcast_to(mask[:, None, None, :], (batch_size, 1, self.num_readouts, l))
 
-        out = nn.MultiHeadDotProductAttention(
-            num_heads=self.num_heads, kernel_init=nn.initializers.xavier_uniform()
-        )(probe, x, mask=mask)
+        out = nn.MultiHeadDotProductAttention(num_heads=self.num_heads, kernel_init=nn.initializers.xavier_uniform())(
+            probe, x, mask=mask
+        )
 
         # TODO: dropout on head?
         y = nn.LayerNorm()(out)
 
-        out = out + MlpBlock(mlp_dim=nn.merge_param("mlp_dim", self.mlp_dim, 4 * d))(
-            y, deterministic=not train
-        )
+        out = out + MlpBlock(mlp_dim=nn.merge_param("mlp_dim", self.mlp_dim, 4 * d))(y, deterministic=not train)
         out = out.reshape(*batch_dims, self.num_readouts, d)
         return out
 
@@ -169,9 +159,9 @@ class Encoder1DBlock(nn.Module):
 
         # MLP block.
         y = nn.LayerNorm(dtype=self.dtype)(x)
-        y = MlpBlock(
-            mlp_dim=self.mlp_dim, dtype=self.dtype, dropout_rate=self.dropout_rate
-        )(y, deterministic=deterministic)
+        y = MlpBlock(mlp_dim=self.mlp_dim, dtype=self.dtype, dropout_rate=self.dropout_rate)(
+            y, deterministic=deterministic
+        )
 
         return x + y
 
@@ -253,48 +243,48 @@ def common_transformer_sizes(transformer_size: str) -> (int, dict):
     }
 
     TRANSFORMER_SIZES = {
-        "dummy": dict(
-            num_layers=1,
-            mlp_dim=256,
-            num_attention_heads=2,
-            dropout_rate=0.1,
-        ),
-        "vanilla": dict(
-            num_layers=4,
-            mlp_dim=1024,
-            num_attention_heads=8,
-            dropout_rate=0.1,
-        ),
-        "vit_t": dict(
-            num_layers=12,
-            mlp_dim=768,
-            num_attention_heads=3,
-            dropout_rate=0.0,
-        ),
-        "vit_s": dict(
-            num_layers=12,
-            mlp_dim=1536,
-            num_attention_heads=6,
-            dropout_rate=0.0,
-        ),
-        "vit_b": dict(
-            num_layers=12,
-            mlp_dim=3072,
-            num_attention_heads=12,
-            dropout_rate=0.0,
-        ),
-        "vit_l": dict(
-            num_layers=24,
-            mlp_dim=4096,
-            num_attention_heads=16,
-            dropout_rate=0.1,
-        ),
-        "vit_h": dict(
-            num_layers=32,
-            mlp_dim=5120,
-            num_attention_heads=16,
-            dropout_rate=0.1,
-        ),
+        "dummy": {
+            "num_layers": 1,
+            "mlp_dim": 256,
+            "num_attention_heads": 2,
+            "dropout_rate": 0.1,
+        },
+        "vanilla": {
+            "num_layers": 4,
+            "mlp_dim": 1024,
+            "num_attention_heads": 8,
+            "dropout_rate": 0.1,
+        },
+        "vit_t": {
+            "num_layers": 12,
+            "mlp_dim": 768,
+            "num_attention_heads": 3,
+            "dropout_rate": 0.0,
+        },
+        "vit_s": {
+            "num_layers": 12,
+            "mlp_dim": 1536,
+            "num_attention_heads": 6,
+            "dropout_rate": 0.0,
+        },
+        "vit_b": {
+            "num_layers": 12,
+            "mlp_dim": 3072,
+            "num_attention_heads": 12,
+            "dropout_rate": 0.0,
+        },
+        "vit_l": {
+            "num_layers": 24,
+            "mlp_dim": 4096,
+            "num_attention_heads": 16,
+            "dropout_rate": 0.1,
+        },
+        "vit_h": {
+            "num_layers": 32,
+            "mlp_dim": 5120,
+            "num_attention_heads": 16,
+            "dropout_rate": 0.1,
+        },
     }
 
     TOKEN_DIMS = {

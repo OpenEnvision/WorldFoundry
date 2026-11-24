@@ -1,22 +1,30 @@
 """PyTorch Action Expert(based on InternLM2) model, integrated to models from modeling_internlm2_go1.py."""
 
+import logging
 import math
 import warnings
-from typing import List, Optional, Tuple
+from typing import ClassVar
 
 import numpy as np
 import torch
+from einops import rearrange
 from torch import nn
 from transformers import PreTrainedModel
 from transformers.modeling_outputs import BaseModelOutputWithPast
 
+from worldfoundry.base_models.llm_mllm_core.mllm.qwen.layers import QwenMLP, repeat_kv
+from worldfoundry.base_models.llm_mllm_core.mllm.qwen.layers import get_unpad_data as _get_unpad_data
 from worldfoundry.core.attention import scaled_dot_product_attention
-
-from .modeling_internlm2 import InternLM2MLP, InternLM2RMSNorm
+from worldfoundry.core.attention.rotary.rope import rotate_half
 
 from .configuration_action_expert import ActionExpertConfig
-
 from .flash_attn_utils import load_flash_attn
+from .modeling_internlm2 import (
+    InternLM2DynamicNTKScalingRotaryEmbedding,
+    InternLM2LinearScalingRotaryEmbedding,
+    InternLM2RMSNorm,
+    InternLM2RotaryEmbedding,
+)
 
 flash_attn_func, flash_attn_varlen_func = None, None
 pad_input, index_first_axis, unpad_input = None, None, None
@@ -28,18 +36,6 @@ if has_flash_attn:
     pad_input = _flash_attn_symbols["pad_input"]
     index_first_axis = _flash_attn_symbols["index_first_axis"]
     unpad_input = _flash_attn_symbols["unpad_input"]
-import logging
-
-from .modeling_internlm2 import (
-    InternLM2DynamicNTKScalingRotaryEmbedding,
-    InternLM2LinearScalingRotaryEmbedding,
-    InternLM2RotaryEmbedding,
-    _get_unpad_data,
-    rearrange,
-    repeat_kv,
-    rotate_half,
-)
-
 # warnings.filterwarnings("ignore")
 logger = logging.getLogger(__name__)
 
@@ -127,19 +123,20 @@ class ActioinExpertAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        vlm_key_values: Tuple[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        position_ids_k: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        vlm_key_values: tuple[torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        position_ids_k: torch.LongTensor | None = None,
+        past_key_value: tuple[torch.Tensor] | None = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         if "padding_mask" in kwargs:
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. "
-                "Please make sure use `attention_mask` instead.`"
+                "Please make sure use `attention_mask` instead.`",
+                stacklevel=1,
             )
 
         bsz, q_len, _ = hidden_states.size()
@@ -186,11 +183,10 @@ class ActioinExpertAttention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
+        if attention_mask is not None and attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+            raise ValueError(
+                f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+            )
         if output_attentions:
             attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
             if attention_mask is not None:
@@ -233,19 +229,20 @@ class ActioinExpertAttentionFlashAttention2(ActioinExpertAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        vlm_key_values: Tuple[torch.Tensor],
-        attention_mask: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        vlm_key_values: tuple[torch.Tensor],
+        attention_mask: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_value: tuple[torch.Tensor] | None = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         # InternLM2FlashAttention2 attention does not support output_attentions
         if "padding_mask" in kwargs:
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. "
-                "Please make sure use `attention_mask` instead.`"
+                "Please make sure use `attention_mask` instead.`",
+                stacklevel=1,
             )
 
             # overwrite attention_mask with padding_mask
@@ -414,22 +411,22 @@ class ActionExpertDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.attention = ACTIONEXPERT_ATTENTION_CLASSES[config.attn_implementation](config=config)
 
-        self.feed_forward = InternLM2MLP(config)
+        self.feed_forward = QwenMLP(config)
         self.attention_norm = InternLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.ffn_norm = InternLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        vlm_key_values: Tuple[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        position_ids_k: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
+        vlm_key_values: tuple[torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        position_ids_k: torch.LongTensor | None = None,
+        past_key_value: tuple[torch.Tensor] | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = False,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -448,7 +445,8 @@ class ActionExpertDecoderLayer(nn.Module):
         if "padding_mask" in kwargs:
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. "
-                "Please make sure use `attention_mask` instead.`"
+                "Please make sure use `attention_mask` instead.`",
+                stacklevel=1,
             )
 
         residual = hidden_states
@@ -504,7 +502,7 @@ class ActionExpertPretrainedModel(PreTrainedModel):
     config_class = ActionExpertConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ActionExpertDecoderLayer"]
+    _no_split_modules: ClassVar[list] = ["ActionExpertDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
 
@@ -619,14 +617,14 @@ class ActionExpertModel(ActionExpertPretrainedModel):
         state_action_traj: torch.FloatTensor,
         # vlm related inputs
         attention_mask: torch.Tensor = None,
-        vlm_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        vlm_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
+        position_ids: torch.LongTensor | None = None,
         # output related args
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

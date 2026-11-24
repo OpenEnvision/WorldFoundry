@@ -65,9 +65,7 @@ def remap_checkpoint_keys(state_dict: dict[str, Tensor], mapping: dict[str, str]
                 target = re.sub(old_key, new_key, k)
                 break
         if target in new_state_dict:
-            raise ValueError(
-                f"Checkpoint key remap collision at {target!r}: {origins[target]!r} and {k!r}"
-            )
+            raise ValueError(f"Checkpoint key remap collision at {target!r}: {origins[target]!r} and {k!r}")
         new_state_dict[target] = v
         origins[target] = k
     return new_state_dict
@@ -81,11 +79,7 @@ def remap_checkpoint_keys(state_dict: dict[str, Tensor], mapping: dict[str, str]
 def submodule_state_dict(state_dict: Mapping[str, Tensor], prefix: str) -> OrderedDict[str, Tensor]:
     """Select checkpoint tensors below a prefix and remove that prefix."""
 
-    return OrderedDict(
-        (key[len(prefix) :], value)
-        for key, value in state_dict.items()
-        if key.startswith(prefix)
-    )
+    return OrderedDict((key[len(prefix) :], value) for key, value in state_dict.items() if key.startswith(prefix))
 
 
 __all__ = ["remap_checkpoint_keys", "submodule_state_dict"]

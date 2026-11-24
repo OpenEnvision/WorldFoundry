@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> components -> sparse_tracks -> __init__.py functionality."""
-
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -33,11 +31,6 @@ class SparseTracks(ABC):
     enabled: bool = True
 
     def __init__(self, n_views: int):
-        """Init.
-
-        Args:
-            n_views: The n views.
-        """
         self.observations = [[] for _ in range(n_views)]
 
     @abstractmethod
@@ -80,19 +73,6 @@ class SparseTracks(ABC):
         image_size: tuple[int, int],
         dense_disp_size: tuple[int, int],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Compute dense disp target weight.
-
-        Args:
-            source_view_inds: The source view inds.
-            source_frame_inds: The source frame inds.
-            target_view_inds: The target view inds.
-            target_frame_inds: The target frame inds.
-            image_size: The image size.
-            dense_disp_size: The dense disp size.
-
-        Returns:
-            The return value.
-        """
         n_terms = len(source_view_inds)
         disp_h, disp_w = dense_disp_size
         uv_factor = torch.tensor(
@@ -119,6 +99,7 @@ class SparseTracks(ABC):
                 source_frame_inds.cpu().numpy(),
                 target_view_inds.cpu().numpy(),
                 target_frame_inds.cpu().numpy(),
+                strict=False,
             )
         ):
             assert s_vidx == t_vidx, "Only same view tracking is supported"
@@ -156,32 +137,14 @@ class SparseTracks(ABC):
 
 
 class DummySparseTracks(SparseTracks):
-    """Dummy sparse tracks implementation."""
     enabled: bool = False
 
     def track_image(self, frame_data_list: list[VideoFrame]) -> None:
-        """Track image.
-
-        Args:
-            frame_data_list: The frame data list.
-
-        Returns:
-            The return value.
-        """
         for obs in self.observations:
             obs.append({})
 
 
 def build_sparse_tracks(config: DictConfig, n_views: int) -> SparseTracks:
-    """Build sparse tracks.
-
-    Args:
-        config: The config.
-        n_views: The n views.
-
-    Returns:
-        The return value.
-    """
     if config.name == "dummy":
         return DummySparseTracks(n_views)
 

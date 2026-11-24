@@ -47,7 +47,6 @@ class StreamToLogger:
         Flush method to comply with file-like object interface.
         This method is required but does nothing in this implementation.
         """
-        pass
 
 
 def seed_everything(seed: int = 42):
@@ -65,26 +64,6 @@ def seed_everything(seed: int = 42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     print(f"Seed set to: {seed}")
-
-
-def invalid_to_nans(arr, valid_mask, ndim=999):
-    """
-    Replace invalid values in an array with NaN values based on a validity mask.
-
-    Parameters:
-    - arr: Input array (typically a PyTorch tensor)
-    - valid_mask: Boolean mask indicating valid elements (True) and invalid elements (False)
-    - ndim: Maximum number of dimensions to keep; flattens dimensions if arr.ndim > ndim
-
-    Returns:
-    - Modified array with invalid values replaced by NaN
-    """
-    if valid_mask is not None:
-        arr = arr.clone()
-        arr[~valid_mask] = float("nan")
-    if arr.ndim > ndim:
-        arr = arr.flatten(-2 - (arr.ndim - ndim), -2)
-    return arr
 
 
 def invalid_to_zeros(arr, valid_mask, ndim=999):
@@ -106,9 +85,7 @@ def invalid_to_zeros(arr, valid_mask, ndim=999):
         arr[~valid_mask] = 0
         nnz = valid_mask.view(len(valid_mask), -1).sum(1)
     else:
-        nnz = (
-            arr[..., 0].numel() // len(arr) if len(arr) else 0
-        )  # Number of pixels per image
+        nnz = arr[..., 0].numel() // len(arr) if len(arr) else 0  # Number of pixels per image
     if arr.ndim > ndim:
         arr = arr.flatten(-2 - (arr.ndim - ndim), -2)
     return arr, nnz

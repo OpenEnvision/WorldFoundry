@@ -39,10 +39,7 @@ class _NaiveKVCache:
             return
 
         if chunk_index == self.previous_chunk:
-            overlaps_sink = (
-                self.sink_size > 0
-                and chunk_index * self.chunk_size < self.sink_size
-            )
+            overlaps_sink = self.sink_size > 0 and chunk_index * self.chunk_size < self.sink_size
             if self.k.shape[1] == self.total_size and not overlaps_sink:
                 if self.chunk_size <= self.window_size:
                     self.k[:, -self.chunk_size :] = k
@@ -63,12 +60,8 @@ class _NaiveKVCache:
 
         sink_k = self.k[:, : self.sink_size]
         sink_v = self.v[:, : self.sink_size]
-        window_k = torch.cat([self.k[:, self.sink_size :], k], dim=1)[
-            :, -self.window_size :
-        ]
-        window_v = torch.cat([self.v[:, self.sink_size :], v], dim=1)[
-            :, -self.window_size :
-        ]
+        window_k = torch.cat([self.k[:, self.sink_size :], k], dim=1)[:, -self.window_size :]
+        window_v = torch.cat([self.v[:, self.sink_size :], v], dim=1)[:, -self.window_size :]
         self.k = torch.cat([sink_k, window_k], dim=1)
         self.v = torch.cat([sink_v, window_v], dim=1)
         self.previous_chunk += 1

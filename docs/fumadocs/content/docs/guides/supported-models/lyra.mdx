@@ -5,44 +5,44 @@ modelId: "lyra"
 pageSource: authored
 ---
 
-Lyra is NVIDIA's generative world model family for exploration: from an image or video (Lyra-1) or from actions (Lyra-2) it produces an explorable world video. In this catalog both variants run through in-tree pipelines backed by vendored runtime adapters, the default runner targets Lyra-2, and runner status is Verified.
+Lyra is NVIDIA's generative world model family for exploration: from an image or video (Lyra-1) or from actions (Lyra-2) it produces an explorable world video. Validated with local assets: Lyra-1 runs the official static single-image SDG demo and Lyra-2 the official ZoomGS single-image forward-navigation demo. The default runner uses Lyra-2.
 
 <ModelPaperFigures modelId="lyra" locale="en" />
 
 Project page: [research.nvidia.com/labs/sil/projects/lyra2](https://research.nvidia.com/labs/sil/projects/lyra2/). Code: [nv-tlabs/lyra](https://github.com/nv-tlabs/lyra).
 
-The paper is [Paper](https://openreview.net/forum?id=tIVCfVnIHo). Project page: [research.nvidia.com/labs/sil/projects/lyra2](https://research.nvidia.com/labs/sil/projects/lyra2). Code: [nv-tlabs/lyra](https://github.com/nv-tlabs/lyra).
+The paper is on [OpenReview](https://openreview.net/forum?id=tIVCfVnIHo).
 
 <ModelCommandBuilder modelId="lyra" locale="en" />
 
 ## What it is for
 
-Use `lyra-1` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.
+`lyra-1` is a world generation model.
 
-The catalog records two generations: Lyra-1 for image-or-video-to-world-video and Lyra-2 for action-conditioned world video (paper on OpenReview; project page at NVIDIA Research). Runtime execution requires local Lyra checkpoints, text-encoder assets, DA3 (Depth Anything 3) assets, and CUDA dependencies; internals beyond the recorded structure are not stored in this repository.
+Lyra comes in two generations: Lyra-1 for image-or-video-to-world-video and Lyra-2 for action-conditioned world video (paper on OpenReview; project page at NVIDIA Research). Running either needs local Lyra checkpoints, text-encoder assets, DA3 (Depth Anything 3) assets, and CUDA dependencies.
 
-Catalog tasks include open generative 3D and 4D world models. Catalog aliases include `Project Lyra`, `Lyra 1.0`, and `Lyra 2.0`. Also recorded: `lyra-2`.
+Tasks: open generative 3D and 4D world models. Aliases: `Project Lyra`, `Lyra 1.0`, and `Lyra 2.0`. Other variants: `lyra-2`.
 
-Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Standard scoring for explorable generated worlds), [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Evaluates camera/viewpoint control quality during exploration).
+Suggested benchmarks: [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Standard scoring for explorable generated worlds), [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Evaluates camera/viewpoint control quality during exploration).
 
 ## Runtime contract
 
-Optional `image`, `prompt`, `mode`, `trajectory`, and `camera_rotation`; artifacts `generated_world`, `generated_3d_asset`, and `lyra-1.mp4`.
+Inputs `image` and `prompt` (bundled samples are used when omitted); options `mode`, `trajectory`, `camera-rotation`, `movement-distance`, `multi-trajectory`, `total-movement-distance-factor`, and 17 more; artifacts `generated_world`, `generated_3d_asset`, and `lyra-1.mp4`.
 
 CLI task profiles: `official-static-sdg` and `official-zoomgs`. WorldFoundry binds `LyraPipeline`.
 
-Start on `lyra-1`. The family registers 2 catalog variants (cards above): `lyra-1` (`image-or-video-to-world-video`) — Runner parity pending; `lyra-2` (`action-conditioned-world-video`) — Runner parity pending. Family status: **Verified**.
+Start with `lyra-1`. The family has 2 variants, selectable in the command builder above: `lyra-1` (`image-or-video-to-world-video`) — Verified; `lyra-2` (`action-conditioned-world-video`) — Verified. Family status: **Verified**.
 
-Recorded `official-zoomgs` defaults: fps=16, seed=1.
+Defaults for `official-zoomgs`: fps=16, seed=1.
 
-Pick the variant by input: lyra-1 when you start from an image or video, lyra-2 when you drive the world with actions. The default catalog runner resolves to Lyra-2.
+Pick the variant by input: lyra-1 when you start from an image or video, lyra-2 when you drive the world with actions. The default runner resolves to Lyra-2. Stage all required assets before submitting Studio jobs.
 
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run lyra-1 --pipeline.task-profile official-static-sdg` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Generate a world with `wf run lyra-1 --pipeline.task-profile official-static-sdg`. Switch tasks in the command builder above to change `--pipeline.task-profile`.
 
-Recorded weight repositories include `depth-anything/DA3NESTED-GIANT-LARGE-1.1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lyra-1`. Add `--download` to fetch missing public checkpoints.
+It runs in the dedicated environment `lyra` (Python 3.10, CUDA 12.4, torch==2.6.0).
 
-Status: **Verified**.
+Weights: `depth-anything/DA3NESTED-GIANT-LARGE-1.1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lyra-1`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="lyra" locale="en" />

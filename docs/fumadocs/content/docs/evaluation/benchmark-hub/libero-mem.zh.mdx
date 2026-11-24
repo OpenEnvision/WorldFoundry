@@ -1,27 +1,27 @@
 ---
 title: LIBERO-Mem
-description: "非马尔可夫 LIBERO 套件：10 个物体记忆任务（OM / OS / OR / OO）。WorldFoundry 导入官方 rollout——不跑模拟器。"
+description: "非马尔可夫 LIBERO 套件：10 个物体记忆任务（OM / OS / OR / OO）。WorldFoundry 导入官方 rollout 结果。"
 ---
 
 LIBERO-Mem（AAAI 2026）**不是** Spatial / Object / Goal / LIBERO-100 那四个终身学习套件。FPT Software AI Center（联合阿肯色、斯图加特、CMU、奥尔堡与利物浦）在 LIBERO / robosuite 栈上新建了 **10** 个桌面任务，使策略无法只靠当前帧成功。线索在**物体历史**里：动过什么、做了几次、什么顺序，或被什么挡住。四条官方记忆轴：
 
-- **物体运动 (OM)** — 在歧义场景里回忆上一次抓 / 放。
-- **物体序列 (OS)** — 统计重复抓放次数（3× / 5× / 7×）。
-- **物体关系 (OR)** — 在相同碗盘间交换或轮转。
-- **物体遮挡 (OO)** — 记住哪个篮子藏了哪个物体。
+- **物体运动（OM）**：在歧义场景里回忆上一次抓 / 放。
+- **物体序列（OS）**：统计重复抓放次数（3× / 5× / 7×）。
+- **物体关系（OR）**：在相同碗盘间交换或轮转。
+- **物体遮挡（OO）**：记住哪个篮子藏了哪个物体。
 
-每任务 **120** 条轨迹（100 训练 / 20 验证）、**200–700** 帧，带实例 ID、掩码与符号化子目标（`→`、`∨`）。官方计分报告**任务成功**与**子目标完成**。Embodied-SlotSSM 是作者的配套 VLA——模型卡片事实，不是 WorldFoundry 的榜单行。
+每个任务 **120** 条轨迹（100 训练 / 20 验证）、**200–700** 帧，带实例 ID、掩码与符号化子目标（`→`、`∨`）。官方计分报告**任务成功**与**子目标完成**。Embodied-SlotSSM 是作者的配套 VLA。
 
 论文：[Rethinking Progression of Memory State in Robotic Manipulation](https://arxiv.org/abs/2511.11478)。项目：[libero-mem.github.io](https://libero-mem.github.io/)。代码：[libero-mem/libero-mem](https://github.com/libero-mem/libero-mem)。
 
-WorldFoundry **只导入官方结果**。你在上游跑评测器，再经 `official-validation` 把 JSON/CSV 归一化进 scorecard。仓内不跑模拟器，也不带 Embodied-SlotSSM 权重。这与可接线闭环的[基础 LIBERO](/zh/docs/evaluation/benchmark-hub/libero) 不同。
+WorldFoundry **只导入官方结果**。你在上游跑评测器，再经 `official-validation` 把 JSON/CSV 归一化进 scorecard。WorldFoundry 不附带模拟器，也不带 Embodied-SlotSSM 权重。这与支持闭环执行的[基础 LIBERO](/zh/docs/evaluation/benchmark-hub/libero) 不同。
 
 <BenchmarkPageSections id="libero-mem" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id libero-mem \
   --mode official-validation \
   --official-results-path <official_results.json> \
@@ -29,6 +29,6 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-可选 `WORLDFOUNDRY_LIBERO_MEM_ROOT` 指向本地工具包 / 仓库根。省略 `--official-results-path` 时，默认导入路径是 `WORLDFOUNDRY_LIBERO_MEM_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/libero-mem.yaml`。输出：`scorecard.json`（主键 `success_rate`；导出含该字段时还有 `memory_success_rate`）、`raw_results.jsonl`、`evaluation/summary.json`。
+可选的 `WORLDFOUNDRY_LIBERO_MEM_ROOT` 指向本地工具包 / 仓库根。省略 `--official-results-path` 时，默认导入路径是 `WORLDFOUNDRY_LIBERO_MEM_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/libero-mem.yaml`。输出：`scorecard.json`（主键 `success_rate`；导出含该字段时还有 `memory_success_rate`）、`raw_results.jsonl`、`evaluation/summary.json`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

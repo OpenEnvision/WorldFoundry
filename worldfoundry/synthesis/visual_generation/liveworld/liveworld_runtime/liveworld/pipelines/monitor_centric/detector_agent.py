@@ -3,10 +3,10 @@
 DetectorAgent detects dynamic entities from frames using Qwen3-VL,
 then segments them with SAM3 and produces cropped images.
 """
+
 from __future__ import annotations
 
 import tempfile
-from typing import List, Tuple
 from contextlib import contextmanager
 
 import cv2
@@ -15,7 +15,6 @@ import torch
 
 from worldfoundry.base_models.perception_core.general_perception.qwen3_vl_entity import (
     Qwen3VLEntityExtractor,
-    parse_entities,
 )
 from worldfoundry.base_models.perception_core.segment.sam3.video_segmenter import (
     Sam3VideoSegmenter,
@@ -29,7 +28,7 @@ def _unwrap_torch_module(obj):
     if obj is None:
         return None
     if hasattr(obj, "model"):
-        return getattr(obj, "model")
+        return obj.model
     return obj
 
 
@@ -61,7 +60,7 @@ def _crop_entity_on_black_square(
     frame: np.ndarray,
     mask: np.ndarray,
     padding: int = 10,
-) -> Tuple[np.ndarray, Tuple[int, int, int, int], np.ndarray]:
+) -> tuple[np.ndarray, tuple[int, int, int, int], np.ndarray]:
     """Crop entity from frame using mask, place on black square background.
 
     Args:
@@ -76,10 +75,7 @@ def _crop_entity_on_black_square(
         cropped_mask: Cropped SAM mask aligned with cropped_image, uint8 {0,1}.
     """
     # Find bounding box from mask.
-    if mask.dtype == bool:
-        mask_uint8 = mask.astype(np.uint8) * 255
-    else:
-        mask_uint8 = mask
+    mask_uint8 = mask.astype(np.uint8) * 255 if mask.dtype == bool else mask
 
     coords = cv2.findNonZero(mask_uint8)
     if coords is None:
@@ -115,9 +111,9 @@ def _crop_entity_on_black_square(
 
     # Apply SAM mask: only copy foreground pixels, leave rest black.
     cropped_mask_bool = cropped_mask > 0
-    region = black_square[offset_y:offset_y + crop_h, offset_x:offset_x + crop_w]
+    region = black_square[offset_y : offset_y + crop_h, offset_x : offset_x + crop_w]
     region[cropped_mask_bool] = cropped_frame[cropped_mask_bool]
-    region_mask = black_square_mask[offset_y:offset_y + crop_h, offset_x:offset_x + crop_w]
+    region_mask = black_square_mask[offset_y : offset_y + crop_h, offset_x : offset_x + crop_w]
     region_mask[cropped_mask_bool] = 1
 
     return black_square, (x1, y1, x2, y2), black_square_mask
@@ -188,8 +184,8 @@ class DetectorAgent:
         frame_path: str,
         frame: np.ndarray,
         frame_index: int = 0,
-        preset_entity_names: List[str] | None = None,
-    ) -> List[EntityDetectionResult]:
+        preset_entity_names: list[str] | None = None,
+    ) -> list[EntityDetectionResult]:
         """Detect and segment entities from a frame.
 
         Args:
@@ -206,7 +202,7 @@ class DetectorAgent:
         # If frame_path is empty, save frame to a temporary file
         temp_file = None
         if not frame_path:
-            temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
             temp_path = temp_file.name
             temp_file.close()
             # Convert RGB to BGR for cv2.imwrite
@@ -256,13 +252,15 @@ class DetectorAgent:
                         frame,
                         inst_mask,
                     )
-                    results.append(EntityDetectionResult(
-                        name=entity_name.strip().lower(),
-                        mask=inst_mask,
-                        cropped_image=cropped_image,
-                        bbox=bbox,
-                        cropped_mask=cropped_mask,
-                    ))
+                    results.append(
+                        EntityDetectionResult(
+                            name=entity_name.strip().lower(),
+                            mask=inst_mask,
+                            cropped_image=cropped_image,
+                            bbox=bbox,
+                            cropped_mask=cropped_mask,
+                        )
+                    )
 
         return results
         # finally:

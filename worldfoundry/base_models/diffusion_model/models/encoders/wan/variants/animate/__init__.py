@@ -10,4 +10,3 @@ Outputs feed Wan Animate control channels, not the UMT5
 
 This is a control preprocessor family, not a text encoder.
 """
-

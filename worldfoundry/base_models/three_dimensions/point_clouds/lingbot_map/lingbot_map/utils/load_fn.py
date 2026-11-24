@@ -4,15 +4,13 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> lingbot_map -> lingbot_map -> utils -> load_fn.py functionality."""
-
 from concurrent.futures import ThreadPoolExecutor
 
+import numpy as np
 import torch
 from PIL import Image, ImageOps
 from torchvision import transforms as TF
 from tqdm.auto import tqdm
-import numpy as np
 
 
 def load_and_preprocess_images_square(image_path_list, target_size=1024):
@@ -95,15 +93,16 @@ def load_and_preprocess_images_square(image_path_list, target_size=1024):
     original_coords = torch.from_numpy(np.array(original_coords)).float()
 
     # Add additional dimension if single image to ensure correct shape
-    if len(image_path_list) == 1:
-        if images.dim() == 3:
-            images = images.unsqueeze(0)
-            original_coords = original_coords.unsqueeze(0)
+    if len(image_path_list) == 1 and images.dim() == 3:
+        images = images.unsqueeze(0)
+        original_coords = original_coords.unsqueeze(0)
 
     return images, original_coords
 
 
-def load_and_preprocess_images(image_path_list, fx=None, fy=None, cx=None, cy=None, mode="crop", image_size=512, patch_size=16):
+def load_and_preprocess_images(
+    image_path_list, fx=None, fy=None, cx=None, cy=None, mode="crop", image_size=512, patch_size=16
+):
     """
     A quick start function to load and preprocess images for model input.
     This assumes the images should have the same shape for easier batching, but our model can also work well with different shapes.
@@ -134,8 +133,6 @@ def load_and_preprocess_images(image_path_list, fx=None, fy=None, cx=None, cy=No
     if len(image_path_list) == 0:
         raise ValueError("At least 1 image is required")
 
-        
-
     # Validate mode
     if mode not in ["crop", "pad"]:
         raise ValueError("Mode must be either 'crop' or 'pad'")
@@ -144,11 +141,6 @@ def load_and_preprocess_images(image_path_list, fx=None, fy=None, cx=None, cy=No
     to_tensor = TF.ToTensor()
 
     def _load_one(idx_path):
-        """Helper function to load one.
-
-        Args:
-            idx_path: The idx path.
-        """
         i, image_path = idx_path
         img = Image.open(image_path)
         # Honor EXIF orientation (Sony / iPhone portrait shots store landscape
@@ -218,7 +210,7 @@ def load_and_preprocess_images(image_path_list, fx=None, fy=None, cx=None, cy=No
                 fx[i], fy[i], cx[i], cy[i] = calib
 
     images = results
-    shapes = set((img.shape[1], img.shape[2]) for img in images)
+    shapes = {(img.shape[1], img.shape[2]) for img in images}
 
     # Check if we have different shapes
     # In theory our model can also work well with different shapes
@@ -249,7 +241,7 @@ def load_and_preprocess_images(image_path_list, fx=None, fy=None, cx=None, cy=No
     images = torch.stack(images)  # concatenate images
 
     # Ensure correct shape when single image
-    if len(image_path_list) == 1:
+    if len(image_path_list) == 1:  # noqa: SIM102 - Branches carry per-case comments.
         # Verify shape is (1, C, H, W)
         if images.dim() == 3:
             images = images.unsqueeze(0)

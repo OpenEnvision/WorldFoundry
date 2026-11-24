@@ -32,12 +32,12 @@ import imageio
 
 logger = logging.getLogger(__name__)
 
-import cv2
-import numpy as np
-import torch
-import torch.distributed as dist
-from torch.distributed.device_mesh import init_device_mesh
-import tyro
+import cv2  # noqa: E402 - Follows the logging setup.
+import numpy as np  # noqa: E402 - Follows the logging setup.
+import torch  # noqa: E402 - Follows the logging setup.
+import torch.distributed as dist  # noqa: E402 - Follows the logging setup.
+import tyro  # noqa: E402 - Follows the logging setup.
+from torch.distributed.device_mesh import init_device_mesh  # noqa: E402 - Follows the logging setup.
 
 # Avoid FailOnRecompileLimitHit when serving: the flow scheduler's torch.compile'd
 # multistep_uni_p_bh_update recompiles under varying shapes/inputs (e.g. batch size,
@@ -51,14 +51,16 @@ if hasattr(_dynamo, "accumulated_cache_size_limit"):
     _dynamo.accumulated_cache_size_limit = 1000
 if hasattr(_dynamo, "accumulated_recompile_limit"):
     _dynamo.accumulated_recompile_limit = 2000
-from tianshou.data import Batch
+from tianshou.data import Batch  # noqa: E402 - Follows the conditional setup block.
 
-from .protocol import BasePolicy
+from .protocol import BasePolicy  # noqa: E402 - Follows the conditional setup block.
+from .websocket import PolicyServerConfig, WebsocketPolicyServer  # noqa: E402 - Follows the conditional setup block.
 
-from .websocket import WebsocketPolicyServer, PolicyServerConfig
-from .modeling.policy import GrootSimPolicy
-from .preprocessing import EmbodimentTag, ComposedModalityTransform
+# isort: split
+from .modeling.policy import GrootSimPolicy  # noqa: E402 - Follows the conditional setup block.
 
+# isort: split
+from .preprocessing import ComposedModalityTransform, EmbodimentTag  # noqa: E402 - Follows the conditional setup block.
 
 # DreamZero Wan 5B is trained with 160×320 (droid_relative_wan22). Fallback if we cannot read from policy.
 DEFAULT_IMAGE_HEIGHT = 160
@@ -150,9 +152,7 @@ class DreamZeroWan225BPolicy(BasePolicy):
         self._policy = groot_policy
         self._image_height = image_height
         self._image_width = image_width
-        self._embodiment_tag = (
-            embodiment_tag if embodiment_tag in VIDEO_KEY_MAPPING else "oxe_droid"
-        )
+        self._embodiment_tag = embodiment_tag if embodiment_tag in VIDEO_KEY_MAPPING else "oxe_droid"
         video_keys = list(VIDEO_KEY_MAPPING[self._embodiment_tag].values())
         self._frame_buffers = {k: [] for k in video_keys}
         self._is_first_call = True
@@ -172,9 +172,7 @@ class DreamZeroWan225BPolicy(BasePolicy):
             if roboarena_key in obs:
                 data = obs[roboarena_key]
                 if isinstance(data, np.ndarray):
-                    data = _resize_frames_to_resolution(
-                        data, self._image_height, self._image_width
-                    )
+                    data = _resize_frames_to_resolution(data, self._image_height, self._image_width)
                     if data.ndim == 4:
                         self._frame_buffers[model_key].extend(list(data))
                     else:
@@ -208,7 +206,7 @@ class DreamZeroWan225BPolicy(BasePolicy):
                 gripper_pos = gripper_pos.reshape(1, -1)
             converted[state_gripper_key] = gripper_pos.astype(np.float64)
         else:
-            converted[state_gripper_key] = np.zeros((1,1), dtype=np.float64)
+            converted[state_gripper_key] = np.zeros((1, 1), dtype=np.float64)
 
         text_prompt = obs.get("prompt", "")
         logger.info("Text prompt: %s", text_prompt)
@@ -290,7 +288,7 @@ class DreamZeroWan225BPolicy(BasePolicy):
 
             os.makedirs(self._video_output_dir, exist_ok=True)
             timestamp = datetime.datetime.now().strftime("%m_%d_%H_%M_%S")
-            n_latent_frames = latents.shape[2]
+            _n_latent_frames = latents.shape[2]
             existing = [f for f in os.listdir(self._video_output_dir) if f.endswith(".mp4")]
             safe_prompt = self._current_prompt.replace(" ", "_")
             safe_prompt = "".join(c for c in safe_prompt if c.isalnum() or c in "_-.")

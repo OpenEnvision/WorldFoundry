@@ -1,4 +1,3 @@
-# ruff: noqa
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -233,9 +232,7 @@ class SmolVLMWithExpertModel(nn.Module):
 
         attention_interface = self.get_attention_interface()
 
-        att_output = attention_interface(
-            attention_mask_, batch_size, head_dim, query_states, key_states, value_states
-        )
+        att_output = attention_interface(attention_mask_, batch_size, head_dim, query_states, key_states, value_states)
         return [att_output], past_key_values
 
     def forward_cross_attn_layer(
@@ -372,7 +369,7 @@ class SmolVLMWithExpertModel(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: list[torch.FloatTensor] = None,
+        inputs_embeds: list[torch.FloatTensor] | None = None,
         use_cache: bool | None = None,
         fill_kv_cache: bool | None = None,
     ):
@@ -424,9 +421,7 @@ class SmolVLMWithExpertModel(nn.Module):
             start = 0
             for i, hidden_states in enumerate(inputs_embeds):
                 layer = model_layers[i][layer_idx]
-                att_output = (
-                    att_outputs[i] if i < len(att_outputs) else att_outputs[0]
-                )  # in case of self_attn
+                att_output = att_outputs[i] if i < len(att_outputs) else att_outputs[0]  # in case of self_attn
                 if hidden_states is not None:
                     if layer is None:
                         outputs_embeds.append(hidden_states)
@@ -468,9 +463,7 @@ class SmolVLMWithExpertModel(nn.Module):
         attention_interface = self.eager_attention_forward
         return attention_interface
 
-    def eager_attention_forward(
-        self, attention_mask, batch_size, head_dim, query_states, key_states, value_states
-    ):
+    def eager_attention_forward(self, attention_mask, batch_size, head_dim, query_states, key_states, value_states):
         num_att_heads = self.num_attention_heads
         num_key_value_heads = self.num_key_value_heads
         num_key_value_groups = num_att_heads // num_key_value_heads

@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> sh_helpers.py functionality."""
-
 from math import isqrt
+
 import torch
 from einops import einsum
 
@@ -29,14 +28,6 @@ except ImportError:
 
 
 def project_to_so3_strict(M: torch.Tensor) -> torch.Tensor:
-    """Project to so3 strict.
-
-    Args:
-        M: The m.
-
-    Returns:
-        The return value.
-    """
     if M.shape[-2:] != (3, 3):
         raise ValueError("Input must be a batch of 3x3 matrices (i.e., shape [..., 3, 3]).")
 
@@ -69,20 +60,9 @@ def rotate_sh(
     sh_coefficients: torch.Tensor,  # "*#batch n"
     rotations: torch.Tensor,  # "*#batch 3 3"
 ) -> torch.Tensor:  # "*batch n"
-    """Rotate sh.
-
-    Args:
-        sh_coefficients: The sh coefficients.
-        rotations: The rotations.
-
-    Returns:
-        The return value.
-    """
     # https://github.com/graphdeco-inria/gaussian-splatting/issues/176#issuecomment-2452412653
     if matrix_to_angles is None or wigner_D is None:
-        raise ImportError(
-            "DepthAnything3 Gaussian SH rotation requires the optional dependency `e3nn`."
-        )
+        raise ImportError("DepthAnything3 Gaussian SH rotation requires the optional dependency `e3nn`.")
     device = sh_coefficients.device
     dtype = sh_coefficients.dtype
 

@@ -14,10 +14,11 @@ import logging
 import os
 import shutil
 import tempfile
+from collections.abc import Generator, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,7 @@ def _validated_relative_paths(
         value = str(raw_path)
         relative = Path(value)
         if relative.is_absolute() or ".." in relative.parts:
-            raise ValueError(
-                f"{parameter} entries must be relative paths without '..': {value!r}"
-            )
+            raise ValueError(f"{parameter} entries must be relative paths without '..': {value!r}")
         validated.append(value)
     return tuple(validated)
 
@@ -47,9 +46,7 @@ def _resolved_within(root: Path, candidate: Path, *, description: str) -> Path:
     try:
         resolved_candidate.relative_to(resolved_root)
     except ValueError as error:
-        raise ValueError(
-            f"{description} resolves outside {resolved_root}: {candidate}"
-        ) from error
+        raise ValueError(f"{description} resolves outside {resolved_root}: {candidate}") from error
     return resolved_candidate
 
 
@@ -62,7 +59,7 @@ def _resolved_relative(root: Path, relative: str, *, parameter: str) -> Path:
 
 
 @contextmanager
-def _publish_lock(cache_root: Path, target_name: str) -> Iterator[None]:
+def _publish_lock(cache_root: Path, target_name: str) -> Generator[None, None, None]:
     """Serialize the publish step across unrelated processes via ``flock``.
 
     Staging copies may run concurrently, but replacing the published target
@@ -89,9 +86,7 @@ def _enabled() -> bool:
         return False
     if raw in {"1", "true", "yes", "on"}:
         return True
-    raise ValueError(
-        "WORLDFOUNDRY_REALTIME_STAGE_CHECKPOINT must be a boolean value."
-    )
+    raise ValueError("WORLDFOUNDRY_REALTIME_STAGE_CHECKPOINT must be a boolean value.")
 
 
 def _selected_files(source: Path, include_paths: tuple[str, ...]) -> list[Path]:
@@ -146,12 +141,7 @@ def _copy_tree_parallel(
 
     files = _selected_files(source, include_paths)
     directories = sorted(
-        {
-            parent
-            for item in files
-            for parent in item.parents
-            if parent != source and source in parent.parents
-        },
+        {parent for item in files for parent in item.parents if parent != source and source in parent.parents},
         key=lambda item: len(item.parts),
     )
     target.mkdir(parents=True, exist_ok=True)
@@ -200,10 +190,7 @@ def _is_ready(target: Path, source: Path, required_paths: tuple[str, ...]) -> bo
         return False
     if payload.get("source") != str(source):
         return False
-    return all(
-        _resolved_relative(target, relative, parameter="required_paths").exists()
-        for relative in required_paths
-    )
+    return all(_resolved_relative(target, relative, parameter="required_paths").exists() for relative in required_paths)
 
 
 def _stage_rank_zero(
@@ -284,9 +271,7 @@ def stage_checkpoint_for_realtime(
     if not _enabled():
         return resolved
     required = _validated_relative_paths(required_paths, parameter="required_paths")
-    included = tuple(
-        sorted(_validated_relative_paths(include_paths, parameter="include_paths"))
-    )
+    included = tuple(sorted(_validated_relative_paths(include_paths, parameter="include_paths")))
     for relative in (*required, *included):
         parameter = "required_paths" if relative in required else "include_paths"
         _resolved_relative(resolved, relative, parameter=parameter)
@@ -307,9 +292,7 @@ def stage_checkpoint_for_realtime(
         ).exists()
     ]
     if missing_source:
-        raise FileNotFoundError(
-            f"Checkpoint is incomplete at {resolved}; missing: {', '.join(missing_source)}"
-        )
+        raise FileNotFoundError(f"Checkpoint is incomplete at {resolved}; missing: {', '.join(missing_source)}")
     is_distributed = bool(
         distributed is not None
         and distributed.is_available()
@@ -342,10 +325,7 @@ def stage_checkpoint_for_realtime(
         Path(published_path).expanduser(),
         description="published local checkpoint path",
     )
-    if not all(
-        _resolved_relative(target, relative, parameter="required_paths").exists()
-        for relative in required
-    ):
+    if not all(_resolved_relative(target, relative, parameter="required_paths").exists() for relative in required):
         raise FileNotFoundError(f"Staged checkpoint is incomplete: {target}")
     return target
 

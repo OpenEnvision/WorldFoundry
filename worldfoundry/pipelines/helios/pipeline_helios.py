@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from worldfoundry.core.media.codecs.image import load_pil_image
 from worldfoundry.pipelines.video_official.pipeline_official_video import (
@@ -31,8 +32,7 @@ class HeliosPipeline(OfficialVideoPipeline):
         if not checkpoint:
             missing = "; ".join(str(item) for item in plan.get("missing") or ())
             raise FileNotFoundError(
-                "Helios-Distilled checkpoint is required for resident inference"
-                + (f": {missing}" if missing else ".")
+                "Helios-Distilled checkpoint is required for resident inference" + (f": {missing}" if missing else ".")
             )
         from ...synthesis.visual_generation.helios.realtime import HeliosRealtimeSession
 

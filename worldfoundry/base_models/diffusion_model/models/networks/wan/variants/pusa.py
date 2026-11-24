@@ -36,9 +36,8 @@ class PusaWanModel(WanModel):
         """Expand per-frame timesteps to one value per patch token, then call Wan."""
         if timestep.ndim == 2:
             temporal_tokens = (x.shape[2] - self.patch_size[0]) // self.patch_size[0] + 1
-            spatial_tokens = (
-                ((x.shape[3] - self.patch_size[1]) // self.patch_size[1] + 1)
-                * ((x.shape[4] - self.patch_size[2]) // self.patch_size[2] + 1)
+            spatial_tokens = ((x.shape[3] - self.patch_size[1]) // self.patch_size[1] + 1) * (
+                (x.shape[4] - self.patch_size[2]) // self.patch_size[2] + 1
             )
             total_tokens = temporal_tokens * spatial_tokens
             if timestep.shape[1] == temporal_tokens:

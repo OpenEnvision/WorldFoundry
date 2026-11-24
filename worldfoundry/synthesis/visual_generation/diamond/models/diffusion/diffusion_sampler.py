@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Tuple
 
 import torch
 from torch import Tensor
@@ -31,7 +30,7 @@ class DiffusionSampler:
         return prev_obs, {}
 
     @torch.no_grad()
-    def sample(self, prev_obs: Tensor, prev_act: Tensor) -> Tuple[Tensor, List[Tensor]]:
+    def sample(self, prev_obs: Tensor, prev_act: Tensor) -> tuple[Tensor, list[Tensor]]:
         device = prev_obs.device
         b, t, c, h, w = prev_obs.size()
         prev_obs = prev_obs.reshape(b, t * c, h, w)
@@ -39,7 +38,7 @@ class DiffusionSampler:
         gamma_ = min(self.cfg.s_churn / (len(self.sigmas) - 1), 2**0.5 - 1)
         x = torch.randn(b, c, h, w, device=device)
         trajectory = [x]
-        for sigma, next_sigma in zip(self.sigmas[:-1], self.sigmas[1:]):
+        for sigma, next_sigma in zip(self.sigmas[:-1], self.sigmas[1:], strict=False):
             gamma = gamma_ if self.cfg.s_tmin <= sigma <= self.cfg.s_tmax else 0
             sigma_hat = sigma * (gamma + 1)
             if gamma > 0:
@@ -66,6 +65,6 @@ class DiffusionSampler:
 def build_sigmas(num_steps: int, sigma_min: float, sigma_max: float, rho: int, device: torch.device) -> Tensor:
     min_inv_rho = sigma_min ** (1 / rho)
     max_inv_rho = sigma_max ** (1 / rho)
-    l = torch.linspace(0, 1, num_steps, device=device)
+    l = torch.linspace(0, 1, num_steps, device=device)  # noqa: E741 - Ambiguous upstream name kept as written.
     sigmas = (max_inv_rho + l * (min_inv_rho - max_inv_rho)) ** rho
     return torch.cat((sigmas, sigmas.new_zeros(1)))

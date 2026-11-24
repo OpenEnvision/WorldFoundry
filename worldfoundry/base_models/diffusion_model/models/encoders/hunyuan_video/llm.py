@@ -12,35 +12,21 @@ This is a weight-compatible wrapper, not a ConditionEncoder
 by itself.
 """
 
-from transformers import LlamaModel, LlamaConfig, DynamicCache, LlavaForConditionalGeneration
 from copy import deepcopy
+
 import torch
+from transformers import DynamicCache, LlamaConfig, LlamaModel, LlavaForConditionalGeneration
 
 
 class HunyuanVideoLLMEncoder(LlamaModel):
-    """Hunyuan video llm encoder implementation."""
-
     def __init__(self, config: LlamaConfig):
-        """Init.
-
-        Args:
-            config: The config.
-        """
         super().__init__(config)
         self.auto_offload = False
 
     def enable_auto_offload(self, **kwargs):
-        """Enable auto offload."""
         self.auto_offload = True
 
     def forward(self, input_ids, attention_mask, hidden_state_skip_layer=2):
-        """Forward.
-
-        Args:
-            input_ids: The input ids.
-            attention_mask: The attention mask.
-            hidden_state_skip_layer: The hidden state skip layer.
-        """
         embed_tokens = deepcopy(self.embed_tokens).to(input_ids.device) if self.auto_offload else self.embed_tokens
         inputs_embeds = embed_tokens(input_ids)
 
@@ -78,34 +64,17 @@ class HunyuanVideoLLMEncoder(LlamaModel):
 
 
 class HunyuanVideoMLLMEncoder(LlavaForConditionalGeneration):
-    """Hunyuan video mllm encoder implementation."""
-
     def __init__(self, config):
-        """Init.
-
-        Args:
-            config: The config.
-        """
         super().__init__(config)
         self.auto_offload = False
 
     def enable_auto_offload(self, **kwargs):
-        """Enable auto offload."""
         self.auto_offload = True
 
     # TODO: implement the low VRAM inference for MLLM.
     def forward(self, input_ids, pixel_values, attention_mask, hidden_state_skip_layer=2):
-        """Forward.
-
-        Args:
-            input_ids: The input ids.
-            pixel_values: The pixel values.
-            attention_mask: The attention mask.
-            hidden_state_skip_layer: The hidden state skip layer.
-        """
-        outputs = super().forward(input_ids=input_ids,
-                                  attention_mask=attention_mask,
-                                  output_hidden_states=True,
-                                  pixel_values=pixel_values)
+        outputs = super().forward(
+            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True, pixel_values=pixel_values
+        )
         hidden_state = outputs.hidden_states[-(hidden_state_skip_layer + 1)]
         return hidden_state

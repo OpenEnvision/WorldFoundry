@@ -4,9 +4,8 @@ This module provides similarity matching between detected entities using
 DINOv3 foreground embeddings. It's used to determine if a newly detected
 entity is the same as one already tracked in the EventPool.
 """
-from __future__ import annotations
 
-from typing import Optional
+from __future__ import annotations
 
 import cv2
 import numpy as np
@@ -46,7 +45,7 @@ class EntityMatcher:
     def compute_embedding(
         self,
         image: np.ndarray,
-        mask: Optional[np.ndarray] = None,
+        mask: np.ndarray | None = None,
     ) -> torch.Tensor:
         """Compute foreground-only embedding for an entity image.
 
@@ -72,8 +71,8 @@ class EntityMatcher:
             patch_tokens = outputs.last_hidden_state[0, 5:]
 
         num_patches = patch_tokens.shape[0]
-        hidden_dim = patch_tokens.shape[1]
-        grid_size = int(num_patches ** 0.5)
+        _hidden_dim = patch_tokens.shape[1]
+        grid_size = int(num_patches**0.5)
 
         # Require SAM mask for foreground token selection.
         if mask is None:
@@ -111,8 +110,8 @@ class EntityMatcher:
 
     def compute_similarity(
         self,
-        embedding1: Optional[torch.Tensor],
-        embedding2: Optional[torch.Tensor],
+        embedding1: torch.Tensor | None,
+        embedding2: torch.Tensor | None,
     ) -> float:
         """Compute cosine similarity between two embeddings.
 
@@ -130,8 +129,8 @@ class EntityMatcher:
     def is_same_entity(
         self,
         new_image: np.ndarray,
-        existing_embedding: Optional[torch.Tensor],
-        new_mask: Optional[np.ndarray] = None,
+        existing_embedding: torch.Tensor | None,
+        new_mask: np.ndarray | None = None,
     ) -> tuple[bool, float]:
         """Check if a new image matches an existing entity.
 
@@ -150,9 +149,9 @@ class EntityMatcher:
     def find_matching_entity(
         self,
         new_image: np.ndarray,
-        existing_embeddings: dict[str, Optional[torch.Tensor]],
-        new_mask: Optional[np.ndarray] = None,
-    ) -> tuple[Optional[str], float]:
+        existing_embeddings: dict[str, torch.Tensor | None],
+        new_mask: np.ndarray | None = None,
+    ) -> tuple[str | None, float]:
         """Find if a new image matches any existing entity.
 
         Args:

@@ -2,7 +2,7 @@
 # Source revision: 7e57e4d0448e8661eb6ae078f53e19638bd07102
 # Academic-use terms: THIRD-PARTY-NOTICES (WorldCrafter)
 from __future__ import annotations
-from typing import Tuple
+
 import torch
 import torch.nn.functional as F
 from einops import einsum, rearrange, repeat
@@ -20,7 +20,7 @@ def pixel_coordinates(
     pixel_center: bool = False,
     device: torch.device | str = "cpu",
     dtype: torch.dtype = torch.float32,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Sampling coordinates for a ``height x width`` grid.
 
     With ``pixel_center=False`` the samples are the integers ``0 .. W-1``, which
@@ -112,9 +112,7 @@ def ucm_unproject_grid(
     xi = _to_tensor_1d(xi, device, dtype)
     batch = max(fx.shape[0], fy.shape[0], cx.shape[0], cy.shape[0], xi.shape[0])
 
-    grid_x, grid_y = pixel_coordinates(
-        height, width, pixel_center, device=device, dtype=dtype
-    )
+    grid_x, grid_y = pixel_coordinates(height, width, pixel_center, device=device, dtype=dtype)
     grid_x = grid_x.unsqueeze(0).expand(batch, -1, -1)
     grid_y = grid_y.unsqueeze(0).expand(batch, -1, -1)
 
@@ -152,9 +150,7 @@ def ucm_unproject_grid_fov(
 
     Returns ``[H, W, 3]`` for scalar parameters, ``[B, H, W, 3]`` otherwise.
     """
-    is_batched = any(
-        torch.is_tensor(p) and p.reshape(-1).numel() > 1 for p in (x_fov, xi)
-    )
+    is_batched = any(torch.is_tensor(p) and p.reshape(-1).numel() > 1 for p in (x_fov, xi))
 
     fx = compute_fx_from_fov_xi(x_fov, xi, width, device, dtype)
     d_cam = ucm_unproject_grid(
@@ -228,21 +224,15 @@ def world_to_ray_mats(
     if c2w.ndim == 3:
         c2w = c2w.unsqueeze(0)
     if d_cam.ndim != 4 or d_cam.shape[-1] != 3:
-        raise ValueError(
-            f"d_cam must have shape [H,W,3] or [B,H,W,3], got {tuple(d_cam.shape)}"
-        )
+        raise ValueError(f"d_cam must have shape [H,W,3] or [B,H,W,3], got {tuple(d_cam.shape)}")
     if c2w.ndim != 4 or c2w.shape[-2:] != (4, 4):
-        raise ValueError(
-            f"c2w must have shape [T,4,4] or [B,T,4,4], got {tuple(c2w.shape)}"
-        )
+        raise ValueError(f"c2w must have shape [T,4,4] or [B,T,4,4], got {tuple(c2w.shape)}")
     if d_cam.shape[0] == 1 and c2w.shape[0] != 1:
         d_cam = d_cam.expand(c2w.shape[0], -1, -1, -1)
     elif c2w.shape[0] == 1 and d_cam.shape[0] != 1:
         c2w = c2w.expand(d_cam.shape[0], -1, -1, -1)
     elif d_cam.shape[0] != c2w.shape[0]:
-        raise ValueError(
-            f"d_cam and c2w batch mismatch: {d_cam.shape[0]} vs {c2w.shape[0]}"
-        )
+        raise ValueError(f"d_cam and c2w batch mismatch: {d_cam.shape[0]} vs {c2w.shape[0]}")
 
     B, H, W, _ = d_cam.shape
     T = c2w.shape[1]
@@ -285,7 +275,7 @@ def compute_up_lat_map(
     xi: torch.Tensor,
     height: int,
     width: int,
-    device: torch.device = torch.device("cpu"),
+    device: torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
     delta: float = 0.1,
     pixel_center: bool = False,
 ):
@@ -319,18 +309,14 @@ def compute_up_lat_map(
 
     v = d_world
     up_world = torch.tensor([0, -1, 0], device=device, dtype=torch.float32)
-    k = torch.cross(
-        v, up_world.unsqueeze(0).unsqueeze(0).unsqueeze(0).expand_as(v), dim=-1
-    )
+    k = torch.cross(v, up_world.unsqueeze(0).unsqueeze(0).unsqueeze(0).expand_as(v), dim=-1)
     k = k / torch.clamp_min(k.norm(dim=-1, keepdim=True), 1e-8)
 
     delta = torch.tensor(delta, device=device, dtype=torch.float32)
     cos_eps = torch.cos(delta)
     sin_eps = torch.sin(delta)
     v_rot = (
-        v * cos_eps
-        + torch.cross(k, v, dim=-1) * sin_eps
-        + k * (k * (v * 1).sum(dim=-1, keepdim=True)) * (1 - cos_eps)
+        v * cos_eps + torch.cross(k, v, dim=-1) * sin_eps + k * (k * (v * 1).sum(dim=-1, keepdim=True)) * (1 - cos_eps)
     )
 
     dirs_cam = torch.einsum("btij,bthwj->bthwi", R.transpose(-1, -2), v_rot)
@@ -346,9 +332,7 @@ def compute_up_lat_map(
         width=width,
     )
 
-    grid_x, grid_y = pixel_coordinates(
-        height, width, pixel_center, device=device, dtype=torch.float32
-    )
+    grid_x, grid_y = pixel_coordinates(height, width, pixel_center, device=device, dtype=torch.float32)
     grid_x = grid_x.view(1, 1, height, width)
     grid_y = grid_y.view(1, 1, height, width)
 

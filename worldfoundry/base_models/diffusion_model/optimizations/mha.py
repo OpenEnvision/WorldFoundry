@@ -5,8 +5,8 @@ from dataclasses import asdict
 import torch
 
 from worldfoundry.core.acceleration.guards import guard_fixed_inference
+from worldfoundry.core.acceleration.mha_schedule import MHASchedule, ScheduledProjection, scheduled_sdpa
 from worldfoundry.core.acceleration.plugins import AccelerationHandle, PreparedAcceleration
-from worldfoundry.core.attention.schedule import MHASchedule, ScheduledProjection, scheduled_sdpa
 
 from .projection_selection import ProjectionSelection, select_native_projections
 
@@ -108,7 +108,7 @@ def prepare_optimized_mha(model, options, policy):
     if any(module.weight.device != device or module.weight.dtype != dtype for _, module in selected):
         raise ValueError("optimized_mha requires a uniform projection device and dtype")
     for schedule in schedules.values():
-        if schedule.sdpa_backend != "torch" or schedule.approximate:
+        if schedule.sdpa_backend != "torch" or schedule.approximate:  # noqa: SIM102 - The inner check is the requirement of accelerated schedules.
             if device.type != "cuda" or dtype not in {torch.float16, torch.bfloat16}:
                 raise ValueError("accelerated MHA schedules require CUDA FP16/BF16 policy")
         if schedule.sdpa_backend == "fa2":

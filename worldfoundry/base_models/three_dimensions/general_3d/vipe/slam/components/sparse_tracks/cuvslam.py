@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> components -> sparse_tracks -> cuvslam.py functionality."""
-
 import numpy as np
 import torch
 import vslam
@@ -29,27 +27,11 @@ class CuVSLAMSparseTracks(SparseTracks):
     """Utilize the cuVSLAM backend for sparse tracking"""
 
     def __init__(self, n_views: int) -> None:
-        """Init.
-
-        Args:
-            n_views: The n views.
-
-        Returns:
-            The return value.
-        """
         super().__init__(n_views)
         self.tracker = None
         self.frame_idx = 0
 
     def _build_tracker(self, frame_data_list: list[VideoFrame]) -> None:
-        """Helper function to build tracker.
-
-        Args:
-            frame_data_list: The frame data list.
-
-        Returns:
-            The return value.
-        """
         assert len(frame_data_list) == 1, (
             "Only single-camera supported for now. Mainly due to rig transformations not properly set."
         )
@@ -83,14 +65,6 @@ class CuVSLAMSparseTracks(SparseTracks):
         self.frame_idx = 0
 
     def track_image(self, frame_data_list: list[VideoFrame]) -> None:
-        """Track image.
-
-        Args:
-            frame_data_list: The frame data list.
-
-        Returns:
-            The return value.
-        """
         if self.tracker is None:
             self._build_tracker(frame_data_list)
         assert self.tracker is not None, "Tracker not initialized"

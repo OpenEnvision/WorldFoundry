@@ -31,12 +31,7 @@ class PatchEmbed(nn.Module):
         self.flatten = flatten
 
         self.proj = nn.Conv3d(
-            in_chans,
-            embed_dim,
-            kernel_size=patch_size,
-            stride=patch_size,
-            bias=bias,
-            **factory_kwargs
+            in_chans, embed_dim, kernel_size=patch_size, stride=patch_size, bias=bias, **factory_kwargs
         )
         nn.init.xavier_uniform_(self.proj.weight.view(self.proj.weight.size(0), -1))
         if bias:

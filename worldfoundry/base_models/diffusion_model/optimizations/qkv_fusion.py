@@ -138,9 +138,7 @@ class _FusedQKVLinear(nn.Linear):
         # Text identities stay specialized across models. Integer identities
         # can become symbolic during recompilation and cannot be passed to an
         # assume_constant_result helper.
-        self._worldfoundry_qkv_receipt_token = _register_qkv_fusion_state(
-            fusion_state
-        )
+        self._worldfoundry_qkv_receipt_token = _register_qkv_fusion_state(fusion_state)
 
     def _record_projection(self, path: str) -> None:
         state = self._worldfoundry_qkv_fusion_state
@@ -202,24 +200,37 @@ class _FusedQKVLinear(nn.Linear):
 def project_fused_qkv(
     projection: nn.Module,
     input: torch.Tensor,
+    *,
+    fusion_state: QKVFusionState | None = None,
+    receipt_token: str | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Use workload dispatch when available, otherwise a packed projection.
 
     Generic quantization can replace the dense fused Linear after installation.
     Those wrappers intentionally keep their existing packed kernel; this helper
-    lets every Wan processor share the same compatibility behavior.
+    lets every Wan processor share the same compatibility behavior and keeps
+    projection telemetry accurate when ``projection`` is quantized.
     """
 
     project = getattr(projection, "project_qkv", None)
     if callable(project):
         return project(input)
+    state = fusion_state if fusion_state is not None else getattr(projection, "_worldfoundry_qkv_fusion_state", None)
+    token = receipt_token if receipt_token is not None else getattr(projection, "_worldfoundry_qkv_receipt_token", None)
+    if isinstance(state, QKVFusionState):
+        if torch.compiler.is_compiling():
+            if isinstance(token, str):
+                _record_compiled_qkv_graph_trace(token, 0)
+        else:
+            state.eager_projection_calls += 1
+            state.request_eager_projection_calls += 1
+            state.eager_packed_projection_calls += 1
+            state.request_eager_packed_projection_calls += 1
     packed = projection(input)
     if not isinstance(packed, torch.Tensor) or packed.shape[:-1] != input.shape[:-1]:
         raise RuntimeError("fused Wan qkv projection must preserve leading dimensions")
     if packed.shape[-1] != input.shape[-1] * 3:
-        raise RuntimeError(
-            "fused Wan qkv projection must return exactly 3 * hidden width"
-        )
+        raise RuntimeError("fused Wan qkv projection must return exactly 3 * hidden width")
     return packed.chunk(3, dim=-1)
 
 
@@ -256,18 +267,14 @@ def _is_fusible_self_attention(module: nn.Module) -> bool:
     if not hasattr(module, "norm_q") or not hasattr(module, "norm_k"):
         return False
     native_projection_dispatch = getattr(module, "supports_fused_qkv", False) is True
-    if not native_projection_dispatch and (
-        type(module).__name__ != "SelfAttention" or not hasattr(module, "attn")
-    ):
+    if not native_projection_dispatch and (type(module).__name__ != "SelfAttention" or not hasattr(module, "attn")):
         return False
     dim = q.in_features
     for layer in (q, k, v):
         if layer.in_features != dim or layer.out_features != dim:
             return False
     bias_flags = {layer.bias is not None for layer in (q, k, v)}
-    if len(bias_flags) != 1:
-        return False
-    return True
+    return len(bias_flags) == 1
 
 
 def _fused_self_attention_forward(
@@ -282,7 +289,12 @@ def _fused_self_attention_forward(
         apply_wan_qk_norm_rope,
     )
 
-    q, k, v = project_fused_qkv(self.qkv, x)
+    q, k, v = project_fused_qkv(
+        self.qkv,
+        x,
+        fusion_state=getattr(self, "_worldfoundry_qkv_fusion_state", None),
+        receipt_token=getattr(self, "_worldfoundry_qkv_receipt_token", None),
+    )
     q, k = apply_wan_qk_norm_rope(
         self,
         q,
@@ -290,6 +302,7 @@ def _fused_self_attention_forward(
         freqs,
         fused_table=kwargs.pop("_worldfoundry_rope_table", None),
         fused_grid=kwargs.pop("_worldfoundry_rope_grid", None),
+        fused_indexed=bool(kwargs.pop("_worldfoundry_fused_rope_indexed", False)),
         precision=kwargs.pop("_worldfoundry_rope_precision", "fp64"),
     )
     x = self.attn(q, k, v)
@@ -331,6 +344,8 @@ def _fuse_one(module: nn.Module, state: QKVFusionState) -> None:
     # Drop the originals so their weights are freed and no stale path remains.
     del module.q, module.k, module.v
     module._qkv_fused = True
+    module._worldfoundry_qkv_fusion_state = state
+    module._worldfoundry_qkv_receipt_token = fused._worldfoundry_qkv_receipt_token
     if not preserve_projection_dispatch:
         module.forward = types.MethodType(_fused_self_attention_forward, module)
 
@@ -392,9 +407,7 @@ def restore_fused_qkv_processor_dispatch(module: nn.Module) -> bool:
         )
     class_forward = getattr(type(module), "forward", None)
     if not callable(class_forward):
-        raise TypeError(
-            "cannot restore fused QKV processor dispatch without a class forward"
-        )
+        raise TypeError("cannot restore fused QKV processor dispatch without a class forward")
     module.forward = types.MethodType(class_forward, module)
     return True
 

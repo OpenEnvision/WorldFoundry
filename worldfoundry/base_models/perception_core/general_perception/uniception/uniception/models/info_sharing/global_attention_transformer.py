@@ -2,26 +2,41 @@
 UniCeption Global-Attention Transformer for Information Sharing
 """
 
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, List, Optional, Tuple, Type, Union
 
 import numpy as np
 import torch
-
-from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 import torch.nn as nn
 
-from uniception.models.info_sharing.base import (
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.info_sharing.base import (
     MultiSetTransformerInput,
     MultiSetTransformerOutput,
     MultiViewTransformerInput,
     MultiViewTransformerOutput,
     UniCeptionInfoSharingBase,
 )
-from uniception.models.libs.croco.pos_embed import RoPE2D
-from uniception.models.utils.intermediate_feature_return import IntermediateFeatureReturner, feature_take_indices
-from uniception.models.utils.positional_encoding import PositionGetter
-from uniception.models.utils.transformer_blocks import Mlp, SelfAttentionBlock
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
+
+# isort: split
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.libs.croco.pos_embed import (
+    RoPE2D,
+)
+
+# isort: split
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.utils.intermediate_feature_return import (
+    IntermediateFeatureReturner,
+    feature_take_indices,
+)
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.utils.positional_encoding import (
+    PositionGetter,
+)
+
+# isort: split
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.utils.transformer_blocks import (
+    Mlp,
+    SelfAttentionBlock,
+)
 
 
 class MultiViewGlobalAttentionTransformer(UniCeptionInfoSharingBase):
@@ -35,7 +50,7 @@ class MultiViewGlobalAttentionTransformer(UniCeptionInfoSharingBase):
         use_pe_for_non_reference_views: bool = True,
         max_num_views_for_pe: int = 1000,
         use_rand_idx_pe_for_non_reference_views: bool = True,
-        size: Optional[str] = None,
+        size: str | None = None,
         depth: int = 12,
         dim: int = 768,
         num_heads: int = 12,
@@ -44,17 +59,17 @@ class MultiViewGlobalAttentionTransformer(UniCeptionInfoSharingBase):
         qk_norm: bool = False,
         proj_drop: float = 0.0,
         attn_drop: float = 0.0,
-        init_values: Optional[float] = None,
+        init_values: float | None = None,
         drop_path: float = 0.0,
-        act_layer: Type[nn.Module] = nn.GELU,
-        norm_layer: Union[Type[nn.Module], Callable[..., nn.Module]] = partial(nn.LayerNorm, eps=1e-6),
-        mlp_layer: Type[nn.Module] = Mlp,
-        custom_positional_encoding: Optional[Union[str, Callable]] = None,
+        act_layer: type[nn.Module] = nn.GELU,
+        norm_layer: type[nn.Module] | Callable[..., nn.Module] = partial(nn.LayerNorm, eps=1e-6),  # noqa: B008 - Default evaluated once at definition, as upstream.
+        mlp_layer: type[nn.Module] = Mlp,
+        custom_positional_encoding: str | Callable | None = None,
         use_scalable_softmax: bool = False,
         use_entropy_scaling: bool = False,
         base_token_count_for_entropy_scaling: int = 444,
         entropy_scaling_growth_factor: float = 1.4,
-        pretrained_checkpoint_path: Optional[str] = None,
+        pretrained_checkpoint_path: str | None = None,
         gradient_checkpointing: bool = False,
         *args,
         **kwargs,
@@ -92,7 +107,7 @@ class MultiViewGlobalAttentionTransformer(UniCeptionInfoSharingBase):
             gradient_checkpointing (bool, optional): Whether to use gradient checkpointing for memory efficiency. (default: False)
         """
         # Initialize the base class
-        super().__init__(name=name, size=size, *args, **kwargs)
+        super().__init__(name=name, size=size, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         # Initialize the specific attributes of the transformer
         self.input_embed_dim = input_embed_dim
@@ -249,15 +264,15 @@ class MultiViewGlobalAttentionTransformer(UniCeptionInfoSharingBase):
                 Returns view features and optionally additional_token_features (global) and additional_token_features_per_view (per-view).
         """
         # Check that the number of views matches the input and the features are of expected shape
-        assert (
-            len(model_input.features) <= self.max_num_views_for_pe
-        ), f"Expected less than {self.max_num_views_for_pe} views, got {len(model_input.features)}"
+        assert len(model_input.features) <= self.max_num_views_for_pe, (
+            f"Expected less than {self.max_num_views_for_pe} views, got {len(model_input.features)}"
+        )
         assert all(
             curr_view_features.shape[1] == self.input_embed_dim for curr_view_features in model_input.features
         ), f"All views must have input dimension {self.input_embed_dim}"
-        assert all(
-            curr_view_features.ndim == 4 for curr_view_features in model_input.features
-        ), "All views must have 4 dimensions (N, C, H, W)"
+        assert all(curr_view_features.ndim == 4 for curr_view_features in model_input.features), (
+            "All views must have 4 dimensions (N, C, H, W)"
+        )
 
         # Initialize the multi-view features from the model input and number of views for current input
         multi_view_features = model_input.features
@@ -273,22 +288,22 @@ class MultiViewGlobalAttentionTransformer(UniCeptionInfoSharingBase):
                 f"Number of additional token tensors ({len(additional_tokens_per_view)}) "
                 f"must match number of views ({num_of_views})"
             )
-            assert all(
-                tokens.ndim == 3 for tokens in additional_tokens_per_view
-            ), "Additional tokens per view must have 3 dimensions (N, C, T)"
-            assert all(
-                tokens.shape[1] == self.input_embed_dim for tokens in additional_tokens_per_view
-            ), f"Additional tokens per view must have input dimension {self.input_embed_dim}"
-            assert all(
-                tokens.shape[0] == batch_size for tokens in additional_tokens_per_view
-            ), "Batch size mismatch for additional tokens per view"
+            assert all(tokens.ndim == 3 for tokens in additional_tokens_per_view), (
+                "Additional tokens per view must have 3 dimensions (N, C, T)"
+            )
+            assert all(tokens.shape[1] == self.input_embed_dim for tokens in additional_tokens_per_view), (
+                f"Additional tokens per view must have input dimension {self.input_embed_dim}"
+            )
+            assert all(tokens.shape[0] == batch_size for tokens in additional_tokens_per_view), (
+                "Batch size mismatch for additional tokens per view"
+            )
 
             num_of_additional_tokens_per_view = additional_tokens_per_view[0].shape[2]
 
             # Concatenate per-view additional tokens to each view's features
             multi_view_features_with_tokens = []
-            for view_idx, (view_features, view_tokens) in enumerate(
-                zip(multi_view_features, additional_tokens_per_view)
+            for _view_idx, (view_features, view_tokens) in enumerate(
+                zip(multi_view_features, additional_tokens_per_view, strict=False)
             ):
                 # view_features: (N, C, H, W)
                 # view_tokens: (N, C, T)
@@ -325,9 +340,9 @@ class MultiViewGlobalAttentionTransformer(UniCeptionInfoSharingBase):
         if model_input.additional_input_tokens is not None:
             additional_tokens = model_input.additional_input_tokens
             assert additional_tokens.ndim == 3, "Additional tokens must have 3 dimensions (N, C, T)"
-            assert (
-                additional_tokens.shape[1] == self.input_embed_dim
-            ), f"Additional tokens must have input dimension {self.input_embed_dim}"
+            assert additional_tokens.shape[1] == self.input_embed_dim, (
+                f"Additional tokens must have input dimension {self.input_embed_dim}"
+            )
             assert additional_tokens.shape[0] == batch_size, "Batch size mismatch for additional tokens"
 
             # Reshape to channel-last format for transformer processing
@@ -340,16 +355,14 @@ class MultiViewGlobalAttentionTransformer(UniCeptionInfoSharingBase):
         multi_view_features = self.proj_embed(multi_view_features)
 
         # Raise error if custom positional encoding is used with additional tokens
-        if self.custom_positional_encoding is not None:
-            if (
-                model_input.additional_input_tokens is not None
-                or model_input.additional_input_tokens_per_view is not None
-            ):
-                raise ValueError(
-                    "Custom positional encoding is not supported when additional_input_tokens or "
-                    "additional_input_tokens_per_view are provided. Please set custom_positional_encoding=None "
-                    "or remove additional tokens from the input."
-                )
+        if self.custom_positional_encoding is not None and (
+            model_input.additional_input_tokens is not None or model_input.additional_input_tokens_per_view is not None
+        ):
+            raise ValueError(
+                "Custom positional encoding is not supported when additional_input_tokens or "
+                "additional_input_tokens_per_view are provided. Please set custom_positional_encoding=None "
+                "or remove additional tokens from the input."
+            )
 
         # Create patch positions for each view if custom positional encoding is used
         if self.custom_positional_encoding is not None:
@@ -473,7 +486,7 @@ class MultiViewGlobalAttentionTransformerIFR(MultiViewGlobalAttentionTransformer
         use_pe_for_non_reference_views: bool = True,
         max_num_views_for_pe: int = 1000,
         use_rand_idx_pe_for_non_reference_views: bool = True,
-        size: Optional[str] = None,
+        size: str | None = None,
         depth: int = 12,
         dim: int = 768,
         num_heads: int = 12,
@@ -482,18 +495,18 @@ class MultiViewGlobalAttentionTransformerIFR(MultiViewGlobalAttentionTransformer
         qk_norm: bool = False,
         proj_drop: float = 0.0,
         attn_drop: float = 0.0,
-        init_values: Optional[float] = None,
+        init_values: float | None = None,
         drop_path: float = 0.0,
         act_layer: nn.Module = nn.GELU,
-        norm_layer: nn.Module = partial(nn.LayerNorm, eps=1e-6),
+        norm_layer: nn.Module = partial(nn.LayerNorm, eps=1e-6),  # noqa: B008 - Default evaluated once at definition, as upstream.
         mlp_layer: nn.Module = Mlp,
-        custom_positional_encoding: Callable = None,
+        custom_positional_encoding: Callable | None = None,
         use_scalable_softmax: bool = False,
         use_entropy_scaling: bool = False,
         base_token_count_for_entropy_scaling: int = 444,
         entropy_scaling_growth_factor: float = 1.4,
-        pretrained_checkpoint_path: str = None,
-        indices: Optional[Union[int, List[int]]] = None,
+        pretrained_checkpoint_path: str | None = None,
+        indices: int | list[int] | None = None,
         norm_intermediate: bool = True,
         intermediates_only: bool = False,
         gradient_checkpointing: bool = False,
@@ -569,7 +582,7 @@ class MultiViewGlobalAttentionTransformerIFR(MultiViewGlobalAttentionTransformer
             entropy_scaling_growth_factor=entropy_scaling_growth_factor,
             pretrained_checkpoint_path=pretrained_checkpoint_path,
             gradient_checkpointing=gradient_checkpointing,
-            *args,
+            *args,  # noqa: B026 - Keeps the upstream argument order.
             **kwargs,
         )
         IntermediateFeatureReturner.__init__(
@@ -582,7 +595,7 @@ class MultiViewGlobalAttentionTransformerIFR(MultiViewGlobalAttentionTransformer
     def forward(
         self,
         model_input: MultiViewTransformerInput,
-    ) -> Union[List[MultiViewTransformerOutput], Tuple[MultiViewTransformerOutput, List[MultiViewTransformerOutput]],]:
+    ) -> list[MultiViewTransformerOutput] | tuple[MultiViewTransformerOutput, list[MultiViewTransformerOutput]]:
         """
         Forward interface for the Multi-View Global-Attention Transformer with Intermediate Feature Return.
 
@@ -608,15 +621,15 @@ class MultiViewGlobalAttentionTransformerIFR(MultiViewGlobalAttentionTransformer
                     - List of intermediate outputs (MultiViewTransformerOutput) from specified layers
         """
         # Check that the number of views matches the input and the features are of expected shape
-        assert (
-            len(model_input.features) <= self.max_num_views_for_pe
-        ), f"Expected {self.num_views} views, got {len(model_input.features)}"
+        assert len(model_input.features) <= self.max_num_views_for_pe, (
+            f"Expected {self.num_views} views, got {len(model_input.features)}"
+        )
         assert all(
             curr_view_features.shape[1] == self.input_embed_dim for curr_view_features in model_input.features
         ), f"All views must have input dimension {self.input_embed_dim}"
-        assert all(
-            curr_view_features.ndim == 4 for curr_view_features in model_input.features
-        ), "All views must have 4 dimensions (N, C, H, W)"
+        assert all(curr_view_features.ndim == 4 for curr_view_features in model_input.features), (
+            "All views must have 4 dimensions (N, C, H, W)"
+        )
 
         # Get the indices of the intermediate features to return
         intermediate_multi_view_features = []
@@ -636,22 +649,22 @@ class MultiViewGlobalAttentionTransformerIFR(MultiViewGlobalAttentionTransformer
                 f"Number of additional token tensors ({len(additional_tokens_per_view)}) "
                 f"must match number of views ({num_of_views})"
             )
-            assert all(
-                tokens.ndim == 3 for tokens in additional_tokens_per_view
-            ), "Additional tokens per view must have 3 dimensions (N, C, T)"
-            assert all(
-                tokens.shape[1] == self.input_embed_dim for tokens in additional_tokens_per_view
-            ), f"Additional tokens per view must have input dimension {self.input_embed_dim}"
-            assert all(
-                tokens.shape[0] == batch_size for tokens in additional_tokens_per_view
-            ), "Batch size mismatch for additional tokens per view"
+            assert all(tokens.ndim == 3 for tokens in additional_tokens_per_view), (
+                "Additional tokens per view must have 3 dimensions (N, C, T)"
+            )
+            assert all(tokens.shape[1] == self.input_embed_dim for tokens in additional_tokens_per_view), (
+                f"Additional tokens per view must have input dimension {self.input_embed_dim}"
+            )
+            assert all(tokens.shape[0] == batch_size for tokens in additional_tokens_per_view), (
+                "Batch size mismatch for additional tokens per view"
+            )
 
             num_of_additional_tokens_per_view = additional_tokens_per_view[0].shape[2]
 
             # Concatenate per-view additional tokens to each view's features
             multi_view_features_with_tokens = []
-            for view_idx, (view_features, view_tokens) in enumerate(
-                zip(multi_view_features, additional_tokens_per_view)
+            for _view_idx, (view_features, view_tokens) in enumerate(
+                zip(multi_view_features, additional_tokens_per_view, strict=False)
             ):
                 # view_features: (N, C, H, W)
                 # view_tokens: (N, C, T)
@@ -688,9 +701,9 @@ class MultiViewGlobalAttentionTransformerIFR(MultiViewGlobalAttentionTransformer
         if model_input.additional_input_tokens is not None:
             additional_tokens = model_input.additional_input_tokens
             assert additional_tokens.ndim == 3, "Additional tokens must have 3 dimensions (N, C, T)"
-            assert (
-                additional_tokens.shape[1] == self.input_embed_dim
-            ), f"Additional tokens must have input dimension {self.input_embed_dim}"
+            assert additional_tokens.shape[1] == self.input_embed_dim, (
+                f"Additional tokens must have input dimension {self.input_embed_dim}"
+            )
             assert additional_tokens.shape[0] == batch_size, "Batch size mismatch for additional tokens"
 
             # Reshape to channel-last format for transformer processing
@@ -703,16 +716,14 @@ class MultiViewGlobalAttentionTransformerIFR(MultiViewGlobalAttentionTransformer
         multi_view_features = self.proj_embed(multi_view_features)
 
         # Raise error if custom positional encoding is used with additional tokens
-        if self.custom_positional_encoding is not None:
-            if (
-                model_input.additional_input_tokens is not None
-                or model_input.additional_input_tokens_per_view is not None
-            ):
-                raise ValueError(
-                    "Custom positional encoding is not supported when additional_input_tokens or "
-                    "additional_input_tokens_per_view are provided. Please set custom_positional_encoding=None "
-                    "or remove additional tokens from the input."
-                )
+        if self.custom_positional_encoding is not None and (
+            model_input.additional_input_tokens is not None or model_input.additional_input_tokens_per_view is not None
+        ):
+            raise ValueError(
+                "Custom positional encoding is not supported when additional_input_tokens or "
+                "additional_input_tokens_per_view are provided. Please set custom_positional_encoding=None "
+                "or remove additional tokens from the input."
+            )
 
         # Create patch positions for each view if custom positional encoding is used
         if self.custom_positional_encoding is not None:
@@ -909,7 +920,7 @@ class GlobalAttentionTransformer(UniCeptionInfoSharingBase):
         input_embed_dim: int,
         max_num_sets: int,
         use_rand_idx_pe_for_non_reference_sets: bool,
-        size: Optional[str] = None,
+        size: str | None = None,
         depth: int = 12,
         dim: int = 768,
         num_heads: int = 12,
@@ -918,16 +929,16 @@ class GlobalAttentionTransformer(UniCeptionInfoSharingBase):
         qk_norm: bool = False,
         proj_drop: float = 0.0,
         attn_drop: float = 0.0,
-        init_values: Optional[float] = None,
+        init_values: float | None = None,
         drop_path: float = 0.0,
-        act_layer: Type[nn.Module] = nn.GELU,
-        norm_layer: Union[Type[nn.Module], Callable[..., nn.Module]] = partial(nn.LayerNorm, eps=1e-6),
-        mlp_layer: Type[nn.Module] = Mlp,
+        act_layer: type[nn.Module] = nn.GELU,
+        norm_layer: type[nn.Module] | Callable[..., nn.Module] = partial(nn.LayerNorm, eps=1e-6),  # noqa: B008 - Default evaluated once at definition, as upstream.
+        mlp_layer: type[nn.Module] = Mlp,
         use_scalable_softmax: bool = False,
         use_entropy_scaling: bool = False,
         base_token_count_for_entropy_scaling: int = 444,
         entropy_scaling_growth_factor: float = 1.4,
-        pretrained_checkpoint_path: Optional[str] = None,
+        pretrained_checkpoint_path: str | None = None,
         gradient_checkpointing: bool = False,
         *args,
         **kwargs,
@@ -962,7 +973,7 @@ class GlobalAttentionTransformer(UniCeptionInfoSharingBase):
             gradient_checkpointing (bool, optional): Whether to use gradient checkpointing for memory efficiency. (default: False)
         """
         # Initialize the base class
-        super().__init__(name=name, size=size, *args, **kwargs)
+        super().__init__(name=name, size=size, *args, **kwargs)  # noqa: B026 - Keeps the upstream argument order.
 
         # Initialize the specific attributes of the transformer
         self.input_embed_dim = input_embed_dim
@@ -1089,15 +1100,15 @@ class GlobalAttentionTransformer(UniCeptionInfoSharingBase):
             MultiSetTransformerOutput: Output of the model post information sharing.
         """
         # Check that the number of sets matches the input and the features are of expected shape
-        assert (
-            len(model_input.features) <= self.max_num_sets
-        ), f"Expected less than {self.max_num_sets} sets, got {len(model_input.features)}"
-        assert all(
-            set_features.shape[1] == self.input_embed_dim for set_features in model_input.features
-        ), f"All sets must have input dimension {self.input_embed_dim}"
-        assert all(
-            set_features.ndim == 3 for set_features in model_input.features
-        ), "All sets must have 3 dimensions (N, C, T)"
+        assert len(model_input.features) <= self.max_num_sets, (
+            f"Expected less than {self.max_num_sets} sets, got {len(model_input.features)}"
+        )
+        assert all(set_features.shape[1] == self.input_embed_dim for set_features in model_input.features), (
+            f"All sets must have input dimension {self.input_embed_dim}"
+        )
+        assert all(set_features.ndim == 3 for set_features in model_input.features), (
+            "All sets must have 3 dimensions (N, C, T)"
+        )
 
         # Initialize the multi-set features from the model input and number of sets for current input
         multi_set_features = model_input.features
@@ -1115,9 +1126,9 @@ class GlobalAttentionTransformer(UniCeptionInfoSharingBase):
         if model_input.additional_input_tokens is not None:
             additional_tokens = model_input.additional_input_tokens
             assert additional_tokens.ndim == 3, "Additional tokens must have 3 dimensions (N, C, T)"
-            assert (
-                additional_tokens.shape[1] == self.input_embed_dim
-            ), f"Additional tokens must have input dimension {self.input_embed_dim}"
+            assert additional_tokens.shape[1] == self.input_embed_dim, (
+                f"Additional tokens must have input dimension {self.input_embed_dim}"
+            )
             assert additional_tokens.shape[0] == batch_size, "Batch size mismatch for additional tokens"
 
             # Reshape to channel-last format for transformer processing

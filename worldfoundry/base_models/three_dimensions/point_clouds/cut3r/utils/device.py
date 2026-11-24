@@ -4,8 +4,6 @@
 # --------------------------------------------------------
 # modified from DUSt3R
 
-"""Module for base_models -> three_dimensions -> point_clouds -> cut3r -> utils -> device.py functionality."""
-
 import numpy as np
 import torch
 
@@ -42,39 +40,18 @@ to_device = todevice  # alias
 
 
 def to_numpy(x):
-    """To numpy.
-
-    Args:
-        x: The x.
-    """
     return todevice(x, "numpy")
 
 
 def to_cpu(x):
-    """To cpu.
-
-    Args:
-        x: The x.
-    """
     return todevice(x, "cpu")
 
 
 def to_cuda(x):
-    """To cuda.
-
-    Args:
-        x: The x.
-    """
     return todevice(x, "cuda")
 
 
 def collate_with_cat(whatever, lists=False):
-    """Collate with cat.
-
-    Args:
-        whatever: The whatever.
-        lists: The lists.
-    """
     if isinstance(whatever, dict):
         return {k: collate_with_cat(vals, lists=lists) for k, vals in whatever.items()}
 
@@ -89,7 +66,7 @@ def collate_with_cat(whatever, lists=False):
         if isinstance(elem, (bool, float, int, str)):
             return whatever
         if isinstance(elem, tuple):
-            return T(collate_with_cat(x, lists=lists) for x in zip(*whatever))
+            return T(collate_with_cat(x, lists=lists) for x in zip(*whatever, strict=False))
         if isinstance(elem, dict):
             return {k: collate_with_cat([e[k] for e in whatever], lists=lists) for k in elem}
 
@@ -102,9 +79,4 @@ def collate_with_cat(whatever, lists=False):
 
 
 def listify(elems):
-    """Listify.
-
-    Args:
-        elems: The elems.
-    """
     return [x for e in elems for x in e]

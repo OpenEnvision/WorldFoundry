@@ -8,14 +8,14 @@ from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import patch
 
-from worldfoundry.evaluation import framework
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, MetricResult, WorldModelConfig
-from worldfoundry.evaluation.api.metrics import aggregate_mean
-from worldfoundry.evaluation.tasks.embodied import evaluate as embodied
-from worldfoundry.evaluation.tasks.execution.orchestration import model_benchmark_suite
-from worldfoundry.evaluation.tasks.execution.orchestration.contract import ContractRunRequest, run_contract
-from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import EvaluateRunRequest, run_evaluate
-from worldfoundry.evaluation.tasks.execution.orchestration.existing_results import (
+from worldfoundry.evals.api import GenerationRequest, GenerationResult, MetricResult, WorldModelConfig
+from worldfoundry.evals.api.metrics import aggregate_mean
+from worldfoundry.evals.tasks.embodied import evaluate as embodied
+from worldfoundry.evals.tasks.execution.orchestration import model_benchmark_suite
+from worldfoundry.evals.tasks.execution.orchestration import run as unified_run
+from worldfoundry.evals.tasks.execution.orchestration.contract import ContractRunRequest, run_contract
+from worldfoundry.evals.tasks.execution.orchestration.evaluate import EvaluateRunRequest, run_evaluate
+from worldfoundry.evals.tasks.execution.orchestration.existing_results import (
     ExistingResultsRunRequest,
     run_existing_results,
 )
@@ -88,7 +88,7 @@ class RequestOverrideTests(unittest.TestCase):
     def test_facades_preserve_nested_configuration_types(self):
         config = WorldModelConfig("review", "worldfoundry.pipeline")
         for module, request in (
-            (framework, framework.WorldFoundryRunRequest(output_dir="original", model_config=config)),
+            (unified_run, unified_run.WorldFoundryRunRequest(output_dir="original", model_config=config)),
             (embodied, embodied.VlaVaWamRunRequest(output_dir="original", spec={}, model_config=config)),
             (model_benchmark_suite, model_benchmark_suite.ModelBenchmarkSuiteRequest(
                 output_dir="original", model_config=config,

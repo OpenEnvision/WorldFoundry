@@ -12,8 +12,9 @@ Snake activations here are LTX-specific; MiniMax H3 has a
 parallel BigVGAN port under :mod:`~...minimax_h3_audio`.
 """
 
+import contextlib
 import math
-from typing import List
+from collections.abc import Iterator
 
 import einops
 import torch
@@ -26,6 +27,20 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.resn
 def get_padding(kernel_size: int, dilation: int = 1) -> int:
     """Return symmetric 1-D conv padding for a kernel/dilation pair."""
     return int((kernel_size * dilation - dilation) / 2)
+
+
+@contextlib.contextmanager
+def _module_in_fp32(module: nn.Module, *, enabled: bool) -> Iterator[None]:
+    """Temporarily cast ``module`` to float32 and restore its weight dtype on exit."""
+    if not enabled:
+        yield
+        return
+    module_dtype = next(module.parameters()).dtype
+    module.float()
+    try:
+        yield
+    finally:
+        module.to(module_dtype)
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +81,7 @@ def kaiser_sinc_filter1d(cutoff: float, half_width: float, kernel_size: int) -> 
 
 class LowPassFilter1d(nn.Module):
     """Depthwise 1-D low-pass convolution used by alias-free resample."""
+
     def __init__(
         self,
         cutoff: float = 0.5,
@@ -99,6 +115,7 @@ class LowPassFilter1d(nn.Module):
 
 class UpSample1d(nn.Module):
     """Alias-free 1-D upsample used inside the LTX vocoder."""
+
     def __init__(
         self,
         ratio: int = 2,
@@ -147,6 +164,7 @@ class UpSample1d(nn.Module):
 
 class DownSample1d(nn.Module):
     """Alias-free 1-D downsample used inside the LTX vocoder."""
+
     def __init__(self, ratio: int = 2, kernel_size: int | None = None) -> None:
         super().__init__()
         self.ratio = ratio
@@ -164,6 +182,7 @@ class DownSample1d(nn.Module):
 
 class Activation1d(nn.Module):
     """Snake activation wrapped with alias-free up/down sampling."""
+
     def __init__(
         self,
         activation: nn.Module,
@@ -185,6 +204,7 @@ class Activation1d(nn.Module):
 
 class Snake(nn.Module):
     """Periodic Snake activation used by the LTX vocoder."""
+
     def __init__(
         self,
         in_features: int,
@@ -207,6 +227,7 @@ class Snake(nn.Module):
 
 class SnakeBeta(nn.Module):
     """Snake activation with a learnable beta frequency term."""
+
     def __init__(
         self,
         in_features: int,
@@ -233,6 +254,7 @@ class SnakeBeta(nn.Module):
 
 class AMPBlock1(nn.Module):
     """Anti-aliased multi-period residual block for the LTX vocoder."""
+
     def __init__(
         self,
         channels: int,
@@ -316,12 +338,12 @@ class Vocoder(torch.nn.Module):
         use_bias_at_final: Whether to use bias in the final conv layer.
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
-        resblock_kernel_sizes: List[int] | None = None,
-        upsample_rates: List[int] | None = None,
-        upsample_kernel_sizes: List[int] | None = None,
-        resblock_dilation_sizes: List[List[int]] | None = None,
+        resblock_kernel_sizes: list[int] | None = None,
+        upsample_rates: list[int] | None = None,
+        upsample_kernel_sizes: list[int] | None = None,
+        resblock_dilation_sizes: list[list[int]] | None = None,
         upsample_initial_channel: int = 1024,
         resblock: str = "1",
         output_sampling_rate: int = 24000,
@@ -596,8 +618,17 @@ class VocoderWithBWE(nn.Module):
         #   autocast fp32: +70 MB peak VRAM, 123 ms  (vs 482 MB / 95 ms for bf16)
         #   model.float(): +324 MB peak VRAM, 149 ms
         # Tested: both approaches produce bit-identical output.
+        # MPS autocast supports only lower-precision dtypes, so there the weights are
+        # materialized in fp32 for the pass instead; a vocoder built in fp32 on MPS
+        # needs no cast.
+        device_type = mel_spec.device.type
+        fp32_context = (
+            _module_in_fp32(self, enabled=next(self.parameters()).dtype != torch.float32)
+            if device_type == "mps"
+            else torch.autocast(device_type=device_type, dtype=torch.float32)
+        )
 
-        with torch.autocast(device_type=mel_spec.device.type, dtype=torch.float32):
+        with fp32_context:
             x = self.vocoder(mel_spec.float())
             _, _, length_low_rate = x.shape
             output_length = length_low_rate * self.output_sampling_rate // self.input_sampling_rate

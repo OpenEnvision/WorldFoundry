@@ -7,6 +7,7 @@ groups:
 - prior
 source_repos:
 - url: https://github.com/Insta360-Research-Team/DAP
+  revision: 595492dba4eabf741aaa549f87c767facb82275b
 checkpoints:
 - repo_id: Insta360-Research/DAP-weights
   filename: model.pth
@@ -30,6 +31,3 @@ notes:
 - Independent base-model profile for the DAP geometric prior under worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v1.
 - WorldFoundry exposes this prior through the shared geometry-prior pipeline/operator
   contract.
-backend_stage: in_tree_geometry_prior_runtime
-runtime_status: in_tree_runtime_wired
-integration_status: integrated

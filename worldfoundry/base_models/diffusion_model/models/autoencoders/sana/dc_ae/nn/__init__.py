@@ -11,6 +11,6 @@ and drop-path (:mod:`.drop`).
 No encode/decode entry points live here.
 """
 
-from .act import *
-from .norm import *
-from .ops import *
+from .act import *  # noqa: F403 - Upstream star import kept as written.
+from .norm import *  # noqa: F403 - Upstream star import kept as written.
+from .ops import *  # noqa: F403 - Upstream star import kept as written.

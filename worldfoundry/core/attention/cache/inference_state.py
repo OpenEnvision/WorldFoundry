@@ -58,7 +58,7 @@ class InferenceParams:
         if len(self.key_value_memory_dict) == 0:
             raise ValueError("should not swap when dict is empty")
 
-        for layer_number in self.key_value_memory_dict.keys():
+        for layer_number in self.key_value_memory_dict:
             inference_key_memory, inference_value_memory = self.key_value_memory_dict[layer_number]
             assert len(batch_idx) == inference_key_memory.shape[1]
             new_inference_key_memory = inference_key_memory[:, batch_idx]

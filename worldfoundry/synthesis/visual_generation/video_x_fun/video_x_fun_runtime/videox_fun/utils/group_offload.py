@@ -5,7 +5,7 @@ import types
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
 import safetensors.torch
 import torch
@@ -46,7 +46,7 @@ class ModelHook:
     _is_stateful = False
 
     def __init__(self):
-        self.fn_ref: "HookFunctionReference" = None
+        self.fn_ref: HookFunctionReference = None
 
     def initialize_hook(self, module: torch.nn.Module) -> torch.nn.Module:
         r"""
@@ -68,7 +68,7 @@ class ModelHook:
         """
         return module
 
-    def pre_forward(self, module: torch.nn.Module, *args, **kwargs) -> Tuple[Tuple[Any], Dict[str, Any]]:
+    def pre_forward(self, module: torch.nn.Module, *args, **kwargs) -> tuple[tuple[Any], dict[str, Any]]:
         r"""
         Hook that is executed just before the forward method of the model.
 
@@ -142,14 +142,14 @@ class HookRegistry:
     def __init__(self, module_ref: torch.nn.Module) -> None:
         super().__init__()
 
-        self.hooks: Dict[str, ModelHook] = {}
+        self.hooks: dict[str, ModelHook] = {}
 
         self._module_ref = module_ref
         self._hook_order = []
         self._fn_refs = []
 
     def register_hook(self, hook: ModelHook, name: str) -> None:
-        if name in self.hooks.keys():
+        if name in self.hooks.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             raise ValueError(
                 f"Hook with name {name} already exists in the registry. Please use a different name or "
                 f"first remove the existing hook and then add a new one."
@@ -188,11 +188,11 @@ class HookRegistry:
         self._hook_order.append(name)
         self._fn_refs.append(fn_ref)
 
-    def get_hook(self, name: str) -> Optional[ModelHook]:
+    def get_hook(self, name: str) -> ModelHook | None:
         return self.hooks.get(name, None)
 
     def remove_hook(self, name: str, recurse: bool = True) -> None:
-        if name in self.hooks.keys():
+        if name in self.hooks.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             num_hooks = len(self._hook_order)
             hook = self.hooks[name]
             index = self._hook_order.index(name)
@@ -264,31 +264,31 @@ class GroupOffloadingConfig:
     non_blocking: bool
     record_stream: bool
     low_cpu_mem_usage: bool
-    num_blocks_per_group: Optional[int] = None
-    offload_to_disk_path: Optional[str] = None
-    stream: Optional[Union[torch.cuda.Stream, torch.Stream]] = None
-    block_modules: Optional[List[str]] = None
-    exclude_kwargs: Optional[List[str]] = None
-    module_prefix: Optional[str] = ""
+    num_blocks_per_group: int | None = None
+    offload_to_disk_path: str | None = None
+    stream: torch.cuda.Stream | torch.Stream | None = None
+    block_modules: list[str] | None = None
+    exclude_kwargs: list[str] | None = None
+    module_prefix: str | None = ""
 
 
 class ModuleGroup:
     def __init__(
         self,
-        modules: List[torch.nn.Module],
+        modules: list[torch.nn.Module],
         offload_device: torch.device,
         onload_device: torch.device,
         offload_leader: torch.nn.Module,
-        onload_leader: Optional[torch.nn.Module] = None,
-        parameters: Optional[List[torch.nn.Parameter]] = None,
-        buffers: Optional[List[torch.Tensor]] = None,
+        onload_leader: torch.nn.Module | None = None,
+        parameters: list[torch.nn.Parameter] | None = None,
+        buffers: list[torch.Tensor] | None = None,
         non_blocking: bool = False,
-        stream: Union[torch.cuda.Stream, torch.Stream, None] = None,
-        record_stream: Optional[bool] = False,
+        stream: torch.cuda.Stream | torch.Stream | None = None,
+        record_stream: bool | None = False,
         low_cpu_mem_usage: bool = False,
         onload_self: bool = True,
-        offload_to_disk_path: Optional[str] = None,
-        group_id: Optional[Union[int, str]] = None,
+        offload_to_disk_path: str | None = None,
+        group_id: int | str | None = None,
     ) -> None:
         self.modules = modules
         self.offload_device = offload_device
@@ -341,9 +341,7 @@ class ModuleGroup:
             for param in module.parameters():
                 cpu_param_dict[param] = param.data.cpu() if self.low_cpu_mem_usage else param.data.cpu().pin_memory()
             for buffer in module.buffers():
-                cpu_param_dict[buffer] = (
-                    buffer.data.cpu() if self.low_cpu_mem_usage else buffer.data.cpu().pin_memory()
-                )
+                cpu_param_dict[buffer] = buffer.data.cpu() if self.low_cpu_mem_usage else buffer.data.cpu().pin_memory()
 
         for param in self.parameters:
             cpu_param_dict[param] = param.data.cpu() if self.low_cpu_mem_usage else param.data.cpu().pin_memory()
@@ -443,7 +441,7 @@ class ModuleGroup:
         self._is_offloaded_to_disk = True
 
         # We do this to free up the RAM which is still holding the up tensor data.
-        for tensor_obj in self.tensor_to_key.keys():
+        for tensor_obj in self.tensor_to_key.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             tensor_obj.data = torch.empty_like(tensor_obj.data, device=self.offload_device)
 
     def _offload_to_memory(self):
@@ -495,7 +493,7 @@ class GroupOffloadingHook(ModelHook):
 
     def __init__(self, group: ModuleGroup, *, config: GroupOffloadingConfig) -> None:
         self.group = group
-        self.next_group: Optional[ModuleGroup] = None
+        self.next_group: ModuleGroup | None = None
         self.config = config
 
     def initialize_hook(self, module: torch.nn.Module) -> torch.nn.Module:
@@ -567,7 +565,7 @@ class LazyPrefetchGroupOffloadingHook(ModelHook):
     _is_stateful = False
 
     def __init__(self):
-        self.execution_order: List[Tuple[str, torch.nn.Module]] = []
+        self.execution_order: list[tuple[str, torch.nn.Module]] = []
         self._layer_execution_tracker_module_names = set()
 
     def initialize_hook(self, module):
@@ -671,17 +669,17 @@ class LayerExecutionTrackerHook(ModelHook):
 
 def apply_group_offloading(
     module: torch.nn.Module,
-    onload_device: Union[str, torch.device],
-    offload_device: Union[str, torch.device] = torch.device("cpu"),
-    offload_type: Union[str, GroupOffloadingType] = "block_level",
-    num_blocks_per_group: Optional[int] = None,
+    onload_device: str | torch.device,
+    offload_device: str | torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
+    offload_type: str | GroupOffloadingType = "block_level",
+    num_blocks_per_group: int | None = None,
     non_blocking: bool = False,
     use_stream: bool = False,
     record_stream: bool = False,
     low_cpu_mem_usage: bool = False,
-    offload_to_disk_path: Optional[str] = None,
-    block_modules: Optional[List[str]] = None,
-    exclude_kwargs: Optional[List[str]] = None,
+    offload_to_disk_path: str | None = None,
+    block_modules: list[str] | None = None,
+    exclude_kwargs: list[str] | None = None,
 ) -> None:
     r"""
     Applies group offloading to the internal layers of a torch.nn.Module. To understand what group offloading is, and
@@ -815,7 +813,7 @@ def _apply_group_offloading(module: torch.nn.Module, config: GroupOffloadingConf
     elif config.offload_type == GroupOffloadingType.LEAF_LEVEL:
         _apply_group_offloading_leaf_level(module, config)
     else:
-        assert False
+        assert False  # noqa: B011 - Keeps the assertion semantics under -O.
 
 
 def _apply_group_offloading_block_level(module: torch.nn.Module, config: GroupOffloadingConfig) -> None:
@@ -882,7 +880,7 @@ def _apply_group_offloading_block_level(module: torch.nn.Module, config: GroupOf
             unmatched_modules.append((name, submodule))
 
     # Apply group offloading hooks to the module groups
-    for i, group in enumerate(matched_module_groups):
+    for i, group in enumerate(matched_module_groups):  # noqa: B007 - The loop variable is read outside the loop.
         for group_module in group.modules:
             _apply_group_offloading_hook(group_module, group, config=config)
 
@@ -1051,8 +1049,8 @@ def _apply_lazy_group_offloading_hook(
 
 
 def _gather_parameters_with_no_group_offloading_parent(
-    module: torch.nn.Module, modules_with_group_offloading: Set[str]
-) -> List[torch.nn.Parameter]:
+    module: torch.nn.Module, modules_with_group_offloading: set[str]
+) -> list[torch.nn.Parameter]:
     parameters = []
     for name, parameter in module.named_parameters():
         has_parent_with_group_offloading = False
@@ -1069,8 +1067,8 @@ def _gather_parameters_with_no_group_offloading_parent(
 
 
 def _gather_buffers_with_no_group_offloading_parent(
-    module: torch.nn.Module, modules_with_group_offloading: Set[str]
-) -> List[torch.Tensor]:
+    module: torch.nn.Module, modules_with_group_offloading: set[str]
+) -> list[torch.Tensor]:
     buffers = []
     for name, buffer in module.named_buffers():
         has_parent_with_group_offloading = False
@@ -1086,7 +1084,7 @@ def _gather_buffers_with_no_group_offloading_parent(
     return buffers
 
 
-def _find_parent_module_in_module_dict(name: str, module_dict: Dict[str, torch.nn.Module]) -> str:
+def _find_parent_module_in_module_dict(name: str, module_dict: dict[str, torch.nn.Module]) -> str:
     atoms = name.split(".")
     while len(atoms) > 0:
         parent_name = ".".join(atoms)
@@ -1110,7 +1108,7 @@ def _raise_error_if_accelerate_model_or_sequential_hook_present(module: torch.nn
             )
 
 
-def _get_top_level_group_offload_hook(module: torch.nn.Module) -> Optional[GroupOffloadingHook]:
+def _get_top_level_group_offload_hook(module: torch.nn.Module) -> GroupOffloadingHook | None:
     for submodule in module.modules():
         if hasattr(submodule, "_diffusers_hook"):
             group_offloading_hook = submodule._diffusers_hook.get_hook(_GROUP_OFFLOADING)
@@ -1165,7 +1163,7 @@ def _maybe_remove_and_reapply_group_offloading(module: torch.nn.Module) -> None:
 
 def remove_group_offloading(
     module: torch.nn.Module,
-    exclude_modules: Optional[Union[str, List[str]]] = None,
+    exclude_modules: str | list[str] | None = None,
 ) -> None:
     """
     Removes group offloading hooks from a module and its submodules.
@@ -1182,7 +1180,7 @@ def remove_group_offloading(
         exclude_modules = []
 
     # Check if this is a pipeline with components
-    if hasattr(module, 'components'):
+    if hasattr(module, "components"):
         unknown = set(exclude_modules) - module.components.keys()
         if unknown:
             logger.info(
@@ -1208,7 +1206,7 @@ def safe_remove_group_offloading(obj, *args, **kwargs):
     """Safely call remove_group_offloading, and restore _execution_device if it was patched."""
     result = remove_group_offloading(obj, *args, **kwargs)
     # Restore the original _execution_device from the MRO if we had patched it.
-    if hasattr(obj, 'components') and hasattr(obj.__class__, '_execution_device_original'):
+    if hasattr(obj, "components") and hasattr(obj.__class__, "_execution_device_original"):
         obj.__class__._execution_device = obj.__class__._execution_device_original
         del obj.__class__._execution_device_original
         logger.debug("Restored original _execution_device after removing group offload.")
@@ -1218,15 +1216,15 @@ def safe_remove_group_offloading(obj, *args, **kwargs):
 def enable_group_offload(
     self,
     onload_device: torch.device,
-    offload_device: torch.device = torch.device("cpu"),
+    offload_device: torch.device = torch.device("cpu"),  # noqa: B008 - Default evaluated once at definition, as upstream.
     offload_type: str = "block_level",
-    num_blocks_per_group: Optional[int] = None,
+    num_blocks_per_group: int | None = None,
     non_blocking: bool = False,
     use_stream: bool = False,
     record_stream: bool = False,
     low_cpu_mem_usage=False,
-    offload_to_disk_path: Optional[str] = None,
-    exclude_modules: Optional[Union[str, List[str]]] = None,
+    offload_to_disk_path: str | None = None,
+    exclude_modules: str | list[str] | None = None,
 ) -> None:
     r"""
     Applies group offloading to the internal layers of a torch.nn.Module. To understand what group offloading is,
@@ -1345,19 +1343,19 @@ def safe_enable_group_offload(obj, *args, **kwargs):
     falling back to self.device (which may be CPU after offloading).
     """
 
-    if not hasattr(obj, 'enable_group_offload'):
+    if not hasattr(obj, "enable_group_offload"):
         obj.enable_group_offload = types.MethodType(enable_group_offload, obj)
 
     result = obj.enable_group_offload(*args, **kwargs)
 
     # Patch _execution_device on the pipeline so it correctly returns the
     # onload (GPU) device instead of self.device (CPU) when group offload is active.
-    onload_device = kwargs.get('onload_device') or (args[0] if args else None)
-    if onload_device is not None and hasattr(obj, 'components'):
+    onload_device = kwargs.get("onload_device") or (args[0] if args else None)
+    if onload_device is not None and hasattr(obj, "components"):
         onload_device = torch.device(onload_device) if isinstance(onload_device, str) else onload_device
 
         # Save the original _execution_device before patching so safe_remove can restore it.
-        if not hasattr(obj.__class__, '_execution_device_original'):
+        if not hasattr(obj.__class__, "_execution_device_original"):
             obj.__class__._execution_device_original = obj.__class__._execution_device
 
         @property
@@ -1387,7 +1385,7 @@ def register_auto_device_hook(model):
         model: The model with registered hooks
     """
 
-    def auto_device_hook(module, input: Tuple[Any, ...]):
+    def auto_device_hook(module, input: tuple[Any, ...]):
         """
         Forward pre-hook function to automatically transfer device before forward
 
@@ -1431,7 +1429,7 @@ def register_auto_device_hook(model):
 
         # Check if device transfer is needed
         # Condition: module_device is not 'meta' and different from input_device
-        if module_device.type != 'meta' and module_device != input_device:
+        if module_device.type != "meta" and module_device != input_device:
             # print(f"Moving {module.__class__.__name__} from {module_device} to {input_device}")
             module.to(input_device)
 
@@ -1454,8 +1452,8 @@ def remove_auto_device_hook(model):
     Args:
         model: The model to process
     """
-    if hasattr(model, '_auto_device_hooks'):
+    if hasattr(model, "_auto_device_hooks"):
         for hook in model._auto_device_hooks:
             hook.remove()
-        delattr(model, '_auto_device_hooks')
+        delattr(model, "_auto_device_hooks")
         print("Auto device hooks removed")

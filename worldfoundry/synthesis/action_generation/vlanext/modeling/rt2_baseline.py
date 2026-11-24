@@ -4,9 +4,13 @@ import torch
 import torch.nn as nn
 from transformers import (
     AutoTokenizer,
-    SiglipVisionModel, SiglipImageProcessor, LlamaForCausalLM,
-    LogitsProcessor, LogitsProcessorList
+    LlamaForCausalLM,
+    LogitsProcessor,
+    LogitsProcessorList,
+    SiglipImageProcessor,
+    SiglipVisionModel,
 )
+
 from .encoder import ActionTransformerProjector
 from .model import load_local_transformers_model
 
@@ -15,6 +19,7 @@ class LlamaProcessorWrapper:
     def __init__(self, tokenizer, image_processor):
         self.tokenizer = tokenizer
         self.image_processor = image_processor
+
 
 class RT2LikeBaseline(nn.Module):
     def __init__(
@@ -53,7 +58,8 @@ class RT2LikeBaseline(nn.Module):
         )
 
         tokenizer = AutoTokenizer.from_pretrained(lmm_path, local_files_only=True)
-        if tokenizer.pad_token is None: tokenizer.pad_token = tokenizer.eos_token
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
         image_processor = SiglipImageProcessor.from_pretrained(
             vision_encoder_path,
             local_files_only=True,
@@ -66,7 +72,7 @@ class RT2LikeBaseline(nn.Module):
             nn.SiLU(),
             nn.Linear(self.hidden_size, self.hidden_size),
             nn.SiLU(),
-            nn.Linear(self.hidden_size, self.hidden_size)
+            nn.Linear(self.hidden_size, self.hidden_size),
         )
 
         self.action_dim = action_dim
@@ -81,7 +87,7 @@ class RT2LikeBaseline(nn.Module):
                     action_dim=action_dim,
                     hidden_size=self.hidden_size,
                     depth=projector_depth,
-                    num_heads=projector_num_heads
+                    num_heads=projector_num_heads,
                 )
             else:
                 self.action_projector = nn.Linear(action_dim, self.hidden_size)
@@ -90,13 +96,17 @@ class RT2LikeBaseline(nn.Module):
 
         vocab_limit = 128000
         self.action_token_start_idx = vocab_limit - num_bins
-        print(f"RT-2 Mode: Using vocabulary indices [{self.action_token_start_idx}, {vocab_limit}) for {num_bins} action bins.")
+        print(
+            f"RT-2 Mode: Using vocabulary indices [{self.action_token_start_idx}, {vocab_limit}) for {num_bins} action bins."
+        )
 
         self.requires_grad_(False)
         self.eval()
 
     @torch.no_grad()
-    def predict_action(self, input_ids, attention_mask, proprioception=None, proprio_attention_mask=None, pixel_values=None, **kwargs):
+    def predict_action(
+        self, input_ids, attention_mask, proprioception=None, proprio_attention_mask=None, pixel_values=None, **kwargs
+    ):
         B = input_ids.shape[0]
 
         vision_outputs = self.vision_encoder(pixel_values, output_hidden_states=True)
@@ -120,7 +130,9 @@ class RT2LikeBaseline(nn.Module):
             if proprio_attention_mask is not None:
                 mask_list.append(proprio_attention_mask.to(attention_mask.device))
             else:
-                mask_list.append(torch.ones(B, proprio_embeds.shape[1], device=attention_mask.device, dtype=attention_mask.dtype))
+                mask_list.append(
+                    torch.ones(B, proprio_embeds.shape[1], device=attention_mask.device, dtype=attention_mask.dtype)
+                )
 
         embeds_list.append(text_embeds)
         mask_list.append(attention_mask)
@@ -134,13 +146,13 @@ class RT2LikeBaseline(nn.Module):
                 self.end_idx = end_idx
 
             def __call__(self, input_ids, scores):
-                scores[:, :self.start_idx] = float('-inf')
-                scores[:, self.end_idx:] = float('-inf')
+                scores[:, : self.start_idx] = float("-inf")
+                scores[:, self.end_idx :] = float("-inf")
                 return scores
 
-        logits_processor = LogitsProcessorList([
-            RT2ActionLogitsProcessor(self.action_token_start_idx, self.action_token_start_idx + self.num_bins)
-        ])
+        logits_processor = LogitsProcessorList(
+            [RT2ActionLogitsProcessor(self.action_token_start_idx, self.action_token_start_idx + self.num_bins)]
+        )
 
         total_action_tokens = self.num_actions * self.action_dim
 
@@ -148,10 +160,7 @@ class RT2LikeBaseline(nn.Module):
         pad_token_id = pad_token_id if pad_token_id is not None else 0
 
         dummy_input_ids = torch.full(
-            (B, inputs_embeds.shape[1]),
-            pad_token_id,
-            dtype=torch.long,
-            device=inputs_embeds.device
+            (B, inputs_embeds.shape[1]), pad_token_id, dtype=torch.long, device=inputs_embeds.device
         )
 
         outputs = self.lmm.generate(
@@ -163,10 +172,10 @@ class RT2LikeBaseline(nn.Module):
             do_sample=False,
             use_cache=True,
             eos_token_id=[],
-            pad_token_id=pad_token_id
+            pad_token_id=pad_token_id,
         )
 
-        generated_ids = outputs[:, inputs_embeds.shape[1]:]
+        generated_ids = outputs[:, inputs_embeds.shape[1] :]
 
         bin_indices = generated_ids - self.action_token_start_idx
 

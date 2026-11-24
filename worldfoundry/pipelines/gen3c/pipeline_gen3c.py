@@ -139,13 +139,13 @@ class Gen3CPipeline(PipelineABC):
         return overrides or None
 
     @classmethod
-    def from_pretrained(  # ty: ignore[invalid-method-override]
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
         model_path: str | Mapping[str, Any] | None = None,
         required_components: Mapping[str, Any] | None = None,
         device: str = "cuda",
         **kwargs: Any,
-    ) -> "Gen3CPipeline":
+    ) -> Gen3CPipeline:
         options = cls._options(model_path, required_components, kwargs)
         native = NativeDiffusionPipeline.from_pretrained(
             "gen3c",

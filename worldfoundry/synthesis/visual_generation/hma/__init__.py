@@ -1,5 +1,5 @@
-"""HMA official-runtime integration."""
+"""HMA runtime integration."""
 
-from .worldfoundry_runtime import build_command, missing_requirements, runtime_root
+from .worldfoundry_runtime import build_command, missing_requirements
 
-__all__ = ["build_command", "missing_requirements", "runtime_root"]
+__all__ = ["build_command", "missing_requirements"]

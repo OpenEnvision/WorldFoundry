@@ -144,8 +144,8 @@ def test_regional_norm_roots_and_preparation_fallback(
     monkeypatch: pytest.MonkeyPatch,
     fallback: bool,
 ) -> None:
-    from worldfoundry.core.execution import compile_cache
     from worldfoundry.core.nn.transformer.dit import RMSNorm
+    from worldfoundry.core.platform import compile_cache
 
     class Norms(torch.nn.Module):
         def __init__(self) -> None:

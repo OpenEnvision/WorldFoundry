@@ -1,2 +1,9 @@
-from .datasets import IMG_FPS, BatchFeatureDataset, VariableVideoTextDataset, VideoTextDataset
-from .utils import get_transforms_image, get_transforms_video, is_img, is_vid, save_sample
+from .datasets import IMG_FPS as IMG_FPS
+from .datasets import BatchFeatureDataset as BatchFeatureDataset
+from .datasets import VariableVideoTextDataset as VariableVideoTextDataset
+from .datasets import VideoTextDataset as VideoTextDataset
+from .utils import get_transforms_image as get_transforms_image
+from .utils import get_transforms_video as get_transforms_video
+from .utils import is_img as is_img
+from .utils import is_vid as is_vid
+from .utils import save_sample as save_sample

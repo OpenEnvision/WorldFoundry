@@ -3,8 +3,6 @@ model_id: open-sora
 runtime:
   kind: official_cli
   backend_quality: in_tree_official_cli
-  repo_root_candidates:
-  - ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/synthesis/visual_generation/open_sora/open_sora_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_CKPT_DIR/OpenSora-STDiT-v3
   - $WORLDFOUNDRY_CKPT_DIR/hpcai-tech--OpenSora-STDiT-v3
@@ -41,9 +39,8 @@ runtime:
   env:
     OPENSORA_VAE_PATH: "$WORLDFOUNDRY_HFD_ROOT/hpcai-tech--OpenSora-VAE-v1.2"
     OPENSORA_TEXT_ENCODER_PATH: "$WORLDFOUNDRY_HFD_ROOT/DeepFloyd--t5-v1_1-xxl-safetensors"
-  command:
-  - "{python}"
-  - "{repo_root}/scripts/inference.py"
+  module: worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.scripts.inference
+  args:
   - "{config}"
   - "--ckpt-path"
   - "{checkpoint_path}"

@@ -1,3 +1,3 @@
-from .dpms import DPMS
-from .iddpm import IDDPM
-from .rf import RFLOW
+from .dpms import DPMS as DPMS
+from .iddpm import IDDPM as IDDPM
+from .rf import RFLOW as RFLOW

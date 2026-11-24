@@ -8,6 +8,7 @@ groups:
 - dynamicrafter
 source_repos:
 - url: https://github.com/Doubiiu/DynamiCrafter
+  revision: 859021927d8e0f8eb4d91d16f86711b8c25a2023
 checkpoints:
 - repo_id: Doubiiu/DynamiCrafter_512
   revision: 9eb874455b7903c0244fe7bf53ca21cb979cd05a

@@ -6,9 +6,7 @@ Face paper thumbnails when they exist. Writes ``lib/model-paper-media.json``
 and patches recipe/index JSON in place so the pages pick up paper figures
 without a full catalog regenerate.
 
-Never attach catalog / Studio demo clips (``kind: video``, ``/demos/*.mp4``)
-to model homepages. Home, Studio gallery, and welcome still use those files
-on disk — this harvest just must not emit them into model-page media.
+Never attach video clips (``kind: video`` or video files) to model homepages.
 """
 
 from __future__ import annotations
@@ -41,7 +39,6 @@ ARXIV_ID_RE = re.compile(
     r"(?:arxiv\.org/(?:abs|pdf|html)|huggingface\.co/papers|hf\.co/papers)/(\d{4}\.\d{4,5})(?:v\d+)?",
     re.I,
 )
-GITHUB_RE = re.compile(r"https?://(?:www\.)?github\.com/([^/]+)/([^/?#]+)", re.I)
 
 # Official paper teaser / overview figures. Download only these author-published
 # assets; never a PDF page-1 render (that stays paper.png beside the title).
@@ -165,13 +162,6 @@ CURATED_FIGURES: dict[str, dict[str, str]] = {
     "dualcamctrl": {
         "overview": "https://arxiv.org/html/2511.23127v2/dualcam_framework.png",
     },
-    "dust3r": {
-        "teaser": "https://raw.githubusercontent.com/naver/dust3r/main/assets/dust3r.jpg",
-    },
-    "dvlt": {
-        "teaser": "https://arxiv.org/html/2605.30215v2/teaser_figure.png",
-        "overview": "https://arxiv.org/html/2605.30215v2/method_overview_v3.png",
-    },
     "dynamicrafter": {
         "overview": "https://arxiv.org/html/2310.12190v2/overview3.png",
     },
@@ -263,9 +253,6 @@ CURATED_FIGURES: dict[str, dict[str, str]] = {
     },
     "hunyuanworld-mirror": {
         "overview": "https://arxiv.org/html/2510.10726v2/Figs/pipeline.png",
-    },
-    "hunyuanworld-voyager": {
-        "teaser": "https://arxiv.org/html/2405.07719v5/lb.png",
     },
     "hy-embodied-vla": {
         "teaser": "https://arxiv.org/html/2606.14409v2/teaser_1.png",
@@ -397,9 +384,6 @@ CURATED_FIGURES: dict[str, dict[str, str]] = {
     "molmobot": {
         "teaser": "https://arxiv.org/html/2603.16861v2/MolmoBotTeaser_11.png",
     },
-    "monst3r": {
-        "teaser": "https://raw.githubusercontent.com/Junyi42/monst3r/main/assets/fig1_teaser.png",
-    },
     "mosaicmem": {
         "teaser": "https://arxiv.org/html/2603.17117v1/figs/mem_comparison_V7.jpg",
         "overview": "https://arxiv.org/html/2603.17117v1/figs/method_v4.jpg",
@@ -428,9 +412,6 @@ CURATED_FIGURES: dict[str, dict[str, str]] = {
     },
     "omniforcing": {
         "overview": "https://arxiv.org/html/2603.11647v2/teaser_2.png",
-    },
-    "open-dreamer": {
-        "teaser": "https://arxiv.org/html/2509.24527v1/imag.png",
     },
     "open-magvit2": {
         "overview": "https://arxiv.org/html/2409.04410v3/framework.png",
@@ -503,10 +484,6 @@ CURATED_FIGURES: dict[str, dict[str, str]] = {
     "self-forcing": {
         "overview": "https://arxiv.org/html/2506.08009v2/overview.png",
     },
-    "shotstream": {
-        "teaser": "https://arxiv.org/html/2603.25746v1/overflow.png",
-        "overview": "https://arxiv.org/html/2603.25746v1/method_teacher.png",
-    },
     "show-o": {
         "overview": "https://arxiv.org/html/2408.12528v7/method_comparisons.png",
     },
@@ -531,15 +508,9 @@ CURATED_FIGURES: dict[str, dict[str, str]] = {
     "spatia": {
         "overview": "https://arxiv.org/html/2512.15716v1/overview.png",
     },
-    "splatt3r": {
-        "overview": "https://arxiv.org/html/2408.13912v2/methodology.png",
-    },
     "stable-video-infinity": {
         "teaser": "https://arxiv.org/html/2510.09212v1/Figure/intro.png",
         "overview": "https://arxiv.org/html/2510.09212v1/Figure/overall.png",
-    },
-    "stable-virtual-camera": {
-        "overview": "https://arxiv.org/html/2503.14489v2/overview.png",
     },
     "starvla": {
         "teaser": "https://arxiv.org/html/2604.05014v1/vla-form.png",
@@ -570,10 +541,6 @@ CURATED_FIGURES: dict[str, dict[str, str]] = {
     "unidepth-v2-prior": {
         "teaser": "https://arxiv.org/html/2502.20110v2/teaser1.png",
         "overview": "https://arxiv.org/html/2502.20110v2/overview3.png",
-    },
-    "unik3d-prior": {
-        "teaser": "https://arxiv.org/html/2503.16591v1/teaser_cr.png",
-        "overview": "https://arxiv.org/html/2503.16591v1/overview_cr.png",
     },
     "uwm": {
         "overview": "https://arxiv.org/html/2504.02792v3/teaser.png",
@@ -670,10 +637,6 @@ CURATED_FIGURES: dict[str, dict[str, str]] = {
         "teaser": "https://arxiv.org/html/2505.22944v3/figures/example1.jpg",
         "overview": "https://arxiv.org/html/2505.22944v3/figures/Pipeline.jpg",
     },
-    "egowm": {
-        "teaser": "https://arxiv.org/html/2601.15284v2/teaser.png",
-        "overview": "https://arxiv.org/html/2601.15284v2/method.png",
-    },
     "emu3.5": {
         "overview": "https://raw.githubusercontent.com/baaivision/Emu3.5/main/assets/arch.png",
     },
@@ -721,10 +684,6 @@ CURATED_FIGURES: dict[str, dict[str, str]] = {
     "vggt": {
         "teaser": "https://arxiv.org/html/2503.11651v1/comparison_vggt_dust3r.png",
         "overview": "https://arxiv.org/html/2503.11651v1/architecture_v4.png",
-    },
-    "wilddet3d": {
-        "teaser": "https://arxiv.org/html/2604.08626v2/teaser_5_flat.png",
-        "overview": "https://arxiv.org/html/2604.08626v2/model_arch_new.png",
     },
 }
 
@@ -778,8 +737,8 @@ AR5IV_FALLBACK = {
     },
 }
 
-# In-tree paper / architecture stills only. Demo mp4s stay on disk for home /
-# Studio / CDN — they must not be harvested onto model homepages.
+# In-tree paper / architecture stills only; video clips are never harvested onto
+# model homepages.
 LOCAL_MEDIA: dict[str, list[dict[str, str]]] = {
     "hunyuanvideo": [
         {
@@ -931,16 +890,16 @@ def download_curated_figures() -> dict[str, list[str]]:
     return saved
 
 
-def is_demo_video_figure(item: dict[str, str]) -> bool:
+def is_video_figure(item: dict[str, str]) -> bool:
     kind = item.get("kind") or "image"
     src = str(item.get("src") or "").strip().lower()
     if kind == "video":
         return True
-    return src.endswith((".mp4", ".webm", ".mov", ".m4v")) or src.startswith("/demos/")
+    return src.endswith((".mp4", ".webm", ".mov", ".m4v"))
 
 
-def without_demo_videos(figures: list[dict[str, str]]) -> list[dict[str, str]]:
-    return [item for item in figures if not is_demo_video_figure(item)]
+def without_videos(figures: list[dict[str, str]]) -> list[dict[str, str]]:
+    return [item for item in figures if not is_video_figure(item)]
 
 
 def local_figure_exists(src: str) -> bool:
@@ -949,16 +908,13 @@ def local_figure_exists(src: str) -> bool:
     path = PUBLIC / src.lstrip("/")
     if not path.is_file():
         return False
-    # Demo clips stay on disk for home / Studio / CDN; model homes must not list them.
-    if src.startswith("/demos/"):
-        return False
     return path.stat().st_size > 800
 
 
 def merge_official_figures(figures: list[dict[str, str]], model_id: str) -> list[dict[str, str]]:
     official = figure_records(model_id)
     if not official:
-        return without_demo_videos(
+        return without_videos(
             [
                 item
                 for item in figures
@@ -973,7 +929,7 @@ def merge_official_figures(figures: list[dict[str, str]], model_id: str) -> list
         and not str(item.get("src") or "").lower().endswith("/paper.png")
         and local_figure_exists(str(item.get("src") or ""))
     ]
-    return without_demo_videos(official + kept)
+    return without_videos(official + kept)
 
 
 def request(url: str, timeout: int = 20) -> bytes | None:
@@ -1066,7 +1022,7 @@ def apply_payload(media: dict[str, _ModelMedia]) -> None:
         else:
             docs.setdefault("paper", None)
         if extra.get("figures"):
-            docs["figures"] = without_demo_videos(list(extra["figures"]))
+            docs["figures"] = without_videos(list(extra["figures"]))
         else:
             docs.setdefault("figures", [])
     RECIPES.write_text(json.dumps(recipes, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -1104,7 +1060,7 @@ def main() -> None:
         for model_id, extra in list(media.items()):
             if not isinstance(extra, dict):
                 continue
-            extra["figures"] = without_demo_videos(list(extra.get("figures") or []))
+            extra["figures"] = without_videos(list(extra.get("figures") or []))
             media[model_id] = extra
         OUT.write_text(json.dumps(media, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"curated figures for {len(saved)} models -> {OUT}", flush=True)
@@ -1132,7 +1088,7 @@ def main() -> None:
         arxiv_id = arxiv_for.get(model_id)
         if arxiv_id and arxiv_id in papers:
             entry["paper"] = papers[arxiv_id]
-        figures = without_demo_videos([dict(item) for item in LOCAL_MEDIA.get(model_id, [])])
+        figures = without_videos([dict(item) for item in LOCAL_MEDIA.get(model_id, [])])
         if arxiv_id and not (THUMB_DIR / model_id / "paper.png").is_file():
             thumb = download_thumb(arxiv_id, model_id)
             if thumb:

@@ -1,5 +1,55 @@
-"""Inference-only adapters for the official LTX-2.5 pipelines."""
+"""Inference-only adapters and SOL-Engine acceleration stack for official LTX-2.5 pipelines."""
 
-from .runtime import LTX25DistilledRuntime, LTX25RuntimePlan
+from .acceleration import (
+    LTX25AcceleratedExecutor,
+    LTX25AccelerationConfig,
+    LTX25CFGParallelRunner,
+    LTX25FirstBlockCache,
+    LTX25FirstBlockCacheConfig,
+    LTX25ParallelConfig,
+    LTX25UlyssesAttentionAdapter,
+    accelerate_ltx25_transformer,
+    accelerate_ltx25_video_vae,
+    coerce_ltx25_acceleration_config,
+    convert_ltx25_conv_video_decoder_state_dict,
+    convert_ltx25_conv_video_encoder_state_dict,
+    gather_ltx25_video_hidden,
+    ltx25_sol_profile,
+    shard_ltx25_video_args,
+)
+from .runtime import (
+    CONV_VIDEO_VAE_RELPATH,
+    DEV_TRANSFORMER_RELPATH,
+    DIFF_VIDEO_VAE_RELPATH,
+    LTX25_STAGE_1_SIGMAS,
+    LTX25_STAGE_2_SIGMAS,
+    LTX25DistilledRuntime,
+    LTX25RuntimePlan,
+    resample_video_for_ltx25,
+)
 
-__all__ = ["LTX25DistilledRuntime", "LTX25RuntimePlan"]
+__all__ = [
+    "CONV_VIDEO_VAE_RELPATH",
+    "DEV_TRANSFORMER_RELPATH",
+    "DIFF_VIDEO_VAE_RELPATH",
+    "LTX25_STAGE_1_SIGMAS",
+    "LTX25_STAGE_2_SIGMAS",
+    "LTX25AcceleratedExecutor",
+    "LTX25AccelerationConfig",
+    "LTX25CFGParallelRunner",
+    "LTX25DistilledRuntime",
+    "LTX25FirstBlockCache",
+    "LTX25FirstBlockCacheConfig",
+    "LTX25ParallelConfig",
+    "LTX25RuntimePlan",
+    "LTX25UlyssesAttentionAdapter",
+    "accelerate_ltx25_transformer",
+    "accelerate_ltx25_video_vae",
+    "coerce_ltx25_acceleration_config",
+    "convert_ltx25_conv_video_decoder_state_dict",
+    "convert_ltx25_conv_video_encoder_state_dict",
+    "gather_ltx25_video_hidden",
+    "ltx25_sol_profile",
+    "resample_video_for_ltx25",
+    "shard_ltx25_video_args",
+]

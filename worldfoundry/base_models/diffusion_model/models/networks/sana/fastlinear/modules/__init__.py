@@ -23,8 +23,8 @@ PyTorch reference modules (:class:`LiteMLA`, :class:`MBConvPreGLU`) live
 alongside for CPU / non-Triton fallbacks.
 """
 
-from .triton_lite_mla import *
-from .triton_lite_mla_fwd import *
-from .triton_mb_conv_pre_glu import *
+from .triton_lite_mla import *  # noqa: F403 - Upstream star import kept as written.
+from .triton_lite_mla_fwd import *  # noqa: F403 - Upstream star import kept as written.
+from .triton_mb_conv_pre_glu import *  # noqa: F403 - Upstream star import kept as written.
 
 # from .flash_attn import *

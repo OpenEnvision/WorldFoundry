@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: hy-nomas
+model_id: hy-nomas
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.hy_nomas.pipeline_hy_nomas:HyNomasPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

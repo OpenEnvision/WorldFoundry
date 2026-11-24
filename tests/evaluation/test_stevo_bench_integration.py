@@ -10,13 +10,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.catalog.dispatch import (
+from worldfoundry.evals.tasks.catalog.dispatch import (
     BENCHMARK_INTEGRATION_REGISTRY,
     CLI_RUNNERS,
     VIDEO_RUNNER_REGISTRY,
 )
-from worldfoundry.evaluation.tasks.contracts import get_external_benchmark_contract
-from worldfoundry.evaluation.tasks.execution.runners.stevo_bench.stevo_bench_metrics import (
+from worldfoundry.evals.tasks.contracts import get_external_benchmark_contract
+from worldfoundry.evals.tasks.execution.runners.stevo_bench.stevo_bench_metrics import (
     METRIC_ORDER,
     aggregate_metrics,
     load_sample_records,
@@ -24,7 +24,7 @@ from worldfoundry.evaluation.tasks.execution.runners.stevo_bench.stevo_bench_met
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = REPO_ROOT / "worldfoundry/data/benchmarks/assets/stevo-bench/sample_run"
-RUNNER = REPO_ROOT / "worldfoundry/evaluation/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py"
+RUNNER = REPO_ROOT / "worldfoundry/evals/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py"
 
 
 class StevoBenchIntegrationTests(unittest.TestCase):

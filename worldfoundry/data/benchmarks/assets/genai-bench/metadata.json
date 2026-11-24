@@ -8,6 +8,6 @@
   ],
   "fixture_pair_count": 3,
   "preference_pairs_file": "preference_pairs.fixture.jsonl",
-  "vqa_score_backend": "worldfoundry/evaluation/tasks/execution/runners/_scorers/vqa_score",
+  "vqa_score_backend": "worldfoundry/evals/tasks/execution/runners/_scorers/vqa_score",
   "default_vqascore_model": "clip-flant5-xxl"
 }

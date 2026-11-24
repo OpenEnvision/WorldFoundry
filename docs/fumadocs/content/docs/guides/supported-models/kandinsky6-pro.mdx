@@ -1,11 +1,11 @@
 ---
 title: "Kandinsky 6.0 pro"
-description: "Kandinsky 6.0 pro from Kandinsky6: text-to-video and image-to-video; Runner parity pending."
+description: "Kandinsky 6.0 pro from kandinskylab: text-to-video, image-to-video, and 1 more task; Runner parity pending; dedicated `worldfoundry-kandinsky6-cu126`."
 modelId: "kandinsky6-pro"
 pageSource: generated
 ---
 
-Kandinsky 6.0 pro is a video generation model from Kandinsky6. The catalog records it for text-to-video, image-to-video, and audio-video-generation.
+Kandinsky 6.0 pro is a video generation model from kandinskylab for text-to-video, image-to-video, and audio video generation.
 
 <ModelPaperFigures modelId="kandinsky6-pro" locale="en" />
 
@@ -15,30 +15,24 @@ Code: [kandinskylab/kandinsky-6](https://github.com/kandinskylab/kandinsky-6).
 
 ## What it is for
 
-`kandinsky6-pro` is the recorded text/image-to-video line. Use it when you want both prompt and still conditioning on the same catalog card.
+Use `kandinsky6-pro` for both text-to-video and image-to-video generation.
 
-Catalog tasks include text-to-video, image-to-video, and audio-video-generation. Documented modalities: text and image in, video out.
+Tasks: text-to-video, image-to-video, and audio video generation. Modalities: text and image in, video out.
 
 ## Runtime contract
 
-Optional `prompt`, `image`, `seed`, `frames`, and `fps`; artifacts `generated_video` and `kandinsky6-pro.mp4`.
+Inputs `prompt` and `image`; artifacts `generated_video` and `kandinsky6-pro.mp4`.
 
 CLI task profiles: `text-to-video`, `image-to-video`, `audio-video-generation`, and `video_generation`. WorldFoundry binds `Kandinsky6Pipeline`.
 
 Family status: **Runner parity pending**.
 
-Native audio-video inference; checkpoint-backed CUDA parity is pending.
-
-Runner evidence is “Pending” — not a verified end-to-end GPU run. Do not treat this page as proof the route is fully validated.
-
 ## Running in WorldFoundry
 
-Launch `worldfoundry-eval run kandinsky6-pro --pipeline.task-profile text-to-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Generate a clip with `wf run kandinsky6-pro --pipeline.task-profile text-to-video`. Switch tasks in the command builder above to change `--pipeline.task-profile`.
 
-It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+It runs in the dedicated environment `worldfoundry-kandinsky6-cu126` (Python 3.10, CUDA 12.6, torch==2.9.0+cu126).
 
-Recorded weight repositories include `kandinskylab/Kandinsky-6.0-Pro-5s-Diffusers`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh kandinsky6-pro`. Add `--download` to fetch missing public checkpoints.
-
-Status: **Runner parity pending**.
+Weights: `kandinskylab/Kandinsky-6.0-Pro-5s-Diffusers`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh kandinsky6-pro`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="kandinsky6-pro" locale="en" />

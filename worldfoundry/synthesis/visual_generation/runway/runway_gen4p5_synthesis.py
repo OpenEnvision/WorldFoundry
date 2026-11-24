@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ..api_video_client import ApiVideoSynthesis
 
@@ -14,7 +14,7 @@ class RunwayGen4p5Synthesis(ApiVideoSynthesis):
 
     def __init__(
         self,
-        endpoint: Optional[str] = None,
+        endpoint: str | None = None,
         api_key: str = "your_api_key",
         runway_version: str = "2024-11-06",
         logger=None,
@@ -23,7 +23,7 @@ class RunwayGen4p5Synthesis(ApiVideoSynthesis):
         super().__init__(endpoint=endpoint, api_key=api_key, logger=logger)
         self.runway_version = runway_version
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         """Add Runway's mandatory API-version header to the standard bearer auth."""
         return {**super()._headers(), "X-Runway-Version": self.runway_version}
 
@@ -33,10 +33,10 @@ class RunwayGen4p5Synthesis(ApiVideoSynthesis):
         model: str = "gen4.5",
         ratio: str = "1280:720",
         duration: int = 5,
-        seed: Optional[int] = None,
-        public_figure_threshold: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        seed: int | None = None,
+        public_figure_threshold: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Submit a text-to-video generation task."""
         payload = self._payload(
             input_prompt=input_prompt,
@@ -56,10 +56,10 @@ class RunwayGen4p5Synthesis(ApiVideoSynthesis):
         model: str = "gen4.5",
         ratio: str = "1280:720",
         duration: int = 5,
-        seed: Optional[int] = None,
-        public_figure_threshold: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        seed: int | None = None,
+        public_figure_threshold: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Submit an image-to-video generation task anchored on ``prompt_image``."""
         payload = self._payload(
             input_prompt=input_prompt,
@@ -80,12 +80,12 @@ class RunwayGen4p5Synthesis(ApiVideoSynthesis):
         model: str,
         ratio: str,
         duration: int,
-        seed: Optional[int],
-        public_figure_threshold: Optional[str],
-        **kwargs
-    ) -> Dict[str, Any]:
+        seed: int | None,
+        public_figure_threshold: str | None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Build the request body shared by both generation routes."""
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": model,
             "promptText": input_prompt,
             "ratio": ratio,
@@ -98,21 +98,21 @@ class RunwayGen4p5Synthesis(ApiVideoSynthesis):
         payload.update(kwargs)
         return payload
 
-    def get_task(self, task_id: str) -> Dict[str, Any]:
+    def get_task(self, task_id: str) -> dict[str, Any]:
         """Return the status and details of a submitted generation task."""
         return self._get(f"/tasks/{task_id}")
 
     def predict(
         self,
-        processed_data: Dict[str, Any],
+        processed_data: dict[str, Any],
         task_type: str = "auto",
         model: str = "gen4.5",
         ratio: str = "1280:720",
         duration: int = 5,
-        seed: Optional[int] = None,
-        public_figure_threshold: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        seed: int | None = None,
+        public_figure_threshold: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Submit a generation, choosing the route from the presence of a prompt image.
 
         Args:
@@ -125,7 +125,7 @@ class RunwayGen4p5Synthesis(ApiVideoSynthesis):
                 no prompt image.
         """
         prompt = processed_data.get("prompt", "")
-        prompt_image = processed_data.get("prompt_image", None)
+        prompt_image = processed_data.get("prompt_image")
 
         if task_type == "auto":
             task_type = "i2av" if prompt_image is not None else "t2av"

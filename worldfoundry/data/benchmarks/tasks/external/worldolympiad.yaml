@@ -32,13 +32,13 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: worldolympiad
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldOlympiadContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldolympiad --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/worldolympiad --json
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:worldolympiad
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+  contract_validation_command: wf zoo benchmark-run --benchmark-id worldolympiad --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/worldolympiad --json
   runtime:
     kind: in_tree_official_runtime
-    root: worldfoundry/evaluation/tasks/execution/runners/worldolympiad
-    runtime_root: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+    root: worldfoundry/evals/tasks/execution/runners/worldolympiad
+    runtime_root: worldfoundry/evals/tasks/execution/runners/worldolympiad/runtime/worldolympiad
     root_env: WORLDFOUNDRY_WORLDOLYMPIAD_ROOT
     results_path_env: WORLDFOUNDRY_WORLDOLYMPIAD_RESULTS_PATH
     weights_dir_env: WORLDFOUNDRY_WORLDOLYMPIAD_WEIGHTS_DIR
@@ -57,12 +57,12 @@ metadata:
   data_refs:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/worldolympiad.yaml
     fixture: worldfoundry/data/benchmarks/assets/worldolympiad
-    runtime_root: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+    runtime_root: worldfoundry/evals/tasks/execution/runners/worldolympiad/runtime/worldolympiad
     hf_dataset_ids:
     - ziplab/WorldOlympiad
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldOlympiadContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:worldolympiad
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
@@ -71,7 +71,7 @@ metadata:
     surface: worldolympiad_official_in_tree
     normalizer_verified: true
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.execution.runners.worldolympiad.run_worldolympiad_official_runner:main
+    target: worldfoundry.evals.tasks.execution.runners.worldolympiad.run_worldolympiad_official_runner:main
     status: implemented
     tracks:
     - physical
@@ -90,7 +90,7 @@ metadata:
     role: multimodal_judge
   validation_command:
   - python
-  - worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
   - --run-fixture
   - --output-dir
   - <out>
@@ -179,10 +179,10 @@ tasks:
       - transition_smoothness
       - global_consistency
       - clip_semantic_adherence
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldOlympiadContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:worldolympiad
+      runner_script: worldfoundry/evals/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
     runtime_requirements:
-      runtime_root: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+      runtime_root: worldfoundry/evals/tasks/execution/runners/worldolympiad/runtime/worldolympiad
       root_env: WORLDFOUNDRY_WORLDOLYMPIAD_ROOT
       results_path_env: WORLDFOUNDRY_WORLDOLYMPIAD_RESULTS_PATH
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR

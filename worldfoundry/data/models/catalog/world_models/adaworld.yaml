@@ -13,6 +13,7 @@ official_sources:
   project_page: https://adaptable-world-model.github.io/
   github:
     url: https://github.com/Little-Podi/AdaWorld
+    revision: fe3701e607d025376b54aad28d04121f592ddbb3
 integration:
   status: runtime_ported
   notes:
@@ -24,7 +25,7 @@ runner_parity:
     official runner byte-for-byte.
   - No task success, long-horizon consistency, or benchmark parity is claimed.
 runtime_profile: runtime-profile:adaworld
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: adaworld
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked entries retain
@@ -33,16 +34,14 @@ docs:
   publisher: The Hong Kong University of Science and Technology / MIT
   publisher_kind: university
   publisher_zh: 香港科技大学 / 麻省理工学院
-  overview: AdaWorld extracts latent actions from video to condition an adaptable world model. The public pipeline now runs
-    its released checkpoint on a supplied source video; a short GPU probe verified the inference path.
-  overview_zh: AdaWorld 从视频中提取潜在动作来驱动可适配世界模型。公开 pipeline 现可使用发布权重和用户提供的源视频推理；短时 GPU 测试已验证推理链路。
-  architecture: Per the upstream project, a latent action autoencoder extracts transferable action representations that condition an autoregressive world model. The official source is vendored in-tree under synthesis/visual_generation/adaworld; public checkpoints exist upstream.
-  architecture_zh: 按上游项目，潜在动作自编码器提取可迁移的动作表示，用于条件化自回归世界模型。官方源码已内置于 synthesis/visual_generation/adaworld；上游存在公开 checkpoint。
+  overview: AdaWorld extracts latent actions from video to condition an adaptable world model. WorldFoundry runs the released checkpoint on a supplied source video.
+  overview_zh: AdaWorld 从视频中提取潜在动作来驱动可适配世界模型。WorldFoundry 使用发布权重和用户提供的源视频推理。
+  architecture: Per the upstream project, a latent action autoencoder extracts transferable action representations that condition an autoregressive world model. WorldFoundry runs the official FDM inference path in-tree.
+  architecture_zh: 按上游项目，潜在动作自编码器提取可迁移的动作表示，用于条件化自回归世界模型。WorldFoundry 在仓内运行官方 FDM 推理路径。
   usage_notes: Supply the released adaworld.safetensors checkpoint and a readable source video. The main checkpoint includes
     the active CLIP and LAM encoder weights; a separate lam.ckpt is not needed for this inference path.
   usage_notes_zh: 提供发布的 adaworld.safetensors 权重和可读取的源视频。主权重已包含推理所需的 CLIP 与 LAM 编码器参数，此推理路径不需要单独的 lam.ckpt。
   limitations:
-  - The verified probe used four generated frames and two sampling steps with synthetic video input; task behavior and
-    long-horizon consistency remain unmeasured.
+  - Validation covers a short rollout only (four frames, two sampling steps, synthetic source video); task behavior and long-horizon consistency are not measured.
   limitations_zh:
-  - 已验证的测试使用合成视频输入、生成 4 帧并采样 2 步；任务效果和长时一致性尚未测量。
+  - 验证只覆盖短时推理（合成源视频、生成 4 帧、采样 2 步）；任务效果和长时一致性尚未测量。

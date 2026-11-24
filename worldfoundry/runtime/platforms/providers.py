@@ -6,6 +6,7 @@ therefore safe in lightweight control-plane processes and CPU-only installs.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import os
 import platform as host_platform
@@ -125,11 +126,7 @@ class CudaPlatformProvider(BasePlatformProvider):
         for index in range(cuda.device_count()):
             properties = cuda.get_device_properties(index)
             compute_capability = _cuda_compute_capability(cuda, index)
-            arch = (
-                f"sm_{compute_capability[0]}{compute_capability[1]}"
-                if compute_capability is not None
-                else "unknown"
-            )
+            arch = f"sm_{compute_capability[0]}{compute_capability[1]}" if compute_capability is not None else "unknown"
             features = {"cuda"}
             if compute_capability is not None and compute_capability[0] >= 8:
                 features.update(("tensor_cores", "tf32"))
@@ -147,18 +144,13 @@ class CudaPlatformProvider(BasePlatformProvider):
                         compute_capability=compute_capability,
                         supports_compile=_torch_compile_available(torch),
                         supports_graphs=hasattr(cuda, "CUDAGraph"),
-                        supports_async_copy=(
-                            compute_capability is not None
-                            and compute_capability[0] >= 8
-                        ),
+                        supports_async_copy=(compute_capability is not None and compute_capability[0] >= 8),
                         supports_distributed=_torch_distributed_available(torch),
                         features=frozenset(features),
                     ),
                     metadata={
                         "runtime": "cuda",
-                        "runtime_version": getattr(
-                            getattr(torch, "version", None), "cuda", None
-                        ),
+                        "runtime_version": getattr(getattr(torch, "version", None), "cuda", None),
                     },
                 )
             )
@@ -274,19 +266,11 @@ class MpsPlatformProvider(BasePlatformProvider):
         if mps is not None:
             recommended = getattr(mps, "recommended_max_memory", None)
             current = getattr(mps, "current_allocated_memory", None)
-            try:
+            with contextlib.suppress(Exception):
                 total = _safe_int(recommended()) if callable(recommended) else None
-            except Exception:
-                pass
-            try:
+            with contextlib.suppress(Exception):
                 allocated = _safe_int(current()) if callable(current) else None
-            except Exception:
-                pass
-        free = (
-            max(0, total - allocated)
-            if total is not None and allocated is not None
-            else None
-        )
+        free = max(0, total - allocated) if total is not None and allocated is not None else None
         return [
             AcceleratorDescriptor(
                 id="mps:0",

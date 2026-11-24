@@ -3,8 +3,6 @@ model_id: sama-14b
 runtime:
   kind: official_cli
   backend_quality: in_tree_official_runtime
-  repo_root_candidates:
-  - ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/synthesis/visual_generation/sama/sama_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_CKPT_DIR/SAMA-14B
   - $WORLDFOUNDRY_HFD_ROOT/syxbb--SAMA-14B
@@ -26,9 +24,8 @@ runtime:
     base: checkpoint
   required_default_paths:
   - wan_model_root
-  command:
-  - "{python}"
-  - "{repo_root}/infer_sh/inference.py"
+  module: worldfoundry.synthesis.visual_generation.sama.sama_runtime.infer_sh.inference
+  args:
   - "--model-root"
   - "{wan_model_root}"
   - "--state-dict"

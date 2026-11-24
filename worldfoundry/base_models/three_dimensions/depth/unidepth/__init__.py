@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> depth -> unidepth -> __init__.py functionality."""
-
 import os
 from pathlib import Path
 from typing import Literal
@@ -90,15 +88,6 @@ class UniDepth2Model(DepthEstimationModel):
     """Uni depth model implementation."""
 
     def __init__(self, type: Literal["s", "b", "l"] = "l", model_path: str | None = None, device: str = "cuda") -> None:
-        """Init.
-
-        Args:
-            type: The type.
-            model_path: The model path.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         source = resolve_unidepth_source(type, model_path)
         if not Path(source).is_dir():
@@ -113,22 +102,9 @@ class UniDepth2Model(DepthEstimationModel):
 
     @property
     def depth_type(self) -> DepthType:
-        """Depth type.
-
-        Returns:
-            The return value.
-        """
         return DepthType.MODEL_METRIC_DEPTH
 
     def estimate(self, src: DepthEstimationInput) -> DepthEstimationResult:
-        """Estimate.
-
-        Args:
-            src: The src.
-
-        Returns:
-            The return value.
-        """
         rgb: torch.Tensor = unpack_optional(src.rgb)
         assert rgb.dtype == torch.float32, "Input image should be float32"
 

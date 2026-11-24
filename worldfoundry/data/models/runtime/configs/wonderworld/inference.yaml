@@ -1,9 +1,0 @@
-# Native offline pipeline call defaults. Supply images/input_path explicitly.
-seed: 42
-depth_steps: 30
-inpaint_steps: 50
-normal_steps: 10
-refinement_steps: 100
-focal_length: 500
-gen_layer: true
-negative_prompt: collage, text, writings, signs, text, white border, photograph border, artifacts, blur, blurry, foggy, fog, person, bad quality, distortions, distorted image, watermark, signature, fisheye look

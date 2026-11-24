@@ -3,8 +3,6 @@ model_id: open-sora-plan
 runtime:
   kind: official_cli
   backend_quality: in_tree_official_runtime
-  repo_root_candidates:
-  - ${WORLDFOUNDRY_PACKAGE_ROOT}/synthesis/visual_generation/open_sora_plan/open_sora_plan_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_HFD_ROOT/LanguageBind--Open-Sora-Plan-v1.3.0
   - $WORLDFOUNDRY_CKPT_DIR/Open-Sora-Plan-v1.3.0
@@ -20,7 +18,6 @@ runtime:
   - "*.mp4"
   defaults:
     nproc_per_node: 1
-    master_port: 29521
     version: v1_3
     model_subdir: any93x640x640
     vae_subdir: vae
@@ -40,14 +37,9 @@ runtime:
     sample_method: EulerAncestralDiscrete
     seed: 1234
     num_samples_per_prompt: 1
-  command:
-  - "{torchrun}"
-  - "--nproc_per_node"
-  - "{nproc_per_node}"
-  - "--master_port"
-  - "{master_port}"
-  - "-m"
-  - "opensora.sample.sample"
+  module: worldfoundry.synthesis.visual_generation.open_sora_plan.open_sora_plan_runtime.opensora.sample.sample
+  nproc_per_node: "{nproc_per_node}"
+  args:
   - "--model_path"
   - "{checkpoint_path}/{model_subdir}"
   - "--version"
@@ -88,6 +80,6 @@ runtime:
   - "--prediction_type"
   - "v_prediction"
 notes:
-- Open-Sora-Plan v1.3.0 is the GPU validation target; v1.5.0 weights are staged for NPU/MindSpeed in the current official release.
+- Open-Sora-Plan v1.3.0 is the in-tree route; the optional v1.5 backbone and VEnhancer are unavailable in this build.
 - Defaults mirror the upstream scripts/text_condition/gpu/sample_t2v_v1_3.sh recipe for model, frames, resolution, scheduler, and sampler settings. Studio uses one worker for the single-prompt demo because upstream torchrun parallelism distributes multiple prompts across ranks; set nproc_per_node=8 when passing a prompt file or prompt list.
 - Runtime code is resolved from WorldFoundry's in-tree infer-only port; checkpoint assets use Hugging Face/local cache layout.

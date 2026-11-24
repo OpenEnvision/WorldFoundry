@@ -14,8 +14,6 @@
 # limitations under the License.
 
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> utils -> morph.py functionality."""
-
 import torch
 
 

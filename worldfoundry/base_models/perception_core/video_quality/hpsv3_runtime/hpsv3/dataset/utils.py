@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import numpy as np
 ## This file is modified from https://github.com/kq-chen/qwen-vl-utils/blob/main/src/qwen_vl_utils/vision_process.py
 import base64
 import logging
@@ -19,7 +18,6 @@ from packaging import version
 from PIL import Image
 from torchvision import io, transforms
 from torchvision.transforms import InterpolationMode
-
 
 logger = logging.getLogger(__name__)
 
@@ -82,16 +80,11 @@ def smart_resize(
 
 
 def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACTOR) -> Image.Image:
-    if "image" in ele:
-        image = ele["image"]
-    else:
-        image = ele["image_url"]
+    image = ele["image"] if "image" in ele else ele["image_url"]
     image_obj = None
-    if isinstance(image, Image.Image):
+    if isinstance(image, (Image.Image, torch.Tensor)):
         image_obj = image
-    elif isinstance(image, torch.Tensor):
-        image_obj = image
-    elif image.startswith("http://") or image.startswith("https://"):
+    elif image.startswith(("http://", "https://")):
         image_obj = Image.open(requests.get(image, stream=True).raw)
     elif image.startswith("file://"):
         image_obj = Image.open(image[7:])
@@ -119,18 +112,18 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
             if len(shape) == 4:
                 if shape[1] in [1, 3]:  # Likely [B, C, H, W]
                     height, width = shape[2], shape[3]
-                    image_mode = 'NCHW'
+                    image_mode = "NCHW"
                 elif shape[3] in [1, 3]:  # Likely [B, H, W, C]
                     height, width = shape[1], shape[2]
-                    image_mode = 'NHWC'
+                    image_mode = "NHWC"
 
             elif len(shape) == 3:
                 if shape[0] in [1, 3]:  # Likely [C, H, W]
                     height, width = shape[1], shape[2]
-                    image_mode = 'CHW'
+                    image_mode = "CHW"
                 elif shape[2] in [1, 3]:  # Likely [H, W, C]
                     height, width = shape[0], shape[1]
-                    image_mode = 'HWC'
+                    image_mode = "HWC"
                 else:
                     raise ValueError(f"Cannot determine tensor image format from shape {shape}")
             else:
@@ -148,20 +141,23 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
         )
 
     if isinstance(image, torch.Tensor):
-        if image_mode == 'NCHW':
+        if image_mode == "NCHW":
             image = transforms.functional.resize(
                 image, [resized_height, resized_width], interpolation=InterpolationMode.BICUBIC, antialias=True
             )
-        elif image_mode == 'NHWC':
+        elif image_mode == "NHWC":
             image = transforms.functional.resize(
-                image.permute(0, 3, 1, 2), [resized_height, resized_width], interpolation=InterpolationMode.BICUBIC, antialias=True
+                image.permute(0, 3, 1, 2),
+                [resized_height, resized_width],
+                interpolation=InterpolationMode.BICUBIC,
+                antialias=True,
             )
-        elif image_mode == 'CHW':
+        elif image_mode == "CHW":
             image = image.unsqueeze(0)  # Add batch dimension
             image = transforms.functional.resize(
                 image, [resized_height, resized_width], interpolation=InterpolationMode.BICUBIC, antialias=True
             )
-        elif image_mode == 'HWC':
+        elif image_mode == "HWC":
             image = image.permute(2, 0, 1).unsqueeze(0)  # Add batch dimension and change to CHW
             image = transforms.functional.resize(
                 image, [resized_height, resized_width], interpolation=InterpolationMode.BICUBIC, antialias=True
@@ -211,7 +207,7 @@ def smart_nframes(
         nframes = round_by_factor(nframes, FRAME_FACTOR)
     if nframes > total_frames:
         nframes = total_frames
-    if not (FRAME_FACTOR <= nframes and nframes <= total_frames):
+    if not (nframes >= FRAME_FACTOR and nframes <= total_frames):
         raise ValueError(f"nframes should in interval [{FRAME_FACTOR}, {total_frames}], but got {nframes}.")
     return nframes
 
@@ -233,24 +229,26 @@ def _read_video_torchvision(
     video_path = ele["video"]
     if version.parse(torchvision.__version__) < version.parse("0.19.0"):
         if "http://" in video_path or "https://" in video_path:
-            warnings.warn("torchvision < 0.19.0 does not support http/https video path, please upgrade to 0.19.0.")
+            warnings.warn(
+                "torchvision < 0.19.0 does not support http/https video path, please upgrade to 0.19.0.", stacklevel=1
+            )
         if "file://" in video_path:
             video_path = video_path[7:]
-    st = time.time()
+    _st = time.time()
     video, audio, info = io.read_video(
         video_path,
         start_pts=ele.get("video_start", 0.0),
-        end_pts=ele.get("video_end", None),
+        end_pts=ele.get("video_end"),
         pts_unit="sec",
         output_format="TCHW",
     )
 
     total_frames, video_fps = video.size(0), info["video_fps"]
     # logger.info(f"torchvision:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-    if ele['sample_type'] == 'uniform':
+    if ele["sample_type"] == "uniform":
         nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
         idx = torch.linspace(0, total_frames - 1, nframes).round().long().tolist()
-    elif ele['sample_type'] == 'multi_pts':
+    elif ele["sample_type"] == "multi_pts":
         frames_each_pts = 6
         num_pts = 4
         fps = 8
@@ -263,7 +261,7 @@ def _read_video_torchvision(
         idx = []
         for pt in pts:
             idx.extend(frames_idx[pt - frames_each_pts // 2 : pt + frames_each_pts // 2])
-   
+
     video = video[idx]
     return video
 
@@ -289,20 +287,21 @@ def _read_video_decord(
         torch.Tensor: the video tensor with shape (T, C, H, W).
     """
     import decord
+
     video_path = ele["video"]
-    st = time.time()
+    _st = time.time()
     vr = decord.VideoReader(video_path)
     # TODO: support start_pts and end_pts
-    if 'video_start' in ele or 'video_end' in ele:
+    if "video_start" in ele or "video_end" in ele:
         raise NotImplementedError("not support start_pts and end_pts in decord for now.")
     total_frames, video_fps = len(vr), vr.get_avg_fps()
     # logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-    if ele['sample_type'] == 'uniform':
+    if ele["sample_type"] == "uniform":
         nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
         # nframes = max(nframes, 8)
         # import pdb; pdb.set_trace()
         idx = torch.linspace(0, total_frames - 1, nframes).round().long().tolist()
-    elif ele['sample_type'] == 'multi_pts':
+    elif ele["sample_type"] == "multi_pts":
         frames_each_pts = 6
         num_pts = 4
         fps = 8

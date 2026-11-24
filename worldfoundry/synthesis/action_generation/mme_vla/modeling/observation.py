@@ -1,10 +1,10 @@
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from flax import struct
 
 from ...openpi import array_typing as at
 from ...openpi.modeling.model import ArrayT
 from ...openpi.modeling.model import Observation as _Observation
 from ...openpi.modeling.model import preprocess_observation as _preprocess_observation
-
 
 #  b: batch size
 #  t: time step
@@ -55,9 +55,7 @@ class HistAugObservation(_Observation):
             recur_pos_emb=data.get("recur_pos_emb", None),
             recur_state_emb=data.get("recur_state_emb", None),
             symbolic_tokenized_prompt=data.get("symbolic_tokenized_prompt", None),
-            symbolic_tokenized_prompt_mask=data.get(
-                "symbolic_tokenized_prompt_mask", None
-            ),
+            symbolic_tokenized_prompt_mask=data.get("symbolic_tokenized_prompt_mask", None),
         )
 
     def to_dict(self) -> at.PyTree[ArrayT]:

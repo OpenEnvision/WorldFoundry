@@ -1,6 +1,9 @@
-from .batch import Batch
-from .batch_sampler import BatchSampler
-from .dataset import Dataset
-from .episode import Episode
-from .segment import Segment, SegmentId
-from .utils import collate_segments_to_batch, DatasetTraverser, make_segment
+from .batch import Batch as Batch
+from .batch_sampler import BatchSampler as BatchSampler
+from .dataset import Dataset as Dataset
+from .episode import Episode as Episode
+from .segment import Segment as Segment
+from .segment import SegmentId as SegmentId
+from .utils import DatasetTraverser as DatasetTraverser
+from .utils import collate_segments_to_batch as collate_segments_to_batch
+from .utils import make_segment as make_segment

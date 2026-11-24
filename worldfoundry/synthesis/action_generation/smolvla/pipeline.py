@@ -9,9 +9,7 @@ class SmolVLAPipeline(ComponentPipeline):
     MODEL_ID = "smolvla"
     OPERATOR_TARGET = "worldfoundry.operators.official_policy_operator:OfficialPolicyOperator"
     MEMORY_TARGET = "worldfoundry.synthesis.action_generation.memory:ActionTraceMemory"
-    SYNTHESIS_TARGET = (
-        "worldfoundry.synthesis.action_generation.smolvla.smolvla_synthesis:SmolVLASynthesis"
-    )
+    SYNTHESIS_TARGET = "worldfoundry.synthesis.action_generation.smolvla.smolvla_synthesis:SmolVLASynthesis"
     generation_type = "vla_policy"
 
 

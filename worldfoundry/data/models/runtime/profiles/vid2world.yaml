@@ -1,29 +1,29 @@
-artifact_filename: vid2world_runtime_plan.json
-artifact_kind: generated_video
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: vid2world
 display_name: Vid2World
-id: vid2world
+task_family: world_model
+checkpoints:
+- role: rt1_checkpoint
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Vid2World-RT1
 input_schema:
   actions:
   - action
   image: true
   prompt: true
   video: true
-integration_status: runtime_ported
-checkpoints:
-- role: rt1_checkpoint
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Vid2World-RT1
+artifact_kind: generated_video
+artifact_filename: vid2world_runtime_plan.json
+execution:
+  pipeline_binding: vid2world
+  backend_stage: worldfoundry_runtime_plan
+  runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - Vid2World official evaluation route is registered; checkpoints/config assets are
   runtime-gated.
 - Missing checkpoints/assets are reported by the runtime plan and are not catalog
   blockers.
-- WorldFoundry tracks upstream source and checkpoint metadata only; no runnable pipeline
-  is registered.
-- Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/Vid2World at ae24077adbd0783bc6e1b79f705d9b8fad5888ce.
-runtime_status: route_ready_assets_pending
-task_family: world_model
-execution:
-  pipeline_binding: vid2world
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending
+- The in-tree inference module is worldfoundry.synthesis.visual_generation.vid2world.main.inference;
+  only checkpoint, dataset and config assets are external. Source revision is ae24077adbd0783bc6e1b79f705d9b8fad5888ce.

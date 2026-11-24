@@ -8,6 +8,7 @@ groups:
 - robot_policy
 source_repos:
 - url: https://github.com/BeingBeyond/Being-H
+  revision: 66b959e05db225fd816f8a517d94a9c0585cfc3e
   subdir: Being-H07
 checkpoints:
 - repo_id: BeingBeyond/Being-H07

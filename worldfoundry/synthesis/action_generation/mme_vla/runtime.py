@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
 import os
 import shutil
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
 
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     completed_action_result,
@@ -30,10 +31,13 @@ def _stage_paligemma_tokenizer(location: str | Path | None = None) -> Path:
 
     source = resolve_worldfoundry_path(str(location or _MODEL_CONFIG["paligemma_tokenizer_path"]))
     if not source.is_file() and location is None:
-        source = resolve_local_hf_model_path(
-            "google/paligemma-3b-pt-224",
-            required_files=("tokenizer.model",),
-        ) / "tokenizer.model"
+        source = (
+            resolve_local_hf_model_path(
+                "google/paligemma-3b-pt-224",
+                required_files=("tokenizer.model",),
+            )
+            / "tokenizer.model"
+        )
     if not source.is_file():
         raise FileNotFoundError(f"MME-VLA PaliGemma tokenizer is missing: {source}")
     target = checkpoint_root_path("runtime_assets", "openpi", "big_vision", "tokenizer.model")
@@ -60,9 +64,9 @@ def _runtime_for(location: str, options: Mapping[str, Any]) -> Any:
     # Keep the JAX/OpenPI model graph out of module import.  Workspace discovery
     # imports every public runtime, while these dependencies are only required
     # when an MME-VLA checkpoint is actually loaded.
+    from ..openpi.modeling import tokenizer as openpi_tokenizer
     from . import config as mme_config
     from . import policy_loader
-    from ..openpi.modeling import tokenizer as openpi_tokenizer
 
     config_name = str(options.get("policy_config") or _DEFAULT_POLICY_CONFIG)
     key = (
@@ -141,7 +145,9 @@ def _buffer_observation(observation: Mapping[str, Any], instruction: str) -> dic
     image = first_present(observation, "observation/image", "image", "base_image")
     image_np = to_numpy_image(image)
     if image_np is None or state is None:
-        raise ValueError("MME-VLA history_observations require images/state or observation/image plus observation/state.")
+        raise ValueError(
+            "MME-VLA history_observations require images/state or observation/image plus observation/state."
+        )
 
     return {
         "images": np.asarray(image_np, dtype=np.uint8)[None, None, ...],

@@ -11,8 +11,9 @@ from __future__ import annotations
 import math
 import os
 import time
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -58,9 +59,7 @@ def _env_flag(name: str, default: bool) -> bool:
 def _rotation_matrix(pitch_degrees: float, yaw_degrees: float) -> np.ndarray:
     """Return the native DreamX camera rotation for pitch/yaw controls."""
 
-    return euler_angles_to_rotation_matrix_zyx(
-        np.radians([pitch_degrees, yaw_degrees, 0.0])
-    ).astype(np.float32)
+    return euler_angles_to_rotation_matrix_zyx(np.radians([pitch_degrees, yaw_degrees, 0.0])).astype(np.float32)
 
 
 def _c2w(position: np.ndarray, pitch_degrees: float, yaw_degrees: float) -> np.ndarray:
@@ -208,12 +207,8 @@ class DreamXWorldARRealtimeSession:
         if self._kv_cache is None:
             self._kv_cache = [
                 {
-                    "k": torch.zeros(
-                        1, cache_tokens, num_heads, head_dim, device=self.device, dtype=self.dtype
-                    ),
-                    "v": torch.zeros(
-                        1, cache_tokens, num_heads, head_dim, device=self.device, dtype=self.dtype
-                    ),
+                    "k": torch.zeros(1, cache_tokens, num_heads, head_dim, device=self.device, dtype=self.dtype),
+                    "v": torch.zeros(1, cache_tokens, num_heads, head_dim, device=self.device, dtype=self.dtype),
                     # Cache positions drive Python slicing/control flow. Keep
                     # them on the host so every transformer block does not
                     # force a CUDA synchronization through ``Tensor.item``.
@@ -225,12 +220,8 @@ class DreamXWorldARRealtimeSession:
         if self._crossattn_cache is None:
             self._crossattn_cache = [
                 {
-                    "k": torch.zeros(
-                        1, 512, num_heads, head_dim, device=self.device, dtype=self.dtype
-                    ),
-                    "v": torch.zeros(
-                        1, 512, num_heads, head_dim, device=self.device, dtype=self.dtype
-                    ),
+                    "k": torch.zeros(1, 512, num_heads, head_dim, device=self.device, dtype=self.dtype),
+                    "v": torch.zeros(1, 512, num_heads, head_dim, device=self.device, dtype=self.dtype),
                     "is_init": False,
                 }
                 for _ in range(num_layers)
@@ -316,9 +307,7 @@ class DreamXWorldARRealtimeSession:
         # at the chunk boundary (which may be several pixel frames later).
         reference_w2c = np.linalg.inv(reference)
         relative_c2w = np.stack([reference_w2c @ pose for pose in poses]).astype(np.float32)
-        viewmats = torch.as_tensor(
-            np.linalg.inv(relative_c2w), device=self.device, dtype=self.dtype
-        )
+        viewmats = torch.as_tensor(np.linalg.inv(relative_c2w), device=self.device, dtype=self.dtype)
         viewmats = viewmats.unsqueeze(1).expand(-1, SPATIAL_TOKENS_PER_FRAME, -1, -1)
         viewmats = viewmats.reshape(1, -1, 4, 4)
         intrinsics = torch.zeros(1, 3, 3, device=self.device, dtype=self.dtype)
@@ -453,9 +442,7 @@ class DreamXWorldARRealtimeSession:
                 cache_update_policy="none",
             )
             if index + 1 < len(self.timesteps):
-                next_timestep = self.timesteps[index + 1].expand(
-                    1, LATENT_FRAMES_PER_BLOCK
-                ).clone()
+                next_timestep = self.timesteps[index + 1].expand(1, LATENT_FRAMES_PER_BLOCK).clone()
                 if self._first_block:
                     next_timestep[:, 0] = 0
                 fresh_noise = torch.randn(
@@ -489,9 +476,7 @@ class DreamXWorldARRealtimeSession:
         decode_started = time.perf_counter()
         video = self.vae.decode_to_pixel(latents, use_cache=True)
         video = (video * 0.5 + 0.5).clamp_(0, 1)
-        frames = (
-            video[0].permute(0, 2, 3, 1).mul_(255).round_().to(torch.uint8).cpu().numpy()
-        )
+        frames = video[0].permute(0, 2, 3, 1).mul_(255).round_().to(torch.uint8).cpu().numpy()
         decode_ms = (time.perf_counter() - decode_started) * 1000.0
         expected = FIRST_PIXEL_FRAMES if self._first_block else STEADY_PIXEL_FRAMES
         if len(frames) != expected:

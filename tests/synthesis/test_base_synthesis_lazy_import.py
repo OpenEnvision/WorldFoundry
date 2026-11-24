@@ -11,7 +11,7 @@ from worldfoundry.synthesis.base_synthesis import _lazy_no_grad
 
 
 def test_import_does_not_load_torch_and_prediction_works_when_torch_is_absent():
-    script = '''
+    script = """
 import builtins, sys
 from worldfoundry.synthesis.base_synthesis import BaseSynthesis, _lazy_no_grad
 assert "torch" not in sys.modules
@@ -31,7 +31,7 @@ except NotImplementedError:
 else:
     raise AssertionError("BaseSynthesis.predict lost its abstract contract")
 assert "torch" not in sys.modules
-'''
+"""
     result = subprocess.run([sys.executable, "-c", script], text=True, capture_output=True)
     assert result.returncode == 0, result.stdout + result.stderr
 

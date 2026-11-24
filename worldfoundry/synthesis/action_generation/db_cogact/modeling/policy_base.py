@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from PIL import Image
 
 from .types import (
     ActionOutput,
-    GenSamplingConfig,
     GenerationOutput,
+    GenSamplingConfig,
     SamplingConfig,
 )
 
@@ -26,7 +27,7 @@ class BasePolicy(ABC):
     action_mode: str = "unknown"
     state_used: bool = False
     state_required: bool = False
-    state_dim: Optional[int] = None
+    state_dim: int | None = None
     max_batch_size: int = 1
 
     def __init__(
@@ -34,9 +35,9 @@ class BasePolicy(ABC):
         model: Any,
         tokenizer: Any,
         norm_stats: dict,
-        input_pipeline: Optional[Callable] = None,
-        output_pipeline: Optional[Callable] = None,
-        camera_order: Optional[list] = None,
+        input_pipeline: Callable | None = None,
+        output_pipeline: Callable | None = None,
+        camera_order: list | None = None,
     ) -> None:
         self.model = model
         self.tokenizer = tokenizer
@@ -51,7 +52,7 @@ class BasePolicy(ABC):
     def select_action(
         self,
         observation: dict,
-        sampling_config: Optional[SamplingConfig] = None,
+        sampling_config: SamplingConfig | None = None,
     ) -> list[ActionOutput]:
         """
         Policy-level VLA inference. Implementations may support single-sample
@@ -74,7 +75,7 @@ class BasePolicy(ABC):
         schemas.
         """
 
-    def reset(self) -> None:
+    def reset(self) -> None:  # noqa: B027 - Optional hook with a no-op default.
         """Reset episode state. Stateless models can leave this as no-op."""
 
     # ── batch helpers ────────────────────────────────────────────────────────
@@ -92,9 +93,7 @@ class BasePolicy(ABC):
         for k, v in observation.items():
             if isinstance(v, list):
                 if len(v) != batch_size:
-                    raise ValueError(
-                        f"obs['{k}'] has length {len(v)}, expected {batch_size}"
-                    )
+                    raise ValueError(f"obs['{k}'] has length {len(v)}, expected {batch_size}")
                 out[k] = v
             else:
                 out[k] = [v] * batch_size
@@ -118,21 +117,17 @@ class BasePolicy(ABC):
     def generate(
         self,
         observation: dict,
-        sampling: Optional[GenSamplingConfig] = None,
+        sampling: GenSamplingConfig | None = None,
     ) -> GenerationOutput:
         raise NotImplementedError(
-            f"{type(self).__name__} does not support VLM generation. "
-            "Override generate() and set supports_vlm() → True."
+            f"{type(self).__name__} does not support VLM generation. Override generate() and set supports_vlm() → True."
         )
 
     # ── Image helpers (A-family shared) ──────────────────────────────────────
 
     def _load_images(self, raw_images: list) -> list:
         """Normalize image inputs: open file paths as PIL, pass PIL Images through."""
-        return [
-            Image.open(p).convert("RGB") if isinstance(p, str) else p
-            for p in raw_images
-        ]
+        return [Image.open(p).convert("RGB") if isinstance(p, str) else p for p in raw_images]
 
     def _images_to_tensor(self, pil_images: list):
         """Convert PIL images → model input tensor; unsqueeze batch dim for >1 image."""

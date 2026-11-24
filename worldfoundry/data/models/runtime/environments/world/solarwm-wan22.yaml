@@ -42,5 +42,5 @@ validation_imports:
 notes:
 - Pins the official SolarWM Wan2.2 release-tested Python 3.10, PyTorch 2.5.1/CUDA 12.4, Diffusers 0.38.0, Transformers 5.12.1, PEFT 0.20.0, and FlashAttention 2.8.3 stack.
 - FlashAttention is installed after PyTorch with build isolation disabled by the model-environment installer, matching the official Wan setup order.
-- SolarWM source is intentionally not installed into this environment; the runtime adapter adds the pinned user-staged checkout's src directory to PYTHONPATH.
+- The SolarWM inference code is vendored in WorldFoundry and runs as a package module; it is not installed into this environment.
 - LTX-2.5 and MiniMax-H3 require different Python/CUDA/model stacks and are not routed through this environment.

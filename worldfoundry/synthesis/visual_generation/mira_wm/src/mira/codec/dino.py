@@ -1,8 +1,7 @@
 """DINOv3 backbone loading for the frozen RAE encoder.
 
-The encoder's frozen feature extractor is a DINOv3 ViT loaded through ``torch.hub`` from the
-``facebookresearch/dinov3`` repo. This requires network access (or a populated hub cache) the first
-time it runs. Pretrained weights are loaded from a local cache directory when the
+The encoder's frozen feature extractor uses WorldFoundry's canonical DINOv3 ViT.
+Pretrained weights are loaded from a local cache directory when the
 ``RS_DINO_WEIGHTS_DIR`` environment variable points at one; when no local weights are available and
 ``require_pretrained=False`` the backbone is built with random weights and restored from a codec
 checkpoint instead (the path :meth:`VideoCodec.load_from_checkpoint` takes).
@@ -17,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -63,7 +62,7 @@ DEFAULT_DINO_LAYERS = {
 
 
 class DinoModel(nn.Module):
-    # The hub-loaded (or preloaded) backbone; typed loosely as its API is dynamic.
+    # The canonical (or preloaded) backbone supports a compiled feature-extraction method.
     dino_model: Any
     mean: Tensor
     std: Tensor
@@ -95,17 +94,17 @@ class DinoModel(nn.Module):
         else:
             logging.getLogger("dinov3").setLevel(logging.WARNING)  # suppress noisy dinov3 logging
             logger.info(f"Loading DINOv3 model, variant {dino_model}, {compile=}")
-            hub_kwargs: dict[str, Any] = dict(
-                repo_or_dir="facebookresearch/dinov3",
-                model=dino_model,
-                source="github",
-                verbose=False,  # Get rid of "Using cache found in ..." message
+            from worldfoundry.base_models.perception_core.general_perception.dinov3.hub.backbones import (
+                dinov3_vitb16,
+                dinov3_vitl16,
             )
+
+            builder = {"dinov3_vitb16": dinov3_vitb16, "dinov3_vitl16": dinov3_vitl16}[dino_model]
             # Load pretrained weights from a local cache dir if RS_DINO_WEIGHTS_DIR provides one;
             # otherwise build without pretrained weights (restored from a codec checkpoint).
             weights_path = resolve_dino_weights(dino_model)
             if weights_path is not None:
-                self.dino_model = torch.hub.load(**hub_kwargs, weights=str(weights_path))
+                self.dino_model = builder(weights=str(weights_path))
             elif require_pretrained:
                 raise FileNotFoundError(
                     f"DINOv3 pretrained weights for {dino_model} not found. Set RS_DINO_WEIGHTS_DIR "
@@ -121,11 +120,9 @@ class DinoModel(nn.Module):
                     "model checkpoint).",
                     dino_model,
                 )
-                self.dino_model = torch.hub.load(**hub_kwargs, pretrained=False)
+                self.dino_model = builder(pretrained=False)
             if compile:
-                self.dino_model.get_intermediate_layers = torch.compile(
-                    self.dino_model.get_intermediate_layers
-                )
+                self.dino_model.get_intermediate_layers = torch.compile(self.dino_model.get_intermediate_layers)
 
         self.register_buffer(
             "mean",
@@ -145,7 +142,7 @@ class DinoModel(nn.Module):
     def image_normalization(self, x: torch.Tensor) -> torch.Tensor:
         return (x - self.mean) / self.std
 
-    def dino_forward(self, x: Tensor) -> List[Tensor]:
+    def dino_forward(self, x: Tensor) -> list[Tensor]:
         b, t, _, h, w = x.shape
         x = rearrange(x, "b t c h w -> (b t) c h w")  # x must be in [0, 1]
         x = self.image_normalization(x)
@@ -154,9 +151,7 @@ class DinoModel(nn.Module):
         x = torch.nn.functional.interpolate(x, (new_height, new_width), mode="bilinear", antialias=True)
 
         dino_features = self.dino_model.get_intermediate_layers(x, n=self.layers, norm=True, reshape=True)  # type: ignore
-        dino_features = [
-            rearrange(feature, "(b t) c h w -> b t c h w", b=b, t=t) for feature in dino_features
-        ]
+        dino_features = [rearrange(feature, "(b t) c h w -> b t c h w", b=b, t=t) for feature in dino_features]
         return dino_features
 
 
@@ -208,7 +203,7 @@ class DinoPerceptualLoss(DinoModel):
                 target_features = tuple(self.dino_forward(target_image))
 
         layer_terms: list[Tensor] = []
-        for p, t in zip(pred_features, target_features):
+        for p, t in zip(pred_features, target_features, strict=False):
             if self.normalize:
                 p = nn.functional.normalize(p, dim=2, eps=1e-6)
                 t = nn.functional.normalize(t, dim=2, eps=1e-6)

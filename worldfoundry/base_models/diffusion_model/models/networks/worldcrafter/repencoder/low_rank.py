@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 LOW_RANK_DIM = 64
 LOW_RANK_SCALE = 32.0 / LOW_RANK_DIM
 EXPECTED_LOW_RANK_MODULES = 438
@@ -97,9 +96,7 @@ def _uses_low_rank_branch(name: str) -> bool:
         return True
     if name.startswith("repfeature.blocks."):
         return True
-    if name.startswith("repfeature.final_block."):
-        return True
-    return False
+    return bool(name.startswith("repfeature.final_block."))
 
 
 def _parent_and_child(model: nn.Module, dotted_name: str) -> tuple[nn.Module, str]:
@@ -119,16 +116,11 @@ def inject_low_rank_branches(model: nn.Module) -> int:
             continue
         parent, child = _parent_and_child(model, module_name)
         replacement: nn.Module
-        if isinstance(module, nn.Linear):
-            replacement = LowRankLinear(module)
-        else:
-            replacement = LowRankConv2d(module)
+        replacement = LowRankLinear(module) if isinstance(module, nn.Linear) else LowRankConv2d(module)
         setattr(parent, child, replacement)
         count += 1
     if count != EXPECTED_LOW_RANK_MODULES:
-        raise RuntimeError(
-            f"RepEncoder low-rank graph changed: {count} != {EXPECTED_LOW_RANK_MODULES}"
-        )
+        raise RuntimeError(f"RepEncoder low-rank graph changed: {count} != {EXPECTED_LOW_RANK_MODULES}")
     return count
 
 

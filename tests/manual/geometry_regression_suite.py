@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import fcntl
 import importlib.util
@@ -33,6 +34,19 @@ def load_module(path: Path):
 
 impact = load_module(Path(__file__).with_name("geometry_regression_impact.py"))
 replay = load_module(Path(__file__).with_name("geometry_regression.py"))
+REPLAY_SCRIPT = Path("tests/manual/geometry_regression.py")
+
+
+def accepts_reference_manifest(worker: Path) -> bool:
+    return any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "add_argument"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == "--accepted-manifest"
+        for node in ast.walk(ast.parse(worker.read_text(), filename=str(worker)))
+    )
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -139,7 +153,7 @@ def reference_index(profile: dict) -> dict:
     return index
 
 
-def verify_reference(root: Path, name: str, index: dict) -> None:
+def verify_reference(root: Path, name: str, index: dict) -> list[str]:
     files = index["cases"][name]["files"]
     if not isinstance(files, dict) or not {"manifest.json", "arrays.npz"}.issubset(files):
         raise ValueError(f"Incomplete accepted reference index: {name}")
@@ -155,6 +169,8 @@ def verify_reference(root: Path, name: str, index: dict) -> None:
         impact.relative_path(path)
         if replay.sha256(root / path) != expected:
             raise ValueError(f"Accepted reference file was modified: {name}/{path}")
+    manifest = json.loads((root / "manifest.json").read_text())
+    return replay.accepted_export_paths(root.resolve(), manifest.get("exported_files", []), actual)
 
 
 def resolve_case(value, env: dict):
@@ -193,9 +209,8 @@ def materialize_case(case: dict, reference: Path, env: dict) -> dict:
         raise ValueError(f"Current case differs from its accepted recipe: {case['id']}")
     if manifest.get("arrays_sha256") != replay.sha256(reference / "arrays.npz"):
         raise ValueError(f"Accepted arrays were modified: {case['id']}")
-    for path in resolve_case(case, env).get("assets", {}).values():
-        if not Path(path).exists():
-            raise FileNotFoundError(f"Missing replay asset for {case['id']}: {path}")
+    assets = replay.asset_files(resolve_case(case["assets"], env))
+    replay.verify_asset_inventory(assets, manifest["assets"])
     # Retain the original representation of explicit defaults and asset paths.
     # The semantic equality check above prevents replaying an obsolete recipe.
     return manifest["case"]
@@ -370,7 +385,7 @@ def run_child(command: list[str], env: dict, cwd: Path, log: Path, timeout: floa
 
 def probe_cuda(profile: dict, env: dict, run_root: Path, lease=None, *, case_ids=None, label="cuda-preflight") -> None:
     metadata_path = run_root / (label + "-metadata.json")
-    replay_path = str(Path(__file__).with_name("geometry_regression.py"))
+    replay_path = str(run_root / "source" / REPLAY_SCRIPT)
     code = (
         "import importlib.util,json,pathlib,torch; "
         "assert torch.cuda.is_available(), 'GPU regression requires CUDA'; torch.cuda.init(); "
@@ -520,13 +535,20 @@ def interruption_cleanup():
 
 
 def validate_plan(
-    selection: dict, matrix: Path, dependencies: Path, source: Path, tree: str,
-    *, history_root: Path | None = None,
+    selection: dict,
+    matrix: Path,
+    dependencies: Path,
+    source: Path,
+    tree: str,
+    *,
+    source_revision: str,
+    history_root: Path | None = None,
 ) -> list[str]:
     if selection.get("status") not in {"planned", "no_inference_changes"}:
         raise ValueError("Uncovered or failed impact plan cannot authorize replays")
     if (
-        selection.get("source_tree") != tree
+        selection.get("source_revision") != source_revision
+        or selection.get("source_tree") != tree
         or selection.get("matrix_sha256") != impact.digest(matrix)
         or selection.get("dependencies_sha256") != impact.digest(dependencies)
     ):
@@ -604,7 +626,8 @@ def run_suite(
         lease = None
         cleanup_safe = True
         try:
-            report.update(snapshot_source(profile, root / "source"))
+            snapshot = snapshot_source(profile, root / "source")
+            report.update(snapshot)
             source = root / "source"
             matrix, dependencies = source / profile["matrix"], source / profile["dependencies"]
             cases, _ = impact.load_definitions(matrix, dependencies)
@@ -622,7 +645,12 @@ def run_suite(
                     raise ValueError("Do not combine a saved plan with explicit case ids")
                 selection = json.loads(plan.read_text())
                 selected = validate_plan(
-                    selection, matrix, dependencies, source, report["source_tree"],
+                    selection,
+                    matrix,
+                    dependencies,
+                    source,
+                    snapshot["source_tree"],
+                    source_revision=snapshot["source_revision"],
                     history_root=Path(profile["source_root"]),
                 )
                 write_json(root / "impact-plan.json", selection)
@@ -638,10 +666,22 @@ def run_suite(
             configurations = {name: case_configuration(profile, name) for name in selected}
             recipes = {}
             index = reference_index(profile)
+            verified_exports = {}
+            asset_preflight_failures = {}
             for name in selected:
-                verify_reference(Path(profile["reference"]) / name, name, index)
-                recipes[name] = materialize_case(
-                    cases[name], Path(profile["reference"]) / name, child_environment(configurations[name])
+                try:
+                    if name not in index["cases"]:
+                        raise ValueError(f"Missing accepted reference for {name}")
+                    reference = Path(profile["reference"]) / name
+                    verified_exports[name] = verify_reference(reference, name, index)
+                    recipes[name] = materialize_case(cases[name], reference, child_environment(configurations[name]))
+                except (KeyError, OSError, ValueError) as exc:
+                    asset_preflight_failures[name] = f"{type(exc).__name__}: {exc}"
+            if asset_preflight_failures:
+                report["asset_preflight_failures"] = asset_preflight_failures
+                first = next(iter(asset_preflight_failures.values()))
+                raise ValueError(
+                    f"Reference or asset checks failed for {len(asset_preflight_failures)} of {len(selected)} cases. {first}"
                 )
             write_json(root / "recipes.json", recipes)
             helpers = process_helpers(source)
@@ -661,15 +701,19 @@ def run_suite(
             if preflight_only:
                 report["status"] = "preflight_passed"
                 return report
+            worker = source / REPLAY_SCRIPT
+            worker_checks_assets = accepts_reference_manifest(worker)
             holder.stop()
             for name in selected:
                 remaining = profile["suite_timeout_seconds"] - (time.monotonic() - started)
                 if remaining <= 0:
                     raise TimeoutError("Whole GPU suite exceeded its time budget")
                 candidate = root / "candidate" / name
+                manifest = Path(profile["reference"]) / name / "manifest.json"
+                case_env = child_environment(configurations[name])
                 command = [
                     configurations[name]["python"],
-                    str(Path(__file__).with_name("geometry_regression.py")),
+                    str(worker),
                     "run",
                     "--case",
                     str(root / "recipes.json"),
@@ -681,9 +725,20 @@ def run_suite(
                     str(candidate),
                 ]
                 try:
+                    if worker_checks_assets:
+                        command.extend(["--accepted-manifest", str(manifest)])
+                    else:
+                        # Older workers record asset hashes but do not compare them before loading.
+                        case = resolve_case(recipes[name], case_env)
+                        pinned = replay.verify_asset_pins(case)
+                        expected = json.loads(manifest.read_text())["assets"]
+                        replay.hash_assets(case["assets"], expected, pinned=pinned)
+                        remaining = profile["suite_timeout_seconds"] - (time.monotonic() - started)
+                        if remaining <= 0:
+                            raise TimeoutError("Whole GPU suite exceeded its time budget")
                     exit_code = run_child(
                         command,
-                        child_environment(configurations[name]),
+                        case_env,
                         source,
                         root / f"{name}.log",
                         min(remaining, profile["case_timeout_seconds"]),
@@ -694,7 +749,14 @@ def run_suite(
                         raise RuntimeError(f"Replay process exited with status {exit_code}")
                     single = root / f"{name}-matrix.json"
                     write_json(single, {name: recipes[name]})
-                    result = replay.audit_matrix(single, Path(profile["reference"]), root / "candidate", source, [])
+                    result = replay.audit_matrix(
+                        single,
+                        Path(profile["reference"]),
+                        root / "candidate",
+                        source,
+                        [],
+                        verified_reference_exports=verified_exports,
+                    )
                     if result["status"] != "passed":
                         raise ValueError(json.dumps(result["cases"][name]))
                     report["cases"][name] = result["cases"][name]
@@ -746,7 +808,9 @@ def main() -> int:
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--case-id", action="append")
     parser.add_argument(
-        "--preflight-only", action="store_true", help="Check assets and accepted environments without model inference"
+        "--preflight-only",
+        action="store_true",
+        help="Check asset inventories and accepted environments without inference",
     )
     args = parser.parse_args()
     try:

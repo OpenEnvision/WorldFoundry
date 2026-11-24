@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Mapping
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from worldfoundry.core.io import artifact_root_path
 from worldfoundry.core.media.codecs.image import load_pil_image, materialize_image_input
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 class OfficialVideoPipeline(PipelineABC):
     """WorldFoundry pipeline for data-backed official video model runtimes."""
 
-    MODEL_ID: ClassVar[str] = ""
+    MODEL_ID: ClassVar[str] = ""  # ty: ignore[invalid-mutable-override]  # each pipeline binds one model id
     GENERATION_TYPE = "t2v"
 
     def __init__(
@@ -48,7 +49,7 @@ class OfficialVideoPipeline(PipelineABC):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "OfficialVideoPipeline":
+    ) -> OfficialVideoPipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         resolved_model_id = cls._resolve_model_id({}, model_id=cls.MODEL_ID or model_id)
         runtime_kwargs: dict[str, Any] = {}
@@ -324,10 +325,10 @@ __all__ = [
     "MMAudioPipeline",
     "Mochi1PreviewT2VPipeline",
     "ModelScopeT2VPipeline",
+    "OfficialVideoPipeline",
     "OmniVinciPipeline",
     "OpenSoraPipeline",
     "OpenSoraPlanPipeline",
-    "OfficialVideoPipeline",
     "Qwen25OmniPipeline",
     "SAMA14BPipeline",
     "SpatialLadderPipeline",

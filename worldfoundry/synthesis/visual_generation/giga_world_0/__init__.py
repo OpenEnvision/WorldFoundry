@@ -2,6 +2,7 @@
 This module provides utility functions for resolving application-specific file paths,
 such as the designated runtime root directory.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,7 +19,7 @@ def runtime_root() -> Path:
     Returns:
         Path: The absolute path to the 'giga_world_0_runtime' directory.
     """
-    return Path(__file__).resolve().parent / 'giga_world_0_runtime'
+    return Path(__file__).resolve().parent / "giga_world_0_runtime"
 
 
 __all__ = ["runtime_root"]

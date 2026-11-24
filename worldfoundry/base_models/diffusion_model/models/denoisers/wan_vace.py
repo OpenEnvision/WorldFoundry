@@ -15,7 +15,6 @@ from ...loaders import ModuleLoadSpec, NativeModuleLoader
 from ..networks.wan.model import RMSNorm
 from ..networks.wan.vace import VaceWanModel
 
-
 WAN21_VACE_14B_CONFIG = {
     "vace_layers": (0, 5, 10, 15, 20, 25, 30, 35),
     "vace_in_dim": 96,

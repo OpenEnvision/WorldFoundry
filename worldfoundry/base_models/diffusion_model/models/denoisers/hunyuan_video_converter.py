@@ -97,13 +97,13 @@ class HunyuanVideoDiTStateDictConverter:
                 if isinstance(single_suffix_dict[suffix], list):
                     if suffix == "linear1":
                         name_a, name_b = single_suffix_dict[suffix]
-                        param_a, param_b = torch.split(param, (3072*3, 3072*4), dim=0)
+                        param_a, param_b = torch.split(param, (3072 * 3, 3072 * 4), dim=0)
                         state_dict_[prefix + "." + name_a + "." + names[-1]] = param_a
                         state_dict_[prefix + "." + name_b + "." + names[-1]] = param_b
                     elif suffix == "linear2":
                         if names[-1] == "weight":
                             name_a, name_b = single_suffix_dict[suffix]
-                            param_a, param_b = torch.split(param, (3072*1, 3072*4), dim=-1)
+                            param_a, param_b = torch.split(param, (3072 * 1, 3072 * 4), dim=-1)
                             state_dict_[prefix + "." + name_a + "." + names[-1]] = param_a
                             state_dict_[prefix + "." + name_b + "." + names[-1]] = param_b
                         else:
@@ -124,5 +124,5 @@ class HunyuanVideoDiTStateDictConverter:
 
         return state_dict_
 
-__all__ = ["HunyuanVideoDiTStateDictConverter"]
 
+__all__ = ["HunyuanVideoDiTStateDictConverter"]

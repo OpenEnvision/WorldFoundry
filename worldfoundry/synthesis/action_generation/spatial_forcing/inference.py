@@ -6,17 +6,18 @@ import json
 import math
 import os
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 os.environ.setdefault("USE_FLAX", "0")
 os.environ.setdefault("USE_TF", "0")
 os.environ.setdefault("TRANSFORMERS_NO_FLAX", "1")
 os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
 
-from worldfoundry.core.media.types import MediaKind, infer_media_kind
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
+from worldfoundry.core.media.types import MediaKind, infer_media_kind
 from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
 
 
@@ -117,12 +118,9 @@ def _load_component_state_dict(path: Path) -> dict[str, Any]:
     if not isinstance(state_dict, Mapping):
         raise TypeError(f"Spatial-Forcing component checkpoint is not a state dict: {path}")
     if not state_dict or not all(
-        isinstance(key, str) and isinstance(value, torch.Tensor)
-        for key, value in state_dict.items()
+        isinstance(key, str) and isinstance(value, torch.Tensor) for key, value in state_dict.items()
     ):
-        raise TypeError(
-            f"Spatial-Forcing component checkpoint must be a non-empty string-to-tensor mapping: {path}"
-        )
+        raise TypeError(f"Spatial-Forcing component checkpoint must be a non-empty string-to-tensor mapping: {path}")
     return {key[7:] if key.startswith("module.") else key: value for key, value in state_dict.items()}
 
 
@@ -190,7 +188,7 @@ def _prepare_image(image: Any, *, center_crop: bool) -> Any:
     if pil.size != (image_size, image_size):
         pil = pil.resize((image_size, image_size), Image.Resampling.LANCZOS)
     if center_crop:
-        crop_side = int(round(image_size * math.sqrt(0.9)))
+        crop_side = int(round(image_size * math.sqrt(0.9)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
         left = (image_size - crop_side) // 2
         top = (image_size - crop_side) // 2
         pil = pil.crop((left, top, left + crop_side, top + crop_side))
@@ -321,7 +319,7 @@ class SpatialForcingRuntime:
         from transformers import LlamaTokenizerFast
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
 
         from .modeling import (
             ACTION_DIM,

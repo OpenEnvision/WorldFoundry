@@ -28,9 +28,7 @@ class _NumpyStatsUnpickler(pickle.Unpickler):
 
     def find_class(self, module: str, name: str) -> Any:
         if (module, name) not in _ALLOWED_PICKLE_GLOBALS:
-            raise pickle.UnpicklingError(
-                f"disallowed global in Hy-VLA normalization statistics: {module}.{name}"
-            )
+            raise pickle.UnpicklingError(f"disallowed global in Hy-VLA normalization statistics: {module}.{name}")
         return super().find_class(module, name)
 
 
@@ -54,7 +52,7 @@ class HyVLANormalizationStats:
         return int(self.action_mean.shape[0])
 
     @classmethod
-    def load(cls, path: str | Path) -> "HyVLANormalizationStats":
+    def load(cls, path: str | Path) -> HyVLANormalizationStats:
         """Load an official stats pickle without allowing arbitrary Python globals."""
 
         source = Path(path).expanduser().resolve()
@@ -116,9 +114,7 @@ class HyVLANormalizationStats:
         if actions.ndim != 2:
             raise ValueError(f"Hy-VLA action chunk must have shape (T, D), got {actions.shape}")
         if actions.shape != mean.shape:
-            raise ValueError(
-                f"Hy-VLA action chunk shape {actions.shape} does not match statistics {mean.shape}"
-            )
+            raise ValueError(f"Hy-VLA action chunk shape {actions.shape} does not match statistics {mean.shape}")
         rows = [
             unnormalize_action_values(
                 actions[index],

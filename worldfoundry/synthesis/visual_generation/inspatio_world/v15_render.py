@@ -4,6 +4,7 @@
 Adapted from inspatio-world-v1.5 dd3561f544053fe22d739b6b2f8461c9c97bf8cb.
 The depth-weighted splat is shared through the 3D base-model layer.
 """
+
 from contextlib import ExitStack
 from itertools import permutations
 from pathlib import Path
@@ -38,20 +39,27 @@ def load_scene(record):
         depth_paths = image_depth_paths(scene / "depth", meta["views"])
         if len(image_paths) != len(depth_paths) or not all(path.is_file() for path in depth_paths):
             raise ValueError(f"Image/depth mismatch: {scene}")
+
         def read(index):
-            return (np.asarray(Image.open(image_paths[index]).convert("RGB")),
-                    decode_image_depth(depth_paths[index], scene / "depth" / "metadata.txt"))
+            return (
+                np.asarray(Image.open(image_paths[index]).convert("RGB")),
+                decode_image_depth(depth_paths[index], scene / "depth" / "metadata.txt"),
+            )
     else:
         input_video = cv2.VideoCapture(str(scene / "input" / "video.mp4"))
         depth_video = cv2.VideoCapture(str(scene / "depth" / "depth.mp4"))
         captures.extend([input_video, depth_video])
         depth_minimum, depth_maximum = read_range(scene / "depth" / "metadata.txt")
-        if (not input_video.isOpened() or not depth_video.isOpened()
-                or int(input_video.get(cv2.CAP_PROP_FRAME_COUNT)) != len(target_tcw)
-                or int(depth_video.get(cv2.CAP_PROP_FRAME_COUNT)) != len(target_tcw)):
+        if (
+            not input_video.isOpened()
+            or not depth_video.isOpened()
+            or int(input_video.get(cv2.CAP_PROP_FRAME_COUNT)) != len(target_tcw)
+            or int(depth_video.get(cv2.CAP_PROP_FRAME_COUNT)) != len(target_tcw)
+        ):
             for capture in captures:
                 capture.release()
             raise ValueError(f"Video/depth/camera count mismatch: {scene}")
+
         def read(index):
             if int(input_video.get(cv2.CAP_PROP_POS_FRAMES)) != index:
                 input_video.set(cv2.CAP_PROP_POS_FRAMES, index)
@@ -66,11 +74,14 @@ def load_scene(record):
                 raise ValueError(f"Cannot read depth frame {index}: {scene}")
             depth = decode_video_depth_frame(frame, depth_minimum, depth_maximum)
             return image, depth
+
     return meta, source_k, source_tcw, target_tcw, read, captures
 
 
 def prepare_source(warper, image, depth, source_tcw, source_k, device):
-    image_tensor = torch.from_numpy(np.array(image, copy=True, order="C")).to(device).permute(2, 0, 1)[None].float() / 127.5 - 1
+    image_tensor = (
+        torch.from_numpy(np.array(image, copy=True, order="C")).to(device).permute(2, 0, 1)[None].float() / 127.5 - 1
+    )
     depth_tensor = torch.from_numpy(np.array(depth, copy=True, order="C")).to(device)[None, None].float()
     tcw = torch.from_numpy(source_tcw.copy()).to(device)[None]
     intrinsic = torch.from_numpy(source_k.copy()).to(device)[None]
@@ -104,12 +115,13 @@ def select_chunk_top3(overlap_pixels):
         raise ValueError("chunk_top3 requires three latents per chunk and four source views")
     choices, chunk_views = [], []
     for start in range(0, len(overlap_pixels), 3):
-        scores = overlap_pixels[start:start + 3]
+        scores = overlap_pixels[start : start + 3]
         totals = [sum(row[view] for row in scores) for view in range(4)]
         top3 = sorted(range(4), key=lambda view: (-totals[view], view))[:3]
-        assignment = min(permutations(top3),
-                         key=lambda views: (-sum(scores[latent][view]
-                                                  for latent, view in enumerate(views)), views))
+        assignment = min(
+            permutations(top3),
+            key=lambda views: (-sum(scores[latent][view] for latent, view in enumerate(views)), views),
+        )
         choices.extend(assignment)
         chunk_views.append(top3)
     return choices, chunk_views
@@ -127,24 +139,36 @@ def render_one(record, device, output_root):
     source_indices, overlap_pixels, chunk_views = [], [], []
     try:
         sources = [read(index) for index in range(len(source_k))] if meta["kind"] == "image" else None
-        prepared = [prepare_source(warper, image, depth, source_tcw[index], source_k[index], device)
-                    for index, (image, depth) in enumerate(sources)] if sources is not None else None
+        prepared = (
+            [
+                prepare_source(warper, image, depth, source_tcw[index], source_k[index], device)
+                for index, (image, depth) in enumerate(sources)
+            ]
+            if sources is not None
+            else None
+        )
         if source_type == "multi-image":
             groups = list(latent_frame_groups(meta["frames"]))
             if len(groups) % 3:
                 raise ValueError("Multi-image frames must cover complete three-latent chunks")
-            chunks = [groups[index:index + 3] for index in range(0, len(groups), 3)]
+            chunks = [groups[index : index + 3] for index in range(0, len(groups), 3)]
         else:
             chunks = [[range(meta["frames"])]]
         height, width = meta["resolution"]
         with ExitStack() as stack:
             video = stack.enter_context(video_writer(destination / "render.mp4", meta["fps"], width, height))
-            masks = stack.enter_context(video_writer(destination / "mask.mp4", meta["fps"], width, height, lossless=True))
+            masks = stack.enter_context(
+                video_writer(destination / "mask.mp4", meta["fps"], width, height, lossless=True)
+            )
             source_video = stack.enter_context(video_writer(destination / "source.mp4", meta["fps"], width, height))
             for chunk in chunks:
                 chunk_scores = []
                 for frames in chunk:
-                    scores = torch.zeros(len(source_k), device=device, dtype=torch.int64) if source_type == "multi-image" else None
+                    scores = (
+                        torch.zeros(len(source_k), device=device, dtype=torch.int64)
+                        if source_type == "multi-image"
+                        else None
+                    )
                     for frame in frames:
                         indices = range(len(source_k)) if sources is not None else (frame,)
                         fused = fused_depth = fused_mask = first_image = None
@@ -152,9 +176,14 @@ def render_one(record, device, output_root):
                             image, depth = sources[index] if sources is not None else read(index)
                             if first_image is None:
                                 first_image = image
-                            projected_source = prepared[index] if prepared is not None else prepare_source(
-                                warper, image, depth, source_tcw[index], source_k[index], device)
-                            rgb, distance, known = project_source(warper, projected_source, target_poses[frame:frame + 1], target_k)
+                            projected_source = (
+                                prepared[index]
+                                if prepared is not None
+                                else prepare_source(warper, image, depth, source_tcw[index], source_k[index], device)
+                            )
+                            rgb, distance, known = project_source(
+                                warper, projected_source, target_poses[frame : frame + 1], target_k
+                            )
                             if scores is not None:
                                 scores[index] += known.sum()
                             if fused is None:
@@ -182,12 +211,15 @@ def render_one(record, device, output_root):
                     source_indices.extend(choices)
                     chunk_views.extend(views)
                     overlap_pixels.extend(chunk_scores)
-                    for frames, selected in zip(chunk, choices):
+                    for frames, selected in zip(chunk, choices, strict=False):
                         pixels = sources[selected][0].tobytes()
                         for _ in frames:
                             source_video.write(pixels)
-        extra = ({"source_indices": source_indices, "overlap_pixels": overlap_pixels, "chunk_views": chunk_views}
-                 if source_type == "multi-image" else None)
+        extra = (
+            {"source_indices": source_indices, "overlap_pixels": overlap_pixels, "chunk_views": chunk_views}
+            if source_type == "multi-image"
+            else None
+        )
         return extra
     finally:
         for capture in captures:

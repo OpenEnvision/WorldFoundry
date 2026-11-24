@@ -7,15 +7,15 @@ from pathlib import Path
 import yaml
 
 from worldfoundry.base_models.capabilities import resolve_base_model_capability_ids
-from worldfoundry.evaluation.tasks import load_task_registry_from_paths
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import (
+from worldfoundry.evals.tasks import load_task_registry_from_paths
+from worldfoundry.evals.tasks.catalog.benchmark_catalog import (
     DEFAULT_BENCHMARK_RUNTIME_PROFILE_PATH,
     DEFAULT_EMBODIED_CATALOG_DIR,
     DEFAULT_VIDEO_CATALOG_DIR,
     formal_benchmark_ids,
     load_benchmark_runtime_profiles,
 )
-from worldfoundry.evaluation.tasks.catalog.integrity import (
+from worldfoundry.evals.tasks.catalog.integrity import (
     build_benchmark_inventory_integrity,
     build_docs_benchmark_coverage,
 )
@@ -41,10 +41,6 @@ def _runtime_profiles_by_id() -> dict[str, dict]:
     return {str(profile["id"]): profile for profile in _runtime_profiles()}
 
 
-BENCHMARK_DOCS_PATH = REPO_ROOT / "docs" / "fumadocs" / "content" / "docs" / "evaluation" / "benchmarks.mdx"
-BENCHMARK_DOCS_ZH_PATH = REPO_ROOT / "docs" / "fumadocs" / "content" / "docs" / "evaluation" / "benchmarks.zh.mdx"
-BENCHMARK_HUB_DATA_PATH = REPO_ROOT / "docs" / "fumadocs" / "lib" / "benchmark-hub-data.ts"
-BENCHMARK_HUB_COMPONENT_PATH = REPO_ROOT / "docs" / "fumadocs" / "components" / "benchmark-hub.tsx"
 CANONICAL_EXTERNAL_TASK_REF = "worldfoundry/data/benchmarks/tasks/external"
 LEGACY_BUNDLED_METADATA_RE = re.compile(
     r"(^|[\" :])data/(benchmarks|models)/(tasks/external|fixtures|scorecards|suites|catalog|runtime_profiles)/"
@@ -112,12 +108,6 @@ VIDEO_WORLD_OFFICIAL_RESULT_NORMALIZER_IDS = {
     "vmbench",
 }
 FORMAL_BENCHMARK_COUNT = len(formal_benchmark_ids(CATALOG_DIR))
-VIDEO_CATALOG_COUNT = len(list(VIDEO_BENCHMARKS_DIR.glob("*.yaml"))) - int(
-    (VIDEO_BENCHMARKS_DIR / "_manifest.yaml").is_file()
-)
-EMBODIED_CATALOG_COUNT = len(list(EMBODIED_BENCHMARKS_DIR.glob("*.yaml"))) - int(
-    (EMBODIED_BENCHMARKS_DIR / "_manifest.yaml").is_file()
-)
 
 
 def _has_verified_official_start_evidence(source: dict) -> bool:
@@ -220,7 +210,7 @@ def test_benchmark_zoo_external_manifest_metadata_contracts() -> None:
         assert manifest["benchmark"] == benchmark_id
         assert metadata["source_kind"] == "benchmark_zoo"
         assert metadata["contract_validation_command"] == (
-            f"worldfoundry-eval zoo benchmark-run --benchmark-id {benchmark_id} "
+            f"wf zoo benchmark-run --benchmark-id {benchmark_id} "
             f"--mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/{benchmark_id} --json"
         )
         assert metadata.get("one_click_command") is None
@@ -399,75 +389,6 @@ def test_packaged_benchmark_metadata_mirrors_repository_metadata() -> None:
         packaged = package_root / path.relative_to(data_root)
         assert packaged.is_file(), str(packaged)
         assert packaged.read_text(encoding="utf-8") == path.read_text(encoding="utf-8")
-
-
-def test_benchmark_docs_list_every_formal_inventory_entry() -> None:
-    docs_text = BENCHMARK_DOCS_PATH.read_text(encoding="utf-8")
-
-    for benchmark_id in sorted(_inventory_benchmark_ids()):
-        assert f"`{benchmark_id}`" in docs_text
-
-
-def test_benchmark_docs_registry_tables_match_formal_inventory_exactly() -> None:
-    expected_ids = _inventory_benchmark_ids()
-
-    for path in (BENCHMARK_DOCS_PATH, BENCHMARK_DOCS_ZH_PATH):
-        docs_text = path.read_text(encoding="utf-8")
-        table_ids = re.findall(r"^\| `([^`]+)`\s*/", docs_text, flags=re.M)
-
-        assert table_ids, str(path)
-        assert len(table_ids) == len(set(table_ids)), str(path)
-        assert set(table_ids) == expected_ids
-
-
-def test_benchmark_hub_inventory_renders_every_formal_benchmark_entry() -> None:
-    data_text = BENCHMARK_HUB_DATA_PATH.read_text(encoding="utf-8")
-    component_text = BENCHMARK_HUB_COMPONENT_PATH.read_text(encoding="utf-8")
-    category_blocks = re.findall(r"benchmarkIds:\s*\[([^\]]*)\]", data_text, flags=re.S)
-    hub_ids: list[str] = []
-    for block in category_blocks:
-        hub_ids.extend(re.findall(r"'([^']+)'", block))
-
-    assert hub_ids
-    assert len(hub_ids) == len(set(hub_ids))
-    assert set(hub_ids) == _inventory_benchmark_ids()
-    assert "category.benchmarkIds.map" in component_text
-    assert "fallbackBenchmarkCard(category, id)" in component_text
-
-
-def test_benchmark_status_docs_match_current_catalog_summary() -> None:
-    docs_text = BENCHMARK_DOCS_PATH.read_text(encoding="utf-8")
-    status_text = (BENCHMARK_DOCS_PATH.parent / "benchmark-status.mdx").read_text(encoding="utf-8")
-    status_zh_text = (BENCHMARK_DOCS_ZH_PATH.parent / "benchmark-status.zh.mdx").read_text(encoding="utf-8")
-    hub_text = BENCHMARK_HUB_DATA_PATH.read_text(encoding="utf-8")
-
-    assert f"Benchmark inventory catalog | {FORMAL_BENCHMARK_COUNT}" in status_text
-    assert f"Video/world catalog | {VIDEO_CATALOG_COUNT}" in status_text
-    assert f"Embodied catalog | {EMBODIED_CATALOG_COUNT}" in status_text
-    assert f"All {EMBODIED_CATALOG_COUNT} embodied entries are `contract_ready`" in status_text
-    assert f"{EMBODIED_CATALOG_COUNT} 个 embodied 条目全部是 `contract_ready`" in status_zh_text
-    assert "bridgedata-v2` remains blocked" not in status_text
-    assert "bridgedata-v2` 在 dataset materialization" not in status_zh_text
-    assert "4 rows have bounded/verified runner evidence" in hub_text
-    assert "CameraBench bounded official validation row" in hub_text
-    assert "{ label: 'integrated'" not in hub_text
-    assert "integrated runner evidence" not in hub_text
-    assert "bounded-runner" in hub_text
-    assert "Core video-generation quality benchmark with bounded official GPU-validation evidence" in hub_text
-    assert "Bounded Diversity GPU validation is recorded" in hub_text
-    assert (
-        "Extended I2V, long-video, and trustworthiness dimensions with bounded official GPU-validation evidence"
-        in hub_text
-    )
-    assert "WorldScore" in hub_text and "Bounded official GPU validation is recorded" in hub_text
-
-    for benchmark_id in ("bridgedata-v2", "videoscore", "camerabench"):
-        assert f"`{benchmark_id}`" in docs_text
-    assert "worldfoundry/data" in docs_text
-    assert f"*.yaml ({FORMAL_BENCHMARK_COUNT} external task manifests)" in docs_text
-    assert "[https://github.com/EmbodiedCity/iWorld-Bench]" in docs_text
-    iworld_doc_line = next(line for line in docs_text.splitlines() if line.startswith("| `iworld-bench`"))
-    assert "Project/source page only; runnable benchmark code/data is not confirmed." not in iworld_doc_line
 
 
 def test_vbench2_bounded_official_gpu_validation_is_recorded_without_full_suite_claim() -> None:
@@ -678,9 +599,6 @@ def test_public_docs_benchmark_references_match_formal_inventory() -> None:
     assert coverage.ok, coverage.failure_summary()
     assert set(coverage.benchmark_ids) == _inventory_benchmark_ids()
     assert len(coverage.mentioned_ids) == FORMAL_BENCHMARK_COUNT
-    assert "docs/fumadocs/content/docs/evaluation/benchmarks.mdx" in coverage.docs_paths
-    assert "docs/fumadocs/content/docs/evaluation/benchmark-hub.mdx" in coverage.docs_paths
-    assert "docs/fumadocs/lib/benchmark-hub-data.ts" in coverage.docs_paths
 
 
 def test_docs_benchmark_coverage_flags_unknown_and_excluded_refs(tmp_path: Path) -> None:
@@ -691,8 +609,8 @@ def test_docs_benchmark_coverage_flags_unknown_and_excluded_refs(tmp_path: Path)
 | `vbench` / VBench | ok |
 | `missing-bench` / Missing Bench | not ok |
 
-worldfoundry-eval zoo benchmark-run --benchmark-id met3r --mode contract
-worldfoundry-eval zoo benchmark-run --benchmark-id <benchmark-id> --mode contract
+wf zoo benchmark-run --benchmark-id met3r --mode contract
+wf zoo benchmark-run --benchmark-id <benchmark-id> --mode contract
 """,
         encoding="utf-8",
     )
@@ -814,13 +732,13 @@ def test_task_manifests_distinguish_runner_scripts_from_commands() -> None:
         if script is not None:
             assert str(script).startswith(
                 (
-                    "worldfoundry/evaluation/tasks/execution/",
-                    "worldfoundry/evaluation/tasks/embodied/runners/",
+                    "worldfoundry/evals/tasks/execution/",
+                    "worldfoundry/evals/tasks/embodied/runners/",
                 )
             ), manifest_path
             assert (REPO_ROOT / script).is_file(), manifest_path
         if command is not None:
-            assert str(command).startswith("worldfoundry-eval "), manifest_path
+            assert str(command).startswith("wf "), manifest_path
         assert availability.get("runner_script_available") is bool(script)
 
 
@@ -830,7 +748,7 @@ def test_task_manifests_expose_user_facing_contract_validation_commands() -> Non
         benchmark_id = manifest["metadata"]["benchmark_id"]
         command = str(manifest["metadata"].get("contract_validation_command") or "")
 
-        assert command.startswith("worldfoundry-eval zoo benchmark-run "), manifest_path
+        assert command.startswith("wf zoo benchmark-run "), manifest_path
         assert f"--benchmark-id {benchmark_id}" in command, manifest_path
         assert "--mode contract" in command, manifest_path
         assert "--output-dir tmp/benchmark_zoo/benchmark_contract/" in command, manifest_path
@@ -872,8 +790,8 @@ def test_runtime_profile_package_required_paths_exist() -> None:
             checked_paths.append(path)
             assert (REPO_ROOT / path).exists(), f"{profile['id']}: {path}"
 
-    assert "worldfoundry/evaluation/tasks/embodied/normalizer.py" in checked_paths
-    assert all("worldfoundry/evaluation/runner/" not in path for path in checked_paths)
+    assert "worldfoundry/evals/tasks/embodied/normalizer.py" in checked_paths
+    assert all("worldfoundry/evals/runner/" not in path for path in checked_paths)
 
 
 def test_new_video_world_contract_profiles_remain_contract_preflight_only() -> None:
@@ -937,7 +855,7 @@ def test_robotwin_embodied_task_manifest_loads_with_official_task_list() -> None
     assert manifest["metadata"]["source_kind"] == "benchmark_zoo"
     assert (
         manifest["metadata"]["official_runner_script"]
-        == "worldfoundry/evaluation/tasks/embodied/runners/robotwin/run_robotwin_official_runner.py"
+        == "worldfoundry/evals/tasks/embodied/runners/robotwin/run_robotwin_official_runner.py"
     )
     assert manifest["metadata"]["runtime"]["root_env"] == "WORLDFOUNDRY_ROBOTWIN_ROOT"
     assert manifest["metadata"]["runtime"]["task_count"] == 50

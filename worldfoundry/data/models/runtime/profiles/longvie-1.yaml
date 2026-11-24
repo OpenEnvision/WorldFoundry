@@ -1,6 +1,7 @@
-artifact_filename: longvie-1.mp4
-artifact_kind: generated_video
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: longvie-1
+display_name: LongVie
+task_family: video_generation
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Wan-AI--Wan2.1-I2V-14B-480P
   repo_id: Wan-AI/Wan2.1-I2V-14B-480P
@@ -8,8 +9,6 @@ checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Wan-AI--Wan2.1-T2V-1.3B
   repo_id: Wan-AI/Wan2.1-T2V-1.3B
   role: umt5_tokenizer
-display_name: LongVie
-id: longvie-1
 input_schema:
   actions:
   - dense_video
@@ -17,14 +16,19 @@ input_schema:
   image: true
   prompt: true
   video: true
-integration_status: integrated
+artifact_kind: generated_video
+artifact_filename: longvie-1.mp4
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: route_ready_assets_pending
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - LongVie runs on canonical Wan components and the shared staged diffusion runner;
   its synthesis package is a thin product assembly boundary.
 - Default calls fail fast unless execute=True is supplied; staged checkpoints are
   required for the official-equivalent GPU path.
 - Upstream has not published a first-generation checkpoint. The adapter therefore
-  requires an explicitly staged LongVie-1 control weight and rejects LongVie2
-  directories instead of silently reusing their control and DiT weights.
-runtime_status: route_ready_assets_pending
-task_family: video_generation
+  requires an explicitly staged LongVie-1 control weight and rejects LongVie2 directories
+  instead of silently reusing their control and DiT weights.

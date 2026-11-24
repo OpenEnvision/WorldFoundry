@@ -33,9 +33,9 @@ metadata:
   source_kind: benchmark_zoo
   benchmark_id: robotwin
   status: integrated
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id robotwin --mode contract --output-dir
+  contract_validation_command: wf zoo benchmark-run --benchmark-id robotwin --mode contract --output-dir
     tmp/benchmark_zoo/benchmark_contract/robotwin --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:RoboTwinContract
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:robotwin
   prompt_suite:
     hf_dataset_id: TianxingChen/RoboTwin2.0
     split: demo_clean,demo_randomized
@@ -54,7 +54,7 @@ metadata:
     default_camera: D435
     task_count: 50
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -163,7 +163,7 @@ metadata:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/robotwin.yaml
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:RoboTwinContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:robotwin
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
@@ -176,12 +176,12 @@ metadata:
       render_ok: false
       reason: Latest hard-timeout validation reached CUDA driver allocation but upstream script/test_render.py exceeded
         30s without Render Well under the local RoboTwin simulator runtime.
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   local_evaluator:
     status: removed
-    note: Official _result.txt normalizer removed; use worldfoundry-eval embodied run (harness vendoring pending).
+    note: Official _result.txt normalizer removed; use wf embodied run (harness vendoring pending).
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -271,4 +271,4 @@ tasks:
       - clean_success
       - randomized_success
       - reward
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:RoboTwinContract
+      runner_target: worldfoundry.evals.tasks.contracts.external:robotwin

@@ -1,8 +1,7 @@
-artifact_filename: worldgrow_runtime_plan.json
-artifact_kind: generated_world
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: worldgrow
 display_name: WorldGrow
-id: worldgrow
+task_family: world_model
 checkpoints:
 - repo_id: UranusITS/WorldGrow
   role: world_checkpoint
@@ -14,7 +13,15 @@ input_schema:
   image: true
   prompt: true
   video: true
-integration_status: runtime_ported
+artifact_kind: generated_world
+artifact_filename: worldgrow_runtime_plan.json
+execution:
+  pipeline_binding: worldgrow
+  backend_stage: worldfoundry_runtime_plan
+  runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - WorldGrow official source route is registered; checkpoints/TRELLIS assets are runtime-gated.
 - Missing checkpoints/assets are reported by the runtime plan and are not catalog
@@ -24,9 +31,3 @@ notes:
 - Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/WorldGrow at 1f2ac49c30fd1390a810a201019ed26c02487883.
 - Real scene expansion remains blocked until UranusITS/WorldGrow checkpoints and generated
   artifact parity are staged.
-runtime_status: route_ready_assets_pending
-task_family: world_model
-execution:
-  pipeline_binding: worldgrow
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending

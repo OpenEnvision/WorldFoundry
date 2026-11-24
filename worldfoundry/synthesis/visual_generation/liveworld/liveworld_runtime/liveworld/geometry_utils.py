@@ -1,44 +1,42 @@
 """
-LiveWorld 通用工具函数
-
-整合了 LiveWorld 数据处理、推理、训练中常用的工具函数:
-- 图像处理: resize, crop, normalize
-- 相机/内参: scale_intrinsics, intrinsics 操作
-- 轨迹生成: TrajectoryGenerator
-- 几何工具: 点云构建、投影、坐标变换
-- 视频 I/O: 加载、保存视频
-- 深度可视化
+Shared LiveWorld utilities for data processing, inference and training:
+- image processing: resize, crop, normalize
+- camera intrinsics: scale_intrinsics and related helpers
+- trajectory generation: TrajectoryGenerator
+- geometry: point cloud construction, projection, coordinate transforms
+- video I/O: load and save videos
+- depth visualization
 """
+
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union, List, Tuple, Iterable, Set, Dict
 
 import cv2
 import numpy as np
 import torch
-from PIL import Image
 from scipy.ndimage import gaussian_filter
 from scipy.spatial.transform import Rotation as R
 
 from .utils import save_video_h264
 
+# ============================================================================
+# Image processing
+# ============================================================================
 
-# ============================================================================
-# 图像处理工具
-# ============================================================================
 
 def resize_short_edge(image: np.ndarray, short_edge: int) -> np.ndarray:
     """
-    将图片短边 resize 到指定长度，保持宽高比
+    Resize the short edge of an image to ``short_edge``, keeping the aspect ratio.
 
     Args:
-        image: 输入图片 (H, W, C) 或 (H, W)
-        short_edge: 目标短边长度
+        image: Image (H, W, C) or (H, W).
+        short_edge: Target short-edge length.
 
     Returns:
-        resize 后的图片
+        Resized image.
     """
     h, w = image.shape[:2]
 
@@ -54,15 +52,15 @@ def resize_short_edge(image: np.ndarray, short_edge: int) -> np.ndarray:
 
 def center_crop(image: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
     """
-    对图片进行中心裁剪
+    Center-crop an image.
 
     Args:
-        image: 输入图片 (H, W, C) 或 (H, W)
-        target_h: 目标高度
-        target_w: 目标宽度
+        image: Image (H, W, C) or (H, W).
+        target_h: Target height.
+        target_w: Target width.
 
     Returns:
-        裁剪后的图片
+        Cropped image.
     """
     h, w = image.shape[:2]
 
@@ -72,45 +70,37 @@ def center_crop(image: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
     start_y = (h - target_h) // 2
     start_x = (w - target_w) // 2
 
-    return image[start_y:start_y + target_h, start_x:start_x + target_w]
+    return image[start_y : start_y + target_h, start_x : start_x + target_w]
 
 
-def resize_short_edge_and_center_crop(
-    image: np.ndarray,
-    target_h: int,
-    target_w: int
-) -> np.ndarray:
+def resize_short_edge_and_center_crop(image: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
     """
-    将图片短边 resize 到目标短边长度，然后 center crop 到目标尺寸
+    Resize the short edge to ``min(target_h, target_w)``, then center-crop to the target size.
 
     Args:
-        image: 输入图片 (H, W, C)
-        target_h: 目标高度
-        target_w: 目标宽度
+        image: Image (H, W, C).
+        target_h: Target height.
+        target_w: Target width.
 
     Returns:
-        处理后的图片 (target_h, target_w, C)
+        Image (target_h, target_w, C).
     """
     target_short = min(target_h, target_w)
     resized = resize_short_edge(image, target_short)
     return center_crop(resized, target_h, target_w)
 
 
-def resize_image(
-    image: np.ndarray,
-    size: Union[int, Tuple[int, int]],
-    interpolation: int = cv2.INTER_LINEAR
-) -> np.ndarray:
+def resize_image(image: np.ndarray, size: int | tuple[int, int], interpolation: int = cv2.INTER_LINEAR) -> np.ndarray:
     """
-    Resize 图片到指定尺寸
+    Resize an image to a fixed size.
 
     Args:
-        image: 输入图片 (H, W, C) 或 (H, W)
-        size: 目标尺寸，int 表示 (size, size)，tuple 表示 (H, W)
-        interpolation: 插值方法
+        image: Image (H, W, C) or (H, W).
+        size: Target size; an int means (size, size), a tuple means (H, W).
+        interpolation: OpenCV interpolation flag.
 
     Returns:
-        resize 后的图片
+        Resized image.
     """
     if isinstance(size, int):
         target_h, target_w = size, size
@@ -120,16 +110,16 @@ def resize_image(
     return cv2.resize(image, (target_w, target_h), interpolation=interpolation)
 
 
-def load_image(path: Union[str, Path], rgb: bool = True) -> np.ndarray:
+def load_image(path: str | Path, rgb: bool = True) -> np.ndarray:
     """
-    加载图片
+    Load an image file.
 
     Args:
-        path: 图片路径
-        rgb: 是否转换为 RGB 格式
+        path: Image path.
+        rgb: Convert from OpenCV BGR to RGB.
 
     Returns:
-        图片数组 (H, W, C)
+        Image array (H, W, C).
     """
     image = cv2.imread(str(path))
     if image is None:
@@ -139,14 +129,14 @@ def load_image(path: Union[str, Path], rgb: bool = True) -> np.ndarray:
     return image
 
 
-def save_image(image: np.ndarray, path: Union[str, Path], rgb: bool = True) -> None:
+def save_image(image: np.ndarray, path: str | Path, rgb: bool = True) -> None:
     """
-    保存图片
+    Save an image, creating the parent directory; non-uint8 input is clipped to [0, 255].
 
     Args:
-        image: 图片数组 (H, W, C)
-        path: 保存路径
-        rgb: 输入是否为 RGB 格式
+        image: Image array (H, W, C).
+        path: Output path.
+        rgb: Treat 3-channel input as RGB and convert it to BGR for OpenCV.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -159,93 +149,77 @@ def save_image(image: np.ndarray, path: Union[str, Path], rgb: bool = True) -> N
 
 
 # ============================================================================
-# 相机/内参工具
+# Camera intrinsics
 # ============================================================================
 
-def scale_intrinsics(
-    K: np.ndarray,
-    from_size: Tuple[int, int],
-    to_size: Tuple[int, int]
-) -> np.ndarray:
+
+def scale_intrinsics(K: np.ndarray, scale_x, scale_y) -> np.ndarray:
     """
-    将内参从一个尺寸缩放到另一个尺寸
+    Scale intrinsics by per-axis factors, or from a source to a target size when both arguments are tuples.
 
     Args:
-        K: 内参矩阵 (3, 3)
-        from_size: 原始尺寸 (H, W)
-        to_size: 目标尺寸 (H, W)
+        K: [3, 3] intrinsic matrix
+        scale_x: Scale factor for x (width), or source (h, w) tuple
+        scale_y: Scale factor for y (height), or target (h, w) tuple
 
     Returns:
-        缩放后的内参矩阵 (3, 3)
+        K_scaled: [3, 3] scaled intrinsic matrix
     """
-    from_h, from_w = from_size
-    to_h, to_w = to_size
-
-    scale_x = to_w / from_w
-    scale_y = to_h / from_h
-
+    if isinstance(scale_x, tuple) and isinstance(scale_y, tuple):
+        from_h, from_w = scale_x
+        to_h, to_w = scale_y
+        scale_x = to_w / from_w
+        scale_y = to_h / from_h
     K_scaled = K.copy()
     K_scaled[0, 0] *= scale_x  # fx
     K_scaled[1, 1] *= scale_y  # fy
     K_scaled[0, 2] *= scale_x  # cx
     K_scaled[1, 2] *= scale_y  # cy
-
     return K_scaled
 
 
-def scale_intrinsics_batch(
-    intrinsics: np.ndarray,
-    from_size: Tuple[int, int],
-    to_size: Tuple[int, int]
-) -> np.ndarray:
+def scale_intrinsics_batch(intrinsics: np.ndarray, from_size: tuple[int, int], to_size: tuple[int, int]) -> np.ndarray:
     """
-    批量缩放内参
+    Scale one or a batch of intrinsics matrices.
 
     Args:
-        intrinsics: 内参矩阵 (N, 3, 3) 或 (3, 3)
-        from_size: 原始尺寸 (H, W)
-        to_size: 目标尺寸 (H, W)
+        intrinsics: Intrinsics (N, 3, 3) or (3, 3).
+        from_size: Source size (H, W).
+        to_size: Target size (H, W).
 
     Returns:
-        缩放后的内参矩阵
+        Scaled intrinsics with the input shape.
     """
     if intrinsics.ndim == 2:
         return scale_intrinsics(intrinsics, from_size, to_size)
 
-    return np.stack([
-        scale_intrinsics(K, from_size, to_size)
-        for K in intrinsics
-    ], axis=0)
+    return np.stack([scale_intrinsics(K, from_size, to_size) for K in intrinsics], axis=0)
 
 
 def make_intrinsics(fx: float, fy: float, cx: float, cy: float) -> np.ndarray:
     """
-    构建内参矩阵
+    Build a float32 intrinsics matrix.
 
     Args:
-        fx, fy: 焦距
-        cx, cy: 主点
+        fx, fy: Focal lengths in pixels.
+        cx, cy: Principal point in pixels.
 
     Returns:
-        内参矩阵 (3, 3)
+        Intrinsics matrix (3, 3).
     """
-    return np.array([
-        [fx, 0, cx],
-        [0, fy, cy],
-        [0, 0, 1]
-    ], dtype=np.float32)
+    return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float32)
 
 
-def intrinsics_to_fov(K: np.ndarray, size: Tuple[int, int]) -> Tuple[float, float]:
+def intrinsics_to_fov(K: np.ndarray, size: tuple[int, int]) -> tuple[float, float]:
     """
-    从内参计算视场角 (FOV)
+    Compute the field of view from intrinsics.
 
     Args:
-        K: 内参矩阵 (3, 3)
-        size: 图像尺寸 (H, W)
+        K: Intrinsics matrix (3, 3).
+        size: Image size (H, W).
 
     Returns:
-        (fov_x, fov_y) 以角度为单位
+        (fov_x, fov_y) in degrees.
     """
     h, w = size
     fx, fy = K[0, 0], K[1, 1]
@@ -255,44 +229,40 @@ def intrinsics_to_fov(K: np.ndarray, size: Tuple[int, int]) -> Tuple[float, floa
 
 
 # ============================================================================
-# 相机轨迹生成
+# Camera trajectory generation
 # ============================================================================
+
 
 class TrajectoryGenerator:
     """
-    相机轨迹生成器工具类
+    Camera trajectory generator.
 
-    输入：初始位姿 (4x4 c2w matrix), 总帧数
-    输出：轨迹列表 (N, 4, 4)
+    Input: initial pose (4x4 c2w matrix) and frame count.
+    Output: trajectory (N, 4, 4).
 
-    支持的轨迹模式:
-    - yaw_sweep_pause_return: 向右转 -> 停顿 -> 转回
-    - yaw_sweep: 左右摇摆
-    - pitch_sweep: 上下摇摆
-    - orbit: 绕点做圆周运动
-    - dolly_forward: 向前推进
-    - dolly_zoom: 推拉变焦
-    - static: 静止不动
+    Modes:
+    - yaw_sweep_pause_return: turn right -> pause -> turn back
+    - yaw_sweep: sinusoidal left-right sweep
+    - pitch_sweep: sinusoidal up-down sweep
+    - orbit: circle around the initial position
+    - dolly_forward: move forward
+    - dolly_zoom: move forward and optionally back
+    - static: stay still
     """
 
     @staticmethod
-    def generate(
-        initial_c2w: np.ndarray,
-        total_frames: int,
-        mode: str = 'yaw_sweep',
-        **kwargs
-    ) -> np.ndarray:
+    def generate(initial_c2w: np.ndarray, total_frames: int, mode: str = "yaw_sweep", **kwargs) -> np.ndarray:
         """
-        统一入口函数
+        Generate a trajectory with the ``_path_<mode>`` method.
 
         Args:
-            initial_c2w: 初始位姿 (4, 4) c2w 矩阵
-            total_frames: 总帧数
-            mode: 轨迹模式名称
-            **kwargs: 传递给具体路径函数的参数
+            initial_c2w: Initial c2w pose (4, 4).
+            total_frames: Number of frames.
+            mode: Trajectory mode name.
+            **kwargs: Arguments forwarded to the mode method.
 
         Returns:
-            轨迹数组 (N, 4, 4)
+            Trajectory (N, 4, 4).
         """
         method = getattr(TrajectoryGenerator, f"_path_{mode}", None)
         if not method:
@@ -302,22 +272,19 @@ class TrajectoryGenerator:
 
     @staticmethod
     def _path_static(initial_c2w: np.ndarray, total_frames: int, **kwargs) -> np.ndarray:
-        """静止不动"""
+        """Repeat the initial pose."""
         return np.stack([initial_c2w.copy() for _ in range(total_frames)], axis=0)
 
     @staticmethod
     def _path_yaw_sweep_pause_return(
-        initial_c2w: np.ndarray,
-        total_frames: int,
-        max_angle: float = -90,
-        pause_ratio: float = 0.2
+        initial_c2w: np.ndarray, total_frames: int, max_angle: float = -90, pause_ratio: float = 0.2
     ) -> np.ndarray:
         """
-        向右转 -> 停顿 -> 转回原位
+        Turn right -> pause -> turn back to the initial pose.
 
         Args:
-            max_angle: 最大旋转角度，负数向右
-            pause_ratio: 停顿时间占总时长的比例
+            max_angle: Maximum yaw in degrees; negative turns right.
+            pause_ratio: Fraction of the frames spent paused.
         """
         poses = []
 
@@ -329,7 +296,7 @@ class TrajectoryGenerator:
 
         for i in range(total_frames):
             current_angle = np.interp(i, key_frames, key_angles)
-            r_relative = R.from_euler('y', current_angle, degrees=True).as_matrix()
+            r_relative = R.from_euler("y", current_angle, degrees=True).as_matrix()
             new_c2w = initial_c2w.copy()
             new_c2w[:3, :3] = initial_c2w[:3, :3] @ r_relative
             new_c2w[:3, 3] = initial_c2w[:3, 3]
@@ -339,47 +306,40 @@ class TrajectoryGenerator:
 
     @staticmethod
     def _path_yaw_sweep(
-        initial_c2w: np.ndarray,
-        total_frames: int,
-        max_angle: float = 30,
-        num_cycles: float = 1.0
+        initial_c2w: np.ndarray, total_frames: int, max_angle: float = 30, num_cycles: float = 1.0
     ) -> np.ndarray:
         """
-        左右摇摆轨迹
+        Sinusoidal left-right (yaw) sweep.
 
         Args:
-            max_angle: 最大摇摆角度
-            num_cycles: 摇摆周期数
+            max_angle: Maximum yaw in degrees.
+            num_cycles: Number of sweep cycles.
         """
-        poses = []
-        for i in range(total_frames):
-            t = i / (total_frames - 1) if total_frames > 1 else 0
-            angle = max_angle * np.sin(2 * np.pi * num_cycles * t)
-            r_relative = R.from_euler('y', angle, degrees=True).as_matrix()
-            new_c2w = initial_c2w.copy()
-            new_c2w[:3, :3] = initial_c2w[:3, :3] @ r_relative
-            poses.append(new_c2w)
-        return np.array(poses)
+        return TrajectoryGenerator._sinusoidal_sweep(initial_c2w, total_frames, "y", max_angle, num_cycles)
 
     @staticmethod
     def _path_pitch_sweep(
-        initial_c2w: np.ndarray,
-        total_frames: int,
-        max_angle: float = 15,
-        num_cycles: float = 1.0
+        initial_c2w: np.ndarray, total_frames: int, max_angle: float = 15, num_cycles: float = 1.0
     ) -> np.ndarray:
         """
-        上下摇摆轨迹
+        Sinusoidal up-down (pitch) sweep.
 
         Args:
-            max_angle: 最大摇摆角度
-            num_cycles: 摇摆周期数
+            max_angle: Maximum pitch in degrees.
+            num_cycles: Number of sweep cycles.
         """
+        return TrajectoryGenerator._sinusoidal_sweep(initial_c2w, total_frames, "x", max_angle, num_cycles)
+
+    @staticmethod
+    def _sinusoidal_sweep(
+        initial_c2w: np.ndarray, total_frames: int, axis: str, max_angle: float, num_cycles: float
+    ) -> np.ndarray:
+        """Rotate about the camera ``axis`` by ``max_angle * sin(2 * pi * num_cycles * t)`` degrees."""
         poses = []
         for i in range(total_frames):
             t = i / (total_frames - 1) if total_frames > 1 else 0
             angle = max_angle * np.sin(2 * np.pi * num_cycles * t)
-            r_relative = R.from_euler('x', angle, degrees=True).as_matrix()
+            r_relative = R.from_euler(axis, angle, degrees=True).as_matrix()
             new_c2w = initial_c2w.copy()
             new_c2w[:3, :3] = initial_c2w[:3, :3] @ r_relative
             poses.append(new_c2w)
@@ -391,15 +351,15 @@ class TrajectoryGenerator:
         total_frames: int,
         radius: float = 0.5,
         height_var: float = 0.1,
-        num_cycles: float = 1.0
+        num_cycles: float = 1.0,
     ) -> np.ndarray:
         """
-        绕初始位置做圆周运动
+        Circle around the initial position.
 
         Args:
-            radius: 圆周半径
-            height_var: 高度变化幅度
-            num_cycles: 圆周数
+            radius: Circle radius.
+            height_var: Amplitude of the vertical offset.
+            num_cycles: Number of circles.
         """
         poses = []
         center = initial_c2w[:3, 3].copy()
@@ -416,23 +376,19 @@ class TrajectoryGenerator:
             new_c2w[:3, 3] = center + np.array([offset_x, offset_y, offset_z])
 
             yaw = -np.degrees(angle)
-            r_relative = R.from_euler('y', yaw, degrees=True).as_matrix()
+            r_relative = R.from_euler("y", yaw, degrees=True).as_matrix()
             new_c2w[:3, :3] = initial_c2w[:3, :3] @ r_relative
 
             poses.append(new_c2w)
         return np.array(poses)
 
     @staticmethod
-    def _path_dolly_forward(
-        initial_c2w: np.ndarray,
-        total_frames: int,
-        distance: float = 1.0
-    ) -> np.ndarray:
+    def _path_dolly_forward(initial_c2w: np.ndarray, total_frames: int, distance: float = 1.0) -> np.ndarray:
         """
-        向前推进的轨迹
+        Translate the camera along ``-c2w[:3, 2]``.
 
         Args:
-            distance: 推进距离
+            distance: Total travel distance.
         """
         poses = []
         for i in range(total_frames):
@@ -445,27 +401,21 @@ class TrajectoryGenerator:
 
     @staticmethod
     def _path_dolly_zoom(
-        initial_c2w: np.ndarray,
-        total_frames: int,
-        distance: float = 1.0,
-        return_back: bool = True
+        initial_c2w: np.ndarray, total_frames: int, distance: float = 1.0, return_back: bool = True
     ) -> np.ndarray:
         """
-        推拉变焦轨迹
+        Translate the camera along ``-c2w[:3, 2]`` and optionally back.
 
         Args:
-            distance: 推进距离
-            return_back: 是否返回
+            distance: Maximum travel distance.
+            return_back: Return to the initial pose in the second half.
         """
         poses = []
         for i in range(total_frames):
             if return_back:
                 t = i / (total_frames - 1) if total_frames > 1 else 0
-                # 前半段前进，后半段后退
-                if t < 0.5:
-                    progress = t * 2
-                else:
-                    progress = (1 - t) * 2
+                # Forward in the first half, back in the second half.
+                progress = t * 2 if t < 0.5 else (1 - t) * 2
             else:
                 progress = i / (total_frames - 1) if total_frames > 1 else 0
 
@@ -477,37 +427,32 @@ class TrajectoryGenerator:
 
 
 # ============================================================================
-# 几何工具 - 点云和投影
+# Geometry: point clouds and projection
 # ============================================================================
 
+
 def unproject_depth_to_points(
-    depth: np.ndarray,
-    K: np.ndarray,
-    mask: Optional[np.ndarray] = None,
-    return_pixels: bool = False
-) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+    depth: np.ndarray, K: np.ndarray, mask: np.ndarray | None = None, return_pixels: bool = False
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """
-    深度图反投影为相机坐标系3D点
+    Unproject a depth map to 3D points in camera coordinates; pixels with depth <= 0 are skipped.
 
     Args:
-        depth: 深度图 (H, W)
-        K: 内参矩阵 (3, 3)
-        mask: 有效像素 mask (H, W)
-        return_pixels: 是否返回像素坐标
+        depth: Depth map (H, W).
+        K: Intrinsics matrix (3, 3).
+        mask: Valid-pixel mask (H, W).
+        return_pixels: Also return the pixel coordinates.
 
     Returns:
-        points: 3D点 (N, 3)
-        pixels: (可选) 像素坐标 (N, 2)
+        points: 3D points (N, 3).
+        pixels: (optional) pixel coordinates (N, 2) as (x, y).
     """
     if depth.ndim != 2:
         raise ValueError("depth must be HxW")
     if K.shape != (3, 3):
         raise ValueError("K must be 3x3")
 
-    if mask is None:
-        mask = depth > 0
-    else:
-        mask = mask & (depth > 0)
+    mask = depth > 0 if mask is None else mask & (depth > 0)
 
     ys, xs = np.nonzero(mask)
     if ys.size == 0:
@@ -531,14 +476,14 @@ def unproject_depth_to_points(
 
 def transform_points(points: np.ndarray, transform: np.ndarray) -> np.ndarray:
     """
-    使用4x4变换矩阵变换3D点
+    Apply a 4x4 transform to 3D points.
 
     Args:
-        points: 3D点 (N, 3)
-        transform: 变换矩阵 (4, 4)
+        points: 3D points (N, 3).
+        transform: Transform matrix (4, 4).
 
     Returns:
-        变换后的点 (N, 3)
+        Transformed points (N, 3).
     """
     if points.ndim != 2 or points.shape[1] != 3:
         raise ValueError("points must be Nx3")
@@ -551,17 +496,17 @@ def transform_points(points: np.ndarray, transform: np.ndarray) -> np.ndarray:
     return transformed.astype(np.float32)
 
 
-def project_points(points: np.ndarray, K: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def project_points(points: np.ndarray, K: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
-    将相机坐标系3D点投影到像素坐标
+    Project camera-space 3D points to pixel coordinates.
 
     Args:
-        points: 3D点 (N, 3)
-        K: 内参矩阵 (3, 3)
+        points: 3D points (N, 3).
+        K: Intrinsics matrix (3, 3).
 
     Returns:
-        uv: 像素坐标 (N, 2)
-        z: 深度 (N,)
+        uv: Pixel coordinates (N, 2); NaN for points with z <= 0.
+        z: Depth (N,).
     """
     if points.ndim != 2 or points.shape[1] != 3:
         raise ValueError("points must be Nx3")
@@ -572,7 +517,7 @@ def project_points(points: np.ndarray, K: np.ndarray) -> Tuple[np.ndarray, np.nd
     fx, fy = float(K[0, 0]), float(K[1, 1])
     cx, cy = float(K[0, 2]), float(K[1, 2])
 
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", invalid="ignore"):
         u = np.where(z > 0, (x / z) * fx + cx, np.nan)
         v = np.where(z > 0, (y / z) * fy + cy, np.nan)
 
@@ -581,14 +526,14 @@ def project_points(points: np.ndarray, K: np.ndarray) -> Tuple[np.ndarray, np.nd
 
 def voxel_downsample(points: np.ndarray, voxel_size: float) -> np.ndarray:
     """
-    体素下采样
+    Voxel-downsample points, keeping one point per occupied voxel.
 
     Args:
-        points: 3D点 (N, 3)
-        voxel_size: 体素大小
+        points: 3D points (N, 3).
+        voxel_size: Voxel edge length; <= 0 disables downsampling.
 
     Returns:
-        下采样后的点 (M, 3)
+        Downsampled points (M, 3).
     """
     if voxel_size <= 0:
         return points.astype(np.float32)
@@ -602,14 +547,14 @@ def voxel_downsample(points: np.ndarray, voxel_size: float) -> np.ndarray:
 
 def voxel_indices(points: np.ndarray, voxel_size: float) -> np.ndarray:
     """
-    计算每个点所属的 voxel 索引
+    Compute the integer voxel index of each point.
 
     Args:
-        points: 3D点 (N, 3)
-        voxel_size: 体素大小
+        points: 3D points (N, 3).
+        voxel_size: Voxel edge length.
 
     Returns:
-        体素索引 (N, 3)
+        Voxel indices (N, 3).
     """
     if points.size == 0:
         return np.zeros((0, 3), dtype=np.int32)
@@ -619,31 +564,30 @@ def voxel_indices(points: np.ndarray, voxel_size: float) -> np.ndarray:
 
 
 # ============================================================================
-# 视频 I/O
+# Video I/O
 # ============================================================================
 
 VIDEO_EXTS = (".mp4", ".mov", ".avi", ".mkv", ".webm")
 
 
 def load_video_frames(
-    video_path: Union[str, Path],
+    video_path: str | Path,
     start: int = 0,
     stride: int = 1,
-    max_frames: Optional[int] = None,
-    target_size: Optional[Union[int, Tuple[int, int]]] = None,
-) -> List[np.ndarray]:
+    max_frames: int | None = None,
+    target_size: int | tuple[int, int] | None = None,
+) -> list[np.ndarray]:
     """
-    加载视频帧
+    Load RGB video frames.
 
     Args:
-        video_path: 视频路径
-        start: 起始帧索引
-        stride: 帧间隔
-        max_frames: 最大帧数
-        target_size: 目标尺寸，int 表示 (size, size)，tuple 表示 (W, H)
+        start: Index of the first frame.
+        stride: Frame step.
+        max_frames: Maximum number of frames.
+        target_size: Resize target; an int means (size, size), a tuple means (W, H).
 
     Returns:
-        帧列表 [np.ndarray]
+        List of frames.
     """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -651,12 +595,9 @@ def load_video_frames(
 
     resize_wh = None
     if target_size is not None:
-        if isinstance(target_size, int):
-            resize_wh = (target_size, target_size)
-        else:
-            resize_wh = (target_size[0], target_size[1])
+        resize_wh = (target_size, target_size) if isinstance(target_size, int) else (target_size[0], target_size[1])
 
-    frames: List[np.ndarray] = []
+    frames: list[np.ndarray] = []
     idx = 0
     while True:
         ret, frame = cap.read()
@@ -677,18 +618,14 @@ def load_video_frames(
     return frames
 
 
-def save_video(
-    frames: np.ndarray,
-    out_path: Union[str, Path],
-    fps: float = 16.0
-) -> None:
+def save_video(frames: np.ndarray, out_path: str | Path, fps: float = 16.0) -> None:
     """
-    保存帧序列为 mp4 视频
+    Save frames as an H.264 mp4 video.
 
     Args:
-        frames: 帧数组 (N, H, W, C)
-        out_path: 输出路径
-        fps: 帧率
+        frames: Frames (N, H, W, C).
+        out_path: Output path.
+        fps: Frame rate.
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -696,47 +633,41 @@ def save_video(
     save_video_h264(out_path, frames, fps=fps)
 
 
-def get_video_info(video_path: Union[str, Path]) -> dict:
+def get_video_info(video_path: str | Path) -> dict:
     """
-    获取视频信息
-
-    Args:
-        video_path: 视频路径
+    Read video metadata.
 
     Returns:
-        包含 fps, frame_count, width, height 的字典
+        Dict with fps (16.0 when unknown), frame_count, width and height.
     """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise RuntimeError(f"Failed to open video: {video_path}")
 
     info = {
-        'fps': cap.get(cv2.CAP_PROP_FPS),
-        'frame_count': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
-        'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-        'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+        "fps": cap.get(cv2.CAP_PROP_FPS),
+        "frame_count": int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
+        "width": int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+        "height": int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
     }
     cap.release()
 
-    if info['fps'] is None or info['fps'] <= 0:
-        info['fps'] = 16.0
+    if info["fps"] is None or info["fps"] <= 0:
+        info["fps"] = 16.0
 
     return info
 
 
-def list_video_files(
-    video_dir: Union[str, Path],
-    recursive: bool = True
-) -> List[Path]:
+def list_video_files(video_dir: str | Path, recursive: bool = True) -> list[Path]:
     """
-    列出目录中的视频文件
+    List video files in a directory.
 
     Args:
-        video_dir: 目录路径
-        recursive: 是否递归搜索
+        video_dir: Directory path.
+        recursive: Search subdirectories.
 
     Returns:
-        视频文件路径列表
+        Sorted video file paths.
     """
     root = Path(video_dir)
     if not root.is_dir():
@@ -753,26 +684,27 @@ def list_video_files(
 
 
 # ============================================================================
-# 深度可视化
+# Depth visualization
 # ============================================================================
+
 
 def visualize_depth(
     depth: np.ndarray,
     colormap: int = cv2.COLORMAP_VIRIDIS,
-    min_depth: Optional[float] = None,
-    max_depth: Optional[float] = None
+    min_depth: float | None = None,
+    max_depth: float | None = None,
 ) -> np.ndarray:
     """
-    深度图可视化
+    Colorize a depth map.
 
     Args:
-        depth: 深度图 (H, W)
-        colormap: OpenCV colormap
-        min_depth: 最小深度值 (用于归一化)
-        max_depth: 最大深度值 (用于归一化)
+        depth: Depth map (H, W).
+        colormap: OpenCV colormap.
+        min_depth: Normalization minimum; defaults to the depth minimum.
+        max_depth: Normalization maximum; defaults to the depth maximum.
 
     Returns:
-        彩色深度图 (H, W, 3) RGB
+        RGB depth visualization (H, W, 3).
     """
     if min_depth is None:
         min_depth = depth.min()
@@ -786,39 +718,36 @@ def visualize_depth(
     return d_vis
 
 
-def save_depth_visualization(
-    depth: np.ndarray,
-    out_path: Union[str, Path],
-    colormap: int = cv2.COLORMAP_VIRIDIS
-) -> None:
+def save_depth_visualization(depth: np.ndarray, out_path: str | Path, colormap: int = cv2.COLORMAP_VIRIDIS) -> None:
     """
-    保存深度可视化图
+    Save a colorized depth map.
 
     Args:
-        depth: 深度图 (H, W)
-        out_path: 输出路径
-        colormap: OpenCV colormap
+        depth: Depth map (H, W).
+        out_path: Output path.
+        colormap: OpenCV colormap.
     """
     d_vis = visualize_depth(depth, colormap)
     save_image(d_vis, out_path)
 
 
 # ============================================================================
-# 点云 I/O
+# Point cloud I/O
 # ============================================================================
 
+
 def save_point_cloud_ply(
-    save_path: Union[str, Path],
+    save_path: str | Path,
     points: np.ndarray,
     colors: np.ndarray,
 ) -> None:
     """
-    保存点云为 PLY 文件
+    Save a point cloud as an ASCII PLY file.
 
     Args:
-        save_path: 保存路径
-        points: 点坐标 (N, 3)
-        colors: 点颜色 (N, 3) uint8 RGB
+        save_path: Output path.
+        points: Point coordinates (N, 3).
+        colors: Point colors (N, 3), uint8 RGB or floats in [0, 1].
     """
     save_path = Path(save_path)
     save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -829,7 +758,7 @@ def save_point_cloud_ply(
 
     num_points = len(points)
 
-    with open(save_path, 'w') as f:
+    with open(save_path, "w") as f:
         f.write("ply\n")
         f.write("format ascii 1.0\n")
         f.write(f"element vertex {num_points}\n")
@@ -842,111 +771,111 @@ def save_point_cloud_ply(
         f.write("end_header\n")
 
         for i in range(num_points):
-            f.write(f"{points[i, 0]:.6f} {points[i, 1]:.6f} {points[i, 2]:.6f} "
-                    f"{colors[i, 0]} {colors[i, 1]} {colors[i, 2]}\n")
+            f.write(
+                f"{points[i, 0]:.6f} {points[i, 1]:.6f} {points[i, 2]:.6f} "
+                f"{colors[i, 0]} {colors[i, 1]} {colors[i, 2]}\n"
+            )
 
     print(f"Saved point cloud: {save_path} ({num_points} points)")
 
 
 # ============================================================================
-# 数据类型定义
+# Data types
 # ============================================================================
+
 
 @dataclass
 class VideoGeometry:
     """
-    视频几何信息
-
-    由 MapAnything 估计得到，包含:
-    - frames: RGB帧 (L, H, W, 3)
-    - depths: 深度图 (L, H, W)
-    - intrinsics: 相机内参 (L, 3, 3)
-    - poses_c2w: 相机位姿，camera-to-world (L, 4, 4)
-    - masks: 有效区域mask (L, H, W)
+    Per-frame video geometry estimated by MapAnything:
+    - frames: RGB frames (L, H, W, 3)
+    - depths: depth maps (L, H, W)
+    - intrinsics: camera intrinsics (L, 3, 3)
+    - poses_c2w: camera-to-world poses (L, 4, 4)
+    - masks: valid-region masks (L, H, W)
     """
+
     frames: np.ndarray
     depths: np.ndarray
     intrinsics: np.ndarray
     poses_c2w: np.ndarray
-    masks: Optional[np.ndarray] = None
-    frame_indices: Optional[np.ndarray] = None
-    original_size: Optional[Tuple[int, int]] = None
-    processed_size: Optional[Tuple[int, int]] = None
+    masks: np.ndarray | None = None
+    frame_indices: np.ndarray | None = None
+    original_size: tuple[int, int] | None = None
+    processed_size: tuple[int, int] | None = None
 
 
 # ============================================================================
-# 便捷函数
+# Geometry file helpers
 # ============================================================================
 
-def load_geometry_npz(path: Union[str, Path]) -> dict:
+
+def load_geometry_npz(path: str | Path) -> dict:
     """
-    加载 geometry.npz 文件
+    Load a geometry.npz file.
 
     Args:
-        path: npz 文件路径
+        path: npz file path.
 
     Returns:
-        包含几何信息的字典
+        Dict of the stored arrays.
     """
     data = np.load(str(path))
     return {key: data[key] for key in data.files}
 
 
 def save_geometry_npz(
-    path: Union[str, Path],
+    path: str | Path,
     depths: np.ndarray,
     poses_c2w: np.ndarray,
     intrinsics: np.ndarray,
-    processed_size: Tuple[int, int],
-    original_size: Optional[Tuple[int, int]] = None,
-    **kwargs
+    processed_size: tuple[int, int],
+    original_size: tuple[int, int] | None = None,
+    **kwargs,
 ) -> None:
     """
-    保存 geometry.npz 文件
+    Save a geometry.npz file.
 
     Args:
-        path: 输出路径
-        depths: 深度图 (N, H, W)
-        poses_c2w: 位姿 (N, 4, 4)
-        intrinsics: 内参 (N, 3, 3) 或 (3, 3)
-        processed_size: 处理后的尺寸 (H, W)
-        original_size: 原始尺寸 (H, W)
-        **kwargs: 其他要保存的数据
+        path: Output path.
+        depths: Depth maps (N, H, W).
+        poses_c2w: Camera-to-world poses (N, 4, 4).
+        intrinsics: Intrinsics (N, 3, 3) or (3, 3).
+        processed_size: Processed size (H, W).
+        original_size: Original size (H, W).
+        **kwargs: Additional arrays to store.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     save_dict = {
-        'depths': depths,
-        'poses_c2w': poses_c2w,
-        'intrinsics': intrinsics,
-        'processed_size': np.array(processed_size),
+        "depths": depths,
+        "poses_c2w": poses_c2w,
+        "intrinsics": intrinsics,
+        "processed_size": np.array(processed_size),
     }
 
     if original_size is not None:
-        save_dict['original_size'] = np.array(original_size)
+        save_dict["original_size"] = np.array(original_size)
 
     save_dict.update(kwargs)
     np.savez(str(path), **save_dict)
 
 
 def make_comparison_image(
-    images: List[np.ndarray],
-    axis: int = 1,
-    gap: int = 0,
-    gap_color: Tuple[int, int, int] = (255, 255, 255)
+    images: list[np.ndarray], axis: int = 1, gap: int = 0, gap_color: tuple[int, int, int] = (255, 255, 255)
 ) -> np.ndarray:
     """
-    创建对比图
+    Concatenate images into one comparison image.
 
     Args:
-        images: 图片列表
-        axis: 拼接方向，0=垂直，1=水平
-        gap: 图片间隔
-        gap_color: 间隔颜色 (R, G, B)
+        images: Images with matching sizes.
+        axis: Concatenation axis; 0 = vertical, 1 = horizontal.
+        gap: Gap width in pixels between images.
+        gap_color: Gap color (R, G, B).
 
     Returns:
-        拼接后的图片
+        Concatenated image.
     """
     if not images:
         raise ValueError("images list is empty")
@@ -969,14 +898,15 @@ def make_comparison_image(
 
 
 # ============================================================================
-# Pipeline 工具函数 (从 pipeline_unified_backbone.py 移入)
+# Pipeline utilities
 # ============================================================================
+
 
 def voxel_downsample_with_colors(
     points: np.ndarray,
-    colors: Optional[np.ndarray] = None,
+    colors: np.ndarray | None = None,
     voxel_size: float = 0.02,
-) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray | None]:
     """
     Downsample point cloud using voxel grid, preserving colors.
 
@@ -1005,15 +935,13 @@ def voxel_downsample_with_colors(
     return downsampled_points, downsampled_colors
 
 
-
-
 def project_points_to_image(
     points_world: np.ndarray,
     pose_c2w: np.ndarray,
     intrinsics: np.ndarray,
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     return_depth: bool = False,
-) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
     """
     Project 3D world points to 2D image coordinates.
 
@@ -1066,8 +994,6 @@ def project_points_to_image(
     return pixel_coords, valid_mask, None
 
 
-
-
 def generate_blue_noise_tile(size: int, rng: np.random.Generator) -> np.ndarray:
     """
     Generate a blue noise dither tile using void-and-cluster method.
@@ -1082,10 +1008,10 @@ def generate_blue_noise_tile(size: int, rng: np.random.Generator) -> np.ndarray:
     tile = rng.random((size, size))
 
     sigma = 1.5
-    k_size = int(sigma * 6) | 1
+    _k_size = int(sigma * 6) | 1
 
     for _ in range(size * size // 4):
-        blurred = gaussian_filter(tile, sigma, mode='wrap')
+        blurred = gaussian_filter(tile, sigma, mode="wrap")
 
         max_idx = np.unravel_index(np.argmax(blurred), tile.shape)
         min_idx = np.unravel_index(np.argmin(blurred), tile.shape)
@@ -1099,10 +1025,11 @@ def generate_blue_noise_tile(size: int, rng: np.random.Generator) -> np.ndarray:
 # Pipeline utility functions (projection, point cloud, IoU, reference selection)
 # ============================================================================
 
+
 def compute_iteration_plan(
     num_frames: int,
-    frames_per_iter: int = None,
-) -> List[Tuple[int, int, int]]:
+    frames_per_iter: int | None = None,
+) -> list[tuple[int, int, int]]:
     """
     Compute the iteration plan for generating num_frames (T2V mode, no overlap).
 
@@ -1133,10 +1060,7 @@ def compute_iteration_plan(
         raise ValueError(f"frames_per_iter must be 4N+1, got {frames_per_iter}")
 
     if num_frames % frames_per_iter != 0:
-        raise ValueError(
-            f"num_frames ({num_frames}) must be divisible by "
-            f"frames_per_iter ({frames_per_iter})"
-        )
+        raise ValueError(f"num_frames ({num_frames}) must be divisible by frames_per_iter ({frames_per_iter})")
 
     plan = []
     num_iterations = num_frames // frames_per_iter
@@ -1151,6 +1075,7 @@ def compute_iteration_plan(
 # =============================================================================
 # Camera Intrinsics Helpers
 # =============================================================================
+
 
 def _safe_frame_index(frame_idx: int, length: int) -> int:
     """Clamp frame index to a valid range for arrays with known length."""
@@ -1201,22 +1126,21 @@ def compute_depth_scale_factor(
     ratio_std = np.std(ratios)
     valid_ratios = ratios[np.abs(ratios - ratio_median) < 3 * ratio_std]
 
-    if len(valid_ratios) < min_valid_pixels // 2:
-        scale_factor = ratio_median
-    else:
-        scale_factor = np.median(valid_ratios)
+    scale_factor = ratio_median if len(valid_ratios) < min_valid_pixels // 2 else np.median(valid_ratios)
 
     print(f"  [ScaleAlign] Computed scale factor: {scale_factor:.4f} (from {num_valid} pixels)")
     return float(scale_factor)
+
 
 # =============================================================================
 # Reference Frame Selection (3D IoU)
 # =============================================================================
 
+
 def _unproject_depth_to_points(
     depth: np.ndarray,
     K: np.ndarray,
-    mask: Optional[np.ndarray] = None,
+    mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Unproject depth map to 3D points in camera coordinates."""
     H, W = depth.shape
@@ -1250,14 +1174,13 @@ def _transform_points(points: np.ndarray, transform: np.ndarray) -> np.ndarray:
     return (points @ R.T) + t
 
 
-
 def _merge_pointcloud_incremental(
-    base_points: Optional[np.ndarray],
-    base_colors: Optional[np.ndarray],
+    base_points: np.ndarray | None,
+    base_colors: np.ndarray | None,
     new_points: np.ndarray,
-    new_colors: Optional[np.ndarray],
+    new_colors: np.ndarray | None,
     voxel_size: float,
-) -> tuple[np.ndarray, Optional[np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray | None]:
     """Merge new points into existing point cloud using voxel occupancy."""
     if base_points is None or len(base_points) == 0:
         return new_points, new_colors
@@ -1298,9 +1221,9 @@ def _occupancy_from_frame(
     K: np.ndarray,
     c2w: np.ndarray,
     voxel_size: float,
-    valid_mask: Optional[np.ndarray] = None,
-    dynamic_mask: Optional[np.ndarray] = None,
-) -> Set[Tuple[int, int, int]]:
+    valid_mask: np.ndarray | None = None,
+    dynamic_mask: np.ndarray | None = None,
+) -> set[tuple[int, int, int]]:
     """Compute voxel occupancy set from a single frame's depth map."""
     mask = depth > 0
     if valid_mask is not None:
@@ -1317,7 +1240,7 @@ def _occupancy_from_frame(
     return set(map(tuple, vox.tolist()))
 
 
-def _iou_occupancy(a: Set[Tuple[int, int, int]], b: Set[Tuple[int, int, int]]) -> float:
+def _iou_occupancy(a: set[tuple[int, int, int]], b: set[tuple[int, int, int]]) -> float:
     """Compute IoU between two voxel occupancy sets."""
     if not a and not b:
         return 0.0
@@ -1331,8 +1254,9 @@ def _iou_occupancy(a: Set[Tuple[int, int, int]], b: Set[Tuple[int, int, int]]) -
 @dataclass
 class RefSelectionResult:
     """Result of reference frame selection with diagnostic info."""
-    indices: List[int] = field(default_factory=list)
-    ious: List[float] = field(default_factory=list)
+
+    indices: list[int] = field(default_factory=list)
+    ious: list[float] = field(default_factory=list)
     stats: dict = field(default_factory=dict)
 
     @property
@@ -1347,7 +1271,7 @@ class RefSelectionResult:
             reason = self.stats.get("no_ref_reason", "unknown")
             best = self.stats.get("best_iou", 0)
             thresh = self.stats.get("threshold", 0)
-            if reason == "max_refs_zero":
+            if reason == "max_refs_zero":  # noqa: SIM116 - Branch chain kept as upstream.
                 return "ref=0 (max_refs=0)"
             elif reason == "no_candidates":
                 return "ref=0 (no candidates)"
@@ -1367,8 +1291,8 @@ def select_reference_frames(
     stride: int = 1,
     iou_threshold: float = 0.04,
     max_refs: int = 7,
-    valid_masks: Optional[np.ndarray] = None,
-    dynamic_masks: Optional[np.ndarray] = None,
+    valid_masks: np.ndarray | None = None,
+    dynamic_masks: np.ndarray | None = None,
     max_iou_frames: int = 0,
 ) -> RefSelectionResult:
     """
@@ -1421,10 +1345,8 @@ def select_reference_frames(
         stats["best_iou"] = 0.0
         return RefSelectionResult([], [], stats)
 
-    # Pre-compute occupancy for all target frames
-    target_occs = []
-    for idx in target_list:
-        occ = _occupancy_from_frame(
+    def frame_occupancy(idx: int) -> set[tuple[int, int, int]]:
+        return _occupancy_from_frame(
             depth=depths[idx],
             K=intrinsics[idx],
             c2w=poses_c2w[idx],
@@ -1432,20 +1354,9 @@ def select_reference_frames(
             valid_mask=None if valid_masks is None else valid_masks[idx],
             dynamic_mask=None if dynamic_masks is None else dynamic_masks[idx],
         )
-        target_occs.append(occ)
 
-    # Pre-compute occupancy for all candidate frames
-    candidate_occs = {}
-    for idx in candidates:
-        occ = _occupancy_from_frame(
-            depth=depths[idx],
-            K=intrinsics[idx],
-            c2w=poses_c2w[idx],
-            voxel_size=voxel_size,
-            valid_mask=None if valid_masks is None else valid_masks[idx],
-            dynamic_mask=None if dynamic_masks is None else dynamic_masks[idx],
-        )
-        candidate_occs[idx] = occ
+    target_occs = [frame_occupancy(idx) for idx in target_list]
+    candidate_occs = {idx: frame_occupancy(idx) for idx in candidates}
 
     # For each candidate, compute max IoU across all target frames
     scored = []
@@ -1483,13 +1394,14 @@ def select_reference_frames(
 # Projection Rendering Utilities
 # =============================================================================
 
+
 def render_projection(
     points_world: np.ndarray,
     K: np.ndarray,
     c2w: np.ndarray,
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     channels: Iterable[str],
-    colors: Optional[np.ndarray] = None,
+    colors: np.ndarray | None = None,
     fill_holes_kernel: int = 0,
     device: str = "cuda",
 ) -> np.ndarray:
@@ -1497,6 +1409,7 @@ def render_projection(
     from worldfoundry.base_models.three_dimensions.point_clouds.projection import (
         render_projection as _render_proj,
     )
+
     return _render_proj(
         points_world=points_world,
         K=K,
@@ -1509,41 +1422,17 @@ def render_projection(
     )
 
 
-def scale_intrinsics(K: np.ndarray, scale_x, scale_y) -> np.ndarray:
-    """
-    Scale intrinsic matrix for different resolutions.
-
-    Args:
-        K: [3, 3] intrinsic matrix
-        scale_x: Scale factor for x (width), or source (h, w) tuple
-        scale_y: Scale factor for y (height), or target (h, w) tuple
-
-    Returns:
-        K_scaled: [3, 3] scaled intrinsic matrix
-    """
-    if isinstance(scale_x, tuple) and isinstance(scale_y, tuple):
-        from_h, from_w = scale_x
-        to_h, to_w = scale_y
-        scale_x = to_w / from_w
-        scale_y = to_h / from_h
-    K_scaled = K.copy()
-    K_scaled[0, 0] *= scale_x  # fx
-    K_scaled[1, 1] *= scale_y  # fy
-    K_scaled[0, 2] *= scale_x  # cx
-    K_scaled[1, 2] *= scale_y  # cy
-    return K_scaled
-
-
 # =============================================================================
 # Projection Density Helpers
 # =============================================================================
+
 
 def _project_points_to_pixels(
     points_world: np.ndarray,
     pose_c2w: np.ndarray,
     K: np.ndarray,
-    image_size: Tuple[int, int],
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    image_size: tuple[int, int],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Project 3D points to image pixels."""
     height, width = image_size
     pose_w2c = np.linalg.inv(pose_c2w)
@@ -1568,9 +1457,9 @@ def _compute_projection_density_max_pixels(
     points_world: np.ndarray,
     poses_c2w: np.ndarray,
     intrinsics: np.ndarray,
-    target_frames: List[int],
-    output_size: Tuple[int, int],
-    intrinsics_size: Tuple[int, int],
+    target_frames: list[int],
+    output_size: tuple[int, int],
+    intrinsics_size: tuple[int, int],
 ) -> int:
     """Compute max projected unique pixel count from the first iteration."""
     height, width = output_size
@@ -1582,7 +1471,6 @@ def _compute_projection_density_max_pixels(
 
     proc_h, proc_w = intrinsics_size
     max_pixels = 0
-
 
     for frame_idx in target_frames:
         pose_idx = _safe_frame_index(frame_idx, len(poses_c2w))
@@ -1603,11 +1491,11 @@ def _limit_points_by_density(
     colors: np.ndarray,
     pose_c2w: np.ndarray,
     K: np.ndarray,
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     max_pixels: int,
-    rng: Optional[np.random.Generator] = None,
-    blue_noise: Optional[np.ndarray] = None,
-) -> Tuple[np.ndarray, np.ndarray]:
+    rng: np.random.Generator | None = None,
+    blue_noise: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """Limit projected point density by blue-noise sampling."""
     if max_pixels is None or max_pixels <= 0:
         return points_world, colors
@@ -1624,7 +1512,7 @@ def _limit_points_by_density(
     order_pix = np.lexsort((z, flat))
     flat_sorted = flat[order_pix]
     idx_sorted = idx[order_pix]
-    z_sorted = z[order_pix]
+    _z_sorted = z[order_pix]
     unique_flat, first_idx = np.unique(flat_sorted, return_index=True)
 
     pixel_idx = idx_sorted[first_idx]
@@ -1654,10 +1542,9 @@ def _limit_points_by_density(
 # Reference Frame Retrieval
 # =============================================================================
 def _voxel_downsample(points: np.ndarray, voxel_size: float) -> np.ndarray:
-    """Voxel grid downsampling: keep one point per voxel cell.
+    """Voxel grid downsampling: keep the first point of each occupied voxel cell.
 
-    Much better than random subsampling for preserving spatial structure.
-    Returns the centroid of points in each occupied voxel.
+    Preserves spatial structure better than random subsampling.
     """
     if len(points) == 0 or voxel_size <= 0:
         return points
@@ -1691,24 +1578,23 @@ def _compute_3d_iou_numpy(points_a: np.ndarray, points_b: np.ndarray, voxel_size
 
 def compute_3d_iou_batched(
     target_points: np.ndarray,
-    hist_points_list: List[Tuple[int, np.ndarray]],
+    hist_points_list: list[tuple[int, np.ndarray]],
     voxel_size: float,
     device: str | torch.device = "cuda",
     max_points: int = 50000,
-) -> List[Tuple[int, float]]:
+) -> list[tuple[int, float]]:
     """Batch compute 3D IoU between a target point cloud and multiple histories.
 
-    Pre-step: voxel downsample all point clouds (same voxel_size as IoU) to
-    drastically reduce point count while preserving spatial structure, then
-    deterministically trim (if needed) and compute IoU on GPU.
+    All point clouds are first voxel-downsampled with the IoU voxel size, which
+    sharply reduces the point count while preserving spatial structure; IoU is
+    then computed on ``device``, falling back to NumPy on CUDA out-of-memory.
 
     Args:
         target_points: Target point cloud (N, 3)
         hist_points_list: List of (frame_idx, points) tuples
         voxel_size: Voxel size for discretization
         device: Device for computation
-        max_points: Max points per frame after voxel downsample (deterministic
-            trim if still too many). 0 = no limit.
+        max_points: Unused.
     """
     if len(target_points) == 0 or len(hist_points_list) == 0:
         return []
@@ -1721,10 +1607,7 @@ def compute_3d_iou_batched(
 
     # Voxel downsample only (preserves spatial structure without lossy truncation).
     target_points_ds = _voxel_downsample(target_points, voxel_size)
-    valid_hist_ds = [
-        (idx, _voxel_downsample(pts, voxel_size))
-        for idx, pts in valid_hist
-    ]
+    valid_hist_ds = [(idx, _voxel_downsample(pts, voxel_size)) for idx, pts in valid_hist]
 
     # Try GPU computation with OOM fallback to CPU.
     try:
@@ -1741,10 +1624,10 @@ def compute_3d_iou_batched(
 
 def _compute_3d_iou_batched_gpu(
     target_points: np.ndarray,
-    valid_hist: List[Tuple[int, np.ndarray]],
+    valid_hist: list[tuple[int, np.ndarray]],
     voxel_size: float,
     device: torch.device,
-) -> List[Tuple[int, float]]:
+) -> list[tuple[int, float]]:
     """GPU implementation of batched 3D IoU computation."""
     target_t = torch.as_tensor(target_points, device=device, dtype=torch.float32)
     target_vox = torch.floor(target_t / voxel_size).to(torch.int64)
@@ -1897,9 +1780,9 @@ def get_visible_points_for_frame(
     colors: np.ndarray,
     pose_c2w: np.ndarray,
     intrinsics: np.ndarray,
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     depth_threshold: float = 100.0,
-) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray | None]:
     """Return points visible from a specific camera viewpoint."""
     height, width = image_size
 
@@ -1928,11 +1811,11 @@ def _get_visible_points_and_coverage_gpu(
     points_world: np.ndarray,
     poses_c2w: np.ndarray,
     intrinsics_per_frame: np.ndarray,
-    frame_indices: List[int],
-    image_size: Tuple[int, int],
+    frame_indices: list[int],
+    image_size: tuple[int, int],
     depth_threshold: float = 100.0,
     device: str | torch.device = "cuda",
-) -> List[Tuple[int, np.ndarray, float, int]]:
+) -> list[tuple[int, np.ndarray, float, int]]:
     """Batch-compute visible points + pixel coverage for multiple frames on GPU.
 
     For each frame: project world points → camera → image, filter by depth and
@@ -1957,7 +1840,7 @@ def _get_visible_points_and_coverage_gpu(
 
     # Upload points once.
     pts_t = torch.as_tensor(points_world, device=dev, dtype=torch.float32)  # (N, 3)
-    N = pts_t.shape[0]
+    _N = pts_t.shape[0]
 
     results = []
     for frame_idx in frame_indices:
@@ -2000,6 +1883,8 @@ def _get_visible_points_and_coverage_gpu(
         results.append((frame_idx, visible_pts, coverage, n_unique))
 
     return results
+
+
 @dataclass
 class BackboneInferenceOptions:
     """Options for iterative LiveWorld inference.
@@ -2010,6 +1895,7 @@ class BackboneInferenceOptions:
     - Point cloud: Managed by 3D handler
     - Sky masking: SAM3 per-frame sky segmentation
     """
+
     # ============ Inference Settings ============
     infer_steps: int = 50
     no_cfg: bool = False
@@ -2018,7 +1904,7 @@ class BackboneInferenceOptions:
     fps: int = 16
     # Few-step mode (CausVid-style): predict x0 at each step, then add noise to next step.
     use_few_step: bool = False
-    denoising_step_list: Optional[List[float]] = None  # e.g. [1000, 757, 522]
+    denoising_step_list: list[float] | None = None  # e.g. [1000, 757, 522]
 
     # ============ Frame Selection ============
     max_reference_frames: int = 7  # 0 = disable reference frames
@@ -2035,10 +1921,10 @@ class BackboneInferenceOptions:
 
     # ============ Stream3R Point Cloud Update ============
     stream3r_model_path: str = "ckpts/yslan--STream3R"
-    stream3r_window_size: Optional[int] = None  # null = causal; integer = window mode (keep first 1 + last N frames)
+    stream3r_window_size: int | None = None  # null = causal; integer = window mode (keep first 1 + last N frames)
     stream3r_preprocess_mode: str = "crop"  # "crop" or "pad"
     stream3r_frame_sample_rate: int = 1  # Sample every Nth frame (1 = all, 4 = every 4th)
-    stream3r_icp_conf_percentile: float = 70.0   # ICP uses top (100 - this)% points
+    stream3r_icp_conf_percentile: float = 70.0  # ICP uses top (100 - this)% points
     stream3r_keep_conf_percentile: float = 5.0  # Final merge uses top (100 - this)% points
     stream3r_icp_threshold: float = 0.05
     stream3r_icp_max_iter: int = 200
@@ -2047,10 +1933,12 @@ class BackboneInferenceOptions:
     stream3r_outlier_std_ratio: float = 2.0
     stream3r_global_icp_threshold: float = 0.1
     stream3r_global_icp_max_iter: int = 200
-    stream3r_global_icp_voxel_size: Optional[float] = None
+    stream3r_global_icp_voxel_size: float | None = None
     stream3r_global_icp_min_fitness: float = 0.01
     stream3r_merge_voxel_size: float = 0.001
-    stream3r_update_mode: str = "complete"  # "complete": fill unseen areas; "freeze": never alter historical pose projections
+    stream3r_update_mode: str = (
+        "complete"  # "complete": fill unseen areas; "freeze": never alter historical pose projections
+    )
     stream3r_use_3d_dist_filter: bool = True  # Use 3D distance to filter duplicate points during merge
     stream3r_use_dynamic_mask_in_update: bool = True  # Run Qwen+SAM3 to remove dynamic objects during update
     stream3r_consistency_threshold: float = 0.05  # Relative depth tolerance for multi-view consistency
@@ -2075,10 +1963,10 @@ class BackboneInferenceOptions:
     depth_edge_erosion: int = 10  # Erode depth edges by N pixels (0 = disabled)
 
     # ============ Target Resolution ============
-    target_hw: Tuple[int, int] = (720, 1280)  # (H, W) from image_or_video_shape; set automatically
+    target_hw: tuple[int, int] = (720, 1280)  # (H, W) from image_or_video_shape; set automatically
 
     # ============ 3D IoU Config ============
     iou_device: str = "auto"  # auto, cpu, cuda
-    voxel_size_iou: Optional[float] = None  # Voxel size for 3D IoU computation (None = voxel_size * 2)
+    voxel_size_iou: float | None = None  # Voxel size for 3D IoU computation (None = voxel_size * 2)
     max_iou_frames: int = 10  # Backward-compatible no-op (kept in config/API)
     max_iou_points: int = 20000  # Max points per frame for IoU (downsample if more)

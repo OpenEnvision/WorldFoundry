@@ -27,26 +27,16 @@ def build_data_loader(
 
     local_batch_size = batch_size // jax.process_count()
 
-    assert (
-        eval_num_samples == batch_size
-    ), "eval_num_samples should be equal to batch_size in eval mode"
+    assert eval_num_samples == batch_size, "eval_num_samples should be equal to batch_size in eval mode"
     if eval_pseudo_process_index is not None or eval_pseudo_process_count is not None:
-        assert (
-            not jax.distributed.is_initialized()
-        ), "jax.distributed should be disabled with eval_pseudo_process_index and eval_pseudo_process_count!"
-        assert (
-            batch_size == local_batch_size
-        ), "batch_size should be equal to local_batch_size when using eval_pseudo_process_index and eval_pseudo_process_count!"
-    rank = (
-        eval_pseudo_process_index
-        if eval_pseudo_process_index is not None
-        else jax.process_index()
-    )
-    num_replicas = (
-        eval_pseudo_process_count
-        if eval_pseudo_process_count is not None
-        else jax.process_count()
-    )
+        assert not jax.distributed.is_initialized(), (
+            "jax.distributed should be disabled with eval_pseudo_process_index and eval_pseudo_process_count!"
+        )
+        assert batch_size == local_batch_size, (
+            "batch_size should be equal to local_batch_size when using eval_pseudo_process_index and eval_pseudo_process_count!"
+        )
+    rank = eval_pseudo_process_index if eval_pseudo_process_index is not None else jax.process_index()
+    num_replicas = eval_pseudo_process_count if eval_pseudo_process_count is not None else jax.process_count()
     sampler = EvalBatchSampler(
         dataset,
         rank=rank,
@@ -62,11 +52,9 @@ def build_data_loader(
         dataset,
         batch_sampler=sampler,
         num_workers=num_workers,
-        collate_fn=functools.partial(
-            collate_segments_to_batch, sampler.num_frames, pad_batch_to
-        ),
+        collate_fn=functools.partial(collate_segments_to_batch, sampler.num_frames, pad_batch_to),
         pin_memory=True,
-        persistent_workers=True if num_workers > 0 else False,
+        persistent_workers=num_workers > 0,
     )
     return loader, num_batches
 

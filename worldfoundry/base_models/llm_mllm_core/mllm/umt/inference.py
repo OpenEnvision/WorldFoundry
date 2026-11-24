@@ -8,11 +8,11 @@ import torch
 from huggingface_hub import hf_hub_download
 from transformers import BertTokenizer
 
-from worldfoundry.core.configuration.python import load_python_config
 from worldfoundry.core import (
     get_video_details,
     load_frames_from_video,
 )
+from worldfoundry.core.configuration.python import load_python_config
 
 from .models import UMT
 from .models.criterions import get_sim
@@ -53,14 +53,10 @@ def evaluation(
         image_paths, transforms, model, device, num_frames=num_frames
     )
     pooled_image_feats = pooled_image_feats.to(device, non_blocking=True)
-    i2t_scores, _ = get_sim(
-        model.vision_proj(pooled_image_feats), model.text_proj(text_feats[:, 0])
-    )
+    i2t_scores, _ = get_sim(model.vision_proj(pooled_image_feats), model.text_proj(text_feats[:, 0]))
 
     encoder_output = image_feats[:, 0].to(device, non_blocking=True)
-    encoder_att = torch.ones(encoder_output.size()[:-1], dtype=torch.long).to(
-        device, non_blocking=True
-    )
+    encoder_att = torch.ones(encoder_output.size()[:-1], dtype=torch.long).to(device, non_blocking=True)
     output = model.get_text_encoder()(
         encoder_embeds=text_feats,
         attention_mask=text_atts,
@@ -141,9 +137,7 @@ def _resolve_checkpoint(name: str, cache_dir: str | os.PathLike[str]) -> str:
     return hf_hub_download(repo_id=repo_id, filename=filename, cache_dir=cache_dir)
 
 
-def _find_local_file(
-    cache_dir: str | os.PathLike[str], repo_id: str, filename: str
-) -> Path | None:
+def _find_local_file(cache_dir: str | os.PathLike[str], repo_id: str, filename: str) -> Path | None:
     root = Path(cache_dir).expanduser()
     repo_dir = repo_id.replace("/", "--")
     candidates = (

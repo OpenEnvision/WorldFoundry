@@ -3,9 +3,9 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence, TextIO
-
+from typing import TextIO
 
 BACKEND_TO_ENGINE = {
     "diffusers": "diffusers",

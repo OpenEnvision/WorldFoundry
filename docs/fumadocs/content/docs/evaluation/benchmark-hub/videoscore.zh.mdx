@@ -1,9 +1,9 @@
 ---
 title: VideoScore
-description: "TIGER-Lab 奖励模型：在 VideoFeedback 3.76 万条上训练的五个 1-4 分面。WorldFoundry 内置打分器，不编造榜单。"
+description: "TIGER-Lab 奖励模型：在 VideoFeedback 3.76 万条上训练的五个 1-4 分面。WorldFoundry 内置打分器。"
 ---
 
-VideoScore（滑铁卢大学 TIGER-Lab）是 **学出来的奖励模型**，不是 prompt 套件。它在 **VideoFeedback（3.76 万条人工标注视频）** 上训练，对任意生成片段预测五个分面（官方 **1–4** 量表）：
+VideoScore（滑铁卢大学 TIGER-Lab）是**学习得到的奖励模型**，不是 prompt 套件。它在 **VideoFeedback（3.76 万条人工标注视频）** 上训练，对任意生成片段预测五个分面（官方 **1–4** 量表）：
 
 - 视觉质量
 - 时间一致性
@@ -11,11 +11,11 @@ VideoScore（滑铁卢大学 TIGER-Lab）是 **学出来的奖励模型**，不�
 - 文本-视频对齐
 - 事实一致性
 
-`videoscore_average` 是五者均值。VideoScore-Bench 评估打分器与人类的相关（SPCC / 成对）。许可证：MIT（runtime）；数据集栈为 Apache-2.0 / MIT。
+`videoscore_average` 是五者均值。VideoScore-Bench 评估打分器与人类评分的相关性（SPCC / 成对比较）。许可证：MIT（runtime）；数据集栈为 Apache-2.0 / MIT。
 
 论文：[VideoScore](https://arxiv.org/abs/2406.15252)。项目：[tiger-ai-lab.github.io/VideoScore](https://tiger-ai-lab.github.io/VideoScore/)。代码：[TIGER-AI-Lab/VideoScore](https://github.com/TIGER-AI-Lab/VideoScore)。Bench 数据：[`TIGER-Lab/VideoScore-Bench`](https://huggingface.co/datasets/TIGER-Lab/VideoScore-Bench)。
 
-WorldFoundry **仓内内置 runtime**，支持有界进程内 GPU 打分，并封装 `benchmark/eval_videoscore.py`。有界官方打分器 GPU 运行已验证；**SPCC / 成对全套对齐未验证**。
+WorldFoundry **仓内内置 runtime**，支持有界进程内 GPU 打分，并封装 `benchmark/eval_videoscore.py`。已用官方打分器完成有界 GPU 运行验证；全套 SPCC / 成对相关尚未与官方数值核对。
 
 <BenchmarkPageSections id="videoscore" locale="zh" />
 
@@ -26,7 +26,7 @@ hf download TIGER-Lab/VideoScore-Bench --repo-type dataset --local-dir /path/to/
 export WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT=/path/to/VideoScore-Bench
 
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/videoscore/run_videoscore_official_runner.py \
   --bench-name video_feedback \
   --bounded-sample-count 4 \
   --dataset-root "${WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT}" \
@@ -36,7 +36,7 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
 
 通过 `--official-results-path` / `--from-upstream-results` 导入上游 `eval_*_videoscore.json`。环境变量：`WORLDFOUNDRY_VIDEOSCORE_MODEL_DIR`、`WORLDFOUNDRY_VIDEOSCORE_FRAMES_DIR`、`WORLDFOUNDRY_VIDEOSCORE_ROOT`。共享栈：`videoscore_reward_metric_stack`。
 
-仓内指针：`worldfoundry/data/benchmarks/tasks/external/videoscore.yaml`，`worldfoundry/evaluation/tasks/execution/runners/videoscore/runtime/videoscore`。
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/videoscore.yaml`，`worldfoundry/evals/tasks/execution/runners/videoscore/runtime/videoscore`。
 
 产物包括 `scorecard.json`（主键 `videoscore_average`）。
 

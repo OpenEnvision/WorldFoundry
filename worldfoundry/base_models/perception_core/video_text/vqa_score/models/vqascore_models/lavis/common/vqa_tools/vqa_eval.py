@@ -1,8 +1,8 @@
 """
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+Copyright (c) 2022, salesforce.com, inc.
+All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 """
 
 # coding=utf-8
@@ -11,8 +11,8 @@ __author__ = "aagrawal"
 
 # This code is based on the code written by Tsung-Yi Lin for MSCOCO Python API available at the following link:
 # (https://github.com/tylin/coco-caption/blob/master/pycocoevalcap/eval.py).
-import sys
 import re
+import sys
 
 
 class VQAEval:
@@ -191,8 +191,8 @@ class VQAEval:
         ]
 
     def evaluate(self, quesIds=None):
-        if quesIds == None:
-            quesIds = [quesId for quesId in self.params["question_id"]]
+        if quesIds == None:  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
+            quesIds = list(self.params["question_id"])
         gts = {}
         res = {}
         for quesId in quesIds:
@@ -220,9 +220,7 @@ class VQAEval:
                 for ansDic in gts[quesId]["answers"]:
                     ansDic["answer"] = self.processPunctuation(ansDic["answer"])
             for gtAnsDatum in gts[quesId]["answers"]:
-                otherGTAns = [
-                    item for item in gts[quesId]["answers"] if item != gtAnsDatum
-                ]
+                otherGTAns = [item for item in gts[quesId]["answers"] if item != gtAnsDatum]
                 matchingAns = [item for item in otherGTAns if item["answer"] == resAns]
                 acc = min(1, float(len(matchingAns)) / 3)
                 gtAcc.append(acc)
@@ -249,9 +247,7 @@ class VQAEval:
     def processPunctuation(self, inText):
         outText = inText
         for p in self.punct:
-            if (p + " " in inText or " " + p in inText) or (
-                re.search(self.commaStrip, inText) != None
-            ):
+            if (p + " " in inText or " " + p in inText) or (re.search(self.commaStrip, inText) != None):  # noqa: E711 - Keeps `==` for operands that may compare elementwise.
                 outText = outText.replace(p, "")
             else:
                 outText = outText.replace(p, " ")
@@ -283,9 +279,7 @@ class VQAEval:
             for quesType in accQuesType
         }
         self.accuracy["perAnswerType"] = {
-            ansType: round(
-                100 * float(sum(accAnsType[ansType])) / len(accAnsType[ansType]), self.n
-            )
+            ansType: round(100 * float(sum(accAnsType[ansType])) / len(accAnsType[ansType]), self.n)
             for ansType in accAnsType
         }
 
@@ -316,8 +310,8 @@ class VQAEval:
         if progress >= 1:
             progress = 1
             status = "Done...\r\n"
-        block = int(round(barLength * progress))
-        text = "\rFinshed Percent: [{0}] {1}% {2}".format(
+        block = int(round(barLength * progress))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
+        text = "\rFinshed Percent: [{}] {}% {}".format(
             "#" * block + "-" * (barLength - block), int(progress * 100), status
         )
         sys.stdout.write(text)

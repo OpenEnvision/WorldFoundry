@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 id: rdt-1b
 name: RDT-1B
 aliases:
@@ -38,15 +38,13 @@ docs:
   publisher: Tsinghua University (thu-ml)
   publisher_kind: university
   publisher_zh: 清华大学（thu-ml 团队）
-  overview: 'RDT-1B from Tsinghua''s thu-ml group is the Robotics Diffusion Transformer: a 1B diffusion policy pretrained on large multi-robot data with a native 128-dimensional unified action space covering many embodiments. The confirmed robotics-diffusion-transformer/rdt-1b pretrained policy is recorded, and the unified action model, two-frame three-camera preprocessing, and DPM inference run in-tree.'
-  overview_zh: 清华大学 thu-ml 团队的 RDT-1B 即 Robotics Diffusion Transformer：1B 扩散策略，在大规模多机器人数据上预训练，原生 128 维统一动作空间覆盖多种本体。已确认的 robotics-diffusion-transformer/rdt-1b 预训练策略有记录，统一动作模型、两帧三相机预处理与 DPM 推理在树内运行。
+  overview: "RDT-1B from Tsinghua's thu-ml group is the Robotics Diffusion Transformer: a 1B diffusion policy pretrained on large multi-robot data with a native 128-dimensional unified action space covering many embodiments. WorldFoundry runs the robotics-diffusion-transformer/rdt-1b pretrained policy natively, including the unified action model, two-frame three-camera preprocessing, and DPM inference."
+  overview_zh: 清华大学 thu-ml 团队的 RDT-1B 即 Robotics Diffusion Transformer：1B 扩散策略，在大规模多机器人数据上预训练，原生 128 维统一动作空间覆盖多种本体。WorldFoundry 原生运行 robotics-diffusion-transformer/rdt-1b 预训练策略，包括统一动作模型、两帧三相机预处理与 DPM 推理。
   architecture: A diffusion transformer over a 128D unified action encoding that maps heterogeneous robot action spaces into one vocabulary; prompt encoding uses the official T5 checkpoint, and precomputed embeddings are accepted to lower peak memory.
   architecture_zh: 在 128 维统一动作编码上的扩散 transformer，将异构机器人动作空间映射进同一词表；提示编码使用官方 T5 checkpoint，并接受预计算 embedding 以降低峰值内存。
   usage_notes: The released checkpoint is a pretraining checkpoint and may require embodiment/task fine-tuning for deployment. Use precomputed T5 embeddings on memory-constrained hosts.
   usage_notes_zh: 发布的 checkpoint 为预训练版本，部署可能需按本体/任务微调。内存受限主机建议使用预计算的 T5 embedding。
   limitations:
-  - Pretraining checkpoint only — deployment typically needs fine-tuning.
-  - No GPU rollout validation is recorded in this repository.
+  - Pretraining checkpoint only; deployment typically needs fine-tuning.
   limitations_zh:
-  - 仅预训练 checkpoint——部署通常需要微调。
-  - 仓库未记录 GPU rollout 验证。
+  - 仅有预训练 checkpoint，部署通常需要微调。

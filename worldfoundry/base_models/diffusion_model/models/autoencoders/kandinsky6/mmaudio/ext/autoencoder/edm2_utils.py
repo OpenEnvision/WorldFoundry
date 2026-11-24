@@ -10,11 +10,11 @@
 import numpy as np
 import torch
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Variant of constant() that inherits dtype and device from the given
 # reference tensor by default.
 
-_constant_cache = dict()
+_constant_cache = {}
 
 
 def constant(value, shape=None, dtype=None, device=None, memory_format=None):
@@ -24,12 +24,12 @@ def constant(value, shape=None, dtype=None, device=None, memory_format=None):
     if dtype is None:
         dtype = torch.get_default_dtype()
     if device is None:
-        device = torch.device('cpu')
+        device = torch.device("cpu")
     if memory_format is None:
         memory_format = torch.contiguous_format
 
     key = (value.shape, value.dtype, value.tobytes(), shape, dtype, device, memory_format)
-    tensor = _constant_cache.get(key, None)
+    tensor = _constant_cache.get(key)
     if tensor is None:
         tensor = torch.as_tensor(value.copy(), dtype=dtype, device=device)
         if shape is not None:
@@ -47,7 +47,7 @@ def const_like(ref, value, shape=None, dtype=None, device=None, memory_format=No
     return constant(value, shape=shape, dtype=dtype, device=device, memory_format=memory_format)
 
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Normalize given tensor to unit magnitude with respect to the given
 # dimensions. Default = all dimensions except the first.
 
@@ -61,7 +61,6 @@ def normalize(x, dim=None, eps=1e-4):
 
 
 class Normalize(torch.nn.Module):
-
     def __init__(self, dim=None, eps=1e-4):
         super().__init__()
         self.dim = dim
@@ -71,13 +70,13 @@ class Normalize(torch.nn.Module):
         return normalize(x, dim=self.dim, eps=self.eps)
 
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Upsample or downsample the given tensor with the given filter,
 # or keep it as is.
 
 
-def resample(x, f=[1, 1], mode='keep'):
-    if mode == 'keep':
+def resample(x, f=[1, 1], mode="keep"):  # noqa: B006 - Keeps the upstream default object and signature.
+    if mode == "keep":
         return x
     f = np.float32(f)
     assert f.ndim == 1 and len(f) % 2 == 0
@@ -86,20 +85,13 @@ def resample(x, f=[1, 1], mode='keep'):
     f = np.outer(f, f)[np.newaxis, np.newaxis, :, :]
     f = const_like(x, f)
     c = x.shape[1]
-    if mode == 'down':
-        return torch.nn.functional.conv2d(x,
-                                          f.tile([c, 1, 1, 1]),
-                                          groups=c,
-                                          stride=2,
-                                          padding=(pad, ))
-    assert mode == 'up'
-    return torch.nn.functional.conv_transpose2d(x, (f * 4).tile([c, 1, 1, 1]),
-                                                groups=c,
-                                                stride=2,
-                                                padding=(pad, ))
+    if mode == "down":
+        return torch.nn.functional.conv2d(x, f.tile([c, 1, 1, 1]), groups=c, stride=2, padding=(pad,))
+    assert mode == "up"
+    return torch.nn.functional.conv_transpose2d(x, (f * 4).tile([c, 1, 1, 1]), groups=c, stride=2, padding=(pad,))
 
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Magnitude-preserving SiLU (Equation 81).
 
 
@@ -108,39 +100,37 @@ def mp_silu(x):
 
 
 class MPSiLU(torch.nn.Module):
-
     def forward(self, x):
         return mp_silu(x)
 
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Magnitude-preserving sum (Equation 88).
 
 
 def mp_sum(a, b, t=0.5):
-    return a.lerp(b, t) / np.sqrt((1 - t)**2 + t**2)
+    return a.lerp(b, t) / np.sqrt((1 - t) ** 2 + t**2)
 
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Magnitude-preserving concatenation (Equation 103).
 
 
 def mp_cat(a, b, dim=1, t=0.5):
     Na = a.shape[dim]
     Nb = b.shape[dim]
-    C = np.sqrt((Na + Nb) / ((1 - t)**2 + t**2))
+    C = np.sqrt((Na + Nb) / ((1 - t) ** 2 + t**2))
     wa = C / np.sqrt(Na) * (1 - t)
     wb = C / np.sqrt(Nb) * t
     return torch.cat([wa * a, wb * b], dim=dim)
 
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Magnitude-preserving convolution or fully-connected layer (Equation 47)
 # with force weight normalization (Equation 66).
 
 
 class MPConv1D(torch.nn.Module):
-
     def __init__(self, in_channels, out_channels, kernel_size):
         super().__init__()
         self.out_channels = out_channels
@@ -149,13 +139,13 @@ class MPConv1D(torch.nn.Module):
         self.weight_norm_removed = False
 
     def forward(self, x, gain=1):
-        assert self.weight_norm_removed, 'call remove_weight_norm() before inference'
+        assert self.weight_norm_removed, "call remove_weight_norm() before inference"
 
         w = self.weight * gain
         if w.ndim == 2:
             return x @ w.t()
         assert w.ndim == 3
-        return torch.nn.functional.conv1d(x, w, padding=(w.shape[-1] // 2, ))
+        return torch.nn.functional.conv1d(x, w, padding=(w.shape[-1] // 2,))
 
     def remove_weight_norm(self):
         w = self.weight.to(torch.float32)

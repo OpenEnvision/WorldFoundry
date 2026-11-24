@@ -21,6 +21,7 @@ official_sources:
   paper: https://arxiv.org/abs/2605.23345
   github:
     url: https://github.com/z2tong/SCOPE
+    revision: c1eeaffca346313912f4ce5ac89cbe42d7428d9e
   huggingface:
   - repo_id: zizhaotong/SCOPE
     status: confirmed
@@ -41,7 +42,7 @@ integration:
   - The WorldFoundry wrapper runs the in-tree native SCOPE assembly for execute=True
     Workspace jobs.
 runtime_profile: runtime-profile:scope
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: scope
 runner_parity:
   status: verified
@@ -55,18 +56,12 @@ docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: 'SCOPE is an interactive game world model over a Wan backbone: image plus per-step actions in, game-world video out (paper arXiv 2605.23345). In this catalog both integration and runner are verified — the image-action-to-video demo runs through the Workspace infer path with staged zizhaotong/SCOPE weights, the in-tree example image, and an action parquet.'
-  overview_zh: SCOPE 是基于 Wan 基座的交互式游戏世界模型：输入图像与逐步动作，输出游戏世界视频（论文 arXiv 2605.23345）。本 catalog 中集成与 runner 均已验证——图像+动作到视频的 demo 经 Workspace 推理路径运行，使用就位的 zizhaotong/SCOPE 权重、树内示例图与动作 parquet。
-  architecture: SCOPE-specific action conditioning is integrated as a canonical Wan network variant, assembled with shared Wan encoders, VAE, loaders, and staged execution (apache-2.0). Only the checkpoint-shaped action-conditioned network remains model-specific.
-  architecture_zh: SCOPE 专属的动作条件被集成为规范 Wan 网络 variant，与共享 Wan 编码器、VAE、加载器与分级执行组装（apache-2.0）。只有按 checkpoint 形状实现的动作条件网络保持模型专属。
-  usage_notes: SCOPEPipeline fails fast unless execute=True is supplied, then invokes the in-tree native assembly. Weights stay external HF assets injected through model_dir/checkpoint_root or SCOPE_MODEL_DIR.
-  usage_notes_zh: SCOPEPipeline 在未提供 execute=True 时快速失败，提供后调用树内原生组装。权重保持为外部 HF 资产，通过 model_dir/checkpoint_root 或 SCOPE_MODEL_DIR 注入。
-  limitations:
-  - Requires explicit execute=True plus staged SCOPE weights.
-  - The publishing institution is not recorded in this repository.
-  limitations_zh:
-  - 需要显式 execute=True 与就位的 SCOPE 权重。
-  - 发表机构在本仓库中未记录。
+  overview: 'SCOPE is an interactive game world model over a Wan backbone: image plus per-step actions in, game-world video out (paper arXiv 2605.23345). Validated with the zizhaotong/SCOPE weights: the image-action-to-video demo runs end to end from the example image and an action parquet.'
+  overview_zh: SCOPE 是基于 Wan 基座的交互式游戏世界模型：输入图像与逐步动作，输出游戏世界视频（论文 arXiv 2605.23345）。已用 zizhaotong/SCOPE 权重验证：图像+动作到视频的 demo 可基于示例图与动作 parquet 端到端运行。
+  architecture: SCOPE adds action conditioning to the Wan network and uses the Wan encoders and VAE (apache-2.0).
+  architecture_zh: SCOPE 在 Wan 网络上加入动作条件，并使用 Wan 编码器与 VAE（apache-2.0）。
+  usage_notes: Pass execute=True to SCOPEPipeline to run generation; without it the pipeline stops immediately. Point model_dir/checkpoint_root or SCOPE_MODEL_DIR at the staged zizhaotong/SCOPE weights.
+  usage_notes_zh: 向 SCOPEPipeline 传入 execute=True 才会执行生成；未传入时 pipeline 会立即停止。通过 model_dir/checkpoint_root 或 SCOPE_MODEL_DIR 指向本地的 zizhaotong/SCOPE 权重。
   recommended_benchmarks:
   - id: worldmodelbench
     reason: Action-conditioned game-world rollout quality.

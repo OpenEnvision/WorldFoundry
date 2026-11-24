@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import io
-from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -24,28 +23,22 @@ from worldfoundry.core.model_loading.checkpoints import load_weights_only
 def load_packed_tracks(path: str) -> bytes:
     payload = load_weights_only(path)
     if not isinstance(payload, (bytes, bytearray)):
-        raise TypeError(
-            f"ATI track checkpoint must contain packed NPZ bytes, got {type(payload).__name__}."
-        )
+        raise TypeError(f"ATI track checkpoint must contain packed NPZ bytes, got {type(payload).__name__}.")
     return bytes(payload)
 
 
-def get_tracks_inference(tracks, height, width, quant_multi: Optional[int] = 8, **kwargs):
+def get_tracks_inference(tracks, height, width, quant_multi: int | None = 8, **kwargs):
     if isinstance(tracks, str):
         tracks = load_packed_tracks(tracks)
 
     tracks_np = unzip_to_array(tracks)
 
-    tracks = process_tracks(
-        tracks_np, (width, height), quant_multi=quant_multi, **kwargs
-    )
+    tracks = process_tracks(tracks_np, (width, height), quant_multi=quant_multi, **kwargs)
 
     return tracks
 
 
-def unzip_to_array(
-    data: bytes, key: Union[str, List[str]] = "array"
-) -> Union[np.ndarray, Dict[str, np.ndarray]]:
+def unzip_to_array(data: bytes, key: str | list[str] = "array") -> np.ndarray | dict[str, np.ndarray]:
     bytes_io = io.BytesIO(data)
 
     if isinstance(key, str):
@@ -60,7 +53,7 @@ def unzip_to_array(
         return get
 
 
-def process_tracks(tracks_np: np.ndarray, frame_size: Tuple[int, int], quant_multi: int = 8, **kwargs):
+def process_tracks(tracks_np: np.ndarray, frame_size: tuple[int, int], quant_multi: int = 8, **kwargs):
     # tracks: shape [t, h, w, 3] => samples align with 24 fps, model trained with 16 fps.
     # frame_size: tuple (W, H)
 
@@ -79,6 +72,6 @@ def process_tracks(tracks_np: np.ndarray, frame_size: Tuple[int, int], quant_mul
 
     out_ = torch.cat([trange, tracks, visibles], dim=-1).view(121, -1, 4)
     out_0 = out_[:1]
-    out_l = out_[1:] # 121 => 120 | 1
+    out_l = out_[1:]  # 121 => 120 | 1
     out_l = torch.repeat_interleave(out_l, 2, dim=0)[1::3]  # 120 => 240 => 80
     return torch.cat([out_0, out_l], dim=0)

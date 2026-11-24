@@ -30,12 +30,12 @@ import os
 import threading
 import warnings
 from collections import OrderedDict, defaultdict, deque
-from collections.abc import Iterator, MutableMapping
+from collections.abc import Callable, Generator, MutableMapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from statistics import median
-from typing import Any, Callable
+from typing import Any
 
 KernelCallable = Callable[..., Any]
 KernelPredicate = Callable[..., bool]
@@ -54,7 +54,7 @@ _KERNEL_DISPATCH_RECEIPT: ContextVar[MutableMapping[str, Any] | None] = ContextV
 @contextmanager
 def kernel_dispatch_receipt_scope(
     receipt: MutableMapping[str, Any],
-) -> Iterator[None]:
+) -> Generator[None, None, None]:
     """Capture the concrete implementation selected by logical kernel calls.
 
     The registry's selection cache is useful diagnostic state, but by itself it
@@ -267,7 +267,9 @@ class KernelRegistry:
         :class:`KeyboardInterrupt`, and :class:`SystemExit` always re-raise.
         """
 
-        requested = (backend if backend is not None else os.getenv("WORLDFOUNDRY_KERNEL_BACKEND", "auto")).strip().casefold() or "auto"
+        requested = (
+            backend if backend is not None else os.getenv("WORLDFOUNDRY_KERNEL_BACKEND", "auto")
+        ).strip().casefold() or "auto"
         failures: list[str] = []
         quarantined: list[str] = []
         if requested in {"torch", "pytorch", "native", "off", "disabled"}:
@@ -478,7 +480,9 @@ class KernelRegistry:
                 }
             )
             selected = candidate if winner == candidate.name else None
-            result = self._invoke_candidate(candidate, args, kwargs) if selected is not None else fallback(*args, **kwargs)
+            result = (
+                self._invoke_candidate(candidate, args, kwargs) if selected is not None else fallback(*args, **kwargs)
+            )
             return selected, result, record
 
         try:
@@ -814,7 +818,7 @@ __all__ = [
     "KernelNotSupported",
     "KernelRegistry",
     "clear_kernel_dispatch_cache",
-    "kernel_dispatch_receipt_scope",
     "kernel_autotune_enabled",
+    "kernel_dispatch_receipt_scope",
     "kernel_dispatch_report",
 ]

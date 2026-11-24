@@ -23,11 +23,9 @@ Public surface:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
 
 import numpy as np
 import torch
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Packed range ABI — device tensors plus CPU copies for host-side planners
@@ -89,7 +87,7 @@ class ModelMetaArgs:
     H: int
     W: int
     cp_pad_size: int
-    cp_split_sizes: List[int]
+    cp_split_sizes: list[int]
     slice_point: int
     denoising_range_num: int
     range_num: int

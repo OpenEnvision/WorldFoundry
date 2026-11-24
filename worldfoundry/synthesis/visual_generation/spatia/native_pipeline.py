@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import numpy as np
 import torch
@@ -140,9 +140,15 @@ class SpatiaWanPipeline(WanStagedPipeline):
             tile_size=tile_size,
             tile_stride=tile_stride,
         )
-        return encoded.squeeze(2).transpose(0, 1).unsqueeze(0).contiguous().to(
-            device=self.device,
-            dtype=self.torch_dtype,
+        return (
+            encoded.squeeze(2)
+            .transpose(0, 1)
+            .unsqueeze(0)
+            .contiguous()
+            .to(
+                device=self.device,
+                dtype=self.torch_dtype,
+            )
         )
 
     @torch.no_grad()
@@ -276,9 +282,7 @@ class SpatiaWanPipeline(WanStagedPipeline):
         if first_frame_latent is not None:
             frozen_count = max(frozen_count, num_ref_frames + 1)
         frozen_prefix = latents[:, :, :frozen_count].clone() if frozen_count else None
-        spatial_tokens = (latents.shape[3] // self.dit.patch_size[1]) * (
-            latents.shape[4] // self.dit.patch_size[2]
-        )
+        spatial_tokens = (latents.shape[3] // self.dit.patch_size[1]) * (latents.shape[4] // self.dit.patch_size[2])
         generator = torch.Generator(device=self.device).manual_seed(int(seed or 0))
 
         self.load_models_to_device(["dit", "vace"])
@@ -385,9 +389,7 @@ def load_spatia_pipeline(
     if lora_path:
         raw = load_state_dict(str(lora_path), torch_dtype=torch.float32, device="cpu")
         lora_state_dict = {
-            key.removeprefix("pipe.dit."): value
-            for key, value in raw.items()
-            if key.startswith("pipe.dit.")
+            key.removeprefix("pipe.dit."): value for key, value in raw.items() if key.startswith("pipe.dit.")
         }
         if not lora_state_dict:
             lora_state_dict = raw

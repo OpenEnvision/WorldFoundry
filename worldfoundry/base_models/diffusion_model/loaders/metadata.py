@@ -70,9 +70,7 @@ def safetensors_json_metadata(
     try:
         from safetensors import safe_open
     except ImportError as error:
-        raise RuntimeError(
-            "reading safetensors metadata requires the optional 'safetensors' package"
-        ) from error
+        raise RuntimeError("reading safetensors metadata requires the optional 'safetensors' package") from error
     with safe_open(path, framework="pt", device="cpu") as handle:
         metadata = handle.metadata() or {}
     try:

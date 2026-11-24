@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2026 Tencent.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,11 +50,10 @@ After the patch:
 from __future__ import annotations
 
 import math
-from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F  # noqa: N812
+import torch.nn.functional as F
 
 
 class SpaceTimeBlock(nn.Module):
@@ -98,15 +96,12 @@ class SpaceTimeBlock(nn.Module):
         dim = self.attn.num_heads * self.attn.head_dim
         self._time_embed_dim = dim
 
-    def _build_time_pe(
-        self, kf: int, device: torch.device, dtype: torch.dtype
-    ) -> torch.Tensor:
+    def _build_time_pe(self, kf: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
         """Fixed sinusoidal e(t) with e(0)=0, shape (kf, D), on ``device``."""
         dim = self._time_embed_dim
         t = torch.arange(kf, dtype=torch.float32, device=device).unsqueeze(1)
         inv_freq = torch.exp(
-            torch.arange(0, dim, 2, dtype=torch.float32, device=device)
-            * (-math.log(self.time_embed_base) / dim)
+            torch.arange(0, dim, 2, dtype=torch.float32, device=device) * (-math.log(self.time_embed_base) / dim)
         )
         pe = torch.empty(kf, dim, dtype=torch.float32, device=device)
         pe[:, 0::2] = torch.sin(t * inv_freq)
@@ -122,38 +117,25 @@ class SpaceTimeBlock(nn.Module):
             qkv = F.linear(h, a.qkv.weight, bias)
         else:
             qkv = a.qkv(h)
-        q, k, v = (
-            qkv.reshape(batch_tokens, seq_len, 3, a.num_heads, a.head_dim)
-            .permute(2, 0, 3, 1, 4)
-            .unbind(0)
-        )
+        q, k, v = qkv.reshape(batch_tokens, seq_len, 3, a.num_heads, a.head_dim).permute(2, 0, 3, 1, 4).unbind(0)
         return a.q_norm(q), a.k_norm(k), v
 
     def _time_softmax_on_v(self, q, k, v, b: int, kf: int) -> torch.Tensor:
         """Causal time softmax contracted onto V: v_mixed = A_time @ v."""
         bk, heads, n, d = v.shape
+
         # (B*K, H, N, d) -> (B*N, H, K, d): fold K into per-position sequence.
         def reshape_to_time(t):
-            return (
-                t.view(b, kf, heads, n, d)
-                .permute(0, 3, 2, 1, 4)
-                .reshape(b * n, heads, kf, d)
-            )
+            return t.view(b, kf, heads, n, d).permute(0, 3, 2, 1, 4).reshape(b * n, heads, kf, d)
 
         q_t, k_t, v_t = reshape_to_time(q), reshape_to_time(k), reshape_to_time(v)
 
         scores = (q_t @ k_t.transpose(-2, -1)) * self.attn.scale  # (B*N, H, K, K)
-        mask = torch.triu(
-            torch.ones(kf, kf, device=scores.device, dtype=torch.bool), diagonal=1
-        )
+        mask = torch.triu(torch.ones(kf, kf, device=scores.device, dtype=torch.bool), diagonal=1)
         scores = scores.masked_fill(mask, float("-inf"))
         v_mixed_t = scores.softmax(dim=-1).to(v_t.dtype) @ v_t  # (B*N, H, K, d)
 
-        return (
-            v_mixed_t.view(b, n, heads, kf, d)
-            .permute(0, 3, 2, 1, 4)
-            .reshape(bk, heads, n, d)
-        )
+        return v_mixed_t.view(b, n, heads, kf, d).permute(0, 3, 2, 1, 4).reshape(bk, heads, n, d)
 
     def _space_attn(self, q, k, v, cu_slens=None) -> torch.Tensor:
         """A_space softmax, then the single W_O. (B*K, H, N, d) in."""
@@ -176,9 +158,7 @@ class SpaceTimeBlock(nn.Module):
         assert bk % num_frames == 0, f"B*K={bk} not divisible by num_frames={num_frames}"
         b, kf = bk // num_frames, num_frames
         if kf > self.max_num_frames:
-            raise ValueError(
-                f"num_frames={kf} exceeds configured maximum {self.max_num_frames}"
-            )
+            raise ValueError(f"num_frames={kf} exceeds configured maximum {self.max_num_frames}")
 
         pe = self._build_time_pe(kf, x.device, x.dtype)  # (K, D)
         h = self.norm1(x.view(b, kf, n, d) + pe.view(1, kf, 1, d)).view(bk, n, d)
@@ -215,19 +195,14 @@ def _patched_forward_video_features(self, x: torch.Tensor):
 
     drop_at = self.past_drop_layer
     if drop_at is not None:
-        assert 0 <= drop_at <= len(self.blocks), (
-            f"past_drop_layer must be in [0, {len(self.blocks)}]; got {drop_at}"
-        )
+        assert 0 <= drop_at <= len(self.blocks), f"past_drop_layer must be in [0, {len(self.blocks)}]; got {drop_at}"
 
     for i, blk in enumerate(self.blocks):
         if drop_at is not None and i == drop_at and k > 1:
             # Collapse time dim: keep only the current-frame tokens.
             x = x.view(b, k, -1, x.shape[-1])[:, -1]
             k = 1
-        if isinstance(blk, SpaceTimeBlock):
-            x = blk(x, cu_slens=None, num_frames=k)
-        else:
-            x = blk(x)
+        x = blk(x, cu_slens=None, num_frames=k) if isinstance(blk, SpaceTimeBlock) else blk(x)
 
     # Drop past-timestep tokens; keep only the current frame (t = K-1).
     x = x.view(b, k, -1, x.shape[-1])[:, -1]  # (B, N, D)
@@ -241,11 +216,7 @@ def _make_vision_tower_forward(orig_forward):
     """
 
     def _forward(self, x, cal_attn_pool=False):
-        if (
-            getattr(self, "use_video_encoder", False)
-            and torch.is_tensor(x)
-            and x.ndim == 5
-        ):
+        if getattr(self, "use_video_encoder", False) and torch.is_tensor(x) and x.ndim == 5:
             feats, image_sizes = _patched_forward_video_features(self, x)
             if not cal_attn_pool:
                 return feats, image_sizes, None
@@ -265,9 +236,7 @@ def _make_wrapper_forward_func(orig_forward_func):
         if torch.is_tensor(images) and images.ndim == 5:
             # Route 5-D directly into the patched vision_tower.forward
             # (which detects ndim==5 and routes to forward_video_features).
-            image_features, img_size, cls_token = self.vision_tower(
-                images.to(self.dtype), cal_attn_pool=cal_attn_pool
-            )
+            image_features, img_size, cls_token = self.vision_tower(images.to(self.dtype), cal_attn_pool=cal_attn_pool)
             image_features = image_features.to(images.dtype)
             return image_features, img_size, cls_token
         return orig_forward_func(images, cal_attn_pool=cal_attn_pool)
@@ -283,9 +252,7 @@ def _make_wrapper_forward(orig_forward):
 
     def _forward(self, images, cal_attn_pool=False):
         if torch.is_tensor(images) and images.ndim == 5:
-            image_features, img_size, _ = self._forward_func(
-                images, cal_attn_pool=cal_attn_pool
-            )
+            image_features, img_size, _ = self._forward_func(images, cal_attn_pool=cal_attn_pool)
             # image_features is (B, N, 1152) coming from forward_video_features.
             # Apply the merger projection -> (B, N', 2048), then flatten the
             # batch into the (B*N', 2048) layout dual_tower.embed_image expects.
@@ -302,7 +269,7 @@ def _make_wrapper_forward(orig_forward):
 def apply_video_encoder_patch(
     visual: nn.Module,
     spacetime_layer_stride: int = 4,
-    past_drop_layer: Optional[int] = None,
+    past_drop_layer: int | None = None,
     max_num_frames: int = 18,
     time_embed_base: float = 100.0,
 ) -> None:
@@ -338,8 +305,7 @@ def apply_video_encoder_patch(
     vision_tower = visual.vision_tower
     if not hasattr(vision_tower, "blocks"):
         raise TypeError(
-            f"apply_video_encoder_patch: expected vision_tower with .blocks; "
-            f"got {type(vision_tower).__name__}"
+            f"apply_video_encoder_patch: expected vision_tower with .blocks; got {type(vision_tower).__name__}"
         )
 
     blocks = vision_tower.blocks
@@ -360,20 +326,14 @@ def apply_video_encoder_patch(
 
     if not getattr(vision_tower, "_video_forward_patched", False):
         orig = vision_tower.forward
-        vision_tower.forward = _make_vision_tower_forward(orig).__get__(
-            vision_tower, type(vision_tower)
-        )
+        vision_tower.forward = _make_vision_tower_forward(orig).__get__(vision_tower, type(vision_tower))
         vision_tower._video_forward_patched = True
 
     if not getattr(visual, "_video_forward_patched", False):
         orig_ff = visual._forward_func
-        visual._forward_func = _make_wrapper_forward_func(orig_ff).__get__(
-            visual, type(visual)
-        )
+        visual._forward_func = _make_wrapper_forward_func(orig_ff).__get__(visual, type(visual))
         orig_f = visual.forward
-        visual.forward = _make_wrapper_forward(orig_f).__get__(
-            visual, type(visual)
-        )
+        visual.forward = _make_wrapper_forward(orig_f).__get__(visual, type(visual))
         visual._video_forward_patched = True
 
     visual.use_video_encoder = True

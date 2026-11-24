@@ -1,6 +1,6 @@
 ---
 title: "AHA-WAM"
-description: "World-action model for RoboTwin 2.0: video + action experts, six-frame history, 16×14 chunks. MIT license. A100 Workspace validated; not a closed-loop score."
+description: "World-action model for RoboTwin 2.0: video and action experts, six-frame history, 16×14 action chunks from three ALOHA views. MIT license; open-loop inference validated with the released checkpoint."
 modelId: "ahawam"
 pageSource: authored
 ---
@@ -9,9 +9,9 @@ AHA-WAM is a **world-action model** for manipulation: a video expert and an acti
 
 <ModelPaperFigures modelId="ahawam" locale="en" />
 
-The official paper is on [arXiv 2606.09811](https://arxiv.org/abs/2606.09811). Project: [serene-sivy.github.io/aha-wam](https://serene-sivy.github.io/aha-wam/). Code: [Serene-SIVY/AHA-WAM](https://github.com/Serene-SIVY/AHA-WAM). License: **MIT**. Recorded policy: `SereneC/AHA-WAM-RoboTwin2.0` (`robotwin_ahawam.pt`). VAE and UMT5 come from `DiffSynth-Studio/Wan-Series-Converted-Safetensors`.
+The official paper is on [arXiv 2606.09811](https://arxiv.org/abs/2606.09811). Project: [serene-sivy.github.io/aha-wam](https://serene-sivy.github.io/aha-wam/). Code: [Serene-SIVY/AHA-WAM](https://github.com/Serene-SIVY/AHA-WAM). License: **MIT**. Policy checkpoint: `SereneC/AHA-WAM-RoboTwin2.0` (`robotwin_ahawam.pt`). VAE and UMT5 come from `DiffSynth-Studio/Wan-Series-Converted-Safetensors`.
 
-The released RoboTwin 2.0 checkpoint completed real **A100** Workspace inference from **three ALOHA views** plus a **14-D** state and returned a finite **16×14** open-loop chunk. Catalog runner is still unset — that is numerical checkpoint validation, not a closed-loop simulator score.
+Validated with the released RoboTwin 2.0 checkpoint on **A100**: from **three ALOHA views** plus a **14-D** state, the pipeline returns a finite **16×14** open-loop action chunk. This is an open-loop check, not a closed-loop simulator score.
 
 <ModelCommandBuilder modelId="ahawam" locale="en" />
 
@@ -19,7 +19,7 @@ The released RoboTwin 2.0 checkpoint completed real **A100** Workspace inference
 
 AHA-WAM RoboTwin chunk from three ALOHA views plus state.
 
-Launch `worldfoundry-eval run ahawam`.
+Launch `wf run ahawam`.
 
 Score on [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) — the released checkpoint is trained for RoboTwin 2.0.
 
@@ -34,8 +34,10 @@ Required: `image` and `prompt`; optional: `model_id`, `state`, `preferred_camera
 | Chunk size | **16** |
 | Video prefill chunks | **2** (then KV refresh; up to six earlier prefill entries kept) |
 
-## Run in WorldFoundry
+The VAE and UMT5 encoder can sit on the policy GPU, the CPU, or another GPU; automatic placement follows memory thresholds.
 
-Status: **Verified**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `SereneC/AHA-WAM-RoboTwin2.0`, `DiffSynth-Studio/Wan-Series-Converted-Safetensors`, and `Wan-AI/Wan2.1-T2V-1.3B` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run ahawam`. Catalog VRAM is unset.
+## Running in WorldFoundry
+
+Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `SereneC/AHA-WAM-RoboTwin2.0`, `DiffSynth-Studio/Wan-Series-Converted-Safetensors`, and `Wan-AI/Wan2.1-T2V-1.3B` locally; all assets load from local storage with strict key matching. Run `wf run ahawam`.
 
 <ModelRelatedRecipes modelId="ahawam" locale="en" />

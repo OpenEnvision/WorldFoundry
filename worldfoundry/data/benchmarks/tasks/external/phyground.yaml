@@ -29,7 +29,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: phyground
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phyground --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/phyground --json
+  contract_validation_command: wf zoo benchmark-run --benchmark-id phyground --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/phyground --json
   name: PhyGround
   domain:
   - physics
@@ -96,15 +96,15 @@ metadata:
     - <phyground_data_root>/videos/<model_id>/
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGroundContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:phyground
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
     surface: in_tree_result_importer
     normalizer_verified: false
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGroundContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py
-  metric_evaluator_target: worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_contract_evaluator:write_phyground_evaluation
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:phyground
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/phyground/run_phyground_official_runner.py
+  metric_evaluator_target: worldfoundry.evals.tasks.execution.runners.phyground.phyground_contract_evaluator:write_phyground_evaluation
   metric_protocol:
     official_definition: PhyGround scores three general 1-5 dimensions, SA, PTV, and persistence, and 2-4 applicable physical-law criteria per video across 13 laws; domain scores are aggregates over scored applicable laws for solid-body mechanics, fluid dynamics, and optics.
     official_results_fields:
@@ -130,11 +130,11 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_result_importer
-    root: worldfoundry/evaluation/tasks/execution/runners/phyground/runtime/phyground
+    root: worldfoundry/data/benchmarks/assets/phyground
     root_env: WORLDFOUNDRY_PHYGROUND_ROOT
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_contract_evaluator:write_phyground_evaluation
+    target: worldfoundry.evals.tasks.execution.runners.phyground.phyground_contract_evaluator:write_phyground_evaluation
     status: implemented
     protocol: local_artifact_checks_and_official_result_normalization
     official_result_normalization:
@@ -152,7 +152,7 @@ metadata:
       - yaml
       provenance: normalizes caller-provided official outputs without executing external repository scripts
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -234,7 +234,7 @@ tasks:
       - fluid_dynamics_score
       - optics_score
       - phyground_overall
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_contract_evaluator:write_phyground_evaluation
+      evaluator_target: worldfoundry.evals.tasks.execution.runners.phyground.phyground_contract_evaluator:write_phyground_evaluation
       status: implemented
     - name: result_importer
       metric_ids:
@@ -245,10 +245,10 @@ tasks:
       - fluid_dynamics_score
       - optics_score
       - phyground_overall
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGroundContract
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_contract_evaluator:write_phyground_evaluation
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phyground --mode official-validation --benchmark-data-root <phyground_data_root> --generated-artifact-dir <phyground_data_root>/videos/<model_id> --result-model-id <model_id> --output-dir <out> --json
+      runner_target: worldfoundry.evals.tasks.contracts.external:phyground
+      evaluator_target: worldfoundry.evals.tasks.execution.runners.phyground.phyground_contract_evaluator:write_phyground_evaluation
+      runner_script: worldfoundry/evals/tasks/execution/runners/phyground/run_phyground_official_runner.py
+      official_validation_command: wf zoo benchmark-run --benchmark-id phyground --mode official-validation --benchmark-data-root <phyground_data_root> --generated-artifact-dir <phyground_data_root>/videos/<model_id> --result-model-id <model_id> --output-dir <out> --json
     - name: external_official_runner
       metric_ids:
       - semantic_adherence
@@ -258,8 +258,8 @@ tasks:
       - fluid_dynamics_score
       - optics_score
       - phyground_overall
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGroundContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:phyground
+      runner_script: worldfoundry/evals/tasks/execution/runners/phyground/run_phyground_official_runner.py
     runtime_requirements:
       benchmark_data_root_env: WORLDFOUNDRY_PHYGROUND_DATA_ROOT
       results_path_env: WORLDFOUNDRY_PHYGROUND_RESULTS_PATH

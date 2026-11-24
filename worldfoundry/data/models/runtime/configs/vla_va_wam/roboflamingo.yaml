@@ -13,6 +13,7 @@ architecture:
   precision: fp32
 source:
   repo_url: https://github.com/RoboFlamingo/RoboFlamingo
+  revision: 1475a07d043a62bb07ab11abfc71115bb72e2a16
   source_files:
   - modeling/factory.py
   - modeling/flamingo_bc.py

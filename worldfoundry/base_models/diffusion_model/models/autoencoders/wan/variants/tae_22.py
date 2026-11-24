@@ -44,9 +44,7 @@ class _MemoryBlock(nn.Module):
             _conv(out_channels, out_channels),
         )
         self.skip = (
-            nn.Conv2d(in_channels, out_channels, 1, bias=False)
-            if in_channels != out_channels
-            else nn.Identity()
+            nn.Conv2d(in_channels, out_channels, 1, bias=False) if in_channels != out_channels else nn.Identity()
         )
         self.activation = nn.ReLU(inplace=True)
 
@@ -165,10 +163,7 @@ class TAEW22StreamingDecoder(nn.Module):
     @torch.no_grad()
     def decode(self, latents: torch.Tensor) -> torch.Tensor:
         if latents.ndim != 5 or latents.shape[2] != self.latent_channels:
-            raise ValueError(
-                "TAEW2.2 latents must have [B,T,48,H,W] layout, "
-                f"got {tuple(latents.shape)}"
-            )
+            raise ValueError(f"TAEW2.2 latents must have [B,T,48,H,W] layout, got {tuple(latents.shape)}")
         first_block = self._decoded_frames == 0
         self._queue.extend(_WorkItem(value, 0) for value in latents.unbind(1))
         frames = []

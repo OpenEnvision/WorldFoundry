@@ -15,8 +15,6 @@
 
 """Reason1 hidden-state extraction for Gamma-World inference."""
 
-from typing import List, Optional
-
 import torch
 from torch.distributed._tensor import DTensor
 
@@ -38,21 +36,21 @@ class QwenVLBaseModel(QwenModel):
     def _forward(
         self,
         input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
-        rope_deltas: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        second_per_grid_ts: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        rope_deltas: torch.LongTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        second_per_grid_ts: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Return the Qwen backbone outputs required by the video conditioner."""
 
@@ -175,7 +173,7 @@ class QwenVLBaseModel(QwenModel):
 
         return outputs
 
-    def forward(self, tokens, data_batch={}, start_pos: int = 0) -> torch.Tensor:
+    def forward(self, tokens, data_batch={}, start_pos: int = 0) -> torch.Tensor:  # noqa: B006 - Keeps the upstream default object and signature.
         """Extract hidden states for one token batch."""
         assert "pixel_values" not in data_batch, "pixel_values should not be in data_batch, use images instead"
         pixel_values = data_batch.get("images", None)

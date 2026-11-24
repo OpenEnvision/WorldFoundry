@@ -1,0 +1,169 @@
+# Open-vocabulary detection and image/video segmentation models.
+# Schema and templates: see the module docstring of worldfoundry/base_models/capabilities.py.
+
+grounding_dino:
+  family: detection
+  canonical_path: worldfoundry/base_models/perception_core/detection/grounding_dino
+  package_imports: [torch, cv2, numpy, transformers, timm]
+  install_packages: [torch, opencv-python, numpy, transformers, timm]
+  assets:
+    - id: grounding_dino_swint_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_GROUNDING_DINO_CKPT]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/ShilongLiu--GroundingDINO/groundingdino_swint_ogc.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/ShilongLiu--GroundingDINO/groundingdino_swint_ogc.pth
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/GroundingDINO/groundingdino_swint_ogc.pth
+        - ${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/groundingdino_swint_ogc.pth
+      hf_repo_id: ShilongLiu/GroundingDINO
+      hf_filename: groundingdino_swint_ogc.pth
+      min_size_bytes: 600000000
+      note: GroundingDINO Swin-T checkpoint shared by detection and Grounded-SAM paths.
+    - id: grounding_dino_bert_base_uncased_model_dir
+      kind: dir
+      role: text_encoder_model_dir
+      env: [WORLDFOUNDRY_GROUNDING_DINO_TEXT_ENCODER_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/bert-base-uncased
+      alternate_paths:
+        - ${WORLDFOUNDRY_BENCH_ROOT}/ckpt/hfd/bert-base-uncased
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/bert-base-uncased
+      hf_repo_id: bert-base-uncased
+      min_file_count: 3
+      required_files: [config.json, vocab.txt]
+      required_any_paths: [model.safetensors, pytorch_model.bin]
+      note: BERT text encoder used by the in-tree GroundingDINO model.
+
+repvit_sam:
+  family: segmentation
+  canonical_path: worldfoundry/base_models/perception_core/segment/repvit_sam
+  package_imports: [torch, torchvision, numpy, timm]
+  assets:
+    - id: repvit_sam_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_REPVIT_SAM_CKPT]
+      local_path: ${WORLDFOUNDRY_CKPT_DIR}/RepViT/repvit_sam.pt
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/repvit_sam.pt
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/repvit_sam.pt
+      download_url: https://github.com/THU-MIG/RepViT/releases/download/v1.0/repvit_sam.pt
+      min_size_bytes: 100000000
+      note: Official RepViT-SAM checkpoint from the THU-MIG/RepViT v1.0 release.
+
+sam2:
+  family: segmentation
+  canonical_path: worldfoundry/base_models/perception_core/segment/sam2
+  package_imports: [torch, numpy, hydra, iopath]
+  install_packages: [torch, numpy, hydra-core, iopath]
+  assets:
+    - id: sam2_base_plus_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_SAM2_CKPT]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/facebook--sam2.1-hiera-base-plus/sam2.1_hiera_base_plus.pt
+      alternate_paths:
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/facebook--sam2.1-hiera-base-plus/sam2.1_hiera_base_plus.pt
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/sam2.1-hiera-base-plus/sam2.1_hiera_base_plus.pt
+        - ${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/sam2.1_hiera_base_plus.pt
+      hf_repo_id: facebook/sam2.1-hiera-base-plus
+      hf_filename: sam2.1_hiera_base_plus.pt
+      min_size_bytes: 300000000
+      note: SAM2.1 base-plus checkpoint used by video segmentation metrics.
+
+sam3:
+  family: segmentation
+  canonical_path: worldfoundry/base_models/perception_core/segment/sam3
+  package_imports: [torch, numpy, huggingface_hub, hydra, omegaconf, iopath, pycocotools]
+  install_packages:
+    - torch
+    - numpy
+    - huggingface-hub
+    - hydra-core
+    - omegaconf
+    - iopath
+    - pycocotools
+  assets:
+    - id: sam3_multiplex_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_SAM3_CKPT]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/facebook--sam3.1/sam3.1_multiplex.pt
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_ROOT}/facebook--sam3/sam3.pt
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/facebook--sam3/sam3.pt
+        - ${WORLDFOUNDRY_CKPT_DIR}/sam3.1_multiplex.pt
+        - ${WORLDFOUNDRY_CKPT_DIR}/sam3.pt
+      hf_repo_id: facebook/sam3.1
+      hf_filename: sam3.1_multiplex.pt
+      min_size_bytes: 1000000000
+      note: SAM3 checkpoint for unified image/video segmentation and tracking metrics.
+
+sam_v1:
+  family: segmentation
+  canonical_path: worldfoundry/base_models/perception_core/segment/sam_v1
+  package_imports: [torch, torchvision, numpy]
+  assets:
+    - id: sam_vit_h_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_SAM_VIT_H_CKPT]
+      local_path: ${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/sam_vit_h_4b8939.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_ROOT}/facebook--sam-vit-huge/sam_vit_h_4b8939.pth
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/facebook--sam-vit-huge/sam_vit_h_4b8939.pth
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/code/sam_vit_h_4b8939.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/shape-of-motion/checkpoints/sam_vit_h_4b8939.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WonderJourney/sam_vit_h_4b8939.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/sam_vit_h_4b8939.pth
+      download_url: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
+      min_size_bytes: 2000000000
+      note: SAM ViT-H checkpoint shared by Grounded-SAM and WorldScore segmentation paths.
+
+sam_vit_b:
+  family: segmentation
+  canonical_path: worldfoundry/base_models/perception_core/segment/sam_v1
+  package_imports: [torch, torchvision, numpy]
+  assets:
+    - id: sam_vit_b_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_SAM_VIT_B_CKPT]
+      local_path: ${WORLDFOUNDRY_CKPT_DIR}/sam_vit_b_01ec64.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/sam_vit_b_01ec64.pth
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/sam_vit_b_01ec64.pth
+      download_url: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
+      min_size_bytes: 350000000
+      note: SAM ViT-B checkpoint used by several lightweight official segmentation metric paths.
+
+aot_deaot_l:
+  family: video_object_segmentation
+  canonical_path: worldfoundry/base_models/perception_core/tracking/aot
+  package_imports: [torch, cv2, numpy]
+  install_packages: [torch, opencv-python, numpy]
+  assets:
+    - id: deaot_r50_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_DEAOT_R50_CKPT]
+      local_path: ${WORLDFOUNDRY_CKPT_DIR}/R50_DeAOTL_PRE_YTB_DAV.pth
+      alternate_paths: ['${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/R50_DeAOTL_PRE_YTB_DAV.pth']
+      min_size_bytes: 150000000
+      note: DeAOT-L R50 checkpoint used by Segment-and-Track-Anything object attribute metrics.
+
+sam2_hiera_large:
+  family: segmentation
+  canonical_path: worldfoundry/base_models/perception_core/segment/sam2
+  package_imports: [torch, numpy, hydra, iopath]
+  install_packages: [torch, numpy, hydra-core, iopath]
+  assets:
+    - id: sam2_hiera_large_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_PHYSICAL_AI_BENCH_SAM2_CKPT]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/facebook--sam2-hiera-large/sam2_hiera_large.pt
+      hf_repo_id: facebook/sam2-hiera-large
+      hf_filename: sam2_hiera_large.pt
+      min_size_bytes: 800000000
+      note: SAM 2 hiera-large checkpoint (config sam2_hiera_l), the Grounded-SAM2 tracker of the official PAI-Bench-C.

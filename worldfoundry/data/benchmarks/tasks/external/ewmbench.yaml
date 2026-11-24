@@ -25,9 +25,9 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: ewmbench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ewmbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/ewmbench --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:EWMBenchContract
-  official_runner_command: worldfoundry-eval zoo benchmark-run
+  contract_validation_command: wf zoo benchmark-run --benchmark-id ewmbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/ewmbench --json
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:ewmbench
+  official_runner_command: wf zoo benchmark-run
   name: EWMBench
   domain:
   - embodied-world-model
@@ -83,11 +83,11 @@ metadata:
   data_refs:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/ewmbench.yaml
     in_tree_runtime_paths:
-    - worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
+    - worldfoundry/evals/tasks/execution/runners/ewmbench/runtime/ewmbench
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:EWMBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:ewmbench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
@@ -99,7 +99,7 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_official_source
-    root: worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench
+    root: worldfoundry/evals/tasks/execution/runners/ewmbench/runtime/ewmbench
     root_env: WORLDFOUNDRY_EWMBENCH_ROOT
     repo_url: https://github.com/AgibotTech/EWMBench.git
     revision: 3a5531c0e6b6be51431251ed5617b9e48c852098
@@ -118,7 +118,7 @@ metadata:
     - official_scorecard_normalization
     - artifact_presence_format
   local_evaluator:
-    target: worldfoundry/evaluation/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
+    target: worldfoundry/evals/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
     status: implemented
     protocol: official_result_normalization
     official_result_normalization:
@@ -133,10 +133,10 @@ metadata:
       - csv
       provenance: normalizes caller-provided official outputs without executing upstream repos
       framework_verified: true
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   runner:
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -152,9 +152,9 @@ metadata:
     - --json
     runtime:
       results_path_env: WORLDFOUNDRY_EWMBENCH_RESULTS_PATH
-    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ewmbench --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
+    official_validation_command: wf zoo benchmark-run --benchmark-id ewmbench --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -238,20 +238,20 @@ tasks:
           kind: video
     evaluation_protocol:
     - name: external_official_runner
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:EWMBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:ewmbench
+      runner_script: worldfoundry/evals/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
       metric_ids:
       - scene_consistency
       - motion_correctness
       - semantic_alignment
       - diversity
       - ewmbench_average
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ewmbench --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
+      official_validation_command: wf zoo benchmark-run --benchmark-id ewmbench --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
       required_inputs:
       - official_results_path or official_results
       - generated_video artifacts for the official prompt/task suite
       - official upstream scorer or judge assets for leaderboard parity
-      official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+      official_result_entrypoint: wf zoo benchmark-run
     - name: in_tree_local_quality_evaluator
       metric_ids:
       - scene_consistency
@@ -259,7 +259,7 @@ tasks:
       - semantic_alignment
       - diversity
       - ewmbench_average
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.ewmbench.ewmbench_in_tree_evaluator:EwmbenchInTreeEvaluator
+      evaluator_target: worldfoundry.evals.tasks.execution.runners.ewmbench.ewmbench_in_tree_evaluator:EwmbenchInTreeEvaluator
       status: available_for_structured_evidence
       metadata:
         scoring_modes:
@@ -273,6 +273,6 @@ tasks:
         - rubric_manifest or official score rows keyed by EWMBench dimensions
         - official detector/VLM/foundation-model outputs for leaderboard parity
     runtime_requirements:
-      in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench
+      in_tree_runtime: worldfoundry/evals/tasks/execution/runners/ewmbench/runtime/ewmbench
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
       results_path_env: WORLDFOUNDRY_EWMBENCH_RESULTS_PATH

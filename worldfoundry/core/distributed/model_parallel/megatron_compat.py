@@ -19,16 +19,26 @@ import torch
 # ──────────────────────────────────────────────────────────────────────────
 
 try:
-    from megatron.core import ModelParallelConfig, mpu, parallel_state
-    from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear, VocabParallelEmbedding
-    from megatron.core.tensor_parallel.mappings import (
-        reduce_from_tensor_model_parallel_region,
-        reduce_scatter_to_sequence_parallel_region,
+    _core_api = __import__("megatron.core", fromlist=["ModelParallelConfig", "mpu", "parallel_state"])
+    ModelParallelConfig, mpu, parallel_state = _core_api.ModelParallelConfig, _core_api.mpu, _core_api.parallel_state
+    _tensor_parallel_api = __import__(
+        "megatron.core.tensor_parallel",
+        fromlist=["ColumnParallelLinear", "RowParallelLinear", "VocabParallelEmbedding"],
     )
-    from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
-    from megatron.core.tensor_parallel.utils import VocabUtility
+    ColumnParallelLinear = _tensor_parallel_api.ColumnParallelLinear
+    RowParallelLinear = _tensor_parallel_api.RowParallelLinear
+    VocabParallelEmbedding = _tensor_parallel_api.VocabParallelEmbedding
+    _mapping_api = __import__(
+        "megatron.core.tensor_parallel.mappings",
+        fromlist=["reduce_from_tensor_model_parallel_region", "reduce_scatter_to_sequence_parallel_region"],
+    )
+    reduce_from_tensor_model_parallel_region = _mapping_api.reduce_from_tensor_model_parallel_region
+    reduce_scatter_to_sequence_parallel_region = _mapping_api.reduce_scatter_to_sequence_parallel_region
+    model_parallel_cuda_manual_seed = __import__(
+        "megatron.core.tensor_parallel.random", fromlist=["model_parallel_cuda_manual_seed"]
+    ).model_parallel_cuda_manual_seed
+    VocabUtility = __import__("megatron.core.tensor_parallel.utils", fromlist=["VocabUtility"]).VocabUtility
 except Exception:  # pragma: no cover - Megatron is optional for many runtimes.
-
     # ──────────────────────────────────────────────────────────────────────
     # Fallback stubs — TP stays 1×1 so vendored DiT imports do not require megatron-core
     # ──────────────────────────────────────────────────────────────────────
@@ -50,6 +60,7 @@ except Exception:  # pragma: no cover - Megatron is optional for many runtimes.
         not for training a Megatron tensor-parallel Linear.
         """
 
+        cp_size_t: int
         _initialized = False
         _context_parallel_group = None
         _context_parallel_size = 1

@@ -1,7 +1,0 @@
-model_id: openvla
-args:
-  checkpoint_role: libero_demo_checkpoint
-  unnorm_key: libero_spatial
-  center_crop: true
-  jpeg_roundtrip: true
-  port: 8000

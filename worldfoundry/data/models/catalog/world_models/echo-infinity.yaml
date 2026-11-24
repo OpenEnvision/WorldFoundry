@@ -1,4 +1,4 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 availability: open_source
 family: Autoregressive Video Diffusion
 id: echo-infinity
@@ -24,6 +24,7 @@ official_sources:
   project_page: https://echo-team-joy-future-academy-jd.github.io/Echo-Infinity/
   github:
     url: https://github.com/Echo-Team-Joy-Future-Academy-JD/Echo-Infinity
+    revision: 7ed7eee09e7c7543ecfce42d2fe2ff6c0f9984ea
   huggingface:
     url: https://huggingface.co/Echo-Team/Echo-Infinity
 pipeline_binding: echo-infinity
@@ -43,17 +44,15 @@ docs:
   publisher: JD.com (Joy Future Academy)
   publisher_kind: company
   publisher_zh: 京东（Joy Future Academy）
-  overview: 'Echo-Infinity is JD''s autoregressive long-video generator: text in, arbitrarily long video out, generated block by block. In this catalog the inference path is vendored in-tree as an infer-only runtime; full parity waits on local Echo-Infinity and Wan2.1 weights staged under WORLDFOUNDRY_CKPT_DIR.'
-  overview_zh: Echo-Infinity 是京东的自回归长视频生成器：输入文本，逐块生成任意长度的视频。本 catalog 中其推理路径以仅推理运行时形式内置树内；完整一致性待本地 Echo-Infinity 与 Wan2.1 权重就位于 WORLDFOUNDRY_CKPT_DIR。
-  architecture: The recorded structure is a Wan2.1-based autoregressive text-to-video design from the same JD team as Echo-Memory. Training, prompt datasets, demo scripts, and checkpoint download helpers are intentionally not packaged; weights are never tracked in git.
-  architecture_zh: 记录的结构为基于 Wan2.1 的自回归文生视频设计，与 Echo-Memory 出自同一京东团队。训练、提示词数据集、demo 脚本与 checkpoint 下载辅助有意不打包；权重绝不入 git。
-  usage_notes: Runtime assets are local paths under WORLDFOUNDRY_CKPT_DIR — stage Echo-Infinity plus Wan2.1 weights there before running. Full GPU parity is pending.
-  usage_notes_zh: 运行时资产为 WORLDFOUNDRY_CKPT_DIR 下的本地路径——运行前请把 Echo-Infinity 与 Wan2.1 权重就位于该目录。完整 GPU 一致性待验证。
+  overview: "Echo-Infinity is JD's autoregressive long-video generator: text in, arbitrarily long video out, generated block by block."
+  overview_zh: Echo-Infinity 是京东的自回归长视频生成器：输入文本，逐块生成任意长度的视频。
+  architecture: A Wan2.1-based autoregressive text-to-video design from the same JD team as Echo-Memory. The runtime is inference-only; training, prompt datasets, demo scripts, and checkpoint download helpers are not included.
+  architecture_zh: 基于 Wan2.1 的自回归文生视频设计，与 Echo-Memory 出自同一京东团队。运行时仅含推理；不包含训练、提示词数据集、demo 脚本与 checkpoint 下载辅助。
+  usage_notes: Stage the Echo-Infinity and Wan2.1 weights as local paths under WORLDFOUNDRY_CKPT_DIR before running.
+  usage_notes_zh: 运行前请把 Echo-Infinity 与 Wan2.1 权重就位到 WORLDFOUNDRY_CKPT_DIR 下的本地路径。
   limitations:
-  - Full parity is pending staged local weights.
   - 'Research-scale backbone: expect research-preview visual quality.'
   limitations_zh:
-  - 完整一致性待本地权重就位。
   - 研究规模基座：视觉质量属研究预览级。
   recommended_benchmarks:
   - id: vbench

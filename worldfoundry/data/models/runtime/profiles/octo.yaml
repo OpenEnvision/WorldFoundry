@@ -1,6 +1,6 @@
-artifact_filename: octo_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: octo
+task_family: vla_policy
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/rail-berkeley--octo-base-1.5
   repo_id: rail-berkeley/octo-base-1.5
@@ -8,7 +8,6 @@ checkpoints:
 - local_dir: ${WORLDFOUNDRY_CKPT_DIR}/octo-small-1.5
   repo_id: rail-berkeley/octo-small-1.5
   role: small_policy_checkpoint
-id: octo
 input_schema:
   actions:
   - robot_action
@@ -18,7 +17,14 @@ input_schema:
   instruction: true
   prompt: true
   video: true
-integration_status: integrated
+artifact_kind: action_trace
+artifact_filename: octo_action_trace.json
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_octo_small_jax_gpu_sample_actions_ready
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - Octo is a generalist robot policy profile. It is evaluated through embodied action
   rollouts, not video generation.
@@ -26,6 +32,4 @@ notes:
   demos.
 - Octo checkpoints are variant-specific; real execution should remain benchmark and
   robot-action-space gated.
-runtime_status: in_tree_octo_small_jax_gpu_sample_actions_ready
-task_family: vla_policy
 verification_status: official_demo_jax_gpu_ready

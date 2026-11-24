@@ -11,7 +11,7 @@ pipeline:
     mode: native_or_standard_invocation
 aliases:
 - echo-context-k1
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 availability:
   status: source_available
   open_source: true

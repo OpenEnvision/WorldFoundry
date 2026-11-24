@@ -16,6 +16,7 @@ official_sources:
   paper: https://arxiv.org/abs/2601.03782
   github:
     url: https://github.com/NVlabs/PointWorld
+    revision: 05484826dfef74cbe278a3974179a5a16705d35d
     head_sha: 05484826dfef74cbe278a3974179a5a16705d35d
   huggingface:
   - repo_id: nvidia/PointWorld_models
@@ -35,23 +36,21 @@ runner_parity:
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry
   runtimes; blocked entries retain upstream provenance without runnable backends.
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: pointworld
 docs:
   publisher: NVIDIA
   publisher_kind: company
   publisher_zh: 英伟达（NVIDIA）
-  overview: 'PointWorld is NVIDIA''s point-cloud world model for robotics: instead of predicting pixels it predicts future 3D point-cloud states under actions, giving geometry-native world modeling. In this catalog the official source route is registered at a pinned commit; checkpoint and point-cloud assets stay runtime-gated.'
-  overview_zh: PointWorld 是英伟达面向机器人的点云世界模型：不预测像素，而是在动作条件下预测未来 3D 点云状态，实现几何原生的世界建模。本 catalog 中官方源码路径以固定 commit 注册；checkpoint 与点云资产保持运行时限制。
-  architecture: Architecture internals beyond the recorded tasks are not stored in this repository (apache-2.0; checkpoints at nvidia/PointWorld_models). The recorded artifact type is generated_3d_asset.
-  architecture_zh: 除已记录任务外的架构内部细节仓库未存（apache-2.0；checkpoint 位于 nvidia/PointWorld_models）。记录的产物类型为 generated_3d_asset。
-  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. Inputs include point clouds alongside the usual prompt/image/video/actions.
-  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。输入除常规的提示词/图像/视频/动作外还包括点云。
+  overview: "PointWorld is NVIDIA's point-cloud world model for robotics: instead of predicting pixels it predicts future 3D point-cloud states under actions, giving geometry-native world modeling."
+  overview_zh: PointWorld 是英伟达面向机器人的点云世界模型：不预测像素，而是在动作条件下预测未来 3D 点云状态，实现几何原生的世界建模。
+  architecture: Predicted point-cloud states are written as a generated_3d_asset artifact. The code is Apache-2.0; checkpoints are at nvidia/PointWorld_models.
+  architecture_zh: 预测的点云状态以 generated_3d_asset 产物输出。代码采用 apache-2.0 许可；checkpoint 位于 nvidia/PointWorld_models。
+  usage_notes: Stage the nvidia/PointWorld_models checkpoints and the point-cloud assets before running; until they are staged, a run returns a plan that lists the missing assets instead of generating. Inputs include point clouds alongside the usual prompt/image/video/actions.
+  usage_notes_zh: 运行前需准备 nvidia/PointWorld_models checkpoint 与点云资产；在它们就位前，运行只会返回列出缺失资产的计划，而不会生成结果。输入除常规的提示词/图像/视频/动作外还包括点云。
   limitations:
-  - Real generation is checkpoint/point-cloud-asset gated.
   - Point-cloud outputs need downstream rendering for visual inspection.
   limitations_zh:
-  - 真实生成受 checkpoint/点云资产限制。
   - 点云输出需要下游渲染才能可视化检查。
   recommended_benchmarks:
   - id: ewmbench

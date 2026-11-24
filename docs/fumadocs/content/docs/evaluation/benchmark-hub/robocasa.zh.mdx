@@ -3,16 +3,16 @@ title: RoboCasa
 description: "UT Austin 与 NVIDIA 的厨房仿真——120 个场景、100+ 原子与组合任务。WorldFoundry 导入官方 rollout。"
 ---
 
-RoboCasa 是 UT Austin 与 NVIDIA 面向通才机器人的大规模**厨房**仿真：**120** 个真实厨房布局、**2500+** 三维资产（不少由生成模型制作），大约 **100** 个原子技能加**组合**长时程活动，并带大规模演示。论文是 [RoboCasa: Large-Scale Simulation of Everyday Tasks for Generalist Robots](https://arxiv.org/abs/2406.02523)。项目：[robocasa.ai](https://robocasa.ai/)。代码：[robocasa/robocasa](https://github.com/robocasa/robocasa)。本 catalog 里 GitHub 许可元数据是 `other:noassertion_github_api`——复用前先读上游条款。
+RoboCasa 是 UT Austin 与 NVIDIA 面向通才机器人的大规模**厨房**仿真：**120** 个真实厨房布局、**2500+** 三维资产（不少由生成模型制作），大约 **100** 个原子技能任务及**组合式**长时程活动，并带大规模演示。论文是 [RoboCasa: Large-Scale Simulation of Everyday Tasks for Generalist Robots](https://arxiv.org/abs/2406.02523)。项目：[robocasa.ai](https://robocasa.ai/)。代码：[robocasa/robocasa](https://github.com/robocasa/robocasa)。GitHub 仓库未声明标准许可证，复用前先读上游条款。
 
-WorldFoundry **导入**官方 rollout 导出。场景资产与长时程策略执行留在上游。仓库镜像：`cache/vla_va_wam/repos/robocasa--robocasa`。[Being-H0.5](/zh/docs/guides/supported-models/being-h05) 等模型发布了 RoboCasa 专家线；那不是本页上的分数。
+WorldFoundry **导入**官方 rollout 导出。场景资产与长时程策略执行留在上游。仓库镜像：`cache/vla_va_wam/repos/robocasa--robocasa`。[Being-H0.5](/zh/docs/guides/supported-models/being-h05) 等模型发布了 RoboCasa 专家版本。
 
 <BenchmarkPageSections id="robocasa" locale="zh" />
 
 ## 如何运行
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id robocasa \
   --mode official-validation \
   --official-results-path <official_results.json> \

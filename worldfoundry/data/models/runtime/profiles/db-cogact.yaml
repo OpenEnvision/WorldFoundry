@@ -8,7 +8,7 @@ groups:
 - action_chunk
 source_repos:
 - url: https://github.com/Dexmal/dexbotic
-  revision: 0f5ae6382bf0
+  revision: 0f5ae6382bf0bc6196120f0930ce342ae54e7354
 checkpoints:
 - repo_id: Dexmal/libero-db-cogact
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Dexmal--libero-db-cogact

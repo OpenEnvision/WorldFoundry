@@ -4,7 +4,7 @@ type DocsPageActionsProps = {
   copyMarkdownCopiedLabel: string;
   copyMarkdownLabel: string;
   editLabel: string;
-  githubUrl: string;
+  editUrl: string;
   lastUpdated?: {
     formatted: string;
     iso: string;
@@ -12,21 +12,18 @@ type DocsPageActionsProps = {
   lastUpdatedLabel: string;
   markdownLabel: string;
   markdownUrl: string;
-  pageTitle: string;
 };
 
 export function DocsPageActions({
   copyMarkdownCopiedLabel,
   copyMarkdownLabel,
   editLabel,
-  githubUrl,
+  editUrl,
   lastUpdated,
   lastUpdatedLabel,
   markdownLabel,
   markdownUrl,
 }: DocsPageActionsProps) {
-  const editUrl = githubUrl.replace('/blob/', '/edit/');
-
   return (
     <div className="pi-doc-actions" aria-label="Document actions">
       <div className="pi-doc-actions-links">
@@ -35,14 +32,11 @@ export function DocsPageActions({
           label={copyMarkdownLabel}
           markdownUrl={markdownUrl}
         />
-        <a className="pi-doc-action-link" href={editUrl} rel="noreferrer" target="_blank">
-          {editLabel}
-        </a>
-        <a className="pi-doc-action-link" href={githubUrl} rel="noreferrer" target="_blank">
-          GitHub
-        </a>
         <a className="pi-doc-action-link" href={markdownUrl} rel="noreferrer" target="_blank">
           {markdownLabel}
+        </a>
+        <a className="pi-doc-action-link" href={editUrl} rel="noreferrer" target="_blank">
+          {editLabel}
         </a>
       </div>
       {lastUpdated ? (

@@ -39,14 +39,6 @@ checkpoints:
   status: checkpoint_manifest_validated
   required_paths:
   - open_clip_pytorch_model.bin
-- repo_id: naver/DUSt3R_ViTLarge_BaseDecoder_512_dpt
-  revision: 61c57447d7b0adc8a1a30b2b0adec7a8935aa2a3
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/DUSt3R_ViTLarge_BaseDecoder_512_dpt
-  role: camera_preprocessor
-  status: checkpoint_manifest_validated
-  required_paths:
-  - config.json
-  - model.safetensors
 input_schema:
   prompt: true
   image: true

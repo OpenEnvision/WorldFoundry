@@ -12,8 +12,8 @@ def test_second_pip_pass_uses_exact_torch_constraint() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert "TORCH_CONSTRAINT_FILE=" in text
     assert '--constraint "$TORCH_CONSTRAINT_FILE"' in text
-    assert 'version(name)' in text
-    assert 'trap cleanup_torch_constraint EXIT' in text
+    assert "version(name)" in text
+    assert "trap cleanup_torch_constraint EXIT" in text
 
 
 def test_post_install_checks_selected_torch_cuda_tier() -> None:

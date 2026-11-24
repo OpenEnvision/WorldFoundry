@@ -58,13 +58,18 @@ def build_position_encoding(args: Any):
             j = torch.arange(h, device=tensor.device)
             x_emb = self.col_embed(i)
             y_emb = self.row_embed(j)
-            return torch.cat(
-                [
-                    x_emb.unsqueeze(0).repeat(h, 1, 1),
-                    y_emb.unsqueeze(1).repeat(1, w, 1),
-                ],
-                dim=-1,
-            ).permute(2, 0, 1).unsqueeze(0).repeat(tensor.shape[0], 1, 1, 1)
+            return (
+                torch.cat(
+                    [
+                        x_emb.unsqueeze(0).repeat(h, 1, 1),
+                        y_emb.unsqueeze(1).repeat(1, w, 1),
+                    ],
+                    dim=-1,
+                )
+                .permute(2, 0, 1)
+                .unsqueeze(0)
+                .repeat(tensor.shape[0], 1, 1, 1)
+            )
 
     n_steps = args.hidden_dim // 2
     if args.position_embedding in ("v2", "sine"):

@@ -1,9 +1,9 @@
 from hydra.core.config_store import ConfigStore
-from lyra_2._src.networks.wan2pt1_lyra2 import Lyra2WanModel
 
-from worldfoundry.core.nn.checkpointing.activation_checkpointing import SACConfig
 from worldfoundry.core.configuration.lazy_config import LazyCall as L
 from worldfoundry.core.configuration.lazy_config import LazyDict
+from worldfoundry.core.nn.checkpointing.activation_checkpointing import SACConfig
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.networks.wan2pt1_lyra2 import Lyra2WanModel
 
 WAN2PT1_1PT3B_I2V_LYRA2: LazyDict = L(Lyra2WanModel)(
     dim=1536,

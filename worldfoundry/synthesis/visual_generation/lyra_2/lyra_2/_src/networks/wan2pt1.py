@@ -18,7 +18,6 @@
 
 import math
 from collections import namedtuple
-from typing import Optional
 
 import torch
 import torch.amp as amp
@@ -40,10 +39,13 @@ try:
 except ImportError:
     _TransformerEngineDotProductAttention = None
 
-from worldfoundry.core.nn.checkpointing.activation_checkpointing import CheckpointMode, SACConfig
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import MLPProj as _MLPProj
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import WanRMSNorm as _WanRMSNorm
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import sinusoidal_embedding_1d
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 from worldfoundry.core.distributed.model_parallel.context import split_inputs_cp
-from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.nn.checkpointing.activation_checkpointing import CheckpointMode, SACConfig
+from worldfoundry.core.observability.rank_logging import log
 
 T5_CONTEXT_TOKEN_NUMBER = 512
 FIRST_LAST_FRAME_CONTEXT_TOKEN_NUMBER = 257 * 2
@@ -178,9 +180,9 @@ class VideoRopePosition3DEmb(VideoPositionEmb):
     def generate_embeddings(
         self,
         B_T_H_W_C: torch.Size,
-        h_ntk_factor: Optional[float] = None,
-        w_ntk_factor: Optional[float] = None,
-        t_ntk_factor: Optional[float] = None,
+        h_ntk_factor: float | None = None,
+        w_ntk_factor: float | None = None,
+        t_ntk_factor: float | None = None,
     ):
         """
         Generate embeddings for the given input size.
@@ -210,7 +212,7 @@ class VideoRopePosition3DEmb(VideoPositionEmb):
         temporal_freqs = 1.0 / (t_theta**self.dim_temporal_range)
 
         B, T, H, W, _ = B_T_H_W_C
-        assert H <= self.max_h and W <= self.max_w, (
+        assert self.max_h >= H and self.max_w >= W, (
             f"Input dimensions (H={H}, W={W}) exceed the maximum dimensions (max_h={self.max_h}, max_w={self.max_w})"
         )
         freqs_h = torch.outer(self.seq[:H], h_spatial_freqs)
@@ -230,18 +232,6 @@ class VideoRopePosition3DEmb(VideoPositionEmb):
     @property
     def seq_dim(self):
         return 0
-
-
-def sinusoidal_embedding_1d(dim, position):
-    # preprocess
-    assert dim % 2 == 0
-    half = dim // 2
-    position = position.type(torch.float64)
-
-    # calculation
-    sinusoid = torch.outer(position, torch.pow(10000, -torch.arange(half).to(position).div(half)))
-    x = torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1)
-    return x
 
 
 def rope_apply(x, video_size: VideoSize, freqs):
@@ -281,25 +271,9 @@ def rope_apply(x, video_size: VideoSize, freqs):
     return rotated.to(x.dtype)
 
 
-class WanRMSNorm(nn.Module):
-    def __init__(self, dim, eps=1e-5):
-        super().__init__()
-        self.dim = dim
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
-
-    def reset_parameters(self):
+class WanRMSNorm(_WanRMSNorm):
+    def reset_parameters(self) -> None:
         self.weight.data.fill_(1.0)
-
-    def forward(self, x):
-        r"""
-        Args:
-            x(Tensor): Shape [B, L, C]
-        """
-        return self._norm(x.float()).type_as(x) * self.weight
-
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
 
 
 class WanLayerNorm(nn.LayerNorm):
@@ -321,7 +295,7 @@ class SelfAttnOp(DotProductAttention):
         q_B_L_H_D,
         k_B_L_H_D,
         v_B_L_H_D,
-        video_size: Optional[VideoSize] = None,
+        video_size: VideoSize | None = None,
     ):
         return super().forward(q_B_L_H_D, k_B_L_H_D, v_B_L_H_D)
 
@@ -615,36 +589,14 @@ class Head(nn.Module):
         return x
 
 
-class MLPProj(torch.nn.Module):
-    def __init__(self, in_dim, out_dim, flf_pos_emb=False):
-        super().__init__()
-
-        self.proj = torch.nn.Sequential(
-            torch.nn.LayerNorm(in_dim),
-            torch.nn.Linear(in_dim, in_dim),
-            torch.nn.GELU(),
-            torch.nn.Linear(in_dim, out_dim),
-            torch.nn.LayerNorm(out_dim),
-        )
-        if flf_pos_emb:  # NOTE: we only use this for `flf2v`
-            self.emb_pos = nn.Parameter(torch.zeros(1, FIRST_LAST_FRAME_CONTEXT_TOKEN_NUMBER, 1280))
-
-    def init_weights(self):
+class MLPProj(_MLPProj):
+    def init_weights(self) -> None:
         self.proj[0].reset_parameters()
         self.proj[1].reset_parameters()
         self.proj[3].reset_parameters()
         self.proj[4].reset_parameters()
-
         if hasattr(self, "emb_pos"):
             self.emb_pos.data.zero_()
-
-    def forward(self, image_embeds):
-        if hasattr(self, "emb_pos"):
-            bs, n, d = image_embeds.shape
-            image_embeds = image_embeds.view(-1, 2 * n, d)
-            image_embeds = image_embeds + self.emb_pos
-        clip_extra_context_tokens = self.proj(image_embeds)
-        return clip_extra_context_tokens
 
 
 class WanModel(nn.Module):
@@ -670,7 +622,7 @@ class WanModel(nn.Module):
         cross_attn_norm=True,
         eps=1e-6,
         concat_padding_mask: bool = False,
-        sac_config: SACConfig = SACConfig(),
+        sac_config: SACConfig = SACConfig(),  # noqa: B008 - Default evaluated once at definition, as upstream.
         cp_comm_type: str = "p2p",
         postpone_checkpoint: bool = False,
         conv_patchify: bool = False,
@@ -799,7 +751,7 @@ class WanModel(nn.Module):
         seq_len=None,
         frame_cond_crossattn_emb_B_L_D=None,
         y_B_C_T_H_W=None,
-        padding_mask: Optional[torch.Tensor] = None,
+        padding_mask: torch.Tensor | None = None,
         is_uncond=False,
         slg_layers=None,
         **kwargs,
@@ -877,14 +829,14 @@ class WanModel(nn.Module):
             context_B_L_D = torch.concat([context_clip, context_B_L_D], dim=1)
 
         # arguments
-        kwargs = dict(
-            e=e0_B_6_D,
-            seq_lens=seq_lens,
-            video_size=video_size,
-            freqs=self.rope_position_embedding(x_B_T_H_W_D),
-            context=context_B_L_D,
-            context_lens=context_lens,
-        )
+        kwargs = {
+            "e": e0_B_6_D,
+            "seq_lens": seq_lens,
+            "video_size": video_size,
+            "freqs": self.rope_position_embedding(x_B_T_H_W_D),
+            "context": context_B_L_D,
+            "context_lens": context_lens,
+        }
 
         for block_idx, block in enumerate(self.blocks):
             if slg_layers is not None and block_idx in slg_layers and is_uncond:
@@ -954,7 +906,7 @@ class WanModel(nn.Module):
             nn.init.zeros_(self.head.head.bias)
 
     def fully_shard(self, mesh):
-        for i, block in enumerate(self.blocks):
+        for _i, block in enumerate(self.blocks):
             fully_shard(block, mesh=mesh, reshard_after_forward=True)
         fully_shard(self.head, mesh=mesh, reshard_after_forward=False)
         fully_shard(self.text_embedding, mesh=mesh, reshard_after_forward=True)
@@ -975,7 +927,7 @@ class WanModel(nn.Module):
 
         self._is_context_parallel_enabled = False
 
-    def enable_context_parallel(self, process_group: Optional[ProcessGroup] = None):
+    def enable_context_parallel(self, process_group: ProcessGroup | None = None):
         # pos_embedder
         self.rope_position_embedding.enable_context_parallel(process_group=process_group)
         cp_ranks = get_process_group_ranks(process_group)

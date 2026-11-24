@@ -1,12 +1,9 @@
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v2 -> util -> transform.py functionality."""
-
-import numpy as np
 import cv2
+import numpy as np
 
 
-class Resize(object):
-    """Resize sample to given size (width, height).
-    """
+class Resize:
+    """Resize sample to given size (width, height)."""
 
     def __init__(
         self,
@@ -18,8 +15,7 @@ class Resize(object):
         resize_method="lower_bound",
         image_interpolation_method=cv2.INTER_AREA,
     ):
-        """Init.
-
+        """
         Args:
             width (int): desired output width
             height (int): desired output height
@@ -51,13 +47,6 @@ class Resize(object):
         self.__image_interpolation_method = image_interpolation_method
 
     def constrain_to_multiple_of(self, x, min_val=0, max_val=None):
-        """Constrain to multiple of.
-
-        Args:
-            x: The x.
-            min_val: The min val.
-            max_val: The max val.
-        """
         y = (np.round(x / self.__multiple_of) * self.__multiple_of).astype(int)
 
         if max_val is not None and y > max_val:
@@ -69,12 +58,6 @@ class Resize(object):
         return y
 
     def get_size(self, width, height):
-        """Get size.
-
-        Args:
-            width: The width.
-            height: The height.
-        """
         # determine new height and width
         scale_height = self.__height / height
         scale_width = self.__width / width
@@ -122,74 +105,52 @@ class Resize(object):
         return (new_width, new_height)
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         width, height = self.get_size(sample["image"].shape[1], sample["image"].shape[0])
-        
+
         # resize sample
         sample["image"] = cv2.resize(sample["image"], (width, height), interpolation=self.__image_interpolation_method)
 
         if self.__resize_target:
             if "depth" in sample:
                 sample["depth"] = cv2.resize(sample["depth"], (width, height), interpolation=cv2.INTER_NEAREST)
-                
+
             if "mask" in sample:
-                sample["mask"] = cv2.resize(sample["mask"].astype(np.float32), (width, height), interpolation=cv2.INTER_NEAREST)
-        
+                sample["mask"] = cv2.resize(
+                    sample["mask"].astype(np.float32), (width, height), interpolation=cv2.INTER_NEAREST
+                )
+
         return sample
 
 
-class NormalizeImage(object):
-    """Normlize image by given mean and std.
-    """
+class NormalizeImage:
+    """Normlize image by given mean and std."""
 
     def __init__(self, mean, std):
-        """Init.
-
-        Args:
-            mean: The mean.
-            std: The std.
-        """
         self.__mean = mean
         self.__std = std
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         sample["image"] = (sample["image"] - self.__mean) / self.__std
 
         return sample
 
 
-class PrepareForNet(object):
-    """Prepare sample for usage as network input.
-    """
+class PrepareForNet:
+    """Prepare sample for usage as network input."""
 
     def __init__(self):
-        """Init."""
         pass
 
     def __call__(self, sample):
-        """Call.
-
-        Args:
-            sample: The sample.
-        """
         image = np.transpose(sample["image"], (2, 0, 1))
         sample["image"] = np.ascontiguousarray(image).astype(np.float32)
 
         if "depth" in sample:
             depth = sample["depth"].astype(np.float32)
             sample["depth"] = np.ascontiguousarray(depth)
-        
+
         if "mask" in sample:
             sample["mask"] = sample["mask"].astype(np.float32)
             sample["mask"] = np.ascontiguousarray(sample["mask"])
-        
+
         return sample

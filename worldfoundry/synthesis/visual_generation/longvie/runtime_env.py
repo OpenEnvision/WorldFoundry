@@ -3,20 +3,17 @@ This module provides utility functions for resolving file system paths related t
 and its dependencies, including base models like Wan2.1 I2V and UMT5 tokenizer, and control weights.
 It handles various ways of specifying paths, including local directories, Hugging Face Hub (HFD)
 repositories, and environment variable expansions, ensuring that the correct model assets are found.
-It also manages Python's import resolution path (`sys.path`) for specific LongVie runtime components.
 """
 
 from __future__ import annotations
 
 import os
-import sys
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence
 
+from worldfoundry.core.io.paths import checkpoint_root_path
 from worldfoundry.runtime.assets import expand_worldfoundry_path
 from worldfoundry.runtime.env import resolve_hfd_root
-from worldfoundry.core.io.paths import checkpoint_root_path
-
 
 # Default Hugging Face repository IDs for various LongVie components and dependencies.
 DEFAULT_LONGVIE2_REPO = "Vchitect/LongVie2"
@@ -30,28 +27,6 @@ WAN21_I2V_REQUIRED_FILES = (
     "Wan2.1_VAE.pth",
     "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth",
 )
-
-
-def runtime_root() -> Path:
-    """
-    Returns the root directory for the LongVie specific runtime components.
-    This typically points to `longvie_runtime` adjacent to this file.
-    """
-    return Path(__file__).resolve().parent / "longvie_runtime"
-
-
-def video_depth_anything_runtime_root() -> Path:
-    """
-    Returns the root directory for the `video_depth_anything_longvie` runtime.
-    This path is relative to the current file, navigating up three directories
-    then down into a specific `three_dimensions` structure.
-    """
-    return (
-        Path(__file__).resolve().parents[3]
-        / "three_dimensions"
-        / "depth"
-        / "video_depth_anything_longvie"
-    )
 
 
 def project_root() -> Path:
@@ -69,29 +44,6 @@ def project_root() -> Path:
             return parent
     # Fallback if 'pyproject.toml' is not found within a reasonable ancestor.
     return Path(__file__).resolve().parents[6]
-
-
-def ensure_longvie_runtime() -> Path:
-    """
-    Ensures that the LongVie runtime and its base-model dependencies are prioritized
-    in Python's import resolution path (`sys.path`).
-
-    It adds the `longvie_runtime` and `video_depth_anything_longvie` directories to the
-    front of `sys.path`, removing them first if they already exist, to ensure precedence.
-
-    Returns:
-        Path: The resolved path to the LongVie runtime root.
-    """
-    root = runtime_root().resolve()
-    video_depth_root = video_depth_anything_runtime_root().resolve()
-    for import_root in (root, video_depth_root):
-        root_str = str(import_root)
-        # Remove the path if it already exists to prevent duplicates and ensure it's at the front.
-        if root_str in sys.path:
-            sys.path.remove(root_str)
-        # Insert the path at the beginning of sys.path for highest priority.
-        sys.path.insert(0, root_str)
-    return root
 
 
 def _local_bench_hfd_root() -> Path | None:

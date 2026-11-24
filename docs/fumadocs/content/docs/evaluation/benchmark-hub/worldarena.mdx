@@ -3,14 +3,14 @@ title: WorldArena
 description: "Tsinghua FIB Lab embodied world-model bench: perceptual quality plus data-engine / policy / planner utility."
 ---
 
-WorldArena (Tsinghua FIB Lab) evaluates embodied world models on two axes. Primary `ewm_score` aggregates the embodied-world-model surface. This catalog id is **`worldarena`**.
+WorldArena (Tsinghua FIB Lab) evaluates embodied world models on two axes. The primary metric `ewm_score` is the aggregate embodied-world-model score.
 
 - **Perceptual** — visual quality, motion quality, content consistency, physics adherence, 3D accuracy, controllability, human quality.
 - **Functional** — utility as a data engine (`data_engine_success`), policy evaluator (`policy_evaluator_correlation`), and action planner (`action_planner_success`).
 
 Paper: [WorldArena](https://arxiv.org/abs/2602.08971). Project: [world-arena.ai](https://world-arena.ai/). Code: [tsinghua-fib-lab/WorldArena](https://github.com/tsinghua-fib-lab/WorldArena).
 
-WorldFoundry **integrates the official video-quality metric runtime** (`runners/worldarena/runtime/video_quality`) and can score one `--dimension` at a time (catalog-bounded example: `action_following`). **One real prepared-data PSNR component is verified. Full Track 1 and the embodied tracks are not.** Functional-utility metrics need embodied task evidence outside the video-quality runtime.
+WorldFoundry **integrates the official video-quality metric runtime** and can score one `--dimension` at a time (the example below uses `action_following`). **The PSNR component is validated on prepared data; full Track 1 and the embodied tracks have not been validated.** Functional-utility metrics need embodied task results outside the video-quality runtime.
 
 <BenchmarkPageSections id="worldarena" locale="en" />
 
@@ -18,7 +18,7 @@ WorldFoundry **integrates the official video-quality metric runtime** (`runners/
 
 ```bash
 ${WORLDFOUNDRY_UNIFIED_PYTHON} \
-  worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py \
+  worldfoundry/evals/tasks/execution/runners/worldarena/run_worldarena_official_runner.py \
   --run-official \
   --dimension action_following \
   --config-path <worldarena_config.yaml> \
@@ -27,9 +27,9 @@ ${WORLDFOUNDRY_UNIFIED_PYTHON} \
   --json
 ```
 
-Ground-truth comparisons take `--gt-data-dir` / `--action-gt-data-dir`. Weights resolve from `--ckpt-root`. `--official-results-path` imports an existing result file. Env: `WORLDFOUNDRY_WORLDARENA_RESULTS_PATH`, `WORLDFOUNDRY_WORLDARENA_ROOT`. No Hugging Face dataset is required by the contract.
+Ground-truth comparisons take `--gt-data-dir` / `--action-gt-data-dir`. Weights resolve from `--ckpt-root`. `--official-results-path` imports an existing result file. Env: `WORLDFOUNDRY_WORLDARENA_RESULTS_PATH`, `WORLDFOUNDRY_WORLDARENA_ROOT`. No Hugging Face dataset is required.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/worldarena.yaml`, `worldfoundry/evaluation/tasks/execution/runners/worldarena`.
+Manifest: `worldfoundry/data/benchmarks/tasks/external/worldarena.yaml`.
 
 Outputs include `scorecard.json` (primary `ewm_score`).
 

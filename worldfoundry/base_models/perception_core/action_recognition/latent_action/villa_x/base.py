@@ -22,7 +22,7 @@ class ModelConfig(BaseModel):
     config: dict
 
     @classmethod
-    def load(cls, path: str | Path) -> "ModelConfig":
+    def load(cls, path: str | Path) -> ModelConfig:
         return cls.model_validate_json(Path(path).read_text())
 
 
@@ -46,25 +46,18 @@ class PretrainedModel(nn.Module):
         self.apply(self._initialize_weights)
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_path: str, strict: bool = False, **kwargs
-    ) -> "PretrainedModel":
+    def from_pretrained(cls, pretrained_model_path: str, strict: bool = False, **kwargs) -> PretrainedModel:
         from safetensors.torch import load_model
 
         model_dir = Path(pretrained_model_path)
         config_path = model_dir / "model_config.json"
         weights_path = model_dir / "model.safetensors"
         if not config_path.is_file() or not weights_path.is_file():
-            raise FileNotFoundError(
-                f"Expected model_config.json and model.safetensors in {model_dir}"
-            )
+            raise FileNotFoundError(f"Expected model_config.json and model.safetensors in {model_dir}")
 
         model_config = ModelConfig.load(config_path)
         if model_config.architecture != cls.__name__:
-            raise ValueError(
-                f"Expected architecture {cls.__name__}, "
-                f"got {model_config.architecture}"
-            )
+            raise ValueError(f"Expected architecture {cls.__name__}, got {model_config.architecture}")
 
         config = cls.config_class.model_validate(model_config.config)
         config._config_path = model_dir.absolute().as_posix()

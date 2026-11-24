@@ -2,36 +2,29 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import torch
 from PIL import Image
 
-from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
 from worldfoundry.synthesis.base_synthesis import BaseSynthesis
-
+from worldfoundry.zoo.runtime.profiles import load_runtime_profile
 
 _BASE_MODEL_TARGETS: Mapping[str, str] = {
     "dap": "worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v1",
     "depth-anything-v2-prior": "worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v2",
     "depth-anything-v3-prior": "worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3",
-    "dust3r": "worldfoundry.base_models.three_dimensions.general_3d.dust3r",
-    "dust3r-base-model": "worldfoundry.base_models.three_dimensions.general_3d.dust3r",
     "geocalib-prior": "worldfoundry.base_models.three_dimensions.general_3d.geocalib",
     "metric3d-prior": "worldfoundry.base_models.three_dimensions.depth.metric3d",
     "prior-depth-anything": "worldfoundry.base_models.three_dimensions.depth.priorda",
     "track-anything-prior": "worldfoundry.base_models.perception_core.tracking.track_anything",
     "unidepth-v2-prior": "worldfoundry.base_models.three_dimensions.depth.unidepth",
-    "unik3d-prior": "worldfoundry.base_models.three_dimensions.depth.unik3d",
     "video-depth-anything-prior": "worldfoundry.base_models.three_dimensions.depth.videodepthanything",
-}
-
-_PROFILE_ID_OVERRIDES: Mapping[str, str] = {
-    "dust3r": "dust3r-base-model",
 }
 
 
@@ -59,14 +52,6 @@ def _known_checkpoint_candidates(model_id: str) -> tuple[str, ...]:
             root / "DA3METRIC-LARGE" / "model.safetensors",
             root / "depth-anything--DA3METRIC-LARGE" / "model.safetensors",
         ),
-        "dust3r": (
-            root / "DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth",
-            root / "DUSt3R_ViTLarge_BaseDecoder_512_dpt" / "model.safetensors",
-        ),
-        "dust3r-base-model": (
-            root / "DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth",
-            root / "DUSt3R_ViTLarge_BaseDecoder_512_dpt" / "model.safetensors",
-        ),
         "geocalib-prior": (
             root / "GeoCalib" / "geocalib-pinhole.tar",
             Path(torch.hub.get_dir()) / "geocalib" / "pinhole.tar",
@@ -75,9 +60,7 @@ def _known_checkpoint_candidates(model_id: str) -> tuple[str, ...]:
             root / "Metric3D" / "metric_depth_vit_giant2_800k.pth",
             root / "Metric3D" / "metric_depth_vit_large_800k.pth",
         ),
-        "prior-depth-anything": (
-            root / "Prior-Depth-Anything",
-        ),
+        "prior-depth-anything": (root / "Prior-Depth-Anything",),
         "track-anything-prior": (
             root / "SAM" / "models" / "sams" / "sam_vit_b_01ec64.pth",
             root / "Track-Anything" / "R50_DeAOTL_PRE_YTB_DAV.pth",
@@ -87,12 +70,7 @@ def _known_checkpoint_candidates(model_id: str) -> tuple[str, ...]:
             root / "unidepth-v2-vitl14",
             root / "lpiccinelli--unidepth-v2-vitl14",
         ),
-        "unik3d-prior": (
-            root / "unik3d-vitl",
-        ),
-        "video-depth-anything-prior": (
-            root / "Video-Depth-Anything-Large" / "video_depth_anything_vitl.pth",
-        ),
+        "video-depth-anything-prior": (root / "Video-Depth-Anything-Large" / "video_depth_anything_vitl.pth",),
     }
     return tuple(str(path) for path in table.get(model_id, ()))
 
@@ -126,7 +104,7 @@ class GeometryPriorSynthesis(BaseSynthesis):
     def __init__(self, *, model_id: str, device: str = "cuda", options: Mapping[str, Any] | None = None) -> None:
         super().__init__()
         self.model_id = model_id
-        self.profile_id = _PROFILE_ID_OVERRIDES.get(model_id, model_id)
+        self.profile_id = model_id
         self.device = device
         self.options = dict(options or {})
         self.profile = load_runtime_profile(self.profile_id, check_conda_env_exists=False)
@@ -139,7 +117,7 @@ class GeometryPriorSynthesis(BaseSynthesis):
         required_components: Mapping[str, Any] | None = None,
         device: str = "cuda",
         **kwargs: Any,
-    ) -> "GeometryPriorSynthesis":
+    ) -> GeometryPriorSynthesis:
         options: dict[str, Any] = {}
         if isinstance(model_path, Mapping):
             options.update(model_path)
@@ -147,7 +125,9 @@ class GeometryPriorSynthesis(BaseSynthesis):
             options["model_path"] = str(model_path)
         options.update(dict(required_components or {}))
         options.update(kwargs)
-        model_id = str(options.get("profile_id") or options.get("runtime_profile") or options.get("model_id") or cls.MODEL_ID or "")
+        model_id = str(
+            options.get("profile_id") or options.get("runtime_profile") or options.get("model_id") or cls.MODEL_ID or ""
+        )
         if not model_id:
             raise ValueError("GeometryPriorSynthesis requires model_id/profile_id.")
         return cls(model_id=model_id, device=device, options=options)
@@ -158,7 +138,7 @@ class GeometryPriorSynthesis(BaseSynthesis):
         if base_model_target:
             try:
                 __import__(base_model_target)
-            except Exception as exc:  # noqa: BLE001 - preserve import failure for Studio.
+            except Exception as exc:  # preserve import failure for Studio.
                 import_error = f"{type(exc).__name__}: {exc}"
         profile_paths = self._checkpoint_paths()
         known_paths = _known_checkpoint_candidates(self.model_id)
@@ -169,6 +149,7 @@ class GeometryPriorSynthesis(BaseSynthesis):
                 for key, default in zip(
                     ("sam_ckpt_path", "aot_ckpt_path", "grounding_dino_ckpt_path"),
                     known_paths,
+                    strict=False,
                 )
             )
         elif explicit:
@@ -306,8 +287,6 @@ class GeometryPriorSynthesis(BaseSynthesis):
             if prompt is not None:
                 kwargs.setdefault("prompt", prompt)
             return self._run_track_anything(video=video, images=images, output_dir=output_dir, **kwargs)
-        if self.model_id in {"dust3r", "dust3r-base-model"}:
-            return self._run_dust3r(images=images, output_dir=output_dir, **kwargs)
         return self._run_single_image_depth(images=images, output_dir=output_dir, **kwargs)
 
     def _run_single_image_depth(self, *, images: Any, output_dir: Path, **kwargs: Any) -> dict[str, Any]:
@@ -319,31 +298,45 @@ class GeometryPriorSynthesis(BaseSynthesis):
         from worldfoundry.base_models.three_dimensions.depth.base import DepthEstimationInput
         from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.cameras import CameraType
 
-        ckpt = self._existing_checkpoint(directory_ok=self.model_id in {"prior-depth-anything", "unidepth-v2-prior", "unik3d-prior"})
+        ckpt = self._existing_checkpoint(directory_ok=self.model_id in {"prior-depth-anything", "unidepth-v2-prior"})
         if self.model_id == "dap":
-            from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v1.dap_adapter import DAPModel
+            from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v1.dap_adapter import (
+                DAPModel,
+            )
 
             model = DAPModel(weights_path=ckpt, input_size=int(kwargs.get("input_size") or 518))
             src = DepthEstimationInput(rgb=rgb_tensor, camera_type=CameraType.PANORAMA)
         elif self.model_id == "depth-anything-v2-prior":
-            from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v2 import DepthAnythingDepthModel
+            from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v2 import (
+                DepthAnythingDepthModel,
+            )
 
             model = DepthAnythingDepthModel(model=str(kwargs.get("model") or "vitl"), weights_path=ckpt)
             src = DepthEstimationInput(rgb=rgb_tensor)
         elif self.model_id == "depth-anything-v3-prior":
-            from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3 import DepthAnything3Model
+            from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3 import (
+                DepthAnything3Model,
+            )
 
             model = DepthAnything3Model(weights_path=ckpt)
-            src = DepthEstimationInput(rgb=rgb_tensor, intrinsics=torch.tensor([focal], device=device), camera_type=CameraType.PINHOLE)
+            src = DepthEstimationInput(
+                rgb=rgb_tensor, intrinsics=torch.tensor([focal], device=device), camera_type=CameraType.PINHOLE
+            )
         elif self.model_id == "metric3d-prior":
             from worldfoundry.base_models.three_dimensions.depth.metric3d import Metric3DDepthModel
 
-            model = Metric3DDepthModel(version=int(kwargs.get("version") or 2), model=str(kwargs.get("model") or "giant2"), weights_path=ckpt)
-            src = DepthEstimationInput(rgb=rgb_tensor, intrinsics=torch.tensor([focal], device=device), camera_type=CameraType.PINHOLE)
+            model = Metric3DDepthModel(
+                version=int(kwargs.get("version") or 2), model=str(kwargs.get("model") or "giant2"), weights_path=ckpt
+            )
+            src = DepthEstimationInput(
+                rgb=rgb_tensor, intrinsics=torch.tensor([focal], device=device), camera_type=CameraType.PINHOLE
+            )
         elif self.model_id == "prior-depth-anything":
             from worldfoundry.base_models.three_dimensions.depth.priorda import PriorDAModel
 
-            prompt_depth = _load_prompt_depth(kwargs.get("prompt_depth_path") or kwargs.get("prior_depth_path"), rgb.shape[:2], device=device)
+            prompt_depth = _load_prompt_depth(
+                kwargs.get("prompt_depth_path") or kwargs.get("prior_depth_path"), rgb.shape[:2], device=device
+            )
             model = PriorDAModel(weights_dir=ckpt, device=device)
             src = DepthEstimationInput(rgb=rgb_tensor, prompt_metric_depth=prompt_depth)
             with torch.inference_mode():
@@ -362,24 +355,9 @@ class GeometryPriorSynthesis(BaseSynthesis):
             from worldfoundry.base_models.three_dimensions.depth.unidepth import UniDepth2Model
 
             model = UniDepth2Model(type=str(kwargs.get("type") or "l"), model_path=ckpt, device=device)
-            src = DepthEstimationInput(rgb=rgb_tensor, intrinsics=torch.tensor([focal], device=device), camera_type=CameraType.PINHOLE)
-        elif self.model_id == "unik3d-prior":
-            from worldfoundry.base_models.three_dimensions.depth.unik3d import Unik3DModel
-
-            model = Unik3DModel(type=str(kwargs.get("type") or "l"), model_path=ckpt)
-            camera_model = str(kwargs.get("camera_model") or "auto").strip().lower()
-            if camera_model == "panorama":
-                src = DepthEstimationInput(rgb=rgb_tensor, camera_type=CameraType.PANORAMA)
-            elif camera_model == "pinhole":
-                src = DepthEstimationInput(
-                    rgb=rgb_tensor,
-                    intrinsics=torch.tensor([focal], device=device),
-                    camera_type=CameraType.PINHOLE,
-                )
-            elif camera_model == "auto":
-                src = DepthEstimationInput(rgb=rgb_tensor, camera_type=CameraType.PINHOLE)
-            else:
-                raise ValueError("UniK3D camera_model must be one of: auto, pinhole, panorama")
+            src = DepthEstimationInput(
+                rgb=rgb_tensor, intrinsics=torch.tensor([focal], device=device), camera_type=CameraType.PINHOLE
+            )
         else:
             raise RuntimeError(f"Unsupported geometry prior model: {self.model_id}")
 
@@ -393,10 +371,7 @@ class GeometryPriorSynthesis(BaseSynthesis):
             depth_kind=str(getattr(model.depth_type, "value", model.depth_type)),
             max_points=int(kwargs.get("max_points") or 5000),
             focal_length=focal,
-            extra_metadata={
-                "checkpoint_path": ckpt,
-                **({"camera_model": camera_model} if self.model_id == "unik3d-prior" else {}),
-            },
+            extra_metadata={"checkpoint_path": ckpt},
         )
 
     def _run_video_depth(self, *, video: Any, images: Any, output_dir: Path, **kwargs: Any) -> dict[str, Any]:
@@ -415,9 +390,7 @@ class GeometryPriorSynthesis(BaseSynthesis):
         )
         with torch.inference_mode():
             result = model.estimate(
-                DepthEstimationInput(
-                    video_frame_list=[frame.astype(np.float32) / 255.0 for frame in frames]
-                )
+                DepthEstimationInput(video_frame_list=[frame.astype(np.float32) / 255.0 for frame in frames])
             )
         return _write_depth_artifacts(
             model_id=self.model_id,
@@ -457,107 +430,6 @@ class GeometryPriorSynthesis(BaseSynthesis):
             "model_id": self.model_id,
             "artifact_path": str(metadata_path),
             "preview_image": str(preview_path),
-            "metadata_path": str(metadata_path),
-        }
-
-    def _run_dust3r(self, *, images: Any, output_dir: Path, **kwargs: Any) -> dict[str, Any]:
-        from worldfoundry.base_models.three_dimensions.general_3d.dust3r import ensure_import_paths
-
-        ensure_import_paths()
-        from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
-        from dust3r.image_pairs import make_pairs
-        from dust3r.inference import inference
-        from dust3r.model import AsymmetricCroCo3DStereo
-        from dust3r.utils.image import load_images
-
-        image_paths = _collect_image_paths(
-            _first_available(images, kwargs.get("image_path"), kwargs.get("input_path")),
-            output_dir=output_dir,
-            max_images=int(kwargs.get("max_images") or 2),
-        )
-        if len(image_paths) == 1:
-            image_paths = [image_paths[0], image_paths[0]]
-        if len(image_paths) < 2:
-            raise ValueError("DUSt3R inference requires at least one image path; a single image is duplicated for validation tests.")
-
-        ckpt = self._existing_checkpoint(directory_ok=True)
-        if not ckpt:
-            raise FileNotFoundError("DUSt3R requires a local checkpoint file or a Hugging Face model directory.")
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        model = AsymmetricCroCo3DStereo.from_pretrained(ckpt).to(device).eval()
-        dust3r_images = load_images(
-            image_paths[: int(kwargs.get("max_images") or 2)],
-            size=int(kwargs.get("image_size") or 512),
-            verbose=bool(kwargs.get("verbose", False)),
-        )
-        pairs = make_pairs(
-            dust3r_images,
-            scene_graph=str(kwargs.get("scene_graph") or "complete"),
-            prefilter=None,
-            symmetrize=True,
-        )
-        with torch.no_grad():
-            output = inference(
-                pairs,
-                model,
-                device,
-                batch_size=int(kwargs.get("batch_size") or 1),
-                verbose=bool(kwargs.get("verbose", False)),
-            )
-        scene = global_aligner(
-            output,
-            device=device,
-            mode=GlobalAlignerMode.PairViewer,
-            min_conf_thr=float(kwargs.get("min_conf_thr") or 3.0),
-        )
-
-        imgs = [np.asarray(img) for img in scene.imgs]
-        pts3d = [item.detach().cpu().numpy() for item in scene.get_pts3d()]
-        masks = [item.detach().cpu().numpy().astype(bool) for item in scene.get_masks()]
-        points = []
-        colors = []
-        for pts, img, mask in zip(pts3d, imgs, masks, strict=False):
-            if mask.shape == pts.shape[:2]:
-                points.append(pts[mask])
-                colors.append(img[mask])
-            else:
-                points.append(pts.reshape(-1, 3))
-                colors.append(img.reshape(-1, 3))
-
-        ply_path = output_dir / "dust3r_point_cloud.ply"
-        _write_colored_points_ply(
-            ply_path,
-            points=points,
-            colors=colors,
-            max_points=int(kwargs.get("max_points") or 20000),
-        )
-        intrinsics_path = output_dir / "dust3r_intrinsics.npy"
-        poses_path = output_dir / "dust3r_camera_poses.npy"
-        np.save(intrinsics_path, scene.get_intrinsics().detach().cpu().numpy())
-        np.save(poses_path, scene.get_im_poses().detach().cpu().numpy())
-        preview_path = output_dir / "dust3r_input_preview.png"
-        Image.fromarray(np.clip(imgs[0] * 255.0, 0, 255).astype(np.uint8)).save(preview_path)
-        metadata_path = output_dir / "dust3r_metadata.json"
-        self._write_json(
-            metadata_path,
-            {
-                "model_id": self.model_id,
-                "checkpoint_path": ckpt,
-                "input_images": image_paths,
-                "num_pairs": len(pairs),
-                "point_cloud_path": str(ply_path),
-                "intrinsics_path": str(intrinsics_path),
-                "camera_poses_path": str(poses_path),
-                "runtime_options": _safe_json(kwargs),
-            },
-        )
-        return {
-            "status": "succeeded",
-            "runtime": "geometry_prior_in_tree",
-            "model_id": self.model_id,
-            "artifact_path": str(ply_path),
-            "preview_image": str(preview_path),
-            "point_cloud_path": str(ply_path),
             "metadata_path": str(metadata_path),
         }
 
@@ -690,7 +562,13 @@ def _ensure_rgb_float(array: np.ndarray) -> np.ndarray:
 def _load_video_frames(source: Any, *, max_frames: int) -> list[np.ndarray]:
     if isinstance(source, Sequence) and not isinstance(source, (str, bytes, bytearray, np.ndarray)):
         frames = [_as_uint8_frame(item) for item in source[:max_frames]]
-    elif isinstance(source, (str, Path)) and Path(source).expanduser().suffix.lower() in {".mp4", ".mov", ".avi", ".mkv", ".webm"}:
+    elif isinstance(source, (str, Path)) and Path(source).expanduser().suffix.lower() in {
+        ".mp4",
+        ".mov",
+        ".avi",
+        ".mkv",
+        ".webm",
+    }:
         frames = _read_video_file(Path(source).expanduser(), max_frames=max_frames)
     else:
         frame = _as_uint8_frame(source)
@@ -739,7 +617,9 @@ def _load_prompt_depth(path: Any, shape: tuple[int, int], *, device: str) -> tor
         )
     array = np.load(path) if str(path).endswith(".npy") else np.asarray(Image.open(path).convert("F"), dtype=np.float32)
     if array.shape != shape:
-        array = np.asarray(Image.fromarray(array.astype(np.float32)).resize((shape[1], shape[0]), Image.BILINEAR), dtype=np.float32)
+        array = np.asarray(
+            Image.fromarray(array.astype(np.float32)).resize((shape[1], shape[0]), Image.BILINEAR), dtype=np.float32
+        )
     return torch.from_numpy(array.astype(np.float32)).to(device=device)
 
 
@@ -761,7 +641,9 @@ def _write_depth_artifacts(
         depth_source = "relative_inv_depth"
     if depth is None:
         raise RuntimeError(f"{model_id} did not return metric_depth or relative_inv_depth.")
-    depth_np = depth.detach().cpu().float().numpy() if isinstance(depth, torch.Tensor) else np.asarray(depth, dtype=np.float32)
+    depth_np = (
+        depth.detach().cpu().float().numpy() if isinstance(depth, torch.Tensor) else np.asarray(depth, dtype=np.float32)
+    )
     first_depth = depth_np[0] if depth_np.ndim == 3 else depth_np
     if first_depth.ndim == 3:
         first_depth = first_depth[0]
@@ -832,39 +714,6 @@ def _save_depth_preview(depth: np.ndarray, path: Path) -> None:
         Image.fromarray(image).save(path)
 
 
-def _collect_image_paths(source: Any, *, output_dir: Path, max_images: int) -> list[str]:
-    image_paths: list[str] = []
-
-    def add_path(path: Path) -> None:
-        if path.is_dir():
-            for child in sorted(path.iterdir()):
-                if child.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
-                    image_paths.append(str(child))
-                    if len(image_paths) >= max_images:
-                        return
-        elif path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
-            image_paths.append(str(path))
-
-    if isinstance(source, (str, Path)):
-        add_path(Path(source).expanduser())
-    elif isinstance(source, Sequence) and not isinstance(source, (str, bytes, bytearray, np.ndarray)):
-        for item in source:
-            if len(image_paths) >= max_images:
-                break
-            if isinstance(item, (str, Path)):
-                add_path(Path(item).expanduser())
-            else:
-                frame_path = output_dir / f"dust3r_input_{len(image_paths):03d}.png"
-                Image.fromarray(_as_uint8_frame(item)).save(frame_path)
-                image_paths.append(str(frame_path))
-    elif source is not None:
-        frame_path = output_dir / "dust3r_input_000.png"
-        Image.fromarray(_as_uint8_frame(source)).save(frame_path)
-        image_paths.append(str(frame_path))
-
-    return image_paths[:max(max_images, 1)]
-
-
 def _write_colored_points_ply(
     path: Path,
     *,
@@ -899,8 +748,7 @@ def _write_colored_points_ply(
         handle.write("property uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n")
         for point, color in zip(all_points, all_colors, strict=False):
             handle.write(
-                f"{point[0]:.6f} {point[1]:.6f} {point[2]:.6f} "
-                f"{int(color[0])} {int(color[1])} {int(color[2])}\n"
+                f"{point[0]:.6f} {point[1]:.6f} {point[2]:.6f} {int(color[0])} {int(color[1])} {int(color[2])}\n"
             )
 
 
@@ -981,8 +829,7 @@ def _write_point_cloud_ply(
         handle.write("property uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n")
         for point, color in zip(points, colors, strict=False):
             handle.write(
-                f"{point[0]:.6f} {point[1]:.6f} {point[2]:.6f} "
-                f"{int(color[0])} {int(color[1])} {int(color[2])}\n"
+                f"{point[0]:.6f} {point[1]:.6f} {point[2]:.6f} {int(color[0])} {int(color[1])} {int(color[2])}\n"
             )
 
 

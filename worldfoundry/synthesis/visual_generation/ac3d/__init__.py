@@ -6,7 +6,7 @@ optimizing startup time and resource usage for applications that may only use a 
 of the library's components.
 """
 
-__all__ = ["AC3DSynthesis", "AC3DRuntime"]
+__all__ = ["AC3DRuntime", "AC3DSynthesis"]
 
 
 def __getattr__(name):

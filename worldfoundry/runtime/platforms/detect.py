@@ -38,9 +38,7 @@ def detect_accelerators(
     another repository.
     """
 
-    provider_list = list(
-        builtin_accelerator_providers() if providers is None else providers
-    )
+    provider_list = list(builtin_accelerator_providers() if providers is None else providers)
     preference = _preference_order(preferred)
     preference_index = {kind: index for index, kind in enumerate(preference)}
     original_index = {id(provider): index for index, provider in enumerate(provider_list)}

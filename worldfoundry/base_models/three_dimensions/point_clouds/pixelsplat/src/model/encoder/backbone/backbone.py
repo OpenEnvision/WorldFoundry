@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> model -> encoder -> backbone -> backbone.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar
 
@@ -12,18 +11,9 @@ T = TypeVar("T")
 
 
 class Backbone(nn.Module, ABC, Generic[T]):
-    """Backbone implementation."""
     cfg: T
 
     def __init__(self, cfg: T) -> None:
-        """Init.
-
-        Args:
-            cfg: The cfg.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.cfg = cfg
 
@@ -32,22 +22,9 @@ class Backbone(nn.Module, ABC, Generic[T]):
         self,
         context: BatchedViews,
     ) -> Float[Tensor, "batch view d_out height width"]:
-        """Forward.
-
-        Args:
-            context: The context.
-
-        Returns:
-            The return value.
-        """
         pass
 
     @property
     @abstractmethod
     def d_out(self) -> int:
-        """D out.
-
-        Returns:
-            The return value.
-        """
         pass

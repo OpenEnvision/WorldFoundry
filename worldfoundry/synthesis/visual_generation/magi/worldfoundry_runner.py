@@ -5,11 +5,10 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import resolve_data_path
-
 
 VARIANT_CONFIGS = {
     "4.5b-base": ("4.5B/4.5B_base_config.json", "ckpt/magi/4.5B_base"),
@@ -59,7 +58,6 @@ def _ffmpeg_bin_dir(shim_root: Path) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="WorldFoundry MAGI-1 official runner")
-    parser.add_argument("--repo-root", required=True)
     parser.add_argument("--checkpoint-path", required=True)
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--output-path", required=True)
@@ -76,7 +74,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _write_config(repo_root: Path, checkpoint_root: Path, output_dir: Path, args: argparse.Namespace) -> Path:
+def _write_config(checkpoint_root: Path, output_dir: Path, args: argparse.Namespace) -> Path:
     key = str(args.variant).lower()
     if key not in VARIANT_CONFIGS:
         raise ValueError(f"Unsupported MAGI variant {args.variant!r}; choose one of {sorted(VARIANT_CONFIGS)}")
@@ -105,16 +103,13 @@ def _write_config(repo_root: Path, checkpoint_root: Path, output_dir: Path, args
 
 def main() -> None:
     args = parse_args()
-    repo_root = Path(args.repo_root).expanduser().resolve()
     checkpoint_root = Path(args.checkpoint_path).expanduser().resolve()
     output_path = Path(args.output_path).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path = _write_config(repo_root, checkpoint_root, output_path.parent, args)
+    config_path = _write_config(checkpoint_root, output_path.parent, args)
     mode = args.mode or ("v2v" if args.prefix_video_path else "i2v" if args.image_path else "t2v")
 
-    command = [
-        sys.executable,
-        str(repo_root / "inference" / "pipeline" / "entry.py"),
+    arguments = [
         "--config_file",
         str(config_path),
         "--mode",
@@ -127,18 +122,13 @@ def main() -> None:
     if mode == "i2v":
         if not args.image_path:
             raise ValueError("MAGI i2v mode requires --image-path")
-        command.extend(["--image_path", str(Path(args.image_path).expanduser().resolve())])
+        arguments.extend(["--image_path", str(Path(args.image_path).expanduser().resolve())])
     if mode == "v2v":
         if not args.prefix_video_path:
             raise ValueError("MAGI v2v mode requires --prefix-video-path")
-        command.extend(["--prefix_video_path", str(Path(args.prefix_video_path).expanduser().resolve())])
+        arguments.extend(["--prefix_video_path", str(Path(args.prefix_video_path).expanduser().resolve())])
 
     env = os.environ.copy()
-    compat_path = Path(__file__).resolve().parent / "torch_compat"
-    worldfoundry_root = Path(__file__).resolve().parents[4]
-    env["PYTHONPATH"] = os.pathsep.join(
-        item for item in (str(worldfoundry_root), str(compat_path), str(repo_root), env.get("PYTHONPATH", "")) if item
-    )
     env.setdefault("MASTER_ADDR", "localhost")
     env.setdefault("MASTER_PORT", "6009")
     env.setdefault("GPUS_PER_NODE", "1")
@@ -154,13 +144,15 @@ def main() -> None:
     if ffmpeg_dir:
         env["PATH"] = os.pathsep.join(item for item in (ffmpeg_dir, env.get("PATH", "")) if item)
 
+    command = package_module_command(
+        "worldfoundry.synthesis.visual_generation.magi.magi_runtime.inference.pipeline.entry", arguments
+    )
     completed = subprocess.run(
         command,
-        cwd=str(repo_root),
+        cwd=str(output_path.parent),
         env=env,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     log_path = output_path.with_suffix(output_path.suffix + ".magi.log")

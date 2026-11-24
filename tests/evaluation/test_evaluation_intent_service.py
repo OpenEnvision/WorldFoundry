@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.datasets import build_dataset_manifest, write_dataset_manifest
-from worldfoundry.evaluation.tasks.execution.orchestration.service import (
+from worldfoundry.evals.tasks.datasets import build_dataset_manifest, write_dataset_manifest
+from worldfoundry.evals.tasks.execution.orchestration.service import (
     GenerateAndScoreIntent,
     prepare_evaluation,
 )

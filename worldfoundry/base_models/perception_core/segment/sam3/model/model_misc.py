@@ -10,16 +10,19 @@ import warnings
 import weakref
 from collections.abc import Iterator
 from contextlib import AbstractContextManager
-from enum import auto, Enum
-from typing import Dict, List, Optional, Tuple, Union
+from enum import Enum, auto
+from typing import ClassVar
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch.overrides import handle_torch_function, has_torch_function
 from typing_extensions import override
-from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+
+from worldfoundry.core.attention import (
+    scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention,
+)
 
 try:
     import xformers
@@ -27,19 +30,7 @@ except ImportError:
     xformers = None
 
 
-def inverse_sigmoid(x, eps=1e-3):
-    """
-    The inverse function for sigmoid activation function.
-    Note: It might face numberical issues with fp16 small eps.
-    """
-    x = x.clamp(min=0, max=1)
-    x1 = x.clamp(min=eps)
-    x2 = (1 - x).clamp(min=eps)
-    return torch.log(x1 / x2)
-
-
 def get_sdpa_settings():
-    """Get sdpa settings."""
     if torch.cuda.is_available():
         old_gpu = torch.cuda.get_device_properties(0).major < 7
         # only use Flash Attention on Ampere (8.0) or newer GPUs
@@ -94,67 +85,31 @@ def multi_head_attention_forward(
     value: Tensor,
     embed_dim_to_check: int,
     num_heads: int,
-    in_proj_weight: Optional[Tensor],
-    in_proj_bias: Optional[Tensor],
-    bias_k: Optional[Tensor],
-    bias_v: Optional[Tensor],
+    in_proj_weight: Tensor | None,
+    in_proj_bias: Tensor | None,
+    bias_k: Tensor | None,
+    bias_v: Tensor | None,
     add_zero_attn: bool,
     dropout_p: float,
     out_proj_weight: Tensor,
-    out_proj_bias: Optional[Tensor],
+    out_proj_bias: Tensor | None,
     training: bool = True,
-    key_padding_mask: Optional[Tensor] = None,
+    key_padding_mask: Tensor | None = None,
     need_weights: bool = True,
-    attn_mask: Optional[Tensor] = None,
+    attn_mask: Tensor | None = None,
     use_separate_proj_weight: bool = False,
-    q_proj_weight: Optional[Tensor] = None,
-    k_proj_weight: Optional[Tensor] = None,
-    v_proj_weight: Optional[Tensor] = None,
-    static_k: Optional[Tensor] = None,
-    static_v: Optional[Tensor] = None,
+    q_proj_weight: Tensor | None = None,
+    k_proj_weight: Tensor | None = None,
+    v_proj_weight: Tensor | None = None,
+    static_k: Tensor | None = None,
+    static_v: Tensor | None = None,
     average_attn_weights: bool = True,
     is_causal: bool = False,
     attn_type: AttentionType = AttentionType.Vanilla,
     attn_sparsity: float = 0.0,
-    attn_bias: Optional[Tensor] = None,
+    attn_bias: Tensor | None = None,
     use_fa3: bool = False,
-) -> Tuple[Tensor, Optional[Tensor]]:
-    """Multi head attention forward.
-
-    Args:
-        query: The query.
-        key: The key.
-        value: The value.
-        embed_dim_to_check: The embed dim to check.
-        num_heads: The num heads.
-        in_proj_weight: The in proj weight.
-        in_proj_bias: The in proj bias.
-        bias_k: The bias k.
-        bias_v: The bias v.
-        add_zero_attn: The add zero attn.
-        dropout_p: The dropout p.
-        out_proj_weight: The out proj weight.
-        out_proj_bias: The out proj bias.
-        training: The training.
-        key_padding_mask: The key padding mask.
-        need_weights: The need weights.
-        attn_mask: The attn mask.
-        use_separate_proj_weight: The use separate proj weight.
-        q_proj_weight: The q proj weight.
-        k_proj_weight: The k proj weight.
-        v_proj_weight: The v proj weight.
-        static_k: The static k.
-        static_v: The static v.
-        average_attn_weights: The average attn weights.
-        is_causal: The is causal.
-        attn_type: The attn type.
-        attn_sparsity: The attn sparsity.
-        attn_bias: The attn bias.
-        use_fa3: The use fa3.
-
-    Returns:
-        The return value.
-    """
+) -> tuple[Tensor, Tensor | None]:
     tens_ops = (
         query,
         key,
@@ -217,9 +172,7 @@ def multi_head_attention_forward(
     if key_padding_mask is not None:
         _kpm_dtype = key_padding_mask.dtype
         if _kpm_dtype != torch.bool and not torch.is_floating_point(key_padding_mask):
-            raise AssertionError(
-                "only bool and floating types of key_padding_mask are supported"
-            )
+            raise AssertionError("only bool and floating types of key_padding_mask are supported")
     assert embed_dim == embed_dim_to_check, (
         f"was expecting embedding dimension of {embed_dim_to_check}, but got {embed_dim}"
     )
@@ -227,38 +180,24 @@ def multi_head_attention_forward(
         head_dim = embed_dim.div(num_heads, rounding_mode="trunc")
     else:
         head_dim = embed_dim // num_heads
-    assert head_dim * num_heads == embed_dim, (
-        f"embed_dim {embed_dim} not divisible by num_heads {num_heads}"
-    )
+    assert head_dim * num_heads == embed_dim, f"embed_dim {embed_dim} not divisible by num_heads {num_heads}"
     if use_separate_proj_weight:
         assert key.shape[:2] == value.shape[:2], (
             f"key's sequence and batch dims {key.shape[:2]} do not match value's {value.shape[:2]}"
         )
     else:
-        assert key.shape == value.shape, (
-            f"key shape {key.shape} does not match value shape {value.shape}"
-        )
+        assert key.shape == value.shape, f"key shape {key.shape} does not match value shape {value.shape}"
 
     #
     # compute in-projection
     #
     if not use_separate_proj_weight:
-        assert in_proj_weight is not None, (
-            "use_separate_proj_weight is False but in_proj_weight is None"
-        )
-        q, k, v = F._in_projection_packed(
-            query, key, value, in_proj_weight, in_proj_bias
-        )
+        assert in_proj_weight is not None, "use_separate_proj_weight is False but in_proj_weight is None"
+        q, k, v = F._in_projection_packed(query, key, value, in_proj_weight, in_proj_bias)
     else:
-        assert q_proj_weight is not None, (
-            "use_separate_proj_weight is True but q_proj_weight is None"
-        )
-        assert k_proj_weight is not None, (
-            "use_separate_proj_weight is True but k_proj_weight is None"
-        )
-        assert v_proj_weight is not None, (
-            "use_separate_proj_weight is True but v_proj_weight is None"
-        )
+        assert q_proj_weight is not None, "use_separate_proj_weight is True but q_proj_weight is None"
+        assert k_proj_weight is not None, "use_separate_proj_weight is True but k_proj_weight is None"
+        assert v_proj_weight is not None, "use_separate_proj_weight is True but v_proj_weight is None"
         if in_proj_bias is None:
             b_q = b_k = b_v = None
         else:
@@ -279,7 +218,8 @@ def multi_head_attention_forward(
     if attn_mask is not None:
         if attn_mask.dtype == torch.uint8:
             warnings.warn(
-                "Byte tensor for attn_mask in nn.MultiheadAttention is deprecated. Use bool tensor instead."
+                "Byte tensor for attn_mask in nn.MultiheadAttention is deprecated. Use bool tensor instead.",
+                stacklevel=1,
             )
             attn_mask = attn_mask.to(torch.bool)
         else:
@@ -301,9 +241,7 @@ def multi_head_attention_forward(
                     f"The shape of the 3D attn_mask is {attn_mask.shape}, but should be {correct_3d_size}."
                 )
         else:
-            raise RuntimeError(
-                f"attn_mask's dimension {attn_mask.dim()} is not supported"
-            )
+            raise RuntimeError(f"attn_mask's dimension {attn_mask.dim()} is not supported")
 
     # add bias along batch dimension (currently second)
     if bias_k is not None and bias_v is not None:
@@ -329,9 +267,7 @@ def multi_head_attention_forward(
         assert static_k.size(0) == bsz * num_heads, (
             f"expecting static_k.size(0) of {bsz * num_heads}, but got {static_k.size(0)}"
         )
-        assert static_k.size(2) == head_dim, (
-            f"expecting static_k.size(2) of {head_dim}, but got {static_k.size(2)}"
-        )
+        assert static_k.size(2) == head_dim, f"expecting static_k.size(2) of {head_dim}, but got {static_k.size(2)}"
         k = static_k
     if static_v is None:
         v = v.contiguous().view(v.shape[0], bsz * num_heads, head_dim).transpose(0, 1)
@@ -339,20 +275,14 @@ def multi_head_attention_forward(
         assert static_v.size(0) == bsz * num_heads, (
             f"expecting static_v.size(0) of {bsz * num_heads}, but got {static_v.size(0)}"
         )
-        assert static_v.size(2) == head_dim, (
-            f"expecting static_v.size(2) of {head_dim}, but got {static_v.size(2)}"
-        )
+        assert static_v.size(2) == head_dim, f"expecting static_v.size(2) of {head_dim}, but got {static_v.size(2)}"
         v = static_v
 
     # add zero attention along batch dimension (now first)
     if add_zero_attn:
         zero_attn_shape = (bsz * num_heads, 1, head_dim)
-        k = torch.cat(
-            [k, torch.zeros(zero_attn_shape, dtype=k.dtype, device=k.device)], dim=1
-        )
-        v = torch.cat(
-            [v, torch.zeros(zero_attn_shape, dtype=v.dtype, device=v.device)], dim=1
-        )
+        k = torch.cat([k, torch.zeros(zero_attn_shape, dtype=k.dtype, device=k.device)], dim=1)
+        v = torch.cat([v, torch.zeros(zero_attn_shape, dtype=v.dtype, device=v.device)], dim=1)
         if attn_mask is not None:
             attn_mask = F.pad(attn_mask, (0, 1))
         if key_padding_mask is not None:
@@ -366,13 +296,9 @@ def multi_head_attention_forward(
         assert key_padding_mask.shape == (
             bsz,
             src_len,
-        ), (
-            f"expecting key_padding_mask shape of {(bsz, src_len)}, but got {key_padding_mask.shape}"
-        )
+        ), f"expecting key_padding_mask shape of {(bsz, src_len)}, but got {key_padding_mask.shape}"
         key_padding_mask = (
-            key_padding_mask.view(bsz, 1, 1, src_len)
-            .expand(-1, num_heads, -1, -1)
-            .reshape(bsz * num_heads, 1, src_len)
+            key_padding_mask.view(bsz, 1, 1, src_len).expand(-1, num_heads, -1, -1).reshape(bsz * num_heads, 1, src_len)
         )
         if attn_mask is None:
             attn_mask = key_padding_mask
@@ -396,10 +322,7 @@ def multi_head_attention_forward(
     #
 
     if attn_mask is not None:
-        if attn_mask.size(0) == 1:
-            attn_mask = attn_mask.unsqueeze(0)
-        else:
-            attn_mask = attn_mask.view(bsz, num_heads, -1, src_len)
+        attn_mask = attn_mask.unsqueeze(0) if attn_mask.size(0) == 1 else attn_mask.view(bsz, num_heads, -1, src_len)
 
     if attn_bias is not None:
         assert attn_bias.shape == (
@@ -407,13 +330,8 @@ def multi_head_attention_forward(
             num_heads,
             tgt_len,
             src_len,
-        ), (
-            f"expecting attn_bias shape of {(bsz, num_heads, tgt_len, src_len)}, but got {attn_bias.shape}"
-        )
-        if attn_mask is None:
-            attn_mask = attn_bias
-        else:
-            attn_mask = attn_mask + attn_bias
+        ), f"expecting attn_bias shape of {(bsz, num_heads, tgt_len, src_len)}, but got {attn_bias.shape}"
+        attn_mask = attn_bias if attn_mask is None else attn_mask + attn_bias
 
     q = q.view(bsz, num_heads, tgt_len, head_dim)
     k = k.view(bsz, num_heads, src_len, head_dim)
@@ -421,20 +339,16 @@ def multi_head_attention_forward(
 
     if attn_type == AttentionType.Vanilla:
         if attn_mask is None and not is_causal and use_fa3:
-            from worldfoundry.base_models.perception_core.segment.sam3.perflib.fa3 import flash_attn_func
-
-            assert dropout_p == 0.0
-            attn_output = flash_attn_func(
-                q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
-            ).transpose(1, 2)
-        else:
-            attn_output = _worldfoundry_scaled_dot_product_attention(
-                q, k, v, attn_mask, dropout_p, is_causal
+            from worldfoundry.base_models.perception_core.segment.sam3.perflib.fa3 import (
+                flash_attn_func,
             )
 
-        attn_output = (
-            attn_output.permute(2, 0, 1, 3).contiguous().view(bsz * tgt_len, embed_dim)
-        )
+            assert dropout_p == 0.0
+            attn_output = flash_attn_func(q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)).transpose(1, 2)
+        else:
+            attn_output = _worldfoundry_scaled_dot_product_attention(q, k, v, attn_mask, dropout_p, is_causal)
+
+        attn_output = attn_output.permute(2, 0, 1, 3).contiguous().view(bsz * tgt_len, embed_dim)
     elif attn_type == AttentionType.Xformer:
         attn_output_weights = None
         assert not need_weights, "need_weights is not supported in efficient mode"
@@ -453,9 +367,7 @@ def multi_head_attention_forward(
         q = q.reshape(bsz * num_heads, tgt_len, head_dim).contiguous()
         k = k.reshape(bsz * num_heads, src_len, head_dim).contiguous()
         v = v.reshape(bsz * num_heads, src_len, head_dim).contiguous()
-        row_offsets, column_indices = xformers.ops.find_locations_new(
-            q, k, attn_sparsity, True
-        )
+        row_offsets, column_indices = xformers.ops.find_locations_new(q, k, attn_sparsity, True)
         attn_output = xformers.ops.sparse_memory_efficient_attention(
             q, k, v, row_offsets, column_indices, attn_bias=attn_mask
         ).reshape(bsz, num_heads, tgt_len, head_dim)
@@ -485,10 +397,9 @@ def multi_head_attention_forward(
 
 
 class MultiheadAttention(nn.Module):
-    """Multihead attention implementation."""
-    __constants__ = ["batch_first"]
-    bias_k: Optional[torch.Tensor]
-    bias_v: Optional[torch.Tensor]
+    __constants__: ClassVar[list] = ["batch_first"]
+    bias_k: torch.Tensor | None
+    bias_v: torch.Tensor | None
 
     def __init__(
         self,
@@ -508,30 +419,8 @@ class MultiheadAttention(nn.Module):
         use_act_checkpoint: bool = False,
         use_fa3: bool = False,
     ) -> None:
-        """Init.
-
-        Args:
-            embed_dim: The embed dim.
-            num_heads: The num heads.
-            dropout: The dropout.
-            bias: The bias.
-            add_bias_kv: The add bias kv.
-            add_zero_attn: The add zero attn.
-            kdim: The kdim.
-            vdim: The vdim.
-            batch_first: The batch first.
-            device: The device.
-            dtype: The dtype.
-            attn_type: The attn type.
-            sparsity: The sparsity.
-            use_act_checkpoint: The use act checkpoint.
-            use_fa3: The use fa3.
-
-        Returns:
-            The return value.
-        """
         factory_kwargs = {"device": device, "dtype": dtype}
-        super(MultiheadAttention, self).__init__()
+        super().__init__()
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim
         self.vdim = vdim if vdim is not None else embed_dim
@@ -542,37 +431,23 @@ class MultiheadAttention(nn.Module):
         self.batch_first = batch_first
         self.head_dim = embed_dim // num_heads
         self.use_act_checkpoint = use_act_checkpoint
-        assert self.head_dim * num_heads == self.embed_dim, (
-            "embed_dim must be divisible by num_heads"
-        )
+        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
 
-        assert attn_type == AttentionType.Sparse or sparsity == 0.0, (
-            "sparsity is only supported for sparse attention"
-        )
+        assert attn_type == AttentionType.Sparse or sparsity == 0.0, "sparsity is only supported for sparse attention"
 
         if not self._qkv_same_embed_dim:
-            self.q_proj_weight = nn.Parameter(
-                torch.empty((embed_dim, embed_dim), **factory_kwargs)
-            )
-            self.k_proj_weight = nn.Parameter(
-                torch.empty((embed_dim, self.kdim), **factory_kwargs)
-            )
-            self.v_proj_weight = nn.Parameter(
-                torch.empty((embed_dim, self.vdim), **factory_kwargs)
-            )
+            self.q_proj_weight = nn.Parameter(torch.empty((embed_dim, embed_dim), **factory_kwargs))
+            self.k_proj_weight = nn.Parameter(torch.empty((embed_dim, self.kdim), **factory_kwargs))
+            self.v_proj_weight = nn.Parameter(torch.empty((embed_dim, self.vdim), **factory_kwargs))
             self.register_parameter("in_proj_weight", None)
         else:
-            self.in_proj_weight = nn.Parameter(
-                torch.empty((3 * embed_dim, embed_dim), **factory_kwargs)
-            )
+            self.in_proj_weight = nn.Parameter(torch.empty((3 * embed_dim, embed_dim), **factory_kwargs))
             self.register_parameter("q_proj_weight", None)
             self.register_parameter("k_proj_weight", None)
             self.register_parameter("v_proj_weight", None)
 
         if bias:
-            self.in_proj_bias = nn.Parameter(
-                torch.empty(3 * embed_dim, **factory_kwargs)
-            )
+            self.in_proj_bias = nn.Parameter(torch.empty(3 * embed_dim, **factory_kwargs))
         else:
             self.register_parameter("in_proj_bias", None)
         self.out_proj = nn.modules.linear.NonDynamicallyQuantizableLinear(
@@ -594,7 +469,6 @@ class MultiheadAttention(nn.Module):
         self._reset_parameters()
 
     def _reset_parameters(self):
-        """Helper function to reset parameters."""
         if self._qkv_same_embed_dim:
             nn.init.xavier_uniform_(self.in_proj_weight)
         else:
@@ -611,51 +485,27 @@ class MultiheadAttention(nn.Module):
             nn.init.xavier_normal_(self.bias_v)
 
     def __setstate__(self, state):
-        """Setstate.
-
-        Args:
-            state: The state.
-        """
         if "_qkv_same_embed_dim" not in state:
             state["_qkv_same_embed_dim"] = True
 
-        super(MultiheadAttention, self).__setstate__(state)
+        super().__setstate__(state)
 
     def forward(
         self,
         query: Tensor,
         key: Tensor,
         value: Tensor,
-        key_padding_mask: Optional[Tensor] = None,
+        key_padding_mask: Tensor | None = None,
         need_weights: bool = False,
-        attn_mask: Optional[Tensor] = None,
+        attn_mask: Tensor | None = None,
         average_attn_weights: bool = True,
-        attn_bias: Optional[Tensor] = None,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
-        """Forward.
-
-        Args:
-            query: The query.
-            key: The key.
-            value: The value.
-            key_padding_mask: The key padding mask.
-            need_weights: The need weights.
-            attn_mask: The attn mask.
-            average_attn_weights: The average attn weights.
-            attn_bias: The attn bias.
-
-        Returns:
-            The return value.
-        """
+        attn_bias: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None]:
         is_batched = query.dim() == 3
         if key_padding_mask is not None:
             _kpm_dtype = key_padding_mask.dtype
-            if _kpm_dtype != torch.bool and not torch.is_floating_point(
-                key_padding_mask
-            ):
-                raise AssertionError(
-                    "only bool and floating types of key_padding_mask are supported"
-                )
+            if _kpm_dtype != torch.bool and not torch.is_floating_point(key_padding_mask):
+                raise AssertionError("only bool and floating types of key_padding_mask are supported")
 
         if self.batch_first and is_batched:
             if key is value:
@@ -790,7 +640,6 @@ MultiheadAttentionWrapper = MultiheadAttention
 
 
 class DotProductScoring(torch.nn.Module):
-    """Dot product scoring implementation."""
     def __init__(
         self,
         d_model,
@@ -799,15 +648,6 @@ class DotProductScoring(torch.nn.Module):
         clamp_logits=True,
         clamp_max_val=12.0,
     ):
-        """Init.
-
-        Args:
-            d_model: The d model.
-            d_proj: The d proj.
-            prompt_mlp: The prompt mlp.
-            clamp_logits: The clamp logits.
-            clamp_max_val: The clamp max val.
-        """
         super().__init__()
         self.d_proj = d_proj
         assert isinstance(prompt_mlp, torch.nn.Module) or prompt_mlp is None
@@ -820,12 +660,6 @@ class DotProductScoring(torch.nn.Module):
             self.clamp_max_val = clamp_max_val
 
     def mean_pool_text(self, prompt, prompt_mask):
-        """Mean pool text.
-
-        Args:
-            prompt: The prompt.
-            prompt_mask: The prompt mask.
-        """
         # is_valid has shape (seq, bs, 1), where 1 is valid and 0 is padding
         is_valid = (~prompt_mask).float().permute(1, 0)[..., None]
         # num_valid has shape (bs, 1)
@@ -835,13 +669,6 @@ class DotProductScoring(torch.nn.Module):
         return pooled_prompt
 
     def forward(self, hs, prompt, prompt_mask):
-        """Forward.
-
-        Args:
-            hs: The hs.
-            prompt: The prompt.
-            prompt_mask: The prompt mask.
-        """
         # hs has shape (num_layer, bs, num_query, d_model)
         # prompt has shape (seq, bs, d_model)
         # prompt_mask has shape (bs, seq), where 1 is valid and 0 is padding
@@ -869,42 +696,7 @@ class DotProductScoring(torch.nn.Module):
         return scores
 
 
-class LayerScale(nn.Module):
-    """Layer scale implementation."""
-    def __init__(
-        self,
-        dim: int,
-        init_values: Union[float, Tensor] = 1e-5,
-        inplace: bool = False,
-    ) -> None:
-        """Init.
-
-        Args:
-            dim: The dim.
-            init_values: The init values.
-            inplace: The inplace.
-
-        Returns:
-            The return value.
-        """
-        super().__init__()
-        self.inplace = inplace
-        self.gamma = nn.Parameter(init_values * torch.ones(dim))
-
-    def forward(self, x: Tensor) -> Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
-        return x.mul_(self.gamma) if self.inplace else x * self.gamma
-
-
 class TransformerWrapper(nn.Module):
-    """Transformer wrapper implementation."""
     def __init__(
         self,
         encoder,
@@ -913,15 +705,6 @@ class TransformerWrapper(nn.Module):
         two_stage_type="none",  # ["none"] only for now
         pos_enc_at_input_dec=True,
     ):
-        """Init.
-
-        Args:
-            encoder: The encoder.
-            decoder: The decoder.
-            d_model: The d model.
-            two_stage_type: The two stage type.
-            pos_enc_at_input_dec: The pos enc at input dec.
-        """
         super().__init__()
 
         self.encoder = encoder
@@ -930,23 +713,16 @@ class TransformerWrapper(nn.Module):
         self.pos_enc_at_input_dec = pos_enc_at_input_dec
 
         # for two stage
-        assert two_stage_type in ["none"], "unknown param {} of two_stage_type".format(
-            two_stage_type
-        )
+        assert two_stage_type in ["none"], f"unknown param {two_stage_type} of two_stage_type"
         self.two_stage_type = two_stage_type
 
         self._reset_parameters()
         self.d_model = d_model
 
     def _reset_parameters(self):
-        """Helper function to reset parameters."""
         for n, p in self.named_parameters():
-            if p.dim() > 1:
-                if (
-                    "box_embed" not in n
-                    and "query_embed" not in n
-                    and "reference_points" not in n
-                ):
+            if p.dim() > 1:  # noqa: SIM102 - Statement form kept for readability.
+                if "box_embed" not in n and "query_embed" not in n and "reference_points" not in n:
                     nn.init.xavier_uniform_(p)
 
 
@@ -961,25 +737,12 @@ class MLP(nn.Module):
         num_layers: int,
         dropout: float = 0.0,
         residual: bool = False,
-        out_norm: Optional[nn.Module] = None,
+        out_norm: nn.Module | None = None,
     ):
-        """Init.
-
-        Args:
-            input_dim: The input dim.
-            hidden_dim: The hidden dim.
-            output_dim: The output dim.
-            num_layers: The num layers.
-            dropout: The dropout.
-            residual: The residual.
-            out_norm: The out norm.
-        """
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(
-            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
-        )
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim], strict=False))  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         self.drop = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
         # whether to add the output as a residual connection to the input
         if residual and input_dim != output_dim:
@@ -990,11 +753,6 @@ class MLP(nn.Module):
         self.out_norm = out_norm or nn.Identity()
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         orig_x = x
         for i, layer in enumerate(self.layers):
             x = self.drop(F.relu(layer(x))) if i < self.num_layers - 1 else layer(x)
@@ -1004,35 +762,8 @@ class MLP(nn.Module):
         return x
 
 
-def get_clones(module, N):
-    """Get clones.
-
-    Args:
-        module: The module.
-        N: The n.
-    """
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
-
-
 def get_clones_seq(module, N):
-    """Get clones seq.
-
-    Args:
-        module: The module.
-        N: The n.
-    """
     return nn.Sequential(*[copy.deepcopy(module) for i in range(N)])
-
-
-def get_activation_fn(activation):
-    """Return an activation function given a string"""
-    if activation == "relu":
-        return F.relu
-    if activation == "gelu":
-        return F.gelu
-    if activation == "glu":
-        return F.glu
-    raise RuntimeError(f"activation should be relu/gelu, not {activation}.")
 
 
 def get_activation_module(activation):
@@ -1047,11 +778,6 @@ def get_activation_module(activation):
 
 
 def get_valid_ratio(mask):
-    """Get valid ratio.
-
-    Args:
-        mask: The mask.
-    """
     _, H, W = mask.shape
     valid_H = torch.sum(~mask[:, :, 0], 1)
     valid_W = torch.sum(~mask[:, 0, :], 1)
@@ -1062,12 +788,6 @@ def get_valid_ratio(mask):
 
 
 def gen_sineembed_for_position(pos_tensor, num_feats=256):
-    """Gen sineembed for position.
-
-    Args:
-        pos_tensor: The pos tensor.
-        num_feats: The num feats.
-    """
     assert num_feats % 2 == 0
     num_feats = num_feats // 2
     # n_query, bs, _ = pos_tensor.size()
@@ -1079,30 +799,22 @@ def gen_sineembed_for_position(pos_tensor, num_feats=256):
     y_embed = pos_tensor[:, :, 1] * scale
     pos_x = x_embed[:, :, None] / dim_t
     pos_y = y_embed[:, :, None] / dim_t
-    pos_x = torch.stack(
-        (pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3
-    ).flatten(2)
-    pos_y = torch.stack(
-        (pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3
-    ).flatten(2)
+    pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
+    pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
     if pos_tensor.size(-1) == 2:
         pos = torch.cat((pos_y, pos_x), dim=2)
     elif pos_tensor.size(-1) == 4:
         w_embed = pos_tensor[:, :, 2] * scale
         pos_w = w_embed[:, :, None] / dim_t
-        pos_w = torch.stack(
-            (pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3
-        ).flatten(2)
+        pos_w = torch.stack((pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3).flatten(2)
 
         h_embed = pos_tensor[:, :, 3] * scale
         pos_h = h_embed[:, :, None] / dim_t
-        pos_h = torch.stack(
-            (pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3
-        ).flatten(2)
+        pos_h = torch.stack((pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3).flatten(2)
 
         pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
     else:
-        raise ValueError("Unknown pos_tensor shape(-1):{}".format(pos_tensor.size(-1)))
+        raise ValueError(f"Unknown pos_tensor shape(-1):{pos_tensor.size(-1)}")
     return pos
 
 
@@ -1140,31 +852,23 @@ class SAM3Output(list):
     """
 
     class IterMode(Enum):
-        """Iter mode implementation."""
         # Defines the type of iterator over ouptuts.
         ALL_STEPS_PER_STAGE = auto()
         LAST_STEP_PER_STAGE = auto()
-        FLATTENED = auto()  # Returns each interactivity step as if it is a separate stage (this is used in SAM3Image model)
+        FLATTENED = (
+            auto()
+        )  # Returns each interactivity step as if it is a separate stage (this is used in SAM3Image model)
 
     def __init__(
         self,
-        output: List[List[Dict]] = None,
+        output: list[list[dict]] | None = None,
         iter_mode: IterMode = IterMode.ALL_STEPS_PER_STAGE,
-        loss_stages: Optional[List[int]] = None,
+        loss_stages: list[int] | None = None,
     ):
-        """Init.
-
-        Args:
-            output: The output.
-            iter_mode: The iter mode.
-            loss_stages: The loss stages.
-        """
         if output is not None:
-            assert (
-                isinstance(output, list)
-                and len(output) > 0
-                and isinstance(output[0], list)
-            ), "Expected output to be a list of lists"
+            assert isinstance(output, list) and len(output) > 0 and isinstance(output[0], list), (
+                "Expected output to be a list of lists"
+            )
             self.output = output
         else:
             self.output = []
@@ -1178,9 +882,7 @@ class SAM3Output(list):
         self_ref = weakref.ref(self)
         self._mode2iter = {
             SAM3Output.IterMode.ALL_STEPS_PER_STAGE: lambda: iter(self_ref().output),
-            SAM3Output.IterMode.LAST_STEP_PER_STAGE: lambda: (
-                inner_list[-1] for inner_list in self_ref().output
-            ),
+            SAM3Output.IterMode.LAST_STEP_PER_STAGE: lambda: (inner_list[-1] for inner_list in self_ref().output),
             SAM3Output.IterMode.FLATTENED: lambda: (
                 element for inner_list in self_ref().output for element in inner_list
             ),
@@ -1189,11 +891,6 @@ class SAM3Output(list):
 
     @override
     def __iter__(self) -> Iterator:
-        """Iter.
-
-        Returns:
-            The return value.
-        """
         return self._mode2iter[self.iter_mode]()
 
     def __getitem__(self, index):
@@ -1213,7 +910,7 @@ class SAM3Output(list):
             if index == -1:
                 return self.self.output[-1][-1]
             else:
-                flattened_output = sum(self.output, [])
+                flattened_output = sum(self.output, [])  # noqa: RUF017 - Keeps the upstream sum() list concatenation.
                 return flattened_output[index]
 
     class _IterationMode(AbstractContextManager):
@@ -1222,45 +919,23 @@ class SAM3Output(list):
         This class is used internally by the SAM3Output.iteration_mode method.
         """
 
-        def __init__(
-            self, model_output: "SAM3Output", iter_mode: "SAM3Output.IterMode"
-        ):
-            """Init.
-
-            Args:
-                model_output: The model output.
-                iter_mode: The iter mode.
-            """
+        def __init__(self, model_output: "SAM3Output", iter_mode: "SAM3Output.IterMode"):
             self._model_output = model_output
             self._orig_iter_mode = model_output.iter_mode
             self._new_iter_mode = iter_mode
 
         @override
         def __enter__(self) -> "SAM3Output":
-            """Enter.
-
-            Returns:
-                The return value.
-            """
             self._model_output.iter_mode = self._new_iter_mode
             return self._model_output
 
         @override
         def __exit__(self, exc_type, exc_value, traceback):
-            """Exit.
-
-            Args:
-                exc_type: The exc type.
-                exc_value: The exc value.
-                traceback: The traceback.
-            """
             self._model_output.iter_mode = self._orig_iter_mode
             return super().__exit__(exc_type, exc_value, traceback)
 
     @staticmethod
-    def iteration_mode(
-        model_output: "SAM3Output", iter_mode: IterMode
-    ) -> _IterationMode:
+    def iteration_mode(model_output: "SAM3Output", iter_mode: IterMode) -> _IterationMode:
         """
         Returns a context manager that allows you to temporarily change the iteration mode of the SAM3Output object.
         Args:
@@ -1272,27 +947,18 @@ class SAM3Output(list):
         return SAM3Output._IterationMode(model_output=model_output, iter_mode=iter_mode)
 
     def append(self, item: list):
-        """Append.
-
-        Args:
-            item: The item.
-        """
-        assert isinstance(item, list), (
-            f"Only list items are supported. Got {type(item)}"
-        )
+        assert isinstance(item, list), f"Only list items are supported. Got {type(item)}"
         self.output.append(item)
 
     def __repr__(self):
-        """Repr."""
         return self.output.__repr__()
 
     def __len__(self):
-        """Len."""
         if self.iter_mode in [
             SAM3Output.IterMode.ALL_STEPS_PER_STAGE,
             SAM3Output.IterMode.LAST_STEP_PER_STAGE,
         ]:
             return len(self.output)
         elif self.iter_mode == SAM3Output.IterMode.FLATTENED:
-            flattened_output = sum(self.output, [])
+            flattened_output = sum(self.output, [])  # noqa: RUF017 - Keeps the upstream sum() list concatenation.
             return len(flattened_output)

@@ -59,11 +59,11 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: devil-dynamics
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id devil-dynamics --mode contract 
+  contract_validation_command: wf zoo benchmark-run --benchmark-id devil-dynamics --mode contract 
     --output-dir tmp/benchmark_zoo/benchmark_contract/devil-dynamics --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:DevilDynamicsContract
-  official_runner_command: worldfoundry-eval zoo benchmark-run
-  metric_evaluator_target: worldfoundry.evaluation.tasks.execution.runners.devil_dynamics.devil_dynamics_contract_evaluator:write_devil_dynamics_evaluation
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:devil-dynamics
+  official_runner_command: wf zoo benchmark-run
+  metric_evaluator_target: worldfoundry.evals.tasks.execution.runners.devil_dynamics.devil_dynamics_contract_evaluator:write_devil_dynamics_evaluation
   metric_protocol:
     official_definition: DEVIL reports dynamics range as Q0.99 - Q0.01 over video dynamics scores, dynamics 
       controllability as ranking consistency between prompt dynamics grades and generated-video dynamics, and 
@@ -88,7 +88,7 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_official_runtime
-    root: worldfoundry/evaluation/tasks/execution/runners/devil_dynamics
+    root: worldfoundry/evals/tasks/execution/runners/devil_dynamics
     root_env: WORLDFOUNDRY_DEVIL_DYNAMICS_ROOT
     artifact_score_dir_env: WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR
     results_path_env: WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH
@@ -111,17 +111,17 @@ metadata:
   data_refs:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/devil-dynamics.yaml
   official_runner_script: 
-    worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/run_devil_dynamics_official_runner.py
+    worldfoundry/evals/tasks/execution/runners/devil_dynamics/run_devil_dynamics_official_runner.py
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:DevilDynamicsContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:devil-dynamics
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
     surface: devil_dynamics_official_in_tree
     normalizer_verified: true
   local_evaluator:
-    target: worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/run_devil_dynamics_official_runner.py
+    target: worldfoundry/evals/tasks/execution/runners/devil_dynamics/run_devil_dynamics_official_runner.py
     status: implemented
     protocol: in_tree_official_runtime_and_result_normalization
     official_result_normalization:
@@ -135,10 +135,10 @@ metadata:
       - jsonl
       - csv
       provenance: normalizes caller-provided official outputs without executing external repository scripts
-  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  official_result_entrypoint: wf zoo benchmark-run
   runner:
     validation_command:
-    - worldfoundry-eval
+    - wf
     - zoo
     - benchmark-run
     - --benchmark-id
@@ -154,11 +154,11 @@ metadata:
     - --json
     runtime:
       results_path_env: WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH
-    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id devil-dynamics --mode 
+    official_validation_command: wf zoo benchmark-run --benchmark-id devil-dynamics --mode 
       official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
       --output-dir <out> --json
   validation_command:
-  - worldfoundry-eval
+  - wf
   - zoo
   - benchmark-run
   - --benchmark-id
@@ -221,15 +221,15 @@ tasks:
       - dynamics_controllability
       - dynamics_quality
       - devil_dynamics_average
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:DevilDynamicsContract
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.devil_dynamics.devil_dynamics_contract_evaluator:write_devil_dynamics_evaluation
+      runner_target: worldfoundry.evals.tasks.contracts.external:devil-dynamics
+      evaluator_target: worldfoundry.evals.tasks.execution.runners.devil_dynamics.devil_dynamics_contract_evaluator:write_devil_dynamics_evaluation
       runner_script: 
-        worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/run_devil_dynamics_official_runner.py
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id devil-dynamics --mode 
+        worldfoundry/evals/tasks/execution/runners/devil_dynamics/run_devil_dynamics_official_runner.py
+      official_validation_command: wf zoo benchmark-run --benchmark-id devil-dynamics --mode 
         official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
         --output-dir <out> --json
       required_inputs:
       - official_results_path or official_results
       - generated_video artifacts for the official prompt/task suite
       - official scorer or judge assets for leaderboard parity
-      official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+      official_result_entrypoint: wf zoo benchmark-run

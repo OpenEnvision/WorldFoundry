@@ -6,15 +6,16 @@ around `WorldCamRuntime`, delegating most operations to the underlying runtime o
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any
 
 from worldfoundry.synthesis.visual_generation.worldcam.worldfoundry_runtime import (
     DEFAULT_NEGATIVE_PROMPT,
     DEFAULT_SHARED_HFD_ROOT,
-    DEFAULT_WEIGHT_DTYPE,
     DEFAULT_WAN_MODEL_DIR,
     DEFAULT_WAN_REPO,
+    DEFAULT_WEIGHT_DTYPE,
     DEFAULT_WORLDCAM_CHECKPOINT,
     DEFAULT_WORLDCAM_CKPT_DIR,
     DEFAULT_WORLDCAM_REPO,
@@ -38,7 +39,6 @@ except ModuleNotFoundError as exc:
 
         def __init__(self):
             """Initializes the placeholder BaseSynthesis."""
-            pass
 
 
 class WorldCamSynthesis(BaseSynthesis):
@@ -89,7 +89,7 @@ class WorldCamSynthesis(BaseSynthesis):
         load_model: bool = True,
         allow_download: bool = False,
         **kwargs: Any,
-    ) -> "WorldCamSynthesis":
+    ) -> WorldCamSynthesis:
         """
         Instantiates WorldCamSynthesis by loading a WorldCamRuntime from pretrained weights.
 
@@ -183,12 +183,12 @@ class WorldCamSynthesis(BaseSynthesis):
         intrinsics: Any,
         extrinsics: Any,
         num_ar_steps: int,
-        negative_prompt: Optional[str] = None,
+        negative_prompt: str | None = None,
         cfg_scale: float = 4.0,
         seed: int = 0,
         long_term_memory_start_step: int = 30,
         long_term_memory_num_clips: int = 4,
-        long_term_memory_ref_indices: Optional[list[int]] = None,
+        long_term_memory_ref_indices: list[int] | None = None,
         attention_sink_inference: bool = False,
         trim_conditioning: bool = True,
         num_inference_steps: int = 50,
@@ -249,9 +249,9 @@ class WorldCamSynthesis(BaseSynthesis):
 __all__ = [
     "DEFAULT_NEGATIVE_PROMPT",
     "DEFAULT_SHARED_HFD_ROOT",
-    "DEFAULT_WEIGHT_DTYPE",
     "DEFAULT_WAN_MODEL_DIR",
     "DEFAULT_WAN_REPO",
+    "DEFAULT_WEIGHT_DTYPE",
     "DEFAULT_WORLDCAM_CHECKPOINT",
     "DEFAULT_WORLDCAM_CKPT_DIR",
     "DEFAULT_WORLDCAM_REPO",

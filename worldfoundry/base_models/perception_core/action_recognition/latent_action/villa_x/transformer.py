@@ -20,16 +20,12 @@ def get_1D_position_embeddings(embed_dim: int, length: int) -> np.ndarray:
     return _sine_cosine(embed_dim, np.arange(length))
 
 
-def get_2D_position_embeddings(
-    embed_dim: int, grid_size: int
-) -> np.ndarray:
+def get_2D_position_embeddings(embed_dim: int, grid_size: int) -> np.ndarray:
     height, width = (
         np.arange(grid_size, dtype=np.float32),
         np.arange(grid_size, dtype=np.float32),
     )
-    grid = np.stack(np.meshgrid(width, height), axis=0).reshape(
-        2, 1, grid_size, grid_size
-    )
+    grid = np.stack(np.meshgrid(width, height), axis=0).reshape(2, 1, grid_size, grid_size)
     return np.concatenate(
         (
             _sine_cosine(embed_dim // 2, grid[0]),
@@ -84,9 +80,7 @@ class FlashAttention(nn.Module):
             self.q_layernorm = nn.LayerNorm(head_dim)
             self.k_layernorm = nn.LayerNorm(head_dim)
 
-    def forward(
-        self, q_in: torch.Tensor, kv_in: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, q_in: torch.Tensor, kv_in: torch.Tensor) -> torch.Tensor:
         batch_size, query_count, embed_dim = q_in.shape
         key_count = kv_in.shape[1]
 
@@ -117,9 +111,7 @@ class FlashAttention(nn.Module):
             key = self.k_layernorm(key)
 
         output = F.scaled_dot_product_attention(query, key, value)
-        output = output.transpose(1, 2).reshape(
-            batch_size, query_count, embed_dim
-        )
+        output = output.transpose(1, 2).reshape(batch_size, query_count, embed_dim)
         return self.dropout(self.proj(output))
 
 
@@ -158,9 +150,7 @@ class MAPBlock(nn.Module):
         if do_swish_glu:
             hidden_layer = SwishGLU(embed_dim, hidden_dim)
         else:
-            hidden_layer = nn.Sequential(
-                nn.Linear(embed_dim, hidden_dim), nn.GELU()
-            )
+            hidden_layer = nn.Sequential(nn.Linear(embed_dim, hidden_dim), nn.GELU())
         self.mlp = nn.Sequential(
             hidden_layer,
             nn.Linear(hidden_dim, embed_dim),

@@ -21,7 +21,7 @@ import sys
 import time
 import traceback
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -46,10 +46,10 @@ def expand(value, output_dir: Path):
     return value
 
 
-def hash_assets(assets: dict) -> dict:
+def asset_files(assets: dict) -> dict[str, Path]:
     if not assets:
         raise ValueError("Declare local input and checkpoint assets to pin the replay")
-    hashes = {}
+    inventory = {}
     for name, value in sorted(assets.items()):
         root = Path(value).expanduser().resolve()
         if not root.exists():
@@ -63,8 +63,121 @@ def hash_assets(assets: dict) -> dict:
             raise ValueError(f"Empty asset: {name}")
         for path in files:
             key = name if root.is_file() else f"{name}/{path.relative_to(root).as_posix()}"
-            hashes[key] = sha256(path)
+            inventory[key] = path
+    return inventory
+
+
+def verify_asset_inventory(actual: dict, expected: dict) -> None:
+    if actual.keys() != expected.keys():
+        missing = sorted(expected.keys() - actual.keys())
+        extra = sorted(actual.keys() - expected.keys())
+        raise ValueError(f"Replay asset inventory differs from accepted reference (missing={missing}, extra={extra})")
+
+
+def asset_identity(path: Path) -> tuple[int, int, int, int, int]:
+    stat = path.stat()
+    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+
+
+class PinnedAsset(NamedTuple):
+    path: Path
+    identity: tuple[int, int, int, int, int]
+    digest: str
+
+    def checked_digest(self, path: Path) -> str:
+        if path != self.path or asset_identity(path) != self.identity:
+            raise ValueError(f"Pinned asset changed during replay validation: {path}")
+        return self.digest
+
+
+def hash_assets(
+    assets: dict, expected: dict[str, str] | None = None, *, pinned: dict[str, PinnedAsset] | None = None
+) -> dict[str, str]:
+    files = asset_files(assets)
+    if expected is not None:
+        verify_asset_inventory(files, expected)
+    pinned = pinned or {}
+    if not pinned.keys() <= files.keys():
+        raise ValueError("Pinned asset files changed during replay validation")
+    pins_by_path = {pin.path: pin for pin in pinned.values()}
+    hashes = {}
+    for name, path in files.items():
+        resolved = path.resolve() if pinned else path
+        pin = pinned.get(name) or pins_by_path.get(resolved)
+        actual = pin.checked_digest(resolved) if pin is not None else sha256(path)
+        if expected is not None and actual != expected[name]:
+            raise ValueError(f"Replay asset SHA256 differs from accepted reference: {name}")
+        hashes[name] = actual
     return hashes
+
+
+def verify_asset_pins(case: dict) -> dict[str, PinnedAsset]:
+    """Check operator-pinned input files before checkpoint hashing or model loading."""
+    pinned = {}
+    pins_by_path = {}
+    for name, expected in case.get("asset_sha256", {}).items():
+        if name not in case["assets"]:
+            raise ValueError(f"SHA256 pin needs a declared asset: {name}")
+        if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+            raise ValueError(f"Asset needs a SHA256 pin: {name}")
+        path = Path(case["assets"][name]).expanduser().resolve()
+        pin = pins_by_path.get(path)
+        if pin is None:
+            pin = PinnedAsset(path, asset_identity(path), sha256(path))
+            pins_by_path[path] = pin
+        if pin.checked_digest(path) != expected:
+            raise ValueError(f"Asset SHA256 differs: {name}")
+        pinned[name] = pin
+    return pinned
+
+
+def relocate_observation_paths(value: Any, original: Path, local: Path, declared: set[Path]) -> Any:
+    """Resolve archived observation file references against the local declared assets."""
+    if isinstance(value, dict):
+        return {key: relocate_observation_paths(item, original, local, declared) for key, item in value.items()}
+    if isinstance(value, list):
+        return [relocate_observation_paths(item, original, local, declared) for item in value]
+    if not isinstance(value, str):
+        return value
+    archived = Path(value)
+    if not archived.is_relative_to(original):
+        return value
+
+    copied = (local / archived.relative_to(original)).resolve()
+    covered = any(
+        copied == asset
+        or (asset.is_dir() and copied.is_relative_to(asset) and ".cache" not in copied.relative_to(asset).parts)
+        for asset in declared
+    )
+    if not copied.is_relative_to(local) or not covered or not copied.is_file():
+        raise ValueError(f"Relocated observation file is missing or outside the declared input assets: {copied}")
+    return str(copied)
+
+
+def materialize_input_json(case: dict, output_dir: Path) -> dict:
+    """Load declared observation data only after verifying its required content pin."""
+    call = dict(case["call"])
+    declared = {Path(value).expanduser().resolve() for value in case["assets"].values()}
+    for argument, source in case.get("input_json", {}).items():
+        if argument in call:
+            raise ValueError(f"JSON input collides with an explicit call argument: {argument}")
+        path = Path(source["path"]).expanduser().resolve()
+        if path not in declared:
+            raise ValueError(f"JSON input is not a declared asset: {path}")
+        expected = source["sha256"]
+        if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+            raise ValueError(f"JSON input needs a SHA256 pin: {argument}")
+        if sha256(path) != expected:
+            raise ValueError(f"JSON input SHA256 differs: {argument}")
+        value = expand(json.loads(path.read_text(encoding="utf-8")), output_dir)
+        if original_root := os.environ.get("WORLDFOUNDRY_REGRESSION_ORIGINAL_INPUT_ROOT"):
+            original = Path(original_root)
+            local = Path(os.environ.get("WORLDFOUNDRY_REGRESSION_INPUT_ROOT", ""))
+            if not original.is_absolute() or not local.is_absolute():
+                raise ValueError("Archived and local observation input roots must be absolute")
+            value = relocate_observation_paths(value, original, local.resolve(), declared)
+        call[argument] = value
+    return call
 
 
 def collect_arrays(value, arrays: dict, key: str = "result") -> None:
@@ -111,6 +224,28 @@ def validate_arrays(arrays: dict, required: list[str]) -> None:
             raise ValueError(f"Empty or non-finite output: {key}")
 
 
+def prepare_projected_tracks(arrays: dict[str, np.ndarray], projected_tracks: dict[str, str]) -> None:
+    """Compare valid 3D coordinates and the exact mask of in-frame 2D tracks."""
+    for key, pixel_key in projected_tracks.items():
+        if key not in arrays or pixel_key not in arrays:
+            raise ValueError(f"Missing 3D tracks or corresponding 2D pixels: {key}")
+        xyz, pixels = arrays[key], arrays[pixel_key]
+        if (
+            pixels.ndim != 5
+            or pixels.shape[-1] != 2
+            or xyz.shape != (*pixels.shape[:-1], 3)
+            or not np.isfinite(pixels).all()
+        ):
+            raise ValueError(f"Invalid projected track shape or pixels: {key}")
+        height, width = pixels.shape[-3:-1]
+        x, y = pixels[..., 0], pixels[..., 1]
+        inside = (x >= 0) & (x <= width - 1) & (y >= 0) & (y <= height - 1)
+        if not inside.any() or not np.isfinite(xyz[inside]).all() or not np.isnan(xyz[~inside]).all():
+            raise ValueError(f"3D tracks must be finite in frame and NaN outside: {key}")
+        arrays[key] = np.where(inside[..., None], xyz, 0)
+        arrays[key + ".in_frame"] = inside
+
+
 def validate_contracts(arrays: dict, contracts: dict, comparisons: list[dict]) -> None:
     """Check geometry and request isolation independently of the reference run."""
     for key, contract in contracts.items():
@@ -148,6 +283,40 @@ def validate_contracts(arrays: dict, contracts: dict, comparisons: list[dict]) -
             raise ValueError(f"Output relation {relation} failed: {left}, {right}")
 
 
+def collect_output_fields(result: Any, arrays: dict, prefix: str, fields: list[str] | None) -> None:
+    """Select generated result fields without comparing unrelated runtime metadata."""
+    if fields is None:
+        collect_arrays(result, arrays, prefix)
+        return
+    if not isinstance(fields, list) or len(set(fields)) != len(fields):
+        raise ValueError(f"Invalid output selection: {prefix}")
+    for path in fields:
+        selected = result
+        for attribute in path.split("."):
+            selected = selected[attribute] if isinstance(selected, dict) else getattr(selected, attribute)
+        key = prefix + "." + path
+        if isinstance(selected, (str, Path)) and Path(selected).suffix.lower() in {
+            ".npy",
+            ".npz",
+            ".splat",
+            ".ply",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".json",
+            ".mp4",
+            ".webm",
+            ".mov",
+            ".mkv",
+        }:
+            artifact = Path(selected)
+            exported_prefix = "export." + artifact.name
+            for exported_key, value in exported_arrays(artifact.parent, [str(artifact)]).items():
+                arrays[key + exported_key.removeprefix(exported_prefix)] = value
+        else:
+            collect_arrays(selected, arrays, key)
+
+
 def run_sequence(pipeline, sequence: list[dict], arrays: dict) -> list[dict]:
     """Exercise one resident model, including failures, reset and A/B/A requests."""
     if not isinstance(sequence, list) or not sequence:
@@ -182,42 +351,40 @@ def run_sequence(pipeline, sequence: list[dict], arrays: dict) -> list[dict]:
         if expected is not None:
             raise ValueError(f"Expected inference failure did not occur: {name}")
         step_arrays = {}
-        outputs = step.get("outputs")
-        if outputs is None:
-            collect_arrays(result, step_arrays, name)
-        else:
-            if not isinstance(outputs, list) or len(set(outputs)) != len(outputs):
-                raise ValueError(f"Invalid output selection: {name}")
-            for path in outputs:
-                selected = result
-                for attribute in path.split("."):
-                    selected = selected[attribute] if isinstance(selected, dict) else getattr(selected, attribute)
-                key = name + "." + path
-                if isinstance(selected, (str, Path)) and Path(selected).suffix.lower() in {
-                    ".npy",
-                    ".npz",
-                    ".splat",
-                    ".ply",
-                    ".png",
-                    ".jpg",
-                    ".jpeg",
-                    ".json",
-                    ".mp4",
-                    ".webm",
-                    ".mov",
-                    ".mkv",
-                }:
-                    artifact = Path(selected)
-                    prefix = "export." + artifact.name
-                    for exported_key, value in exported_arrays(artifact.parent, [str(artifact)]).items():
-                        step_arrays[key + exported_key.removeprefix(prefix)] = value
-                else:
-                    collect_arrays(selected, step_arrays, key)
+        collect_output_fields(result, step_arrays, name, step.get("outputs"))
         # Some resident runtimes return views of reusable CPU buffers. Preserve
         # each response now so later requests cannot rewrite the earlier evidence.
         arrays.update({key: value.copy() for key, value in step_arrays.items()})
         events.append({"name": name, "status": "passed"})
     return events
+
+
+def emu35_story_arrays(path: Path, key: str) -> dict[str, np.ndarray]:
+    """Decode generated Story content, excluding the question and reference images."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    from worldfoundry.synthesis.visual_generation.emu35.emu35_runtime.src.proto import emu_pb
+
+    story = getattr(emu_pb, "Story")()
+    story.ParseFromString(path.read_bytes())
+    arrays = {}
+    for clip_index, clip in enumerate(story.clips):
+        for segment_index, segment in enumerate(clip.segments):
+            suffix = f"{clip_index}.{segment_index}"
+            if segment.asr:
+                arrays[f"{key}.text.{suffix}"] = np.frombuffer(segment.asr.encode("utf-8"), dtype=np.uint8).copy()
+            for image_index, metadata in enumerate(segment.images):
+                if not metadata.image.image_data:
+                    raise ValueError("Emu3.5 generated image has no PNG payload")
+                with Image.open(BytesIO(metadata.image.image_data)) as image:
+                    arrays[f"{key}.images.{suffix}.{image_index}"] = np.asarray(image).copy()
+    if not any(name.startswith(key + ".text.") for name in arrays) or not any(
+        name.startswith(key + ".images.") for name in arrays
+    ):
+        raise ValueError("Emu3.5 Story must contain generated clip text and images")
+    return arrays
 
 
 def exported_arrays(root: Path, files: list[str]) -> dict:
@@ -245,9 +412,21 @@ def exported_arrays(root: Path, files: list[str]) -> dict:
             from PIL import Image
 
             with Image.open(path) as image:
+                expected_format = "PNG" if path.suffix.lower() == ".png" else "JPEG"
+                if image.format != expected_format:
+                    raise ValueError(f"Expected {expected_format} image, got {image.format}: {path}")
                 collect_arrays(np.asarray(image), arrays, key)
         elif path.suffix == ".json":
             collect_arrays(json.loads(path.read_text()), arrays, key)
+        elif path.suffix == ".pb":
+            arrays.update(emu35_story_arrays(path, key))
+        elif path.suffix == ".flac":
+            import soundfile
+
+            samples, sample_rate = soundfile.read(path, dtype="int32", always_2d=True)
+            collect_arrays(samples, arrays, key + ".samples")
+            collect_arrays(np.array([sample_rate], dtype=np.int64), arrays, key + ".sample_rate")
+            collect_arrays(np.array([samples.shape[1]], dtype=np.int64), arrays, key + ".channels")
         elif path.suffix.lower() in {".mp4", ".webm", ".mov", ".mkv"}:
             import av
 
@@ -261,6 +440,53 @@ def exported_arrays(root: Path, files: list[str]) -> dict:
                     raise ValueError(f"Video has no decodable frames: {path}")
                 collect_arrays(np.stack(frames), arrays, key + ".frames")
                 collect_arrays(np.array([rate.numerator, rate.denominator], dtype=np.int64), arrays, key + ".fps")
+    return arrays
+
+
+def exported_text_arrays(root: Path, fields: dict[str, list[str]]) -> dict[str, np.ndarray]:
+    """Capture only explicitly selected generated-text fields from JSON artifacts."""
+    arrays = {}
+    for relative, selected in fields.items():
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts or path.suffix != ".json":
+            raise ValueError(f"Text output must name a relative JSON artifact: {relative}")
+        if not isinstance(selected, list) or not selected or len(set(selected)) != len(selected):
+            raise ValueError(f"Text output needs distinct field paths: {relative}")
+        payload = json.loads((root / path).read_text())
+        for field in selected:
+            value = payload
+            for name in field.split("."):
+                value = value[name]
+            if not isinstance(value, str):
+                raise ValueError(f"Text output is not a string: {relative}:{field}")
+            arrays[f"text.{relative}.{field}"] = np.frombuffer(value.encode("utf-8"), dtype=np.uint8).copy()
+    return arrays
+
+
+def exported_audio_arrays(root: Path, files: list[str]) -> dict[str, np.ndarray]:
+    """Decode only selected video soundtracks as exact float32 PCM and stream metadata."""
+    arrays = {}
+    for relative in files:
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts or path.suffix.lower() not in {".mp4", ".mov", ".webm", ".mkv"}:
+            raise ValueError(f"Audio output must name a relative video artifact: {relative}")
+        import av
+
+        with av.open(str(root / path)) as container:
+            if not container.streams.audio:
+                raise ValueError(f"Required generated soundtrack is missing: {relative}")
+            stream = container.streams.audio[0]
+            rate = stream.codec_context.sample_rate
+            resampler = av.AudioResampler(format="fltp", layout=stream.layout, rate=rate)
+            chunks = [part.to_ndarray() for frame in container.decode(stream) for part in resampler.resample(frame)]
+            chunks.extend(part.to_ndarray() for part in resampler.resample(None))
+            if not chunks:
+                raise ValueError(f"Generated soundtrack has no decoded samples: {relative}")
+            key = "audio." + relative
+            arrays[key + ".samples"] = np.concatenate(chunks, axis=-1)
+            arrays[key + ".sample_rate"] = np.array([rate], dtype=np.int64)
+            arrays[key + ".channels"] = np.array([len(stream.layout.channels)], dtype=np.int64)
+            arrays[key + ".layout"] = np.frombuffer(stream.layout.name.encode("utf-8"), dtype=np.uint8).copy()
     return arrays
 
 
@@ -286,7 +512,14 @@ def runtime_metadata(torch) -> dict:
     }
 
 
-def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str | None = None) -> dict:
+def run_case(
+    case_file: Path,
+    source_root: Path,
+    output_dir: Path,
+    case_id: str | None = None,
+    *,
+    accepted_manifest: Path | None = None,
+) -> dict:
     # Refuse to overwrite evidence, particularly an approved reference run.
     output_dir.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
@@ -315,14 +548,25 @@ def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str 
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
+        requires_gpu = case.get("requires_gpu", False)
+        if not isinstance(requires_gpu, bool):
+            raise ValueError("requires_gpu must be a boolean")
+        if requires_gpu and not torch.cuda.is_available():
+            raise RuntimeError("This replay case requires CUDA")
         resolved = expand(case, output_dir)
-        manifest["assets"] = hash_assets(resolved["assets"])
+        pinned = verify_asset_pins(resolved)
+        if resolved.get("input_json"):
+            if "sequence" in resolved:
+                raise ValueError("JSON inputs require a single explicit call")
+            resolved["call"] = materialize_input_json(resolved, output_dir)
+        accepted_assets = None if accepted_manifest is None else json.loads(accepted_manifest.read_text())["assets"]
+        manifest["assets"] = hash_assets(resolved["assets"], accepted_assets, pinned=pinned)
         module_name, class_name = resolved["target"].split(":")
         module = importlib.import_module(module_name)
         if module.__file__ is None or not Path(module.__file__).resolve().is_relative_to(source_root):
             raise RuntimeError("The requested source tree was not imported")
         pipeline = getattr(module, class_name).from_pretrained(**resolved["load"])
-        arrays = {}
+        arrays: dict[str, Any] = {}
         for model_path in resolved.get("capture_modules", []):
             model = pipeline
             for attribute in model_path.split("."):
@@ -339,7 +583,7 @@ def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str 
         else:
             method = getattr(pipeline, resolved.get("method", "__call__"))
             result = method(**resolved["call"])
-            collect_arrays(result, arrays)
+            collect_output_fields(result, arrays, "result", resolved.get("result_outputs"))
             for name, extra in resolved.get("extra_calls", {}).items():
                 collect_arrays(getattr(pipeline, extra["method"])(**extra["call"]), arrays, name)
         if resolved.get("save", False):
@@ -372,9 +616,13 @@ def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str 
                     arrays.update({name.replace("export.", "artifact.", 1): value for name, value in decoded.items()})
                 else:
                     raise ValueError(f"Unsupported numerical artifact: {path}")
+        arrays.update(exported_text_arrays(output_dir, resolved.get("text_outputs", {})))
+        arrays.update(exported_audio_arrays(output_dir, resolved.get("audio_outputs", [])))
         exports = exported_arrays(output_dir, manifest.get("exported_files", []))
-        validate_arrays({**arrays, **exports}, resolved["required_outputs"])
-        validate_contracts({**arrays, **exports}, resolved.get("array_contracts", {}), resolved.get("comparisons", []))
+        outputs = {**arrays, **exports}
+        prepare_projected_tracks(outputs, resolved.get("projected_tracks", {}))
+        validate_arrays(outputs, resolved["required_outputs"])
+        validate_contracts(outputs, resolved.get("array_contracts", {}), resolved.get("comparisons", []))
         np.savez_compressed(output_dir / "arrays.npz", **arrays)
         sources = {}
         for imported in list(sys.modules.values()):
@@ -406,7 +654,35 @@ def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str 
     return manifest
 
 
-def compare_runs(reference: Path, candidate: Path, *, atol: float = 0, rtol: float = 0) -> dict:
+def accepted_export_paths(root: Path, exports: list[str], verified_files: set[str]) -> list[str]:
+    """Locate immutable exports in an already verified reference inventory."""
+    if not exports:
+        return []
+    paths = [Path(path) for path in exports]
+    possible_roots: set[Path] | None = None
+    for path in paths:
+        if not path.is_absolute() or ".." in path.parts:
+            raise ValueError(f"Invalid accepted export path: {path}")
+        ancestors = (root,) if path.is_relative_to(root) else path.parents
+        matching = {parent for parent in ancestors if path.relative_to(parent).as_posix() in verified_files}
+        possible_roots = matching if possible_roots is None else possible_roots & matching
+    if not possible_roots or len(possible_roots) != 1:
+        raise ValueError("Accepted exports do not identify one root in the verified reference inventory")
+    original_root = next(iter(possible_roots))
+    resolved = [str(root / path.relative_to(original_root)) for path in paths]
+    if len(set(resolved)) != len(resolved):
+        raise ValueError("Accepted export paths contain duplicates")
+    return resolved
+
+
+def compare_runs(
+    reference: Path,
+    candidate: Path,
+    *,
+    atol: float = 0,
+    rtol: float = 0,
+    verified_reference_exports: list[str] | None = None,
+) -> dict:
     reference, candidate = reference.resolve(), candidate.resolve()
     if not np.isfinite([atol, rtol]).all() or atol < 0 or rtol < 0:
         raise ValueError("Tolerances must be finite and nonnegative")
@@ -420,7 +696,7 @@ def compare_runs(reference: Path, candidate: Path, *, atol: float = 0, rtol: flo
     for key in ("case", "assets", "runtime"):
         if meta_a[key] != meta_b[key]:
             raise ValueError(f"Replay conditions differ: {key}")
-    exports_a = meta_a.get("exported_files", [])
+    exports_a = meta_a.get("exported_files", []) if verified_reference_exports is None else verified_reference_exports
     exports_b = meta_b.get("exported_files", [])
     if sorted(Path(p).relative_to(reference).as_posix() for p in exports_a) != sorted(
         Path(p).relative_to(candidate).as_posix() for p in exports_b
@@ -433,8 +709,21 @@ def compare_runs(reference: Path, candidate: Path, *, atol: float = 0, rtol: flo
     ):
         if set(left.files) != set(right.files):
             raise ValueError("Numerical output keys differ or are empty")
-        arrays_a = {**dict(left), **exported_arrays(reference, exports_a)}
-        arrays_b = {**dict(right), **exported_arrays(candidate, exports_b)}
+        arrays_a = {
+            **dict(left),
+            **exported_arrays(reference, exports_a),
+            **exported_text_arrays(reference, meta_a["case"].get("text_outputs", {})),
+            **exported_audio_arrays(reference, meta_a["case"].get("audio_outputs", [])),
+        }
+        arrays_b = {
+            **dict(right),
+            **exported_arrays(candidate, exports_b),
+            **exported_text_arrays(candidate, meta_b["case"].get("text_outputs", {})),
+            **exported_audio_arrays(candidate, meta_b["case"].get("audio_outputs", [])),
+        }
+        projected_tracks = meta_a["case"].get("projected_tracks", {})
+        prepare_projected_tracks(arrays_a, projected_tracks)
+        prepare_projected_tracks(arrays_b, projected_tracks)
         if not arrays_a or not arrays_b:
             raise ValueError("Numerical output keys differ or are empty")
         if arrays_a.keys() != arrays_b.keys():
@@ -445,9 +734,13 @@ def compare_runs(reference: Path, candidate: Path, *, atol: float = 0, rtol: flo
                 raise ValueError(f"Output shape or dtype changed: {key}")
             validate_arrays({key: a}, [])
             validate_arrays({key: b}, [])
-            # Masks, images, counts and IDs must remain exact even with float tolerances.
+            # Discrete outputs and selected decoded soundtracks remain exact with float tolerances.
             exact = np.array_equal(a, b)
-            passed = exact if a.dtype.kind in "biu" else bool(np.allclose(b, a, atol=atol, rtol=rtol, equal_nan=False))
+            passed = (
+                exact
+                if a.dtype.kind in "biu" or key.startswith("audio.")
+                else bool(np.allclose(b, a, atol=atol, rtol=rtol, equal_nan=False))
+            )
             dtype = np.complex128 if a.dtype.kind == "c" else np.float64
             delta = np.abs(b.astype(dtype) - a.astype(dtype))
             report["outputs"][key] = {
@@ -461,7 +754,15 @@ def compare_runs(reference: Path, candidate: Path, *, atol: float = 0, rtol: flo
     return report
 
 
-def audit_matrix(matrix: Path, reference: Path, candidate: Path, source_root: Path, case_ids: list[str]) -> dict:
+def audit_matrix(
+    matrix: Path,
+    reference: Path,
+    candidate: Path,
+    source_root: Path,
+    case_ids: list[str],
+    *,
+    verified_reference_exports: dict[str, list[str]] | None = None,
+) -> dict:
     cases = json.loads(matrix.read_text())
     selected = case_ids or list(cases)
     report = {"status": "passed", "cases": {}}
@@ -483,7 +784,8 @@ def audit_matrix(matrix: Path, reference: Path, candidate: Path, source_root: Pa
                     hashes[path] = sha256(source_root / path)
                 if hashes[path] != expected:
                     raise ValueError(f"Inference evidence is stale: {path}")
-            result = compare_runs(reference / name, candidate / name)
+            exports = verified_reference_exports[name] if verified_reference_exports is not None else None
+            result = compare_runs(reference / name, candidate / name, verified_reference_exports=exports)
         except (ValueError, OSError, KeyError, ImportError) as exc:
             result = {"status": "failed", "error": str(exc)}
         report["cases"][name] = result
@@ -502,6 +804,7 @@ def main() -> int:
     run.add_argument("--case-id", help="Select a case from the published case matrix")
     run.add_argument("--source-root", type=Path, required=True)
     run.add_argument("--output-dir", type=Path, required=True)
+    run.add_argument("--accepted-manifest", type=Path)
     compare = commands.add_parser("compare")
     compare.add_argument("--reference", type=Path, required=True)
     compare.add_argument("--candidate", type=Path, required=True)
@@ -517,7 +820,13 @@ def main() -> int:
     audit.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "run":
-        report = run_case(args.case.resolve(), args.source_root.resolve(), args.output_dir.resolve(), args.case_id)
+        report = run_case(
+            args.case.resolve(),
+            args.source_root.resolve(),
+            args.output_dir.resolve(),
+            args.case_id,
+            accepted_manifest=args.accepted_manifest,
+        )
         print(
             json.dumps({key: report[key] for key in ("status", "elapsed_seconds", "error") if key in report}),
             flush=True,

@@ -80,6 +80,4 @@ def test_bf16_mutating_kernel_preserves_alias_version_and_eager_bits(
     assert torch.equal(actual, expected)
     dispatches = receipt["dispatches"]
     assert isinstance(dispatches, list)
-    assert dispatches[-1]["implementation"] == (
-        "triton_residual_gate_add_inplace"
-    )
+    assert dispatches[-1]["implementation"] == ("triton_residual_gate_add_inplace")

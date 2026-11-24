@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
+from typing import cast
 
 import torch
 
@@ -131,16 +132,16 @@ class EasyCache:
         # Snapshot even FP32 views: schedulers/callers may mutate their inputs.
         return value.detach().reshape(value.shape[0], -1)[:, :: self.config.subsample_stride].float().clone()
 
-    def run_blocks(
+    def _run_whole_stack(
         self,
         step: int,
         value: torch.Tensor,
-        run_block: Callable[[int, torch.Tensor], torch.Tensor],
+        execute_dense: Callable[[torch.Tensor], torch.Tensor],
         *,
         block_count: int,
         total_steps: int | None = None,
-    ) -> torch.Tensor:
-        """Run or reuse the whole stack; dense execution returns its original output."""
+    ) -> tuple[torch.Tensor, bool]:
+        """Run or reuse the whole stack via ``execute_dense``; dense execution returns its original output."""
         count = self.total_steps if total_steps is None else total_steps
         if (
             isinstance(step, bool)
@@ -184,20 +185,18 @@ class EasyCache:
             elif self._skips >= self.config.max_skip_steps:
                 reason = "max-skip"
         if reason is None:
-            delta = (probe - self._previous_input).abs().mean(dim=1)
-            norm = self._dense_output.abs().mean(dim=1).clamp_min(self.config.eps)
-            estimate = float((self._factor * delta / norm).max().item())
+            delta = (probe - cast(torch.Tensor, self._previous_input)).abs().mean(dim=1)
+            norm = cast(torch.Tensor, self._dense_output).abs().mean(dim=1).clamp_min(self.config.eps)
+            estimate = float((cast(torch.Tensor, self._factor) * delta / norm).max().item())
             self._accumulator += estimate
             if not math.isfinite(self._accumulator) or self._accumulator >= self.config.threshold:
                 reason = "threshold"
         hit = reason is None
         if hit:
-            output = value + self._residual
+            output = value + cast(torch.Tensor, self._residual)
             self._skips += 1
         else:
-            output = value
-            for index in range(block_count):
-                output = run_block(index, output)
+            output = execute_dense(value)
             if output.shape != value.shape or output.device != value.device or output.dtype != value.dtype:
                 raise ValueError("EasyCache block output must preserve input shape, device and dtype")
             output_probe = self._probe(output)
@@ -205,7 +204,9 @@ class EasyCache:
             if finite and not torch.is_grad_enabled() and output_finite:
                 if self._dense_input is not None:
                     input_delta = (probe - self._dense_input).abs().mean(dim=1).clamp_min(self.config.eps)
-                    self._factor = (output_probe - self._dense_output).abs().mean(dim=1) / input_delta
+                    self._factor = (output_probe - cast(torch.Tensor, self._dense_output)).abs().mean(
+                        dim=1
+                    ) / input_delta
                 self._dense_input, self._dense_output = probe, output_probe
                 self._residual = (output - value).detach().clone()
                 self._layout = layout
@@ -227,7 +228,51 @@ class EasyCache:
                 self._accumulator,
             )
         )
+        return output, hit
+
+    def run_blocks(
+        self,
+        step: int,
+        value: torch.Tensor,
+        run_block: Callable[[int, torch.Tensor], torch.Tensor],
+        *,
+        block_count: int,
+        total_steps: int | None = None,
+    ) -> torch.Tensor:
+        """Run or reuse the whole stack; dense execution returns its original output."""
+
+        def _execute_blocks(hidden: torch.Tensor) -> torch.Tensor:
+            output = hidden
+            for index in range(block_count):
+                output = run_block(index, output)
+            return output
+
+        output, _ = self._run_whole_stack(
+            step,
+            value,
+            _execute_blocks,
+            block_count=block_count,
+            total_steps=total_steps,
+        )
         return output
+
+    def run_stack(
+        self,
+        step: int,
+        value: torch.Tensor,
+        run_stack_fn: Callable[[torch.Tensor], torch.Tensor],
+        *,
+        block_count: int,
+        total_steps: int | None = None,
+    ) -> tuple[torch.Tensor, bool]:
+        """Run or reuse the whole stack via a stack-level callback, returning ``(output, hit)``."""
+        return self._run_whole_stack(
+            step,
+            value,
+            run_stack_fn,
+            block_count=block_count,
+            total_steps=total_steps,
+        )
 
     @property
     def dense_block_calls(self) -> int:

@@ -6,7 +6,6 @@ import argparse
 import json
 from pathlib import Path
 
-
 NEGATIVE_PROMPT = (
     "static, motion blur, low resolution, grainy, pixelated, poorly lit, "
     "choppy motion, artifacts, unnatural transitions, visual noise, flickering"
@@ -85,15 +84,17 @@ def _local_text_encoder(model_dir: Path, *, device, dtype, max_length: int):
         def __init__(self) -> None:
             super().__init__()
             self.max_length = max_length
-            self.tokenizer = T5TokenizerFast.from_pretrained(
-                model_dir, local_files_only=True
+            self.tokenizer = T5TokenizerFast.from_pretrained(model_dir, local_files_only=True)
+            self.text_encoder = (
+                T5EncoderModel.from_pretrained(
+                    model_dir,
+                    dtype=dtype,
+                    local_files_only=True,
+                    low_cpu_mem_usage=True,
+                )
+                .to(device=device, dtype=dtype)
+                .eval()
             )
-            self.text_encoder = T5EncoderModel.from_pretrained(
-                model_dir,
-                dtype=dtype,
-                local_files_only=True,
-                low_cpu_mem_usage=True,
-            ).to(device=device, dtype=dtype).eval()
 
         @property
         def device(self):
@@ -145,9 +146,9 @@ def _condition_image(path: Path, *, height: int, width: int):
         resized_width = round(height / image_height * image_width)
     left = (resized_width - width) // 2
     top = (resized_height - height) // 2
-    return image.resize(
-        (resized_width, resized_height), resample=Image.Resampling.BILINEAR
-    ).crop((left, top, left + width, top + height))
+    return image.resize((resized_width, resized_height), resample=Image.Resampling.BILINEAR).crop(
+        (left, top, left + width, top + height)
+    )
 
 
 def run(args: argparse.Namespace) -> Path:
@@ -179,15 +180,13 @@ def run(args: argparse.Namespace) -> Path:
                 "neighborhood_attention_generic; install the source-compatible release for this Torch runtime"
             )
 
-    dtype = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}[
-        args.mixed_precision
-    ]
+    dtype = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}[args.mixed_precision]
     device = torch.device(args.device)
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     torch.backends.cuda.matmul.allow_tf32 = True
 
-    transformer_config = _transformer_config(
+    _transformer_config(
         args.transformer_model_dir,
         attention_backend=args.attention_backend,
     )
@@ -200,12 +199,16 @@ def run(args: argparse.Namespace) -> Path:
             max_length=args.max_text_length,
         )
         print("Loading local Wan Diffusers VAE...")
-        vae = AutoencoderKLWan.from_pretrained(
-            args.vae_model_dir,
-            torch_dtype=dtype,
-            local_files_only=True,
-            low_cpu_mem_usage=True,
-        ).to(device=device, dtype=dtype).eval()
+        vae = (
+            AutoencoderKLWan.from_pretrained(
+                args.vae_model_dir,
+                torch_dtype=dtype,
+                local_files_only=True,
+                low_cpu_mem_usage=True,
+            )
+            .to(device=device, dtype=dtype)
+            .eval()
+        )
         vae.enable_slicing()
         vae.enable_tiling()
 
@@ -217,10 +220,14 @@ def run(args: argparse.Namespace) -> Path:
         }
         if args.attention_backend == "torch":
             transformer_load_kwargs["natten_parameters"] = None
-        transformer = components.transformer_class.from_pretrained(
-            args.transformer_model_dir,
-            **transformer_load_kwargs,
-        ).to(device=device, dtype=dtype).eval()
+        transformer = (
+            components.transformer_class.from_pretrained(
+                args.transformer_model_dir,
+                **transformer_load_kwargs,
+            )
+            .to(device=device, dtype=dtype)
+            .eval()
+        )
         scheduler = components.scheduler_class(
             prediction_type="rf",
             solver_order=1,

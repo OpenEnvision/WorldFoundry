@@ -1,5 +1,4 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> pixelsplat -> src -> misc -> sh_rotation.py functionality."""
-
+# ruff: noqa: F722 - jaxtyping dimension strings in annotations.
 from math import isqrt
 
 import torch
@@ -13,15 +12,6 @@ def rotate_sh(
     sh_coefficients: Float[Tensor, "*#batch n"],
     rotations: Float[Tensor, "*#batch 3 3"],
 ) -> Float[Tensor, "*batch n"]:
-    """Rotate sh.
-
-    Args:
-        sh_coefficients: The sh coefficients.
-        rotations: The rotations.
-
-    Returns:
-        The return value.
-    """
     device = sh_coefficients.device
     dtype = sh_coefficients.dtype
 
@@ -56,15 +46,6 @@ if __name__ == "__main__":
     coefficients = torch.rand((degree + 1) ** 2, dtype=torch.float32, device=device)
 
     def plot_sh(sh_coefficients, path: Path) -> None:
-        """Plot sh.
-
-        Args:
-            sh_coefficients: The sh coefficients.
-            path: The path.
-
-        Returns:
-            The return value.
-        """
         phi = torch.linspace(0, torch.pi, 100, device=device)
         theta = torch.linspace(0, 2 * torch.pi, 100, device=device)
         phi, theta = torch.meshgrid(phi, theta, indexing="xy")
@@ -93,9 +74,7 @@ if __name__ == "__main__":
         plt.savefig(path)
 
     for i, angle in enumerate(torch.linspace(0, 2 * torch.pi, 30)):
-        rotation = torch.tensor(
-            R.from_euler("x", angle.item()).as_matrix(), device=device
-        )
+        rotation = torch.tensor(R.from_euler("x", angle.item()).as_matrix(), device=device)
         plot_sh(rotate_sh(coefficients, rotation), Path(f"sh_rotation/{i:0>3}.png"))
 
     print("Done!")

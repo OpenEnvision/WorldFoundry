@@ -3,6 +3,7 @@ import { BenchmarkPaperFigures } from '@/components/benchmark-paper-figures';
 import {
   getBenchmarkLeaderboard,
   leaderboardColumns,
+  localizedColumnLabel,
   localizedEmptyReason,
   localizedLiveLabel,
   localizedPaperExtra,
@@ -20,6 +21,7 @@ const copy = {
   en: {
     live: 'Live',
     liveNote: 'Official live board, embedded on this page. Not WorldFoundry-run scores.',
+    liveLinkNote: 'Official live board on the authors\' site. Not WorldFoundry-run scores.',
     openLive: 'Open live board',
     embedFailed:
       'This live board refused to embed, or the official Space is sleeping. Official paper figure and table below; open the live source for updates.',
@@ -31,6 +33,7 @@ const copy = {
   zh: {
     live: '实时',
     liveNote: '官方实时榜，嵌在本页。不是 WorldFoundry 跑分。',
+    liveLinkNote: '官方实时榜位于作者站点。不是 WorldFoundry 跑分。',
     openLive: '打开实时榜',
     embedFailed: '实时榜拒绝嵌入，或官方 Space 处于休眠。下面是官方论文图与表；更新请看实时源。',
     paperNote: '论文报告结果（非实时榜；不是 WorldFoundry 跑分）。',
@@ -85,7 +88,7 @@ function DetailTable({
             <th scope="col">{t.model}</th>
             {columns.map((column) => (
               <th key={column.id} scope="col">
-                {locale === 'zh' ? column.labelZh || column.label : column.label}
+                {localizedColumnLabel(column, locale)}
               </th>
             ))}
           </tr>
@@ -226,10 +229,7 @@ export function BenchmarkLeaderboard({
     if (embedSrcs.length === 0) {
       return (
         <>
-          <p className="wf-benchmark-board-note">
-            {t.embedFailed}
-            {liveLabel ? <> {liveLabel}.</> : null}
-          </p>
+          <p className="wf-benchmark-board-note">{t.liveLinkNote}</p>
           {fallback}
         </>
       );

@@ -18,8 +18,8 @@ from collections.abc import Mapping
 import torch
 from safetensors import safe_open
 
-from worldfoundry.core.model_loading import load_torch_state_dict
 from worldfoundry.core.io.filesystem.storage import read_text_uri
+from worldfoundry.core.model_loading.checkpoints.file import load_torch_state_dict
 
 # ──────────────────────────────────────────────────────────────────────────
 # Index expansion — flatten sharded safetensors.json into unique shard paths
@@ -140,7 +140,7 @@ class DiskMap(Mapping):
         self.flush_files()
         self.name_map = {}
         for file_id, file in enumerate(self.files):
-            for name in file.keys():
+            for name in file.keys():  # noqa: SIM118  # safetensors handles are not iterable
                 self.name_map[name] = file_id
         self.rename_dict = self.fetch_rename_dict(state_dict_converter)
 
@@ -184,13 +184,28 @@ class DiskMap(Mapping):
             self.flush_files()
         return param
 
+    def tensor_metadata(self, name: str) -> tuple[torch.dtype, tuple[int, ...]]:
+        """Read lookup dtype and shape without materializing safetensors payloads."""
+        from safetensors.torch import _getdtype
+
+        if self.rename_dict is not None:
+            name = self.rename_dict[name]
+        reader = self.files[self.name_map[name]]
+        if isinstance(reader, SafetensorsCompatibleBinaryLoader):
+            tensor = reader.get_tensor(name)
+            dtype, shape = tensor.dtype, tuple(tensor.shape)
+        else:
+            view = reader.get_slice(name)
+            dtype, shape = _getdtype(view.get_dtype()), tuple(view.get_shape())
+        return self.torch_dtype or dtype, shape
+
     def fetch_rename_dict(self, state_dict_converter):
         """Build the optional model-key to checkpoint-key mapping."""
         if state_dict_converter is None:
             return None
         state_dict = {}
         for file in self.files:
-            for name in file.keys():
+            for name in file.keys():  # noqa: SIM118  # safetensors handles are not iterable
                 state_dict[name] = name
         state_dict = state_dict_converter(state_dict)
         return state_dict

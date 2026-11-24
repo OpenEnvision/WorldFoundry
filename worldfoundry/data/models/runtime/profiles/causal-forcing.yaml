@@ -7,30 +7,31 @@ groups:
 - autoregressive_video
 source_repos:
 - url: https://github.com/thu-ml/Causal-Forcing
+  revision: a67b81351d6dd50c1a1215f5958ee5a7c95eb135
 checkpoints:
 - role: causal_forcing_chunkwise
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Causal-Forcing/chunkwise/causal_forcing.pt
+  repo_id: zhuhz22/Causal-Forcing
+  revision: 2f8eb8bb6eeb1238da9d13e5420d342a74d634a6
+  filename: chunkwise/causal_forcing.pt
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/zhuhz22--Causal-Forcing/chunkwise/causal_forcing.pt
 - role: wan2_1_t2v_1_3b
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-1.3B
-- role: wan2_1_t2v_14b
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-14B
+  repo_id: Wan-AI/Wan2.1-T2V-1.3B
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan-AI--Wan2.1-T2V-1.3B
 input_schema:
   prompt: true
   image: true
   video: false
-  actions:
-  - seed
 artifact_kind: generated_video
 artifact_filename: causal-forcing.mp4
 execution:
-  backend_stage: official_in_tree_runtime
-  runtime_status: official_demo_parity_pending
+  backend_stage: native_diffusion
+  runtime_status: all_released_checkpoints_gpu_validated
   integration_status: integrated
   pipeline_binding: causal-forcing
 integration:
   status: integrated
 notes:
-- WorldFoundry vendors the infer-only Causal-Forcing runtime under worldfoundry/synthesis/visual_generation/forcing/causal_forcing_runtime.
-- Benchmark prompt lists live under worldfoundry/data/test_cases/forcing/prompts/ (override with WORLDFOUNDRY_FORCING_PROMPTS_ROOT).
-- The default local profile targets chunkwise/causal_forcing.pt. Override config_path/checkpoint_path
-  for frame-wise, Causal-Forcing++, or I2V variants.
+- NativeCausalForcingPipeline loads the chunk-wise native recipe by default; variant selects causal-forcing-framewise
+  (the image-to-video student), causal-forcing-framewise-1step or causal-forcing-framewise-2step.
+- Each variant reads its generator file from zhuhz22/Causal-Forcing under ${WORLDFOUNDRY_CKPT_DIR} or the Hub cache;
+  checkpoint_path or checkpoint_overrides selects other local files.

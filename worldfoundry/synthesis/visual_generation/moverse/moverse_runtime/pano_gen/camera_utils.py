@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from PIL import Image
+
 
 class Perspective:
     r"""Convert perspective image to equirectangular image.
@@ -13,7 +13,10 @@ class Perspective:
         img_height (int): The height of the output equirectangular image.
         crop_bound (bool): Whether to crop the boundary area of the image proportionally.
     """
-    def __init__(self, img_name=None, FOV=80, THETA=0, PHI=0, ROLL=0, img_width=512, img_height=512, crop_bound=False, vfov=True):
+
+    def __init__(
+        self, img_name=None, FOV=80, THETA=0, PHI=0, ROLL=0, img_width=512, img_height=512, crop_bound=False, vfov=True
+    ):
         # either img_name is provided, or img_width/img_height and img in function GetEquirec is provided
         self.crop_bound = crop_bound
         if img_name is not None:
@@ -25,8 +28,11 @@ class Perspective:
             [self._height, self._width, _] = self._img.shape
             # Crop the boundary area of the image proportionally
             if self.crop_bound:
-                self._img = self._img[int(
-                    self._height*0.05):int(self._height*0.95), int(self._width*0.05):int(self._width*0.95), :]
+                self._img = self._img[
+                    int(self._height * 0.05) : int(self._height * 0.95),
+                    int(self._width * 0.05) : int(self._width * 0.95),
+                    :,
+                ]
 
                 [self._height, self._width, _] = self._img.shape
         else:
@@ -49,7 +55,6 @@ class Perspective:
                 self.h_len = np.tan(np.radians(FOV / 2.0))
                 self.w_len = self.h_len * float(self._width) / self._height
 
-
         self.wFOV = np.degrees(2 * np.arctan(self.w_len))
         self.hFOV = np.degrees(2 * np.arctan(self.h_len))
 
@@ -60,8 +65,7 @@ class Perspective:
         if self._img is None:
             self._img = img
         # Calculate the equirectangular coordinates
-        x, y = np.meshgrid(np.linspace(-180, 180, width),
-                           np.linspace(90, -90, height))
+        x, y = np.meshgrid(np.linspace(-180, 180, width), np.linspace(90, -90, height))
         # Convert spherical coordinates to Cartesian coordinates
         x_map = np.cos(np.radians(x)) * np.cos(np.radians(y))
         y_map = np.sin(np.radians(x)) * np.cos(np.radians(y))
@@ -92,28 +96,41 @@ class Perspective:
         # Create mask for valid forward-facing points (x > 0)
         inverse_mask = np.where(xyz[:, :, 0] > 0, 1, 0)
         # Normalize coordinates by x-component (perspective division)
-        xyz[:, :] = xyz[:, :] / \
-            np.repeat(xyz[:, :, 0][:, :, np.newaxis], 3, axis=2)
+        xyz[:, :] = xyz[:, :] / np.repeat(xyz[:, :, 0][:, :, np.newaxis], 3, axis=2)
         # Map 3D points back to 2D perspective image coordinates
         lon_map = np.where(
-            (-self.w_len < xyz[:, :, 1]) & (xyz[:, :, 1] < self.w_len) \
-                & (-self.h_len < xyz[:, :, 2]) & (xyz[:, :, 2] < self.h_len),
-            (xyz[:, :, 1]+self.w_len)/2/self.w_len*self._width,
-            0)
+            (-self.w_len < xyz[:, :, 1])
+            & (xyz[:, :, 1] < self.w_len)
+            & (-self.h_len < xyz[:, :, 2])
+            & (xyz[:, :, 2] < self.h_len),
+            (xyz[:, :, 1] + self.w_len) / 2 / self.w_len * self._width,
+            0,
+        )
         lat_map = np.where(
-            (-self.w_len < xyz[:, :, 1]) & (xyz[:, :, 1] < self.w_len) \
-                & (-self.h_len < xyz[:, :, 2]) & (xyz[:, :, 2] < self.h_len),
-            (-xyz[:, :, 2]+self.h_len) /
-            2/self.h_len*self._height,
-            0)
+            (-self.w_len < xyz[:, :, 1])
+            & (xyz[:, :, 1] < self.w_len)
+            & (-self.h_len < xyz[:, :, 2])
+            & (xyz[:, :, 2] < self.h_len),
+            (-xyz[:, :, 2] + self.h_len) / 2 / self.h_len * self._height,
+            0,
+        )
         mask = np.where(
-            (-self.w_len < xyz[:, :, 1]) & (xyz[:, :, 1] < self.w_len) \
-                & (-self.h_len < xyz[:, :, 2]) & (xyz[:, :, 2] < self.h_len),
+            (-self.w_len < xyz[:, :, 1])
+            & (xyz[:, :, 1] < self.w_len)
+            & (-self.h_len < xyz[:, :, 2])
+            & (xyz[:, :, 2] < self.h_len),
             1,
-            0)
+            0,
+        )
         # Remap the image using the longitude and latitude maps
-        persp = cv2.remap(self._img, lon_map.astype(np.float32), lat_map.astype(
-            np.float32), cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
+        persp = cv2.remap(
+            self._img,
+            lon_map.astype(np.float32),
+            lat_map.astype(np.float32),
+            cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=(0, 0, 0),
+        )
         # Apply the mask to the equirectangular image
         mask = mask * inverse_mask
         mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)

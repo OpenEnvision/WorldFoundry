@@ -1,0 +1,53 @@
+schema_version: 2
+model_id: hy-nomas
+display_name: Hy-Nomas
+task_family: world_model
+groups:
+- world_model
+- text_to_video
+- action_conditioned_video
+source_repos:
+- url: https://github.com/Tencent-Hunyuan/Hy-Nomas
+  revision: 911cea6458a89c2663513ff7099561ec190dd491
+checkpoints:
+- repo_id: tencent/Hy-Nomas
+  revision: bac719a80c8d02f91c485fca804bb8221e149b70
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Hy-Nomas
+  role: transformer_and_decoder
+  status: checkpoint_environment_required
+  required_paths:
+  - DiT/distilled/diffusion_pytorch_model_ema_0_995.safetensors
+  - VAE/PixelUMM_FT/diffusion_pytorch_model.safetensors
+- repo_id: Qwen/Qwen2.5-VL-7B-Instruct
+  revision: cc594898137f460bfe9f0759e9844b3ce807cfb5
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Qwen2.5-VL-7B-Instruct
+  role: text_encoder
+  status: checkpoint_environment_required
+  required_paths:
+  - config.json
+  - tokenizer.json
+  - model.safetensors.index.json
+input_schema:
+  prompt: true
+  image: false
+  video: false
+  actions:
+  - segments
+  - segment_latent_lengths
+  - camera_extrinsics
+  - kv_cache_quantization
+  - max_cache_segments
+  - cache_noise_sigma
+artifact_kind: generated_video
+artifact_filename: hy-nomas.mp4
+execution:
+  backend_stage: native_diffusion
+  runtime_status: checkpoint_environment_required
+  integration_status: integrated
+  pipeline_binding: hy-nomas
+integration:
+  status: integrated
+notes:
+- Inference-only native DiT and PixelUMM composition; no training or upstream serving code.
+- The native low-memory variant uses INT8 weight-only DiT, INT8 KV storage and FP8 decoder linear layers with phase-wise CPU offload.
+- Qwen2.5-VL-7B must be staged separately; the upstream PE directory at the recorded revision describes a different text architecture.

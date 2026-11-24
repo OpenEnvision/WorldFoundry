@@ -1,7 +1,6 @@
 import dataclasses
 import logging
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import torch
@@ -9,12 +8,21 @@ from colorlog import ColoredFormatter
 from PIL import Image
 from torchvision.transforms import v2
 
-from mmaudio.data.av_utils import ImageInfo, VideoInfo, read_frames, reencode_with_audio
-from mmaudio.model.flow_matching import FlowMatching
-from mmaudio.model.networks import MMAudio
-from mmaudio.model.sequence_config import CONFIG_16K, CONFIG_44K, SequenceConfig
-from mmaudio.model.utils.features_utils import FeaturesUtils
-from mmaudio.utils.download_utils import download_model_if_needed
+from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.data.av_utils import (
+    ImageInfo,
+    VideoInfo,
+    read_frames,
+    reencode_with_audio,
+)
+from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.model.flow_matching import FlowMatching
+from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.model.networks import MMAudio
+from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.model.sequence_config import (
+    CONFIG_16K,
+    CONFIG_44K,
+    SequenceConfig,
+)
+from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.model.utils.features_utils import FeaturesUtils
+from worldfoundry.synthesis.visual_generation.mmaudio.mmaudio.utils.download_utils import download_model_if_needed
 
 log = logging.getLogger()
 
@@ -24,15 +32,15 @@ class ModelConfig:
     model_name: str
     model_path: Path
     vae_path: Path
-    bigvgan_16k_path: Optional[Path]
+    bigvgan_16k_path: Path | None
     mode: str
-    synchformer_ckpt: Path = Path('./ext_weights/synchformer_state_dict.pth')
+    synchformer_ckpt: Path = Path("./ext_weights/synchformer_state_dict.pth")
 
     @property
     def seq_cfg(self) -> SequenceConfig:
-        if self.mode == '16k':
+        if self.mode == "16k":
             return CONFIG_16K
-        elif self.mode == '44k':
+        elif self.mode == "44k":
             return CONFIG_44K
 
     def download_if_needed(self):
@@ -43,46 +51,56 @@ class ModelConfig:
         download_model_if_needed(self.synchformer_ckpt)
 
 
-small_16k = ModelConfig(model_name='small_16k',
-                        model_path=Path('./weights/mmaudio_small_16k.pth'),
-                        vae_path=Path('./ext_weights/v1-16.pth'),
-                        bigvgan_16k_path=Path('./ext_weights/best_netG.pt'),
-                        mode='16k')
-small_44k = ModelConfig(model_name='small_44k',
-                        model_path=Path('./weights/mmaudio_small_44k.pth'),
-                        vae_path=Path('./ext_weights/v1-44.pth'),
-                        bigvgan_16k_path=None,
-                        mode='44k')
-medium_44k = ModelConfig(model_name='medium_44k',
-                         model_path=Path('./weights/mmaudio_medium_44k.pth'),
-                         vae_path=Path('./ext_weights/v1-44.pth'),
-                         bigvgan_16k_path=None,
-                         mode='44k')
-large_44k = ModelConfig(model_name='large_44k',
-                        model_path=Path('./weights/mmaudio_large_44k.pth'),
-                        vae_path=Path('./ext_weights/v1-44.pth'),
-                        bigvgan_16k_path=None,
-                        mode='44k')
-large_44k_v2 = ModelConfig(model_name='large_44k_v2',
-                           model_path=Path('./weights/mmaudio_large_44k_v2.pth'),
-                           vae_path=Path('./ext_weights/v1-44.pth'),
-                           bigvgan_16k_path=None,
-                           mode='44k')
+small_16k = ModelConfig(
+    model_name="small_16k",
+    model_path=Path("./weights/mmaudio_small_16k.pth"),
+    vae_path=Path("./ext_weights/v1-16.pth"),
+    bigvgan_16k_path=Path("./ext_weights/best_netG.pt"),
+    mode="16k",
+)
+small_44k = ModelConfig(
+    model_name="small_44k",
+    model_path=Path("./weights/mmaudio_small_44k.pth"),
+    vae_path=Path("./ext_weights/v1-44.pth"),
+    bigvgan_16k_path=None,
+    mode="44k",
+)
+medium_44k = ModelConfig(
+    model_name="medium_44k",
+    model_path=Path("./weights/mmaudio_medium_44k.pth"),
+    vae_path=Path("./ext_weights/v1-44.pth"),
+    bigvgan_16k_path=None,
+    mode="44k",
+)
+large_44k = ModelConfig(
+    model_name="large_44k",
+    model_path=Path("./weights/mmaudio_large_44k.pth"),
+    vae_path=Path("./ext_weights/v1-44.pth"),
+    bigvgan_16k_path=None,
+    mode="44k",
+)
+large_44k_v2 = ModelConfig(
+    model_name="large_44k_v2",
+    model_path=Path("./weights/mmaudio_large_44k_v2.pth"),
+    vae_path=Path("./ext_weights/v1-44.pth"),
+    bigvgan_16k_path=None,
+    mode="44k",
+)
 all_model_cfg: dict[str, ModelConfig] = {
-    'small_16k': small_16k,
-    'small_44k': small_44k,
-    'medium_44k': medium_44k,
-    'large_44k': large_44k,
-    'large_44k_v2': large_44k_v2,
+    "small_16k": small_16k,
+    "small_44k": small_44k,
+    "medium_44k": medium_44k,
+    "large_44k": large_44k,
+    "large_44k_v2": large_44k_v2,
 }
 
 
 def generate(
-    clip_video: Optional[torch.Tensor],
-    sync_video: Optional[torch.Tensor],
-    text: Optional[list[str]],
+    clip_video: torch.Tensor | None,
+    sync_video: torch.Tensor | None,
+    text: list[str] | None,
     *,
-    negative_text: Optional[list[str]] = None,
+    negative_text: list[str] | None = None,
     feature_utils: FeaturesUtils,
     net: MMAudio,
     fm: FlowMatching,
@@ -98,9 +116,7 @@ def generate(
     bs = len(text)
     if clip_video is not None:
         clip_video = clip_video.to(device, dtype, non_blocking=True)
-        clip_features = feature_utils.encode_video_with_clip(clip_video,
-                                                             batch_size=bs *
-                                                             clip_batch_size_multiplier)
+        clip_features = feature_utils.encode_video_with_clip(clip_video, batch_size=bs * clip_batch_size_multiplier)
         if image_input:
             clip_features = clip_features.expand(-1, net.clip_seq_len, -1)
     else:
@@ -108,16 +124,11 @@ def generate(
 
     if sync_video is not None and not image_input:
         sync_video = sync_video.to(device, dtype, non_blocking=True)
-        sync_features = feature_utils.encode_video_with_sync(sync_video,
-                                                             batch_size=bs *
-                                                             sync_batch_size_multiplier)
+        sync_features = feature_utils.encode_video_with_sync(sync_video, batch_size=bs * sync_batch_size_multiplier)
     else:
         sync_features = net.get_empty_sync_sequence(bs)
 
-    if text is not None:
-        text_features = feature_utils.encode_text(text)
-    else:
-        text_features = net.get_empty_string_sequence(bs)
+    text_features = feature_utils.encode_text(text) if text is not None else net.get_empty_string_sequence(bs)
 
     if negative_text is not None:
         assert len(negative_text) == bs
@@ -125,18 +136,15 @@ def generate(
     else:
         negative_text_features = net.get_empty_string_sequence(bs)
 
-    x0 = torch.randn(bs,
-                     net.latent_seq_len,
-                     net.latent_dim,
-                     device=device,
-                     dtype=dtype,
-                     generator=rng)
+    x0 = torch.randn(bs, net.latent_seq_len, net.latent_dim, device=device, dtype=dtype, generator=rng)
     preprocessed_conditions = net.preprocess_conditions(clip_features, sync_features, text_features)
     empty_conditions = net.get_empty_conditions(
-        bs, negative_text_features=negative_text_features if negative_text is not None else None)
+        bs, negative_text_features=negative_text_features if negative_text is not None else None
+    )
 
-    cfg_ode_wrapper = lambda t, x: net.ode_wrapper(t, x, preprocessed_conditions, empty_conditions,
-                                                   cfg_strength)
+    def cfg_ode_wrapper(t, x):
+        return net.ode_wrapper(t, x, preprocessed_conditions, empty_conditions, cfg_strength)
+
     x1 = fm.to_data(cfg_ode_wrapper, x0)
     x1 = net.unnormalize(x1)
     spec = feature_utils.decode(x1)
@@ -166,29 +174,34 @@ _SYNC_FPS = 25.0
 
 
 def load_video(video_path: Path, duration_sec: float, load_all_frames: bool = True) -> VideoInfo:
+    clip_transform = v2.Compose(
+        [
+            v2.Resize((_CLIP_SIZE, _CLIP_SIZE), interpolation=v2.InterpolationMode.BICUBIC),
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+        ]
+    )
 
-    clip_transform = v2.Compose([
-        v2.Resize((_CLIP_SIZE, _CLIP_SIZE), interpolation=v2.InterpolationMode.BICUBIC),
-        v2.ToImage(),
-        v2.ToDtype(torch.float32, scale=True),
-    ])
-
-    sync_transform = v2.Compose([
-        v2.Resize(_SYNC_SIZE, interpolation=v2.InterpolationMode.BICUBIC),
-        v2.CenterCrop(_SYNC_SIZE),
-        v2.ToImage(),
-        v2.ToDtype(torch.float32, scale=True),
-        v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-    ])
+    sync_transform = v2.Compose(
+        [
+            v2.Resize(_SYNC_SIZE, interpolation=v2.InterpolationMode.BICUBIC),
+            v2.CenterCrop(_SYNC_SIZE),
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+        ]
+    )
 
     if not isinstance(video_path, Path) and not isinstance(video_path, str):
         # for gradio>6.0, video_path is a namespace
         video_path = Path(video_path.value)
-    output_frames, all_frames, orig_fps = read_frames(video_path,
-                                                      list_of_fps=[_CLIP_FPS, _SYNC_FPS],
-                                                      start_sec=0,
-                                                      end_sec=duration_sec,
-                                                      need_all_frames=load_all_frames)
+    output_frames, all_frames, orig_fps = read_frames(
+        video_path,
+        list_of_fps=[_CLIP_FPS, _SYNC_FPS],
+        start_sec=0,
+        end_sec=duration_sec,
+        need_all_frames=load_all_frames,
+    )
 
     clip_chunk, sync_chunk = output_frames
     clip_chunk = torch.from_numpy(clip_chunk).permute(0, 3, 1, 2)
@@ -201,17 +214,17 @@ def load_video(video_path: Path, duration_sec: float, load_all_frames: bool = Tr
     sync_length_sec = sync_frames.shape[0] / _SYNC_FPS
 
     if clip_length_sec < duration_sec:
-        log.warning(f'Clip video is too short: {clip_length_sec:.2f} < {duration_sec:.2f}')
-        log.warning(f'Truncating to {clip_length_sec:.2f} sec')
+        log.warning(f"Clip video is too short: {clip_length_sec:.2f} < {duration_sec:.2f}")
+        log.warning(f"Truncating to {clip_length_sec:.2f} sec")
         duration_sec = clip_length_sec
 
     if sync_length_sec < duration_sec:
-        log.warning(f'Sync video is too short: {sync_length_sec:.2f} < {duration_sec:.2f}')
-        log.warning(f'Truncating to {sync_length_sec:.2f} sec')
+        log.warning(f"Sync video is too short: {sync_length_sec:.2f} < {duration_sec:.2f}")
+        log.warning(f"Truncating to {sync_length_sec:.2f} sec")
         duration_sec = sync_length_sec
 
-    clip_frames = clip_frames[:int(_CLIP_FPS * duration_sec)]
-    sync_frames = sync_frames[:int(_SYNC_FPS * duration_sec)]
+    clip_frames = clip_frames[: int(_CLIP_FPS * duration_sec)]
+    sync_frames = sync_frames[: int(_SYNC_FPS * duration_sec)]
 
     video_info = VideoInfo(
         duration_sec=duration_sec,
@@ -224,19 +237,23 @@ def load_video(video_path: Path, duration_sec: float, load_all_frames: bool = Tr
 
 
 def load_image(image_path: Path) -> VideoInfo:
-    clip_transform = v2.Compose([
-        v2.Resize((_CLIP_SIZE, _CLIP_SIZE), interpolation=v2.InterpolationMode.BICUBIC),
-        v2.ToImage(),
-        v2.ToDtype(torch.float32, scale=True),
-    ])
+    clip_transform = v2.Compose(
+        [
+            v2.Resize((_CLIP_SIZE, _CLIP_SIZE), interpolation=v2.InterpolationMode.BICUBIC),
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+        ]
+    )
 
-    sync_transform = v2.Compose([
-        v2.Resize(_SYNC_SIZE, interpolation=v2.InterpolationMode.BICUBIC),
-        v2.CenterCrop(_SYNC_SIZE),
-        v2.ToImage(),
-        v2.ToDtype(torch.float32, scale=True),
-        v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-    ])
+    sync_transform = v2.Compose(
+        [
+            v2.Resize(_SYNC_SIZE, interpolation=v2.InterpolationMode.BICUBIC),
+            v2.CenterCrop(_SYNC_SIZE),
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+        ]
+    )
 
     frame = np.array(Image.open(image_path))
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ._dashscope import RUNTIME_STATUS, DashScopeVideoSynthesis
 
@@ -10,10 +10,7 @@ __all__ = ["RUNTIME_STATUS", "Wan2p6Synthesis"]
 
 
 class Wan2p6Synthesis(DashScopeVideoSynthesis):
-    """Wan2.6 API 合成类。
-
-    支持文本生成视频、图像生成视频和参考素材生成视频。
-    """
+    """Wan2.6 video generation through the DashScope API: text-, image- and reference-driven."""
 
     def generate_t2av(
         self,
@@ -22,13 +19,13 @@ class Wan2p6Synthesis(DashScopeVideoSynthesis):
         size: str = "1280*720",
         duration: int = 5,
         negative_prompt: str = "",
-        audio_url: Optional[str] = None,
+        audio_url: str | None = None,
         prompt_extend: bool = True,
-        shot_type: Optional[str] = None,
+        shot_type: str | None = None,
         watermark: bool = False,
-        seed: Optional[int] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        seed: int | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Submit a text-to-video task."""
         payload = _task_payload(
             model=model,
@@ -54,12 +51,12 @@ class Wan2p6Synthesis(DashScopeVideoSynthesis):
         resolution: str = "720P",
         duration: int = 5,
         negative_prompt: str = "",
-        audio: Optional[bool] = None,
+        audio: bool | None = None,
         prompt_extend: bool = True,
         watermark: bool = False,
-        seed: Optional[int] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        seed: int | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Submit an image-to-video task anchored on ``encoded_image``."""
         payload = _task_payload(
             model=model,
@@ -78,18 +75,18 @@ class Wan2p6Synthesis(DashScopeVideoSynthesis):
 
     def generate_r2av(
         self,
-        reference_urls: List[str],
+        reference_urls: list[str],
         input_prompt: str,
         model: str = "wan2.6-r2v",
         size: str = "1280*720",
         duration: int = 5,
         negative_prompt: str = "",
-        audio: Optional[bool] = None,
+        audio: bool | None = None,
         prompt_extend: bool = True,
         watermark: bool = False,
-        seed: Optional[int] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        seed: int | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Submit a reference-driven video task."""
         payload = _task_payload(
             model=model,
@@ -108,20 +105,20 @@ class Wan2p6Synthesis(DashScopeVideoSynthesis):
 
     def predict(
         self,
-        processed_data: Dict[str, Any],
+        processed_data: dict[str, Any],
         task_type: str = "auto",
-        model: Optional[str] = None,
+        model: str | None = None,
         size: str = "1280*720",
         resolution: str = "720P",
         duration: int = 5,
         negative_prompt: str = "",
-        audio: Optional[bool] = None,
+        audio: bool | None = None,
         prompt_extend: bool = True,
-        shot_type: Optional[str] = None,
+        shot_type: str | None = None,
         watermark: bool = False,
-        seed: Optional[int] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        seed: int | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """Submit a generation, choosing the route from what ``processed_data`` carries.
 
         Args:
@@ -133,9 +130,9 @@ class Wan2p6Synthesis(DashScopeVideoSynthesis):
             ValueError: On an unknown ``task_type`` or a route missing its input.
         """
         prompt = processed_data.get("prompt", "")
-        encoded_image = processed_data.get("encoded_image", None)
-        reference_urls = processed_data.get("reference_urls", None)
-        audio_url = processed_data.get("audio_url", None)
+        encoded_image = processed_data.get("encoded_image")
+        reference_urls = processed_data.get("reference_urls")
+        audio_url = processed_data.get("audio_url")
 
         if task_type == "auto":
             if reference_urls:
@@ -197,18 +194,18 @@ def _task_payload(
     model: str,
     input_prompt: str,
     negative_prompt: str,
-    parameters: Dict[str, Any],
+    parameters: dict[str, Any],
     prompt_extend: bool,
     watermark: bool,
-    seed: Optional[int],
-    **kwargs
-) -> Dict[str, Any]:
+    seed: int | None,
+    **kwargs,
+) -> dict[str, Any]:
     """Build the DashScope task body shared by every Wan2.6 route.
 
     Extra keyword arguments land in ``parameters``, matching what the API expects
     for per-model knobs the adapter does not name explicitly.
     """
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "model": model,
         "input": {"prompt": input_prompt},
         "parameters": {**parameters, "prompt_extend": prompt_extend, "watermark": watermark},

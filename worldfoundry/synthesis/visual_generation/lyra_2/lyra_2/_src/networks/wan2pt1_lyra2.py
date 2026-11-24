@@ -14,13 +14,23 @@
 # limitations under the License.
 
 import math
-from typing import List, Optional, Tuple
 
 import torch
 import torch.amp as amp
 import torch.nn as nn
 from einops import rearrange, repeat
-from lyra_2._src.networks.wan2pt1 import (
+from torch.distributed import ProcessGroup, get_process_group_ranks
+from torch.distributed._composable.fsdp import fully_shard
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import checkpoint_wrapper as ptd_checkpoint_wrapper
+from torchvision import transforms
+
+from worldfoundry.core.distributed.model_parallel.context import (
+    cat_outputs_cp_with_grad,
+    split_inputs_cp,
+)
+from worldfoundry.core.nn.checkpointing.activation_checkpointing import CheckpointMode, SACConfig
+from worldfoundry.core.observability.rank_logging import log
+from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.networks.wan2pt1 import (
     WAN_CROSSATTENTION_CLASSES,
     Head,
     MLPProj,
@@ -30,17 +40,6 @@ from lyra_2._src.networks.wan2pt1 import (
     WanSelfAttention,
     sinusoidal_embedding_1d,
 )
-from torch.distributed import ProcessGroup, get_process_group_ranks
-from torch.distributed._composable.fsdp import fully_shard
-from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import checkpoint_wrapper as ptd_checkpoint_wrapper
-from torchvision import transforms
-
-from worldfoundry.core.nn.checkpointing.activation_checkpointing import CheckpointMode, SACConfig
-from worldfoundry.core.distributed.model_parallel.context import (
-    cat_outputs_cp_with_grad,
-    split_inputs_cp,
-)
-from worldfoundry.core.distributed.runtime.logging import log
 
 
 class Lyra2AttentionBlock(nn.Module):
@@ -153,8 +152,8 @@ class Lyra2AttentionBlock(nn.Module):
         freqs,
         context,
         context_lens,
-        camera: Optional[torch.Tensor] = None,
-        buffer: Optional[torch.Tensor] = None,
+        camera: torch.Tensor | None = None,
+        buffer: torch.Tensor | None = None,
     ):
         assert e.dtype == torch.float32
         with amp.autocast("cuda", dtype=torch.float32):
@@ -220,7 +219,7 @@ class Lyra2WanModel(nn.Module):
     def __init__(
         self,
         model_type: str = "t2v",
-        patch_size: Tuple[int, int, int] = (1, 2, 2),
+        patch_size: tuple[int, int, int] = (1, 2, 2),
         text_len: int = 512,
         in_dim: int = 16,
         dim: int = 2048,
@@ -230,12 +229,12 @@ class Lyra2WanModel(nn.Module):
         out_dim: int = 16,
         num_heads: int = 16,
         num_layers: int = 32,
-        window_size: Tuple[int, int] = (-1, -1),
+        window_size: tuple[int, int] = (-1, -1),
         qk_norm: bool = True,
         cross_attn_norm: bool = True,
         eps: float = 1e-6,
         concat_padding_mask: bool = False,
-        sac_config: SACConfig = SACConfig(),
+        sac_config: SACConfig = SACConfig(),  # noqa: B008 - Default evaluated once at definition, as upstream.
         cp_comm_type: str = "p2p",
         postpone_checkpoint: bool = False,
         conv_patchify: bool = False,
@@ -283,7 +282,7 @@ class Lyra2WanModel(nn.Module):
         self.patch_embedding_buffer: nn.Linear | None = None
 
         # CP state
-        self.cp_group: Optional[ProcessGroup] = None
+        self.cp_group: ProcessGroup | None = None
         self._is_context_parallel_enabled: bool = False
 
         # embeddings
@@ -354,7 +353,7 @@ class Lyra2WanModel(nn.Module):
 
     # ------------------------- Clean Embeddings -------------------------
     def init_clean_patch_embeddings(
-        self, clean_latent_frame_kernel_sizes: List[int], clean_latent_frame_kernel_types: List[str] | None = None
+        self, clean_latent_frame_kernel_sizes: list[int], clean_latent_frame_kernel_types: list[str] | None = None
     ) -> None:
         """Construct clean patch embedding layers without copying weights.
 
@@ -386,7 +385,7 @@ class Lyra2WanModel(nn.Module):
             "kernel sizes/types length mismatch"
         )
 
-        for k, t in zip(clean_latent_frame_kernel_sizes, clean_latent_frame_kernel_types):
+        for k, t in zip(clean_latent_frame_kernel_sizes, clean_latent_frame_kernel_types, strict=False):
             if t == "s":  # spatial-only packing (T unchanged)
                 new_pt, new_ph, new_pw = pt, ph * k, pw * k
             else:  # default temporal-style packing (THW)
@@ -446,7 +445,9 @@ class Lyra2WanModel(nn.Module):
             base_weight = base_linear.weight.detach()  # [dim, in_dim*pt*ph*pw]
             base_bias = base_linear.bias.detach() if base_linear.bias is not None else None
 
-            for clean_lin, k, t in zip(self.clean_patch_embeddings, self.clean_kernel_sizes, self.clean_kernel_types):
+            for clean_lin, k, t in zip(
+                self.clean_patch_embeddings, self.clean_kernel_sizes, self.clean_kernel_types, strict=False
+            ):
                 # Prepare tiled weights
                 tiled = rearrange(
                     base_weight,
@@ -495,7 +496,7 @@ class Lyra2WanModel(nn.Module):
 
     # --------------------------- Utilities ----------------------------
     @staticmethod
-    def _pad_for_linear_patch(x: torch.Tensor, kernel: Tuple[int, int, int]) -> torch.Tensor:
+    def _pad_for_linear_patch(x: torch.Tensor, kernel: tuple[int, int, int]) -> torch.Tensor:
         """Pad a BCHWT tensor so T/H/W are divisible by kernel.
 
         Args:
@@ -512,8 +513,8 @@ class Lyra2WanModel(nn.Module):
         return x
 
     def _patchify_linear(
-        self, x: torch.Tensor, patch: Tuple[int, int, int], lin: nn.Linear
-    ) -> Tuple[torch.Tensor, Tuple[int, int, int]]:
+        self, x: torch.Tensor, patch: tuple[int, int, int], lin: nn.Linear
+    ) -> tuple[torch.Tensor, tuple[int, int, int]]:
         """Patchify via einops+Linear, returning tokens and (f,h,w) grid size.
 
         Args:
@@ -535,8 +536,8 @@ class Lyra2WanModel(nn.Module):
         return x, (f, hh, ww)
 
     def _pixelshuffle_tokens(
-        self, x: torch.Tensor, patch: Tuple[int, int, int]
-    ) -> Tuple[torch.Tensor, Tuple[int, int, int]]:
+        self, x: torch.Tensor, patch: tuple[int, int, int]
+    ) -> tuple[torch.Tensor, tuple[int, int, int]]:
         """Rearrange patches into channels without a linear projection."""
         pt, ph, pw = patch
         x = self._pad_for_linear_patch(x, patch)
@@ -559,18 +560,18 @@ class Lyra2WanModel(nn.Module):
         self,
         x: torch.Tensor,
         framepack_indices: torch.Tensor,
-        framepack_splits: List[int],
-        framepack_kernel_ids: List[int],
-        framepack_kernel_types: List[str] | None = None,
-        camera: Optional[torch.Tensor] = None,
-        buffer_B_C_T_H_W: Optional[torch.Tensor] = None,
-    ) -> Tuple[
+        framepack_splits: list[int],
+        framepack_kernel_ids: list[int],
+        framepack_kernel_types: list[str] | None = None,
+        camera: torch.Tensor | None = None,
+        buffer_B_C_T_H_W: torch.Tensor | None = None,
+    ) -> tuple[
         torch.Tensor,
         torch.Tensor,
-        Optional[torch.Tensor],
-        Optional[torch.Tensor],
-        Tuple[int, int],
-        Tuple[int, int, int],
+        torch.Tensor | None,
+        torch.Tensor | None,
+        tuple[int, int],
+        tuple[int, int, int],
     ]:
         """Lyra2-aware patchify.
 
@@ -603,12 +604,12 @@ class Lyra2WanModel(nn.Module):
         # (f*h*w,1,1,d) -> (1,d,f,h,w)
         freqs_base_5d = rearrange(freqs_base, "(f h w) 1 1 d -> 1 d f h w", f=f_base, h=h_base, w=w_base)
 
-        token_chunks: List[torch.Tensor] = []
-        freq_chunks: List[torch.Tensor] = []
-        cam_chunks: List[torch.Tensor] = [] if camera is not None else []
+        token_chunks: list[torch.Tensor] = []
+        freq_chunks: list[torch.Tensor] = []
+        cam_chunks: list[torch.Tensor] = []
         use_buffer_tokens = bool(self.use_correspondence and buffer_B_C_T_H_W is not None)
-        buf_chunks: List[torch.Tensor] = [] if use_buffer_tokens else []
-        buf_validity_chunks: List[torch.Tensor] = [] if use_buffer_tokens else []
+        buf_chunks: list[torch.Tensor] = []
+        buf_validity_chunks: list[torch.Tensor] = []
         buf_splits = None
         buffer_full_match = False
         if buffer_B_C_T_H_W is not None:
@@ -621,10 +622,7 @@ class Lyra2WanModel(nn.Module):
         gen_grid = (0, 0, 0)
         buffer_token_dim = None
         if use_buffer_tokens:
-            if self.buffer_pixelshuffle:
-                buffer_token_dim = int(self.buffer_in_dim) * pt * ph * pw
-            else:
-                buffer_token_dim = int(self.dim)
+            buffer_token_dim = int(self.buffer_in_dim) * pt * ph * pw if self.buffer_pixelshuffle else int(self.dim)
 
         for i, x_chunk in enumerate(xs):
             kid = framepack_kernel_ids[i]
@@ -828,7 +826,7 @@ class Lyra2WanModel(nn.Module):
         frame_cond_crossattn_emb_B_L_D: torch.Tensor | None = None,
         y_B_C_T_H_W: torch.Tensor | None = None,
         y_buffer_B_C_T_H_W: torch.Tensor | None = None,
-        padding_mask: Optional[torch.Tensor] = None,
+        padding_mask: torch.Tensor | None = None,
         is_uncond: bool = False,
         slg_layers=None,
         **kwargs,
@@ -884,14 +882,14 @@ class Lyra2WanModel(nn.Module):
                 context_clip = self.img_emb(frame_cond_crossattn_emb_B_L_D)
                 context_B_L_D = torch.concat([context_clip, context_B_L_D], dim=1)
 
-            kwargs_blocks = dict(
-                e=e0_B_6_D,
-                seq_lens=seq_lens,
-                video_size=video_size,
-                freqs=self.rope_position_embedding(x_B_T_H_W_D),
-                context=context_B_L_D,
-                context_lens=context_lens,
-            )
+            kwargs_blocks = {
+                "e": e0_B_6_D,
+                "seq_lens": seq_lens,
+                "video_size": video_size,
+                "freqs": self.rope_position_embedding(x_B_T_H_W_D),
+                "context": context_B_L_D,
+                "context_lens": context_lens,
+            }
 
             for block_idx, block in enumerate(self.blocks):
                 if slg_layers is not None and block_idx in slg_layers and is_uncond:
@@ -939,7 +937,7 @@ class Lyra2WanModel(nn.Module):
         framepack_indices = kwargs["framepack_indices"]
         framepack_splits = kwargs["framepack_splits"]
         framepack_kernel_ids = kwargs["framepack_kernel_ids"]
-        framepack_kernel_types = kwargs.get("framepack_kernel_types", None)
+        framepack_kernel_types = kwargs.get("framepack_kernel_types")
 
         assert self.clean_patch_embeddings is not None
 
@@ -992,26 +990,26 @@ class Lyra2WanModel(nn.Module):
         assert x_tokens.shape[0] == 1
         seq_lens = torch.tensor([x_tokens.size(1)] * x_tokens.size(0), dtype=torch.long, device=x_tokens.device)
         if self.use_plucker_condition:
-            kwargs_blocks = dict(
-                e=e0_B_6_D,
-                seq_lens=seq_lens,
-                video_size=VideoSize(T=1, H=1, W=x_tokens.size(1)),
-                freqs=freqs_tokens,
-                context=context_B_L_D,
-                context_lens=None,
-                camera=camera_tokens,
-                buffer=buffer_tokens,
-            )
+            kwargs_blocks = {
+                "e": e0_B_6_D,
+                "seq_lens": seq_lens,
+                "video_size": VideoSize(T=1, H=1, W=x_tokens.size(1)),
+                "freqs": freqs_tokens,
+                "context": context_B_L_D,
+                "context_lens": None,
+                "camera": camera_tokens,
+                "buffer": buffer_tokens,
+            }
         else:
-            kwargs_blocks = dict(
-                e=e0_B_6_D,
-                seq_lens=seq_lens,
-                video_size=VideoSize(T=1, H=1, W=x_tokens.size(1)),
-                freqs=freqs_tokens,
-                context=context_B_L_D,
-                context_lens=None,
-                buffer=buffer_tokens,
-            )
+            kwargs_blocks = {
+                "e": e0_B_6_D,
+                "seq_lens": seq_lens,
+                "video_size": VideoSize(T=1, H=1, W=x_tokens.size(1)),
+                "freqs": freqs_tokens,
+                "context": context_B_L_D,
+                "context_lens": None,
+                "buffer": buffer_tokens,
+            }
 
         x_B_L_D = x_tokens
         for block in self.blocks:
@@ -1080,7 +1078,7 @@ class Lyra2WanModel(nn.Module):
             nn.init.zeros_(self.head.head.bias)
 
     def fully_shard(self, mesh, **fsdp_kwargs):
-        for i, block in enumerate(self.blocks):
+        for _i, block in enumerate(self.blocks):
             fully_shard(block, mesh=mesh, reshard_after_forward=True, **fsdp_kwargs)
         fully_shard(self.head, mesh=mesh, reshard_after_forward=False, **fsdp_kwargs)
         fully_shard(self.text_embedding, mesh=mesh, reshard_after_forward=True, **fsdp_kwargs)
@@ -1091,7 +1089,7 @@ class Lyra2WanModel(nn.Module):
             for lin in self.clean_patch_embeddings:
                 fully_shard(lin, mesh=mesh, reshard_after_forward=True, **fsdp_kwargs)
 
-    def enable_context_parallel(self, process_group: Optional[ProcessGroup] = None):
+    def enable_context_parallel(self, process_group: ProcessGroup | None = None):
         # For Lyra2, we split after patchify; disable CP inside rope embedder
         self.rope_position_embedding.disable_context_parallel()
         cp_ranks = get_process_group_ranks(process_group)

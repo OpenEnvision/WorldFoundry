@@ -29,7 +29,12 @@ import yaml
 from pydantic import Field, field_validator, model_validator
 
 from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.base import ConfigModel as _Cfg
-from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.cache import CacheConfig, CacheModeName, MagCacheConfig, NaviCacheConfig
+from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.cache import (
+    CacheConfig,
+    CacheModeName,
+    MagCacheConfig,
+    NaviCacheConfig,
+)
 from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.compile import AotiCompileConfig, CompileConfig
 from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.kernels import AttentionConfig
 from worldfoundry.base_models.diffusion_model.optimizations.kandinsky6.offload import OffloadConfig
@@ -50,10 +55,10 @@ __all__ = (
     "NaviCacheConfig",
     "OffloadConfig",
     "PathsConfig",
-    "ProfileConfig",
-    "ProfileMode",
     "PiFlowConfig",
     "PipelineConfig",
+    "ProfileConfig",
+    "ProfileMode",
     "TextEmbedderConfig",
     "VocoderConfig",
     "load_config",

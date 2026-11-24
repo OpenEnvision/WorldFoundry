@@ -10,8 +10,6 @@
 # --------------------------------------------------------
 
 import functools
-import math
-from typing import Optional
 
 import numpy as np
 import torch
@@ -23,10 +21,20 @@ import xformers.ops
 from einops import rearrange
 from timm.models.vision_transformer import Mlp
 
-from opensora.acceleration.communications import all_to_all, split_forward_gather_backward
-from opensora.acceleration.parallel_states import get_sequence_parallel_group
+from worldfoundry.base_models.diffusion_model.models.networks.sana.variants.cpu_frequency import (
+    CpuFrequencyTimestepEmbedder,
+)
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.acceleration.communications import (
+    all_to_all,
+    split_forward_gather_backward,
+)
+from worldfoundry.synthesis.visual_generation.open_sora.open_sora_runtime.opensora.acceleration.parallel_states import (
+    get_sequence_parallel_group,
+)
 
-approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+def approx_gelu():
+    return nn.GELU(approximate="tanh")
 
 
 class LlamaRMSNorm(nn.Module):
@@ -53,7 +61,7 @@ def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool, use_kerne
 
             return FusedLayerNorm(hidden_size, elementwise_affine=affine, eps=eps)
         except ImportError:
-            raise RuntimeError("FusedLayerNorm not available. Please install apex.")
+            raise RuntimeError("FusedLayerNorm not available. Please install apex.")  # noqa: B904 - Keeps the implicit exception context.
     else:
         return nn.LayerNorm(hidden_size, eps, elementwise_affine=affine)
 
@@ -108,7 +116,6 @@ class PatchEmbed3D(nn.Module):
             self.norm = None
 
     def forward(self, x):
-        """Forward function."""
         # padding
         _, _, D, H, W = x.size()
         if W % self.patch_size[2] != 0:
@@ -385,7 +392,7 @@ class SeqParallelAttention(Attention):
         # [B, SUB_N, 3, NUM_HEAD, HEAD_DIM] -> [B, N, 3, NUM_HEAD_PER_DEVICE, HEAD_DIM]
         qkv = all_to_all(qkv, sp_group, scatter_dim=3, gather_dim=1)
 
-        if self.enable_flash_attn:
+        if self.enable_flash_attn:  # noqa: SIM108 - Branches carry per-case comments.
             qkv_permute_shape = (
                 2,
                 0,
@@ -443,7 +450,7 @@ class SeqParallelAttention(Attention):
 
 class MultiHeadCrossAttention(nn.Module):
     def __init__(self, d_model, num_heads, attn_drop=0.0, proj_drop=0.0):
-        super(MultiHeadCrossAttention, self).__init__()
+        super().__init__()
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
 
         self.d_model = d_model
@@ -590,41 +597,8 @@ class T2IFinalLayer(nn.Module):
 # ===============================================
 
 
-class TimestepEmbedder(nn.Module):
-    """
-    Embeds scalar timesteps into vector representations.
-    """
-
-    def __init__(self, hidden_size, frequency_embedding_size=256):
-        super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(frequency_embedding_size, hidden_size, bias=True),
-            nn.SiLU(),
-            nn.Linear(hidden_size, hidden_size, bias=True),
-        )
-        self.frequency_embedding_size = frequency_embedding_size
-
-    @staticmethod
-    def timestep_embedding(t, dim, max_period=10000):
-        """
-        Create sinusoidal timestep embeddings.
-        :param t: a 1-D Tensor of N indices, one per batch element.
-                          These may be fractional.
-        :param dim: the dimension of the output.
-        :param max_period: controls the minimum frequency of the embeddings.
-        :return: an (N, D) Tensor of positional embeddings.
-        """
-        # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
-        half = dim // 2
-        freqs = torch.exp(-math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half)
-        freqs = freqs.to(device=t.device)
-        args = t[:, None].float() * freqs[None]
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
-        return embedding
-
-    def forward(self, t, dtype):
+class TimestepEmbedder(CpuFrequencyTimestepEmbedder):
+    def forward(self, t: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
         t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
         if t_freq.dtype != dtype:
             t_freq = t_freq.to(dtype)
@@ -662,40 +636,6 @@ class LabelEmbedder(nn.Module):
         return self.embedding_table(labels)
 
 
-class SizeEmbedder(TimestepEmbedder):
-    """
-    Embeds scalar timesteps into vector representations.
-    """
-
-    def __init__(self, hidden_size, frequency_embedding_size=256):
-        super().__init__(hidden_size=hidden_size, frequency_embedding_size=frequency_embedding_size)
-        self.mlp = nn.Sequential(
-            nn.Linear(frequency_embedding_size, hidden_size, bias=True),
-            nn.SiLU(),
-            nn.Linear(hidden_size, hidden_size, bias=True),
-        )
-        self.frequency_embedding_size = frequency_embedding_size
-        self.outdim = hidden_size
-
-    def forward(self, s, bs):
-        if s.ndim == 1:
-            s = s[:, None]
-        assert s.ndim == 2
-        if s.shape[0] != bs:
-            s = s.repeat(bs // s.shape[0], 1)
-            assert s.shape[0] == bs
-        b, dims = s.shape[0], s.shape[1]
-        s = rearrange(s, "b d -> (b d)")
-        s_freq = self.timestep_embedding(s, self.frequency_embedding_size).to(self.dtype)
-        s_emb = self.mlp(s_freq)
-        s_emb = rearrange(s_emb, "(b d) d2 -> b (d d2)", b=b, d=dims, d2=self.outdim)
-        return s_emb
-
-    @property
-    def dtype(self):
-        return next(self.parameters()).dtype
-
-
 class CaptionEmbedder(nn.Module):
     """
     Embeds class labels into vector representations. Also handles label dropout for classifier-free guidance.
@@ -706,7 +646,7 @@ class CaptionEmbedder(nn.Module):
         in_channels,
         hidden_size,
         uncond_prob,
-        act_layer=nn.GELU(approximate="tanh"),
+        act_layer=nn.GELU(approximate="tanh"),  # noqa: B008 - Default evaluated once at definition, as upstream.
         token_num=120,
     ):
         super().__init__()
@@ -759,7 +699,7 @@ class PositionEmbedding2D(nn.Module):
         emb_sin = torch.sin(out)
         return torch.cat((emb_sin, emb_cos), dim=-1)
 
-    @functools.lru_cache(maxsize=512)
+    @functools.lru_cache(maxsize=512)  # noqa: B019 - Keeps the upstream per-instance method cache.
     def _get_cached_emb(
         self,
         device: torch.device,
@@ -767,7 +707,7 @@ class PositionEmbedding2D(nn.Module):
         h: int,
         w: int,
         scale: float = 1.0,
-        base_size: Optional[int] = None,
+        base_size: int | None = None,
     ):
         grid_h = torch.arange(h, device=device) / scale
         grid_w = torch.arange(w, device=device) / scale
@@ -790,8 +730,8 @@ class PositionEmbedding2D(nn.Module):
         x: torch.Tensor,
         h: int,
         w: int,
-        scale: Optional[float] = 1.0,
-        base_size: Optional[int] = None,
+        scale: float | None = 1.0,
+        base_size: int | None = None,
     ) -> torch.Tensor:
         return self._get_cached_emb(x.device, x.dtype, h, w, scale, base_size)
 

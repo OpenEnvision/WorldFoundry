@@ -1,9 +1,10 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import torch
-from torchvision.utils import make_grid
 from torch.utils.tensorboard import SummaryWriter
+from torchvision.utils import make_grid
 
 from worldfoundry.base_models.perception_core.tracking.dot.utils.plot import to_rgb
 
@@ -20,7 +21,7 @@ def number(tensor):
     return tensor
 
 
-class Logger():
+class Logger:
     def __init__(self, args):
         self.writer = SummaryWriter(args.log_path)
         self.factor = args.log_factor
@@ -28,7 +29,7 @@ class Logger():
 
     def log_scalar(self, name, scalar, global_iter):
         if scalar is not None:
-            if type(scalar) == list:
+            if type(scalar) is list:
                 for i, x in enumerate(scalar):
                     self.log_scalar(f"{name}_{i}", x, global_iter)
             else:

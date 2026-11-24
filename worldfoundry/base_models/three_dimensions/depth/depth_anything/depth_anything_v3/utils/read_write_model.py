@@ -31,28 +31,21 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 
-"""Module for base_models -> three_dimensions -> depth -> depth_anything -> depth_anything_v3 -> utils -> read_write_model.py functionality."""
-
 import argparse
 import collections
 import os
 import struct
+
 import numpy as np
 
 CameraModel = collections.namedtuple("CameraModel", ["model_id", "model_name", "num_params"])
 Camera = collections.namedtuple("Camera", ["id", "model", "width", "height", "params"])
-BaseImage = collections.namedtuple(
-    "Image", ["id", "qvec", "tvec", "camera_id", "name", "xys", "point3D_ids"]
-)
-Point3D = collections.namedtuple(
-    "Point3D", ["id", "xyz", "rgb", "error", "image_ids", "point2D_idxs"]
-)
+BaseImage = collections.namedtuple("Image", ["id", "qvec", "tvec", "camera_id", "name", "xys", "point3D_ids"])
+Point3D = collections.namedtuple("Point3D", ["id", "xyz", "rgb", "error", "image_ids", "point2D_idxs"])
 
 
 class Image(BaseImage):
-    """Image implementation."""
     def qvec2rotmat(self):
-        """Qvec2rotmat."""
         return qvec2rotmat(self.qvec)
 
 
@@ -250,9 +243,7 @@ def read_images_binary(path_to_model_file):
     with open(path_to_model_file, "rb") as fid:
         num_reg_images = read_next_bytes(fid, 8, "Q")[0]
         for _ in range(num_reg_images):
-            binary_image_properties = read_next_bytes(
-                fid, num_bytes=64, format_char_sequence="idddddddi"
-            )
+            binary_image_properties = read_next_bytes(fid, num_bytes=64, format_char_sequence="idddddddi")
             image_id = binary_image_properties[0]
             qvec = np.array(binary_image_properties[1:5])
             tvec = np.array(binary_image_properties[5:8])
@@ -294,17 +285,12 @@ def write_images_text(images, path):
         void Reconstruction::ReadImagesText(const std::string& path)
         void Reconstruction::WriteImagesText(const std::string& path)
     """
-    if len(images) == 0:
-        mean_observations = 0
-    else:
-        mean_observations = sum((len(img.point3D_ids) for _, img in images.items())) / len(images)
+    mean_observations = 0 if len(images) == 0 else sum(len(img.point3D_ids) for _, img in images.items()) / len(images)
     HEADER = (
         "# Image list with two lines of data per image:\n"
         + "#   IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n"
         + "#   POINTS2D[] as (X, Y, POINT3D_ID)\n"
-        + "# Number of images: {}, mean observations per image: {}\n".format(
-            len(images), mean_observations
-        )
+        + f"# Number of images: {len(images)}, mean observations per image: {mean_observations}\n"
     )
 
     with open(path, "w") as fid:
@@ -321,7 +307,7 @@ def write_images_text(images, path):
             fid.write(first_line + "\n")
 
             points_strings = []
-            for xy, point3D_id in zip(img.xys, img.point3D_ids):
+            for xy, point3D_id in zip(img.xys, img.point3D_ids, strict=False):
                 points_strings.append(" ".join(map(str, [*xy, point3D_id])))
             fid.write(" ".join(points_strings) + "\n")
 
@@ -343,7 +329,7 @@ def write_images_binary(images, path_to_model_file):
                 write_next_bytes(fid, char.encode("utf-8"), "c")
             write_next_bytes(fid, b"\x00", "c")
             write_next_bytes(fid, len(img.point3D_ids), "Q")
-            for xy, p3d_id in zip(img.xys, img.point3D_ids):
+            for xy, p3d_id in zip(img.xys, img.point3D_ids, strict=False):
                 write_next_bytes(fid, [*xy, p3d_id], "ddq")
 
 
@@ -389,9 +375,7 @@ def read_points3D_binary(path_to_model_file):
     with open(path_to_model_file, "rb") as fid:
         num_points = read_next_bytes(fid, 8, "Q")[0]
         for _ in range(num_points):
-            binary_point_line_properties = read_next_bytes(
-                fid, num_bytes=43, format_char_sequence="QdddBBBd"
-            )
+            binary_point_line_properties = read_next_bytes(fid, num_bytes=43, format_char_sequence="QdddBBBd")
             point3D_id = binary_point_line_properties[0]
             xyz = np.array(binary_point_line_properties[1:4])
             rgb = np.array(binary_point_line_properties[4:7])
@@ -428,9 +412,7 @@ def write_points3D_text(points3D, path):
     HEADER = (
         "# 3D point list with one line of data per point:\n"
         + "#   POINT3D_ID, X, Y, Z, R, G, B, ERROR, TRACK[] as (IMAGE_ID, POINT2D_IDX)\n"
-        + "# Number of points: {}, mean track length: {}\n".format(
-            len(points3D), mean_track_length
-        )
+        + f"# Number of points: {len(points3D)}, mean track length: {mean_track_length}\n"
     )
 
     with open(path, "w") as fid:
@@ -439,7 +421,7 @@ def write_points3D_text(points3D, path):
             point_header = [pt.id, *pt.xyz, *pt.rgb, pt.error]
             fid.write(" ".join(map(str, point_header)) + " ")
             track_strings = []
-            for image_id, point2D in zip(pt.image_ids, pt.point2D_idxs):
+            for image_id, point2D in zip(pt.image_ids, pt.point2D_idxs, strict=False):
                 track_strings.append(" ".join(map(str, [image_id, point2D])))
             fid.write(" ".join(track_strings) + "\n")
 
@@ -459,17 +441,11 @@ def write_points3D_binary(points3D, path_to_model_file):
             write_next_bytes(fid, pt.error, "d")
             track_length = pt.image_ids.shape[0]
             write_next_bytes(fid, track_length, "Q")
-            for image_id, point2D_id in zip(pt.image_ids, pt.point2D_idxs):
+            for image_id, point2D_id in zip(pt.image_ids, pt.point2D_idxs, strict=False):
                 write_next_bytes(fid, [image_id, point2D_id], "ii")
 
 
 def detect_model_format(path, ext):
-    """Detect model format.
-
-    Args:
-        path: The path.
-        ext: The ext.
-    """
     if (
         os.path.isfile(os.path.join(path, "cameras" + ext))
         and os.path.isfile(os.path.join(path, "images" + ext))
@@ -482,12 +458,6 @@ def detect_model_format(path, ext):
 
 
 def read_model(path, ext=""):
-    """Read model.
-
-    Args:
-        path: The path.
-        ext: The ext.
-    """
     # try to detect the extension automatically
     if ext == "":
         if detect_model_format(path, ".bin"):
@@ -510,15 +480,6 @@ def read_model(path, ext=""):
 
 
 def write_model(cameras, images, points3D, path, ext=".bin"):
-    """Write model.
-
-    Args:
-        cameras: The cameras.
-        images: The images.
-        points3D: The points3d.
-        path: The path.
-        ext: The ext.
-    """
     if ext == ".txt":
         write_cameras_text(cameras, os.path.join(path, "cameras" + ext))
         write_images_text(images, os.path.join(path, "images" + ext))
@@ -531,11 +492,6 @@ def write_model(cameras, images, points3D, path, ext=".bin"):
 
 
 def qvec2rotmat(qvec):
-    """Qvec2rotmat.
-
-    Args:
-        qvec: The qvec.
-    """
     return np.array(
         [
             [
@@ -558,11 +514,6 @@ def qvec2rotmat(qvec):
 
 
 def rotmat2qvec(R):
-    """Rotmat2qvec.
-
-    Args:
-        R: The r.
-    """
     Rxx, Ryx, Rzx, Rxy, Ryy, Rzy, Rxz, Ryz, Rzz = R.flat
     K = (
         np.array(
@@ -583,7 +534,6 @@ def rotmat2qvec(R):
 
 
 def main():
-    """Main."""
     parser = argparse.ArgumentParser(description="Read and write COLMAP binary and text models")
     parser.add_argument("--input_model", help="path to input model folder")
     parser.add_argument(

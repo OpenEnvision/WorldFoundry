@@ -4,12 +4,14 @@ Native packed Wan with causal audio encoding, FramePack motion, and
 per-block audio injection.  Adds audio / motion conditioning.  No VACE
 or linear attn.
 """
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Tuple
+
 from worldfoundry.core.model_loading import hash_state_dict_keys
+
 from ..model import (
     CrossAttention,
     DiTBlock,
@@ -21,23 +23,14 @@ from ..model import (
 )
 
 
-def torch_dfs(model: nn.Module, parent_name='root'):
-    """Torch dfs.
-
-    Args:
-        model: The model.
-        parent_name: The parent name.
-    """
+def torch_dfs(model: nn.Module, parent_name="root"):
     module_names, modules = [], []
-    current_name = parent_name if parent_name else 'root'
+    current_name = parent_name if parent_name else "root"
     module_names.append(current_name)
     modules.append(model)
 
     for name, child in model.named_children():
-        if parent_name:
-            child_name = f'{parent_name}.{name}'
-        else:
-            child_name = name
+        child_name = f"{parent_name}.{name}" if parent_name else name
         child_modules, child_names = torch_dfs(child, child_name)
         module_names += child_names
         modules += child_modules
@@ -45,14 +38,6 @@ def torch_dfs(model: nn.Module, parent_name='root'):
 
 
 def rope_precompute(x, grid_sizes, freqs, start=None):
-    """Rope precompute.
-
-    Args:
-        x: The x.
-        grid_sizes: The grid sizes.
-        freqs: The freqs.
-        start: The start.
-    """
     b, s, n, c = x.size(0), x.size(1), x.size(2), x.size(3) // 2
 
     # split freqs
@@ -64,10 +49,10 @@ def rope_precompute(x, grid_sizes, freqs, start=None):
     # loop over samples
     output = torch.view_as_complex(x.detach().reshape(b, s, n, -1, 2).to(torch.float64))
     seq_bucket = [0]
-    if not type(grid_sizes) is list:
+    if type(grid_sizes) is not list:
         grid_sizes = [grid_sizes]
     for g in grid_sizes:
-        if not type(g) is list:
+        if type(g) is not list:
             g = [torch.zeros_like(g), g]
         batch_size = g[0].shape[0]
         for i in range(batch_size):
@@ -82,7 +67,7 @@ def rope_precompute(x, grid_sizes, freqs, start=None):
             seq_len = int(seq_f * seq_h * seq_w)
             if seq_len > 0:
                 if t_f > 0:
-                    factor_f, factor_h, factor_w = (t_f / seq_f).item(), (t_h / seq_h).item(), (t_w / seq_w).item()
+                    factor_f, factor_h, factor_w = (t_f / seq_f).item(), (t_h / seq_h).item(), (t_w / seq_w).item()  # noqa: F841 - Upstream assignment kept.
                     # Generate a list of seq_f integers starting from f_o and ending at math.ceil(factor_f * seq_f.item() + f_o.item())
                     if f_o >= 0:
                         f_sam = np.linspace(f_o.item(), (t_f + f_o).item() - 1, seq_f).astype(int).tolist()
@@ -101,12 +86,12 @@ def rope_precompute(x, grid_sizes, freqs, start=None):
                             freqs[1][h_sam].view(1, seq_h, 1, -1).expand(seq_f, seq_h, seq_w, -1),
                             freqs[2][w_sam].view(1, 1, seq_w, -1).expand(seq_f, seq_h, seq_w, -1),
                         ],
-                        dim=-1
+                        dim=-1,
                     ).reshape(seq_len, 1, -1)
                 elif t_f < 0:
                     freqs_i = trainable_freqs.unsqueeze(1)
                 # apply rotary embedding
-                output[i, seq_bucket[-1]:seq_bucket[-1] + seq_len] = freqs_i
+                output[i, seq_bucket[-1] : seq_bucket[-1] + seq_len] = freqs_i
         seq_bucket.append(seq_bucket[-1] + seq_len)
     return output
 
@@ -114,17 +99,7 @@ def rope_precompute(x, grid_sizes, freqs, start=None):
 class CausalConv1d(nn.Module):
     """1-D causal convolution used by the S2V motion / audio encoders."""
 
-    def __init__(self, chan_in, chan_out, kernel_size=3, stride=1, dilation=1, pad_mode='replicate', **kwargs):
-        """Init.
-
-        Args:
-            chan_in: The chan in.
-            chan_out: The chan out.
-            kernel_size: The kernel size.
-            stride: The stride.
-            dilation: The dilation.
-            pad_mode: The pad mode.
-        """
+    def __init__(self, chan_in, chan_out, kernel_size=3, stride=1, dilation=1, pad_mode="replicate", **kwargs):
         super().__init__()
 
         self.pad_mode = pad_mode
@@ -134,11 +109,6 @@ class CausalConv1d(nn.Module):
         self.conv = nn.Conv1d(chan_in, chan_out, kernel_size, stride=stride, dilation=dilation, **kwargs)
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         x = F.pad(x, self.time_causal_padding, mode=self.pad_mode)
         return self.conv(x)
 
@@ -147,16 +117,6 @@ class MotionEncoder_tc(nn.Module):
     """Temporal-convolution motion encoder for Wan 2.2 S2V."""
 
     def __init__(self, in_dim: int, hidden_dim: int, num_heads=int, need_global=True, dtype=None, device=None):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            hidden_dim: The hidden dim.
-            num_heads: The num heads.
-            need_global: The need global.
-            dtype: The dtype.
-            device: The device.
-        """
         factory_kwargs = {"dtype": dtype, "device": device}
         super().__init__()
 
@@ -179,29 +139,24 @@ class MotionEncoder_tc(nn.Module):
         self.padding_tokens = nn.Parameter(torch.zeros(1, 1, 1, hidden_dim))
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
-        x = rearrange(x, 'b t c -> b c t')
+        x = rearrange(x, "b t c -> b c t")
         x_ori = x.clone()
         b, c, t = x.shape
         x = self.conv1_local(x)
-        x = rearrange(x, 'b (n c) t -> (b n) t c', n=self.num_heads)
+        x = rearrange(x, "b (n c) t -> (b n) t c", n=self.num_heads)
         x = self.norm1(x)
         x = self.act(x)
-        x = rearrange(x, 'b t c -> b c t')
+        x = rearrange(x, "b t c -> b c t")
         x = self.conv2(x)
-        x = rearrange(x, 'b c t -> b t c')
+        x = rearrange(x, "b c t -> b t c")
         x = self.norm2(x)
         x = self.act(x)
-        x = rearrange(x, 'b t c -> b c t')
+        x = rearrange(x, "b t c -> b c t")
         x = self.conv3(x)
-        x = rearrange(x, 'b c t -> b t c')
+        x = rearrange(x, "b c t -> b t c")
         x = self.norm3(x)
         x = self.act(x)
-        x = rearrange(x, '(b n) t c -> b t n c', b=b)
+        x = rearrange(x, "(b n) t c -> b t n c", b=b)
         padding = self.padding_tokens.repeat(b, x.shape[1], 1, 1).to(device=x.device, dtype=x.dtype)
         x = torch.cat([x, padding], dim=-2)
         x_local = x.clone()
@@ -210,21 +165,21 @@ class MotionEncoder_tc(nn.Module):
             return x_local
 
         x = self.conv1_global(x_ori)
-        x = rearrange(x, 'b c t -> b t c')
+        x = rearrange(x, "b c t -> b t c")
         x = self.norm1(x)
         x = self.act(x)
-        x = rearrange(x, 'b t c -> b c t')
+        x = rearrange(x, "b t c -> b c t")
         x = self.conv2(x)
-        x = rearrange(x, 'b c t -> b t c')
+        x = rearrange(x, "b c t -> b t c")
         x = self.norm2(x)
         x = self.act(x)
-        x = rearrange(x, 'b t c -> b c t')
+        x = rearrange(x, "b t c -> b c t")
         x = self.conv3(x)
-        x = rearrange(x, 'b c t -> b t c')
+        x = rearrange(x, "b c t -> b t c")
         x = self.norm3(x)
         x = self.act(x)
         x = self.final_linear(x)
-        x = rearrange(x, '(b n) t c -> b t n c', b=b)
+        x = rearrange(x, "(b n) t c -> b t n c", b=b)
 
         return x, x_local
 
@@ -232,15 +187,7 @@ class MotionEncoder_tc(nn.Module):
 class FramePackMotioner(nn.Module):
     """FramePack-style motion tokenizer consumed by the S2V DiT."""
 
-    def __init__(self, inner_dim=1024, num_heads=16, zip_frame_buckets=[1, 2, 16], drop_mode="drop", *args, **kwargs):
-        """Init.
-
-        Args:
-            inner_dim: The inner dim.
-            num_heads: The num heads.
-            zip_frame_buckets: The zip frame buckets.
-            drop_mode: The drop mode.
-        """
+    def __init__(self, inner_dim=1024, num_heads=16, zip_frame_buckets=[1, 2, 16], drop_mode="drop", *args, **kwargs):  # noqa: B006 - Keeps the upstream default object and signature.
         super().__init__(*args, **kwargs)
         self.proj = nn.Conv3d(16, inner_dim, kernel_size=(1, 2, 2), stride=(1, 2, 2))
         self.proj_2x = nn.Conv3d(16, inner_dim, kernel_size=(2, 4, 4), stride=(2, 4, 4))
@@ -253,30 +200,26 @@ class FramePackMotioner(nn.Module):
         self.drop_mode = drop_mode
 
     def forward(self, motion_latents, add_last_motion=2):
-        """Forward.
-
-        Args:
-            motion_latents: The motion latents.
-            add_last_motion: The add last motion.
-        """
-        motion_frames = motion_latents[0].shape[1]
+        _motion_frames = motion_latents[0].shape[1]
         mot = []
         mot_remb = []
         for m in motion_latents:
             lat_height, lat_width = m.shape[2], m.shape[3]
-            padd_lat = torch.zeros(16, self.zip_frame_buckets.sum(), lat_height, lat_width).to(device=m.device, dtype=m.dtype)
+            padd_lat = torch.zeros(16, self.zip_frame_buckets.sum(), lat_height, lat_width).to(
+                device=m.device, dtype=m.dtype
+            )
             overlap_frame = min(padd_lat.shape[1], m.shape[1])
             if overlap_frame > 0:
                 padd_lat[:, -overlap_frame:] = m[:, -overlap_frame:]
 
             if add_last_motion < 2 and self.drop_mode != "drop":
-                zero_end_frame = self.zip_frame_buckets[:self.zip_frame_buckets.__len__() - add_last_motion - 1].sum()
+                zero_end_frame = self.zip_frame_buckets[: self.zip_frame_buckets.__len__() - add_last_motion - 1].sum()
                 padd_lat[:, -zero_end_frame:] = 0
 
             padd_lat = padd_lat.unsqueeze(0)
-            clean_latents_4x, clean_latents_2x, clean_latents_post = padd_lat[:, :, -self.zip_frame_buckets.sum():, :, :].split(
-                list(self.zip_frame_buckets)[::-1], dim=2
-            )  # 16, 2 ,1
+            clean_latents_4x, clean_latents_2x, clean_latents_post = padd_lat[
+                :, :, -self.zip_frame_buckets.sum() :, :, :
+            ].split(list(self.zip_frame_buckets)[::-1], dim=2)  # 16, 2 ,1
 
             # patchfy
             clean_latents_post = self.proj(clean_latents_post).flatten(2).transpose(1, 2)
@@ -292,21 +235,35 @@ class FramePackMotioner(nn.Module):
             # rope
             start_time_id = -(self.zip_frame_buckets[:1].sum())
             end_time_id = start_time_id + self.zip_frame_buckets[0]
-            grid_sizes = [] if add_last_motion < 2 and self.drop_mode == "drop" else \
-                        [
-                            [torch.tensor([start_time_id, 0, 0]).unsqueeze(0).repeat(1, 1),
-                            torch.tensor([end_time_id, lat_height // 2, lat_width // 2]).unsqueeze(0).repeat(1, 1),
-                            torch.tensor([self.zip_frame_buckets[0], lat_height // 2, lat_width // 2]).unsqueeze(0).repeat(1, 1), ]
-                        ]
+            grid_sizes = (
+                []
+                if add_last_motion < 2 and self.drop_mode == "drop"
+                else [
+                    [
+                        torch.tensor([start_time_id, 0, 0]).unsqueeze(0).repeat(1, 1),
+                        torch.tensor([end_time_id, lat_height // 2, lat_width // 2]).unsqueeze(0).repeat(1, 1),
+                        torch.tensor([self.zip_frame_buckets[0], lat_height // 2, lat_width // 2])
+                        .unsqueeze(0)
+                        .repeat(1, 1),
+                    ]
+                ]
+            )
 
             start_time_id = -(self.zip_frame_buckets[:2].sum())
             end_time_id = start_time_id + self.zip_frame_buckets[1] // 2
-            grid_sizes_2x = [] if add_last_motion < 1 and self.drop_mode == "drop" else \
-            [
-                [torch.tensor([start_time_id, 0, 0]).unsqueeze(0).repeat(1, 1),
-                torch.tensor([end_time_id, lat_height // 4, lat_width // 4]).unsqueeze(0).repeat(1, 1),
-                torch.tensor([self.zip_frame_buckets[1], lat_height // 2, lat_width // 2]).unsqueeze(0).repeat(1, 1), ]
-            ]
+            grid_sizes_2x = (
+                []
+                if add_last_motion < 1 and self.drop_mode == "drop"
+                else [
+                    [
+                        torch.tensor([start_time_id, 0, 0]).unsqueeze(0).repeat(1, 1),
+                        torch.tensor([end_time_id, lat_height // 4, lat_width // 4]).unsqueeze(0).repeat(1, 1),
+                        torch.tensor([self.zip_frame_buckets[1], lat_height // 2, lat_width // 2])
+                        .unsqueeze(0)
+                        .repeat(1, 1),
+                    ]
+                ]
+            )
 
             start_time_id = -(self.zip_frame_buckets[:3].sum())
             end_time_id = start_time_id + self.zip_frame_buckets[2] // 4
@@ -314,7 +271,9 @@ class FramePackMotioner(nn.Module):
                 [
                     torch.tensor([start_time_id, 0, 0]).unsqueeze(0).repeat(1, 1),
                     torch.tensor([end_time_id, lat_height // 8, lat_width // 8]).unsqueeze(0).repeat(1, 1),
-                    torch.tensor([self.zip_frame_buckets[2], lat_height // 2, lat_width // 2]).unsqueeze(0).repeat(1, 1),
+                    torch.tensor([self.zip_frame_buckets[2], lat_height // 2, lat_width // 2])
+                    .unsqueeze(0)
+                    .repeat(1, 1),
                 ]
             ]
 
@@ -324,7 +283,7 @@ class FramePackMotioner(nn.Module):
                 motion_lat.detach().view(1, motion_lat.shape[1], self.num_heads, self.inner_dim // self.num_heads),
                 grid_sizes,
                 self.freqs,
-                start=None
+                start=None,
             )
 
             mot.append(motion_lat)
@@ -341,25 +300,12 @@ class AdaLayerNorm(nn.Module):
         output_dim: int,
         norm_eps: float = 1e-5,
     ):
-        """Init.
-
-        Args:
-            embedding_dim: The embedding dim.
-            output_dim: The output dim.
-            norm_eps: The norm eps.
-        """
         super().__init__()
         self.silu = nn.SiLU()
         self.linear = nn.Linear(embedding_dim, output_dim)
         self.norm = nn.LayerNorm(output_dim // 2, norm_eps, elementwise_affine=False)
 
     def forward(self, x, temb):
-        """Forward.
-
-        Args:
-            x: The x.
-            temb: The temb.
-        """
         temb = self.linear(F.silu(temb))
         shift, scale = temb.chunk(2, dim=1)
         shift = shift[:, None, :]
@@ -377,62 +323,59 @@ class AudioInjector_WAN(nn.Module):
         all_modules_names,
         dim=2048,
         num_heads=32,
-        inject_layer=[0, 27],
+        inject_layer=[0, 27],  # noqa: B006 - Keeps the upstream default object and signature.
         enable_adain=False,
         adain_dim=2048,
     ):
-        """Init.
-
-        Args:
-            all_modules: The all modules.
-            all_modules_names: The all modules names.
-            dim: The dim.
-            num_heads: The num heads.
-            inject_layer: The inject layer.
-            enable_adain: The enable adain.
-            adain_dim: The adain dim.
-        """
         super().__init__()
         self.injected_block_id = {}
         audio_injector_id = 0
-        for mod_name, mod in zip(all_modules_names, all_modules):
+        for mod_name, mod in zip(all_modules_names, all_modules, strict=False):
             if isinstance(mod, DiTBlock):
                 for inject_id in inject_layer:
-                    if f'transformer_blocks.{inject_id}' in mod_name:
+                    if f"transformer_blocks.{inject_id}" in mod_name:
                         self.injected_block_id[inject_id] = audio_injector_id
                         audio_injector_id += 1
 
-        self.injector = nn.ModuleList([CrossAttention(
-            dim=dim,
-            num_heads=num_heads,
-        ) for _ in range(audio_injector_id)])
-        self.injector_pre_norm_feat = nn.ModuleList([nn.LayerNorm(
-            dim,
-            elementwise_affine=False,
-            eps=1e-6,
-        ) for _ in range(audio_injector_id)])
-        self.injector_pre_norm_vec = nn.ModuleList([nn.LayerNorm(
-            dim,
-            elementwise_affine=False,
-            eps=1e-6,
-        ) for _ in range(audio_injector_id)])
+        self.injector = nn.ModuleList(
+            [
+                CrossAttention(
+                    dim=dim,
+                    num_heads=num_heads,
+                )
+                for _ in range(audio_injector_id)
+            ]
+        )
+        self.injector_pre_norm_feat = nn.ModuleList(
+            [
+                nn.LayerNorm(
+                    dim,
+                    elementwise_affine=False,
+                    eps=1e-6,
+                )
+                for _ in range(audio_injector_id)
+            ]
+        )
+        self.injector_pre_norm_vec = nn.ModuleList(
+            [
+                nn.LayerNorm(
+                    dim,
+                    elementwise_affine=False,
+                    eps=1e-6,
+                )
+                for _ in range(audio_injector_id)
+            ]
+        )
         if enable_adain:
-            self.injector_adain_layers = nn.ModuleList([AdaLayerNorm(output_dim=dim * 2, embedding_dim=adain_dim) for _ in range(audio_injector_id)])
+            self.injector_adain_layers = nn.ModuleList(
+                [AdaLayerNorm(output_dim=dim * 2, embedding_dim=adain_dim) for _ in range(audio_injector_id)]
+            )
 
 
 class CausalAudioEncoder(nn.Module):
     """Causal audio encoder that produces per-frame S2V condition tokens."""
 
     def __init__(self, dim=5120, num_layers=25, out_dim=2048, num_token=4, need_global=False):
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_layers: The num layers.
-            out_dim: The out dim.
-            num_token: The num token.
-            need_global: The need global.
-        """
         super().__init__()
         self.encoder = MotionEncoder_tc(in_dim=dim, hidden_dim=out_dim, num_heads=num_token, need_global=need_global)
         weight = torch.ones((1, num_layers, 1, 1)) * 0.01
@@ -441,11 +384,6 @@ class CausalAudioEncoder(nn.Module):
         self.act = torch.nn.SiLU()
 
     def forward(self, features):
-        """Forward.
-
-        Args:
-            features: The features.
-        """
         # features B * num_layers * dim * video_length
         weights = self.act(self.weights.to(device=features.device, dtype=features.dtype))
         weights_sum = weights.sum(dim=1, keepdims=True)
@@ -459,19 +397,16 @@ class WanS2VDiTBlock(DiTBlock):
     """Wan 2.2 S2V DiT block (audio-aware residual on the native graph)."""
 
     def forward(self, x, context, t_mod, seq_len_x, freqs):
-        """Forward.
-
-        Args:
-            x: The x.
-            context: The context.
-            t_mod: The t mod.
-            seq_len_x: The seq len x.
-            freqs: The freqs.
-        """
         t_mod = (self.modulation.unsqueeze(2).to(dtype=t_mod.dtype, device=t_mod.device) + t_mod).chunk(6, dim=1)
         # t_mod[:, :, 0] for x, t_mod[:, :, 1] for other like ref, motion, etc.
         t_mod = [
-            torch.cat([element[:, :, 0].expand(1, seq_len_x, x.shape[-1]), element[:, :, 1].expand(1, x.shape[1] - seq_len_x, x.shape[-1])], dim=1)
+            torch.cat(
+                [
+                    element[:, :, 0].expand(1, seq_len_x, x.shape[-1]),
+                    element[:, :, 1].expand(1, x.shape[1] - seq_len_x, x.shape[-1]),
+                ],
+                dim=1,
+            )
             for element in t_mod
         ]
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = t_mod
@@ -495,14 +430,14 @@ class WanS2VModel(torch.nn.Module):
         text_dim: int,
         freq_dim: int,
         eps: float,
-        patch_size: Tuple[int, int, int],
+        patch_size: tuple[int, int, int],
         num_heads: int,
         num_layers: int,
         cond_dim: int,
         audio_dim: int,
         num_audio_token: int,
         enable_adain: bool = True,
-        audio_inject_layers: list = [0, 4, 8, 12, 16, 20, 24, 27, 30, 33, 36, 39],
+        audio_inject_layers: list = [0, 4, 8, 12, 16, 20, 24, 27, 30, 33, 36, 39],  # noqa: B006 - Keeps the upstream default object and signature.
         zero_timestep: bool = True,
         add_last_motion: bool = True,
         framepack_drop_mode: str = "padd",
@@ -511,32 +446,6 @@ class WanS2VModel(torch.nn.Module):
         seperated_timestep: bool = False,
         require_clip_embedding: bool = False,
     ):
-        """Init.
-
-        Args:
-            dim: The dim.
-            in_dim: The in dim.
-            ffn_dim: The ffn dim.
-            out_dim: The out dim.
-            text_dim: The text dim.
-            freq_dim: The freq dim.
-            eps: The eps.
-            patch_size: The patch size.
-            num_heads: The num heads.
-            num_layers: The num layers.
-            cond_dim: The cond dim.
-            audio_dim: The audio dim.
-            num_audio_token: The num audio token.
-            enable_adain: The enable adain.
-            audio_inject_layers: The audio inject layers.
-            zero_timestep: The zero timestep.
-            add_last_motion: The add last motion.
-            framepack_drop_mode: The framepack drop mode.
-            fuse_vae_embedding_in_latents: The fuse vae embedding in latents.
-            require_vae_embedding: The require vae embedding.
-            seperated_timestep: The seperated timestep.
-            require_clip_embedding: The require clip embedding.
-        """
         super().__init__()
         self.dim = dim
         self.in_dim = in_dim
@@ -552,7 +461,7 @@ class WanS2VModel(torch.nn.Module):
         self.require_clip_embedding = require_clip_embedding
 
         self.patch_embedding = nn.Conv3d(in_dim, dim, kernel_size=patch_size, stride=patch_size)
-        self.text_embedding = nn.Sequential(nn.Linear(text_dim, dim), nn.GELU(approximate='tanh'), nn.Linear(dim, dim))
+        self.text_embedding = nn.Sequential(nn.Linear(text_dim, dim), nn.GELU(approximate="tanh"), nn.Linear(dim, dim))
         self.time_embedding = nn.Sequential(nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
         self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(dim, dim * 6))
 
@@ -561,7 +470,9 @@ class WanS2VModel(torch.nn.Module):
         self.freqs = torch.cat(precompute_freqs_cis_3d(dim // num_heads), dim=1)
 
         self.cond_encoder = nn.Conv3d(cond_dim, dim, kernel_size=patch_size, stride=patch_size)
-        self.casual_audio_encoder = CausalAudioEncoder(dim=audio_dim, out_dim=dim, num_token=num_audio_token, need_global=enable_adain)
+        self.casual_audio_encoder = CausalAudioEncoder(
+            dim=audio_dim, out_dim=dim, num_token=num_audio_token, need_global=enable_adain
+        )
         all_modules, all_modules_names = torch_dfs(self.blocks, parent_name="root.transformer_blocks")
         self.audio_injector = AudioInjector_WAN(
             all_modules,
@@ -573,44 +484,28 @@ class WanS2VModel(torch.nn.Module):
             adain_dim=dim,
         )
         self.trainable_cond_mask = nn.Embedding(3, dim)
-        self.frame_packer = FramePackMotioner(inner_dim=dim, num_heads=num_heads, zip_frame_buckets=[1, 2, 16], drop_mode=framepack_drop_mode)
+        self.frame_packer = FramePackMotioner(
+            inner_dim=dim, num_heads=num_heads, zip_frame_buckets=[1, 2, 16], drop_mode=framepack_drop_mode
+        )
 
     def patchify(self, x: torch.Tensor):
-        """Patchify.
-
-        Args:
-            x: The x.
-        """
         grid_size = x.shape[2:]
-        x = rearrange(x, 'b c f h w -> b (f h w) c').contiguous()
+        x = rearrange(x, "b c f h w -> b (f h w) c").contiguous()
         return x, grid_size  # x, grid_size: (f, h, w)
 
     def unpatchify(self, x: torch.Tensor, grid_size: torch.Tensor):
-        """Unpatchify.
-
-        Args:
-            x: The x.
-            grid_size: The grid size.
-        """
         return rearrange(
             x,
-            'b (f h w) (x y z c) -> b c (f x) (h y) (w z)',
+            "b (f h w) (x y z c) -> b c (f x) (h y) (w z)",
             f=grid_size[0],
             h=grid_size[1],
             w=grid_size[2],
             x=self.patch_size[0],
             y=self.patch_size[1],
-            z=self.patch_size[2]
+            z=self.patch_size[2],
         )
 
     def process_motion_frame_pack(self, motion_latents, drop_motion_frames=False, add_last_motion=2):
-        """Process motion frame pack.
-
-        Args:
-            motion_latents: The motion latents.
-            drop_motion_frames: The drop motion frames.
-            add_last_motion: The add last motion.
-        """
         flattern_mot, mot_remb = self.frame_packer(motion_latents, add_last_motion)
         if drop_motion_frames:
             return [m[:, :0] for m in flattern_mot], [m[:, :0] for m in mot_remb]
@@ -618,49 +513,49 @@ class WanS2VModel(torch.nn.Module):
             return flattern_mot, mot_remb
 
     def inject_motion(self, x, rope_embs, mask_input, motion_latents, drop_motion_frames=True, add_last_motion=2):
-        """Inject motion.
-
-        Args:
-            x: The x.
-            rope_embs: The rope embs.
-            mask_input: The mask input.
-            motion_latents: The motion latents.
-            drop_motion_frames: The drop motion frames.
-            add_last_motion: The add last motion.
-        """
         # inject the motion frames token to the hidden states
-        mot, mot_remb = self.process_motion_frame_pack(motion_latents, drop_motion_frames=drop_motion_frames, add_last_motion=add_last_motion)
+        mot, mot_remb = self.process_motion_frame_pack(
+            motion_latents, drop_motion_frames=drop_motion_frames, add_last_motion=add_last_motion
+        )
         if len(mot) > 0:
             x = torch.cat([x, mot[0]], dim=1)
             rope_embs = torch.cat([rope_embs, mot_remb[0]], dim=1)
             mask_input = torch.cat(
-                [mask_input, 2 * torch.ones([1, x.shape[1] - mask_input.shape[1]], device=mask_input.device, dtype=mask_input.dtype)], dim=1
+                [
+                    mask_input,
+                    2
+                    * torch.ones(
+                        [1, x.shape[1] - mask_input.shape[1]], device=mask_input.device, dtype=mask_input.dtype
+                    ),
+                ],
+                dim=1,
             )
         return x, rope_embs, mask_input
 
-    def after_transformer_block(self, block_idx, hidden_states, audio_emb_global, audio_emb, original_seq_len, use_unified_sequence_parallel=False):
-        """After transformer block.
-
-        Args:
-            block_idx: The block idx.
-            hidden_states: The hidden states.
-            audio_emb_global: The audio emb global.
-            audio_emb: The audio emb.
-            original_seq_len: The original seq len.
-            use_unified_sequence_parallel: The use unified sequence parallel.
-        """
-        if block_idx in self.audio_injector.injected_block_id.keys():
+    def after_transformer_block(
+        self,
+        block_idx,
+        hidden_states,
+        audio_emb_global,
+        audio_emb,
+        original_seq_len,
+        use_unified_sequence_parallel=False,
+    ):
+        if block_idx in self.audio_injector.injected_block_id.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             audio_attn_id = self.audio_injector.injected_block_id[block_idx]
             num_frames = audio_emb.shape[1]
             if use_unified_sequence_parallel:
                 from xfuser.core.distributed import get_sp_group
+
                 hidden_states = get_sp_group().all_gather(hidden_states, dim=1)
 
             input_hidden_states = hidden_states[:, :original_seq_len].clone()  # b (f h w) c
             input_hidden_states = rearrange(input_hidden_states, "b (t n) c -> (b t) n c", t=num_frames)
 
             audio_emb_global = rearrange(audio_emb_global, "b t n c -> (b t) n c")
-            adain_hidden_states = self.audio_injector.injector_adain_layers[audio_attn_id](input_hidden_states, temb=audio_emb_global[:, 0])
+            adain_hidden_states = self.audio_injector.injector_adain_layers[audio_attn_id](
+                input_hidden_states, temb=audio_emb_global[:, 0]
+            )
             attn_hidden_states = adain_hidden_states
 
             audio_emb = rearrange(audio_emb, "b t n c -> (b t) n c", t=num_frames)
@@ -669,39 +564,32 @@ class WanS2VModel(torch.nn.Module):
             residual_out = rearrange(residual_out, "(b t) n c -> b (t n) c", t=num_frames)
             hidden_states[:, :original_seq_len] = hidden_states[:, :original_seq_len] + residual_out
             if use_unified_sequence_parallel:
-                from xfuser.core.distributed import get_sequence_parallel_world_size, get_sequence_parallel_rank
-                hidden_states = torch.chunk(hidden_states, get_sequence_parallel_world_size(), dim=1)[get_sequence_parallel_rank()]
+                from xfuser.core.distributed import get_sequence_parallel_rank, get_sequence_parallel_world_size
+
+                hidden_states = torch.chunk(hidden_states, get_sequence_parallel_world_size(), dim=1)[
+                    get_sequence_parallel_rank()
+                ]
         return hidden_states
 
-    def cal_audio_emb(self, audio_input, motion_frames=[73, 19]):
-        """Cal audio emb.
-
-        Args:
-            audio_input: The audio input.
-            motion_frames: The motion frames.
-        """
+    def cal_audio_emb(self, audio_input, motion_frames=[73, 19]):  # noqa: B006 - Keeps the upstream default object and signature.
         audio_input = torch.cat([audio_input[..., 0:1].repeat(1, 1, 1, motion_frames[0]), audio_input], dim=-1)
         audio_emb_global, audio_emb = self.casual_audio_encoder(audio_input)
-        audio_emb_global = audio_emb_global[:, motion_frames[1]:].clone()
-        merged_audio_emb = audio_emb[:, motion_frames[1]:, :]
+        audio_emb_global = audio_emb_global[:, motion_frames[1] :].clone()
+        merged_audio_emb = audio_emb[:, motion_frames[1] :, :]
         return audio_emb_global, merged_audio_emb
 
     def get_grid_sizes(self, grid_size_x, grid_size_ref):
-        """Get grid sizes.
-
-        Args:
-            grid_size_x: The grid size x.
-            grid_size_ref: The grid size ref.
-        """
         f, h, w = grid_size_x
         rf, rh, rw = grid_size_ref
         grid_sizes_x = torch.tensor([f, h, w], dtype=torch.long).unsqueeze(0)
         grid_sizes_x = [[torch.zeros_like(grid_sizes_x), grid_sizes_x, grid_sizes_x]]
-        grid_sizes_ref = [[
-            torch.tensor([30, 0, 0]).unsqueeze(0),
-            torch.tensor([31, rh, rw]).unsqueeze(0),
-            torch.tensor([1, rh, rw]).unsqueeze(0),
-        ]]
+        grid_sizes_ref = [
+            [
+                torch.tensor([30, 0, 0]).unsqueeze(0),
+                torch.tensor([31, rh, rw]).unsqueeze(0),
+                torch.tensor([1, rh, rw]).unsqueeze(0),
+            ]
+        ]
         return grid_sizes_x + grid_sizes_ref
 
     def forward(
@@ -713,20 +601,8 @@ class WanS2VModel(torch.nn.Module):
         motion_latents,
         pose_cond,
         use_gradient_checkpointing_offload=False,
-        use_gradient_checkpointing=False
+        use_gradient_checkpointing=False,
     ):
-        """Forward.
-
-        Args:
-            latents: The latents.
-            timestep: The timestep.
-            context: The context.
-            audio_input: The audio input.
-            motion_latents: The motion latents.
-            pose_cond: The pose cond.
-            use_gradient_checkpointing_offload: The use gradient checkpointing offload.
-            use_gradient_checkpointing: The use gradient checkpointing.
-        """
         origin_ref_latents = latents[:, :, 0:1]
         x = latents[:, :, 1:]
 
@@ -738,18 +614,29 @@ class WanS2VModel(torch.nn.Module):
 
         # x and pose_cond
         pose_cond = torch.zeros_like(x) if pose_cond is None else pose_cond
-        x, (f, h, w) = self.patchify(self.patch_embedding(x) + self.cond_encoder(pose_cond))  # torch.Size([1, 29120, 5120])
+        x, (f, h, w) = self.patchify(
+            self.patch_embedding(x) + self.cond_encoder(pose_cond)
+        )  # torch.Size([1, 29120, 5120])
         seq_len_x = x.shape[1]
 
         # reference image
-        ref_latents, (rf, rh, rw) = self.patchify(self.patch_embedding(origin_ref_latents))  # torch.Size([1, 1456, 5120])
+        ref_latents, (rf, rh, rw) = self.patchify(
+            self.patch_embedding(origin_ref_latents)
+        )  # torch.Size([1, 1456, 5120])
         grid_sizes = self.get_grid_sizes((f, h, w), (rf, rh, rw))
         x = torch.cat([x, ref_latents], dim=1)
         # mask
-        mask = torch.cat([torch.zeros([1, seq_len_x]), torch.ones([1, ref_latents.shape[1]])], dim=1).to(torch.long).to(x.device)
+        mask = (
+            torch.cat([torch.zeros([1, seq_len_x]), torch.ones([1, ref_latents.shape[1]])], dim=1)
+            .to(torch.long)
+            .to(x.device)
+        )
         # freqs
         pre_compute_freqs = rope_precompute(
-            x.detach().view(1, x.size(1), self.num_heads, self.dim // self.num_heads), grid_sizes, self.freqs, start=None
+            x.detach().view(1, x.size(1), self.num_heads, self.dim // self.num_heads),
+            grid_sizes,
+            self.freqs,
+            start=None,
         )
         # motion
         x, pre_compute_freqs, mask = self.inject_motion(x, pre_compute_freqs, mask, motion_latents, add_last_motion=2)
@@ -762,14 +649,9 @@ class WanS2VModel(torch.nn.Module):
         t_mod = self.time_projection(t).unflatten(1, (6, self.dim)).unsqueeze(2).transpose(0, 2)
 
         def create_custom_forward(module):
-            """Create custom forward.
-
-            Args:
-                module: The module.
-            """
             def custom_forward(*inputs):
-                """Custom forward."""
                 return module(*inputs)
+
             return custom_forward
 
         for block_id, block in enumerate(self.blocks):
@@ -785,7 +667,15 @@ class WanS2VModel(torch.nn.Module):
                         use_reentrant=False,
                     )
                     x = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(lambda x: self.after_transformer_block(block_id, x, audio_emb_global, merged_audio_emb, seq_len_x)),
+                        create_custom_forward(
+                            lambda x: self.after_transformer_block(
+                                block_id,  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                                x,
+                                audio_emb_global,
+                                merged_audio_emb,
+                                seq_len_x,
+                            )
+                        ),
                         x,
                         use_reentrant=False,
                     )
@@ -800,7 +690,15 @@ class WanS2VModel(torch.nn.Module):
                     use_reentrant=False,
                 )
                 x = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(lambda x: self.after_transformer_block(block_id, x, audio_emb_global, merged_audio_emb, seq_len_x)),
+                    create_custom_forward(
+                        lambda x: self.after_transformer_block(
+                            block_id,  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                            x,
+                            audio_emb_global,
+                            merged_audio_emb,
+                            seq_len_x,
+                        )
+                    ),
                     x,
                     use_reentrant=False,
                 )
@@ -817,7 +715,6 @@ class WanS2VModel(torch.nn.Module):
 
     @staticmethod
     def state_dict_converter():
-        """State dict converter."""
         return WanS2VModelStateDictConverter()
 
 
@@ -825,15 +722,9 @@ class WanS2VModelStateDictConverter:
     """Key remap / config recovery for Wan 2.2 S2V checkpoints."""
 
     def __init__(self):
-        """Init."""
         pass
 
     def from_civitai(self, state_dict):
-        """From civitai.
-
-        Args:
-            state_dict: The state dict.
-        """
         config = {}
         if hash_state_dict_keys(state_dict) == "966cffdcc52f9c46c391768b27637614":
             config = {

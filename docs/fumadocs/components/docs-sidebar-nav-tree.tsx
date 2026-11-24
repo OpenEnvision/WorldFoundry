@@ -3,9 +3,7 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { BenchmarkBadge } from '@/components/benchmark-badge';
 import { DocsSidebarIcon } from '@/components/docs-sidebar-icon';
-import type { Locale } from '@/lib/i18n';
 import {
   isSidebarItemActive,
   type SidebarNavItem,
@@ -16,24 +14,20 @@ type DocsSidebarNavTreeProps = {
   hub: SidebarNavPage;
   items: SidebarNavItem[];
   currentUrl: string;
-  locale: Locale;
   defaultOpen: boolean;
   expandLabel: string;
   collapseLabel: string;
   panelId: string;
-  showBadges?: boolean;
 };
 
 export function DocsSidebarNavTree({
   hub,
   items,
   currentUrl,
-  locale,
   defaultOpen,
   expandLabel,
   collapseLabel,
   panelId,
-  showBadges = false,
 }: DocsSidebarNavTreeProps) {
   const [open, setOpen] = useState(defaultOpen);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -98,13 +92,6 @@ export function DocsSidebarNavTree({
               >
                 <span className="pi-doc-link-row">
                   <span className="pi-doc-link-title">{item.link.label}</span>
-                  {showBadges && item.badges.length > 0 ? (
-                    <span className="pi-doc-link-badges">
-                      {item.badges.map((badge) => (
-                        <BenchmarkBadge kind={badge.kind} locale={locale} key={badge.kind} />
-                      ))}
-                    </span>
-                  ) : null}
                 </span>
               </Link>
             );

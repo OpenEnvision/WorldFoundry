@@ -1,10 +1,10 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import List, Union
 
 import torch.nn as nn
 from mmdet.utils import ConfigType, OptMultiConfig
 
 from mmyolo.registry import MODELS
+
 from .. import CSPLayerWithTwoConv
 from ..utils import make_divisible, make_round
 from .yolov5_pafpn import YOLOv5PAFPN
@@ -31,17 +31,18 @@ class YOLOv8PAFPN(YOLOv5PAFPN):
             Defaults to None.
     """
 
-    def __init__(self,
-                 in_channels: List[int],
-                 out_channels: Union[List[int], int],
-                 deepen_factor: float = 1.0,
-                 widen_factor: float = 1.0,
-                 num_csp_blocks: int = 3,
-                 freeze_all: bool = False,
-                 norm_cfg: ConfigType = dict(
-                     type='BN', momentum=0.03, eps=0.001),
-                 act_cfg: ConfigType = dict(type='SiLU', inplace=True),
-                 init_cfg: OptMultiConfig = None):
+    def __init__(
+        self,
+        in_channels: list[int],
+        out_channels: list[int] | int,
+        deepen_factor: float = 1.0,
+        widen_factor: float = 1.0,
+        num_csp_blocks: int = 3,
+        freeze_all: bool = False,
+        norm_cfg: ConfigType = {"type": "BN", "momentum": 0.03, "eps": 0.001},  # noqa: B006 - Keeps the upstream default object and signature.
+        act_cfg: ConfigType = {"type": "SiLU", "inplace": True},  # noqa: B006 - Keeps the upstream default object and signature.
+        init_cfg: OptMultiConfig = None,
+    ):
         super().__init__(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -51,11 +52,11 @@ class YOLOv8PAFPN(YOLOv5PAFPN):
             freeze_all=freeze_all,
             norm_cfg=norm_cfg,
             act_cfg=act_cfg,
-            init_cfg=init_cfg)
+            init_cfg=init_cfg,
+        )
 
     def build_reduce_layer(self, idx: int) -> nn.Module:
-        """build reduce layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -65,8 +66,7 @@ class YOLOv8PAFPN(YOLOv5PAFPN):
         return nn.Identity()
 
     def build_top_down_layer(self, idx: int) -> nn.Module:
-        """build top down layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -74,17 +74,16 @@ class YOLOv8PAFPN(YOLOv5PAFPN):
             nn.Module: The top down layer.
         """
         return CSPLayerWithTwoConv(
-            make_divisible((self.in_channels[idx - 1] + self.in_channels[idx]),
-                           self.widen_factor),
+            make_divisible((self.in_channels[idx - 1] + self.in_channels[idx]), self.widen_factor),
             make_divisible(self.out_channels[idx - 1], self.widen_factor),
             num_blocks=make_round(self.num_csp_blocks, self.deepen_factor),
             add_identity=False,
             norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
+            act_cfg=self.act_cfg,
+        )
 
     def build_bottom_up_layer(self, idx: int) -> nn.Module:
-        """build bottom up layer.
-
+        """
         Args:
             idx (int): layer idx.
 
@@ -92,11 +91,10 @@ class YOLOv8PAFPN(YOLOv5PAFPN):
             nn.Module: The bottom up layer.
         """
         return CSPLayerWithTwoConv(
-            make_divisible(
-                (self.out_channels[idx] + self.out_channels[idx + 1]),
-                self.widen_factor),
+            make_divisible((self.out_channels[idx] + self.out_channels[idx + 1]), self.widen_factor),
             make_divisible(self.out_channels[idx + 1], self.widen_factor),
             num_blocks=make_round(self.num_csp_blocks, self.deepen_factor),
             add_identity=False,
             norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
+            act_cfg=self.act_cfg,
+        )

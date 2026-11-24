@@ -1,15 +1,15 @@
 ---
 title: "LingBot-VA"
-description: "LingBot-VA from Robbyant (Ant Group): vla and va; Runner parity pending; 3 variants."
+description: "LingBot-VA from Robbyant (Ant Group): VLA, va, and 6 more tasks; Runner parity pending; 3 variants."
 modelId: "lingbot-va"
 pageSource: authored
 ---
 
-LingBot-VA is Robbyant's video-action model served through a vendored server/client runtime: base plus RoboTwin and LIBERO-Long post-trained checkpoints are staged (Apache-2.0). On an 80GB CUDA GPU the base transformer passed CUDA forward, post-train checkpoints passed tensor probes, and libero-long server init reached websocket listen — full client rollout remains unverified.
+LingBot-VA is Robbyant's video-action model, served through a vendored server/client runtime, with a base checkpoint plus RoboTwin and LIBERO-Long post-trained checkpoints (Apache-2.0). On an 80GB GPU the base transformer runs a CUDA forward pass and the LIBERO-Long server starts and listens on its websocket; end-to-end client rollout is not yet validated.
 
 <ModelPaperFigures modelId="lingbot-va" locale="en" />
 
-The recorded paper is [arXiv 2601.21998](https://arxiv.org/abs/2601.21998).
+Paper: [arXiv 2601.21998](https://arxiv.org/abs/2601.21998).
 
 Code: [Robbyant/lingbot-va](https://github.com/Robbyant/lingbot-va).
 
@@ -17,36 +17,36 @@ Code: [Robbyant/lingbot-va](https://github.com/Robbyant/lingbot-va).
 
 ## What it is for
 
-Pick `lingbot-va-base` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.
+`lingbot-va-base` is a vision-language-action policy: an instruction and observations in, actions out.
 
-A transformer video-action backbone; staged configs set attn_mode=torch and build_server_command passes --checkpoint-dir to the vendored server. Architecture internals beyond the official repository pointer are not recorded in this repository. It is published by Robbyant (Ant Group).
+A transformer video-action backbone. The provided configs set attn_mode=torch, and the vendored server is launched with --checkpoint-dir pointing at the chosen checkpoint. It is published by Robbyant (Ant Group).
 
-Catalog tasks include vla, va, vam, and wam. Catalog aliases include `lingbot_va`, `lingbot-va-base`, `lingbot-va-posttrain-robotwin`, and `lingbot-va-posttrain-libero-long`. Also recorded: `lingbot-va-posttrain-robotwin`, `lingbot-va-posttrain-libero-long`.
+Tasks: VLA, va, vam, and WAM. Aliases: `lingbot_va`, `lingbot-va-base`, `lingbot-va-posttrain-robotwin`, and `lingbot-va-posttrain-libero-long`. Other variants: `lingbot-va-posttrain-robotwin`, `lingbot-va-posttrain-libero-long`.
 
-Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub/libero) (Post-trained libero-long checkpoint is staged), [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) (Post-trained RoboTwin checkpoint is staged).
+Suggested benchmarks: [LIBERO](/docs/evaluation/benchmark-hub/libero) (A LIBERO-Long post-trained checkpoint is available), [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) (A RoboTwin post-trained checkpoint is available).
 
 ## Runtime contract
 
-Optional `prompt`, `input_path`, `interactions`, and `fps`; artifacts `lingbot_va_action_trace.json`.
+Inputs `prompt` and `input-path` (bundled samples are used when omitted); artifacts `lingbot_va_action_trace.json`.
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `LingBotVAPipeline`.
 
-Start on `lingbot-va-base`. The family registers 3 catalog variants (cards above): `lingbot-va-base` (`vam.video_action_modeling`) — Runner parity pending; `lingbot-va-posttrain-robotwin` (`vla.policy_rollout`) — Runner parity pending; `lingbot-va-posttrain-libero-long` (`vla.policy_rollout`) — Runner parity pending. Family status: **Runner parity pending**.
+Start with `lingbot-va-base`. The family has 3 variants, selectable in the command builder above: `lingbot-va-base` (`vam.video_action_modeling`) — Runner parity pending; `lingbot-va-posttrain-robotwin` (`vla.policy_rollout`) — Runner parity pending; `lingbot-va-posttrain-libero-long` (`vla.policy_rollout`) — Runner parity pending. Family status: **Runner parity pending**.
 
-Runs use a server/client split: server init is verified with staged checkpoints, but official demo parity is not claimed until client rollout and action decoding are validated.
+Runs use a server/client split: the vendored server loads the checkpoint and the client drives the rollout.
 
-Local official source and LingBot-VA checkpoints are present; base transformer CUDA forward, posttrain checkpoint tensor probes, and libero-long server-init validation passed on an 80GB CUDA GPU. Full client rollout/action decoding remains unverified, so official demo parity is not claimed.
+Client rollout and action decoding are not yet validated end to end.
 
-The retained inference path includes the model graph, distributed server, client, preprocessing, action diffusion, KV-cache updates, and action decoding.
+The inference path covers the model graph, distributed server, client, preprocessing, action diffusion, KV-cache updates, and action decoding.
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run lingbot-va-base --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Run `wf run lingbot-va-base --pipeline.task-profile interactive-video` to predict actions.
 
 It runs in the dedicated environment `worldfoundry-lingbot-va-cu12` (Python 3.10, Cu126 Or Newer, torch==2.9.0).
 
-Recorded weight repositories include `robbyant/lingbot-va-base`, `robbyant/lingbot-va-posttrain-robotwin`, and `robbyant/lingbot-va-posttrain-libero-long`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lingbot-va-base`. Add `--download` to fetch missing public checkpoints.
+Weights: `robbyant/lingbot-va-base`, `robbyant/lingbot-va-posttrain-robotwin`, and `robbyant/lingbot-va-posttrain-libero-long`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lingbot-va-base`. Add `--download` to fetch missing public checkpoints.
 
-Recorded licenses include apache-2.0; status: **Runner parity pending**.
+License: Apache-2.0.
 
 <ModelRelatedRecipes modelId="lingbot-va" locale="en" />

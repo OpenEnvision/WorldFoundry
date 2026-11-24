@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-import sys
-
 
 EASYANIMATE_RUNTIME_UNAVAILABLE = (
     "EasyAnimate source code is not available from the in-tree runtime package. "
@@ -23,26 +20,21 @@ class EasyAnimateComponents:
 
 
 def load_easyanimate_components() -> EasyAnimateComponents:
-    """
-    Load the in-tree EasyAnimate implementation components.
-
-    Args:
-        None: This loader has no parameters because checkpoints stay external assets.
-    """
-    runtime_root = Path(__file__).resolve().parent
-    package_root = runtime_root / "easyanimate"
-    if not package_root.exists():
-        raise RuntimeError(EASYANIMATE_RUNTIME_UNAVAILABLE)
-
-    runtime_root_str = str(runtime_root)
-    if runtime_root_str not in sys.path:
-        sys.path.insert(0, runtime_root_str)
-
+    """Load the installed EasyAnimate components; checkpoints remain external assets."""
     try:
-        from easyanimate.models import name_to_autoencoder_magvit, name_to_transformer3d
-        from easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
-        from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
-        from easyanimate.utils.utils import get_image_to_video_latent
+        from worldfoundry.base_models.diffusion_model.models.initializers.easyanimate_conditioning import (
+            get_image_to_video_latent,
+        )
+        from worldfoundry.synthesis.visual_generation.easyanimate.easyanimate_runtime.easyanimate.models import (
+            name_to_autoencoder_magvit,
+            name_to_transformer3d,
+        )
+        from worldfoundry.synthesis.visual_generation.easyanimate.easyanimate_runtime.easyanimate.pipeline.pipeline_easyanimate_inpaint import (
+            EasyAnimateInpaintPipeline,
+        )
+        from worldfoundry.synthesis.visual_generation.easyanimate.easyanimate_runtime.easyanimate.utils.fp8_optimization import (
+            convert_weight_dtype_wrapper,
+        )
     except ImportError as exc:
         raise RuntimeError(EASYANIMATE_RUNTIME_UNAVAILABLE) from exc
 

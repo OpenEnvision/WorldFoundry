@@ -1,7 +1,7 @@
 model_name: single_player
 dataset_converters: [CameraLinearConverterMatrixGame2]
 network_config:
-  target: src.models.singleplayer.world_model.SolarisSPModel
+  target: worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.models.singleplayer.world_model.SolarisSPModel
   params:
     action_config:
       blocks:

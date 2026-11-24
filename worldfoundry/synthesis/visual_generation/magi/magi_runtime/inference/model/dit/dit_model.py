@@ -15,7 +15,6 @@
 import gc
 import math
 import os
-from typing import Tuple
 
 import torch
 import torch.distributed
@@ -23,8 +22,6 @@ import torch.nn as nn
 from einops import rearrange
 
 import worldfoundry.core.distributed.model_parallel.groups as mpu
-from inference.common.config import MagiConfig
-from inference.infra.checkpoint.checkpointing import load_checkpoint
 from worldfoundry.core import (
     InferenceParams,
     ModelMetaArgs,
@@ -36,6 +33,10 @@ from worldfoundry.core import (
 )
 from worldfoundry.core.attention import cp_post_process, cp_pre_process
 from worldfoundry.core.distributed import pp_scheduler
+from worldfoundry.synthesis.visual_generation.magi.magi_runtime.inference.common.config import MagiConfig
+from worldfoundry.synthesis.visual_generation.magi.magi_runtime.inference.infra.checkpoint.checkpointing import (
+    load_checkpoint,
+)
 
 from .dit_module import CaptionEmbedder, FinalLinear, LearnableRotaryEmbeddingCat, TimestepEmbedder, TransformerBlock
 
@@ -87,14 +88,19 @@ class VideoDiTModel(torch.nn.Module):
         )
 
         self.final_linear = FinalLinear(
-            self.model_config.hidden_size, self.model_config.patch_size, self.model_config.t_patch_size, self.out_channels
+            self.model_config.hidden_size,
+            self.model_config.patch_size,
+            self.model_config.t_patch_size,
+            self.out_channels,
         )
 
     def generate_kv_range_for_uncondition(self, uncond_x) -> torch.Tensor:
         device = f"cuda:{torch.cuda.current_device()}"
         B, C, T, H, W = uncond_x.shape
         chunk_token_nums = (
-            (T // self.model_config.t_patch_size) * (H // self.model_config.patch_size) * (W // self.model_config.patch_size)
+            (T // self.model_config.t_patch_size)
+            * (H // self.model_config.patch_size)
+            * (W // self.model_config.patch_size)
         )
 
         k_chunk_start = torch.linspace(0, (B - 1) * chunk_token_nums, steps=B).reshape((B, 1))
@@ -162,7 +168,9 @@ class VideoDiTModel(torch.nn.Module):
         # This definition do not have any relationship with the actual input/model/setting.
         # ref_feat_shape is used to calculate innner rescale factor, so it can be float.
         rescale_factor = math.sqrt((H * W) / (16 * 16))
-        rope = self.rope.get_embed(shape=[T_total, H, W], ref_feat_shape=[T_total, H / rescale_factor, W / rescale_factor])
+        rope = self.rope.get_embed(
+            shape=[T_total, H, W], ref_feat_shape=[T_total, H / rescale_factor, W / rescale_factor]
+        )
         # the shape of rope is (T*H*W, -1) aka (seq_length, head_dim), as T is the first dimension, we can directly cut it.
         rope = rope[-(T * H * W) :]
 
@@ -170,7 +178,9 @@ class VideoDiTModel(torch.nn.Module):
         #          Part3: Embed t         #
         ###################################
         assert t.shape[0] == batch_size, f"Invalid t shape, got {t.shape[0]} != {batch_size}"  # nolint
-        assert t.shape[1] == denoising_range_num, f"Invalid t shape, got {t.shape[1]} != {denoising_range_num}"  # nolint
+        assert t.shape[1] == denoising_range_num, (
+            f"Invalid t shape, got {t.shape[1]} != {denoising_range_num}"
+        )  # nolint
         t_flat = t.flatten()  # (N * denoising_range_num,)
         t = self.t_embedder(t_flat)  # (N, D)
 
@@ -207,7 +217,9 @@ class VideoDiTModel(torch.nn.Module):
         condition_map = condition_map.reshape(batch_size, -1).transpose(0, 1).contiguous()
 
         # y_xattn_flat: (total_token, D)
-        y_xattn_flat = torch.masked_select(y_xattn.squeeze(1), xattn_mask.unsqueeze(-1).bool()).reshape(-1, y_xattn.shape[-1])
+        y_xattn_flat = torch.masked_select(y_xattn.squeeze(1), xattn_mask.unsqueeze(-1).bool()).reshape(
+            -1, y_xattn.shape[-1]
+        )
         xattn_mask_for_cuda_graph = None
 
         ######################################################
@@ -218,19 +230,21 @@ class VideoDiTModel(torch.nn.Module):
         y_index = torch.sum(xattn_mask, dim=-1)
         clip_token_nums = H * W * frame_in_range
 
-        cu_seqlens_q = torch.Tensor([0] + ([clip_token_nums] * denoising_range_num * batch_size)).to(torch.int64).to(x.device)
+        cu_seqlens_q = (
+            torch.Tensor([0] + ([clip_token_nums] * denoising_range_num * batch_size)).to(torch.int64).to(x.device)
+        )
         cu_seqlens_k = torch.cat([y_index.new_tensor([0]), y_index]).to(torch.int64).to(x.device)
         cu_seqlens_q = cu_seqlens_q.cumsum(-1).to(torch.int32)
         cu_seqlens_k = cu_seqlens_k.cumsum(-1).to(torch.int32)
-        assert (
-            cu_seqlens_q.shape == cu_seqlens_k.shape
-        ), f"cu_seqlens_q.shape: {cu_seqlens_q.shape}, cu_seqlens_k.shape: {cu_seqlens_k.shape}"
+        assert cu_seqlens_q.shape == cu_seqlens_k.shape, (
+            f"cu_seqlens_q.shape: {cu_seqlens_q.shape}, cu_seqlens_k.shape: {cu_seqlens_k.shape}"
+        )
 
         xattn_q_ranges = torch.cat([cu_seqlens_q[:-1].unsqueeze(1), cu_seqlens_q[1:].unsqueeze(1)], dim=1)
         xattn_k_ranges = torch.cat([cu_seqlens_k[:-1].unsqueeze(1), cu_seqlens_k[1:].unsqueeze(1)], dim=1)
-        assert (
-            xattn_q_ranges.shape == xattn_k_ranges.shape
-        ), f"xattn_q_ranges.shape: {xattn_q_ranges.shape}, xattn_k_ranges.shape: {xattn_k_ranges.shape}"
+        assert xattn_q_ranges.shape == xattn_k_ranges.shape, (
+            f"xattn_q_ranges.shape: {xattn_q_ranges.shape}, xattn_k_ranges.shape: {xattn_k_ranges.shape}"
+        )
 
         cross_attn_params = PackedCrossAttnParams(
             q_ranges=xattn_q_ranges,
@@ -248,23 +262,34 @@ class VideoDiTModel(torch.nn.Module):
         flat_kv = torch.unique(kv_range, sorted=True)
         max_seqlen_k = (flat_kv[-1] - flat_kv[0]).cpu().item()
 
-        ardf_meta = dict(
-            clip_token_nums=clip_token_nums,
-            slice_point=slice_point,
-            range_num=range_num,
-            denoising_range_num=denoising_range_num,
-            q_range=q_range,
-            k_range=kv_range,
-            max_seqlen_q=clip_token_nums,
-            max_seqlen_k=max_seqlen_k,
-        )
+        ardf_meta = {
+            "clip_token_nums": clip_token_nums,
+            "slice_point": slice_point,
+            "range_num": range_num,
+            "denoising_range_num": denoising_range_num,
+            "q_range": q_range,
+            "k_range": kv_range,
+            "max_seqlen_q": clip_token_nums,
+            "max_seqlen_k": max_seqlen_k,
+        }
 
-        return (x, condition, condition_map, rope, y_xattn_flat, xattn_mask_for_cuda_graph, H, W, ardf_meta, cross_attn_params)
+        return (
+            x,
+            condition,
+            condition_map,
+            rope,
+            y_xattn_flat,
+            xattn_mask_for_cuda_graph,
+            H,
+            W,
+            ardf_meta,
+            cross_attn_params,
+        )
 
     @torch.no_grad()
     def forward_pre_process(
         self, x, t, y, caption_dropout_mask=None, xattn_mask=None, kv_range=None, **kwargs
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, ModelMetaArgs]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, ModelMetaArgs]:
         assert kv_range is not None, "Please ensure kv_range is provided"
 
         x = x * self.model_config.x_rescale_factor
@@ -400,7 +425,7 @@ class VideoDiTModel(torch.nn.Module):
 
     def forward_3cfg(
         self, x, timestep, y, mask, kv_range, inference_params, **kwargs
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
         """
         Forward pass of PixArt, but also batches the unconditional forward pass for classifier-free guidance.
         """
@@ -513,7 +538,9 @@ class VideoDiTModel(torch.nn.Module):
                 applied_cfg_range_num -= 1
             cfg_timestep = timestep[0, -applied_cfg_range_num:]
 
-            assert len(prev_chunk_scale_s) == len(cfg_t_range), "prev_chunks_scale and t_range should have the same length"
+            assert len(prev_chunk_scale_s) == len(cfg_t_range), (
+                "prev_chunks_scale and t_range should have the same length"
+            )
             assert len(text_scale_s) == len(cfg_t_range), "text_scale and t_range should have the same length"
 
             cfg_output_list = []
@@ -522,7 +549,7 @@ class VideoDiTModel(torch.nn.Module):
                 prev_chunk_scale, text_scale = self.get_cfg_scale(
                     cfg_timestep[chunk_idx], cfg_t_range, prev_chunk_scale_s, text_scale_s
                 )
-                l = chunk_idx * chunk_width
+                l = chunk_idx * chunk_width  # noqa: E741 - Ambiguous upstream name kept as written.
                 r = (chunk_idx + 1) * chunk_width
                 cfg_output = (
                     (1 - prev_chunk_scale) * out_uncond[:, :, l:r]
@@ -543,7 +570,7 @@ class VideoDiTModel(torch.nn.Module):
             kwargs["caption_dropout_mask"] = torch.tensor([False], dtype=torch.bool, device=x.device)
             inference_params.update_kv_cache = True
             if kwargs.get("distill_nearly_clean_chunk", False):
-                prev_chunks_scale = float(os.getenv("prev_chunks_scale", 0.7))
+                prev_chunks_scale = float(os.getenv("prev_chunks_scale", 0.7))  # noqa: SIM112 - Environment variable name used by the upstream code.
                 slice_start = 1 if kwargs["fwd_extra_1st_chunk"] else 0
                 cond_pre_and_text_channel = x.shape[2]
                 new_x_chunk = x[0:1, :, slice_start * kwargs["chunk_width"] : (slice_start + 1) * kwargs["chunk_width"]]
@@ -570,11 +597,12 @@ class VideoDiTModel(torch.nn.Module):
                 ]
                 near_clean_out_cond_text = cat_out[:, :, cond_pre_and_text_channel:]
                 near_out_cond_pre_and_text = (
-                    near_clean_out_cond_pre_and_text * prev_chunks_scale + near_clean_out_cond_text * (1 - prev_chunks_scale)
+                    near_clean_out_cond_pre_and_text * prev_chunks_scale
+                    + near_clean_out_cond_text * (1 - prev_chunks_scale)
                 )
-                cat_out[
-                    :, :, slice_start * kwargs["chunk_width"] : (slice_start + 1) * kwargs["chunk_width"]
-                ] = near_out_cond_pre_and_text
+                cat_out[:, :, slice_start * kwargs["chunk_width"] : (slice_start + 1) * kwargs["chunk_width"]] = (
+                    near_out_cond_pre_and_text
+                )
                 out_cond_pre_and_text = cat_out[:, :, :cond_pre_and_text_channel]
             else:
                 out_cond_pre_and_text = self.forward(

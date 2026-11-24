@@ -4,7 +4,7 @@ family: NVIDIA DreamDojo
 availability: open_source
 license: other:nvidia-open-model-license
 provider: official_repo
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: dreamdojo
 runtime_profile: runtime-profile:dreamdojo
 release_type: code_and_weights
@@ -23,6 +23,7 @@ official_sources:
   project_page: https://dreamdojo-world.github.io/
   github:
     url: https://github.com/NVIDIA/DreamDojo
+    revision: 02f119b759d5c7f84a399fdeea3c6e82e7ed6cff
     confirmed_ref: 02f119b759d5c7f84a399fdeea3c6e82e7ed6cff
   huggingface:
   - repo_id: nvidia/DreamDojo
@@ -80,10 +81,10 @@ docs:
   usage_notes: Supply one initial image, complete 12-action chunks in the normalized 384-dimensional space, the converted EMA checkpoint, Cosmos video tokenizer, and Reason1 text weights or explicit precomputed embeddings. Each chunk generates 13 frames; longer sequences reuse the final generated frame.
   usage_notes_zh: 提供一幅初始图像、归一化 384 维空间中的完整 12 步动作块、转换后的 EMA 权重、Cosmos 视频 tokenizer，以及 Reason1 文本权重或显式预计算 embedding。每块生成 13 帧，较长序列复用上一块的最终生成帧。
   limitations:
-  - Official numerical parity and robot-task quality are pending validation.
+  - Official numerical parity, GR-1 evaluation quality, and robot-task success have not been validated.
   - Distilled inference uses dreamdojo-student with explicit student weights; the teacher checkpoint is not interchangeable. Other model scales are not supported.
   limitations_zh:
-  - 官方数值一致性与机器人任务质量尚待验证。
+  - 尚未验证官方数值一致性、GR-1 评测质量与机器人任务成功率。
   - 蒸馏推理通过 dreamdojo-student 使用显式学生权重，不能与 teacher 权重互换。暂不支持其他模型规模。
   recommended_benchmarks:
   - id: ewmbench

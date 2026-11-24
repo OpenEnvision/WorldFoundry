@@ -1,12 +1,16 @@
 """Inference utilities for MolmoAct2"""
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Iterable, Optional, Sequence, Tuple
+from typing import Any
 
 import torch
 from torch.nn import functional as F
 from transformers.cache_utils import Cache
 from transformers.configuration_utils import PretrainedConfig
+
+from worldfoundry.base_models.llm_mllm_core.mllm.qwen.layers import repeat_kv as _repeat_kv
+from worldfoundry.core.attention.rotary.embedding import apply_rotary_pos_emb as _apply_rotary_pos_emb
 
 
 @dataclass
@@ -14,12 +18,12 @@ class _ActionFlowInputs:
     trajectory: torch.Tensor
     context: Any
     modulations: Sequence[Any]
-    action_dim_is_pad: Optional[torch.Tensor]
+    action_dim_is_pad: torch.Tensor | None
 
 
 @dataclass
 class _ActionFlowCudaGraph:
-    key: Tuple[Any, ...]
+    key: tuple[Any, ...]
     graph: torch.cuda.CUDAGraph
     static_inputs: _ActionFlowInputs
     output: torch.Tensor
@@ -41,7 +45,7 @@ class _DepthDecodeCudaGraphPostStage:
 
 @dataclass
 class _DepthDecodeCudaGraph:
-    cache_key: Tuple[Any, ...]
+    cache_key: tuple[Any, ...]
     pre_graph: torch.cuda.CUDAGraph
     token_ids: torch.Tensor
     cos: torch.Tensor
@@ -55,13 +59,13 @@ class _DepthDecodeCudaGraph:
 @dataclass
 class _DepthDecodeCudaGraphSpec:
     eligible: bool
-    cache_key_prefix: Tuple[Any, ...]
+    cache_key_prefix: tuple[Any, ...]
     num_hidden_layers: int
     head_dim: int
     num_attention_heads: int
 
 
-def _cache_seq_len_int(past_key_values: Optional[Cache]) -> int:
+def _cache_seq_len_int(past_key_values: Cache | None) -> int:
     if past_key_values is None:
         return 0
     seq_len = past_key_values.get_seq_length()
@@ -70,7 +74,7 @@ def _cache_seq_len_int(past_key_values: Optional[Cache]) -> int:
     return int(seq_len)
 
 
-def _cache_max_len_int(past_key_values: Optional[Cache]) -> int:
+def _cache_max_len_int(past_key_values: Cache | None) -> int:
     if past_key_values is None:
         return -1
     max_len = past_key_values.get_max_cache_shape()
@@ -81,7 +85,7 @@ def _cache_max_len_int(past_key_values: Optional[Cache]) -> int:
 
 def _iter_cache_key_values(
     past_key_values: Cache,
-) -> Iterable[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]]:
+) -> Iterable[tuple[torch.Tensor | None, torch.Tensor | None]]:
     layers = getattr(past_key_values, "layers", None)
     if layers is not None:
         for layer in layers:
@@ -98,8 +102,8 @@ class _DepthDecodeStaticLayerCache:
     def __init__(self, max_cache_len: int) -> None:
         self.max_cache_len = int(max_cache_len)
         self.cumulative_length = 0
-        self.keys: Optional[torch.Tensor] = None
-        self.values: Optional[torch.Tensor] = None
+        self.keys: torch.Tensor | None = None
+        self.values: torch.Tensor | None = None
 
     def _allocate(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         bsz, n_heads = key_states.shape[:2]
@@ -120,15 +124,13 @@ class _DepthDecodeStaticLayerCache:
         value_states: torch.Tensor,
         *args,
         **kwargs,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if self.keys is None:
             self._allocate(key_states, value_states)
         start = self.cumulative_length
         end = start + key_states.shape[-2]
         if end > self.max_cache_len:
-            raise RuntimeError(
-                f"KV cache length {end} exceeds max_cache_len={self.max_cache_len}."
-            )
+            raise RuntimeError(f"KV cache length {end} exceeds max_cache_len={self.max_cache_len}.")
         self.keys[:, :, start:end, :].copy_(key_states)
         self.values[:, :, start:end, :].copy_(value_states)
         self.cumulative_length = end
@@ -149,8 +151,7 @@ class _DepthDecodeStaticCache(Cache):
         text_config = config.get_text_config(decoder=True)
         super().__init__(
             layers=[
-                _DepthDecodeStaticLayerCache(max_cache_len=max_cache_len)
-                for _ in range(text_config.num_hidden_layers)
+                _DepthDecodeStaticLayerCache(max_cache_len=max_cache_len) for _ in range(text_config.num_hidden_layers)
             ]
         )
 
@@ -169,7 +170,7 @@ class ActionCudaGraphManager:
     def __init__(self, model: Any) -> None:
         self.model = model
         self.enabled = True
-        self.action_flow_graph: Optional[_ActionFlowCudaGraph] = None
+        self.action_flow_graph: _ActionFlowCudaGraph | None = None
 
     def set_enabled(self, enabled: bool) -> None:
         self.enabled = bool(enabled)
@@ -240,8 +241,8 @@ class DepthDecodeCudaGraphManager:
         self.model = model
         self.backbone = model.model
         self.enabled = True
-        self.graph: Optional[_DepthDecodeCudaGraph] = None
-        self.graph_spec: Optional[_DepthDecodeCudaGraphSpec] = None
+        self.graph: _DepthDecodeCudaGraph | None = None
+        self.graph_spec: _DepthDecodeCudaGraphSpec | None = None
 
     def set_enabled(self, enabled: bool) -> None:
         self.enabled = bool(enabled)
@@ -288,26 +289,15 @@ class DepthDecodeCudaGraphManager:
         past_key_values: Cache,
         attention_bias: torch.Tensor,
     ) -> bool:
-        if (
-            not self.enabled
-            or self.model.training
-            or self.backbone.transformer.training
-        ):
+        if not self.enabled or self.model.training or self.backbone.transformer.training:
             return False
         if next_input_ids.device.type != "cuda":
             return False
-        if (
-            next_input_ids.ndim != 2
-            or next_input_ids.shape[0] != 1
-            or next_input_ids.shape[1] != 1
-        ):
+        if next_input_ids.ndim != 2 or next_input_ids.shape[0] != 1 or next_input_ids.shape[1] != 1:
             return False
         if not isinstance(past_key_values, _DepthDecodeStaticCache):
             return False
-        if (
-            not torch.is_tensor(attention_bias)
-            or attention_bias.device != next_input_ids.device
-        ):
+        if not torch.is_tensor(attention_bias) or attention_bias.device != next_input_ids.device:
             return False
         return self._depth_decode_spec().eligible
 
@@ -315,7 +305,7 @@ class DepthDecodeCudaGraphManager:
         self,
         next_input_ids: torch.Tensor,
         attention_bias: torch.Tensor,
-    ) -> Tuple[Any, ...]:
+    ) -> tuple[Any, ...]:
         device = next_input_ids.device
         return (
             self._depth_decode_spec().cache_key_prefix,
@@ -325,9 +315,7 @@ class DepthDecodeCudaGraphManager:
             attention_bias.shape[-1],
         )
 
-    def _select_depth_decode_rope(
-        self, cos: torch.Tensor, sin: torch.Tensor, *, past_length: int
-    ) -> None:
+    def _select_depth_decode_rope(self, cos: torch.Tensor, sin: torch.Tensor, *, past_length: int) -> None:
         emb = self.backbone.transformer.rotary_emb
         cos.copy_(emb._pos_cos_cache[0, :, past_length : past_length + 1, :])
         sin.copy_(emb._pos_sin_cache[0, :, past_length : past_length + 1, :])
@@ -338,7 +326,7 @@ class DepthDecodeCudaGraphManager:
         hidden_states: torch.Tensor,
         cos: torch.Tensor,
         sin: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         block = self.backbone.transformer.blocks[layer_idx]
         attention = block.self_attn
         residual = hidden_states
@@ -367,9 +355,7 @@ class DepthDecodeCudaGraphManager:
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
-        query_states, key_states = _apply_rotary_pos_emb(
-            query_states, key_states, cos, sin
-        )
+        query_states, key_states = _apply_rotary_pos_emb(query_states, key_states, cos, sin)
         return residual, query_states, key_states, value_states
 
     def _depth_decode_pre0(
@@ -377,7 +363,7 @@ class DepthDecodeCudaGraphManager:
         token_ids: torch.Tensor,
         cos: torch.Tensor,
         sin: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         inputs_embeds = self.model._embed_base_tokens(token_ids)
         return self._depth_decode_pre_layer(0, inputs_embeds, cos, sin)
 
@@ -407,7 +393,7 @@ class DepthDecodeCudaGraphManager:
         attn_context: torch.Tensor,
         cos: torch.Tensor,
         sin: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = self._depth_decode_post_layer(layer_idx, residual, attn_context)
         return self._depth_decode_pre_layer(layer_idx + 1, hidden_states, cos, sin)
 
@@ -435,9 +421,7 @@ class DepthDecodeCudaGraphManager:
         head_dim = static.head_dim
         max_cache_len = int(attention_bias.shape[-1])
         max_rope_len = max(int(text_config.max_position_embeddings or 0), max_cache_len)
-        self.backbone.transformer.prepare_rope_cache(
-            device=device, max_seq_len=max_rope_len
-        )
+        self.backbone.transformer.prepare_rope_cache(device=device, max_seq_len=max_rope_len)
 
         token_ids = torch.empty((1, 1), device=device, dtype=torch.long)
         cos = torch.empty((1, 1, head_dim), device=device, dtype=dtype)
@@ -469,9 +453,7 @@ class DepthDecodeCudaGraphManager:
                 ),
                 device,
             )
-            post_graphs.append(
-                _DepthDecodeCudaGraphPostStage(graph=graph, attn_context=attn_context)
-            )
+            post_graphs.append(_DepthDecodeCudaGraphPostStage(graph=graph, attn_context=attn_context))
             stages.append(_DepthDecodeCudaGraphLayerStage(*output))
 
         last_stage = stages[-1]
@@ -484,11 +466,7 @@ class DepthDecodeCudaGraphManager:
             ),
             device,
         )
-        post_graphs.append(
-            _DepthDecodeCudaGraphPostStage(
-                graph=last_graph, attn_context=last_attn_context
-            )
-        )
+        post_graphs.append(_DepthDecodeCudaGraphPostStage(graph=last_graph, attn_context=last_attn_context))
         return _DepthDecodeCudaGraph(
             cache_key=self._depth_decode_key(next_input_ids, attention_bias),
             pre_graph=pre_graph,
@@ -519,9 +497,7 @@ class DepthDecodeCudaGraphManager:
             self.graph = decode_graph
         else:
             decode_graph.token_ids.copy_(next_input_ids)
-            self._select_depth_decode_rope(
-                decode_graph.cos, decode_graph.sin, past_length=past_length
-            )
+            self._select_depth_decode_rope(decode_graph.cos, decode_graph.sin, past_length=past_length)
         return decode_graph
 
     def _run_depth_decode_attention_core(
@@ -562,7 +538,7 @@ class DepthDecodeCudaGraphManager:
         past_key_values: Cache,
         attention_bias: torch.Tensor,
         past_length: int,
-    ) -> Tuple[torch.Tensor, Cache]:
+    ) -> tuple[torch.Tensor, Cache]:
         end = past_length + 1
         decode_graph = self._get_depth_decode_graph(
             next_input_ids,
@@ -591,8 +567,8 @@ class DepthDecodeCudaGraphManager:
 
 
 def _cuda_graph_tensor_signature(
-    tensor: Optional[torch.Tensor],
-) -> Optional[Tuple[Any, ...]]:
+    tensor: torch.Tensor | None,
+) -> tuple[Any, ...] | None:
     if tensor is None:
         return None
     return (
@@ -603,35 +579,30 @@ def _cuda_graph_tensor_signature(
     )
 
 
-def _cuda_graph_context_signature(context: Any) -> Tuple[Any, ...]:
+def _cuda_graph_context_signature(context: Any) -> tuple[Any, ...]:
     sig = _cuda_graph_tensor_signature
     return (
         tuple((sig(k), sig(v)) for k, v in context.kv_contexts),
         sig(context.cross_mask),
         sig(context.self_mask),
         sig(context.valid_action),
-        None
-        if context.rope_cache is None
-        else tuple(sig(t) for t in context.rope_cache),
+        None if context.rope_cache is None else tuple(sig(t) for t in context.rope_cache),
     )
 
 
-def _cuda_graph_modulation_signature(modulations: Sequence[Any]) -> Tuple[Any, ...]:
+def _cuda_graph_modulation_signature(modulations: Sequence[Any]) -> tuple[Any, ...]:
     sig = _cuda_graph_tensor_signature
     return tuple(
         (
             sig(step.conditioning),
-            tuple(
-                tuple(sig(t) for t in block_modulation)
-                for block_modulation in step.block_modulations
-            ),
+            tuple(tuple(sig(t) for t in block_modulation) for block_modulation in step.block_modulations),
             tuple(sig(t) for t in step.final_modulation),
         )
         for step in modulations
     )
 
 
-def _cuda_graph_key(inputs: _ActionFlowInputs, steps: int) -> Tuple[Any, ...]:
+def _cuda_graph_key(inputs: _ActionFlowInputs, steps: int) -> tuple[Any, ...]:
     sig = _cuda_graph_tensor_signature
     return (
         sig(inputs.trajectory),
@@ -642,7 +613,7 @@ def _cuda_graph_key(inputs: _ActionFlowInputs, steps: int) -> Tuple[Any, ...]:
     )
 
 
-def _clone_static_tensor(tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+def _clone_static_tensor(tensor: torch.Tensor | None) -> torch.Tensor | None:
     if tensor is None:
         return None
     static = torch.empty_strided(
@@ -660,10 +631,7 @@ def _clone_static_context(context: Any) -> Any:
     if context.rope_cache is not None:
         rope_cache = tuple(_clone_static_tensor(t) for t in context.rope_cache)
     return context.__class__(
-        kv_contexts=tuple(
-            (_clone_static_tensor(k), _clone_static_tensor(v))
-            for k, v in context.kv_contexts
-        ),
+        kv_contexts=tuple((_clone_static_tensor(k), _clone_static_tensor(v)) for k, v in context.kv_contexts),
         cross_mask=_clone_static_tensor(context.cross_mask),
         self_mask=_clone_static_tensor(context.self_mask),
         valid_action=_clone_static_tensor(context.valid_action),
@@ -676,12 +644,9 @@ def _clone_static_modulations(modulations: Sequence[Any]) -> Sequence[Any]:
         step.__class__(
             conditioning=_clone_static_tensor(step.conditioning),
             block_modulations=tuple(
-                tuple(_clone_static_tensor(t) for t in block_modulation)
-                for block_modulation in step.block_modulations
+                tuple(_clone_static_tensor(t) for t in block_modulation) for block_modulation in step.block_modulations
             ),
-            final_modulation=tuple(
-                _clone_static_tensor(t) for t in step.final_modulation
-            ),
+            final_modulation=tuple(_clone_static_tensor(t) for t in step.final_modulation),
         )
         for step in modulations
     )
@@ -697,7 +662,7 @@ def _clone_static_inputs(inputs: _ActionFlowInputs) -> _ActionFlowInputs:
 
 
 def _copy_context_(dst: Any, src: Any) -> None:
-    for (dst_k, dst_v), (src_k, src_v) in zip(dst.kv_contexts, src.kv_contexts):
+    for (dst_k, dst_v), (src_k, src_v) in zip(dst.kv_contexts, src.kv_contexts, strict=False):
         dst_k.copy_(src_k)
         dst_v.copy_(src_v)
     if src.cross_mask is not None:
@@ -707,7 +672,7 @@ def _copy_context_(dst: Any, src: Any) -> None:
     if src.valid_action is not None:
         dst.valid_action.copy_(src.valid_action)
     if src.rope_cache is not None:
-        for dst_tensor, src_tensor in zip(dst.rope_cache, src.rope_cache):
+        for dst_tensor, src_tensor in zip(dst.rope_cache, src.rope_cache, strict=False):
             dst_tensor.copy_(src_tensor)
 
 
@@ -718,42 +683,12 @@ def _copy_inputs_(dst: _ActionFlowInputs, src: _ActionFlowInputs) -> None:
         dst.action_dim_is_pad.copy_(src.action_dim_is_pad)
 
 
-def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def _apply_rotary_pos_emb(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    unsqueeze_dim: int = 1,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (_rotate_half(q) * sin)
-    k_embed = (k * cos) + (_rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-def _repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(
-        batch, num_key_value_heads, n_rep, slen, head_dim
-    )
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 def _capture_cuda_graph(
     fn,
     device: torch.device,
     *,
     after_warmup=None,
-) -> Tuple[torch.cuda.CUDAGraph, Any]:
+) -> tuple[torch.cuda.CUDAGraph, Any]:
     warmup_stream = torch.cuda.Stream(device=device)
     warmup_stream.wait_stream(torch.cuda.current_stream(device))
     with torch.cuda.stream(warmup_stream):

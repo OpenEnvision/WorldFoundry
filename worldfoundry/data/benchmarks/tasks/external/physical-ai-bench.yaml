@@ -26,9 +26,9 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: physical-ai-bench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id physical-ai-bench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/physical-ai-bench --json
-  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicalAIBenchContract
-  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py
+  contract_validation_command: wf zoo benchmark-run --benchmark-id physical-ai-bench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/physical-ai-bench --json
+  official_runner_target: worldfoundry.evals.tasks.contracts.external:physical-ai-bench
+  official_runner_script: worldfoundry/evals/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py
   release_status: experimental
   maturity: verified_runner
   open_source_status: in_tree_runtime
@@ -52,10 +52,10 @@ metadata:
   - {id: grounding_dino_checkpoint, cli_flag: --grounding-checkpoint, role: segmentation_metrics}
   - {id: sam2_checkpoint, cli_flag: --sam2-checkpoint, role: segmentation_metrics}
   - {id: dover_checkpoint, cli_flag: --dover-checkpoint, role: dover_tech_score}
-  validation_command: ["${WORLDFOUNDRY_UNIFIED_PYTHON:-python}", -m, worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner, --track, conditional-generation, --run-official, --dataset-root, "${WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT}", --generated-video-dir, "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}", --output-dir, <out>, --json]
+  validation_command: ["${WORLDFOUNDRY_UNIFIED_PYTHON:-python}", -m, worldfoundry.evals.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner, --track, conditional-generation, --run-official, --dataset-root, "${WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT}", --generated-video-dir, "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}", --output-dir, <out>, --json]
   runner_availability:
     available: true
-    runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicalAIBenchContract
+    runner_target: worldfoundry.evals.tasks.contracts.external:physical-ai-bench
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
@@ -68,9 +68,9 @@ metadata:
     filename_template: scorecard.json
   runtime:
     kind: in_tree_multi_track_evaluator
-    root: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench
+    root: worldfoundry/evals/tasks/execution/runners/physical_ai_bench
     root_env: WORLDFOUNDRY_PHYSICAL_AI_BENCH_ROOT
-    implementation: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/runtime/physical_ai_bench
+    implementation: worldfoundry/evals/tasks/execution/runners/physical_ai_bench/runtime/physical_ai_bench
     config: worldfoundry/data/benchmarks/assets/physical-ai-bench/evaluator.yaml
     dataset_root_env: WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -103,8 +103,8 @@ tasks:
     evaluation_protocol:
     - name: in_tree_official_runtime
       metric_ids: [aesthetic_quality, background_consistency, imaging_quality, motion_smoothness, overall_consistency, subject_consistency, i2v_background, i2v_subject, vqa_accuracy, dover_tech_score, blur_ssim, canny_f1_score, canny_precision, canny_recall, depth_si_rmse, seg_m_iou, seg_recall, lpips_diversity]
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicalAIBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:physical-ai-bench
+      runner_script: worldfoundry/evals/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py
   physical_ai_bench_conditional_generation:
     benchmark_name: physical-ai-bench
     protocol: pai_bench_c
@@ -129,5 +129,5 @@ tasks:
     evaluation_protocol:
     - name: in_tree_official_runtime
       metric_ids: [aesthetic_quality, background_consistency, imaging_quality, motion_smoothness, overall_consistency, subject_consistency, i2v_background, i2v_subject, vqa_accuracy, dover_tech_score, blur_ssim, canny_f1_score, canny_precision, canny_recall, depth_si_rmse, seg_m_iou, seg_recall, lpips_diversity]
-      runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicalAIBenchContract
-      runner_script: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py
+      runner_target: worldfoundry.evals.tasks.contracts.external:physical-ai-bench
+      runner_script: worldfoundry/evals/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py

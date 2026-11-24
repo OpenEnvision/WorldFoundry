@@ -1,0 +1,124 @@
+# Optical flow and frame interpolation models.
+# Schema and templates: see the module docstring of worldfoundry/base_models/capabilities.py.
+
+sea_raft:
+  family: optical_flow
+  canonical_path: worldfoundry/base_models/perception_core/optical_flow/sea_raft
+  package_imports: [torch, cv2, numpy, huggingface_hub]
+  install_packages: [torch, opencv-python, numpy, huggingface-hub]
+  assets:
+    - id: sea_raft_spring_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_SEA_RAFT_CKPT]
+      local_path: ${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/Tartan-C-T-TSKH-spring540x960-M.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/Tartan-C-T-TSKH-spring540x960-M.pth
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/Tartan-C-T-TSKH-spring540x960-M.pth
+        - ${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/sea_raft_gdrive/Tartan-C-T-TSKH-spring540x960-M.pth
+      min_size_bytes: 70000000
+      note: SEA-RAFT optical-flow checkpoint reused by WorldScore motion metrics.
+
+flowformerplusplus:
+  family: optical_flow
+  canonical_path: worldfoundry/base_models/perception_core/optical_flow/flowformerplusplus
+  package_imports: [torch, cv2, numpy, PIL, scipy, timm, yacs, einops, loguru]
+  install_packages: [torch, opencv-python, numpy, Pillow, scipy, timm, yacs, einops, loguru]
+  assets:
+    - id: flowformerplusplus_things_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_FLOWFORMERPLUSPLUS_CKPT]
+      local_path: ${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/things_288960.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/things_288960.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WorldScore/things_288960.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WorldScore/metrics/checkpoints/things_288960.pth
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/things_288960.pth
+      manual_action: Stage FlowFormer++ `things_288960.pth` under $WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR
+        or set $WORLDFOUNDRY_FLOWFORMERPLUSPLUS_CKPT. Use the official FlowFormer++/WorldScore checkpoint release
+        if the file is not in Hugging Face.
+      min_size_bytes: 50000000
+      note: FlowFormer++ Things checkpoint used by WorldScore optical-flow and motion-accuracy metrics.
+
+vfimamba:
+  family: frame_interpolation
+  canonical_path: worldfoundry/base_models/perception_core/frame_interpolation/vfimamba
+  package_imports:
+    - torch
+    - cv2
+    - numpy
+    - timm
+    - einops
+    - mamba_ssm
+    - huggingface_hub
+    - transformers
+  install_packages:
+    - torch
+    - opencv-python
+    - numpy
+    - timm
+    - einops
+    - mamba-ssm
+    - huggingface-hub
+    - transformers
+  assets:
+    - id: vfimamba_vfimamba_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VFIMAMBA_CKPT]
+      local_path: ${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/VFIMamba.pkl
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/VFIMamba.pkl
+        - ${WORLDFOUNDRY_CKPT_DIR}/WorldScore/VFIMamba.pkl
+        - ${WORLDFOUNDRY_CKPT_DIR}/WorldScore/metrics/checkpoints/VFIMamba.pkl
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/VFIMamba.pkl
+      manual_action: Stage VFIMamba.pkl under $WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR or set $WORLDFOUNDRY_VFIMAMBA_CKPT.
+        The runner can also load Hugging Face model ids through `Model.from_pretrained()` when an official Hub checkpoint
+        is available.
+      min_size_bytes: 50000000
+      note: VFIMamba checkpoint used by WorldScore motion-smoothness interpolation metrics.
+    - id: vfimamba_vfimamba_s_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VFIMAMBA_S_CKPT]
+      local_path: ${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/VFIMamba_S.pkl
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/VFIMamba_S.pkl
+        - ${WORLDFOUNDRY_CKPT_DIR}/WorldScore/VFIMamba_S.pkl
+        - ${WORLDFOUNDRY_CKPT_DIR}/WorldScore/metrics/checkpoints/VFIMamba_S.pkl
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/VFIMamba_S.pkl
+      manual_action: Stage VFIMamba_S.pkl under $WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR or set $WORLDFOUNDRY_VFIMAMBA_S_CKPT
+        when using the small VFIMamba configuration.
+      min_size_bytes: 30000000
+      required: false
+      note: Optional VFIMamba-S checkpoint for the small interpolation configuration.
+
+raft:
+  family: optical_flow
+  canonical_path: worldfoundry/base_models/perception_core/optical_flow/raft
+  package_imports: [torch, cv2, numpy]
+  install_packages: [torch, opencv-python, numpy]
+  assets:
+    - id: raft_things_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_RAFT_THINGS_CKPT]
+      local_path: ${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/models/raft-things.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/models/raft-things.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/raft-things.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WorldScore/models/raft-things.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/monst3r_raft_models/raft-things.pth
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/models/raft-things.pth
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/raft-things.pth
+      download_command_template: RAFT_CKPT=${WORLDFOUNDRY_RAFT_THINGS_CKPT:-${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/models/raft-things.pth};
+        RAFT_ZIP=${WORLDFOUNDRY_RAFT_MODELS_ZIP:-${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/models.zip}; mkdir
+        -p "$(dirname "$RAFT_CKPT")" "$(dirname "$RAFT_ZIP")"; if [ ! -f "$RAFT_CKPT" ]; then curl -L --fail --retry
+        5 --retry-delay 2 https://dl.dropboxusercontent.com/s/4j4z58wuv8o0mfz/models.zip -o "$RAFT_ZIP" && python
+        -c 'import pathlib, sys, zipfile; member="models/raft-things.pth"; archive=zipfile.ZipFile(sys.argv[1]);
+        info=archive.getinfo(member); target=pathlib.Path(sys.argv[2]); target.parent.mkdir(parents=True, exist_ok=True);
+        target.write_bytes(archive.read(info)); print(target)' "$RAFT_ZIP" "$RAFT_CKPT"; fi
+      min_size_bytes: 20000000
+      note: RAFT Things checkpoint reused by fallback optical-flow metric paths; downloaded from the upstream RAFT
+        models.zip bundle.

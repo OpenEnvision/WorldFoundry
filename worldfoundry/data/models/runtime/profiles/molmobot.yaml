@@ -8,7 +8,7 @@ groups:
 - action_chunk
 source_repos:
 - url: https://github.com/allenai/MolmoBot
-  revision: 33c0ca77bf60
+  revision: 33c0ca77bf6062a23d60ffd4a6859334c4a46d30
 checkpoints:
 - repo_id: allenai/MolmoBot-DROID
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/allenai--MolmoBot-DROID

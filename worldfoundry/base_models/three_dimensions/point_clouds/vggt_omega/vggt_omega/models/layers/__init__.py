@@ -4,14 +4,28 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt_omega -> vggt_omega -> models -> layers -> __init__.py functionality."""
-
-from .attention import CausalSelfAttention, LinearKMaskedBias, SelfAttention
-from .block import CausalSelfAttentionBlock, SelfAttentionBlock
+from worldfoundry.base_models.perception_core.general_perception.dinov3.layers.attention import (
+    CausalSelfAttention as CausalSelfAttention,
+)
+from worldfoundry.base_models.perception_core.general_perception.dinov3.layers.attention import (
+    LinearKMaskedBias as LinearKMaskedBias,
+)
+from worldfoundry.base_models.perception_core.general_perception.dinov3.layers.block import (
+    CausalSelfAttentionBlock as CausalSelfAttentionBlock,
+)
+from worldfoundry.base_models.perception_core.general_perception.dinov3.layers.ffn_layers import ListMlp as Mlp
+from worldfoundry.base_models.perception_core.general_perception.dinov3.layers.ffn_layers import SwiGLUFFN as SwiGLUFFN
+from worldfoundry.base_models.perception_core.general_perception.dinov3.layers.rms_norm import RMSNorm as RMSNorm
+from worldfoundry.base_models.perception_core.general_perception.dinov3.layers.rope_position_encoding import (
+    RopePositionEmbedding as RopePositionEmbedding,
+)
+from worldfoundry.base_models.perception_core.general_perception.dinov3.variants.vggt_omega import (
+    SelfAttention as SelfAttention,
+)
+from worldfoundry.base_models.perception_core.general_perception.dinov3.variants.vggt_omega import (
+    SelfAttentionBlock as SelfAttentionBlock,
+)
 from worldfoundry.core.nn.blocks.layers import LayerScale, PatchEmbed
-from .ffn_layers import Mlp, SwiGLUFFN
-from .rms_norm import RMSNorm
-from .rope_position_encoding import RopePositionEmbedding
 
 __all__ = [
     "CausalSelfAttention",

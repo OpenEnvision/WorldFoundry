@@ -13,6 +13,7 @@ from .utils.general_utils import pano_unit_rays
 
 MAX_DISTANCE = 20.0  # Scale the relative depth prior so max distance = 20 meters
 
+
 def _depth_anything2_checkpoint_name(encoder: str) -> str:
     return f"depth_anything_v2_{encoder}.pth"
 
@@ -102,10 +103,10 @@ def _predict_depth(model: DepthAnything2Representation, image: Image.Image):
     rgb_out = torch.tensor(np.array(image.resize((w, h))), device=model.device)
 
     results = {
-        "rgb": rgb_out,       # (H, W, 3)
-        "depth": distance,    # (H, W)
-        "distance": distance, # (H, W)
-        "rays": rays          # (H, W, 3)
+        "rgb": rgb_out,  # (H, W, 3)
+        "depth": distance,  # (H, W)
+        "distance": distance,  # (H, W)
+        "rays": rays,  # (H, W, 3)
     }
 
     return results
@@ -117,6 +118,7 @@ def pred_pano_depth(model: DepthAnything2Representation, image: Image.Image):
 
 def pred_depth(model: DepthAnything2Representation, image: Image.Image):
     return _predict_depth(model, image)
+
 
 if __name__ == "__main__":
     model = build_depth_model()

@@ -41,9 +41,8 @@ Conditioning
 
 import math
 import os
-from typing import List, Optional, Tuple, Union
+import weakref
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -53,19 +52,48 @@ from transformers import AutoModelForCausalLM
 from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities import is_xformers_available
 from worldfoundry.base_models.diffusion_model.models.networks.sana.normalization import RMSNorm
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+from worldfoundry.core.attention.rotary.rope_nd import get_1d_rotary_pos_embed_linear as get_1d_rotary_pos_embed
+from worldfoundry.core.kernels.diffusion import apply_real_rope_bshd
 from worldfoundry.core.nn import get_same_padding, to_2tuple, to_3tuple
 from worldfoundry.core.nn.blocks.layers import Mlp
 from worldfoundry.core.nn.blocks.layers import VisionAttention as Attention_
+from worldfoundry.core.nn.transformer.dit import modulate_sequence as modulate
 
 _xformers_available = False if os.environ.get("DISABLE_XFORMERS", "0") == "1" else is_xformers_available()
 if _xformers_available:
     import xformers.ops
 
 
-def modulate(x, shift, scale):
-    """AdaLN affine with an extra sequence axis: ``x * (1 + scale) + shift``."""
+@torch.library.custom_op("worldfoundry::sana_fa3_cross_attn", mutates_args=(), device_types="cuda")
+def _sana_fa3_cross_attn_op(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    import flash_attn_interface as fa3
 
-    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+    out = fa3.flash_attn_func(q, k, v, causal=False)
+    return out[0] if isinstance(out, tuple) else out
+
+
+@_sana_fa3_cross_attn_op.register_fake
+def _sana_fa3_cross_attn_fake(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    del k
+    return q.new_empty((*q.shape[:-1], v.shape[-1]))
+
+
+@torch.library.custom_op("worldfoundry::sana_fa3_cross_attn_kvcache", mutates_args=(), device_types="cuda")
+def _sana_fa3_cross_attn_kvcache_op(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, seqlens: torch.Tensor
+) -> torch.Tensor:
+    import flash_attn_interface as fa3
+
+    out = fa3.flash_attn_with_kvcache(q, k, v, cache_seqlens=seqlens, causal=False)
+    return out[0] if isinstance(out, tuple) else out
+
+
+@_sana_fa3_cross_attn_kvcache_op.register_fake
+def _sana_fa3_cross_attn_kvcache_fake(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, seqlens: torch.Tensor
+) -> torch.Tensor:
+    del k, seqlens
+    return q.new_empty((*q.shape[:-1], v.shape[-1]))
 
 
 def t2i_modulate(x, shift, scale):
@@ -78,15 +106,6 @@ class MultiHeadCrossAttention(nn.Module):
     """Caption (and optional image-embed) cross-attention over packed tokens."""
 
     def __init__(self, d_model, num_heads, attn_drop=0.0, proj_drop=0.0, qk_norm=False, **block_kwargs):
-        """Init.
-
-        Args:
-            d_model: The d model.
-            num_heads: The num heads.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-            qk_norm: The qk norm.
-        """
         super().__init__()
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
 
@@ -105,40 +124,129 @@ class MultiHeadCrossAttention(nn.Module):
         else:
             self.q_norm = nn.Identity()
             self.k_norm = nn.Identity()
+        self._cross_attn_backend: str = "torch"
+        self._static_cross_kv: bool = False
+        self._static_kv_cache: list[
+            tuple[
+                weakref.ref[torch.Tensor],
+                int,
+                int,
+                int,
+                torch.Tensor,
+                torch.Tensor,
+                torch.Tensor,
+            ]
+        ] = []
+        self._fa3_calls: int = 0
+        self._sdpa_calls: int = 0
+        self._static_kv_hits: int = 0
+
+    def reset_static_cross_kv(self) -> None:
+        self._static_kv_cache.clear()
+
+    def _project_kv(self, cond: torch.Tensor, first_dim: int, C: int) -> tuple[torch.Tensor, torch.Tensor]:
+        use_cache = (
+            self._static_cross_kv
+            and not self.training
+            and not torch.is_grad_enabled()
+            and not torch.compiler.is_compiling()
+            and not (cond.is_cuda and torch.cuda.is_current_stream_capturing())
+        )
+        if use_cache:
+            is_inf = cond.is_inference()
+            version = -1 if is_inf else int(cond._version)
+            ptr = int(cond.data_ptr())
+            for ref, saved_ptr, saved_first_dim, saved_ver, snapshot, cached_k, cached_v in self._static_kv_cache:
+                if saved_first_dim != first_dim:
+                    continue
+                if (
+                    not is_inf
+                    and saved_ver >= 0
+                    and ref() is cond
+                    and saved_ptr == ptr
+                    and saved_ver == version
+                    and snapshot.shape == cond.shape
+                    and snapshot.dtype == cond.dtype
+                    and snapshot.device == cond.device
+                ):
+                    self._static_kv_hits += 1
+                    return cached_k, cached_v
+                if (
+                    snapshot.shape == cond.shape
+                    and snapshot.dtype == cond.dtype
+                    and snapshot.device == cond.device
+                    and torch.equal(snapshot, cond)
+                ):
+                    self._static_kv_hits += 1
+                    return cached_k, cached_v
+        kv = self.kv_linear(cond).view(first_dim, -1, 2, C)
+        k, v = kv.unbind(2)
+        k = self.k_norm(k).view(first_dim, -1, self.num_heads, self.head_dim)
+        v = v.view(first_dim, -1, self.num_heads, self.head_dim)
+        if use_cache:
+            if len(self._static_kv_cache) >= 4:
+                self._static_kv_cache.pop(0)
+            k_c, v_c = k.detach().contiguous(), v.detach().contiguous()
+            version = -1 if cond.is_inference() else int(cond._version)
+            self._static_kv_cache.append(
+                (
+                    weakref.ref(cond),
+                    int(cond.data_ptr()),
+                    int(first_dim),
+                    version,
+                    cond.detach().clone(),
+                    k_c,
+                    v_c,
+                )
+            )
+            return k_c, v_c
+        return k, v
 
     def forward(self, x, cond, mask=None):
-        """Forward.
-
-        Args:
-            x: The x.
-            cond: The cond.
-            mask: The mask.
-        """
         # query: img tokens; key/value: condition; mask: if padding tokens
         B, N, C = x.shape
         first_dim = 1 if _xformers_available else B
 
         q = self.q_linear(x)
-        kv = self.kv_linear(cond).view(first_dim, -1, 2, C)
-        k, v = kv.unbind(2)
         q = self.q_norm(q).view(first_dim, -1, self.num_heads, self.head_dim)
-        k = self.k_norm(k).view(first_dim, -1, self.num_heads, self.head_dim)
-        v = v.view(first_dim, -1, self.num_heads, self.head_dim)
+        k, v = self._project_kv(cond, first_dim, C)
 
         if _xformers_available:
             attn_bias = None
             if mask is not None:
                 attn_bias = xformers.ops.fmha.BlockDiagonalMask.from_seqlens([N] * B, mask)
             x = xformers.ops.memory_efficient_attention(q, k, v, p=self.attn_drop.p, attn_bias=attn_bias)
+        elif (
+            self._cross_attn_backend == "flash_attention_3"
+            and not self.training
+            and not torch.is_grad_enabled()
+            and q.is_cuda
+            and q.dtype in {torch.bfloat16, torch.float16}
+            and k.dtype == q.dtype
+            and v.dtype == q.dtype
+            and (mask is None or (mask.ndim == 1 and mask.dtype == torch.int32))
+        ):
+            if mask is None:
+                x = _sana_fa3_cross_attn_op(q.contiguous(), k.contiguous(), v.contiguous())
+            else:
+                x = _sana_fa3_cross_attn_kvcache_op(q.contiguous(), k.contiguous(), v.contiguous(), mask)
+            if not torch.compiler.is_compiling():
+                self._fa3_calls += 1
         else:
             q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
             if mask is not None and mask.ndim == 2:
                 mask = (1 - mask.to(q.dtype)) * -10000.0
                 mask = mask[:, None, None].repeat(1, self.num_heads, 1, 1)
+            elif mask is not None and mask.ndim == 1 and mask.dtype == torch.int32:
+                # Reconstruct boolean prefix mask for portable SDPA fallback if needed
+                positions = torch.arange(k.shape[2], device=k.device, dtype=torch.int32)[None, :]
+                mask = (positions < mask[:, None])[:, None, None, :]
             x = _worldfoundry_scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
             x = x.transpose(1, 2)
+            if not torch.compiler.is_compiling():
+                self._sdpa_calls += 1
 
-        x = x.view(B, -1, C)
+        x = x.reshape(B, -1, C)
         x = self.proj(x)
         x = self.proj_drop(x)
 
@@ -146,18 +254,7 @@ class MultiHeadCrossAttention(nn.Module):
 
 
 class MultiHeadCrossAttentionImageEmbed(nn.Module):
-    """Multi head cross attention image embed implementation."""
-
     def __init__(self, d_model, num_heads, attn_drop=0.0, proj_drop=0.0, qk_norm=False, **block_kwargs):
-        """Init.
-
-        Args:
-            d_model: The d model.
-            num_heads: The num heads.
-            attn_drop: The attn drop.
-            proj_drop: The proj drop.
-            qk_norm: The qk norm.
-        """
         super().__init__()
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
 
@@ -182,14 +279,6 @@ class MultiHeadCrossAttentionImageEmbed(nn.Module):
             self.image_k_norm = nn.Identity()
 
     def forward(self, x, cond, mask=None, image_embeds=None):
-        """Forward.
-
-        Args:
-            x: The x.
-            cond: The cond.
-            mask: The mask.
-            image_embeds: The image embeds.
-        """
         # query: img tokens; key/value: condition; mask: if padding tokens
         B, N, C = x.shape
 
@@ -225,26 +314,10 @@ class MultiHeadCrossAttentionImageEmbed(nn.Module):
 
 
 class MultiHeadCrossVallinaAttention(MultiHeadCrossAttention):
-    """Multi head cross vallina attention implementation."""
-
     @staticmethod
     def scaled_dot_product_attention(
         query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None
     ) -> torch.Tensor:
-        """Scaled dot product attention.
-
-        Args:
-            query: The query.
-            key: The key.
-            value: The value.
-            attn_mask: The attn mask.
-            dropout_p: The dropout p.
-            is_causal: The is causal.
-            scale: The scale.
-
-        Returns:
-            The return value.
-        """
         B, H, L, S = *query.size()[:-1], key.size(-2)
         scale_factor = 1 / math.sqrt(query.size(-1)) if scale is None else scale
         attn_bias = torch.zeros(B, H, L, S, dtype=query.dtype, device=query.device)
@@ -261,13 +334,6 @@ class MultiHeadCrossVallinaAttention(MultiHeadCrossAttention):
         return attn_weight @ value
 
     def forward(self, x, cond, mask=None):
-        """Forward.
-
-        Args:
-            x: The x.
-            cond: The cond.
-            mask: The mask.
-        """
         # query: img tokens; key/value: condition; mask: if padding tokens
         B, N, C = x.shape
 
@@ -314,7 +380,7 @@ class LiteLA(Attention_):
         self,
         in_dim: int,
         out_dim: int,
-        heads: Optional[int] = None,
+        heads: int | None = None,
         heads_ratio: float = 1.0,
         dim=32,
         eps=1e-15,
@@ -322,19 +388,6 @@ class LiteLA(Attention_):
         qk_norm=False,
         norm_eps=1e-5,
     ):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            heads: The heads.
-            heads_ratio: The heads ratio.
-            dim: The dim.
-            eps: The eps.
-            use_bias: The use bias.
-            qk_norm: The qk norm.
-            norm_eps: The norm eps.
-        """
         heads = heads or int(out_dim // dim * heads_ratio)
         super().__init__(in_dim, num_heads=heads, qkv_bias=use_bias)
 
@@ -354,16 +407,6 @@ class LiteLA(Attention_):
 
     @torch.amp.autocast("cuda", enabled=os.environ.get("AUTOCAST_LINEAR_ATTN", False) == "true")
     def attn_matmul(self, q, k, v: torch.Tensor) -> torch.Tensor:
-        """Attn matmul.
-
-        Args:
-            q: The q.
-            k: The k.
-            v: The v.
-
-        Returns:
-            The return value.
-        """
         # lightweight linear attention
         q = self.kernel_func(q)  # B, h, h_d, N
         k = self.kernel_func(k)
@@ -385,19 +428,6 @@ class LiteLA(Attention_):
     def forward(
         self, x: torch.Tensor, mask=None, HW=None, rotary_emb=None, block_id=None, block_mask=None
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            rotary_emb: The rotary emb.
-            block_id: The block id.
-            block_mask: The block mask.
-
-        Returns:
-            The return value.
-        """
         B, N, C = x.shape
 
         qkv = self.qkv(x).reshape(B, N, 3, C)
@@ -425,18 +455,12 @@ class LiteLA(Attention_):
 
     @property
     def module_str(self) -> str:
-        """Module str.
-
-        Returns:
-            The return value.
-        """
         _str = type(self).__name__ + "("
         eps = f"{self.eps:.1E}"
         _str += f"i={self.in_dim},o={self.out_dim},h={self.heads},d={self.dim},eps={eps}"
         return _str
 
     def __repr__(self):
-        """Repr."""
         return f"EPS{self.eps}-" + super().__repr__()
 
 
@@ -449,7 +473,7 @@ class LiteLAReLURope(Attention_):
         self,
         in_dim: int,
         out_dim: int,
-        heads: Optional[int] = None,
+        heads: int | None = None,
         heads_ratio: float = 1.0,
         dim=32,
         eps=1e-15,
@@ -457,19 +481,6 @@ class LiteLAReLURope(Attention_):
         qk_norm=False,
         norm_eps=1e-5,
     ):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            heads: The heads.
-            heads_ratio: The heads ratio.
-            dim: The dim.
-            eps: The eps.
-            use_bias: The use bias.
-            qk_norm: The qk norm.
-            norm_eps: The norm eps.
-        """
         heads = heads or int(out_dim // dim * heads_ratio)
         super().__init__(in_dim, num_heads=heads, qkv_bias=use_bias)
 
@@ -488,21 +499,51 @@ class LiteLAReLURope(Attention_):
             self.k_norm = nn.Identity()
 
         self.qkv_store_buffer = None
+        self._fast_litela_rope: bool = False
 
     def forward(self, x: torch.Tensor, mask=None, HW=None, rotary_emb=None, block_mask=None, **kwargs) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            rotary_emb: The rotary emb.
-            block_mask: The block mask.
-
-        Returns:
-            The return value.
-        """
         B, N, C = x.shape
+
+        if self._fast_litela_rope and not self.training and self.qkv_store_buffer is None and rotary_emb is not None:
+            qkv = self.qkv(x).reshape(B, N, 3, C)
+            q, k, v = qkv.unbind(2)
+            dtype = q.dtype
+            heads = C // self.dim
+
+            q = F.relu(self.q_norm(q)).view(B, N, heads, self.dim)
+            k = F.relu(self.k_norm(k)).view(B, N, heads, self.dim)
+            v = v.view(B, N, heads, self.dim)
+
+            if isinstance(rotary_emb, tuple):
+                cos, sin = rotary_emb
+            else:
+                cos = rotary_emb.real.transpose(1, 2).contiguous()
+                sin = rotary_emb.imag.transpose(1, 2).contiguous()
+
+            q_rotated = apply_real_rope_bshd(q, cos, sin)
+            k_rotated = apply_real_rope_bshd(k, cos, sin)
+
+            q_h = q.transpose(1, 2)
+            q_rot_h = q_rotated.transpose(1, 2)
+            k_rot_h = k_rotated.transpose(1, 2)
+            v_h = v.transpose(1, 2)
+
+            use_fp32_attention = getattr(self, "fp32_attention", False)
+            if use_fp32_attention:
+                q_rot_h = q_rot_h.float()
+                k_rot_h = k_rot_h.float()
+                v_h = v_h.float()
+                q_h = q_h.float()
+                k_sum = k.float().sum(dim=1).unsqueeze(-1)  # (B, h, d, 1)
+            else:
+                k_sum = k.sum(dim=1).unsqueeze(-1)  # (B, h, d, 1)
+
+            kv = torch.matmul(k_rot_h.transpose(-2, -1), v_h)  # (B, h, d, d)
+            out = torch.matmul(q_rot_h, kv)  # (B, h, N, d)
+            denom = torch.matmul(q_h, k_sum) + self.eps  # (B, h, N, 1)
+            out = (out / denom).to(dtype)
+            out = out.transpose(1, 2).reshape(B, N, C)
+            return self.proj(out)
 
         qkv = self.qkv(x).reshape(B, N, 3, C)
         q, k, v = qkv.unbind(2)  # B, N, 3, C --> B, N, C
@@ -520,13 +561,10 @@ class LiteLAReLURope(Attention_):
         q = self.kernel_func(q)  # B, h, h_d, N
         k = self.kernel_func(k)
 
-        def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
-            """Apply rotary emb.
-
-            Args:
-                hidden_states: The hidden states.
-                freqs: The freqs.
-            """
+        def apply_rotary_emb(hidden_states: torch.Tensor, freqs):
+            if isinstance(freqs, tuple):
+                cos_f, sin_f = freqs
+                freqs = torch.complex(cos_f.to(torch.float64), sin_f.to(torch.float64)).transpose(1, 2)
             x_rotated = torch.view_as_complex(hidden_states.permute(0, 1, 3, 2).to(torch.float64).unflatten(3, (-1, 2)))
             x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).permute(0, 1, 3, 2)
             return x_out.type_as(hidden_states)
@@ -559,13 +597,11 @@ class LiteLAReLURope(Attention_):
 
 
 class ChunkCausalAttention(LiteLAReLURope):
-    r"""Chunk causal attention"""
-
     def __init__(
         self,
         in_dim: int,
         out_dim: int,
-        heads: Optional[int] = None,
+        heads: int | None = None,
         heads_ratio: float = 1.0,
         dim=32,
         eps=1e-15,
@@ -573,37 +609,17 @@ class ChunkCausalAttention(LiteLAReLURope):
         qk_norm=False,
         norm_eps=1e-5,
     ):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-            heads: The heads.
-            heads_ratio: The heads ratio.
-            dim: The dim.
-            eps: The eps.
-            use_bias: The use bias.
-            qk_norm: The qk norm.
-            norm_eps: The norm eps.
-        """
         super().__init__(in_dim, out_dim, heads, heads_ratio, dim, eps, use_bias, qk_norm, norm_eps)
 
     def forward(
-        self, x: torch.Tensor, mask=None, HW=None, rotary_emb=None, block_mask=None, chunk_index: List[int] = [0]
+        self,
+        x: torch.Tensor,
+        mask=None,
+        HW=None,
+        rotary_emb=None,
+        block_mask=None,
+        chunk_index: list[int] = [0],  # noqa: B006 - Keeps the upstream default object and signature.
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            rotary_emb: The rotary emb.
-            block_mask: The block mask.
-            chunk_index: The chunk index.
-
-        Returns:
-            The return value.
-        """
         B, N, C = x.shape
 
         qkv = self.qkv(x).reshape(B, N, 3, C)
@@ -622,13 +638,10 @@ class ChunkCausalAttention(LiteLAReLURope):
         q = self.kernel_func(q)  # B, h, h_d, N
         k = self.kernel_func(k)
 
-        def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
-            """Apply rotary emb.
-
-            Args:
-                hidden_states: The hidden states.
-                freqs: The freqs.
-            """
+        def apply_rotary_emb(hidden_states: torch.Tensor, freqs):
+            if isinstance(freqs, tuple):
+                cos_f, sin_f = freqs
+                freqs = torch.complex(cos_f.to(torch.float64), sin_f.to(torch.float64)).transpose(1, 2)
             x_rotated = torch.view_as_complex(hidden_states.permute(0, 1, 3, 2).to(torch.float64).unflatten(3, (-1, 2)))
             x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).permute(0, 1, 3, 2)
             return x_out.type_as(hidden_states)
@@ -680,7 +693,9 @@ class ChunkCausalAttention(LiteLAReLURope):
         q_list = [_q.reshape(B, h, h_d, -1) for _q in q_list]
         k_list = [_k.reshape(B, h, h_d, -1) for _k in k_list]
         out_list = []
-        for _q_rotated, _k_rotated, _v, _q, _k in zip(q_rotated_list, k_rotated_list, v_list, q_list, k_list):
+        for _q_rotated, _k_rotated, _v, _q, _k in zip(
+            q_rotated_list, k_rotated_list, v_list, q_list, k_list, strict=False
+        ):
             _vk = torch.matmul(_v, _k_rotated.transpose(-1, -2))
             cumsum_vk += _vk
             cumsum_k_sum += _k.sum(dim=-1, keepdim=True).transpose(-2, -1)
@@ -698,10 +713,7 @@ class ChunkCausalAttention(LiteLAReLURope):
 
 
 class CachedCausalAttention(LiteLAReLURope):
-    """Cached causal attention implementation."""
-
     def __init__(self, *args, **kwargs):
-        """Init."""
         super().__init__(*args, **kwargs)
 
     def forward(
@@ -715,21 +727,6 @@ class CachedCausalAttention(LiteLAReLURope):
         kv_cache=None,
         **kwargs,
     ) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            rotary_emb: The rotary emb.
-            block_mask: The block mask.
-            save_kv_cache: The save kv cache.
-            kv_cache: The kv cache.
-
-        Returns:
-            The return value.
-        """
-
         B, N, C = x.shape
 
         qkv = self.qkv(x).reshape(B, N, 3, C)
@@ -748,13 +745,10 @@ class CachedCausalAttention(LiteLAReLURope):
         q = self.kernel_func(q)  # B, h, h_d, N
         k = self.kernel_func(k)
 
-        def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
-            """Apply rotary emb.
-
-            Args:
-                hidden_states: The hidden states.
-                freqs: The freqs.
-            """
+        def apply_rotary_emb(hidden_states: torch.Tensor, freqs):
+            if isinstance(freqs, tuple):
+                cos_f, sin_f = freqs
+                freqs = torch.complex(cos_f.to(torch.float64), sin_f.to(torch.float64)).transpose(1, 2)
             x_rotated = torch.view_as_complex(hidden_states.permute(0, 1, 3, 2).to(torch.float64).unflatten(3, (-1, 2)))
             x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).permute(0, 1, 3, 2)
             return x_out.type_as(hidden_states)
@@ -800,29 +794,11 @@ class PAGCFGIdentitySelfAttnProcessorLiteLA:
     r"""Self Attention with Perturbed Attention & CFG Guidance"""
 
     def __init__(self, attn):
-        """Init.
-
-        Args:
-            attn: The attn.
-        """
         self.attn = attn
 
     def __call__(
         self, x: torch.Tensor, mask=None, HW=None, rotary_emb=None, block_id=None, block_mask=None, **kwargs
     ) -> torch.Tensor:
-        """Call.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            rotary_emb: The rotary emb.
-            block_id: The block id.
-            block_mask: The block mask.
-
-        Returns:
-            The return value.
-        """
         x_uncond, x_org, x_ptb = x.chunk(3)
         x_org = torch.cat([x_uncond, x_org])
         B, N, C = x_org.shape
@@ -870,29 +846,11 @@ class PAGIdentitySelfAttnProcessorLiteLA:
     r"""Self Attention with Perturbed Attention Guidance"""
 
     def __init__(self, attn):
-        """Init.
-
-        Args:
-            attn: The attn.
-        """
         self.attn = attn
 
     def __call__(
         self, x: torch.Tensor, mask=None, HW=None, rotary_emb=None, block_id=None, block_mask=None, **kwargs
     ) -> torch.Tensor:
-        """Call.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            rotary_emb: The rotary emb.
-            block_id: The block id.
-            block_mask: The block mask.
-
-        Returns:
-            The return value.
-        """
         x_org, x_ptb = x.chunk(2)
         B, N, C = x_org.shape
 
@@ -939,29 +897,11 @@ class SelfAttnProcessorLiteLA:
     r"""Self Attention with Lite Linear Attention"""
 
     def __init__(self, attn):
-        """Init.
-
-        Args:
-            attn: The attn.
-        """
         self.attn = attn
 
     def __call__(
         self, x: torch.Tensor, mask=None, HW=None, rotary_emb=None, block_id=None, block_mask=None, **kwargs
     ) -> torch.Tensor:
-        """Call.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            rotary_emb: The rotary emb.
-            block_id: The block id.
-            block_mask: The block mask.
-
-        Returns:
-            The return value.
-        """
         B, N, C = x.shape
         if HW is None:
             H = W = int(N**0.5)
@@ -999,29 +939,11 @@ class SelfAttnProcessorLiteLAReLURope:
     r"""Self Attention with Lite Linear Attention"""
 
     def __init__(self, attn):
-        """Init.
-
-        Args:
-            attn: The attn.
-        """
         self.attn = attn
 
     def __call__(
         self, x: torch.Tensor, mask=None, HW=None, rotary_emb=None, block_id=None, block_mask=None, **kwargs
     ) -> torch.Tensor:
-        """Call.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            rotary_emb: The rotary emb.
-            block_id: The block id.
-            block_mask: The block mask.
-
-        Returns:
-            The return value.
-        """
         B, N, C = x.shape
 
         qkv = self.attn.qkv(x).reshape(B, N, 3, C)
@@ -1040,13 +962,10 @@ class SelfAttnProcessorLiteLAReLURope:
         q = self.attn.kernel_func(q)  # B, h, h_d, N
         k = self.attn.kernel_func(k)
 
-        def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
-            """Apply rotary emb.
-
-            Args:
-                hidden_states: The hidden states.
-                freqs: The freqs.
-            """
+        def apply_rotary_emb(hidden_states: torch.Tensor, freqs):
+            if isinstance(freqs, tuple):
+                cos_f, sin_f = freqs
+                freqs = torch.complex(cos_f.to(torch.float64), sin_f.to(torch.float64)).transpose(1, 2)
             x_rotated = torch.view_as_complex(hidden_states.permute(0, 1, 3, 2).to(torch.float64).unflatten(3, (-1, 2)))
             x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).permute(0, 1, 3, 2)
             return x_out.type_as(hidden_states)
@@ -1096,16 +1015,6 @@ class FlashAttention(Attention_):
         self.qkv_store_buffer = None
 
     def forward(self, x, mask=None, HW=None, rotary_emb=None, block_id=None, block_mask=None, **kwargs):
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            rotary_emb: The rotary emb.
-            block_id: The block id.
-            block_mask: The block mask.
-        """
         B, N, C = x.shape
 
         qkv = self.qkv(x).reshape(B, N, 3, C)
@@ -1129,12 +1038,6 @@ class FlashAttention(Attention_):
             attn_bias.masked_fill_(mask.squeeze(1).repeat(self.num_heads, 1, 1) == 0, float("-inf"))
 
         def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
-            """Apply rotary emb.
-
-            Args:
-                hidden_states: The hidden states.
-                freqs: The freqs.
-            """
             x_rotated = torch.view_as_complex(hidden_states.transpose(1, 2).to(torch.float64).unflatten(3, (-1, 2)))
             x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).transpose(1, 2)
             return x_out.type_as(hidden_states)
@@ -1170,15 +1073,7 @@ class FlashAttention(Attention_):
 #   AMP attention with fp32 softmax to fix loss NaN problem during training     #
 #################################################################################
 class Attention(Attention_):
-    """Attention implementation."""
-
     def forward(self, x, HW=None, **kwargs):
-        """Forward.
-
-        Args:
-            x: The x.
-            HW: The hw.
-        """
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         # B,N,3,H,C -> B,H,N,C
@@ -1204,25 +1099,12 @@ class FinalLayer(nn.Module):
     """
 
     def __init__(self, hidden_size, patch_size, out_channels):
-        """Init.
-
-        Args:
-            hidden_size: The hidden size.
-            patch_size: The patch size.
-            out_channels: The out channels.
-        """
         super().__init__()
         self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels, bias=True)
         self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 2 * hidden_size, bias=True))
 
     def forward(self, x, c):
-        """Forward.
-
-        Args:
-            x: The x.
-            c: The c.
-        """
         shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
         x = modulate(self.norm_final(x), shift, scale)
         x = self.linear(x)
@@ -1235,13 +1117,6 @@ class T2IFinalLayer(nn.Module):
     """
 
     def __init__(self, hidden_size, patch_size, out_channels):
-        """Init.
-
-        Args:
-            hidden_size: The hidden size.
-            patch_size: The patch size.
-            out_channels: The out channels.
-        """
         super().__init__()
         if isinstance(patch_size, int):
             patch_size = [patch_size, patch_size]
@@ -1251,12 +1126,6 @@ class T2IFinalLayer(nn.Module):
         self.out_channels = out_channels
 
     def forward_frame_aware(self, x, t):
-        """Forward frame aware.
-
-        Args:
-            x: The x.
-            t: The t.
-        """
         # t: B,1,F,D
         B, N, C = x.shape
         num_frames = t.shape[2]
@@ -1269,12 +1138,6 @@ class T2IFinalLayer(nn.Module):
         return x
 
     def forward(self, x, t):
-        """Forward.
-
-        Args:
-            x: The x.
-            t: The t.
-        """
         if len(t.shape) > 2:
             return self.forward_frame_aware(x, t)
         shift, scale = (self.scale_shift_table[None] + t[:, None]).chunk(2, dim=1)
@@ -1289,26 +1152,12 @@ class MaskFinalLayer(nn.Module):
     """
 
     def __init__(self, final_hidden_size, c_emb_size, patch_size, out_channels):
-        """Init.
-
-        Args:
-            final_hidden_size: The final hidden size.
-            c_emb_size: The c emb size.
-            patch_size: The patch size.
-            out_channels: The out channels.
-        """
         super().__init__()
         self.norm_final = nn.LayerNorm(final_hidden_size, elementwise_affine=False, eps=1e-6)
         self.linear = nn.Linear(final_hidden_size, patch_size * patch_size * out_channels, bias=True)
         self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(c_emb_size, 2 * final_hidden_size, bias=True))
 
     def forward(self, x, t):
-        """Forward.
-
-        Args:
-            x: The x.
-            t: The t.
-        """
         shift, scale = self.adaLN_modulation(t).chunk(2, dim=1)
         x = modulate(self.norm_final(x), shift, scale)
         x = self.linear(x)
@@ -1321,24 +1170,12 @@ class DecoderLayer(nn.Module):
     """
 
     def __init__(self, hidden_size, decoder_hidden_size):
-        """Init.
-
-        Args:
-            hidden_size: The hidden size.
-            decoder_hidden_size: The decoder hidden size.
-        """
         super().__init__()
         self.norm_decoder = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.linear = nn.Linear(hidden_size, decoder_hidden_size, bias=True)
         self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 2 * hidden_size, bias=True))
 
     def forward(self, x, t):
-        """Forward.
-
-        Args:
-            x: The x.
-            t: The t.
-        """
         shift, scale = self.adaLN_modulation(t).chunk(2, dim=1)
         x = modulate(self.norm_decoder(x), shift, scale)
         x = self.linear(x)
@@ -1354,12 +1191,6 @@ class TimestepEmbedder(nn.Module):
     """
 
     def __init__(self, hidden_size, frequency_embedding_size=256):
-        """Init.
-
-        Args:
-            hidden_size: The hidden size.
-            frequency_embedding_size: The frequency embedding size.
-        """
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(frequency_embedding_size, hidden_size, bias=True),
@@ -1390,18 +1221,12 @@ class TimestepEmbedder(nn.Module):
         return embedding
 
     def forward(self, t):
-        """Forward.
-
-        Args:
-            t: The t.
-        """
         t_freq = self.timestep_embedding(t, self.frequency_embedding_size).to(self.dtype)
         t_emb = self.mlp(t_freq)
         return t_emb
 
     @property
     def dtype(self):
-        """Dtype."""
         execution_dtype = getattr(self, "_worldfoundry_execution_dtype", None)
         if isinstance(execution_dtype, torch.dtype):
             return execution_dtype
@@ -1417,12 +1242,6 @@ class SizeEmbedder(TimestepEmbedder):
     """
 
     def __init__(self, hidden_size, frequency_embedding_size=256):
-        """Init.
-
-        Args:
-            hidden_size: The hidden size.
-            frequency_embedding_size: The frequency embedding size.
-        """
         super().__init__(hidden_size=hidden_size, frequency_embedding_size=frequency_embedding_size)
         self.mlp = nn.Sequential(
             nn.Linear(frequency_embedding_size, hidden_size, bias=True),
@@ -1433,12 +1252,6 @@ class SizeEmbedder(TimestepEmbedder):
         self.outdim = hidden_size
 
     def forward(self, s, bs):
-        """Forward.
-
-        Args:
-            s: The s.
-            bs: The bs.
-        """
         if s.ndim == 1:
             s = s[:, None]
         assert s.ndim == 2
@@ -1454,7 +1267,6 @@ class SizeEmbedder(TimestepEmbedder):
 
     @property
     def dtype(self):
-        """Dtype."""
         execution_dtype = getattr(self, "_worldfoundry_execution_dtype", None)
         if isinstance(execution_dtype, torch.dtype):
             return execution_dtype
@@ -1470,13 +1282,6 @@ class LabelEmbedder(nn.Module):
     """
 
     def __init__(self, num_classes, hidden_size, dropout_prob):
-        """Init.
-
-        Args:
-            num_classes: The num classes.
-            hidden_size: The hidden size.
-            dropout_prob: The dropout prob.
-        """
         super().__init__()
         use_cfg_embedding = dropout_prob > 0
         self.embedding_table = nn.Embedding(num_classes + use_cfg_embedding, hidden_size)
@@ -1495,13 +1300,6 @@ class LabelEmbedder(nn.Module):
         return labels
 
     def forward(self, labels, train, force_drop_ids=None):
-        """Forward.
-
-        Args:
-            labels: The labels.
-            train: The train.
-            force_drop_ids: The force drop ids.
-        """
         use_dropout = self.dropout_prob > 0
         if (train and use_dropout) or (force_drop_ids is not None):
             labels = self.token_drop(labels, force_drop_ids)
@@ -1519,18 +1317,9 @@ class CaptionEmbedder(nn.Module):
         in_channels,
         hidden_size,
         uncond_prob,
-        act_layer=nn.GELU(approximate="tanh"),
+        act_layer=nn.GELU(approximate="tanh"),  # noqa: B008 - Default evaluated once at definition, as upstream.
         token_num=120,
     ):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            hidden_size: The hidden size.
-            uncond_prob: The uncond prob.
-            act_layer: The act layer.
-            token_num: The token num.
-        """
         super().__init__()
         self.y_proj = Mlp(
             in_features=in_channels, hidden_features=hidden_size, out_features=hidden_size, act_layer=act_layer, drop=0
@@ -1539,15 +1328,10 @@ class CaptionEmbedder(nn.Module):
         self.uncond_prob = uncond_prob
 
     def initialize_gemma_params(self, model_name="google/gemma-2b-it"):
-        """Initialize gemma params.
-
-        Args:
-            model_name: The model name.
-        """
         num_layers = len(self.custom_gemma_layers)
         text_encoder = AutoModelForCausalLM.from_pretrained(model_name).get_decoder()
         pretrained_layers = text_encoder.layers[-num_layers:]
-        for custom_layer, pretrained_layer in zip(self.custom_gemma_layers, pretrained_layers):
+        for custom_layer, pretrained_layer in zip(self.custom_gemma_layers, pretrained_layers, strict=False):
             info = custom_layer.load_state_dict(pretrained_layer.state_dict(), strict=False)
             print(f"**** {info} ****")
         print(f"**** Initialized {num_layers} Gemma layers from pretrained model: {model_name} ****")
@@ -1564,14 +1348,6 @@ class CaptionEmbedder(nn.Module):
         return caption
 
     def forward(self, caption, train, force_drop_ids=None, mask=None):
-        """Forward.
-
-        Args:
-            caption: The caption.
-            train: The train.
-            force_drop_ids: The force drop ids.
-            mask: The mask.
-        """
         y_embedding = self.y_embedding
         if train:
             if caption.shape[-2] < self.y_embedding.shape[-2]:
@@ -1594,16 +1370,7 @@ class CaptionEmbedderDoubleBr(nn.Module):
     Embeds class labels into vector representations. Also handles label dropout for classifier-free guidance.
     """
 
-    def __init__(self, in_channels, hidden_size, uncond_prob, act_layer=nn.GELU(approximate="tanh"), token_num=120):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            hidden_size: The hidden size.
-            uncond_prob: The uncond prob.
-            act_layer: The act layer.
-            token_num: The token num.
-        """
+    def __init__(self, in_channels, hidden_size, uncond_prob, act_layer=nn.GELU(approximate="tanh"), token_num=120):  # noqa: B008 - Default evaluated once at definition, as upstream.
         super().__init__()
         self.proj = Mlp(
             in_features=in_channels, hidden_features=hidden_size, out_features=hidden_size, act_layer=act_layer, drop=0
@@ -1625,13 +1392,6 @@ class CaptionEmbedderDoubleBr(nn.Module):
         return global_caption, caption
 
     def forward(self, caption, train, force_drop_ids=None):
-        """Forward.
-
-        Args:
-            caption: The caption.
-            train: The train.
-            force_drop_ids: The force drop ids.
-        """
         assert caption.shape[2:] == self.y_embedding.shape
         global_caption = caption.mean(dim=2).squeeze()
         use_dropout = self.uncond_prob > 0
@@ -1643,28 +1403,12 @@ class CaptionEmbedderDoubleBr(nn.Module):
 
 # copy from https://github.com/huggingface/diffusers/blob/01abfc873659e29a8d002f20782fa5b5e6d03f9c/src/diffusers/models/transformers/transformer_hunyuan_video_framepack.py#L72
 class ClipVisionProjection(nn.Module):
-    """Clip vision projection implementation."""
-
     def __init__(self, in_channels: int, out_channels: int):
-        """Init.
-
-        Args:
-            in_channels: The in channels.
-            out_channels: The out channels.
-        """
         super().__init__()
         self.up = nn.Linear(in_channels, out_channels * 3)
         self.down = nn.Linear(out_channels * 3, out_channels)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            hidden_states: The hidden states.
-
-        Returns:
-            The return value.
-        """
         hidden_states = self.up(hidden_states)
         hidden_states = F.silu(hidden_states)
         hidden_states = self.down(hidden_states)
@@ -1686,22 +1430,9 @@ class PatchEmbed(nn.Module):
         flatten=True,
         bias=True,
     ):
-        """Init.
-
-        Args:
-            img_size: The img size.
-            patch_size: The patch size.
-            in_chans: The in chans.
-            embed_dim: The embed dim.
-            kernel_size: The kernel size.
-            padding: The padding.
-            norm_layer: The norm layer.
-            flatten: The flatten.
-            bias: The bias.
-        """
         super().__init__()
         kernel_size = kernel_size or patch_size
-        if isinstance(kernel_size, tuple) or isinstance(kernel_size, list):
+        if isinstance(kernel_size, (tuple, list)):
             kernel_size = kernel_size[0]
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
@@ -1718,14 +1449,9 @@ class PatchEmbed(nn.Module):
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         B, C, H, W = x.shape
-        assert H == self.img_size[0], f"Input image height ({H}) doesn't match model ({self.img_size[0]})."
-        assert W == self.img_size[1], f"Input image width ({W}) doesn't match model ({self.img_size[1]})."
+        assert self.img_size[0] == H, f"Input image height ({H}) doesn't match model ({self.img_size[0]})."
+        assert self.img_size[1] == W, f"Input image width ({W}) doesn't match model ({self.img_size[1]})."
         x = self.proj(x)
         if self.flatten:
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
@@ -1747,21 +1473,9 @@ class PatchEmbedMS(nn.Module):
         flatten=True,
         bias=True,
     ):
-        """Init.
-
-        Args:
-            patch_size: The patch size.
-            in_chans: The in chans.
-            embed_dim: The embed dim.
-            kernel_size: The kernel size.
-            padding: The padding.
-            norm_layer: The norm layer.
-            flatten: The flatten.
-            bias: The bias.
-        """
         super().__init__()
         kernel_size = kernel_size or patch_size
-        if isinstance(kernel_size, tuple) or isinstance(kernel_size, list):
+        if isinstance(kernel_size, (tuple, list)):
             kernel_size = kernel_size[0]
         patch_size = to_2tuple(patch_size)
         self.patch_size = patch_size
@@ -1774,11 +1488,6 @@ class PatchEmbedMS(nn.Module):
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         x = self.proj(x)
         if self.flatten:
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
@@ -1800,18 +1509,6 @@ class PatchEmbedMS3D(nn.Module):
         flatten=True,
         bias=True,
     ):
-        """Init.
-
-        Args:
-            patch_size: The patch size.
-            in_chans: The in chans.
-            embed_dim: The embed dim.
-            kernel_size: The kernel size.
-            padding: The padding.
-            norm_layer: The norm layer.
-            flatten: The flatten.
-            bias: The bias.
-        """
         super().__init__()
         kernel_size = kernel_size or patch_size
         patch_size = to_3tuple(patch_size)
@@ -1827,11 +1524,6 @@ class PatchEmbedMS3D(nn.Module):
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
     def forward(self, x):
-        """Forward.
-
-        Args:
-            x: The x.
-        """
         x = self.proj(x)
         if self.flatten:
             x = x.flatten(2).transpose(1, 2)  # BCTHW -> BNC
@@ -1840,29 +1532,13 @@ class PatchEmbedMS3D(nn.Module):
 
 
 class RopePosEmbed(nn.Module):
-    """Rope pos embed implementation."""
-
     # modified from https://github.com/black-forest-labs/flux/blob/c00d7c60b085fce8058b9df845e036090873f2ce/src/flux/modules/layers.py#L11
-    def __init__(self, theta: int, axes_dim: List[int]):
-        """Init.
-
-        Args:
-            theta: The theta.
-            axes_dim: The axes dim.
-        """
+    def __init__(self, theta: int, axes_dim: list[int]):
         super().__init__()
         self.theta = theta
         self.axes_dim = axes_dim
 
     def forward(self, ids: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            ids: The ids.
-
-        Returns:
-            The return value.
-        """
         n_axes = ids.shape[-1]
         cos_out = []
         sin_out = []
@@ -1887,16 +1563,6 @@ class RopePosEmbed(nn.Module):
 
     @staticmethod
     def _prepare_latent_image_ids(batch_size, height, width, device, dtype, frame=None):
-        """Helper function to prepare latent image ids.
-
-        Args:
-            batch_size: The batch size.
-            height: The height.
-            width: The width.
-            device: The device.
-            dtype: The dtype.
-            frame: The frame.
-        """
         if frame is None:
             frame = 1
         latent_image_ids = torch.zeros(frame, height, width, 3)
@@ -1920,25 +1586,14 @@ class RopePosEmbed(nn.Module):
 
 
 class WanRotaryPosEmbed(nn.Module):
-    """Wan rotary pos embed implementation."""
-
     def __init__(
         self,
         attention_head_dim: int,
-        patch_size: Tuple[int, int, int],
+        patch_size: tuple[int, int, int],
         max_seq_len: int,
         theta: float = 10000.0,
-        fhw_dim: Optional[Tuple[int, int, int]] = None,
+        fhw_dim: tuple[int, int, int] | None = None,
     ):
-        """Init.
-
-        Args:
-            attention_head_dim: The attention head dim.
-            patch_size: The patch size.
-            max_seq_len: The max seq len.
-            theta: The theta.
-            fhw_dim: The fhw dim.
-        """
         super().__init__()
 
         self.attention_head_dim = attention_head_dim
@@ -1961,20 +1616,19 @@ class WanRotaryPosEmbed(nn.Module):
             )
             freqs.append(freq)
         self.freqs = torch.cat(freqs, dim=1)
+        self._cached_fhw: tuple[int, int, int, str] | None = None
+        self._cached_freqs: torch.Tensor | None = None
+        self._cached_real_fhw: tuple[int, int, int, str, torch.dtype] | None = None
+        self._cached_real_cos_sin: tuple[torch.Tensor, torch.Tensor] | None = None
 
     def forward(self, fhw: torch.Tensor, device: torch.device) -> torch.Tensor:
-        """Forward.
+        ppf, pph, ppw = int(fhw[0]), int(fhw[1]), int(fhw[2])
+        cache_key = (ppf, pph, ppw, str(device))
+        if self._cached_fhw == cache_key and self._cached_freqs is not None and not torch.compiler.is_compiling():
+            return self._cached_freqs
 
-        Args:
-            fhw: The fhw.
-            device: The device.
-
-        Returns:
-            The return value.
-        """
-        ppf, pph, ppw = fhw
-
-        self.freqs = self.freqs.to(device)
+        if self.freqs.device != device:
+            self.freqs = self.freqs.to(device)
         freqs = self.freqs.split_with_sizes(
             [
                 self.attention_head_dim // 2 - 2 * (self.attention_head_dim // 6),
@@ -1987,23 +1641,43 @@ class WanRotaryPosEmbed(nn.Module):
         freqs_f = freqs[0][:ppf].view(ppf, 1, 1, -1).expand(ppf, pph, ppw, -1)
         freqs_h = freqs[1][:pph].view(1, pph, 1, -1).expand(ppf, pph, ppw, -1)
         freqs_w = freqs[2][:ppw].view(1, 1, ppw, -1).expand(ppf, pph, ppw, -1)
-        freqs = torch.cat([freqs_f, freqs_h, freqs_w], dim=-1).reshape(1, 1, ppf * pph * ppw, -1)
-        return freqs
+        out = torch.cat([freqs_f, freqs_h, freqs_w], dim=-1).reshape(1, 1, ppf * pph * ppw, -1)
+        if not torch.compiler.is_compiling() and not (
+            device.type == "cuda" and torch.cuda.is_current_stream_capturing()
+        ):
+            self._cached_fhw = cache_key
+            self._cached_freqs = out
+        return out
+
+    def forward_real(
+        self,
+        fhw: tuple[int, int, int],
+        device: torch.device,
+        *,
+        dtype: torch.dtype = torch.float64,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return cached ``(cos, sin)`` tensors of shape ``[1, N, 1, D//2]`` for Triton RoPE."""
+        ppf, pph, ppw = int(fhw[0]), int(fhw[1]), int(fhw[2])
+        cache_key = (ppf, pph, ppw, str(device), dtype)
+        if (
+            self._cached_real_fhw == cache_key
+            and self._cached_real_cos_sin is not None
+            and not torch.compiler.is_compiling()
+        ):
+            return self._cached_real_cos_sin
+        freqs = self.forward(fhw, device)  # [1, 1, N, D//2] complex128
+        cos = freqs.real.transpose(1, 2).to(dtype).contiguous()
+        sin = freqs.imag.transpose(1, 2).to(dtype).contiguous()
+        if not torch.compiler.is_compiling() and not (
+            device.type == "cuda" and torch.cuda.is_current_stream_capturing()
+        ):
+            self._cached_real_fhw = cache_key
+            self._cached_real_cos_sin = (cos, sin)
+        return cos, sin
 
 
 class CausalWanRotaryPosEmbed(WanRotaryPosEmbed):
-    """Causal wan rotary pos embed implementation."""
-
     def forward(self, fhw: torch.Tensor, device: torch.device) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            fhw: The fhw.
-            device: The device.
-
-        Returns:
-            The return value.
-        """
         (f_start, f_end), pph, ppw = fhw
 
         self.freqs = self.freqs.to(device)
@@ -2024,19 +1698,9 @@ class CausalWanRotaryPosEmbed(WanRotaryPosEmbed):
 
 
 class WanRotaryTemporalPosEmbed(nn.Module):
-    """Wan rotary temporal pos embed implementation."""
-
     def __init__(
-        self, attention_head_dim: int, patch_size: Tuple[int, int, int], max_seq_len: int, theta: float = 10000.0
+        self, attention_head_dim: int, patch_size: tuple[int, int, int], max_seq_len: int, theta: float = 10000.0
     ):
-        """Init.
-
-        Args:
-            attention_head_dim: The attention head dim.
-            patch_size: The patch size.
-            max_seq_len: The max seq len.
-            theta: The theta.
-        """
         super().__init__()
 
         self.attention_head_dim = attention_head_dim
@@ -2054,15 +1718,6 @@ class WanRotaryTemporalPosEmbed(nn.Module):
         self.freqs = torch.cat(freqs, dim=1)
 
     def forward(self, fhw: torch.Tensor, device: torch.device) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            fhw: The fhw.
-            device: The device.
-
-        Returns:
-            The return value.
-        """
         ppf, pph, ppw = fhw
 
         self.freqs = self.freqs.to(device)
@@ -2078,78 +1733,12 @@ class WanRotaryTemporalPosEmbed(nn.Module):
         return freqs
 
 
-def get_1d_rotary_pos_embed(
-    dim: int,
-    pos: Union[np.ndarray, int],
-    theta: float = 10000.0,
-    use_real=False,
-    linear_factor=1.0,
-    ntk_factor=1.0,
-    repeat_interleave_real=True,
-    freqs_dtype=torch.float32,  #  torch.float32, torch.float64 (flux)
-):
-    """
-    Precompute the frequency tensor for complex exponentials (cis) with given dimensions.
-
-    This function calculates a frequency tensor with complex exponentials using the given dimension 'dim' and the end
-    index 'end'. The 'theta' parameter scales the frequencies. The returned tensor contains complex values in complex64
-    data type.
-
-    Args:
-        dim (`int`): Dimension of the frequency tensor.
-        pos (`np.ndarray` or `int`): Position indices for the frequency tensor. [S] or scalar
-        theta (`float`, *optional*, defaults to 10000.0):
-            Scaling factor for frequency computation. Defaults to 10000.0.
-        use_real (`bool`, *optional*):
-            If True, return real part and imaginary part separately. Otherwise, return complex numbers.
-        linear_factor (`float`, *optional*, defaults to 1.0):
-            Scaling factor for the context extrapolation. Defaults to 1.0.
-        ntk_factor (`float`, *optional*, defaults to 1.0):
-            Scaling factor for the NTK-Aware RoPE. Defaults to 1.0.
-        repeat_interleave_real (`bool`, *optional*, defaults to `True`):
-            If `True` and `use_real`, real part and imaginary part are each interleaved with themselves to reach `dim`.
-            Otherwise, they are concateanted with themselves.
-        freqs_dtype (`torch.float32` or `torch.float64`, *optional*, defaults to `torch.float32`):
-            the dtype of the frequency tensor.
-    Returns:
-        `torch.Tensor`: Precomputed frequency tensor with complex exponentials. [S, D/2]
-    """
-    assert dim % 2 == 0
-
-    if isinstance(pos, int):
-        pos = torch.arange(pos)
-    if isinstance(pos, np.ndarray):
-        pos = torch.from_numpy(pos)  # type: ignore  # [S]
-
-    theta = theta * ntk_factor
-    freqs = (
-        1.0
-        / (theta ** (torch.arange(0, dim, 2, dtype=freqs_dtype, device=pos.device)[: (dim // 2)] / dim))
-        / linear_factor
-    )  # [D/2]
-    freqs = torch.outer(pos, freqs)  # type: ignore   # [S, D/2]
-    if use_real and repeat_interleave_real:
-        # flux, hunyuan-dit, cogvideox
-        freqs_cos = freqs.cos().repeat_interleave(2, dim=1, output_size=freqs.shape[1] * 2).float()  # [S, D]
-        freqs_sin = freqs.sin().repeat_interleave(2, dim=1, output_size=freqs.shape[1] * 2).float()  # [S, D]
-        return freqs_cos, freqs_sin
-    elif use_real:
-        # stable audio, allegro
-        freqs_cos = torch.cat([freqs.cos(), freqs.cos()], dim=-1).float()  # [S, D]
-        freqs_sin = torch.cat([freqs.sin(), freqs.sin()], dim=-1).float()  # [S, D]
-        return freqs_cos, freqs_sin
-    else:
-        # lumina
-        freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64     # [S, D/2]
-        return freqs_cis
-
-
 def apply_rotary_emb(
     x: torch.Tensor,
-    freqs_cis: Union[torch.Tensor, Tuple[torch.Tensor]],
+    freqs_cis: torch.Tensor | tuple[torch.Tensor],
     use_real: bool = True,
     use_real_unbind_dim: int = -1,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Apply rotary embeddings to input tensors using the given frequency tensor. This function applies rotary embeddings
     to the given query or key 'x' tensors using the provided frequency tensor 'freqs_cis'. The input tensors are
@@ -2276,12 +1865,6 @@ class WindowAttention(FlashAttention):
 
         # 3. apply RoPE
         def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
-            """Apply rotary emb.
-
-            Args:
-                hidden_states: The hidden states.
-                freqs: The freqs.
-            """
             x_rotated = torch.view_as_complex(hidden_states.transpose(1, 2).to(torch.float64).unflatten(3, (-1, 2)))
             x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).transpose(1, 2)
             return x_out.type_as(hidden_states)
@@ -2388,11 +1971,6 @@ class WindowAttention(FlashAttention):
         return x
 
     def extra_repr(self) -> str:
-        """Extra repr.
-
-        Returns:
-            The return value.
-        """
         return f"window_count={self.window_count}, pad_if_needed={self.pad_if_needed}"
 
 
@@ -2400,27 +1978,14 @@ class ChunkedLiteLAReLURope(LiteLAReLURope):
     r"""Lightweight linear attention with first relu kernel and then rope, with chunked computation for large token sequences"""
 
     def __init__(self, *args, chunk_size=200_000, **kwargs):
-        """Init."""
         super().__init__(*args, **kwargs)
         self.chunk_size = chunk_size
 
     def forward(self, x: torch.Tensor, mask=None, HW=None, rotary_emb=None, block_mask=None, **kwargs) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-            mask: The mask.
-            HW: The hw.
-            rotary_emb: The rotary emb.
-            block_mask: The block mask.
-
-        Returns:
-            The return value.
-        """
         B, N, C = x.shape
 
         # if token number is not large, use original method
-        if N <= self.chunk_size:
+        if self.chunk_size >= N:
             return super().forward(x, mask=mask, HW=HW, rotary_emb=rotary_emb, block_mask=block_mask, **kwargs)
 
         # chunked computation
@@ -2440,13 +2005,10 @@ class ChunkedLiteLAReLURope(LiteLAReLURope):
         q = self.kernel_func(q)  # B, h, h_d, N
         k = self.kernel_func(k)
 
-        def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
-            """Apply rotary emb.
-
-            Args:
-                hidden_states: The hidden states.
-                freqs: The freqs.
-            """
+        def apply_rotary_emb(hidden_states: torch.Tensor, freqs):
+            if isinstance(freqs, tuple):
+                cos_f, sin_f = freqs
+                freqs = torch.complex(cos_f.to(torch.float64), sin_f.to(torch.float64)).transpose(1, 2)
             x_rotated = torch.view_as_complex(hidden_states.permute(0, 1, 3, 2).to(torch.float64).unflatten(3, (-1, 2)))
             x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4).permute(0, 1, 3, 2)
             return x_out.type_as(hidden_states)
@@ -2487,10 +2049,7 @@ class ChunkedLiteLAReLURope(LiteLAReLURope):
             vk_chunk = torch.matmul(v_chunk, k_rotated_chunk.transpose(-1, -2))  # (B, h, h_d, h_d)
 
             # accumulate results
-            if vk_accumulated is None:
-                vk_accumulated = vk_chunk
-            else:
-                vk_accumulated = vk_accumulated + vk_chunk
+            vk_accumulated = vk_chunk if vk_accumulated is None else vk_accumulated + vk_chunk
 
             # explicitly delete chunk tensors to free memory
             del v_chunk, k_rotated_chunk, vk_chunk

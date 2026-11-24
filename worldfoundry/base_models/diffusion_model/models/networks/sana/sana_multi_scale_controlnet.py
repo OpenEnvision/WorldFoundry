@@ -29,12 +29,19 @@ import torch
 import torch.nn as nn
 from torch.nn import Linear, Module, init
 
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.networks.sana.sana import get_2d_sincos_pos_embed
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_blocks import RopePosEmbed
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.networks.sana.sana_multi_scale import (
     SanaMS,
     SanaMSBlock,
 )
+
+# isort: split
 from worldfoundry.base_models.diffusion_model.models.networks.sana.capabilities import (
     is_triton_module_available,
     is_xformers_available,
@@ -43,11 +50,6 @@ from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 _triton_modules_available = False
 if is_triton_module_available():
-    from worldfoundry.base_models.diffusion_model.models.networks.sana.fastlinear.modules import (
-        TritonLiteMLA,
-        TritonMBConvPreGLU,
-    )
-
     _triton_modules_available = True
 
 _xformers_available = False
@@ -59,15 +61,6 @@ class ControlSanaMSBlock(Module):
     """Copied SanaMSBlock plus ``before_proj`` / ``after_proj`` control residuals."""
 
     def __init__(self, base_block: SanaMSBlock, block_index: int) -> None:
-        """Init.
-
-        Args:
-            base_block: The base block.
-            block_index: The block index.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.copied_block = deepcopy(base_block)
         self.block_index = block_index
@@ -78,12 +71,7 @@ class ControlSanaMSBlock(Module):
         self.after_proj = Linear(hidden_size, hidden_size)
 
     def initialize_all_and_copy_from_base(self, base_block):
-        """Initialize all and copy from base.
-
-        Args:
-            base_block: The base block.
-        """
-        for name, param in self.named_parameters():
+        for _name, param in self.named_parameters():
             param.requires_grad_(True)
 
         self.copied_block.load_state_dict(base_block.state_dict())
@@ -97,17 +85,6 @@ class ControlSanaMSBlock(Module):
         init.zeros_(self.after_proj.bias)
 
     def forward(self, x, y, t, control_signal, mask=None, HW=None, image_rotary_emb=None):
-        """Forward.
-
-        Args:
-            x: The x.
-            y: The y.
-            t: The t.
-            control_signal: The control signal.
-            mask: The mask.
-            HW: The hw.
-            image_rotary_emb: The image rotary emb.
-        """
         if self.block_index == 0:
             # the first block
             control_signal = self.before_proj(control_signal)
@@ -156,38 +133,6 @@ class SanaMSControlNet(SanaMS):
         timestep_norm_scale_factor=1.0,
         **kwargs,
     ):
-        """Init.
-
-        Args:
-            input_size: The input size.
-            patch_size: The patch size.
-            in_channels: The in channels.
-            hidden_size: The hidden size.
-            depth: The depth.
-            num_heads: The num heads.
-            mlp_ratio: The mlp ratio.
-            class_dropout_prob: The class dropout prob.
-            learn_sigma: The learn sigma.
-            pred_sigma: The pred sigma.
-            drop_path: The drop path.
-            caption_channels: The caption channels.
-            pe_interpolation: The pe interpolation.
-            config: The config.
-            model_max_length: The model max length.
-            qk_norm: The qk norm.
-            y_norm: The y norm.
-            norm_eps: The norm eps.
-            attn_type: The attn type.
-            ffn_type: The ffn type.
-            use_pe: The use pe.
-            y_norm_scale_factor: The y norm scale factor.
-            patch_embed_kernel: The patch embed kernel.
-            mlp_acts: The mlp acts.
-            linear_head_dim: The linear head dim.
-            copy_blocks_num: The copy blocks num.
-            cross_norm: The cross norm.
-            timestep_norm_scale_factor: The timestep norm scale factor.
-        """
         super().__init__(
             input_size=input_size,
             patch_size=patch_size,
@@ -223,11 +168,6 @@ class SanaMSControlNet(SanaMS):
         self.controlnet = nn.ModuleList([ControlSanaMSBlock(self.blocks[i], i) for i in range(copy_blocks_num)])
 
     def load_pretrain_and_initialize(self, model_path):
-        """Load pretrain and initialize.
-
-        Args:
-            model_path: The model path.
-        """
         missing, unexpected = self.load_state_dict(
             load_tensor_state_dict(model_path, wrapper_keys=("state_dict",)), strict=False
         )
@@ -235,7 +175,6 @@ class SanaMSControlNet(SanaMS):
         return missing, unexpected
 
     def initialize_all(self):
-        """Initialize all."""
         # freeze all the parameters
         for p in self.parameters():
             p.requires_grad_(False)
@@ -244,12 +183,6 @@ class SanaMSControlNet(SanaMS):
             block.initialize_all_and_copy_from_base(self.blocks[i])
 
     def forward_controlnet(self, control_signal, pos_embed_ms=None):
-        """Forward controlnet.
-
-        Args:
-            control_signal: The control signal.
-            pos_embed_ms: The pos embed ms.
-        """
         if self.use_pe and pos_embed_ms:
             control_signal = self.x_embedder(control_signal) + pos_embed_ms
         else:
@@ -331,9 +264,7 @@ class SanaMSControlNet(SanaMS):
             control_signal, control_signal_skip = self.controlnet[i - 1](
                 x, y, t0, control_signal, y_lens, (self.h, self.w), image_pos_embed, **kwargs
             )
-            x = self.blocks[i](
-                x + control_signal_skip, y, t0, y_lens, (self.h, self.w), image_pos_embed, **kwargs
-            )
+            x = self.blocks[i](x + control_signal_skip, y, t0, y_lens, (self.h, self.w), image_pos_embed, **kwargs)
 
         for i in range(self.copy_blocks_num + 1, len(self.blocks)):
             x = self.blocks[i](x, y, t0, y_lens, (self.h, self.w), image_pos_embed, **kwargs)
@@ -375,10 +306,8 @@ class SanaMSControlNet(SanaMS):
 
 
 def SanaMSControlNet_600M_P1_D28(**kwargs):
-    """Sanamscontrolnet 600m p1 d28."""
     return SanaMSControlNet(depth=28, hidden_size=1152, patch_size=1, num_heads=16, **kwargs)
 
 
 def SanaMSControlNet_1600M_P1_D20(**kwargs):
-    """Sanamscontrolnet 1600m p1 d20."""
     return SanaMSControlNet(depth=20, hidden_size=2240, patch_size=1, num_heads=20, **kwargs)

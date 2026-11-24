@@ -3,33 +3,22 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 from torch import nn
 from torch.nn.attention import SDPBackend, sdpa_kernel
-from typing import Union
 
-
-class GEGLU(nn.Module):
-    def __init__(self, dim_in: int, dim_out: int):
-        super().__init__()
-        self.proj = nn.Linear(dim_in, dim_out * 2)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x, gate = self.proj(x).chunk(2, dim=-1)
-        return x * F.gelu(gate)
+from worldfoundry.base_models.diffusion_model.models.networks.lvdm.attention import GEGLU
 
 
 class FeedForward(nn.Module):
     def __init__(
         self,
         dim: int,
-        dim_out: Union[int, None] = None,
+        dim_out: int | None = None,
         mult: int = 4,
         dropout: float = 0.0,
     ):
         super().__init__()
         inner_dim = int(dim * mult)
         dim_out = dim_out or dim
-        self.net = nn.Sequential(
-            GEGLU(dim, inner_dim), nn.Dropout(dropout), nn.Linear(inner_dim, dim_out)
-        )
+        self.net = nn.Sequential(GEGLU(dim, inner_dim), nn.Dropout(dropout), nn.Linear(inner_dim, dim_out))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
@@ -39,7 +28,7 @@ class Attention(nn.Module):
     def __init__(
         self,
         query_dim: int,
-        context_dim: Union[int, None] = None,
+        context_dim: int | None = None,
         heads: int = 8,
         dim_head: int = 64,
         dropout: float = 0.0,
@@ -53,21 +42,14 @@ class Attention(nn.Module):
         self.to_q = nn.Linear(query_dim, inner_dim, bias=False)
         self.to_k = nn.Linear(context_dim, inner_dim, bias=False)
         self.to_v = nn.Linear(context_dim, inner_dim, bias=False)
-        self.to_out = nn.Sequential(
-            nn.Linear(inner_dim, query_dim), nn.Dropout(dropout)
-        )
+        self.to_out = nn.Sequential(nn.Linear(inner_dim, query_dim), nn.Dropout(dropout))
 
-    def forward(
-        self, x: torch.Tensor, context: Union[torch.Tensor, None] = None
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, context: torch.Tensor | None = None) -> torch.Tensor:
         q = self.to_q(x)
         context = context if context is not None else x
         k = self.to_k(context)
         v = self.to_v(context)
-        q, k, v = map(
-            lambda t: rearrange(t, "b l (h d) -> b h l d", h=self.heads),
-            (q, k, v),
-        )
+        q, k, v = (rearrange(t, "b l (h d) -> b h l d", h=self.heads) for t in (q, k, v))
         with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
             out = F.scaled_dot_product_attention(q, k, v)
         out = rearrange(out, "b h l d -> b l (h d)")
@@ -143,9 +125,7 @@ class TransformerBlockTimeMix(nn.Module):
         self.norm2 = nn.LayerNorm(inner_dim)
         self.norm3 = nn.LayerNorm(inner_dim)
 
-    def forward(
-        self, x: torch.Tensor, context: torch.Tensor, num_frames: int
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, context: torch.Tensor, num_frames: int) -> torch.Tensor:
         _, s, _ = x.shape
         x = rearrange(x, "(b t) s c -> (b s) t c", t=num_frames)
         x = self.ff_in(self.norm_in(x)) + x
@@ -160,9 +140,7 @@ class SkipConnect(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(
-        self, x_spatial: torch.Tensor, x_temporal: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, x_spatial: torch.Tensor, x_temporal: torch.Tensor) -> torch.Tensor:
         return x_spatial + x_temporal
 
 
@@ -173,7 +151,7 @@ class MultiviewTransformer(nn.Module):
         n_heads: int,
         d_head: int,
         name: str,
-        unflatten_names: list[str] = [],
+        unflatten_names: list[str] = [],  # noqa: B006 - Keeps the upstream default object and signature.
         depth: int = 1,
         context_dim: int = 1024,
         dropout: float = 0.0,
@@ -213,18 +191,14 @@ class MultiviewTransformer(nn.Module):
             ]
         )
 
-    def forward(
-        self, x: torch.Tensor, context: torch.Tensor, num_frames: int
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, context: torch.Tensor, num_frames: int) -> torch.Tensor:
         assert context.ndim == 3
         _, _, h, w = x.shape
         x_in = x
 
         time_context = context
         time_context_first_timestep = time_context[::num_frames]
-        time_context = repeat(
-            time_context_first_timestep, "b ... -> (b n) ...", n=h * w
-        )
+        time_context = repeat(time_context_first_timestep, "b ... -> (b n) ...", n=h * w)
 
         if self.name in self.unflatten_names:
             context = context[::num_frames]
@@ -233,7 +207,7 @@ class MultiviewTransformer(nn.Module):
         x = rearrange(x, "b c h w -> b (h w) c")
         x = self.proj_in(x)
 
-        for block, mix_block in zip(self.transformer_blocks, self.time_mix_blocks):
+        for block, mix_block in zip(self.transformer_blocks, self.time_mix_blocks, strict=False):
             if self.name in self.unflatten_names:
                 x = rearrange(x, "(b t) (h w) c -> b (t h w) c", t=num_frames, h=h, w=w)
             x = block(x, context=context)

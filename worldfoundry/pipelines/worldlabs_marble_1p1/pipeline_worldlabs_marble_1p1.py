@@ -21,7 +21,7 @@ class WorldLabsMarble11Pipeline(WorldLabsPipeline):
         device: str = "cuda",
         model_id: str | None = None,
         **kwargs: Any,
-    ) -> "WorldLabsMarble11Pipeline":
+    ) -> WorldLabsMarble11Pipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         del model_id
         return super().from_pretrained(

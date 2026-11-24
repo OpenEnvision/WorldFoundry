@@ -54,7 +54,7 @@ class MultiWorldItTakesTwoSynthesis(BaseSynthesis):
         return self.runtime.defaults
 
     @classmethod
-    def from_pretrained(cls, *args: Any, **kwargs: Any) -> "MultiWorldItTakesTwoSynthesis":
+    def from_pretrained(cls, *args: Any, **kwargs: Any) -> MultiWorldItTakesTwoSynthesis:
         return cls(runtime=MultiWorldItTakesTwoRuntime.from_pretrained(*args, **kwargs))
 
     def predict(self, *args: Any, **kwargs: Any):

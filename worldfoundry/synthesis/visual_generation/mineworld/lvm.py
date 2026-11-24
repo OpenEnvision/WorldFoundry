@@ -1,62 +1,39 @@
 """
-    Wrap the Huggingface Transformers Llama to PyTorch Lightning Module.
+Wrap the Huggingface Transformers Llama to PyTorch Lightning Module.
 """
-import os
-import sys
-import inspect 
+
 import torch
-from typing import Optional
 import torch.utils.checkpoint
 from torch import nn
-from transformers.activations import ACT2FN
+from transformers import LlamaConfig
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
-from transformers import LlamaConfig
-from utils import get_obj_from_str, instantiate_from_config
-from diagonal_decoding import (
+
+from worldfoundry.base_models.llm_mllm_core.mllm.qwen.layers import QwenMLP as LlamaMLP
+from worldfoundry.base_models.llm_mllm_core.mllm.qwen.layers import (
+    QwenRMSNorm as LlamaRMSNorm,
+)
+from worldfoundry.core.attention import (
+    scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention,
+)
+from worldfoundry.core.attention.rotary.embedding import apply_rotary_pos_emb
+from worldfoundry.synthesis.visual_generation.mineworld.diagonal_decoding import (
+    decode_n_tokens,
     decode_one_token,
     decode_some_token,
-    decode_n_tokens,
-    prefill,
     img_diagd_decode_n_tokens,
+    prefill,
     video_diagd_decode_n_tokens,
 )
-from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+from worldfoundry.synthesis.visual_generation.mineworld.utils import (
+    get_obj_from_str,
+    instantiate_from_config,
+)
+
 torch.backends.cuda.matmul.allow_tf32 = False
 
 logger = logging.get_logger(__name__)
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-
-if not (parentdir in sys.path):
-    sys.path.insert(0, parentdir) 
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
-    """
-    Apply rotary position embeddings to query and key tensors.
-
-    Args:
-        q (torch.Tensor): Query tensor.
-        k (torch.Tensor): Key tensor.
-        cos (torch.Tensor): Cosine values.
-        sin (torch.Tensor): Sine values.
-        position_ids (torch.Tensor): Position IDs.
-
-    Returns:
-        torch.Tensor: Query and key tensors with rotary position embeddings applied.
-    """
-    cos = cos[position_ids].unsqueeze(0).unsqueeze(2)
-    sin = sin[position_ids].unsqueeze(0).unsqueeze(2)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 
 class LlamaLVM(torch.nn.Module):
@@ -64,7 +41,7 @@ class LlamaLVM(torch.nn.Module):
         self,
         transformer_config,
         model_class: str,
-        tokenizer_config = None,
+        tokenizer_config=None,
     ):
         super().__init__()
         self.config = instantiate_from_config(transformer_config)
@@ -72,30 +49,12 @@ class LlamaLVM(torch.nn.Module):
         if tokenizer_config is not None:
             self.tokenizer = instantiate_from_config(tokenizer_config)
 
-class LlamaRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        LlamaRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 class LlamaRotaryEmbedding(nn.Module):
     def __init__(
         self,
         device=None,
-        config: Optional[LlamaConfig] = None,
+        config: LlamaConfig | None = None,
     ):
         super().__init__()
         self.rope_kwargs = {}
@@ -109,7 +68,7 @@ class LlamaRotaryEmbedding(nn.Module):
             device=self.inv_freq.device,
             dtype=torch.get_default_dtype(),
         )
-    
+
     def _set_cos_sin_cache(self, device, dtype):
         """
         Set the cosine and sine cache for positional embeddings.
@@ -119,19 +78,13 @@ class LlamaRotaryEmbedding(nn.Module):
             device (str): The device on which the cache tensors will be stored.
             dtype: The data type of the cache tensors.
         """
-        t = torch.arange(
-            self.max_position_embeddings, device=device, dtype=self.inv_freq.dtype
-        )
+        t = torch.arange(self.max_position_embeddings, device=device, dtype=self.inv_freq.dtype)
 
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer(
-            "cos_cached", emb.cos().to(dtype), persistent=False
-        )
-        self.register_buffer(
-            "sin_cached", emb.sin().to(dtype), persistent=False
-        )
-    
+        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+
     def forward(self, x, seq_len=None):
         """
         Forward pass of the LlamaRotaryEmbedding module.
@@ -151,21 +104,7 @@ class LlamaRotaryEmbedding(nn.Module):
             self.sin_cached[:seq_len, :].to(dtype=x.dtype),
         )
 
-class LlamaMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-  
 class LlamaAttention(nn.Module):
     def __init__(self, config: LlamaConfig):
         super().__init__()
@@ -177,18 +116,10 @@ class LlamaAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         assert (self.head_dim * self.num_heads) == self.hidden_size, "hidden_size must be divisible by num_heads"
-        self.q_proj = nn.Linear(
-            self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias
-        )
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         self.rotary_emb = LlamaRotaryEmbedding(config=config)
         self.max_batch_size = getattr(config, "max_batch_size", 1)
         self.init_kv_cache()
@@ -199,75 +130,72 @@ class LlamaAttention(nn.Module):
         self.cache_v = torch.zeros(cache_shape, dtype=dtype).cuda()
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            positions_embedding = None,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        positions_embedding=None,
     ):
-        
         bsz, q_len, _ = hidden_states.size()
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(
-            bsz, q_len, self.num_heads, self.head_dim
-        )
-        key_states = key_states.view(
-            bsz, q_len, self.num_key_value_heads, self.head_dim
-        )
-        value_states = value_states.view(
-            bsz, q_len, self.num_key_value_heads, self.head_dim
-        )
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
 
         cos, sin = positions_embedding
 
-
         query_states, key_states = apply_rotary_pos_emb(
-            query_states, key_states, cos, sin, position_ids
+            query_states, key_states, cos[position_ids].unsqueeze(0), sin[position_ids].unsqueeze(0), unsqueeze_dim=2
         )
-        
+
         self.cache_k[:bsz, position_ids] = key_states
         self.cache_v[:bsz, position_ids] = value_states
         key_states, value_states = (
-                self.cache_k[:bsz, :, :],
-                self.cache_v[:bsz, :, :],
-            )
+            self.cache_k[:bsz, :, :],
+            self.cache_v[:bsz, :, :],
+        )
 
         key_states = key_states.repeat_interleave(self.num_key_value_groups, dim=2)
         value_states = value_states.repeat_interleave(self.num_key_value_groups, dim=2)
 
-        query_states, key_states, value_states = map(lambda x: x.transpose(1, 2), (query_states, key_states, value_states))
-        
-        attn_output = _worldfoundry_scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=attention_mask,
-            dropout_p=0.0,
-            is_causal=False,
-        ).transpose(1, 2).contiguous()
+        query_states, key_states, value_states = (x.transpose(1, 2) for x in (query_states, key_states, value_states))
+
+        attn_output = (
+            _worldfoundry_scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=attention_mask,
+                dropout_p=0.0,
+                is_causal=False,
+            )
+            .transpose(1, 2)
+            .contiguous()
+        )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
         attn_output = self.o_proj(attn_output)
         return attn_output
+
 
 class LlamaDecoderLayer(nn.Module):
     def __init__(self, config: LlamaConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = LlamaAttention(config=config)
-        self.mlp = LlamaMLP(config)
+        self.mlp = LlamaMLP(config, bias=config.mlp_bias)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            positions_embedding = None,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        positions_embedding=None,
     ):
         """
         Forward pass for the LlamaDecoderLayer.
@@ -304,6 +232,7 @@ class LlamaDecoderLayer(nn.Module):
 
         return hidden_states
 
+
 class LlamaModel(PreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
@@ -317,9 +246,7 @@ class LlamaModel(PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LlamaRotaryEmbedding(config=config)
         self.max_position_embedding = config.max_position_embeddings
@@ -327,8 +254,8 @@ class LlamaModel(PreTrainedModel):
             torch.ones(self.max_position_embedding, self.max_position_embedding, dtype=torch.bool)
         ).cuda()
         self.post_init()
-        
-    def _create_attention_mask(self, input_pos: Optional[torch.Tensor]):
+
+    def _create_attention_mask(self, input_pos: torch.Tensor | None):
         """
         Creates an attention mask for the transformer layers.
 
@@ -342,22 +269,19 @@ class LlamaModel(PreTrainedModel):
         return mask
 
     def forward(
-            self,
-            input_ids: torch.LongTensor = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
     ):
-
         if input_ids is None:
-            raise ValueError(
-                "decoder_input_ids is None"
-            )
+            raise ValueError("decoder_input_ids is None")
         hidden_states = self.embed_tokens(input_ids)
-        
+
         positions_embedding = self.rotary_emb(hidden_states, seq_len=self.max_position_embedding)
 
         attention_mask = self._create_attention_mask(input_pos=position_ids)
-        for idx, decoder_layer in enumerate(self.layers):
+        for _idx, decoder_layer in enumerate(self.layers):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
@@ -370,34 +294,33 @@ class LlamaModel(PreTrainedModel):
         hidden_states = self.norm(hidden_states)
 
         return hidden_states
-        
-class LlamaForCausalLM(PreTrainedModel):
 
+
+class LlamaForCausalLM(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.model = LlamaModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.post_init()      
+        self.post_init()
 
     def forward(
-            self,
-            input_ids: torch.LongTensor = None,
-            position_ids: Optional[torch.LongTensor] = None,
+        self,
+        input_ids: torch.LongTensor = None,
+        position_ids: torch.LongTensor | None = None,
     ):
-
         outputs = self.model(
             input_ids=input_ids,
             position_ids=position_ids,
         )
         logits = self.lm_head(outputs[:, :, :])
         return logits
+
     def refresh_kvcache(self):
         for i in self.model.layers:
             i.self_attn.init_kv_cache()
 
     def naive_generate(self, input_ids, max_new_tokens, temperature=1.0, action_all=None, top_p=None, top_k=None):
-
         self.prefill = torch.compile(prefill, fullgraph=True, dynamic=True)
         if action_all is not None:
             input_ids = torch.cat([input_ids, action_all[0]], dim=-1)
@@ -407,32 +330,29 @@ class LlamaForCausalLM(PreTrainedModel):
             input_ids=input_ids,
             position_ids=position_ids,
             temperature=temperature,
-            top_k = top_k,
-            top_p = top_p,
+            top_k=top_k,
+            top_p=top_p,
         )
 
         self.decode_one_token = torch.compile(decode_one_token, mode="max-autotune", fullgraph=True)
         position_ids = torch.tensor([input_ids.shape[1]], dtype=torch.long, device="cuda")
-        
+
         generated_tokens = decode_n_tokens(
             self,
-            input_ids = next_token.view(1, -1),
-            position_ids = position_ids,
-            num_generate_tokens = max_new_tokens - 1,
-            temperature = temperature,
+            input_ids=next_token.view(1, -1),
+            position_ids=position_ids,
+            num_generate_tokens=max_new_tokens - 1,
+            temperature=temperature,
             decode_one_token_function=self.decode_one_token,
             action=action_all,
-            top_p = top_p,
-            top_k = top_k,
+            top_p=top_p,
+            top_k=top_k,
         )
         return torch.cat(generated_tokens, dim=1)
-    
-    
-    
 
-
-    def img_diagd_generate(self, input_ids, max_new_tokens, temperature=1.0, action_all=None, windowsize=2, top_p=None, top_k=None):
-
+    def img_diagd_generate(
+        self, input_ids, max_new_tokens, temperature=1.0, action_all=None, windowsize=2, top_p=None, top_k=None
+    ):
         self.prefill = torch.compile(prefill, fullgraph=True, dynamic=True)
         input_ids = torch.cat([input_ids, action_all[0]], dim=-1)
         position_ids = torch.arange(0, input_ids.shape[1], device="cuda")
@@ -441,8 +361,8 @@ class LlamaForCausalLM(PreTrainedModel):
             input_ids=input_ids,
             position_ids=position_ids,
             temperature=temperature,
-            top_k = top_k,
-            top_p = top_p,
+            top_k=top_k,
+            top_p=top_p,
         )
 
         self.decode_some_token = torch.compile(decode_some_token, mode="max-autotune", fullgraph=True)
@@ -450,21 +370,20 @@ class LlamaForCausalLM(PreTrainedModel):
 
         generated_tokens = img_diagd_decode_n_tokens(
             self,
-            input_ids = next_token.view(1, -1),
-            position_ids = position_ids,
-            num_generate_tokens = max_new_tokens - 1,
-            temperature = temperature,
+            input_ids=next_token.view(1, -1),
+            position_ids=position_ids,
+            num_generate_tokens=max_new_tokens - 1,
+            temperature=temperature,
             decode_some_token_function=self.decode_some_token,
-            windowsize = windowsize,
+            windowsize=windowsize,
             action=action_all,
             prompt=input_ids,
-            top_k = top_k,
-            top_p = top_p,
+            top_k=top_k,
+            top_p=top_p,
         )
         return torch.cat(generated_tokens, dim=1)
-    
-    def vid_diagd_generate(self, input_ids, max_new_tokens,windowsize=2, temperature=1.0, action_all=None,**kwargs):
 
+    def vid_diagd_generate(self, input_ids, max_new_tokens, windowsize=2, temperature=1.0, action_all=None, **kwargs):
         self.prefill = torch.compile(prefill, fullgraph=True, dynamic=True)
         input_ids = torch.cat([input_ids, action_all[0]], dim=-1)
         position_ids = torch.arange(0, input_ids.shape[1], device="cuda")
@@ -481,14 +400,14 @@ class LlamaForCausalLM(PreTrainedModel):
 
         generated_tokens = video_diagd_decode_n_tokens(
             self,
-            input_ids = next_token.view(1, -1),
-            position_ids = position_ids,
-            num_generate_tokens = max_new_tokens - 1,
-            temperature = temperature,
+            input_ids=next_token.view(1, -1),
+            position_ids=position_ids,
+            num_generate_tokens=max_new_tokens - 1,
+            temperature=temperature,
             decode_some_token_function=self.decode_some_token,
-            windowsize = windowsize,
+            windowsize=windowsize,
             action=action_all,
             prompt=input_ids,
-            **kwargs
+            **kwargs,
         )
         return torch.cat(generated_tokens, dim=1)

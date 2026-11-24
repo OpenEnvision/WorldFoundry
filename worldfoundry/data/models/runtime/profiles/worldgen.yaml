@@ -8,6 +8,7 @@ groups:
 - official_repo
 source_repos:
 - url: https://github.com/ZiYang-xie/WorldGen
+  revision: 7ce7b2767fdf31e2727b69a2e61e2e950e3a017f
 checkpoints:
 - repo_id: LeoXie/WorldGen
   role: worldgen_checkpoint

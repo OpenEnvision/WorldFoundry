@@ -2,8 +2,10 @@
 dynamic_mjc.py
 A small library for programmatically building MuJoCo XML files
 """
-from contextlib import contextmanager
+
 import tempfile
+from contextlib import contextmanager
+
 import numpy as np
 
 
@@ -18,9 +20,10 @@ def default_model(name):
     root.compiler(angle="radian", inertiafromgeom="true")
     default = root.default()
     default.joint(armature=1, damping=1, limited="true")
-    default.geom(contype=0, friction='1 0.1 0.1', rgba='0.7 0.7 0 1')
+    default.geom(contype=0, friction="1 0.1 0.1", rgba="0.7 0.7 0 1")
     root.option(gravity="0 0 -9.81", integrator="RK4", timestep=0.01)
     return model
+
 
 def pointmass_model(name):
     """
@@ -38,10 +41,10 @@ def pointmass_model(name):
     return model
 
 
-class MJCModel(object):
+class MJCModel:
     def __init__(self, name):
         self.name = name
-        self.root = MJCTreeNode("mujoco").add_attr('model', name)
+        self.root = MJCTreeNode("mujoco").add_attr("model", name)
 
     @contextmanager
     def asfile(self):
@@ -51,13 +54,13 @@ class MJCModel(object):
         with model.asfile() as f:
             print f.read()  # prints a dump of the model
         """
-        with tempfile.NamedTemporaryFile(mode='w+', suffix='.xml', delete=True) as f:
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".xml", delete=True) as f:
             self.root.write(f)
             f.seek(0)
             yield f
 
     def open(self):
-        self.file = tempfile.NamedTemporaryFile(mode='w+', suffix='.xml', delete=True)
+        self.file = tempfile.NamedTemporaryFile(mode="w+", suffix=".xml", delete=True)  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
         self.root.write(self.file)
         self.file.seek(0)
         return self.file
@@ -75,7 +78,7 @@ class MJCModel(object):
         pass
 
 
-class MJCTreeNode(object):
+class MJCTreeNode:
     def __init__(self, name):
         self.name = name
         self.attrs = {}
@@ -84,8 +87,8 @@ class MJCTreeNode(object):
     def add_attr(self, key, value):
         if isinstance(value, str):
             pass
-        elif isinstance(value, list) or isinstance(value, np.ndarray):
-            value = ' '.join([str(val).lower() for val in value])
+        elif isinstance(value, (list, np.ndarray)):
+            value = " ".join([str(val).lower() for val in value])
         else:
             value = str(value).lower()
 
@@ -94,22 +97,23 @@ class MJCTreeNode(object):
 
     def __getattr__(self, name):
         def wrapper(**kwargs):
-            newnode =  MJCTreeNode(name)
-            for (k, v) in kwargs.items():
+            newnode = MJCTreeNode(name)
+            for k, v in kwargs.items():
                 newnode.add_attr(k, v)
             self.children.append(newnode)
             return newnode
+
         return wrapper
 
     def dfs(self):
         yield self
         if self.children:
             for child in self.children:
-                for node in child.dfs():
+                for node in child.dfs():  # noqa: UP028 - Keeps the loop; `yield from` would forward send() and throw().
                     yield node
 
     def find_attr(self, attr, value):
-        """ Run DFS to find a matching attr """
+        """Run DFS to find a matching attr"""
         if attr in self.attrs and self.attrs[attr] == value:
             return self
         for child in self.children:
@@ -118,21 +122,20 @@ class MJCTreeNode(object):
                 return res
         return None
 
-
     def write(self, ostream, tabs=0):
-        contents = ' '.join(['%s="%s"'%(k,v) for (k,v) in self.attrs.items()])
+        contents = " ".join(['%s="%s"' % (k, v) for (k, v) in self.attrs.items()])  # noqa: UP031 - Keeps printf conversions that depend on argument types.
         if self.children:
-            ostream.write('\t'*tabs)
-            ostream.write('<%s %s>\n' % (self.name, contents))
+            ostream.write("\t" * tabs)
+            ostream.write("<%s %s>\n" % (self.name, contents))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
             for child in self.children:
-                child.write(ostream, tabs=tabs+1)
-            ostream.write('\t'*tabs)
-            ostream.write('</%s>\n' % self.name)
+                child.write(ostream, tabs=tabs + 1)
+            ostream.write("\t" * tabs)
+            ostream.write("</%s>\n" % self.name)  # noqa: UP031 - Keeps printf conversions that depend on argument types.
         else:
-            ostream.write('\t'*tabs)
-            ostream.write('<%s %s/>\n' % (self.name, contents))
+            ostream.write("\t" * tabs)
+            ostream.write("<%s %s/>\n" % (self.name, contents))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
     def __str__(self):
-        s = "<"+self.name
-        s += ' '.join(['%s="%s"'%(k,v) for (k,v) in self.attrs.items()])
-        return s+">"
+        s = "<" + self.name
+        s += " ".join(['%s="%s"' % (k, v) for (k, v) in self.attrs.items()])  # noqa: UP031 - Keeps printf conversions that depend on argument types.
+        return s + ">"

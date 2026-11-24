@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from worldfoundry.pipelines.native_diffusion_video import NativeTextToVideoPipeline
 
 
@@ -17,7 +19,7 @@ class SkyReelsV2Pipeline(NativeTextToVideoPipeline):
     DEFAULT_NUM_INFERENCE_STEPS = 30
     DEFAULT_GUIDANCE_SCALE = 6.0
     DEFAULT_FPS = 24
-    DEFAULT_SCHEDULER_OPTIONS = {"shift": 8.0}
+    DEFAULT_SCHEDULER_OPTIONS: Mapping[str, object] = {"shift": 8.0}
 
 
 __all__ = ["SkyReelsV2Pipeline"]

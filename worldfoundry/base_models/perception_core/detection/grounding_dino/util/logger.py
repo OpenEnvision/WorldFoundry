@@ -1,6 +1,4 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-"""Module for base_models -> perception_core -> detection -> grounding_dino -> util -> logger.py functionality."""
-
 import functools
 import logging
 import os
@@ -10,23 +8,16 @@ from termcolor import colored
 
 
 class _ColorfulFormatter(logging.Formatter):
-    """Colorful formatter implementation."""
     def __init__(self, *args, **kwargs):
-        """Init."""
         self._root_name = kwargs.pop("root_name") + "."
         self._abbrev_name = kwargs.pop("abbrev_name", "")
         if len(self._abbrev_name):
             self._abbrev_name = self._abbrev_name + "."
-        super(_ColorfulFormatter, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def formatMessage(self, record):
-        """Formatmessage.
-
-        Args:
-            record: The record.
-        """
         record.name = record.name.replace(self._root_name, self._abbrev_name)
-        log = super(_ColorfulFormatter, self).formatMessage(record)
+        log = super().formatMessage(record)
         if record.levelno == logging.WARNING:
             prefix = colored("WARNING", "red", attrs=["blink"])
         elif record.levelno == logging.ERROR or record.levelno == logging.CRITICAL:
@@ -37,7 +28,7 @@ class _ColorfulFormatter(logging.Formatter):
 
 
 # so that calling setup_logger multiple times won't add many handlers
-@functools.lru_cache()
+@functools.lru_cache
 def setup_logger(output=None, distributed_rank=0, *, color=True, name="imagenet", abbrev_name=None):
     """
     Initialize the detectron2 logger and set its verbosity level to "INFO".
@@ -58,9 +49,7 @@ def setup_logger(output=None, distributed_rank=0, *, color=True, name="imagenet"
     if abbrev_name is None:
         abbrev_name = name
 
-    plain_formatter = logging.Formatter(
-        "[%(asctime)s.%(msecs)03d]: %(message)s", datefmt="%m/%d %H:%M:%S"
-    )
+    plain_formatter = logging.Formatter("[%(asctime)s.%(msecs)03d]: %(message)s", datefmt="%m/%d %H:%M:%S")
     # stdout logging: master only
     if distributed_rank == 0:
         ch = logging.StreamHandler(stream=sys.stdout)
@@ -79,10 +68,7 @@ def setup_logger(output=None, distributed_rank=0, *, color=True, name="imagenet"
 
     # file logging: all workers
     if output is not None:
-        if output.endswith(".txt") or output.endswith(".log"):
-            filename = output
-        else:
-            filename = os.path.join(output, "log.txt")
+        filename = output if output.endswith((".txt", ".log")) else os.path.join(output, "log.txt")
         if distributed_rank > 0:
             filename = filename + f".rank{distributed_rank}"
         os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -97,11 +83,6 @@ def setup_logger(output=None, distributed_rank=0, *, color=True, name="imagenet"
 
 # cache the opened file object, so that different calls to `setup_logger`
 # with the same file name can safely write to the same file.
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _cached_log_stream(filename):
-    """Helper function to cached log stream.
-
-    Args:
-        filename: The filename.
-    """
     return open(filename, "a")

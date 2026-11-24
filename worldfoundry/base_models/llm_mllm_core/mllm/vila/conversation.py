@@ -17,7 +17,7 @@
 
 import dataclasses
 from enum import Enum, auto
-from typing import List
+
 
 class SeparatorStyle(Enum):
     """Different separator style."""
@@ -34,8 +34,8 @@ class Conversation:
     """A class that keeps all conversation history."""
 
     system: str
-    roles: List[str]
-    messages: List[List[str]]
+    roles: list[str]
+    messages: list[list[str]]
     sep_style: SeparatorStyle = SeparatorStyle.AUTO
     sep: str = "###"
     sep2: str = None
@@ -81,7 +81,7 @@ class Conversation:
         elif self.sep_style == SeparatorStyle.PLAIN:
             seps = [self.sep, self.sep2]
             ret = self.system
-            for i, (role, message) in enumerate(messages):
+            for i, (role, message) in enumerate(messages):  # noqa: B007 - The loop variable is read outside the loop.
                 if message:
                     if type(message) is tuple:
                         message, _, _ = message

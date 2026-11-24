@@ -8,7 +8,7 @@ from typing import Any
 import torch
 
 from .config import LlavaPythiaConfig
-from .constants import DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN
+from .constants import DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IMAGE_PATCH_TOKEN
 from .model import LlavaPythiaForCausalLM
 
 
@@ -33,9 +33,7 @@ def validate_checkpoint(root: Path) -> str:
         raise FileNotFoundError(f"TinyVLA task checkpoint directory is missing: {root}")
     if _has_adapter_weights(root):
         if not (root / "non_lora_trainables.bin").is_file():
-            raise FileNotFoundError(
-                f"TinyVLA LoRA checkpoint requires non_lora_trainables.bin under {root}"
-            )
+            raise FileNotFoundError(f"TinyVLA LoRA checkpoint requires non_lora_trainables.bin under {root}")
         return "lora"
     if _has_merged_weights(root):
         return "merged"
@@ -46,9 +44,7 @@ def _config_root(checkpoint: Path, explicit: Path | None) -> Path:
     for candidate in (explicit, checkpoint, checkpoint.parent):
         if candidate is not None and (candidate / "config.json").is_file():
             return candidate
-    raise FileNotFoundError(
-        f"TinyVLA requires a local task config.json in {checkpoint} or its parent"
-    )
+    raise FileNotFoundError(f"TinyVLA requires a local task config.json in {checkpoint} or its parent")
 
 
 def _normalize_non_lora_keys(weights: dict[str, Any]) -> dict[str, Any]:
@@ -58,10 +54,7 @@ def _normalize_non_lora_keys(weights: dict[str, Any]) -> dict[str, Any]:
         if "lora" not in key.lower()
     }
     if any(key.startswith("model.gpt_neox.") for key in normalized):
-        normalized = {
-            (key[6:] if key.startswith("model.") else key): value
-            for key, value in normalized.items()
-        }
+        normalized = {(key[6:] if key.startswith("model.") else key): value for key, value in normalized.items()}
     return normalized
 
 
@@ -90,17 +83,14 @@ def _load_lora_model(
         map_location="cpu",
         weights_only=True,
     )
-    if not isinstance(non_lora, dict) or not non_lora or not all(
-        isinstance(key, str) and isinstance(value, torch.Tensor)
-        for key, value in non_lora.items()
+    if (
+        not isinstance(non_lora, dict)
+        or not non_lora
+        or not all(isinstance(key, str) and isinstance(value, torch.Tensor) for key, value in non_lora.items())
     ):
-        raise TypeError(
-            "TinyVLA non_lora_trainables.bin must contain a non-empty string-to-tensor mapping"
-        )
+        raise TypeError("TinyVLA non_lora_trainables.bin must contain a non-empty string-to-tensor mapping")
     non_lora = _normalize_non_lora_keys(non_lora)
-    expected_action_keys = {
-        key for key in model.state_dict() if key.startswith("embed_out.") or key.startswith("proj_to_action.")
-    }
+    expected_action_keys = {key for key in model.state_dict() if key.startswith(("embed_out.", "proj_to_action."))}
     missing_action = sorted(expected_action_keys - set(non_lora))
     if missing_action:
         raise RuntimeError(
@@ -109,9 +99,7 @@ def _load_lora_model(
         )
     incompatible = model.load_state_dict(non_lora, strict=False)
     if incompatible.unexpected_keys:
-        raise RuntimeError(
-            f"TinyVLA non-LoRA checkpoint has unexpected tensors: {incompatible.unexpected_keys[:8]}"
-        )
+        raise RuntimeError(f"TinyVLA non-LoRA checkpoint has unexpected tensors: {incompatible.unexpected_keys[:8]}")
 
     from peft import PeftModel
 
@@ -185,7 +173,9 @@ def load_local_policy(
         )
 
     vision_name = str(config.vision_config["vision_tower"]["vision_model_name_or_path"]).lower()
-    processor_type = CLIPImageProcessor if "clip" in vision_name else SiglipImageProcessor if "siglip" in vision_name else None
+    processor_type = (
+        CLIPImageProcessor if "clip" in vision_name else SiglipImageProcessor if "siglip" in vision_name else None
+    )
     if processor_type is None:
         raise ValueError(f"unsupported TinyVLA vision tower: {vision_name}")
     processor = None

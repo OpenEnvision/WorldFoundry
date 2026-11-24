@@ -6,16 +6,16 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from worldfoundry.core import cuda_visible_devices_from_device, jsonable
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.runtime.assets import expand_worldfoundry_path
 
-
-SRC_ROOT = Path(__file__).resolve().parents[4]
-RUNTIME_ROOT = SRC_ROOT / "worldfoundry" / "synthesis" / "visual_generation" / "longcat_video" / "longcat_video_runtime"
+RUNTIME_ROOT = Path(__file__).resolve().parent / "longcat_video_runtime"
 CHECKPOINT_SUBDIRS = ("tokenizer", "text_encoder", "vae", "scheduler", "dit")
 REQUIRED_RUNTIME_FILES = (
     "run_inference_text_to_video.py",
@@ -42,13 +42,7 @@ def _expand_path(value: str | Path | None) -> Path | None:
 
 
 def _video_files_in(directory: Path) -> list[Path]:
-    return sorted(
-        {
-            path
-            for pattern in ("*.mp4", "*.webm", "*.mov", "*.gif")
-            for path in directory.glob(pattern)
-        }
-    )
+    return sorted({path for pattern in ("*.mp4", "*.webm", "*.mov", "*.gif") for path in directory.glob(pattern)})
 
 
 def _preferred_video_output(paths: Sequence[Path]) -> Path | None:
@@ -106,7 +100,6 @@ class LongCatVideoRuntime:
         device: str = "cuda",
         loaded: bool = False,
         python_executable: str | Path | None = None,
-        runtime_root: str | Path | None = None,
         **kwargs: Any,
     ) -> None:
         del kwargs
@@ -117,7 +110,7 @@ class LongCatVideoRuntime:
         self.checkpoint_dir = _expand_path(checkpoint_dir)
         self.task_type = task_type
         self.device = str(device)
-        self.runtime_root = _expand_path(runtime_root) or RUNTIME_ROOT
+        self.runtime_root = RUNTIME_ROOT
         self.python_executable = (
             Path(python_executable).expanduser()
             if python_executable is not None
@@ -137,14 +130,12 @@ class LongCatVideoRuntime:
         task_type: str = DEFAULT_TASK,
         device: str = "cuda",
         **options: Any,
-    ) -> "LongCatVideoRuntime":
+    ) -> LongCatVideoRuntime:
         return cls(checkpoint_dir=checkpoint_dir, task_type=task_type, device=device, **options)
 
     def missing_checkpoint_files(self) -> tuple[str, ...]:
         if self.checkpoint_dir is None:
-            return tuple(
-                str(Path(relative_path)) for relative_path in CHECKPOINT_SUBDIRS
-            )
+            return tuple(str(Path(relative_path)) for relative_path in CHECKPOINT_SUBDIRS)
         return tuple(
             str(self.checkpoint_dir / relative_path)
             for relative_path in CHECKPOINT_SUBDIRS
@@ -155,14 +146,15 @@ class LongCatVideoRuntime:
         return tuple(
             str(self.runtime_root / relative_path)
             for relative_path in REQUIRED_RUNTIME_FILES
-            if not (self.runtime_root / relative_path).is_file()
-            and not (self.runtime_root / relative_path).is_dir()
+            if not (self.runtime_root / relative_path).is_file() and not (self.runtime_root / relative_path).is_dir()
         )
 
     def preflight(self) -> dict[str, Any]:
         missing_checkpoint = self.missing_checkpoint_files()
         missing_runtime = self.missing_runtime_files()
-        checkpoint_ready = len(missing_checkpoint) == 0 and self.checkpoint_dir is not None and self.checkpoint_dir.is_dir()
+        checkpoint_ready = (
+            len(missing_checkpoint) == 0 and self.checkpoint_dir is not None and self.checkpoint_dir.is_dir()
+        )
         runtime_ready = len(missing_runtime) == 0
         return {
             "status": "ready" if checkpoint_ready and runtime_ready else "blocked",
@@ -213,32 +205,24 @@ class LongCatVideoRuntime:
         )
         context_parallel_size = max(1, int(context_parallel_size))
         script_args = (
-            str(script_path),
             "--checkpoint_dir",
             str(self.checkpoint_dir),
             "--context_parallel_size",
             str(context_parallel_size),
         )
-        if context_parallel_size > 1:
-            command = (
-                str(self.python_executable),
-                "-m",
-                "torch.distributed.run",
-                "--standalone",
-                "--nnodes",
-                "1",
-                "--nproc_per_node",
-                str(context_parallel_size),
-                *script_args,
-            )
-        else:
-            command = (str(self.python_executable), *script_args)
+        module = f"worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.{script_path.stem}"
+        command = package_module_command(
+            module,
+            script_args,
+            python_executable=self.python_executable,
+            nproc_per_node=context_parallel_size if context_parallel_size > 1 else None,
+            launcher_options=("--standalone", "--nnodes", "1"),
+        )
         if enable_compile:
-            command = (*command, "--enable_compile")
+            command.append("--enable_compile")
         env = {
-            "PYTHONPATH": f"{self.runtime_root}:{SRC_ROOT}{os.pathsep + os.environ.get('PYTHONPATH', '') if os.environ.get('PYTHONPATH') else ''}",
             "WORLD_EVALS_LONGCAT_TASK": str(task_type),
-            "WORLD_EVALS_LONGCAT_REQUEST_PATH": str(output_path_obj.with_suffix('.json')),
+            "WORLD_EVALS_LONGCAT_REQUEST_PATH": str(output_path_obj.with_suffix(".json")),
         }
         if self.device:
             env["WORLD_EVALS_LONGCAT_DEVICE"] = self.device
@@ -272,7 +256,11 @@ class LongCatVideoRuntime:
             workdir=str(target_output_dir if task_type == "t2v" else self.runtime_root),
             checkpoint_dir=str(self.checkpoint_dir),
             output_dir=str(target_output_dir),
-            output_path=str(output_path_obj.with_suffix(".mp4") if output_path_obj.suffix.lower() not in {".json", ".mp4", ".mov", ".webm", ".gif"} else output_path_obj),
+            output_path=str(
+                output_path_obj.with_suffix(".mp4")
+                if output_path_obj.suffix.lower() not in {".json", ".mp4", ".mov", ".webm", ".gif"}
+                else output_path_obj
+            ),
             task_type=task_type,
             script=str(script_path),
         )
@@ -306,7 +294,7 @@ class LongCatVideoRuntime:
                     text=True,
                     timeout=timeout_seconds,
                     check=False,
-            )
+                )
             returncode = completed.returncode
             runtime_output_dir = Path(plan.workdir).expanduser().resolve()
             requested_output_dir = Path(plan.output_dir).expanduser().resolve()
@@ -329,7 +317,9 @@ class LongCatVideoRuntime:
                     if target.resolve() != primary_output_path.resolve():
                         copied_videos.append(target)
             materialized_videos = _video_files_in(requested_output_dir)
-            generated_files = [str(path) for path in dict.fromkeys([*copied_videos, *requested_videos, *materialized_videos])]
+            generated_files = [
+                str(path) for path in dict.fromkeys([*copied_videos, *requested_videos, *materialized_videos])
+            ]
             for source in runtime_videos:
                 if source.parent == runtime_output_dir and source.parent != requested_output_dir:
                     source.unlink(missing_ok=True)

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from .base_operator import BaseOperator
 
@@ -40,7 +41,6 @@ class LongVieOperator(BaseOperator):
 
     @staticmethod
     def _pick(mapping: Mapping[str, Any], *keys: str) -> Any:
-        """Pick implementation."""
         for key in keys:
             value = mapping.get(key)
             if value is not None:
@@ -49,7 +49,6 @@ class LongVieOperator(BaseOperator):
 
     @staticmethod
     def _first_present(*values: Any) -> Any:
-        """First present implementation."""
         for value in values:
             if value is not None:
                 return value

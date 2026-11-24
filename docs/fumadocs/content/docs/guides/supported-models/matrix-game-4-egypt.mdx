@@ -31,7 +31,7 @@ print(result["artifact_path"], result["metadata"])
 ```
 
 ```bash
-worldfoundry-eval run matrix-game-4-egypt \
+wf run matrix-game-4-egypt \
   --pipeline.task-profile low-poly-rendering \
   --pipeline.input-path lowpoly.mp4 --json
 ```
@@ -70,7 +70,7 @@ Follow the pinned [installation guide](https://github.com/SkyworkAI/Matrix-Game/
 
 ## Validation
 
-Released-weight comparisons through the public loader match pinned upstream latent and decoded RGB values exactly for **5-frame and 100-frame** inputs at 864×480 on H100, using BF16, SDPA and no offload. Inputs are repeated sink imagery and synthetic image panning. The 100-frame case crosses the 21-latent KV window, removes one padded frame and exports a 100-frame, 20 FPS MP4. A/B/A request reuse, recovery after interrupted denoising and unchanged global RNG also pass on resident weights.
+Validated with the released weights on H100 (BF16, SDPA, no offload): for 5-frame and 100-frame 864×480 inputs, the public pipeline's latents and decoded RGB match the pinned upstream implementation exactly, and the 100-frame case exports a 100-frame, 20 FPS MP4.
 
 Reproduce with an explicit local input and checkpoint directories:
 
@@ -83,10 +83,10 @@ python tests/manual/matrix_game4_checkpoint_parity.py \
   --output-dir tmp/matrix-game4-checkpoint-parity
 ```
 
-The comparison shares decoded RGB input with the public route and runs upstream's quality preset independently. Reports, numerical tensors and the native MP4 are written to the output directory. Component comparisons remain available through `tests/manual/matrix_game4_component_parity.py`; its small graph matches 81 forwards and KV tensors exactly, and the real Wan2.2 VAE matches five-frame encoding and decoding exactly.
+The script runs the public route and upstream's quality preset on the same decoded RGB input and writes reports, numerical tensors and the native MP4 to the output directory.
 
 ## Limitations
 
-Accepted-reference release replay, gameplay-quality validation and measured throughput remain pending. Castle, Racing, TAEHV one-step rendering, live game interaction and optimized throughput are separate integration work.
+Gameplay visual quality and rendering throughput have not been measured. Only the Ancient Egypt scene is available; Castle, Racing, TAEHV one-step rendering, and live game interaction are not integrated.
 
 <ModelRelatedRecipes modelId="matrix-game-4-egypt" locale="en" />

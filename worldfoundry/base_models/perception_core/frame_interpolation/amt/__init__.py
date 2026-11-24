@@ -9,7 +9,7 @@ from worldfoundry.core.io.paths import package_data_path
 
 
 def config_path(name: str = "AMT-S.yaml") -> Path:
-    return package_data_path('models', 'runtime', 'configs', 'amt') / name
+    return package_data_path("models", "runtime", "configs", "amt") / name
 
 
 def checkpoint_path() -> Path:

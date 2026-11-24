@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_MODEL_ID, CONTRACT_FIXTURE_RUNNER_TARGET
-from worldfoundry.evaluation.utils import (
+from worldfoundry.evals.utils import (
     VERSION_CONTEXT_SCHEMA_VERSION,
     build_version_context,
     git_metadata,
@@ -54,7 +54,7 @@ def test_git_metadata_does_not_scan_untracked_files(monkeypatch) -> None:
             return subprocess.CompletedProcess(command, 0, stdout=None, stderr=None)
         raise AssertionError(command)
 
-    import worldfoundry.evaluation.utils as versioning
+    import worldfoundry.evals.utils as versioning
 
     monkeypatch.setattr(versioning.subprocess, "run", fake_run)
 
@@ -83,7 +83,7 @@ def test_git_metadata_skips_diff_for_clean_tree(monkeypatch) -> None:
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
         raise AssertionError(command)
 
-    import worldfoundry.evaluation.utils as versioning
+    import worldfoundry.evals.utils as versioning
 
     monkeypatch.setattr(versioning.subprocess, "run", fake_run)
 
@@ -106,7 +106,7 @@ def test_git_metadata_preserves_dirty_state_when_diff_times_out(monkeypatch) -> 
             raise subprocess.TimeoutExpired(command, kwargs["timeout"])
         raise AssertionError(command)
 
-    import worldfoundry.evaluation.utils as versioning
+    import worldfoundry.evals.utils as versioning
 
     monkeypatch.setattr(versioning.subprocess, "run", fake_run)
 
@@ -119,7 +119,7 @@ def test_git_metadata_preserves_dirty_state_when_diff_times_out(monkeypatch) -> 
 
 
 def test_version_context_does_not_include_python_executable(monkeypatch) -> None:
-    import worldfoundry.evaluation.utils as versioning
+    import worldfoundry.evals.utils as versioning
 
     monkeypatch.setattr(versioning, "git_metadata", lambda _root=None: {"available": False})
 
@@ -131,7 +131,7 @@ def test_version_context_does_not_include_python_executable(monkeypatch) -> None
 def test_eval_runner_writes_version_context(tmp_path: Path) -> None:
     output_dir = tmp_path / "run"
 
-    from worldfoundry.evaluation.runner import EvaluateRunRequest, execute_evaluate_run
+    from worldfoundry.evals.tasks.execution.orchestration.evaluate import EvaluateRunRequest, execute_evaluate_run
 
     execute_evaluate_run(
         EvaluateRunRequest(

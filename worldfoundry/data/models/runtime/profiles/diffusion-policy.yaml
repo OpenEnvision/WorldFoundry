@@ -1,10 +1,9 @@
-artifact_filename: diffusion_policy_action_trace.json
-artifact_kind: action_trace
-backend_stage: in_tree_runtime
+schema_version: 2
+model_id: diffusion-policy
+task_family: visuomotor_policy
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/diffusion-policy/low_dim_pusht_diffusion_policy_cnn/epoch=0550-test_mean_score=0.969.weights-only.ckpt
   role: safely_converted_low_dim_pusht_checkpoint
-id: diffusion-policy
 input_schema:
   actions:
   - robot_action
@@ -17,15 +16,25 @@ input_schema:
   state_dim: 20
   observation_history: 2
   video: false
-integration_status: integrated
+artifact_kind: action_trace
+artifact_filename: diffusion_policy_action_trace.json
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_lowdim_pusht_runtime_safe_checkpoint_gpu_validated
+  integration_status: integrated
+integration:
+  status: integrated
 notes:
 - Diffusion Policy is a visuomotor action policy profile, not a diffusion video-generation
   profile.
-- The runtime asset is a trusted offline conversion of the published low_dim/pusht checkpoint: a fully resolved primitive cfg plus tensor-only model/EMA state dictionaries.
-- The original dill workspace checkpoint is intentionally rejected because loading it can execute arbitrary Python. There is no unsafe fallback in the inference process.
+- The runtime asset is a trusted offline conversion of the published low_dim/pusht checkpoint: a
+    fully resolved primitive cfg plus tensor-only model/EMA state dictionaries.
+- The original dill workspace checkpoint is intentionally rejected because loading
+  it can execute arbitrary Python. There is no unsafe fallback in the inference process.
 - The runner emits action_trace artifacts for policy rollout evaluation.
-- WorldFoundry keeps the inference-only low-dimensional PushT Diffusion Policy runtime directly under worldfoundry/synthesis/action_generation/diffusion_policy.
-  Static construction, import, configuration allowlisting, the predict_action contract, strict restoration, and a finite A100 action probe using the converted model/EMA state are verified.
-runtime_status: in_tree_lowdim_pusht_runtime_safe_checkpoint_gpu_validated
-task_family: visuomotor_policy
+- WorldFoundry keeps the inference-only low-dimensional PushT Diffusion Policy runtime
+  directly under worldfoundry/synthesis/action_generation/diffusion_policy. Static
+  construction, import, configuration allowlisting, the predict_action contract, strict
+  restoration, and a finite A100 action probe using the converted model/EMA state
+  are verified.
 verification_status: converted_checkpoint_strict_restore_and_gpu_action_probe_validated

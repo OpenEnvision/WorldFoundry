@@ -63,7 +63,7 @@ def select_token_indices(
         raise ValueError("keep_ratio must be in (0, 1]")
     moved = hidden_states.movedim(seq_dim, -2)
     num_tokens = moved.shape[-2]
-    keep = max(1, min(num_tokens, int(round(num_tokens * float(keep_ratio)))))
+    keep = max(1, min(num_tokens, round(num_tokens * float(keep_ratio))))
     if keep >= num_tokens:
         return torch.arange(num_tokens, device=hidden_states.device, dtype=torch.long)
 
@@ -179,7 +179,7 @@ def restore_tokens(
 
     moved = processed.movedim(state.seq_dim, -2)
     kept_end = state.start + state.kept_length
-    kept = moved[..., state.start:kept_end, :]
+    kept = moved[..., state.start : kept_end, :]
     expected_shape = (*kept.shape[:-2], state.full_length, kept.shape[-1])
     if compensation is None:
         full = kept.new_zeros(expected_shape)
@@ -262,9 +262,7 @@ class TokenPruner:
             return processed
         restored = restore_tokens(processed, state, compensation=self._previous.get(key))
         moved = restored.movedim(state.seq_dim, -2)
-        self._previous[key] = (
-            moved[..., state.start:state.end, :].movedim(-2, state.seq_dim).detach()
-        )
+        self._previous[key] = moved[..., state.start : state.end, :].movedim(-2, state.seq_dim).detach()
         return restored
 
 

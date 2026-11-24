@@ -19,6 +19,7 @@ official_sources:
   project_page: https://pusav1.org/
   github:
     url: https://github.com/Yaofang-Liu/Pusa-VidGen
+    revision: 8a8c4f523a0cadb94ab7c9f1e0620a4847b92991
   huggingface:
   - repo_id: RaphaelLiu/Pusa-Wan2.2-V1
     status: confirmed
@@ -47,7 +48,7 @@ runner_parity:
   - Per-run visual QA and artifact checks are tracked in the validation reference,
     not in the model catalog YAML.
 runtime_profile: runtime-profile:pusa-vidgen
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: pusa-vidgen
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries
@@ -61,14 +62,12 @@ docs:
   overview_zh: Pusa VidGen（Pusa V1）展示了向量化时间步适配：不再让整段视频共享一个扩散时间步，而是每帧独立时间步，从而用一次低成本的 Wan2.2 LoRA 训练同时解锁图生视频、文生视频与视频延展。WorldFoundry 完全用规范化 Wan2.2 组件装配它——推理时不需要外部运行时检出。
   architecture: Pusa V1 = Wan2.2 base (canonical denoisers, conditioner, VAE, loaders, shared staged runner) + the official Pusa V1 LoRA checkpoint (RaphaelLiu/Pusa-Wan2.2-V1). The vectorized-timestep behavior comes from the LoRA; no alternate diffusion backend is involved.
   architecture_zh: Pusa V1 = Wan2.2 基座（规范化去噪器、条件器、VAE、加载器与共享分段 runner）+ 官方 Pusa V1 LoRA checkpoint（RaphaelLiu/Pusa-Wan2.2-V1）。向量化时间步行为来自 LoRA；不涉及其它扩散后端。
-  usage_notes: 'Runner status is ''configured'': the model-specific pipeline exposes generated_video through execute=True and no longer emits request-plan artifacts on default calls. Per-run visual QA lives in the validation reference. Stage the Wan2.2 base weights plus the Pusa LoRA before running.'
-  usage_notes_zh: runner 状态为 configured：模型专属 pipeline 通过 execute=True 暴露 generated_video，默认调用不再产生请求计划产物。每次运行的视觉 QA 在验证参考中跟踪。运行前请同时就位 Wan2.2 基座权重与 Pusa LoRA。
+  usage_notes: Call the pipeline with execute=True to write the generated_video artifact. Stage the Wan2.2 base weights plus the Pusa LoRA before running.
+  usage_notes_zh: 以 execute=True 调用 pipeline 即可写出 generated_video 产物。运行前请同时就位 Wan2.2 基座权重与 Pusa LoRA。
   limitations:
   - Requires both the Wan2.2 base checkpoints and the Pusa LoRA — the LoRA alone does nothing.
-  - Checkpoint-backed visual parity is tracked in the validation reference, not yet summarized here.
   limitations_zh:
   - 需要同时就位 Wan2.2 基座 checkpoint 与 Pusa LoRA——只有 LoRA 无法运行。
-  - checkpoint 加载的视觉一致性在验证参考中跟踪，本页尚无汇总结论。
   recommended_benchmarks:
   - id: vbench
     reason: General T2V/I2V quality suite.

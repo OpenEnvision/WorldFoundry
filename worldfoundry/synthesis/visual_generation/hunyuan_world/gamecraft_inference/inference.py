@@ -99,7 +99,7 @@ def load_vae(
     return vae, vae_path, spatial_compression_ratio, time_compression_ratio
 
 
-class Inference(object):
+class Inference:
     def __init__(
         self,
         args,

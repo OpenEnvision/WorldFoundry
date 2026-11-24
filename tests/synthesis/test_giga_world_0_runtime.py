@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import GigaWorld0Pipeline
+from worldfoundry.synthesis.visual_generation import runtime_manifest
 from worldfoundry.synthesis.visual_generation.giga_world_0 import infer
 from worldfoundry.synthesis.visual_generation.giga_world_0 import worldfoundry_runtime as runtime
-from worldfoundry.synthesis.visual_generation import runtime_manifest
 
 
 def _write_fixture(path: Path, payload: bytes = b"fixture") -> None:
@@ -50,6 +51,7 @@ def _stage_runtime(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
 def test_runtime_spec_uses_executable_giga_world_adapter() -> None:
     spec = runtime_manifest.runtime_spec("giga-world-0")
 
+    assert spec.runtime_module is not None
     assert spec.runtime_module.endswith("giga_world_0.worldfoundry_runtime")
     assert spec.runtime_root_func == "runtime_root"
     assert spec.blocked_reason == ""
@@ -116,6 +118,7 @@ def test_build_command_expands_paths_and_plan_options(tmp_path, monkeypatch) -> 
         }
     )
 
+    assert command[:3] == ["python", "-m", "worldfoundry.synthesis.visual_generation.giga_world_0.infer"]
     assert command[command.index("--transformer-model-dir") + 1] == str(transformer)
     assert command[command.index("--text-encoder-model-dir") + 1] == str(text_encoder)
     assert command[command.index("--vae-model-dir") + 1] == str(vae)
@@ -172,3 +175,22 @@ def test_launcher_rejects_cpu_execution(tmp_path) -> None:
         assert "CUDA" in str(exc)
     else:
         raise AssertionError("CPU execution was accepted")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("attention_backend", ["torch", "natten"])
+@pytest.mark.parametrize("mixed_precision", ["bf16", "fp16", "fp32"])
+def test_package_launch_keeps_attention_and_precision_choices(attention_backend: str, mixed_precision: str) -> None:
+    command = runtime.build_command(
+        {
+            "python": "/env/python",
+            "entrypoint": str(runtime.OFFICIAL_ENTRYPOINT),
+            "output_path": "/out.mp4",
+            "options": {"attention_backend": attention_backend, "mixed_precision": mixed_precision},
+        }
+    )
+    assert command[:3] == ["/env/python", "-m", "worldfoundry.synthesis.visual_generation.giga_world_0.infer"]
+    args = infer._parser().parse_args(command[3:])
+    assert args.attention_backend == attention_backend
+    assert args.mixed_precision == mixed_precision
+    assert (args.height, args.width, args.num_frames, args.num_inference_steps, args.seed) == (480, 640, 61, 30, 6666)

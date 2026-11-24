@@ -7,18 +7,25 @@ attention, not via the native :class:`SimpleAdapter` residual.
 
 Adds camera conditioning.  No VACE, action encoder, or linear attn.
 """
+
 import math
+from typing import ClassVar
 
 import torch
 import torch.nn as nn
-from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
-from einops import repeat
 
-from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.camera_attention import flash_attention, sageattn_func, SAGEATTN_AVAILABLE, FLASH_ATTN_2_AVAILABLE, FLASH_ATTN_3_AVAILABLE
-from einops import rearrange
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.camera_attention import (
+    FLASH_ATTN_2_AVAILABLE,
+    FLASH_ATTN_3_AVAILABLE,
+    SAGEATTN_AVAILABLE,
+    flash_attention,
+    sageattn_func,
+)
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 
-__all__ = ['WanModel']
+__all__ = ["WanModel"]
+
 
 def sinusoidal_embedding_1d(dim, position):
     """Classic sinusoidal features for 1-D timestep / position ids."""
@@ -28,7 +35,9 @@ def sinusoidal_embedding_1d(dim, position):
     position = position.type(torch.float64)
 
     # calculation
-    sinusoid = torch.outer(position, torch.pow(10000, -torch.arange(half, device=position.device, dtype=torch.float64).div(half)))
+    sinusoid = torch.outer(
+        position, torch.pow(10000, -torch.arange(half, device=position.device, dtype=torch.float64).div(half))
+    )
     x = torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1)
     return x
 
@@ -38,9 +47,8 @@ def rope_params(max_seq_len, dim, theta=10000):
     """Build complex cis frequencies for one RoPE axis."""
     assert dim % 2 == 0
     freqs = torch.outer(
-        torch.arange(max_seq_len),
-        1.0 / torch.pow(theta,
-                        torch.arange(0, dim, 2).to(torch.float64).div(dim)))
+        torch.arange(max_seq_len), 1.0 / torch.pow(theta, torch.arange(0, dim, 2).to(torch.float64).div(dim))
+    )
     freqs = torch.polar(torch.ones_like(freqs), freqs)
     return freqs
 
@@ -59,14 +67,15 @@ def rope_apply(x, grid_sizes, freqs):
         seq_len = f * h * w
 
         # precompute multipliers
-        x_i = torch.view_as_complex(x[i, :seq_len].to(torch.float64).reshape(
-            seq_len, n, -1, 2))
-        freqs_i = torch.cat([
-            freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
-            freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
-            freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1)
-        ],
-            dim=-1).reshape(seq_len, 1, -1)
+        x_i = torch.view_as_complex(x[i, :seq_len].to(torch.float64).reshape(seq_len, n, -1, 2))
+        freqs_i = torch.cat(
+            [
+                freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
+                freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
+                freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1),
+            ],
+            dim=-1,
+        ).reshape(seq_len, 1, -1)
 
         # apply rotary embedding
         x_i = torch.view_as_real(x_i * freqs_i).flatten(2)
@@ -76,22 +85,16 @@ def rope_apply(x, grid_sizes, freqs):
         output.append(x_i)
     return torch.stack(output).type_as(x)
 
-@torch.amp.autocast('cuda', enabled=False)
-def rope_apply_given_freqs(x, freqs):
-    """Rope apply given freqs.
 
-    Args:
-        x: The x.
-        freqs: The freqs.
-    """
-    n, c = x.size(2), x.size(3) // 2
+@torch.amp.autocast("cuda", enabled=False)
+def rope_apply_given_freqs(x, freqs):
+    n, c = x.size(2), x.size(3) // 2  # noqa: F841 - Upstream assignment kept.
     seq_len = freqs.size(0)
     # loop over samples
     output = []
     for i in range(x.shape[0]):
         # precompute multipliers
-        x_i = torch.view_as_complex(x[i, :seq_len].to(torch.float64).reshape(
-            seq_len, n, -1, 2))
+        x_i = torch.view_as_complex(x[i, :seq_len].to(torch.float64).reshape(seq_len, n, -1, 2))
         x_i = torch.view_as_real(x_i * freqs).flatten(2)
         x_i = torch.cat([x_i, x[i, seq_len:]])
 
@@ -104,12 +107,6 @@ class WanRMSNorm(nn.Module):
     """RMSNorm with a learned scale; compute in fp32 when the impl upcasts."""
 
     def __init__(self, dim, eps=1e-5):
-        """Init.
-
-        Args:
-            dim: The dim.
-            eps: The eps.
-        """
         super().__init__()
         self.dim = dim
         self.eps = eps
@@ -131,13 +128,6 @@ class WanLayerNorm(nn.LayerNorm):
     """LayerNorm that typically upcasts to fp32, then restores the activation dtype."""
 
     def __init__(self, dim, eps=1e-6, elementwise_affine=False):
-        """Init.
-
-        Args:
-            dim: The dim.
-            eps: The eps.
-            elementwise_affine: The elementwise affine.
-        """
         super().__init__(dim, elementwise_affine=elementwise_affine, eps=eps)
 
     def forward(self, x):
@@ -151,21 +141,7 @@ class WanLayerNorm(nn.LayerNorm):
 class WanSelfAttention(nn.Module):
     """Wan self-attention: RMSNorm Q/K, 3D RoPE, flash or variant kernel."""
 
-    def __init__(self,
-                 dim,
-                 num_heads,
-                 window_size=(-1, -1),
-                 qk_norm=True,
-                 eps=1e-6):
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            window_size: The window size.
-            qk_norm: The qk norm.
-            eps: The eps.
-        """
+    def __init__(self, dim, num_heads, window_size=(-1, -1), qk_norm=True, eps=1e-6):
         assert dim % num_heads == 0
         super().__init__()
         self.dim = dim
@@ -183,7 +159,7 @@ class WanSelfAttention(nn.Module):
         self.norm_q = WanRMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
         self.norm_k = WanRMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
 
-    def forward(self, x, seq_lens,freqs):
+    def forward(self, x, seq_lens, freqs):
         r"""
         Args:
             x(Tensor): Shape [B, L, num_heads, C / num_heads]
@@ -207,7 +183,8 @@ class WanSelfAttention(nn.Module):
             k=rope_apply_given_freqs(k, freqs),
             v=v,
             k_lens=seq_lens,
-            window_size=self.window_size)
+            window_size=self.window_size,
+        )
 
         # output
         x = x.flatten(2)
@@ -307,21 +284,7 @@ class WanGanCrossAttention(WanSelfAttention):
 class WanI2VCrossAttention(WanSelfAttention):
     """Wan text or image-text cross-attention."""
 
-    def __init__(self,
-                 dim,
-                 num_heads,
-                 window_size=(-1, -1),
-                 qk_norm=True,
-                 eps=1e-6):
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            window_size: The window size.
-            qk_norm: The qk norm.
-            eps: The eps.
-        """
+    def __init__(self, dim, num_heads, window_size=(-1, -1), qk_norm=True, eps=1e-6):
         super().__init__(dim, num_heads, window_size, qk_norm, eps)
 
         # self.k_img = nn.Linear(dim, dim)
@@ -389,35 +352,25 @@ class WanI2VCrossAttention(WanSelfAttention):
 
 
 WAN_CROSSATTENTION_CLASSES = {
-    't2v_cross_attn': WanT2VCrossAttention,
-    'i2v_cross_attn': WanI2VCrossAttention,
+    "t2v_cross_attn": WanT2VCrossAttention,
+    "i2v_cross_attn": WanI2VCrossAttention,
 }
 
 
 class WanAttentionBlock(nn.Module):
     """Wan transformer block: AdaLN self-attn, cross-attn, then AdaLN FFN."""
 
-    def __init__(self,
-                 cross_attn_type,
-                 dim,
-                 ffn_dim,
-                 num_heads,
-                 window_size=(-1, -1),
-                 qk_norm=True,
-                 cross_attn_norm=False,
-                 eps=1e-6):
-        """Init.
-
-        Args:
-            cross_attn_type: The cross attn type.
-            dim: The dim.
-            ffn_dim: The ffn dim.
-            num_heads: The num heads.
-            window_size: The window size.
-            qk_norm: The qk norm.
-            cross_attn_norm: The cross attn norm.
-            eps: The eps.
-        """
+    def __init__(
+        self,
+        cross_attn_type,
+        dim,
+        ffn_dim,
+        num_heads,
+        window_size=(-1, -1),
+        qk_norm=True,
+        cross_attn_norm=False,
+        eps=1e-6,
+    ):
         super().__init__()
         self.dim = dim
         self.ffn_dim = ffn_dim
@@ -429,20 +382,11 @@ class WanAttentionBlock(nn.Module):
 
         # layers
         self.norm1 = WanLayerNorm(dim, eps)
-        self.self_attn = WanSelfAttention(dim, num_heads, window_size, qk_norm,
-                                          eps)
-        self.norm3 = WanLayerNorm(
-            dim, eps,
-            elementwise_affine=True) if cross_attn_norm else nn.Identity()
-        self.cross_attn = WAN_CROSSATTENTION_CLASSES[cross_attn_type](dim,
-                                                                      num_heads,
-                                                                      (-1, -1),
-                                                                      qk_norm,
-                                                                      eps)
+        self.self_attn = WanSelfAttention(dim, num_heads, window_size, qk_norm, eps)
+        self.norm3 = WanLayerNorm(dim, eps, elementwise_affine=True) if cross_attn_norm else nn.Identity()
+        self.cross_attn = WAN_CROSSATTENTION_CLASSES[cross_attn_type](dim, num_heads, (-1, -1), qk_norm, eps)
         self.norm2 = WanLayerNorm(dim, eps)
-        self.ffn = nn.Sequential(
-            nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'),
-            nn.Linear(ffn_dim, dim))
+        self.ffn = nn.Sequential(nn.Linear(dim, ffn_dim), nn.GELU(approximate="tanh"), nn.Linear(ffn_dim, dim))
 
         # modulation
         self.modulation = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
@@ -470,9 +414,7 @@ class WanAttentionBlock(nn.Module):
         # assert e[0].dtype == torch.float32
 
         # self-attention
-        y = self.self_attn(
-            self.norm1(x) * (1 + e[1]) + e[0], seq_lens,
-            freqs)
+        y = self.self_attn(self.norm1(x) * (1 + e[1]) + e[0], seq_lens, freqs)
         # with amp.autocast(dtype=torch.float32):
         x = x + y * e[2]
 
@@ -492,25 +434,9 @@ class WanAttentionBlock(nn.Module):
 class GanAttentionBlock(nn.Module):
     """Auxiliary GAN attention block (not on the main denoising residual)."""
 
-    def __init__(self,
-                 dim=1536,
-                 ffn_dim=8192,
-                 num_heads=12,
-                 window_size=(-1, -1),
-                 qk_norm=True,
-                 cross_attn_norm=True,
-                 eps=1e-6):
-        """Init.
-
-        Args:
-            dim: The dim.
-            ffn_dim: The ffn dim.
-            num_heads: The num heads.
-            window_size: The window size.
-            qk_norm: The qk norm.
-            cross_attn_norm: The cross attn norm.
-            eps: The eps.
-        """
+    def __init__(
+        self, dim=1536, ffn_dim=8192, num_heads=12, window_size=(-1, -1), qk_norm=True, cross_attn_norm=True, eps=1e-6
+    ):
         super().__init__()
         self.dim = dim
         self.ffn_dim = ffn_dim
@@ -524,19 +450,12 @@ class GanAttentionBlock(nn.Module):
         # self.norm1 = WanLayerNorm(dim, eps)
         # self.self_attn = WanSelfAttention(dim, num_heads, window_size, qk_norm,
         #   eps)
-        self.norm3 = WanLayerNorm(
-            dim, eps,
-            elementwise_affine=True) if cross_attn_norm else nn.Identity()
+        self.norm3 = WanLayerNorm(dim, eps, elementwise_affine=True) if cross_attn_norm else nn.Identity()
 
         self.norm2 = WanLayerNorm(dim, eps)
-        self.ffn = nn.Sequential(
-            nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'),
-            nn.Linear(ffn_dim, dim))
+        self.ffn = nn.Sequential(nn.Linear(dim, ffn_dim), nn.GELU(approximate="tanh"), nn.Linear(ffn_dim, dim))
 
-        self.cross_attn = WanGanCrossAttention(dim, num_heads,
-                                               (-1, -1),
-                                               qk_norm,
-                                               eps)
+        self.cross_attn = WanGanCrossAttention(dim, num_heads, (-1, -1), qk_norm, eps)
 
         # modulation
         # self.modulation = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
@@ -573,12 +492,6 @@ class GanAttentionBlock(nn.Module):
 
         # cross-attention & ffn function
         def cross_attn_ffn(x, context):
-            """Cross attn ffn.
-
-            Args:
-                x: The x.
-                context: The context.
-            """
             token = context + self.cross_attn(self.norm3(x), context)
             y = self.ffn(self.norm2(token)) + token  # * (1 + e[4]) + e[3])
             # with amp.autocast(dtype=torch.float32):
@@ -593,14 +506,6 @@ class Head(nn.Module):
     """AdaLN-modulated output projection from tokens to packed patch voxels."""
 
     def __init__(self, dim, out_dim, patch_size, eps=1e-6):
-        """Init.
-
-        Args:
-            dim: The dim.
-            out_dim: The out dim.
-            patch_size: The patch size.
-            eps: The eps.
-        """
         super().__init__()
         self.dim = dim
         self.out_dim = out_dim
@@ -624,7 +529,7 @@ class Head(nn.Module):
         # assert e.dtype == torch.float32
         # with amp.autocast(dtype=torch.float32):
         e = (self.modulation + e.unsqueeze(1)).chunk(2, dim=1)
-        x = (self.head(self.norm(x) * (1 + e[1]) + e[0]))
+        x = self.head(self.norm(x) * (1 + e[1]) + e[0])
         return x
 
 
@@ -632,54 +537,47 @@ class MLPProj(torch.nn.Module):
     """CLIP image-token projector (I2V / FLF2V)."""
 
     def __init__(self, in_dim, out_dim):
-        """Init.
-
-        Args:
-            in_dim: The in dim.
-            out_dim: The out dim.
-        """
         super().__init__()
 
         self.proj = torch.nn.Sequential(
-            torch.nn.LayerNorm(in_dim), torch.nn.Linear(in_dim, in_dim),
-            torch.nn.GELU(), torch.nn.Linear(in_dim, out_dim),
-            torch.nn.LayerNorm(out_dim))
+            torch.nn.LayerNorm(in_dim),
+            torch.nn.Linear(in_dim, in_dim),
+            torch.nn.GELU(),
+            torch.nn.Linear(in_dim, out_dim),
+            torch.nn.LayerNorm(out_dim),
+        )
 
     def forward(self, image_embeds):
-        """Forward.
-
-        Args:
-            image_embeds: The image embeds.
-        """
         clip_extra_context_tokens = self.proj(image_embeds)
         return clip_extra_context_tokens
+
 
 class WanModel(nn.Module, NativeConfigMixin):
     r"""Wan 2.1 camera-conditioned DiT (Plücker / camera tokens in attention)."""
 
-    ignore_for_config = [
-        'patch_size', 'cross_attn_norm', 'qk_norm', 'text_dim', 'window_size'
-    ]
-    _no_split_modules = ['WanAttentionBlock']
+    ignore_for_config: ClassVar[list] = ["patch_size", "cross_attn_norm", "qk_norm", "text_dim", "window_size"]
+    _no_split_modules: ClassVar[list] = ["WanAttentionBlock"]
     _supports_gradient_checkpointing = True
 
     @register_to_config
-    def __init__(self,
-                 model_type='t2v',
-                 patch_size=(1, 2, 2),
-                 text_len=512,
-                 in_dim=16,
-                 dim=2048,
-                 ffn_dim=8192,
-                 freq_dim=256,
-                 text_dim=4096,
-                 out_dim=16,
-                 num_heads=16,
-                 num_layers=32,
-                 window_size=(-1, -1),
-                 qk_norm=True,
-                 cross_attn_norm=True,
-                 eps=1e-6):
+    def __init__(
+        self,
+        model_type="t2v",
+        patch_size=(1, 2, 2),
+        text_len=512,
+        in_dim=16,
+        dim=2048,
+        ffn_dim=8192,
+        freq_dim=256,
+        text_dim=4096,
+        out_dim=16,
+        num_heads=16,
+        num_layers=32,
+        window_size=(-1, -1),
+        qk_norm=True,
+        cross_attn_norm=True,
+        eps=1e-6,
+    ):
         r"""
         Initialize the diffusion model backbone.
 
@@ -718,7 +616,7 @@ class WanModel(nn.Module, NativeConfigMixin):
 
         super().__init__()
 
-        assert model_type in ['t2v', 'i2v']
+        assert model_type in ["t2v", "i2v"]
         self.model_type = model_type
 
         self.patch_size = patch_size
@@ -734,27 +632,23 @@ class WanModel(nn.Module, NativeConfigMixin):
         self.window_size = window_size
         self.qk_norm = qk_norm
         self.cross_attn_norm = cross_attn_norm
-        self.eps = eps 
+        self.eps = eps
 
         # embeddings
-        self.patch_embedding = nn.Conv3d(
-            in_dim, dim, kernel_size=patch_size, stride=patch_size)
-        self.text_embedding = nn.Sequential(
-            nn.Linear(text_dim, dim), nn.GELU(approximate='tanh'),
-            nn.Linear(dim, dim))
+        self.patch_embedding = nn.Conv3d(in_dim, dim, kernel_size=patch_size, stride=patch_size)
+        self.text_embedding = nn.Sequential(nn.Linear(text_dim, dim), nn.GELU(approximate="tanh"), nn.Linear(dim, dim))
 
-        self.time_embedding = nn.Sequential(
-            nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
-        self.time_projection = nn.Sequential(
-            nn.SiLU(), nn.Linear(dim, dim * 6))
+        self.time_embedding = nn.Sequential(nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
+        self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(dim, dim * 6))
 
         # blocks
-        cross_attn_type = 't2v_cross_attn' if model_type == 't2v' else 'i2v_cross_attn'
-        self.blocks = nn.ModuleList([
-            WanAttentionBlock(cross_attn_type, dim, ffn_dim, num_heads,
-                              window_size, qk_norm, cross_attn_norm, eps)
-            for _ in range(num_layers)
-        ])
+        cross_attn_type = "t2v_cross_attn" if model_type == "t2v" else "i2v_cross_attn"
+        self.blocks = nn.ModuleList(
+            [
+                WanAttentionBlock(cross_attn_type, dim, ffn_dim, num_heads, window_size, qk_norm, cross_attn_norm, eps)
+                for _ in range(num_layers)
+            ]
+        )
 
         # head
         self.head = Head(dim, out_dim, patch_size, eps)
@@ -778,39 +672,22 @@ class WanModel(nn.Module, NativeConfigMixin):
         self.gradient_checkpointing = False
 
     def _set_gradient_checkpointing(self, value=False):
-        """Helper function to set gradient checkpointing.
-
-        Args:
-            value: The value.
-        """
         self.gradient_checkpointing = value
 
-    def forward(
-        self,
-        *args,
-        **kwargs
-    ):
-        """Forward."""
+    def forward(self, *args, **kwargs):
         return self._forward(*args, **kwargs)
 
-    def init_freqs(self,device):
-        """Init freqs.
-
-        Args:
-            device: The device.
-        """
+    def init_freqs(self, device):
         d = self.dim // self.num_heads
-        self.freqs = torch.cat([
-            rope_params(1024, d - 4 * (d // 6)),
-            rope_params(1024, 2 * (d // 6)),
-            rope_params(1024, 2 * (d // 6))
-        ], dim=1)
+        self.freqs = torch.cat(
+            [rope_params(1024, d - 4 * (d // 6)), rope_params(1024, 2 * (d // 6)), rope_params(1024, 2 * (d // 6))],
+            dim=1,
+        )
         self.freqs = self.freqs.to(device)
 
     def get_transformer_module(self):
-        """Get transformer module."""
         return {type(self.blocks[0])}
-        
+
     def _forward(
         self,
         x,
@@ -844,17 +721,16 @@ class WanModel(nn.Module, NativeConfigMixin):
             List[Tensor]:
                 List of denoised video tensors with original input shapes [C_out, F, H / 8, W / 8]
         """
-        
+
         device = self.patch_embedding.weight.device
-        if hasattr(self, 'freqs'):
+        if hasattr(self, "freqs"):
             if self.freqs.device != device:
                 self.freqs = self.freqs.to(device)
         else:
             self.init_freqs(device)
 
-
         if y is not None:
-            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y)]
+            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y, strict=False)]
 
         if render_latent_input is not None:
             x = torch.cat([x, render_latent_input], dim=1)
@@ -866,8 +742,7 @@ class WanModel(nn.Module, NativeConfigMixin):
 
         # embeddings
         x = [self.patch_embedding(u.unsqueeze(0)) for u in x]
-        grid_sizes = torch.stack(
-            [torch.tensor(u.shape[2:], dtype=torch.long) for u in x])
+        grid_sizes = torch.stack([torch.tensor(u.shape[2:], dtype=torch.long) for u in x])
         x = [u.flatten(2).transpose(1, 2) for u in x]
         seq_lens = torch.tensor([u.size(1) for u in x], dtype=torch.long)
         assert seq_lens.max() <= seq_len
@@ -880,35 +755,32 @@ class WanModel(nn.Module, NativeConfigMixin):
         #     image_latent_input = [u.flatten(2).transpose(1, 2) for u in image_latent_input]
         #     image_latent_seq_lens = torch.tensor([u.size(1) for u in image_latent_input], dtype=torch.long)
         #     image_latent = torch.cat(image_latent_input)
-        
-        e = self.time_embedding(
-            sinusoidal_embedding_1d(self.freq_dim, t).type_as(x))
+
+        e = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, t).type_as(x))
         e0 = self.time_projection(e).unflatten(1, (6, self.dim))
 
         # context
         context_lens = None
         context = self.text_embedding(
-            torch.stack([
-                torch.cat(
-                    [u, u.new_zeros(self.text_len - u.size(0), u.size(1))])
-                for u in context
-            ]))
+            torch.stack([torch.cat([u, u.new_zeros(self.text_len - u.size(0), u.size(1))]) for u in context])
+        )
 
         if clip_fea is not None:
             context_clip = self.img_emb(clip_fea)  # bs x 257 x dim
             context = torch.concat([context_clip, context], dim=1)
-        
 
         f, h, w = grid_sizes.tolist()[0]
-        c = self.dim // self.num_heads // 2 
+        c = self.dim // self.num_heads // 2
         freqs = self.freqs.split([c - 2 * (c // 3), c // 3, c // 3], dim=1)
-        
-        freqs_x = torch.cat([
-            freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
-            freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
-            freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1)
-        ],
-                            dim=-1).reshape(f*h*w, 1, -1)
+
+        freqs_x = torch.cat(
+            [
+                freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
+                freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
+                freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1),
+            ],
+            dim=-1,
+        ).reshape(f * h * w, 1, -1)
         # if image_latent_input is not None:
         #     f_image_latent_input, h_image_latent_input, w_image_latent_input = image_latent_grid_sizes.tolist()[0]
         #     freqs_image = torch.cat([
@@ -923,39 +795,28 @@ class WanModel(nn.Module, NativeConfigMixin):
         # freqs = torch.cat([freqs_x, freqs_image], dim=0)
 
         # arguments
-        kwargs = dict(
-            e=e0,
-            seq_lens=seq_lens,
-            freqs=freqs_x,
-            context=context,
-            context_lens=context_lens)
+        kwargs = {"e": e0, "seq_lens": seq_lens, "freqs": freqs_x, "context": context, "context_lens": context_lens}
 
         def create_custom_forward(module):
-            """Create custom forward.
-
-            Args:
-                module: The module.
-            """
             def custom_forward(*inputs, **kwargs):
-                """Custom forward."""
                 return module(*inputs, **kwargs)
+
             return custom_forward
 
         # TODO: Tune the number of blocks for feature extraction
-        final_x = None 
 
-        gan_idx = 0
-        for ii, block in enumerate(self.blocks):
+        for _ii, block in enumerate(self.blocks):
             if torch.is_grad_enabled() and self.gradient_checkpointing:
                 # with torch.autograd.graph.save_on_cpu():
-                    x = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(block),
-                        x, **kwargs,
-                        use_reentrant=False,
-                    )
+                x = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(block),
+                    x,
+                    **kwargs,
+                    use_reentrant=False,
+                )
             else:
                 x = block(x, **kwargs)
-  
+
         # head
         # x = x[:, :token_length]
         x = self.head(x, e)
@@ -963,8 +824,8 @@ class WanModel(nn.Module, NativeConfigMixin):
         # unpatchify
         x = self.unpatchify(x, grid_sizes)
 
-        return torch.stack(x)[:,:,:token_length]
- 
+        return torch.stack(x)[:, :, :token_length]
+
     def unpatchify(self, x, grid_sizes, c=None):
         r"""
         Reconstruct video tensors from patch embeddings.
@@ -983,10 +844,10 @@ class WanModel(nn.Module, NativeConfigMixin):
 
         c = self.out_dim if c is None else c
         out = []
-        for u, v in zip(x, grid_sizes.tolist()):
-            u = u[:math.prod(v)].view(*v, *self.patch_size, c)
-            u = torch.einsum('fhwpqrc->cfphqwr', u)
-            u = u.reshape(c, *[i * j for i, j in zip(v, self.patch_size)])
+        for u, v in zip(x, grid_sizes.tolist(), strict=False):
+            u = u[: math.prod(v)].view(*v, *self.patch_size, c)
+            u = torch.einsum("fhwpqrc->cfphqwr", u)
+            u = u.reshape(c, *[i * j for i, j in zip(v, self.patch_size, strict=False)])
             out.append(u)
         return out
 
@@ -1006,10 +867,10 @@ class WanModel(nn.Module, NativeConfigMixin):
         nn.init.xavier_uniform_(self.patch_embedding.weight.flatten(1))
         for m in self.text_embedding.modules():
             if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, std=.02)
+                nn.init.normal_(m.weight, std=0.02)
         for m in self.time_embedding.modules():
             if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, std=.02)
+                nn.init.normal_(m.weight, std=0.02)
 
         # init output layer
         nn.init.zeros_(self.head.head.weight)

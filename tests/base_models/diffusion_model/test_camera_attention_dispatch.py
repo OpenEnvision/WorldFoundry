@@ -22,12 +22,16 @@ def test_cpu_camera_attention_with_installed_cuda_provider_matches_sdpa(monkeypa
     generator = torch.Generator().manual_seed(37)
     query = torch.randn(2, 7, 2, 8, generator=generator).bfloat16()
     key, value = [torch.randn(2, 9, 2, 8, generator=generator).bfloat16() for _ in range(2)]
-    expected = F.scaled_dot_product_attention(
-        (query * 0.75).float().transpose(1, 2),
-        key.float().transpose(1, 2),
-        value.float().transpose(1, 2),
-        scale=0.2,
-    ).transpose(1, 2).to(query.dtype)
+    expected = (
+        F.scaled_dot_product_attention(
+            (query * 0.75).float().transpose(1, 2),
+            key.float().transpose(1, 2),
+            value.float().transpose(1, 2),
+            scale=0.2,
+        )
+        .transpose(1, 2)
+        .to(query.dtype)
+    )
 
     with torch.no_grad():
         actual = getattr(camera_attention, entry)(query, key, value, q_scale=0.75, softmax_scale=0.2)

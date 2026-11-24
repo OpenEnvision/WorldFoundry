@@ -14,10 +14,10 @@ here (or on a recipe). They may only supply checkpoint-compatible component impl
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Callable, Mapping
 
 from .loaders import CheckpointSpec
 from .optimizations import AttentionBackend, OffloadMode, QuantizationMode, RuntimePolicy
@@ -260,6 +260,7 @@ class ExecutionSpec:
 
 
 __all__ = [
+    "STANDARD_COMPONENT_BINDINGS",
     "BuildPurpose",
     "ComponentBuildContext",
     "ComponentFactory",
@@ -267,6 +268,5 @@ __all__ = [
     "ComponentKind",
     "ComponentSpec",
     "ExecutionSpec",
-    "STANDARD_COMPONENT_BINDINGS",
     "validate_runtime_policy_for_purpose",
 ]

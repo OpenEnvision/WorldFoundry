@@ -3,11 +3,13 @@
 The upstream repository intentionally gives Echo-LongVideo and Echo-WM separate
 Python environments.  These adapters preserve that boundary: WorldFoundry owns
 request normalization, preflight, launch planning, logs, and artifact discovery,
-while the selected upstream interpreter executes the official entrypoint.
+while the selected interpreter runs the vendored official entrypoint
+(``echo_longvideo_runtime`` or ``echo_wm_runtime``) as a package module.
 """
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import os
@@ -16,20 +18,26 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 from urllib.parse import urlparse
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io import resolve_data_path
 from worldfoundry.runtime.assets import expand_worldfoundry_path
 from worldfoundry.runtime.env import resolve_hfd_root
 
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
 UPSTREAM_REVISION = "0b931fd42f5ef51410019ae41b261eb3b8936410"
 WM_UPSTREAM_REVISION = "a08f1274573d7cd6ec66719f204951f4227a5173"
-DEFAULT_SOURCE_ROOT = PROJECT_ROOT / "cache" / "generative_taxonomy" / "jd-opensource--JoyAI-Echo"
 DEFAULT_HFD_ROOT = resolve_hfd_root()
+_PACKAGE = "worldfoundry.synthesis.visual_generation.joyai_echo"
+LONGVIDEO_MODULE = f"{_PACKAGE}.echo_longvideo_runtime.inference"
+WM_MODULES = {
+    "base": f"{_PACKAGE}.echo_wm_runtime.inference_wm",
+    "flash": f"{_PACKAGE}.echo_wm_runtime.inference_wm_causal",
+}
 
 LONGVIDEO_CHECKPOINT_NAMES = {
     "bf16": "echo15_full_dmd",
@@ -84,7 +92,7 @@ def _safe_slug(value: Any, fallback: str) -> str:
     return text.strip("-") or fallback
 
 
-def _missing_paths(paths: Sequence[Path]) -> tuple[str, ...]:
+def _missing_paths(*paths: Path) -> tuple[str, ...]:
     return tuple(str(path) for path in paths if not path.exists())
 
 
@@ -115,14 +123,12 @@ def _cuda_visible_devices(device: str) -> str | None:
     return ",".join(indices) if all(item.isdigit() for item in indices) else None
 
 
-def _runtime_env(device: str, source_root: Path) -> dict[str, str]:
-    python_path = os.pathsep.join(value for value in (str(source_root), os.environ.get("PYTHONPATH")) if value)
+def _runtime_env(device: str) -> dict[str, str]:
     env = {
-        "PYTHONPATH": python_path,
         "PYTHONUNBUFFERED": "1",
         "TOKENIZERS_PARALLELISM": "false",
     }
-    # The upstream overlay otherwise defaults to /usr/bin/ffprobe, which
+    # The vendored overlay otherwise defaults to /usr/bin/ffprobe, which
     # need not exist in conda and user-local installations.
     for tool in ("ffmpeg", "ffprobe"):
         variable = f"{tool.upper()}_BIN"
@@ -137,7 +143,7 @@ def _runtime_env(device: str, source_root: Path) -> dict[str, str]:
 
 @dataclass(frozen=True)
 class JoyAIEchoRuntimePlan:
-    """Serializable launch plan for one official JoyAI-Echo subprocess."""
+    """Serializable launch plan for one JoyAI-Echo subprocess."""
 
     project: str
     variant: str
@@ -164,7 +170,7 @@ class JoyAIEchoRuntimePlan:
 
 
 class _JoyAIEchoSubprocessRuntime:
-    """Shared official-subprocess execution and artifact handling."""
+    """Shared subprocess execution and artifact handling."""
 
     project_name = "joyai_echo"
 
@@ -261,7 +267,6 @@ class JoyAIEchoLongVideoRuntime(_JoyAIEchoSubprocessRuntime):
         checkpoint_dir: str | Path | None = None,
         *,
         gemma_path: str | Path | None = None,
-        source_root: str | Path | None = None,
         python_executable: str | Path | None = None,
         config_path: str | Path | None = None,
         precision: str = "bf16",
@@ -274,13 +279,6 @@ class JoyAIEchoLongVideoRuntime(_JoyAIEchoSubprocessRuntime):
             raise ValueError("Echo-LongVideo precision must be one of: bf16, fp8, fp4.")
         if consumer and low_vram:
             raise ValueError("Echo-LongVideo consumer and low_vram profiles are mutually exclusive.")
-        source_candidate = _expand_path(source_root or os.getenv("JOYAI_ECHO_ROOT")) or DEFAULT_SOURCE_ROOT
-        if source_candidate.name == "echo_longvideo":
-            self.runtime_root = source_candidate
-            self.source_root = source_candidate.parent
-        else:
-            self.source_root = source_candidate
-            self.runtime_root = source_candidate / "echo_longvideo"
         self.precision = normalized_precision
         self.consumer = bool(consumer)
         self.low_vram = bool(low_vram)
@@ -293,7 +291,9 @@ class JoyAIEchoLongVideoRuntime(_JoyAIEchoSubprocessRuntime):
         )
         self.checkpoint_dir = checkpoint_root if checkpoint_is_variant else checkpoint_root / checkpoint_name
         self.gemma_path = _expand_path(gemma_path) or DEFAULT_HFD_ROOT / "google--gemma-3-12b-it"
-        self.config_path = _expand_path(config_path) or self.runtime_root / "configs" / self._config_name()
+        self.config_path = _expand_path(config_path) or Path(
+            resolve_data_path(f"models/runtime/configs/joyai-echo-longvideo/{self._config_name()}")
+        )
 
     def _config_name(self) -> str:
         if self.consumer:
@@ -311,17 +311,10 @@ class JoyAIEchoLongVideoRuntime(_JoyAIEchoSubprocessRuntime):
         else:
             required.append(self.checkpoint_dir / "model.safetensors")
         required.append(self.gemma_path / "config.json")
-        return _missing_paths(required)
+        return _missing_paths(*required)
 
     def missing_runtime_files(self) -> tuple[str, ...]:
-        return _missing_paths(
-            (
-                self.runtime_root / "inference.py",
-                self.runtime_root / "r2v_schema.py",
-                self.config_path,
-                self.python_executable,
-            )
-        )
+        return _missing_paths(self.config_path, self.python_executable)
 
     def preflight(self) -> dict[str, Any]:
         missing_checkpoint = self.missing_checkpoint_files()
@@ -333,8 +326,7 @@ class JoyAIEchoLongVideoRuntime(_JoyAIEchoSubprocessRuntime):
             "status": "ready" if ready else "blocked",
             "project": self.project_name,
             "variant": self.precision,
-            "source_root": str(self.source_root),
-            "runtime_root": str(self.runtime_root),
+            "module": LONGVIDEO_MODULE,
             "checkpoint_dir": str(self.checkpoint_dir),
             "gemma_path": str(self.gemma_path),
             "config_path": str(self.config_path),
@@ -414,9 +406,7 @@ class JoyAIEchoLongVideoRuntime(_JoyAIEchoSubprocessRuntime):
         if run_root is None:
             run_root = output.parent / f"{output.stem}_echo_longvideo"
         run_root.mkdir(parents=True, exist_ok=True)
-        command = [
-            str(self.python_executable),
-            str(self.runtime_root / "inference.py"),
+        arguments = [
             "--config",
             str(self.config_path),
             "--request",
@@ -446,20 +436,21 @@ class JoyAIEchoLongVideoRuntime(_JoyAIEchoSubprocessRuntime):
             "memory_max_size": "--memory-max-size",
         }
         for key, flag in value_flags.items():
-            _append_value(command, flag, request.get(key))
+            _append_value(arguments, flag, request.get(key))
         for key, flag in {
             "dit_layerwise_offload": "--dit-layerwise-offload",
             "dit_pin_memory": "--dit-pin-memory",
         }.items():
             if request.get(key) is not None:
-                _append_value(command, flag, str(bool(request[key])).lower())
-        _append_bool(command, "--overwrite-condition-cache", request.get("overwrite_condition_cache"))
+                _append_value(arguments, flag, str(bool(request[key])).lower())
+        _append_bool(arguments, "--overwrite-condition-cache", request.get("overwrite_condition_cache"))
+        command = package_module_command(LONGVIDEO_MODULE, arguments, python_executable=self.python_executable)
         return JoyAIEchoRuntimePlan(
             project=self.project_name,
             variant=self.precision,
             command=tuple(command),
-            env=_runtime_env(self.device, self.runtime_root),
-            workdir=str(self.runtime_root),
+            env=_runtime_env(self.device),
+            workdir=str(run_root),
             output_path=str(output),
             output_root=str(run_root),
             request_path=str(request_path),
@@ -476,7 +467,6 @@ class JoyAIEchoWMRuntime(_JoyAIEchoSubprocessRuntime):
         checkpoint_dir: str | Path | None = None,
         *,
         gemma_path: str | Path | None = None,
-        source_root: str | Path | None = None,
         python_executable: str | Path | None = None,
         config_path: str | Path | None = None,
         variant: str = "base",
@@ -488,13 +478,6 @@ class JoyAIEchoWMRuntime(_JoyAIEchoSubprocessRuntime):
         if normalized_variant not in WM_CHECKPOINT_NAMES:
             raise ValueError("Echo-WM variant must be base or flash.")
         self.variant = normalized_variant
-        source_candidate = _expand_path(source_root or os.getenv("JOYAI_ECHO_ROOT")) or DEFAULT_SOURCE_ROOT
-        if source_candidate.name == "echo_wm":
-            self.runtime_root = source_candidate
-            self.source_root = source_candidate.parent
-        else:
-            self.source_root = source_candidate
-            self.runtime_root = source_candidate / "echo_wm"
         self.device = str(device)
         self.python_executable = _python_path(python_executable)
         checkpoint_root = _expand_path(checkpoint_dir) or DEFAULT_HFD_ROOT / "Echo-Team--Echo-WM"
@@ -504,19 +487,19 @@ class JoyAIEchoWMRuntime(_JoyAIEchoSubprocessRuntime):
         self.gemma_path = _expand_path(gemma_path) or DEFAULT_HFD_ROOT / "google--gemma-3-12b-it-qat-q4_0-unquantized"
         default_config = "inference_wm.yaml" if self.variant == "base" else "inference_wm_causal.yaml"
         self.config_path = _expand_path(config_path) or Path(
-            resolve_data_path(f"models/runtime/configs/joyai-echo-wm/{default_config}")
+            resolve_data_path(f"models/runtime/configs/joyai_echo/{default_config}")
         )
 
     @property
-    def script_path(self) -> Path:
-        name = "inference_wm.py" if self.variant == "base" else "inference_wm_causal.py"
-        return self.runtime_root / name
+    def module(self) -> str:
+        """Package module of the selected variant's inference entrypoint."""
+        return WM_MODULES[self.variant]
 
     def missing_checkpoint_files(self) -> tuple[str, ...]:
-        return _missing_paths((self.checkpoint_path, self.gemma_path / "config.json"))
+        return _missing_paths(self.checkpoint_path, self.gemma_path / "config.json")
 
     def missing_runtime_files(self) -> tuple[str, ...]:
-        return _missing_paths((self.script_path, self.config_path, self.python_executable))
+        return _missing_paths(self.config_path, self.python_executable)
 
     def preflight(self) -> dict[str, Any]:
         missing_checkpoint = self.missing_checkpoint_files()
@@ -530,8 +513,7 @@ class JoyAIEchoWMRuntime(_JoyAIEchoSubprocessRuntime):
             "status": "ready" if ready else "blocked",
             "project": self.project_name,
             "variant": self.variant,
-            "source_root": str(self.source_root),
-            "runtime_root": str(self.runtime_root),
+            "module": self.module,
             "checkpoint_path": str(self.checkpoint_path),
             "gemma_path": str(self.gemma_path),
             "config_path": str(self.config_path),
@@ -632,7 +614,7 @@ class JoyAIEchoWMRuntime(_JoyAIEchoSubprocessRuntime):
                 raise ValueError("Echo-WM timesteps must be a non-empty descending list")
             values = [float(value) for value in timesteps]
             if not all(math.isfinite(v) and v == int(v) and 0 < v <= 1000 for v in values) or any(
-                a <= b for a, b in zip(values, values[1:])
+                a <= b for a, b in itertools.pairwise(values)
             ):
                 raise ValueError("Echo-WM timesteps must be integers in [1, 1000] and descending")
         prompt = str(request.get("prompt") or "").strip()
@@ -684,9 +666,7 @@ class JoyAIEchoWMRuntime(_JoyAIEchoSubprocessRuntime):
                 request[name] = int(value)
         if timesteps is not None:
             request["timesteps"] = [int(value) for value in timesteps]
-        command = [
-            str(self.python_executable),
-            str(self.script_path),
+        arguments = [
             "--config",
             str(self.config_path),
             "--image",
@@ -714,7 +694,7 @@ class JoyAIEchoWMRuntime(_JoyAIEchoSubprocessRuntime):
             "pitch_limit_deg": "--pitch-limit-deg",
         }
         for key, flag in common_flags.items():
-            _append_value(command, flag, request.get(key))
+            _append_value(arguments, flag, request.get(key))
         if self.variant == "base":
             base_flags = {
                 "steps": "--steps",
@@ -725,11 +705,11 @@ class JoyAIEchoWMRuntime(_JoyAIEchoSubprocessRuntime):
                 "stg_scale": "--stg-scale",
             }
             for key, flag in base_flags.items():
-                _append_value(command, flag, request.get(key))
+                _append_value(arguments, flag, request.get(key))
             stg_blocks = request.get("stg_blocks")
             if isinstance(stg_blocks, Sequence) and not isinstance(stg_blocks, (str, bytes, bytearray)):
-                command.append("--stg-blocks")
-                command.extend(str(item) for item in stg_blocks)
+                arguments.append("--stg-blocks")
+                arguments.extend(str(item) for item in stg_blocks)
         else:
             causal_flags = {
                 "video_local_attn_size": "--video_local_attn_size",
@@ -737,28 +717,31 @@ class JoyAIEchoWMRuntime(_JoyAIEchoSubprocessRuntime):
                 "video_chunk_size": "--video_chunk_size",
             }
             for key, flag in causal_flags.items():
-                _append_value(command, flag, request.get(key))
+                _append_value(arguments, flag, request.get(key))
             timesteps = request.get("timesteps")
             if isinstance(timesteps, Sequence) and not isinstance(timesteps, (str, bytes, bytearray)):
-                command.append("--timesteps")
-                command.extend(str(item) for item in timesteps)
-        _append_bool(command, "--auto-fov", request.get("auto_fov"))
-        _append_bool(command, "--no-audio", request.get("no_audio") or request.get("audio") is False)
+                arguments.append("--timesteps")
+                arguments.extend(str(item) for item in timesteps)
+        _append_bool(arguments, "--auto-fov", request.get("auto_fov"))
+        _append_bool(arguments, "--no-audio", request.get("no_audio") or request.get("audio") is False)
         if request.get("action_overlay") is False:
-            command.append("--no-action-overlay")
+            arguments.append("--no-action-overlay")
+        command = package_module_command(self.module, arguments, python_executable=self.python_executable)
         return JoyAIEchoRuntimePlan(
             project=self.project_name,
             variant=self.variant,
             upstream_revision=WM_UPSTREAM_REVISION,
             command=tuple(command),
-            env=_runtime_env(self.device, self.runtime_root),
-            workdir=str(self.runtime_root),
+            env=_runtime_env(self.device),
+            workdir=str(output.parent),
             output_path=str(output),
             output_root=str(output.parent),
         )
 
 
 __all__ = [
+    "LONGVIDEO_MODULE",
+    "WM_MODULES",
     "JoyAIEchoLongVideoRuntime",
     "JoyAIEchoRuntimePlan",
     "JoyAIEchoWMRuntime",

@@ -19,4 +19,5 @@ def __getattr__(name: str) -> Any:
         return DreamDojoSynthesis
     raise AttributeError(name)
 
+
 __all__ = ["ActionModelSynthesis", "DreamDojoSynthesis"]

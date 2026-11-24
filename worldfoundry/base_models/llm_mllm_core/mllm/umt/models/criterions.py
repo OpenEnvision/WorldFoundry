@@ -5,9 +5,10 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .utils import allgather_wgrad
-from ..utils.distributed import get_rank, get_world_size
 from worldfoundry.core.configuration.python import EasyDict
+
+from ..utils.distributed import get_rank, get_world_size
+from .utils import allgather_wgrad
 
 logger = logging.getLogger(__name__)
 
@@ -110,9 +111,7 @@ class VTC_VTM_Loss(nn.Module):
         """
         with torch.no_grad():
             sim_v2t, sim_t2v = get_sim(vision_proj, text_proj, temp)
-            vision_atts = torch.ones(
-                vision_embeds.size()[:-1], dtype=torch.long, device=vision_embeds.device
-            )
+            vision_atts = torch.ones(vision_embeds.size()[:-1], dtype=torch.long, device=vision_embeds.device)
             weights_v2t = F.softmax(sim_v2t + 1e-4, dim=1)  # (N, N)
             weights_t2v = F.softmax(sim_t2v + 1e-4, dim=1)
 
@@ -193,7 +192,7 @@ class VTC_VTM_Loss(nn.Module):
             mask.fill_diagonal_(1)
         return mask  # `1` mark valid/matched location
 
-    @lru_cache(maxsize=16)
+    @lru_cache(maxsize=16)  # noqa: B019 - Keeps the upstream per-instance method cache.
     def get_gather_args(self):
         """obtain the args for all_gather
         Returns: dict.
@@ -206,7 +205,7 @@ class MLMLoss(nn.Module):
     """masked language modeling loss."""
 
     def __init__(self, masking_prob, tokenizer):
-        super(MLMLoss, self).__init__()
+        super().__init__()
         self.tokenizer = tokenizer
         self.masking_prob = masking_prob
 
@@ -251,15 +250,7 @@ class MLMLoss(nn.Module):
         )
         return mlm_output.loss
 
-    def simple_mlm_loss(
-        self,
-        text_encoder,
-        text,
-        text_embeds,
-        vision_embeds,
-        vision_atts,
-        labels
-    ):
+    def simple_mlm_loss(self, text_encoder, text, text_embeds, vision_embeds, vision_atts, labels):
         mlm_output = text_encoder(
             encoder_embeds=text_embeds,
             attention_mask=text.attention_mask,
@@ -292,17 +283,11 @@ class MLMLoss(nn.Module):
             targets[~masked_indices] = -100
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = (
-            torch.bernoulli(torch.full(input_ids.shape, 0.8)).bool() & masked_indices
-        )
+        indices_replaced = torch.bernoulli(torch.full(input_ids.shape, 0.8)).bool() & masked_indices
         input_ids[indices_replaced] = self.tokenizer.mask_token_id
 
         # 10% of the time, we replace masked input tokens with random word
-        indices_random = (
-            torch.bernoulli(torch.full(input_ids.shape, 0.5)).bool()
-            & masked_indices
-            & ~indices_replaced
-        )
+        indices_random = torch.bernoulli(torch.full(input_ids.shape, 0.5)).bool() & masked_indices & ~indices_replaced
         random_words = torch.randint(vocab_size, input_ids.shape, dtype=torch.long).to(device)
         input_ids[indices_random] = random_words[indices_random]
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
@@ -316,18 +301,18 @@ class MLMLoss(nn.Module):
 class UTA_Loss(nn.Module):
     """unmasked token alignment loss."""
 
-    def __init__(self, uta_norm_type='l2', uta_loss_type='l2'):
+    def __init__(self, uta_norm_type="l2", uta_loss_type="l2"):
         super().__init__()
         self.norm_type = uta_norm_type
         self.loss_type = uta_loss_type
         # logger.info(f'Norm type: {uta_norm_type}')
         # logger.info(f'Loss type: {uta_loss_type}')
 
-        if uta_loss_type == 'mse':
+        if uta_loss_type == "mse":
             self.loss_func = nn.MSELoss()
-        elif uta_loss_type == 'smooth_l1':
+        elif uta_loss_type == "smooth_l1":
             self.loss_func = nn.SmoothL1Loss()
-    
+
     def uta_loss(self, student_output, clip_output):
         """forward to calculate the loss
 
@@ -338,17 +323,17 @@ class UTA_Loss(nn.Module):
         Returns: loss_uta (torch.Tensor): The mask clip alignment loss. Shape: [].
         """
 
-        if self.norm_type == 'l2':
+        if self.norm_type == "l2":
             student_output = student_output / student_output.norm(dim=-1, keepdim=True)
             clip_output = clip_output / clip_output.norm(dim=-1, keepdim=True)
-        elif self.norm_type == 'none':
+        elif self.norm_type == "none":
             pass
         else:
             raise NotImplementedError
 
-        if self.loss_type == 'l2':
+        if self.loss_type == "l2":
             loss_uta = (2 - 2 * (student_output * clip_output).sum(dim=-1)).mean()
-        elif self.loss_type in ['mse', 'smooth_l1']:
+        elif self.loss_type in ["mse", "smooth_l1"]:
             loss_uta = self.loss_func(input=student_output, target=clip_output)
         else:
             raise NotImplementedError

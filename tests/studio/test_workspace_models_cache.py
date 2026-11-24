@@ -3,7 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, BrokenBarrierError, Lock
 
-from worldfoundry.studio.serving import workspace as workspace_app
+from worldfoundry.studio.workspace import app as workspace_app
 
 
 def test_workspace_models_builds_cold_catalog_once_for_concurrent_callers(

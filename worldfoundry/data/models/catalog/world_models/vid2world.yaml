@@ -15,6 +15,7 @@ official_sources:
   project_page: https://knightnemo.github.io/vid2world/
   github:
     url: https://github.com/thuml/Vid2World
+    revision: ae24077adbd0783bc6e1b79f705d9b8fad5888ce
     head_sha: ae24077adbd0783bc6e1b79f705d9b8fad5888ce
 integration:
   status: runtime_ported
@@ -30,22 +31,18 @@ runtime_profile: runtime-profile:vid2world
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry
   runtimes; blocked entries retain upstream provenance without runnable backends.
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: vid2world
 docs:
   publisher: Tsinghua University (THUML)
   publisher_kind: university
   publisher_zh: 清华大学（THUML 机器学习组）
-  overview: 'Vid2World from Tsinghua''s THUML group turns pretrained video diffusion models into interactive world models: it adapts a passive video generator into an action-conditioned, autoregressive predictor. WorldFoundry registers the official evaluation route in-tree; checkpoints and config assets are runtime-gated.'
-  overview_zh: 清华大学 THUML 组的 Vid2World 将预训练视频扩散模型改造为交互式世界模型：把被动的视频生成器适配成动作条件的自回归预测器。WorldFoundry 树内注册了官方评测路由；checkpoint 与配置资产为运行时门控。
-  architecture: 'The core idea recorded here is video-diffusion adaptation: converting a full-sequence diffusion model to causal, action-conditioned rollout. Architecture internals beyond the official repository pointer (thuml/Vid2World, pinned head ae24077a) are not recorded in this repository.'
-  architecture_zh: 仓库记录的核心思想是视频扩散适配：将全序列扩散模型改造成因果、动作条件的滚动生成。官方仓库指针（thuml/Vid2World，锁定 head ae24077a）之外的架构内部细节仓库未记录。
-  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
-  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。
-  limitations:
-  - Checkpoints/config assets are runtime-gated; no GPU validation is recorded in this repository.
-  limitations_zh:
-  - checkpoint/配置资产为运行时门控；仓库未记录 GPU 验证。
+  overview: "Vid2World from Tsinghua's THUML group turns pretrained video diffusion models into interactive world models: it adapts a passive video generator into an action-conditioned, autoregressive predictor. WorldFoundry runs the official evaluation route."
+  overview_zh: 清华大学 THUML 组的 Vid2World 将预训练视频扩散模型改造为交互式世界模型：把被动的视频生成器适配成动作条件的自回归预测器。WorldFoundry 运行官方评测路由。
+  architecture: 'The core idea is video-diffusion adaptation: converting a full-sequence diffusion model into a causal, action-conditioned rollout. Official code: thuml/Vid2World.'
+  architecture_zh: 核心思想是视频扩散适配：把全序列扩散模型改造成因果、动作条件的滚动生成。官方代码：thuml/Vid2World。
+  usage_notes: Until the required checkpoints and config assets are staged, generation returns a runtime plan that lists the missing assets.
+  usage_notes_zh: 在所需 checkpoint 与配置资产就位前，生成会返回列出缺失资产的运行时计划。
   recommended_benchmarks:
   - id: worldmodelbench
     reason: Action-conditioned interactive rollout quality.

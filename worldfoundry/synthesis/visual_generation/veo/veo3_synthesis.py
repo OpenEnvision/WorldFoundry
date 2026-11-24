@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from PIL import Image
 
@@ -49,13 +49,13 @@ class Veo3Synthesis(CredentialedSynthesis):
 
     def _generate(
         self,
-        processed_data: Dict[str, Any],
+        processed_data: dict[str, Any],
         *,
         output_path: str | Path | None = None,
         wait: bool = True,
         poll_interval: float = 10,
         timeout: float = 600,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if poll_interval <= 0 or timeout <= 0:
             raise ValueError("poll_interval and timeout must be positive")
 
@@ -70,17 +70,13 @@ class Veo3Synthesis(CredentialedSynthesis):
             raise ValueError("Veo accepts at most three reference images")
 
         config_values = {
-            key: value
-            for key, value in (processed_data.get("veo_config") or {}).items()
-            if value is not None
+            key: value for key, value in (processed_data.get("veo_config") or {}).items() if value is not None
         }
         if last_frame is not None:
             config_values["last_frame"] = self._as_google_image(last_frame)
         if reference_images:
             config_values["reference_images"] = [
-                self._types.VideoGenerationReferenceImage(
-                    image=self._as_google_image(item), reference_type="asset"
-                )
+                self._types.VideoGenerationReferenceImage(image=self._as_google_image(item), reference_type="asset")
                 for item in reference_images
             ]
         operation = self.client.models.generate_videos(
@@ -89,7 +85,7 @@ class Veo3Synthesis(CredentialedSynthesis):
             image=self._as_google_image(image) if image is not None else None,
             config=self._types.GenerateVideosConfig(**config_values),
         )
-        result: Dict[str, Any] = {"operation_name": operation.name, "done": bool(operation.done)}
+        result: dict[str, Any] = {"operation_name": operation.name, "done": bool(operation.done)}
         if not wait:
             return result
 
@@ -116,18 +112,18 @@ class Veo3Synthesis(CredentialedSynthesis):
             result["output_path"] = str(path)
         return result
 
-    def generate_t2av(self, processed_data: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+    def generate_t2av(self, processed_data: dict[str, Any], **kwargs) -> dict[str, Any]:
         return self._generate(processed_data, **kwargs)
 
-    def generate_i2av(self, processed_data: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+    def generate_i2av(self, processed_data: dict[str, Any], **kwargs) -> dict[str, Any]:
         return self._generate(processed_data, **kwargs)
 
     def predict(
         self,
-        processed_data: Dict[str, Any],
+        processed_data: dict[str, Any],
         task_type: str = "auto",
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         images = processed_data.get("images")
         if task_type == "auto":
             task_type = "i2av" if images is not None else "t2av"

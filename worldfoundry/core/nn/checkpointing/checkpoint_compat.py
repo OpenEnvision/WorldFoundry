@@ -20,7 +20,6 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Inference-only checkpoint buffers — load released graphs without SAC
 # ──────────────────────────────────────────────────────────────────────────

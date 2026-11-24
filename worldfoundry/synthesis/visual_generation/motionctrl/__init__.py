@@ -8,6 +8,7 @@ accessed, improving package import performance.
 
 The public API of this package is defined by `__all__`.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,7 +24,7 @@ def runtime_root() -> Path:
     Returns:
         Path: The absolute path to the MotionCtrl runtime root directory.
     """
-    return Path(__file__).resolve().parent / 'motionctrl_runtime'
+    return Path(__file__).resolve().parent / "motionctrl_runtime"
 
 
 def __getattr__(name: str):

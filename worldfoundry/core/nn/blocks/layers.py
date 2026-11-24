@@ -29,14 +29,14 @@ from __future__ import annotations
 
 import collections.abc
 import math
+from collections.abc import Callable, Sequence
 from itertools import repeat
-from typing import Callable, Optional, Sequence, Tuple, Type, Union
+from typing import overload
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Tuple / list helpers — config scalars and pairs share one constructor path
@@ -99,6 +99,14 @@ def list_sum(values: list):
     return result
 
 
+@overload
+def get_same_padding(kernel_size: int) -> int: ...
+
+
+@overload
+def get_same_padding(kernel_size: tuple[int, ...]) -> tuple[int, ...]: ...
+
+
 def get_same_padding(kernel_size: int | tuple[int, ...]) -> int | tuple[int, ...]:
     """Return symmetric padding for odd scalar or n-D kernels."""
 
@@ -156,6 +164,28 @@ class DropPath(nn.Module):
         return drop_path(x, float(self.drop_prob), self.training, self.scale_by_keep)
 
 
+class QuickGELU(nn.Module):
+    """CLIP's sigmoid approximation, with multiplication in the input dtype."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        return x * torch.sigmoid(1.702 * x)
+
+
+class Mish(nn.Module):
+    """Mish with explicit softplus/tanh rounding in the input dtype."""
+
+    def forward(self, hidden_states: Tensor) -> Tensor:
+        return hidden_states * torch.tanh(F.softplus(hidden_states))
+
+
+def inverse_sigmoid(x: Tensor, eps: float = 1e-3) -> Tensor:
+    """Clamp probabilities to [0, 1] before forming the epsilon-bounded odds."""
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1 / x2)
+
+
 class LayerNorm2d(nn.Module):
     """2D layer normalization over the channel dimension (dim=1)."""
 
@@ -183,7 +213,7 @@ class LayerScale(nn.Module):
     def __init__(
         self,
         dim: int,
-        init_values: Union[float, Tensor] = 1e-5,
+        init_values: float | Tensor = 1e-5,
         inplace: bool = False,
         device=None,
     ) -> None:
@@ -233,7 +263,7 @@ class SamMLPBlock(nn.Module):
         self,
         embedding_dim: int,
         mlp_dim: int,
-        act: Type[nn.Module] = nn.GELU,
+        act: type[nn.Module] = nn.GELU,
     ) -> None:
         """Build the ``lin1`` / ``lin2`` names expected by SAM checkpoints."""
 
@@ -257,7 +287,7 @@ class SamHeadMLP(nn.Module):
         hidden_dim: int,
         output_dim: int,
         num_layers: int,
-        activation: nn.Module = nn.ReLU,
+        activation: type[nn.Module] = nn.ReLU,
         sigmoid_output: bool = False,
     ) -> None:
         """Stack ``num_layers`` linears with activation on every layer except the last."""
@@ -265,7 +295,7 @@ class SamHeadMLP(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim, *h], [*h, output_dim], strict=False))
         self.sigmoid_output = sigmoid_output
         self.act = activation()
 
@@ -285,8 +315,8 @@ class Mlp(nn.Module):
     def __init__(
         self,
         in_features: int,
-        hidden_features: Optional[int] = None,
-        out_features: Optional[int] = None,
+        hidden_features: int | None = None,
+        out_features: int | None = None,
         act_layer: Callable[..., nn.Module] = nn.GELU,
         drop: float | tuple[float, float] = 0.0,
         bias: bool | tuple[bool, bool] = True,
@@ -437,7 +467,9 @@ class DomainAwareLinear(nn.Module):
 class PositionEmbeddingRandom(nn.Module):
     """Positional encoding using random spatial frequencies."""
 
-    def __init__(self, num_pos_feats: int = 64, scale: Optional[float] = None) -> None:
+    positional_encoding_gaussian_matrix: Tensor
+
+    def __init__(self, num_pos_feats: int = 64, scale: float | None = None) -> None:
         """Register a non-learned Gaussian frequency matrix (SAM prompt encoder)."""
 
         super().__init__()
@@ -456,7 +488,7 @@ class PositionEmbeddingRandom(nn.Module):
         coords = 2 * np.pi * coords
         return torch.cat([torch.sin(coords), torch.cos(coords)], dim=-1)
 
-    def forward(self, size: Tuple[int, int]) -> Tensor:
+    def forward(self, size: tuple[int, int]) -> Tensor:
         """Dense ``[C, H, W]`` encoding for a regular grid of size ``(H, W)``."""
 
         h, w = size
@@ -470,7 +502,7 @@ class PositionEmbeddingRandom(nn.Module):
         pe = self._pe_encoding(torch.stack([x_embed, y_embed], dim=-1))
         return pe.permute(2, 0, 1)
 
-    def forward_with_coords(self, coords_input: Tensor, image_size: Tuple[int, int]) -> Tensor:
+    def forward_with_coords(self, coords_input: Tensor, image_size: tuple[int, int]) -> Tensor:
         """Encode sparse ``[B, N, 2]`` xy coords normalized by ``image_size`` (W, H)."""
 
         coords = coords_input.clone()
@@ -489,11 +521,11 @@ class PatchEmbed(nn.Module):
 
     def __init__(
         self,
-        img_size: Union[int, tuple[int, int]] = 224,
-        patch_size: Union[int, tuple[int, int]] = 16,
+        img_size: int | tuple[int, int] = 224,
+        patch_size: int | tuple[int, int] = 16,
         in_chans: int = 3,
         embed_dim: int = 768,
-        norm_layer: Optional[Callable[..., nn.Module]] = None,
+        norm_layer: Callable[..., nn.Module] | None = None,
         flatten_embedding: bool = True,
     ) -> None:
         """Configure convolutional image-to-token projection.
@@ -568,11 +600,11 @@ class PatchEmbed_Mlp(PatchEmbed):
 
     def __init__(
         self,
-        img_size: Union[int, tuple[int, int]] = 224,
-        patch_size: Union[int, tuple[int, int]] = 16,
+        img_size: int | tuple[int, int] = 224,
+        patch_size: int | tuple[int, int] = 16,
         in_chans: int = 3,
         embed_dim: int = 768,
-        norm_layer: Optional[Callable[..., nn.Module]] = None,
+        norm_layer: Callable[..., nn.Module] | None = None,
         flatten_embedding: bool = True,
     ) -> None:
         """Replace the conv ``proj`` with unshuffle + MLP; requires a square patch.
@@ -652,8 +684,8 @@ class SwiGLUFFN(nn.Module):
     def __init__(
         self,
         in_features: int,
-        hidden_features: Optional[int] = None,
-        out_features: Optional[int] = None,
+        hidden_features: int | None = None,
+        out_features: int | None = None,
         act_layer: Callable[..., nn.Module] | None = None,
         drop: float = 0.0,
         bias: bool = True,
@@ -686,8 +718,8 @@ class SwiGLUFFNFused(SwiGLU):
     def __init__(
         self,
         in_features: int,
-        hidden_features: Optional[int] = None,
-        out_features: Optional[int] = None,
+        hidden_features: int | None = None,
+        out_features: int | None = None,
         act_layer: Callable[..., nn.Module] | None = None,
         drop: float = 0.0,
         bias: bool = True,
@@ -730,31 +762,71 @@ def _ntuple(n: int):
     return parse
 
 
+class PreNormFeedForward(nn.Module):
+    """Layer-normalized FFN with native sequential checkpoint slots."""
+
+    def __init__(self, dim: int, hidden_dim: int, dropout: float = 0.0) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.LayerNorm(dim),
+            nn.Linear(dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, dim),
+            nn.Dropout(dropout),
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.net(x)
+
+
+class TwoLayerReLU(nn.Module):
+    """Two linear layers with ReLU and native layer1/layer2 keys."""
+
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int) -> None:
+        super().__init__()
+        self.layer1 = nn.Linear(input_dim, hidden_dim)
+        self.layer2 = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, value: torch.Tensor) -> torch.Tensor:
+        return self.layer2(F.relu(self.layer1(value)))
+
+
+class InputFP32LayerNorm(nn.LayerNorm):
+    """Normalize FP32 inputs without casting the affine parameters."""
+
+    def forward(self, x: Tensor) -> Tensor:  # ty: ignore[invalid-method-override] - Native x keyword.
+        return super().forward(x.float()).type_as(x)
+
+
 __all__ = [
+    "XFORMERS_AVAILABLE",
+    "XFORMERS_ENABLED",
     "DropPath",
+    "InputFP32LayerNorm",
     "LayerNorm2d",
     "LayerScale",
-    "SamHeadMLP",
-    "SamMLPBlock",
     "Mlp",
-    "VisionAttention",
     "PatchEmbed",
     "PatchEmbed_Mlp",
     "Permute",
     "PixelUnshuffle",
     "PositionEmbeddingRandom",
+    "PreNormFeedForward",
+    "SamHeadMLP",
+    "SamMLPBlock",
     "SwiGLU",
     "SwiGLUFFN",
     "SwiGLUFFNFused",
-    "XFORMERS_AVAILABLE",
-    "XFORMERS_ENABLED",
+    "TwoLayerReLU",
+    "VisionAttention",
     "drop_path",
+    "get_same_padding",
+    "list_sum",
     "make_2tuple",
     "to_2tuple",
     "to_3tuple",
-    "val2tuple",
-    "get_same_padding",
-    "list_sum",
     "val2list",
+    "val2tuple",
     "zero_module",
 ]

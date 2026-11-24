@@ -3,7 +3,7 @@ title: Python API 参考
 description: Core primitive、评测契约、runner 与 runtime 工具的源码驱动签名。
 ---
 
-与 CLI、Studio 调用的是同一套契约。各页先给选型说明，再展示从源码生成的签名。模型专属实现、vendored 上游代码与 benchmark 内部细节不在本参考范围内。
+这些 API 与 CLI、Studio 使用同一套契约。各页先给选型说明，再展示从源码生成的签名。模型专属实现、vendored 上游代码与 benchmark 内部细节不在本参考范围内。
 
 <PythonApiCatalog locale="zh" />
 
@@ -12,19 +12,19 @@ description: Core primitive、评测契约、runner 与 runtime 工具的源码�
 优先使用公开 facade，避免直接依赖私有模块：
 
 ```python
-from worldfoundry.evaluation.api import (
+from worldfoundry.evals.api import (
     ArtifactRef,
     GenerationRequest,
     GenerationResult,
     Metric,
     WorldModelRunner,
 )
-from worldfoundry.evaluation.public import WorldFoundryRunRequest, run_worldfoundry
-from worldfoundry.evaluation.reporting import build_scorecard
+from worldfoundry.evals.public import WorldFoundryRunRequest, run_worldfoundry
+from worldfoundry.evals.reporting import build_scorecard
 from worldfoundry.core import scaled_dot_product_attention
 ```
 
-`worldfoundry.core` 惰性导出共享 primitive；评测契约在 `worldfoundry.evaluation.api`，编排在 `worldfoundry.evaluation.public`，证据构建在 `worldfoundry.evaluation.reporting`，路径与资产工具在 `worldfoundry.runtime.*`。
+`worldfoundry.core` 惰性导出共享 primitive；评测契约在 `worldfoundry.evals.api`，编排在 `worldfoundry.evals.public`，证据构建在 `worldfoundry.evals.reporting`，路径与资产工具在 `worldfoundry.runtime.*`。
 
 ## 页面如何生成
 
@@ -33,7 +33,6 @@ from worldfoundry.core import scaled_dot_product_attention
 ```bash
 cd docs/fumadocs
 npm run api:generate
-npm run api:check
 ```
 
 若需要签名之外的工作流说明，请继续阅读[设计文档](/zh/docs/overview/design)、[推理指南](/zh/docs/guides/inference)和[评测概览](/zh/docs/evaluation)。

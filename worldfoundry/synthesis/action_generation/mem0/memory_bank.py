@@ -32,9 +32,7 @@ class PositionEmbedder(nn.Module):
     ) -> torch.Tensor:
         half = dimension // 2
         frequencies = torch.exp(
-            -math.log(max_period)
-            * torch.arange(half, dtype=torch.float32, device=positions.device)
-            / half
+            -math.log(max_period) * torch.arange(half, dtype=torch.float32, device=positions.device) / half
         )
         angles = positions[:, None].float() * frequencies[None]
         embedding = torch.cat([torch.cos(angles), torch.sin(angles)], dim=-1)
@@ -199,8 +197,7 @@ class MemoryBank(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, bool]:
         if new_vector.shape != (1, 1, self.hidden_dim):
             raise ValueError(
-                f"Mem-0 memory input must have shape (1, 1, {self.hidden_dim}), "
-                f"received {tuple(new_vector.shape)}"
+                f"Mem-0 memory input must have shape (1, 1, {self.hidden_dim}), received {tuple(new_vector.shape)}"
             )
         key = self._episode_key(episode_id)
         current_vector = new_vector[0]

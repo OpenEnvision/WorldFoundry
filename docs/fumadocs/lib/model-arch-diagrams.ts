@@ -97,7 +97,3 @@ export function getModelPaperFigures(
   }
   return figures;
 }
-
-export function hasModelPaperFigures(modelId: string): boolean {
-  return getModelPaperFigures(modelId).length > 0;
-}

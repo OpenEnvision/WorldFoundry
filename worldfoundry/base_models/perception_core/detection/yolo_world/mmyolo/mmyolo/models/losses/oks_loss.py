@@ -1,5 +1,4 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -32,36 +31,28 @@ class OksLoss(nn.Module):
         loss_weight (float): Weight for the loss.
     """
 
-    def __init__(self,
-                 metainfo: Optional[str] = None,
-                 loss_weight: float = 1.0):
+    def __init__(self, metainfo: str | None = None, loss_weight: float = 1.0):
         super().__init__()
 
         if metainfo is not None:
             if parse_pose_metainfo is None:
                 raise ImportError(
-                    'Please run "mim install -r requirements/mmpose.txt" '
-                    'to install mmpose first for OksLossn.')
-            metainfo = parse_pose_metainfo(dict(from_file=metainfo))
-            sigmas = metainfo.get('sigmas', None)
+                    'Please run "mim install -r requirements/mmpose.txt" to install mmpose first for OksLossn.'
+                )
+            metainfo = parse_pose_metainfo({"from_file": metainfo})
+            sigmas = metainfo.get("sigmas", None)
             if sigmas is not None:
-                self.register_buffer('sigmas', torch.as_tensor(sigmas))
+                self.register_buffer("sigmas", torch.as_tensor(sigmas))
         self.loss_weight = loss_weight
 
-    def forward(self,
-                output: Tensor,
-                target: Tensor,
-                target_weights: Tensor,
-                bboxes: Optional[Tensor] = None) -> Tensor:
+    def forward(self, output: Tensor, target: Tensor, target_weights: Tensor, bboxes: Tensor | None = None) -> Tensor:
         oks = self.compute_oks(output, target, target_weights, bboxes)
         loss = 1 - oks
         return loss * self.loss_weight
 
-    def compute_oks(self,
-                    output: Tensor,
-                    target: Tensor,
-                    target_weights: Tensor,
-                    bboxes: Optional[Tensor] = None) -> Tensor:
+    def compute_oks(
+        self, output: Tensor, target: Tensor, target_weights: Tensor, bboxes: Tensor | None = None
+    ) -> Tensor:
         """Calculates the OKS loss.
 
         Args:
@@ -80,12 +71,11 @@ class OksLoss(nn.Module):
 
         dist = torch.norm(output - target, dim=-1)
 
-        if hasattr(self, 'sigmas'):
-            sigmas = self.sigmas.reshape(*((1, ) * (dist.ndim - 1)), -1)
+        if hasattr(self, "sigmas"):
+            sigmas = self.sigmas.reshape(*((1,) * (dist.ndim - 1)), -1)
             dist = dist / sigmas
         if bboxes is not None:
             area = torch.norm(bboxes[..., 2:] - bboxes[..., :2], dim=-1)
             dist = dist / area.clip(min=1e-8).unsqueeze(-1)
 
-        return (torch.exp(-dist.pow(2) / 2) * target_weights).sum(
-            dim=-1) / target_weights.sum(dim=-1).clip(min=1e-8)
+        return (torch.exp(-dist.pow(2) / 2) * target_weights).sum(dim=-1) / target_weights.sum(dim=-1).clip(min=1e-8)

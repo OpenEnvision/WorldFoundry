@@ -26,7 +26,7 @@ def canonical_entries(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict
         patch.setenv("WORLDFOUNDRY_HFD_ROOT", str(checkpoint_root))
         patch.delenv("WORLDFOUNDRY_STUDIO_MODEL_REF", raising=False)
         patch.delenv("WORLDFOUNDRY_STUDIO_FIXED_MODEL_REF", raising=False)
-        yield {entry.model_id: entry for entry in catalog._canonical_runtime_entries()}
+        yield {entry.model_id: entry for entry in catalog.discovery._canonical_runtime_entries()}
 
 
 @pytest.mark.parametrize(
@@ -60,7 +60,7 @@ def test_single_model_lookup_preserves_canonical_contract(
     model_id: str,
     canonical_id: str,
 ) -> None:
-    monkeypatch.setattr(catalog, "discover_catalog", _unexpected_catalog_scan)
+    monkeypatch.setattr(catalog.discovery, "discover_catalog", _unexpected_catalog_scan)
 
     entry = catalog.find_entry(model_id)
 
@@ -74,10 +74,10 @@ def test_single_model_lookup_resolves_only_its_checkpoint(monkeypatch: pytest.Mo
         requested.append(names)
         return fallback
 
-    monkeypatch.setattr(catalog, "discover_catalog", _unexpected_catalog_scan)
-    monkeypatch.setattr(catalog, "_discover_ast_pipelines", lambda: ())
-    monkeypatch.setattr(catalog, "_checkpoint_model_ref", checkpoint_ref)
-    monkeypatch.setattr(catalog, "_t2v_turbo_base_ref", _unexpected_catalog_scan)
+    monkeypatch.setattr(catalog.discovery, "discover_catalog", _unexpected_catalog_scan)
+    monkeypatch.setattr(catalog.discovery, "_discover_ast_pipelines", lambda: ())
+    monkeypatch.setattr(catalog.resolve, "_checkpoint_model_ref", checkpoint_ref)
+    monkeypatch.setattr(catalog.params, "_t2v_turbo_base_ref", _unexpected_catalog_scan)
 
     entry = catalog.find_entry("easyanimate")
 
@@ -93,9 +93,9 @@ def test_single_model_lookup_resolves_only_its_checkpoint(monkeypatch: pytest.Mo
 
 
 def test_unregistered_canonical_lookup_does_not_discover_pipelines(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(catalog, "_discover_ast_pipelines", _unexpected_catalog_scan)
+    monkeypatch.setattr(catalog.discovery, "_discover_ast_pipelines", _unexpected_catalog_scan)
 
-    assert list(catalog._canonical_runtime_entries("not-a-registered-model")) == []
+    assert list(catalog.discovery._canonical_runtime_entries("not-a-registered-model")) == []
 
 
 @pytest.mark.parametrize(
@@ -107,7 +107,7 @@ def test_canonical_lookup_retains_explicit_checkpoint_override(
 ) -> None:
     checkpoint = str(tmp_path / "custom-checkpoint")
     monkeypatch.setenv(override, checkpoint)
-    monkeypatch.setattr(catalog, "discover_catalog", _unexpected_catalog_scan)
+    monkeypatch.setattr(catalog.discovery, "discover_catalog", _unexpected_catalog_scan)
 
     assert catalog.find_entry("easyanimate-i2v").default_model_ref == checkpoint
-    assert next(iter(catalog._canonical_runtime_entries("easyanimate_i2v"))).default_model_ref == checkpoint
+    assert next(iter(catalog.discovery._canonical_runtime_entries("easyanimate_i2v"))).default_model_ref == checkpoint

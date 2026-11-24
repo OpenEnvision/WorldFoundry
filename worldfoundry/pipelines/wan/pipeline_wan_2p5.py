@@ -1,16 +1,15 @@
 """Wan 2.5 hosted-API visual generation pipeline module."""
 
 import logging
-
-from ..pipeline_utils import PipelineABC
-from PIL import Image
-from typing import Optional, Dict, Any
 from http import HTTPStatus
+from typing import Any
+
+from PIL import Image
 
 from ...operators.wan_2p5_operator import Wan2p5Operator
 from ...synthesis.visual_generation.wan.wan_2p5_synthesis import Wan2p5Synthesis
 from ..api_runtime import load_api_pipeline_from_pretrained, resolve_api_key
-
+from ..pipeline_utils import PipelineABC
 
 _API_KEY_ENV = ("DASHSCOPE_API_KEY", "WAN_API_KEY", "ALIYUN_API_KEY")
 
@@ -18,26 +17,27 @@ logger = logging.getLogger(__name__)
 
 
 class Wan2p5Pipeline(PipelineABC):
+    """Wan2.5 hosted-API pipeline.
+
+    The operator preprocesses inputs before the synthesis model calls the API, keeping
+    preprocessing separate from inference.
     """
-    将输入通过 operator 处理后再传给模型进行推理，
-    实现数据预处理和模型推理的分离。
-    """
-    
+
     def __init__(
         self,
-        operator: Optional[Wan2p5Operator] = None,
-        synthesis_model: Optional[Wan2p5Synthesis] = None,
+        operator: Wan2p5Operator | None = None,
+        synthesis_model: Wan2p5Synthesis | None = None,
         endpoint: str = "https://dashscope.aliyuncs.com/api/v1",
         api_key: str = "your_api_key",
     ):
         """
-        初始化 Wan2p5Pipeline
-        
+        Initialize the Wan2.5 pipeline.
+
         Args:
-            operator: Wan2p5 operator 实例（如果为None则自动创建）
-            synthesis_model: Wan2p5 synthesis 模型实例（如果为None则自动创建）
-            endpoint: API基础URL
-            api_key: API密钥
+            operator: Optional Wan2.5 operator; ``api_init`` creates one.
+            synthesis_model: Optional Wan2.5 synthesis model; ``api_init`` creates one.
+            endpoint: API base URL.
+            api_key: API key; read from the environment when empty or a placeholder.
         """
         api_key = resolve_api_key(api_key, _API_KEY_ENV, "Wan2.5")
         self.endpoint = endpoint
@@ -49,9 +49,9 @@ class Wan2p5Pipeline(PipelineABC):
     def from_pretrained(
         cls,
         model_path: Any = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
-        model_id: Optional[str] = None,
+        model_id: str | None = None,
         **kwargs: Any,
     ) -> "Wan2p5Pipeline":
         """Build the API-only pipeline through the unified loader contract."""
@@ -72,141 +72,115 @@ class Wan2p5Pipeline(PipelineABC):
         endpoint: str = "https://dashscope.aliyuncs.com/api/v1",
         api_key: str = "your_api_key",
         logger=None,
-        **kwargs
-    ) -> 'Wan2p5Pipeline':
+        **kwargs,
+    ) -> "Wan2p5Pipeline":
         """
-        从配置加载完整的 pipeline
-        
+        Build the pipeline with its synthesis model and operator from API settings.
+
         Args:
-            endpoint: API基础URL
-            api_key: API密钥
-            logger: 日志记录器
-            **kwargs: 额外参数
-            
+            endpoint: API base URL.
+            api_key: API key; read from the environment when empty or a placeholder.
+            logger: Optional logger for progress messages.
+            **kwargs: Forwarded to ``Wan2p5Synthesis.api_init``.
+
         Returns:
-            Wan2p5Pipeline: 初始化的 pipeline 实例
+            Wan2p5Pipeline: The initialized pipeline.
         """
         if logger:
             logger.info(f"Loading Wan2p5 pipeline with endpoint: {endpoint}")
         api_key = resolve_api_key(api_key, _API_KEY_ENV, "Wan2.5")
-        
-        # 加载 synthesis 模型
+
         if logger:
             logger.info("Loading Wan2p5 synthesis model...")
-        
-        synthesis_model = Wan2p5Synthesis.api_init(
-            endpoint=endpoint,
-            api_key=api_key,
-            logger=logger,
-            **kwargs
-        )
-        
+
+        synthesis_model = Wan2p5Synthesis.api_init(endpoint=endpoint, api_key=api_key, logger=logger, **kwargs)
+
         if logger:
             logger.info("Initializing Wan2p5 operator...")
-        
+
         operator = Wan2p5Operator()
-        
-        pipeline = cls(
-            operator=operator,
-            synthesis_model=synthesis_model,
-            endpoint=endpoint,
-            api_key=api_key
-        )
-        
+
+        pipeline = cls(operator=operator, synthesis_model=synthesis_model, endpoint=endpoint, api_key=api_key)
+
         if logger:
             logger.info("Wan2p5 pipeline loaded successfully")
-        
+
         return pipeline
-    
-    def process(
-        self,
-        prompt: str,
-        images: Optional[Image.Image] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+
+    def process(self, prompt: str, images: Image.Image | None = None, **kwargs) -> dict[str, Any]:
         """
-        处理输入，通过 operator 预处理后传给 synthesis 模型
-        
+        Preprocess the prompt and optional reference image with the operator for the synthesis model.
+
         Args:
-            prompt: 文本提示词
-            images: 参考图像（可选）
-            **kwargs: 其他参数
-            
+            prompt: Text prompt.
+            images: Optional reference image.
+            **kwargs: Forwarded to ``Wan2p5Operator.process_perception``.
+
         Returns:
-            Dict 包含处理后的数据
+            Dict with ``prompt``, ``encoded_image`` and ``images``.
         """
         if self.operator is None:
             raise ValueError("Operator is not initialized")
 
-        processed_data:Dict[str, Any] = {}
+        processed_data: dict[str, Any] = {}
 
         self.operator.get_interaction(prompt)
-        processed_interaction = self.operator.process_interaction()  
-        processed_data['prompt'] = processed_interaction['processed_prompt']
-        
-        processed_perception = self.operator.process_perception(
-            images=images,
-            **kwargs
-        )
-        processed_data['encoded_image'] = processed_perception['encoded_image']
-        processed_data['images'] = processed_perception['images']
-        
+        processed_interaction = self.operator.process_interaction()
+        processed_data["prompt"] = processed_interaction["processed_prompt"]
+
+        processed_perception = self.operator.process_perception(images=images, **kwargs)
+        processed_data["encoded_image"] = processed_perception["encoded_image"]
+        processed_data["images"] = processed_perception["images"]
+
         return processed_data
-    
+
     def __call__(
         self,
         prompt: str,
-        images: Optional[Image.Image] = None,
+        images: Image.Image | None = None,
         task_type: str = "auto",  # "auto", "t2av", "i2av"
-        size: str = '832*480',
-        resolution: str = '480P',
+        size: str = "832*480",
+        resolution: str = "480P",
         duration: int = 10,
         negative_prompt: str = "",
         audio: bool = True,
         prompt_extend: bool = True,
         watermark: bool = False,
-        seed: Optional[int] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+        seed: int | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """
-        统一的调用接口，自动判断任务类型
-        
+        Generate a video, inferring the task type unless it is given.
+
         Args:
-            prompt: 文本提示词
-            images: 参考图像（可选），如果提供则使用 i2av，否则使用 t2av
-            task_type: 任务类型，"auto" 自动判断，"t2av" 文本到视频，"i2av" 图像到视频
-            size: t2av 任务的视频尺寸
-            resolution: i2av 任务的分辨率
-            duration: 视频时长（秒）
-            negative_prompt: 负面提示词
-            audio: 是否生成音频
-            prompt_extend: 是否扩展提示词
-            watermark: 是否添加水印
-            seed: 随机种子
-            **kwargs: 其他参数
-            
+            prompt: Text prompt.
+            images: Optional reference image; with ``task_type="auto"`` it selects i2av, otherwise t2av.
+            task_type: ``"auto"`` to infer the task, ``"t2av"`` for text-to-video, ``"i2av"`` for image-to-video.
+            size: Video size of t2av tasks.
+            resolution: Resolution of i2av tasks.
+            duration: Video duration in seconds.
+            audio: Whether to generate audio.
+            prompt_extend: Whether the service extends the prompt.
+            watermark: Whether to add a watermark.
+            seed: Random seed.
+            **kwargs: Forwarded to preprocessing and ``Wan2p5Synthesis.predict``.
+
         Returns:
-            Dict 包含生成的结果：
-                - response: API响应对象
-                - task_type: 实际使用的任务类型
-                - prompt: 使用的提示词
-                - video_url: 视频URL（如果API调用成功）
-                - task_id: 任务ID（如果API调用成功）
+            Dict with:
+                - response: API response object.
+                - task_type: The task type used.
+                - prompt: The prompt used.
+                - video_url: Video URL, or None unless the API call succeeded.
+                - task_id: Task ID, or None unless the API call succeeded.
         """
         if self.synthesis_model is None:
             raise ValueError("Synthesis model is not initialized")
-        
+
         if self.operator is None:
             raise ValueError("Operator is not initialized")
-        
-        # 使用 operator 预处理输入
-        processed_data = self.process(
-            prompt=prompt,
-            images=images,
-            **kwargs
-        )
-        
-        # 使用 synthesis 模型的 predict 方法进行推理
+
+        processed_data = self.process(prompt=prompt, images=images, **kwargs)
+
         result = self.synthesis_model.predict(
             processed_data=processed_data,
             task_type=task_type,
@@ -218,44 +192,42 @@ class Wan2p5Pipeline(PipelineABC):
             prompt_extend=prompt_extend,
             watermark=watermark,
             seed=seed,
-            **kwargs
+            **kwargs,
         )
 
-        # 提取视频信息（video_url 和 task_id）
         response = result.get("response")
         task_type = result.get("task_type")
-        
-        # 检查响应状态
-        if response and hasattr(response, 'status_code') and response.status_code == HTTPStatus.OK:
+
+        if response and hasattr(response, "status_code") and response.status_code == HTTPStatus.OK:
             logger.info("Wan2.5 API call succeeded with status code %s", response.status_code)
 
             video_url = None
             task_id = None
-            if hasattr(response, 'output') and response.output:
+            if hasattr(response, "output") and response.output:
                 output_data = response.output
-                video_url = output_data.get('video_url')
-                task_id = output_data.get('task_id')
-            
-            result['video_url'] = video_url
-            result['task_id'] = task_id
+                video_url = output_data.get("video_url")
+                task_id = output_data.get("task_id")
+
+            result["video_url"] = video_url
+            result["task_id"] = task_id
         else:
-            if response and hasattr(response, 'status_code'):
+            if response and hasattr(response, "status_code"):
                 logger.error(
                     "Wan2.5 API call failed with status code %s: %s",
                     response.status_code,
-                    getattr(response, 'message', ''),
+                    getattr(response, "message", ""),
                 )
             else:
                 logger.error("Wan2.5 API call failed without a usable response object")
-            result['video_url'] = None
-            result['task_id'] = None
-        
+            result["video_url"] = None
+            result["task_id"] = None
+
         return result
-    
-    def get_operator(self) -> Optional[Wan2p5Operator]:
-        """获取 operator 实例"""
+
+    def get_operator(self) -> Wan2p5Operator | None:
+        """Return the operator."""
         return self.operator
-    
-    def get_synthesis_model(self) -> Optional[Wan2p5Synthesis]:
-        """获取 synthesis 模型实例"""
+
+    def get_synthesis_model(self) -> Wan2p5Synthesis | None:
+        """Return the synthesis model."""
         return self.synthesis_model

@@ -85,9 +85,7 @@ def test_condition_warmup_counts_every_shared_layer_execution():
 
 def test_condition_warmup_rejects_unknown_spatial_container_layer():
     encoder = _tiny_encoder()
-    downsample = next(
-        module for module in encoder.downsamples if getattr(module, "mode", None) == "downsample2d"
-    )
+    downsample = next(module for module in encoder.downsamples if getattr(module, "mode", None) == "downsample2d")
     downsample.resample.add_module("unknown_temporal", torch.nn.Conv3d(1, 1, 3))
 
     with pytest.raises(ValueError, match=r"Conv3d at encoder\.downsamples\.\d+\.resample\.unknown_temporal"):
@@ -96,9 +94,7 @@ def test_condition_warmup_rejects_unknown_spatial_container_layer():
 
 def test_condition_warmup_rejects_modified_temporal_resampling():
     encoder = _tiny_encoder()
-    downsample = next(
-        module for module in encoder.downsamples if getattr(module, "mode", None) == "downsample3d"
-    )
+    downsample = next(module for module in encoder.downsamples if getattr(module, "mode", None) == "downsample3d")
     downsample.time_conv = CausalConv3d(2, 2, (5, 1, 1), stride=(2, 1, 1))
 
     with pytest.raises(ValueError, match="Resample"):
@@ -113,7 +109,9 @@ def test_condition_warmup_rejects_invalid_block_size(block_frames):
 
 @pytest.mark.parametrize("requested_blocks,expected_blocks", [(None, 11), ("2", 11), ("5", 11), ("12", 12)])
 def test_realtime_clamps_condition_prefix_to_proven_encoder_bound(
-    monkeypatch, requested_blocks, expected_blocks,
+    monkeypatch,
+    requested_blocks,
+    expected_blocks,
 ):
     if requested_blocks is None:
         monkeypatch.delenv("WORLDFOUNDRY_MATRIX_REALTIME_CONDITION_BLOCKS", raising=False)

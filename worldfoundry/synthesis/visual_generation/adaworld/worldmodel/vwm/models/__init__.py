@@ -1,2 +1,2 @@
-from .autoencoder import AutoencodingEngine
-from .diffusion import DiffusionEngine
+from .autoencoder import AutoencodingEngine as AutoencodingEngine
+from .diffusion import DiffusionEngine as DiffusionEngine

@@ -1,42 +1,24 @@
 import os
+import random
+import re
 import sys
-import torch.nn as nn
-from torch.utils.checkpoint import checkpoint, checkpoint_sequential
-import torch.nn.functional as F
+from collections.abc import Iterable
+
 import torch
 import torch.distributed as dist
-import re
-import math
-from collections.abc import Iterable
-from itertools import repeat
-from torchvision import transforms as T
-import random
+import torch.nn.functional as F
 from PIL import Image
+from torch.utils.checkpoint import checkpoint, checkpoint_sequential
+from torchvision import transforms as T
 
-
-def _ntuple(n):
-    def parse(x):
-        if isinstance(x, Iterable) and not isinstance(x, str):
-            return x
-        return tuple(repeat(x, n))
-    return parse
-
+from worldfoundry.core.nn.blocks.tuples import ntuple as _ntuple
 
 to_1tuple = _ntuple(1)
 to_2tuple = _ntuple(2)
 
-def set_grad_checkpoint(model, use_fp32_attention=False, gc_step=1):
-    assert isinstance(model, nn.Module)
-
-    def set_attr(module):
-        module.grad_checkpointing = True
-        module.fp32_attention = use_fp32_attention
-        module.grad_checkpointing_step = gc_step
-    model.apply(set_attr)
-
 
 def auto_grad_checkpoint(module, *args, **kwargs):
-    if getattr(module, 'grad_checkpointing', False):
+    if getattr(module, "grad_checkpointing", False):
         if isinstance(module, Iterable):
             gc_step = module[0].grad_checkpointing_step
             return checkpoint_sequential(module, gc_step, *args, **kwargs)
@@ -44,8 +26,10 @@ def auto_grad_checkpoint(module, *args, **kwargs):
             # torch.utils.checkpoint.checkpoint does NOT accept **kwargs in some torch versions.
             # We wrap the module call in a closure so checkpoint only sees positional args.
             if kwargs:
+
                 def _forward_with_kwargs(*inputs):
                     return module(*inputs, **kwargs)
+
                 try:
                     # Newer torch versions recommend setting this explicitly.
                     return checkpoint(_forward_with_kwargs, *args, use_reentrant=get_checkpoint_use_reentrant())
@@ -77,10 +61,9 @@ def get_checkpoint_use_reentrant() -> bool:
     return _CHECKPOINT_USE_REENTRANT
 
 
-def checkpoint_sequential(functions, step, input, *args, **kwargs):
-
+def checkpoint_sequential(functions, step, input, *args, **kwargs):  # noqa: F811 - Later definition replaces the earlier one, as upstream.
     # Hack for keyword-only parameter in a python 2.7-compliant way
-    preserve = kwargs.pop('preserve_rng_state', True)
+    preserve = kwargs.pop("preserve_rng_state", True)
     if kwargs:
         raise ValueError("Unexpected keyword arguments: " + ",".join(arg for arg in kwargs))
 
@@ -89,6 +72,7 @@ def checkpoint_sequential(functions, step, input, *args, **kwargs):
             for j in range(start, end + 1):
                 input = functions[j](input, *args)
             return input
+
         return forward
 
     if isinstance(functions, torch.nn.Sequential):
@@ -102,117 +86,6 @@ def checkpoint_sequential(functions, step, input, *args, **kwargs):
         input = checkpoint(run_function(start, end, functions), input, preserve_rng_state=preserve)
     return run_function(end + 1, len(functions) - 1, functions)(input)
 
-
-def window_partition(x, window_size):
-    """
-    Partition into non-overlapping windows with padding if needed.
-    Args:
-        x (tensor): input tokens with [B, H, W, C].
-        window_size (int): window size.
-
-    Returns:
-        windows: windows after partition with [B * num_windows, window_size, window_size, C].
-        (Hp, Wp): padded height and width before partition
-    """
-    B, H, W, C = x.shape
-
-    pad_h = (window_size - H % window_size) % window_size
-    pad_w = (window_size - W % window_size) % window_size
-    if pad_h > 0 or pad_w > 0:
-        x = F.pad(x, (0, 0, 0, pad_w, 0, pad_h))
-    Hp, Wp = H + pad_h, W + pad_w
-
-    x = x.view(B, Hp // window_size, window_size, Wp // window_size, window_size, C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
-    return windows, (Hp, Wp)
-
-
-def window_unpartition(windows, window_size, pad_hw, hw):
-    """
-    Window unpartition into original sequences and removing padding.
-    Args:
-        x (tensor): input tokens with [B * num_windows, window_size, window_size, C].
-        window_size (int): window size.
-        pad_hw (Tuple): padded height and width (Hp, Wp).
-        hw (Tuple): original height and width (H, W) before padding.
-
-    Returns:
-        x: unpartitioned sequences with [B, H, W, C].
-    """
-    Hp, Wp = pad_hw
-    H, W = hw
-    B = windows.shape[0] // (Hp * Wp // window_size // window_size)
-    x = windows.view(B, Hp // window_size, Wp // window_size, window_size, window_size, -1)
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, Hp, Wp, -1)
-
-    if Hp > H or Wp > W:
-        x = x[:, :H, :W, :].contiguous()
-    return x
-
-
-def get_rel_pos(q_size, k_size, rel_pos):
-    """
-    Get relative positional embeddings according to the relative positions of
-        query and key sizes.
-    Args:
-        q_size (int): size of query q.
-        k_size (int): size of key k.
-        rel_pos (Tensor): relative position embeddings (L, C).
-
-    Returns:
-        Extracted positional embeddings according to relative positions.
-    """
-    max_rel_dist = int(2 * max(q_size, k_size) - 1)
-    # Interpolate rel pos if needed.
-    if rel_pos.shape[0] != max_rel_dist:
-        # Interpolate rel pos.
-        rel_pos_resized = F.interpolate(
-            rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
-            size=max_rel_dist,
-            mode="linear",
-        )
-        rel_pos_resized = rel_pos_resized.reshape(-1, max_rel_dist).permute(1, 0)
-    else:
-        rel_pos_resized = rel_pos
-
-    # Scale the coords with short length if shapes for q and k are different.
-    q_coords = torch.arange(q_size)[:, None] * max(k_size / q_size, 1.0)
-    k_coords = torch.arange(k_size)[None, :] * max(q_size / k_size, 1.0)
-    relative_coords = (q_coords - k_coords) + (k_size - 1) * max(q_size / k_size, 1.0)
-
-    return rel_pos_resized[relative_coords.long()]
-
-
-def add_decomposed_rel_pos(attn, q, rel_pos_h, rel_pos_w, q_size, k_size):
-    """
-    Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
-    https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py   # noqa B950
-    Args:
-        attn (Tensor): attention map.
-        q (Tensor): query q in the attention layer with shape (B, q_h * q_w, C).
-        rel_pos_h (Tensor): relative position embeddings (Lh, C) for height axis.
-        rel_pos_w (Tensor): relative position embeddings (Lw, C) for width axis.
-        q_size (Tuple): spatial sequence size of query q with (q_h, q_w).
-        k_size (Tuple): spatial sequence size of key k with (k_h, k_w).
-
-    Returns:
-        attn (Tensor): attention map with added relative positional embeddings.
-    """
-    q_h, q_w = q_size
-    k_h, k_w = k_size
-    Rh = get_rel_pos(q_h, k_h, rel_pos_h)
-    Rw = get_rel_pos(q_w, k_w, rel_pos_w)
-
-    B, _, dim = q.shape
-    r_q = q.reshape(B, q_h, q_w, dim)
-    rel_h = torch.einsum("bhwc,hkc->bhwk", r_q, Rh)
-    rel_w = torch.einsum("bhwc,wkc->bhwk", r_q, Rw)
-
-    attn = (
-        attn.view(B, q_h, q_w, k_h, k_w) + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
-    ).view(B, q_h * q_w, k_h * k_w)
-
-    return attn
 
 def mean_flat(tensor):
     return tensor.mean(dim=list(range(1, tensor.ndim)))
@@ -235,11 +108,11 @@ def get_mask(batch, length, mask_ratio, device, mask_type=None, data_info=None, 
         - ids_keep: indices of tokens to keep
         - ids_restore: indices to restore the original order
     """
-    assert mask_type in ['random', 'fft', 'laplacian', 'group']
+    assert mask_type in ["random", "fft", "laplacian", "group"]
     mask = torch.ones([batch, length], device=device)
     len_keep = int(length * (1 - mask_ratio)) - extra_len
 
-    if mask_type == 'random' or mask_type == 'group':
+    if mask_type == "random" or mask_type == "group":
         noise = torch.rand(batch, length, device=device)  # noise in [0, 1]
         ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
         ids_restore = torch.argsort(ids_shuffle, dim=1)
@@ -247,31 +120,42 @@ def get_mask(batch, length, mask_ratio, device, mask_type=None, data_info=None, 
         ids_keep = ids_shuffle[:, :len_keep]
         ids_removed = ids_shuffle[:, len_keep:]
 
-    elif mask_type in ['fft', 'laplacian']:
-        if 'strength' in data_info:
-            strength = data_info['strength']
+    elif mask_type in ["fft", "laplacian"]:
+        if "strength" in data_info:
+            strength = data_info["strength"]
 
         else:
-            N = data_info['N'][0]
-            img = data_info['ori_img']
-            # 获取原图的尺寸信息
+            N = data_info["N"][0]
+            img = data_info["ori_img"]
             _, C, H, W = img.shape
-            if mask_type == 'fft':
-                # 对图片进行reshape，将其变为patch (3, H/N, N, W/N, N)
+            if mask_type == "fft":
+                # Split the image into N x N patches: (batch, C, H/N, N, W/N, N)
                 reshaped_image = img.reshape((batch, -1, H // N, N, W // N, N))
                 fft_image = torch.fft.fftn(reshaped_image, dim=(3, 5))
-                # 取绝对值并求和获取频率强度
-                strength = torch.sum(torch.abs(fft_image), dim=(1, 3, 5)).reshape((batch, -1,))
-            elif type == 'laplacian':
-                laplacian_kernel = torch.tensor([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]], dtype=torch.float32).reshape(1, 1, 3, 3)
+                # Frequency strength per patch: sum of FFT magnitudes
+                strength = torch.sum(torch.abs(fft_image), dim=(1, 3, 5)).reshape(
+                    (
+                        batch,
+                        -1,
+                    )
+                )
+            elif type == "laplacian":  # noqa: E721 - Upstream compares against the builtin `type` object.
+                laplacian_kernel = torch.tensor([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]], dtype=torch.float32).reshape(
+                    1, 1, 3, 3
+                )
                 laplacian_kernel = laplacian_kernel.repeat(C, 1, 1, 1)
-                # 对图片进行reshape，将其变为patch (3, H/N, N, W/N, N)
+                # Split the image into N x N patches: (-1, C, N, N)
                 reshaped_image = img.reshape(-1, C, H // N, N, W // N, N).permute(0, 2, 4, 1, 3, 5).reshape(-1, C, N, N)
                 laplacian_response = F.conv2d(reshaped_image, laplacian_kernel, padding=1, groups=C)
-                strength = laplacian_response.sum(dim=[1, 2, 3]).reshape((batch, -1,))
+                strength = laplacian_response.sum(dim=[1, 2, 3]).reshape(
+                    (
+                        batch,
+                        -1,
+                    )
+                )
 
-        # 对频率强度进行归一化，然后使用torch.multinomial进行采样
-        probabilities = strength / (strength.max(dim=1)[0][:, None]+1e-5)
+        # Sample the token order with probabilities proportional to the normalized strength.
+        probabilities = strength / (strength.max(dim=1)[0][:, None] + 1e-5)
         ids_shuffle = torch.multinomial(probabilities.clip(1e-5, 1), length, replacement=False)
         ids_keep = ids_shuffle[:, :len_keep]
         ids_restore = torch.argsort(ids_shuffle, dim=1)
@@ -280,10 +164,7 @@ def get_mask(batch, length, mask_ratio, device, mask_type=None, data_info=None, 
     mask[:, :len_keep] = 0
     mask = torch.gather(mask, dim=1, index=ids_restore)
 
-    return {'mask': mask,
-            'ids_keep': ids_keep,
-            'ids_restore': ids_restore,
-            'ids_removed': ids_removed}
+    return {"mask": mask, "ids_keep": ids_keep, "ids_restore": ids_restore, "ids_removed": ids_removed}
 
 
 def mask_out_token(x, ids_keep, ids_removed=None):
@@ -342,34 +223,36 @@ def unmask_tokens(x, ids_restore, mask_token):
 # Parse 'None' to None and others to float value
 def parse_float_none(s):
     assert isinstance(s, str)
-    return None if s == 'None' else float(s)
+    return None if s == "None" else float(s)
 
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Parse a comma separated list of numbers or ranges and return a list of ints.
 # Example: '1,2,5-10' returns [1, 2, 5, 6, 7, 8, 9, 10]
 
+
 def parse_int_list(s):
-    if isinstance(s, list): return s
+    if isinstance(s, list):
+        return s
     ranges = []
-    range_re = re.compile(r'^(\d+)-(\d+)$')
-    for p in s.split(','):
+    range_re = re.compile(r"^(\d+)-(\d+)$")
+    for p in s.split(","):
         m = range_re.match(p)
         if m:
-            ranges.extend(range(int(m.group(1)), int(m.group(2))+1))
+            ranges.extend(range(int(m.group(1)), int(m.group(2)) + 1))
         else:
             ranges.append(int(p))
     return ranges
 
 
 def init_processes(fn, args):
-    """ Initialize the distributed environment. """
-    os.environ['MASTER_ADDR'] = args.master_address
-    os.environ['MASTER_PORT'] = str(random.randint(2000, 6000))
-    print(f'MASTER_ADDR = {os.environ["MASTER_ADDR"]}')
-    print(f'MASTER_PORT = {os.environ["MASTER_PORT"]}')
+    """Initialize the distributed environment."""
+    os.environ["MASTER_ADDR"] = args.master_address
+    os.environ["MASTER_PORT"] = str(random.randint(2000, 6000))
+    print(f"MASTER_ADDR = {os.environ['MASTER_ADDR']}")
+    print(f"MASTER_PORT = {os.environ['MASTER_PORT']}")
     torch.cuda.set_device(args.local_rank)
-    dist.init_process_group(backend='nccl', init_method='env://', rank=args.global_rank, world_size=args.global_size)
+    dist.init_process_group(backend="nccl", init_method="env://", rank=args.global_rank, world_size=args.global_size)
     fn(args)
     if args.global_size > 1:
         cleanup()
@@ -393,9 +276,9 @@ def cleanup():
     dist.destroy_process_group()
 
 
-#----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # logging info.
-class Logger(object):
+class Logger:
     """
     Redirect stderr to stdout, optionally print stdout to a file,
     and optionally force flushing on both stdout and the file.
@@ -405,7 +288,7 @@ class Logger(object):
         self.file = None
 
         if file_name is not None:
-            self.file = open(file_name, file_mode)
+            self.file = open(file_name, file_mode)  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
 
         self.should_flush = should_flush
         self.stdout = sys.stdout
@@ -422,7 +305,7 @@ class Logger(object):
 
     def write(self, text):
         """Write text to stdout (and a file) and optionally flush."""
-        if len(text) == 0: # workaround for a bug in VSCode debugger: sys.stdout.write(''); sys.stdout.flush() => crash
+        if len(text) == 0:  # workaround for a bug in VSCode debugger: sys.stdout.write(''); sys.stdout.flush() => crash
             return
 
         if self.file is not None:
@@ -471,7 +354,7 @@ class StackedRandomGenerator:
         return torch.stack([torch.randint(*args, size=size[1:], generator=gen, **kwargs) for gen in self.generators])
 
 
-def prepare_prompt_ar(prompt, ratios, device='cpu', show=True):
+def prepare_prompt_ar(prompt, ratios, device="cpu", show=True):
     # get aspect_ratio or ar
     aspect_ratios = re.findall(r"--aspect_ratio\s+(\d+:\d+)", prompt)
     ars = re.findall(r"--ar\s+(\d+:\d+)", prompt)
@@ -480,21 +363,29 @@ def prepare_prompt_ar(prompt, ratios, device='cpu', show=True):
         print("aspect_ratios:", aspect_ratios, "ars:", ars, "hws:", custom_hw)
     prompt_clean = prompt.split("--aspect_ratio")[0].split("--ar")[0].split("--hw")[0]
     if len(aspect_ratios) + len(ars) + len(custom_hw) == 0 and show:
-        print("Wrong prompt format. Set to default ar: 1. change your prompt into format '--ar h:w or --hw h:w' for correct generating")
+        print(
+            "Wrong prompt format. Set to default ar: 1. change your prompt into format '--ar h:w or --hw h:w' for correct generating"
+        )
     if len(aspect_ratios) != 0:
-        ar = float(aspect_ratios[0].split(':')[0]) / float(aspect_ratios[0].split(':')[1])
+        ar = float(aspect_ratios[0].split(":")[0]) / float(aspect_ratios[0].split(":")[1])
     elif len(ars) != 0:
-        ar = float(ars[0].split(':')[0]) / float(ars[0].split(':')[1])
+        ar = float(ars[0].split(":")[0]) / float(ars[0].split(":")[1])
     else:
-        ar = 1.
+        ar = 1.0
     closest_ratio = min(ratios.keys(), key=lambda ratio: abs(float(ratio) - ar))
     if len(custom_hw) != 0:
-        custom_hw = [float(custom_hw[0].split(':')[0]), float(custom_hw[0].split(':')[1])]
+        custom_hw = [float(custom_hw[0].split(":")[0]), float(custom_hw[0].split(":")[1])]
     else:
         custom_hw = ratios[closest_ratio]
     default_hw = ratios[closest_ratio]
-    prompt_show = f'prompt: {prompt_clean.strip()}\nSize: --ar {closest_ratio}, --bin hw {ratios[closest_ratio]}, --custom hw {custom_hw}'
-    return prompt_clean, prompt_show, torch.tensor(default_hw, device=device)[None], torch.tensor([float(closest_ratio)], device=device)[None], torch.tensor(custom_hw, device=device)[None]
+    prompt_show = f"prompt: {prompt_clean.strip()}\nSize: --ar {closest_ratio}, --bin hw {ratios[closest_ratio]}, --custom hw {custom_hw}"
+    return (
+        prompt_clean,
+        prompt_show,
+        torch.tensor(default_hw, device=device)[None],
+        torch.tensor([float(closest_ratio)], device=device)[None],
+        torch.tensor(custom_hw, device=device)[None],
+    )
 
 
 def resize_and_crop_tensor(samples: torch.Tensor, new_width: int, new_height: int):
@@ -506,10 +397,7 @@ def resize_and_crop_tensor(samples: torch.Tensor, new_width: int, new_height: in
         resized_width = int(orig_hw[1] * ratio)
         resized_height = int(orig_hw[0] * ratio)
 
-        transform = T.Compose([
-            T.Resize((resized_height, resized_width)),
-            T.CenterCrop(custom_hw.tolist())
-        ])
+        transform = T.Compose([T.Resize((resized_height, resized_width)), T.CenterCrop(custom_hw.tolist())])
         return transform(samples)
     else:
         return samples
@@ -518,21 +406,20 @@ def resize_and_crop_tensor(samples: torch.Tensor, new_width: int, new_height: in
 def resize_and_crop_img(img: Image, new_width, new_height):
     orig_width, orig_height = img.size
 
-    ratio = max(new_width/orig_width, new_height/orig_height)
+    ratio = max(new_width / orig_width, new_height / orig_height)
     resized_width = int(orig_width * ratio)
     resized_height = int(orig_height * ratio)
 
     img = img.resize((resized_width, resized_height), Image.LANCZOS)
 
-    left = (resized_width - new_width)/2
-    top = (resized_height - new_height)/2
-    right = (resized_width + new_width)/2
-    bottom = (resized_height + new_height)/2
+    left = (resized_width - new_width) / 2
+    top = (resized_height - new_height) / 2
+    right = (resized_width + new_width) / 2
+    bottom = (resized_height + new_height) / 2
 
     img = img.crop((left, top, right, bottom))
 
     return img
-
 
 
 def mask_feature(emb, mask):

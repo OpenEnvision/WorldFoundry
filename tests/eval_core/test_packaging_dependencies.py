@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,9 +13,9 @@ from packaging.utils import canonicalize_name
 # check_release_worktree, check_sdist_hygiene no longer exist in the repo).
 # Only the packaging-metadata contract tests below remain.
 
-try:
+if sys.version_info >= (3, 11):
     import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10 only.
+else:  # pragma: no cover - exercised on Python 3.10 only.
     tomllib = pytest.importorskip("tomli")
 
 
@@ -58,7 +59,7 @@ def test_lint_tooling_uses_one_exact_ruff_version() -> None:
 
     assert "ruff==0.12.7" in payload["project"]["optional-dependencies"]["dev"]
     assert "ruff==0.12.7" in payload["dependency-groups"]["lint"]
-    assert 'python -m pip install PyYAML "ruff==0.12.7"' in workflow
+    assert 'python -m pip install -e . "ruff==0.12.7"' in workflow
     assert "pytest>=8" in payload["project"]["optional-dependencies"]["dev"]
 
 
@@ -110,9 +111,9 @@ def test_studio_static_assets_are_packaged() -> None:
 
     assert "assets/**/*" in package_data["worldfoundry.studio"]
     assert (REPO_ROOT / "worldfoundry/studio/assets").is_dir()
-    assert "ui/*.html" in package_data["worldfoundry.studio"]
+    assert (REPO_ROOT / "worldfoundry/studio/assets/web/workspace.html").is_file()
     assert "assets/vendor/**/*" in excluded_package_data["*"]
-    assert (REPO_ROOT / "worldfoundry/studio/ui/vendor_assets.py").is_file()
+    assert (REPO_ROOT / "worldfoundry/studio/visualization/vendor_assets.py").is_file()
 
 
 def test_unified_requirements_install_data_gpu_probe_dependencies() -> None:
@@ -120,10 +121,7 @@ def test_unified_requirements_install_data_gpu_probe_dependencies() -> None:
     install_script = (REPO_ROOT / "scripts" / "setup" / "conda_install.sh").read_text(encoding="utf-8")
 
     assert "build" in requirements
-    assert (
-        "-e .[tui,optimized_core,video,hf,api,ui,metrics,studio_pointcloud,studio_rerun]"
-        in requirements
-    )
+    assert "-e .[tui,optimized_core,video,hf,api,ui,metrics,studio_pointcloud,studio_rerun]" in requirements
     assert "stable-worldmodel[train]" in requirements
     for package in ("h5py", "numpy", "opencv-python", "pillow", "pyarrow"):
         assert package in requirements
@@ -151,7 +149,6 @@ def test_sdist_manifest_excludes_generated_downloaded_and_large_artifacts() -> N
     # data/models/runtime (+ environments/), and the cosmos vendored trees are
     # covered by the global binary/notebook excludes instead of per-path prunes.
     required_snippets = (
-        "include worldfoundry/data/benchmarks/*.md",
         "recursive-include worldfoundry/data/benchmarks/catalog *.yaml",
         "recursive-include worldfoundry/data/benchmarks/runtime_profiles *.yaml",
         "recursive-include worldfoundry/data/models/catalog *.yaml",
@@ -167,10 +164,6 @@ def test_sdist_manifest_excludes_generated_downloaded_and_large_artifacts() -> N
         "prune worldfoundry/data/test_cases",
         "prune docs/fumadocs/.next",
         "prune docs/fumadocs/node_modules",
-        "prune worldfoundry/synthesis/visual_generation/pandora/pandora_runtime/ChatUniVi/eval",
-        "prune worldfoundry/synthesis/visual_generation/pandora/pandora_runtime/ChatUniVi/train",
-        "prune worldfoundry/synthesis/visual_generation/dynamicrafter_pandora/DynamiCrafter/assets",
-        "prune worldfoundry/synthesis/visual_generation/dynamicrafter_pandora/DynamiCrafter/prompts",
         "global-exclude *.py[cod]",
     )
     for snippet in required_snippets:

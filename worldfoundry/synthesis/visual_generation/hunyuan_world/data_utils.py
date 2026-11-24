@@ -12,7 +12,9 @@ def get_closest_ratio(height: float, width: float, ratios: list, buckets: list) 
     return closest_size, closest_ratio
 
 
-def generate_crop_size_list(base_size: int = 256, patch_size: int = 16, max_ratio: float = 4.0) -> list[tuple[int, int]]:
+def generate_crop_size_list(
+    base_size: int = 256, patch_size: int = 16, max_ratio: float = 4.0
+) -> list[tuple[int, int]]:
     num_patches = round((base_size / patch_size) ** 2)
     assert max_ratio >= 1.0
     crop_size_list = []

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,11 +13,8 @@
 # limitations under the License.
 """DINOv3 model configuration"""
 
-from typing import Optional
-
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -128,9 +124,9 @@ class DINOv3ViTConfig(PretrainedConfig):
         use_gated_mlp: bool = False,
         num_register_tokens: int = 0,
         # train augs
-        pos_embed_shift: Optional[float] = None,
-        pos_embed_jitter: Optional[float] = None,
-        pos_embed_rescale: Optional[float] = 2.0,
+        pos_embed_shift: float | None = None,
+        pos_embed_jitter: float | None = None,
+        pos_embed_rescale: float | None = 2.0,
         **kwargs,
     ):
         super().__init__(**kwargs)

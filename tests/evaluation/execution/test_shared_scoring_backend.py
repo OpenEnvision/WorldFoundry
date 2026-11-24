@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 import torch
 
-from worldfoundry.evaluation.tasks.execution.runners._scorers import score as scoring
+from worldfoundry.evals.tasks.execution.runners._scorers import score as scoring
 
 pytestmark = pytest.mark.unit
 
@@ -199,7 +199,7 @@ def test_images_and_direct_video_do_not_allocate_temporary_files(monkeypatch: py
 def test_families_use_one_score_base(
     monkeypatch: pytest.MonkeyPatch, family: str, model: str, registry: str, getter: str, lister: str
 ) -> None:
-    prefix = "worldfoundry.evaluation.tasks.execution.runners._scorers."
+    prefix = "worldfoundry.evals.tasks.execution.runners._scorers."
     registry_name = registry if registry.startswith("worldfoundry.") else prefix + registry
     backend = _Backend()
     module = ModuleType(registry_name)

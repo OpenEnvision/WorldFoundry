@@ -27,8 +27,6 @@ which is why :meth:`append` verifies it.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
 import torch
 
 from worldfoundry.core.attention.cache.kv_cache_policy import (
@@ -75,7 +73,7 @@ class PolicyKVCache(KVCache):
         """Chunks still resident, oldest first."""
         return tuple(self._blocks)
 
-    def _clamp(self, block_range: Optional[int]) -> Optional[int]:
+    def _clamp(self, block_range: int | None) -> int | None:
         """Reinterpret a cursor-valued ``block_range`` against retained chunks."""
         if block_range is None:
             return None
@@ -85,7 +83,7 @@ class PolicyKVCache(KVCache):
 
     # ── Overridden cache surface ─────────────────────────────
 
-    def append(self, k: torch.Tensor, v: torch.Tensor) -> Tuple[int, int]:
+    def append(self, k: torch.Tensor, v: torch.Tensor) -> tuple[int, int]:
         """Commit a chunk, then apply the policy.
 
         Returns the span the chunk occupied *before* eviction, matching the
@@ -142,11 +140,11 @@ class PolicyKVCache(KVCache):
         self._cum_ends = ends
         self.cur = cumulative
 
-    def get(self, block_range: Optional[int] = None):
+    def get(self, block_range: int | None = None):
         """Return a retained prefix, reinterpreting a cursor-valued range."""
         return super().get(self._clamp(block_range))
 
-    def get_prefix_end(self, block_range: Optional[int] = None) -> int:
+    def get_prefix_end(self, block_range: int | None = None) -> int:
         """Return the retained prefix end for a cursor-valued range."""
         return super().get_prefix_end(self._clamp(block_range))
 

@@ -1,24 +1,50 @@
 ---
 title: Metrics
-description: In-tree metric registry and distribution/perceptual compute APIs.
+description: In-tree metric registry and categorized distribution, perceptual, and scorer compute APIs.
 ---
 
 import MetricsSetup from '../../../../mdx/partials/metrics-usage-setup.mdx';
 
-WorldFoundry ships an in-tree metric layer — a registry of scorers and distribution/perceptual compute routines that runners invoke through a stable contract. Benchmarks decide *what* to measure on *which* data; metrics decide *how* to turn predictions into numbers. Each entry declares inputs, optional checkpoint dependencies, and output shape; runners reference metric IDs and the registry resolves aliases, validates availability, and routes to the right `compute_*`. This keeps model code out of scoring while making scoring reproducible across machines. This hub documents what the repository actually implements — it is not a survey of every published score.
+WorldFoundry ships an in-tree metric layer — a registry of categorized compute routines and multimodal scorers that runners invoke through a stable contract. Benchmarks decide *what* to measure on *which* data; metrics decide *how* to turn predictions into numbers. Each entry declares inputs, optional checkpoint dependencies, and output shape; runners reference metric IDs and the registry resolves aliases, validates availability, and routes to the right `compute_*`. This keeps model code out of scoring while making scoring reproducible across machines. This hub documents what the repository actually implements — it is not a survey of every published score.
 
-The in-tree catalog spans four families: **scorers & quality** (CLIP, VQA, ITM, face, art, S2V judges), **distribution** (FID, IS, KID, FVD, JEDi, CMMD, Clean-FID), **perceptual pairwise** (LPIPS, SSIM, DINO, mask, layout), and **editing & layout** (SemSR, IRS, CAS, manipulation). Metrics that need pretrained backbones declare those dependencies explicitly — missing checkpoints fail loudly, never silently substitute a proxy. A fifth page, [Registry & reference](/docs/evaluation/metrics/reference), covers discovery (`worldfoundry-eval metric list`), parameterized ids, checkpoint staging, and package layout. For benchmark-specific evaluator assets and commands, see [Benchmark Hub](/docs/evaluation/benchmark-hub); individual pages call out approximations and cases where official scripts must be used instead of the generic compute API.
+The in-tree catalog is organized into three compute families mirroring `worldfoundry/evals/tasks/metrics/{distribution,perceptual,scorer}/`: **scorers** (CLIP, VQA, ITM, LAION aesthetic, FaceScore, ArtScore, OpenS2V, editing/alignment), **distribution** (FID, IS, KID, CMMD, Clean-FID, diversity/coverage, FVD, FVMD, JEDi), and **perceptual** (LPIPS, SSIM, MS-SSIM, PSNR, DINO, DreamSim, FSIM, CPBD, IRS, masks, detection, layout). Metrics that need pretrained backbones declare those dependencies explicitly — missing checkpoints fail loudly, never silently substitute a proxy. [Registry & reference](/docs/evaluation/metrics/reference) covers discovery (`wf metric list`), parameterized ids, checkpoint staging, and package layout. For benchmark-specific evaluator assets and commands, see [Benchmark Hub](/docs/evaluation/benchmark-hub); individual pages call out approximations and cases where official scripts must be used instead of the generic compute API.
 
 ## Getting started
 
 <MetricsSetup />
 
+## Built-in existing-results metrics
+
+These metrics score an existing `GenerationResult` JSON/JSONL file with `wf evaluate` and load no model checkpoint.
+
+| Metric | Value per result |
+| --- | --- |
+| `artifact_count` | Number of output artifacts. |
+| `required_artifacts_present` | `1` when every `--required-artifact` name is present, otherwise `0`. |
+| `has_artifact:<name>` | `1` when the named artifact is present, otherwise `0`. |
+| `numeric` | All numeric metrics, scores, and timings recorded on the result. |
+| `numeric:<name>` | One named numeric value recorded on the result, such as `numeric:reward`. |
+
+```bash
+wf evaluate \
+  --mode existing-results \
+  --results-path runs/results.jsonl \
+  --output-dir runs/eval/builtin \
+  --required-artifact video \
+  --metric artifact_count \
+  --metric required_artifacts_present \
+  --metric has_artifact:video \
+  --metric numeric:reward \
+  --json
+```
+
+The scorecard JSON is written under `--output-dir`.
+
 ## Pages
 
-- [Scorers & quality](/docs/evaluation/metrics/scorers) — CLIPScore, VQAScore, ITMScore, FaceScore, ArtScore, OpenS2V reward metrics.
-- [Distribution](/docs/evaluation/metrics/distribution) — FID, IS, KID, FVD, JEDi, CMMD, Clean-FID, and feature-array metrics.
-- [Perceptual pairwise](/docs/evaluation/metrics/perceptual) — LPIPS, SSIM, DINO similarity, mask accuracy, layout quality.
-- [Editing & layout](/docs/evaluation/metrics/editing) — SemSR, IRS, CAS, manipulation direction, object-wise consistency.
+- [Scorers](/docs/evaluation/metrics/scorers) — CLIPScore, VQAScore, ITMScore, LAION aesthetic, FaceScore, ArtScore, OpenS2V, and editing/alignment scorers (`family=scorer`).
+- [Distribution](/docs/evaluation/metrics/distribution) — FID, IS, KID, CMMD, Clean-FID, diversity/coverage, conditional distance, FVD, FVMD, and JEDi (`family=distribution`).
+- [Perceptual](/docs/evaluation/metrics/perceptual) — LPIPS, SSIM, MS-SSIM, PSNR, DINO similarity, DreamSim, FSIM, CPBD, IRS, mask accuracy, object detection, and layout (`family=perceptual`).
 - [Registry & reference](/docs/evaluation/metrics/reference) — `MetricRegistry`, registered-metric tables, CLI surface, checkpoints, architecture.
 
 ## Related pages

@@ -24,8 +24,8 @@ base_model_dependency_preflight:
   - CLIP ViT-B/32 is resolved through the shared base-model asset location or an explicit model path.
 required_assets:
   in_tree_runtime_paths:
-  - worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
-  - worldfoundry/evaluation/tasks/execution/runners/evalcrafter/evalcrafter_raw_metrics.py
+  - worldfoundry/evals/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
+  - worldfoundry/evals/tasks/execution/runners/evalcrafter/evalcrafter_raw_metrics.py
   local_dataset_paths:
   - EvalCrafter_T2V_Dataset
   task_yaml: worldfoundry/data/benchmarks/tasks/external/evalcrafter.yaml
@@ -49,20 +49,20 @@ required_packages:
 - transformers
 required_paths:
 - id: official_runner_script
-  path: worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
+  path: worldfoundry/evals/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
 - id: raw_metric_adapter
-  path: worldfoundry/evaluation/tasks/execution/runners/evalcrafter/evalcrafter_raw_metrics.py
+  path: worldfoundry/evals/tasks/execution/runners/evalcrafter/evalcrafter_raw_metrics.py
 - id: evalcrafter_prompt_suite
   path: worldfoundry/data/benchmarks/assets/evalcrafter/prompt700.txt
 - id: task_yaml
   path: worldfoundry/data/benchmarks/tasks/external/evalcrafter.yaml
 preflight_command: >-
   PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile evalcrafter --manifest
+  worldfoundry.evals.tasks.execution.orchestration.runtime_preflight --profile evalcrafter --manifest
   worldfoundry/data/benchmarks/runtime_profiles/official/evalcrafter.yaml --output-dir
   tmp/worldfoundry_preflight/evalcrafter --json
 validation_command:
-- worldfoundry-eval
+- wf
 - zoo
 - benchmark-run
 - --benchmark-id

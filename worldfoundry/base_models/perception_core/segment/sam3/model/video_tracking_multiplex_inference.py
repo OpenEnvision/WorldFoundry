@@ -1,21 +1,37 @@
-"""Module for base_models -> perception_core -> segment -> sam3 -> model -> video_tracking_multiplex_inference.py functionality."""
-
 import logging
 from collections import OrderedDict
+from collections.abc import Iterable
 from copy import deepcopy
-from typing import Iterable, Optional
 
 import numpy as np
 import torch
-from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import NestedTensor
-from worldfoundry.base_models.perception_core.segment.sam3.model.io_utils import load_video_frames
-from worldfoundry.base_models.perception_core.segment.sam3.model.multiplex_utils import MultiplexState
-from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_tracker_utils import fill_holes_in_mask_scores
+
+# isort: split
+from worldfoundry.base_models.perception_core.segment.sam3.model.data_misc import (
+    NestedTensor,
+)
+
+# isort: split
+from worldfoundry.base_models.perception_core.segment.sam3.model.io_utils import (
+    load_video_frames,
+)
+from worldfoundry.base_models.perception_core.segment.sam3.model.multiplex_utils import (
+    MultiplexState,
+)
+from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_tracker_utils import (
+    fill_holes_in_mask_scores,
+)
+
+# isort: split
 from worldfoundry.base_models.perception_core.segment.sam3.model.video_tracking_multiplex import (
-    concat_points,
     NO_OBJ_SCORE,
     VideoTrackingDynamicMultiplex,
 )
+from worldfoundry.base_models.perception_core.segment.sam_components.utils import (
+    concat_points,
+)
+
+# isort: split
 from tqdm import tqdm
 
 
@@ -47,16 +63,6 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         non_overlap_masks_for_output=True,
         **kwargs,
     ):
-        """Init.
-
-        Args:
-            clear_non_cond_mem_around_input: The clear non cond mem around input.
-            clear_non_cond_mem_for_multi_obj: The clear non cond mem for multi obj.
-            fill_hole_area: The fill hole area.
-            always_start_from_first_ann_frame: The always start from first ann frame.
-            max_point_num_in_prompt_enc: The max point num in prompt enc.
-            non_overlap_masks_for_output: The non overlap masks for output.
-        """
         super().__init__(**kwargs)
 
         self.clear_non_cond_mem_around_input = clear_non_cond_mem_around_input
@@ -168,9 +174,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         if obj_idx is not None:
             return obj_idx
 
-        if (
-            self.is_dynamic_model or not inference_state["tracking_has_started"]
-        ) and not error_if_new:
+        if (self.is_dynamic_model or not inference_state["tracking_has_started"]) and not error_if_new:
             # get the next object slot
             obj_idx = len(inference_state["obj_id_to_idx"])
             inference_state["obj_id_to_idx"][obj_id] = obj_idx
@@ -190,8 +194,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             return obj_idx
         else:
             raise RuntimeError(
-                f"Cannot add new object id {obj_id}. "
-                f"All existing object ids: {inference_state['obj_ids']}."
+                f"Cannot add new object id {obj_id}. All existing object ids: {inference_state['obj_ids']}."
             )
 
     def _obj_idx_to_id(self, inference_state, obj_idx):
@@ -231,9 +234,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
                 for f_idx, source_frame_out in source_outputs.items():
                     # Check if this frame has valid data for this object
-                    has_valid_data = (
-                        source_frame_out["pred_masks"].shape[0] >= obj_idx_in_source + 1
-                    )
+                    has_valid_data = source_frame_out["pred_masks"].shape[0] >= obj_idx_in_source + 1
 
                     if has_valid_data:
                         # Create singleton frame output by slicing
@@ -241,9 +242,9 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                             "pred_masks": source_frame_out["pred_masks"][
                                 obj_idx_in_source : obj_idx_in_source + 1
                             ].clone(),
-                            "object_score_logits": source_frame_out[
-                                "object_score_logits"
-                            ][obj_idx_in_source : obj_idx_in_source + 1].clone(),
+                            "object_score_logits": source_frame_out["object_score_logits"][
+                                obj_idx_in_source : obj_idx_in_source + 1
+                            ].clone(),
                             # image_features and image_pos_enc remain shared (not in multiplex space)
                             "image_features": source_frame_out.get("image_features"),
                             "image_pos_enc": source_frame_out.get("image_pos_enc"),
@@ -262,9 +263,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                     and maskmem_features.shape[1] == expected_multiplex
                                 ):
                                     try:
-                                        demuxed_features = multiplex_state.demux(
-                                            maskmem_features
-                                        )
+                                        demuxed_features = multiplex_state.demux(maskmem_features)
                                     except AssertionError as exc:
                                         logging.warning(
                                             "[EXTRACT] demux failed for maskmem_features shape %s: %s",
@@ -295,9 +294,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                     )
                                     maskmem_features = None
                             else:
-                                maskmem_features = maskmem_features[
-                                    obj_idx_in_source : obj_idx_in_source + 1
-                                ].clone()
+                                maskmem_features = maskmem_features[obj_idx_in_source : obj_idx_in_source + 1].clone()
                         singleton_frame_out["maskmem_features"] = maskmem_features
 
                         # Handle maskmem_pos_enc similarly, level by level
@@ -317,9 +314,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                         and level_enc.shape[1] == expected_multiplex
                                     ):
                                         try:
-                                            demuxed_level = multiplex_state.demux(
-                                                level_enc
-                                            )
+                                            demuxed_level = multiplex_state.demux(level_enc)
                                         except AssertionError as exc:
                                             logging.warning(
                                                 "[EXTRACT] demux failed for maskmem_pos_enc level shape %s: %s",
@@ -329,19 +324,11 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                             demuxed_level = None
                                         if demuxed_level is not None:
                                             remapped_pos_enc.append(
-                                                demuxed_level[
-                                                    obj_idx_in_source : obj_idx_in_source
-                                                    + 1
-                                                ].clone()
+                                                demuxed_level[obj_idx_in_source : obj_idx_in_source + 1].clone()
                                             )
-                                        elif (
-                                            level_enc.shape[0] >= obj_idx_in_source + 1
-                                        ):
+                                        elif level_enc.shape[0] >= obj_idx_in_source + 1:
                                             remapped_pos_enc.append(
-                                                level_enc[
-                                                    obj_idx_in_source : obj_idx_in_source
-                                                    + 1
-                                                ].clone()
+                                                level_enc[obj_idx_in_source : obj_idx_in_source + 1].clone()
                                             )
                                         else:
                                             logging.warning(
@@ -351,10 +338,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                             remapped_pos_enc.append(None)
                                     elif level_enc.shape[0] >= obj_idx_in_source + 1:
                                         remapped_pos_enc.append(
-                                            level_enc[
-                                                obj_idx_in_source : obj_idx_in_source
-                                                + 1
-                                            ].clone()
+                                            level_enc[obj_idx_in_source : obj_idx_in_source + 1].clone()
                                         )
                                     else:
                                         logging.warning(
@@ -364,24 +348,17 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                         remapped_pos_enc.append(None)
                                 else:
                                     remapped_pos_enc.append(
-                                        level_enc[
-                                            obj_idx_in_source : obj_idx_in_source + 1
-                                        ].clone()
+                                        level_enc[obj_idx_in_source : obj_idx_in_source + 1].clone()
                                     )
                             maskmem_pos_enc = remapped_pos_enc
                         singleton_frame_out["maskmem_pos_enc"] = maskmem_pos_enc
 
                         # Handle obj_ptr (must demux from multiplex space first)
-                        if (
-                            "obj_ptr" in source_frame_out
-                            and self.use_obj_ptrs_in_encoder
-                        ):
+                        if "obj_ptr" in source_frame_out and self.use_obj_ptrs_in_encoder:
                             source_obj_ptr = source_frame_out["obj_ptr"]
                             if multiplex_state is not None:
                                 # Demux: multiplex space → data space
-                                obj_ptr_data_space = multiplex_state.demux(
-                                    source_obj_ptr
-                                )
+                                obj_ptr_data_space = multiplex_state.demux(source_obj_ptr)
                                 # Slice for this object
                                 singleton_frame_out["obj_ptr"] = obj_ptr_data_space[
                                     obj_idx_in_source : obj_idx_in_source + 1
@@ -393,37 +370,22 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
                         # Convert conditioning_objects
                         if "conditioning_objects" in source_frame_out:
-                            if (
-                                obj_idx_in_source
-                                in source_frame_out["conditioning_objects"]
-                            ):
+                            if obj_idx_in_source in source_frame_out["conditioning_objects"]:
                                 singleton_frame_out["conditioning_objects"] = {0}
                             else:
                                 singleton_frame_out["conditioning_objects"] = set()
 
-                        singleton_consolidated_outputs[storage_key][f_idx] = (
-                            singleton_frame_out
-                        )
+                        singleton_consolidated_outputs[storage_key][f_idx] = singleton_frame_out
 
         # Extract point and mask inputs
         extracted_point_inputs = {}
         extracted_mask_inputs = {}
 
-        if (
-            "point_inputs_per_obj" in source_state
-            and obj_idx_in_source in source_state["point_inputs_per_obj"]
-        ):
-            extracted_point_inputs = source_state["point_inputs_per_obj"][
-                obj_idx_in_source
-            ].copy()
+        if "point_inputs_per_obj" in source_state and obj_idx_in_source in source_state["point_inputs_per_obj"]:
+            extracted_point_inputs = source_state["point_inputs_per_obj"][obj_idx_in_source].copy()
 
-        if (
-            "mask_inputs_per_obj" in source_state
-            and obj_idx_in_source in source_state["mask_inputs_per_obj"]
-        ):
-            extracted_mask_inputs = source_state["mask_inputs_per_obj"][
-                obj_idx_in_source
-            ].copy()
+        if "mask_inputs_per_obj" in source_state and obj_idx_in_source in source_state["mask_inputs_per_obj"]:
+            extracted_mask_inputs = source_state["mask_inputs_per_obj"][obj_idx_in_source].copy()
 
         # Extract per-object outputs
         extracted_obj_cond_outputs = {}
@@ -431,31 +393,15 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         extracted_temp_cond_outputs = {}
         extracted_temp_non_cond_outputs = {}
 
-        if (
-            "output_dict_per_obj" in source_state
-            and obj_idx_in_source in source_state["output_dict_per_obj"]
-        ):
+        if "output_dict_per_obj" in source_state and obj_idx_in_source in source_state["output_dict_per_obj"]:
             obj_output_dict = source_state["output_dict_per_obj"][obj_idx_in_source]
-            extracted_obj_cond_outputs = obj_output_dict.get(
-                "cond_frame_outputs", {}
-            ).copy()
-            extracted_obj_non_cond_outputs = obj_output_dict.get(
-                "non_cond_frame_outputs", {}
-            ).copy()
+            extracted_obj_cond_outputs = obj_output_dict.get("cond_frame_outputs", {}).copy()
+            extracted_obj_non_cond_outputs = obj_output_dict.get("non_cond_frame_outputs", {}).copy()
 
-        if (
-            "temp_output_dict_per_obj" in source_state
-            and obj_idx_in_source in source_state["temp_output_dict_per_obj"]
-        ):
-            temp_obj_output_dict = source_state["temp_output_dict_per_obj"][
-                obj_idx_in_source
-            ]
-            extracted_temp_cond_outputs = temp_obj_output_dict.get(
-                "cond_frame_outputs", {}
-            ).copy()
-            extracted_temp_non_cond_outputs = temp_obj_output_dict.get(
-                "non_cond_frame_outputs", {}
-            ).copy()
+        if "temp_output_dict_per_obj" in source_state and obj_idx_in_source in source_state["temp_output_dict_per_obj"]:
+            temp_obj_output_dict = source_state["temp_output_dict_per_obj"][obj_idx_in_source]
+            extracted_temp_cond_outputs = temp_obj_output_dict.get("cond_frame_outputs", {}).copy()
+            extracted_temp_non_cond_outputs = temp_obj_output_dict.get("non_cond_frame_outputs", {}).copy()
 
         # Step 2: Remove the object from source state
         remaining_obj_ids, _ = self.remove_object(
@@ -468,12 +414,11 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
         # If multiplex state became empty, reset it so downstream code can reinitialize
         updated_multiplex_state = source_state.get("multiplex_state")
-        if updated_multiplex_state is not None:
-            if (
-                getattr(updated_multiplex_state, "assignments", None) is None
-                or updated_multiplex_state.total_valid_entries == 0
-            ):
-                source_state["multiplex_state"] = None
+        if updated_multiplex_state is not None and (
+            getattr(updated_multiplex_state, "assignments", None) is None
+            or updated_multiplex_state.total_valid_entries == 0
+        ):
+            source_state["multiplex_state"] = None
 
         # Step 3: Create new singleton inference state
         singleton_state = self.init_state(
@@ -501,9 +446,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 "non_cond_frame_outputs": extracted_temp_non_cond_outputs,
             }
         }
-        singleton_state["frames_already_tracked"] = source_state[
-            "frames_already_tracked"
-        ].copy()
+        singleton_state["frames_already_tracked"] = source_state["frames_already_tracked"].copy()
 
         # Step 5: Create new singleton multiplex state (even for 1 object, needed for obj_ptr)
         new_multiplex_state = self.multiplex_controller.get_state(
@@ -517,13 +460,11 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
         # Step 6: Remux extracted tensors into the singleton multiplex space
         for storage_key in ["cond_frame_outputs", "non_cond_frame_outputs"]:
-            for f_idx, frame_out in singleton_consolidated_outputs[storage_key].items():
+            for f_idx, frame_out in singleton_consolidated_outputs[storage_key].items():  # noqa: B007 - The loop variable is read outside the loop.
                 # mask memory features
                 if frame_out.get("maskmem_features") is not None:
                     # Keep mask memory features in data space (num_objects, C, H, W)
-                    frame_out["maskmem_features"] = frame_out[
-                        "maskmem_features"
-                    ].clone()
+                    frame_out["maskmem_features"] = frame_out["maskmem_features"].clone()
 
                 if frame_out.get("maskmem_pos_enc") is not None:
                     remapped_levels = []
@@ -586,29 +527,21 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         # Step 2: Add object to multiplex state buckets using proper API
         multiplex_state = inference_state.get("multiplex_state")
 
-        assignments = (
-            getattr(multiplex_state, "assignments", None)
-            if multiplex_state is not None
-            else None
-        )
+        assignments = getattr(multiplex_state, "assignments", None) if multiplex_state is not None else None
         total_valid_entries = (
             getattr(multiplex_state, "total_valid_entries", 0)
             if multiplex_state is not None and assignments is not None
             else 0
         )
-        need_state_reinit = (
-            multiplex_state is None or assignments is None or total_valid_entries == 0
-        )
+        need_state_reinit = multiplex_state is None or assignments is None or total_valid_entries == 0
 
-        if not need_state_reinit and getattr(multiplex_state, "object_ids", None):
+        if not need_state_reinit and getattr(multiplex_state, "object_ids", None):  # noqa: SIM102 - Statement form kept for readability.
             if obj_id in multiplex_state.object_ids:
                 old_idx = multiplex_state.object_ids.index(obj_id)
                 multiplex_state.remove_objects(object_indices=[old_idx], strict=False)
                 assignments = getattr(multiplex_state, "assignments", None)
                 total_valid_entries = (
-                    getattr(multiplex_state, "total_valid_entries", 0)
-                    if assignments is not None
-                    else 0
+                    getattr(multiplex_state, "total_valid_entries", 0) if assignments is not None else 0
                 )
                 need_state_reinit = assignments is None or total_valid_entries == 0
 
@@ -631,36 +564,27 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
         # Step 3: Restore point and mask inputs at new index
         singleton_obj_idx = 0  # Object is always at index 0 in singleton state
-        if (
-            "point_inputs_per_obj" in singleton_state
-            and singleton_obj_idx in singleton_state["point_inputs_per_obj"]
-        ):
+        if "point_inputs_per_obj" in singleton_state and singleton_obj_idx in singleton_state["point_inputs_per_obj"]:
             if "point_inputs_per_obj" not in inference_state:
                 inference_state["point_inputs_per_obj"] = {}
-            inference_state["point_inputs_per_obj"][new_obj_idx] = singleton_state[
-                "point_inputs_per_obj"
-            ][singleton_obj_idx].copy()
+            inference_state["point_inputs_per_obj"][new_obj_idx] = singleton_state["point_inputs_per_obj"][
+                singleton_obj_idx
+            ].copy()
 
-        if (
-            "mask_inputs_per_obj" in singleton_state
-            and singleton_obj_idx in singleton_state["mask_inputs_per_obj"]
-        ):
+        if "mask_inputs_per_obj" in singleton_state and singleton_obj_idx in singleton_state["mask_inputs_per_obj"]:
             if "mask_inputs_per_obj" not in inference_state:
                 inference_state["mask_inputs_per_obj"] = {}
-            inference_state["mask_inputs_per_obj"][new_obj_idx] = singleton_state[
-                "mask_inputs_per_obj"
-            ][singleton_obj_idx].copy()
+            inference_state["mask_inputs_per_obj"][new_obj_idx] = singleton_state["mask_inputs_per_obj"][
+                singleton_obj_idx
+            ].copy()
 
         # Step 4: Restore per-object outputs at new index
-        if (
-            "output_dict_per_obj" in singleton_state
-            and singleton_obj_idx in singleton_state["output_dict_per_obj"]
-        ):
+        if "output_dict_per_obj" in singleton_state and singleton_obj_idx in singleton_state["output_dict_per_obj"]:
             if "output_dict_per_obj" not in inference_state:
                 inference_state["output_dict_per_obj"] = {}
-            inference_state["output_dict_per_obj"][new_obj_idx] = singleton_state[
-                "output_dict_per_obj"
-            ][singleton_obj_idx].copy()
+            inference_state["output_dict_per_obj"][new_obj_idx] = singleton_state["output_dict_per_obj"][
+                singleton_obj_idx
+            ].copy()
 
         if (
             "temp_output_dict_per_obj" in singleton_state
@@ -668,9 +592,9 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         ):
             if "temp_output_dict_per_obj" not in inference_state:
                 inference_state["temp_output_dict_per_obj"] = {}
-            inference_state["temp_output_dict_per_obj"][new_obj_idx] = singleton_state[
-                "temp_output_dict_per_obj"
-            ][singleton_obj_idx].copy()
+            inference_state["temp_output_dict_per_obj"][new_obj_idx] = singleton_state["temp_output_dict_per_obj"][
+                singleton_obj_idx
+            ].copy()
 
         # Step 5: Merge consolidated outputs back into multiplex (append at new_obj_idx)
         # Preserve each frame's original storage key from the singleton state so that
@@ -681,9 +605,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 "cond_frame_outputs",
                 "non_cond_frame_outputs",
             ]:
-                singleton_outputs = singleton_state["output_dict"].get(
-                    singleton_storage_key, {}
-                )
+                singleton_outputs = singleton_state["output_dict"].get(singleton_storage_key, {})
 
                 # Skip if singleton doesn't have any frames in this storage_key
                 if not singleton_outputs:
@@ -697,10 +619,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                             "non_cond_frame_outputs": {},
                         }
 
-                    if (
-                        frame_idx
-                        not in inference_state["output_dict"][singleton_storage_key]
-                    ):
+                    if frame_idx not in inference_state["output_dict"][singleton_storage_key]:
                         # Frame doesn't exist - create with singleton results at new_obj_idx
                         num_objs = len(inference_state["obj_ids"])
 
@@ -711,48 +630,30 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
                         new_maskmem_features = None
                         new_maskmem_pos_enc = None
-                        if (
-                            singleton_frame_out.get("maskmem_features") is not None
-                            and multiplex_state is not None
-                        ):
+                        if singleton_frame_out.get("maskmem_features") is not None and multiplex_state is not None:
                             # Check if singleton features are in multiplexed format and demux if needed
-                            singleton_features_muxed = singleton_frame_out[
-                                "maskmem_features"
-                            ]
+                            singleton_features_muxed = singleton_frame_out["maskmem_features"]
                             if singleton_features_muxed.shape[:2] == (
                                 singleton_multiplex_state.num_buckets,
                                 singleton_multiplex_state.multiplex_count,
                             ):
                                 # Singleton features are multiplexed, need to demux
-                                singleton_features_data = (
-                                    singleton_multiplex_state.demux(
-                                        singleton_features_muxed
-                                    )
-                                )
+                                singleton_features_data = singleton_multiplex_state.demux(singleton_features_muxed)
                             else:
                                 # Singleton features are in data space
                                 singleton_features_data = singleton_features_muxed
 
-                            feature_shape = (num_objs,) + singleton_features_data.shape[
-                                1:
-                            ]
+                            feature_shape = (num_objs,) + singleton_features_data.shape[1:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                             maskmem_features_data = torch.zeros(
                                 feature_shape,
                                 dtype=singleton_features_data.dtype,
                                 device=singleton_features_data.device,
                             )
-                            maskmem_features_data[new_obj_idx : new_obj_idx + 1] = (
-                                singleton_features_data
-                            )
+                            maskmem_features_data[new_obj_idx : new_obj_idx + 1] = singleton_features_data
                             # Mux using destination multiplex state
-                            new_maskmem_features = multiplex_state.mux(
-                                maskmem_features_data
-                            )
+                            new_maskmem_features = multiplex_state.mux(maskmem_features_data)
 
-                        if (
-                            singleton_frame_out.get("maskmem_pos_enc") is not None
-                            and multiplex_state is not None
-                        ):
+                        if singleton_frame_out.get("maskmem_pos_enc") is not None and multiplex_state is not None:
                             new_maskmem_pos_enc = []
                             for level_enc in singleton_frame_out["maskmem_pos_enc"]:
                                 if level_enc is None:
@@ -764,14 +665,12 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                     singleton_multiplex_state.multiplex_count,
                                 ):
                                     # Singleton pos_enc is multiplexed, need to demux
-                                    level_data = singleton_multiplex_state.demux(
-                                        level_enc
-                                    )
+                                    level_data = singleton_multiplex_state.demux(level_enc)
                                 else:
                                     # Singleton pos_enc is in data space
                                     level_data = level_enc
 
-                                level_shape = (num_objs,) + level_data.shape[1:]
+                                level_shape = (num_objs,) + level_data.shape[1:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                                 level_tensor = torch.zeros(
                                     level_shape,
                                     dtype=level_data.dtype,
@@ -779,24 +678,17 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                 )
                                 level_tensor[new_obj_idx : new_obj_idx + 1] = level_data
                                 # Mux using destination multiplex state to store in multiplex format
-                                new_maskmem_pos_enc.append(
-                                    multiplex_state.mux(level_tensor)
-                                )
+                                new_maskmem_pos_enc.append(multiplex_state.mux(level_tensor))
 
-                        inference_state["output_dict"][singleton_storage_key][
-                            frame_idx
-                        ] = {
+                        inference_state["output_dict"][singleton_storage_key][frame_idx] = {
                             "maskmem_features": new_maskmem_features,
                             "maskmem_pos_enc": new_maskmem_pos_enc,
                             "image_features": singleton_frame_out.get("image_features"),
                             "image_pos_enc": singleton_frame_out.get("image_pos_enc"),
                             "local_obj_id_to_idx": {obj_id: new_obj_idx},
                             "conditioning_objects": (
-                                set([new_obj_idx])
-                                if singleton_obj_idx
-                                in singleton_frame_out.get(
-                                    "conditioning_objects", set()
-                                )
+                                {new_obj_idx}
+                                if singleton_obj_idx in singleton_frame_out.get("conditioning_objects", set())
                                 else set()
                             ),
                             "pred_masks": torch.zeros(
@@ -813,101 +705,67 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                 (num_objs, 1),
                                 NO_OBJ_SCORE,
                                 dtype=singleton_frame_out["object_score_logits"].dtype,
-                                device=singleton_frame_out[
-                                    "object_score_logits"
-                                ].device,
+                                device=singleton_frame_out["object_score_logits"].device,
                             ),
                         }
                         # Set singleton results at new_obj_idx
-                        inference_state["output_dict"][singleton_storage_key][
-                            frame_idx
-                        ]["pred_masks"][
+                        inference_state["output_dict"][singleton_storage_key][frame_idx]["pred_masks"][
                             new_obj_idx : new_obj_idx + 1
                         ] = singleton_frame_out["pred_masks"]
-                        inference_state["output_dict"][singleton_storage_key][
-                            frame_idx
-                        ]["object_score_logits"][
+                        inference_state["output_dict"][singleton_storage_key][frame_idx]["object_score_logits"][
                             new_obj_idx : new_obj_idx + 1
                         ] = singleton_frame_out["object_score_logits"]
 
                         # Also copy pred_masks_video_res if it exists in singleton output
                         if "pred_masks_video_res" in singleton_frame_out:
-                            inference_state["output_dict"][singleton_storage_key][
-                                frame_idx
-                            ]["pred_masks_video_res"] = torch.zeros(
-                                (
-                                    num_objs,
-                                    1,
-                                    singleton_frame_out["pred_masks_video_res"].shape[
-                                        2
-                                    ],
-                                    singleton_frame_out["pred_masks_video_res"].shape[
-                                        3
-                                    ],
-                                ),
-                                dtype=singleton_frame_out["pred_masks_video_res"].dtype,
-                                device=singleton_frame_out[
-                                    "pred_masks_video_res"
-                                ].device,
+                            inference_state["output_dict"][singleton_storage_key][frame_idx]["pred_masks_video_res"] = (
+                                torch.zeros(
+                                    (
+                                        num_objs,
+                                        1,
+                                        singleton_frame_out["pred_masks_video_res"].shape[2],
+                                        singleton_frame_out["pred_masks_video_res"].shape[3],
+                                    ),
+                                    dtype=singleton_frame_out["pred_masks_video_res"].dtype,
+                                    device=singleton_frame_out["pred_masks_video_res"].device,
+                                )
                             )
-                            inference_state["output_dict"][singleton_storage_key][
-                                frame_idx
-                            ]["pred_masks_video_res"][
+                            inference_state["output_dict"][singleton_storage_key][frame_idx]["pred_masks_video_res"][
                                 new_obj_idx : new_obj_idx + 1
                             ] = singleton_frame_out["pred_masks_video_res"]
 
                         # Handle obj_ptr if present
-                        if (
-                            "obj_ptr" in singleton_frame_out
-                            and self.use_obj_ptrs_in_encoder
-                        ):
-                            singleton_obj_ptr_data = singleton_multiplex_state.demux(
-                                singleton_frame_out["obj_ptr"]
-                            )
+                        if "obj_ptr" in singleton_frame_out and self.use_obj_ptrs_in_encoder:
+                            singleton_obj_ptr_data = singleton_multiplex_state.demux(singleton_frame_out["obj_ptr"])
                             obj_ptr_data = torch.zeros(
                                 (num_objs, singleton_obj_ptr_data.shape[1]),
                                 dtype=singleton_obj_ptr_data.dtype,
                                 device=singleton_obj_ptr_data.device,
                             )
-                            obj_ptr_data[new_obj_idx : new_obj_idx + 1] = (
-                                singleton_obj_ptr_data
+                            obj_ptr_data[new_obj_idx : new_obj_idx + 1] = singleton_obj_ptr_data
+                            inference_state["output_dict"][singleton_storage_key][frame_idx]["obj_ptr"] = (
+                                multiplex_state.mux(obj_ptr_data)
                             )
-                            inference_state["output_dict"][singleton_storage_key][
-                                frame_idx
-                            ]["obj_ptr"] = multiplex_state.mux(obj_ptr_data)
                     else:
                         # Frame exists - expand tensors and add singleton results
-                        main_frame_out = inference_state["output_dict"][
-                            singleton_storage_key
-                        ][frame_idx]
+                        main_frame_out = inference_state["output_dict"][singleton_storage_key][frame_idx]
 
                         num_objs_total = len(inference_state["obj_ids"])
 
-                        if (
-                            singleton_frame_out.get("maskmem_features") is not None
-                            and multiplex_state is not None
-                        ):
+                        if singleton_frame_out.get("maskmem_features") is not None and multiplex_state is not None:
                             # Check if singleton features are in multiplexed format and demux if needed
-                            singleton_features_muxed = singleton_frame_out[
-                                "maskmem_features"
-                            ]
+                            singleton_features_muxed = singleton_frame_out["maskmem_features"]
                             if singleton_features_muxed.shape[:2] == (
                                 singleton_multiplex_state.num_buckets,
                                 singleton_multiplex_state.multiplex_count,
                             ):
                                 # Singleton features are multiplexed, need to demux
-                                singleton_features_data = (
-                                    singleton_multiplex_state.demux(
-                                        singleton_features_muxed
-                                    )
-                                )
+                                singleton_features_data = singleton_multiplex_state.demux(singleton_features_muxed)
                             else:
                                 # Singleton features are in data space
                                 singleton_features_data = singleton_features_muxed
 
-                            existing_features_muxed = main_frame_out.get(
-                                "maskmem_features"
-                            )
+                            existing_features_muxed = main_frame_out.get("maskmem_features")
                             if existing_features_muxed is not None:
                                 # Check if features are in multiplex format before demuxing
                                 if existing_features_muxed.shape[:2] == (
@@ -915,9 +773,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                     multiplex_state.multiplex_count,
                                 ):
                                     # Features are in multiplex format, demux them
-                                    existing_features_data = multiplex_state.demux(
-                                        existing_features_muxed
-                                    )
+                                    existing_features_data = multiplex_state.demux(existing_features_muxed)
                                 else:
                                     # Features are already in data space, use directly
                                     existing_features_data = existing_features_muxed
@@ -925,41 +781,26 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                 existing_features_data = None
 
                             if existing_features_data is None:
-                                feature_shape = (
-                                    num_objs_total,
-                                ) + singleton_features_data.shape[1:]
+                                feature_shape = (num_objs_total,) + singleton_features_data.shape[1:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                                 existing_features_data = torch.zeros(
                                     feature_shape,
                                     dtype=singleton_features_data.dtype,
                                     device=singleton_features_data.device,
                                 )
                             elif existing_features_data.shape[0] < num_objs_total:
-                                pad_size = (
-                                    num_objs_total - existing_features_data.shape[0]
-                                )
+                                pad_size = num_objs_total - existing_features_data.shape[0]
                                 pad = torch.zeros(
-                                    (pad_size,) + existing_features_data.shape[1:],
+                                    (pad_size,) + existing_features_data.shape[1:],  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                                     dtype=existing_features_data.dtype,
                                     device=existing_features_data.device,
                                 )
-                                existing_features_data = torch.cat(
-                                    [existing_features_data, pad], dim=0
-                                )
+                                existing_features_data = torch.cat([existing_features_data, pad], dim=0)
 
-                            existing_features_data[new_obj_idx : new_obj_idx + 1] = (
-                                singleton_features_data
-                            )
-                            main_frame_out["maskmem_features"] = multiplex_state.mux(
-                                existing_features_data
-                            )
+                            existing_features_data[new_obj_idx : new_obj_idx + 1] = singleton_features_data
+                            main_frame_out["maskmem_features"] = multiplex_state.mux(existing_features_data)
 
-                        if (
-                            singleton_frame_out.get("maskmem_pos_enc") is not None
-                            and multiplex_state is not None
-                        ):
-                            existing_pos_enc_list = (
-                                main_frame_out.get("maskmem_pos_enc") or []
-                            )
+                        if singleton_frame_out.get("maskmem_pos_enc") is not None and multiplex_state is not None:
+                            existing_pos_enc_list = main_frame_out.get("maskmem_pos_enc") or []
                             new_maskmem_pos_enc = []
                             max_levels = max(
                                 len(singleton_frame_out["maskmem_pos_enc"]),
@@ -968,14 +809,11 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                             for level_idx in range(max_levels):
                                 singleton_level_muxed = (
                                     singleton_frame_out["maskmem_pos_enc"][level_idx]
-                                    if level_idx
-                                    < len(singleton_frame_out["maskmem_pos_enc"])
+                                    if level_idx < len(singleton_frame_out["maskmem_pos_enc"])
                                     else None
                                 )
                                 existing_level_muxed = (
-                                    existing_pos_enc_list[level_idx]
-                                    if level_idx < len(existing_pos_enc_list)
-                                    else None
+                                    existing_pos_enc_list[level_idx] if level_idx < len(existing_pos_enc_list) else None
                                 )
 
                                 if singleton_level_muxed is None:
@@ -989,11 +827,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                     singleton_multiplex_state.multiplex_count,
                                 ):
                                     # Singleton pos_enc is multiplexed, need to demux
-                                    singleton_level_data = (
-                                        singleton_multiplex_state.demux(
-                                            singleton_level_muxed
-                                        )
-                                    )
+                                    singleton_level_data = singleton_multiplex_state.demux(singleton_level_muxed)
                                 else:
                                     # Singleton pos_enc is in data space
                                     singleton_level_data = singleton_level_muxed
@@ -1005,9 +839,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                         multiplex_state.multiplex_count,
                                     ):
                                         # Positional encoding is in multiplex format, demux it
-                                        existing_level_data = multiplex_state.demux(
-                                            existing_level_muxed
-                                        )
+                                        existing_level_data = multiplex_state.demux(existing_level_muxed)
                                     else:
                                         # Positional encoding is already in data space, use directly
                                         existing_level_data = existing_level_muxed
@@ -1015,42 +847,28 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                     existing_level_data = None
 
                                 if existing_level_data is None:
-                                    level_shape = (
-                                        num_objs_total,
-                                    ) + singleton_level_data.shape[1:]
+                                    level_shape = (num_objs_total,) + singleton_level_data.shape[1:]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                                     existing_level_data = torch.zeros(
                                         level_shape,
                                         dtype=singleton_level_data.dtype,
                                         device=singleton_level_data.device,
                                     )
                                 elif existing_level_data.shape[0] < num_objs_total:
-                                    pad_size = (
-                                        num_objs_total - existing_level_data.shape[0]
-                                    )
+                                    pad_size = num_objs_total - existing_level_data.shape[0]
                                     pad = torch.zeros(
-                                        (pad_size,) + existing_level_data.shape[1:],
+                                        (pad_size,) + existing_level_data.shape[1:],  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
                                         dtype=existing_level_data.dtype,
                                         device=existing_level_data.device,
                                     )
-                                    existing_level_data = torch.cat(
-                                        [existing_level_data, pad], dim=0
-                                    )
+                                    existing_level_data = torch.cat([existing_level_data, pad], dim=0)
 
-                                existing_level_data[new_obj_idx : new_obj_idx + 1] = (
-                                    singleton_level_data
-                                )
-                                new_maskmem_pos_enc.append(
-                                    multiplex_state.mux(existing_level_data)
-                                )
+                                existing_level_data[new_obj_idx : new_obj_idx + 1] = singleton_level_data
+                                new_maskmem_pos_enc.append(multiplex_state.mux(existing_level_data))
 
                             main_frame_out["maskmem_pos_enc"] = new_maskmem_pos_enc
 
-                        singleton_pred_masks = singleton_frame_out[
-                            "pred_masks"
-                        ]  # [1, 1, H, W]
-                        singleton_scores = singleton_frame_out[
-                            "object_score_logits"
-                        ]  # [1, 1]
+                        singleton_pred_masks = singleton_frame_out["pred_masks"]  # [1, 1, H, W]
+                        singleton_scores = singleton_frame_out["object_score_logits"]  # [1, 1]
 
                         # Expand tensors if needed
                         num_existing_objs = main_frame_out["pred_masks"].shape[0]
@@ -1089,36 +907,21 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                             )
 
                         # Set singleton results at new_obj_idx
-                        main_frame_out["pred_masks"][new_obj_idx : new_obj_idx + 1] = (
-                            singleton_pred_masks
-                        )
-                        main_frame_out["object_score_logits"][
-                            new_obj_idx : new_obj_idx + 1
-                        ] = singleton_scores
+                        main_frame_out["pred_masks"][new_obj_idx : new_obj_idx + 1] = singleton_pred_masks
+                        main_frame_out["object_score_logits"][new_obj_idx : new_obj_idx + 1] = singleton_scores
                         # Initialize local_obj_id_to_idx if missing (e.g., frame
                         # output was created by VG propagation's track_step which
                         # does not populate this field).
                         if "local_obj_id_to_idx" not in main_frame_out:
-                            main_frame_out["local_obj_id_to_idx"] = deepcopy(
-                                inference_state["obj_id_to_idx"]
-                            )
+                            main_frame_out["local_obj_id_to_idx"] = deepcopy(inference_state["obj_id_to_idx"])
                         main_frame_out["local_obj_id_to_idx"][obj_id] = new_obj_idx
 
                         # Also expand and copy pred_masks_video_res if it exists in singleton output
                         if "pred_masks_video_res" in singleton_frame_out:
                             if "pred_masks_video_res" in main_frame_out:
                                 # Expand existing video_res masks
-                                if (
-                                    main_frame_out["pred_masks_video_res"].shape[0]
-                                    < new_obj_idx + 1
-                                ):
-                                    pad_size = (
-                                        new_obj_idx
-                                        + 1
-                                        - main_frame_out["pred_masks_video_res"].shape[
-                                            0
-                                        ]
-                                    )
+                                if main_frame_out["pred_masks_video_res"].shape[0] < new_obj_idx + 1:
+                                    pad_size = new_obj_idx + 1 - main_frame_out["pred_masks_video_res"].shape[0]
                                     main_frame_out["pred_masks_video_res"] = torch.cat(
                                         [
                                             main_frame_out["pred_masks_video_res"],
@@ -1126,19 +929,11 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                                 (
                                                     pad_size,
                                                     1,
-                                                    singleton_frame_out[
-                                                        "pred_masks_video_res"
-                                                    ].shape[2],
-                                                    singleton_frame_out[
-                                                        "pred_masks_video_res"
-                                                    ].shape[3],
+                                                    singleton_frame_out["pred_masks_video_res"].shape[2],
+                                                    singleton_frame_out["pred_masks_video_res"].shape[3],
                                                 ),
-                                                dtype=singleton_frame_out[
-                                                    "pred_masks_video_res"
-                                                ].dtype,
-                                                device=singleton_frame_out[
-                                                    "pred_masks_video_res"
-                                                ].device,
+                                                dtype=singleton_frame_out["pred_masks_video_res"].dtype,
+                                                device=singleton_frame_out["pred_masks_video_res"].device,
                                             ),
                                         ],
                                         dim=0,
@@ -1150,30 +945,19 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                     (
                                         num_objs,
                                         1,
-                                        singleton_frame_out[
-                                            "pred_masks_video_res"
-                                        ].shape[2],
-                                        singleton_frame_out[
-                                            "pred_masks_video_res"
-                                        ].shape[3],
+                                        singleton_frame_out["pred_masks_video_res"].shape[2],
+                                        singleton_frame_out["pred_masks_video_res"].shape[3],
                                     ),
-                                    dtype=singleton_frame_out[
-                                        "pred_masks_video_res"
-                                    ].dtype,
-                                    device=singleton_frame_out[
-                                        "pred_masks_video_res"
-                                    ].device,
+                                    dtype=singleton_frame_out["pred_masks_video_res"].dtype,
+                                    device=singleton_frame_out["pred_masks_video_res"].device,
                                 )
                             # Set singleton video_res mask
-                            main_frame_out["pred_masks_video_res"][
-                                new_obj_idx : new_obj_idx + 1
-                            ] = singleton_frame_out["pred_masks_video_res"]
+                            main_frame_out["pred_masks_video_res"][new_obj_idx : new_obj_idx + 1] = singleton_frame_out[
+                                "pred_masks_video_res"
+                            ]
 
                         # Handle obj_ptr
-                        if (
-                            "obj_ptr" in singleton_frame_out
-                            and self.use_obj_ptrs_in_encoder
-                        ):
+                        if "obj_ptr" in singleton_frame_out and self.use_obj_ptrs_in_encoder:
                             singleton_obj_ptr_data = singleton_multiplex_state.demux(
                                 singleton_frame_out["obj_ptr"]
                             )  # [1, D]
@@ -1198,23 +982,15 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                         device=singleton_obj_ptr_data.device,
                                     )
                                     # Only set the singleton object's ptr, leave others as zeros
-                                    obj_ptr_data[new_obj_idx : new_obj_idx + 1] = (
-                                        singleton_obj_ptr_data
-                                    )
-                                    main_frame_out["obj_ptr"] = multiplex_state.mux(
-                                        obj_ptr_data
-                                    )
+                                    obj_ptr_data[new_obj_idx : new_obj_idx + 1] = singleton_obj_ptr_data
+                                    main_frame_out["obj_ptr"] = multiplex_state.mux(obj_ptr_data)
                                 else:
                                     # Bucket count matches - safe to demux
-                                    main_obj_ptr_data = multiplex_state.demux(
-                                        old_obj_ptr_muxed
-                                    )
+                                    main_obj_ptr_data = multiplex_state.demux(old_obj_ptr_muxed)
 
                                     # Expand if needed
                                     if main_obj_ptr_data.shape[0] < new_obj_idx + 1:
-                                        pad_size = (
-                                            new_obj_idx + 1 - main_obj_ptr_data.shape[0]
-                                        )
+                                        pad_size = new_obj_idx + 1 - main_obj_ptr_data.shape[0]
                                         main_obj_ptr_data = torch.cat(
                                             [
                                                 main_obj_ptr_data,
@@ -1230,12 +1006,8 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                             dim=0,
                                         )
 
-                                    main_obj_ptr_data[new_obj_idx : new_obj_idx + 1] = (
-                                        singleton_obj_ptr_data
-                                    )
-                                    main_frame_out["obj_ptr"] = multiplex_state.mux(
-                                        main_obj_ptr_data
-                                    )
+                                    main_obj_ptr_data[new_obj_idx : new_obj_idx + 1] = singleton_obj_ptr_data
+                                    main_frame_out["obj_ptr"] = multiplex_state.mux(main_obj_ptr_data)
                             else:
                                 # Create new obj_ptr
                                 num_objs = len(inference_state["obj_ids"])
@@ -1244,17 +1016,11 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                                     dtype=singleton_obj_ptr_data.dtype,
                                     device=singleton_obj_ptr_data.device,
                                 )
-                                obj_ptr_data[new_obj_idx : new_obj_idx + 1] = (
-                                    singleton_obj_ptr_data
-                                )
-                                main_frame_out["obj_ptr"] = multiplex_state.mux(
-                                    obj_ptr_data
-                                )
+                                obj_ptr_data[new_obj_idx : new_obj_idx + 1] = singleton_obj_ptr_data
+                                main_frame_out["obj_ptr"] = multiplex_state.mux(obj_ptr_data)
 
                         # Update conditioning_objects
-                        if singleton_obj_idx in singleton_frame_out.get(
-                            "conditioning_objects", set()
-                        ):
+                        if singleton_obj_idx in singleton_frame_out.get("conditioning_objects", set()):
                             main_frame_out["conditioning_objects"].add(new_obj_idx)
 
     @torch.inference_mode()
@@ -1293,7 +1059,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         obj_ids = [obj_id]
 
         point_inputs_per_frame = inference_state["point_inputs_per_obj"][obj_idx]
-        mask_inputs_per_frame = inference_state["mask_inputs_per_obj"][obj_idx]
+        _mask_inputs_per_frame = inference_state["mask_inputs_per_obj"][obj_idx]
 
         if points.dim() == 2:
             points = points.unsqueeze(0)
@@ -1306,10 +1072,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         points = points.to(inference_state["device"])
         labels = labels.to(inference_state["device"])
 
-        if not clear_old_points:
-            old_point_inputs = point_inputs_per_frame.get(frame_idx, None)
-        else:
-            old_point_inputs = None
+        old_point_inputs = point_inputs_per_frame.get(frame_idx, None) if not clear_old_points else None
 
         point_inputs = concat_points(old_point_inputs, points, labels)
         point_inputs_per_frame[frame_idx] = point_inputs
@@ -1317,9 +1080,9 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         is_init_cond_frame = frame_idx not in inference_state["frames_already_tracked"]
 
         if is_init_cond_frame:
-            reverse = False
+            reverse = False  # noqa: F841 - Kept as upstream; an underscore name already exists.
         else:
-            reverse = inference_state["frames_already_tracked"][frame_idx]["reverse"]
+            _reverse = inference_state["frames_already_tracked"][frame_idx]["reverse"]
 
         is_cond = is_init_cond_frame or self.add_all_frames_to_correct_as_cond
         storage_key = "cond_frame_outputs" if is_cond else "non_cond_frame_outputs"
@@ -1341,11 +1104,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         # - New object: never seen before
         # - Refine: existing mask on tracked frame
         # - Gap fill: object exists but frame has no output
-        is_existing_object = (
-            not is_new_state
-            and multiplex_state is not None
-            and obj_id in multiplex_state.object_ids
-        )
+        is_existing_object = not is_new_state and multiplex_state is not None and obj_id in multiplex_state.object_ids
 
         if is_existing_object:
             if is_init_cond_frame:
@@ -1385,13 +1144,9 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 objects_to_interact=None,
             )
         elif is_refine:
-            singleton_state, original_obj_idx = self._extract_object_for_interaction(
-                inference_state, obj_id, frame_idx
-            )
+            singleton_state, original_obj_idx = self._extract_object_for_interaction(inference_state, obj_id, frame_idx)
 
-            user_refined_frames_map = inference_state.get(
-                "user_refined_frames_per_obj", {}
-            )
+            user_refined_frames_map = inference_state.get("user_refined_frames_per_obj", {})
             user_refined_frames = user_refined_frames_map.get(obj_id)
             if user_refined_frames is None:
                 user_refined_frames = set()
@@ -1400,41 +1155,25 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             prev_sam_mask_logits_singleton = None
             if not is_first_refinement:
                 singleton_obj_idx = 0
-                singleton_output_dict = singleton_state["output_dict_per_obj"][
-                    singleton_obj_idx
-                ]
-                singleton_temp_output_dict = singleton_state[
-                    "temp_output_dict_per_obj"
-                ][singleton_obj_idx]
+                singleton_output_dict = singleton_state["output_dict_per_obj"][singleton_obj_idx]
+                singleton_temp_output_dict = singleton_state["temp_output_dict_per_obj"][singleton_obj_idx]
 
                 # Check BOTH storage keys since previous refinement might be in a different key
                 # (e.g., first refinement creates cond_frame, but after propagation,
                 # second refinement on same frame would look for non_cond_frame)
                 prev_out = None
 
-                storage_key_current = (
-                    "cond_frame_outputs" if is_cond else "non_cond_frame_outputs"
-                )
-                prev_out = singleton_temp_output_dict[storage_key_current].get(
-                    frame_idx
-                )
+                storage_key_current = "cond_frame_outputs" if is_cond else "non_cond_frame_outputs"
+                prev_out = singleton_temp_output_dict[storage_key_current].get(frame_idx)
 
                 if prev_out is None:
-                    prev_out = singleton_output_dict["cond_frame_outputs"].get(
-                        frame_idx
-                    )
+                    prev_out = singleton_output_dict["cond_frame_outputs"].get(frame_idx)
                 if prev_out is None:
-                    prev_out = singleton_output_dict["non_cond_frame_outputs"].get(
-                        frame_idx
-                    )
+                    prev_out = singleton_output_dict["non_cond_frame_outputs"].get(frame_idx)
 
                 if prev_out is not None and prev_out["pred_masks"] is not None:
-                    prev_sam_mask_logits_singleton = prev_out["pred_masks"].cuda(
-                        non_blocking=True
-                    )
-                    prev_sam_mask_logits_singleton = torch.clamp(
-                        prev_sam_mask_logits_singleton, -32.0, 32.0
-                    )
+                    prev_sam_mask_logits_singleton = prev_out["pred_masks"].cuda(non_blocking=True)
+                    prev_sam_mask_logits_singleton = torch.clamp(prev_sam_mask_logits_singleton, -32.0, 32.0)
 
             if is_first_refinement:
                 # ALWAYS use is_init_cond_frame=True to force interaction_only mode
@@ -1444,9 +1183,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             else:
                 # Second+ refinement: Incremental refinement for quality improvement
                 singleton_is_init_cond = False
-                singleton_objects_to_interact = (
-                    [0] if prev_sam_mask_logits_singleton is not None else None
-                )
+                singleton_objects_to_interact = [0] if prev_sam_mask_logits_singleton is not None else None
 
             singleton_obj_idx = 0
             singleton_obj_idxs = [singleton_obj_idx]
@@ -1470,24 +1207,14 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 objects_to_interact=singleton_objects_to_interact,
             )
 
-            singleton_storage_key = (
-                "cond_frame_outputs"
-                if singleton_is_init_cond
-                else "non_cond_frame_outputs"
-            )
+            singleton_storage_key = "cond_frame_outputs" if singleton_is_init_cond else "non_cond_frame_outputs"
 
-            _, singleton_video_res_masks = self._get_orig_video_res_output(
-                singleton_state, current_out["pred_masks"]
-            )
+            _, singleton_video_res_masks = self._get_orig_video_res_output(singleton_state, current_out["pred_masks"])
             current_out["pred_masks_video_res"] = singleton_video_res_masks
 
-            singleton_state["output_dict"][singleton_storage_key][frame_idx] = (
-                current_out
-            )
+            singleton_state["output_dict"][singleton_storage_key][frame_idx] = current_out
 
-            self._merge_singleton_interaction_result(
-                inference_state, singleton_state, obj_id, original_obj_idx
-            )
+            self._merge_singleton_interaction_result(inference_state, singleton_state, obj_id, original_obj_idx)
 
             obj_idx = inference_state["obj_id_to_idx"][obj_id]
             obj_idxs = [obj_idx]
@@ -1499,20 +1226,14 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
             inference_state["user_refined_frames_per_obj"][obj_id].add(frame_idx)
 
-            merged_frame_out = inference_state["output_dict"][singleton_storage_key][
-                frame_idx
-            ]
+            merged_frame_out = inference_state["output_dict"][singleton_storage_key][frame_idx]
             obj_output_dict = inference_state["output_dict_per_obj"][obj_idx]
             obj_temp_output_dict = inference_state["temp_output_dict_per_obj"][obj_idx]
 
             if "pred_masks_video_res" in merged_frame_out:
-                pred_masks_video_res_slice = merged_frame_out["pred_masks_video_res"][
-                    obj_idx : obj_idx + 1
-                ]
+                pred_masks_video_res_slice = merged_frame_out["pred_masks_video_res"][obj_idx : obj_idx + 1]
             else:
-                _, video_res_masks = self._get_orig_video_res_output(
-                    inference_state, merged_frame_out["pred_masks"]
-                )
+                _, video_res_masks = self._get_orig_video_res_output(inference_state, merged_frame_out["pred_masks"])
                 pred_masks_video_res_slice = video_res_masks[obj_idx : obj_idx + 1]
 
             pred_masks_slice = merged_frame_out["pred_masks"][obj_idx : obj_idx + 1]
@@ -1520,13 +1241,9 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             obj_temp_output_dict[singleton_storage_key][frame_idx] = {
                 "pred_masks": pred_masks_slice,
                 "pred_masks_video_res": pred_masks_video_res_slice,
-                "object_score_logits": merged_frame_out["object_score_logits"][
-                    obj_idx : obj_idx + 1
-                ],
+                "object_score_logits": merged_frame_out["object_score_logits"][obj_idx : obj_idx + 1],
             }
-            obj_output_dict[singleton_storage_key][frame_idx] = obj_temp_output_dict[
-                singleton_storage_key
-            ][frame_idx]
+            obj_output_dict[singleton_storage_key][frame_idx] = obj_temp_output_dict[singleton_storage_key][frame_idx]
 
         elif is_gap_fill_case:
             # Gap fill: Run inference directly in multiplex mode (no singleton extraction)
@@ -1558,26 +1275,16 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 objects_to_interact=[obj_idx],
             )
 
-            current_out["local_obj_id_to_idx"] = deepcopy(
-                inference_state["obj_id_to_idx"]
-            )
+            current_out["local_obj_id_to_idx"] = deepcopy(inference_state["obj_id_to_idx"])
 
-            _, video_res_masks = self._get_orig_video_res_output(
-                inference_state, current_out["pred_masks"]
-            )
+            _, video_res_masks = self._get_orig_video_res_output(inference_state, current_out["pred_masks"])
             current_out["pred_masks_video_res"] = video_res_masks
 
             is_cond = storage_key == "cond_frame_outputs"
-            if (
-                is_cond
-                and frame_idx
-                in inference_state["output_dict"]["non_cond_frame_outputs"]
-            ):
+            if is_cond and frame_idx in inference_state["output_dict"]["non_cond_frame_outputs"]:
                 del inference_state["output_dict"]["non_cond_frame_outputs"][frame_idx]
                 if "consolidated_frame_inds" in inference_state:
-                    inference_state["consolidated_frame_inds"][
-                        "non_cond_frame_outputs"
-                    ].discard(frame_idx)
+                    inference_state["consolidated_frame_inds"]["non_cond_frame_outputs"].discard(frame_idx)
 
             # Store consolidated output (has obj_ptr, maskmem_features, etc.)
             inference_state["output_dict"][storage_key][frame_idx] = current_out
@@ -1590,13 +1297,9 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             obj_temp_output_dict[storage_key][frame_idx] = {
                 "pred_masks": current_out["pred_masks"][obj_idx : obj_idx + 1],
                 "pred_masks_video_res": video_res_masks[obj_idx : obj_idx + 1],
-                "object_score_logits": current_out["object_score_logits"][
-                    obj_idx : obj_idx + 1
-                ],
+                "object_score_logits": current_out["object_score_logits"][obj_idx : obj_idx + 1],
             }
-            obj_output_dict[storage_key][frame_idx] = obj_temp_output_dict[storage_key][
-                frame_idx
-            ]
+            obj_output_dict[storage_key][frame_idx] = obj_temp_output_dict[storage_key][frame_idx]
 
         # Store outputs and prepare return values
         obj_output_dict = inference_state["output_dict_per_obj"][obj_idx]
@@ -1610,41 +1313,27 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             singleton_obj_idx = 0
 
             # Get video resolution masks from singleton output
-            _, video_res_masks_singleton = self._get_orig_video_res_output(
-                inference_state, current_out["pred_masks"]
-            )
+            _, video_res_masks_singleton = self._get_orig_video_res_output(inference_state, current_out["pred_masks"])
 
             # Mark frame as consolidated (prevents double consolidation in preflight)
             if "consolidated_frame_inds" in inference_state:
                 inference_state["consolidated_frame_inds"][storage_key].add(frame_idx)
 
             # For return value, use singleton masks
-            video_res_masks_to_return = video_res_masks_singleton[
-                singleton_obj_idx : singleton_obj_idx + 1
-            ]
+            video_res_masks_to_return = video_res_masks_singleton[singleton_obj_idx : singleton_obj_idx + 1]
         else:
             # Standard multiplex output - use obj_idx
-            _, video_res_masks = self._get_orig_video_res_output(
-                inference_state, current_out["pred_masks"]
-            )
+            _, video_res_masks = self._get_orig_video_res_output(inference_state, current_out["pred_masks"])
 
             current_out["pred_masks_video_res"] = video_res_masks
-            current_out["local_obj_id_to_idx"] = deepcopy(
-                inference_state["obj_id_to_idx"]
-            )
+            current_out["local_obj_id_to_idx"] = deepcopy(inference_state["obj_id_to_idx"])
 
             # Remove from non_cond if this becomes a cond frame
-            if (
-                is_cond
-                and frame_idx
-                in inference_state["output_dict"]["non_cond_frame_outputs"]
-            ):
+            if is_cond and frame_idx in inference_state["output_dict"]["non_cond_frame_outputs"]:
                 del inference_state["output_dict"]["non_cond_frame_outputs"][frame_idx]
                 # Also update consolidated_frame_inds
                 if "consolidated_frame_inds" in inference_state:
-                    inference_state["consolidated_frame_inds"][
-                        "non_cond_frame_outputs"
-                    ].discard(frame_idx)
+                    inference_state["consolidated_frame_inds"]["non_cond_frame_outputs"].discard(frame_idx)
 
             inference_state["output_dict"][storage_key][frame_idx] = current_out
 
@@ -1654,18 +1343,12 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
             # Store per-object outputs (slice from the full multiplex output)
             obj_temp_output_dict[storage_key][frame_idx] = {
-                "pred_masks_video_res": current_out["pred_masks_video_res"][
-                    obj_idx : obj_idx + 1
-                ],
+                "pred_masks_video_res": current_out["pred_masks_video_res"][obj_idx : obj_idx + 1],
                 "pred_masks": current_out["pred_masks"][obj_idx : obj_idx + 1],
-                "object_score_logits": current_out["object_score_logits"][
-                    obj_idx : obj_idx + 1
-                ],
+                "object_score_logits": current_out["object_score_logits"][obj_idx : obj_idx + 1],
             }
 
-            obj_output_dict[storage_key][frame_idx] = obj_temp_output_dict[storage_key][
-                frame_idx
-            ]
+            obj_output_dict[storage_key][frame_idx] = obj_temp_output_dict[storage_key][frame_idx]
 
             video_res_masks_to_return = video_res_masks[obj_idx : obj_idx + 1]
 
@@ -1687,16 +1370,9 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         """Add new mask to a frame."""
         if isinstance(obj_ids, np.ndarray):
             obj_ids = obj_ids.tolist()
-        obj_idxs = [
-            self._obj_id_to_idx(inference_state, obj_id, error_if_new=reconditioning)
-            for obj_id in obj_ids
-        ]
-        point_inputs_per_frame = [
-            inference_state["point_inputs_per_obj"][obj_idx] for obj_idx in obj_idxs
-        ]
-        mask_inputs_per_frame = [
-            inference_state["mask_inputs_per_obj"][obj_idx] for obj_idx in obj_idxs
-        ]
+        obj_idxs = [self._obj_id_to_idx(inference_state, obj_id, error_if_new=reconditioning) for obj_id in obj_ids]
+        point_inputs_per_frame = [inference_state["point_inputs_per_obj"][obj_idx] for obj_idx in obj_idxs]
+        mask_inputs_per_frame = [inference_state["mask_inputs_per_obj"][obj_idx] for obj_idx in obj_idxs]
 
         assert masks.dim() == 3
         num_objects, mask_H, mask_W = masks.shape
@@ -1746,9 +1422,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 )
                 inference_state["multiplex_state"] = multiplex_state
             else:
-                assert self.is_dynamic_model, (
-                    "New objects are not allowed after state creation"
-                )
+                assert self.is_dynamic_model, "New objects are not allowed after state creation"
 
         for i in range(num_objects):
             mask_inputs_per_frame[i][frame_idx] = mask_inputs_video_res[i : i + 1]
@@ -1759,16 +1433,9 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         # the input points will be used to correct the already tracked masks.
         is_init_cond_frame = frame_idx not in inference_state["frames_already_tracked"]
         # whether to track in reverse time order
-        if is_init_cond_frame:
-            reverse = False
-        else:
-            reverse = inference_state["frames_already_tracked"][frame_idx]["reverse"]
-        obj_output_dicts = [
-            inference_state["output_dict_per_obj"][obj_idx] for obj_idx in obj_idxs
-        ]
-        obj_temp_output_dicts = [
-            inference_state["temp_output_dict_per_obj"][obj_idx] for obj_idx in obj_idxs
-        ]
+        reverse = False if is_init_cond_frame else inference_state["frames_already_tracked"][frame_idx]["reverse"]
+        obj_output_dicts = [inference_state["output_dict_per_obj"][obj_idx] for obj_idx in obj_idxs]
+        obj_temp_output_dicts = [inference_state["temp_output_dict_per_obj"][obj_idx] for obj_idx in obj_idxs]
         # Add a frame to conditioning output if it's an initial conditioning frame or
         # if the model sees all frames receiving clicks/mask as conditioning frames.
         is_cond = is_init_cond_frame or self.add_all_frames_to_correct_as_cond
@@ -1776,7 +1443,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
         # Allow creating a new bucket only when existing buckets cannot fit the new objects
         allow_new_buckets_local = False
-        if not is_new_state and not reconditioning and multiplex_state is not None:
+        if not is_new_state and not reconditioning and multiplex_state is not None:  # noqa: SIM102 - Statement form kept for readability.
             if multiplex_state.available_slots < num_objects:
                 allow_new_buckets_local = True
 
@@ -1804,29 +1471,18 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         # video editing experience (so that the masks don't change after each brushing).
         # Here NO_OBJ_SCORE is a large negative value to represent the background and
         # similarly -NO_OBJ_SCORE is a large positive value to represent the foreground.
-        _, video_res_masks = self._get_orig_video_res_output(
-            inference_state, current_out["pred_masks"]
-        )
+        _, video_res_masks = self._get_orig_video_res_output(inference_state, current_out["pred_masks"])
         obj_idxs_t = torch.as_tensor(obj_idxs, device=video_res_masks.device)
-        video_res_masks[obj_idxs_t] = torch.where(
-            mask_inputs_video_res, -NO_OBJ_SCORE, NO_OBJ_SCORE
-        )
+        video_res_masks[obj_idxs_t] = torch.where(mask_inputs_video_res, -NO_OBJ_SCORE, NO_OBJ_SCORE)
 
         current_out["pred_masks_video_res"] = video_res_masks
         with torch.profiler.record_function("add_new_masks._deepcopy"):
-            current_out["local_obj_id_to_idx"] = deepcopy(
-                inference_state["obj_id_to_idx"]
-            )
-        if (
-            is_cond
-            and frame_idx in inference_state["output_dict"]["non_cond_frame_outputs"]
-        ):
+            current_out["local_obj_id_to_idx"] = deepcopy(inference_state["obj_id_to_idx"])
+        if is_cond and frame_idx in inference_state["output_dict"]["non_cond_frame_outputs"]:
             del inference_state["output_dict"]["non_cond_frame_outputs"][frame_idx]
             # Also update consolidated_frame_inds
             if "consolidated_frame_inds" in inference_state:
-                inference_state["consolidated_frame_inds"][
-                    "non_cond_frame_outputs"
-                ].discard(frame_idx)
+                inference_state["consolidated_frame_inds"]["non_cond_frame_outputs"].discard(frame_idx)
 
         inference_state["output_dict"][storage_key][frame_idx] = current_out
 
@@ -1840,19 +1496,13 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 # Add the predicted masks to the output dict
                 # NOTE: object ordering matters here but I guess this is the same for the per-object implementation
                 obj_temp_output_dicts[i][storage_key][frame_idx] = {
-                    "pred_masks_video_res": current_out["pred_masks_video_res"][
-                        obj_idx : obj_idx + 1
-                    ]
+                    "pred_masks_video_res": current_out["pred_masks_video_res"][obj_idx : obj_idx + 1]
                 }
-                obj_output_dicts[i][storage_key][frame_idx] = obj_temp_output_dicts[i][
-                    storage_key
-                ][frame_idx]
+                obj_output_dicts[i][storage_key][frame_idx] = obj_temp_output_dicts[i][storage_key][frame_idx]
 
             # Step 2: Precompute suppress masks to avoid O(n*m) torch.where calls
             # Combined mask of all new objects (for existing objects)
-            combined_new_mask = mask_inputs_video_res.any(
-                dim=0, keepdim=True
-            )  # (1, 1, H, W)
+            combined_new_mask = mask_inputs_video_res.any(dim=0, keepdim=True)  # (1, 1, H, W)
 
             # Precompute exclude-self masks for new objects (if there are multiple new objects)
             num_new = len(obj_idxs)
@@ -1862,14 +1512,10 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                     other_indices = torch.cat(
                         [
                             torch.arange(i, device=mask_inputs_video_res.device),
-                            torch.arange(
-                                i + 1, num_new, device=mask_inputs_video_res.device
-                            ),
+                            torch.arange(i + 1, num_new, device=mask_inputs_video_res.device),
                         ]
                     )
-                    exclude_self_masks[obj_idxs[i]] = mask_inputs_video_res[
-                        other_indices
-                    ].any(dim=0, keepdim=True)
+                    exclude_self_masks[obj_idxs[i]] = mask_inputs_video_res[other_indices].any(dim=0, keepdim=True)
 
             # Step 3: Apply suppression to all objects in a single pass
             temp_output_dict_per_obj = inference_state["temp_output_dict_per_obj"]
@@ -1905,9 +1551,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             run_mem_encoder=False,
             consolidate_at_video_res=True,
         )
-        _, video_res_masks = self._get_orig_video_res_output(
-            inference_state, consolidated_out["pred_masks_video_res"]
-        )
+        _, video_res_masks = self._get_orig_video_res_output(inference_state, consolidated_out["pred_masks_video_res"])
         low_res_masks = None  # not needed by the demo
 
         consolidated_out["local_obj_id_to_idx"] = current_out["local_obj_id_to_idx"]
@@ -1936,9 +1580,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             video_res_masks = self._apply_non_overlapping_constraints(video_res_masks)
         # potentially fill holes in the predicted masks
         if self.fill_hole_area > 0:
-            video_res_masks = fill_holes_in_mask_scores(
-                video_res_masks, self.fill_hole_area
-            )
+            video_res_masks = fill_holes_in_mask_scores(video_res_masks, self.fill_hole_area)
         return any_res_masks, video_res_masks
 
     def _consolidate_temp_output_across_obj(
@@ -1966,10 +1608,10 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         max_obj_idx = batch_size - 1  # Default to batch_size - 1
 
         # Check both temp and regular output dicts to find max index
-        for obj_idx in inference_state["temp_output_dict_per_obj"].keys():
+        for obj_idx in inference_state["temp_output_dict_per_obj"].keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if obj_idx > max_obj_idx:
                 max_obj_idx = obj_idx
-        for obj_idx in inference_state["output_dict_per_obj"].keys():
+        for obj_idx in inference_state["output_dict_per_obj"].keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
             if obj_idx > max_obj_idx:
                 max_obj_idx = obj_idx
 
@@ -2012,13 +1654,9 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             ),
         }
 
-        all_out = inference_state["output_dict"]["cond_frame_outputs"].get(
-            frame_idx, None
-        )
+        all_out = inference_state["output_dict"]["cond_frame_outputs"].get(frame_idx, None)
         if all_out is None:
-            all_out = inference_state["output_dict"]["non_cond_frame_outputs"].get(
-                frame_idx, None
-            )
+            all_out = inference_state["output_dict"]["non_cond_frame_outputs"].get(frame_idx, None)
 
         # Handle the case where output_dict is empty (e.g., during demo VG propagation)
         # In this case, we'll reconstruct the consolidated output from per-object outputs
@@ -2032,10 +1670,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 # Check if this object has point inputs on this frame
                 if obj_idx in inference_state["point_inputs_per_obj"]:
                     point_inputs = inference_state["point_inputs_per_obj"][obj_idx]
-                    if (
-                        frame_idx in point_inputs
-                        and point_inputs[frame_idx] is not None
-                    ):
+                    if frame_idx in point_inputs and point_inputs[frame_idx] is not None:
                         conditioning_objects.add(obj_idx)
                         continue
 
@@ -2050,9 +1685,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             # Note: obj_ptr and object_score_logits will be populated from per-object outputs below
         else:
             # Normal case: populate from existing consolidated output
-            consolidated_out["conditioning_objects"] = all_out.get(
-                "conditioning_objects", set()
-            )
+            consolidated_out["conditioning_objects"] = all_out.get("conditioning_objects", set())
             consolidated_out["obj_ptr"] = all_out["obj_ptr"]
             consolidated_out["object_score_logits"] = all_out["object_score_logits"]
             if self.use_memory_selection:
@@ -2062,9 +1695,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             consolidated_out["maskmem_pos_enc"] = all_out.get("maskmem_pos_enc")
             consolidated_out["image_features"] = all_out.get("image_features")
             consolidated_out["image_pos_enc"] = all_out.get("image_pos_enc")
-            consolidated_out["local_obj_id_to_idx"] = all_out.get(
-                "local_obj_id_to_idx", {}
-            )
+            consolidated_out["local_obj_id_to_idx"] = all_out.get("local_obj_id_to_idx", {})
             consolidated_out["obj_ptr"] = all_out["obj_ptr"]
             consolidated_out["object_score_logits"] = all_out["object_score_logits"]
             if self.use_memory_selection:
@@ -2074,9 +1705,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             consolidated_out["maskmem_pos_enc"] = all_out.get("maskmem_pos_enc")
             consolidated_out["image_features"] = all_out.get("image_features")
             consolidated_out["image_pos_enc"] = all_out.get("image_pos_enc")
-            consolidated_out["local_obj_id_to_idx"] = all_out.get(
-                "local_obj_id_to_idx", {}
-            )
+            consolidated_out["local_obj_id_to_idx"] = all_out.get("local_obj_id_to_idx", {})
             all_mask = all_out.get("pred_masks_video_res", all_out["pred_masks"])
             # Ensure masks are at the correct consolidated resolution
             # This handles the case where all_out has interactive resolution (288) masks
@@ -2099,19 +1728,12 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         # Collect per-object outputs (masks and scores) to build consolidated output
         # When reconstructing from per-object outputs, we also need to collect obj_ptr and object_score_logits
         obj_score_logits_list = []
-        obj_ptr_list = [] if need_to_reconstruct_from_per_obj else None
-        iou_scores_list = (
-            []
-            if need_to_reconstruct_from_per_obj and self.use_memory_selection
-            else None
-        )
+        _obj_ptr_list = [] if need_to_reconstruct_from_per_obj else None
+        iou_scores_list = [] if need_to_reconstruct_from_per_obj and self.use_memory_selection else None
 
         # When reconstructing from per-object outputs, initialize the mask tensor
         # with the correct size (consolidated_batch_size, not batch_size)
-        if (
-            need_to_reconstruct_from_per_obj
-            and consolidated_mask_key not in consolidated_out
-        ):
+        if need_to_reconstruct_from_per_obj and consolidated_mask_key not in consolidated_out:
             # Initialize with zeros - will be populated from per-object outputs below
             consolidated_out[consolidated_mask_key] = torch.zeros(
                 (consolidated_batch_size, 1, consolidated_H, consolidated_W),
@@ -2125,9 +1747,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 device=inference_state["storage_device"],
             )
 
-        for obj_idx in range(
-            consolidated_batch_size
-        ):  # Use consolidated_batch_size instead of batch_size
+        for obj_idx in range(consolidated_batch_size):  # Use consolidated_batch_size instead of batch_size
             # Check if this object index exists in temp/output dicts (it may not if object was just added)
             if obj_idx not in inference_state["temp_output_dict_per_obj"]:
                 continue
@@ -2209,9 +1829,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 )
                 # Ensure dtype match between source and destination before assignment
                 if resized_obj_mask.dtype != consolidated_pred_masks.dtype:
-                    resized_obj_mask = resized_obj_mask.to(
-                        consolidated_pred_masks.dtype
-                    )
+                    resized_obj_mask = resized_obj_mask.to(consolidated_pred_masks.dtype)
                 consolidated_pred_masks[obj_idx : obj_idx + 1] = resized_obj_mask
 
             # When reconstructing from per-object outputs, also collect scores
@@ -2232,9 +1850,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 run_mem_encoder = False  # Skip for now, will encode during propagation
 
             if obj_score_logits_list:
-                consolidated_out["object_score_logits"] = torch.cat(
-                    obj_score_logits_list, dim=0
-                )
+                consolidated_out["object_score_logits"] = torch.cat(obj_score_logits_list, dim=0)
             else:
                 # Create placeholder scores - these will be replaced when memory encoder runs
                 device = inference_state["device"]
@@ -2264,18 +1880,14 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 align_corners=False,
             )
             high_res_masks = self._apply_non_overlapping_constraints(high_res_masks)
-            maskmem_features, maskmem_pos_enc, image_features, image_pos_enc = (
-                self._run_memory_encoder(
-                    inference_state=inference_state,
-                    frame_idx=frame_idx,
-                    batch_size=batch_size,
-                    high_res_masks=high_res_masks,
-                    object_score_logits=consolidated_out["object_score_logits"],
-                    is_mask_from_pts=True,  # these frames are what the user interacted with
-                    conditioning_objects=consolidated_out[
-                        "conditioning_objects"
-                    ],  # Pass conditioning_objects
-                )
+            maskmem_features, maskmem_pos_enc, image_features, image_pos_enc = self._run_memory_encoder(
+                inference_state=inference_state,
+                frame_idx=frame_idx,
+                batch_size=batch_size,
+                high_res_masks=high_res_masks,
+                object_score_logits=consolidated_out["object_score_logits"],
+                is_mask_from_pts=True,  # these frames are what the user interacted with
+                conditioning_objects=consolidated_out["conditioning_objects"],  # Pass conditioning_objects
             )
             consolidated_out["maskmem_features"] = maskmem_features
             consolidated_out["maskmem_pos_enc"] = maskmem_pos_enc
@@ -2318,9 +1930,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 )
                 # merge them into "output_dict" and also create per-object slices
                 output_dict[storage_key][frame_idx] = consolidated_out
-                self._add_output_per_object(
-                    inference_state, frame_idx, consolidated_out, storage_key
-                )
+                self._add_output_per_object(inference_state, frame_idx, consolidated_out, storage_key)
                 clear_non_cond_mem = self.clear_non_cond_mem_around_input and (
                     self.clear_non_cond_mem_for_multi_obj or batch_size <= 1
                 )
@@ -2346,8 +1956,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         # Make sure that the frame indices in "consolidated_frame_inds" are exactly those frames
         # with either points or mask inputs (which should be true under a correct demo workflow).
         all_consolidated_frame_inds = (
-            consolidated_frame_inds["cond_frame_outputs"]
-            | consolidated_frame_inds["non_cond_frame_outputs"]
+            consolidated_frame_inds["cond_frame_outputs"] | consolidated_frame_inds["non_cond_frame_outputs"]
         )
 
         input_frames_inds = set()
@@ -2358,30 +1967,13 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         assert all_consolidated_frame_inds == input_frames_inds
         # Record the first interacted frame index (for tracking start)
         if inference_state["first_ann_frame_idx"] is None:
-            inference_state["first_ann_frame_idx"] = min(
-                input_frames_inds, default=None
-            )
+            inference_state["first_ann_frame_idx"] = min(input_frames_inds, default=None)
         # In case `first_ann_frame_idx` is not in the conditioning frames (e.g. because
         # we cleared the input points on that frame), pick the first conditioning frame
-        if (
-            inference_state["first_ann_frame_idx"]
-            not in output_dict["cond_frame_outputs"]
-        ):
-            inference_state["first_ann_frame_idx"] = min(
-                output_dict["cond_frame_outputs"], default=None
-            )
+        if inference_state["first_ann_frame_idx"] not in output_dict["cond_frame_outputs"]:
+            inference_state["first_ann_frame_idx"] = min(output_dict["cond_frame_outputs"], default=None)
 
-    def _get_processing_order(
-        self, inference_state, start_frame_idx, max_frame_num_to_track, reverse
-    ):
-        """Helper function to get processing order.
-
-        Args:
-            inference_state: The inference state.
-            start_frame_idx: The start frame idx.
-            max_frame_num_to_track: The max frame num to track.
-            reverse: The reverse.
-        """
+    def _get_processing_order(self, inference_state, start_frame_idx, max_frame_num_to_track, reverse):
         num_frames = inference_state["num_frames"]
         # set start index, end index, and processing order
         if self.always_start_from_first_ann_frame:
@@ -2396,7 +1988,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             max_frame_num_to_track = num_frames
         if reverse:
             end_frame_idx = max(start_frame_idx - max_frame_num_to_track, 0)
-            if start_frame_idx > 0:
+            if start_frame_idx > 0:  # noqa: SIM108 - Branches carry per-case comments.
                 processing_order = range(start_frame_idx, end_frame_idx - 1, -1)
             else:
                 # TODO: Jie - this is the edge case that we start from frame 0 and track in reverse order;
@@ -2405,9 +1997,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 # processing_order = []  # skip reverse tracking if starting from frame 0 <-- original behaviour
                 processing_order = [0]
         else:
-            end_frame_idx = min(
-                start_frame_idx + max_frame_num_to_track, num_frames - 1
-            )
+            end_frame_idx = min(start_frame_idx + max_frame_num_to_track, num_frames - 1)
             processing_order = range(start_frame_idx, end_frame_idx + 1)
         return processing_order
 
@@ -2426,9 +2016,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         output_dict = inference_state["output_dict"]
         consolidated_frame_inds = inference_state["consolidated_frame_inds"]
         if obj_ids is not None:
-            raise NotImplementedError(
-                "Per-object tracking yet for batched inference if not implemented."
-            )
+            raise NotImplementedError("Per-object tracking yet for batched inference if not implemented.")
         obj_ids = inference_state["obj_ids"]
         batch_size = self._get_obj_num(inference_state)
         if len(output_dict["cond_frame_outputs"]) == 0:
@@ -2445,9 +2033,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             reverse,
         )
 
-        for frame_idx in tqdm(
-            processing_order, desc="propagate in video", disable=tqdm_disable
-        ):
+        for frame_idx in tqdm(processing_order, desc="propagate in video", disable=tqdm_disable):
             # We skip those frames already in consolidated outputs (these are frames
             # that received input clicks or mask). Note that we cannot directly run
             # batched forward on them via `_run_single_frame_inference` because the
@@ -2465,9 +2051,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 pred_masks = current_out["pred_masks"]
             else:
                 storage_key = "non_cond_frame_outputs"
-                with torch.profiler.record_function(
-                    "VideoTrackingMultiplexInference._run_single_frame_inference"
-                ):
+                with torch.profiler.record_function("VideoTrackingMultiplexInference._run_single_frame_inference"):
                     current_out, pred_masks = self._run_single_frame_inference(
                         inference_state=inference_state,
                         output_dict=output_dict,
@@ -2479,27 +2063,19 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                         reverse=reverse,
                         run_mem_encoder=run_mem_encoder,
                     )
-                current_out["local_obj_id_to_idx"] = deepcopy(
-                    inference_state["obj_id_to_idx"]
-                )
+                current_out["local_obj_id_to_idx"] = deepcopy(inference_state["obj_id_to_idx"])
                 output_dict[storage_key][frame_idx] = current_out
             # Create slices of per-object outputs for subsequent interaction with each
             # individual object after tracking.
-            self._add_output_per_object(
-                inference_state, frame_idx, current_out, storage_key
-            )
+            self._add_output_per_object(inference_state, frame_idx, current_out, storage_key)
             inference_state["frames_already_tracked"][frame_idx] = {"reverse": reverse}
 
             # Resize the output mask to the original video resolution (we directly use
             # the mask scores on GPU for output to avoid any CPU conversion in between)
-            low_res_masks, video_res_masks = self._get_orig_video_res_output(
-                inference_state, pred_masks
-            )
+            low_res_masks, video_res_masks = self._get_orig_video_res_output(inference_state, pred_masks)
             yield frame_idx, obj_ids, low_res_masks, video_res_masks
 
-    def _add_output_per_object(
-        self, inference_state, frame_idx, current_out, storage_key
-    ):
+    def _add_output_per_object(self, inference_state, frame_idx, current_out, storage_key):
         """
         Split a multi-object output into per-object output slices and add them into
         `output_dict_per_obj`. The resulting slices share the same tensor storage.
@@ -2535,10 +2111,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         inference_state["mask_inputs_per_obj"][obj_idx].pop(frame_idx, None)
 
         # Clear user refinement tracking for this frame and object unless preserving it
-        if (
-            not preserve_user_refined
-            and "user_refined_frames_per_obj" in inference_state
-        ):
+        if not preserve_user_refined and "user_refined_frames_per_obj" in inference_state:
             user_refined_map = inference_state["user_refined_frames_per_obj"]
             if obj_id in user_refined_map:
                 user_refined_map[obj_id].discard(frame_idx)
@@ -2606,9 +2179,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             run_mem_encoder=False,
             consolidate_at_video_res=True,
         )
-        _, video_res_masks = self._get_orig_video_res_output(
-            inference_state, consolidated_out["pred_masks_video_res"]
-        )
+        _, video_res_masks = self._get_orig_video_res_output(inference_state, consolidated_out["pred_masks_video_res"])
         low_res_masks = None  # not needed by the demo
         return frame_idx, obj_ids, low_res_masks, video_res_masks
 
@@ -2649,9 +2220,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
     def _get_image_feature(self, inference_state, frame_idx, batch_size):
         """Compute the image features on a given frame."""
         # Look up in the cache first
-        image, backbone_out = inference_state["cached_features"].get(
-            frame_idx, (None, None)
-        )
+        image, backbone_out = inference_state["cached_features"].get(frame_idx, (None, None))
         if backbone_out is None:
             # Cache miss -- we will run inference on a single image
             image = inference_state["images"][frame_idx].cuda().float().unsqueeze(0)
@@ -2682,21 +2251,17 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         run_mem_encoder,
         prev_sam_mask_logits=None,
         add_to_existing_state: bool = False,
-        new_obj_idxs: Optional[list[int]] = None,
-        new_obj_ids: Optional[list[int]] = None,
+        new_obj_idxs: list[int] | None = None,
+        new_obj_ids: list[int] | None = None,
         allow_new_buckets: bool = False,
         prefer_new_buckets: bool = False,
         reconditioning: bool = False,
-        objects_to_interact: Optional[list[int]] = None,
+        objects_to_interact: list[int] | None = None,
     ):
         """Run tracking on a single frame based on current inputs and previous memory."""
         # Retrieve correct image features
-        with torch.profiler.record_function(
-            "VideoTrackingMultiplexInference._get_image_feature"
-        ):
-            image, backbone_features = self._get_image_feature(
-                inference_state, frame_idx, batch_size
-            )
+        with torch.profiler.record_function("VideoTrackingMultiplexInference._get_image_feature"):
+            image, backbone_features = self._get_image_feature(inference_state, frame_idx, batch_size)
 
         if add_to_existing_state or reconditioning:
             assert new_obj_idxs is not None
@@ -2706,18 +2271,14 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         backbone_features_propagation = backbone_features["sam2_backbone_out"]
 
         if add_to_existing_state or reconditioning:
-            with torch.profiler.record_function(
-                "VideoTrackingMultiplexInference.add_new_masks_to_existing_state"
-            ):
+            with torch.profiler.record_function("VideoTrackingMultiplexInference.add_new_masks_to_existing_state"):
                 # Get existing output from current frame to modify in-place
                 # Try both storage keys since the output could be in either location
                 existing_out = output_dict["cond_frame_outputs"].get(frame_idx)
                 if existing_out is None:
                     existing_out = output_dict["non_cond_frame_outputs"].get(frame_idx)
                 if existing_out is None:
-                    raise RuntimeError(
-                        f"No existing output found for frame {frame_idx} in either storage"
-                    )
+                    raise RuntimeError(f"No existing output found for frame {frame_idx} in either storage")
 
                 # Prepare interactive features
                 interactive_pix_feat = self._get_interactive_pix_mem(
@@ -2731,20 +2292,13 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                     for x, s in zip(
                         backbone_features_interactive["vision_feats"][:-1],
                         backbone_features_interactive["feat_sizes"][:-1],
+                        strict=False,
                     )
                 ]
 
                 # Prepare propagation features for memory encoding
-                propagation_vision_feats = (
-                    backbone_features_propagation["vision_feats"]
-                    if run_mem_encoder
-                    else None
-                )
-                propagation_feat_sizes = (
-                    backbone_features_propagation["feat_sizes"]
-                    if run_mem_encoder
-                    else None
-                )
+                propagation_vision_feats = backbone_features_propagation["vision_feats"] if run_mem_encoder else None
+                propagation_feat_sizes = backbone_features_propagation["feat_sizes"] if run_mem_encoder else None
 
                 # Add new masks to existing state
                 if reconditioning:
@@ -2765,12 +2319,8 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                     # first convert points -> masks via the interactivity head.
                     new_masks_from_points = None
                     if mask_inputs is None and point_inputs is not None:
-                        with torch.profiler.record_function(
-                            "VideoTrackingMultiplexInference.points_to_masks"
-                        ):
-                            multimask_output = self._use_multimask(
-                                is_init_cond_frame, point_inputs=point_inputs
-                            )
+                        with torch.profiler.record_function("VideoTrackingMultiplexInference.points_to_masks"):
+                            multimask_output = self._use_multimask(is_init_cond_frame, point_inputs=point_inputs)
                             interaction_out = self._forward_sam_heads(
                                 backbone_features=interactive_pix_feat,
                                 point_inputs=point_inputs,
@@ -2787,11 +2337,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                         interactive_high_res_features=interactive_high_res_features,
                         propagation_vision_feats=propagation_vision_feats,
                         propagation_feat_sizes=propagation_feat_sizes,
-                        new_masks=(
-                            mask_inputs
-                            if mask_inputs is not None
-                            else new_masks_from_points
-                        ),
+                        new_masks=(mask_inputs if mask_inputs is not None else new_masks_from_points),
                         obj_idxs_in_mask=new_obj_idxs,
                         obj_ids_in_mask=new_obj_ids,
                         prev_output=existing_out,
@@ -2807,9 +2353,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         else:
             # point and mask should not appear as input simultaneously on the same frame
             assert point_inputs is None or mask_inputs is None
-            with torch.profiler.record_function(
-                "VideoTrackingMultiplexInference.track_step"
-            ):
+            with torch.profiler.record_function("VideoTrackingMultiplexInference.track_step"):
                 current_out = self.track_step(
                     frame_idx=frame_idx,
                     is_init_cond_frame=is_init_cond_frame,
@@ -2833,29 +2377,21 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         storage_device = inference_state["storage_device"]
         if current_out.get("maskmem_features") is not None:
             maskmem_features = current_out["maskmem_features"]
-            maskmem_features = maskmem_features.to(
-                device=storage_device, dtype=torch.bfloat16, non_blocking=True
-            )
+            maskmem_features = maskmem_features.to(device=storage_device, dtype=torch.bfloat16, non_blocking=True)
         else:
             maskmem_features = None
 
         if current_out.get("image_features") is not None:
             assert "image_pos_enc" in current_out
-            image_features = current_out["image_features"].to(
-                storage_device, non_blocking=True
-            )
-            image_pos_enc = current_out["image_pos_enc"].to(
-                storage_device, non_blocking=True
-            )
+            image_features = current_out["image_features"].to(storage_device, non_blocking=True)
+            image_pos_enc = current_out["image_pos_enc"].to(storage_device, non_blocking=True)
         else:
             image_features = image_pos_enc = None
 
         pred_masks_gpu = current_out["pred_masks"]
         pred_masks = pred_masks_gpu.to(storage_device, non_blocking=True)
         # "maskmem_pos_enc" is the same across frames, so we only need to store one copy of it
-        with torch.profiler.record_function(
-            "VideoTrackingMultiplexInference.maskmem_pos_enc"
-        ):
+        with torch.profiler.record_function("VideoTrackingMultiplexInference.maskmem_pos_enc"):
             maskmem_pos_enc = self._get_maskmem_pos_enc(inference_state, current_out)
         # object pointer is a small tensor, so we always keep it on GPU memory for fast access
         obj_ptr = current_out["obj_ptr"]
@@ -2873,13 +2409,9 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
             "conditioning_objects": conditioning_objects,
         }
         if self.use_memory_selection:
-            with torch.profiler.record_function(
-                "VideoTrackingMultiplexInference.use_memory_selection"
-            ):
+            with torch.profiler.record_function("VideoTrackingMultiplexInference.use_memory_selection"):
                 compact_current_out["iou_score"] = current_out["iou_score"]
-                compact_current_out["eff_iou_score"] = self.cal_mem_score(
-                    object_score_logits, current_out["iou_score"]
-                )
+                compact_current_out["eff_iou_score"] = self.cal_mem_score(object_score_logits, current_out["iou_score"])
         return compact_current_out, pred_masks_gpu
 
     def _run_memory_encoder(
@@ -2898,14 +2430,10 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         memory also need to be computed again with the memory encoder.
         """
         # Retrieve correct image features
-        image, backbone_features = self._get_image_feature(
-            inference_state, frame_idx, batch_size
-        )
+        image, backbone_features = self._get_image_feature(inference_state, frame_idx, batch_size)
         backbone_features_propagation = backbone_features["sam2_backbone_out"]
         propagation_vision_feats = backbone_features_propagation["vision_feats"]
-        propagation_vision_pos_embeds = backbone_features_propagation[
-            "vision_pos_embeds"
-        ]
+        propagation_vision_pos_embeds = backbone_features_propagation["vision_pos_embeds"]
         propagation_feat_sizes = backbone_features_propagation["feat_sizes"]
 
         # If conditioning_objects is not provided, look it up from output_dict
@@ -2936,9 +2464,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         maskmem_features = maskmem_features.to(torch.bfloat16)
         maskmem_features = maskmem_features.to(storage_device, non_blocking=True)
         # "maskmem_pos_enc" is the same across frames, so we only need to store one copy of it
-        maskmem_pos_enc = self._get_maskmem_pos_enc(
-            inference_state, {"maskmem_pos_enc": maskmem_pos_enc}
-        )
+        maskmem_pos_enc = self._get_maskmem_pos_enc(inference_state, {"maskmem_pos_enc": maskmem_pos_enc})
 
         image_features = propagation_vision_feats[-1]
         image_features = image_features.to(storage_device, non_blocking=True)
@@ -2964,9 +2490,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 maskmem_pos_enc = model_constants["maskmem_pos_enc"]
             # expand the cached maskmem_pos_enc to the actual batch size
             batch_size = out_maskmem_pos_enc[0].size(0)
-            expanded_maskmem_pos_enc = [
-                x.expand(batch_size, -1, -1, -1) for x in maskmem_pos_enc
-            ]
+            expanded_maskmem_pos_enc = [x.expand(batch_size, -1, -1, -1) for x in maskmem_pos_enc]
         else:
             expanded_maskmem_pos_enc = None
         return expanded_maskmem_pos_enc
@@ -3016,18 +2540,14 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         the object ids actually exist and raise an error if any of them don't exist.
         """
         obj_ids = list(obj_ids)
-        old_obj_idxs_to_rm = [
-            inference_state["obj_id_to_idx"].get(obj_id, None) for obj_id in obj_ids
-        ]
+        old_obj_idxs_to_rm = [inference_state["obj_id_to_idx"].get(obj_id, None) for obj_id in obj_ids]
         updated_frames = []
         actually_used_obj_ids = []
         removing_any = False
         for old_obj_idx_to_rm, obj_id in zip(old_obj_idxs_to_rm, obj_ids, strict=True):
             if old_obj_idx_to_rm is None:
                 if strict:
-                    raise ValueError(
-                        f"Object id {obj_id} does not exist in the tracking state."
-                    )
+                    raise ValueError(f"Object id {obj_id} does not exist in the tracking state.")
             else:
                 actually_used_obj_ids.append(obj_id)
                 removing_any = True
@@ -3053,12 +2573,8 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         all_obj_input_frames_inds = set()
         for old_obj_idx_to_rm, obj_id in zip(old_obj_idxs_to_rm, obj_ids, strict=True):
             obj_input_frames_inds = set()
-            obj_input_frames_inds.update(
-                inference_state["point_inputs_per_obj"][old_obj_idx_to_rm]
-            )
-            obj_input_frames_inds.update(
-                inference_state["mask_inputs_per_obj"][old_obj_idx_to_rm]
-            )
+            obj_input_frames_inds.update(inference_state["point_inputs_per_obj"][old_obj_idx_to_rm])
+            obj_input_frames_inds.update(inference_state["mask_inputs_per_obj"][old_obj_idx_to_rm])
             for frame_idx in obj_input_frames_inds:
                 self.clear_all_points_in_frame(
                     inference_state,
@@ -3079,9 +2595,9 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         new_obj_ids = [old_obj_ids[old_idx] for old_idx in remain_old_obj_inds]
         new_obj_inds = list(range(len(new_obj_ids)))
         # build new mappings
-        old_idx_to_new_idx = dict(zip(remain_old_obj_inds, new_obj_inds))
-        inference_state["obj_id_to_idx"] = dict(zip(new_obj_ids, new_obj_inds))
-        inference_state["obj_idx_to_id"] = dict(zip(new_obj_inds, new_obj_ids))
+        old_idx_to_new_idx = dict(zip(remain_old_obj_inds, new_obj_inds, strict=False))
+        inference_state["obj_id_to_idx"] = dict(zip(new_obj_ids, new_obj_inds, strict=False))
+        inference_state["obj_idx_to_id"] = dict(zip(new_obj_inds, new_obj_ids, strict=False))
         inference_state["obj_ids"] = new_obj_ids
 
         if len(new_obj_ids) == 0:
@@ -3091,11 +2607,6 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
         # (note that "consolidated_frame_inds" doesn't need to be updated in this step as
         # it's already handled in Step 0)
         def _map_keys(container):
-            """Helper function to map keys.
-
-            Args:
-                container: The container.
-            """
             new_kvs = []
             for k in old_obj_inds:
                 v = container.pop(k)
@@ -3110,24 +2621,14 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
         multiplex_state: MultiplexState = inference_state["multiplex_state"]
         # strict is set to True because we have done the filtering above
-        buckets_to_keep = multiplex_state.remove_objects(
-            old_obj_idxs_to_rm, strict=True
-        )
+        buckets_to_keep = multiplex_state.remove_objects(old_obj_idxs_to_rm, strict=True)
         obj_ids = set(obj_ids)
 
         # Step 3: For packed tensor storage, we index the remaining ids and rebuild the per-bucket/per-object slices.
         def _slice_state(output_dict, storage_key):
-            """Helper function to slice state.
-
-            Args:
-                output_dict: The output dict.
-                storage_key: The storage key.
-            """
             for frame_idx, out in output_dict[storage_key].items():
                 out["maskmem_features"] = out["maskmem_features"][buckets_to_keep]
-                out["maskmem_pos_enc"] = [
-                    x[buckets_to_keep] for x in out["maskmem_pos_enc"]
-                ]
+                out["maskmem_pos_enc"] = [x[buckets_to_keep] for x in out["maskmem_pos_enc"]]
                 # "maskmem_pos_enc" is the same across frames, so we only need to store one copy of it
                 out["maskmem_pos_enc"] = self._get_maskmem_pos_enc(inference_state, out)
                 out["obj_ptr"] = out["obj_ptr"][buckets_to_keep]
@@ -3140,18 +2641,14 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
                 # Find which local indices correspond to the remaining old object indices
                 local_remain_old_obj_inds = [
-                    obj_idx
-                    for obj_id, obj_idx in local_obj_id_to_idx.items()
-                    if obj_id not in obj_ids
+                    obj_idx for obj_id, obj_idx in local_obj_id_to_idx.items() if obj_id not in obj_ids
                 ]
 
                 # Guard against stale indices by intersecting with available rows
                 max_pred = out["pred_masks"].shape[0]
                 max_scores = out["object_score_logits"].shape[0]
                 keep_indices = [
-                    idx
-                    for idx in local_remain_old_obj_inds
-                    if 0 <= idx < max_pred and 0 <= idx < max_scores
+                    idx for idx in local_remain_old_obj_inds if 0 <= idx < max_pred and 0 <= idx < max_scores
                 ]
                 out["pred_masks"] = out["pred_masks"][keep_indices]
                 out["object_score_logits"] = out["object_score_logits"][keep_indices]
@@ -3164,11 +2661,9 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
                 # Update local_obj_id_to_idx to reflect the new indices after removal
                 new_local_obj_id_to_idx = {}
-                old_to_new = {
-                    old_idx: new_i for new_i, old_idx in enumerate(keep_indices)
-                }
+                old_to_new = {old_idx: new_i for new_i, old_idx in enumerate(keep_indices)}
                 for obj_id, old_idx in local_obj_id_to_idx.items():
-                    if obj_id not in obj_ids:  # Keep objects not being removed
+                    if obj_id not in obj_ids:  # noqa: SIM102 - Branches carry per-case comments.  # Keep objects not being removed
                         # Find the new index for this object if it was kept
                         if old_idx in old_to_new:
                             new_idx = old_to_new[old_idx]
@@ -3180,9 +2675,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
                 out["conditioning_objects"] = sliced_conditioning_objects
 
                 # also update the per-object slices
-                self._add_output_per_object(
-                    inference_state, frame_idx, out, storage_key
-                )
+                self._add_output_per_object(inference_state, frame_idx, out, storage_key)
 
         _slice_state(inference_state["output_dict"], "cond_frame_outputs")
         _slice_state(inference_state["output_dict"], "non_cond_frame_outputs")
@@ -3231,9 +2724,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
     @torch.inference_mode()
     @torch.autocast(device_type="cuda", dtype=torch.bfloat16)
-    def warm_up_compilation(
-        self, offload_video_to_cpu=False, offload_state_to_cpu=False
-    ):
+    def warm_up_compilation(self, offload_video_to_cpu=False, offload_state_to_cpu=False):
         """
         Warm up the model by running a dummy inference to compile the model. This is
         useful to avoid the compilation overhead in the first inference call.
@@ -3248,6 +2739,7 @@ class VideoTrackingMultiplexInference(VideoTrackingDynamicMultiplex):
 
 class Sam3VideoTrackingMultiplexInference(VideoTrackingMultiplexInference):
     """Sam video tracking multiplex inference implementation."""
+
     @torch.inference_mode()
     def init_state(
         self,
@@ -3289,9 +2781,7 @@ class Sam3VideoTrackingMultiplexInference(VideoTrackingMultiplexInference):
         inference_state["point_inputs_per_obj"] = {}
         inference_state["mask_inputs_per_obj"] = {}
         # visual features on a small number of recently visited frames for quick interactions
-        inference_state["cached_features"] = (
-            {} if cached_features is None else cached_features
-        )
+        inference_state["cached_features"] = {} if cached_features is None else cached_features
         # values that don't change across frames (so we only need to hold one copy of them)
         inference_state["constants"] = {}
         # mapping between client-side object id and model-side object index
@@ -3334,25 +2824,14 @@ class Sam3VideoTrackingMultiplexInference(VideoTrackingMultiplexInference):
         self.clear_all_points_in_video(inference_state)
         return inference_state
 
-    def _suppress_shrinked_masks(
-        self, pred_masks, new_pred_masks, shrink_threshold=0.3
-    ):
-        """Helper function to suppress shrinked masks.
-
-        Args:
-            pred_masks: The pred masks.
-            new_pred_masks: The new pred masks.
-            shrink_threshold: The shrink threshold.
-        """
+    def _suppress_shrinked_masks(self, pred_masks, new_pred_masks, shrink_threshold=0.3):
         area_before = (pred_masks > 0).sum(dim=(-1, -2))
         area_after = (new_pred_masks > 0).sum(dim=(-1, -2))
         area_before = torch.clamp(area_before, min=1.0)
         area_ratio = area_after / area_before
         keep = area_ratio >= shrink_threshold
         keep_mask = keep[..., None, None].expand_as(pred_masks)
-        pred_masks_after = torch.where(
-            keep_mask, pred_masks, torch.clamp(pred_masks, max=-10.0)
-        )
+        pred_masks_after = torch.where(keep_mask, pred_masks, torch.clamp(pred_masks, max=-10.0))
         return pred_masks_after
 
     @staticmethod
@@ -3378,9 +2857,7 @@ class Sam3VideoTrackingMultiplexInference(VideoTrackingMultiplexInference):
         keep = max_obj_inds == batch_obj_inds
         # suppress overlapping regions' scores below -10.0 so that the foreground regions
         # don't overlap (here sigmoid(-10.0)=4.5398e-05)
-        pixel_level_non_overlapping_masks = torch.where(
-            keep, pred_masks, torch.clamp(pred_masks, max=-10.0)
-        )
+        pixel_level_non_overlapping_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
 
         # Fully suppress masks with high shrinkage (probably noisy) based on the pixel wise non-overlapping constraints
         # NOTE: The output of this function can be a no op if none of the masks shrinked by a large factor.
@@ -3395,27 +2872,19 @@ class Sam3VideoTrackingMultiplexInference(VideoTrackingMultiplexInference):
         area_ratio = area_after / area_before
         keep = area_ratio >= shrink_threshold
         keep_mask = keep[..., None, None].expand_as(pred_masks)
-        pred_masks_after = torch.where(
-            keep_mask, pred_masks, torch.clamp(pred_masks, max=-10.0)
-        )
+        pred_masks_after = torch.where(keep_mask, pred_masks, torch.clamp(pred_masks, max=-10.0))
 
         return pred_masks_after
 
-    def _apply_object_wise_non_overlapping_constraints(
-        self, pred_masks, obj_scores, background_value=-10.0
-    ):
+    def _apply_object_wise_non_overlapping_constraints(self, pred_masks, obj_scores, background_value=-10.0):
         """
         Applies non-overlapping constraints object wise (i.e. only one object can claim the overlapping region)
         """
         # TODO: Try suppression based on IoM here as well.
         # Replace pixel scores with object scores
-        pred_masks_single_score = torch.where(
-            pred_masks > 0, obj_scores[..., None, None], background_value
-        )
+        pred_masks_single_score = torch.where(pred_masks > 0, obj_scores[..., None, None], background_value)
         # Apply pixel-wise non-overlapping constraint based on mask scores
-        pixel_level_non_overlapping_masks = super()._apply_non_overlapping_constraints(
-            pred_masks_single_score
-        )
+        pixel_level_non_overlapping_masks = super()._apply_non_overlapping_constraints(pred_masks_single_score)
         # Replace object scores with pixel scores. Note, that now only one object can claim the overlapping region
         pred_masks = torch.where(
             pixel_level_non_overlapping_masks > 0,
@@ -3440,9 +2909,7 @@ class Sam3VideoTrackingMultiplexInference(VideoTrackingMultiplexInference):
         output_dict = inference_state["output_dict"]
         consolidated_frame_inds = inference_state["consolidated_frame_inds"]
         if obj_ids is not None:
-            raise NotImplementedError(
-                "Per-object tracking yet for batched inference if not implemented."
-            )
+            raise NotImplementedError("Per-object tracking yet for batched inference if not implemented.")
         obj_ids = inference_state["obj_ids"]
         batch_size = self._get_obj_num(inference_state)
         if len(output_dict["cond_frame_outputs"]) == 0:
@@ -3458,9 +2925,7 @@ class Sam3VideoTrackingMultiplexInference(VideoTrackingMultiplexInference):
             reverse,
         )
 
-        for frame_idx in tqdm(
-            processing_order, desc="propagate in video", disable=tqdm_disable
-        ):
+        for frame_idx in tqdm(processing_order, desc="propagate in video", disable=tqdm_disable):
             # We skip those frames already in consolidated outputs (these are frames
             # that received input clicks or mask). Note that we cannot directly run
             # batched forward on them via `_run_single_frame_inference` because the
@@ -3480,9 +2945,7 @@ class Sam3VideoTrackingMultiplexInference(VideoTrackingMultiplexInference):
                 obj_scores = current_out["object_score_logits"]
             else:
                 storage_key = "non_cond_frame_outputs"
-                with torch.profiler.record_function(
-                    "VideoTrackingMultiplexInference._run_single_frame_inference"
-                ):
+                with torch.profiler.record_function("VideoTrackingMultiplexInference._run_single_frame_inference"):
                     current_out, pred_masks = self._run_single_frame_inference(
                         inference_state=inference_state,
                         output_dict=output_dict,
@@ -3495,21 +2958,15 @@ class Sam3VideoTrackingMultiplexInference(VideoTrackingMultiplexInference):
                         run_mem_encoder=run_mem_encoder,
                     )
                     obj_scores = current_out["object_score_logits"]
-                    current_out["local_obj_id_to_idx"] = deepcopy(
-                        inference_state["obj_id_to_idx"]
-                    )
+                    current_out["local_obj_id_to_idx"] = deepcopy(inference_state["obj_id_to_idx"])
                 output_dict[storage_key][frame_idx] = current_out
 
             # Create slices of per-object outputs for subsequent interaction with each
             # individual object after tracking.
-            self._add_output_per_object(
-                inference_state, frame_idx, current_out, storage_key
-            )
+            self._add_output_per_object(inference_state, frame_idx, current_out, storage_key)
             inference_state["frames_already_tracked"][frame_idx] = {"reverse": reverse}
 
             # Resize the output mask to the original video resolution (we directly use
             # the mask scores on GPU for output to avoid any CPU conversion in between)
-            low_res_masks, video_res_masks = self._get_orig_video_res_output(
-                inference_state, pred_masks
-            )
+            low_res_masks, video_res_masks = self._get_orig_video_res_output(inference_state, pred_masks)
             yield frame_idx, obj_ids, low_res_masks, video_res_masks, obj_scores

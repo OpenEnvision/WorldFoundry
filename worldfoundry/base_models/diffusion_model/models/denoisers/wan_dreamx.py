@@ -11,11 +11,15 @@ Wan 2.1 / 2.2 helpers with DreamX's 48-channel Wan2.2 VAE statistics.
 The causal DiT is :class:`~..networks.wan.variants.dreamx_world.causal.CausalWanModel`.
 """
 
-from typing import List, Optional
 import torch
 
-from worldfoundry.base_models.diffusion_model.schedulers import (
-    InferenceFlowMatchScheduler,
+from worldfoundry.base_models.diffusion_model.loaders.wan_variant import load_wan_config
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_22 import (
+    WAN_2P2_VAE_MEAN,
+    WAN_2P2_VAE_STD,
+)
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_22 import (
+    _video_vae as _video_vae_2_2,
 )
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.resident import (
     WanVAEWrapper as _WanVAEWrapper,
@@ -23,12 +27,9 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.resident i
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.resident import (
     WanTextEncoder as _WanTextEncoder,
 )
-from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_22 import (
-    WAN_2P2_VAE_MEAN,
-    WAN_2P2_VAE_STD,
-    _video_vae as _video_vae_2_2,
+from worldfoundry.base_models.diffusion_model.schedulers import (
+    InferenceFlowMatchScheduler,
 )
-from worldfoundry.base_models.diffusion_model.loaders.wan_variant import load_wan_config
 
 
 class WanTextEncoder(_WanTextEncoder):
@@ -115,11 +116,11 @@ class WanDiffusionCameraWrapper(torch.nn.Module):
         conditional_dict: dict,
         y_camera,
         timestep: torch.Tensor,
-        y: Optional[torch.Tensor] = None,
-        kv_cache: Optional[List[dict]] = None,
-        crossattn_cache: Optional[List[dict]] = None,
-        current_start: Optional[int] = None,
-        cache_start: Optional[int] = None,
+        y: torch.Tensor | None = None,
+        kv_cache: list[dict] | None = None,
+        crossattn_cache: list[dict] | None = None,
+        current_start: int | None = None,
+        cache_start: int | None = None,
         cache_update_policy: str = "commit_detached",
     ) -> torch.Tensor:
         prompt_embeds = conditional_dict["prompt_embeds"]

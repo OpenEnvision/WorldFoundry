@@ -5,43 +5,57 @@ reused across multiple ``MonitorCentricEvolutionPipeline`` runs.  Each pipeline
 receives a ``SharedModels`` instance and uses the pre-loaded models
 directly — no lazy loading.
 """
+
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 
+# isort: split
 from .observer_adapter import ObserverAdapter
+
+# isort: split
 from worldfoundry.base_models.perception_core.general_perception.qwen3_vl_entity import (
     Qwen3VLEntityExtractor,
 )
+
+# isort: split
 from worldfoundry.base_models.perception_core.segment.sam3.video_segmenter import (
     Sam3VideoSegmenter,
 )
+
+# isort: split
 from .entity_matcher import EntityMatcher
-from .helpers import get_project_root, load_unified_backbone_pipeline, parse_target_resolution
+
+# isort: split
+from .helpers import load_unified_backbone_pipeline, parse_target_resolution
+
+# isort: split
+# isort: split
 from .logger import logger
-from liveworld.pipelines.pointcloud_updater import PointCloudUpdater, create_pointcloud_updater
+
+# isort: split
+# isort: split
+from worldfoundry.synthesis.visual_generation.liveworld.liveworld_runtime.liveworld.pipelines.pointcloud_updater import (
+    PointCloudUpdater,
+    create_pointcloud_updater,
+)
 
 
 @dataclass
 class SharedModels:
     """Pre-loaded model instances shared across batch runs."""
+
     observer_adapter: ObserverAdapter
     qwen_extractor: Qwen3VLEntityExtractor
     sam3_segmenter: Sam3VideoSegmenter
     pointcloud_handler: PointCloudUpdater
-    entity_matcher: Optional[EntityMatcher]
+    entity_matcher: EntityMatcher | None
 
 
 def create_shared_models(config: dict) -> SharedModels:
     """Create all heavyweight models from a config."""
-    project_root = get_project_root()
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-
     device_str = config["runtime"]["device"]
     device = torch.device(device_str)
     cpu_offload = config["runtime"]["cpu_offload"]
@@ -95,7 +109,9 @@ def create_shared_models(config: dict) -> SharedModels:
         dedup_model_path = dedup_cfg.get("model_path", "ckpts/facebook--dinov3-vith16plus-pretrain-lvd1689m")
         dedup_similarity_threshold = dedup_cfg.get("similarity_threshold", 0.6)
         entity_matcher = EntityMatcher(
-            model_path=dedup_model_path, device=device_str, similarity_threshold=dedup_similarity_threshold,
+            model_path=dedup_model_path,
+            device=device_str,
+            similarity_threshold=dedup_similarity_threshold,
         )
         if event_cfg["cpu_offload"].get("dinov3", False) and hasattr(entity_matcher, "model"):
             entity_matcher.model.to("cpu")

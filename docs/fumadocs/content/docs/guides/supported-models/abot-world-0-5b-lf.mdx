@@ -1,52 +1,50 @@
 ---
 title: "ABot-World-0-5B-LF"
-description: "ABot-World-0-5B-LF from Alibaba (Amap): image-to-world-video and action-conditioned-video; Verified; dedicated `abot-world`."
+description: "ABot-World-0-5B-LF from Alibaba (Amap): image-to-world-video, action-conditioned video, and 1 more task; Verified; dedicated `abot-world`."
 modelId: "abot-world-0-5b-lf"
 pageSource: authored
 ---
 
-ABot-World-0-5B-LF is Amap's interactive world model: give it an image plus actions and it rolls out world video block by block, keeping causal KV state resident between action blocks. In this catalog it is checkpoint/GPU validated — real A100 Workspace inference produced a fully decodable 1280x704 nine-frame H.264 artifact from the public 0.5B-LF checkpoint at the official resolution.
+ABot-World-0-5B-LF is Amap's interactive world model: give it an image plus actions and it rolls out world video block by block, keeping causal KV state resident between action blocks. Validated with the public 0.5B-LF checkpoint on an A100: one action block at the official 1280×704 resolution produces a decodable nine-frame H.264 clip.
 
 <ModelPaperFigures modelId="abot-world-0-5b-lf" locale="en" />
 
-The recorded paper is [arXiv 2607.19191](https://arxiv.org/abs/2607.19191).
+Paper: [arXiv 2607.19191](https://arxiv.org/abs/2607.19191).
 
 Project page: [amap-cvlab.github.io/ABot-World](https://amap-cvlab.github.io/ABot-World/). Code: [amap-cvlab/ABot-World](https://github.com/amap-cvlab/ABot-World).
 
-The official paper is on [arXiv 2607.19191](https://arxiv.org/abs/2607.19191). Project: [amap-cvlab.github.io/ABot-World](https://amap-cvlab.github.io/ABot-World/). Code: [amap-cvlab/ABot-World](https://github.com/amap-cvlab/ABot-World). Public checkpoint: `acvlab/ABot-World-0-5B-LF` (revision `d05a3ecf`). Catalog license is unset.
+Public checkpoint: `acvlab/ABot-World-0-5B-LF`. No license is stated for the model; check the upstream repository before production use.
 
-What this repository actually ran: real **A100** Workspace inference at the official **1280×704** produced a fully decodable **9-frame** H.264 clip at **16 fps**. That is checkpoint/GPU validation for the first block, not a long-horizon scorecard.
+Validated on an **A100**: the first action block at the official **1280×704** produces a decodable **9-frame** H.264 clip at **16 fps**.
 
 <ModelCommandBuilder modelId="abot-world-0-5b-lf" locale="en" />
 
 ## What it is for
 
-Pick `abot-world-0-5b-lf` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+`abot-world-0-5b-lf` is an action-conditioned world model: actions and a starting frame in, a rollout out.
 
-Only causal inference and resident interactive rollout are integrated; Wan attention, T5, the Wan2.2 VAE, scheduler, media I/O, and FP8 support are reused in-tree, while training, Gradio, benchmark, and experimental quantizer sources are excluded. The recorded checkpoint is acvlab/ABot-World-0-5B-LF (causal student). It is published by Alibaba (Amap).
+The causal student uses Wan attention, a T5 text encoder, the Wan2.2 VAE, and its scheduler, with optional FP8. WorldFoundry supports causal inference and resident interactive rollout; training and the Gradio demo are not included. The checkpoint is acvlab/ABot-World-0-5B-LF (causal student). It is published by Alibaba (Amap).
 
-Catalog tasks include image-to-world-video, action-conditioned-video, and interactive-world-model. Catalog aliases include `abot-world` and `abot`. Documented modalities: image in, world state and video out.
+Tasks: image-to-world-video, action-conditioned video, and interactive world model. Aliases: `abot-world` and `abot`. Modalities: image in, world state and video out.
 
-Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (General world-model rollout quality evaluation).
+Suggested benchmarks: [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (General world-model rollout quality evaluation).
 
 ## Runtime contract
 
-Optional `prompt`, `input_path`, `interactions`, `frames`, and `fps`; artifacts `generated_world_video` and `abot-world.mp4`.
+Inputs `prompt` and `input-path` (bundled samples are used when omitted); options `frames`, `fps`, `seed`, and `num-blocks`; artifacts `generated_world_video` and `abot-world.mp4`.
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `ABotWorldPipeline`.
 
 Family status: **Verified**.
 
-Runtime execution is offline-first and requires a local checkpoint directory. The resident API keeps causal KV state between action blocks; the first block returns 9 RGB frames and subsequent blocks return 12 — plan client-side buffering accordingly.
-
-Only causal inference and resident interactive rollout are integrated.
+Stage the checkpoint in a local directory before running; the runtime works offline. The resident API keeps causal KV state between action blocks; the first block returns 9 RGB frames and subsequent blocks return 12 — plan client-side buffering accordingly.
 
 ## Running in WorldFoundry
 
-The catalog launch is `worldfoundry-eval run abot-world-0-5b-lf --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+Run `wf run abot-world-0-5b-lf --pipeline.task-profile interactive-video` to roll out the world model.
 
-Recorded weight repositories include `acvlab/ABot-World-0-5B-LF`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh abot-world-0-5b-lf`. Add `--download` to fetch missing public checkpoints.
+It runs in the dedicated environment `abot-world` (Python 3.12, CUDA 12.9, torch==2.8.0).
 
-Status: **Verified**.
+Weights: `acvlab/ABot-World-0-5B-LF`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh abot-world-0-5b-lf`. Add `--download` to fetch missing public checkpoints.
 
 <ModelRelatedRecipes modelId="abot-world-0-5b-lf" locale="en" />

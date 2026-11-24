@@ -8,13 +8,13 @@ asset path resolution, JAX/Tux compatibility fixes, and model inference.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from worldfoundry.core import jsonable
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
-
 
 
 def _install_tux_jax_compat() -> None:
@@ -47,6 +47,7 @@ def _install_tux_jax_compat() -> None:
     if not hasattr(jnp, "DeviceArray") and hasattr(jax, "Array"):
         jnp.DeviceArray = jax.Array
     if not hasattr(transformers, "FlaxLogitsWarper"):
+
         class FlaxLogitsWarper:
             """Compatibility base removed from recent Transformers releases."""
 
@@ -62,8 +63,8 @@ def _install_tux_checkpoint_compat() -> None:
     preventing out-of-memory issues during streaming loading.
     """
     try:
-        from tux import StreamingCheckpointer
         import tux.checkpoint as tux_checkpoint
+        from tux import StreamingCheckpointer
     except Exception:
         # If tux is not available, skip compatibility patches.
         return
@@ -86,7 +87,7 @@ def _install_tux_checkpoint_compat() -> None:
             unpacker = tux_checkpoint.msgpack.Unpacker(
                 fin,
                 read_size=83886080,  # Larger read size for performance
-                max_buffer_size=32 * 2 ** 30,  # 32 GB max buffer to handle large tensors
+                max_buffer_size=32 * 2**30,  # 32 GB max buffer to handle large tensors
             )
             for key, value in unpacker:
                 key = tuple(key)
@@ -105,9 +106,7 @@ def _install_tux_checkpoint_compat() -> None:
 
         # If a target state dict is provided, merge in any missing empty nodes from the target.
         if target is not None:
-            flattened_target = tux_checkpoint.flatten_dict(
-                tux_checkpoint.to_state_dict(target), keep_empty_nodes=True
-            )
+            flattened_target = tux_checkpoint.flatten_dict(tux_checkpoint.to_state_dict(target), keep_empty_nodes=True)
             for key, value in flattened_target.items():
                 if key not in flattened_train_state and value == tux_checkpoint.empty_node:
                     flattened_train_state[key] = value

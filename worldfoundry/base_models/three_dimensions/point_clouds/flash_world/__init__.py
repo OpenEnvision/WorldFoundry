@@ -1,18 +1,11 @@
-"""Module for base_models -> three_dimensions -> point_clouds -> flash_world -> __init__.py functionality."""
-
 __all__ = [
     "AutoencoderKLWan",
-    "WanTransformer3DModel",
     "WANDecoderPixelAligned3DGSReconstructionModel",
+    "WanTransformer3DModel",
 ]
 
 
 def __getattr__(name):
-    """Getattr.
-
-    Args:
-        name: The name.
-    """
     if name == "AutoencoderKLWan":
         from .autoencoder_kl_wan import AutoencoderKLWan
 

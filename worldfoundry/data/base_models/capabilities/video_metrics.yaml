@@ -1,0 +1,541 @@
+# Video quality and benchmark-specific metric models.
+# Schema and templates: see the module docstring of worldfoundry/base_models/capabilities.py.
+
+fastvqa:
+  family: video_quality
+  canonical_path: worldfoundry/base_models/perception_core/video_quality/fastvqa
+  package_imports: [torch, torchvision, cv2, numpy, decord, timm, yaml]
+  install_packages: [torch, torchvision, opencv-python, numpy, decord, timm, pyyaml]
+  assets:
+    - id: fastvqa_fastervqa_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_FASTVQA_CKPT, WORLDFOUNDRY_4DWORLDBENCH_FASTVQA_CKPT]
+      local_path: ${WORLDFOUNDRY_CKPT_DIR}/FAST-VQA/FAST_VQA_3D_1_1_Scr.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/fastvqa/FAST_VQA_3D_1_1_Scr.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/4dworldbench/FAST-VQA/FAST_VQA_3D_1_1_Scr.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WorldScore/metrics/checkpoints/FAST_VQA_3D_1_1_Scr.pth
+      manual_action: Stage the official FAST_VQA_3D_1_1_Scr.pth checkpoint under $WORLDFOUNDRY_CKPT_DIR/FAST-VQA
+        or set $WORLDFOUNDRY_FASTVQA_CKPT/$WORLDFOUNDRY_4DWORLDBENCH_FASTVQA_CKPT.
+      min_size_bytes: 10000000
+      note: Default FasterVQA checkpoint used by 4DWorldBench perceptual_fastvqa.
+    - id: fastvqa_fast_b_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_FASTVQA_B_CKPT]
+      local_path: ${WORLDFOUNDRY_CKPT_DIR}/FAST-VQA/FAST_VQA_B_1_4.pth
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/fastvqa/FAST_VQA_B_1_4.pth']
+      manual_action: Stage FAST_VQA_B_1_4.pth only when using the FAST-VQA model variant.
+      min_size_bytes: 10000000
+      required: false
+      note: Optional FAST-VQA-B checkpoint.
+    - id: fastvqa_fast_m_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_FASTVQA_M_CKPT]
+      local_path: ${WORLDFOUNDRY_CKPT_DIR}/FAST-VQA/FAST_VQA_M_1_4.pth
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/fastvqa/FAST_VQA_M_1_4.pth']
+      manual_action: Stage FAST_VQA_M_1_4.pth only when using the FAST-VQA-M model variant.
+      min_size_bytes: 10000000
+      required: false
+      note: Optional FAST-VQA-M checkpoint.
+
+visual_chronometer_fps_predictor:
+  family: video_metric_model
+  package_imports: [torch, numpy, cv2, omegaconf, huggingface_hub]
+  install_packages: [torch, numpy, opencv-python, omegaconf, huggingface-hub]
+  assets:
+    - id: visual_chronometer_fps_ckpt
+      kind: file
+      role: metric_checkpoint
+      env: [WORLDFOUNDRY_VISUAL_CHRONOMETER_CKPT_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/xiangbog--Visual_Chronometer/vc_common_10_60fps.ckpt
+      alternate_paths:
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/xiangbog--Visual_Chronometer/vc_common_10_60fps.ckpt
+        - ${WORLDFOUNDRY_VISUAL_CHRONOMETER_ROOT}/inference/ckpts/vc_common_10_60fps.ckpt
+      hf_repo_id: xiangbog/Visual_Chronometer
+      hf_filename: vc_common_10_60fps.ckpt
+      min_file_count: 1
+      note: Visual Chronometer PhyFPS predictor checkpoint used by in-tree official-run surfaces.
+
+fetv_blip_retrieval_source:
+  family: video_metric_model
+  canonical_path: worldfoundry/base_models/perception_core/video_text/fetv_blip
+  package_imports: [torch, transformers, PIL, numpy, timm, fairscale]
+  install_packages: [torch, transformers, Pillow, numpy, timm, fairscale]
+
+fetv_stylegan_v_fvd_source:
+  family: video_metric_model
+  canonical_path: worldfoundry/base_models/perception_core/video_quality/fetv_stylegan_v
+  package_imports: [torch, torchvision, PIL, numpy, scipy, click, omegaconf]
+  install_packages: [torch, torchvision, Pillow, numpy, scipy, click, omegaconf]
+
+wbench_quality_metric_assets:
+  family: video_quality_metric_model
+  canonical_path: worldfoundry/base_models/perception_core/general_perception/openai_clip.py
+  package_imports: [pyiqa, transformers, torch, torchvision, ftfy, regex, tqdm]
+  asset_env_policy: all
+  assets:
+    - id: wbench_clip_vit_b32_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_WBENCH_CLIP_VIT_B32_PT]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/models/wbench/clip_model/ViT-B-32.pt
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/clip_model/ViT-B-32.pt
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/clip/ViT-B-32.pt
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/clip_model/ViT-B-32.pt
+        - ${WORLDFOUNDRY_CKPT_DIR}/VBench/clip_model/ViT-B-32.pt
+      download_url: https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt
+      min_size_bytes: 300000000
+      note: OpenAI CLIP ViT-B/32 checkpoint used by WBench background consistency.
+    - id: wbench_clip_vit_l14_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_WBENCH_CLIP_VIT_L14_PT]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/models/wbench/clip_model/ViT-L-14.pt
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/clip_model/ViT-L-14.pt
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/clip/ViT-L-14.pt
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/clip_model/ViT-L-14.pt
+        - ${WORLDFOUNDRY_CKPT_DIR}/VBench/clip_model/ViT-L-14.pt
+      download_url: https://openaipublic.azureedge.net/clip/models/b8cca3fd41ae0c99ba7e8951adf17d267cdb84cd88be6f7c2e0eca1737a03836/ViT-L-14.pt
+      min_size_bytes: 800000000
+      note: OpenAI CLIP ViT-L/14 checkpoint used by WBench aesthetic quality.
+    - id: wbench_aesthetic_linear_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_WBENCH_AESTHETIC_LINEAR_CKPT]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/models/wbench/aesthetic_model/emb_reader/sa_0_4_vit_l_14_linear.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/aesthetic_model/emb_reader/sa_0_4_vit_l_14_linear.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/aesthetic/sa_0_4_vit_l_14_linear.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/aesthetic_model/emb_reader/sa_0_4_vit_l_14_linear.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/VBench/aesthetic_model/emb_reader/sa_0_4_vit_l_14_linear.pth
+      download_url: https://github.com/LAION-AI/aesthetic-predictor/raw/main/sa_0_4_vit_l_14_linear.pth
+      min_size_bytes: 1000
+      note: LAION aesthetic predictor linear head used by WBench aesthetic quality.
+    - id: wbench_musiq_koniq_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_WBENCH_MUSIQ_KONIQ_CKPT]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/models/wbench/pyiqa_model/musiq_koniq_ckpt-e95806b9.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/pyiqa_model/musiq_koniq_ckpt-e95806b9.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/pyiqa/musiq_koniq_ckpt-e95806b9.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/pyiqa_model/musiq_koniq_ckpt-e95806b9.pth
+      download_url: https://github.com/chaofengc/IQA-PyTorch/releases/download/v0.1-weights/musiq_koniq_ckpt-e95806b9.pth
+      min_size_bytes: 100000000
+      note: MUSIQ-KonIQ checkpoint selected by the official WBench pyiqa.create_metric('musiq') call.
+    - id: wbench_clip_vit_b16_model_dir
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_WBENCH_CLIP_VIT_B16_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/openai--clip-vit-base-patch16
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/hfd/openai--clip-vit-base-patch16
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/clip-vit-base-patch16
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/hfd/openai--clip-vit-base-patch16
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/openai--clip-vit-base-patch16
+      hf_repo_id: openai/clip-vit-base-patch16
+      min_file_count: 1
+      required_files: [config.json]
+      required_any_paths: [model.safetensors, pytorch_model.bin]
+      note: HF CLIP ViT-B/16 model used by WBench subject consistency.
+
+wbench_transnetv2:
+  family: video_quality
+  canonical_path: worldfoundry/base_models/perception_core/video_quality/transnetv2.py
+  package_imports: [torch, cv2, numpy, tqdm]
+  install_packages: [torch, opencv-python, numpy, tqdm]
+  assets:
+    - id: wbench_transnetv2_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_WBENCH_TRANSNETV2_CKPT]
+      local_path: ${WORLDFOUNDRY_CACHE_DIR}/models/wbench/transnetv2/transnetv2-pytorch-weights.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/transnetv2/transnetv2-pytorch-weights.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/transnetv2/transnetv2-pytorch-weights.pth
+        - ${WORLDFOUNDRY_CKPT_DIR}/wbench/transnetv2/transnetv2-pytorch-weights.pth
+      hf_repo_id: meituan-longcat/WBench-weights
+      hf_filename: transnetv2/transnetv2-pytorch-weights.pth
+      min_size_bytes: 10000000
+      note: TransNetV2 scene-cut checkpoint used by WBench segment_continuity.
+
+t2v_metrics_clip_flant5_xxl:
+  family: video_metric_model
+  canonical_path: worldfoundry/base_models/perception_core/video_text/vqa_score
+  package_imports: [torch, transformers, PIL, numpy, huggingface_hub]
+  install_packages: [torch, transformers, Pillow, numpy, huggingface-hub]
+  assets:
+    - id: t2v_metrics_clip_flant5_xxl_dir
+      kind: dir
+      role: metric_model_dir
+      env: [WORLDFOUNDRY_T2V_METRICS_CLIP_FLANT5_XXL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/zhiqiulin--clip-flant5-xxl
+      alternate_paths:
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/zhiqiulin--clip-flant5-xxl
+        - ${WORLDFOUNDRY_HFD_ROOT}/zhiqiulin/clip-flant5-xxl
+      hf_repo_id: zhiqiulin/clip-flant5-xxl
+      min_file_count: 2
+      required_files: [config.json]
+      note: CLIP-FlanT5-XXL VQAScore checkpoint used by GenAI-Bench and PhyGenBench alignment scoring.
+    - id: t2v_metrics_flan_t5_xxl_tokenizer_dir
+      kind: dir
+      role: metric_tokenizer_dir
+      env: [WORLDFOUNDRY_T2V_METRICS_FLAN_T5_XXL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/google--flan-t5-xxl
+      alternate_paths: ['${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/google--flan-t5-xxl']
+      hf_repo_id: google/flan-t5-xxl
+      min_file_count: 2
+      required_files: [config.json, tokenizer_config.json]
+      note: Tokenizer dependency for clip-flant5-xxl VQAScore.
+
+t2v_metrics_blip2_itm:
+  family: video_metric_model
+  canonical_path: worldfoundry/evals/tasks/execution/runners/_scorers/itm_score
+  package_imports: [torch, transformers, PIL, numpy, timm]
+  install_packages: [torch, transformers, Pillow, numpy, timm]
+  assets:
+    - id: t2v_metrics_blip2_itm_dir
+      kind: dir
+      role: metric_model_dir
+      env: [WORLDFOUNDRY_T2V_METRICS_BLIP2_ITM_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/Salesforce--blip2-opt-2.7b
+      alternate_paths: ['${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/Salesforce--blip2-opt-2.7b']
+      hf_repo_id: Salesforce/blip2-opt-2.7b
+      min_file_count: 2
+      required_files: [config.json]
+      note: BLIP-2 ITMScore backbone used by CameraBench and t2v_metrics ITM paths.
+
+t2v_metrics_internvideo2_itm:
+  family: video_metric_model
+  canonical_path: worldfoundry/evals/tasks/execution/runners/_scorers/itm_score
+  package_imports: [torch, transformers, decord, PIL, numpy]
+  install_packages: [torch, transformers, decord, Pillow, numpy]
+  assets:
+    - id: t2v_metrics_internvideo2_itm_dir
+      kind: dir
+      role: metric_model_dir
+      env: [WORLDFOUNDRY_T2V_METRICS_INTERNVIDEO2_ITM_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/OpenGVLab--InternVideo2-Stage2_1B-224p-f4
+      alternate_paths:
+        - ${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/OpenGVLab--InternVideo2-Stage2_1B-224p-f4
+      hf_repo_id: OpenGVLab/InternVideo2-Stage2_1B-224p-f4
+      min_file_count: 2
+      required_files: [config.json]
+      note: InternVideo2 ITMScore checkpoint for video-text matching metrics.
+
+jedi_vjepa_vith16:
+  family: video_metric_model
+  canonical_path: worldfoundry/evals/tasks/metrics/distribution/jedi
+  package_imports: [torch, vjepa, numpy, yaml]
+  install_packages: [torch, vjepa, numpy, pyyaml]
+  assets:
+    - id: jedi_vith16_encoder_checkpoint
+      kind: dir
+      role: metric_model_dir
+      env: [WORLDFOUNDRY_JEDI_MODEL_DIR, WORLDFOUNDRY_JEDI_VJEPA_DIR, WORLDFOUNDRY_VJEPA_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/jedi-vjepa
+      download_command_template: >-
+        mkdir -p ${WORLDFOUNDRY_HFD_ROOT}/jedi-vjepa &&
+        curl -L --fail --retry 5 --retry-delay 2 https://dl.fbaipublicfiles.com/jepa/vith16/vith16.pth.tar
+        -o ${WORLDFOUNDRY_HFD_ROOT}/jedi-vjepa/vith16.pth.tar
+      required_files: [vith16.pth.tar]
+      note: V-JEPA ViT-H/16 encoder checkpoint used by VideoJEDi feature extraction. The JEDi runtime reads it from this model directory.
+
+jedi_vjepa_ssv2_probe:
+  family: video_metric_model
+  canonical_path: worldfoundry/evals/tasks/metrics/distribution/jedi
+  package_imports: [torch, vjepa, numpy, yaml]
+  install_packages: [torch, vjepa, numpy, pyyaml]
+  assets:
+    - id: jedi_ssv2_probe_checkpoint
+      kind: dir
+      role: metric_model_dir
+      env: [WORLDFOUNDRY_JEDI_MODEL_DIR, WORLDFOUNDRY_JEDI_VJEPA_DIR, WORLDFOUNDRY_VJEPA_MODEL_DIR]
+      local_path: ${WORLDFOUNDRY_HFD_ROOT}/jedi-vjepa
+      download_command_template: >-
+        mkdir -p ${WORLDFOUNDRY_HFD_ROOT}/jedi-vjepa &&
+        curl -L --fail --retry 5 --retry-delay 2 https://dl.fbaipublicfiles.com/jepa/vith16/ssv2-probe.pth.tar
+        -o ${WORLDFOUNDRY_HFD_ROOT}/jedi-vjepa/ssv2-probe.pth.tar
+      required_files: [ssv2-probe.pth.tar]
+      note: Fine-tuned SSV2 attentive probe used by VideoJEDi feature aggregation. The JEDi runtime reads it from this model directory.
+
+vbench_metric_checkpoint_assets:
+  family: video_metric_model
+  canonical_path: worldfoundry/evals/tasks/execution/runners/vbench/runtime
+  canonical_owner: worldfoundry.evals.tasks.execution.runners.vbench
+  package_imports: [torch, torchvision, transformers, open_clip, cv2, numpy]
+  install_packages:
+    - torch
+    - torchvision
+    - transformers
+    - open-clip-torch
+    - opencv-python
+    - numpy
+  asset_env_policy: all
+  assets:
+    - id: vbench_amt_s_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH_AMT_S_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/amt_model/amt-s.pth
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/VBench/amt_model/amt-s.pth']
+      hf_repo_id: lalala125/AMT
+      hf_filename: amt-s.pth
+      min_size_bytes: 10000000
+      note: AMT motion-smoothness checkpoint used by VBench.
+    - id: vbench_umt_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH_UMT_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/umt_model/l16_ptk710_ftk710_ftk400_f16_res224.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/VBench/umt_model/l16_ptk710_ftk710_ftk400_f16_res224.pth
+      hf_repo_id: OpenGVLab/VBench_Used_Models
+      hf_filename: l16_ptk710_ftk710_ftk400_f16_res224.pth
+      min_size_bytes: 200000000
+      note: UMT action-recognition checkpoint used by VBench human-action metrics.
+    - id: vbench_viclip_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH_VICLIP_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/ViCLIP/ViClip-InternVid-10M-FLT.pth
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/VBench/ViCLIP/ViClip-InternVid-10M-FLT.pth']
+      hf_repo_id: OpenGVLab/VBench_Used_Models
+      hf_filename: ViClip-InternVid-10M-FLT.pth
+      min_size_bytes: 300000000
+      note: ViCLIP checkpoint used by VBench overall-consistency metrics.
+    - id: vbench_grit_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH_GRIT_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/grit_model/grit_b_densecap_objectdet.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/VBench/grit_model/grit_b_densecap_objectdet.pth
+      hf_repo_id: OpenGVLab/VBench_Used_Models
+      hf_filename: grit_b_densecap_objectdet.pth
+      min_size_bytes: 400000000
+      note: GRiT dense-caption/object-detection checkpoint used by VBench scene/object metrics.
+    - id: vbench_tag2text_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH_TAG2TEXT_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/caption_model/tag2text_swin_14m.pth
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/VBench/caption_model/tag2text_swin_14m.pth']
+      hf_repo_id: xinyu1205/recognize-anything
+      hf_repo_type: space
+      hf_filename: tag2text_swin_14m.pth
+      min_size_bytes: 600000000
+      note: Tag2Text checkpoint used by VBench multiple-object/color metrics.
+    - id: vbench_dino_vitb16_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH_DINO_VITB16_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/dino_model/dino_vitbase16_pretrain.pth
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/VBench/dino_model/dino_vitbase16_pretrain.pth']
+      download_url: https://dl.fbaipublicfiles.com/dino/dino_vitbase16_pretrain/dino_vitbase16_pretrain.pth
+      min_size_bytes: 300000000
+      note: DINO ViT-B/16 checkpoint used by VBench subject/background consistency metrics.
+    - id: vbench_dino_source
+      kind: dir
+      role: source_asset
+      env: []
+      local_path: ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/base_models/perception_core/general_perception/dino/hub
+      manual_action: >-
+        Restore the checked-in DINO torch.hub entry point at
+        worldfoundry/base_models/perception_core/general_perception/dino/hub/hubconf.py;
+        do not clone facebookresearch/dino for VBench readiness.
+      min_file_count: 1
+      required_files: [hubconf.py, backbones.py]
+      note: >-
+        In-tree facebookresearch/dino torch.hub entry point; loads the ViT-B/16 weights from the local
+        checkpoint instead of downloading them. Used by VBench subject/background consistency.
+    - id: vbench_clip_vit_b32_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH_CLIP_VIT_B32_PT]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/clip_model/ViT-B-32.pt
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/VBench/clip_model/ViT-B-32.pt']
+      download_url: https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt
+      min_size_bytes: 300000000
+      note: OpenAI CLIP ViT-B/32 checkpoint used by VBench semantic metrics.
+    - id: vbench_clip_vit_l14_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH_CLIP_VIT_L14_PT]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/clip_model/ViT-L-14.pt
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/VBench/clip_model/ViT-L-14.pt']
+      download_url: https://openaipublic.azureedge.net/clip/models/b8cca3fd41ae0c99ba7e8951adf17d267cdb84cd88be6f7c2e0eca1737a03836/ViT-L-14.pt
+      min_size_bytes: 800000000
+      note: OpenAI CLIP ViT-L/14 checkpoint used by VBench/VBench++ image-text metrics.
+    - id: vbench_aesthetic_linear_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH_AESTHETIC_LINEAR_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/aesthetic_model/emb_reader/sa_0_4_vit_l_14_linear.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/VBench/aesthetic_model/emb_reader/sa_0_4_vit_l_14_linear.pth
+      download_url: https://github.com/LAION-AI/aesthetic-predictor/raw/main/sa_0_4_vit_l_14_linear.pth
+      min_size_bytes: 1000
+      note: LAION aesthetic predictor linear head used by VBench aesthetic quality.
+    - id: vbench_musiq_spaq_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH_MUSIQ_SPAQ_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/pyiqa_model/musiq_spaq_ckpt-358bb6af.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/VBench/pyiqa_model/musiq_spaq_ckpt-358bb6af.pth
+      download_url: https://github.com/chaofengc/IQA-PyTorch/releases/download/v0.1-weights/musiq_spaq_ckpt-358bb6af.pth
+      min_size_bytes: 100000000
+      note: MUSIQ-SPAQ checkpoint used by VBench imaging quality.
+    - id: vbench_retinaface_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH_RETINAFACE_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/retina_face_model/retinaface_resnet50_2020-07-20-f168fae3c.zip
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/VBench/retina_face_model/retinaface_resnet50_2020-07-20-f168fae3c.zip
+      download_url: https://github.com/ternaus/retinaface/releases/download/0.01/retinaface_resnet50_2020-07-20-f168fae3c.zip
+      min_size_bytes: 100000000
+      required: false
+      note: RetinaFace checkpoint used by VBench++ bias dimensions.
+    - id: vbench_sd_safety_checker_model
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_VBENCH_SD_SAFETY_CHECKER_DIR]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/sd_safety_checker
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_ROOT}/CompVis--stable-diffusion-safety-checker
+        - ${WORLDFOUNDRY_CKPT_DIR}/hfd/CompVis--stable-diffusion-safety-checker
+      hf_repo_id: CompVis/stable-diffusion-safety-checker
+      min_file_count: 1
+      required_files: [config.json, preprocessor_config.json, pytorch_model.bin]
+      required: false
+      note: Stable Diffusion safety checker used by VBench++ trustworthiness safety.
+    - id: vbench_q16_prompts
+      kind: file
+      role: prompt_asset
+      env: [WORLDFOUNDRY_VBENCH_Q16_PROMPTS]
+      local_path: ${WORLDFOUNDRY_VBENCH_CACHE_DIR}/q16/prompts.p
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/VBench/q16/prompts.p']
+      download_url: https://raw.githubusercontent.com/ml-research/Q16/main/data/ViT-B-32/prompts.p
+      min_size_bytes: 1000
+      required: false
+      note: Q16 prompt asset used by VBench++ trustworthiness safety.
+    - id: vbench2_llava_video_qwen2_model
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_VBENCH2_LLAVA_VIDEO_QWEN2_DIR]
+      local_path: ${WORLDFOUNDRY_VBENCH2_CACHE_DIR}/lmms-lab/LLaVA-Video-7B-Qwen2
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_ROOT}/lmms-lab--LLaVA-Video-7B-Qwen2
+        - ${WORLDFOUNDRY_CKPT_DIR}/hfd/lmms-lab--LLaVA-Video-7B-Qwen2
+      hf_repo_id: lmms-lab/LLaVA-Video-7B-Qwen2
+      min_file_count: 1
+      required_files: [config.json]
+      required: false
+      note: VBench-2.0 text/video reasoning model; required only for dimensions that call LLaVA-Video.
+    - id: vbench2_qwen2_5_7b_model
+      kind: dir
+      role: model_dir
+      env: [WORLDFOUNDRY_VBENCH2_QWEN2_5_7B_DIR]
+      local_path: ${WORLDFOUNDRY_VBENCH2_CACHE_DIR}/Qwen/Qwen2.5-7B-Instruct
+      alternate_paths:
+        - ${WORLDFOUNDRY_HFD_ROOT}/Qwen--Qwen2.5-7B-Instruct
+        - ${WORLDFOUNDRY_CKPT_DIR}/hfd/Qwen--Qwen2.5-7B-Instruct
+      hf_repo_id: Qwen/Qwen2.5-7B-Instruct
+      min_file_count: 1
+      required_files: [config.json]
+      required: false
+      note: Qwen2.5 instruction model used by selected VBench-2.0 LLM judging paths.
+    - id: vbench2_arcface_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH2_ARCFACE_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH2_CACHE_DIR}/arcface/resnet18_110.pth
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/VBench2/arcface/resnet18_110.pth']
+      manual_action: Stage VBench-2.0 ArcFace resnet18_110.pth from the official VBench-2.0 asset release under
+        $WORLDFOUNDRY_VBENCH2_CACHE_DIR or set WORLDFOUNDRY_VBENCH2_ARCFACE_CKPT.
+      required: false
+      note: ArcFace checkpoint used by VBench-2.0 human identity dimensions.
+    - id: vbench2_yolo_world_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH2_YOLO_WORLD_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH2_CACHE_DIR}/YOLO-World/yolo_world_v2_xl_obj365v1_goldg_cc3mlite_pretrain-5daf1395.pth
+      alternate_paths:
+        - ${WORLDFOUNDRY_CKPT_DIR}/VBench2/YOLO-World/yolo_world_v2_xl_obj365v1_goldg_cc3mlite_pretrain-5daf1395.pth
+      manual_action: Stage the official VBench-2.0 YOLO-World checkpoint under $WORLDFOUNDRY_VBENCH2_CACHE_DIR or
+        set WORLDFOUNDRY_VBENCH2_YOLO_WORLD_CKPT.
+      required: false
+      note: YOLO-World checkpoint used by VBench-2.0 object and layout dimensions.
+    - id: vbench2_human_anomaly_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH2_HUMAN_ANOMALY_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH2_CACHE_DIR}/anomaly_detector/human.pth
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/VBench2/anomaly_detector/human.pth']
+      manual_action: Stage VBench-2.0 anomaly detector weights from the official asset release or set WORLDFOUNDRY_VBENCH2_HUMAN_ANOMALY_CKPT.
+      required: false
+      note: Human anomaly detector used by VBench-2.0 human fidelity metrics.
+    - id: vbench2_face_anomaly_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH2_FACE_ANOMALY_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH2_CACHE_DIR}/anomaly_detector/face.pth
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/VBench2/anomaly_detector/face.pth']
+      manual_action: Stage VBench-2.0 face anomaly detector weights from the official asset release or set WORLDFOUNDRY_VBENCH2_FACE_ANOMALY_CKPT.
+      required: false
+      note: Face anomaly detector used by VBench-2.0 human fidelity metrics.
+    - id: vbench2_hand_anomaly_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_VBENCH2_HAND_ANOMALY_CKPT]
+      local_path: ${WORLDFOUNDRY_VBENCH2_CACHE_DIR}/anomaly_detector/hand.pth
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/VBench2/anomaly_detector/hand.pth']
+      manual_action: Stage VBench-2.0 hand anomaly detector weights from the official asset release or set WORLDFOUNDRY_VBENCH2_HAND_ANOMALY_CKPT.
+      required: false
+      note: Hand anomaly detector used by VBench-2.0 human fidelity metrics.
+
+dover:
+  family: video_quality
+  canonical_path: worldfoundry/base_models/perception_core/video_quality/dover
+  package_imports: [torch, numpy, yaml, decord]
+  install_packages: [torch, numpy, pyyaml, decord]
+  assets:
+    - id: dover_checkpoint
+      kind: file
+      role: checkpoint
+      env: [WORLDFOUNDRY_DOVER_CKPT]
+      local_path: ${WORLDFOUNDRY_CKPT_DIR}/DOVER/pretrained_weights/DOVER.pth
+      alternate_paths: ['${WORLDFOUNDRY_CKPT_DIR}/evalcrafter/DOVER/pretrained_weights/DOVER.pth']
+      download_url: https://github.com/QualityAssessment/DOVER/releases/download/v0.1.0/DOVER.pth
+      min_size_bytes: 100000000
+      note: Official DOVER checkpoint; PAI-Bench-C reports its technical score.
+
+lpips_vgg:
+  family: video_quality
+  canonical_path: worldfoundry/base_models/perception_core/video_quality/lpips.py
+  package_imports: [lpips, torch, torchvision]
+
+wrbench_scorer_runtime_config:
+  family: video_metric_model
+  canonical_path: worldfoundry/evals/tasks/execution/runners/wrbench/runtime/wrbench/eval
+  gpu_required: true
+  assets:
+    - id: wrbench_runtime_config_file
+      kind: file
+      role: config
+      env: [WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG]
+      local_path: ${WORLDFOUNDRY_DATA_DIR}/benchmarks/wrbench/wrbench.runtime.json
+      manual_action: >-
+        Copy wrbench.runtime.example.json from https://github.com/JinPLu/WRBench and fill eval.scorers explicitly:
+        vggt_repo and vggt_checkpoint (VGGT-Omega, D1), dinov2_model_path (D2), qwen35_model and qwen3vl_model
+        (D3-D6); then set WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG.
+      note: >-
+        Official WRBench scoring is driven by this config; upstream pins model families (VGGT-Omega, DINOv2,
+        Qwen3.5, Qwen3-VL) but not checkpoints, so they are staged through it rather than as fixed assets.

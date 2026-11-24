@@ -1,15 +1,17 @@
-""" CLIP tokenizer
+"""CLIP tokenizer
 
 Copied from https://github.com/openai/CLIP. Originally MIT License, Copyright (c) 2021 OpenAI.
 """
+
 import gzip
 import html
 import os
 import random
 import string
-from functools import lru_cache, partial
-from typing import Callable, List, Optional, Union, Dict
 import warnings
+from collections.abc import Callable
+from functools import lru_cache, partial
+from typing import ClassVar
 
 import ftfy
 import numpy as np
@@ -23,13 +25,12 @@ _nltk_init = False
 DEFAULT_CONTEXT_LENGTH = 77  # default context length for OpenAI CLIP
 
 
-@lru_cache()
+@lru_cache
 def default_bpe():
-    """Default bpe."""
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "bpe_simple_vocab_16e6.txt.gz")
 
 
-@lru_cache()
+@lru_cache
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a corresponding list of unicode strings.
@@ -40,16 +41,16 @@ def bytes_to_unicode():
     To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
     And avoids mapping to whitespace/control characters the bpe code barfs on.
     """
-    bs = list(range(ord("!"), ord("~")+1))+list(range(ord("¡"), ord("¬")+1))+list(range(ord("®"), ord("ÿ")+1))
+    bs = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
     cs = bs[:]
     n = 0
     for b in range(2**8):
         if b not in bs:
             bs.append(b)
-            cs.append(2**8+n)
+            cs.append(2**8 + n)
             n += 1
     cs = [chr(n) for n in cs]
-    return dict(zip(bs, cs))
+    return dict(zip(bs, cs, strict=False))
 
 
 def get_pairs(word):
@@ -65,78 +66,48 @@ def get_pairs(word):
 
 
 def basic_clean(text):
-    """Basic clean.
-
-    Args:
-        text: The text.
-    """
     text = ftfy.fix_text(text)
     text = html.unescape(html.unescape(text))
     return text.strip()
 
 
 def whitespace_clean(text):
-    """Whitespace clean.
-
-    Args:
-        text: The text.
-    """
     text = " ".join(text.split())
     text = text.strip()
     return text
 
 
 def _clean_canonicalize(x):
-    """Helper function to clean canonicalize.
-
-    Args:
-        x: The x.
-    """
     # basic, remove whitespace, remove punctuation, lower case
     return canonicalize_text(basic_clean(x))
 
 
 def _clean_lower(x):
-    """Helper function to clean lower.
-
-    Args:
-        x: The x.
-    """
     # basic, remove whitespace, lower case
     return whitespace_clean(basic_clean(x)).lower()
 
 
 def _clean_whitespace(x):
-    """Helper function to clean whitespace.
-
-    Args:
-        x: The x.
-    """
     # basic, remove whitespace
     return whitespace_clean(basic_clean(x))
 
 
 def get_clean_fn(type: str):
-    """Get clean fn.
-
-    Args:
-        type: The type.
-    """
-    if type == 'canonicalize':
+    if type == "canonicalize":
         return _clean_canonicalize
-    elif type == 'lower':
+    elif type == "lower":
         return _clean_lower
-    elif type == 'whitespace':
+    elif type == "whitespace":
         return _clean_whitespace
     else:
-        assert False, f"Invalid clean function ({type})."
+        assert False, f"Invalid clean function ({type})."  # noqa: B011 - Keeps the assertion semantics under -O.
 
 
 def canonicalize_text(
     text,
     *,
     keep_punctuation_exact_string=None,
-    trans_punctuation: dict = str.maketrans("", "", string.punctuation),
+    trans_punctuation: dict = str.maketrans("", "", string.punctuation),  # noqa: B008 - Default evaluated once at definition, as upstream.
 ):
     """Returns canonicalized `text` (lowercase and punctuation removed).
 
@@ -151,8 +122,7 @@ def canonicalize_text(
     text = text.replace("_", " ")
     if keep_punctuation_exact_string:
         text = keep_punctuation_exact_string.join(
-            part.translate(trans_punctuation)
-            for part in text.split(keep_punctuation_exact_string)
+            part.translate(trans_punctuation) for part in text.split(keep_punctuation_exact_string)
         )
     else:
         text = text.translate(trans_punctuation)
@@ -161,42 +131,32 @@ def canonicalize_text(
     return text.strip()
 
 
-class SimpleTokenizer(object):
-    """Simple tokenizer implementation."""
+class SimpleTokenizer:
     def __init__(
-            self,
-            bpe_path: str = default_bpe(),
-            additional_special_tokens: Optional[List[str]] = None,
-            context_length: Optional[int] = DEFAULT_CONTEXT_LENGTH,
-            clean: str = 'lower',
-            reduction_mask: str = ''
+        self,
+        bpe_path: str = default_bpe(),
+        additional_special_tokens: list[str] | None = None,
+        context_length: int | None = DEFAULT_CONTEXT_LENGTH,
+        clean: str = "lower",
+        reduction_mask: str = "",
     ):
-        """Init.
-
-        Args:
-            bpe_path: The bpe path.
-            additional_special_tokens: The additional special tokens.
-            context_length: The context length.
-            clean: The clean.
-            reduction_mask: The reduction mask.
-        """
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        merges = gzip.open(bpe_path).read().decode("utf-8").split('\n')
-        merges = merges[1:49152-256-2+1]
+        merges = gzip.open(bpe_path).read().decode("utf-8").split("\n")  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
+        merges = merges[1 : 49152 - 256 - 2 + 1]
         merges = [tuple(merge.split()) for merge in merges]
         vocab = list(bytes_to_unicode().values())
-        vocab = vocab + [v+'</w>' for v in vocab]
+        vocab = vocab + [v + "</w>" for v in vocab]
         for merge in merges:
-            vocab.append(''.join(merge))
-        special_tokens = ['<start_of_text>', '<end_of_text>']
+            vocab.append("".join(merge))
+        special_tokens = ["<start_of_text>", "<end_of_text>"]
         if additional_special_tokens:
             special_tokens += additional_special_tokens
         vocab.extend(special_tokens)
-        self.encoder = dict(zip(vocab, range(len(vocab))))
+        self.encoder = dict(zip(vocab, range(len(vocab)), strict=False))
         self.decoder = {v: k for k, v in self.encoder.items()}
-        self.bpe_ranks = dict(zip(merges, range(len(merges))))
-        self.cache = {t:t for t in special_tokens}
+        self.bpe_ranks = dict(zip(merges, range(len(merges)), strict=False))
+        self.cache = {t: t for t in special_tokens}
         special = "|".join(special_tokens)
         self.pat = re.compile(
             special + r"""|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""",
@@ -211,21 +171,16 @@ class SimpleTokenizer(object):
         self.reduction_fn = get_reduction_mask_fn(reduction_mask) if reduction_mask else None
 
     def bpe(self, token):
-        """Bpe.
-
-        Args:
-            token: The token.
-        """
         if token in self.cache:
             return self.cache[token]
-        word = tuple(token[:-1]) + ( token[-1] + '</w>',)
+        word = tuple(token[:-1]) + (token[-1] + "</w>",)  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         pairs = get_pairs(word)
 
         if not pairs:
-            return token+'</w>'
+            return token + "</w>"
 
         while True:
-            bigram = min(pairs, key = lambda pair: self.bpe_ranks.get(pair, float('inf')))
+            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
             if bigram not in self.bpe_ranks:
                 break
             first, second = bigram
@@ -240,8 +195,8 @@ class SimpleTokenizer(object):
                     new_word.extend(word[i:])
                     break
 
-                if word[i] == first and i < len(word)-1 and word[i+1] == second:
-                    new_word.append(first+second)
+                if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
+                    new_word.append(first + second)
                     i += 2
                 else:
                     new_word.append(word[i])
@@ -252,35 +207,25 @@ class SimpleTokenizer(object):
                 break
             else:
                 pairs = get_pairs(word)
-        word = ' '.join(word)
+        word = " ".join(word)
         self.cache[token] = word
         return word
 
     def encode(self, text):
-        """Encode.
-
-        Args:
-            text: The text.
-        """
         bpe_tokens = []
         text = self.clean_fn(text)
         for token in re.findall(self.pat, text):
-            token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
-            bpe_tokens.extend(self.encoder[bpe_token] for bpe_token in self.bpe(token).split(' '))
+            token = "".join(self.byte_encoder[b] for b in token.encode("utf-8"))
+            bpe_tokens.extend(self.encoder[bpe_token] for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
     def decode(self, tokens):
-        """Decode.
-
-        Args:
-            tokens: The tokens.
-        """
-        text = ''.join([self.decoder[token] for token in tokens])
-        text = bytearray([self.byte_decoder[c] for c in text]).decode('utf-8', errors="replace").replace('</w>', ' ')
+        text = "".join([self.decoder[token] for token in tokens])
+        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors="replace").replace("</w>", " ")
         return text
 
-    def __call__(self, texts: Union[str, List[str]], context_length: Optional[int] = None) -> torch.LongTensor:
-        """ Returns the tokenized representation of given input string(s)
+    def __call__(self, texts: str | list[str], context_length: int | None = None) -> torch.LongTensor:
+        """Returns the tokenized representation of given input string(s)
 
         Parameters
         ----------
@@ -297,7 +242,7 @@ class SimpleTokenizer(object):
             texts = [texts]
 
         context_length = context_length or self.context_length
-        assert context_length, 'Please set a valid context length'
+        assert context_length, "Please set a valid context length"
 
         if self.reduction_fn is not None:
             # use reduction strategy for tokenize if set, otherwise default to truncation below
@@ -309,27 +254,22 @@ class SimpleTokenizer(object):
                 encode_fn=self.encode,
             )
 
-        all_tokens = [[self.sot_token_id] + self.encode(text) + [self.eot_token_id] for text in texts]
+        all_tokens = [[self.sot_token_id] + self.encode(text) + [self.eot_token_id] for text in texts]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         result = torch.zeros(len(all_tokens), context_length, dtype=torch.long)
 
         for i, tokens in enumerate(all_tokens):
             if len(tokens) > context_length:
                 tokens = tokens[:context_length]  # Truncate
                 tokens[-1] = self.eot_token_id
-            result[i, :len(tokens)] = torch.tensor(tokens)
+            result[i, : len(tokens)] = torch.tensor(tokens)
 
         return result
 
 
-_tokenizer: Optional[SimpleTokenizer] = None
+_tokenizer: SimpleTokenizer | None = None
 
 
 def _default_tokenizer() -> SimpleTokenizer:
-    """Helper function to default tokenizer.
-
-    Returns:
-        The return value.
-    """
     global _tokenizer
     if _tokenizer is None:
         _tokenizer = SimpleTokenizer()
@@ -337,46 +277,22 @@ def _default_tokenizer() -> SimpleTokenizer:
 
 
 def decode(output_ids: torch.Tensor):
-    """Decode.
-
-    Args:
-        output_ids: The output ids.
-    """
     output_ids = output_ids.cpu().numpy()
     return _default_tokenizer().decode(output_ids)
 
 
-def tokenize(texts: Union[str, List[str]], context_length: int = DEFAULT_CONTEXT_LENGTH) -> torch.LongTensor:
-    """Tokenize.
-
-    Args:
-        texts: The texts.
-        context_length: The context length.
-
-    Returns:
-        The return value.
-    """
+def tokenize(texts: str | list[str], context_length: int = DEFAULT_CONTEXT_LENGTH) -> torch.LongTensor:
     return _default_tokenizer()(texts, context_length=context_length)
 
 
 def random_mask_tokenize(
-        texts: Union[str, List[str]],
-        context_length: int,
-        sot_token_id: int,
-        eot_token_id: int,
-        encode_fn: Callable,
-        shuffle: bool = False,
+    texts: str | list[str],
+    context_length: int,
+    sot_token_id: int,
+    eot_token_id: int,
+    encode_fn: Callable,
+    shuffle: bool = False,
 ):
-    """Random mask tokenize.
-
-    Args:
-        texts: The texts.
-        context_length: The context length.
-        sot_token_id: The sot token id.
-        eot_token_id: The eot token id.
-        encode_fn: The encode fn.
-        shuffle: The shuffle.
-    """
     all_tokens = [encode_fn(text) for text in texts]
     result = torch.zeros(len(all_tokens), context_length, dtype=torch.long)
 
@@ -392,28 +308,19 @@ def random_mask_tokenize(
             tokens = tokens[indices]
             num_tokens = num_keep
         result[i, 0] = sot_token_id
-        result[i, 1:num_tokens + 1] = tokens
+        result[i, 1 : num_tokens + 1] = tokens
         result[i, num_tokens + 1] = eot_token_id
 
     return result
 
 
 def simple_mask_tokenize(
-        texts: Union[str, List[str]],
-        context_length: int,
-        sot_token_id: int,
-        eot_token_id: int,
-        encode_fn: Callable,
+    texts: str | list[str],
+    context_length: int,
+    sot_token_id: int,
+    eot_token_id: int,
+    encode_fn: Callable,
 ):
-    """Simple mask tokenize.
-
-    Args:
-        texts: The texts.
-        context_length: The context length.
-        sot_token_id: The sot token id.
-        eot_token_id: The eot token id.
-        encode_fn: The encode fn.
-    """
     all_tokens = [encode_fn(text) for text in texts]
     result = torch.zeros(len(all_tokens), context_length, dtype=torch.long)
 
@@ -422,42 +329,38 @@ def simple_mask_tokenize(
         if num_tokens > context_length - 2:  # 2 for sot and eot token
             num_keep = context_length - 2
             start_index = random.randint(0, num_tokens - num_keep)  # high is incl
-            tokens = tokens[start_index: start_index + num_keep]
-        tokens = [sot_token_id] + tokens + [eot_token_id]
-        result[i, :len(tokens)] = torch.tensor(tokens)
+            tokens = tokens[start_index : start_index + num_keep]
+        tokens = [sot_token_id] + tokens + [eot_token_id]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
+        result[i, : len(tokens)] = torch.tensor(tokens)
 
     return result
 
 
 def syntax_mask_tokenize(
-        texts: Union[str, List[str]],
-        context_length: int,
-        sot_token_id: int,
-        eot_token_id: int,
-        encode_fn: Callable,
+    texts: str | list[str],
+    context_length: int,
+    sot_token_id: int,
+    eot_token_id: int,
+    encode_fn: Callable,
 ) -> torch.LongTensor:
-    """ Returns the tokenized representation of given input string(s).
+    """Returns the tokenized representation of given input string(s).
     Apply syntax masking before tokenize.
     """
     import nltk
+
     global _nltk_init
     if not _nltk_init:
         # run them for the first time
-        nltk.download('punkt')
-        nltk.download('averaged_perceptron_tagger')
+        nltk.download("punkt")
+        nltk.download("averaged_perceptron_tagger")
         _nltk_init = True
 
     def get_order(x):
-        """Get order.
-
-        Args:
-            x: The x.
-        """
-        if x.startswith('NN'):
+        if x.startswith("NN"):
             return 1
-        elif x.startswith('JJ'):
+        elif x.startswith("JJ"):
             return 2
-        elif x.startswith('VB'):
+        elif x.startswith("VB"):
             return 3
         else:
             return 4
@@ -470,17 +373,17 @@ def syntax_mask_tokenize(
         #  sample the words by get_order method
         order_list = [get_order(tag) for _, tag in pos_tags]
         sorted_ids = np.argsort(np.array(order_list))
-        sampled_ids = sorted(sorted_ids[:context_length - 2]) # need 2 slots for sot and eot tokens
+        sampled_ids = sorted(sorted_ids[: context_length - 2])  # need 2 slots for sot and eot tokens
         sampled_tokens = np.take(np.array(list_tokens), sampled_ids, axis=0)  # sample the tokens
 
-        new_text = ''
+        new_text = ""
         for token in sampled_tokens:
-            new_text = new_text + str(token) + ' '
+            new_text = new_text + str(token) + " "
         new_text = new_text.strip()
         new_texts.append(new_text)
     texts = new_texts
 
-    all_tokens = [[sot_token_id] + encode_fn(text) + [eot_token_id] for text in texts]
+    all_tokens = [[sot_token_id] + encode_fn(text) + [eot_token_id] for text in texts]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
     result = torch.zeros(len(all_tokens), context_length, dtype=torch.long)
 
     for i, tokens in enumerate(all_tokens):
@@ -488,52 +391,41 @@ def syntax_mask_tokenize(
         if len(tokens) > context_length:
             tokens = tokens[:context_length]  # Truncate
             tokens[-1] = eot_token_id
-        result[i, :len(tokens)] = torch.tensor(tokens)
+        result[i, : len(tokens)] = torch.tensor(tokens)
 
     return result
 
 
 def get_reduction_mask_fn(type: str):
-    """ Choose strategy for dropping (masking) tokens to achieve target context length"""
-    assert type in ('simple', 'random', 'shuffle', 'syntax')
-    if type == 'simple':
+    """Choose strategy for dropping (masking) tokens to achieve target context length"""
+    assert type in ("simple", "random", "shuffle", "syntax")
+    if type == "simple":
         return simple_mask_tokenize  # randomly select block [start:end]
-    elif type == 'random':
+    elif type == "random":
         return random_mask_tokenize  # randomly drop tokens (keep order)
-    elif type == 'shuffle':
+    elif type == "shuffle":
         return partial(random_mask_tokenize, shuffle=True)  # randomly drop tokens (shuffle order)
-    elif type == 'syntax':
+    elif type == "syntax":
         return syntax_mask_tokenize  # randomly drop prioritized by syntax
     else:
-        assert False, F'Unknown type {type}.'
+        assert False, f"Unknown type {type}."  # noqa: B011 - Keeps the assertion semantics under -O.
 
 
 class HFTokenizer:
     """HuggingFace tokenizer wrapper with support for custom tokenization modes"""
 
     def __init__(
-            self,
-            tokenizer_name: str,
-            context_length: Optional[int] = DEFAULT_CONTEXT_LENGTH,
-            clean: str = 'whitespace',
-            strip_sep_token: bool = False,
-            language: Optional[str] = None,
-            cache_dir: Optional[str] = None,
-            tokenizer_mode: Optional[str] = None,  # None, 'clips'
-            **kwargs
+        self,
+        tokenizer_name: str,
+        context_length: int | None = DEFAULT_CONTEXT_LENGTH,
+        clean: str = "whitespace",
+        strip_sep_token: bool = False,
+        language: str | None = None,
+        cache_dir: str | None = None,
+        tokenizer_mode: str | None = None,  # None, 'clips'
+        **kwargs,
     ):
-        """Init.
-
-        Args:
-            tokenizer_name: The tokenizer name.
-            context_length: The context length.
-            clean: The clean.
-            strip_sep_token: The strip sep token.
-            language: The language.
-            cache_dir: The cache dir.
-            tokenizer_mode: The tokenizer mode.
-        """
-        self.tokenizer_mode = tokenizer_mode or ''
+        self.tokenizer_mode = tokenizer_mode or ""
         self.context_length = context_length
         self.clean_fn = get_clean_fn(clean)
         self.strip_sep_token = strip_sep_token
@@ -566,57 +458,40 @@ class HFTokenizer:
 
         # Standard HuggingFace tokenizer initialization
         from transformers import AutoTokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            tokenizer_name,
-            cache_dir=cache_dir,
-            **kwargs
-        )
+
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, cache_dir=cache_dir, **kwargs)
 
         # Set language function if available
-        set_lang_fn = getattr(self.tokenizer, 'set_src_lang_special_tokens', None)
+        set_lang_fn = getattr(self.tokenizer, "set_src_lang_special_tokens", None)
         if callable(set_lang_fn):
             self.set_lang_fn = set_lang_fn
         if language is not None:
             self.set_language(language)
 
     def save_pretrained(self, dest):
-        """Save pretrained.
-
-        Args:
-            dest: The dest.
-        """
         self.tokenizer.save_pretrained(dest)
 
-    def __call__(self, texts: Union[str, List[str]], context_length: Optional[int] = None) -> torch.Tensor:
-        """Call.
-
-        Args:
-            texts: The texts.
-            context_length: The context length.
-
-        Returns:
-            The return value.
-        """
+    def __call__(self, texts: str | list[str], context_length: int | None = None) -> torch.Tensor:
         # same cleaning as for default tokenizer, except lowercasing
         # adding lower (for case-sensitive tokenizers) will make it more robust but less sensitive to nuance
         if isinstance(texts, str):
             texts = [texts]
 
         context_length = context_length or self.context_length
-        assert context_length, 'Please set a valid context length in class init or call.'
+        assert context_length, "Please set a valid context length in class init or call."
 
         texts = [self.clean_fn(text) for text in texts]
 
         # Handle different tokenization modes
-        if self.tokenizer_mode == 'clips':
+        if self.tokenizer_mode == "clips":
             return self._clips_tokenize(texts, context_length)
         else:
             # Standard tokenization
             input_ids = self.tokenizer(
                 texts,
-                return_tensors='pt',
+                return_tensors="pt",
                 max_length=context_length,
-                padding='max_length',
+                padding="max_length",
                 truncation=True,
             ).input_ids
 
@@ -630,31 +505,22 @@ class HFTokenizer:
             return input_ids
 
     def set_language(self, src_lang):
-        """Set language.
-
-        Args:
-            src_lang: The src lang.
-        """
-        if hasattr(self, 'set_lang_fn'):
+        if hasattr(self, "set_lang_fn"):
             self.set_lang_fn(src_lang)
         else:
-            warnings.warn('Cannot set language for the tokenizer.')
+            warnings.warn("Cannot set language for the tokenizer.", stacklevel=1)
 
-    def _clips_tokenize(self, texts: List[str], context_length: int) -> torch.Tensor:
+    def _clips_tokenize(self, texts: list[str], context_length: int) -> torch.Tensor:
         """Use standard HF tokenizer but apply custom post-processing"""
         # Use standard tokenizer without special tokens - we'll add our own
         encoded_outputs = self.tokenizer(
-            texts,
-            add_special_tokens=False,
-            padding=False,
-            truncation=False,
-            return_tensors=None
+            texts, add_special_tokens=False, padding=False, truncation=False, return_tensors=None
         )
 
         encoded = []
         for tokens in encoded_outputs["input_ids"]:
-            tokens = tokens[:context_length - 3]  # Leave room for special tokens
-            tokens = [self.tokenizer.bos_token_id] + tokens + [self.tokenizer.eos_token_id]
+            tokens = tokens[: context_length - 3]  # Leave room for special tokens
+            tokens = [self.tokenizer.bos_token_id] + tokens + [self.tokenizer.eos_token_id]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
             encoded.append(tokens)
 
         # Create result tensor and handle padding + class token
@@ -666,27 +532,27 @@ class HFTokenizer:
                 pad_token_id=self.tokenizer.pad_token_id,
                 cls_token_id=self.tokenizer.cls_token_id,
             )
-            result[i, :len(padded_tokens)] = torch.tensor(padded_tokens)
+            result[i, : len(padded_tokens)] = torch.tensor(padded_tokens)
 
         return result
 
     def _pad_and_add_class_token(
-            self,
-            tokens: List[int],
-            max_length: int,
-            pad_token_id: int = 0,
-            cls_token_id: int = 101,
-    ) -> List[int]:
-        """ Add padding with class token at the end """
+        self,
+        tokens: list[int],
+        max_length: int,
+        pad_token_id: int = 0,
+        cls_token_id: int = 101,
+    ) -> list[int]:
+        """Add padding with class token at the end"""
         if len(tokens) > max_length - 1:
-            tokens = tokens[:max_length - 1]
+            tokens = tokens[: max_length - 1]
 
         # Add padding to reach max_length-1
         if len(tokens) < max_length - 1:
             tokens = tokens + [pad_token_id] * (max_length - 1 - len(tokens))
 
         # Add class token at the end
-        tokens = tokens + [cls_token_id]
+        tokens = tokens + [cls_token_id]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         return tokens
 
 
@@ -696,7 +562,8 @@ class SigLipTokenizer:
     NOTE: this is not needed in normal library use, but is used to import new sentencepiece tokenizers
     into OpenCLIP. Leaving code here in case future models use new tokenizers.
     """
-    VOCAB_FILES = {
+
+    VOCAB_FILES: ClassVar[dict] = {
         # english, vocab_size=32_000
         "c4-en": "http://storage.googleapis.com/t5-data/vocabs/cc_en.32000/sentencepiece.model",
         # used in multilingual models (mT5, PaLI), vocab_size=250_000
@@ -706,72 +573,55 @@ class SigLipTokenizer:
     }
 
     def __init__(
-            self,
-            tokenizer_name: str,
-            context_length: Optional[int] = 64,
+        self,
+        tokenizer_name: str,
+        context_length: int | None = 64,
     ):
-        """Init.
-
-        Args:
-            tokenizer_name: The tokenizer name.
-            context_length: The context length.
-        """
-        if 'gemma' in tokenizer_name:
+        if "gemma" in tokenizer_name:
             from transformers import GemmaTokenizerFast
-            tokenizer_cls = partial(
-                GemmaTokenizerFast, padding_side='right', add_bos_token=False, add_eos_token=True)
+
+            tokenizer_cls = partial(GemmaTokenizerFast, padding_side="right", add_bos_token=False, add_eos_token=True)
         else:
             from transformers import T5TokenizerFast
+
             tokenizer_cls = partial(T5TokenizerFast, extra_ids=0)
 
         if tokenizer_name in self.VOCAB_FILES:
             # FIXME temporary hack?
             import tempfile
+
             import fsspec
+
             vocab_file = self.VOCAB_FILES[tokenizer_name]
-            with tempfile.NamedTemporaryFile('wb') as dst:
-                with fsspec.open(vocab_file, 'rb') as src:
+            with tempfile.NamedTemporaryFile("wb") as dst:
+                with fsspec.open(vocab_file, "rb") as src:
                     dst.write(src.read())
                 self.tokenizer = tokenizer_cls(dst.name, legacy=False)
         else:
             self.tokenizer = tokenizer_cls(tokenizer_name, legacy=False)
 
-        self.tokenizer.pad_token_id = 0 if 'gemma' in tokenizer_name else 1
+        self.tokenizer.pad_token_id = 0 if "gemma" in tokenizer_name else 1
         self.tokenizer.eos_token_id = 1
         self.context_length = context_length
 
     def save_pretrained(self, dest):
-        """Save pretrained.
-
-        Args:
-            dest: The dest.
-        """
         self.tokenizer.save_pretrained(dest)
 
-    def __call__(self, texts: Union[str, List[str]], context_length: Optional[int] = None) -> torch.Tensor:
-        """Call.
-
-        Args:
-            texts: The texts.
-            context_length: The context length.
-
-        Returns:
-            The return value.
-        """
+    def __call__(self, texts: str | list[str], context_length: int | None = None) -> torch.Tensor:
         # same cleaning as for default tokenizer, except lowercasing
         # adding lower (for case-sensitive tokenizers) will make it more robust but less sensitive to nuance
         if isinstance(texts, str):
             texts = [texts]
 
         context_length = context_length or self.context_length
-        assert context_length, 'Please set a valid context length in class init or call.'
+        assert context_length, "Please set a valid context length in class init or call."
 
         texts = [canonicalize_text(basic_clean(text)) for text in texts]
         output = self.tokenizer(
             texts,
-            return_tensors='pt',
+            return_tensors="pt",
             max_length=context_length,
-            padding='max_length',
+            padding="max_length",
             truncation=True,
         )
         return output.input_ids

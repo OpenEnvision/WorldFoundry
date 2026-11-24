@@ -8,10 +8,6 @@ The import is currently disabled so the default path stays flash / SDPA;
 No action, camera, VACE, causal, or TeaCache logic lives here.
 """
 
-import torch
-from typing import Optional
-import os
-
 SAGEATTN_AVAILABLE = False
 # try:
 #     if os.getenv("DISABLE_SAGEATTENTION", "0") != "0":

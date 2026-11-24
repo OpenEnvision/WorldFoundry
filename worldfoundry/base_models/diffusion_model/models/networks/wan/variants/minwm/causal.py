@@ -3,25 +3,29 @@
 Causal official-layout Wan 2.1.  Action and ProPE live in sibling
 modules.  Adds causal attention.
 """
-from worldfoundry.core.attention.sequence.varlen import attention
-from .action import (
-    WanRMSNorm,
-    rope_apply,
-    WanLayerNorm,
-    WAN_CROSSATTENTION_CLASSES,
-    rope_params,
-    MLPProj,
-    sinusoidal_embedding_1d
-)
-from torch.nn.attention.flex_attention import create_block_mask, flex_attention
-from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
-from torch.nn.attention.flex_attention import BlockMask
-import torch.nn as nn
-import torch.nn.functional as F
-import torch
+
 import math
 import os
+from typing import ClassVar
+
+import torch
 import torch.distributed as dist
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
+
+from worldfoundry.core.attention.sequence.varlen import attention
+from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
+
+from .action import (
+    WAN_CROSSATTENTION_CLASSES,
+    MLPProj,
+    WanLayerNorm,
+    WanRMSNorm,
+    rope_apply,
+    rope_params,
+    sinusoidal_embedding_1d,
+)
 
 try:
     from worldfoundry.base_models.diffusion_model.recipes.wan_configs.wan21.causal import CausalWanConfig
@@ -30,6 +34,7 @@ try:
         sequence_model_parallel_all_to_all_4D,
     )
     from worldfoundry.core.distributed.sequence_parallel.parallel_states import get_parallel_state
+
     _HAS_CLEANCODE_INFRA = True
 except ImportError as _e:
     _HAS_CLEANCODE_INFRA = False
@@ -58,26 +63,14 @@ def _require_cleancode_infra(context: str = ""):
         )
         raise RuntimeError(msg)
 
+
 # wan 1.3B model has a weird channel / head configurations and require max-autotune to work with flexattention
 # see https://github.com/pytorch/pytorch/issues/133254
 # change to default for other models
-flex_attention = torch.compile(
-    flex_attention,
-    dynamic=False,
-    mode="default"
-)
-
+flex_attention = torch.compile(flex_attention, dynamic=False, mode="default")
 
 
 def causal_rope_apply(x, grid_sizes, freqs, start_frame=0):
-    """Causal rope apply.
-
-    Args:
-        x: The x.
-        grid_sizes: The grid sizes.
-        freqs: The freqs.
-        start_frame: The start frame.
-    """
     n, c = x.size(2), x.size(3) // 2
 
     # split freqs
@@ -90,14 +83,15 @@ def causal_rope_apply(x, grid_sizes, freqs, start_frame=0):
         seq_len = f * h * w
 
         # precompute multipliers
-        x_i = torch.view_as_complex(x[i, :seq_len].to(torch.float64).reshape(
-            seq_len, n, -1, 2))
-        freqs_i = torch.cat([
-            freqs[0][start_frame:start_frame + f].view(f, 1, 1, -1).expand(f, h, w, -1),
-            freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
-            freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1)
-        ],
-            dim=-1).reshape(seq_len, 1, -1)
+        x_i = torch.view_as_complex(x[i, :seq_len].to(torch.float64).reshape(seq_len, n, -1, 2))
+        freqs_i = torch.cat(
+            [
+                freqs[0][start_frame : start_frame + f].view(f, 1, 1, -1).expand(f, h, w, -1),
+                freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
+                freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1),
+            ],
+            dim=-1,
+        ).reshape(seq_len, 1, -1)
 
         # apply rotary embedding
         x_i = torch.view_as_real(x_i * freqs_i).flatten(2)
@@ -111,23 +105,7 @@ def causal_rope_apply(x, grid_sizes, freqs, start_frame=0):
 class CausalWanSelfAttention(nn.Module):
     """Causal self-attention with optional KV cache and frame-offset RoPE."""
 
-    def __init__(self,
-                 dim,
-                 num_heads,
-                 local_attn_size=-1,
-                 sink_size=0,
-                 qk_norm=True,
-                 eps=1e-6):
-        """Init.
-
-        Args:
-            dim: The dim.
-            num_heads: The num heads.
-            local_attn_size: The local attn size.
-            sink_size: The sink size.
-            qk_norm: The qk norm.
-            eps: The eps.
-        """
+    def __init__(self, dim, num_heads, local_attn_size=-1, sink_size=0, qk_norm=True, eps=1e-6):
         assert dim % num_heads == 0
         super().__init__()
         self.dim = dim
@@ -187,10 +165,12 @@ class CausalWanSelfAttention(nn.Module):
         q, k, v = qkv_fn(x)
 
         # PRoPE: apply BEFORE SP all-to-all so viewmats/Ks and q/k/v have matching lengths
-        prope_enabled = (viewmats is not None) and hasattr(self, 'prope_o') and \
-                        (kv_cache is None or prope_kv_cache is not None)
+        prope_enabled = (
+            (viewmats is not None) and hasattr(self, "prope_o") and (kv_cache is None or prope_kv_cache is not None)
+        )
         if prope_enabled:
             from .prope import prope_qkv
+
             q_p, k_p, v_p, apply_fn_o = prope_qkv(
                 q.permute(0, 2, 1, 3),
                 k.permute(0, 2, 1, 3),
@@ -228,7 +208,7 @@ class CausalWanSelfAttention(nn.Module):
             # With SP padding, full_s may be slightly larger than seq_lens[0]*2,
             # so use > 1.5x threshold instead of exact equality.
             full_s = q.shape[1]
-            is_tf = (full_s > seq_lens[0].item() * 1.5)
+            is_tf = full_s > seq_lens[0].item() * 1.5
             if is_tf:
                 # SP + TF: after all-to-all, sequence is interleaved:
                 # [clean_r0, noisy_r0, clean_r1, noisy_r1, ...]
@@ -239,15 +219,12 @@ class CausalWanSelfAttention(nn.Module):
                     per_rank_half = chunk_size // 2
 
                     def _interleaved_to_contiguous(x):
-                        """Helper function to interleaved to contiguous.
-
-                        Args:
-                            x: The x.
-                        """
                         B, S, H, D = x.shape
-                        return x.reshape(B, sp_world_size, 2, per_rank_half, H, D) \
-                                .permute(0, 2, 1, 3, 4, 5) \
-                                .reshape(B, S, H, D)
+                        return (
+                            x.reshape(B, sp_world_size, 2, per_rank_half, H, D)
+                            .permute(0, 2, 1, 3, 4, 5)
+                            .reshape(B, S, H, D)
+                        )
 
                     q = _interleaved_to_contiguous(q)
                     k = _interleaved_to_contiguous(k)
@@ -264,14 +241,10 @@ class CausalWanSelfAttention(nn.Module):
                     if sp_pad_per_half > 0:
                         # Remove padding from each half
                         def _strip_sp_pad(t):
-                            """Helper function to strip sp pad.
-
-                            Args:
-                                t: The t.
-                            """
                             c = t[:, :unpadded_half]
-                            n = t[:, full_s // 2:full_s // 2 + unpadded_half]
+                            n = t[:, full_s // 2 : full_s // 2 + unpadded_half]
                             return torch.cat([c, n], dim=1)
+
                         q = _strip_sp_pad(q)
                         k = _strip_sp_pad(k)
                         v = _strip_sp_pad(v)
@@ -296,38 +269,52 @@ class CausalWanSelfAttention(nn.Module):
 
                 padded_length = math.ceil(q.shape[1] / 128) * 128 - q.shape[1]
                 padded_roped_query = torch.cat(
-                    [roped_query,
-                     torch.zeros([q.shape[0], padded_length, q.shape[2], q.shape[3]],
-                                 device=q.device, dtype=v.dtype)],
-                    dim=1
+                    [
+                        roped_query,
+                        torch.zeros(
+                            [q.shape[0], padded_length, q.shape[2], q.shape[3]], device=q.device, dtype=v.dtype
+                        ),
+                    ],
+                    dim=1,
                 )
 
                 padded_roped_key = torch.cat(
-                    [roped_key, torch.zeros([k.shape[0], padded_length, k.shape[2], k.shape[3]],
-                                            device=k.device, dtype=v.dtype)],
-                    dim=1
+                    [
+                        roped_key,
+                        torch.zeros(
+                            [k.shape[0], padded_length, k.shape[2], k.shape[3]], device=k.device, dtype=v.dtype
+                        ),
+                    ],
+                    dim=1,
                 )
 
                 padded_v = torch.cat(
-                    [v, torch.zeros([v.shape[0], padded_length, v.shape[2], v.shape[3]],
-                                    device=v.device, dtype=v.dtype)],
-                    dim=1
+                    [
+                        v,
+                        torch.zeros(
+                            [v.shape[0], padded_length, v.shape[2], v.shape[3]], device=v.device, dtype=v.dtype
+                        ),
+                    ],
+                    dim=1,
                 )
 
                 x = flex_attention(
                     query=padded_roped_query.transpose(2, 1),
                     key=padded_roped_key.transpose(2, 1),
                     value=padded_v.transpose(2, 1),
-                    block_mask=block_mask
+                    block_mask=block_mask,
                 )
-                x = x[:, :, :q.shape[1]].transpose(2, 1) if padded_length > 0 else x.transpose(2, 1)
+                x = x[:, :, : q.shape[1]].transpose(2, 1) if padded_length > 0 else x.transpose(2, 1)
 
                 # PRoPE attention path (TF mode)
                 if prope_enabled:
                     padded_length_p = padded_length
                     if padded_length_p > 0:
-                        pad_zeros_p = torch.zeros([q_p.shape[0], padded_length_p, q_p.shape[2], q_p.shape[3]],
-                                                  device=q_p.device, dtype=q_p.dtype)
+                        pad_zeros_p = torch.zeros(
+                            [q_p.shape[0], padded_length_p, q_p.shape[2], q_p.shape[3]],
+                            device=q_p.device,
+                            dtype=q_p.dtype,
+                        )
                         padded_q_p = torch.cat([q_p, pad_zeros_p], dim=1)
                         padded_k_p = torch.cat([k_p, pad_zeros_p], dim=1)
                         padded_v_p = torch.cat([v_p, pad_zeros_p], dim=1)
@@ -338,55 +325,60 @@ class CausalWanSelfAttention(nn.Module):
                         query=padded_q_p.transpose(2, 1),
                         key=padded_k_p.transpose(2, 1),
                         value=padded_v_p.transpose(2, 1),
-                        block_mask=block_mask
+                        block_mask=block_mask,
                     )
-                    x_prope = x_prope[:, :, :q_p.shape[1]].transpose(2, 1) if padded_length_p > 0 else x_prope.transpose(2, 1)
+                    x_prope = (
+                        x_prope[:, :, : q_p.shape[1]].transpose(2, 1)
+                        if padded_length_p > 0
+                        else x_prope.transpose(2, 1)
+                    )
 
                 # Restore SP padding after attention so reverse reorder works
                 if sp_enabled and sp_pad_per_half > 0:
                     B_x, S_x, H_x, D_x = x.shape
                     half_valid = S_x // 2  # == unpadded_half
                     pad_t = x.new_zeros(B_x, sp_pad_per_half, H_x, D_x)
-                    x = torch.cat([
-                        x[:, :half_valid], pad_t,
-                        x[:, half_valid:], pad_t
-                    ], dim=1)
+                    x = torch.cat([x[:, :half_valid], pad_t, x[:, half_valid:], pad_t], dim=1)
                     if prope_enabled:
-                        x_prope = torch.cat([
-                            x_prope[:, :half_valid], pad_t,
-                            x_prope[:, half_valid:], pad_t
-                        ], dim=1)
+                        x_prope = torch.cat([x_prope[:, :half_valid], pad_t, x_prope[:, half_valid:], pad_t], dim=1)
 
             else:
                 # DF path removed — only Teacher Forcing is supported.
-                assert False, "Diffusion Forcing is currently not supported. Only Teacher Forcing is supported."
+                assert False, "Diffusion Forcing is currently not supported. Only Teacher Forcing is supported."  # noqa: B011 - Keeps the assertion semantics under -O.
         else:
             frame_seqlen = math.prod(grid_sizes[0][1:]).item()
             current_start_frame = current_start // frame_seqlen
-            roped_query = causal_rope_apply(
-                q, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
-            roped_key = causal_rope_apply(
-                k, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
+            roped_query = causal_rope_apply(q, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
+            roped_key = causal_rope_apply(k, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
 
             current_end = current_start + roped_query.shape[1]
             sink_tokens = self.sink_size * frame_seqlen
             # If we are using local attention and the current KV cache size is larger than the local attention size, we need to truncate the KV cache
             kv_cache_size = kv_cache["k"].shape[1]
             num_new_tokens = roped_query.shape[1]
-            if self.local_attn_size != -1 and (current_end > kv_cache["global_end_index"].item()) and (
-                    num_new_tokens + kv_cache["local_end_index"].item() > kv_cache_size):
+            if (
+                self.local_attn_size != -1
+                and (current_end > kv_cache["global_end_index"].item())
+                and (num_new_tokens + kv_cache["local_end_index"].item() > kv_cache_size)
+            ):
                 # Calculate the number of new tokens added in this step
                 # Shift existing cache content left to discard oldest tokens
                 # Clone the source slice to avoid overlapping memory error
                 num_evicted_tokens = num_new_tokens + kv_cache["local_end_index"].item() - kv_cache_size
                 num_rolled_tokens = kv_cache["local_end_index"].item() - num_evicted_tokens - sink_tokens
-                kv_cache["k"][:, sink_tokens:sink_tokens + num_rolled_tokens] = \
-                    kv_cache["k"][:, sink_tokens + num_evicted_tokens:sink_tokens + num_evicted_tokens + num_rolled_tokens].clone()
-                kv_cache["v"][:, sink_tokens:sink_tokens + num_rolled_tokens] = \
-                    kv_cache["v"][:, sink_tokens + num_evicted_tokens:sink_tokens + num_evicted_tokens + num_rolled_tokens].clone()
+                kv_cache["k"][:, sink_tokens : sink_tokens + num_rolled_tokens] = kv_cache["k"][
+                    :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
+                ].clone()
+                kv_cache["v"][:, sink_tokens : sink_tokens + num_rolled_tokens] = kv_cache["v"][
+                    :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
+                ].clone()
                 # Insert the new keys/values at the end
-                local_end_index = kv_cache["local_end_index"].item() + current_end - \
-                    kv_cache["global_end_index"].item() - num_evicted_tokens
+                local_end_index = (
+                    kv_cache["local_end_index"].item()
+                    + current_end
+                    - kv_cache["global_end_index"].item()
+                    - num_evicted_tokens
+                )
                 local_start_index = local_end_index - num_new_tokens
                 kv_cache["k"][:, local_start_index:local_end_index] = roped_key
                 kv_cache["v"][:, local_start_index:local_end_index] = v
@@ -398,8 +390,8 @@ class CausalWanSelfAttention(nn.Module):
                 kv_cache["v"][:, local_start_index:local_end_index] = v
             x = attention(
                 roped_query,
-                kv_cache["k"][:, max(0, local_end_index - self.max_attention_size):local_end_index],
-                kv_cache["v"][:, max(0, local_end_index - self.max_attention_size):local_end_index]
+                kv_cache["k"][:, max(0, local_end_index - self.max_attention_size) : local_end_index],
+                kv_cache["v"][:, max(0, local_end_index - self.max_attention_size) : local_end_index],
             )
             kv_cache["global_end_index"].fill_(current_end)
             kv_cache["local_end_index"].fill_(local_end_index)
@@ -410,29 +402,42 @@ class CausalWanSelfAttention(nn.Module):
                 # Store PRoPE-transformed k_p, v_p into prope_kv_cache
                 # Use the same eviction logic as the RoPE cache
                 prope_cache_size = prope_kv_cache["k"].shape[1]
-                if self.local_attn_size != -1 and (current_end > prope_kv_cache["global_end_index"].item()) and (
-                        num_new_tokens + prope_kv_cache["local_end_index"].item() > prope_cache_size):
+                if (
+                    self.local_attn_size != -1
+                    and (current_end > prope_kv_cache["global_end_index"].item())
+                    and (num_new_tokens + prope_kv_cache["local_end_index"].item() > prope_cache_size)
+                ):
                     p_num_evicted = num_new_tokens + prope_kv_cache["local_end_index"].item() - prope_cache_size
                     p_num_rolled = prope_kv_cache["local_end_index"].item() - p_num_evicted - sink_tokens
-                    prope_kv_cache["k"][:, sink_tokens:sink_tokens + p_num_rolled] = \
-                        prope_kv_cache["k"][:, sink_tokens + p_num_evicted:sink_tokens + p_num_evicted + p_num_rolled].clone()
-                    prope_kv_cache["v"][:, sink_tokens:sink_tokens + p_num_rolled] = \
-                        prope_kv_cache["v"][:, sink_tokens + p_num_evicted:sink_tokens + p_num_evicted + p_num_rolled].clone()
-                    p_local_end = prope_kv_cache["local_end_index"].item() + current_end - \
-                        prope_kv_cache["global_end_index"].item() - p_num_evicted
+                    prope_kv_cache["k"][:, sink_tokens : sink_tokens + p_num_rolled] = prope_kv_cache["k"][
+                        :, sink_tokens + p_num_evicted : sink_tokens + p_num_evicted + p_num_rolled
+                    ].clone()
+                    prope_kv_cache["v"][:, sink_tokens : sink_tokens + p_num_rolled] = prope_kv_cache["v"][
+                        :, sink_tokens + p_num_evicted : sink_tokens + p_num_evicted + p_num_rolled
+                    ].clone()
+                    p_local_end = (
+                        prope_kv_cache["local_end_index"].item()
+                        + current_end
+                        - prope_kv_cache["global_end_index"].item()
+                        - p_num_evicted
+                    )
                     p_local_start = p_local_end - num_new_tokens
                     prope_kv_cache["k"][:, p_local_start:p_local_end] = k_p
                     prope_kv_cache["v"][:, p_local_start:p_local_end] = v_p
                 else:
-                    p_local_end = prope_kv_cache["local_end_index"].item() + current_end - prope_kv_cache["global_end_index"].item()
+                    p_local_end = (
+                        prope_kv_cache["local_end_index"].item()
+                        + current_end
+                        - prope_kv_cache["global_end_index"].item()
+                    )
                     p_local_start = p_local_end - num_new_tokens
                     prope_kv_cache["k"][:, p_local_start:p_local_end] = k_p
                     prope_kv_cache["v"][:, p_local_start:p_local_end] = v_p
 
                 x_prope = attention(
                     q_p,
-                    prope_kv_cache["k"][:, max(0, p_local_end - self.max_attention_size):p_local_end],
-                    prope_kv_cache["v"][:, max(0, p_local_end - self.max_attention_size):p_local_end]
+                    prope_kv_cache["k"][:, max(0, p_local_end - self.max_attention_size) : p_local_end],
+                    prope_kv_cache["v"][:, max(0, p_local_end - self.max_attention_size) : p_local_end],
                 )
                 prope_kv_cache["global_end_index"].fill_(current_end)
                 prope_kv_cache["local_end_index"].fill_(p_local_end)
@@ -443,13 +448,17 @@ class CausalWanSelfAttention(nn.Module):
             # interleaved [clean_r0, noisy_r0, ...] before reverse all-to-all
             if is_tf:
                 B_x, S_x, H_x, D_x = x.shape
-                x = x.reshape(B_x, 2, sp_world_size, per_rank_half, H_x, D_x) \
-                      .permute(0, 2, 1, 3, 4, 5) \
-                      .reshape(B_x, S_x, H_x, D_x)
+                x = (
+                    x.reshape(B_x, 2, sp_world_size, per_rank_half, H_x, D_x)
+                    .permute(0, 2, 1, 3, 4, 5)
+                    .reshape(B_x, S_x, H_x, D_x)
+                )
                 if prope_enabled:
-                    x_prope = x_prope.reshape(B_x, 2, sp_world_size, per_rank_half, H_x, D_x) \
-                                     .permute(0, 2, 1, 3, 4, 5) \
-                                     .reshape(B_x, S_x, H_x, D_x)
+                    x_prope = (
+                        x_prope.reshape(B_x, 2, sp_world_size, per_rank_half, H_x, D_x)
+                        .permute(0, 2, 1, 3, 4, 5)
+                        .reshape(B_x, S_x, H_x, D_x)
+                    )
             x = sequence_model_parallel_all_to_all_4D(x, scatter_dim=1, gather_dim=2)
             if prope_enabled:
                 x_prope = sequence_model_parallel_all_to_all_4D(x_prope, scatter_dim=1, gather_dim=2)
@@ -471,29 +480,18 @@ class CausalWanSelfAttention(nn.Module):
 class CausalWanAttentionBlock(nn.Module):
     """Causal Wan block: cached self-attn, cross-attn, then gated FFN."""
 
-    def __init__(self,
-                 cross_attn_type,
-                 dim,
-                 ffn_dim,
-                 num_heads,
-                 local_attn_size=-1,
-                 sink_size=0,
-                 qk_norm=True,
-                 cross_attn_norm=False,
-                 eps=1e-6):
-        """Init.
-
-        Args:
-            cross_attn_type: The cross attn type.
-            dim: The dim.
-            ffn_dim: The ffn dim.
-            num_heads: The num heads.
-            local_attn_size: The local attn size.
-            sink_size: The sink size.
-            qk_norm: The qk norm.
-            cross_attn_norm: The cross attn norm.
-            eps: The eps.
-        """
+    def __init__(
+        self,
+        cross_attn_type,
+        dim,
+        ffn_dim,
+        num_heads,
+        local_attn_size=-1,
+        sink_size=0,
+        qk_norm=True,
+        cross_attn_norm=False,
+        eps=1e-6,
+    ):
         super().__init__()
         self.dim = dim
         self.ffn_dim = ffn_dim
@@ -506,18 +504,10 @@ class CausalWanAttentionBlock(nn.Module):
         # layers
         self.norm1 = WanLayerNorm(dim, eps)
         self.self_attn = CausalWanSelfAttention(dim, num_heads, local_attn_size, sink_size, qk_norm, eps)
-        self.norm3 = WanLayerNorm(
-            dim, eps,
-            elementwise_affine=True) if cross_attn_norm else nn.Identity()
-        self.cross_attn = WAN_CROSSATTENTION_CLASSES[cross_attn_type](dim,
-                                                                      num_heads,
-                                                                      (-1, -1),
-                                                                      qk_norm,
-                                                                      eps)
+        self.norm3 = WanLayerNorm(dim, eps, elementwise_affine=True) if cross_attn_norm else nn.Identity()
+        self.cross_attn = WAN_CROSSATTENTION_CLASSES[cross_attn_type](dim, num_heads, (-1, -1), qk_norm, eps)
         self.norm2 = WanLayerNorm(dim, eps)
-        self.ffn = nn.Sequential(
-            nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'),
-            nn.Linear(ffn_dim, dim))
+        self.ffn = nn.Sequential(nn.Linear(dim, ffn_dim), nn.GELU(approximate="tanh"), nn.Linear(ffn_dim, dim))
 
         # modulation
         self.modulation = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
@@ -538,7 +528,7 @@ class CausalWanAttentionBlock(nn.Module):
         cache_start=None,
         viewmats=None,
         Ks=None,
-        prope_kv_cache=None
+        prope_kv_cache=None,
     ):
         r"""
         Args:
@@ -548,7 +538,7 @@ class CausalWanAttentionBlock(nn.Module):
             grid_sizes(Tensor): Shape [B, 3], the second dimension contains (F, H, W)
             freqs(Tensor): Rope freqs, shape [1024, C / num_heads / 2]
         """
-        token_level_e = (e.shape[1] == x.shape[1])
+        token_level_e = e.shape[1] == x.shape[1]
         e_num_frames = e.shape[1]  # save before chunk() turns e into a tuple
         # assert e.dtype == torch.float32
         # with amp.autocast(dtype=torch.float32):
@@ -559,27 +549,23 @@ class CausalWanAttentionBlock(nn.Module):
             # SP token-level: e[i] is [B, L, 1, C], squeeze to [B, L, C]
             y = self.self_attn(
                 self.norm1(x) * (1 + e[1].squeeze(2)) + e[0].squeeze(2),
-                seq_lens, grid_sizes,
-                freqs, block_mask, kv_cache, current_start, cache_start,
-                viewmats=viewmats, Ks=Ks, prope_kv_cache=prope_kv_cache)
+                seq_lens,
+                grid_sizes,
+                freqs,
+                block_mask,
+                kv_cache,
+                current_start,
+                cache_start,
+                viewmats=viewmats,
+                Ks=Ks,
+                prope_kv_cache=prope_kv_cache,
+            )
             x = x + y * e[2].squeeze(2)
 
             # cross-attention & ffn function
             def cross_attn_ffn(x, context, context_lens, e, crossattn_cache=None):
-                """Cross attn ffn.
-
-                Args:
-                    x: The x.
-                    context: The context.
-                    context_lens: The context lens.
-                    e: The e.
-                    crossattn_cache: The crossattn cache.
-                """
-                x = x + self.cross_attn(self.norm3(x), context,
-                                        context_lens, crossattn_cache=crossattn_cache)
-                y = self.ffn(
-                    self.norm2(x) * (1 + e[4].squeeze(2)) + e[3].squeeze(2)
-                )
+                x = x + self.cross_attn(self.norm3(x), context, context_lens, crossattn_cache=crossattn_cache)
+                y = self.ffn(self.norm2(x) * (1 + e[4].squeeze(2)) + e[3].squeeze(2))
                 x = x + y * e[5].squeeze(2)
                 return x
         else:
@@ -589,33 +575,29 @@ class CausalWanAttentionBlock(nn.Module):
             # self-attention
             y = self.self_attn(
                 (self.norm1(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0]).flatten(1, 2),
-                seq_lens, grid_sizes,
-                freqs, block_mask, kv_cache, current_start, cache_start,
-                viewmats=viewmats, Ks=Ks, prope_kv_cache=prope_kv_cache)
+                seq_lens,
+                grid_sizes,
+                freqs,
+                block_mask,
+                kv_cache,
+                current_start,
+                cache_start,
+                viewmats=viewmats,
+                Ks=Ks,
+                prope_kv_cache=prope_kv_cache,
+            )
 
             # with amp.autocast(dtype=torch.float32):
             x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[2]).flatten(1, 2)
 
             # cross-attention & ffn function
             def cross_attn_ffn(x, context, context_lens, e, crossattn_cache=None):
-                """Cross attn ffn.
-
-                Args:
-                    x: The x.
-                    context: The context.
-                    context_lens: The context lens.
-                    e: The e.
-                    crossattn_cache: The crossattn cache.
-                """
-                x = x + self.cross_attn(self.norm3(x), context,
-                                        context_lens, crossattn_cache=crossattn_cache)
+                x = x + self.cross_attn(self.norm3(x), context, context_lens, crossattn_cache=crossattn_cache)
                 y = self.ffn(
-                    (self.norm2(x).unflatten(dim=1, sizes=(num_frames,
-                     frame_seqlen)) * (1 + e[4]) + e[3]).flatten(1, 2)
+                    (self.norm2(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[4]) + e[3]).flatten(1, 2)
                 )
                 # with amp.autocast(dtype=torch.float32):
-                x = x + (y.unflatten(dim=1, sizes=(num_frames,
-                         frame_seqlen)) * e[5]).flatten(1, 2)
+                x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[5]).flatten(1, 2)
                 return x
 
         x = cross_attn_ffn(x, context, context_lens, e, crossattn_cache)
@@ -626,14 +608,6 @@ class CausalHead(nn.Module):
     """AdaLN output head used by causal Wan graphs."""
 
     def __init__(self, dim, out_dim, patch_size, eps=1e-6):
-        """Init.
-
-        Args:
-            dim: The dim.
-            out_dim: The out dim.
-            patch_size: The patch size.
-            eps: The eps.
-        """
         super().__init__()
         self.dim = dim
         self.out_dim = out_dim
@@ -658,40 +632,40 @@ class CausalHead(nn.Module):
         # with amp.autocast(dtype=torch.float32):
         num_frames, frame_seqlen = e.shape[1], x.shape[1] // e.shape[1]
         e = (self.modulation.unsqueeze(1) + e).chunk(2, dim=2)
-        x = (self.head(self.norm(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0]))
+        x = self.head(self.norm(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0])
         return x
 
 
 class CausalWanModel(nn.Module, NativeConfigMixin):
     r"""MinWM causal Wan 2.1 transformer (chunk KV cache)."""
 
-    ignore_for_config = [
-        'patch_size', 'cross_attn_norm', 'qk_norm', 'text_dim'
-    ]
-    _no_split_modules = ['WanAttentionBlock']
+    ignore_for_config: ClassVar[list] = ["patch_size", "cross_attn_norm", "qk_norm", "text_dim"]
+    _no_split_modules: ClassVar[list] = ["WanAttentionBlock"]
     _supports_gradient_checkpointing = True
 
     # FSDP shard conditions — infra only, no model change
     _fsdp_shard_conditions = CausalWanConfig().arch_config._fsdp_shard_conditions if _HAS_CLEANCODE_INFRA else []
 
     @register_to_config
-    def __init__(self,
-                 model_type='t2v',
-                 patch_size=(1, 2, 2),
-                 text_len=512,
-                 in_dim=16,
-                 dim=2048,
-                 ffn_dim=8192,
-                 freq_dim=256,
-                 text_dim=4096,
-                 out_dim=16,
-                 num_heads=16,
-                 num_layers=32,
-                 local_attn_size=-1,
-                 sink_size=0,
-                 qk_norm=True,
-                 cross_attn_norm=True,
-                 eps=1e-6):
+    def __init__(
+        self,
+        model_type="t2v",
+        patch_size=(1, 2, 2),
+        text_len=512,
+        in_dim=16,
+        dim=2048,
+        ffn_dim=8192,
+        freq_dim=256,
+        text_dim=4096,
+        out_dim=16,
+        num_heads=16,
+        num_layers=32,
+        local_attn_size=-1,
+        sink_size=0,
+        qk_norm=True,
+        cross_attn_norm=True,
+        eps=1e-6,
+    ):
         r"""
         Initialize the diffusion model backbone.
 
@@ -732,7 +706,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
 
         super().__init__()
 
-        assert model_type in ['t2v', 'i2v']
+        assert model_type in ["t2v", "i2v"]
         self.model_type = model_type
 
         self.patch_size = patch_size
@@ -751,24 +725,22 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         self.eps = eps
 
         # embeddings
-        self.patch_embedding = nn.Conv3d(
-            in_dim, dim, kernel_size=patch_size, stride=patch_size)
-        self.text_embedding = nn.Sequential(
-            nn.Linear(text_dim, dim), nn.GELU(approximate='tanh'),
-            nn.Linear(dim, dim))
+        self.patch_embedding = nn.Conv3d(in_dim, dim, kernel_size=patch_size, stride=patch_size)
+        self.text_embedding = nn.Sequential(nn.Linear(text_dim, dim), nn.GELU(approximate="tanh"), nn.Linear(dim, dim))
 
-        self.time_embedding = nn.Sequential(
-            nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
-        self.time_projection = nn.Sequential(
-            nn.SiLU(), nn.Linear(dim, dim * 6))
+        self.time_embedding = nn.Sequential(nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
+        self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(dim, dim * 6))
 
         # blocks
-        cross_attn_type = 't2v_cross_attn' if model_type == 't2v' else 'i2v_cross_attn'
-        self.blocks = nn.ModuleList([
-            CausalWanAttentionBlock(cross_attn_type, dim, ffn_dim, num_heads,
-                                    local_attn_size, sink_size, qk_norm, cross_attn_norm, eps)
-            for _ in range(num_layers)
-        ])
+        cross_attn_type = "t2v_cross_attn" if model_type == "t2v" else "i2v_cross_attn"
+        self.blocks = nn.ModuleList(
+            [
+                CausalWanAttentionBlock(
+                    cross_attn_type, dim, ffn_dim, num_heads, local_attn_size, sink_size, qk_norm, cross_attn_norm, eps
+                )
+                for _ in range(num_layers)
+            ]
+        )
 
         # head
         self.head = CausalHead(dim, out_dim, patch_size, eps)
@@ -776,14 +748,12 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         # buffers (don't use register_buffer otherwise dtype will be changed in to())
         assert (dim % num_heads) == 0 and (dim // num_heads) % 2 == 0
         d = dim // num_heads
-        self.freqs = torch.cat([
-            rope_params(1024, d - 4 * (d // 6)),
-            rope_params(1024, 2 * (d // 6)),
-            rope_params(1024, 2 * (d // 6))
-        ],
-            dim=1)
+        self.freqs = torch.cat(
+            [rope_params(1024, d - 4 * (d // 6)), rope_params(1024, 2 * (d // 6)), rope_params(1024, 2 * (d // 6))],
+            dim=1,
+        )
 
-        if model_type == 'i2v':
+        if model_type == "i2v":
             self.img_emb = MLPProj(1280, dim)
 
         # initialize weights
@@ -797,22 +767,17 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         self.independent_first_frame = False
 
     def _set_gradient_checkpointing(self, module=None, value=False, enable=None, gradient_checkpointing_func=None):
-        """Helper function to set gradient checkpointing.
-
-        Args:
-            module: The module.
-            value: The value.
-            enable: The enable.
-            gradient_checkpointing_func: The gradient checkpointing func.
-        """
         if enable is not None:
             value = enable
         self.gradient_checkpointing = value
 
     @staticmethod
     def _prepare_blockwise_causal_attn_mask(
-        device: torch.device | str, num_frames: int = 21,
-        frame_seqlen: int = 1560, num_frame_per_block=1, local_attn_size=-1
+        device: torch.device | str,
+        num_frames: int = 21,
+        frame_seqlen: int = 1560,
+        num_frame_per_block=1,
+        local_attn_size=-1,
     ) -> BlockMask:
         """
         we will divide the token sequence into the following format
@@ -824,43 +789,37 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         # we do right padding to get to a multiple of 128
         padded_length = math.ceil(total_length / 128) * 128 - total_length
 
-        ends = torch.zeros(total_length + padded_length,
-                           device=device, dtype=torch.long)
+        ends = torch.zeros(total_length + padded_length, device=device, dtype=torch.long)
 
         # Block-wise causal mask will attend to all elements that are before the end of the current chunk
-        frame_indices = torch.arange(
-            start=0,
-            end=total_length,
-            step=frame_seqlen * num_frame_per_block,
-            device=device
-        )
+        frame_indices = torch.arange(start=0, end=total_length, step=frame_seqlen * num_frame_per_block, device=device)
 
         for tmp in frame_indices:
-            ends[tmp:tmp + frame_seqlen * num_frame_per_block] = tmp + \
-                frame_seqlen * num_frame_per_block
+            ends[tmp : tmp + frame_seqlen * num_frame_per_block] = tmp + frame_seqlen * num_frame_per_block
 
         def attention_mask(b, h, q_idx, kv_idx):
-            """Attention mask.
-
-            Args:
-                b: The b.
-                h: The h.
-                q_idx: The q idx.
-                kv_idx: The kv idx.
-            """
             if local_attn_size == -1:
                 return (kv_idx < ends[q_idx]) | (q_idx == kv_idx)
             else:
-                return ((kv_idx < ends[q_idx]) & (kv_idx >= (ends[q_idx] - local_attn_size * frame_seqlen))) | (q_idx == kv_idx)
+                return ((kv_idx < ends[q_idx]) & (kv_idx >= (ends[q_idx] - local_attn_size * frame_seqlen))) | (
+                    q_idx == kv_idx
+                )
             # return ((kv_idx < total_length) & (q_idx < total_length))  | (q_idx == kv_idx) # bidirectional mask
 
-        block_mask = create_block_mask(attention_mask, B=None, H=None, Q_LEN=total_length + padded_length,
-                                       KV_LEN=total_length + padded_length, _compile=False, device=device)
+        block_mask = create_block_mask(
+            attention_mask,
+            B=None,
+            H=None,
+            Q_LEN=total_length + padded_length,
+            KV_LEN=total_length + padded_length,
+            _compile=False,
+            device=device,
+        )
 
         import torch.distributed as dist
+
         if not dist.is_initialized() or dist.get_rank() == 0:
-            print(
-                f" cache a block wise causal mask with block size of {num_frame_per_block} frames")
+            print(f" cache a block wise causal mask with block size of {num_frame_per_block} frames")
             print(block_mask)
 
         # import imageio
@@ -877,8 +836,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
 
     @staticmethod
     def _prepare_teacher_forcing_mask(
-        device: torch.device | str, num_frames: int = 21,
-        frame_seqlen: int = 1560, num_frame_per_block=1
+        device: torch.device | str, num_frames: int = 21, frame_seqlen: int = 1560, num_frame_per_block=1
     ) -> BlockMask:
         """
         we will divide the token sequence into the following format
@@ -908,25 +866,20 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         # Block-wise causal mask will attend to all elements that are before the end of the current chunk
         attention_block_size = frame_seqlen * num_frame_per_block
         frame_indices = torch.arange(
-            start=0,
-            end=num_frames * frame_seqlen,
-            step=attention_block_size,
-            device=device, dtype=torch.long
+            start=0, end=num_frames * frame_seqlen, step=attention_block_size, device=device, dtype=torch.long
         )
 
         # attention for clean context frames
         for start in frame_indices:
-            context_ends[start:start + attention_block_size] = start + attention_block_size
+            context_ends[start : start + attention_block_size] = start + attention_block_size
 
         noisy_image_start_list = torch.arange(
-            num_frames * frame_seqlen, total_length,
-            step=attention_block_size,
-            device=device, dtype=torch.long
+            num_frames * frame_seqlen, total_length, step=attention_block_size, device=device, dtype=torch.long
         )
         noisy_image_end_list = noisy_image_start_list + attention_block_size
 
         # attention for noisy frames
-        for block_index, (start, end) in enumerate(zip(noisy_image_start_list, noisy_image_end_list)):
+        for block_index, (start, end) in enumerate(zip(noisy_image_start_list, noisy_image_end_list, strict=False)):
             # attend to noisy tokens within the same block
             noise_noise_starts[start:end] = start
             noise_noise_ends[start:end] = end
@@ -935,14 +888,6 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             noise_context_ends[start:end] = block_index * attention_block_size
 
         def attention_mask(b, h, q_idx, kv_idx):
-            """Attention mask.
-
-            Args:
-                b: The b.
-                h: The h.
-                q_idx: The q idx.
-                kv_idx: The kv idx.
-            """
             # first design the mask for clean frames
             clean_mask = (q_idx < clean_ends) & (kv_idx < context_ends[q_idx])
             # then design the mask for noisy frames
@@ -954,8 +899,15 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             eye_mask = q_idx == kv_idx
             return eye_mask | clean_mask | noise_mask
 
-        block_mask = create_block_mask(attention_mask, B=None, H=None, Q_LEN=total_length + padded_length,
-                                       KV_LEN=total_length + padded_length, _compile=False, device=device)
+        block_mask = create_block_mask(
+            attention_mask,
+            B=None,
+            H=None,
+            Q_LEN=total_length + padded_length,
+            KV_LEN=total_length + padded_length,
+            _compile=False,
+            device=device,
+        )
 
         if DEBUG:
             print(block_mask)
@@ -963,18 +915,28 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             import numpy as np
             from torch.nn.attention.flex_attention import create_mask
 
-            mask = create_mask(attention_mask, B=None, H=None, Q_LEN=total_length +
-                                padded_length, KV_LEN=total_length + padded_length, device=device)
+            mask = create_mask(
+                attention_mask,
+                B=None,
+                H=None,
+                Q_LEN=total_length + padded_length,
+                KV_LEN=total_length + padded_length,
+                device=device,
+            )
             import cv2
+
             mask = cv2.resize(mask[0, 0].cpu().float().numpy(), (1024, 1024))
-            imageio.imwrite("mask_%d.jpg" % (0), np.uint8(255. * mask))
+            imageio.imwrite("mask_%d.jpg" % (0), np.uint8(255.0 * mask))  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
         return block_mask
 
     @staticmethod
     def _prepare_blockwise_causal_attn_mask_i2v(
-        device: torch.device | str, num_frames: int = 21,
-        frame_seqlen: int = 1560, num_frame_per_block=4, local_attn_size=-1
+        device: torch.device | str,
+        num_frames: int = 21,
+        frame_seqlen: int = 1560,
+        num_frame_per_block=4,
+        local_attn_size=-1,
     ) -> BlockMask:
         """
         we will divide the token sequence into the following format
@@ -987,45 +949,39 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         # we do right padding to get to a multiple of 128
         padded_length = math.ceil(total_length / 128) * 128 - total_length
 
-        ends = torch.zeros(total_length + padded_length,
-                           device=device, dtype=torch.long)
+        ends = torch.zeros(total_length + padded_length, device=device, dtype=torch.long)
 
         # special handling for the first frame
         ends[:frame_seqlen] = frame_seqlen
 
         # Block-wise causal mask will attend to all elements that are before the end of the current chunk
         frame_indices = torch.arange(
-            start=frame_seqlen,
-            end=total_length,
-            step=frame_seqlen * num_frame_per_block,
-            device=device
+            start=frame_seqlen, end=total_length, step=frame_seqlen * num_frame_per_block, device=device
         )
 
-        for idx, tmp in enumerate(frame_indices):
-            ends[tmp:tmp + frame_seqlen * num_frame_per_block] = tmp + \
-                frame_seqlen * num_frame_per_block
+        for _idx, tmp in enumerate(frame_indices):
+            ends[tmp : tmp + frame_seqlen * num_frame_per_block] = tmp + frame_seqlen * num_frame_per_block
 
         def attention_mask(b, h, q_idx, kv_idx):
-            """Attention mask.
-
-            Args:
-                b: The b.
-                h: The h.
-                q_idx: The q idx.
-                kv_idx: The kv idx.
-            """
             if local_attn_size == -1:
                 return (kv_idx < ends[q_idx]) | (q_idx == kv_idx)
             else:
-                return ((kv_idx < ends[q_idx]) & (kv_idx >= (ends[q_idx] - local_attn_size * frame_seqlen))) | \
-                    (q_idx == kv_idx)
+                return ((kv_idx < ends[q_idx]) & (kv_idx >= (ends[q_idx] - local_attn_size * frame_seqlen))) | (
+                    q_idx == kv_idx
+                )
 
-        block_mask = create_block_mask(attention_mask, B=None, H=None, Q_LEN=total_length + padded_length,
-                                       KV_LEN=total_length + padded_length, _compile=False, device=device)
+        block_mask = create_block_mask(
+            attention_mask,
+            B=None,
+            H=None,
+            Q_LEN=total_length + padded_length,
+            KV_LEN=total_length + padded_length,
+            _compile=False,
+            device=device,
+        )
 
         if not dist.is_initialized() or dist.get_rank() == 0:
-            print(
-                f" cache a block wise causal mask with block size of {num_frame_per_block} frames")
+            print(f" cache a block wise causal mask with block size of {num_frame_per_block} frames")
             print(block_mask)
 
         # import imageio
@@ -1048,13 +1004,13 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         seq_len,
         clip_fea=None,
         y=None,
-        kv_cache: dict = None,
-        crossattn_cache: dict = None,
+        kv_cache: dict | None = None,
+        crossattn_cache: dict | None = None,
         current_start: int = 0,
         cache_start: int = 0,
         viewmats=None,
         Ks=None,
-        prope_kv_cache=None
+        prope_kv_cache=None,
     ):
         r"""
         Run the diffusion model with kv caching.
@@ -1081,7 +1037,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
                 List of denoised video tensors with original input shapes [C_out, F, H / 8, W / 8]
         """
 
-        if self.model_type == 'i2v':
+        if self.model_type == "i2v":
             assert clip_fea is not None and y is not None
         # params
         device = self.patch_embedding.weight.device
@@ -1089,12 +1045,11 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             self.freqs = self.freqs.to(device)
 
         if y is not None:
-            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y)]
+            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y, strict=False)]
 
         # embeddings
         x = [self.patch_embedding(u.unsqueeze(0)) for u in x]
-        grid_sizes = torch.stack(
-            [torch.tensor(u.shape[2:], dtype=torch.long) for u in x])
+        grid_sizes = torch.stack([torch.tensor(u.shape[2:], dtype=torch.long) for u in x])
         x = [u.flatten(2).transpose(1, 2) for u in x]
         seq_lens = torch.tensor([u.size(1) for u in x], dtype=torch.long)
         assert seq_lens.max() <= seq_len
@@ -1108,20 +1063,15 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
 
         # time embeddings
         # with amp.autocast(dtype=torch.float32):
-        e = self.time_embedding(
-            sinusoidal_embedding_1d(self.freq_dim, t.flatten()).type_as(x))
-        e0 = self.time_projection(e).unflatten(
-            1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
+        e = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, t.flatten()).type_as(x))
+        e0 = self.time_projection(e).unflatten(1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
         # assert e.dtype == torch.float32 and e0.dtype == torch.float32
 
         # context
         context_lens = None
         context = self.text_embedding(
-            torch.stack([
-                torch.cat(
-                    [u, u.new_zeros(self.text_len - u.size(0), u.size(1))])
-                for u in context
-            ]))
+            torch.stack([torch.cat([u, u.new_zeros(self.text_len - u.size(0), u.size(1))]) for u in context])
+        )
 
         if clip_fea is not None:
             context_clip = self.img_emb(clip_fea)  # bs x 257 x dim
@@ -1152,17 +1102,21 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
                 vm = vm[:, None, None].expand(-1, h, w, -1, -1).reshape(f * h * w, 4, 4)
                 pad_len = single_seq_len - f * h * w
                 if pad_len > 0:
-                    vm = torch.cat([vm, torch.eye(4, device=vm.device, dtype=vm.dtype).unsqueeze(0).expand(pad_len, -1, -1)])
+                    vm = torch.cat(
+                        [vm, torch.eye(4, device=vm.device, dtype=vm.dtype).unsqueeze(0).expand(pad_len, -1, -1)]
+                    )
                 expanded_vm.append(vm)
 
                 ks = Ks[i, :f]  # (F_chunk, 3, 3)
                 ks = ks[:, None, None].expand(-1, h, w, -1, -1).reshape(f * h * w, 3, 3)
                 if pad_len > 0:
-                    ks = torch.cat([ks, torch.eye(3, device=ks.device, dtype=ks.dtype).unsqueeze(0).expand(pad_len, -1, -1)])
+                    ks = torch.cat(
+                        [ks, torch.eye(3, device=ks.device, dtype=ks.dtype).unsqueeze(0).expand(pad_len, -1, -1)]
+                    )
                 expanded_ks.append(ks)
 
             viewmats = torch.stack(expanded_vm)  # (B, single_seq_len, 4, 4)
-            Ks = torch.stack(expanded_ks)        # (B, single_seq_len, 3, 3)
+            Ks = torch.stack(expanded_ks)  # (B, single_seq_len, 3, 3)
 
             # SP: chunk viewmats/Ks along sequence dim to match x's per-rank slice.
             # x was chunked above; viewmats/Ks must follow so prope_qkv sees matching seqlen.
@@ -1171,28 +1125,23 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
                 Ks = torch.chunk(Ks, sp_size, dim=1)[sp_rank]
 
         # arguments
-        kwargs = dict(
-            e=e0,
-            seq_lens=seq_lens,
-            grid_sizes=grid_sizes,
-            freqs=self.freqs,
-            context=context,
-            context_lens=context_lens,
-            block_mask=self.block_mask
-        )
+        kwargs = {
+            "e": e0,
+            "seq_lens": seq_lens,
+            "grid_sizes": grid_sizes,
+            "freqs": self.freqs,
+            "context": context,
+            "context_lens": context_lens,
+            "block_mask": self.block_mask,
+        }
         if viewmats is not None:
-            kwargs['viewmats'] = viewmats
-            kwargs['Ks'] = Ks
+            kwargs["viewmats"] = viewmats
+            kwargs["Ks"] = Ks
 
         def create_custom_forward(module):
-            """Create custom forward.
-
-            Args:
-                module: The module.
-            """
             def custom_forward(*inputs, **kwargs):
-                """Custom forward."""
                 return module(*inputs, **kwargs)
+
             return custom_forward
 
         for block_index, block in enumerate(self.blocks):
@@ -1202,12 +1151,13 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
                         "kv_cache": kv_cache[block_index],
                         "current_start": current_start,
                         "cache_start": cache_start,
-                        "prope_kv_cache": prope_kv_cache[block_index] if prope_kv_cache is not None else None
+                        "prope_kv_cache": prope_kv_cache[block_index] if prope_kv_cache is not None else None,
                     }
                 )
                 x = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
-                    x, **kwargs,
+                    x,
+                    **kwargs,
                     use_reentrant=False,
                 )
             else:
@@ -1217,7 +1167,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
                         "crossattn_cache": crossattn_cache[block_index],
                         "current_start": current_start,
                         "cache_start": cache_start,
-                        "prope_kv_cache": prope_kv_cache[block_index] if prope_kv_cache is not None else None
+                        "prope_kv_cache": prope_kv_cache[block_index] if prope_kv_cache is not None else None,
                     }
                 )
                 x = block(x, **kwargs)
@@ -1266,7 +1216,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             List[Tensor]:
                 List of denoised video tensors with original input shapes [C_out, F, H / 8, W / 8]
         """
-        if self.model_type == 'i2v':
+        if self.model_type == "i2v":
             assert clip_fea is not None and y is not None
         # params
         device = self.patch_embedding.weight.device
@@ -1275,64 +1225,58 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
 
         # Construct blockwise causal attn mask
         if self.block_mask is None:
-            if clean_x is not None: # TF
+            if clean_x is not None:  # TF
                 if self.independent_first_frame:
                     raise NotImplementedError()
                 else:
                     self.block_mask = self._prepare_teacher_forcing_mask(
-                        device, num_frames=x.shape[2],
-                        frame_seqlen=x.shape[-2] * x.shape[-1] // (self.patch_size[1] * self.patch_size[2]),
-                        num_frame_per_block=self.num_frame_per_block
-                    )
-            else: # DF?
-                if self.independent_first_frame:
-                    self.block_mask = self._prepare_blockwise_causal_attn_mask_i2v(
-                        device, num_frames=x.shape[2],
+                        device,
+                        num_frames=x.shape[2],
                         frame_seqlen=x.shape[-2] * x.shape[-1] // (self.patch_size[1] * self.patch_size[2]),
                         num_frame_per_block=self.num_frame_per_block,
-                        local_attn_size=self.local_attn_size
+                    )
+            else:  # DF?
+                if self.independent_first_frame:
+                    self.block_mask = self._prepare_blockwise_causal_attn_mask_i2v(
+                        device,
+                        num_frames=x.shape[2],
+                        frame_seqlen=x.shape[-2] * x.shape[-1] // (self.patch_size[1] * self.patch_size[2]),
+                        num_frame_per_block=self.num_frame_per_block,
+                        local_attn_size=self.local_attn_size,
                     )
                 else:
                     self.block_mask = self._prepare_blockwise_causal_attn_mask(
-                        device, num_frames=x.shape[2],
+                        device,
+                        num_frames=x.shape[2],
                         frame_seqlen=x.shape[-2] * x.shape[-1] // (self.patch_size[1] * self.patch_size[2]),
                         num_frame_per_block=self.num_frame_per_block,
-                        local_attn_size=self.local_attn_size
+                        local_attn_size=self.local_attn_size,
                     )
 
         if y is not None:
-            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y)]
+            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y, strict=False)]
 
         # embeddings
         x = [self.patch_embedding(u.unsqueeze(0)) for u in x]
 
-        grid_sizes = torch.stack(
-            [torch.tensor(u.shape[2:], dtype=torch.long) for u in x])
+        grid_sizes = torch.stack([torch.tensor(u.shape[2:], dtype=torch.long) for u in x])
         x = [u.flatten(2).transpose(1, 2) for u in x]
 
         seq_lens = torch.tensor([u.size(1) for u in x], dtype=torch.long)
         assert seq_lens.max() <= seq_len
-        x = torch.cat([
-            torch.cat([u, u.new_zeros(1, seq_lens[0] - u.size(1), u.size(2))],
-                      dim=1) for u in x
-        ])
+        x = torch.cat([torch.cat([u, u.new_zeros(1, seq_lens[0] - u.size(1), u.size(2))], dim=1) for u in x])
 
         # time embeddings
         # with amp.autocast(dtype=torch.float32):
-        e = self.time_embedding(
-            sinusoidal_embedding_1d(self.freq_dim, t.flatten()).type_as(x))
-        e0 = self.time_projection(e).unflatten(
-            1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
+        e = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, t.flatten()).type_as(x))
+        e0 = self.time_projection(e).unflatten(1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
         # assert e.dtype == torch.float32 and e0.dtype == torch.float32
 
         # context
         context_lens = None
         context = self.text_embedding(
-            torch.stack([
-                torch.cat(
-                    [u, u.new_zeros(self.text_len - u.size(0), u.size(1))])
-                for u in context
-            ]))
+            torch.stack([torch.cat([u, u.new_zeros(self.text_len - u.size(0), u.size(1))]) for u in context])
+        )
 
         if clip_fea is not None:
             context_clip = self.img_emb(clip_fea)  # bs x 257 x dim
@@ -1345,17 +1289,15 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
 
             seq_lens_clean = torch.tensor([u.size(1) for u in clean_x], dtype=torch.long)
             assert seq_lens_clean.max() <= seq_len
-            clean_x = torch.cat([
-                torch.cat([u, u.new_zeros(1, seq_lens_clean[0] - u.size(1), u.size(2))], dim=1) for u in clean_x
-            ])
+            clean_x = torch.cat(
+                [torch.cat([u, u.new_zeros(1, seq_lens_clean[0] - u.size(1), u.size(2))], dim=1) for u in clean_x]
+            )
 
             x = torch.cat([clean_x, x], dim=1)
             if aug_t is None:
                 aug_t = torch.zeros_like(t)
-            e_clean = self.time_embedding(
-                sinusoidal_embedding_1d(self.freq_dim, aug_t.flatten()).type_as(x))
-            e0_clean = self.time_projection(e_clean).unflatten(
-                1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
+            e_clean = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, aug_t.flatten()).type_as(x))
+            e0_clean = self.time_projection(e_clean).unflatten(1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
             e0 = torch.cat([e0_clean, e0], dim=1)
 
         # PRoPE: expand viewmats/Ks from (B, F, *, *) to (B, seq_len, *, *)
@@ -1368,22 +1310,26 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
                 vm = vm[:, None, None].expand(-1, h, w, -1, -1).reshape(f * h * w, 4, 4)
                 pad_len = single_seq_len - f * h * w
                 if pad_len > 0:
-                    vm = torch.cat([vm, torch.eye(4, device=vm.device, dtype=vm.dtype).unsqueeze(0).expand(pad_len, -1, -1)])
+                    vm = torch.cat(
+                        [vm, torch.eye(4, device=vm.device, dtype=vm.dtype).unsqueeze(0).expand(pad_len, -1, -1)]
+                    )
                 expanded_vm.append(vm)
 
                 ks = Ks[i, :f]  # (F, 3, 3)
                 ks = ks[:, None, None].expand(-1, h, w, -1, -1).reshape(f * h * w, 3, 3)
                 if pad_len > 0:
-                    ks = torch.cat([ks, torch.eye(3, device=ks.device, dtype=ks.dtype).unsqueeze(0).expand(pad_len, -1, -1)])
+                    ks = torch.cat(
+                        [ks, torch.eye(3, device=ks.device, dtype=ks.dtype).unsqueeze(0).expand(pad_len, -1, -1)]
+                    )
                 expanded_ks.append(ks)
 
             viewmats = torch.stack(expanded_vm)  # (B, single_seq_len, 4, 4)
-            Ks = torch.stack(expanded_ks)        # (B, single_seq_len, 3, 3)
+            Ks = torch.stack(expanded_ks)  # (B, single_seq_len, 3, 3)
 
             # TF mode: clean and noisy share the same camera trajectory
             if clean_x is not None:
                 viewmats = torch.cat([viewmats, viewmats], dim=1)  # (B, 2*single_seq_len, 4, 4)
-                Ks = torch.cat([Ks, Ks], dim=1)                    # (B, 2*single_seq_len, 3, 3)
+                Ks = torch.cat([Ks, Ks], dim=1)  # (B, 2*single_seq_len, 3, 3)
 
         # SP: token-level chunk (like HunyuanVideo)
         if _HAS_CLEANCODE_INFRA:
@@ -1430,10 +1376,10 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
                 e0_clean_half = torch.chunk(e0_clean_half, sp_size, dim=1)[sp_rank]
                 e0_noisy_half = torch.chunk(e0_noisy_half, sp_size, dim=1)[sp_rank]
                 if viewmats is not None:
-                    vm_clean_chunk = torch.chunk(viewmats[:, :half + sp_pad_len], sp_size, dim=1)[sp_rank]
-                    vm_noisy_chunk = torch.chunk(viewmats[:, half + sp_pad_len:], sp_size, dim=1)[sp_rank]
-                    ks_clean_chunk = torch.chunk(Ks[:, :half + sp_pad_len], sp_size, dim=1)[sp_rank]
-                    ks_noisy_chunk = torch.chunk(Ks[:, half + sp_pad_len:], sp_size, dim=1)[sp_rank]
+                    vm_clean_chunk = torch.chunk(viewmats[:, : half + sp_pad_len], sp_size, dim=1)[sp_rank]
+                    vm_noisy_chunk = torch.chunk(viewmats[:, half + sp_pad_len :], sp_size, dim=1)[sp_rank]
+                    ks_clean_chunk = torch.chunk(Ks[:, : half + sp_pad_len], sp_size, dim=1)[sp_rank]
+                    ks_noisy_chunk = torch.chunk(Ks[:, half + sp_pad_len :], sp_size, dim=1)[sp_rank]
                     viewmats = torch.cat([vm_clean_chunk, vm_noisy_chunk], dim=1)
                     Ks = torch.cat([ks_clean_chunk, ks_noisy_chunk], dim=1)
                 # Reassemble [clean_chunk, noisy_chunk]
@@ -1450,41 +1396,38 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
 
         # arguments
         block_mask = self.block_mask
-        kwargs = dict(
-            e=e0,
-            seq_lens=seq_lens,
-            grid_sizes=grid_sizes,
-            freqs=self.freqs,
-            context=context,
-            context_lens=context_lens,
-            block_mask=block_mask)
+        kwargs = {
+            "e": e0,
+            "seq_lens": seq_lens,
+            "grid_sizes": grid_sizes,
+            "freqs": self.freqs,
+            "context": context,
+            "context_lens": context_lens,
+            "block_mask": block_mask,
+        }
         if viewmats is not None:
-            kwargs['viewmats'] = viewmats
-            kwargs['Ks'] = Ks
+            kwargs["viewmats"] = viewmats
+            kwargs["Ks"] = Ks
 
         def create_custom_forward(module):
-            """Create custom forward.
-
-            Args:
-                module: The module.
-            """
             def custom_forward(*inputs, **kwargs):
-                """Custom forward."""
                 return module(*inputs, **kwargs)
+
             return custom_forward
 
         for block in self.blocks:
             if torch.is_grad_enabled() and self.gradient_checkpointing:
                 x = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
-                    x, **kwargs,
+                    x,
+                    **kwargs,
                     use_reentrant=False,
                 )
             else:
                 x = block(x, **kwargs)
 
         if clean_x is not None:
-            x = x[:, x.shape[1] // 2:]
+            x = x[:, x.shape[1] // 2 :]
             # [1,31200,1536]
 
         # SP: gather sequence from all ranks and remove padding
@@ -1504,13 +1447,8 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         x = self.unpatchify(x, grid_sizes)
         return torch.stack(x)
 
-    def forward(
-        self,
-        *args,
-        **kwargs
-    ):
-        """Forward."""
-        if kwargs.get('kv_cache', None) is not None:
+    def forward(self, *args, **kwargs):
+        if kwargs.get("kv_cache") is not None:
             return self._forward_inference(*args, **kwargs)
         else:
             # TF or DF
@@ -1534,10 +1472,10 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
 
         c = self.out_dim
         out = []
-        for u, v in zip(x, grid_sizes.tolist()):
-            u = u[:math.prod(v)].view(*v, *self.patch_size, c)
-            u = torch.einsum('fhwpqrc->cfphqwr', u)
-            u = u.reshape(c, *[i * j for i, j in zip(v, self.patch_size)])
+        for u, v in zip(x, grid_sizes.tolist(), strict=False):
+            u = u[: math.prod(v)].view(*v, *self.patch_size, c)
+            u = torch.einsum("fhwpqrc->cfphqwr", u)
+            u = u.reshape(c, *[i * j for i, j in zip(v, self.patch_size, strict=False)])
             out.append(u)
         return out
 
@@ -1557,10 +1495,10 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         nn.init.xavier_uniform_(self.patch_embedding.weight.flatten(1))
         for m in self.text_embedding.modules():
             if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, std=.02)
+                nn.init.normal_(m.weight, std=0.02)
         for m in self.time_embedding.modules():
             if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, std=.02)
+                nn.init.normal_(m.weight, std=0.02)
 
         # init output layer
         nn.init.zeros_(self.head.head.weight)

@@ -16,7 +16,7 @@ WorldFoundry **vendors runtime source and normalizes official result files**. Fu
 ## How to run
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
+wf zoo benchmark-run \
   --benchmark-id t2vworldbench \
   --mode official-validation \
   --official-results-path <model_video_assessment_scores.csv> \
@@ -27,7 +27,7 @@ worldfoundry-eval zoo benchmark-run \
 
 Default import: `WORLDFOUNDRY_T2VWORLDBENCH_RESULTS_PATH`. Optional root: `WORLDFOUNDRY_T2VWORLDBENCH_ROOT`. In-tree prompt: `worldfoundry/data/benchmarks/assets/t2vworldbench/prompt/prompt.csv`.
 
-In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/t2vworldbench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/t2vworldbench/runtime/t2vworldbench`.
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/t2vworldbench.yaml`, `worldfoundry/evals/tasks/execution/runners/t2vworldbench/runtime/t2vworldbench`.
 
 Outputs include `scorecard.json` (primary `final`) and `raw_metric_table.jsonl`.
 

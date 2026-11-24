@@ -85,49 +85,6 @@ def test_test_cases_root_does_not_store_runtime_yaml_configs() -> None:
     assert root_yaml_configs == []
 
 
-def test_wan_va_inference_configs_are_user_editable_yaml() -> None:
-    runtime_config_root = REPO_ROOT / "worldfoundry/data/models/runtime/configs/wan_va"
-    test_case_root = REPO_ROOT / "worldfoundry/data/test_cases/wan_va"
-    demo_yaml = runtime_config_root / "demo.yaml"
-    i2va_yaml = runtime_config_root / "demo_i2va.yaml"
-    inference_config_py = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/wan_va/wan_va/configs/va_inference_cfg.py"
-    )
-    inference_i2va_config_py = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/wan_va/wan_va/configs/va_inference_i2va.py"
-    )
-    retired_demo_modules = [
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/wan_va/wan_va/configs/va_demo_cfg.py",
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/wan_va/wan_va/configs/va_demo_i2va.py",
-    ]
-
-    demo_payload = yaml.safe_load(demo_yaml.read_text(encoding="utf-8"))
-    i2va_payload = yaml.safe_load(i2va_yaml.read_text(encoding="utf-8"))
-    inference_text = inference_config_py.read_text(encoding="utf-8")
-    inference_i2va_text = inference_i2va_config_py.read_text(encoding="utf-8")
-
-    assert not test_case_root.exists() or not any(test_case_root.glob("*.yaml"))
-    assert [path for path in retired_demo_modules if path.exists()] == []
-    assert demo_payload["wan22_pretrained_model_name_or_path"] is None
-    assert demo_payload["infer_mode"] == "server"
-    assert demo_payload["used_action_channel_ids"] == [0, 1, 2, 3, 4, 28]
-    assert i2va_payload["infer_mode"] == "i2va"
-    assert "demo.yaml" in inference_text
-    assert "demo_i2va.yaml" in inference_i2va_text
-    assert "Pick the green cube" not in inference_i2va_text
-
-    from worldfoundry.synthesis.action_generation.wan_va.wan_va.configs.va_inference_cfg import (
-        va_inference_cfg,
-    )
-    from worldfoundry.synthesis.action_generation.wan_va.wan_va.configs.va_inference_i2va import (
-        va_inference_i2va_cfg,
-    )
-
-    assert va_inference_cfg.infer_mode == "server"
-    assert va_inference_cfg.inverse_used_action_channel_ids[28] == 5
-    assert va_inference_i2va_cfg.prompt == i2va_payload["prompt"]
-
-
 def test_wan_va_runtime_configs_are_yaml_backed_and_training_code_is_removed() -> None:
     runtime_config_root = REPO_ROOT / "worldfoundry/data/models/runtime/configs/wan_va"
     test_case_root = REPO_ROOT / "worldfoundry/data/test_cases/wan_va"
@@ -214,17 +171,6 @@ def test_wan_va_runtime_configs_are_yaml_backed_and_training_code_is_removed() -
     assert VA_CONFIGS["robotwin"].inverse_used_action_channel_ids[29] == 15
 
 
-def test_wan_va_server_requires_explicit_checkpoint_dir() -> None:
-    server_path = REPO_ROOT / "worldfoundry/synthesis/action_generation/wan_va/wan_va/wan_va_server.py"
-    text = server_path.read_text(encoding="utf-8")
-
-    assert 'WAN_VA_CHECKPOINT_ENV = "WORLDFOUNDRY_WAN_VA_CHECKPOINT_DIR"' in text
-    assert "def _resolve_checkpoint_dir(args, config):" in text
-    assert "args.checkpoint_dir or os.getenv(WAN_VA_CHECKPOINT_ENV)" in text
-    assert "Pass --checkpoint-dir" in text
-    assert "os.path.join(None" not in text
-
-
 def test_lingbot_world_runtime_config_is_yaml_backed() -> None:
     runtime_config_root = REPO_ROOT / "worldfoundry/data/models/runtime/configs/lingbot_world"
     test_case_root = REPO_ROOT / "worldfoundry/data/test_cases/lingbot_world"
@@ -266,7 +212,7 @@ def test_lingbot_world_runtime_config_is_yaml_backed() -> None:
     )
 
     cfg = WAN_CONFIGS["i2v-A14B"]
-    assert cfg.fast_noise_checkpoint == "lingbot_world_fast"
-    assert cfg.sample_steps == payloads["wan_i2v_A14B.yaml"]["sample_steps"]
+    assert cfg["fast_noise_checkpoint"] == "lingbot_world_fast"
+    assert cfg["sample_steps"] == payloads["wan_i2v_A14B.yaml"]["sample_steps"]
     assert SIZE_CONFIGS["480*832"] == (480, 832)
     assert SUPPORTED_SIZES["i2v-A14B"] == tuple(payloads["registry.yaml"]["supported_sizes"]["i2v-A14B"])

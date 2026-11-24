@@ -4,10 +4,11 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import cv2
-import torch
-import numpy as np
 import os
+
+import cv2
+import numpy as np
+import torch
 
 
 def color_from_xy(x, y, W, H, cmap_name="hsv"):
@@ -178,15 +179,12 @@ def visualize_tracks_on_images(
 
         # Draw each visible track
         cur_tracks = tracks[s]  # shape (N, 2)
-        if track_vis_mask is not None:
-            valid_indices = torch.where(track_vis_mask[s])[0]
-        else:
-            valid_indices = range(N)
+        valid_indices = torch.where(track_vis_mask[s])[0] if track_vis_mask is not None else range(N)
 
         cur_tracks_np = cur_tracks.numpy()
         for i in valid_indices:
             x, y = cur_tracks_np[i]
-            pt = (int(round(x)), int(round(y)))
+            pt = (int(round(x)), int(round(y)))  # noqa: RUF046 - Keeps the explicit int conversion for non-builtin operands.
 
             # track_colors_rgb[i] is (R,G,B). For OpenCV circle, we need BGR
             R, G, B = track_colors_rgb[i]
@@ -225,10 +223,7 @@ def visualize_tracks_on_images(
                 row_img = np.concatenate([row_img, padding], axis=1)
 
             # Add this row to the grid
-            if grid_img is None:
-                grid_img = row_img
-            else:
-                grid_img = np.concatenate([grid_img, row_img], axis=0)
+            grid_img = row_img if grid_img is None else np.concatenate([grid_img, row_img], axis=0)
 
         out_path = os.path.join(out_dir, "tracks_grid.png")
         # Convert back to BGR for OpenCV imwrite

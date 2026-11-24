@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from worldfoundry.cli import main
-from worldfoundry.evaluation.reporting import write_run_index
+from worldfoundry.evals.reporting import write_run_index
 
 
 def _summary(*, run_id: str, model_id: str, quality: float) -> dict:

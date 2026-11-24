@@ -10,14 +10,15 @@ Provides streaming inference functionality:
 
 import logging
 import os
+from typing import Any
+
 import torch
 import torch.nn as nn
-from typing import Optional, Dict, Any, List
 from tqdm.auto import tqdm
 
+from ..aggregator.stream import AggregatorStream
 from ..heads.camera_head import CameraCausalHead
 from .gct_base import GCTBase
-from ..aggregator.stream import AggregatorStream
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +29,6 @@ _KV_DEBUG = os.environ.get("LINGBOT_DEBUG_KV", "")
 
 
 def _parse_kv_debug_interval(val: str) -> int:
-    """Helper function to parse kv debug interval.
-
-    Args:
-        val: The val.
-
-    Returns:
-        The return value.
-    """
     if not val:
         return 0
     try:
@@ -96,8 +89,8 @@ class GCTStream(GCTBase):
         img_size: int = 518,
         patch_size: int = 14,
         embed_dim: int = 1024,
-        patch_embed: str = 'dinov2_vitl14_reg',
-        pretrained_path: str = '',
+        patch_embed: str = "dinov2_vitl14_reg",
+        pretrained_path: str = "",
         disable_global_rope: bool = False,
         # Head configuration
         enable_camera: bool = True,
@@ -263,8 +256,8 @@ class GCTStream(GCTBase):
     def _aggregate_features(
         self,
         images: torch.Tensor,
-        num_frame_for_scale: Optional[int] = None,
-        sliding_window_size: Optional[int] = None,
+        num_frame_for_scale: int | None = None,
+        sliding_window_size: int | None = None,
         num_frame_per_block: int = 1,
         **kwargs,
     ) -> tuple:
@@ -296,11 +289,11 @@ class GCTStream(GCTBase):
         Call this method when starting a new video sequence to clear
         cached key-value pairs from previous sequences.
         """
-        if hasattr(self.aggregator, 'clean_kv_cache'):
+        if hasattr(self.aggregator, "clean_kv_cache"):
             self.aggregator.clean_kv_cache()
         else:
             logger.warning("Aggregator does not support KV cache cleaning")
-        if hasattr(self.camera_head, 'kv_cache'):
+        if hasattr(self.camera_head, "kv_cache"):
             self.camera_head.clean_kv_cache()
         else:
             logger.warning("Camera head does not support KV cache cleaning")
@@ -315,17 +308,21 @@ class GCTStream(GCTBase):
         Args:
             skip: If True, subsequent forward passes will not append KV to cache.
         """
-        if hasattr(self.aggregator, 'kv_cache') and self.aggregator.kv_cache is not None:
+        if hasattr(self.aggregator, "kv_cache") and self.aggregator.kv_cache is not None:
             self.aggregator.kv_cache["_skip_append"] = skip
         # FlashInfer manager — honored by attention.py's FlashInfer phase-2
         # branch to avoid persisting non-keyframes in the paged cache.
-        if hasattr(self.aggregator, 'kv_cache_manager') and self.aggregator.kv_cache_manager is not None:
+        if hasattr(self.aggregator, "kv_cache_manager") and self.aggregator.kv_cache_manager is not None:
             self.aggregator.kv_cache_manager._skip_append = skip
-        if self.camera_head is not None and hasattr(self.camera_head, 'kv_cache') and self.camera_head.kv_cache is not None:
+        if (
+            self.camera_head is not None
+            and hasattr(self.camera_head, "kv_cache")
+            and self.camera_head.kv_cache is not None
+        ):
             for cache_dict in self.camera_head.kv_cache:
                 cache_dict["_skip_append"] = skip
 
-    def get_kv_cache_info(self) -> Dict[str, Any]:
+    def get_kv_cache_info(self) -> dict[str, Any]:
         """
         Get information about current KV cache state.
 
@@ -334,11 +331,11 @@ class GCTStream(GCTBase):
                 - num_cached_blocks: Number of blocks with cached KV
                 - cache_memory_mb: Approximate memory usage in MB
         """
-        if not hasattr(self.aggregator, 'kv_cache') or self.aggregator.kv_cache is None:
+        if not hasattr(self.aggregator, "kv_cache") or self.aggregator.kv_cache is None:
             return {"num_cached_blocks": 0, "cache_memory_mb": 0.0}
 
         kv_cache = self.aggregator.kv_cache
-        num_cached = sum(1 for k in kv_cache.keys() if k.startswith('k_') and not k.endswith('_special'))
+        num_cached = sum(1 for k in kv_cache.keys() if k.startswith("k_") and not k.endswith("_special"))  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
 
         # Estimate memory usage
         total_elements = 0
@@ -349,19 +346,16 @@ class GCTStream(GCTBase):
         # Assume bfloat16 (2 bytes per element)
         cache_memory_mb = (total_elements * 2) / (1024 * 1024)
 
-        return {
-            "num_cached_blocks": num_cached,
-            "cache_memory_mb": round(cache_memory_mb, 2)
-        }
+        return {"num_cached_blocks": num_cached, "cache_memory_mb": round(cache_memory_mb, 2)}
 
     @torch.no_grad()
     def inference_streaming(
         self,
         images: torch.Tensor,
-        num_scale_frames: Optional[int] = None,
+        num_scale_frames: int | None = None,
         keyframe_interval: int = 1,
-        output_device: Optional[torch.device] = None,
-    ) -> Dict[str, torch.Tensor]:
+        output_device: torch.device | None = None,
+    ) -> dict[str, torch.Tensor]:
         """
         Streaming inference: process scale frames first, then frame-by-frame.
 
@@ -407,14 +401,6 @@ class GCTStream(GCTBase):
 
         # Helper to move tensor to output device
         def _to_out(t: torch.Tensor) -> torch.Tensor:
-            """Helper function to to out.
-
-            Args:
-                t: The t.
-
-            Returns:
-                The return value.
-            """
             if output_device is not None:
                 return t.to(output_device)
             return t
@@ -429,7 +415,7 @@ class GCTStream(GCTBase):
 
         # Phase 1: Process scale frames together
         # These frames get bidirectional attention among themselves via scale token
-        logger.info(f'Processing {scale_frames} scale frames...')
+        logger.info(f"Processing {scale_frames} scale frames...")
         scale_images = images[:, :scale_frames].to(_model_device, non_blocking=True)
         # No-op unless hot modules were compiled with mode="reduce-overhead";
         # required then to reset CUDA-graph step state between replays.
@@ -446,13 +432,15 @@ class GCTStream(GCTBase):
         all_depth = [_to_out(scale_output["depth"])] if "depth" in scale_output else []
         all_depth_conf = [_to_out(scale_output["depth_conf"])] if "depth_conf" in scale_output else []
         all_world_points = [_to_out(scale_output["world_points"])] if "world_points" in scale_output else []
-        all_world_points_conf = [_to_out(scale_output["world_points_conf"])] if "world_points_conf" in scale_output else []
+        all_world_points_conf = (
+            [_to_out(scale_output["world_points_conf"])] if "world_points_conf" in scale_output else []
+        )
         del scale_output
 
         # Phase 2: Process remaining frames one-by-one
         pbar = tqdm(
             range(scale_frames, S),
-            desc='Streaming inference',
+            desc="Streaming inference",
             initial=scale_frames,
             total=S,
         )
@@ -460,7 +448,7 @@ class GCTStream(GCTBase):
         if dbg_every:
             _log_kv_stats(self, label="after phase-1 scale")
         for i in pbar:
-            frame_image = images[:, i:i+1].to(_model_device, non_blocking=True)
+            frame_image = images[:, i : i + 1].to(_model_device, non_blocking=True)
 
             # Determine if this frame is a keyframe
             is_keyframe = (keyframe_interval <= 1) or ((i - scale_frames) % keyframe_interval == 0)

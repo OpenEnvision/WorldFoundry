@@ -8,7 +8,7 @@ import glob
 import json
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -16,6 +16,9 @@ from PIL import Image
 from safetensors import safe_open
 from transformers import AutoConfig, AutoModel, AutoTokenizer
 
+from worldfoundry.base_models.llm_mllm_core.action.gr00t.preprocessing.modality import ModalityConfig
+from worldfoundry.base_models.llm_mllm_core.mllm.intern_vit.configuration import InternVisionConfig
+from worldfoundry.base_models.llm_mllm_core.mllm.intern_vit.model import InternVisionModel
 from worldfoundry.base_models.llm_mllm_core.mllm.qwen.beingh.qwen2 import Qwen2Tokenizer
 from worldfoundry.base_models.llm_mllm_core.mllm.qwen.beingh.qwen2_navit import (
     Qwen2Config,
@@ -25,12 +28,11 @@ from worldfoundry.base_models.llm_mllm_core.mllm.qwen.beingh.qwen3_navit import 
     Qwen3Config,
     Qwen3ForCausalLM,
 )
-from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+from worldfoundry.core.platform.device import resolve_inference_device, resolve_inference_dtype
+from worldfoundry.synthesis.action_generation.being_h05.preprocessing.data_config import DATA_CONFIG_MAP
 
 from .modeling.beingvla import BeingH, BeingHConfig
-from .modeling.internvit import InternVisionConfig, InternVisionModel
 from .modeling.layers import InternVLConnector
-from .preprocessing.data_config import DATA_CONFIG_MAP, ModalityConfig
 from .preprocessing.image_transforms import build_vit_transform_base
 from .preprocessing.schema import DatasetMetadata, EmbodimentTag
 
@@ -59,14 +61,14 @@ def load_safetensors(path):
     state_dict = {}
     for file_path in safetensor_files:
         with safe_open(file_path, framework="pt", device="cpu") as f:
-            for key in f.keys():
+            for key in f.keys():  # noqa: SIM118 - Keeps the keys view for mappings with custom membership.
                 state_dict[key] = f.get_tensor(key)
     print("Weights loaded from .safetensors files.")
     return state_dict
 
 
 # Helper functions
-def unsqueeze_dict_values(data: Dict[str, Any]) -> Dict[str, Any]:
+def unsqueeze_dict_values(data: dict[str, Any]) -> dict[str, Any]:
     """
     Unsqueeze the values of a dictionary.
     This converts the data to be batched of size 1.
@@ -84,7 +86,7 @@ def unsqueeze_dict_values(data: Dict[str, Any]) -> Dict[str, Any]:
     return unsqueezed_data
 
 
-def squeeze_dict_values(data: Dict[str, Any]) -> Dict[str, Any]:
+def squeeze_dict_values(data: dict[str, Any]) -> dict[str, Any]:
     """
     Squeeze the values of a dictionary. This removes the batch dimension (axis=0).
     NOTE: We use axis=0 explicitly to avoid removing other size-1 dimensions
@@ -108,7 +110,7 @@ class BasePolicy(ABC):
     """Abstract base class for robot control policies."""
 
     @abstractmethod
-    def get_action(self, observations: Dict[str, Any]) -> Dict[str, Any]:
+    def get_action(self, observations: dict[str, Any]) -> dict[str, Any]:
         """
         Abstract method to get the action for a given state.
 
@@ -121,7 +123,7 @@ class BasePolicy(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_modality_config(self) -> Dict[str, ModalityConfig]:
+    def get_modality_config(self) -> dict[str, ModalityConfig]:
         """
         Return the modality config of the policy.
         """
@@ -139,6 +141,7 @@ class BeingHPolicy(BasePolicy):
     - MPG parameter overrides
     - Hierarchical metadata variant selection
     """
+
     def __init__(
         self,
         model_path: str,
@@ -150,20 +153,20 @@ class BeingHPolicy(BasePolicy):
         max_view_num: int = -1,
         use_fixed_view: bool = False,
         action_attn_mode: str = "causal",
-        device: Union[int, str] = "cuda" if torch.cuda.is_available() else "cpu",
+        device: int | str = "cuda" if torch.cuda.is_available() else "cpu",
         torch_dtype: str | torch.dtype | None = "auto",
         # MPG overrides
-        use_mpg: bool = None,
-        mpg_lambda: float = None,
-        mpg_num_projections: int = None,
-        mpg_refinement_iters: int = None,
-        mpg_gate_temperature: float = None,
+        use_mpg: bool | None = None,
+        mpg_lambda: float | None = None,
+        mpg_num_projections: int | None = None,
+        mpg_refinement_iters: int | None = None,
+        mpg_gate_temperature: float | None = None,
         # Flow matching parameter override
-        num_inference_timesteps: int = None,
+        num_inference_timesteps: int | None = None,
         # RTC parameter
         enable_rtc: bool = True,
         # Metadata variant selection
-        metadata_variant: str = None,
+        metadata_variant: str | None = None,
         stats_selection_mode: str = "auto",
         # WorldFoundry runtime memory control
         attention_mask_kind: str = "dense",
@@ -260,7 +263,7 @@ class BeingHPolicy(BasePolicy):
         llm_config = QwenConfigClass.from_dict(llm_config_dict)
 
         # Setup expert config
-        expert_config_dict = llm_config_dict.get('expert_config')
+        expert_config_dict = llm_config_dict.get("expert_config")
         if expert_config_dict:
             if not isinstance(expert_config_dict, dict):
                 expert_config_dict = expert_config_dict.to_dict()
@@ -309,7 +312,7 @@ class BeingHPolicy(BasePolicy):
         self.action_chunk_length = self.model.config.action_chunk_length
         patch_size = self.model.config.vit_config.patch_size
         self.num_image_token = self.model.num_image_token = int(
-            (self.model.config.force_image_size // patch_size) ** 2 * (0.5 ** 2)
+            (self.model.config.force_image_size // patch_size) ** 2 * (0.5**2)
         )
 
         self.gen_action_type = self.model.config.gen_action_type
@@ -320,18 +323,14 @@ class BeingHPolicy(BasePolicy):
         # =====================================
         # Setup and Apply Overrides
         # =====================================
-        self._apply_mpg_overrides(
-            use_mpg, mpg_lambda, mpg_num_projections, mpg_refinement_iters, mpg_gate_temperature
-        )
+        self._apply_mpg_overrides(use_mpg, mpg_lambda, mpg_num_projections, mpg_refinement_iters, mpg_gate_temperature)
         self._apply_flow_matching_overrides(num_inference_timesteps)
         self._setup_rtc()
 
         self._setup_tokenizer()
 
         _, self.image_transform = build_vit_transform_base(
-            force_image_size=self.model.config.force_image_size,
-            pad2square=False,
-            normalize_type='imagenet'
+            force_image_size=self.model.config.force_image_size, pad2square=False, normalize_type="imagenet"
         )
 
         # ===================
@@ -345,32 +344,31 @@ class BeingHPolicy(BasePolicy):
     def _detect_llm_version(self, llm_config) -> str:
         """Detect LLM version from config."""
         # Check layer module
-        if hasattr(llm_config, 'layer_module') and llm_config.layer_module:
-            if 'Qwen3' in llm_config.layer_module:
+        if hasattr(llm_config, "layer_module") and llm_config.layer_module:
+            if "Qwen3" in llm_config.layer_module:
                 version = "qwen3"
-            elif 'Qwen2' in llm_config.layer_module:
+            elif "Qwen2" in llm_config.layer_module:
                 version = "qwen2.5"
             else:
                 version = "qwen2.5"  # Default
         # Check architectures
-        elif hasattr(llm_config, 'architectures') and llm_config.architectures:
-            if 'Qwen3ForCausalLM' in llm_config.architectures:
+        elif hasattr(llm_config, "architectures") and llm_config.architectures:
+            if "Qwen3ForCausalLM" in llm_config.architectures:
                 version = "qwen3"
-            elif 'Qwen2ForCausalLM' in llm_config.architectures:
+            elif "Qwen2ForCausalLM" in llm_config.architectures:
                 version = "qwen2.5"
             else:
                 version = "qwen2.5"
-
 
         return version
 
     def _apply_mpg_overrides(
         self,
-        use_mpg: Optional[bool],
-        mpg_lambda: Optional[float],
-        mpg_num_projections: Optional[int],
-        mpg_refinement_iters: Optional[int],
-        mpg_gate_temperature: Optional[float],
+        use_mpg: bool | None,
+        mpg_lambda: float | None,
+        mpg_num_projections: int | None,
+        mpg_refinement_iters: int | None,
+        mpg_gate_temperature: float | None,
     ):
         """Apply MPG parameter overrides."""
         if use_mpg is not None:
@@ -381,38 +379,46 @@ class BeingHPolicy(BasePolicy):
         if mpg_lambda is not None:
             print(f"Overriding mpg_lambda: {self.model.config.mpg_lambda} -> {mpg_lambda}")
             self.model.config.mpg_lambda = mpg_lambda
-            if hasattr(self.model, 'mpg') and self.model.mpg is not None:
+            if hasattr(self.model, "mpg") and self.model.mpg is not None:
                 self.model.mpg.lambda_strength = mpg_lambda
 
         if mpg_num_projections is not None:
             print(f"Overriding mpg_num_projections: {self.model.config.mpg_num_projections} -> {mpg_num_projections}")
             self.model.config.mpg_num_projections = mpg_num_projections
-            if hasattr(self.model, 'mpg') and self.model.mpg is not None:
+            if hasattr(self.model, "mpg") and self.model.mpg is not None:
                 self.model.mpg.num_projections = mpg_num_projections
                 self.model.mpg.sliced_wasserstein.num_projections = mpg_num_projections
 
         if mpg_refinement_iters is not None:
-            print(f"Overriding mpg_refinement_iters: {self.model.config.mpg_refinement_iters} -> {mpg_refinement_iters}")
+            print(
+                f"Overriding mpg_refinement_iters: {self.model.config.mpg_refinement_iters} -> {mpg_refinement_iters}"
+            )
             self.model.config.mpg_refinement_iters = mpg_refinement_iters
             self.model.mpg_refinement_iters = mpg_refinement_iters
 
         if mpg_gate_temperature is not None:
-            print(f"Overriding mpg_gate_temperature: {self.model.config.mpg_gate_temperature} -> {mpg_gate_temperature}")
+            print(
+                f"Overriding mpg_gate_temperature: {self.model.config.mpg_gate_temperature} -> {mpg_gate_temperature}"
+            )
             self.model.config.mpg_gate_temperature = mpg_gate_temperature
-            if hasattr(self.model, 'mpg') and self.model.mpg is not None:
+            if hasattr(self.model, "mpg") and self.model.mpg is not None:
                 self.model.mpg.gate_temperature = mpg_gate_temperature
 
         # Log final MPG configuration
-        if hasattr(self.model.config, 'use_mpg') and self.model.config.use_mpg:
-            print(f"MPG enabled: lambda={self.model.config.mpg_lambda}, "
-                  f"projections={self.model.config.mpg_num_projections}, "
-                  f"refinement_iters={self.model.config.mpg_refinement_iters}")
+        if hasattr(self.model.config, "use_mpg") and self.model.config.use_mpg:
+            print(
+                f"MPG enabled: lambda={self.model.config.mpg_lambda}, "
+                f"projections={self.model.config.mpg_num_projections}, "
+                f"refinement_iters={self.model.config.mpg_refinement_iters}"
+            )
 
-    def _apply_flow_matching_overrides(self, num_inference_timesteps: Optional[int]):
+    def _apply_flow_matching_overrides(self, num_inference_timesteps: int | None):
         """Apply flow matching parameter overrides."""
         if num_inference_timesteps is not None:
-            print(f"Override num_inference_timesteps: "
-                  f"{self.model.config.num_inference_timesteps} -> {num_inference_timesteps}")
+            print(
+                f"Override num_inference_timesteps: "
+                f"{self.model.config.num_inference_timesteps} -> {num_inference_timesteps}"
+            )
             self.model.config.num_inference_timesteps = num_inference_timesteps
             self.model.num_inference_timesteps = num_inference_timesteps
 
@@ -424,9 +430,11 @@ class BeingHPolicy(BasePolicy):
                 print("WARNING: Model was not trained with RTC, but RTC inference is enabled. May not work correctly.")
 
             self.model.config.use_inference_prefix_overwrite = True
-            print(f"RTC enabled: Server returns full chunk_length={self.action_chunk_length} actions, "
-                  f"trained_with_rtc={self.model.config.use_training_time_rtc}, "
-                  f"prefix locking during denoising (client sends prev_chunk)")
+            print(
+                f"RTC enabled: Server returns full chunk_length={self.action_chunk_length} actions, "
+                f"trained_with_rtc={self.model.config.use_training_time_rtc}, "
+                f"prefix locking during denoising (client sends prev_chunk)"
+            )
         else:
             print("RTC disabled")
 
@@ -440,16 +448,19 @@ class BeingHPolicy(BasePolicy):
         )
 
         # Get special token IDs
-        tokens = [
-            '<|im_start|>', '<|im_end|>', '<img>', '</img>',
-            '<|state_start|>', '<|state_end|>'
-        ]
+        tokens = ["<|im_start|>", "<|im_end|>", "<img>", "</img>", "<|state_start|>", "<|state_end|>"]
         token_ids = self.tokenizer.convert_tokens_to_ids(tokens)
 
-        (self.bos_token_id, self.eos_token_id, self.start_of_image,
-         self.end_of_image, self.start_of_state, self.end_of_state) = token_ids
+        (
+            self.bos_token_id,
+            self.eos_token_id,
+            self.start_of_image,
+            self.end_of_image,
+            self.start_of_state,
+            self.end_of_state,
+        ) = token_ids
 
-        newline_encoded = self.tokenizer.encode('\n')
+        newline_encoded = self.tokenizer.encode("\n")
         assert len(newline_encoded) == 1, "Newline should be single token"
         self.newline_token_id = newline_encoded[0]
 
@@ -465,20 +476,17 @@ class BeingHPolicy(BasePolicy):
 
         if not metadata_path.exists():
             raise FileNotFoundError(
-                f"metadata.json not found at {metadata_path}. "
-                "This file is required for normalization statistics."
+                f"metadata.json not found at {metadata_path}. This file is required for normalization statistics."
             )
 
         print(f"[Metadata] Loading from: {metadata_path}")
 
-        with open(metadata_path, "r") as f:
+        with open(metadata_path) as f:
             all_metadatas = json.load(f)
 
         metadata_dict = all_metadatas.get(self.dataset_name)
         if metadata_dict is None:
-            raise ValueError(
-                f"No metadata found for dataset: '{self.dataset_name}' in {metadata_path}"
-            )
+            raise ValueError(f"No metadata found for dataset: '{self.dataset_name}' in {metadata_path}")
 
         # Hierarchical Stats and Variant Selection
         variants_key = f"{self.dataset_name}_variants"
@@ -492,10 +500,12 @@ class BeingHPolicy(BasePolicy):
             print(f"\n[Metadata Variants] Available: {available_variants}")
 
             # Separate Level 1 (task) and Level 2 (embodiment) variants for display
-            task_variants = [v for v in available_variants
-                           if all_metadatas[variants_key][v].get('stats_level') == 'task']
-            embodiment_variants = [v for v in available_variants
-                                  if all_metadatas[variants_key][v].get('stats_level') == 'embodiment']
+            task_variants = [
+                v for v in available_variants if all_metadatas[variants_key][v].get("stats_level") == "task"
+            ]
+            embodiment_variants = [
+                v for v in available_variants if all_metadatas[variants_key][v].get("stats_level") == "embodiment"
+            ]
 
             if task_variants:
                 print(f"  Level 1 (task): {task_variants}")
@@ -506,21 +516,25 @@ class BeingHPolicy(BasePolicy):
             if self.metadata_variant == "merged":
                 # User requested merged statistics (use default top-level)
                 print("  ✓ Using merged statistics from all variants")
-                self.stats_level = metadata_dict.get('stats_level', 'merged')
+                self.stats_level = metadata_dict.get("stats_level", "merged")
                 self.stats_source = "merged"
 
             elif self.metadata_variant and self.metadata_variant != "merged":
                 # User requested specific variant
                 if self.metadata_variant in all_metadatas[variants_key]:
                     metadata_dict = all_metadatas[variants_key][self.metadata_variant]
-                    self.stats_level = metadata_dict.get('stats_level', 'unknown')
+                    self.stats_level = metadata_dict.get("stats_level", "unknown")
                     self.stats_source = f"variant:{self.metadata_variant}"
                     print(f"  ✓ Using variant: '{self.metadata_variant}' (level: {self.stats_level})")
                 else:
                     print(f"  ⚠ Requested variant '{self.metadata_variant}' not found, using default")
                     # Fall through to auto-select
 
-            if not self.metadata_variant or (self.metadata_variant and self.metadata_variant not in all_metadatas[variants_key] and self.metadata_variant != "merged"):
+            if not self.metadata_variant or (
+                self.metadata_variant
+                and self.metadata_variant not in all_metadatas[variants_key]
+                and self.metadata_variant != "merged"
+            ):
                 # Auto-select (default behavior)
                 # Priority: task-specific > embodiment-merged > default
                 if self.stats_selection_mode == "task" and task_variants:
@@ -541,13 +555,13 @@ class BeingHPolicy(BasePolicy):
                     # Default: use first available variant (usually task-specific)
                     first_variant = available_variants[0]
                     metadata_dict = all_metadatas[variants_key][first_variant]
-                    self.stats_level = metadata_dict.get('stats_level', 'auto')
+                    self.stats_level = metadata_dict.get("stats_level", "auto")
                     self.stats_source = f"auto:{first_variant}"
                     print(f"  → Auto-selected: '{first_variant}' (level: {self.stats_level})")
 
                 else:
                     # Use default top-level
-                    self.stats_level = metadata_dict.get('stats_level', 'default')
+                    self.stats_level = metadata_dict.get("stats_level", "default")
                     self.stats_source = "default"
                     print("  → Using default top-level metadata")
 
@@ -566,7 +580,7 @@ class BeingHPolicy(BasePolicy):
                     selected_variant = next(iter(metadata_dict))
                 print(f"[Metadata] Selecting nested variant: {selected_variant}")
                 metadata_dict = metadata_dict[selected_variant]
-                self.stats_level = metadata_dict.get('stats_level', 'unknown')
+                self.stats_level = metadata_dict.get("stats_level", "unknown")
                 self.stats_source = f"legacy:{selected_variant}"
             else:
                 self.stats_source = "legacy:direct"
@@ -584,7 +598,7 @@ class BeingHPolicy(BasePolicy):
         print(f"✓ Metadata loaded for '{self.dataset_name}'")
 
     @torch.no_grad()
-    def get_action(self, observations: Dict[str, Any]) -> Dict[str, Any]:
+    def get_action(self, observations: dict[str, Any]) -> dict[str, Any]:
         """
         Get action with RTC support.
 
@@ -601,8 +615,8 @@ class BeingHPolicy(BasePolicy):
             Action dictionary with unnormalized actions
         """
         # ===== 1. Extract RTC Parameters (sent by client) =====
-        prev_chunk = observations.pop('prev_chunk', None)
-        inference_delay = observations.pop('inference_delay', 0)
+        prev_chunk = observations.pop("prev_chunk", None)
+        inference_delay = observations.pop("inference_delay", 0)
 
         # Prepare prev_chunk if RTC enabled
         if self.enable_rtc and prev_chunk is not None:
@@ -633,17 +647,15 @@ class BeingHPolicy(BasePolicy):
         processed_obs = self._modality_transform(observations)
 
         # ===== 3. Prepare Packed Inputs =====
-        packed_inputs = self._prepare_packed_inputs(
-            processed_obs, observations[self.language_key]
-        )
+        packed_inputs = self._prepare_packed_inputs(processed_obs, observations[self.language_key])
         for key, value in packed_inputs.items():
             if isinstance(value, torch.Tensor):
                 packed_inputs[key] = value.to(self.device, non_blocking=True)
 
         # ===== 4. Add RTC Parameters to Model Input =====
         if self.enable_rtc and prev_chunk is not None and inference_delay > 0:
-            packed_inputs['prev_chunk'] = prev_chunk
-            packed_inputs['inference_delay'] = inference_delay
+            packed_inputs["prev_chunk"] = prev_chunk
+            packed_inputs["inference_delay"] = inference_delay
 
         # ===== 5. Generate Action Chunk =====
         model_pred = self.model.get_action(**packed_inputs)
@@ -657,7 +669,7 @@ class BeingHPolicy(BasePolicy):
 
         sliced_action_dict = {}
         for key, (start, end) in self.unified_mapping.items():
-            if key.startswith('action.'):
+            if key.startswith("action."):
                 sliced_action_dict[key] = action_pred_cpu[:, :, start:end]
 
         unnormalized_action_dict = self._modality_transform.unapply(sliced_action_dict)
@@ -671,29 +683,28 @@ class BeingHPolicy(BasePolicy):
         # For RTC mode, also return unified actions for next query
         if self.enable_rtc:
             if not is_batch:
-                result['action_unified'] = action_pred_cpu.squeeze(0).tolist()  # (chunk_length, action_dim)
+                result["action_unified"] = action_pred_cpu.squeeze(0).tolist()  # (chunk_length, action_dim)
             else:
-                result['action_unified'] = action_pred_cpu.tolist()  # (batch, chunk_length, action_dim)
+                result["action_unified"] = action_pred_cpu.tolist()  # (batch, chunk_length, action_dim)
 
         return result
 
-    def _prepare_packed_inputs(self, processed_obs: Dict[str, Any], instructions: List[str]) -> Dict[str, Any]:
+    def _prepare_packed_inputs(self, processed_obs: dict[str, Any], instructions: list[str]) -> dict[str, Any]:
         """Prepare packed inputs for model."""
-        first_state_key = next((k for k in processed_obs if k.startswith('state.')), None)
+        first_state_key = next((k for k in processed_obs if k.startswith("state.")), None)
         N, _ = processed_obs[first_state_key].shape
 
         state_tensor = torch.zeros(N, self.model.unified_state_dim, dtype=torch.float32)
 
         # Fill state tensor from mapping
         for key, (start, end) in self.unified_mapping.items():
-            if key.startswith('state.') and key in processed_obs:
+            if key.startswith("state.") and key in processed_obs:
                 source_tensor = processed_obs[key]
 
                 expected_dim = end - start
                 if source_tensor.shape[-1] != expected_dim:
                     raise ValueError(
-                        f"Dimension mismatch for '{key}': "
-                        f"expected {expected_dim}, got {source_tensor.shape[-1]}"
+                        f"Dimension mismatch for '{key}': expected {expected_dim}, got {source_tensor.shape[-1]}"
                     )
 
                 state_tensor[:, start:end] = source_tensor
@@ -717,9 +728,7 @@ class BeingHPolicy(BasePolicy):
         assistant_prompt = "assistant\n"
         assistant_ids = self.tokenizer.encode(assistant_prompt)
 
-        inst_formatted = self.instruction_template.format(
-            task_description=instructions[0], k=self.action_chunk_length
-        )
+        inst_formatted = self.instruction_template.format(task_description=instructions[0], k=self.action_chunk_length)
         inst_ids = self.tokenizer.encode(inst_formatted)
 
         # CORE: Build packed sequence
@@ -732,7 +741,7 @@ class BeingHPolicy(BasePolicy):
         curr_rope_id = 0
 
         # === Block 1: System Turn ===
-        block_ids = [self.bos_token_id] + system_ids + [self.eos_token_id, self.newline_token_id]
+        block_ids = [self.bos_token_id] + system_ids + [self.eos_token_id, self.newline_token_id]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         packed_text_ids.extend(block_ids)
         packed_text_indexes.extend(range(curr, curr + len(block_ids)))
         packed_position_ids.extend(range(curr_rope_id, curr_rope_id + len(block_ids)))
@@ -746,7 +755,7 @@ class BeingHPolicy(BasePolicy):
 
         # User prompt
         # is_bos: True, is_eos: False
-        block_ids = [self.bos_token_id] + user_ids
+        block_ids = [self.bos_token_id] + user_ids  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         packed_text_ids.extend(block_ids)
         packed_text_indexes.extend(range(curr, curr + len(block_ids)))
         curr += len(block_ids)
@@ -769,7 +778,7 @@ class BeingHPolicy(BasePolicy):
         packed_text_indexes.append(curr)
         curr += 1
 
-        packed_state_indexes.append(curr) # State occupies one token position
+        packed_state_indexes.append(curr)  # State occupies one token position
         curr += 1
 
         packed_text_ids.extend([self.end_of_state])
@@ -778,7 +787,7 @@ class BeingHPolicy(BasePolicy):
 
         # Instruction
         # is_bos: False, is_eos: True
-        block_ids = inst_ids + [self.eos_token_id, self.newline_token_id]
+        block_ids = inst_ids + [self.eos_token_id, self.newline_token_id]  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         packed_text_ids.extend(block_ids)
         packed_text_indexes.extend(range(curr, curr + len(block_ids)))
         curr += len(block_ids)
@@ -795,7 +804,7 @@ class BeingHPolicy(BasePolicy):
 
         # Assistant prompt
         # is_bos: True, is_eos: False
-        block_ids = [self.bos_token_id] + assistant_ids
+        block_ids = [self.bos_token_id] + assistant_ids  # noqa: RUF005 - Keeps `+` semantics for the operand's runtime type.
         packed_text_ids.extend(block_ids)
         packed_text_indexes.extend(range(curr, curr + len(block_ids)))
         curr += len(block_ids)
@@ -843,7 +852,7 @@ class BeingHPolicy(BasePolicy):
             "embodiment_ids": torch.tensor([31], dtype=torch.long),
         }
 
-    def _check_is_batched(self, obs: Dict[str, Any]) -> bool:
+    def _check_is_batched(self, obs: dict[str, Any]) -> bool:
         first_key, first_val = next(iter(obs.items()))
 
         if isinstance(first_val, np.ndarray):
@@ -852,9 +861,9 @@ class BeingHPolicy(BasePolicy):
             if first_key.startswith("state."):
                 return first_val.ndim >= 2
             return first_val.ndim > 1
-        if isinstance(first_val, list):  # Applies to instruction lists
+        if isinstance(first_val, list):  # noqa: SIM103 - Branches carry per-case comments.  # Applies to instruction lists
             return True
         return False
 
-    def get_modality_config(self) -> Dict[str, ModalityConfig]:
+    def get_modality_config(self) -> dict[str, ModalityConfig]:
         return self.data_config.modality_config()

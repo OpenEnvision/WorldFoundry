@@ -1,6 +1,7 @@
 import { DocsWelcomeWorkflow } from '@/components/docs-welcome-workflow';
 import { catalogCoverage } from '@/lib/catalog-coverage';
 import type { Locale } from '@/lib/i18n';
+import { modelRecipeIndex } from '@/lib/model-recipe-index';
 import { gitConfig } from '@/lib/shared';
 import { WORLDFOUNDRY_GITHUB_REPO } from '@/lib/site-links';
 
@@ -32,7 +33,7 @@ const copy = {
       {
         title: 'Breadth with clear boundaries',
         items: [
-          `${catalogCoverage.modelsTotal} model entries and ${catalogCoverage.benchmarksTotal} browsable benchmarks, with explicit readiness signals`,
+          `${modelRecipeIndex.total} models and ${catalogCoverage.benchmarksTotal} browsable benchmarks, with explicit readiness signals`,
           'Native upstream runtimes across video, 3D/4D, interactive worlds, and embodied stacks',
           'Benchmarks score outputs without taking ownership of model loading',
           'Generation and scoring can run in separate environments when required',
@@ -61,7 +62,7 @@ const copy = {
       {
         title: '广覆盖、边界清晰',
         items: [
-          `${catalogCoverage.modelsTotal} 个模型条目与 ${catalogCoverage.benchmarksTotal} 个可浏览的 benchmark，readiness 信号明确可见`,
+          `${modelRecipeIndex.total} 个模型与 ${catalogCoverage.benchmarksTotal} 个可浏览的 benchmark，readiness 信号明确可见`,
           '保留视频、3D/4D、交互世界与具身栈的原生 runtime',
           'Benchmark 只评测输出，不接管模型加载',
           '生成与打分可按需拆到不同环境执行',

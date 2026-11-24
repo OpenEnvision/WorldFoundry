@@ -9,7 +9,7 @@ groups:
 - embodied_benchmark
 source_repos:
 - url: https://github.com/RoboMME/robomme_policy_learning
-  revision: ecf086c3be7c
+  revision: ecf086c3be7c2223167d9bb2f6ef1f0a6e24353b
 checkpoints:
 - repo_id: Yinpei/perceptual-framesamp-modul
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Yinpei--perceptual-framesamp-modul

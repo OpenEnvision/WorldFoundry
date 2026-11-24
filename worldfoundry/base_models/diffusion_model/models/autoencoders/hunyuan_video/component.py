@@ -12,11 +12,13 @@ from collections.abc import Mapping
 
 import torch
 
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import RMS_norm
+
 from ....components import ComponentBuildContext
 from ....contracts import DiffusionRequest
 from ....loaders import ModuleLoadSpec, NativeModuleLoader, checkpoint_json_config
 from .causal3d import HunyuanVideoCausal3DAutoencoder
-from .h15 import AutoencoderKLConv3D, RMS_norm
+from .h15 import AutoencoderKLConv3D
 
 
 def _original_vae_state_dict(state_dict: Mapping[str, object]) -> Mapping[str, object]:

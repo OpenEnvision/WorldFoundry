@@ -6,8 +6,8 @@ do not require an external attention or serving checkout.
 Not this module:
     Capability gates, size thresholds, and PyTorch fallbacks live in
     :mod:`.diffusion`. GroupNorm+SiLU lives in :mod:`.triton_group_norm_silu`.
-    MiniMax H3 indexed AdaLN / QK RoPE live in the ``triton_minimax_h3_*``
-    modules.
+    MiniMax H3 indexed AdaLN and Q/K RoPE kernels live with the MiniMax H3
+    network in ``base_models/diffusion_model/models/networks/minimax_h3``.
 
 Public surface:
 
@@ -21,12 +21,12 @@ from __future__ import annotations
 
 import torch
 
-from worldfoundry.core.execution.compile_cache import configure_persistent_compile_cache
+from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
 
 configure_persistent_compile_cache(namespace="diffusion-triton")
 
-import triton  # noqa: E402
-import triton.language as tl  # noqa: E402
+import triton  # noqa: E402 - Follows the Triton compile-cache configuration.
+import triton.language as tl  # noqa: E402 - Follows the Triton compile-cache configuration.
 
 # ──────────────────────────────────────────────────────────────────────────
 # Pointwise SiLU — BLOCK=1024; fp32 sigmoid then store in the output dtype
@@ -124,6 +124,20 @@ def _round_float32_to_float16(value):
 
 
 @triton.jit
+def _round_float32_to_bfloat16_ptx(value):
+    """Single-cycle SM80+ PTX IEEE round-to-nearest-even BF16 boundary."""
+
+    return tl.inline_asm_elementwise(
+        "{ .reg .b16 r; .reg .b32 b; cvt.rn.bf16.f32 r, $1; cvt.u32.u16 b, r; shl.b32 $0, b, 16; }",
+        constraints="=f,f",
+        args=[value],
+        dtype=tl.float32,
+        is_pure=True,
+        pack=1,
+    )
+
+
+@triton.jit
 def _round_to_dtype(value, dtype: tl.constexpr):
     """Materialize a PyTorch low-precision expression boundary in registers."""
 
@@ -133,6 +147,213 @@ def _round_to_dtype(value, dtype: tl.constexpr):
         return _round_float32_to_float16(value)
     else:
         return value
+
+
+@triton.jit
+def _round_to_dtype_ptx(value, dtype: tl.constexpr):
+    """Single-instruction SM80+ IEEE rounding boundary for BF16/FP16."""
+
+    if dtype == tl.bfloat16:
+        return _round_float32_to_bfloat16_ptx(value)
+    elif dtype == tl.float16:
+        return _round_float32_to_float16(value)
+    else:
+        return value
+
+
+@triton.jit
+def _fused_layer_norm_scale_shift_kernel(
+    x_ptr,
+    scale_ptr,
+    shift_ptr,
+    out_ptr,
+    rows,
+    eps,
+    features: tl.constexpr,
+    d0: tl.constexpr,
+    d1: tl.constexpr,
+    d2: tl.constexpr,
+    d3: tl.constexpr,
+    ss0: tl.constexpr,
+    ss1: tl.constexpr,
+    ss2: tl.constexpr,
+    ss3: tl.constexpr,
+    ss4: tl.constexpr,
+    hs0: tl.constexpr,
+    hs1: tl.constexpr,
+    hs2: tl.constexpr,
+    hs3: tl.constexpr,
+    hs4: tl.constexpr,
+    round_product_bf16: tl.constexpr,
+    round_product_fp16: tl.constexpr,
+    block: tl.constexpr,
+):
+    """Single-pass affine-free LayerNorm + AdaLN scale/shift with exact IEEE BF16/FP16 boundaries."""
+
+    row = tl.program_id(0).to(tl.int64)
+    cols = tl.arange(0, block)
+    mask = (row < rows) & (cols < features)
+    offsets = row * features + cols
+
+    x_input = tl.load(x_ptr + offsets, mask=mask, other=0.0)
+    x_f = x_input.to(tl.float32)
+    mean = tl.sum(x_f, axis=0) / features
+    diff = tl.where(mask, x_f - mean, 0.0)
+    var = tl.sum(diff * diff, axis=0) / features
+    rstd = tl.rsqrt(var + eps)
+    normed = _round_to_dtype_ptx(diff * rstd, x_input.dtype)
+
+    scale_base = _broadcast_row_offset(row, d0, d1, d2, d3, ss0, ss1, ss2, ss3)
+    shift_base = _broadcast_row_offset(row, d0, d1, d2, d3, hs0, hs1, hs2, hs3)
+    scale_input = tl.load(scale_ptr + scale_base + cols * ss4, mask=mask, other=0.0)
+    shift_input = tl.load(shift_ptr + shift_base + cols * hs4, mask=mask, other=0.0)
+    scale_factor = _round_to_dtype_ptx(1.0 + scale_input.to(tl.float32), scale_input.dtype)
+    product = normed * scale_factor
+    if round_product_bf16:
+        product = _round_float32_to_bfloat16_ptx(product)
+    elif round_product_fp16:
+        product = _round_float32_to_float16(product)
+    tl.store(out_ptr + offsets, product + shift_input.to(tl.float32), mask=mask)
+
+
+@triton.jit
+def _residual_gate_layer_norm_kernel(
+    residual_ptr,
+    update_ptr,
+    gate_ptr,
+    weight_ptr,
+    bias_ptr,
+    x_out_ptr,
+    norm_out_ptr,
+    rows,
+    eps,
+    features: tl.constexpr,
+    d0: tl.constexpr,
+    d1: tl.constexpr,
+    d2: tl.constexpr,
+    d3: tl.constexpr,
+    gs0: tl.constexpr,
+    gs1: tl.constexpr,
+    gs2: tl.constexpr,
+    gs3: tl.constexpr,
+    gs4: tl.constexpr,
+    has_weight: tl.constexpr,
+    has_bias: tl.constexpr,
+    round_product_bf16: tl.constexpr,
+    round_product_fp16: tl.constexpr,
+    round_x_bf16: tl.constexpr,
+    round_x_fp16: tl.constexpr,
+    block: tl.constexpr,
+):
+    """Single-pass ``x_out = residual + update * gate`` and ``norm_out = LayerNorm(x_out, w, b)``."""
+
+    row = tl.program_id(0).to(tl.int64)
+    cols = tl.arange(0, block)
+    mask = (row < rows) & (cols < features)
+    offsets = row * features + cols
+
+    gate_base = _broadcast_row_offset(row, d0, d1, d2, d3, gs0, gs1, gs2, gs3)
+    residual_f = tl.load(residual_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
+    update_f = tl.load(update_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
+    gate_f = tl.load(gate_ptr + gate_base + cols * gs4, mask=mask, other=0.0).to(tl.float32)
+
+    product = update_f * gate_f
+    if round_product_bf16:
+        product = _round_float32_to_bfloat16_ptx(product)
+    elif round_product_fp16:
+        product = _round_float32_to_float16(product)
+
+    x_new = residual_f + product
+    if round_x_bf16:
+        x_new = _round_float32_to_bfloat16_ptx(x_new)
+    elif round_x_fp16:
+        x_new = _round_float32_to_float16(x_new)
+    tl.store(x_out_ptr + offsets, x_new, mask=mask)
+
+    x_masked = tl.where(mask, x_new, 0.0)
+    mean = tl.sum(x_masked, axis=0) / features
+    diff = tl.where(mask, x_masked - mean, 0.0)
+    var = tl.sum(diff * diff, axis=0) / features
+    rstd = tl.rsqrt(var + eps)
+    normed = diff * rstd
+    if has_weight:
+        w = tl.load(weight_ptr + cols, mask=mask, other=1.0).to(tl.float32)
+        normed = normed * w
+    if has_bias:
+        b = tl.load(bias_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+        normed = normed + b
+    tl.store(norm_out_ptr + offsets, normed, mask=mask)
+
+
+@triton.jit
+def _residual_add_layer_norm_scale_shift_kernel(
+    residual_ptr,
+    update_ptr,
+    scale_ptr,
+    shift_ptr,
+    x_out_ptr,
+    norm_out_ptr,
+    rows,
+    eps,
+    features: tl.constexpr,
+    d0: tl.constexpr,
+    d1: tl.constexpr,
+    d2: tl.constexpr,
+    d3: tl.constexpr,
+    ss0: tl.constexpr,
+    ss1: tl.constexpr,
+    ss2: tl.constexpr,
+    ss3: tl.constexpr,
+    ss4: tl.constexpr,
+    hs0: tl.constexpr,
+    hs1: tl.constexpr,
+    hs2: tl.constexpr,
+    hs3: tl.constexpr,
+    hs4: tl.constexpr,
+    round_x_bf16: tl.constexpr,
+    round_x_fp16: tl.constexpr,
+    round_product_bf16: tl.constexpr,
+    round_product_fp16: tl.constexpr,
+    block: tl.constexpr,
+):
+    """Single-pass ``x_out = residual + update`` and ``norm_out = LayerNorm(x_out)*(1+scale)+shift``."""
+
+    row = tl.program_id(0).to(tl.int64)
+    cols = tl.arange(0, block)
+    mask = (row < rows) & (cols < features)
+    offsets = row * features + cols
+
+    residual_f = tl.load(residual_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
+    update_f = tl.load(update_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
+    x_new = residual_f + update_f
+    if round_x_bf16:
+        x_new = _round_float32_to_bfloat16_ptx(x_new)
+    elif round_x_fp16:
+        x_new = _round_float32_to_float16(x_new)
+    tl.store(x_out_ptr + offsets, x_new, mask=mask)
+
+    x_masked = tl.where(mask, x_new, 0.0)
+    mean = tl.sum(x_masked, axis=0) / features
+    diff = tl.where(mask, x_masked - mean, 0.0)
+    var = tl.sum(diff * diff, axis=0) / features
+    rstd = tl.rsqrt(var + eps)
+    normed = diff * rstd
+    if round_x_bf16:
+        normed = _round_float32_to_bfloat16_ptx(normed)
+    elif round_x_fp16:
+        normed = _round_float32_to_float16(normed)
+
+    scale_base = _broadcast_row_offset(row, d0, d1, d2, d3, ss0, ss1, ss2, ss3)
+    shift_base = _broadcast_row_offset(row, d0, d1, d2, d3, hs0, hs1, hs2, hs3)
+    scale_input = tl.load(scale_ptr + scale_base + cols * ss4, mask=mask, other=0.0)
+    shift_input = tl.load(shift_ptr + shift_base + cols * hs4, mask=mask, other=0.0)
+    scale_factor = _round_to_dtype_ptx(1.0 + scale_input.to(tl.float32), scale_input.dtype)
+    product = normed * scale_factor
+    if round_product_bf16:
+        product = _round_float32_to_bfloat16_ptx(product)
+    elif round_product_fp16:
+        product = _round_float32_to_float16(product)
+    tl.store(norm_out_ptr + offsets, product + shift_input.to(tl.float32), mask=mask)
 
 
 @triton.jit
@@ -377,6 +598,10 @@ def _hidden_qk_rmsnorm_rope_3d_kernel(
     k_weight_ptr,
     freqs_ptr,
     sequence,
+    q_batch_stride,
+    q_seq_stride,
+    k_batch_stride,
+    k_seq_stride,
     hidden_size: tl.constexpr,
     head_dim: tl.constexpr,
     valid_tokens,
@@ -392,34 +617,38 @@ def _hidden_qk_rmsnorm_rope_3d_kernel(
     freq_stride_position,
     freq_stride_pair,
     freq_stride_component,
-    block_hidden: tl.constexpr,
+    block_pairs: tl.constexpr,
+    USE_FP64: tl.constexpr = False,
 ):
-    """Fuse full-hidden Q/K RMSNorm with packed interleaved 3D RoPE."""
+    """Fuse full-hidden Q/K RMSNorm with packed interleaved 3D RoPE in one pass."""
 
     row = tl.program_id(0)
+    batch_idx = row // sequence
     local_token = row % sequence
     global_token = sequence_offset + local_token
-    cols = tl.arange(0, block_hidden)
-    hidden_mask = cols < hidden_size
-    offsets = row * hidden_size + cols
-    q_input = tl.load(q_ptr + offsets, mask=hidden_mask, other=0.0)
-    k_input = tl.load(k_ptr + offsets, mask=hidden_mask, other=0.0)
-    q_float = q_input.to(tl.float32)
-    k_float = k_input.to(tl.float32)
-    q_rstd = tl.rsqrt(tl.sum(q_float * q_float, axis=0) / hidden_size + eps)
-    k_rstd = tl.rsqrt(tl.sum(k_float * k_float, axis=0) / hidden_size + eps)
 
-    pair_index = tl.arange(0, block_hidden // 2)
+    pair_index = tl.arange(0, block_pairs)
     even_col = pair_index * 2
     odd_col = even_col + 1
     pair_mask = odd_col < hidden_size
     rotate_mask = pair_mask & (even_col >= store_feature_start) & (odd_col < store_feature_end)
-    even_offsets = row * hidden_size + even_col
-    odd_offsets = row * hidden_size + odd_col
-    q_even_input = tl.load(q_ptr + even_offsets, mask=pair_mask, other=0.0)
-    q_odd_input = tl.load(q_ptr + odd_offsets, mask=pair_mask, other=0.0)
-    k_even_input = tl.load(k_ptr + even_offsets, mask=pair_mask, other=0.0)
-    k_odd_input = tl.load(k_ptr + odd_offsets, mask=pair_mask, other=0.0)
+
+    q_row_base = batch_idx * q_batch_stride + local_token * q_seq_stride
+    k_row_base = batch_idx * k_batch_stride + local_token * k_seq_stride
+    q_even_input = tl.load(q_ptr + q_row_base + even_col, mask=pair_mask, other=0.0)
+    q_odd_input = tl.load(q_ptr + q_row_base + odd_col, mask=pair_mask, other=0.0)
+    k_even_input = tl.load(k_ptr + k_row_base + even_col, mask=pair_mask, other=0.0)
+    k_odd_input = tl.load(k_ptr + k_row_base + odd_col, mask=pair_mask, other=0.0)
+
+    q_even_f = q_even_input.to(tl.float32)
+    q_odd_f = q_odd_input.to(tl.float32)
+    k_even_f = k_even_input.to(tl.float32)
+    k_odd_f = k_odd_input.to(tl.float32)
+    q_sq_sum = tl.sum(q_even_f * q_even_f + q_odd_f * q_odd_f, axis=0)
+    k_sq_sum = tl.sum(k_even_f * k_even_f + k_odd_f * k_odd_f, axis=0)
+    q_rstd = tl.rsqrt(q_sq_sum / hidden_size + eps)
+    k_rstd = tl.rsqrt(k_sq_sum / hidden_size + eps)
+
     q_weight_even = tl.load(q_weight_ptr + even_col, mask=pair_mask, other=0.0).to(tl.float32)
     q_weight_odd = tl.load(q_weight_ptr + odd_col, mask=pair_mask, other=0.0).to(tl.float32)
     k_weight_even = tl.load(k_weight_ptr + even_col, mask=pair_mask, other=0.0).to(tl.float32)
@@ -427,10 +656,10 @@ def _hidden_qk_rmsnorm_rope_3d_kernel(
 
     # WanRMSNorm rounds the normalized value to the projection dtype before
     # multiplying by the learned weight.
-    q_even = (q_even_input.to(tl.float32) * q_rstd).to(q_even_input.dtype)
-    q_odd = (q_odd_input.to(tl.float32) * q_rstd).to(q_odd_input.dtype)
-    k_even = (k_even_input.to(tl.float32) * k_rstd).to(k_even_input.dtype)
-    k_odd = (k_odd_input.to(tl.float32) * k_rstd).to(k_odd_input.dtype)
+    q_even = (q_even_f * q_rstd).to(q_even_input.dtype)
+    q_odd = (q_odd_f * q_rstd).to(q_odd_input.dtype)
+    k_even = (k_even_f * k_rstd).to(k_even_input.dtype)
+    k_odd = (k_odd_f * k_rstd).to(k_odd_input.dtype)
     q_even = (q_even.to(tl.float32) * q_weight_even).to(q_even_input.dtype)
     q_odd = (q_odd.to(tl.float32) * q_weight_odd).to(q_odd_input.dtype)
     k_even = (k_even.to(tl.float32) * k_weight_even).to(k_even_input.dtype)
@@ -450,24 +679,42 @@ def _hidden_qk_rmsnorm_rope_3d_kernel(
     )
     valid = global_token < valid_tokens
     freq_base = rope_position * freq_stride_position + pair_in_head * freq_stride_pair
-    cosine = tl.load(
-        freqs_ptr + freq_base,
-        mask=pair_mask & valid,
-        other=1.0,
-    ).to(tl.float32)
-    sine = tl.load(
-        freqs_ptr + freq_base + freq_stride_component,
-        mask=pair_mask & valid,
-        other=0.0,
-    ).to(tl.float32)
-    rotated_q_even = q_even.to(tl.float32) * cosine - q_odd.to(tl.float32) * sine
-    rotated_q_odd = q_odd.to(tl.float32) * cosine + q_even.to(tl.float32) * sine
-    rotated_k_even = k_even.to(tl.float32) * cosine - k_odd.to(tl.float32) * sine
-    rotated_k_odd = k_odd.to(tl.float32) * cosine + k_even.to(tl.float32) * sine
-    tl.store(q_out_ptr + even_offsets, tl.where(rotate_mask, rotated_q_even, q_even), mask=pair_mask)
-    tl.store(q_out_ptr + odd_offsets, tl.where(rotate_mask, rotated_q_odd, q_odd), mask=pair_mask)
-    tl.store(k_out_ptr + even_offsets, tl.where(rotate_mask, rotated_k_even, k_even), mask=pair_mask)
-    tl.store(k_out_ptr + odd_offsets, tl.where(rotate_mask, rotated_k_odd, k_odd), mask=pair_mask)
+    if USE_FP64:
+        cosine = tl.load(
+            freqs_ptr + freq_base,
+            mask=pair_mask & valid,
+            other=1.0,
+        ).to(tl.float64)
+        sine = tl.load(
+            freqs_ptr + freq_base + freq_stride_component,
+            mask=pair_mask & valid,
+            other=0.0,
+        ).to(tl.float64)
+        rotated_q_even = (q_even.to(tl.float64) * cosine - q_odd.to(tl.float64) * sine).to(q_even_input.dtype)
+        rotated_q_odd = (q_odd.to(tl.float64) * cosine + q_even.to(tl.float64) * sine).to(q_odd_input.dtype)
+        rotated_k_even = (k_even.to(tl.float64) * cosine - k_odd.to(tl.float64) * sine).to(k_even_input.dtype)
+        rotated_k_odd = (k_odd.to(tl.float64) * cosine + k_even.to(tl.float64) * sine).to(k_odd_input.dtype)
+    else:
+        cosine = tl.load(
+            freqs_ptr + freq_base,
+            mask=pair_mask & valid,
+            other=1.0,
+        ).to(tl.float32)
+        sine = tl.load(
+            freqs_ptr + freq_base + freq_stride_component,
+            mask=pair_mask & valid,
+            other=0.0,
+        ).to(tl.float32)
+        rotated_q_even = q_even.to(tl.float32) * cosine - q_odd.to(tl.float32) * sine
+        rotated_q_odd = q_odd.to(tl.float32) * cosine + q_even.to(tl.float32) * sine
+        rotated_k_even = k_even.to(tl.float32) * cosine - k_odd.to(tl.float32) * sine
+        rotated_k_odd = k_odd.to(tl.float32) * cosine + k_even.to(tl.float32) * sine
+    out_even_offsets = row.to(tl.int64) * hidden_size + even_col
+    out_odd_offsets = row.to(tl.int64) * hidden_size + odd_col
+    tl.store(q_out_ptr + out_even_offsets, tl.where(rotate_mask, rotated_q_even, q_even), mask=pair_mask)
+    tl.store(q_out_ptr + out_odd_offsets, tl.where(rotate_mask, rotated_q_odd, q_odd), mask=pair_mask)
+    tl.store(k_out_ptr + out_even_offsets, tl.where(rotate_mask, rotated_k_even, k_even), mask=pair_mask)
+    tl.store(k_out_ptr + out_odd_offsets, tl.where(rotate_mask, rotated_k_odd, k_odd), mask=pair_mask)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -692,7 +939,11 @@ def layer_norm_scale_shift(
     # boundary. Keep the same vendor reduction, dtype, and optional upcast as
     # the eager expression; only combine its following pointwise operations.
     normalized = torch.nn.functional.layer_norm(
-        x.float() if upcast else x, (x.shape[-1],), weight=None, bias=None, eps=eps,
+        x.float() if upcast else x,
+        (x.shape[-1],),
+        weight=None,
+        bias=None,
+        eps=eps,
     )
     if upcast:
         normalized = normalized.to(x.dtype)
@@ -813,9 +1064,11 @@ def hidden_qk_rmsnorm_rope_3d(
     temporal_pairs = complex_dim - 2 * (complex_dim // 3)
     height_pairs = complex_dim // 3
     real_freqs = torch.view_as_real(freqs) if freqs.is_complex() else freqs
-    block_hidden = triton.next_power_of_2(hidden_size)
-    q_output = torch.empty_like(q)
-    k_output = torch.empty_like(k)
+    use_fp64 = real_freqs.dtype == torch.float64
+    block_pairs = triton.next_power_of_2(hidden_size // 2)
+    q_output = torch.empty(q.shape, device=q.device, dtype=q.dtype)
+    k_output = torch.empty(k.shape, device=k.device, dtype=k.dtype)
+    warps = 16 if block_pairs >= 4096 else _num_warps(block_pairs * 2)
     _hidden_qk_rmsnorm_rope_3d_kernel[(q.shape[0] * q.shape[1],)](
         q,
         k,
@@ -825,6 +1078,10 @@ def hidden_qk_rmsnorm_rope_3d(
         k_weight,
         real_freqs,
         q.shape[1],
+        q.stride(0),
+        q.stride(1),
+        k.stride(0),
+        k.stride(1),
         hidden_size=hidden_size,
         head_dim=head_dim,
         valid_tokens=int(valid_tokens),
@@ -840,19 +1097,570 @@ def hidden_qk_rmsnorm_rope_3d(
         freq_stride_position=real_freqs.stride(0),
         freq_stride_pair=real_freqs.stride(1),
         freq_stride_component=real_freqs.stride(2),
-        block_hidden=block_hidden,
-        num_warps=_num_warps(block_hidden),
+        block_pairs=block_pairs,
+        USE_FP64=use_fp64,
+        num_warps=warps,
+    )
+    return q_output, k_output
+
+
+@triton.jit
+def _real_rope_bshd_kernel(
+    x_ptr,
+    cos_ptr,
+    sin_ptr,
+    out_ptr,
+    seq_len,
+    num_heads,
+    x_stride_b,
+    x_stride_s,
+    x_stride_h,
+    out_stride_b,
+    out_stride_s,
+    out_stride_h,
+    cos_stride_s,
+    sin_stride_s,
+    HEAD_DIM: tl.constexpr,
+    PAIRS: tl.constexpr,
+    BLOCK_PAIRS: tl.constexpr,
+    USE_FP64: tl.constexpr,
+):
+    """Single-pass real-valued RoPE on ``[B, S, H, D]`` keeping FP64/FP32 math in registers."""
+    token_row = tl.program_id(0).to(tl.int64)
+    head_idx = tl.program_id(1).to(tl.int64)
+    batch_idx = token_row // seq_len
+    seq_idx = token_row % seq_len
+
+    pair_offsets = tl.arange(0, BLOCK_PAIRS)
+    mask = pair_offsets < PAIRS
+    even_col = pair_offsets * 2
+    odd_col = even_col + 1
+
+    x_base = batch_idx * x_stride_b + seq_idx * x_stride_s + head_idx * x_stride_h
+    out_base = batch_idx * out_stride_b + seq_idx * out_stride_s + head_idx * out_stride_h
+
+    x_even_raw = tl.load(x_ptr + x_base + even_col, mask=mask, other=0.0)
+    x_odd_raw = tl.load(x_ptr + x_base + odd_col, mask=mask, other=0.0)
+    if USE_FP64:
+        x_even = x_even_raw.to(tl.float64)
+        x_odd = x_odd_raw.to(tl.float64)
+        c = tl.load(cos_ptr + seq_idx * cos_stride_s + pair_offsets, mask=mask, other=1.0).to(tl.float64)
+        s = tl.load(sin_ptr + seq_idx * sin_stride_s + pair_offsets, mask=mask, other=0.0).to(tl.float64)
+    else:
+        x_even = x_even_raw.to(tl.float32)
+        x_odd = x_odd_raw.to(tl.float32)
+        c = tl.load(cos_ptr + seq_idx * cos_stride_s + pair_offsets, mask=mask, other=1.0).to(tl.float32)
+        s = tl.load(sin_ptr + seq_idx * sin_stride_s + pair_offsets, mask=mask, other=0.0).to(tl.float32)
+
+    rot_even = (x_even * c - x_odd * s).to(x_even_raw.dtype)
+    rot_odd = (x_even * s + x_odd * c).to(x_odd_raw.dtype)
+    tl.store(out_ptr + out_base + even_col, rot_even, mask=mask)
+    tl.store(out_ptr + out_base + odd_col, rot_odd, mask=mask)
+
+
+def apply_real_rope_bshd(
+    x: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> torch.Tensor:
+    """Apply real-valued ``(cos, sin)`` RoPE in one Triton pass with register-resident FP64/FP32."""
+    b, s, h, d = x.shape
+    pairs = d // 2
+    block_pairs = triton.next_power_of_2(pairs)
+    cos_2d = cos.reshape(s, pairs).contiguous()
+    sin_2d = sin.reshape(s, pairs).contiguous()
+    out = torch.empty((b, s, h, d), device=x.device, dtype=x.dtype)
+    use_fp64 = cos.dtype == torch.float64
+    _real_rope_bshd_kernel[(b * s, h)](
+        x,
+        cos_2d,
+        sin_2d,
+        out,
+        s,
+        h,
+        x.stride(0),
+        x.stride(1),
+        x.stride(2),
+        out.stride(0),
+        out.stride(1),
+        out.stride(2),
+        cos_2d.stride(0),
+        sin_2d.stride(0),
+        HEAD_DIM=d,
+        PAIRS=pairs,
+        BLOCK_PAIRS=block_pairs,
+        USE_FP64=use_fp64,
+        num_warps=2 if block_pairs <= 64 else 4,
+    )
+    return out
+
+
+def fused_layer_norm_scale_shift(
+    x: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float,
+) -> torch.Tensor:
+    """Single-pass affine-free LayerNorm + AdaLN scale/shift with exact IEEE BF16/FP16 rounding."""
+
+    rows = x.numel() // x.shape[-1]
+    features = int(x.shape[-1])
+    dims, scale_strides = _padded_outer_shape_and_strides(x, scale)
+    _, shift_strides = _padded_outer_shape_and_strides(x, shift)
+    block = triton.next_power_of_2(features)
+    product_dtype = torch.promote_types(x.dtype, scale.dtype)
+    output_dtype = torch.promote_types(product_dtype, shift.dtype)
+    output = torch.empty_like(x, dtype=output_dtype)
+    _fused_layer_norm_scale_shift_kernel[(rows,)](
+        x,
+        scale,
+        shift,
+        output,
+        rows,
+        float(eps),
+        features=features,
+        d0=dims[0],
+        d1=dims[1],
+        d2=dims[2],
+        d3=dims[3],
+        ss0=scale_strides[0],
+        ss1=scale_strides[1],
+        ss2=scale_strides[2],
+        ss3=scale_strides[3],
+        ss4=scale_strides[4],
+        hs0=shift_strides[0],
+        hs1=shift_strides[1],
+        hs2=shift_strides[2],
+        hs3=shift_strides[3],
+        hs4=shift_strides[4],
+        round_product_bf16=product_dtype == torch.bfloat16,
+        round_product_fp16=product_dtype == torch.float16,
+        block=block,
+        num_warps=_num_warps(block),
+        enable_fp_fusion=False,
+    )
+    return output
+
+
+def _launch_residual_gate_layer_norm(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    gate: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor,
+    x_out: torch.Tensor,
+    norm_out: torch.Tensor,
+    *,
+    has_weight: bool,
+    has_bias: bool,
+    eps: float,
+) -> None:
+    rows = residual.numel() // residual.shape[-1]
+    features = int(residual.shape[-1])
+    dims, gate_strides = _padded_outer_shape_and_strides(residual, gate)
+    block = triton.next_power_of_2(features)
+    product_dtype = torch.promote_types(update.dtype, gate.dtype)
+    x_dtype = x_out.dtype
+    _residual_gate_layer_norm_kernel[(rows,)](
+        residual,
+        update,
+        gate,
+        weight,
+        bias,
+        x_out,
+        norm_out,
+        rows,
+        float(eps),
+        features=features,
+        d0=dims[0],
+        d1=dims[1],
+        d2=dims[2],
+        d3=dims[3],
+        gs0=gate_strides[0],
+        gs1=gate_strides[1],
+        gs2=gate_strides[2],
+        gs3=gate_strides[3],
+        gs4=gate_strides[4],
+        has_weight=has_weight,
+        has_bias=has_bias,
+        round_product_bf16=product_dtype == torch.bfloat16,
+        round_product_fp16=product_dtype == torch.float16,
+        round_x_bf16=x_dtype == torch.bfloat16,
+        round_x_fp16=x_dtype == torch.float16,
+        block=block,
+        num_warps=_num_warps(block),
+        enable_fp_fusion=False,
+    )
+
+
+def residual_gate_layer_norm(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    gate: torch.Tensor,
+    weight: torch.Tensor | None,
+    bias: torch.Tensor | None,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Single-pass ``x_out = residual + update * gate`` and ``LayerNorm(x_out, w, b)``."""
+
+    product_dtype = torch.promote_types(update.dtype, gate.dtype)
+    x_out_dtype = torch.promote_types(residual.dtype, product_dtype)
+    x_out = torch.empty_like(residual, dtype=x_out_dtype)
+    norm_out = torch.empty_like(residual, dtype=x_out_dtype)
+    _launch_residual_gate_layer_norm(
+        residual,
+        update,
+        gate,
+        residual if weight is None else weight,
+        residual if bias is None else bias,
+        x_out,
+        norm_out,
+        has_weight=weight is not None,
+        has_bias=bias is not None,
+        eps=eps,
+    )
+    return x_out, norm_out
+
+
+@torch.library.custom_op(
+    "worldfoundry::residual_gate_layer_norm_inplace",
+    mutates_args=("residual",),
+    device_types="cuda",
+)
+def _residual_gate_layer_norm_inplace_custom(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    gate: torch.Tensor,
+    weight: torch.Tensor | None,
+    bias: torch.Tensor | None,
+    eps: float,
+) -> torch.Tensor:
+    norm_out = torch.empty_like(residual)
+    _launch_residual_gate_layer_norm(
+        residual,
+        update,
+        gate,
+        residual if weight is None else weight,
+        residual if bias is None else bias,
+        residual,
+        norm_out,
+        has_weight=weight is not None,
+        has_bias=bias is not None,
+        eps=eps,
+    )
+    return norm_out
+
+
+@_residual_gate_layer_norm_inplace_custom.register_fake
+def _residual_gate_layer_norm_inplace_custom_fake(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    gate: torch.Tensor,
+    weight: torch.Tensor | None,
+    bias: torch.Tensor | None,
+    eps: float,
+) -> torch.Tensor:
+    del update, gate, weight, bias, eps
+    return torch.empty_like(residual)
+
+
+def residual_gate_layer_norm_inplace(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    gate: torch.Tensor,
+    weight: torch.Tensor | None,
+    bias: torch.Tensor | None,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Mutate ``residual`` in place and return ``(residual, LayerNorm(residual, w, b))``."""
+
+    norm_out = _residual_gate_layer_norm_inplace_custom(
+        residual,
+        update,
+        gate,
+        weight,
+        bias,
+        float(eps),
+    )
+    return residual, norm_out
+
+
+def _launch_residual_add_layer_norm_scale_shift(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    x_out: torch.Tensor,
+    norm_out: torch.Tensor,
+    *,
+    eps: float,
+) -> None:
+    rows = residual.numel() // residual.shape[-1]
+    features = int(residual.shape[-1])
+    dims, scale_strides = _padded_outer_shape_and_strides(residual, scale)
+    _, shift_strides = _padded_outer_shape_and_strides(residual, shift)
+    block = triton.next_power_of_2(features)
+    x_dtype = x_out.dtype
+    product_dtype = torch.promote_types(x_dtype, scale.dtype)
+    _residual_add_layer_norm_scale_shift_kernel[(rows,)](
+        residual,
+        update,
+        scale,
+        shift,
+        x_out,
+        norm_out,
+        rows,
+        float(eps),
+        features=features,
+        d0=dims[0],
+        d1=dims[1],
+        d2=dims[2],
+        d3=dims[3],
+        ss0=scale_strides[0],
+        ss1=scale_strides[1],
+        ss2=scale_strides[2],
+        ss3=scale_strides[3],
+        ss4=scale_strides[4],
+        hs0=shift_strides[0],
+        hs1=shift_strides[1],
+        hs2=shift_strides[2],
+        hs3=shift_strides[3],
+        hs4=shift_strides[4],
+        round_x_bf16=x_dtype == torch.bfloat16,
+        round_x_fp16=x_dtype == torch.float16,
+        round_product_bf16=product_dtype == torch.bfloat16,
+        round_product_fp16=product_dtype == torch.float16,
+        block=block,
+        num_warps=_num_warps(block),
+        enable_fp_fusion=False,
+    )
+
+
+def residual_add_layer_norm_scale_shift(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Single-pass ``x_out = residual + update`` and ``LayerNorm(x_out)*(1+scale)+shift``."""
+
+    x_out_dtype = torch.promote_types(residual.dtype, update.dtype)
+    product_dtype = torch.promote_types(x_out_dtype, scale.dtype)
+    norm_out_dtype = torch.promote_types(product_dtype, shift.dtype)
+    x_out = torch.empty_like(residual, dtype=x_out_dtype)
+    norm_out = torch.empty_like(residual, dtype=norm_out_dtype)
+    _launch_residual_add_layer_norm_scale_shift(residual, update, scale, shift, x_out, norm_out, eps=eps)
+    return x_out, norm_out
+
+
+@torch.library.custom_op(
+    "worldfoundry::residual_add_layer_norm_scale_shift_inplace",
+    mutates_args=("residual",),
+    device_types="cuda",
+)
+def _residual_add_layer_norm_scale_shift_inplace_custom(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float,
+) -> torch.Tensor:
+    product_dtype = torch.promote_types(residual.dtype, scale.dtype)
+    norm_out_dtype = torch.promote_types(product_dtype, shift.dtype)
+    norm_out = torch.empty_like(residual, dtype=norm_out_dtype)
+    _launch_residual_add_layer_norm_scale_shift(residual, update, scale, shift, residual, norm_out, eps=eps)
+    return norm_out
+
+
+@_residual_add_layer_norm_scale_shift_inplace_custom.register_fake
+def _residual_add_layer_norm_scale_shift_inplace_custom_fake(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float,
+) -> torch.Tensor:
+    del update, eps
+    product_dtype = torch.promote_types(residual.dtype, scale.dtype)
+    norm_out_dtype = torch.promote_types(product_dtype, shift.dtype)
+    return torch.empty_like(residual, dtype=norm_out_dtype)
+
+
+def residual_add_layer_norm_scale_shift_inplace(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Mutate ``residual`` in place and return ``(residual, LayerNorm(residual)*(1+scale)+shift)``."""
+
+    norm_out = _residual_add_layer_norm_scale_shift_inplace_custom(residual, update, scale, shift, float(eps))
+    return residual, norm_out
+
+
+@triton.jit
+def _hidden_qk_rmsnorm_rope_freqs_kernel(
+    q_ptr,
+    k_ptr,
+    q_out_ptr,
+    k_out_ptr,
+    q_weight_ptr,
+    k_weight_ptr,
+    freqs_ptr,
+    sequence,
+    q_batch_stride,
+    q_seq_stride,
+    k_batch_stride,
+    k_seq_stride,
+    hidden_size: tl.constexpr,
+    head_dim: tl.constexpr,
+    eps,
+    freq_stride_pos,
+    freq_stride_pair,
+    freq_stride_comp,
+    block_pairs: tl.constexpr,
+    USE_FP64: tl.constexpr = True,
+):
+    """Fuse full-hidden Q/K RMSNorm with pre-indexed per-token interleaved RoPE in one pass."""
+
+    row = tl.program_id(0).to(tl.int64)
+    batch_idx = row // sequence
+    local_token = row % sequence
+
+    pair_index = tl.arange(0, block_pairs)
+    even_col = pair_index * 2
+    odd_col = even_col + 1
+    pair_mask = odd_col < hidden_size
+
+    q_row_base = batch_idx * q_batch_stride + local_token * q_seq_stride
+    k_row_base = batch_idx * k_batch_stride + local_token * k_seq_stride
+    q_even_input = tl.load(q_ptr + q_row_base + even_col, mask=pair_mask, other=0.0)
+    q_odd_input = tl.load(q_ptr + q_row_base + odd_col, mask=pair_mask, other=0.0)
+    k_even_input = tl.load(k_ptr + k_row_base + even_col, mask=pair_mask, other=0.0)
+    k_odd_input = tl.load(k_ptr + k_row_base + odd_col, mask=pair_mask, other=0.0)
+
+    q_even_f = q_even_input.to(tl.float32)
+    q_odd_f = q_odd_input.to(tl.float32)
+    k_even_f = k_even_input.to(tl.float32)
+    k_odd_f = k_odd_input.to(tl.float32)
+    q_sq_sum = tl.sum(q_even_f * q_even_f + q_odd_f * q_odd_f, axis=0)
+    k_sq_sum = tl.sum(k_even_f * k_even_f + k_odd_f * k_odd_f, axis=0)
+    q_rstd = tl.rsqrt(q_sq_sum / hidden_size + eps)
+    k_rstd = tl.rsqrt(k_sq_sum / hidden_size + eps)
+
+    q_weight_even = tl.load(q_weight_ptr + even_col, mask=pair_mask, other=0.0).to(tl.float32)
+    q_weight_odd = tl.load(q_weight_ptr + odd_col, mask=pair_mask, other=0.0).to(tl.float32)
+    k_weight_even = tl.load(k_weight_ptr + even_col, mask=pair_mask, other=0.0).to(tl.float32)
+    k_weight_odd = tl.load(k_weight_ptr + odd_col, mask=pair_mask, other=0.0).to(tl.float32)
+
+    q_even = (q_even_f * q_rstd).to(q_even_input.dtype)
+    q_odd = (q_odd_f * q_rstd).to(q_odd_input.dtype)
+    k_even = (k_even_f * k_rstd).to(k_even_input.dtype)
+    k_odd = (k_odd_f * k_rstd).to(k_odd_input.dtype)
+    q_even = (q_even.to(tl.float32) * q_weight_even).to(q_even_input.dtype)
+    q_odd = (q_odd.to(tl.float32) * q_weight_odd).to(q_odd_input.dtype)
+    k_even = (k_even.to(tl.float32) * k_weight_even).to(k_even_input.dtype)
+    k_odd = (k_odd.to(tl.float32) * k_weight_odd).to(k_odd_input.dtype)
+
+    pairs_per_head = head_dim // 2
+    pair_in_head = pair_index % pairs_per_head
+    freq_base = local_token * freq_stride_pos + pair_in_head * freq_stride_pair
+    if USE_FP64:
+        cosine = tl.load(freqs_ptr + freq_base, mask=pair_mask, other=1.0).to(tl.float64)
+        sine = tl.load(freqs_ptr + freq_base + freq_stride_comp, mask=pair_mask, other=0.0).to(tl.float64)
+        rotated_q_even = (q_even.to(tl.float64) * cosine - q_odd.to(tl.float64) * sine).to(q_even_input.dtype)
+        rotated_q_odd = (q_odd.to(tl.float64) * cosine + q_even.to(tl.float64) * sine).to(q_odd_input.dtype)
+        rotated_k_even = (k_even.to(tl.float64) * cosine - k_odd.to(tl.float64) * sine).to(k_even_input.dtype)
+        rotated_k_odd = (k_odd.to(tl.float64) * cosine + k_even.to(tl.float64) * sine).to(k_odd_input.dtype)
+    else:
+        cosine = tl.load(freqs_ptr + freq_base, mask=pair_mask, other=1.0).to(tl.float32)
+        sine = tl.load(freqs_ptr + freq_base + freq_stride_comp, mask=pair_mask, other=0.0).to(tl.float32)
+        rotated_q_even = (q_even.to(tl.float32) * cosine - q_odd.to(tl.float32) * sine).to(q_even_input.dtype)
+        rotated_q_odd = (q_odd.to(tl.float32) * cosine + q_even.to(tl.float32) * sine).to(q_odd_input.dtype)
+        rotated_k_even = (k_even.to(tl.float32) * cosine - k_odd.to(tl.float32) * sine).to(k_even_input.dtype)
+        rotated_k_odd = (k_odd.to(tl.float32) * cosine + k_even.to(tl.float32) * sine).to(k_odd_input.dtype)
+
+    out_even_offsets = row * hidden_size + even_col
+    out_odd_offsets = row * hidden_size + odd_col
+    tl.store(q_out_ptr + out_even_offsets, rotated_q_even, mask=pair_mask)
+    tl.store(q_out_ptr + out_odd_offsets, rotated_q_odd, mask=pair_mask)
+    tl.store(k_out_ptr + out_even_offsets, rotated_k_even, mask=pair_mask)
+    tl.store(k_out_ptr + out_odd_offsets, rotated_k_odd, mask=pair_mask)
+
+
+def hidden_qk_rmsnorm_rope_freqs(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    q_weight: torch.Tensor,
+    k_weight: torch.Tensor,
+    freqs: torch.Tensor,
+    *,
+    num_heads: int,
+    eps: float,
+    precision: str | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Launch fused Q/K RMSNorm + pre-indexed per-token interleaved RoPE."""
+
+    hidden_size = int(q.shape[-1])
+    head_dim = hidden_size // int(num_heads)
+    if freqs.is_complex():
+        freqs_2d = freqs.squeeze(1) if freqs.ndim == 3 and freqs.shape[1] == 1 else freqs
+        real_freqs = torch.view_as_real(freqs_2d)
+    else:
+        real_freqs = freqs.squeeze(1) if freqs.ndim == 4 and freqs.shape[1] == 1 else freqs
+    if precision is None:
+        use_fp64 = real_freqs.dtype == torch.float64
+    else:
+        normalized_precision = precision.strip().casefold()
+        if normalized_precision not in {"fp32", "fp64"}:
+            raise ValueError(f"unsupported RoPE precision: {precision!r}")
+        use_fp64 = normalized_precision == "fp64"
+    block_pairs = triton.next_power_of_2(hidden_size // 2)
+    q_output = torch.empty(q.shape, device=q.device, dtype=q.dtype)
+    k_output = torch.empty(k.shape, device=k.device, dtype=k.dtype)
+    warps = 16 if block_pairs >= 4096 else _num_warps(block_pairs * 2)
+    _hidden_qk_rmsnorm_rope_freqs_kernel[(q.shape[0] * q.shape[1],)](
+        q,
+        k,
+        q_output,
+        k_output,
+        q_weight,
+        k_weight,
+        real_freqs,
+        q.shape[1],
+        q.stride(0),
+        q.stride(1),
+        k.stride(0),
+        k.stride(1),
+        hidden_size=hidden_size,
+        head_dim=head_dim,
+        eps=float(eps),
+        freq_stride_pos=real_freqs.stride(0),
+        freq_stride_pair=real_freqs.stride(1),
+        freq_stride_comp=real_freqs.stride(2),
+        block_pairs=block_pairs,
+        USE_FP64=use_fp64,
+        num_warps=warps,
     )
     return q_output, k_output
 
 
 __all__ = [
+    "apply_real_rope_bshd",
+    "fused_layer_norm_scale_shift",
     "hidden_qk_rmsnorm_rope_3d",
+    "hidden_qk_rmsnorm_rope_freqs",
     "layer_norm_scale_shift",
     "qk_rmsnorm_rope",
-    "rms_norm_scale_shift",
+    "residual_add_layer_norm_scale_shift",
+    "residual_add_layer_norm_scale_shift_inplace",
     "residual_gate",
     "residual_gate_inplace",
+    "residual_gate_layer_norm",
+    "residual_gate_layer_norm_inplace",
+    "rms_norm_scale_shift",
     "scale_shift",
     "silu_and_mul",
     "silu_mul",

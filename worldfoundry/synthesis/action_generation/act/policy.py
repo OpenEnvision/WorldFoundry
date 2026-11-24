@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 import pickle
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, ClassVar
 
 
 class _DatasetStatsUnpickler(pickle.Unpickler):
     """Restricted loader for the NumPy arrays in official ACT statistics."""
 
-    _ALLOWED_GLOBALS = {
+    _ALLOWED_GLOBALS: ClassVar[set] = {
         ("numpy", "dtype"),
         ("numpy", "ndarray"),
         ("numpy.core.multiarray", "_reconstruct"),
@@ -20,9 +21,7 @@ class _DatasetStatsUnpickler(pickle.Unpickler):
 
     def find_class(self, module: str, name: str) -> Any:
         if (module, name) not in self._ALLOWED_GLOBALS:
-            raise pickle.UnpicklingError(
-                f"ACT dataset statistics contain a forbidden pickle global: {module}.{name}"
-            )
+            raise pickle.UnpicklingError(f"ACT dataset statistics contain a forbidden pickle global: {module}.{name}")
         return super().find_class(module, name)
 
 

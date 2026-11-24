@@ -7,6 +7,7 @@ groups:
 - text_to_video
 source_repos:
 - url: https://github.com/modelscope/modelscope
+  revision: 13064d9486d7f4be46294860767b1e93e149104f
 checkpoints:
 - repo_id: ali-vilab/modelscope-damo-text-to-video-synthesis
   role: t2v_checkpoint

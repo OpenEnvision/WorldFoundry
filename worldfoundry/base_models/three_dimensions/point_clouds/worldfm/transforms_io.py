@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 
@@ -19,7 +19,7 @@ class CameraFrame:
     id: int
     width: int
     height: int
-    K_3x3: np.ndarray   # float64 (3,3)
+    K_3x3: np.ndarray  # float64 (3,3)
     c2w_4x4: np.ndarray  # float64 (4,4)
 
 
@@ -52,26 +52,29 @@ def _as_4x4(mat) -> np.ndarray:
     raise ValueError(f"Expected (4,4) or (3,4), got {m.shape}")
 
 
-def _frame_K(frame: Dict[str, Any]) -> np.ndarray:
+def _frame_K(frame: dict[str, Any]) -> np.ndarray:
     if "K" in frame and frame["K"] is not None:
         K = np.asarray(frame["K"], dtype=np.float64)
         if K.shape != (3, 3):
             raise ValueError(f"frame['K'] must be (3,3), got {K.shape}")
         return K
-    return np.asarray([
-        [float(frame["fx"]), 0.0, float(frame["cx"])],
-        [0.0, float(frame["fy"]), float(frame["cy"])],
-        [0.0, 0.0, 1.0],
-    ], dtype=np.float64)
+    return np.asarray(
+        [
+            [float(frame["fx"]), 0.0, float(frame["cx"])],
+            [0.0, float(frame["fy"]), float(frame["cy"])],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
 
 
-def load_camera_frames(transforms_json_path: str) -> List[CameraFrame]:
+def load_camera_frames(transforms_json_path: str) -> list[CameraFrame]:
     """Load transforms_*.json -> list of CameraFrame."""
     p = Path(transforms_json_path)
     with p.open("r", encoding="utf-8") as f:
         data = json.load(f)
     frames = data.get("frames", [])
-    out: List[CameraFrame] = []
+    out: list[CameraFrame] = []
     for i, fr in enumerate(frames):
         try:
             fid = int(fr.get("id", i + 1))
@@ -85,10 +88,10 @@ def load_camera_frames(transforms_json_path: str) -> List[CameraFrame]:
     return out
 
 
-def load_camera_frames_from_dict(transforms_dict: Dict) -> List[CameraFrame]:
+def load_camera_frames_from_dict(transforms_dict: dict) -> list[CameraFrame]:
     """Same as load_camera_frames but from in-memory dict (no file I/O)."""
     frames = transforms_dict.get("frames", [])
-    out: List[CameraFrame] = []
+    out: list[CameraFrame] = []
     for i, fr in enumerate(frames):
         fid = int(fr.get("id", i + 1))
         w = int(fr["width"])

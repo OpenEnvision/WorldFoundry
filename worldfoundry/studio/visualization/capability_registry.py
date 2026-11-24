@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 BASE_MODELS_ROOT = REPO_ROOT / "worldfoundry" / "base_models"
@@ -39,7 +40,7 @@ class ModelVisualizationCapability:
     def family(self) -> str:
         return self.package.split("/", 1)[0]
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["family"] = self.family
         payload["backends"] = sorted({RENDER_BACKENDS[item] for item in self.renderers})
@@ -73,12 +74,6 @@ MODEL_VISUALIZATION_CAPABILITIES = (
         "three_dimensions/depth/depth_anything/depth_anything_v3/api.py",
     ),
     _cap(
-        "dvlt",
-        "three_dimensions/depth/dvlt",
-        ("depth", "normal", "camera", "point-cloud"),
-        "three_dimensions/depth/dvlt/viz/camera_overlay.py",
-    ),
-    _cap(
         "metric3d",
         "three_dimensions/depth/metric3d",
         ("depth", "normal"),
@@ -104,12 +99,6 @@ MODEL_VISUALIZATION_CAPABILITIES = (
         "three_dimensions/depth/unidepth/models/unidepthv2/unidepthv2.py",
     ),
     _cap(
-        "unik3d",
-        "three_dimensions/depth/unik3d",
-        ("depth", "normal", "point-cloud"),
-        "three_dimensions/depth/unik3d/unik3d.py",
-    ),
-    _cap(
         "longvie-video-depth",
         "three_dimensions/depth/video_depth_anything_longvie",
         ("depth", "media"),
@@ -122,12 +111,6 @@ MODEL_VISUALIZATION_CAPABILITIES = (
         "three_dimensions/depth/videodepthanything/video_depth.py",
     ),
     # Reconstruction, dynamic scenes, splats, and SLAM.
-    _cap(
-        "dust3r",
-        "three_dimensions/general_3d/dust3r",
-        ("point-cloud", "mesh", "viser"),
-        "three_dimensions/general_3d/dust3r/dust3r/viz/scene3d_dust.py",
-    ),
     _cap(
         "4d-gaussians",
         "three_dimensions/general_3d/four_d_gaussians",
@@ -153,28 +136,10 @@ MODEL_VISUALIZATION_CAPABILITIES = (
         "three_dimensions/general_3d/mast3r/mast3r/cloud_opt/sparse_ga.py",
     ),
     _cap(
-        "monst3r",
-        "three_dimensions/general_3d/monst3r",
-        ("point-cloud", "mesh", "viser", "rerun"),
-        "three_dimensions/general_3d/monst3r/demo.py",
-    ),
-    _cap(
         "mvdiffusion",
         "three_dimensions/general_3d/mvdiffusion",
         ("media",),
         "three_dimensions/general_3d/mvdiffusion/mvdiffusion_runtime/demo.py",
-    ),
-    _cap(
-        "splatt3r",
-        "three_dimensions/general_3d/splatt3r",
-        ("gaussian-splat",),
-        "three_dimensions/general_3d/splatt3r/splatt3r_runtime/utils/export.py",
-    ),
-    _cap(
-        "stable-virtual-camera",
-        "three_dimensions/general_3d/stable_virtual_camera",
-        ("media", "camera"),
-        "three_dimensions/general_3d/stable_virtual_camera/stable_virtual_camera_runtime/demo.py",
     ),
     _cap(
         "vipe",
@@ -240,7 +205,7 @@ MODEL_VISUALIZATION_CAPABILITIES = (
         "pixelsplat",
         "three_dimensions/point_clouds/pixelsplat",
         ("media",),
-        "three_dimensions/point_clouds/pixelsplat/decoder_splatting_cuda.py",
+        "three_dimensions/point_clouds/pixelsplat/src/model/decoder/decoder_splatting_cuda.py",
     ),
     _cap(
         "vggt",
@@ -273,12 +238,6 @@ MODEL_VISUALIZATION_CAPABILITIES = (
         ("text", "media"),
         "perception_core/action_recognition/umt/models/modeling_finetune.py",
     ),
-    _cap(
-        "videomae-mmaction",
-        "perception_core/action_recognition/videomae_mmaction",
-        ("text", "media"),
-        "perception_core/action_recognition/videomae_mmaction/configs/_base_/default_runtime.py",
-    ),
     _cap("grit", "perception_core/captioning/grit", ("detection", "text"), "perception_core/captioning/grit/model.py"),
     _cap(
         "tag2text", "perception_core/captioning/tag2text", ("text",), "perception_core/captioning/tag2text/tag2text.py"
@@ -294,12 +253,6 @@ MODEL_VISUALIZATION_CAPABILITIES = (
         "perception_core/detection/yolo_world",
         ("detection",),
         "perception_core/detection/yolo_world/mmyolo/demo/image_demo.py",
-    ),
-    _cap(
-        "deepface",
-        "perception_core/face/deepface",
-        ("detection", "text", "media"),
-        "perception_core/face/deepface/deepface/commons/realtime.py",
     ),
     _cap(
         "amt",
@@ -354,22 +307,10 @@ MODEL_VISUALIZATION_CAPABILITIES = (
         "nudenet", "perception_core/safety/nudenet", ("detection", "text"), "perception_core/safety/nudenet/nudenet.py"
     ),
     _cap(
-        "efficient-sam",
-        "perception_core/segment/efficient_sam",
-        ("mask",),
-        "perception_core/segment/efficient_sam/efficient_sam.py",
-    ),
-    _cap(
         "grounded-sam",
         "perception_core/segment/grounded_segment_anything",
         ("detection", "mask"),
         "perception_core/segment/grounded_segment_anything/pipeline.py",
-    ),
-    _cap(
-        "mobile-sam",
-        "perception_core/segment/mobile_sam",
-        ("mask",),
-        "perception_core/segment/mobile_sam/predictor.py",
     ),
     _cap(
         "repvit-sam",
@@ -419,7 +360,7 @@ def visualization_capabilities(
     )
 
 
-def visualization_inventory(*, family: str | None = None, model_id: str | None = None) -> dict[str, object]:
+def visualization_inventory(*, family: str | None = None, model_id: str | None = None) -> dict[str, Any]:
     entries = visualization_capabilities(family=family, model_id=model_id)
     return {
         "schema_version": 1,

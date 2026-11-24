@@ -83,7 +83,7 @@ def reduce_dict(input_dict, average=True):
         dist.reduce(values, dst=0)
         if dist.get_rank() == 0 and average:
             values /= world_size
-    return {key: value for key, value in zip(keys, values)}
+    return dict(zip(keys, values, strict=False))
 
 
 def data_sampler(dataset, shuffle, distributed):

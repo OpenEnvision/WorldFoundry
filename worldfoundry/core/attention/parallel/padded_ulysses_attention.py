@@ -32,7 +32,6 @@ import torch.distributed as dist
 from worldfoundry.core.attention import attention
 from worldfoundry.core.distributed.sequence_parallel.ops import all_to_all, all_to_all_many
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Padded Ulysses — head-pad so all-to-all shapes match when Nq % p != 0
 # ──────────────────────────────────────────────────────────────────────────

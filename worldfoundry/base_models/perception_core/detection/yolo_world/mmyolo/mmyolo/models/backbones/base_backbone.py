@@ -1,6 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from abc import ABCMeta, abstractmethod
-from typing import List, Sequence, Union
+from collections.abc import Sequence
 
 import torch
 import torch.nn as nn
@@ -74,29 +74,30 @@ class BaseBackbone(BaseModule, metaclass=ABCMeta):
             Defaults to None.
     """
 
-    def __init__(self,
-                 arch_setting: list,
-                 deepen_factor: float = 1.0,
-                 widen_factor: float = 1.0,
-                 input_channels: int = 3,
-                 out_indices: Sequence[int] = (2, 3, 4),
-                 frozen_stages: int = -1,
-                 plugins: Union[dict, List[dict]] = None,
-                 norm_cfg: ConfigType = None,
-                 act_cfg: ConfigType = None,
-                 norm_eval: bool = False,
-                 init_cfg: OptMultiConfig = None):
+    def __init__(
+        self,
+        arch_setting: list,
+        deepen_factor: float = 1.0,
+        widen_factor: float = 1.0,
+        input_channels: int = 3,
+        out_indices: Sequence[int] = (2, 3, 4),
+        frozen_stages: int = -1,
+        plugins: dict | list[dict] | None = None,
+        norm_cfg: ConfigType = None,
+        act_cfg: ConfigType = None,
+        norm_eval: bool = False,
+        init_cfg: OptMultiConfig = None,
+    ):
         super().__init__(init_cfg)
         self.num_stages = len(arch_setting)
         self.arch_setting = arch_setting
 
-        assert set(out_indices).issubset(
-            i for i in range(len(arch_setting) + 1))
+        assert set(out_indices).issubset(i for i in range(len(arch_setting) + 1))
 
         if frozen_stages not in range(-1, len(arch_setting) + 1):
-            raise ValueError('"frozen_stages" must be in range(-1, '
-                             'len(arch_setting) + 1). But received '
-                             f'{frozen_stages}')
+            raise ValueError(
+                f'"frozen_stages" must be in range(-1, len(arch_setting) + 1). But received {frozen_stages}'
+            )
 
         self.input_channels = input_channels
         self.out_indices = out_indices
@@ -109,20 +110,19 @@ class BaseBackbone(BaseModule, metaclass=ABCMeta):
         self.plugins = plugins
 
         self.stem = self.build_stem_layer()
-        self.layers = ['stem']
+        self.layers = ["stem"]
 
         for idx, setting in enumerate(arch_setting):
             stage = []
             stage += self.build_stage_layer(idx, setting)
             if plugins is not None:
                 stage += self.make_stage_plugins(plugins, idx, setting)
-            self.add_module(f'stage{idx + 1}', nn.Sequential(*stage))
-            self.layers.append(f'stage{idx + 1}')
+            self.add_module(f"stage{idx + 1}", nn.Sequential(*stage))
+            self.layers.append(f"stage{idx + 1}")
 
     @abstractmethod
     def build_stem_layer(self):
         """Build a stem layer."""
-        pass
 
     @abstractmethod
     def build_stage_layer(self, stage_idx: int, setting: list):
@@ -132,7 +132,6 @@ class BaseBackbone(BaseModule, metaclass=ABCMeta):
             stage_idx (int): The index of a stage layer.
             setting (list): The architecture setting of a stage layer.
         """
-        pass
 
     def make_stage_plugins(self, plugins, stage_idx, setting):
         """Make plugins for backbone ``stage_idx`` th stage.
@@ -185,11 +184,10 @@ class BaseBackbone(BaseModule, metaclass=ABCMeta):
         plugin_layers = []
         for plugin in plugins:
             plugin = plugin.copy()
-            stages = plugin.pop('stages', None)
+            stages = plugin.pop("stages", None)
             assert stages is None or len(stages) == self.num_stages
             if stages is None or stages[stage_idx]:
-                name, layer = build_plugin_layer(
-                    plugin['cfg'], in_channels=in_channels)
+                name, layer = build_plugin_layer(plugin["cfg"], in_channels=in_channels)
                 plugin_layers.append(layer)
         return plugin_layers
 

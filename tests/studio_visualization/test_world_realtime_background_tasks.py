@@ -16,9 +16,7 @@ from pathlib import Path
 
 import pytest
 
-realtime_backend = pytest.importorskip(
-    "worldfoundry.studio.visualization.backends.world_realtime"
-)
+realtime_backend = pytest.importorskip("worldfoundry.studio.visualization.backends.world_realtime")
 
 
 def _manager() -> "realtime_backend.RealtimePeerManager":

@@ -61,8 +61,9 @@ export function liveEmbedCandidates(board: BenchmarkLeaderboardBoard): string[] 
     return candidates;
   }
 
+  // Other hosts are embedded only when the board names an explicit leaderboard view;
+  // project homepages are linked instead of framed.
   push(board.liveEmbedUrl);
-  if (board.kind === 'live') push(board.liveUrl);
   return candidates;
 }
 

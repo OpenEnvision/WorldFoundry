@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,7 +16,7 @@ class DreamZeroOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "world_action_model_zero_shot_policy"
     ACTION_REPRESENTATION = "droid_joint_gripper_action_chunk_plus_predicted_video"
     OBSERVATION_LAYOUT = "droid_three_camera_video_language_state"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "instruction": True,
         "image": True,
@@ -30,25 +31,29 @@ class DreamZeroOperator(EmbodiedActionOperator):
             "video_prediction",
         ],
     }
-    OFFICIAL_CAMERA_KEYS = {
+    OFFICIAL_CAMERA_KEYS: ClassVar[dict[str, str]] = {
         "exterior_image_1_left": "video.exterior_image_1_left",
         "exterior_image_2_left": "video.exterior_image_2_left",
         "wrist_image_left": "video.wrist_image_left",
     }
-    OFFICIAL_ROBOARENA_KEYS = {
+    OFFICIAL_ROBOARENA_KEYS: ClassVar[dict[str, str]] = {
         "exterior_image_1_left": "observation/exterior_image_0_left",
         "exterior_image_2_left": "observation/exterior_image_1_left",
         "wrist_image_left": "observation/wrist_image_left",
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
-        instruction = prompt if prompt not in (None, "") else _first_present(
-            kwargs,
-            "instruction",
-            "task_instruction",
-            "action_text",
-            "annotation.language.action_text",
+        instruction = (
+            prompt
+            if prompt not in (None, "")
+            else _first_present(
+                kwargs,
+                "instruction",
+                "task_instruction",
+                "action_text",
+                "annotation.language.action_text",
+            )
         )
         instruction = "" if instruction is None else str(instruction)
         return {
@@ -67,7 +72,7 @@ class DreamZeroOperator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         camera_views = _compact_dict(
             {
@@ -130,7 +135,7 @@ class DreamZeroOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
         actions = _extract_action_signal(

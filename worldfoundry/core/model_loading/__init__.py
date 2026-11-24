@@ -12,11 +12,10 @@ from importlib import import_module
 from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────────
-# Lazy export table — do not import LoRA / file / factory at package import
+# Lazy export table — do not import LoRA / checkpoint / model modules at package import
 # ──────────────────────────────────────────────────────────────────────────
 
 _EXPORT_MODULES = {
-    "audit_wan_lora_targets": "worldfoundry.core.model_loading.peft",
     "merge_peft_adapter": "worldfoundry.core.model_loading.peft",
     "GeneralLoRALoader": "worldfoundry.core.model_loading.lora",
     "LightX2VLoRALoader": "worldfoundry.core.model_loading.lora",
@@ -29,13 +28,10 @@ _EXPORT_MODULES = {
     "QuantizationMode": "worldfoundry.core.model_loading.policy",
     "QuantizationPolicy": "worldfoundry.core.model_loading.policy",
     "RuntimePolicy": "worldfoundry.core.model_loading.policy",
-    "count_parameters": "worldfoundry.core.model_loading.factory",
-    "count_params": "worldfoundry.core.model_loading.factory",
     "convert_keys_dict_to_single_str": "worldfoundry.core.model_loading.checkpoints.file",
     "convert_state_dict_keys_to_single_str": "worldfoundry.core.model_loading.checkpoints.file",
     "convert_state_dict_to_keys_dict": "worldfoundry.core.model_loading.checkpoints.file",
     "get_init_context": "worldfoundry.core.model_loading.model",
-    "get_obj_from_str": "worldfoundry.core.model_loading.factory",
     "hash_model_file": "worldfoundry.core.model_loading.checkpoints.file",
     "hash_state_dict_keys": "worldfoundry.core.model_loading.checkpoints.file",
     "build_rename_dict": "worldfoundry.core.model_loading.checkpoints.file",
@@ -54,12 +50,10 @@ _EXPORT_MODULES = {
     "load_state_dict_from_safetensors_index": "worldfoundry.core.model_loading.checkpoints.file",
     "load_torch_checkpoint": "worldfoundry.core.model_loading.checkpoints.file",
     "load_torch_state_dict": "worldfoundry.core.model_loading.checkpoints.file",
-    "instantiate_from_config": "worldfoundry.core.model_loading.factory",
     "non_strict_load_model": "worldfoundry.core.model_loading.checkpoints.state_dict",
     "search_for_embeddings": "worldfoundry.core.model_loading.checkpoints.file",
     "search_for_files": "worldfoundry.core.model_loading.checkpoints.file",
     "search_parameter": "worldfoundry.core.model_loading.checkpoints.file",
-    "resolve_symbol": "worldfoundry.core.model_loading.factory",
     "split_state_dict_with_prefix": "worldfoundry.core.model_loading.checkpoints.file",
     "ModelLoaderRegistry": "worldfoundry.core.model_loading.registry_config",
 }

@@ -3,22 +3,22 @@
 from __future__ import annotations
 
 import importlib.util
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
+from worldfoundry.core.execution.process import package_module_command
 from worldfoundry.core.io.paths import checkpoint_root_path, project_root
 from worldfoundry.runtime.assets import expand_worldfoundry_path
 from worldfoundry.synthesis.visual_generation.runtime_manifest import command_settings
 
-
 PACKAGE_DIR = Path(__file__).resolve().parent
 RUNTIME_DIR = PACKAGE_DIR / "genie_envisioner_runtime"
 OFFICIAL_ENTRYPOINT = PACKAGE_DIR / "infer.py"
+ENTRYPOINT_MODULE = "worldfoundry.synthesis.visual_generation.genie_envisioner.infer"
 OFFICIAL_REPO_URL = "https://github.com/AgibotTech/Genie-Envisioner"
 
-DEFAULT_CHECKPOINT_PATH = checkpoint_root_path(
-    "agibot-world--Genie-Envisioner", "GE_base_fast_v0.1.safetensors"
-)
+DEFAULT_CHECKPOINT_PATH = checkpoint_root_path("agibot-world--Genie-Envisioner", "GE_base_fast_v0.1.safetensors")
 DEFAULT_BASE_MODEL_DIR = checkpoint_root_path("Lightricks--LTX-Video")
 DEFAULT_INPUT_IMAGE = (
     project_root(__file__)
@@ -122,9 +122,7 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile) -> list[
             }
         )
 
-    checkpoint_missing = _missing_file(
-        _checkpoint_path(options), "Genie Envisioner checkpoint is missing or empty"
-    )
+    checkpoint_missing = _missing_file(_checkpoint_path(options), "Genie Envisioner checkpoint is missing or empty")
     if checkpoint_missing is not None:
         missing.append(checkpoint_missing)
 
@@ -192,9 +190,7 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile) -> list[
     else:
         image = _path_option(options, "image_path", "input_image", default=DEFAULT_INPUT_IMAGE)
         if not image.is_file():
-            missing.append(
-                {"kind": "asset", "path": str(image), "reason": "Genie Envisioner input image is missing"}
-            )
+            missing.append({"kind": "asset", "path": str(image), "reason": "Genie Envisioner input image is missing"})
 
     for module_name in (
         "torch",
@@ -219,9 +215,7 @@ def missing_requirements(*, options, runtime_root, entrypoint, profile) -> list[
 def build_command(context: Mapping[str, Any]) -> list[str]:
     settings = command_settings(context)
     input_mode = str(settings.get("input_mode", "explicit-three-view"))
-    command = [
-        str(context["python"]),
-        str(context["entrypoint"]),
+    args = [
         "--checkpoint-path",
         str(_checkpoint_path(settings)),
         "--base-model-dir",
@@ -261,11 +255,11 @@ def build_command(context: Mapping[str, Any]) -> list[str]:
         views = _input_views(settings)
         if len(views) != 3:
             raise ValueError("Genie Envisioner explicit-three-view mode requires exactly three input_views")
-        command[6:6] = ["--input-views", *(str(view) for view in views)]
+        args[4:4] = ["--input-views", *(str(view) for view in views)]
     else:
         image = _path_option(settings, "image_path", "input_image", default=DEFAULT_INPUT_IMAGE)
-        command[6:6] = ["--input-image", str(image)]
-    return command
+        args[4:4] = ["--input-image", str(image)]
+    return package_module_command(ENTRYPOINT_MODULE, args, python_executable=str(context["python"]))
 
 
 __all__ = [
@@ -275,6 +269,7 @@ __all__ = [
     "DEFAULT_INPUT_IMAGE",
     "DEFAULT_INPUT_VIEWS",
     "DEFAULT_PROMPT",
+    "ENTRYPOINT_MODULE",
     "OFFICIAL_ENTRYPOINT",
     "RUNTIME_DIR",
     "build_command",

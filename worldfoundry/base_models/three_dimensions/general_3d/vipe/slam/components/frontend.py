@@ -18,8 +18,6 @@
 # Licensed under the MIT License.
 # -------------------------------------------------------------------------------------------------
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> components -> frontend.py functionality."""
-
 import torch
 from omegaconf import DictConfig
 
@@ -37,14 +35,6 @@ class SLAMFrontend:
     """
 
     def __init__(self, net: DroidNet, video: GraphBuffer, args: DictConfig, device: torch.device):
-        """Init.
-
-        Args:
-            net: The net.
-            video: The video.
-            args: The args.
-            device: The device.
-        """
         self.video = video
         self.graph = FactorGraph(
             net,
@@ -77,7 +67,6 @@ class SLAMFrontend:
         self.has_init_pose = args.has_init_pose
 
     def __init_pose(self):
-        """Helper function to init pose."""
         assert self.t1 > 1
         p1 = SE3(self.video.poses[self.t1 - 2])
         p2 = SE3(self.video.poses[self.t1 - 1])

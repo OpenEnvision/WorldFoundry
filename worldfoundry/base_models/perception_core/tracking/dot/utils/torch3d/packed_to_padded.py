@@ -60,9 +60,7 @@ class _PackedToPadded(Function):
         return grad_input, None, None
 
 
-def packed_to_padded(
-    inputs: torch.Tensor, first_idxs: torch.LongTensor, max_size: int
-) -> torch.Tensor:
+def packed_to_padded(inputs: torch.Tensor, first_idxs: torch.LongTensor, max_size: int) -> torch.Tensor:
     """
     Torch wrapper that handles allowed input shapes. See description below.
 
@@ -87,10 +85,7 @@ def packed_to_padded(
     # if inputs is of shape (F,), reshape into (F, 1)
     input_shape = inputs.shape
     n_dims = inputs.dim()
-    if n_dims == 1:
-        inputs = inputs.unsqueeze(1)
-    else:
-        inputs = inputs.reshape(input_shape[0], -1)
+    inputs = inputs.unsqueeze(1) if n_dims == 1 else inputs.reshape(input_shape[0], -1)
     inputs_padded = _PackedToPadded.apply(inputs, first_idxs, max_size)
     # if flat is True, reshape output to (N, max_size) from (N, max_size, 1)
     # else reshape output to (N, max_size, ...)
@@ -183,10 +178,7 @@ def padded_to_packed(
 
     # if inputs is of shape (N, max_size), reshape into (N, max_size, 1))
     input_shape = inputs.shape
-    if n_dims == 2:
-        inputs = inputs.unsqueeze(2)
-    else:
-        inputs = inputs.reshape(*input_shape[:2], -1)
+    inputs = inputs.unsqueeze(2) if n_dims == 2 else inputs.reshape(*input_shape[:2], -1)
     inputs_packed = _PaddedToPacked.apply(inputs, first_idxs, num_inputs)
     # if input is flat, reshape output to (F,) from (F, 1)
     # else reshape output to (F, ...)

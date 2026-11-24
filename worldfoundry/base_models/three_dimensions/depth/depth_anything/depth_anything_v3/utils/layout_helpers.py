@@ -22,13 +22,15 @@
 Images are assumed to be float32 tensors with shape (channel, height, width).
 """
 
-from typing import Any, Generator, Iterable, Literal, Union
+from collections.abc import Generator, Iterable
+from typing import Any, Literal, Union
+
 import torch
 from torch import Tensor
 
 Alignment = Literal["start", "center", "end"]
 Axis = Literal["horizontal", "vertical"]
-Color = Union[
+Color = Union[  # noqa: UP007 - Runtime type alias kept as typing.Union.
     int,
     float,
     Iterable[int],
@@ -39,37 +41,17 @@ Color = Union[
 
 
 def _sanitize_color(color: Color) -> Tensor:  # "#channel"
-    """Helper function to sanitize color.
-
-    Args:
-        color: The color.
-
-    Returns:
-        The return value.
-    """
     # Convert tensor to list (or individual item).
     if isinstance(color, torch.Tensor):
         color = color.tolist()
 
     # Turn iterators and individual items into lists.
-    if isinstance(color, Iterable):
-        color = list(color)
-    else:
-        color = [color]
+    color = list(color) if isinstance(color, Iterable) else [color]
 
     return torch.tensor(color, dtype=torch.float32)
 
 
 def _intersperse(iterable: Iterable, delimiter: Any) -> Generator[Any, None, None]:
-    """Helper function to intersperse.
-
-    Args:
-        iterable: The iterable.
-        delimiter: The delimiter.
-
-    Returns:
-        The return value.
-    """
     it = iter(iterable)
     yield next(it)
     for item in it:
@@ -78,14 +60,6 @@ def _intersperse(iterable: Iterable, delimiter: Any) -> Generator[Any, None, Non
 
 
 def _get_main_dim(main_axis: Axis) -> int:
-    """Helper function to get main dim.
-
-    Args:
-        main_axis: The main axis.
-
-    Returns:
-        The return value.
-    """
     return {
         "horizontal": 2,
         "vertical": 1,
@@ -93,14 +67,6 @@ def _get_main_dim(main_axis: Axis) -> int:
 
 
 def _get_cross_dim(main_axis: Axis) -> int:
-    """Helper function to get cross dim.
-
-    Args:
-        main_axis: The main axis.
-
-    Returns:
-        The return value.
-    """
     return {
         "horizontal": 1,
         "vertical": 2,
@@ -108,16 +74,6 @@ def _get_cross_dim(main_axis: Axis) -> int:
 
 
 def _compute_offset(base: int, overlay: int, align: Alignment) -> slice:
-    """Helper function to compute offset.
-
-    Args:
-        base: The base.
-        overlay: The overlay.
-        align: The align.
-
-    Returns:
-        The return value.
-    """
     assert base >= overlay
     offset = {
         "start": 0,
@@ -134,18 +90,6 @@ def overlay(
     main_axis_alignment: Alignment,
     cross_axis_alignment: Alignment,
 ) -> Tensor:  # "channel base_height base_width"
-    """Overlay.
-
-    Args:
-        base: The base.
-        overlay: The overlay.
-        main_axis: The main axis.
-        main_axis_alignment: The main axis alignment.
-        cross_axis_alignment: The cross axis alignment.
-
-    Returns:
-        The return value.
-    """
     # The overlay must be smaller than the base.
     _, base_height, base_width = base.shape
     _, overlay_height, overlay_width = overlay.shape
@@ -153,15 +97,11 @@ def overlay(
 
     # Compute spacing on the main dimension.
     main_dim = _get_main_dim(main_axis)
-    main_slice = _compute_offset(
-        base.shape[main_dim], overlay.shape[main_dim], main_axis_alignment
-    )
+    main_slice = _compute_offset(base.shape[main_dim], overlay.shape[main_dim], main_axis_alignment)
 
     # Compute spacing on the cross dimension.
     cross_dim = _get_cross_dim(main_axis)
-    cross_slice = _compute_offset(
-        base.shape[cross_dim], overlay.shape[cross_dim], cross_axis_alignment
-    )
+    cross_slice = _compute_offset(base.shape[cross_dim], overlay.shape[cross_dim], cross_axis_alignment)
 
     # Combine the slices and paste the overlay onto the base accordingly.
     selector = [..., None, None]
@@ -261,21 +201,9 @@ def add_border(
     border: int = 8,
     color: Color = 1,
 ) -> Tensor:  # "channel new_height new_width"
-    """Add border.
-
-    Args:
-        image: The image.
-        border: The border.
-        color: The color.
-
-    Returns:
-        The return value.
-    """
     color = _sanitize_color(color).to(image)
     c, h, w = image.shape
-    result = torch.empty(
-        (c, h + 2 * border, w + 2 * border), dtype=torch.float32, device=image.device
-    )
+    result = torch.empty((c, h + 2 * border, w + 2 * border), dtype=torch.float32, device=image.device)
     result[:] = color[:, None, None]
     result[:, border : h + border, border : w + border] = image
     return result

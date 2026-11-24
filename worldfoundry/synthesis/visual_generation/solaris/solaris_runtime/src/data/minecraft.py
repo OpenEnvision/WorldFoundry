@@ -1,4 +1,3 @@
-
 import numpy as np
 
 from .utils import resize_letterbox
@@ -93,33 +92,30 @@ def read_act_slice_vpt(
     start,
     stop,
 ):
-
     attack_is_stuck = False
     last_hotbar = 0
 
     episode_actions = []
-    for i in range(0, stop):
+    for i in range(stop):
         step_data = actions_json[i]
         if i == 0:
             # Check if attack will be stuck down
             if step_data["mouse"]["newButtons"] == [0]:
                 attack_is_stuck = True
-        elif attack_is_stuck:
+        elif attack_is_stuck:  # noqa: SIM102 - Branches carry per-case comments.
             # Check if we press attack down, then it might not be stuck
             if 0 in step_data["mouse"]["newButtons"]:
                 attack_is_stuck = False
         # If still stuck, remove the action
         if attack_is_stuck:
-            step_data["mouse"]["buttons"] = [
-                button for button in step_data["mouse"]["buttons"] if button != 0
-            ]
+            step_data["mouse"]["buttons"] = [button for button in step_data["mouse"]["buttons"] if button != 0]
 
         action, _ = json_action_to_env_action(step_data)
 
         # Update hotbar selection
         current_hotbar = step_data["hotbar"]
         if current_hotbar != last_hotbar:
-            action["hotbar.{}".format(current_hotbar + 1)] = 1
+            action[f"hotbar.{current_hotbar + 1}"] = 1
         last_hotbar = current_hotbar
 
         if i < start:
@@ -210,17 +206,11 @@ def read_obs_slice_decord(
         # Shift frames to the right by one so that frame at t is influenced by action at t.
         frames = video.get_batch(range(start + 1, stop + 1)).asnumpy()
     except Exception as e:
-        raise ValueError(
-            f"Could not read frames from video: {e}. "
-            "Ensure the video is properly loaded and the range is valid."
+        raise ValueError(  # noqa: B904 - Keeps the implicit exception context.
+            f"Could not read frames from video: {e}. Ensure the video is properly loaded and the range is valid."
         )
 
-    episode_frames = np.array(
-        [
-            resize_letterbox(frame, *resize) if resize is not None else frame
-            for frame in frames
-        ]
-    )
+    episode_frames = np.array([resize_letterbox(frame, *resize) if resize is not None else frame for frame in frames])
     return episode_frames
 
 
@@ -281,10 +271,8 @@ def convert_act_slice_mineflayer(
         if action_data["mine"]:
             actions_one_hot[i, ACTION_KEYS.index("attack")] = 1  # LMB
         for hotbar_idx in range(HOTBAR_KEYS_NUM):
-            if action_data.get("hotbar.{}".format(hotbar_idx + 1)):
-                actions_one_hot[
-                    i, ACTION_KEYS.index("hotbar.{}".format(hotbar_idx + 1))
-                ] = 1
+            if action_data.get(f"hotbar.{hotbar_idx + 1}"):
+                actions_one_hot[i, ACTION_KEYS.index(f"hotbar.{hotbar_idx + 1}")] = 1
 
         # Convert camera values from radians to degrees (no normalization)
         # MineFlayer camera: [yaw, pitch] in radians

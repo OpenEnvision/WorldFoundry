@@ -55,7 +55,7 @@ def common_broadcast(x: Tensor, y: Tensor) -> tuple[Tensor, Tensor]:
 
     common_ndims = min(ndims1, ndims2)
     for axis in range(common_ndims):
-        assert x.shape[axis] == y.shape[axis], "Dimensions not equal at axis {}".format(axis)
+        assert x.shape[axis] == y.shape[axis], f"Dimensions not equal at axis {axis}"
 
     if ndims1 < ndims2:
         x = x.reshape(x.shape + (1,) * (ndims2 - ndims1))
@@ -118,7 +118,7 @@ def stack_or_pad_tensors(
     if padding_value is None:
         padding_value = False if values[0].dtype == torch.bool else 0
     return torch.nn.utils.rnn.pad_sequence(
-        tuple(values),
+        list(values),
         batch_first=True,
         padding_value=padding_value,
     )

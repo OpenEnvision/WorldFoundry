@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from ..pipeline_utils import PipelineABC
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
-from ...synthesis.visual_generation.solaris.solaris_synthesis import SolarisSynthesis
 from ...synthesis.visual_generation.solaris.runtime_env import normalize_eval_types
+from ...synthesis.visual_generation.solaris.solaris_synthesis import SolarisSynthesis
+from ..pipeline_utils import PipelineABC
 
 
 class SolarisPipeline(PipelineABC):
@@ -16,7 +16,7 @@ class SolarisPipeline(PipelineABC):
 
     def __init__(
         self,
-        synthesis_model: Optional[SolarisSynthesis] = None,
+        synthesis_model: SolarisSynthesis | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype=torch.bfloat16,
@@ -27,15 +27,15 @@ class SolarisPipeline(PipelineABC):
         self.weight_dtype = weight_dtype
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]  # model-specific loader arguments, passed by keyword
         cls,
-        model_path: Optional[str] = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        model_path: str | None = None,
+        required_components: dict[str, Any] | None = None,
         device: str = "cuda",
         # Use bfloat16 precision to balance memory efficiency and numeric range
         weight_dtype=torch.bfloat16,
         **kwargs,
-    ) -> "SolarisPipeline":
+    ) -> SolarisPipeline:
         """Load the pipeline from pretrained checkpoints and configurations."""
         required_components = required_components or {}
         synthesis_model = SolarisSynthesis.from_pretrained(
@@ -58,7 +58,7 @@ class SolarisPipeline(PipelineABC):
             weight_dtype=weight_dtype,
         )
 
-    def process(self, eval_types: Optional[object] = None) -> Dict[str, Any]:
+    def process(self, eval_types: object | None = None) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
         return {
             "eval_types": normalize_eval_types(eval_types),
@@ -66,17 +66,17 @@ class SolarisPipeline(PipelineABC):
 
     def __call__(
         self,
-        eval_types: Optional[object] = None,
+        eval_types: object | None = None,
         *,
         experiment_name: str = "solaris_worldfoundry",
-        output_dir: Optional[str] = None,
-        eval_num_samples: Optional[int] = None,
-        num_workers: Optional[int] = None,
-        num_frames_eval: Optional[int] = None,
-        enable_jax_cache: Optional[bool] = None,
-        checkpoint_dir: Optional[str] = None,
-        jax_cache_dir: Optional[str] = None,
-        model_weights_path: Optional[str] = None,
+        output_dir: str | None = None,
+        eval_num_samples: int | None = None,
+        num_workers: int | None = None,
+        num_frames_eval: int | None = None,
+        enable_jax_cache: bool | None = None,
+        checkpoint_dir: str | None = None,
+        jax_cache_dir: str | None = None,
+        model_weights_path: str | None = None,
         return_dict: bool = False,
         show_progress: bool = True,
     ):

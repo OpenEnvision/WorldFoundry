@@ -1,15 +1,16 @@
-id: hunyuanworld-1
+schema_version: 2
+model_id: hunyuanworld-1
 display_name: HunyuanWorld 1.0
 task_family: world_model
 artifact_kind: generated_world
 artifact_filename: hunyuanworld_1_runtime_plan.json
-backend_stage: worldfoundry_runtime_plan
-integration_status: runtime_ported
-runtime_status: route_ready_assets_pending
 execution:
   pipeline_binding: hunyuanworld-1
   backend_stage: worldfoundry_runtime_plan
   runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
 notes:
 - HunyuanWorld 1.0 official source route is registered; checkpoints and third-party
   assets are runtime-gated.

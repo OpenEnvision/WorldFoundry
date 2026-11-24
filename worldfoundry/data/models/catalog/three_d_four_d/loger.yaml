@@ -14,6 +14,7 @@ official_sources:
   paper: https://arxiv.org/abs/2603.03269
   github:
     url: https://github.com/Junyi42/LoGeR
+    revision: 7685b7a41949e62ed8a69309642465aee4cb89ba
   huggingface:
   - repo_id: Junyi42/LoGeR
     type: model
@@ -22,7 +23,7 @@ integration:
   status: verified
   notes:
   - In-tree LoGeR point-cloud navigation pipeline is registered for reconstruction and trajectory rendering.
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: loger
 runner_parity:
   status: verified
@@ -35,13 +36,9 @@ docs:
   publisher: Open-source research release (institution not recorded)
   publisher_kind: lab
   publisher_zh: 开源研究发布（仓库未记录正式机构）
-  overview: 'LoGeR reconstructs 3D scenes with camera trajectories and point clouds from input views, and is one of the verified 3D routes in this catalog: checkpoint-backed Studio inference produced finite poses, depth, and a 601,570-vertex point cloud, with evidence in inference_evidence.yaml.'
-  overview_zh: LoGeR 从输入视图重建 3D 场景、相机轨迹与点云，是本 catalog 中已验证的 3D 路径之一： checkpoint 加载的 Studio 推理产出有限位姿、深度与 601,570 顶点的点云，证据记录在 inference_evidence.yaml。
-  architecture: 'The catalog records a reconstruction-plus-trajectory model exporting binary PLY artifacts; the publishing institution and architecture internals are not recorded in this repository (upstream: Junyi42/LoGeR, apache-2.0).'
-  architecture_zh: catalog 记录其为「重建+轨迹」模型，导出二进制 PLY 产物；发表机构与架构内部细节仓库未记录（上游：Junyi42/LoGeR，apache-2.0）。
-  usage_notes: Verified end to end in the shared worldfoundry-unified-cu128 environment — a dependable choice for point-cloud navigation pipelines.
-  usage_notes_zh: 已在共享 worldfoundry-unified-cu128 环境中端到端验证——点云导航管线的可靠选择。
-  limitations:
-  - The publishing institution is not recorded in this repository.
-  limitations_zh:
-  - 发表机构在本仓库中未记录。
+  overview: 'LoGeR reconstructs 3D scenes, camera trajectories, and point clouds from input views. Validated with the Junyi42/LoGeR checkpoint: inference produces finite camera poses, depth, and a 601,570-vertex point cloud.'
+  overview_zh: LoGeR 从输入视图重建 3D 场景、相机轨迹与点云。已用 Junyi42/LoGeR checkpoint 验证：推理产出有限的相机位姿、深度与 601,570 顶点的点云。
+  architecture: 'A reconstruction-plus-trajectory model that exports binary PLY artifacts (upstream: Junyi42/LoGeR, apache-2.0).'
+  architecture_zh: 「重建+轨迹」模型，导出二进制 PLY 产物（上游：Junyi42/LoGeR，apache-2.0）。
+  usage_notes: Runs in the shared worldfoundry-unified-cu128 environment; the exported point clouds can feed point-cloud navigation pipelines.
+  usage_notes_zh: 在共享的 worldfoundry-unified-cu128 环境中运行；导出的点云可接入点云导航管线。

@@ -135,7 +135,7 @@ class OptimizationSnapshot:
         return _with_extensions(payload, self.extensions)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "OptimizationSnapshot":
+    def from_dict(cls, data: Mapping[str, Any]) -> OptimizationSnapshot:
         """Rebuild a snapshot; unknown keys become ``extensions``."""
         known = frozenset({"requested", "effective", "fallbacks", "quality_tier", "extensions"})
         requested = data.get("requested")
@@ -145,9 +145,7 @@ class OptimizationSnapshot:
             requested=requested if isinstance(requested, Mapping) else {},
             effective=effective if isinstance(effective, Mapping) else {},
             fallbacks=(
-                tuple(fallbacks)
-                if isinstance(fallbacks, Sequence) and not isinstance(fallbacks, (str, bytes))
-                else ()
+                tuple(fallbacks) if isinstance(fallbacks, Sequence) and not isinstance(fallbacks, (str, bytes)) else ()
             ),
             quality_tier=str(data.get("quality_tier") or "exact"),
             extensions=_extensions(data, known),

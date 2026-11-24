@@ -8,13 +8,16 @@ from huggingface_hub import PyTorchModelHubMixin
 from worldfoundry.base_models.perception_core.general_perception.dinov2.hub.backbones import (
     dinov2_vitl14_reg,
 )
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import (
+    homogenize_points,
+)
+from worldfoundry.core.attention.rotary.rope_2d import CrocoRotaryPositionEmbedding2D as RoPE2D
 from worldfoundry.core.nn.blocks.layers import Mlp
 
-from ..utils.geometry import homogenize_points
 from .layers.attention import FlashAttentionRope
 from .layers.block import BlockRope
 from .layers.camera_head import CameraHead
-from .layers.pos_embed import PositionGetter, RoPE2D
+from .layers.pos_embed import PositionGetter
 from .layers.transformer_head import LinearPts3d, TransformerDecoder
 
 
@@ -50,7 +53,7 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
         # ----------------------
         #        Decoder
         # ----------------------
-        self.encoder.blocks[0].attn.qkv.in_features  # 1024
+        self.encoder.blocks[0].attn.qkv.in_features  # noqa: B018 - Attribute access resolves the lazy import, as upstream.  # 1024
         if decoder_size == "small":
             dec_embed_dim = 384
             dec_num_heads = 6
@@ -218,9 +221,9 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
             # unproject local points using camera poses
             points = torch.einsum("bnij, bnhwj -> bnhwi", camera_poses, homogenize_points(local_points))[..., :3]
 
-        return dict(
-            points=points,
-            local_points=local_points,
-            conf=conf,
-            camera_poses=camera_poses,
-        )
+        return {
+            "points": points,
+            "local_points": local_points,
+            "conf": conf,
+            "camera_poses": camera_poses,
+        }

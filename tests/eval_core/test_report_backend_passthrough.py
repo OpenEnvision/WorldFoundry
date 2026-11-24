@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.evaluation.reporting import (
+from worldfoundry.evals.reporting import (
     MOCK_BACKEND_BLOCKING_REASON,
     build_markdown_comparison,
     build_markdown_report,

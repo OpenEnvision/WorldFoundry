@@ -16,15 +16,15 @@ import pytest
 import yaml
 from PIL import Image
 
-from worldfoundry.evaluation.tasks.execution.runners.worldbench.runtime.worldbench.evaluator import (
+from worldfoundry.evals.tasks.execution.runners.worldbench.runtime.worldbench.evaluator import (
     WorldBenchEvaluationRequest,
     evaluate_worldbench,
 )
-from worldfoundry.evaluation.tasks.execution.runners.worldbench.runtime.worldbench.metrics import (
+from worldfoundry.evals.tasks.execution.runners.worldbench.runtime.worldbench.metrics import (
     answer_is_correct,
     overlap_by_frame,
 )
-from worldfoundry.evaluation.tasks.execution.runners.worldbench.runtime.worldbench.reporting import (
+from worldfoundry.evals.tasks.execution.runners.worldbench.runtime.worldbench.reporting import (
     write_evaluation_scorecard,
 )
 

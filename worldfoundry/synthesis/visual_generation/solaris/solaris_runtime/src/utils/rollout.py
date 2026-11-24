@@ -1,12 +1,14 @@
-
 import jax
 import jax.numpy as jnp
 from einops import rearrange, repeat
 from flax import nnx
 
-from src.models import wan_vae
-from src.models.kv_cache import KVCacheDict
-from src.utils.multiplayer import handle_multiplayer_input, handle_multiplayer_output
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.models import wan_vae
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.models.kv_cache import KVCacheDict
+from worldfoundry.synthesis.visual_generation.solaris.solaris_runtime.src.utils.multiplayer import (
+    handle_multiplayer_input,
+    handle_multiplayer_output,
+)
 
 
 def flow_match_inference_timesteps(
@@ -37,13 +39,9 @@ def flow_match_inference_timesteps(
     # With extra_one_step=True, mimic:
     # sigmas = linspace(sigma_start, sigma_min, N+1)[:-1]  -> length N
     if extra_one_step:
-        sigmas = jnp.linspace(
-            sigma_start, sigma_min, num_inference_steps + 1, dtype=jnp.float32
-        )[:-1]
+        sigmas = jnp.linspace(sigma_start, sigma_min, num_inference_steps + 1, dtype=jnp.float32)[:-1]
     else:
-        sigmas = jnp.linspace(
-            sigma_start, sigma_min, num_inference_steps, dtype=jnp.float32
-        )
+        sigmas = jnp.linspace(sigma_start, sigma_min, num_inference_steps, dtype=jnp.float32)
 
     # shift: sigmas = shift * sigmas / (1 + (shift - 1) * sigmas)
     sigmas = timestep_shift * sigmas / (1.0 + (timestep_shift - 1.0) * sigmas)
@@ -99,25 +97,18 @@ def fully_denoise_frame_bidirectional_multiplayer(
     model = nnx.merge(graph, state)
     if num_denoising_steps is None:
         num_denoising_steps = 10
-        inference_timesteps = jnp.array(
-            [1000.0, 937.0, 869.0, 795.0, 714.0, 625.0, 526.0, 416.0, 294.0, 156.0, 0.0]
-        )
+        inference_timesteps = jnp.array([1000.0, 937.0, 869.0, 795.0, 714.0, 625.0, 526.0, 416.0, 294.0, 156.0, 0.0])
     else:
         inference_timesteps = flow_match_inference_timesteps(num_denoising_steps)
     sigma_t = inference_timesteps / 1000
     B, P, F, _, _, _ = frame_noise_BPFHWC.shape
 
-    padded_mouse_actions_BPTD = left_repeat_padding(
-        mouse_actions_BPTD, left_action_padding, axis=2
-    )
-    padded_keyboard_actions_BPTD = left_repeat_padding(
-        keyboard_actions_BPTD, left_action_padding, axis=2
-    )
+    padded_mouse_actions_BPTD = left_repeat_padding(mouse_actions_BPTD, left_action_padding, axis=2)
+    padded_keyboard_actions_BPTD = left_repeat_padding(keyboard_actions_BPTD, left_action_padding, axis=2)
 
     frame = frame_noise_BPFHWC
 
     for i in range(num_denoising_steps):
-
         v, _, _, _ = model(
             frame.astype(jnp.bfloat16),
             inference_timesteps[i] * jnp.ones((B, P, F), dtype=jnp.int32),
@@ -128,17 +119,14 @@ def fully_denoise_frame_bidirectional_multiplayer(
             mesh=mesh,
             bidirectional=True,
         )
-        x_start_f32 = flow_prediction_to_x0(
-            v.astype(jnp.float32), frame.astype(jnp.float32), sigma_t[i]
-        )
+        x_start_f32 = flow_prediction_to_x0(v.astype(jnp.float32), frame.astype(jnp.float32), sigma_t[i])
         is_last_step = i == num_denoising_steps - 1
         rngs, step_rng = jax.random.split(rngs)
         x_pred = jax.lax.cond(
             is_last_step,
-            lambda: x_start_f32,
-            lambda: (1 - sigma_t[i + 1]) * x_start_f32
-            + sigma_t[i + 1]
-            * jax.random.normal(step_rng, x_start_f32.shape, dtype=jnp.float32),
+            lambda: x_start_f32,  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+            lambda: (1 - sigma_t[i + 1]) * x_start_f32  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+            + sigma_t[i + 1] * jax.random.normal(step_rng, x_start_f32.shape, dtype=jnp.float32),  # noqa: B023 - Keeps the upstream late binding of the loop variable.
         )
         frame = x_pred.astype(frame.dtype)
 
@@ -164,12 +152,8 @@ def perform_multiplayer_rollout(
     left_action_padding,
     num_denoising_steps=None,
 ):
-    mouse_actions_BPFD = left_repeat_padding(
-        mouse_actions_BPFD, left_action_padding, axis=2
-    )
-    keyboard_actions_BPFD = left_repeat_padding(
-        keyboard_actions_BPFD, left_action_padding, axis=2
-    )
+    mouse_actions_BPFD = left_repeat_padding(mouse_actions_BPFD, left_action_padding, axis=2)
+    keyboard_actions_BPFD = left_repeat_padding(keyboard_actions_BPFD, left_action_padding, axis=2)
     P, F = cond_concat_BPFHWC.shape[1], cond_concat_BPFHWC.shape[2]
 
     mouse_actions_BPFWD = []
@@ -177,9 +161,7 @@ def perform_multiplayer_rollout(
 
     for i in range(F):
         mouse_actions_BPFWD.append(mouse_actions_BPFD[:, :, (i * 4) : (i * 4) + 12, :])
-        keyboard_actions_BPFWD.append(
-            keyboard_actions_BPFD[:, :, (i * 4) : (i * 4) + 12, :]
-        )
+        keyboard_actions_BPFWD.append(keyboard_actions_BPFD[:, :, (i * 4) : (i * 4) + 12, :])
 
     mouse_actions_BPFWD = jnp.stack(mouse_actions_BPFWD, axis=2)
     keyboard_actions_BPFWD = jnp.stack(keyboard_actions_BPFWD, axis=2)
@@ -189,9 +171,7 @@ def perform_multiplayer_rollout(
     # --- Diffusion schedule ---
     if num_denoising_steps is None:
         num_denoising_steps = 4
-        denoising_timesteps = jnp.array(
-            [1000.0, 750.0, 500.0, 250.0, 0.0], dtype=jnp.float32
-        )
+        denoising_timesteps = jnp.array([1000.0, 750.0, 500.0, 250.0, 0.0], dtype=jnp.float32)
     else:
         denoising_timesteps = flow_match_inference_timesteps(num_denoising_steps)
     sigma_t = denoising_timesteps / 1000
@@ -200,9 +180,7 @@ def perform_multiplayer_rollout(
 
     # === Inner scan (denoising steps) ===
     @nnx.scan(in_axes=(2, 2, 2, None, nnx.Carry), out_axes=(2, nnx.Carry))
-    def denoise_frame(
-        cond_concat_BPFHWC, mouse_actions_BPFD, keyboard_actions_BPFD, _model, carry
-    ):
+    def denoise_frame(cond_concat_BPFHWC, mouse_actions_BPFD, keyboard_actions_BPFD, _model, carry):
         rngs, kv_cache, frame_index = carry
         rngs, step_rng = jax.random.split(rngs)
         B, P, F, H, W, _ = cond_concat_BPFHWC.shape
@@ -236,9 +214,8 @@ def perform_multiplayer_rollout(
                 frame = jax.lax.cond(
                     exit,
                     lambda: x_start_f32,
-                    lambda: (1 - sigma_t[i + 1]) * x_start_f32
-                    + sigma_t[i + 1]
-                    * jax.random.normal(step_rng, x_start_f32.shape, dtype=jnp.float32),
+                    lambda: (1 - sigma_t[i + 1]) * x_start_f32  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+                    + sigma_t[i + 1] * jax.random.normal(step_rng, x_start_f32.shape, dtype=jnp.float32),  # noqa: B023 - Keeps the upstream late binding of the loop variable.
                 )
                 return frame.astype(jnp.bfloat16), rngs
 
@@ -261,9 +238,7 @@ def perform_multiplayer_rollout(
             bidirectional=False,
             current_start=frame_index,
         )
-        new_kv_cache = KVCacheDict(
-            new_kv_cache, new_kv_cache_mouse, new_kv_cache_keyboard
-        )
+        new_kv_cache = KVCacheDict(new_kv_cache, new_kv_cache_mouse, new_kv_cache_keyboard)
         return frame, (rngs, new_kv_cache, frame_index + 1)
 
     kv_cache = model.initialize_kv_cache(B, H // 2, W // 2, num_players=P)
@@ -275,12 +250,8 @@ def perform_multiplayer_rollout(
         model,
         (rngs, kv_cache, 0),
     )
-    final_frame_BPFHWC = rearrange(
-        final_frame_BPFRHWC, "b p f r h w c -> b p (f r) h w c"
-    )
-    last_timestep = jax.lax.dynamic_index_in_dim(
-        denoising_timesteps, last_timestep, keepdims=False
-    )
+    final_frame_BPFHWC = rearrange(final_frame_BPFRHWC, "b p f r h w c -> b p (f r) h w c")
+    last_timestep = jax.lax.dynamic_index_in_dim(denoising_timesteps, last_timestep, keepdims=False)
     return final_frame_BPFHWC, last_timestep, rngs
 
 
@@ -345,18 +316,12 @@ def perform_bidirectional_multiplayer_rollout(
         "(b p) f h w c -> b p f h w c",
         b=B,
     )
-    mask_cond_BPFHWC = (
-        jnp.ones(img_cond_BPFHWC.shape, dtype=jnp.bfloat16).at[:, :, 1:].set(0)
+    mask_cond_BPFHWC = jnp.ones(img_cond_BPFHWC.shape, dtype=jnp.bfloat16).at[:, :, 1:].set(0)
+    cond_concat_BPFHWC = jnp.concatenate([mask_cond_BPFHWC[:, :, :, :, :, :4], img_cond_BPFHWC], axis=-1).astype(
+        jnp.bfloat16
     )
-    cond_concat_BPFHWC = jnp.concatenate(
-        [mask_cond_BPFHWC[:, :, :, :, :, :4], img_cond_BPFHWC], axis=-1
-    ).astype(jnp.bfloat16)
     visual_context_BPFD = rearrange(
-        p_clip_encode(
-            rearrange(
-                first_frames_BPHWC[:, :, None], "b p f h w c -> (b p) c f h w"
-            ).astype(jnp.bfloat16)
-        ),
+        p_clip_encode(rearrange(first_frames_BPHWC[:, :, None], "b p f h w c -> (b p) c f h w").astype(jnp.bfloat16)),
         "(b p) f d -> b p f d",
         b=B,
     )
@@ -383,9 +348,7 @@ def perform_bidirectional_multiplayer_rollout(
     # For concat_c, latent channels are doubled (16 * num_players = 32)
     latent_channels = 16 * num_players if multiplayer_method == "concat_c" else 16
     rngs, frame_rng = jax.random.split(rngs)
-    frame_noise_BPFHWC = jax.random.normal(
-        frame_rng, (B, P_eff, F, Hl, Wl, latent_channels), dtype=jnp.bfloat16
-    )
+    frame_noise_BPFHWC = jax.random.normal(frame_rng, (B, P_eff, F, Hl, Wl, latent_channels), dtype=jnp.bfloat16)
 
     # Call denoising with intermediate latent collection if requested
 
@@ -404,20 +367,14 @@ def perform_bidirectional_multiplayer_rollout(
     )
 
     # Reverse multiplayer transformation before VAE decoding
-    frame = handle_multiplayer_output(
-        frame, multiplayer_method, num_players=num_players
-    )
+    frame = handle_multiplayer_output(frame, multiplayer_method, num_players=num_players)
 
     decoded_frames_BPFHWC = rearrange(
-        p_vae_decode(
-            rearrange(frame, "b p f h w c -> (b p) f h w c"), scale=wan_vae.VAE_SCALE
-        ),
+        p_vae_decode(rearrange(frame, "b p f h w c -> (b p) f h w c"), scale=wan_vae.VAE_SCALE),
         "(b p) f h w c -> b p f h w c",
         b=B,
     )
-    output = change_tensor_range(
-        decoded_frames_BPFHWC, [-1, 1], [0, 255], dtype=jnp.uint8
-    )
+    output = change_tensor_range(decoded_frames_BPFHWC, [-1, 1], [0, 255], dtype=jnp.uint8)
 
     return output
 
@@ -443,9 +400,7 @@ def fully_denoise_frame_bidirectional(
     model = nnx.merge(graph, state)
     if num_denoising_steps is None:
         num_denoising_steps = 10
-        inference_timesteps = jnp.array(
-            [1000.0, 937.0, 869.0, 795.0, 714.0, 625.0, 526.0, 416.0, 294.0, 156.0, 0.0]
-        )
+        inference_timesteps = jnp.array([1000.0, 937.0, 869.0, 795.0, 714.0, 625.0, 526.0, 416.0, 294.0, 156.0, 0.0])
     else:
         inference_timesteps = flow_match_inference_timesteps(num_denoising_steps)
     sigma_t = inference_timesteps / 1000
@@ -466,17 +421,14 @@ def fully_denoise_frame_bidirectional(
             mesh=mesh,
             bidirectional=True,
         )
-        x_start_f32 = flow_prediction_to_x0(
-            v.astype(jnp.float32), frame.astype(jnp.float32), sigma_t[i]
-        )
+        x_start_f32 = flow_prediction_to_x0(v.astype(jnp.float32), frame.astype(jnp.float32), sigma_t[i])
         is_last_step = i == num_denoising_steps - 1
         rngs, step_rng = jax.random.split(rngs)
         x_pred = jax.lax.cond(
             is_last_step,
-            lambda: x_start_f32,
-            lambda: (1 - sigma_t[i + 1]) * x_start_f32
-            + sigma_t[i + 1]
-            * jax.random.normal(step_rng, x_start_f32.shape, dtype=jnp.float32),
+            lambda: x_start_f32,  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+            lambda: (1 - sigma_t[i + 1]) * x_start_f32  # noqa: B023 - Keeps the upstream late binding of the loop variable.
+            + sigma_t[i + 1] * jax.random.normal(step_rng, x_start_f32.shape, dtype=jnp.float32),  # noqa: B023 - Keeps the upstream late binding of the loop variable.
         )
         frame = x_pred.astype(frame.dtype)
     return frame, rngs
@@ -518,28 +470,18 @@ def perform_bidirectional_rollout(
         ],
         axis=1,
     )
-    img_cond_BFHWC = p_vae_encode(padded_image_BFHWC, scale=wan_vae.VAE_SCALE).astype(
-        jnp.bfloat16
-    )
-    mask_cond_BFHWC = (
-        jnp.ones(img_cond_BFHWC.shape, dtype=jnp.bfloat16).at[:, 1:].set(0)
-    )
-    cond_concat_BFHWC = jnp.concatenate(
-        [mask_cond_BFHWC[:, :, :, :, :4], img_cond_BFHWC], axis=-1
-    ).astype(jnp.bfloat16)
+    img_cond_BFHWC = p_vae_encode(padded_image_BFHWC, scale=wan_vae.VAE_SCALE).astype(jnp.bfloat16)
+    mask_cond_BFHWC = jnp.ones(img_cond_BFHWC.shape, dtype=jnp.bfloat16).at[:, 1:].set(0)
+    cond_concat_BFHWC = jnp.concatenate([mask_cond_BFHWC[:, :, :, :, :4], img_cond_BFHWC], axis=-1).astype(jnp.bfloat16)
     visual_context_BFD = p_clip_encode(
-        rearrange(first_frames_BHWC[:, None], "b f h w c -> b c f h w").astype(
-            jnp.bfloat16
-        )
+        rearrange(first_frames_BHWC[:, None], "b f h w c -> b c f h w").astype(jnp.bfloat16)
     )
 
     rngs = jax.random.PRNGKey(0)
 
     B, F, Hl, Wl, _ = img_cond_BFHWC.shape
     rngs, frame_rng = jax.random.split(rngs)
-    frame_noise_BFHWC = jax.random.normal(
-        frame_rng, (B, F, Hl, Wl, 16), dtype=jnp.bfloat16
-    )
+    frame_noise_BFHWC = jax.random.normal(frame_rng, (B, F, Hl, Wl, 16), dtype=jnp.bfloat16)
     frame, _ = p_fully_denoise_frame_bidirectional(
         model_graph,
         model_state,
@@ -555,7 +497,5 @@ def perform_bidirectional_rollout(
     )
 
     decoded_frames_BFHWC = p_vae_decode(frame, scale=wan_vae.VAE_SCALE)
-    output = change_tensor_range(
-        decoded_frames_BFHWC, [-1, 1], [0, 255], dtype=jnp.uint8
-    )
+    output = change_tensor_range(decoded_frames_BFHWC, [-1, 1], [0, 255], dtype=jnp.uint8)
     return output

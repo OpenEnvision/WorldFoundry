@@ -33,7 +33,7 @@ import torch
 import torch.nn as nn
 from torch.nn.modules.batchnorm import _BatchNorm
 
-__all__ = ["LayerNorm2d", "build_norm", "get_norm_name", "reset_bn", "remove_bn", "set_norm_eps"]
+__all__ = ["LayerNorm2d", "build_norm", "get_norm_name", "remove_bn", "reset_bn", "set_norm_eps"]
 
 
 class LayerNorm2d(nn.LayerNorm):
@@ -42,14 +42,6 @@ class LayerNorm2d(nn.LayerNorm):
     rmsnorm = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward.
-
-        Args:
-            x: The x.
-
-        Returns:
-            The return value.
-        """
         out = x if LayerNorm2d.rmsnorm else x - torch.mean(x, dim=1, keepdim=True)
         out = out / torch.sqrt(torch.square(out).mean(dim=1, keepdim=True) + self.eps)
         if self.elementwise_affine:
@@ -57,11 +49,6 @@ class LayerNorm2d(nn.LayerNorm):
         return out
 
     def extra_repr(self) -> str:
-        """Extra repr.
-
-        Returns:
-            The return value.
-        """
         return f"{self.normalized_shape}, eps={self.eps}, elementwise_affine={self.elementwise_affine}, rmsnorm={self.rmsnorm}"
 
 
@@ -76,16 +63,6 @@ REGISTERED_NORMALIZATION_DICT: dict[str, tuple[type, dict[str, any]]] = {
 
 
 def build_norm(name="bn2d", num_features=None, affine=True, **kwargs) -> nn.Module or None:
-    """Build norm.
-
-    Args:
-        name: The name.
-        num_features: The num features.
-        affine: The affine.
-
-    Returns:
-        The return value.
-    """
     if name in ["ln", "ln2d"]:
         kwargs["normalized_shape"] = num_features
         kwargs["elementwise_affine"] = affine
@@ -101,18 +78,10 @@ def build_norm(name="bn2d", num_features=None, affine=True, **kwargs) -> nn.Modu
     elif name is None or name.lower() == "none":
         return None
     else:
-        raise ValueError("do not support: %s" % name)
+        raise ValueError("do not support: %s" % name)  # noqa: UP031 - Keeps printf conversions that depend on argument types.
 
 
 def get_norm_name(norm: nn.Module or None) -> str or None:
-    """Get norm name.
-
-    Args:
-        norm: The norm.
-
-    Returns:
-        The return value.
-    """
     if norm is None:
         return None
     module2name = {}
@@ -127,17 +96,6 @@ def reset_bn(
     sync=True,
     progress_bar=False,
 ) -> None:
-    """Reset bn.
-
-    Args:
-        model: The model.
-        data_loader: The data loader.
-        sync: The sync.
-        progress_bar: The progress bar.
-
-    Returns:
-        The return value.
-    """
     import copy
 
     import torch.nn.functional as F
@@ -157,20 +115,7 @@ def reset_bn(
             bn_var[name] = AverageMeter(is_distributed=False)
 
             def new_forward(bn, mean_est, var_est):
-                """New forward.
-
-                Args:
-                    bn: The bn.
-                    mean_est: The mean est.
-                    var_est: The var est.
-                """
-
                 def lambda_forward(x):
-                    """Lambda forward.
-
-                    Args:
-                        x: The x.
-                    """
                     x = x.contiguous()
                     if sync:
                         batch_mean = x.mean(0, keepdim=True).mean(2, keepdim=True).mean(3, keepdim=True)  # 1, C, 1, 1
@@ -214,7 +159,7 @@ def reset_bn(
         return
 
     tmp_model.eval()
-    with torch.inference_mode():
+    with torch.inference_mode():  # noqa: SIM117 - Keeps the nested context managers.
         with tqdm(total=len(data_loader), desc="reset bn", disable=not progress_bar or not is_master()) as t:
             for images in data_loader:
                 images = images.to(get_device(tmp_model))
@@ -236,14 +181,6 @@ def reset_bn(
 
 
 def remove_bn(model: nn.Module) -> None:
-    """Remove bn.
-
-    Args:
-        model: The model.
-
-    Returns:
-        The return value.
-    """
     for m in model.modules():
         if isinstance(m, _BatchNorm):
             m.weight = m.bias = None
@@ -251,16 +188,6 @@ def remove_bn(model: nn.Module) -> None:
 
 
 def set_norm_eps(model: nn.Module, eps: float or None = None, momentum: float or None = None) -> None:
-    """Set norm eps.
-
-    Args:
-        model: The model.
-        eps: The eps.
-        momentum: The momentum.
-
-    Returns:
-        The return value.
-    """
     for m in model.modules():
         if isinstance(m, (nn.GroupNorm, nn.LayerNorm, _BatchNorm)):
             if eps is not None:
@@ -272,11 +199,9 @@ def set_norm_eps(model: nn.Module, eps: float or None = None, momentum: float or
 try:
     from apex.normalization import FusedRMSNorm as RMSNorm
 except ImportError:
-    warnings.warn("Cannot import apex RMSNorm, switch to vanilla implementation")
+    warnings.warn("Cannot import apex RMSNorm, switch to vanilla implementation", stacklevel=1)
 
     class RMSNorm(torch.nn.Module):
-        """Rms norm implementation."""
-
         def __init__(self, dim: int, scale_factor=1.0, eps: float = 1e-6):
             """
             Initialize the RMSNorm normalization layer.

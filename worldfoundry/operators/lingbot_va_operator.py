@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, ClassVar
 
 from .embodied_action_operator import EmbodiedActionOperator, _compact_dict, _extract_action_signal, _first_present
 
@@ -15,7 +16,7 @@ class LingBotVAOperator(EmbodiedActionOperator):
     POLICY_FAMILY = "autoregressive_video_action_world_model"
     ACTION_REPRESENTATION = "continuous_robot_action_chunk_with_video_latents"
     OBSERVATION_LAYOUT = "multi_view_rgb_language_robot_state_video_context"
-    DEFAULT_INPUT_SCHEMA = {
+    DEFAULT_INPUT_SCHEMA: ClassVar[dict[str, Any]] = {
         "prompt": True,
         "instruction": True,
         "image": True,
@@ -24,9 +25,13 @@ class LingBotVAOperator(EmbodiedActionOperator):
         "actions": ["robot_actions", "action_chunk", "video_actions", "world_actions", "proprio"],
     }
 
-    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> Dict[str, Any]:
+    def process_prompt(self, prompt: str | None = None, **kwargs: Any) -> dict[str, Any]:
         """Process the input prompt or caption to ensure compatibility."""
-        instruction = prompt if prompt not in (None, "") else _first_present(kwargs, "instruction", "task_instruction", "world_model_prompt")
+        instruction = (
+            prompt
+            if prompt not in (None, "")
+            else _first_present(kwargs, "instruction", "task_instruction", "world_model_prompt")
+        )
         instruction = "" if instruction is None else str(instruction)
         return {
             "prompt": instruction,
@@ -44,7 +49,7 @@ class LingBotVAOperator(EmbodiedActionOperator):
         video: Any = None,
         ref_image_path: str | Path | None = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
         rgb_views = _first_present(kwargs, "lingbot_va_rgb_views", "rgb_views", "multi_view_rgb")
         if rgb_views is not None:
@@ -80,10 +85,12 @@ class LingBotVAOperator(EmbodiedActionOperator):
             "observation": observation,
         }
 
-    def process_interaction(self) -> Dict[str, Any]:
+    def process_interaction(self) -> dict[str, Any]:
         """Process the recorded interactions and return the generated actions."""
         raw = self.current_interaction[-1] if self.current_interaction else None
-        actions = _extract_action_signal(raw, "robot_actions", "action_chunk", "video_actions", "world_actions", "state")
+        actions = _extract_action_signal(
+            raw, "robot_actions", "action_chunk", "video_actions", "world_actions", "state"
+        )
         self.interaction_history.append(actions)
         action_horizon = raw.get("action_horizon") if isinstance(raw, Mapping) else None
         track = raw.get("track") if isinstance(raw, Mapping) else None

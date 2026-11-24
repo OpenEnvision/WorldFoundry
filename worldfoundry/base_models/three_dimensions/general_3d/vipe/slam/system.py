@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> system.py functionality."""
-
 import uuid
 
 import numpy as np
@@ -44,28 +42,21 @@ from .components.frontend import SLAMFrontend
 from .components.inner_filler import FilledReturn, InnerFiller
 from .components.motion_filter import MotionFilter
 from .components.sparse_tracks import build_sparse_tracks
+
+# isort: split
 from .interface import SLAMOutput
+
+# isort: split
 from .constants import SLAM_PER_VIDEO_COMPONENTS
 from .networks.droid_net import DroidNet
 
 
 class StandardResizeStreamProcessor(StreamProcessor):
-    """Standard resize stream processor implementation."""
     def __init__(self) -> None:
-        """Init.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
         self.fac_x, self.fac_y = 1.0, 1.0
 
     def _compute_frame_size_crop(self, previous_frame_size: tuple[int, int]):
-        """Helper function to compute frame size crop.
-
-        Args:
-            previous_frame_size: The previous frame size.
-        """
         h0, w0 = previous_frame_size
         scale_factor = np.sqrt((384 * 512) / (h0 * w0))
         h1 = int(h0 * scale_factor)
@@ -80,38 +71,16 @@ class StandardResizeStreamProcessor(StreamProcessor):
         return (h1, w1), (crop_top, crop_bottom, crop_left, crop_right)
 
     def update_frame_size(self, previous_frame_size: tuple[int, int]):
-        """Update frame size.
-
-        Args:
-            previous_frame_size: The previous frame size.
-        """
         (h1, w1), (crop_top, crop_bottom, crop_left, crop_right) = self._compute_frame_size_crop(previous_frame_size)
         return h1 - (crop_top + crop_bottom), w1 - (crop_left + crop_right)
 
     def __call__(self, frame_idx: int, frame_data: VideoFrame) -> VideoFrame:
-        """Call.
-
-        Args:
-            frame_idx: The frame idx.
-            frame_data: The frame data.
-
-        Returns:
-            The return value.
-        """
         (h1, w1), (crop_top, crop_bottom, crop_left, crop_right) = self._compute_frame_size_crop(frame_data.size())
         frame_data = frame_data.resize((h1, w1))
         frame_data = frame_data.crop(top=crop_top, bottom=crop_bottom, left=crop_left, right=crop_right)
         return frame_data
 
     def recover_intrinsics(self, after_intrinsics: torch.Tensor) -> torch.Tensor:
-        """Recover intrinsics.
-
-        Args:
-            after_intrinsics: The after intrinsics.
-
-        Returns:
-            The return value.
-        """
         new_intrinsics = after_intrinsics.clone()
         new_intrinsics[2] += self.scx
         new_intrinsics[3] += self.scy
@@ -124,15 +93,6 @@ class SLAMSystem:
     """Solver-defined SLAM"""
 
     def __init__(self, device: torch.device, config: DictConfig) -> None:
-        """Init.
-
-        Args:
-            device: The device.
-            config: The config.
-
-        Returns:
-            The return value.
-        """
         self.device = device
         self.visualize = config.visualize
         self.config = config.copy()
@@ -143,7 +103,6 @@ class SLAMSystem:
         self.metric_depth = None
 
     def _build_components(self):
-        """Helper function to build components."""
         # metric_depth / droid_net are weight holders, not per-video graph state.
         per_video_components = SLAM_PER_VIDEO_COMPONENTS
         for name in per_video_components:
@@ -203,15 +162,6 @@ class SLAMSystem:
         frame_data_list: list[VideoFrame],
         phase: int,
     ):
-        """Helper function to add keyframe.
-
-        Args:
-            frame_idx: The frame idx.
-            images: The images.
-            buffer_masks: The buffer masks.
-            frame_data_list: The frame data list.
-            phase: The phase.
-        """
         assert phase in [1, 2]
         kf_idx = self.buffer.n_frames
         self.buffer.tstamp[kf_idx] = frame_idx
@@ -239,14 +189,8 @@ class SLAMSystem:
         self.buffer.n_frames += 1
 
     def _log_final(self, video_streams: list[VideoStream], filled_return: FilledReturn):
-        """Helper function to log final.
-
-        Args:
-            video_streams: The video streams.
-            filled_return: The filled return.
-        """
         trajectory = filled_return.poses.inv()
-        for frame_idx, frame_data_list in enumerate(zip(*video_streams)):
+        for frame_idx, frame_data_list in enumerate(zip(*video_streams, strict=False)):
             pose_mat = trajectory[frame_idx].matrix().cpu().numpy()
             rr.set_time("frame", sequence=frame_idx)
             for view_idx in range(len(frame_data_list)):
@@ -263,11 +207,6 @@ class SLAMSystem:
                 )
 
     def _precompute_features(self, frame_data_list: list[VideoFrame]):
-        """Helper function to precompute features.
-
-        Args:
-            frame_data_list: The frame data list.
-        """
         images_list = []
         masks_list = []
         for frame_data in frame_data_list:
@@ -285,10 +224,7 @@ class SLAMSystem:
                 )
                 masks_list.append(~mask)
         images = rearrange(torch.stack(images_list), "n h w c -> n c h w")
-        if masks_list:
-            masks = torch.stack(masks_list)
-        else:
-            masks = None
+        masks = torch.stack(masks_list) if masks_list else None
         return images, masks
 
     @torch.no_grad()
@@ -298,20 +234,11 @@ class SLAMSystem:
         rig: SE3 | None = None,
         camera_type: CameraType = CameraType.PINHOLE,
     ) -> SLAMOutput:
-        """Run.
-
-        Args:
-            video_streams: The video streams.
-            rig: The rig.
-            camera_type: The camera type.
-
-        Returns:
-            The return value.
-        """
         assert len(video_streams) > 0
         resizers = [StandardResizeStreamProcessor() for _ in video_streams]
         video_streams = [
-            ProcessedVideoStream(video_stream, [resizer]) for video_stream, resizer in zip(video_streams, resizers)
+            ProcessedVideoStream(video_stream, [resizer])
+            for video_stream, resizer in zip(video_streams, resizers, strict=False)
         ]
 
         frame_size = video_streams[0].frame_size()
@@ -345,7 +272,7 @@ class SLAMSystem:
         frame_data_list: list[VideoFrame]
         frame_idx: int = 0
         for frame_idx, frame_data_list in pbar(
-            enumerate(zip(*video_streams)), desc="SLAM Pass (1/2)", total=total_n_frames
+            enumerate(zip(*video_streams, strict=False)), desc="SLAM Pass (1/2)", total=total_n_frames
         ):
             images, buffer_masks = self._precompute_features(frame_data_list)
 
@@ -381,7 +308,7 @@ class SLAMSystem:
         # Infill poses and attributes for non-keyframe frames.
         self.inner_filler.set_start_idx(self.buffer.n_frames)
         for frame_idx, frame_data_list in pbar(
-            enumerate(zip(*video_streams)), desc="SLAM Pass (2/2)", total=total_n_frames
+            enumerate(zip(*video_streams, strict=False)), desc="SLAM Pass (2/2)", total=total_n_frames
         ):
             images, buffer_masks = self._precompute_features(frame_data_list)
             self._add_keyframe(frame_idx, images, buffer_masks, frame_data_list, phase=2)

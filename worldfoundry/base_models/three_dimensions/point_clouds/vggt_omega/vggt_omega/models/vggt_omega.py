@@ -4,8 +4,6 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Module for base_models -> three_dimensions -> point_clouds -> vggt_omega -> vggt_omega -> models -> vggt_omega.py functionality."""
-
 import warnings
 
 import torch
@@ -26,18 +24,6 @@ class VGGTOmega(nn.Module):
         enable_depth: bool = True,
         enable_alignment: bool = False,
     ) -> None:
-        """Init.
-
-        Args:
-            patch_size: The patch size.
-            embed_dim: The embed dim.
-            enable_camera: The enable camera.
-            enable_depth: The enable depth.
-            enable_alignment: The enable alignment.
-
-        Returns:
-            The return value.
-        """
         super().__init__()
 
         self.aggregator = Aggregator(patch_size=patch_size, embed_dim=embed_dim)
@@ -47,14 +33,6 @@ class VGGTOmega(nn.Module):
         self.text_alignment_head = TextAlignmentHead(dim_in=2 * embed_dim) if enable_alignment else None
 
     def forward(self, images: torch.Tensor) -> dict[str, torch.Tensor]:
-        """Forward.
-
-        Args:
-            images: The images.
-
-        Returns:
-            The return value.
-        """
         if len(images.shape) == 4:
             images = images.unsqueeze(0)
 
@@ -99,14 +77,6 @@ class VGGTOmega(nn.Module):
 
 
 def _warn_if_rope_not_max(aggregator: nn.Module) -> None:
-    """Helper function to warn if rope not max.
-
-    Args:
-        aggregator: The aggregator.
-
-    Returns:
-        The return value.
-    """
     for name, module in (("aggregator.patch_embed", aggregator.patch_embed), ("aggregator", aggregator)):
         rope_embed = getattr(module, "rope_embed", None)
         normalize_coords = getattr(rope_embed, "normalize_coords", None)

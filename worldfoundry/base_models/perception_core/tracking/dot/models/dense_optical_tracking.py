@@ -1,24 +1,27 @@
 import torch
-from torch import nn
 import torch.nn.functional as F
-from tqdm import tqdm
 from einops import rearrange, repeat
+from torch import nn
+from tqdm import tqdm
+
+from worldfoundry.base_models.perception_core.tracking.dot.utils.torch import get_grid
 
 from .optical_flow import OpticalFlow
 from .point_tracking import PointTracker
-from worldfoundry.base_models.perception_core.tracking.dot.utils.torch import get_grid
 
 
 class DenseOpticalTracker(nn.Module):
-    def __init__(self,
-                 height=512,
-                 width=512,
-                 tracker_config="configs/cotracker2_patch_4_wind_8.json",
-                 tracker_path="checkpoints/movi_f_cotracker2_patch_4_wind_8.pth",
-                 estimator_config="configs/raft_patch_8.json",
-                 estimator_path="checkpoints/cvo_raft_patch_8.pth",
-                 refiner_config="configs/raft_patch_4_alpha.json",
-                 refiner_path="checkpoints/movi_f_raft_patch_4_alpha.pth"):
+    def __init__(
+        self,
+        height=512,
+        width=512,
+        tracker_config="configs/cotracker2_patch_4_wind_8.json",
+        tracker_path="checkpoints/movi_f_cotracker2_patch_4_wind_8.pth",
+        estimator_config="configs/raft_patch_8.json",
+        estimator_path="checkpoints/cvo_raft_patch_8.pth",
+        refiner_config="configs/raft_patch_4_alpha.json",
+        refiner_path="checkpoints/movi_f_raft_patch_4_alpha.pth",
+    ):
         super().__init__()
         self.point_tracker = PointTracker(height, width, tracker_config, tracker_path, estimator_config, estimator_path)
         self.optical_flow_refiner = OpticalFlow(height, width, refiner_config, refiner_path)
@@ -45,7 +48,7 @@ class DenseOpticalTracker(nn.Module):
             "src_frame": data["video"][:, -1],
             "tgt_frame": data["video"][:, 0],
             "src_points": init[:, -1],
-            "tgt_points": init[:, 0]
+            "tgt_points": init[:, 0],
         }
         pred = self.optical_flow_refiner(data, mode="flow_with_tracks_init", **kwargs)
         pred["src_points"] = data["src_points"]
@@ -88,7 +91,7 @@ class DenseOpticalTracker(nn.Module):
                         "src_feats": src_feats,
                         "tgt_feats": tgt_feats,
                         "src_points": src_points,
-                        "tgt_points": tgt_points
+                        "tgt_points": tgt_points,
                     }
                     pred = self.optical_flow_refiner(data, mode="flow_with_tracks_init", **kwargs)
                     flow, alpha = pred["flow"], pred["alpha"]
@@ -120,8 +123,8 @@ class DenseOpticalTracker(nn.Module):
         init = torch.stack([init[..., 0] / (w - 1), init[..., 1] / (h - 1), init[..., 2]], dim=-1)
 
         grid = get_grid(H, W, device=video.device)
-        grid[..., 0] *= (W - 1)
-        grid[..., 1] *= (H - 1)
+        grid[..., 0] *= W - 1
+        grid[..., 1] *= H - 1
         src_step = 0
         src_points = init[:, src_step]
         src_frame = video[:, src_step]
@@ -137,7 +140,7 @@ class DenseOpticalTracker(nn.Module):
                     "src_frame": src_frame,
                     "tgt_frame": tgt_frame,
                     "src_points": src_points,
-                    "tgt_points": tgt_points
+                    "tgt_points": tgt_points,
                 }
                 pred = self.optical_flow_refiner(data, mode="flow_with_tracks_init", **kwargs)
                 flow, alpha = pred["flow"], pred["alpha"]
@@ -165,7 +168,7 @@ class DenseOpticalTracker(nn.Module):
         visited_cells = torch.zeros(B, T, ch, cw, device=video.device)
         src_steps = torch.linspace(0, T - 1, T // ct).long()
         tracks = [[] for _ in range(B)]
-        for k, src_step in enumerate(tqdm(src_steps, desc="Refine source step", leave=False)):
+        for _k, src_step in enumerate(tqdm(src_steps, desc="Refine source step", leave=False)):
             if visited_cells[:, src_step].all():
                 continue
             src_points = init[:, src_step]
@@ -182,7 +185,7 @@ class DenseOpticalTracker(nn.Module):
                         "src_feats": src_feats,
                         "tgt_feats": tgt_feats,
                         "src_points": src_points,
-                        "tgt_points": tgt_points
+                        "tgt_points": tgt_points,
                     }
                     pred = self.optical_flow_refiner(data, mode="flow_with_tracks_init", **kwargs)
                     flow, alpha = pred["flow"], pred["alpha"]
@@ -203,6 +206,7 @@ class DenseOpticalTracker(nn.Module):
         tracks = [torch.cat(t, dim=1) for t in tracks]
         return {"tracks": tracks}
 
+
 def dense_to_sparse_tracks(x, y, tracks, height, width):
     h, w = height, width
     T = tracks.size(0)
@@ -215,6 +219,7 @@ def dense_to_sparse_tracks(x, y, tracks, height, width):
     tracks[..., 1] = tracks[..., 1] * (h - 1)
     tracks[..., 2] = (tracks[..., 2] > 0).float()
     return tracks
+
 
 def update_visited(visited_cells, tracks, height, width, cell_height, cell_width):
     T = tracks.size(0)
@@ -232,7 +237,7 @@ def update_visited(visited_cells, tracks, height, width, cell_height, cell_width
             visited_x = visited_x[valid]
             visited_y = visited_y[valid]
             tgt_cell = visited_cells[tgt_step].view(-1)
-            tgt_cell[visited_y * cw + visited_x] = 1.
+            tgt_cell[visited_y * cw + visited_x] = 1.0
             tgt_cell = tgt_cell.view_as(visited_cells[tgt_step])
             visited_cells[tgt_step] = tgt_cell
     return visited_cells
